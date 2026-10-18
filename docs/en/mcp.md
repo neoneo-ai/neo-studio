@@ -126,14 +126,17 @@ neo_status → list_skills (pick skill_id) → generate_image → poll task_stat
 ```
 director_recipes → director_spec (read segments) → director_plan (story → segments, needs the LLM)
 → director_copy → director_save (write into a custom recipe)
-→ director_run → poll task_status (multi-segment long job) → filename is the finished mp4
+→ director_run → poll task_status (multi-segment long job) → on succeeded, filename / subfolder is where the
+  file landed and url is the playable link
 → get_media (the mp4's /view URL — playable in a browser or player)
 → fixes: segment_run (regenerate one segment) → assemble_run (stitch it back into the film)
 ```
 
-Full film, segment and assembly outputs are mp4 files written by `SaveVideo` into `output/NeoDirector/`.
-`/view` serves them as `video/mp4`, so they can be downloaded or played directly; MCP never returns video
-bytes.
+Full film, regenerated segment and assembled film outputs are mp4 files: `SaveVideo` writes the film into
+`output/NeoDirector/<recipe>/`, a regenerated segment lands in `output/neo_director_regen/`, an assembled film
+in `output/neo_director_merge/`. The `succeeded` `task_status` snapshot carries `filename`, `subfolder` and the
+backend-built `url`; `/view` serves these as `video/mp4`, so they can be downloaded or played directly; MCP
+never returns video bytes.
 
 **What to say to the agent** (the tool descriptions and `initialize.instructions` already state the
 conventions, so you normally don't have to repeat them)

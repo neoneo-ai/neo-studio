@@ -260,6 +260,23 @@ class BaseToolTests(unittest.TestCase):
         self.assertEqual(data["images"][0]["url"],
                          "http://127.0.0.1:8188/view?filename=neo_0001.png&subfolder=&type=output")
 
+    def test_task_status_video_kind_carries_view_url(self):
+        # 链接必须由后端拼：智能体按配方 filename_prefix 自己拼 /view 时目录是 NeoDirector/xxx，
+        # 产物真实落盘目录是 neo_director_regen
+        routes = {("GET", "/neo_video_gen/run_segment/T7"): {"status": "succeeded", "recipe": "r",
+                                                             "filename": "Temp_古风少女换装_s1_20261018-184750.mp4",
+                                                             "subfolder": "neo_director_regen"}}
+        data = json.loads(text_of(call_tool("task_status", {"task_id": "T7"}, routes)[0]))
+        self.assertEqual(data["kind"], "segment")
+        self.assertEqual(data["url"],
+                         "http://127.0.0.1:8188/view?filename=Temp_%E5%8F%A4%E9%A3%8E%E5%B0%91%E5%A5%B3"
+                         "%E6%8D%A2%E8%A3%85_s1_20261018-184750.mp4&subfolder=neo_director_regen&type=output")
+
+    def test_task_status_running_video_has_no_url(self):
+        routes = {("GET", "/neo_studio/director/T8"): {"status": "running", "recipe": "r"}}
+        data = json.loads(text_of(call_tool("task_status", {"task_id": "T8"}, routes)[0]))
+        self.assertNotIn("url", data)
+
     def test_task_status_and_cancel_not_found(self):
         resp = call_tool("task_status", {"task_id": "T0"})[0]
         self.assertTrue(resp["result"]["isError"])

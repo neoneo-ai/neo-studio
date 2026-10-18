@@ -184,11 +184,17 @@ class TestPayloadHelpers(unittest.TestCase):
                                         "filename": "cat_walk.mp4", "subfolder": "NeoDirector/cat_walk"})),
             [{"kind": "video", "title": "cat_walk.mp4",
               "url": "/view?filename=cat_walk.mp4&subfolder=NeoDirector%2Fcat_walk&type=output"}])
-        # 单段与拼接的快照只给文件名，产物子目录得按生成模块里的约定补
+        # 单段与拼接的快照带产物子目录：链接照抄它，不能按 filename_prefix 猜
         self.assertEqual(
             agent._media_of(json.dumps({"kind": "segment", "status": "succeeded",
-                                        "filename": "walk_s1_20260101.mp4"}))[0]["url"],
+                                        "filename": "walk_s1_20260101.mp4",
+                                        "subfolder": "neo_director_regen"}))[0]["url"],
             "/view?filename=walk_s1_20260101.mp4&subfolder=neo_director_regen&type=output")
+        self.assertEqual(
+            agent._media_of(json.dumps({"kind": "assemble", "status": "succeeded",
+                                        "filename": "walk_merged_20260101.mp4",
+                                        "subfolder": "neo_director_merge"}))[0]["url"],
+            "/view?filename=walk_merged_20260101.mp4&subfolder=neo_director_merge&type=output")
         self.assertEqual(agent._media_of(json.dumps({"kind": "director", "status": "running"})), [])
         self.assertEqual(agent._media_of("not json"), [])
 

@@ -205,7 +205,7 @@ _TASKS: dict = {}
 
 def _snapshot(task: dict) -> dict:
     return {key: task[key] for key in (
-        "task_id", "status", "recipe", "use", "film", "blend", "filename", "frames",
+        "task_id", "status", "recipe", "use", "film", "blend", "filename", "subfolder", "frames",
         "progress", "stage", "clips", "warnings", "error", "created", "updated")}
 
 
@@ -240,7 +240,8 @@ def _run_task(task_id: str) -> None:
         result = assemble_film(task["recipe"], task["use"], film=task["film"], blend=task["blend"],
                                continuity=task["continuity"], context_frames=task["context_frames"],
                                progress=on_progress, should_cancel=lambda: bool(task.get("cancel")))
-        task.update({"status": "succeeded", "filename": result["filename"], "frames": result["frames"],
+        task.update({"status": "succeeded", "filename": result["filename"], "subfolder": result["subfolder"],
+                     "frames": result["frames"],
                      "clips": result["clips"], "warnings": result["warnings"],
                      "film": result["film"] or "", "progress": None, "stage": ""})
     except _Cancelled:
@@ -275,7 +276,7 @@ async def assemble_segments_route(request):
         "task_id": task_id, "status": "queued", "recipe": recipe, "use": sorted(set(use)),
         "film": str(data.get("film") or "").strip(), "blend": int(data.get("blend", SEAM_BLEND_FRAMES)),
         "continuity": bool(data.get("continuity", True)), "context_frames": int(data.get("context_frames", 22)),
-        "filename": None, "frames": 0, "progress": None, "stage": "", "clips": [],
+        "filename": None, "subfolder": None, "frames": 0, "progress": None, "stage": "", "clips": [],
         "warnings": [], "error": "", "cancel": False, "created": now, "updated": now,
     }
     threading.Thread(target=_run_task, args=(task_id,), name=f"neo-assemble-{task_id[:8]}", daemon=True).start()

@@ -64,8 +64,8 @@ ANSWER_CLIP = 2000
 # 计划模式不许执行的工具：生成入队、配方写、取消在跑的任务，全是改状态的动作
 PLAN_BLOCKED_TOOLS = frozenset(("generate_image", "director_run", "segment_run", "assemble_run",
                                 "director_save", "director_copy", "cancel_task"))
-# 出片三类的产物是 mp4，快照只给 filename：单段与拼接的产物子目录写死在生成模块里，取图要自己补
-FILM_DIR = {"director": "", "segment": "neo_director_regen", "assemble": "neo_director_merge"}
+# 出片三类的产物是 mp4，快照 succeeded 后带 filename + 产物子目录，取图按它拼 /view
+FILM_KINDS = ("director", "segment", "assemble")
 CANCELLED_TEXT = "已取消：智能体循环与在跑的任务已停止"
 PAUSE_TIMEOUT_TEXT = "已暂停后超时收场：在跑的任务已取消，这次运行结束"
 SYSTEM_PROMPT_FILE = PLUGIN_DIR / "prompts" / "agent" / "system_prompt.md"
@@ -250,10 +250,10 @@ def _media_of(text: str) -> list:
         return []
     film = str(data.get("filename") or "")
     kind = str(data.get("kind") or "")
-    if not film or kind not in FILM_DIR:
+    if not film or kind not in FILM_KINDS:
         return []
-    # 整片快照带 subfolder，单段与拼接只给文件名：产物子目录写死在生成模块里，取图得自己补
-    subfolder = str(data.get("subfolder") or FILM_DIR[kind])
+    # 产物子目录由后端快照给出（整片 NeoDirector/<配方>、单段 neo_director_regen、拼接 neo_director_merge）
+    subfolder = str(data.get("subfolder") or "")
     return [{"kind": "video", "title": film,
              "url": f"/view?filename={quote(film, safe='')}&subfolder={quote(subfolder, safe='')}&type=output"}]
 

@@ -551,8 +551,8 @@ class _FakeQueue:
 
 def _task_snapshot(task_id="t1", prompt_id="p1") -> dict:
     return {"task_id": task_id, "prompt_id": prompt_id, "status": "running", "recipe": "T", "segment": 0,
-            "seed": -1, "filename": None, "film": None, "progress": None, "warnings": [], "error": "",
-            "created": 0.0, "updated": 0.0}
+            "seed": -1, "filename": None, "subfolder": h3_segment.SEG_OUT_SUBDIR, "film": None,
+            "progress": None, "warnings": [], "error": "", "created": 0.0, "updated": 0.0}
 
 
 class FilmSizeNoticeTests(_RecipeCase):
@@ -691,7 +691,9 @@ class RunSegmentRouteTests(_RecipeCase):
         resp = _run_async(h3_segment.run_segment_status_route(_FakeRequest(match={"task_id": "t1"})))
         self.assertEqual((resp.status, _body(resp)["segment"], _body(resp)["seed"]), (200, 2, 7))
         self.assertEqual(set(_body(resp)), {"success", "task_id", "prompt_id", "status", "recipe", "segment", "seed",
-                                            "filename", "film", "progress", "warnings", "error", "created", "updated"})
+                                            "filename", "subfolder", "film", "progress", "warnings", "error",
+                                            "created", "updated"})
+        self.assertEqual(_body(resp)["subfolder"], "neo_director_regen")
         resp = _run_async(h3_segment.run_segment_status_route(_FakeRequest(match={"task_id": "nope"})))
         self.assertEqual((resp.status, _body(resp)["error"]), (404, "任务不存在"))
 
@@ -726,6 +728,7 @@ class RunSegmentRouteTests(_RecipeCase):
         task = h3_segment._SEGMENT_TASKS["t1"]
         self.assertEqual((task["status"], task["filename"], task["film"], task["seed"], task["warnings"]),
                          ("succeeded", "s.mp4", "film.mp4", 9, ["w"]))
+        self.assertEqual(task["subfolder"], "neo_director_regen")
         self.assertNotIn("p1", h3_segment._RUNS)
 
         h3_segment._SEGMENT_TASKS["t2"] = _task_snapshot("t2", "p2")
@@ -738,6 +741,7 @@ class RunSegmentRouteTests(_RecipeCase):
             _run_async(h3_segment._watch("t2"))
         self.assertEqual(h3_segment._SEGMENT_TASKS["t2"]["status"], "failed")
         self.assertIn("CUDA out of memory", h3_segment._SEGMENT_TASKS["t2"]["error"])
+        self.assertIsNone(h3_segment._SEGMENT_TASKS["t2"]["subfolder"])
 
         h3_segment._SEGMENT_TASKS["t3"] = _task_snapshot("t3", "p3")
 

@@ -237,7 +237,8 @@ class AssembleTaskTests(_RecipeCase):
 
     def _task(self, task_id="t1", **overrides):
         task = {"task_id": task_id, "status": "queued", "recipe": "T", "use": [1], "film": "", "blend": 0,
-                "continuity": True, "context_frames": 22, "filename": None, "frames": 0, "progress": None,
+                "continuity": True, "context_frames": 22, "filename": None, "subfolder": None, "frames": 0,
+                "progress": None,
                 "stage": "", "clips": [], "warnings": [], "error": "", "cancel": False,
                 "created": 0.0, "updated": 0.0}
         task.update(overrides)
@@ -253,6 +254,7 @@ class AssembleTaskTests(_RecipeCase):
             task = h3_assemble._TASKS["t1"]
             self.assertEqual((task["status"], task["frames"]), ("succeeded", 124 + 141 + 119))
             self.assertTrue(task["filename"].endswith(".mp4"))
+            self.assertEqual(task["subfolder"], "neo_director_merge")   # 快照带产物目录，取图才拼得对
             self.assertEqual([c["segment"] for c in task["clips"]], [1])
 
             self._task("t2", use=[9])
@@ -276,9 +278,10 @@ class AssembleTaskTests(_RecipeCase):
             self.assertEqual(resp.status, 200)
             self.assertTrue(data["success"])
             self.assertEqual((data["status"], data["frames"], data["use"]), ("succeeded", 384, [1]))
+            self.assertEqual(data["subfolder"], "neo_director_merge")
             self.assertEqual(set(data), {"success", "task_id", "status", "recipe", "use", "film", "blend",
-                                         "filename", "frames", "progress", "stage", "clips", "warnings",
-                                         "error", "created", "updated"})
+                                         "filename", "subfolder", "frames", "progress", "stage", "clips",
+                                         "warnings", "error", "created", "updated"})
             for body, expect in (({"recipe": "T", "use": [5]}, "段序号越界"),
                                  ({"recipe": "Nope", "use": [0]}, "配方不存在"),
                                  ({"recipe": "T", "use": []}, "还没有选择要替换的段"),

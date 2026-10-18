@@ -59,6 +59,7 @@ _RUNS: dict = {}
 
 TASK_TTL = 3600.0     # 任务记录保留时长（秒）
 POLL_INTERVAL = 0.5   # 轮询队列状态的间隔（秒）
+SEG_OUT_SUBDIR = "neo_director_regen"   # 单段重生成落盘的输出目录（拼接成片在 h3_assemble 里落 neo_director_merge）
 
 
 def _safe_name(text) -> str:
@@ -322,15 +323,15 @@ def run_single_segment(recipe: str, index: int, anchors: str, seed: int, *, step
 
     filename = None
     if record:
-        out_dir = Path(folder_paths.get_output_directory()) / "neo_director_regen"
+        out_dir = Path(folder_paths.get_output_directory()) / SEG_OUT_SUBDIR
         out_dir.mkdir(parents=True, exist_ok=True)
         filename = f"{_safe_name(recipe)}_s{index + 1}_{datetime.datetime.now().strftime('%Y%m%d-%H%M%S')}.mp4"
         video.save_to(str(out_dir / filename), format=Types.VideoContainer.MP4, codec=Types.VideoCodec.H264)
         add_recipe_results(recipe, [{
-            "filename": filename, "subfolder": "neo_director_regen", "type": "output",
+            "filename": filename, "subfolder": SEG_OUT_SUBDIR, "type": "output",
             "kind": "video", "segment": index, "seed": seed,
         }])
-    return {"video": video, "filename": filename, "subfolder": "neo_director_regen", "seed": seed,
+    return {"video": video, "filename": filename, "subfolder": SEG_OUT_SUBDIR, "seed": seed,
             "frames": frames, "anchors": anchors,
             "film": film_entry["filename"] if film_entry else None, "warnings": warnings}
 
@@ -418,7 +419,7 @@ _SEGMENT_WATCHERS: dict = {}  # task_id -> asyncio.Task
 def _snapshot(task: dict) -> dict:
     return {key: task[key] for key in (
         "task_id", "prompt_id", "status", "recipe", "segment", "seed",
-        "filename", "film", "progress", "warnings", "error", "created", "updated")}
+        "filename", "subfolder", "film", "progress", "warnings", "error", "created", "updated")}
 
 
 def _prune_tasks() -> None:
@@ -452,6 +453,8 @@ async def _watch(task_id: str) -> None:
             meta = _RUNS.pop(prompt_id, {}) or {}
             task["status"] = "cancelled" if cancelled else ("failed" if error else "succeeded")
             task["filename"] = meta.get("filename")
+            # 产物目录由节点写死（SEG_OUT_SUBDIR），快照带上它：取图与播放链接只按 filename + subfolder 拼
+            task["subfolder"] = SEG_OUT_SUBDIR if task["filename"] else None
             task["film"] = meta.get("film")
             task["seed"] = meta.get("seed", task["seed"])
             task["warnings"] = list(meta.get("warnings") or [])
@@ -541,8 +544,8 @@ async def run_segment_route(request):
     _SEGMENT_TASKS[task_id] = {
         "task_id": task_id, "prompt_id": prompt_id, "status": "queued",
         "recipe": payload["recipe"], "segment": payload["index"], "seed": payload["seed"],
-        "filename": None, "film": None, "progress": None, "warnings": [], "error": "",
-        "created": now, "updated": now,
+        "filename": None, "subfolder": SEG_OUT_SUBDIR, "film": None, "progress": None,
+        "warnings": [], "error": "", "created": now, "updated": now,
     }
     _SEGMENT_WATCHERS[task_id] = asyncio.create_task(_watch(task_id))
     _prune_tasks()

@@ -322,6 +322,10 @@ def tool_task_status(ctx, args):
         data.pop("latest_preview", None)   # 预览帧载荷很大，智能体只要产物名
         data.pop("preview", None)
         out = {"kind": kind, **data}
+        if data.get("filename"):
+            # 播放链接只能由后端拼：智能体自己拼时抄的是配方里的 filename_prefix（NeoDirector/xxx），
+            # 真实落盘目录是 neo_director_regen，拼出来的 /view 必 404
+            out["url"] = view_url(ctx.comfy, data["filename"], data.get("subfolder") or "")
         if kind == "director":
             prog = ctx.comfy.get_soft("/neo_video_gen/director_progress") or {}
             if prog.get("active") and (prog.get("segment_index") or -1) >= 0:
@@ -559,14 +563,14 @@ TOOLS = [
           "steps": s("integer", "采样步数")}, ("skill_id", "prompt"),
          {"skill_id": "<list_skills 里 has_workflow=true 的技能 id>",
           "prompt": "一只橘猫坐在窗台，暖色阳光，写实", "width": 1024, "height": 1024}),
-    tool("task_status", "查任务快照（生图 / 整片 / 单段 / 拼接共用 task_id）；生图 succeeded 后 images 带取图 URL，导演类 succeeded 后 filename 是 mp4 产物",
+    tool("task_status", "查任务快照（生图 / 整片 / 单段 / 拼接共用 task_id）；生图 succeeded 后 images 带取图 URL，导演类 succeeded 后 filename 是 mp4 产物、url 是可直接转给用户的播放/下载链接，别自己拼",
          {"task_id": TASK_ID}, ("task_id",), {"task_id": "<generate_image / director_run 返回的 task_id>"}),
     tool("list_tasks", "列出最近的生图任务", {}),
     tool("cancel_task", "取消任务（未执行出队，执行中中断）", {"task_id": TASK_ID}, ("task_id",),
          {"task_id": "<list_tasks 里的 task_id>"}),
     tool("get_media", "取产物文件（图片 / 视频 / 音频）：返回文件名、类型与 /view 的 URL；图片可 base64=true 回字节，视频与音频只给 URL",
          {"filename": s("string", "产物文件名（生图是 png，导演 / 单段 / 拼接是 mp4）"),
-          "subfolder": s("string", "子目录，如 NeoDirector/xxx"),
+          "subfolder": s("string", "产物子目录（照抄 task_status 的 subfolder：整片 NeoDirector/配方名、单段 neo_director_regen、拼接 neo_director_merge）"),
           "type": s("string", "output（默认）或 input"),
           "base64": s("boolean", "为 true 且产物是图片时附带 base64 字节")}, ("filename",),
          {"filename": "<task_status 里的产物文件名>", "base64": False}),

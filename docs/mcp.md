@@ -112,13 +112,14 @@ neo_status → list_skills(取 skill_id) → generate_image → task_status 轮�
 ```
 director_recipes → director_spec(读分段) → director_plan(故事 → 分段，需 LLM)
 → director_copy → director_save(写进 custom 配方)
-→ director_run → task_status 轮询（多段长任务）→ succeeded 后 filename 就是整片 mp4
+→ director_run → task_status 轮询（多段长任务）→ succeeded 后 filename / subfolder 是产物落盘位置、url 是播放链接
 → get_media(取 mp4 的 /view 地址，浏览器或播放器直接播)
 → 修片：segment_run(单段重生成) → assemble_run(拼回成片)
 ```
 
-整片 / 单段 / 拼接的产物都是 `SaveVideo` 落在 `output/NeoDirector/` 的 mp4，`/view` 按 `video/mp4`
-返回，可直接下载或播放；MCP 不回传视频字节。
+整片由 `SaveVideo` 落在 `output/NeoDirector/<配方名>/`，单段重生成落在 `output/neo_director_regen/`，
+拼接成片落在 `output/neo_director_merge/`；`task_status` 的 succeeded 快照带 `filename`、`subfolder` 与
+后端拼好的 `url`，`/view` 按 `video/mp4` 返回，可直接下载或播放；MCP 不回传视频字节。
 
 **对智能体怎么说**（工具描述与 `initialize.instructions` 已写明约定，一般不用重复交代）
 
