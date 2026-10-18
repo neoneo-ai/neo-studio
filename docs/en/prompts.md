@@ -191,6 +191,10 @@ Both nodes share the same layout (the Agent shows no status bar):
   conversation goes back in after the system prompt for the LLM to continue from (resuming into plan mode works the
   same way — the old system message is never stored, so this turn rebuilds it). One run lands as one JSON in
   `agent_sessions/` under the data root, and **🗑** deletes the saved history too, behind one in-page confirm.
+  The dock can run that same chain: `director_plan` (split, writing `story`) → `director_save` →
+  `director_keyframes` (keyframes land in the recipe's `assets/`) → echo the returned `segments` / `shared` /
+  `story` back to `director_save` (records `storyboard` and the first frame of non-r2v segments) →
+  `segment_run` / `director_run`; same backend as the 📖 page, see [mcp.md](mcp.md).
   In act mode, a successful `director_save` / `director_copy` broadcasts the director editor's own saved-recipe event:
   the director page's recipe list picks the new recipe up on the spot and selects it, so opening the card is the editor
   for segment and parameter edits, and the whole film and single segments reuse that same recipe; in plan mode those

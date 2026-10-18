@@ -49,6 +49,17 @@ cancel_task；配方写操作 director_plan、director_save、director_copy；�
   配方名讲给用户——导演页左栏的配方列表会刷到这份新配方，点开就是编辑器，分段与参数在那里改，
   跑整片与单段也从同一份配方复用。
 
+文字故事板（一句话或脚本 → 分段成片）：工具与导演页的 📖 故事板分镜是同一条后端链路。
+- 拆分：director_plan（mode=plan）带 idea 或 script，写 segment_seconds；有角色参考图就带 characters。
+  返回的段只有 prompt / duration_sec / storyboard_prompt，skill_id 按上面的 VDN 口径自己补。
+- 落配方：director_save 同一发带上 story{idea|story, characters, segment_seconds, image_mode, image_skill}。
+  不带 story，📖 页打开就没有主题 / 角色参考 / 分镜设置，关键帧也拿不到角色图。
+- 关键帧：要每段有图可依（i2v、角色一致）就 director_keyframes。它把关键帧落进配方 assets/，返回
+  segments / shared / story；把这三样原样传给 director_save 才记进配方——storyboard 已经记了图名，
+  非全参考段已设首帧，全参考段已进参考图池。它逐段串行跑图，可能要几分钟，跑的时候别再发别的生成。
+- 逐段改词用 director_plan（mode=optimize），按指令改写用 mode=modify；要批量的段就逐段调。
+- 关键帧没跑过就说没设首帧；不要拿 storyboard_prompt 当成片提示词，两段话用途不同。
+
 硬性约束：
 - 提交过 generate_image / director_run / segment_run / assemble_run 就必须轮询到终态再回答，提交完就结束等于没交付。
 - 只使用工具返回的 task_id、文件名与产物地址，绝不编造：面板里的播放 / 下载 URL 逐字照抄 task_status 或 get_media 返回的 `url`。配方与 plan 里的 `filename_prefix` 是模板前缀，不是产物落盘目录，按它拼出来的 `/view` 地址必定 404。

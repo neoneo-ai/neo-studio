@@ -19,7 +19,7 @@
 
 ```powershell
 python studio\mcp_server.py --selftest
-# Neo Studio MCP Server v1.3.0 · 20 工具：neo_status, list_skills, ...
+# Neo Studio MCP Server v1.3.0 · 21 工具：neo_status, list_skills, ...
 ```
 
 ### 2. 写进 MCP 客户端
@@ -47,7 +47,7 @@ Cursor（项目根 `.cursor/mcp.json`，内容同上）。已有其他 MCP 服�
 
 ### 3. 在客户端里确认
 
-对智能体说「列出 Neo Studio 的 MCP 工具」，能看到 `neo_status` 等 20 个工具说明接入成功；再让它调
+对智能体说「列出 Neo Studio 的 MCP 工具」，能看到 `neo_status` 等 21 个工具说明接入成功；再让它调
 `neo_status`，返回版本号与队列长度说明 ComfyUI 连上了。
 
 ## Studio 设置页的 MCP 服务（内置 MCP 客户端）
@@ -90,12 +90,13 @@ id 就能跑通。
 | `list_skills` `list_models` | 生图技能 id、可选模型与建议值 |
 | `generate_prompt` | 简短想法 → 成品提示词（走 LLM，需已配置模型） |
 | `generate_image` | 提交生图，立即返回 `task_id` |
-| `task_status` `list_tasks` `cancel_task` | 任务快照 / 列表 / 取消（四套任务表共用 `task_id`） |
+| `task_status` `list_tasks` `cancel_task` | 任务快照 / 列表 / 取消（五套任务表共用 `task_id`：生图 / 整片 / 单段 / 拼接 / 图片分镜） |
 | `get_media` | 取产物文件：图片（png）与视频（mp4）都给 `/view` 地址；图片可 `base64=true` 回字节，视频与音频只给 URL |
 | `list_gallery` `list_recipes` `load_recipe` | 素材库目录、配方清单、单配方元数据（`results` 是历史产物，含成片 mp4） |
 | `director_recipes` `director_spec` | 导演配方清单、`shared` + 分段清单 |
 | `director_plan` | 故事板规划：`plan` 主题/脚本 → 分段；`optimize` 单段按 H3 格式重写；`modify` 按指令改单段 |
-| `director_copy` `director_save` | 复制配方（解锁预设只读）、写分段到 custom 配方 |
+| `director_keyframes` | 图片分镜：按段给配方出关键帧，落进配方 `assets/`；返回 `segments` / `shared` / `story`，原样喂回 `director_save` 才记进配方 |
+| `director_copy` `director_save` | 复制配方（解锁预设只读）、写分段到 custom 配方（`story` 带主题 / 角色参考 / 分镜设置） |
 | `director_run` `segment_run` `assemble_run` | 整片 / 单段 / 拼接，均立即返回 `task_id`，产物是 mp4 视频 |
 
 ## 典型流程
@@ -116,6 +117,21 @@ director_recipes → director_spec(读分段) → director_plan(故事 → 分�
 → get_media(取 mp4 的 /view 地址，浏览器或播放器直接播)
 → 修片：segment_run(单段重生成) → assemble_run(拼回成片)
 ```
+
+**文字故事板闭环（一句话或脚本 → 分段 → 关键帧 → 分段成片）**
+
+```
+director_plan(mode=plan, idea|script, segment_seconds[, characters])    → 分段（prompt / duration_sec / storyboard_prompt）
+→ director_save(name, segments, story{idea|story, characters, segment_seconds, image_mode, image_skill})
+→ director_keyframes(recipe[, segments, skill_id, mode, force])        → 关键帧落进配方 assets/（逐段串行跑图）
+→ director_save(segments / shared / story 原样回传)                     → storyboard 记图名、非全参考段设首帧
+→ segment_run / director_run → task_status 轮询 → get_media
+```
+
+这条链与导演页 📖 故事板分镜页是同一套后端。`director_keyframes` 返回的 `segments` / `shared` / `story`
+必须原样喂回 `director_save` 才生效——保存是整份覆盖，漏带 `story` 会把主题与角色参考一起清掉。
+非全参考段的关键帧直接设成首帧（i2v / fl2v 吃这张图），全参考（r2v）段进参考图池；只写 `storyboard`
+时后端只把它当多帧分块锚点，段还是纯文生视频。
 
 整片由 `SaveVideo` 落在 `output/NeoDirector/<配方名>/`，单段重生成落在 `output/neo_director_regen/`，
 拼接成片落在 `output/neo_director_merge/`；`task_status` 的 succeeded 快照带 `filename`、`subfolder` 与
@@ -140,8 +156,10 @@ director_recipes → director_spec(读分段) → director_plan(故事 → 分�
   没有这种技能时先在前端技能管理里保存一个工作流模板；MCP 层不会替你挑，空 `skill_id` 在发出请求之前就报错。
 - **段序号一律 1 起**（第 1 段 = 时间轴第一段）。`segment_run` 的 `segment`、`assemble_run` 与
   `director_run.only_segments` 的列表都是 1 基，内部换算成端点的 0 基。
-- **写操作只有两个**：`rs_recipes/save` 与 `rs_recipes/copy`。不暴露删除端点；读文件只经 ComfyUI 的
-  `/view`，MCP 层不碰本地路径。内置预设配方只读，先 `director_copy` 再 `director_save`。
+- **写操作只有两个**：配方元数据的写路是 `rs_recipes/save` 与 `rs_recipes/copy`。不暴露删除端点；读文件只经
+  ComfyUI 的 `/view`，MCP 层不碰本地路径。内置预设配方只读，先 `director_copy` 再 `director_save`。
+  `director_keyframes` 生成的关键帧按导演页同一条路径落进配方 `assets/`（只增不删），段级引用仍由
+  `director_save` 写回。
 - **LLM 依赖**：`generate_prompt` 与 `director_plan` 需要 Neo Studio 设置里已配置 LLM；未配置时返回
   指向设置的短错误，不返回假成功。
 
@@ -154,6 +172,9 @@ director_recipes → director_spec(读分段) → director_plan(故事 → 分�
 | `neo_status` 报连不上 | ComfyUI 未启动或端口不对 |
 | `generate_prompt` / `director_plan` 报错 | LLM 未配置或远程通道不健康，按返回的错误去 Neo Studio 设置里处理 |
 | `task_status` 说任务不存在 | 任务结束后快照会被清理，产物名请在 `succeeded` 时立刻取走 |
+| 分镜某段是 `skipped` | 该段没有分镜提示词（`storyboard_prompt`），后端回退视频提示词生图；补上分镜描述或重新 `director_plan` 拆分 |
+| `director_keyframes` 很久才返回 | 关键帧逐段串行跑图，耗时随段数与分辨率走；超时会带着 `running` 与 `task_id` 返回，用 `task_status` 续查，别重复提交 |
+| 右栏 / 📖 页看不到分镜图 | 关键帧生成完还要把返回的 `segments` 原样喂回 `director_save`：段级 `storyboard` / `first_frame` 是保存时写进配方的 |
 | 返回被截断 | 文本上限 12000 字符；`list_skills` 用 `q` 过滤，`all=true` 会很长 |
 
 ## 局域网接入（不走 MCP）
@@ -171,6 +192,7 @@ MCP 这一层是 stdio + 本机回环，没有网络监听口，也不做跨机�
 ## 已知限制
 
 - 单段提示词的逐段改写（`director_plan` 的 `optimize` / `modify`）一次一段，多段需逐次调用。
+- `director_keyframes` 逐段串行跑图，与导演页同时点「生成分镜」会抢显存。
 - base64 图片单次最多 4 张、单张 1.5MB 以内，超出只给 `/view` 地址；视频与音频不回传字节。
 - 文本返回上限 12000 字符，超出截断。
 - 宫格拆分、配音、配音字幕等前端编排能力未开放为工具。

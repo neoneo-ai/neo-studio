@@ -24,7 +24,7 @@ logs always go to `stderr`.
 
 ```powershell
 python studio\mcp_server.py --selftest
-# Neo Studio MCP Server v1.3.0 · 20 tools: neo_status, list_skills, ...
+# Neo Studio MCP Server v1.3.0 · 21 tools: neo_status, list_skills, ...
 ```
 
 ### 2. Add it to the MCP client
@@ -54,7 +54,7 @@ the `neo-studio` entry instead of overwriting the file.
 
 ### 3. Confirm in the client
 
-Ask the agent to "list the Neo Studio MCP tools" — 20 tools such as `neo_status` means the wiring works. Asking
+Ask the agent to "list the Neo Studio MCP tools" — 21 tools such as `neo_status` means the wiring works. Asking
 it to call `neo_status` proves ComfyUI is reachable.
 
 ## The Studio MCP servers settings (built-in MCP client)
@@ -104,12 +104,13 @@ Example — expose only the image pipeline:
 | `list_skills` `list_models` | Skill ids, available models and suggested values |
 | `generate_prompt` | Short idea → finished prompt (uses the LLM, requires a configured model) |
 | `generate_image` | Submits an image job and returns a `task_id` immediately |
-| `task_status` `list_tasks` `cancel_task` | Task snapshot / list / cancel (all four task tables share `task_id`) |
+| `task_status` `list_tasks` `cancel_task` | Task snapshot / list / cancel (all five task tables share `task_id`: image / full film / segment / assembly / image storyboard) |
 | `get_media` | Fetch an output file: images (png) and videos (mp4) both return a `/view` URL; base64 bytes only for images with `base64=true` |
 | `list_gallery` `list_recipes` `load_recipe` | Asset library tree, recipe list, single recipe metadata (`results` lists past outputs, including finished films) |
 | `director_recipes` `director_spec` | Director recipe list, `shared` + segment list |
 | `director_plan` | Storyboard planning: `plan` idea/script → segments; `optimize` rewrites one segment in H3 format; `modify` rewrites one segment per instruction |
-| `director_copy` `director_save` | Copy a recipe (unlocks read-only presets), write segments into a custom recipe |
+| `director_keyframes` | Image storyboard: renders keyframes per segment into the recipe's `assets/`; returns `segments` / `shared` / `story` that must go back to `director_save` to stick |
+| `director_copy` `director_save` | Copy a recipe (unlocks read-only presets), write segments into a custom recipe (`story` carries idea / character refs / storyboard settings) |
 | `director_run` `segment_run` `assemble_run` | Full film / single segment / assembly, all return a `task_id` immediately and produce an mp4 |
 
 ## Typical flows
@@ -131,6 +132,22 @@ director_recipes → director_spec (read segments) → director_plan (story → 
 → get_media (the mp4's /view URL — playable in a browser or player)
 → fixes: segment_run (regenerate one segment) → assemble_run (stitch it back into the film)
 ```
+
+**Text-storyboard pipeline (idea or script → segments → keyframes → finished segments)**
+
+```
+director_plan(mode=plan, idea|script, segment_seconds[, characters])   → segments (prompt / duration_sec / storyboard_prompt)
+→ director_save(name, segments, story{idea|story, characters, segment_seconds, image_mode, image_skill})
+→ director_keyframes(recipe[, segments, skill_id, mode, force])       → keyframes land in the recipe's assets/ (one segment at a time)
+→ director_save(echo segments / shared / story back)                   → storyboard filename + first frame recorded in the recipe
+→ segment_run / director_run → poll task_status → get_media
+```
+
+This is the same backend the director page's 📖 Storyboard tab uses. The `segments` / `shared` / `story` that
+`director_keyframes` returns have to go back to `director_save` unchanged — a save replaces the whole recipe, and
+dropping `story` wipes the idea and the character references with it. A non-r2v segment gets its keyframe as the
+first frame (i2v / fl2v use it), an r2v segment gets it in its reference pool; writing only `storyboard` leaves the
+backend treating it as a multi-frame anchor, so the segment still runs as plain text-to-video.
 
 Full film, regenerated segment and assembled film outputs are mp4 files: `SaveVideo` writes the film into
 `output/NeoDirector/<recipe>/`, a regenerated segment lands in `output/neo_director_regen/`, an assembled film
@@ -164,9 +181,11 @@ The image sentence only runs when the machine has an image skill with a `workflo
 - **Segment numbers are 1-based everywhere** (segment 1 = the first segment on the timeline).
   `segment_run.segment` and the lists in `assemble_run.segments` / `director_run.only_segments` are 1-based
   and converted to the endpoints' 0-based indices internally.
-- **Only two write operations**: `rs_recipes/save` and `rs_recipes/copy`. No delete endpoints are exposed;
-  file reads go through ComfyUI's `/view` only, the MCP layer never touches local paths. Built-in preset
-  recipes are read-only — `director_copy` first, then `director_save`.
+- **Only two recipe writes**: recipe metadata is written through `rs_recipes/save` and `rs_recipes/copy` only. No
+  delete endpoints are exposed; file reads go through ComfyUI's `/view` only, the MCP layer never touches local
+  paths. Built-in preset recipes are read-only — `director_copy` first, then `director_save`. The keyframes that
+  `director_keyframes` renders land in the recipe's `assets/` along the same path the director page uses (add-only),
+  and the segment-level references still go through `director_save`.
 - **LLM dependency**: `generate_prompt` and `director_plan` need an LLM configured in Neo Studio settings.
   Without one they return a short error pointing at the settings instead of a fake success.
 
@@ -179,6 +198,9 @@ The image sentence only runs when the machine has an image skill with a `workflo
 | `neo_status` cannot connect | ComfyUI is not running, or the port is wrong |
 | `generate_prompt` / `director_plan` fail | No LLM configured, or the remote channel is unhealthy — follow the returned error in Neo Studio settings |
 | `task_status` says task not found | Snapshots are pruned after a task finishes; collect output names as soon as it is `succeeded` |
+| A storyboard segment is `skipped` | That segment has no `storyboard_prompt`, so the backend fell back to the video prompt; add a storyboard line or split again with `director_plan` |
+| `director_keyframes` takes very long | Keyframes render one segment at a time; on timeout it returns `running` with a `task_id` — continue with `task_status`, do not resubmit |
+| No storyboard image on the dock / 📖 page | After rendering, the returned `segments` must go back through `director_save`; the segment-level `storyboard` / `first_frame` are written on save |
 | Response truncated | Text is capped at 12000 characters; filter `list_skills` with `q` (`all=true` is long) |
 
 ## LAN access (not over MCP)
@@ -198,6 +220,7 @@ open. The MCP layer takes no part in that — it stays stdio plus loopback, and 
 
 - Per-segment prompt rewriting (`director_plan` with `optimize` / `modify`) handles one segment per call;
   multiple segments need repeated calls.
+- `director_keyframes` renders one segment at a time, so it competes for VRAM with the 📖 page's own storyboard run.
 - Base64 images are capped at 4 per call and 1.5 MB per image — larger ones return the `/view` URL only;
   video and audio bytes are never returned.
 - Text responses are capped at 12000 characters, longer output is truncated.

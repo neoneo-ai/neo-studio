@@ -435,6 +435,109 @@ class DirectorTests(unittest.TestCase):
                          {("POST", "/rs_recipes/save"): http_error(400, "内置预设配方只读")})[0]
         self.assertIn("内置预设配方只读", text_of(resp))
 
+    def test_director_keyframes_returns_save_ready_segments(self):
+        routes = {
+            ("POST", "/rs_recipes/load"): {"recipe": {
+                "type": "video_director", "shared": {"width": 1344},
+                "story": {"idea": "雨夜便利店", "segment_seconds": 5},
+                "segments": [{"skill_id": "minimax_h3_vdn_i2v", "prompt": "雨夜街道，霓虹",
+                              "duration_sec": 5, "storyboard_prompt": "雨夜便利店门口，霓虹倒影"},
+                             {"skill_id": "minimax-h3-vdn-r2v", "prompt": "推门进店",
+                              "duration_sec": 5, "mode": "r2v", "refs": {"images": ["keep.png"]}}]}},
+            ("POST", "/neo_video_gen/storyboard_generate"): {"success": True, "task_id": "SB1", "total": 2},
+            ("GET", "/neo_video_gen/storyboard_status/SB1"): {
+                "success": True, "status": "done", "total": 2, "processed": 2,
+                "details": [{"index": 0, "status": "done", "filename": "storyboard_雨夜_01.png",
+                             "preview_url": "/rs_recipes/asset?recipe=雨夜&file=storyboard_雨夜_01.png"},
+                            {"index": 1, "status": "done", "filename": "storyboard_雨夜_02.png",
+                             "preview_url": "/rs_recipes/asset?recipe=雨夜&file=storyboard_雨夜_02.png"}]},
+        }
+        resp, fake = call_tool("director_keyframes", {"recipe": "雨夜", "skill_id": "qwen_image_21"}, routes)
+        body = fake.body("POST", "/neo_video_gen/storyboard_generate")
+        self.assertEqual(body["name"], "雨夜")
+        self.assertEqual(body["skill_id"], "qwen_image_21")
+        self.assertEqual(body["index"], 0)
+        self.assertFalse(body["force"])
+        self.assertNotIn("mode", body, "没点名模式就交给后端按角色参考图自动")
+        self.assertEqual(body["segments"][0]["storyboard_prompt"], "雨夜便利店门口，霓虹倒影")
+        self.assertEqual(body["segments"][1]["storyboard_prompt"], "", "没有分镜提示词就空着，让后端回退视频提示词")
+        data = json.loads(text_of(resp))
+        self.assertEqual(data["status"], "done")
+        self.assertEqual([d["index"] for d in data["details"]], [1, 2], "段号对外一律 1 起")
+        first, second = data["segments"]
+        self.assertEqual(first["storyboard"], "storyboard_雨夜_01.png")
+        self.assertEqual(first["first_frame"], "storyboard_雨夜_01.png", "非全参考段要把关键帧设成首帧，i2v 才吃这张图")
+        self.assertEqual(second["storyboard"], "storyboard_雨夜_02.png")
+        self.assertNotIn("first_frame", second, "全参考段不设首帧")
+        self.assertEqual(second["refs"]["images"], ["storyboard_雨夜_02.png", "keep.png"], "全参考段把关键帧进参考图池")
+        self.assertEqual(data["shared"], {"width": 1344}, "shared 要回带：save 是整份覆盖")
+        self.assertEqual(data["story"]["idea"], "雨夜便利店", "story 要回带，否则 📖 页的主题与角色参考会被清掉")
+        self.assertNotIn("preview_url", text_of(resp))
+
+    def test_director_keyframes_rejects_bad_segments_and_mode(self):
+        routes = {("POST", "/rs_recipes/load"): {"recipe": {"type": "video_director",
+                                                            "segments": [{"prompt": "p1"}, {"prompt": "p2"}]}}}
+        self.assertIn("段序号超出范围",
+                      text_of(call_tool("director_keyframes", {"recipe": "r", "segments": [3]}, routes)[0]))
+        self.assertIn("mode 只能是",
+                      text_of(call_tool("director_keyframes", {"recipe": "r", "mode": "zzz"}, routes)[0]))
+        resp = call_tool("director_keyframes", {"recipe": "r"},
+                         {("POST", "/rs_recipes/load"): {"recipe": {"type": "video_director", "segments": []}}})[0]
+        self.assertIn("还没有分段", text_of(resp))
+        resp = call_tool("director_keyframes", {"recipe": "r"},
+                         {("POST", "/rs_recipes/load"): {"recipe": {"type": "image",
+                                                                    "segments": [{"prompt": "p"}]}}})[0]
+        self.assertIn("不是 video_director 配方", text_of(resp))
+
+    def test_director_keyframes_splits_non_contiguous_picks(self):
+        routes = {("POST", "/rs_recipes/load"): {"recipe": {
+                      "type": "video_director",
+                      "segments": [{"prompt": "p1"}, {"prompt": "p2"}, {"prompt": "p3"}]}},
+                  ("POST", "/neo_video_gen/storyboard_generate"): {"success": True, "task_id": "SB1"},
+                  ("GET", "/neo_video_gen/storyboard_status/SB1"): {
+                      "success": True, "status": "done",
+                      "details": [{"index": 0, "status": "done", "filename": "k1.png"}]}}
+        _, fake = call_tool("director_keyframes", {"recipe": "r", "segments": [1, 3]}, routes)
+        indexes = [d["index"] for m, p, d in fake.calls if p == "/neo_video_gen/storyboard_generate"]
+        self.assertEqual(indexes, [0, 2], "跳着选段要按段各发一发，图名才不会和段号错位")
+
+    def test_director_save_passes_story_through(self):
+        routes = {("POST", "/rs_recipes/save"): {"ok": True, "name": "r"}}
+        _, fake = call_tool("director_save",
+                            {"name": "r", "segments": [{"prompt": "p", "duration_sec": 5}],
+                             "story": {"idea": "雨夜便利店", "segment_seconds": 5,
+                                       "characters": [{"filename": "girl.png"}]}}, routes)
+        body = fake.body("POST", "/rs_recipes/save")
+        self.assertEqual(body["story"]["idea"], "雨夜便利店")
+        self.assertEqual(body["story"]["characters"], [{"filename": "girl.png"}])
+
+    def test_task_status_and_cancel_cover_storyboard(self):
+        routes = {
+            ("GET", "/neo_video_gen/storyboard_status/SB1"): {
+                "success": True, "status": "done", "total": 2, "processed": 2,
+                "details": [{"index": 0, "status": "done", "filename": "k1.png",
+                             "preview_url": "/rs_recipes/asset?recipe=r&file=k1.png"}]},
+            ("POST", "/neo_video_gen/storyboard_cancel/SB1"): {"success": True, "status": "cancelled"},
+        }
+        resp = call_tool("task_status", {"task_id": "SB1"}, routes)[0]
+        self.assertEqual(json.loads(text_of(resp))["kind"], "storyboard")
+        self.assertNotIn("preview_url", text_of(resp), "预览是相对地址，取图统一走 get_media")
+        _, fake = call_tool("cancel_task", {"task_id": "SB1"}, routes)
+        self.assertEqual(json.loads(text_of(call_tool("cancel_task", {"task_id": "SB1"}, routes)[0]))["kind"],
+                         "storyboard")
+        self.assertEqual(len(fake.calls), 5, "生图 / 整片 / 单段 / 拼接都 404 之后才命中分镜")
+
+    def test_director_spec_projects_storyboard_fields(self):
+        routes = {("GET", "/rs_recipes/director_spec"): {
+            "name": "r", "shared": {}, "segments": [
+                {"skill_id": "h3", "prompt": "p1", "duration_sec": 5,
+                 "storyboard": "storyboard_r_01.png", "storyboard_prompt": "门口全景",
+                 "first_frame": "storyboard_r_01.png"}]}}
+        seg = json.loads(text_of(call_tool("director_spec", {"name": "r"}, routes)[0]))["segments"][0]
+        self.assertEqual(seg["storyboard"], "storyboard_r_01.png")
+        self.assertEqual(seg["storyboard_prompt"], "门口全景")
+        self.assertEqual(seg["first_frame"], "storyboard_r_01.png")
+
     def test_director_run_payload(self):
         routes = {("POST", "/neo_studio/director/generate"): {"task_id": "D1", "status": "queued", "recipe": "r"}}
         resp, fake = call_tool("director_run", {"recipe": "r", "only_segments": [1, 3], "seed": 7}, routes)

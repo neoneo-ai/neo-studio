@@ -178,8 +178,9 @@ the rules a change has to obey.
   a non-loopback ComfyUI URL at startup, the desktop service binds
   locally, and generation endpoints are reached on `127.0.0.1`.
 - `stdout` on the MCP server carries JSON-RPC only; all logs
-  go to `stderr`. The MCP server exposes no delete endpoint, and
-  its only writes are `rs_recipes/save` and `rs_recipes/copy`.
+  go to `stderr`. The MCP server exposes no delete endpoint, and its
+  recipe writes are `rs_recipes/save` and `rs_recipes/copy`
+  (`director_keyframes` only adds keyframe PNGs to a recipe's `assets/`).
 - Model downloads land in the model folder that matches the repo path,
   stay resumable, and carry no telemetry and no unrelated metadata upload.
 - Optional providers degrade without a network call: a missing `laya`

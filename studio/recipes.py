@@ -1446,6 +1446,11 @@ def load_director_spec(name: str) -> dict:
             "refs": refs_out,
             "mode": mode,
             "keyframe": keyframe,
+            # 关键帧与分镜提示词快照：智能体经 director_spec 要看到「关键帧落没落地」，
+            # 只在 save 时读一次 recipe.json 也是这两个来源
+            "storyboard": str(seg.get("storyboard") or "").strip() or None,
+            "storyboard_prompt": str(seg.get("storyboard_prompt") or "").strip() or None,
+            "first_frame": str(seg.get("first_frame") or "").strip() or None,
         })
     out = {"shared": director_shared, "segments": segments}
     # 身份参考默认开（配方「角色参考图」→ 各段身份参考）；配方里显式关掉时既不解析也不注入

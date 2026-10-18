@@ -4,6 +4,17 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **The agent can run the 📖 text-storyboard pipeline now, keyframes included.** `director_plan` and the editor's
+  「生成分镜分段」 already hit the same split route, but the rest of that page had no tool: `director_save` dropped
+  `story`, so an agent-built recipe opened without its idea / character references / storyboard settings (and r2i
+  keyframes lost the character images), and nothing could render keyframes at all. `director_keyframes` renders them
+  into the recipe's `assets/` through the same storyboard route the page calls, returns `segments` / `shared` / `story`
+  with `storyboard` recorded and a first frame set on non-r2v segments (r2v segments get it in their reference pool),
+  and the second `director_save` writes them back. `storyboard_status` / `storyboard_cancel` joined the task tables
+  `task_status` / `cancel_task` probe, `director_spec` reports `storyboard` / `storyboard_prompt` / `first_frame`, and
+  plan mode blocks the new tool. Covered by `studio/tests/test_mcp_server.py` (6 new cases); docs in `docs/mcp.md` +
+  `docs/en/mcp.md` and `docs/prompts.md` + `docs/en/prompts.md`.
+
 - **The dock's recent-sessions list survives a restart.** Session history is local files under `agent_sessions/`, but the four
   session routes were owner `comfy`, so the offline desktop service answered `409` to the summary fetch the dock makes at page
   load — before a cold-started ComfyUI answers — and the home list stayed empty (「🗂」worked because it fetches on click).

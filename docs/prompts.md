@@ -154,6 +154,9 @@ LLM 模式与本地安装见 [llm.md](llm.md)。
   「↩ 接上次会话」条，下一句 **✨ 生成** 带着那条会话的 `run_id` 发 `resume`，落下来的旧对话原文接在系统提示词之后
   由 LLM 接着跑（换到计划模式续聊同一条路，旧的 system 不落盘、按这一次重生成）。一次运行一个 JSON 落在数据根的
   `agent_sessions/`，**🗑** 连着删后端保存的历史（一次点击一次确认）。
+  右栏也能走这条链：`director_plan`（拆分，写 `story`）→ `director_save` → `director_keyframes`（关键帧落进配方
+  `assets/`）→ 把返回的 `segments` / `shared` / `story` 原样喂回 `director_save`（记 `storyboard` 与非全参考段的
+  首帧）→ `segment_run` / `director_run`；与 📖 页同一套后端，见 [mcp.md](mcp.md)。
   执行模式里 `director_save` / `director_copy` 一保存成功，右栏就广播导演编辑器那条同一份的保存事件：导演页左栏的
   配方列表当场刷到这份新配方并选中它，点开即进编辑器改分段与参数，整片与单段从同一份配方复用；计划模式这两个工具
   不进工具表。

@@ -11,6 +11,7 @@ import json
 import os
 import re
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -24,6 +25,9 @@ MAX_B64_IMAGES = 4        # 单次返回 base64 图片张数上限
 MAX_B64_BYTES = 1_500_000  # base64 回传的单张图字节上限（超出只给 url）
 MAX_IMAGES = 8            # 单次返回的产物图条目上限（与 image_gen 的批量上限一致）
 SSE_TIMEOUT = 600         # LLM 流式端点读超时（整段提示词生成可能很慢）
+STORYBOARD_POLL_SEC = 2.0
+STORYBOARD_WAIT_SEC = 900.0   # 分镜逐段串行跑图：每段数十秒起，超时就回 task_id 让智能体用 task_status 续查
+KEYFRAME_REF_MAX = 9          # 段参考图上限（与 H3 参考生视频的 autogrow 槽位一致）
 
 
 def log(msg) -> None:
@@ -215,19 +219,21 @@ def image_items(comfy: Comfy, images, limit: int = MAX_B64_IMAGES) -> list:
     return out
 
 
-# 四套任务表（生图 / 整片 / 单段 / 拼接）的 task_id 都是裸 uuid，没有前缀可判；
+# 五套任务表（生图 / 整片 / 单段 / 拼接 / 图片分镜）的 task_id 都是裸 uuid，没有前缀可判；
 # 按顺序探测状态端点，命中即返回。
-# 生图任务只有整表列表（无单任务路由），整片 / 单段 / 拼接各有单任务快照路由。
+# 生图任务只有整表列表（无单任务路由），其余四套各有单任务快照路由。
 TASK_STATUS_ROUTES = (
     ("director", "/neo_studio/director/{tid}"),
     ("segment", "/neo_video_gen/run_segment/{tid}"),
     ("assemble", "/neo_video_gen/assemble_segments/{tid}"),
+    ("storyboard", "/neo_video_gen/storyboard_status/{tid}"),
 )
 TASK_CANCEL_ROUTES = (
     ("image", "/neo_image_gen/cancel/{tid}"),
     ("director", "/neo_studio/director/{tid}/cancel"),
     ("segment", "/neo_video_gen/run_segment/{tid}/cancel"),
     ("assemble", "/neo_video_gen/assemble_segments/{tid}/cancel"),
+    ("storyboard", "/neo_video_gen/storyboard_cancel/{tid}"),
 )
 
 
@@ -321,6 +327,10 @@ def tool_task_status(ctx, args):
             continue
         data.pop("latest_preview", None)   # 预览帧载荷很大，智能体只要产物名
         data.pop("preview", None)
+        if kind == "storyboard":
+            # 分镜的 warning / filename 有用，preview_url 是相对地址（取图统一走 get_media）
+            for d in (data.get("details") or []):
+                d.pop("preview_url", None)
         out = {"kind": kind, **data}
         if data.get("filename"):
             # 播放链接只能由后端拼：智能体自己拼时抄的是配方里的 filename_prefix（NeoDirector/xxx），
@@ -429,6 +439,8 @@ def tool_director_spec(ctx, args):
     data = ctx.comfy.get("/rs_recipes/director_spec", {"name": need(args, "name")}) or {}
     segs = [{"index": i + 1, "skill_id": s.get("skill_id"), "mode": s.get("mode"),
              "duration_sec": s.get("duration_sec"), "ref_input": s.get("ref_input"),
+             "first_frame": s.get("first_frame"), "storyboard": s.get("storyboard"),
+             "storyboard_prompt": s.get("storyboard_prompt"),
              "prompt": clip(str(s.get("prompt") or ""))}
             for i, s in enumerate(data.get("segments") or [])]
     return dump({"name": data.get("name"), "shared": data.get("shared") or {},
@@ -464,6 +476,106 @@ def tool_director_plan(ctx, args):
     return clip(ctx.comfy.sse_text(route, body))
 
 
+def _wait_storyboard(ctx, task_id):
+    """轮询分镜任务到终态。逐段串行跑图、每段数十秒起，等到上限就带着 running 回给智能体，
+    让它用 task_status 按同一个 task_id 继续查，别把一次工具调用挂死。"""
+    deadline = time.time() + STORYBOARD_WAIT_SEC
+    while True:
+        snap = ctx.comfy.get(f"/neo_video_gen/storyboard_status/{task_id}") or {}
+        if snap.get("status") in ("done", "cancelled") or time.time() >= deadline:
+            return snap
+        time.sleep(STORYBOARD_POLL_SEC)
+
+
+def _keyframe_segments(segments, frames, shared):
+    """把关键帧接回段：storyboard 记图名，非全参考段同时设首帧（i2v 吃这张图，只写 storyboard
+    时后端只把它当多帧分块锚点），r2v 段进参考图池 —— 与 📖 故事板页 generateAllStoryboards 同口径。
+    save 是整份覆盖，所以这里回整份段清单，智能体原样喂回 director_save 就行。"""
+    shared_mode = str((shared or {}).get("mode") or "").strip()
+    out = []
+    for i, seg in enumerate(segments):
+        seg = dict(seg)
+        fname = frames.get(i)
+        if fname:
+            seg["storyboard"] = fname
+            eff = str(seg.get("mode") or "").strip() or shared_mode
+            if eff in ("r2v", "v2v", "rv2v"):
+                refs = dict(seg.get("refs") or {})
+                imgs = [str(x) for x in (refs.get("images") or []) if str(x) and str(x) != fname]
+                refs["images"] = ([fname] + imgs)[:KEYFRAME_REF_MAX]
+                seg["refs"] = refs
+            else:
+                seg["first_frame"] = fname
+        out.append(seg)
+    return out
+
+
+def tool_director_keyframes(ctx, args):
+    """图片分镜：按段给配方出关键帧（写进配方自己的 assets/），回可直接喂回 director_save 的段。"""
+    name = need(args, "recipe")
+    meta = (ctx.comfy.post("/rs_recipes/load", {"name": name}) or {}).get("recipe") or {}
+    if meta.get("type") != "video_director":
+        raise ToolError(f"不是 video_director 配方：{name}")
+    segments = meta.get("segments") or []
+    if not segments:
+        raise ToolError(f"配方还没有分段：{name}（先 director_plan 出分段、director_save 写进配方）")
+    picks = list(range(len(segments))) if args.get("segments") is None else seg_list(args["segments"])
+    for i in picks:
+        if i >= len(segments):
+            raise ToolError(f"段序号超出范围：第 {i + 1} 段（配方共 {len(segments)} 段）")
+    mode = str(args.get("mode") or "").strip()
+    if mode not in ("", "t2i", "r2i"):
+        raise ToolError(f"mode 只能是 t2i / r2i：{mode}")
+
+    # 后端按 segments[] + index 偏移给图名编号（storyboard_{recipe}_{n:02d}）：连续选段一发提交，
+    # 跳着选段按段各发一发，图名才不会和段号错位
+    groups = []
+    for i in picks:
+        if groups and i == groups[-1][-1] + 1:
+            groups[-1].append(i)
+        else:
+            groups.append([i])
+
+    details, statuses, task_ids = [], [], []
+    for group in groups:
+        body = {"name": name,
+                "segments": [{"prompt": str((segments[i] or {}).get("prompt") or ""),
+                              "storyboard_prompt": str((segments[i] or {}).get("storyboard_prompt") or "")}
+                             for i in group],
+                "skill_id": str(args.get("skill_id") or "").strip() or "image_gen",
+                "index": group[0],
+                "force": bool(args.get("force"))}
+        if mode:
+            body["mode"] = mode
+        for key in ("ratio", "width", "height", "seed"):
+            if args.get(key) is not None:
+                body[key] = args[key]
+        snap = ctx.comfy.post("/neo_video_gen/storyboard_generate", body) or {}
+        task_id = str(snap.get("task_id") or "")
+        if not task_id:
+            raise ToolError(f"图片分镜没有返回 task_id：{snap.get('error') or name}")
+        task_ids.append(task_id)
+        state = _wait_storyboard(ctx, task_id)
+        statuses.append(str(state.get("status") or "running"))
+        details.extend(state.get("details") or [])
+
+    frames = {}
+    for d in details:
+        if d.get("filename") and d.get("index") is not None:
+            frames[int(d["index"])] = str(d["filename"])
+    status = "done" if all(s == "done" for s in statuses) else (statuses[-1] if statuses else "running")
+    return dump({"recipe": name, "task_id": task_ids[-1], "task_ids": task_ids, "status": status,
+                 # 段号对外一律 1 起：后端 details 里是 0 基偏移
+                 "details": [{"index": int(d["index"]) + 1, "status": d.get("status"),
+                              "filename": d.get("filename"), "error": d.get("error"),
+                              "warnings": d.get("warnings")}
+                             for d in details if d.get("index") is not None],
+                 "segments": _keyframe_segments(segments, frames, meta.get("shared")),
+                 "shared": meta.get("shared") or {}, "story": meta.get("story") or {},
+                 "note": "把 segments / shared / story 原样传给 director_save 才会落盘："
+                         "storyboard 已记图名，非全参考段已设首帧，全参考段已进参考图池"})
+
+
 def tool_director_save(ctx, args):
     """把分段写进 custom 配方（写操作）：预设配方只读，先 director_copy 再保存。"""
     segments = args.get("segments")
@@ -471,7 +583,7 @@ def tool_director_save(ctx, args):
         raise ToolError("segments 为空：每段至少 prompt + duration_sec（草稿可留空 prompt）")
     body = {"name": need(args, "name"), "type": "video_director",
             "shared": args.get("shared") or {}, "segments": segments}
-    for key in ("assets", "prompt", "gen_type"):
+    for key in ("assets", "prompt", "gen_type", "story"):
         if args.get(key) is not None:
             body[key] = args[key]
     return dump(ctx.comfy.post("/rs_recipes/save", body) or {})
@@ -596,10 +708,24 @@ TOOLS = [
     tool("director_save", "写操作：把分段写进 custom 配方（内置预设只读，先 director_copy）",
          {"name": s("string", "配方名"),
           "shared": s("object", "{width,height,seed,mode?,chunk_sec?}；mode 全体统一，mixed 时每段用 seg.mode"),
-          "segments": s("array", "每段 {prompt,duration_sec,skill_id?,first_frame?,refs?,mode?}；草稿可留空 prompt"),
+          "segments": s("array", "每段 {prompt,duration_sec,skill_id?,first_frame?,storyboard?,storyboard_prompt?,refs?,mode?}；草稿可留空 prompt"),
+          "story": s("object", "{idea,story,characters,segment_seconds,image_mode,image_skill,frame_source}："
+                               "文字故事板快照；带上才有主题 / 角色参考 / 分镜设置，关键帧也才拿得到角色参考"),
           "assets": s("array", "随配方收录的素材 {filename,subfolder,type,kind}，kind=image/video/audio")}, ("name", "segments"),
          {"name": "<director_copy 返回的新配方名>",
           "segments": [{"prompt": "橘猫走过城市街道，黄昏，镜头缓慢推进", "duration_sec": 5}]}),
+    tool("director_keyframes", "图片分镜（写操作，逐段串行跑图，可能要几分钟）：按段给配方出关键帧，落进配方自己的 assets/。"
+         "返回 segments / shared / story，原样传给 director_save 才记进配方（storyboard 已记图名、非全参考段已设首帧）",
+         {"recipe": RECIPE,
+          "segments": s("array", "只跑这些段（1 起）；留空跑全部"),
+          "skill_id": s("string", "生图技能 id（list_skills 可查），默认 image_gen（Krea2）"),
+          "mode": s("string", "t2i 纯文生图 / r2i 带角色参考；留空按配方的角色参考图自动"),
+          "force": s("boolean", "true 时已有关键帧的段也重出（换新随机种子）"),
+          "ratio": s("string", "宽高比（如 16:9），留空按配方 shared.ratio 或方图"),
+          "width": s("integer", "宽（像素），留空按比例"),
+          "height": s("integer", "高（像素），留空按比例"),
+          "seed": s("integer", "种子，留空随机")}, ("recipe",),
+         {"recipe": "<director_recipes 里的配方名>"}),
     tool("director_copy", "复制配方为新的 custom 配方（解锁内置预设的只读限制），返回新配方名",
          {"name": RECIPE}, ("name",), {"name": "<director_recipes 里的配方名>"}),
     tool("director_run", "整片入队，立即返回 task_id（多段长任务，用 task_status 轮询，勿同步等待；succeeded 后 filename 是整片 mp4，用 get_media 取）。出片默认口径是一段 5 秒，那种走 segment_run",
@@ -645,6 +771,7 @@ HANDLERS = {
     "director_recipes": tool_director_recipes,
     "director_spec": tool_director_spec,
     "director_plan": tool_director_plan,
+    "director_keyframes": tool_director_keyframes,
     "director_save": tool_director_save,
     "director_copy": tool_director_copy,
     "director_run": tool_director_run,
@@ -697,7 +824,9 @@ def serve(ctx, tools, stdin, stdout) -> int:
                                 "生图产物是图片，导演 / 单段 / 拼接产物是 mp4 视频，都用 get_media 取（视频只给 URL）。"
                                 "段序号一律 1 起。generate_image 的 skill_id 必须是 list_skills 里 has_workflow=true 的技能。"
                                 "出片默认口径是一段 5 秒、VDN 技能（minimax_h3_vdn_*，8 步）走 segment_run；"
-                                "多段整片要用户点名才跑，别拿现成多段配方直接 director_run。"}})
+                                "多段整片要用户点名才跑，别拿现成多段配方直接 director_run。"
+                                "要每段有图可依就用 director_keyframes 出关键帧，再把返回的 segments / shared / story "
+                                "原样传给 director_save 才生效；没跑过关键帧不要说已经设了首帧。"}})
         elif method == "notifications/initialized":
             continue
         elif method == "ping":

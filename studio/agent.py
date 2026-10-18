@@ -79,7 +79,7 @@ SESSION_TTL_SEC = 7 * 24 * 3600
 SESSION_FILE_RE = re.compile(r"^\d{8}-\d{6}-[0-9a-f]{32}\.json$")
 # 计划模式不许执行的工具：生成入队、配方写、取消在跑的任务，全是改状态的动作
 PLAN_BLOCKED_TOOLS = frozenset(("generate_image", "director_run", "segment_run", "assemble_run",
-                                "director_save", "director_copy", "cancel_task"))
+                                "director_save", "director_copy", "director_keyframes", "cancel_task"))
 # 出片三类的产物是 mp4，快照 succeeded 后带 filename + 产物子目录，取图按它拼 /view
 FILM_KINDS = ("director", "segment", "assemble")
 CANCELLED_TEXT = "已取消：智能体循环与在跑的任务已停止"
@@ -101,7 +101,7 @@ PLAN_MODE_NOTE = """
 
 本轮是计划模式（Plan）：只查不跑。
 - generate_image / director_run / segment_run / assemble_run / director_save / director_copy /
-  cancel_task 这一类改状态的工具本轮调不到，调用会被后端拒回错误。
+  director_keyframes / cancel_task 这一类改状态的工具本轮调不到，调用会被后端拒回错误。
 - 要看现状就用查询类工具查清：neo_status、list_skills、list_models、list_recipes、
   director_recipes、director_spec、list_gallery。
 - 方向上有分叉就用 ask_user 把问题与选项发给用户，等回答再定计划。
