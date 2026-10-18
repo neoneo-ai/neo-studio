@@ -290,7 +290,12 @@ _GENERATE_KEYS = ("skill_id", "prompt", "width", "height", "count", "seed", "neg
 
 
 def tool_generate_image(ctx, args):
+    skill_id = str(args.get("skill_id") or "").strip()
+    if not skill_id:
+        # 后端的空技能报错写的是「技能下拉」，那是 Studio 界面的控件，MCP 调用方没有下拉，先给一条照着做得下去的
+        raise ToolError("generate_image 需要 skill_id：先调 list_skills 取一个 has_workflow=true 的技能 id")
     body = {k: args[k] for k in _GENERATE_KEYS if args.get(k) is not None}
+    body["skill_id"] = skill_id
     refs = args.get("references")
     if isinstance(refs, str):
         refs = [refs]
@@ -516,9 +521,13 @@ def s(t, d) -> dict:
     return {"type": t, "description": d}
 
 
-def tool(name, desc, props, required=()) -> dict:
-    return {"name": name, "description": desc,
+def tool(name, desc, props, required=(), example=None) -> dict:
+    item = {"name": name, "description": desc,
             "inputSchema": {"type": "object", "properties": props, "required": list(required)}}
+    if example is not None:
+        # 示例参数只给 Studio 设置页的工具卡预填；_meta 是协议里放附加数据的位置，外部智能体可无视
+        item["_meta"] = {"example": example}
+    return item
 
 
 TASK_ID = s("string", "generate_image / director_run / segment_run / assemble_run 返回的 task_id")
@@ -532,7 +541,8 @@ TOOLS = [
           "q": s("string", "按 id / 名称 / 中文名子串过滤")}),
     tool("generate_prompt", "把简短想法扩写成成品提示词（LLM 同步返回文本）",
          {"text": s("string", "简短想法或草稿提示词"),
-          "skill_id": s("string", "可选：按该技能的模板上下文扩写")}, ("text",)),
+          "skill_id": s("string", "可选：按该技能的模板上下文扩写")}, ("text",),
+         {"text": "一只在窗台打盹的橘猫，暖色阳光，写实"}),
     tool("list_models", "列出可选模型（diffusion_models / text_encoders / vae / loras）与建议值", {}),
     tool("generate_image", "提交生图任务，立即返回 task_id（用 task_status 轮询、get_media 取图）",
          {"skill_id": s("string", "生图技能 id（list_skills 可查）"),
@@ -546,22 +556,28 @@ TOOLS = [
           "model": s("string", "扩散模型文件名，留空自动挑选"),
           "text_encoder": s("string", "文本编码器文件名，留空自动挑选"),
           "vae": s("string", "VAE 文件名，留空自动挑选"),
-          "steps": s("integer", "采样步数")}, ("skill_id", "prompt")),
+          "steps": s("integer", "采样步数")}, ("skill_id", "prompt"),
+         {"skill_id": "<list_skills 里 has_workflow=true 的技能 id>",
+          "prompt": "一只橘猫坐在窗台，暖色阳光，写实", "width": 1024, "height": 1024}),
     tool("task_status", "查任务快照（生图 / 整片 / 单段 / 拼接共用 task_id）；生图 succeeded 后 images 带取图 URL，导演类 succeeded 后 filename 是 mp4 产物",
-         {"task_id": TASK_ID}, ("task_id",)),
+         {"task_id": TASK_ID}, ("task_id",), {"task_id": "<generate_image / director_run 返回的 task_id>"}),
     tool("list_tasks", "列出最近的生图任务", {}),
-    tool("cancel_task", "取消任务（未执行出队，执行中中断）", {"task_id": TASK_ID}, ("task_id",)),
+    tool("cancel_task", "取消任务（未执行出队，执行中中断）", {"task_id": TASK_ID}, ("task_id",),
+         {"task_id": "<list_tasks 里的 task_id>"}),
     tool("get_media", "取产物文件（图片 / 视频 / 音频）：返回文件名、类型与 /view 的 URL；图片可 base64=true 回字节，视频与音频只给 URL",
          {"filename": s("string", "产物文件名（生图是 png，导演 / 单段 / 拼接是 mp4）"),
           "subfolder": s("string", "子目录，如 NeoDirector/xxx"),
           "type": s("string", "output（默认）或 input"),
-          "base64": s("boolean", "为 true 且产物是图片时附带 base64 字节")}, ("filename",)),
+          "base64": s("boolean", "为 true 且产物是图片时附带 base64 字节")}, ("filename",),
+         {"filename": "<task_status 里的产物文件名>", "base64": False}),
     tool("list_gallery", "列素材库目录结构（可 dir_name / path 下钻）",
          {"dir_name": s("string", "目录名"), "path": s("string", "目录内子路径")}),
     tool("list_recipes", "列出配方（含 video_director 类型标记与段数）", {}),
-    tool("load_recipe", "读单个配方的元数据", {"name": s("string", "配方名")}, ("name",)),
+    tool("load_recipe", "读单个配方的元数据", {"name": s("string", "配方名")}, ("name",),
+         {"name": "<list_recipes 里的配方名>"}),
     tool("director_recipes", "列出导演配方（type=video_director）", {}),
-    tool("director_spec", "读导演配方的 shared 与分段清单（段号 1 起）", {"name": RECIPE}, ("name",)),
+    tool("director_spec", "读导演配方的 shared 与分段清单（段号 1 起）", {"name": RECIPE}, ("name",),
+         {"name": "<director_recipes 里的配方名>"}),
     tool("director_plan", "故事板规划：mode=plan 主题/脚本→分段 JSON；mode=optimize 单段按 H3 格式重写；mode=modify 按指令改写单段",
          {"mode": s("string", "plan（默认）/ optimize / modify"),
           "idea": s("string", "plan：故事主题"),
@@ -577,9 +593,11 @@ TOOLS = [
          {"name": s("string", "配方名"),
           "shared": s("object", "{width,height,seed,mode?,chunk_sec?}；mode 全体统一，mixed 时每段用 seg.mode"),
           "segments": s("array", "每段 {prompt,duration_sec,skill_id?,first_frame?,refs?,mode?}；草稿可留空 prompt"),
-          "assets": s("array", "随配方收录的素材 {filename,subfolder,type,kind}，kind=image/video/audio")}, ("name", "segments")),
+          "assets": s("array", "随配方收录的素材 {filename,subfolder,type,kind}，kind=image/video/audio")}, ("name", "segments"),
+         {"name": "<director_copy 返回的新配方名>",
+          "segments": [{"prompt": "橘猫走过城市街道，黄昏，镜头缓慢推进", "duration_sec": 5}]}),
     tool("director_copy", "复制配方为新的 custom 配方（解锁内置预设的只读限制），返回新配方名",
-         {"name": RECIPE}, ("name",)),
+         {"name": RECIPE}, ("name",), {"name": "<director_recipes 里的配方名>"}),
     tool("director_run", "整片入队，立即返回 task_id（多段长任务，用 task_status 轮询，勿同步等待；succeeded 后 filename 是整片 mp4，用 get_media 取）",
          {"recipe": RECIPE,
           "only_segments": s("array", "只跑勾选的段（1 起）；留空跑全部"),
@@ -588,20 +606,23 @@ TOOLS = [
           "height": s("integer", "高，-1 用配方默认"),
           "continuity": s("boolean", "段间连续性"),
           "context_frames": s("integer", "连续性上下文帧数"),
-          "steps": s("integer", "采样步数，-1 用默认")}, ("recipe",)),
+          "steps": s("integer", "采样步数，-1 用默认")}, ("recipe",),
+         {"recipe": "<director_recipes 里的配方名>"}),
     tool("segment_run", "单段生成 / 重生成（修片主手段），立即返回 task_id（succeeded 后 filename 是该段 mp4）",
          {"recipe": RECIPE, "segment": SEGMENT,
           "seed": s("integer", "种子，-1 随机"),
           "anchors": s("string", "锚点模式 both/first/none"),
           "continuity": s("boolean", "段间连续性"),
           "context_frames": s("integer", "连续性上下文帧数"),
-          "film": s("string", "锚定用的成片文件名，留空取最新")}, ("recipe", "segment")),
+          "film": s("string", "锚定用的成片文件名，留空取最新")}, ("recipe", "segment"),
+         {"recipe": "<director_recipes 里的配方名>", "segment": 1}),
     tool("assemble_run", "把勾选的段拼回成片，立即返回 task_id（succeeded 后 filename 是拼接后的整片 mp4）",
          {"recipe": RECIPE, "segments": s("array", "要拼接的段序号（1 起）"),
           "film": s("string", "被替换的成片文件名，留空取最新"),
           "blend": s("integer", "接缝融合帧数"),
           "continuity": s("boolean", "段间连续性"),
-          "context_frames": s("integer", "连续性上下文帧数")}, ("recipe", "segments")),
+          "context_frames": s("integer", "连续性上下文帧数")}, ("recipe", "segments"),
+         {"recipe": "<director_recipes 里的配方名>", "segments": [1]}),
 ]
 
 HANDLERS = {
@@ -670,7 +691,7 @@ def serve(ctx, tools, stdin, stdout) -> int:
                 "instructions": "生图与整片都是异步任务：generate_image / director_run / segment_run / "
                                 "assemble_run 只返回 task_id，用 task_status 轮询到 succeeded 再取产物。"
                                 "生图产物是图片，导演 / 单段 / 拼接产物是 mp4 视频，都用 get_media 取（视频只给 URL）。"
-                                "段序号一律 1 起。"}})
+                                "段序号一律 1 起。generate_image 的 skill_id 必须是 list_skills 里 has_workflow=true 的技能。"}})
         elif method == "notifications/initialized":
             continue
         elif method == "ping":

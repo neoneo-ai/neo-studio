@@ -147,6 +147,19 @@ Both nodes share the same layout (the Agent shows no status bar):
   hovering a row shows a floating preview card (generation skills = configuration summary, the rest = an
   excerpt of the skill.md body), clicking the card opens the detail window; + New Skill / ⬆ ZIP /
   ⬆ Folder at the bottom of the dropdown are the skill-management entries.
+  The first option is the empty "Default" entry (labelled "Auto" in the desktop agent dock): with no skill
+  selected the backend decides on its own whether a template applies, and an image with no skill routes to captioning.
+  In the desktop agent dock, image and film generation both go through the backend agent
+  (`POST /neo_agent/run`, an SSE timeline — see [api-routes.md](api-routes.md)): a picked image skill makes the
+  backend generate straight from it without calling the LLM, and the empty "Auto" entry lets the LLM plan and call
+  MCP tools, with the tool list being the whole MCP registry (the `director_run` / `segment_run` / `assemble_run`
+  film chain included). The transcript shows the plan line, one card per tool call (arguments / progress /
+  result with result thumbnails, click opens the lightbox) and the final answer; a running task card carries a
+  Cancel button. The dock starts closed and the header **✨** button opens it; a sash between the page view and the
+  dock resizes it (260px floor for the dock, the page view keeps 420px), dragging it narrower than 150px closes the
+  column, double-click collapses / expands, `←`/`→` nudges it, and a key in the closed state reopens it at the
+  width it had. Open state and width live in `localStorage["neo_studio_agent_dock"]`, and closing keeps the width.
+  Enhancement skills only produce a prompt through `/rs_prompts/stream_generate_prompt`.
 - **Multi-turn skills** - when a skill that declares `multi_turn` is selected, a line of small text
   appears at the very bottom of the node (it hides again when the skill is switched or cleared): each
   generation advances one stage only, so fill in the returned questions completely and click ✨ again to

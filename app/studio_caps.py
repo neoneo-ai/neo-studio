@@ -155,11 +155,24 @@ _BACKYARD = {
     ("POST", "/neo_backyard/delete"),
 }
 
-DESKTOP_ROUTES = (_GALLERY | _BOOKMARK | _SKILL | _RECIPES | _SETTINGS | _LLM | _MODEL_HUB | _BACKYARD)
+# MCP：外部 MCP 服务的注册表、连接与工具调用。stdio 子进程只活在桌面端进程里，
+# 浏览器 spawn 不了，所以这组路由只有桌面端有（app/mcp_routes.py）。
+_MCP = {
+    ("GET", "/neo_mcp/servers"),
+    ("POST", "/neo_mcp/servers"),
+    ("POST", "/neo_mcp/connect"),
+    ("POST", "/neo_mcp/disconnect"),
+    ("GET", "/neo_mcp/tools"),
+    ("POST", "/neo_mcp/tools/call"),
+}
+
+DESKTOP_ROUTES = (_GALLERY | _BOOKMARK | _SKILL | _RECIPES | _SETTINGS | _LLM | _MODEL_HUB
+                  | _BACKYARD | _MCP)
 
 # 前端门控用的功能开关：功能 → 代表路由。桌面端服务时该功能可用，否则按钮指向「启动 ComfyUI」。
 FEATURE_ROUTES = {
     "image_gen": ("POST", "/neo_image_gen/generate"),
+    "agent": ("POST", "/neo_agent/run"),
     "storyboard": ("POST", "/neo_video_gen/storyboard_generate"),
     "voice": ("POST", "/neo_voice/generate"),
     "segment": ("POST", "/neo_video_gen/run_segment"),
@@ -167,6 +180,7 @@ FEATURE_ROUTES = {
     "grid_split": ("POST", "/rs_recipes/grid_split"),
     "memory": ("GET", "/neo_studio/mem_stats"),
     "repair": ("POST", "/neo_nodes/repair"),
+    "mcp": ("GET", "/neo_mcp/servers"),
 }
 
 

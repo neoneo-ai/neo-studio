@@ -122,6 +122,7 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(res["serverInfo"]["name"], "neo-studio")
         self.assertEqual(res["serverInfo"]["version"], mcp.plugin_version())
         self.assertIn("task_id", res["instructions"])
+        self.assertIn("has_workflow", res["instructions"], "instructions 要写明生图技能必须带工作流模板")
         self.assertIn("tools", res["capabilities"])
 
     def test_protocol_negotiation_falls_back(self):
@@ -141,6 +142,10 @@ class ProtocolTests(unittest.TestCase):
             self.assertTrue(set(schema["required"]) <= set(schema["properties"]))
             for prop in schema["properties"].values():
                 self.assertTrue(prop["description"])
+            example = (t.get("_meta") or {}).get("example") or {}
+            self.assertTrue(set(example) <= set(schema["properties"]))
+            if schema["required"]:
+                self.assertTrue(example, f"{t['name']} 有必填参数就得带示例参数")
 
     def test_empty_capability_lists(self):
         out = rpc(FakeHttp(), [{"jsonrpc": "2.0", "id": 1, "method": "resources/list"},
@@ -222,6 +227,14 @@ class BaseToolTests(unittest.TestCase):
         self.assertEqual(body["references"], [{"kind": "input", "value": "a.png"},
                                               {"kind": "input", "value": "b.png"}])
         self.assertEqual(json.loads(text_of(resp))["task_id"], "T1")
+
+    def test_generate_image_without_skill_id_points_at_list_skills(self):
+        # 后端的空技能报错写的是「技能下拉」，MCP 侧要在打到后端之前换成照着做得下去的一句
+        resp, fake = call_tool("generate_image", {"prompt": "猫"})
+        self.assertTrue(resp["result"]["isError"])
+        self.assertIn("list_skills", text_of(resp))
+        self.assertIn("has_workflow", text_of(resp))
+        self.assertEqual(fake.calls, [], "技能 id 缺失时不该把请求发到后端")
 
     def test_task_status_probes_tables_and_merges_director_progress(self):
         routes = {("GET", "/neo_studio/director/T1"): {"status": "running", "recipe": "r",

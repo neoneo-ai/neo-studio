@@ -170,6 +170,21 @@ Neo Studio 独立页面（`web/studio/index.html`）的后端。素材 / 生图 
 - 任务状态不走 HTTP 轮询：按变化经 WS 事件 `rs.image_gen.status` 推送任务快照，
   `/status` 仅作订阅前首拉与断线重连补漏，取消时后端也主动推送 `cancelled` 快照。
 
+## agent.py — `/neo_agent/*`
+
+右栏「智能体」的后端代理循环。工具调用一律经进程内 MCP 客户端逐行走 `mcp_server.serve` 的 JSON-RPC，
+工具表就是 MCP 全集（出片链路在内），面板自己不直接调 handler。
+
+| 方法 | 路由 | 说明 |
+|------|------|------|
+| POST | `/neo_agent/run` | 智能体一轮对话，SSE 时间线；body `{text, skill_id}`，帧 `plan` / `tool_call` / `status` / `tool_result` / `content`，收尾 `[ERROR]` / `[DONE]` |
+| POST | `/neo_agent/cancel` | 按 `task_id` 取消任务（走 MCP `cancel_task`，图片 / 整片 / 单段 / 拼接四类由协议自己找路由）；`task_id` 只收 UUID 形态 |
+
+- `skill_id` 非空时后端按技能直出图、不叫 LLM；为空时由 LLM 规划并调工具，轮次上限 12。
+- `generate_image` / `director_run` / `segment_run` / `assemble_run` 只回 `task_id`，循环里轮询 `task_status` 到终态，
+  采样步数与整片段号经 `status` 帧发出去；等待上限单图 600 秒、整片 2400 秒。
+- 工具回指的 ComfyUI 取本次请求自己的来源，请求体里没有地址可注入。
+
 ## prompts.py — `/rs_prompts/*`
 
 | 方法 | 路由 | 说明 |
@@ -263,7 +278,7 @@ LLM 模式与配置见 [llm.md](llm.md)，技能设计见 [skills.md](skills.md)
 
 - 生成与队列类接口必须 ComfyUI 在跑：`/neo_image_gen/generate`、`/neo_video_gen/run_segment`
   `assemble_segments` `storyboard_generate`、`/neo_voice/generate`、`/neo_studio/director/generate`、
-  `/neo_studio/mem_stats`、`/neo_nodes/repair`。
+  `/neo_agent/run` `/neo_agent/cancel`、`/neo_studio/mem_stats`、`/neo_nodes/repair`。
 - 缩略图与 ComfyUI 共用 `gallery/thumbnails` 缓存；两边同时跑时同一张图可能各生成一次。
 - 目录取 `folder_paths` 的默认 `output` / `input` / `user`：外部用 `--output-directory` 启动 ComfyUI 时，
   桌面端浏览仍指向默认目录。

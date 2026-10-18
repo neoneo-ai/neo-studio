@@ -50,6 +50,19 @@ Cursor（项目根 `.cursor/mcp.json`，内容同上）。已有其他 MCP 服�
 对智能体说「列出 Neo Studio 的 MCP 工具」，能看到 `neo_status` 等 20 个工具说明接入成功；再让它调
 `neo_status`，返回版本号与队列长度说明 ComfyUI 连上了。
 
+## Studio 设置页的 MCP 服务（内置 MCP 客户端）
+
+桌面端「设置 → MCP 服务」栏自带一个 MCP 客户端：注册表、连接 / 断开、工具调用都在这一栏，注册表文件是
+`data/configs/mcp_servers.json`。右栏「智能体」的「✨ 生成」下面有「🔌 MCP」入口，点它直接跳到这一栏。工具卡的参数框默认填的是服务端给的示例参数
+（`tools/list` 里的 `_meta.example`）：只读工具点开就能执行，带必填参数的工具只要把尖括号里的占位换成上一步返回的
+id 就能跑通。
+注册表文件不存在时，这一栏直接给出内置的 `neo-studio` 一项：`command` 用启动设置里的 Python，脚本用已安装
+插件目录里的 `mcp_server.py`，`--comfy-url` 指向桌面端启动的 ComfyUI 端口，点「连接」即可，不用手填路径。
+右栏「智能体」的「✨ 生成」是同一套口径的另一个客户端：`studio/agent.py` 在进程内逐行走 `mcp_server.serve`
+的 JSON-RPC，工具表就是 MCP 全集（出片链路在内），面板不直接调 handler，见 [api-routes.md](api-routes.md)。
+保存过一次注册表之后一切以文件内容为准——存了空清单就是空清单，删掉内置项不会再冒出来；文件存在但内容损坏
+时按空清单处理，内置项不会覆盖用户写坏的 JSON。远程 ComfyUI 模式下没有内置项，这一栏提示去外部 MCP 客户端接入。
+
 ## 参数与环境变量
 
 | 参数 | 环境变量 | 说明 |
@@ -109,6 +122,8 @@ director_recipes → director_spec(读分段) → director_plan(故事 → 分�
 
 **对智能体怎么说**（工具描述与 `initialize.instructions` 已写明约定，一般不用重复交代）
 
+生图那句要跑得通，前提是本机存在带 `workflow.json` 的生图技能（`list_skills` 里 `has_workflow=true`）。
+
 - 「用 Neo Studio 生成一张 1024×1024 的橘猫图，生成好把图给我」
 - 「列出导演配方，读《红毯》的分段，把第 3 段重生成后拼回成片，给我成片地址」
 - 「按这个故事脚本分 6 段做短片，跑完把成片文件名给我」
@@ -117,6 +132,8 @@ director_recipes → director_spec(读分段) → director_plan(故事 → 分�
 
 - **异步任务**：`generate_image` `director_run` `segment_run` `assemble_run` 只返回 `task_id`，
   用 `task_status` 轮询到 `succeeded` 再取产物；整片是多段长任务，不要同步等待。
+- **生图技能必须带模板**：`generate_image` 的 `skill_id` 必须是 `list_skills` 里 `has_workflow=true` 的技能。
+  没有这种技能时先在前端技能管理里保存一个工作流模板；MCP 层不会替你挑，空 `skill_id` 在发出请求之前就报错。
 - **段序号一律 1 起**（第 1 段 = 时间轴第一段）。`segment_run` 的 `segment`、`assemble_run` 与
   `director_run.only_segments` 的列表都是 1 基，内部换算成端点的 0 基。
 - **写操作只有两个**：`rs_recipes/save` 与 `rs_recipes/copy`。不暴露删除端点；读文件只经 ComfyUI 的

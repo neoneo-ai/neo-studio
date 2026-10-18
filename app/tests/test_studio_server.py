@@ -25,6 +25,8 @@ sys.path.insert(0, str(PLUGIN_DIR / "tests"))
 
 import studio_caps as caps
 import studio_server as ns
+import mcp_client
+import mcp_routes
 
 TEST_PORT = 8291
 STUDIO_URL = "/neo-studio"
@@ -106,11 +108,15 @@ class _ServerCase(_RealFolderPaths):
         cls.app["userdata"] = cls.tmpdir / "neo_gallery_data.json"
         cls.app["comfy_log"] = cls.tmpdir / "comfy_run.log"
         cls.app["comfy_log"].write_text("desktop log line 1\ndesktop log line 2\n", encoding="utf-8")
+        # MCP 注册表落在用例自己的临时目录：注册表写入用例不能碰真实数据根
+        cls.mcp_config = cls.tmpdir / "mcp_servers.json"
+        cls.app["mcp"] = mcp_client.McpManager(cls.mcp_config)
         cls.server = ns.DesktopServer(lambda: cls.app, TEST_PORT)
         cls.port = cls.server.start()
 
     @classmethod
     def tearDownClass(cls):
+        cls.app["mcp"].close_all()   # 用例连过的外部 MCP 进程不能留到下一个测试进程外
         cls.server.stop()
         cls._restore_stubs()
 
@@ -446,6 +452,8 @@ class DesktopModuleTests(_RealFolderPaths):
     def test_capability_manifest_matches_module_routes(self):
         registered = {(r.method, r.path)
                       for table in ns.load_desktop_modules(PLUGIN_DIR) for r in table}
+        # MCP 是桌面端自己的一层（浏览器 spawn 不了 stdio 子进程），路由表在 app 层不在插件层
+        registered |= {(r.method, r.path) for r in mcp_routes.routes}
         self.assertFalse(caps.DESKTOP_ROUTES - registered,
                          f"能力清单里的桌面端路由在模块里不存在: {sorted(caps.DESKTOP_ROUTES - registered)}")
 
@@ -462,6 +470,110 @@ class DesktopModuleTests(_RealFolderPaths):
         mounted = {(r.method, r.resource.canonical) for r in app.router.routes()
                    if r.method != "HEAD" and r.resource.canonical.startswith(("/neo", "/rs_"))}
         self.assertEqual(mounted - desktop_pages, caps.DESKTOP_ROUTES)
+
+
+# 路由用例用的最小 MCP 服务：UTF-8 的 NDJSON over stdio，规范三步齐全
+FAKE_MCP = '''
+import json, sys
+
+TOOLS = {"tools": [{"name": "ping", "description": "ping", "inputSchema":
+        {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}}]}
+
+
+def send(msg):
+    sys.stdout.buffer.write((json.dumps(msg, ensure_ascii=False) + "\\n").encode("utf-8"))
+    sys.stdout.buffer.flush()
+
+
+for raw in sys.stdin.buffer:
+    msg = json.loads(raw.decode("utf-8"))
+    if "id" not in msg:
+        continue
+    if msg["method"] == "initialize":
+        send({"jsonrpc": "2.0", "id": msg["id"], "result":
+              {"protocolVersion": "2025-06-18", "capabilities": {},
+               "serverInfo": {"name": "route-mcp", "version": "1"}}})
+    elif msg["method"] == "tools/list":
+        send({"jsonrpc": "2.0", "id": msg["id"], "result": TOOLS})
+    else:
+        send({"jsonrpc": "2.0", "id": msg["id"], "result": {"content": [{"type": "text",
+              "text": msg["params"]["arguments"].get("text", "")}]}})
+'''
+
+
+class McpRouteTests(_ServerCase):
+    """外部 MCP 服务只在桌面端进程里连：页面拿到注册表、工具表与调用结果，密钥不回显。"""
+
+    def setUp(self):
+        # 服务实例是整族用例共用的，注册表与在连会话要逐条用例复位，不能靠执行顺序
+        self.app["mcp"].close_all()
+        if self.mcp_config.exists():
+            self.mcp_config.unlink()
+
+    def test_registry_starts_empty(self):
+        data = json.loads(self.get("/neo_mcp/servers")[1])
+        self.assertEqual(data["servers"], [])
+        self.assertEqual(data["connected"], [])
+
+    def test_registry_round_trip_masks_the_secret(self):
+        status, body = self.post_json("/neo_mcp/servers", {"servers": [
+            {"name": "demo", "transport": "stdio", "command": "node", "args": ["server.js"],
+             "env": {"API_KEY": "super-secret"}}]})
+        self.assertEqual(status, 200)
+        data = json.loads(body)
+        self.assertEqual(data["servers"][0]["env"], {"API_KEY": "***"})
+        self.assertNotIn("super-secret", body.decode("utf-8"), "响应里不能把密钥带回浏览器")
+        self.assertIn("super-secret", self.mcp_config.read_text(encoding="utf-8"), "密钥只留本机")
+        self.assertEqual(json.loads(self.get("/neo_mcp/servers")[1])["servers"][0]["name"], "demo")
+
+    def test_registry_validation_error_is_reported_to_the_page(self):
+        data = json.loads(self.post_json("/neo_mcp/servers", {"servers": [
+            {"name": "demo", "transport": "http", "url": "ftp://a/mcp"}]})[1])
+        self.assertFalse(data["success"])
+        self.assertIn("HTTP 地址无效", data["error"])
+
+    def test_registry_post_without_servers_is_a_bad_request(self):
+        self.assertEqual(self.post_json("/neo_mcp/servers", {})[0], 400)
+
+    def test_tools_list_is_empty_without_a_connection(self):
+        data = json.loads(self.get("/neo_mcp/tools")[1])
+        self.assertEqual(data["tools"], [])
+        self.assertEqual(data["connected"], [])
+
+    def test_connect_to_an_unregistered_server_reports_it(self):
+        data = json.loads(self.post_json("/neo_mcp/connect", {"name": "ghost"})[1])
+        self.assertFalse(data["success"])
+        self.assertIn("未注册", data["error"])
+
+    def test_call_without_a_connection_reports_it(self):
+        data = json.loads(self.post_json("/neo_mcp/tools/call",
+                                         {"name": "ghost", "tool": "x", "arguments": {}})[1])
+        self.assertFalse(data["success"])
+        self.assertIn("未连接", data["error"])
+
+    def test_disconnect_is_idempotent(self):
+        self.assertTrue(json.loads(self.post_json("/neo_mcp/disconnect", {"name": "ghost"})[1])["success"])
+
+    def test_connect_through_the_route_lists_the_tools(self):
+        script = self.tmpdir / "route_mcp_server.py"
+        script.write_text(FAKE_MCP, encoding="utf-8")
+        self.post_json("/neo_mcp/servers", {"servers": [
+            {"name": "demo", "transport": "stdio", "command": sys.executable, "args": [str(script)]}]})
+        data = json.loads(self.post_json("/neo_mcp/connect", {"name": "demo"})[1])
+        self.assertTrue(data["success"], data)
+        self.assertEqual([t["name"] for t in data["tools"]], ["ping"])
+        self.assertEqual(json.loads(self.get("/neo_mcp/tools")[1])["connected"], ["demo"])
+        data = json.loads(self.post_json("/neo_mcp/tools/call",
+                                         {"name": "demo", "tool": "ping", "arguments": {"text": "hi"}})[1])
+        self.assertEqual(data["result"]["content"][0]["text"], "hi")
+        self.assertTrue(json.loads(self.post_json("/neo_mcp/disconnect", {"name": "demo"})[1])["success"])
+        self.assertEqual(json.loads(self.get("/neo_mcp/tools")[1])["connected"], [])
+
+    def test_mcp_routes_are_listed_in_the_ownership_table(self):
+        data = json.loads(self.get("/neo_studio/version")[1])
+        self.assertIn("GET /neo_mcp/servers", data["routes"])
+        self.assertIn("POST /neo_mcp/tools/call", data["routes"])
+        self.assertTrue(data["caps"]["mcp"], "MCP 只有桌面端能服务，页面据此门控")
 
 
 if __name__ == "__main__":

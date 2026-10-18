@@ -36,6 +36,12 @@ if __package__ not in (None, ""):
     # Import workflow module (workflow repair API; registers /neo_nodes/repair route)
     from . import workflow
 
+    # 右栏智能体代理循环（/neo_agent/run）：工具调用走进程内 MCP 客户端，需要 ComfyUI 运行时，
+    # 桌面端离线服务不挂这条路由（app/studio_caps.py 里没有它，离线时回 409）
+    from . import agent
+    for _route in agent.routes:
+        PromptServer.instance.routes.route(_route.method, _route.path, **_route.kwargs)(_route.handler)
+
     # Import built-in image generation module (registers /neo_image_gen/* generation routes)
     from . import image_gen
 

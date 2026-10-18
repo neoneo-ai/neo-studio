@@ -57,6 +57,26 @@ the `neo-studio` entry instead of overwriting the file.
 Ask the agent to "list the Neo Studio MCP tools" — 20 tools such as `neo_status` means the wiring works. Asking
 it to call `neo_status` proves ComfyUI is reachable.
 
+## The Studio MCP servers settings (built-in MCP client)
+
+The **Settings → MCP Servers** tab of the desktop window is its own MCP client: registry, connect /
+disconnect, and tool calls all live in that tab, with the registry at `data/configs/mcp_servers.json`.
+The agent dock has a **🔌 MCP** entry under **✨ Generate** that jumps straight to the tab. Tool cards open
+with the server's example arguments (`_meta.example` in `tools/list`): a read-only tool runs as soon as you
+press Execute, and a tool with required arguments only needs the angle-bracket placeholders swapped for the
+ids the previous call returned. While the
+registry file does not exist, the tab offers one built-in `neo-studio` entry: `command` is the Python
+from the startup settings, the script is the `mcp_server.py` inside the installed plugin directory, and
+`--comfy-url` points at the ComfyUI port the desktop launched — press Connect, no paths to type. Once
+the registry has been saved the file is the only source: a saved empty list stays empty and the built-in
+entry never reappears; a file that exists but is malformed reads as empty, and the built-in entry never
+overwrites JSON the user broke. In remote ComfyUI mode there is no built-in entry and the tab points at
+the external MCP clients instead.
+
+The agent dock's **✨ Generate** is a second client on the same protocol: `studio/agent.py` feeds
+`mcp_server.serve` line by line in-process, the tool list it hands the LLM is the whole MCP registry (the film
+chain included), and the dock never calls a handler directly — see [api-routes.md](api-routes.md).
+
 ## Flags and environment variables
 
 | Flag | Environment | Meaning |
@@ -118,6 +138,9 @@ bytes.
 **What to say to the agent** (the tool descriptions and `initialize.instructions` already state the
 conventions, so you normally don't have to repeat them)
 
+The image sentence only runs when the machine has an image skill with a `workflow.json`
+(`has_workflow=true` in `list_skills`).
+
 - "Generate a 1024×1024 image of an orange cat with Neo Studio and give me the picture when it's done."
 - "List the director recipes, read the segments of the Red Carpet recipe, regenerate segment 3, stitch the
   film back together and give me the finished film URL."
@@ -128,6 +151,9 @@ conventions, so you normally don't have to repeat them)
 - **Async tasks**: `generate_image`, `director_run`, `segment_run`, `assemble_run` only return a `task_id`.
   Poll with `task_status` until `succeeded`, then fetch the output; a full film is a multi-segment long job,
   so never wait on it synchronously.
+- **Image generation needs a skill with a template**: `generate_image.skill_id` must be a `list_skills`
+  entry with `has_workflow=true`. The MCP layer never picks one for you, and an empty `skill_id` fails with
+  that pointer before any request reaches the backend.
 - **Segment numbers are 1-based everywhere** (segment 1 = the first segment on the timeline).
   `segment_run.segment` and the lists in `assemble_run.segments` / `director_run.only_segments` are 1-based
   and converted to the endpoints' 0-based indices internally.

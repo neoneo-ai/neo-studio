@@ -48,6 +48,29 @@ body {
 .ns-frameless .ns-header a, .ns-frameless .ns-header button { cursor: pointer; }
 .ns-about-version { font-size: 13px; color: #b7bbc4; user-select: text; cursor: text; }
 
+/* 右栏智能体：顶栏开合按钮 + 常驻右缘的栏子（默认收起，开合与宽度存 neo_studio_agent_dock）。
+   栏子宽度由 .ns-body 上的 --ns-agent-w 决定，没拖过就用样式里的默认宽度；页面视图让位（.ns-body 的 flex 行）。
+   按钮里的 sparkle 与栏内「✨ 生成」同一字形，两处图标一致 */
+.ns-agent-toggle {
+    width: 30px; height: 26px; margin-left: 12px;
+    border: 1px solid transparent; border-radius: 4px;
+    background: transparent; cursor: pointer;
+    font-size: 15px; line-height: 1;
+}
+.ns-agent-toggle:hover { background: #33333a; }
+.ns-agent-toggle-on { background: #2b3a52; border-color: #2f6fed; color: #cfe0ff; }
+.ns-agent-dock {
+    flex: none; width: var(--ns-agent-w, 360px); min-width: 0;
+    border-left: 1px solid #333; overflow: hidden; transition: width .16s ease;
+}
+/* 右栏分隔条：与左栏那条共用样式（.ns-director-colsplit），在 flex 行里占 18px 热区。
+   收起态栏子不显示、分隔条留着，三点抓手常驻 = 它就是把栏子拖回来的那个把手 */
+.ns-body > .ns-director-colsplit { flex: none; width: 18px; }
+.ns-body.ns-agent-closed > .ns-director-colsplit::before { opacity: 1; }
+/* 拖动时关掉宽度过渡，否则每一帧都在补间、拖起来发黏 */
+.ns-body.ns-colsplit-drag { user-select: none; }
+.ns-body.ns-colsplit-drag .ns-agent-dock { transition: none; }
+
 /* 桌面端的离线素材页：body.ns-offline 只用来压暗生成入口与收起显存条，离线页不叠横幅 */
 .ns-gen-off { opacity: .75; }
 .ns-comfy-hint { animation: ns-blink 1s ease-in-out 3; }
@@ -60,7 +83,9 @@ body {
 .ns-offline .neo-director-sb-gen { opacity: .6; }
 
 
-.ns-view { flex: 1; overflow: hidden; position: relative; }
+/* 主区一行两栏：左 = 页面视图，右 = 智能体栏（顶栏按钮开合） */
+.ns-body { flex: 1; display: flex; min-height: 0; }
+.ns-view { flex: 1; min-width: 0; overflow: hidden; position: relative; }
 .ns-page { height: 100%; overflow: auto; padding: 16px; }
 /* 素材页顶部不留内边距：sticky 停在容器 padding 内侧，上方会露出一条滚动的缩略图；顶部间距由工具条自己的 padding 提供 */
 .ns-page:has(.ns-gallery-host) { padding-top: 0; }
@@ -485,6 +510,9 @@ body {
 .ns-settings-content { flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 0; overflow: auto; padding: 14px 18px; }
 .ns-settings-section { padding: 0; }
 .ns-settings-section h3 { margin: 0 0 8px; font-size: 15px; color: #fff; }
+/* MCP 服务栏：面板自带滚动区，高度跟着设置页走，长工具表在面板内滚而不是把设置页撑高 */
+.ns-mcp-section { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.ns-mcp-section .neo-agent { flex: 1 1 auto; min-height: 0; height: auto; }
 /* 表单自带的区块标题与 tab 名重复（tab 就是页名），只留说明行当副标题 */
 .ns-settings .rs-settings-info .rs-settings-title { display: none; }
 .ns-settings .rs-settings-desc { margin-bottom: 12px; }
@@ -600,6 +628,7 @@ body {
 .rs-btn:focus-visible,
 .ns-mem-clear:focus-visible,
 .ns-wctl-btn:focus-visible,
+.ns-agent-toggle:focus-visible,
 .ns-settings-tab:focus-visible,
 .ns-info:focus-visible,
 .ns-launch-input:focus-visible,

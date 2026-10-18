@@ -49,6 +49,7 @@ from pathlib import Path
 from typing import Optional
 
 from studio_server import DesktopServer, build_app
+import mcp_client
 
 IS_FROZEN = bool(getattr(sys, "frozen", False))
 APP_DIR = Path(__file__).resolve().parent
@@ -1615,8 +1616,15 @@ def main() -> int:
     # build_app 要把根目录加进 sys.path 才能 import folder_paths：根目录无效时装配必崩。
     # 引导页补完根目录后由 ensure_server 重取，服务才装配得起来。
     boot = {"root": root, "serve_dir": serve_dir}
+    # MCP 会话登记表与桌面端服务共用：页面连上的那批进程，关窗收尾回收的也是这批
+    # 注册表还没有文件时内置这一条：插件自带 mcp_server.py，解释器与副本路径只有桌面端知道
+    builtin = mcp_client.builtin_server(python, serve_dir / "mcp_server.py",
+                                         f"http://127.0.0.1:{port}")
+    mcp = mcp_client.McpManager(STATE / "configs" / "mcp_servers.json", log_line,
+                                defaults=[builtin] if builtin else [])
     server = DesktopServer(lambda: build_app(boot["root"], boot["serve_dir"], flags, launcher,
-                                           launcher_api, COMFY_LOG, data_root=STATE),
+                                           launcher_api, COMFY_LOG, data_root=STATE,
+                                           mcp_manager=mcp),
                          port + DESKTOP_PORT_OFFSET)
     offline_url = ""
 
@@ -1701,6 +1709,7 @@ def main() -> int:
             desktop.comfy_close()   # 先带走内核：evaluate_js 要等 UI 线程回消息循环，卡住也不能拖住杀进程
             if desktop.comfy is not None:
                 window.evaluate_js(CLOSING_JS)   # 窗口停在提示上，直到收尾走完
+            mcp.close_all()   # 用户连过的外部 MCP 进程：不收就在后台读着已关的 stdin 挂着，netstat 里多一个「关不掉的 ComfyUI」
             server.stop()
         finally:
             window.destroy()   # 收尾出异常也不能把窗口留成关不掉

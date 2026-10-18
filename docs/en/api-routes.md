@@ -185,6 +185,24 @@ ComfyUI runtime.
   `rs.image_gen.status`; `/status` only serves as the first pull before subscribing and as the gap filler after a
   reconnect, and on cancel the backend also pushes a `cancelled` snapshot.
 
+## agent.py — `/neo_agent/*`
+
+The backend agent loop behind the right-side agent dock. Every tool call goes through an in-process MCP client
+that feeds `mcp_server.serve` line by line over JSON-RPC; the tool list is the whole MCP registry (the film chain
+included), and the dock never calls a handler directly.
+
+| Method | Route | Description |
+|--------|-------|-------------|
+| POST | `/neo_agent/run` | One agent turn, SSE timeline; body `{text, skill_id}`, frames `plan` / `tool_call` / `status` / `tool_result` / `content`, ending with `[ERROR]` / `[DONE]` |
+| POST | `/neo_agent/cancel` | Cancel a task by `task_id` (through MCP `cancel_task`, which resolves the image / film / segment / assemble route itself); `task_id` accepts UUID shapes only |
+
+- A non-empty `skill_id` makes the backend generate straight from that skill without calling the LLM; an empty one
+  lets the LLM plan and call tools, with a 12-turn cap.
+- `generate_image` / `director_run` / `segment_run` / `assemble_run` return a `task_id` only; the loop polls
+  `task_status` to a terminal state and emits sampling steps and film segment numbers through `status` frames.
+  The wait cap is 600s for a single image and 2400s for a whole film.
+- The ComfyUI the tools talk to is the source of the current request; the body carries no address to inject.
+
 ## prompts.py — `/rs_prompts/*`
 
 | Method | Route | Description |
@@ -288,7 +306,7 @@ the table answers 409. Startup sequence, close teardown and cache conventions: [
 
 - Generation and queue routes require ComfyUI to be running: `/neo_image_gen/generate`,
   `/neo_video_gen/run_segment` `assemble_segments` `storyboard_generate`, `/neo_voice/generate`,
-  `/neo_studio/director/generate`, `/neo_studio/mem_stats`, `/neo_nodes/repair`.
+  `/neo_studio/director/generate`, `/neo_agent/run` `/neo_agent/cancel`, `/neo_studio/mem_stats`, `/neo_nodes/repair`.
 - Thumbnails share the `gallery/thumbnails` cache with ComfyUI; when both run at the same time the same image may be
   generated twice.
 - Directories come from `folder_paths`' default `output` / `input` / `user`: if ComfyUI is started externally with

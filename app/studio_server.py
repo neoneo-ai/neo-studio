@@ -18,6 +18,8 @@ from pathlib import Path
 from aiohttp import web
 
 import studio_caps as caps
+import mcp_client
+import mcp_routes
 
 OFFLINE_ERROR = "ComfyUI 未运行"
 DESKTOP_PKG = "_neo_studio_desktop"
@@ -197,14 +199,23 @@ async def launcher_post(request):
     return web.json_response(res)
 
 
+def mcp_config_path(plugin_dir: Path, data_root: Path = None) -> Path:
+    """MCP 注册表的落点：用户数据根的 configs/。data_root 没给时落插件的 tmp/ ——
+    与 comfy_run.log 的兜底同一套，用户数据不落插件目录是硬规矩。"""
+    base = Path(data_root) if data_root else plugin_dir / "tmp"
+    return base / "configs" / "mcp_servers.json"
+
+
 def build_app(root: Path, plugin_dir: Path, flags: dict = None, launcher: dict = None,
               launcher_api: dict = None, comfy_log: Path = None,
-              data_root: Path = None) -> web.Application:
+              data_root: Path = None, mcp_manager=None) -> web.Application:
     """桌面端 app：Studio 页面 + 前端静态文件 + 能力清单里归桌面端的全部路由。
     flags 是桌面端的启动中标记（与 StudioDesktop 共用同一份 dict），随版本快照下发给页面。
     launcher / launcher_api 同样与 StudioDesktop 共用：设置页在桌面端读快照、发保存。
     data_root 是桌面端的用户数据根：插件模块 import 期按它找 gallery / recipes / configs，
-    桌面端服务与桌面端拉起的内核因此读同一份数据。"""
+    桌面端服务与桌面端拉起的内核因此读同一份数据。
+    mcp_manager 与 StudioDesktop 共用同一份会话登记表：关窗收尾要回收的进程与页面连着的是
+    同一批；没给时按 data_root 建一个，注册表落在 <data_root>/configs/mcp_servers.json。"""
     if str(root) not in sys.path:
         sys.path.insert(0, str(root))
     import folder_paths   # noqa: F401  gallery 在 import 期就要读 output/input 目录
@@ -244,8 +255,17 @@ def build_app(root: Path, plugin_dir: Path, flags: dict = None, launcher: dict =
     app["launcher"] = launcher if launcher is not None else {}
     app["launcher_api"] = launcher_api if launcher_api is not None else {}
     app["plugin_version"] = sys.modules[f"{DESKTOP_PKG}.util"].plugin_version()
+    if mcp_manager is not None:
+        app["mcp"] = mcp_manager
+    else:
+        # 注册表还没有文件时内置这一条：插件自带 mcp_server.py，桌面端服务认得自己的解释器与副本路径
+        builtin = mcp_client.builtin_server(sys.executable, plugin_dir / "mcp_server.py",
+                                            f"http://127.0.0.1:{app['launcher'].get('port') or 8188}")
+        app["mcp"] = mcp_client.McpManager(mcp_config_path(plugin_dir, data_root),
+                                           defaults=[builtin] if builtin else [])
 
     app.add_routes(routes)
+    app.add_routes(mcp_routes.routes)
     # catch-all 必须最后注册：aiohttp 按注册顺序匹配，静态与浏览路由先占位
     app.router.add_route("GET", "/{path:.*}", offline)
     app.router.add_route("POST", "/{path:.*}", offline)

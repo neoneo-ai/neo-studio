@@ -29,6 +29,7 @@
         <a href="#/settings" data-tab="settings">设置</a>
     </nav>
     <span class="ns-comfy-status" id="ns-comfy-status" hidden></span>
+    <button class="ns-agent-toggle" id="ns-agent-toggle" type="button" title="智能体" hidden>✨</button>
     <span class="ns-wctl" id="ns-wctl" hidden>
         <button class="ns-wctl-btn" id="ns-win-min" type="button" title="最小化">–</button>
         <button class="ns-wctl-btn" id="ns-win-max" type="button" title="最大化">▢</button>
@@ -36,7 +37,10 @@
         <button class="ns-wctl-btn ns-wctl-close" id="ns-win-close" type="button" title="关闭">✕</button>
     </span>
 </header>
-<main id="ns-view" class="ns-view"></main>
+<div class="ns-body">
+    <main id="ns-view" class="ns-view"></main>
+    <aside class="ns-agent-dock ns-hidden" id="ns-agent-dock"></aside>
+</div>
 <script type="module" src="/extensions/comfyui-neo-studio/studio/studio-app.js"></script>
 </body>
 </html>

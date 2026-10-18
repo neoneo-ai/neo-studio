@@ -17,6 +17,7 @@ import { createRecipesPanel } from "../recipes.js";
 import { createImageGenSettingsForm, createVideoGenSettingsForm } from "../image-gen.js";
 import { createModelConfigForm } from "../llm-setting.js";
 import { createSkillManager } from "../skill.js";
+import { createAgentPanel, createMcpPanel } from "../agent-panel.js";
 import { t, tf, getLang, applyLang, LANGS } from "../js/core/i18n.js";
 
 const view = document.getElementById("ns-view");
@@ -933,7 +934,9 @@ function createLangPanel() {
         [...rows, $el("div", { className: "ns-lang-hint", textContent: t("选择后立即落盘并整页刷新，界面文案按新语言重建。") })]);
 }
 
-// ====== 设置页：左侧 tab 切换（LLM / 生图 / 生视频 / 界面语言 / 日志 / 启动设置 / 关于），默认 LLM ======
+// ====== 设置页：左侧 tab 切换（LLM / 生图 / 生视频 / MCP 服务 / 界面语言 / 日志 / 启动设置 / 关于），默认 LLM ======
+let settingsShow = null;   // 设置页的 tab 切换函数：深链 #/settings?tab=mcp 要用它落到那一栏
+
 function buildSettings(el) {
     // 三个表单工厂均返回 { el, load, save, isDirty }，挂 .el、后台 load（💾 保存按钮在表单内部）
     const genForm = createImageGenSettingsForm();
@@ -995,11 +998,13 @@ function buildSettings(el) {
 
     // tab 顺序：LLM 设置 → 生图设置 → 生视频设置 → 界面语言 → 日志 → 启动设置 → 关于；每个 tab 只显示对应设置区
     const launcher = createLauncherPanel();
+    const mcp = createMcpPanel();
     const section = (title) => $el("h3", { textContent: t(title) });
     const sections = [
         { key: "llm", label: t("LLM 设置"), body: $el("div", { className: "ns-settings-section" }, [section("LLM 设置"), llmForm.el]) },
         { key: "gen", label: t("生图设置"), body: $el("div", { className: "ns-settings-section" }, [section("生图设置"), genForm.el]) },
         { key: "video", label: t("生视频设置"), body: $el("div", { className: "ns-settings-section" }, [section("生视频设置"), videoForm.el]) },
+        { key: "mcp", label: t("MCP 服务"), body: $el("div", { className: "ns-settings-section ns-mcp-section" }, [section("MCP 服务"), mcp.root]) },
         { key: "lang", label: t("界面语言"), body: $el("div", { className: "ns-settings-section" }, [section("界面语言"), createLangPanel()]) },
         { key: "log", label: t("日志"), body: $el("div", { className: "ns-settings-section ns-log-section" }, [$el("div", { className: "ns-log-head" }, [section("日志"), copyLogBtn]), logBody]) },
         { key: "launch", label: t("启动设置"), body: launcher.el },
@@ -1015,11 +1020,14 @@ function buildSettings(el) {
             logStick = true;   // 重新进 tab 回到最新，之后按用户滚动位置决定
             refreshLog();
             logTimer = setInterval(refreshLog, 2000);
+        } else if (key === "mcp") {
+            mcp.refresh().catch(e => console.error("[Neo Studio] mcp panel refresh failed:", e));
         } else if (logTimer) {
             clearInterval(logTimer);
             logTimer = null;
         }
     };
+    settingsShow = showSection;
     for (const s of sections) {
         const btn = $el("button", { className: "ns-settings-tab", textContent: s.label });
         btn.dataset.key = s.key;
@@ -1139,6 +1147,7 @@ window.addEventListener("neo-offline-request", () => {
 // 那些接口只读写文件与 8080 服务，桌面端自己就能服务。
 const RUN_GATES = [
     [".neo-gallery-gm-btn", "image_gen", t("生成素材")],
+    [".neo-agent-run", "agent", t("✨ 生成")],
     [".ns-gen-run", "director", t("🎬 生成整片")],
     [".neo-director-regen-run", "segment", t("生成这一段")],
     [".neo-director-merge-run", "segment", t("拼回成片")],
@@ -1532,10 +1541,92 @@ function localizeShell() {
     const logo = document.querySelector(".ns-logo");
     if (logo) { logo.textContent = t("🎬 新影工坊"); logo.title = t("返回首页"); }
     for (const a of document.querySelectorAll(".ns-tabs a")) a.textContent = t(a.textContent.trim());
-    for (const id of ["ns-win-min", "ns-win-max", "ns-win-fs", "ns-win-close"]) {
+    for (const id of ["ns-win-min", "ns-win-max", "ns-win-fs", "ns-win-close", "ns-agent-toggle"]) {
         const b = document.getElementById(id);
         if (b) b.title = t(b.title);
     }
+}
+
+// ====== 右栏智能体：常驻窗口右缘，顶栏按钮开合（默认收起），开合与栏宽存 localStorage ======
+const AGENT_DOCK_KEY = "neo_studio_agent_dock";
+const AGENT_DOCK_MIN = 260;        // 右栏下限：技能下拉与工具卡参数框还看得下
+const AGENT_DOCK_COLLAPSE = 150;   // 收起阈值：拖到比这更窄就关掉整栏，靠分隔条上的三点抓手拖回来
+const AGENT_VIEW_MIN = 420;        // 左侧页面视图下限：与导演编辑器下限同档
+
+function initAgentDock() {
+    const dock = document.getElementById("ns-agent-dock");
+    const toggle = document.getElementById("ns-agent-toggle");
+    const body = document.querySelector(".ns-body");
+    if (!dock || !toggle || !body) return;
+    const panel = createAgentPanel(dock, {
+        // MCP 注册表在设置页那一栏，右栏入口只做跳转（pushState 与 go() 同一理由：不碰 location.hash）
+        onOpenMcp: () => {
+            history.pushState(null, "", "#/settings?tab=mcp");
+            route();
+        },
+    });
+    const refresh = () => panel.refresh().catch(e => console.error("[Neo Studio] agent panel refresh failed:", e));
+    // 分隔条夹在页面视图与栏子之间，样式与左栏那条共用（.ns-director-colsplit）
+    const split = $el("div", {
+        className: "ns-director-colsplit", role: "separator", "aria-orientation": "vertical", tabindex: "0",
+        title: t("拖动调整右栏宽度 · 拖到最窄收起整栏 · 双击收起 / 展开"),
+    });
+    body.insertBefore(split, dock);
+    let saved = null;
+    try { saved = JSON.parse(localStorage.getItem(AGENT_DOCK_KEY) || "null"); } catch { /* 偏好读不到就用默认 */ }
+    let closed = saved?.closed !== false;   // 默认收起：只有存过展开才开局展开
+    let width = Number(saved?.w) > 0 ? Number(saved.w) : 0;   // 0 = 用样式里的默认宽度
+    const render = () => {
+        body.classList.toggle("ns-agent-closed", closed);
+        dock.classList.toggle("ns-hidden", closed);
+        split.setAttribute("aria-expanded", String(!closed));
+        toggle.classList.toggle("ns-agent-toggle-on", !closed);
+        if (width > 0) body.style.setProperty("--ns-agent-w", width + "px");
+        else body.style.removeProperty("--ns-agent-w");
+    };
+    const persist = () => localStorage.setItem(AGENT_DOCK_KEY, JSON.stringify({ w: width, closed }));
+    const open = () => { closed = false; persist(); render(); refresh(); };
+    const close = () => { closed = true; persist(); render(); };
+    const toggleDock = () => (closed ? open() : close());
+    const setWidth = (w) => {
+        const max = Math.max(AGENT_DOCK_MIN, body.clientWidth - split.offsetWidth - AGENT_VIEW_MIN);
+        closed = w < AGENT_DOCK_COLLAPSE;   // 拖过阈值 = 关掉整栏，松手后三点抓手还在
+        width = Math.round(Math.max(AGENT_DOCK_MIN, Math.min(w, max)));
+        render();
+    };
+    render();
+    if (!closed) refresh();
+    toggle.onclick = toggleDock;
+    toggle.hidden = false;
+    split.addEventListener("mousedown", (e) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        const startX = e.clientX, startW = dock.offsetWidth;
+        const move = (ev) => setWidth(startW + (startX - ev.clientX));   // 往左拖 = 右栏变宽
+        const up = () => {
+            window.removeEventListener("mousemove", move);
+            window.removeEventListener("mouseup", up);
+            split.classList.remove("ns-colsplit-drag");
+            body.classList.remove("ns-colsplit-drag");
+            persist();
+        };
+        split.classList.add("ns-colsplit-drag");
+        body.classList.add("ns-colsplit-drag");
+        window.addEventListener("mousemove", move);
+        window.addEventListener("mouseup", up);
+    });
+    split.addEventListener("dblclick", toggleDock);
+    split.addEventListener("keydown", (e) => {
+        if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+            if (closed) { open(); return; }   // 收起态按方向键展开，落回收起前那一档宽度
+            e.preventDefault();
+            setWidth(dock.offsetWidth + (e.key === "ArrowLeft" ? 24 : -24));
+            persist();
+        } else if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            toggleDock();
+        }
+    });
 }
 
 function route() {
@@ -1544,7 +1635,12 @@ function route() {
     ensureView("director", buildDirector);
     ensureView("paint", buildPaint);
     if (name === "skills") ensureView("skills", buildSkills);
-    else if (name === "settings") ensureView("settings", buildSettings);
+    else if (name === "settings") {
+        ensureView("settings", buildSettings);
+        // 深链 #/settings?tab=mcp：右栏「🔌 MCP」入口跳来这，视图常驻时也要落到那一栏
+        const tab = new URLSearchParams(location.hash.split("?")[1] || "").get("tab");
+        if (tab && settingsShow) settingsShow(tab);
+    }
     else ensureView("gallery", buildGallery);
     showView(name);
 }
@@ -1565,6 +1661,7 @@ if (view) {
         initComfyStatus();
         initWindowChrome();
         initReloadHotkey();
+        initAgentDock();
     }).catch(e => {
         console.error("[Neo Studio] startup failed:", e);
         desktopLog(`STARTUP FAILED ${e?.stack || e}`);

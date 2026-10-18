@@ -4,6 +4,61 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **The agent dock starts closed, and you can drag it to width.** The dock opened on every window start at a fixed
+  360px, so the page view lost that width on every launch and closing the dock was the only way to get it back.
+  The dock now starts closed, the header **✨** button opens it, and a sash between the page view and the dock drags
+  it wider or narrower (260px floor for the dock, the page view keeps 420px): dragging past 150px closes the column,
+  double-click and the arrow keys collapse and reopen it, and reopening lands back on the width it had. Open state
+  and width are stored in `localStorage["neo_studio_agent_dock"]`, and the sash is the left column's sash style.
+  `studio/tests/js/studio-agent-skill.test.mjs` covers the closed default, the restored preference, the drag, the
+  collapse threshold and the reopen width.
+
+- **The agent dock runs a backend agent, and it can render film.** The dock's **✨ Generate** used to call the
+  generation route itself, so the dock could only ever produce an image and only for a picked image skill, while
+  the MCP server had the whole film chain for external agents. The dock is now a thin client of one backend route:
+  `POST /neo_agent/run` streams an SSE timeline (`plan` / `tool_call` / `status` / `tool_result` / `content`), and
+  the backend loop calls tools as an in-process MCP client through `mcp_server.serve` with the full registry —
+  `director_run` / `segment_run` / `assemble_run` included, so 出片 works from the dock. A picked image skill skips
+  the LLM and runs `generate_image` → `task_status` straight; the empty **智能判断** entry lets the LLM plan.
+  Async tools are polled to a terminal state (600s for an image, 2400s for a whole film) with segment progress on
+  the status line, a running task card carries **取消任务** (`POST /neo_agent/cancel`, which validates the
+  `task_id` shape), and the loop stops at the model's final answer instead of burning the remaining turns.
+  `studio/tests/test_agent.py` and `studio/tests/js/studio-agent-skill.test.mjs` cover the tool surface, the skill
+  path, the plan/call/poll loop, the film progress line, the cancel call, and that the dock sends no
+  `/neo_image_gen/generate` request of its own.
+
+- **The agent dock generates without a skill, and MCP settings moved to Settings.** The right-side dock's skill
+  dropdown had no empty option, so its first skill was selected by default and every **✨ Generate** run forced
+  that skill's template. The dropdown now starts with the empty **智能判断 / Auto** entry, the same rule as the
+  main panel's **默认**: with nothing selected the backend's smart-prompt path decides whether a template applies,
+  an image with no skill routes to captioning, and picking a skill sends its `skillId` as before. MCP server
+  management moved out of the dock into the Settings **🔌 MCP** tab; the dock keeps a **🔌 MCP** entry under
+  **✨ Generate** that deep-links to `#/settings?tab=mcp`. `studio/tests/js/studio-agent-skill.test.mjs` and
+  `studio/tests/js/studio-mcp-settings.test.mjs` cover the default option, the empty `skillId` payload and the deep link.
+
+- **The MCP tab redraws its server rows and tool cards instead of stacking them.** The rows and the tool cards
+  are appended to the panel body, and `load()` runs on every entry — tab activation, the ⟳ button, saving the
+  registry, and the click on **连接 / 断开** itself. So the first **连接** left the pre-connect row on screen and
+  added a second row for the same server: the tab showed `neo-studio` twice, once grey with **Connect** and once
+  green with **Disconnect**, and every later refresh stacked another full set of tool cards. An empty
+  `tools/list` after a **断开** kept the disconnected server's cards visible as if they were still callable.
+  `load()` now clears the body before rendering, and the tool list is removed on every redraw so an empty list
+  leaves nothing behind. `studio/tests/js/studio-mcp-settings.test.mjs` asserts one row per server across a
+  connect / disconnect cycle and that the cards disappear with the session.
+
+- **MCP tool cards open with runnable example arguments.** The Settings **MCP 服务** tab prefilled a tool's
+  argument box with an empty string per required parameter, so the first **执行** click always failed:
+  `generate_prompt` answered `缺少参数：text`, and `generate_image` reached the backend and came back with the
+  Studio-only wording `请先在技能下拉里选择一个生图技能`. Every tool with required parameters now carries an
+  example payload in `tools/list` under `_meta.example` (the spec's slot for extra data, so external agents
+  ignore it), the desktop client passes it through in `/neo_mcp/tools`, and the card fills its box with it —
+  read-only tools run on the first click, and the ids that come from a previous call stay as
+  `<angle-bracket>` placeholders. `initialize.instructions` now states that `generate_image`'s `skill_id` must
+  be a `list_skills` entry with `has_workflow=true`, and an empty `skill_id` fails on that pointer in the MCP
+  layer instead of forwarding the UI wording. `studio/tests/test_mcp_server.py`,
+  `app/tests/test_mcp_client.py` and `studio/tests/js/studio-mcp-settings.test.mjs` cover the example payload,
+  the pass-through and the prefill.
+
 - **The asset library keeps the directory you entered — per tab.** The gallery sidebar tab redrew the home page
   on every remount, so switching to the recipes tab and back, or closing and reopening the director page's
   asset-library drawer, dropped the user out of the subdirectory they had browsed into. A remount now redraws
