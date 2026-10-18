@@ -4,6 +4,22 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **The dock's recent-sessions list survives a restart.** Session history is local files under `agent_sessions/`, but the four
+  session routes were owner `comfy`, so the offline desktop service answered `409` to the summary fetch the dock makes at page
+  load — before a cold-started ComfyUI answers — and the home list stayed empty (「🗂」worked because it fetches on click).
+  `GET /neo_agent/sessions`, `GET /neo_agent/session` and the two delete routes are desktop-owned now: `agent` joins the
+  desktop module set and `_AGENT` in `app/studio_caps.py`, so listing, opening and deleting sessions work with ComfyUI stopped,
+  while `/neo_agent/run` still reports offline. Covered by `app/tests/test_studio_server.py` (the four routes are in the
+  manifest, and a session file written under the data root lists back).
+
+- **The Studio director page opens the selected recipe's editor on entry.** The page auto-selected the first director
+  recipe for the generation panel, but `createRecipesPanel` only opened the editor from a card click
+  (`openEditorOnSelect` lived in `pick()`), so the top-right pane sat on its dashed placeholder and the only way in was
+  a second click on a recipe card. The `autoSelectFirst` path now takes the same open step as a click, so the editor is
+  built as soon as the list lands; a card click still just switches segments on the open recipe, and an editor closed
+  with ✕ is not reopened by simply returning to the tab (the next selection — a card click or a list refresh after a
+  save — opens it again). Frontend-only: `studio/web/recipes.js` + `studio/tests/js/studio-director.test.mjs` (the
+  first-entry case now asserts the editor is up without a click).
 - **Neo Agent: the empty chat dock lists the most recent sessions by default, Cline-style.** The empty composer showed
   only its hint line, so the last conversations stayed hidden behind the「🗂」button. It now lays out the three newest
   sessions by default (the same `GET /neo_agent/sessions` summary the 🗂 list uses: one row per session, first line +

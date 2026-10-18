@@ -64,6 +64,7 @@ async function until(fn, what) {
 
 test("Studio 导演页：分段勾选条 + 生成中实时预览", async () => {
     await import("../../web/studio/studio-app.js");
+    appState.graph = { _nodes: [] }; // 无 Load* 节点 → 编辑器内无媒体候选
     location.hash = "#/director";
     await until(() => document.querySelector(".ns-gen-panel"), "生成面板挂载");
 
@@ -76,6 +77,9 @@ test("Studio 导演页：分段勾选条 + 生成中实时预览", async () => {
         return sel && sel.textContent === "R1";
     }, "配方自动选中");
     await until(() => document.querySelectorAll(".ns-gen-seg-chip").length === 2, "一格一段（mock spec 2 段）");
+    // 自动选中的配方直接铺进右上宿主：进页即有编辑器，不用先点一张配方卡
+    await until(() => document.querySelectorAll(".ns-director-editor .neo-director-seg").length === 2, "进页自动打开编辑器");
+    assert.ok(document.querySelector(".ns-director-editor").classList.contains("ns-editor-open"), "编辑器挂上后收起占位提示");
     assert.equal(document.querySelector(".ns-gen-seg-chip").textContent, "1", "格内只有段号");
     // 参数不在面板上：尺寸 / 步数只读回显来自配方 defaults
     assert.equal(document.querySelector(".ns-gen-spec").textContent, "640×384 · 20 步", "回显配方尺寸与步数");
@@ -120,13 +124,17 @@ test("Studio 导演页：点配方卡内嵌打开编辑器 + 「保存并生成�
         return sel && sel.textContent === "R1";
     }, "配方自动选中");
     assert.ok(document.querySelector(".ns-director-side .neo-recipes-list"), "配方列表挂在左栏");
-    assert.ok(document.querySelector(".ns-director-editor-hint"), "没有编辑器时右上出占位提示");
+    // 进页时自动选中的配方已经在右上宿主编好：不用先点一张卡才出编辑器
+    const autoPanel = document.querySelector(".ns-director-editor .neo-director-panel");
+    assert.ok(autoPanel, "进页即有内嵌编辑器");
+    assert.ok(document.querySelector(".ns-director-editor").classList.contains("ns-editor-open"), "有编辑器时占位提示收起");
 
-    // 点配方卡 → 打开导演编辑器（分段格子只管勾选，不再负责开编辑器）
+    // 点配方卡 → 在同一个内嵌宿主里打开（分段格子只管勾选，不再负责开编辑器）
     click(document.querySelector(".ns-director-side .neo-recipes-card"));
 
     // 编辑器内嵌进右上宿主（不建浮层窗口）
     await until(() => document.querySelector(".ns-director-editor .neo-director-panel"), "编辑器内嵌出现");
+    assert.equal(document.querySelector(".ns-director-editor .neo-director-panel"), autoPanel, "点同一张卡不重载编辑器");
     assert.equal(document.querySelector(".neo-director-overlay"), null, "内嵌模式不建浮层窗口");
     assert.equal(document.querySelector(".neo-director-resize"), null, "内嵌模式无右下角缩放手柄");
     assert.equal(document.querySelector(".neo-director-maximize"), null, "内嵌模式无 ⛶ 放大按钮");
@@ -156,7 +164,7 @@ test("Studio 导演页：点左栏配方卡直接在内嵌宿主里打开编辑�
     appState.graph = { _nodes: [] };
     location.hash = "#/director";
     await until(() => document.querySelector(".ns-director-side .neo-recipes-card"), "配方卡片挂载");
-    assert.equal(document.querySelector(".ns-director-editor .neo-director-panel"), null, "进入页面不自动打开编辑器");
+    assert.equal(document.querySelector(".ns-director-editor .neo-director-panel"), null, "上一用例关掉编辑器后不自动重开");
 
     const card = document.querySelector(".ns-director-side .neo-recipes-card");
     click(card);

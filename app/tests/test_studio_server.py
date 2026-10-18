@@ -222,6 +222,32 @@ class OfflineServiceTests(_ServerCase):
         self.assertIn("GET /neo_gallery/txt", data["routes"])
         self.assertEqual(self.get("/neo_gallery/txt?filename=&subfolder=")[0], 400)
 
+    def test_agent_session_history_served_offline(self):
+        """历史会话是数据根 agent_sessions/ 里的文件：列 / 读 / 删在桌面端就能做完，
+        右栏空态的最近列表不该等 ComfyUI 起来才铺得出来。"""
+        data = json.loads(self.get("/neo_studio/version")[1])
+        for route in ("GET /neo_agent/sessions", "GET /neo_agent/session",
+                      "POST /neo_agent/session/delete", "POST /neo_agent/session/delete_all"):
+            self.assertIn(route, data["routes"])
+        agent = sys.modules[f"{ns.DESKTOP_PKG}.agent"]
+        run_id = "a" * 32
+        session = agent.AGENT_SESSIONS_DIR / f"20260101-000000-{run_id}.json"
+        session.parent.mkdir(parents=True, exist_ok=True)
+        session.write_text(json.dumps({
+            "version": 1, "run_id": run_id, "created": 1767225600, "mode": "act",
+            "status": "succeeded", "input": {"text": "上一轮的首句", "images": [], "context": {}},
+            "frames": [{"kind": "content", "text": "好了"}], "messages": [],
+        }, ensure_ascii=False), encoding="utf-8")
+        try:
+            status, body = self.get("/neo_agent/sessions")
+            self.assertEqual(status, 200)
+            rows = json.loads(body)["sessions"]
+            self.assertEqual([r["run_id"] for r in rows], [run_id])
+            self.assertEqual(rows[0]["text"], "上一轮的首句")
+            self.assertEqual(self.get(f"/neo_agent/session?run_id={run_id}")[0], 200)
+        finally:
+            session.unlink(missing_ok=True)
+
     def test_backyard_upload_plan_served_offline(self):
         """上传页打开就列待上传目录，这份清单在桌面端窗口里也要出得来。"""
         data = json.loads(self.get("/neo_studio/version")[1])

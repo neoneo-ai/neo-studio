@@ -91,11 +91,13 @@ between the recipe list and the asset library (widened to 380px), so assets are 
   An embedded save (including **🎬 Save & Generate Film**) leaves the editor **in place** — the film runs in the
   pane below and the editor the user was just editing is not pulled away. Closing is the title-bar **✕**, the
   footer **Cancel**, the dirty bar's "Save & close", or switching to another recipe (the singleton reload path).
-- With no editor open the top-right pane **takes no space**: it collapses to zero, the dashed placeholder no
-  longer blocks the layout, and the generation panel fills the whole column (the splitter steps out);
-  reopening the editor returns to the top/bottom split. **Clicking a left-column recipe card selects it
-  and opens it embedded** (clicking the same card again only switches the current segment, so unsaved edits
-  survive), and "🎬 New director recipe" on the gallery page switches to the director page and opens it embedded.
+- **Entering the page opens the editor**: as soon as the recipe list lands, the first director recipe (or the one
+  last selected) is selected, and it is opened embedded in the top-right pane — no card click needed.
+  **Clicking a left-column recipe card selects it and opens it embedded** (clicking the same card again only switches
+  the current segment, so unsaved edits survive), and "🎬 New director recipe" on the gallery page switches to the
+  director page and opens it embedded. After **✕** / Cancel closes the editor the top-right pane **takes no space**:
+  it collapses to zero, the dashed placeholder no longer blocks the layout, and the generation panel fills the whole
+  column (the splitter steps out); clicking a recipe card reopens the editor and returns to the top/bottom split.
 - The **📋 Recipes / 🖼 Assets** switch bar on top of the left column is that column's switch: "🖼 Assets" turns
   the whole column into the **asset library** (`.ns-director-lib`, the column widens to 380px), "📋 Recipes"
   turns it back. The **asset library** button inside the director editor drives the same switch (Studio has no

@@ -808,6 +808,11 @@ export async function createRecipesPanel(options = {}) {
     const openEditorOnSelect = !!options.openEditorOnSelect;
     const autoSelectFirst = !!options.autoSelectFirst;
     let selectedName = null;
+    // 选中即打开内嵌编辑器（Studio 导演页）：点卡片与首屏自动选中走同一条路径。
+    // 自动选中只回 onSelect 的话，进页时右上宿主是空的 —— 得再点一次配方卡才有编辑器
+    const openOnSelect = (r) => {
+        if (openEditorOnSelect && r.type === 'video_director') openDirectorEditor(r, renderList);
+    };
 
     // 面板状态（搜索/筛选/排序/分组折叠）：存 /userdata/neo_recipes_data.json，刷新后回显
     const prefs = { query: '', filter: fixedFilter || 'all', sort: 'mtime', collapsed: {} };
@@ -1151,7 +1156,7 @@ export async function createRecipesPanel(options = {}) {
             // openEditorOnSelect 时同一次点击直接在内嵌宿主里打开该配方（重复点同一配方只切段，不重载）
             const pick = () => {
                 selectRecipe(r);
-                if (openEditorOnSelect && r.type === 'video_director') openDirectorEditor(r, renderList);
+                openOnSelect(r);
             };
             card.addEventListener('click', pick);
             card.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); } });
@@ -1337,7 +1342,8 @@ export async function createRecipesPanel(options = {}) {
         while (cursor) { const next = cursor.nextSibling; listEl.removeChild(cursor); cursor = next; }
         const alive = new Set(state.recipes.map(r => r.name));
         for (const name of [...cardIndex.keys()]) if (!alive.has(name)) cardIndex.delete(name);
-        // 恢复选中高亮（不重复触发 onSelect）；首次按 initialSelection / autoSelectFirst 自动选中
+        // 恢复选中高亮（不重复触发 onSelect）；首次按 initialSelection / autoSelectFirst 自动选中，
+        // 并和点卡片一样把选中的配方铺进内嵌编辑器（进页即有编辑器，不用先点一次）
         if (selectedName) {
             applySelectionHighlight(selectedName);
         } else if (autoSelectFirst) {
@@ -1345,7 +1351,9 @@ export async function createRecipesPanel(options = {}) {
             if (list.length) {
                 const name = (options.initialSelection && list.some(x => x.name === options.initialSelection))
                     ? options.initialSelection : list[0].name;
-                selectRecipe(list.find(x => x.name === name));
+                const first = list.find(x => x.name === name);
+                selectRecipe(first);
+                openOnSelect(first);
             }
         }
     }

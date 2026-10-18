@@ -166,8 +166,17 @@ _MCP = {
     ("POST", "/neo_mcp/tools/call"),
 }
 
+# 智能体会话落盘：一次运行的 JSON 在数据根的 agent_sessions/，列 / 读 / 删都是纯文件读写，
+# ComfyUI 没起来也能读回历史；要内核的 /neo_agent/run、/neo_agent/answer 这类不在这组里，仍归 comfy
+_AGENT = {
+    ("GET", "/neo_agent/sessions"),
+    ("GET", "/neo_agent/session"),
+    ("POST", "/neo_agent/session/delete"),
+    ("POST", "/neo_agent/session/delete_all"),
+}
+
 DESKTOP_ROUTES = (_GALLERY | _BOOKMARK | _SKILL | _RECIPES | _SETTINGS | _LLM | _MODEL_HUB
-                  | _BACKYARD | _MCP)
+                  | _BACKYARD | _MCP | _AGENT)
 
 # 前端门控用的功能开关：功能 → 代表路由。桌面端服务时该功能可用，否则按钮指向「启动 ComfyUI」。
 FEATURE_ROUTES = {

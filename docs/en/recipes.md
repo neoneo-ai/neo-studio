@@ -105,8 +105,9 @@ Execution details: [h3-video-gen.md](h3-video-gen.md).
 - An existing director recipe: click its card thumbnail to enter the editor, or click a timeline segment block
   / the ✎ in the top-right of a `NeoH3VideoDirector` node (entering through a block positions the editor on
   that segment; when the window is already open, clicking another block only switches the current segment).
-- Desktop Studio director page: clicking a left-column recipe card selects it and opens it embedded in the
-  top-right pane (the card's ✎ works too).
+- Desktop Studio director page: entering the page selects the first (or the last-selected) director recipe and opens it
+  embedded in the top-right pane; clicking a left-column recipe card selects it and opens it there too (the card's ✎
+  works as well).
 - The **＋** in the bottom-right outside the node's timeline display opens the create editor directly (after
   saving, the recipe is added to the `recipe` dropdown and selected).
 - **Run only the checked segments**: hovering a timeline segment block reveals a checkbox, and checking some
