@@ -71,7 +71,11 @@ function mockAgentRaw(lines) {
 
 const IMAGE_RESULT = {
     kind: "tool_result", tool: "generate_image", text: '{"status":"succeeded"}',
-    images: [{ filename: "cat_0001.png", url: "/view?filename=cat_0001.png&type=output" }],
+    media: [{ kind: "image", title: "cat_0001.png", url: "/view?filename=cat_0001.png&type=output" }],
+};
+const FILM_RESULT = {
+    kind: "tool_result", tool: "director_run", text: '{"status":"succeeded","filename":"cat_walk.mp4"}',
+    media: [{ kind: "video", title: "cat_walk.mp4", url: "/view?filename=cat_walk.mp4&subfolder=NeoDirector%2Fcat_walk&type=output" }],
 };
 
 test("技能下拉首项是空值「智能判断」，技能照常列出", async () => {
@@ -196,6 +200,189 @@ test("出片任务：状态行显示段进度，任务卡给取消按钮，点�
     assert.equal(calls.length, 1, "点取消应发一次 /neo_agent/cancel");
     assert.equal(calls[0].body.task_id, "f-1", "取消请求应带上任务 id");
     assert.equal(statusLine().querySelector(".neo-agent-cancel").disabled, true, "已发出的取消应锁住");
+});
+
+// ====== 产物查看：缩略图与最终回答里的链接一律进弹出窗口，整扇窗口不导航 ======
+const lightbox = () => document.querySelector(".neo-lightbox");
+const lbClose = () => lightbox().querySelector(".neo-lightbox-close").click();
+const opens = [];
+window.open = (url, target) => { opens.push({ url, target }); return null; };
+const clickLink = (a) => {
+    const ev = new window.MouseEvent("click", { bubbles: true, cancelable: true });
+    a.dispatchEvent(ev);
+    return ev;
+};
+
+test("出图与出片缩略图进弹出窗口：卡片收小、成片可播，页面不导航", async () => {
+    mountStudio();
+    await openStudio("#/gallery");
+    const before = window.location.href;
+    mockAgentStream([
+        { kind: "tool_call", tool: "generate_image", text: "{}" },
+        IMAGE_RESULT,
+        { kind: "tool_call", tool: "director_run", text: "{}" },
+        FILM_RESULT,
+        { kind: "content", text: "完成" },
+    ]);
+
+    skillSel().value = "sk_gen";
+    inputText(dock().querySelector(".neo-agent-input"), "一只橘猫");
+    click(runBtn());
+    await flush(40);
+
+    const cards = [...dock().querySelectorAll(".neo-agent-tool")];
+    const img = cards[0].querySelector(".neo-agent-media img");
+    const film = cards[1].querySelector(".neo-agent-media video");
+    assert.ok(img, "出图应给图片缩略");
+    assert.ok(film, "出片应给视频缩略");
+    assert.ok(film.muted, "成片缩略静音：右栏不自动播声");
+
+    click(img);
+    await flush(10);
+    assert.ok(lightbox(), "点缩略图应弹出灯箱");
+    assert.ok(lightbox().classList.contains("neo-lightbox-compact"), "右栏产物用弹出窗口形态，不铺满整扇窗口");
+    assert.match(String(lightbox().querySelector(".neo-lightbox-media").src), /cat_0001\.png/);
+    lbClose();
+    await flush(10);
+    assert.equal(lightbox(), null, "灯箱应正常关闭");
+
+    click(film);
+    await flush(10);
+    assert.match(String(lightbox().querySelector(".neo-lightbox-media").src), /cat_walk\.mp4/, "点成片进灯箱播放");
+    lbClose();
+    await flush(10);
+    assert.equal(window.location.href, before, "看产物不许翻走整扇窗口");
+});
+
+test("最终回答里的产物链接进弹出窗口，外部链接交新窗口，页面不导航", async () => {
+    mountStudio();
+    await openStudio("#/gallery");
+    const before = window.location.href;
+    mockAgentStream([
+        { kind: "content", text: "成片见 [cat_walk.mp4](/view?filename=cat_walk.mp4&subfolder=NeoDirector%2Fcat_walk&type=output)，模型在 [C 站](https://civitai.com/models/1)" },
+    ]);
+
+    inputText(dock().querySelector(".neo-agent-input"), "把猫走街景的配方出成片");
+    click(runBtn());
+    await flush(40);
+
+    const links = [...finalRow().querySelectorAll("a")];
+    assert.equal(links.length, 2, "Markdown 链接应渲染成可点的 <a>");
+
+    const mediaEv = clickLink(links[0]);
+    await flush(10);
+    assert.ok(mediaEv.defaultPrevented, "产物链接不能走默认导航：整扇窗口翻到图片页，回来时启动状态与时间线一起没了");
+    assert.ok(lightbox()?.classList.contains("neo-lightbox-compact"), "产物链接应进弹出窗口");
+    assert.match(String(lightbox().querySelector(".neo-lightbox-media").src), /cat_walk\.mp4/);
+    lbClose();
+    await flush(10);
+
+    clickLink(links[1]);
+    await flush(10);
+    assert.equal(lightbox(), null, "外部链接不该开灯箱");
+    assert.deepEqual(opens, [{ url: "https://civitai.com/models/1", target: "_blank" }], "外部链接交新窗口");
+    assert.equal(window.location.href, before, "Studio 页自己不导航");
+});
+
+const RUN_ID = "0f1e2d3c4b5a69788796a5b4c3d2e1f0";
+
+/** 首帧报 run_id 之后停住的流：运行态留在页面上，「⏹ 取消」才有得点；顺带把 signal 交回用例。 */
+function mockPendingRunStream(takeSignal) {
+    mockRoute("/neo_agent/run", (body, call) => {
+        takeSignal(call.signal);
+        const chunk = `data: ${JSON.stringify({ kind: "run", run_id: RUN_ID })}\n\n`;
+        let sent = false;
+        return {
+            ok: true,
+            status: 200,
+            body: {
+                getReader: () => ({
+                    async read() {
+                        if (!sent) {
+                            sent = true;
+                            return { done: false, value: new TextEncoder().encode(chunk) };
+                        }
+                        return new Promise(() => {});   // 永不结束：取消之前这条流就是挂着
+                    },
+                    releaseLock() {},
+                }),
+            },
+        };
+    });
+}
+
+test("运行中生成键不禁用、带停止态样式，第二击才发取消", async () => {
+    mountStudio();
+    await openStudio("#/gallery");
+    mockPendingRunStream(() => {});
+
+    inputText(dock().querySelector(".neo-agent-input"), "一只橘猫");
+    click(runBtn());
+    await flush(40);
+
+    assert.equal(runBtn().disabled, false, "运行中按钮必须可点：禁用等于把停止键从界面上摘掉");
+    assert.ok(runBtn().classList.contains("ns-agent-stop"), "运行中应带停止态样式");
+    assert.equal(cancelCalls().length, 0, "没点第二击不该发取消请求");
+});
+
+test("点停止键断流并按 run_id 取消，时间线补一行已取消", async () => {
+    mountStudio();
+    await openStudio("#/gallery");
+    let signal = null;
+    mockPendingRunStream((s) => { signal = s; });
+    mockRoute("/neo_agent/cancel", () => jsonResponse({ success: true, run_id: RUN_ID, task_id: "" }));
+
+    inputText(dock().querySelector(".neo-agent-input"), "一只橘猫");
+    click(runBtn());
+    await flush(40);
+    assert.ok(!signal.aborted, "没点取消时这条流不能被断");
+
+    click(runBtn());
+    await flush(40);
+
+    assert.ok(signal.aborted, "取消必须断掉 SSE 流");
+    const calls = cancelCalls();
+    assert.equal(calls.length, 1, "点停止键应发一次 /neo_agent/cancel");
+    assert.deepEqual(calls[0].body, { run_id: RUN_ID }, "取消请求应带上后端首帧给的 run_id");
+    const rows = [...dock().querySelectorAll(".neo-agent-step")].map((e) => e.textContent);
+    assert.ok(rows.some((x) => x.includes("已取消")), `应有已取消行：${rows.join(" | ")}`);
+    assert.equal(dock().querySelector(".neo-agent-answer-error"), null, "断流是预期收场，不该报生成失败");
+    assert.equal(runBtn().disabled, true, "取消中不许再开一路");
+});
+
+test("取消请求失败：时间线写明取消失败，不演成一直在取消", async () => {
+    mountStudio();
+    await openStudio("#/gallery");
+    mockPendingRunStream(() => {});
+    mockRoute("/neo_agent/cancel", () => jsonResponse({ success: false, error: "这次运行已经收场" }, 404));
+
+    inputText(dock().querySelector(".neo-agent-input"), "一只橘猫");
+    click(runBtn());
+    await flush(40);
+    click(runBtn());
+    await flush(40);
+
+    const rows = [...dock().querySelectorAll(".neo-agent-step")].map((e) => e.textContent);
+    assert.ok(rows.some((x) => x.includes("已取消") && x.includes("取消失败")),
+        `取消请求失败要留在时间线上：${rows.join(" | ")}`);
+});
+
+test("后端发出取消帧：时间线收场，生成键回到✨ 生成", async () => {
+    mountStudio();
+    await openStudio("#/gallery");
+    mockAgentStream([
+        { kind: "run", run_id: RUN_ID },
+        { kind: "content", text: "已取消：智能体循环与在跑的任务已停止" },
+    ]);
+
+    inputText(dock().querySelector(".neo-agent-input"), "一只橘猫");
+    click(runBtn());
+    await flush(40);
+
+    assert.equal(finalRow().textContent.trim(), "已取消：智能体循环与在跑的任务已停止");
+    assert.equal(runBtn().textContent, "✨ 生成");
+    assert.equal(runBtn().disabled, false);
+    assert.ok(!runBtn().classList.contains("ns-agent-stop"), "收场后应去掉停止态样式");
 });
 
 test("后端报错帧：时间线显示错误原文，不留缩略图，解禁生成按钮", async () => {

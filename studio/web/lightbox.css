@@ -180,6 +180,26 @@
     display: none;
 }
 
+/* 弹出窗口形态（compact）：右栏产物预览用。薄遮罩 + 收小卡片，窗口里的启动状态位与时间线
+   留在遮罩外面可见，看完成品不用把整扇窗口翻走 */
+.neo-lightbox-compact {
+    background: rgba(0, 0, 0, 0.42);
+    padding: 12px;
+}
+
+.neo-lightbox-compact .neo-lightbox-box {
+    max-width: min(760px, 72vw);
+    max-height: 74vh;
+}
+
+.neo-lightbox-compact .neo-lightbox-media {
+    max-height: calc(74vh - 110px);
+}
+
+.neo-lightbox-compact .neo-lightbox-video {
+    max-width: 100%;
+}
+
 /* 全屏模式 */
 .neo-lightbox-box.fullscreen-mode {
     position: fixed;

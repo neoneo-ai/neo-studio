@@ -177,12 +177,15 @@ Neo Studio 独立页面（`web/studio/index.html`）的后端。素材 / 生图 
 
 | 方法 | 路由 | 说明 |
 |------|------|------|
-| POST | `/neo_agent/run` | 智能体一轮对话，SSE 时间线；body `{text, skill_id}`，帧 `plan` / `tool_call` / `status` / `tool_result` / `content`，收尾 `[ERROR]` / `[DONE]` |
-| POST | `/neo_agent/cancel` | 按 `task_id` 取消任务（走 MCP `cancel_task`，图片 / 整片 / 单段 / 拼接四类由协议自己找路由）；`task_id` 只收 UUID 形态 |
+| POST | `/neo_agent/run` | 智能体一轮对话，SSE 时间线；body `{text, skill_id}`，首帧 `run`（带 `run_id`，取消整条循环要用），帧 `plan` / `tool_call` / `status` / `tool_result` / `content`，收尾 `[ERROR]` / `[DONE]` |
+| POST | `/neo_agent/cancel` | 取消：带 `run_id` 停整条智能体循环并掐掉在跑的任务（`run_id` 只收 `run` 帧发过的形态，查不到 404）；带 `task_id` 只掐那一个任务（走 MCP `cancel_task`，图片 / 整片 / 单段 / 拼接四类由协议自己找路由），`task_id` 只收 UUID 形态 |
 
 - `skill_id` 非空时后端按技能直出图、不叫 LLM；为空时由 LLM 规划并调工具，轮次上限 12。
 - `generate_image` / `director_run` / `segment_run` / `assemble_run` 只回 `task_id`，循环里轮询 `task_status` 到终态，
   采样步数与整片段号经 `status` 帧发出去；等待上限单图 600 秒、整片 2400 秒。
+- `tool_result` 帧带 `media`：出图的 `images` 逐条成 `{kind:"image", url, title}`，出片三类的成片 `filename` 补成一条
+  `{kind:"video", url}` 的 `/view` 地址（单段与拼接的快照只给文件名，子目录按生成模块的产物目录补）。右栏的产物
+  缩略图与产物链接只认这一份列表。
 - 工具回指的 ComfyUI 取本次请求自己的来源，请求体里没有地址可注入。
 
 ## prompts.py — `/rs_prompts/*`

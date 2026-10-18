@@ -281,17 +281,23 @@
     opacity: 0.6;
 }
 
-/* 生图结果：右栏窄，缩略图整幅铺满，点击进灯箱看原图 */
-.neo-agent-images {
+/* 产物缩略图：右栏窄，缩略图整幅铺满，点击进弹出窗口看大图 / 播放（页面自己不导航） */
+.neo-agent-media {
     display: flex;
     flex-direction: column;
     gap: 4px;
 }
 
-.neo-agent-images img {
+.neo-agent-media img,
+.neo-agent-media video {
     width: 100%;
     border-radius: 4px;
     cursor: zoom-in;
+}
+
+.neo-agent-media video {
+    background: #000;
+    cursor: pointer;
 }
 
 
@@ -350,6 +356,12 @@
 .neo-agent-run:disabled {
     opacity: 0.6;
     cursor: default;
+}
+
+/* 运行中这一击就是停止：底色换成警示色，按钮没禁用才点得到 */
+.neo-agent-run.ns-agent-stop {
+    background: var(--neo-vsc-warn);
+    color: #1f1f1f;
 }
 
 /* 生成按钮下面的一行入口：MCP 注册表在设置页那一栏，这里只做跳转 */

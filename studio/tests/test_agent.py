@@ -4,7 +4,7 @@
 右栏的工具表就是 MCP 全集（出片链路也在里面），工具调用逐行走 mcp_server.serve 的 JSON-RPC。
 用例只替两个接缝：McpClient.call（假工具载荷）与 _chat（假 LLM），验证工具表面等于 MCP
 注册表、技能直出图、LLM 规划-调用-回填、异步任务轮询（含整片段进度）、工具错误原文回填、
-轮次用满兜底、系统提示词缺失、SSE 帧形态、cancel 路由的 task_id 校验。
+轮次用满兜底、系统提示词缺失、SSE 帧形态、cancel 路由的 task_id / run_id 校验与轮次、轮询边界的取消。
 """
 import asyncio
 import contextlib
@@ -102,6 +102,11 @@ def _no_poll_sleep():
         yield
 
 
+def _runobj(client):
+    """取消面：轮次与轮询边界要读它。非取消用例也照给一个，停止位永不置起就是跑完整路。"""
+    return agent._Run(client)
+
+
 @skip
 class TestToolSurface(unittest.TestCase):
     def test_client_sees_the_whole_mcp_registry(self):
@@ -149,6 +154,25 @@ class TestPayloadHelpers(unittest.TestCase):
     def test_status_of_non_json_is_empty(self):
         self.assertEqual(agent._status_of("not json"), "")
 
+    def test_media_items_cover_images_and_film(self):
+        """右栏缩略图与产物链接只认这份列表：出图的 images 逐条成项，出片的 filename 补成 /view 地址。"""
+        self.assertEqual(
+            agent._media_of(json.dumps({"status": "succeeded",
+                                        "images": [{"url": "/view?f=a.png", "filename": "a.png"}]})),
+            [{"kind": "image", "url": "/view?f=a.png", "title": "a.png"}])
+        self.assertEqual(
+            agent._media_of(json.dumps({"kind": "director", "status": "succeeded",
+                                        "filename": "cat_walk.mp4", "subfolder": "NeoDirector/cat_walk"})),
+            [{"kind": "video", "title": "cat_walk.mp4",
+              "url": "/view?filename=cat_walk.mp4&subfolder=NeoDirector%2Fcat_walk&type=output"}])
+        # 单段与拼接的快照只给文件名，产物子目录得按生成模块里的约定补
+        self.assertEqual(
+            agent._media_of(json.dumps({"kind": "segment", "status": "succeeded",
+                                        "filename": "walk_s1_20260101.mp4"}))[0]["url"],
+            "/view?filename=walk_s1_20260101.mp4&subfolder=neo_director_regen&type=output")
+        self.assertEqual(agent._media_of(json.dumps({"kind": "director", "status": "running"})), [])
+        self.assertEqual(agent._media_of("not json"), [])
+
     def test_caption_covers_images_film_and_failure(self):
         self.assertEqual(agent._caption(json.dumps(
             {"status": "succeeded", "width": 1024, "height": 512,
@@ -168,12 +192,13 @@ class TestSkillPath(unittest.TestCase):
                             {"status": "succeeded", "width": 1024, "height": 1024,
                              "images": [{"url": "/view?f=a.png", "filename": "a.png"}]}]})
         with _no_poll_sleep():
-            frames = _run(lambda emit: agent._run_skill(client, "一只橘猫", "skill_cat", emit))
+            frames = _run(lambda emit: agent._run_skill(client, "一只橘猫", "skill_cat", emit, _runobj(client)))
         self.assertEqual(_kinds(frames),
                          ["plan", "tool_call", "status", "status", "tool_result", "content"])
         self.assertEqual([f["tool"] for f in frames if f.get("tool")],
                          ["generate_image", "task_status", "task_status", "generate_image"])
-        self.assertEqual(frames[4]["images"], [{"url": "/view?f=a.png", "filename": "a.png"}])
+        self.assertEqual(frames[4]["media"],
+                         [{"kind": "image", "url": "/view?f=a.png", "title": "a.png"}])
         self.assertEqual(frames[5]["text"], "完成：1 张 · 1024×1024")
         self.assertEqual(client.calls[0],
                          ("generate_image", {"skill_id": "skill_cat", "prompt": "一只橘猫"}))
@@ -183,7 +208,7 @@ class TestSkillPath(unittest.TestCase):
         client = FakeClient({"generate_image": {"task_id": "t-1"}, "task_status": done})
         with mock.patch.object(agent, "_chat",
                                side_effect=AssertionError("技能路径不该叫 LLM")), _no_poll_sleep():
-            frames = _run(lambda emit: agent._run_skill(client, "x", "skill_cat", emit))
+            frames = _run(lambda emit: agent._run_skill(client, "x", "skill_cat", emit, _runobj(client)))
         self.assertEqual(frames[0]["kind"], "plan")
         self.assertEqual(frames[-1]["kind"], "content")
 
@@ -200,7 +225,7 @@ class TestTaskPolling(unittest.TestCase):
                             {"status": "succeeded", "filename": "NeoDirector/film.mp4"}]})
         with _no_poll_sleep():
             payload, frames = _result(
-                lambda emit: agent._tool_result(client, "director_run", {"recipe": "r"}, emit))
+                lambda emit: agent._tool_result(client, "director_run", {"recipe": "r"}, emit, _runobj(client)))
         self.assertEqual(client.calls[0][0], "director_run")
         self.assertEqual(client.calls[1], ("task_status", {"task_id": "f-1"}))
         self.assertEqual(frames[0]["text"], "running 段 1/2 3/10")
@@ -211,12 +236,13 @@ class TestTaskPolling(unittest.TestCase):
         client = FakeClient({"segment_run": {"task_id": "s-1"}, "task_status": {"status": "running"}})
         with _no_poll_sleep(), mock.patch.object(agent, "FILM_WAIT_SEC", 4.0):
             payload, _ = _result(lambda emit: agent._tool_result(
-                client, "segment_run", {"recipe": "r", "segment": 1}, emit))
+                client, "segment_run", {"recipe": "r", "segment": 1}, emit, _runobj(client)))
         self.assertIn("任务超时", payload)
 
     def test_sync_snapshot_without_task_id_is_returned_as_is(self):
         client = FakeClient({"generate_image": {"images": [{"url": "/view?f=a.png"}]}})
-        payload, frames = _result(lambda emit: agent._tool_result(client, "generate_image", {}, emit))
+        payload, frames = _result(lambda emit: agent._tool_result(
+            client, "generate_image", {}, emit, _runobj(client)))
         self.assertEqual(frames, [])
         self.assertIn("/view?f=a.png", payload)
         self.assertEqual(client.calls, [("generate_image", {})])
@@ -224,7 +250,8 @@ class TestTaskPolling(unittest.TestCase):
     def test_tool_error_text_goes_back_into_the_loop(self):
         """工具报错不能炸循环：原文带 [error] 前缀回填给 LLM，让它换路。"""
         client = FakeClient({"neo_status": mcp.ToolError("ComfyUI 没在线")})
-        payload, _ = _result(lambda emit: agent._tool_result(client, "neo_status", {}, emit))
+        payload, _ = _result(lambda emit: agent._tool_result(
+            client, "neo_status", {}, emit, _runobj(client)))
         self.assertEqual(payload, "[error] ComfyUI 没在线")
 
 
@@ -243,7 +270,7 @@ class TestAgentLoop(unittest.TestCase):
         client = FakeClient({"director_recipes": {"count": 2, "recipes": []}},
                             names=("director_recipes", "director_run"))
         with mock.patch.object(agent, "_chat", chat):
-            frames = _run(lambda emit: agent._run_agent(client, "出个片", "", emit))
+            frames = _run(lambda emit: agent._run_agent(client, "出个片", "", emit, _runobj(client)))
         self.assertEqual(_kinds(frames), ["plan", "tool_call", "tool_result", "content"])
         self.assertEqual(frames[1]["tool"], "director_recipes")
         self.assertEqual(frames[3]["text"], "有 2 个配方，选一个跑整片")
@@ -265,7 +292,7 @@ class TestAgentLoop(unittest.TestCase):
 
         client = FakeClient({"list_skills": {"count": 0, "skills": []}})
         with mock.patch.object(agent, "_chat", chat):
-            frames = _run(lambda emit: agent._run_agent(client, "列技能", "", emit))
+            frames = _run(lambda emit: agent._run_agent(client, "列技能", "", emit, _runobj(client)))
         self.assertEqual(client.calls[0], ("list_skills", {}))
         self.assertEqual(frames[-1]["text"], "好了")
 
@@ -282,7 +309,7 @@ class TestAgentLoop(unittest.TestCase):
 
         client = FakeClient({"neo_status": {"neo_studio": "1"}})
         with mock.patch.object(agent, "_chat", chat):
-            frames = _run(lambda emit: agent._run_agent(client, "在吗", "", emit))
+            frames = _run(lambda emit: agent._run_agent(client, "在吗", "", emit, _runobj(client)))
         self.assertEqual([t["type"] for t in seen[0]], ["function"])
         self.assertEqual(seen[0][0]["function"]["name"], "neo_status")
         self.assertNotIn("inputSchema", seen[0][0])
@@ -295,7 +322,7 @@ class TestAgentLoop(unittest.TestCase):
         client = FakeClient({"neo_status": {"neo_studio": "1"}})
         with mock.patch.object(agent, "_chat", lambda m, t: looping), \
              mock.patch.object(agent, "MAX_TURNS", 2):
-            frames = _run(lambda emit: agent._run_agent(client, "随便看看", "", emit))
+            frames = _run(lambda emit: agent._run_agent(client, "随便看看", "", emit, _runobj(client)))
         self.assertEqual(frames[-1]["kind"], "content")
         self.assertIn("2 轮", frames[-1]["text"])
 
@@ -331,7 +358,7 @@ class TestRoutes(unittest.TestCase):
                 TestRoutes._req({"text": "橘猫", "skill_id": "skill_cat"})))
         self.assertEqual(resp.headers["Content-Type"], "text/event-stream")
         lines = _data_lines(resp)
-        self.assertEqual(json.loads(lines[0]), {"kind": "plan", "text": "按技能 skill_cat 直接出图"})
+        self.assertEqual(json.loads(lines[1]), {"kind": "plan", "text": "按技能 skill_cat 直接出图"})
         self.assertEqual(lines[-1], "[DONE]")
         self.assertEqual(json.loads(lines[-2])["kind"], "content")
 
@@ -379,6 +406,125 @@ class TestRoutes(unittest.TestCase):
                 TestRoutes._req({"task_id": "6f1c2a34-9b7c-4d0a-8e11-2f3a4b5c6d7e"})))
         self.assertEqual(resp.status, 404)
         self.assertIn("任务不存在", json.loads(resp.text)["error"])
+
+
+@skip
+class TestCancellation(unittest.TestCase):
+    def test_stop_before_the_first_turn_never_calls_the_llm(self):
+        """停止位在轮次边界生效：置起后一次 LLM 都不该叫，末帧说明这一路已停。"""
+        client = FakeClient({"neo_status": {"neo_studio": "1"}})
+        run = _runobj(client)
+        run.stop.set()
+        with mock.patch.object(agent, "_chat",
+                               side_effect=AssertionError("取消后不该再叫 LLM")):
+            frames = _run(lambda emit: agent._run_agent(client, "随便看看", "", emit, run))
+        self.assertEqual(frames, [{"kind": "content", "text": agent.CANCELLED_TEXT}])
+        self.assertEqual(client.calls, [])
+
+    def test_stop_during_a_tool_call_skips_the_next_turn(self):
+        """取消落在第一轮工具在飞时：工具结果照发，其后不再叫第二轮 LLM。"""
+        turns = [{"content": "",
+                  "tool_calls": [{"id": "c1", "function": {"name": "neo_status", "arguments": "{}"}}]},
+                 {"content": "第二轮"}]
+        asked = []
+        client = FakeClient({"neo_status": {"neo_studio": "1"}})
+        run = _runobj(client)
+
+        def chat(messages, tools):
+            asked.append(len(messages))
+            if len(asked) == 1:
+                run.stop.set()
+            return turns[len(asked) - 1]
+
+        with mock.patch.object(agent, "_chat", chat):
+            frames = _run(lambda emit: agent._run_agent(client, "在吗", "", emit, run))
+        self.assertEqual(len(asked), 1)
+        self.assertEqual(_kinds(frames), ["tool_call", "tool_result", "content"])
+        self.assertEqual(frames[-1]["text"], agent.CANCELLED_TEXT)
+
+    def test_stop_during_poll_cancels_the_running_task(self):
+        """轮询边界取消：按 task_id 走 cancel_task，任务按 cancelled 终态交回，运行对象上不留任务。"""
+        client = FakeClient({"generate_image": {"task_id": "t-9"},
+                             "task_status": {"status": "running"},
+                             "cancel_task": {"kind": "image", "status": "cancelled"}})
+        run = _runobj(client)
+        run.stop.set()
+        with _no_poll_sleep():
+            payload, frames = _result(lambda emit: agent._tool_result(
+                client, "generate_image", {"prompt": "x"}, emit, run))
+        self.assertEqual(json.loads(payload)["status"], "cancelled")
+        self.assertIn(("cancel_task", {"task_id": "t-9"}), client.calls)
+        self.assertEqual(run.task_id, "")
+        self.assertEqual(frames[0]["task_id"], "t-9")
+
+    def test_skill_path_ends_with_the_cancelled_line(self):
+        """技能直出图路径取消：工具卡照收口，最终一行写取消而不是完成。"""
+        client = FakeClient({"generate_image": {"task_id": "t-8"},
+                             "task_status": {"status": "running"},
+                             "cancel_task": {"status": "cancelled"}})
+        run = _runobj(client)
+        run.stop.set()
+        with _no_poll_sleep():
+            frames = _run(lambda emit: agent._run_skill(client, "一只橘猫", "skill_cat", emit, run))
+        self.assertEqual(_kinds(frames),
+                         ["plan", "tool_call", "status", "tool_result", "content"])
+        self.assertEqual(frames[-1]["text"], agent.CANCELLED_TEXT)
+
+    def test_cancel_route_stops_the_run_and_its_task(self):
+        """run_id 取消：置停止位并掐掉在跑的任务，回带 task_id 让前端知道掐了什么。"""
+        calls = []
+
+        class Client:
+            def call(self, name, args):
+                calls.append((name, args))
+                return json.dumps({"status": "cancelled"})
+
+        run = agent._Run(Client())
+        run.task_id = "6f1c2a34-9b7c-4d0a-8e11-2f3a4b5c6d7e"
+        agent._RUNS[run.run_id] = run
+        try:
+            resp = asyncio.run(agent.agent_cancel(TestRoutes._req({"run_id": run.run_id})))
+        finally:
+            agent._RUNS.pop(run.run_id, None)
+        self.assertTrue(json.loads(resp.text)["success"])
+        self.assertTrue(run.stop.is_set())
+        self.assertEqual(calls, [("cancel_task", {"task_id": run.task_id})])
+
+    def test_cancel_route_rejects_unknown_and_malformed_run_id(self):
+        """run_id 只认后端发过的形态：查不到是 404，路径穿越形态在入口就挡掉。"""
+        resp = asyncio.run(agent.agent_cancel(TestRoutes._req({"run_id": "0" * 32})))
+        self.assertEqual(resp.status, 404)
+        resp = asyncio.run(agent.agent_cancel(TestRoutes._req({"run_id": "../secret"})))
+        self.assertEqual(resp.status, 400)
+        self.assertIn("run_id", json.loads(resp.text)["error"])
+
+    def test_run_frame_carries_run_id_and_the_table_empties_after(self):
+        """首帧带 run_id，前端的停止键才有得发；整条流收场后取消表必须空，不跨请求留状态。"""
+        client = FakeClient({"generate_image": {"images": [{"url": "/view?f=a.png"}]}})
+        with mock.patch.object(agent, "McpClient", lambda base, timeout=30: client):
+            resp = asyncio.run(agent.agent_run(
+                TestRoutes._req({"text": "橘猫", "skill_id": "skill_cat"})))
+        first = json.loads(_data_lines(resp)[0])
+        self.assertEqual(first["kind"], "run")
+        self.assertTrue(agent.RUN_ID_RE.match(first["run_id"]))
+        self.assertEqual(agent._RUNS, {})
+
+    def test_pump_cancels_the_worker_when_the_consumer_goes_away(self):
+        """前端 abort 时 aiohttp 关掉这个生成器：worker 必须被 cancel，不能在后台跑完轮次。"""
+        async def main():
+            async def loop(emit):
+                await emit({"kind": "status", "text": "running"})
+                await asyncio.sleep(3600)
+            gen = agent._pump(loop)
+            first = await gen.__anext__()
+            await gen.aclose()
+            await asyncio.sleep(0)
+            left = [t for t in asyncio.all_tasks()
+                    if t is not asyncio.current_task() and not t.done()]
+            return first, left
+        first, left = asyncio.run(main())
+        self.assertEqual(first["kind"], "status")
+        self.assertEqual(left, [])
 
 
 if __name__ == "__main__":

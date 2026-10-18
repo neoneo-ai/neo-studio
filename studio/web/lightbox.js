@@ -9,6 +9,7 @@
  *   Lightbox.open({
  *     items: [{ kind: 'image'|'video'|'audio', url, title, resolve }],
  *     index: 0,    // 可选：起始项
+ *     compact: true,   // 可选：弹出窗口形态（薄遮罩 + 收小卡片），右栏产物预览用，不铺满整扇窗口
  *     actions: (item, index) => [{ label, title, onClick(item, lightbox, button) }], // 函数按项定额外按钮；也接受普通数组
  *     panel: (item, index) => Node | null,   // 可选：右侧信息栏，按项重建；返回空则不占位
  *   });
@@ -35,7 +36,7 @@ export class Lightbox {
         return this._instance;
     }
 
-    /** 打开 Lightbox；重复调用会替换当前实例。options: { items, index, actions, panel }。 */
+    /** 打开 Lightbox；重复调用会替换当前实例。options: { items, index, actions, panel, compact }。 */
     static open(options) { return Lightbox.instance.open(options); }
 
     static close() { return Lightbox.instance.close(); }
@@ -75,7 +76,7 @@ export class Lightbox {
         this._onFsChange = null;
     }
 
-    open({ items = [], index = 0, actions = null, panel = null } = {}) {
+    open({ items = [], index = 0, actions = null, panel = null, compact = false } = {}) {
         this.close();
         if (!items.length) return this;
 
@@ -85,7 +86,7 @@ export class Lightbox {
         this.index = Math.max(0, Math.min(index, items.length - 1));
 
         this._root = $el('div', {
-            className: 'neo-lightbox',
+            className: compact ? 'neo-lightbox neo-lightbox-compact' : 'neo-lightbox',
             onclick: (e) => { if (e.target === this._root) this.close(); }
         });
 

@@ -39,10 +39,11 @@ export function sseResponse(lines) {
 
 const encoder = new TextEncoder();
 
-function makeReader(chunks) {
+function makeReader(chunks, signal) {
     let i = 0;
     return {
         async read() {
+            if (signal?.aborted) return { done: true, value: undefined };   // 真 fetch 在 abort 之后读流即断
             if (i >= chunks.length) return { done: true, value: undefined };
             return { done: false, value: encoder.encode(chunks[i++]) };
         },
@@ -50,7 +51,7 @@ function makeReader(chunks) {
     };
 }
 
-function makeResponse({ status, bodyText, sseLines }) {
+function makeResponse({ status, bodyText, sseLines, signal = null }) {
     const ok = status >= 200 && status < 300;
     const resp = {
         ok,
@@ -61,7 +62,7 @@ function makeResponse({ status, bodyText, sseLines }) {
         async text() {
             return bodyText;
         },
-        body: sseLines ? { getReader: () => makeReader(sseLines) } : null,
+        body: sseLines ? { getReader: () => makeReader(sseLines, signal) } : null,
         clone: () => resp,   // 浏览器 Response 有 clone；桩照给，离线 409 探测要读副本
     };
     return resp;
@@ -97,7 +98,7 @@ export async function handleFetch(input, init = {}) {
     } else if (body) {
         body = "[non-json]";
     }
-    const call = { path: url.pathname, query: url.searchParams, method, body };
+    const call = { path: url.pathname, query: url.searchParams, method, body, signal: init.signal ?? null };
     fetchLog.push(call);
 
     const match = matchRoute(url.pathname);
@@ -111,7 +112,7 @@ export async function handleFetch(input, init = {}) {
     const norm = normalize(spec);
     if (norm.raw) return norm.raw;
     const { status, bodyText, sseLines } = norm;
-    return makeResponse({ status, bodyText, sseLines });
+    return makeResponse({ status, bodyText, sseLines, signal: init.signal });
 }
 
 export function installFetch() {

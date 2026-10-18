@@ -127,16 +127,18 @@ async function enhancePrompt(text) {
  * @param {Function} options.onChunk - 收到数据块时回调
  * @param {Function} options.onDone - 完成时回调
  * @param {Function} options.onError - 错误时回调
+ * @param {AbortSignal} options.signal - 取消请求时回调（用户点停止）
  * @param {Object} body - 请求体（可选）
  * @returns {Promise<void>}
  */
 async function sseStream(url, options = {}, body = null) {
-    const { onChunk, onDone, onError } = options;
+    const { onChunk, onDone, onError, signal } = options;
     try {
         const resp = await fetch(url, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: body ? JSON.stringify(body) : undefined
+            body: body ? JSON.stringify(body) : undefined,
+            signal
         });
         if (!resp.ok) {
             const err = await resp.json().catch(() => ({}));
@@ -181,6 +183,7 @@ async function sseStream(url, options = {}, body = null) {
         }
         onDone?.();
     } catch (e) {
+        if (signal?.aborted) return;   // 用户点停止：断流是预期收场，不报「生成失败」
         onError?.(e.message);
     }
 }

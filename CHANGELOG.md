@@ -4,6 +4,33 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **Agent results open in a popup viewer, and the window stops navigating.** Clicking an agent result took over the
+  whole window: the dock's thumbnails opened the full-viewport lightbox (92vw / 88vh over a 0.72 backdrop), and a
+  result URL in the final answer is a Markdown `<a href="/view?...">` whose click navigates the window to the bare
+  image / video page — coming back reloads the Studio page, so the startup status and the whole transcript are gone.
+  The shared Lightbox gained a `compact` popup form (thin backdrop, card capped at 72vw / 74vh) and the dock opens
+  its results in it; the dock also intercepts every link in the timeline, so a result link opens the popup viewer,
+  an external link opens a new window, and the Studio page never navigates. Film tasks ship a thumbnail now too:
+  `tool_result` carries a `media` list of `{kind, url, title}` built from the image task's `images` and from a
+  finished film's filename, so a director / segment / assemble run lays out a muted clip that plays in the popup.
+  `studio/tests/test_agent.py` covers the media items; `studio/tests/js/studio-agent-skill.test.mjs` covers the
+  popup form, the film thumbnail and the link interception.
+
+- **The agent dock can stop a run.** **✨ Generate** stayed disabled for the whole run, so a film that polls for
+  up to 2400 seconds had no stop button in the dock — only the per-task **取消任务** on a running task card, and
+  closing the dock left the loop running. The button is now one key with two states: idle **✨ Generate**, running
+  **⏳ 生成中** (clickable, stop styling). The run's first SSE frame carries a `run_id`; clicking the running
+  button aborts the stream and posts `/neo_agent/cancel` with that `run_id`, which sets the stop event, kills the
+  in-flight ComfyUI task, and ends the loop at the next turn / poll boundary with a **已取消** timeline line. A
+  stream cut by navigating away or closing the page cancels the worker on the consumer-disconnect path and kills the
+  task there, so no loop keeps burning turns and no poller keeps hitting the queue after the page is gone. A cancel
+  request that itself fails (the run already ended, the desktop service offline) lands on the timeline as
+  **已取消（取消失败）**: the stream abort already stopped the run, and the button's **⏳ 取消中** label is
+  overwritten by the closing **✨ Generate**, so the timeline is the only place that failure stays visible.
+  `studio/tests/test_agent.py` covers the turn-boundary stop, the poll-boundary task cancel, the `run_id`
+  validation and the worker cancel; `studio/tests/js/studio-agent-skill.test.mjs` covers the clickable running
+  button, the abort plus cancel request, the cancelled line, and the button returning to **✨ Generate**.
+
 - **The right agent dock always failed with a remote LLM.** The agent sent the MCP `tools/list` payload to the
   provider untouched (`name` / `inputSchema` / `_meta`), llama-server looks for a `type` key on every entry and
   rejected the whole request with `HTTP 500 Failed to parse tools: Missing tool type`, leaving one red line in

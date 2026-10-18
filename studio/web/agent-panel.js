@@ -66,6 +66,15 @@ async function postJson(path, body) {
     return await res.json();
 }
 
+// 产物地址的形态：后端 media 项与最终回答里的链接都落在这几类地址上
+const MEDIA_EXT = /\.(png|jpe?g|gif|webp|avif|bmp|svg|mp4|webm|mov|m4v|mkv|avi|mp3|wav|ogg|m4a|aac|flac)(?=&|#|$)/i;
+const VIDEO_EXT = /\.(mp4|webm|mov|m4v|mkv|avi)(?=&|#|$)/i;
+const AUDIO_EXT = /\.(mp3|wav|ogg|m4a|aac|flac)(?=&|#|$)/i;
+const MEDIA_PATH = /^\/(view|neo_gallery\/\w*|rs_recipes\/(asset|thumbnail))(?=\?|#|$)/;
+
+const isMediaHref = (href) => MEDIA_PATH.test(href) || MEDIA_EXT.test(href);
+const mediaKindOf = (href) => (VIDEO_EXT.test(href) ? "video" : AUDIO_EXT.test(href) ? "audio" : "image");
+
 // ==========================================
 // 聊天区：一问一答，正文按 Markdown 渲染
 // ==========================================
@@ -101,6 +110,20 @@ function buildChat(onOpenMcp) {
         transcript.appendChild(empty);
     })]), transcript, composer);
 
+    // 时间线里的链接一律收在页面内：产物进弹出窗口，外部链接交给新窗口。放任 <a> 的默认行为
+    // 就是整扇窗口翻到 /view 图片页——返回时 Studio 页重载，启动状态位与整条时间线一起没了
+    transcript.addEventListener("click", (e) => {
+        const a = e.target.closest ? e.target.closest("a[href]") : null;
+        if (!a) return;
+        e.preventDefault();
+        const href = a.getAttribute("href") || "";
+        if (isMediaHref(href)) {
+            Lightbox.open({ items: [{ kind: mediaKindOf(href), url: href, title: a.textContent || "" }], compact: true });
+            return;
+        }
+        window.open(href, "_blank", "noopener");
+    });
+
     let skillsLoaded = false;
 
     async function loadSkills() {
@@ -117,18 +140,23 @@ function buildChat(onOpenMcp) {
         skillsLoaded = true;
     }
 
-    // 生图产物缩略图：右栏窄，整幅铺图，点击进灯箱看原图
-    function renderGenImages(host, images) {
-        const box = mkEl("div", "neo-agent-images");
-        const items = images.map((im) => ({ kind: "image", url: im.url, title: im.filename }));
-        images.forEach((im, i) => {
-            const img = mkEl("img");
-            img.src = im.url;
-            img.alt = im.filename;
-            img.loading = "lazy";
-            img.title = t("点击放大查看");
-            img.onclick = () => Lightbox.open({ items, index: i });
-            box.appendChild(img);
+    // 产物缩略图：右栏窄，整幅铺图 / 铺片；点击进弹出窗口看大图与播放，页面自己不导航
+    function renderGenMedia(host, media) {
+        const box = mkEl("div", "neo-agent-media");
+        const items = media.map((m) => ({ kind: m.kind || "image", url: m.url, title: m.title || "" }));
+        media.forEach((m, i) => {
+            const video = (m.kind || "image") === "video";
+            const el = mkEl(video ? "video" : "img");
+            el.src = m.url;
+            el.loading = "lazy";
+            el.title = video ? t("点击播放") : t("点击放大查看");
+            if (video) {
+                el.muted = true;
+                el.preload = "metadata";
+                el.setAttribute("playsinline", "true");
+            }
+            el.onclick = () => Lightbox.open({ items, index: i, compact: true });
+            box.appendChild(el);
         });
         host.appendChild(box);
     }
@@ -179,16 +207,23 @@ function buildChat(onOpenMcp) {
                 row.textContent = text;
                 if (taskId && !row.querySelector(".neo-agent-cancel")) mkCancel(row, taskId);
             },
-            toolResult(text, images) {
+            toolResult(text, media) {
                 const out = slot("neo-agent-tool-out");
                 if (!out) return;
                 out.textContent = text;
                 const btn = slot("neo-agent-cancel");
                 if (btn) btn.remove();       // 任务到终态，取消入口跟着收掉
-                if (images.length) renderGenImages(card, images);
+                if (media.length) renderGenMedia(card, media);
             },
             answer(text) {
                 final.innerHTML = renderMarkdown(text);
+            },
+            // 「⏹ 取消」落在步骤区，不覆盖最终回答那一行；取消请求本身失败要留在时间线上——
+            // 按钮那一行在断流收尾时就被「✨ 生成」盖掉，写在那里没人看得见
+            cancelled(note) {
+                const row = mkEl("div", "neo-agent-step");
+                row.textContent = "⏹ " + t("已取消") + (note ? "（" + note + "）" : "");
+                steps.appendChild(row);
             },
             error(text) {
                 final.textContent = text;
@@ -197,17 +232,27 @@ function buildChat(onOpenMcp) {
         };
     }
 
+    // 运行中的这一路：取消要断流、要按 run_id 停后端循环、要往当前时间线补一行，句柄挂在这里
+    let running = false;
+    let controller = null;
+    let runId = "";
+    let activeView = null;
+
     // 智能体路径：一次请求换一路 SSE。选了生图技能时后端按技能直出图（不叫 LLM），
     // 空值「智能判断」时后端让 LLM 规划并调 MCP 工具
     async function runAgent(answer, skillId, text) {
         const view = agentTimeline(answer);
+        activeView = view;
+        controller = new AbortController();
         await sseStream("/neo_agent/run", {
+            signal: controller.signal,
             onChunk: (frame) => {
                 const kind = frame?.kind || "content";
+                if (kind === "run") { runId = frame.run_id || ""; return; }
                 if (kind === "plan") view.plan(frame.text || "");
                 else if (kind === "tool_call") view.toolCall(frame.tool || "?", frame.text || "");
                 else if (kind === "status") view.status(frame.text || "", frame.task_id || "");
-                else if (kind === "tool_result") view.toolResult(frame.text || "", frame.images || []);
+                else if (kind === "tool_result") view.toolResult(frame.text || "", frame.media || []);
                 else view.answer(frame.text || "");
                 transcript.scrollTop = transcript.scrollHeight;
             },
@@ -215,10 +260,31 @@ function buildChat(onOpenMcp) {
         }, { text, skill_id: skillId });
     }
 
+    // 「⏹ 取消」：断流 + 让后端停循环并掐在跑的任务。首帧的 run_id 还没到就只断流——
+    // 断开路径上后端会兜底掐任务，不给一个空 run_id 去打接口
+    async function stopRun() {
+        if (!running || !controller) return;   // 增强类技能那一路没有可断的流，按钮本来就锁着
+        run.disabled = true;
+        run.textContent = t("⏳ 取消中");
+        controller.abort();
+        let note = "";
+        if (runId) {
+            // 断流已经生效，取消请求发不出去也不能演成「取消中」吊在那儿：把失败写进时间线
+            let data = { success: false };
+            try {
+                data = await postJson("/neo_agent/cancel", { run_id: runId });
+            } catch (e) {
+                data.error = String(e);
+            }
+            if (!data.success) note = t("取消失败");
+        }
+        if (activeView) activeView.cancelled(note);
+    }
+
 
     async function generate() {
         const text = input.value.trim();
-        if (!text || run.disabled) return;
+        if (!text || running) return;
         if (empty.parentNode) empty.remove();
         const turn = mkEl("div", "neo-agent-turn");
         const opt = skillSel.selectedOptions[0];
@@ -231,8 +297,15 @@ function buildChat(onOpenMcp) {
         transcript.appendChild(turn);
         transcript.scrollTop = transcript.scrollHeight;
 
-        run.disabled = true;
+        // 生图技能与空值「智能判断」都交给后端智能体：前者按技能直出图，后者由 LLM 规划调工具；
+        // 增强类技能照旧只出提示词
+        const agentPath = opt?.dataset.genImage === "1" || !skillSel.value;
+        running = true;
+        // 智能体路径运行中不禁用按钮：这一击就是停止，禁用等于把停止键从界面上摘掉。
+        // 增强类技能那一路没有可断的流，照旧锁住按钮
+        run.disabled = !agentPath;
         run.textContent = t("⏳ 生成中");
+        if (agentPath) run.classList.add("ns-agent-stop");
         let acc = "";
         let raf = null;
         const paint = () => {
@@ -245,9 +318,7 @@ function buildChat(onOpenMcp) {
             if (acc) paint();
         };
         try {
-            // 生图技能与空值「智能判断」都交给后端智能体：前者按技能直出图，后者由 LLM 规划调工具；
-            // 增强类技能照旧只出提示词
-            if (opt?.dataset.genImage === "1" || !skillSel.value) {
+            if (agentPath) {
                 await runAgent(answer, skillSel.value, text);
                 return;
             }
@@ -272,12 +343,18 @@ function buildChat(onOpenMcp) {
             answer.textContent = String(e);
             answer.classList.add("neo-agent-answer-error");
         } finally {
+            running = false;
+            controller = null;
+            runId = "";
+            activeView = null;
             run.disabled = false;
+            run.classList.remove("ns-agent-stop");
             run.textContent = t("✨ 生成");
         }
     }
 
-    run.onclick = () => generate();
+    // 一个键两态：空闲是「✨ 生成」，运行中是「⏹ 取消」
+    run.onclick = () => (running ? stopRun() : generate());
     input.addEventListener("keydown", (e) => {
         if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();

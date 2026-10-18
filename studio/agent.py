@@ -16,6 +16,8 @@ import io
 import json
 import logging
 import re
+import uuid
+from urllib.parse import quote
 
 from aiohttp import web
 
@@ -41,6 +43,11 @@ RESULT_CLIP = 1500
 TASK_FINAL = ("succeeded", "failed", "cancelled")
 # cancel 的 task_id 从请求体来，会被拼进 /view 与 cancel 路由的路径段，只收 UUID 形态
 TASK_ID_RE = re.compile(r"^[0-9a-fA-F-]{8,64}$")
+# 停整条循环的 run_id 是后端发的 uuid4().hex，从请求体回来只认这个形态
+RUN_ID_RE = re.compile(r"^[0-9a-f]{32}$")
+# 出片三类的产物是 mp4，快照只给 filename：单段与拼接的产物子目录写死在生成模块里，取图要自己补
+FILM_DIR = {"director": "", "segment": "neo_director_regen", "assemble": "neo_director_merge"}
+CANCELLED_TEXT = "已取消：智能体循环与在跑的任务已停止"
 SYSTEM_PROMPT_FILE = PLUGIN_DIR / "prompts" / "agent" / "system_prompt.md"
 
 
@@ -92,6 +99,36 @@ def comfy_base(request) -> str:
 
 
 # ---------------------------------------------------------------------------
+# 运行取消面
+# ---------------------------------------------------------------------------
+
+_RUNS: dict[str, "_Run"] = {}
+
+
+class _Run:
+    """一次 /neo_agent/run 的取消面。
+
+    停止要从另一个 HTTP 请求打进来，运行中的循环就得按 run_id 挂住；条目只在整条 SSE
+    活着期间存在，_events 收尾时摘掉，不跨请求留状态。task_id 记在运行对象上是因为 LLM
+    正卡在一次请求里时，取消端点要能立刻掐掉在跑的 ComfyUI 任务，不能等循环回到轮询边界。"""
+
+    def __init__(self, client):
+        self.client = client
+        self.run_id = uuid.uuid4().hex
+        self.stop = asyncio.Event()
+        self.task_id = ""
+
+    async def cancel_comfy_task(self):
+        """掐掉在跑的 ComfyUI 任务。没有任务、任务已终态、取消失败都不影响循环收场。"""
+        if not self.task_id:
+            return
+        try:
+            await asyncio.to_thread(self.client.call, "cancel_task", {"task_id": self.task_id})
+        except (mcp.ToolError, OSError, ValueError) as e:
+            logger.info(f"[Neo Studio] agent cancel task {self.task_id} failed: {e}")
+
+
+# ---------------------------------------------------------------------------
 # 载荷解析与 LLM 接缝
 # ---------------------------------------------------------------------------
 
@@ -109,9 +146,26 @@ def _json_of(text: str) -> dict:
     return data if isinstance(data, dict) else {}
 
 
-def _images_of(text: str) -> list:
-    return [im for im in (_json_of(text).get("images") or [])
-            if isinstance(im, dict) and im.get("url")]
+def _media_of(text: str) -> list:
+    """工具载荷里的产物媒体：生图的 images 逐条成项，出片三类的成片按 filename 补成 /view 地址。
+    右栏的缩略图与产物链接只认这一份列表——最终回答里的 URL 会被 Markdown 画成 <a>，
+    点一下整扇窗口翻到图片页，回来时启动状态与整条时间线一起没了。"""
+    data = _json_of(text)
+    items = [{"kind": "image", "url": str(im["url"]), "title": str(im.get("filename") or "")}
+             for im in (data.get("images") or [])
+             if isinstance(im, dict) and im.get("url")]
+    if items:
+        return items
+    if str(data.get("status")) != "succeeded":
+        return []
+    film = str(data.get("filename") or "")
+    kind = str(data.get("kind") or "")
+    if not film or kind not in FILM_DIR:
+        return []
+    # 整片快照带 subfolder，单段与拼接只给文件名：产物子目录写死在生成模块里，取图得自己补
+    subfolder = str(data.get("subfolder") or FILM_DIR[kind])
+    return [{"kind": "video", "title": film,
+             "url": f"/view?filename={quote(film, safe='')}&subfolder={quote(subfolder, safe='')}&type=output"}]
 
 
 def _status_of(text: str) -> str:
@@ -131,7 +185,7 @@ def _status_of(text: str) -> str:
 
 def _caption(text: str) -> str:
     data = _json_of(text)
-    images = _images_of(text)
+    images = [m for m in _media_of(text) if m["kind"] == "image"]
     if str(data.get("status")) != "succeeded":
         return str(data.get("error") or "") or "任务结束，没有产物"
     if images:
@@ -186,27 +240,35 @@ async def _pump(make_coro):
         await queue.put(None)
 
     task = asyncio.create_task(worker())
-    while True:
-        frame = await queue.get()
-        if frame is None:
-            break
-        if "__error__" in frame:
-            await task
-            raise mcp.ToolError(str(frame["__error__"]))
-        yield frame
-    await task
+    try:
+        while True:
+            frame = await queue.get()
+            if frame is None:
+                break
+            if "__error__" in frame:
+                await task
+                raise mcp.ToolError(str(frame["__error__"]))
+            yield frame
+        await task
+    finally:
+        # 客户端断开时 aiohttp 关掉这个生成器，GeneratorExit 路径里 await 不动 worker；
+        # 不 cancel 的话 LLM 循环与任务轮询会在后台跑满 MAX_TURNS 轮与 600 / 2400 秒上限
+        if not task.done():
+            task.cancel()
 
 
 # ---------------------------------------------------------------------------
 # 两条运行路径
 # ---------------------------------------------------------------------------
 
-async def _task_and_wait(client, tool: str, args: dict, emit) -> str:
-    """异步任务工具只回 task_id：轮询 task_status 到终态，采样步数与段号经 status 帧发出去。"""
+async def _task_and_wait(client, tool: str, args: dict, emit, run) -> str:
+    """异步任务工具只回 task_id：轮询 task_status 到终态，采样步数与段号经 status 帧发出去。
+    停止位在轮询边界生效：掐掉任务并按 cancelled 终态交回，调用方的循环据此立刻收场。"""
     snap = await asyncio.to_thread(client.call, tool, args)
     task_id = str(_json_of(snap).get("task_id") or "")
     if not task_id:
         return snap                      # 同步出图的后端快照里已带 images
+    run.task_id = task_id
     cap = TASK_WAIT_SEC if tool == "generate_image" else FILM_WAIT_SEC
     waited = 0.0
     while True:
@@ -215,42 +277,54 @@ async def _task_and_wait(client, tool: str, args: dict, emit) -> str:
         await emit({"kind": "status", "tool": "task_status", "task_id": task_id,
                     "text": status or "排队中…"})
         if status.split(" ")[0] in TASK_FINAL:
+            run.task_id = ""
             return snap
+        if run.stop.is_set():
+            await run.cancel_comfy_task()
+            run.task_id = ""
+            return json.dumps({"task_id": task_id, "status": "cancelled"}, ensure_ascii=False)
         if waited >= cap:
             raise mcp.ToolError(f"任务超时（{int(cap)} 秒）：{task_id}")
         await asyncio.sleep(TASK_POLL_SEC)
         waited += TASK_POLL_SEC
 
 
-async def _tool_result(client, name: str, args: dict, emit) -> str:
+async def _tool_result(client, name: str, args: dict, emit, run) -> str:
     """一次 tools/call 的文本结果；异步任务工具在循环里轮询到终态，其余一次返回。"""
     try:
         if name in TASK_TOOLS:
-            return await _task_and_wait(client, name, args, emit)
+            return await _task_and_wait(client, name, args, emit, run)
         return await asyncio.to_thread(client.call, name, args)
     except mcp.ToolError as e:
         return f"[error] {e}"
 
 
-async def _run_skill(client, text: str, skill_id: str, emit) -> None:
+async def _run_skill(client, text: str, skill_id: str, emit, run) -> None:
     """显式选了生图技能：不叫 LLM，按 generate_image → task_status 直出图，模型与尺寸走技能自带设置。"""
     args = {"skill_id": skill_id, "prompt": text}
     await emit({"kind": "plan", "text": f"按技能 {skill_id} 直接出图"})
     await emit({"kind": "tool_call", "tool": "generate_image",
                 "text": _clip(json.dumps(args, ensure_ascii=False), ARGS_CLIP)})
-    result = await _task_and_wait(client, "generate_image", args, emit)
+    result = await _task_and_wait(client, "generate_image", args, emit, run)
     await emit({"kind": "tool_result", "tool": "generate_image",
-                "text": _clip(result, RESULT_CLIP), "images": _images_of(result)})
+                "text": _clip(result, RESULT_CLIP), "media": _media_of(result)})
+    if run.stop.is_set():
+        await emit({"kind": "content", "text": CANCELLED_TEXT})
+        return
     await emit({"kind": "content", "text": _caption(result)})
 
 
-async def _run_agent(client, text: str, skill_id: str, emit) -> None:
-    """LLM 规划 → tools/call → 结果回填 → 直到给出最终回答或用满轮次。"""
+async def _run_agent(client, text: str, skill_id: str, emit, run) -> None:
+    """LLM 规划 → tools/call → 结果回填 → 直到给出最终回答或用满轮次。
+    停止位只在轮次与工具边界生效：LLM 的单轮请求在飞时掐不掉，回来后的第一个边界收场。"""
     messages = [{"role": "system", "content": system_prompt(skill_id)},
                 {"role": "user", "content": text}]
     tools = _openai_tools(client.tool_list())
     answered = False
     for _ in range(MAX_TURNS):
+        if run.stop.is_set():
+            await emit({"kind": "content", "text": CANCELLED_TEXT})
+            return
         msg = await asyncio.to_thread(_chat, messages, tools)
         content = str(msg.get("content") or "")
         calls = msg.get("tool_calls") or []
@@ -272,10 +346,13 @@ async def _run_agent(client, text: str, skill_id: str, emit) -> None:
                 args = {}
             await emit({"kind": "tool_call", "tool": name,
                         "text": _clip(json.dumps(args, ensure_ascii=False), ARGS_CLIP)})
-            result = await _tool_result(client, name, args, emit)
+            result = await _tool_result(client, name, args, emit, run)
             await emit({"kind": "tool_result", "tool": name,
-                        "text": _clip(result, RESULT_CLIP), "images": _images_of(result)})
+                        "text": _clip(result, RESULT_CLIP), "media": _media_of(result)})
             messages.append({"role": "tool", "tool_call_id": tc.get("id", ""), "content": result})
+            if run.stop.is_set():
+                await emit({"kind": "content", "text": CANCELLED_TEXT})
+                return
     if not answered:
         await emit({"kind": "content",
                     "text": f"跑了 {MAX_TURNS} 轮还没有结论：把需求说具体些（要什么画面、用哪个技能）再试。"})
@@ -285,17 +362,30 @@ async def _run_agent(client, text: str, skill_id: str, emit) -> None:
 # 路由
 # ---------------------------------------------------------------------------
 
-async def _events(client, text: str, skill_id: str):
+def _sse(frame) -> bytes:
+    return ("data: " + json.dumps(_json_safe(frame), ensure_ascii=False) + "\n\n").encode("utf-8")
+
+
+async def _events(run, text: str, skill_id: str):
     runner = _run_skill if skill_id else _run_agent
+    _RUNS[run.run_id] = run
     try:
-        async for frame in _pump(lambda emit: runner(client, text, skill_id, emit)):
-            yield ("data: " + json.dumps(_json_safe(frame), ensure_ascii=False) + "\n\n").encode("utf-8")
-    except mcp.ToolError as e:
-        yield f"data: [ERROR] {e}\n\n".encode("utf-8")
-    except Exception as e:
-        logger.info(f"[Neo Studio] agent run failed: {e}")
-        yield f"data: [ERROR] {e}\n\n".encode("utf-8")
-    yield b"data: [DONE]\n\n"
+        # 首帧报 run_id：前端的「⏹ 取消」只有拿到它才能停这条循环
+        yield _sse({"kind": "run", "run_id": run.run_id})
+        try:
+            async for frame in _pump(lambda emit: runner(run.client, text, skill_id, emit, run)):
+                yield _sse(frame)
+        except mcp.ToolError as e:
+            yield f"data: [ERROR] {e}\n\n".encode("utf-8")
+        except Exception as e:
+            logger.info(f"[Neo Studio] agent run failed: {e}")
+            yield f"data: [ERROR] {e}\n\n".encode("utf-8")
+        yield b"data: [DONE]\n\n"
+    finally:
+        _RUNS.pop(run.run_id, None)
+        # 前端 abort 时来不及发 cancel：断开路径上兜底掐掉在跑的 ComfyUI 任务
+        if run.task_id:
+            asyncio.create_task(run.cancel_comfy_task())
 
 
 def _error_response(message: str) -> web.Response:
@@ -318,7 +408,7 @@ async def agent_run(request):
     if not text:
         return _error_response("没有输入内容")
     return web.Response(
-        body=_events(McpClient(comfy_base(request)), text, skill_id),
+        body=_events(_Run(McpClient(comfy_base(request))), text, skill_id),
         content_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no",
                  "Connection": "keep-alive"},
@@ -327,12 +417,23 @@ async def agent_run(request):
 
 @routes.post("/neo_agent/cancel")
 async def agent_cancel(request):
-    """时间线上的「取消」：按 task_id 走 MCP cancel_task，四种任务类型由协议自己找路由。"""
+    """时间线上的「取消」：run_id 停整条智能体循环并掐掉在跑的任务，task_id 只掐那一个任务
+    （循环照旧换路）。两种 id 都从请求体来，会被拼进 cancel 路由的路径段，先按形态校验。"""
     try:
         body = await request.json()
     except Exception:
         return web.json_response({"success": False, "error": "请求不是合法 JSON"}, status=400)
+    run_id = str((body or {}).get("run_id") or "").strip()
     task_id = str((body or {}).get("task_id") or "").strip()
+    if run_id:
+        if not RUN_ID_RE.match(run_id):
+            return web.json_response({"success": False, "error": "run_id 不合法"}, status=400)
+        run = _RUNS.get(run_id)
+        if run is None:
+            return web.json_response({"success": False, "error": "这次运行已经收场"}, status=404)
+        run.stop.set()
+        await run.cancel_comfy_task()
+        return web.json_response({"success": True, "run_id": run_id, "task_id": run.task_id})
     if not TASK_ID_RE.match(task_id):
         return web.json_response({"success": False, "error": "task_id 不合法"}, status=400)
     try:

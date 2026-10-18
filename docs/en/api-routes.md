@@ -193,14 +193,18 @@ included), and the dock never calls a handler directly.
 
 | Method | Route | Description |
 |--------|-------|-------------|
-| POST | `/neo_agent/run` | One agent turn, SSE timeline; body `{text, skill_id}`, frames `plan` / `tool_call` / `status` / `tool_result` / `content`, ending with `[ERROR]` / `[DONE]` |
-| POST | `/neo_agent/cancel` | Cancel a task by `task_id` (through MCP `cancel_task`, which resolves the image / film / segment / assemble route itself); `task_id` accepts UUID shapes only |
+| POST | `/neo_agent/run` | One agent turn, SSE timeline; body `{text, skill_id}`, first frame `run` (carries the `run_id` the cancel route needs), frames `plan` / `tool_call` / `status` / `tool_result` / `content`, ending with `[ERROR]` / `[DONE]` |
+| POST | `/neo_agent/cancel` | Cancel: with `run_id` it stops the whole agent loop and kills the in-flight task (`run_id` accepts only the shape the `run` frame issued; unknown id is 404); with `task_id` it kills just that task (through MCP `cancel_task`, which resolves the image / film / segment / assemble route itself), `task_id` accepts UUID shapes only |
 
 - A non-empty `skill_id` makes the backend generate straight from that skill without calling the LLM; an empty one
   lets the LLM plan and call tools, with a 12-turn cap.
 - `generate_image` / `director_run` / `segment_run` / `assemble_run` return a `task_id` only; the loop polls
   `task_status` to a terminal state and emits sampling steps and film segment numbers through `status` frames.
   The wait cap is 600s for a single image and 2400s for a whole film.
+- A `tool_result` frame carries `media`: the image task's `images` become `{kind:"image", url, title}` items, and a
+  finished film becomes one `{kind:"video", url}` `/view` item (segment and assemble snapshots carry a filename
+  only, so the subfolder comes from the generating module's output directory). The dock's result thumbnails and
+  result links read nothing else.
 - The ComfyUI the tools talk to is the source of the current request; the body carries no address to inject.
 
 ## prompts.py — `/rs_prompts/*`

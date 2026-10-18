@@ -154,8 +154,18 @@ Both nodes share the same layout (the Agent shows no status bar):
   backend generate straight from it without calling the LLM, and the empty "Auto" entry lets the LLM plan and call
   MCP tools, with the tool list being the whole MCP registry (the `director_run` / `segment_run` / `assemble_run`
   film chain included). The transcript shows the plan line, one card per tool call (arguments / progress /
-  result with result thumbnails, click opens the lightbox) and the final answer; a running task card carries a
-  Cancel button. The dock starts closed and the header **✨** button opens it; a sash between the page view and the
+  result with result thumbnails — an image skill lays out the picture and a film task a muted clip, and a click
+  opens the popup viewer for the full image or the playback instead of taking over the whole window) and the
+  final answer; a running task card carries a Cancel button. Links inside the timeline stay in the page: a
+  result link opens the popup viewer, an external link opens a new window, and the window never navigates to the
+  bare image / video page — navigating away and coming back reloads the Studio page, taking the startup status
+  and the whole transcript with it. While a run is in flight **✨ Generate** is the stop button: it posts
+  `/neo_agent/cancel` with the `run_id` from the first frame, aborts the stream, makes the backend end at the next
+  turn / poll boundary and kill the in-flight ComfyUI task, and the timeline gets a "Cancelled" line (a cancel
+  request that itself fails is labelled "Cancelled (Failed to cancel)" — the stream abort already stopped the run);
+  a stream cut by navigating away or closing the page cancels the background loop and the task the same way, so
+  nothing keeps polling once the page is gone.
+  The dock starts closed and the header **✨** button opens it; a sash between the page view and the
   dock resizes it (260px floor for the dock, the page view keeps 420px), dragging it narrower than 150px closes the
   column, double-click collapses / expands, `←`/`→` nudges it, and a key in the closed state reopens it at the
   width it had. Open state and width live in `localStorage["neo_studio_agent_dock"]`, and closing keeps the width.
