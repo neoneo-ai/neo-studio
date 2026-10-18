@@ -561,7 +561,9 @@ function buildChat(onOpenMcp, getContext) {
         note.textContent = sessionStatus(s.status) + " · " + tf("{n} 次工具", { n: s.tools || 0 })
             + (s.resume_of ? " · " + t("接上次会话") : "");
         const open = headBtn(t("打开"), t("读回这条会话的完整时间线"), () => openSession(s.run_id));
-        const del = headBtn("✕", t("删除这条会话"), async () => {
+        // 会话文件删掉就没了，确认框挡在请求前面
+        const del = headBtn("🗑", t("删除这条会话"), async () => {
+            if (!window.confirm(t("删除这条会话？"))) return;
             await postJson("/neo_agent/session/delete", { run_id: s.run_id });
             if (resumeId === s.run_id) { resumeId = ""; renderResumeBar(); }
             renderHistory();
@@ -614,6 +616,8 @@ function buildChat(onOpenMcp, getContext) {
     async function renderHistory() {
         const data = await getJson("/neo_agent/sessions");
         historyBox.replaceChildren();
+        // 整页列表由「🗂」或「查看全部」铺满右栏：栏头自带 ✕，回时间线不用绕栏头那一排
+        historyBox.appendChild(sectionHead(t("会话历史"), [headBtn("✕", t("关闭会话列表"), showTranscript)]));
         const note = mkEl("div", "neo-agent-history-note");
         if (data.offline) {
             note.textContent = t("桌面端服务读不回历史会话");
@@ -667,7 +671,8 @@ function buildChat(onOpenMcp, getContext) {
             + (rec.mode === "plan" ? t("计划") : t("执行模式")) + " · " + sessionStatus(rec.status);
         const hint = mkEl("span", "neo-agent-session-note");
         hint.textContent = t("输入下一句就接在这条会话后面");
-        const del = headBtn("✕", t("删除这条会话"), async () => {
+        const del = headBtn("🗑", t("删除这条会话"), async () => {
+            if (!window.confirm(t("删除这条会话？"))) return;
             await postJson("/neo_agent/session/delete", { run_id: rec.run_id });
             resumeId = "";
             renderResumeBar();

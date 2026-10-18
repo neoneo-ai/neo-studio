@@ -185,12 +185,13 @@ Both nodes share the same layout (the Agent shows no status bar):
   locks after answering, a 30-minute wait continues with a note that the user never replied, and cancelling by `run_id`
   settles a parked question.
   The empty composer shows the three most recent sessions by default (the same summary as 🗂: one row per run, first line + date); clicking a row replays that session read-only and arms the continue bar, **View all ›** opens the full list, and clearing the conversation or deleting a session empties the list; session history is plain files under `agent_sessions/`, and the desktop service lists, reads and deletes them itself, so the list still shows with ComfyUI stopped (only `/neo_agent/run` waits for the kernel). The **＋** header button starts a new session (the timeline drops back to the empty state with the recent list, the continue bar detaches, and the next message opens a fresh session — saved history stays untouched); the **🗂** header button opens the session list (`GET /neo_agent/sessions`: one row per run, newest first, with time /
-  mode / status / first line / tool count); **Open** replays that session's timeline into the dock **read-only** — a
+  mode / status / first line / tool count); the full-page list carries its own header **✕** back to the timeline; **Open** replays that session's timeline into the dock **read-only** — a
   finished loop has no task to cancel and its choice card is fully greyed out. The composer then shows a
   「↩ continue the last session」 bar: the next **✨ Generate** posts that session's `run_id` as `resume`, and the saved
   conversation goes back in after the system prompt for the LLM to continue from (resuming into plan mode works the
   same way — the old system message is never stored, so this turn rebuilds it). One run lands as one JSON in
-  `agent_sessions/` under the data root, and **🗑** deletes the saved history too, behind one in-page confirm.
+  `agent_sessions/` under the data root, and **🗑** deletes the saved history too, behind one in-page confirm; the row delete and the replay header's delete are
+the same 🗑 icon, and deleting one session is confirmed before its file goes.
   The dock can run that same chain: `director_plan` (split, writing `story`) → `director_save` →
   `director_keyframes` (keyframes land in the recipe's `assets/`) → echo the returned `segments` / `shared` /
   `story` back to `director_save` (records `storyboard` and the first frame of non-r2v segments) →

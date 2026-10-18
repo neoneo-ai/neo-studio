@@ -1596,6 +1596,8 @@ const EN = {
     "打开": "Open",
     "读回这条会话的完整时间线": "Replay this session's full timeline",
     "删除这条会话": "Delete this session",
+    "删除这条会话？": "Delete this session?",
+    "关闭会话列表": "Close the session list",
     "桌面端服务读不回历史会话": "The desktop service cannot read saved sessions",
     "还没有历史会话": "No saved sessions yet",
     "最近": "Recent",

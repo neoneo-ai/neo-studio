@@ -835,6 +835,13 @@
     padding: 4px;
 }
 
+/* 整页列表的栏头跟着滚：列表长到要看旧会话时，关闭钮得一直在够得着的地方 */
+.neo-agent-history .neo-agent-head {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
 .neo-agent-history-note {
     padding: 8px 4px;
     color: var(--neo-vsc-fg-dim);

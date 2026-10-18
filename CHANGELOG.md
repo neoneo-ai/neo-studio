@@ -4,6 +4,12 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **The agent's full session list closes, and deleting a session asks first.** 「View all ›」and「🗂」filled the dock with
+  the list and left no exit but the「🗂」header button. The list now carries its own head with a「✕」back to the timeline,
+  the row delete is a 🗑 (「✕」read as close, not delete), and the row delete and the replay header's delete both land
+  behind a confirm before `POST /neo_agent/session/delete`. Frontend-only: `studio/web/agent-panel.js`,
+  `studio/web/agent-panel.css`, `studio/web/js/core/i18n.js` + `studio/tests/js/studio-agent-skill.test.mjs` (2 new cases).
+
 - **The agent can run the 📖 text-storyboard pipeline now, keyframes included.** `director_plan` and the editor's
   「生成分镜分段」 already hit the same split route, but the rest of that page had no tool: `director_save` dropped
   `story`, so an agent-built recipe opened without its idea / character references / storyboard settings (and r2i
