@@ -565,6 +565,47 @@
     color: var(--neo-vsc-ok);
 }
 
+/* 最终回答末尾的下一步方向：一栏一行、整行可点。右栏窄到 260px 下限靠折行装下长句子，
+   不截断也不溢出；已选过的那组只靠 locked 类与 disabled 表态，不留第二条可点的路 */
+.neo-agent-answer-opts {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-top: 4px;
+}
+
+.neo-agent-answer-opts-title {
+    font-size: 11px;
+    color: var(--neo-vsc-fg-dim);
+}
+
+.neo-agent-answer-opt {
+    min-height: 22px;
+    padding: 2px 6px;
+    background: var(--neo-vsc-bg-alt);
+    border: 1px solid var(--neo-vsc-border);
+    border-radius: 4px;
+    color: var(--neo-vsc-fg);
+    font-size: 12px;
+    text-align: left;
+    cursor: pointer;
+    white-space: normal;
+    word-break: break-word;
+}
+
+.neo-agent-answer-opt:hover:not(:disabled) {
+    border-color: var(--neo-vsc-accent);
+}
+
+.neo-agent-answer-opt:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+.neo-agent-answer-chosen {
+    color: var(--neo-vsc-ok);
+}
+
 /* MCP 区 */
 .neo-agent-status {
     min-height: 16px;

@@ -184,6 +184,12 @@ Both nodes share the same layout (the Agent shows no status bar):
   (the question, 2-5 options, and a free-text box) whose answer goes back through `POST /neo_agent/answer` — the card
   locks after answering, a 30-minute wait continues with a note that the user never replied, and cancelling by `run_id`
   settles a parked question.
+  The numbered directions at the end of the final answer are laid out as full-width clickable rows (the heading must be
+  a one-line title — 下一步 / 接下来 / 后续 with 选项 / 方向 / 建议 / 操作, or English Options / Choices / Next options):
+  a click fills the composer and posts that sentence as the next turn, which is the same path as typing it, the picked
+  group locks with a「✔ …」line, and the rows left by earlier turns stay locked while a run is in flight and come back
+  once it ends; every row spans the dock and wraps, so nothing is clipped at the 260px floor. Fewer than 2 or more than
+  6 numbered items, and any numbered list with no such heading (plan mode's step-by-step plan), stays plain text.
   Enhancement skills only produce a prompt through `/rs_prompts/stream_generate_prompt`.
 - **Multi-turn skills** - when a skill that declares `multi_turn` is selected, a line of small text
   appears at the very bottom of the node (it hides again when the skill is switched or cleared): each

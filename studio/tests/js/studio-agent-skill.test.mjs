@@ -647,6 +647,68 @@ test("选项确认卡：自由输入走同一个回答请求", async () => {
     assert.equal(calls[0].body.text, "定格三秒再淡出", "应把用户自己写的方向交回去");
 });
 
+// 最终回答末尾的「下一步选项」：模型在收场那段里自己列的方向
+const OPT_ANSWER = [
+    "第 1 段已按红色性感旗袍风格出片，产物是 cat_walk_seg1.mp4。",
+    "",
+    "### 下一步选项",
+    "1. **继续生成第 2 段**（正面半身特写，同样应用“红色性感旗袍”风格）。",
+    "2. 继续生成第 3 段（背影全景，同样应用“红色性感旗袍”风格）。",
+    "3. 直接拼接已生成的片段（如果只想要这一段）。",
+    "",
+    "请告诉我您希望如何继续！",
+].join("\n");
+const OPT_ROWS = [
+    "1. 继续生成第 2 段（正面半身特写，同样应用“红色性感旗袍”风格）。",
+    "2. 继续生成第 3 段（背影全景，同样应用“红色性感旗袍”风格）。",
+    "3. 直接拼接已生成的片段（如果只想要这一段）。",
+];
+const optRows = () => [...dock().querySelectorAll(".neo-agent-answer-opt")];
+
+test("最终回答的下一步选项铺成一排可点方向：点一下就是把它当下一轮输入，选过的那组锁住", async () => {
+    mountStudio();
+    await openStudio("#/gallery");
+    mockAgentStream([{ kind: "content", text: OPT_ANSWER }]);
+
+    inputText(dock().querySelector(".neo-agent-input"), "先出第 1 段");
+    click(runBtn());
+    await flush(40);
+
+    assert.deepEqual(optRows().map((b) => b.textContent), OPT_ROWS, `应把编号方向铺成可点的行：${optRows().map((b) => b.textContent).join(" | ")}`);
+    assert.equal(finalRow().querySelector("ol"), null, "编号文本要换成按钮，不留一份重复的列表");
+    assert.ok(finalRow().textContent.includes("请告诉我您希望如何继续"), "方向块之外的正文应照原样留下");
+    assert.equal(dock().querySelector(".neo-agent-answer-opts-title").textContent, "▶ 下一步选项", "应带出回答里的标题");
+
+    click(optRows()[1]);
+    await flush(40);
+
+    const picked = OPT_ROWS[1].slice(3);
+    const calls = agentCalls();
+    assert.equal(calls.length, 2, "点方向应直接发出下一轮请求");
+    assert.equal(calls[1].body.text, picked, "请求文本应是所点的那一句方向");
+    const first = dock().querySelector(".neo-agent-answer-opts");
+    assert.equal(first.querySelector(".neo-agent-answer-chosen").textContent, "✔ " + picked, "应留下所选方向");
+    assert.ok([...first.querySelectorAll(".neo-agent-answer-opt")].every((b) => b.disabled), "选过的那组锁住，不给第二次改口");
+    assert.equal(optRows().length, OPT_ROWS.length * 2, "两轮各留一组方向");
+    assert.ok(optRows().slice(OPT_ROWS.length).every((b) => !b.disabled), "收场后新一轮的方向按钮要可用");
+});
+
+test("没有方向标题的编号列表不铺成按钮：计划模式的步骤与正文里的编号照原文渲染", async () => {
+    mountStudio();
+    await openStudio("#/gallery");
+    mockAgentStream([
+        { kind: "plan", text: "分三步出片" },
+        { kind: "content", text: ["计划如下：", "1. generate_prompt 扩写提示词", "2. generate_image 出图", "3. 产物入素材库"].join("\n") },
+    ]);
+
+    inputText(dock().querySelector(".neo-agent-input"), "出个片");
+    click(runBtn());
+    await flush(40);
+
+    assert.equal(dock().querySelector(".neo-agent-answer-opts"), null, "无方向标题的编号列表不该铺成方向按钮");
+    assert.ok(finalRow().querySelector("ol"), "编号列表应照原样渲染成文本");
+});
+
 test("拖入图片：进附件缩略图，发送时随请求体走并清空", async () => {
     mountStudio();
     await openStudio("#/gallery");

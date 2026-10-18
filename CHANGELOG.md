@@ -20,6 +20,19 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   is); `studio/tests/js/studio-desktop.test.mjs` covers the chip coming up from the service with no bridge at all, and
   with a bridge whose result never lands.
 
+- **The agent dock's final answer renders its「下一步选项」as clickable rows.** The `ask_user` choice card only exists
+  while the loop is parked on the question, so a turn that ended with the model listing the next directions inside its
+  answer left them as plain numbered text — the user had to copy a line into the composer and press ✨ 生成 again. The dock
+  now splits a trailing options block off the final answer: a one-line heading naming it (「下一步 / 接下来 / 后续」with
+  「选项 / 方向 / 建议 / 操作」, or English Options / Choices / Next options) followed by 2-6 numbered items, numbered
+  samples inside a code fence ignored and the last such heading in the answer winning. The rest of the answer renders as
+  Markdown, and the directions become one full-width row per item that wraps instead of clipping at the dock's 260px
+  floor; a click fills the composer and posts `POST /neo_agent/run` with that sentence — the same path as typing it — the
+  picked group locks with a「✔ …」line, and the rows left by earlier turns stay locked while a run is in flight and come
+  back once it ends. A numbered list with no such heading stays text, so plan mode's numbered steps are never copied into
+  a row of buttons. `studio/tests/js/studio-agent-skill.test.mjs` covers the rendered rows, the click as the next turn,
+  the lock and the rows coming back, and the plan-mode list staying plain text.
+
 - **The agent dock stops guessing which recipe and which mode the request is about.** The dock had a skill dropdown
   and the backend generated straight from a picked skill, so a picked skill bypassed the LLM entirely, and the LLM had
   no idea what was on screen: with the director page open it planned a one-segment film, and with the paint page in

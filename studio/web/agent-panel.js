@@ -9,7 +9,8 @@
  * 输入框按 Cline 的口径做：只读上下文条、附件图 chip、文本框，底栏一行是 📎 附件图、🔌 MCP、
  * 「📝 计划 / ⚡ 执行」与右下角主按钮（生成 / 暂停 / 继续）；整行「⏹ 取消」只在跑起来之后出现。
  * 时间线里的选项确认卡
- * （后端 ask_user 发一问就挂在循环上，点选经 POST /neo_agent/answer 交回去）。
+ * （后端 ask_user 发一问就挂在循环上，点选经 POST /neo_agent/answer 交回去）；最终回答末尾的
+ * 「下一步选项」编号列表铺成一排可点的方向，点一下即把这句话当作下一轮输入发出。
  * stdio 型 MCP 服务是子进程，浏览器起不了，连接只活在桌面端进程里：面板只发 HTTP 打 /neo_mcp/*，
  * 桌面端服务不在时这些接口回 409，面板据此把 MCP 区收成一句离线说明，不给假成功。
  * 宿主是 studio 外壳（studio-app.js 挂右栏与设置页），不是 ComfyUI 画布侧栏：本模块不注册扩展。
@@ -90,6 +91,49 @@ const GALLERY_IMAGE = /\.(png|jpe?g|gif|webp|bmp)(?=&|#|$)/i;
 
 // 附件缩略图地址：本地文件是 data URI，素材库拖入的是 copy_to_input 落进 input 后的那张
 const attSrc = (a) => a.data || `/view?filename=${encodeURIComponent(a.input)}&type=input`;
+
+// 最终回答末尾的「下一步选项」：模型在收场那段里列的编号方向。ask_user 的选项卡只在循环挂着时
+// 能点，跑完那一轮这些方向此前只是一段文本，用户只能自己抄进输入框再点一次生成。
+// 标题是必须的：计划模式交出的同样是一串编号步骤，只按编号认列表就会把计划照抄成一排按钮。
+const OPT_ITEM = /^\s*(?:[1-9]\d*[.)]|[-*+])\s+(.+)$/;
+const OPT_MAX = 6;
+
+/** 标题行只认一行的短标题（「下一步选项」「Options」）：带两个关键词的长句子是正文。 */
+function isOptionsTitle(raw) {
+    const line = raw.replace(/^#+\s*/, "").replace(/\*\*/g, "").replace(/[：:]\s*$/, "").trim();
+    if (!line || line.length > 24) return false;
+    if (/^(next\s+)?(options?|choices?|directions?)\b/i.test(line)) return true;
+    return /下一步|接下来|后续/.test(line) && /选项|方向|建议|操作|做法/.test(line);
+}
+
+/** 从回答原文里摘出末尾的选项块，交回去掉这一块的正文、标题与选项文本；摘不动回 null。 */
+function splitAnswerOptions(text) {
+    const lines = String(text || "").split("\n");
+    let head = -1;
+    let fence = false;
+    for (let i = 0; i < lines.length; i++) {
+        if (/^\s*```/.test(lines[i])) { fence = !fence; continue; }   // 代码块里的编号列表是样例，不是方向
+        if (fence) continue;
+        if (isOptionsTitle(lines[i])) head = i;   // 一轮里可能两次列方向，只认最后一个标题
+    }
+    if (head < 0) return null;
+    const items = [];
+    let end = head;
+    for (let i = head + 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        const hit = OPT_ITEM.exec(line);
+        if (!hit) break;
+        items.push(hit[1].replace(/\*\*/g, "").trim());
+        end = i;
+    }
+    if (items.length < 2 || items.length > OPT_MAX) return null;
+    return {
+        title: lines[head].replace(/^#+\s*/, "").replace(/\*\*/g, "").trim(),
+        items,
+        body: lines.slice(0, head).concat(lines.slice(end + 1)).join("\n").trim(),
+    };
+}
 
 // ==========================================
 // 聊天区：一问一答，正文按 Markdown 渲染
@@ -301,6 +345,35 @@ function buildChat(onOpenMcp, getContext) {
         host.appendChild(box);
     }
 
+    // 回答末尾的方向铺成一排可点的行（Cline 的口径：可选项是能点的按钮，不是让用户抄的文本）。
+    // 点一下走的就是用户自己敲这句话那条路：填进输入框直接开跑。整行铺满栏宽、文字折行，
+    // 右栏拖到 260px 下限也只是折行，不截断。
+    function renderAnswerOptions(host, block) {
+        const box = mkEl("div", "neo-agent-answer-opts");
+        const title = mkEl("div", "neo-agent-answer-opts-title");
+        title.textContent = "▶ " + block.title;
+        box.appendChild(title);
+        const pick = (item) => {
+            if (running) return;
+            box.classList.add("neo-agent-answer-opts-locked");
+            box.querySelectorAll("button").forEach((b) => { b.disabled = true; });
+            const chosen = mkEl("div", "neo-agent-answer-chosen");
+            chosen.textContent = "✔ " + item;
+            box.appendChild(chosen);
+            input.value = item;
+            generate();
+        };
+        block.items.forEach((item, i) => {
+            const btn = mkEl("button", "neo-agent-answer-opt");
+            btn.type = "button";
+            btn.textContent = `${i + 1}. ${item}`;
+            btn.title = item;
+            btn.onclick = () => pick(item);
+            box.appendChild(btn);
+        });
+        host.appendChild(box);
+    }
+
     // 后端 /neo_agent/run 的时间线：计划一行、每次工具调用一张卡（参数 / 状态 / 结果），
     // 产物图铺在卡下，最终回答落在末尾
     function agentTimeline(answer) {
@@ -395,7 +468,10 @@ function buildChat(onOpenMcp, getContext) {
                 steps.appendChild(card);
             },
             answer(text) {
-                final.innerHTML = renderMarkdown(text);
+                // 末尾的方向块从正文里摘出来铺成按钮：留着编号文本就等于同一份内容出现两遍
+                const block = splitAnswerOptions(text);
+                final.innerHTML = renderMarkdown(block ? block.body : text);
+                if (block) renderAnswerOptions(final, block);
             },
             // 「⏹ 取消」落在步骤区，不覆盖最终回答那一行；取消请求本身失败要留在时间线上——
             // 主按钮在断流收尾时就被「✨ 生成」盖回去，写在那里没人看得见
@@ -436,6 +512,10 @@ function buildChat(onOpenMcp, getContext) {
             : next === "paused" ? t("▶ 继续") : t("⏸ 暂停");
         run.classList.toggle("neo-agent-paused", next === "paused");
         cancelBar.hidden = next === "run";
+        // 跑起来之后不点第二下：上一轮留下的方向按钮整排锁住，本轮收场放开（点过的那组保持锁定，
+        // 与 ask_user 选项卡同一口径）
+        transcript.querySelectorAll(".neo-agent-answer-opts:not(.neo-agent-answer-opts-locked) .neo-agent-answer-opt")
+            .forEach((b) => { b.disabled = next !== "run"; });
     }
 
     // 智能体路径：一次请求换一路 SSE。界面当前状态随请求体进后端系统提示词，
