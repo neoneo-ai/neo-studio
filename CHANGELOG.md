@@ -4,6 +4,14 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **The right agent dock always failed with a remote LLM.** The agent sent the MCP `tools/list` payload to the
+  provider untouched (`name` / `inputSchema` / `_meta`), llama-server looks for a `type` key on every entry and
+  rejected the whole request with `HTTP 500 Failed to parse tools: Missing tool type`, leaving one red line in
+  the chat. The tool table is now converted to the OpenAI
+  `{"type":"function","function":{name,description,parameters}}` shape before it reaches the LLM, and the `_meta`
+  example arguments the tool cards prefill with stay out of the request. The skill path builds its own tool
+  table in `skill.py` and was never affected.
+
 - **The agent dock starts closed, and you can drag it to width.** The dock opened on every window start at a fixed
   360px, so the page view lost that width on every launch and closing the dock was the only way to get it back.
   The dock now starts closed, the header **✨** button opens it, and a sash between the page view and the dock drags

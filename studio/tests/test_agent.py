@@ -125,6 +125,16 @@ class TestToolSurface(unittest.TestCase):
     def test_system_prompt_pins_selected_skill(self):
         self.assertIn("skill_cat", agent.system_prompt("skill_cat"))
 
+    def test_mcp_tools_reach_the_llm_in_openai_shape(self):
+        """llama-server 逐条找 type 键，MCP 的 inputSchema 在 OpenAI 侧叫 parameters：
+        整张 MCP 注册表换形后条条要能解析，工具卡预填用的 _meta 不进模型请求。"""
+        out = agent._openai_tools(mcp.TOOLS)
+        self.assertEqual([t["function"]["name"] for t in out], [t["name"] for t in mcp.TOOLS])
+        for src, item in zip(mcp.TOOLS, out):
+            self.assertEqual(item["type"], "function")
+            self.assertEqual(item["function"]["parameters"], src["inputSchema"])
+            self.assertNotIn("_meta", item["function"])
+
 
 @skip
 class TestPayloadHelpers(unittest.TestCase):
@@ -239,8 +249,8 @@ class TestAgentLoop(unittest.TestCase):
         self.assertEqual(frames[3]["text"], "有 2 个配方，选一个跑整片")
         # 工具结果要以 tool 角色回填，第二轮 LLM 才看得见这一路
         self.assertIn("tool", [m["role"] for m in seen[1][0]])
-        # LLM 拿到的工具表就是 MCP 全集，出片工具在里面
-        self.assertEqual([t["name"] for t in seen[0][1]], ["director_recipes", "director_run"])
+        # LLM 拿到的工具表就是 MCP 全集，出片工具在里面（provider 认的 function 形态）
+        self.assertEqual([t["function"]["name"] for t in seen[0][1]], ["director_recipes", "director_run"])
 
     def test_bad_tool_arguments_do_not_kill_the_turn(self):
         turns = [{"content": "",
@@ -258,6 +268,25 @@ class TestAgentLoop(unittest.TestCase):
             frames = _run(lambda emit: agent._run_agent(client, "列技能", "", emit))
         self.assertEqual(client.calls[0], ("list_skills", {}))
         self.assertEqual(frames[-1]["text"], "好了")
+
+    def test_loop_hands_the_llm_function_shaped_tools(self):
+        """右栏这条路的工具表在进 provider 之前换形：MCP 原样载荷会让 llama-server 整请求 500。"""
+        turns = [{"content": "查一下状态",
+                  "tool_calls": [{"id": "c1", "function": {"name": "neo_status", "arguments": "{}"}}]},
+                 {"content": "服务在线"}]
+        seen = []
+
+        def chat(messages, tools):
+            seen.append(list(tools))
+            return turns[len(seen) - 1]
+
+        client = FakeClient({"neo_status": {"neo_studio": "1"}})
+        with mock.patch.object(agent, "_chat", chat):
+            frames = _run(lambda emit: agent._run_agent(client, "在吗", "", emit))
+        self.assertEqual([t["type"] for t in seen[0]], ["function"])
+        self.assertEqual(seen[0][0]["function"]["name"], "neo_status")
+        self.assertNotIn("inputSchema", seen[0][0])
+        self.assertEqual(frames[-1]["text"], "服务在线")
 
     def test_turn_cap_says_what_was_tried(self):
         """轮次用满不能静默收场：兜底文案要说明跑了多少轮、下一步该怎么说。"""

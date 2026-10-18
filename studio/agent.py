@@ -144,6 +144,17 @@ def _caption(text: str) -> str:
     return "任务结束，没有产物"
 
 
+def _openai_tools(tools: list) -> list:
+    """MCP 的 tools/list 载荷原样发给远程 provider 会整请求 500：llama-server 逐条找 type 键
+    （Failed to parse tools: Missing tool type），inputSchema 在 OpenAI 侧叫 parameters。
+    _meta 里的示例参数是 Studio 工具卡预填用的，不进模型请求。"""
+    return [{"type": "function",
+             "function": {"name": str(t.get("name") or ""),
+                          "description": str(t.get("description") or ""),
+                          "parameters": t.get("inputSchema") or {"type": "object", "properties": {}}}}
+            for t in tools]
+
+
 def _chat(messages: list, tools: list) -> dict:
     """LLM 单轮接缝：llm 是重依赖，函数内导入，测试替掉这个函数就能跑整条循环。"""
     from .llm import chat_turn
@@ -237,7 +248,7 @@ async def _run_agent(client, text: str, skill_id: str, emit) -> None:
     """LLM 规划 → tools/call → 结果回填 → 直到给出最终回答或用满轮次。"""
     messages = [{"role": "system", "content": system_prompt(skill_id)},
                 {"role": "user", "content": text}]
-    tools = client.tool_list()
+    tools = _openai_tools(client.tool_list())
     answered = False
     for _ in range(MAX_TURNS):
         msg = await asyncio.to_thread(_chat, messages, tools)
