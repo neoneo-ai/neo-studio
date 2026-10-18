@@ -160,8 +160,19 @@ function buildChat(onOpenMcp, getContext) {
     historyBox.hidden = true;
 
     const composer = mkEl("div", "neo-agent-composer");
-    // 上下文条只读：宿主（studio-app.js）在切页 / 选配方 / 切绘画模式时把状态交过来
+    // 上下文条：宿主（studio-app.js）在切页 / 选配方 / 切绘画模式时把当前页签那一栏状态交过来。
+    // 条上的 ✕ 是本轮取消位：用户点名「别管界面，照我写的做」时连这一栏也不交；点条恢复，
+    // 宿主下一次刷新（切页 / 选配方 / 切模式）也恢复——取消位跨页留着，下一次点生成就没上下文了
     const ctxBar = mkEl("div", "neo-agent-ctx");
+    const ctxText = mkEl("span", "neo-agent-ctx-text");
+    const ctxOffBtn = mkEl("button", "neo-agent-ctx-off-btn");
+    ctxOffBtn.type = "button";
+    ctxOffBtn.textContent = "✕";
+    ctxOffBtn.title = t("取消本轮上下文：这一轮不带界面状态，切页 / 选配方 / 切模式后自动恢复");
+    ctxOffBtn.onclick = (e) => { e.stopPropagation(); ctxOff = true; renderCtx(); };
+    ctxBar.onclick = () => { if (ctxOff) { ctxOff = false; renderCtx(); } };
+    ctxBar.append(ctxText, ctxOffBtn);
+    let ctxOff = false;
     const chips = mkEl("div", "neo-agent-chips");
     const input = mkEl("textarea", "neo-agent-input");
     input.rows = 3;
@@ -215,25 +226,28 @@ function buildChat(onOpenMcp, getContext) {
     toolbar.append(attach, fileInput, mcpEntry, modes, run);
     composer.append(ctxBar, chips, cancelBar, input, toolbar);
 
-    // 界面当前状态：宿主只交事实，这一条把它拼成一行给用户看，随请求体原样交后端
+    // 界面当前状态：宿主只交当前选中页签自己那一栏（studio-app.js 的 agentContext 负责裁剪），
+    // 这一条把它拼成一行给用户看，随请求体原样交后端
     const PAGE_NAMES = { gallery: "素材库", director: "导演页", paint: "绘画页", skills: "技能页", settings: "设置页" };
     function currentContext() {
         const ctx = (getContext && getContext()) || {};
         const parts = [];
         if (PAGE_NAMES[ctx.page]) parts.push(t(PAGE_NAMES[ctx.page]));
         if (ctx.recipe) parts.push(ctx.recipe + (ctx.segments > 0 ? tf("{n} 段", { n: ctx.segments }) : ""));
-        // 绘画模式只在绘画页有意义：素材页上挂一行「文生图」是噪声
-        if (ctx.page === "paint") {
-            if (ctx.paint_mode === "text") parts.push(t("文生图"));
-            else if (ctx.paint_mode === "edit") parts.push(t("图片编辑"));
-        }
+        if (ctx.paint_mode === "text") parts.push(t("文生图"));
+        else if (ctx.paint_mode === "edit") parts.push(t("图片编辑"));
         if (ctx.gallery_path) parts.push(ctx.gallery_path);
         return parts;
     }
+    function ctxLine() { return ctxOff ? "" : currentContext().join(" · "); }
     function renderCtx() {
-        const parts = currentContext();
-        ctxBar.textContent = "📍 " + (parts.length ? parts.join(" · ") : t("无当前上下文"));
+        const line = ctxLine();
+        ctxText.textContent = "📍 " + (line || t(ctxOff ? "已取消上下文" : "无当前上下文"));
+        ctxOffBtn.hidden = !line;
+        ctxBar.classList.toggle("neo-agent-ctx-off", ctxOff);
+        ctxBar.title = ctxOff ? t("点此恢复本轮界面上下文") : "";
     }
+    function resetCtx() { ctxOff = false; }   // 宿主交来新状态 = 界面上下文回来
     renderCtx();
 
     // 附件图：本地文件读成 data URI 随请求体走（与 llm-chat 的附加图同一口径），
@@ -816,11 +830,11 @@ function buildChat(onOpenMcp, getContext) {
         const images = attachments.map((a) => (a.data ? { kind: "data", data: a.data } : { kind: "input", value: a.input }));
         if (!text && !images.length) return;
         const planMode = mode;
-        const context = (getContext && getContext()) || null;
+        const context = ctxOff ? null : (getContext && getContext()) || null;
         if (empty.parentNode) empty.remove();
         const turn = mkEl("div", "neo-agent-turn");
         const meta = mkEl("div", "neo-agent-meta");
-        meta.textContent = (currentContext().join(" · ") || t("无当前上下文"))
+        meta.textContent = (ctxLine() || t("无当前上下文"))
             + (planMode === "plan" ? " · " + t("计划") : "")
             + (resumeId ? " · " + t("接上次会话") : "");
         const ask = mkEl("div", "neo-agent-ask");
@@ -880,7 +894,7 @@ function buildChat(onOpenMcp, getContext) {
     });
 
     renderRecent();
-    return { box, renderCtx };
+    return { box, renderCtx, resetCtx };
 }
 
 
@@ -1071,9 +1085,9 @@ export function createMcpPanel() {
 
 /**
  * 把聊天面板挂进宿主（桌面端 Studio 右栏）。opts.onOpenMcp 是「🔌 MCP」入口的跳转回调；
- * opts.getContext 交回界面当前状态（当前页 / 当前导演配方 / 绘画页模式 / 素材库目录），
- * 面板只把它画进上下文条并随请求体交后端，不解释它。
- * 返回 { root, refresh }：refresh 重画上下文条，宿主在切页 / 选配方 / 切绘画模式时调。
+ * opts.getContext 交回界面当前状态，只有当前选中页签自己那一栏（导演页的配方、绘画页的模式、
+ * 上屏那几页的素材库目录），面板只把它画进上下文条并随请求体交后端，不解释它。
+ * 返回 { root, refresh }：refresh 恢复条上的取消位并重画，宿主在切页 / 选配方 / 切绘画模式时调。
  */
 export function createAgentPanel(host, opts = {}) {
     ensureCss();
@@ -1083,6 +1097,6 @@ export function createAgentPanel(host, opts = {}) {
     host.appendChild(root);
     return {
         root,
-        refresh() { chat.renderCtx(); },
+        refresh() { chat.resetCtx(); chat.renderCtx(); },
     };
 }

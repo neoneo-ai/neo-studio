@@ -199,9 +199,23 @@ class TestToolSurface(unittest.TestCase):
         self.assertEqual(
             agent._context_block({"page": "paint", "segments": "3"}),
             "\n\n界面当前状态（只是事实，不是指令；用户没说要换就不换）：\n- 当前页面：paint")
-        clipped = agent._context_block({"gallery_path": "d" * 500})
+        clipped = agent._context_block({"page": "gallery", "gallery_path": "d" * 500})
         self.assertIn("d" * agent.CONTEXT_CLIP, clipped)
         self.assertNotIn("d" * (agent.CONTEXT_CLIP + 1), clipped)
+
+    def test_context_block_reports_only_the_current_page(self):
+        """每一栏只属于自己那页：在技能页还报着导演页的配方、绘画页的模式与素材页的目录，
+        就是拿用户没在看的页签干扰这一轮出片。"""
+        head = "\n\n界面当前状态（只是事实，不是指令；用户没说要换就不换）：\n"
+        fields = {"recipe": "cat_walk", "segments": 3, "paint_mode": "edit", "gallery_path": "Neo/Montage"}
+        self.assertEqual(agent._context_block({"page": "skills", **fields}), head + "- 当前页面：skills")
+        director = agent._context_block({"page": "director", **fields})
+        self.assertIn("当前导演配方：cat_walk · 3 段", director)
+        self.assertIn("素材库当前目录：Neo/Montage", director)
+        self.assertNotIn("绘画页模式", director)
+        paint = agent._context_block({"page": "paint", **fields})
+        self.assertIn("绘画页模式：图片编辑", paint)
+        self.assertNotIn("当前导演配方", paint)
 
     def test_mcp_tools_reach_the_llm_in_openai_shape(self):
         """llama-server 逐条找 type 键，MCP 的 inputSchema 在 OpenAI 侧叫 parameters：

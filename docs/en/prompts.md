@@ -172,10 +172,14 @@ Both nodes share the same layout (the Agent shows no status bar):
   dock resizes it (260px floor for the dock, the page view keeps 420px), dragging it narrower than 150px closes the
   column, double-click collapses / expands, `←`/`→` nudges it, and a key in the closed state reopens it at the
   width it had. Open state and width live in `localStorage["neo_studio_agent_dock"]`, and closing keeps the width.
-  The composer: on top a read-only context bar (📍 current page · current recipe and segment count ·
-  paint mode · gallery directory) that the host refreshes on page switch, recipe selection and paint-mode switch; it
-  travels in the request body's `context` into the system prompt, which is how the agent knows which recipe and which
-  mode to work around, and it holds nothing clickable. 📎 attachments (paste, drop, or pick, up to 6, with removable
+  The composer: on top a context bar (📍 current page · current recipe and segment count ·
+  paint mode · gallery directory) that the host refreshes on page switch, recipe selection, paint-mode switch and
+  opening / closing the director page's library drawer. Only the selected tab's own fields are reported and travel in
+  the request body's `context` into the system prompt: a director recipe is reported on the director page only, a paint
+  mode on the paint page only, and a gallery directory only while the library is on screen, and `_context_block` in
+  `studio/agent.py` gates the same payload on the same page. A「✕」on the bar drops the context for this turn — the
+  request sends `context: null` and the bar reads「已取消上下文 / Context off for this turn」; clicking the bar brings it
+  back, and so does any host refresh. 📎 attachments (paste, drop, or pick, up to 6, with removable
   thumbnails) travel in
   the request body as multimodal content, so an image with no text is a valid turn; in Act mode they are the references
   this turn generates with — `generate_image` gets them automatically when its `references` argument is left out (a pasted

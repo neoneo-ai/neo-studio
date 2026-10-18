@@ -52,6 +52,8 @@ const ctxBar = () => dock().querySelector(".neo-agent-ctx");
 const runBtn = () => dock().querySelector(".neo-agent-run");
 const cancelBar = () => dock().querySelector(".neo-agent-cancelbar");
 const meta = () => dock().querySelector(".neo-agent-meta");
+const metaLines = () => [...dock().querySelectorAll(".neo-agent-meta")];
+const ctxOffBtn = () => dock().querySelector(".neo-agent-ctx-off-btn");
 const finalRow = () => dock().querySelector(".neo-agent-answer-body");  // 智能体时间线的最终回答
 const toolCard = () => dock().querySelector(".neo-agent-tool");
 const statusLine = () => dock().querySelector(".neo-agent-tool-status");
@@ -576,6 +578,39 @@ test("切页与切绘画模式：上下文条跟着宿主走，请求带的是�
     await flush(40);
     assert.equal(agentCalls()[0].body.context.page, "paint", "请求应带上切过之后的页");
     assert.equal(agentCalls()[0].body.context.paint_mode, "edit", "请求应带上切过之后的绘画模式");
+});
+
+test("上下文只带当前页签那一栏；条上的 ✕ 让本轮不带界面上下文，点条恢复", async () => {
+    mountStudio();
+    await openStudio("#/gallery");
+    click(document.querySelector('.ns-tabs a[data-tab="paint"]'));
+    await flush(40);
+    const modeLabel = ctxBar().textContent.includes("文生图") ? "文生图" : "图片编辑";
+    assert.ok(ctxBar().textContent.includes("绘画页 · " + modeLabel),
+        `绘画页应报自己那一栏（模式存过就落回存过的那档）：${ctxBar().textContent}`);
+
+    click(document.querySelector('.ns-tabs a[data-tab="skills"]'));
+    await flush(40);
+    assert.ok(ctxBar().textContent.includes("技能页"), `技能页应报技能页：${ctxBar().textContent}`);
+    assert.ok(!ctxBar().textContent.includes("文生图") && !ctxBar().textContent.includes("图片编辑"),
+        `离开绘画页不该再带它的模式：${ctxBar().textContent}`);
+
+    mockAgentStream([{ kind: "content", text: "好" }]);
+    click(ctxOffBtn());
+    assert.ok(ctxBar().textContent.includes("已取消上下文"), `取消位要写明本轮不带上下文：${ctxBar().textContent}`);
+    inputText(dock().querySelector(".neo-agent-input"), "照我写的做，别管界面");
+    click(runBtn());
+    await flush(40);
+    assert.equal(agentCalls()[0].body.context, null, "取消位下请求不带界面上下文");
+    assert.ok(metaLines()[0].textContent.includes("无当前上下文"),
+        `回合头要写明这一轮没有上下文：${metaLines()[0].textContent}`);
+
+    click(ctxBar());
+    assert.ok(ctxBar().textContent.includes("技能页"), `点条把本轮上下文点回来：${ctxBar().textContent}`);
+    inputText(dock().querySelector(".neo-agent-input"), "接着来");
+    click(runBtn());
+    await flush(40);
+    assert.equal(agentCalls()[1].body.context.page, "skills", "恢复后请求重新带上当前页");
 });
 
 test("点计划模式：请求带 mode=plan，回合头写明计划，收尾解禁模式按钮", async () => {

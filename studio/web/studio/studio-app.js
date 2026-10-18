@@ -25,17 +25,28 @@ let directorPanelOpts = null;   // 导演页配方面板选项（buildDirector �
 let onDirectorShown = null;     // 进导演页时补拉的活：隐藏期间跳过的 director_spec 在进本页时补一次
 
 // ====== 右栏智能体的界面上下文：宿主只交事实，右栏画进上下文条并随请求体交后端进系统提示词 ======
+// 只交当前选中页签自己那一栏：导演页的配方、绘画页的模式、素材页的目录各留自己那页，切到技能 / 设置页
+// 就只剩页面本身——在技能页还带着「当前配方 X」出片，就是拿没在看的页签干扰这一轮。
 // 素材库目录在取用时现读画廊：画廊导航没有对外事件，读一次现值比在 gallery.js 里插监听便宜
-const agentCtx = { page: "gallery", recipe: "", segments: 0, paint_mode: "text", gallery_path: "" };
+const agentCtx = { page: "gallery", recipe: "", segments: 0, paint_mode: "text" };
 let agentCtxRefresh = null;     // 右栏展开时挂上的重画回调，收起时没有右栏可通知
 
 function notifyAgentCtx() { if (agentCtxRefresh) agentCtxRefresh(); }
 
 function agentContext() {
     const view = app.neoGallery?.currentView;
-    agentCtx.gallery_path = (view?.mode === "directory" && view.source)
+    const lib = (view?.mode === "directory" && view.source)
         ? [view.source, ...(view.categoryPath || [])].join("/") : "";
-    return { ...agentCtx };
+    const page = agentCtx.page;
+    if (page === "director") {
+        // 抽屉开着时素材库是导演页自己上屏的；收起时画廊交还收留宿主，报它就是串到素材页那一份目录
+        const ctx = { page, recipe: agentCtx.recipe, segments: agentCtx.segments };
+        if (lib && libDrawers.director?.isOpen()) ctx.gallery_path = lib;
+        return ctx;
+    }
+    if (page === "paint") return { page, paint_mode: agentCtx.paint_mode, gallery_path: lib };
+    if (page === "gallery") return { page, gallery_path: lib };
+    return { page };
 }
 
 // ====== 视图缓存：每个 tab 只挂载一次，切换时显隐（保留画廊滚动/编辑状态） ======
@@ -360,14 +371,16 @@ function buildLibDrawer(side, sideCol, view) {
         side.classList.remove("ns-lib-open");
         sideCol.apply();   // 回到配方列表宽度（用户拖过的宽度按模式各记各的）
         app.extensionManager.sidebarTab.activeSidebarTabId = null;   // 素材库收起，替身侧栏同步归位
-        if (galleryMountHost === libHost) mountGallery(galleryStandby());
+        // 右栏上下文那一栏目录跟着抽屉走：收起后素材库不在本页上屏，报它就是报素材页那一份
+        if (galleryMountHost === libHost) mountGallery(galleryStandby()).then(notifyAgentCtx);
+        else notifyAgentCtx();
     };
     const openLib = () => {
         side.classList.add("ns-lib-open");
         sideCol.apply();
         sideCol.expand();   // 用户点名要素材库：这一档收起过就势展开
-        if (galleryMountHost === libHost) return;
-        mountGallery(libHost);
+        if (galleryMountHost === libHost) { notifyAgentCtx(); return; }
+        mountGallery(libHost).then(notifyAgentCtx);   // 挂上并落回该宿主记的目录，右栏才报得出它
     };
     tabRecipes.onclick = closeLib;
     tabLib.onclick = openLib;
@@ -378,7 +391,7 @@ function buildLibDrawer(side, sideCol, view) {
         tabRecipes.classList.toggle("active", !open);
     }).observe(side, { attributes: true, attributeFilter: ["class"] });
     tabRecipes.classList.add("active");
-    libDrawers[view] = { open: openLib, close: closeLib };
+    libDrawers[view] = { open: openLib, close: closeLib, isOpen: () => side.classList.contains("ns-lib-open") };
 }
 
 async function buildDirector(el) {

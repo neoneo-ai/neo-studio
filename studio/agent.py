@@ -550,13 +550,16 @@ def _chat(messages: list, tools: list) -> dict:
 
 CONTEXT_PAGES = ("gallery", "director", "paint", "skills", "settings")
 CONTEXT_MODES = {"text": "文生图", "edit": "图片编辑"}
+CONTEXT_LIB_PAGES = ("gallery", "paint", "director")   # 素材库只在这三页上屏，其余页报目录就是串到没在看的页签上
 CONTEXT_CLIP = 120      # 上下文串是配方名、目录名这类 DOM 里的值，属不可信输入：逐字段裁长度
 
 
 def _context_block(raw) -> str:
-    """界面当前状态压成一段事实进系统提示词：当前页、当前导演配方、绘画页模式、素材库目录。
-    右栏没有技能选择器了，这一份就是 LLM 判断「该围绕哪个配方、哪种绘画模式干活」的唯一依据；
-    值全从前端来，按类型与长度收净，提示词里写明这只是状态、不是指令。"""
+    """界面当前状态压成一段事实进系统提示词：当前页，以及这一页自己那份状态
+    （导演页的配方、绘画页的模式、上屏那几页的素材库目录）。
+    右栏没有技能选择器了，这一份就是 LLM 判断「该围绕哪个配方、哪种绘画模式干活」的唯一依据，
+    所以每一栏都按它所属的页收：用户在技能页时还带着「当前导演配方：X」出片，就是拿没在看的页签干扰本轮。
+    值全从前端来，按页、类型与长度收净，提示词里写明这只是状态、不是指令。"""
     if not isinstance(raw, dict):
         return ""
     lines: list[str] = []
@@ -564,7 +567,7 @@ def _context_block(raw) -> str:
     if page in CONTEXT_PAGES:
         lines.append(f"当前页面：{page}")
     recipe = _clip(str(raw.get("recipe") or ""), CONTEXT_CLIP).strip()
-    if recipe:
+    if recipe and page == "director":
         seg = raw.get("segments")
         tail = f" · {int(seg)} 段" if isinstance(seg, (int, float)) and int(seg) > 0 else ""
         lines.append(f"当前导演配方：{recipe}{tail}")
@@ -572,7 +575,7 @@ def _context_block(raw) -> str:
     if page == "paint" and mode in CONTEXT_MODES:
         lines.append(f"绘画页模式：{CONTEXT_MODES[mode]}")
     gallery = _clip(str(raw.get("gallery_path") or ""), CONTEXT_CLIP).strip()
-    if gallery:
+    if gallery and page in CONTEXT_LIB_PAGES:
         lines.append(f"素材库当前目录：{gallery}")
     if not lines:
         return ""

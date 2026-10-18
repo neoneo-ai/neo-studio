@@ -427,8 +427,11 @@
     outline: none;
 }
 
-/* 只读上下文条：宿主交来的界面当前状态，右栏只画不解释，用户要改就去对应的页 */
+/* 上下文条：宿主交来的界面当前状态，右栏只画不解释；条上的 ✕ 只决定本轮请求带不带这份状态 */
 .neo-agent-ctx {
+    display: flex;
+    align-items: center;
+    gap: 4px;
     padding: 3px 4px;
     background: var(--neo-vsc-bg-alt);
     border: 1px dashed var(--neo-vsc-border);
@@ -437,6 +440,32 @@
     color: var(--neo-vsc-fg-dim);
     white-space: pre-wrap;
     word-break: break-word;
+}
+
+.neo-agent-ctx-text {
+    flex: 1;
+    min-width: 0;
+}
+
+.neo-agent-ctx-off-btn {
+    flex: none;
+    padding: 0 4px;
+    border: 0;
+    background: none;
+    color: var(--neo-vsc-fg-dim);
+    font-size: 11px;
+    line-height: 1.4;
+    cursor: pointer;
+}
+
+.neo-agent-ctx-off-btn:hover {
+    color: var(--neo-vsc-fg);
+}
+
+/* 取消态整条点一下点回来：虚线换实线，一眼看出这一轮不带界面状态 */
+.neo-agent-ctx-off {
+    border-style: solid;
+    cursor: pointer;
 }
 
 .neo-agent-input {

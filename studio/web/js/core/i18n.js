@@ -1561,6 +1561,10 @@ const EN = {
     "继续失败": "Resume failed",
     "桌面端服务未就绪": "The desktop service is not ready",
     "无当前上下文": "No context on screen",
+    "已取消上下文": "Context off for this turn",
+    "取消本轮上下文：这一轮不带界面状态，切页 / 选配方 / 切模式后自动恢复":
+        "Drop the on-screen context for this turn; switching pages, picking a recipe, or changing the paint mode brings it back",
+    "点此恢复本轮界面上下文": "Click to bring the on-screen context back for this turn",
     "导演页": "Director",
     "绘画页": "Paint",
     "技能页": "Skills",

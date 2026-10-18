@@ -4,6 +4,18 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **The dock context is the selected tab's own, and one click drops it for a turn.** The context bar and the request's
+  `context` carried every tab at once: the director recipe stayed reported after leaving the director page, and the
+  gallery directory came from whichever library host was last mounted — a turn started on the skills page generated
+  around a recipe and a directory the user was not looking at. `agentContext()` in `studio/web/studio/studio-app.js`
+  now reports only what the selected page owns (director: the recipe, plus the directory while the library drawer is
+  open; paint: mode and directory; gallery: the directory; skills / settings: the page alone), and `_context_block` in
+  `studio/agent.py` gates each field on the same page, so a stale payload cannot leak across tabs. The bar gains a
+  「✕」: that turn sends `context: null` and the bar reads「已取消上下文」, clicking the bar restores it, and any host
+  refresh (page switch, recipe select, paint-mode switch, drawer open / close) restores it. Covered by
+  `studio/tests/js/studio-agent-skill.test.mjs` (1 new case) and `studio/tests/test_agent.py` (1 new case); docs in
+  `docs/prompts.md` + `docs/en/prompts.md`.
+
 - **Dock attachments are the references the agent generates with.** Pasting or dropping an image into the composer only fed
   the multimodal turn: `generate_image` ran plain text-to-image, so the picture the user attached had no effect on the
   result. `_apply_references` in `studio/agent.py` resolves the turn's attachments to `input/` names through
