@@ -926,6 +926,78 @@ test("只读回放历史会话：会话里的配方落盘帧不广播保存事�
     assert.equal(dock().querySelector(".neo-agent-resumebar").hidden, false, "读回后应给出「接上次会话」条");
 });
 
+const recentRows = () => [...dock().querySelectorAll(".neo-agent-recent-row")];
+const RECENT_SESSIONS = [0, 1, 2, 3, 4].map((i) => ({
+    run_id: `r${i}`, created: 1000 + i, mode: "act", status: "succeeded", text: `第 ${i} 次`, tools: i,
+}));
+
+test("空态默认铺最近会话：五条只铺最近三条，点一行直接读回那条会话并挂出续聊条", async () => {
+    mountStudio();
+    mockRoute("/neo_agent/sessions", jsonResponse({ success: true, sessions: RECENT_SESSIONS }));
+    mockRoute("/neo_agent/session", jsonResponse({
+        success: true,
+        session: {
+            run_id: "r0", created: 1000, mode: "act", status: "succeeded", text: "第 0 次",
+            frames: [{ kind: "run", run_id: "r0" }, { kind: "content", text: "上一轮的回答" }],
+        },
+    }));
+    await openStudio("#/gallery");
+    await flush(10);   // 最近列表是建栏时异步拉摘要，和「会话历史」用例同一层 flush
+
+    const rows = recentRows();
+    assert.equal(rows.length, 3, "空态默认只铺最近 3 条");
+    assert.ok(rows[0].textContent.includes("第 0 次"), `第一行应是最新会话：${rows[0].textContent}`);
+    assert.ok(dock().querySelector(".neo-agent-recent-all"), "空态应给出「查看全部」入口");
+
+    click(rows[0]);
+    await until(() => finalRow(), "点最近行应把那条会话的时间线铺回右栏");
+    assert.equal(finalRow().textContent.trim(), "上一轮的回答", "应照原文铺出会话里的回答");
+    assert.equal(dock().querySelector(".neo-agent-resumebar").hidden, false, "读回后应给出「接上次会话」条");
+});
+
+test("清空对话连着删历史：空态的最近列表跟着收空，提示行留下", async () => {
+    mountStudio();
+    let cleared = false;
+    mockRoute("/neo_agent/sessions", () => jsonResponse({ success: true, sessions: cleared ? [] : RECENT_SESSIONS.slice(0, 2) }));
+    mockRoute("/neo_agent/session/delete_all", () => {
+        cleared = true;
+        return jsonResponse({ success: true, deleted: 2 });
+    });
+    await openStudio("#/gallery");
+    await flush(10);
+
+    assert.equal(recentRows().length, 2, "开局空态应铺出两条最近会话");
+    click(dock().querySelector('.neo-agent-head-btn[title="清空对话与历史"]'));
+    await until(() => !recentRows().length, "清空后空态不该再列会话");
+
+    assert.ok(dock().querySelector(".neo-agent-empty-hint"), "提示行应留在空态里");
+});
+
+test("新增会话：铺开的会话收回空态，续聊条断开，后端历史原样留着", async () => {
+    mountStudio();
+    mockRoute("/neo_agent/sessions", jsonResponse({ success: true, sessions: RECENT_SESSIONS.slice(0, 2) }));
+    mockRoute("/neo_agent/session", jsonResponse({
+        success: true,
+        session: {
+            run_id: "r0", created: 1000, mode: "act", status: "succeeded", text: "第 0 次",
+            frames: [{ kind: "run", run_id: "r0" }, { kind: "content", text: "上一轮的回答" }],
+        },
+    }));
+    await openStudio("#/gallery");
+    await flush(10);
+
+    click(recentRows()[0]);
+    await until(() => finalRow(), "点最近行应把会话铺回右栏");
+    assert.equal(dock().querySelector(".neo-agent-resumebar").hidden, false, "读回后应挂出「接上次会话」条");
+
+    click(dock().querySelector('.neo-agent-head-btn[title="新增会话"]'));
+    await until(() => !finalRow() && recentRows().length === 2 && dock().querySelector(".neo-agent-resumebar").hidden,
+        "新增会话应把时间线收回带最近列表的空态");
+
+    const dels = fetchLog.filter((c) => String(c.path).startsWith("/neo_agent/session/delete"));
+    assert.deepEqual(dels, [], "新增会话不该删后端任何会话");
+});
+
 // 导演页 fixture 与 studio-director.test.mjs 同一套。列表路由按「保存事件到过没有」决定新配方
 // 可见不可见——后端写完文件列表才看得见，于是列表数量本身就是刷新发生在落盘之后的证据
 const DIR_R1 = { name: "R1", type: "video_director", shared: { mode: "f2v" }, segments: [

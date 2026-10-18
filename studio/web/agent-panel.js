@@ -8,7 +8,7 @@
  * （注册表 / 连接 / 工具调用）交给设置页的「MCP 服务」栏，右栏只在输入框底栏留一个跳转入口。
  * 输入框按 Cline 的口径做：只读上下文条、附件图 chip、文本框，底栏一行是 📎 附件图、🔌 MCP、
  * 「📝 计划 / ⚡ 执行」与右下角主按钮（生成 / 暂停 / 继续）；整行「⏹ 取消」只在跑起来之后出现。
- * 时间线里的选项确认卡
+ * 空态按 Cline 首页 RECENT 的口径默认铺最近几条会话，点一行直接读回那条会话续聊。时间线里的选项确认卡
  * （后端 ask_user 发一问就挂在循环上，点选经 POST /neo_agent/answer 交回去）；最终回答末尾的
  * 「下一步选项」编号列表铺成一排可点的方向，点一下即把这句话当作下一轮输入发出。
  * stdio 型 MCP 服务是子进程，浏览器起不了，连接只活在桌面端进程里：面板只发 HTTP 打 /neo_mcp/*，
@@ -153,7 +153,7 @@ function buildChat(onOpenMcp, getContext) {
     const box = mkEl("div", "neo-agent-section neo-agent-chat");
     const transcript = mkEl("div", "neo-agent-transcript");
     const empty = mkEl("div", "neo-agent-empty");
-    empty.textContent = t("输入需求，Enter 生成；右栏会带着界面当前状态去规划");
+    renderEmpty();
     transcript.appendChild(empty);
     // 历史列表与时间线互斥显示：列表整页铺满右栏，读回的旧会话落回时间线本体
     const historyBox = mkEl("div", "neo-agent-history");
@@ -319,6 +319,7 @@ function buildChat(onOpenMcp, getContext) {
             .catch(() => toast("error", t("素材库图片复制失败")));
     }
     box.append(sectionHead(t("智能体"), [
+        headBtn("＋", t("新增会话"), () => newSession()),
         headBtn("🗂", t("会话历史"), () => toggleHistory()),
         headBtn("🗑", t("清空对话与历史"), () => clearConversation()),
     ]), transcript, historyBox, composer);
@@ -569,6 +570,47 @@ function buildChat(onOpenMcp, getContext) {
         return row;
     }
 
+    // 空态默认铺最近几条会话（Cline 首页 RECENT 的口径：进页面就能点开上一条接着聊）。
+    // 摘要与「🗂」列表同源；桌面端服务回 409、请求直连不到或没有会话时，空态只剩提示行，不给假列表
+    const RECENT_MAX = 3;
+    function renderEmpty() {
+        const hint = mkEl("div", "neo-agent-empty-hint");
+        hint.textContent = t("输入需求，Enter 生成；右栏会带着界面当前状态去规划");
+        empty.replaceChildren(hint);
+    }
+    async function renderRecent() {
+        renderEmpty();
+        let data;
+        try {
+            data = await getJson("/neo_agent/sessions");
+        } catch {
+            return;   // 钉在桌面端端口且 ComfyUI 没跑时，这条 comfy 归属的请求直连不到
+        }
+        const list = (data.sessions || []).slice(0, RECENT_MAX);
+        if (data.offline || !list.length) return;
+        const head = mkEl("div", "neo-agent-recent-head");
+        const title = mkEl("span", "neo-agent-recent-title");
+        title.textContent = t("最近");
+        const all = mkEl("button", "neo-agent-recent-all");
+        all.type = "button";
+        all.textContent = t("查看全部 ›");
+        all.onclick = () => renderHistory();
+        head.append(title, all);
+        const rows = mkEl("div", "neo-agent-recent");
+        list.forEach((s) => {
+            const row = mkEl("button", "neo-agent-recent-row");
+            row.type = "button";
+            const text = mkEl("span", "neo-agent-recent-text");
+            text.textContent = s.text || t("（只给了附件图）");
+            const time = mkEl("span", "neo-agent-recent-time");
+            time.textContent = s.created ? new Date(s.created * 1000).toLocaleDateString() : "-";
+            row.append(text, time);
+            row.onclick = () => openSession(s.run_id);
+            rows.appendChild(row);
+        });
+        empty.append(head, rows);
+    }
+
     async function renderHistory() {
         const data = await getJson("/neo_agent/sessions");
         historyBox.replaceChildren();
@@ -631,6 +673,7 @@ function buildChat(onOpenMcp, getContext) {
             renderResumeBar();
             transcript.replaceChildren();
             transcript.appendChild(empty);
+            renderRecent();
             renderHistory();
         });
         head.append(title, hint, del);
@@ -642,15 +685,23 @@ function buildChat(onOpenMcp, getContext) {
         transcript.scrollTop = transcript.scrollHeight;
     }
 
-    // 「🗑 清空对话」连着清后端保存的历史：删掉的是整目录里的会话文件，先确认再动手
-    async function clearConversation() {
+    // 「＋ 新增会话」（Cline New Task 的口径）：时间线收回空态、resumeId 清零，下一条消息开一条新会话；
+    // 后端保存的会话原样留下，空态照铺最近列表
+    function newSession() {
         transcript.replaceChildren();
         transcript.appendChild(empty);
         showTranscript();
         resumeId = "";
         renderResumeBar();
+        renderRecent();
+    }
+
+    // 「🗑 清空对话」连着清后端保存的历史：删掉的是整目录里的会话文件，先确认再动手
+    async function clearConversation() {
+        newSession();
         if (!window.confirm(t("清空对话会同时删掉后端保存的历史会话，继续？"))) return;
         await postJson("/neo_agent/session/delete_all", {});
+        renderRecent();   // 后端历史已清空：空态里的最近列表跟着收空，不能留在屏幕上
     }
 
     // 主按钮三态：空闲「✨ 生成」、运行中「⏸ 暂停」、暂停中「▶ 继续」。整行「⏹ 取消」跟着
@@ -823,6 +874,7 @@ function buildChat(onOpenMcp, getContext) {
         }
     });
 
+    renderRecent();
     return { box, renderCtx };
 }
 

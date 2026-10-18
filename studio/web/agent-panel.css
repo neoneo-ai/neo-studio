@@ -135,6 +135,71 @@
     font-size: 12px;
 }
 
+/* 空态默认铺的「最近」列表（Cline 首页 RECENT 的口径）：最近几条会话一行一条，
+   首句折行截断、右侧一个短日期，点一行读回那条会话；「查看全部」开整页列表 */
+.neo-agent-recent-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+    margin-top: 8px;
+}
+
+.neo-agent-recent-title {
+    font-size: 11px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    color: var(--neo-vsc-fg-dim);
+}
+
+.neo-agent-recent-all {
+    padding: 0;
+    background: none;
+    border: none;
+    color: var(--neo-vsc-accent);
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.neo-agent-recent {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 4px;
+}
+
+.neo-agent-recent-row {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    padding: 5px 6px;
+    background: none;
+    border: 1px solid var(--neo-vsc-border);
+    border-radius: 4px;
+    color: var(--neo-vsc-fg);
+    font-size: 12px;
+    text-align: left;
+    cursor: pointer;
+}
+
+.neo-agent-recent-row:hover {
+    border-color: var(--neo-vsc-accent);
+    background: var(--neo-vsc-bg-alt);
+}
+
+.neo-agent-recent-text {
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.neo-agent-recent-time {
+    flex: 0 0 auto;
+    color: var(--neo-vsc-fg-dim);
+    font-size: 11px;
+}
+
 /* 一轮问答：元信息行 + 提问 + 正文 */
 .neo-agent-turn {
     display: flex;

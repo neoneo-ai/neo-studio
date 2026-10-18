@@ -1587,6 +1587,7 @@ const EN = {
     "参数不是合法 JSON": "The arguments are not valid JSON",
     "无内容": "No content",
     "会话历史": "Session history",
+    "新增会话": "New session",
     "清空对话与历史": "Clear conversation and history",
     "执行模式": "Act",
     "（只给了附件图）": "(image only)",
@@ -1597,6 +1598,8 @@ const EN = {
     "删除这条会话": "Delete this session",
     "桌面端服务读不回历史会话": "The desktop service cannot read saved sessions",
     "还没有历史会话": "No saved sessions yet",
+    "最近": "Recent",
+    "查看全部 ›": "View all ›",
     "这条会话读不回来": "This session cannot be read back",
     "输入下一句就接在这条会话后面": "Type the next line to continue after this session",
     "清空对话会同时删掉后端保存的历史会话，继续？":

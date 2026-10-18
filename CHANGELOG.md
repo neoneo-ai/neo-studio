@@ -4,6 +4,19 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **Neo Agent: the empty chat dock lists the most recent sessions by default, Cline-style.** The empty composer showed
+  only its hint line, so the last conversations stayed hidden behind the「🗂」button. It now lays out the three newest
+  sessions by default (the same `GET /neo_agent/sessions` summary the 🗂 list uses: one row per session, first line +
+  date); clicking a row replays that session read-only and arms the「↩ 接上次会话」bar, and「View all ›」opens the full
+  list. Clearing the conversation or deleting a session empties the list, and offline (the desktop service answers `409`)
+  the composer keeps only its hint line. Frontend-only: `studio/web/agent-panel.js`, `studio/web/agent-panel.css`,
+  `studio/web/js/core/i18n.js` + `studio/tests/js/studio-agent-skill.test.mjs` (2 new cases: the default 3-row list with
+  click-to-replay, and the list emptying after Clear Chat).
+- **The dock header gains a「＋」new-session button, Cline's New Task.** Reading a saved session back arms the「↩ 接上次会话」
+  bar with no way back to a fresh conversation short of「🗑」, which deletes the whole saved history.「＋」rolls the timeline
+  back to the empty recent-sessions state, drops the resume bar, and leaves every saved session on the backend untouched —
+  the next message starts a new session. Clear Chat reuses the same reset before its delete. Frontend-only:
+  `studio/web/agent-panel.js`, `studio/web/js/core/i18n.js` + `studio/tests/js/studio-agent-skill.test.mjs` (+1 case).
 - **A recipe the agent saves is editable and reusable the moment it lands.** Act mode already let the dock's loop call
   `director_save` / `director_copy` (the system prompt tells it to build a one-segment recipe for a film request), and the
   recipe is a normal user recipe under `recipes/custom/`. Nothing told the UI: the director page's left recipe list only
