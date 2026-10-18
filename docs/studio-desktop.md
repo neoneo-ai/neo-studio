@@ -140,6 +140,13 @@ ComfyUI 没就绪时点它只会得到「页面不存在」。`openSkillWorkflow
   `/neo_studio/version` 同时下发。pywebview 的 js_api 注入晚于页面加载，且 `window.pywebview` 先出现、方法由
   `finish.js` 后填：桌面端 api 一律等到要用的方法出现才接管，前端只靠版本快照就知道在启动中。这段时间只出
   「ComfyUI 启动中…」，不出「需要 ComfyUI」提示与启动入口。
+- 桥在整页刷新（F5 热键）之后由 pywebview 在导航完成时重新注入，实测晚到页面脚本之后十几秒（`data/studio_desktop.log`
+  里 `before_load` 与 `loaded` 隔 13 秒）。顶栏状态位与窗口控件因此挂在 5 秒一轮的探桥上，不在几轮之后放弃：放弃一次
+  就是刷新一次顶栏少一块，就绪后的原地翻面也断在这里。状态位还不认桥一条来源：桥的返回值要窗口线程把 resolve 脚本打回
+  页面（pywebview 在 worker 线程算完结果，靠 `evaluate_js` 的 `Invoke` 加信号量送回），而拖动循环就跑在窗口线程上、
+  每步 `sleep` 不泵消息，这段拖动里桥的 promise 整段不落地。顶栏每轮同时问桥与桌面端服务的 `GET /neo_studio/comfy_state`
+  （同一份 `comfy_state`，由服务线程答，与窗口线程无关），谁先落地用谁；页面 origin 不答这条路由（浏览器标签页、远程
+  那路）就停问。
 - 启动桌面端时「有没有 ComfyUI」只看端口有没有人监听：`/neo_studio/version` 探不到（那路插件没加载、还在导入自定义
   节点）也只附着，不在旁边端口拉第二路，启动设置的「启动内核」按钮同样只附着。
 

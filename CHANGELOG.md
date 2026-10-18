@@ -4,6 +4,22 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **A page refresh no longer wipes the header's ComfyUI status.** The status chip and the frameless window controls
+  were driven only by the pywebview `js_api` bridge. Two separate failures hid them after an F5: pywebview re-injects
+  that bridge on navigation completion, measured 13 seconds after the page script runs
+  (`data/studio_desktop.log`, `before_load` vs `loaded`), and both waited 10 × 300 ms for it and then gave up for good;
+  and a bridge result is delivered back to the page by the window thread (pywebview computes it on a worker thread and
+  hands it over through `evaluate_js`'s `Invoke` plus a semaphore), which the borderless-window drag loop occupies with
+  a `sleep` per step and no message pumping — so bridge promises do not land at all while the window is being dragged.
+  One F5 left the header with no「● 运行中」and no min / max / close buttons, and the in-place ready flip never ran
+  after a reload either. Both now poll on a 5-second cadence with no give-up, the chip asks the bridge and
+  `GET /neo_studio/comfy_state` in the same round and takes whichever lands first (the desktop-side service answers the
+  same `StudioDesktop.comfy_state` on its own thread — `app/studio_server.py` runs it off-loop, the probe is a 1-second
+  HTTP probe plus a port-to-PID scan), and the chip is painted on the ready round itself instead of only after the flip.
+  `app/tests/test_studio_server.py` covers the route (409 while no kernel is assembled, the full state snapshot once it
+  is); `studio/tests/js/studio-desktop.test.mjs` covers the chip coming up from the service with no bridge at all, and
+  with a bridge whose result never lands.
+
 - **The agent dock stops guessing which recipe and which mode the request is about.** The dock had a skill dropdown
   and the backend generated straight from a picked skill, so a picked skill bypassed the LLM entirely, and the LLM had
   no idea what was on screen: with the director page open it planned a one-segment film, and with the paint page in

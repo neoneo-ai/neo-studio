@@ -321,6 +321,7 @@ the table answers 409. Startup sequence, close teardown and cache conventions: [
 | GET/POST | `/neo_model_hub/*` `/neo_backyard/*` | Model hub and Backyard |
 | GET/POST | `/userdata/neo_gallery_data.json` | Asset library state file (`user/default/`, writes go through `.tmp` + replace) |
 | GET | `/neo_studio/version` | Capability snapshot: `offline: true` + `caps` + `starting` + `routes` + `comfy_base`; the frontend gates on it and picks the request target |
+| GET | `/neo_studio/comfy_state` | Kernel state snapshot (port / PID / who launched / running / ready / starting): after a full-page reload the pywebview bridge lands later than the page script, so the header status chip falls back to this route; `409` while the desktop has no kernel assembled |
 | GET | `/neo_studio/log` `/view` `/ws` | Startup log / read-only images / WS stub |
 | ANY | any other `/neo_*` `/rs_*` `/userdata/*` `/api/*` | `409 {"success": false, "offline": true}` |
 

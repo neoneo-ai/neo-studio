@@ -290,6 +290,7 @@ LLM 模式与配置见 [llm.md](llm.md)，技能设计见 [skills.md](skills.md)
 | GET/POST | `/neo_model_hub/*` `/neo_backyard/*` | 模型库与 Backyard |
 | GET/POST | `/userdata/neo_gallery_data.json` | 素材库状态文件（`user/default/`，写入走 `.tmp` + replace） |
 | GET | `/neo_studio/version` | 能力快照：`offline: true` + `caps` + `starting` + `routes` + `comfy_base`，前端据此门控与选目标 |
+| GET | `/neo_studio/comfy_state` | 内核状态快照（端口 / PID / 谁启动 / 运行 / 就绪 / 启动中）：整页刷新后 pywebview 的桥晚于页面注入，顶栏状态位靠它从 HTTP 侧补上；桌面端还没装配出内核时 `409` |
 | GET | `/neo_studio/log` `/view` `/ws` | 启动日志 / 图片只读 / WS 桩 |
 | ANY | 其余 `/neo_*` `/rs_*` `/userdata/*` `/api/*` | `409 {"success": false, "offline": true}` |
 

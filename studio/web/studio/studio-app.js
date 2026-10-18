@@ -1119,8 +1119,9 @@ function toast(text) {
 }
 
 // 前端错误上报桌面端日志（data/studio_desktop.log）：白屏这类问题只有 DevTools 能看太晚。
-// pywebview 桥脚本注入晚于页面加载，报错正撞在这个空档 —— 没就绪就重试几轮，别把消息丢了；
-// 浏览器标签页里永远没有桌面端 api，重试完静默放弃。
+// pywebview 桥脚本注入晚于页面加载，整页刷新时实测晚到页面脚本之后十几秒（日志里 before_load 与
+// loaded 隔 13 秒），报错正撞在这个空档 —— 没就绪就接着重试，3 秒就放弃的话刷新那一下的报错全丢；
+// 浏览器标签页里永远没有桌面端 api，送满一分钟静默放弃。
 function desktopLog(text) {
     let tries = 0;
     const send = () => {
@@ -1129,7 +1130,7 @@ function desktopLog(text) {
             api.log(text);
             return;
         }
-        if (tries++ < 10) setTimeout(send, 300);
+        if (tries++ < 200) setTimeout(send, 300);
     };
     send();
 }
@@ -1395,18 +1396,18 @@ function initWindowChrome() {
         }).catch(() => { /* 桥未就绪：顶栏不出控件 */ });
     };
     // 桥脚本在导航完成之后才注入且分两步：window.pywebview 先到（api 是空的），方法由 finish.js
-    // 调 _createApi 后填。模块脚本跑在注入前面，第一趟多半只看到空 api：重试几轮再放弃，
-    // 浏览器标签页里 api 永远不来，顶栏控件整块不出
-    let tries = 0;
+    // 调 _createApi 后填；整页刷新时实测晚到页面脚本之后好几秒。等满几轮就放弃的话，刷新一次
+    // 顶栏控件就永久消失。挂在 5 秒一轮上探桥，浏览器标签页里桥永远不来，每轮只多一次属性读取
+    let wired = false;
     const attach = () => {
+        if (wired) return;
         const bridge = window.pywebview?.api;
-        if (!bridge?.window_state) {
-            if (tries++ < 10) setTimeout(attach, 300);
-            return;
-        }
+        if (!bridge?.window_state) return;
+        wired = true;
         wire(bridge);
     };
     attach();
+    setInterval(attach, 5000);
 }
 
 // ====== 刷新快捷键 ======
@@ -1501,17 +1502,26 @@ function setMemActive(on) {
     memTimer = setInterval(pollMemStats, 3000);
 }
 
-// ====== 顶栏 ComfyUI 状态位（只有桌面端窗口里有：comfy_state 由桌面端的 js_api 提供） ======
+// ====== 顶栏 ComfyUI 状态位（桌面端窗口里才有：状态由 js_api 的 comfy_state 与桌面端服务的
+// /neo_studio/comfy_state 两条来源送） ======
 // 只报状态，不带动作 —— 启停在「设置 → 启动设置」顶部；端口 / 谁启动 / 进程号收在提示里。
 function initComfyStatus() {
     const el = document.getElementById("ns-comfy-status");
     if (!el) return;
+    const runTitle = (s) => s.remote
+        ? (s.running ? tf("远程 ComfyUI 运行中 · {remote} · 起停由远端机器管", { remote: s.remote })
+                     : tf("远程 ComfyUI 不可达 · {remote}", { remote: s.remote }))
+        : (s.running
+            ? tf("ComfyUI 运行中 · 端口 {port} · {by} · PID {pid}", { port: s.port, by: t(s.mine ? "桌面端启动" : "外部启动"), pid: s.pid })
+            : t("ComfyUI 已停止 · 在「设置 → 启动设置」点「启动内核」"));
     const render = (s) => {
+        el.hidden = false;   // 状态到了才出字：出字前它是空的，浏览器标签页里没人送状态就一直是空的
         setStarting(!!s.starting);   // 桌面端拉起的启动中：生成按钮文案跟着收
         // 就绪就翻面，不看是谁拉起内核。桌面端在 ready 这同一份快照里才清掉 starting（_jump_when_ready），
         // 5 秒轮询只会看到「启动中·未就绪」紧跟「已就绪·不再启动中」；拿 starting 当翻面条件的话，
         // 桌面端自己拉起内核的冷启动（userStarting 为假）永远进不来，顶栏出「运行中」而页面钉在离线形态。
         if (s.ready && offline) {
+            setStatus("run", t("运行中"), runTitle(s));   // 翻面是异步的：这一轮先把字挂上，翻完之前顶栏不许是空的
             if (!flipStarted) { flipStarted = true; flipOnline(); }   // 原地接上生成：不刷新，未保存的编辑留着
             return;
         }
@@ -1519,36 +1529,32 @@ function initComfyStatus() {
             setStatus("starting", t("启动中"), t("ComfyUI 启动中…就绪后自动接上生成"));
             return;
         }
-        setStatus(s.running ? "run" : null,
-            s.running ? t("运行中") : t("已停止"),
-            s.remote
-                ? (s.running ? tf("远程 ComfyUI 运行中 · {remote} · 起停由远端机器管", { remote: s.remote })
-                             : tf("远程 ComfyUI 不可达 · {remote}", { remote: s.remote }))
-                : (s.running
-                    ? tf("ComfyUI 运行中 · 端口 {port} · {by} · PID {pid}", { port: s.port, by: t(s.mine ? "桌面端启动" : "外部启动"), pid: s.pid })
-                    : t("ComfyUI 已停止 · 在「设置 → 启动设置」点「启动内核」")));
+        setStatus(s.running ? "run" : null, s.running ? t("运行中") : t("已停止"), runTitle(s));
         if (!s.ready && !offline) flipOffline();
     };
 
     onComfyState(render);
 
-    // pywebview 的桥脚本在导航完成之后才注入，且分两步：window.pywebview 先出现，方法由 finish.js 调
-    // _createApi 后填。只判断 api 对象存在就接管，第一次 poll 会抛 TypeError 打断整条启动链（route 再也
-    // 不执行，窗口停在只出顶栏的空白页）。等真正要用的方法出现再接管：重试几轮再放弃，
-    // 浏览器标签页里永远没有 api，状态位保持隐藏
-    let tries = 0;
-    const attach = () => {
+    // 两条来源同轮并发，谁先落地用谁，一条都不许等死。桥的返回要窗口线程把 resolve 脚本打回页面
+    // （pywebview 的 js_bridge_call 在 worker 线程算完结果，靠 evaluate_js 的 Invoke + 信号量送回），
+    // 而拖动循环就跑在窗口线程上、每步 sleep 不泵消息（app/studio_app.py 的 win_start_drag）：
+    // 这段拖动里桥的 promise 整段不落地，只认桥就是刷新后状态位不回来的现场（日志里刷新后紧接
+    // 一串 drag 199 steps，页面到不了 ready，[web] FLIP 一行不出）。HTTP 那条由桌面端服务的线程答，
+    // 与窗口线程无关。它是桌面端自己的一层（与 /neo_studio/version 同路，不在归属表里），所以打
+    // 绝对地址问页面自己的 origin：页面钉在桌面端端口上，翻面之后归属表把表外路径送去 ComfyUI
+    // 也管不到它。origin 不答这条路由（浏览器标签页 / 远程那路）就停问，别每 5 秒撞一次 404。
+    let httpAsks = true;
+    const pollHttp = () => fetch(`${location.origin}/neo_studio/comfy_state`)
+        .then((r) => (r.ok ? r.json() : (httpAsks = false, null)))
+        .then((d) => { if (d?.success) publishComfyState(d); })
+        .catch(() => {});
+    const poll = () => {
         const api = window.pywebview?.api;
-        if (!api?.comfy_state) {
-            if (tries++ < 10) setTimeout(attach, 300);
-            return;
-        }
-        el.hidden = false;
-        const poll = () => api.comfy_state().then(publishComfyState).catch(() => {});
-        poll();
-        setInterval(poll, 5000);
+        if (api?.comfy_state) api.comfy_state().then(publishComfyState).catch(() => {});
+        if (httpAsks) pollHttp();
     };
-    attach();
+    poll();
+    setInterval(poll, 5000);
 }
 
 function setStatus(kind, text, title) {

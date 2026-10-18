@@ -191,6 +191,17 @@ no floating window, no ✕ and no "from canvas" export button.
   waits for the method it needs to show up before taking over, and the frontend knows it is starting from the version
   snapshot alone. During that window only "ComfyUI is starting…" is shown; the "ComfyUI required" toast and the start
   entry stay hidden.
+- After a full-page reload (the F5 hotkey) pywebview re-injects the bridge on navigation completion, measured to land
+  more than ten seconds after the page script runs (`before_load` and `loaded` are 13 seconds apart in
+  `data/studio_desktop.log`). The header status chip and the window controls therefore sit on a 5-second bridge poll
+  instead of giving up after a few rounds — giving up once means a refresh strips that part of the header, and the
+  in-place ready flip breaks there too. The chip also refuses the bridge as its only source: a bridge result is handed
+  back to the page by the window thread (pywebview computes it on a worker thread and delivers it through
+  `evaluate_js`'s `Invoke` plus a semaphore), and the drag loop runs on that same window thread with a `sleep` per step
+  and no message pumping, so bridge promises do not land at all during a drag. Every poll round asks the bridge and the
+  desktop-side `GET /neo_studio/comfy_state` (the same `comfy_state`, answered on the service thread, independent of the
+  window thread) and takes whichever lands first; when the page origin does not answer that route (browser tab, remote
+  mode) it stops asking.
 - When the desktop starts, "is there a ComfyUI" is decided only by whether anyone is listening on the port: a missing
   `/neo_studio/version` probe (that instance has not loaded the plugin yet and is still importing custom nodes) also
   only attaches — a second instance is never started on a neighbouring port, and the "Startup settings → Start

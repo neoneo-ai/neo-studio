@@ -173,6 +173,26 @@ class OfflineServiceTests(_ServerCase):
         self.assertEqual(data["comfy_base"], "http://127.0.0.1:8188", "页面靠它把生成类请求原地切过去")
         self.app["flags"]["comfy_base"] = ""
 
+    def test_comfy_state_needs_the_desktop_kernel_provider(self):
+        # 引导页那一路桌面端还没装配出内核：没有 provider 就明说没有，不给前端一份假状态
+        status, body = self.get("/neo_studio/comfy_state")
+        self.assertEqual(status, 409)
+        self.assertFalse(json.loads(body)["success"])
+
+    def test_comfy_state_answers_the_kernel_snapshot(self):
+        # 整页刷新后 pywebview 的桥晚于页面脚本注入，顶栏状态位靠这条路由从 HTTP 侧补上
+        self.app["kernel_state"] = lambda: {"port": 8188, "pid": 4321, "mine": True,
+                                            "running": True, "ready": True, "starting": False}
+        try:
+            status, body = self.get("/neo_studio/comfy_state")
+        finally:
+            self.app["kernel_state"] = None
+        data = json.loads(body)
+        self.assertEqual(status, 200)
+        self.assertTrue(data["success"])
+        self.assertEqual((data["port"], data["pid"], data["mine"], data["running"], data["ready"]),
+                         (8188, 4321, True, True, True), "顶栏状态位要的字段一个都不能少")
+
     def test_extension_static_files_served(self):
         for path in ("/extensions/comfyui-neo-studio/studio/studio-app.js",
                      "/extensions/comfyui-neo-studio/studio/style.css",
@@ -465,6 +485,7 @@ class DesktopModuleTests(_RealFolderPaths):
     def test_desktop_app_mounts_exactly_the_manifest(self):
         app = ns.build_app(COMFY_ROOT, PLUGIN_DIR)
         desktop_pages = {("GET", "/neo-studio"), ("GET", "/neo_studio/version"),
+                       ("GET", "/neo_studio/comfy_state"),
                        ("GET", "/neo_studio/log"), ("GET", "/neo_studio/launcher"),
                        ("POST", "/neo_studio/launcher")}
         mounted = {(r.method, r.resource.canonical) for r in app.router.routes()

@@ -146,6 +146,18 @@ async def studio_version(request):
     })
 
 
+async def comfy_state(request):
+    """顶栏状态位的 HTTP 版：pywebview 在导航完成之后才注入 js_api，整页刷新时实测能晚到页面脚本
+    之后好几秒（data/studio_desktop.log 里 before_load 与 loaded 隔 7 秒，UI 线程正忙于拖动循环），
+    状态位只挂在桥上的话刷新一次就永久消失，就绪后的原地翻面也一起断在这里。
+    provider 是 StudioDesktop.comfy_state：探活是阻塞的（probe 1 秒 + 按端口找 PID），丢线程里跑，
+    别占着桌面端的事件循环。引导页那一路桌面端还没装配出内核，没有 provider 就明说没有。"""
+    provider = request.app.get("kernel_state")
+    if provider is None:
+        return web.json_response({"success": False, "error": OFFLINE_ERROR}, status=409)
+    return web.json_response({"success": True, **await asyncio.to_thread(provider)})
+
+
 async def desktop_log(request):
     """离线时的「设置 → 日志」：读桌面端拉起 ComfyUI 的完整输出（data/comfy_run.log）。"""
     entries = []
@@ -208,14 +220,15 @@ def mcp_config_path(plugin_dir: Path, data_root: Path = None) -> Path:
 
 def build_app(root: Path, plugin_dir: Path, flags: dict = None, launcher: dict = None,
               launcher_api: dict = None, comfy_log: Path = None,
-              data_root: Path = None, mcp_manager=None) -> web.Application:
+              data_root: Path = None, mcp_manager=None, kernel_state=None) -> web.Application:
     """桌面端 app：Studio 页面 + 前端静态文件 + 能力清单里归桌面端的全部路由。
     flags 是桌面端的启动中标记（与 StudioDesktop 共用同一份 dict），随版本快照下发给页面。
     launcher / launcher_api 同样与 StudioDesktop 共用：设置页在桌面端读快照、发保存。
     data_root 是桌面端的用户数据根：插件模块 import 期按它找 gallery / recipes / configs，
     桌面端服务与桌面端拉起的内核因此读同一份数据。
     mcp_manager 与 StudioDesktop 共用同一份会话登记表：关窗收尾要回收的进程与页面连着的是
-    同一批；没给时按 data_root 建一个，注册表落在 <data_root>/configs/mcp_servers.json。"""
+    同一批；没给时按 data_root 建一个，注册表落在 <data_root>/configs/mcp_servers.json。
+    kernel_state 是 StudioDesktop.comfy_state 那份内核状态，顶栏状态位刷新后靠它从 HTTP 侧补上。"""
     if str(root) not in sys.path:
         sys.path.insert(0, str(root))
     import folder_paths   # noqa: F401  gallery 在 import 期就要读 output/input 目录
@@ -241,6 +254,7 @@ def build_app(root: Path, plugin_dir: Path, flags: dict = None, launcher: dict =
     routes.get(USERDATA_PATH)(userdata_get)
     routes.post(USERDATA_PATH)(userdata_post)
     routes.get("/neo_studio/version")(studio_version)
+    routes.get("/neo_studio/comfy_state")(comfy_state)
     routes.get("/neo_studio/log")(desktop_log)
     routes.get("/neo_studio/launcher")(launcher_get)
     routes.post("/neo_studio/launcher")(launcher_post)
@@ -255,6 +269,7 @@ def build_app(root: Path, plugin_dir: Path, flags: dict = None, launcher: dict =
     app["launcher"] = launcher if launcher is not None else {}
     app["launcher_api"] = launcher_api if launcher_api is not None else {}
     app["plugin_version"] = sys.modules[f"{DESKTOP_PKG}.util"].plugin_version()
+    app["kernel_state"] = kernel_state
     if mcp_manager is not None:
         app["mcp"] = mcp_manager
     else:

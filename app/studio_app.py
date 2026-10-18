@@ -1624,7 +1624,8 @@ def main() -> int:
                                 defaults=[builtin] if builtin else [])
     server = DesktopServer(lambda: build_app(boot["root"], boot["serve_dir"], flags, launcher,
                                            launcher_api, COMFY_LOG, data_root=STATE,
-                                           mcp_manager=mcp),
+                                           mcp_manager=mcp,
+                                           kernel_state=lambda: desktop.comfy_state()),
                          port + DESKTOP_PORT_OFFSET)
     offline_url = ""
 

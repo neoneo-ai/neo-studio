@@ -188,6 +188,67 @@ test("桥对象先到、方法后填：不打断启动链，状态位等齐了�
     assert.equal(status.textContent, "● 运行中");
 });
 
+// comfy_state 的桩只答第一发：页面每 5 秒一轮问状态，桩常开的话本用例的实例会一直往共享
+// DOM 里写自己的状态，串进后面的用例（每次 import 的实例共用同一个 document）。非 200 的
+// 答复会让页面停问这条路由。
+function mockComfyStateOnce(payload) {
+    let asks = 0;
+    mockRoute("/neo_studio/comfy_state", () => (++asks <= 1
+        ? jsonResponse(payload)
+        : jsonResponse({ success: false }, 501)));
+}
+
+// 整页刷新（F5 热键）后 pywebview 在导航完成之后才注入桥，实测晚到页面脚本之后好几秒
+// （data/studio_desktop.log 里 before_load 与 loaded 隔 7 秒，UI 线程正忙于拖动循环）：
+// 这段时间顶栏必须由桌面端服务的 /neo_studio/comfy_state 报出内核状态，
+// 否则状态位整块消失，就绪后的原地翻面也一起断在这里。
+test("刷新现场桥还没注入：顶栏状态位由桌面端服务的 comfy_state 顶上", async () => {
+    resetEnv();
+    document.body.innerHTML = studioBody;
+    mockRoute("/neo_studio/version", jsonResponse({
+        success: true, plugin_version: "9.9.9", comfyui_version: "ComfyUI 未运行",
+        offline: true, starting: false, caps: {}, routes: ["GET /neo_gallery/list"],
+        comfy_base: "", recipes: [],
+    }));
+    mockComfyStateOnce({
+        success: true, port: 8188, pid: 4321, mine: true, running: true, ready: false, starting: false,
+    });
+    const status = document.getElementById("ns-comfy-status");
+    await import("../../web/studio/studio-app.js?httpStatus=1");
+    await flush();
+    await sleep(120);
+    assert.equal(status.hidden, false, "桥没注入时桌面端服务要顶上状态位");
+    assert.equal(status.textContent, "● 运行中");
+    assert.match(status.title, /端口 8188/, "提示里报端口");
+});
+
+// 刷新现场桥已注入、方法也齐了，但桥的返回值要窗口线程把 resolve 脚本打回页面
+// （pywebview 的 js_bridge_call 在 worker 线程算完，靠 evaluate_js 的 Invoke + 信号量送回），
+// 而拖动循环就跑在窗口线程上、每步 sleep 不泵消息：这段拖动里桥的 promise 整段不落地。
+// 只认桥的那条就是「刷新后状态位不回来」的现场（日志里刷新后紧接一串 drag 199 steps，
+// [web] FLIP 一行不出）。两条来源必须同轮并发。
+test("桥在但结果送不回页面（窗口线程被拖动循环占住）：状态位由桌面端服务顶上", async () => {
+    resetEnv();
+    document.body.innerHTML = studioBody;
+    mockRoute("/neo_studio/version", jsonResponse({
+        success: true, plugin_version: "9.9.9", comfyui_version: "ComfyUI 未运行",
+        offline: true, starting: false, caps: {}, routes: ["GET /neo_gallery/list"],
+        comfy_base: "", recipes: [],
+    }));
+    mockComfyStateOnce({
+        success: true, port: 7791, pid: 7791, mine: true, running: true, ready: false, starting: false,
+    });
+    // 桥的方法齐了、promise 永不落地：拖动循环占住窗口线程时 pywebview 就是这样
+    window.pywebview = { api: { comfy_state: () => new Promise(() => {}) } };
+    const status = document.getElementById("ns-comfy-status");
+    await import("../../web/studio/studio-app.js?bridgeStarved=1");
+    await flush();
+    await sleep(120);
+    assert.equal(status.hidden, false, "桥卡住时桌面端服务要顶上状态位");
+    assert.equal(status.textContent, "● 运行中");
+    assert.match(status.title, /端口 7791/, "提示里报端口");
+});
+
 test("前端错误上报：桥没就绪先等，方法齐了再补进桌面端日志", async () => {
     mountStudio();
     window.pywebview = { api: {} };   // 报错正撞在桥脚本注入的空档上：api 对象在、log 方法还没填
