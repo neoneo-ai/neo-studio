@@ -177,10 +177,20 @@ Neo Studio 独立页面（`web/studio/index.html`）的后端。素材 / 生图 
 
 | 方法 | 路由 | 说明 |
 |------|------|------|
-| POST | `/neo_agent/run` | 智能体一轮对话，SSE 时间线；body `{text, skill_id}`，首帧 `run`（带 `run_id`，取消整条循环要用），帧 `plan` / `tool_call` / `status` / `tool_result` / `content`，收尾 `[ERROR]` / `[DONE]` |
+| POST | `/neo_agent/run` | 智能体一轮对话，SSE 时间线；body `{text, skill_id, mode, images}`（`mode` 只认 `plan` / `act`，缺省 `act`；`images` 是输入框附件图，按图片源口径给，最多 6 张），首帧 `run`（带 `run_id`，取消整条循环与回答问句都要用），帧 `plan` / `tool_call` / `status` / `tool_result` / `ask` / `content`，收尾 `[ERROR]` / `[DONE]` |
+| POST | `/neo_agent/answer` | 回答 `ask` 帧：body `{run_id, ask_id, text}`，把用户选的方向交回正等在 `ask_user` 上的循环；`run_id` / `ask_id` 只收 `run` / `ask` 帧发过的形态，运行收场 404、问句已收场 404 |
 | POST | `/neo_agent/cancel` | 取消：带 `run_id` 停整条智能体循环并掐掉在跑的任务（`run_id` 只收 `run` 帧发过的形态，查不到 404）；带 `task_id` 只掐那一个任务（走 MCP `cancel_task`，图片 / 整片 / 单段 / 拼接四类由协议自己找路由），`task_id` 只收 UUID 形态 |
 
 - `skill_id` 非空时后端按技能直出图、不叫 LLM；为空时由 LLM 规划并调工具，轮次上限 12。
+- `mode=plan` 是计划模式：`generate_image` / `director_run` / `segment_run` / `assemble_run` /
+  `director_save` / `director_copy` / `cancel_task` 不进 LLM 的工具表，硬调也拒回错误；
+  查询类工具照旧可用。
+- `ask_user` 是右栏伪工具，不在 MCP 注册表里：循环发 `ask` 帧（带 `ask_id`、问题与 2-5 个选项）
+  后挂在等回答上，`/neo_agent/answer` 交回答案，30 分钟无回应就按「用户没回应」继续；
+  按 `run_id` 取消时挂着的问句一并交收。
+- 附件图只进首个 user 消息（多模态），技能直出图那条路用不上附件图。粘贴与点选的图按 `kind:"data"`
+  的 data URI 给；从素材库卡片拖入的图先经 `/neo_gallery/copy_to_input` 落进 `input/`，再按
+  `kind:"input"` 的文件名给。右栏只收后端解得动的图片后缀，素材库里的视频 / 音频卡片在拖入这一步就挡掉。
 - `generate_image` / `director_run` / `segment_run` / `assemble_run` 只回 `task_id`，循环里轮询 `task_status` 到终态，
   采样步数与整片段号经 `status` 帧发出去；等待上限单图 600 秒、整片 2400 秒。
 - `tool_result` 帧带 `media`：出图的 `images` 逐条成 `{kind:"image", url, title}`，出片三类的成片 `filename` 补成一条
@@ -281,7 +291,7 @@ LLM 模式与配置见 [llm.md](llm.md)，技能设计见 [skills.md](skills.md)
 
 - 生成与队列类接口必须 ComfyUI 在跑：`/neo_image_gen/generate`、`/neo_video_gen/run_segment`
   `assemble_segments` `storyboard_generate`、`/neo_voice/generate`、`/neo_studio/director/generate`、
-  `/neo_agent/run` `/neo_agent/cancel`、`/neo_studio/mem_stats`、`/neo_nodes/repair`。
+  `/neo_agent/run` `/neo_agent/cancel` `/neo_agent/answer`、`/neo_studio/mem_stats`、`/neo_nodes/repair`。
 - 缩略图与 ComfyUI 共用 `gallery/thumbnails` 缓存；两边同时跑时同一张图可能各生成一次。
 - 目录取 `folder_paths` 的默认 `output` / `input` / `user`：外部用 `--output-directory` 启动 ComfyUI 时，
   桌面端浏览仍指向默认目录。

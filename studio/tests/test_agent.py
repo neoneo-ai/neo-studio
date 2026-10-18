@@ -7,9 +7,11 @@
 轮次用满兜底、系统提示词缺失、SSE 帧形态、cancel 路由的 task_id / run_id 校验与轮次、轮询边界的取消。
 """
 import asyncio
+import base64
 import contextlib
 import importlib
 import json
+import sys
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -276,8 +278,9 @@ class TestAgentLoop(unittest.TestCase):
         self.assertEqual(frames[3]["text"], "有 2 个配方，选一个跑整片")
         # 工具结果要以 tool 角色回填，第二轮 LLM 才看得见这一路
         self.assertIn("tool", [m["role"] for m in seen[1][0]])
-        # LLM 拿到的工具表就是 MCP 全集，出片工具在里面（provider 认的 function 形态）
-        self.assertEqual([t["function"]["name"] for t in seen[0][1]], ["director_recipes", "director_run"])
+        # LLM 拿到的工具表就是 MCP 全集加右栏伪工具 ask_user（provider 认的 function 形态）
+        self.assertEqual([t["function"]["name"] for t in seen[0][1]],
+                         ["director_recipes", "director_run", "ask_user"])
 
     def test_bad_tool_arguments_do_not_kill_the_turn(self):
         turns = [{"content": "",
@@ -310,8 +313,9 @@ class TestAgentLoop(unittest.TestCase):
         client = FakeClient({"neo_status": {"neo_studio": "1"}})
         with mock.patch.object(agent, "_chat", chat):
             frames = _run(lambda emit: agent._run_agent(client, "在吗", "", emit, _runobj(client)))
-        self.assertEqual([t["type"] for t in seen[0]], ["function"])
+        self.assertEqual([t["type"] for t in seen[0]], ["function"] * len(seen[0]))
         self.assertEqual(seen[0][0]["function"]["name"], "neo_status")
+        self.assertEqual(seen[0][-1]["function"]["name"], "ask_user")   # 右栏伪工具排在 MCP 之后
         self.assertNotIn("inputSchema", seen[0][0])
         self.assertEqual(frames[-1]["text"], "服务在线")
 
@@ -525,6 +529,194 @@ class TestCancellation(unittest.TestCase):
         first, left = asyncio.run(main())
         self.assertEqual(first["kind"], "status")
         self.assertEqual(left, [])
+
+
+@skip
+class TestPlanMode(unittest.TestCase):
+    def test_plan_mode_drops_state_changing_tools(self):
+        """计划模式里模型看不见写操作工具就不会去调：查询类照旧全在，执行模式一张表不少。"""
+        act = [t["function"]["name"] for t in agent._openai_tools(mcp.TOOLS)]
+        plan = [t["function"]["name"] for t in agent._openai_tools(mcp.TOOLS, plan=True)]
+        self.assertIn("generate_image", act)
+        self.assertIn("director_run", act)
+        self.assertEqual(set(act) - set(plan), set(agent.PLAN_BLOCKED_TOOLS))
+        self.assertIn("neo_status", plan)
+        self.assertIn("director_spec", plan)
+
+    def test_plan_mode_note_lands_in_the_system_prompt(self):
+        self.assertIn("本轮是计划模式", agent.system_prompt("", "plan"))
+        self.assertNotIn("本轮是计划模式", agent.system_prompt(""))
+
+    def test_plan_mode_refuses_a_write_call_at_the_boundary(self):
+        """模型硬调写操作：不发 MCP，拒回原文，让 LLM 拿着错误改口去写计划。"""
+        client = FakeClient({"neo_status": {"ok": True}}, names=("neo_status", "generate_image"))
+        turns = [
+            {"content": "先看一眼", "tool_calls": [{"id": "1", "function": {
+                "name": "generate_image",
+                "arguments": json.dumps({"skill_id": "skill_cat", "prompt": "橘猫"})}}]},
+            {"content": "计划：切到执行模式后跑 generate_image"},
+        ]
+
+        def chat(messages, tools):
+            return turns.pop(0)
+
+        with mock.patch.object(agent, "_chat", chat):
+            frames = _run(lambda emit: agent._run_agent(
+                client, "出图", "", emit, _runobj(client), "plan"))
+        self.assertEqual(client.calls, [], "计划模式不许把任务交进 ComfyUI")
+        self.assertIn("计划模式不执行 generate_image",
+                      [f for f in frames if f["kind"] == "tool_result"][0]["text"])
+        self.assertEqual(frames[-1]["text"], "计划：切到执行模式后跑 generate_image")
+
+
+@skip
+class TestAskUser(unittest.TestCase):
+    def test_ask_user_is_a_dock_only_tool(self):
+        """ask_user 是右栏伪工具：MCP 注册表里没有它，交给 LLM 的工具表里才有。"""
+        self.assertNotIn("ask_user", [t["name"] for t in mcp.TOOLS])
+        seen = []
+
+        def chat(messages, tools):
+            seen.append([t["function"]["name"] for t in tools])
+            return {"content": "好"}
+
+        client = FakeClient({}, names=("neo_status",))
+        with mock.patch.object(agent, "_chat", chat):
+            _run(lambda emit: agent._run_agent(client, "在吗", "", emit, _runobj(client)))
+        self.assertIn("ask_user", seen[0])
+        self.assertNotIn("ask_user", [t["name"] for t in client.tool_list()])
+
+    def test_ask_user_parks_the_loop_until_the_answer_arrives(self):
+        """ask_user 不发 MCP：循环发 ask 帧就挂在等回答上，答案回来才走下一轮。"""
+        client = FakeClient({}, names=("neo_status",))
+        turns = [
+            {"content": "", "tool_calls": [{"id": "a1", "function": {
+                "name": "ask_user",
+                "arguments": json.dumps({"question": "要哪种结尾？",
+                                         "options": ["淡出", "定格"]}, ensure_ascii=False)}}]},
+            {"content": "按淡出出片"},
+        ]
+
+        def chat(messages, tools):
+            return turns.pop(0)
+
+        run = agent._Run(client)
+
+        async def main():
+            frames = []
+
+            async def emit(frame):
+                frames.append(frame)
+                if frame["kind"] == "ask":
+                    # 回答要发生在循环还挂着的时候，等同前端点选项的时机
+                    run.asks[frame["ask_id"]]["text"] = "淡出"
+                    run.asks[frame["ask_id"]]["event"].set()
+
+            with mock.patch.object(agent, "_chat", chat):
+                await agent._run_agent(client, "出个片", "", emit, run)
+            return frames
+
+        frames = asyncio.run(main())
+        ask = [f for f in frames if f["kind"] == "ask"][0]
+        self.assertEqual(ask["text"], "要哪种结尾？")
+        self.assertEqual(ask["options"], ["淡出", "定格"])
+        self.assertTrue(agent.ASK_ID_RE.match(ask["ask_id"]))
+        self.assertEqual([f for f in frames if f["kind"] == "tool_result"][0]["text"], "淡出")
+        self.assertEqual(frames[-1]["text"], "按淡出出片")
+        self.assertEqual(client.calls, [], "ask_user 不该走 MCP")
+        self.assertEqual(run.asks, {}, "问句收场后不留挂起点")
+
+    def test_answer_route_wakes_the_parked_question(self):
+        run = agent._Run(object())
+        ask_id = "0" * 32
+        run.asks[ask_id] = {"event": asyncio.Event(), "text": ""}
+        agent._RUNS[run.run_id] = run
+        try:
+            resp = asyncio.run(agent.agent_answer(TestRoutes._req(
+                {"run_id": run.run_id, "ask_id": ask_id, "text": " 淡出 "})))
+        finally:
+            agent._RUNS.pop(run.run_id, None)
+        self.assertEqual(resp.status, 200)
+        self.assertTrue(run.asks[ask_id]["event"].is_set())
+        self.assertEqual(run.asks[ask_id]["text"], "淡出")
+
+    def test_answer_route_rejects_bad_ids_and_finished_runs(self):
+        """run_id / ask_id 只认后端发过的形态；空回答与认不到的运行都在入口挡掉。"""
+        good = "0" * 32
+        for body, why in [({"run_id": "../secret", "ask_id": good, "text": "a"}, "run_id 形态"),
+                          ({"run_id": good, "ask_id": "../secret", "text": "a"}, "ask_id 形态"),
+                          ({"run_id": good, "ask_id": good, "text": "  "}, "空回答")]:
+            self.assertEqual(asyncio.run(agent.agent_answer(TestRoutes._req(body))).status, 400, why)
+        self.assertEqual(asyncio.run(agent.agent_answer(TestRoutes._req(
+            {"run_id": good, "ask_id": good, "text": "a"}))).status, 404, "运行已经收场")
+        run = agent._Run(object())
+        agent._RUNS[run.run_id] = run
+        try:
+            self.assertEqual(asyncio.run(agent.agent_answer(TestRoutes._req(
+                {"run_id": run.run_id, "ask_id": "1" * 32, "text": "a"}))).status, 404, "问句已经收场")
+        finally:
+            agent._RUNS.pop(run.run_id, None)
+
+    def test_cancel_settles_a_parked_question(self):
+        """取消点在问句挂着的时候按下去：循环不能卡在 await 上等用户。"""
+        run = agent._Run(object())
+        ask_id = "2" * 32
+        run.asks[ask_id] = {"event": asyncio.Event(), "text": ""}
+        agent._RUNS[run.run_id] = run
+        try:
+            resp = asyncio.run(agent.agent_cancel(TestRoutes._req({"run_id": run.run_id})))
+        finally:
+            agent._RUNS.pop(run.run_id, None)
+        self.assertTrue(json.loads(resp.text)["success"])
+        self.assertTrue(run.asks[ask_id]["event"].is_set())
+        self.assertIn("取消", run.asks[ask_id]["text"])
+
+
+@skip
+class TestAttachments(unittest.TestCase):
+    def test_attachments_enter_the_first_user_message_only(self):
+        """附件图按多模态形状进首个 user 消息；后续轮次靠历史文本走，不逐轮重灌 base64。"""
+        seen = []
+        client = FakeClient({"neo_status": {"ok": True}}, names=("neo_status",))
+        turns = [
+            {"content": "先看现状", "tool_calls": [{"id": "1", "function": {
+                "name": "neo_status", "arguments": "{}"}}]},
+            {"content": "图里是一只橘猫"},
+        ]
+
+        def chat(messages, tools):
+            seen.append([dict(m) for m in messages])
+            return turns.pop(0)
+
+        with mock.patch.object(agent, "_chat", chat):
+            frames = _run(lambda emit: agent._run_agent(
+                client, "这张图能做什么", "", emit, _runobj(client), "act", [b"png-bytes"]))
+        first = seen[0][1]
+        self.assertIsInstance(first["content"], list, "带图的 user 消息应是多个内容块")
+        self.assertEqual(first["content"][0]["image_url"]["url"],
+                         "data:image/png;base64," + base64.b64encode(b"png-bytes").decode("ascii"))
+        self.assertEqual(first["content"][-1], {"type": "text", "text": "这张图能做什么"})
+        self.assertEqual(len([m for m in seen[1]
+                              if m["role"] == "user" and isinstance(m["content"], list)]), 1,
+                         "第二轮里带图的应当只有那一条 user 消息")
+        self.assertEqual(client.calls, [("neo_status", {})])
+        self.assertEqual(frames[-1]["text"], "图里是一只橘猫")
+
+    def test_resolve_images_caps_count_and_skips_non_sources(self):
+        """附件图按 prompts 的图片源口径解析，张数收在 MAX_IMAGES 内，非图片源项跳过。"""
+        fake = SimpleNamespace(resolve_image_bytes=lambda src, **kw:
+                               b"x" if src.get("kind") == "data" else None)
+        with mock.patch.dict(sys.modules, {"studio.prompts": fake}):
+            self.assertEqual(len(agent._resolve_images(
+                [{"kind": "data"}] * 20 + ["str", 3, None])), agent.MAX_IMAGES)
+            self.assertEqual(agent._resolve_images([]), [])
+
+    def test_skill_path_says_attachments_are_not_used(self):
+        """技能直出图没有附件图入口：带图时计划行要讲清图没进流程。"""
+        client = FakeClient({"generate_image": {"images": [{"url": "/view?f=a.png"}]}})
+        frames = _run(lambda emit: agent._run_skill(
+            client, "橘猫", "skill_cat", emit, _runobj(client), [b"x"]))
+        self.assertIn("用不上", frames[0]["text"])
 
 
 if __name__ == "__main__":

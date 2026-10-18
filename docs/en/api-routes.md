@@ -193,11 +193,23 @@ included), and the dock never calls a handler directly.
 
 | Method | Route | Description |
 |--------|-------|-------------|
-| POST | `/neo_agent/run` | One agent turn, SSE timeline; body `{text, skill_id}`, first frame `run` (carries the `run_id` the cancel route needs), frames `plan` / `tool_call` / `status` / `tool_result` / `content`, ending with `[ERROR]` / `[DONE]` |
+| POST | `/neo_agent/run` | One agent turn, SSE timeline; body `{text, skill_id, mode, images}` (`mode` accepts `plan` / `act`, default `act`; `images` are composer attachments in the image-source shape, up to 6), first frame `run` (carries the `run_id` the cancel and answer routes need), frames `plan` / `tool_call` / `status` / `tool_result` / `ask` / `content`, ending with `[ERROR]` / `[DONE]` |
+| POST | `/neo_agent/answer` | Answer an `ask` frame: body `{run_id, ask_id, text}` hands the user's choice back to the loop parked on `ask_user`; `run_id` / `ask_id` accept only the shapes the `run` / `ask` frames issued — finished run is 404, finished question is 404 |
 | POST | `/neo_agent/cancel` | Cancel: with `run_id` it stops the whole agent loop and kills the in-flight task (`run_id` accepts only the shape the `run` frame issued; unknown id is 404); with `task_id` it kills just that task (through MCP `cancel_task`, which resolves the image / film / segment / assemble route itself), `task_id` accepts UUID shapes only |
 
 - A non-empty `skill_id` makes the backend generate straight from that skill without calling the LLM; an empty one
   lets the LLM plan and call tools, with a 12-turn cap.
+- `mode=plan` is plan mode: `generate_image` / `director_run` / `segment_run` / `assemble_run` /
+  `director_save` / `director_copy` / `cancel_task` stay out of the LLM's tool list, and calling one anyway is
+  refused with an error; the query tools stay available.
+- `ask_user` is a dock-only pseudo tool, absent from the MCP registry: the loop emits an `ask` frame (with
+  `ask_id`, the question and 2-5 options) and parks on it, `/neo_agent/answer` hands the choice back, and after
+  30 minutes without an answer the loop continues noting that the user never replied; cancelling by `run_id`
+  settles any parked question.
+- Attachments enter the first user message only (multimodal); the skill-direct generation path does not use them.
+  Pasted and picked files arrive as `kind: "data"` data URIs; a card dragged in from the library is copied into
+  `input/` through `/neo_gallery/copy_to_input` first and arrives as `kind: "input"` with that filename. The dock
+  takes only the image suffixes the backend decodes — video and audio cards are refused at the drop.
 - `generate_image` / `director_run` / `segment_run` / `assemble_run` return a `task_id` only; the loop polls
   `task_status` to a terminal state and emits sampling steps and film segment numbers through `status` frames.
   The wait cap is 600s for a single image and 2400s for a whole film.
@@ -310,7 +322,7 @@ the table answers 409. Startup sequence, close teardown and cache conventions: [
 
 - Generation and queue routes require ComfyUI to be running: `/neo_image_gen/generate`,
   `/neo_video_gen/run_segment` `assemble_segments` `storyboard_generate`, `/neo_voice/generate`,
-  `/neo_studio/director/generate`, `/neo_agent/run` `/neo_agent/cancel`, `/neo_studio/mem_stats`, `/neo_nodes/repair`.
+  `/neo_studio/director/generate`, `/neo_agent/run` `/neo_agent/cancel` `/neo_agent/answer`, `/neo_studio/mem_stats`, `/neo_nodes/repair`.
 - Thumbnails share the `gallery/thumbnails` cache with ComfyUI; when both run at the same time the same image may be
   generated twice.
 - Directories come from `folder_paths`' default `output` / `input` / `user`: if ComfyUI is started externally with

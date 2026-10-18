@@ -6,20 +6,28 @@
  * mcp_server 的 JSON-RPC 走，右栏不直接调后端函数；增强类技能仍只出提示词（prompt-service 的
  * SSE 与 skill.js 的技能表）。MCP 区
  * （注册表 / 连接 / 工具调用）交给设置页的「MCP 服务」栏，右栏只在「✨ 生成」下方留一个跳转入口。
+ * 输入框三件事照 Cline 的口径做：📎 附件图（粘贴 / 点选 / 从素材库拖入，随请求体进多模态）、
+ * 「📝 计划 / ⚡ 执行」模式开关（计划模式后端只给查询类工具）、时间线里的选项确认卡（后端 ask_user
+ * 发一问就挂在循环上，点选经 POST /neo_agent/answer 交回去）。
  * stdio 型 MCP 服务是子进程，浏览器起不了，连接只活在桌面端进程里：面板只发 HTTP 打 /neo_mcp/*，
  * 桌面端服务不在时这些接口回 409，面板据此把 MCP 区收成一句离线说明，不给假成功。
  * 宿主是 studio 外壳（studio-app.js 挂右栏与设置页），不是 ComfyUI 画布侧栏：本模块不注册扩展。
  * 样式全在 agent-panel.css，作用域收在 .neo-agent 下。
  */
 import { mkEl } from "./dom-utils.js";
-import { t } from "./js/core/i18n.js";
+import { app } from "../../scripts/app.js";
+import { t, tf } from "./js/core/i18n.js";
 import { listSkills, populateSkillOptions, renderMarkdown } from "./skill.js";
-import { invokePromptStream, sseStream } from "./prompt-service.js";
+import { fileToBase64, imagesFromClipboard, invokePromptStream, sseStream } from "./prompt-service.js";
 import { Lightbox } from "./lightbox.js";
+import { grabDataType, copyGalleryToInput } from "./media-transfer.js";
 
 const AGENT_CSS_HREF = "/extensions/comfyui-neo-studio/agent-panel.css";
 
 const OFFLINE_HINT = t("MCP 连接由 Neo Studio 桌面端提供：桌面端服务未就绪时无法连接外部 MCP 服务");
+
+const toast = (severity, detail) =>
+    app.extensionManager?.toast?.add({ severity, summary: t("智能体"), detail, life: 4000 });
 
 function ensureCss() {
     if (document.querySelector('link[data-neo-agent="1"]')) return;
@@ -75,6 +83,13 @@ const MEDIA_PATH = /^\/(view|neo_gallery\/\w*|rs_recipes\/(asset|thumbnail))(?=\
 const isMediaHref = (href) => MEDIA_PATH.test(href) || MEDIA_EXT.test(href);
 const mediaKindOf = (href) => (VIDEO_EXT.test(href) ? "video" : AUDIO_EXT.test(href) ? "audio" : "image");
 
+// 素材库卡片可拖的图片后缀：与 prompts._read_image_raw 认的那一集对齐。heic / tiff 这类
+// 放进来只会得到一张复制成功、后端解不动、最后静默消失的缩略图
+const GALLERY_IMAGE = /\.(png|jpe?g|gif|webp|bmp)(?=&|#|$)/i;
+
+// 附件缩略图地址：本地文件是 data URI，素材库拖入的是 copy_to_input 落进 input 后的那张
+const attSrc = (a) => a.data || `/view?filename=${encodeURIComponent(a.input)}&type=input`;
+
 // ==========================================
 // 聊天区：一问一答，正文按 Markdown 渲染
 // ==========================================
@@ -90,11 +105,125 @@ function buildChat(onOpenMcp) {
     const skillSel = mkEl("select", "neo-agent-skill");
     const input = mkEl("textarea", "neo-agent-input");
     input.rows = 3;
-    input.placeholder = t("描述要生成的提示词，或要改写的方向");
+    input.placeholder = t("描述要生成的提示词，或要改写的方向；可粘贴 / 拖入图片（含素材库卡片）");
+    // 计划 / 执行：计划模式后端只把查询类工具交给 LLM，跑不跑由这一对按钮定
+    const toolbar = mkEl("div", "neo-agent-toolbar");
+    const modes = mkEl("div", "neo-agent-modes");
+    let mode = "act";
+    const modeBtns = [["plan", t("📝 计划")], ["act", t("⚡ 执行")]].map(([key, label]) => {
+        const btn = mkEl("button", "neo-agent-mode-btn");
+        btn.type = "button";
+        btn.dataset.mode = key;
+        btn.textContent = label;
+        btn.title = key === "plan" ? t("只查询与规划，不执行生成") : t("按计划直接执行生成");
+        btn.onclick = () => setMode(key);
+        modes.appendChild(btn);
+        return btn;
+    });
+    function setMode(next) {
+        mode = next;
+        modeBtns.forEach((b) => b.classList.toggle("active", b.dataset.mode === next));
+    }
+    setMode("act");
+    const chips = mkEl("div", "neo-agent-chips");
+    const attach = mkEl("button", "neo-agent-attach");
+    attach.type = "button";
+    attach.textContent = "📎 " + t("添加图片");
+    attach.title = t("附加参考图（粘贴、从素材库拖入或点选，最多 6 张）");
+    const fileInput = mkEl("input", "neo-agent-file");
+    fileInput.type = "file";
+    fileInput.accept = "image/*";
+    fileInput.multiple = true;
+    fileInput.hidden = true;
+    attach.onclick = () => fileInput.click();
+    toolbar.append(modes, attach, fileInput);
     const run = mkEl("button", "neo-agent-run");
     run.type = "button";
     run.textContent = t("✨ 生成");
-    composer.append(skillSel, input, run);
+    composer.append(skillSel, toolbar, chips, input, run);
+
+    // 附件图：本地文件读成 data URI 随请求体走（与 llm-chat 的附加图同一口径），
+    // 后端按 prompts 的图片源解析并等比缩边，面板这边只管增删与预览
+    const MAX_IMAGES = 6;
+    const attachments = [];
+    function renderChips() {
+        chips.replaceChildren();
+        attachments.forEach((img, i) => {
+            const chip = mkEl("span", "neo-agent-chip");
+            const thumb = mkEl("img");
+            thumb.src = attSrc(img);
+            thumb.alt = img.name || "";
+            thumb.title = img.name || "";
+            const del = mkEl("button", "neo-agent-chip-del");
+            del.type = "button";
+            del.textContent = "✕";
+            del.title = t("移除");
+            del.onclick = () => { attachments.splice(i, 1); renderChips(); };
+            chip.append(thumb, del);
+            chips.appendChild(chip);
+        });
+    }
+    function rawFileToDataUri(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve({ data: String(reader.result), name: file.name });
+            reader.onerror = () => reject(reader.error);
+            reader.readAsDataURL(file);
+        });
+    }
+    function addFiles(files) {
+        Array.from(files || [])
+            .filter((f) => f.type && f.type.startsWith("image/"))
+            .forEach((f) => {
+                if (attachments.length >= MAX_IMAGES) return;
+                // 浏览器画不动的图（HEIC 这类）退回原始 data URI：后端 PIL 认得的原图比缩过的副本更值得给
+                fileToBase64(f)
+                    .catch(() => rawFileToDataUri(f))
+                    .then((img) => {
+                        if (!img) return;
+                        attachments.push(img);
+                        renderChips();
+                    })
+                    .catch(() => {});
+            });
+    }
+    function clearAttachments() { attachments.length = 0; renderChips(); }
+    fileInput.onchange = () => { addFiles(fileInput.files); fileInput.value = ""; };
+    input.addEventListener("paste", (e) => {
+        const files = imagesFromClipboard(e);
+        if (!files.length) return;
+        e.preventDefault();
+        addFiles(files);
+    });
+    composer.addEventListener("dragover", (e) => e.preventDefault());
+    composer.addEventListener("drop", (e) => {
+        const files = e.dataTransfer && e.dataTransfer.files;
+        if (files && files.length) {
+            e.preventDefault();
+            addFiles(files);
+            return;
+        }
+        addGalleryImage(e);   // 素材库卡片只带自定义 MIME，dataTransfer 里没有文件
+    });
+    // 素材库卡片拖入：载荷是 {filename, subfolder}，走 copy_to_input 落进 input 后按文件名引用
+    // （与导演页参考图宫格同一通道）。视频音频挡在这一步——后端只把字节当图片喂给视觉模型，
+    // 喂进去就是一次看不懂的失败；拖进来的是文字时载荷连 JSON 都不是，静默放过。
+    function addGalleryImage(e) {
+        const raw = grabDataType(e.dataTransfer);
+        let payload = null;
+        try { payload = JSON.parse(raw); } catch { return; }
+        if (!payload || !payload.filename) return;
+        e.preventDefault();
+        if (attachments.length >= MAX_IMAGES) { toast("warning", tf("附件图最多 {n} 张", { n: MAX_IMAGES })); return; }
+        if (!GALLERY_IMAGE.test(payload.filename)) { toast("warning", t("素材库里的视频和音频不能当参考图")); return; }
+        copyGalleryToInput(raw)
+            .then((copied) => {
+                if (!copied) { toast("error", t("素材库图片复制失败")); return; }
+                attachments.push({ input: copied, name: copied });
+                renderChips();
+            })
+            .catch(() => toast("error", t("素材库图片复制失败")));
+    }
     // MCP 注册表在设置页那一栏，生成按钮下面只留一个跳转入口
     const foot = mkEl("div", "neo-agent-foot");
     const mcpEntry = mkEl("button", "neo-agent-entry");
@@ -215,6 +344,45 @@ function buildChat(onOpenMcp) {
                 if (btn) btn.remove();       // 任务到终态，取消入口跟着收掉
                 if (media.length) renderGenMedia(card, media);
             },
+            // 中途的选项确认：后端 ask_user 发一问就挂在循环上，点选即把方向交回 /neo_agent/answer。
+            // 这一击必须能点：卡片在步骤区，运行中的「⏹ 取消」在按钮上，两条路互不挡
+            ask(question, options, askId) {
+                const card = mkEl("div", "neo-agent-step neo-agent-choice");
+                const q = mkEl("div", "neo-agent-choice-q");
+                q.textContent = "❓ " + question;
+                const opts = mkEl("div", "neo-agent-choice-opts");
+                const free = mkEl("input", "neo-agent-choice-free");
+                free.placeholder = t("或自己写一个方向");
+                const send = mkEl("button", "neo-agent-choice-send");
+                send.type = "button";
+                send.textContent = t("发送");
+                const chosen = mkEl("div", "neo-agent-choice-chosen");
+                const answer = (text) => {
+                    [...opts.children].forEach((b) => { b.disabled = true; });
+                    free.disabled = true;
+                    send.disabled = true;
+                    chosen.textContent = "✔ " + text;
+                    card.appendChild(chosen);
+                    postJson("/neo_agent/answer", { run_id: runId, ask_id: askId, text });
+                };
+                const sendFree = () => { const v = free.value.trim(); if (v) answer(v); };
+                options.forEach((o) => {
+                    const btn = mkEl("button", "neo-agent-choice-opt");
+                    btn.type = "button";
+                    btn.textContent = o;
+                    btn.onclick = () => answer(o);
+                    opts.appendChild(btn);
+                });
+                send.onclick = sendFree;
+                free.addEventListener("keydown", (e) => {
+                    if (e.key !== "Enter") return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    sendFree();
+                });
+                card.append(q, opts, free, send);
+                steps.appendChild(card);
+            },
             answer(text) {
                 final.innerHTML = renderMarkdown(text);
             },
@@ -239,8 +407,8 @@ function buildChat(onOpenMcp) {
     let activeView = null;
 
     // 智能体路径：一次请求换一路 SSE。选了生图技能时后端按技能直出图（不叫 LLM），
-    // 空值「智能判断」时后端让 LLM 规划并调 MCP 工具
-    async function runAgent(answer, skillId, text) {
+    // 空值「智能判断」时后端让 LLM 规划并调 MCP 工具；mode 决定计划还是执行，images 是附件图
+    async function runAgent(answer, skillId, text, planMode, images) {
         const view = agentTimeline(answer);
         activeView = view;
         controller = new AbortController();
@@ -253,11 +421,12 @@ function buildChat(onOpenMcp) {
                 else if (kind === "tool_call") view.toolCall(frame.tool || "?", frame.text || "");
                 else if (kind === "status") view.status(frame.text || "", frame.task_id || "");
                 else if (kind === "tool_result") view.toolResult(frame.text || "", frame.media || []);
+                else if (kind === "ask") view.ask(frame.text || "", frame.options || [], frame.ask_id || "");
                 else view.answer(frame.text || "");
                 transcript.scrollTop = transcript.scrollHeight;
             },
             onError: (err) => view.error(String(err || t("生成失败"))),
-        }, { text, skill_id: skillId });
+        }, { text, skill_id: skillId, mode: planMode, images });
     }
 
     // 「⏹ 取消」：断流 + 让后端停循环并掐在跑的任务。首帧的 run_id 还没到就只断流——
@@ -283,19 +452,36 @@ function buildChat(onOpenMcp) {
 
 
     async function generate() {
+        if (running) return;
         const text = input.value.trim();
-        if (!text || running) return;
+        // 只给图不给字是合法输入（看图说话），两头都空才拦。素材库拖入的图已在 input 目录里，
+        // 按文件名给后端（与绘画页参考图同一口径），本地粘贴 / 选图仍是 data URI
+        const images = attachments.map((a) => (a.data ? { kind: "data", data: a.data } : { kind: "input", value: a.input }));
+        if (!text && !images.length) return;
+        const planMode = mode;
         if (empty.parentNode) empty.remove();
         const turn = mkEl("div", "neo-agent-turn");
         const opt = skillSel.selectedOptions[0];
         const meta = mkEl("div", "neo-agent-meta");
-        meta.textContent = opt?.textContent || t("智能判断");
+        meta.textContent = (opt?.textContent || t("智能判断")) + (planMode === "plan" ? " · " + t("计划") : "");
         const ask = mkEl("div", "neo-agent-ask");
         ask.textContent = text;
+        turn.appendChild(meta);
+        turn.appendChild(ask);
+        if (images.length) {
+            const strip = mkEl("div", "neo-agent-ask-media");
+            attachments.forEach((a) => {
+                const thumb = mkEl("img");
+                thumb.src = attSrc(a);
+                strip.appendChild(thumb);
+            });
+            turn.appendChild(strip);
+        }
         const answer = mkEl("div", "neo-agent-answer");
-        turn.append(meta, ask, answer);
+        turn.appendChild(answer);
         transcript.appendChild(turn);
         transcript.scrollTop = transcript.scrollHeight;
+        clearAttachments();
 
         // 生图技能与空值「智能判断」都交给后端智能体：前者按技能直出图，后者由 LLM 规划调工具；
         // 增强类技能照旧只出提示词
@@ -306,6 +492,8 @@ function buildChat(onOpenMcp) {
         run.disabled = !agentPath;
         run.textContent = t("⏳ 生成中");
         if (agentPath) run.classList.add("ns-agent-stop");
+        // 运行中锁模式：一轮跑到一半换模式等于把工具表从脚下抽走，计划要留到下一轮
+        modeBtns.forEach((b) => { b.disabled = true; });
         let acc = "";
         let raf = null;
         const paint = () => {
@@ -319,7 +507,7 @@ function buildChat(onOpenMcp) {
         };
         try {
             if (agentPath) {
-                await runAgent(answer, skillSel.value, text);
+                await runAgent(answer, skillSel.value, text, planMode, images);
                 return;
             }
             await invokePromptStream({ text, skillId: skillSel.value, description: text }, {
@@ -350,6 +538,7 @@ function buildChat(onOpenMcp) {
             run.disabled = false;
             run.classList.remove("ns-agent-stop");
             run.textContent = t("✨ 生成");
+            modeBtns.forEach((b) => { b.disabled = false; });
         }
     }
 

@@ -2,16 +2,21 @@
 """右栏 Neo Agent 的后端代理循环（SSE）。
 
 前端一次 POST /neo_agent/run 之后只收 {kind,text} 帧的时间线：plan / tool_call /
-tool_result / status / content。显式选了生图技能就按技能直出图，不叫 LLM；没选技能才让
+tool_result / status / content / ask。显式选了生图技能就按技能直出图，不叫 LLM；没选技能才让
 LLM 规划并调工具。
 
 两条路径的工具调用一律经进程内 MCP 客户端逐行走 mcp_server.serve 的 JSON-RPC，与外部
 智能体连 MCP 是同一套口径：右栏看到的工具表就是 MCP 的全集，出片链路（director_run /
 segment_run / assemble_run）也开给这个面板，能不能调由协议自己判，这里不再砍第二层。
+
+三件右栏独有的事：mode=plan 的计划模式只查不跑（写操作工具不进 LLM 的工具表，调用到也拒）；
+ask_user 是右栏自己的伪工具，循环发 ask 帧挂起等 POST /neo_agent/answer 把用户选项交回来；
+images 是输入框附件图，按 prompts 的图片源口径解析成字节进首个 user 消息。
 """
 from __future__ import annotations
 
 import asyncio
+import base64
 import io
 import json
 import logging
@@ -45,10 +50,43 @@ TASK_FINAL = ("succeeded", "failed", "cancelled")
 TASK_ID_RE = re.compile(r"^[0-9a-fA-F-]{8,64}$")
 # 停整条循环的 run_id 是后端发的 uuid4().hex，从请求体回来只认这个形态
 RUN_ID_RE = re.compile(r"^[0-9a-f]{32}$")
+# ask 帧的 ask_id 同样是 uuid4().hex，回答请求带回来只认这个形态
+ASK_ID_RE = re.compile(r"^[0-9a-f]{32}$")
+# 一次运行能带的附件图张数：再多就是往 LLM 请求里灌 base64
+MAX_IMAGES = 6
+# 等用户点选项的上限：前端整页导航走、SSE 还挂着时不能把循环吊死在 await 上
+ASK_WAIT_SEC = 1800.0
+ANSWER_CLIP = 2000
+# 计划模式不许执行的工具：生成入队、配方写、取消在跑的任务，全是改状态的动作
+PLAN_BLOCKED_TOOLS = frozenset(("generate_image", "director_run", "segment_run", "assemble_run",
+                                "director_save", "director_copy", "cancel_task"))
 # 出片三类的产物是 mp4，快照只给 filename：单段与拼接的产物子目录写死在生成模块里，取图要自己补
 FILM_DIR = {"director": "", "segment": "neo_director_regen", "assemble": "neo_director_merge"}
 CANCELLED_TEXT = "已取消：智能体循环与在跑的任务已停止"
 SYSTEM_PROMPT_FILE = PLUGIN_DIR / "prompts" / "agent" / "system_prompt.md"
+
+# 右栏伪工具：只进本次运行的 LLM 工具表，不进 MCP 注册表，外部 MCP 客户端看不到
+ASK_TOOL = {"type": "function", "function": {
+    "name": "ask_user",
+    "description": ("要用户在几个方向里定一个时调用：把问题与 2-5 个互斥选项发给用户，等到回答再继续。"
+                    "一次运行最多问一次；能用查询工具确定的事不要问用户。"),
+    "parameters": {"type": "object", "properties": {
+        "question": {"type": "string", "description": "要用户决定什么，一句话说清"},
+        "options": {"type": "array", "items": {"type": "string"},
+                    "description": "2-5 个用户可以直接照选的方向"}},
+        "required": ["question", "options"]}}}
+
+PLAN_MODE_NOTE = """
+
+本轮是计划模式（Plan）：只查不跑。
+- generate_image / director_run / segment_run / assemble_run / director_save / director_copy /
+  cancel_task 这一类改状态的工具本轮调不到，调用会被后端拒回错误。
+- 要看现状就用查询类工具查清：neo_status、list_skills、list_models、list_recipes、
+  director_recipes、director_spec、list_gallery。
+- 方向上有分叉就用 ask_user 把问题与选项发给用户，等回答再定计划。
+- 收场时交出一份能照着跑的计划：分步骤写明每步要调的工具与关键参数（技能 id、段数、
+  时长、尺寸、配方名），最后一步写明产物是什么。
+- 计划模式里不许说「已完成」，也不许编造产物文件名。"""
 
 
 
@@ -110,13 +148,38 @@ class _Run:
 
     停止要从另一个 HTTP 请求打进来，运行中的循环就得按 run_id 挂住；条目只在整条 SSE
     活着期间存在，_events 收尾时摘掉，不跨请求留状态。task_id 记在运行对象上是因为 LLM
-    正卡在一次请求里时，取消端点要能立刻掐掉在跑的 ComfyUI 任务，不能等循环回到轮询边界。"""
+    正卡在一次请求里时，取消端点要能立刻掐掉在跑的 ComfyUI 任务，不能等循环回到轮询边界。
+    asks 是 ask_user 的挂起点：循环发完 ask 帧就 await 在这个 Event 上，回答请求按
+    ask_id 找到它写入答案并 set；取消整条运行时也要把挂着的问句一并交收，
+    否则取消点下去循环还卡在 await 上。"""
 
     def __init__(self, client):
         self.client = client
         self.run_id = uuid.uuid4().hex
         self.stop = asyncio.Event()
         self.task_id = ""
+        self.asks: dict[str, dict] = {}
+
+    async def await_answer(self, emit, question: str, options: list) -> str:
+        """发一问，等到用户点选或超时。超时是真实失败模式：整页导航走、SSE 还挂着，
+        循环不能永远停在 await 上。"""
+        ask_id = uuid.uuid4().hex
+        ask = {"event": asyncio.Event(), "text": ""}
+        self.asks[ask_id] = ask
+        try:
+            await emit({"kind": "ask", "ask_id": ask_id, "text": question, "options": options})
+            await asyncio.wait_for(ask["event"].wait(), ASK_WAIT_SEC)
+            return ask["text"]
+        except asyncio.TimeoutError:
+            return "[timeout] 用户没有回应这个问题：按你自己的判断继续，并在回答里说明这一点"
+        finally:
+            self.asks.pop(ask_id, None)
+
+    def wake_asks(self, text: str):
+        """取消整条运行时交收挂着的问句：写一句定论把 await 放开。"""
+        for ask in self.asks.values():
+            ask["text"] = text
+            ask["event"].set()
 
     async def cancel_comfy_task(self):
         """掐掉在跑的 ComfyUI 任务。没有任务、任务已终态、取消失败都不影响循环收场。"""
@@ -198,15 +261,40 @@ def _caption(text: str) -> str:
     return "任务结束，没有产物"
 
 
-def _openai_tools(tools: list) -> list:
+def _openai_tools(tools: list, plan: bool = False) -> list:
     """MCP 的 tools/list 载荷原样发给远程 provider 会整请求 500：llama-server 逐条找 type 键
     （Failed to parse tools: Missing tool type），inputSchema 在 OpenAI 侧叫 parameters。
-    _meta 里的示例参数是 Studio 工具卡预填用的，不进模型请求。"""
-    return [{"type": "function",
-             "function": {"name": str(t.get("name") or ""),
-                          "description": str(t.get("description") or ""),
-                          "parameters": t.get("inputSchema") or {"type": "object", "properties": {}}}}
-            for t in tools]
+    _meta 里的示例参数是 Studio 工具卡预填用的，不进模型请求。
+    plan=True 时把改状态的工具整条摘掉：模型看不见工具就不会去调，比只在调用点上拦更可靠。"""
+    out = [{"type": "function",
+            "function": {"name": str(t.get("name") or ""),
+                         "description": str(t.get("description") or ""),
+                         "parameters": t.get("inputSchema") or {"type": "object", "properties": {}}}}
+           for t in tools]
+    return [t for t in out if t["function"]["name"] not in PLAN_BLOCKED_TOOLS] if plan else out
+
+
+def _user_message(text: str, images: list) -> dict:
+    """首个 user 消息：带附件图时按多模态口径组装（与 skill.py 的技能代理循环同一形状）。
+    图只进这一条消息，后续轮次靠历史文本走，不逐轮重灌 base64。"""
+    if not images:
+        return {"role": "user", "content": text}
+    parts = [{"type": "image_url",
+              "image_url": {"url": "data:image/png;base64," + base64.b64encode(b).decode("ascii")}}
+             for b in images]
+    parts.append({"type": "text", "text": text})
+    return {"role": "user", "content": parts}
+
+
+def _resolve_images(raw: list) -> list:
+    """输入框附件图按 prompts 的图片源口径解析（data URI / input 目录文件名），
+    超长的图由 resolve_image_bytes 等比缩到 MAX_IMAGE_SIDE。没带图就不碰 prompts（它带 PIL 与
+    folder_paths 依赖，不该为一次纯文字对话被拖进来）。"""
+    if not raw:
+        return []
+    from .prompts import resolve_image_bytes
+    return [b for b in (resolve_image_bytes(src) for src in raw[:MAX_IMAGES]
+                        if isinstance(src, dict)) if b]
 
 
 def _chat(messages: list, tools: list) -> dict:
@@ -215,13 +303,15 @@ def _chat(messages: list, tools: list) -> dict:
     return chat_turn(messages, max_tokens=MAX_TOKENS, tools=tools)
 
 
-def system_prompt(skill_id: str) -> str:
+def system_prompt(skill_id: str, mode: str = "act") -> str:
     try:
         text = SYSTEM_PROMPT_FILE.read_text(encoding="utf-8")
     except OSError as e:
         raise mcp.ToolError(f"缺少智能体系统提示词：{SYSTEM_PROMPT_FILE}（{e}）")
     if skill_id:
         text += f"\n\n用户已选定技能 {skill_id}：出图时直接用它作为 generate_image 的 skill_id。"
+    if mode == "plan":
+        text += PLAN_MODE_NOTE
     return text
 
 
@@ -299,10 +389,14 @@ async def _tool_result(client, name: str, args: dict, emit, run) -> str:
         return f"[error] {e}"
 
 
-async def _run_skill(client, text: str, skill_id: str, emit, run) -> None:
-    """显式选了生图技能：不叫 LLM，按 generate_image → task_status 直出图，模型与尺寸走技能自带设置。"""
+async def _run_skill(client, text: str, skill_id: str, emit, run, images: list | None = None) -> None:
+    """显式选了生图技能：不叫 LLM，按 generate_image → task_status 直出图，模型与尺寸走技能自带设置。
+    技能直出图没有附件图入口（generate_image 只吃 prompt 与 skill_id），带图时要说清图没进流程。"""
     args = {"skill_id": skill_id, "prompt": text}
-    await emit({"kind": "plan", "text": f"按技能 {skill_id} 直接出图"})
+    note = f"按技能 {skill_id} 直接出图"
+    if images:
+        note += f"（附的 {len(images)} 张图技能直出图用不上，要按图判断就用「智能判断」）"
+    await emit({"kind": "plan", "text": note})
     await emit({"kind": "tool_call", "tool": "generate_image",
                 "text": _clip(json.dumps(args, ensure_ascii=False), ARGS_CLIP)})
     result = await _task_and_wait(client, "generate_image", args, emit, run)
@@ -314,12 +408,15 @@ async def _run_skill(client, text: str, skill_id: str, emit, run) -> None:
     await emit({"kind": "content", "text": _caption(result)})
 
 
-async def _run_agent(client, text: str, skill_id: str, emit, run) -> None:
+async def _run_agent(client, text: str, skill_id: str, emit, run, mode: str = "act",
+                     images: list | None = None) -> None:
     """LLM 规划 → tools/call → 结果回填 → 直到给出最终回答或用满轮次。
-    停止位只在轮次与工具边界生效：LLM 的单轮请求在飞时掐不掉，回来后的第一个边界收场。"""
-    messages = [{"role": "system", "content": system_prompt(skill_id)},
-                {"role": "user", "content": text}]
-    tools = _openai_tools(client.tool_list())
+    停止位只在轮次与工具边界生效：LLM 的单轮请求在飞时掐不掉，回来后的第一个边界收场。
+    计划模式（mode="plan"）里改状态的工具不进工具表，模型硬调也在边界拒回错误；
+    ask_user 是右栏伪工具，不发 MCP，循环自己发 ask 帧挂起等用户点选。"""
+    messages = [{"role": "system", "content": system_prompt(skill_id, mode)},
+                _user_message(text, images or [])]
+    tools = _openai_tools(client.tool_list(), plan=(mode == "plan")) + [ASK_TOOL]
     answered = False
     for _ in range(MAX_TURNS):
         if run.stop.is_set():
@@ -346,7 +443,16 @@ async def _run_agent(client, text: str, skill_id: str, emit, run) -> None:
                 args = {}
             await emit({"kind": "tool_call", "tool": name,
                         "text": _clip(json.dumps(args, ensure_ascii=False), ARGS_CLIP)})
-            result = await _tool_result(client, name, args, emit, run)
+            if name == "ask_user":
+                result = await run.await_answer(
+                    emit, str(args.get("question") or "").strip(),
+                    [str(o).strip() for o in (args.get("options") or []) if str(o).strip()][:5])
+            elif mode == "plan" and name in PLAN_BLOCKED_TOOLS:
+                # 计划模式里模型仍可能硬调写操作：拒回原文它才会改口去写计划
+                result = (f"[error] 计划模式不执行 {name}：把要做的事写进计划，"
+                          f"让用户切到执行模式再跑")
+            else:
+                result = await _tool_result(client, name, args, emit, run)
             await emit({"kind": "tool_result", "tool": name,
                         "text": _clip(result, RESULT_CLIP), "media": _media_of(result)})
             messages.append({"role": "tool", "tool_call_id": tc.get("id", ""), "content": result})
@@ -366,14 +472,19 @@ def _sse(frame) -> bytes:
     return ("data: " + json.dumps(_json_safe(frame), ensure_ascii=False) + "\n\n").encode("utf-8")
 
 
-async def _events(run, text: str, skill_id: str):
-    runner = _run_skill if skill_id else _run_agent
+async def _events(run, text: str, skill_id: str, mode: str = "act", images: list | None = None):
+    async def runner(emit):
+        if skill_id:
+            await _run_skill(run.client, text, skill_id, emit, run, images)
+        else:
+            await _run_agent(run.client, text, skill_id, emit, run, mode, images)
+
     _RUNS[run.run_id] = run
     try:
-        # 首帧报 run_id：前端的「⏹ 取消」只有拿到它才能停这条循环
+        # 首帧报 run_id：前端的「⏹ 取消」与「选项回答」都要靠它认这次运行
         yield _sse({"kind": "run", "run_id": run.run_id})
         try:
-            async for frame in _pump(lambda emit: runner(run.client, text, skill_id, emit, run)):
+            async for frame in _pump(runner):
                 yield _sse(frame)
         except mcp.ToolError as e:
             yield f"data: [ERROR] {e}\n\n".encode("utf-8")
@@ -398,21 +509,58 @@ def _error_response(message: str) -> web.Response:
 
 @routes.post("/neo_agent/run")
 async def agent_run(request):
-    """右栏智能体：一次请求，一路 SSE 时间线。body {text, skill_id}。"""
+    """右栏智能体：一次请求，一路 SSE 时间线。body {text, skill_id, mode, images}。
+    mode 只认 plan / act，其余按 act；images 是输入框附件图，按 prompts 的图片源口径给。"""
     try:
         body = await request.json()
     except Exception:
         return _error_response("请求不是合法 JSON")
-    text = str((body or {}).get("text") or "").strip()
-    skill_id = str((body or {}).get("skill_id") or "").strip()
+    body = body or {}
+    text = str(body.get("text") or "").strip()
+    skill_id = str(body.get("skill_id") or "").strip()
+    mode = str(body.get("mode") or "act").strip()
+    if mode not in ("plan", "act"):
+        mode = "act"
+    images = await asyncio.to_thread(_resolve_images, body.get("images") or [])
+    if not text:
+        # 只给图不给字是合法输入（看图说话），补一句要什么，别让 LLM 对着图无话可说
+        text = "（没有文字说明）看这张附件图，说清你能拿它做什么，并给出建议的下一步" if images else ""
     if not text:
         return _error_response("没有输入内容")
     return web.Response(
-        body=_events(_Run(McpClient(comfy_base(request))), text, skill_id),
+        body=_events(_Run(McpClient(comfy_base(request))), text, skill_id, mode, images),
         content_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no",
                  "Connection": "keep-alive"},
     )
+
+
+@routes.post("/neo_agent/answer")
+async def agent_answer(request):
+    """时间线上「选项确认卡」的回答：把用户选的方向交回正等在 ask 帧上的循环。
+    run_id / ask_id 都从请求体来，按后端发出去的形态校验，认不到就 404，不给任意目标留口子。"""
+    try:
+        body = await request.json()
+    except Exception:
+        return web.json_response({"success": False, "error": "请求不是合法 JSON"}, status=400)
+    run_id = str((body or {}).get("run_id") or "").strip()
+    ask_id = str((body or {}).get("ask_id") or "").strip()
+    text = str((body or {}).get("text") or "").strip()
+    if not RUN_ID_RE.match(run_id):
+        return web.json_response({"success": False, "error": "run_id 不合法"}, status=400)
+    if not ASK_ID_RE.match(ask_id):
+        return web.json_response({"success": False, "error": "ask_id 不合法"}, status=400)
+    if not text:
+        return web.json_response({"success": False, "error": "没有回答内容"}, status=400)
+    run = _RUNS.get(run_id)
+    if run is None:
+        return web.json_response({"success": False, "error": "这次运行已经收场"}, status=404)
+    ask = run.asks.get(ask_id)
+    if ask is None:
+        return web.json_response({"success": False, "error": "这个问题已经收场"}, status=404)
+    ask["text"] = _clip(text, ANSWER_CLIP)
+    ask["event"].set()
+    return web.json_response({"success": True, "run_id": run_id, "ask_id": ask_id})
 
 
 @routes.post("/neo_agent/cancel")
@@ -432,6 +580,7 @@ async def agent_cancel(request):
         if run is None:
             return web.json_response({"success": False, "error": "这次运行已经收场"}, status=404)
         run.stop.set()
+        run.wake_asks("用户已取消这次运行")
         await run.cancel_comfy_task()
         return web.json_response({"success": True, "run_id": run_id, "task_id": run.task_id})
     if not TASK_ID_RE.match(task_id):

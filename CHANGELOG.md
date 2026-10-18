@@ -4,6 +4,28 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **The agent dock works like Cline: image attachments, Plan / Act, and mid-run choices.** The composer only took
+  text, the dock always ran whatever the LLM planned, and a request with several viable directions had to be typed out
+  by hand after the run ended. The composer now takes attachments — 📎, paste, or drag a file in, up to 6, with
+  removable thumbnails — and sends them in the body's `images` in the same image-source shape the prompt panel uses;
+  the backend resolves them through `prompts.resolve_image_bytes` and puts them in the first user message as
+  multimodal content, so a bare image with no text is a valid turn. A card dragged in from the asset library rides
+  the channel the director's reference grid already uses: `/neo_gallery/copy_to_input` copies it into `input/` and
+  the attachment carries `kind: "input"` with that filename instead of a second base64 payload, with the thumbnail
+  read back through `/view?type=input`; only the image suffixes the backend decodes pass, so a video or audio card
+  is refused at the drop with the reason on a toast. The **📝 计划 / ⚡ 执行** switch picks the mode:
+  in plan mode `generate_image` / `director_run` / `segment_run` / `assemble_run` / `director_save` / `director_copy` /
+  `cancel_task` stay out of the LLM's tool list, a call that arrives anyway is refused with the reason, and the system
+  prompt asks for a step-by-step plan naming the tools and parameters instead of a finished claim. `ask_user` is a
+  dock-only pseudo tool (absent from the MCP registry): the loop emits an `ask` frame with the question and 2-5
+  options, parks on it, and the timeline's choice card answers through `POST /neo_agent/answer` with the `run_id` and
+  `ask_id`; the card locks after the answer, a 30-minute wait ends the park noting the user never replied, and
+  cancelling by `run_id` settles a parked question so the loop never hangs on it.
+  `studio/tests/test_agent.py` covers the plan-mode tool filter and refusal, the ask park and answer route, the
+  cancel handoff and the attachment message shape; `studio/tests/js/studio-agent-skill.test.mjs` covers the mode in
+  the request body, the choice card answering and locking, the attachment chips through the request, the library
+  card drop through `copy_to_input` and the refused video card.
+
 - **Agent results open in a popup viewer, and the window stops navigating.** Clicking an agent result took over the
   whole window: the dock's thumbnails opened the full-viewport lightbox (92vw / 88vh over a 0.72 backdrop), and a
   result URL in the final answer is a Markdown `<a href="/view?...">` whose click navigates the window to the bare

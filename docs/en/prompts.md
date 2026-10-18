@@ -169,6 +169,14 @@ Both nodes share the same layout (the Agent shows no status bar):
   dock resizes it (260px floor for the dock, the page view keeps 420px), dragging it narrower than 150px closes the
   column, double-click collapses / expands, `←`/`→` nudges it, and a key in the closed state reopens it at the
   width it had. Open state and width live in `localStorage["neo_studio_agent_dock"]`, and closing keeps the width.
+  The composer does three things: 📎 attachments (paste, drop, or pick, up to 6, with removable thumbnails) travel in
+  the request body as multimodal content, so an image with no text is a valid turn; the **📝 Plan / ⚡ Act** switch
+  decides whether this turn runs anything — in plan mode the generation and recipe-writing tools stay out of the LLM's
+  tool list, a call that arrives anyway is refused, and the turn ends with a step-by-step plan naming the tools and
+  parameters; and when the backend's `ask_user` asks a question the loop parks on it, the timeline shows a choice card
+  (the question, 2-5 options, and a free-text box) whose answer goes back through `POST /neo_agent/answer` — the card
+  locks after answering, a 30-minute wait continues with a note that the user never replied, and cancelling by `run_id`
+  settles a parked question.
   Enhancement skills only produce a prompt through `/rs_prompts/stream_generate_prompt`.
 - **Multi-turn skills** - when a skill that declares `multi_turn` is selected, a line of small text
   appears at the very bottom of the node (it hides again when the skill is switched or cleared): each

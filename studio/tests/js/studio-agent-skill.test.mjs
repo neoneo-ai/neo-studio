@@ -5,7 +5,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { resetEnv, flush, mockRoute, jsonResponse, sseResponse, click, inputText, fetchLog } from "./setup.mjs";
+import { resetEnv, flush, sleep, mockRoute, jsonResponse, sseResponse, click, inputText, fetchLog, dropFiles, makeFile } from "./setup.mjs";
+import { appState } from "./mocks/comfy-app.mjs";
 
 const webDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../web");
 const studioBody = fs.readFileSync(path.join(webDir, "studio", "index.html"), "utf8").match(/<body>([\s\S]*?)<\/body>/)[1];
@@ -470,5 +471,214 @@ test("右栏分隔条：拖动调宽落盘，拖过收起阈值关栏，方向�
     split().dispatchEvent(mouse("dblclick"));
     assert.ok(!body().classList.contains("ns-agent-closed"), "再双击展开");
     assert.equal(widthVar(), "260px", "展开仍是收起前那一档宽度");
+});
+
+const ASK_ID = "ab".repeat(16);
+const modeBtns = () => [...dock().querySelectorAll(".neo-agent-mode-btn")];
+const answerCalls = () => fetchLog.filter((c) => c.path === "/neo_agent/answer");
+
+/** 发完这批帧就挂住的流：后端在 ask_user 上等用户点选时，这条 SSE 就是开着的，
+ *  run_id 也才留在页面上——回答请求要拿它认这次运行。 */
+function mockPendingRunFrames(frames) {
+    mockRoute("/neo_agent/run", () => ({
+        ok: true,
+        status: 200,
+        body: {
+            getReader: () => {
+                const chunks = frames.map((f) => `data: ${JSON.stringify(f)}\n\n`);
+                let i = 0;
+                return {
+                    async read() {
+                        if (i < chunks.length) return { done: false, value: new TextEncoder().encode(chunks[i++]) };
+                        return new Promise(() => {});   // 等用户点选，这条流不收场
+                    },
+                    releaseLock() {},
+                };
+            },
+        },
+    }));
+}
+
+test("输入区有模式开关与附件图入口，默认停在执行", async () => {
+    mountStudio();
+    await openStudio("#/gallery");
+
+    assert.deepEqual(modeBtns().map((b) => b.dataset.mode), ["plan", "act"], "应有计划与执行两档");
+    assert.ok(modeBtns()[1].classList.contains("active"), "默认应停在执行模式");
+    assert.ok(dock().querySelector(".neo-agent-attach"), "应有附件图入口");
+    const file = dock().querySelector(".neo-agent-file");
+    assert.equal(file.type, "file", "附件入口应挂在文件选择上");
+    assert.equal(file.accept, "image/*", "附件只收图片");
+    assert.ok(dock().querySelector(".neo-agent-chips"), "应有附件缩略图容器");
+});
+
+test("点计划模式：请求带 mode=plan，回合头写明计划，收尾解禁模式按钮", async () => {
+    mountStudio();
+    await openStudio("#/gallery");
+    mockAgentStream([
+        { kind: "plan", text: "计划：先扩写提示词再出图" },
+        { kind: "content", text: "计划已给出" },
+    ]);
+
+    click(modeBtns()[0]);
+    inputText(dock().querySelector(".neo-agent-input"), "一只橘猫");
+    click(runBtn());
+    await flush(40);
+
+    const calls = agentCalls();
+    assert.equal(calls.length, 1, "应发出一次智能体请求");
+    assert.equal(calls[0].body.mode, "plan", "请求应带上计划模式");
+    assert.ok(meta().textContent.includes("计划"), "回合头应写明这一轮是计划");
+    assert.equal(modeBtns()[0].disabled, false, "收尾后应解禁模式按钮");
+});
+
+test("选项确认卡：点选项按 run_id 与 ask_id 回答，答完锁住选项", async () => {
+    mountStudio();
+    await openStudio("#/gallery");
+    mockRoute("/neo_agent/answer", () => jsonResponse({ success: true }));
+    mockPendingRunFrames([
+        { kind: "run", run_id: RUN_ID },
+        { kind: "tool_call", tool: "ask_user", text: "{\"question\":\"要哪种结尾？\"}" },
+        { kind: "ask", ask_id: ASK_ID, text: "要哪种结尾？", options: ["淡出", "定格"] },
+    ]);
+
+    inputText(dock().querySelector(".neo-agent-input"), "出个片");
+    click(runBtn());
+    await flush(40);
+
+    const card = dock().querySelector(".neo-agent-choice");
+    assert.ok(card, "应渲染选项确认卡");
+    const opts = [...card.querySelectorAll(".neo-agent-choice-opt")];
+    assert.deepEqual(opts.map((b) => b.textContent), ["淡出", "定格"], "应列出后端给的选项");
+
+    click(opts[0]);
+    await flush(20);
+    const calls = answerCalls();
+    assert.equal(calls.length, 1, "点选项应发一次 /neo_agent/answer");
+    assert.deepEqual(calls[0].body, { run_id: RUN_ID, ask_id: ASK_ID, text: "淡出" },
+                     "回答应带上首帧的 run_id 与 ask 帧的 ask_id");
+    assert.equal(card.querySelector(".neo-agent-choice-chosen").textContent, "✔ 淡出", "应留下所选方向");
+    assert.ok(opts.every((b) => b.disabled), "答完要锁住选项，不给第二次改口");
+});
+
+test("选项确认卡：自由输入走同一个回答请求", async () => {
+    mountStudio();
+    await openStudio("#/gallery");
+    mockRoute("/neo_agent/answer", () => jsonResponse({ success: true }));
+    mockPendingRunFrames([
+        { kind: "run", run_id: RUN_ID },
+        { kind: "ask", ask_id: ASK_ID, text: "要哪种结尾？", options: ["淡出"] },
+    ]);
+
+    inputText(dock().querySelector(".neo-agent-input"), "出个片");
+    click(runBtn());
+    await flush(40);
+
+    const card = dock().querySelector(".neo-agent-choice");
+    inputText(card.querySelector(".neo-agent-choice-free"), "定格三秒再淡出");
+    click(card.querySelector(".neo-agent-choice-send"));
+    await flush(20);
+
+    const calls = answerCalls();
+    assert.equal(calls.length, 1, "自由输入应发一次回答");
+    assert.equal(calls[0].body.text, "定格三秒再淡出", "应把用户自己写的方向交回去");
+});
+
+test("拖入图片：进附件缩略图，发送时随请求体走并清空", async () => {
+    mountStudio();
+    await openStudio("#/gallery");
+    mockAgentStream([{ kind: "content", text: "图里是一只橘猫" }]);
+
+    dropFiles(dock().querySelector(".neo-agent-composer"), [makeFile("cat.png", "image/png")]);
+    await sleep(40);
+    assert.ok(dock().querySelector(".neo-agent-chip img"), "拖入的图片应进附件缩略图");
+
+    inputText(dock().querySelector(".neo-agent-input"), "这张图能做什么");
+    click(runBtn());
+    await flush(40);
+
+    const calls = agentCalls();
+    assert.equal(calls[0].body.images.length, 1, "请求应带上附件图");
+    assert.ok(calls[0].body.images[0].data.startsWith("data:image/"), "附件图应带 data URI");
+    assert.equal(calls[0].body.images[0].kind, "data", "附件图按图片源口径给后端");
+    assert.equal(dock().querySelector(".neo-agent-chip"), null, "发送后附件应清空，不串到下一轮");
+    assert.ok(dock().querySelector(".neo-agent-ask-media img"), "回合里应留下附件缩略图");
+});
+
+// 素材库卡片只带自定义 MIME，dataTransfer 里没有文件（与画廊拖放用例同一载荷）
+function dropGalleryCard(el, payload) {
+    const ev = new window.Event("drop", { bubbles: true, cancelable: true });
+    Object.defineProperty(ev, "dataTransfer", {
+        value: { files: [], getData: (m) => (m === "application/x-neo-gallery" ? JSON.stringify(payload) : "") },
+        configurable: true,
+    });
+    el.dispatchEvent(ev);
+}
+
+test("素材库卡片拖入：copy_to_input 落盘后进附件，发送时按 input 文件名给后端", async () => {
+    mountStudio();
+    await openStudio("#/gallery");
+    mockRoute("/neo_gallery/copy_to_input", () => jsonResponse({ success: true, filename: "g1.png" }));
+    mockAgentStream([{ kind: "content", text: "图里是一只橘猫" }]);
+
+    dropGalleryCard(dock().querySelector(".neo-agent-composer"), { filename: "橘猫.png", subfolder: "角色" });
+    await sleep(40);
+
+    const chip = dock().querySelector(".neo-agent-chip img");
+    assert.ok(chip, "素材库拖入的图片应进附件缩略图");
+    assert.ok(chip.src.includes("/view?filename=g1.png&type=input"), `缩略图应指向 input 目录：${chip.src}`);
+    const copied = fetchLog.find((c) => c.path === "/neo_gallery/copy_to_input");
+    assert.equal(copied?.query.get("filename"), "橘猫.png", "应按卡片给的素材名复制");
+    assert.equal(copied?.query.get("subfolder"), "角色", "应按卡片给的相对子路径复制");
+
+    inputText(dock().querySelector(".neo-agent-input"), "这张图能做什么");
+    click(runBtn());
+    await flush(40);
+
+    const calls = agentCalls();
+    assert.equal(calls.length, 1, "应发出一次智能体请求");
+    assert.equal(calls[0].body.images.length, 1, "请求应带上附件图");
+    assert.deepEqual(calls[0].body.images[0], { kind: "input", value: "g1.png" },
+                     "素材库图按 input 目录文件名给后端，不再灌 base64");
+    assert.ok(dock().querySelector(".neo-agent-ask-media img"), "回合里应留下附件缩略图");
+});
+
+test("素材库拖入视频卡片：拒绝并提示，不进附件也不带进请求", async () => {
+    mountStudio();
+    await openStudio("#/gallery");
+    appState.toasts.length = 0;
+    mockRoute("/neo_gallery/copy_to_input", () => jsonResponse({ success: true, filename: "clip.mp4" }));
+    mockAgentStream([{ kind: "content", text: "好" }]);
+
+    dropGalleryCard(dock().querySelector(".neo-agent-composer"), { filename: "clip.mp4", subfolder: "" });
+    await flush(20);
+
+    assert.equal(dock().querySelector(".neo-agent-chip"), null, "视频不该进附件");
+    assert.ok(appState.toasts.some((x) => x.detail.includes("视频")),
+              `应写明不能当参考图：${JSON.stringify(appState.toasts)}`);
+    assert.equal(fetchLog.filter((c) => c.path === "/neo_gallery/copy_to_input").length, 0,
+                 "拒绝的素材不该被复制进 input");
+
+    inputText(dock().querySelector(".neo-agent-input"), "出个片");
+    click(runBtn());
+    await flush(40);
+    assert.equal(agentCalls()[0].body.images.length, 0, "被拒绝的拖入不该带进请求");
+});
+
+test("拖进来的是文字不是素材卡片：静默放过，不进附件也不提示", async () => {
+    mountStudio();
+    await openStudio("#/gallery");
+    appState.toasts.length = 0;
+
+    const ev = new window.Event("drop", { bubbles: true, cancelable: true });
+    Object.defineProperty(ev, "dataTransfer", {
+        value: { files: [], getData: (m) => (m === "application/x-neo-gallery" ? "" : "一段拖出来的文字") },
+        configurable: true,
+    });
+    dock().querySelector(".neo-agent-composer").dispatchEvent(ev);
+    await flush(20);
+
+    assert.equal(dock().querySelector(".neo-agent-chip"), null, "文字不该变成附件");
+    assert.equal(appState.toasts.length, 0, "拖文字不是失败，不该弹提示");
 });
 
