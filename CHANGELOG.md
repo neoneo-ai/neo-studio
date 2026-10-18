@@ -4,6 +4,28 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **A recipe the agent saves is editable and reusable the moment it lands.** Act mode already let the dock's loop call
+  `director_save` / `director_copy` (the system prompt tells it to build a one-segment recipe for a film request), and the
+  recipe is a normal user recipe under `recipes/custom/`. Nothing told the UI: the director page's left recipe list only
+  rebuilds on `DIRECTOR_RECIPE_SAVED_EVENT`, which the director editor dispatches on its own save path, so an
+  agent-saved recipe stayed out of the list — and out of the editor — until the page was rebuilt. The dock now reads the
+  saved name out of the tool result and broadcasts that same event with `{name, created:true}` plus a toast naming the
+  recipe, so the list refreshes, the new recipe is selected, opening the card is the editor, and the film / segment runs
+  reuse it. Replaying a saved session never broadcasts, so reading history leaves the UI alone, and plan mode keeps both
+  write tools out of the tool list. `studio/prompts/agent/system_prompt.md` tells the model to pick an unused name
+  (`director_recipes` first) and report it. Covered by `studio/tests/js/studio-agent-skill.test.mjs`.
+
+- **The agent dock saves every run and continues from one.** Each run lands as one JSON in `agent_sessions/` under the data
+  root (`<created>-<run_id>.json`, atomic write, 100 sessions / 400 KB per file / 7-day pruning) with the timeline `frames`
+  and the `messages` a resume needs — no system prompt and no image bytes stored. `GET /neo_agent/sessions` lists
+  summaries, `GET /neo_agent/session` reads one back, `POST /neo_agent/session/delete` and `.../delete_all` remove them, and
+  `POST /neo_agent/run` takes `resume`. The「🗂」header button lists sessions; opening one replays its timeline
+  **read-only** (a finished loop has no task to cancel, its choice card is disabled) and puts a「↩ 接上次会话」bar over the
+  composer, so the next「✨ 生成」continues that conversation after a freshly built system prompt;「🗑」clears the transcript
+  and the saved sessions together behind one confirm. `run_id` is validated to the shape the backend issued, so no session
+  path is reachable from a request body. `studio/tests/test_agent.py` covers the store, the routes and the resume guards;
+  `studio/tests/js/studio-agent-skill.test.mjs` covers the list, the read-only replay and the resume bar.
+
 - **A page refresh no longer wipes the header's ComfyUI status.** The status chip and the frameless window controls
   were driven only by the pywebview `js_api` bridge. Two separate failures hid them after an F5: pywebview re-injects
   that bridge on navigation completion, measured 13 seconds after the page script runs

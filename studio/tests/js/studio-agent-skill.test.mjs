@@ -537,9 +537,11 @@ test("输入区：上下文条只读、取消行只在运行中出现、底栏�
     await openStudio("#/gallery");
 
     const composer = dock().querySelector(".neo-agent-composer");
+    const resumeBar = dock().querySelector(".neo-agent-resumebar");
     assert.equal(composer.children[0], ctxBar(), "输入区顶上应是只读上下文条");
-    assert.equal(composer.children[2], cancelBar(), "取消行应铺在文本框上面");
-    assert.equal(composer.children[3], dock().querySelector(".neo-agent-input"), "取消行下面应是文本框");
+    assert.equal(composer.children[2], resumeBar, "续聊条铺在取消行上面");
+    assert.equal(composer.children[3], cancelBar(), "取消行应铺在文本框上面");
+    assert.equal(composer.children[4], dock().querySelector(".neo-agent-input"), "取消行下面应是文本框");
     assert.equal(composer.lastElementChild, composer.querySelector(".neo-agent-toolbar"),
         "输入框下面只该有底栏这一行");
     assert.deepEqual(modeBtns().map((b) => b.dataset.mode), ["plan", "act"], "应有计划与执行两档");
@@ -547,6 +549,7 @@ test("输入区：上下文条只读、取消行只在运行中出现、底栏�
     assert.ok(dock().querySelector(".neo-agent-attach"), "应有附件图入口");
     assert.ok(dock().querySelector(".neo-agent-entry"), "应有 MCP 入口");
     assert.ok(cancelBar().hidden, "空闲时没有取消键");
+    assert.ok(resumeBar.hidden, "没打开过旧会话时续聊条不占位");
     const file = dock().querySelector(".neo-agent-file");
     assert.equal(file.type, "file", "附件入口应挂在文件选择上");
     assert.equal(file.accept, "image/*", "附件只收图片");
@@ -806,4 +809,196 @@ test("拖进来的是文字不是素材卡片：静默放过，不进附件也�
     assert.equal(dock().querySelector(".neo-agent-chip"), null, "文字不该变成附件");
     assert.equal(appState.toasts.length, 0, "拖文字不是失败，不该弹提示");
 });
+
+// ====== 智能体写配方 → 导演页配方列表：只有活回合的 tool_result 才广播保存事件 ======
+// 后端把 director_save / director_copy 写进 recipes/custom/，界面这一侧唯一的刷新入口就是导演页
+// 监听的那条事件：收不到就得等下一次建页。历史回放与计划模式都没有落盘，不该惊动配方列表。
+const RECIPE_SAVED = { kind: "tool_result", tool: "director_save", text: '{"success":true,"name":"我的片子"}' };
+const RECIPE_COPIED = { kind: "tool_result", tool: "director_copy", text: '{"success":true,"name":"我的片子·副本"}' };
+const PLAN_REFUSED = { kind: "tool_result", tool: "director_save", text: "计划模式不执行 director_save" };
+
+// director.js 一进来要连走 scripts/app.js 那一串的宿主桩，放在这一段才不拖累前面的用例；
+// 配方列表与这条事件同源，监听方就是导演页左栏
+const { DIRECTOR_RECIPE_SAVED_EVENT } = await import("../../web/director.js");
+const savedEvents = [];
+window.addEventListener(DIRECTOR_RECIPE_SAVED_EVENT, (e) => savedEvents.push(e.detail));
+const savedToastTexts = () => appState.toasts.map((x) => x.detail || "");
+
+async function until(fn, what) {
+    for (let i = 0; i < 60; i++) {
+        if (fn()) return;
+        await sleep(10);
+    }
+    assert.fail(`等待超时：${what}`);
+}
+
+test("执行模式存配方：结果一落地就广播刚写的配方名，一次落盘只广播一次", async () => {
+    mountStudio();
+    await openStudio("#/gallery");
+    appState.toasts.length = 0;
+    savedEvents.length = 0;
+    mockAgentStream([
+        { kind: "tool_call", tool: "director_save", text: '{"name":"我的片子","segments":[1,2]}' },
+        RECIPE_SAVED,
+        { kind: "tool_result", tool: "director_run", text: '{"status":"succeeded","filename":"cat_walk.mp4"}' },
+        { kind: "content", text: "配方已保存并出片" },
+    ]);
+
+    inputText(dock().querySelector(".neo-agent-input"), "把这一版存成配方");
+    click(runBtn());
+    await flush(40);
+
+    assert.deepEqual(savedEvents, [{ name: "我的片子", created: true }],
+        "只该按 director_save 的结果广播一次，出片结果不再报配方");
+    assert.ok(savedToastTexts().some((s) => s.includes("我的片子")),
+        `提示应写明刚存的配方名：${JSON.stringify(savedToastTexts())}`);
+});
+
+test("执行模式复制配方：副本按新名字广播", async () => {
+    mountStudio();
+    await openStudio("#/gallery");
+    appState.toasts.length = 0;
+    savedEvents.length = 0;
+    mockAgentStream([RECIPE_COPIED, { kind: "content", text: "已复制一份" }]);
+
+    inputText(dock().querySelector(".neo-agent-input"), "复制一份这个配方");
+    click(runBtn());
+    await flush(40);
+
+    assert.deepEqual(savedEvents, [{ name: "我的片子·副本", created: true }], "副本应按副本名广播");
+});
+
+test("计划模式：后端拒回的那一发不写文件，不广播保存事件也不弹提示", async () => {
+    mountStudio();
+    await openStudio("#/gallery");
+    appState.toasts.length = 0;
+    savedEvents.length = 0;
+    mockAgentStream([
+        { kind: "plan", text: "计划：director_plan → director_save → segment_run" },
+        { kind: "tool_call", tool: "director_save", text: '{"name":"我的片子"}' },
+        PLAN_REFUSED,
+        { kind: "content", text: "已给出计划，未写任何配方" },
+    ]);
+
+    click(modeBtns()[0]);
+    inputText(dock().querySelector(".neo-agent-input"), "出个片");
+    click(runBtn());
+    await flush(40);
+
+    assert.equal(agentCalls()[0].body.mode, "plan", "请求应带计划模式");
+    assert.ok(toolCard(), "时间线里应留下这一发的工具卡");
+    assert.deepEqual(savedEvents, [], "计划模式没有落盘，不该广播保存事件");
+    assert.equal(appState.toasts.length, 0, `拒回不是落盘，不该弹保存提示：${JSON.stringify(savedToastTexts())}`);
+});
+
+test("只读回放历史会话：会话里的配方落盘帧不广播保存事件、不弹提示、不发请求", async () => {
+    mountStudio();
+    await openStudio("#/gallery");
+    appState.toasts.length = 0;
+    savedEvents.length = 0;
+    mockRoute("/neo_agent/sessions", jsonResponse({
+        success: true,
+        sessions: [{ run_id: "r-old", created: 111, mode: "act", status: "succeeded", text: "把这一版存成配方", tools: 1 }],
+    }));
+    mockRoute("/neo_agent/session", jsonResponse({
+        success: true,
+        session: {
+            run_id: "r-old", created: 111, mode: "act", status: "succeeded", text: "把这一版存成配方",
+            frames: [
+                { kind: "run", run_id: "r-old" },
+                { kind: "tool_call", tool: "director_save", text: '{"name":"我的片子"}' },
+                RECIPE_SAVED,
+                { kind: "content", text: "配方已保存" },
+            ],
+        },
+    }));
+
+    click(dock().querySelector('.neo-agent-head-btn[title="会话历史"]'));
+    await until(() => dock().querySelector('.neo-agent-head-btn[title="读回这条会话的完整时间线"]'), "会话行铺出「打开」按钮");
+    click(dock().querySelector('.neo-agent-head-btn[title="读回这条会话的完整时间线"]'));
+    await until(() => finalRow(), "会话里的回答铺回时间线");
+
+    assert.ok(toolCard(), "会话里的工具卡应照原样铺回时间线");
+    assert.equal(finalRow().textContent.trim(), "配方已保存", "会话里的回答应照原文铺出来");
+    assert.equal(agentCalls().length, 0, "读回旧会话不该发智能体请求");
+    assert.deepEqual(savedEvents, [], "旧会话里的落盘帧不是刚发生的落盘，不该广播保存事件");
+    assert.equal(appState.toasts.length, 0, `读回会话不该弹保存提示：${JSON.stringify(savedToastTexts())}`);
+    assert.equal(dock().querySelector(".neo-agent-resumebar").hidden, false, "读回后应给出「接上次会话」条");
+});
+
+// 导演页 fixture 与 studio-director.test.mjs 同一套。列表路由按「保存事件到过没有」决定新配方
+// 可见不可见——后端写完文件列表才看得见，于是列表数量本身就是刷新发生在落盘之后的证据
+const DIR_R1 = { name: "R1", type: "video_director", shared: { mode: "f2v" }, segments: [
+    { skill_id: "sk-a", prompt: "段一", duration_sec: 3 },
+    { skill_id: "sk-a", prompt: "段二", duration_sec: 4 }] };
+const DIR_NEW = { name: "我的片子", type: "video_director", shared: { mode: "f2v" }, segments: [
+    { skill_id: "sk-a", prompt: "雨夜街道", duration_sec: 5 }] };
+
+function mockDirectorRoutes() {
+    mockRoute("/rs_prompts/skills", jsonResponse([{ id: "sk-a", name: "技能 A", gen_video: true }]));
+    mockRoute("/rs_recipes/list", () => jsonResponse(savedEvents.length ? [DIR_R1, DIR_NEW] : [DIR_R1]));
+    mockRoute("/rs_recipes/director_spec", jsonResponse({
+        success: true,
+        segments: [
+            { prompt: "段一", duration_sec: 3, ref_input: "" },
+            { prompt: "段二", duration_sec: 4, ref_input: "" },
+        ],
+        defaults: { width: 640, height: 384, steps: 20 },
+    }));
+    mockRoute("/neo_video_gen/director_progress", jsonResponse({ active: false, segment_index: -1, total_segments: 0 }));
+    mockRoute("/userdata/neo_recipes_data.json", jsonResponse({}));
+    localStorage.setItem("neo_studio_director_side_col", JSON.stringify({ side: 240, lib: 420 }));
+}
+
+const dirCards = () => document.querySelectorAll(".ns-director-side .neo-recipes-card");
+const dirSelected = () => document.querySelector(".neo-recipes-card-selected .neo-recipes-card-name span")?.textContent;
+
+test("导演页在用时存配方：左栏立刻长出新配方并选中，右栏上下文跟着换配方", async () => {
+    mountStudio();
+    mockDirectorRoutes();
+    appState.graph = { _nodes: [] };   // 无 Load* 节点 → 编辑器内无媒体候选
+    appState.toasts.length = 0;
+    savedEvents.length = 0;
+    await openStudio("#/director");
+    await until(() => dirCards().length === 1 && dirSelected() === "R1", "进页时左栏只有 R1 且自动选中");
+    assert.ok(document.querySelector(".ns-gen-panel"), "下方生成面板已铺好");
+
+    mockAgentStream([{ kind: "tool_call", tool: "director_save", text: '{"name":"我的片子"}' }, RECIPE_SAVED,
+                     { kind: "content", text: "配方已保存" }]);
+    inputText(dock().querySelector(".neo-agent-input"), "把这一版存成配方");
+    click(runBtn());
+
+    await until(() => dirCards().length === 2, "保存后左栏长出新配方");
+    assert.deepEqual(savedEvents, [{ name: "我的片子", created: true }], "广播的是刚写的配方名");
+    await until(() => dirSelected() === "我的片子", "新配方直接选中，下方生成面板跟着是它");
+    await until(() => ctxBar().textContent.includes("我的片子"), "右栏上下文条跟着换配方");
+    assert.ok(savedToastTexts().some((s) => s.includes("我的片子")),
+        `应弹带配方名的保存提示：${JSON.stringify(savedToastTexts())}`);
+});
+
+test("导演页在用时切计划模式：不写配方就不重建配方列表，选中配方保持不动", async () => {
+    mountStudio();
+    mockDirectorRoutes();
+    appState.graph = { _nodes: [] };
+    appState.toasts.length = 0;
+    savedEvents.length = 0;
+    await openStudio("#/director");
+    await until(() => dirCards().length === 1 && dirSelected() === "R1", "进页时左栏只有 R1 且自动选中");
+    const listCallsBefore = fetchLog.filter((c) => c.path === "/rs_recipes/list").length;
+
+    mockAgentStream([{ kind: "plan", text: "计划：director_plan → director_save → segment_run" },
+                     PLAN_REFUSED,
+                     { kind: "content", text: "已给出计划，未写任何配方" }]);
+    click(modeBtns()[0]);
+    inputText(dock().querySelector(".neo-agent-input"), "出个片");
+    click(runBtn());
+    await flush(60);
+
+    assert.equal(savedEvents.length, 0, "计划模式没有落盘，不该广播保存事件");
+    assert.equal(fetchLog.filter((c) => c.path === "/rs_recipes/list").length, listCallsBefore,
+                 "没有落盘就不该重建配方列表");
+    assert.equal(dirSelected(), "R1", "选中的配方照旧");
+    assert.equal(dirCards().length, 1, "左栏列表照旧只有 R1");
+});
+
 

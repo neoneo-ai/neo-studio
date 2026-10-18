@@ -12,7 +12,9 @@ import base64
 import contextlib
 import importlib
 import json
+import os
 import sys
+import time
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -108,6 +110,58 @@ def _no_poll_sleep():
 def _runobj(client):
     """取消面：轮次与轮询边界要读它。非取消用例也照给一个，停止位永不置起就是跑完整路。"""
     return agent._Run(client)
+
+
+def _drive(coro):
+    """跑一条路由协程、收完它的 SSE，并把收尾挂上的落盘后台任务等完：asyncio.run 在收流
+    一结束就关事件循环，落盘任务不等完就看不到会话文件，用例里也不该为这个放真实时限的 sleep。"""
+    saved: list = []
+    real = asyncio.create_task
+
+    def capture(c):
+        task = real(c)
+        saved.append(task)
+        return task
+
+    async def collect():
+        with mock.patch.object(agent.asyncio, "create_task", capture):
+            resp = await coro
+            body = resp.body
+            chunks = [body] if isinstance(body, bytes) else [x async for x in getattr(body, "_value", body)]
+            lines = [x[6:] for c in chunks for x in c.decode("utf-8").split("\n") if x.startswith("data: ")]
+            for task in saved:
+                await task
+        return lines
+    return asyncio.run(collect())
+
+
+def _fake_run(client, text="出片", created=None, mode="act", frames=(), messages=()):
+    """落盘与列表用例直接喂一个运行对象：文件读写只看这些字段，不跑循环。"""
+    run = agent._Run(client)
+    run.created = created if created is not None else time.time()
+    run.text = text
+    run.mode = mode
+    run.frames = list(frames)
+    run.messages = list(messages)
+    return run
+
+
+def _clear_sessions():
+    for path in agent._session_files():
+        path.unlink(missing_ok=True)
+
+
+def _saved_top():
+    """最新一条会话文件（_session_files 就是新的在前）。"""
+    files = agent._session_files()
+    assert files, "没有会话文件"
+    return files[0], json.loads(files[0].read_text(encoding="utf-8"))
+
+
+def _saved_one():
+    files = agent._session_files()
+    assert len(files) == 1, [p.name for p in files]
+    return files[0], json.loads(files[0].read_text(encoding="utf-8"))
 
 
 @skip
@@ -419,6 +473,293 @@ class TestRoutes(unittest.TestCase):
                 TestRoutes._req({"task_id": "6f1c2a34-9b7c-4d0a-8e11-2f3a4b5c6d7e"})))
         self.assertEqual(resp.status, 404)
         self.assertIn("任务不存在", json.loads(resp.text)["error"])
+
+
+@skip
+class TestSessionStore(unittest.TestCase):
+    """会话落盘与续聊：一次运行一个 JSON 在数据根的 agent_sessions/，列表只读摘要，
+    续聊把落下来的 messages 接在系统提示词之后。conftest 已把数据根钉在临时目录。"""
+
+    @staticmethod
+    def _req(body, query=None):
+        async def json():
+            return body
+        return SimpleNamespace(json=json, query=query or {},
+                               url=SimpleNamespace(host="127.0.0.1", port=8188, scheme="http"))
+
+    def setUp(self):
+        _clear_sessions()
+        self.addCleanup(_clear_sessions)
+
+    def _one_run(self, body, turns, replies=None, names=("neo_status",)):
+        """走一遍 /neo_agent/run 并收干净，返回 (SSE 行, 这次运行的 run_id)。"""
+        client = FakeClient(replies or {"neo_status": {"neo_studio": "1"}}, names=names)
+        queue = list(turns)
+        with mock.patch.object(agent, "McpClient", lambda base, timeout=30: client), \
+             mock.patch.object(agent, "_chat", lambda m, t: queue.pop(0)):
+            lines = _drive(agent.agent_run(self._req(body)))
+        return lines, json.loads(lines[0])["run_id"]
+
+    def test_run_persists_one_session_file_with_the_timeline(self):
+        """一次运行落一个文件：时间线逐帧、终态、输入与界面状态都在，参数按展示裁剪。"""
+        args = json.dumps({"prompt": "橘猫 " * 120}, ensure_ascii=False)
+        turns = [{"content": "先看状态",
+                  "tool_calls": [{"id": "c1", "function": {"name": "neo_status", "arguments": args}}]},
+                 {"content": "服务在线"}]
+        lines, run_id = self._one_run(
+            {"text": "橘猫出片", "context": {"page": "director", "recipe": "cat_walk", "segments": 2}}, turns)
+        self.assertEqual(lines[-1], "[DONE]")
+        path, rec = _saved_one()
+        self.assertIn(run_id, path.name)
+        self.assertTrue(agent.SESSION_FILE_RE.match(path.name))
+        self.assertEqual(rec["run_id"], run_id)
+        self.assertEqual(rec["status"], "succeeded")
+        self.assertEqual(rec["mode"], "act")
+        self.assertEqual(_kinds(rec["frames"]), ["plan", "tool_call", "tool_result", "content"])
+        self.assertEqual(rec["input"]["text"], "橘猫出片")
+        self.assertIn("cat_walk · 2 段", rec["input"]["context"])
+        self.assertLessEqual(len(rec["frames"][1]["text"]), agent.ARGS_CLIP + 1)
+
+    def test_saved_session_carries_no_image_bytes_and_no_system_prompt(self):
+        """落盘不带 base64 图字节，也不带 system 提示词：文件里已是用户提示词与本机路径，
+        再灌一堆图字节只会把这一份撑到读不动，续聊的 system 由当时的 mode 重生成。"""
+        msgs = [{"role": "system", "content": "系统提示词" * 400},
+                {"role": "user", "content": [{"type": "image_url",
+                                              "image_url": {"url": "data:image/png;base64," + "AA" * 9000}},
+                                             {"type": "text", "text": "看这张图" * 3000}]},
+                {"role": "assistant", "content": "看图说话" * 3000,
+                 "tool_calls": [{"id": "c1", "function": {"name": "neo_status", "arguments": "{}"}}]},
+                {"role": "tool", "tool_call_id": "c1", "content": "结果"}]
+        out = agent._stored_messages(msgs)
+        text = json.dumps(out, ensure_ascii=False)
+        self.assertNotIn("base64,", text)
+        self.assertNotIn("系统提示词", text)
+        self.assertEqual([m["role"] for m in out], ["user", "assistant", "tool"])
+        self.assertIn("附件图 1 张", out[0]["content"])
+        self.assertTrue(all(len(m["content"]) <= agent.RESUME_MSG_CLIP + 1 for m in out))
+        self.assertEqual(out[2]["tool_call_id"], "c1")
+        self.assertEqual(out[1]["tool_calls"][0]["function"]["name"], "neo_status")
+        agent._save_session(_fake_run(None, messages=msgs))
+        self.assertNotIn("base64,", _saved_one()[0].read_text(encoding="utf-8"))
+
+    def test_saved_history_is_capped_at_the_recent_tail(self):
+        long = [{"role": "user", "content": f"第 {i} 句 " + "字" * 5000}
+                for i in range(agent.RESUME_MSG_MAX + 12)]
+        out = agent._stored_messages(long)
+        self.assertEqual(len(out), agent.RESUME_MSG_MAX)
+        self.assertEqual(out[-1]["content"].split(" ")[1], str(agent.RESUME_MSG_MAX + 11))
+
+    def test_resume_feeds_the_saved_history_to_the_llm(self):
+        """续聊把落下来的原文接回 LLM：系统提示词在最前，旧对话在中间，新的一句在最后。"""
+        turns = [{"content": "先看状态",
+                  "tool_calls": [{"id": "c1", "function": {"name": "neo_status", "arguments": "{}"}}]},
+                 {"content": "服务在线"}]
+        _, run_id = self._one_run({"text": "橘猫出片"}, turns)
+        seen = []
+
+        def chat(messages, tools):
+            seen.append(list(messages))
+            return {"content": "好，第二段换慢一点"}
+
+        client = FakeClient({"neo_status": {"neo_studio": "1"}}, names=("neo_status",))
+        with mock.patch.object(agent, "McpClient", lambda base, timeout=30: client), \
+             mock.patch.object(agent, "_chat", chat):
+            _drive(agent.agent_run(self._req({"text": "把第二段换慢一点", "resume": run_id})))
+        first = seen[0]
+        self.assertEqual([m["role"] for m in first],
+                         ["system", "user", "assistant", "tool", "assistant", "user"])
+        self.assertIn("橘猫出片", first[1]["content"])
+        self.assertIn("服务在线", first[4]["content"])
+        self.assertEqual(first[-1]["content"], "把第二段换慢一点")
+        # 续出来的这一轮自己也是一个新会话：接的是谁记在 resume_of 里
+        _, rec = _saved_top()
+        self.assertEqual(rec["resume_of"], run_id)
+        self.assertEqual(len(agent._session_files()), 2)
+
+    def test_resume_regenerates_the_system_prompt_from_the_current_turn(self):
+        """续聊不带旧的 system：换到计划模式、换了界面状态，系统提示词按这一次重生成。"""
+        _, run_id = self._one_run({"text": "橘猫出片"}, [{"content": "服务在线"}])
+        seen = []
+        client = FakeClient({"neo_status": {"neo_studio": "1"}}, names=("neo_status",))
+
+        def chat(messages, tools):
+            seen.append(messages)
+            return {"content": "计划如下"}
+
+        with mock.patch.object(agent, "McpClient", lambda base, timeout=30: client), \
+             mock.patch.object(agent, "_chat", chat):
+            _drive(agent.agent_run(self._req({"text": "先给计划", "mode": "plan", "resume": run_id,
+                                              "context": {"page": "director", "recipe": "cat_walk",
+                                                          "segments": 2}})))
+        self.assertIn(agent.PLAN_MODE_NOTE, seen[0][0]["content"])
+        self.assertIn("当前导演配方：cat_walk · 2 段", seen[0][0]["content"])
+
+    def test_resume_rejects_a_run_that_is_still_going(self):
+        """还在跑的循环不能被第二条请求同时接上：那一轮的 messages 正被循环改着。"""
+        live = _runobj(FakeClient({}))
+        agent._RUNS[live.run_id] = live
+        try:
+            client = FakeClient({"neo_status": {"neo_studio": "1"}}, names=("neo_status",))
+            with mock.patch.object(agent, "McpClient", lambda base, timeout=30: client), \
+                 mock.patch.object(agent, "_chat", lambda m, t: {"content": "不该跑到 LLM"}):
+                lines = _drive(agent.agent_run(self._req({"text": "续一下", "resume": live.run_id})))
+        finally:
+            agent._RUNS.pop(live.run_id, None)
+        self.assertIn("[ERROR] 这次运行还在跑，不能同时续", lines)
+        self.assertEqual(lines[-1], "[DONE]")
+
+    def test_resume_rejects_malformed_and_missing_run_id(self):
+        """resume 的 run_id 会拼进会话文件名的匹配段：畸形形态在入口挡掉，查不到就说没有。"""
+        for resume in ("../secret", "Z" * 32, "0" * 32):
+            client = FakeClient({"neo_status": {"neo_studio": "1"}}, names=("neo_status",))
+            with mock.patch.object(agent, "McpClient", lambda base, timeout=30: client), \
+                 mock.patch.object(agent, "_chat", lambda m, t: {"content": "不该跑到 LLM"}):
+                lines = _drive(agent.agent_run(self._req({"text": "续一下", "resume": resume})))
+            self.assertIn("[ERROR]", lines[0])
+            self.assertEqual(lines[-1], "[DONE]")
+
+    def test_a_huge_run_drops_the_oldest_turns_then_the_timeline(self):
+        """一次大结果能把文件撑到几兆：先从最旧消息丢起，还超就只留最终回答——
+        接得上上下文的最后几轮比完整历史与整条时间线更值钱。"""
+        run = _fake_run(
+            None,
+            frames=[{"kind": "tool_result", "text": "结" * 100_000} for _ in range(8)]
+                   + [{"kind": "content", "text": "最终回答"}],
+            messages=[{"role": "user", "content": "问" * 3900} for _ in range(30)]
+                     + [{"role": "assistant", "content": "答"}])
+        agent._save_session(run)
+        path, rec = _saved_one()
+        self.assertLessEqual(len(path.read_text(encoding="utf-8")), agent.SESSION_FILE_MAX)
+        self.assertEqual(_kinds(rec["frames"]), ["content"])
+        self.assertEqual(rec["messages"], [{"role": "assistant", "content": "答"}])
+
+    def test_session_list_is_newest_first_with_a_compact_summary(self):
+        now = time.time()
+        for i, (tools, mode) in enumerate([(1, "act"), (0, "plan"), (2, "act")]):
+            agent._save_session(_fake_run(
+                None, text=f"第 {i} 次", created=now - 10 * (i + 1), mode=mode,
+                frames=[{"kind": "tool_call", "tool": "neo_status", "text": "{}"}] * tools
+                       + [{"kind": "content", "text": "好了"}]))
+        for s in agent._list_sessions():    # 三条在同一毫秒里落盘：把落盘时间钉回各自的创建时间
+            stamp = s["created"]
+            os.utime(agent._session_of(s["run_id"]), (stamp, stamp))
+        out = agent._list_sessions()
+        self.assertEqual([s["text"] for s in out], ["第 0 次", "第 1 次", "第 2 次"])
+        self.assertEqual([s["tools"] for s in out], [1, 0, 2])
+        self.assertEqual(out[1]["mode"], "plan")
+
+    def test_session_list_drops_the_expired_one(self):
+        """过期只看落盘时间：七天前的那次不再进列表，历史页不会一年比一年长。"""
+        agent._save_session(_fake_run(None, text="上周的", created=time.time() - 10))
+        agent._save_session(_fake_run(None, text="今天的"))
+        stale_id = [s["run_id"] for s in agent._list_sessions() if s["text"] == "上周的"][0]
+        old = time.time() - agent.SESSION_TTL_SEC - 3600
+        os.utime(agent._session_of(stale_id), (old, old))     # 不用真等七天：改落盘时间就是过期
+        self.assertEqual([s["text"] for s in agent._list_sessions()], ["今天的"])
+
+    def test_overflow_prune_keeps_the_newest(self):
+        with mock.patch.object(agent, "MAX_SESSIONS", 3):
+            for i in range(5):
+                agent._save_session(_fake_run(None, text=f"第 {i} 次", created=time.time() - 10 * (5 - i)))
+            self.assertEqual([s["text"] for s in agent._list_sessions()],
+                             ["第 4 次", "第 3 次", "第 2 次"])
+        self.assertEqual(len(agent._session_files()), 3)
+
+    def test_delete_touches_only_the_session_files_it_wrote(self):
+        """删一条只动那一个文件，清空只动按名字认出来的会话文件：用户丢进这目录的
+        别的文件与目录本身一律不碰。"""
+        agent._save_session(_fake_run(None, text="留着的", created=time.time() - 60))
+        agent._save_session(_fake_run(None, text="要删的"))
+        keep = agent.AGENT_SESSIONS_DIR / "keep.json"
+        keep.write_text("{}", encoding="utf-8")
+        note = agent.AGENT_SESSIONS_DIR / "note.txt"
+        note.write_text("用户自己的文件", encoding="utf-8")
+        target = [s for s in agent._list_sessions() if s["text"] == "要删的"][0]["run_id"]
+        self.assertEqual(agent._delete_sessions(target), 1)
+        self.assertEqual([s["text"] for s in agent._list_sessions()], ["留着的"])
+        self.assertEqual(agent._delete_sessions(target), 0)      # 已经删掉的不再报删成功
+        self.assertTrue(keep.exists() and note.exists())
+        agent._save_session(_fake_run(None, text="再来一次"))
+        self.assertEqual(agent._delete_sessions(), 2)
+        self.assertEqual(agent._list_sessions(), [])
+        self.assertTrue(keep.exists() and note.exists()
+                        and agent.AGENT_SESSIONS_DIR.is_dir())
+
+    def test_a_half_written_session_file_does_not_break_the_list(self):
+        """写盘中途断电 / 磁盘写满留下的半截 JSON：不进列表也不参与续聊，收掉，
+        别让下一次列历史整页跟着炸。"""
+        broken = agent.AGENT_SESSIONS_DIR / ("20260101-000000-" + "0" * 32 + ".json")
+        broken.parent.mkdir(parents=True, exist_ok=True)
+        broken.write_text('{"run_id": "0', encoding="utf-8")
+        self.assertEqual(agent._list_sessions(), [])
+        self.assertFalse(broken.exists())
+
+    def test_abort_mid_stream_still_leaves_a_session_record(self):
+        """前端关页面时这一路 SSE 正被关掉，落盘挂成后台任务：半途收场的运行也要在历史里
+        留下这一条，终态落 interrupted，看得见它没跑完。"""
+        run = _runobj(FakeClient({"neo_status": {"neo_studio": "1"}}, names=("neo_status",)))
+        saved: list = []
+        real = asyncio.create_task
+
+        def capture(c):
+            task = real(c)
+            saved.append(task)
+            return task
+
+        async def abort():
+            agen = agent._events(run, "橘猫")
+            await agen.__anext__()
+            await agen.aclose()
+            for task in saved:
+                await task
+
+        with mock.patch.object(agent.asyncio, "create_task", capture):
+            asyncio.run(abort())
+        _, rec = _saved_one()
+        self.assertEqual(rec["status"], "interrupted")
+        self.assertEqual(rec["run_id"], run.run_id)
+        self.assertEqual(rec["frames"], [])
+
+    def test_tool_error_run_is_marked_failed(self):
+        client = FakeClient({}, names=("neo_status",))
+        with mock.patch.object(agent, "McpClient", lambda base, timeout=30: client), \
+             mock.patch.object(agent, "_chat", mock.Mock(side_effect=mcp.ToolError("技能不存在：skill_cat"))):
+            lines = _drive(agent.agent_run(self._req({"text": "橘猫"})))
+        self.assertIn("[ERROR] 技能不存在：skill_cat", lines)
+        _, rec = _saved_one()
+        self.assertEqual(rec["status"], "failed")
+
+    def test_sessions_route_lists_summaries(self):
+        _, run_id = self._one_run({"text": "橘猫出片"}, [{"content": "好了"}])
+        data = json.loads(asyncio.run(agent.agent_sessions(self._req({}))).text)
+        self.assertTrue(data["ok"])
+        self.assertEqual([s["run_id"] for s in data["sessions"]], [run_id])
+        self.assertEqual(data["sessions"][0]["text"], "橘猫出片")
+        self.assertEqual(data["sessions"][0]["status"], "succeeded")
+
+    def test_session_route_reads_the_timeline_back(self):
+        _, run_id = self._one_run({"text": "橘猫出片"}, [{"content": "好了"}])
+        data = json.loads(asyncio.run(agent.agent_session(self._req({}, {"run_id": run_id}))).text)
+        self.assertEqual(_kinds(data["session"]["frames"]), ["content"])
+        self.assertEqual([m["role"] for m in data["session"]["messages"]], ["user", "assistant"])
+
+    def test_session_route_rejects_bad_and_missing_run_id(self):
+        bad = asyncio.run(agent.agent_session(self._req({}, {"run_id": "../secret"})))
+        self.assertEqual(bad.status, 400)
+        self.assertEqual(asyncio.run(agent.agent_session(self._req({}, {"run_id": "0" * 32}))).status, 404)
+        self.assertEqual(asyncio.run(agent.agent_session(self._req({}, {}))).status, 400)
+
+    def test_session_delete_routes(self):
+        _, run_id = self._one_run({"text": "橘猫出片"}, [{"content": "好了"}])
+        self.assertEqual(asyncio.run(agent.agent_session_delete(self._req({"run_id": "zz"}))).status, 400)
+        self.assertEqual(asyncio.run(agent.agent_session_delete(self._req({"run_id": "0" * 32}))).status, 404)
+        ok = asyncio.run(agent.agent_session_delete(self._req({"run_id": run_id})))
+        self.assertEqual(json.loads(ok.text)["deleted"], 1)
+        self.assertEqual(agent._list_sessions(), [])
+        self._one_run({"text": "再来一次"}, [{"content": "好了"}])
+        alls = asyncio.run(agent.agent_session_delete_all(self._req({})))
+        self.assertEqual(json.loads(alls.text)["deleted"], 1)
+        self.assertEqual(agent._list_sessions(), [])
 
 
 @skip

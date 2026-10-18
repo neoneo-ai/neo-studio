@@ -57,6 +57,7 @@ GALLERY_DIR = DATA_ROOT / "gallery"
 PROMPTS_DIR = DATA_ROOT / "prompts"
 RECIPES_DIR = DATA_ROOT / "recipes"
 SKILLS_DIR = DATA_ROOT / "skills"
+AGENT_SESSIONS_DIR = DATA_ROOT / "agent_sessions"   # 智能体一次运行的会话落盘，只存本机
 
 
 def seed_presets() -> None:

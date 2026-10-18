@@ -229,6 +229,7 @@ V3 节点（`NeoImageGenEdit`）走 `io.Schema(description=..., search_aliases=[
 | `gallery/oss_cache/` | 云端预设缓存 |
 | `recipes/presets/` | 内置预设配方（只读） |
 | `recipes/custom/` | 用户配方：`recipe.json` + `assets/` |
+| `agent_sessions/` | 智能体会话落盘：一次运行一个 JSON（时间线逐帧 + 续聊原文），只存本机、不进包 |
 | `configs/llm_providers.json` | Provider 定义（唯一真源），前端下拉由此生成 |
 | `configs/remote_llm_config.json` | 远程 LLM 配置，API Key 仅存本机 |
 | `configs/image_gen.json` | 生图默认参数 |

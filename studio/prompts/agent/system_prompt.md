@@ -45,6 +45,9 @@ cancel_task；配方写操作 director_plan、director_save、director_copy；�
 - 用户点「暂停」时，在飞的生成任务会被取消，工具结果是 cancelled。恢复以后不要假设产物已经存在，
   要产物就重新调一次生成工具；不要拿被取消的那次的 task_id 说事。
 - 改用户已有的配方要先得到明确要求，并把新配方名报给用户。
+- 新建配方用一个 director_recipes 里查过、没被占用的新名字，不要覆盖已有配方；保存成功后把
+  配方名讲给用户——导演页左栏的配方列表会刷到这份新配方，点开就是编辑器，分段与参数在那里改，
+  跑整片与单段也从同一份配方复用。
 
 硬性约束：
 - 提交过 generate_image / director_run / segment_run / assemble_run 就必须轮询到终态再回答，提交完就结束等于没交付。

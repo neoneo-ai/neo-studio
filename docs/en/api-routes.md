@@ -193,11 +193,15 @@ included), and the dock never calls a handler directly.
 
 | Method | Route | Description |
 |--------|-------|-------------|
-| POST | `/neo_agent/run` | One agent turn, SSE timeline; body `{text, mode, images, context}` (`mode` accepts `plan` / `act`, default `act`; `images` are composer attachments in the image-source shape, up to 6; `context` is the current UI state, dropped whole when it is not an object), first frame `run` (carries the `run_id` the cancel / pause / resume / answer routes need), frames `plan` / `tool_call` / `status` / `tool_result` / `ask` / `paused` / `resumed` / `content`, ending with `[ERROR]` / `[DONE]` |
+| POST | `/neo_agent/run` | One agent turn, SSE timeline; body `{text, mode, images, context, resume}` (`mode` accepts `plan` / `act`, default `act`; `images` are composer attachments in the image-source shape, up to 6; `context` is the current UI state, dropped whole when it is not an object; `resume` carries the `run_id` of a saved session and this turn continues after it — that run still going, or an unknown session, ends with `[ERROR]` before the first frame), first frame `run` (carries the `run_id` the cancel / pause / resume / answer routes need), frames `plan` / `tool_call` / `status` / `tool_result` / `ask` / `paused` / `resumed` / `content`, ending with `[ERROR]` / `[DONE]` |
 | POST | `/neo_agent/answer` | Answer an `ask` frame: body `{run_id, ask_id, text}` hands the user's choice back to the loop parked on `ask_user`; `run_id` / `ask_id` accept only the shapes the `run` / `ask` frames issued — finished run is 404, finished question is 404 |
 | POST | `/neo_agent/cancel` | Cancel: with `run_id` it stops the whole agent loop and kills the in-flight task (`run_id` accepts only the shape the `run` frame issued; unknown id is 404); with `task_id` it kills just that task (through MCP `cancel_task`, which resolves the image / film / segment / assemble route itself), `task_id` accepts UUID shapes only |
 | POST | `/neo_agent/pause` | Pause: body `{run_id}` (validated like cancel) parks the loop at the next turn / poll boundary and leaves the SSE stream open; an in-flight ComfyUI task has no paused state, so the boundary kills it and returns `cancelled`, and the resumed loop does not resend it |
 | POST | `/neo_agent/resume` | Resume: body `{run_id}` (validated like cancel) releases the loop parked on the pause checkpoint; a no-op when nothing is paused, so clicking Resume repeatedly never pushes a run past the checkpoint |
+| GET | `/neo_agent/sessions` | The **🗂 History** list: newest first, compact summaries only (time / mode / status / first line / tool count); reading it also drops sessions older than 7 days |
+| GET | `/neo_agent/session` | Reads one session back by `run_id` (query string, accepts only the shape the `run` frame issued): the `frames` timeline and the `messages` the resume feeds the LLM; malformed shape is 400, missing session is 404 |
+| POST | `/neo_agent/session/delete` | Delete one session: body `{run_id}` (validated as above); it unlinks that one file only, missing is 404 |
+| POST | `/neo_agent/session/delete_all` | **Clear conversation** clears the saved history too: it deletes only the session files this module wrote — the directory and any other file stay untouched |
 
 - The whole turn is planned by the LLM calling tools, with a 12-turn cap. The dock has no skill picker — the LLM
   picks the skill itself through `list_skills`, and `context` is its only evidence for which recipe and which paint
@@ -228,7 +232,21 @@ included), and the dock never calls a handler directly.
   finished film becomes one `{kind:"video", url}` `/view` item (segment and assemble snapshots carry a filename
   only, so the subfolder comes from the generating module's output directory). The dock's result thumbnails and
   result links read nothing else.
+- The `director_save` / `director_copy` result JSON carries `name`: recognizing it, the dock broadcasts the director
+  editor's saved-recipe event (the window event `neo-director-recipe-saved` with `{name, created:true}`), so the director
+  page's recipe list refreshes and selects the new recipe — opening the card is the editor for segment and parameter
+  edits. Replaying a saved session never broadcasts, so reading history back leaves the UI alone.
 - The ComfyUI the tools talk to is the source of the current request; the body carries no address to inject.
+- One run lands as one session file in `agent_sessions/` under the data root (`<created>-<run_id>.json`, written
+  atomically; at most 100 sessions, 400 KB per file). `frames` is the timeline, replayed read-only by the frontend;
+  `messages` is the text a resume feeds the LLM — no system message, no image bytes (an attachment is kept as one
+  reference line), each message clipped to 4000 characters and the whole list capped at 40, and an over-cap file
+  drops the oldest messages first, then keeps only the final answer. The terminal state is recorded as
+  `succeeded` / `failed` / `cancelled` / `interrupted` (a stream cut by the client), and a resumed run records
+  `resume_of`.
+- Session files contain user prompts and local paths: they stay on this machine, excluded by gitignore and out of
+  the Registry package. The history and resume routes exist on the ComfyUI side only — they are not in the desktop
+  capability table `app/studio_caps.py`, and the dock never appears in the offline desktop window.
 
 ## prompts.py — `/rs_prompts/*`
 

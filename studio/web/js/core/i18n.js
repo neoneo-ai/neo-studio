@@ -1586,6 +1586,27 @@ const EN = {
     "调用失败": "Call failed",
     "参数不是合法 JSON": "The arguments are not valid JSON",
     "无内容": "No content",
+    "会话历史": "Session history",
+    "清空对话与历史": "Clear conversation and history",
+    "执行模式": "Act",
+    "（只给了附件图）": "(image only)",
+    "{n} 次工具": "{n} tools",
+    "接上次会话": "continues the last session",
+    "打开": "Open",
+    "读回这条会话的完整时间线": "Replay this session's full timeline",
+    "删除这条会话": "Delete this session",
+    "桌面端服务读不回历史会话": "The desktop service cannot read saved sessions",
+    "还没有历史会话": "No saved sessions yet",
+    "这条会话读不回来": "This session cannot be read back",
+    "输入下一句就接在这条会话后面": "Type the next line to continue after this session",
+    "清空对话会同时删掉后端保存的历史会话，继续？":
+        "Clearing the conversation also deletes the sessions saved by the backend. Continue?",
+    "完成": "Done",
+    "中断": "Interrupted",
+    "在跑": "Running",
+    "出错": "Error",
+    "配方「{name}」已保存，在导演页配方列表里打开调整":
+        "Recipe “{name}” is saved — open it in the director page's recipe list to adjust and reuse it",
 };
 
 function detectLang() {

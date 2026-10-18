@@ -177,11 +177,15 @@ Neo Studio 独立页面（`web/studio/index.html`）的后端。素材 / 生图 
 
 | 方法 | 路由 | 说明 |
 |------|------|------|
-| POST | `/neo_agent/run` | 智能体一轮对话，SSE 时间线；body `{text, mode, images, context}`（`mode` 只认 `plan` / `act`，缺省 `act`；`images` 是输入框附件图，按图片源口径给，最多 6 张；`context` 是界面当前状态，非 dict 整块丢掉），首帧 `run`（带 `run_id`，取消 / 暂停 / 继续整条循环与回答问句都要用），帧 `plan` / `tool_call` / `status` / `tool_result` / `ask` / `paused` / `resumed` / `content`，收尾 `[ERROR]` / `[DONE]` |
+| POST | `/neo_agent/run` | 智能体一轮对话，SSE 时间线；body `{text, mode, images, context, resume}`（`mode` 只认 `plan` / `act`，缺省 `act`；`images` 是输入框附件图，按图片源口径给，最多 6 张；`context` 是界面当前状态，非 dict 整块丢掉；`resume` 带旧会话的 `run_id` 时这一轮接在那条会话后面跑，那条还在跑与查不到都在首帧前 `[ERROR]` 收场），首帧 `run`（带 `run_id`，取消 / 暂停 / 继续整条循环与回答问句都要用），帧 `plan` / `tool_call` / `status` / `tool_result` / `ask` / `paused` / `resumed` / `content`，收尾 `[ERROR]` / `[DONE]` |
 | POST | `/neo_agent/answer` | 回答 `ask` 帧：body `{run_id, ask_id, text}`，把用户选的方向交回正等在 `ask_user` 上的循环；`run_id` / `ask_id` 只收 `run` / `ask` 帧发过的形态，运行收场 404、问句已收场 404 |
 | POST | `/neo_agent/cancel` | 取消：带 `run_id` 停整条智能体循环并掐掉在跑的任务（`run_id` 只收 `run` 帧发过的形态，查不到 404）；带 `task_id` 只掐那一个任务（走 MCP `cancel_task`，图片 / 整片 / 单段 / 拼接四类由协议自己找路由），`task_id` 只收 UUID 形态 |
 | POST | `/neo_agent/pause` | 暂停：body `{run_id}`（校验同 cancel），让循环停在下一个轮次 / 轮询边界，SSE 开着不收尾；在飞的 ComfyUI 任务没有暂停态，边界上掐掉它并交回 `cancelled`，恢复后不自动重发 |
 | POST | `/neo_agent/resume` | 继续：body `{run_id}`（校验同 cancel），放开正等在暂停检查点上的循环；没在暂停时是空操作，重复点「继续」不会把运行推过检查点 |
+| GET | `/neo_agent/sessions` | 「🗂 历史」列表：新的在前，只回摘要（时间 / 模式 / 终态 / 首句 / 工具数）；读时顺带收掉落盘超 7 天的会话 |
+| GET | `/neo_agent/session` | 按 `run_id`（查询串，只收 `run` 帧发过的形态）读回一条会话：`frames` 逐帧时间线与续聊要用的 `messages`；形态不对 400、没有 404 |
+| POST | `/neo_agent/session/delete` | 删一条会话：body `{run_id}`（校验同上），只删那一个文件，没有 404 |
+| POST | `/neo_agent/session/delete_all` | 「清空对话」连着清历史：只删会话目录里按名字认出来的文件，目录与别的文件不碰 |
 
 - 一轮对话全程由 LLM 规划并调工具，轮次上限 12；右栏没有技能选择器，用哪个技能由 LLM 自己查
   `list_skills` 定，`context` 就是它判断「围绕哪个配方、哪种绘画模式干活」的唯一依据。
@@ -205,7 +209,16 @@ Neo Studio 独立页面（`web/studio/index.html`）的后端。素材 / 生图 
 - `tool_result` 帧带 `media`：出图的 `images` 逐条成 `{kind:"image", url, title}`，出片三类的成片 `filename` 补成一条
   `{kind:"video", url}` 的 `/view` 地址（单段与拼接的快照只给文件名，子目录按生成模块的产物目录补）。右栏的产物
   缩略图与产物链接只认这一份列表。
+- `director_save` / `director_copy` 的结果 JSON 带 `name`：右栏认出来就广播导演编辑器那条保存事件
+  （窗口事件 `neo-director-recipe-saved`，`{name, created:true}`），导演页左栏的配方列表随之刷新并选中这份新配方，
+  点开即进编辑器改分段与参数；重放旧会话的那一路不广播，读一次历史不改动界面。
 - 工具回指的 ComfyUI 取本次请求自己的来源，请求体里没有地址可注入。
+- 一次运行落一个会话文件在数据根的 `agent_sessions/`（`<创建时间>-<run_id>.json`，原子写；最多 100 条、
+  单文件 400 KB）：`frames` 是时间线逐帧，供前端只读重放；`messages` 是续聊要回填 LLM 的原文，不含 system、
+  不含图字节（附件图只留一句引用），单条按 4000 字裁剪、整份最多 40 条，超上限时从最旧消息丢起、再超就只留
+  最终回答。终态记 `succeeded` / `failed` / `cancelled` / `interrupted`（断流收尾），续聊记 `resume_of`。
+- 会话文件含用户提示词与本机路径：gitignore 与 Registry 包都把它挡在外面，只存本机。历史与续聊的路由只在
+  ComfyUI 侧有，不进桌面端能力表 `app/studio_caps.py`，右栏在离线桌面端整栏不出现。
 
 ## prompts.py — `/rs_prompts/*`
 

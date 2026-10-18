@@ -45,3 +45,6 @@ gallery/oss_cache/
 gallery/lora_cache/
 gallery/waveform_cache/
 gallery/civitai_bookmarks/
+
+# 智能体会话落盘：一次运行一个 JSON，含用户提示词与本机路径，只存本机
+agent_sessions/

@@ -14,6 +14,10 @@ segment_run / assemble_run）也开给这个面板，能不能调由协议自己
 ask_user 是右栏自己的伪工具，循环发 ask 帧挂起等 POST /neo_agent/answer 把用户选项交回来；
 images 是输入框附件图，按 prompts 的图片源口径解析成字节进首个 user 消息；
 暂停 / 继续按 run_id 在轮次与轮询边界生效，暂停掐掉在飞的 ComfyUI 任务且不自动重发。
+
+一次运行的时间线逐帧与 LLM 原文落在用户数据根的 agent_sessions/（一次运行一个 JSON，原子写，
+只存本机、不进 Registry 包）：GET /neo_agent/sessions 列历史，GET /neo_agent/session 读回整条
+时间线，POST /neo_agent/run 带 resume 时这一轮接在那条旧会话后面跑。
 """
 from __future__ import annotations
 
@@ -22,14 +26,16 @@ import base64
 import io
 import json
 import logging
+import os
 import re
+import time
 import uuid
 from urllib.parse import quote
 
 from aiohttp import web
 
 from . import mcp_server as mcp
-from .plugin_paths import PLUGIN_DIR
+from .plugin_paths import AGENT_SESSIONS_DIR, PLUGIN_DIR
 from .util import _json_safe
 
 logger = logging.getLogger("NeoStudio")
@@ -61,6 +67,16 @@ ASK_WAIT_SEC = 1800.0
 # 暂停后等「继续」的上限，与 ask 同档：暂停后整页导航走、SSE 还挂着时按超时收场
 PAUSE_WAIT_SEC = 1800.0
 ANSWER_CLIP = 2000
+# 会话落盘：一次运行一个文件在数据根的 agent_sessions/。续聊要回填给 LLM 的原文比
+# 时间线上的展示裁剪宽——RESULT_CLIP 那一档是给右栏铺卡片用的，接上下文要更全
+RESUME_MSG_CLIP = 4000
+RESUME_MSG_MAX = 40
+SESSION_FILE_MAX = 400_000
+MAX_SESSIONS = 100
+SESSION_TTL_SEC = 7 * 24 * 3600
+# 会话文件名是 <创建时间>-<run_id>.json，按名字倒序就是新的在前；
+# 名字形态不对的文件一律无视，这一页只认自己写出来的东西
+SESSION_FILE_RE = re.compile(r"^\d{8}-\d{6}-[0-9a-f]{32}\.json$")
 # 计划模式不许执行的工具：生成入队、配方写、取消在跑的任务，全是改状态的动作
 PLAN_BLOCKED_TOOLS = frozenset(("generate_image", "director_run", "segment_run", "assemble_run",
                                 "director_save", "director_copy", "cancel_task"))
@@ -159,7 +175,10 @@ class _Run:
     否则取消点下去循环还卡在 await 上。pause / resume 是暂停面的一对 Event：
     「暂停」置 pause，循环在下一个轮次 / 轮询边界停在 await_resume 上；「继续」置 resume
     把它放开。没在暂停时置 resume 是空操作——pause 一侧先清掉它，旧的一次「继续」
-    不会把下一次暂停直接放过去。"""
+    不会把下一次暂停直接放过去。
+
+    落盘面（created / mode / frames / messages / 终态）挂在同一个对象上，_events 收尾时整份
+    写进数据根的 agent_sessions/：前端「🗂 历史」读回的就是这一份。"""
 
     def __init__(self, client):
         self.client = client
@@ -169,6 +188,17 @@ class _Run:
         self.resume = asyncio.Event()
         self.task_id = ""
         self.asks: dict[str, dict] = {}
+        # 会话落盘面，挂在同一个对象上：收尾时整份写进数据根的 agent_sessions/，
+        # 前端「🗂 历史」读回时间线，「继续这次会话」接的是 messages
+        self.created = time.time()
+        self.mode = "act"
+        self.text = ""
+        self.context = ""
+        self.image_refs: list[str] = []
+        self.resume_of = ""
+        self.status = "running"
+        self.frames: list[dict] = []
+        self.messages: list[dict] = []
 
     async def await_answer(self, emit, question: str, options: list) -> str:
         """发一问，等到用户点选或超时。超时是真实失败模式：整页导航走、SSE 还挂着，
@@ -216,6 +246,148 @@ class _Run:
             await asyncio.to_thread(self.client.call, "cancel_task", {"task_id": self.task_id})
         except (mcp.ToolError, OSError, ValueError) as e:
             logger.info(f"[Neo Studio] agent cancel task {self.task_id} failed: {e}")
+
+
+# ---------------------------------------------------------------------------
+# 会话落盘：一次运行一个文件，供「🗂 历史」读回时间线、供「继续这次会话」接上下文
+# ---------------------------------------------------------------------------
+
+def _session_files() -> list:
+    """目录里的会话文件，新的在前。同秒落盘的两条只能靠落盘时间分先后——
+    列表顺序与超条数收档都要这个顺序，文件名前缀做同时间下的次级键。
+    名字形态不对的一律无视：这一页只认自己写出来的文件，用户丢进这目录的别的文件不碰。"""
+    if not AGENT_SESSIONS_DIR.is_dir():
+        return []
+    files = [p for p in AGENT_SESSIONS_DIR.glob("*.json") if SESSION_FILE_RE.match(p.name)]
+    return sorted(files, key=lambda p: (p.stat().st_mtime, p.name), reverse=True)
+
+
+def _session_of(run_id: str):
+    hits = [p for p in AGENT_SESSIONS_DIR.glob(f"*-{run_id}.json") if SESSION_FILE_RE.match(p.name)]
+    return hits[0] if hits else None
+
+
+def _prune_sessions() -> None:
+    """过期与超条数的会话收掉：只 unlink 这个目录里按名字认出来的自己的文件。"""
+    files = _session_files()
+    stale = files[MAX_SESSIONS:]
+    now = time.time()
+    stale += [p for p in files[:MAX_SESSIONS] if now - p.stat().st_mtime > SESSION_TTL_SEC]
+    for p in stale:
+        p.unlink(missing_ok=True)
+
+
+def _stored_messages(messages: list) -> list:
+    """续聊要回填给 LLM 的原文。system 不落盘：续聊按当时的 mode 与界面状态重生成，
+    换了模式不会带着旧模式的提示词跑。附件图的 base64 不落盘：一轮里灌进请求的图字节
+    能把会话文件撑到读不动，续聊要带图就靠 input 目录里的文件名重新解析。"""
+    out = []
+    for msg in messages:
+        if msg.get("role") == "system":
+            continue
+        content = msg.get("content")
+        if isinstance(content, list):
+            parts = [str(p.get("text") or "") for p in content if p.get("type") == "text"]
+            imgs = sum(1 for p in content if p.get("type") == "image_url")
+            if imgs:
+                # 附件说明落在句首：逐条裁长度时句子尾部会被裁掉，说明落在尾部就等于没落盘
+                parts.insert(0, f"[附件图 {imgs} 张，落盘不存图；这一轮要带图就从输入框重新附加]")
+            content = "\n".join(parts)
+        item = {"role": str(msg.get("role") or ""), "content": _clip(content or "", RESUME_MSG_CLIP)}
+        if msg.get("tool_calls"):
+            item["tool_calls"] = msg["tool_calls"]
+        if msg.get("tool_call_id"):
+            item["tool_call_id"] = str(msg["tool_call_id"])
+        out.append(item)
+    return out[-RESUME_MSG_MAX:]
+
+
+def _image_refs(raw) -> list:
+    """附件图只落引用不落字节：素材库拖入与本地选图都已落进 input 目录，按文件名记；
+    粘贴来的 data URI 没有文件名，记一句，续聊要带图就从输入框重新附加。"""
+    refs = []
+    for src in (raw or [])[:MAX_IMAGES]:
+        if not isinstance(src, dict):
+            continue
+        refs.append(str(src.get("value") or "") if src.get("kind") == "input" else "[粘贴图]")
+    return [r for r in refs if r]
+
+
+def _save_session(run) -> None:
+    """一次运行的时间线与续聊原文落盘，原子写（.tmp 再 replace）。会话正文含用户提示词、
+    本机路径与产物名，只落在数据根里：不进 Registry 包、不出本机。"""
+    payload = {"version": 1, "run_id": run.run_id, "created": run.created,
+               "updated": time.time(), "mode": run.mode, "status": run.status,
+               "resume_of": run.resume_of,
+               "input": {"text": run.text, "images": run.image_refs, "context": run.context},
+               "frames": run.frames, "messages": _stored_messages(run.messages)}
+    data = json.dumps(_json_safe(payload), ensure_ascii=False)
+    # 一次大结果（技能全表、长工具返回）能把文件撑到几兆：从最旧消息丢起，
+    # 接得上上下文的最后几轮比完整历史更值钱
+    while len(data) > SESSION_FILE_MAX and len(payload["messages"]) > 1:
+        payload["messages"].pop(0)
+        data = json.dumps(_json_safe(payload), ensure_ascii=False)
+    if len(data) > SESSION_FILE_MAX:
+        # 时间线是展示层，续聊不读它：文件还是太大就只留最终回答
+        payload["frames"] = [f for f in payload["frames"] if f.get("kind") == "content"][-1:]
+        data = json.dumps(_json_safe(payload), ensure_ascii=False)
+    AGENT_SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+    stamp = time.strftime("%Y%m%d-%H%M%S", time.localtime(run.created))
+    target = AGENT_SESSIONS_DIR / f"{stamp}-{run.run_id}.json"
+    tmp = target.with_name(target.name + ".tmp")
+    tmp.write_text(data, encoding="utf-8")
+    os.replace(tmp, target)
+    _prune_sessions()
+
+
+def _read_session(path):
+    """整份读回一条会话。半截文件是真实失败模式（写盘中途断电、磁盘写满）：
+    它不进列表也不参与续聊，收掉，别让下一次列表整页跟着炸。"""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        path.unlink(missing_ok=True)
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _load_session(run_id: str):
+    path = _session_of(run_id)
+    return _read_session(path) if path else None
+
+
+def _list_sessions() -> list:
+    """历史列表，新的在前，只回摘要。摘要要读整份文件才取得到首句与工具数：
+    条数上限与单文件上限一起把这一页的读量压在几兆内，不为此留第二份索引文件。"""
+    _prune_sessions()
+    out = []
+    for path in _session_files():
+        data = _read_session(path)
+        if data is None:
+            continue
+        inp = data.get("input") or {}
+        out.append({"run_id": str(data.get("run_id") or ""), "created": data.get("created"),
+                    "mode": data.get("mode"), "status": data.get("status"),
+                    "resume_of": data.get("resume_of"),
+                    "text": _clip(str(inp.get("text") or ""), 120),
+                    "images": len(inp.get("images") or []),
+                    "tools": sum(1 for f in (data.get("frames") or []) if f.get("kind") == "tool_call")})
+    return out
+
+
+def _delete_sessions(run_id: str = "") -> int:
+    """删一条会话，或清空整目录里的会话文件。只按名字认自己的文件，目录本身与别的文件不碰。"""
+    if run_id:
+        path = _session_of(run_id)
+        if path is None:
+            return 0
+        path.unlink(missing_ok=True)
+        return 1
+    n = 0
+    for path in _session_files():
+        path.unlink(missing_ok=True)
+        n += 1
+    return n
 
 
 # ---------------------------------------------------------------------------
@@ -441,14 +613,19 @@ async def _tool_result(client, name: str, args: dict, emit, run) -> str:
 
 
 async def _run_agent(client, text: str, emit, run, mode: str = "act",
-                     images: list | None = None, context: str = "") -> None:
+                     images: list | None = None, context: str = "",
+                     history: list | None = None) -> None:
     """LLM 规划 → tools/call → 结果回填 → 直到给出最终回答或用满轮次。
     停止与暂停位只在轮次与工具边界生效：LLM 的单轮请求在飞时掐不掉，回来后的第一个边界收场；
     循环挂在 ask_user 的 await 上时，暂停要等回答落地才在下一轮边界生效。
     计划模式（mode="plan"）里改状态的工具不进工具表，模型硬调也在边界拒回错误；
-    ask_user 是右栏伪工具，不发 MCP，循环自己发 ask 帧挂起等用户点选。"""
-    messages = [{"role": "system", "content": system_prompt(mode, context)},
-                _user_message(text, images or [])]
+    ask_user 是右栏伪工具，不发 MCP，循环自己发 ask 帧挂起等用户点选。
+    history 是续聊带回来的旧会话原文（不含 system）：带它时这一轮接在那条会话后面跑，
+    轮次预算是新一轮自己的 12 轮。"""
+    messages = [{"role": "system", "content": system_prompt(mode, context)}]
+    messages += list(history or [])
+    messages.append(_user_message(text, images or []))
+    run.messages = messages       # 同一个 list 对象：循环里的 append 逐轮可见，半途收场也留得下
     tools = _openai_tools(client.tool_list(), plan=(mode == "plan")) + [ASK_TOOL]
     answered = False
     for _ in range(MAX_TURNS):
@@ -507,9 +684,15 @@ def _sse(frame) -> bytes:
     return ("data: " + json.dumps(_json_safe(frame), ensure_ascii=False) + "\n\n").encode("utf-8")
 
 
-async def _events(run, text: str, mode: str = "act", images: list | None = None, context: str = ""):
+async def _events(run, text: str, mode: str = "act", images: list | None = None,
+                  context: str = "", history: list | None = None):
     async def runner(emit):
-        await _run_agent(run.client, text, emit, run, mode, images, context)
+        # 逐帧记在运行对象上：历史里打开旧会话要的就是这一串帧，前端不留第二份
+        async def record(frame):
+            run.frames.append(frame)
+            await emit(frame)
+
+        await _run_agent(run.client, text, record, run, mode, images, context, history)
 
     _RUNS[run.run_id] = run
     try:
@@ -518,9 +701,12 @@ async def _events(run, text: str, mode: str = "act", images: list | None = None,
         try:
             async for frame in _pump(runner):
                 yield _sse(frame)
+            run.status = "cancelled" if run.stop.is_set() else "succeeded"
         except mcp.ToolError as e:
+            run.status = "failed"
             yield f"data: [ERROR] {e}\n\n".encode("utf-8")
         except Exception as e:
+            run.status = "error"
             logger.info(f"[Neo Studio] agent run failed: {e}")
             yield f"data: [ERROR] {e}\n\n".encode("utf-8")
         yield b"data: [DONE]\n\n"
@@ -529,6 +715,12 @@ async def _events(run, text: str, mode: str = "act", images: list | None = None,
         # 前端 abort 时来不及发 cancel：断开路径上兜底掐掉在跑的 ComfyUI 任务
         if run.task_id:
             asyncio.create_task(run.cancel_comfy_task())
+        if run.status == "running":
+            # 断流收尾时循环没机会写终态：落了 interrupted，历史里看得见这一条没跑完
+            run.status = "interrupted"
+        # 落盘挂成后台任务：收尾路径上 await 不动它（前端 abort 时这个生成器正被关掉），
+        # 半途收场的运行也要在历史里留下这一条
+        asyncio.create_task(asyncio.to_thread(_save_session, run))
 
 
 def _error_response(message: str) -> web.Response:
@@ -541,9 +733,10 @@ def _error_response(message: str) -> web.Response:
 
 @routes.post("/neo_agent/run")
 async def agent_run(request):
-    """右栏智能体：一次请求，一路 SSE 时间线。body {text, mode, images, context}。
+    """右栏智能体：一次请求，一路 SSE 时间线。body {text, mode, images, context, resume}。
     mode 只认 plan / act，其余按 act；images 是输入框附件图，按 prompts 的图片源口径给；
-    context 是界面当前状态（当前页 / 当前导演配方 / 绘画页模式 / 素材库目录），值从前端 DOM 来。"""
+    context 是界面当前状态（当前页 / 当前导演配方 / 绘画页模式 / 素材库目录），值从前端 DOM 来；
+    resume 是「继续这次会话」要接的那条旧会话的 run_id，带它时旧对话原文接在系统提示词之后。"""
     try:
         body = await request.json()
     except Exception:
@@ -560,8 +753,25 @@ async def agent_run(request):
         text = "（没有文字说明）看这张附件图，说清你能拿它做什么，并给出建议的下一步" if images else ""
     if not text:
         return _error_response("没有输入内容")
+    resume = str(body.get("resume") or "").strip()
+    history: list = []
+    if resume:
+        # 续聊带的 run_id 会拼进会话文件名的匹配段，按后端发出去的形态校验；
+        # 还在跑的循环不能同时被两条请求接上
+        if not RUN_ID_RE.match(resume):
+            return _error_response("resume 的 run_id 不合法")
+        if resume in _RUNS:
+            return _error_response("这次运行还在跑，不能同时续")
+        record = await asyncio.to_thread(_load_session, resume)
+        if record is None:
+            return _error_response(f"会话不存在：{resume}")
+        history = list(record.get("messages") or [])
+    run = _Run(McpClient(comfy_base(request)))
+    run.mode, run.text, run.context = mode, text, context
+    run.resume_of = resume
+    run.image_refs = _image_refs(body.get("images"))
     return web.Response(
-        body=_events(_Run(McpClient(comfy_base(request))), text, mode, images, context),
+        body=_events(run, text, mode, images, context, history),
         content_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no",
                  "Connection": "keep-alive"},
@@ -664,3 +874,45 @@ async def agent_resume(request):
         return web.json_response({"success": False, "error": "这次运行已经收场"}, status=404)
     run.resume.set()
     return web.json_response({"success": True, "run_id": run_id})
+
+
+@routes.get("/neo_agent/sessions")
+async def agent_sessions(request):
+    """「🗂 历史」的列表：新的在前，只回摘要（时间 / 模式 / 终态 / 首句 / 工具数），
+    整条时间线由 /neo_agent/session 按 run_id 读回。"""
+    return web.json_response(_json_safe({"ok": True, "sessions": await asyncio.to_thread(_list_sessions)}))
+
+
+@routes.get("/neo_agent/session")
+async def agent_session(request):
+    """打开一条旧会话：时间线逐帧与续聊要用的 messages 一起读回去。
+    run_id 从查询串来，按后端发出去的形态校验，认不到 404，不给路径穿越留口子。"""
+    run_id = str(request.query.get("run_id") or "").strip()
+    if not RUN_ID_RE.match(run_id):
+        return web.json_response({"ok": False, "error": "run_id 不合法"}, status=400)
+    data = await asyncio.to_thread(_load_session, run_id)
+    if data is None:
+        return web.json_response({"ok": False, "error": f"会话不存在：{run_id}"}, status=404)
+    return web.json_response(_json_safe({"ok": True, "session": data}))
+
+
+@routes.post("/neo_agent/session/delete")
+async def agent_session_delete(request):
+    """删一条会话：run_id 按后端发出去的形态校验，只删那一个文件。"""
+    try:
+        body = await request.json()
+    except Exception:
+        return web.json_response({"success": False, "error": "请求不是合法 JSON"}, status=400)
+    run_id = str((body or {}).get("run_id") or "").strip()
+    if not RUN_ID_RE.match(run_id):
+        return web.json_response({"success": False, "error": "run_id 不合法"}, status=400)
+    n = await asyncio.to_thread(_delete_sessions, run_id)
+    if not n:
+        return web.json_response({"success": False, "deleted": 0, "error": "会话不存在"}, status=404)
+    return web.json_response({"success": True, "deleted": n})
+
+
+@routes.post("/neo_agent/session/delete_all")
+async def agent_session_delete_all(request):
+    """「清空对话」连着清历史：只删会话目录里按名字认出来的文件，目录本身与别的文件不碰。"""
+    return web.json_response({"success": True, "deleted": await asyncio.to_thread(_delete_sessions)})

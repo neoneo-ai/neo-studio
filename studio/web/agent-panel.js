@@ -23,6 +23,7 @@ import { renderMarkdown } from "./skill.js";
 import { fileToBase64, imagesFromClipboard, sseStream } from "./prompt-service.js";
 import { Lightbox } from "./lightbox.js";
 import { grabDataType, copyGalleryToInput } from "./media-transfer.js";
+import { DIRECTOR_RECIPE_SAVED_EVENT } from "./director.js";
 
 const AGENT_CSS_HREF = "/extensions/comfyui-neo-studio/agent-panel.css";
 
@@ -85,6 +86,15 @@ const MEDIA_PATH = /^\/(view|neo_gallery\/\w*|rs_recipes\/(asset|thumbnail))(?=\
 const isMediaHref = (href) => MEDIA_PATH.test(href) || MEDIA_EXT.test(href);
 const mediaKindOf = (href) => (VIDEO_EXT.test(href) ? "video" : AUDIO_EXT.test(href) ? "audio" : "image");
 
+// 智能体写完配方要广播编辑器保存那一条同一个事件：导演页左栏的配方列表、节点内时间轴
+// 都监听它，收不到就只能等下一次建页。结果文本是 MCP 回的 JSON（带 name），
+// 被后端 RESULT_CLIP 裁断时解析不动，就当这一发没写成交互
+const RECIPE_WRITE_TOOLS = { director_save: true, director_copy: true };
+function savedRecipeName(tool, text) {
+    if (!RECIPE_WRITE_TOOLS[tool]) return "";
+    try { return String(JSON.parse(text)?.name || "").trim(); } catch { return ""; }
+}
+
 // 素材库卡片可拖的图片后缀：与 prompts._read_image_raw 认的那一集对齐。heic / tiff 这类
 // 放进来只会得到一张复制成功、后端解不动、最后静默消失的缩略图
 const GALLERY_IMAGE = /\.(png|jpe?g|gif|webp|bmp)(?=&|#|$)/i;
@@ -145,6 +155,9 @@ function buildChat(onOpenMcp, getContext) {
     const empty = mkEl("div", "neo-agent-empty");
     empty.textContent = t("输入需求，Enter 生成；右栏会带着界面当前状态去规划");
     transcript.appendChild(empty);
+    // 历史列表与时间线互斥显示：列表整页铺满右栏，读回的旧会话落回时间线本体
+    const historyBox = mkEl("div", "neo-agent-history");
+    historyBox.hidden = true;
 
     const composer = mkEl("div", "neo-agent-composer");
     // 上下文条只读：宿主（studio-app.js）在切页 / 选配方 / 切绘画模式时把状态交过来
@@ -305,10 +318,10 @@ function buildChat(onOpenMcp, getContext) {
             })
             .catch(() => toast("error", t("素材库图片复制失败")));
     }
-    box.append(sectionHead(t("智能体"), [headBtn("🗑", t("清空对话"), () => {
-        transcript.innerHTML = "";
-        transcript.appendChild(empty);
-    })]), transcript, composer);
+    box.append(sectionHead(t("智能体"), [
+        headBtn("🗂", t("会话历史"), () => toggleHistory()),
+        headBtn("🗑", t("清空对话与历史"), () => clearConversation()),
+    ]), transcript, historyBox, composer);
 
     // 时间线里的链接一律收在页面内：产物进弹出窗口，外部链接交给新窗口。放任 <a> 的默认行为
     // 就是整扇窗口翻到 /view 图片页——返回时 Studio 页重载，启动状态位与整条时间线一起没了
@@ -432,6 +445,8 @@ function buildChat(onOpenMcp, getContext) {
             // 这一击必须能点：卡片在步骤区，主按钮在运行中是暂停态，两条路互不挡
             ask(question, options, askId) {
                 const card = mkEl("div", "neo-agent-step neo-agent-choice");
+                // 恢复出来的旧会话没有 run_id 可交：循环早收场了，这一击铺出来就是死钮
+                const dead = !askId;
                 const q = mkEl("div", "neo-agent-choice-q");
                 q.textContent = "❓ " + question;
                 const opts = mkEl("div", "neo-agent-choice-opts");
@@ -454,9 +469,12 @@ function buildChat(onOpenMcp, getContext) {
                     const btn = mkEl("button", "neo-agent-choice-opt");
                     btn.type = "button";
                     btn.textContent = o;
+                    btn.disabled = dead;
                     btn.onclick = () => answer(o);
                     opts.appendChild(btn);
                 });
+                free.disabled = dead;
+                send.disabled = dead;
                 send.onclick = sendFree;
                 free.addEventListener("keydown", (e) => {
                     if (e.key !== "Enter") return;
@@ -504,6 +522,136 @@ function buildChat(onOpenMcp, getContext) {
     let controller = null;
     let runId = "";
     let activeView = null;
+    let resumeId = "";
+    let historyOpen = false;
+
+    // 「接上次会话」条铺在文本框上方，与「⏹ 取消」同一位置口径：打开过一条旧会话才出现，
+    // 点一下断开。下一次「✨ 生成」带着 resume 打后端，旧对话原文接在系统提示词之后
+    const resumeBar = mkEl("button", "neo-agent-resumebar");
+    resumeBar.type = "button";
+    resumeBar.hidden = true;
+    resumeBar.onclick = () => { resumeId = ""; renderResumeBar(); };
+    composer.insertBefore(resumeBar, cancelBar);
+    function renderResumeBar() {
+        resumeBar.hidden = !resumeId;
+        resumeBar.textContent = resumeId ? "↩ " + t("接上次会话") + " " + resumeId.slice(0, 8) : "";
+    }
+
+    const SESSION_STATUS = { succeeded: "完成", failed: "失败", cancelled: "已取消",
+                             interrupted: "中断", running: "在跑", error: "出错" };
+    function sessionStatus(s) { return t(SESSION_STATUS[s] || s || "?"); }
+    function sessionTime(sec) { return sec ? new Date(sec * 1000).toLocaleString() : "-"; }
+
+    function showTranscript() {
+        historyOpen = false;
+        historyBox.hidden = true;
+        transcript.hidden = false;
+    }
+
+    function sessionRow(s) {
+        const row = mkEl("div", "neo-agent-session-row");
+        const time = mkEl("span", "neo-agent-session-time");
+        time.textContent = sessionTime(s.created);
+        const tag = mkEl("span", "neo-agent-badge");
+        tag.textContent = s.mode === "plan" ? t("计划") : t("执行模式");
+        const text = mkEl("span", "neo-agent-session-text");
+        text.textContent = s.text || t("（只给了附件图）");
+        const note = mkEl("span", "neo-agent-session-note");
+        note.textContent = sessionStatus(s.status) + " · " + tf("{n} 次工具", { n: s.tools || 0 })
+            + (s.resume_of ? " · " + t("接上次会话") : "");
+        const open = headBtn(t("打开"), t("读回这条会话的完整时间线"), () => openSession(s.run_id));
+        const del = headBtn("✕", t("删除这条会话"), async () => {
+            await postJson("/neo_agent/session/delete", { run_id: s.run_id });
+            if (resumeId === s.run_id) { resumeId = ""; renderResumeBar(); }
+            renderHistory();
+        });
+        row.append(time, tag, text, note, open, del);
+        return row;
+    }
+
+    async function renderHistory() {
+        const data = await getJson("/neo_agent/sessions");
+        historyBox.replaceChildren();
+        const note = mkEl("div", "neo-agent-history-note");
+        if (data.offline) {
+            note.textContent = t("桌面端服务读不回历史会话");
+            historyBox.appendChild(note);
+        } else {
+            const list = data.sessions || [];
+            if (!list.length) {
+                note.textContent = t("还没有历史会话");
+                historyBox.appendChild(note);
+            }
+            list.forEach((s) => historyBox.appendChild(sessionRow(s)));
+        }
+        historyOpen = true;
+        transcript.hidden = true;
+        historyBox.hidden = false;
+    }
+
+    function toggleHistory() {
+        if (historyOpen) { showTranscript(); return; }
+        renderHistory();
+    }
+
+    // 旧会话逐帧铺回现有时间线：跑完的循环没有可取消的任务（状态行不带取消钮），
+    // 也没有可回答的问句（ask 卡在视图里按 askId 空挡置灰）
+    function replayFrame(view, f) {
+        const kind = f?.kind || "content";
+        if (kind === "run") return;
+        if (kind === "plan") view.plan(f.text || "");
+        else if (kind === "tool_call") view.toolCall(f.tool || "?", f.text || "");
+        else if (kind === "status") view.status(f.text || "", "");
+        else if (kind === "tool_result") view.toolResult(f.text || "", f.media || []);
+        else if (kind === "ask") view.ask(f.text || "", f.options || [], "");
+        else if (kind === "paused") view.paused();
+        else if (kind === "resumed") view.resumed();
+        else view.answer(f.text || "");
+    }
+
+    async function openSession(id) {
+        const data = await getJson(`/neo_agent/session?run_id=${encodeURIComponent(id)}`);
+        const rec = data.session;
+        if (!rec) {
+            toast("error", data.error || t("这条会话读不回来"));
+            return;
+        }
+        showTranscript();
+        transcript.replaceChildren();
+        if (empty.parentNode) empty.remove();
+        const head = mkEl("div", "neo-agent-session-head");
+        const title = mkEl("span", "neo-agent-session-title");
+        title.textContent = sessionTime(rec.created) + " · "
+            + (rec.mode === "plan" ? t("计划") : t("执行模式")) + " · " + sessionStatus(rec.status);
+        const hint = mkEl("span", "neo-agent-session-note");
+        hint.textContent = t("输入下一句就接在这条会话后面");
+        const del = headBtn("✕", t("删除这条会话"), async () => {
+            await postJson("/neo_agent/session/delete", { run_id: rec.run_id });
+            resumeId = "";
+            renderResumeBar();
+            transcript.replaceChildren();
+            transcript.appendChild(empty);
+            renderHistory();
+        });
+        head.append(title, hint, del);
+        transcript.appendChild(head);
+        const view = agentTimeline(transcript);
+        (rec.frames || []).forEach((f) => replayFrame(view, f));
+        resumeId = rec.run_id;
+        renderResumeBar();
+        transcript.scrollTop = transcript.scrollHeight;
+    }
+
+    // 「🗑 清空对话」连着清后端保存的历史：删掉的是整目录里的会话文件，先确认再动手
+    async function clearConversation() {
+        transcript.replaceChildren();
+        transcript.appendChild(empty);
+        showTranscript();
+        resumeId = "";
+        renderResumeBar();
+        if (!window.confirm(t("清空对话会同时删掉后端保存的历史会话，继续？"))) return;
+        await postJson("/neo_agent/session/delete_all", {});
+    }
 
     // 主按钮三态：空闲「✨ 生成」、运行中「⏸ 暂停」、暂停中「▶ 继续」。整行「⏹ 取消」跟着
     // 运行出现——Cline 的口径：没在跑就没有取消键，空闲时那一行不占位
@@ -532,7 +680,17 @@ function buildChat(onOpenMcp, getContext) {
                 if (kind === "plan") view.plan(frame.text || "");
                 else if (kind === "tool_call") view.toolCall(frame.tool || "?", frame.text || "");
                 else if (kind === "status") view.status(frame.text || "", frame.task_id || "");
-                else if (kind === "tool_result") view.toolResult(frame.text || "", frame.media || []);
+                else if (kind === "tool_result") {
+                    view.toolResult(frame.text || "", frame.media || []);
+                    // 配方落盘只发生在后端，界面这一侧要有人接：广播后导演页左栏刷新并选中新配方，
+                    // 用户点开即进编辑器调整，跑整片与单段都在那里复用同一份配方
+                    const saved = savedRecipeName(frame.tool || "", frame.text || "");
+                    if (saved) {
+                        window.dispatchEvent(new CustomEvent(DIRECTOR_RECIPE_SAVED_EVENT,
+                            { detail: { name: saved, created: true } }));
+                        toast("info", tf("配方「{name}」已保存，在导演页配方列表里打开调整", { name: saved }));
+                    }
+                }
                 else if (kind === "ask") view.ask(frame.text || "", frame.options || [], frame.ask_id || "");
                 else if (kind === "paused") { paused = true; setRunState("paused"); view.paused(); }
                 else if (kind === "resumed") { paused = false; setRunState("running"); view.resumed(); }
@@ -540,7 +698,7 @@ function buildChat(onOpenMcp, getContext) {
                 transcript.scrollTop = transcript.scrollHeight;
             },
             onError: (err) => view.error(String(err || t("生成失败"))),
-        }, { text, mode: planMode, images, context });
+        }, { text, mode: planMode, images, context, resume: resumeId || undefined });
     }
 
     // 「⏸ 暂停」只置后端一个位，SSE 不断：后端在下一个轮次 / 轮询边界把在飞的任务掐掉、发
@@ -607,7 +765,8 @@ function buildChat(onOpenMcp, getContext) {
         const turn = mkEl("div", "neo-agent-turn");
         const meta = mkEl("div", "neo-agent-meta");
         meta.textContent = (currentContext().join(" · ") || t("无当前上下文"))
-            + (planMode === "plan" ? " · " + t("计划") : "");
+            + (planMode === "plan" ? " · " + t("计划") : "")
+            + (resumeId ? " · " + t("接上次会话") : "");
         const ask = mkEl("div", "neo-agent-ask");
         ask.textContent = text;
         turn.appendChild(meta);

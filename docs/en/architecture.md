@@ -245,6 +245,7 @@ uses the `data/` next to the exe.
 | `gallery/oss_cache/` | Cloud preset cache |
 | `recipes/presets/` | Built-in preset recipes (read-only) |
 | `recipes/custom/` | User recipes: `recipe.json` + `assets/` |
+| `agent_sessions/` | Agent session records: one JSON per run (timeline frames + resume text), stored on this machine only, never packaged |
 | `configs/llm_providers.json` | Provider definitions (the single source of truth); the frontend dropdown is built from it |
 | `configs/remote_llm_config.json` | Remote LLM configuration; API keys stay on this machine |
 | `configs/image_gen.json` | Image generation defaults |

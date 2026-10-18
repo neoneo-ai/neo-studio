@@ -184,6 +184,17 @@ Both nodes share the same layout (the Agent shows no status bar):
   (the question, 2-5 options, and a free-text box) whose answer goes back through `POST /neo_agent/answer` — the card
   locks after answering, a 30-minute wait continues with a note that the user never replied, and cancelling by `run_id`
   settles a parked question.
+  The **🗂** header button opens the session list (`GET /neo_agent/sessions`: one row per run, newest first, with time /
+  mode / status / first line / tool count); **Open** replays that session's timeline into the dock **read-only** — a
+  finished loop has no task to cancel and its choice card is fully greyed out. The composer then shows a
+  「↩ continue the last session」 bar: the next **✨ Generate** posts that session's `run_id` as `resume`, and the saved
+  conversation goes back in after the system prompt for the LLM to continue from (resuming into plan mode works the
+  same way — the old system message is never stored, so this turn rebuilds it). One run lands as one JSON in
+  `agent_sessions/` under the data root, and **🗑** deletes the saved history too, behind one in-page confirm.
+  In act mode, a successful `director_save` / `director_copy` broadcasts the director editor's own saved-recipe event:
+  the director page's recipe list picks the new recipe up on the spot and selects it, so opening the card is the editor
+  for segment and parameter edits, and the whole film and single segments reuse that same recipe; in plan mode those
+  two tools stay out of the tool list.
   The numbered directions at the end of the final answer are laid out as full-width clickable rows (the heading must be
   a one-line title — 下一步 / 接下来 / 后续 with 选项 / 方向 / 建议 / 操作, or English Options / Choices / Next options):
   a click fills the composer and posts that sentence as the next turn, which is the same path as typing it, the picked
