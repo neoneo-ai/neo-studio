@@ -262,6 +262,13 @@ class GenerateSegmentsEndpointTests(_FPBase):
         self.assertTrue(data["success"])
         self.assertIn("已确认的故事脚本", _llm_calls[-1]["text"])
 
+    def test_default_segment_seconds_is_five(self):
+        # 缺省 5 秒：出片默认一段短片，多段要调用方点名秒数
+        req = _FakeRequest({"idea": "机器猫"})
+        resp = _run_async(recipes.rs_recipes_director_generate_segments(req))
+        self.assertTrue(json.loads(resp.body)["success"])
+        self.assertIn("约 5 秒", _llm_calls[-1]["text"])
+
     def test_character_refs_attached(self):
         p = os.path.join(_INPUT_DIR, "cat.png")
         with open(p, "wb") as f:

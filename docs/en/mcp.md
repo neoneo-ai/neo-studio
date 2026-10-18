@@ -151,6 +151,10 @@ The image sentence only runs when the machine has an image skill with a `workflo
 - **Async tasks**: `generate_image`, `director_run`, `segment_run`, `assemble_run` only return a `task_id`.
   Poll with `task_status` until `succeeded`, then fetch the output; a full film is a multi-segment long job,
   so never wait on it synchronously.
+- **The default film is one 5-second segment**: an agent asked to make a video plans a single segment of
+  5 seconds with a VDN skill (`minimax_h3_vdn_*`, 8 steps in the skill config) and runs it through
+  `segment_run`; a multi-segment full film only runs when the user asks for one. `director_plan.segment_seconds`
+  defaults to 5, and the non-VDN `minimax_h3_*` skills run 20 steps — twice as slow.
 - **Image generation needs a skill with a template**: `generate_image.skill_id` must be a `list_skills`
   entry with `has_workflow=true`. The MCP layer never picks one for you, and an empty `skill_id` fails with
   that pointer before any request reaches the backend.

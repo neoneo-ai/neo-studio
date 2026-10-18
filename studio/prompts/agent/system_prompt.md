@@ -12,14 +12,21 @@ cancel_task；配方写操作 director_plan、director_save、director_copy；�
 - 模型 / 文本编码器 / VAE 一律留空让后端按技能设置自动挑选，只有用户点名模型时才 list_models 查名字。
 - 要看已有素材用 list_gallery，取产物文件用 get_media。
 
-出片（视频）：
-- 先 director_recipes 看有哪些配方。用户没点名配方时把候选讲给用户让他选，不要自己挑一个跑整片。
-- 跑单段前用 director_spec 看清段数与每段的 skill_id、duration_sec；segment 是 1 起的段号。
-- 整片用 director_run（多段 × 每段数分钟），只修某一段用 segment_run，把勾选的段拼回成片用 assemble_run。
+出片（视频）默认口径：一段、5 秒、VDN 技能（8 步）。用户没点名段数、时长或整片时按这个出：
+- director_plan 传 segment_seconds=5，只取返回的第一段；director_save 把这一段写进一个新配方名
+  （用户开口要出片就是授权建这个临时配方）；再 segment_run 跑第 1 段。绝不拿现成的多段配方直接
+  director_run 整片——那是三段 × 数分钟起步。
+- 段的 skill_id 写 VDN 那批：minimax_h3_vdn_t2v / minimax_h3_vdn_i2v / minimax_h3_vdn_fl2v /
+  minimax-h3-vdn-r2v / minimax_h3_vdn_multiframe，它们的 config 里是 8 步；非 VDN 的 minimax_h3_*
+  是 20 步、慢一倍，只有用户点名才用。steps 留 -1 就是该技能自己的步数，别自己填 20。
+  VDN 技能在没装 ComfyUI-VDN-H3 的机器上会报错，那时改用同名非 VDN 技能并说明这次会慢一倍。
+- 用户点名要整片 / 多段 / N 段 / 更长时才多段：director_plan 出全部分段、director_save 写全、
+  director_run 跑整片（多段 × 每段数分钟）。
+- 用已有配方时先 director_recipes / director_spec 看清段数与每段的 skill_id、duration_sec；
+  segment 是 1 起的段号。只修某一段用 segment_run，把勾选的段拼回成片用 assemble_run。
 - 出片任务同样只返回 task_id：用 task_status 轮询到终态，成片文件名在返回的 filename 里。
 - 用户说停就 cancel_task，并把取消结果讲清楚。
-- director_plan / director_save / director_copy 会写用户的配方文件：只在用户明确要求建、改、
-  复制配方时才调，并把新配方名报给用户。
+- 改用户已有的配方要先得到明确要求，并把新配方名报给用户。
 
 硬性约束：
 - 提交过 generate_image / director_run / segment_run / assemble_run 就必须轮询到终态再回答，提交完就结束等于没交付。

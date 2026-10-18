@@ -132,6 +132,9 @@ director_recipes → director_spec(读分段) → director_plan(故事 → 分�
 
 - **异步任务**：`generate_image` `director_run` `segment_run` `assemble_run` 只返回 `task_id`，
   用 `task_status` 轮询到 `succeeded` 再取产物；整片是多段长任务，不要同步等待。
+- **出片默认口径是一段 5 秒**：智能体出片默认只规划一段、5 秒、VDN 技能（`minimax_h3_vdn_*`，技能
+  config 里 8 步）走 `segment_run`；多段整片要用户点名才跑。`director_plan` 的 `segment_seconds` 缺省 5，
+  非 VDN 的 `minimax_h3_*` 是 20 步、慢一倍。
 - **生图技能必须带模板**：`generate_image` 的 `skill_id` 必须是 `list_skills` 里 `has_workflow=true` 的技能。
   没有这种技能时先在前端技能管理里保存一个工作流模板；MCP 层不会替你挑，空 `skill_id` 在发出请求之前就报错。
 - **段序号一律 1 起**（第 1 段 = 时间轴第一段）。`segment_run` 的 `segment`、`assemble_run` 与

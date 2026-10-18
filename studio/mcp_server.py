@@ -578,11 +578,11 @@ TOOLS = [
     tool("director_recipes", "列出导演配方（type=video_director）", {}),
     tool("director_spec", "读导演配方的 shared 与分段清单（段号 1 起）", {"name": RECIPE}, ("name",),
          {"name": "<director_recipes 里的配方名>"}),
-    tool("director_plan", "故事板规划：mode=plan 主题/脚本→分段 JSON；mode=optimize 单段按 H3 格式重写；mode=modify 按指令改写单段",
+    tool("director_plan", "故事板规划：mode=plan 主题/脚本→分段 JSON（未点名段数时只出 1 段）；mode=optimize 单段按 H3 格式重写；mode=modify 按指令改写单段",
          {"mode": s("string", "plan（默认）/ optimize / modify"),
           "idea": s("string", "plan：故事主题"),
           "script": s("string", "plan：已确认的故事脚本（按原剧情拆分，不改写情节）"),
-          "segment_seconds": s("integer", "plan：每段目标秒数，默认 10"),
+          "segment_seconds": s("integer", "plan：每段目标秒数，默认 5（出片默认一段 5 秒）"),
           "characters": s("array", "plan：角色参考图文件名，锁角色身份"),
           "prompt": s("string", "optimize/modify：该段现有提示词"),
           "instruction": s("string", "modify：修改指令"),
@@ -598,7 +598,7 @@ TOOLS = [
           "segments": [{"prompt": "橘猫走过城市街道，黄昏，镜头缓慢推进", "duration_sec": 5}]}),
     tool("director_copy", "复制配方为新的 custom 配方（解锁内置预设的只读限制），返回新配方名",
          {"name": RECIPE}, ("name",), {"name": "<director_recipes 里的配方名>"}),
-    tool("director_run", "整片入队，立即返回 task_id（多段长任务，用 task_status 轮询，勿同步等待；succeeded 后 filename 是整片 mp4，用 get_media 取）",
+    tool("director_run", "整片入队，立即返回 task_id（多段长任务，用 task_status 轮询，勿同步等待；succeeded 后 filename 是整片 mp4，用 get_media 取）。出片默认口径是一段 5 秒，那种走 segment_run",
          {"recipe": RECIPE,
           "only_segments": s("array", "只跑勾选的段（1 起）；留空跑全部"),
           "seed": s("integer", "种子，-1 随机"),
@@ -606,7 +606,7 @@ TOOLS = [
           "height": s("integer", "高，-1 用配方默认"),
           "continuity": s("boolean", "段间连续性"),
           "context_frames": s("integer", "连续性上下文帧数"),
-          "steps": s("integer", "采样步数，-1 用默认")}, ("recipe",),
+          "steps": s("integer", "采样步数，-1 用各段技能默认（VDN 技能 8 步，非 VDN 20 步）")}, ("recipe",),
          {"recipe": "<director_recipes 里的配方名>"}),
     tool("segment_run", "单段生成 / 重生成（修片主手段），立即返回 task_id（succeeded 后 filename 是该段 mp4）",
          {"recipe": RECIPE, "segment": SEGMENT,
@@ -691,7 +691,9 @@ def serve(ctx, tools, stdin, stdout) -> int:
                 "instructions": "生图与整片都是异步任务：generate_image / director_run / segment_run / "
                                 "assemble_run 只返回 task_id，用 task_status 轮询到 succeeded 再取产物。"
                                 "生图产物是图片，导演 / 单段 / 拼接产物是 mp4 视频，都用 get_media 取（视频只给 URL）。"
-                                "段序号一律 1 起。generate_image 的 skill_id 必须是 list_skills 里 has_workflow=true 的技能。"}})
+                                "段序号一律 1 起。generate_image 的 skill_id 必须是 list_skills 里 has_workflow=true 的技能。"
+                                "出片默认口径是一段 5 秒、VDN 技能（minimax_h3_vdn_*，8 步）走 segment_run；"
+                                "多段整片要用户点名才跑，别拿现成多段配方直接 director_run。"}})
         elif method == "notifications/initialized":
             continue
         elif method == "ping":

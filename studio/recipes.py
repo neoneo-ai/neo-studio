@@ -1585,9 +1585,9 @@ async def rs_recipes_director_generate_segments(request):
     if not idea and not script:
         return web.json_response({"success": False, "error": "请填写故事主题"}, status=400)
     try:
-        seg_sec = int(data.get("segment_seconds") or 10)
+        seg_sec = int(data.get("segment_seconds") or 5)   # 缺省 5 秒：出片默认一段短片，多段由调用方点名
     except (TypeError, ValueError):
-        seg_sec = 10
+        seg_sec = 5
     seg_sec = max(1, min(3600, seg_sec))
 
     parts = [f"目标每段时长：约 {seg_sec} 秒", ""]
