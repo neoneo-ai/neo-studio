@@ -6,8 +6,9 @@
  * mcp_server 的 JSON-RPC 走，右栏不直接调后端函数；右栏不再选技能，界面当前状态（当前页 /
  * 当前导演配方 / 绘画页模式 / 素材库目录）由宿主随请求体交给后端进系统提示词。MCP 区
  * （注册表 / 连接 / 工具调用）交给设置页的「MCP 服务」栏，右栏只在输入框底栏留一个跳转入口。
- * 输入框按 Cline 的口径做：顶部一个主按钮（生成 / 暂停 / 继续），下面只读上下文条、附件图
- * chip、文本框，底栏一行是 📎 附件图、🔌 MCP 与「📝 计划 / ⚡ 执行」开关。时间线里的选项确认卡
+ * 输入框按 Cline 的口径做：只读上下文条、附件图 chip、文本框，底栏一行是 📎 附件图、🔌 MCP、
+ * 「📝 计划 / ⚡ 执行」与右下角主按钮（生成 / 暂停 / 继续）；整行「⏹ 取消」只在跑起来之后出现。
+ * 时间线里的选项确认卡
  * （后端 ask_user 发一问就挂在循环上，点选经 POST /neo_agent/answer 交回去）。
  * stdio 型 MCP 服务是子进程，浏览器起不了，连接只活在桌面端进程里：面板只发 HTTP 打 /neo_mcp/*，
  * 桌面端服务不在时这些接口回 409，面板据此把 MCP 区收成一句离线说明，不给假成功。
@@ -102,17 +103,20 @@ function buildChat(onOpenMcp, getContext) {
     transcript.appendChild(empty);
 
     const composer = mkEl("div", "neo-agent-composer");
-    // Cline 的口径：主按钮在顶上，一个钮三态（生成 / 暂停 / 继续）
-    const run = mkEl("button", "neo-agent-run");
-    run.type = "button";
-    run.textContent = t("✨ 生成");
     // 上下文条只读：宿主（studio-app.js）在切页 / 选配方 / 切绘画模式时把状态交过来
     const ctxBar = mkEl("div", "neo-agent-ctx");
     const chips = mkEl("div", "neo-agent-chips");
     const input = mkEl("textarea", "neo-agent-input");
     input.rows = 3;
     input.placeholder = t("描述要生成的提示词，或要改写的方向；可粘贴 / 拖入图片（含素材库卡片）");
-    // 底栏一行：附件图 + MCP 入口 + 计划 / 执行。计划模式后端只把查询类工具交给 LLM
+    // Cline 的口径：取消只在跑起来之后存在，整行铺在文本框上面，空闲时这一行不占位
+    const cancelBar = mkEl("button", "neo-agent-cancelbar");
+    cancelBar.type = "button";
+    cancelBar.textContent = "⏹ " + t("取消");
+    cancelBar.title = t("取消这次运行：断流并掐掉在跑的任务");
+    cancelBar.hidden = true;
+    cancelBar.onclick = () => stopRun();
+    // 底栏一行：附件图 + MCP 入口 + 计划 / 执行 + 右下角主按钮。计划模式后端只把查询类工具交给 LLM
     const toolbar = mkEl("div", "neo-agent-toolbar");
     const modes = mkEl("div", "neo-agent-modes");
     let mode = "act";
@@ -147,8 +151,12 @@ function buildChat(onOpenMcp, getContext) {
     mcpEntry.textContent = "🔌 MCP";
     mcpEntry.title = t("MCP 服务设置");
     mcpEntry.onclick = () => onOpenMcp && onOpenMcp();
-    toolbar.append(attach, fileInput, mcpEntry, modes);
-    composer.append(run, ctxBar, chips, input, toolbar);
+    // 主按钮在右下角，一个钮三态（生成 / 暂停 / 继续）——空闲时它就是发送键
+    const run = mkEl("button", "neo-agent-run");
+    run.type = "button";
+    run.textContent = t("✨ 生成");
+    toolbar.append(attach, fileInput, mcpEntry, modes, run);
+    composer.append(ctxBar, chips, cancelBar, input, toolbar);
 
     // 界面当前状态：宿主只交事实，这一条把它拼成一行给用户看，随请求体原样交后端
     const PAGE_NAMES = { gallery: "素材库", director: "导演页", paint: "绘画页", skills: "技能页", settings: "设置页" };
@@ -389,6 +397,13 @@ function buildChat(onOpenMcp, getContext) {
             answer(text) {
                 final.innerHTML = renderMarkdown(text);
             },
+            // 「⏹ 取消」落在步骤区，不覆盖最终回答那一行；取消请求本身失败要留在时间线上——
+            // 主按钮在断流收尾时就被「✨ 生成」盖回去，写在那里没人看得见
+            cancelled(note) {
+                const row = mkEl("div", "neo-agent-step");
+                row.textContent = "⏹ " + t("已取消") + (note ? "（" + note + "）" : "");
+                steps.appendChild(row);
+            },
             // 暂停 / 继续各落一行：暂停点在飞的任务由后端掐掉，恢复后要不要再生成由 LLM 定
             paused() {
                 const row = mkEl("div", "neo-agent-step neo-agent-step-paused");
@@ -407,24 +422,30 @@ function buildChat(onOpenMcp, getContext) {
         };
     }
 
-    // 运行中的这一路：暂停 / 继续按 run_id 打后端，句柄挂在这里
+    // 运行中的这一路：暂停 / 继续按 run_id 打后端，取消要断流并停后端循环，句柄挂在这里
     let running = false;
     let paused = false;
+    let controller = null;
     let runId = "";
+    let activeView = null;
 
-    // 主按钮三态：空闲「✨ 生成」、运行中「⏸ 暂停」、暂停中「▶ 继续」。
-    // 要停整条运行就在暂停态再点一次「继续」放它跑完，或在任务卡上「取消任务」掐在跑的任务
+    // 主按钮三态：空闲「✨ 生成」、运行中「⏸ 暂停」、暂停中「▶ 继续」。整行「⏹ 取消」跟着
+    // 运行出现——Cline 的口径：没在跑就没有取消键，空闲时那一行不占位
     function setRunState(next) {
         run.textContent = next === "run" ? t("✨ 生成")
             : next === "paused" ? t("▶ 继续") : t("⏸ 暂停");
         run.classList.toggle("neo-agent-paused", next === "paused");
+        cancelBar.hidden = next === "run";
     }
 
     // 智能体路径：一次请求换一路 SSE。界面当前状态随请求体进后端系统提示词，
     // mode 决定计划还是执行，images 是附件图
     async function runAgent(answer, text, planMode, images, context) {
         const view = agentTimeline(answer);
+        activeView = view;
+        controller = new AbortController();
         await sseStream("/neo_agent/run", {
+            signal: controller.signal,
             onChunk: (frame) => {
                 const kind = frame?.kind || "content";
                 if (kind === "run") { runId = frame.run_id || ""; return; }
@@ -467,6 +488,29 @@ function buildChat(onOpenMcp, getContext) {
         }
         paused = false;
         setRunState("running");
+    }
+
+    // 「⏹ 取消」：断流 + 让后端停循环并掐在跑的任务（后端同时放开 resume，挂在暂停检查点上的
+    // 循环也退得出来）。首帧的 run_id 还没到就只断流——断开路径上后端会兜底掐任务，
+    // 不给一个空 run_id 去打接口
+    async function stopRun() {
+        if (!running || !controller) return;
+        run.disabled = true;
+        cancelBar.hidden = true;
+        run.textContent = t("⏳ 取消中");
+        controller.abort();
+        let note = "";
+        if (runId) {
+            // 断流已经生效，取消请求发不出去也不能演成「取消中」吊在那儿：把失败写进时间线
+            let data = { success: false };
+            try {
+                data = await postJson("/neo_agent/cancel", { run_id: runId });
+            } catch (e) {
+                data.error = String(e);
+            }
+            if (!data.success) note = t("取消失败");
+        }
+        if (activeView) activeView.cancelled(note);
     }
 
 
@@ -518,7 +562,9 @@ function buildChat(onOpenMcp, getContext) {
         } finally {
             running = false;
             paused = false;
+            controller = null;
             runId = "";
+            activeView = null;
             run.disabled = false;
             setRunState("run");
             modeBtns.forEach((b) => { b.disabled = false; });

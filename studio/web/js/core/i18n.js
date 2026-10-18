@@ -1553,6 +1553,8 @@ const EN = {
     "✨ 生成": "✨ Generate",
     "⏸ 暂停": "⏸ Pause",
     "▶ 继续": "▶ Resume",
+    "取消这次运行：断流并掐掉在跑的任务": "Cancel this run: close the stream and kill the task in flight",
+    "⏳ 取消中": "⏳ Cancelling",
     "已暂停": "Paused",
     "已继续": "Resumed",
     "暂停失败": "Pause failed",

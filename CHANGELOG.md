@@ -28,10 +28,13 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   paint mode, gallery directory) as the body's `context`. `studio/agent.py` sanitizes it at the boundary (`page` and
   `paint_mode` against a table, names and paths clipped to 120 characters, non-objects dropped whole, `paint_mode`
   counted only on the paint page) and appends it to the system prompt as facts, never as instructions; the dock shows
-  the same state in a read-only context bar under the main button, refreshed on page switch, recipe selection and
-  paint-mode switch. The main button is now three-state — **✨ 生成** idle, **⏸ 暂停** while running, **▶ 继续** while
-  paused — and the composer keeps one row under the input (📎 attach / 🔌 MCP entry / Plan · Act) with no stop
-  button: a stop button locked while idle is a button nobody can press. The composer and the transcript sit 8px
+  the same state in a read-only context bar on top of the composer, refreshed on page switch, recipe selection and
+  paint-mode switch. The main button sits in the bottom-right corner of the composer's bottom row and is three-state —
+  **✨ 生成** idle, **⏸ 暂停** while running, **▶ 继续** while paused — and a full-width **⏹ 取消** row appears above
+  the textarea only while a run is active: Cline's rule is that with nothing running there is no cancel button, so the
+  row takes no space when idle. Pressing it aborts the stream and posts `POST /neo_agent/cancel` with the `run_id`, the
+  timeline lands a「⏹ 已取消」row, and a cancel request that itself fails is written into that row instead of leaving
+  the button stuck on「⏳ 取消中」. The composer and the transcript sit 8px
   inside the dock — at 4px the generate button and the textarea pressed the dock's border. Pause posts `POST /neo_agent/pause`
   and parks the loop
   at the next turn / poll boundary with the stream open; an in-flight ComfyUI task has no paused state, so the boundary
@@ -41,8 +44,9 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   context block (whitelists, clipping, non-dict input, paint-mode suppression off the paint page), the turn-boundary
   and poll-boundary pause checkpoints, the resume and cancel handoff, and the pause / resume route validation;
   `studio/tests/js/studio-agent-skill.test.mjs` covers the context bar through page and paint-mode switches, the
-  three-state button, the one-row composer with no stop button, the pause / resume requests, and the `paused` /
-  `resumed` timeline rows.
+  three-state button as the rightmost control of the composer row, the cancel row that exists only while running
+  (stream abort, the `run_id` cancel request, the「已取消」row, and a failed cancel request), the pause / resume
+  requests, and the `paused` / `resumed` timeline rows.
 
 - **The agent dock works like Cline: image attachments, Plan / Act, and mid-run choices.** The composer only took
   text, the dock always ran whatever the LLM planned, and a request with several viable directions had to be typed out

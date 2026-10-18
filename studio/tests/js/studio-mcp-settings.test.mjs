@@ -51,8 +51,9 @@ test("右栏：输入框底栏有 MCP 入口，栏内不再有 MCP 区", async (
     assert.ok(entry, "底栏应有 MCP 入口");
     const row = entry.closest(".neo-agent-toolbar");
     const run = dock.querySelector(".neo-agent-run");
-    const kids = [...run.parentNode.children];
-    assert.ok(kids.includes(row) && kids.indexOf(row) > kids.indexOf(run), "入口行应在生成按钮之后");
+    const kids = [...row.children];
+    assert.ok(kids.includes(entry) && kids.includes(run), "MCP 入口与生成按钮应在底栏同一行");
+    assert.ok(kids.indexOf(entry) < kids.indexOf(run), "生成按钮应是底栏最右一个");
 });
 
 test("设置页「MCP 服务」栏：tab 激活时拉注册表并列出服务", async () => {

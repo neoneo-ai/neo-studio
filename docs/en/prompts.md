@@ -158,19 +158,21 @@ Both nodes share the same layout (the Agent shows no status bar):
   and the final answer; a running task card carries a Cancel button. Links inside the timeline stay in the page: a
   result link opens the popup viewer, an external link opens a new window, and the window never navigates to the
   bare image / video page — navigating away and coming back reloads the Studio page, taking the startup status
-  and the whole transcript with it. The main button **✨ Generate** has three states: idle is generate, a running turn
-  turns it into **⏸ Pause** (it posts `/neo_agent/pause` with the `run_id` from the first frame, parks the loop at the
+  and the whole transcript with it. The main button **✨ Generate** sits in the bottom-right corner of the composer's
+  bottom row and has three states: idle is generate, a running turn turns it into **⏸ Pause** (it posts
+  `/neo_agent/pause` with the `run_id` from the first frame, parks the loop at the
   next turn / poll boundary, and kills the in-flight ComfyUI task at that boundary without resending it), and a paused
-  turn turns it into **▶ Resume** (it posts `/neo_agent/resume` to release the checkpoint). Under the input there is
-  only the bottom row (📎 attach image / 🔌 MCP entry / Plan · Act) and no stop button — a stop button that is locked
-  while idle is a button nobody can press; to end a run, release it from the paused state and let it finish, or cancel
-  the running task from its task card. A stream cut by navigating away or closing the page cancels the background loop
-  and the task the same way, so nothing keeps polling once the page is gone.
+  turn turns it into **▶ Resume** (it posts `/neo_agent/resume` to release the checkpoint). A full-width **⏹ Cancel**
+  row appears above the textarea only while a run is active — Cline's rule: with nothing running there is no cancel
+  button, and that row takes no space. Pressing it aborts the stream and posts `/neo_agent/cancel` by `run_id`, so the
+  backend stops the loop, kills the task in flight and releases resume, letting a loop parked on a pause checkpoint exit
+  too, and the timeline lands a「⏹ 已取消 / Cancelled」row. A stream cut by navigating away or closing the page cancels
+  the background loop and the task the same way, so nothing keeps polling once the page is gone.
   The dock starts closed and the header **✨** button opens it; a sash between the page view and the
   dock resizes it (260px floor for the dock, the page view keeps 420px), dragging it narrower than 150px closes the
   column, double-click collapses / expands, `←`/`→` nudges it, and a key in the closed state reopens it at the
   width it had. Open state and width live in `localStorage["neo_studio_agent_dock"]`, and closing keeps the width.
-  The composer: under the main button a read-only context bar (📍 current page · current recipe and segment count ·
+  The composer: on top a read-only context bar (📍 current page · current recipe and segment count ·
   paint mode · gallery directory) that the host refreshes on page switch, recipe selection and paint-mode switch; it
   travels in the request body's `context` into the system prompt, which is how the agent knows which recipe and which
   mode to work around, and it holds nothing clickable. 📎 attachments (paste, drop, or pick, up to 6, with removable

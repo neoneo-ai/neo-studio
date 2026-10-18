@@ -308,8 +308,8 @@
 
 
 
-/* 输入区：Cline 的口径——主按钮在顶上铺满一行，下面只读上下文条、附件 chips、文本框，底栏一行工具。
-   8px 内缩：栏子外壳只给一条 border-left，4px 时主按钮与文本框直接压在栏子边框上 */
+/* 输入区：Cline 的口径——顶上一条只读上下文条、附件 chips、文本框、底栏一行工具，主按钮在底栏右下角；
+   整行取消只在运行中出现。8px 内缩：栏子外壳只给一条 border-left，4px 时按钮与文本框直接压在栏子边框上 */
 .neo-agent-composer {
     display: flex;
     flex-direction: column;
@@ -319,14 +319,16 @@
     border-top: 1px solid var(--neo-vsc-border);
 }
 
-/* 主按钮一钮三态（生成 / 暂停 / 继续），铺满顶行才点得准 */
+/* 主按钮在底栏右下角，一钮三态（生成 / 暂停 / 继续）：空闲时它就是发送键，不铺满一行 */
 .neo-agent-run {
-    height: 28px;
+    height: 22px;
+    padding: 0 10px;
+    margin-left: 4px;
     background: var(--neo-vsc-accent);
-    border: 0;
+    border: 1px solid var(--neo-vsc-accent);
     border-radius: 4px;
     color: #ffffff;
-    font-size: 13px;
+    font-size: 12px;
     cursor: pointer;
 }
 
@@ -338,7 +340,26 @@
 /* 暂停中这一击是「继续」：底色换成警示色，按钮没禁用才点得到 */
 .neo-agent-run.neo-agent-paused {
     background: var(--neo-vsc-warn);
+    border-color: var(--neo-vsc-warn);
     color: #1f1f1f;
+}
+
+/* 整行取消只在跑起来之后存在（Cline 的口径）：铺在文本框上面，空闲时 hidden 不占位。
+   类名与任务卡上那个小取消键（.neo-agent-cancel）分开，两边样式互不吃 */
+.neo-agent-cancelbar {
+    height: 26px;
+    background: none;
+    border: 1px solid var(--neo-vsc-accent);
+    border-radius: 4px;
+    color: var(--neo-vsc-fg);
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.neo-agent-cancelbar:hover,
+.neo-agent-cancelbar:focus-visible {
+    background: var(--neo-vsc-bg-alt);
+    outline: none;
 }
 
 /* 只读上下文条：宿主交来的界面当前状态，右栏只画不解释，用户要改就去对应的页 */

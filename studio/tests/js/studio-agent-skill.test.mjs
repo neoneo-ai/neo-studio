@@ -50,6 +50,7 @@ async function openStudio(hash, open = true) {
 const dock = () => document.querySelector("#ns-agent-dock");
 const ctxBar = () => dock().querySelector(".neo-agent-ctx");
 const runBtn = () => dock().querySelector(".neo-agent-run");
+const cancelBar = () => dock().querySelector(".neo-agent-cancelbar");
 const meta = () => dock().querySelector(".neo-agent-meta");
 const finalRow = () => dock().querySelector(".neo-agent-answer-body");  // 智能体时间线的最终回答
 const toolCard = () => dock().querySelector(".neo-agent-tool");
@@ -81,15 +82,16 @@ const FILM_RESULT = {
     media: [{ kind: "video", title: "cat_walk.mp4", url: "/view?filename=cat_walk.mp4&subfolder=NeoDirector%2Fcat_walk&type=output" }],
 };
 
-test("右栏没有技能下拉：主按钮在顶上，上下文条画出宿主交来的界面状态", async () => {
+test("右栏没有技能下拉：主按钮在底栏右下角，上下文条画出宿主交来的界面状态", async () => {
     mountStudio();
     await openStudio("#/gallery");
 
     assert.equal(dock().querySelector(".neo-agent-skill"), null, "右栏不该再有技能下拉");
-    const composer = dock().querySelector(".neo-agent-composer");
-    assert.equal(composer.children[0], runBtn(), "主按钮应是输入区第一个元素");
+    const toolbar = dock().querySelector(".neo-agent-toolbar");
+    assert.equal(toolbar.lastElementChild, runBtn(), "主按钮应是底栏最右一个");
     assert.equal(runBtn().textContent, "✨ 生成", "空闲时主按钮是生成");
     assert.ok(ctxBar().textContent.includes("素材库"), `上下文条应画出当前页：${ctxBar().textContent}`);
+    assert.ok(cancelBar().hidden, "没跑起来就没有取消键：空闲时那一行不占位");
 });
 
 test("点生成：请求带界面上下文，出计划行与最终回答，面板不发流式提示词", async () => {
@@ -304,6 +306,7 @@ test("运行中主按钮是暂停态、可点：第二击发暂停，不断流�
 
     assert.equal(runBtn().disabled, false, "运行中按钮必须可点：锁掉等于把暂停键从界面上摘掉");
     assert.equal(runBtn().textContent, "⏸ 暂停", "运行中主按钮应是暂停");
+    assert.ok(!cancelBar().hidden, "跑起来了取消键就要在：Cline 只在运行中给一行取消");
     assert.equal(cancelCalls().length, 0, "没点第二击不该发取消请求");
 
     click(runBtn());
@@ -354,6 +357,49 @@ test("后端 paused / resumed 帧：时间线各落一行，主按钮跟着翻�
     assert.ok(rows.some((x) => x.includes("已继续")), `应有已继续行：${rows.join(" | ")}`);
     assert.ok(dock().querySelector(".neo-agent-step-paused"), "已暂停行应带暂停样式");
     assert.equal(runBtn().textContent, "✨ 生成", "收场后主按钮回到生成");
+});
+
+test("点整行取消：断流并按 run_id 发取消，时间线补一行已取消，取消行收掉", async () => {
+    mountStudio();
+    await openStudio("#/gallery");
+    let signal = null;
+    mockPendingRunStream((s) => { signal = s; });
+    mockRoute("/neo_agent/cancel", () => jsonResponse({ success: true, run_id: RUN_ID, task_id: "" }));
+
+    inputText(dock().querySelector(".neo-agent-input"), "一只橘猫");
+    click(runBtn());
+    await flush(40);
+    assert.ok(!signal.aborted, "没点取消时这条流不能被断");
+
+    click(cancelBar());
+    await flush(40);
+
+    assert.ok(signal.aborted, "取消必须断掉 SSE 流");
+    const calls = cancelCalls();
+    assert.equal(calls.length, 1, "点取消应发一次 /neo_agent/cancel");
+    assert.deepEqual(calls[0].body, { run_id: RUN_ID }, "取消请求应带上后端首帧给的 run_id");
+    const rows = [...dock().querySelectorAll(".neo-agent-step")].map((e) => e.textContent);
+    assert.ok(rows.some((x) => x.includes("已取消")), `应有已取消行：${rows.join(" | ")}`);
+    assert.equal(dock().querySelector(".neo-agent-answer-error"), null, "断流是预期收场，不该报生成失败");
+    assert.ok(cancelBar().hidden, "取消已按下，那一行不该留在收场后的输入区");
+    assert.equal(runBtn().disabled, true, "取消中不许再开一路");
+});
+
+test("取消请求失败：时间线写明取消失败，不演成一直在取消", async () => {
+    mountStudio();
+    await openStudio("#/gallery");
+    mockPendingRunStream(() => {});
+    mockRoute("/neo_agent/cancel", () => jsonResponse({ success: false, error: "这次运行已经收场" }, 404));
+
+    inputText(dock().querySelector(".neo-agent-input"), "一只橘猫");
+    click(runBtn());
+    await flush(40);
+    click(cancelBar());
+    await flush(40);
+
+    const rows = [...dock().querySelectorAll(".neo-agent-step")].map((e) => e.textContent);
+    assert.ok(rows.some((x) => x.includes("已取消") && x.includes("取消失败")),
+        `取消请求失败要留在时间线上：${rows.join(" | ")}`);
 });
 
 test("后端发出取消帧：时间线收场，生成键回到✨ 生成", async () => {
@@ -486,21 +532,21 @@ function mockPendingRunFrames(frames) {
     }));
 }
 
-test("输入区：主按钮在顶、上下文条只读、底栏一行有附件图 / MCP 入口 / 模式开关，默认停在执行", async () => {
+test("输入区：上下文条只读、取消行只在运行中出现、底栏一行有附件图 / MCP 入口 / 模式开关 / 主按钮，默认停在执行", async () => {
     mountStudio();
     await openStudio("#/gallery");
 
     const composer = dock().querySelector(".neo-agent-composer");
-    assert.equal(composer.children[0], runBtn(), "主按钮应铺在输入区顶上");
-    assert.equal(composer.children[1], ctxBar(), "主按钮下面应是只读上下文条");
+    assert.equal(composer.children[0], ctxBar(), "输入区顶上应是只读上下文条");
+    assert.equal(composer.children[2], cancelBar(), "取消行应铺在文本框上面");
+    assert.equal(composer.children[3], dock().querySelector(".neo-agent-input"), "取消行下面应是文本框");
+    assert.equal(composer.lastElementChild, composer.querySelector(".neo-agent-toolbar"),
+        "输入框下面只该有底栏这一行");
     assert.deepEqual(modeBtns().map((b) => b.dataset.mode), ["plan", "act"], "应有计划与执行两档");
     assert.ok(modeBtns()[1].classList.contains("active"), "默认应停在执行模式");
-    const toolbar = composer.querySelector(".neo-agent-toolbar");
     assert.ok(dock().querySelector(".neo-agent-attach"), "应有附件图入口");
     assert.ok(dock().querySelector(".neo-agent-entry"), "应有 MCP 入口");
-    assert.equal(dock().querySelector(".neo-agent-stop"), null, "底栏不该再有停止键");
-    // 输入框下面只有一行：底栏就是 composer 的最后一个子元素，没有第二条 foot 行
-    assert.equal(composer.lastElementChild, toolbar, "输入框下面只该有底栏这一行");
+    assert.ok(cancelBar().hidden, "空闲时没有取消键");
     const file = dock().querySelector(".neo-agent-file");
     assert.equal(file.type, "file", "附件入口应挂在文件选择上");
     assert.equal(file.accept, "image/*", "附件只收图片");
