@@ -161,12 +161,11 @@ Both nodes share the same layout (the Agent shows no status bar):
   and the whole transcript with it. The main button **✨ Generate** has three states: idle is generate, a running turn
   turns it into **⏸ Pause** (it posts `/neo_agent/pause` with the `run_id` from the first frame, parks the loop at the
   next turn / poll boundary, and kills the in-flight ComfyUI task at that boundary without resending it), and a paused
-  turn turns it into **▶ Resume** (it posts `/neo_agent/resume` to release the checkpoint). **⏹ Stop** sits in the
-  bottom row of the composer: it posts `/neo_agent/cancel` with the `run_id`, aborts the stream, makes the backend end
-  at the next turn / poll boundary and kill the in-flight ComfyUI task, and the timeline gets a "Cancelled" line (a
-  cancel request that itself fails is labelled "Cancelled (Failed to cancel)" — the stream abort already stopped the
-  run); a stream cut by navigating away or closing the page cancels the background loop and the task the same way, so
-  nothing keeps polling once the page is gone.
+  turn turns it into **▶ Resume** (it posts `/neo_agent/resume` to release the checkpoint). Under the input there is
+  only the bottom row (📎 attach image / 🔌 MCP entry / Plan · Act) and no stop button — a stop button that is locked
+  while idle is a button nobody can press; to end a run, release it from the paused state and let it finish, or cancel
+  the running task from its task card. A stream cut by navigating away or closing the page cancels the background loop
+  and the task the same way, so nothing keeps polling once the page is gone.
   The dock starts closed and the header **✨** button opens it; a sash between the page view and the
   dock resizes it (260px floor for the dock, the page view keeps 420px), dragging it narrower than 150px closes the
   column, double-click collapses / expands, `←`/`→` nudges it, and a key in the closed state reopens it at the

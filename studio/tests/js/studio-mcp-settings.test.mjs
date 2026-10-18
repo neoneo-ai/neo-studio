@@ -39,7 +39,7 @@ async function openStudio(hash) {
 const mcpTab = () => document.querySelector('.ns-settings-tab[data-key="mcp"]');
 const mcpSection = () => document.querySelector(".ns-mcp-section");
 
-test("右栏：生成按钮下面有 MCP 入口，栏内不再有 MCP 区", async () => {
+test("右栏：输入框底栏有 MCP 入口，栏内不再有 MCP 区", async () => {
     mountStudio();
     await openStudio("#/gallery");
 
@@ -48,11 +48,11 @@ test("右栏：生成按钮下面有 MCP 入口，栏内不再有 MCP 区", asyn
     assert.ok(!dock.querySelector(".neo-agent-mcp"), "右栏不应再有 MCP 区");
 
     const entry = dock.querySelector(".neo-agent-entry");
-    assert.ok(entry, "生成按钮下面应有 MCP 入口");
-    const foot = entry.closest(".neo-agent-foot");
+    assert.ok(entry, "底栏应有 MCP 入口");
+    const row = entry.closest(".neo-agent-toolbar");
     const run = dock.querySelector(".neo-agent-run");
     const kids = [...run.parentNode.children];
-    assert.ok(kids.includes(foot) && kids.indexOf(foot) > kids.indexOf(run), "入口行应在生成按钮之后");
+    assert.ok(kids.includes(row) && kids.indexOf(row) > kids.indexOf(run), "入口行应在生成按钮之后");
 });
 
 test("设置页「MCP 服务」栏：tab 激活时拉注册表并列出服务", async () => {

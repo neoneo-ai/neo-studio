@@ -14,7 +14,10 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   counted only on the paint page) and appends it to the system prompt as facts, never as instructions; the dock shows
   the same state in a read-only context bar under the main button, refreshed on page switch, recipe selection and
   paint-mode switch. The main button is now three-state — **✨ 生成** idle, **⏸ 暂停** while running, **▶ 继续** while
-  paused — with **⏹ 停止** moved to the composer's bottom row. Pause posts `POST /neo_agent/pause` and parks the loop
+  paused — and the composer keeps one row under the input (📎 attach / 🔌 MCP entry / Plan · Act) with no stop
+  button: a stop button locked while idle is a button nobody can press. The composer and the transcript sit 8px
+  inside the dock — at 4px the generate button and the textarea pressed the dock's border. Pause posts `POST /neo_agent/pause`
+  and parks the loop
   at the next turn / poll boundary with the stream open; an in-flight ComfyUI task has no paused state, so the boundary
   cancels it and the resumed loop does not resend it, and 30 minutes without a resume ends the run as a paused
   timeout. Resume posts `POST /neo_agent/resume` and is a no-op when nothing is paused, so repeated clicks never push a
@@ -22,7 +25,8 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   context block (whitelists, clipping, non-dict input, paint-mode suppression off the paint page), the turn-boundary
   and poll-boundary pause checkpoints, the resume and cancel handoff, and the pause / resume route validation;
   `studio/tests/js/studio-agent-skill.test.mjs` covers the context bar through page and paint-mode switches, the
-  three-state button, the pause / resume / stop requests, and the `paused` / `resumed` timeline rows.
+  three-state button, the one-row composer with no stop button, the pause / resume requests, and the `paused` /
+  `resumed` timeline rows.
 
 - **The agent dock works like Cline: image attachments, Plan / Act, and mid-run choices.** The composer only took
   text, the dock always ran whatever the LLM planned, and a request with several viable directions had to be typed out
@@ -58,20 +62,13 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   `studio/tests/test_agent.py` covers the media items; `studio/tests/js/studio-agent-skill.test.mjs` covers the
   popup form, the film thumbnail and the link interception.
 
-- **The agent dock can stop a run.** **✨ Generate** stayed disabled for the whole run, so a film that polls for
-  up to 2400 seconds had no stop button in the dock — only the per-task **取消任务** on a running task card, and
-  closing the dock left the loop running. The button is now one key with two states: idle **✨ Generate**, running
-  **⏳ 生成中** (clickable, stop styling). The run's first SSE frame carries a `run_id`; clicking the running
-  button aborts the stream and posts `/neo_agent/cancel` with that `run_id`, which sets the stop event, kills the
-  in-flight ComfyUI task, and ends the loop at the next turn / poll boundary with a **已取消** timeline line. A
-  stream cut by navigating away or closing the page cancels the worker on the consumer-disconnect path and kills the
-  task there, so no loop keeps burning turns and no poller keeps hitting the queue after the page is gone. A cancel
-  request that itself fails (the run already ended, the desktop service offline) lands on the timeline as
-  **已取消（取消失败）**: the stream abort already stopped the run, and the button's **⏳ 取消中** label is
-  overwritten by the closing **✨ Generate**, so the timeline is the only place that failure stays visible.
-  `studio/tests/test_agent.py` covers the turn-boundary stop, the poll-boundary task cancel, the `run_id`
-  validation and the worker cancel; `studio/tests/js/studio-agent-skill.test.mjs` covers the clickable running
-  button, the abort plus cancel request, the cancelled line, and the button returning to **✨ Generate**.
+- **A run can be stopped, and a closed page stops it.** A film polls for up to 2400 seconds, so a dock with no way
+  out left the loop burning turns. The run's first SSE frame carries a `run_id`; a running task card keeps a
+  **取消任务** button that posts `/neo_agent/cancel` with that `task_id`, and a stream cut by navigating away or
+  closing the page cancels the worker on the consumer-disconnect path and kills the in-flight ComfyUI task there,
+  so no loop keeps burning turns and no poller keeps hitting the queue after the page is gone.
+  `studio/tests/test_agent.py` covers the poll-boundary task cancel, the `run_id` validation and the worker cancel;
+  `studio/tests/js/studio-agent-skill.test.mjs` covers the task-card cancel request.
 
 - **The right agent dock always failed with a remote LLM.** The agent sent the MCP `tools/list` payload to the
   provider untouched (`name` / `inputSchema` / `_meta`), llama-server looks for a `type` key on every entry and
