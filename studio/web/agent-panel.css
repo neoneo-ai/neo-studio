@@ -221,6 +221,11 @@
     word-break: break-word;
 }
 
+/* 暂停那一行要显眼：用户点完暂停得看得见循环确实停在检查点上 */
+.neo-agent-step-paused {
+    color: var(--neo-vsc-warn);
+}
+
 .neo-agent-tool {
     display: flex;
     flex-direction: column;
@@ -303,7 +308,7 @@
 
 
 
-/* 输入区 */
+/* 输入区：Cline 的口径——主按钮在顶上铺满一行，下面只读上下文条、附件 chips、文本框，底栏一行工具 */
 .neo-agent-composer {
     display: flex;
     flex-direction: column;
@@ -313,14 +318,38 @@
     border-top: 1px solid var(--neo-vsc-border);
 }
 
-.neo-agent-skill {
-    height: 24px;
-    padding: 0 4px;
-    background: var(--neo-vsc-bg-alt);
-    border: 1px solid var(--neo-vsc-border);
+/* 主按钮一钮三态（生成 / 暂停 / 继续），铺满顶行才点得准 */
+.neo-agent-run {
+    height: 28px;
+    background: var(--neo-vsc-accent);
+    border: 0;
     border-radius: 4px;
-    color: var(--neo-vsc-fg);
-    font-size: 12px;
+    color: #ffffff;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.neo-agent-run:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+/* 暂停中这一击是「继续」：底色换成警示色，按钮没禁用才点得到 */
+.neo-agent-run.neo-agent-paused {
+    background: var(--neo-vsc-warn);
+    color: #1f1f1f;
+}
+
+/* 只读上下文条：宿主交来的界面当前状态，右栏只画不解释，用户要改就去对应的页 */
+.neo-agent-ctx {
+    padding: 3px 4px;
+    background: var(--neo-vsc-bg-alt);
+    border: 1px dashed var(--neo-vsc-border);
+    border-radius: 4px;
+    font-size: 11px;
+    color: var(--neo-vsc-fg-dim);
+    white-space: pre-wrap;
+    word-break: break-word;
 }
 
 .neo-agent-input {
@@ -336,35 +365,13 @@
 }
 
 .neo-agent-input:focus,
-.neo-agent-skill:focus,
 .neo-agent-json:focus,
 .neo-agent-tool-args:focus {
     border-color: var(--neo-vsc-accent);
     outline: none;
 }
 
-.neo-agent-run {
-    height: 24px;
-    background: var(--neo-vsc-accent);
-    border: 0;
-    border-radius: 4px;
-    color: #ffffff;
-    font-size: 12px;
-    cursor: pointer;
-}
-
-.neo-agent-run:disabled {
-    opacity: 0.6;
-    cursor: default;
-}
-
-/* 运行中这一击就是停止：底色换成警示色，按钮没禁用才点得到 */
-.neo-agent-run.ns-agent-stop {
-    background: var(--neo-vsc-warn);
-    color: #1f1f1f;
-}
-
-/* 输入区顶部一行：计划 / 执行 分段开关 + 附件图入口 */
+/* 输入区底栏一行：附件图 + 停止 + 计划 / 执行（模式开关靠右，运行中锁） */
 .neo-agent-toolbar {
     display: flex;
     align-items: center;
@@ -374,10 +381,12 @@
 .neo-agent-modes {
     display: flex;
     gap: 2px;
+    margin-left: auto;
 }
 
 .neo-agent-mode-btn,
-.neo-agent-attach {
+.neo-agent-attach,
+.neo-agent-stop {
     height: 22px;
     padding: 0 6px;
     background: var(--neo-vsc-bg-alt);
@@ -394,11 +403,13 @@
 }
 
 .neo-agent-mode-btn:hover,
-.neo-agent-attach:hover {
+.neo-agent-attach:hover,
+.neo-agent-stop:hover:not(:disabled) {
     color: var(--neo-vsc-fg);
 }
 
-.neo-agent-mode-btn:disabled {
+.neo-agent-mode-btn:disabled,
+.neo-agent-stop:disabled {
     opacity: 0.6;
     cursor: default;
 }

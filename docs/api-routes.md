@@ -177,18 +177,27 @@ Neo Studio 独立页面（`web/studio/index.html`）的后端。素材 / 生图 
 
 | 方法 | 路由 | 说明 |
 |------|------|------|
-| POST | `/neo_agent/run` | 智能体一轮对话，SSE 时间线；body `{text, skill_id, mode, images}`（`mode` 只认 `plan` / `act`，缺省 `act`；`images` 是输入框附件图，按图片源口径给，最多 6 张），首帧 `run`（带 `run_id`，取消整条循环与回答问句都要用），帧 `plan` / `tool_call` / `status` / `tool_result` / `ask` / `content`，收尾 `[ERROR]` / `[DONE]` |
+| POST | `/neo_agent/run` | 智能体一轮对话，SSE 时间线；body `{text, mode, images, context}`（`mode` 只认 `plan` / `act`，缺省 `act`；`images` 是输入框附件图，按图片源口径给，最多 6 张；`context` 是界面当前状态，非 dict 整块丢掉），首帧 `run`（带 `run_id`，取消 / 暂停 / 继续整条循环与回答问句都要用），帧 `plan` / `tool_call` / `status` / `tool_result` / `ask` / `paused` / `resumed` / `content`，收尾 `[ERROR]` / `[DONE]` |
 | POST | `/neo_agent/answer` | 回答 `ask` 帧：body `{run_id, ask_id, text}`，把用户选的方向交回正等在 `ask_user` 上的循环；`run_id` / `ask_id` 只收 `run` / `ask` 帧发过的形态，运行收场 404、问句已收场 404 |
 | POST | `/neo_agent/cancel` | 取消：带 `run_id` 停整条智能体循环并掐掉在跑的任务（`run_id` 只收 `run` 帧发过的形态，查不到 404）；带 `task_id` 只掐那一个任务（走 MCP `cancel_task`，图片 / 整片 / 单段 / 拼接四类由协议自己找路由），`task_id` 只收 UUID 形态 |
+| POST | `/neo_agent/pause` | 暂停：body `{run_id}`（校验同 cancel），让循环停在下一个轮次 / 轮询边界，SSE 开着不收尾；在飞的 ComfyUI 任务没有暂停态，边界上掐掉它并交回 `cancelled`，恢复后不自动重发 |
+| POST | `/neo_agent/resume` | 继续：body `{run_id}`（校验同 cancel），放开正等在暂停检查点上的循环；没在暂停时是空操作，重复点「继续」不会把运行推过检查点 |
 
-- `skill_id` 非空时后端按技能直出图、不叫 LLM；为空时由 LLM 规划并调工具，轮次上限 12。
+- 一轮对话全程由 LLM 规划并调工具，轮次上限 12；右栏没有技能选择器，用哪个技能由 LLM 自己查
+  `list_skills` 定，`context` 就是它判断「围绕哪个配方、哪种绘画模式干活」的唯一依据。
+- `context` 只当事实进系统提示词，不当指令：`page` 只认 `gallery` / `director` / `paint` / `skills` /
+  `settings`，`paint_mode` 只在 `page=paint` 时生效且只认 `text` / `edit`，配方名与素材库目录按 120 字裁剪，
+  `segments` 只取整数；表外的值整行丢掉。
 - `mode=plan` 是计划模式：`generate_image` / `director_run` / `segment_run` / `assemble_run` /
   `director_save` / `director_copy` / `cancel_task` 不进 LLM 的工具表，硬调也拒回错误；
   查询类工具照旧可用。
 - `ask_user` 是右栏伪工具，不在 MCP 注册表里：循环发 `ask` 帧（带 `ask_id`、问题与 2-5 个选项）
   后挂在等回答上，`/neo_agent/answer` 交回答案，30 分钟无回应就按「用户没回应」继续；
   按 `run_id` 取消时挂着的问句一并交收。
-- 附件图只进首个 user 消息（多模态），技能直出图那条路用不上附件图。粘贴与点选的图按 `kind:"data"`
+- 暂停与停止都只在轮次与工具边界生效：LLM 的单轮请求在飞时掐不掉，回来后的第一个边界收场。
+  暂停是发 `paused` 帧后挂在检查点上等 `/neo_agent/resume`，30 分钟无「继续」按「暂停超时」收场；
+  取消会同时放开 `resume`，正挂在检查点上的循环也退得出来，时间线补一行「已取消」。
+- 附件图只进首个 user 消息（多模态）。粘贴与点选的图按 `kind:"data"`
   的 data URI 给；从素材库卡片拖入的图先经 `/neo_gallery/copy_to_input` 落进 `input/`，再按
   `kind:"input"` 的文件名给。右栏只收后端解得动的图片后缀，素材库里的视频 / 音频卡片在拖入这一步就挡掉。
 - `generate_image` / `director_run` / `segment_run` / `assemble_run` 只回 `task_id`，循环里轮询 `task_status` 到终态，
@@ -291,7 +300,8 @@ LLM 模式与配置见 [llm.md](llm.md)，技能设计见 [skills.md](skills.md)
 
 - 生成与队列类接口必须 ComfyUI 在跑：`/neo_image_gen/generate`、`/neo_video_gen/run_segment`
   `assemble_segments` `storyboard_generate`、`/neo_voice/generate`、`/neo_studio/director/generate`、
-  `/neo_agent/run` `/neo_agent/cancel` `/neo_agent/answer`、`/neo_studio/mem_stats`、`/neo_nodes/repair`。
+  `/neo_agent/run` `/neo_agent/cancel` `/neo_agent/answer` `/neo_agent/pause` `/neo_agent/resume`、
+  `/neo_studio/mem_stats`、`/neo_nodes/repair`。
 - 缩略图与 ComfyUI 共用 `gallery/thumbnails` 缓存；两边同时跑时同一张图可能各生成一次。
 - 目录取 `folder_paths` 的默认 `output` / `input` / `user`：外部用 `--output-directory` 启动 ComfyUI 时，
   桌面端浏览仍指向默认目录。

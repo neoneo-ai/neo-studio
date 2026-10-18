@@ -147,29 +147,35 @@ Both nodes share the same layout (the Agent shows no status bar):
   hovering a row shows a floating preview card (generation skills = configuration summary, the rest = an
   excerpt of the skill.md body), clicking the card opens the detail window; + New Skill / ⬆ ZIP /
   ⬆ Folder at the bottom of the dropdown are the skill-management entries.
-  The first option is the empty "Default" entry (labelled "Auto" in the desktop agent dock): with no skill
+  The first option is the empty "Default" entry: with no skill
   selected the backend decides on its own whether a template applies, and an image with no skill routes to captioning.
   In the desktop agent dock, image and film generation both go through the backend agent
-  (`POST /neo_agent/run`, an SSE timeline — see [api-routes.md](api-routes.md)): a picked image skill makes the
-  backend generate straight from it without calling the LLM, and the empty "Auto" entry lets the LLM plan and call
-  MCP tools, with the tool list being the whole MCP registry (the `director_run` / `segment_run` / `assemble_run`
-  film chain included). The transcript shows the plan line, one card per tool call (arguments / progress /
-  result with result thumbnails — an image skill lays out the picture and a film task a muted clip, and a click
-  opens the popup viewer for the full image or the playback instead of taking over the whole window) and the
-  final answer; a running task card carries a Cancel button. Links inside the timeline stay in the page: a
+  (`POST /neo_agent/run`, an SSE timeline — see [api-routes.md](api-routes.md)): the dock has no skill picker, the
+  LLM picks the skill itself through `list_skills`, and the tool list is the whole MCP registry (the `director_run` /
+  `segment_run` / `assemble_run` film chain included). The transcript shows the plan line, one card per tool call
+  (arguments / progress / result with result thumbnails — an image skill lays out the picture and a film task a muted
+  clip, and a click opens the popup viewer for the full image or the playback instead of taking over the whole window)
+  and the final answer; a running task card carries a Cancel button. Links inside the timeline stay in the page: a
   result link opens the popup viewer, an external link opens a new window, and the window never navigates to the
   bare image / video page — navigating away and coming back reloads the Studio page, taking the startup status
-  and the whole transcript with it. While a run is in flight **✨ Generate** is the stop button: it posts
-  `/neo_agent/cancel` with the `run_id` from the first frame, aborts the stream, makes the backend end at the next
-  turn / poll boundary and kill the in-flight ComfyUI task, and the timeline gets a "Cancelled" line (a cancel
-  request that itself fails is labelled "Cancelled (Failed to cancel)" — the stream abort already stopped the run);
-  a stream cut by navigating away or closing the page cancels the background loop and the task the same way, so
+  and the whole transcript with it. The main button **✨ Generate** has three states: idle is generate, a running turn
+  turns it into **⏸ Pause** (it posts `/neo_agent/pause` with the `run_id` from the first frame, parks the loop at the
+  next turn / poll boundary, and kills the in-flight ComfyUI task at that boundary without resending it), and a paused
+  turn turns it into **▶ Resume** (it posts `/neo_agent/resume` to release the checkpoint). **⏹ Stop** sits in the
+  bottom row of the composer: it posts `/neo_agent/cancel` with the `run_id`, aborts the stream, makes the backend end
+  at the next turn / poll boundary and kill the in-flight ComfyUI task, and the timeline gets a "Cancelled" line (a
+  cancel request that itself fails is labelled "Cancelled (Failed to cancel)" — the stream abort already stopped the
+  run); a stream cut by navigating away or closing the page cancels the background loop and the task the same way, so
   nothing keeps polling once the page is gone.
   The dock starts closed and the header **✨** button opens it; a sash between the page view and the
   dock resizes it (260px floor for the dock, the page view keeps 420px), dragging it narrower than 150px closes the
   column, double-click collapses / expands, `←`/`→` nudges it, and a key in the closed state reopens it at the
   width it had. Open state and width live in `localStorage["neo_studio_agent_dock"]`, and closing keeps the width.
-  The composer does three things: 📎 attachments (paste, drop, or pick, up to 6, with removable thumbnails) travel in
+  The composer: under the main button a read-only context bar (📍 current page · current recipe and segment count ·
+  paint mode · gallery directory) that the host refreshes on page switch, recipe selection and paint-mode switch; it
+  travels in the request body's `context` into the system prompt, which is how the agent knows which recipe and which
+  mode to work around, and it holds nothing clickable. 📎 attachments (paste, drop, or pick, up to 6, with removable
+  thumbnails) travel in
   the request body as multimodal content, so an image with no text is a valid turn; the **📝 Plan / ⚡ Act** switch
   decides whether this turn runs anything — in plan mode the generation and recipe-writing tools stay out of the LLM's
   tool list, a call that arrives anyway is refused, and the turn ends with a step-by-step plan naming the tools and

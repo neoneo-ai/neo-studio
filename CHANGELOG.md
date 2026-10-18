@@ -4,6 +4,26 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **The agent dock stops guessing which recipe and which mode the request is about.** The dock had a skill dropdown
+  and the backend generated straight from a picked skill, so a picked skill bypassed the LLM entirely, and the LLM had
+  no idea what was on screen: with the director page open it planned a one-segment film, and with the paint page in
+  image-edit mode it planned a text-to-image run. The dropdown is gone — every turn is planned by the LLM through
+  `list_skills` — and the host now hands the dock the current UI state (page, selected recipe and its segment count,
+  paint mode, gallery directory) as the body's `context`. `studio/agent.py` sanitizes it at the boundary (`page` and
+  `paint_mode` against a table, names and paths clipped to 120 characters, non-objects dropped whole, `paint_mode`
+  counted only on the paint page) and appends it to the system prompt as facts, never as instructions; the dock shows
+  the same state in a read-only context bar under the main button, refreshed on page switch, recipe selection and
+  paint-mode switch. The main button is now three-state — **✨ 生成** idle, **⏸ 暂停** while running, **▶ 继续** while
+  paused — with **⏹ 停止** moved to the composer's bottom row. Pause posts `POST /neo_agent/pause` and parks the loop
+  at the next turn / poll boundary with the stream open; an in-flight ComfyUI task has no paused state, so the boundary
+  cancels it and the resumed loop does not resend it, and 30 minutes without a resume ends the run as a paused
+  timeout. Resume posts `POST /neo_agent/resume` and is a no-op when nothing is paused, so repeated clicks never push a
+  run past the checkpoint; cancel releases `resume` too, so a parked loop exits. `studio/tests/test_agent.py` covers the
+  context block (whitelists, clipping, non-dict input, paint-mode suppression off the paint page), the turn-boundary
+  and poll-boundary pause checkpoints, the resume and cancel handoff, and the pause / resume route validation;
+  `studio/tests/js/studio-agent-skill.test.mjs` covers the context bar through page and paint-mode switches, the
+  three-state button, the pause / resume / stop requests, and the `paused` / `resumed` timeline rows.
+
 - **The agent dock works like Cline: image attachments, Plan / Act, and mid-run choices.** The composer only took
   text, the dock always ran whatever the LLM planned, and a request with several viable directions had to be typed out
   by hand after the run ended. The composer now takes attachments — 📎, paste, or drag a file in, up to 6, with

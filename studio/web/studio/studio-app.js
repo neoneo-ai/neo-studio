@@ -24,6 +24,20 @@ const view = document.getElementById("ns-view");
 let directorPanelOpts = null;   // 导演页配方面板选项（buildDirector 设置；含 onSelect 回传选中配方）
 let onDirectorShown = null;     // 进导演页时补拉的活：隐藏期间跳过的 director_spec 在进本页时补一次
 
+// ====== 右栏智能体的界面上下文：宿主只交事实，右栏画进上下文条并随请求体交后端进系统提示词 ======
+// 素材库目录在取用时现读画廊：画廊导航没有对外事件，读一次现值比在 gallery.js 里插监听便宜
+const agentCtx = { page: "gallery", recipe: "", segments: 0, paint_mode: "text", gallery_path: "" };
+let agentCtxRefresh = null;     // 右栏展开时挂上的重画回调，收起时没有右栏可通知
+
+function notifyAgentCtx() { if (agentCtxRefresh) agentCtxRefresh(); }
+
+function agentContext() {
+    const view = app.neoGallery?.currentView;
+    agentCtx.gallery_path = (view?.mode === "directory" && view.source)
+        ? [view.source, ...(view.categoryPath || [])].join("/") : "";
+    return { ...agentCtx };
+}
+
 // ====== 视图缓存：每个 tab 只挂载一次，切换时显隐（保留画廊滚动/编辑状态） ======
 const views = new Map();
 
@@ -49,6 +63,8 @@ function showView(name) {
         if (tab && name !== "gallery") tab.activeSidebarTabId = null;
     }
     currentView = name;
+    agentCtx.page = name;
+    notifyAgentCtx();
     setMemActive(name === "director" || name === "paint");   // 显存读数只在生成页（导演 / 绘画）轮询
     if (name === "director" && onDirectorShown) onDirectorShown();
     // 画廊单例的宿主跟着视图走：绘画页 = 左栏素材库；素材页 = 整片宿主；其余页 = 交还素材页 / 收留宿主。
@@ -393,6 +409,8 @@ async function buildDirector(el) {
 
     const onSelect = (r) => {
         currentRecipeName = r.name;
+        agentCtx.recipe = r.name;      // 右栏上下文：智能体默认围绕这一份配方出片
+        notifyAgentCtx();
         applyRecipe(r.name);   // 刷新分段格子 + 尺寸/步数回显
     };
     const panelOpts = () => ({ directorOnly: true, autoSelectFirst: true, initialSelection: currentRecipeName, openEditorOnSelect: true, onSelect });
@@ -480,6 +498,8 @@ async function buildDirector(el) {
             if (spec) specCache.set(name, spec);
         }
         tlSegments = spec?.segments || [];
+        agentCtx.segments = tlSegments.length;   // 右栏上下文要报得出这份配方有几段
+        notifyAgentCtx();
         setChecked([]);   // 分段已换（切配方 / 配方内容变更）→ 勾选作废
         const d = spec?.defaults;
         specEl.textContent = d ? tf("{w}×{h} · {steps} 步", { w: d.width, h: d.height, steps: d.steps }) : "";
@@ -621,6 +641,8 @@ async function buildDirector(el) {
     window.addEventListener(DIRECTOR_RECIPE_SAVED_EVENT, async (e) => {
         specCache.clear();
         if (e?.detail?.created) currentRecipeName = e.detail.name;
+        agentCtx.recipe = currentRecipeName || "";   // 保存会换配方名，右栏上下文跟着走
+        notifyAgentCtx();
         await refreshRecipesPanel();
     });
 }
@@ -665,6 +687,8 @@ function buildPaint(el) {
         modeBtns.edit.classList.toggle("ns-paint-mode-on", mode === "edit");
         textHost.classList.toggle("ns-hidden", mode !== "text");
         editHost.classList.toggle("ns-hidden", mode !== "edit");
+        agentCtx.paint_mode = mode;   // 右栏上下文：智能体知道这一栏现在是文生图还是图片编辑
+        notifyAgentCtx();
         try { localStorage.setItem(PAINT_MODE_KEY, mode); } catch { /* 偏好写不进不影响用 */ }
     };
     try { setMode(localStorage.getItem(PAINT_MODE_KEY) === "edit" ? "edit" : "text"); } catch { setMode("text"); }
@@ -1549,7 +1573,7 @@ function localizeShell() {
 
 // ====== 右栏智能体：常驻窗口右缘，顶栏按钮开合（默认收起），开合与栏宽存 localStorage ======
 const AGENT_DOCK_KEY = "neo_studio_agent_dock";
-const AGENT_DOCK_MIN = 260;        // 右栏下限：技能下拉与工具卡参数框还看得下
+const AGENT_DOCK_MIN = 260;        // 右栏下限：上下文条与工具卡参数框还看得下
 const AGENT_DOCK_COLLAPSE = 150;   // 收起阈值：拖到比这更窄就关掉整栏，靠分隔条上的三点抓手拖回来
 const AGENT_VIEW_MIN = 420;        // 左侧页面视图下限：与导演编辑器下限同档
 
@@ -1564,8 +1588,11 @@ function initAgentDock() {
             history.pushState(null, "", "#/settings?tab=mcp");
             route();
         },
+        // 界面当前状态由宿主交：右栏把它画进上下文条，并把同一份值随请求体交后端进系统提示词
+        getContext: agentContext,
     });
-    const refresh = () => panel.refresh().catch(e => console.error("[Neo Studio] agent panel refresh failed:", e));
+    const refresh = () => panel.refresh();
+    agentCtxRefresh = refresh;   // 切页 / 选配方 / 切绘画模式时重画右栏上下文条
     // 分隔条夹在页面视图与栏子之间，样式与左栏那条共用（.ns-director-colsplit）
     const split = $el("div", {
         className: "ns-director-colsplit", role: "separator", "aria-orientation": "vertical", tabindex: "0",

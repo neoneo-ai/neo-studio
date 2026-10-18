@@ -1,5 +1,6 @@
-// 右栏智能体：技能下拉首项是空值「智能判断」；出图与出片一律走后端 /neo_agent/run 的 SSE 时间线，
-// 面板自己不发 /neo_image_gen/generate；增强类技能照旧只出提示词。
+// 右栏智能体：没有技能下拉，主按钮在顶上（生成 / 暂停 / 继续），界面当前状态随请求体交后端；
+// 出图与出片一律走后端 /neo_agent/run 的 SSE 时间线，面板自己不发 /neo_image_gen/generate，
+// 也不发流式提示词请求。
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -47,10 +48,10 @@ async function openStudio(hash, open = true) {
 }
 
 const dock = () => document.querySelector("#ns-agent-dock");
-const skillSel = () => dock().querySelector(".neo-agent-skill");
+const ctxBar = () => dock().querySelector(".neo-agent-ctx");
 const runBtn = () => dock().querySelector(".neo-agent-run");
+const stopBtn = () => dock().querySelector(".neo-agent-stop");
 const meta = () => dock().querySelector(".neo-agent-meta");
-const turnAnswer = () => dock().querySelector(".neo-agent-answer");     // 增强类技能的正文
 const finalRow = () => dock().querySelector(".neo-agent-answer-body");  // 智能体时间线的最终回答
 const toolCard = () => dock().querySelector(".neo-agent-tool");
 const statusLine = () => dock().querySelector(".neo-agent-tool-status");
@@ -58,6 +59,8 @@ const streamCalls = () => fetchLog.filter((c) => c.path === "/rs_prompts/stream_
 const agentCalls = () => fetchLog.filter((c) => c.path === "/neo_agent/run");
 const genCalls = () => fetchLog.filter((c) => c.path === "/neo_image_gen/generate");
 const cancelCalls = () => fetchLog.filter((c) => c.path === "/neo_agent/cancel");
+const pauseCalls = () => fetchLog.filter((c) => c.path === "/neo_agent/pause");
+const resumeCalls = () => fetchLog.filter((c) => c.path === "/neo_agent/resume");
 
 /** 后端时间线的帧：逐条包成 SSE 行，末尾补 [DONE]。 */
 function mockAgentStream(frames) {
@@ -79,25 +82,24 @@ const FILM_RESULT = {
     media: [{ kind: "video", title: "cat_walk.mp4", url: "/view?filename=cat_walk.mp4&subfolder=NeoDirector%2Fcat_walk&type=output" }],
 };
 
-test("技能下拉首项是空值「智能判断」，技能照常列出", async () => {
+test("右栏没有技能下拉：主按钮在顶上，上下文条画出宿主交来的界面状态", async () => {
     mountStudio();
     await openStudio("#/gallery");
 
-    const sel = skillSel();
-    assert.ok(sel, "右栏应有技能下拉");
-    const first = sel.options[0];
-    assert.equal(first.value, "", "首项应为空值");
-    assert.equal(first.textContent, "智能判断", "首项应写明智能判断");
-    assert.equal(sel.value, "", "默认应停在智能判断，不强制套第一个技能");
-    assert.ok([...sel.options].some((o) => o.value === "sk_cat"), "技能应照常列出");
+    assert.equal(dock().querySelector(".neo-agent-skill"), null, "右栏不该再有技能下拉");
+    const composer = dock().querySelector(".neo-agent-composer");
+    assert.equal(composer.children[0], runBtn(), "主按钮应是输入区第一个元素");
+    assert.equal(runBtn().textContent, "✨ 生成", "空闲时主按钮是生成");
+    assert.ok(ctxBar().textContent.includes("素材库"), `上下文条应画出当前页：${ctxBar().textContent}`);
+    assert.equal(stopBtn().disabled, true, "空闲时停止键锁着");
 });
 
-test("不选技能点生成：走后端智能体，skill_id 为空，出计划行与最终回答", async () => {
+test("点生成：请求带界面上下文，出计划行与最终回答，面板不发流式提示词", async () => {
     mountStudio();
     await openStudio("#/gallery");
     mockAgentStream([
         { kind: "plan", text: "先扩写提示词再出图" },
-        { kind: "content", text: "需要你先选一个技能" },
+        { kind: "content", text: "已按素材库现状出图" },
     ]);
 
     inputText(dock().querySelector(".neo-agent-input"), "一只橘猫");
@@ -106,74 +108,55 @@ test("不选技能点生成：走后端智能体，skill_id 为空，出计划�
 
     const calls = agentCalls();
     assert.equal(calls.length, 1, "应发出一次智能体请求");
-    assert.equal(calls[0].body.skill_id, "", "未选技能时 skill_id 应为空");
+    assert.equal(calls[0].body.skill_id, undefined, "请求体不再带技能");
+    assert.equal(calls[0].body.context.page, "gallery", "请求应带上宿主交来的当前页");
     assert.equal(calls[0].body.text, "一只橘猫", "智能体请求应带上输入文本");
-    assert.equal(streamCalls().length, 0, "空技能不应发流式提示词请求");
+    assert.equal(streamCalls().length, 0, "右栏不该发流式提示词请求");
     assert.equal(dock().querySelector(".neo-agent-step").textContent, "🧭 先扩写提示词再出图", "应渲染计划行");
-    assert.equal(finalRow().textContent.trim(), "需要你先选一个技能", "应渲染最终回答");
-    assert.equal(meta().textContent, "智能判断", "回合头应显示智能判断");
-    assert.equal(runBtn().disabled, false, "收尾后应解禁生成按钮");
+    assert.equal(finalRow().textContent.trim(), "已按素材库现状出图", "应渲染最终回答");
+    assert.ok(meta().textContent.includes("素材库"), `回合头应写明这一轮的上下文：${meta().textContent}`);
+    assert.equal(runBtn().disabled, false, "收尾后应解禁主按钮");
 });
 
-test("增强类技能照旧只出提示词，不发智能体请求也不发出图请求", async () => {
-    mountStudio();
-    await openStudio("#/gallery");
-    mockRoute("/neo_image_gen/generate", () => jsonResponse({ task_id: "ag2", status: "queued" }));
-
-    skillSel().value = "sk_cat";
-    inputText(dock().querySelector(".neo-agent-input"), "写一段橘猫提示词");
-    click(runBtn());
-    await flush(40);
-
-    assert.equal(streamCalls().length, 1, "增强类技能应走流式提示词");
-    assert.equal(agentCalls().length, 0, "增强类技能不应发智能体请求");
-    assert.equal(genCalls().length, 0, "增强类技能不应发出生图请求");
-    assert.equal(turnAnswer().textContent.trim(), "生成正文");
-});
-
-test("MCP 入口与技能选择无关：点入口不改技能值、不发智能体请求", async () => {
+test("MCP 入口只做跳转：点入口不发智能体请求", async () => {
     mountStudio();
     await openStudio("#/gallery");
 
-    const sel = skillSel();
-    sel.value = "sk_cat";
     click(dock().querySelector(".neo-agent-entry"));
     await flush(40);
 
     assert.equal(window.location.hash, "#/settings?tab=mcp", "入口应深链到设置页 MCP 栏");
-    assert.equal(skillSel().value, "sk_cat", "技能选择不应被入口改动");
     assert.equal(agentCalls().length, 0, "入口不应触发智能体请求");
 });
 
-test("选生图技能点生成：发 /neo_agent/run 带 skill_id，面板不自己发出图请求", async () => {
+test("点生成走后端智能体出图：工具卡 / 状态 / 产物缩略图 / 最终回答，面板不自己发出图请求", async () => {
     mountStudio();
     await openStudio("#/gallery");
     mockAgentStream([
-        { kind: "plan", text: "按技能 sk_gen 直接出图" },
+        { kind: "plan", text: "用出图技能生成白猫" },
         { kind: "tool_call", tool: "generate_image", text: '{"skill_id":"sk_gen","prompt":"生成一个白猫坐窗台的图片"}' },
         { kind: "status", tool: "task_status", task_id: "ag1", text: "running 10/20" },
         IMAGE_RESULT,
         { kind: "content", text: "完成：1 张 · 1280×720" },
     ]);
 
-    skillSel().value = "sk_gen";
     inputText(dock().querySelector(".neo-agent-input"), "生成一个白猫坐窗台的图片");
     click(runBtn());
     await flush(40);
 
     const calls = agentCalls();
     assert.equal(calls.length, 1, "应发出一次智能体请求");
-    assert.equal(calls[0].body.skill_id, "sk_gen", "智能体请求应带上所选技能");
+    assert.equal(calls[0].body.skill_id, undefined, "请求体不再带技能，用哪个技能由后端 LLM 定");
     assert.equal(genCalls().length, 0, "出图由后端 MCP 工具发起，面板不该自己打 /neo_image_gen/generate");
-    assert.equal(streamCalls().length, 0, "生图技能不应发流式提示词请求");
+    assert.equal(streamCalls().length, 0, "右栏不再发流式提示词请求");
     assert.equal(toolCard().querySelector(".neo-agent-tool-title").textContent, "🔧 generate_image", "应渲染工具卡");
     assert.ok(statusLine().textContent.includes("running 10/20"), "状态行应显示采样进度");
     const img = toolCard().querySelector("img");
     assert.ok(img, "应在工具卡里渲染出图缩略图");
     assert.equal(img.getAttribute("src"), "/view?filename=cat_0001.png&type=output", "缩略图应指向产物地址");
     assert.equal(finalRow().textContent.trim(), "完成：1 张 · 1280×720", "应渲染最终回答");
-    assert.equal(meta().textContent, "Krea2 出图", "回合头应显示所选技能名");
-    assert.equal(runBtn().disabled, false, "出图收尾后应解禁生成按钮");
+    assert.equal(runBtn().disabled, false, "出图收尾后应解禁主按钮");
+    assert.equal(runBtn().textContent, "✨ 生成", "收场后主按钮回到生成");
 });
 
 test("出片任务：状态行显示段进度，任务卡给取消按钮，点它按 task_id 取消", async () => {
@@ -190,7 +173,7 @@ test("出片任务：状态行显示段进度，任务卡给取消按钮，点�
     click(runBtn());
     await flush(40);
 
-    assert.equal(agentCalls()[0].body.skill_id, "", "出片走 LLM 规划路径，不带技能");
+    assert.equal(agentCalls()[0].body.skill_id, undefined, "出片走 LLM 规划路径，请求体不带技能");
     assert.equal(toolCard().querySelector(".neo-agent-tool-title").textContent, "🔧 director_run", "应渲染出片工具卡");
     assert.ok(statusLine().textContent.includes("running 段 1/2 3/10"), "状态行应显示段进度");
     const btn = statusLine().querySelector(".neo-agent-cancel");
@@ -226,7 +209,6 @@ test("出图与出片缩略图进弹出窗口：卡片收小、成片可播，�
         { kind: "content", text: "完成" },
     ]);
 
-    skillSel().value = "sk_gen";
     inputText(dock().querySelector(".neo-agent-input"), "一只橘猫");
     click(runBtn());
     await flush(40);
@@ -312,18 +294,69 @@ function mockPendingRunStream(takeSignal) {
     });
 }
 
-test("运行中生成键不禁用、带停止态样式，第二击才发取消", async () => {
+test("运行中主按钮是暂停态、可点：第二击发暂停，不断流也不发取消", async () => {
     mountStudio();
     await openStudio("#/gallery");
+    mockRoute("/neo_agent/pause", () => jsonResponse({ success: true, run_id: RUN_ID, task_id: "" }));
     mockPendingRunStream(() => {});
 
     inputText(dock().querySelector(".neo-agent-input"), "一只橘猫");
     click(runBtn());
     await flush(40);
 
-    assert.equal(runBtn().disabled, false, "运行中按钮必须可点：禁用等于把停止键从界面上摘掉");
-    assert.ok(runBtn().classList.contains("ns-agent-stop"), "运行中应带停止态样式");
+    assert.equal(runBtn().disabled, false, "运行中按钮必须可点：锁掉等于把暂停键从界面上摘掉");
+    assert.equal(runBtn().textContent, "⏸ 暂停", "运行中主按钮应是暂停");
+    assert.equal(stopBtn().disabled, false, "运行中停止键要能按");
     assert.equal(cancelCalls().length, 0, "没点第二击不该发取消请求");
+
+    click(runBtn());
+    await flush(20);
+
+    assert.equal(pauseCalls().length, 1, "点暂停应发一次 /neo_agent/pause");
+    assert.deepEqual(pauseCalls()[0].body, { run_id: RUN_ID }, "暂停请求应带上首帧给的 run_id");
+    assert.equal(runBtn().textContent, "▶ 继续", "暂停后主按钮应翻成继续");
+    assert.equal(cancelCalls().length, 0, "暂停不是取消，不该发取消请求");
+});
+
+test("暂停后点继续：按 run_id 发 /neo_agent/resume，主按钮回到暂停", async () => {
+    mountStudio();
+    await openStudio("#/gallery");
+    mockRoute("/neo_agent/pause", () => jsonResponse({ success: true, run_id: RUN_ID, task_id: "" }));
+    mockRoute("/neo_agent/resume", () => jsonResponse({ success: true, run_id: RUN_ID }));
+    mockPendingRunStream(() => {});
+
+    inputText(dock().querySelector(".neo-agent-input"), "一只橘猫");
+    click(runBtn());
+    await flush(40);
+    click(runBtn());
+    await flush(20);
+    click(runBtn());
+    await flush(20);
+
+    assert.equal(resumeCalls().length, 1, "点继续应发一次 /neo_agent/resume");
+    assert.deepEqual(resumeCalls()[0].body, { run_id: RUN_ID }, "继续请求应带上首帧给的 run_id");
+    assert.equal(runBtn().textContent, "⏸ 暂停", "继续后运行还在跑，主按钮回到暂停");
+});
+
+test("后端 paused / resumed 帧：时间线各落一行，主按钮跟着翻态", async () => {
+    mountStudio();
+    await openStudio("#/gallery");
+    mockAgentStream([
+        { kind: "run", run_id: RUN_ID },
+        { kind: "paused", text: "已暂停：在跑的任务已取消，点「继续」接着跑" },
+        { kind: "resumed", text: "已继续" },
+        { kind: "content", text: "重跑完成" },
+    ]);
+
+    inputText(dock().querySelector(".neo-agent-input"), "一只橘猫");
+    click(runBtn());
+    await flush(40);
+
+    const rows = [...dock().querySelectorAll(".neo-agent-step")].map((e) => e.textContent);
+    assert.ok(rows.some((x) => x.includes("已暂停")), `应有已暂停行：${rows.join(" | ")}`);
+    assert.ok(rows.some((x) => x.includes("已继续")), `应有已继续行：${rows.join(" | ")}`);
+    assert.ok(dock().querySelector(".neo-agent-step-paused"), "已暂停行应带暂停样式");
+    assert.equal(runBtn().textContent, "✨ 生成", "收场后主按钮回到生成");
 });
 
 test("点停止键断流并按 run_id 取消，时间线补一行已取消", async () => {
@@ -338,10 +371,10 @@ test("点停止键断流并按 run_id 取消，时间线补一行已取消", asy
     await flush(40);
     assert.ok(!signal.aborted, "没点取消时这条流不能被断");
 
-    click(runBtn());
+    click(stopBtn());
     await flush(40);
 
-    assert.ok(signal.aborted, "取消必须断掉 SSE 流");
+    assert.ok(signal.aborted, "停止必须断掉 SSE 流");
     const calls = cancelCalls();
     assert.equal(calls.length, 1, "点停止键应发一次 /neo_agent/cancel");
     assert.deepEqual(calls[0].body, { run_id: RUN_ID }, "取消请求应带上后端首帧给的 run_id");
@@ -360,7 +393,7 @@ test("取消请求失败：时间线写明取消失败，不演成一直在取�
     inputText(dock().querySelector(".neo-agent-input"), "一只橘猫");
     click(runBtn());
     await flush(40);
-    click(runBtn());
+    click(stopBtn());
     await flush(40);
 
     const rows = [...dock().querySelectorAll(".neo-agent-step")].map((e) => e.textContent);
@@ -383,7 +416,8 @@ test("后端发出取消帧：时间线收场，生成键回到✨ 生成", asyn
     assert.equal(finalRow().textContent.trim(), "已取消：智能体循环与在跑的任务已停止");
     assert.equal(runBtn().textContent, "✨ 生成");
     assert.equal(runBtn().disabled, false);
-    assert.ok(!runBtn().classList.contains("ns-agent-stop"), "收场后应去掉停止态样式");
+    assert.ok(!runBtn().classList.contains("neo-agent-paused"), "收场后应去掉暂停态样式");
+    assert.equal(stopBtn().disabled, true, "收场后停止键锁回去");
 });
 
 test("后端报错帧：时间线显示错误原文，不留缩略图，解禁生成按钮", async () => {
@@ -391,7 +425,6 @@ test("后端报错帧：时间线显示错误原文，不留缩略图，解禁�
     await openStudio("#/gallery");
     mockAgentRaw(["data: [ERROR] 技能 sk_gen 没有工作流模板（workflow.json）"]);
 
-    skillSel().value = "sk_gen";
     inputText(dock().querySelector(".neo-agent-input"), "一只柴犬");
     click(runBtn());
     await flush(40);
@@ -499,17 +532,44 @@ function mockPendingRunFrames(frames) {
     }));
 }
 
-test("输入区有模式开关与附件图入口，默认停在执行", async () => {
+test("输入区：主按钮在顶、上下文条只读、底栏有附件图 / 停止 / 模式开关，默认停在执行", async () => {
     mountStudio();
     await openStudio("#/gallery");
 
+    const composer = dock().querySelector(".neo-agent-composer");
+    assert.equal(composer.children[0], runBtn(), "主按钮应铺在输入区顶上");
+    assert.equal(composer.children[1], ctxBar(), "主按钮下面应是只读上下文条");
     assert.deepEqual(modeBtns().map((b) => b.dataset.mode), ["plan", "act"], "应有计划与执行两档");
     assert.ok(modeBtns()[1].classList.contains("active"), "默认应停在执行模式");
     assert.ok(dock().querySelector(".neo-agent-attach"), "应有附件图入口");
+    assert.ok(stopBtn(), "底栏应有停止键");
+    assert.equal(stopBtn().disabled, true, "空闲时停止键锁着");
     const file = dock().querySelector(".neo-agent-file");
     assert.equal(file.type, "file", "附件入口应挂在文件选择上");
     assert.equal(file.accept, "image/*", "附件只收图片");
     assert.ok(dock().querySelector(".neo-agent-chips"), "应有附件缩略图容器");
+});
+
+test("切页与切绘画模式：上下文条跟着宿主走，请求带的是切过之后的状态", async () => {
+    mountStudio();
+    await openStudio("#/gallery");
+    assert.ok(ctxBar().textContent.includes("素材库"), `素材页应报素材库：${ctxBar().textContent}`);
+
+    click(document.querySelector('.ns-tabs a[data-tab="paint"]'));
+    await flush(40);
+    assert.ok(ctxBar().textContent.includes("绘画页"), `切页后应报绘画页：${ctxBar().textContent}`);
+    assert.ok(ctxBar().textContent.includes("文生图"), `绘画页应报出当前模式：${ctxBar().textContent}`);
+
+    click([...document.querySelectorAll(".ns-paint-mode-btn")][1]);
+    await flush(20);
+    assert.ok(ctxBar().textContent.includes("图片编辑"), `切模式后应报图片编辑：${ctxBar().textContent}`);
+
+    mockAgentStream([{ kind: "content", text: "好" }]);
+    inputText(dock().querySelector(".neo-agent-input"), "把这张图改成夜景");
+    click(runBtn());
+    await flush(40);
+    assert.equal(agentCalls()[0].body.context.page, "paint", "请求应带上切过之后的页");
+    assert.equal(agentCalls()[0].body.context.paint_mode, "edit", "请求应带上切过之后的绘画模式");
 });
 
 test("点计划模式：请求带 mode=plan，回合头写明计划，收尾解禁模式按钮", async () => {

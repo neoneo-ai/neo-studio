@@ -1,14 +1,14 @@
 /**
  * agent-panel.js — Neo Agent 面板（Neo Studio 桌面端 Studio 页右栏）
  *
- * 聊天区挂桌面端右栏：生图技能与空值「智能判断」都交给后端智能体（POST /neo_agent/run 的 SSE
- * 时间线：计划 / 工具卡 / 状态 / 产物图 / 最终回答），后端那一侧是 MCP 客户端，工具经
- * mcp_server 的 JSON-RPC 走，右栏不直接调后端函数；增强类技能仍只出提示词（prompt-service 的
- * SSE 与 skill.js 的技能表）。MCP 区
- * （注册表 / 连接 / 工具调用）交给设置页的「MCP 服务」栏，右栏只在「✨ 生成」下方留一个跳转入口。
- * 输入框三件事照 Cline 的口径做：📎 附件图（粘贴 / 点选 / 从素材库拖入，随请求体进多模态）、
- * 「📝 计划 / ⚡ 执行」模式开关（计划模式后端只给查询类工具）、时间线里的选项确认卡（后端 ask_user
- * 发一问就挂在循环上，点选经 POST /neo_agent/answer 交回去）。
+ * 聊天区挂桌面端右栏：一次「✨ 生成」交给后端智能体（POST /neo_agent/run 的 SSE 时间线：
+ * 计划 / 工具卡 / 状态 / 产物图 / 暂停 / 继续 / 最终回答），后端那一侧是 MCP 客户端，工具经
+ * mcp_server 的 JSON-RPC 走，右栏不直接调后端函数；右栏不再选技能，界面当前状态（当前页 /
+ * 当前导演配方 / 绘画页模式 / 素材库目录）由宿主随请求体交给后端进系统提示词。MCP 区
+ * （注册表 / 连接 / 工具调用）交给设置页的「MCP 服务」栏，右栏只在生成按钮下面留一个跳转入口。
+ * 输入框按 Cline 的口径做：顶部一个主按钮（生成 / 暂停 / 继续），下面只读上下文条、附件图
+ * chip、文本框，底栏是 📎 附件图、⏹ 停止与「📝 计划 / ⚡ 执行」开关。时间线里的选项确认卡
+ * （后端 ask_user 发一问就挂在循环上，点选经 POST /neo_agent/answer 交回去）。
  * stdio 型 MCP 服务是子进程，浏览器起不了，连接只活在桌面端进程里：面板只发 HTTP 打 /neo_mcp/*，
  * 桌面端服务不在时这些接口回 409，面板据此把 MCP 区收成一句离线说明，不给假成功。
  * 宿主是 studio 外壳（studio-app.js 挂右栏与设置页），不是 ComfyUI 画布侧栏：本模块不注册扩展。
@@ -17,8 +17,8 @@
 import { mkEl } from "./dom-utils.js";
 import { app } from "../../scripts/app.js";
 import { t, tf } from "./js/core/i18n.js";
-import { listSkills, populateSkillOptions, renderMarkdown } from "./skill.js";
-import { fileToBase64, imagesFromClipboard, invokePromptStream, sseStream } from "./prompt-service.js";
+import { renderMarkdown } from "./skill.js";
+import { fileToBase64, imagesFromClipboard, sseStream } from "./prompt-service.js";
 import { Lightbox } from "./lightbox.js";
 import { grabDataType, copyGalleryToInput } from "./media-transfer.js";
 
@@ -94,19 +94,25 @@ const attSrc = (a) => a.data || `/view?filename=${encodeURIComponent(a.input)}&t
 // 聊天区：一问一答，正文按 Markdown 渲染
 // ==========================================
 
-function buildChat(onOpenMcp) {
+function buildChat(onOpenMcp, getContext) {
     const box = mkEl("div", "neo-agent-section neo-agent-chat");
     const transcript = mkEl("div", "neo-agent-transcript");
     const empty = mkEl("div", "neo-agent-empty");
-    empty.textContent = t("输入需求，Enter 生成；选技能则按技能模板生成");
+    empty.textContent = t("输入需求，Enter 生成；右栏会带着界面当前状态去规划");
     transcript.appendChild(empty);
 
     const composer = mkEl("div", "neo-agent-composer");
-    const skillSel = mkEl("select", "neo-agent-skill");
+    // Cline 的口径：主按钮在顶上，一个钮三态（生成 / 暂停 / 继续），停止收进底栏
+    const run = mkEl("button", "neo-agent-run");
+    run.type = "button";
+    run.textContent = t("✨ 生成");
+    // 上下文条只读：宿主（studio-app.js）在切页 / 选配方 / 切绘画模式时把状态交过来
+    const ctxBar = mkEl("div", "neo-agent-ctx");
+    const chips = mkEl("div", "neo-agent-chips");
     const input = mkEl("textarea", "neo-agent-input");
     input.rows = 3;
     input.placeholder = t("描述要生成的提示词，或要改写的方向；可粘贴 / 拖入图片（含素材库卡片）");
-    // 计划 / 执行：计划模式后端只把查询类工具交给 LLM，跑不跑由这一对按钮定
+    // 底栏：附件图 + 停止 + 计划 / 执行。计划模式后端只把查询类工具交给 LLM
     const toolbar = mkEl("div", "neo-agent-toolbar");
     const modes = mkEl("div", "neo-agent-modes");
     let mode = "act";
@@ -125,7 +131,6 @@ function buildChat(onOpenMcp) {
         modeBtns.forEach((b) => b.classList.toggle("active", b.dataset.mode === next));
     }
     setMode("act");
-    const chips = mkEl("div", "neo-agent-chips");
     const attach = mkEl("button", "neo-agent-attach");
     attach.type = "button";
     attach.textContent = "📎 " + t("添加图片");
@@ -136,11 +141,35 @@ function buildChat(onOpenMcp) {
     fileInput.multiple = true;
     fileInput.hidden = true;
     attach.onclick = () => fileInput.click();
-    toolbar.append(modes, attach, fileInput);
-    const run = mkEl("button", "neo-agent-run");
-    run.type = "button";
-    run.textContent = t("✨ 生成");
-    composer.append(skillSel, toolbar, chips, input, run);
+    const stopBtn = mkEl("button", "neo-agent-stop");
+    stopBtn.type = "button";
+    stopBtn.textContent = "⏹ " + t("停止");
+    stopBtn.title = t("停止这次运行：断流并取消在跑的任务");
+    stopBtn.disabled = true;
+    stopBtn.onclick = () => stopRun();
+    toolbar.append(attach, fileInput, stopBtn, modes);
+    composer.append(run, ctxBar, chips, input, toolbar);
+
+    // 界面当前状态：宿主只交事实，这一条把它拼成一行给用户看，随请求体原样交后端
+    const PAGE_NAMES = { gallery: "素材库", director: "导演页", paint: "绘画页", skills: "技能页", settings: "设置页" };
+    function currentContext() {
+        const ctx = (getContext && getContext()) || {};
+        const parts = [];
+        if (PAGE_NAMES[ctx.page]) parts.push(t(PAGE_NAMES[ctx.page]));
+        if (ctx.recipe) parts.push(ctx.recipe + (ctx.segments > 0 ? tf("{n} 段", { n: ctx.segments }) : ""));
+        // 绘画模式只在绘画页有意义：素材页上挂一行「文生图」是噪声
+        if (ctx.page === "paint") {
+            if (ctx.paint_mode === "text") parts.push(t("文生图"));
+            else if (ctx.paint_mode === "edit") parts.push(t("图片编辑"));
+        }
+        if (ctx.gallery_path) parts.push(ctx.gallery_path);
+        return parts;
+    }
+    function renderCtx() {
+        const parts = currentContext();
+        ctxBar.textContent = "📍 " + (parts.length ? parts.join(" · ") : t("无当前上下文"));
+    }
+    renderCtx();
 
     // 附件图：本地文件读成 data URI 随请求体走（与 llm-chat 的附加图同一口径），
     // 后端按 prompts 的图片源解析并等比缩边，面板这边只管增删与预览
@@ -252,22 +281,6 @@ function buildChat(onOpenMcp) {
         }
         window.open(href, "_blank", "noopener");
     });
-
-    let skillsLoaded = false;
-
-    async function loadSkills() {
-        if (skillsLoaded) return;
-        const skills = await listSkills();
-        if (!skills || !skills.length) return;
-        // 空值项 = 后端无 skillId 时的 smart_prompt 分支（llm.py 里「智能判断是否使用模版」），与主面板 llm-chat 同口径；
-        // 不插这一项的话 select 默认落在第一个技能上，右栏等于强制套模板。
-        const auto = mkEl("option");
-        auto.value = "";
-        auto.textContent = t("智能判断");
-        skillSel.appendChild(auto);
-        populateSkillOptions(skillSel, skills);
-        skillsLoaded = true;
-    }
 
     // 产物缩略图：右栏窄，整幅铺图 / 铺片；点击进弹出窗口看大图与播放，页面自己不导航
     function renderGenMedia(host, media) {
@@ -393,6 +406,17 @@ function buildChat(onOpenMcp) {
                 row.textContent = "⏹ " + t("已取消") + (note ? "（" + note + "）" : "");
                 steps.appendChild(row);
             },
+            // 暂停 / 继续各落一行：暂停点在飞的任务由后端掐掉，恢复后要不要再生成由 LLM 定
+            paused() {
+                const row = mkEl("div", "neo-agent-step neo-agent-step-paused");
+                row.textContent = "⏸ " + t("已暂停");
+                steps.appendChild(row);
+            },
+            resumed() {
+                const row = mkEl("div", "neo-agent-step");
+                row.textContent = "▶ " + t("已继续");
+                steps.appendChild(row);
+            },
             error(text) {
                 final.textContent = text;
                 final.classList.add("neo-agent-answer-error");
@@ -400,15 +424,25 @@ function buildChat(onOpenMcp) {
         };
     }
 
-    // 运行中的这一路：取消要断流、要按 run_id 停后端循环、要往当前时间线补一行，句柄挂在这里
+    // 运行中的这一路：暂停 / 继续按 run_id 打后端，停止要断流并停后端循环，句柄挂在这里
     let running = false;
+    let paused = false;
     let controller = null;
     let runId = "";
     let activeView = null;
 
-    // 智能体路径：一次请求换一路 SSE。选了生图技能时后端按技能直出图（不叫 LLM），
-    // 空值「智能判断」时后端让 LLM 规划并调 MCP 工具；mode 决定计划还是执行，images 是附件图
-    async function runAgent(answer, skillId, text, planMode, images) {
+    // 主按钮三态：空闲「✨ 生成」、运行中「⏸ 暂停」、暂停中「▶ 继续」。停止是底栏另一个钮，
+    // 暂停中照样能按——暂停之后停掉整条运行是另一条路
+    function setRunState(next) {
+        run.textContent = next === "run" ? t("✨ 生成")
+            : next === "paused" ? t("▶ 继续") : t("⏸ 暂停");
+        run.classList.toggle("neo-agent-paused", next === "paused");
+        stopBtn.disabled = next === "run";
+    }
+
+    // 智能体路径：一次请求换一路 SSE。界面当前状态随请求体进后端系统提示词，
+    // mode 决定计划还是执行，images 是附件图
+    async function runAgent(answer, text, planMode, images, context) {
         const view = agentTimeline(answer);
         activeView = view;
         controller = new AbortController();
@@ -422,18 +456,49 @@ function buildChat(onOpenMcp) {
                 else if (kind === "status") view.status(frame.text || "", frame.task_id || "");
                 else if (kind === "tool_result") view.toolResult(frame.text || "", frame.media || []);
                 else if (kind === "ask") view.ask(frame.text || "", frame.options || [], frame.ask_id || "");
+                else if (kind === "paused") { paused = true; setRunState("paused"); view.paused(); }
+                else if (kind === "resumed") { paused = false; setRunState("running"); view.resumed(); }
                 else view.answer(frame.text || "");
                 transcript.scrollTop = transcript.scrollHeight;
             },
             onError: (err) => view.error(String(err || t("生成失败"))),
-        }, { text, skill_id: skillId, mode: planMode, images });
+        }, { text, mode: planMode, images, context });
     }
 
-    // 「⏹ 取消」：断流 + 让后端停循环并掐在跑的任务。首帧的 run_id 还没到就只断流——
-    // 断开路径上后端会兜底掐任务，不给一个空 run_id 去打接口
+    // 「⏸ 暂停」只置后端一个位，SSE 不断：后端在下一个轮次 / 轮询边界把在飞的任务掐掉、发
+    // paused 帧挂住循环。首帧 run_id 还没到就没有可暂停的运行。按钮先翻成「继续」，
+    // paused 帧到了会再对一次——两边对不上时以帧为准
+    async function pauseRun() {
+        if (!running || !runId) return;
+        const data = await postJson("/neo_agent/pause", { run_id: runId });
+        if (!data.success) {
+            toast("error", data.offline ? t("桌面端服务未就绪") : (data.error || t("暂停失败")));
+            return;
+        }
+        paused = true;
+        setRunState("paused");
+    }
+
+    // 「▶ 继续」放开挂在检查点上的循环。后端在暂停中不自动重发被取消的任务，
+    // 要不要再生成由恢复后的那一轮 LLM 自己定
+    async function resumeRun() {
+        if (!running || !runId) return;
+        const data = await postJson("/neo_agent/resume", { run_id: runId });
+        if (!data.success) {
+            toast("error", data.offline ? t("桌面端服务未就绪") : (data.error || t("继续失败")));
+            return;
+        }
+        paused = false;
+        setRunState("running");
+    }
+
+    // 「⏹ 停止」：断流 + 让后端停循环并掐在跑的任务（后端同时放开 resume，挂在暂停检查点上的
+    // 循环也退得出来）。首帧的 run_id 还没到就只断流——断开路径上后端会兜底掐任务，
+    // 不给一个空 run_id 去打接口
     async function stopRun() {
-        if (!running || !controller) return;   // 增强类技能那一路没有可断的流，按钮本来就锁着
+        if (!running || !controller) return;
         run.disabled = true;
+        stopBtn.disabled = true;
         run.textContent = t("⏳ 取消中");
         controller.abort();
         let note = "";
@@ -459,11 +524,12 @@ function buildChat(onOpenMcp) {
         const images = attachments.map((a) => (a.data ? { kind: "data", data: a.data } : { kind: "input", value: a.input }));
         if (!text && !images.length) return;
         const planMode = mode;
+        const context = (getContext && getContext()) || null;
         if (empty.parentNode) empty.remove();
         const turn = mkEl("div", "neo-agent-turn");
-        const opt = skillSel.selectedOptions[0];
         const meta = mkEl("div", "neo-agent-meta");
-        meta.textContent = (opt?.textContent || t("智能判断")) + (planMode === "plan" ? " · " + t("计划") : "");
+        meta.textContent = (currentContext().join(" · ") || t("无当前上下文"))
+            + (planMode === "plan" ? " · " + t("计划") : "");
         const ask = mkEl("div", "neo-agent-ask");
         ask.textContent = text;
         turn.appendChild(meta);
@@ -482,77 +548,45 @@ function buildChat(onOpenMcp) {
         transcript.appendChild(turn);
         transcript.scrollTop = transcript.scrollHeight;
         clearAttachments();
+        renderCtx();
 
-        // 生图技能与空值「智能判断」都交给后端智能体：前者按技能直出图，后者由 LLM 规划调工具；
-        // 增强类技能照旧只出提示词
-        const agentPath = opt?.dataset.genImage === "1" || !skillSel.value;
         running = true;
-        // 智能体路径运行中不禁用按钮：这一击就是停止，禁用等于把停止键从界面上摘掉。
-        // 增强类技能那一路没有可断的流，照旧锁住按钮
-        run.disabled = !agentPath;
-        run.textContent = t("⏳ 生成中");
-        if (agentPath) run.classList.add("ns-agent-stop");
+        paused = false;
+        // 运行中主按钮不锁：这一击就是「暂停」，锁掉等于把暂停键从界面上摘掉
+        setRunState("running");
         // 运行中锁模式：一轮跑到一半换模式等于把工具表从脚下抽走，计划要留到下一轮
         modeBtns.forEach((b) => { b.disabled = true; });
-        let acc = "";
-        let raf = null;
-        const paint = () => {
-            raf = null;
-            answer.innerHTML = renderMarkdown(acc);
-            transcript.scrollTop = transcript.scrollHeight;
-        };
-        const flush = () => {
-            if (raf) { cancelAnimationFrame(raf); raf = null; }
-            if (acc) paint();
-        };
         try {
-            if (agentPath) {
-                await runAgent(answer, skillSel.value, text, planMode, images);
-                return;
-            }
-            await invokePromptStream({ text, skillId: skillSel.value, description: text }, {
-                onChunk: (chunk) => {
-                    if (!chunk || !chunk.text) return;
-                    if (chunk.kind === "thinking" || chunk.kind === "status") {
-                        meta.textContent = chunk.kind === "thinking" ? t("💭 思考中…") : chunk.text;
-                        return;
-                    }
-                    acc = chunk.kind === "replace" ? chunk.text : acc + chunk.text;
-                    if (!raf) raf = requestAnimationFrame(paint);
-                },
-                onDone: flush,
-                onError: (err) => {
-                    flush();
-                    answer.textContent = String(err || t("生成失败"));
-                    answer.classList.add("neo-agent-answer-error");
-                },
-            });
+            await runAgent(answer, text, planMode, images, context);
         } catch (e) {
             answer.textContent = String(e);
             answer.classList.add("neo-agent-answer-error");
         } finally {
             running = false;
+            paused = false;
             controller = null;
             runId = "";
             activeView = null;
             run.disabled = false;
-            run.classList.remove("ns-agent-stop");
-            run.textContent = t("✨ 生成");
+            setRunState("run");
             modeBtns.forEach((b) => { b.disabled = false; });
         }
     }
 
-    // 一个键两态：空闲是「✨ 生成」，运行中是「⏹ 取消」
-    run.onclick = () => (running ? stopRun() : generate());
+    // 主按钮一个钮三态：空闲生成、运行中暂停、暂停中继续；停止在底栏单独一个钮
+    run.onclick = () => {
+        if (!running) return generate();
+        return paused ? resumeRun() : pauseRun();
+    };
     input.addEventListener("keydown", (e) => {
         if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
             e.stopPropagation();
-            generate();
+            if (!running) generate();
         }
     });
 
-    return { box, loadSkills };
+    return { box, renderCtx };
 }
 
 
@@ -742,19 +776,19 @@ export function createMcpPanel() {
 // ==========================================
 
 /**
- * 把聊天面板挂进宿主（桌面端 Studio 右栏）。opts.onOpenMcp 是「🔌 MCP」入口的跳转回调。
- * 返回 { root, refresh }：refresh 拉技能表，宿主在栏子展开时调。
+ * 把聊天面板挂进宿主（桌面端 Studio 右栏）。opts.onOpenMcp 是「🔌 MCP」入口的跳转回调；
+ * opts.getContext 交回界面当前状态（当前页 / 当前导演配方 / 绘画页模式 / 素材库目录），
+ * 面板只把它画进上下文条并随请求体交后端，不解释它。
+ * 返回 { root, refresh }：refresh 重画上下文条，宿主在切页 / 选配方 / 切绘画模式时调。
  */
 export function createAgentPanel(host, opts = {}) {
     ensureCss();
-    const chat = buildChat(opts.onOpenMcp);
+    const chat = buildChat(opts.onOpenMcp, opts.getContext);
     const root = mkEl("div", "neo-agent");
     root.appendChild(chat.box);
     host.appendChild(root);
     return {
         root,
-        async refresh() {
-            await chat.loadSkills();
-        },
+        refresh() { chat.renderCtx(); },
     };
 }
