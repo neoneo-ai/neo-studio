@@ -178,6 +178,11 @@ The image sentence only runs when the machine has an image skill with a `workflo
 - **Image generation needs a skill with a template**: `generate_image.skill_id` must be a `list_skills`
   entry with `has_workflow=true`. The MCP layer never picks one for you, and an empty `skill_id` fails with
   that pointer before any request reaches the backend.
+- **A turn with `references` edits that image**: `skill_id` must be a skill that accepts references —
+  `mode=edit / t2i_edit` in the `list_skills` rows, or `requires_ref=true` for canvas-imported skills that
+  declare no `mode`. A `mode=t2i` template has no reference slot and drops the image in silence, so that call
+  fails with the skill to switch to before any request reaches the backend, the same rule the paint page
+  skill list filters by.
 - **Segment numbers are 1-based everywhere** (segment 1 = the first segment on the timeline).
   `segment_run.segment` and the lists in `assemble_run.segments` / `director_run.only_segments` are 1-based
   and converted to the endpoints' 0-based indices internally.

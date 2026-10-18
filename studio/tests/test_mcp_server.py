@@ -193,17 +193,24 @@ class BaseToolTests(unittest.TestCase):
 
     def test_list_skills_and_models(self):
         skills = [{"id": "qwen_image_21", "name": "Qwen", "cn_name": "写实", "has_workflow": True,
-                   "gen_image": True, "gen_video": False},
+                   "gen_image": True, "gen_video": False, "mode": "t2i_edit", "requires_ref": False},
+                  {"id": "qwen_image_21_face_swap", "name": "Swap", "cn_name": "换脸", "has_workflow": True,
+                   "gen_image": True, "gen_video": False, "mode": "edit", "requires_ref": True},
                   {"id": "translate", "name": "Translate", "cn_name": "翻译", "has_workflow": False,
                    "gen_image": False, "gen_video": False}]
         data = json.loads(text_of(call_tool("list_skills", {},
                                            {("GET", "/rs_prompts/skills"): skills})[0]))
-        self.assertEqual(data["count"], 1)          # 默认只列生图 / 生视频技能
+        self.assertEqual(data["count"], 2)          # 默认只列生图 / 生视频技能
         self.assertTrue(data["skills"][0]["has_workflow"])
+        # 技能收不收参考图要靠这两项告诉调用方：行里没有 mode / requires_ref 时，带参考图那一发
+        # 只能挑到纯文生图技能上，参考图被模板丢掉，智能体那边看不出任何痕迹
+        self.assertEqual(data["skills"][0]["mode"], "t2i_edit")
+        self.assertFalse(data["skills"][0]["requires_ref"])
 
         data = json.loads(text_of(call_tool("list_skills", {"all": True},
                                            {("GET", "/rs_prompts/skills"): skills})[0]))
-        self.assertEqual([s["id"] for s in data["skills"]], ["qwen_image_21", "translate"])
+        self.assertEqual([s["id"] for s in data["skills"]],
+                         ["qwen_image_21", "qwen_image_21_face_swap", "translate"])
         data = json.loads(text_of(call_tool("list_skills", {"q": "翻译", "all": True},
                                            {("GET", "/rs_prompts/skills"): skills})[0]))
         self.assertEqual([s["id"] for s in data["skills"]], ["translate"])
@@ -235,6 +242,50 @@ class BaseToolTests(unittest.TestCase):
         self.assertIn("list_skills", text_of(resp))
         self.assertIn("has_workflow", text_of(resp))
         self.assertEqual(fake.calls, [], "技能 id 缺失时不该把请求发到后端")
+
+    def test_reference_on_a_text_to_image_skill_is_refused(self):
+        """参考图进了纯文生图模板就是静默丢图：这一发跑出来就是「出的图不跟我给的图走」。
+        绘画页的技能列表把这种技能从编辑面板里过滤掉了，工具这一侧要在发出请求之前点名要换的技能。"""
+        routes = {("GET", "/rs_prompts/skills"): [{"id": "image_gen", "mode": "t2i", "has_workflow": True}],
+                  ("POST", "/neo_image_gen/generate"): {"task_id": "T1", "status": "queued"}}
+        resp, fake = call_tool("generate_image", {"skill_id": "image_gen", "prompt": "猫",
+                                                 "references": ["a.png"]}, routes)
+        self.assertTrue(resp["result"]["isError"])
+        self.assertIn("mode=t2i", text_of(resp))
+        self.assertIn("mode=edit / t2i_edit", text_of(resp))
+        self.assertNotIn(("POST", "/neo_image_gen/generate"), fake.paths())
+
+    def test_reference_on_a_skill_that_accepts_it_runs(self):
+        """mode 声明优先，画布导入的用户技能没有 mode 时看 requires_ref——与绘画页技能列表同一份判法。"""
+        skills = [{"id": "qwen_image_21_face_swap", "mode": "edit", "requires_ref": True},
+                  {"id": "qwen_image_21", "mode": "t2i_edit"},
+                  {"id": "my_canvas_skill", "requires_ref": True},
+                  {"id": "my_plain_skill"}]
+        routes = {("GET", "/rs_prompts/skills"): skills,
+                  ("POST", "/neo_image_gen/generate"): {"task_id": "T1", "status": "queued"}}
+        for skill in ("qwen_image_21_face_swap", "qwen_image_21", "my_canvas_skill"):
+            resp, fake = call_tool("generate_image", {"skill_id": skill, "prompt": "猫",
+                                                     "references": ["a.png"]}, routes)
+            self.assertFalse(resp["result"]["isError"], text_of(resp))
+            self.assertEqual(fake.body("POST", "/neo_image_gen/generate")["skill_id"], skill)
+        resp, fake = call_tool("generate_image", {"skill_id": "my_plain_skill", "prompt": "猫",
+                                                 "references": ["a.png"]}, routes)
+        self.assertIn("my_plain_skill", text_of(resp))
+        self.assertNotIn(("POST", "/neo_image_gen/generate"), fake.paths())
+
+    def test_a_skill_the_table_does_not_list_is_left_to_the_backend(self):
+        routes = {("GET", "/rs_prompts/skills"): [{"id": "image_gen", "mode": "t2i"}],
+                  ("POST", "/neo_image_gen/generate"): {"task_id": "T1", "status": "queued"}}
+        resp = call_tool("generate_image", {"skill_id": "gone", "prompt": "猫",
+                                           "references": ["a.png"]}, routes)[0]
+        self.assertEqual(json.loads(text_of(resp))["task_id"], "T1")
+
+    def test_plain_text_to_image_never_probes_the_skill_table(self):
+        routes = {("GET", "/rs_prompts/skills"): [{"id": "image_gen", "mode": "t2i"}],
+                  ("POST", "/neo_image_gen/generate"): {"task_id": "T1", "status": "queued"}}
+        resp, fake = call_tool("generate_image", {"skill_id": "image_gen", "prompt": "猫"}, routes)
+        self.assertEqual(json.loads(text_of(resp))["task_id"], "T1")
+        self.assertNotIn(("GET", "/rs_prompts/skills"), fake.paths())
 
     def test_task_status_probes_tables_and_merges_director_progress(self):
         routes = {("GET", "/neo_studio/director/T1"): {"status": "running", "recipe": "r",

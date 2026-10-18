@@ -177,7 +177,14 @@ Both nodes share the same layout (the Agent shows no status bar):
   travels in the request body's `context` into the system prompt, which is how the agent knows which recipe and which
   mode to work around, and it holds nothing clickable. 📎 attachments (paste, drop, or pick, up to 6, with removable
   thumbnails) travel in
-  the request body as multimodal content, so an image with no text is a valid turn; the **📝 Plan / ⚡ Act** switch
+  the request body as multimodal content, so an image with no text is a valid turn; in Act mode they are the references
+  this turn generates with — `generate_image` gets them automatically when its `references` argument is left out (a pasted
+  image lands in `input/NeoAgent/`, deduplicated by content hash and written once per run), and film references land on the
+  recipe this turn creates (character references and per-segment `refs.images`; an existing recipe is left untouched), while
+  an explicit `references: []` stays plain text-to-image; a turn that carries references is an edit of that image, so the
+  skill has to accept them — `list_skills` rows carry `mode` / `requires_ref`, and picking a `mode=t2i` skill never reaches
+  the backend: the tool result names the `mode=edit / t2i_edit` skill to switch to (canvas-imported skills have no `mode`,
+  so `requires_ref` decides), the same filter the paint page skill list uses; the **📝 Plan / ⚡ Act** switch
   decides whether this turn runs anything — in plan mode the generation and recipe-writing tools stay out of the LLM's
   tool list, a call that arrives anyway is refused, and the turn ends with a step-by-step plan naming the tools and
   parameters; and when the backend's `ask_user` asks a question the loop parks on it, the timeline shows a choice card

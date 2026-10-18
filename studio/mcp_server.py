@@ -263,7 +263,8 @@ def tool_list_skills(ctx, args):
     for s in (ctx.comfy.get("/rs_prompts/skills") or []):
         row = {"id": s.get("id"), "name": s.get("name"), "cn_name": s.get("cn_name"),
                "has_workflow": bool(s.get("has_workflow")), "gen_image": bool(s.get("gen_image")),
-               "gen_video": bool(s.get("gen_video"))}
+               "gen_video": bool(s.get("gen_video")), "mode": str(s.get("mode") or ""),
+               "requires_ref": bool(s.get("requires_ref"))}
         if not want_all and not (row["gen_image"] or row["gen_video"]):
             continue
         if q and q not in " ".join(str(row[k] or "") for k in ("id", "name", "cn_name")).lower():
@@ -295,6 +296,19 @@ _GENERATE_KEYS = ("skill_id", "prompt", "width", "height", "count", "seed", "neg
                   "ratio", "model", "text_encoder", "vae", "steps", "output_prefix")
 
 
+def _skill_ref_form(ctx, skill_id: str) -> str:
+    """技能收不收参考图，判法与绘画页的技能列表同源（studio/web/skill/skill-core.js 的 skillImageMode）：
+    mode 声明优先，画布导入的用户技能没有 mode 时回落 requires_ref。表里没有这个 id 就交后端的技能报错说话。"""
+    for s in (ctx.comfy.get_soft("/rs_prompts/skills") or []):
+        if not isinstance(s, dict) or str(s.get("id") or "") != skill_id:
+            continue
+        mode = str(s.get("mode") or "")
+        if mode in ("t2i", "edit", "t2i_edit"):
+            return mode
+        return "edit" if s.get("requires_ref") else "t2i"
+    return ""
+
+
 def tool_generate_image(ctx, args):
     skill_id = str(args.get("skill_id") or "").strip()
     if not skill_id:
@@ -308,6 +322,12 @@ def tool_generate_image(ctx, args):
     if refs:
         # 后端 _reference_name 认 {kind,value}：value 是 input/ 相对名（output/ 前缀会自动拷进 input/）
         body["references"] = [{"kind": "input", "value": str(r)} for r in refs[:4]]
+        if _skill_ref_form(ctx, skill_id) == "t2i":
+            # 参考图进了纯文生图模板就是静默丢图：跑完用户看到的就是「出的图不跟我给的图走」。
+            # 绘画页的技能列表把这种技能从编辑面板里过滤掉了，工具这一侧要在发出请求之前点名要换的技能
+            raise ToolError(f"技能 {skill_id} 是纯文生图（mode=t2i），模板里没有参考图槽位，参考图会被直接丢掉；"
+                            "带参考图出图要在 list_skills 里选 mode=edit / t2i_edit 的技能"
+                            "（没有 mode 声明时看 requires_ref=true），换完 skill_id 再调一次")
     snap = ctx.comfy.post("/neo_image_gen/generate", body) or {}
     return dump({"task_id": snap.get("task_id"), "status": snap.get("status"),
                  "images": image_items(ctx.comfy, snap.get("images"))})
@@ -652,7 +672,7 @@ SEGMENT = s("integer", "段序号，1 起（第 1 段 = 时间轴第一段）")
 
 TOOLS = [
     tool("neo_status", "Neo Studio / ComfyUI 版本、队列长度、导演配方数；先调它确认服务在线", {}),
-    tool("list_skills", "列出技能（id 即 generate_image 的 skill_id）；默认只列生图 / 生视频技能，all=true 列全部，q 按 id / 名称子串过滤",
+    tool("list_skills", "列出技能（id 即 generate_image 的 skill_id）；默认只列生图 / 生视频技能，all=true 列全部，q 按 id / 名称子串过滤；带参考图出图要选 mode=edit / t2i_edit 的技能（没有 mode 声明时看 requires_ref=true），mode=t2i 的纯文生图技能会把参考图直接丢掉",
          {"all": s("boolean", "true 时连任务类技能一起列（较长）"),
           "q": s("string", "按 id / 名称 / 中文名子串过滤")}),
     tool("generate_prompt", "把简短想法扩写成成品提示词（LLM 同步返回文本）",
@@ -660,15 +680,15 @@ TOOLS = [
           "skill_id": s("string", "可选：按该技能的模板上下文扩写")}, ("text",),
          {"text": "一只在窗台打盹的橘猫，暖色阳光，写实"}),
     tool("list_models", "列出可选模型（diffusion_models / text_encoders / vae / loras）与建议值", {}),
-    tool("generate_image", "提交生图任务，立即返回 task_id（用 task_status 轮询、get_media 取图）",
-         {"skill_id": s("string", "生图技能 id（list_skills 可查）"),
+    tool("generate_image", "提交生图任务，立即返回 task_id（用 task_status 轮询、get_media 取图）；带 references 的这一次是编辑那张参考图，不是文生图",
+         {"skill_id": s("string", "生图技能 id（list_skills 可查）；带 references 时必须是 mode=edit / t2i_edit 的技能，mode=t2i 会把参考图直接丢掉"),
           "prompt": s("string", "提示词"),
           "width": s("integer", "宽（像素），留空用技能默认"),
           "height": s("integer", "高（像素），留空用技能默认"),
           "count": s("integer", "张数"),
           "seed": s("integer", "种子，-1 随机"),
           "negative": s("string", "负向提示词"),
-          "references": s("array", "参考图文件名列表（input/ 下的名字）"),
+          "references": s("array", "参考图文件名列表（input/ 下的名字）；右栏的附件图会自动接进来，显式传空列表就是纯文生图；带它的这一次按编辑那张参考图走，技能要选 mode=edit / t2i_edit"),
           "model": s("string", "扩散模型文件名，留空自动挑选"),
           "text_encoder": s("string", "文本编码器文件名，留空自动挑选"),
           "vae": s("string", "VAE 文件名，留空自动挑选"),
@@ -699,7 +719,7 @@ TOOLS = [
           "idea": s("string", "plan：故事主题"),
           "script": s("string", "plan：已确认的故事脚本（按原剧情拆分，不改写情节）"),
           "segment_seconds": s("integer", "plan：每段目标秒数，默认 5（出片默认一段 5 秒）"),
-          "characters": s("array", "plan：角色参考图文件名，锁角色身份"),
+          "characters": s("array", "plan：角色参考图文件名，锁角色身份；右栏的附件图会自动接进来"),
           "prompt": s("string", "optimize/modify：该段现有提示词"),
           "instruction": s("string", "modify：修改指令"),
           "duration_sec": s("number", "optimize/modify：本段秒数"),

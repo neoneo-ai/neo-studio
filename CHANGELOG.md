@@ -4,6 +4,22 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **Dock attachments are the references the agent generates with.** Pasting or dropping an image into the composer only fed
+  the multimodal turn: `generate_image` ran plain text-to-image, so the picture the user attached had no effect on the
+  result. `_apply_references` in `studio/agent.py` resolves the turn's attachments to `input/` names through
+  `image_gen._reference_name` (pasted data URIs land in `input/NeoAgent/`, deduplicated by content hash, resolved once per
+  run) and fills `generate_image`'s `references` before the tool card is emitted, so the timeline shows what was really
+  used — an explicit `references` wins, `references: []` stays plain text-to-image, and plan mode injects nothing. Film
+  references belong to the recipe, so they land on the recipe this turn creates (`director_plan` characters, per-segment
+  `refs.images`) and an existing recipe is never modified. A reference is an edit of that image, and a template with no
+  reference slot drops it in silence — the paint page skill list already hides those skills from its edit panel, the tools
+  had no such rule: `generate_image` with `references` now refuses a `mode=t2i` skill before the request reaches the
+  backend and names the skill to switch to, using the same `mode` / `requires_ref` rule as `studio/web/skill/skill-core.js`,
+  and `list_skills` rows carry both fields so a caller can pick one knowingly. Covered by
+  `studio/tests/test_mcp_server.py` (4 new cases) on top of `studio/tests/test_agent.py` (8 injection cases);
+  `studio/prompts/agent/system_prompt.md`, docs in `docs/prompts.md` + `docs/en/prompts.md` and `docs/mcp.md` +
+  `docs/en/mcp.md`.
+
 - **The agent's full session list closes, and deleting a session asks first.** 「View all ›」and「🗂」filled the dock with
   the list and left no exit but the「🗂」header button. The list now carries its own head with a「✕」back to the timeline,
   the row delete is a 🗑 (「✕」read as close, not delete), and the row delete and the replay header's delete both land

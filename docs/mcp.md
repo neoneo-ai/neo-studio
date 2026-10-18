@@ -154,6 +154,9 @@ director_plan(mode=plan, idea|script, segment_seconds[, characters])    → 分�
   非 VDN 的 `minimax_h3_*` 是 20 步、慢一倍。
 - **生图技能必须带模板**：`generate_image` 的 `skill_id` 必须是 `list_skills` 里 `has_workflow=true` 的技能。
   没有这种技能时先在前端技能管理里保存一个工作流模板；MCP 层不会替你挑，空 `skill_id` 在发出请求之前就报错。
+- **带 `references` 的那一发是编辑那张图**：`skill_id` 要选收得了参考图的技能——`list_skills` 行里的 `mode` 是
+  `edit / t2i_edit`（画布导入的技能没有 `mode` 时看 `requires_ref=true`）。`mode=t2i` 的模板没有参考图槽位，
+  参考图挂上去会被静默丢掉，这一发在发出请求之前就报错点名要换的技能，与绘画页技能列表的过滤是同一份判法。
 - **段序号一律 1 起**（第 1 段 = 时间轴第一段）。`segment_run` 的 `segment`、`assemble_run` 与
   `director_run.only_segments` 的列表都是 1 基，内部换算成端点的 0 基。
 - **写操作只有两个**：配方元数据的写路是 `rs_recipes/save` 与 `rs_recipes/copy`。不暴露删除端点；读文件只经

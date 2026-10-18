@@ -44,6 +44,9 @@ routes = web.RouteTableDef()
 
 # 入队即返回 task_id 的异步工具：循环里要轮询到终态，不能把一次 tools/call 当同步结果用
 TASK_TOOLS = ("generate_image", "director_run", "segment_run", "assemble_run")
+# 本轮附件图要注入参考的工具：出图直接进 references，出片的参考集归配方拥有（segment_run /
+# director_run 没有参考入参），所以出片侧只写本轮新建配方的 characters 与段 refs
+REF_TOOLS = ("generate_image", "director_plan", "director_save")
 
 MAX_TURNS = 12
 MAX_TOKENS = 900
@@ -195,6 +198,10 @@ class _Run:
         self.text = ""
         self.context = ""
         self.image_refs: list[str] = []
+        # 附件原样挂在运行对象上：注入参考要的是图片源本身，image_refs 只是会话摘要。
+        # image_names 是落盘后的 input/ 名字缓存，两者都不进会话落盘（落盘不带图字节）
+        self.image_sources: list[dict] = []
+        self.image_names: list[str] = []
         self.resume_of = ""
         self.status = "running"
         self.frames: list[dict] = []
@@ -481,6 +488,60 @@ def _resolve_images(raw: list) -> list:
                         if isinstance(src, dict)) if b]
 
 
+def _attachment_names(sources: list) -> list:
+    """本轮附件落成参考图名（出图与出片共用）。粘贴 / 拖入的图由 image_gen._reference_name
+    写进 input/NeoAgent/ 按内容哈希去重——同一张图重发不重复落盘，也是 🎨 绘画页出图今天就在写的文件；
+    素材库拖入的图本来就是 input/ 名，原样返回。名字要在生成工具真正被调到时才要，纯问答的一轮不写文件。"""
+    if not sources:
+        return []
+    from .image_gen import _reference_name
+    return [n for n in (_reference_name(src) for src in sources[:MAX_IMAGES]) if n]
+
+
+async def _run_references(run) -> list:
+    """参考图名按运行对象缓存：一条会话里连续出图只落盘一次。"""
+    if not run.image_sources:
+        return []
+    if not run.image_names:
+        run.image_names = await asyncio.to_thread(_attachment_names, run.image_sources)
+    return run.image_names
+
+
+async def _recipe_taken(client, name: str) -> bool:
+    """director_save 要写的名字是否已被占用——注入只碰本轮新建的配方，改用户已有配方是他的明确要求。"""
+    data = _json_of(await asyncio.to_thread(client.call, "director_recipes", {}))
+    return any(str(r.get("name") or "") == name for r in data.get("recipes") or [])
+
+
+async def _apply_references(client, name: str, args: dict, run) -> None:
+    """本轮附件默认就是这次生成的参考图：模型没给值时注入，给了（含 references:[] = 纯文生图）以它为准。
+    出片侧不塞 run 工具的参数——段的参考集由配方拥有，多帧块还要求块内各段参考逐字一致，
+    运行时加参考会打破分块。所以出片的参考落在本轮新建配方上：director_plan 的角色参考、
+    director_save 各段的 refs.images，写已有配方一个字不改。
+    技能收不收参考图不在这里判：那条判法归 generate_image 的 MCP 层，右栏走的是同一条调用。"""
+    refs = await _run_references(run)
+    if not refs:
+        return
+    if name == "generate_image":
+        if "references" not in args:
+            args["references"] = list(refs)
+        return
+    if name == "director_plan":
+        if not args.get("characters"):
+            args["characters"] = list(refs)
+        return
+    target = str(args.get("name") or "")
+    if name == "director_save" and target and not await _recipe_taken(client, target):
+        for seg in args.get("segments") or []:
+            if not isinstance(seg, dict):
+                continue
+            seg_refs = seg.get("refs")
+            if seg_refs is None:
+                seg["refs"] = {"images": list(refs)}
+            elif isinstance(seg_refs, dict) and not (seg_refs.get("images") or []):
+                seg_refs["images"] = list(refs)
+
+
 def _chat(messages: list, tools: list) -> dict:
     """LLM 单轮接缝：llm 是重依赖，函数内导入，测试替掉这个函数就能跑整条循环。"""
     from .llm import chat_turn
@@ -653,6 +714,9 @@ async def _run_agent(client, text: str, emit, run, mode: str = "act",
                 args = json.loads(fn.get("arguments") or "{}")
             except ValueError:
                 args = {}
+            if mode == "act" and name in REF_TOOLS:
+                # 注入要在发 tool_call 帧之前：时间线的工具卡上得看得见这次真用了哪些参考图
+                await _apply_references(client, name, args, run)
             await emit({"kind": "tool_call", "tool": name,
                         "text": _clip(json.dumps(args, ensure_ascii=False), ARGS_CLIP)})
             if name == "ask_user":
@@ -734,7 +798,8 @@ def _error_response(message: str) -> web.Response:
 @routes.post("/neo_agent/run")
 async def agent_run(request):
     """右栏智能体：一次请求，一路 SSE 时间线。body {text, mode, images, context, resume}。
-    mode 只认 plan / act，其余按 act；images 是输入框附件图，按 prompts 的图片源口径给；
+    mode 只认 plan / act，其余按 act；images 是输入框附件图，按 prompts 的图片源口径给，
+    act 模式下它们默认作为本轮生成的参考图（见 _apply_references）；
     context 是界面当前状态（当前页 / 当前导演配方 / 绘画页模式 / 素材库目录），值从前端 DOM 来；
     resume 是「继续这次会话」要接的那条旧会话的 run_id，带它时旧对话原文接在系统提示词之后。"""
     try:
@@ -770,6 +835,8 @@ async def agent_run(request):
     run.mode, run.text, run.context = mode, text, context
     run.resume_of = resume
     run.image_refs = _image_refs(body.get("images"))
+    run.image_sources = [src for src in (body.get("images") or [])
+                         if isinstance(src, dict)][:MAX_IMAGES]
     return web.Response(
         body=_events(run, text, mode, images, context, history),
         content_type="text/event-stream",

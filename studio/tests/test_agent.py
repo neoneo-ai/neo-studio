@@ -370,6 +370,112 @@ class TestAgentLoop(unittest.TestCase):
 
 
 @skip
+class TestReferenceInjection(unittest.TestCase):
+    """本轮附件图默认作为参考图接进生成工具：出图进 generate_image 的 references，出片只进
+    本轮新建配方的角色参考与段参考。模型显式给值（含 references: [] 这个纯文生图口径）以它为准。
+    带参考图的出图是编辑那张图，技能收不收参考图归 generate_image 的 MCP 层判（见 test_mcp_server.py）。"""
+
+    SRC = {"kind": "data", "data": "data:image/png;base64,QUJD"}
+
+    def _fake_names(self):
+        """替掉落盘边界：_reference_name 要真 input 目录，用例只要名字，也不该在测试里写文件。"""
+        patch = mock.patch.object(agent, "_attachment_names",
+                                  lambda srcs: [f"NeoAgent/ref_{i}.png" for i in range(len(srcs))])
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def _apply(self, name, args, sources=(), recipes=()):
+        client = FakeClient({"director_recipes": {"recipes": list(recipes)}})
+        run = agent._Run(client)
+        run.image_sources = list(sources)
+        self._fake_names()
+        asyncio.run(agent._apply_references(client, name, args, run))
+        return args, client
+
+    def test_generate_image_gets_the_attachments_as_references(self):
+        args, _ = self._apply("generate_image", {"prompt": "橘猫"}, sources=(self.SRC,))
+        self.assertEqual(args["references"], ["NeoAgent/ref_0.png"])
+
+    def test_explicit_reference_list_wins_including_the_empty_one(self):
+        """references: [] 是模型说的「这次纯文生图」，不能被附件顶掉；显式点名同理照原样。"""
+        args, _ = self._apply("generate_image", {"references": []}, sources=(self.SRC,))
+        self.assertEqual(args["references"], [])
+        args, _ = self._apply("generate_image", {"references": ["own.png"]}, sources=(self.SRC,))
+        self.assertEqual(args["references"], ["own.png"])
+
+    def test_a_text_only_run_never_touches_the_reference_files(self):
+        """没带附件就什么都不注入：纯问答的一轮不会往 input/NeoAgent/ 写参考文件。"""
+        args, _ = self._apply("generate_image", {"prompt": "橘猫"})
+        self.assertNotIn("references", args)
+        self.assertNotIn("characters", args)
+
+    def test_director_plan_characters_take_the_attachments_when_absent(self):
+        args, _ = self._apply("director_plan", {"mode": "plan", "idea": "橘猫散步"}, sources=(self.SRC,))
+        self.assertEqual(args["characters"], ["NeoAgent/ref_0.png"])
+        args, _ = self._apply("director_plan", {"mode": "plan", "idea": "橘猫散步",
+                                               "characters": ["mei.png"]}, sources=(self.SRC,))
+        self.assertEqual(args["characters"], ["mei.png"])
+
+    def test_segment_references_land_only_on_a_new_recipe(self):
+        """段的参考集归配方拥有：本轮新建的配方补上附件参考，写已有配方一个字不改。"""
+        fresh = [{"prompt": "橘猫走过街道"}, {"prompt": "橘猫抬头", "refs": {"images": ["own.png"]}}]
+        args, client = self._apply("director_save", {"name": "新片", "segments": list(fresh)},
+                                   sources=(self.SRC,))
+        self.assertEqual(args["segments"][0]["refs"], {"images": ["NeoAgent/ref_0.png"]})
+        self.assertEqual(args["segments"][1]["refs"], {"images": ["own.png"]})
+        self.assertEqual(client.calls[0][0], "director_recipes")
+        kept = [{"prompt": "橘猫走过街道"}]
+        args, _ = self._apply("director_save", {"name": "cat_walk", "segments": list(kept)},
+                              sources=(self.SRC,), recipes=[{"name": "cat_walk"}])
+        self.assertNotIn("refs", args["segments"][0])
+
+    def test_reference_names_resolve_once_per_run(self):
+        """参考名按运行对象缓存：一条会话里连出两次图只落盘一次。"""
+        client = FakeClient({"director_recipes": {"recipes": []}})
+        run = agent._Run(client)
+        run.image_sources = [self.SRC]
+        names = mock.Mock(return_value=["NeoAgent/ref_0.png"])
+        with mock.patch.object(agent, "_attachment_names", names):
+            async def main():
+                await agent._apply_references(client, "generate_image", {"prompt": "第一张"}, run)
+                await agent._apply_references(client, "generate_image", {"prompt": "第二张"}, run)
+            asyncio.run(main())
+        self.assertEqual(names.call_count, 1)
+        self.assertEqual(run.image_names, ["NeoAgent/ref_0.png"])
+
+    def test_the_tool_card_shows_the_injected_reference(self):
+        """注入要在发 tool_call 帧之前：时间线的工具卡上要看得见这次真用了哪些参考图。"""
+        turns = [{"content": "先拆分段",
+                  "tool_calls": [{"id": "c1", "function": {
+                      "name": "director_plan", "arguments": json.dumps({"mode": "plan", "idea": "橘猫散步"})}}]},
+                 {"content": "分好了"}]
+        client = FakeClient({"director_plan": {"segments": [{"prompt": "橘猫散步", "duration_sec": 5}]}})
+        run = agent._Run(client)
+        run.image_sources = [self.SRC]
+        self._fake_names()
+        with mock.patch.object(agent, "_chat", lambda m, t: turns.pop(0)):
+            frames = _run(lambda emit: agent._run_agent(client, "出个片", emit, run))
+        self.assertIn("NeoAgent/ref_0.png", frames[1]["text"])
+        self.assertEqual(client.calls[0][1]["characters"], ["NeoAgent/ref_0.png"])
+
+    def test_plan_mode_injects_nothing(self):
+        """计划模式本轮只查不跑：生成工具在边界就被拒，参数不该被改动。"""
+        turns = [{"content": "先出计划",
+                  "tool_calls": [{"id": "c1", "function": {
+                      "name": "generate_image", "arguments": json.dumps({"prompt": "橘猫"})}}]},
+                 {"content": "计划：先用 VDN 技能出 5 秒一段"}]
+        client = FakeClient({"generate_image": {"task_id": "t1"}})
+        run = agent._Run(client)
+        run.image_sources = [self.SRC]
+        self._fake_names()
+        with mock.patch.object(agent, "_chat", lambda m, t: turns.pop(0)):
+            frames = _run(lambda emit: agent._run_agent(client, "出图", emit, run, "plan"))
+        self.assertNotIn("references", frames[1]["text"])
+        self.assertTrue(frames[2]["text"].startswith("[error] 计划模式"))
+        self.assertEqual(client.calls, [])
+
+
+@skip
 class TestRoutes(unittest.TestCase):
     @staticmethod
     def _req(body, valid_json=True):
