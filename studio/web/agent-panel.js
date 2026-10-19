@@ -236,7 +236,7 @@ function buildChat(onOpenMcp, getContext) {
         if (ctx.recipe) parts.push(ctx.recipe + (ctx.segments > 0 ? tf("{n} 段", { n: ctx.segments }) : ""));
         if (ctx.paint_mode === "text") parts.push(t("文生图"));
         else if (ctx.paint_mode === "edit") parts.push(t("图片编辑"));
-        if (ctx.gallery_path) parts.push(ctx.gallery_path);
+        if (ctx.gallery_path) parts.push(ctx.character_dir ? tf("{dir}（角色图）", { dir: ctx.gallery_path }) : ctx.gallery_path);
         return parts;
     }
     function ctxLine() { return ctxOff ? "" : currentContext().join(" · "); }

@@ -1261,9 +1261,10 @@ export class NeoGallery {
     }
 
     /** 当前视图是角色图目录：多选建导演配方走全参考（三视图当关键帧会让视频从设定图开镜）。
-     *  子目录继承父目录的标记：标了 stars，stars/孟子义 里的图同样按角色图处理。 */
-    isCharacterDir() {
-        const token = this._dirTokenOf();
+     *  子目录继承父目录的标记：标了 stars，stars/孟子义 里的图同样按角色图处理。
+     *  宿主（studio-app.js 的右栏上下文）要问的是自己那份视图，传进来查，不读画廊现值。 */
+    isCharacterDir(view = this.currentView) {
+        const token = this._dirTokenOf(view);
         if (!token) return false;
         const parts = token.split('/');
         for (let i = parts.length; i > 0; i--) {

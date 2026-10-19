@@ -727,7 +727,8 @@ TOOLS = [
           "refs": s("object", "optimize/modify：本段参考素材 {images,videos,audios}")}),
     tool("director_save", "写操作：把分段写进 custom 配方（内置预设只读，先 director_copy）",
          {"name": s("string", "配方名"),
-          "shared": s("object", "{width,height,seed,mode?,chunk_sec?}；mode 全体统一，mixed 时每段用 seg.mode"),
+          "shared": s("object", "{width,height,seed,mode?,chunk_sec?}；mode 全体统一，mixed 时每段用 seg.mode；"
+                              "拿参考图（角色图目录的设定图）出片写 r2v，图进各段 refs.images，不当 first_frame"),
           "segments": s("array", "每段 {prompt,duration_sec,skill_id?,first_frame?,storyboard?,storyboard_prompt?,refs?,mode?}；草稿可留空 prompt"),
           "story": s("object", "{idea,story,characters,segment_seconds,image_mode,image_skill,frame_source}："
                                "文字故事板快照；带上才有主题 / 角色参考 / 分镜设置，关键帧也才拿得到角色参考"),

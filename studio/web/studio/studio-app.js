@@ -37,15 +37,22 @@ function agentContext() {
     const view = app.neoGallery?.currentView;
     const lib = (view?.mode === "directory" && view.source)
         ? [view.source, ...(view.categoryPath || [])].join("/") : "";
+    // 素材库目录带 👤 角色图标记时一并报出去：右栏智能体基于这些附件图建导演配方
+    // 要照画廊 ⋯ 菜单那条口径走全参考，它自己没有目录标记这份数据
+    const withLib = (ctx) => {
+        if (!lib) return ctx;
+        ctx.gallery_path = lib;
+        if (app.neoGallery?.isCharacterDir?.(view)) ctx.character_dir = true;
+        return ctx;
+    };
     const page = agentCtx.page;
     if (page === "director") {
         // 抽屉开着时素材库是导演页自己上屏的；收起时画廊交还收留宿主，报它就是串到素材页那一份目录
         const ctx = { page, recipe: agentCtx.recipe, segments: agentCtx.segments };
-        if (lib && libDrawers.director?.isOpen()) ctx.gallery_path = lib;
-        return ctx;
+        return (lib && libDrawers.director?.isOpen()) ? withLib(ctx) : ctx;
     }
-    if (page === "paint") return { page, paint_mode: agentCtx.paint_mode, gallery_path: lib };
-    if (page === "gallery") return { page, gallery_path: lib };
+    if (page === "paint") return withLib({ page, paint_mode: agentCtx.paint_mode });
+    if (page === "gallery") return withLib({ page });
     return { page };
 }
 

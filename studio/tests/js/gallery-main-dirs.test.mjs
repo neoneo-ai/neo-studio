@@ -29,6 +29,27 @@ test("只读判定：云端预设目录与 presets 缓存不可删除", async ()
     assert.equal(gallery.isDeletableItem("a.png", "presets"), false);
 });
 
+test("角色图标记按视图判定：宿主交来自己那份视图时照同一份 token 比", async () => {
+    resetEnv();
+    clearRoutes();
+    await loadNeoGallery();
+    const gallery = makeGallery();
+    gallery.characterDirs = new Set(["cloud presets/明朝人物", "stars", "f:/shots/montage"]);
+    gallery._customDirTokens = new Map([["montage", "f:/shots/montage"]]);
+    gallery.currentView = { mode: "home", source: null, categoryPath: [] };
+
+    assert.equal(gallery.isCharacterDir({ mode: "directory", source: "Cloud Presets", categoryPath: ["明朝人物"] }), true,
+                 "云端预设目录按标签默认就是角色图目录");
+    assert.equal(gallery.isCharacterDir({ mode: "directory", source: "stars", categoryPath: ["孟子义"] }), true,
+                 "子目录继承父目录的标记");
+    assert.equal(gallery.isCharacterDir({ mode: "directory", source: "Montage", categoryPath: [] }), true,
+                 "自定义目录在画廊按目录名寻址，比对要换成设置里存的路径");
+    assert.equal(gallery.isCharacterDir({ mode: "directory", source: "Output", categoryPath: [] }), false);
+    assert.equal(gallery.isCharacterDir({ mode: "home", source: null, categoryPath: [] }), false,
+                 "首页没有目录 token，标不了角色图");
+    assert.equal(gallery.isCharacterDir(gallery.currentView), false, "首页视图交进来同样判否");
+});
+
 test("Cloud Presets 卡片按 path 导航到主目录的预设分支", async () => {
     resetEnv();
     clearRoutes();

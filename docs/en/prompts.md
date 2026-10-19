@@ -177,14 +177,20 @@ Both nodes share the same layout (the Agent shows no status bar):
   opening / closing the director page's library drawer. Only the selected tab's own fields are reported and travel in
   the request body's `context` into the system prompt: a director recipe is reported on the director page only, a paint
   mode on the paint page only, and a gallery directory only while the library is on screen, and `_context_block` in
-  `studio/agent.py` gates the same payload on the same page. A「✕」on the bar drops the context for this turn — the
+  `studio/agent.py` gates the same payload on the same page. A directory carrying the 👤 character-directory flag shows
+  as「directory name（角色图 / character images）」and the request body carries `character_dir: true` — the gallery's
+  `isCharacterDir(view)` decides the flag and the host hands it its own view. A「✕」on the bar drops the context for this
+  turn — the
   request sends `context: null` and the bar reads「已取消上下文 / Context off for this turn」; clicking the bar brings it
   back, and so does any host refresh. 📎 attachments (paste, drop, or pick, up to 6, with removable
   thumbnails) travel in
   the request body as multimodal content, so an image with no text is a valid turn; in Act mode they are the references
   this turn generates with — `generate_image` gets them automatically when its `references` argument is left out (a pasted
   image lands in `input/NeoAgent/`, deduplicated by content hash and written once per run), and film references land on the
-  recipe this turn creates (character references and per-segment `refs.images`; an existing recipe is left untouched), while
+  recipe this turn creates (character references and per-segment `refs.images`; an existing recipe is left untouched), and in
+  a character directory that new recipe gets `shared.mode=r2v` filled in on the same rule as the gallery's ⋯ menu (a
+  three-view sheet as a first frame opens the video on the sheet; a mode the model wrote itself — `i2v` or `mixed` — is
+  left alone), while
   an explicit `references: []` stays plain text-to-image; a turn that carries references is an edit of that image, so the
   skill has to accept them — `list_skills` rows carry `mode` / `requires_ref`, and picking a `mode=t2i` skill never reaches
   the backend: the tool result names the `mode=edit / t2i_edit` skill to switch to (canvas-imported skills have no `mode`,

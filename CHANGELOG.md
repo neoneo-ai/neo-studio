@@ -4,6 +4,19 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **A character directory makes the agent's new recipe full-reference, like the card menu.** The 👤 mark only drove the
+  two frontend entries — the card ⋯ menu and the multi-select bar — while the agent dock built its recipe from the same
+  images with whatever mode the model wrote: `load_director_spec` derives frame modes from the first / last frame assets
+  and needs an explicit `r2v` for image references, so a recipe with `refs.images` and no mode quietly became `t2v` and
+  dropped the sheets. The mark is now a fact the host reports: `isCharacterDir(view)` answers about the view a host asks
+  for, `agentContext()` in `studio/web/studio/studio-app.js` adds `character_dir`, the context bar shows
+  「目录名（角色图）」, and `_context_block` in `studio/agent.py` puts it in the system prompt. `_apply_references` fills
+  `shared.mode=r2v` on the recipe this run creates in a character directory — an existing recipe is left untouched, and a
+  mode the model wrote itself (`i2v`, `mixed`) stays its own. Covered by `studio/tests/test_agent.py` (context marker,
+  fill / respect / skip on injection, one `/neo_agent/run` end to end) and
+  `studio/tests/js/studio-agent-skill.test.mjs` + `studio/tests/js/gallery-main-dirs.test.mjs`; docs in
+  `docs/gallery.md` + `docs/en/gallery.md` and `docs/prompts.md` + `docs/en/prompts.md`.
+
 - **Cloud presets have one home: every index directory is a Cloud Presets card.** The index's `categories` mapping used
   to host preset directories inside the `StoryBoard` / `CharacterSheet` output roots, so `_get_oss_cache_dir` cached the
   same cloud files a second and third time under `output/StoryBoard/presets/` and `output/CharacterSheet/presets/` —

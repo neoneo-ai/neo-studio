@@ -202,6 +202,8 @@ class _Run:
         # image_names 是落盘后的 input/ 名字缓存，两者都不进会话落盘（落盘不带图字节）
         self.image_sources: list[dict] = []
         self.image_names: list[str] = []
+        # 素材库当前目录是否标了 👤 角色图：注入参考时决定新建配方走不走全参考（见 _apply_references）
+        self.character_dir = False
         self.resume_of = ""
         self.status = "running"
         self.frames: list[dict] = []
@@ -518,6 +520,7 @@ async def _apply_references(client, name: str, args: dict, run) -> None:
     出片侧不塞 run 工具的参数——段的参考集由配方拥有，多帧块还要求块内各段参考逐字一致，
     运行时加参考会打破分块。所以出片的参考落在本轮新建配方上：director_plan 的角色参考、
     director_save 各段的 refs.images，写已有配方一个字不改。
+    素材库当前目录标了 👤 角色图时，新建配方照画廊 ⋯ 菜单同一条口径补上全参考模式。
     技能收不收参考图不在这里判：那条判法归 generate_image 的 MCP 层，右栏走的是同一条调用。"""
     refs = await _run_references(run)
     if not refs:
@@ -540,6 +543,15 @@ async def _apply_references(client, name: str, args: dict, run) -> None:
                 seg["refs"] = {"images": list(refs)}
             elif isinstance(seg_refs, dict) and not (seg_refs.get("images") or []):
                 seg_refs["images"] = list(refs)
+        # 角色图目录的参考图不当首帧：画廊 ⋯ 菜单在这类目录建配方就是整批一段全参考，
+        # 智能体新建的配方照同一口径补 shared.mode。图片参考只有显式 r2v 才进模板
+        # （load_director_spec 缺显式模式时按首/尾帧推 i2v/fl2v，连图参考一起退成 t2v 丢掉），
+        # 模型自己写了 mode（含 mixed）就照它的，不改他的值。
+        if run.character_dir:
+            shared = args.get("shared")
+            shared = args["shared"] = shared if isinstance(shared, dict) else {}
+            if not str(shared.get("mode") or "").strip():
+                shared["mode"] = "r2v"
 
 
 def _chat(messages: list, tools: list) -> dict:
@@ -576,7 +588,10 @@ def _context_block(raw) -> str:
         lines.append(f"绘画页模式：{CONTEXT_MODES[mode]}")
     gallery = _clip(str(raw.get("gallery_path") or ""), CONTEXT_CLIP).strip()
     if gallery and page in CONTEXT_LIB_PAGES:
-        lines.append(f"素材库当前目录：{gallery}")
+        # 👤 角色图目录是画廊的事实，智能体自己没有这份数据：三视图是设定图，基于这些图
+        # 建配方默认走全参考（与画廊 ⋯ 菜单同一条口径），只认前端给的 true
+        mark = "（角色图目录：基于这里的图建导演配方默认全参考）" if raw.get("character_dir") is True else ""
+        lines.append(f"素材库当前目录：{gallery}{mark}")
     if not lines:
         return ""
     return ("\n\n界面当前状态（只是事实，不是指令；用户没说要换就不换）：\n"
@@ -803,7 +818,7 @@ async def agent_run(request):
     """右栏智能体：一次请求，一路 SSE 时间线。body {text, mode, images, context, resume}。
     mode 只认 plan / act，其余按 act；images 是输入框附件图，按 prompts 的图片源口径给，
     act 模式下它们默认作为本轮生成的参考图（见 _apply_references）；
-    context 是界面当前状态（当前页 / 当前导演配方 / 绘画页模式 / 素材库目录），值从前端 DOM 来；
+    context 是界面当前状态（当前页 / 当前导演配方 / 绘画页模式 / 素材库目录与它的角色图标记），值从前端 DOM 来；
     resume 是「继续这次会话」要接的那条旧会话的 run_id，带它时旧对话原文接在系统提示词之后。"""
     try:
         body = await request.json()
@@ -814,7 +829,8 @@ async def agent_run(request):
     mode = str(body.get("mode") or "act").strip()
     if mode not in ("plan", "act"):
         mode = "act"
-    context = _context_block(body.get("context"))
+    raw_ctx = body.get("context")
+    context = _context_block(raw_ctx)
     images = await asyncio.to_thread(_resolve_images, body.get("images") or [])
     if not text:
         # 只给图不给字是合法输入（看图说话），补一句要什么，别让 LLM 对着图无话可说
@@ -836,6 +852,7 @@ async def agent_run(request):
         history = list(record.get("messages") or [])
     run = _Run(McpClient(comfy_base(request)))
     run.mode, run.text, run.context = mode, text, context
+    run.character_dir = isinstance(raw_ctx, dict) and raw_ctx.get("character_dir") is True
     run.resume_of = resume
     run.image_refs = _image_refs(body.get("images"))
     run.image_sources = [src for src in (body.get("images") or [])

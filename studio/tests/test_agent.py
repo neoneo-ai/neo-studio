@@ -217,6 +217,17 @@ class TestToolSurface(unittest.TestCase):
         self.assertIn("绘画页模式：图片编辑", paint)
         self.assertNotIn("当前导演配方", paint)
 
+    def test_context_block_marks_the_character_directory(self):
+        """👤 角色图目录是画廊的事实，智能体自己没有这份数据：写明它，基于这里的附件图建配方
+        才默认走全参考。这一栏只认前端给的 true，字符串形态的标记当没有。"""
+        marked = agent._context_block({"page": "gallery", "gallery_path": "Cloud Presets/明朝人物",
+                                       "character_dir": True})
+        self.assertIn("素材库当前目录：Cloud Presets/明朝人物（角色图目录", marked)
+        self.assertNotIn("角色图目录", agent._context_block({"page": "gallery",
+                                                             "gallery_path": "Cloud Presets/明朝人物"}))
+        self.assertNotIn("角色图目录", agent._context_block({"page": "gallery",
+                                                             "gallery_path": "stars", "character_dir": "yes"}))
+
     def test_mcp_tools_reach_the_llm_in_openai_shape(self):
         """llama-server 逐条找 type 键，MCP 的 inputSchema 在 OpenAI 侧叫 parameters：
         整张 MCP 注册表换形后条条要能解析，工具卡预填用的 _meta 不进模型请求。"""
@@ -398,10 +409,11 @@ class TestReferenceInjection(unittest.TestCase):
         patch.start()
         self.addCleanup(patch.stop)
 
-    def _apply(self, name, args, sources=(), recipes=()):
+    def _apply(self, name, args, sources=(), recipes=(), char_dir=False):
         client = FakeClient({"director_recipes": {"recipes": list(recipes)}})
         run = agent._Run(client)
         run.image_sources = list(sources)
+        run.character_dir = char_dir
         self._fake_names()
         asyncio.run(agent._apply_references(client, name, args, run))
         return args, client
@@ -442,6 +454,38 @@ class TestReferenceInjection(unittest.TestCase):
         args, _ = self._apply("director_save", {"name": "cat_walk", "segments": list(kept)},
                               sources=(self.SRC,), recipes=[{"name": "cat_walk"}])
         self.assertNotIn("refs", args["segments"][0])
+
+    def test_character_dir_new_recipe_defaults_to_full_reference(self):
+        """角色图目录里基于附件图建的新配方走全参考，与画廊 ⋯ 菜单同一条口径：三视图当首帧
+        会让视频从设定图开镜。图片参考也只有显式 r2v 才进模板——缺显式模式时后端按首/尾帧推模式，
+        段里的图参考会连模式一起退成 t2v 丢掉。"""
+        args, _ = self._apply("director_save", {"name": "新片", "segments": [{"prompt": "明朝人物", "duration_sec": 5}]},
+                              sources=(self.SRC,), char_dir=True)
+        self.assertEqual(args["shared"]["mode"], "r2v")
+        self.assertEqual(args["segments"][0]["refs"], {"images": ["NeoAgent/ref_0.png"]})
+
+    def test_the_mode_the_model_wrote_survives_the_full_reference_default(self):
+        """注入只补模型没写的那一格：他自己写的 i2v 与 mixed 照原样，shared 里其余参数不动。"""
+        args, _ = self._apply("director_save", {"name": "新片", "shared": {"mode": "i2v"},
+                                                "segments": [{"first_frame": "a.png"}]},
+                              sources=(self.SRC,), char_dir=True)
+        self.assertEqual(args["shared"], {"mode": "i2v"})
+        args, _ = self._apply("director_save", {"name": "新片", "shared": {"mode": "mixed", "width": 1280},
+                                                "segments": [{"prompt": "明朝人物", "mode": "i2v"}]},
+                              sources=(self.SRC,), char_dir=True)
+        self.assertEqual(args["shared"], {"mode": "mixed", "width": 1280})
+
+    def test_an_unmarked_directory_leaves_the_mode_to_the_model(self):
+        """没标角色图的目录仍是每图一段、图作首帧：注入参考不替用户选模式。"""
+        args, _ = self._apply("director_save", {"name": "新片", "segments": [{"first_frame": "a.png"}]},
+                              sources=(self.SRC,))
+        self.assertNotIn("shared", args)
+
+    def test_an_existing_recipe_gets_no_full_reference_mode(self):
+        """写已有配方一个字不改：连补 shared.mode 也不做，全参考是用户对已有配方的决定。"""
+        args, _ = self._apply("director_save", {"name": "cat_walk", "segments": [{"prompt": "橘猫"}]},
+                              sources=(self.SRC,), char_dir=True, recipes=[{"name": "cat_walk"}])
+        self.assertNotIn("shared", args)
 
     def test_reference_names_resolve_once_per_run(self):
         """参考名按运行对象缓存：一条会话里连出两次图只落盘一次。"""
@@ -558,6 +602,31 @@ class TestRoutes(unittest.TestCase):
         self.assertIn("当前导演配方：cat_walk · 2 段", seen[0])
         run_with({"text": "出片", "context": "not-a-dict"})
         self.assertNotIn("用户没说要换就不换", seen[1])   # 认不到的上下文形态就当没有这一段
+
+    def test_run_makes_a_new_recipe_full_reference_in_a_character_directory(self):
+        """请求体里的角色图标记一路走到参考注入：本轮新建的配方补上 shared.mode=r2v，
+        与画廊 👤 目录卡片菜单的「🎬 新建导演配方（全参考）」同一条口径。"""
+        turns = [{"content": "建配方", "tool_calls": [{"id": "c1", "function": {
+            "name": "director_save",
+            "arguments": json.dumps({"name": "明朝人物",
+                                     "segments": [{"prompt": "明朝人物立于城楼", "duration_sec": 5}]})}}]},
+            {"content": "配方已保存"}]
+        client = FakeClient({"director_recipes": {"recipes": []},
+                             "director_save": {"success": True, "name": "明朝人物"}},
+                            names=("director_save",))
+        with mock.patch.object(agent, "McpClient", lambda base, timeout=30: client), \
+             mock.patch.object(agent, "_resolve_images", lambda raw: [b"png-bytes"]), \
+             mock.patch.object(agent, "_attachment_names", lambda srcs: ["NeoAgent/ref_0.png"]), \
+             mock.patch.object(agent, "_chat", lambda m, t: turns.pop(0)):
+            resp = asyncio.run(agent.agent_run(TestRoutes._req({
+                "text": "照这张设定图出个片",
+                "images": [{"kind": "input", "filename": "明朝人物.png"}],
+                "context": {"page": "gallery", "gallery_path": "Cloud Presets/明朝人物",
+                            "character_dir": True}})))
+            _data_lines(resp)
+        saved = [a for n, a in client.calls if n == "director_save"][0]
+        self.assertEqual(saved["shared"]["mode"], "r2v")
+        self.assertEqual(saved["segments"][0]["refs"], {"images": ["NeoAgent/ref_0.png"]})
 
     def test_cancel_rejects_non_uuid_task_id(self):
         """task_id 会被拼进 cancel 路由的路径段，路径穿越形态必须在入口挡掉。"""

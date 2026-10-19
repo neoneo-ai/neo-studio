@@ -8,6 +8,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { resetEnv, flush, sleep, mockRoute, jsonResponse, sseResponse, click, inputText, fetchLog, dropFiles, makeFile, setConfirmAnswer, dialogs } from "./setup.mjs";
 import { appState } from "./mocks/comfy-app.mjs";
+import { app as studioApp } from "../../web/studio/shim/app.js";
 
 const webDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../web");
 const studioBody = fs.readFileSync(path.join(webDir, "studio", "index.html"), "utf8").match(/<body>([\s\S]*?)<\/body>/)[1];
@@ -611,6 +612,32 @@ test("上下文只带当前页签那一栏；条上的 ✕ 让本轮不带界面
     click(runBtn());
     await flush(40);
     assert.equal(agentCalls()[1].body.context.page, "skills", "恢复后请求重新带上当前页");
+});
+
+test("素材库目录标了 👤 角色图：上下文带上这个标记，未标记的目录不带", async () => {
+    mountStudio();
+    await openStudio("#/gallery");
+    // 画廊的标记判定在 gallery-main-dirs.test.mjs 里验；这里验宿主把这份事实交进请求体
+    const view = { mode: "directory", source: "Cloud Presets", categoryPath: ["明朝人物"] };
+    let marked = true;
+    studioApp.neoGallery = { currentView: view, isCharacterDir: () => marked };
+    mockAgentStream([{ kind: "content", text: "好" }]);
+    inputText(dock().querySelector(".neo-agent-input"), "照这批设定图出个片");
+    click(runBtn());
+    await flush(40);
+    assert.equal(agentCalls()[0].body.context.gallery_path, "Cloud Presets/明朝人物");
+    assert.equal(agentCalls()[0].body.context.character_dir, true,
+                 "角色图目录要带标记，右栏据此把新建配方出成全参考");
+    assert.ok(metaLines()[0].textContent.includes("角色图"),
+              `回合头应写明这是角色图目录：${metaLines()[0].textContent}`);
+
+    marked = false;
+    inputText(dock().querySelector(".neo-agent-input"), "这批不当角色图用");
+    click(runBtn());
+    await flush(40);
+    assert.equal(agentCalls()[1].body.context.character_dir, undefined,
+                 "未标记的目录不带这一栏（每图一段、图作首帧）");
+    delete studioApp.neoGallery;   // 这一份替身只属于本用例：后面用例的上下文里没有素材库目录
 });
 
 test("点计划模式：请求带 mode=plan，回合头写明计划，收尾解禁模式按钮", async () => {
