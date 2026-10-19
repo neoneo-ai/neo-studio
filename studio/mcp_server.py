@@ -519,6 +519,7 @@ def tool_generate_image(ctx, args):
         body["references"] = [{"kind": "input", "value": str(r)} for r in refs[:4]]
     snap = ctx.comfy.post("/neo_image_gen/generate", body) or {}
     return dump({"task_id": snap.get("task_id"), "status": snap.get("status"),
+                 "skill_id": snap.get("skill_id") or "",
                  "images": image_items(ctx.comfy, snap.get("images"))})
 
 
@@ -559,6 +560,7 @@ def tool_task_status(ctx, args):
 def tool_list_tasks(ctx, args):
     tasks = ctx.comfy.get("/neo_image_gen/tasks") or []
     return dump([{"task_id": t.get("task_id"), "status": t.get("status"), "mode": t.get("mode"),
+                  "skill_id": t.get("skill_id") or "",
                   "prompt": str(t.get("prompt") or "")[:120], "seed": t.get("seed"),
                   "images": image_items(ctx.comfy, t.get("images"), MAX_IMAGES)} for t in tasks[:8]], None)
 
@@ -876,7 +878,7 @@ TOOLS = [
           "limit": s("integer", f"每组最多列几条，默认 {MODEL_LIMIT}")},
          example={"scope": "image", "near": "<当前主模型名，如 Krea2\\krea2_turbo_fp8.safetensors>",
                   "q": "<目录或文件名关键词>"}),
-    tool("generate_image", "提交生图任务，立即返回 task_id（用 task_status 轮询、get_media 取图）；带 references 的这一次是编辑那张参考图，不是文生图；references 为空的这一次是纯文生图，mode=edit 的纯编辑技能会被拒；主模型与 LoRA 的家族（krea2 / qwen）与技能的模板家族不一致时会被拒；主模型名不在生图扫描的 diffusion_models 表里时会被拒，报错给出相近的名字与留空的口径",
+    tool("generate_image", "提交生图任务，立即返回 task_id（用 task_status 轮询、get_media 取图）；返回里带 skill_id，就是这一发用的技能，本会话后续出图默认沿用同一个技能；带 references 的这一次是编辑那张参考图，不是文生图；references 为空的这一次是纯文生图，mode=edit 的纯编辑技能会被拒；主模型与 LoRA 的家族（krea2 / qwen）与技能的模板家族不一致时会被拒；主模型名不在生图扫描的 diffusion_models 表里时会被拒，报错给出相近的名字与留空的口径",
          {"skill_id": s("string", "生图技能 id（list_skills 可查）；带 references 时必须是 mode=edit / t2i_edit 的技能，mode=t2i 会把参考图直接丢掉；references 为空时不能是 mode=edit 的技能"),
           "prompt": s("string", "提示词"),
           "width": s("integer", "宽（像素），留空用技能默认"),
@@ -895,7 +897,7 @@ TOOLS = [
 
     tool("task_status", "查任务快照（生图 / 整片 / 单段 / 拼接共用 task_id）；生图 succeeded 后 images 带取图 URL，导演类 succeeded 后 filename 是 mp4 产物、url 是可直接转给用户的播放/下载链接，别自己拼",
          {"task_id": TASK_ID}, ("task_id",), {"task_id": "<generate_image / director_run 返回的 task_id>"}),
-    tool("list_tasks", "列出最近的生图任务", {}),
+    tool("list_tasks", "列出最近的生图任务（每行带 skill_id：出这一发用的技能）", {}),
     tool("cancel_task", "取消任务（未执行出队，执行中中断）", {"task_id": TASK_ID}, ("task_id",),
          {"task_id": "<list_tasks 里的 task_id>"}),
     tool("get_media", "取产物文件（图片 / 视频 / 音频）：返回文件名、类型与 /view 的 URL；图片可 base64=true 回字节，视频与音频只给 URL",

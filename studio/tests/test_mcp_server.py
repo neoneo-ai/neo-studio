@@ -368,10 +368,12 @@ class BaseToolTests(unittest.TestCase):
 
     def test_task_status_image_kind_with_view_urls(self):
         routes = {("GET", "/neo_image_gen/tasks"): [{"task_id": "T9", "status": "succeeded",
+                                                     "skill_id": "image_gen",
                                                      "images": [{"filename": "neo_0001.png",
                                                                  "subfolder": ""}]}]}
         data = json.loads(text_of(call_tool("task_status", {"task_id": "T9"}, routes)[0]))
         self.assertEqual(data["kind"], "image")
+        self.assertEqual(data["skill_id"], "image_gen")     # 快照字段原样透传，续生成认得出技能
         self.assertEqual(data["images"][0]["url"],
                          "http://127.0.0.1:8188/view?filename=neo_0001.png&subfolder=&type=output")
 
@@ -646,6 +648,26 @@ class MainModelNameTests(unittest.TestCase):
                                     "model": "no_scan.safetensors"})
         self.assertFalse(resp["result"].get("isError"), text_of(resp))
         self.assertIn(("POST", "/neo_image_gen/generate"), fake.paths())
+
+
+class GenerationSkillFactTests(unittest.TestCase):
+    """技能 id 是后端的既定事实：出图响应与任务列表都交回它，外部智能体与右栏才接得上
+    「上一张是哪个技能出的」。"""
+
+    def test_generate_image_returns_the_skill_it_ran_on(self):
+        routes = {("POST", "/neo_image_gen/generate"): {"task_id": "T1", "status": "queued",
+                                                        "skill_id": "image_gen"}}
+        data = json.loads(text_of(call_tool("generate_image",
+                                           {"skill_id": "image_gen", "prompt": "猫"}, routes)[0]))
+        self.assertEqual(data["skill_id"], "image_gen")
+
+    def test_list_tasks_rows_carry_the_skill_id(self):
+        routes = {("GET", "/neo_image_gen/tasks"):
+                  [{"task_id": "T1", "status": "succeeded", "mode": "t2i", "skill_id": "image_gen",
+                    "prompt": "猫", "seed": 7,
+                    "images": [{"filename": "neo_0001.png", "subfolder": ""}]}]}
+        data = json.loads(text_of(call_tool("list_tasks", {}, routes)[0]))
+        self.assertEqual(data[0]["skill_id"], "image_gen")
 
 
 # ===========================================================================

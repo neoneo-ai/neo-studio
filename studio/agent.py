@@ -18,6 +18,8 @@ images 是输入框附件图，按 prompts 的图片源口径解析成字节进�
 一次运行的时间线逐帧与 LLM 原文落在用户数据根的 agent_sessions/（一次运行一个 JSON，原子写，
 只存本机、不进 Registry 包）：GET /neo_agent/sessions 列历史，GET /neo_agent/session 读回整条
 时间线，POST /neo_agent/run 带 resume 时这一轮接在那条旧会话后面跑。
+一次运行里最近一次生成的技能 / 主模型 / 尺寸 / 种子 / 产物名记成焦点链，逐轮重注入系统提示词
+并随会话落盘：「再来一张」接的就是上一张那一发的配置，续聊不会连自己刚用过的技能一起忘掉。
 """
 from __future__ import annotations
 
@@ -47,6 +49,14 @@ TASK_TOOLS = ("generate_image", "director_run", "segment_run", "assemble_run")
 # 本轮附件图要注入参考的工具：出图直接进 references，出片的参考集归配方拥有（segment_run /
 # director_run 没有参考入参），所以出片侧只写本轮新建配方的 characters 与段 refs
 REF_TOOLS = ("generate_image", "director_plan", "director_save")
+# 焦点链：只收这些工具的成功终态——读类工具的返回值是候选集，不是本轮出过的东西
+FOCUS_TOOLS = ("generate_image", "director_run", "segment_run", "assemble_run", "director_save")
+FOCUS_MEDIA_MAX = 4       # 产物文件名只留最近几张：焦点每轮都要进系统提示词，逐轮灌长列表就是白烧 token
+FOCUS_CLIP = 200          # 提示词与产物名来自 LLM 入参与工具载荷，逐字段裁长度再进系统提示词
+FOCUS_LABELS = (("skill_id", "技能"), ("model", "主模型"), ("loras", "LoRA"),
+                ("width", "宽"), ("height", "高"), ("seed", "种子"),
+                ("recipe", "导演配方"), ("prompt", "提示词"),
+                ("images", "产物图"), ("film", "成片"), ("task_id", "最近任务"))
 
 MAX_TURNS = 12
 MAX_TOKENS = 900
@@ -180,7 +190,7 @@ class _Run:
     把它放开。没在暂停时置 resume 是空操作——pause 一侧先清掉它，旧的一次「继续」
     不会把下一次暂停直接放过去。
 
-    落盘面（created / mode / frames / messages / 终态）挂在同一个对象上，_events 收尾时整份
+    落盘面（created / mode / frames / messages / focus / 终态）挂在同一个对象上，_events 收尾时整份
     写进数据根的 agent_sessions/：前端「🗂 历史」读回的就是这一份。"""
 
     def __init__(self, client):
@@ -208,6 +218,9 @@ class _Run:
         self.status = "running"
         self.frames: list[dict] = []
         self.messages: list[dict] = []
+        # 焦点链：本轮会话最近一次生成的既定事实（技能 / 主模型 / 尺寸 / 种子 / 产物名）。
+        # _focus_update 逐次覆盖，逐轮重注入系统提示词，随会话落盘供续聊恢复——不跨运行留全局状态
+        self.focus: dict = {}
 
     async def await_answer(self, emit, question: str, options: list) -> str:
         """发一问，等到用户点选或超时。超时是真实失败模式：整页导航走、SSE 还挂着，
@@ -327,7 +340,7 @@ def _save_session(run) -> None:
     本机路径与产物名，只落在数据根里：不进 Registry 包、不出本机。"""
     payload = {"version": 1, "run_id": run.run_id, "created": run.created,
                "updated": time.time(), "mode": run.mode, "status": run.status,
-               "resume_of": run.resume_of,
+               "resume_of": run.resume_of, "focus": run.focus,
                "input": {"text": run.text, "images": run.image_refs, "context": run.context},
                "frames": run.frames, "messages": _stored_messages(run.messages)}
     data = json.dumps(_json_safe(payload), ensure_ascii=False)
@@ -378,6 +391,8 @@ def _list_sessions() -> list:
         out.append({"run_id": str(data.get("run_id") or ""), "created": data.get("created"),
                     "mode": data.get("mode"), "status": data.get("status"),
                     "resume_of": data.get("resume_of"),
+                    # 焦点链里的技能：历史列表里认得出「这条会话最后是用哪个技能出的图」
+                    "focus_skill": str((data.get("focus") or {}).get("skill_id") or ""),
                     "text": _clip(str(inp.get("text") or ""), 120),
                     "images": len(inp.get("images") or []),
                     "tools": sum(1 for f in (data.get("frames") or []) if f.get("kind") == "tool_call")})
@@ -580,6 +595,85 @@ def _chat(messages: list, tools: list) -> dict:
     return chat_turn(messages, max_tokens=MAX_TOKENS, tools=tools)
 
 
+# ---------------------------------------------------------------------------
+# 焦点链：本会话最近一次生成的既定事实
+# ---------------------------------------------------------------------------
+
+def _focus_update(run, name: str, args: dict, result: str) -> None:
+    """一次生成工具的成功终态把技能 / 主模型 / 尺寸 / 种子 / 产物名写进焦点链：下一轮的系统
+    提示词靠它把「上一张是怎么出的」立成本会话的事实。
+    只收 FOCUS_TOOLS 的成功终态——failed / cancelled 的入参是试过的路，不是出过东西的配置，
+    记进焦点就是拿一次失败污染整条会话；读类工具的返回是候选集，同样不算事实。
+    工具载荷优先（它是后端真值），LLM 的入参只在载荷没给时兜底（generate_image 同步返回的
+    快照没有宽高，主模型留空时后端自己挑的那一份只有载荷知道）。"""
+    if name not in FOCUS_TOOLS:
+        return
+    data = _json_of(result)
+    if name in TASK_TOOLS:
+        if str(data.get("status") or "").split(" ")[0] != "succeeded":
+            return
+    elif data.get("success") is not True:      # director_save 是同步写：回执 success 才算事实
+        return
+    facts: dict = {}
+    for key in ("skill_id", "model"):
+        value = str(data.get(key) or args.get(key) or "").strip()
+        if value:
+            facts[key] = _clip(value, FOCUS_CLIP)
+    for key in ("width", "height", "seed"):
+        value = data.get(key)
+        if value is None:
+            value = args.get(key)
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            facts[key] = int(value)
+    if name == "director_save":
+        recipe = str(data.get("name") or args.get("name") or "").strip()
+    else:
+        recipe = str(data.get("recipe") or args.get("recipe") or "").strip()
+    if recipe:
+        facts["recipe"] = _clip(recipe, FOCUS_CLIP)
+    prompt = str(args.get("prompt") or "").strip()
+    if prompt:
+        facts["prompt"] = _clip(prompt, FOCUS_CLIP)
+    loras = args.get("loras")
+    if isinstance(loras, list):
+        names = [_clip(str(l.get("name") if isinstance(l, dict) else l).strip(), FOCUS_CLIP)
+                 for l in loras]
+        names = [n for n in names if n]
+        if names:
+            facts["loras"] = names[:FOCUS_MEDIA_MAX]
+    files = [_clip(str(im.get("filename") or ""), FOCUS_CLIP)
+             for im in (data.get("images") or []) if isinstance(im, dict)]
+    files = [f for f in files if f]
+    if files:
+        facts["images"] = files[:FOCUS_MEDIA_MAX]
+    film = str(data.get("filename") or "").strip()
+    if film:
+        facts["film"] = _clip(film, FOCUS_CLIP)
+    task_id = str(data.get("task_id") or "").strip()
+    if task_id:
+        facts["task_id"] = task_id
+    run.focus.update(facts)
+
+
+def _focus_block(focus: dict) -> str:
+    """焦点链压成一段事实。空焦点不产出这一段：提示词里一段空的「既定事实」是噪声。"""
+    lines = []
+    for key, label in FOCUS_LABELS:
+        value = focus.get(key)
+        if value is None:
+            continue
+        if isinstance(value, list):
+            value = "、".join(str(v) for v in value)
+        lines.append(_clip(f"{label}={value}", 320))   # 一行 320 字符封顶：这一段每轮整段进请求
+    if not lines:
+        return ""
+    return ("\n\n本会话的既定事实（最近一次生成用的技能、参数与产物）：\n"
+            + "\n".join(f"- {x}" for x in lines)
+            + "\n本轮要继续出图就默认沿用这里的技能与参数，不要为了「再来一张」去重查 "
+              "list_skills / list_models；用户点名要换技能、换模型、换尺寸就按他说的换。"
+              "要完全复刻上一张就照这里的种子与技能出图；只说「再来一张」时按需要换种子。")
+
+
 CONTEXT_PAGES = ("gallery", "director", "paint", "skills", "settings")
 CONTEXT_MODES = {"text": "文生图", "edit": "图片编辑"}
 CONTEXT_LIB_PAGES = ("gallery", "paint", "director")   # 素材库只在这三页上屏，其余页报目录就是串到没在看的页签上
@@ -618,12 +712,15 @@ def _context_block(raw) -> str:
             + "\n".join(f"- {x}" for x in lines))
 
 
-def system_prompt(mode: str = "act", context: str = "") -> str:
+def system_prompt(mode: str = "act", context: str = "", focus: dict | None = None) -> str:
+    """系统提示词 = 静态提示词 + 界面状态 + 焦点链（+ 计划模式说明）。
+    焦点链要在每次 LLM 请求前重算：本轮生成工具刚立的事实得在下一轮请求里可见（见 _run_agent）。"""
     try:
         text = SYSTEM_PROMPT_FILE.read_text(encoding="utf-8")
     except OSError as e:
         raise mcp.ToolError(f"缺少智能体系统提示词：{SYSTEM_PROMPT_FILE}（{e}）")
     text += context
+    text += _focus_block(focus or {})
     if mode == "plan":
         text += PLAN_MODE_NOTE
     return text
@@ -733,7 +830,7 @@ async def _run_agent(client, text: str, emit, run, mode: str = "act",
     ask_user 是右栏伪工具，不发 MCP，循环自己发 ask 帧挂起等用户点选。
     history 是续聊带回来的旧会话原文（不含 system）：带它时这一轮接在那条会话后面跑，
     轮次预算是新一轮自己的 12 轮。"""
-    messages = [{"role": "system", "content": system_prompt(mode, context)}]
+    messages = [{"role": "system", "content": system_prompt(mode, context, run.focus)}]
     messages += list(history or [])
     messages.append(_user_message(text, images or []))
     run.messages = messages       # 同一个 list 对象：循环里的 append 逐轮可见，半途收场也留得下
@@ -745,6 +842,9 @@ async def _run_agent(client, text: str, emit, run, mode: str = "act",
             return
         if not await run.await_resume(emit):
             return
+        # 焦点链逐轮重注入：本轮生成工具刚立的事实要在这一轮的请求里可见，
+        # 而 messages[0] 是循环开头按当时的焦点写的
+        messages[0]["content"] = system_prompt(mode, context, run.focus)
         msg = await asyncio.to_thread(_chat, messages, tools)
         content = str(msg.get("content") or "")
         calls = msg.get("tool_calls") or []
@@ -782,6 +882,7 @@ async def _run_agent(client, text: str, emit, run, mode: str = "act",
             await emit({"kind": "tool_result", "tool": name,
                         "text": _clip(result, RESULT_CLIP), "media": _media_of(result)})
             messages.append({"role": "tool", "tool_call_id": tc.get("id", ""), "content": result})
+            _focus_update(run, name, args, result)
             if run.stop.is_set():
                 await emit({"kind": "content", "text": CANCELLED_TEXT})
                 return
@@ -852,7 +953,8 @@ async def agent_run(request):
     mode 只认 plan / act，其余按 act；images 是输入框附件图，按 prompts 的图片源口径给，
     act 模式下它们默认作为本轮生成的参考图（见 _apply_references）；
     context 是界面当前状态（当前页 / 当前导演配方 / 绘画页模式 / 素材库目录与它的角色图标记），值从前端 DOM 来；
-    resume 是「继续这次会话」要接的那条旧会话的 run_id，带它时旧对话原文接在系统提示词之后。"""
+    resume 是「继续这次会话」要接的那条旧会话的 run_id，带它时旧对话原文与那条会话的焦点链
+    （上一次生成的技能 / 参数 / 产物）一起接在系统提示词之后。"""
     try:
         body = await request.json()
     except Exception:
@@ -887,6 +989,12 @@ async def agent_run(request):
     run.mode, run.text, run.context = mode, text, context
     run.character_dir = isinstance(raw_ctx, dict) and raw_ctx.get("character_dir") is True
     run.resume_of = resume
+    if resume:
+        # 焦点链接上旧会话：续聊第一轮的系统提示词就带着上一次生成的技能与参数。
+        # 老会话文件没有 focus 这一项时是空焦点，本轮从第一次生成起自己攒
+        saved_focus = record.get("focus")
+        if isinstance(saved_focus, dict):
+            run.focus = dict(saved_focus)
     run.image_refs = _image_refs(body.get("images"))
     run.image_sources = [src for src in (body.get("images") or [])
                          if isinstance(src, dict)][:MAX_IMAGES]

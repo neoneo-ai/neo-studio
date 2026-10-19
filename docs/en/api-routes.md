@@ -168,9 +168,9 @@ ComfyUI runtime.
 | GET | `/neo_image_gen/settings` | Read the built-in image-generation defaults |
 | POST | `/neo_image_gen/settings` | Save the default parameters |
 | GET | `/neo_image_gen/models` | Scan the model directories and report the auto-selection result |
-| POST | `/neo_image_gen/generate` | Enqueue image generation (optional per-run overrides / outpaint) |
+| POST | `/neo_image_gen/generate` | Enqueue image generation (optional per-run overrides / outpaint); the response carries `skill_id` (the skill this run used) |
 | GET | `/neo_image_gen/status/{task_id}` | Task snapshot (progress / images / live preview) |
-| GET | `/neo_image_gen/tasks` | Recent task list (at most 32 entries) |
+| GET | `/neo_image_gen/tasks` | Recent task list (at most 32 entries), each row carrying `skill_id` |
 | POST | `/neo_image_gen/cancel/{task_id}` | Dequeue and interrupt when running |
 | GET | `/neo_image_gen/skill_dims` | Skill preset width/height and steps (for filling defaults) |
 | GET | `/neo_image_gen/skill_config` | Read a skill's image / video generation settings |
@@ -200,8 +200,8 @@ included), and the dock never calls a handler directly.
 | POST | `/neo_agent/cancel` | Cancel: with `run_id` it stops the whole agent loop and kills the in-flight task (`run_id` accepts only the shape the `run` frame issued; unknown id is 404); with `task_id` it kills just that task (through MCP `cancel_task`, which resolves the image / film / segment / assemble route itself), `task_id` accepts UUID shapes only |
 | POST | `/neo_agent/pause` | Pause: body `{run_id}` (validated like cancel) parks the loop at the next turn / poll boundary and leaves the SSE stream open; an in-flight ComfyUI task has no paused state, so the boundary kills it and returns `cancelled`, and the resumed loop does not resend it |
 | POST | `/neo_agent/resume` | Resume: body `{run_id}` (validated like cancel) releases the loop parked on the pause checkpoint; a no-op when nothing is paused, so clicking Resume repeatedly never pushes a run past the checkpoint |
-| GET | `/neo_agent/sessions` | The **🗂 History** list: newest first, compact summaries only (time / mode / status / first line / tool count); reading it also drops sessions older than 7 days |
-| GET | `/neo_agent/session` | Reads one session back by `run_id` (query string, accepts only the shape the `run` frame issued): the `frames` timeline and the `messages` the resume feeds the LLM; malformed shape is 400, missing session is 404 |
+| GET | `/neo_agent/sessions` | The **🗂 History** list: newest first, compact summaries only (time / mode / status / first line / tool count / `focus_skill`); reading it also drops sessions older than 7 days |
+| GET | `/neo_agent/session` | Reads one session back by `run_id` (query string, accepts only the shape the `run` frame issued): the `frames` timeline, the `messages` the resume feeds the LLM and the `focus` chain; malformed shape is 400, missing session is 404 |
 | POST | `/neo_agent/session/delete` | Delete one session: body `{run_id}` (validated as above); it unlinks that one file only, missing is 404 |
 | POST | `/neo_agent/session/delete_all` | **Clear conversation** clears the saved history too: it deletes only the session files this module wrote — the directory and any other file stay untouched |
 
@@ -250,6 +250,13 @@ included), and the dock never calls a handler directly.
   drops the oldest messages first, then keeps only the final answer. The terminal state is recorded as
   `succeeded` / `failed` / `cancelled` / `interrupted` (a stream cut by the client), and a resumed run records
   `resume_of`.
+- The session file carries `focus` (the focus chain): the `skill_id` / `model` / `loras` / `width` / `height` / `seed` /
+  `recipe` / `prompt` and the artifact filenames of the most recent successful generation — the loop writes it on a
+  generation tool's success only, because a failed or cancelled request records a path that was tried, not a
+  configuration that produced something. The block is re-injected into the system prompt every turn and restored from
+  the session file on resume: "one more image" defaults to the last run's skill and parameters instead of re-listing
+  skills and models, and the recorded seed is the last run's value, not an order to reproduce the same image. A session
+  file written before the focus chain exists resumes as an empty one.
 - Session files contain user prompts and local paths: they stay on this machine, excluded by gitignore and out of
   the Registry package. The history and resume routes exist on the ComfyUI side only — they are not in the desktop
   capability table `app/studio_caps.py`, and the dock never appears in the offline desktop window.
@@ -375,8 +382,8 @@ loopback). Tool list, parameters, and usage conventions: [mcp.md](mcp.md).
 |------|----------------|
 | `neo_status` | `GET /neo_studio/version` + `GET /queue` |
 | `list_skills` `generate_prompt` | `GET /rs_prompts/skills` + `POST /rs_prompts/stream_generate_prompt` (SSE) |
-| `list_models` `generate_image` `list_tasks` | `GET /neo_image_gen/models` + `POST /neo_image_gen/generate` + `GET /neo_image_gen/tasks` (`list_models` with `scope=video` reads `GET /neo_video_gen/models`, and with `group=diffusion_models` it also reads `GET /rs_prompts/skills` for the main-model ↔ skill mapping) |
-| `task_status` | Image generation is matched by `task_id` inside `GET /neo_image_gen/tasks`; film / segment / assemble probe `GET /neo_studio/director/{id}`, `GET /neo_video_gen/run_segment/{id}`, `GET /neo_video_gen/assemble_segments/{id}` in order, with `GET /neo_video_gen/director_progress` attached for the film |
+| `list_models` `generate_image` `list_tasks` | `GET /neo_image_gen/models` + `POST /neo_image_gen/generate` + `GET /neo_image_gen/tasks` (`list_models` with `scope=video` reads `GET /neo_video_gen/models`, and with `group=diffusion_models` it also reads `GET /rs_prompts/skills` for the main-model ↔ skill mapping; the `generate_image` and `list_tasks` responses carry `skill_id`, the skill that run used) |
+| `task_status` | Image generation is matched by `task_id` inside `GET /neo_image_gen/tasks`, with the snapshot fields passed through unchanged (including `skill_id`); film / segment / assemble probe `GET /neo_studio/director/{id}`, `GET /neo_video_gen/run_segment/{id}`, `GET /neo_video_gen/assemble_segments/{id}` in order, with `GET /neo_video_gen/director_progress` attached for the film |
 | `cancel_task` | Probes the `…/cancel` route of those four tables in order |
 | `get_media` | `GET /view` (output is read through ComfyUI only; png images and mp4 films share one address, video bytes are not returned) |
 | `list_gallery` | `GET /neo_gallery/list` |

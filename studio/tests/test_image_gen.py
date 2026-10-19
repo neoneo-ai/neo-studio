@@ -742,6 +742,12 @@ class StartGenerationTemplateRouteTests(unittest.TestCase):
         self.assertNotIn("12", graph)  # 第二槽无参考 → LoadImage 与连线一并裁掉
         self.assertNotIn("images.image_2", graph["4"]["inputs"])
 
+    def test_snapshot_records_the_skill_the_task_ran_on(self):
+        """技能 id 落在任务行上：快照交回前端与 MCP，续生成才知道上一张是哪个技能出的。"""
+        snap, _ = self._run(self.PLAIN_TEMPLATE, {"skill_id": "qwen_image_21", "prompt": "猫"})
+        self.addCleanup(image_gen.TASKS.pop, snap["task_id"], None)
+        self.assertEqual(snap["skill_id"], "qwen_image_21")
+
     def test_remove_points_uses_sam3_local_edit(self):
         # 点选删除：SAM3 分割 → 遮罩，走局部编辑管线（标红裁剪 + 羽化合并），空提示词填默认删除指令
         seg_calls = {}

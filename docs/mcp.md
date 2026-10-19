@@ -90,8 +90,8 @@ id 就能跑通。
 | `list_skills` | 生图技能 id（含 `mode` / `requires_ref`，判参考图就看这两项；`q` 连 `mode` 的值一起匹配，`q=t2i` 列出 `mode=t2i` 与 `t2i_edit`） |
 | `list_models` | 生图 / 出片扫到的模型与 LoRA：`q` 按 目录/文件名 过滤，`group` 只看一组，`scope=video` 走 H3 扫描，`near=<主模型名>` 把同目录条目排最前（每项带 `dir`），`group=diffusion_models` 的每一项带 `skills`（家族对得上的技能 id，空 = 词表认不出这一家），另带回 `suggested_*` 自动挑选值 |
 | `generate_prompt` | 简短想法 → 成品提示词（走 LLM，需已配置模型） |
-| `generate_image` | 提交生图，立即返回 `task_id`；`model` / `loras` 是这一次的覆盖，技能里的自定参数不动 |
-| `task_status` `list_tasks` `cancel_task` | 任务快照 / 列表 / 取消（五套任务表共用 `task_id`：生图 / 整片 / 单段 / 拼接 / 图片分镜） |
+| `generate_image` | 提交生图，立即返回 `task_id` 与 `skill_id`（这一发用的技能）；`model` / `loras` 是这一次的覆盖，技能里的自定参数不动 |
+| `task_status` `list_tasks` `cancel_task` | 任务快照 / 列表 / 取消（五套任务表共用 `task_id`：生图 / 整片 / 单段 / 拼接 / 图片分镜）；生图快照与列表行带 `skill_id` |
 | `get_media` | 取产物文件：图片（png）与视频（mp4）都给 `/view` 地址；图片可 `base64=true` 回字节，视频与音频只给 URL |
 | `list_gallery` `list_recipes` `load_recipe` | 素材库目录、配方清单、单配方元数据（`results` 是历史产物，含成片 mp4） |
 | `director_recipes` `director_spec` | 导演配方清单、`shared` + 分段清单 |
@@ -174,6 +174,9 @@ director_plan(mode=plan, idea|script, segment_seconds[, characters])    → 分�
   非 VDN 的 `minimax_h3_*` 是 20 步、慢一倍。
 - **生图技能必须带模板**：`generate_image` 的 `skill_id` 必须是 `list_skills` 里 `has_workflow=true` 的技能。
   没有这种技能时先在前端技能管理里保存一个工作流模板；MCP 层不会替你挑，空 `skill_id` 在发出请求之前就报错。
+- **`skill_id` 是这一发用过的技能**：`generate_image` 的响应、`list_tasks` 的每行与生图的 `task_status` 快照都带它。
+  右栏智能体把这份事实记进会话的焦点链、逐轮注入系统提示词，续聊时接上；外部 MCP 客户端要在自己一侧留着它——
+  生图任务表是内存表（最多 32 条、终态 30 分钟清理、重启即空），查不到重启之前那批发过的任务。
 - **带 `references` 的那一发是编辑那张图**：`skill_id` 要选收得了参考图的技能——`list_skills` 行里的 `mode` 是
   `edit / t2i_edit`（画布导入的技能没有 `mode` 时看 `requires_ref=true`）。`mode=t2i` 的模板没有参考图槽位，
   参考图挂上去会被静默丢掉，这一发在发出请求之前就报错点名要换的技能，与绘画页技能列表的过滤是同一份判法。

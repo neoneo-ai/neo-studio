@@ -154,9 +154,9 @@ Neo Studio 独立页面（`web/studio/index.html`）的后端。素材 / 生图 
 | GET | `/neo_image_gen/settings` | 读取内置生图默认参数 |
 | POST | `/neo_image_gen/settings` | 保存默认参数 |
 | GET | `/neo_image_gen/models` | 扫描模型目录并给出自动挑选结果 |
-| POST | `/neo_image_gen/generate` | 生图入队（可带单次覆盖参数 / 扩图） |
+| POST | `/neo_image_gen/generate` | 生图入队（可带单次覆盖参数 / 扩图），响应带 `skill_id`（出这一发用的技能） |
 | GET | `/neo_image_gen/status/{task_id}` | 任务快照（进度 / 图片 / 实时预览） |
-| GET | `/neo_image_gen/tasks` | 最近任务列表（最多 32 条） |
+| GET | `/neo_image_gen/tasks` | 最近任务列表（最多 32 条），每条带 `skill_id` |
 | POST | `/neo_image_gen/cancel/{task_id}` | 出队并在运行中时中断 |
 | GET | `/neo_image_gen/skill_dims` | 技能预设宽高与步数（填默认值用） |
 | GET | `/neo_image_gen/skill_config` | 读取技能生图 / 生视频设置 |
@@ -184,8 +184,8 @@ Neo Studio 独立页面（`web/studio/index.html`）的后端。素材 / 生图 
 | POST | `/neo_agent/cancel` | 取消：带 `run_id` 停整条智能体循环并掐掉在跑的任务（`run_id` 只收 `run` 帧发过的形态，查不到 404）；带 `task_id` 只掐那一个任务（走 MCP `cancel_task`，图片 / 整片 / 单段 / 拼接四类由协议自己找路由），`task_id` 只收 UUID 形态 |
 | POST | `/neo_agent/pause` | 暂停：body `{run_id}`（校验同 cancel），让循环停在下一个轮次 / 轮询边界，SSE 开着不收尾；在飞的 ComfyUI 任务没有暂停态，边界上掐掉它并交回 `cancelled`，恢复后不自动重发 |
 | POST | `/neo_agent/resume` | 继续：body `{run_id}`（校验同 cancel），放开正等在暂停检查点上的循环；没在暂停时是空操作，重复点「继续」不会把运行推过检查点 |
-| GET | `/neo_agent/sessions` | 「🗂 历史」列表：新的在前，只回摘要（时间 / 模式 / 终态 / 首句 / 工具数）；读时顺带收掉落盘超 7 天的会话 |
-| GET | `/neo_agent/session` | 按 `run_id`（查询串，只收 `run` 帧发过的形态）读回一条会话：`frames` 逐帧时间线与续聊要用的 `messages`；形态不对 400、没有 404 |
+| GET | `/neo_agent/sessions` | 「🗂 历史」列表：新的在前，只回摘要（时间 / 模式 / 终态 / 首句 / 工具数 / `focus_skill`）；读时顺带收掉落盘超 7 天的会话 |
+| GET | `/neo_agent/session` | 按 `run_id`（查询串，只收 `run` 帧发过的形态）读回一条会话：`frames` 逐帧时间线、续聊要用的 `messages` 与 `focus`（焦点链）；形态不对 400、没有 404 |
 | POST | `/neo_agent/session/delete` | 删一条会话：body `{run_id}`（校验同上），只删那一个文件，没有 404 |
 | POST | `/neo_agent/session/delete_all` | 「清空对话」连着清历史：只删会话目录里按名字认出来的文件，目录与别的文件不碰 |
 
@@ -222,6 +222,10 @@ Neo Studio 独立页面（`web/studio/index.html`）的后端。素材 / 生图 
   单文件 400 KB）：`frames` 是时间线逐帧，供前端只读重放；`messages` 是续聊要回填 LLM 的原文，不含 system、
   不含图字节（附件图只留一句引用），单条按 4000 字裁剪、整份最多 40 条，超上限时从最旧消息丢起、再超就只留
   最终回答。终态记 `succeeded` / `failed` / `cancelled` / `interrupted`（断流收尾），续聊记 `resume_of`。
+- 会话文件带 `focus`（焦点链）：最近一次成功生成用的 `skill_id` / `model` / `loras` / `width` / `height` / `seed` /
+  `recipe` / `prompt` 与产物文件名，由循环在生成工具的成功终态上写下——failed 与 cancelled 的入参是试过的路，不立事实。
+  这一段逐轮重注入系统提示词，续聊时从会话文件接上：用户说「再来一张」默认沿用上一发的技能与参数，不重查技能表与模型表；
+  里面的种子是上一发的真值，不是「必须复现同一张」的指令。焦点链之前的会话文件没有这一项，按空焦点接上。
 - 会话文件含用户提示词与本机路径：gitignore 与 Registry 包都把它挡在外面，只存本机。历史与续聊的路由只在
   ComfyUI 侧有，不进桌面端能力表 `app/studio_caps.py`，右栏在离线桌面端整栏不出现。
 
@@ -335,8 +339,8 @@ LLM 模式与配置见 [llm.md](llm.md)，技能设计见 [skills.md](skills.md)
 |------|-----------|
 | `neo_status` | `GET /neo_studio/version` + `GET /queue` |
 | `list_skills` `generate_prompt` | `GET /rs_prompts/skills` + `POST /rs_prompts/stream_generate_prompt`（SSE） |
-| `list_models` `generate_image` `list_tasks` | `GET /neo_image_gen/models` + `POST /neo_image_gen/generate` + `GET /neo_image_gen/tasks`（`list_models` 的 `scope=video` 读 `GET /neo_video_gen/models`，`group=diffusion_models` 时另读 `GET /rs_prompts/skills` 取主模型 ↔ 技能映射） |
-| `task_status` | 生图在 `GET /neo_image_gen/tasks` 整表里按 `task_id` 命中；整片 / 单段 / 拼接依次探测 `GET /neo_studio/director/{id}` `GET /neo_video_gen/run_segment/{id}` `GET /neo_video_gen/assemble_segments/{id}`，整片附带 `GET /neo_video_gen/director_progress` |
+| `list_models` `generate_image` `list_tasks` | `GET /neo_image_gen/models` + `POST /neo_image_gen/generate` + `GET /neo_image_gen/tasks`（`list_models` 的 `scope=video` 读 `GET /neo_video_gen/models`，`group=diffusion_models` 时另读 `GET /rs_prompts/skills` 取主模型 ↔ 技能映射；`generate_image` 与 `list_tasks` 的响应带 `skill_id`，就是这一发用的技能） |
+| `task_status` | 生图在 `GET /neo_image_gen/tasks` 整表里按 `task_id` 命中，快照字段原样透传（含 `skill_id`）；整片 / 单段 / 拼接依次探测 `GET /neo_studio/director/{id}` `GET /neo_video_gen/run_segment/{id}` `GET /neo_video_gen/assemble_segments/{id}`，整片附带 `GET /neo_video_gen/director_progress` |
 | `cancel_task` | 依次探测上述四张表的 `…/cancel` |
 | `get_media` | `GET /view`（产物只经 ComfyUI 读；图片 png 与成片 mp4 同一地址，视频不回传字节） |
 | `list_gallery` | `GET /neo_gallery/list` |

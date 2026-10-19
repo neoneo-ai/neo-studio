@@ -1242,6 +1242,8 @@ def _snapshot(task: dict) -> dict:
         "canvas": task["params"].get("canvas"),
         "model": task["params"]["model"],
         "seed": task["params"]["seed"],
+        # 出这一发用的技能：任务表里只存 id，技能名由调用方从技能表取
+        "skill_id": task.get("skill_id", ""),
         "images": [_public_image(e) for e in task["images"]],
         "progress": task.get("progress"),
         "preview": task.get("preview"),
@@ -1480,6 +1482,7 @@ async def start_generation(body: dict) -> dict:
         "status": "queued",
         "created": now,
         "updated": now,
+        "skill_id": skill_id,
         "params": params,
         "images": [],
         "progress": None,

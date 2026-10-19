@@ -1032,6 +1032,148 @@ class TestSessionStore(unittest.TestCase):
 
 
 @skip
+class TestFocusChain(unittest.TestCase):
+    """焦点链：一次生成的成功终态立成本会话的既定事实，逐轮重注入系统提示词，
+    随会话落盘供续聊接上。"""
+
+    SNAP = {"task_id": "t-1", "kind": "image", "status": "succeeded", "skill_id": "image_gen",
+            "model": "Krea2\\krea2_turbo_fp8.safetensors", "width": 1024, "height": 1024,
+            "seed": 77,
+            "images": [{"filename": "neo_0001.png", "subfolder": "", "url": "/view?f=neo_0001.png"}]}
+    TURNS = [{"content": "出图", "tool_calls": [{"id": "c1", "function": {
+        "name": "generate_image",
+        "arguments": json.dumps({"skill_id": "image_gen", "prompt": "橘猫",
+                                 "loras": ["Krea2\\lyf.safetensors"]}, ensure_ascii=False)}}]},
+        {"content": "好了"}]
+    REPLIES = {"generate_image": {"task_id": "t-1", "status": "queued", "skill_id": "image_gen"},
+               "task_status": SNAP}
+
+    def setUp(self):
+        _clear_sessions()
+        self.addCleanup(_clear_sessions)
+
+    def _generate(self, status="succeeded"):
+        """跑一轮带 generate_image 的循环，返回那条运行对象（焦点链挂在它上面）。"""
+        turns = [dict(self.TURNS[0]), {"content": "好了"}]
+        client = FakeClient({"generate_image": {"task_id": "t-1", "status": "queued",
+                                                "skill_id": "image_gen"},
+                             "task_status": dict(self.SNAP, status=status)},
+                            names=("generate_image",))
+        run = _runobj(client)
+        with mock.patch.object(agent, "_chat", lambda m, t: turns.pop(0)), _no_poll_sleep():
+            _run(lambda emit: agent._run_agent(client, "出张图", emit, run))
+        return run
+
+    def _run_with(self, body, turns, replies, names, chat=None):
+        client = FakeClient(replies, names=names)
+        queue = list(turns)
+        with mock.patch.object(agent, "McpClient", lambda base, timeout=30: client), \
+             mock.patch.object(agent, "_chat", chat or (lambda m, t: queue.pop(0))):
+            lines = _drive(agent.agent_run(TestSessionStore._req(body)))
+        return lines, json.loads(lines[0])["run_id"]
+
+    def test_a_successful_generation_becomes_a_fact(self):
+        run = self._generate()
+        self.assertEqual(run.focus["skill_id"], "image_gen")
+        self.assertEqual((run.focus["width"], run.focus["height"]), (1024, 1024))
+        self.assertEqual(run.focus["seed"], 77)
+        self.assertEqual(run.focus["model"], "Krea2\\krea2_turbo_fp8.safetensors")
+        self.assertEqual(run.focus["loras"], ["Krea2\\lyf.safetensors"])
+        self.assertEqual(run.focus["images"], ["neo_0001.png"])
+
+    def test_a_failed_or_cancelled_generation_is_not_a_fact(self):
+        """failed / cancelled 的入参是试过的路，不是出过东西的配置：记进焦点就是拿一次失败污染整条会话。"""
+        for status in ("failed", "cancelled", "running"):
+            self.assertEqual(self._generate(status=status).focus, {}, status)
+
+    def test_a_read_only_tool_is_not_a_fact(self):
+        """list_skills 的返回是候选集：技能要模型挑完技能那一发生成才立得起来。"""
+        run = _runobj(FakeClient({}))
+        agent._focus_update(run, "list_skills", {}, json.dumps({"skills": [{"id": "image_gen"}]}))
+        self.assertEqual(run.focus, {})
+
+    def test_the_latest_generation_is_the_fact(self):
+        run = _runobj(FakeClient({}))
+        for skill, task in (("skill_a", "t1"), ("skill_b", "t2")):
+            agent._focus_update(run, "generate_image", {"skill_id": skill},
+                                json.dumps({"task_id": task, "status": "succeeded",
+                                            "skill_id": skill}))
+        self.assertEqual(run.focus["skill_id"], "skill_b")
+        self.assertEqual(run.focus["task_id"], "t2")
+
+    def test_a_saved_recipe_becomes_a_fact(self):
+        """director_save 是同步写：回执 success 才记，配方名是本轮出片的落点。"""
+        run = _runobj(FakeClient({}))
+        agent._focus_update(run, "director_save", {"name": "cat_walk"},
+                            json.dumps({"success": True, "name": "cat_walk"}))
+        self.assertEqual(run.focus["recipe"], "cat_walk")
+        agent._focus_update(run, "director_save", {"name": "x"}, "[error] 内置预设配方只读")
+        self.assertEqual(run.focus["recipe"], "cat_walk")
+
+    def test_an_empty_focus_produces_no_prompt_block(self):
+        self.assertEqual(agent._focus_block({}), "")
+        self.assertNotIn("最近一次生成用的技能、参数与产物", agent.system_prompt())
+
+    def test_the_fact_enters_the_next_turns_system_prompt(self):
+        """一次生成之后，下一轮请求的 system 里要写着刚用过的技能与产物名——
+        本轮刚立的事实要在下一轮可见，靠的就是逐轮重注入。"""
+        turns = list(self.TURNS)
+        seen = []
+
+        def chat(messages, tools):
+            seen.append([dict(m) for m in messages])
+            return turns.pop(0)
+
+        client = FakeClient(self.REPLIES, names=("generate_image",))
+        with mock.patch.object(agent, "_chat", chat), _no_poll_sleep():
+            _run(lambda emit: agent._run_agent(client, "出张图", emit, _runobj(client)))
+        self.assertEqual(len(seen), 2)
+        self.assertNotIn("最近一次生成用的技能、参数与产物", seen[0][0]["content"], "开局没有既定事实")
+        self.assertIn("技能=image_gen", seen[1][0]["content"])
+        self.assertIn("neo_0001.png", seen[1][0]["content"])
+
+    def test_the_fact_lands_in_the_session_file_and_the_history_list(self):
+        self._run_with({"text": "橘猫"}, list(self.TURNS), self.REPLIES, ("generate_image",))
+        _, rec = _saved_one()
+        self.assertEqual(rec["focus"]["skill_id"], "image_gen")
+        self.assertEqual(rec["focus"]["images"], ["neo_0001.png"])
+        self.assertEqual([s["focus_skill"] for s in agent._list_sessions()], ["image_gen"])
+
+    def test_a_resumed_session_carries_the_previous_fact(self):
+        """续聊第一轮的系统提示词带着上一次的技能：接话的人不该连自己刚用过的技能都要重查一遍。"""
+        _lines, run_id = self._run_with({"text": "橘猫"}, list(self.TURNS),
+                                        self.REPLIES, ("generate_image",))
+        seen = []
+        client = FakeClient({"neo_status": {"neo_studio": "1"}}, names=("neo_status",))
+
+        def chat(messages, tools):
+            seen.append(messages)
+            return {"content": "再来一张"}
+
+        self._run_with({"text": "再来一张", "resume": run_id}, [{"content": "再来一张"}],
+                       {"neo_status": {"neo_studio": "1"}}, ("neo_status",), chat)
+        self.assertIn("最近一次生成用的技能、参数与产物", seen[0][0]["content"])
+        self.assertIn("技能=image_gen", seen[0][0]["content"])
+
+    def test_an_old_session_without_a_focus_resumes_as_an_empty_one(self):
+        """焦点链之前落盘的会话没有这一项：续聊照跑，焦点从本轮第一次生成起自己攒。"""
+        _lines, run_id = self._run_with({"text": "橘猫"}, [{"content": "好了"}],
+                                        {"neo_status": {"neo_studio": "1"}}, ("neo_status",))
+        path, rec = _saved_one()
+        rec.pop("focus")
+        path.write_text(json.dumps(rec, ensure_ascii=False), encoding="utf-8")
+        seen = []
+
+        def chat(messages, tools):
+            seen.append(messages)
+            return {"content": "好"}
+
+        self._run_with({"text": "继续", "resume": run_id}, [{"content": "好"}],
+                       {"neo_status": {"neo_studio": "1"}}, ("neo_status",), chat)
+        self.assertNotIn("最近一次生成用的技能、参数与产物", seen[0][0]["content"])
+
+
+@skip
 class TestCancellation(unittest.TestCase):
     def test_stop_before_the_first_turn_never_calls_the_llm(self):
         """停止位在轮次边界生效：置起后一次 LLM 都不该叫，末帧说明这一路已停。"""

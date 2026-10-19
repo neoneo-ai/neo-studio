@@ -4,6 +4,19 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **A finished generation is a fact the agent keeps.** `image_gen` records the `skill_id` it ran on in the task row,
+  the task snapshot returns it, and the MCP `generate_image` response, every `list_tasks` row and the image
+  `task_status` snapshot pass it through, so the caller knows which skill produced the picture in its hands. The dock's
+  agent writes the last successful generation — skill, main model, LoRAs, width / height, seed, recipe, prompt and the
+  artifact filenames — into the session's focus chain, re-injects that block into the system prompt before every LLM
+  request, and restores it from the session file on resume, so "one more image" continues on the last run's skill
+  instead of re-listing skills and models every turn. A failed, cancelled or timed-out call records nothing; a session
+  saved before the focus chain exists resumes as an empty one; and an external MCP client sees `skill_id` on its own
+  calls only — the image task table is in memory (32 rows, terminal rows pruned after 30 minutes), so a batch sent
+  before a restart stays unqueryable. Covered by `studio/tests/test_image_gen.py`, `studio/tests/test_mcp_server.py`
+  and `studio/tests/test_agent.py` (`TestFocusChain`). Docs in `docs/api-routes.md`, `docs/mcp.md` and
+  `studio/prompts/agent/system_prompt.md`.
+
 - **The skill workflow preview names the variable behind every value it filled in.** The read-only flowchart
   pre-renders `workflow.json` with the skill's settings, so the `{{MEGAPIXELS}}` / `{{ASPECT_RATIO}}` the export
   just bound came back as `megapixels: 1` and `aspect_ratio: 1:1 (Square)` with no trace of the variable — the
