@@ -50,6 +50,12 @@ if mode == "exit":
     sys.stderr.flush()
     sys.exit(3)
 
+if mode == "utf8_exit":
+    # 子进程继承到 PYTHONIOENCODING / PYTHONUTF8 时写的是 UTF-8，跟父进程的本机代码页无关
+    sys.stderr.buffer.write("缺依赖，启动即退出\n".encode("utf-8"))
+    sys.stderr.buffer.flush()
+    sys.exit(3)
+
 if mode == "stderr":
     for i in range(4000):
         sys.stderr.write("x" * 200 + "\n")
@@ -175,6 +181,13 @@ class StdioSessionTests(unittest.TestCase):
         self.assertFalse(res["success"])
         self.assertIn("缺依赖", res["error"])
         self.assertTrue("code=3" in res["error"] or "关闭了输出" in res["error"], res["error"])
+
+    def test_utf8_stderr_tail_survives_the_machine_codepage(self):
+        """子进程写的是 UTF-8 时，按本机代码页（中文 Windows 的 cp936）解就是「缂轰緷璧栵」这种乱码，
+        等于没把要装什么送到用户眼前。"""
+        res = manager_for([fake_server("utf8_exit")], []).connect("fake")
+        self.assertFalse(res["success"])
+        self.assertIn("缺依赖", res["error"])
 
     def test_timeout_reports_the_reason(self):
         transport = mc.StdioTransport(fake_server("hang"), timeout=1.0)

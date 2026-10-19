@@ -35,6 +35,16 @@ MAX_TEXT_CHARS = 200_000   # 工具返回的正文上限：一次抓取回整页
 STDERR_ENCODING = locale.getpreferredencoding(False) or "utf-8"
 
 
+def decode_stderr(raw: bytes) -> str:
+    """子进程 stderr 的编码由它那边定：本机代码页（中文 Windows 是 cp936）是常态，子进程继承到
+    PYTHONIOENCODING / PYTHONUTF8 时就是 UTF-8。只按本机代码页解 UTF-8 的话，「缺依赖」会变成
+    「缂轰緷璧栵」，用户看不到要装什么；UTF-8 能解干净就先按 UTF-8 解，解不动再回落代码页。"""
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return raw.decode(STDERR_ENCODING, "replace")
+
+
 class McpError(Exception):
     """一次 MCP 往返失败：消息里带上用户能看懂的原因，前端原样显示。"""
 
@@ -110,7 +120,7 @@ class StdioTransport:
         for raw in self.proc.stderr:
             # 子进程写 stderr 用的是本机代码页（中文 Windows 是 cp936）：按 UTF-8 解就是乱码，
             # 用户看不到「缺依赖」这类原因。stdout 反过来必须按 UTF-8 —— JSON-RPC over stdio 规范定的。
-            self.stderr_lines.append(raw.decode(STDERR_ENCODING, "replace").rstrip())
+            self.stderr_lines.append(decode_stderr(raw).rstrip())
 
     def _write(self, payload: dict) -> None:
         data = (json.dumps(payload, ensure_ascii=False) + "\n").encode("utf-8")
