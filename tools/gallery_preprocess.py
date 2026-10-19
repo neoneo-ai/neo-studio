@@ -5,9 +5,11 @@
 # Usage:
 #   python gallery_preprocess.py --presets <presets_dir> --output <output_dir> [--size 320]
 #   cd <dir_with_new_dirs> && python gallery_preprocess.py --output <output_dir> --dirs dir1 dir2
-#       [--category grid|character]   (--presets omitted in incremental mode: cwd is used)
-#   python gallery_preprocess.py --output <output_dir> --publish dir1 dir2 [--category grid|character]
+#       (incremental add/update; --presets omitted: cwd is used)
+#   python gallery_preprocess.py --output <output_dir> --publish dir1 dir2
 #   python gallery_preprocess.py --output <output_dir> --split-legacy
+#   python gallery_preprocess.py --output <output_dir> --tag-dirs dir1 dir2 --tag character-sheet
+#       (--tag-dirs edits tags of existing index directories: no media scan, no new entries)
 #
 # Without --dirs: full scan of all subdirectories, the master index is rebuilt from scratch.
 # With --dirs DIR...: only those subdirectories are (re)scanned — new directories are added,
@@ -17,6 +19,10 @@
 # --draft writes the directory indexes without publishing them in the master index;
 #   --publish publishes already written directory indexes later without rescanning media.
 #   --split-legacy converts a legacy full index.json into per-directory indexes.
+# --tag/--clear-tags writes the per-directory "tags" list in the master index. "tags" is a
+#   label on the directory (a directory can carry many) and never moves the card: every index
+#   directory is one Cloud Presets card. The plugin reads tags for directory defaults,
+#   e.g. "character-sheet" = 角色图目录.
 #
 # The output directory will contain:
 #   index.json          — v2 master index: per-directory count / index path / rev / covers
@@ -141,7 +147,7 @@ def fetch_index_from_url(url: str, dest_path: Path):
 
 def get_oss_config() -> dict:
     """Read the plugin's configs/oss_presets.json (empty dict if unset)."""
-    cfg_path = Path(__file__).resolve().parent.parent / "configs" / "oss_presets.json"
+    cfg_path = Path(__file__).resolve().parent.parent / "studio" / "configs" / "oss_presets.json"
     try:
         with open(cfg_path, "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -201,16 +207,21 @@ def load_dir_index(output_dir: Path, dir_name: str) -> tuple[list[dict], str] | 
     return data["items"], str(data.get("generated_at", ""))
 
 
-def master_entry(dir_name: str, entries: list[dict], rev: str) -> dict:
-    """Master-index entry: count, directory index path, rev, card covers — no items."""
+def master_entry(dir_name: str, entries: list[dict], rev: str, tags: list[str] | None = None) -> dict:
+    """Master-index entry: count, directory index path, rev, card covers — no items.
+
+    tags 是可选的目录标签（与卡片位置无关），不传就不写 tags 字段。"""
     covers = [{"filename": e["filename"], "thumbnail": e["thumbnail"]}
               for e in entries if e.get("thumbnail")][:2]
-    return {
+    entry = {
         "count": len(entries),
         "index": f"{dir_name}/index.json",
         "rev": rev,
         "covers": covers,
     }
+    if tags:
+        entry["tags"] = sorted({str(t).strip().lower() for t in tags if str(t).strip()})
+    return entry
 
 
 def master_items(master: dict) -> int:
@@ -237,14 +248,30 @@ def split_legacy_index(output_dir: Path, legacy: dict) -> dict:
 
 
 def build_master_index(existing: dict | None, fragment: dict, base_url: str,
-                       category: str, scanned: list[str]) -> dict:
+                       category: str | None, scanned: list[str],
+                       tags: list[str] | None = None, clear_tags: bool = False) -> dict:
     """Merge new directory entries into the master index and re-assign categories.
 
     合并基准里没扫到的目录条目原样保留，这就是分批发布：--draft 写出的目录索引不进
-    主索引，--publish 才把它们挂到素材库上。"""
+    主索引，--publish 才把它们挂到素材库上。tags 只挂在 scanned 这批目录上（整体替换，
+    不累积），未扫目录的标签原样留着。category=None 表示只改标签，不动 categories。
+    categories 是旧版插件挑目录用的字段：现版插件把索引里每个目录都当成 Cloud Presets
+    卡，写这个字段只让旧版插件看到同一份清单。"""
     directories = dict(existing.get("directories", {})) if existing else {}
     directories.update(fragment)
+    for name in scanned:
+        entry = dict(directories.get(name, {}))
+        if clear_tags:
+            entry.pop("tags", None)
+        elif tags:
+            entry["tags"] = sorted({str(t).strip().lower() for t in tags if str(t).strip()})
+        directories[name] = entry
     master = {"version": 2, "generated_at": _stamp(), "base_url": base_url, "directories": directories}
+    if not category:
+        # 只改标签时原样保留 categories：标签通路不碰这个字段
+        if existing and existing.get("categories"):
+            master["categories"] = existing["categories"]
+        return master
 
     categories = {}
     if existing:
@@ -495,11 +522,6 @@ def main():
              "default in --dirs mode: configs/oss_presets.json -> base_url)"
     )
     parser.add_argument(
-        "--category", type=str, default="presets", choices=["presets", "grid", "character"],
-        help="Category the (re)scanned --dirs belong to (index.json top-level "
-             "'categories'); 'presets' keeps the legacy Cloud Presets section"
-    )
-    parser.add_argument(
         "--draft", action="store_true",
         help="With --dirs: write the directory indexes only, leave the master index untouched "
              "(staged release; publish later with --publish)"
@@ -513,15 +535,37 @@ def main():
         help="Convert a legacy full index.json (items inside) in the output directory into "
              "per-directory indexes plus a v2 master index"
     )
+    parser.add_argument(
+        "--tag", action="append", default=None, metavar="TAG",
+        help="Attach a virtual label (e.g. character-sheet) to the scanned/--publish directories in the "
+             "master index; repeatable, labels never move a card"
+    )
+    parser.add_argument(
+        "--clear-tags", action="store_true",
+        help="Remove every tag from the scanned/--publish directories (instead of setting --tag)"
+    )
+    parser.add_argument(
+        "--tag-dirs", nargs="+", default=None, metavar="DIR",
+        help="Tag-only pass: set --tag (or clear with --clear-tags) on these existing index "
+             "directories without rescanning media and without adding new entries"
+    )
 
     args = parser.parse_args()
+
+    tags = [str(t).strip().lower() for t in (args.tag or []) if str(t).strip()]
+    if any(not re.fullmatch(r"[a-z0-9_-]+", t) for t in tags):
+        print("[ERROR] --tag accepts lowercase letters, digits, - and _")
+        sys.exit(1)
+    if args.tag_dirs and not (tags or args.clear_tags):
+        print("[ERROR] --tag-dirs needs --tag or --clear-tags")
+        sys.exit(1)
 
     if args.draft and not args.dirs:
         print("[ERROR] --draft only applies to an incremental --dirs run")
         sys.exit(1)
 
     if not args.presets:
-        if not (args.dirs or args.publish or args.split_legacy):
+        if not (args.dirs or args.publish or args.tag_dirs or args.split_legacy):
             print("[ERROR] --presets is required for a full scan (or use --dirs / --publish for incremental mode)")
             sys.exit(1)
         presets_dir = Path.cwd().resolve()
@@ -555,13 +599,13 @@ def main():
         print(f"       master index: {index_path}")
         return
 
-    incremental = bool(args.dirs or args.publish)
+    incremental = bool(args.dirs or args.publish or args.tag_dirs)
     if args.dirs:
         print(f"  Dirs:     {', '.join(args.dirs)} (incremental)")
     if args.publish:
         print(f"  Publish:  {', '.join(args.publish)} (no media scan)")
-    if incremental:
-        print(f"  Category: {args.category}")
+    if args.tag_dirs:
+        print(f"  Tag-only: {', '.join(args.tag_dirs)}")
 
     # Merge base: in incremental mode default to the latest master index on OSS
     existing = None
@@ -580,7 +624,16 @@ def main():
             print(f"  Merge:    into {len(existing['directories'])} directories from "
                   f"{'OSS' if fetch_url else 'existing index'}")
 
-    if args.publish:
+    if args.tag_dirs:
+        known = set((existing or {}).get("directories", {}))
+        unknown = [d for d in args.tag_dirs if d not in known]
+        if unknown:
+            print("[ERROR] Directory is not in the index (tags live in the master index): "
+                  + ", ".join(unknown))
+            sys.exit(1)
+        fragment = {}
+        scanned = list(args.tag_dirs)
+    elif args.publish:
         fragment = {}
         for d in args.publish:
             loaded = load_dir_index(output_dir, d)
@@ -606,10 +659,16 @@ def main():
     if not base_url:
         base_url = get_oss_config().get("base_url", "") or ""
 
-    master = build_master_index(existing, fragment, base_url, args.category, scanned)
+    master = build_master_index(existing, fragment, base_url,
+                                None if args.tag_dirs else "presets", scanned,
+                                tags=tags, clear_tags=args.clear_tags)
     write_master_index(index_path, master)
     print(f"\n[DONE] master index written to {index_path} "
           f"({len(master['directories'])} directories, {master_items(master)} items)")
+    if tags:
+        print(f"  Tags:     {', '.join(sorted(tags))} -> {len(scanned)} directories")
+    elif args.clear_tags:
+        print(f"  Tags:     cleared on {len(scanned)} directories")
 
 
 if __name__ == "__main__":

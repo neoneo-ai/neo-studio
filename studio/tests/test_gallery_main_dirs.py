@@ -1,10 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Grid / Character 主目录：OSS 预设分类与只读预设入口（离线单测）。
+"""StoryBoard / CharacterSheet 主目录与云端预设卡（离线单测）。
 
-主目录是 output 下的子目录（grid / character），把「可写的生成结果
-（<日期>/）」与「只读的 OSS 预设缓存（presets/<远端目录>/）」放在同一棵树里；
-分类归属决定预设出现在哪个目录（旧的 Cloud Presets / Grid / Character），历史
-索引（没有 categories）必须继续按老行为工作。
+主目录是 output 下的子目录，只放可写的生成结果（<日期>/）。云端预设目录一律是
+Cloud Presets 卡，预设文件只缓存在 Gallery 的 oss_cache；索引里残留的 categories
+映射（旧版把预设挂进主目录的设计）读取时忽略，历史索引继续可用。
 """
 
 import asyncio
@@ -106,8 +105,8 @@ CHARACTER_DIR = Path(_OUTPUT) / "CharacterSheet"
 gallery.GRID_DIR = GRID_DIR
 gallery.CHARACTER_DIR = CHARACTER_DIR
 gallery._MAIN_DIRS = {
-    "StoryBoard": (GRID_DIR, _oss.OSS_CATEGORY_GRID),
-    "CharacterSheet": (CHARACTER_DIR, _oss.OSS_CATEGORY_CHARACTER),
+    "StoryBoard": GRID_DIR,
+    "CharacterSheet": CHARACTER_DIR,
 }
 
 
@@ -174,41 +173,103 @@ _CATEGORY_INDEX = {
 }
 
 
-class OssCategoryTests(unittest.TestCase):
-    """索引里的 categories 决定预设归属；旧索引（无 categories）全部仍是 Cloud Presets。"""
+class OssIndexDirTests(unittest.TestCase):
+    """索引里每个目录都是一张 Cloud Presets 卡；旧索引的 categories 映射不参与归属。"""
 
-    def test_legacy_index_keeps_everything_in_presets(self):
-        dirs = _oss._oss_category_dirs(_LEGACY_INDEX, _oss.OSS_CATEGORY_PRESETS)
-        self.assertEqual(sorted(dirs), ["styles", "已分类分镜", "已分类角色"])
-        self.assertEqual(_oss._oss_category_dirs(_LEGACY_INDEX, _oss.OSS_CATEGORY_GRID), [])
-        self.assertEqual(_oss._oss_category_dirs(_LEGACY_INDEX, _oss.OSS_CATEGORY_CHARACTER), [])
+    def test_every_directory_is_a_preset_card(self):
+        self.assertEqual(sorted(_oss._oss_index_dirs(_LEGACY_INDEX)),
+                         ["styles", "已分类分镜", "已分类角色"])
 
-    def test_categories_split_presets_grid_character(self):
-        self.assertEqual(_oss._oss_category_dirs(_CATEGORY_INDEX, _oss.OSS_CATEGORY_GRID), ["已分类分镜"])
-        self.assertEqual(_oss._oss_category_dirs(_CATEGORY_INDEX, _oss.OSS_CATEGORY_CHARACTER), ["已分类角色"])
-        # presets = 显式列在 presets 里的 + 未归类目录；别类的不再混进 Cloud Presets
-        self.assertEqual(sorted(_oss._oss_category_dirs(_CATEGORY_INDEX, _oss.OSS_CATEGORY_PRESETS)),
-                         ["显式预设", "未分类"])
+    def test_legacy_categories_mapping_is_ignored(self):
+        # 旧索引把目录挂进 StoryBoard/CharacterSheet：这些目录同样出现在 Cloud Presets
+        self.assertEqual(sorted(_oss._oss_index_dirs(_CATEGORY_INDEX)),
+                         ["已分类分镜", "已分类角色", "显式预设", "未分类"])
 
-    def test_cache_dir_per_category(self):
-        self.assertEqual(_oss._get_oss_cache_dir(_oss.OSS_CATEGORY_GRID),
-                         Path(_OUTPUT) / "StoryBoard" / "presets")
-        self.assertEqual(_oss._get_oss_cache_dir(_oss.OSS_CATEGORY_CHARACTER),
-                         Path(_OUTPUT) / "CharacterSheet" / "presets")
+    def test_cache_dir_is_the_gallery_oss_cache(self):
+        # 云端文件曾按分类写进 output/StoryBoard|CharacterSheet/presets：插件缓存落在用户 output 树里
+        prev_cfg = _oss._get_oss_config
+        _oss._get_oss_config = lambda: {}
+        try:
+            self.assertEqual(_oss._get_oss_cache_dir(), _oss.OSS_CACHE_DIR)
+        finally:
+            _oss._get_oss_config = prev_cfg
 
-    def test_legacy_presets_lookup_does_not_leak_other_categories(self):
+    def test_lookup_finds_files_of_legacy_categorized_dirs(self):
         prev = _oss._oss_index_cache
         _oss._oss_index_cache = _CATEGORY_INDEX
         try:
-            # 逐个目录在第一轮就命中，不会跨分类兜底扫描到别类的同名文件
-            async def _lookup(subdir, category):
-                return await _oss._find_in_oss_index("g.png", subdir, category)
+            async def _lookup(subdir):
+                return await _oss._find_in_oss_index("g.png", subdir)
 
-            self.assertEqual(asyncio.run(_lookup("已分类分镜", _oss.OSS_CATEGORY_GRID)), "已分类分镜/g.png")
-            self.assertIsNone(asyncio.run(_lookup("已分类分镜", _oss.OSS_CATEGORY_CHARACTER)))
-            self.assertIsNone(asyncio.run(_lookup("已分类分镜", _oss.OSS_CATEGORY_PRESETS)))
+            self.assertEqual(asyncio.run(_lookup("已分类分镜")), "已分类分镜/g.png")
+            self.assertIsNone(asyncio.run(_lookup("没有这个目录")))
         finally:
             _oss._oss_index_cache = prev
+
+    def test_three_nav_prefixes_share_one_index_dir(self):
+        # 三种导航前缀解析到同一个索引目录：前缀只决定卡片出现在哪
+        self.assertEqual(gallery._oss_dir_from_subfolder("Cloud Presets/已分类分镜"), "已分类分镜")
+        self.assertEqual(gallery._oss_dir_from_subfolder("StoryBoard/presets/已分类分镜"), "已分类分镜")
+        self.assertEqual(gallery._oss_dir_from_subfolder("CharacterSheet/presets/已分类分镜"), "已分类分镜")
+        # 前缀本身与本地目录、日期目录都不带出目录名
+        self.assertEqual(gallery._oss_dir_from_subfolder("Cloud Presets"), "")
+        self.assertEqual(gallery._oss_dir_from_subfolder("StoryBoard/presets"), "")
+        self.assertEqual(gallery._oss_dir_from_subfolder("StoryBoard/2026-09-26"), "")
+        self.assertEqual(gallery._oss_dir_from_subfolder(""), "")
+
+
+_TAG_INDEX = {
+    "version": 2,
+    "base_url": "http://127.0.0.1:1/neo/presets",
+    "categories": {"presets": ["明朝人物", "角色杂图"],
+                   "CharacterSheet": ["现代人物"],
+                   "StoryBoard": ["分镜标签"]},
+    "directories": {
+        # 标签大小写混杂与重复：读取要归一去重
+        "明朝人物": {"count": 1, "index": "明朝人物/index.json", "rev": "r",
+                  "covers": [], "tags": ["Character-Sheet", "character-sheet"]},
+        # 老索引条目没有 tags 字段 = 无标签
+        "角色杂图": {"count": 1, "index": "角色杂图/index.json", "rev": "r", "covers": []},
+        "现代人物": {"count": 1, "index": "现代人物/index.json", "rev": "r",
+                  "covers": [], "tags": ["character-sheet"]},
+        "分镜标签": {"count": 1, "index": "分镜标签/index.json", "rev": "r",
+                  "covers": [], "tags": ["character-sheet"]},
+        "未归类标签": {"count": 1, "index": "未归类标签/index.json", "rev": "r",
+                   "covers": [], "tags": ["voice"]},
+        "_root": {"count": 1, "index": "_root/index.json", "rev": "r", "covers": [],
+                  "tags": ["character-sheet"]},
+        "旧版目录/index.json": {"count": 9, "items": [], "tags": ["character-sheet"]},
+    },
+}
+
+
+class OssDirTagTests(unittest.TestCase):
+    """目录标签是目录属性：标签不移动卡片，只按卡片位置出 token。"""
+
+    def test_dir_tags_lowercase_dedupe(self):
+        self.assertEqual(_oss._oss_dir_tags(_TAG_INDEX, "明朝人物"), ["character-sheet"])
+        self.assertEqual(_oss._oss_dir_tags(_TAG_INDEX, "角色杂图"), [])
+        self.assertEqual(_oss._oss_dir_tags(_TAG_INDEX, "没这个目录"), [])
+
+    def test_tagged_dirs_skips_root_and_legacy_entries(self):
+        self.assertEqual(_oss._oss_tagged_dirs(_TAG_INDEX, "character-sheet"),
+                         ["明朝人物", "现代人物", "分镜标签"])
+        self.assertEqual(_oss._oss_tagged_dirs(_TAG_INDEX, "Character-Sheet"),
+                         ["明朝人物", "现代人物", "分镜标签"])
+        self.assertEqual(_oss._oss_tagged_dirs(_TAG_INDEX, "voice"), ["未归类标签"])
+        self.assertEqual(_oss._oss_tagged_dirs(_TAG_INDEX, "lora"), [])
+        self.assertEqual(_oss._oss_tagged_dirs(_TAG_INDEX, ""), [])
+        self.assertEqual(_oss._oss_tagged_dirs({}, "character-sheet"), [])
+
+    def test_tag_tokens_use_the_cloud_presets_prefix(self):
+        # 前端按 token 逐字匹配卡片位置，云端目录卡一律在 Cloud Presets 下
+        self.assertEqual(_oss._oss_tagged_dir_tokens(_TAG_INDEX, _oss.OSS_TAG_CHARACTER_SHEET),
+                         ["Cloud Presets/明朝人物", "Cloud Presets/现代人物",
+                          "Cloud Presets/分镜标签"])
+
+    def test_unlisted_tagged_dir_token_is_cloud_presets(self):
+        self.assertEqual(_oss._oss_tagged_dir_tokens(_TAG_INDEX, "voice"),
+                         ["Cloud Presets/未归类标签"])
 
 
 _V2_INDEX = {
@@ -230,7 +291,7 @@ class V2MasterIndexTests(unittest.TestCase):
     """v2 主索引只声明目录元数据：计数来自 count，封面来自 covers，items 进目录才拉。"""
 
     def setUp(self):
-        self.cache_dir = _oss._get_oss_cache_dir(_oss.OSS_CATEGORY_GRID)
+        self.cache_dir = _oss._get_oss_cache_dir()
         self.cache_file = self.cache_dir / "分镜目录" / "_index.json"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
@@ -244,21 +305,20 @@ class V2MasterIndexTests(unittest.TestCase):
             ensure_ascii=False), encoding="utf-8")
 
     def test_card_count_and_cover_come_from_master_entry(self):
-        self.assertEqual(_oss._oss_dir_cards(_V2_INDEX, _oss.OSS_CATEGORY_GRID),
-                         {"分镜目录": {"image_count": 2}})
-        dirs = _oss._oss_directories_to_gallery_dirs(_V2_INDEX, _oss.OSS_CATEGORY_GRID)
+        self.assertEqual(_oss._oss_dir_cards(_V2_INDEX), {"分镜目录": {"image_count": 2}})
+        dirs = _oss._oss_directories_to_gallery_dirs(_V2_INDEX)
         self.assertEqual(dirs[0]["root_count"], 2)
         self.assertEqual(dirs[0]["items"], [])
+        self.assertEqual(dirs[0]["path"], "Cloud Presets/分镜目录")
         covers = {}
-        _oss._collect_oss_covers(covers, _V2_INDEX, _oss.OSS_CATEGORY_GRID)
+        _oss._collect_oss_covers(covers, _V2_INDEX, "StoryBoard/presets")
         self.assertEqual(covers["StoryBoard/presets/分镜目录"][0]["filename"], "g.png")
 
     def test_dir_items_use_cached_dir_index_when_rev_matches(self):
         self._seed_cache("R1", [{"filename": "g.png", "type": "image", "mtime": 1, "txt_content": "全文"}])
 
         async def _go():
-            return await _oss._oss_dir_items(_V2_INDEX, "分镜目录", "StoryBoard/presets",
-                                             _oss.OSS_CATEGORY_GRID)
+            return await _oss._oss_dir_items(_V2_INDEX, "分镜目录", "StoryBoard/presets")
 
         items = asyncio.run(_go())
         self.assertEqual(items[0]["txt_content"], "全文")
@@ -269,13 +329,13 @@ class V2MasterIndexTests(unittest.TestCase):
         self._seed_cache("OLD", [{"filename": "stale.png", "type": "image"}])
 
         async def _go():
-            return await _oss._find_in_oss_index("g.png", "分镜目录", _oss.OSS_CATEGORY_GRID)
+            return await _oss._find_in_oss_index("g.png", "分镜目录")
 
         self.assertIsNone(asyncio.run(_go()))
 
 
 class MainDirListingTests(unittest.TestCase):
-    """固定首页卡（空目录也显示）+ Grid/Character 下只读的 Cloud Presets 入口。"""
+    """固定首页卡（空目录也显示）+ 主目录里只读的 Cloud Presets 入口。"""
 
     @classmethod
     def setUpClass(cls):
@@ -311,13 +371,16 @@ class MainDirListingTests(unittest.TestCase):
         # 本地 OSS 缓存目录本身不再作为普通子目录出现
         self.assertNotIn("presets", resp_dir["subdirs"])
 
-    def test_presets_branch_lists_category_dirs(self):
+    def test_presets_branch_lists_every_index_dir(self):
         out = _payload(_call(gallery.get_gallery_list(
             _GetRequest({"dir_name": "StoryBoard", "path": "presets"}))))
         resp_dir = out["directories"][0]
         self.assertTrue(resp_dir["read_only"])
         self.assertEqual(resp_dir["source"], "oss")
-        self.assertEqual(list(resp_dir["subdirs"]), ["已分类分镜"])
+        self.assertEqual(resp_dir["name"], "StoryBoard/presets")
+        # 主目录里的预设卡列索引里的全部目录：categories 不再挑目录
+        self.assertEqual(sorted(resp_dir["subdirs"]),
+                         sorted(["显式预设", "已分类分镜", "已分类角色", "未分类"]))
 
     def test_presets_branch_items_carry_navigable_subfolder(self):
         out = _payload(_call(gallery.get_gallery_list(
@@ -377,7 +440,7 @@ class MainDirCoverTests(unittest.TestCase):
         os.utime(_write(CHARACTER_DIR / "2026-09-24" / "sheet.png"), (2000, 2000))
         os.utime(_write(CHARACTER_DIR / "2026-09-25" / "pose.png"), (3000, 3000))
         os.utime(_write(CHARACTER_DIR / "2026-09-24" / "takes" / "take1.png"), (1000, 1000))
-        # StoryBoard/presets/已分类分镜 需要真实目录+封面，聚合预设卡片才借得到封面
+        # 本地 presets/ 目录存在过：它不能作为普通子目录出现，也不参与最近更新
         _write(GRID_DIR / "presets" / "已分类分镜" / "g.png")
         gallery._is_oss_enabled = lambda: True
         gallery._load_oss_index_from_disk = lambda: _CATEGORY_INDEX
@@ -415,7 +478,8 @@ class MainDirCoverTests(unittest.TestCase):
             _GetRequest({"dir_name": "StoryBoard", "fields": "dirs,covers"}))))
         covers = out["covers"]
         self.assertTrue(covers["StoryBoard/presets"])
-        self.assertEqual(covers["StoryBoard/presets"], covers["StoryBoard/presets/已分类分镜"])
+        # 聚合预设卡借索引里第一个云端目录的封面（索引顺序就是卡片顺序）
+        self.assertEqual(covers["StoryBoard/presets"], covers["StoryBoard/presets/显式预设"])
 
 
 class RecentDirSortTests(unittest.TestCase):

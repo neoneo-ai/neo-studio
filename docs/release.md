@@ -112,12 +112,17 @@ python tools/gallery_preprocess.py --presets <presets_dir> --output <output_dir>
 cd <dir_with_new_dirs> && python tools/gallery_preprocess.py --output <output_dir> --dirs dir1 dir2
 
 # 分批发布：--draft 只写目录索引 <dir>/index.json，主索引不动，素材库还看不到；
-# --publish 把已写好的目录索引挂进主索引（不重扫素材），--category 决定它落在哪个板块。
-python tools/gallery_preprocess.py --output <output_dir> --dirs dir1 dir2 --draft --category grid
-python tools/gallery_preprocess.py --output <output_dir> --publish dir1 dir2 --category grid
+# --publish 把已写好的目录索引挂进主索引（不重扫素材）。
+python tools/gallery_preprocess.py --output <output_dir> --dirs dir1 dir2 --draft
+python tools/gallery_preprocess.py --output <output_dir> --publish dir1 dir2
 
 # 旧版整包索引拆成分层索引：--split-legacy 把带 items 的 index.json 拆成 <dir>/index.json + v2 主索引
 python tools/gallery_preprocess.py --output <output_dir> --split-legacy
+
+# 只改标签：--tag-dirs 给主索引里已有的目录打 / 清标签，不重扫素材、不动目录在首页的板块位置
+# （tags 是目录属性、一个目录可以有多个；主索引没列出的目录标签原样保留）
+python tools/gallery_preprocess.py --output <output_dir> --tag-dirs dir1 dir2 --tag character-sheet
+python tools/gallery_preprocess.py --output <output_dir> --tag-dirs dir1 --clear-tags
 
 # 2. 部署：上传预处理产物到阿里云 OSS（需要 pip install oss2，
 #    凭证从环境变量 OSS_ACCESS_KEY_ID / OSS_ACCESS_KEY_SECRET / OSS_ENDPOINT 读取）

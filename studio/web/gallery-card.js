@@ -489,13 +489,12 @@ export class GalleryCard {
         }
     }
 
-    /** 只读素材源判定：presets/lora/C站收藏目录、Grid/Character 的 OSS 预设缓存与远程 oss（⋯ 菜单删除项与左上角勾选框共用）。 */
+    /** 只读素材源判定：presets/lora/C站收藏目录与远程 oss（⋯ 菜单删除项与左上角勾选框共用）。 */
     _isReadOnlySource(subfolder, source) {
         const subLower = String(subfolder || "").toLowerCase();
         return subLower === 'presets' || subLower.startsWith('presets/') ||
             subLower === 'lora' || subLower.startsWith('lora/') ||
             subLower === 'civitai_bookmarks' || subLower.startsWith('civitai_bookmarks/') ||
-            subLower.startsWith('grid/presets') || subLower.startsWith('character/presets') ||
             source === "oss";
     }
 

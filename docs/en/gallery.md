@@ -152,7 +152,14 @@ embedded ComfyUI workflow).
   video on the sheet; unmarked directories keep the "one segment per image, image as first frame" behavior. The
   flag also covers subdirectories (mark `stars` and `stars/孟子义` behaves the same), lives in `character_dirs` in
   `gallery_settings.json` (lowercased tokens, same token space as the hide switch), and is dropped when the
-  directory is removed. Cloud preset directories are read-only and normally carry no checkbox; marking one as a
+  directory is removed. Cloud preset directories ship the default in the index itself: the publisher tags a sheet
+  directory with the `character-sheet` entry tag, and everyone who downloads the index gets it as a character
+  directory without marking a thing. `tags` is a directory attribute (a directory can carry several) and every
+  index directory is one Cloud Presets card, so tagging never moves a directory. Turning 👤 off on such a
+  directory records it in `character_dirs_off`, which the effective list subtracts — the tag default never pushes
+  the card back on, and the entry is dropped when the directory is removed. `/neo_gallery/get_settings` returns
+  the effective `character_dirs` (marked ∪ tagged − `character_dirs_off`). Cloud preset directories are read-only
+  and normally carry no checkbox; marking one as a
   character directory brings the checkbox back (multi-select then only feeds recipe creation — the images are
   downloaded to `input/` on demand, and bulk delete still skips read-only items).
 - **⟳ Refresh index** - a title-bar button that force re-downloads the cloud preset index
@@ -171,10 +178,11 @@ embedded ComfyUI workflow).
   the generation-result area / asset card menu, or through a deep link; generated character sheets and
   storyboards land in a `<date>/` subdirectory.
   - Each level's cards use that level's own first two media as the cover (image > video > audio priority).
-  - Inside, a read-only **Cloud Presets** entry exists (remote preset cache under `presets/<remote dir>/`), and
-    `Grid/presets/**`, `Character/presets/**` are undeletable just like Cloud Presets.
+  - Inside, a read-only **Cloud Presets** entry lists the preset directories from the cloud index; preset files are
+    cached in `gallery/oss_cache/` and never written into these roots (a leftover `presets/` cache directory stays
+    undeletable, like Cloud Presets).
 - **Recently updated first** - inside the three directories the plugin writes itself (generated `Output`, the
-  archived `Grid` / `Character`), every level's subdirectory cards put the newest write first, and covers take
+  `StoryBoard` / `CharacterSheet` roots), every level's subdirectory cards put the newest write first, and covers take
   the newest two within the same type (image > video > audio priority); other directories keep their original
   order and cover selection.
 

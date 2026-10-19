@@ -73,14 +73,14 @@ async def _oss_no_items(*a, **k):
 
 
 _stub("gallery_oss",
-      OSS_CATEGORY_PRESETS="presets",
-      OSS_CATEGORY_GRID="grid",
-      OSS_CATEGORY_CHARACTER="character",
+      OSS_NAV_PREFIX="Cloud Presets",
       _is_oss_enabled=lambda: False,
       _load_oss_index_from_disk=lambda *a, **k: {},
       _fetch_oss_index=lambda *a, **k: None,
-      _oss_category_dirs=lambda *a, **k: [],
+      _oss_index_dirs=lambda *a, **k: [],
       _oss_directories_to_gallery_dirs=lambda *a, **k: [],
+      OSS_TAG_CHARACTER_SHEET="character-sheet",
+      _oss_tagged_dir_tokens=lambda *a, **k: [],
       _collect_oss_covers=lambda *a, **k: {},
       _handle_oss_gallery_list=lambda *a, **k: None,
       _find_in_oss_index=_oss_none,

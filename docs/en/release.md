@@ -136,13 +136,19 @@ cd <dir_with_new_dirs> && python tools/gallery_preprocess.py --output <output_di
 
 # Staged release: --draft writes only the directory index <dir>/index.json and leaves the master index
 # untouched, so the asset page does not show it yet; --publish mounts already written directory indexes
-# into the master index without rescanning media, and --category picks the section they land in.
-python tools/gallery_preprocess.py --output <output_dir> --dirs dir1 dir2 --draft --category grid
-python tools/gallery_preprocess.py --output <output_dir> --publish dir1 dir2 --category grid
+# into the master index without rescanning media.
+python tools/gallery_preprocess.py --output <output_dir> --dirs dir1 dir2 --draft
+python tools/gallery_preprocess.py --output <output_dir> --publish dir1 dir2
 
 # Split a legacy full index into the layered layout: --split-legacy turns an index.json whose entries
 # carry items into <dir>/index.json files plus a v2 master index
 python tools/gallery_preprocess.py --output <output_dir> --split-legacy
+
+# Tags only: --tag-dirs tags or clears tags on directories already in the master index, with no media
+# rescan and no move of their home-section position (tags are directory attributes, a directory can
+# carry several; directories the master index does not list keep the tags they already have)
+python tools/gallery_preprocess.py --output <output_dir> --tag-dirs dir1 dir2 --tag character-sheet
+python tools/gallery_preprocess.py --output <output_dir> --tag-dirs dir1 --clear-tags
 
 # 2. Deploy: upload the preprocessed output to Aliyun OSS (needs pip install oss2,
 #    credentials from OSS_ACCESS_KEY_ID / OSS_ACCESS_KEY_SECRET / OSS_ENDPOINT)

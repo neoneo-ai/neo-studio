@@ -74,14 +74,14 @@ async def _oss_no_items(*a, **k):
 
 
 _stub("gallery_oss",
-      OSS_CATEGORY_PRESETS="presets",
-      OSS_CATEGORY_GRID="grid",
-      OSS_CATEGORY_CHARACTER="character",
+      OSS_NAV_PREFIX="Cloud Presets",
       _is_oss_enabled=lambda: False,
       _load_oss_index_from_disk=lambda *a, **k: {},
       _fetch_oss_index=lambda *a, **k: None,
-      _oss_category_dirs=lambda *a, **k: [],
+      _oss_index_dirs=lambda *a, **k: [],
       _oss_directories_to_gallery_dirs=lambda *a, **k: [],
+      OSS_TAG_CHARACTER_SHEET="character-sheet",
+      _oss_tagged_dir_tokens=lambda *a, **k: [],
       _collect_oss_covers=lambda *a, **k: {},
       _handle_oss_gallery_list=lambda *a, **k: None,
       _find_in_oss_index=_oss_none,
@@ -226,13 +226,13 @@ class TxtRouteOssSidecarTests(unittest.TestCase):
                          "正向提示词：仙山云海、宗门演武台".encode("utf-8"), root=_TMP)
         gallery._is_oss_enabled = lambda: True
 
-        async def _find(fn, sub, cat=None):
+        async def _find(fn, sub):
             return "仙侠玄幻人物/181_下凡仙娥.png"
 
         gallery._find_in_oss_index = _find
 
-        async def _dl(rel, category=None):
-            self.calls.append((rel, category))
+        async def _dl(rel):
+            self.calls.append(rel)
             return Path(sidecar)
 
         gallery._download_oss_file = _dl
@@ -247,7 +247,6 @@ class TxtRouteOssSidecarTests(unittest.TestCase):
 
     def test_download_rel_stays_posix(self):
         _txt("181_下凡仙娥.png", "Cloud Presets/仙侠玄幻人物")
-        rel, category = self.calls[0]
+        rel = self.calls[0]
         self.assertEqual(rel, "仙侠玄幻人物/181_下凡仙娥.txt")
         self.assertNotIn("\\", rel)
-        self.assertEqual(category, gallery.OSS_CATEGORY_PRESETS)

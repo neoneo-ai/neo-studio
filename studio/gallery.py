@@ -46,8 +46,8 @@ THUMBNAIL_DIR = GALLERY_DIR / "thumbnails"
 LORA_CACHE_DIR = GALLERY_DIR / "lora_cache"
 WAVEFORM_DIR = GALLERY_DIR / "waveform_cache"  # decoded audio waveform peaks (JSON)
 # Main dirs (StoryBoard / CharacterSheet): browsable output subdirs. Character images land
-# in output/CharacterSheet, storyboard sheets in output/StoryBoard; each
-# keeps a read-only "presets/" subfolder for the OSS preset cache.
+# in output/CharacterSheet, storyboard sheets in output/StoryBoard. Cloud presets are
+# cached in the Gallery oss_cache, never inside these dirs.
 OUTPUT_DIR = Path(folder_paths.output_directory).resolve()
 GRID_DIR = OUTPUT_DIR / "StoryBoard"
 CHARACTER_DIR = OUTPUT_DIR / "CharacterSheet"
@@ -215,12 +215,49 @@ def _oss_home_dir_tokens() -> list:
     index = _load_oss_index_from_disk()
     if not index:
         return []
-    return [f"Cloud Presets/{d}" for d in _oss_category_dirs(index, OSS_CATEGORY_PRESETS)]
+    return [f"{OSS_NAV_PREFIX}/{d}" for d in _oss_index_dirs(index)]
 
 
 def _is_home_entry_token(token: str, dirs: list) -> bool:
     """顺序表与隐藏开关接受的 token：内置卡、自定义目录、云端预设目录。"""
     return token in dirs or token in HOME_BUILTINS or token in _oss_home_dir_tokens()
+
+
+def _character_token_list(raw) -> list:
+    """角色图目录的 token 列表 → 小写去重；配置里写成单个字符串也要能用。"""
+    if isinstance(raw, str):
+        raw = [raw]
+    if not isinstance(raw, list):
+        return []
+    return list(dict.fromkeys(str(c).strip().lower() for c in raw if str(c or "").strip()))
+
+
+def _purge_token_prefix(tokens: list, lowered: str) -> list:
+    """剔掉 token 本身和它的子目录 token：角色图标记是逐段继承的，删目录要一起删干净。"""
+    return [t for t in tokens if t != lowered and not t.startswith(lowered + "/")]
+
+
+def _oss_character_dir_tokens() -> list:
+    """索引里打了 character 标签的云端目录 token；只读本地索引缓存，不联网。"""
+    if not _is_oss_enabled():
+        return []
+    index = _load_oss_index_from_disk()
+    if not index:
+        return []
+    return [t.lower() for t in _oss_tagged_dir_tokens(index, OSS_TAG_CHARACTER_SHEET)]
+
+
+def _effective_character_dirs(settings: dict) -> list:
+    """角色图目录的有效 token：用户标记的目录 + 索引里打 character-sheet 标签的云端目录。
+
+    标签是目录属性、和卡片在首页的位置无关：发布者给设定图目录打上 character-sheet 标签，别人拿到
+    索引就自带角色图默认值（多选建配方走全参考），不用逐个点 👤。用户显式取消过的目录记在
+    character_dirs_off 里，读取时剔掉，默认值不会把它顶回来。
+    """
+    marked = _character_token_list(settings.get("character_dirs"))
+    cloud = _oss_character_dir_tokens()
+    off = set(_character_token_list(settings.get("character_dirs_off")))
+    return [t for t in dict.fromkeys(marked + cloud) if t not in off]
 
 
 def _get_home_order() -> list:
@@ -302,13 +339,11 @@ def _repair_mislabeled_media() -> None:
 # OSS / Lora modules (split out of this file)
 # ---------------------------------------------------------------------------
 from .gallery_oss import (
-    OSS_CATEGORY_PRESETS,
-    OSS_CATEGORY_GRID,
-    OSS_CATEGORY_CHARACTER,
+    OSS_NAV_PREFIX,
     _is_oss_enabled,
     _load_oss_index_from_disk,
     _fetch_oss_index,
-    _oss_category_dirs,
+    _oss_index_dirs,
     _oss_directories_to_gallery_dirs,
     _collect_oss_covers,
     _handle_oss_gallery_list,
@@ -317,7 +352,27 @@ from .gallery_oss import (
     _download_oss_file,
     _oss_dir_cards,
     _oss_dir_items,
+    OSS_TAG_CHARACTER_SHEET,
+    _oss_tagged_dir_tokens,
 )
+
+# 云端预设卡的三种导航前缀：首页的 Cloud Presets 卡与 StoryBoard/CharacterSheet 主目录里
+# 只读的 presets 卡指向同一份索引，前缀只决定卡片出现在哪，不决定文件落在哪。
+_OSS_NAV_PREFIXES = (OSS_NAV_PREFIX, "StoryBoard/presets", "CharacterSheet/presets")
+
+
+def _oss_dir_from_subfolder(subfolder: str) -> str:
+    """导航 subfolder 里的云端预设目录名；空串表示这是本地目录，不走云端索引。"""
+    stripped = (subfolder or "").strip().rstrip("/")
+    lowered = stripped.lower()
+    for prefix in _OSS_NAV_PREFIXES:
+        if lowered == prefix.lower():
+            return ""
+        if lowered.startswith(prefix.lower() + "/"):
+            return stripped[len(prefix) + 1:]
+    return ""
+
+
 from .gallery_lora import (
     _lora_pending_subdirs,
     _attach_lora_meta,
@@ -593,8 +648,9 @@ def _scan_recent_media(directory: Path, limit: int) -> tuple[dict, dict[str, dic
 def _recent_media_buckets(directory: Path, limit: int) -> list[dict]:
     """Buckets of a plugin-updated dir: the dir itself plus each direct child.
 
-    The read-only OSS preset cache (``presets/``) is a download, not generated
-    content, so it never counts as an update of the dir that hosts it.
+    The read-only ``presets/`` subdir is a legacy cloud-preset cache left behind by
+    the old category layout; it is a download, not generated content, so it never
+    counts as an update of the dir that hosts it.
     """
     own, children = _scan_recent_media(directory, limit)
     children.pop("presets", None)
@@ -975,30 +1031,29 @@ def _process_home_directory(dir_path: Path, dir_name: str, read_only: bool,
 
 
 # ---------------------------------------------------------------------------
-# Main dirs (Grid / Character): output subdirs, mix writable generated results
-# (<date>/ subfolders) with a read-only OSS preset cache (presets/<oss-dir>/).
+# Main dirs (StoryBoard / CharacterSheet): output subdirs holding generated results
+# (<date>/ subfolders). Their read-only "Cloud Presets" card lists the remote preset
+# dirs; the preset files themselves are cached in the Gallery oss_cache, not here.
 # ---------------------------------------------------------------------------
 _MAIN_DIRS = {
-    "StoryBoard": (GRID_DIR, OSS_CATEGORY_GRID),
-    "CharacterSheet": (CHARACTER_DIR, OSS_CATEGORY_CHARACTER),
+    "StoryBoard": GRID_DIR,
+    "CharacterSheet": CHARACTER_DIR,
 }
 
 
 async def _handle_main_dir_list(dir_name_param: str, rel_path_param: str, base: Path,
                                 include_dirs: bool, include_items: bool,
                                 include_covers: bool) -> web.Response:
-    """Handle /neo_gallery/list for the Grid/Character main dirs.
+    """Handle /neo_gallery/list for the StoryBoard/CharacterSheet main dirs.
 
     Local generated results are scanned normally (the presets/ cache is skipped);
     a read-only "Cloud Presets" card is injected at the top level and
-    path=presets[/<oss-dir>] routes to the matching OSS category listing.
+    path=presets[/<oss-dir>] lists the remote preset dirs under this main dir.
     """
-    key = dir_name_param.lower()
     # Deep links may carry the sub path in dir_name ("StoryBoard/presets/<dir>"); names and
     # navigation prefixes are always built from the main dir label.
     main_label = dir_name_param.split("/", 1)[0]
-    _main_entry = next(((k, v) for k, v in _MAIN_DIRS.items() if k.lower() == key.split("/", 1)[0]), None)
-    oss_category = _main_entry[1][1] if _main_entry else OSS_CATEGORY_GRID
+    presets_prefix = f"{main_label}/presets"
     rel_lower = rel_path_param.lower()
 
     if rel_lower == "presets":
@@ -1006,30 +1061,30 @@ async def _handle_main_dir_list(dir_name_param: str, rel_path_param: str, base: 
         if not oss_index:
             return web.json_response({"error": "OSS not configured or index unavailable"}, status=404)
         resp_dir = {
-            "name": f"{main_label}/presets",
-            "path": f"{main_label}/presets",
+            "name": presets_prefix,
+            "path": presets_prefix,
             "read_only": True,
             "source": "oss",
-            "subdirs": _oss_dir_cards(oss_index, oss_category),
+            "subdirs": _oss_dir_cards(oss_index),
             "root_count": 0,
             "items": [],
         }
         response_data = {"directories": [resp_dir], "total": 0}
         if include_covers:
             covers: dict[str, list[dict]] = {}
-            _collect_oss_covers(covers, oss_index, oss_category)
+            _collect_oss_covers(covers, oss_index, presets_prefix)
             response_data["covers"] = covers
         return web.json_response(response_data)
 
     if rel_lower.startswith("presets/"):
         oss_dir = rel_path_param[len("presets/"):]
         oss_index = await _fetch_oss_index()
-        if not oss_index or oss_dir not in _oss_dir_cards(oss_index, oss_category):
+        if not oss_index or oss_dir not in _oss_dir_cards(oss_index):
             return web.json_response({"error": f"OSS directory not found: {oss_dir}"}, status=404)
-        items = await _oss_dir_items(oss_index, oss_dir, f"{main_label}/presets", oss_category)
+        items = await _oss_dir_items(oss_index, oss_dir, presets_prefix)
         resp_dir = {
-            "name": f"{main_label}/presets/{oss_dir}",
-            "path": f"{main_label}/presets/{oss_dir}",
+            "name": f"{presets_prefix}/{oss_dir}",
+            "path": f"{presets_prefix}/{oss_dir}",
             "read_only": True,
             "source": "oss",
             "subdirs": {},
@@ -1039,7 +1094,7 @@ async def _handle_main_dir_list(dir_name_param: str, rel_path_param: str, base: 
         response_data = {"directories": [resp_dir], "total": len(items)}
         if include_covers:
             covers = {}
-            _collect_oss_covers(covers, oss_index, oss_category)
+            _collect_oss_covers(covers, oss_index, presets_prefix)
             response_data["covers"] = covers
         return web.json_response(response_data)
 
@@ -1050,7 +1105,7 @@ async def _handle_main_dir_list(dir_name_param: str, rel_path_param: str, base: 
     if not rel_path_param and _is_oss_enabled():
         oss_index = _load_oss_index_from_disk() or await _fetch_oss_index()
         if oss_index:
-            cards = _oss_dir_cards(oss_index, oss_category)
+            cards = _oss_dir_cards(oss_index)
             if cards:
                 resp_dir.setdefault("subdirs", {})["Cloud Presets"] = {
                     "image_count": sum(c.get("image_count", 0) for c in cards.values()),
@@ -1085,7 +1140,7 @@ async def _handle_main_dir_list(dir_name_param: str, rel_path_param: str, base: 
 
         oss_index = _load_oss_index_from_disk() or await _fetch_oss_index()
         if oss_index:
-            _collect_oss_covers(covers, oss_index, oss_category)
+            _collect_oss_covers(covers, oss_index, presets_prefix)
             # The injected read-only entry aggregates the OSS presets: borrow the
             # first preset cover so the card is not an empty placeholder.
             if not rel_path_param:
@@ -1156,14 +1211,14 @@ async def get_gallery_list(request):
         base: Path | None = None
         dir_name_lower = dir_name_param.lower()
 
-        # Main dirs (StoryBoard / CharacterSheet): plugin-owned generated assets + OSS preset cache.
+        # Main dirs (StoryBoard / CharacterSheet): plugin-owned generated results.
         # dir_name may carry the sub path ("StoryBoard/presets/26-06-25") for deep links.
         main_key = dir_name_lower.split("/", 1)[0]
-        _main_dir_entry = next(((k, v) for k, v in _MAIN_DIRS.items() if k.lower() == main_key), None)
-        if _main_dir_entry:
+        main_base = next((d for k, d in _MAIN_DIRS.items() if k.lower() == main_key), None)
+        if main_base:
             if not rel_path_param and "/" in dir_name_param:
                 rel_path_param = dir_name_param.split("/", 1)[1]
-            return await _handle_main_dir_list(dir_name_param, rel_path_param, _main_dir_entry[1][0],
+            return await _handle_main_dir_list(dir_name_param, rel_path_param, main_base,
                                                include_dirs, include_items, include_covers)
 
         if dir_name_lower == "presets" or dir_name_lower.startswith("presets/"):
@@ -1634,29 +1689,16 @@ async def copy_to_input(request):
             if candidate.exists():
                 source_path = candidate
 
-        # OSS fallback: download from remote cache
+        # OSS fallback: 云端预设目录，按需下载到 Gallery 缓存
         if not source_path and _is_oss_enabled() and subfolder:
-            subfolder_lower = subfolder.lower()
-            if subfolder_lower.startswith("cloud presets/"):
-                oss_subdir = subfolder_lower[len("cloud presets/"):]
-                oss_rel = await _find_in_oss_index(filename, oss_subdir, OSS_CATEGORY_PRESETS)
+            oss_subdir = _oss_dir_from_subfolder(subfolder)
+            if oss_subdir:
+                oss_rel = await _find_in_oss_index(filename, oss_subdir)
                 if not oss_rel:
                     from urllib.parse import unquote as _uq
-                    oss_rel = await _find_in_oss_index(_uq(filename), oss_subdir, OSS_CATEGORY_PRESETS)
+                    oss_rel = await _find_in_oss_index(_uq(filename), oss_subdir)
                 if oss_rel:
-                    cached = await _download_oss_file(oss_rel, OSS_CATEGORY_PRESETS)
-                    if cached and cached.exists():
-                        source_path = cached
-            elif subfolder_lower.startswith("storyboard/presets/") or subfolder_lower.startswith("charactersheet/presets/"):
-                # Main-dir OSS preset cache (not downloaded yet): fetch on demand
-                oss_category = OSS_CATEGORY_GRID if subfolder_lower.startswith("storyboard/") else OSS_CATEGORY_CHARACTER
-                oss_subdir = subfolder_lower.split("/")[2]
-                oss_rel = await _find_in_oss_index(filename, oss_subdir, oss_category)
-                if not oss_rel:
-                    from urllib.parse import unquote as _uq
-                    oss_rel = await _find_in_oss_index(_uq(filename), oss_subdir, oss_category)
-                if oss_rel:
-                    cached = await _download_oss_file(oss_rel, oss_category)
+                    cached = await _download_oss_file(oss_rel)
                     if cached and cached.exists():
                         source_path = cached
 
@@ -2382,21 +2424,11 @@ async def get_thumbnail(request):
 
     # OSS fallback: try pre-generated thumbnail from remote index
     if not source_path and _is_oss_enabled():
-        oss_subdir = ""
-        oss_category = OSS_CATEGORY_PRESETS
-        subfolder_lower = subfolder.lower()
-        if subfolder.startswith("Cloud Presets/"):
-            oss_subdir = subfolder[len("Cloud Presets/"):]
-        elif subfolder_lower.startswith("storyboard/presets/"):
-            oss_category = OSS_CATEGORY_GRID
-            oss_subdir = subfolder_lower.split("/")[2]
-        elif subfolder_lower.startswith("charactersheet/presets/"):
-            oss_category = OSS_CATEGORY_CHARACTER
-            oss_subdir = subfolder_lower.split("/")[2]
+        oss_subdir = _oss_dir_from_subfolder(subfolder)
         if oss_subdir:
-            thumb_rel = await _find_thumbnail_in_oss_index(filename, oss_subdir, oss_category)
+            thumb_rel = await _find_thumbnail_in_oss_index(filename, oss_subdir)
             if thumb_rel:
-                cached = await _download_oss_file(thumb_rel, oss_category)
+                cached = await _download_oss_file(thumb_rel)
                 if cached and cached.exists():
                     return await asyncio.to_thread(_media_file_response, cached)
 
@@ -2621,26 +2653,17 @@ async def view_txt(request):
     txt_name = Path(filename).stem + ".txt"
     sub_lower = subfolder.lower()
 
-    oss_category, oss_subdir = None, ""
-    if sub_lower.startswith("cloud presets/"):
-        oss_category = OSS_CATEGORY_PRESETS
-        oss_subdir = sub_lower[len("cloud presets/"):]
-    elif sub_lower.startswith("storyboard/presets/"):
-        oss_category = OSS_CATEGORY_GRID
-        oss_subdir = sub_lower.split("/", 2)[2]
-    elif sub_lower.startswith("charactersheet/presets/"):
-        oss_category = OSS_CATEGORY_CHARACTER
-        oss_subdir = sub_lower.split("/", 2)[2]
+    oss_subdir = _oss_dir_from_subfolder(subfolder)
     if oss_subdir and _is_oss_enabled():
-        oss_rel = await _find_in_oss_index(filename, oss_subdir, oss_category)
+        oss_rel = await _find_in_oss_index(filename, oss_subdir)
         if not oss_rel:
             from urllib.parse import unquote as _uq
-            oss_rel = await _find_in_oss_index(_uq(filename), oss_subdir, oss_category)
+            oss_rel = await _find_in_oss_index(_uq(filename), oss_subdir)
         if not oss_rel:
             return web.json_response({"success": False, "error": "not in oss index"}, status=404)
         # 索引里的相对路径是 posix 的，换后缀不能经过 Path：Windows 下 str(Path(...))
         # 会把 "/" 变成 "\"，拼进下载 URL 就是 404。
-        cached = await _download_oss_file(Path(oss_rel).with_suffix(".txt").as_posix(), oss_category)
+        cached = await _download_oss_file(Path(oss_rel).with_suffix(".txt").as_posix())
         if not cached:
             return web.json_response({"success": False, "error": "sidecar download failed"}, status=404)
         content = await asyncio.to_thread(_read_text_file, str(cached))
@@ -2775,26 +2798,15 @@ async def view_image(request):
                     base = candidate
                     break
 
-    # OSS fallback: serve from cache or download on demand. Category scoping keeps
-    # Cloud Presets, Grid and Character from resolving each other's files.
-    oss_category = None
-    oss_subdir = ""
-    if subfolder_lower.startswith("cloud presets/"):
-        oss_category = OSS_CATEGORY_PRESETS
-        oss_subdir = subfolder_lower[len("cloud presets/"):]
-    elif subfolder_lower.startswith("storyboard/presets/"):
-        oss_category = OSS_CATEGORY_GRID
-        oss_subdir = subfolder_lower.split("/", 2)[2]
-    elif subfolder_lower.startswith("charactersheet/presets/"):
-        oss_category = OSS_CATEGORY_CHARACTER
-        oss_subdir = subfolder_lower.split("/", 2)[2]
+    # OSS fallback: serve from cache or download on demand.
+    oss_subdir = _oss_dir_from_subfolder(subfolder)
     if oss_subdir and _is_oss_enabled():
-        oss_rel = await _find_in_oss_index(filename, oss_subdir, oss_category)
+        oss_rel = await _find_in_oss_index(filename, oss_subdir)
         if not oss_rel:
             from urllib.parse import unquote as _uq
-            oss_rel = await _find_in_oss_index(_uq(filename), oss_subdir, oss_category)
+            oss_rel = await _find_in_oss_index(_uq(filename), oss_subdir)
         if oss_rel:
-            cached = await _download_oss_file(oss_rel, oss_category)
+            cached = await _download_oss_file(oss_rel)
             if cached and cached.exists():
                 return await asyncio.to_thread(_media_file_response, cached)
         return web.Response(status=404)
@@ -2895,10 +2907,14 @@ async def save_gallery_settings(request):
             if isinstance(home, list) and remove_path in home:
                 home.remove(remove_path)
                 current_settings["home_order"] = home
-            chars = current_settings.get("character_dirs", [])
-            if isinstance(chars, list) and remove_path.lower() in chars:
-                chars.remove(remove_path.lower())
-                current_settings["character_dirs"] = chars
+            chars = _character_token_list(current_settings.get("character_dirs"))
+            off = _character_token_list(current_settings.get("character_dirs_off"))
+            kept_chars = _purge_token_prefix(chars, remove_path.lower())
+            kept_off = _purge_token_prefix(off, remove_path.lower())
+            if kept_chars != chars:
+                current_settings["character_dirs"] = kept_chars
+            if kept_off != off:
+                current_settings["character_dirs_off"] = kept_off
 
         elif action == "reorder":
             dirs = current_settings.get("custom_directories", [])
@@ -2935,15 +2951,24 @@ async def save_gallery_settings(request):
             token = data.get("path", "").strip()
             dirs = current_settings.get("custom_directories", [])
             if _is_home_entry_token(token, dirs):
-                chars = current_settings.get("character_dirs", [])
-                if not isinstance(chars, list):
-                    chars = []
                 key = token.lower()
-                if bool(data.get("character")) and key not in chars:
-                    chars.append(key)
-                elif not bool(data.get("character")) and key in chars:
-                    chars.remove(key)
+                marked = bool(data.get("character"))
+                chars = _character_token_list(current_settings.get("character_dirs"))
+                # 索引打了 character-sheet 标签的云端目录默认就是角色图，只从 character_dirs 里删掉会被
+                # 默认值顶回来；用户显式取消要记进 character_dirs_off 才点得动。
+                off = _character_token_list(current_settings.get("character_dirs_off"))
+                if key in off:
+                    off.remove(key)
+                if marked:
+                    if key not in chars:
+                        chars.append(key)
+                else:
+                    if key in chars:
+                        chars.remove(key)
+                    if key not in off and key in _oss_character_dir_tokens():
+                        off.append(key)
                 current_settings["character_dirs"] = chars
+                current_settings["character_dirs_off"] = off
 
         elif action == "list":
             pass
@@ -2996,6 +3021,8 @@ async def get_gallery_settings(request):
     settings["civitai_api_key_hint"] = f"****{key[-4:]}" if len(key) >= 4 else ("****" if key else "")
     settings["civitai_proxy"] = civitai.clean_proxy(settings.get("civitai_proxy"))
     settings["home_order"] = _get_home_order()
+    # 角色图有效列表：用户标记 ∪ 索引 character-sheet 标签目录 − character_dirs_off，前端逐字消费它。
+    settings["character_dirs"] = _effective_character_dirs(settings)
     return web.json_response(settings)
 
 

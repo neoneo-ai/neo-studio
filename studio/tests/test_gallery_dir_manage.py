@@ -3,7 +3,8 @@
 
 隐藏的目录保留在配置里，但 _get_user_custom_dirs 不再返回它；
 reorder 按提交的完整顺序回写（未知路径剔除、未列出的目录追加末尾）；set_hidden 对不存在的目录无效；
-删除目录时同步清掉它的隐藏标记。set_character 写角色图目录标记（character_dirs），同样只认已知 token。
+删除目录时同步清掉它的隐藏标记。set_character 写角色图目录标记（character_dirs），同样只认已知
+token；云端目录由索引的 character 标签自带默认值，用户显式取消的记在 character_dirs_off 里。
 """
 
 import asyncio
@@ -88,12 +89,14 @@ async def _oss_no_items(*a, **k):
 
 
 _stub("gallery_oss",
-      OSS_CATEGORY_PRESETS="presets", OSS_CATEGORY_GRID="grid", OSS_CATEGORY_CHARACTER="character",
+      OSS_NAV_PREFIX="Cloud Presets",
+      OSS_TAG_CHARACTER_SHEET="character-sheet",
       _is_oss_enabled=lambda *a, **k: False,
       _load_oss_index_from_disk=lambda *a, **k: None,
       _fetch_oss_index=lambda *a, **k: None,
-      _oss_category_dirs=lambda *a, **k: [],
+      _oss_index_dirs=lambda *a, **k: [],
       _oss_directories_to_gallery_dirs=lambda *a, **k: [],
+      _oss_tagged_dir_tokens=lambda *a, **k: [],
       _collect_oss_covers=lambda *a, **k: None,
       _handle_oss_gallery_list=lambda *a, **k: None,
       _find_in_oss_index=_oss_none,
@@ -329,6 +332,56 @@ class SetCharacterTests(DirManageBase):
         _SETTINGS["custom_directories"] = [str(self.dir_a)]
         _post({"action": "set_character", "path": str(self.dir_a), "character": True})
         self.assertEqual(_get_settings()["character_dirs"], [str(self.dir_a).lower()])
+
+
+    def test_settings_route_adds_tagged_cloud_dirs(self):
+        # 索引里打了 character 标签的云端目录自带角色图默认值，用户不用逐个点 👤
+        _SETTINGS["custom_directories"] = [str(self.dir_a)]
+        _post({"action": "set_character", "path": str(self.dir_a), "character": True})
+        with mock.patch.object(gallery, "_oss_character_dir_tokens",
+                               lambda: ["cloud presets/明朝人物", "cloud presets/角色杂图"]):
+            chars = _get_settings()["character_dirs"]
+        self.assertIn(str(self.dir_a).lower(), chars)
+        self.assertIn("cloud presets/明朝人物", chars)
+        self.assertIn("cloud presets/角色杂图", chars)
+
+    def test_tagged_cloud_dir_off_survives_reload(self):
+        # 点 👤 取消云端目录要记进 character_dirs_off，读取时不会被默认值顶回来
+        _SETTINGS["custom_directories"] = []
+        with mock.patch.multiple(gallery,
+                                 _oss_home_dir_tokens=lambda: ["Cloud Presets/明朝人物"],
+                                 _oss_character_dir_tokens=lambda: ["cloud presets/明朝人物"]):
+            result = _post({"action": "set_character", "path": "Cloud Presets/明朝人物", "character": False})
+            self.assertTrue(result["success"])
+            self.assertEqual(_SETTINGS["character_dirs_off"], ["cloud presets/明朝人物"])
+            self.assertNotIn("cloud presets/明朝人物", _SETTINGS["character_dirs"])
+            self.assertNotIn("cloud presets/明朝人物", _get_settings()["character_dirs"])
+
+    def test_set_character_on_cloud_dir_clears_off(self):
+        _SETTINGS["custom_directories"] = []
+        _SETTINGS["character_dirs_off"] = ["cloud presets/明朝人物"]
+        with mock.patch.multiple(gallery,
+                                 _oss_home_dir_tokens=lambda: ["Cloud Presets/明朝人物"],
+                                 _oss_character_dir_tokens=lambda: ["cloud presets/明朝人物"]):
+            result = _post({"action": "set_character", "path": "Cloud Presets/明朝人物", "character": True})
+            self.assertTrue(result["success"])
+            self.assertEqual(_SETTINGS["character_dirs"], ["cloud presets/明朝人物"])
+            self.assertEqual(_SETTINGS["character_dirs_off"], [])
+
+    def test_local_dir_unmark_writes_no_off_entry(self):
+        # 本地目录没有云端默认值，取消只清 character_dirs，不产生 character_dirs_off
+        _SETTINGS["custom_directories"] = [str(self.dir_a)]
+        _post({"action": "set_character", "path": str(self.dir_a), "character": True})
+        _post({"action": "set_character", "path": str(self.dir_a), "character": False})
+        self.assertEqual(_SETTINGS["character_dirs"], [])
+        self.assertEqual(_SETTINGS.get("character_dirs_off", []), [])
+
+    def test_remove_cleans_character_dirs_off(self):
+        _SETTINGS["custom_directories"] = [str(self.dir_a), str(self.dir_b)]
+        _SETTINGS["character_dirs_off"] = [str(self.dir_b).lower()]
+        result = _post({"action": "remove", "path": str(self.dir_b)})
+        self.assertTrue(result["success"])
+        self.assertEqual(_SETTINGS.get("character_dirs_off", []), [])
 
 
 class HomeOrderTests(DirManageBase):

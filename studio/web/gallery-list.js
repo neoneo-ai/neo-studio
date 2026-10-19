@@ -407,7 +407,7 @@ export class GalleryList {
             model_name: subdirs[name].model_name || "",
             base_model: subdirs[name].base_model || "",
             civitai: subdirs[name].civitai || null,
-            // 注入的 OSS 预设入口（Grid / Character 下的 Cloud Presets）靠 path 导航
+            // 注入的云端预设入口（主目录下的 Cloud Presets）靠 path 导航
             source: subdirs[name].source || "",
             read_only: subdirs[name].read_only || false
         }));

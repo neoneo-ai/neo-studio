@@ -1297,7 +1297,7 @@ export class NeoGallery {
     /** 与 ⋯ 菜单的 canDelete 判定一致：presets/lora/C站收藏目录（按目录名或子路径）与 oss 只读。 */
     isDeletableItem(name, subfolder, source = "", dirName = "") {
         const lower = (s) => String(s || "").toLowerCase();
-        const readOnlyPrefixes = ["presets", "lora", "civitai_bookmarks", "grid/presets", "character/presets"];
+        const readOnlyPrefixes = ["presets", "lora", "civitai_bookmarks"];
         const isReadOnlyPath = (p) => readOnlyPrefixes.some((pre) => p === pre || p.startsWith(pre + "/"));
         if (isReadOnlyPath(lower(subfolder)) || isReadOnlyPath(lower(dirName))) return false;
         return source !== "oss";

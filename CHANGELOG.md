@@ -4,6 +4,43 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **Cloud presets have one home: every index directory is a Cloud Presets card.** The index's `categories` mapping used
+  to host preset directories inside the `StoryBoard` / `CharacterSheet` output roots, so `_get_oss_cache_dir` cached the
+  same cloud files a second and third time under `output/StoryBoard/presets/` and `output/CharacterSheet/presets/` —
+  plugin cache written into the user's output tree. The published index only ever carried the `presets` key, and the
+  `--category grid|character` publishing options wrote a key no reader matched, which pulled the scanned directories out
+  of Cloud Presets and hid the cards. `studio/gallery_oss.py` now reads every index directory as one preset card
+  (`_oss_index_dirs`), caches downloads only in `gallery/oss_cache/`, and drops `OSS_CATEGORY_GRID` /
+  `OSS_CATEGORY_CHARACTER` / `_OSS_CATEGORY_PATH_PREFIX` / `_oss_index_categories` together with the `category`
+  pass-through parameter on `_find_in_oss_index`, `_find_thumbnail_in_oss_index`, `_download_oss_file`,
+  `_fetch_oss_dir_index`, `_oss_dir_cards`, `_oss_dir_items` and `_oss_directories_to_gallery_dirs`.
+  `studio/gallery.py` collapses the per-route prefix ladders (list, copy-to-input, thumbnail, sidecar txt, media) into
+  `_oss_dir_from_subfolder()`, so `Cloud Presets/<dir>`, `StoryBoard/presets/<dir>` and `CharacterSheet/presets/<dir>`
+  keep their navigation shape and resolve against the same index; the two main dirs stay generation targets only, and
+  a leftover `presets/` cache directory stays read-only and out of the "recently updated" counts.
+  `tools/gallery_preprocess.py` drops `--category`: scanned and published entries land under `presets`, the index shape
+  and the tag pass are unchanged, so no index republish is needed and old indexes with a `categories` mapping keep
+  working (their directories surface as Cloud Presets cards). Covered by `studio/tests/test_gallery_main_dirs.py`
+  (mapping ignored, single cache dir, three nav prefixes resolve to one index directory, main-dir preset card lists
+  every index directory, tag tokens carry the Cloud
+  Presets prefix) with the `gallery_oss` stubs aligned in `test_gallery_media_types.py`,
+  `test_gallery_image_route.py`, `test_gallery_copy_to_input.py` and `test_gallery_dir_manage.py`; docs in
+  `docs/gallery.md` + `docs/en/gallery.md` and `docs/release.md` + `docs/en/release.md`.
+
+- **Cloud preset directories carry their character-dir default in the index.** Every cloud preset directory had to be
+  clicked with 👤 on each machine before its cards behaved as character sheets, so a publisher who released nothing but
+  sheet art left every user marking the same directories by hand. The master index gains a per-directory `tags` list:
+  `character-sheet` marks a directory as a character directory for everyone who downloads the index, and `tags` is a
+  directory attribute — a directory can carry several, tags never move the Cloud Presets card, and an index
+  without the field is untagged, so old indexes keep working (`_oss_dir_tags` / `_oss_tagged_dir_tokens` in
+  `studio/gallery_oss.py`). The effective list is marked ∪ tagged − `character_dirs_off`, served as `character_dirs`
+  from `/neo_gallery/get_settings`; turning 👤 off on a tagged directory records it in `character_dirs_off` so the
+  default cannot push it back, re-marking drops the entry, and removing a directory purges both lists. Publishing
+  stays tag-only: `--tag-dirs dir1 dir2 --tag character-sheet` (and `--clear-tags`) edits the master index entries with
+  no media rescan and no move of any directory. Covered by `studio/tests/test_gallery_main_dirs.py` (3 new cases) and
+  `studio/tests/test_gallery_dir_manage.py` (5 new cases); docs in `docs/gallery.md` + `docs/en/gallery.md` and
+  `docs/release.md` + `docs/en/release.md`.
+
 - **The dock context is the selected tab's own, and one click drops it for a turn.** The context bar and the request's
   `context` carried every tab at once: the director recipe stayed reported after leaving the director page, and the
   gallery directory came from whichever library host was last mounted — a turn started on the skills page generated

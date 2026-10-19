@@ -11,7 +11,6 @@ from pathlib import Path
 import aiohttp
 from aiohttp import web
 routes = web.RouteTableDef()
-import folder_paths
 
 from . import plugin_paths
 from .util import IMG_EXTENSIONS, VIDEO_EXTENSIONS, AUDIO_EXTENSIONS
@@ -28,59 +27,27 @@ OSS_INDEX_CACHE_FILE = OSS_CACHE_DIR / "_index.json"
 _oss_index_cache: dict | None = None
 _oss_index_fetch_time: float = 0.0
 
-# OSS preset categories: the index may group remote directories under a top-level
-# "categories" mapping ({"StoryBoard": [...], "CharacterSheet": [...]}) for the plugin-owned
-# main Gallery dirs. Directories not listed in any category stay "presets"
-# (the legacy Cloud Presets section), so old indexes keep working unchanged.
-OSS_CATEGORY_PRESETS = "presets"
-OSS_CATEGORY_GRID = "StoryBoard"
-OSS_CATEGORY_CHARACTER = "CharacterSheet"
-# Navigation prefix of the OSS preset cards per category. Presets are top-level
-# cards ("Cloud Presets/<dir>"); the Grid/Character caches live under a read-only
-# "presets" folder inside their main dir ("Grid/presets/<dir>").
-_OSS_CATEGORY_PATH_PREFIX = {
-    OSS_CATEGORY_PRESETS: "Cloud Presets",
-    OSS_CATEGORY_GRID: "StoryBoard/presets",
-    OSS_CATEGORY_CHARACTER: "CharacterSheet/presets",
-}
-# Output main dirs that hold the grid/character content the 素材库 buttons browse.
-# The read-only OSS preset cache lives in their "presets/" subdir.
-OUTPUT_DIR = Path(folder_paths.output_directory).resolve()
-GRID_MAIN_DIR = OUTPUT_DIR / "StoryBoard"
-CHARACTER_MAIN_DIR = OUTPUT_DIR / "CharacterSheet"
+# 云端预设只有一个位置：索引里的每个目录都是一张 Cloud Presets 卡。旧索引顶层的
+# "categories" 映射（把预设目录挂进 StoryBoard/CharacterSheet 主目录的废弃设计）读取时
+# 忽略，卡片一律回到 Cloud Presets，索引不用重发。
+# Directory tags: a per-directory "tags" list in the master index — a virtual label that is
+# independent from the card location. "categories" owns the single home position, tags only
+# describe the directory (a directory can carry many), so tagging never moves a card.
+# Indexes without a "tags" field have no tags. The sheet tag is named after the artifact these
+# directories hold (GenerateCharacterSheet output); the bare word "character" is already taken by
+# the archive category, so reusing it in the same index.json reads as two different things.
+OSS_TAG_CHARACTER_SHEET = "character-sheet"
+# 云端预设卡的导航前缀（卡片路径、封面 key、首页 token 共用）。
+OSS_NAV_PREFIX = "Cloud Presets"
 
 
-def _oss_index_categories(index: dict) -> dict[str, list[str]]:
-    """Return the index's top-level category -> directory-name mapping."""
-    categories = (index or {}).get("categories")
-    if not isinstance(categories, dict):
-        return {}
-    result = {}
-    for cat, names in categories.items():
-        if isinstance(names, list):
-            result[str(cat)] = [n for n in names if isinstance(n, str)]
-    return result
+def _oss_index_dirs(index: dict) -> list[str]:
+    """云端预设目录名：索引里的每个目录都是一张卡。
 
-
-def _oss_category_dirs(index: dict, category: str | None) -> list[str]:
-    """Directory names belonging to a category (None = every non-root directory).
-
-    Directories listed under another category are excluded from "presets", so
-    the legacy Cloud Presets section only shows unlisted directories.
-    """
-    directories = (index or {}).get("directories", {})
-    if not category:
-        return [d for d in directories if d != "_root"]
-    if category == OSS_CATEGORY_PRESETS:
-        # Unlisted directories plus any explicitly listed under "presets";
-        # directories owned by another category never show up in Cloud Presets.
-        listed = set()
-        for cat, names in _oss_index_categories(index).items():
-            if cat != OSS_CATEGORY_PRESETS:
-                listed.update(names)
-        return [d for d in directories if d != "_root" and d not in listed]
-    cat_names = _oss_index_categories(index).get(category, [])
-    return [d for d in cat_names if d in directories]
+    旧索引顶层的 categories 映射不参与归属；`_root` 与旧版内嵌目录索引条目
+    （键形如 `<目录>/index.json`）不是目录卡。"""
+    return [name for name in (index or {}).get("directories", {})
+            if name != "_root" and not name.endswith("/index.json")]
 
 
 def _oss_dir_entry(index: dict, dir_name: str) -> dict:
@@ -104,6 +71,38 @@ def _oss_total_items(index: dict) -> int:
     return sum(_oss_dir_count(index, d) for d in (index or {}).get("directories", {}))
 
 
+def _oss_dir_tags(index: dict, dir_name: str) -> list[str]:
+    """目录标签列表：小写去重；没有 tags 字段返回空。"""
+    raw = _oss_dir_entry(index, dir_name).get("tags")
+    if not isinstance(raw, list):
+        return []
+    tags: list[str] = []
+    for tag in raw:
+        if not isinstance(tag, str):
+            continue
+        lowered = tag.strip().lower()
+        if lowered and lowered not in tags:
+            tags.append(lowered)
+    return tags
+
+
+def _oss_tagged_dirs(index: dict, tag: str) -> list[str]:
+    """按标签取云端目录名：排除 _root 与旧版内嵌目录索引条目。"""
+    target = (tag or "").strip().lower()
+    if not target:
+        return []
+    return [name for name in (index or {}).get("directories", {})
+            if name != "_root" and not name.endswith("/index.json")
+            and target in _oss_dir_tags(index, name)]
+
+
+def _oss_tagged_dir_tokens(index: dict, tag: str) -> list[str]:
+    """带标签目录的画廊 token（"Cloud Presets/明朝人物" 形式）。
+
+    前端按 token 逐字匹配卡片位置，首页角色图标记才能认得云端目录。"""
+    return [f"{OSS_NAV_PREFIX}/{name}" for name in _oss_tagged_dirs(index, tag)]
+
+
 def _get_oss_config() -> dict:
     """Read OSS presets configuration from configs/oss_presets.json."""
     try:
@@ -121,17 +120,11 @@ def _is_oss_enabled() -> bool:
     return bool(cfg.get("enabled")) and bool(cfg.get("index_url"))
 
 
-def _get_oss_cache_dir(category: str | None = None) -> Path:
-    """Local cache root for downloaded OSS files.
+def _get_oss_cache_dir() -> Path:
+    """云端预设文件的本地缓存根：配置里的 cache_dir，缺省落在 Gallery 自己的缓存下。
 
-    StoryBoard/CharacterSheet presets are cached under the output main dirs' read-only
-    "presets/" subdir (output/StoryBoard/presets, output/CharacterSheet/presets);
-    everything else keeps the legacy oss_cache location.
-    """
-    if category == OSS_CATEGORY_GRID:
-        return GRID_MAIN_DIR / "presets"
-    if category == OSS_CATEGORY_CHARACTER:
-        return CHARACTER_MAIN_DIR / "presets"
+    同一批云端文件曾按分类落进 output/StoryBoard/presets 与
+    output/CharacterSheet/presets，把插件缓存写进用户 output 树；分类去掉后只剩这一处。"""
     cfg = _get_oss_config()
     custom = cfg.get("cache_dir", "")
     if custom:
@@ -214,14 +207,14 @@ def _load_oss_index_from_disk() -> dict | None:
     return None
 
 
-async def _download_oss_file(remote_rel_path: str, category: str | None = None) -> Path | None:
+async def _download_oss_file(remote_rel_path: str) -> Path | None:
     """Download a single file from OSS to local cache. Returns local cache path or None."""
     cfg = _get_oss_config()
     base_url = cfg.get("base_url", "").rstrip("/")
     if not base_url:
         return None
 
-    cache_dir = _get_oss_cache_dir(category)
+    cache_dir = _get_oss_cache_dir()
     local_path = cache_dir / remote_rel_path
     if local_path.exists():
         return local_path
@@ -246,7 +239,7 @@ async def _download_oss_file(remote_rel_path: str, category: str | None = None) 
         return None
 
 
-async def _fetch_oss_dir_index(index: dict, dir_name: str, category: str | None = None) -> list[dict]:
+async def _fetch_oss_dir_index(index: dict, dir_name: str) -> list[dict]:
     """Items of one remote directory: the per-directory index is downloaded on entry.
 
     主索引只声明目录索引的路径与 rev；rev 不变就用 oss_cache/<dir>/_index.json 里的缓存，
@@ -259,7 +252,7 @@ async def _fetch_oss_dir_index(index: dict, dir_name: str, category: str | None 
     if not rel:
         return []
 
-    cache_file = _get_oss_cache_dir(category) / dir_name / "_index.json"
+    cache_file = _get_oss_cache_dir() / dir_name / "_index.json"
     cached = None
     if cache_file.exists():
         try:
@@ -304,7 +297,7 @@ def _oss_match_dir(dirs: list[str], subdir: str) -> str | None:
     return None
 
 
-async def _find_in_oss_index(filename: str, subdir: str, category: str | None = None) -> str | None:
+async def _find_in_oss_index(filename: str, subdir: str) -> str | None:
     """Look up a file in the OSS index. Returns the remote relative path or None.
 
     只查 subdir 自己的目录索引：调用方的 subfolder 就是从导航路径取出的目录名。"""
@@ -312,7 +305,7 @@ async def _find_in_oss_index(filename: str, subdir: str, category: str | None = 
     if not index:
         return None
 
-    dirs = _oss_category_dirs(index, category)
+    dirs = _oss_index_dirs(index)
     if subdir:
         target = _oss_match_dir(dirs, subdir)
         if target is None:
@@ -322,19 +315,19 @@ async def _find_in_oss_index(filename: str, subdir: str, category: str | None = 
         targets = dirs
 
     for dir_name in targets:
-        for item in await _fetch_oss_dir_index(index, dir_name, category):
+        for item in await _fetch_oss_dir_index(index, dir_name):
             if item.get("filename") == filename:
                 return f"{dir_name}/{filename}"
     return None
 
 
-async def _find_thumbnail_in_oss_index(filename: str, subdir: str, category: str | None = None) -> str | None:
+async def _find_thumbnail_in_oss_index(filename: str, subdir: str) -> str | None:
     """Look up a thumbnail in the OSS index. Returns the remote relative path or None."""
     index = _oss_index_cache or _load_oss_index_from_disk()
     if not index:
         return None
 
-    dirs = _oss_category_dirs(index, category)
+    dirs = _oss_index_dirs(index)
     if subdir:
         target = _oss_match_dir(dirs, subdir)
         if target is None:
@@ -344,24 +337,22 @@ async def _find_thumbnail_in_oss_index(filename: str, subdir: str, category: str
         targets = dirs
 
     for dir_name in targets:
-        for item in await _fetch_oss_dir_index(index, dir_name, category):
+        for item in await _fetch_oss_dir_index(index, dir_name):
             if item.get("filename") == filename and item.get("thumbnail"):
                 return item["thumbnail"]
     return None
 
 
-def _oss_directories_to_gallery_dirs(index: dict, category: str | None = OSS_CATEGORY_PRESETS) -> list[dict]:
+def _oss_directories_to_gallery_dirs(index: dict) -> list[dict]:
     """Convert OSS index directories to gallery directory response format.
 
-    `path_prefix` controls the navigation prefix ("Cloud Presets" for the legacy
-    section, "StoryBoard"/"CharacterSheet" for the main-dir preset cards).
+    云端预设目录的卡片路径固定是 "Cloud Presets/<目录>"。
     """
-    path_prefix = _OSS_CATEGORY_PATH_PREFIX.get(category or OSS_CATEGORY_PRESETS, "Cloud Presets")
     result = []
-    for dir_name in _oss_category_dirs(index, category):
+    for dir_name in _oss_index_dirs(index):
         result.append({
             "name": dir_name,
-            "path": f"{path_prefix}/{dir_name}",
+            "path": f"{OSS_NAV_PREFIX}/{dir_name}",
             "read_only": True,
             "source": "oss",
             "subdirs": {},
@@ -383,10 +374,12 @@ def _oss_cover_kind(filename: str) -> str:
     return "other"
 
 
-def _collect_oss_covers(covers: dict, index: dict, category: str | None = OSS_CATEGORY_PRESETS):
-    """Collect cover images from OSS index for each remote directory."""
-    path_prefix = _OSS_CATEGORY_PATH_PREFIX.get(category or OSS_CATEGORY_PRESETS, "Cloud Presets")
-    for dir_name in _oss_category_dirs(index, category):
+def _collect_oss_covers(covers: dict, index: dict, path_prefix: str = OSS_NAV_PREFIX):
+    """Collect cover images from OSS index for each remote directory.
+
+    `path_prefix` is the navigation prefix the caller's cards sit under: the home
+    page uses "Cloud Presets", a main dir's read-only preset card uses "<主目录>/presets"."""
+    for dir_name in _oss_index_dirs(index):
         entry = _oss_dir_entry(index, dir_name)
         # v2 主索引给每个目录带一份 covers；旧版索引从 items 里现抽
         candidates = entry.get("covers")
@@ -419,17 +412,16 @@ def _collect_oss_covers(covers: dict, index: dict, category: str | None = OSS_CA
             covers[f"{path_prefix}/{dir_name}"] = cover_items
 
 
-def _oss_dir_cards(index: dict, category: str) -> dict:
-    """subdirs mapping (dir name -> image_count) for one OSS category."""
+def _oss_dir_cards(index: dict) -> dict:
+    """subdirs mapping (dir name -> image_count) for every remote preset directory."""
     return {dname: {"image_count": _oss_dir_count(index, dname)}
-            for dname in _oss_category_dirs(index, category)}
+            for dname in _oss_index_dirs(index)}
 
 
-async def _oss_dir_items(index: dict, dir_name: str, subfolder_prefix: str,
-                         category: str | None = None) -> list[dict]:
+async def _oss_dir_items(index: dict, dir_name: str, subfolder_prefix: str) -> list[dict]:
     """Item entries of one OSS remote directory, with the navigation subfolder prefix."""
     items = []
-    for item in await _fetch_oss_dir_index(index, dir_name, category):
+    for item in await _fetch_oss_dir_index(index, dir_name):
         entry = {
             "name": Path(item["filename"]).stem,
             "filename": item["filename"],
@@ -470,7 +462,7 @@ async def _handle_oss_gallery_list(dir_name_param: str, rel_path_param: str,
             "path": "Cloud Presets",
             "read_only": True,
             "source": "oss",
-            "subdirs": {k: v for k, v in _oss_dir_cards(oss_index, OSS_CATEGORY_PRESETS).items()
+            "subdirs": {k: v for k, v in _oss_dir_cards(oss_index).items()
                         if _oss_dir_visible(k, hidden)},
             "root_count": 0,
             "items": [],
@@ -486,13 +478,13 @@ async def _handle_oss_gallery_list(dir_name_param: str, rel_path_param: str,
     # "Cloud Presets/<subdir>" — show items from that subdir
     if dir_name_lower.startswith("cloud presets/"):
         subdir_name = dir_name_param[len("Cloud Presets/"):]
-        if subdir_name not in _oss_category_dirs(oss_index, OSS_CATEGORY_PRESETS):
+        if subdir_name not in _oss_index_dirs(oss_index):
             return web.json_response({"error": f"OSS directory not found: {subdir_name}"}, status=404)
 
         if not _oss_dir_visible(subdir_name, hidden):
             return web.json_response({"directories": [], "total": 0})
 
-        items = await _oss_dir_items(oss_index, subdir_name, "Cloud Presets", OSS_CATEGORY_PRESETS)
+        items = await _oss_dir_items(oss_index, subdir_name, OSS_NAV_PREFIX)
 
         resp_dir = {
             "name": f"Cloud Presets/{subdir_name}",
