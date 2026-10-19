@@ -1239,7 +1239,7 @@ test("Esc 收掉写了一半的输入：框清空、框高收回，不发请求"
     assert.equal(agentCalls().length, 0, "Esc 不该发出请求");
 });
 
-test("发问与最终回答各带一个「⧉ 复制」按钮", async () => {
+test("一轮问答只有一枚图标复制钮：钉在最终回答之后，回合头不留第二枚", async () => {
     mountStudio();
     await openStudio("#/gallery");
     mockAgentStream([{ kind: "content", text: "已按素材库现状出图" }]);
@@ -1247,32 +1247,31 @@ test("发问与最终回答各带一个「⧉ 复制」按钮", async () => {
     click(runBtn());
     await until(() => dock().querySelector(".neo-agent-answer > .neo-agent-copy"), "最终回答要带复制按钮");
 
-    assert.equal(dock().querySelector(".neo-agent-meta .neo-agent-copy").textContent, "⧉ 复制",
-        "发问要有复制按钮");
-    assert.equal(dock().querySelector(".neo-agent-answer > .neo-agent-copy").textContent, "⧉ 复制",
-        "最终回答要有复制按钮");
+    const btn = dock().querySelector(".neo-agent-answer > .neo-agent-copy");
+    assert.equal(dock().querySelectorAll(".neo-agent-copy").length, 1, "一枚就够，同一张卡片不并排两枚");
+    assert.equal(dock().querySelector(".neo-agent-meta .neo-agent-copy"), null, "回合头右端不留复制钮");
+    assert.ok(btn.querySelector("svg rect"), "钮面是 Cline 那枚叠角方块");
+    assert.equal(btn.textContent, "", "钮面不写文案");
+    assert.equal(btn.title, "", "不给 tooltip，提示全交给图标");
+    assert.equal(btn.getAttribute("aria-label"), null, "连 aria-label 都不带");
 });
 
-test("复制按钮随语言切文案，复制不可用时写失败", async () => {
+test("复制钮只看图标：成功换对勾，两条路都不通换叉", async () => {
     mountStudio();
-    setLang("en");   // resetEnv 里复位成 zh，切语言要在挂载之后
     await openStudio("#/gallery");
-    mockAgentStream([{ kind: "content", text: "done cat image" }]);
+    mockAgentStream([{ kind: "content", text: "已按素材库现状出图" }]);
     inputText(dock().querySelector(".neo-agent-input"), "一只橘猫");
     click(runBtn());
     await until(() => dock().querySelector(".neo-agent-answer > .neo-agent-copy"), "最终回答要带复制按钮");
 
-    const askBtn = dock().querySelector(".neo-agent-meta .neo-agent-copy");
-    const finalBtn = dock().querySelector(".neo-agent-answer > .neo-agent-copy");
-    assert.equal(askBtn.textContent, "⧉ Copy", "英文界面下按钮文案要跟着切");
-    assert.equal(finalBtn.textContent, "⧉ Copy", "回答上的按钮同一份文案");
+    const btn = dock().querySelector(".neo-agent-answer > .neo-agent-copy");
 
-    // 非安全上下文里 navigator.clipboard 缺席是常态：成功与失败两条路都要写得出名字
+    // 非安全上下文里 navigator.clipboard 缺席是常态：没有文案，成功与失败只能靠图标写出结果
     Object.defineProperty(window.navigator, "clipboard",
         { value: { writeText: async () => {} }, configurable: true });
-    click(finalBtn);
+    click(btn);
     await flush(1);
-    assert.equal(finalBtn.textContent, "✓ Copied", "写入成功要写已复制");
+    assert.equal(btn.querySelector("svg path").getAttribute("d"), "M20 6 9 17l-5-5", "写入成功换对勾");
 
     const nativeCopy = document.execCommand;
     Object.defineProperty(window.navigator, "clipboard", {
@@ -1280,9 +1279,9 @@ test("复制按钮随语言切文案，复制不可用时写失败", async () =>
         configurable: true,
     });
     document.execCommand = () => false;   // navigator.clipboard 不可用时的原生退路，一并掐掉
-    click(askBtn);
+    click(btn);
     await flush(1);
-    assert.equal(askBtn.textContent, "✗ Copy failed", "两条路都不通要写失败，不能演成已复制");
+    assert.equal(btn.querySelector("svg path").getAttribute("d"), "M18 6 6 18", "两条路都不通换叉，不能演成对勾");
     document.execCommand = nativeCopy;
 });
 

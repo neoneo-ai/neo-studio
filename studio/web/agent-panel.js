@@ -187,18 +187,30 @@ function buildChat(onOpenMcp, getContext) {
         titleBar.hidden = !text;
     }
 
-    // 「⧉ 复制」挂在发问与回答上：桌面窗口的 WebView2 只在 dev 态放行 Ctrl+C 与右键菜单
-    // （app/studio_app.py 把 AreBrowserAcceleratorKeysEnabled / AreDefaultContextMenusEnabled 绑到 debug），
-    // 正文又常被宿主注入的 body{user-select:none;cursor:default} 压得选不动，复制这一句只剩按钮一条路。
+    // 复制钮一轮只挂一枚，钉在最终回答之后，钮面用 Cline 那枚叠角方块：桌面窗口的 WebView2 只在 dev 态放行
+    // Ctrl+C 与右键菜单（app/studio_app.py 把 AreBrowserAcceleratorKeysEnabled / AreDefaultContextMenusEnabled 绑到
+    // debug），正文又常被宿主注入的 body{user-select:none;cursor:default} 压得选不动，复制这一句只剩按钮一条路。
+    // 回合头右端再放一枚复制提问的，同一张问答卡片里就是两枚并排，分不出各复制哪一段。
     // 局域网 IP 访问不是安全上下文，navigator.clipboard 不存在，回落 execCommand
+    const COPY_ICONS = {
+        idle: '<rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
+        ok: '<path d="M20 6 9 17l-5-5"/>',
+        fail: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+    };
     function mkCopyBtn(host, getText) {
         const btn = mkEl("button", "neo-agent-copy");
         btn.type = "button";
-        btn.textContent = t("⧉ 复制");
+        // 钮面只有图标、不写文案，界面上一句提示都没有；图标是写死的常量，划正文时带不走按钮字样
+        const setState = (state) => {
+            btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"`
+                + ` stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">`
+                + COPY_ICONS[state] + "</svg>";
+        };
+        setState("idle");
         btn.onclick = () => {
             const feedback = (ok) => {
-                btn.textContent = ok ? t("✓ 已复制") : t("✗ 复制失败");
-                setTimeout(() => { btn.textContent = t("⧉ 复制"); }, 1500);
+                setState(ok ? "ok" : "fail");
+                setTimeout(() => { setState("idle"); }, 1500);
             };
             const value = getText();
             if (typeof navigator.clipboard?.writeText === "function") {
@@ -946,7 +958,6 @@ function buildChat(onOpenMcp, getContext) {
             + (resumeId ? " · " + t("接上次会话") : "");
         const ask = mkEl("div", "neo-agent-ask");
         ask.textContent = text;
-        mkCopyBtn(meta, () => text);   // 复制钮贴回合头右端，提问原文保持干净
         turn.appendChild(meta);
         turn.appendChild(ask);
         if (images.length) {

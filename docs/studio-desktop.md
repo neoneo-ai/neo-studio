@@ -190,9 +190,11 @@ js_api（`check_setup` / `pick_root` / `pick_python` / `start_setup`），根目
   Ctrl+C / Ctrl+V / Ctrl+X / Ctrl+A / Ctrl+Z / Ctrl+Y 不靠开发模式就能用。这几键在页面侧由
   `initClipboardKeys`（`studio/web/studio/studio-app.js`）在 capture 相位摘走，注入的那一套吞键 handler 收不到事件；
   刷新键不在放行名单里，仍由 `initReloadHotkey` 接管。
-- `http://127.0.0.1` 不是安全上下文，`navigator.clipboard` 不存在。智能体对话页在发问的回合头右端与回答正文之后各放
-  一个「⧉ 复制」（`mkCopyBtn`）：点击走 `navigator.clipboard`，没有就退到 `execCommand`，两条路都不通写成
-  「✗ 复制失败」。按钮都落在正文文本之外，划词与取文本不会把按钮字样一起带走。
+- `http://127.0.0.1` 不是安全上下文，`navigator.clipboard` 不存在。智能体对话页一轮只放一枚复制钮
+  （`mkCopyBtn`），钉在最终回答正文之后：钮面只有 Cline 那枚叠角方块图标（inline SVG），一句文案都不写、
+  连 tooltip 都没有；点击走 `navigator.clipboard`，没有就退到 `execCommand`，成功换对勾、两条路都不通换叉，
+  1.5 秒收回图标。一枚就够——同一张问答卡片里并排两枚，分不出各复制哪一段。按钮落在正文文本之外，
+  划词与取文本带不走按钮。
 - 输入框随内容长到 108px 封顶（`fitInput`）：发送即清空并把焦点交回输入框，空闲时按 Esc 清掉写了一半的一段。
 
 ## 开发模式

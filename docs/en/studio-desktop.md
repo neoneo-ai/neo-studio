@@ -263,10 +263,13 @@ startable once the root is filled in.
   without dev mode. The page side grabs those keys in the capture phase in `initClipboardKeys`
   (`studio/web/studio/studio-app.js`) so the injected key-swallowing handler never sees them; the reload keys stay
   out of that allow-list and remain owned by `initReloadHotkey`.
-- `http://127.0.0.1` is not a secure context, so `navigator.clipboard` does not exist. The agent chat page puts a
-  "⧉ Copy" button at the right end of the ask's meta row and after the answer body (`mkCopyBtn`): the click goes
-  through `navigator.clipboard` and falls back to `execCommand`, and when neither works the label reads
-  "✗ Copy failed". Both buttons sit outside the body text, so selecting text never drags the button label along.
+- `http://127.0.0.1` is not a secure context, so `navigator.clipboard` does not exist. The agent chat page puts one
+  copy button per turn (`mkCopyBtn`), pinned after the final answer body: the button face is only Cline's
+  overlapping-squares glyph as an inline SVG — no label and no tooltip at all. The click goes through
+  `navigator.clipboard` and falls back to `execCommand`; success swaps in a check and failure swaps in a cross, and
+  the glyph comes back after 1.5 seconds. One is enough — two buttons side by side in the same ask-and-answer card
+  leave it unreadable which text each one copies. The button sits outside the body text, so selecting text never
+  drags the button along.
 - The input grows with its content up to a 108px cap (`fitInput`): sending clears the input and hands focus back to
   it, and Esc clears a half-written entry while the panel is idle.
 

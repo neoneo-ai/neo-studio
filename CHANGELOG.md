@@ -4,6 +4,16 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **The agent answer carries one icon-only copy button.** The Q&A card rendered two `⧉ 复制` text buttons
+  (`studio/web/agent-panel.js` `mkCopyBtn` — one in the turn meta row copying the ask, one after the answer body),
+  so it was unreadable which text each one copied. The meta-row button is gone; the answer button stays, pinned
+  after the final answer body, and is now Cline's overlapping-squares glyph as an inline SVG with no label, no
+  tooltip and no `aria-label` — success swaps in a check, failure swaps in a cross, and the glyph returns after
+  1.5 seconds, so a selection over the answer can never sweep the button label up with it.
+  `studio/web/js/core/i18n.js` drops the `⧉ 复制` / `✓ 已复制` / `✗ 复制失败` keys the agent block re-added over the
+  director block's copy. Covered by `studio/tests/js/studio-agent-skill.test.mjs` (one button per turn, icon-only
+  face, clipboard success and failure icon swap). Docs in `docs/studio-desktop.md` + `docs/en/studio-desktop.md`.
+
 - **A text-to-image request stops landing on an editing skill.** Session `20261019-125206` ("生成一张刘亦菲的图片", no
   attached image) spent 12 tool rounds and produced nothing. `list_skills(q="t2i_edit")` hit 0 because `q` only matched
   id / name / cn_name, so the batch the earlier `q="edit"` returned set the pick; `qwen_image_21_local_edit`

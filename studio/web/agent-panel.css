@@ -226,26 +226,27 @@
     text-overflow: ellipsis;
 }
 
-/* 「⧉ 复制」：正文选不动时的复制出口（agent-panel.js 的 mkCopyBtn）。
-   提问的钮在回合头右端，回答的钮跟在正文容器之后——两处都在正文文本之外，
-   划词与取文本都不会把按钮字样一起带走 */
+/* 复制钮：正文选不动时的复制出口（agent-panel.js 的 mkCopyBtn），一轮一枚，钉在最终回答容器之后。
+   钮面只有图标，一句文案都不写——落在正文文本之外，划词与取文本带不走按钮 */
 .neo-agent-copy {
-    margin-top: 2px;
-    padding: 1px 5px;
-    border: 1px solid var(--neo-vsc-border);
-    border-radius: 3px;
-    background: var(--neo-vsc-bg);
+    display: inline-flex;
+    margin-top: 3px;
+    padding: 0;
+    border: 0;
+    background: none;
     color: var(--neo-vsc-fg-dim);
-    font: inherit;
-    font-size: 11px;
-    white-space: nowrap;
+    line-height: 0;
     cursor: pointer;
     user-select: none;
 }
 
 .neo-agent-copy:hover {
-    border-color: var(--neo-vsc-accent);
-    color: var(--neo-vsc-fg);
+    color: var(--neo-vsc-accent);
+}
+
+/* 钉在回答容器之后的那一枚独占一行，图标左对齐跟在正文末尾，不缩在最后一行的字后 */
+.neo-agent-answer > .neo-agent-copy {
+    display: block;
 }
 
 /* 一轮问答：元信息行 + 提问 + 正文 */
@@ -266,11 +267,6 @@
     letter-spacing: 0.5px;
     text-transform: uppercase;
     color: var(--neo-vsc-fg-dim);
-}
-
-.neo-agent-meta .neo-agent-copy {
-    margin-left: auto;
-    text-transform: none;   /* 回合头是大写排版，按钮文案按原样出 */
 }
 
 .neo-agent-ask {
