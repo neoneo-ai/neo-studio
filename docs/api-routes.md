@@ -206,6 +206,9 @@ Neo Studio 独立页面（`web/studio/index.html`）的后端。素材 / 生图 
   `kind:"input"` 的文件名给。右栏只收后端解得动的图片后缀，素材库里的视频 / 音频卡片在拖入这一步就挡掉。
 - `generate_image` / `director_run` / `segment_run` / `assemble_run` 只回 `task_id`，循环里轮询 `task_status` 到终态，
   采样步数与整片段号经 `status` 帧发出去；等待上限单图 600 秒、整片 2400 秒。
+- 生成中的 `status` 帧可带 `preview`（`{frames:[dataURL…], fps, w, h, step}`）：出片是 `h3_preview` 的紧凑档、
+  生图是进度预览捕获的那一张，只在载荷推进时挂一次，右栏工具卡用它播该步动画。这一份只进界面——会话落盘与
+  `tool_result` 文本都不带它，LLM 永远看不到帧字节。
 - `tool_result` 帧带 `media`：出图的 `images` 逐条成 `{kind:"image", url, title}`，出片三类的成片 `filename` 补成一条
   `{kind:"video", url}` 的 `/view` 地址（单段与拼接的快照只给文件名，子目录按生成模块的产物目录补）。右栏的产物
   缩略图与产物链接只认这一份列表。

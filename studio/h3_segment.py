@@ -33,6 +33,7 @@ from comfy_execution.utils import get_executing_context
 from PIL import Image
 from server import PromptServer
 
+from .h3_preview import clear_latest_preview
 from .h3_video_director import (
     NeoH3VideoDirector,
     _align_context_frames,
@@ -451,6 +452,7 @@ async def _watch(task_id: str) -> None:
         if state == "done":
             error, cancelled = _error_from_history(item)
             meta = _RUNS.pop(prompt_id, {}) or {}
+            clear_latest_preview(meta.get("preview_node_id"))   # 终态后紧凑档没人再取，随这次运行收掉
             task["status"] = "cancelled" if cancelled else ("failed" if error else "succeeded")
             task["filename"] = meta.get("filename")
             # 产物目录由节点写死（SEG_OUT_SUBDIR），快照带上它：取图与播放链接只按 filename + subfolder 拼
@@ -529,6 +531,7 @@ async def run_segment_route(request):
         data = await request.json()
     except Exception:
         return web.json_response({"success": False, "error": "请求体不是 JSON"}, status=400)
+    task_id = str(uuid.uuid4())   # 先建：没有节点归属的路由任务按它寻址预览帧（右栏智能体出片没有节点面板）
     try:
         payload = _run_prompt(data)
         prompt_id = await submit_graph(payload["graph"])
@@ -538,9 +541,8 @@ async def run_segment_route(request):
         logger.error(f"run_segment submit failed: {e}")
         return web.json_response({"success": False, "error": str(e)}, status=500)
 
-    task_id = str(uuid.uuid4())
     now = time.time()
-    _RUNS[prompt_id] = {"preview_node_id": data.get("node_id")}
+    _RUNS[prompt_id] = {"preview_node_id": data.get("node_id") or task_id}
     _SEGMENT_TASKS[task_id] = {
         "task_id": task_id, "prompt_id": prompt_id, "status": "queued",
         "recipe": payload["recipe"], "segment": payload["index"], "seed": payload["seed"],

@@ -348,9 +348,11 @@ class LatestPreviewTests(_RecipeCase):
     def setUp(self):
         super().setUp()
         self.h3p._LATEST.clear()
+        self.h3p._LATEST_SMALL.clear()
 
     def tearDown(self):
         self.h3p._LATEST.clear()
+        self.h3p._LATEST_SMALL.clear()
         super().tearDown()
 
     def test_status_route_includes_latest_preview(self):
@@ -386,6 +388,22 @@ class LatestPreviewTests(_RecipeCase):
         self.assertEqual(len(self.h3p._LATEST), 8)
         self.assertNotIn("n0", self.h3p._LATEST)
         self.assertIn("n9", self.h3p._LATEST)
+
+    def test_compact_preview_is_a_separate_channel(self):
+        """紧凑档只走进程内那一份：路由载荷是全尺寸那一份，终态两张表一起清。"""
+        small = {"frames": ["small"], "step": 3}
+        self.h3p._store_latest("t-1", {"frames": ["full"], "step": 3}, small)
+        self.assertEqual(self.h3p.get_latest_preview("t-1"), {"frames": ["full"], "step": 3})
+        self.assertEqual(self.h3p.get_latest_preview("t-1", small=True), small)
+        self.h3p.clear_latest_preview("t-1")
+        self.assertIsNone(self.h3p.get_latest_preview("t-1", small=True))
+
+    def test_store_latest_cap_evicts_both_channels(self):
+        for i in range(10):
+            self.h3p._store_latest(f"n{i}", {"step": i}, {"step": i})
+        self.assertEqual(len(self.h3p._LATEST), len(self.h3p._LATEST_SMALL))
+        self.assertNotIn("n0", self.h3p._LATEST_SMALL)
+        self.assertIn("n9", self.h3p._LATEST_SMALL)
 
 
 class MemStatsTests(unittest.TestCase):

@@ -4,6 +4,21 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **The agent dock plays the sampling preview, not just a step counter.** The film's live preview existed all along
+  (`studio/h3_preview.py`: 8 taeh3 frames per sampling step) and reached the director node panel and the Studio director
+  page, while the right dock only read "running 3/8 段 1/3 2/8": `task_status` stripped `preview` / `latest_preview`, the
+  poll loop emitted a text-only `status` frame, and a route-submitted segment keyed its payload by the graph node id
+  "1", so an agent-run segment was not addressable by task at all. `h3_preview.py` now stores the same decoded frames a
+  second time at a 384 longest side; `_task_and_wait` in `studio/agent.py` reads it in process and attaches it to the
+  `status` frame once per advance (image generation attaches the captured progress image the same way); the tool card in
+  `studio/web/agent-panel.js` mounts the shared `createFramePlayer` to loop that step and freezes on the last frame at
+  the terminal state. The frame bytes stay out of the LLM — `tool_result` text, the MCP payload and the saved session
+  file carry none of them. `h3_segment.py` keys the payload by task id when the request carries no node. Covered by
+  `studio/tests/test_agent.py` (in-process read, attach-once, session file free of base64),
+  `studio/tests/test_studio.py` (channel split, shared cap, terminal clear) and
+  `studio/tests/test_h3_video_director.py` (compact frames stored, WS payload untouched); docs in
+  `docs/h3-video-gen.md` + `docs/en/h3-video-gen.md` and `docs/api-routes.md` + `docs/en/api-routes.md`.
+
 - **MCP model lookup answers "which LoRA goes with this checkpoint", and a LoRA override stays in one request.**
   `list_models` forwarded the raw `/neo_image_gen/models` scan — a flat list of everything on the machine cut at
   40 items — so an agent picking a LoRA for `Krea2\Moody\krea2_Moody-Krea-Mix-v2G_int8.safetensors` had no

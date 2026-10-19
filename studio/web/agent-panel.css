@@ -330,6 +330,16 @@
     color: var(--neo-vsc-fg-dim);
 }
 
+.neo-agent-tool-preview:empty {
+    display: none;
+}
+
+/* 采样预览播放器（live-preview.js 的 neo-dtl-live 布局）在右栏这一档的下限高度：
+   卡片宽度就这么点，画面按 object-fit 等比缩；reset() 写过的内联高度由 onFrame 清掉 */
+.neo-agent .neo-agent-tool-preview {
+    min-height: 168px;
+}
+
 .neo-agent-cancel {
     height: 18px;
     padding: 0 6px;

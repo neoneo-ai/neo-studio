@@ -142,7 +142,7 @@ studio/
 | `skill/skill-detail-popup.js` | Single-skill detail popup and its cross-node singleton |
 | `image-gen.js` | Image generation client and generation settings form |
 | `image-gen-edit-node.js` | Image generation/editing node frontend |
-| `live-preview.js` | Live preview panel during sampling |
+| `live-preview.js` | Live preview panel during sampling (shared by the director node, the Studio director page and the agent dock's tool card) |
 | `director.js` | Director recipe editor |
 | `director-node.js` | Director node's embedded timeline and preview |
 | `director-timeline.js` | Reusable timeline component |

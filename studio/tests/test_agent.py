@@ -277,6 +277,17 @@ class TestPayloadHelpers(unittest.TestCase):
         self.assertEqual(agent._media_of(json.dumps({"kind": "director", "status": "running"})), [])
         self.assertEqual(agent._media_of("not json"), [])
 
+    def test_preview_reads_the_task_owned_tables(self):
+        """出片按 task_id 取紧凑帧、生图按 prompt_id 取进度预览：两份都在拥有它的模块里，右栏不另建一张表。"""
+        h3 = SimpleNamespace(get_latest_preview=lambda tid, small=False:
+                             {"frames": ["v"], "step": 2} if small and tid == "t-9" else None)
+        imgs = SimpleNamespace(_PREVIEWS={"p-1": "data:image/jpeg;base64,AA"})
+        with mock.patch.dict(sys.modules, {"studio.h3_preview": h3, "studio.image_gen": imgs}):
+            self.assertEqual(agent._preview_of("segment_run", "t-9", "{}"), {"frames": ["v"], "step": 2})
+            self.assertEqual(agent._preview_of("generate_image", "t-1", json.dumps({"prompt_id": "p-1"})),
+                             {"frames": ["data:image/jpeg;base64,AA"]})
+            self.assertIsNone(agent._preview_of("generate_image", "t-1", "{}"))   # 快照里没有 prompt_id 就不去找表
+
 
 @skip
 class TestTaskPolling(unittest.TestCase):
@@ -302,6 +313,18 @@ class TestTaskPolling(unittest.TestCase):
             payload, _ = _result(lambda emit: agent._tool_result(
                 client, "segment_run", {"recipe": "r", "segment": 1}, emit, _runobj(client)))
         self.assertIn("任务超时", payload)
+
+    def test_status_frame_carries_preview_once_per_payload(self):
+        """预览只在载荷推进时挂进 status 帧：轮询重发同一批帧就是往 SSE 里白灌 base64。"""
+        client = FakeClient({"director_run": {"task_id": "f-1"},
+                             "task_status": [{"status": "running"}, {"status": "running"},
+                                             {"status": "succeeded", "filename": "NeoDirector/film.mp4"}]})
+        prev = {"frames": ["data:image/jpeg;base64,AA"], "step": 3}
+        with _no_poll_sleep(), mock.patch.object(agent, "_preview_of", lambda *a: prev):
+            _payload, frames = _result(
+                lambda emit: agent._tool_result(client, "director_run", {"recipe": "r"}, emit, _runobj(client)))
+        self.assertEqual([f.get("preview") for f in frames], [prev, None, None])
+        self.assertNotIn("preview", json.dumps(frames[1]))
 
     def test_sync_snapshot_without_task_id_is_returned_as_is(self):
         client = FakeClient({"generate_image": {"images": [{"url": "/view?f=a.png"}]}})
@@ -708,6 +731,29 @@ class TestSessionStore(unittest.TestCase):
         self.assertEqual(rec["input"]["text"], "橘猫出片")
         self.assertIn("cat_walk · 2 段", rec["input"]["context"])
         self.assertLessEqual(len(rec["frames"][1]["text"]), agent.ARGS_CLIP + 1)
+
+    def test_saved_session_drops_the_preview_frames(self):
+        """预览载荷只给界面：base64 帧写进会话文件，一步就能把 SESSION_FILE_MAX 顶满。"""
+        async def noop(_s):
+            return None
+
+        turns = [{"content": "跑整片",
+                  "tool_calls": [{"id": "c1", "function": {"name": "director_run",
+                                                           "arguments": "{\"recipe\": \"r\"}"}}]},
+                 {"content": "出好了"}]
+        replies = {"director_run": {"task_id": "f-1"},
+                   "task_status": [{"status": "running"},
+                                   {"status": "succeeded", "filename": "NeoDirector/a.mp4"}]}
+        prev = {"frames": ["data:image/jpeg;base64," + "AA" * 4000], "step": 1}
+        with mock.patch.object(agent, "_preview_of", lambda *a: prev), \
+             mock.patch.object(agent.asyncio, "sleep", noop):
+            lines, _ = self._one_run({"text": "出片"}, turns, replies, names=("director_run",))
+        frames = [json.loads(x) for x in lines[1:] if x != "[DONE]"]
+        self.assertTrue([f for f in frames if f["kind"] == "status" and "preview" in f],
+                        "界面这一路要拿得到预览帧")
+        path, rec = _saved_one()
+        self.assertFalse([f for f in rec["frames"] if "preview" in f])
+        self.assertNotIn("base64,", path.read_text(encoding="utf-8"))
 
     def test_saved_session_carries_no_image_bytes_and_no_system_prompt(self):
         """落盘不带 base64 图字节，也不带 system 提示词：文件里已是用户提示词与本机路径，

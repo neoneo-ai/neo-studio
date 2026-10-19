@@ -243,6 +243,10 @@ Runtime injection (when the template has no matching slot):
 - During sampling, 8 frames are sampled evenly along the latent timeline at every step, decoded to color,
   downscaled to a 1024 longest side, and pushed to the client that started the run.
 - The payload carries the node id, and the frontend routes it to that node's animation panel.
+- The same decoded frames are stored a second time at a 384 longest side for the right agent dock: that card is only
+  that wide, and SSE carries nothing the card cannot show. The WS broadcast and the polling fallback never carry it.
+- A segment run's payload is addressed by the node id the submitting request carries; a route submission with no node
+  is addressed by the task id (same as a whole film), and the terminal state clears both caches.
 - Without taeh3 weights, or when decoding fails, it falls back to the core default preview and never blocks
   the output.
 

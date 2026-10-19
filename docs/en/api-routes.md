@@ -228,6 +228,10 @@ included), and the dock never calls a handler directly.
 - `generate_image` / `director_run` / `segment_run` / `assemble_run` return a `task_id` only; the loop polls
   `task_status` to a terminal state and emits sampling steps and film segment numbers through `status` frames.
   The wait cap is 600s for a single image and 2400s for a whole film.
+- A running `status` frame can carry `preview` (`{frames:[dataURL…], fps, w, h, step}`): the compact channel of
+  `h3_preview` for a film, the captured progress image for an image task, attached once per payload advance, which is
+  what the dock's tool card plays. This payload is UI-only — the saved session and the `tool_result` text never carry
+  it, so the LLM never sees a frame byte.
 - A `tool_result` frame carries `media`: the image task's `images` become `{kind:"image", url, title}` items, and a
   finished film becomes one `{kind:"video", url}` `/view` item (segment and assemble snapshots carry a filename
   only, so the subfolder comes from the generating module's output directory). The dock's result thumbnails and

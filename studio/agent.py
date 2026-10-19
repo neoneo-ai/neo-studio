@@ -454,6 +454,21 @@ def _status_of(text: str) -> str:
     return status
 
 
+def _preview_of(tool: str, task_id: str, snap: str):
+    """右栏卡片用的预览载荷：进程内直读拥有那张表的模块，不走 HTTP。
+    出片取本步的紧凑帧（h3_preview 的紧凑档），生图取进度 handler 捕获的最新一张。
+    这份载荷只进 SSE 给界面，绝不进 LLM 的文本——base64 进上下文就是整轮 token 爆炸。"""
+    if tool == "generate_image":
+        pid = str(_json_of(snap).get("prompt_id") or "")
+        if not pid:
+            return None
+        from .image_gen import _PREVIEWS
+        url = _PREVIEWS.get(pid)
+        return {"frames": [url]} if url else None
+    from .h3_preview import get_latest_preview
+    return get_latest_preview(task_id, small=True)
+
+
 def _openai_tools(tools: list, plan: bool = False) -> list:
     """MCP 的 tools/list 载荷原样发给远程 provider 会整请求 500：llama-server 逐条找 type 键
     （Failed to parse tools: Missing tool type），inputSchema 在 OpenAI 侧叫 parameters。
@@ -655,11 +670,23 @@ async def _task_and_wait(client, tool: str, args: dict, emit, run) -> str:
     run.task_id = task_id
     cap = TASK_WAIT_SEC if tool == "generate_image" else FILM_WAIT_SEC
     waited = 0.0
+    last_preview = None
     while True:
         snap = await asyncio.to_thread(client.call, "task_status", {"task_id": task_id})
         status = _status_of(snap)
-        await emit({"kind": "status", "tool": "task_status", "task_id": task_id,
-                    "text": status or "排队中…"})
+        frame = {"kind": "status", "tool": "task_status", "task_id": task_id,
+                 "text": status or "排队中…"}
+        # 预览载荷只在推进时挂一次：2 秒一次的轮询原样重发同一批帧，SSE 就只是白灌 base64
+        prev = _preview_of(tool, task_id, snap)
+        sig = None
+        if prev and prev.get("frames"):
+            sig = prev.get("step") if prev.get("step") is not None else prev["frames"][0]
+            if sig == last_preview:
+                sig = None
+        if sig is not None:
+            last_preview = sig
+            frame["preview"] = prev
+        await emit(frame)
         if status.split(" ")[0] in TASK_FINAL:
             run.task_id = ""
             return snap
@@ -771,7 +798,8 @@ async def _events(run, text: str, mode: str = "act", images: list | None = None,
     async def runner(emit):
         # 逐帧记在运行对象上：历史里打开旧会话要的就是这一串帧，前端不留第二份
         async def record(frame):
-            run.frames.append(frame)
+            # 预览载荷只给界面：base64 帧写进会话文件，一步就能把 SESSION_FILE_MAX 顶满
+            run.frames.append({k: v for k, v in frame.items() if k != "preview"})
             await emit(frame)
 
         await _run_agent(run.client, text, record, run, mode, images, context, history)

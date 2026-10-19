@@ -7,6 +7,7 @@ taesd_decoder_name，且 taeh3 是「96 宽 / 4 次上采样」的扁平 2D TAE�
 核心的进度预览通道一步只出一张静图（server.send_image 走 image.save 且只认 JPEG/PNG），
 所以这里不用它：每步沿时间轴均匀抽 PREVIEW_FRAMES 帧解成 JPEG 序列，经自有 WS 事件
 rs.h3.preview 推给 NeoH3VideoDirector 节点内的动画面板（自动循环 + 暂停/逐帧/逐步）。
+同一批解码帧另存一份紧凑档（384 边）给右栏智能体卡片：卡片就这么宽，SSE 只该搬它放得下的尺寸。
 
 NeoH3VideoDirector 逐段执行期间临时替换 latent_preview.get_previewer，执行结束（含异常）
 立即还原，不影响画布上其他节点的预览行为。
@@ -35,26 +36,34 @@ PREVIEW_FRAMES = 8                # 每步沿时间轴均匀抽的帧数
 PREVIEW_FPS = 4                   # 面板播放帧率（随载荷带给前端）：8 帧一圈 2 秒，快了就像快放
 PREVIEW_SIDE = 1024               # 预览最长边（动图比单图小一档：解码、传输、内存都省）
 JPEG_QUALITY = 85
+AGENT_PREVIEW_SIDE = 384          # 右栏智能体卡片那一档：卡片就这么宽，全尺寸载荷过 SSE 只是白占带宽
+AGENT_JPEG_QUALITY = 70
 JPEG_DATA_URL = "data:image/jpeg;base64,"   # 前端拿帧直接塞 <img>.src，载荷里就带好 data URL
 
 _warned = False
 
 _LATEST = {}   # node_id -> 最新预览载荷（前端轮询取帧兜底；_LATEST_CAP 限量，任务终态由调用方清掉）
+_LATEST_SMALL = {}   # 同键的紧凑档：右栏智能体卡片经 SSE 逐帧播放只取这一份，WS 与轮询兜底不带上它
 _LATEST_CAP = 8
 
 
-def _store_latest(node_id, payload):
+def _store_latest(node_id, payload, small=None):
     _LATEST[node_id] = payload
+    if small is not None:
+        _LATEST_SMALL[node_id] = small
     while len(_LATEST) > _LATEST_CAP:
-        _LATEST.pop(next(iter(_LATEST)))
+        stale = next(iter(_LATEST))
+        _LATEST.pop(stale)
+        _LATEST_SMALL.pop(stale, None)
 
 
-def get_latest_preview(node_id):
-    return _LATEST.get(node_id)
+def get_latest_preview(node_id, small=False):
+    return (_LATEST_SMALL if small else _LATEST).get(node_id)
 
 
 def clear_latest_preview(node_id):
     _LATEST.pop(node_id, None)
+    _LATEST_SMALL.pop(node_id, None)
 
 
 def _build_decoder(sd):
@@ -128,16 +137,16 @@ def _video_frames(x0, channels, count):
     return None
 
 
-def _preview_payload(images):
+def _preview_payload(images, side=PREVIEW_SIDE, quality=JPEG_QUALITY):
     """帧序列 → 前端载荷：逐帧 JPEG data URL + 播放帧率 + 画面尺寸（前端据此建动画）。"""
     frames = []
     size = (0, 0)
     for img in images:
-        if img.width > PREVIEW_SIDE or img.height > PREVIEW_SIDE:
-            img = ImageOps.contain(img, (PREVIEW_SIDE, PREVIEW_SIDE), Image.Resampling.LANCZOS)
+        if img.width > side or img.height > side:
+            img = ImageOps.contain(img, (side, side), Image.Resampling.LANCZOS)
         size = img.size
         buf = io.BytesIO()
-        img.convert("RGB").save(buf, format="JPEG", quality=JPEG_QUALITY)
+        img.convert("RGB").save(buf, format="JPEG", quality=quality)
         frames.append(JPEG_DATA_URL + base64.b64encode(buf.getvalue()).decode("ascii"))
     return {"frames": frames, "fps": PREVIEW_FPS, "w": size[0], "h": size[1]}
 
@@ -172,7 +181,8 @@ class H3Previewer(latent_preview.LatentPreviewer):
             return None
         if self.node_id:
             payload = {**_preview_payload(images), "step": self._step_count}   # step 供前端按步号去重 / 排序（WS 与轮询兜底同源）
-            _store_latest(self.node_id, payload)
+            small = {**_preview_payload(images, AGENT_PREVIEW_SIDE, AGENT_JPEG_QUALITY), "step": self._step_count}
+            _store_latest(self.node_id, payload, small)
             _push_preview(self.node_id, payload)
         return None
 

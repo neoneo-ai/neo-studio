@@ -2610,6 +2610,20 @@ class H3PreviewTests(unittest.TestCase):
         self.assertIsNone(prev.decode_latent_to_preview_image("JPEG", torch.randn(1, 24, 4, 4, 6)))
         self.assertEqual(self.sent, [])
 
+    def test_previewer_stores_compact_frames_for_the_agent_card(self):
+        """右栏智能体卡片只吃紧凑档：全尺寸那份过 SSE 太肥，WS 广播里不带上它。"""
+        self.h3p._LATEST.clear()
+        self.h3p._LATEST_SMALL.clear()
+        prev = self.h3p.H3Previewer(self._vae(), "7")
+        prev.decode_latent_to_preview_image("JPEG", torch.randn(1, 24, 8, 4, 6))
+        _event, data, _sid = self.sent[0]
+        self.assertNotIn("small", data)   # 广播载荷就是全尺寸那一份
+        small = self.h3p.get_latest_preview("7", small=True)
+        self.assertEqual(len(small["frames"]), self.h3p.PREVIEW_FRAMES)
+        self.assertEqual(small["step"], data["step"])
+        self.assertTrue(small["frames"][0].startswith(self.h3p.JPEG_DATA_URL))
+        self.assertLessEqual(max(small["w"], small["h"]), self.h3p.AGENT_PREVIEW_SIDE)
+
     def test_previewer_skips_non_video_shapes(self):
         prev = self.h3p.H3Previewer(self._vae(), "7")
         self.assertIsNone(prev.decode_latent_to_preview_image("JPEG", torch.randn(1, 32, 2, 5, 7)))

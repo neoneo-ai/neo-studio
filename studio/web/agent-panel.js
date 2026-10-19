@@ -23,6 +23,7 @@ import { renderMarkdown } from "./skill.js";
 import { fileToBase64, imagesFromClipboard, sseStream } from "./prompt-service.js";
 import { Lightbox } from "./lightbox.js";
 import { grabDataType, copyGalleryToInput } from "./media-transfer.js";
+import { createFramePlayer } from "./live-preview.js";
 import { DIRECTOR_RECIPE_SAVED_EVENT } from "./director.js";
 
 const AGENT_CSS_HREF = "/extensions/comfyui-neo-studio/agent-panel.css";
@@ -409,6 +410,7 @@ function buildChat(onOpenMcp, getContext) {
         const final = mkEl("div", "neo-agent-answer-body");
         answer.append(steps, final);
         let card = null;
+        let live = null;   // 当前工具卡上的采样预览播放器（live-preview.js），卡片切走即换
         const slot = (cls) => card && card.querySelector("." + cls);
 
         // 任务卡上的取消：后端 /neo_agent/cancel 走 MCP cancel_task，四种任务类型由它自己找路由
@@ -437,16 +439,27 @@ function buildChat(onOpenMcp, getContext) {
                 title.textContent = "🔧 " + name;
                 const body = mkEl("pre", "neo-agent-tool-args");
                 body.textContent = args;
+                const preview = mkEl("div", "neo-agent-tool-preview neo-dtl-live");
                 const status = mkEl("div", "neo-agent-tool-status");
                 const out = mkEl("pre", "neo-agent-tool-out");
-                card.append(title, body, status, out);
+                card.append(title, body, preview, status, out);
                 steps.appendChild(card);
+                live = null;
             },
-            status(text, taskId) {
+            status(text, taskId, preview) {
                 const row = slot("neo-agent-tool-status");
                 if (!row) return;
                 row.textContent = text;
                 if (taskId && !row.querySelector(".neo-agent-cancel")) mkCancel(row, taskId);
+                // 采样预览走 SSE 的 status 帧（后端只发紧凑档、一步一份）；播放器自定帧率循环该步动画
+                if (preview && Array.isArray(preview.frames) && preview.frames.length) {
+                    const box = slot("neo-agent-tool-preview");
+                    if (box) {
+                        // reset() 把内联高度写成 0px 藏住面板；首个载荷到达时交回 CSS 的定高
+                        live = live || createFramePlayer(box, () => { box.style.height = ""; });
+                        live.apply(preview);
+                    }
+                }
             },
             toolResult(text, media) {
                 const out = slot("neo-agent-tool-out");
@@ -454,6 +467,7 @@ function buildChat(onOpenMcp, getContext) {
                 out.textContent = text;
                 const btn = slot("neo-agent-cancel");
                 if (btn) btn.remove();       // 任务到终态，取消入口跟着收掉
+                if (live) { live.pause(); live = null; }   // 预览定格在最后一帧，产物媒体条另铺在卡下
                 if (media.length) renderGenMedia(card, media);
             },
             // 中途的选项确认：后端 ask_user 发一问就挂在循环上，点选即把方向交回 /neo_agent/answer。
@@ -749,7 +763,7 @@ function buildChat(onOpenMcp, getContext) {
                 if (kind === "run") { runId = frame.run_id || ""; return; }
                 if (kind === "plan") view.plan(frame.text || "");
                 else if (kind === "tool_call") view.toolCall(frame.tool || "?", frame.text || "");
-                else if (kind === "status") view.status(frame.text || "", frame.task_id || "");
+                else if (kind === "status") view.status(frame.text || "", frame.task_id || "", frame.preview);
                 else if (kind === "tool_result") {
                     view.toolResult(frame.text || "", frame.media || []);
                     // 配方落盘只发生在后端，界面这一侧要有人接：广播后导演页左栏刷新并选中新配方，

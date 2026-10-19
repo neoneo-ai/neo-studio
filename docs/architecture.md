@@ -139,7 +139,7 @@ studio/
 | `skill/skill-detail-popup.js` | 单技能详情弹窗与跨节点单例 |
 | `image-gen.js` | 生图客户端与生图设置表单 |
 | `image-gen-edit-node.js` | 生图/编辑节点前端 |
-| `live-preview.js` | 采样实时预览面板 |
+| `live-preview.js` | 采样实时预览面板（导演节点 / Studio 导演页 / 右栏智能体工具卡共用） |
 | `director.js` | 导演配方编辑器 |
 | `director-node.js` | 导演节点内嵌时间轴与预览 |
 | `director-timeline.js` | 可复用时间轴组件 |
