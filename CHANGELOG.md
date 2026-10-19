@@ -4,6 +4,30 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **A text-to-image request stops landing on an editing skill.** Session `20261019-125206` ("生成一张刘亦菲的图片", no
+  attached image) spent 12 tool rounds and produced nothing. `list_skills(q="t2i_edit")` hit 0 because `q` only matched
+  id / name / cn_name, so the batch the earlier `q="edit"` returned set the pick; `qwen_image_21_local_edit`
+  (`mode=edit`, `requires_ref=true`) with an empty `references` ran its required reference slot as plain text-to-image,
+  and the trio copied out of the scan's `suggested_*` (`Krea2\krea2_turbo_fp8` + `qwen3vl_4b_fp8_scaled` +
+  `qwen_image_vae`) into a Qwen template killed all three runs with "Krea2 expects conditioning with 12x2560 features
+  (a 12-layer Qwen3-VL stack) but got 2560". `studio/mcp_server.py` now checks the skill row in the place the reference
+  check already ran: an empty `references` on an `edit`-only skill fails naming the text-accepting skill to use, a main
+  model whose family word (`krea2` / `qwen` — the same list `near` and the frontend `sortByModelFamily` use) disagrees
+  with the skill's fails with the conditioning reason, and a LoRA of a foreign family fails with the same-family lookup
+  `list_skills(q=<family word>)`; a skill the table does not list is left to the backend, `list_skills`'s `q` matches the
+  `mode` value too, and the tool descriptions carry all three rules. `studio/prompts/agent/system_prompt.md` adds the
+  matching pick rule, "the scan's `suggested_*` are the machine-wide defaults, not parameters for this request",
+  "family mismatch — tell the user, do not swap the skill or the main model yourself", and stop once the same arguments
+  failed twice (a node hint inside an error message is a loading mode, not a model filename to search for). Covered by
+  `studio/tests/test_mcp_server.py`; docs in `docs/mcp.md` + `docs/en/mcp.md` and `docs/prompts.md` + `docs/en/prompts.md`.
+
+- **An MCP child's UTF-8 stderr reaches the user.** `app/mcp_client.py` decoded the child's stderr with
+  `locale.getpreferredencoding(False)`; a child that inherited `PYTHONIOENCODING` / `PYTHONUTF8` writes UTF-8, so the
+  reason line 「缺依赖」 arrived as 「缂轰緷璧栵」 — the tail that exists to tell the user what to install said nothing.
+  `decode_stderr()` decodes UTF-8 first and falls back to the machine code page, which is what a plain console child
+  writes; stdout stays UTF-8 per JSON-RPC over stdio. Covered by `app/tests/test_mcp_client.py` (a child that writes its
+  stderr bytes as UTF-8 explicitly).
+
 - **The agent dock plays the sampling preview, not just a step counter.** The film's live preview existed all along
   (`studio/h3_preview.py`: 8 taeh3 frames per sampling step) and reached the director node panel and the Studio director
   page, while the right dock only read "running 3/8 段 1/3 2/8": `task_status` stripped `preview` / `latest_preview`, the

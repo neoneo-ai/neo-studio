@@ -257,7 +257,9 @@ def tool_neo_status(ctx, args):
 
 
 def tool_list_skills(ctx, args):
-    """技能清单（id 就是 generate_image 的 skill_id）；默认只列生图 / 生视频技能，all=true 列全部。"""
+    """技能清单（id 就是 generate_image 的 skill_id）；默认只列生图 / 生视频技能，all=true 列全部。
+    q 连 mode 的值一起匹配：q=t2i 列出 mode=t2i 与 t2i_edit，q=edit 列出 mode=edit 与 t2i_edit——
+    只匹配 id / 名称时，q=t2i_edit 这类按模式搜的词谁都命中不了，调用方就会沿用到手的第一批编辑技能。"""
     q = str(args.get("q") or "").strip().lower()
     want_all = bool(args.get("all"))
     rows = []
@@ -268,7 +270,7 @@ def tool_list_skills(ctx, args):
                "requires_ref": bool(s.get("requires_ref"))}
         if not want_all and not (row["gen_image"] or row["gen_video"]):
             continue
-        if q and q not in " ".join(str(row[k] or "") for k in ("id", "name", "cn_name")).lower():
+        if q and q not in " ".join(str(row[k] or "") for k in ("id", "name", "cn_name", "mode")).lower():
             continue
         rows.append(row)
     return dump({"count": len(rows), "skills": rows}, None)
@@ -394,17 +396,37 @@ _GENERATE_KEYS = ("skill_id", "prompt", "width", "height", "count", "seed", "neg
                   "ratio", "model", "text_encoder", "vae", "steps", "output_prefix")
 
 
-def _skill_ref_form(ctx, skill_id: str) -> str:
-    """技能收不收参考图，判法与绘画页的技能列表同源（studio/web/skill/skill-core.js 的 skillImageMode）：
-    mode 声明优先，画布导入的用户技能没有 mode 时回落 requires_ref。表里没有这个 id 就交后端的技能报错说话。"""
+def _skill_row(ctx, skill_id: str) -> dict:
+    """技能表里的那一行；表里没有这个 id 返回空行，交后端的技能报错说话。"""
     for s in (ctx.comfy.get_soft("/rs_prompts/skills") or []):
-        if not isinstance(s, dict) or str(s.get("id") or "") != skill_id:
-            continue
-        mode = str(s.get("mode") or "")
-        if mode in ("t2i", "edit", "t2i_edit"):
-            return mode
-        return "edit" if s.get("requires_ref") else "t2i"
-    return ""
+        if isinstance(s, dict) and str(s.get("id") or "") == skill_id:
+            return s
+    return {}
+
+
+def _ref_form(row: dict) -> str:
+    """技能收不收参考图，判法与绘画页的技能列表同源（studio/web/skill/skill-core.js 的 skillImageMode）：
+    mode 声明优先，画布导入的用户技能没有 mode 时回落 requires_ref。"""
+    if not row:
+        return ""
+    mode = str(row.get("mode") or "")
+    if mode in ("t2i", "edit", "t2i_edit"):
+        return mode
+    return "edit" if row.get("requires_ref") else "t2i"
+
+
+def _model_family(name: str) -> str:
+    """名字里的模型家族关键词（krea2 / qwen）：词表与前端 image-gen.js 的 sortByModelFamily、
+    list_models 的 near 同一份。Krea2 的文本编码器名字里带的就是 qwen，这一层只用在主模型、
+    LoRA 与技能名上，编码器名进来的话家族是错的。"""
+    key = model_key(name)
+    return next((h for h in MODEL_FAMILY_HINTS["image"] if h in key), "")
+
+
+def _skill_family(row: dict) -> str:
+    """技能自带的模型家族：内置技能的 id 与中文名里带家族词（qwen_image_21* / 「Krea2 文生图」）。
+    画布导入的用户技能两处都没有家族词，返回空串交后端模板说话。"""
+    return _model_family(f"{row.get('id') or ''} {row.get('cn_name') or ''}")
 
 
 def tool_generate_image(ctx, args):
@@ -412,23 +434,45 @@ def tool_generate_image(ctx, args):
     if not skill_id:
         # 后端的空技能报错写的是「技能下拉」，那是 Studio 界面的控件，MCP 调用方没有下拉，先给一条照着做得下去的
         raise ToolError("generate_image 需要 skill_id：先调 list_skills 取一个 has_workflow=true 的技能 id")
-    body = {k: args[k] for k in _GENERATE_KEYS if args.get(k) is not None}
-    body["skill_id"] = skill_id
-    loras = generate_loras(ctx, args.get("loras"))
-    if loras:
-        body["loras"] = loras
+    row = _skill_row(ctx, skill_id)
+    form, family = _ref_form(row), _skill_family(row)
     refs = args.get("references")
     if isinstance(refs, str):
         refs = [refs]
+    if refs and form == "t2i":
+        # 参考图进了纯文生图模板就是静默丢图：跑完用户看到的就是「出的图不跟我给的图走」。
+        # 绘画页的技能列表把这种技能从编辑面板里过滤掉了，工具这一侧要在发出请求之前点名要换的技能
+        raise ToolError(f"技能 {skill_id} 是纯文生图（mode=t2i），模板里没有参考图槽位，参考图会被直接丢掉；"
+                        "带参考图出图要在 list_skills 里选 mode=edit / t2i_edit 的技能"
+                        "（没有 mode 声明时看 requires_ref=true），换完 skill_id 再调一次")
+    if not refs and form == "edit":
+        # 编辑技能的模板有必填参考图槽位：槽位空着进队列，后端把模板当文生图跑完，
+        # 出来的图跟用户的编辑意图无关（会话 20261019-125206 的「文生图请求被当编辑跑」就是这一发）
+        raise ToolError(f"技能 {skill_id} 是纯编辑技能（mode=edit / requires_ref=true），本轮 references 是空的，"
+                        "模板的参考图槽位空着跑不出编辑结果；本轮要的是纯文生图就调 list_skills(q=t2i) 选"
+                        "mode=t2i / t2i_edit 的技能（没有 mode 声明时看 requires_ref=false），"
+                        "要在这个技能上做编辑就把参考图放进 references")
+    body = {k: args[k] for k in _GENERATE_KEYS if args.get(k) is not None}
+    body["skill_id"] = skill_id
+    model_family = _model_family(str(args.get("model") or ""))
+    if family and model_family and model_family != family:
+        # Krea2 主模型要 12 层 tap×2560 的 conditioning，Qwen 模板按 qwen 类型加载编码器只给 2560：
+        # 家族对撞的模板在后端是必败的一发，照抄扫描表 suggested_* 的用户提示词那一发就死在这里
+        raise ToolError(f"主模型 {args.get('model')} 是 {model_family} 家族，技能 {skill_id} 的模板是 {family} 家族，"
+                        f"家族不同的 conditioning 维度对不上，这一发必败；主模型留空让后端按技能自动挑，"
+                        f"要换家族就调 list_skills(q={model_family}) 选 {model_family} 家族的技能")
+    loras = generate_loras(ctx, args.get("loras"))
+    if loras:
+        body["loras"] = loras
+        alien = sorted({f for f in (_model_family(str(l["name"])) for l in loras) if f} - {family}) if family else []
+        if alien:
+            raise ToolError(f"LoRA 是 {alien[0]} 家族的（{'、'.join(str(l['name']) for l in loras)}），技能 {skill_id} "
+                            f"的模板是 {family} 家族，LoRA 挂不进不同家族的主模型（LoraLoader 报权重形状不匹配）；"
+                            f"要挂这一批 LoRA 就调 list_skills(q={alien[0]}) 选 {alien[0]} 家族的技能，"
+                            "或把 loras 留空")
     if refs:
         # 后端 _reference_name 认 {kind,value}：value 是 input/ 相对名（output/ 前缀会自动拷进 input/）
         body["references"] = [{"kind": "input", "value": str(r)} for r in refs[:4]]
-        if _skill_ref_form(ctx, skill_id) == "t2i":
-            # 参考图进了纯文生图模板就是静默丢图：跑完用户看到的就是「出的图不跟我给的图走」。
-            # 绘画页的技能列表把这种技能从编辑面板里过滤掉了，工具这一侧要在发出请求之前点名要换的技能
-            raise ToolError(f"技能 {skill_id} 是纯文生图（mode=t2i），模板里没有参考图槽位，参考图会被直接丢掉；"
-                            "带参考图出图要在 list_skills 里选 mode=edit / t2i_edit 的技能"
-                            "（没有 mode 声明时看 requires_ref=true），换完 skill_id 再调一次")
     snap = ctx.comfy.post("/neo_image_gen/generate", body) or {}
     return dump({"task_id": snap.get("task_id"), "status": snap.get("status"),
                  "images": image_items(ctx.comfy, snap.get("images"))})
@@ -773,9 +817,9 @@ SEGMENT = s("integer", "段序号，1 起（第 1 段 = 时间轴第一段）")
 
 TOOLS = [
     tool("neo_status", "Neo Studio / ComfyUI 版本、队列长度、导演配方数；先调它确认服务在线", {}),
-    tool("list_skills", "列出技能（id 即 generate_image 的 skill_id）；默认只列生图 / 生视频技能，all=true 列全部，q 按 id / 名称子串过滤；带参考图出图要选 mode=edit / t2i_edit 的技能（没有 mode 声明时看 requires_ref=true），mode=t2i 的纯文生图技能会把参考图直接丢掉",
+    tool("list_skills", "列出技能（id 即 generate_image 的 skill_id）；默认只列生图 / 生视频技能，all=true 列全部，q 按 id / 名称 / 中文名 / mode 子串过滤（q=t2i 列 mode=t2i 与 t2i_edit，q=edit 列 mode=edit 与 t2i_edit）；本轮没有 references 就是纯文生图，要选 mode=t2i / t2i_edit（无 mode 时 requires_ref=false）的技能，mode=edit 的纯编辑技能没有参考图跑不出编辑结果；带参考图出图要选 mode=edit / t2i_edit 的技能（没有 mode 声明时看 requires_ref=true），mode=t2i 的纯文生图技能会把参考图直接丢掉；技能 id 与中文名里的家族词（krea2 / qwen）就是它模板的主模型家族，挂 LoRA 时要在同一家族里选",
          {"all": s("boolean", "true 时连任务类技能一起列（较长）"),
-          "q": s("string", "按 id / 名称 / 中文名子串过滤")}),
+          "q": s("string", "按 id / 名称 / 中文名 / mode 子串过滤")}),
     tool("generate_prompt", "把简短想法扩写成成品提示词（LLM 同步返回文本）",
          {"text": s("string", "简短想法或草稿提示词"),
           "skill_id": s("string", "可选：按该技能的模板上下文扩写")}, ("text",),
@@ -788,8 +832,8 @@ TOOLS = [
           "limit": s("integer", f"每组最多列几条，默认 {MODEL_LIMIT}")},
          example={"scope": "image", "near": "<当前主模型名，如 Krea2\\krea2_turbo_fp8.safetensors>",
                   "q": "<目录或文件名关键词>"}),
-    tool("generate_image", "提交生图任务，立即返回 task_id（用 task_status 轮询、get_media 取图）；带 references 的这一次是编辑那张参考图，不是文生图",
-         {"skill_id": s("string", "生图技能 id（list_skills 可查）；带 references 时必须是 mode=edit / t2i_edit 的技能，mode=t2i 会把参考图直接丢掉"),
+    tool("generate_image", "提交生图任务，立即返回 task_id（用 task_status 轮询、get_media 取图）；带 references 的这一次是编辑那张参考图，不是文生图；references 为空的这一次是纯文生图，mode=edit 的纯编辑技能会被拒；主模型与 LoRA 的家族（krea2 / qwen）与技能的模板家族不一致时会被拒",
+         {"skill_id": s("string", "生图技能 id（list_skills 可查）；带 references 时必须是 mode=edit / t2i_edit 的技能，mode=t2i 会把参考图直接丢掉；references 为空时不能是 mode=edit 的技能"),
           "prompt": s("string", "提示词"),
           "width": s("integer", "宽（像素），留空用技能默认"),
           "height": s("integer", "高（像素），留空用技能默认"),
@@ -797,10 +841,10 @@ TOOLS = [
           "seed": s("integer", "种子，-1 随机"),
           "negative": s("string", "负向提示词"),
           "references": s("array", "参考图文件名列表（input/ 下的名字）；右栏的附件图会自动接进来，显式传空列表就是纯文生图；带它的这一次按编辑那张参考图走，技能要选 mode=edit / t2i_edit"),
-          "model": s("string", "扩散模型文件名，留空自动挑选；只影响这一次，技能里的自定参数不动"),
+          "model": s("string", "扩散模型文件名，留空自动挑选；只影响这一次，技能里的自定参数不动。家族（krea2 / qwen）必须与技能一致，扫描表里的 suggested_* 是整套默认建议、照抄进这里会让主模型与技能模板家族对撞"),
           "text_encoder": s("string", "文本编码器文件名，留空自动挑选"),
           "vae": s("string", "VAE 文件名，留空自动挑选"),
-          "loras": s("array", "这一次的 LoRA：[{\"name\": \"lora.safetensors\", \"strength\": 1.0}]，也可直接写文件名；strength 0-2，超出后端夹到 0-2；只影响这一次，技能里的自定参数不动。名字用 list_models(group=loras, near=<主模型名>) 查；用户没点名 LoRA 时，描述里带人物 / 画风 / 作品名这类专名也先按 q=<关键词> 搜一轮，命中多项就问用户选哪个"),
+          "loras": s("array", "这一次的 LoRA：[{\"name\": \"lora.safetensors\", \"strength\": 1.0}]，也可直接写文件名；strength 0-2，超出后端夹到 0-2；只影响这一次，技能里的自定参数不动。名字用 list_models(group=loras, near=<主模型名>) 查；LoRA 的家族（krea2 / qwen）必须与技能一致；用户没点名 LoRA 时，描述里带人物 / 画风 / 作品名这类专名也先按 q=<关键词> 搜一轮，命中多项就问用户选哪个"),
           "steps": s("integer", "采样步数")}, ("skill_id", "prompt"),
          {"skill_id": "<list_skills 里 has_workflow=true 的技能 id>",
           "prompt": "一只橘猫坐在窗台，暖色阳光，写实", "width": 1024, "height": 1024}),

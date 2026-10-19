@@ -215,6 +215,11 @@ class BaseToolTests(unittest.TestCase):
                                            {("GET", "/rs_prompts/skills"): skills})[0]))
         self.assertEqual([s["id"] for s in data["skills"]], ["translate"])
         self.assertNotIn("description", data["skills"][0])
+        # q 连 mode 的值一起匹配：只匹配 id / 名称时，q=t2i_edit 这类按模式搜的词谁都命中不了，
+        # 调用方就沿用到手的第一批编辑技能（会话 20261019-125206 的 q=edit / q=t2i_edit 两轮空搜）
+        data = json.loads(text_of(call_tool("list_skills", {"q": "t2i"},
+                                           {("GET", "/rs_prompts/skills"): skills})[0]))
+        self.assertEqual([s["id"] for s in data["skills"]], ["qwen_image_21"])
 
         data = json.loads(text_of(call_tool("list_models", {}, {("GET", "/neo_image_gen/models"):
                                                                  {"diffusion_models": ["m1", "m2"],
@@ -285,12 +290,65 @@ class BaseToolTests(unittest.TestCase):
                                            "references": ["a.png"]}, routes)[0]
         self.assertEqual(json.loads(text_of(resp))["task_id"], "T1")
 
-    def test_plain_text_to_image_never_probes_the_skill_table(self):
+    def test_plain_text_to_image_on_a_t2i_skill_runs(self):
         routes = {("GET", "/rs_prompts/skills"): [{"id": "image_gen", "mode": "t2i"}],
                   ("POST", "/neo_image_gen/generate"): {"task_id": "T1", "status": "queued"}}
         resp, fake = call_tool("generate_image", {"skill_id": "image_gen", "prompt": "猫"}, routes)
         self.assertEqual(json.loads(text_of(resp))["task_id"], "T1")
-        self.assertNotIn(("GET", "/rs_prompts/skills"), fake.paths())
+
+    def test_text_to_image_on_an_edit_only_skill_is_refused(self):
+        """零参考进编辑技能的模板：参考图槽位是必填的，槽位空着后端就把模板当文生图跑完，
+        出来的图跟用户的编辑意图无关（会话 20261019-125206 的「文生图请求被当编辑跑」就是这一发）。
+        工具要在发出请求之前拦下，并点名本轮该用的收文本的技能。"""
+        skills = [{"id": "qwen_image_21_local_edit", "mode": "edit", "requires_ref": True},
+                  {"id": "qwen_image_21", "mode": "t2i_edit"},
+                  {"id": "image_gen", "cn_name": "Krea2 文生图", "mode": "t2i"}]
+        routes = {("GET", "/rs_prompts/skills"): skills,
+                  ("POST", "/neo_image_gen/generate"): {"task_id": "T1", "status": "queued"}}
+        resp, fake = call_tool("generate_image", {"skill_id": "qwen_image_21_local_edit", "prompt": "刘亦菲"}, routes)
+        self.assertTrue(resp["result"]["isError"])
+        self.assertIn("mode=t2i / t2i_edit", text_of(resp))
+        self.assertNotIn(("POST", "/neo_image_gen/generate"), fake.paths())
+        for skill in ("qwen_image_21", "image_gen"):
+            resp = call_tool("generate_image", {"skill_id": skill, "prompt": "刘亦菲"}, routes)[0]
+            self.assertFalse(resp["result"]["isError"], text_of(resp))
+
+    def test_main_model_family_must_match_the_skill(self):
+        """Krea2 主模型要 12 层 tap×2560 的 conditioning，Qwen 技能的模板按 qwen 类型加载编码器只给 2560。
+        照抄扫描表 suggested_* 的那一发就死在这里；主模型留空时后端按技能自动挑，这一层不拦。"""
+        skills = [{"id": "qwen_image_21", "mode": "t2i_edit"},
+                  {"id": "image_gen", "cn_name": "Krea2 文生图", "mode": "t2i"}]
+        routes = {("GET", "/rs_prompts/skills"): skills,
+                  ("POST", "/neo_image_gen/generate"): {"task_id": "T1", "status": "queued"}}
+        resp, fake = call_tool("generate_image", {"skill_id": "qwen_image_21", "prompt": "猫",
+                                                 "model": "Krea2\\krea2_turbo_fp8.safetensors"}, routes)
+        self.assertTrue(resp["result"]["isError"])
+        self.assertIn("qwen", text_of(resp))
+        self.assertNotIn(("POST", "/neo_image_gen/generate"), fake.paths())
+        resp = call_tool("generate_image", {"skill_id": "image_gen", "prompt": "猫",
+                                            "model": "Krea2\\krea2_turbo_fp8.safetensors"}, routes)[0]
+        self.assertFalse(resp["result"]["isError"], text_of(resp))
+        resp = call_tool("generate_image", {"skill_id": "qwen_image_21", "prompt": "猫"}, routes)[0]
+        self.assertFalse(resp["result"]["isError"], text_of(resp))
+
+    def test_lora_family_must_match_the_skill(self):
+        """krea2 的 LoRA 挂进 Qwen 技能的模板是 LoraLoader 的必败一发：用户挑的就是 krea2 的 LoRA，
+        要跑的是同家族的技能。画布导入的用户技能两处都没有家族词，交后端模板说话。"""
+        skills = [{"id": "qwen_image_21", "mode": "t2i_edit"},
+                  {"id": "image_gen", "cn_name": "Krea2 文生图", "mode": "t2i"},
+                  {"id": "my_canvas_skill"}]
+        routes = {("GET", "/rs_prompts/skills"): skills,
+                  ("GET", "/neo_image_gen/models"): {"loras": ["krea2\\Character\\krea2_lyf.safetensors"]},
+                  ("POST", "/neo_image_gen/generate"): {"task_id": "T1", "status": "queued"}}
+        resp, fake = call_tool("generate_image", {"skill_id": "qwen_image_21", "prompt": "猫",
+                                                 "loras": ["krea2/Character/krea2_lyf.safetensors"]}, routes)
+        self.assertTrue(resp["result"]["isError"])
+        self.assertIn("list_skills(q=krea2)", text_of(resp))
+        self.assertNotIn(("POST", "/neo_image_gen/generate"), fake.paths())
+        for skill in ("image_gen", "my_canvas_skill"):
+            resp = call_tool("generate_image", {"skill_id": skill, "prompt": "猫",
+                                                "loras": ["krea2/Character/krea2_lyf.safetensors"]}, routes)[0]
+            self.assertFalse(resp["result"]["isError"], text_of(resp))
 
     def test_task_status_probes_tables_and_merges_director_progress(self):
         routes = {("GET", "/neo_studio/director/T1"): {"status": "running", "recipe": "r",

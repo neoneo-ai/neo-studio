@@ -87,7 +87,7 @@ id 就能跑通。
 | 工具 | 说明 |
 |------|------|
 | `neo_status` | 版本 / 队列 / 导演配方数，先调它确认服务在线 |
-| `list_skills` | 生图技能 id（含 `mode` / `requires_ref`，判参考图就看这两项） |
+| `list_skills` | 生图技能 id（含 `mode` / `requires_ref`，判参考图就看这两项；`q` 连 `mode` 的值一起匹配，`q=t2i` 列出 `mode=t2i` 与 `t2i_edit`） |
 | `list_models` | 生图 / 出片扫到的模型与 LoRA：`q` 按 目录/文件名 过滤，`group` 只看一组，`scope=video` 走 H3 扫描，`near=<主模型名>` 把同目录条目排最前（每项带 `dir`），另带回 `suggested_*` 自动挑选值 |
 | `generate_prompt` | 简短想法 → 成品提示词（走 LLM，需已配置模型） |
 | `generate_image` | 提交生图，立即返回 `task_id`；`model` / `loras` 是这一次的覆盖，技能里的自定参数不动 |
@@ -173,6 +173,15 @@ director_plan(mode=plan, idea|script, segment_seconds[, characters])    → 分�
 - **带 `references` 的那一发是编辑那张图**：`skill_id` 要选收得了参考图的技能——`list_skills` 行里的 `mode` 是
   `edit / t2i_edit`（画布导入的技能没有 `mode` 时看 `requires_ref=true`）。`mode=t2i` 的模板没有参考图槽位，
   参考图挂上去会被静默丢掉，这一发在发出请求之前就报错点名要换的技能，与绘画页技能列表的过滤是同一份判法。
+- **`references` 为空的那一发是纯文生图**：`skill_id` 要选收得了文本的技能——`mode=t2i / t2i_edit`
+  （画布导入的技能没有 `mode` 时看 `requires_ref=false`）。`mode=edit` 的纯编辑技能里参考图槽位是必填的，
+  零参考进队列后端就把模板当文生图跑完，出来的图跟用户的编辑意图无关，这一发同样在发出请求之前就报错、
+  点名本轮该用的技能。
+- **主模型与 LoRA 的家族要和技能一致**：家族词就是 `krea2` / `qwen`——技能 id 与中文名里带的那个词，
+  与前端模型下拉的排序、`list_models` 的 `near` 用同一份词表。Krea2 主模型要 12 层 tap×2560 的 conditioning，
+  进 Qwen 技能的模板只拿到 2560；LoRA 挂进不同家族的主模型是 `LoraLoader` 的形状不匹配。这两发都在发出请求
+  之前就报错，并给出同家族技能的查法（`list_skills(q=<家族词>)`）。扫描表回的 `suggested_*` 是这台机器的整套
+  默认建议，不是这一发的参数。
 - **模型与 LoRA 只在单次请求里覆盖**：`generate_image` 的 `model` / `loras` 只影响这一次，技能 `config.json`
   与全局生图设置不动。名字用 `list_models` 查（`near=<当前主模型名>` 时同目录那一排排最前，`dir` 给出每项目录）；
   `loras` 里对不上 `models/loras` 扫描表的名字在发出请求之前就报错并给出候选文件名。出片一侧不吃请求级覆盖。

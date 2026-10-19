@@ -160,6 +160,11 @@ LLM 模式与本地安装见 [llm.md](llm.md)。
   模型显式传 `references: []` 就是纯文生图；带参考图的出图算的是编辑那张图，技能要收得了参考图——`list_skills` 的行里
   带 `mode` / `requires_ref`，`generate_image` 挑到 `mode=t2i` 的纯文生图技能时后端不发这一发，工具结果直接点名要换的
   `mode=edit / t2i_edit` 技能（画布导入的技能没有 `mode` 时看 `requires_ref`），与绘画页技能列表的过滤是同一条判法；
+  反过来 `references` 为空时挑到 `mode=edit` 的纯编辑技能也发不出去（模板的参考图槽位是必填的，槽位空着后端就把模板
+  当文生图跑完，出来的图跟用户的编辑意图无关），`list_skills` 的 `q` 连 `mode` 的值一起匹配，按纯文生图找技能 `q=t2i` 就够；
+  主模型与 LoRA 的家族词（`krea2` / `qwen`，技能 id 与中文名里带的那个词）和技能不一致时同样在发出之前拒，
+  `list_models` 回的 `suggested_*` 在提示词里写明是整套默认建议、不要照抄进这一发；
+  同一发参数失败两次提示词要求停手，报错里的节点提示（`CLIPLoader` 的 type 这类）不是模型文件名，不许当 `q` 去搜；
   换主模型 / 加 LoRA 走单次覆盖：系统提示词交代 `list_models` 的 `q` / `group` / `near`（同目录那一排排最前、
   每项带 `dir`）与 `generate_image` 的 `model` / `loras`，只覆盖这一发请求，技能自定参数与全局生图设置不动，
   工具表里没有写技能配置的入口；描述里带人物 / 画风 / 作品名这类专名时提示词要求先按 `q` 搜一轮 LoRA——命中一项直接带上，

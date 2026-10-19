@@ -101,7 +101,7 @@ Example — expose only the image pipeline:
 | Tool | Purpose |
 |------|---------|
 | `neo_status` | Versions / queue / director recipe count — call it first to confirm the service is up |
-| `list_skills` | Skill ids (with `mode` / `requires_ref`, the two fields the reference check reads) |
+| `list_skills` | Skill ids (with `mode` / `requires_ref`, the two fields the reference check reads; `q` also matches the `mode` value, so `q=t2i` lists `mode=t2i` and `t2i_edit`) |
 | `list_models` | Models and LoRAs scanned for image / video: `q` filters by directory+filename, `group` lists one group, `scope=video` uses the H3 scan, `near=<main model name>` puts the same-directory entries first (every item carries its `dir`), plus the `suggested_*` auto-picks |
 | `generate_prompt` | Short idea → finished prompt (uses the LLM, requires a configured model) |
 | `generate_image` | Submits an image job and returns a `task_id` immediately; `model` / `loras` override that one request only |
@@ -202,6 +202,17 @@ The image sentence only runs when the machine has an image skill with a `workflo
   declare no `mode`. A `mode=t2i` template has no reference slot and drops the image in silence, so that call
   fails with the skill to switch to before any request reaches the backend, the same rule the paint page
   skill list filters by.
+- **A turn with empty `references` is plain text-to-image**: `skill_id` must be a skill that accepts text —
+  `mode=t2i / t2i_edit`, or `requires_ref=false` for canvas-imported skills that declare no `mode`. An
+  `mode=edit` skill has a required reference slot, and an empty slot makes the backend run the template as
+  text-to-image, so the picture ignores the editing intent; that call fails the same way, naming the skill
+  to use.
+- **Main model and LoRA must match the skill's family**: the family word is `krea2` / `qwen` — the one inside
+  the skill id and Chinese name, the same word list the model dropdown sorting and `list_models`'s `near`
+  use. A Krea2 main model wants a 12-tap × 2560 conditioning stack and a Qwen skill's template hands it 2560,
+  and a LoRA on a main model of another family is a `LoraLoader` shape mismatch; both fail before any request
+  reaches the backend with the same-family lookup (`list_skills(q=<family word>)`). The scan's `suggested_*`
+  fields are the machine-wide defaults, not parameters for this request.
 - **Model and LoRA are overridden per request only**: `generate_image`'s `model` / `loras` affect this run
   and leave the skill's `config.json` and the global image settings alone. Look the names up with
   `list_models` (`near=<current main model>` ranks the same-directory batch first and `dir` names each item's

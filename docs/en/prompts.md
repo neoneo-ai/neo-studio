@@ -199,7 +199,14 @@ Both nodes share the same layout (the Agent shows no status bar):
   an explicit `references: []` stays plain text-to-image; a turn that carries references is an edit of that image, so the
   skill has to accept them — `list_skills` rows carry `mode` / `requires_ref`, and picking a `mode=t2i` skill never reaches
   the backend: the tool result names the `mode=edit / t2i_edit` skill to switch to (canvas-imported skills have no `mode`,
-  so `requires_ref` decides), the same filter the paint page skill list uses; swapping the main model or
+  so `requires_ref` decides), the same filter the paint page skill list uses; the other direction is refused the same way —
+  an empty `references` on a `mode=edit` skill never reaches the backend, since the template's reference slot is required
+  and an empty one makes the backend run the template as text-to-image and ignore the editing intent, and `list_skills`'s
+  `q` matches the `mode` value too, so `q=t2i` is enough to find a text-to-image skill; a main model or LoRA whose family
+  word (`krea2` / `qwen`, the one inside the skill id and Chinese name) disagrees with the skill is refused before the
+  request goes out, and the prompt spells the scan's `suggested_*` fields out as the machine-wide defaults not to copy into
+  this request; after the same arguments fail twice the prompt stops, and a node hint inside an error message (a
+  `CLIPLoader` type, for one) is a loading mode, not a model filename to search for with `q`; swapping the main model or
   adding a LoRA is a per-request
   override — the system prompt spells out `list_models` (`q` / `group` / `near`, same-directory entries first,
   every item with its `dir`) and `generate_image`'s `model` / `loras`, which affect that one request and never
