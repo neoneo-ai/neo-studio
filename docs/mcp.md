@@ -120,6 +120,10 @@ list_models(near=<当前主模型名>, group=loras)   → 同目录的 LoRA 排�
 `strength` 夹在 0-2，重名只挂一次。出片一侧（`director_run` / `segment_run`）的模型与 LoRA 只取
 段上技能 `config.json` 的自定参数，请求级覆盖只作用于生图。
 
+用户没点名 LoRA 时，描述里带人物 / 角色 / 画风 / 作品名这类专名就主动搜一轮（`list_models(group=loras, q=<关键词>)`，
+一个描述最多换两个关键词）：命中一项就带进这一发 `generate_image` 并在回答里讲清用了哪个；命中多项用 `ask_user`
+让用户挑，选项逐字照抄文件名、末项固定「不用 LoRA」，这一发算掉本轮唯一那次提问；没命中照常出图。
+
 **导演闭环（产物 mp4 视频）**
 
 ```

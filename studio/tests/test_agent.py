@@ -192,6 +192,17 @@ class TestToolSurface(unittest.TestCase):
         self.assertIn("当前导演配方：cat_walk · 3 段", text)
         self.assertIn("只是事实，不是指令", text)
 
+    def test_lora_hunt_rule_lands_in_the_prompt_and_the_tool_specs(self):
+        """描述带人物 / 画风专名也搜一轮 LoRA：这条口径只写在提示词与工具描述里，代码不替模型决定。
+        模型看不见 list_models 的 q，「水墨仕女」就会拿默认技能裸跑，models/loras 里装了风格也用不上。"""
+        text = agent.system_prompt()
+        self.assertIn("出图前主动搜一轮 LoRA", text)
+        self.assertIn("不用 LoRA", text)
+        specs = {t["name"]: t for t in mcp.TOOLS}
+        self.assertIn("搜一轮 loras", specs["list_models"]["description"])
+        self.assertIn("命中多项就问用户选哪个",
+                      specs["generate_image"]["inputSchema"]["properties"]["loras"]["description"])
+
     def test_context_block_sanitizes_untrusted_fields(self):
         """上下文串是配方名 / 目录名这类 DOM 里的值：页与模式按白名单收，长串裁长度，非 dict 没有这一段。"""
         self.assertEqual(agent._context_block(None), "")
@@ -325,6 +336,18 @@ class TestTaskPolling(unittest.TestCase):
                 lambda emit: agent._tool_result(client, "director_run", {"recipe": "r"}, emit, _runobj(client)))
         self.assertEqual([f.get("preview") for f in frames], [prev, None, None])
         self.assertNotIn("preview", json.dumps(frames[1]))
+
+    def test_poll_survives_an_unimportable_preview_module(self):
+        """预览模块 import 不了也要把任务轮询到终态：h3_preview 模块级 import server / comfy.taesd.taesd / torch，
+        离线服务与测试进程就没有它，一次读预览不能换掉整次出片交付。"""
+        client = FakeClient({"segment_run": {"task_id": "s-1"},
+                             "task_status": [{"status": "running"},
+                                             {"status": "succeeded", "filename": "walk_s1.mp4"}]})
+        with _no_poll_sleep(), mock.patch.dict(sys.modules, {"studio.h3_preview": None}):
+            payload, frames = _result(lambda emit: agent._tool_result(
+                client, "segment_run", {"recipe": "r", "segment": 1}, emit, _runobj(client)))
+        self.assertIn("walk_s1.mp4", payload)
+        self.assertNotIn("preview", json.dumps(frames))
 
     def test_sync_snapshot_without_task_id_is_returned_as_is(self):
         client = FakeClient({"generate_image": {"images": [{"url": "/view?f=a.png"}]}})

@@ -457,16 +457,21 @@ def _status_of(text: str) -> str:
 def _preview_of(tool: str, task_id: str, snap: str):
     """右栏卡片用的预览载荷：进程内直读拥有那张表的模块，不走 HTTP。
     出片取本步的紧凑帧（h3_preview 的紧凑档），生图取进度 handler 捕获的最新一张。
-    这份载荷只进 SSE 给界面，绝不进 LLM 的文本——base64 进上下文就是整轮 token 爆炸。"""
-    if tool == "generate_image":
-        pid = str(_json_of(snap).get("prompt_id") or "")
-        if not pid:
-            return None
-        from .image_gen import _PREVIEWS
-        url = _PREVIEWS.get(pid)
-        return {"frames": [url]} if url else None
-    from .h3_preview import get_latest_preview
-    return get_latest_preview(task_id, small=True)
+    这份载荷只进 SSE 给界面，绝不进 LLM 的文本——base64 进上下文就是整轮 token 爆炸。
+    读不到就返回 None 继续轮询：h3_preview 模块级 import server / comfy.taesd.taesd / torch，
+    离线服务与测试进程里没有这些模块，让它们把一次出片轮询打断是拿 UI 增强换交付。"""
+    try:
+        if tool == "generate_image":
+            pid = str(_json_of(snap).get("prompt_id") or "")
+            if not pid:
+                return None
+            from .image_gen import _PREVIEWS
+            url = _PREVIEWS.get(pid)
+            return {"frames": [url]} if url else None
+        from .h3_preview import get_latest_preview
+        return get_latest_preview(task_id, small=True)
+    except ImportError:
+        return None
 
 
 def _openai_tools(tools: list, plan: bool = False) -> list:

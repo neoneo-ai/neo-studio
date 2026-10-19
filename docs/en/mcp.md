@@ -135,6 +135,12 @@ comes back with the closest filenames instead of a doomed 404. `strength` is cla
 name is attached once. Video runs (`director_run` / `segment_run`) take their model and LoRAs from the
 segment skill's `config.json` — the request-level override applies to image generation only.
 
+With no LoRA named, a description that carries a proper noun — a character, an art style, a work or an artist —
+gets one proactive search (`list_models(group=loras, q=<keyword>)`, at most two keywords per description): one hit goes
+into this `generate_image` call and the answer names which LoRA ran; several hits go through `ask_user`, with the
+options copying the filenames verbatim and 「不用 LoRA / No LoRA」 fixed as the last one — that question uses up the
+turn's single ask; no hit means generate as asked.
+
 **Director pipeline (mp4 output)**
 
 ```

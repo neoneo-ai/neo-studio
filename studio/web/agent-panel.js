@@ -342,6 +342,14 @@ function buildChat(onOpenMcp, getContext) {
     // 时间线里的链接一律收在页面内：产物进弹出窗口，外部链接交给新窗口。放任 <a> 的默认行为
     // 就是整扇窗口翻到 /view 图片页——返回时 Studio 页重载，启动状态位与整条时间线一起没了
     transcript.addEventListener("click", (e) => {
+        // Markdown 正文里的产物图：卡片里限高显示，点击进弹出窗口看大图，外链图交给新窗口
+        const pic = e.target.closest ? e.target.closest(".neo-agent-answer img") : null;
+        if (pic) {
+            const src = pic.getAttribute("src") || "";
+            if (isMediaHref(src)) Lightbox.open({ items: [{ kind: mediaKindOf(src), url: src, title: pic.alt || "" }], compact: true });
+            else if (src) window.open(src, "_blank", "noopener");
+            return;
+        }
         const a = e.target.closest ? e.target.closest("a[href]") : null;
         if (!a) return;
         e.preventDefault();

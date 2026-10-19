@@ -13,11 +13,27 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   `status` frame once per advance (image generation attaches the captured progress image the same way); the tool card in
   `studio/web/agent-panel.js` mounts the shared `createFramePlayer` to loop that step and freezes on the last frame at
   the terminal state. The frame bytes stay out of the LLM — `tool_result` text, the MCP payload and the saved session
-  file carry none of them. `h3_segment.py` keys the payload by task id when the request carries no node. Covered by
+  file carry none of them. `h3_segment.py` keys the payload by task id when the request carries no node. The dock's
+  result images are capped (`max-height` + `object-fit: contain`, click opens the compact Lightbox): a Markdown body
+  image at its intrinsic 1536x864 filled the whole panel and pushed a horizontal scrollbar. Covered by
   `studio/tests/test_agent.py` (in-process read, attach-once, session file free of base64),
   `studio/tests/test_studio.py` (channel split, shared cap, terminal clear) and
-  `studio/tests/test_h3_video_director.py` (compact frames stored, WS payload untouched); docs in
+  `studio/tests/test_h3_video_director.py` (compact frames stored, WS payload untouched). A preview read that cannot
+  import returns no preview and keeps polling to the terminal state — `h3_preview` pulls `server`, `comfy.taesd.taesd`
+  and `torch` at module scope, which the offline service and the test process do not have, so a UI-only read must not
+  decide whether a film task gets delivered. Docs in
   `docs/h3-video-gen.md` + `docs/en/h3-video-gen.md` and `docs/api-routes.md` + `docs/en/api-routes.md`.
+
+- **A style word in the prompt now looks for a LoRA on the machine.** The agent only ever attached a LoRA when the user
+  named one, so "水墨仕女" and "赛璐璐少女" generated on the plain skill even with the matching LoRA sitting in
+  `models/loras`. The system prompt (`studio/prompts/agent/system_prompt.md`) now runs one search when the description
+  carries a proper noun — a character, an art style, a work, an artist: `list_models(group=loras, q=<keyword>)`, at most
+  two keywords per description. One hit attaches to that `generate_image` call and the answer names which LoRA ran;
+  several hits open the choice card with the filenames verbatim and 「不用 LoRA」 fixed last (that question uses the
+  turn's single ask); no hit generates as asked and the search is not mentioned. `mcp_server.py` spells the same rule in
+  the `list_models` / `loras` tool descriptions, so an external MCP client behaves the same. Video stays as it was —
+  request-level LoRA applies to image generation only. Docs in `docs/prompts.md` + `docs/en/prompts.md`
+  and `docs/mcp.md` + `docs/en/mcp.md`.
 
 - **MCP model lookup answers "which LoRA goes with this checkpoint", and a LoRA override stays in one request.**
   `list_models` forwarded the raw `/neo_image_gen/models` scan — a flat list of everything on the machine cut at

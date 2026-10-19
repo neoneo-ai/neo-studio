@@ -267,6 +267,17 @@
     color: var(--neo-vsc-accent);
 }
 
+/* Markdown 正文里的产物图按原尺寸铺进右栏：1536x864 直接撑出横向滚动条，一张图占满整屏。
+   限宽限高 letterbox，点击进弹出窗口看大图（见 agent-panel.js 的正文图点击） */
+.neo-agent-answer img {
+    max-width: 100%;
+    max-height: 240px;
+    object-fit: contain;
+    background: var(--neo-vsc-bg-alt);
+    border-radius: 4px;
+    cursor: zoom-in;
+}
+
 .neo-agent-answer-error {
     color: var(--neo-vsc-err);
     white-space: pre-wrap;
@@ -371,6 +382,9 @@
 .neo-agent-media img,
 .neo-agent-media video {
     width: 100%;
+    /* 铺满栏宽时竖图（1024x1536）会拉到栏宽的一点五倍高，一屏只剩这一张；限高 letterbox 后点击放大 */
+    max-height: 240px;
+    object-fit: contain;
     border-radius: 4px;
     cursor: zoom-in;
 }
