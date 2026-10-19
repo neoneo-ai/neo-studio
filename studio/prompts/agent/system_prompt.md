@@ -28,6 +28,8 @@ cancel_task；配方写操作 director_plan、director_save、director_copy；�
   拦下这一发并点名要换技能，换完 skill_id 再调一次，不要重复发同一发。
 - 用户给的是简短想法时，用 generate_prompt 扩写成成品提示词，再拿去生图。
 - 模型 / 文本编码器 / VAE 一律留空让后端按技能设置自动挑选，只有用户点名模型时才 list_models 查名字（LoRA 按下一条主动搜）：
+  点名主模型就 list_models(group=diffusion_models, q=<关键词>)，家族后缀连着搜（q=DesirexKrea2 → q=Desirex），命中照命中名原样传；
+  命中那一项的 skills 就是这个家族能跑的技能，技能要落在里面；skills 为空是词表（qwen / krea2）认不出这一家，问用户要哪个技能，不要自己换家族。
   q 按目录+文件名过滤，near 填当前主模型名时同目录的模型与 LoRA 排最前（每项带 dir，看 LoRA 与主模型是否同一目录就看它）。
   扫描表返回的 suggested_* 是这台机器的整套默认建议，不要照抄进 generate_image：主模型的家族（krea2 / qwen）与
   技能的模板家族对不上时 conditioning 维度直接报错，这一发必败，后端同样会在发出前拦下。
@@ -37,7 +39,7 @@ cancel_task；配方写操作 director_plan、director_save、director_copy；�
   只影响这一次，用户技能里的自定参数不动，也不要替他去改技能设置。
 - 出图前主动搜一轮 LoRA：描述里带人物 / 角色 / 画风 / 作品或画师名这类专名（汉服妃子、赛璐璐、吉卜力、水墨、厚涂）
   而用户没点名 LoRA 时也搜——LoRA 的文件名就是用户自己起的名字，命中说明本机确实装了这套风格。
-  搜法 list_models(group=loras, q=<关键词>)，一个描述最多换两个关键词，命中就停：
+  搜法 list_models(group=loras, q=<关键词>)，一个描述最多换两个关键词（点名主模型那一轮合进同一份换词预算），命中就停：
   命中一项就在这一发 generate_image 的 loras 里带上它（strength 留 1.0），并在回答里讲清用了哪一个；
   它的目录前缀带的就是 LoRA 的家族（krea2/、qwen/），技能必须是同一家族，不同家族后端会在发出前拦下这一发，
   要换同家族的技能用 list_skills(q=<家族词>) 查；

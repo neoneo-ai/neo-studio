@@ -102,7 +102,7 @@ Example — expose only the image pipeline:
 |------|---------|
 | `neo_status` | Versions / queue / director recipe count — call it first to confirm the service is up |
 | `list_skills` | Skill ids (with `mode` / `requires_ref`, the two fields the reference check reads; `q` also matches the `mode` value, so `q=t2i` lists `mode=t2i` and `t2i_edit`) |
-| `list_models` | Models and LoRAs scanned for image / video: `q` filters by directory+filename, `group` lists one group, `scope=video` uses the H3 scan, `near=<main model name>` puts the same-directory entries first (every item carries its `dir`), plus the `suggested_*` auto-picks |
+| `list_models` | Models and LoRAs scanned for image / video: `q` filters by directory+filename, `group` lists one group, `scope=video` uses the H3 scan, `near=<main model name>` puts the same-directory entries first (every item carries its `dir`), every item of `group=diffusion_models` carries `skills` (the skill ids that family can run, empty when the family word list does not recognize it), plus the `suggested_*` auto-picks |
 | `generate_prompt` | Short idea → finished prompt (uses the LLM, requires a configured model) |
 | `generate_image` | Submits an image job and returns a `task_id` immediately; `model` / `loras` override that one request only |
 | `task_status` `list_tasks` `cancel_task` | Task snapshot / list / cancel (all five task tables share `task_id`: image / full film / segment / assembly / image storyboard) |
@@ -126,12 +126,14 @@ neo_status → list_skills (pick skill_id) → generate_image → poll task_stat
 **Per-run model and LoRA (one request only)**
 
 ```
+list_models(group=diffusion_models, q=<keyword>)  → main-model items carry skills: the skills that family can run
 list_models(near=<current main model>, group=loras)   → same-directory LoRAs first, dir names every item's folder
 → generate_image(model=..., loras=[{name,strength}], ...)   → this run only; the skill's config.json and global settings stay
 ```
 
-LoRA names are checked against the `models/loras` scan before the request goes out: a name that is not there
-comes back with the closest filenames instead of a doomed 404. `strength` is clamped to 0-2 and a repeated
+Main model and LoRA names are checked against their scan tables before the request goes out: a name that is not
+there comes back with the closest filenames — for `model`, plus the "leave it empty and the backend picks per the
+skill" hint — instead of a doomed 404. `strength` is clamped to 0-2 and a repeated
 name is attached once. Video runs (`director_run` / `segment_run`) take their model and LoRAs from the
 segment skill's `config.json` — the request-level override applies to image generation only.
 
@@ -139,7 +141,9 @@ With no LoRA named, a description that carries a proper noun — a character, an
 gets one proactive search (`list_models(group=loras, q=<keyword>)`, at most two keywords per description): one hit goes
 into this `generate_image` call and the answer names which LoRA ran; several hits go through `ask_user`, with the
 options copying the filenames verbatim and 「不用 LoRA / No LoRA」 fixed as the last one — that question uses up the
-turn's single ask; no hit means generate as asked.
+turn's single ask; no hit means generate as asked. A named main model gets the same search
+(`list_models(group=diffusion_models, q=<keyword>)`) inside that same two-keyword budget: the skill has to come from
+that item's `skills`, and an empty `skills` asks the user which skill to run.
 
 **Director pipeline (mp4 output)**
 
@@ -217,7 +221,10 @@ The image sentence only runs when the machine has an image skill with a `workflo
   and leave the skill's `config.json` and the global image settings alone. Look the names up with
   `list_models` (`near=<current main model>` ranks the same-directory batch first and `dir` names each item's
   folder); a LoRA name that is not in the `models/loras` scan fails before any request reaches the backend,
-  with the closest filenames. Video runs take no request-level override.
+  with the closest filenames, and a `model` name that is not in the image scan's `diffusion_models` fails the
+  same way with the closest filenames plus the "leave it empty" hint. The `skills` a
+  `group=diffusion_models` item carries are the skills that main model's family can run. Video runs take no
+  request-level override.
 - **Segment numbers are 1-based everywhere** (segment 1 = the first segment on the timeline).
   `segment_run.segment` and the lists in `assemble_run.segments` / `director_run.only_segments` are 1-based
   and converted to the endpoints' 0-based indices internally.

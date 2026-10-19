@@ -88,7 +88,7 @@ id 就能跑通。
 |------|------|
 | `neo_status` | 版本 / 队列 / 导演配方数，先调它确认服务在线 |
 | `list_skills` | 生图技能 id（含 `mode` / `requires_ref`，判参考图就看这两项；`q` 连 `mode` 的值一起匹配，`q=t2i` 列出 `mode=t2i` 与 `t2i_edit`） |
-| `list_models` | 生图 / 出片扫到的模型与 LoRA：`q` 按 目录/文件名 过滤，`group` 只看一组，`scope=video` 走 H3 扫描，`near=<主模型名>` 把同目录条目排最前（每项带 `dir`），另带回 `suggested_*` 自动挑选值 |
+| `list_models` | 生图 / 出片扫到的模型与 LoRA：`q` 按 目录/文件名 过滤，`group` 只看一组，`scope=video` 走 H3 扫描，`near=<主模型名>` 把同目录条目排最前（每项带 `dir`），`group=diffusion_models` 的每一项带 `skills`（家族对得上的技能 id，空 = 词表认不出这一家），另带回 `suggested_*` 自动挑选值 |
 | `generate_prompt` | 简短想法 → 成品提示词（走 LLM，需已配置模型） |
 | `generate_image` | 提交生图，立即返回 `task_id`；`model` / `loras` 是这一次的覆盖，技能里的自定参数不动 |
 | `task_status` `list_tasks` `cancel_task` | 任务快照 / 列表 / 取消（五套任务表共用 `task_id`：生图 / 整片 / 单段 / 拼接 / 图片分镜） |
@@ -112,10 +112,12 @@ neo_status → list_skills(取 skill_id) → generate_image → task_status 轮�
 **自定参数：换主模型与加 LoRA（只影响一次请求）**
 
 ```
+list_models(group=diffusion_models, q=<关键词>)  → 主模型项带 skills：这个家族能跑的技能，技能要落在里面
 list_models(near=<当前主模型名>, group=loras)   → 同目录的 LoRA 排最前，dir 给出每项所在目录
 → generate_image(model=..., loras=[{name,strength}], ...)   → 只覆盖这一次，技能 config.json 与全局设置不动
 ```
 
+`model` 的名字先对着生图扫描的 `diffusion_models` 核一遍：不在表里的名字直接回候选文件名与「留空自动挑」的口径，请求不发；
 `loras` 的名字先对着 `models/loras` 扫描表核一遍：不存在的名字直接回候选文件名，请求不发；
 `strength` 夹在 0-2，重名只挂一次。出片一侧（`director_run` / `segment_run`）的模型与 LoRA 只取
 段上技能 `config.json` 的自定参数，请求级覆盖只作用于生图。
@@ -123,6 +125,8 @@ list_models(near=<当前主模型名>, group=loras)   → 同目录的 LoRA 排�
 用户没点名 LoRA 时，描述里带人物 / 角色 / 画风 / 作品名这类专名就主动搜一轮（`list_models(group=loras, q=<关键词>)`，
 一个描述最多换两个关键词）：命中一项就带进这一发 `generate_image` 并在回答里讲清用了哪个；命中多项用 `ask_user`
 让用户挑，选项逐字照抄文件名、末项固定「不用 LoRA」，这一发算掉本轮唯一那次提问；没命中照常出图。
+点名主模型时同样搜一轮（`list_models(group=diffusion_models, q=<关键词>)`），与 LoRA 共用那两个关键词的预算；
+命中项的 `skills` 就是这个家族能跑的技能，技能要落在里面，`skills` 为空就问用户要哪个技能。
 
 **导演闭环（产物 mp4 视频）**
 
@@ -184,7 +188,9 @@ director_plan(mode=plan, idea|script, segment_seconds[, characters])    → 分�
   默认建议，不是这一发的参数。
 - **模型与 LoRA 只在单次请求里覆盖**：`generate_image` 的 `model` / `loras` 只影响这一次，技能 `config.json`
   与全局生图设置不动。名字用 `list_models` 查（`near=<当前主模型名>` 时同目录那一排排最前，`dir` 给出每项目录）；
-  `loras` 里对不上 `models/loras` 扫描表的名字在发出请求之前就报错并给出候选文件名。出片一侧不吃请求级覆盖。
+  `loras` 里对不上 `models/loras` 扫描表的名字在发出请求之前就报错并给出候选文件名，`model` 对不上生图扫描的
+  `diffusion_models` 同样在发出前报错，给出候选文件名与「留空自动挑」的口径。`group=diffusion_models` 的每一项
+  带的 `skills` 就是这一家能跑的技能，主模型配哪个技能就看它。出片一侧不吃请求级覆盖。
 - **段序号一律 1 起**（第 1 段 = 时间轴第一段）。`segment_run` 的 `segment`、`assemble_run` 与
   `director_run.only_segments` 的列表都是 1 基，内部换算成端点的 0 基。
 - **写操作只有两个**：配方元数据的写路是 `rs_recipes/save` 与 `rs_recipes/copy`。不暴露删除端点；读文件只经

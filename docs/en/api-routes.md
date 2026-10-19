@@ -373,7 +373,7 @@ loopback). Tool list, parameters, and usage conventions: [mcp.md](mcp.md).
 |------|----------------|
 | `neo_status` | `GET /neo_studio/version` + `GET /queue` |
 | `list_skills` `generate_prompt` | `GET /rs_prompts/skills` + `POST /rs_prompts/stream_generate_prompt` (SSE) |
-| `list_models` `generate_image` `list_tasks` | `GET /neo_image_gen/models` + `POST /neo_image_gen/generate` + `GET /neo_image_gen/tasks` (`list_models` with `scope=video` reads `GET /neo_video_gen/models`) |
+| `list_models` `generate_image` `list_tasks` | `GET /neo_image_gen/models` + `POST /neo_image_gen/generate` + `GET /neo_image_gen/tasks` (`list_models` with `scope=video` reads `GET /neo_video_gen/models`, and with `group=diffusion_models` it also reads `GET /rs_prompts/skills` for the main-model ↔ skill mapping) |
 | `task_status` | Image generation is matched by `task_id` inside `GET /neo_image_gen/tasks`; film / segment / assemble probe `GET /neo_studio/director/{id}`, `GET /neo_video_gen/run_segment/{id}`, `GET /neo_video_gen/assemble_segments/{id}` in order, with `GET /neo_video_gen/director_progress` attached for the film |
 | `cancel_task` | Probes the `…/cancel` route of those four tables in order |
 | `get_media` | `GET /view` (output is read through ComfyUI only; png images and mp4 films share one address, video bytes are not returned) |

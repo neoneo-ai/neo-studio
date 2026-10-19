@@ -227,8 +227,9 @@ class BaseToolTests(unittest.TestCase):
         self.assertEqual(data["diffusion_models"]["count"], 2)
         self.assertEqual(data["diffusion_models"]["returned"], 2)
         self.assertFalse(data["diffusion_models"]["truncated"])
-        self.assertEqual(data["diffusion_models"]["items"], [{"name": "m1", "dir": ""},
-                                                             {"name": "m2", "dir": ""}])
+        # 技能表拿不到（404）时家族没有依据：每项给空列表，不猜技能
+        self.assertEqual(data["diffusion_models"]["items"], [{"name": "m1", "dir": "", "skills": []},
+                                                             {"name": "m2", "dir": "", "skills": []}])
         self.assertEqual(data["suggested_model"], "m1")
         self.assertNotIn("mtimes_diffusion_models", data)      # mtime 数字不进上下文
 
@@ -476,6 +477,15 @@ MODEL_SCAN = {"diffusion_models": ["Krea2\\krea2_turbo_fp8.safetensors",
               "suggested_model": "Krea2\\krea2_turbo_fp8.safetensors",
               "mtimes_loras": {"Krea2\\lora_a.safetensors": 1750000000.0}}
 
+MAIN_SCAN = {"diffusion_models": ["BSS\\BSSDesirexKrea2_fp8.safetensors",
+                                 "QwenImage2.1\\qwen_image_2.1_int8_convrot.safetensors",
+                                 "Flux\\flux_dev_fp8.safetensors"],
+             "loras": ["BSS\\BSSDesirexKrea2_lora.safetensors"]}
+MAIN_SKILLS = [{"id": "Krea2_subject", "cn_name": "Krea2 主体"},
+               {"id": "qwen_image_21_local_edit", "mode": "edit"},
+               # 画布导入的用户技能：id 与中文名都没有家族词，家族由它钉的主模型说话
+               {"id": "canvas_import", "gen_config": {"model": "BSS\\BSSDesirexKrea2_fp8.safetensors"}}]
+
 
 class ModelLookupTests(unittest.TestCase):
     """按名字找、只看一组、绕着当前主模型挑同目录的那一批。"""
@@ -499,6 +509,23 @@ class ModelLookupTests(unittest.TestCase):
         self.assertEqual(self.models({"group": "diffusion_models", "q": "krea2/moody"})
                          ["diffusion_models"]["matched"], 0)
 
+    def test_main_models_carry_the_skills_their_family_can_run(self):
+        """用户点名主模型时，LLM 挑技能要的就是这一项：家族由技能表说话（id / 中文名 / 钉的主模型）。"""
+        resp = call_tool("list_models", {"group": "diffusion_models", "q": "desirex"},
+                         {("GET", "/neo_image_gen/models"): MAIN_SCAN,
+                          ("GET", "/rs_prompts/skills"): MAIN_SKILLS})[0]
+        items = json.loads(text_of(resp))["diffusion_models"]["items"]
+        self.assertEqual([i["name"] for i in items], ["BSS\\BSSDesirexKrea2_fp8.safetensors"])
+        self.assertEqual(sorted(items[0]["skills"]), ["Krea2_subject", "canvas_import"])
+        data = json.loads(text_of(call_tool("list_models", {},
+                                            {("GET", "/neo_image_gen/models"): MAIN_SCAN,
+                                             ("GET", "/rs_prompts/skills"): MAIN_SKILLS})[0]))
+        main = {i["name"]: i["skills"] for i in data["diffusion_models"]["items"]}
+        self.assertEqual(main["QwenImage2.1\\qwen_image_2.1_int8_convrot.safetensors"],
+                         ["qwen_image_21_local_edit"])
+        self.assertEqual(main["Flux\\flux_dev_fp8.safetensors"], [])   # 词表（qwen / krea2）认不出就不猜
+        self.assertNotIn("skills", data["loras"]["items"][0])          # LoRA 一侧的形状不动
+
     def test_near_puts_the_same_directory_first(self):
         data = self.models({"group": "loras", "near": "QwenImage2.1\\qwen_image_2.1_int8_convrot.safetensors"})
         self.assertEqual(data["near_dir"], "QwenImage2.1/")
@@ -519,6 +546,7 @@ class ModelLookupTests(unittest.TestCase):
         data = self.models({"scope": "video"}, scan, "/neo_video_gen/models")
         self.assertEqual(data["scope"], "video")
         self.assertEqual(data["diffusion_models"]["items"][0]["dir"], "MiniMaxH3/")
+        self.assertNotIn("skills", data["diffusion_models"]["items"][0])   # 出片扫描没有主模型↔技能这一层
         self.assertNotIn("loras", data)               # 空组不列：这次扫描里没有 LoRA
         self.assertNotIn("suggested_model", data)     # H3 扫描表里没有自动挑选值
 
@@ -581,6 +609,43 @@ class LoraOverrideTests(unittest.TestCase):
     def test_loras_shape_is_spelled_out(self):
         self.assertIn("数组", text_of(self.generate({"skill_id": "sd", "prompt": "猫",
                                                      "loras": "a.safetensors"})[0]))
+
+
+class MainModelNameTests(unittest.TestCase):
+    """主模型名在不在生图扫描的 diffusion_models 表里：后端对不在表里的名字是一次必败的生成，
+    工具侧换成带候选文件名的一句，请求不发。"""
+
+    def generate(self, args, routes=None):
+        base = {("POST", "/neo_image_gen/generate"): {"task_id": "T1", "status": "queued"},
+                ("GET", "/rs_prompts/skills"): [{"id": "image_gen", "mode": "t2i"}]}
+        base.update(routes or {})
+        return call_tool("generate_image", args, base)
+
+    def test_misspelled_main_model_is_refused_with_candidates(self):
+        routes = {("GET", "/neo_image_gen/models"):
+                  {"diffusion_models": ["Krea2\\krea2_turbo_fp8.safetensors", "Flux\\flux_dev_fp8.safetensors"]}}
+        resp, fake = self.generate({"skill_id": "image_gen", "prompt": "猫",
+                                    "model": "Krea2\\krea2_turbo_fp7.safetensors"}, routes)
+        self.assertTrue(resp["result"]["isError"])
+        self.assertIn("Krea2\\krea2_turbo_fp8.safetensors", text_of(resp))
+        self.assertIn("留空", text_of(resp))
+        self.assertNotIn(("POST", "/neo_image_gen/generate"), fake.paths())
+
+    def test_a_model_outside_the_family_words_is_only_checked_for_existence(self):
+        """flux 这类词表（qwen / krea2）之外的家族不因为家族被拒，名字在表里就发得出去。"""
+        routes = {("GET", "/neo_image_gen/models"):
+                  {"diffusion_models": ["Flux\\flux_dev_fp8.safetensors"]}}
+        resp, fake = self.generate({"skill_id": "image_gen", "prompt": "猫",
+                                    "model": "Flux\\flux_dev_fp8.safetensors"}, routes)
+        self.assertFalse(resp["result"].get("isError"), text_of(resp))
+        self.assertIn(("POST", "/neo_image_gen/generate"), fake.paths())
+
+    def test_an_unavailable_scan_table_leaves_the_name_to_the_backend(self):
+        """扫描表拿不到或这一组空着就不拦（旧内核 / 没扫到）：名字交后端模板说话。"""
+        resp, fake = self.generate({"skill_id": "image_gen", "prompt": "猫",
+                                    "model": "no_scan.safetensors"})
+        self.assertFalse(resp["result"].get("isError"), text_of(resp))
+        self.assertIn(("POST", "/neo_image_gen/generate"), fake.paths())
 
 
 # ===========================================================================

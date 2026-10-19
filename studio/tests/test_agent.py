@@ -203,6 +203,17 @@ class TestToolSurface(unittest.TestCase):
         self.assertIn("命中多项就问用户选哪个",
                       specs["generate_image"]["inputSchema"]["properties"]["loras"]["description"])
 
+    def test_main_model_search_rule_lands_in_the_prompt_and_the_tool_specs(self):
+        """点名主模型也要搜：名字由 list_models 说话，技能由那一轮的 skills 说话，代码不替模型猜家族。"""
+        text = agent.system_prompt()
+        self.assertIn("list_models(group=diffusion_models", text)
+        self.assertIn("skills 为空是词表", text)
+        self.assertIn("同一份换词预算", text)
+        specs = {t["name"]: t for t in mcp.TOOLS}
+        self.assertIn("每一项带 skills", specs["list_models"]["description"])
+        self.assertIn("技能要落在 list_models 该主模型项的 skills 里",
+                      specs["generate_image"]["inputSchema"]["properties"]["model"]["description"])
+
     def test_context_block_sanitizes_untrusted_fields(self):
         """上下文串是配方名 / 目录名这类 DOM 里的值：页与模式按白名单收，长串裁长度，非 dict 没有这一段。"""
         self.assertEqual(agent._context_block(None), "")

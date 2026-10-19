@@ -4,6 +4,23 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **A named main model now says which skills it can run.** `list_models` returned only `{name, dir}` for
+  `diffusion_models`, so an agent told to generate with a model whose name carries the family word (`BSSDesirexKrea2`)
+  had nothing in the tool output naming the skill template that model fits, and picked a Qwen skill
+  (`data/agent_sessions/20261019-141620_*.json`). `list_models` now builds a per-call family index from
+  `GET /rs_prompts/skills` — the family word of a skill's id / Chinese name, falling back to the model pinned in that
+  skill's `gen_config` — and every `diffusion_models` item of the image scope carries `skills`, an empty list when the
+  `krea2` / `qwen` word list does not recognize the family (`studio/mcp_server.py` `skill_family_index` /
+  `model_item`). `generate_image` checks a named `model` against the image scan's `diffusion_models` before the request
+  goes out and answers with the closest filenames plus the "leave it empty and the backend picks per the skill" hint —
+  the same shape as the LoRA name check (`check_main_model`); a model name the word list does not recognize is still
+  sent. The system prompt searches main models with `group=diffusion_models` inside the LoRA two-keyword budget and
+  takes the skill from that item's `skills` (`studio/prompts/agent/system_prompt.md`). Covered by
+  `studio/tests/test_mcp_server.py` (`ModelLookupTests.test_main_models_carry_the_skills_their_family_can_run`,
+  `MainModelNameTests`) and `studio/tests/test_agent.py`
+  (`test_main_model_search_rule_lands_in_the_prompt_and_the_tool_specs`). Docs in `docs/mcp.md`, `docs/prompts.md`,
+  `docs/api-routes.md` and their `docs/en/` mirrors.
+
 - **The agent answer carries one icon-only copy button.** The Q&A card rendered two `⧉ 复制` text buttons
   (`studio/web/agent-panel.js` `mkCopyBtn` — one in the turn meta row copying the ask, one after the answer body),
   so it was unreadable which text each one copied. The meta-row button is gone; the answer button stays, pinned

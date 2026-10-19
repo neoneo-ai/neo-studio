@@ -212,7 +212,10 @@ Both nodes share the same layout (the Agent shows no status bar):
   every item with its `dir`) and `generate_image`'s `model` / `loras`, which affect that one request and never
   write skill config; with a proper noun in the description (a character, an art style, a work) the prompt runs
   a `q` LoRA search first — one hit attaches to this request, several hits open a choice card with
-  「不用 LoRA / No LoRA」 fixed last, and no hit generates as asked; the **📝 Plan / ⚡ Act** switch
+  「不用 LoRA / No LoRA」 fixed last, and no hit generates as asked; a named main model gets the same search inside
+  that two-keyword budget, with the skill taken from that item's `skills` and an empty `skills` asking the user which
+  skill to run, and a `model` name outside the image scan's `diffusion_models` is refused before the request goes out
+  with the closest filenames plus the "leave it empty" hint; the **📝 Plan / ⚡ Act** switch
   decides whether this turn runs anything — in plan mode the generation and recipe-writing tools stay out of the LLM's
   tool list, a call that arrives anyway is refused, and the turn ends with a step-by-step plan naming the tools and
   parameters; and when the backend's `ask_user` asks a question the loop parks on it, the timeline shows a choice card

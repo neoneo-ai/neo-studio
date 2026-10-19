@@ -302,6 +302,27 @@ def model_dir(name) -> str:
     return path[:path.rfind("/") + 1] if "/" in path else ""
 
 
+def skill_family_index(rows) -> dict:
+    """家族 → 技能 id 列表。家族取技能 id / 中文名里的词；画布导入的用户技能两处都没有词，
+    就看它钉的主模型（技能表 gen_config 里的 model）。主模型的名字只能对上这份词表。"""
+    index = {}
+    for row in rows:
+        sid = str(row.get("id") or "")
+        fam = _skill_family(row) or _model_family(str(((row.get("gen_config") or {}).get("model") or "")))
+        if fam and sid and sid not in index.setdefault(fam, []):
+            index[fam].append(sid)
+    return index
+
+
+def model_item(name: str, families) -> dict:
+    """扫描表里的一项：名字与所在目录。主模型额外带 skills —— 家族对得上的技能 id 列表，
+    空列表就是词表（只有 qwen / krea2）认不出这一家，别在这里猜家族。"""
+    item = {"name": name, "dir": model_dir(name)}
+    if families is not None:
+        item["skills"] = families.get(_model_family(name), [])
+    return item
+
+
 def near_order(files: list, near: str, hints: tuple) -> list:
     """当前主模型周边排序：同目录最前，其次名字里带同家族关键词，其余保持扫描原序。
     与前端 image-gen.js 的 sortByModelFamily 同一口径；sorted 稳定，同档内部不动。"""
@@ -331,6 +352,8 @@ def tool_list_models(ctx, args):
     near = str(args.get("near") or "").strip()
     q = model_key(args.get("q") or "")
     data = ctx.comfy.get(MODEL_SCANS[scope]) or {}
+    # 主模型的家族只能由这份技能表说话；出片扫描（video）没有这套家族概念，不带 skills
+    families = skill_family_index(ctx.comfy.get_soft("/rs_prompts/skills") or []) if scope == "image" else None
     out = {"scope": scope}
     if near:
         out["near"], out["near_dir"] = near, model_dir(near)
@@ -343,7 +366,8 @@ def tool_list_models(ctx, args):
             matched = near_order(matched, near, MODEL_FAMILY_HINTS[scope])
         out[name] = {"count": len(files), "matched": len(matched),
                      "returned": min(len(matched), limit), "truncated": len(matched) > limit,
-                     "items": [{"name": f, "dir": model_dir(f)} for f in matched[:limit]]}
+                     "items": [model_item(f, families if name == "diffusion_models" else None)
+                               for f in matched[:limit]]}
     for key, val in data.items():
         if str(key).startswith("suggested_"):
             out[key] = val
@@ -429,6 +453,25 @@ def _skill_family(row: dict) -> str:
     return _model_family(f"{row.get('id') or ''} {row.get('cn_name') or ''}")
 
 
+def check_main_model(ctx, name: str) -> None:
+    """主模型名在不在生图扫描的 diffusion_models 表里：后端对不在表里的名字是一次必败的生成。
+    扫描表拿不到或这一组空着就不拦（交后端模板说话）；词表之外的家族只看存在性，不看家族。"""
+    if not name:
+        return
+    table = [str(f) for f in ((ctx.comfy.get_soft(MODEL_SCANS["image"]) or {}).get("diffusion_models") or [])
+             if str(f).strip()]
+    if not table:
+        return
+    keys = {model_key(f): f for f in table}
+    if model_key(name) in keys:
+        return
+    close = difflib.get_close_matches(model_key(name), list(keys), n=3, cutoff=0.3)
+    raise ToolError(f"主模型名不在生图扫描的 diffusion_models 里：{name}"
+                    + (f"，相近的有 {' / '.join(keys[c] for c in close)}" if close else "")
+                    + "；主模型留空就是让后端按技能模板自动挑，要换名字就照 "
+                      "list_models(group=diffusion_models, q=<关键词>) 查到的名字用")
+
+
 def tool_generate_image(ctx, args):
     skill_id = str(args.get("skill_id") or "").strip()
     if not skill_id:
@@ -455,6 +498,7 @@ def tool_generate_image(ctx, args):
     body = {k: args[k] for k in _GENERATE_KEYS if args.get(k) is not None}
     body["skill_id"] = skill_id
     model_family = _model_family(str(args.get("model") or ""))
+    check_main_model(ctx, str(args.get("model") or ""))
     if family and model_family and model_family != family:
         # Krea2 主模型要 12 层 tap×2560 的 conditioning，Qwen 模板按 qwen 类型加载编码器只给 2560：
         # 家族对撞的模板在后端是必败的一发，照抄扫描表 suggested_* 的用户提示词那一发就死在这里
@@ -824,7 +868,7 @@ TOOLS = [
          {"text": s("string", "简短想法或草稿提示词"),
           "skill_id": s("string", "可选：按该技能的模板上下文扩写")}, ("text",),
          {"text": "一只在窗台打盹的橘猫，暖色阳光，写实"}),
-    tool("list_models", "列出 Neo Studio 扫到的模型与 LoRA（scope=image 生图扫描，scope=video 出片 H3 扫描）。q 按 目录/文件名 子串过滤，group 只看一组，near 给当前主模型名时同目录条目排最前、同家族关键词次之；每项带 dir，看某个 LoRA 与主模型是否同一目录就看它。描述里带人物 / 画风 / 作品名这类专名时就带 q=<关键词> 搜一轮 loras",
+    tool("list_models", "列出 Neo Studio 扫到的模型与 LoRA（scope=image 生图扫描，scope=video 出片 H3 扫描）。q 按 目录/文件名 子串过滤，group 只看一组，near 给当前主模型名时同目录条目排最前、同家族关键词次之；每项带 dir，看某个 LoRA 与主模型是否同一目录就看它。描述里带人物 / 画风 / 作品名这类专名时就带 q=<关键词> 搜一轮 loras；group=diffusion_models 的每一项带 skills（家族对得上的技能 id 列表，空 = 词表（只有 qwen / krea2）认不出这一家，问用户要哪个技能，别在这里猜家族）",
          {"scope": s("string", "image（默认，生图扫描，带 suggested_* 自动挑选值）/ video（出片 H3 扫描）"),
           "group": s("string", "只看一组：diffusion_models / text_encoders / vae / loras"),
           "q": s("string", "按 目录/文件名 子串过滤（大小写不敏感，中文文件名可用）"),
@@ -832,7 +876,7 @@ TOOLS = [
           "limit": s("integer", f"每组最多列几条，默认 {MODEL_LIMIT}")},
          example={"scope": "image", "near": "<当前主模型名，如 Krea2\\krea2_turbo_fp8.safetensors>",
                   "q": "<目录或文件名关键词>"}),
-    tool("generate_image", "提交生图任务，立即返回 task_id（用 task_status 轮询、get_media 取图）；带 references 的这一次是编辑那张参考图，不是文生图；references 为空的这一次是纯文生图，mode=edit 的纯编辑技能会被拒；主模型与 LoRA 的家族（krea2 / qwen）与技能的模板家族不一致时会被拒",
+    tool("generate_image", "提交生图任务，立即返回 task_id（用 task_status 轮询、get_media 取图）；带 references 的这一次是编辑那张参考图，不是文生图；references 为空的这一次是纯文生图，mode=edit 的纯编辑技能会被拒；主模型与 LoRA 的家族（krea2 / qwen）与技能的模板家族不一致时会被拒；主模型名不在生图扫描的 diffusion_models 表里时会被拒，报错给出相近的名字与留空的口径",
          {"skill_id": s("string", "生图技能 id（list_skills 可查）；带 references 时必须是 mode=edit / t2i_edit 的技能，mode=t2i 会把参考图直接丢掉；references 为空时不能是 mode=edit 的技能"),
           "prompt": s("string", "提示词"),
           "width": s("integer", "宽（像素），留空用技能默认"),
@@ -841,7 +885,7 @@ TOOLS = [
           "seed": s("integer", "种子，-1 随机"),
           "negative": s("string", "负向提示词"),
           "references": s("array", "参考图文件名列表（input/ 下的名字）；右栏的附件图会自动接进来，显式传空列表就是纯文生图；带它的这一次按编辑那张参考图走，技能要选 mode=edit / t2i_edit"),
-          "model": s("string", "扩散模型文件名，留空自动挑选；只影响这一次，技能里的自定参数不动。家族（krea2 / qwen）必须与技能一致，扫描表里的 suggested_* 是整套默认建议、照抄进这里会让主模型与技能模板家族对撞"),
+          "model": s("string", "扩散模型文件名，留空自动挑选；只影响这一次，技能里的自定参数不动。家族（krea2 / qwen）必须与技能一致，扫描表里的 suggested_* 是整套默认建议、照抄进这里会让主模型与技能模板家族对撞。名字要在生图扫描的 diffusion_models 表里（list_models 查，不在就直接拒并给出相近的名字）；技能要落在 list_models 该主模型项的 skills 里"),
           "text_encoder": s("string", "文本编码器文件名，留空自动挑选"),
           "vae": s("string", "VAE 文件名，留空自动挑选"),
           "loras": s("array", "这一次的 LoRA：[{\"name\": \"lora.safetensors\", \"strength\": 1.0}]，也可直接写文件名；strength 0-2，超出后端夹到 0-2；只影响这一次，技能里的自定参数不动。名字用 list_models(group=loras, near=<主模型名>) 查；LoRA 的家族（krea2 / qwen）必须与技能一致；用户没点名 LoRA 时，描述里带人物 / 画风 / 作品名这类专名也先按 q=<关键词> 搜一轮，命中多项就问用户选哪个"),
