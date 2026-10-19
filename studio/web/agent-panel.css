@@ -406,6 +406,8 @@
     padding: 8px;
     flex: 0 0 auto;
     border-top: 1px solid var(--neo-vsc-border);
+    /* 底栏那一行的可用宽度就是这一块的宽度：窄栏收字用容器查询量它，不用 JS 去记拖出来的宽度 */
+    container-type: inline-size;
 }
 
 /* 主按钮在底栏右下角，一钮三态（生成 / 暂停 / 继续）：空闲时它就是发送键，不铺满一行 */
@@ -511,11 +513,21 @@
     outline: none;
 }
 
-/* 输入区底栏一行：附件图 + MCP 入口 + 计划 / 执行（模式开关靠右，运行中锁） */
+/* 输入区底栏一行：附件图 + MCP 入口 + 计划 / 执行（模式开关靠右，运行中锁）。
+   允许换行：栏子窄到放不下整排时按钮整块换到下一行，主按钮不会被裁掉 */
 .neo-agent-toolbar {
     display: flex;
     align-items: center;
     gap: 4px;
+    flex-wrap: wrap;
+}
+
+/* 标签由 agent-panel.js 的 labelSpans 拆成图标 + 文字两段：整串标签不许在钮内折行 */
+.neo-agent-toolbar .neo-agent-run,
+.neo-agent-toolbar .neo-agent-attach,
+.neo-agent-toolbar .neo-agent-entry,
+.neo-agent-toolbar .neo-agent-mode-btn {
+    white-space: nowrap;
 }
 
 .neo-agent-modes {
@@ -568,6 +580,19 @@
     border-color: var(--neo-vsc-accent);
     color: var(--neo-vsc-fg);
     outline: none;
+}
+
+/* 栏子拖到 316px 以下（composer 内宽 = 栏宽 − 16px 内缩）时底栏只留字形：四个按钮连文字要
+   320px 以上，收字前主按钮会被栏子的 overflow: hidden 裁在右下角。图标 span 带尾随空格，
+   两段拼起来与整串标签逐字相同，收掉的只是文字那一段 */
+@container (max-width: 300px) {
+    .neo-agent-toolbar .neo-agent-btn-text {
+        display: none;
+    }
+
+    .neo-agent-run {
+        padding: 0 6px;
+    }
 }
 
 /* 附件图 chips：空容器不占行，缩略图带一个移除键 */

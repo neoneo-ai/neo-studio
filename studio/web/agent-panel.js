@@ -62,6 +62,23 @@ function headBtn(label, title, onClick) {
     return btn;
 }
 
+// 底栏按钮的标签拆成图标与文字两段：栏子拖窄时容器查询只收文字（agent-panel.css 的
+// @container (max-width: 300px)），字形留下，主按钮不会被栏子的 overflow: hidden 裁掉。
+// 图标 span 带尾随空格，两段拼起来与整串标签逐字相同；整串进 aria-label，文字收掉后还能认出按钮
+function labelSpans(btn, label) {
+    const cut = label.indexOf(" ");
+    if (cut < 0) {
+        btn.textContent = label;
+        return;
+    }
+    const icon = mkEl("span", "neo-agent-btn-icon");
+    icon.textContent = label.slice(0, cut + 1);
+    const text = mkEl("span", "neo-agent-btn-text");
+    text.textContent = label.slice(cut + 1);
+    btn.replaceChildren(icon, text);
+    btn.setAttribute("aria-label", label);
+}
+
 async function getJson(path) {
     const res = await fetch(path);
     if (res.status === 409 || res.status === 404) return { offline: true };
@@ -193,7 +210,7 @@ function buildChat(onOpenMcp, getContext) {
         const btn = mkEl("button", "neo-agent-mode-btn");
         btn.type = "button";
         btn.dataset.mode = key;
-        btn.textContent = label;
+        labelSpans(btn, label);
         btn.title = key === "plan" ? t("只查询与规划，不执行生成") : t("按计划直接执行生成");
         btn.onclick = () => setMode(key);
         modes.appendChild(btn);
@@ -206,7 +223,7 @@ function buildChat(onOpenMcp, getContext) {
     setMode("act");
     const attach = mkEl("button", "neo-agent-attach");
     attach.type = "button";
-    attach.textContent = "📎 " + t("添加图片");
+    labelSpans(attach, "📎 " + t("添加图片"));
     attach.title = t("附加参考图（粘贴、从素材库拖入或点选，最多 6 张）");
     const fileInput = mkEl("input", "neo-agent-file");
     fileInput.type = "file";
@@ -217,13 +234,14 @@ function buildChat(onOpenMcp, getContext) {
     // MCP 注册表在设置页那一栏，这一行只留一个跳转入口
     const mcpEntry = mkEl("button", "neo-agent-entry");
     mcpEntry.type = "button";
-    mcpEntry.textContent = "🔌 MCP";
+    labelSpans(mcpEntry, "🔌 MCP");
     mcpEntry.title = t("MCP 服务设置");
     mcpEntry.onclick = () => onOpenMcp && onOpenMcp();
     // 主按钮在右下角，一个钮三态（生成 / 暂停 / 继续）——空闲时它就是发送键
     const run = mkEl("button", "neo-agent-run");
     run.type = "button";
-    run.textContent = t("✨ 生成");
+    labelSpans(run, t("✨ 生成"));
+    run.title = t("✨ 生成");
     toolbar.append(attach, fileInput, mcpEntry, modes, run);
     composer.append(ctxBar, chips, cancelBar, input, toolbar);
 
@@ -748,8 +766,10 @@ function buildChat(onOpenMcp, getContext) {
     // 主按钮三态：空闲「✨ 生成」、运行中「⏸ 暂停」、暂停中「▶ 继续」。整行「⏹ 取消」跟着
     // 运行出现——Cline 的口径：没在跑就没有取消键，空闲时那一行不占位
     function setRunState(next) {
-        run.textContent = next === "run" ? t("✨ 生成")
+        const label = next === "run" ? t("✨ 生成")
             : next === "paused" ? t("▶ 继续") : t("⏸ 暂停");
+        labelSpans(run, label);
+        run.title = label;
         run.classList.toggle("neo-agent-paused", next === "paused");
         cancelBar.hidden = next === "run";
         // 跑起来之后不点第二下：上一轮留下的方向按钮整排锁住，本轮收场放开（点过的那组保持锁定，
@@ -827,7 +847,7 @@ function buildChat(onOpenMcp, getContext) {
         if (!running || !controller) return;
         run.disabled = true;
         cancelBar.hidden = true;
-        run.textContent = t("⏳ 取消中");
+        labelSpans(run, t("⏳ 取消中"));
         controller.abort();
         let note = "";
         if (runId) {

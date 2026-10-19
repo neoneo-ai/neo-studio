@@ -172,6 +172,11 @@ Both nodes share the same layout (the Agent shows no status bar):
   dock resizes it (260px floor for the dock, the page view keeps 420px), dragging it narrower than 150px closes the
   column, double-click collapses / expands, `←`/`→` nudges it, and a key in the closed state reopens it at the
   width it had. Open state and width live in `localStorage["neo_studio_agent_dock"]`, and closing keeps the width.
+  Drag the dock narrower than 316px and the composer's bottom row keeps only the glyphs (📎 / 🔌 / 📝 / ⚡ / ✨):
+  the full label stays in the DOM as the button's `aria-label` (the main button carries it as its tooltip too),
+  the row wraps, and the dock's `overflow: hidden` no longer clips the Generate button in the bottom-right corner
+  (`@container (max-width: 300px)` in `studio/web/agent-panel.css`, measured on the composer's inner width —
+  dock width minus its 16px padding).
   The composer: on top a context bar (📍 current page · current recipe and segment count ·
   paint mode · gallery directory) that the host refreshes on page switch, recipe selection, paint-mode switch and
   opening / closing the director page's library drawer. Only the selected tab's own fields are reported and travel in

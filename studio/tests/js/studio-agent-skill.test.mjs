@@ -12,6 +12,7 @@ import { app as studioApp } from "../../web/studio/shim/app.js";
 
 const webDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../web");
 const studioBody = fs.readFileSync(path.join(webDir, "studio", "index.html"), "utf8").match(/<body>([\s\S]*?)<\/body>/)[1];
+const cssText = fs.readFileSync(path.join(webDir, "agent-panel.css"), "utf8");
 
 let seq = 0;
 const importApp = () => import(`../../web/studio/studio-app.js?skill=${seq++}`);
@@ -309,6 +310,8 @@ test("运行中主按钮是暂停态、可点：第二击发暂停，不断流�
 
     assert.equal(runBtn().disabled, false, "运行中按钮必须可点：锁掉等于把暂停键从界面上摘掉");
     assert.equal(runBtn().textContent, "⏸ 暂停", "运行中主按钮应是暂停");
+    assert.deepEqual([...runBtn().children].map((s) => s.textContent), ["⏸ ", "暂停"],
+        "翻态要重建图标与文字两段，图标 span 带尾随空格");
     assert.ok(!cancelBar().hidden, "跑起来了取消键就要在：Cline 只在运行中给一行取消");
     assert.equal(cancelCalls().length, 0, "没点第二击不该发取消请求");
 
@@ -557,6 +560,22 @@ test("输入区：上下文条只读、取消行只在运行中出现、底栏�
     assert.equal(file.type, "file", "附件入口应挂在文件选择上");
     assert.equal(file.accept, "image/*", "附件只收图片");
     assert.ok(dock().querySelector(".neo-agent-chips"), "应有附件缩略图容器");
+
+    // 底栏标签拆成图标 + 文字两段：整串 textContent 逐字不变，文字收掉后靠 aria-label 认钮
+    assert.deepEqual([...runBtn().children].map((s) => s.className),
+        ["neo-agent-btn-icon", "neo-agent-btn-text"], "主按钮应拆成图标与文字两段");
+    assert.equal(runBtn().getAttribute("aria-label"), "✨ 生成", "整串标签要进 aria-label");
+    assert.ok(runBtn().title, "主按钮要有悬停说明：只剩字形时靠它读全名");
+    assert.deepEqual([...dock().querySelectorAll(".neo-agent-toolbar .neo-agent-btn-text")].map((s) => s.textContent),
+        ["添加图片", "MCP", "计划", "执行", "生成"], "底栏每颗钮的文字段应各自独立成 span");
+    assert.deepEqual([...dock().querySelectorAll(".neo-agent-toolbar .neo-agent-attach, .neo-agent-toolbar .neo-agent-entry, .neo-agent-toolbar .neo-agent-mode-btn")].map((b) => b.getAttribute("aria-label")),
+        ["📎 添加图片", "🔌 MCP", "📝 计划", "⚡ 执行"], "每颗钮都要带上整串可访问名");
+});
+
+test("窄栏底栏的 CSS：composer 是容器、底栏可换行、300px 以下只收文字段", () => {
+    assert.match(cssText, /\.neo-agent-composer\s*\{[^}]*container-type:\s*inline-size;/);
+    assert.match(cssText, /\.neo-agent-toolbar\s*\{[^}]*flex-wrap:\s*wrap;/);
+    assert.match(cssText, /@container \(max-width: 300px\)\s*\{[^}]*\.neo-agent-toolbar \.neo-agent-btn-text\s*\{[^}]*display: none;/);
 });
 
 test("切页与切绘画模式：上下文条跟着宿主走，请求带的是切过之后的状态", async () => {

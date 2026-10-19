@@ -35,6 +35,17 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   request-level LoRA applies to image generation only. Docs in `docs/prompts.md` + `docs/en/prompts.md`
   and `docs/mcp.md` + `docs/en/mcp.md`.
 
+- **A narrow dock keeps its main Generate button on screen.** `📎 添加图片`, `🔌 MCP`, `📝 计划`, `⚡ 执行` and
+  `✨ 生成` are flex items in one nowrap row inside a dock whose drag floor is 260px, so under ~316px the row
+  overflowed and `overflow: hidden` on `.ns-agent-dock` clipped the accent button in the bottom-right corner.
+  `studio/web/agent-panel.js` now builds each label as an icon span plus a text span, the row in
+  `studio/web/agent-panel.css` wraps, and `@container (max-width: 300px)` on `.neo-agent-composer` (composer inner
+  width = dock width minus its 16px padding) drops the text span and tightens the Generate button's padding. The
+  full label stays in the DOM: `textContent` per button is byte-identical, the same string is the button's
+  `aria-label`, and the main button carries it as its tooltip, so an icon-only button is still named. Covered by
+  `studio/tests/js/studio-agent-skill.test.mjs` (button structure, `aria-label`, the CSS rule). Docs in
+  `docs/prompts.md` + `docs/en/prompts.md`.
+
 - **MCP model lookup answers "which LoRA goes with this checkpoint", and a LoRA override stays in one request.**
   `list_models` forwarded the raw `/neo_image_gen/models` scan — a flat list of everything on the machine cut at
   40 items — so an agent picking a LoRA for `Krea2\Moody\krea2_Moody-Krea-Mix-v2G_int8.safetensors` had no
