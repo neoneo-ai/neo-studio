@@ -220,7 +220,12 @@ class BaseToolTests(unittest.TestCase):
                                                                  {"diffusion_models": ["m1", "m2"],
                                                                   "suggested_model": "m1"}})[0]))
         self.assertEqual(data["diffusion_models"]["count"], 2)
+        self.assertEqual(data["diffusion_models"]["returned"], 2)
+        self.assertFalse(data["diffusion_models"]["truncated"])
+        self.assertEqual(data["diffusion_models"]["items"], [{"name": "m1", "dir": ""},
+                                                             {"name": "m2", "dir": ""}])
         self.assertEqual(data["suggested_model"], "m1")
+        self.assertNotIn("mtimes_diffusion_models", data)      # mtime 数字不进上下文
 
     def test_generate_image_payload_and_task_id(self):
         routes = {("POST", "/neo_image_gen/generate"): {"task_id": "T1", "status": "queued"}}
@@ -399,6 +404,125 @@ class BaseToolTests(unittest.TestCase):
                          {("POST", "/rs_recipes/load"):
                           {"recipe": {"blob": "y" * (mcp.MAX_TEXT + 500)}}})[0]
         self.assertIn("已截断", text_of(resp))
+
+
+# ===========================================================================
+# 模型 / LoRA 查询（自定参数的查询侧）
+# ===========================================================================
+
+MODEL_SCAN = {"diffusion_models": ["Krea2\\krea2_turbo_fp8.safetensors",
+                                   "QwenImage2.1\\qwen_image_2.1_int8_convrot.safetensors"],
+              "loras": ["Krea2\\lora_a.safetensors", "QwenImage2.1\\qwen_lora_a.safetensors",
+                        "Other\\unrelated_lora.safetensors"],
+              "vae": ["Krea2\\krea2_vae.safetensors"],
+              "suggested_model": "Krea2\\krea2_turbo_fp8.safetensors",
+              "mtimes_loras": {"Krea2\\lora_a.safetensors": 1750000000.0}}
+
+
+class ModelLookupTests(unittest.TestCase):
+    """按名字找、只看一组、绕着当前主模型挑同目录的那一批。"""
+
+    def models(self, args, scan=None, route="/neo_image_gen/models"):
+        resp = call_tool("list_models", args,
+                         {("GET", route): MODEL_SCAN if scan is None else scan})[0]
+        return json.loads(text_of(resp))
+
+    def test_group_lists_only_that_group(self):
+        data = self.models({"group": "loras"})
+        self.assertEqual(sorted(data.keys()), ["loras", "scope", "suggested_model"])
+        self.assertEqual(data["loras"]["count"], 3)
+        self.assertEqual(data["loras"]["items"][0], {"name": "Krea2\\lora_a.safetensors", "dir": "Krea2/"})
+        self.assertNotIn("mtimes_loras", data)        # mtime 数字对智能体没有上下文价值
+
+    def test_q_filters_by_dir_and_filename(self):
+        self.assertEqual([i["name"] for i in self.models({"group": "loras", "q": "QWEN"})["loras"]["items"]],
+                         ["QwenImage2.1\\qwen_lora_a.safetensors"])
+        # 目录名也能过滤：换同目录主模型时就按目录筛
+        self.assertEqual(self.models({"group": "diffusion_models", "q": "krea2/moody"})
+                         ["diffusion_models"]["matched"], 0)
+
+    def test_near_puts_the_same_directory_first(self):
+        data = self.models({"group": "loras", "near": "QwenImage2.1\\qwen_image_2.1_int8_convrot.safetensors"})
+        self.assertEqual(data["near_dir"], "QwenImage2.1/")
+        # 同目录 → 名字同家族（qwen）→ 其余保持扫描原序
+        self.assertEqual([i["name"] for i in data["loras"]["items"]],
+                         ["QwenImage2.1\\qwen_lora_a.safetensors",
+                          "Krea2\\lora_a.safetensors",
+                          "Other\\unrelated_lora.safetensors"])
+
+    def test_limit_reports_truncation(self):
+        data = self.models({"group": "loras", "limit": 2})
+        self.assertEqual((data["loras"]["count"], data["loras"]["returned"], data["loras"]["truncated"]),
+                         (3, 2, True))
+        self.assertEqual(len(data["loras"]["items"]), 2)
+
+    def test_video_scope_uses_the_h3_scan(self):
+        scan = {"diffusion_models": ["MiniMaxH3\\minimax_h3_turbo.safetensors"], "loras": []}
+        data = self.models({"scope": "video"}, scan, "/neo_video_gen/models")
+        self.assertEqual(data["scope"], "video")
+        self.assertEqual(data["diffusion_models"]["items"][0]["dir"], "MiniMaxH3/")
+        self.assertNotIn("loras", data)               # 空组不列：这次扫描里没有 LoRA
+        self.assertNotIn("suggested_model", data)     # H3 扫描表里没有自动挑选值
+
+    def test_bad_scope_group_and_limit_say_what_to_pass(self):
+        self.assertIn("scope 只认 image / video", text_of(call_tool("list_models", {"scope": "audio"})[0]))
+        self.assertIn("diffusion_models", text_of(call_tool("list_models", {"group": "checkpoints"})[0]))
+        self.assertIn("limit 要的是一个整数", text_of(call_tool("list_models", {"limit": "很多"},
+                                                               {("GET", "/neo_image_gen/models"):
+                                                                MODEL_SCAN})[0]))
+        self.assertEqual(call_tool("list_models", {"scope": "audio"})[1].calls, [])
+
+
+# ===========================================================================
+# 单次 LoRA 覆盖（自定参数的覆盖侧，不落技能配置）
+# ===========================================================================
+
+class LoraOverrideTests(unittest.TestCase):
+    """LoRA 只进这一次请求：技能里的自定参数不动。"""
+
+    def generate(self, args, routes=None):
+        base = {("POST", "/neo_image_gen/generate"): {"task_id": "T1", "status": "queued"}}
+        base.update(routes or {})
+        return call_tool("generate_image", args, base)
+
+    def test_loras_go_into_the_request_body(self):
+        routes = {("GET", "/neo_image_gen/models"): {"loras": ["Krea2\\lora_a.safetensors"]}}
+        _, fake = self.generate({"skill_id": "sd", "prompt": "猫",
+                                 "loras": [{"name": "krea2/LORA_A.SAFETENSORS", "strength": 3},
+                                           {"name": "", "strength": 1.0},
+                                           "Krea2\\lora_a.safetensors"]}, routes)
+        # 斜杠与大小写归一成扫描表里的名字；strength 夹进后端认的 0-2；重名只挂一次；空名跳过
+        self.assertEqual(fake.body("POST", "/neo_image_gen/generate")["loras"],
+                         [{"name": "Krea2\\lora_a.safetensors", "strength": 2.0}])
+
+    def test_zero_strength_is_not_replaced_by_the_default(self):
+        routes = {("GET", "/neo_image_gen/models"): {"loras": ["a.safetensors"]}}
+        _, fake = self.generate({"skill_id": "sd", "prompt": "猫",
+                                 "loras": [{"name": "a.safetensors", "strength": 0}]}, routes)
+        self.assertEqual(fake.body("POST", "/neo_image_gen/generate")["loras"],
+                         [{"name": "a.safetensors", "strength": 0.0}])
+
+    def test_no_loras_means_no_scan_and_no_body_key(self):
+        _, fake = self.generate({"skill_id": "sd", "prompt": "猫"})
+        self.assertNotIn("loras", fake.body("POST", "/neo_image_gen/generate"))
+        self.assertNotIn(("GET", "/neo_image_gen/models"), fake.paths())
+        _, fake = self.generate({"skill_id": "sd", "prompt": "猫", "loras": [{"name": ""}]})
+        self.assertNotIn("loras", fake.body("POST", "/neo_image_gen/generate"))
+        self.assertNotIn(("GET", "/neo_image_gen/models"), fake.paths())
+
+    def test_missing_lora_name_is_refused_with_candidates(self):
+        """后端对不存在的 LoRA 名是 404 一次必败的生成；工具侧换成带候选文件名的一句，请求不发。"""
+        routes = {("GET", "/neo_image_gen/models"): {"loras": ["Krea2\\lora_a.safetensors"]}}
+        resp, fake = self.generate({"skill_id": "sd", "prompt": "猫",
+                                    "loras": [{"name": "lora_a1.safetensors"}]}, routes)
+        self.assertTrue(resp["result"]["isError"])
+        self.assertIn("Krea2\\lora_a.safetensors", text_of(resp))
+        self.assertIn("list_models", text_of(resp))
+        self.assertNotIn(("POST", "/neo_image_gen/generate"), fake.paths())
+
+    def test_loras_shape_is_spelled_out(self):
+        self.assertIn("数组", text_of(self.generate({"skill_id": "sd", "prompt": "猫",
+                                                     "loras": "a.safetensors"})[0]))
 
 
 # ===========================================================================

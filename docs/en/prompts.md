@@ -194,7 +194,11 @@ Both nodes share the same layout (the Agent shows no status bar):
   an explicit `references: []` stays plain text-to-image; a turn that carries references is an edit of that image, so the
   skill has to accept them — `list_skills` rows carry `mode` / `requires_ref`, and picking a `mode=t2i` skill never reaches
   the backend: the tool result names the `mode=edit / t2i_edit` skill to switch to (canvas-imported skills have no `mode`,
-  so `requires_ref` decides), the same filter the paint page skill list uses; the **📝 Plan / ⚡ Act** switch
+  so `requires_ref` decides), the same filter the paint page skill list uses; swapping the main model or
+  adding a LoRA is a per-request
+  override — the system prompt spells out `list_models` (`q` / `group` / `near`, same-directory entries first,
+  every item with its `dir`) and `generate_image`'s `model` / `loras`, which affect that one request and never
+  write skill config; the **📝 Plan / ⚡ Act** switch
   decides whether this turn runs anything — in plan mode the generation and recipe-writing tools stay out of the LLM's
   tool list, a call that arrives anyway is refused, and the turn ends with a step-by-step plan naming the tools and
   parameters; and when the backend's `ask_user` asks a question the loop parks on it, the timeline shows a choice card

@@ -23,7 +23,10 @@ cancel_task；配方写操作 director_plan、director_save、director_copy；�
   requires_ref=true）。mode=t2i 的纯文生图模板没有参考图槽位，挂了参考图会被直接丢掉，后端会在工具结果里
   拦下这一发并点名要换技能，换完 skill_id 再调一次，不要重复发同一发。
 - 用户给的是简短想法时，用 generate_prompt 扩写成成品提示词，再拿去生图。
-- 模型 / 文本编码器 / VAE 一律留空让后端按技能设置自动挑选，只有用户点名模型时才 list_models 查名字。
+- 模型 / 文本编码器 / VAE 一律留空让后端按技能设置自动挑选，只有用户点名模型时才 list_models 查名字：
+  q 按目录+文件名过滤，near 填当前主模型名时同目录的模型与 LoRA 排最前（每项带 dir，看 LoRA 与主模型是否同一目录就看它）。
+- 用户要点名换主模型 / 加 LoRA 时，就在这一发 generate_image 里传 model 与 loras（[{name,strength}]，strength 0-2）：
+  只影响这一次，用户技能里的自定参数不动，也不要替他去改技能设置。
 - 要看已有素材用 list_gallery，取产物文件用 get_media。
 - 输入框可以带附件图。附件图本轮默认就是参考图：generate_image 没写 references 时后端自动把它们接进去，
   出片时它们进本轮新建配方的角色参考与段参考（写已有配方不会加）。要指定具体图就显式传 references，

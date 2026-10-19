@@ -330,7 +330,7 @@ LLM 模式与配置见 [llm.md](llm.md)，技能设计见 [skills.md](skills.md)
 |------|-----------|
 | `neo_status` | `GET /neo_studio/version` + `GET /queue` |
 | `list_skills` `generate_prompt` | `GET /rs_prompts/skills` + `POST /rs_prompts/stream_generate_prompt`（SSE） |
-| `list_models` `generate_image` `list_tasks` | `GET /neo_image_gen/models` + `POST /neo_image_gen/generate` + `GET /neo_image_gen/tasks` |
+| `list_models` `generate_image` `list_tasks` | `GET /neo_image_gen/models` + `POST /neo_image_gen/generate` + `GET /neo_image_gen/tasks`（`list_models` 的 `scope=video` 读 `GET /neo_video_gen/models`） |
 | `task_status` | 生图在 `GET /neo_image_gen/tasks` 整表里按 `task_id` 命中；整片 / 单段 / 拼接依次探测 `GET /neo_studio/director/{id}` `GET /neo_video_gen/run_segment/{id}` `GET /neo_video_gen/assemble_segments/{id}`，整片附带 `GET /neo_video_gen/director_progress` |
 | `cancel_task` | 依次探测上述四张表的 `…/cancel` |
 | `get_media` | `GET /view`（产物只经 ComfyUI 读；图片 png 与成片 mp4 同一地址，视频不回传字节） |

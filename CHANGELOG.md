@@ -4,6 +4,22 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **MCP model lookup answers "which LoRA goes with this checkpoint", and a LoRA override stays in one request.**
+  `list_models` forwarded the raw `/neo_image_gen/models` scan — a flat list of everything on the machine cut at
+  40 items — so an agent picking a LoRA for `Krea2\Moody\krea2_Moody-Krea-Mix-v2G_int8.safetensors` had no
+  directory in front of it and no way to ask for one. `studio/mcp_server.py` now takes `q` (directory + filename
+  substring), `group` (one group only), `scope=video` (the H3 scan at `/neo_video_gen/models`), `near=<main model>`
+  (same-directory entries first, then the family keywords the frontend `sortByModelFamily` uses, scan order kept
+  inside each tier) and `limit`, every item carries its `dir`, and the `suggested_*` auto-picks still come back.
+  `generate_image` gained `loras` (`[{name,strength}]`, bare filenames accepted): names are normalized against the
+  `models/loras` scan, a name that is not there fails with the closest filenames instead of a doomed backend 404,
+  `strength` clamps to 0-2 and a repeated name is attached once. Nothing writes a skill `config.json` — the
+  override lives in that request body, and video runs keep taking their model and LoRAs from the segment skill.
+  Covered by `studio/tests/test_mcp_server.py` (group, q, near ordering, video scope, limit truncation, bad
+  arguments, request body shape, missing-name refusal); docs in `docs/mcp.md` + `docs/en/mcp.md`,
+  `docs/prompts.md` + `docs/en/prompts.md`, `docs/api-routes.md` + `docs/en/api-routes.md` and
+  `studio/prompts/agent/system_prompt.md`.
+
 - **A character directory makes the agent's new recipe full-reference, like the card menu.** The 👤 mark only drove the
   two frontend entries — the card ⋯ menu and the multi-select bar — while the agent dock built its recipe from the same
   images with whatever mode the model wrote: `load_director_spec` derives frame modes from the first / last frame assets

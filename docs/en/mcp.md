@@ -101,9 +101,10 @@ Example — expose only the image pipeline:
 | Tool | Purpose |
 |------|---------|
 | `neo_status` | Versions / queue / director recipe count — call it first to confirm the service is up |
-| `list_skills` `list_models` | Skill ids, available models and suggested values |
+| `list_skills` | Skill ids (with `mode` / `requires_ref`, the two fields the reference check reads) |
+| `list_models` | Models and LoRAs scanned for image / video: `q` filters by directory+filename, `group` lists one group, `scope=video` uses the H3 scan, `near=<main model name>` puts the same-directory entries first (every item carries its `dir`), plus the `suggested_*` auto-picks |
 | `generate_prompt` | Short idea → finished prompt (uses the LLM, requires a configured model) |
-| `generate_image` | Submits an image job and returns a `task_id` immediately |
+| `generate_image` | Submits an image job and returns a `task_id` immediately; `model` / `loras` override that one request only |
 | `task_status` `list_tasks` `cancel_task` | Task snapshot / list / cancel (all five task tables share `task_id`: image / full film / segment / assembly / image storyboard) |
 | `get_media` | Fetch an output file: images (png) and videos (mp4) both return a `/view` URL; base64 bytes only for images with `base64=true` |
 | `list_gallery` `list_recipes` `load_recipe` | Asset library tree, recipe list, single recipe metadata (`results` lists past outputs, including finished films) |
@@ -121,6 +122,18 @@ Example — expose only the image pipeline:
 neo_status → list_skills (pick skill_id) → generate_image → poll task_status until succeeded
 → get_media (png: URL, add base64=true when bytes are needed)
 ```
+
+**Per-run model and LoRA (one request only)**
+
+```
+list_models(near=<current main model>, group=loras)   → same-directory LoRAs first, dir names every item's folder
+→ generate_image(model=..., loras=[{name,strength}], ...)   → this run only; the skill's config.json and global settings stay
+```
+
+LoRA names are checked against the `models/loras` scan before the request goes out: a name that is not there
+comes back with the closest filenames instead of a doomed 404. `strength` is clamped to 0-2 and a repeated
+name is attached once. Video runs (`director_run` / `segment_run`) take their model and LoRAs from the
+segment skill's `config.json` — the request-level override applies to image generation only.
 
 **Director pipeline (mp4 output)**
 
@@ -183,6 +196,11 @@ The image sentence only runs when the machine has an image skill with a `workflo
   declare no `mode`. A `mode=t2i` template has no reference slot and drops the image in silence, so that call
   fails with the skill to switch to before any request reaches the backend, the same rule the paint page
   skill list filters by.
+- **Model and LoRA are overridden per request only**: `generate_image`'s `model` / `loras` affect this run
+  and leave the skill's `config.json` and the global image settings alone. Look the names up with
+  `list_models` (`near=<current main model>` ranks the same-directory batch first and `dir` names each item's
+  folder); a LoRA name that is not in the `models/loras` scan fails before any request reaches the backend,
+  with the closest filenames. Video runs take no request-level override.
 - **Segment numbers are 1-based everywhere** (segment 1 = the first segment on the timeline).
   `segment_run.segment` and the lists in `assemble_run.segments` / `director_run.only_segments` are 1-based
   and converted to the endpoints' 0-based indices internally.

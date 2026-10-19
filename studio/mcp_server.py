@@ -7,6 +7,7 @@
 
 import argparse
 import base64
+import difflib
 import json
 import os
 import re
@@ -280,16 +281,113 @@ def tool_generate_prompt(ctx, args):
     return clip(ctx.comfy.sse_text("/rs_prompts/stream_generate_prompt", body))
 
 
+# 模型扫描的两套口径：生图（suggested_* 给自动挑选值）与出片 H3（扫描表里没有 suggested_*）。
+MODEL_SCANS = {"image": "/neo_image_gen/models", "video": "/neo_video_gen/models"}
+MODEL_GROUPS = ("diffusion_models", "text_encoders", "vae", "loras")
+# 家族关键词与前端 image-gen.js 的 LORA_FAMILY_HINTS、后端 video_gen._VIDEO_MODEL_HINTS 同步；
+# 词表分叉时 near 的同目录档还在，同家族那一档会退化成原序。
+MODEL_FAMILY_HINTS = {"image": ("qwen", "krea2"), "video": ("minimax_h3", "minimaxh3", "minimax", "h3")}
+MODEL_LIMIT = 60
+
+
+def model_key(name) -> str:
+    """相对路径名的比较形态：反斜杠归一成斜杠并小写。扫描表里同一个目录两种写法都有。"""
+    return str(name).replace("\\", "/").lower()
+
+
+def model_dir(name) -> str:
+    path = str(name).replace("\\", "/")
+    return path[:path.rfind("/") + 1] if "/" in path else ""
+
+
+def near_order(files: list, near: str, hints: tuple) -> list:
+    """当前主模型周边排序：同目录最前，其次名字里带同家族关键词，其余保持扫描原序。
+    与前端 image-gen.js 的 sortByModelFamily 同一口径；sorted 稳定，同档内部不动。"""
+    anchor_dir = model_dir(near).lower()
+    family = next((h for h in hints if h in model_key(near)), "")
+
+    def tier(name) -> int:
+        key = model_key(name)
+        if anchor_dir and key.startswith(anchor_dir):
+            return 0
+        return 1 if family and family in key else 2
+
+    return sorted(files, key=tier)
+
+
 def tool_list_models(ctx, args):
-    data = ctx.comfy.get("/neo_image_gen/models") or {}
-    out = {}
-    for group, items in data.items():
-        if not str(group).startswith("suggested_"):
-            names = [str(i) for i in (items or [])]
-            out[group] = {"count": len(names), "names": names[:40]}
-        else:
-            out[group] = items
+    scope = str(args.get("scope") or "image").strip().lower()
+    if scope not in MODEL_SCANS:
+        raise ToolError(f"list_models 的 scope 只认 image / video，收到的是 '{scope}'")
+    group = str(args.get("group") or "").strip().lower()
+    if group and group not in MODEL_GROUPS:
+        raise ToolError(f"模型组只有 {'、'.join(MODEL_GROUPS)}，收到的是 '{group}'；要看全部就不传 group")
+    try:
+        limit = min(max(1, int(args.get("limit") or MODEL_LIMIT)), 500)
+    except (TypeError, ValueError):
+        raise ToolError(f"list_models 的 limit 要的是一个整数，默认 {MODEL_LIMIT}")
+    near = str(args.get("near") or "").strip()
+    q = model_key(args.get("q") or "")
+    data = ctx.comfy.get(MODEL_SCANS[scope]) or {}
+    out = {"scope": scope}
+    if near:
+        out["near"], out["near_dir"] = near, model_dir(near)
+    for name in (MODEL_GROUPS if not group else (group,)):
+        files = [str(f) for f in (data.get(name) or []) if str(f).strip()]
+        if not files:
+            continue        # 空组不列：这套模板结构里就没有这一项
+        matched = [f for f in files if not q or q in model_key(f)]
+        if near:
+            matched = near_order(matched, near, MODEL_FAMILY_HINTS[scope])
+        out[name] = {"count": len(files), "matched": len(matched),
+                     "returned": min(len(matched), limit), "truncated": len(matched) > limit,
+                     "items": [{"name": f, "dir": model_dir(f)} for f in matched[:limit]]}
+    for key, val in data.items():
+        if str(key).startswith("suggested_"):
+            out[key] = val
     return dump(out, None)
+
+
+def generate_loras(ctx, value) -> list:
+    """单次 LoRA 覆盖（不落技能配置）：只吃 [{name,strength}] 与裸文件名，name 为空的条目跳过——与前端 LoRA 行同一过滤。
+    名字先对着 loras 扫描表核一遍：后端对不存在的 LoRA 是 404 一次必败的生成，工具侧换成带候选文件名的一句。"""
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise ToolError("loras 要的是一个数组：[{\"name\": \"lora.safetensors\", \"strength\": 1.0}]")
+    wanted = []
+    for item in value:
+        if isinstance(item, str):
+            name, strength = item.strip(), 1.0
+        elif isinstance(item, dict):
+            name = str(item.get("name") or "").strip()
+            raw = item.get("strength")
+            strength = 1.0 if raw is None or raw == "" else float(raw)
+        else:
+            raise ToolError("loras 的每一项要写成 {\"name\": \"lora.safetensors\", \"strength\": 1.0}")
+        wanted.append((name, min(max(strength, 0.0), 2.0)))
+    wanted = [(n, s) for n, s in wanted if n]
+    seen, unique = set(), []
+    for name, strength in wanted:
+        # 同一个 LoRA 点名两次只挂一次：重复项在后端是第二个 LoraLoader 节点，白多跑一趟模型
+        key = model_key(name)
+        if key not in seen:
+            seen.add(key)
+            unique.append((name, strength))
+    if not unique:
+        return []
+    table = {model_key(f): str(f) for f in ((ctx.comfy.get("/neo_image_gen/models") or {}).get("loras") or [])}
+    out = []
+    for name, strength in unique:
+        hit = table.get(model_key(name))
+        if hit is None:
+            close = [table[c] for c in difflib.get_close_matches(model_key(name), list(table), n=3, cutoff=0.3)]
+            raise ToolError(f"LoRA '{name}' 不在本地 loras 目录的 {len(table)} 个文件里；"
+                            f"最接近的是 {'、'.join(close) if close else '没有相近的文件名'}；"
+                            "完整名单用 list_models(group=loras)，配主模型那一批就再带 near=<主模型名>")
+        out.append({"name": hit, "strength": strength})
+    return out
+
 
 
 _GENERATE_KEYS = ("skill_id", "prompt", "width", "height", "count", "seed", "negative",
@@ -316,6 +414,9 @@ def tool_generate_image(ctx, args):
         raise ToolError("generate_image 需要 skill_id：先调 list_skills 取一个 has_workflow=true 的技能 id")
     body = {k: args[k] for k in _GENERATE_KEYS if args.get(k) is not None}
     body["skill_id"] = skill_id
+    loras = generate_loras(ctx, args.get("loras"))
+    if loras:
+        body["loras"] = loras
     refs = args.get("references")
     if isinstance(refs, str):
         refs = [refs]
@@ -679,7 +780,14 @@ TOOLS = [
          {"text": s("string", "简短想法或草稿提示词"),
           "skill_id": s("string", "可选：按该技能的模板上下文扩写")}, ("text",),
          {"text": "一只在窗台打盹的橘猫，暖色阳光，写实"}),
-    tool("list_models", "列出可选模型（diffusion_models / text_encoders / vae / loras）与建议值", {}),
+    tool("list_models", "列出 Neo Studio 扫到的模型与 LoRA（scope=image 生图扫描，scope=video 出片 H3 扫描）。q 按 目录/文件名 子串过滤，group 只看一组，near 给当前主模型名时同目录条目排最前、同家族关键词次之；每项带 dir，看某个 LoRA 与主模型是否同一目录就看它",
+         {"scope": s("string", "image（默认，生图扫描，带 suggested_* 自动挑选值）/ video（出片 H3 扫描）"),
+          "group": s("string", "只看一组：diffusion_models / text_encoders / vae / loras"),
+          "q": s("string", "按 目录/文件名 子串过滤（大小写不敏感，中文文件名可用）"),
+          "near": s("string", "当前主模型的相对路径名：同目录的模型与 LoRA 排最前，其次名字里带同家族关键词的；换同目录的主模型、给主模型配 LoRA 就传它"),
+          "limit": s("integer", f"每组最多列几条，默认 {MODEL_LIMIT}")},
+         example={"scope": "image", "near": "<当前主模型名，如 Krea2\\krea2_turbo_fp8.safetensors>",
+                  "q": "<目录或文件名关键词>"}),
     tool("generate_image", "提交生图任务，立即返回 task_id（用 task_status 轮询、get_media 取图）；带 references 的这一次是编辑那张参考图，不是文生图",
          {"skill_id": s("string", "生图技能 id（list_skills 可查）；带 references 时必须是 mode=edit / t2i_edit 的技能，mode=t2i 会把参考图直接丢掉"),
           "prompt": s("string", "提示词"),
@@ -689,12 +797,14 @@ TOOLS = [
           "seed": s("integer", "种子，-1 随机"),
           "negative": s("string", "负向提示词"),
           "references": s("array", "参考图文件名列表（input/ 下的名字）；右栏的附件图会自动接进来，显式传空列表就是纯文生图；带它的这一次按编辑那张参考图走，技能要选 mode=edit / t2i_edit"),
-          "model": s("string", "扩散模型文件名，留空自动挑选"),
+          "model": s("string", "扩散模型文件名，留空自动挑选；只影响这一次，技能里的自定参数不动"),
           "text_encoder": s("string", "文本编码器文件名，留空自动挑选"),
           "vae": s("string", "VAE 文件名，留空自动挑选"),
+          "loras": s("array", "这一次的 LoRA：[{\"name\": \"lora.safetensors\", \"strength\": 1.0}]，也可直接写文件名；strength 0-2，超出后端夹到 0-2；只影响这一次，技能里的自定参数不动。名字用 list_models(group=loras, near=<主模型名>) 查"),
           "steps": s("integer", "采样步数")}, ("skill_id", "prompt"),
          {"skill_id": "<list_skills 里 has_workflow=true 的技能 id>",
           "prompt": "一只橘猫坐在窗台，暖色阳光，写实", "width": 1024, "height": 1024}),
+
     tool("task_status", "查任务快照（生图 / 整片 / 单段 / 拼接共用 task_id）；生图 succeeded 后 images 带取图 URL，导演类 succeeded 后 filename 是 mp4 产物、url 是可直接转给用户的播放/下载链接，别自己拼",
          {"task_id": TASK_ID}, ("task_id",), {"task_id": "<generate_image / director_run 返回的 task_id>"}),
     tool("list_tasks", "列出最近的生图任务", {}),
