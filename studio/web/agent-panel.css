@@ -33,6 +33,16 @@
     box-sizing: border-box;
 }
 
+/* 宿主注入样式会把正文压成选不动：pywebview 在 text_select=False 时给 body 加
+   {user-select:none;cursor:default}，主画布那侧的主题样式同理。对话正文是要复用的内容，
+   在这块作用域里交回来；textarea / input 是宿主控件，浏览器自己管 */
+.neo-agent,
+.neo-agent *:not(textarea):not(input):not(button) {
+    user-select: text;
+    -webkit-user-select: text;
+    cursor: auto;
+}
+
 .neo-agent-section {
     display: flex;
     flex-direction: column;
@@ -200,6 +210,44 @@
     font-size: 11px;
 }
 
+/* 会话标题：这一轮的第一句话，钉在时间线顶上随滚动常驻。放在 .neo-agent-transcript 的第一个子节点，
+   时间线就是它的 sticky 滚动容器（见 agent-panel.js 的 titleBar） */
+.neo-agent-titlebar {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    padding: 4px;
+    background: var(--neo-vsc-bg-alt);
+    border-bottom: 1px solid var(--neo-vsc-border);
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* 「⧉ 复制」：正文选不动时的复制出口（agent-panel.js 的 mkCopyBtn）。
+   提问的钮在回合头右端，回答的钮跟在正文容器之后——两处都在正文文本之外，
+   划词与取文本都不会把按钮字样一起带走 */
+.neo-agent-copy {
+    margin-top: 2px;
+    padding: 1px 5px;
+    border: 1px solid var(--neo-vsc-border);
+    border-radius: 3px;
+    background: var(--neo-vsc-bg);
+    color: var(--neo-vsc-fg-dim);
+    font: inherit;
+    font-size: 11px;
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+}
+
+.neo-agent-copy:hover {
+    border-color: var(--neo-vsc-accent);
+    color: var(--neo-vsc-fg);
+}
+
 /* 一轮问答：元信息行 + 提问 + 正文 */
 .neo-agent-turn {
     display: flex;
@@ -211,10 +259,18 @@
 }
 
 .neo-agent-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
     font-size: 10px;
     letter-spacing: 0.5px;
     text-transform: uppercase;
     color: var(--neo-vsc-fg-dim);
+}
+
+.neo-agent-meta .neo-agent-copy {
+    margin-left: auto;
+    text-transform: none;   /* 回合头是大写排版，按钮文案按原样出 */
 }
 
 .neo-agent-ask {
@@ -503,7 +559,7 @@
     color: var(--neo-vsc-fg);
     font-size: 13px;
     font-family: inherit;
-    resize: vertical;
+    resize: none;
 }
 
 .neo-agent-input:focus,

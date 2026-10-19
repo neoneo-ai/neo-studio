@@ -181,6 +181,20 @@ js_api（`check_setup` / `pick_root` / `pick_python` / `start_setup`），根目
   工作区（系统 maximize 给整屏矩形，任务栏会被盖住）；全屏退出时 pywebview 把 `FormBorderStyle` 写回建窗时的值、
   标题栏跟着回来，样式按桌面端的状态重贴；全屏时关窗不存几何（存的是整屏矩形，下次开机窗口铺满屏幕）。
 
+## 划词复制
+
+- 正文要划得起来：建窗时显式给 `text_select=True` —— pywebview 默认 False，注入页面的 `customize.js` 给非表单元素
+  `preventDefault selectstart`，聊天正文一个字都选不动。对话正文这一层在 `studio/web/agent-panel.css` 里把
+  `user-select` 交回 `text`，按钮与输入控件不在其列。
+- 原生复制按键在窗口显示后补开：`enable_copy_keys` 把 CoreWebView2 的 `AreBrowserAcceleratorKeysEnabled` 置真，
+  Ctrl+C / Ctrl+V / Ctrl+X / Ctrl+A / Ctrl+Z / Ctrl+Y 不靠开发模式就能用。这几键在页面侧由
+  `initClipboardKeys`（`studio/web/studio/studio-app.js`）在 capture 相位摘走，注入的那一套吞键 handler 收不到事件；
+  刷新键不在放行名单里，仍由 `initReloadHotkey` 接管。
+- `http://127.0.0.1` 不是安全上下文，`navigator.clipboard` 不存在。智能体对话页在发问的回合头右端与回答正文之后各放
+  一个「⧉ 复制」（`mkCopyBtn`）：点击走 `navigator.clipboard`，没有就退到 `execCommand`，两条路都不通写成
+  「✗ 复制失败」。按钮都落在正文文本之外，划词与取文本不会把按钮字样一起带走。
+- 输入框随内容长到 108px 封顶（`fitInput`）：发送即清空并把焦点交回输入框，空闲时按 Esc 清掉写了一半的一段。
+
 ## 开发模式
 
 - 开发模式是启动设置里的一项，存 `launcher_config.json` 的 `dev_mode`（缺省关）：勾上下次开机走
@@ -188,7 +202,8 @@ js_api（`check_setup` / `pick_root` / `pick_python` / `start_setup`），根目
   关掉，pywebview 在 debug 时会 `OpenDevToolsWindow`），按 F12 或右键「检查」手动开。
 - pywebview 在 CoreWebView2 建环境时把 `AreBrowserAcceleratorKeysEnabled`、`AreDefaultContextMenusEnabled`、
   `AreDevToolsEnabled` 全等于 debug：不带开发模式时，F5 / Ctrl+F5 / Ctrl+R 与 WebView2 右键菜单在窗口里都不出。
-  这三项建环境时定值，运行中的窗口改不了，勾完要重启窗口。
+  右键菜单与 DevTools 建环境时定值，运行中的窗口改不了，勾完要重启窗口；原生复制按键不在这个限制里，窗口
+  Shown 之后由 `enable_copy_keys` 补开（见「划词复制」）。
 - 刷新入口不依赖开发模式：Studio 页自己接管 F5 / Ctrl+F5 / Ctrl+R（`studio/web/studio/studio-app.js` 的
   `initReloadHotkey`），前端热同步（`tools/watch_web.py`）之后按一次就是新代码。
 

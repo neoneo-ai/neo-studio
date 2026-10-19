@@ -1140,6 +1140,20 @@ class StudioDesktop:
         if self.frameless and self._window is not None:
             set_window_frame(self._hwnd(), True)
 
+    def enable_copy_keys(self) -> None:
+        """非 dev 窗口放开原生复制按键：pywebview 把 AreBrowserAcceleratorKeysEnabled 绑在 debug 上
+        （platforms/edgechromium.py 建核时写死），Ctrl+C / Ctrl+V / Ctrl+A 在 WebView2 层就被吞了；
+        页面又跑在 http://127.0.0.1 非安全上下文，navigator.clipboard 不存在，复制没有原生出口。
+        建核后补开加速器键，DevTools 与右键菜单保持关，开发模式另开。"""
+        if self._window is None:
+            return
+        try:
+            settings = self._window.browser.webview.CoreWebView2.Settings
+        except AttributeError as e:
+            log_line(f"accelerator keys skipped: {e}")   # pywebview 内部结构变了，复制退回「⧉ 复制」按钮
+            return
+        settings.AreBrowserAcceleratorKeysEnabled = True
+
     def window_state(self) -> dict:
         """顶栏自绘标题栏要的状态：frameless 决定控件出不出，maximized / fullscreen 决定图标。
         pywebview 的 Window.maximized / .fullscreen 是建窗时的初值，运行中不跟着变，状态由桌面端自己记。"""
@@ -1671,6 +1685,9 @@ def main() -> int:
     kw = dict(width=geo.get("width", 1440), height=geo.get("height", 900),
              x=geo.get("x"), y=geo.get("y"), min_size=(900, 600),
              frameless=desktop.frameless, easy_drag=False, js_api=desktop,
+             # text_select 显式开：pywebview 默认 False，注入页面的 customize.js 给非表单元素
+             # preventDefault selectstart，聊天正文与右栏回答一个字都选不动，划词复制整条没有出口
+             text_select=True,
              background_color=WINDOW_BG)
     # easy_drag 关掉：pywebview 的简易拖动是全局 mousedown，无边框时点任何卡片都会拖着窗口跑；
     # 拖动改由顶栏空白处按下交回系统（StudioDesktop.win_start_drag）
@@ -1684,6 +1701,7 @@ def main() -> int:
     desktop._window = window
     # 原生窗口在 start() 里才建出来，建窗时拿不到 hwnd：无边框补边框挂在窗口显示之后
     window.events.shown += desktop.ensure_resizable_frame
+    window.events.shown += desktop.enable_copy_keys
     global _studio_window
     _studio_window = window
 

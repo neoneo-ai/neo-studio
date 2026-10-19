@@ -252,6 +252,24 @@ startable once the root is filled in.
   the style re-applied from the desktop's state; closing while fullscreen does not save geometry (it would store a
   full-screen rectangle and the window would fill the screen on the next start).
 
+## Text selection and copy
+
+- Text stays selectable: the window is created with `text_select=True` — pywebview defaults it to False and the
+  injected `customize.js` calls `preventDefault` on `selectstart` for every non-form element, so not a single
+  character of the chat text can be selected. Inside the chat scope `studio/web/agent-panel.css` hands `user-select`
+  back as `text`; buttons and form controls stay out of that rule.
+- The native copy keys are re-opened once the window is shown: `enable_copy_keys` sets
+  CoreWebView2's `AreBrowserAcceleratorKeysEnabled`, so Ctrl+C / Ctrl+V / Ctrl+X / Ctrl+A / Ctrl+Z / Ctrl+Y work
+  without dev mode. The page side grabs those keys in the capture phase in `initClipboardKeys`
+  (`studio/web/studio/studio-app.js`) so the injected key-swallowing handler never sees them; the reload keys stay
+  out of that allow-list and remain owned by `initReloadHotkey`.
+- `http://127.0.0.1` is not a secure context, so `navigator.clipboard` does not exist. The agent chat page puts a
+  "⧉ Copy" button at the right end of the ask's meta row and after the answer body (`mkCopyBtn`): the click goes
+  through `navigator.clipboard` and falls back to `execCommand`, and when neither works the label reads
+  "✗ Copy failed". Both buttons sit outside the body text, so selecting text never drags the button label along.
+- The input grows with its content up to a 108px cap (`fitInput`): sending clears the input and hands focus back to
+  it, and Esc clears a half-written entry while the panel is idle.
+
 ## Dev mode
 
 - Dev mode is a startup setting, stored as `dev_mode` in `launcher_config.json` (off by default): checking it makes
@@ -260,8 +278,10 @@ startable once the root is filled in.
   with F12 or the right-inspect context menu.
 - pywebview sets `AreBrowserAcceleratorKeysEnabled`, `AreDefaultContextMenusEnabled`, and `AreDevToolsEnabled` all
   equal to `debug` when the CoreWebView2 environment is created: without dev mode, F5 / Ctrl+F5 / Ctrl+R and the
-  WebView2 context menu do not work in the window. All three are fixed at environment creation and cannot be changed
-  on a running window, so the toggle takes effect after the window restarts.
+  WebView2 context menu do not work in the window. The context menu and DevTools are fixed at environment creation
+  and cannot be changed on a running window, so that toggle takes effect after the window restarts. The native copy
+  keys are not under that limit — `enable_copy_keys` re-opens them once the window is shown (see "Text selection and
+  copy").
 - The reload entry does not depend on dev mode: the Studio page takes over F5 / Ctrl+F5 / Ctrl+R itself
   (`initReloadHotkey` in `studio/web/studio/studio-app.js`), so one keypress after a frontend hot-sync
   (`tools/watch_web.py`) loads the new code.

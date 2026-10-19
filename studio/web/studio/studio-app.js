@@ -1445,6 +1445,18 @@ function initReloadHotkey() {
 }
 
 
+// ====== 复制粘贴按键放行 ======
+// 非 debug 窗口里 pywebview 注入的 customize.js 在 window 上挂了一个只放过 F12 与 DevTools 三键的
+// keydown，其余按键全部 preventDefault：Ctrl+C 划词复制、Ctrl+V 粘参考图、Ctrl+A 全选一起没了。
+// 在 capture 相位把这几个键摘走，customize.js 收不到事件就不会吞默认动作；刷新键不在放行名单里，
+// 仍由 initReloadHotkey 接管
+function initClipboardKeys() {
+    const CLIP_KEYS = new Set(["KeyC", "KeyV", "KeyX", "KeyA", "KeyZ", "KeyY"]);
+    document.addEventListener("keydown", (e) => {
+        if ((e.ctrlKey || e.metaKey) && !e.altKey && CLIP_KEYS.has(e.code)) e.stopImmediatePropagation();
+    }, true);
+}
+
 // ====== 显存/内存监控（导演页生成面板底部） ======
 // 只有导演生成会把显存吃满：读数挂在导演页，进导演页才轮询，离开即停
 function fmtBytes(n) {
@@ -1713,6 +1725,7 @@ if (view) {
         route();   // 视图先挂上：桌面端附件（顶栏状态位）失败不能连坐，窗口不至于停在只出顶栏的空白页
         initComfyStatus();
         initWindowChrome();
+        initClipboardKeys();
         initReloadHotkey();
         initAgentDock();
     }).catch(e => {

@@ -6,9 +6,10 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { resetEnv, flush, sleep, mockRoute, jsonResponse, sseResponse, click, inputText, fetchLog, dropFiles, makeFile, setConfirmAnswer, dialogs } from "./setup.mjs";
+import { resetEnv, flush, sleep, mockRoute, jsonResponse, sseResponse, click, keydown, inputText, fetchLog, dropFiles, makeFile, setConfirmAnswer, dialogs } from "./setup.mjs";
 import { appState } from "./mocks/comfy-app.mjs";
 import { app as studioApp } from "../../web/studio/shim/app.js";
+import { setLang } from "../../web/js/core/i18n.js";
 
 const webDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../web");
 const studioBody = fs.readFileSync(path.join(webDir, "studio", "index.html"), "utf8").match(/<body>([\s\S]*?)<\/body>/)[1];
@@ -1205,3 +1206,95 @@ test("导演页在用时切计划模式：不写配方就不重建配方列表�
 });
 
 
+
+test("发送后输入框清空并交回焦点，撑开的框高收回封顶值", async () => {
+    mountStudio();
+    await openStudio("#/gallery");
+    mockAgentStream([{ kind: "content", text: "已按素材库现状出图" }]);
+
+    const input = dock().querySelector(".neo-agent-input");
+    // jsdom 不排版：fitInput 读的就剩这一个数，撑开的高度要自己报
+    Object.defineProperty(input, "scrollHeight", { get: () => 300, configurable: true });
+    inputText(input, "一只橘猫\n".repeat(40));
+    input.style.height = "480px";   // 长文本撑开（或用户拖过）的框高
+    click(runBtn());
+    await flush(40);
+
+    assert.equal(input.value, "", "发送后输入框要清空，一条长提示词不留框");
+    assert.equal(document.activeElement, input, "焦点要交回输入框，下一句直接写");
+    assert.equal(input.style.height, "108px", "框高应收回封顶值，不留撑开的高度");
+});
+
+test("Esc 收掉写了一半的输入：框清空、框高收回，不发请求", async () => {
+    mountStudio();
+    await openStudio("#/gallery");
+    const input = dock().querySelector(".neo-agent-input");
+    Object.defineProperty(input, "scrollHeight", { get: () => 300, configurable: true });
+    inputText(input, "写到一半的长提示词\n".repeat(30));
+    input.style.height = "480px";
+    keydown(input, "Escape");
+
+    assert.equal(input.value, "", "Esc 应清空输入框");
+    assert.equal(input.style.height, "108px", "Esc 后框高收回封顶值");
+    assert.equal(agentCalls().length, 0, "Esc 不该发出请求");
+});
+
+test("发问与最终回答各带一个「⧉ 复制」按钮", async () => {
+    mountStudio();
+    await openStudio("#/gallery");
+    mockAgentStream([{ kind: "content", text: "已按素材库现状出图" }]);
+    inputText(dock().querySelector(".neo-agent-input"), "一只橘猫");
+    click(runBtn());
+    await until(() => dock().querySelector(".neo-agent-answer > .neo-agent-copy"), "最终回答要带复制按钮");
+
+    assert.equal(dock().querySelector(".neo-agent-meta .neo-agent-copy").textContent, "⧉ 复制",
+        "发问要有复制按钮");
+    assert.equal(dock().querySelector(".neo-agent-answer > .neo-agent-copy").textContent, "⧉ 复制",
+        "最终回答要有复制按钮");
+});
+
+test("复制按钮随语言切文案，复制不可用时写失败", async () => {
+    mountStudio();
+    setLang("en");   // resetEnv 里复位成 zh，切语言要在挂载之后
+    await openStudio("#/gallery");
+    mockAgentStream([{ kind: "content", text: "done cat image" }]);
+    inputText(dock().querySelector(".neo-agent-input"), "一只橘猫");
+    click(runBtn());
+    await until(() => dock().querySelector(".neo-agent-answer > .neo-agent-copy"), "最终回答要带复制按钮");
+
+    const askBtn = dock().querySelector(".neo-agent-meta .neo-agent-copy");
+    const finalBtn = dock().querySelector(".neo-agent-answer > .neo-agent-copy");
+    assert.equal(askBtn.textContent, "⧉ Copy", "英文界面下按钮文案要跟着切");
+    assert.equal(finalBtn.textContent, "⧉ Copy", "回答上的按钮同一份文案");
+
+    // 非安全上下文里 navigator.clipboard 缺席是常态：成功与失败两条路都要写得出名字
+    Object.defineProperty(window.navigator, "clipboard",
+        { value: { writeText: async () => {} }, configurable: true });
+    click(finalBtn);
+    await flush(1);
+    assert.equal(finalBtn.textContent, "✓ Copied", "写入成功要写已复制");
+
+    const nativeCopy = document.execCommand;
+    Object.defineProperty(window.navigator, "clipboard", {
+        value: { writeText: async () => { throw new Error("clipboard denied"); } },
+        configurable: true,
+    });
+    document.execCommand = () => false;   // navigator.clipboard 不可用时的原生退路，一并掐掉
+    click(askBtn);
+    await flush(1);
+    assert.equal(askBtn.textContent, "✗ Copy failed", "两条路都不通要写失败，不能演成已复制");
+    document.execCommand = nativeCopy;
+});
+
+test("复制键在 capture 相位摘走，宿主注入的吞键 handler 接不到", async () => {
+    mountStudio();
+    await openStudio("#/gallery");
+    const seen = [];
+    document.addEventListener("keydown", (e) => seen.push(e.code), true);   // 挂在放行之后，模拟注入的那一套
+    const input = dock().querySelector(".neo-agent-input");
+    for (const [key, code] of [["c", "KeyC"], ["v", "KeyV"], ["x", "KeyX"], ["a", "KeyA"],
+                               ["z", "KeyZ"], ["y", "KeyY"], ["l", "KeyL"]]) {
+        keydown(input, key, { code, ctrlKey: true });
+    }
+    assert.deepEqual(seen, ["KeyL"], `放行名单内的键不该再往下传：${seen.join(" ")}`);
+});

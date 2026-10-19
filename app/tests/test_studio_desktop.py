@@ -679,6 +679,32 @@ class StudioDesktopTests(unittest.TestCase):
         patcher.start()
         self.addCleanup(patcher.stop)
 
+    def test_copy_keys_open_the_webview_accelerators(self):
+        """Ctrl+C / Ctrl+V / Ctrl+A 要在生产窗口里活着：pywebview 把加速器键绑在 debug 上，
+        非 dev 窗口建核后补开，划词复制才有原生出口（页面跑在非安全上下文，navigator.clipboard 不存在）"""
+        desktop = app.StudioDesktop("u", None, 8188, pathlib.Path("root"))
+        settings = SimpleNamespace(AreBrowserAcceleratorKeysEnabled=False, AreDevToolsEnabled=False)
+        desktop._window = SimpleNamespace(browser=SimpleNamespace(
+            webview=SimpleNamespace(CoreWebView2=SimpleNamespace(Settings=settings))))
+        desktop.enable_copy_keys()
+        self.assertTrue(settings.AreBrowserAcceleratorKeysEnabled, "复制按键要放行")
+        self.assertFalse(settings.AreDevToolsEnabled, "开发者工具不跟着一起开")
+
+    def test_copy_keys_degrades_when_the_webview_controls_are_gone(self):
+        """pywebview 内部结构换了形状：显示处理器不能抛在事件里，留一行日志退回「⧉ 复制」按钮"""
+        logs = []
+        desktop = app.StudioDesktop("u", None, 8188, pathlib.Path("root"))
+        desktop._window = SimpleNamespace(browser=SimpleNamespace())
+        with patch.object(app, "log_line", lambda text: logs.append(text)):
+            desktop.enable_copy_keys()
+        self.assertEqual(len(logs), 1, f"要留一条说明退化的日志：{logs}")
+        self.assertIn("accelerator keys skipped", logs[0])
+
+    def test_copy_keys_before_the_window_exists_do_nothing(self):
+        desktop = app.StudioDesktop("u", None, 8188, pathlib.Path("root"))
+        desktop._window = None
+        desktop.enable_copy_keys()
+
     def test_go_studio_loads_studio_url(self):
         loader = MagicMock()
         rearm = MagicMock()
@@ -1727,6 +1753,23 @@ class MainWindowTests(unittest.TestCase):
         # 缺 .ico 时传 None，让 pywebview 回退到 pythonw 自己的图标，也不设 AppUserModelID
         self.assertIsNone(start.call_args.kwargs["icon"])
         set_id.assert_not_called()
+
+    def test_window_ships_with_text_selection(self):
+        """划词复制的前提：pywebview 默认 text_select=False，注入页面的 customize.js 给非表单元素
+        preventDefault selectstart，聊天正文一个字都选不动；加速器键与原生按键随窗口显示补开"""
+        window = _fake_window()
+        cw = MagicMock(return_value=window)
+        self.port_busy = True
+        with patch.object(app, "webview", _fake_webview(cw)), \
+             patch.object(app, "singleton", lambda: 7), \
+             patch.object(app, "DesktopServer", _fake_desktop_server()), \
+             patch.object(app, "probe", lambda port, timeout=3.0: True), \
+             patch.object(sys, "argv", ["studio_app.py"]):
+            self.assertEqual(app.main(), 0)
+        self.assertIs(True, cw.call_args.kwargs["text_select"], "要显式开划词选择")
+        desktop = cw.call_args.kwargs["js_api"]
+        self.assertIn(desktop.enable_copy_keys, window.events.shown.handlers,
+                      "复制按键补开要挂在窗口显示之后，建核前拿不到设置")
 
     def test_busy_port_never_spawns_second_comfy(self):
         # 用户现场：8188 已有一路 ComfyUI，但它的 /neo_studio/version 探不到（插件没加载或还在导入

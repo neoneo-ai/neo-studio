@@ -177,6 +177,47 @@ function buildChat(onOpenMcp, getContext) {
     const historyBox = mkEl("div", "neo-agent-history");
     historyBox.hidden = true;
 
+    // 会话标题就是这一轮的第一句话，钉在时间线顶上（sticky 见 agent-panel.css 的 .neo-agent-titlebar）。
+    // 时间线整栏重铺的三条路（新增会话、读回旧会话、删掉读回的会话）都要把它放回第一个子节点，
+    // sticky 才有吸得住的位置
+    const titleBar = mkEl("div", "neo-agent-titlebar");
+    titleBar.hidden = true;
+    function setConversationTitle(text) {
+        titleBar.textContent = text ? "💬 " + text : "";
+        titleBar.hidden = !text;
+    }
+
+    // 「⧉ 复制」挂在发问与回答上：桌面窗口的 WebView2 只在 dev 态放行 Ctrl+C 与右键菜单
+    // （app/studio_app.py 把 AreBrowserAcceleratorKeysEnabled / AreDefaultContextMenusEnabled 绑到 debug），
+    // 正文又常被宿主注入的 body{user-select:none;cursor:default} 压得选不动，复制这一句只剩按钮一条路。
+    // 局域网 IP 访问不是安全上下文，navigator.clipboard 不存在，回落 execCommand
+    function mkCopyBtn(host, getText) {
+        const btn = mkEl("button", "neo-agent-copy");
+        btn.type = "button";
+        btn.textContent = t("⧉ 复制");
+        btn.onclick = () => {
+            const feedback = (ok) => {
+                btn.textContent = ok ? t("✓ 已复制") : t("✗ 复制失败");
+                setTimeout(() => { btn.textContent = t("⧉ 复制"); }, 1500);
+            };
+            const value = getText();
+            if (typeof navigator.clipboard?.writeText === "function") {
+                navigator.clipboard.writeText(value).then(() => feedback(true), () => feedback(false));
+                return;
+            }
+            const ta = mkEl("textarea");
+            ta.value = value;
+            ta.style.cssText = "position:absolute;opacity:0";
+            document.body.appendChild(ta);
+            ta.select();
+            let ok = false;
+            try { ok = document.execCommand("copy"); } catch (e) { /* 环境不支持 execCommand，按失败处理 */ }
+            ta.remove();
+            feedback(ok);
+        };
+        host.appendChild(btn);
+    }
+
     const composer = mkEl("div", "neo-agent-composer");
     // 上下文条：宿主（studio-app.js）在切页 / 选配方 / 切绘画模式时把当前页签那一栏状态交过来。
     // 条上的 ✕ 是本轮取消位：用户点名「别管界面，照我写的做」时连这一栏也不交；点条恢复，
@@ -195,6 +236,14 @@ function buildChat(onOpenMcp, getContext) {
     const input = mkEl("textarea", "neo-agent-input");
     input.rows = 3;
     input.placeholder = t("描述要生成的提示词，或要改写的方向；可粘贴 / 拖入图片（含素材库卡片）");
+    // 框高跟着内容走：rows 只给初值，长提示词撑出来的高度在窗口里不会自己缩回，
+    // 拖拽手柄一并禁掉（agent-panel.css 的 resize: none），发送与 Esc 后收回初值
+    function fitInput() {
+        input.style.height = "";
+        const h = Math.min(input.scrollHeight || 0, 108);
+        if (h > 0) input.style.height = h + "px";
+    }
+
     // Cline 的口径：取消只在跑起来之后存在，整行铺在文本框上面，空闲时这一行不占位
     const cancelBar = mkEl("button", "neo-agent-cancelbar");
     cancelBar.type = "button";
@@ -431,10 +480,10 @@ function buildChat(onOpenMcp, getContext) {
 
     // 后端 /neo_agent/run 的时间线：计划一行、每次工具调用一张卡（参数 / 状态 / 结果），
     // 产物图铺在卡下，最终回答落在末尾
-    function agentTimeline(answer) {
+    function agentTimeline(answerBox) {
         const steps = mkEl("div", "neo-agent-steps");
         const final = mkEl("div", "neo-agent-answer-body");
-        answer.append(steps, final);
+        answerBox.append(steps, final);
         let card = null;
         let live = null;   // 当前工具卡上的采样预览播放器（live-preview.js），卡片切走即换
         const slot = (cls) => card && card.querySelector("." + cls);
@@ -545,6 +594,7 @@ function buildChat(onOpenMcp, getContext) {
                 const block = splitAnswerOptions(text);
                 final.innerHTML = renderMarkdown(block ? block.body : text);
                 if (block) renderAnswerOptions(final, block);
+                mkCopyBtn(answerBox, () => text);   // 按钮落在正文容器外，划正文文本时不带进剪贴板
             },
             // 「⏹ 取消」落在步骤区，不覆盖最终回答那一行；取消请求本身失败要留在时间线上——
             // 主按钮在断流收尾时就被「✨ 生成」盖回去，写在那里没人看得见
@@ -718,6 +768,8 @@ function buildChat(onOpenMcp, getContext) {
         }
         showTranscript();
         transcript.replaceChildren();
+        transcript.prepend(titleBar);
+        setConversationTitle(rec.text || t("（只给了附件图）"));
         if (empty.parentNode) empty.remove();
         const head = mkEl("div", "neo-agent-session-head");
         const title = mkEl("span", "neo-agent-session-title");
@@ -728,11 +780,7 @@ function buildChat(onOpenMcp, getContext) {
         const del = headBtn("🗑", t("删除这条会话"), async () => {
             if (!window.confirm(t("删除这条会话？"))) return;
             await postJson("/neo_agent/session/delete", { run_id: rec.run_id });
-            resumeId = "";
-            renderResumeBar();
-            transcript.replaceChildren();
-            transcript.appendChild(empty);
-            renderRecent();
+            resetTranscript();
             renderHistory();
         });
         head.append(title, hint, del);
@@ -747,9 +795,16 @@ function buildChat(onOpenMcp, getContext) {
     // 「＋ 新增会话」（Cline New Task 的口径）：时间线收回空态、resumeId 清零，下一条消息开一条新会话；
     // 后端保存的会话原样留下，空态照铺最近列表
     function newSession() {
-        transcript.replaceChildren();
-        transcript.appendChild(empty);
+        resetTranscript();
         showTranscript();
+    }
+
+    // 收回空态：标题行跟着收起并占住第一个子节点，下一条消息一到就换成新的第一句话
+    function resetTranscript() {
+        transcript.replaceChildren();
+        transcript.prepend(titleBar);
+        transcript.appendChild(empty);
+        titleBar.hidden = true;
         resumeId = "";
         renderResumeBar();
         renderRecent();
@@ -871,6 +926,16 @@ function buildChat(onOpenMcp, getContext) {
         // 按文件名给后端（与绘画页参考图同一口径），本地粘贴 / 选图仍是 data URI
         const images = attachments.map((a) => (a.data ? { kind: "data", data: a.data } : { kind: "input", value: a.input }));
         if (!text && !images.length) return;
+        // 发出去的话交进时间线留档，输入框立刻清出来：一条长提示词留在框里只挡下一句
+        input.value = "";
+        fitInput();
+        // 交回焦点：整段原文留在时间线里可复制，输入框清空后不抢焦点的话，下一句要点一下框才写得到
+        input.focus();
+
+        if (titleBar.hidden) {
+            transcript.prepend(titleBar);
+            setConversationTitle(text);
+        }
         const planMode = mode;
         const context = ctxOff ? null : (getContext && getContext()) || null;
         if (empty.parentNode) empty.remove();
@@ -881,6 +946,7 @@ function buildChat(onOpenMcp, getContext) {
             + (resumeId ? " · " + t("接上次会话") : "");
         const ask = mkEl("div", "neo-agent-ask");
         ask.textContent = text;
+        mkCopyBtn(meta, () => text);   // 复制钮贴回合头右端，提问原文保持干净
         turn.appendChild(meta);
         turn.appendChild(ask);
         if (images.length) {
@@ -927,11 +993,20 @@ function buildChat(onOpenMcp, getContext) {
         if (!running) return generate();
         return paused ? resumeRun() : pauseRun();
     };
+    input.addEventListener("input", fitInput);
+
     input.addEventListener("keydown", (e) => {
         if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
             e.stopPropagation();
             if (!running) generate();
+        }
+        if (e.key === "Escape" && !running) {
+            // Esc 收掉写了一半的长提示词：写过整段的原文在时间线里可复制，框里清空重开
+            e.preventDefault();
+            e.stopPropagation();
+            input.value = "";
+            fitInput();
         }
     });
 
