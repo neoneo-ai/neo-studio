@@ -397,9 +397,9 @@ class TestAgentLoop(unittest.TestCase):
         self.assertEqual(frames[3]["text"], "有 2 个配方，选一个跑整片")
         # 工具结果要以 tool 角色回填，第二轮 LLM 才看得见这一路
         self.assertIn("tool", [m["role"] for m in seen[1][0]])
-        # LLM 拿到的工具表就是 MCP 全集加右栏伪工具 ask_user（provider 认的 function 形态）
+        # LLM 拿到的工具表就是 MCP 全集加右栏伪工具 ask_user / finish_task（provider 认的 function 形态）
         self.assertEqual([t["function"]["name"] for t in seen[0][1]],
-                         ["director_recipes", "director_run", "ask_user"])
+                         ["director_recipes", "director_run", "ask_user", "finish_task"])
 
     def test_bad_tool_arguments_do_not_kill_the_turn(self):
         turns = [{"content": "",
@@ -434,7 +434,8 @@ class TestAgentLoop(unittest.TestCase):
             frames = _run(lambda emit: agent._run_agent(client, "在吗", emit, _runobj(client)))
         self.assertEqual([t["type"] for t in seen[0]], ["function"] * len(seen[0]))
         self.assertEqual(seen[0][0]["function"]["name"], "neo_status")
-        self.assertEqual(seen[0][-1]["function"]["name"], "ask_user")   # 右栏伪工具排在 MCP 之后
+        self.assertEqual([t["function"]["name"] for t in seen[0][-2:]],
+                         ["ask_user", "finish_task"])   # 右栏伪工具排在 MCP 之后（执行模式交收场）
         self.assertNotIn("inputSchema", seen[0][0])
         self.assertEqual(frames[-1]["text"], "服务在线")
 
@@ -1541,6 +1542,627 @@ class TestPauseResume(unittest.TestCase):
             self.assertTrue(run.resume.is_set())
         finally:
             agent._RUNS.pop(run.run_id, None)
+
+
+@skip
+class TestContextBudget(unittest.TestCase):
+    """上下文预算：超了从最旧的工具结果压成一行标记。只换 content、不删消息——
+    assistant.tool_calls 与 tool.tool_call_id 是成对的，删一条就是整请求 400。"""
+
+    @staticmethod
+    def _history(turns=6, payload_len=9000):
+        msgs = [{"role": "user", "content": "出个片"}]
+        for i in range(turns):
+            msgs.append({"role": "assistant", "content": f"第 {i} 轮",
+                         "tool_calls": [{"id": f"c{i}", "function": {"name": "list_gallery",
+                                                                     "arguments": "{}"}}]})
+            msgs.append({"role": "tool", "tool_call_id": f"c{i}", "content": "字" * payload_len})
+        return msgs
+
+    def test_over_budget_compresses_oldest_tool_payloads_first(self):
+        msgs = [{"role": "system", "content": "系统提示词"}] + self._history()
+        # 预算只够装下最新那一条工具结果：旧的全压掉，最近那一段里也只留最新那一条
+        budget = agent._msg_tokens(msgs[0]) + 5200
+        kept = agent._compress_messages(msgs, budget)
+        self.assertLessEqual(kept, budget)
+        tools = [m for m in msgs if m["role"] == "tool"]
+        marks = [m for m in tools if m["content"] == agent.COMPRESS_MARK]
+        self.assertTrue(marks, "超预算就要压出标记")
+        self.assertNotEqual(tools[-1]["content"], agent.COMPRESS_MARK)     # 本轮刚拿到的结果要接着用
+        self.assertNotEqual(msgs[0]["content"], agent.COMPRESS_MARK)       # 焦点链 / 偏好 / 清单都在 system 里
+        self.assertEqual([m["content"] for m in msgs if m["role"] == "user"], ["出个片"])
+
+    def test_compressing_the_same_budget_twice_compresses_no_more(self):
+        msgs = [{"role": "system", "content": "系统提示词"}] + self._history()
+        agent._compress_messages(msgs, 6000)
+        marks = sum(1 for m in msgs if m["content"] == agent.COMPRESS_MARK)
+        agent._compress_messages(msgs, 6000)
+        self.assertEqual(sum(1 for m in msgs if m["content"] == agent.COMPRESS_MARK), marks)
+
+    def test_tool_call_pairing_survives_compression(self):
+        msgs = [{"role": "system", "content": "s"}] + self._history(turns=8, payload_len=12000)
+        agent._compress_messages(msgs, 3000)
+        self.assertEqual(len(msgs), 1 + 1 + 16)      # 一条都不删
+        calls = [c["id"] for m in msgs for c in (m.get("tool_calls") or [])]
+        ids = [m["tool_call_id"] for m in msgs if m["role"] == "tool"]
+        self.assertEqual(sorted(calls), sorted(ids))
+        self.assertTrue(all(m["content"] for m in msgs if m["role"] == "tool"))
+
+    def test_attachment_image_counts_as_a_fixed_cost(self):
+        msg = {"role": "user", "content": [{"type": "image_url",
+                                            "image_url": {"url": "data:image/png;base64," + "AA" * 40000}},
+                                           {"type": "text", "text": "看这张图"}]}
+        self.assertLess(agent._msg_tokens(msg), 2000)   # base64 不逐字符计费，压缩不会被一张图带跑
+
+    def test_loop_reports_the_context_frame_once_it_gets_big(self):
+        turns = [{"content": "查素材",
+                  "tool_calls": [{"id": "c1", "function": {"name": "list_gallery", "arguments": "{}"}}]},
+                 {"content": "好了"}]
+        client = FakeClient({"list_gallery": {"items": ["字" * 4000] * 3}}, names=("list_gallery",))
+        with mock.patch.object(agent, "_chat", lambda m, t: turns.pop(0)), \
+             mock.patch.object(agent, "CONTEXT_BUDGET_TOKENS", 6000), \
+             mock.patch.object(agent, "CONTEXT_REPORT_FLOOR", 1500):
+            frames = _run(lambda emit: agent._run_agent(client, "看看素材", emit, _runobj(client)))
+        report = [f for f in frames if f.get("kind") == "context"]
+        self.assertTrue(report, "上下文到量级要在时间线上报出来")
+        self.assertLessEqual(report[0]["approx_tokens"], 6000)
+        self.assertLessEqual(report[0]["ratio"], 1.0)
+
+    def test_plain_text_history_keeps_its_pairing_after_a_compress(self):
+        history = self._history(turns=6, payload_len=9000)
+        seen = []
+
+        def chat(messages, tools):
+            seen.append(list(messages))
+            return {"content": "接着聊"}
+
+        client = FakeClient({}, names=("neo_status",))
+        with mock.patch.object(agent, "_chat", chat), \
+             mock.patch.object(agent, "CONTEXT_BUDGET_TOKENS", 8000):
+            _run(lambda emit: agent._run_agent(client, "再来一张", emit, _runobj(client),
+                                               "act", None, "", history))
+        msgs = seen[0]
+        self.assertEqual(msgs[0]["role"], "system")
+        self.assertEqual(msgs[-1]["role"], "user")
+        self.assertIn(agent.COMPRESS_MARK, [m["content"] for m in msgs if m["role"] == "tool"])
+        calls = [c["id"] for m in msgs for c in (m.get("tool_calls") or [])]
+        ids = [m["tool_call_id"] for m in msgs if m["role"] == "tool"]
+        self.assertEqual(sorted(calls), sorted(ids))
+
+
+@skip
+class TestUsageReport(unittest.TestCase):
+    """provider 每轮报的 token 统计要走到右栏与历史列表里，不能只留在后端日志。"""
+
+    def setUp(self):
+        _clear_sessions()
+        self.addCleanup(_clear_sessions)
+
+    def test_each_turns_usage_accumulates_into_a_frame(self):
+        turns = [{"content": "查状态", "usage": {"prompt_tokens": 900, "completion_tokens": 60,
+                                                 "total_tokens": 960},
+                  "tool_calls": [{"id": "c1", "function": {"name": "neo_status", "arguments": "{}"}}]},
+                 {"content": "好了", "usage": {"prompt_tokens": 950, "completion_tokens": 40,
+                                               "total_tokens": 990}}]
+        client = FakeClient({"neo_status": {"neo_studio": "1"}}, names=("neo_status",))
+        run = _runobj(client)
+        with mock.patch.object(agent, "_chat", lambda m, t: turns.pop(0)):
+            frames = _run(lambda emit: agent._run_agent(client, "在吗", emit, run))
+        usage = [f for f in frames if f.get("kind") == "usage"]
+        self.assertEqual(len(usage), 2)
+        self.assertEqual((usage[-1]["prompt_tokens"], usage[-1]["completion_tokens"],
+                          usage[-1]["total_tokens"], usage[-1]["turns"]), (1850, 100, 1950, 2))
+        self.assertFalse([m for m in run.messages if "usage" in m],
+                         "usage 是调用侧的统计，不该混进交回 provider 的对话原文")
+
+    def test_a_backend_that_reports_nothing_produces_no_frame(self):
+        client = FakeClient({}, names=("neo_status",))
+        with mock.patch.object(agent, "_chat", lambda m, t: {"content": "好了"}):
+            frames = _run(lambda emit: agent._run_agent(client, "在吗", emit, _runobj(client)))
+        self.assertFalse([f for f in frames if f.get("kind") == "usage"])
+
+    def test_usage_and_resume_from_land_in_the_session_file_and_the_summary(self):
+        self.addCleanup(_clear_sessions)
+        run = _fake_run(None)
+        run.usage = {"prompt_tokens": 1200, "completion_tokens": 80, "total_tokens": 1280, "turns": 3}
+        run.resume_from = 2
+        agent._save_session(run)
+        _path, rec = _saved_one()
+        self.assertEqual(rec["usage"]["total_tokens"], 1280)
+        row = agent._list_sessions()[0]
+        self.assertEqual(row["tokens"], 1280)
+        self.assertEqual(row["resume_from"], 2)
+
+
+@skip
+class TestFinishContract(unittest.TestCase):
+    """finish_task 是右栏的收场契约：产物名只认本次运行真出现过的工具结果。"""
+
+    @staticmethod
+    def _image_payload():
+        return {"images": [{"url": "/view?filename=a.png&type=output", "filename": "a.png"}]}
+
+    def test_finish_delivers_result_media_urls_and_next_options(self):
+        turns = [{"content": "出图",
+                  "tool_calls": [{"id": "c1", "function": {"name": "generate_image", "arguments": "{}"}}]},
+                 {"content": "", "tool_calls": [{"id": "c2", "function": {
+                     "name": "finish_task",
+                     "arguments": json.dumps({"result": "出了 1 张橘猫", "media": ["a.png"],
+                                              "next_options": ["再来一张", "换个尺寸"]})}}]},
+                 {"content": "这一轮不该跑到"}]
+        client = FakeClient({"generate_image": self._image_payload()}, names=("generate_image",))
+        with mock.patch.object(agent, "_chat", lambda m, t: turns.pop(0)):
+            frames = _run(lambda emit: agent._run_agent(client, "出张图", emit, _runobj(client)))
+        finish = [f for f in frames if f.get("kind") == "finish"]
+        self.assertEqual(len(finish), 1)
+        self.assertEqual(finish[0]["text"], "出了 1 张橘猫")
+        self.assertEqual([m["url"] for m in finish[0]["media"]], ["/view?filename=a.png&type=output"])
+        self.assertEqual(finish[0]["options"], ["再来一张", "换个尺寸"])
+        self.assertEqual(frames[-1]["kind"], "finish")     # 收场即退出双层循环，不再喂下一轮
+        self.assertFalse([f for f in frames if f.get("text") == "这一轮不该跑到"])
+
+    def test_a_fabricated_media_name_is_rejected_with_the_names_that_exist(self):
+        turns = [{"content": "出图",
+                  "tool_calls": [{"id": "c1", "function": {"name": "generate_image", "arguments": "{}"}}]},
+                 {"content": "", "tool_calls": [{"id": "c2", "function": {
+                     "name": "finish_task",
+                     "arguments": json.dumps({"result": "好了", "media": ["橘猫_神图.png"]})}}]},
+                 {"content": "只出过 a.png，产物名我照工具结果写"}]
+        client = FakeClient({"generate_image": self._image_payload()}, names=("generate_image",))
+        with mock.patch.object(agent, "_chat", lambda m, t: turns.pop(0)):
+            frames = _run(lambda emit: agent._run_agent(client, "出张图", emit, _runobj(client)))
+        rejected = [f for f in frames if f.get("kind") == "tool_result" and f["tool"] == "finish_task"]
+        self.assertTrue(rejected[0]["text"].startswith("[error]"))
+        self.assertIn("橘猫_神图.png", rejected[0]["text"])
+        self.assertIn("a.png", rejected[0]["text"])       # 拒回要把真出现过的名字报回去
+        self.assertFalse([f for f in frames if f.get("kind") == "finish"])
+        self.assertEqual(frames[-1]["text"], "只出过 a.png，产物名我照工具结果写")
+
+    def test_plan_mode_refuses_to_finish(self):
+        turns = [{"content": "", "tool_calls": [{"id": "c1", "function": {
+            "name": "finish_task", "arguments": json.dumps({"result": "已完成"})}}]},
+            {"content": "计划写好了"}]
+        client = FakeClient({}, names=("neo_status",))
+        with mock.patch.object(agent, "_chat", lambda m, t: turns.pop(0)):
+            frames = _run(lambda emit: agent._run_agent(client, "先出个计划", emit,
+                                                        _runobj(client), "plan"))
+        rejected = [f for f in frames if f.get("kind") == "tool_result" and f["tool"] == "finish_task"]
+        self.assertIn("计划模式不收场", rejected[0]["text"])
+        self.assertFalse([f for f in frames if f.get("kind") == "finish"])
+
+    def test_a_model_that_never_calls_finish_task_still_gets_the_old_path(self):
+        """弱模型不调 finish_task 时，「没有 tool_calls 就是收场」这条路要照旧走得通。"""
+        turns = [{"content": "查状态",
+                  "tool_calls": [{"id": "c1", "function": {"name": "neo_status", "arguments": "{}"}}]},
+                 {"content": "服务在线，没出图"}]
+        client = FakeClient({"neo_status": {"neo_studio": "1"}}, names=("neo_status",))
+        with mock.patch.object(agent, "_chat", lambda m, t: turns.pop(0)):
+            frames = _run(lambda emit: agent._run_agent(client, "在吗", emit, _runobj(client)))
+        self.assertEqual(frames[-1]["kind"], "content")
+        self.assertEqual(frames[-1]["text"], "服务在线，没出图")
+        self.assertFalse([f for f in frames if f.get("kind") == "finish"])
+
+    def test_finish_without_result_is_rejected_so_the_turn_continues(self):
+        turns = [{"content": "", "tool_calls": [{"id": "c1", "function": {
+            "name": "finish_task", "arguments": json.dumps({"media": []})}}]},
+            {"content": "我出了 1 张，产物是……"}]
+        client = FakeClient({}, names=("neo_status",))
+        with mock.patch.object(agent, "_chat", lambda m, t: turns.pop(0)):
+            frames = _run(lambda emit: agent._run_agent(client, "出图", emit, _runobj(client)))
+        rejected = [f for f in frames if f.get("kind") == "tool_result" and f["tool"] == "finish_task"]
+        self.assertIn("缺 result", rejected[0]["text"])
+        self.assertEqual(frames[-1]["kind"], "content")
+
+
+@skip
+class TestPlanContract(unittest.TestCase):
+    """write_plan 是计划模式的交付物：清单要在时间线上铺出来，切到执行模式后接回来逐条划掉。"""
+
+    def test_write_plan_lands_a_plan_steps_frame_and_blocks_nothing(self):
+        turns = [{"content": "查配方",
+                  "tool_calls": [{"id": "c1", "function": {"name": "director_recipes", "arguments": "{}"}}]},
+                 {"content": "写好计划", "tool_calls": [{"id": "c2", "function": {
+                     "name": "write_plan",
+                     "arguments": json.dumps({"steps": [{"tool": "generate_image",
+                                                         "key_args": "skill=cat 1024x1024",
+                                                         "note": "先出设定图"},
+                                                        {"tool": "director_run",
+                                                         "key_args": "recipe=cat_walk"}]})}}]},
+                 {"content": "计划写好了，切到执行模式就能跑"}]
+        client = FakeClient({"director_recipes": {"count": 0, "recipes": []}},
+                            names=("director_recipes", "generate_image", "director_run"))
+        run = _runobj(client)
+        with mock.patch.object(agent, "_chat", lambda m, t: turns.pop(0)):
+            frames = _run(lambda emit: agent._run_agent(client, "出个片", emit, run, "plan"))
+        plan = [f for f in frames if f.get("kind") == "plan_steps"]
+        self.assertEqual(len(plan), 1)
+        self.assertEqual([s["tool"] for s in plan[0]["steps"]], ["generate_image", "director_run"])
+        self.assertFalse(any(s["done"] for s in plan[0]["steps"]))
+        self.assertEqual(frames[-1]["text"], "计划写好了，切到执行模式就能跑")
+
+    def test_a_tool_name_that_is_not_in_the_table_is_rejected(self):
+        """名字写错的一步在计划里就是一条跑不动的：拒回并说清不在工具表里。"""
+        turns = [{"content": "", "tool_calls": [{"id": "c1", "function": {
+            "name": "write_plan",
+            "arguments": json.dumps({"steps": [{"tool": "make_movie_now", "note": "出片"}]})}}]},
+            {"content": "照真名重写"}]
+        client = FakeClient({}, names=("director_run",))
+        run = _runobj(client)
+        with mock.patch.object(agent, "_chat", lambda m, t: turns.pop(0)):
+            frames = _run(lambda emit: agent._run_agent(client, "出个片", emit, run, "plan"))
+        rejected = [f for f in frames if f.get("kind") == "tool_result" and f["tool"] == "write_plan"]
+        self.assertIn("不在工具表里", rejected[0]["text"])
+        self.assertIn("make_movie_now", rejected[0]["text"])
+        self.assertFalse(run.plan_steps)
+
+    def test_write_plan_is_rejected_in_act_mode(self):
+        turns = [{"content": "", "tool_calls": [{"id": "c1", "function": {
+            "name": "write_plan", "arguments": json.dumps({"steps": [{"tool": "neo_status"}]})}}]},
+            {"content": "直接做了"}]
+        client = FakeClient({}, names=("neo_status",))
+        with mock.patch.object(agent, "_chat", lambda m, t: turns.pop(0)):
+            frames = _run(lambda emit: agent._run_agent(client, "做掉", emit, _runobj(client), "act"))
+        rejected = [f for f in frames if f.get("kind") == "tool_result" and f["tool"] == "write_plan"]
+        self.assertIn("只在计划模式用", rejected[0]["text"])
+
+    def test_the_saved_plan_comes_back_into_act_mode_and_marks_are_emitted(self):
+        """计划模式交出的清单在切到执行模式续聊时接回来：照它跑，跑完一条划掉一条并发帧。"""
+        plan = [{"tool": "neo_status", "key_args": "", "note": "先看服务", "done": False},
+                {"tool": "generate_image", "key_args": "skill=cat", "note": "再出图", "done": False}]
+        body = json.dumps({"version": 1, "run_id": "a" * 32, "created": time.time(), "mode": "plan",
+                           "status": "succeeded", "focus": {}, "plan_steps": plan,
+                           "input": {"text": "出个片", "images": [], "context": ""},
+                           "frames": [], "messages": [{"role": "user", "content": "出个片"},
+                                                      {"role": "assistant", "content": "计划写好了"}]})
+        agent.AGENT_SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+        (agent.AGENT_SESSIONS_DIR / f"{time.strftime('%Y%m%d-%H%M%S')}-{'a' * 32}.json").write_text(
+            body, encoding="utf-8")
+        self.addCleanup(_clear_sessions)
+        turns = [{"content": "先看服务",
+                  "tool_calls": [{"id": "c1", "function": {"name": "neo_status", "arguments": "{}"}}]},
+                 {"content": "两项都做完了"}]
+        client = FakeClient({"neo_status": {"neo_studio": "1"}}, names=("neo_status", "generate_image"))
+        seen = []
+
+        def chat(messages, tools):
+            seen.append(messages[0]["content"])
+            return turns.pop(0)
+
+        with mock.patch.object(agent, "McpClient", lambda base, timeout=30: client), \
+             mock.patch.object(agent, "_chat", chat):
+            resp = asyncio.run(agent.agent_run(TestRoutes._req(
+                {"text": "照计划跑", "mode": "act", "resume": "a" * 32})))
+            lines = _data_lines(resp)
+        self.assertIn("[DONE]", lines[-1])
+        self.assertIn("执行清单", seen[0])
+        self.assertIn("neo_status", seen[0])
+        self.assertIn("✅ 已完成", seen[1])       # 划掉的那一条在第二轮请求里就看得见
+
+    def test_a_failed_tool_does_not_mark_a_plan_step_done(self):
+        """[error] 那一发没产出东西：划成已完成就是报假进度。"""
+        run = _runobj(FakeClient({}, names=("neo_status",)))
+        run.plan_steps = [{"tool": "neo_status", "key_args": "", "note": "", "done": False}]
+        self.assertFalse(agent._plan_mark(run, "neo_status", "[error] 技能不存在：cat"))
+        self.assertFalse(run.plan_steps[0]["done"])
+        self.assertTrue(agent._plan_mark(run, "neo_status", json.dumps({"neo_studio": "1"})))
+        self.assertTrue(run.plan_steps[0]["done"])
+
+
+def _clear_prefs():
+    agent.AGENT_PREFS_FILE.unlink(missing_ok=True)
+
+
+def _run_answered(run, answer: str, text: str = "出个片", mode: str = "act") -> list:
+    """跑一轮循环，把确认卡上的问句在 ask 帧落地那一刻就答掉：挂在 ASK_WAIT_SEC 的超时上
+    就是拿真实时限换一次收场。"""
+    frames = []
+
+    async def emit(frame):
+        frames.append(frame)
+        ask = run.asks.get(frame.get("ask_id") or "")
+        if frame.get("kind") == "ask" and ask is not None:
+            ask["text"] = answer
+            ask["event"].set()
+
+    async def main():
+        await agent._run_agent(run.client, text, emit, run, mode)
+
+    asyncio.run(main())
+    return frames
+
+
+@skip
+class TestUserPrefs(unittest.TestCase):
+    """用户级偏好：一台机器一份，落在 configs/agent_prefs.json。读入口按形态收净，写盘原子，
+    缺文件回代码里的默认值；偏好段在系统提示词里排在焦点链之后兜底。"""
+
+    def setUp(self):
+        _clear_prefs()
+        self.addCleanup(_clear_prefs)
+
+    def test_the_film_gate_toggle_defaults_off(self):
+        """默认拦住整片会把「✨ 生成 → 出片」这条今天就在跑的链路变成每次多点一下。"""
+        self.assertFalse(agent.DEFAULT_PREFS["confirm_films"])
+        self.assertFalse(_runobj(None).prefs["confirm_films"])
+
+    def test_clean_prefs_keeps_the_right_shapes_and_drops_the_rest(self):
+        good = agent._clean_prefs({"preferred_skill": "cat-anime_2.1", "preferred_family": "krea2",
+                                   "preferred_size": "16:9", "style_notes": "冷色",
+                                   "avoid": "畸变手", "confirm_films": True})
+        self.assertEqual((good["preferred_skill"], good["preferred_family"], good["preferred_size"]),
+                         ("cat-anime_2.1", "krea2", "16:9"))
+        bad = agent._clean_prefs({"preferred_skill": "../../secrets", "preferred_family": "中文家族",
+                                  "preferred_size": "1024", "style_notes": "字" * 5000,
+                                  "avoid": None, "confirm_films": "yes", "gallery_path": "D:\\x"})
+        self.assertEqual((bad["preferred_skill"], bad["preferred_family"], bad["preferred_size"]),
+                         ("", "", ""))
+        self.assertEqual(len(bad["style_notes"]), agent.PREFS_TEXT_MAX + 1)
+        self.assertEqual(bad["avoid"], "")
+        self.assertTrue(bad["confirm_films"])
+        self.assertEqual(sorted(bad), sorted(agent.DEFAULT_PREFS))
+
+    def test_a_missing_or_half_written_prefs_file_reads_the_defaults(self):
+        self.assertEqual(agent._load_prefs(), agent.DEFAULT_PREFS)
+        self.assertFalse(agent.AGENT_PREFS_FILE.exists())     # 读不往数据根落一份默认副本
+        agent.AGENT_PREFS_FILE.write_text('{"preferred_skill": "cat"', encoding="utf-8")
+        self.assertEqual(agent._load_prefs(), agent.DEFAULT_PREFS)
+
+    def test_save_prefs_writes_atomically_and_reads_back_the_cleaned_copy(self):
+        saved = agent._save_prefs({"preferred_skill": "cat", "preferred_size": "1024x1024",
+                                   "style_notes": "字" * 5000, "confirm_films": True, "junk": 1})
+        self.assertEqual(json.loads(agent.AGENT_PREFS_FILE.read_text(encoding="utf-8")), saved)
+        self.assertEqual(agent._load_prefs(), saved)
+        self.assertEqual(len(saved["style_notes"]), agent.PREFS_TEXT_MAX + 1)
+        self.assertFalse((agent.AGENT_PREFS_FILE.parent
+                          / (agent.AGENT_PREFS_FILE.name + ".tmp")).exists())
+
+    def test_the_prefs_block_is_silent_when_the_user_set_nothing(self):
+        """提示词里一段空的「偏好」是噪声。"""
+        self.assertEqual(agent._prefs_block({}), "")
+        self.assertEqual(agent._prefs_block(agent.DEFAULT_PREFS), "")
+        self.assertIn("出片先确认", agent._prefs_block({"confirm_films": True}))
+
+
+    def test_the_prefs_block_names_the_role_it_plays(self):
+        block = agent._prefs_block({"preferred_skill": "cat", "preferred_size": "1024x1024",
+                                    "avoid": "畸变手"})
+        self.assertIn("偏好技能=cat", block)
+        self.assertIn("要避开=畸变手", block)
+        self.assertIn("本会话的既定事实比这一段更近", block)
+        self.assertIn("list_skills", block)
+        self.assertNotIn("出片先确认", block)
+
+    def test_system_prompt_puts_the_prefs_after_the_focus_chain(self):
+        text = agent.system_prompt("act", "", {"skill_id": "cat", "seed": 7},
+                                   None, {"preferred_skill": "dog", "preferred_size": "16:9"})
+        self.assertIn("技能=cat", text)
+        self.assertIn("偏好技能=dog", text)
+        self.assertLess(text.index("本会话的既定事实"), text.index("用户级偏好"))
+
+    def test_prefs_routes_read_and_save_without_a_comfyui_runtime(self):
+        got = json.loads(asyncio.run(agent.agent_prefs_get(TestRoutes._req({}))).body)
+        self.assertEqual((got["ok"], got["prefs"]), (True, agent.DEFAULT_PREFS))
+        body = json.loads(asyncio.run(agent.agent_prefs_save(TestRoutes._req(
+            {"preferred_skill": "cat", "preferred_size": "99999"}))).body)
+        self.assertTrue(body["ok"])
+        self.assertEqual((body["prefs"]["preferred_skill"], body["prefs"]["preferred_size"]),
+                         ("cat", ""))
+        self.assertEqual(agent._load_prefs()["preferred_skill"], "cat")
+        bad = asyncio.run(agent.agent_prefs_save(TestRoutes._req({}, valid_json=False)))
+        self.assertEqual(bad.status, 400)
+
+    def test_a_run_snapshots_the_saved_prefs_into_the_system_prompt(self):
+        agent._save_prefs({"preferred_skill": "cat", "style_notes": "冷色"})
+        seen = []
+
+        def chat(messages, tools):
+            seen.append(messages[0]["content"])
+            return {"content": "好了"}
+
+        with mock.patch.object(agent, "McpClient", lambda base, timeout=30:
+                               FakeClient({}, names=("neo_status",))), \
+             mock.patch.object(agent, "_chat", chat):
+            lines = _drive(agent.agent_run(TestRoutes._req({"text": "出张图"})))
+        self.assertEqual(lines[-1], "[DONE]")
+        self.assertIn("偏好技能=cat", seen[0])
+        self.assertIn("风格偏好=冷色", seen[0])
+
+
+@skip
+class TestFilmGate(unittest.TestCase):
+    """出片级工具的量级确认卡：一次整片是三段 × 每段数分钟起步，跑下去再喊停就晚了一半，
+    确认要在入队之前——挡下之后才发任务就等于没挡。"""
+
+    @staticmethod
+    def _turns():
+        return [{"content": "出片", "tool_calls": [{"id": "c1", "function": {
+            "name": "director_run",
+            "arguments": json.dumps({"recipe": "cat_walk", "segments": [{}, {}]})}}]},
+            {"content": "这一发交回来了"}]
+
+    def test_a_refused_gate_never_queues_the_task(self):
+        turns = self._turns()
+        client = FakeClient({"director_run": {"status": "succeeded", "filename": "f.mp4"}},
+                            names=("director_run",))
+        run = _runobj(client)
+        run.prefs = dict(agent.DEFAULT_PREFS, confirm_films=True)
+        with mock.patch.object(agent, "_chat", lambda m, t: turns.pop(0)):
+            frames = _run_answered(run, "⏹ 先不跑")
+        asks = [f for f in frames if f.get("kind") == "ask"]
+        self.assertEqual(len(asks), 1)
+        self.assertEqual(asks[0]["options"], list(agent.GATE_OPTIONS))
+        self.assertIn("要跑 director_run", asks[0]["text"])
+        self.assertIn("2 段", asks[0]["text"])
+        self.assertIn("cat_walk", asks[0]["text"])
+        self.assertEqual(client.calls, [], "确认卡挡下之后才发任务就等于没挡")
+        refused = [f for f in frames if f.get("kind") == "tool_result" and f["tool"] == "director_run"]
+        self.assertTrue(refused[0]["text"].startswith("[skipped]"))
+        self.assertIn("不要自己重发同一发", refused[0]["text"])
+        self.assertEqual(frames[-1]["text"], "这一发交回来了")
+
+    def test_the_gate_runs_the_tool_when_the_user_says_yes(self):
+        turns = self._turns()
+        client = FakeClient({"director_run": {"status": "succeeded", "filename": "f.mp4"}},
+                            names=("director_run",))
+        run = _runobj(client)
+        run.prefs = dict(agent.DEFAULT_PREFS, confirm_films=True)
+        with mock.patch.object(agent, "_chat", lambda m, t: turns.pop(0)):
+            frames = _run_answered(run, "✅ 跑这一发")
+        self.assertEqual([c[0] for c in client.calls], ["director_run"])
+        done = [f for f in frames if f.get("kind") == "tool_result" and f["tool"] == "director_run"]
+        self.assertIn("succeeded", done[0]["text"])
+
+    def test_no_gate_when_the_toggle_is_off(self):
+        turns = self._turns()
+        client = FakeClient({"director_run": {"status": "succeeded", "filename": "f.mp4"}},
+                            names=("director_run",))
+        with mock.patch.object(agent, "_chat", lambda m, t: turns.pop(0)):
+            frames = _run(lambda emit: agent._run_agent(client, "出个片", emit, _runobj(client)))
+        self.assertFalse([f for f in frames if f.get("kind") == "ask"])
+        self.assertEqual([c[0] for c in client.calls], ["director_run"])
+
+    def test_a_single_image_never_pays_for_the_gate(self):
+        """确认卡只管出片四类：出一张图是几秒的量级，为它多点一下就是纯摩擦。"""
+        turns = [{"content": "出图", "tool_calls": [{"id": "c1", "function": {
+            "name": "generate_image", "arguments": json.dumps({"prompt": "橘猫"})}}]},
+            {"content": "好了"}]
+        client = FakeClient({"generate_image": {"success": True, "images": []}},
+                            names=("generate_image",))
+        run = _runobj(client)
+        run.prefs = dict(agent.DEFAULT_PREFS, confirm_films=True)
+        with mock.patch.object(agent, "_chat", lambda m, t: turns.pop(0)):
+            frames = _run_answered(run, "⏹ 先不跑")
+        self.assertFalse([f for f in frames if f.get("kind") == "ask"])
+        self.assertEqual([c[0] for c in client.calls], ["generate_image"])
+
+    def test_the_cost_line_only_names_the_numbers_that_are_in_the_args(self):
+        """卡上报一个编出来的数比不给数更坏——用户是照这个数决定跑不跑的。"""
+        self.assertEqual(agent._gate_cost("director_run",
+                                          {"segments": [{}, {}], "duration_sec": 5}),
+                         "2 段 · 秒/段 5")
+        self.assertEqual(agent._gate_cost("segment_run", {"segment": 2, "recipe": "cat_walk"}),
+                         "第 2 段 · cat_walk")
+        self.assertEqual(agent._gate_cost("director_run",
+                                          {"segments": [], "width": 768, "height": 1024}),
+                         "768x1024")
+        self.assertEqual(agent._gate_cost("director_run", {}), "参数在配方里")
+
+    def test_the_gate_recognises_a_refusal_and_not_a_timeout(self):
+        self.assertTrue(agent._gate_refused("⏹ 先不跑"))
+        self.assertTrue(agent._gate_refused("这发别跑"))
+        self.assertFalse(agent._gate_refused("✅ 跑这一发"))
+        self.assertFalse(agent._gate_refused("[timeout] 30 分钟没等到回答"))
+        self.assertFalse(agent._gate_refused(""))
+
+
+@skip
+class TestFocusFrame(unittest.TestCase):
+    """焦点链要在时间线上交回界面：右栏的「设为偏好」照这一份填，用户不用自己抄技能名与尺寸。"""
+
+    @staticmethod
+    def _frames(turns, replies, names):
+        client = FakeClient(replies, names=names)
+        with mock.patch.object(agent, "_chat", lambda m, t: turns.pop(0)), _no_poll_sleep():
+            return _run(lambda emit: agent._run_agent(client, "出张图", emit, _runobj(client)))
+
+    def test_a_successful_generation_emits_a_focus_frame(self):
+        turns = [{"content": "出图", "tool_calls": [{"id": "c1", "function": {
+            "name": "generate_image", "arguments": json.dumps({"skill_id": "cat"})}}]},
+            {"content": "好了"}]
+        frames = self._frames(
+            turns, {"generate_image": {"task_id": "t-1", "status": "queued"},
+                    "task_status": {"status": "succeeded", "skill_id": "cat", "seed": 7,
+                                    "images": [{"filename": "neo_1.png", "url": "/view?f=neo_1.png"}]}},
+            ("generate_image", "task_status"))
+        focus = [f for f in frames if f.get("kind") == "focus"]
+        self.assertEqual(len(focus), 1)
+        self.assertEqual((focus[0]["focus"]["skill_id"], focus[0]["focus"]["seed"],
+                          focus[0]["focus"]["images"]), ("cat", 7, ["neo_1.png"]))
+
+    def test_a_failed_generation_emits_no_focus_frame(self):
+        turns = [{"content": "出图", "tool_calls": [{"id": "c1", "function": {
+            "name": "generate_image", "arguments": json.dumps({"skill_id": "cat"})}}]},
+            {"content": "炸了"}]
+        frames = self._frames(turns, {"generate_image": {"task_id": "t-1", "status": "queued"},
+                                      "task_status": {"status": "failed"}},
+                              ("generate_image", "task_status"))
+        self.assertFalse([f for f in frames if f.get("kind") == "focus"])
+
+    def test_a_read_only_tool_emits_no_focus_frame(self):
+        turns = [{"content": "查状态", "tool_calls": [{"id": "c1", "function": {
+            "name": "neo_status", "arguments": "{}"}}]}, {"content": "好了"}]
+        frames = self._frames(turns, {"neo_status": {"neo_studio": "1"}}, ("neo_status",))
+        self.assertFalse([f for f in frames if f.get("kind") == "focus"])
+
+    def test_the_focus_frame_is_not_repeated_when_the_facts_do_not_move(self):
+        call = {"id": "c1", "function": {"name": "generate_image",
+                                         "arguments": json.dumps({"skill_id": "cat"})}}
+        payload = {"status": "succeeded", "skill_id": "cat", "seed": 7,
+                   "images": [{"filename": "neo_1.png"}]}
+        turns = [{"content": "出图", "tool_calls": [call]},
+                 {"content": "再出", "tool_calls": [dict(call, id="c2")]},
+                 {"content": "好了"}]
+        frames = self._frames(turns, {"generate_image": payload}, ("generate_image",))
+        self.assertEqual(len([f for f in frames if f.get("kind") == "focus"]), 1)
+
+
+@skip
+class TestResumeFrom(unittest.TestCase):
+    """「从这条消息重新开始」：连着 resume 给那条会话里第 N 条用户消息（1 起），那一条与它之后
+    的原文整段丢掉，本轮的输入从那个点重新长出去。"""
+
+    def setUp(self):
+        _clear_sessions()
+        self.addCleanup(_clear_sessions)
+        run = _fake_run(None, text="第一问")
+        run.run_id = "b" * 32
+        run.messages = [{"role": "user", "content": "第一问"},
+                        {"role": "assistant", "content": "第一答"},
+                        {"role": "user", "content": "第二问"},
+                        {"role": "assistant", "content": "第二答"}]
+        agent._save_session(run)
+        self.run_id = run.run_id
+
+    def _start(self, body):
+        seen = []
+
+        def chat(messages, tools):
+            seen.append([dict(m) for m in messages])
+            return {"content": "好了"}
+
+        with mock.patch.object(agent, "McpClient", lambda base, timeout=30:
+                               FakeClient({}, names=("neo_status",))), \
+             mock.patch.object(agent, "_chat", chat):
+            lines = _drive(agent.agent_run(TestRoutes._req(body)))
+        self.assertEqual(lines[-1], "[DONE]")
+        return lines, seen[0]
+
+    def test_from_drops_that_message_and_everything_after_it(self):
+        _lines, msgs = self._start({"text": "重问一次", "resume": self.run_id, "from": 2})
+        self.assertEqual([m["role"] for m in msgs], ["system", "user", "assistant", "user"])
+        self.assertEqual(msgs[1]["content"], "第一问")
+        self.assertEqual(msgs[-1]["content"], "重问一次")
+        self.assertFalse([m for m in msgs if "第二问" in str(m.get("content"))])
+
+    def test_from_one_restarts_from_an_empty_history(self):
+        _lines, msgs = self._start({"text": "重问一次", "resume": self.run_id, "from": 1})
+        self.assertEqual([m["role"] for m in msgs], ["system", "user"])
+
+    def test_a_from_that_is_not_a_message_number_is_rejected_before_the_first_frame(self):
+        for body in ({"text": "x", "resume": self.run_id, "from": 5},
+                     {"text": "x", "resume": self.run_id, "from": "第二问"},
+                     {"text": "x", "from": 2}):
+            lines = _data_lines(asyncio.run(agent.agent_run(TestRoutes._req(body))))
+            self.assertIn("[ERROR]", lines[0], body)
+            self.assertEqual(lines[-1], "[DONE]")
+
+    def test_the_new_run_records_which_message_it_restarted_from(self):
+        lines, _msgs = self._start({"text": "重问一次", "resume": self.run_id, "from": 2})
+        run_id = json.loads(lines[0])["run_id"]
+        rec = agent._load_session(run_id)
+        self.assertEqual((rec["resume_of"], rec["resume_from"]), (self.run_id, 2))
+        row = [r for r in agent._list_sessions() if r["run_id"] == run_id][0]
+        self.assertEqual(row["resume_from"], 2)
 
 
 if __name__ == "__main__":

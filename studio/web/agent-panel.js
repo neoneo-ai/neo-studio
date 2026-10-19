@@ -5,7 +5,7 @@
  * 计划 / 工具卡 / 状态 / 产物图 / 暂停 / 继续 / 最终回答），后端那一侧是 MCP 客户端，工具经
  * mcp_server 的 JSON-RPC 走，右栏不直接调后端函数；右栏不再选技能，界面当前状态（当前页 /
  * 当前导演配方 / 绘画页模式 / 素材库目录）由宿主随请求体交给后端进系统提示词。MCP 区
- * （注册表 / 连接 / 工具调用）交给设置页的「MCP 服务」栏，右栏只在输入框底栏留一个跳转入口。
+ * （注册表 / 连接 / 工具调用）交给设置页的「MCP 服务」栏，右栏只在输入框底栏留一个跳转入口；用户级偏好走同一条路，表单在设置页「智能体偏好」栏，右栏的 ⚙ 与焦点链上的「设为偏好」都只做跳转。
  * 输入框按 Cline 的口径做：只读上下文条、附件图 chip、文本框，底栏一行是 📎 附件图、🔌 MCP、
  * 「📝 计划 / ⚡ 执行」与右下角主按钮（生成 / 暂停 / 继续）；整行「⏹ 取消」只在跑起来之后出现。
  * 空态按 Cline 首页 RECENT 的口径默认铺最近几条会话，点一行直接读回那条会话续聊。时间线里的选项确认卡
@@ -19,6 +19,7 @@
 import { mkEl } from "./dom-utils.js";
 import { app } from "../../scripts/app.js";
 import { t, tf } from "./js/core/i18n.js";
+import { COMMON_EDGES, COMMON_RATIOS, LORA_FAMILY_HINTS, modelFamily } from "./image-gen.js";
 import { icon, setIcon } from "./js/core/icons.js";
 import { renderMarkdown } from "./skill.js";
 import { fileToBase64, imagesFromClipboard, sseStream } from "./prompt-service.js";
@@ -30,6 +31,31 @@ import { DIRECTOR_RECIPE_SAVED_EVENT } from "./director.js";
 const AGENT_CSS_HREF = "/extensions/comfyui-neo-studio/agent-panel.css";
 
 const OFFLINE_HINT = t("MCP 连接由 Neo Studio 桌面端提供：桌面端服务未就绪时无法连接外部 MCP 服务");
+
+// focus 帧里的键 → 右栏 chip 上的标签：与后端 _focus_block 是同一批事实，只挑用户在右栏认得出
+// 的那几项（产物图与最近任务在工具卡上本来就看得见，不重复铺）
+const FOCUS_FACTS = [["skill_id", "技能"], ["model", "主模型"], ["loras", "LoRA"],
+                     ["width", "宽"], ["height", "高"], ["seed", "种子"], ["recipe", "导演配方"]];
+// 偏好表单的字段：与后端 _clean_prefs 收净的那六个一一对应。技能 / 尺寸 / 家族是枚举值，
+// 直接给固定下拉（select）；风格要求与要避开的是长文本（area），出片确认是开关（check）
+const PREFS_FIELDS = [["preferred_skill", "技能", "select"], ["preferred_size", "尺寸", "select"],
+                      ["preferred_family", "主模型家族", "select"], ["style_notes", "风格要求", "area"],
+                      ["avoid", "要避开的", "area"], ["confirm_films", "出片前逐发确认", "check"]];
+const PREFS_NONE = "不设（跟随每次输入）";
+// 尺寸档位 = 生图的比例档 + 长边正方形档：与生图设置共用同一批常量，用户在两处看到的是同一套数
+const PREFS_SIZE_STEPS = [...COMMON_RATIOS, ...COMMON_EDGES.map((e) => `${e}x${e}`)];
+// 家族 = 家族线索（LORA_FAMILY_HINTS）在已装主模型路径里的命中集；一台模型都没装时回落线索全集，
+// 下拉不空着——用户接着要装的那一发本来就在这份候选里
+function modelFamilies(files) {
+    const found = [];
+    for (const f of files) {
+        const hit = modelFamily(f);
+        if (hit && !found.includes(hit)) found.push(hit);
+    }
+    return found.length ? found : [...LORA_FAMILY_HINTS];
+}
+// token 数在右栏那一栏宽里只写一档量级：24000 写作 24k，几百不缩写
+const tokenText = (n) => (n >= 1000 ? (n / 1000).toFixed(1) + "k" : String(n));
 
 const toast = (severity, detail) =>
     app.extensionManager?.toast?.add({ severity, summary: t("智能体"), detail, life: 4000 });
@@ -168,7 +194,7 @@ function splitAnswerOptions(text) {
 // 聊天区：一问一答，正文按 Markdown 渲染
 // ==========================================
 
-function buildChat(onOpenMcp, getContext) {
+function buildChat(onOpenMcp, getContext, onOpenPrefs) {
     const box = mkEl("div", "neo-agent-section neo-agent-chat");
     const transcript = mkEl("div", "neo-agent-transcript");
     const empty = mkEl("div", "neo-agent-empty");
@@ -408,6 +434,7 @@ function buildChat(onOpenMcp, getContext) {
         headBtn("＋", t("新增会话"), () => newSession()),
         headBtn("🗂", t("会话历史"), () => toggleHistory()),
         headBtn(icon("trash"), t("清空对话与历史"), () => clearConversation()),
+        headBtn("⚙", t("智能体偏好"), () => onOpenPrefs && onOpenPrefs()),
     ]), transcript, historyBox, composer);
 
     // 时间线里的链接一律收在页面内：产物进弹出窗口，外部链接交给新窗口。放任 <a> 的默认行为
@@ -490,6 +517,22 @@ function buildChat(onOpenMcp, getContext) {
         answerBox.append(steps, final);
         let card = null;
         let live = null;   // 当前工具卡上的采样预览播放器（live-preview.js），卡片切走即换
+        let planBox = null;      // 执行清单那一块：后端每划掉一条重发整张，原地重铺
+        let focusCard = null, focusChips = null, focusFacts = {};   // 焦点链卡与「设为偏好」照的这份
+        let metaRow = null;      // 上下文与 token 统计共用的那一行
+        const metaPart = (which) => {
+            if (!metaRow) {
+                metaRow = mkEl("div", "neo-agent-runmeta");
+                steps.appendChild(metaRow);
+            }
+            const cls = "neo-agent-runmeta-" + which;
+            let span = metaRow.querySelector("." + cls);
+            if (!span) {
+                span = mkEl("span", "neo-agent-runmeta-part " + cls);
+                metaRow.appendChild(span);
+            }
+            return span;
+        };
         const slot = (cls) => card && card.querySelector("." + cls);
 
         // 任务卡上的取消：后端 /neo_agent/cancel 走 MCP cancel_task，四种任务类型由它自己找路由
@@ -618,6 +661,73 @@ function buildChat(onOpenMcp, getContext) {
                 row.textContent = "▶ " + t("已继续");
                 steps.appendChild(row);
             },
+            // 执行清单：write_plan 交出整张，之后每划掉一条后端重发整张。一块列表原地重铺，
+            // 逐帧追加就是刷屏
+            planSteps(list) {
+                if (!list.length) return;
+                if (!planBox) {
+                    planBox = mkEl("div", "neo-agent-plan");
+                    steps.appendChild(planBox);
+                }
+                const rows = list.map((s, i) => {
+                    const row = mkEl("div", "neo-agent-plan-row" + (s.done ? " neo-agent-plan-done" : ""));
+                    row.textContent = `${s.done ? "✅" : "▢"} ${i + 1}. ${s.tool}`
+                        + (s.key_args ? `（${s.key_args}）` : "") + (s.note ? `：${s.note}` : "");
+                    return row;
+                });
+                const foot = mkEl("div", "neo-agent-plan-foot");
+                foot.textContent = tf("{done}/{total} 已完成",
+                    { done: list.filter((s) => s.done).length, total: list.length });
+                planBox.replaceChildren(...rows);
+                planBox.appendChild(foot);
+            },
+            // 焦点链落一块卡：本轮刚立的事实逐条铺成 chip，「设为偏好」照这一份填进偏好表单——
+            // 用户不用自己抄技能名与宽高（后端逐轮重注入系统提示词的就是这一份）
+            focus(focusObj) {
+                if (!focusCard) {
+                    focusCard = mkEl("div", "neo-agent-focus");
+                    focusChips = mkEl("span", "neo-agent-focus-chips");
+                    const btn = mkEl("button", "neo-agent-focus-prefs");
+                    btn.type = "button";
+                    btn.textContent = "⚙ " + t("设为偏好");
+                    btn.title = t("把这一发的技能与尺寸写进偏好，下一条输入照它跑");
+                    btn.onclick = () => onOpenPrefs && onOpenPrefs(focusFacts);
+                    focusCard.append(focusChips, btn);
+                    steps.appendChild(focusCard);
+                }
+                focusFacts = focusObj || {};
+                const chips = FOCUS_FACTS
+                    .filter(([key]) => focusFacts[key] !== undefined && focusFacts[key] !== null)
+                    .map(([key, label]) => {
+                        const chip = mkEl("span", "neo-agent-focus-chip");
+                        const value = focusFacts[key];
+                        chip.title = t(label);
+                        chip.textContent = `${t(label)} ${Array.isArray(value) ? value.join(" / ") : value}`;
+                        return chip;
+                    });
+                focusChips.replaceChildren(...chips);
+            },
+            // 上下文与 token 统计两帧都是「当前整份」：各占那一行里的一段，逐轮重写
+            context(frame) {
+                metaPart("ctx").textContent = "🧮 " + tf("上下文 ~{n}（{pct}%）",
+                    { n: tokenText(frame.approx_tokens || 0), pct: Math.round((frame.ratio || 0) * 100) });
+            },
+            usage(frame) {
+                metaPart("usage").textContent = "🧾 " + tf("token {total}（提示 {p} · 补全 {c}）· {n} 轮",
+                    { total: tokenText(frame.total_tokens || 0), p: tokenText(frame.prompt_tokens || 0),
+                      c: tokenText(frame.completion_tokens || 0), n: frame.turns || 0 });
+            },
+            // finish_task 的收场载荷：正文 + 产物 + 下一步方向。后端走这条收场时不发 content 帧，
+            // 这一条就是最终回答的唯一落点；方向优先按正文里那段编号列表铺按钮，正文没有才用
+            // finish 交下来的结构化方向
+            finish(text, media, options) {
+                const block = splitAnswerOptions(text);
+                final.innerHTML = renderMarkdown(block ? block.body : text);
+                if (media.length) renderGenMedia(final, media);
+                const items = block ? block.items : (options || []);
+                if (items.length >= 2) renderAnswerOptions(final, block || { title: t("下一步选项"), items });
+                mkCopyBtn(answerBox, () => text);
+            },
             error(text) {
                 final.textContent = text;
                 final.classList.add("neo-agent-answer-error");
@@ -632,6 +742,7 @@ function buildChat(onOpenMcp, getContext) {
     let runId = "";
     let activeView = null;
     let resumeId = "";
+    let restartFrom = 0;   // 「从这条消息重新开始」的序号：旧会话里第几条用户消息（1 起），0 = 整条接上
     let historyOpen = false;
 
     // 「接上次会话」条铺在文本框上方，与「⏹ 取消」同一位置口径：打开过一条旧会话才出现，
@@ -639,11 +750,14 @@ function buildChat(onOpenMcp, getContext) {
     const resumeBar = mkEl("button", "neo-agent-resumebar");
     resumeBar.type = "button";
     resumeBar.hidden = true;
-    resumeBar.onclick = () => { resumeId = ""; renderResumeBar(); };
+    resumeBar.onclick = () => { resumeId = ""; restartFrom = 0; renderResumeBar(); };
     composer.insertBefore(resumeBar, cancelBar);
     function renderResumeBar() {
         resumeBar.hidden = !resumeId;
-        resumeBar.textContent = resumeId ? "↩ " + t("接上次会话") + " " + resumeId.slice(0, 8) : "";
+        resumeBar.textContent = resumeId
+            ? "↩ " + t("接上次会话") + " " + resumeId.slice(0, 8)
+                + (restartFrom ? " · " + tf("从第 {n} 条消息重开", { n: restartFrom }) : "")
+            : "";
     }
 
     const SESSION_STATUS = { succeeded: "完成", failed: "失败", cancelled: "已取消",
@@ -667,6 +781,8 @@ function buildChat(onOpenMcp, getContext) {
         text.textContent = s.text || t("（只给了附件图）");
         const note = mkEl("span", "neo-agent-session-note");
         note.textContent = sessionStatus(s.status) + " · " + tf("{n} 次工具", { n: s.tools || 0 })
+            + (s.tokens ? " · ~" + tokenText(s.tokens) + " tokens" : "")
+            + (s.focus_skill ? " · " + s.focus_skill : "")
             + (s.resume_of ? " · " + t("接上次会话") : "");
         const open = headBtn(t("打开"), t("读回这条会话的完整时间线"), () => openSession(s.run_id));
         // 会话文件删掉就没了，确认框挡在请求前面
@@ -760,7 +876,40 @@ function buildChat(onOpenMcp, getContext) {
         else if (kind === "ask") view.ask(f.text || "", f.options || [], "");
         else if (kind === "paused") view.paused();
         else if (kind === "resumed") view.resumed();
+        else if (kind === "plan_steps") view.planSteps(f.steps || []);
+        else if (kind === "focus") view.focus(f.focus || {});
+        else if (kind === "usage") view.usage(f);
+        else if (kind === "context") view.context(f);
+        else if (kind === "finish") view.finish(f.text || "", f.media || [], f.options || []);
         else view.answer(f.text || "");
+    }
+
+    // 「从这条消息重新开始」（Cline 的 fork 口径）：旧会话里每条用户消息给一个入口，点它就把下一条
+    // 输入接在截断点之前——后端按序号把那条之后的原文丢掉（见 /neo_agent/run 的 from）。只有第一条
+    // 用户消息时「从它重开」等于开一条新会话，那一排不铺
+    function restartRows(rec) {
+        const marks = [];
+        (rec.messages || []).forEach((m, i) => { if (m && m.role === "user") marks.push(i); });
+        if (marks.length < 2) return null;
+        const box = mkEl("div", "neo-agent-restart");
+        const title = mkEl("span", "neo-agent-restart-title");
+        title.textContent = "↩ " + t("从这条消息重新开始");
+        box.appendChild(title);
+        marks.forEach((pos, idx) => {
+            const line = String(rec.messages[pos].content || "").replace(/\s+/g, " ");
+            const btn = mkEl("button", "neo-agent-restart-row");
+            btn.type = "button";
+            btn.textContent = `${idx + 1}. ${line.length > 40 ? line.slice(0, 40) + "…" : line}`;
+            btn.title = t("从这条消息重新跑，这条之后的原文丢掉");
+            btn.onclick = () => {
+                restartFrom = idx + 1;
+                resumeId = rec.run_id;
+                renderResumeBar();
+                [...box.querySelectorAll("button")].forEach((b) => b.classList.toggle("neo-agent-restart-on", b === btn));
+            };
+            box.appendChild(btn);
+        });
+        return box;
     }
 
     async function openSession(id) {
@@ -789,8 +938,11 @@ function buildChat(onOpenMcp, getContext) {
         });
         head.append(title, hint, del);
         transcript.appendChild(head);
+        const restart = restartRows(rec);
+        if (restart) transcript.appendChild(restart);
         const view = agentTimeline(transcript);
         (rec.frames || []).forEach((f) => replayFrame(view, f));
+        restartFrom = 0;
         resumeId = rec.run_id;
         renderResumeBar();
         transcript.scrollTop = transcript.scrollHeight;
@@ -865,11 +1017,16 @@ function buildChat(onOpenMcp, getContext) {
                 else if (kind === "ask") view.ask(frame.text || "", frame.options || [], frame.ask_id || "");
                 else if (kind === "paused") { paused = true; setRunState("paused"); view.paused(); }
                 else if (kind === "resumed") { paused = false; setRunState("running"); view.resumed(); }
+                else if (kind === "plan_steps") view.planSteps(frame.steps || []);
+                else if (kind === "focus") view.focus(frame.focus || {});
+                else if (kind === "usage") view.usage(frame);
+                else if (kind === "context") view.context(frame);
+                else if (kind === "finish") view.finish(frame.text || "", frame.media || [], frame.options || []);
                 else view.answer(frame.text || "");
                 transcript.scrollTop = transcript.scrollHeight;
             },
             onError: (err) => view.error(String(err || t("生成失败"))),
-        }, { text, mode: planMode, images, context, resume: resumeId || undefined });
+        }, { text, mode: planMode, images, context, resume: resumeId || undefined, from: restartFrom || undefined });
     }
 
     // 「⏸ 暂停」只置后端一个位，SSE 不断：后端在下一个轮次 / 轮询边界把在飞的任务掐掉、发
@@ -947,7 +1104,8 @@ function buildChat(onOpenMcp, getContext) {
         const meta = mkEl("div", "neo-agent-meta");
         meta.textContent = (ctxLine() || t("无当前上下文"))
             + (planMode === "plan" ? " · " + t("计划") : "")
-            + (resumeId ? " · " + t("接上次会话") : "");
+            + (resumeId ? " · " + t("接上次会话") : "")
+            + (restartFrom ? " · " + tf("从第 {n} 条消息重开", { n: restartFrom }) : "");
         const ask = mkEl("div", "neo-agent-ask");
         ask.textContent = text;
         turn.appendChild(meta);
@@ -1204,14 +1362,14 @@ export function createMcpPanel() {
 // ==========================================
 
 /**
- * 把聊天面板挂进宿主（桌面端 Studio 右栏）。opts.onOpenMcp 是「🔌 MCP」入口的跳转回调；
+ * 把聊天面板挂进宿主（桌面端 Studio 右栏）。opts.onOpenMcp 是「🔌 MCP」入口的跳转回调，opts.onOpenPrefs 是「⚙ 智能体偏好」与焦点链「设为偏好」跳设置页的回调；
  * opts.getContext 交回界面当前状态，只有当前选中页签自己那一栏（导演页的配方、绘画页的模式、
  * 上屏那几页的素材库目录），面板只把它画进上下文条并随请求体交后端，不解释它。
  * 返回 { root, refresh }：refresh 恢复条上的取消位并重画，宿主在切页 / 选配方 / 切绘画模式时调。
  */
 export function createAgentPanel(host, opts = {}) {
     ensureCss();
-    const chat = buildChat(opts.onOpenMcp, opts.getContext);
+    const chat = buildChat(opts.onOpenMcp, opts.getContext, opts.onOpenPrefs);
     const root = mkEl("div", "neo-agent");
     root.appendChild(chat.box);
     host.appendChild(root);
@@ -1220,3 +1378,131 @@ export function createAgentPanel(host, opts = {}) {
         refresh() { chat.resetCtx(); chat.renderCtx(); },
     };
 }
+
+// ==========================================
+// 用户级偏好表单（设置页「智能体偏好」栏）
+// ==========================================
+
+/**
+ * 用户级偏好落在数据根的 configs/agent_prefs.json，一台机器一份：表单在设置页那一栏，右栏只留入口
+ * （栏子拖到 260px 宽时塞不下六个字段）。返回 { el, load, prefill }：load 读当前偏好，prefill 把
+ * 焦点链上的技能 / 宽高 / 导演配方填进表单。
+ * 技能 / 尺寸 / 家族是枚举值，给固定下拉：技能取 /rs_prompts/skills 的 id（标签是中文名），尺寸取
+ * 生图那批比例与长边正方形档，家族取家族线索在已装主模型里的命中集。焦点链带进来的值不在档位里
+ * （1280x720 这种具体宽高、后来被删掉的技能 id）时追加成一项，用户看得见自己点进来的是什么。
+ * 保存按后端 _clean_prefs 收净的返回值回填——越界的技能名与尺寸在后端被丢回默认值，表单留着用户刚写的
+ * 那一份就是演它存上了。字段与后端收净的那六个一一对应（select 是枚举，area 是长文本，check 是开关）。
+ */
+export function createAgentPrefsForm() {
+    const form = mkEl("div", "ns-agent-prefs");
+    const field = {};
+    const desc = mkEl("div", "rs-settings-desc");
+    desc.textContent = t("偏好对本机每条输入生效；本会话刚出过的那一发优先");
+    const rows = PREFS_FIELDS.map(([key, label, kind]) => {
+        const row = mkEl("div", "rs-config-row ns-prefs-row" + (kind === "check" ? " ns-prefs-check" : ""));
+        const lab = mkEl("label", "rs-form-label");
+        lab.textContent = t(label);
+        const el = mkEl(kind === "select" ? "select" : (kind === "area" ? "textarea" : "input"), "rs-form-input");
+        el.name = key;   // 深链预填与测试都按 name 认字段
+        if (kind === "check") el.type = "checkbox";
+        if (kind === "area") el.rows = 3;
+        field[key] = el;
+        row.append(lab, el);
+        return row;
+    });
+    const note = mkEl("div", "ns-prefs-note");
+
+    // 下拉的选项来源在 load 里与偏好一起取：技能列表与已装主模型；取不到就是空列表，下拉只剩「不设」
+    let skills = [], modelFiles = [];
+    const prefOptions = (key) => key === "preferred_skill"
+        ? skills.map((s) => [String(s?.id || ""), String(s?.cn_name || s?.name || s?.id || "")])
+        : key === "preferred_size" ? PREFS_SIZE_STEPS.map((v) => [v, v])
+        : modelFamilies(modelFiles).map((v) => [v, v]);
+
+    function setSelect(key, value) {
+        const el = field[key];
+        const opts = prefOptions(key);
+        el.innerHTML = "";
+        const none = document.createElement("option");
+        none.value = "";
+        none.textContent = t(PREFS_NONE);
+        el.appendChild(none);
+        for (const [v, label] of opts) {
+            const opt = document.createElement("option");
+            opt.value = v;
+            opt.textContent = label;
+            el.appendChild(opt);
+        }
+        if (value && !opts.some(([v]) => v === value)) {
+            const extra = document.createElement("option");
+            extra.value = value;
+            extra.textContent = value + t("（焦点链）");
+            el.appendChild(extra);
+        }
+        el.value = value || "";
+    }
+
+    function setValue(key, kind, value) {
+        if (kind === "check") field[key].checked = !!value;
+        else if (kind === "select") setSelect(key, String(value || ""));
+        else field[key].value = String(value ?? "");
+    }
+
+    function fill(prefs) {
+        PREFS_FIELDS.forEach(([key, , kind]) => setValue(key, kind, prefs[key]));
+    }
+
+    const save = mkEl("button", "rs-gen-save ns-prefs-save");
+    save.type = "button";
+    save.textContent = t("保存偏好");
+    save.onclick = async () => {
+        const body = {};
+        PREFS_FIELDS.forEach(([key, , kind]) => {
+            body[key] = kind === "check" ? field[key].checked : field[key].value.trim();
+        });
+        const data = await postJson("/neo_agent/prefs", body);
+        if (!data.ok) {
+            toast("error", data.offline ? t("桌面端服务未就绪") : (data.error || t("保存偏好失败")));
+            return;
+        }
+        fill(data.prefs || {});
+        note.textContent = t("已写入 configs/agent_prefs.json，下一条输入起效");
+        toast("info", t("智能体偏好已保存"));
+    };
+
+    async function load() {
+        // 技能列表与主模型列表是下拉的选项来源，与偏好一起取；任一条取不到（离线服务、模型目录读失败）
+        // 只让那一项下拉少几档，偏好本身照读——选项来源不该有把表单读崩的能力
+        const [data, skillRes, modelRes] = await Promise.all([
+            getJson("/neo_agent/prefs"),
+            getJson("/rs_prompts/skills").catch(() => null),
+            getJson("/neo_image_gen/models").catch(() => null),
+        ]);
+        if (data.offline) { note.textContent = t("桌面端服务未就绪"); return; }
+        skills = Array.isArray(skillRes) ? skillRes : [];
+        modelFiles = modelRes?.diffusion_models || [];
+        fill(data.prefs || {});
+        applyPending();
+    }
+
+    // 焦点链带过来的三个值走深链 #/settings?tab=agent&skill=..&size=..&family=..：预填要先落下，
+    // 再在晚到的那次读之后盖回去——进栏子时的 GET 晚于预填落地，先把用户刚点进来的值抹平就是演它读上了
+    let pending = null;
+    function applyPending() {
+        if (!pending) return;
+        for (const [key, value] of [["preferred_skill", pending.skill],
+                                    ["preferred_size", pending.size],
+                                    ["preferred_family", pending.family]]) {
+            if (value) setSelect(key, value);
+        }
+        field.preferred_skill.focus();
+    }
+    function prefill(query) {
+        pending = { skill: query.get("skill"), size: query.get("size"), family: query.get("family") };
+        applyPending();
+    }
+
+    form.append(desc, ...rows, save, note);
+    return { el: form, load, prefill };
+}
+

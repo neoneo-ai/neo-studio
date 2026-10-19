@@ -459,8 +459,20 @@ export function videoVideoVaeSuggestion(files) {
     return (files || []).find((n) => /h3_video/i.test(String(n))) || "";
 }
 
-// 主模型家族名称线索（与后端 _MODEL_HINTS 同风格）：命中则同家族条目在模型下拉里靠前
-const LORA_FAMILY_HINTS = ["qwen", "krea2"];
+// 主模型家族名称线索（与后端 _MODEL_HINTS 同风格）：命中则同家族条目在模型下拉里靠前；
+// 智能体偏好的「主模型家族」档位与焦点链预填取的都是这条线索在模型路径里的命中
+export const LORA_FAMILY_HINTS = ["qwen", "krea2"];
+
+/** 模型路径 / 模型名 → 家族名：命中家族线索的那一个，没命中回空。 */
+export function modelFamily(name) {
+    const path = String(name || "").toLowerCase();
+    return LORA_FAMILY_HINTS.find((h) => path.includes(h)) || "";
+}
+
+// 生图档位下拉的固定选项（长边像素 / 比例）：生图设置与智能体偏好共用同一批档位，
+// 一处改动两处生效（偏好的尺寸项就是这两份的组合）
+export const COMMON_EDGES = ["1024", "1152", "1280", "1536", "1792", "2048", "2560", "3072"];
+export const COMMON_RATIOS = ["1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3", "21:9"];
 
 /** 模型类下拉排序：与当前主模型同级者靠前（同目录 → 同家族关键词），其余保持后端顺序（排序稳定，只改顺序不改内容）。
  *  例：主模型 QwenImage2.1\qwen_image_2.1_int8_convrot → QwenImage2.1 目录的模型与 LoRA 最前，其次名字含 qwen 的。
@@ -470,7 +482,7 @@ function sortByModelFamily(files, model) {
     const path = String(model || "").replace(/\\/g, "/").toLowerCase();
     if (!path) return files;
     const dir = path.includes("/") ? path.slice(0, path.lastIndexOf("/") + 1) : "";
-    const family = LORA_FAMILY_HINTS.find((h) => path.includes(h)) || "";
+    const family = modelFamily(path);
     const tier = (f) => {
         const p = String(f).replace(/\\/g, "/").toLowerCase();
         if (dir && p.startsWith(dir)) return 0;
@@ -688,8 +700,6 @@ export function createGenSizeRows() {
 
     // 常用长边（像素）与比例下拉可选；空值（「默认」）= 走后端默认；
     // 未列出的已保存值自动追加为「…（已保存）」项保留，避免切下拉即丢数据
-    const COMMON_EDGES = ["1024", "1152", "1280", "1536", "1792", "2048", "2560", "3072"];
-    const COMMON_RATIOS = ["1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3", "21:9"];
     function fillChoiceSelect(select, options, current, defaultValue) {
         select.innerHTML = "";
         const auto = document.createElement("option");

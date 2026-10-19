@@ -1645,6 +1645,36 @@ const EN = {
     "出错": "Error",
     "配方「{name}」已保存，在导演页配方列表里打开调整":
         "Recipe “{name}” is saved — open it in the director page's recipe list to adjust and reuse it",
+    // 执行清单 / 焦点链 / token 统计 / 从这条消息重开 / 用户级偏好
+    "{done}/{total} 已完成": "{done}/{total} done",
+    "上下文 ~{n}（{pct}%）": "context ~{n} ({pct}%)",
+    "token {total}（提示 {p} · 补全 {c}）· {n} 轮": "{total} tokens ({p} prompt · {c} completion) · {n} turns",
+    "{n} tokens": "{n} tokens",
+    "LoRA": "LoRA",
+    "导演配方": "Director recipe",
+    "设为偏好": "Set as preference",
+    "把这一发的技能与尺寸写进偏好，下一条输入照它跑":
+        "Write this run's skill and size into preferences; the next request runs with them",
+    "智能体偏好": "Agent preferences",
+    "尺寸": "Size",
+    "主模型家族": "Model family",
+    "风格要求": "Style notes",
+    "要避开的": "Avoid",
+    "出片前逐发确认": "Confirm before each film run",
+    "不设（跟随每次输入）": "Not set (follow each request)",
+    "（焦点链）": " (from focus chain)",
+    "保存偏好": "Save preferences",
+    "保存偏好失败": "Saving preferences failed",
+    "已写入 configs/agent_prefs.json，下一条输入起效":
+        "Written to configs/agent_prefs.json — takes effect on the next request",
+    "智能体偏好已保存": "Agent preferences saved",
+    "偏好对本机每条输入生效；本会话刚出过的那一发优先":
+        "Preferences apply to every request on this machine; what this session just generated takes priority",
+    "下一步选项": "Next steps",
+    "从第 {n} 条消息重开": "restart from message {n}",
+    "从这条消息重新开始": "Restart from this message",
+    "从这条消息重新跑，这条之后的原文丢掉": "Run the next request from this message; everything after it is dropped",
+
 };
 
 function detectLang() {

@@ -1023,3 +1023,120 @@
     outline: none;
 }
 
+
+/* ===== 执行清单 / 焦点链 / 上下文与 token 统计 / 从这条消息重开 / 用户级偏好 ===== */
+
+/* 执行清单：write_plan 交出整张、之后每划掉一条重发整张，一块列表原地重铺 */
+.neo-agent-plan {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 4px;
+    border: 1px solid var(--neo-vsc-border);
+    border-radius: 4px;
+    background: var(--neo-vsc-bg-alt);
+    font-size: 12px;
+}
+
+.neo-agent-plan-row {
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+/* 划掉的行只留个形状：清单还在，读的是没划掉的那几条 */
+.neo-agent-plan-done {
+    color: var(--neo-vsc-fg-dim);
+    text-decoration: line-through;
+}
+
+.neo-agent-plan-foot {
+    font-size: 10px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    color: var(--neo-vsc-fg-dim);
+}
+
+/* 上下文量级与 token 统计共用一行：右栏拖窄时换行，不截断 */
+.neo-agent-runmeta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 8px;
+    font-size: 10px;
+    letter-spacing: 0.5px;
+    color: var(--neo-vsc-fg-dim);
+}
+
+/* 焦点链：本轮刚立的事实一排 chip，末尾跟着「设为偏好」 */
+.neo-agent-focus,
+.neo-agent-focus-chips {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+}
+
+.neo-agent-focus-chip {
+    max-width: 100%;
+    padding: 0 4px;
+    border: 1px solid var(--neo-vsc-border);
+    border-radius: 4px;
+    font-size: 10px;
+    color: var(--neo-vsc-fg-dim);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.neo-agent-focus-prefs {
+    height: 20px;
+    padding: 0 8px;
+    background: var(--neo-vsc-bg-alt);
+    border: 1px solid var(--neo-vsc-border);
+    border-radius: 4px;
+    color: var(--neo-vsc-fg);
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.neo-agent-focus-prefs:hover {
+    border-color: var(--neo-vsc-accent);
+}
+
+/* 从旧会话的某条用户消息重开：每条一行，点选的那条描边 */
+.neo-agent-restart {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 4px;
+    border: 1px dashed var(--neo-vsc-border);
+    border-radius: 4px;
+}
+
+.neo-agent-restart-title {
+    font-size: 10px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    color: var(--neo-vsc-fg-dim);
+}
+
+.neo-agent-restart-row {
+    padding: 2px 4px;
+    background: none;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    color: var(--neo-vsc-fg);
+    font-size: 12px;
+    text-align: left;
+    cursor: pointer;
+    white-space: normal;
+    overflow-wrap: break-word;
+}
+
+.neo-agent-restart-row:hover {
+    border-color: var(--neo-vsc-accent);
+}
+
+.neo-agent-restart-on {
+    border-color: var(--neo-vsc-accent);
+    color: var(--neo-vsc-accent);
+}

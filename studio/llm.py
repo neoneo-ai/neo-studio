@@ -848,6 +848,22 @@ def get_available_models() -> Dict[str, Any]:
 # Remote API LLM Client (OpenAI SDK)
 # ==========================================
 
+def _usage_counts(usage) -> Dict[str, int]:
+    """provider 的 token 统计压成 plain dict：SDK 回的是对象，dict 才进得了 JSON 响应与会话文件。
+
+    两家后端都认（远程是 response.usage 对象或 model_dump 出来的 dict，本地 llama.cpp 是 dict）。
+    一个数都没报时回空 dict——右栏把「这一轮没有 usage」与「这一轮烧了 0 token」分得开。"""
+    if usage is None:
+        return {}
+    pick = usage.get if isinstance(usage, dict) else (lambda key: getattr(usage, key, None))
+    prompt, completion, total = pick("prompt_tokens"), pick("completion_tokens"), pick("total_tokens")
+    if prompt is None and completion is None:
+        return {}
+    prompt, completion = int(prompt or 0), int(completion or 0)
+    return {"prompt_tokens": prompt, "completion_tokens": completion,
+            "total_tokens": int(total or (prompt + completion))}
+
+
 def _log_llm_usage(usage) -> None:
     """记录单次 LLM 调用的 token 统计：prompt/completion，及思考 token reasoning_tokens（Qwen3 系思考模型返回）。"""
     if usage is None:
@@ -1079,11 +1095,11 @@ class RemoteLLMClient:
         tool_calls = message.get("tool_calls")
         if tool_calls:
             out_message["tool_calls"] = tool_calls
-        return {
-            "choices": [{
-                "message": out_message
-            }]
-        }
+        out = {"choices": [{"message": out_message}]}
+        usage = _usage_counts(response_data.get("usage"))
+        if usage:
+            out["usage"] = usage      # 智能体面板按它报每轮 token；不带就是这一轮没报
+        return out
 
     def _stream_response_generator(self, client, **kwargs):
         """流式响应生成器：逐块 yield {"text":..., "kind":"content"|"thinking"}。
@@ -1765,7 +1781,9 @@ def chat_turn(messages: List[Dict[str, Any]], max_tokens: Optional[int] = None,
               reasoning_effort: Optional[str] = None) -> Dict[str, Any]:
     """对当前激活的 provider（本地 llama.cpp 或远程 API）执行一次（非流式）对话，返回 assistant message dict。
 
-    供 skill 代理循环按需调用：传入带 tools 的 messages，返回含 content / tool_calls 的消息。
+    供 skill 代理循环与右栏智能体按需调用：传入带 tools 的 messages，返回含 content / tool_calls 的消息。
+    provider 报了 token 统计时消息里多一项 usage（plain dict）——调用方要按它报每轮用量；
+    没报时没有这一项，调用方按「没有」处理，不当 0。
     按 get_current_mode() 分发到本地或远程；对应后端不可用时抛出 RuntimeError。
     """
     if get_current_mode() == LLM_MODE_REMOTE:
@@ -1790,7 +1808,11 @@ def chat_turn(messages: List[Dict[str, Any]], max_tokens: Optional[int] = None,
     choices = response.get("choices", [])
     if not choices:
         return {}
-    return choices[0].get("message", {}) or {}
+    message = choices[0].get("message", {}) or {}
+    usage = _usage_counts(response.get("usage"))
+    if usage:
+        message = {**message, "usage": usage}
+    return message
 
 
 def run_llm_task(task_name: str, text: str, extra_system_prompt: Optional[str] = None,

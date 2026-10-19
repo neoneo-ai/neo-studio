@@ -14,10 +14,10 @@ import { setDirectorEditorHost, DIRECTOR_RECIPE_SAVED_EVENT } from "../director.
 import { setPaintHost, openGenMaterialDialog, openImageEditDialog } from "../gallery-gen.js";
 import { createFramePlayer } from "../live-preview.js";
 import { createRecipesPanel } from "../recipes.js";
-import { createImageGenSettingsForm, createVideoGenSettingsForm } from "../image-gen.js";
+import { createImageGenSettingsForm, createVideoGenSettingsForm, modelFamily } from "../image-gen.js";
 import { createModelConfigForm } from "../llm-setting.js";
 import { createSkillManager } from "../skill.js";
-import { createAgentPanel, createMcpPanel } from "../agent-panel.js";
+import { createAgentPanel, createMcpPanel, createAgentPrefsForm } from "../agent-panel.js";
 import { t, tf, getLang, applyLang, LANGS } from "../js/core/i18n.js";
 import { icon } from "../js/core/icons.js";
 
@@ -979,8 +979,10 @@ function createLangPanel() {
         [...rows, $el("div", { className: "ns-lang-hint", textContent: t("选择后立即落盘并整页刷新，界面文案按新语言重建。") })]);
 }
 
-// ====== 设置页：左侧 tab 切换（LLM / 生图 / 生视频 / MCP 服务 / 界面语言 / 日志 / 启动设置 / 关于），默认 LLM ======
+// ====== 设置页：左侧 tab 切换（LLM / 生图 / 生视频 / 智能体偏好 / MCP 服务 / 界面语言 / 日志 / 启动设置 / 关于），默认 LLM ======
 let settingsShow = null;   // 设置页的 tab 切换函数：深链 #/settings?tab=mcp 要用它落到那一栏
+
+let agentPrefs = null;   // 设置页那张偏好表单：深链 #/settings?tab=agent&skill=.. 的预填要走它
 
 function buildSettings(el) {
     // 三个表单工厂均返回 { el, load, save, isDirty }，挂 .el、后台 load（💾 保存按钮在表单内部）
@@ -1040,14 +1042,18 @@ function buildSettings(el) {
         logSelText = sel && !sel.isCollapsed && logBody.contains(sel.anchorNode) ? sel.toString() : "";
     });
 
-    // tab 顺序：LLM 设置 → 生图设置 → 生视频设置 → 界面语言 → 日志 → 启动设置 → 关于；每个 tab 只显示对应设置区
+    // tab 顺序：LLM 设置 → 生图设置 → 生视频设置 → 智能体偏好 → 界面语言 → 日志 → 启动设置 → 关于；每个 tab 只显示对应设置区
     const launcher = createLauncherPanel();
     const mcp = createMcpPanel();
+    const prefs = createAgentPrefsForm();
+    agentPrefs = prefs;   // 深链带预填参数进来时，route() 要把焦点链那份值交给这张表单
+
     const section = (title) => $el("h3", { textContent: t(title) });
     const sections = [
         { key: "llm", label: t("LLM 设置"), body: $el("div", { className: "ns-settings-section" }, [section("LLM 设置"), llmForm.el]) },
         { key: "gen", label: t("生图设置"), body: $el("div", { className: "ns-settings-section" }, [section("生图设置"), genForm.el]) },
         { key: "video", label: t("生视频设置"), body: $el("div", { className: "ns-settings-section" }, [section("生视频设置"), videoForm.el]) },
+        { key: "agent", label: t("智能体偏好"), body: $el("div", { className: "ns-settings-section" }, [section("智能体偏好"), prefs.el]) },
         { key: "mcp", label: t("MCP 服务"), body: $el("div", { className: "ns-settings-section ns-mcp-section" }, [section("MCP 服务"), mcp.root]) },
         { key: "lang", label: t("界面语言"), body: $el("div", { className: "ns-settings-section" }, [section("界面语言"), createLangPanel()]) },
         { key: "log", label: t("日志"), body: $el("div", { className: "ns-settings-section ns-log-section" }, [$el("div", { className: "ns-log-head" }, [section("日志"), copyLogBtn]), logBody]) },
@@ -1066,6 +1072,8 @@ function buildSettings(el) {
             logTimer = setInterval(refreshLog, 2000);
         } else if (key === "mcp") {
             mcp.refresh().catch(e => console.error("[Neo Studio] mcp panel refresh failed:", e));
+        } else if (key === "agent") {
+            prefs.load().catch(e => console.error("[Neo Studio] agent prefs load failed:", e));
         } else if (logTimer) {
             clearInterval(logTimer);
             logTimer = null;
@@ -1626,6 +1634,18 @@ function initAgentDock() {
             history.pushState(null, "", "#/settings?tab=mcp");
             route();
         },
+        // 用户级偏好的表单在设置页那一栏，右栏只跳过去（pushState 与 MCP 入口同一理由：不碰 location.hash）；
+        // 焦点链上的「设为偏好」把这一发的技能、宽高与主模型家族带进表单，用户不用自己抄——
+        // 家族取的是这一发用的主模型命中家族线索的那一个（导演配方名是中文，过不了后端家族名的形态）
+        onOpenPrefs: (fact) => {
+            const q = new URLSearchParams({ tab: "agent" });
+            if (fact?.skill_id) q.set("skill", fact.skill_id);
+            if (fact?.width && fact?.height) q.set("size", `${fact.width}x${fact.height}`);
+            const family = fact?.model ? modelFamily(fact.model) : "";
+            if (family) q.set("family", family);
+            history.pushState(null, "", `#/settings?${q}`);
+            route();
+        },
         // 界面当前状态由宿主交：右栏把它画进上下文条，并把同一份值随请求体交后端进系统提示词
         getContext: agentContext,
     });
@@ -1703,8 +1723,12 @@ function route() {
     else if (name === "settings") {
         ensureView("settings", buildSettings);
         // 深链 #/settings?tab=mcp：右栏「🔌 MCP」入口跳来这，视图常驻时也要落到那一栏
-        const tab = new URLSearchParams(location.hash.split("?")[1] || "").get("tab");
-        if (tab && settingsShow) settingsShow(tab);
+        const query = new URLSearchParams(location.hash.split("?")[1] || "");
+        const tab = query.get("tab");
+        if (tab && settingsShow) {
+            settingsShow(tab);
+            if (tab === "agent") agentPrefs.prefill(query);   // 焦点链的技能与宽高照深链落进表单
+        }
     }
     else ensureView("gallery", buildGallery);
     showView(name);

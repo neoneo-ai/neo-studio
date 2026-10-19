@@ -167,13 +167,16 @@ _MCP = {
     ("POST", "/neo_mcp/tools/call"),
 }
 
-# 智能体会话落盘：一次运行的 JSON 在数据根的 agent_sessions/，列 / 读 / 删都是纯文件读写，
-# ComfyUI 没起来也能读回历史；要内核的 /neo_agent/run、/neo_agent/answer 这类不在这组里，仍归 comfy
+# 智能体会话落盘与用户级偏好：一次运行的 JSON 在数据根的 agent_sessions/、偏好在 configs/agent_prefs.json，
+# 列 / 读 / 删 / 读写偏好都是纯文件读写，ComfyUI 没起来也能读回历史；要内核的 /neo_agent/run、
+# /neo_agent/answer 这类不在这组里，仍归 comfy
 _AGENT = {
     ("GET", "/neo_agent/sessions"),
     ("GET", "/neo_agent/session"),
     ("POST", "/neo_agent/session/delete"),
     ("POST", "/neo_agent/session/delete_all"),
+    ("GET", "/neo_agent/prefs"),
+    ("POST", "/neo_agent/prefs"),
 }
 
 DESKTOP_ROUTES = (_GALLERY | _BOOKMARK | _SKILL | _RECIPES | _SETTINGS | _LLM | _MODEL_HUB

@@ -2,7 +2,8 @@
 """右栏 Neo Agent 的后端代理循环（SSE）。
 
 前端一次 POST /neo_agent/run 之后只收 {kind,text} 帧的时间线：plan / tool_call /
-tool_result / status / content / ask / paused / resumed。运行一律由 LLM 规划并调工具；
+tool_result / status / content / ask / paused / resumed / context / usage / plan_steps /
+focus / finish。运行一律由 LLM 规划并调工具；
 界面当前状态（当前页、当前导演配方、绘画页模式、素材库目录）随请求体进系统提示词，
 右栏不再让用户选技能，用哪个技能由 LLM 自己查 list_skills 定。
 
@@ -10,16 +11,27 @@ tool_result / status / content / ask / paused / resumed。运行一律由 LLM �
 智能体连 MCP 是同一套口径：右栏看到的工具表就是 MCP 的全集，出片链路（director_run /
 segment_run / assemble_run）也开给这个面板，能不能调由协议自己判，这里不再砍第二层。
 
-四件右栏独有的事：mode=plan 的计划模式只查不跑（写操作工具不进 LLM 的工具表，调用到也拒）；
-ask_user 是右栏自己的伪工具，循环发 ask 帧挂起等 POST /neo_agent/answer 把用户选项交回来；
+六件右栏独有的事：mode=plan 的计划模式只查不跑（写操作工具不进 LLM 的工具表，调用到也拒）；
+ask_user / finish_task / write_plan 是右栏自己的伪工具，不发 MCP——ask 帧挂起等 POST /neo_agent/answer
+把用户选项交回来，write_plan 在计划模式收场前把执行清单交下来（右栏铺成逐条打勾的清单，
+切到执行模式后照它跑并逐条划掉），finish_task 在执行模式交收场文本、产物名与下一步方向
+（产物名只认本次运行真出现过的工具结果，编出来的名字拒回）；
 images 是输入框附件图，按 prompts 的图片源口径解析成字节进首个 user 消息；
-暂停 / 继续按 run_id 在轮次与轮询边界生效，暂停掐掉在飞的 ComfyUI 任务且不自动重发。
+暂停 / 继续按 run_id 在轮次与轮询边界生效，暂停掐掉在飞的 ComfyUI 任务且不自动重发；
+每一轮请求前按 CONTEXT_BUDGET_TOKENS 压一次上下文，超了从最旧的工具结果压成一行标记
+（只换 content，不删消息——assistant.tool_calls 与 tool.tool_call_id 是成对的）；
+出片级工具（整片 / 单段 / 拼接 / 关键帧）在入队之前先发一张量级确认卡，用户在偏好里关掉
+confirm_films 才不拦。
 
 一次运行的时间线逐帧与 LLM 原文落在用户数据根的 agent_sessions/（一次运行一个 JSON，原子写，
 只存本机、不进 Registry 包）：GET /neo_agent/sessions 列历史，GET /neo_agent/session 读回整条
 时间线，POST /neo_agent/run 带 resume 时这一轮接在那条旧会话后面跑。
 一次运行里最近一次生成的技能 / 主模型 / 尺寸 / 种子 / 产物名记成焦点链，逐轮重注入系统提示词
 并随会话落盘：「再来一张」接的就是上一张那一发的配置，续聊不会连自己刚用过的技能一起忘掉。
+provider 每轮报的 token 统计逐轮累进 run.usage 并随会话落盘，历史列表里看得见这条会话烧掉多少；
+「从这条消息重新开始」带 from 时从那条会话的第 N 条用户消息截断，本轮从那个点重新长出去。
+用户级偏好在 configs/agent_prefs.json（一台机器一份，右栏「设为偏好」写它），逐轮进系统提示词，
+排在焦点链之后——本会话刚出过那一发的真值优先。
 """
 from __future__ import annotations
 
@@ -37,7 +49,7 @@ from urllib.parse import quote
 from aiohttp import web
 
 from . import mcp_server as mcp
-from .plugin_paths import AGENT_SESSIONS_DIR, PLUGIN_DIR
+from .plugin_paths import AGENT_SESSIONS_DIR, CONFIGS_DIR, PLUGIN_DIR
 from .util import _json_safe
 
 logger = logging.getLogger("NeoStudio")
@@ -90,6 +102,16 @@ SESSION_TTL_SEC = 7 * 24 * 3600
 # 会话文件名是 <创建时间>-<run_id>.json，按名字倒序就是新的在前；
 # 名字形态不对的文件一律无视，这一页只认自己写出来的东西
 SESSION_FILE_RE = re.compile(r"^\d{8}-\d{6}-[0-9a-f]{32}\.json$")
+# 用户级偏好：一台机器一份，落在数据根的 configs/agent_prefs.json——这个文件用户会自己在编辑器里
+# 打开改，写盘走 .tmp 再 replace；代码里的 DEFAULT_PREFS 就是缺文件时的读入口，不往数据根落默认副本
+AGENT_PREFS_FILE = CONFIGS_DIR / "agent_prefs.json"
+# confirm_films 默认关：出片确认卡只在用户自己打开它时才拦——默认拦住整片会把「✨ 生成 → 出片」
+# 这条今天就在跑的链路变成每次多点一下，而这一发的取舍本来就是用户开口要出片时给过的
+DEFAULT_PREFS = {"preferred_skill": "", "preferred_size": "", "preferred_family": "",
+                 "style_notes": "", "avoid": "", "confirm_films": False}
+PREFS_TEXT_MAX = 400
+PREFS_NAME_RE = re.compile(r"^[A-Za-z0-9_.\-]{1,64}$")     # 技能 id 与模型家族名的形态
+PREFS_SIZE_RE = re.compile(r"^\d{3,4}x\d{3,4}$|^\d{1,2}:\d{1,2}$")    # 1024x1024 或 16:9
 # 计划模式不许执行的工具：生成入队、配方写、取消在跑的任务，全是改状态的动作
 PLAN_BLOCKED_TOOLS = frozenset(("generate_image", "director_run", "segment_run", "assemble_run",
                                 "director_save", "director_copy", "director_keyframes", "cancel_task"))
@@ -98,6 +120,17 @@ FILM_KINDS = ("director", "segment", "assemble")
 CANCELLED_TEXT = "已取消：智能体循环与在跑的任务已停止"
 PAUSE_TIMEOUT_TEXT = "已暂停后超时收场：在跑的任务已取消，这次运行结束"
 SYSTEM_PROMPT_FILE = PLUGIN_DIR / "prompts" / "agent" / "system_prompt.md"
+# 上下文预算：一次运行的全部 messages 逐轮整份进请求，provider 的窗口比这窄就是整请求 400。
+# 估算口径是字符数 / 2：中文约一字一 token，英文约两字一 token，取一半是宁可估高
+CONTEXT_BUDGET_TOKENS = 24000
+CONTEXT_REPORT_FLOOR = CONTEXT_BUDGET_TOKENS // 4   # 到这一档起才发 context 帧：一轮纯问答的量级不值得逐轮报
+COMPRESS_KEEP = 8         # 最近这么多条消息不压：本轮的工具结果与刚说过的话模型要接着用
+COMPRESS_MARK = "[这段工具结果早于上下文预算，已从请求里压掉]"
+IMAGE_TOKENS = 1000       # 附件图按定值计：base64 的字符数会把一条消息算成十万 token，压完整轮上下文就是被一张图带跑
+MSG_OVERHEAD = 4          # OpenAI 一条消息的固定壳开销
+# 出片级工具的量级确认卡：一次整片是三段 × 每段数分钟起步，跑下去再喊停就晚了一半
+FILM_GATE_TOOLS = ("director_run", "segment_run", "assemble_run", "director_keyframes")
+GATE_OPTIONS = ("✅ 跑这一发", "⏹ 先不跑")
 
 # 右栏伪工具：只进本次运行的 LLM 工具表，不进 MCP 注册表，外部 MCP 客户端看不到
 ASK_TOOL = {"type": "function", "function": {
@@ -109,6 +142,30 @@ ASK_TOOL = {"type": "function", "function": {
         "options": {"type": "array", "items": {"type": "string"},
                     "description": "2-5 个用户可以直接照选的方向"}},
         "required": ["question", "options"]}}}
+FINISH_TOOL = {"type": "function", "function": {
+    "name": "finish_task",
+    "description": ("收场时调用，把交付物一次性交回来：做了什么与产物是什么（result）、"
+                    "产物文件名（media，只能填本次运行真出现过的工具结果里的文件名）、"
+                    "用户可以照着点的下一步方向（next_options）。不调这个工具直接写一段话也能收场，"
+                    "但 media 与下一步只能靠这一份结构传下来。"),
+    "parameters": {"type": "object", "properties": {
+        "result": {"type": "string", "description": "两三句中文，说清做了什么、产物是什么"},
+        "media": {"type": "array", "items": {"type": "string"},
+                  "description": "产物文件名，逐字照抄工具结果里的 filename；没有产物就留空"},
+        "next_options": {"type": "array", "items": {"type": "string"},
+                         "description": "2-5 个用户可以照着点的下一步，写成能直接发出去的一句话"}},
+        "required": ["result"]}}}
+PLAN_TOOL = {"type": "function", "function": {
+    "name": "write_plan",
+    "description": ("计划模式收场前调用，把这份计划交成结构化清单：每步是 {tool, key_args, note}，"
+                    "tool 必须是工具表里的真名，key_args 写关键参数（技能 id、段数、时长、尺寸、配方名），"
+                    "note 一句话说明这一步要产出什么。用户切到执行模式后照着这份清单逐条跑。"),
+    "parameters": {"type": "object", "properties": {
+        "steps": {"type": "array", "items": {"type": "object", "properties": {
+            "tool": {"type": "string", "description": "要调的工具名，照工具表里的真名写"},
+            "key_args": {"type": "string", "description": "这一步的关键参数，一行写完"},
+            "note": {"type": "string", "description": "这一步要产出什么"}}}},
+        "required": ["steps"]}}}}
 
 PLAN_MODE_NOTE = """
 
@@ -118,9 +175,10 @@ PLAN_MODE_NOTE = """
 - 要看现状就用查询类工具查清：neo_status、list_skills、list_models、list_recipes、
   director_recipes、director_spec、list_gallery。
 - 方向上有分叉就用 ask_user 把问题与选项发给用户，等回答再定计划。
-- 收场时交出一份能照着跑的计划：分步骤写明每步要调的工具与关键参数（技能 id、段数、
-  时长、尺寸、配方名），最后一步写明产物是什么。
-- 计划模式里不许说「已完成」，也不许编造产物文件名。"""
+- 收场前调 write_plan 把计划交成结构化清单：分步骤写明每步要调的工具与关键参数（技能 id、段数、
+  时长、尺寸、配方名），最后一步写明产物是什么。右栏会把它铺成一张执行清单，用户切到执行模式
+  就照着这一份逐条跑，工具名写错了这一发会被拒回。
+- 计划模式里不许说「已完成」，不许编造产物文件名，finish_task 也会被拒回——把要做的事写进计划，让用户切到执行模式再跑。"""
 
 
 
@@ -215,12 +273,23 @@ class _Run:
         # 素材库当前目录是否标了 👤 角色图：注入参考时决定新建配方走不走全参考（见 _apply_references）
         self.character_dir = False
         self.resume_of = ""
+        self.resume_from = 0      # 「从这条消息重新开始」的序号（历史里第几条用户消息，1 起），0 = 整条接上
         self.status = "running"
         self.frames: list[dict] = []
         self.messages: list[dict] = []
         # 焦点链：本轮会话最近一次生成的既定事实（技能 / 主模型 / 尺寸 / 种子 / 产物名）。
         # _focus_update 逐次覆盖，逐轮重注入系统提示词，随会话落盘供续聊恢复——不跨运行留全局状态
         self.focus: dict = {}
+        # token 统计按 provider 每轮报的 usage 累加，随会话落盘进历史摘要：
+        # 一轮 12 轮 × 长上下文跑到什么量级，用户要在右栏看见，不能只留在后端日志里
+        self.usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "turns": 0}
+        # 执行清单：计划模式 write_plan 写下的那一份，切到执行模式续聊时接回来逐条划掉
+        self.plan_steps: list = []
+        # 用户级偏好的快照（configs/agent_prefs.json 在请求开始时读一次）：一轮跑一半用户改了
+        # 偏好不该影响正在跑的这一条循环
+        self.prefs: dict = dict(DEFAULT_PREFS)
+        # 本次运行真出现过的产物：名字 → 产物项。finish_task 只认这份表里的名字
+        self.media_urls: dict[str, dict] = {}
 
     async def await_answer(self, emit, question: str, options: list) -> str:
         """发一问，等到用户点选或超时。超时是真实失败模式：整页导航走、SSE 还挂着，
@@ -340,7 +409,8 @@ def _save_session(run) -> None:
     本机路径与产物名，只落在数据根里：不进 Registry 包、不出本机。"""
     payload = {"version": 1, "run_id": run.run_id, "created": run.created,
                "updated": time.time(), "mode": run.mode, "status": run.status,
-               "resume_of": run.resume_of, "focus": run.focus,
+               "resume_of": run.resume_of, "resume_from": run.resume_from, "focus": run.focus,
+               "usage": run.usage, "plan_steps": run.plan_steps,
                "input": {"text": run.text, "images": run.image_refs, "context": run.context},
                "frames": run.frames, "messages": _stored_messages(run.messages)}
     data = json.dumps(_json_safe(payload), ensure_ascii=False)
@@ -388,6 +458,7 @@ def _list_sessions() -> list:
         if data is None:
             continue
         inp = data.get("input") or {}
+        usage = data.get("usage") if isinstance(data.get("usage"), dict) else {}
         out.append({"run_id": str(data.get("run_id") or ""), "created": data.get("created"),
                     "mode": data.get("mode"), "status": data.get("status"),
                     "resume_of": data.get("resume_of"),
@@ -395,6 +466,9 @@ def _list_sessions() -> list:
                     "focus_skill": str((data.get("focus") or {}).get("skill_id") or ""),
                     "text": _clip(str(inp.get("text") or ""), 120),
                     "images": len(inp.get("images") or []),
+                    # 这条会话烧掉多少 token：长上下文的会话在列表里就该看得出来
+                    "tokens": int(usage.get("total_tokens") or 0),
+                    "resume_from": int(data.get("resume_from") or 0),
                     "tools": sum(1 for f in (data.get("frames") or []) if f.get("kind") == "tool_call")})
     return out
 
@@ -412,6 +486,47 @@ def _delete_sessions(run_id: str = "") -> int:
         path.unlink(missing_ok=True)
         n += 1
     return n
+
+
+# ---------------------------------------------------------------------------
+# 用户级偏好：configs/agent_prefs.json，一台机器一份
+# ---------------------------------------------------------------------------
+
+def _clean_prefs(raw) -> dict:
+    """偏好文件的读入口：缺字段回默认值，形态不对的字段丢回默认值。
+
+    这个文件在用户自己的编辑器里打开着，一个 {"preferred_size": ["1024x1024"]} 不能把整轮
+    系统提示词带炸；combo 与路径类值在这里按形态收口，照抄进来的越界字符串也在这一步裁掉。"""
+    raw = raw if isinstance(raw, dict) else {}
+    out = {}
+    for key in ("preferred_skill", "preferred_family"):
+        value = str(raw.get(key) or "").strip()
+        out[key] = value if PREFS_NAME_RE.match(value) else ""
+    size = str(raw.get("preferred_size") or "").strip()
+    out["preferred_size"] = size if PREFS_SIZE_RE.match(size) else ""
+    for key in ("style_notes", "avoid"):
+        out[key] = _clip(str(raw.get(key) or "").strip(), PREFS_TEXT_MAX)
+    out["confirm_films"] = bool(raw.get("confirm_films", DEFAULT_PREFS["confirm_films"]))
+    return out
+
+
+def _load_prefs() -> dict:
+    """缺文件、半截文件都回代码里的默认值：不往数据根落一份默认副本，用户的偏好只在他改的时候才写盘。"""
+    try:
+        raw = json.loads(AGENT_PREFS_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return dict(DEFAULT_PREFS)
+    return _clean_prefs(raw)
+
+
+def _save_prefs(prefs) -> dict:
+    """原子写（.tmp 再 replace）：用户开着编辑器时不会读到半截 JSON。返回落盘的那一份。"""
+    clean = _clean_prefs(prefs)
+    AGENT_PREFS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    tmp = AGENT_PREFS_FILE.with_name(AGENT_PREFS_FILE.name + ".tmp")
+    tmp.write_text(json.dumps(clean, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(tmp, AGENT_PREFS_FILE)
+    return clean
 
 
 # ---------------------------------------------------------------------------
@@ -596,6 +711,187 @@ def _chat(messages: list, tools: list) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# 上下文预算：超了就从最旧的工具结果开始压
+# ---------------------------------------------------------------------------
+
+def _msg_tokens(msg: dict) -> int:
+    """一条消息的粗略 token。字符数 / 2 对中文与英文都落在同一量级，宁可估高。
+
+    附件图按 IMAGE_TOKENS 定值计：一条带图的 user 消息里是 base64，按字符数算会把一条消息
+    记成十万 token，压缩就会从该留的地方下手。tool_calls 的参数同样在计费。"""
+    content = msg.get("content")
+    if isinstance(content, list):
+        total = sum(IMAGE_TOKENS if (isinstance(part, dict) and part.get("type") == "image_url")
+                    else len(str(part)) // 2 for part in content)
+    else:
+        total = len(str(content or "")) // 2
+    for call in (msg.get("tool_calls") or []):
+        total += len(json.dumps(call, ensure_ascii=False)) // 2
+    return total + MSG_OVERHEAD
+
+
+def _compress_messages(messages: list, budget: int = CONTEXT_BUDGET_TOKENS) -> int:
+    """整份 messages 的 token 估计；超预算时从最旧的工具结果开始压成一行标记。
+
+    只换 role="tool" 消息的 content，一条都不删：assistant 的 tool_calls 与 tool 消息的
+    tool_call_id 是成对的，删一条 tool 就是整请求 400，比超预算更难查。
+    系统提示词（焦点链、用户偏好、执行清单都在 messages[0] 里）与 user 消息不参与压缩。
+    第一遍只动最近 COMPRESS_KEEP 条之外的那一段；压完还超才动第二遍（见下）。
+    已压过的不再压第二次；压到预算内就停，压不动的剩余量由调用方在 context 帧里报出来。
+    返回压完的估计值。"""
+    total = sum(_msg_tokens(m) for m in messages)
+    if total <= budget:
+        return total
+    keep_from = max(1, len(messages) - COMPRESS_KEEP)
+
+    def compress(msg) -> int:
+        """把一条工具结果压成标记，返回省下的估计值。"""
+        nonlocal total
+        if msg.get("role") != "tool":
+            return 0
+        content = str(msg.get("content") or "")
+        if not content or content == COMPRESS_MARK:
+            return 0
+        saved = max(0, (len(content) - len(COMPRESS_MARK)) // 2)
+        msg["content"] = COMPRESS_MARK
+        total -= saved
+        return saved
+
+    for msg in messages[:keep_from]:
+        if compress(msg) and total <= budget:
+            return total
+    # 最近那一段自己就能顶爆预算（一次 list_gallery 的全表）：压它，只留住最新的一条
+    # ——那是模型下一步要照着调的参数来源
+    newest_tool = max((i for i, m in enumerate(messages) if m.get("role") == "tool"), default=-1)
+    for i in range(keep_from, len(messages)):
+        if i != newest_tool and compress(messages[i]) and total <= budget:
+            return total
+    return total
+
+
+# ---------------------------------------------------------------------------
+# 执行清单与收场契约：右栏伪工具 write_plan / finish_task 的验收
+# ---------------------------------------------------------------------------
+
+def _plan_of(run, args: dict, mode: str) -> tuple[str, list]:
+    """write_plan 的验收，返回 (拒回原文, 清单)。
+
+    每步的 tool 必须是这次工具表里的真名：名字写错的一步在计划里就是一条跑不动的，
+    用户切到执行模式照着跑会当场报错，那比少写一步更难查。"""
+    if mode != "plan":
+        return ("[error] write_plan 只在计划模式用：执行模式直接把事做完，收场用 finish_task", [])
+    steps = args.get("steps")
+    if not isinstance(steps, list) or not (1 <= len(steps) <= 12):
+        return ("[error] write_plan 要 1-12 步的 steps：每步 {tool, key_args, note}，"
+                "tool 用工具表里的真名", [])
+    names = {str(t.get("name") or "") for t in run.client.tool_list()}
+    out: list = []
+    for st in steps:
+        st = st if isinstance(st, dict) else {}
+        tool = str(st.get("tool") or "").strip()
+        if tool not in names:
+            return (f"[error] write_plan 第 {len(out) + 1} 步的工具名不在工具表里：{tool or '（空）'}。"
+                    "照工具表里的真名重写这份计划", [])
+        out.append({"tool": tool,
+                    "key_args": _clip(str(st.get("key_args") or "").strip(), 200),
+                    "note": _clip(str(st.get("note") or "").strip(), 200),
+                    "done": False})
+    return "", out
+
+
+def _plan_mark(run, name: str, result: str) -> bool:
+    """执行模式里把清单上第一项同名工具划成已完成：右栏的 3/8 就是这么走起来的。
+
+    只认成功交付——[error] 与任务终态非 succeeded 的那一发没产出东西，划上去就是报假进度。"""
+    if not run.plan_steps or result.startswith("[error]"):
+        return False
+    if name in TASK_TOOLS and str(_json_of(result).get("status") or "").split(" ")[0] != "succeeded":
+        return False
+    for step in run.plan_steps:
+        if step["tool"] == name and not step["done"]:
+            step["done"] = True
+            return True
+    return False
+
+
+def _plan_block(steps: list) -> str:
+    """执行清单进系统提示词：计划模式写下的那一份计划在切到执行模式后还在，逐条照跑、跑完一条划掉一条。"""
+    if not steps:
+        return ""
+    lines = []
+    for i, step in enumerate(steps[:12]):
+        line = f"- {i + 1}. {step.get('tool')}"
+        if step.get("key_args"):
+            line += f"（{_clip(step['key_args'], 200)}）"
+        if step.get("note"):
+            line += f"：{_clip(step['note'], 200)}"
+        lines.append(line + ("　✅ 已完成" if step.get("done") else ""))
+    return ("\n\n本轮照这份执行清单跑（用户刚从计划模式切过来，这是他自己认下的计划）：\n"
+            + "\n".join(lines)
+            + "\n按顺序逐条做，做完一条才做下一条；要改顺序或跳过某条就把理由讲给用户。"
+              "清单跑完用 finish_task 收场，media 只报本次运行真出现过的产物名。")
+
+
+def _finish_of(run, args: dict, mode: str) -> tuple[str, dict]:
+    """finish_task 的验收，返回 (拒回原文, 收场载荷)。
+
+    media 里的名字必须在本次运行的工具结果里真出现过：模型编一个文件名出来，右栏的播放与
+    下载链接就是 404，用户点下去只拿到一句「文件不存在」——这一发比不交产物更坏。"""
+    if mode == "plan":
+        return ("[error] 计划模式不收场：把要做的事写进 write_plan 的计划，"
+                "让用户切到执行模式再跑", {})
+    result = str(args.get("result") or "").strip()
+    if not result:
+        return ("[error] finish_task 缺 result：把做了什么与产物是什么写清楚再收场", {})
+    names = [str(n).strip() for n in (args.get("media") or []) if str(n).strip()][:8]
+    fake = [n for n in names if n not in run.media_urls]
+    if fake:
+        seen = "、".join(sorted(list(run.media_urls)[:8])) or "（本次运行还没有产物）"
+        return (f"[error] finish_task 的产物名在本次运行的工具结果里没有：{'、'.join(fake)}。"
+                f"本次出现过的产物是 {seen}；只报这些名字，没有产物就把 media 留空", {})
+    return "", {"result": _clip(result, RESULT_CLIP),
+                "media": [run.media_urls[n] for n in names],
+                "options": [_clip(str(o).strip(), 200) for o in (args.get("next_options") or [])
+                            if str(o).strip()][:6]}
+
+
+def _gate_cost(name: str, args: dict) -> str:
+    """出片确认卡上的量级：段数 / 段号 / 时长 / 尺寸 / 配方名。
+
+    字段全从 LLM 这一发的入参来，缺什么就不写什么——卡上报一个编出来的数，用户是照它决定
+    跑不跑的，那比不给数更坏。"""
+    bits = []
+    segs = args.get("segments")
+    if isinstance(segs, (list, tuple)) and segs:
+        bits.append(f"{len(segs)} 段")
+    if isinstance(args.get("segment"), int):
+        bits.append(f"第 {int(args['segment'])} 段")
+    for key, label in (("duration_sec", "秒/段"), ("seconds", "秒"),
+                       ("frames", "帧"), ("fps", "fps")):
+        value = args.get(key)
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            bits.append(f"{label} {value}")
+    width, height = args.get("width"), args.get("height")
+    if isinstance(width, int) and isinstance(height, int):
+        bits.append(f"{width}x{height}")
+    recipe = str(args.get("recipe") or "").strip()
+    if recipe:
+        bits.append(_clip(recipe, 80))
+    return " · ".join(bits) or "参数在配方里"
+
+
+def _gate_refused(text: str) -> bool:
+    """确认卡上的回答认挡不挡：选项是后端给的两句，认得出「先不跑」就挡下这一发。
+
+    自由输入走同一集关键词。[timeout] 那句按「跑」走——用户 30 分钟没有回应时取舍已经交回循环：
+    代价是用户离开电脑时这一发会照跑，换来的是循环不挂在确认卡上永不收场。"""
+    line = str(text or "").strip()
+    if not line or line.startswith("[timeout]"):
+        return False
+    return any(key in line for key in ("先不跑", "不出片", "别跑", "不跑", "取消"))
+
+
+# ---------------------------------------------------------------------------
 # 焦点链：本会话最近一次生成的既定事实
 # ---------------------------------------------------------------------------
 
@@ -712,17 +1008,48 @@ def _context_block(raw) -> str:
             + "\n".join(f"- {x}" for x in lines))
 
 
-def system_prompt(mode: str = "act", context: str = "", focus: dict | None = None) -> str:
-    """系统提示词 = 静态提示词 + 界面状态 + 焦点链（+ 计划模式说明）。
-    焦点链要在每次 LLM 请求前重算：本轮生成工具刚立的事实得在下一轮请求里可见（见 _run_agent）。"""
+def _prefs_block(prefs: dict) -> str:
+    """用户级偏好压成一段事实：右栏「设为偏好」写的是这台机器上的长期口味。
+
+    与焦点链的分工是远近：本会话刚出过那一发的真值优先，这一段只在焦点链没给的部分兜底。
+    空的偏好不产出这一段——提示词里一段空的「偏好」是噪声。"""
+    if not prefs:
+        return ""
+    lines = []
+    for key, label in (("preferred_skill", "偏好技能"), ("preferred_size", "偏好尺寸"),
+                       ("preferred_family", "偏好模型家族"), ("style_notes", "风格偏好"),
+                       ("avoid", "要避开")):
+        value = str(prefs.get(key) or "").strip()
+        if value:
+            lines.append(_clip(f"{label}={value}", PREFS_TEXT_MAX))
+    if prefs.get("confirm_films"):
+        lines.append("出片先确认=跑整片 / 单段 / 关键帧之前先问用户一次")
+    if not lines:
+        return ""
+    return ("\n\n用户级偏好（这台机器上的长期口味，不是本轮指令）：\n"
+            + "\n".join(f"- {x}" for x in lines)
+            + "\n本会话的既定事实比这一段更近：焦点链里有的部分照焦点链，这一段只在它没给的地方兜底；"
+              "用户本轮明说的照他说的。偏好技能要先在 list_skills 里认得到才用，"
+              "偏好尺寸与技能支持的宽高对不上就按技能自己的来。")
+
+
+def system_prompt(mode: str = "act", context: str = "", focus: dict | None = None,
+                  plan_steps: list | None = None, prefs: dict | None = None) -> str:
+    """系统提示词 = 静态提示词 + 界面状态 + 焦点链 + 用户级偏好（+ 计划模式说明 + 执行清单）。
+    焦点链与执行清单要在每次 LLM 请求前重算：本轮生成工具刚立的事实、清单上刚划掉的那一条
+    都得在下一轮请求里可见（见 _run_agent）。执行清单只在执行模式进提示词——
+    计划模式这一轮正在写它，还没有清单可照跑。"""
     try:
         text = SYSTEM_PROMPT_FILE.read_text(encoding="utf-8")
     except OSError as e:
         raise mcp.ToolError(f"缺少智能体系统提示词：{SYSTEM_PROMPT_FILE}（{e}）")
     text += context
     text += _focus_block(focus or {})
+    text += _prefs_block(prefs or {})
     if mode == "plan":
         text += PLAN_MODE_NOTE
+    else:
+        text += _plan_block(plan_steps or [])
     return text
 
 
@@ -827,27 +1154,51 @@ async def _run_agent(client, text: str, emit, run, mode: str = "act",
     停止与暂停位只在轮次与工具边界生效：LLM 的单轮请求在飞时掐不掉，回来后的第一个边界收场；
     循环挂在 ask_user 的 await 上时，暂停要等回答落地才在下一轮边界生效。
     计划模式（mode="plan"）里改状态的工具不进工具表，模型硬调也在边界拒回错误；
-    ask_user 是右栏伪工具，不发 MCP，循环自己发 ask 帧挂起等用户点选。
+    ask_user / finish_task / write_plan 是右栏的伪工具，不发 MCP：ask 帧挂起等用户点选，
+    write_plan 在计划模式收场前把执行清单交下来，finish_task 在执行模式交收场载荷与产物名。
     history 是续聊带回来的旧会话原文（不含 system）：带它时这一轮接在那条会话后面跑，
-    轮次预算是新一轮自己的 12 轮。"""
-    messages = [{"role": "system", "content": system_prompt(mode, context, run.focus)}]
+    轮次预算是新一轮自己的 12 轮。
+    每轮请求前压一次上下文（_compress_messages）；出片级工具在跑之前过一道量级确认卡
+    （用户偏好里的 confirm_films）；provider 每轮报的 token 统计逐轮累进 run.usage。"""
+    messages = [{"role": "system", "content": system_prompt(mode, context, run.focus,
+                                                            run.plan_steps, run.prefs)}]
     messages += list(history or [])
     messages.append(_user_message(text, images or []))
     run.messages = messages       # 同一个 list 对象：循环里的 append 逐轮可见，半途收场也留得下
     tools = _openai_tools(client.tool_list(), plan=(mode == "plan")) + [ASK_TOOL]
+    tools += [PLAN_TOOL] if mode == "plan" else [FINISH_TOOL]
     answered = False
+    sent_tokens = -1
     for _ in range(MAX_TURNS):
         if run.stop.is_set():
             await emit({"kind": "content", "text": CANCELLED_TEXT})
             return
         if not await run.await_resume(emit):
             return
-        # 焦点链逐轮重注入：本轮生成工具刚立的事实要在这一轮的请求里可见，
-        # 而 messages[0] 是循环开头按当时的焦点写的
-        messages[0]["content"] = system_prompt(mode, context, run.focus)
+        # 焦点链、用户偏好与执行清单逐轮重注入：本轮刚立的事实与清单上刚划掉的一条要在这一轮
+        # 的请求里可见，而 messages[0] 是循环开头按当时的状态写的
+        messages[0]["content"] = system_prompt(mode, context, run.focus, run.plan_steps, run.prefs)
+        # 上下文在每一轮的边界上压：一次长会话里的技能全表与长工具返回是逐轮攒起来的，
+        # 不压就是整请求 400，报错点在 provider 那一侧，比少一轮难查得多
+        tokens = _compress_messages(messages)
+        # 上下文帧只在量级开始有意义时报：一轮纯问答的上下文本来就在预算的四分之一以下，
+        # 逐轮发一条「用了 8%」是噪声
+        if tokens >= CONTEXT_REPORT_FLOOR and tokens != sent_tokens:
+            sent_tokens = tokens
+            await emit({"kind": "context", "approx_tokens": tokens,
+                        "ratio": round(tokens / CONTEXT_BUDGET_TOKENS, 2)})
         msg = await asyncio.to_thread(_chat, messages, tools)
+        # provider 每轮报的 token 统计累进运行对象：整条会话烧掉多少 token 要能在右栏看见，
+        # 不能只留在后端日志里
+        usage = msg.pop("usage", None)
+        if isinstance(usage, dict):
+            for key in ("prompt_tokens", "completion_tokens", "total_tokens"):
+                run.usage[key] += int(usage.get(key) or 0)
+            run.usage["turns"] += 1
+            await emit({"kind": "usage", **run.usage})
         content = str(msg.get("content") or "")
         calls = msg.get("tool_calls") or []
+        finish = None       # 本轮的 finish_task 收场载荷：收下了就在这条 calls 之后退出双层循环
         assistant = {"role": "assistant", "content": content}
         if calls:
             assistant["tool_calls"] = calls
@@ -873,19 +1224,58 @@ async def _run_agent(client, text: str, emit, run, mode: str = "act",
                 result = await run.await_answer(
                     emit, str(args.get("question") or "").strip(),
                     [str(o).strip() for o in (args.get("options") or []) if str(o).strip()][:5])
+            elif name == "finish_task":
+                result, finish = _finish_of(run, args, mode)
+            elif name == "write_plan":
+                result, steps = _plan_of(run, args, mode)
+                if not result:
+                    run.plan_steps = steps
+                    result = json.dumps({"success": True, "steps": steps}, ensure_ascii=False)
             elif mode == "plan" and name in PLAN_BLOCKED_TOOLS:
                 # 计划模式里模型仍可能硬调写操作：拒回原文它才会改口去写计划
                 result = (f"[error] 计划模式不执行 {name}：把要做的事写进计划，"
                           f"让用户切到执行模式再跑")
+            elif mode == "act" and name in FILM_GATE_TOOLS and run.prefs.get("confirm_films", False):
+                # 一次整片是三段 × 每段数分钟起步：跑下去再喊停就晚了一半，先在卡上把量级报出来。
+                # 确认要在入队之前——挡下之后才发任务就等于没挡
+                answer = await run.await_answer(
+                    emit, f"要跑 {name}（{_gate_cost(name, args)}），这一发是数分钟起步的量级，跑吗？",
+                    list(GATE_OPTIONS))
+                if _gate_refused(answer):
+                    result = (f"[skipped] 用户选择这一发不跑（{name}）：把「用户挡下了这一发」写进结论，"
+                              f"换一个更小的方向或把计划交回来，不要自己重发同一发")
+                else:
+                    result = await _tool_result(client, name, args, emit, run)
             else:
                 result = await _tool_result(client, name, args, emit, run)
+            media = _media_of(result)
             await emit({"kind": "tool_result", "tool": name,
-                        "text": _clip(result, RESULT_CLIP), "media": _media_of(result)})
+                        "text": _clip(result, RESULT_CLIP), "media": media})
+            for item in media:
+                # 产物名与它的地址记在运行对象上：finish_task 只认这份表里真出现过的名字
+                title = str(item.get("title") or "")
+                if title:
+                    run.media_urls[title] = item
             messages.append({"role": "tool", "tool_call_id": tc.get("id", ""), "content": result})
+            before = json.dumps(run.focus, ensure_ascii=False, sort_keys=True)
             _focus_update(run, name, args, result)
+            if json.dumps(run.focus, ensure_ascii=False, sort_keys=True) != before:
+                # 焦点链交回界面：右栏的「设为偏好」照这一份填，用户不用自己抄技能名与尺寸
+                await emit({"kind": "focus", "focus": run.focus})
+            if name == "write_plan" and run.plan_steps:
+                await emit({"kind": "plan_steps", "steps": run.plan_steps})
+            elif _plan_mark(run, name, result):
+                await emit({"kind": "plan_steps", "steps": run.plan_steps})
+            if finish:
+                await emit({"kind": "finish", "text": finish["result"],
+                            "media": finish["media"], "options": finish["options"]})
+                answered = True
+                break
             if run.stop.is_set():
                 await emit({"kind": "content", "text": CANCELLED_TEXT})
                 return
+        if finish:
+            break
     if not answered:
         await emit({"kind": "content",
                     "text": f"跑了 {MAX_TURNS} 轮还没有结论：把需求说具体些（要什么画面、用哪个技能）再试。"})
@@ -949,12 +1339,15 @@ def _error_response(message: str) -> web.Response:
 
 @routes.post("/neo_agent/run")
 async def agent_run(request):
-    """右栏智能体：一次请求，一路 SSE 时间线。body {text, mode, images, context, resume}。
+    """右栏智能体：一次请求，一路 SSE 时间线。body {text, mode, images, context, resume, from}。
     mode 只认 plan / act，其余按 act；images 是输入框附件图，按 prompts 的图片源口径给，
     act 模式下它们默认作为本轮生成的参考图（见 _apply_references）；
     context 是界面当前状态（当前页 / 当前导演配方 / 绘画页模式 / 素材库目录与它的角色图标记），值从前端 DOM 来；
     resume 是「继续这次会话」要接的那条旧会话的 run_id，带它时旧对话原文与那条会话的焦点链
-    （上一次生成的技能 / 参数 / 产物）一起接在系统提示词之后。"""
+    （上一次生成的技能 / 参数 / 产物）一起接在系统提示词之后，那条会话在计划模式交出的执行清单
+    也在执行模式下接回来照跑；
+    from 是「从这条消息重新开始」：连着 resume 给，取那条会话里第 N 条用户消息（1 起），
+    那一条与它之后的原文整段丢掉，本轮的输入从那个点重新长出去。"""
     try:
         body = await request.json()
     except Exception:
@@ -973,7 +1366,10 @@ async def agent_run(request):
     if not text:
         return _error_response("没有输入内容")
     resume = str(body.get("resume") or "").strip()
+    raw_from = body.get("from")
+    resume_from = 0
     history: list = []
+    record: dict | None = None
     if resume:
         # 续聊带的 run_id 会拼进会话文件名的匹配段，按后端发出去的形态校验；
         # 还在跑的循环不能同时被两条请求接上
@@ -985,16 +1381,35 @@ async def agent_run(request):
         if record is None:
             return _error_response(f"会话不存在：{resume}")
         history = list(record.get("messages") or [])
+        if raw_from is not None:
+            # 序号数的是那条会话里的第几条用户消息（界面上就照这个序号铺按钮），内部换成消息位置
+            try:
+                resume_from = int(raw_from)
+            except (TypeError, ValueError):
+                return _error_response("from 要是一个序号（整数）")
+            marks = [i for i, m in enumerate(history) if str(m.get("role") or "") == "user"]
+            if not (1 <= resume_from <= len(marks)):
+                return _error_response(f"from 的序号超出这条会话的用户消息数（1-{len(marks)}）")
+            history = history[:marks[resume_from - 1]]
+    elif raw_from is not None:
+        return _error_response("from 要连着 resume 一起给")
     run = _Run(McpClient(comfy_base(request)))
     run.mode, run.text, run.context = mode, text, context
     run.character_dir = isinstance(raw_ctx, dict) and raw_ctx.get("character_dir") is True
-    run.resume_of = resume
-    if resume:
-        # 焦点链接上旧会话：续聊第一轮的系统提示词就带着上一次生成的技能与参数。
-        # 老会话文件没有 focus 这一项时是空焦点，本轮从第一次生成起自己攒
+    run.resume_of, run.resume_from = resume, resume_from
+    # 偏好是请求开始时读的一次快照：一轮跑一半用户改了偏好，不该影响正在跑的这条循环
+    run.prefs = await asyncio.to_thread(_load_prefs)
+    if record is not None:
         saved_focus = record.get("focus")
-        if isinstance(saved_focus, dict):
+        if isinstance(saved_focus, dict) and not resume_from:
+            # 从中间某条消息重开时不接焦点链：那条会话后半段刚出过的那一发在截断点之后，
+            # 把它当本轮的既定事实就是报一个本轮没做过的事
             run.focus = dict(saved_focus)
+        saved_plan = record.get("plan_steps")
+        if mode == "act" and isinstance(saved_plan, list):
+            # 计划模式交出的那份清单在切到执行模式后接着照跑，跑完一条划掉一条
+            run.plan_steps = [dict(step) for step in saved_plan
+                              if isinstance(step, dict) and step.get("tool")][:12]
     run.image_refs = _image_refs(body.get("images"))
     run.image_sources = [src for src in (body.get("images") or [])
                          if isinstance(src, dict)][:MAX_IMAGES]
@@ -1144,3 +1559,21 @@ async def agent_session_delete(request):
 async def agent_session_delete_all(request):
     """「清空对话」连着清历史：只删会话目录里按名字认出来的文件，目录本身与别的文件不碰。"""
     return web.json_response({"success": True, "deleted": await asyncio.to_thread(_delete_sessions)})
+
+
+@routes.get("/neo_agent/prefs")
+async def agent_prefs_get(request):
+    """右栏「偏好」表单的当前值：纯文件读，桌面端服务没 ComfyUI 也在。缺文件回代码里的默认值。"""
+    return web.json_response(_json_safe({"ok": True, "prefs": await asyncio.to_thread(_load_prefs)}))
+
+
+@routes.post("/neo_agent/prefs")
+async def agent_prefs_save(request):
+    """存用户级偏好：逐字段按形态收净再原子写（见 _clean_prefs）。
+    越界的 combo 值与长文本在这一步挡掉，落盘的只有收净的那一份。"""
+    try:
+        body = await request.json()
+    except Exception:
+        return web.json_response({"ok": False, "error": "请求不是合法 JSON"}, status=400)
+    prefs = await asyncio.to_thread(_save_prefs, body if isinstance(body, dict) else {})
+    return web.json_response(_json_safe({"ok": True, "prefs": prefs}))

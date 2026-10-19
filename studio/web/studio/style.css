@@ -637,3 +637,23 @@ body {
     outline: 2px solid #7aa2ff;
     outline-offset: 2px;
 }
+/* 智能体偏好（设置页一栏）：短字段两列，两条长文本，开关与保存收在整行下沿。
+   表单复用 prompts.css 的 .rs-config-row / .rs-form-label / .rs-form-input / .rs-gen-save，
+   限宽与设置页其它表单同一条（宽窗口里字段不铺满整屏）。 */
+.ns-agent-prefs {
+    max-width: 720px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 14px;
+}
+.ns-agent-prefs .rs-settings-desc { grid-column: 1 / -1; margin-bottom: 0; }
+.ns-agent-prefs textarea.rs-form-input { resize: vertical; font-family: inherit; }
+/* 枚举三项的下拉：沿用 .rs-form-input 的暗色外观，展开后的选项列表也铺同一套底色 */
+.ns-agent-prefs select.rs-form-input { appearance: auto; }
+.ns-agent-prefs select.rs-form-input option { background: #2a2a2a; color: #ccc; }
+.ns-prefs-check { flex-direction: row; align-items: center; gap: 8px; }
+.ns-prefs-check .rs-form-label { margin-bottom: 0; }
+.ns-prefs-check .rs-form-input { width: auto; }
+.ns-prefs-save { width: auto; padding: 6px 20px; justify-self: start; }
+.ns-prefs-note { grid-column: 1 / -1; font-size: 12px; color: #9a9aa8; }
+
