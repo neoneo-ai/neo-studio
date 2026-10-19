@@ -148,7 +148,7 @@ studio/
 | `bundle-lock.js` | bundle 锁定与自动增强 |
 | `ref-grid.js` | 参考图宫格前端 |
 | `workflow.js` | 工作流修复交互 |
-| `workflow-graph.js` | 技能工作流只读流程图（autogrow 槽位合并为合成节点，图上与 tooltip 不显示内部 id；同列宽度拉齐，模型加载节点放宽以显示模型名）；`canvasLayout` 按同一套分层与同层排序重排「导入到画布」后的画布节点，并返回同列统一宽度供 setSize |
+| `workflow-graph.js` | 技能工作流只读流程图（autogrow 槽位合并为合成节点，图上与 tooltip 不显示内部 id；同列宽度拉齐，模型加载节点放宽以显示模型名；被设置填走值的字段带 `{{TOKEN}}` 来源，摘要给出变量芯片）；`canvasLayout` 按同一套分层与同层排序重排「导入到画布」后的画布节点，并返回同列统一宽度供 setSize |
 | `workflow-context.js` | 工作流上下文采集 |
 | `top-menu.js` | 顶栏 🅝 菜单 |
 | `canvas-lock.js` | 主画布离线闸门：ComfyUI 掉线时锁画布（前端自带的 `read_only` 画布锁）并出横幅，恢复后解锁 |

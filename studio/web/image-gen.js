@@ -113,11 +113,24 @@ export async function cancelTask(taskId) {
 }
 
 /** 把当前画布工作流（API prompt）保存为生图技能；返回 { id, warnings } */
-export async function saveWorkflowSkill({ name, description, tags, workflow }) {
+export async function saveWorkflowSkill({ name, description, tags, workflow, bindings }) {
     const resp = await fetch(`${GEN_API}/save_workflow_skill`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, description, tags: tags || [], workflow })
+        body: JSON.stringify({ name, description, tags: tags || [], workflow, bindings: bindings || [] })
+    });
+    const data = await resp.json().catch(() => null);
+    if (!resp.ok || !data || data.error) throw new Error(data?.error || `HTTP ${resp.status}`);
+    return data;
+}
+
+/** 导出预览：后端给出画布里可替换成占位符的 widget 候选（提示词原文节点 / 分辨率选择器）；
+ * 返回 { gen_video, candidates: [{ node, field, token, class_type, value }], warnings } */
+export async function planWorkflowSkill(workflow) {
+    const resp = await fetch(`${GEN_API}/plan_workflow_skill`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workflow })
     });
     const data = await resp.json().catch(() => null);
     if (!resp.ok || !data || data.error) throw new Error(data?.error || `HTTP ${resp.status}`);

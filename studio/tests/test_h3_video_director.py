@@ -194,6 +194,27 @@ class _PF(logging.Filter):
         return True
 _util.PrefixFilter = _PF
 _util.plugin_version = lambda: "0.0.0-stub"   # studio.py 的版本 banner / 版本页共用
+# skill.py / image_gen.py 在模块导入期就要这两个比例工具（ResolutionSelector 的 combo label 表
+# 与 "16:9 (Widescreen)" → (16, 9) 的解析）：桩里镜像 studio/util.py 的同名定义
+_util.ASPECT_LABELS = {"1:1": "1:1 (Square)", "2:3": "2:3 (Portrait Photo)", "3:2": "3:2 (Photo)",
+                       "3:4": "3:4 (Portrait Standard)", "4:3": "4:3 (Standard)",
+                       "9:16": "9:16 (Portrait Widescreen)", "16:9": "16:9 (Widescreen)",
+                       "21:9": "21:9 (Ultrawide)"}
+
+
+def _stub_ratio_pair(text):
+    head = str(text or "").strip().split(" ")[0].lower().replace("x", ":").replace("/", ":")
+    parts = head.split(":")
+    if len(parts) != 2:
+        return None
+    try:
+        w, h = float(parts[0]), float(parts[1])
+    except ValueError:
+        return None
+    return (w, h) if w > 0 and h > 0 else None
+
+
+_util.ratio_pair = _stub_ratio_pair
 sys.modules[f"{_PKG}.util"] = _util
 setattr(_pkg, "util", _util)
 

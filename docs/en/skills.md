@@ -105,7 +105,16 @@ ids are laid out the same way instead of stacking.
 Collapsing the header unmounts the canvas; expanding it mounts a fresh one. In a view without LiteGraph
 (embedded in Studio), or when the skill references unregistered node types, nothing can be mounted and the
 workflow area falls back to a read-only flowchart (red frame = node not installed / model missing, blue
-frame = contains `{{template variables}}`).
+frame = contains `{{template variables}}`). That fallback is pre-rendered with the current settings, so every
+field a setting filled keeps its variable name on the line, written `field: {{TOKEN}} = value` (the name leads,
+so column-width truncation cuts the value and never the variable), and the summary counts them
+("🟦 N variables filled from the skill's settings") with one `{{TOKEN}}` chip per variable: hovering names the
+node, the field, the filled value and what that widget accepts (a combo lists its options, a number its min / max),
+and 📋 copies the variable name. The source line leads with the two settings the skill really stores — the size is
+"base resolution × default ratio" — so `{{MEGAPIXELS}}` is spelled out as the number those two settings' width and
+height give divided by 1024² (neither the skill nor the canvas has a megapixels setting), and `{{ASPECT_RATIO}}`
+points at "default ratio". Size variables also state that each generation recomputes them from its own width and
+height, so the number on the graph is only the preview at the skill's default size.
 
 The embedded canvas carries `tabindex=1` and is focused on mount. ComfyUI's litegraph patch runs canvas
 shortcuts against `app.canvas` (the main canvas), so the embedded canvas grabs a capture listener before
@@ -125,7 +134,11 @@ the same flowchart layout (reference loaders LoadImage/LoadVideo/LoadAudio move 
 to bottom instead of squeezing into the model-loading column; column widths are applied first and positions
 are computed a second time at the new size, so a preview node whose height grew after widening does not land
 on another node); `{{REF_IMAGE_N}}` / `{{CONTROL_IMAGE}}` are replaced by the actual images from the
-LoadImage list according to the `config.json` slots (`control_ref`), leaving no placeholder on the canvas.
+LoadImage list according to the `config.json` slots (`control_ref`), leaving no placeholder on the canvas. The
+success toast lists every template variable it baked into a number — the node and field it landed in and which
+setting produced it (size is spelled "base resolution × default ratio", megapixels as the number computed from
+that size, recomputed from each request's width and height) — because the canvas keeps no `{{variables}}`: the
+number on the canvas is what the skill's settings compute, not a value stored in the skill.
 The second writes the whole canvas into that skill's `workflow.json` (preset skills never edit the preset
 itself: model values go to the local override, structural changes copy the skill as custom and write the
 copy, and the pending-writeback state moves to the copy).
@@ -134,6 +147,23 @@ Reference video / audio slots (`{{REF_VIDEO_N}}` / `{{REF_AUDIO_N}}`) carry `mod
 by default (the placeholder files usually are not in the `input` directory, and pushing them into a combo
 turns the whole node red); writeback and "📋 From canvas" export temporarily enable them before reading the
 prompt and restore them afterwards, so no slot is lost.
+
+"📋 From canvas" starts with a variable-substitution list: model / text encoder / VAE / seed / count / output
+prefix / reference images / prompt encoding are replaced by the fixed rules, and the canvas offers its extra
+candidates checked by default — the hardcoded prompt text node (`PrimitiveString` / `PrimitiveStringMultiline`
+/ `StringLiteral`, found by walking links through pass-through nodes such as previews and switches) and
+`ResolutionSelector`'s `megapixels` / `aspect_ratio` (counted as the size source only when its width and
+height feed a latent). Each row shows `node #id · field → {{TOKEN}} = current value`; unchecking a row keeps
+the value baked in the canvas, and the checked ones are written into `workflow.json` as `{{PROMPT}}` /
+`{{MEGAPIXELS}}` / `{{ASPECT_RATIO}}`, and the two settings the skill really stores are `config.json`'s
+`default_ratio` / `base_resolution` (seeded by the same export): megapixels is no setting of its own, it is the
+number those two settings' width and height give divided by 1024². At generation the size follows the requested
+output, `{{MEGAPIXELS}}` is the megapixels recomputed from it (clamped to the node's 0.1–16), and `{{ASPECT_RATIO}}`
+resolves to the option the `ResolutionSelector` combo accepts (a ratio the combo
+has no entry for raises an error instead of submitting a bare ratio). A checked size row freezes no canvas value,
+and the dialog says so next to the checkboxes, so the saved template is not readable as the canvas width and
+height. Writeback restores the same selection from the placeholder in the same field of the stored template; the
+selection itself is not stored in `config.json`.
 
 After a successful import the skill window closes by itself (the full manager window closes, a standalone
 detail popup collapses, nothing covers the canvas any more); the only canvas-side hint is the green dot on the

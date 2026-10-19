@@ -176,6 +176,8 @@ ComfyUI runtime.
 | GET | `/neo_image_gen/skill_config` | Read a skill's image / video generation settings |
 | POST | `/neo_image_gen/skill_config` | Write a skill's settings (presets write a local override file) |
 | GET | `/neo_image_gen/skill_workflow` | The skill's `workflow.json` template (read-only) |
+| POST | `/neo_image_gen/plan_workflow_skill` | Export preview: the canvas widgets that can become placeholders |
+| POST | `/neo_image_gen/save_workflow_skill` | Export the canvas workflow as a new skill (checked candidates go into the template) |
 | POST | `/neo_image_gen/update_workflow_skill` | Write the canvas workflow back as the skill template |
 | POST | `/neo_image_gen/save_combo_skill` | Save a main-model + LoRA combination as a new skill |
 

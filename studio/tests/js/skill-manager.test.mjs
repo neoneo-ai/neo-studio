@@ -948,7 +948,7 @@ test("内嵌编辑：widget 按技能 config 初始化（模型 / 尺寸 / 张�
     const [model, latent, sampler, save, slot, extra] = nodes.map((n) => n.widgets_values);
     assert.equal(nodes.length, 6, "config 里超出模板槽位的 LoRA 应注入画布");
     assert.deepEqual(model, ["new.safetensors", "default"], "主模型灌 config.model，非 config 键位保持模板值");
-    assert.deepEqual(latent, [1296, 1296, 4], "宽高按 base_resolution + 比例对齐 16，batch_size 灌 config.count");
+    assert.deepEqual(latent, [1280, 1280, 4], "宽高按 base_resolution + 比例对齐 16（整数倍不抬高，与后端同口径），batch_size 灌 config.count");
     assert.deepEqual(sampler, ["{{SEED}}", 30, 7], "seed 属运行时变量保留，steps 灌 config.steps");
     assert.deepEqual(save, ["neo_x"], "输出前缀灌 config.output_prefix");
     assert.deepEqual(slot, ["l1.safetensors", "0.8"], "模板 LoRA 槽位灌 config.loras 的路径与强度");

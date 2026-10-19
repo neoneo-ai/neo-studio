@@ -42,6 +42,26 @@ def plugin_version() -> str:
     return "unknown"
 
 
+# ResolutionSelector（ComfyUI nodes_resolution.AspectRatio）的 aspect_ratio 是 combo，取值只能是这八项；
+# 技能模板的 {{ASPECT_RATIO}} 按请求比例落进其中一项，落不进去就是比例不合法（不是渲染 bug）。
+ASPECT_LABELS = {"1:1": "1:1 (Square)", "2:3": "2:3 (Portrait Photo)", "3:2": "3:2 (Photo)",
+                 "3:4": "3:4 (Portrait Standard)", "4:3": "4:3 (Standard)",
+                 "9:16": "9:16 (Portrait Widescreen)", "16:9": "16:9 (Widescreen)",
+                 "21:9": "21:9 (Ultrawide)"}
+
+
+def ratio_pair(text) -> tuple | None:
+    """比例标签 → (w, h)：接受 "16:9" 与 combo 写法 "16:9 (Widescreen)" 的比例前缀，非法返回 None。"""
+    m = re.match(r"^\s*(\d+(?:\.\d+)?)\s*[:x/]\s*(\d+(?:\.\d+)?)\s*$",
+                 str(text or "").strip().split(" ")[0], re.I)
+    if not m:
+        return None
+    w, h = float(m.group(1)), float(m.group(2))
+    if w <= 0 or h <= 0:
+        return None
+    return (w, h)
+
+
 def _load_settings() -> dict:
     try:
         if SETTINGS_FILE.exists():

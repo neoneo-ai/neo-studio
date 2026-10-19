@@ -51,7 +51,7 @@ except ImportError:  # pypinyin 缺失时中文拼音匹配静默不可用，其
     lazy_pinyin = None
 from .minimax_h3 import _ratio, _filter_mode_sections, _h3_audit_and_repair, _h3_audit_events, _h3_grounding_check, _h3_mode, format_h3_context_lines
 from . import plugin_paths
-from .util import PrefixFilter
+from .util import PrefixFilter, ASPECT_LABELS, ratio_pair
 
 logger = logging.getLogger(__name__)
 logger.addFilter(PrefixFilter())
@@ -1306,9 +1306,161 @@ def _ratio_label(w: int, h: int) -> str:
     return f"{w}:{h}"
 
 
-def _template_from_workflow(workflow: dict) -> tuple[dict, list, dict]:
+# 画布导出成技能时的可选占位符（预设 image_gen_text_subject 的写法）：写死文本的提示词节点，
+# 和给 latent 供宽高的 ResolutionSelector（百万像素 + 比例）。候选由「从画布创建技能」对话框逐项
+# 勾选，勾中的才写进模板；回写按已存模板同一节点同一字段的占位符复原勾选。这份选择不进
+# config.json —— 设置区保存是整文件白名单重写，写进去会被擦掉。
+_PROMPT_TEXT_FIELDS = {"PrimitiveString": "value", "PrimitiveStringMultiline": "value", "StringLiteral": "value"}
+_LATENT_SIZE_CLASSES = ("EmptyLatentImage", "EmptySD3LatentImage", "EmptyFlux2LatentImage",
+                        "EmptyHunyuanLatentImage", "EmptyLTXVLatentImage", "EmptyMochiLatentVideo")
+_BIND_TOKENS = ("PROMPT", "NEGATIVE", "WIDTH", "HEIGHT", "MEGAPIXELS", "ASPECT_RATIO")
+_PROMPT_HOPS = 4  # 文本节点到 CLIPTextEncode 之间允许穿过的透传层数（PreviewAny / ComfySwitchNode / ComfyGateway）
+
+
+def _clip_bind_sides(workflow: dict) -> dict:
+    """CLIPTextEncode → 该填的占位符名：按采样器 positive / negative 的连线判定；
+    没连到采样器的沿用「第一个正向、其余负向」的既有约定。"""
+    sides = {}
+    for node in workflow.values():
+        if not isinstance(node, dict) or node.get("class_type") not in ("KSampler", "KSamplerAdvanced"):
+            continue
+        for key, token in (("positive", "PROMPT"), ("negative", "NEGATIVE")):
+            link = (node.get("inputs") or {}).get(key)
+            if isinstance(link, list) and len(link) == 2:
+                sides.setdefault(str(link[0]), token)
+    order = 0
+    for nid, node in workflow.items():
+        if isinstance(node, dict) and node.get("class_type") == "CLIPTextEncode":
+            sides.setdefault(nid, "PROMPT" if order == 0 else "NEGATIVE")
+            order += 1
+    return sides
+
+
+def _string_source_node(workflow: dict, start_id: str) -> str | None:
+    """沿连线反向找写死文本的节点：预览 / 开关 / 网关这类透传节点不改文本，最多回溯 _PROMPT_HOPS 层。"""
+    queue, seen = [(start_id, 0)], {start_id}
+    while queue:
+        nid, depth = queue.pop(0)
+        node = workflow.get(nid)
+        if not isinstance(node, dict):
+            continue
+        field = _PROMPT_TEXT_FIELDS.get(node.get("class_type"))
+        if field and isinstance((node.get("inputs") or {}).get(field), str):
+            return nid
+        if depth >= _PROMPT_HOPS:
+            continue
+        for link in (node.get("inputs") or {}).values():
+            if isinstance(link, list) and len(link) == 2 and isinstance(link[0], str) and link[0] not in seen:
+                seen.add(link[0])
+                queue.append((link[0], depth + 1))
+    return None
+
+
+def _selector_ratio_label(value) -> str:
+    """ResolutionSelector 的 combo 值 "16:9 (Widescreen)" → 技能设置用的 "16:9"；非比例写法返回 ""。"""
+    pair = ratio_pair(value)
+    return f"{pair[0]:g}:{pair[1]:g}" if pair else ""
+
+
+def _base_resolution_from_mp(label: str, megapixels: float) -> int:
+    """combo 的比例 + 百万像素 → 技能设置的 base_resolution（size_from_ratio 的长边，对齐 16）：
+    16:9 @ 1.05MP 要开在 sqrt(mp * 长宽比) 上，直接取 sqrt(mp) 出来的图会小一档。"""
+    pair = ratio_pair(label)
+    if not pair or megapixels <= 0:
+        return 0
+    value = pair[0] / pair[1]
+    long_side = (megapixels * 1024 * 1024 * max(value, 1 / value)) ** 0.5
+    return max(256, int(long_side / 16 + 0.5) * 16)
+
+
+def _bind_candidates(workflow: dict) -> list:
+    """画布里可替换成占位符的 widget 候选：提示词原文节点 + 输出尺寸的 ResolutionSelector。
+    候选在导入对话框里显示成「节点 #id · 字段 = 当前值 → {{TOKEN}}」，由用户勾选。"""
+    out = []
+    sides = _clip_bind_sides(workflow)
+    for nid, node in workflow.items():
+        if not isinstance(node, dict) or node.get("class_type") != "CLIPTextEncode":
+            continue
+        link = (node.get("inputs") or {}).get("text")
+        if not (isinstance(link, list) and len(link) == 2 and isinstance(link[0], str)):
+            continue  # 文本就写在 CLIPTextEncode 自己身上，固定规则已经替换
+        src = _string_source_node(workflow, link[0])
+        if not src:
+            continue
+        field = _PROMPT_TEXT_FIELDS[workflow[src]["class_type"]]
+        value = workflow[src]["inputs"][field]
+        if not value.strip():
+            continue
+        out.append({"node": src, "field": field, "token": sides.get(nid, "PROMPT"),
+                    "class_type": str(workflow[src].get("class_type")), "value": value})
+    for nid, node in workflow.items():
+        if not isinstance(node, dict) or node.get("class_type") != "ResolutionSelector":
+            continue
+        feeds_latent = any(isinstance(link, list) and len(link) == 2 and link[0] == nid
+                           and str(n.get("class_type")) in _LATENT_SIZE_CLASSES
+                           for n in workflow.values() if isinstance(n, dict)
+                           for link in (n.get("inputs") or {}).values())
+        if not feeds_latent:
+            continue
+        inputs = node.get("inputs") or {}
+        megapixels = inputs.get("megapixels")
+        has_mp = isinstance(megapixels, (int, float)) and not isinstance(megapixels, bool)
+        ratio = inputs.get("aspect_ratio")
+        label = _selector_ratio_label(ratio)
+        # 技能里真正要存的两项是 base_resolution / default_ratio（同一份算式在 _template_from_workflow
+        # 写进 config.json）。候选不带这两项，对话框上的 megapixels 就会被读成「技能里的那一项设置」，
+        # 而技能设置面板与 config.json 里都没有 megapixels 这个键。
+        base = _base_resolution_from_mp(label, float(megapixels)) if has_mp and label else 0
+        if has_mp:
+            out.append({"node": nid, "field": "megapixels", "token": "MEGAPIXELS",
+                        "class_type": "ResolutionSelector", "value": megapixels,
+                        "setting": {"key": "base_resolution", "value": base} if base else {}})
+        if isinstance(ratio, str) and label in ASPECT_LABELS:
+            out.append({"node": nid, "field": "aspect_ratio", "token": "ASPECT_RATIO",
+                        "class_type": "ResolutionSelector", "value": ratio,
+                        "setting": {"key": "default_ratio", "value": label}})
+    return out
+
+
+def _apply_bindings(template: dict, bindings) -> None:
+    """按勾选写入占位符：只认 _BIND_TOKENS 里的名字，节点与字段必须是模板里已有的标量。"""
+    for item in bindings or []:
+        if not isinstance(item, dict):
+            continue
+        token = str(item.get("token") or "")
+        node = template.get(str(item.get("node") or ""))
+        if token not in _BIND_TOKENS or not isinstance(node, dict):
+            continue
+        inputs = node.get("inputs") or {}
+        field = str(item.get("field") or "")
+        value = inputs.get(field)
+        if isinstance(value, bool) or not isinstance(value, (str, int, float)):
+            continue
+        inputs[field] = "{{%s}}" % token
+
+
+def _bound_bindings(old_wf: dict, workflow: dict) -> list:
+    """回写时复原创建时的勾选：候选里只保留已存模板同一节点同一字段已经是占位符的那些。"""
+    wanted = {(str(c["node"]), str(c["field"]), str(c["token"])): c for c in _bind_candidates(workflow)}
+    out = []
+    for nid, node in (old_wf or {}).items():
+        if not isinstance(node, dict):
+            continue
+        for key, value in (node.get("inputs") or {}).items():
+            text = str(value)
+            if not (text.startswith("{{") and text.endswith("}}")):
+                continue
+            entry = wanted.get((str(nid), str(key), text[2:-2]))
+            if entry:
+                out.append(entry)
+    return out
+
+
+def _template_from_workflow(workflow: dict, bindings=None) -> tuple[dict, list, dict]:
     """把 API prompt 转成模板：已知值替换为占位符、主链 LoRA 编为 {{LORA_i_*}} 槽位。
 
+    bindings 是「从画布创建技能」对话框勾选的可选占位符（_bind_candidates 的候选项），
+    在固定规则之后写入。
     返回 (template, warnings, seed_cfg)；seed_cfg 是从加载器/LoRA/latent 尺寸/SaveImage
     前缀提取的 config.json 初值（只含非空项）。"""
     template = copy.deepcopy(workflow)
@@ -1339,7 +1491,7 @@ def _template_from_workflow(workflow: dict) -> tuple[dict, list, dict]:
             inputs["vae_name"] = "{{VAE}}"
         elif ct in ("KSampler", "KSamplerAdvanced") and "seed" in inputs:
             inputs["seed"] = "{{SEED}}"
-        elif ct in ("EmptyLatentImage", "EmptySD3LatentImage"):
+        elif ct in _LATENT_SIZE_CLASSES:
             if isinstance(inputs.get("width"), int) and isinstance(inputs.get("height"), int):
                 seed_cfg.setdefault("default_ratio", _ratio_label(inputs["width"], inputs["height"]))
             if isinstance(inputs.get("batch_size"), int):
@@ -1347,6 +1499,13 @@ def _template_from_workflow(workflow: dict) -> tuple[dict, list, dict]:
             for key, token in (("width", "{{WIDTH}}"), ("height", "{{HEIGHT}}"), ("batch_size", "{{COUNT}}")):
                 if isinstance(inputs.get(key), int):
                     inputs[key] = token
+        elif ct == "ResolutionSelector":
+            # 尺寸由 combo（比例 + 百万像素）算出来时，config 里记的是这条链的真实输出
+            label = _selector_ratio_label(inputs.get("aspect_ratio"))
+            megapixels = inputs.get("megapixels")
+            if label and isinstance(megapixels, (int, float)) and not isinstance(megapixels, bool):
+                seed_cfg.setdefault("default_ratio", label)
+                seed_cfg.setdefault("base_resolution", _base_resolution_from_mp(label, float(megapixels)))
         elif ct == "SaveImage" and isinstance(inputs.get("filename_prefix"), str):
             seed_cfg.setdefault("output_prefix", inputs["filename_prefix"])
             inputs["filename_prefix"] = "{{PREFIX}}"
@@ -1381,6 +1540,7 @@ def _template_from_workflow(workflow: dict) -> tuple[dict, list, dict]:
     if loras:
         seed_cfg["loras"] = [l for l in loras if l["name"]]
 
+    _apply_bindings(template, bindings)
     return template, warnings, seed_cfg
 
 
@@ -1490,8 +1650,10 @@ def _template_video_from_workflow(workflow: dict) -> tuple[dict, list, dict]:
     return template, warnings, seed_cfg
 
 
-def save_workflow_skill(name: str, description: str, tags, workflow: dict) -> dict:
-    """把当前画布工作流（API prompt）导出为生图技能：skill.md + workflow.json + config.json。"""
+def save_workflow_skill(name: str, description: str, tags, workflow: dict, bindings=None) -> dict:
+    """把当前画布工作流（API prompt）导出为生图技能：skill.md + workflow.json + config.json。
+
+    bindings 是导入对话框勾选的可选占位符，见 _bind_candidates。"""
     if not isinstance(workflow, dict) or not workflow:
         return {"success": False, "message": "workflow 不是合法的 API prompt"}
     for nid, node in workflow.items():
@@ -1501,7 +1663,7 @@ def save_workflow_skill(name: str, description: str, tags, workflow: dict) -> di
     if is_video:
         template, warnings, seed_cfg = _template_video_from_workflow(workflow)
     else:
-        template, warnings, seed_cfg = _template_from_workflow(workflow)
+        template, warnings, seed_cfg = _template_from_workflow(workflow, bindings)
     has_ref = any(isinstance(v, str) and "{{REF_IMAGE" in v
                   for n in template.values() if isinstance(n, dict)
                   for v in (n.get("inputs") or {}).values())
@@ -1541,6 +1703,25 @@ def save_workflow_skill(name: str, description: str, tags, workflow: dict) -> di
                 json.dump(seed_cfg, f, indent=2, ensure_ascii=False)
             os.replace(tmp, os.path.join(d, "config.json"))
     return {"success": True, "id": sid, "warnings": warnings, "gen_video": is_video}
+
+
+def plan_workflow_skill(workflow: dict) -> dict:
+    """「从画布创建技能」的导出预览：视频判定 + 可替换成占位符的 widget 候选，不落盘。
+
+    候选就是给用户勾选的那份清单（提示词原文节点、输出尺寸的 ResolutionSelector），
+    视频模板按视频固定规则替换，没有可选项。"""
+    if not isinstance(workflow, dict) or not workflow:
+        return {"success": False, "message": "workflow 不是合法的 API prompt"}
+    for nid, node in workflow.items():
+        if not isinstance(node, dict) or not node.get("class_type") or not isinstance(node.get("inputs"), dict):
+            return {"success": False, "message": f"节点 {nid} 缺少 class_type/inputs"}
+    is_video = _is_h3_video_workflow(workflow)
+    warnings = []
+    if not is_video and not any(isinstance(n, dict) and n.get("class_type") == "CLIPTextEncode"
+                                for n in workflow.values()):
+        warnings.append("工作流没有 CLIPTextEncode 节点，运行时无法注入提示词")
+    return {"success": True, "gen_video": is_video, "warnings": warnings,
+            "candidates": [] if is_video else _bind_candidates(workflow)}
 
 
 def _workflow_update_guard(skill_id: str, workflow: dict) -> tuple[str, str, str]:
@@ -1632,7 +1813,8 @@ def _plan_workflow_update(sid: str, d: str, workflow: dict) -> dict:
     if is_video:
         template, warnings, seed_cfg = _template_video_from_workflow(workflow)
     else:
-        template, warnings, seed_cfg = _template_from_workflow(workflow)
+        # 画布灌 widget 后勾选过的占位符已经是具体值，按已存模板复原勾选再替换
+        template, warnings, seed_cfg = _template_from_workflow(workflow, _bound_bindings(old_wf, workflow))
     if injected_loras:
         seed_cfg["loras"] = list(seed_cfg.get("loras") or []) + injected_loras
     has_ref = any(isinstance(v, str) and "{{REF_IMAGE" in v

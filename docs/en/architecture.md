@@ -151,7 +151,7 @@ studio/
 | `bundle-lock.js` | Bundle locking and auto-enhancement |
 | `ref-grid.js` | Reference grid frontend |
 | `workflow.js` | Workflow repair interaction |
-| `workflow-graph.js` | Read-only skill workflow flowchart (autogrow slots merged into a synthetic node, internal ids hidden in the graph and tooltips; columns width-aligned, model-loading nodes widened to show the model name); `canvasLayout` re-lays canvas nodes after "import to canvas" with the same layering and in-layer ordering, and returns the shared column width for setSize |
+| `workflow-graph.js` | Read-only skill workflow flowchart (autogrow slots merged into a synthetic node, internal ids hidden in the graph and tooltips; columns width-aligned, model-loading nodes widened to show the model name; fields filled from settings carry their `{{TOKEN}}` source and the summary lists variable chips); `canvasLayout` re-lays canvas nodes after "import to canvas" with the same layering and in-layer ordering, and returns the shared column width for setSize |
 | `workflow-context.js` | Workflow context collection |
 | `top-menu.js` | Top-bar 🅝 menu |
 | `canvas-lock.js` | Main-canvas offline gate: locks the canvas with the frontend's own `read_only` canvas lock when ComfyUI is gone and shows a banner; unlocks when it returns |

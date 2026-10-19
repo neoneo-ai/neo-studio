@@ -99,6 +99,20 @@ async function loadSkillWorkflow(id) {
         return null;
     }
 }
+// ResolutionSelector 的 aspect_ratio 是 combo，只认这几个写法（与后端 image_gen.ASPECT_LABELS 同一份）
+const ASPECT_LABELS = {
+    "1:1": "1:1 (Square)", "2:3": "2:3 (Portrait Photo)", "3:2": "3:2 (Photo)",
+    "3:4": "3:4 (Portrait Standard)", "4:3": "4:3 (Standard)",
+    "9:16": "9:16 (Portrait Widescreen)", "16:9": "16:9 (Widescreen)", "21:9": "21:9 (Ultrawide)",
+};
+
+/** 技能里的比例（"16:9" / "16:9 (Widescreen)" / "1.78"）→ combo 项；combo 没有这一档返回 null */
+function aspectComboValue(ratio) {
+    const m = String(ratio || "").trim().split(" ")[0].match(/^(\d+(?:\.\d+)?)\s*[:x]\s*(\d+(?:\.\d+)?)$/i);
+    if (!m || !(parseFloat(m[1]) > 0) || !(parseFloat(m[2]) > 0)) return null;
+    return ASPECT_LABELS[`${parseFloat(m[1])}:${parseFloat(m[2])}`] || null;
+}
+
 // 工作流模板预渲染的已知参数：设置显式值优先，空值回落自动建议模型（与设置区「自动」项一致）；
 // 运行时变量（提示词/种子/参考图）不填。genInfo = { config, models }，来自设置区加载结果。
 function workflowParamValues(isVideo, genInfo) {
@@ -124,10 +138,19 @@ function workflowParamValues(isVideo, genInfo) {
         const [w, h] = defaultSizeFromConfig(cfg);
         values.WIDTH = w;
         values.HEIGHT = h;
+        // 「来源」说明要引用这两项真设置（长边尺寸 / 默认比例），照字面写出来才不会把 megapixels
+        // 说成技能里存的值；小写键不与 {{TOKEN}} 同名，不会参与模板替换
+        values.base_resolution = Math.max(256, parseInt(cfg.base_resolution, 10) || 1280);
+        values._ratio_text = String(cfg.default_ratio || "1:1").trim() || "1:1";
         // 参考槽预处理里的 ImageScale 目标：后端 _edit_canvas_size 按 32 对齐，number widget 必须是数字
         const round32 = (v) => Math.max(32, Math.floor(v / 32 + 0.5) * 32);
         values.CANVAS_WIDTH = round32(w);
         values.CANVAS_HEIGHT = round32(h);
+        // 分辨率选择器灌的两项：百万像素由默认宽高反算（夹在节点的 0.1~16 区间里），
+        // 比例必须落进 combo 认得的 label，落不进去就不灌、保持画布上的原值
+        values.MEGAPIXELS = Math.min(16, Math.max(0.1, Math.round(w * h / 1048576 * 100) / 100));
+        const combo = aspectComboValue(cfg.default_ratio);
+        if (combo) values.ASPECT_RATIO = combo;
     }
     for (const [i, entry] of (cfg.loras || []).entries()) {
         const name = typeof entry === "string" ? entry : (entry && entry.name);
@@ -143,7 +166,9 @@ const NUMERIC_WIDGET_KEYS = new Set(["width", "height", "batch_size", "seed", "s
 
 // 默认宽高：长边 base_resolution、比例 default_ratio（与后端 resolve_dimensions 一致，对齐 16）
 function defaultSizeFromConfig(cfg) {
-    const round16 = (v) => Math.max(16, Math.round(v / 16 + 0.5) * 16);
+    // 后端 _round_multiple 是 int(v / 16 + 0.5) * 16，正数即向下取整；用 Math.round 会把 16 的整数倍
+    // 整头抬高一格（1024 → 1040），预览尺寸与百万像素就永远比真实生成值大一档
+    const round16 = (v) => Math.max(16, Math.floor(v / 16 + 0.5) * 16);
     const longSide = Math.max(256, parseInt(cfg.base_resolution, 10) || 1280);
     let ratio = 1.0;
     const text = String(cfg.default_ratio || "1:1").trim();
@@ -180,9 +205,11 @@ const CONFIG_WIDGET_TARGETS = {
     EmptyLatentImage: { width: "WIDTH", height: "HEIGHT", batch_size: "COUNT" },
     EmptySD3LatentImage: { width: "WIDTH", height: "HEIGHT", batch_size: "COUNT" },
     SaveImage: { filename_prefix: "PREFIX" },
+    // 导出技能时勾选了「百万像素 / 比例」的技能：画布导入按技能 config 的比例与分辨率灌这两项
+    ResolutionSelector: { aspect_ratio: "ASPECT_RATIO", megapixels: "MEGAPIXELS" },
 };
 const MINIMAX_H3_TARGETS = { width: "WIDTH", height: "HEIGHT", length: "LENGTH" };
-const NUMERIC_WIDGET_FIELDS = new Set(["seed", "steps", "width", "height", "batch_size", "length"]);
+const NUMERIC_WIDGET_FIELDS = new Set(["seed", "steps", "width", "height", "batch_size", "length", "megapixels"]);
 
 function forceCanvasConfigValues(wf, values, isVideo) {
     // 与后端一致：喂 VAEDecodeAudio 的 VAELoader 是音频 VAE，灌 AUDIO_VAE 而不是视频 VAE

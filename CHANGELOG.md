@@ -4,6 +4,42 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **The skill workflow preview names the variable behind every value it filled in.** The read-only flowchart
+  pre-renders `workflow.json` with the skill's settings, so the `{{MEGAPIXELS}}` / `{{ASPECT_RATIO}}` the export
+  just bound came back as `megapixels: 1` and `aspect_ratio: 1:1 (Square)` with no trace of the variable — the
+  row the export dialog warns about was invisible in the graph. `applyWorkflowParams` records the source token
+  per field (`tpl_filled`): the node line reads `megapixels: {{MEGAPIXELS}} = 1` with the name first so column
+  truncation cuts the value and not the variable, the tooltip appends `← {{MEGAPIXELS}}`, and the summary counts
+  the filled variables and lists one copyable chip per variable. Each chip spells out the target (node, field, value
+  and what that widget accepts — a combo's options or a number's min / max), the source in the two settings the skill
+  really stores (the size is "base resolution × default ratio"; megapixels is that width × height ÷ 1024², it is no
+  setting of its own), and whether generation recomputes it. The same preview path also computed the default
+  size with `Math.round(v / 16 + 0.5) * 16`, which lifts every exact multiple of 16 one step (1024 → 1040,
+  1280 → 1296), so the previewed width / height and the megapixels derived from them never matched
+  `resolve_dimensions`; it is `Math.floor` now, the same truncation as the backend's `int(v / 16 + 0.5)`.
+  Covered by `studio/tests/js/skill-workflow.test.mjs` (line, chips, tooltip, `tpl_filled`, `filledTokenNotes`) and
+  the size expectations in `skill-canvas-sync.test.mjs`, `skill-canvas-import-refs.test.mjs` and `skill-manager.test.mjs`.
+
+- **"📋 From canvas" offers the canvas prompt node and the `ResolutionSelector` as skill variables.** The export
+  replaced only its fixed list, so a canvas that wrote the prompt in a `PrimitiveStringMultiline` and took its size
+  from a `ResolutionSelector` saved a skill with the prompt and the size baked into `workflow.json` — the skill's own
+  settings had nothing to fill. `plan_workflow_skill` walks each `CLIPTextEncode`'s text link through the pass-through
+  nodes to the hardcoded text node, and counts `ResolutionSelector`'s `megapixels` / `aspect_ratio` only when its width
+  and height feed a latent; the new `POST /neo_image_gen/plan_workflow_skill` returns those candidates and the title
+  dialog lists every row checked by default. Checked rows are written as `{{PROMPT}}` / `{{MEGAPIXELS}}` /
+  `{{ASPECT_RATIO}}`, the runtime fills the megapixels from the requested output size and the ratio with the
+  `ResolutionSelector` combo option for it (a ratio the combo has no entry for is an error, not a bare string in a
+  combo widget), and writeback restores the same selection from the stored template. The megapixels row shows the
+  canvas number, so the dialog states next to the checkboxes that the size comes from the skill's "base resolution ×
+  default ratio" recomputed for each request and megapixels is derived from that size. Importing a skill to the
+  canvas carries the same disclosure in the success toast (`filledTokenNotes`): one line per template variable it
+  baked into a literal, naming the node and field it landed in and the setting that computed it — the imported
+  `workflow.json` on the canvas keeps no `{{variables}}` of its own. Covered by
+  `studio/tests/test_skills.py` (`TestCanvasBindCandidates`), `studio/tests/test_image_gen.py` (the two placeholder
+  fills plus the invalid-ratio error), `studio/tests/js/skill-workflow.test.mjs` and
+  `skill-canvas-sync.test.mjs` (import toast). Docs in `docs/skills.md`,
+  `docs/api-routes.md` and their `docs/en/` mirrors.
+
 - **A named main model now says which skills it can run.** `list_models` returned only `{name, dir}` for
   `diffusion_models`, so an agent told to generate with a model whose name carries the family word (`BSSDesirexKrea2`)
   had nothing in the tool output naming the skill template that model fits, and picked a Qwen skill

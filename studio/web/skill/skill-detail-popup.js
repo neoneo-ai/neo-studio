@@ -8,7 +8,7 @@ import { app } from "../../../scripts/app.js";
 import { mkEl } from "../dom-utils.js";
 import { showToast } from "../gallery-utils.js";
 import { openModelHub } from "../model-hub.js";
-import { checkWorkflow, renderWorkflowGraph, applyWorkflowParams, validateWorkflow, injectRuntimeLoras, canvasLayout } from "../workflow-graph.js";
+import { checkWorkflow, renderWorkflowGraph, applyWorkflowParams, validateWorkflow, injectRuntimeLoras, canvasLayout, filledTokenNotes } from "../workflow-graph.js";
 import { updateWorkflowSkill, getSkillGenConfig, saveSkillGenConfig, listGenModels, createModelConfigSection, createGenSizeRows, createVideoModelConfigSection, listVideoGenModels, shortModelName } from "../image-gen.js";
 import {
     dispatchSkillsUpdated, stopPointerBubble, makeRepairDialog, listSkills, loadSkill, loadSkillWorkflow,
@@ -535,7 +535,9 @@ function createSkillDetailPopup(host, canvasBtns = true, opts = {}) {
             showToast(app, "error", t("导入失败"), String(e.message || e));
             return;
         }
-        armCanvasWriteback(currentSkillId, currentSource, currentDisplayName);
+        // 导入成功的说明：画布上没有 {{变量}}，模板变量已按「长边尺寸 × 默认比例」等设置灌成数值
+        armCanvasWriteback(currentSkillId, currentSource, currentDisplayName,
+            filledTokenNotes(wf, workflowParamValues(activeIsVideo(), { config: activeConfig(), models: (loadedGenInfo || {}).models || {} })));
         // 导入成功即收起技能窗口：内嵌宿主（技能管理整窗）走 onCloseWindow 关整窗，独立详情弹窗走 requestClose
         if (onCloseWindow) onCloseWindow(); else requestClose();
     }
@@ -1053,12 +1055,13 @@ function createSkillDetailPopup(host, canvasBtns = true, opts = {}) {
     // 只读流程图：先按模板变量画蓝框预检，/object_info·/models/* 校验在后台完成后原地补红框
     async function renderWorkflowPreview(wf, genInfo, isVideo, seqId) {
         // 超出模板槽位的 LoRA 运行时动态插入（同后端 _apply_loras：在 render_template 之后、LoRA 槽位填充之前执行，流程图与真实提交一致）
-        const rendered = applyWorkflowParams(injectRuntimeLoras(wf, ((genInfo || {}).config || {}).loras), workflowParamValues(isVideo, genInfo));
-        renderWorkflowGraph(workflowBody, rendered, validateWorkflow(rendered, null, {}), workflowSummary);   // 内部先清空占位再画
+        const values = workflowParamValues(isVideo, genInfo);
+        const rendered = applyWorkflowParams(injectRuntimeLoras(wf, ((genInfo || {}).config || {}).loras), values);
+        renderWorkflowGraph(workflowBody, rendered, validateWorkflow(rendered, null, {}), workflowSummary, values);   // 内部先清空占位再画
         const validation = await checkWorkflow(rendered);   // /object_info + /models/*，失败内部按跳过处理
         if (currentSkillId === seqId && workflowShown) {   // 等待期间切了技能/关区 → 丢弃过期结果
             const sl = workflowBody.scrollLeft, st = workflowBody.scrollTop;
-            renderWorkflowGraph(workflowBody, rendered, validation, workflowSummary);
+            renderWorkflowGraph(workflowBody, rendered, validation, workflowSummary, values);
             workflowBody.scrollLeft = sl;
             workflowBody.scrollTop = st;
         }

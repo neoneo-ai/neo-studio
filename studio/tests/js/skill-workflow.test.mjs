@@ -25,6 +25,7 @@ test("From Canvas：单标题对话框导出画布 API prompt 为技能", async 
     const { createSkillDropdown } = await import("../../web/skill.js");
     appState.promptGraph = { output: { "10": { class_type: "KSampler", inputs: {} } }, workflow: null };
     mockRoute("/rs_prompts/skills", () => jsonResponse([]));
+    mockRoute("/neo_image_gen/plan_workflow_skill", () => jsonResponse({ success: true, gen_video: false, warnings: [], candidates: [] }));
     let body = null;
     mockRoute("/neo_image_gen/save_workflow_skill", (b) => {
         body = b;
@@ -39,6 +40,10 @@ test("From Canvas：单标题对话框导出画布 API prompt 为技能", async 
     // 单标题对话框：填入名称后点「创建」（不再问描述/标签）
     const dlg = document.querySelector(".rs-skill-title-dialog");
     assert.ok(dlg, "应弹出标题对话框");
+    assert.ok(dlg.querySelector(".rs-skill-title-binds"), "应显示变量替换清单");
+    const plainNotes = Array.from(dlg.querySelectorAll(".rs-skill-title-binds-note")).map((n) => n.textContent).join("\n");
+    assert.ok(plainNotes.includes("没有可额外勾选的替换项"), "没有候选时给出说明");
+    assert.ok(!plainNotes.includes("本次宽高重算"), "没有尺寸候选就不显示重算说明");
     inputText(dlg.querySelector("input.rs-tpl-name"), "My Skill");
     click(Array.from(dlg.querySelectorAll("button")).find((b) => b.textContent === "创建"));
     await sleep(60);
@@ -48,6 +53,63 @@ test("From Canvas：单标题对话框导出画布 API prompt 为技能", async 
     assert.deepEqual(body.workflow, { "10": { class_type: "KSampler", inputs: {} } });
     assert.deepEqual(body.tags, []);
     assert.equal(body.description, "");
+    assert.deepEqual(body.bindings, []);
+});
+
+test("From Canvas：候选变量默认全勾，取消勾选的不进 bindings", async () => {
+    const { createSkillDropdown } = await import("../../web/skill.js");
+    appState.promptGraph = { output: {
+        "25": { class_type: "PrimitiveStringMultiline", inputs: { value: "一只红狐狸" } },
+        "19": { class_type: "ResolutionSelector", inputs: { aspect_ratio: "1:1 (Square)", megapixels: 1.05 } },
+    }, workflow: null };
+    mockRoute("/rs_prompts/skills", () => jsonResponse([]));
+    mockRoute("/neo_image_gen/plan_workflow_skill", () => jsonResponse({
+        success: true, gen_video: false, warnings: ["工作流没有 CLIPTextEncode 节点，运行时无法注入提示词"],
+        candidates: [
+            { node: "25", field: "value", token: "PROMPT", class_type: "PrimitiveStringMultiline", value: "一只红狐狸" },
+            { node: "19", field: "megapixels", token: "MEGAPIXELS", class_type: "ResolutionSelector", value: 1.05,
+                setting: { key: "base_resolution", value: 1056 } },
+            { node: "19", field: "aspect_ratio", token: "ASPECT_RATIO", class_type: "ResolutionSelector", value: "1:1 (Square)",
+                setting: { key: "default_ratio", value: "1:1" } },
+        ],
+    }));
+    let body = null;
+    mockRoute("/neo_image_gen/save_workflow_skill", (b) => {
+        body = b;
+        return jsonResponse({ success: true, id: "moss", warnings: [], gen_video: false });
+    });
+
+    const { combo } = createSkillDropdown();
+    document.body.appendChild(combo.box);
+    canvasBtn().click();
+    await sleep(80);
+
+    const dlg = document.querySelector(".rs-skill-title-dialog");
+    assert.ok(dlg, "应弹出标题对话框");
+    const rows = Array.from(dlg.querySelectorAll(".rs-skill-title-bind"));
+    assert.equal(rows.length, 3, "三条候选都要列出来");
+    assert.ok(rows[0].textContent.includes("{{PROMPT}}"), "候选行显示替换后的变量");
+    assert.ok(rows[1].textContent.includes("技能设置「长边尺寸」1056 → {{MEGAPIXELS}}"),
+        "尺寸行的主语是技能里真存的设置，不是画布上的 megapixels：" + rows[1].textContent);
+    assert.ok(rows[2].textContent.includes("技能设置「默认比例」1:1 → {{ASPECT_RATIO}}"),
+        "比例行的主语是默认比例这项真设置，不是画布上的 aspect_ratio 控件：" + rows[2].textContent);
+    const sizeValue = rows[1].querySelector(".rs-skill-title-bind-value");
+    assert.ok(sizeValue.textContent.includes("画布当前 1.05"),
+        "画布上的数字只作为「画布当前」参考值：" + sizeValue.textContent);
+    assert.ok(rows[1].querySelector("input").checked, "候选默认勾上");
+    const notes = Array.from(dlg.querySelectorAll(".rs-skill-title-binds-note")).map((n) => n.textContent).join("\n");
+    assert.ok(notes.includes("长边尺寸 × 默认比例"), "尺寸候选要写明尺寸由「长边尺寸 × 默认比例」按本次宽高算，megapixels 是算出来的");
+    assert.ok(notes.includes("megapixels 不是技能设置项"), "要点明 megapixels 不是技能里的设置项");
+    assert.ok(notes.includes("0.1–16"), "尺寸候选要写明 megapixels 的取值范围");
+    assert.ok(notes.includes("工作流没有 CLIPTextEncode"), "后端 warning 列在清单里");
+    rows[1].querySelector("input").checked = false;   // 取消「长边尺寸」
+    rows[2].querySelector("input").checked = false;   // 取消「默认比例」
+    inputText(dlg.querySelector("input.rs-tpl-name"), "Moss T2I");
+    click(Array.from(dlg.querySelectorAll("button")).find((b) => b.textContent === "创建"));
+    await sleep(60);
+
+    assert.ok(body, "应发出 /neo_image_gen/save_workflow_skill");
+    assert.deepEqual(body.bindings, [{ node: "25", field: "value", token: "PROMPT" }]);
 });
 
 test("From Canvas：画布无有效工作流时不发请求并 toast 提示", async () => {
@@ -472,6 +534,41 @@ test("applyWorkflowParams：替换已知参数、保留运行时变量、不改�
     assert.equal(applyWorkflowParams(wf, { MODEL: "" }), wf);
 });
 
+test("applyWorkflowParams：被填走的值记下来源变量 tpl_filled", async () => {
+    const { applyWorkflowParams } = await import("../../web/workflow-graph.js");
+    const wf = {
+        "19": { class_type: "ResolutionSelector", inputs: { resolution: "source", aspect_ratio: "{{ASPECT_RATIO}}", megapixels: "{{MEGAPIXELS}}" } },
+        "3": { class_type: "CLIPTextEncode", inputs: { clip: ["1", 0], text: "{{PROMPT}}" } },
+    };
+    const out = applyWorkflowParams(wf, { ASPECT_RATIO: "1:1 (Square)", MEGAPIXELS: 1 });
+    assert.deepEqual(out["19"].tpl_filled, { aspect_ratio: "{{ASPECT_RATIO}}", megapixels: "{{MEGAPIXELS}}" });
+    assert.equal(out["19"].inputs.megapixels, "1", "数值变量转字符串填入");
+    assert.ok(!("tpl_filled" in out["3"]), "运行时变量没被填走，不记来源");
+});
+
+test("filledTokenNotes：导入画布时逐条说明变量被灌成什么值（尺寸 = 长边尺寸 × 比例 算出来的）", async () => {
+    const { applyWorkflowParams, filledTokenNotes } = await import("../../web/workflow-graph.js");
+    const wf = applyWorkflowParams({
+        "19": { class_type: "ResolutionSelector", inputs: { resolution: "source", aspect_ratio: "{{ASPECT_RATIO}}", megapixels: "{{MEGAPIXELS}}" } },
+    }, { ASPECT_RATIO: "1:1 (Square)", MEGAPIXELS: 1, WIDTH: 1024, HEIGHT: 1024 });
+    const definitions = {
+        ResolutionSelector: { input: { required: {
+            aspect_ratio: [["1:1 (Square)", "16:9 (Widescreen)", "3:2", "2:3", "4:3", "9:16"], {}],
+            megapixels: [1.0, { min: 0.1, max: 16, step: 0.01 }],
+        } } },
+    };
+    const notes = filledTokenNotes(wf, { base_resolution: 1024, _ratio_text: "1:1", WIDTH: 1024, HEIGHT: 1024, MEGAPIXELS: 1, ASPECT_RATIO: "1:1 (Square)" }, definitions);
+    assert.equal(notes.length, 2, "两个被灌成数值的变量各一条");
+    const mp = notes.find((n) => n.includes("{{MEGAPIXELS}}"));
+    assert.ok(mp.includes("ResolutionSelector #19 · megapixels = 1"), "目标写明灌进哪一格：" + mp);
+    assert.ok(mp.includes("数值 0.1–16"), "megapixels 是数值 widget，带上下限：" + mp);
+    assert.ok(mp.includes("长边尺寸 1024 × 比例 1:1 → 1024×1024 ÷ 1024² 算出 1 MP"), "主语是长边尺寸 × 比例：" + mp);
+    assert.ok(mp.includes("生成时按本次宽高重算"), "写明生成时重算：" + mp);
+    const ar = notes.find((n) => n.includes("{{ASPECT_RATIO}}"));
+    assert.ok(ar.includes("下拉 6 项：1:1 (Square)"), "比例是 combo，列出可选项：" + ar);
+    assert.ok(ar.includes("来源：技能设置「默认比例」1:1"), "比例的来源指到默认比例：" + ar);
+});
+
 // ============ LoRA 运行时动态注入（镜像后端 _apply_loras：流程图与真实执行一致）============
 
 test("injectRuntimeLoras：无槽位 → UNETLoader 后串联插入并重接下游", async () => {
@@ -589,6 +686,48 @@ test("详情弹窗：生图工作流模板变量按 config 预替换，缺失模
     assert.ok(nodeTitles.some(t => t.includes("unet_name: m.safetensors")), "UNETLoader tooltip 应显示替换后模型名");
     assert.ok(nodeTitles.some(t => t.includes("model: ← #1") && t.includes("lora_name: q.safetensors")), "LoRA 节点 tooltip 应显示连线来源与 LoRA 名");
     assert.ok(nodeTitles.some(t => t.includes("text: {{PROMPT}}")), "运行时变量在 tooltip 中原样显示");
+});
+
+// 尺寸变量的值是按 base_resolution × 比例算出来后填进模板的，图上只剩一串数字 → 参数行与变量芯片必须把 {{MEGAPIXELS}} / {{ASPECT_RATIO}} 显出来
+const WF_SIZE = {
+    "1": { class_type: "UNETLoader", inputs: { unet_name: "{{MODEL}}" } },
+    "19": { class_type: "ResolutionSelector", inputs: { resolution: "source", aspect_ratio: "{{ASPECT_RATIO}}", megapixels: "{{MEGAPIXELS}}" } },
+    "20": { class_type: "EmptySD3LatentImage", inputs: { width: ["19", 0], height: ["19", 1], batch_size: "{{COUNT}}" } },
+    "3": { class_type: "CLIPTextEncode", inputs: { clip: ["1", 0], text: "{{PROMPT}}" } },
+};
+
+test("详情弹窗：尺寸变量被算出的值填走后，参数行与变量芯片仍显示 {{MEGAPIXELS}} / {{ASPECT_RATIO}}", async () => {
+    mockRoute("/neo_image_gen/skill_workflow", () => jsonResponse({ skill_id: "x", workflow: WF_SIZE }));
+    mockObjectInfo({});
+    const copied = [];
+    navigator.clipboard = { writeText: async (v) => { copied.push(v); } };
+
+    await openGenPopup({
+        id: "image_gen_text", source: "custom",
+        config: { model: "m.safetensors", base_resolution: 1024, default_ratio: "1:1", count: 2 },
+    });
+    const wfWrap = document.querySelector(".rs-skill-workflow");
+    const lines = Array.from(wfWrap.querySelectorAll(".rs-wf-node-input")).map((el) => el.textContent);
+    assert.ok(lines.some((l) => l.startsWith("megapixels: {{MEGAPIXELS}} =")), "百万像素行应带来源变量：" + JSON.stringify(lines));
+    assert.ok(lines.some((l) => l.startsWith("aspect_ratio: {{ASPECT_RATIO}} =")), "比例行应带来源变量（截断也留得住）：" + JSON.stringify(lines));
+
+    const chips = Array.from(wfWrap.querySelectorAll(".rs-wf-token-item"));
+    assert.deepEqual(chips.map((c) => c.querySelector(".rs-wf-missing-name").textContent).sort(),
+        ["{{ASPECT_RATIO}}", "{{COUNT}}", "{{MEGAPIXELS}}", "{{MODEL}}"], "被设置填走的变量逐个成芯片");
+    const mp = chips.find((c) => c.textContent.includes("{{MEGAPIXELS}}"));
+    assert.ok(mp.title.includes("ResolutionSelector #19 · megapixels = 1"), "芯片 title 写明填在哪格、值多少：" + mp.title);
+    assert.ok(mp.title.startsWith("目标："), "芯片 title 第一段是目标：" + mp.title);
+    assert.ok(mp.title.includes("长边尺寸 1024 × 比例 1:1 → 1024×1024 ÷ 1024² 算出 1 MP"),
+        "来源以长边尺寸 × 默认比例为主语，megapixels 写成算出来的数：" + mp.title);
+    assert.ok(mp.title.includes("生成时按本次请求的宽高重算"), "尺寸变量芯片说明值是运行时重算的");
+    mp.querySelector(".rs-wf-copy").click();
+    await sleep(30);
+    assert.deepEqual(copied, ["{{MEGAPIXELS}}"], "点复制写入 {{MEGAPIXELS}}");
+
+    const summary = wfWrap.querySelector(".rs-wf-summary").textContent;
+    assert.ok(summary.includes("个变量由技能设置填入"), "摘要给出设置填入计数：" + summary);
+    const nodeTitles = Array.from(wfWrap.querySelectorAll(".rs-wf-node title")).map((ti) => ti.textContent);
+    assert.ok(nodeTitles.some((ti) => ti.includes("megapixels: 1 ← {{MEGAPIXELS}}")), "tooltip 标出来源变量");
 });
 
 test("详情弹窗：工作流区默认折叠，点头部展开、再点折叠", async () => {

@@ -13,8 +13,9 @@ import {
     dispatchSkillsUpdated, makeRepairDialog, loadSkill, loadSkillWorkflow,
     buildCanvasWorkflow, arrangeCanvasNodes, serializeCanvasPrompt, copySkillAsCustom,
     writeLog, SKILL_WRITE_LOG_LIMIT, WRITE_SOURCE_LABELS, WRITE_API_ONLY_NOTE, buildWriteChangesTable,
-    skillDisplayName,
+    skillDisplayName, workflowParamValues,
 } from "./skill-core.js";
+import { filledTokenNotes } from "../workflow-graph.js";
 
 /** 变更记录弹窗：skillId 省略 = 全部技能（按技能分组，新→旧）；纯本地记录，可清空 */
 export function showSkillWriteLogDialog(skillId) {
@@ -237,9 +238,16 @@ async function runCanvasSkillWriteback() {
 }
 
 /** 技能工作流灌进画布后登记待回写：点亮 🅝 绿点，顶菜单「💾 回写入技能」据此可用 */
-function armCanvasWriteback(id, source, displayName) {
+function armCanvasWriteback(id, source, displayName, notes) {
     setPendingWriteback(id, source, displayName);
     watchWritebackTab();
+    // 画布上没有 {{变量}}：技能模板里的变量在灌画布这一步被技能设置写成了数值。导入成功当场说清
+    // 每个变量的来源（尺寸 = 长边尺寸 × 默认比例 算出来的）与生成时的行为，画布上那个数字就不再是
+    // 「技能里的尺寸」——改设置才会变，本次生成还会按本次宽高重算。
+    if (notes && notes.length) {
+        showToast(app, "info", tf("已按技能设置灌入 {n} 个模板变量", { n: notes.length }),
+            notes.join("\n") + "\n" + t("画布上只剩算出来的数值：生成时尺寸按本次请求的宽高重算，回写入技能时按模板复原这些变量"));
+    }
 }
 
 // ---- Studio ⇄ 主画布交接 ----
@@ -280,7 +288,8 @@ async function openSkillWorkflowOnCanvas(id) {
         return;
     }
     const source = full.source || "custom";
-    armCanvasWriteback(id, source, displayName);
+    armCanvasWriteback(id, source, displayName,
+        filledTokenNotes(canvasWf, workflowParamValues(isVideo, { config: cfg, models })));
 }
 
 /** 主界面启动时消费 ?neo_wf_edit=<skill_id>：清掉参数（刷新不重复导入）后灌画布。

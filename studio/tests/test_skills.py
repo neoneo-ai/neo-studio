@@ -1807,6 +1807,122 @@ class TestRefSlotWriteback(unittest.TestCase):
         self.assertEqual(template["41"].get("mode"), None)
 
 
+class TestCanvasBindCandidates(unittest.TestCase):
+    """画布 → 技能导出：提示词原文节点与分辨率选择器（百万像素 / 比例）作为可选占位符，由导入对话框勾选。"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.skill_mod = importlib.import_module(f"{_PKG_NAME}.skill")
+
+    def canvas(self):
+        """moss_image_t2i 的骨架：提示词写在 PrimitiveStringMultiline 里，经开关 / 预览进编码器；
+        宽高由 ResolutionSelector（比例 + 百万像素）喂 EmptyFlux2LatentImage。"""
+        return {
+            "19": {"class_type": "ResolutionSelector",
+                   "inputs": {"aspect_ratio": "1:1 (Square)", "megapixels": 1.05, "multiple": 16}},
+            "25": {"class_type": "PrimitiveStringMultiline", "inputs": {"value": "生成一张刘亦菲的写真照片"}},
+            "27": {"class_type": "TextGenerate", "inputs": {"prompt": ["25", 0], "model_name": "deepseek-chat"}},
+            "29": {"class_type": "CLIPTextEncode", "inputs": {"clip": ["30", 0], "text": ["33", 0]}},
+            "30": {"class_type": "CLIPLoader", "inputs": {"clip_name": "clip.safetensors"}},
+            "31": {"class_type": "KSampler",
+                   "inputs": {"positive": ["29", 0], "negative": ["36", 0], "latent_image": ["35", 0],
+                              "seed": 127, "steps": 25}},
+            "33": {"class_type": "PreviewAny", "inputs": {"source": ["34", 0]}},
+            "34": {"class_type": "ComfySwitchNode",
+                   "inputs": {"switch": True, "on_false": ["25", 0], "on_true": ["27", 0]}},
+            "35": {"class_type": "EmptyFlux2LatentImage",
+                   "inputs": {"width": ["19", 0], "height": ["19", 1], "batch_size": 1}},
+            "36": {"class_type": "CLIPTextEncode", "inputs": {"clip": ["30", 0], "text": "low quality"}},
+        }
+
+    def test_prompt_text_node_and_selector_are_offered(self):
+        got = {(c["node"], c["field"], c["token"]) for c in self.skill_mod._bind_candidates(self.canvas())}
+        self.assertEqual(got, {("25", "value", "PROMPT"),
+                               ("19", "megapixels", "MEGAPIXELS"),
+                               ("19", "aspect_ratio", "ASPECT_RATIO")})
+
+    def test_empty_text_node_not_offered(self):
+        wf = self.canvas()
+        wf["25"]["inputs"]["value"] = "   "
+        self.assertNotIn("25", [c["node"] for c in self.skill_mod._bind_candidates(wf)])
+
+    def test_selector_feeding_no_latent_not_offered(self):
+        wf = self.canvas()
+        wf["35"]["class_type"] = "TextEncodeQwenImage21"
+        tokens = [c["token"] for c in self.skill_mod._bind_candidates(wf)]
+        self.assertNotIn("MEGAPIXELS", tokens)
+        self.assertNotIn("ASPECT_RATIO", tokens)
+
+    def test_plan_reports_candidates_without_writing(self):
+        wf = self.canvas()
+        plan = self.skill_mod.plan_workflow_skill(wf)
+        self.assertTrue(plan["success"])
+        self.assertFalse(plan["gen_video"])
+        self.assertEqual(len(plan["candidates"]), 3)
+        self.assertEqual(wf["25"]["inputs"]["value"], "生成一张刘亦菲的写真照片")
+        self.assertEqual(wf["19"]["inputs"]["megapixels"], 1.05)
+
+    def test_checked_bindings_replace_prompt_and_size(self):
+        canvas = self.canvas()
+        bindings = self.skill_mod._bind_candidates(canvas)
+        template, _, seed_cfg = self.skill_mod._template_from_workflow(canvas, bindings)
+        self.assertEqual(template["25"]["inputs"]["value"], "{{PROMPT}}")
+        self.assertEqual(template["19"]["inputs"]["megapixels"], "{{MEGAPIXELS}}")
+        self.assertEqual(template["19"]["inputs"]["aspect_ratio"], "{{ASPECT_RATIO}}")
+        self.assertEqual(template["36"]["inputs"]["text"], "{{NEGATIVE}}")   # 固定规则照旧
+        self.assertEqual(seed_cfg["default_ratio"], "1:1")
+        self.assertEqual(seed_cfg["base_resolution"], 1056)                  # 1.05MP @ 1:1 的长边
+
+    def test_size_candidates_name_the_settings_they_write(self):
+        """megapixels / aspect_ratio 在技能里没有对应的设置项：候选要直接给出勾选后写进
+        config.json 的那两项，值与 _template_from_workflow 落的 seed_cfg 对齐，
+        对话框才能把行写成「技能设置「长边尺寸」1056」而不是画布上的 1.05。"""
+        canvas = self.canvas()
+        got = {c["token"]: c["setting"] for c in self.skill_mod._bind_candidates(canvas)
+               if c["token"] in ("MEGAPIXELS", "ASPECT_RATIO")}
+        self.assertEqual(got["MEGAPIXELS"], {"key": "base_resolution", "value": 1056})
+        self.assertEqual(got["ASPECT_RATIO"], {"key": "default_ratio", "value": "1:1"})
+        _, _, seed_cfg = self.skill_mod._template_from_workflow(canvas, self.skill_mod._bind_candidates(canvas))
+        self.assertEqual(seed_cfg["base_resolution"], got["MEGAPIXELS"]["value"])
+        self.assertEqual(seed_cfg["default_ratio"], got["ASPECT_RATIO"]["value"])
+
+    def test_unchecked_binding_keeps_canvas_value(self):
+        canvas = self.canvas()
+        bindings = [c for c in self.skill_mod._bind_candidates(canvas) if c["token"] != "ASPECT_RATIO"]
+        template, _, _ = self.skill_mod._template_from_workflow(canvas, bindings)
+        self.assertEqual(template["19"]["inputs"]["aspect_ratio"], "1:1 (Square)")
+        self.assertEqual(template["19"]["inputs"]["megapixels"], "{{MEGAPIXELS}}")
+
+    def test_unknown_token_is_ignored(self):
+        canvas = self.canvas()
+        template, _, _ = self.skill_mod._template_from_workflow(
+            canvas, [{"node": "25", "field": "value", "token": "MODEL"}])
+        self.assertEqual(canvas["25"]["inputs"]["value"], template["25"]["inputs"]["value"])
+
+    def test_writeback_restores_checked_bindings(self):
+        canvas = self.canvas()
+        template, _, _ = self.skill_mod._template_from_workflow(canvas, self.skill_mod._bind_candidates(canvas))
+        # 导入到画布后 widget 灌回具体值，回写靠已存模板复原勾选
+        restored = self.skill_mod._bound_bindings(template, canvas)
+        self.assertEqual({(b["node"], b["token"]) for b in restored},
+                         {("25", "PROMPT"), ("19", "MEGAPIXELS"), ("19", "ASPECT_RATIO")})
+        template2, _, _ = self.skill_mod._template_from_workflow(canvas, restored)
+        self.assertEqual(template2, template)
+
+    def test_writeback_keeps_unchecked_binding_out(self):
+        canvas = self.canvas()
+        template, _, _ = self.skill_mod._template_from_workflow(canvas, [])
+        self.assertEqual(self.skill_mod._bound_bindings(template, canvas), [])
+
+    def test_video_plan_has_no_candidates(self):
+        wf = {"1": {"class_type": "UNETLoader", "inputs": {"unet_name": "m.safetensors"}},
+              "2": {"class_type": "MiniMaxH3ImageToVideo",
+                    "inputs": {"clip": ["1", 0], "prompt": "p", "width": 512, "height": 512, "length": 24}}}
+        plan = self.skill_mod.plan_workflow_skill(wf)
+        self.assertTrue(plan["gen_video"])
+        self.assertEqual(plan["candidates"], [])
+
+
 if __name__ == '__main__':
     unittest.main()
 

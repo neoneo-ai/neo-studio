@@ -162,6 +162,8 @@ Neo Studio 独立页面（`web/studio/index.html`）的后端。素材 / 生图 
 | GET | `/neo_image_gen/skill_config` | 读取技能生图 / 生视频设置 |
 | POST | `/neo_image_gen/skill_config` | 写技能设置（预设写本地覆盖文件） |
 | GET | `/neo_image_gen/skill_workflow` | 技能 `workflow.json` 模板（只读） |
+| POST | `/neo_image_gen/plan_workflow_skill` | 导出预览：列出画布里可替换成占位符的 widget 候选 |
+| POST | `/neo_image_gen/save_workflow_skill` | 画布工作流导出为新技能（勾选的候选写进模板） |
 | POST | `/neo_image_gen/update_workflow_skill` | 把画布工作流回写为技能模板 |
 | POST | `/neo_image_gen/save_combo_skill` | 主模型 + LoRA 组合存为新技能 |
 

@@ -95,10 +95,10 @@ test("导入到画布：ImageScale 的画布宽高灌成数字（不残留 {{CAN
     await openPopup();
     const wf = await importToCanvas();
     const scale = wf["30"].inputs;
-    assert.strictEqual(wf["5"].inputs.width, 1040, "长边 1024 按 16 对齐（与后端 _round_multiple 同口径）");
-    assert.strictEqual(wf["5"].inputs.height, 592, "16:9 短边 576 按 16 对齐");
-    assert.strictEqual(scale.width, 1056, "画布尺寸按 32 对齐（后端 _edit_canvas_size 口径）");
-    assert.strictEqual(scale.height, 608);
+    assert.strictEqual(wf["5"].inputs.width, 1024, "长边 1024 按 16 对齐（与后端 _round_multiple 同口径，整数倍不抬高）");
+    assert.strictEqual(wf["5"].inputs.height, 576, "16:9 短边 576 按 16 对齐");
+    assert.strictEqual(scale.width, 1024, "画布尺寸按 32 对齐（后端 _edit_canvas_size 口径）");
+    assert.strictEqual(scale.height, 576);
     assert.ok(Number.isFinite(scale.width) && Number.isFinite(scale.height), "number widget 必须是有限数字");
 });
 

@@ -476,7 +476,28 @@ const EN = {
     "⚠️ {n} 个节点未安装": "⚠️ {n} nodes not installed",
     "⚠️ {n} 个模型缺失": "⚠️ {n} models missing",
     "🔵 {n} 个模板变量运行时填入": "🔵 {n} template variables filled at runtime",
+    "🟦 {n} 个变量由技能设置填入": "🟦 {n} variables filled from the skill's settings",
+    "{cls} #{id} · {field} = {value}{note}": "{cls} #{id} · {field} = {value}{note}",
+    "{n} 处：{where}": "{n} places: {where}",
+    "下拉 {n} 项：{opts}": "dropdown, {n} options: {opts}",
+    "下拉 {n} 项：{opts} …": "dropdown, {n} options: {opts} …",
+    "{kind} {min}–{max}": "{kind} {min}–{max}",
+    "目标：": "Target:",
+    "来源：技能设置「默认比例」{ratio}": "Source: skill setting “Default ratio” {ratio}",
+    "来源：技能设置「{label}」": "Source: skill setting “{label}”",
+    "长边尺寸 {base} × 比例 {ratio}": "Long edge {base} × ratio {ratio}",
+    "长边尺寸 {base} × 比例 {ratio} → {w}×{h} ÷ 1024² 算出 {v} MP（生成时按本次宽高重算）":
+        "Long edge {base} × ratio {ratio} → {w}×{h} ÷ 1024² gives {v} MP (recomputed from each generation's width and height)",
+    "生成时按本次宽高重算": "Recomputed from this request's width and height",
+    "… 共 {n} 个变量": "… {n} variables in total",
+    "已按技能设置灌入 {n} 个模板变量": "Loaded {n} template variables from the skill's settings",
+    "画布上只剩算出来的数值：生成时尺寸按本次请求的宽高重算，回写入技能时按模板复原这些变量":
+        "The canvas keeps only the computed numbers: size is recomputed from each request's width and height, and writing back restores these variables in the template",
+    "生成时按本次请求的宽高重算，图上这个值只是按技能默认尺寸的预览值":
+        "Recomputed from each generation's own width and height; this preview value only reflects the skill's default size",
+    "生成时按本次技能设置填入": "Filled from the skill's settings when generating",
     "复制名称": "Copy name",
+    "复制变量": "Copy variable",
     // ===== 素材库工具条 / 面包屑 =====
     "后退 (Back)": "Back",
     "前进 (Forward)": "Forward",
@@ -821,6 +842,20 @@ const EN = {
     "无法导出": "Cannot export",
     "画布上没有有效工作流": "The canvas has no valid workflow",
     "已保存{kind}技能 \"{id}\"": "Saved the {kind} skill “{id}”",
+    "替换为技能变量": "Replaced by skill variables",
+    "固定替换：模型 / 编码器 / VAE / 提示词 / 宽高 / 时长":
+        "Always replaced: model / encoder / VAE / prompt / width & height / length",
+    "固定替换：模型 / 编码器 / VAE / Seed / 张数 / 输出前缀 / 参考图 / 提示词编码":
+        "Always replaced: model / encoder / VAE / seed / count / output prefix / reference images / prompt encoding",
+    "画布里没有可额外勾选的替换项": "Nothing else on the canvas can be bound to a variable",
+    "技能设置「{label}」{value} → {token}": "Skill setting “{label}” {value} → {token}",
+    "画布当前 ": "Canvas value ",
+    "生成时按本次宽高重算，画布上的 megapixels 不保存":
+        "Recomputed from this request's width and height; the canvas megapixels is not stored",
+    "生成时取 ResolutionSelector 下拉认得的那一项":
+        "Each request snaps to an option the ResolutionSelector dropdown accepts",
+    "megapixels 不是技能设置项：它是「长边尺寸 × 默认比例」得到的宽高 ÷ 1024² 算出来的（夹在 0.1–16）；勾选只按画布这一次的值反算出上面两项设置，出图尺寸生成时按本次宽高重算":
+        "megapixels is not a skill setting: it is derived from the width and height that “Long edge × Default ratio” produces, divided by 1024² (clamped to 0.1–16). Checking a row only back-solves the two settings above from this canvas run; the output size is recomputed from each request's width and height",
     "用 ↑ / ↓ 或悬停浏览技能": "Use ↑ / ↓ or hover to browse skills",
     "自动（{m}）": "Auto ({m})",
     "主模型": "Main model",

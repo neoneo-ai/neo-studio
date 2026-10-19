@@ -103,14 +103,29 @@ test("导入到画布：按设置预渲染后 app.loadApiJson（number widget �
     const wf = api[0].data;
     assert.equal(wf["1"].inputs.unet_name, "m.safetensors", "{{MODEL}} 按设置预渲染");
     assert.equal(wf["2"].inputs.text, "", "{{PROMPT}} 归空（画里提示后回写）");
-    assert.strictEqual(wf["3"].inputs.width, 1296, "number widget 的纯数字串归 number（长边 1280 对齐 16）");
-    assert.strictEqual(wf["3"].inputs.height, 736, "16:9 高 720 对齐 16");
+    assert.strictEqual(wf["3"].inputs.width, 1280, "number widget 的纯数字串归 number（长边 1280 对齐 16）");
+    assert.strictEqual(wf["3"].inputs.height, 720, "16:9 高 720 对齐 16");
     assert.strictEqual(wf["3"].inputs.batch_size, 1);
     assert.strictEqual(wf["4"].inputs.seed, 0, "SEED 归 0（画布随机后回写落 0）");
     assert.strictEqual(wf["4"].inputs.steps, 20);
     assert.equal(wf["5"].inputs.filename_prefix, "NeoAgent", "非 number widget 保持字符串");
     assert.equal(wf["9"].inputs.image, "{{REF_IMAGE}}", "参考图槽位留占串（画布里选图后回写）");
     assert.ok(writebackArmed(), "导入后应点亮 🅝 绿点（画布上有技能待回写）");
+});
+
+test("导入到画布：toast 逐条说明哪些模板变量被灌成写死值（画布上没有 {{变量}}）", async () => {
+    menuBtnEl();
+    await openPopup({ id: "custom_a", source: "custom" });
+    const toastAt = appState.toasts.length;
+    click(importBtn());
+    await sleep(80);
+
+    const note = appState.toasts.slice(toastAt).find((x) => (x.summary || "").includes("灌入"));
+    assert.ok(note, "导入成功应 toast 说明灌入的模板变量");
+    assert.ok((note.detail || "").includes("{{WIDTH}}"), "逐条列出被灌成数值的变量：" + note.detail);
+    assert.ok((note.detail || "").includes("长边尺寸 1280 × 比例 16:9"), "尺寸写明由长边尺寸 × 默认比例算出：" + note.detail);
+    assert.ok((note.detail || "").includes("生成时按本次宽高重算"), "写明生成时按本次宽高重算：" + note.detail);
+    assert.ok((note.detail || "").includes("画布上只剩算出来的数值"), "说明画布上不再保留这些变量");
 });
 
 test("导入到画布：成功后自动收起技能窗口，回写入口留在顶菜单", async () => {
@@ -511,8 +526,8 @@ test("交接导入：workflow.json 里写死的 widget 按技能 config.json 覆
     assert.strictEqual(wf["4"].inputs.steps, 12, "写死的 steps 按技能 config 覆盖");
     assert.strictEqual(wf["4"].inputs.seed, 0, "写死的 seed 归 0");
     assert.strictEqual(wf["6"].inputs.seed, 0, "SeedNode.seed 同样覆盖");
-    assert.strictEqual(wf["3"].inputs.width, 1296, "写死 512 按 default_ratio 16:9 重算");
-    assert.strictEqual(wf["3"].inputs.height, 736);
+    assert.strictEqual(wf["3"].inputs.width, 1280, "写死 512 按 default_ratio 16:9 重算");
+    assert.strictEqual(wf["3"].inputs.height, 720);
     assert.strictEqual(wf["3"].inputs.batch_size, 2, "COUNT 按 config.count");
     assert.equal(wf["5"].inputs.filename_prefix, "SkillPrefix", "PREFIX 按 config.output_prefix");
     assert.equal(wf["1"].inputs.ckpt_name, "old.safetensors", "checkpoint 名非技能 widget，不动");

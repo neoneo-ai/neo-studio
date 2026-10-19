@@ -222,6 +222,22 @@ async def input_images_route(request):
 
 
 
+@routes.post("/neo_image_gen/plan_workflow_skill")
+async def plan_workflow_skill_route(request):
+    """「从画布创建技能」的导出预览：列出画布里可替换成占位符的 widget 候选，不落盘。"""
+    from . import skill as _skill
+
+    try:
+        body = await request.json()
+    except Exception:
+        return web.json_response({"error": "请求体不是 JSON"}, status=400)
+    body = body if isinstance(body, dict) else {}
+    result = _skill.plan_workflow_skill(body.get("workflow"))
+    if not result.get("success"):
+        return web.json_response({"error": result.get("message")}, status=400)
+    return web.json_response(result)
+
+
 @routes.post("/neo_image_gen/save_workflow_skill")
 async def save_workflow_skill_route(request):
     """把当前画布工作流（API prompt）导出为生图技能。"""
@@ -234,7 +250,7 @@ async def save_workflow_skill_route(request):
     body = body if isinstance(body, dict) else {}
     result = _skill.save_workflow_skill(
         body.get("name", ""), body.get("description", ""),
-        body.get("tags", []), body.get("workflow"))
+        body.get("tags", []), body.get("workflow"), body.get("bindings"))
     if not result.get("success"):
         return web.json_response({"error": result.get("message")}, status=400)
     return web.json_response(result)

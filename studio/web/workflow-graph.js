@@ -12,7 +12,9 @@
  *   标记 节点未安装 / 模型未找到 / {{模板变量}}（请求失败时跳过对应检查，不误报）
  *   checkWorkflow 只按工作流用到的 class 拉 /object_info/{class}（走 js/core/object-info.js 缓存）
  * - renderWorkflowGraph：画 SVG（节点框 + 参数行 + 贝塞尔连线 + 徽标 + tooltip）+ 问题摘要到容器
- *   （摘要含缺失节点/模型的名称芯片与复制按钮，方便一键复制去安装/下载）
+ *   （摘要含缺失节点/模型的名称芯片与复制按钮，方便一键复制去安装/下载；含被设置填掉值的
+ *   {{变量}}芯片 —— 值被填走后图上只剩数字，芯片说清这一格是哪个变量、目标控件能填什么
+ *   （combo 选项 / 数值上下限，取 /object_info 定义）、这个数由哪项技能设置算出、生成时会不会重算）
  */
 import { getNodeDefs, getModelList } from "./js/core/object-info.js";
 import { t, tf } from "./js/core/i18n.js";
@@ -504,6 +506,8 @@ function collapseRefLoaders(workflow) {
 /**
  * 按已知参数预渲染模板：替换 {{MODEL}} / {{LORA_1_NAME}} / {{STEPS}} 等可由设置确定的占位符，
  * 运行时变量（{{PROMPT}} / {{SEED}} / {{REF_*}} 等）保持原样。返回新对象，不改原模板。
+ * 被替换掉的字段记进节点的 tpl_filled（field → "{{TOKEN}}"）：预览里这一格只剩一个填好的值，
+ * 不记下来就看不出它是哪个变量填的（{{MEGAPIXELS}} 尤其如此，值由 base_resolution × 比例算出）。
  */
 export function applyWorkflowParams(workflow, values) {
     const map = {};
@@ -514,17 +518,23 @@ export function applyWorkflowParams(workflow, values) {
     const out = {};
     for (const [id, node] of Object.entries(workflow || {})) {
         if (!node || typeof node !== "object") { out[id] = node; continue; }
-        const inputs = {};
+        const inputs = {}, filled = {};
         for (const [k, v] of Object.entries(node.inputs || {})) {
             if (typeof v === "string") {
                 let s = v;
-                for (const [tok, rep] of Object.entries(map)) if (s.includes(tok)) s = s.split(tok).join(rep);
+                const toks = [];
+                for (const [tok, rep] of Object.entries(map)) {
+                    if (!s.includes(tok)) continue;
+                    s = s.split(tok).join(rep);
+                    toks.push(tok);
+                }
                 inputs[k] = s;
+                if (toks.length) filled[k] = toks.join(" ");
             } else {
                 inputs[k] = v;
             }
         }
-        out[id] = { ...node, inputs };
+        out[id] = Object.keys(filled).length ? { ...node, inputs, tpl_filled: filled } : { ...node, inputs };
     }
     return out;
 }
@@ -672,6 +682,8 @@ export async function checkWorkflow(workflow) {
         if (def === null) objectInfo[cls] = { input: {} };
         else if (Object.keys(def).length) objectInfo[cls] = def;
     }
+    // definitions 随校验结果带出去：只读流程图的变量芯片要说清「填进哪个控件、能填什么」
+    // （combo 的选项、数值的上下限），拿不到定义时芯片只写控件名。
 
     const folders = new Set();
     for (const cls of classes) {
@@ -687,7 +699,7 @@ export async function checkWorkflow(workflow) {
     }
     const modelLists = {};
     await Promise.all([...folders].map(async (f) => { const list = await getModelList(f); if (list) modelLists[f] = list; }));
-    return validateWorkflow(workflow, objectInfo, modelLists);
+    return { ...validateWorkflow(workflow, objectInfo, modelLists), definitions: objectInfo };
 }
 
 
@@ -726,10 +738,12 @@ function nodeInputLines(workflow, id, maxChars) {
         if (names.length >= 2) groupLines.push(`${base} ×${names.length}`);
         else regular.push([names[0], inputs[names[0]]]);
     }
+    const filled = (workflow[id] && workflow[id].tpl_filled) || {};
     const all = [
         ...regular.map(([k, v]) => {
             if (Array.isArray(v) && typeof v[0] === "string") return k;
-            const l = `${k}: ${_fmtVal(v, 60)}`;
+            // 变量名写在值前面：按列宽截断时截掉的是尾巴，被设置填走的值是靠尾巴认不出来的
+            const l = `${k}: ${filled[k] ? filled[k] + " = " : ""}${_fmtVal(v, 60)}`;
             return l.length > maxChars ? l.slice(0, maxChars - 1) + "…" : l;
         }),
         ...groupLines,
@@ -764,9 +778,10 @@ function nodeTooltip(id, workflow, issues) {
     const idLabel = nodeIdLabel(id);
     const lines = [label + (idLabel ? ` ${idLabel}` : "") + injected];
     const inputs = (node && node.inputs) || {};
+    const filled = (node && node.tpl_filled) || {};
     for (const [k, v] of Object.entries(inputs)) {
         if (Array.isArray(v) && typeof v[0] === "string") lines.push(`${k}: ← ${nodeRefLabel(v[0], workflow)}`);
-        else lines.push(`${k}: ${_fmtVal(v)}`);
+        else lines.push(`${k}: ${_fmtVal(v)}${filled[k] ? ` ← ${filled[k]}` : ""}`);
     }
     for (const i of issues || []) lines.push(i.message);
     return lines.join("\n");
@@ -817,8 +832,102 @@ function copyName(text, btn) {
     feedback(ok);
 }
 
-/** 把流程图画进 container（先清空旧内容）；summaryTarget 提供时摘要行画到滚动区外。返回 { svg, summary }。 */
-export function renderWorkflowGraph(container, workflow, validation, summaryTarget) {
+// 尺寸类变量的值由本次请求的宽高算出，预览里显示的是按技能默认尺寸算的那一份
+const SIZE_TOKEN_RE = /\{\{(MEGAPIXELS|ASPECT_RATIO|WIDTH|HEIGHT)\}\}/;
+
+/** 被技能设置填掉值的 {{变量}}：图上这一格只剩一个值，芯片把变量名、目标控件与来源设置列出来 */
+function filledTokenChips(wf, definitions) {
+    const byToken = {};
+    for (const id of Object.keys(wf || {}).sort(_sortNodeIds)) {
+        const node = wf[id] || {};
+        const inputs = node.inputs || {};
+        for (const [k, toks] of Object.entries(node.tpl_filled || {})) {
+            const rec = (byToken[toks] ||= { token: toks, where: [] });
+            const note = widgetTargetNote(definitions, node.class_type, k);
+            rec.where.push(tf("{cls} #{id} · {field} = {value}{note}",
+                { cls: node.class_type || "?", id, field: k, value: _fmtVal(inputs[k]), note: note ? `（${note}）` : "" }));
+        }
+    }
+    return Object.values(byToken);
+}
+
+// /object_info 的 widget 类型名 → 中文控件名（未知类型原样显示）
+const WIDGET_TYPE_LABEL = {
+    COMBO: "下拉", STRING: "文本", INT: "整数", FLOAT: "数值", FLOAT64: "数值",
+    BOOLEAN: "开关", IMAGE: "图片", MASK: "遮罩", LATENT: "Latent", CONDITIONING: "Conditioning",
+};
+
+/** 目标控件说明：这个字段能填什么。combo 列前几项、数值与整数带上下限；定义取不到（无 ComfyUI、
+ *  拉取失败、该字段是连线输入）返回空串，芯片只写节点与字段名。 */
+function widgetTargetNote(definitions, cls, field) {
+    const input = definitions && cls && definitions[cls] ? definitions[cls].input : null;
+    const spec = input ? ((input.required || {})[field] || (input.optional || {})[field]) : null;
+    if (!Array.isArray(spec)) return "";
+    const rule = (typeof spec[1] === "object" && spec[1]) || {};
+    const range = (kind) => (rule.min !== undefined && rule.max !== undefined)
+        ? tf("{kind} {min}–{max}", { kind, min: rule.min, max: rule.max }) : kind;
+    if (Array.isArray(spec[0])) {   // combo：首项是选项数组
+        const opts = spec[0].filter((o) => typeof o === "string");
+        const head = opts.slice(0, 5).join(" / ");
+        return opts.length > 5
+            ? tf("下拉 {n} 项：{opts} …", { n: opts.length, opts: head })
+            : tf("下拉 {n} 项：{opts}", { n: opts.length, opts: head });
+    }
+    if (typeof spec[0] === "number") {   // 数值 widget：首项是默认值，第二项带 min / max / step
+        return range(Number.isInteger(spec[0]) && Number.isInteger(rule.step ?? 1) ? "整数" : "数值");
+    }
+    if (typeof spec[0] === "string") {
+        if (spec[0] === "INT" || spec[0].startsWith("FLOAT")) return range(spec[0] === "INT" ? "整数" : "数值");
+        return WIDGET_TYPE_LABEL[spec[0]] || spec[0];
+    }
+    return "";
+}
+
+// 变量 → 对应的技能设置项名：tooltip 说清去哪儿改这个值
+const TOKEN_SETTING_LABEL = {
+    MODEL: "主模型", TEXT_ENCODER: "Text Encoder", VAE: "VAE", LORA: "LoRA",
+    COUNT: "生图张数", PREFIX: "输出前缀", STEPS: "步数", SEED: "种子（每次随机）",
+};
+
+/** 这个值从哪项技能设置算出来（芯片 tooltip 与导入说明的「来源」行）。values 是灌进模板的那份设置值。
+ *  尺寸一律以「长边尺寸 × 默认比例」为主语——技能里真正要写的就这两项，设置面板也是这两个词；
+ *  megapixels 是这两项算出来的派生值（技能 config 与画布 widget 都没有它自己的设置项），所以它只作为算式结果出现。
+ *  非尺寸类变量只指设置项名。 */
+function tokenSourceNote(token, values) {
+    if (!values) return "";
+    // 生视频的宽高是设置里的直接值，没有「长边尺寸 × 比例」这层算式，不编一个来源出来
+    const base = Number(values.base_resolution) > 0 ? Number(values.base_resolution) : 0;
+    if (!base) return "";
+    const ratio = String(values._ratio_text || values.ASPECT_RATIO || "1:1").trim();
+    if (token === "{{MEGAPIXELS}}" && values.WIDTH && values.HEIGHT)
+        return tf("长边尺寸 {base} × 比例 {ratio} → {w}×{h} ÷ 1024² 算出 {v} MP（生成时按本次宽高重算）",
+            { base, ratio, w: values.WIDTH, h: values.HEIGHT, v: values.MEGAPIXELS });
+    if (token === "{{ASPECT_RATIO}}") return tf("来源：技能设置「默认比例」{ratio}", { ratio });
+    if (token === "{{WIDTH}}" || token === "{{HEIGHT}}")
+        return tf("长边尺寸 {base} × 比例 {ratio}", { base, ratio });
+    const label = TOKEN_SETTING_LABEL[token.slice(2, -2)];
+    return label ? tf("来源：技能设置「{label}」", { label: t(label) }) : "";
+}
+
+/** 导入画布那一刻要交代的话：画布上没有 {{变量}}，技能模板里的变量被设置灌成了写死值。
+ *  一行一个变量，主语是「长边尺寸 × 比例」这两项真设置，megapixels 写成算出来的结果。 */
+export function filledTokenNotes(wf, values, definitions) {
+    const notes = filledTokenChips(wf, definitions).map((tk) => {
+        const where = tk.where.length === 1 ? tk.where[0]
+            : tf("{n} 处：{where}", { n: tk.where.length, where: tk.where.join(" / ") });
+        const src = tokenSourceNote(tk.token, values);
+        const runtime = SIZE_TOKEN_RE.test(tk.token)
+            ? t("生成时按本次宽高重算")
+            : t("生成时按本次技能设置填入");
+        return [tk.token, where, src, runtime].filter(Boolean).join(" · ");
+    });
+    return notes.length > 6 ? [...notes.slice(0, 6), tf("… 共 {n} 个变量", { n: notes.length })] : notes;
+}
+
+/** 把流程图画进 container（先清空旧内容）；summaryTarget 提供时摘要行画到滚动区外，
+ *  filledValues 是灌进模板的那份设置值（变量芯片靠它写「来源」：哪项设置、怎么算出这个数）。
+ *  返回 { svg, summary }。 */
+export function renderWorkflowGraph(container, workflow, validation, summaryTarget, filledValues) {
     container.innerHTML = "";
     // 合成节点（autogrow 合并）不在原始 workflow 里，tooltip 需要合并后的图
     const wf = collapseRefLoaders(workflow || {});
@@ -892,10 +1001,12 @@ export function renderWorkflowGraph(container, workflow, validation, summaryTarg
     const summary = document.createElement("div");
     summary.className = "rs-wf-summary";
     const c = (validation && validation.counts) || { missingNodes: 0, missingModels: 0, templates: 0 };
+    const tokenChips = filledTokenChips(wf, validation && validation.definitions);
     const parts = [];
     if (c.missingNodes) parts.push(tf("⚠️ {n} 个节点未安装", { n: c.missingNodes }));
     if (c.missingModels) parts.push(tf("⚠️ {n} 个模型缺失", { n: c.missingModels }));
     if (c.templates) parts.push(tf("🔵 {n} 个模板变量运行时填入", { n: c.templates }));
+    if (tokenChips.length) parts.push(tf("🟦 {n} 个变量由技能设置填入", { n: tokenChips.length }));
     const countLine = document.createElement("div");
     countLine.className = "rs-wf-summary-count";
     countLine.textContent = parts.join(" · ");
@@ -931,6 +1042,36 @@ export function renderWorkflowGraph(container, workflow, validation, summaryTarg
             chipsRow.appendChild(chip);
         }
         summary.appendChild(chipsRow);
+    }
+    // 变量芯片：值被设置填走后图上只剩数字，这里把 {{变量名}} 列出来并可复制
+    // （标题三段：目标 = 填进哪个节点哪个控件、能填什么；来源 = 由哪项技能设置算出；生成时 = 会不会重算）
+    if (tokenChips.length) {
+        const tokenRow = document.createElement("div");
+        tokenRow.className = "rs-wf-tokens";
+        for (const tk of tokenChips) {
+            const chip = document.createElement("span");
+            chip.className = "rs-wf-token-item";
+            const sizeVar = SIZE_TOKEN_RE.test(tk.token);
+            const lines = [t("目标："), ...tk.where];
+            const source = tokenSourceNote(tk.token, filledValues);
+            if (source) lines.push(source);
+            lines.push(sizeVar
+                ? t("生成时按本次请求的宽高重算，图上这个值只是按技能默认尺寸的预览值")
+                : t("生成时按本次技能设置填入"));
+            chip.title = lines.join("\n");
+            const name = document.createElement("span");
+            name.className = "rs-wf-missing-name";
+            name.textContent = tk.token;
+            const btn = document.createElement("button");
+            btn.className = "rs-wf-copy";
+            btn.type = "button";
+            btn.textContent = "📋";
+            btn.title = t("复制变量");
+            btn.onclick = () => copyName(tk.token, btn);
+            chip.append(name, btn);
+            tokenRow.appendChild(chip);
+        }
+        summary.appendChild(tokenRow);
     }
     // 分阶段渲染会多次调用本函数，summaryTarget 是外部持久元素，必须整体替换而不是追加
     if (summaryTarget) summaryTarget.replaceChildren(summary);

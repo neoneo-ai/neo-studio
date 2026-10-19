@@ -31,7 +31,7 @@ from comfy.cli_args import args as cli_args, LatentPreviewMethod
 from comfy_execution.progress import ProgressHandler, add_progress_handler, get_progress_state
 from server import PromptServer
 
-from .util import PrefixFilter
+from .util import PrefixFilter, ASPECT_LABELS, ratio_pair
 from .image_gen_files import (CONFIGS_DIR, SETTINGS_FILE, DEFAULT_SETTINGS, _IMAGE_SUFFIXES,
                               _MODEL_HINTS, _SKILL_SETTING_KEYS, _display_sort, _folder_files,
                               get_settings, save_settings, scan_models, resolve_model, suggest_model)
@@ -531,6 +531,9 @@ def resolve_request(body: dict, settings: dict | None = None, max_refs: int = 1)
                                        width=body.get("width"), height=body.get("height"))
     # 采样步数：本次请求（节点入参/接口）> skill config.json > 默认 20
     steps = max(1, _int(merged.get("steps"), 20))
+    # 分辨率选择器（{{ASPECT_RATIO}} / {{MEGAPIXELS}}）的取值：比例取本次请求或技能默认比例，
+    # 百万像素由输出尺寸反算（夹在节点 0.1~16 的合法区间里）
+    ratio_wh = ratio_pair(body.get("ratio")) or ratio_pair(merged.get("default_ratio"))
 
     ref_scale = None
     src_size = None
@@ -577,6 +580,8 @@ def resolve_request(body: dict, settings: dict | None = None, max_refs: int = 1)
         "outpaint": outpaint,
         "local_edit": local_edit,
         "target_mp": _float(merged.get("target_megapixels"), DEFAULT_SETTINGS["target_megapixels"]),
+        "aspect_ratio": f"{ratio_wh[0]:g}:{ratio_wh[1]:g}" if ratio_wh else "",
+        "megapixels": min(16.0, max(0.1, round(width * height / (1024 * 1024), 2))),
         "prefix": prefix,
         "warnings": warnings,
     }
@@ -590,6 +595,7 @@ _PLACEHOLDER_TOKENS = ("{{PROMPT}}", "{{NEGATIVE}}", "{{SEED}}", "{{STEPS}}", "{
                        "{{LENGTH}}", "{{COUNT}}", "{{PREFIX}}", "{{MODEL}}", "{{TEXT_ENCODER}}", "{{VAE}}",
                        "{{AUDIO_VAE}}", "{{REF_IMAGE}}", "{{REF_IMAGE_LAST}}", "{{CONTROL_IMAGE}}", "{{REF_WIDTH}}", "{{REF_HEIGHT}}",
                        "{{CANVAS_WIDTH}}", "{{CANVAS_HEIGHT}}", "{{OUTPAINT_REF_MP}}", "{{TARGET_MP}}",
+                       "{{MEGAPIXELS}}", "{{ASPECT_RATIO}}",
                        "{{PAD_LEFT}}", "{{PAD_TOP}}", "{{PAD_RIGHT}}", "{{PAD_BOTTOM}}")
 
 # 单帧占位符（首帧 {{REF_IMAGE}} / 尾帧 {{REF_IMAGE_LAST}}）：未挂该帧时整值判未填，
@@ -625,6 +631,19 @@ def _typed_value(token: str, params: dict):
         return params["length"]
     if token == "{{COUNT}}":
         return params["count"]
+    # 分辨率选择器（ResolutionSelector）的两个 widget：百万像素按本次输出尺寸算，
+    # 比例必须落进 combo 认得的那几个 label，落不进去就是技能比例不合法（不是渲染 bug）
+    if token == "{{MEGAPIXELS}}":
+        megapixels = params.get("megapixels")
+        if not megapixels:
+            raise ValueError("技能模板的 {{MEGAPIXELS}} 需要输出尺寸才能填值")
+        return megapixels
+    if token == "{{ASPECT_RATIO}}":
+        label = ASPECT_LABELS.get(str(params.get("aspect_ratio") or "").strip())
+        if not label:
+            raise ValueError("技能模板的 {{ASPECT_RATIO}} 只支持 %s 这些比例，当前比例 %s 不在其中"
+                             % (" / ".join(sorted(ASPECT_LABELS)), params.get("aspect_ratio") or "未设置"))
+        return label
     if token == "{{PREFIX}}":
         return params["prefix"]
     if token == "{{MODEL}}":

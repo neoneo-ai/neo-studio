@@ -9,7 +9,7 @@ import { app } from "../../scripts/app.js";
 import { attachComboBox } from "./combo-box.js";
 import { mkEl } from "./dom-utils.js";
 import { checkWorkflow, applyWorkflowParams, injectRuntimeLoras } from "./workflow-graph.js";
-import { getSkillGenConfig, listGenModels, listVideoGenModels, shortModelName, videoSuggestion, saveWorkflowSkill } from "./image-gen.js";
+import { getSkillGenConfig, listGenModels, listVideoGenModels, shortModelName, videoSuggestion, saveWorkflowSkill, planWorkflowSkill } from "./image-gen.js";
 import { showToast } from "./gallery-utils.js";
 import {
     dispatchSkillsUpdated, stopPointerBubble, listSkills, loadSkill, saveSkill, deleteSkill,
@@ -180,11 +180,13 @@ function createSkillStatusRow(opts) {
     return { el, refresh, destroy };
 }
 // ==========================================
-// 标题对话框：从画布导出技能时只问一个名称（替代三个原生 prompt）。
-// overlay 挂到 document.body，复用 skill 弹窗样式；Enter 提交、Esc/点遮罩取消，返回 Promise<string|null>。
+// 标题对话框：从画布导出技能时问名称 + 勾选要替换成技能变量的 widget。
+// overlay 挂到 document.body，复用 skill 弹窗样式；Enter 提交、Esc/点遮罩取消，返回 Promise<{name, bindings}|null>。
 // ==========================================
+// config.json 的键 → 技能设置面板里的控件名（设置弹窗用的就是这两个词，行上要用同一个词才认得出改哪儿）
+const SETTING_LABELS = { base_resolution: "长边尺寸", default_ratio: "默认比例" };
 let _activeTitleDialog = null;
-function promptSkillTitle(defaultValue = "") {
+function promptSkillTitle(defaultValue = "", plan = null) {
     if (_activeTitleDialog) return _activeTitleDialog; // 避免重复弹层
     let resolveFn;
     const promise = new Promise((r) => { resolveFn = r; });
@@ -205,6 +207,60 @@ function promptSkillTitle(defaultValue = "") {
     input.value = defaultValue;
     row.append(label, input);
     body.appendChild(row);
+
+    // 变量替换清单：固定项由后端固定规则替换，候选项逐项勾选，不勾的保持画布里的写死值
+    const binds = mkEl("div", "rs-skill-title-binds");
+    const head = mkEl("div", "rs-skill-title-binds-head");
+    head.textContent = t("替换为技能变量");
+    const fixed = mkEl("div", "rs-skill-title-binds-note");
+    fixed.textContent = plan && plan.gen_video
+        ? t("固定替换：模型 / 编码器 / VAE / 提示词 / 宽高 / 时长")
+        : t("固定替换：模型 / 编码器 / VAE / Seed / 张数 / 输出前缀 / 参考图 / 提示词编码");
+    binds.append(head, fixed);
+    const rows = [];
+    for (const c of (plan && plan.candidates) || []) {
+        const line = mkEl("label", "rs-skill-title-bind");
+        const box = document.createElement("input");
+        box.type = "checkbox";
+        box.checked = true;
+        const shown = String(c.value === undefined ? "" : c.value).replace(/\s+/g, " ").trim();
+        // 尺寸两行的主语换成技能里真正存的那两项：画布上的 megapixels 不是设置项，勾上后
+        // config.json 落的是 base_resolution / default_ratio，画布上那个数只是「当前值」参考
+        const setting = c.setting && c.setting.key ? c.setting : null;
+        const span = mkEl("span", "");
+        span.textContent = setting
+            ? tf("技能设置「{label}」{value} → {token}", {
+                label: t(SETTING_LABELS[setting.key] || setting.key), value: setting.value, token: `{{${c.token}}}`,
+            })
+            : `${c.class_type} #${c.node} · ${c.field} → {{${c.token}}}`;
+        const hint = !setting ? "" : c.token === "MEGAPIXELS"
+            ? t("生成时按本次宽高重算，画布上的 megapixels 不保存")
+            : t("生成时取 ResolutionSelector 下拉认得的那一项");
+        span.title = `${c.class_type} #${c.node} · ${c.field} = ${shown}` + (hint ? ` · ${hint}` : "");
+        const value = mkEl("span", "rs-skill-title-bind-value");
+        const text = (setting ? t("画布当前 ") : "") + shown;
+        value.textContent = text.length > 26 ? `${text.slice(0, 26)}…` : text;
+        line.append(box, span, value);
+        binds.appendChild(line);
+        rows.push({ box, binding: { node: c.node, field: c.field, token: c.token } });
+    }
+    if (!rows.length) {
+        const none = mkEl("div", "rs-skill-title-binds-note");
+        none.textContent = t("画布里没有可额外勾选的替换项");
+        binds.appendChild(none);
+    } else if (rows.some((r) => r.binding.token === "MEGAPIXELS" || r.binding.token === "ASPECT_RATIO")) {
+        // 行上的 base_resolution 是按画布这一次的 megapixels 反算出来的：不写这一行，用户会以为
+        // 保存的是画布上的宽高（照字面理解 = 冻结当前值），也不知道 megapixels 这项数从哪来
+        const calc = mkEl("div", "rs-skill-title-binds-note");
+        calc.textContent = t("megapixels 不是技能设置项：它是「长边尺寸 × 默认比例」得到的宽高 ÷ 1024² 算出来的（夹在 0.1–16）；勾选只按画布这一次的值反算出上面两项设置，出图尺寸生成时按本次宽高重算");
+        binds.appendChild(calc);
+    }
+    for (const w of (plan && plan.warnings) || []) {
+        const warn = mkEl("div", "rs-skill-title-binds-note");
+        warn.textContent = `⚠ ${w}`;
+        binds.appendChild(warn);
+    }
+    body.appendChild(binds);
 
     const btns = mkEl("div", "rs-modal-btns");
     const cancelBtn = mkEl("button", "rs-btn rs-btn-local");
@@ -230,7 +286,7 @@ function promptSkillTitle(defaultValue = "") {
     const submit = () => {
         const v = input.value.trim();
         if (!v) { input.focus(); return; } // 名称必填：空则聚焦输入框，不关闭
-        finish(v);
+        finish({ name: v, bindings: rows.filter((r) => r.box.checked).map((r) => r.binding) });
     };
     const onKey = (e) => {
         if (e.key === "Escape") finish(null);
@@ -249,6 +305,28 @@ function promptSkillTitle(defaultValue = "") {
 
     _activeTitleDialog = promise;
     return promise;
+}
+
+/** 「📋 从画布」两个入口共用：序列化画布 → 预览可替换的 widget → 名称 + 勾选 → 保存 */
+async function exportCanvasAsSkill() {
+    const { output, error } = await serializeCanvasPrompt();
+    if (error || !output || !Object.keys(output).length) {
+        showToast(app, "warning", t("无法导出"), t("画布上没有有效工作流") + (error?.message ? tf("（{msg}）", { msg: error.message }) : ""));
+        return;
+    }
+    let plan = null;
+    try {
+        plan = await planWorkflowSkill(output);
+    } catch (e) {
+        // 预览拿不到候选也照常创建：模板只按固定规则替换
+    }
+    const picked = await promptSkillTitle("my-workflow", plan);
+    if (!picked) return; // 用户在标题对话框取消
+    const r = await saveWorkflowSkill({
+        name: picked.name, description: "", tags: [], workflow: output, bindings: picked.bindings,
+    });
+    showToast(app, "success", tf("已保存{kind}技能 \"{id}\"", { kind: r.gen_video ? t("生视频") : t("生图"), id: r.id }), (r.warnings || []).join("\n"));
+    dispatchSkillsUpdated();
 }
 
 // 共享的 ZIP / 目录上传隐藏 input：多个节点的技能下拉共用同一对，change 时上传并广播刷新
@@ -365,16 +443,7 @@ function buildSkillManagementButtons(onClose) {
         e.stopPropagation();
         onClose();
         try {
-            const { output, error } = await serializeCanvasPrompt();
-            if (error || !output || !Object.keys(output).length) {
-                showToast(app, "warning", t("无法导出"), t("画布上没有有效工作流") + (error?.message ? tf("（{msg}）", { msg: error.message }) : ""));
-                return;
-            }
-            const name = await promptSkillTitle("my-workflow");
-            if (!name) return; // 用户在标题对话框取消
-            const r = await saveWorkflowSkill({ name, description: "", tags: [], workflow: output });
-            showToast(app, "success", tf("已保存{kind}技能 \"{id}\"", { kind: r.gen_video ? t("生视频") : t("生图"), id: r.id }), (r.warnings || []).join("\n"));
-            dispatchSkillsUpdated();
+            await exportCanvasAsSkill();
         } catch (err) {
             showToast(app, "error", t("保存失败"), err.message);
         }
@@ -1155,16 +1224,7 @@ function createSkillManager(host, { showClose = true, showCanvasBtn = true } = {
         canvasBtn.addEventListener("click", async (e) => {
             e.stopPropagation();
             try {
-                const { output, error } = await serializeCanvasPrompt();
-                if (error || !output || !Object.keys(output).length) {
-                    showToast(app, "warning", t("无法导出"), t("画布上没有有效工作流") + (error?.message ? tf("（{msg}）", { msg: error.message }) : ""));
-                    return;
-                }
-                const name = await promptSkillTitle("my-workflow");
-                if (!name) return;
-                const r = await saveWorkflowSkill({ name, description: "", tags: [], workflow: output });
-                showToast(app, "success", tf("已保存{kind}技能 \"{id}\"", { kind: r.gen_video ? t("生视频") : t("生图"), id: r.id }), (r.warnings || []).join("\n"));
-                dispatchSkillsUpdated();
+                await exportCanvasAsSkill();
             } catch (err) {
                 showToast(app, "error", t("保存失败"), err.message);
             }

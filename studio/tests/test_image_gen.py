@@ -113,6 +113,27 @@ class _PF(_logging.Filter):
     def filter(self, record):
         return True
 _util_mod.PrefixFilter = _PF
+# image_gen 在模块导入期就要这两个比例工具（技能模板 {{ASPECT_RATIO}} 的 combo label 表与解析）：
+# 桩里镜像 studio/util.py 的同名定义
+_util_mod.ASPECT_LABELS = {"1:1": "1:1 (Square)", "2:3": "2:3 (Portrait Photo)", "3:2": "3:2 (Photo)",
+                           "3:4": "3:4 (Portrait Standard)", "4:3": "4:3 (Standard)",
+                           "9:16": "9:16 (Portrait Widescreen)", "16:9": "16:9 (Widescreen)",
+                           "21:9": "21:9 (Ultrawide)"}
+
+
+def _stub_ratio_pair(text):
+    head = str(text or "").strip().split(" ")[0].lower().replace("x", ":").replace("/", ":")
+    parts = head.split(":")
+    if len(parts) != 2:
+        return None
+    try:
+        w, h = float(parts[0]), float(parts[1])
+    except ValueError:
+        return None
+    return (w, h) if w > 0 and h > 0 else None
+
+
+_util_mod.ratio_pair = _stub_ratio_pair
 sys.modules["_neo_imgen_pkg.util"] = _util_mod
 _pkg.util = _util_mod
 
@@ -391,6 +412,26 @@ class RenderTemplateTests(unittest.TestCase):
         template = {"1": {"class_type": "LoadImage", "inputs": {"image": "{{NOPE_TOKEN}}"}}}
         with self.assertRaises(ValueError):
             image_gen.render_template(template, self.params())
+
+    def test_resolution_selector_tokens(self):
+        """分辨率选择器模板：{{MEGAPIXELS}} 取本次输出尺寸反算的百万像素，{{ASPECT_RATIO}} 取 combo 认得的那一项。"""
+        template = {"19": {"class_type": "ResolutionSelector",
+                           "inputs": {"aspect_ratio": "{{ASPECT_RATIO}}", "megapixels": "{{MEGAPIXELS}}",
+                                      "multiple": 16}},
+                    "35": {"class_type": "EmptyFlux2LatentImage",
+                           "inputs": {"width": ["19", 0], "height": ["19", 1], "batch_size": 1}}}
+        params = self.params(ratio="16:9")
+        graph, _ = image_gen.render_template(template, params)
+        self.assertEqual(graph["19"]["inputs"]["aspect_ratio"], "16:9 (Widescreen)")
+        self.assertEqual(graph["19"]["inputs"]["megapixels"],
+                         round(params["width"] * params["height"] / (1024 * 1024), 2))
+
+    def test_aspect_ratio_outside_selector_combo_raises(self):
+        """技能比例不在分辨率选择器的 combo 里：明确报错，不把裸比例提交（节点按 label 取字典会 KeyError）。"""
+        template = {"19": {"class_type": "ResolutionSelector",
+                           "inputs": {"aspect_ratio": "{{ASPECT_RATIO}}", "megapixels": 1.0, "multiple": 16}}}
+        with self.assertRaises(ValueError):
+            image_gen.render_template(template, self.params(ratio="5:3"))
 
     def test_lora_dynamic_insertion_after_unet(self):
         # 文生图模板没有 LoRA 槽位：两个用户 LoRA 在主链末端动态串联

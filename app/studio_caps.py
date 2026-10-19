@@ -106,6 +106,7 @@ _SETTINGS = {
     ("GET", "/neo_image_gen/skill_workflow"),
     ("GET", "/neo_image_gen/skill_config"),
     ("POST", "/neo_image_gen/skill_config"),
+    ("POST", "/neo_image_gen/plan_workflow_skill"),
     ("POST", "/neo_image_gen/save_workflow_skill"),
     ("POST", "/neo_image_gen/update_workflow_skill"),
     ("POST", "/neo_image_gen/update_workflow_skill_preview"),
