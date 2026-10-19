@@ -113,7 +113,7 @@ chips; the copy button always copies the raw full text.
 
 | Button | Function |
 |------|------|
-| ⧉ Copy | Copy the current image to the clipboard |
+| Copy image (icon button) | Copy the current image to the clipboard |
 
 The sidebar offers: prompt / parameters copied section by section, 🔍 reverse-prompt (calls the LLM on the
 current image, with progress state while it works), and ⤷ Import workflow (available when the media carries an

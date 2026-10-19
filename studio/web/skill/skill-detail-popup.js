@@ -18,6 +18,7 @@ import {
 } from "./skill-core.js";
 import { confirmWorkflowWrite, writeWorkflowToSkill, showSkillWriteLogDialog, armCanvasWriteback, openSkillWorkflowInMainUi } from "./skill-writeback.js";
 import { t, tf } from "../js/core/i18n.js";
+import { icon, setIconLabel } from "../js/core/icons.js";
 
 // ==========================================
 // UI：createSkillDetailPopup() —— 单技能详情弹窗（查看 / 编辑 / 删除 / 复制为自定义 / 新建）
@@ -47,7 +48,7 @@ function createSkillDetailPopup(host, canvasBtns = true, opts = {}) {
     // 「复制为自定义」放标题栏（仅预设/任务技能显示），在 ✕ 左侧
     const copyBtn = mkEl("button", "rs-btn rs-btn-local");
     copyBtn.type = "button";
-    copyBtn.textContent = t("⧉ 复制为自定义");
+    setIconLabel(copyBtn, "copy", t("复制为自定义"));
     copyBtn.title = t("把这个内置技能复制为可编辑的自定义技能");
     copyBtn.style.display = "none";
     // 带工作流的技能：正文只作帮助文档，标题栏 ? 徽标弹出文档浮窗（正文区整体搬进浮窗，编辑也在浮窗内）
@@ -142,7 +143,7 @@ function createSkillDetailPopup(host, canvasBtns = true, opts = {}) {
     addFileBtn.title = "Add a .md file to this skill";
     const delFileBtn = mkEl("button", "rs-btn rs-delete-cancel-btn rs-content-mode-btn");
     delFileBtn.type = "button";
-    delFileBtn.textContent = "🗑";
+    delFileBtn.append(icon("trash"));
     delFileBtn.title = "Delete the selected file";
     fileTools.append(addFileBtn, delFileBtn);
     contentLeft.appendChild(fileTools);
@@ -784,7 +785,7 @@ function createSkillDetailPopup(host, canvasBtns = true, opts = {}) {
     const saveBtn = mkEl("button", "rs-btn rs-btn-local rs-tpl-save-btn");
     saveBtn.textContent = t("💾 保存");
     const deleteBtn = mkEl("button", "rs-btn rs-delete-cancel-btn");
-    deleteBtn.textContent = t("🗑 删除");
+    setIconLabel(deleteBtn, "trash", t("删除"));
     footerBtns.append(saveBtn, deleteBtn);
 
     // 主区两栏：左 = 生图/生视频设置，右 = 系统提示词内容（面板够宽时并排；窄面板堆叠且系统提示词在上，顺序由 CSS 控制）

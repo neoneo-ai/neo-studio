@@ -359,7 +359,7 @@ test("宫格分镜图拆分：图片输入区支持本地上传 + 素材库/本�
     const copyBtn = card.querySelector(".neo-director-grid-pt-copy");
     promptBox.value = "上一张图的提示词";
     copyBtn.click();
-    assert.ok(["✓ 已复制", "✗ 复制失败"].includes(copyBtn.textContent), "复制按钮给出即时反馈");
+    assert.ok(copyBtn.querySelector("svg path"), "复制按钮点击后换成图标反馈");
 
     // 素材库（Neo Gallery）拖入 → copy_to_input 落盘后回显（换图即清掉上一张图提取到的提示词）
     const dt = { files: [], getData: (t) => (t === "application/x-neo-gallery" ? JSON.stringify({ filename: "g.png", subfolder: "" }) : "") };

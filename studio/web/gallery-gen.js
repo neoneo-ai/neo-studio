@@ -18,6 +18,7 @@ import { createQuickInputHistory } from "./quick-input-history.js";
 import { openGallerySidebar, grabDataType, copyGalleryToInput, uploadLocalFiles } from "./media-transfer.js";
 import { ttlCache } from "./js/core/cache.js";
 import { t, tf } from "./js/core/i18n.js";
+import { icon, setIconLabel } from "./js/core/icons.js";
 
 // 一键角色图 / 九宫格分镜图都固定走 Qwen Image 2.1 预设（多路参考槽位、不走 Krea2 编辑链）。
 const QWEN_IMAGE_SKILL_ID = "qwen_image_21";
@@ -715,9 +716,8 @@ export function openReversePromptDialog(image, subfolder) {
             statusBox.appendChild($el("div", { className: "neo-gallery-rp-result", textContent: text }));
             const copyBtn = $el("button", {
                 className: "neo-gallery-story-btn neo-gallery-rp-copy",
-                textContent: t("\u29C9 复制提示词"),
                 onclick: () => copyPrompt(text, copyBtn),
-            });
+            }, [icon("copy"), " " + t("复制提示词")]);
             statusBox.appendChild(copyBtn);
         } else if (state === "error") {
             statusBox.appendChild($el("span", { className: "neo-gallery-story-hint neo-gallery-story-hint-error", textContent: text }));
@@ -727,8 +727,8 @@ export function openReversePromptDialog(image, subfolder) {
     async function copyPrompt(text, btn) {
         try {
             await navigator.clipboard.writeText(text);
-            btn.textContent = t("\u2705 已复制");
-            setTimeout(() => { btn.textContent = t("\u29C9 复制提示词"); }, 1500);
+            setIconLabel(btn, "check", t("已复制"));
+            setTimeout(() => { setIconLabel(btn, "copy", t("复制提示词")); }, 1500);
         } catch (e) {
             actionToast({ severity: "info", summary: t("复制失败"), detail: String(e) });
         }

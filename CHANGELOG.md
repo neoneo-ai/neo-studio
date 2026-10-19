@@ -13,6 +13,22 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   `studio/web/js/core/i18n.js` drops the `⧉ 复制` / `✓ 已复制` / `✗ 复制失败` keys the agent block re-added over the
   director block's copy. Covered by `studio/tests/js/studio-agent-skill.test.mjs` (one button per turn, icon-only
   face, clipboard success and failure icon swap). Docs in `docs/studio-desktop.md` + `docs/en/studio-desktop.md`.
+- **Copy and delete icons are one shared glyph set app-wide.** Every copy button drew a `⧉` and every delete a
+  `🗑` text character: WebView2 renders those as color emoji and the web fonts reflow them, so the same action
+  looked different on the skill rows, the recipe cards, the director segment row, the grid toolbar, the lightbox
+  toolbar and the gallery menus. `studio/web/js/core/icons.js` now owns the copy / trash / check / cross paths as
+  inline SVG with a `currentColor` stroke, so each button keeps its own color and hover and no module carries a
+  glyph of its own. Icon-only buttons take the icon alone (`studio/web/agent-panel.js`, `skill.js`, `ref-grid.js`,
+  `director.js`, `recipes.js`, `skill/skill-detail-popup.js`); labeled buttons put the icon before the label
+  (`skill/skill-detail-popup.js`, `recipes.js`, `gallery-gen.js`, `gallery-card.js`, `studio/studio-app.js`, and
+  the new `icon` field of a `lightbox.js` action). The glyph prefixes leave the matching
+  `studio/web/js/core/i18n.js` keys, and the director grid copy swaps a check / cross instead of a copied /
+  failed label. Covered by `studio/tests/js/ref-grid.test.mjs`, `skill-manager.test.mjs`,
+  `director-editor-grid.test.mjs`, `studio-agent-skill.test.mjs`. Docs in `docs/gallery.md`,
+  `docs/h3-video-gen.md`, `docs/prompts.md`, `docs/recipes.md`, `docs/skills.md`, `docs/studio-desktop.md`
+  and their `docs/en/` mirrors.
+
+
 
 - **A text-to-image request stops landing on an editing skill.** Session `20261019-125206` ("生成一张刘亦菲的图片", no
   attached image) spent 12 tool rounds and produced nothing. `list_skills(q="t2i_edit")` hit 0 because `q` only matched

@@ -35,8 +35,8 @@ repeated saves accumulate, and a full workflow snapshot is backed up into `workf
 
 ## Recipe panel
 
-- The sidebar's "Recipes" page groups entries into "My recipes / Built-in presets"; 🗑 deletes custom recipes
-only, ⧉ copies one into a new copy (auto-named `<name>-copy`, with `-2/-3` on collision; a preset can be
+- The sidebar's "Recipes" page groups entries into "My recipes / Built-in presets"; the trash icon deletes custom recipes
+only, the copy icon copies one into a new copy (auto-named `<name>-copy`, with `-2/-3` on collision; a preset can be
 copied into custom too).
 - The header toolbar supports **search** (name / prompt), **filter** (all / plain / multi-segment / mine /
 presets) and **sort** (recently modified / name / with results first); group headers collapse, and the state
@@ -84,7 +84,7 @@ alignment, with no dialogs at all.
   `recipe.json`, no files are copied. The multi-segment director node records automatically when it finishes
   (bundle single-segment mode has no recipe, and preset recipes are read-only, so neither records).
   The "Results (N)" area of the detail overlay loads thumbnails through ComfyUI's native `/view`, and clicking
-  opens the Lightbox; 🗑 asks for confirmation and then deletes the real product from disk (with its `.txt`
+  opens the Lightbox; the trash icon asks for confirmation and then deletes the real product from disk (with its `.txt`
   sidecar) and removes the record.
   Files deleted by hand stop being listed, and re-saving the recipe does not clear the result records.
 

@@ -4,7 +4,7 @@
 
 A skill = prompt template (`skill.md`) + built-in model configuration (model / VAE / CLIP) + built-in
 workflow (`workflow.json`) + default base parameters. Presets are read-only and become editable after
-"⧉ Copy as custom". The node-side skill picker and `/` quick menu: [prompts.md](prompts.md).
+"Copy as custom". The node-side skill picker and `/` quick menu: [prompts.md](prompts.md).
 
 ## Skill files
 
@@ -37,7 +37,7 @@ searching), or the embedded entry inside the node's bottom skill dropdown.
 - **Upload / import** - "⬆ ZIP" or "⬆ Folder" at the bottom of the dropdown imports a `.zip` or a whole
   folder (several `.md` files) as new skills.
 - **Copy as custom** - built-in templates and task skills cannot be deleted, but one click
-  "⧉ Copy as custom" makes an editable copy and switches the detail view to it immediately.
+  the header's "Copy as custom" icon button makes an editable copy and switches the detail view to it immediately.
 - **Delete** - only user skills (USR) can be deleted (with confirmation); built-ins (SYS / TASK) are
   protected.
 
@@ -56,7 +56,7 @@ searching), or the embedded entry inside the node's bottom skill dropdown.
   for a skill with a `workflow.json` the generation is decided by the workflow and the body text does not
   participate, so the body area leaves the main area entirely and lives in a centered document popup opened
   from the "?" badge in the title bar, where preview / editing / attached-file management work as usual
-  (built-in skills are read-only with no edit entry); the bottom "💾 Save / 🗑 Delete" bar sticks to the top;
+  (built-in skills are read-only with no edit entry); the bottom "💾 Save / Delete (trash icon)" bar sticks to the top;
   the workflow area is collapsed by default and expands into the embedded editing canvas when its header is
   clicked.
 - **Skill name** - the name takes no separate row and lives in the detail window's title bar (like the
@@ -68,7 +68,7 @@ searching), or the embedded entry inside the node's bottom skill dropdown.
   edited, its frontmatter metadata is kept), and attached files can be added or removed.
 - **Multi-turn switch** - the `Multi-turn (multi_turn)` checkbox above the body area reads and writes the
   frontmatter's `multi_turn` field (unchecking removes it); when checked the node shows the multi-turn hint
-  at its bottom, and "⧉ Copy as custom" copies that setting along.
+  at its bottom, and "Copy as custom" copies that setting along.
 
 ### Window behavior
 

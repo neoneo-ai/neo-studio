@@ -19,6 +19,7 @@ import { createModelConfigForm } from "../llm-setting.js";
 import { createSkillManager } from "../skill.js";
 import { createAgentPanel, createMcpPanel } from "../agent-panel.js";
 import { t, tf, getLang, applyLang, LANGS } from "../js/core/i18n.js";
+import { icon } from "../js/core/icons.js";
 
 const view = document.getElementById("ns-view");
 let directorPanelOpts = null;   // 导演页配方面板选项（buildDirector 设置；含 onSelect 回传选中配方）
@@ -1018,7 +1019,6 @@ function buildSettings(el) {
     let logSelText = "";
     const copyLogBtn = $el("button", {
         className: "ns-btn ns-log-copy",
-        textContent: t("⧉ 复制日志"),
         title: t("有选区复制选区，没有选区复制全部日志"),
         onclick: async () => {
             const picked = !!logSelText;
@@ -1034,7 +1034,7 @@ function buildSettings(el) {
                 toast(tf("复制失败：{msg}", { msg: String(e) }));
             }
         },
-    });
+    }, [icon("copy"), " " + t("复制日志")]);
     copyLogBtn.addEventListener("mousedown", () => {
         const sel = window.getSelection();
         logSelText = sel && !sel.isCollapsed && logBody.contains(sel.anchorNode) ? sel.toString() : "";

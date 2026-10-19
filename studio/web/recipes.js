@@ -12,6 +12,7 @@ import { Lightbox } from "./lightbox.js";
 import { openDirectorEditor, MODE_LABELS, LEGACY_MODE_MAP } from "./director.js";
 import { skillDisplayName } from "./skill.js";
 import { t, tf } from "./js/core/i18n.js";
+import { icon } from "./js/core/icons.js";
 
 const assetUrl = (recipe, file, dir) =>
     `${window.location.protocol}//${window.location.host}/rs_recipes/asset?recipe=${encodeURIComponent(recipe)}&file=${encodeURIComponent(file)}${dir ? `&dir=${encodeURIComponent(dir)}` : ''}`;
@@ -1018,7 +1019,6 @@ export async function createRecipesPanel(options = {}) {
                 if (r.source !== 'preset') {
                     const delBtn = $el('button', {
                         className: 'neo-recipes-sample-del',
-                        textContent: '🗑',
                         title: t('删除该示例结果'),
                         onclick: async (e) => {
                             e.stopPropagation();
@@ -1035,7 +1035,7 @@ export async function createRecipesPanel(options = {}) {
                                 app.extensionManager.toast.add({ severity: 'error', summary: t('删除失败'), detail: res?.error || 'Unknown error', life: 4000 });
                             }
                         }
-                    });
+                    }, [icon('trash')]);
                     item.appendChild(delBtn);
                 }
                 sampleGrid.appendChild(item);
@@ -1044,7 +1044,7 @@ export async function createRecipesPanel(options = {}) {
             bodyChildren.push(sampleGrid);
         }
 
-        // 结果（results）：只记 output 目录产物路径，点击即可查看，🗑 确认后连同磁盘文件一起删
+        // 结果（results）：只记 output 目录产物路径，点击即可查看，删除图标确认后连同磁盘文件一起删
         const results = r.results || [];
         if (results.length) {
             const resultGrid = $el('div', { className: 'neo-recipes-detail-grid' });
@@ -1062,7 +1062,6 @@ export async function createRecipesPanel(options = {}) {
                 ]);
                 const delBtn = $el('button', {
                     className: 'neo-recipes-result-del',
-                    textContent: '🗑',
                     title: t('删除该结果文件（连同 output 目录里的文件）'),
                     onclick: async (e) => {
                         e.stopPropagation();
@@ -1079,7 +1078,7 @@ export async function createRecipesPanel(options = {}) {
                             app.extensionManager.toast.add({ severity: 'error', summary: t('删除失败'), detail: res?.error || 'Unknown error', life: 4000 });
                         }
                     }
-                });
+                }, [icon('trash')]);
                 item.appendChild(delBtn);
                 resultGrid.appendChild(item);
             });
@@ -1089,14 +1088,13 @@ export async function createRecipesPanel(options = {}) {
 
         const copyPromptBtn = $el('button', {
             className: 'rs-btn neo-recipes-detail-copy',
-            textContent: t('📄 复制提示词'),
             title: t('把配方提示词复制到剪贴板'),
             disabled: !r.prompt,
             onclick: async () => {
                 try { await navigator.clipboard.writeText(r.prompt); }
                 catch (e) { app.extensionManager.toast.add({ severity: 'info', summary: t('复制失败'), detail: String(e), life: 3000 }); }
             }
-        });
+        }, [icon('copy'), ' ' + t('复制提示词')]);
 
         const closeBtn = $el('button', { className: 'rs-btn neo-recipes-detail-close', textContent: t('关闭') });
         const footBtns = [closeBtn, copyPromptBtn];
@@ -1227,18 +1225,18 @@ export async function createRecipesPanel(options = {}) {
         } else {
             direct.push({ cls: 'neo-recipes-edit-director', icon: '✎', title: t('编辑多段导演配方'), run: () => openDirectorEditor(r, renderList) });
         }
-        direct.push({ cls: 'neo-recipes-copy', icon: '⧉', title: t('复制配方（生成副本）'), run: (b) => { b.disabled = true; copyRecipe(r.name).then(res => { b.disabled = false; if (res?.success) { app.extensionManager.toast.add({ severity: 'success', summary: t('配方已复制'), detail: tf("已创建副本「{name}」", { name: res.name }), life: 4000 }); renderList(); } else app.extensionManager.toast.add({ severity: 'error', summary: t('复制失败'), detail: res?.error || 'Unknown error', life: 4000 }); }); } });
+        direct.push({ cls: 'neo-recipes-copy', icon: icon('copy'), title: t('复制配方（生成副本）'), run: (b) => { b.disabled = true; copyRecipe(r.name).then(res => { b.disabled = false; if (res?.success) { app.extensionManager.toast.add({ severity: 'success', summary: t('配方已复制'), detail: tf("已创建副本「{name}」", { name: res.name }), life: 4000 }); renderList(); } else app.extensionManager.toast.add({ severity: 'error', summary: t('复制失败'), detail: res?.error || 'Unknown error', life: 4000 }); }); } });
         if (r.type !== 'video_director') {
             more.push({ cls: 'neo-recipes-append', icon: '📥', title: t('追加当前输出为示例结果'), run: (b) => { b.disabled = true; const results = collectWorkflowResults(); appendResultsToRecipe(r.name, results).then(res => { b.disabled = false; if (res?.success) { app.extensionManager.toast.add({ severity: res.added ? 'success' : 'info', summary: t('示例结果追加'), detail: tf("{name}：新增 {added}，跳过重复 {skipped}", { name: r.name, added: res.added, skipped: res.skipped }), life: 4000 }); renderList(); } else app.extensionManager.toast.add({ severity: 'error', summary: t('追加失败'), detail: res?.error || 'Unknown error', life: 4000 }); }); } });
         }
         more.push({ cls: 'neo-recipes-export', icon: '⬇️', title: t('导出为 zip 包（含 Readme.txt）'), run: () => { fetch(`/rs_recipes/export?name=${encodeURIComponent(r.name)}`).then(res => { if (!res.ok) throw new Error(`HTTP ${res.status}`); return res.blob(); }).then(blob => { const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `${r.name}.zip`; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }).catch(err => app.extensionManager.toast.add({ severity: 'error', summary: t('导出失败'), detail: String(err), life: 4000 })); } });
         if (r.source !== 'preset') {
-            more.push({ cls: 'neo-recipes-delete', icon: '🗑', title: t('删除配方'), run: (b) => { if (!confirm(tf("删除配方「{name}」？", { name: r.name }))) return; b.disabled = true; deleteRecipe(r.name).then(res => { b.disabled = false; if (res?.success) renderList(); else app.extensionManager.toast.add({ severity: 'error', summary: t('删除失败'), detail: res?.error || 'Unknown error', life: 4000 }); }); } });
+            more.push({ cls: 'neo-recipes-delete', icon: icon('trash'), title: t('删除配方'), run: (b) => { if (!confirm(tf("删除配方「{name}」？", { name: r.name }))) return; b.disabled = true; deleteRecipe(r.name).then(res => { b.disabled = false; if (res?.success) renderList(); else app.extensionManager.toast.add({ severity: 'error', summary: t('删除失败'), detail: res?.error || 'Unknown error', life: 4000 }); }); } });
         }
 
         const actions = $el('div', { className: 'neo-recipes-card-actions' });
         for (const it of direct) {
-            const b = $el('button', { className: `rs-btn rs-action-btn ${it.cls}`, title: it.title, textContent: it.icon });
+            const b = $el('button', { className: `rs-btn rs-action-btn ${it.cls}`, title: it.title }, [it.icon]);
             b.onclick = (e) => { e.stopPropagation(); it.run(b); };
             actions.append(b);
         }
@@ -1248,7 +1246,7 @@ export async function createRecipesPanel(options = {}) {
             const menu = $el('div', { className: 'neo-recipes-more-menu' });
             for (const it of more) {
                 const row = $el('button', { className: 'neo-recipes-more-item' });
-                row.append($el('span', { className: 'neo-recipes-more-icon', textContent: it.icon }), $el('span', { textContent: it.title }));
+                row.append($el('span', { className: 'neo-recipes-more-icon' }, [it.icon]), $el('span', { textContent: it.title }));
                 row.onclick = (e) => { e.stopPropagation(); menu.classList.remove('open'); moreBtn.setAttribute('aria-expanded', 'false'); it.run(row); };
                 menu.append(row);
             }

@@ -181,7 +181,10 @@ no floating window, no ✕ and no "from canvas" export button.
 - The modal's "🗂 Skill Management" title bar is hidden on the page: the header tab already names the page, and
   nothing here is a draggable window.
 - Left-column width drag and memory (`localStorage["neo.skillManagerLeftWidth"]`), the category accordion, the
-  per-row ⧉ copy / 🗑 delete and the + New / ⬆ ZIP / ⬆ Folder footer behave exactly as in the standalone window.
+  per-row copy / delete icons and the + New / ⬆ ZIP / ⬆ Folder footer behave exactly as in the standalone window.
+- Copy and delete icons all come from `studio/web/js/core/icons.js`: icon-only buttons carry no text,
+  labeled buttons put the icon before the label, so a glyph never reflows with the font fallback.
+
 
 ## Startup sequence
 

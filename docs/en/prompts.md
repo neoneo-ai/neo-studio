@@ -225,8 +225,8 @@ Both nodes share the same layout (the Agent shows no status bar):
   「↩ continue the last session」 bar: the next **✨ Generate** posts that session's `run_id` as `resume`, and the saved
   conversation goes back in after the system prompt for the LLM to continue from (resuming into plan mode works the
   same way — the old system message is never stored, so this turn rebuilds it). One run lands as one JSON in
-  `agent_sessions/` under the data root, and **🗑** deletes the saved history too, behind one in-page confirm; the row delete and the replay header's delete are
-the same 🗑 icon, and deleting one session is confirmed before its file goes.
+  `agent_sessions/` under the data root, and the trash icon button deletes the saved history too, behind one in-page confirm; the row delete and the replay header's delete are
+the same trash icon, and deleting one session is confirmed before its file goes.
   The dock can run that same chain: `director_plan` (split, writing `story`) → `director_save` →
   `director_keyframes` (keyframes land in the recipe's `assets/`) → echo the returned `segments` / `shared` /
   `story` back to `director_save` (records `storyboard` and the first frame of non-r2v segments) →

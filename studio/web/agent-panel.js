@@ -19,6 +19,7 @@
 import { mkEl } from "./dom-utils.js";
 import { app } from "../../scripts/app.js";
 import { t, tf } from "./js/core/i18n.js";
+import { icon, setIcon } from "./js/core/icons.js";
 import { renderMarkdown } from "./skill.js";
 import { fileToBase64, imagesFromClipboard, sseStream } from "./prompt-service.js";
 import { Lightbox } from "./lightbox.js";
@@ -56,7 +57,7 @@ function sectionHead(title, actions) {
 function headBtn(label, title, onClick) {
     const btn = mkEl("button", "neo-agent-head-btn");
     btn.type = "button";
-    btn.textContent = label;
+    btn.replaceChildren(label);   // 文案字符串或图标节点都走这一条
     btn.title = title;
     btn.onclick = onClick;
     return btn;
@@ -192,20 +193,11 @@ function buildChat(onOpenMcp, getContext) {
     // debug），正文又常被宿主注入的 body{user-select:none;cursor:default} 压得选不动，复制这一句只剩按钮一条路。
     // 回合头右端再放一枚复制提问的，同一张问答卡片里就是两枚并排，分不出各复制哪一段。
     // 局域网 IP 访问不是安全上下文，navigator.clipboard 不存在，回落 execCommand
-    const COPY_ICONS = {
-        idle: '<rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
-        ok: '<path d="M20 6 9 17l-5-5"/>',
-        fail: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
-    };
     function mkCopyBtn(host, getText) {
         const btn = mkEl("button", "neo-agent-copy");
         btn.type = "button";
-        // 钮面只有图标、不写文案，界面上一句提示都没有；图标是写死的常量，划正文时带不走按钮字样
-        const setState = (state) => {
-            btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"`
-                + ` stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">`
-                + COPY_ICONS[state] + "</svg>";
-        };
+        // 钮面只有图标、不写文案，界面上一句提示都没有；图标是 core/icons.js 的常量，划正文时带不走按钮字样
+        const setState = (state) => setIcon(btn, state === "ok" ? "check" : state === "fail" ? "cross" : "copy");
         setState("idle");
         btn.onclick = () => {
             const feedback = (ok) => {
@@ -415,7 +407,7 @@ function buildChat(onOpenMcp, getContext) {
     box.append(sectionHead(t("智能体"), [
         headBtn("＋", t("新增会话"), () => newSession()),
         headBtn("🗂", t("会话历史"), () => toggleHistory()),
-        headBtn("🗑", t("清空对话与历史"), () => clearConversation()),
+        headBtn(icon("trash"), t("清空对话与历史"), () => clearConversation()),
     ]), transcript, historyBox, composer);
 
     // 时间线里的链接一律收在页面内：产物进弹出窗口，外部链接交给新窗口。放任 <a> 的默认行为
@@ -678,7 +670,7 @@ function buildChat(onOpenMcp, getContext) {
             + (s.resume_of ? " · " + t("接上次会话") : "");
         const open = headBtn(t("打开"), t("读回这条会话的完整时间线"), () => openSession(s.run_id));
         // 会话文件删掉就没了，确认框挡在请求前面
-        const del = headBtn("🗑", t("删除这条会话"), async () => {
+        const del = headBtn(icon("trash"), t("删除这条会话"), async () => {
             if (!window.confirm(t("删除这条会话？"))) return;
             await postJson("/neo_agent/session/delete", { run_id: s.run_id });
             if (resumeId === s.run_id) { resumeId = ""; renderResumeBar(); }
@@ -789,7 +781,7 @@ function buildChat(onOpenMcp, getContext) {
             + (rec.mode === "plan" ? t("计划") : t("执行模式")) + " · " + sessionStatus(rec.status);
         const hint = mkEl("span", "neo-agent-session-note");
         hint.textContent = t("输入下一句就接在这条会话后面");
-        const del = headBtn("🗑", t("删除这条会话"), async () => {
+        const del = headBtn(icon("trash"), t("删除这条会话"), async () => {
             if (!window.confirm(t("删除这条会话？"))) return;
             await postJson("/neo_agent/session/delete", { run_id: rec.run_id });
             resetTranscript();
@@ -822,7 +814,7 @@ function buildChat(onOpenMcp, getContext) {
         renderRecent();
     }
 
-    // 「🗑 清空对话」连着清后端保存的历史：删掉的是整目录里的会话文件，先确认再动手
+    // 垃圾桶图标的「清空对话与历史」连着清后端保存的历史：删掉的是整目录里的会话文件，先确认再动手
     async function clearConversation() {
         newSession();
         if (!window.confirm(t("清空对话会同时删掉后端保存的历史会话，继续？"))) return;

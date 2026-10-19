@@ -24,6 +24,7 @@ import {
 } from "./skill/skill-writeback.js";
 import { createSkillDetailPopup, getSkillDetailPopup, openSkillDetailById } from "./skill/skill-detail-popup.js";
 import { t, tf } from "./js/core/i18n.js";
+import { icon } from "./js/core/icons.js";
 
 // ==========================================
 // 节点级 Skill 有效性检测：选完 skill 后在节点底部提前提示「缺模型/缺节点」，可一键进详情修复
@@ -1017,11 +1018,11 @@ function createSkillManager(host, { showClose = true, showCanvasBtn = true } = {
         placeholder.hidden = !!(m && m.style.display !== "none");
     };
 
-    // 行内操作按钮（⧉ 复制 / 🗑 删除）：默认透明，hover 行时淡入（见 prompts.css .rs-skill-row-btn）
-    const mkRowBtn = (glyph, tip, extraCls = "") => {
+    // 行内操作按钮（core/icons.js 的复制 / 删除图标）：默认透明，hover 行时淡入（见 prompts.css .rs-skill-row-btn）
+    const mkRowBtn = (name, tip, extraCls = "") => {
         const b = mkEl("button", "rs-skill-row-btn" + (extraCls ? ` ${extraCls}` : ""));
         b.type = "button";
-        b.textContent = glyph;
+        b.append(icon(name));
         b.title = tip;
         b.addEventListener("mousedown", (e) => { e.preventDefault(); e.stopPropagation(); });
         return b;
@@ -1069,7 +1070,7 @@ function createSkillManager(host, { showClose = true, showCanvasBtn = true } = {
                 lbl.textContent = it.label;
                 row.appendChild(lbl);
                 const actions = mkEl("div", "rs-skill-picker-actions");
-                const copyBtn = mkRowBtn("⧉", it.source === "custom" ? t("复制为副本") : t("复制为自定义技能"));
+                const copyBtn = mkRowBtn("copy", it.source === "custom" ? t("复制为副本") : t("复制为自定义技能"));
                 copyBtn.addEventListener("click", async (e) => {
                     e.stopPropagation();
                     const copy = await copySkillAsCustom(it.skillId || it.value, it.label);
@@ -1077,7 +1078,7 @@ function createSkillManager(host, { showClose = true, showCanvasBtn = true } = {
                 });
                 actions.appendChild(copyBtn);
                 if (it.source === "custom") {
-                    const delBtn = mkRowBtn("🗑", t("删除该自定义技能"), "rs-skill-row-del");
+                    const delBtn = mkRowBtn("trash", t("删除该自定义技能"), "rs-skill-row-del");
                     delBtn.addEventListener("click", async (e) => {
                         e.stopPropagation();
                         const id = it.skillId || it.value;

@@ -505,7 +505,7 @@ function dispatchSkillChanged(skillId) {
 }
 /**
  * 复制技能为自定义副本（客户端 loadSkill + saveSkill，无专用后端接口）：连同 workflow.json / config.json 一起复制。
- * 详情弹窗「⧉ 复制为自定义」与技能管理列表行内「⧉」共用。成功返回 { id, name }，失败提示后返回 null。
+ * 详情弹窗「复制为自定义」与技能管理列表行内复制图标共用。成功返回 { id, name }，失败提示后返回 null。
  */
 async function copySkillAsCustom(skillId, fallbackName = "") {
     const full = await loadSkill(skillId);

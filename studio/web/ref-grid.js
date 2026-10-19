@@ -13,6 +13,7 @@
 import { app } from "../../../../scripts/app.js";
 import { $el } from "../../../../scripts/ui.js";
 import { t, tf } from "./js/core/i18n.js";
+import { icon } from "./js/core/icons.js";
 import { Lightbox } from "./lightbox.js";
 import { grabDataType, copyGalleryToInput, toggleGallerySidebar, uploadLocalFiles } from "./media-transfer.js";
 import { collectWorkflowAssets, saveRecipe, listRecipes } from "./recipes.js";
@@ -279,7 +280,7 @@ function buildGridUI(node) {
 
     const toolbar = $el("div", { className: "neo-rg-toolbar" }, [
         minusBtn, count, plusBtn,
-        $el("button", { className: "neo-rg-btn", title: t("清空宫格"), textContent: "🗑️", onclick: () => { if (!list.length) return; list.length = 0; render(); markDirty(node); } }),
+        $el("button", { className: "neo-rg-btn", title: t("清空宫格"), onclick: () => { if (!list.length) return; list.length = 0; render(); markDirty(node); } }, [icon("trash")]),
         $el("button", { className: "neo-rg-btn", title: t("保存配方（提示词 + 宫格图）"), onclick: () => openRecipeDialog(node) }, [$el("i", { className: "pi pi-save" })]),
         $el("button", { className: "neo-rg-btn neo-rg-right", title: t("打开素材面板（从画廊拖图到宫格）"), onclick: () => toggleGallerySidebar() }, [$el("i", { className: "pi pi-images" })]),
         $el("button", { className: "neo-rg-btn", title: t("本地批量添加图片（可多选）"), textContent: "⬆️", onclick: () => localInput.click() }),

@@ -211,7 +211,7 @@ Runtime injection (when the template has no matching slot):
   Encoder / VAE (video) / VAE (audio) / LoRA per skill.
 - Changes to a preset skill go to a local override file and leave the preset file untouched; "↺ Restore
   defaults" clears the override in one click.
-- "⧉ Copy as custom" produces an editable custom skill that keeps `gen_video` and `category: video_gen`.
+- The header's "Copy as custom" icon button produces an editable custom skill that keeps `gen_video` and `category: video_gen`.
 - "📋 From Canvas" in the skill dropdown exports the current canvas API prompt as a skill; when an H3 video
   workflow is detected it is saved as a video skill and templated by placeholders.
 
@@ -225,7 +225,7 @@ Runtime injection (when the template has no matching slot):
 - Without that plugin, execution reports "VDN acceleration plugin ComfyUI-VDN-H3 required" clearly before
   sampling, telling you to install it and restart, or to use a non-VDN skill; the skill dropdown also marks
   them "(unavailable)", and the default skill of a new recipe skips unavailable ones.
-- For a different stage, use "⧉ Copy as custom" and change `vdn_checkpoint` in the template.
+- For a different stage, use "Copy as custom" and change `vdn_checkpoint` in the template.
 
 ## Runtime acceleration: external `MODEL` / `steps`
 

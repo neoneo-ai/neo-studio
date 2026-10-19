@@ -152,7 +152,7 @@ MiniMax H3 视频生成：单段 BUNDLE 与多段导演配方。配方编辑见 
 
 - 技能详情弹窗「🎬 生视频设置」区可单独设生视频模型 / 步数 / Text Encoder / VAE(视频) / VAE(音频) / LoRA。
 - 预设技能的改动存到本地覆盖文件，预设文件保持不变；「↺ 恢复默认」一键清除覆盖。
-- 「⧉ Copy as custom」复制为可编辑的自定义技能，保留 `gen_video` 与 `category: video_gen`。
+- 标题栏「复制为自定义」图标钮复制为可编辑的自定义技能，保留 `gen_video` 与 `category: video_gen`。
 - 技能下拉「📋 From Canvas」把当前画布 API prompt 导出为技能；检测到 H3 视频工作流时自动存为视频技能并按占位符模板化。
 
 ## VDN 加速（可选插件 ComfyUI-VDN-H3）
@@ -163,7 +163,7 @@ MiniMax H3 视频生成：单段 BUNDLE 与多段导演配方。配方编辑见 
 - 需要安装 ComfyUI-VDN-H3 并把 8 步 stage 放到 `models/vdn/stage-dmd-step-250/`。
 - 未安装该插件时执行会在采样前明确报错「需要 VDN 加速插件 ComfyUI-VDN-H3」，提示安装并重启或改用非 VDN 技能；
   技能下拉同时显示「（不可用）」，新建配方的默认技能会跳过不可用技能。
-- 需要其它 stage 时「⧉ Copy as custom」后改模板里的 `vdn_checkpoint`。
+- 需要其它 stage 时在「复制为自定义」副本里改模板里的 `vdn_checkpoint`。
 
 ## 运行时加速：外部 `MODEL` / `steps`
 

@@ -240,7 +240,7 @@ test("工具条：图标与顺序（清空/保存紧随 +，素材组在右且�
     // 顺序：− + 清空 保存 | 素材面板 本地添加 加载配方（计数在 −/+ 之间、非按钮）
     assert.equal(btns[0].title, "减少宫格数（最少 1）");
     assert.ok(btns[1].title.startsWith("增加宫格数"));
-    assert.equal(byTitle("清空宫格").textContent, "🗑️");
+    assert.ok(byTitle("清空宫格").querySelector("svg path"), "清空宫格应是 core/icons.js 的垃圾桶图标");
     const save = byTitle("保存配方");
     assert.ok(save.querySelector("i.pi-save"), "保存配方应为 pi-save 图标");
     const gallery = byTitle("打开素材面板");

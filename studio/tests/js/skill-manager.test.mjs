@@ -211,7 +211,7 @@ test("task 分类技能在管理窗口隐藏，video_gen / custom 保持可见",
     closeMgr(box);
 });
 
-test("左侧列表行内操作：预设行只有 ⧉ 复制，自定义行有 ⧉ + 🗑", async () => {
+test("左侧列表行内操作：预设行只有复制图标，自定义行有复制 + 删除图标", async () => {
     const box = await openMgr();
     const rowOf = (text) => Array.from(box.querySelectorAll(".rs-skill-picker-item")).find((r) => r.textContent.includes(text));
     const presetRow = rowOf("预设生图");
@@ -222,7 +222,7 @@ test("左侧列表行内操作：预设行只有 ⧉ 复制，自定义行有 �
     closeMgr(box);
 });
 
-test("行内 ⧉ 复制：写为自定义副本并刷新列表、切到副本详情", async () => {
+test("行内复制图标：写为自定义副本并刷新列表、切到副本详情", async () => {
     const box = await openMgr();
     let saved = null;
     mockRoute("/rs_prompts/save_skill", (b) => {
@@ -245,7 +245,7 @@ test("行内 ⧉ 复制：写为自定义副本并刷新列表、切到副本详
     closeMgr(box);
 });
 
-test("行内 🗑 删除：确认后删除自定义技能并刷新列表", async () => {
+test("行内删除图标：确认后删除自定义技能并刷新列表", async () => {
     const box = await openMgr();
     let deleted = null;
     mockRoute("/rs_prompts/delete_skill", (b) => {
@@ -263,7 +263,7 @@ test("行内 🗑 删除：确认后删除自定义技能并刷新列表", async
     closeMgr(box);
 });
 
-test("行内 🗑 删除当前选中技能：右侧详情收起为占位提示", async () => {
+test("行内删除图标删除当前选中技能：右侧详情收起为占位提示", async () => {
     const box = await openMgr();
     mockRoute("/rs_prompts/delete_skill", (b) => {
         skills = skills.filter((s) => s.id !== b.id);
@@ -283,7 +283,7 @@ test("行内 🗑 删除当前选中技能：右侧详情收起为占位提示",
     closeMgr(box);
 });
 
-test("行内 🗑 删除取消确认时不发请求", async () => {
+test("行内删除图标取消确认时不发请求", async () => {
     const box = await openMgr();
     setConfirmAnswer(false);
     mockRoute("/rs_prompts/delete_skill", () => jsonResponse({ success: true }));

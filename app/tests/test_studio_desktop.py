@@ -691,7 +691,7 @@ class StudioDesktopTests(unittest.TestCase):
         self.assertFalse(settings.AreDevToolsEnabled, "开发者工具不跟着一起开")
 
     def test_copy_keys_degrades_when_the_webview_controls_are_gone(self):
-        """pywebview 内部结构换了形状：显示处理器不能抛在事件里，留一行日志退回「⧉ 复制」按钮"""
+        """pywebview 内部结构换了形状：显示处理器不能抛在事件里，留一行日志，复制只剩页内图标钮一条路"""
         logs = []
         desktop = app.StudioDesktop("u", None, 8188, pathlib.Path("root"))
         desktop._window = SimpleNamespace(browser=SimpleNamespace())

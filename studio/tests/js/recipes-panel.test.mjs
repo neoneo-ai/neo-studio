@@ -208,7 +208,7 @@ test("配方详情：结果区按 output 路径渲染，点击打开 Lightbox，
     document.querySelector(".neo-lightbox-close")?.click();
 });
 
-test("配方详情：🗑 删除结果先 confirm；取消不删，确认后调 delete_result 并刷新", async () => {
+test("配方详情：删除结果先 confirm；取消不删，确认后调 delete_result 并刷新", async () => {
     const { createRecipesPanel } = await import("../../web/recipes.js");
     appState.graph = { _nodes: [] };
     mockRoute("/rs_prompts/skills", () => jsonResponse([]));

@@ -10,6 +10,7 @@ import { buildGenerationMenuItems, openReversePromptDialog, openLoraTagDialog } 
 import { copyGalleryToInput } from "./media-transfer.js";
 import { openDirectorEditor } from "./director.js";
 import { t, tf } from "./js/core/i18n.js";
+import { icon } from "./js/core/icons.js";
 
 // 已解码波形峰值的会话缓存：同一文件在页面内只请求/解码一次，跨卡片复用。
 // 持久化到后端本地目录由 /neo_gallery/waveform 负责（见 gallery.py）。
@@ -181,7 +182,7 @@ export class GalleryCard {
             // Promise form of ClipboardItem: required by some browsers to keep the write permission alive
             const item = new ClipboardItem({ 'image/png': new Promise(resolve => resolve(pngBlob)) });
             return navigator.clipboard.write([item]).then(() => {
-                if (feedbackBtn) showInlineFeedback(feedbackBtn, '\u2705 Copied!', 'success');
+                if (feedbackBtn) showInlineFeedback(feedbackBtn, 'Copied!', 'success');
                 else showToast(this.gallery.app, 'success', 'Image Copied!', 'Copied image to clipboard');
             });
         }).catch(fail);
@@ -207,7 +208,7 @@ export class GalleryCard {
      */
     _fallbackToClipboard(textToCopy, feedbackBtn = null) {
         navigator.clipboard.writeText(textToCopy).then(() => {
-            if (feedbackBtn) showInlineFeedback(feedbackBtn, '\u2705 Copied!', 'success');
+            if (feedbackBtn) showInlineFeedback(feedbackBtn, 'Copied!', 'success');
             else showToast(this.gallery.app, 'success', 'Tags Copied!', `Copied to clipboard`);
         }).catch((err) => {
             console.error('[Neo Gallery] Clipboard write failed:', err);
@@ -602,9 +603,8 @@ export class GalleryCard {
                         $el("span", {
                             className: "neo-gallery-collect-triggers-copyall",
                             title: t("复制全部触发词"),
-                            textContent: t("\u29C9 复制全部"),
                             onclick: (e) => { e.stopPropagation(); this.copyToClipboard(image.name, image.trigger_words.join(", ")); }
-                        })
+                        }, [icon("copy"), " " + t("复制全部")])
                     ]),
                     ...image.trigger_words.map((w) => $el("span", {
                         className: "neo-gallery-collect-trigger-chip",
@@ -624,13 +624,13 @@ export class GalleryCard {
                 className: "neo-gallery-collect-item",
                 title: t("读取副文件全文后复制，读不到时复制列表预览"),
                 onclick: async () => { const full = await this._fetchFullPrompt(image, subfolder); this.copyToClipboard(image.name, full || image.txt_content); this._removeCollectMenu(); }
-            }, [t("\u29C9 复制提示词")]) : null,
+            }, [t("复制提示词")]) : null,
             wfItem,
             canDelete ? $el("div", {
                 className: "neo-gallery-collect-item neo-gallery-collect-item-danger",
                 title: selectedCount > 0 ? tf("删除已勾选的 {n} 个素材，不影响未选中文件", { n: selectedCount }) : t("仅删除当前素材"),
                 onclick: () => { this._removeCollectMenu(); selectedCount > 0 ? gallery.deleteSelected() : gallery.deleteItem(image.name, subfolder); }
-            }, [selectedCount > 0 ? tf("\uD83D\uDDD1\uFE0F 删除已选素材（{n}）", { n: selectedCount }) : t("\uD83D\uDDD1\uFE0F 删除")]) : null,
+            }, [selectedCount > 0 ? tf("删除已选素材（{n}）", { n: selectedCount }) : t("删除")]) : null,
             unfavorite ? $el("div", {
                 className: "neo-gallery-collect-item neo-gallery-collect-item-danger",
                 title: t("取消收藏（仅移除收藏记录，不删除源文件）"),
@@ -1110,7 +1110,8 @@ export class GalleryCard {
 
     _lightboxActions(gallery, item) {
         const actions = [{
-            label: "\u29C9 \u590D\u5236\u56FE\u7247",
+            icon: "copy",
+            label: "\u590D\u5236\u56FE\u7247",
             title: "\u590D\u5236\u56FE\u7247\u5230\u526A\u8D34\u677F",
             onClick: (_item, _lightbox, btn) => this._copyImageToClipboard(item.url, btn)
         }];
@@ -1174,9 +1175,10 @@ export class GalleryCard {
 
         const copyBtn = $el("div", {
             className: "neo-lightbox-panel-btn",
-            textContent: "\u29C9 \u590D\u5236\u63D0\u793A\u8BCD",
+            textContent: "\u590D\u5236\u63D0\u793A\u8BCD",
             onclick: (e) => { e.stopPropagation(); this.copyToClipboard(image.name, promptText, copyBtn); }
         });
+        copyBtn.prepend(icon("copy"));
 
         const inner = $el("div", { className: "neo-lightbox-panel-inner" }, [
             $el("div", { className: "neo-lightbox-panel-header" }, [

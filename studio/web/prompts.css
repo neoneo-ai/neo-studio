@@ -3679,7 +3679,7 @@ body.rs-skill-resizing { cursor: col-resize; user-select: none; }
 .rs-skill-picker-item.is-selected { background: #1f3a5c; box-shadow: inset 0 0 0 1px #5090cc; color: #fff; }
 .rs-skill-picker-badge { flex-shrink: 0; font-size: 12px; }
 .rs-skill-picker-label { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-/* 技能管理左侧列表的行内操作（⧉ 复制 / 🗑 删除）：默认隐藏，hover 技能行时淡入 */
+/* 技能管理左侧列表的行内操作（复制 / 删除图标）：默认隐藏，hover 技能行时淡入 */
 .rs-skill-picker-actions { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
 .rs-skill-row-btn {
     opacity: 0;

@@ -16,6 +16,7 @@ import { sseStream } from "./prompt-service.js";
 import { openStoryboardDialog } from "./gallery-gen.js";
 import { isImageFile, isVideoFile, isAudioFile } from "./gallery-utils.js";
 import { t, tf } from "./js/core/i18n.js";
+import { icon } from "./js/core/icons.js";
 
 // 配方编辑器保存成功后广播：节点内时间轴等监听方据此刷新下拉候选 + 重载 spec。
 export const DIRECTOR_RECIPE_SAVED_EVENT = "neo-director-recipe-saved";
@@ -625,7 +626,7 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
         const segModeVal = LEGACY_MODE_MAP.get(seg.mode || '') || seg.mode || '';   // 旧 t2v/i2v/fl2v/v2v/rv2v → f2v/r2v，其余原样保留
         segModeSel.value = SEG_MODE_KEYS.has(segModeVal) ? segModeVal : 'f2v';
 
-        const removeBtn = $el('button', { className: 'neo-director-seg-del', title: t('删除该段'), textContent: '🗑' });
+        const removeBtn = $el('button', { className: 'neo-director-seg-del', title: t('删除该段') }, [icon('trash')]);
         // ♻ 重生成该段：从成片取前后真实帧当锚点，换种子单独跑这一段（产物记进配方「结果」区）
         const regenBtn = $el('button', { className: 'neo-director-seg-regen', title: t('重生成该段（锚点：用成片里的前后真实帧）'), textContent: '♻' });
         regenBtn.onclick = (e) => { e.stopPropagation(); openRegenPanel(row, regenBtn); };
@@ -1768,13 +1769,14 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
         className: 'neo-director-grid-prompts',
         placeholder: t('拆分后显示原宫格图元信息里的提示词（可手动改写为全局故事参考）'),
     });
-    const gridPromptCopy = $el('button', { className: 'neo-director-grid-pt-copy', type: 'button', title: t('复制提示词'), textContent: t('⧉ 复制') });
+    const gridPromptCopy = $el('button', { className: 'neo-director-grid-pt-copy', type: 'button', title: t('复制提示词') }, [icon('copy')]);
     gridPromptCopy.onclick = () => {
         const text = gridPromptsTa.value;
         if (!text) return;
+        // 钮面只有图标，复制结果只能靠图标自己说（对勾 / 叉），1 秒后回到静止图标
         const feedback = (ok) => {
-            gridPromptCopy.textContent = ok ? t('✓ 已复制') : t('✗ 复制失败');
-            setTimeout(() => { gridPromptCopy.textContent = t('⧉ 复制'); }, 1000);
+            gridPromptCopy.replaceChildren(icon(ok ? 'check' : 'cross'));
+            setTimeout(() => { gridPromptCopy.replaceChildren(icon('copy')); }, 1000);
         };
         // 优先异步 Clipboard API；不可用（非安全上下文）回落 execCommand
         if (typeof navigator.clipboard?.writeText === 'function') {

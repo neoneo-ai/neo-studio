@@ -10,7 +10,7 @@
  *     items: [{ kind: 'image'|'video'|'audio', url, title, resolve }],
  *     index: 0,    // 可选：起始项
  *     compact: true,   // 可选：弹出窗口形态（薄遮罩 + 收小卡片），右栏产物预览用，不铺满整扇窗口
- *     actions: (item, index) => [{ label, title, onClick(item, lightbox, button) }], // 函数按项定额外按钮；也接受普通数组
+ *     actions: (item, index) => [{ label, title, icon, onClick(item, lightbox, button) }], // 函数按项定额外按钮；也接受普通数组；icon 取 core/icons.js 的名字，按钮文字前带图标
  *     panel: (item, index) => Node | null,   // 可选：右侧信息栏，按项重建；返回空则不占位
  *   });
  *
@@ -20,6 +20,7 @@
  */
 import { $el } from "../../../../scripts/ui.js";
 import { t } from "./js/core/i18n.js";
+import { icon } from "./js/core/icons.js";
 
 // 组件自带样式（幂等注入，调用方无需单独加载 CSS）
 if (!document.getElementById('neo-lightbox-css')) {
@@ -232,10 +233,9 @@ export class Lightbox {
         for (const a of actions) {
             const btn = $el('button', {
                 className: 'neo-lightbox-action',
-                textContent: a.label,
                 title: a.title || a.label,
                 onclick: (e) => { e.stopPropagation(); a.onClick?.(item, this, btn); }
-            });
+            }, a.icon ? [icon(a.icon), " " + a.label] : [a.label]);
             this._toolbar.appendChild(btn);
         }
 

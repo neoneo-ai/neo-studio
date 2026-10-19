@@ -177,7 +177,7 @@ LLM 模式与本地安装见 [llm.md](llm.md)。
   点「打开」把那条会话的时间线**只读**铺回右栏——跑完的循环没有可取消的任务，问句卡整排置灰；铺开后文本框上方出现
   「↩ 接上次会话」条，下一句 **✨ 生成** 带着那条会话的 `run_id` 发 `resume`，落下来的旧对话原文接在系统提示词之后
   由 LLM 接着跑（换到计划模式续聊同一条路，旧的 system 不落盘、按这一次重生成）。一次运行一个 JSON 落在数据根的
-  `agent_sessions/`，**🗑** 连着删后端保存的历史（一次点击一次确认）；整页列表的行删除与回放栏头的删除同为 🗑 图标，删一条会话也是先确认再删文件。
+  `agent_sessions/`，垃圾桶图标钮连着删后端保存的历史（一次点击一次确认）；整页列表的行删除与回放栏头的删除同为垃圾桶图标，删一条会话也是先确认再删文件。
   右栏也能走这条链：`director_plan`（拆分，写 `story`）→ `director_save` → `director_keyframes`（关键帧落进配方
   `assets/`）→ 把返回的 `segments` / `shared` / `story` 原样喂回 `director_save`（记 `storyboard` 与非全参考段的
   首帧）→ `segment_run` / `director_run`；与 📖 页同一套后端，见 [mcp.md](mcp.md)。

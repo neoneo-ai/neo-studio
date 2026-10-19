@@ -1074,7 +1074,7 @@ test("列表里删除会话要二次确认：确认否掉不发删除请求，�
 
     click(dock().querySelector(".neo-agent-recent-all"));
     await until(() => historyDelBtn(), "会话行应给出删除钮");
-    assert.equal(historyDelBtn().textContent, "🗑", "删除钮应是垃圾桶图标");
+    assert.ok(historyDelBtn().querySelector("svg path"), "删除钮应是 core/icons.js 的垃圾桶图标");
 
     setConfirmAnswer(false);
     click(historyDelBtn());

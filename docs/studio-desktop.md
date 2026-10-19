@@ -131,8 +131,11 @@ ComfyUI 没就绪时点它只会得到「页面不存在」。`openSkillWorkflow
   `#202024` 标题条、`#2a2a2e` + `#444` 输入与按钮、选中行用设置页 tab 的半透明蓝），素材 / 绘画 / 导演 / 设置 /
   技能五页落在同一套色上。ComfyUI 里的技能弹窗与节点技能选择窗仍是弹窗那套色。
 - 弹窗的「🗂 技能管理」标题条在页里收起：顶栏 tab 已给页名，整页没有可拖的窗，那一行只是重复的页名。
-- 左栏宽度拖拽与记忆（`localStorage["neo.skillManagerLeftWidth"]`）、分类手风琴、行内 ⧉ 复制 / 🗑 删除、
+- 左栏宽度拖拽与记忆（`localStorage["neo.skillManagerLeftWidth"]`）、分类手风琴、行内复制 / 删除图标、
   底部 + New / ⬆ ZIP / ⬆ Folder 与独立窗口同一套行为。
+- 复制与删除的图标统一取 `studio/web/js/core/icons.js`：纯图标钮只有图标，带文案的钮是图标加文案，
+  字形不随字体与 emoji 字体回退变样。
+
 
 ## 启动序列
 

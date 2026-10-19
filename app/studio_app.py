@@ -1150,7 +1150,7 @@ class StudioDesktop:
         try:
             settings = self._window.browser.webview.CoreWebView2.Settings
         except AttributeError as e:
-            log_line(f"accelerator keys skipped: {e}")   # pywebview 内部结构变了，复制退回「⧉ 复制」按钮
+            log_line(f"accelerator keys skipped: {e}")   # pywebview 内部结构变了，复制只剩页内图标钮一条路
             return
         settings.AreBrowserAcceleratorKeysEnabled = True
 
