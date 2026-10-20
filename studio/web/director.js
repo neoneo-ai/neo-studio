@@ -192,6 +192,7 @@ export function firstFrameAspectWarning(segments, sizes) {
 // 单例且支持「已打开时点击另一配方 → 重新加载为该配方」；overlay 仍在 DOM 才视为真正打开。
 let _directorEditor = null;
 let _directorOpening = false;   // 打开构建中（异步扫描未完成）：期间的重复点击忽略
+let _pendingDirectorSwitch = null;   // 脏态挡下的那次切换 { existing, onSaved, focusSeg, opts }：旧编辑器一关就落地
 function currentDirectorEditor() {
     if (_directorEditor && _directorEditor.overlay && _directorEditor.overlay.parentNode) return _directorEditor;
     _directorEditor = null; // 浮层已不在（外部清除 / 测试重置 body）→ 丢弃过期状态
@@ -259,7 +260,9 @@ function runSegmentTask(body, handlers = {}) {
 /** 打开分镜视频导演编辑器：shared(宽高比/百万像素或自定义 W/H) + 逐段(skill/prompt/首帧/时长)。
  *  existing 为既有 director 配方 meta（编辑时预填），null = 新建；onSaved 保存成功后回调刷新。
  *  首帧候选取全图已连线的 LoadImage（以原始文件名引用，后端落盘后回写）。保存走 saveRecipe(director=...)。
- *  单例：已打开同一配方 → 忽略重复点击（但按 focusSeg 切换当前段）；已打开另一配方 → 关闭旧窗口并重新加载为该配方。
+ *  单例：已打开同一配方 → 忽略重复点击（但按 focusSeg 切换当前段）；已打开另一配方 → 关闭旧窗口并重新加载为该配方；
+ *  那份编辑器有未保存修改 → 出确认条并记下要点的那份配方，确认条里「保存并关闭」/「放弃修改」关掉旧编辑器后自动打开它。
+ *  opts.onAdopt：编辑器认下这份配方（本次真打开/已开着同一份）时回传，调用方据此落选中——卡片高亮与生成区永远同指一份配方。
  *  focusSeg：打开时定位到该段（0 基；<0 表示不指定，保持默认第 1 段）。
  *  内嵌：Studio 注册过宿主（setDirectorEditorHost）或 opts.container 指定容器时，编辑器直接铺进容器，
  *  不建浮层窗口，也不带 ⛶ 放大 / 右下角缩放 / 标题栏拖动；宿主带 onSaveAndRun 时底部多出「保存并生成整片」。
@@ -277,9 +280,15 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
     if (cur) {
         // 「重复点击=切段」只对已命名配方成立；新建（name=''）每次携带的内容都不同，
         // 命中同名校验会被静默吞掉（图库多选「新建导演配方」点不动的根因），一律走重载路径
-        if (requestedName && cur.name === requestedName) { cur.focusSeg?.(focusSeg); return; }
-        if (cur.isDirty()) { cur.requestClose(); return; }   // 有未保存修改：先出确认条，本次不重载；用户选择后再点
-        cur.close();                            // 另一配方 / 新建 → 关闭旧窗口，重载为该配方
+        if (requestedName && cur.name === requestedName) { _pendingDirectorSwitch = null; opts?.onAdopt?.(); cur.focusSeg?.(focusSeg); return; }
+        if (cur.isDirty()) {
+            // 有未保存修改：出确认条并记下要点的那份配方，「保存并关闭」/「放弃修改」关掉旧编辑器即打开它
+            _pendingDirectorSwitch = { existing, onSaved, focusSeg, opts };
+            cur.requestClose();
+            return;
+        }
+        _pendingDirectorSwitch = null;    // 干净切换：别让旧编辑器关闭时消费掉上一次挡下的目标
+        cur.close();                      // 另一配方 / 新建 → 关闭旧窗口，重载为该配方
     } else if (document.querySelector('.neo-director-overlay')) {
         return; // 兜底：状态缺失但浮层仍在 → 忽略，避免叠加
     }
@@ -1229,6 +1238,8 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
         if (timeline) { try { timeline.destroy(); } catch (_) {} timeline = null; }
         if (overlay && overlay.parentNode) overlay.remove();
         if (_directorEditor && _directorEditor.close === close) _directorEditor = null;
+        const pend = _pendingDirectorSwitch;   // 挡下的切换在关闭这一刻落地：确认条里「放弃修改」/「保存并关闭」后直接打开要点的那份配方
+        if (pend && !_directorEditor) { _pendingDirectorSwitch = null; openDirectorEditor(pend.existing, pend.onSaved, pend.focusSeg, pend.opts); }
     };
     // 用户主动关闭（✕ / 取消）：有未保存修改时先出确认条暂停关闭，等用户在确认条里选择
     const requestClose = () => {
@@ -1244,7 +1255,7 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
         $el('span', { className: 'neo-director-dirty-text', textContent: t('⚠ 有未保存的修改') }),
         $el('button', { className: 'rs-btn neo-director-dirty-save', type: 'button', textContent: t('💾 保存并关闭'), onclick: () => { closeAfterSave = true; saveBtn.onclick(); } }),
         $el('button', { className: 'rs-btn neo-director-dirty-discard', type: 'button', textContent: t('放弃修改'), onclick: close }),
-        $el('button', { className: 'rs-btn neo-director-dirty-keep', type: 'button', textContent: t('继续编辑'), onclick: () => { dirtyConfirm.hidden = true; } }),
+        $el('button', { className: 'rs-btn neo-director-dirty-keep', type: 'button', textContent: t('继续编辑'), onclick: () => { dirtyConfirm.hidden = true; _pendingDirectorSwitch = null; } }),   // 「继续编辑」= 取消这次切换
     ]);
     dirtyConfirm.hidden = true;
 
@@ -2544,4 +2555,5 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
         document.body.appendChild(overlay);
     }
     _directorEditor = { name: requestedName, close, requestClose, isDirty: () => dirty, overlay, focusSeg: focusSegAt };
+    opts?.onAdopt?.();   // 编辑器认下这份配方才回传选中：卡片高亮与上方生成区从此和编辑器同指一份配方
 }

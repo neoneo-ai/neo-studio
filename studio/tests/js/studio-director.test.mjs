@@ -3,7 +3,7 @@
 // studio-app.js 顶层会取 #ns-view 并连 WebSocket，导入前必须先备好 DOM 与 WS 桩。
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mockRoute, jsonResponse, sleep, click, fetchLog } from "./setup.mjs";
+import { mockRoute, jsonResponse, sleep, click, inputText, fetchLog } from "./setup.mjs";
 import { appState, app as mockApp } from "./mocks/comfy-app.mjs";
 
 const wsInstances = [];
@@ -16,13 +16,14 @@ document.body.innerHTML = `<div id="ns-view"></div>`;
 mockRoute("/neo_studio/version", jsonResponse({
     success: true, plugin_version: "9.9.9", comfyui_version: "0.1", recipes: ["R1"],
 }));
-mockRoute("/rs_recipes/director_spec", jsonResponse({
+// 分段数按配方名给：R1 两段、R2 三段，切配方时断言分段格子跟着编辑器走
+const SPEC_BY_RECIPE = {
+    R1: { segments: [{ prompt: "段一", duration_sec: 3, ref_input: "" }, { prompt: "段二", duration_sec: 4, ref_input: "" }], defaults: { width: 640, height: 384, steps: 20 } },
+    R2: { segments: [{ prompt: "甲", duration_sec: 2, ref_input: "" }, { prompt: "乙", duration_sec: 2, ref_input: "" }, { prompt: "丙", duration_sec: 2, ref_input: "" }], defaults: { width: 1344, height: 768, steps: 8 } },
+};
+mockRoute("/rs_recipes/director_spec", (b, call) => jsonResponse({
     success: true,
-    segments: [
-        { prompt: "段一", duration_sec: 3, ref_input: "" },
-        { prompt: "段二", duration_sec: 4, ref_input: "" },
-    ],
-    defaults: { width: 640, height: 384, steps: 20 },
+    ...(SPEC_BY_RECIPE[call.query.get("name")] || SPEC_BY_RECIPE.R1),
 }));
 mockRoute("/neo_video_gen/director_progress", jsonResponse({
     active: false, segment_index: -1, total_segments: 0, step: 0, total_steps: 0,
@@ -44,6 +45,11 @@ mockRoute("/rs_recipes/list", jsonResponse([
     { name: "R1", type: "video_director", shared: { mode: "f2v" }, segments: [
         { skill_id: "sk-a", prompt: "段一", duration_sec: 3 },
         { skill_id: "sk-a", prompt: "段二", duration_sec: 4 },
+    ]},
+    { name: "R2", type: "video_director", shared: { mode: "f2v" }, segments: [
+        { skill_id: "sk-a", prompt: "甲", duration_sec: 2 },
+        { skill_id: "sk-a", prompt: "乙", duration_sec: 2 },
+        { skill_id: "sk-a", prompt: "丙", duration_sec: 2 },
     ]},
 ])); // listRecipes 直接返回数组
 mockRoute("/rs_prompts/skills", jsonResponse([{ id: "sk-a", name: "技能 A", gen_video: true }]));
@@ -499,4 +505,41 @@ test("Studio 导演页：左栏分隔条拖动宽度（配方列表 / 素材库�
     assert.equal(width(), "0px", "双击收起写 0 宽");
     assert.equal(pref().side_closed, true, "双击收起同样落盘");
     localStorage.removeItem("neo_studio_director_side_col");
+});
+
+test("Studio 导演页：切配方撞上未保存修改 → 确认条处理完才切过去（选中与分段格子不提前跑）", async () => {
+    await import("../../web/studio/studio-app.js");
+    appState.graph = { _nodes: [] };
+    location.hash = "#/director";
+    await until(() => document.querySelectorAll(".ns-gen-seg-chip").length === 2, "R1 选中并铺出两段格子");
+    await until(() => document.querySelectorAll(".ns-director-editor .neo-director-seg").length === 2, "R1 编辑器挂载");
+
+    const cardName = () => document.querySelector(".neo-recipes-card-selected .neo-recipes-card-name span")?.textContent;
+    const editorName = () => document.querySelector(".ns-director-editor .neo-director-name-view")?.textContent?.trim();
+    assert.equal(cardName(), "R1", "首屏自动选中 R1");
+
+    inputText(document.querySelector(".ns-director-editor .neo-director-prompt"), "改过的段一");
+    const r2Card = [...document.querySelectorAll(".ns-director-side .neo-recipes-card")]
+        .find((c) => c.querySelector(".neo-recipes-card-name span")?.textContent === "R2");
+    assert.ok(r2Card, "列表里有第二份导演配方");
+    click(r2Card);
+
+    await until(() => document.querySelector(".neo-director-dirty-confirm")?.hidden === false, "弹出未保存确认条");
+    assert.equal(editorName(), "R1", "编辑器仍停在 R1");
+    assert.equal(cardName(), "R1", "卡片高亮不提前跑");
+    assert.equal(document.querySelectorAll(".ns-gen-seg-chip").length, 2, "分段格子不提前切");
+    assert.equal(document.querySelector(".ns-gen-spec").textContent, "640×384 · 20 步", "回显仍是 R1 的尺寸/步数");
+
+    click(document.querySelector(".neo-director-dirty-discard"));   // 「放弃修改」→ 旧编辑器关闭，随即打开 R2
+    await until(() => document.querySelectorAll(".ns-gen-seg-chip").length === 3, "R2 三段格子");
+    await until(() => document.querySelectorAll(".ns-director-editor .neo-director-seg").length === 3, "R2 编辑器挂载");
+    assert.equal(editorName(), "R2", "编辑器切到 R2");
+    assert.equal(cardName(), "R2", "卡片高亮跟着编辑器落定");
+    assert.equal(document.querySelector(".ns-gen-spec").textContent, "1344×768 · 8 步", "回显切到 R2 的尺寸/步数");
+
+    // 干净切换（编辑器不脏）→ 一次点击直接切过去
+    click([...document.querySelectorAll(".ns-director-side .neo-recipes-card")]
+        .find((c) => c.querySelector(".neo-recipes-card-name span")?.textContent === "R1"));
+    await until(() => document.querySelectorAll(".ns-gen-seg-chip").length === 2, "切回 R1 两段格子");
+    assert.equal(editorName(), "R1", "无未保存修改时直接切换");
 });

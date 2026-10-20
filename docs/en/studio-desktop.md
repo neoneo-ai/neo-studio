@@ -94,7 +94,10 @@ between the recipe list and the asset library (widened to 380px), so assets are 
 - **Entering the page opens the editor**: as soon as the recipe list lands, the first director recipe (or the one
   last selected) is selected, and it is opened embedded in the top-right pane — no card click needed.
   **Clicking a left-column recipe card selects it and opens it embedded** (clicking the same card again only switches
-  the current segment, so unsaved edits survive), and "🎬 New director recipe" on the gallery page switches to the
+  the current segment, so unsaved edits survive). When the editor has unsaved changes the click is blocked by the dirty
+  bar and nothing moves — the card highlight, the segment chips and the size echo all stay on the old recipe — and
+  "Save & close" / "Discard" on that bar closes the old editor and opens the recipe that was clicked, while
+  "Keep editing" cancels the switch. "🎬 New director recipe" on the gallery page switches to the
   director page and opens it embedded. After **✕** / Cancel closes the editor the top-right pane **takes no space**:
   it collapses to zero, the dashed placeholder no longer blocks the layout, and the generation panel fills the whole
   column (the splitter steps out); clicking a recipe card reopens the editor and returns to the top/bottom split.
@@ -198,8 +201,10 @@ no floating window, no ✕ and no "from canvas" export button.
   entry stay hidden.
 - After a full-page reload (the F5 hotkey) pywebview re-injects the bridge on navigation completion, measured to land
   more than ten seconds after the page script runs (`before_load` and `loaded` are 13 seconds apart in
-  `data/studio_desktop.log`). The header status chip and the window controls therefore sit on a 5-second bridge poll
-  instead of giving up after a few rounds — giving up once means a refresh strips that part of the header, and the
+  `data/studio_desktop.log`). The header window controls attach on the `pywebviewready` event that `finish.js`
+  dispatches once it fills in the bridge methods, with the 5-second poll kept only as a backstop for a bridge that
+  landed before the page's module scripts ran; the header status chip still sits on a 5-second bridge poll and
+  never gives up after a few rounds — giving up once means a refresh strips that part of the header, and the
   in-place ready flip breaks there too. The chip also refuses the bridge as its only source: a bridge result is handed
   back to the page by the window thread (pywebview computes it on a worker thread and delivers it through
   `evaluate_js`'s `Invoke` plus a semaphore), and the drag loop runs on that same window thread with a `sleep` per step
@@ -242,6 +247,11 @@ startable once the root is filled in.
   `GetAsyncKeyState(VK_LBUTTON)`), stopping the moment the left button is released — handing it back to the system
   through `WM_NCLBUTTONDOWN + HTCAPTION` or `WM_SYSCOMMAND·SC_MOUSEMOVE` never starts, because the WinForms Form
   swallows the non-client-area press.
+- How that header press gets wired decides whether the window drags during cold start: `initWindowChrome` runs before
+  the startup chain and the press rides the `pywebviewready` event (`finish.js` dispatches it when it fills in the
+  bridge methods), so it never waits on the extension setups or the version snapshot — both of those requests hit a
+  desktop-side service that was just assembled and is bringing ComfyUI up, and can stall for tens of seconds while the
+  window sits on the cold-start page.
 - A press that never leaves the system drag threshold (`SM_CXDRAG`) is not a drag: the window stays put, and
   maximize / fullscreen are only exited once the cursor crosses that threshold — under maximize `SetWindowPos`
   knocks the window back to its restored rectangle, so a plain header click restoring it is not native title-bar

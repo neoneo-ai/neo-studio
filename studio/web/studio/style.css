@@ -316,12 +316,25 @@ body {
 .ns-gen-spec { font-size: 12px; color: #7aa2ff; white-space: nowrap; flex: none; }
 /* 生成/取消按钮贴行右端 */
 .ns-gen-run-group { display: flex; align-items: center; gap: 10px; flex: none; margin-left: auto; }
-/* 主行动按钮：满幅面板里唯一的高饱和控件，扫一眼就能找到 */
-.ns-gen-panel .ns-gen-run { background: #2f6fed; border-color: #2f6fed; color: #fff; font-weight: 600; padding: 6px 18px; }
-.ns-gen-panel .ns-gen-run:hover:not([disabled]) { background: #3f7ffe; border-color: #3f7ffe; }
+/* 主行动按钮：走壳内半透明蓝（同技能页 Save / 设置页「保存并重启 ComfyUI」）。实心 #2f6fed 在满幅 #17171b 灰底上是
+   一块高饱和蓝板，把整行与上方编辑器的观感全压住；描边留饱和蓝 + 亮字，主行动仍是这一行最显眼的控件 */
+.ns-gen-panel .ns-gen-run { background: rgba(47, 111, 237, 0.18); border-color: #2f6fed; color: #cfe0ff; font-weight: 600; padding: 6px 18px; }
+.ns-gen-panel .ns-gen-run:hover:not([disabled]) { background: rgba(47, 111, 237, 0.3); border-color: #3f7ffe; color: #fff; }
 /* 取消生成：仅排队/运行中显示；红描边与蓝色「生成整片」区分开 */
 .ns-gen-cancel { border-color: #9a3a3a; background: #5a1a1a; color: #f87171; }
 .ns-gen-cancel:hover { background: #6a2a2a; color: #fff; }
+/* 导演页其余按钮走外壳 .ns-btn 灰底（同技能页 519 行）：编辑器底部的 取消 / 保存、提示词行的 ✦ 生成修改、时间轴旁的
+   ＋ 添加段、✨ 生成所有分段的提示词、✂️ 拆分、逐段行的 生成这一段 / 取消任务 / 拼回成片，与面板的 全选 / 清空，
+   原本全吃 prompts.css 的蓝底蓝字（#1a3a5a 底 / #60a5fa 字），一整排蓝里主行动反而挑不出来。
+   写成白名单：未保存确认条的 💾保存并关闭 / 放弃修改 / 继续编辑 自带蓝-红-灰语义色，不该被这排灰底压掉 */
+.ns-director .neo-director-panel :is(.neo-director-save, .neo-director-cancel, .neo-director-mod-btn,
+    .neo-director-add, .neo-director-optimize, .neo-director-grid-split, .neo-director-regen-run,
+    .neo-director-regen-cancel, .neo-director-merge-run, .neo-director-merge-cancel),
+.ns-gen-panel :is(.ns-gen-segs-all, .ns-gen-segs-clear) { background: #2a2a2e; border-color: #444; color: #ddd; }
+.ns-director .neo-director-panel :is(.neo-director-save, .neo-director-cancel, .neo-director-mod-btn,
+    .neo-director-add, .neo-director-optimize, .neo-director-grid-split, .neo-director-regen-run,
+    .neo-director-regen-cancel, .neo-director-merge-run, .neo-director-merge-cancel):hover,
+.ns-gen-panel :is(.ns-gen-segs-all, .ns-gen-segs-clear):hover { background: #333338; border-color: #555; color: #fff; }
 .ns-gen-status { font-size: 12px; color: #a9a9b6; margin-top: 8px; min-height: 16px; white-space: pre-wrap; }
 /* 生成面板底部：状态行 + 显存 / 内存读数（只有导演生成吃显存，监控就挂在导演页，进页面才轮询）
    整行居中：状态文字不撑满整行，读数才不会挂在右下角（与绘画页那条居中的显存条同轴） */

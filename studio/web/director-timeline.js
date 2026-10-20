@@ -735,10 +735,11 @@ export class DirectorTimeline {
     const checked = this._checked.has(idx);
     const dim = this.opts.checkable && !checked;
     this._rr(ctx, x + 1, top, iw, bh, 4);
-    // 半透明块底色：静止淡、选中加深；拖动中的幽灵块另加醒目强调
+    // 半透明块底色：色相只作分段身份，饱和度压到 32%、静止 alpha 0.2，铺满块宽时不再压住首帧缩略图；
+    // 选中的加深靠 alpha 抬一档加亮描边，静止与选中仍是同一色相，重排换槽时块不跳色
     // 拖动中的块（幽灵）更醒目：填充更实更亮、描边更粗且用更亮的色，并加轻微投影营造“拿起/悬浮”感；静止与选中态配色不变
     if (ghost) { ctx.shadowColor = "rgba(120,205,255,0.85)"; ctx.shadowBlur = 8; }
-    ctx.fillStyle = "hsla(" + hue + ",55%," + (ghost ? 70 : sel ? 70 : 58) + "%," + (ghost ? 0.8 : sel ? 0.75 : dim ? 0.14 : 0.45) + ")";
+    ctx.fillStyle = "hsla(" + hue + ",32%," + (ghost ? 62 : sel ? 58 : 50) + "%," + (ghost ? 0.55 : sel ? 0.32 : dim ? 0.09 : 0.2) + ")";
     ctx.fill();
     ctx.lineWidth = ghost ? 2.5 : (sel || drop ? 1.5 : 1);
     ctx.strokeStyle = ghost ? "#bfe6ff" : sel ? "#8cf" : drop ? "#e6a23c" : "rgba(255,255,255,0.16)";

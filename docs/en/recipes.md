@@ -184,7 +184,9 @@ Execution details: [h3-video-gen.md](h3-video-gen.md).
   the old window and loads that recipe.
 - **Unsaved-change protection**: any action that would change what gets written marks "unsaved changes";
   clicking ✕ / cancel / switching recipes then shows a confirmation bar: **💾 Save & close** / **Discard** /
-  **Keep editing**.
+  **Keep editing**. A recipe switch blocked by that bar is remembered on the editor singleton: "Save & close" /
+  "Discard" closes the old editor and opens the recipe that was clicked, "Keep editing" cancels the switch, and
+  while the bar is up the card highlight, the segment chips and the size echo all stay on the old recipe.
 - The editing panel has no overlay and does not dim the background, so you can keep dragging images from the
   left asset panel into a specific segment while editing.
 

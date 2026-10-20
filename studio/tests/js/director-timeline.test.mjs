@@ -566,6 +566,27 @@ test("生成进度条画在刻度尺上（块内不再画顶部细条）", async
     tl.destroy();
 });
 
+// 分段块底色只做“哪一段”的身份提示，不能压过块内的首帧缩略图与提示词摘要
+test("分段块是淡身份底：静止最淡、选中加深、拖动中的幽灵最实", async () => {
+    resetEnv();
+    const { tl } = makeTimeline([{ duration: 5 }]);
+    await sleep(40);
+    const blockFill = (sel, ghost) => {
+        const ctx = recordingCtx();
+        tl._paintSeg(ctx, 8, 200, BLOCK_TOP, 60, { duration: 5, prompt: "" }, "1", 180, ghost, sel, false, -1);
+        const m = /hsla\((\d+),(\d+)%,(\d+)%,([\d.]+)\)/.exec(ctx._paths[0].fill);   // 第一笔填充即块底色
+        assert.ok(m, "块底色必须是 hsla 串，实得：" + ctx._paths[0].fill);
+        return { hue: +m[1], sat: +m[2], light: +m[3], alpha: +m[4] };
+    };
+    const rest = blockFill(false, false), sel = blockFill(true, false), ghost = blockFill(false, true);
+    assert.equal(rest.hue, 180, "填充不改色相，段色相仍由 _segHue 按位置给");
+    assert.ok(rest.sat <= 35, "饱和度压到 35% 以下，静止块才是淡底：" + rest.sat + "%");
+    assert.ok(rest.alpha <= 0.25, "静止 alpha 不超过 0.25：" + rest.alpha);
+    assert.ok(sel.alpha > rest.alpha && ghost.alpha > sel.alpha, "静止淡、选中加深、幽灵最实：" + [rest, sel, ghost].map((c) => c.alpha).join(" < "));
+    assert.ok(sel.light > rest.light && sel.light <= 60, "选中靠亮度小抬区分，不跳成亮色块：" + rest.light + "% → " + sel.light + "%");
+    tl.destroy();
+});
+
 test("revealSeg：内容溢出时把目标段滚进可视区，已可见则不动，未溢出不滚动", async () => {
     resetEnv();
     // 10 段 × 5s、编辑面板尺寸（height=184 → 每段默认宽≈277px）：默认总宽超出可视区 320

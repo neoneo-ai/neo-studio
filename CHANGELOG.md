@@ -4,6 +4,17 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **Switching director recipes is one atomic move.** With the embedded editor holding unsaved changes, clicking a
+  recipe card moved the card highlight, the segment chips and the size / steps echo to the clicked recipe while the
+  editor stayed on the old one behind the dirty bar — **🎬 生成整片** then ran a recipe the user was not looking at and
+  the edits on screen were skipped. The blocked target is remembered on the editor singleton: the dirty bar's
+  "保存并关闭" / "放弃修改" closes the old editor and opens the recipe that was clicked, "继续编辑" cancels the switch,
+  and the selection lands through `opts.onAdopt`, so highlight, segment chips, size echo and the agent context never
+  move ahead of the editor. A film run keeps its segment highlight on its own recipe: switching clears it instead of
+  painting a running index onto another recipe's chips. Covered by `studio/tests/js/studio-director.test.mjs`
+  ("切配方撞上未保存修改") and the singleton cases in `studio/tests/js/director-editor-queue.test.mjs` and
+  `director-editor-segment.test.mjs`. Docs in `docs/recipes.md`, `docs/studio-desktop.md` and their `docs/en/` mirrors.
+
 - **A finished generation is a fact the agent keeps.** `image_gen` records the `skill_id` it ran on in the task row,
   the task snapshot returns it, and the MCP `generate_image` response, every `list_tasks` row and the image
   `task_status` snapshot pass it through, so the caller knows which skill produced the picture in its hands. The dock's
@@ -618,6 +629,28 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 - **Contributor entry docs.** `CONTRIBUTING.md` / `CONTRIBUTING_ZH.md`, `SECURITY.md`,
   `CODE_OF_CONDUCT.md` / `CODE_OF_CONDUCT_ZH.md` and a pull request template, plus a CI gate that runs
   `studio/tests` and `npm test` on every pull request. No plugin code changed.
+
+- **Director timeline segments are a pale identity tint, not a color slab.** Each block was filled at
+  `hsla(hue,55%,58%,0.45)`, and at 70% lightness with 0.75 alpha while selected or hovered, so a segment with no first
+  frame read as a solid saturated slab and the tiled first-frame strip lost its own colors under the overlay. The fill
+  is `hsla(hue,32%,50%,0.2)` at rest, `…,58%,0.32` selected, `…,62%,0.55` for the drag ghost and 0.09 for an unchecked
+  block; the hue stays position-based (`_segHue`), so a segment keeps its identity through a reorder, and the selected
+  block is still told apart by the brighter `#8cf` border plus the alpha step, with the drag ghost keeping its shadow
+  and thick outline. Covered by `studio/tests/js/director-timeline.test.mjs` (rest < selected < ghost in alpha,
+  saturation capped, hue unchanged).
+
+- **Director page buttons wear the shell palette.** The Studio director page was the one place where a solid
+  `#2f6fed` fill sat on the `#17171b` shell: 「🎬 生成整片」(`.ns-gen-run`) and 「🎬 保存并生成整片」
+  (`.neo-director-save-run`) were two saturated blue slabs, and every other button in the embedded editor and the
+  generation row (取消 / 保存 / ✦ 生成修改 / ＋ 添加段 / ✨ 生成所有分段的提示词 / 生成这一段 / 拼回成片 / 全选 / 清空)
+  inherited the node-side `.rs-btn` blue (`#1a3a5a` fill, `#60a5fa` text), so a full-width row of blue left no
+  primary action standing out. The two film-generation buttons now use the shell's translucent primary —
+  `rgba(47,111,237,0.18)` fill with the saturated `#2f6fed` border, `#cfe0ff` label, deepening to 0.3 on hover — the
+  same treatment the skills page's Save and the startup 「保存并重启 ComfyUI」 already use, and the rest of the
+  director-page buttons take the shell gray `#2a2a2e / #444 / #ddd`. Scoped to `.ns-director` and `.ns-gen-panel`, so
+  the node-side editor keeps its blue buttons, and written as a `:is()` whitelist — the unsaved-changes bar keeps its
+  blue 「💾 保存并关闭」/ red 「放弃修改」/ gray 「继续编辑」 semantics, the 取消 red outline is untouched, and
+  `.rs-btn:disabled` keeps its dimmed state. Covered by `studio/tests/js/studio-desktop.test.mjs`; CSS only.
 
 ## [1.3.0] - 2026-10-17
 

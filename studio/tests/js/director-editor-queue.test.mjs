@@ -84,7 +84,7 @@ test("导演编辑器关闭保护：无修改直接关；有未保存修改先�
     assert.equal(document.querySelectorAll(".neo-director-overlay").length, 0, "保存成功后窗口关闭");
 });
 
-test("导演编辑器单例：有未保存修改时切另一配方被拦截并出确认条，处理后才能切换", async () => {
+test("导演编辑器单例：有未保存修改时切另一配方先出确认条，处理完自动切过去", async () => {
     const { openDirectorEditor } = await import("../../web/director.js");
     appState.graph = { _nodes: [] };
     mockRoute("/rs_prompts/skills", () => jsonResponse([{ id: "sk-a", name: "技能 A", gen_video: true }]));
@@ -112,13 +112,28 @@ test("导演编辑器单例：有未保存修改时切另一配方被拦截并�
     assert.equal(document.querySelector(".neo-director-name").value, "T-keep", "未重载为另一配方");
     assert.equal(document.querySelector(".neo-director-dirty-confirm").hidden, false, "切配方被拦截并出确认条");
 
-    // 「放弃修改」关闭后再点 B → 正常打开 B
+    // 「放弃修改」→ 旧窗口关闭并自动打开刚点的 B（切配方那一下记着的）
+    document.querySelector(".neo-director-dirty-discard").click();
+    await sleep(60);
+    assert.equal(document.querySelectorAll(".neo-director-overlay").length, 1, "放弃后自动打开刚点的配方");
+    assert.equal(document.querySelector(".neo-director-name").value, "T-other", "确认条处理完切到 B");
+
+    // 「继续编辑」取消这次切换：带未保存修改关窗口后不补开
+    const bTa = document.querySelector(".neo-director-prompt");
+    bTa.value = "B 的未保存改动";
+    bTa.dispatchEvent(new window.Event("input", { bubbles: true }));
+    await openDirectorEditor(recipeA);
+    await sleep(20);
+    document.querySelector(".neo-director-dirty-keep").click();
+    await sleep(20);
+    assert.equal(document.querySelector(".neo-director-dirty-confirm").hidden, true, "继续编辑收起确认条");
+    assert.equal(document.querySelector(".neo-director-name").value, "T-other", "继续编辑 = 留在 B");
+    document.querySelector(".neo-director-close").click();
+    await sleep(20);
+    assert.equal(document.querySelector(".neo-director-dirty-confirm").hidden, false, "带未保存修改关窗口仍出确认条");
     document.querySelector(".neo-director-dirty-discard").click();
     await sleep(20);
-    assert.equal(document.querySelectorAll(".neo-director-overlay").length, 0, "放弃后旧窗口关闭");
-    await openDirectorEditor(recipeB);
-    await sleep(20);
-    assert.equal(document.querySelector(".neo-director-name").value, "T-other", "之后可正常打开另一配方");
+    assert.equal(document.querySelectorAll(".neo-director-overlay").length, 0, "这次切换已取消：放弃后不补开");
 
     // 无修改时切配方仍直接重载（原行为不变）
     await openDirectorEditor(recipeA);

@@ -709,7 +709,7 @@ test("导演编辑器单例：新建（未命名）编辑器开着时再开新�
     assert.equal(document.querySelectorAll(".neo-director-overlay").length, 1, "重载后仍只有一个浮层");
     assert.equal(document.querySelectorAll(".neo-director-segs .neo-director-seg").length, 2, "重载为新配方的 2 段");
 
-    // 新建编辑器有未保存修改时再开新配方 → 出确认条拦截，不重载
+    // 新建编辑器有未保存修改时再开新配方 → 出确认条拦截，内容不变
     const promptTa = document.querySelector(".neo-director-prompt");
     promptTa.value = "未保存的改动";
     promptTa.dispatchEvent(new window.Event("input", { bubbles: true }));
@@ -719,8 +719,9 @@ test("导演编辑器单例：新建（未命名）编辑器开着时再开新�
     assert.equal(document.querySelectorAll(".neo-director-segs .neo-director-seg").length, 2, "拦截后内容不变");
 
     document.querySelector(".neo-director-dirty-discard").click();
-    await sleep(20);
-    assert.equal(document.querySelectorAll(".neo-director-overlay").length, 0, "放弃修改后关闭");
+    await sleep(60);
+    assert.equal(document.querySelectorAll(".neo-director-overlay").length, 1, "放弃修改后自动打开刚点的那份");
+    assert.equal(document.querySelectorAll(".neo-director-segs .neo-director-seg").length, 1, "重载为刚点的 1 段配方");
 });
 
 test("导演编辑器：故事板分镜页两步徽标（① 宫格拆分 → ② 提示词）与动作按前置置灰", async () => {

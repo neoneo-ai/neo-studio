@@ -521,6 +521,7 @@ async function buildDirector(el) {
             if (spec) specCache.set(name, spec);
         }
         tlSegments = spec?.segments || [];
+        if (genState && !genState.terminal) tlProgress = { active: false, segment_index: -1, total_segments: 0 };   // 生成中切配方：进度高亮属于正在跑的那份配方，不许打到新配方的格子上
         agentCtx.segments = tlSegments.length;   // 右栏上下文要报得出这份配方有几段
         notifyAgentCtx();
         setChecked([]);   // 分段已换（切配方 / 配方内容变更）→ 勾选作废
@@ -1492,8 +1493,8 @@ function initWindowChrome() {
         }).catch(() => { /* 桥未就绪：顶栏不出控件 */ });
     };
     // 桥脚本在导航完成之后才注入且分两步：window.pywebview 先到（api 是空的），方法由 finish.js
-    // 调 _createApi 后填；整页刷新时实测晚到页面脚本之后好几秒。等满几轮就放弃的话，刷新一次
-    // 顶栏控件就永久消失。挂在 5 秒一轮上探桥，浏览器标签页里桥永远不来，每轮只多一次属性读取
+    // 调 _createApi 后填；整页刷新时实测晚到页面脚本之后好几秒。放弃一次就是刷新一次顶栏少一块，
+    // 控件与拖动永久消失，所以探桥不封顶。
     let wired = false;
     const attach = () => {
         if (wired) return;
@@ -1503,7 +1504,10 @@ function initWindowChrome() {
         wire(bridge);
     };
     attach();
-    setInterval(attach, 5000);
+    // finish.js 填完方法就派发这一件，桥可用正是这一刻：拖动挂在它上面，注入完即生效。
+    // 冷启动窗口停在桌面端页上，顶栏拖不动的那一会就夹在这条注入与下面的轮询之间
+    window.addEventListener("pywebviewready", attach);
+    setInterval(attach, 5000);   // 桥在本模块脚本之前注入完时事件已经过去，补一轮；浏览器标签页里桥永不来
 }
 
 // ====== 刷新快捷键 ======
@@ -1842,6 +1846,9 @@ function route() {
 if (view) {
     localizeShell();
     bindHeaderNav();
+    // 顶栏控件与拖动只吃 index.html 的静态顶栏，不等扩展 setup 与版本快照：那两次请求都打在刚装配、
+    // 正拉起 ComfyUI 的桌面端服务上，排在它们后面就是「窗口开出来要过一会才能拖动」
+    initWindowChrome();
     // 未捕获错误与启动失败一并写进桌面端日志：窗口白屏时日志里至少留下证据
     window.addEventListener("error", (e) => desktopLog(`ERROR ${e.message} @ ${e.filename}:${e.lineno}`));
     window.addEventListener("unhandledrejection", (e) => desktopLog(`REJECT ${e.reason?.stack || String(e.reason)}`));
@@ -1852,7 +1859,6 @@ if (view) {
         initOfflineGate();
         route();   // 视图先挂上：桌面端附件（顶栏状态位）失败不能连坐，窗口不至于停在只出顶栏的空白页
         initComfyStatus();
-        initWindowChrome();
         initClipboardKeys();
         initReloadHotkey();
         initAgentDock();

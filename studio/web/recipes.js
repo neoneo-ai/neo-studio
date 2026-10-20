@@ -812,7 +812,8 @@ export async function createRecipesPanel(options = {}) {
     // 选中即打开内嵌编辑器（Studio 导演页）：点卡片与首屏自动选中走同一条路径。
     // 自动选中只回 onSelect 的话，进页时右上宿主是空的 —— 得再点一次配方卡才有编辑器
     const openOnSelect = (r) => {
-        if (openEditorOnSelect && r.type === 'video_director') openDirectorEditor(r, renderList);
+        // 选中由编辑器 adopt 回传：脏态挡下时卡片高亮与上方生成区一律不动，确认条处理完才跟着切过去
+        if (openEditorOnSelect && r.type === 'video_director') openDirectorEditor(r, renderList, -1, { onAdopt: () => selectRecipe(r) });
     };
 
     // 面板状态（搜索/筛选/排序/分组折叠）：存 /userdata/neo_recipes_data.json，刷新后回显
@@ -1153,8 +1154,9 @@ export async function createRecipesPanel(options = {}) {
             // 点卡片即选中并回传 onSelect（Studio 导演页：直接喂给上方整片生成区）；
             // openEditorOnSelect 时同一次点击直接在内嵌宿主里打开该配方（重复点同一配方只切段，不重载）
             const pick = () => {
+                // 导演配方：选中跟着编辑器走（编辑器 adopt 才回传 onSelect）
+                if (openEditorOnSelect && r.type === 'video_director') { openOnSelect(r); return; }
                 selectRecipe(r);
-                openOnSelect(r);
             };
             card.addEventListener('click', pick);
             card.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); } });

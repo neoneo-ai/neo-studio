@@ -2331,17 +2331,19 @@
     padding: 5px 20px;
 }
 
-/* 「🎬 保存并生成整片」（桌面端内嵌）：底部唯一的高饱和主行动按钮，与生成面板同款蓝 */
+/* 「🎬 保存并生成整片」（桌面端内嵌）：底部唯一的主行动按钮，与生成面板同款壳内半透明蓝 + 饱和蓝描边；
+   实心 #2f6fed 在满幅灰底里是一块高饱和蓝板，压过同排的 取消 / 保存 */
 .neo-director-foot .neo-director-save-run {
-    background: #2f6fed;
+    background: rgba(47, 111, 237, 0.18);
     border-color: #2f6fed;
-    color: #fff;
+    color: #cfe0ff;
     font-weight: 600;
 }
 
 .neo-director-foot .neo-director-save-run:hover:not([disabled]) {
-    background: #3f7ffe;
+    background: rgba(47, 111, 237, 0.3);
     border-color: #3f7ffe;
+    color: #fff;
 }
 
 /* 未保存修改确认条（同自动增强菜单 rs-gen-dirty-confirm 模式）：有改动时点 ✕/取消弹出，body 与 foot 之间。

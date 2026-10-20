@@ -163,6 +163,24 @@ test("技能页：技能管理换外壳配色，弹窗标题条收起", () => {
               "选中行与设置页 tab 同一套半透明蓝高亮");
 });
 
+// 导演页按钮：实心 #2f6fed 在满幅 #17171b 灰底上是一块高饱和蓝板，同排 取消 / 保存 又是整排蓝底蓝字，主行动反而挑不出来
+test("导演页按钮走外壳配色：生成按钮半透明蓝，同排按钮灰底", () => {
+    const css = fs.readFileSync(path.join(webDir, "studio", "style.css"), "utf8");
+    const recipes = fs.readFileSync(path.join(webDir, "recipes.css"), "utf8");
+    const run = css.match(/\.ns-gen-panel \.ns-gen-run \{[^}]*\}/);
+    assert.ok(run, "生成整片按钮要有配色规则");
+    assert.match(run[0], /background:\s*rgba\(47, 111, 237/, "「生成整片」走壳内半透明蓝底");
+    assert.match(run[0], /border-color:\s*#2f6fed/, "描边留饱和蓝：压淡底色后主行动仍是这一行最显眼的控件");
+    assert.ok(!/\.ns-gen-run[^}]*background:\s*#2f6fed/.test(css), "主按钮不该再是实心 #2f6fed 蓝板");
+    const saveRun = recipes.match(/\.neo-director-foot \.neo-director-save-run \{[^}]*\}/);
+    assert.ok(saveRun, "编辑器底部「保存并生成整片」要有配色规则");
+    assert.match(saveRun[0], /background:\s*rgba\(47, 111, 237/, "「保存并生成整片」与生成面板同款半透明蓝");
+    assert.ok(/\.ns-director \.neo-director-panel :is\(\.neo-director-save[^{]*\{[^}]*background:\s*#2a2a2e/.test(css),
+              "编辑器里的 取消 / 保存 / ✦ 生成修改 走外壳灰底；白名单写法，未保存确认条的蓝-红-灰语义色不在其内");
+    assert.ok(/\.neo-director-dirty-discard\s*\{[^}]*background:\s*#3a2a2a/.test(recipes),
+              "未保存确认条的「放弃修改」保持红底语义色，灰底排不覆盖它");
+});
+
 // 顶栏 ComfyUI 胶囊：桌面端窗口（有 pywebview api）里才出现，浏览器标签页里不显示。
 // studio-app.js 的启动体只在导入时跑一次，两个用例用不同 query 取同一模块的两份实例。
 const studioBody = fs.readFileSync(path.join(webDir, "studio", "index.html"), "utf8").match(/<body>([\s\S]*?)<\/body>/)[1];
@@ -610,5 +628,32 @@ test("顶栏窗口控件：桥晚到也要挂上，顶栏空白处按下交回�
     document.getElementById("ns-win-close").click();
     await flush();
     assert.ok(calls.includes("close"), "关闭按钮走桌面端");
+});
+
+// 冷启动窗口停在桌面端端口那一页：扩展 setup 与版本快照都打在刚装配、正拉起 ComfyUI 的服务上，
+// 这两次请求可以卡几十秒。顶栏拖动排在它们后面就是「窗口开出来要过一会才能拖动」。
+test("版本快照不落地也要能拖窗口：桥注入完那一刻就挂上顶栏拖动", async () => {
+    mountStudio();
+    const wctl = document.getElementById("ns-wctl");
+    const calls = [];
+    mockRoute("/neo_studio/version", () => new Promise(() => {}));   // 服务正忙：这一发永不落地
+    await import("../../web/studio/studio-app.js?chromeReady=1");
+    await flush();
+    assert.equal(wctl.hidden, true, "桥没齐先别出控件");
+
+    window.pywebview = {
+        api: {
+            window_state: async () => ({ frameless: true, maximized: false, fullscreen: false }),
+            win_start_drag: () => calls.push("drag"),
+        },
+    };
+    window.dispatchEvent(new window.CustomEvent("pywebviewready"));   // finish.js 填完方法那一刻
+    await flush();
+    assert.equal(wctl.hidden, false, "桥注入完即出控件，不排在版本快照之后");
+
+    document.querySelector(".ns-header")
+        .dispatchEvent(new window.MouseEvent("mousedown", { button: 0, bubbles: true }));
+    await flush();
+    assert.ok(calls.includes("drag"), "桥一到顶栏空白处按下就能拖窗");
 });
 
