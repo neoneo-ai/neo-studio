@@ -2556,6 +2556,14 @@ class H3PreviewTests(unittest.TestCase):
     def test_frame_indices_are_unique_for_odd_lengths(self):
         self.assertEqual(len(set(self.h3p._frame_indices(37, 8))), 8)
 
+    def test_preview_wants_small_follows_the_requested_side(self):
+        """档位由界面要的边长定：要得比全档位窄就取紧凑档，中间舞台那档（1024）取全尺寸载荷。"""
+        self.assertTrue(self.h3p.preview_wants_small(0))                 # 界面没说，右栏那档
+        self.assertTrue(self.h3p.preview_wants_small(self.h3p.AGENT_PREVIEW_SIDE))
+        self.assertTrue(self.h3p.preview_wants_small("wide"))            # 读不到就当没要
+        self.assertTrue(self.h3p.preview_wants_small(self.h3p.PREVIEW_SIDE - 1))
+        self.assertFalse(self.h3p.preview_wants_small(self.h3p.PREVIEW_SIDE))
+
     def test_video_frames_picks_evenly_spaced_frames(self):
         frames = self.h3p._video_frames(torch.randn(1, 24, 6, 5, 7), 24, 3)
         self.assertEqual([tuple(f.shape) for f in frames], [(1, 24, 5, 7)] * 3)

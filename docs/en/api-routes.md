@@ -195,7 +195,7 @@ included), and the dock never calls a handler directly.
 
 | Method | Route | Description |
 |--------|-------|-------------|
-| POST | `/neo_agent/run` | One agent turn, SSE timeline; body `{text, mode, images, context, resume}` (`mode` accepts `plan` / `act`, default `act`; `images` are composer attachments in the image-source shape, up to 6; `context` is the current UI state, dropped whole when it is not an object; `resume` carries the `run_id` of a saved session and this turn continues after it — that run still going, or an unknown session, ends with `[ERROR]` before the first frame), first frame `run` (carries the `run_id` the cancel / pause / resume / answer routes need), frames `plan` / `tool_call` / `status` / `tool_result` / `ask` / `paused` / `resumed` / `content`, ending with `[ERROR]` / `[DONE]` |
+| POST | `/neo_agent/run` | One agent turn, SSE timeline; body `{text, mode, images, context, preview_side, resume}` (`mode` accepts `plan` / `act`, default `act`; `images` are composer attachments in the image-source shape, up to 6; `context` is the current UI state, dropped whole when it is not an object; `preview_side` is the preview longest side (px) this turn wants — non-numeric and negative values fall back to the 384 dock tier, and the painting page's center stage asks for 1024; `resume` carries the `run_id` of a saved session and this turn continues after it — that run still going, or an unknown session, ends with `[ERROR]` before the first frame), first frame `run` (carries the `run_id` the cancel / pause / resume / answer routes need), frames `plan` / `tool_call` / `status` / `tool_result` / `ask` / `paused` / `resumed` / `content`, ending with `[ERROR]` / `[DONE]` |
 | POST | `/neo_agent/answer` | Answer an `ask` frame: body `{run_id, ask_id, text}` hands the user's choice back to the loop parked on `ask_user`; `run_id` / `ask_id` accept only the shapes the `run` / `ask` frames issued — finished run is 404, finished question is 404 |
 | POST | `/neo_agent/cancel` | Cancel: with `run_id` it stops the whole agent loop and kills the in-flight task (`run_id` accepts only the shape the `run` frame issued; unknown id is 404); with `task_id` it kills just that task (through MCP `cancel_task`, which resolves the image / film / segment / assemble route itself), `task_id` accepts UUID shapes only |
 | POST | `/neo_agent/pause` | Pause: body `{run_id}` (validated like cancel) parks the loop at the next turn / poll boundary and leaves the SSE stream open; an in-flight ComfyUI task has no paused state, so the boundary kills it and returns `cancelled`, and the resumed loop does not resend it |
@@ -230,10 +230,11 @@ included), and the dock never calls a handler directly.
 - `generate_image` / `director_run` / `segment_run` / `assemble_run` return a `task_id` only; the loop polls
   `task_status` to a terminal state and emits sampling steps and film segment numbers through `status` frames.
   The wait cap is 600s for a single image and 2400s for a whole film.
-- A running `status` frame can carry `preview` (`{frames:[dataURL…], fps, w, h, step}`): the compact channel of
-  `h3_preview` for a film, the captured progress image for an image task, attached once per payload advance, which is
-  what the dock's tool card plays. This payload is UI-only — the saved session and the `tool_result` text never carry
-  it, so the LLM never sees a frame byte.
+- A running `status` frame can carry `preview` (`{frames:[dataURL…], fps, w, h, step}`): a film takes the `h3_preview`
+  tier picked by the request's `preview_side` (384 for the dock card, 1024 for the center stage), an image task takes
+  the captured progress image, attached once per payload advance, which is what the dock's tool card and the center
+  stage play. This payload is UI-only — the saved session and the `tool_result` text never carry it, so the LLM never
+  sees a frame byte.
 - A `tool_result` frame carries `media`: the image task's `images` become `{kind:"image", url, title}` items, and a
   finished film becomes one `{kind:"video", url}` `/view` item (segment and assemble snapshots carry a filename
   only, so the subfolder comes from the generating module's output directory). The dock's result thumbnails and

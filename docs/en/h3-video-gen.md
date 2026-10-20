@@ -245,6 +245,8 @@ Runtime injection (when the template has no matching slot):
 - The payload carries the node id, and the frontend routes it to that node's animation panel.
 - The same decoded frames are stored a second time at a 384 longest side for the right agent dock: that card is only
   that wide, and SSE carries nothing the card cannot show. The WS broadcast and the polling fallback never carry it.
+  Which tier the agent SSE takes is decided by the request's `preview_side`: with the center stage on the painting page
+  it asks for the 1024 tier.
 - A segment run's payload is addressed by the node id the submitting request carries; a route submission with no node
   is addressed by the task id (same as a whole film), and the terminal state clears both caches.
 - Without taeh3 weights, or when decoding fails, it falls back to the core default preview and never blocks

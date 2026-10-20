@@ -300,15 +300,31 @@ class TestPayloadHelpers(unittest.TestCase):
         self.assertEqual(agent._media_of("not json"), [])
 
     def test_preview_reads_the_task_owned_tables(self):
-        """出片按 task_id 取紧凑帧、生图按 prompt_id 取进度预览：两份都在拥有它的模块里，右栏不另建一张表。"""
-        h3 = SimpleNamespace(get_latest_preview=lambda tid, small=False:
-                             {"frames": ["v"], "step": 2} if small and tid == "t-9" else None)
+        """出片按 task_id 取帧、生图按 prompt_id 取进度预览：两份都在拥有它的模块里，右栏不另建一张表。
+        出片取哪一档由界面要的边长定：中间舞台要 1024 就取全尺寸载荷，没要仍是右栏那档。"""
+        seen: list = []
+
+        def latest(tid, small=False):
+            seen.append(small)
+            return {"frames": ["v"], "step": 2} if tid == "t-9" else None
+
+        h3 = SimpleNamespace(get_latest_preview=latest, preview_wants_small=lambda side: int(side) < 1024)
         imgs = SimpleNamespace(_PREVIEWS={"p-1": "data:image/jpeg;base64,AA"})
         with mock.patch.dict(sys.modules, {"studio.h3_preview": h3, "studio.image_gen": imgs}):
             self.assertEqual(agent._preview_of("segment_run", "t-9", "{}"), {"frames": ["v"], "step": 2})
+            self.assertEqual(seen, [True], "界面没要档时取右栏那档")
+            agent._preview_of("segment_run", "t-9", "{}", 1024)
+            self.assertEqual(seen, [True, False], "要 1024 时取全尺寸载荷，铺在中间不糊")
             self.assertEqual(agent._preview_of("generate_image", "t-1", json.dumps({"prompt_id": "p-1"})),
                              {"frames": ["data:image/jpeg;base64,AA"]})
             self.assertIsNone(agent._preview_of("generate_image", "t-1", "{}"))   # 快照里没有 prompt_id 就不去找表
+
+    def test_preview_side_reads_a_ui_advertised_side(self):
+        """preview_side 从请求体来：只认非负整数，非数与负数都按 0 走右栏那档（后端默认）。"""
+        self.assertEqual(agent._preview_side("1024"), 1024)
+        self.assertEqual(agent._preview_side(None), 0)
+        self.assertEqual(agent._preview_side("wide"), 0)
+        self.assertEqual(agent._preview_side(-5), 0)
 
 
 @skip
@@ -347,6 +363,19 @@ class TestTaskPolling(unittest.TestCase):
                 lambda emit: agent._tool_result(client, "director_run", {"recipe": "r"}, emit, _runobj(client)))
         self.assertEqual([f.get("preview") for f in frames], [prev, None, None])
         self.assertNotIn("preview", json.dumps(frames[1]))
+
+    def test_poll_passes_the_run_preview_side_to_the_reader(self):
+        """轮询把这一轮要的档交进读预览那一步：中间舞台那轮的大档要落到载荷选择上，不能只停在请求里。"""
+        client = FakeClient({"director_run": {"task_id": "f-1"},
+                             "task_status": [{"status": "succeeded", "filename": "NeoDirector/film.mp4"}]})
+        run = _runobj(client)
+        run.preview_side = 1024
+        seen: list = []
+        with _no_poll_sleep(), mock.patch.object(agent, "_preview_of", lambda *a: seen.append(a) or None):
+            _result(lambda emit: agent._tool_result(client, "director_run", {"recipe": "r"}, emit, run))
+        self.assertEqual(seen[0][0], "director_run")
+        self.assertEqual(seen[0][1], "f-1")
+        self.assertEqual(seen[0][3], 1024)
 
     def test_poll_survives_an_unimportable_preview_module(self):
         """预览模块 import 不了也要把任务轮询到终态：h3_preview 模块级 import server / comfy.taesd.taesd / torch，

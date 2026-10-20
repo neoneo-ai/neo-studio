@@ -17,6 +17,7 @@
  * 样式全在 agent-panel.css，作用域收在 .neo-agent 下。
  */
 import { mkEl } from "./dom-utils.js";
+import { isMediaHref, mediaKindOf } from "./js/core/media-href.js";
 import { app } from "../../scripts/app.js";
 import { t, tf } from "./js/core/i18n.js";
 import { COMMON_EDGES, COMMON_RATIOS, LORA_FAMILY_HINTS, modelFamily } from "./image-gen.js";
@@ -122,15 +123,6 @@ async function postJson(path, body) {
     return await res.json();
 }
 
-// 产物地址的形态：后端 media 项与最终回答里的链接都落在这几类地址上
-const MEDIA_EXT = /\.(png|jpe?g|gif|webp|avif|bmp|svg|mp4|webm|mov|m4v|mkv|avi|mp3|wav|ogg|m4a|aac|flac)(?=&|#|$)/i;
-const VIDEO_EXT = /\.(mp4|webm|mov|m4v|mkv|avi)(?=&|#|$)/i;
-const AUDIO_EXT = /\.(mp3|wav|ogg|m4a|aac|flac)(?=&|#|$)/i;
-const MEDIA_PATH = /^\/(view|neo_gallery\/\w*|rs_recipes\/(asset|thumbnail))(?=\?|#|$)/;
-
-const isMediaHref = (href) => MEDIA_PATH.test(href) || MEDIA_EXT.test(href);
-const mediaKindOf = (href) => (VIDEO_EXT.test(href) ? "video" : AUDIO_EXT.test(href) ? "audio" : "image");
-
 // 智能体写完配方要广播编辑器保存那一条同一个事件：导演页左栏的配方列表、节点内时间轴
 // 都监听它，收不到就只能等下一次建页。结果文本是 MCP 回的 JSON（带 name），
 // 被后端 RESULT_CLIP 裁断时解析不动，就当这一发没写成交互
@@ -194,7 +186,7 @@ function splitAnswerOptions(text) {
 // 聊天区：一问一答，正文按 Markdown 渲染
 // ==========================================
 
-function buildChat(onOpenMcp, getContext, onOpenPrefs) {
+function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
     const box = mkEl("div", "neo-agent-section neo-agent-chat");
     const transcript = mkEl("div", "neo-agent-transcript");
     const empty = mkEl("div", "neo-agent-empty");
@@ -744,6 +736,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs) {
     let resumeId = "";
     let restartFrom = 0;   // 「从这条消息重新开始」的序号：旧会话里第几条用户消息（1 起），0 = 整条接上
     let historyOpen = false;
+    let lastTurn = null;   // 上一发的原文、模式与附件图：失败收场那一行靠它原样重发
 
     // 「接上次会话」条铺在文本框上方，与「⏹ 取消」同一位置口径：打开过一条旧会话才出现，
     // 点一下断开。下一次「✨ 生成」带着 resume 打后端，旧对话原文接在系统提示词之后
@@ -752,6 +745,43 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs) {
     resumeBar.hidden = true;
     resumeBar.onclick = () => { resumeId = ""; restartFrom = 0; renderResumeBar(); };
     composer.insertBefore(resumeBar, cancelBar);
+
+    // 失败收场那一行：输入框在提交这一步就清空了，LLM 502 这类一次性失败要用户把整段提示词重打
+    // 一遍是说不过去的。这一行按上一发的文本、模式与附件图原样重发；下一次提交与新会话收掉它
+    const retryBar = mkEl("button", "neo-agent-retrybar");
+    retryBar.type = "button";
+    retryBar.hidden = true;
+    retryBar.onclick = () => retryLastTurn();
+    composer.insertBefore(retryBar, input);
+
+    function showRetryBar() {
+        if (!lastTurn) return;
+        const head = lastTurn.text.length > 22 ? lastTurn.text.slice(0, 22) + "…" : lastTurn.text;
+        retryBar.textContent = "🔁 " + t("重试") + (head ? " · " + head : "");
+        retryBar.title = tf("按上一发原样重发（{mode}，附件图照带）：{text}",
+            { mode: lastTurn.mode === "plan" ? t("计划") : t("执行"), text: lastTurn.text });
+        retryBar.hidden = false;
+    }
+
+    // 重发走同一条提交路径：回填文本、模式与附件图，界面当前状态由 generate 现读——那一发跑期间
+    // 用户切了页签或换了配方，重发就该带新的这一份，不该复活上一发的旧上下文
+    function retryLastTurn() {
+        if (running || !lastTurn) return;
+        // 输入框里还写着东西就不动手：这一行重发的是上一发，把用户正在写的这一发覆盖掉是说不过去的
+        if (input.value.trim() || attachments.length) {
+            toast("warning", t("输入框里还有内容：清空后再点重试"));
+            return;
+        }
+        retryBar.hidden = true;
+        input.value = lastTurn.text;
+        fitInput();
+        setMode(lastTurn.mode);
+        clearAttachments();
+        lastTurn.files.forEach((a) => attachments.push({ ...a }));
+        renderChips();
+        generate();
+    }
+
     function renderResumeBar() {
         resumeBar.hidden = !resumeId;
         resumeBar.textContent = resumeId
@@ -962,6 +992,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs) {
         transcript.appendChild(empty);
         titleBar.hidden = true;
         resumeId = "";
+        retryBar.hidden = true;   // 「＋ 新增会话」与清空历史都收掉失败那一行
         renderResumeBar();
         renderRecent();
     }
@@ -990,14 +1021,16 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs) {
     }
 
     // 智能体路径：一次请求换一路 SSE。界面当前状态随请求体进后端系统提示词，
-    // mode 决定计划还是执行，images 是附件图
-    async function runAgent(answer, text, planMode, images, context) {
+    // mode 决定计划还是执行，images 是附件图，preview_side 是这一轮要的采样预览档（中间舞台宽就要大档）
+    async function runAgent(answer, text, planMode, images, context, markFail) {
         const view = agentTimeline(answer);
         activeView = view;
         controller = new AbortController();
         await sseStream("/neo_agent/run", {
             signal: controller.signal,
             onChunk: (frame) => {
+                // 同一帧同时交中间舞台：右栏与舞台各自画当前这一轮，先后无干系
+                if (onFrame) onFrame(frame);
                 const kind = frame?.kind || "content";
                 if (kind === "run") { runId = frame.run_id || ""; return; }
                 if (kind === "plan") view.plan(frame.text || "");
@@ -1025,8 +1058,10 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs) {
                 else view.answer(frame.text || "");
                 transcript.scrollTop = transcript.scrollHeight;
             },
-            onError: (err) => view.error(String(err || t("生成失败"))),
-        }, { text, mode: planMode, images, context, resume: resumeId || undefined, from: restartFrom || undefined });
+            // 后端两条失败口径都汇到这一条（raw [ERROR] 行与 content 帧里的 [ERROR] 前缀），
+            // 用户主动取消的断流不走这条，那一行不会在取消后铺出来
+            onError: (err) => { markFail(); view.error(String(err || t("生成失败"))); },
+        }, { text, mode: planMode, images, context, preview_side: previewSide && previewSide(), resume: resumeId || undefined, from: restartFrom || undefined });
     }
 
     // 「⏸ 暂停」只置后端一个位，SSE 不断：后端在下一个轮次 / 轮询边界把在飞的任务掐掉、发
@@ -1082,6 +1117,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs) {
 
     async function generate() {
         if (running) return;
+        retryBar.hidden = true;
         const text = input.value.trim();
         // 只给图不给字是合法输入（看图说话），两头都空才拦。素材库拖入的图已在 input 目录里，
         // 按文件名给后端（与绘画页参考图同一口径），本地粘贴 / 选图仍是 data URI
@@ -1099,6 +1135,10 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs) {
         }
         const planMode = mode;
         const context = ctxOff ? null : (getContext && getContext()) || null;
+        // 附件图在这一步就清空了，文本与模式也一样：失败收场要原样重发，就得在这一发交出去之前
+        // 把三份都留在面板里。重发是新的一轮，不带 resume 与「从这条消息重开」
+        lastTurn = { text, mode: planMode, files: attachments.map((a) => ({ ...a })) };
+        let failed = false;
         if (empty.parentNode) empty.remove();
         const turn = mkEl("div", "neo-agent-turn");
         const meta = mkEl("div", "neo-agent-meta");
@@ -1133,8 +1173,9 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs) {
         // 运行中锁模式：一轮跑到一半换模式等于把工具表从脚下抽走，计划要留到下一轮
         modeBtns.forEach((b) => { b.disabled = true; });
         try {
-            await runAgent(answer, text, planMode, images, context);
+            await runAgent(answer, text, planMode, images, context, () => { failed = true; });
         } catch (e) {
+            failed = true;
             answer.textContent = String(e);
             answer.classList.add("neo-agent-answer-error");
         } finally {
@@ -1146,6 +1187,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs) {
             run.disabled = false;
             setRunState("run");
             modeBtns.forEach((b) => { b.disabled = false; });
+            if (failed) showRetryBar();
         }
     }
 
@@ -1366,10 +1408,11 @@ export function createMcpPanel() {
  * opts.getContext 交回界面当前状态，只有当前选中页签自己那一栏（导演页的配方、绘画页的模式、
  * 上屏那几页的素材库目录），面板只把它画进上下文条并随请求体交后端，不解释它。
  * 返回 { root, refresh }：refresh 恢复条上的取消位并重画，宿主在切页 / 选配方 / 切绘画模式时调。
+ * opts.onFrame 把实时帧同时交给中间舞台（agent-stage.js）：舞台与右栏消费同一路帧，各自画当前这一轮。
  */
 export function createAgentPanel(host, opts = {}) {
     ensureCss();
-    const chat = buildChat(opts.onOpenMcp, opts.getContext, opts.onOpenPrefs);
+    const chat = buildChat(opts.onOpenMcp, opts.getContext, opts.onOpenPrefs, opts.onFrame, opts.previewSide);
     const root = mkEl("div", "neo-agent");
     root.appendChild(chat.box);
     host.appendChild(root);
@@ -1392,8 +1435,9 @@ export function createAgentPanel(host, opts = {}) {
  * （1280x720 这种具体宽高、后来被删掉的技能 id）时追加成一项，用户看得见自己点进来的是什么。
  * 保存按后端 _clean_prefs 收净的返回值回填——越界的技能名与尺寸在后端被丢回默认值，表单留着用户刚写的
  * 那一份就是演它存上了。字段与后端收净的那六个一一对应（select 是枚举，area 是长文本，check 是开关）。
+ * opts.stageMode / opts.setStageMode 是中间舞台那个界面开关的读写口：开关不在这六个字段里，宿主存本地。
  */
-export function createAgentPrefsForm() {
+export function createAgentPrefsForm(opts = {}) {
     const form = mkEl("div", "ns-agent-prefs");
     const field = {};
     const desc = mkEl("div", "rs-settings-desc");
@@ -1411,6 +1455,19 @@ export function createAgentPrefsForm() {
         return row;
     });
     const note = mkEl("div", "ns-prefs-note");
+
+    // 中间舞台是本机界面开关（宿主存 localStorage），与右栏开合同类：偏好文件里那六个字段会进系统
+    // 提示词，界面布局不该进去，所以这一项不在 PREFS_FIELDS 里、不进保存请求体
+    const stageRow = mkEl("div", "rs-config-row ns-prefs-row ns-prefs-check");
+    const stageLab = mkEl("label", "rs-form-label");
+    stageLab.textContent = t("中间舞台（过程与产物显示在页面中间）");
+    stageLab.title = t("关掉就回到只在右栏看智能体的布局；这一项是本机界面开关，不写进偏好文件");
+    const stageBox = mkEl("input", "rs-form-input");
+    stageBox.type = "checkbox";
+    stageBox.name = "stage_mode";
+    stageBox.checked = opts.stageMode ? opts.stageMode() : true;
+    stageBox.onchange = () => opts.setStageMode && opts.setStageMode(stageBox.checked);
+    stageRow.append(stageLab, stageBox);
 
     // 下拉的选项来源在 load 里与偏好一起取：技能列表与已装主模型；取不到就是空列表，下拉只剩「不设」
     let skills = [], modelFiles = [];
@@ -1482,6 +1539,7 @@ export function createAgentPrefsForm() {
         skills = Array.isArray(skillRes) ? skillRes : [];
         modelFiles = modelRes?.diffusion_models || [];
         fill(data.prefs || {});
+        if (opts.stageMode) stageBox.checked = !!opts.stageMode();   // 开关以宿主那份为准，后端读回来的只有六个字段
         applyPending();
     }
 
@@ -1502,7 +1560,7 @@ export function createAgentPrefsForm() {
         applyPending();
     }
 
-    form.append(desc, ...rows, save, note);
+    form.append(desc, ...rows, stageRow, save, note);
     return { el: form, load, prefill };
 }
 

@@ -222,6 +222,11 @@ Both nodes share the same layout (the Agent shows no status bar):
   (the question, 2-5 options, and a free-text box) whose answer goes back through `POST /neo_agent/answer` — the card
   locks after answering, a 30-minute wait continues with a note that the user never replied, and cancelling by `run_id`
   settles a parked question.
+  A turn that ends with `[ERROR]` (a one-shot failure like a remote LLM 502) lays a 「🔁 Retry」 row above the text box:
+  it resends that turn's text, mode and attachments as-is, reads the interface context at the moment of the retry, and
+  starts a fresh run with no `resume`. The row goes away on the next **✨ Generate**, on **＋** new session, and after a
+  run that completes; a user-initiated **⏹ Cancel** never shows it. Clicking it with a draft still in the text box only
+  warns to clear the box first — the draft is never overwritten.
   The empty composer shows the three most recent sessions by default (the same summary as 🗂: one row per run, first line + date); clicking a row replays that session read-only and arms the continue bar, **View all ›** opens the full list, and clearing the conversation or deleting a session empties the list; session history is plain files under `agent_sessions/`, and the desktop service lists, reads and deletes them itself, so the list still shows with ComfyUI stopped (only `/neo_agent/run` waits for the kernel). The **＋** header button starts a new session (the timeline drops back to the empty state with the recent list, the continue bar detaches, and the next message opens a fresh session — saved history stays untouched); the **🗂** header button opens the session list (`GET /neo_agent/sessions`: one row per run, newest first, with time /
   mode / status / first line / tool count); the full-page list carries its own header **✕** back to the timeline; **Open** replays that session's timeline into the dock **read-only** — a
   finished loop has no task to cancel and its choice card is fully greyed out. The composer then shows a

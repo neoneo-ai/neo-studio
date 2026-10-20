@@ -548,7 +548,10 @@ test("输入区：上下文条只读、取消行只在运行中出现、底栏�
     assert.equal(composer.children[0], ctxBar(), "输入区顶上应是只读上下文条");
     assert.equal(composer.children[2], resumeBar, "续聊条铺在取消行上面");
     assert.equal(composer.children[3], cancelBar(), "取消行应铺在文本框上面");
-    assert.equal(composer.children[4], dock().querySelector(".neo-agent-input"), "取消行下面应是文本框");
+    const retryBar = dock().querySelector(".neo-agent-retrybar");
+    assert.equal(composer.children[4], retryBar, "失败重发那一行铺在文本框上面");
+    assert.ok(retryBar.hidden, "空闲时没有失败可重发，那一行不占位");
+    assert.equal(composer.children[5], dock().querySelector(".neo-agent-input"), "重发行下面应是文本框");
     assert.equal(composer.lastElementChild, composer.querySelector(".neo-agent-toolbar"),
         "输入框下面只该有底栏这一行");
     assert.deepEqual(modeBtns().map((b) => b.dataset.mode), ["plan", "act"], "应有计划与执行两档");

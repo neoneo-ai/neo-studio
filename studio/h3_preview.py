@@ -8,6 +8,8 @@ taesd_decoder_name，且 taeh3 是「96 宽 / 4 次上采样」的扁平 2D TAE�
 所以这里不用它：每步沿时间轴均匀抽 PREVIEW_FRAMES 帧解成 JPEG 序列，经自有 WS 事件
 rs.h3.preview 推给 NeoH3VideoDirector 节点内的动画面板（自动循环 + 暂停/逐帧/逐步）。
 同一批解码帧另存一份紧凑档（384 边）给右栏智能体卡片：卡片就这么宽，SSE 只该搬它放得下的尺寸。
+智能体 SSE 取哪一档由请求里的 preview_side 定（见 preview_wants_small）：中间舞台那块比栏子宽得多，
+要 1024 就搬全尺寸载荷。
 
 NeoH3VideoDirector 逐段执行期间临时替换 latent_preview.get_previewer，执行结束（含异常）
 立即还原，不影响画布上其他节点的预览行为。
@@ -59,6 +61,15 @@ def _store_latest(node_id, payload, small=None):
 
 def get_latest_preview(node_id, small=False):
     return (_LATEST_SMALL if small else _LATEST).get(node_id)
+
+
+def preview_wants_small(side) -> bool:
+    """界面要的预览档：要的边长比全档位小就取紧凑档（0 = 没说要，右栏卡片那一档）。
+    中间舞台比栏子宽得多，384 的帧铺上去是糊的，那一轮请求要 1024 就取全尺寸载荷。"""
+    try:
+        return int(side) < PREVIEW_SIDE
+    except (TypeError, ValueError):
+        return True
 
 
 def clear_latest_preview(node_id):

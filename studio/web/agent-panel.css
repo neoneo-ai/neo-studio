@@ -1023,6 +1023,29 @@
     outline: none;
 }
 
+/* 失败收场那一行：整段提示词在提交时已离开输入框，这一行是它唯一的原样重发口（LLM 502 这类
+   一次性失败）。样式与「接上次会话」那一行同族，描边换红色系；hidden 不占位 */
+.neo-agent-retrybar {
+    height: 26px;
+    background: none;
+    border: 1px dashed var(--neo-vsc-err);
+    border-radius: 4px;
+    color: var(--neo-vsc-err);
+    font-size: 12px;
+    text-align: left;
+    padding: 0 8px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+}
+
+.neo-agent-retrybar:hover,
+.neo-agent-retrybar:focus-visible {
+    background: var(--neo-vsc-bg-alt);
+    outline: none;
+}
+
 
 /* ===== 执行清单 / 焦点链 / 上下文与 token 统计 / 从这条消息重开 / 用户级偏好 ===== */
 

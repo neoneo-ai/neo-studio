@@ -179,7 +179,7 @@ Neo Studio 独立页面（`web/studio/index.html`）的后端。素材 / 生图 
 
 | 方法 | 路由 | 说明 |
 |------|------|------|
-| POST | `/neo_agent/run` | 智能体一轮对话，SSE 时间线；body `{text, mode, images, context, resume}`（`mode` 只认 `plan` / `act`，缺省 `act`；`images` 是输入框附件图，按图片源口径给，最多 6 张；`context` 是界面当前状态，非 dict 整块丢掉；`resume` 带旧会话的 `run_id` 时这一轮接在那条会话后面跑，那条还在跑与查不到都在首帧前 `[ERROR]` 收场），首帧 `run`（带 `run_id`，取消 / 暂停 / 继续整条循环与回答问句都要用），帧 `plan` / `tool_call` / `status` / `tool_result` / `ask` / `paused` / `resumed` / `content`，收尾 `[ERROR]` / `[DONE]` |
+| POST | `/neo_agent/run` | 智能体一轮对话，SSE 时间线；body `{text, mode, images, context, preview_side, resume}`（`mode` 只认 `plan` / `act`，缺省 `act`；`images` 是输入框附件图，按图片源口径给，最多 6 张；`context` 是界面当前状态，非 dict 整块丢掉；`preview_side` 是这一轮要的采样预览最长边（像素），非数与负数按右栏卡片那档 384，绘画页中间舞台挂着时要 1024；`resume` 带旧会话的 `run_id` 时这一轮接在那条会话后面跑，那条还在跑与查不到都在首帧前 `[ERROR]` 收场），首帧 `run`（带 `run_id`，取消 / 暂停 / 继续整条循环与回答问句都要用），帧 `plan` / `tool_call` / `status` / `tool_result` / `ask` / `paused` / `resumed` / `content`，收尾 `[ERROR]` / `[DONE]` |
 | POST | `/neo_agent/answer` | 回答 `ask` 帧：body `{run_id, ask_id, text}`，把用户选的方向交回正等在 `ask_user` 上的循环；`run_id` / `ask_id` 只收 `run` / `ask` 帧发过的形态，运行收场 404、问句已收场 404 |
 | POST | `/neo_agent/cancel` | 取消：带 `run_id` 停整条智能体循环并掐掉在跑的任务（`run_id` 只收 `run` 帧发过的形态，查不到 404）；带 `task_id` 只掐那一个任务（走 MCP `cancel_task`，图片 / 整片 / 单段 / 拼接四类由协议自己找路由），`task_id` 只收 UUID 形态 |
 | POST | `/neo_agent/pause` | 暂停：body `{run_id}`（校验同 cancel），让循环停在下一个轮次 / 轮询边界，SSE 开着不收尾；在飞的 ComfyUI 任务没有暂停态，边界上掐掉它并交回 `cancelled`，恢复后不自动重发 |
@@ -208,9 +208,9 @@ Neo Studio 独立页面（`web/studio/index.html`）的后端。素材 / 生图 
   `kind:"input"` 的文件名给。右栏只收后端解得动的图片后缀，素材库里的视频 / 音频卡片在拖入这一步就挡掉。
 - `generate_image` / `director_run` / `segment_run` / `assemble_run` 只回 `task_id`，循环里轮询 `task_status` 到终态，
   采样步数与整片段号经 `status` 帧发出去；等待上限单图 600 秒、整片 2400 秒。
-- 生成中的 `status` 帧可带 `preview`（`{frames:[dataURL…], fps, w, h, step}`）：出片是 `h3_preview` 的紧凑档、
-  生图是进度预览捕获的那一张，只在载荷推进时挂一次，右栏工具卡用它播该步动画。这一份只进界面——会话落盘与
-  `tool_result` 文本都不带它，LLM 永远看不到帧字节。
+- 生成中的 `status` 帧可带 `preview`（`{frames:[dataURL…], fps, w, h, step}`）：出片按请求体里的 `preview_side`
+  选档（右栏卡片 384、中间舞台 1024），生图是进度预览捕获的那一张，只在载荷推进时挂一次，右栏工具卡与中间舞台
+  用它播该步动画。这一份只进界面——会话落盘与 `tool_result` 文本都不带它，LLM 永远看不到帧字节。
 - `tool_result` 帧带 `media`：出图的 `images` 逐条成 `{kind:"image", url, title}`，出片三类的成片 `filename` 补成一条
   `{kind:"video", url}` 的 `/view` 地址（单段与拼接的快照只给文件名，子目录按生成模块的产物目录补）。右栏的产物
   缩略图与产物链接只认这一份列表。

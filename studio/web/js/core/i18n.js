@@ -1578,6 +1578,8 @@ const EN = {
     "计划": "Plan",
     "或自己写一个方向": "Or write your own direction",
     "发送": "Send",
+    "按上一发原样重发（{mode}，附件图照带）：{text}": "Resend that turn as-is ({mode}, attachments kept): {text}",
+    "输入框里还有内容：清空后再点重试": "The text box is not empty — clear it before retrying",
     "✨ 生成": "✨ Generate",
     "⏸ 暂停": "⏸ Pause",
     "▶ 继续": "▶ Resume",
@@ -1668,6 +1670,13 @@ const EN = {
     "已写入 configs/agent_prefs.json，下一条输入起效":
         "Written to configs/agent_prefs.json — takes effect on the next request",
     "智能体偏好已保存": "Agent preferences saved",
+    "中间舞台（过程与产物显示在页面中间）": "Center stage (process and results shown in the middle)",
+    "关掉就回到只在右栏看智能体的布局；这一项是本机界面开关，不写进偏好文件":
+        "Turning it off restores the layout where the agent is only visible in the right rail; this is a local interface switch, not part of the preferences file",
+    "在右栏「智能体」里提需求，这一轮的过程、采样预览与产物大图就铺在这里":
+        "Ask the agent in the right rail: this round's process, sampling preview and full-size results land here",
+    "本轮开始": "Round started",
+    "本轮完成": "Round finished",
     "偏好对本机每条输入生效；本会话刚出过的那一发优先":
         "Preferences apply to every request on this machine; what this session just generated takes priority",
     "下一步选项": "Next steps",

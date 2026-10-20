@@ -272,6 +272,8 @@ class _Run:
         self.image_names: list[str] = []
         # 素材库当前目录是否标了 👤 角色图：注入参考时决定新建配方走不走全参考（见 _apply_references）
         self.character_dir = False
+        # 采样预览要的档（像素最长边，0 = 紧凑档）：中间舞台那一轮请求要大档，见 _preview_of
+        self.preview_side = 0
         self.resume_of = ""
         self.resume_from = 0      # 「从这条消息重新开始」的序号（历史里第几条用户消息，1 起），0 = 整条接上
         self.status = "running"
@@ -584,9 +586,19 @@ def _status_of(text: str) -> str:
     return status
 
 
-def _preview_of(tool: str, task_id: str, snap: str):
+def _preview_side(value) -> int:
+    """请求里界面要的采样预览最长边（像素）：中间舞台宽就要大档，右栏卡片按紧凑档。
+    0 = 没给（走紧凑档）。上限由 h3_preview 的档位定，这里只挡负数与不是数的值。"""
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _preview_of(tool: str, task_id: str, snap: str, side: int = 0):
     """右栏卡片用的预览载荷：进程内直读拥有那张表的模块，不走 HTTP。
-    出片取本步的紧凑帧（h3_preview 的紧凑档），生图取进度 handler 捕获的最新一张。
+    出片取本步的帧，按 side 选紧凑档（384）还是全尺寸档（1024）——中间舞台那一轮要的是大图；
+    生图取进度 handler 捕获的最新一张。
     这份载荷只进 SSE 给界面，绝不进 LLM 的文本——base64 进上下文就是整轮 token 爆炸。
     读不到就返回 None 继续轮询：h3_preview 模块级 import server / comfy.taesd.taesd / torch，
     离线服务与测试进程里没有这些模块，让它们把一次出片轮询打断是拿 UI 增强换交付。"""
@@ -598,8 +610,8 @@ def _preview_of(tool: str, task_id: str, snap: str):
             from .image_gen import _PREVIEWS
             url = _PREVIEWS.get(pid)
             return {"frames": [url]} if url else None
-        from .h3_preview import get_latest_preview
-        return get_latest_preview(task_id, small=True)
+        from .h3_preview import get_latest_preview, preview_wants_small
+        return get_latest_preview(task_id, small=preview_wants_small(side))
     except ImportError:
         return None
 
@@ -1106,7 +1118,7 @@ async def _task_and_wait(client, tool: str, args: dict, emit, run) -> str:
         frame = {"kind": "status", "tool": "task_status", "task_id": task_id,
                  "text": status or "排队中…"}
         # 预览载荷只在推进时挂一次：2 秒一次的轮询原样重发同一批帧，SSE 就只是白灌 base64
-        prev = _preview_of(tool, task_id, snap)
+        prev = _preview_of(tool, task_id, snap, run.preview_side)
         sig = None
         if prev and prev.get("frames"):
             sig = prev.get("step") if prev.get("step") is not None else prev["frames"][0]
@@ -1339,10 +1351,12 @@ def _error_response(message: str) -> web.Response:
 
 @routes.post("/neo_agent/run")
 async def agent_run(request):
-    """右栏智能体：一次请求，一路 SSE 时间线。body {text, mode, images, context, resume, from}。
+    """右栏智能体：一次请求，一路 SSE 时间线。body {text, mode, images, context, preview_side, resume, from}。
     mode 只认 plan / act，其余按 act；images 是输入框附件图，按 prompts 的图片源口径给，
     act 模式下它们默认作为本轮生成的参考图（见 _apply_references）；
     context 是界面当前状态（当前页 / 当前导演配方 / 绘画页模式 / 素材库目录与它的角色图标记），值从前端 DOM 来；
+    preview_side 是界面这一轮要的采样预览最长边（像素）：中间舞台那块宽，挂着时前端要 1024 那一档，
+    关掉时按右栏卡片那一档，不给就是紧凑档；
     resume 是「继续这次会话」要接的那条旧会话的 run_id，带它时旧对话原文与那条会话的焦点链
     （上一次生成的技能 / 参数 / 产物）一起接在系统提示词之后，那条会话在计划模式交出的执行清单
     也在执行模式下接回来照跑；
@@ -1396,6 +1410,7 @@ async def agent_run(request):
     run = _Run(McpClient(comfy_base(request)))
     run.mode, run.text, run.context = mode, text, context
     run.character_dir = isinstance(raw_ctx, dict) and raw_ctx.get("character_dir") is True
+    run.preview_side = _preview_side(body.get("preview_side"))
     run.resume_of, run.resume_from = resume, resume_from
     # 偏好是请求开始时读的一次快照：一轮跑一半用户改了偏好，不该影响正在跑的这条循环
     run.prefs = await asyncio.to_thread(_load_prefs)

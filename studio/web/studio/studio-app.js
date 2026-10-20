@@ -12,12 +12,13 @@ import { $el } from "./shim/ui.js";
 import "../gallery.js";   // 注册 comfy.neo.gallery 扩展（NeoGallery + 侧栏 tab 定义）
 import { setDirectorEditorHost, DIRECTOR_RECIPE_SAVED_EVENT } from "../director.js";
 import { setPaintHost, openGenMaterialDialog, openImageEditDialog } from "../gallery-gen.js";
-import { createFramePlayer } from "../live-preview.js";
+import { createFramePlayer, DOCK_PREVIEW_SIDE, STAGE_PREVIEW_SIDE } from "../live-preview.js";
 import { createRecipesPanel } from "../recipes.js";
 import { createImageGenSettingsForm, createVideoGenSettingsForm, modelFamily } from "../image-gen.js";
 import { createModelConfigForm } from "../llm-setting.js";
 import { createSkillManager } from "../skill.js";
 import { createAgentPanel, createMcpPanel, createAgentPrefsForm } from "../agent-panel.js";
+import { createAgentStage } from "../agent-stage.js";
 import { t, tf, getLang, applyLang, LANGS } from "../js/core/i18n.js";
 import { icon } from "../js/core/icons.js";
 
@@ -688,6 +689,11 @@ function buildPaint(el) {
     const main = $el("div", { className: "ns-paint-main" });
     page.appendChild(main);
 
+    // 中间舞台常驻本页顶部：右栏那一轮跑起来时过程与产物铺在这里；关掉开关整块不挂，回到没有舞台的布局
+    stageHost = $el("div", { className: "ns-paint-stage" });
+    agentStage = createAgentStage();
+    main.appendChild(stageHost);
+
     // 模式切换：文生图与图片编辑各占满右栏，一次只看一个（不像导演页那样编辑 + 生成同屏抢高度）
     const modeBtns = {
         text: $el("button", { className: "ns-paint-mode-btn", type: "button", textContent: t("🖼️ 文生图"), onclick: () => setMode("text") }),
@@ -700,6 +706,7 @@ function buildPaint(el) {
     main.appendChild(editHost);
     const memBar = buildMemBar();   // 显存 / 内存读数 + 清理：绘画页同样是生成页
     if (memBar) main.appendChild(memBar);
+    mountStage();
 
     let mode = "text";
     const setMode = (m) => {
@@ -1045,7 +1052,7 @@ function buildSettings(el) {
     // tab 顺序：LLM 设置 → 生图设置 → 生视频设置 → 智能体偏好 → 界面语言 → 日志 → 启动设置 → 关于；每个 tab 只显示对应设置区
     const launcher = createLauncherPanel();
     const mcp = createMcpPanel();
-    const prefs = createAgentPrefsForm();
+    const prefs = createAgentPrefsForm({ stageMode: () => stageOn, setStageMode: applyStageMode });
     agentPrefs = prefs;   // 深链带预填参数进来时，route() 要把焦点链那份值交给这张表单
 
     const section = (title) => $el("h3", { textContent: t(title) });
@@ -1617,6 +1624,28 @@ function localizeShell() {
     }
 }
 
+// ====== 中间舞台：右栏那一轮的当前过程与产物在绘画页中间放大 ======
+// 开关在设置页「智能体偏好」栏，与右栏开合同类：本机界面偏好存 localStorage，不进 configs/agent_prefs.json
+// （那六个字段会进系统提示词，界面布局不该进去）
+const AGENT_STAGE_KEY = "neo_studio_agent_stage";
+let agentStage = null;    // 绘画页建页时建一次：舞台只吃实时帧，不留第二份状态
+let stageHost = null;     // 绘画页顶部那块宿主；关掉开关时把舞台摘掉，布局回到没有舞台的样子
+let stageOn = true;
+try { stageOn = localStorage.getItem(AGENT_STAGE_KEY) !== "0"; } catch { /* 偏好读不到就用默认 */ }
+
+function applyStageMode(on) {
+    stageOn = !!on;
+    try { localStorage.setItem(AGENT_STAGE_KEY, stageOn ? "1" : "0"); } catch { /* 偏好写不进不影响用 */ }
+    mountStage();
+}
+
+function mountStage() {
+    if (!agentStage) return;
+    agentStage.setEnabled(stageOn);
+    if (!stageOn) agentStage.el.remove();
+    else if (stageHost && !stageHost.contains(agentStage.el)) stageHost.appendChild(agentStage.el);
+}
+
 // ====== 右栏智能体：常驻窗口右缘，顶栏按钮开合（默认收起），开合与栏宽存 localStorage ======
 const AGENT_DOCK_KEY = "neo_studio_agent_dock";
 const AGENT_DOCK_MIN = 260;        // 右栏下限：上下文条与工具卡参数框还看得下
@@ -1648,6 +1677,10 @@ function initAgentDock() {
         },
         // 界面当前状态由宿主交：右栏把它画进上下文条，并把同一份值随请求体交后端进系统提示词
         getContext: agentContext,
+        // 实时帧同时交中间舞台：舞台只画当前这一轮，右栏时间线照旧逐帧追加
+        onFrame: (frame) => { if (agentStage) agentStage.onFrame(frame); },
+        // 采样预览要哪一档由舞台开关定：舞台那块比栏子宽得多，384 的帧铺在中间是糊的
+        previewSide: () => (stageOn ? STAGE_PREVIEW_SIDE : DOCK_PREVIEW_SIDE),
     });
     const refresh = () => panel.refresh();
     agentCtxRefresh = refresh;   // 切页 / 选配方 / 切绘画模式时重画右栏上下文条
