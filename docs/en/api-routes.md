@@ -88,7 +88,7 @@ entries carry `items` keeps working unchanged (counts and covers are derived fro
 | GET | `/rs_recipes/workflow` | The workflow snapshot of a sample |
 | POST | `/rs_recipes/send_to_workflow` | Copy assets into `input/` for one-click restore |
 | GET | `/rs_recipes/director_spec` | Director recipe `{shared, segments}` and identity reference images |
-| POST | `/rs_recipes/director_generate_segments` | Text storyboard → segment JSON |
+| POST | `/rs_recipes/director_generate_segments` | Theme / script → segment JSON (agent / MCP path; the editor UI does not call it) |
 | POST | `/rs_recipes/director_optimize_prompts` | Rewrite a single segment prompt in H3 format |
 | POST | `/rs_recipes/grid_split` | Split a grid storyboard image into per-segment first frames |
 | POST | `/rs_recipes/director_describe_panel` | Per-panel description → finished single-segment prompt |
@@ -137,7 +137,7 @@ version information:
 | POST | `/neo_studio/director/generate` | Enqueue a full-film run (optionally only the checked segments) |
 | GET | `/neo_studio/director/{task_id}` | Full-film task snapshot |
 | POST | `/neo_studio/director/{task_id}/cancel` | Cancel a full-film task |
-| GET | `/neo_studio/version` | Plugin / ComfyUI versions and the director recipe list |
+| GET | `/neo_studio/version` | Plugin / ComfyUI versions and the director recipe list, plus the Settings → About path fields `data_root` / `comfy_local` (`remote` is empty here — only the desktop knows the remote address) |
 | GET | `/neo_studio/log` | ComfyUI console log (a 300-entry `app.logger` ring buffer), polled by Studio "Settings → Logs" |
 | POST | `/neo_studio/clear_memory` | Unload models and clear the VRAM cache |
 
@@ -352,7 +352,7 @@ the table answers 409. Startup sequence, close teardown and cache conventions: [
 | GET/POST | `/rs_prompts/get_models` `native_models` `set_model` `remote_llm_config` `llm_connection_test` `llm_mode` `extract_title` `fetch_remote_models` | LLM configuration and title extraction (reads only `configs/` and the 8080 service) |
 | GET/POST | `/neo_model_hub/*` `/neo_backyard/*` | Model hub and Backyard |
 | GET/POST | `/userdata/neo_gallery_data.json` | Asset library state file (`user/default/`, writes go through `.tmp` + replace) |
-| GET | `/neo_studio/version` | Capability snapshot: `offline: true` + `caps` + `starting` + `routes` + `comfy_base`; the frontend gates on it and picks the request target |
+| GET | `/neo_studio/version` | Capability snapshot: `offline: true` + `caps` + `starting` + `routes` + `comfy_base` + `data_root` / `comfy_local` / `remote` (the Settings → About path rows); the frontend gates on it and picks the request target |
 | GET | `/neo_studio/comfy_state` | Kernel state snapshot (port / PID / who launched / running / ready / starting): after a full-page reload the pywebview bridge lands later than the page script, so the header status chip falls back to this route; `409` while the desktop has no kernel assembled |
 | GET | `/neo_studio/log` `/view` `/ws` | Startup log / read-only images / WS stub |
 | ANY | any other `/neo_*` `/rs_*` `/userdata/*` `/api/*` | `409 {"success": false, "offline": true}` |

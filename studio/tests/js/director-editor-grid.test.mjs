@@ -92,18 +92,13 @@ test("导演编辑器：🧩 宫格分镜图拆分卡片——自动/手动行�
     Array.from(document.querySelectorAll(".neo-director-tab")).find((t) => t.textContent.includes("故事板分镜")).click();
     await sleep(20);
 
-    const srcGroup = document.querySelector(".neo-director-src");
     const card = document.querySelector(".neo-director-src-card-grid");
     assert.ok(card, "宫格拆分卡片在「📖 故事板分镜」页");
 
-    // 来源二选一：本配方有文字拆分段 → 默认逐段图片分镜（🎨 显示、宫格卡隐藏）；radio 行横排可切
-    const sbCard = document.querySelector(".neo-director-setup-sb");
-    assert.equal(sbCard.style.display, "", "默认逐段图片分镜：🎨 卡片显示");
-    assert.equal(card.style.display, "none", "默认 🧩 宫格卡片隐藏");
-    srcGroup.querySelector('input[value="grid"]').click();
-    await sleep(20);
-    assert.equal(card.style.display, "", "切到宫格：🧩 卡片显示");
-    assert.equal(sbCard.style.display, "none", "切到宫格：🎨 卡片隐藏");
+    // 宫格图是唯一分镜来源：卡片常驻；来源二选一 radio 行与逐段图片分镜卡都已移除
+    assert.equal(card.style.display, "", "宫格卡片常驻显示（唯一来源）");
+    assert.equal(document.querySelector(".neo-director-src"), null, "来源二选一 radio 行已移除");
+    assert.equal(document.querySelector(".neo-director-setup-sb"), null, "逐段图片分镜卡片已移除（分镜图只来自宫格拆分）");
 
     assert.equal(card.querySelector(".neo-director-grid-manual").style.display, "none", "手动行列默认隐藏");
     const modeSel = card.querySelector(".neo-director-grid-mode");
@@ -119,7 +114,7 @@ test("导演编辑器：🧩 宫格分镜图拆分卡片——自动/手动行�
     await sleep(40);
     assert.ok(card.querySelector(".neo-director-grid-src img")?.src.includes("grid_src.png"), "宫格图缩略回显");
 
-    // 拆分（confirm 桩默认 true）→ 替换分段、各格回填首帧与分镜图记录，frame source 自动切到 grid
+    // 拆分（confirm 桩默认 true）→ 替换分段、各格回填首帧与分镜图记录
     card.querySelector(".neo-director-grid-split").click();
     await sleep(60);
     assert.deepEqual(splitBody, { filename: "grid_src.png", rows: 2, cols: 3 }, "手动模式带行列参数");

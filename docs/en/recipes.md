@@ -215,81 +215,62 @@ Execution details: [h3-video-gen.md](h3-video-gen.md).
 
 ### Storyboard page
 
-The editor's title bar carries two tabs: **📖 Storyboard** (character references / storyboard source /
+The editor's title bar carries two tabs: **📖 Storyboard** (character references / grid-image split /
 per-segment comparison) and **🎞️ Storyboard timeline** (generation mode / unified skill / chunk seconds +
 shared resolution + timeline + per-segment cards). On open it returns to the tab this recipe was last on; with
 no memory it opens on the timeline page — a single-segment recipe (one image-to-video or full-reference clip) is
 just a timeline plus one prompt box. A blank new recipe shows a one-line guide at the top of the timeline page
-("split a theme or a grid sheet into several segments? → 📖 Storyboard") that switches tabs and disappears once a
-second segment exists.
+("split a grid sheet into several segments? → 📖 Storyboard") that switches tabs and disappears once a second
+segment exists.
 
 **A single-segment recipe only shows what one segment needs**: with one segment, "chunk seconds" is hidden (there
-is no second segment to merge) and the Storyboard page replaces the per-segment comparison table and its batch
-optimize button with a one-line hint (write the prompt at the bottom of the timeline page). Both come back as soon
-as a second segment exists.
+is no second segment to merge) and the Storyboard page replaces the per-segment comparison table and its prompt
+generation button with a one-line hint (write the prompt at the bottom of the timeline page). Both come back as
+soon as a second segment exists.
 
-This page is laid out **① source / character media → ② segments → ③ keyframes → ④ prompts**, each step's title
-row carrying an index badge on the left (✓ done / highlighted your turn / dimmed a prerequisite is missing),
-each step having a single action button placed uniformly in the top-right of its title row, greyed out with a
-hover hint naming what is missing.
+This page has exactly two steps, each step's title row carrying an index badge on the left (✓ done / highlighted
+your turn / dimmed a prerequisite is missing) and a single action button in the top-right of that row, greyed out
+with a hover hint naming what is missing: **① split the grid image into segments → ② generate prompts for all
+segments**. Turning a story topic / script into segments belongs to the right-hand agent (`director_plan` skill
+cards); the editor has no text-storyboard input box.
 
-#### Source & character media
+#### Character media & grid split
 
-- **Storyboard source (pick one)**: 🧩 grid-image storyboard / 📝 text storyboard; only the selected source's
-  card is shown.
-- **👤 Character reference images**: a recipe-level permanent card (present under both sources), shared by
-  text-storyboard generation, r2i image storyboards and the identity reference of every video segment. The
-  rightmost control on that row is the **character identity reference** switch (on by default; unchecking
+- **👤 Character reference images**: a recipe-level permanent card used as the identity reference of every video
+  segment; the **character identity reference** switch sits inside its title row (on by default; unchecking
   writes `shared.identity_refs=false` on save).
-- **📝 Text storyboard**: left column story topic / script + segment granularity (5 / 10 / 15 seconds) + ✨
-  Generate storyboard segments; right column 🎨 image storyboard cards. After you click generate, the LLM
-  outputs the segment JSON directly (per segment `prompt` / `duration_sec` / `storyboard_prompt`, with the
-  character reference images attached multimodally to lock identity), and on success it replaces the timeline's
-  existing segments (the skill becomes the first available video skill, each segment's `mode` is `t2v`). When
-  an older recipe opens, the topic box shows `story.idea`.
+- **🧩 Grid storyboard image (the only storyboard source on this page)**: pick an existing storyboard grid image
+  (produced externally, uploaded locally or dragged from the asset library), choose the split method
+  (auto-detect / manual rows×columns) and click ✂️ Split into segments. Each cell becomes that segment's first
+  frame and storyboard image and replaces the existing segments. Below the image is the "global story reference
+  (the source grid's prompt by default)", extracted from the ComfyUI metadata embedded in the source image,
+  editable and copyable.
 
-![Text storyboard: ② story topic / script + segment granularity + ✨ generate storyboard segments, right column 🎨 image storyboard cards (generation mode / skill), ④ per-segment comparison](../assets/images/story.png)
+![Grid storyboard image: ① grid upload / grid asset library + global story reference + split method + ✂️ split into segments, ② per-segment comparison](../assets/images/storyboard.png)
 
-- **🧩 Grid-image storyboard**: pick an existing storyboard grid image (produced externally, uploaded locally
-  or dragged from the asset library), the split method (auto-detect / manual rows×columns) + ✂️ Split into
-  segments. Each cell becomes that segment's first frame and storyboard image (`i2v`) and replaces the existing
-  segments. To the right of the source image sits the "global story reference (the source image's embedded
-  ComfyUI metadata by default)", extracted from it, editable and copyable.
+#### Per-segment comparison & prompts
 
-![Grid-image storyboard: ② grid upload / grid asset library + global story reference + split method + ✂️ split into segments, ④ per-segment comparison](../assets/images/storyboard.png)
-
-#### Keyframes & prompts
-
-- **🎨 Image storyboard (keyframes)**: generation mode t2i text-to-image / r2i reference editing (default
-  follows the character references: images present → r2i, none → t2i) + generation skill (t2i defaults to Krea2
-  text-to-image, r2i to Qwen Image 2.1, each mode remembering its last choice) + 🎨 Generate storyboard images.
-  - Keyframes are generated segment by segment in sequence, all segments of one run sharing the same seed (the
-    prompts stay per-segment); clicking again forces a full regeneration.
-  - Keyframes land in the recipe's own `assets/storyboard_<recipe>_<segment>.png`, never through `input/`.
-  - When generation finishes they are routed by each segment's effective mode: image-to-video and
-    first-last-frame segments take it as their first frame; full-reference segments add it to that segment's
-    reference pool automatically (deduplicated, within the ≤9 limit); mixed mode routes per segment mode.
-  - **The prompt used for a storyboard image is the `storyboard_prompt` produced at split time (a static frame,
-    no camera movement), not the video segment prompt**; older recipes without that field fall back to the video
-    prompt and name it in that segment's `warnings`.
-- **Per-segment comparison**: "✨ Generate prompts for all segments" calls the LLM per segment and rewrites each
-  into a finished prompt following the MiniMax H3 audit specification; SSE streams it token by token back into
-  that segment and refreshes the table live, and one failing segment does not stop the rest. The list has three
-  columns (left = storyboard image, middle = original before optimization, right = the latest optimization
-  result), and the ⠿ handle in the row header reorders rows and writes the order back to the timeline. A
-  permanent empty-segment placeholder row sits at the end: only dropping a storyboard image into that row, or
-  uploading there, actually creates a segment. Under grid-split mode the segments have no original text, so the
-  table drops to two columns and generate describes each cell's storyboard image (segments without one are
-  skipped). Re-running optimization always retries from the text before the first optimization, never stacking
-  on the previous result.
+- **Per-segment comparison**: two columns (left = that segment's storyboard image, right = its prompt); the ⠿
+  handle in the row header reorders rows and writes the order back to the timeline. The storyboard column reads
+  that segment's keyframe record and, in `f2v` mode with no record, falls back to the first frame picked on the
+  timeline (clearing that frame with ✕ stops the fallback). A permanent empty-segment placeholder row sits at the
+  end: only dropping a storyboard image into that row, or uploading there, actually creates a segment.
+- **"✨ Generate prompts for all segments"**: calls the LLM per segment and rewrites each into a finished prompt
+  following the MiniMax H3 audit specification; SSE streams it token by token back into that segment and
+  refreshes the table live, a failing segment does not stop the rest and its textarea is restored from the
+  original text. A segment with original text is rewritten; an empty one is described from its storyboard image
+  (with the cell's position in the grid and this run's previous segment as context). The first click snapshots
+  each segment's original text (`setup.orig_prompts`), and every later run retries from that snapshot instead of
+  stacking on the previous result.
 
 #### Media & state
 
-- **Unified media area**: shown or hidden by the global generation mode. Full-reference mode points you to the
-  timeline page to set each segment; text-to-video / mixed modes show explanatory text.
-- **State saved with the recipe**: topic / segment granularity / character references / image-storyboard mode,
-  skill and source are written into `story`; the before/after prompt comparison is written into `setup` (for
-  display only; execution reads each segment's own fields).
+- **Mode hints**: full-reference mode points you to the timeline page to set each segment's reference media
+  (a segment created in mixed mode can fill several slots at once); mixed mode points you to the timeline page
+  for skill and first/last frame / reference media.
+- **State saved with the recipe**: the global story reference and character references are written into `story`;
+  the per-segment original-text snapshot is written into `setup` (the baseline for regenerating prompts;
+  execution reads each segment's own fields).
 
 ### Schema
 
@@ -297,9 +278,9 @@ hover hint naming what is missing.
 |------|------|
 | `type` | `"video_director"`; older flat recipes without the field behave exactly as before |
 | `shared` | Shared settings: width/height / ratio / megapixels / mode / identity references / chunk seconds |
-| `segments[]` | Per segment: skill / prompt / duration / first frame / last frame / mode / reference media |
-| `story` | Storyboard content: topic / segment granularity / character references / image-storyboard mode, skill, source |
-| `setup` | Before/after prompt comparison (for display only) |
+| `segments[]` | Per segment: skill / prompt / duration / first frame / last frame / storyboard image / mode / reference media |
+| `story` | Storyboard page settings: global story reference / character references |
+| `setup` | Per-segment original-text snapshot (the baseline for regenerating prompts) |
 
 - `shared.mode` is `f2v` / `r2v` / `mixed`; when absent it is inferred from each segment's content.
 - `chunk_sec` is the multi-frame single-run chunk length in seconds (`0` = no merging, default 15).

@@ -61,6 +61,8 @@ if mode == "stderr":
         sys.stderr.write("x" * 200 + "\n")
     sys.stderr.flush()
 
+pending_tools = None
+
 for raw in sys.stdin.buffer:
     line = raw.decode("utf-8").strip()
     if not line:
@@ -70,6 +72,12 @@ for raw in sys.stdin.buffer:
         if out_file:
             open(out_file, "a", encoding="utf-8").write("reject\n")
         send({"jsonrpc": "2.0", "method": "ui/notify", "params": {"text": "ignored"}})
+        if pending_tools is not None:
+            # 硬屏障：拒绝应答落盘之后才发 tools/list 的响应。客户端在等 tools/list 的读循环里
+            # 才会应答反向请求，反向请求挂在 tools/list 上发；响应早发一步，connect() 就在
+            # 那行写入之前返回，断言读到的永远是空文件。
+            send({"jsonrpc": "2.0", "id": pending_tools, "result": TOOLS})
+            pending_tools = None
         continue
     if "id" not in msg:
         continue
@@ -78,11 +86,14 @@ for raw in sys.stdin.buffer:
         send({"jsonrpc": "2.0", "id": msg["id"], "result":
               {"protocolVersion": "2025-06-18", "capabilities": {},
                "serverInfo": {"name": "fake-mcp", "version": "1.0"}}})
-        send({"jsonrpc": "2.0", "id": 900, "method": "sampling/createMessage", "params": {}})
     elif mode == "hang":
         continue
     elif method == "tools/list":
-        send({"jsonrpc": "2.0", "id": msg["id"], "result": TOOLS})
+        if out_file:
+            send({"jsonrpc": "2.0", "id": 900, "method": "sampling/createMessage", "params": {}})
+            pending_tools = msg["id"]
+        else:
+            send({"jsonrpc": "2.0", "id": msg["id"], "result": TOOLS})
     elif method == "tools/call":
         name = msg["params"]["name"]
         if name == "boom":

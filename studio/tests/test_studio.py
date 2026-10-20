@@ -319,6 +319,18 @@ class VersionRouteTests(unittest.TestCase):
         self.assertIn("plugin_version", data)
         self.assertIn("comfyui_version", data)
 
+    def test_version_carries_paths_for_the_about_page(self):
+        # 「设置 → 关于」的路径行：数据根与 ComfyUI 根由内核报，远程地址只有桌面端知道
+        req = types.SimpleNamespace()
+        loop = asyncio.new_event_loop()
+        try:
+            data = json.loads(loop.run_until_complete(studio.studio_version_route(req)).body)
+        finally:
+            loop.close()
+        self.assertTrue(data["data_root"], "数据根要报出落点，设置页才有可复制的路径")
+        self.assertIn("comfy_local", data)
+        self.assertEqual(data["remote"], "", "内核不知道启动设置里的远程地址，留空让页面收起该行")
+
 
 class LogRouteTests(unittest.TestCase):
     def test_log_entries(self):

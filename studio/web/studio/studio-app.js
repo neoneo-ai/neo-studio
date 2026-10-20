@@ -23,6 +23,7 @@ import { t, tf, getLang, applyLang, LANGS } from "../js/core/i18n.js";
 import { icon } from "../js/core/icons.js";
 
 const view = document.getElementById("ns-view");
+const REPO_URL = "https://github.com/neoneo-ai/neo-studio";   // 设置「关于」里的仓库行，与顶栏「关于插件」同一地址
 let directorPanelOpts = null;   // 导演页配方面板选项（buildDirector 设置；含 onSelect 回传选中配方）
 let onDirectorShown = null;     // 进导演页时补拉的活：隐藏期间跳过的 director_spec 在进本页时补一次
 
@@ -1070,7 +1071,7 @@ function buildSettings(el) {
         { key: "lang", label: t("界面语言"), body: $el("div", { className: "ns-settings-section" }, [section("界面语言"), createLangPanel()]) },
         { key: "log", label: t("日志"), body: $el("div", { className: "ns-settings-section ns-log-section" }, [$el("div", { className: "ns-log-head" }, [section("日志"), copyLogBtn]), logBody]) },
         { key: "launch", label: t("启动设置"), body: launcher.el },
-        { key: "about", label: t("关于"), body: $el("div", { className: "ns-settings-section" }, [section("关于"), $el("div", { className: "ns-about-version", id: "ns-about-version", textContent: versionText() })]) },
+        { key: "about", label: t("关于"), body: $el("div", { className: "ns-settings-section ns-about-section" }, [section("关于"), $el("div", { className: "ns-about-version", id: "ns-about-version", textContent: versionText() }), $el("div", { className: "ns-about-rows", id: "ns-about-rows" })]) },
     ];
 
     const tabs = $el("div", { className: "ns-settings-tabs" });
@@ -1102,6 +1103,7 @@ function buildSettings(el) {
 
     el.appendChild($el("div", { className: "ns-settings" }, [tabs, content]));
     showSection("llm");  // 默认 LLM 设置
+    renderAboutRows();   // 版本快照早于本页建成：路径行在 DOM 齐了之后补一次
     Promise.all([genForm.load(), videoForm.load(), llmForm.load()])
         .catch(e => console.error("[Neo Studio] settings load failed:", e));
     // 桥由 pywebview 在导航完成后才注入、方法还要晚一步填：桥在长就等它长完，别把桌面端窗口判成浏览器
@@ -1125,7 +1127,7 @@ let offline = false;   // 页面跑在桌面端的服务上：文件类功能可
 let starting = false;  // 桌面端已拉起 ComfyUI 还没就绪：这段时间只出「启动中」，其余离线提示一律收起
 let caps = {};         // 桌面端能力表（/neo_studio/version 下发）；ComfyUI 页里缺省即全可用
 let comfyBase = "";    // 生成类请求的直连目标；空 = 这路 ComfyUI 不认桌面端 origin（未就绪 / 附着 / 远程）
-let versionInfo = { plugin: "", comfy: "", offline: false };   // 版本号只在设置「关于」里显示
+let versionInfo = { plugin: "", comfy: "", offline: false, dataRoot: "", comfyLocal: "", remote: "" };   // 版本号与路径行只在设置「关于」里显示
 
 function can(feature) { return caps[feature] !== false; }
 
@@ -1208,7 +1210,7 @@ window.addEventListener("neo-offline-request", () => {
 });
 
 // 运行类按钮 → 所需 ComfyUI 运行时能力：能力缺失时点它交给桌面端拉起 ComfyUI，不发假请求。
-// 编辑类不在表里（保存 / 生成分段 / 重写提示词 / 逐格描述 / 宫格拆分 / 技能编辑 / 设置 / LLM 配置）：
+// 编辑类不在表里（保存 / 重写提示词 / 逐格描述 / 宫格拆分 / 技能编辑 / 设置 / LLM 配置）：
 // 那些接口只读写文件与 8080 服务，桌面端自己就能服务。
 const RUN_GATES = [
     [".neo-gallery-gm-btn", "image_gen", t("生成素材")],
@@ -1216,7 +1218,6 @@ const RUN_GATES = [
     [".ns-gen-run", "director", t("🎬 生成整片")],
     [".neo-director-regen-run", "segment", t("生成这一段")],
     [".neo-director-merge-run", "segment", t("拼回成片")],
-    [".neo-director-sb-gen", "storyboard", t("生成图片分镜")],
     [".ns-paint .neo-gallery-story-btn-primary", "image_gen", t("生成")],   // 绘画页文生图 / 图片编辑面板的生成
 ];
 
@@ -1295,9 +1296,56 @@ function versionText() {
     return `Neo Studio ${versionInfo.plugin} · ComfyUI ${versionInfo.comfy}`;
 }
 
+async function copyAboutValue(value) {
+    if (typeof navigator.clipboard?.writeText === "function") {
+        try { await navigator.clipboard.writeText(value); return true; } catch { /* 非安全上下文 / 权限拒绝：落 execCommand 兜底 */ }
+    }
+    const ta = $el("textarea", { value });
+    ta.style.cssText = "position:fixed;left:-9999px;top:0;opacity:0";
+    document.body.appendChild(ta);
+    ta.select();
+    let ok = false;
+    try { ok = document.execCommand("copy"); } catch { ok = false; }   // jsdom 与老浏览器没有 execCommand
+    ta.remove();
+    return ok;
+}
+
+function openExternalUrl(url) {
+    // 无边框窗口里没有新标签可开：外链交桌面端的桥（它再校验一遍 scheme）；浏览器标签页里照常开新标签
+    if (window.pywebview?.api?.open_url) { window.pywebview.api.open_url(url); return; }
+    window.open(url, "_blank", "noopener");
+}
+
+function aboutRow(label, value, withOpen) {
+    const copy = $el("button", { className: "ns-about-copy", type: "button", title: t("复制"), textContent: "⧉" });
+    copy.onclick = async () => {
+        toast(await copyAboutValue(value) ? t("已复制") : t("复制失败"));
+    };
+    const kids = [$el("span", { className: "ns-about-label", textContent: label }),
+                  $el("code", { className: "ns-about-value", textContent: value, title: value }), copy];
+    if (withOpen) {
+        const open = $el("button", { className: "ns-about-open", type: "button", textContent: t("打开") });
+        open.onclick = () => openExternalUrl(value);
+        kids.push(open);
+    }
+    return $el("div", { className: "ns-about-row" }, kids);
+}
+
+// 「关于」里的路径行：值全来自版本快照（桌面端与内核两侧都报同一份键），空值那行不出
+function renderAboutRows() {
+    const box = document.getElementById("ns-about-rows");
+    if (!box) return;
+    const rows = [aboutRow(t("GitHub 仓库"), REPO_URL, true)];
+    if (versionInfo.dataRoot) rows.push(aboutRow(t("数据目录"), versionInfo.dataRoot, false));
+    if (versionInfo.comfyLocal) rows.push(aboutRow(t("ComfyUI 本地目录"), versionInfo.comfyLocal, false));
+    if (versionInfo.remote) rows.push(aboutRow(t("远程 ComfyUI"), versionInfo.remote, true));
+    box.replaceChildren(...rows);
+}
+
 function renderVersionInfo() {
     const el = document.getElementById("ns-about-version");
     if (el) el.textContent = versionText();
+    renderAboutRows();
 }
 
 function setStarting(on) {
@@ -1317,7 +1365,11 @@ async function loadVersion() {
             caps = data.caps || {};
             comfyBase = String(data.comfy_base || "");
             configureRoutes({ desktopRoutes: data.routes, comfyBase });
-            versionInfo = { plugin: data.plugin_version || "", comfy: data.comfyui_version || "", offline };
+            versionInfo = {
+                plugin: data.plugin_version || "", comfy: data.comfyui_version || "", offline,
+                dataRoot: String(data.data_root || ""), comfyLocal: String(data.comfy_local || ""),
+                remote: String(data.remote || ""),
+            };
             renderVersionInfo();
             setOfflineMark(offline);
         }
@@ -1343,7 +1395,11 @@ async function flipOnline() {
         offline = false;
         starting = false;
         userStarting = false;   // 内核已就绪：这轮「等端口」到此为止，顶栏状态位交回正常渲染
-        versionInfo = { plugin: comfy.plugin_version || versionInfo.plugin, comfy: comfy.comfyui_version || "", offline: false };
+        versionInfo = {
+            plugin: comfy.plugin_version || versionInfo.plugin, comfy: comfy.comfyui_version || "", offline: false,
+            dataRoot: String(comfy.data_root || desk.data_root || ""), comfyLocal: String(comfy.comfy_local || desk.comfy_local || ""),
+            remote: String(desk.remote || ""),   // 远程地址只有桌面端知道；空 = 连的本机
+        };
         renderVersionInfo();
         setOfflineMark(false);
         ungateRunButtons();

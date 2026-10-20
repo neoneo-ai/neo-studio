@@ -74,30 +74,6 @@ function handleLLMError(summary, error) {
 }
 
 
-// 单选按钮组：对外模仿 select（.value 读写、change 冒泡到容器），选项横向展开更直观。
-// name 加序号保证同页多个 radio 组互不串组；外部 change 监听注册在本函数之后，读 .value 时已是新值。
-let radioSeq = 0;
-function buildRadioGroup(className, options, initialValue) {
-    const wrap = $el('div', { className: `neo-director-radios ${className}` });
-    let current = initialValue;
-    const name = `${className}-${++radioSeq}`;
-    const inputs = options.map(([value, label]) => {
-        const input = $el('input', { type: 'radio', name, value });
-        wrap.appendChild($el('label', { className: 'neo-director-radio' }, [input, $el('span', { textContent: label })]));
-        return input;
-    });
-    Object.defineProperty(wrap, 'value', {
-        get: () => current,
-        set: (v) => { current = v; inputs.forEach(i => { i.checked = (i.value === v); }); },
-    });
-    wrap.addEventListener('change', () => {
-        const hit = inputs.find(i => i.checked);
-        if (hit) current = hit.value;
-    });
-    inputs.forEach(i => { i.checked = (i.value === current); });
-    return wrap;
-}
-
 /** 创建本地上传用的隐藏 <input type=file>：accept 按素材类型过滤；open() 打开文件选择器，
  *  选择后上传并回调 onUploaded(fname)。返回 { input, open }（input 需挂进 DOM 才能弹出选择器）。 */
 function buildLocalFilePicker(accept, onUploaded) {
@@ -330,15 +306,12 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
 
     const exShared = (existing && existing.shared) || {};
     const exSegs = (existing && Array.isArray(existing.segments)) ? existing.segments : [];
-    const exStory = (existing && existing.story) || {};   // 自动故事板内容（主题/脚本/参考图/粒度），编辑旧配方时回显
-    const exSetup = (existing && existing.setup) || {};   // 统一设置区状态（统一首/尾帧 + 优化前后提示词对照），编辑旧配方时回显
-    let origPrompts = Array.isArray(exSetup.orig_prompts) ? exSetup.orig_prompts : null;  // 首次优化前的各段原文快照，随 setup 落盘、重开回显
-    let optPrompts = Array.isArray(exSetup.opt_prompts) ? exSetup.opt_prompts : null;    // 最近一次优化结果，随 setup 落盘、重开回显
+    const exStory = (existing && existing.story) || {};   // 故事板页落盘内容（全局故事参考 / 角色参考图），编辑旧配方时回显
+    const exSetup = (existing && existing.setup) || {};   // 统一设置区落盘内容（各段原文快照），编辑旧配方时回显
+    let origPrompts = Array.isArray(exSetup.orig_prompts) ? exSetup.orig_prompts : null;  // 首次生成前的各段原文快照，随 setup 落盘、重开回显
     let segCounter = 0; // 段身份计数：时间轴颜色按段内容绑定，重排不变色
     let modeSel = null;   // 全局生成模式（文生/图生/混合），在时间线面板中创建后赋值
     let gSkillSel = null;      // 统一技能选择（非混合模式：各段共用，紧邻生成模式；混合模式隐藏）
-    let sbModeSel = null;      // 🎨 图片分镜生图模式 t2i/r2i（下拉；📖 故事板分镜页 band 2 创建后赋值）：默认随角色参考图（有图 r2i / 无图 t2i），手动改过后不再跟随
-    let frameSourceSel = null; // 分镜来源状态 grid|storyboard（📖 故事板分镜页创建后赋值，随 story.frame_source 落盘）
     let chunkSecInp = null;    // 分块秒数 shared.chunk_sec：连续兼容段合并成一次多帧单次运行的预算（0 = 关闭），时间线面板创建后赋值
     let chunkSecLabel = null;   // 「分块秒数」标签：与输入框成对，仅当统一技能支持多帧时显示
     let seedSharedInp = null;       // 整片种子 shared.seed：留空 = 随机（落 -1），时间线面板创建后赋值
@@ -1058,17 +1031,6 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
             const segModeSel = row.querySelector('.neo-director-segmode');
             const modeRow = row.querySelector('.neo-director-segmode-row');
             const eff = (mixed && segModeSel) ? segModeSel.value : g;
-            // f2v：该段已生成分镜图且首帧为空时，自动回填分镜图为首帧（仅逐段生成图片分镜方式）
-            if (eff === 'f2v' && row.dataset.storyboard
-                && frameSourceSel && frameSourceSel.value === 'storyboard') {
-                const setters = segFrameSetters.get(row) || {};
-                if (setters.first && !setters.first()) setters.first(row.dataset.storyboard);
-            }
-            // →r2v：该段已生成分镜图时同时加入其参考图池（insert 去重，重复切模式/重开不堆重复项、不标未保存）
-            if (eff === 'r2v' && row.dataset.storyboard
-                && frameSourceSel && frameSourceSel.value === 'storyboard') {
-                row._addRefImage?.(row.dataset.storyboard, true);
-            }
             const skillSel = row.querySelector('.neo-director-skill');
             refreshSegSkillOptions(skillSel, eff);
             // 段内技能下拉只在混合模式显示；其余模式的技能由上方统一技能框决定
@@ -1370,7 +1332,7 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
                 }
             }
         }
-        // 角色参考图同样要落 assets：r2i 图片分镜从配方 assets 读取并作为参考喂给生图技能
+        // 角色参考图同样要落 assets：重开配方时，各段身份参考要从配方 assets 里读回这些图
         for (const name of charRefRow.getSelected()) {
             if (assetNames.has(name)) continue;
             assetNames.add(name);
@@ -1385,10 +1347,9 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
             const r = directorResolution(aspectSel.value, mpInp.value);
             outW = r.width; outH = r.height;
         }
-        // 统一设置区状态：随配方落盘，重新打开时回显；全空不写
+        // 统一设置区：各段原文快照随配方落盘，重新打开时作为重新生成的基线；全空不写
         const setupPayload = {};
-        if (origPrompts) setupPayload.orig_prompts = origPrompts;   // 优化前后提示词对照：随配方落盘，重开时回显两栏
-        if (optPrompts) setupPayload.opt_prompts = optPrompts;
+        if (origPrompts) setupPayload.orig_prompts = origPrompts;   // 各段原文快照：重开后逐格生成仍基于原文再试
         saveBtn.disabled = true;
         try {
             const result = await saveRecipe(name, '', assets, [], [], {
@@ -1411,14 +1372,10 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
                     identityRefsChk.checked ? {} : { identity_refs: false },
                 ),
                 segments,
-                // 故事板分镜内容（主题 / 粒度 / 图片分镜设置）：随配方落盘，重新打开编辑器回显。
+                // 故事板页设置（全局故事参考 + 角色参考图）：随配方落盘，重新打开编辑器回显。
+                // 主题 / 脚本 → 分段这条文字故事板路径归右栏智能体（director_plan），编辑器不再落它的输入。
                 // 空内容由后端判空后不写入，前端无需分支。
                 story: Object.assign({
-                    idea: ideaInp.value.trim() || null,          // 主题或完整故事脚本（文字故事板输入）
-                    segment_seconds: Number(segLenSel.value) || null,
-                    image_mode: (sbModeSel && sbModeSel.value) || 't2i',       // 图片分镜生图模式（t2i/r2i）
-                    image_skill: (sbSkillSel && sbSkillSel.value) || null,     // 当前模式所选生图技能
-                    frame_source: frameSourceSel.value,           // grid|storyboard（分镜来源持久状态）
                     grid_prompts: gridPromptsTa.value.trim() || null,   // 全局故事参考：默认原宫格提示词，可手动改写
                 }, storyRefsPayload()),
                 setup: Object.keys(setupPayload).length ? setupPayload : null,
@@ -1461,20 +1418,17 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
     };
 
     // ==========================================
-    // 📖 故事板分镜（两种来源）：宫格图拆分 / 文字故事板一键生成
+    // 📖 故事板分镜：宫格图拆分到各段（按主题 / 脚本生成分段的文字故事板由右栏智能体承接）
     // ==========================================
 
-    // 本页四步（体现先后关系）：① 来源 / 角色素材 → ② 分段 → ③ 关键帧 → ④ 提示词。
+    // 本页两步（体现先后关系）：① 宫格图拆分到各段 → ② 逐格生成提示词。
     // 每步标题行带一个序号徽标：✓ = 已完成、序号高亮 = 轮到这一步、序号变淡 = 前置还没满足。
     // 徽标状态与各步动作按钮的置灰都在 refreshStepState() 里按当前内容统一算。
     const buildStepBadge = (label) => $el('span', { className: 'neo-director-step-badge', textContent: label });
-    const stepSrcBadge = buildStepBadge('①');
-    const stepGridBadge = buildStepBadge('②');
-    const stepTextBadge = buildStepBadge('②');
-    const stepSbBadge = buildStepBadge('③');
-    const stepOptBadge = buildStepBadge('④');
+    const stepGridBadge = buildStepBadge('①');
+    const stepOptBadge = buildStepBadge('②');
     let stepUiReady = false;   // 本页构建完成前（初始化期的 setGridSrc 等早期调用）直接跳过
-    let genSegBusy = false, gridSplitBusy = false, sbBusy = false, optBusy = false;   // 各步动作执行中：保持置灰
+    let gridSplitBusy = false, optBusy = false;   // 各步动作执行中：保持置灰
 
     /** 对照表第一列缩略：点击经 Lightbox 看大图（onOpen）；传 onClear 时右上角悬停出现 ✕（清除该段分镜图记录）。 */
     function fillSegThumb(thumb, fname, onClear, onOpen, clearTitle) {
@@ -1487,28 +1441,9 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
         thumb.appendChild(a);
         if (onClear) thumb.appendChild($el('button', { className: 'neo-director-setup-seg-sb-clear', type: 'button', title: clearTitle || t('清除该段分镜图（若首帧正是此图则一并清除）'), textContent: '✕', onclick: (e) => { e.stopPropagation(); onClear(); } }));
     }
-    // 文字故事板输入：主题（一行即可）或完整故事脚本，一键 LLM 生成分段分镜
-    const ideaInp = $el('textarea', { className: 'neo-director-story-idea', placeholder: t('输入故事主题 / 想法（如：一只机器猫在雨夜的城市寻找回家的路），或直接粘贴完整故事脚本') });
-    ideaInp.value = exStory.idea || exStory.story || '';   // textarea 用属性赋值回显（$el 的 value 选项对 textarea 不生效）；旧配方的「story」字段同样回显到这里
-    const storyStatus = $el('span', { className: 'neo-director-story-status' });
-    const segLenSel = $el('select', { className: 'neo-director-seglen' });
-    for (const s of [5, 10, 15]) segLenSel.appendChild($el('option', { value: String(s), textContent: tf("{s} 秒 / 段", { s }) }));
-    segLenSel.value = '10';
-    if (exStory.segment_seconds) segLenSel.value = String(exStory.segment_seconds);
-    if (!segLenSel.value) segLenSel.value = '10'; // 存了非预设粒度时落回默认
-    const genSegBtn = $el('button', { className: 'rs-btn neo-director-gen-segs', textContent: t('✨ 生成分镜分段') });
-
-    // 新建配方：标题随「主题/想法」输入实时同步（超 20 字截断）；手动命名后不再覆盖，编辑已有配方不同步
+    // 新建配方：手动命名后不再被自动提取覆盖；编辑已有配方不同步
     let nameManuallySet = false;
-    nameInp.addEventListener('input', () => { nameManuallySet = true; refreshStepState(); });   // 配方名影响 🎨 关键帧可用性（产物按名落盘）
-    ideaInp.addEventListener('input', () => {
-        if (!existing && !nameManuallySet) {
-            const v = ideaInp.value.trim();
-            nameInp.value = v.length > 20 ? v.slice(0, 20) + '…' : v;
-            renderName();
-        }
-        refreshStepState();   // 主题改动 → ①/② 徽标与「生成分镜分段」可用性
-    });
+    nameInp.addEventListener('input', () => { nameManuallySet = true; refreshStepState(); });   // 配方名影响宫格产物落盘名
     // 新建配方：直接在时间轴输入段提示词时，若尚未手动命名则同样截取生成标题（与「主题/想法」一致）；
     // 先剥掉 H3 结构前缀（首行对齐指令 / 字段头 / [Shot N] / 时间戳），固定语句不当作配方名
     const stripH3Head = (v) => {
@@ -1531,70 +1466,7 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
         if (e.target.classList.contains('neo-director-prompt')) { refreshStepState(); syncGhostSeg(); }
     });
 
-    // 一键生成分段分镜：主题（或手写脚本）→ LLM 直接输出各段提示词 / 时长 / 关键帧提示词；
-    // 配方级「角色参考图」以多模态附上锁角色身份。成功后替换现有分段并切回文字故事板来源。
-    genSegBtn.onclick = async () => {
-        const idea = ideaInp.value.trim();
-        if (!idea) { app.extensionManager.toast.add({ severity: 'error', summary: t('分镜生成'), detail: t('请先填写故事主题 / 脚本'), life: 4000 }); return; }
-        genSegBusy = true; refreshStepState(); storyStatus.textContent = t('正在生成分镜分段…');
-        try {
-            const res = await fetch('/rs_recipes/director_generate_segments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ idea, segment_seconds: Number(segLenSel.value), characters: charRefRow.getSelected() }) });
-            const data = await res.json();
-            if (!data.success) { storyStatus.textContent = ''; handleLLMError(t('分镜生成'), data.error); return; }
-            const defaultSkill = currentSkillId() || (skills.length ? skills[0].id : '');
-            segsWrap.innerHTML = '';
-            for (const s of data.segments) {
-                segsWrap.appendChild(buildSeg({ skill_id: defaultSkill, prompt: s.prompt, duration_sec: s.duration_sec, mode: 'f2v', storyboard_prompt: s.storyboard_prompt || '' }));
-            }
-            renumberSegs(); showSeg(0); applyGlobalMode();
-            // 生成成功 → 切回文字故事板来源（文字侧固定逐段生成图片分镜），对照表随之刷新
-            if (srcSel.value !== 'text') { srcSel.value = 'text'; onFrameSourceChange(); }
-            else renderSetupSegs();   // 已在文字侧：只刷新各段对照
-            storyStatus.textContent = tf("已生成 {n} 段，详见下方各段对照", { n: data.segments.length });
-            autoFillName(idea);
-            markDirty();
-            app.extensionManager.toast.add({ severity: 'success', summary: t('分镜已生成'), detail: tf("{n} 段", { n: data.segments.length }), life: 4000 });
-        } catch (e) {
-            console.error('[Neo Recipes] Director: generate segments failed', e);
-            storyStatus.textContent = ''; handleLLMError(t('分镜生成'), e.message);
-        } finally { genSegBusy = false; refreshStepState(); }
-    };
-
-    // ---- 🎨 图片分镜：文字故事板分段后用生图技能逐段出关键帧（📖 故事板分镜页 band 2）----
-    // mode：t2i = 纯文生图（不带参考）；r2i = 参考编辑（角色图，按所选技能执行、不强制切 Qwen）。
-    // 默认随角色参考图：有图 → r2i（参考角色图生成），无图 → t2i；已落盘的 image_mode 优先回显。
-    sbModeSel = $el('select', { className: 'neo-director-sb-mode' }, [
-        $el('option', { value: 't2i', textContent: t('t2i（文生图）') }),
-        $el('option', { value: 'r2i', textContent: t('r2i（参考图编辑）') }),
-    ]);
-    const hasCharRefs = (exStory.characters || []).some(c => c && c.filename);
-    sbModeSel.value = ['t2i', 'r2i'].includes(exStory.image_mode) ? exStory.image_mode : (hasCharRefs ? 'r2i' : 't2i');
-    const sbSkillSel = $el('select', { className: 'neo-director-sb-skill' });
-    let sbImageSkills = null;   // 生图技能列表（拉一次，两种模式共用）
-    let sbCurMode = sbModeSel.value;
-    const sbSkillMemory = {};   // t2i/r2i 各自记住所选生图技能（切回时恢复）
-    let sbModeTouched = false;  // 用户手动改过生图模式后，不再随角色参考图自动切换
-    async function fillSbSkills() {
-        if (!sbImageSkills) {
-            try {
-                const list = await (await fetch('/rs_prompts/skills')).json();
-                sbImageSkills = Array.isArray(list) ? list : [];
-            } catch (_) { sbImageSkills = []; }
-        }
-        sbSkillSel.innerHTML = '';
-        // 按当前生图模式列生图技能：t2i 只列吃文字的（编辑类没有参考图可给），r2i 只列吃参考图的（纯文生图会丢掉角色图）
-        const sbWantsRef = sbCurMode === 'r2i';
-        for (const s of sbImageSkills.filter(s => s.gen_image && (sbWantsRef ? skillAcceptsRef(s) : skillAcceptsText(s)))) {
-            sbSkillSel.appendChild($el('option', { value: s.id, textContent: skillDisplayName(s) }));
-        }
-        if (!sbSkillSel.value) sbSkillSel.appendChild($el('option', { value: 'qwen_image_21', textContent: t('Qwen Image 2.1 生图') }));
-        // 回显优先：本模式记住的选择 > 配方落盘的 image_skill；否则 t2i 默认 Krea2、r2i 默认 Qwen Image 2.1
-        const keep = sbSkillMemory[sbCurMode] || exStory.image_skill;
-        if (keep && Array.from(sbSkillSel.options).some(o => o.value === keep)) { sbSkillSel.value = keep; return; }
-        const fallback = (sbCurMode === 'r2i') ? 'qwen_image_21' : 'image_gen';
-        if (sbSkillSel.querySelector(`option[value="${fallback}"]`)) sbSkillSel.value = fallback;
-    }
-    // 角色参考图（配方级，常驻显示）：主用途是视频各段身份参考（「角色身份参考」开启时），次用途喂给 r2i 图片分镜让各段角色一致。
+    // 角色参考图（配方级，常驻显示）：主用途是视频各段身份参考（「角色身份参考」开启时）。
     // 复用每段参考网格（本地上传 / 素材库拖入 / 拖拽排序）；顺序即参考先后（第 1 张为编辑目标）。
     // 默认收起（无已有角色图时），点标题展开再添加；添加角色图 / 打开素材库时自动展开。
     let charCard;
@@ -1608,29 +1480,13 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
         { key: 'characters', kind: 'image', label: t('角色参考图'), max: 6, hideHead: true },
         charInitial,
         null,
-        () => {   // 添加角色图自动展开；生图模式默认随角色参考图：有图 r2i / 无图 t2i（手动改过后不再跟随）
+        () => {   // 添加角色图自动展开；「+」宫格按钮（要角色图才画得出一致的宫格）随可用性联动
             if (charRefRow.getSelected().length) setCharOpen(true);
-            gridSbBtn.disabled = !charRefRow.getSelected().length;   // 「+」宫格按钮随角色图可用性联动
-            if (sbModeTouched) return;
-            const v = charRefRow.getSelected().length ? 'r2i' : 't2i';
-            if (v === sbModeSel.value) return;
-            sbSkillMemory[sbCurMode] = sbSkillSel.value || null;   // 切换时同样记住上一模式的技能
-            sbModeSel.value = v;
-            sbCurMode = v;
-            fillSbSkills();
+            gridSbBtn.disabled = !charRefRow.getSelected().length;
         },
         (names, idx) => Lightbox.open({ items: names.map(n => ({ kind: 'image', url: thumbSrc(n), title: n })), index: idx }),   // 点缩略图经 Lightbox 看大图（←/→ 切换各张）
         64   // 角色参考图紧凑瓷砖：空态同步缩小（见 recipes.css），不压低来源卡 / 各段对照
     );
-    const sbGenBtn = $el('button', { className: 'rs-btn neo-director-sb-gen', textContent: t('🎨 生成图片分镜') });
-    const sbStatus = $el('span', { className: 'neo-director-sb-status' });
-    sbModeSel.addEventListener('change', () => {
-        sbModeTouched = true;   // 手动选择后以用户为准，角色参考图增删不再自动切换
-        sbSkillMemory[sbCurMode] = sbSkillSel.value || null;   // 记住上一模式用的技能
-        sbCurMode = sbModeSel.value;
-        fillSbSkills();
-    });
-    fillSbSkills();   // 初始填充（异步，不阻塞）
     // 身份参考开关（默认开）：配方「角色参考图」是否作为视频各段身份参考——关掉就能与旧行为对比。
     // 集成在角色参考图盒的标题行内（标题 flex:1 把它与素材库按钮一起推到右侧）。
     const identityRefsChk = $el('input', { className: 'neo-director-identity-refs', type: 'checkbox' });
@@ -1643,7 +1499,7 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
             title: t('把「角色参考图」作为各段身份参考（关键帧是背影 / 局部特写、看不到脸时靠它保住角色身份）；需「连续性」开启。关掉便于做前后对比测试'),
         }, [identityRefsChk, $el('span', { textContent: t('启用') })]),
     ]);
-    const charTitle = $el('span', { className: 'neo-director-field-label neo-director-char-title', title: t('作为视频各段身份参考（「连续性」与「角色身份参考」开启时生效）：关键帧是背影 / 局部特写、看不到脸时靠它保住角色身份；同时随文字故事板生成与 r2i 图片分镜发出，保持各段角色一致。最多取前 4 张作身份参考。点击展开 / 收起') }, [
+    const charTitle = $el('span', { className: 'neo-director-field-label neo-director-char-title', title: t('作为视频各段身份参考（「连续性」与「角色身份参考」开启时生效）：关键帧是背影 / 局部特写、看不到脸时靠它保住角色身份。最多取前 4 张作身份参考。点击展开 / 收起') }, [
         charChevron,
         $el('span', { textContent: t('👤 角色参考图') }),
     ]);
@@ -1655,110 +1511,6 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
         $el('div', { className: 'neo-director-story-refs' }, [charRefRow.row]),
     ]);
     setCharOpen(charInitial.length > 0);   // 已有角色图时默认展开，便于直接管理
-    const sbCard = $el('div', { className: 'neo-director-setup-sb' }, [
-        $el('div', { className: 'neo-director-refs-head' }, [
-            stepSbBadge,   // ③ 关键帧：分段之后的逐段出图
-            $el('span', { className: 'neo-director-field-label', title: t('角色参考图在上方「👤 角色参考图」设置（配方级）'), textContent: t('🎨 图片分镜（逐段关键帧；图生 / 首尾帧段自动用作首帧，全参考段自动加入该段参考图）') }),
-            // 本步唯一动作（生成图片分镜）统一靠卡右上角
-            $el('div', { className: 'neo-director-step-act' }, [sbStatus, sbGenBtn]),
-        ]),
-        $el('div', { className: 'neo-director-row neo-director-shared' }, [
-            $el('label', { className: 'neo-director-field-label', textContent: t('生图模式') }), sbModeSel,
-            $el('label', { className: 'neo-director-field-label', title: t('t2i 纯文生图；r2i 参考上方「👤 角色参考图」（配方级），按所选技能执行'), textContent: t('生图技能') }), sbSkillSel,
-        ]),
-    ]);
-
-    // 分镜来源（故事板分镜页 band 0 第一行，二选一，横向 radio 与旧版一致）：grid = 已有宫格图拆分；text = 文字故事板生成。
-    // 文字侧固定逐段生成图片分镜（旧「统一首帧」子方式已移除）。frameSourceSel 保留两态语义
-    // （grid|storyboard），随 story.frame_source 落盘回显，供各段路由 / 对照表沿用；旧配方的 unified 值打开时按默认回落。
-    const srcSel = buildRadioGroup('neo-director-src', [
-        ['grid', t('🧩 宫格图故事板')],
-        ['text', t('📝 文字故事板')],
-    ], 'grid');
-    frameSourceSel = {
-        get value() { return srcSel.value === 'grid' ? 'grid' : 'storyboard'; },
-        set value(v) { srcSel.value = (v === 'grid') ? 'grid' : 'text'; },
-    };
-    {
-        const fs = exStory.frame_source;
-        // 已显式保存的来源优先；未选择时默认宫格图，但已有文字拆分段则回落文字侧（逐段生成图片分镜）
-        frameSourceSel.value = ['grid', 'storyboard'].includes(fs)
-            ? fs
-            : (exSegs.some(s => s && (s.prompt || '').trim()) ? 'storyboard' : 'grid');
-    }
-    const onFrameSourceChange = () => {
-        const v = frameSourceSel.value;
-        if (v === 'storyboard') {
-            // 切到文字侧：重跑模式应用一遍——已有分镜图且首帧为空的段恢复关键帧为首帧
-            applyGlobalMode();
-        }
-        // grid：只切换卡片显隐（各格已带自己的首帧/分镜图），无需重跑全局模式
-        refreshSetupRefs();
-        renderSetupSegs();   // 对照表「分镜图」列随方式切换（逐段关键帧 ↔ 宫格各格）
-    };
-    srcSel.addEventListener('change', onFrameSourceChange);
-
-    async function generateAllStoryboards() {
-        const name = (nameInp?.value || '').trim() || requestedName || 'untitled';
-        const rows = Array.from(segsWrap.querySelectorAll('.neo-director-seg'));
-        if (!rows.length) { app.extensionManager.toast.add({ severity: 'warn', summary: t('图片分镜'), detail: t('请先拆分出分段'), life: 4000 }); return; }
-        const segments = rows.map((row, i) => ({
-            prompt: (row.querySelector('.neo-director-prompt')?.value || '').trim(),
-            storyboard_prompt: row.dataset.storyboardPrompt || '',
-        }));
-        sbBusy = true; refreshStepState();
-        try {
-            const res = await fetch('/neo_video_gen/storyboard_generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
-                name, segments, skill_id: sbSkillSel.value || 'qwen_image_21', mode: sbModeSel.value,
-                force: true,   // 按钮点击 = 重新生成：已有产物的段也重出（后端换新随机种子，不重复旧图）
-            }) });
-            const data = await res.json();
-            if (!data.success) { sbStatus.textContent = ''; app.extensionManager.toast.add({ severity: 'error', summary: t('图片分镜'), detail: data.error || t('生成失败'), life: 5000 }); return; }
-            const fallbacks = [];   // 回退用视频提示词生图的段号：后端 warning 里点名，收尾时一次告诉用户
-            for (;;) {
-                await new Promise(r => setTimeout(r, 1500));
-                const st = await (await fetch(`/neo_video_gen/storyboard_status/${data.task_id}`)).json();
-                if (!st.success) break;
-                sbStatus.textContent = tf("分镜 {done}/{total}…", { done: st.processed, total: st.total });
-                let segUpdated = false;
-                for (const d of (st.details || [])) {
-                    for (const w of (d.warnings || [])) {
-                        if (w.includes('回退') && !fallbacks.includes(d.index + 1)) fallbacks.push(d.index + 1);
-                    }
-                    if (d.status === 'done' && d.filename) {
-                        const row = rows[d.index];
-                        if (!row) continue;
-                        row.dataset.storyboard = d.filename;   // 记到段行（保存时随 storyboard 落盘）
-                        recipeAssetFiles.add(d.filename);      // 关键帧已落在配方 assets/：缩略图与资产位都按资产名解析
-                        // 关键帧去向按该段有效模式：全参考段加入其参考图池；其余模式立即回填为首帧（f2v 下保存不带，挂上即生效）
-                        const segModeSel = row.querySelector('.neo-director-segmode');
-                        const eff = (modeSel.value === 'mixed' && segModeSel) ? segModeSel.value : modeSel.value;
-                        if (eff === 'r2v') row._addRefImage?.(d.filename);
-                        else if (frameSourceSel.value === 'storyboard') {
-                            const setters = segFrameSetters.get(row);
-                            if (setters) setters.first(d.filename);
-                        }
-                        segUpdated = true;
-                    }
-                }
-                if (segUpdated) renderSetupSegs();   // 本页对照表「分镜图」列同步回显新生成的关键帧
-                if (st.status === 'done' || st.status === 'cancelled') {
-                    markDirty();
-                    const failed = (st.details || []).filter(d => d.status === 'failed').length;
-                    const fbNote = fallbacks.length ? tf("；第 {segs} 段无分镜提示词，用视频提示词生图", { segs: fallbacks.join('、') }) : '';
-                    sbStatus.textContent = st.status === 'cancelled' ? t('已停止') : tf("完成{failedNote}{fbNote}", { failedNote: failed ? tf("（{n} 段失败）", { n: failed }) : '', fbNote });
-                    if (failed) app.extensionManager.toast.add({ severity: 'warn', summary: t('图片分镜'), detail: tf("{n} 段生成失败，见各段状态", { n: failed }), life: 5000 });
-                    if (fallbacks.length) app.extensionManager.toast.add({ severity: 'warn', summary: t('图片分镜'), detail: tf("第 {segs} 段没有分镜提示词，已回退视频提示词（含运动描述，不一定适合生图）：建议重新拆分或补上分镜提示词", { segs: fallbacks.join('、') }), life: 7000 });
-                    break;
-                }
-            }
-        } catch (e) {
-            console.error('[Neo Recipes] Director storyboard generate failed:', e);
-            sbStatus.textContent = '';
-            app.extensionManager.toast.add({ severity: 'error', summary: t('图片分镜'), detail: e.message, life: 5000 });
-        } finally { sbBusy = false; refreshStepState(); }
-    }
-    sbGenBtn.onclick = () => generateAllStoryboards();
 
     // ---- 🧩 宫格分镜图拆分：一张宫格分镜图自动切分（均匀间隙检测 / 手动行列）→ 替换分段，各格作该段首帧与分镜图 ----
     // 「全局故事参考（默认为原宫格提示词）」：默认是从原宫格图内嵌的 ComfyUI 元信息（PNG 里的 API 格式 prompt）自动提取到的提示词，
@@ -1879,9 +1631,7 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
         }
         if (modeSel && modeSel.value !== 'f2v') modeSel.value = 'f2v';   // 宫格拆分各段均带首帧（图生）：同步全局为分镜生视频模式
         renumberSegs(); showSeg(0); applyGlobalMode();
-        const wasGrid = frameSourceSel.value === 'grid';
-        frameSourceSel.value = 'grid';   // 对照表按宫格各格显示（🧩 卡片）
-        if (wasGrid) { refreshSetupRefs(); renderSetupSegs(); } else onFrameSourceChange();
+        renderSetupSegs();   // 对照表按各格分镜图刷新（内部会重算徽标与动作可用性）
         const p0 = panels[0] || {};
         applyAspectFromImage(p0.width, p0.height);   // 共享比例吸附到首帧最近预设（各格同比例），避免忘记改而拉伸
         markDirty();
@@ -1917,8 +1667,7 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
         } finally { gridSplitBusy = false; refreshStepState(); }
     };
 
-    // band 1 来源卡：🧩 宫格图故事板——只做拆分（宫格图在外部生成），各格替换现有分段并作为该段首帧与分镜图。
-    // 来源 radio 在 band 0 第一行横排；这里只显示选中的那张卡（见 refreshSetupRefs），不会两张同时亮着
+    // band 1 主卡：🧩 宫格图故事板——只做拆分（宫格图在外部生成），各格替换现有分段并作为该段首帧与分镜图。
     // 卡标题行拆两列，与下方源图 / 提示词列共享同一 grid（「全局故事参考」label 左缘对齐 textarea）
     const srcGridCard = $el('div', { className: 'neo-director-src-card neo-director-src-card-grid' }, [
         $el('div', { className: 'neo-director-src-head' }, [
@@ -1952,34 +1701,11 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
         ]),
     ]);
 
-    // 当前选中的角色参考（{filename} 列表），供保存与 r2i 图片分镜共用；空则不写该键。
+    // 当前选中的角色参考（{filename} 列表）：随配方落盘，供各段身份参考；空则不写该键。
     const storyRefsPayload = () => {
         const c = charRefRow.getSelected();
         return c.length ? { characters: c.map(fn => ({ filename: fn })) } : {};
     };
-
-    // band 1 来源卡：📝 文字故事板——主题 / 完整脚本，一键 LLM 生成分段分镜（替换现有分段）
-    // 文字卡右栏：🎨 图片分镜 / 模式提示等（下面挂 textStack）
-    const srcTextSide = $el('div', { className: 'neo-director-idea-side' });
-    const srcTextCard = $el('div', { className: 'neo-director-src-card neo-director-src-card-text' }, [
-        // 一行两栏（整卡紧凑）：左 = 故事主题 / 脚本；右 = 🎨 图片分镜 / 模式提示
-        $el('div', { className: 'neo-director-idea-cols' }, [
-            $el('div', { className: 'neo-director-idea-col' }, [
-                // 标题行：② 徽标 + 字段名（精简，完整说明在 tooltip）靠左，本步动作组（分段粒度 + 生成分镜分段）靠右
-                $el('div', { className: 'neo-director-idea-head' }, [
-                    stepTextBadge,   // ② 分段：文字来源由「生成分镜分段」完成
-                    $el('label', { className: 'neo-director-field-label', title: t('填主题或完整脚本，一键生成各段提示词与关键帧提示词'), textContent: t('填主题/脚本，一键生成各段提示词') }),
-                    $el('div', { className: 'neo-director-step-act' }, [
-                        $el('label', { className: 'neo-director-seglen-wrap' }, [$el('span', { textContent: t('分段粒度') }), segLenSel]),
-                        storyStatus,
-                        genSegBtn,
-                    ]),
-                ]),
-                ideaInp,
-            ]),
-            srcTextSide,
-        ]),
-    ]);
 
     // 「拉伸」控制条：放在时间轴说明行最右侧（不独占一行），驱动 timeline.setZoom()。
     const zoomSlider = $el('input', { className: 'neo-director-zoom-slider', type: 'range', min: 0.25, max: 4, step: 0.25, value: 1 });
@@ -2009,7 +1735,7 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
         modeSel.appendChild($el('option', { value: val, textContent: label }));
     }
     modeSel.value = initMode;
-    // 生成模式只在「🎞️ 分镜时间线」页首行这一处选择（故事板分镜与生成模式无关）：切换时刷新各段显隐，并联动故事板分镜页素材区 / 图片分镜卡片
+    // 生成模式只在「🎞️ 分镜时间线」页首行这一处选择（故事板分镜与生成模式无关）：切换时刷新各段显隐，并联动故事板分镜页的模式提示
     modeSel.addEventListener('change', () => { applyGlobalMode(); refreshSetupRefs(); refreshChunkSecVisibility(); });
 
     // 分块秒数（shared.chunk_sec）：连续兼容段合并成一次多帧单次 ref2va 运行的总时长预算；0 = 关闭（纯逐段生成）
@@ -2169,55 +1895,45 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
     applyGlobalMode();   // 初始化各段首帧/尾帧/参考素材区、统一技能框显隐，并把统一技能同步到各段
 
     // ==========================================
-    // 📖 故事板分镜 band 2：逐段关键帧 / 统一首尾帧 → 按 H3 官方格式批量重写提示词，再到时间轴逐段微调
+    // 📖 故事板分镜 band 2：各段分镜图 → 逐格按 H3 官方格式生成提示词，再到时间轴逐段微调
     // 生成模式 / 统一技能只在「🎞️ 分镜时间线」页选择，本页只跟随刷新；
     // 参考素材没有「统一」入口：到时间轴页各段的参考素材区逐段设置（含「同步到所有分段」按钮）
     // ==========================================
 
-    const uniR2vHint = $el('div', { className: 'neo-director-setup-hint', textContent: t('全参考模式：各段的参考素材（图 / 视频 / 音频，第一个参考视频即源视频）请到「🎞️ 分镜时间线」页逐段设置；可用「🎨 图片分镜」生成关键帧自动加入各段参考图') });
+    const uniR2vHint = $el('div', { className: 'neo-director-setup-hint', textContent: t('全参考模式：各段的参考素材（图 / 视频 / 音频，第一个参考视频即源视频）请到「🎞️ 分镜时间线」页逐段设置') });
     const uniMixedHint = $el('div', { className: 'neo-director-setup-hint', textContent: t('混合模式：技能与首帧/尾帧 / 参考素材请到「🎞️ 分镜时间线」页逐段设置') });
 
-    // 按全局模式 + 分镜来源切换 band 1 来源卡内容 / band 2 子设置（与各段有效模式的显隐规则一致）：
-    // grid → 只展开宫格卡内容、band 2 收成一行说明；text → 文字卡内容 + 素材区。
-    // 注意：全局生成模式的选择在「🎞️ 分镜时间线」页首行（故事板分镜与生成模式无关），这里只跟随刷新。
+    // 按全局生成模式刷新两条模式提示（与各段有效模式的显隐规则一致）。
+    // 生成模式的选择在「🎞️ 分镜时间线」页首行（故事板分镜与生成模式无关），这里只跟随刷新。
     function refreshSetupRefs() {
         const m = modeSel.value;
-        const src = frameSourceSel ? frameSourceSel.value : 'storyboard';
-        // band 1 来源：radio 行常驻横排（可随时切），下面只显示选中来源的卡——不会两张卡同时亮着
-        srcGridCard.style.display = (src === 'grid') ? '' : 'none';
-        srcTextCard.style.display = (src === 'grid') ? 'none' : '';
         uniR2vHint.style.display = (m === 'r2v') ? '' : 'none';   // 参考素材到时间轴页逐段设置（本页无统一入口）
-        // 🎨 图片分镜：文字来源即显示（与生成模式解耦；关键帧按各段有效模式路由：图生/首尾帧作首帧、全参考进参考图池）
-        sbCard.style.display = (src === 'storyboard') ? '' : 'none';
         uniMixedHint.style.display = (m === 'mixed') ? '' : 'none';
     }
 
-    // 提示词批量优化：各段现有提示词 + 模式 + 各段参考素材 → LLM 重写为 H3 官方格式，逐段写回编辑器
+    // 逐格生成提示词：各段分镜图（宫格各格 / 拖入的分镜图）+ 本格在宫格里的位置 + 全局故事参考 → LLM 按 H3 官方格式写回编辑器
     const optBtn = $el('button', { className: 'rs-btn neo-director-optimize', textContent: t('✨ 生成所有分段的提示词') });
     const optStatus = $el('span', { className: 'neo-director-opt-status' });
-    // 逐段循环调用单段优化端点：一次只让 LLM 处理一段（降低单次负担），每生成完一段立即写回并刷新对照表，让用户看到进展。
+    // 逐段循环调用单段端点：一次只让 LLM 处理一段（降低单次负担），每生成完一段立即写回并刷新对照表，让用户看到进展。
     optBtn.onclick = async () => {
         const rows = Array.from(segsWrap.querySelectorAll('.neo-director-seg'));
         if (!rows.length) { app.extensionManager.toast.add({ severity: 'error', summary: t('多段导演'), detail: t('还没有分段，请先在故事板页拆分'), life: 3000 }); return; }
-        const isGrid = frameSourceSel.value === 'grid';   // 宫格拆分：各段无原文，按该段首帧 / 分镜图逐格描述
         // 首次优化前快照各段原文；之后重新点优化始终基于该原文再试（不叠加上一轮结果）
         if (!origPrompts) origPrompts = rows.map((row) => row.querySelector('.neo-director-prompt').value);
         const segs = rows.map((row, i) => {
             const s = {
                 prompt: (origPrompts[i] || '').trim(),
                 duration_sec: Number(row.querySelector('.neo-director-dur').value) || null,
-                panel: isGrid ? segStoryboardFname(row) : '',   // 宫格方式：空原文时按该段分镜图（首帧）描述
+                panel: segStoryboardFname(row),   // 各段无原文时按该段分镜图（首帧）逐格描述
+                panel_index: i + 1,               // 本格在宫格里的位置 + 全片故事上下文：让 LLM 判断本格是第几段、承接哪一段
+                panel_total: rows.length,
             };
-            if (isGrid) {   // 宫格拆分：带全片位置 + 全局故事参考作上下文，让 LLM 判断本格是第几段、承接哪一段
-                s.panel_index = i + 1;
-                s.panel_total = rows.length;
-                if (gridPanelShape && gridPanelShape.rows && gridPanelShape.cols) {
-                    s.rows = gridPanelShape.rows;
-                    s.cols = gridPanelShape.cols;
-                }
-                const storyRef = gridPromptsTa.value.trim();   // 全局故事参考：默认原宫格提示词，可手动改写
-                if (storyRef) s.grid_prompts = [storyRef];
+            if (gridPanelShape && gridPanelShape.rows && gridPanelShape.cols) {
+                s.rows = gridPanelShape.rows;
+                s.cols = gridPanelShape.cols;
             }
+            const storyRef = gridPromptsTa.value.trim();   // 全局故事参考：默认原宫格提示词，可手动改写
+            if (storyRef) s.grid_prompts = [storyRef];
             if (modeSel.value === 'r2v') {   // 参考素材仅全参考模式携带：取该段自己的参考素材区，其余模式不带
                 const refs = {};
                 (segRefReaders.get(row) || []).forEach((read, gi) => { const picked = read() || []; if (picked.length) refs[SEG_REF_GROUPS[gi].key] = picked; });
@@ -2225,13 +1941,10 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
             }
             return s;
         });
-        if (!isGrid && segs.some(s => !s.prompt)) { app.extensionManager.toast.add({ severity: 'error', summary: t('多段导演'), detail: t('有分段未填提示词，请先补齐再生成'), life: 4000 }); return; }
-        if (isGrid && !segs.some(s => s.panel)) { app.extensionManager.toast.add({ severity: 'error', summary: t('多段导演'), detail: t('宫格拆分后没有分镜图可描述，请重新拆分'), life: 4000 }); return; }
+        if (!segs.some(s => s.panel)) { app.extensionManager.toast.add({ severity: 'error', summary: t('多段导演'), detail: t('宫格拆分后没有分镜图可描述，请重新拆分'), life: 4000 }); return; }
         optBusy = true; refreshStepState();
         let okCount = 0, skipped = 0, failed = [], firstErr = '';
-        const prompts = [];
-        const prevOpt = optPrompts;
-        optPrompts = prompts;   // 对照表右栏随生成逐段刷新，让用户看到进展
+        const prompts = [];   // 本轮已生成的各段提示词：下一段按它承接上下文
         for (let i = 0; i < segs.length; i++) {
             if (!segs[i].panel && !segs[i].prompt) { skipped++; continue; }   // 无分镜图也无提示词：跳过（直接拖入的多图流程允许留空段）
             optStatus.textContent = tf("正在生成第 {i}/{total} 段提示词…", { i: i + 1, total: segs.length });
@@ -2266,13 +1979,17 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
                 okCount++;
             } catch (e) {
                 console.error(`[Neo Recipes] Director generate segment ${i + 1} failed:`, e);
+                // 流式中途失败：段里已写回半截文本，按原文恢复该段，避免半截提示词被当成结果保存
+                const ta = rows[i].querySelector('.neo-director-prompt');
+                ta.value = origPrompts[i] || '';
+                ta.dispatchEvent(new Event('input', { bubbles: true }));
                 failed.push(i + 1);
                 if (!firstErr) firstErr = e.message;
             }
             renderSetupSegs();   // 每生成一段刷新对照表，让用户看到进展
         }
         optBusy = false; refreshStepState();
-        if (!okCount) { optPrompts = prevOpt; renderSetupSegs(); }   // 全部失败：不覆盖上一轮结果
+        if (!okCount) renderSetupSegs();
         else markDirty();
         if (failed.length) {
             optStatus.textContent = tf("第 {segs} 段生成失败，其余 {n} 段已完成", { segs: failed.join('、'), n: okCount });
@@ -2285,15 +2002,15 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
         }
     };
 
-    // 「📖 故事板分镜」页 band 3：各段三栏对照（类似表格）——左 = 分镜图，中 = 未优化原文，右 = 最近一次优化结果。
-    // 分镜图列取该段关键帧（逐段生成图片分镜 / 宫格各格），无且 f2v 模式时回退到时间轴选的首帧；两者皆无显示「无」。
-    // 首次点优化前快照原文（origPrompts），之后重新点优化始终基于该原文再试、不叠加上一轮结果；
-    // 两份快照随 setup 落盘，打开旧配方时回显。数据读时间轴各段行（唯一事实来源）。
+    // 「📖 故事板分镜」页 band 3：各段两栏对照（类似表格）——左 = 分镜图（宫格各格 / 拖入的分镜图），右 = 该段提示词。
+    // 分镜图列取该段关键帧记录，无且 f2v 模式时回退到时间轴选的首帧；两者皆无显示「无」。
+    // 首次点逐格生成前快照原文（origPrompts），之后重新点始终基于该原文再试、不叠加上一轮结果；
+    // 快照随 setup 落盘，打开旧配方时回显。数据读时间轴各段行（唯一事实来源）。
     const setupSegPreview = $el('div', { className: 'neo-director-setup-segs' });
-    // 单段配方不走「各段对照 + 批量优化」那套多段工具：换成一行提示，指回时间线页填提示词
+    // 单段配方不走「各段对照 + 逐格生成提示词」那套多段工具：换成一行提示，指回时间线页填提示词
     const setupSingleHint = $el('div', {
         className: 'neo-director-setup-hint neo-director-single-story-hint',
-        textContent: t('单段配方：提示词在「🎞️ 分镜时间线」页底部填写；要拆成多段，用上面的「分镜来源」一次生成'),
+        textContent: t('单段配方：提示词在「🎞️ 分镜时间线」页底部填写；要拆成多段，用上面的宫格图拆分；要按故事主题生成分段，用右栏智能体'),
     });
     let segDragEl = null;      // band-2 对照表正在拖拽排序的项
     let segReordering = false; // 内部段排序拖拽进行中（抑制分镜图位的上传拖放）
@@ -2318,44 +2035,26 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
         badge.classList.toggle('neo-director-step-current', state === 'current');
         badge.classList.toggle('neo-director-step-todo', state === 'todo');
     };
-    // 四步徽标 + 各步动作按钮的置灰：只有「完全没有前置」才置灰（例：主题为空时的「生成分镜分段」），
+    // 两步徽标 + 各步动作按钮的置灰：只有「完全没有前置」才置灰（例：没选宫格图时的「拆分到各段」），
     // 内容不完整仍保持可点、由各按钮自己的 toast 说明——避免把「部分可用」变成「完全点不动」。
     function refreshStepState() {
         if (!stepUiReady) return;
         const rows = Array.from(segsWrap.querySelectorAll('.neo-director-seg'));
         const prompts = rows.map((r) => (r.querySelector('.neo-director-prompt')?.value || '').trim());
         const panels = rows.map((r) => segStoryboardFname(r));
-        const isGrid = frameSourceSel.value === 'grid';
-        const hasIdea = !!ideaInp.value.trim();
         const hasGridSrc = !!gridSrcFile;
         const hasSegs = rows.length > 0;
-        const anyPrompt = prompts.some(Boolean);
-        const allPrompt = hasSegs && prompts.every(Boolean);
         const anyPanel = panels.some(Boolean);
         const allPanel = hasSegs && panels.every(Boolean);
-        const name = nameInp.value.trim() || requestedName;
-        // ② 分段：宫格侧 = 各段都有格子图；文字侧 = 各段都有提示词（一键生成或手写）
-        const segDone = isGrid ? allPanel : allPrompt;
-        const segReady = isGrid ? hasGridSrc : hasIdea;
-        // ④ 提示词：文字侧看优化结果（对照表右栏）；宫格侧直接写回各段提示词
-        const optDone = isGrid ? allPrompt
-            : (Array.isArray(optPrompts) && optPrompts.length === rows.length && optPrompts.every((p) => (p || '').trim()));
+        const allPrompt = hasSegs && prompts.every(Boolean);
 
-        bumpStep(stepSrcBadge, '①', (isGrid ? hasGridSrc : hasIdea) ? 'done' : 'current');
-        bumpStep(stepGridBadge, '②', segDone ? 'done' : (segReady ? 'current' : 'todo'));
-        bumpStep(stepTextBadge, '②', segDone ? 'done' : (segReady ? 'current' : 'todo'));
-        bumpStep(stepSbBadge, '③', allPanel ? 'done' : (anyPrompt ? 'current' : 'todo'));   // 仅文字侧逐段关键帧（宫格来源下整卡隐藏）
-        bumpStep(stepOptBadge, '④', optDone ? 'done' : ((isGrid ? anyPanel : anyPrompt) ? 'current' : 'todo'));
+        bumpStep(stepGridBadge, '①', allPanel ? 'done' : (hasGridSrc ? 'current' : 'todo'));   // 拆分：各段都有格子图
+        bumpStep(stepOptBadge, '②', allPrompt ? 'done' : (anyPanel ? 'current' : 'todo'));     // 提示词：各段都有提示词（逐格生成或手写）
 
-        genSegBtn.disabled = !hasIdea || genSegBusy;
-        genSegBtn.title = hasIdea ? t('按故事主题 / 脚本生成各段提示词与关键帧提示词') : t('请先填写故事主题 / 脚本');
         gridSplitBtn.disabled = !hasGridSrc || gridSplitBusy;
         gridSplitBtn.title = hasGridSrc ? t('把宫格图按行列切成各段（各格作该段首帧与分镜图）') : t('请先选宫格图（本地上传或素材库拖入）');
-        const sbReady = hasSegs && anyPrompt;
-        sbGenBtn.disabled = !sbReady || sbBusy;
-        sbGenBtn.title = sbReady ? t('按各段提示词逐段生成关键帧') : t('请先在左侧生成分段');
-        optBtn.disabled = !(isGrid ? anyPanel : anyPrompt) || optBusy;
-        optBtn.title = (isGrid ? anyPanel : anyPrompt) ? t('逐段重写为 H3 官方格式提示词') : (isGrid ? t('请先拆分宫格图') : t('先生成分段提示词'));
+        optBtn.disabled = !anyPanel || optBusy;
+        optBtn.title = anyPanel ? t('逐段重写为 H3 官方格式提示词') : t('请先拆分宫格图');
     }
 
 
@@ -2468,14 +2167,12 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
     }
 
     // band-2 末尾常驻空段（纯 UI，不进 segsWrap、不保存、不参与拖拽排序）：缩略图位看起来可拖入 / 上传分镜图，触发才真实新建一段
-    function buildGhostSeg(gridMode) {
+    function buildGhostSeg() {
         const thumb = $el('div', { className: 'neo-director-setup-seg-thumb neo-director-setup-seg-thumb-empty neo-director-story-seg-ghost-thumb' }, [
             $el('span', { className: 'neo-director-setup-seg-thumb-hint', textContent: t('＋ 拖入 / 上传分镜图新增一段') }),
         ]);
         attachGhostThumbUpload(thumb);
-        const promptCells = gridMode
-            ? [$el('div', { className: 'neo-director-story-seg-prompt' })]
-            : [$el('div', { className: 'neo-director-story-seg-prompt' }), $el('div', { className: 'neo-director-story-seg-prompt' })];
+        const promptCells = [$el('div', { className: 'neo-director-story-seg-prompt' })];
         return $el('div', { className: 'neo-director-story-seg-ghost' }, [
             $el('div', { className: 'neo-director-story-seg-head' }, [$el('span', { textContent: t('＋ 新增分镜段') })]),
             $el('div', { className: 'neo-director-setup-seg-cols' }, [thumb, ...promptCells]),
@@ -2489,14 +2186,13 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
         const show = !rows.length || (!!first && (!!segStoryboardFname(first) || !!(first.querySelector('.neo-director-prompt')?.value || '').trim()));
         const ghost = setupSegPreview.querySelector('.neo-director-story-seg-ghost');
         if (show && !ghost) {
-            const src = frameSourceSel ? frameSourceSel.value : 'storyboard';
-            setupSegPreview.appendChild(buildGhostSeg(src === 'grid'));
+            setupSegPreview.appendChild(buildGhostSeg());
         } else if (!show && ghost) {
             ghost.remove();
         }
     }
 
-    // 流式生成时轻量刷新某段对照表右栏（优化后）单元格：只改 textContent，不整表重渲
+    // 流式生成时轻量刷新某段对照表的提示词单元格：只改 textContent，不整表重渲
     function _updateOptCell(i, text) {
         for (const item of setupSegPreview.querySelectorAll('.neo-director-story-seg-item')) {
             if (item._segIdx === i) {
@@ -2509,19 +2205,14 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
     }
 
     function renderSetupSegs() {
-        refreshStepState();   // 各段内容 / 来源变化 → 重算四步徽标与各步动作可用性
+        refreshStepState();   // 各段内容变化 → 重算两步徽标与各步动作可用性
         setupSegPreview.innerHTML = '';
         const rows = Array.from(segsWrap.querySelectorAll('.neo-director-seg'));
         // 各段分镜图汇总成一份 Lightbox 列表：点任一缩略图从该段开始，←/→ 在各段间切换；按文件名去重避免重复页
-        const src = frameSourceSel ? frameSourceSel.value : 'storyboard';
-        const gridMode = src === 'grid';   // 宫格分镜图拆分：各段无「优化前」原文，对照表降为两栏（分镜图 / 提示词）
-        setupSegPreview.classList.toggle('neo-director-setup-segs-grid', gridMode);
         if (rows.length) {
             setupSegPreview.appendChild($el('div', { className: 'neo-director-setup-seg-cols neo-director-setup-seg-labels' }, [
                 $el('span', { textContent: t('分镜图') }),
-                ...(gridMode
-                    ? [$el('span', { textContent: t('提示词') })]
-                    : [$el('span', { textContent: t('优化前') }), $el('span', { textContent: t('优化后') })]),
+                $el('span', { textContent: t('提示词') }),
             ]));
         } else {
             setupSegPreview.appendChild($el('div', { className: 'neo-director-story-segs-empty', textContent: t('（还没有分段，把分镜图拖入下方空段即可新增）') }));
@@ -2530,8 +2221,6 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
         const sbItemIdx = new Map();
         rows.forEach((row, i) => {
             const dur = row.querySelector('.neo-director-dur').value;
-            const before = (origPrompts && origPrompts[i]) || row.querySelector('.neo-director-prompt').value || '';
-            const after = (optPrompts && optPrompts[i]) || t('（未优化）');
             const thumb = $el('div', { className: 'neo-director-setup-seg-thumb' });
             const sbFname = segStoryboardFname(row);
             if (sbFname) {
@@ -2561,12 +2250,7 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
                 thumb.appendChild($el('span', { className: 'neo-director-setup-seg-thumb-hint', textContent: t('＋ 拖入 / 上传分镜图') }));
             }
             attachSegThumbUpload(thumb, row);   // 分镜图位支持直接拖入 / 上传（跳过宫格拆分）
-            const promptCells = gridMode
-                ? [$el('div', { className: 'neo-director-story-seg-prompt', textContent: row.querySelector('.neo-director-prompt').value || t('（未生成）') })]
-                : [
-                    $el('div', { className: 'neo-director-story-seg-prompt', textContent: before }),
-                    $el('div', { className: 'neo-director-story-seg-prompt', textContent: after }),
-                ];
+            const promptCells = [$el('div', { className: 'neo-director-story-seg-prompt', textContent: row.querySelector('.neo-director-prompt').value || t('（未生成）') })];
             const item = $el('div', { className: 'neo-director-story-seg-item' }, [
                 $el('div', { className: 'neo-director-story-seg-head' }, [
                     $el('span', { className: 'neo-director-story-seg-grip', textContent: '⠿', title: t('拖拽排序') }),
@@ -2582,44 +2266,29 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
         syncGhostSeg();   // 常驻空段：无分段或第一段已有输入时才显示；拖入分镜图才真实建段
     }
 
-    // 文字侧子设置（🎨 图片分镜 / 模式提示）挂在文字故事板卡的右栏——与主题输入同一行，不再单独占 band；
-    // 宫格来源时文字卡整体隐藏，这些也随之一并隐藏。
-    const textStack = $el('div', { className: 'neo-director-idea-stack' }, [
-        sbCard,         // 🎨 图片分镜（逐段关键帧；与生成模式解耦）
-        uniR2vHint,      // 全参考：参考素材到时间轴页逐段设置
-        uniMixedHint,    // 混合：逐段设置提示
-    ]);
-    srcTextSide.appendChild(textStack);
-
-    // 📖 故事板分镜页：band 0 左来源右角色参考盒 → band 1 选中来源的卡（文字卡内右栏带图片分镜等）→ band 2 各段对照
+    // 📖 故事板分镜页：band 0 角色参考图盒 → band 1 宫格图卡 + 模式提示 → band 2 各段对照
     // 「各段对照」标题行单独持有：单段配方整块收起（换成 setupSingleHint），段数一变就切
     const setupOptRow = $el('div', { className: 'neo-director-setup-opt' }, [
-        stepOptBadge,   // ④ 提示词：分段 / 关键帧之后的最后一步
+        stepOptBadge,   // ② 提示词：拆分到各段之后的最后一步
         $el('label', { className: 'neo-director-field-label neo-director-story-segs-title', textContent: t('各段对照（重新生成基于原文再试）') }),
         optStatus,
         optBtn,
     ]);
     const genPane = $el('div', { className: 'neo-director-pane neo-director-pane-story' }, [
-        // band 0：左 = 分镜来源 radio；右 = 👤 角色参考图紧凑盒（标题 / 身份参考 / 素材库 + 网格都集成在盒内，只占顶部右侧，不再独占整行）
-        $el('div', { className: 'neo-director-band neo-director-band-top' }, [
-            $el('div', { className: 'neo-director-row neo-director-shared' }, [
-                stepSrcBadge,   // ① 来源 / 角色素材：下面是分段，先选来源并给足输入
-                $el('label', { className: 'neo-director-field-label', textContent: t('分镜来源') }), srcSel,
-            ]),
-            charCard,       // 👤 角色参考图：配方级常驻（宫格 / 文字两种来源下都在；视频各段身份参考 + 文字分镜 / r2i 图片分镜共用）
-        ]),
-        // band 1：只显示选中来源的卡（另一张整体隐藏——不会两张同时亮着）；文字卡右栏内含图片分镜 / 模式提示
-        $el('div', { className: 'neo-director-band' }, [srcGridCard, srcTextCard]),
-        // band 2：各段对照（文字来源三栏：分镜图 / 优化前 / 优化后；宫格来源两栏：分镜图 / 提示词）
+        // band 0：👤 角色参考图紧凑盒（标题 / 身份参考 / 素材库 + 网格都集成在盒内，配方级常驻，视频各段身份参考）
+        $el('div', { className: 'neo-director-band neo-director-band-top' }, [charCard]),
+        // band 1：🧩 宫格图故事板卡（① 拆分到各段）+ 生成模式提示（全参考 / 混合的素材到时间轴页逐段设置）
+        $el('div', { className: 'neo-director-band' }, [srcGridCard, uniR2vHint, uniMixedHint]),
+        // band 2：各段对照（分镜图 / 提示词两栏）
         $el('div', { className: 'neo-director-band neo-director-band-segs' }, [
             // 「各段对照」标题行：优化按钮 + 状态靠本行最右（列名见下方表头），不独占一行
             setupOptRow,
-            setupSingleHint,   // 单段：多段对照 + 批量优化没有意义，换成一行指引
+            setupSingleHint,   // 单段：多段对照没有意义，换成一行指引
             setupSegPreview,
         ]),
     ]);
     stepUiReady = true;    // 本页 DOM 齐了：此后各步徽标 / 按钮可用性都随内容实时刷新
-    refreshSetupRefs();   // 按当前模式初始化来源卡 / 统一素材区显隐
+    refreshSetupRefs();   // 按当前生成模式初始化模式提示显隐
     renderSetupSegs();    // 打开旧配方时回显各段当前内容
 
 
@@ -2683,7 +2352,7 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
 
     // 单段引导：空白新建配方落在时间线页，一行指出「要拆多段去哪」；有内容 / 多段时自动收起
     const singleSegGuide = $el('div', { className: 'neo-director-single-guide' }, [
-        $el('span', { textContent: t('只有一段：提示词写在下面的段落里即可。要从主题 / 宫格图一次拆成多段？') }),
+        $el('span', { textContent: t('只有一段：提示词写在下面的段落里即可。要从宫格图一次拆成多段？按故事主题生成分段，用右栏智能体。') }),
         $el('button', {
             className: 'neo-director-single-guide-btn', type: 'button', textContent: t('📖 故事板分镜'),
             onclick: () => switchTab('story'),

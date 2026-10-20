@@ -82,7 +82,7 @@ StoryBoard / CharacterSheet 主目录的只读预设区；未归类的目录仍�
 | GET | `/rs_recipes/workflow` | 示例对应的工作流快照 |
 | POST | `/rs_recipes/send_to_workflow` | 资源复制进 `input/` 供一键还原 |
 | GET | `/rs_recipes/director_spec` | 导演配方 `{shared, segments}` 与身份参考图 |
-| POST | `/rs_recipes/director_generate_segments` | 文字故事板 → 分段 JSON |
+| POST | `/rs_recipes/director_generate_segments` | 按主题 / 脚本生成分段 JSON（智能体 / MCP 路径，编辑器 UI 不调用） |
 | POST | `/rs_recipes/director_optimize_prompts` | 单段提示词按 H3 格式重写 |
 | POST | `/rs_recipes/grid_split` | 宫格分镜图拆分为各段首帧 |
 | POST | `/rs_recipes/director_describe_panel` | 逐格描述生成单段成品提示词 |
@@ -125,7 +125,7 @@ Neo Studio 独立页面（`web/studio/index.html`）的后端。素材 / 生图 
 | POST | `/neo_studio/director/generate` | 整片生成入队（可只跑勾选的段） |
 | GET | `/neo_studio/director/{task_id}` | 整片任务快照 |
 | POST | `/neo_studio/director/{task_id}/cancel` | 取消整片任务 |
-| GET | `/neo_studio/version` | 插件 / ComfyUI 版本与导演配方列表 |
+| GET | `/neo_studio/version` | 插件 / ComfyUI 版本与导演配方列表，附「设置 → 关于」的路径行 `data_root` / `comfy_local`（`remote` 留空，远程地址只有桌面端知道） |
 | GET | `/neo_studio/log` | ComfyUI 控制台日志（`app.logger` 环形缓冲 300 条），Studio「设置 → 日志」轮询 |
 | POST | `/neo_studio/clear_memory` | 卸载模型并清理显存缓存 |
 
@@ -311,7 +311,7 @@ LLM 模式与配置见 [llm.md](llm.md)，技能设计见 [skills.md](skills.md)
 | GET/POST | `/rs_prompts/get_models` `native_models` `set_model` `remote_llm_config` `llm_connection_test` `llm_mode` `extract_title` `fetch_remote_models` | LLM 配置与标题提取（只读 `configs/` 与 8080 服务） |
 | GET/POST | `/neo_model_hub/*` `/neo_backyard/*` | 模型库与 Backyard |
 | GET/POST | `/userdata/neo_gallery_data.json` | 素材库状态文件（`user/default/`，写入走 `.tmp` + replace） |
-| GET | `/neo_studio/version` | 能力快照：`offline: true` + `caps` + `starting` + `routes` + `comfy_base`，前端据此门控与选目标 |
+| GET | `/neo_studio/version` | 能力快照：`offline: true` + `caps` + `starting` + `routes` + `comfy_base` + `data_root` / `comfy_local` / `remote`（「设置 → 关于」的路径行），前端据此门控与选目标 |
 | GET | `/neo_studio/comfy_state` | 内核状态快照（端口 / PID / 谁启动 / 运行 / 就绪 / 启动中）：整页刷新后 pywebview 的桥晚于页面注入，顶栏状态位靠它从 HTTP 侧补上；桌面端还没装配出内核时 `409` |
 | GET | `/neo_studio/log` `/view` `/ws` | 启动日志 / 图片只读 / WS 桩 |
 | ANY | 其余 `/neo_*` `/rs_*` `/userdata/*` `/api/*` | `409 {"success": false, "offline": true}` |

@@ -147,7 +147,7 @@ embedded ComfyUI workflow).
   badge and keeps its button lit). The mark applies to both entry points: **🎬 New director recipe (full
   reference)** in a card's ⋯ menu builds **one full-reference segment** from that image, and the same item on the
   multi-select bar merges the whole batch into one segment — the images become that segment's reference images
-  (first 9) and are also filled into **👤 Character references** (first 6, image storyboard defaults to r2i);
+  (first 9) and are also filled into **👤 Character references** (first 6);
   neither is used as a keyframe. Three-view sheets are character sheets, so using them as a first frame opens the
   video on the sheet; unmarked directories keep the "one segment per image, image as first frame" behavior. The
   flag also covers subdirectories (mark `stars` and `stars/孟子义` behaves the same), lives in `character_dirs` in

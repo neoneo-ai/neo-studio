@@ -9,7 +9,7 @@
 ## 输入
 | 名称 | 类型 | 说明 |
 | --- | --- | --- |
-| `recipe` | Combo | `video_director` 配方名：多段整片模式的分镜来源；接了 `bundle` 时忽略配方。 |
+| `recipe` | Combo | `video_director` 配方名：多段整片模式逐段生成的配方；接了 `bundle` 时忽略配方。 |
 | `skill` | Combo | 仅 BUNDLE 单段模式用的视频 skill；配方多段模式忽略（各段自带 skill）。 |
 | `bundle` | STRING | 可选。Neo Prompt Agent 的 BUNDLE：提供时走单段生成，提示词与参考来自 bundle。 |
 | `seed` | INT | `-1` = 用配方 `shared.seed`（配方存 `-1` = 每次运行随机种子）；`≥0` = 本次整片覆盖该种子。 |

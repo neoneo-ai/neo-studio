@@ -71,6 +71,20 @@ body {
 .ns-frameless .ns-header { cursor: move; user-select: none; }
 .ns-frameless .ns-header a, .ns-frameless .ns-header button { cursor: pointer; }
 .ns-about-version { font-size: 13px; color: #b7bbc4; user-select: text; cursor: text; }
+/* 「关于」的路径行：左标签固定宽 + 中间值可全选、右两端是复制 / 打开 */
+.ns-about-rows { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.ns-about-row { display: flex; align-items: center; gap: 8px; }
+.ns-about-label { flex: 0 0 118px; font-size: 12px; color: #9aa4b0; }
+.ns-about-value {
+    flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-size: 12px; color: #d7dae0; background: #1e1e1e; border: 1px solid #33333a;
+    border-radius: 4px; padding: 3px 6px; user-select: all;
+}
+.ns-about-copy, .ns-about-open {
+    flex: 0 0 auto; border: 1px solid #33333a; border-radius: 4px; background: transparent;
+    color: #b8b8c2; font-size: 12px; padding: 2px 8px; cursor: pointer;
+}
+.ns-about-copy:hover, .ns-about-open:hover { background: #33333a; color: #fff; }
 
 /* 右栏智能体：顶栏开合按钮 + 常驻右缘的栏子（默认收起，开合与宽度存 neo_studio_agent_dock）。
    栏子宽度由 .ns-body 上的 --ns-agent-w 决定，没拖过就用样式里的默认宽度；页面视图让位（.ns-body 的 flex 行）。

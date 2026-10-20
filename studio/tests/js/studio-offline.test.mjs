@@ -59,12 +59,102 @@ test("离线页带离线标记，不叠横幅", async () => {
 
 test("版本号在设置的「关于」里", async () => {
     mockOfflineDesktop();
+    window.pywebview = { api: { launcher_state: async () => ({ ...LAUNCHER_SNAPSHOT }) } };
     window.location.hash = "#/settings";
     await import("../../web/studio/studio-app.js?offAbout=1");
     await flush();
     click(document.querySelector('.ns-settings-tab[data-key="about"]'));
     await flush();
     assert.match(document.getElementById("ns-about-version").textContent, /Neo Studio 9\.9\.9 · 离线模式/);
+});
+
+// 「设置 → 关于」的路径行：值全部来自版本快照（桌面端与内核报同一份键），空值那行不出
+const ABOUT_PATHS = {
+    data_root: "F:\\neo-data", comfy_local: "F:\\ComfyUI", remote: "http://192.168.0.20:8188",
+};
+
+function mockAboutPaths(extra = {}) {
+    mockRoute("/neo_studio/version", jsonResponse({
+        success: true, plugin_version: "9.9.9", comfyui_version: "ComfyUI 未运行",
+        offline: true, caps: OFFLINE_CAPS, recipes: [], ...ABOUT_PATHS, ...extra,
+    }));
+}
+
+async function openAboutTab(tag) {
+    window.location.hash = "#/settings";
+    await import(`../../web/studio/studio-app.js?${tag}`);
+    await flush();
+    click(document.querySelector('.ns-settings-tab[data-key="about"]'));
+    await flush();
+    return [...document.querySelectorAll("#ns-about-rows .ns-about-row")];
+}
+
+// 启动设置面板读不到快照就在 3 秒后摘自己的 tab：不给桥的用例，那个摘除正落在后面用例身上
+const LAUNCHER_SNAPSHOT = {
+    root: "F:/ComfyUI", python: "F:/ComfyUI/python/python.exe", port: 8188,
+    plugin_dir: "F:/ComfyUI/custom_nodes/comfyui-neo-studio",
+    state_dir: "F:/neo-data", portable: true, state: "ok", error: "",
+};
+
+test("关于页：仓库 / 数据根 / ComfyUI 根 / 远程地址逐行列出，打开与复制都走得通", async () => {
+    mockOfflineDesktop();
+    mockAboutPaths();
+    const viaBridge = [], viaOpen = [], copied = [];
+    const rawOpen = window.open;
+    Object.defineProperty(navigator, "clipboard", {
+        value: { writeText: async (text) => { copied.push(text); } }, configurable: true,
+    });
+    window.pywebview = {
+        api: {
+            open_url: async (url) => { viaBridge.push(url); return { ok: true }; },
+            launcher_state: async () => ({ ...LAUNCHER_SNAPSHOT }),
+        },
+    };
+    try {
+        const rows = await openAboutTab("aboutRows=1");
+        assert.equal(rows.length, 4, `仓库 + 数据根 + 本地根 + 远程地址：${rows.map((r) => r.textContent)}`);
+        assert.match(rows[1].textContent, /数据目录/);
+        assert.equal(rows[1].querySelector(".ns-about-value").textContent, "F:\\neo-data");
+        assert.equal(rows[2].querySelector(".ns-about-value").textContent, "F:\\ComfyUI");
+        assert.equal(rows[3].querySelector(".ns-about-value").textContent, "http://192.168.0.20:8188");
+        assert.ok(rows[0].querySelector(".ns-about-open"), "仓库行要能打开");
+        assert.equal(rows[1].querySelector(".ns-about-open"), null, "本地路径行不给打开按钮");
+
+        // 桌面端窗口没有标签页可开：打开交给桥
+        click(rows[3].querySelector(".ns-about-open"));
+        await flush();
+        assert.deepEqual(viaBridge, ["http://192.168.0.20:8188"], "远程地址交给桌面端的桥");
+
+        click(rows[1].querySelector(".ns-about-copy"));
+        await flush();
+        assert.deepEqual(copied, ["F:\\neo-data"]);
+        assert.equal(document.getElementById("ns-toast").textContent, "已复制");
+
+        // 浏览器标签页：没有桥就开新标签
+        delete window.pywebview;
+        window.open = (url, target) => viaOpen.push([url, target]);
+        click(rows[0].querySelector(".ns-about-open"));
+        await flush();
+        assert.deepEqual(viaOpen, [["https://github.com/neoneo-ai/neo-studio", "_blank"]]);
+
+        Object.defineProperty(navigator, "clipboard", {
+            value: { writeText: async () => { throw new Error("NotAllowedError"); } }, configurable: true,
+        });
+        click(rows[2].querySelector(".ns-about-copy"));
+        await flush();
+        assert.equal(document.getElementById("ns-toast").textContent, "复制失败");
+    } finally {
+        window.open = rawOpen;   // 开新标签的桩挂在 window 上，留着会让后面的用例当成已开过标签页
+        delete navigator.clipboard;   // 桩挂在全局 navigator 上，留着会让后面的用例当剪贴板可用
+    }
+});
+
+test("关于页：快照没有路径时只出仓库行", async () => {
+    mockOfflineDesktop();
+    window.pywebview = { api: { launcher_state: async () => ({ ...LAUNCHER_SNAPSHOT }) } };
+    const rows = await openAboutTab("aboutBare=1");
+    assert.equal(rows.length, 1, "旧版快照没有路径键，路径行整块不出");
+    assert.match(rows[0].textContent, /github\.com/);
 });
 
 test("离线导演页：生成按钮不发请求，点一下交给桌面端拉起 ComfyUI", async () => {
@@ -150,38 +240,36 @@ test("离线配方编辑器：运行按钮交给桌面端启动 ComfyUI，不发
     mockDesktopApi(starts);
     document.body.insertAdjacentHTML("beforeend",
         '<button class="neo-director-regen-run" type="button">生成这一段</button>' +
-        '<button class="neo-director-merge-run" type="button">拼回成片</button>' +
-        '<button class="neo-director-sb-gen" type="button">🎨 生成图片分镜</button>');
+        '<button class="neo-director-merge-run" type="button">拼回成片</button>');
     await import("../../web/studio/studio-app.js?offRun=1");
     await flush();
 
-    for (const sel of [".neo-director-regen-run", ".neo-director-merge-run", ".neo-director-sb-gen"]) {
+    for (const sel of [".neo-director-regen-run", ".neo-director-merge-run"]) {
         click(document.querySelector(sel));
         await flush();
     }
     assert.ok(starts.length >= 1, "运行按钮应交给桌面端拉起 ComfyUI（启动中不重复拉起）");
-    for (const p of ["/neo_video_gen/run_segment", "/neo_video_gen/assemble_segments",
-                     "/neo_video_gen/storyboard_generate"]) {
+    for (const p of ["/neo_video_gen/run_segment", "/neo_video_gen/assemble_segments"]) {
         assert.equal(fetchLog.filter((c) => c.path === p).length, 0, `离线不该发 ${p}`);
     }
 });
 
-test("离线配方编辑器：编辑类按钮不被门控，分段生成照常打到桌面端", async () => {
+test("离线配方编辑器：编辑类按钮不被门控，逐格生成提示词照常打到桌面端", async () => {
     mockOfflineDesktop();
     mockDesktopApi([]);
-    mockRoute("/rs_recipes/director_generate_segments", jsonResponse({ success: true, segments: [] }));
+    mockRoute("/rs_recipes/director_describe_panel", jsonResponse({ success: true }));
     document.body.insertAdjacentHTML("beforeend",
-        '<button class="neo-director-gen-segs" type="button">✨ 生成分镜分段</button>');
-    document.querySelector(".neo-director-gen-segs").addEventListener("click", () => {
-        fetch("/rs_recipes/director_generate_segments", { method: "POST", body: "{}" });
+        '<button class="neo-director-gen-seg-prompts" type="button">📝 逐格生成提示词</button>');
+    document.querySelector(".neo-director-gen-seg-prompts").addEventListener("click", () => {
+        fetch("/rs_recipes/director_describe_panel", { method: "POST", body: "{}" });
     });
     await import("../../web/studio/studio-app.js?offEdit=1");
     await flush();
 
-    click(document.querySelector(".neo-director-gen-segs"));
+    click(document.querySelector(".neo-director-gen-seg-prompts"));
     await flush();
-    assert.equal(fetchLog.filter((c) => c.path === "/rs_recipes/director_generate_segments").length, 1,
-                 "分段只依赖 8080 LLM：门控不该拦掉");
+    assert.equal(fetchLog.filter((c) => c.path === "/rs_recipes/director_describe_panel").length, 1,
+                 "逐格描述只依赖 8080 LLM：门控不该拦掉");
 });
 
 test("启动设置：完整 Studio 页里走桌面端的 js_api 读快照并保存", async () => {

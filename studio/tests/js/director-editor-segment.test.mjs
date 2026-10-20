@@ -723,171 +723,43 @@ test("导演编辑器单例：新建（未命名）编辑器开着时再开新�
     assert.equal(document.querySelectorAll(".neo-director-overlay").length, 0, "放弃修改后关闭");
 });
 
-test("导演编辑器：文字故事板一键生成分段填充时间轴", async () => {
-    const { openDirectorEditor } = await import("../../web/director.js");
-    appState.graph = { _nodes: [] }; // 无 Load* 节点 → 参考图网格为空
-    mockRoute("/rs_prompts/skills", () => jsonResponse([
-        { id: "sk-a", name: "技能 A", gen_video: true },
-    ]));
-    let segBody;
-    mockRoute("/rs_recipes/director_generate_segments", (body) => { segBody = body; return jsonResponse({
-        success: true,
-        segments: [
-            { prompt: "场景A提示词", duration_sec: 5, storyboard_prompt: "场景A关键帧" },
-            { prompt: "场景B提示词", duration_sec: 10 },
-        ],
-    }); });
-
-    await openDirectorEditor(null); // 新建：默认 🎞️ 分镜时间线页（单段最简单那条路）
-    await sleep(60);
-
-    // 页签结构：只有两个页签，新建默认落在「🎞️ 分镜时间线」，故事板分镜页隐藏
-    const tabs = Array.from(document.querySelectorAll(".neo-director-tab"));
-    assert.equal(tabs.length, 2, "两个页签");
-    const tabStory = tabs.find((t) => t.textContent.includes("故事板分镜"));
-    const tabTimeline = tabs.find((t) => t.textContent.includes("分镜时间线"));
-    assert.ok(tabStory && tabTimeline, "两个页签齐全");
-    assert.ok(tabTimeline.classList.contains("active"), "新建默认激活时间线页");
-    assert.equal(document.querySelector(".neo-director-pane-story").style.display, "none", "故事板分镜页默认隐藏");
-
-    // 往下断言的是故事板分镜页的结构：显式切过去
-    tabStory.click();
-    await sleep(20);
-    assert.ok(tabStory.classList.contains("active"), "点页签可切到故事板分镜页");
-
-    // band 1 来源 radio 横排（与旧版一致）：宫格 / 文字二选一，下面只显示选中来源的那张卡
-    const srcGroup = document.querySelector(".neo-director-src");
-    const srcRadio = (v) => srcGroup.querySelector(`input[value="${v}"]`);
-    assert.ok(srcRadio("grid") && srcRadio("text"), "来源含「🧩 宫格图故事板」「📝 文字故事板」两个横向 radio");
-    assert.ok(srcGroup.textContent.includes("🧩 宫格图故事板") && srcGroup.textContent.includes("📝 文字故事板"), "两个 radio 标签齐全");
-    const srcGridCard = document.querySelector(".neo-director-src-card-grid");
-    const srcTextCard = document.querySelector(".neo-director-src-card-text");
-    const band0 = srcGroup.closest(".neo-director-band");
-    assert.ok(srcGroup.parentElement.classList.contains("neo-director-row"), "分镜来源在第一行的行内横排");
-    assert.equal(band0, document.querySelector(".neo-director-pane-story").children[0], "分镜来源所在 band 是故事板分镜页第一段");
-    assert.ok(band0.querySelector(".neo-director-setup-char"), "角色参考图卡片在两种来源下都常驻（与来源同行 band）");
-    assert.ok(band0.querySelector(".neo-director-setup-char .neo-director-identity-refs"), "角色身份参考集成在角色参考图盒标题行内");
-    assert.ok(band0.querySelector(".neo-director-setup-char.neo-director-setup-char-collapsed"), "新配方（无角色图）默认收起角色参考图盒");
-    band0.querySelector(".neo-director-char-title").click();
-    assert.ok(!band0.querySelector(".neo-director-setup-char").classList.contains("neo-director-setup-char-collapsed"), "点标题展开网格再添加");
-    assert.equal(srcGridCard.style.display, "", "新配方默认显示宫格图来源卡");
-    assert.equal(srcTextCard.style.display, "none", "默认隐藏文字卡（不同时显示两张）");
-
-    // 切到文字来源：只换卡（radio 行不动），不会两张卡同时亮着
-    srcRadio("text").click();
-    await sleep(20);
-    assert.equal(srcRadio("text").checked, true, "点文字 radio 即选中");
-    assert.equal(srcTextCard.style.display, "", "切到文字来源后文字卡显示");
-    assert.equal(srcGridCard.style.display, "none", "宫格卡隐藏（两张不同时显示）");
-
-    // 文字卡内元素齐全：主题输入 / 分段粒度 / 一键生成按钮
-    const ideaInp = srcTextCard.querySelector(".neo-director-story-idea");
-    const genBtn = srcTextCard.querySelector(".neo-director-gen-segs");
-    assert.ok(ideaInp && genBtn, "主题输入 / 生成分段按钮齐全");
-    assert.ok(srcTextCard.querySelector(".neo-director-seglen"), "分段粒度选择器在文字卡内");
-
-    // 紧凑布局：一行两栏 + 动作靠各段右上角——左 = 故事主题 / 脚本（粒度 + 生成分镜分段在左栏右上角），
-    // 右 = 分镜 / 首帧方式 + 🎨 图片分镜（生成图片分镜在卡片右上角）
-    const ideaCols = srcTextCard.querySelector(".neo-director-idea-cols");
-    const ideaCol = ideaCols.querySelector(".neo-director-idea-col");
-    const ideaSide = ideaCols.querySelector(".neo-director-idea-side");
-    assert.ok(ideaCol.contains(ideaInp), "故事主题 / 脚本在左栏");
-    const leftHead = ideaCol.querySelector(".neo-director-idea-head");
-    const leftAct = leftHead && leftHead.querySelector(".neo-director-step-act");
-    assert.ok(leftAct && leftAct.contains(genBtn) && leftAct.contains(srcTextCard.querySelector(".neo-director-seglen")),
-        "分段粒度 + 生成分镜分段在左栏（故事）标题行右上角");
-    assert.ok(!srcTextCard.querySelector(".neo-director-src-head .neo-director-step-act"), "文字卡总标题行不放动作按钮");
-    assert.equal(document.querySelectorAll(".neo-director-text-mode").length, 0, "分镜 / 首帧方式选择器已移除（文字侧固定逐段生成图片分镜）");
-    assert.ok(ideaSide.contains(srcTextCard.querySelector(".neo-director-setup-sb")), "🎨 图片分镜卡片也在右栏（与主题输入同一行）");
-    assert.ok(!document.querySelector(".neo-director-band-text"), "文字侧子设置不再单独占 band（已并入文字卡右栏）");
-
-    // 一键生成 → 请求带 idea + 粒度，时间轴填充段落（主题用 input 事件输入，与真实输入一致）
-    inputText(ideaInp, "一只机器猫找家");
-    genBtn.click();
-    await sleep(50);
-
-    const genCall = fetchLog.find((c) => c.path === "/rs_recipes/director_generate_segments");
-    assert.ok(genCall, "发出分镜分段生成请求");
-    assert.equal(segBody.idea, "一只机器猫找家", "请求携带主题");
-    assert.ok(Number.isInteger(segBody.segment_seconds), "请求携带分段粒度");
-
-    const segs = Array.from(document.querySelectorAll(".neo-director-seg"));
-    assert.equal(segs.length, 2, "生成 2 段");
-    assert.equal(segs[0].querySelector(".neo-director-prompt").value, "场景A提示词");
-    assert.equal(segs[0].querySelector(".neo-director-skill").value, "sk-a", "技能取首个可用视频技能");
-    assert.equal(Number(segs[1].querySelector(".neo-director-dur").value), 10);
-
-    // band 3 各段对照（文字来源三栏：分镜图 / 优化前 / 优化后）
-    const labels = Array.from(document.querySelectorAll(".neo-director-setup-seg-labels span")).map((s) => s.textContent);
-    assert.deepEqual(labels, ["分镜图", "优化前", "优化后"], "文字来源对照表三栏");
-    const segItems = Array.from(document.querySelectorAll(".neo-director-story-seg-item"));
-    assert.equal(segItems.length, 2, "对照表显示 2 段");
-    assert.ok(segItems[0].textContent.includes("场景A提示词"), "第 1 段含优化前原文");
-
-    document.querySelector(".neo-director-close").click();
-    await sleep(20);
-});
-
-test("导演编辑器：故事板分镜页四步徽标（① 来源 → ② 分段 → ③ 关键帧 → ④ 提示词）与动作按前置置灰", async () => {
+test("导演编辑器：故事板分镜页两步徽标（① 宫格拆分 → ② 提示词）与动作按前置置灰", async () => {
     const { openDirectorEditor } = await import("../../web/director.js");
     appState.graph = { _nodes: [] };
     mockRoute("/rs_prompts/skills", () => jsonResponse([{ id: "sk-a", name: "技能 A", gen_video: true }]));
-    mockRoute("/rs_recipes/director_generate_segments", () => jsonResponse({
-        success: true,
-        segments: [{ prompt: "场景A提示词", duration_sec: 5 }],
-    }));
 
-    await openDirectorEditor(null); // 新建：默认宫格来源、1 个空段、无主题也无配方名
+    await openDirectorEditor(null);   // 新建：1 个空段、无宫格图
     await sleep(60);
-
-    // 徽标排在各自步骤的标题行：①「分镜来源」行、② 宫格 / 文字两张来源卡、③「🎨 图片分镜」、④「各段对照」
+    Array.from(document.querySelectorAll(".neo-director-tab")).find((t) => t.textContent.includes("故事板分镜")).click();
+    await sleep(20);
     const story = document.querySelector(".neo-director-pane-story");
-    const badges = Array.from(story.querySelectorAll(".neo-director-step-badge"));
-    assert.deepEqual(badges.map((b) => b.textContent), ["①", "②", "②", "③", "④"], "四步徽标齐全且按序号排布");
-    assert.ok(document.querySelector(".neo-director-src").parentElement.querySelector(".neo-director-step-badge"), "① 在「分镜来源」这一行");
-    assert.equal(story.querySelector(".neo-director-src-card-grid .neo-director-src-head .neo-director-step-badge"), badges[1], "② 在宫格卡标题行");
-    assert.equal(story.querySelector(".neo-director-src-card-text .neo-director-idea-head .neo-director-step-badge"), badges[2], "② 在文字卡标题行");
-    assert.equal(story.querySelector(".neo-director-setup-sb .neo-director-refs-head .neo-director-step-badge"), badges[3], "③ 在「🎨 图片分镜」标题行");
-    assert.equal(story.querySelector(".neo-director-setup-opt > .neo-director-step-badge"), badges[4], "④ 在「各段对照」标题行");
 
-    const genBtn = story.querySelector(".neo-director-gen-segs");
-    const splitBtn = story.querySelector(".neo-director-grid-split");
-    const sbBtn = story.querySelector(".neo-director-sb-gen");
-    const optBtn = story.querySelector(".neo-director-optimize");
+    const badges = Array.from(story.querySelectorAll(".neo-director-step-badge"));
+    assert.deepEqual(badges.map((b) => b.textContent), ["①", "②"], "两步徽标齐全且按序号排布");
+    assert.equal(story.querySelector(".neo-director-src-card-grid .neo-director-src-head .neo-director-step-badge"), badges[0],
+        "① 徽标在宫格卡标题行");
+    assert.equal(story.querySelector(".neo-director-setup-opt > .neo-director-step-badge"), badges[1],
+        "② 徽标在「各段对照」标题行");
+
     const states = () => badges.map((b) => (b.classList.contains("neo-director-step-done") ? "done"
         : b.classList.contains("neo-director-step-current") ? "current" : "todo"));
+    const splitBtn = story.querySelector(".neo-director-grid-split");
+    const optBtn = story.querySelector(".neo-director-optimize");
 
-    // 初始：宫格来源还没选图 → ① 等输入（高亮），②③④ 前置未满足（变淡）；四个动作都点不动，缺什么写在 title
-    assert.deepEqual(states(), ["current", "todo", "todo", "todo", "todo"], "初始四步状态");
-    assert.equal(genBtn.disabled, true, "主题为空：生成分镜分段置灰");
-    assert.match(genBtn.title, /主题/, "置灰原因写在 title");
+    // 还没选宫格图 → 两步都变淡（前置未完成）；两个动作都点不动，缺什么写在 title
+    assert.deepEqual(states(), ["todo", "todo"], "新建无宫格图：两步都未就绪");
     assert.equal(splitBtn.disabled, true, "未选宫格图：拆分到各段置灰");
     assert.match(splitBtn.title, /宫格图/, "置灰原因写在 title");
-    assert.equal(sbBtn.disabled, true, "分段为空：生成图片分镜置灰");
-    assert.equal(optBtn.disabled, true, "没有可描述的段：生成提示词置灰");
+    assert.equal(optBtn.disabled, true, "没有分镜图：生成所有分段的提示词置灰");
     splitBtn.click();   // 置灰按钮点不动（不报错、不发请求）
     await sleep(20);
     assert.ok(!fetchLog.some((c) => c.path === "/rs_recipes/grid_split"), "置灰的拆分按钮不发请求");
 
-    // 文字侧填主题（input 事件 = 真实输入）→ ① 完成、② 轮到这一步、生成分镜分段可用
-    story.querySelector('input[value="text"]').click();
-    await sleep(20);
-    inputText(story.querySelector(".neo-director-story-idea"), "一只机器猫找家");
-    assert.deepEqual(states(), ["done", "current", "current", "todo", "todo"], "主题就绪：① 完成、② 当前、③/④ 仍等分段");
-    assert.equal(genBtn.disabled, false, "有主题 → 生成分镜分段可用");
-
-    // 生成分段（LLM 直出各段 / 时长 / 关键帧提示词）→ ② 完成、③ 轮到关键帧、④ 轮到提示词（优化结果还没出）
-    genBtn.click();
-    await sleep(60);
-    assert.deepEqual(states(), ["done", "done", "done", "current", "current"], "分段到手：② 完成、③/④ 就绪");
-    assert.equal(sbBtn.disabled, false, "有分段 + 配方名（随主题同步）→ 生成图片分镜可用");
-    assert.equal(optBtn.disabled, false, "有分段原文 → 生成所有分段的提示词可用");
-
     document.querySelector(".neo-director-close").click();
     await sleep(20);
 });
 
-test("导演编辑器：宫格来源的分步状态——选图后 ① 完成、拆分后可进入提示词步", async () => {
+test("导演编辑器：宫格来源的分步状态——选图后 ① 当前、拆分后 ① 完成 ② 当前", async () => {
     const { openDirectorEditor } = await import("../../web/director.js");
     appState.graph = { _nodes: [] };
     mockRoute("/rs_prompts/skills", () => jsonResponse([{ id: "sk-a", name: "技能 A", gen_video: true }]));
@@ -901,7 +773,7 @@ test("导演编辑器：宫格来源的分步状态——选图后 ① 完成、
         prompts: [],
     }));
 
-    await openDirectorEditor(null); // 新建：默认宫格来源
+    await openDirectorEditor(null); // 新建：宫格图是唯一来源
     await sleep(60);
 
     const story = document.querySelector(".neo-director-pane-story");
@@ -910,19 +782,20 @@ test("导演编辑器：宫格来源的分步状态——选图后 ① 完成、
         : b.classList.contains("neo-director-step-current") ? "current" : "todo"));
     const splitBtn = story.querySelector(".neo-director-grid-split");
 
-    // 从素材库拖入宫格图 → ① 完成、② 轮到拆分
+    // 从素材库拖入宫格图 → ① 轮到拆分（当前），② 还要等分镜图
     const dt = { getData: (m) => (m === "application/x-neo-gallery" ? '{"filename":"grid.png","subfolder":""}' : "") };
     const dropEv = new window.Event("drop", { bubbles: true, cancelable: true });
     Object.defineProperty(dropEv, "dataTransfer", { value: dt, configurable: true });
     story.querySelector(".neo-director-grid-src").dispatchEvent(dropEv);
     await sleep(40);
-    assert.deepEqual(states(), ["done", "current", "current", "todo", "todo"], "选图后 ① 完成、② 当前");
+    assert.deepEqual(states(), ["current", "todo"], "选图后 ① 当前、② 仍等分镜图");
     assert.equal(splitBtn.disabled, false, "有宫格图 → 拆分到各段可用");
 
-    // 拆分 → ② 完成（✓）、④ 可按各格分镜图逐格描述
+    // 拆分 → 各格都有分镜图：① 完成（✓）、② 轮到生成提示词
     splitBtn.click();
     await sleep(60);
-    assert.deepEqual(states(), ["done", "done", "done", "done", "current"], "拆分后 ② 完成、④ 当前");
+    assert.equal(badges[0].textContent, "✓", "拆分完成显示对勾");
+    assert.deepEqual(states(), ["done", "current"], "拆分后 ① 完成、② 当前");
     assert.equal(story.querySelector(".neo-director-optimize").disabled, false, "各格有分镜图 → 生成所有分段的提示词可用");
 
     document.querySelector(".neo-director-close").click();
@@ -1013,7 +886,7 @@ test("导演编辑器：两栏帧行——f2v 首帧槽位 | 提示词；r2v 参
     await sleep(20);
 });
 
-test("导演编辑器：打开旧配方回显自动故事板（主题/脚本/粒度），保存时带回 story", async () => {
+test("导演编辑器：打开旧配方只回显宫格拆分字段，文字故事板遗留字段不回显也不落盘", async () => {
     const { openDirectorEditor } = await import("../../web/director.js");
     appState.graph = { _nodes: [] }; // 画布无素材
     mockRoute("/rs_prompts/skills", () => jsonResponse([{ id: "sk-a", name: "技能 A", gen_video: true }]));
@@ -1025,43 +898,52 @@ test("导演编辑器：打开旧配方回显自动故事板（主题/脚本/粒
         shared: { width: 1344, height: 768 },
         segments: [{ skill_id: "sk-a", prompt: "第一段", duration_sec: 5 }],
         story: {
-            idea: "旧主题",
+            idea: "旧主题",                 // 文字故事板遗留字段：无控件回显、保存时丢弃
             story: "旧故事正文",
-            backgrounds: [{ filename: "bg.png" }], // 旧配方遗留字段：不再读取、不回显、保存时丢弃
             segment_seconds: 15,
+            frame_source: "unified",
+            image_mode: "t2i",
+            grid_prompts: "旧全局故事参考",
+            characters: [{ filename: "char.png" }],
+            backgrounds: [{ filename: "bg.png" }],
         },
     };
     await openDirectorEditor(existing, null);
     await sleep(60);
 
-    const tabStory = Array.from(document.querySelectorAll(".neo-director-tab")).find((t) => t.textContent.includes("故事板分镜"));
-    tabStory.click();
+    Array.from(document.querySelectorAll(".neo-director-tab")).find((t) => t.textContent.includes("故事板分镜")).click();
     await sleep(20);
 
-    // 主题 / 分段粒度回显（旧「story」字段同样回显到主题框）
-    assert.equal(document.querySelector(".neo-director-story-idea").value, "旧主题");
-    assert.equal(document.querySelector(".neo-director-seglen").value, "15");
+    // 宫格拆分字段回显：全局故事参考 + 角色参考图；切分方式回到默认自动
+    const card = document.querySelector(".neo-director-src-card-grid");
+    assert.equal(card.querySelector(".neo-director-grid-prompts").value, "旧全局故事参考", "回显全局故事参考");
+    assert.equal(card.querySelector(".neo-director-grid-mode").value, "auto", "切分方式默认自动检测");
+    const charTiles = Array.from(document.querySelectorAll(".neo-director-setup-char .neo-director-refpick-item")).map((it) => it.dataset.file);
+    assert.deepEqual(charTiles, ["char.png"], "角色参考图回显");
 
-    // 背景参考图已移除：旧配方的 backgrounds 不再回显，任何网格都不出现 bg.png
-    assert.ok(
-        !Array.from(document.querySelectorAll(".neo-director-refpick-grid"))
-            .some((g) => g.querySelector(".neo-director-refpick-item")?.dataset.file === "bg.png"),
-        "旧配方 backgrounds 不再回显"
-    );
+    // 主题输入 / 分段粒度 / 来源选择 / 图片分镜卡都已移除；遗留 backgrounds 不回显
+    assert.equal(document.querySelector(".neo-director-story-idea"), null, "主题输入框已移除");
+    assert.equal(document.querySelector(".neo-director-seglen"), null, "分段粒度选择器已移除");
+    assert.equal(document.querySelector(".neo-director-setup-sb"), null, "图片分镜卡片已移除");
+    assert.ok(!Array.from(document.querySelectorAll(".neo-director-refpick-grid"))
+        .some((g) => g.querySelector(".neo-director-refpick-item")?.dataset.file === "bg.png"),
+        "旧配方 backgrounds 不再回显");
 
-    // 未改动直接保存：请求体带回 story（主题/脚本/粒度），遗留 backgrounds 丢弃
+    // 未改动直接保存：story 只带全局故事参考与角色参考，遗留字段丢弃；未生成过不落 setup
     document.querySelector(".neo-director-save").click();
     await sleep(50);
     const saveCall = fetchLog.find((c) => c.path === "/rs_recipes/save");
     assert.ok(saveCall, "发出保存请求");
-    assert.equal(saveCall.body.story.idea, "旧主题");
-    assert.equal(saveCall.body.story.story, undefined, "旧「story」字段不再落盘");
-    assert.equal(saveCall.body.story.characters, undefined, "未设置角色参考图时不回传 characters");
+    assert.equal(saveCall.body.story.grid_prompts, "旧全局故事参考", "全局故事参考落盘");
+    assert.deepEqual(saveCall.body.story.characters, [{ filename: "char.png" }], "角色参考图落盘");
+    assert.equal(saveCall.body.story.idea, undefined, "主题不再落盘");
+    assert.equal(saveCall.body.story.segment_seconds, undefined, "分段粒度不再落盘");
+    assert.equal(saveCall.body.story.frame_source, undefined, "来源选择不再落盘");
     assert.equal(saveCall.body.story.backgrounds, undefined, "遗留 backgrounds 不再回传");
-    assert.equal(saveCall.body.story.segment_seconds, 15);
+    assert.equal(saveCall.body.setup, undefined, "未点过生成提示词时不落 setup");
 });
 
-test("导演编辑器：新建配方无故事内容时 story 各字段为空（由后端判空、不落盘）", async () => {
+test("导演编辑器：新建配方保存时 story 只有切分方式与空全局故事参考", async () => {
     const { openDirectorEditor } = await import("../../web/director.js");
     appState.graph = { _nodes: [] };
     mockRoute("/rs_prompts/skills", () => jsonResponse([{ id: "sk-a", name: "技能 A", gen_video: true }]));
@@ -1069,8 +951,7 @@ test("导演编辑器：新建配方无故事内容时 story 各字段为空（�
 
     await openDirectorEditor(null, null);
     await sleep(60);
-    assert.equal(document.querySelector(".neo-director-story-idea").value, "", "新建时主题为空");
-    assert.equal(document.querySelector(".neo-director-seglen").value, "10", "粒度回落默认 10 秒");
+    assert.equal(document.querySelector(".neo-director-src-card-grid .neo-director-grid-mode").value, "auto", "新建默认自动检测行列");
 
     document.querySelector(".neo-director-name").value = "新配方";
     document.querySelector(".neo-director-seg .neo-director-skill").value = "sk-a";
@@ -1080,61 +961,10 @@ test("导演编辑器：新建配方无故事内容时 story 各字段为空（�
 
     const saveCall = fetchLog.find((c) => c.path === "/rs_recipes/save");
     assert.ok(saveCall, "发出保存请求");
-    assert.equal(saveCall.body.story.idea, null);
-    assert.equal(saveCall.body.story.story, undefined, "旧「story」字段不再落盘");
+    assert.equal(saveCall.body.story.grid_prompts, null, "无全局故事参考时落 null（由后端判空不落盘）");
     assert.equal(saveCall.body.story.characters, undefined, "未设置角色参考图时不回传 characters");
-    assert.equal(saveCall.body.story.backgrounds, undefined, "未设置背景参考图时不回传 backgrounds");
+    assert.equal(saveCall.body.story.idea, undefined, "主题输入已移除，不落盘");
 });
-
-test("导演编辑器：新建默认时间线页；切到故事板分镜页输入主题，标题实时同步（超 20 字截断），手动命名后不再覆盖", async () => {
-    const { openDirectorEditor } = await import("../../web/director.js");
-    appState.graph = { _nodes: [] };
-    mockRoute("/rs_prompts/skills", () => jsonResponse([{ id: "sk-a", name: "技能 A", gen_video: true }]));
-
-    // ① 新建：默认落在时间线页（单段最简单那条路），故事板分镜页隐藏
-    await openDirectorEditor(null);
-    await sleep(60);
-    const tabs = Array.from(document.querySelectorAll(".neo-director-tab"));
-    const tabStory = tabs.find((t) => t.textContent.includes("故事板分镜"));
-    const tabTimeline = tabs.find((t) => t.textContent.includes("分镜时间线"));
-    assert.ok(tabTimeline.classList.contains("active"), "新建默认激活时间线页");
-    assert.equal(document.querySelector(".neo-director-pane-story").style.display, "none", "故事板分镜页默认隐藏");
-
-    // 主题输入在故事板分镜页：切过去再验证标题同步
-    tabStory.click();
-    await sleep(20);
-
-    const ideaInp = document.querySelector(".neo-director-story-idea");
-    const nameInp = document.querySelector(".neo-director-name");
-    const nameView = document.querySelector(".neo-director-name-view");
-
-    // ② 输入主题 → 标题实时同步（未超 20 字）
-    ideaInp.value = "一只机器猫在雨夜找家";
-    ideaInp.dispatchEvent(new window.Event("input", { bubbles: true }));
-    await sleep(20);
-    assert.equal(nameInp.value, "一只机器猫在雨夜找家", "标题同步主题");
-    assert.equal(nameView.textContent, "一只机器猫在雨夜找家", "标题视图更新");
-
-    // ③ 超过 20 字 → 截断加 …（长度 = 20 + 省略号）
-    ideaInp.value = "这是一个非常非常长的故事主题用来测试标题截断逻辑是否正常工作啊";
-    ideaInp.dispatchEvent(new window.Event("input", { bubbles: true }));
-    await sleep(20);
-    assert.equal(nameInp.value.length, 21, "20 字 + 省略号");
-    assert.ok(nameInp.value.endsWith("…"), "超长截断加省略号");
-
-    // ④ 手动命名后，再改主题不再覆盖标题
-    nameInp.value = "我手动的名字";
-    nameInp.dispatchEvent(new window.Event("input", { bubbles: true }));
-    await sleep(20);
-    ideaInp.value = "又改了主题内容";
-    ideaInp.dispatchEvent(new window.Event("input", { bubbles: true }));
-    await sleep(20);
-    assert.equal(nameInp.value, "我手动的名字", "手动命名后不再被主题覆盖");
-
-    document.querySelector(".neo-director-close").click();
-    await sleep(20);
-});
-
 test("导演编辑器：新建时直接在时间轴输入段提示词，标题未命名则截取生成（超 20 字截断），手动命名后不再覆盖", async () => {
     const { openDirectorEditor } = await import("../../web/director.js");
     appState.graph = { _nodes: [] };
@@ -1176,7 +1006,7 @@ test("导演编辑器：新建时直接在时间轴输入段提示词，标题�
     await sleep(20);
 });
 
-test("导演编辑器：编辑已有配方默认时间轴页，且主题输入不同步标题", async () => {
+test("导演编辑器：编辑已有配方默认落在分镜时间线页", async () => {
     const { openDirectorEditor } = await import("../../web/director.js");
     appState.graph = { _nodes: [] };
     mockRoute("/rs_prompts/skills", () => jsonResponse([{ id: "sk-a", name: "技能 A", gen_video: true }]));
@@ -1190,22 +1020,10 @@ test("导演编辑器：编辑已有配方默认时间轴页，且主题输入�
     await openDirectorEditor(existing, null);
     await sleep(60);
 
-    const tabs = Array.from(document.querySelectorAll(".neo-director-tab"));
-    const tabStory = tabs.find((t) => t.textContent.includes("故事板分镜"));
-    const tabTimeline = tabs.find((t) => t.textContent.includes("分镜时间线"));
+    const tabTimeline = Array.from(document.querySelectorAll(".neo-director-tab")).find((t) => t.textContent.includes("分镜时间线"));
     assert.ok(tabTimeline.classList.contains("active"), "编辑默认激活分镜时间线页");
     assert.equal(document.querySelector(".neo-director-pane-story").style.display, "none", "故事板页默认隐藏");
-
-    // 切到故事板页，改主题不应覆盖已有配方名
-    tabStory.click();
-    await sleep(20);
-    const ideaInp = document.querySelector(".neo-director-story-idea");
-    const nameInp = document.querySelector(".neo-director-name");
-    assert.equal(nameInp.value, "旧配方", "初始为已有配方名");
-    ideaInp.value = "新主题内容";
-    ideaInp.dispatchEvent(new window.Event("input", { bubbles: true }));
-    await sleep(20);
-    assert.equal(nameInp.value, "旧配方", "编辑时主题输入不同步标题");
+    assert.equal(document.querySelector(".neo-director-name").value, "旧配方", "编辑时保留已有配方名");
 
     document.querySelector(".neo-director-close").click();
     await sleep(20);

@@ -44,6 +44,7 @@ import sys
 import threading
 import time
 import urllib.request
+import webbrowser
 from urllib.parse import urlsplit
 from pathlib import Path
 from typing import Optional
@@ -937,6 +938,17 @@ class StudioDesktop:
 
     def go_studio(self) -> None:
         self._goto(self.url)
+
+    def open_url(self, url: str) -> dict:
+        """「设置 → 关于」里的外链（仓库地址）：无边框窗口内不开新页，交给系统默认浏览器。
+        只认 http(s) 且带主机名：file:// 与 javascript: 这类载荷经桥进来就是本机执行入口。"""
+        parts = urlsplit(str(url or ""))
+        if parts.scheme not in ("http", "https") or not parts.netloc:
+            log_line(f"open_url rejected url={url!r}")
+            return {"ok": False, "error": "只允许打开 http(s) 链接"}
+        log_line(f"open_url {parts.geturl()}")
+        webbrowser.open(parts.geturl())
+        return {"ok": True}
 
     def _goto(self, target: str) -> None:
         if not target or self.loader is None:

@@ -718,6 +718,27 @@ class StudioDesktopTests(unittest.TestCase):
         rearm.assert_called_once_with()
         self.assertEqual(logs, ["goto http://127.0.0.1:8188/neo-studio"], "每次整页跳转记一行")
 
+    def test_open_url_sends_http_links_to_the_system_browser(self):
+        # 无边框窗口没有新标签可开：「设置 → 关于」的仓库链接交系统浏览器，窗口本身不动
+        opened = []
+        desktop = app.StudioDesktop("u", None, 8188, pathlib.Path("root"))
+        with patch.object(app.webbrowser, "open", lambda url: opened.append(url)), \
+             patch.object(app, "log_line", lambda text: None):
+            res = desktop.open_url("https://github.com/neoneo-ai/neo-studio")
+        self.assertEqual(res, {"ok": True})
+        self.assertEqual(opened, ["https://github.com/neoneo-ai/neo-studio"])
+
+    def test_open_url_refuses_non_http_payloads(self):
+        # 桥上的字符串来自页面：file:// 与裸路径落进本机就是执行入口，一律拒绝、一个都不打开
+        opened = []
+        desktop = app.StudioDesktop("u", None, 8188, pathlib.Path("root"))
+        with patch.object(app.webbrowser, "open", lambda url: opened.append(url)), \
+             patch.object(app, "log_line", lambda text: None):
+            for bad in ("file:///C:/Windows/System32/calc.exe", "javascript:alert(1)",
+                        "C:/Windows/explorer.exe", "", "http://"):
+                self.assertFalse(desktop.open_url(bad)["ok"], f"{bad} 不该被打开")
+        self.assertEqual(opened, [])
+
     def test_web_log_is_flattened_for_grep(self):
         # 页面把未捕获错误折成一行报给桌面端：栈是多行的，落盘要一行一条才好 grep
         desktop = app.StudioDesktop("u", None, 8188, pathlib.Path("root"))

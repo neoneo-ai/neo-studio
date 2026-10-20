@@ -19,11 +19,13 @@ import time
 import uuid
 from pathlib import Path
 
+import folder_paths
 from aiohttp import web
 from server import PromptServer
 
 from .h3_preview import clear_latest_preview, get_latest_preview
 from .h3_video_director import parse_segment_selection
+from .plugin_paths import DATA_ROOT
 from .image_gen import _error_from_history, _lookup, _progress_for, submit_graph
 from .recipes import add_recipe_results, is_preset_recipe, list_director_recipes, load_director_spec
 from .util import PrefixFilter, plugin_version
@@ -256,6 +258,10 @@ async def studio_version_route(request):
         "plugin": "Neo Studio",
         "plugin_version": plugin_version(),
         "comfyui_version": comfy_version,
+        # 「设置 → 关于」里的路径行：数据根与 ComfyUI 根；远程地址只有桌面端知道，这里留空
+        "data_root": str(DATA_ROOT),
+        "comfy_local": str(getattr(folder_paths, "base_path", "") or ""),
+        "remote": "",
         "recipes": list_director_recipes(),
     })
 

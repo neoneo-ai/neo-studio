@@ -542,8 +542,7 @@ test("ComfyUI 在跑时生成入口不受门控：点它不该去启动 ComfyUI"
     document.body.insertAdjacentHTML("beforeend",
         '<button class="neo-gallery-gm-btn" type="button">🖼️ 生成素材</button>' +
         '<button class="neo-director-regen-run" type="button">生成这一段</button>' +
-        '<button class="neo-director-merge-run" type="button">拼回成片</button>' +
-        '<button class="neo-director-sb-gen" type="button">🎨 生成图片分镜</button>');
+        '<button class="neo-director-merge-run" type="button">拼回成片</button>');
     const starts = [];
     const state = { port: 8188, pid: 4321, mine: true, running: true, ready: true };
     window.pywebview = {
@@ -556,7 +555,7 @@ test("ComfyUI 在跑时生成入口不受门控：点它不该去启动 ComfyUI"
     await flush();
 
     for (const sel of [".neo-gallery-gm-btn", ".neo-director-regen-run",
-                       ".neo-director-merge-run", ".neo-director-sb-gen"]) {
+                       ".neo-director-merge-run"]) {
         click(document.querySelector(sel));
     }
     await flush();

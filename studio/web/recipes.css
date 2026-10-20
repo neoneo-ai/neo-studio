@@ -1431,35 +1431,7 @@
 /* 各步唯一动作：前置没满足时置灰（缺什么见按钮 title），不用点了才知道。
    所有动作按钮都挂 rs-btn，由 prompts.css 的 .rs-btn:disabled 统一置灰 */
 
-.neo-director-sb-skill {
-    background: #1e1e1e;
-    color: #ddd;
-    border: 1px solid #3a3a3a;
-    border-radius: 6px;
-    padding: 4px 6px;
-    font-size: 12px;
-    max-width: 220px;
-}
-
-.neo-director-sb-status {
-    font-size: 11px;
-    color: #9aa4b0;
-}
-
-/* 统一设置页：「🎨 图片分镜」卡片（逐段关键帧；i2v/fl2v 下与统一首帧互斥） */
-.neo-director-setup-sb {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    justify-content: space-evenly;   /* 铺满右栏时把富余高度摊到上 / 中 / 下三处，不堆在卡片底部 */
-    flex: 1;   /* 铺满右栏剩余高度：与左栏「故事主题 / 脚本」输入框等高，两栏底部齐平 */
-    background: #161616;
-    border: 1px solid #2a2d33;
-    border-radius: 6px;
-    padding: 8px;
-}
-
-/* 故事板分镜页 band 0 右侧：「👤 角色参考图」紧凑盒（标题 / 身份参考 / 素材库 + 网格都集成在盒内，只占顶部右侧，不独占整行） */
+/* 故事板分镜页 band 0：「👤 角色参考图」紧凑盒（标题 / 身份参考 / 素材库 + 网格都集成在盒内，独占顶部一行） */
 .neo-director-setup-char {
     display: flex;
     flex-direction: column;
@@ -1468,7 +1440,7 @@
     border: 1px solid #2a2d33;
     border-radius: 6px;
     padding: 8px;
-    flex: 1;          /* 占满 band 0 顶部右侧剩余宽度 */
+    flex: 1;          /* 独占 band 0 整行宽度 */
     min-width: 0;
 }
 
@@ -1495,8 +1467,7 @@
     display: none;
 }
 
-/* 📖 故事板分镜页 band 1：来源卡（宫格图 / 文字，二选一）。
-   来源 radio 在 band 1 顶部横排常驻，这里只显示选中来源的那张卡（另一张 display:none，不会两张同时亮着） */
+/* 故事板分镜页 band 1：🧩 宫格图故事板卡（拆分唯一分段来源，文字故事板由右栏智能体承接） */
 .neo-director-src-card {
     display: flex;
     flex-direction: column;
@@ -1514,8 +1485,8 @@
     gap: 8px 12px;
 }
 
-/* 来源卡标题行：只说明这张卡是什么（来源 radio 在 band 0 第一行横排）；右侧是本步唯一的动作按钮组。
-   不用橘色高亮（强调交给上面的来源 radio 加粗），与其他卡片标题同色 */
+/* 来源卡标题行：只说明这张卡是什么；右侧是本步唯一的动作按钮组。
+   不用橘色高亮（强调交给徽标），与其他卡片标题同色 */
 .neo-director-src-head {
     display: flex;
     align-items: center;
@@ -1680,16 +1651,6 @@
     padding: 6px 8px;
     font-size: 12px;
     line-height: 1.4;
-}
-
-.neo-director-sb-mode,
-.neo-director-frame-source {
-    background: #1e1e1e;
-    color: #ddd;
-    border: 1px solid #3a3a3a;
-    border-radius: 6px;
-    padding: 4px 6px;
-    font-size: 12px;
 }
 
 /* 段内「重生成该段」参数面板（种子 / 锚点 + 执行） */
@@ -2034,21 +1995,12 @@
     gap: 8px;
 }
 
-/* band 0：左 = 分镜来源 radio 行（靠左），右 = 角色参考图盒（只占顶部右侧剩余宽度）；收起态两列按水平中线对齐 */
+/* band 0：👤 角色参考图盒独占顶部一行 */
 .neo-director-band-top {
     flex-direction: row;
     align-items: center;
     gap: 10px;
-    flex-wrap: wrap;   /* 角色参考盒展开时换行独占整行 */
-}
-
-/* 角色参考盒展开：换行落到来源行下方独占整行（与下面的来源卡 / 各段对照更相关）；收起时留在来源行右侧 */
-.neo-director-band-top > .neo-director-setup-char:not(.neo-director-setup-char-collapsed) {
-    flex-basis: 100%;
-}
-
-.neo-director-band-top > .neo-director-row {
-    flex: 0 0 auto;
+    flex-wrap: wrap;
 }
 
 /* band 3 各段对照：填满本页剩余高度，超出才内部滚动 */
@@ -2071,7 +2023,7 @@
     min-width: 0;
 }
 
-/* 「🎨 参考图设置」页：各段三栏对照（左 = 分镜图 / 中 = 优化前 / 右 = 优化后）；宫格分镜图拆分无原文时降为两栏 */
+/* 「📖 故事板分镜」页各段两栏对照（左 = 分镜图 / 右 = 提示词） */
 .neo-director-setup-segs {
     display: flex;
     flex-direction: column;
@@ -2087,14 +2039,9 @@
 
 .neo-director-setup-seg-cols {
     display: grid;
-    grid-template-columns: 200px 1fr 1fr;   /* 第一列分镜图缩略图留足宽度（约 16:9） */
+    grid-template-columns: 200px 1fr;   /* 第一列分镜图缩略图留足宽度（约 16:9） */
     gap: 8px;
     align-items: stretch;   /* 缩略图列随行高拉伸（行高由文本列决定），图片高度自适应 */
-}
-
-/* 宫格分镜图拆分：各段无「优化前」原文，对照表降为两栏（分镜图 / 提示词） */
-.neo-director-setup-segs-grid .neo-director-setup-seg-cols {
-    grid-template-columns: 200px 1fr;
 }
 
 .neo-director-setup-seg-labels {
@@ -2187,28 +2134,6 @@
     pointer-events: none;   /* 点击穿透到缩略位的 onclick（本地上传） */
 }
 
-/* radio 组（分镜/首帧方式、生图模式、分镜来源）：选项横向展开，比下拉更直观；选中态靠字重区分而不是彩色高亮 */
-.neo-director-radios {
-    display: inline-flex;
-    gap: 14px;
-}
-
-.neo-director-radio {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    font-size: 12px;
-    font-weight: 600;
-    color: #ccc;
-    cursor: pointer;
-    white-space: nowrap;
-}
-
-.neo-director-radio input {
-    margin: 0;
-    accent-color: #4d8cba;
-}
-
 /* 统一设置页：无素材模式（文生 / 混合）的说明行 */
 .neo-director-setup-hint {
     margin: 8px 0;
@@ -2220,63 +2145,6 @@
 }
 
 
-/* 文字故事板卡：一行两栏（两栏等高、底部齐平，左右都不挤）——左 = 故事主题 / 脚本（标题行右上角是本步动作），
-   右 = 分镜 / 首帧方式 + 🎨 图片分镜（统一首帧方式时换成统一首帧区） */
-.neo-director-idea-cols {
-    display: flex;
-    align-items: stretch;
-    gap: 12px;
-}
-
-.neo-director-idea-col {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    flex: 1 1 0;
-    min-width: 240px;
-}
-
-/* 左栏（故事文本）自己的标题行：名字在左，本步唯一动作（分段粒度 + 生成分镜分段）靠右上角 */
-.neo-director-idea-head {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;   /* 窄窗时动作组换到第二行，仍靠右 */
-}
-
-.neo-director-idea-side {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    flex: 1.4 1 0;   /* 右栏还放 🎨 图片分镜 / 统一首帧，给宽一点 */
-    min-width: 340px;
-}
-
-.neo-director-idea-stack {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    flex: 1;   /* 右栏底部的 🎨 图片分镜 / 统一首帧跟着左栏文本高度一起长高，两栏底部齐平 */
-}
-
-.neo-director-story-idea {
-    flex: 1;
-    min-height: 93px;   /* 缩小 1/3，紧凑布局 */
-    resize: vertical;
-    background: #1e1e1e;
-    color: #ddd;
-    border: 1px solid #3a3a3a;
-    border-radius: 6px;
-    padding: 6px 8px;
-    font-size: 12px;
-}
-
-.neo-director-gen-segs {
-    cursor: pointer;
-    white-space: nowrap;
-}
-
-.neo-director-story-status,
 .neo-director-opt-status {
     font-size: 11px;
     color: #8cf;

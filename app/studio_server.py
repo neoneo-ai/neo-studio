@@ -132,6 +132,7 @@ async def studio_version(request):
     routes 是归属表（caps.route_list）；comfy_base 非空表示这路 ComfyUI 认桌面端 origin，
     页面原地把生成类请求切过去，不整页跳转。"""
     flags = request.app["flags"]
+    launcher = request.app["launcher"]
     return web.json_response({
         "success": True,
         "plugin": "Neo Studio",
@@ -142,6 +143,10 @@ async def studio_version(request):
         "caps": caps.features(),
         "routes": caps.route_list(),
         "comfy_base": str(flags.get("comfy_base", "")),
+        # 「设置 → 关于」里的路径行：桌面端知道自己的数据根、ComfyUI 根与远程地址
+        "data_root": str(request.app.get("data_root") or ""),
+        "comfy_local": str(request.app.get("comfy_root") or ""),
+        "remote": str(launcher.get("remote", "")),
         "recipes": [],
     })
 
@@ -268,6 +273,9 @@ def build_app(root: Path, plugin_dir: Path, flags: dict = None, launcher: dict =
     app["comfy_log"] = Path(comfy_log) if comfy_log else plugin_dir / "tmp" / "comfy_run.log"
     app["launcher"] = launcher if launcher is not None else {}
     app["launcher_api"] = launcher_api if launcher_api is not None else {}
+    # 「设置 → 关于」的路径行读这两份：ComfyUI 根由解释器启动参数决定，数据根由桌面端解析
+    app["comfy_root"] = Path(root)
+    app["data_root"] = Path(data_root) if data_root else None
     app["plugin_version"] = sys.modules[f"{DESKTOP_PKG}.util"].plugin_version()
     app["kernel_state"] = kernel_state
     if mcp_manager is not None:

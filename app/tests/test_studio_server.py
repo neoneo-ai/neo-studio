@@ -45,7 +45,6 @@ COMFY_ONLY_ROUTES = (
     "/neo_image_gen/tasks",
     "/neo_image_gen/enhance",
     "/neo_image_gen/skill_dims?skill_id=x",
-    "/neo_video_gen/storyboard_generate",
     "/neo_video_gen/run_segment",
     "/neo_video_gen/assemble_segments",
     "/neo_voice/generate",
@@ -172,6 +171,21 @@ class OfflineServiceTests(_ServerCase):
         data = json.loads(self.get("/neo_studio/version")[1])
         self.assertEqual(data["comfy_base"], "http://127.0.0.1:8188", "页面靠它把生成类请求原地切过去")
         self.app["flags"]["comfy_base"] = ""
+
+    def test_version_carries_the_paths_for_the_about_page(self):
+        # 「设置 → 关于」的路径行：数据根与 ComfyUI 根由 build_app 存进 app，远程地址读启动设置快照
+        data_root = Path("F:/neo-data")
+        self.app["data_root"] = data_root
+        self.app["launcher"]["remote"] = "http://192.168.0.20:8188"
+        data = json.loads(self.get("/neo_studio/version")[1])
+        self.assertEqual(data["data_root"], str(data_root), "路径按本机分隔符交给页面")
+        self.assertEqual(data["comfy_local"], str(COMFY_ROOT), "ComfyUI 根就是拉起它的那份根目录")
+        self.assertEqual(data["remote"], "http://192.168.0.20:8188")
+        self.app["data_root"] = None
+        self.app["launcher"]["remote"] = ""
+        data = json.loads(self.get("/neo_studio/version")[1])
+        self.assertEqual(data["data_root"], "", "数据根没解析出来时出空串，页面收起该行")
+        self.assertEqual(data["remote"], "", "连的本机时远程行不出")
 
     def test_comfy_state_needs_the_desktop_kernel_provider(self):
         # 引导页那一路桌面端还没装配出内核：没有 provider 就明说没有，不给前端一份假状态

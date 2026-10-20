@@ -165,7 +165,6 @@ test("角色图目录多选「新建导演配方」：整批合成一段全参�
     assert.deepEqual(segRefImgs(), ["a.png", "b.png", "c.png"], "图按选中顺序进该段参考图");
     assert.deepEqual(ffImgs(), [], "三视图不再当关键帧");
     assert.deepEqual(charRefs(), ["a.png", "b.png", "c.png"], "同时进 👤 角色参考图");
-    assert.equal(document.querySelector(".neo-director-sb-mode").value, "r2i", "图片分镜默认随角色图走 r2i");
     assert.equal(gallery._selectedItems.size, 0, "建配方后选中集合清空");
 });
 

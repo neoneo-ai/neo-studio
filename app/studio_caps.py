@@ -186,7 +186,6 @@ DESKTOP_ROUTES = (_GALLERY | _BOOKMARK | _SKILL | _RECIPES | _SETTINGS | _LLM | 
 FEATURE_ROUTES = {
     "image_gen": ("POST", "/neo_image_gen/generate"),
     "agent": ("POST", "/neo_agent/run"),
-    "storyboard": ("POST", "/neo_video_gen/storyboard_generate"),
     "voice": ("POST", "/neo_voice/generate"),
     "segment": ("POST", "/neo_video_gen/run_segment"),
     "director": ("POST", "/neo_studio/director/generate"),
