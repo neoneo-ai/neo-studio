@@ -301,7 +301,8 @@ class TestPayloadHelpers(unittest.TestCase):
 
     def test_preview_reads_the_task_owned_tables(self):
         """出片按 task_id 取帧、生图按 prompt_id 取进度预览：两份都在拥有它的模块里，右栏不另建一张表。
-        出片取哪一档由界面要的边长定：中间舞台要 1024 就取全尺寸载荷，没要仍是右栏那档。"""
+        出片取哪一档由界面要的边长定：中间舞台要 1024 就取全尺寸载荷，没要仍是右栏那档；
+        界面关掉采样预览（0 档）时两份表都不读。"""
         seen: list = []
 
         def latest(tid, small=False):
@@ -318,12 +319,16 @@ class TestPayloadHelpers(unittest.TestCase):
             self.assertEqual(agent._preview_of("generate_image", "t-1", json.dumps({"prompt_id": "p-1"})),
                              {"frames": ["data:image/jpeg;base64,AA"]})
             self.assertIsNone(agent._preview_of("generate_image", "t-1", "{}"))   # 快照里没有 prompt_id 就不去找表
+            self.assertIsNone(agent._preview_of("segment_run", "t-9", "{}", 0), "关掉的一轮连表都不读")
+            self.assertIsNone(agent._preview_of("generate_image", "t-1", json.dumps({"prompt_id": "p-1"}), 0))
+            self.assertEqual(seen, [True, False], "关掉的一轮不该再读一次预览表")
 
     def test_preview_side_reads_a_ui_advertised_side(self):
-        """preview_side 从请求体来：只认非负整数，非数与负数都按 0 走右栏那档（后端默认）。"""
+        """preview_side 从请求体来：非负整数照收，0 = 界面关掉采样预览；没给与非数按右栏那档，负数落到关掉那一档。"""
         self.assertEqual(agent._preview_side("1024"), 1024)
-        self.assertEqual(agent._preview_side(None), 0)
-        self.assertEqual(agent._preview_side("wide"), 0)
+        self.assertEqual(agent._preview_side(0), 0)
+        self.assertEqual(agent._preview_side(None), agent.AGENT_PREVIEW_SIDE)
+        self.assertEqual(agent._preview_side("wide"), agent.AGENT_PREVIEW_SIDE)
         self.assertEqual(agent._preview_side(-5), 0)
 
 

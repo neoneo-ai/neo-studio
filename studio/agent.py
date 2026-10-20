@@ -272,8 +272,8 @@ class _Run:
         self.image_names: list[str] = []
         # 素材库当前目录是否标了 👤 角色图：注入参考时决定新建配方走不走全参考（见 _apply_references）
         self.character_dir = False
-        # 采样预览要的档（像素最长边，0 = 紧凑档）：中间舞台那一轮请求要大档，见 _preview_of
-        self.preview_side = 0
+        # 采样预览要的档（像素最长边，0 = 这一轮关掉采样预览）：没给请求体的调用方按右栏卡片那一档，见 _preview_of
+        self.preview_side = AGENT_PREVIEW_SIDE
         self.resume_of = ""
         self.resume_from = 0      # 「从这条消息重新开始」的序号（历史里第几条用户消息，1 起），0 = 整条接上
         self.status = "running"
@@ -586,22 +586,29 @@ def _status_of(text: str) -> str:
     return status
 
 
+AGENT_PREVIEW_SIDE = 384      # 右栏卡片那一档，与 h3_preview.AGENT_PREVIEW_SIDE 同值：这里只比数值，不 import 那个模块
+
+
 def _preview_side(value) -> int:
-    """请求里界面要的采样预览最长边（像素）：中间舞台宽就要大档，右栏卡片按紧凑档。
-    0 = 没给（走紧凑档）。上限由 h3_preview 的档位定，这里只挡负数与不是数的值。"""
+    """请求里界面要的采样预览最长边（像素）：中间舞台宽就要大档，右栏卡片按紧凑档，0 = 这一轮关掉采样预览。
+    没给这个字段按右栏那一档（卡片就这么宽），负数按关掉处理。上限由 h3_preview 的档位定。"""
     try:
-        return max(0, int(value))
+        side = int(value)
     except (TypeError, ValueError):
-        return 0
+        return AGENT_PREVIEW_SIDE
+    return max(0, side)
 
 
-def _preview_of(tool: str, task_id: str, snap: str, side: int = 0):
+def _preview_of(tool: str, task_id: str, snap: str, side: int = AGENT_PREVIEW_SIDE):
     """右栏卡片用的预览载荷：进程内直读拥有那张表的模块，不走 HTTP。
     出片取本步的帧，按 side 选紧凑档（384）还是全尺寸档（1024）——中间舞台那一轮要的是大图；
     生图取进度 handler 捕获的最新一张。
+    side 是 0（界面关掉采样预览）时连表都不读：2 秒一轮的 base64 帧灌进 SSE，没人看就是白烧带宽。
     这份载荷只进 SSE 给界面，绝不进 LLM 的文本——base64 进上下文就是整轮 token 爆炸。
     读不到就返回 None 继续轮询：h3_preview 模块级 import server / comfy.taesd.taesd / torch，
     离线服务与测试进程里没有这些模块，让它们把一次出片轮询打断是拿 UI 增强换交付。"""
+    if side <= 0:
+        return None
     try:
         if tool == "generate_image":
             pid = str(_json_of(snap).get("prompt_id") or "")
@@ -1356,7 +1363,7 @@ async def agent_run(request):
     act 模式下它们默认作为本轮生成的参考图（见 _apply_references）；
     context 是界面当前状态（当前页 / 当前导演配方 / 绘画页模式 / 素材库目录与它的角色图标记），值从前端 DOM 来；
     preview_side 是界面这一轮要的采样预览最长边（像素）：中间舞台那块宽，挂着时前端要 1024 那一档，
-    关掉时按右栏卡片那一档，不给就是紧凑档；
+    栏子那档是 384，前端关掉采样预览时给 0（后端不读预览表、不挂载荷），不给字段按 384；
     resume 是「继续这次会话」要接的那条旧会话的 run_id，带它时旧对话原文与那条会话的焦点链
     （上一次生成的技能 / 参数 / 产物）一起接在系统提示词之后，那条会话在计划模式交出的执行清单
     也在执行模式下接回来照跑；

@@ -1,22 +1,36 @@
 /**
  * agent-panel.css — Neo Agent 面板（桌面端 Studio 页右栏）
  *
- * 视觉基线是 VS Code：紧凑字号、4px 网格、1px 边框、无阴影无渐变。颜色收在 --neo-vsc-*
- * 一组变量里，缺省回落 ComfyUI 主题变量（--bg-2 / --bg-3 / --border-color /
- * --text-color-secondary / --accent-color），没有这些变量时落 VS Code Dark+ 字面值。
+ * 颜色吃 studio/style.css 的 :root --ns-* 那组外壳值：填充主按钮是主蓝 #2f6fed，描边 / 链接 / 焦点环是
+ * 浅蓝 #7aa2ff，次按钮走外壳灰底钮（#2a2a2e 底 / #444 描边），选中态是半透明蓝底 + 内描边。
+ * 紧凑字号、4px 网格、1px 边框、无阴影无渐变是这一栏自己的密度，只在外壳配色里做密度。
+ * 右栏唯一的宿主是 Studio 页（studio-app.js 的 createAgentPanel），不在 ComfyUI 里渲染，
+ * 颜色不再回落 ComfyUI 主题变量（--bg-2 / --accent-color 那串）——回落就是把用户 ComfyUI 主题的色
+ * 漏进右栏、让它和页面其它区域对不上的那条路。
  * 全部选择器收在 .neo-agent 作用域下：聊天区由 studio/style.css 的 .ns-agent-dock 提供栏子外壳
  * （宽度 / 边框），MCP 服务面板由 .ns-mcp-section 提供设置页里的高度。
  */
 .neo-agent {
-    --neo-vsc-bg: var(--bg-2, #1e1e1e);
-    --neo-vsc-bg-alt: var(--bg-3, #252526);
-    --neo-vsc-border: var(--border-color, #3c3c3c);
-    --neo-vsc-fg: var(--p-font-color, #cccccc);
-    --neo-vsc-fg-dim: var(--text-color-secondary, #9d9d9d);
-    --neo-vsc-accent: var(--accent-color, #007acc);
-    --neo-vsc-ok: #4ec9b0;
-    --neo-vsc-warn: #d7ba7d;
-    --neo-vsc-err: #f14c5e;
+    --neo-vsc-bg: var(--ns-bg, #17171b);
+    --neo-vsc-bg-alt: var(--ns-panel, #202024);
+    --neo-vsc-border: var(--ns-border, #333);
+    --neo-vsc-border-soft: var(--ns-border-soft, #3f3f4a);
+    --neo-vsc-fg: var(--ns-fg, #ddd);
+    --neo-vsc-fg-dim: var(--ns-dim, #9a9aa8);
+    --neo-vsc-accent: var(--ns-accent, #7aa2ff);
+    --neo-vsc-primary: var(--ns-primary, #2f6fed);
+    --neo-vsc-primary-hover: var(--ns-primary-hover, #3f7ffe);
+    --neo-vsc-primary-soft: var(--ns-primary-soft, rgba(47, 111, 237, .16));
+    --neo-vsc-btn-bg: var(--ns-field, #2a2a2e);
+    --neo-vsc-btn-hover: var(--ns-field-hover, #333338);
+    --neo-vsc-btn-bd: var(--ns-field-bd, #444);
+    --neo-vsc-btn-bd-hover: var(--ns-field-bd-hover, #555);
+    --neo-vsc-cancel-bg: #5a1a1a;
+    --neo-vsc-cancel-bd: #9a3a3a;
+    --neo-vsc-cancel-fg: #f87171;
+    --neo-vsc-ok: var(--ns-ok, #7bc47f);
+    --neo-vsc-warn: var(--ns-warn, #e0b070);
+    --neo-vsc-err: var(--ns-err, #ff8a8a);
     --neo-vsc-mono: "Consolas", "SFMono-Regular", Menlo, monospace;
 
     display: flex;
@@ -71,9 +85,8 @@
 }
 
 .neo-agent-head-title {
-    font-size: 11px;
-    letter-spacing: 0.5px;
-    text-transform: uppercase;
+    font-size: 12px;
+    font-weight: 600;
     color: var(--neo-vsc-fg-dim);
 }
 
@@ -167,10 +180,9 @@
 }
 
 .neo-agent-recent-title {
-    font-size: 11px;
-    letter-spacing: 0.5px;
-    text-transform: uppercase;
+    font-size: 12px;
     color: var(--neo-vsc-fg-dim);
+    font-weight: 600;
 }
 
 .neo-agent-recent-all {
@@ -204,8 +216,8 @@
 }
 
 .neo-agent-recent-row:hover {
-    border-color: var(--neo-vsc-accent);
-    background: var(--neo-vsc-bg-alt);
+    border-color: var(--neo-vsc-btn-bd-hover);
+    background: var(--neo-vsc-btn-hover);
 }
 
 .neo-agent-recent-text {
@@ -266,17 +278,16 @@
     flex-direction: column;
     gap: 4px;
     padding: 4px;
+    background: var(--neo-vsc-bg-alt);
     border: 1px solid var(--neo-vsc-border);
-    border-radius: 4px;
+    border-radius: 6px;
 }
 
 .neo-agent-meta {
     display: flex;
     align-items: center;
     gap: 6px;
-    font-size: 10px;
-    letter-spacing: 0.5px;
-    text-transform: uppercase;
+    font-size: 11px;
     color: var(--neo-vsc-fg-dim);
 }
 
@@ -308,9 +319,9 @@
 .neo-agent-answer pre {
     margin: 0 0 4px;
     padding: 4px;
-    background: var(--neo-vsc-bg-alt);
-    border: 1px solid var(--neo-vsc-border);
-    border-radius: 4px;
+    background: var(--neo-vsc-btn-bg);
+    border: 1px solid var(--neo-vsc-border-soft);
+    border-radius: 6px;
     white-space: pre-wrap;
     word-break: break-word;
 }
@@ -370,8 +381,9 @@
     flex-direction: column;
     gap: 2px;
     padding: 4px;
+    background: var(--neo-vsc-bg-alt);
     border: 1px solid var(--neo-vsc-border);
-    border-radius: 4px;
+    border-radius: 6px;
 }
 
 .neo-agent-tool-title {
@@ -385,7 +397,10 @@
 .neo-agent-tool-args,
 .neo-agent-tool-out {
     margin: 0;
-    border: none;
+    padding: 4px;
+    background: var(--neo-vsc-btn-bg);
+    border: 1px solid var(--neo-vsc-border-soft);
+    border-radius: 4px;
     max-height: 220px;
     overflow: auto;
     resize: vertical;
@@ -406,8 +421,7 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    font-size: 10px;
-    letter-spacing: 0.5px;
+    font-size: 11px;
     color: var(--neo-vsc-fg-dim);
 }
 
@@ -425,15 +439,16 @@
     height: 18px;
     padding: 0 6px;
     background: none;
-    border: 1px solid var(--neo-vsc-border);
+    border: 1px solid var(--neo-vsc-btn-bd);
     border-radius: 3px;
     color: var(--neo-vsc-fg-dim);
-    font-size: 10px;
+    font-size: 11px;
     cursor: pointer;
 }
 
 .neo-agent-cancel:hover:not(:disabled) {
-    border-color: var(--neo-vsc-accent);
+    background: var(--neo-vsc-btn-hover);
+    border-color: var(--neo-vsc-btn-bd-hover);
     color: var(--neo-vsc-fg);
 }
 
@@ -485,12 +500,18 @@
     height: 22px;
     padding: 0 10px;
     margin-left: 4px;
-    background: var(--neo-vsc-accent);
-    border: 1px solid var(--neo-vsc-accent);
+    background: var(--neo-vsc-primary);
+    border: 1px solid var(--neo-vsc-primary);
     border-radius: 4px;
-    color: #ffffff;
+    color: #fff;
     font-size: 12px;
+    font-weight: 600;
     cursor: pointer;
+}
+
+.neo-agent-run:hover:not(:disabled) {
+    background: var(--neo-vsc-primary-hover);
+    border-color: var(--neo-vsc-primary-hover);
 }
 
 .neo-agent-run:disabled {
@@ -502,24 +523,26 @@
 .neo-agent-run.neo-agent-paused {
     background: var(--neo-vsc-warn);
     border-color: var(--neo-vsc-warn);
-    color: #1f1f1f;
+    color: #17171b;
 }
 
 /* 整行取消只在跑起来之后存在（Cline 的口径）：铺在文本框上面，空闲时 hidden 不占位。
+   取消口径吃导演页「取消生成」那一系红底描边，与主按钮的蓝分得开。
    类名与任务卡上那个小取消键（.neo-agent-cancel）分开，两边样式互不吃 */
 .neo-agent-cancelbar {
     height: 26px;
-    background: none;
-    border: 1px solid var(--neo-vsc-accent);
+    background: var(--neo-vsc-cancel-bg);
+    border: 1px solid var(--neo-vsc-cancel-bd);
     border-radius: 4px;
-    color: var(--neo-vsc-fg);
+    color: var(--neo-vsc-cancel-fg);
     font-size: 12px;
     cursor: pointer;
 }
 
 .neo-agent-cancelbar:hover,
 .neo-agent-cancelbar:focus-visible {
-    background: var(--neo-vsc-bg-alt);
+    background: #6a2a2a;
+    color: #fff;
     outline: none;
 }
 
@@ -530,7 +553,7 @@
     gap: 4px;
     padding: 3px 4px;
     background: var(--neo-vsc-bg-alt);
-    border: 1px dashed var(--neo-vsc-border);
+    border: 1px dashed var(--neo-vsc-border-soft);
     border-radius: 4px;
     font-size: 11px;
     color: var(--neo-vsc-fg-dim);
@@ -567,8 +590,8 @@
 .neo-agent-input {
     min-height: 52px;
     padding: 4px;
-    background: var(--neo-vsc-bg-alt);
-    border: 1px solid var(--neo-vsc-border);
+    background: var(--neo-vsc-btn-bg);
+    border: 1px solid var(--neo-vsc-btn-bd);
     border-radius: 4px;
     color: var(--neo-vsc-fg);
     font-size: 13px;
@@ -610,8 +633,8 @@
 .neo-agent-attach {
     height: 22px;
     padding: 0 6px;
-    background: var(--neo-vsc-bg-alt);
-    border: 1px solid var(--neo-vsc-border);
+    background: var(--neo-vsc-btn-bg);
+    border: 1px solid var(--neo-vsc-btn-bd);
     border-radius: 4px;
     color: var(--neo-vsc-fg-dim);
     font-size: 12px;
@@ -619,12 +642,16 @@
 }
 
 .neo-agent-mode-btn.active {
-    border-color: var(--neo-vsc-accent);
+    background: var(--neo-vsc-primary-soft);
+    border-color: var(--neo-vsc-primary);
+    box-shadow: inset 0 0 0 1px var(--neo-vsc-primary);
     color: var(--neo-vsc-fg);
 }
 
 .neo-agent-mode-btn:hover,
 .neo-agent-attach:hover {
+    background: var(--neo-vsc-btn-hover);
+    border-color: var(--neo-vsc-btn-bd-hover);
     color: var(--neo-vsc-fg);
 }
 
@@ -637,8 +664,8 @@
 .neo-agent-entry {
     height: 22px;
     padding: 0 8px;
-    background: var(--neo-vsc-bg-alt);
-    border: 1px solid var(--neo-vsc-border);
+    background: var(--neo-vsc-btn-bg);
+    border: 1px solid var(--neo-vsc-btn-bd);
     border-radius: 4px;
     color: var(--neo-vsc-fg-dim);
     font-size: 12px;
@@ -647,7 +674,8 @@
 
 .neo-agent-entry:hover,
 .neo-agent-entry:focus-visible {
-    border-color: var(--neo-vsc-accent);
+    background: var(--neo-vsc-btn-hover);
+    border-color: var(--neo-vsc-btn-bd-hover);
     color: var(--neo-vsc-fg);
     outline: none;
 }
@@ -701,7 +729,7 @@
     background: rgba(0, 0, 0, .6);
     border: 0;
     border-radius: 3px;
-    color: #ffffff;
+    color: #fff;
     font-size: 11px;
     line-height: 16px;
     cursor: pointer;
@@ -723,14 +751,16 @@
     border-radius: 4px;
 }
 
-/* 中途的选项确认卡：问题 + 选项 + 自由输入，答完锁住并把选择留在卡上 */
+/* 中途的选项确认卡：问题 + 选项 + 自由输入，答完锁住并把选择留在卡上。
+   选中口径吃外壳那一套（半透明蓝底 + 主蓝描边），描边不单独喊蓝 */
 .neo-agent-choice {
     display: flex;
     flex-direction: column;
     gap: 4px;
     padding: 4px;
-    border: 1px solid var(--neo-vsc-accent);
-    border-radius: 4px;
+    background: var(--neo-vsc-primary-soft);
+    border: 1px solid var(--neo-vsc-primary);
+    border-radius: 6px;
     color: var(--neo-vsc-fg);
 }
 
@@ -744,8 +774,8 @@
 .neo-agent-choice-send {
     min-height: 22px;
     padding: 2px 6px;
-    background: var(--neo-vsc-bg-alt);
-    border: 1px solid var(--neo-vsc-border);
+    background: var(--neo-vsc-btn-bg);
+    border: 1px solid var(--neo-vsc-btn-bd);
     border-radius: 4px;
     color: var(--neo-vsc-fg);
     font-size: 12px;
@@ -755,7 +785,8 @@
 
 .neo-agent-choice-opt:hover,
 .neo-agent-choice-send:hover {
-    border-color: var(--neo-vsc-accent);
+    background: var(--neo-vsc-btn-hover);
+    border-color: var(--neo-vsc-btn-bd-hover);
 }
 
 .neo-agent-choice-opt:disabled,
@@ -767,8 +798,8 @@
 .neo-agent-choice-free {
     height: 22px;
     padding: 0 4px;
-    background: var(--neo-vsc-bg-alt);
-    border: 1px solid var(--neo-vsc-border);
+    background: var(--neo-vsc-btn-bg);
+    border: 1px solid var(--neo-vsc-btn-bd);
     border-radius: 4px;
     color: var(--neo-vsc-fg);
     font-size: 12px;
@@ -795,8 +826,8 @@
 .neo-agent-answer-opt {
     min-height: 22px;
     padding: 2px 6px;
-    background: var(--neo-vsc-bg-alt);
-    border: 1px solid var(--neo-vsc-border);
+    background: var(--neo-vsc-btn-bg);
+    border: 1px solid var(--neo-vsc-btn-bd);
     border-radius: 4px;
     color: var(--neo-vsc-fg);
     font-size: 12px;
@@ -807,7 +838,8 @@
 }
 
 .neo-agent-answer-opt:hover:not(:disabled) {
-    border-color: var(--neo-vsc-accent);
+    background: var(--neo-vsc-btn-hover);
+    border-color: var(--neo-vsc-btn-bd-hover);
 }
 
 .neo-agent-answer-opt:disabled {
@@ -846,8 +878,9 @@
     align-items: center;
     gap: 4px;
     padding: 4px;
+    background: var(--neo-vsc-bg-alt);
     border: 1px solid var(--neo-vsc-border);
-    border-radius: 4px;
+    border-radius: 6px;
 }
 
 .neo-agent-dot {
@@ -855,7 +888,7 @@
     height: 8px;
     flex: 0 0 auto;
     border-radius: 50%;
-    background: #6a6a6a;
+    background: #4a4a52;
 }
 
 .neo-agent-dot-on {
@@ -875,17 +908,15 @@
     padding: 0 4px;
     border: 1px solid var(--neo-vsc-border);
     border-radius: 4px;
-    font-size: 10px;
-    letter-spacing: 0.5px;
-    text-transform: uppercase;
+    font-size: 11px;
     color: var(--neo-vsc-fg-dim);
 }
 
 .neo-agent-row-btn {
     height: 20px;
     padding: 0 8px;
-    background: var(--neo-vsc-bg-alt);
-    border: 1px solid var(--neo-vsc-border);
+    background: var(--neo-vsc-btn-bg);
+    border: 1px solid var(--neo-vsc-btn-bd);
     border-radius: 4px;
     color: var(--neo-vsc-fg);
     font-size: 12px;
@@ -893,7 +924,8 @@
 }
 
 .neo-agent-row-btn:hover {
-    border-color: var(--neo-vsc-accent);
+    background: var(--neo-vsc-btn-hover);
+    border-color: var(--neo-vsc-btn-bd-hover);
 }
 
 .neo-agent-row-btn:disabled {
@@ -912,8 +944,9 @@
     flex-direction: column;
     gap: 4px;
     padding: 4px;
+    background: var(--neo-vsc-bg-alt);
     border: 1px solid var(--neo-vsc-border);
-    border-radius: 4px;
+    border-radius: 6px;
 }
 
 .neo-agent-tool-off {
@@ -938,9 +971,9 @@
 .neo-agent-json {
     margin: 0;
     padding: 4px;
-    background: var(--neo-vsc-bg-alt);
-    border: 1px solid var(--neo-vsc-border);
-    border-radius: 4px;
+    background: var(--neo-vsc-btn-bg);
+    border: 1px solid var(--neo-vsc-border-soft);
+    border-radius: 6px;
     color: var(--neo-vsc-fg);
     font-family: var(--neo-vsc-mono);
     font-size: 12px;
@@ -1074,7 +1107,7 @@
     gap: 2px;
     padding: 4px;
     border: 1px solid var(--neo-vsc-border);
-    border-radius: 4px;
+    border-radius: 6px;
     background: var(--neo-vsc-bg-alt);
     font-size: 12px;
 }
@@ -1091,9 +1124,7 @@
 }
 
 .neo-agent-plan-foot {
-    font-size: 10px;
-    letter-spacing: 0.5px;
-    text-transform: uppercase;
+    font-size: 11px;
     color: var(--neo-vsc-fg-dim);
 }
 
@@ -1102,8 +1133,7 @@
     display: flex;
     flex-wrap: wrap;
     gap: 2px 8px;
-    font-size: 10px;
-    letter-spacing: 0.5px;
+    font-size: 11px;
     color: var(--neo-vsc-fg-dim);
 }
 
@@ -1121,7 +1151,7 @@
     padding: 0 4px;
     border: 1px solid var(--neo-vsc-border);
     border-radius: 4px;
-    font-size: 10px;
+    font-size: 11px;
     color: var(--neo-vsc-fg-dim);
     overflow: hidden;
     white-space: nowrap;
@@ -1131,8 +1161,8 @@
 .neo-agent-focus-prefs {
     height: 20px;
     padding: 0 8px;
-    background: var(--neo-vsc-bg-alt);
-    border: 1px solid var(--neo-vsc-border);
+    background: var(--neo-vsc-btn-bg);
+    border: 1px solid var(--neo-vsc-btn-bd);
     border-radius: 4px;
     color: var(--neo-vsc-fg);
     font-size: 12px;
@@ -1140,7 +1170,8 @@
 }
 
 .neo-agent-focus-prefs:hover {
-    border-color: var(--neo-vsc-accent);
+    background: var(--neo-vsc-btn-hover);
+    border-color: var(--neo-vsc-btn-bd-hover);
 }
 
 /* 从旧会话的某条用户消息重开：每条一行，点选的那条描边 */
@@ -1149,14 +1180,12 @@
     flex-direction: column;
     gap: 2px;
     padding: 4px;
-    border: 1px dashed var(--neo-vsc-border);
-    border-radius: 4px;
+    border: 1px dashed var(--neo-vsc-border-soft);
+    border-radius: 6px;
 }
 
 .neo-agent-restart-title {
-    font-size: 10px;
-    letter-spacing: 0.5px;
-    text-transform: uppercase;
+    font-size: 11px;
     color: var(--neo-vsc-fg-dim);
 }
 
@@ -1174,10 +1203,12 @@
 }
 
 .neo-agent-restart-row:hover {
-    border-color: var(--neo-vsc-accent);
+    background: var(--neo-vsc-btn-hover);
+    border-color: var(--neo-vsc-btn-bd-hover);
 }
 
 .neo-agent-restart-on {
-    border-color: var(--neo-vsc-accent);
-    color: var(--neo-vsc-accent);
+    background: var(--neo-vsc-primary-soft);
+    border-color: var(--neo-vsc-primary);
+    color: var(--neo-vsc-fg);
 }

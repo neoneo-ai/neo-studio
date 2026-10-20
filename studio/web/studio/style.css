@@ -1,5 +1,29 @@
 /* Neo Studio 外壳样式：顶栏 + 视图容器。功能模块的样式由各自 CSS 注入（gallery.css / recipes.css …）。 */
-:root { color-scheme: dark; }
+:root {
+    color-scheme: dark;
+    /* 外壳调色单点：素材页 / 导演页 / 设置页与右栏智能体共用这一组值。
+       右栏（agent-panel.css）只吃这组变量：右栏唯一的宿主是本页，不在 ComfyUI 里渲染，
+       原先回落 ComfyUI 主题变量就是右栏与页面其它区域两套色的来源 */
+    --ns-bg: #17171b;
+    --ns-panel: #202024;
+    --ns-raised: #26262c;
+    --ns-field: #2a2a2e;
+    --ns-field-hover: #333338;
+    --ns-field-bd: #444;
+    --ns-field-bd-hover: #555;
+    --ns-border: #333;
+    --ns-border-soft: #3f3f4a;
+    --ns-fg: #ddd;
+    --ns-dim: #9a9aa8;
+    --ns-accent: #7aa2ff;
+    --ns-primary: #2f6fed;
+    --ns-primary-hover: #3f7ffe;
+    --ns-primary-soft: rgba(47, 111, 237, .16);
+    --ns-primary-fg: #cfe0ff;
+    --ns-ok: #7bc47f;
+    --ns-warn: #e0b070;
+    --ns-err: #ff8a8a;
+}
 * { box-sizing: border-box; }
 html, body { height: 100%; }
 body {
@@ -57,11 +81,12 @@ body {
     background: transparent; cursor: pointer;
     font-size: 15px; line-height: 1;
 }
-.ns-agent-toggle:hover { background: #33333a; }
-.ns-agent-toggle-on { background: #2b3a52; border-color: #2f6fed; color: #cfe0ff; }
+.ns-agent-toggle:hover { background: var(--ns-raised); }
+.ns-agent-toggle-on { background: var(--ns-primary-soft); border-color: var(--ns-primary); color: var(--ns-primary-fg); }
 .ns-agent-dock {
     flex: none; width: var(--ns-agent-w, 360px); min-width: 0;
-    border-left: 1px solid #333; overflow: hidden; transition: width .16s ease;
+    background: var(--ns-bg);
+    border-left: 1px solid var(--ns-border); overflow: hidden; transition: width .16s ease;
 }
 /* 右栏分隔条：与左栏那条共用样式（.ns-director-colsplit），在 flex 行里占 18px 热区。
    收起态栏子不显示、分隔条留着，三点抓手常驻 = 它就是把栏子拖回来的那个把手 */
@@ -629,6 +654,20 @@ body {
 .ns-mem-clear:focus-visible,
 .ns-wctl-btn:focus-visible,
 .ns-agent-toggle:focus-visible,
+.neo-agent-input:focus-visible,
+.neo-agent-json:focus-visible,
+.neo-agent-tool-args:focus-visible,
+.neo-agent-choice-free:focus-visible,
+.neo-agent-run:focus-visible,
+.neo-agent-attach:focus-visible,
+.neo-agent-entry:focus-visible,
+.neo-agent-mode-btn:focus-visible,
+.neo-agent-row-btn:focus-visible,
+.neo-agent-head-btn:focus-visible,
+.neo-agent-focus-prefs:focus-visible,
+.neo-agent-restart-row:focus-visible,
+.neo-agent-answer-opt:focus-visible,
+.neo-agent-choice-opt:focus-visible,
 .ns-settings-tab:focus-visible,
 .ns-info:focus-visible,
 .ns-launch-input:focus-visible,
@@ -650,35 +689,40 @@ body {
 .ns-agent-prefs textarea.rs-form-input { resize: vertical; font-family: inherit; }
 /* 枚举三项的下拉：沿用 .rs-form-input 的暗色外观，展开后的选项列表也铺同一套底色 */
 .ns-agent-prefs select.rs-form-input { appearance: auto; }
-.ns-agent-prefs select.rs-form-input option { background: #2a2a2a; color: #ccc; }
+.ns-agent-prefs select.rs-form-input option { background: var(--ns-field); color: var(--ns-fg); }
 .ns-prefs-check { flex-direction: row; align-items: center; gap: 8px; }
 .ns-prefs-check .rs-form-label { margin-bottom: 0; }
 .ns-prefs-check .rs-form-input { width: auto; }
 .ns-prefs-save { width: auto; padding: 6px 20px; justify-self: start; }
 .ns-prefs-note { grid-column: 1 / -1; font-size: 12px; color: #9a9aa8; }
 
-/* 中间舞台：右栏那一轮的当前过程与产物在绘画页中间放大；关掉开关整块不挂（studio-app.js 的 neo_studio_agent_stage） */
-.ns-paint-stage { display: flex; flex-direction: column; gap: 8px; flex: none; max-height: 46vh; overflow: auto; }
+/* 中间舞台：右栏那一轮的当前过程与产物在绘画页生成面板下方放大，模式条与面板留在上方不被挤下去；关掉开关整块不挂
+   （studio-app.js 的 neo_studio_agent_stage）。上限按结果图那 480px 的块给：舞台在下，上方面板按 flex 让出这一段高 */
+.ns-paint-stage { display: flex; flex-direction: column; gap: 8px; flex: none; max-height: 56vh; overflow: auto; }
 .ns-paint-stage:empty { display: none; }
 .ns-agent-stage {
     display: flex; flex-direction: column; gap: 8px;
-    border: 1px solid #3a3a44; border-radius: 10px; padding: 10px 12px; background: #232329;
+    border: 1px solid var(--ns-border-soft); border-radius: 6px; padding: 10px 12px; background: var(--ns-panel);
 }
 .ns-agent-stage[hidden] { display: none; }
 .ns-agent-stage-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .ns-agent-stage-title { font-weight: 600; }
-.ns-agent-stage-status { font-size: 12px; color: #9a9aa8; }
-.ns-agent-stage-idle { font-size: 12px; color: #8a8a96; }
+.ns-agent-stage-status { font-size: 12px; color: var(--ns-dim); }
+.ns-agent-stage-idle { font-size: 12px; color: var(--ns-dim); }
 .ns-agent-stage-plan { display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
 .ns-agent-stage-plan-done { opacity: .55; }
-.ns-agent-stage-plan-foot { color: #9a9aa8; }
+.ns-agent-stage-plan-foot { color: var(--ns-dim); }
 .ns-agent-stage-facts { display: flex; flex-wrap: wrap; gap: 6px; }
-.ns-agent-stage-fact { border: 1px solid #3f3f4a; border-radius: 6px; padding: 2px 7px; font-size: 12px; background: #2a2a31; }
-.ns-agent-stage-preview { height: 380px; max-width: 720px; overflow: hidden; border-radius: 8px; background: #000; }
-.ns-agent-stage-media { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+.ns-agent-stage-fact { border: 1px solid var(--ns-border-soft); border-radius: 4px; padding: 2px 7px; font-size: 12px; background: var(--ns-field); }
+/* 采样预览块：宽由 agent-stage.js 按载荷的画面宽高比定（竖图 = 480 高 × 比例宽），高跟着图走。
+   固定高度配 100% 宽会把竖图裁成头部特写——竖图那一档只能让宽跟着画面走 */
+.ns-agent-stage-preview { max-width: 720px; overflow: hidden; border-radius: 6px; background: #000; }
+.ns-agent-stage-preview .neo-dtl-live-img { max-height: 480px; }
+/* 产物是这一轮的主体：预览退场后结果图占最大一块（与采样预览同档），清单与回答收在下面 */
+.ns-agent-stage-media { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 8px; }
 .ns-agent-stage-media img, .ns-agent-stage-media video {
-    width: 100%; max-height: 360px; object-fit: contain; border-radius: 8px; background: #000; cursor: zoom-in;
+    width: 100%; max-height: 480px; object-fit: contain; border-radius: 8px; background: #000; cursor: zoom-in;
 }
-.ns-agent-stage-answer { font-size: 13px; max-height: 260px; overflow: auto; }
+.ns-agent-stage-answer { font-size: 13px; max-height: 180px; overflow: auto; }
 .ns-agent-stage-answer img { max-width: 100%; }
 

@@ -257,13 +257,50 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
     const chips = mkEl("div", "neo-agent-chips");
     const input = mkEl("textarea", "neo-agent-input");
     input.rows = 3;
-    input.placeholder = t("描述要生成的提示词，或要改写的方向；可粘贴 / 拖入图片（含素材库卡片）");
+    input.placeholder = t("描述要生成的提示词，或要改写的方向；可粘贴 / 拖入图片（含素材库卡片），↑ ↓ 翻历史输入");
     // 框高跟着内容走：rows 只给初值，长提示词撑出来的高度在窗口里不会自己缩回，
     // 拖拽手柄一并禁掉（agent-panel.css 的 resize: none），发送与 Esc 后收回初值
     function fitInput() {
         input.style.height = "";
         const h = Math.min(input.scrollHeight || 0, 108);
         if (h > 0) input.style.height = h + "px";
+    }
+
+    // 上下箭头翻历史输入（shell 输入框口径）：发出去的原文在本机 localStorage 存一份，换页重载之后还翻得到。
+    // 进入历史要看光标贴边（↑ 看文本最前、↓ 看文本最后），进去之后连按就一路翻 —— 多行提示词光标落在中间那一下归光标自己
+    const HISTORY_KEY = "neo_studio_agent_history";
+    const HISTORY_MAX = 30;
+    const history = { list: [], at: -1, draft: "" };
+    try {
+        history.list = (JSON.parse(localStorage.getItem(HISTORY_KEY)) || [])
+            .filter((s) => typeof s === "string" && s.trim());
+    } catch { /* 手改过的非 JSON 就当没有历史 */ }
+
+    function pushHistory(text) {
+        if (!text) return;   // 只给图不给字的一轮没有原文可翻
+        history.list = history.list.filter((s) => s !== text);
+        history.list.unshift(text);
+        history.list.length = Math.min(history.list.length, HISTORY_MAX);
+        history.at = -1;
+        history.draft = "";
+        try { localStorage.setItem(HISTORY_KEY, JSON.stringify(history.list)); } catch { /* 配额写不进：本机这一轮翻得到就够 */ }
+    }
+
+    // dir: -1 更早 / +1 更新；翻到边界返回 false，让浏览器按光标自己处理
+    function stepHistory(dir) {
+        if (dir < 0) {
+            if (history.at + 1 >= history.list.length) return false;
+            if (history.at < 0) history.draft = input.value;   // 写了一半的草稿腾开，翻回最新一条时还在
+            history.at += 1;
+            input.value = history.list[history.at];
+        } else {
+            if (history.at < 0) return false;
+            history.at -= 1;
+            input.value = history.at < 0 ? history.draft : history.list[history.at];
+        }
+        input.selectionStart = input.selectionEnd = input.value.length;
+        fitInput();
+        return true;
     }
 
     // Cline 的口径：取消只在跑起来之后存在，整行铺在文本框上面，空闲时这一行不占位
@@ -574,8 +611,10 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
                 if (!row) return;
                 row.textContent = text;
                 if (taskId && !row.querySelector(".neo-agent-cancel")) mkCancel(row, taskId);
-                // 采样预览走 SSE 的 status 帧（后端只发紧凑档、一步一份）；播放器自定帧率循环该步动画
-                if (preview && Array.isArray(preview.frames) && preview.frames.length) {
+                // 采样预览走 SSE 的 status 帧（后端只发紧凑档、一步一份）；播放器自定帧率循环该步动画。
+                // 界面关掉采样预览时这一轮没有载荷，卡片那块靠 :empty 自己收起，播放器不用建
+                if (preview && Array.isArray(preview.frames) && preview.frames.length
+                    && (!previewSide || previewSide() > 0)) {
                     const box = slot("neo-agent-tool-preview");
                     if (box) {
                         // reset() 把内联高度写成 0px 藏住面板；首个载荷到达时交回 CSS 的定高
@@ -1030,7 +1069,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
     }
 
     // 智能体路径：一次请求换一路 SSE。界面当前状态随请求体进后端系统提示词，
-    // mode 决定计划还是执行，images 是附件图，preview_side 是这一轮要的采样预览档（中间舞台宽就要大档）
+    // mode 决定计划还是执行，images 是附件图，preview_side 是这一轮要的采样预览档（舞台那档大、右栏那档紧凑，关掉是 0）
     async function runAgent(answer, text, planMode, images, context, markFail) {
         const view = agentTimeline(answer);
         activeView = view;
@@ -1132,6 +1171,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
         // 按文件名给后端（与绘画页参考图同一口径），本地粘贴 / 选图仍是 data URI
         const images = attachments.map((a) => (a.data ? { kind: "data", data: a.data } : { kind: "input", value: a.input }));
         if (!text && !images.length) return;
+        pushHistory(text);
         // 发出去的话交进时间线留档，输入框立刻清出来：一条长提示词留在框里只挡下一句
         input.value = "";
         fitInput();
@@ -1208,6 +1248,17 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
     input.addEventListener("input", fitInput);
 
     input.addEventListener("keydown", (e) => {
+        if ((e.key === "ArrowUp" || e.key === "ArrowDown") && !e.ctrlKey && !e.metaKey && !e.altKey) {
+            const up = e.key === "ArrowUp";
+            const edge = up
+                ? (input.selectionStart === 0 && input.selectionEnd === 0)
+                : (input.selectionStart === input.value.length && input.selectionEnd === input.value.length);
+            if ((history.at >= 0 || edge) && stepHistory(up ? -1 : 1)) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            return;
+        }
         if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
             e.stopPropagation();
@@ -1219,6 +1270,8 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
             e.stopPropagation();
             input.value = "";
             fitInput();
+            history.at = -1;   // 草稿被丢掉：下一次 ↑ 从空框起头
+            history.draft = "";
         }
     });
 
@@ -1444,7 +1497,8 @@ export function createAgentPanel(host, opts = {}) {
  * （1280x720 这种具体宽高、后来被删掉的技能 id）时追加成一项，用户看得见自己点进来的是什么。
  * 保存按后端 _clean_prefs 收净的返回值回填——越界的技能名与尺寸在后端被丢回默认值，表单留着用户刚写的
  * 那一份就是演它存上了。字段与后端收净的那六个一一对应（select 是枚举，area 是长文本，check 是开关）。
- * opts.stageMode / opts.setStageMode 是中间舞台那个界面开关的读写口：开关不在这六个字段里，宿主存本地。
+ * opts.stageMode / opts.setStageMode 与 opts.previewMode / opts.setPreviewMode 是中间舞台、采样预览这两个
+ * 界面开关的读写口：开关不在这六个字段里，宿主存本地。
  */
 export function createAgentPrefsForm(opts = {}) {
     const form = mkEl("div", "ns-agent-prefs");
@@ -1469,7 +1523,7 @@ export function createAgentPrefsForm(opts = {}) {
     // 提示词，界面布局不该进去，所以这一项不在 PREFS_FIELDS 里、不进保存请求体
     const stageRow = mkEl("div", "rs-config-row ns-prefs-row ns-prefs-check");
     const stageLab = mkEl("label", "rs-form-label");
-    stageLab.textContent = t("中间舞台（过程与产物显示在页面中间）");
+    stageLab.textContent = t("中间舞台（过程与产物显示在页面下方）");
     stageLab.title = t("关掉就回到只在右栏看智能体的布局；这一项是本机界面开关，不写进偏好文件");
     const stageBox = mkEl("input", "rs-form-input");
     stageBox.type = "checkbox";
@@ -1477,6 +1531,19 @@ export function createAgentPrefsForm(opts = {}) {
     stageBox.checked = opts.stageMode ? opts.stageMode() : true;
     stageBox.onchange = () => opts.setStageMode && opts.setStageMode(stageBox.checked);
     stageRow.append(stageLab, stageBox);
+
+    // 采样预览同为机界面开关（同一份 localStorage 偏好）：关掉就是这一轮不给后端要采样帧
+    // （请求里的 preview_side 给 0），SSE 里不再有 base64 帧，中间与右栏都不铺动画
+    const previewRow = mkEl("div", "rs-config-row ns-prefs-row ns-prefs-check");
+    const previewLab = mkEl("label", "rs-form-label");
+    previewLab.textContent = t("采样预览（生成时逐采样步铺动画）");
+    previewLab.title = t("关掉后中间舞台与右栏卡片都不铺采样动画，SSE 不再传预览帧；正在跑的这一轮收尾时收掉。这一项是本机界面开关，不写进偏好文件");
+    const previewBox = mkEl("input", "rs-form-input");
+    previewBox.type = "checkbox";
+    previewBox.name = "preview_mode";
+    previewBox.checked = opts.previewMode ? opts.previewMode() : true;
+    previewBox.onchange = () => opts.setPreviewMode && opts.setPreviewMode(previewBox.checked);
+    previewRow.append(previewLab, previewBox);
 
     // 下拉的选项来源在 load 里与偏好一起取：技能列表与已装主模型；取不到就是空列表，下拉只剩「不设」
     let skills = [], modelFiles = [];
@@ -1548,7 +1615,8 @@ export function createAgentPrefsForm(opts = {}) {
         skills = Array.isArray(skillRes) ? skillRes : [];
         modelFiles = modelRes?.diffusion_models || [];
         fill(data.prefs || {});
-        if (opts.stageMode) stageBox.checked = !!opts.stageMode();   // 开关以宿主那份为准，后端读回来的只有六个字段
+        if (opts.stageMode) stageBox.checked = !!opts.stageMode();   // 两个界面开关以宿主那份为准，后端读回来的只有六个字段
+        if (opts.previewMode) previewBox.checked = !!opts.previewMode();
         applyPending();
     }
 
@@ -1569,7 +1637,7 @@ export function createAgentPrefsForm(opts = {}) {
         applyPending();
     }
 
-    form.append(desc, ...rows, stageRow, save, note);
+    form.append(desc, ...rows, stageRow, previewRow, save, note);
     return { el: form, load, prefill };
 }
 

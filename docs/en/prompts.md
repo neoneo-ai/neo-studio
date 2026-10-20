@@ -160,7 +160,22 @@ Both nodes share the same layout (the Agent shows no status bar):
   overflow inside it (the bottom-right grip stretches the block), and text that does not parse as JSON lands verbatim. Links inside the timeline stay in the page: a
   result link opens the popup viewer, an external link opens a new window, and the window never navigates to the
   bare image / video page — navigating away and coming back reloads the Studio page, taking the startup status
-  and the whole transcript with it. The main button **✨ Generate** sits in the bottom-right corner of the composer's
+  and the whole transcript with it. The stage below the paint panel follows the current round only: the mode bar
+  and the generation panel stay on top, the sampling animation fills the block below while it runs, and once a
+  result lands the preview retires and the result image
+  takes that block, with the plan list and the final answer below it. The sampling-preview block is as wide as the
+  frame's aspect ratio (a portrait is its 480px long side times that ratio, a landscape fills the 720px block cap):
+  a fixed height with a 100% width crops a portrait into a head close-up. The stage and the sampling preview each
+  have their own local switch in the settings page's Agent preferences section
+  (`localStorage["neo_studio_agent_stage"]` / `localStorage["neo_studio_agent_preview"]`, never the six
+  `configs/agent_prefs.json` fields that reach the system prompt): with the sampling preview off, that round's
+  request sends `preview_side: 0`, the backend does not read the preview tables at all, no base64 frames are
+  streamed, and neither the center stage nor the rail tool cards build an animation — flipping the switch mid-round
+  clears the animation that is running. `↑` / `↓` in the textarea walks your recent
+  sends: the last 30 are kept locally (`localStorage["neo_studio_agent_history"]`, so they survive a page reload),
+  `↑` starts walking when the caret sits at the very start and `↓` when it sits at the end, inside the history
+  further presses keep walking, walking past the newest entry returns the draft you were typing, and `Esc` clears
+  the input along with that draft. The main button **✨ Generate** sits in the bottom-right corner of the composer's
   bottom row and has three states: idle is generate, a running turn turns it into **⏸ Pause** (it posts
   `/neo_agent/pause` with the `run_id` from the first frame, parks the loop at the
   next turn / poll boundary, and kills the in-flight ComfyUI task at that boundary without resending it), and a paused

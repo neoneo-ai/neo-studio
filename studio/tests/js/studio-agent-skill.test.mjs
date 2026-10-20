@@ -123,6 +123,51 @@ test("点生成：请求带界面上下文，出计划行与最终回答，面�
     assert.equal(runBtn().disabled, false, "收尾后应解禁主按钮");
 });
 
+const askBox = () => dock().querySelector(".neo-agent-input");
+// keydown 走 helpers 的 keydown() 拿不到 defaultPrevented，用例要断言「这一下有没有被抢」，自己发事件
+const pressKey = (el, k) => {
+    const ev = new window.KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true });
+    el.dispatchEvent(ev);
+    return ev.defaultPrevented;
+};
+
+test("输入框上下箭头翻历史输入：光标贴边进历史，连按一路翻，草稿腾开还在", async () => {
+    localStorage.removeItem("neo_studio_agent_history");
+    mountStudio();
+    await openStudio("#/gallery");
+    const send = async (text) => {
+        mockAgentStream([{ kind: "content", text: "好了" }]);
+        inputText(askBox(), text);
+        click(runBtn());
+        await flush(40);
+    };
+    await send("第一条需求");
+    await send("第二条需求");
+
+    inputText(askBox(), "写了一半的草稿");
+    askBox().setSelectionRange(0, 0);
+    assert.ok(pressKey(askBox(), "ArrowUp"), "光标贴在最前按 ↑ 应进历史");
+    assert.equal(askBox().value, "第二条需求", "↑ 先翻到最近发出去的那一条");
+    pressKey(askBox(), "ArrowUp");
+    assert.equal(askBox().value, "第一条需求", "进了历史之后连按 ↑ 一路往更早翻");
+    pressKey(askBox(), "ArrowUp");
+    assert.equal(askBox().value, "第一条需求", "翻到最早一条就停住，不换文本");
+    pressKey(askBox(), "ArrowDown");
+    assert.equal(askBox().value, "第二条需求", "↓ 往回走到更新的上一条");
+    pressKey(askBox(), "ArrowDown");
+    assert.equal(askBox().value, "写了一半的草稿", "翻过最新一条应回到自己写了一半的草稿");
+    assert.equal(pressKey(askBox(), "ArrowDown"), false, "回到草稿之后再按 ↓ 不该抢键");
+
+    // 多行提示词：光标落在中间，那一下归光标自己，文本不该被历史顶替
+    inputText(askBox(), "第一行\n第二行");
+    askBox().setSelectionRange(4, 4);
+    assert.equal(pressKey(askBox(), "ArrowUp"), false, "光标在中间按 ↑ 不该抢键");
+    assert.equal(askBox().value, "第一行\n第二行", "光标在中间时不许把文本换成历史");
+
+    assert.deepEqual(JSON.parse(localStorage.getItem("neo_studio_agent_history")), ["第二条需求", "第一条需求"],
+        "发出去的原文按最近在前存进本机历史");
+});
+
 test("工具卡的参数与返回：JSON 展开成缩进多行，长载荷在块内滚动而不是截断", async () => {
     mountStudio();
     await openStudio("#/gallery");

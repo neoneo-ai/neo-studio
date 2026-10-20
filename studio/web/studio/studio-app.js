@@ -689,10 +689,11 @@ function buildPaint(el) {
     const main = $el("div", { className: "ns-paint-main" });
     page.appendChild(main);
 
-    // 中间舞台常驻本页顶部：右栏那一轮跑起来时过程与产物铺在这里；关掉开关整块不挂，回到没有舞台的布局
+    // 中间舞台挂在页面下方：右栏那一轮的过程与产物在生成面板下面放大，模式条与面板不被产物挤下去；
+    // 关掉开关整块不挂，回到没有舞台的布局
     stageHost = $el("div", { className: "ns-paint-stage" });
     agentStage = createAgentStage();
-    main.appendChild(stageHost);
+    agentStage.setPreviewMode(previewOn);   // 建好就把本机那份采样预览偏好交进去，本页之前不开过设置页也一样
 
     // 模式切换：文生图与图片编辑各占满右栏，一次只看一个（不像导演页那样编辑 + 生成同屏抢高度）
     const modeBtns = {
@@ -706,6 +707,7 @@ function buildPaint(el) {
     main.appendChild(editHost);
     const memBar = buildMemBar();   // 显存 / 内存读数 + 清理：绘画页同样是生成页
     if (memBar) main.appendChild(memBar);
+    main.appendChild(stageHost);   // 舞台排在原界面之后：产物那一块放大不占页面顶部
     mountStage();
 
     let mode = "text";
@@ -1052,7 +1054,10 @@ function buildSettings(el) {
     // tab 顺序：LLM 设置 → 生图设置 → 生视频设置 → 智能体偏好 → 界面语言 → 日志 → 启动设置 → 关于；每个 tab 只显示对应设置区
     const launcher = createLauncherPanel();
     const mcp = createMcpPanel();
-    const prefs = createAgentPrefsForm({ stageMode: () => stageOn, setStageMode: applyStageMode });
+    const prefs = createAgentPrefsForm({
+        stageMode: () => stageOn, setStageMode: applyStageMode,
+        previewMode: () => previewOn, setPreviewMode: applyPreviewMode,
+    });
     agentPrefs = prefs;   // 深链带预填参数进来时，route() 要把焦点链那份值交给这张表单
 
     const section = (title) => $el("h3", { textContent: t(title) });
@@ -1624,19 +1629,28 @@ function localizeShell() {
     }
 }
 
-// ====== 中间舞台：右栏那一轮的当前过程与产物在绘画页中间放大 ======
+// ====== 中间舞台：右栏那一轮的当前过程与产物在绘画页生成面板下方放大 ======
 // 开关在设置页「智能体偏好」栏，与右栏开合同类：本机界面偏好存 localStorage，不进 configs/agent_prefs.json
 // （那六个字段会进系统提示词，界面布局不该进去）
 const AGENT_STAGE_KEY = "neo_studio_agent_stage";
+const AGENT_PREVIEW_KEY = "neo_studio_agent_preview";
 let agentStage = null;    // 绘画页建页时建一次：舞台只吃实时帧，不留第二份状态
-let stageHost = null;     // 绘画页顶部那块宿主；关掉开关时把舞台摘掉，布局回到没有舞台的样子
+let stageHost = null;     // 绘画页下方那块宿主；关掉开关时把舞台摘掉，布局回到没有舞台的样子
 let stageOn = true;
+let previewOn = true;     // 采样预览开关：关掉就是这一轮不给后端要采样帧（preview_side 0），SSE 里不再有 base64 帧
 try { stageOn = localStorage.getItem(AGENT_STAGE_KEY) !== "0"; } catch { /* 偏好读不到就用默认 */ }
+try { previewOn = localStorage.getItem(AGENT_PREVIEW_KEY) !== "0"; } catch { /* 同上 */ }
 
 function applyStageMode(on) {
     stageOn = !!on;
     try { localStorage.setItem(AGENT_STAGE_KEY, stageOn ? "1" : "0"); } catch { /* 偏好写不进不影响用 */ }
     mountStage();
+}
+
+function applyPreviewMode(on) {
+    previewOn = !!on;
+    try { localStorage.setItem(AGENT_PREVIEW_KEY, previewOn ? "1" : "0"); } catch { /* 偏好写不进不影响用 */ }
+    if (agentStage) agentStage.setPreviewMode(previewOn);   // 中途关掉就把在跑的动画收掉
 }
 
 function mountStage() {
@@ -1679,8 +1693,9 @@ function initAgentDock() {
         getContext: agentContext,
         // 实时帧同时交中间舞台：舞台只画当前这一轮，右栏时间线照旧逐帧追加
         onFrame: (frame) => { if (agentStage) agentStage.onFrame(frame); },
-        // 采样预览要哪一档由舞台开关定：舞台那块比栏子宽得多，384 的帧铺在中间是糊的
-        previewSide: () => (stageOn ? STAGE_PREVIEW_SIDE : DOCK_PREVIEW_SIDE),
+        // 采样预览要哪一档由两个开关定：关掉这一轮就不要采样帧（0 = 后端不读预览表）；
+        // 舞台那块比栏子宽得多，384 的帧铺在中间是糊的
+        previewSide: () => (previewOn ? (stageOn ? STAGE_PREVIEW_SIDE : DOCK_PREVIEW_SIDE) : 0),
     });
     const refresh = () => panel.refresh();
     agentCtxRefresh = refresh;   // 切页 / 选配方 / 切绘画模式时重画右栏上下文条

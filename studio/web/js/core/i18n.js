@@ -1563,7 +1563,7 @@ const EN = {
     "智能体": "Agent",
     "输入需求，Enter 生成；右栏会带着界面当前状态去规划":
         "Type a request and press Enter to generate; the panel plans around what is open on screen",
-    "描述要生成的提示词，或要改写的方向；可粘贴 / 拖入图片（含素材库卡片）": "Describe the prompt to generate, or the direction to rewrite it; paste images, pick files, or drag cards in from the library",
+    "描述要生成的提示词，或要改写的方向；可粘贴 / 拖入图片（含素材库卡片），↑ ↓ 翻历史输入": "Describe the prompt to generate, or the direction to rewrite it; paste images, pick files, or drag cards in from the library — ↑ ↓ walks your recent inputs",
     "清空对话": "Clear conversation",
     "📝 计划": "📝 Plan",
     "⚡ 执行": "⚡ Act",
@@ -1670,9 +1670,12 @@ const EN = {
     "已写入 configs/agent_prefs.json，下一条输入起效":
         "Written to configs/agent_prefs.json — takes effect on the next request",
     "智能体偏好已保存": "Agent preferences saved",
-    "中间舞台（过程与产物显示在页面中间）": "Center stage (process and results shown in the middle)",
+    "中间舞台（过程与产物显示在页面下方）": "Stage below (process and results shown below the panels)",
     "关掉就回到只在右栏看智能体的布局；这一项是本机界面开关，不写进偏好文件":
         "Turning it off restores the layout where the agent is only visible in the right rail; this is a local interface switch, not part of the preferences file",
+    "采样预览（生成时逐采样步铺动画）": "Sampling preview (animate each sampling step while generating)",
+    "关掉后中间舞台与右栏卡片都不铺采样动画，SSE 不再传预览帧；正在跑的这一轮收尾时收掉。这一项是本机界面开关，不写进偏好文件":
+        "Turning it off stops the center stage and the rail cards from animating samples, and no preview frames are streamed; a round already running clears at its end. This is a local interface switch, not part of the preferences file",
     "在右栏「智能体」里提需求，这一轮的过程、采样预览与产物大图就铺在这里":
         "Ask the agent in the right rail: this round's process, sampling preview and full-size results land here",
     "本轮开始": "Round started",

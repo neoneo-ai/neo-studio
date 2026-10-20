@@ -1,5 +1,5 @@
 /**
- * agent-stage.js —— 中间舞台：右栏那一轮智能体的当前过程与产物，在页面中间放大显示。
+ * agent-stage.js —— 中间舞台：右栏那一轮智能体的当前过程与产物，在页面生成面板下方放大显示。
  *
  * 只吃实时帧（右栏 agent-panel.js 把同一路 SSE 的帧交过来），自己不留第二份状态：
  * 新的 run 帧一到就清场，中间永远只有当前这一轮，不会堆成第二条历史时间线。
@@ -15,6 +15,10 @@ import { isMediaHref, mediaKindOf } from "./js/core/media-href.js";
 // 焦点链事实在中间只留用户在放映区认得出的那几项：种子这类左栏里没有的留给右栏焦点卡
 const STAGE_FACTS = [["skill_id", "技能"], ["model", "主模型"], ["loras", "LoRA"],
                      ["width", "宽"], ["height", "高"], ["recipe", "导演配方"]];
+
+// 采样预览块的最长边：与结果图那一档同高，竖图按高定宽、横图按宽定高；STAGE_MAX_W 是 CSS 的块宽上限
+const PREVIEW_MAX_SIDE = 480;
+const STAGE_MAX_W = 720;
 
 export function createAgentStage() {
     const el = mkEl("div", "ns-agent-stage");
@@ -35,6 +39,8 @@ export function createAgentStage() {
     let on = false;
     let empty = true;
     let live = null;
+    let previewOn = true;     // 采样预览是本机开关（设置页「智能体偏好」）：关掉时这一轮的帧不铺动画
+    let previewOff = false;   // 产物上台后采样预览退场：中间那一块留给结果图
     const items = [];
 
     function render() {
@@ -42,7 +48,7 @@ export function createAgentStage() {
         idle.hidden = !empty;
         planBox.hidden = empty || !planBox.children.length;
         factBox.hidden = empty || !factBox.children.length;
-        previewBox.hidden = empty;
+        previewBox.hidden = empty || previewOff || !previewOn;
         mediaBox.hidden = empty || !mediaBox.children.length;
         answerBox.hidden = empty || !answerBox.textContent;
     }
@@ -55,6 +61,7 @@ export function createAgentStage() {
         answerBox.textContent = "";
         if (live) { live.pause(); live = null; }
         previewBox.textContent = "";   // 播放器在 box 里铺了自己的节点，清空就是清场
+        previewOff = false;
         empty = true;
         status.textContent = "";
     }
@@ -138,9 +145,16 @@ export function createAgentStage() {
             status.textContent = frame.text || "";
             // 采样预览在中间正是它最该大的那块：播放器自定帧率循环该步动画，运行结束定格
             const preview = frame.preview;
-            if (preview && Array.isArray(preview.frames) && preview.frames.length) {
-                // reset() 把内联高度写成 0px 藏住面板；首个载荷到达时交回 CSS 的定高
-                live = live || createFramePlayer(previewBox, () => { previewBox.style.height = ""; });
+            if (previewOn && preview && Array.isArray(preview.frames) && preview.frames.length) {
+                // 退场之后又有新的采样步：pause() 过的实例不收迟到载荷，换新实例才接得上这一帧
+                if (previewOff) { previewBox.textContent = ""; live = null; previewOff = false; }
+                // reset() 把内联高度写成 0px 藏住面板；载荷到达时按画面宽高比定块宽：
+                // 固定高度配 100% 宽会把竖图裁成头部特写，竖图那一档只能让宽跟着画面走
+                live = live || createFramePlayer(previewBox, (data) => {
+                    previewBox.style.height = "";
+                    const w = Number(data.w) || 0, h = Number(data.h) || 0;
+                    if (w && h) previewBox.style.maxWidth = `${Math.round(Math.min(PREVIEW_MAX_SIDE * w / h, STAGE_MAX_W))}px`;
+                });
                 live.apply(preview);
             }
         } else if (kind === "plan_steps") {
@@ -152,6 +166,8 @@ export function createAgentStage() {
         } else if (kind === "tool_result") {
             if (!(frame.media || []).length) return;
             addMedia(frame.media);
+            if (live) live.pause();   // 产物上台，采样预览退场：那一块换给结果图
+            previewOff = true;
             status.textContent = "✅ " + (frame.tool || "");
         } else if (kind === "ask") {
             empty = false;
@@ -162,6 +178,8 @@ export function createAgentStage() {
             status.textContent = t("运行中");
         } else if (kind === "finish") {
             empty = false;
+            if (live) live.pause();   // 收场不留动画在跑：定格的预览帧也让位给产物
+            previewOff = true;
             answerBox.innerHTML = renderMarkdown(frame.text || "");
             addMedia(frame.media || []);
             status.textContent = t("本轮完成");
@@ -176,6 +194,17 @@ export function createAgentStage() {
         render();
     }
 
+    // 采样预览开关（本机偏好）：中途关掉就把在跑的动画收掉，那块立刻让给状态行与产物
+    function setPreviewMode(value) {
+        previewOn = !!value;
+        if (!previewOn) {
+            if (live) live.pause();
+            live = null;
+            previewBox.textContent = "";
+        }
+        render();
+    }
+
     render();
-    return { el, onFrame, setEnabled };
+    return { el, onFrame, setEnabled, setPreviewMode };
 }
