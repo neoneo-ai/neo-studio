@@ -138,6 +138,9 @@ export function createAgentStage() {
     function onFrame(frame) {
         if (!on) return;
         const kind = frame?.kind || "";
+        // 会话标题帧是前端自己发的显示帧（agent-panel.js 在标题定下来那一发交过来，不进后端时间线）：
+        // 页眉在整场生成里挂同一句，清空标题回到默认那一句
+        if (kind === "title") { title.textContent = frame.text ? "💬 " + frame.text : "✨ " + t("智能体"); return; }
         if (kind === "run") { clear(); status.textContent = t("本轮开始"); render(); return; }
         if (kind === "tool_call") {
             empty = false;

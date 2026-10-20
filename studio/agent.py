@@ -409,11 +409,36 @@ def _image_refs(raw) -> list:
     return [r for r in refs if r]
 
 
+def _first_user_text(messages) -> str:
+    for msg in messages or []:
+        if isinstance(msg, dict) and msg.get("role") == "user":
+            return str(msg.get("content") or "").strip()
+    return ""
+
+
+def _session_title(run) -> str:
+    """会话标题 = 整条对话的第一句话，落盘就定下来：列表、读回、中间舞台的页眉认的是
+    同一个字符串，续聊那条不会把「续一下」这种短句子顶成标题。接上的旧会话里存了 title
+    就用它（链条一路往上带），老会话没这个字段就翻它落盘的第一条 user 消息。
+    标题只用来认会话，不作为事实源，也不进续聊回填。"""
+    if run.resume_of:
+        parent = _load_session(run.resume_of)
+        if parent:
+            title = str(parent.get("title") or "").strip()
+            if title:
+                return _clip(title, 120)
+            first = _first_user_text(parent.get("messages"))
+            if first:
+                return _clip(first, 120)
+    return _clip(_first_user_text([{"role": "user", "content": run.text}]) or "（只给了附件图）", 120)
+
+
 def _save_session(run) -> None:
     """一次运行的时间线与续聊原文落盘，原子写（.tmp 再 replace）。会话正文含用户提示词、
     本机路径与产物名，只落在数据根里：不进 Registry 包、不出本机。"""
     payload = {"version": 1, "run_id": run.run_id, "created": run.created,
                "updated": time.time(), "mode": run.mode, "status": run.status,
+               "title": _session_title(run),
                "resume_of": run.resume_of, "resume_from": run.resume_from, "focus": run.focus,
                "usage": run.usage, "plan_steps": run.plan_steps,
                "input": {"text": run.text, "images": run.image_refs, "context": run.context},
@@ -470,6 +495,9 @@ def _list_sessions() -> list:
                     # 焦点链里的技能：历史列表里认得出「这条会话最后是用哪个技能出的图」
                     "focus_skill": str((data.get("focus") or {}).get("skill_id") or ""),
                     "text": _clip(str(inp.get("text") or ""), 120),
+                    # 会话标题：整条对话的第一句话，列表与读回认的是同一个字符串。
+                    # 早于这个字段的老会话文件没有它，退回那次自己的首句
+                    "title": _clip(str(data.get("title") or inp.get("text") or ""), 120),
                     "images": len(inp.get("images") or []),
                     # 这条会话烧掉多少 token：长上下文的会话在列表里就该看得出来
                     "tokens": int(usage.get("total_tokens") or 0),
@@ -1571,7 +1599,7 @@ async def agent_resume(request):
 
 @routes.get("/neo_agent/sessions")
 async def agent_sessions(request):
-    """「🗂 历史」的列表：新的在前，只回摘要（时间 / 模式 / 终态 / 首句 / 工具数），
+    """「🗂 历史」的列表：新的在前，只回摘要（时间 / 模式 / 终态 / 标题 / 工具数），
     整条时间线由 /neo_agent/session 按 run_id 读回。"""
     return web.json_response(_json_safe({"ok": True, "sessions": await asyncio.to_thread(_list_sessions)}))
 

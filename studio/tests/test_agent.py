@@ -975,6 +975,35 @@ class TestSessionStore(unittest.TestCase):
         os.utime(agent._session_of(stale_id), (old, old))     # 不用真等七天：改落盘时间就是过期
         self.assertEqual([s["text"] for s in agent._list_sessions()], ["今天的"])
 
+    def test_a_resumed_run_keeps_the_first_message_as_the_session_title(self):
+        """标题 = 整条对话的第一句话，落盘定下来：续聊那条不把「换成蓝色」顶成标题，
+        链条第三发也从接上的旧会话把标题一路带上来。"""
+        first = _fake_run(None, text="画一只橘猫在窗台上")
+        agent._save_session(first)
+        second = _fake_run(None, text="换成蓝色")
+        second.resume_of = first.run_id
+        agent._save_session(second)
+        third = _fake_run(None, text="再来一张夜景")
+        third.resume_of = second.run_id
+        agent._save_session(third)
+        self.assertEqual({s["title"] for s in agent._list_sessions()}, {"画一只橘猫在窗台上"})
+        self.assertEqual(_saved_top()[1]["title"], "画一只橘猫在窗台上")
+
+    def test_an_images_only_run_titles_itself_with_the_placeholder(self):
+        """只给附件图的那一发没有文字：标题落在占位句上，标题行不会空着挂在那儿。"""
+        run = _fake_run(None, text="")
+        run.image_refs = ["input/猫.png"]
+        agent._save_session(run)
+        self.assertEqual(_saved_top()[1]["title"], "（只给了附件图）")
+
+    def test_a_session_file_without_a_title_lists_its_own_first_line(self):
+        """早于 title 字段的老会话文件：列表退回它自己的首句认会话，不补字段也不读第二遍。"""
+        agent._save_session(_fake_run(None, text="老会话第一句"))
+        path, rec = _saved_top()
+        del rec["title"]
+        path.write_text(json.dumps(rec, ensure_ascii=False), encoding="utf-8")
+        self.assertEqual([s["title"] for s in agent._list_sessions()], ["老会话第一句"])
+
     def test_overflow_prune_keeps_the_newest(self):
         with mock.patch.object(agent, "MAX_SESSIONS", 3):
             for i in range(5):

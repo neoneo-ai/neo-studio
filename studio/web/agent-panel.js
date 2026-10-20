@@ -199,14 +199,16 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
     const historyBox = mkEl("div", "neo-agent-history");
     historyBox.hidden = true;
 
-    // 会话标题就是这一轮的第一句话，钉在时间线顶上（sticky 见 agent-panel.css 的 .neo-agent-titlebar）。
-    // 时间线整栏重铺的三条路（新增会话、读回旧会话、删掉读回的会话）都要把它放回第一个子节点，
-    // sticky 才有吸得住的位置
+    // 会话标题 = 整条对话的第一句话，钉在时间线顶上（sticky 见 agent-panel.css 的 .neo-agent-titlebar），
+    // 生成中、读回旧会话、历史列表都认同一句。同一句也交中间舞台的页眉（kind "title" 帧只给舞台画，
+    // 不进后端时间线）。时间线整栏重铺的三条路（新增会话、读回旧会话、删掉读回的会话）都要把标题行放回
+    // 第一个子节点，sticky 才有吸得住的位置
     const titleBar = mkEl("div", "neo-agent-titlebar");
     titleBar.hidden = true;
     function setConversationTitle(text) {
         titleBar.textContent = text ? "💬 " + text : "";
         titleBar.hidden = !text;
+        if (onFrame) onFrame({ kind: "title", text });
     }
 
     // 复制钮一轮只挂一枚，钉在最终回答之后，钮面用 Cline 那枚叠角方块：桌面窗口的 WebView2 只在 dev 态放行
@@ -909,7 +911,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
         const tag = mkEl("span", "neo-agent-badge");
         tag.textContent = s.mode === "plan" ? t("计划") : t("执行模式");
         const text = mkEl("span", "neo-agent-session-text");
-        text.textContent = s.text || t("（只给了附件图）");
+        text.textContent = s.title || s.text || t("（只给了附件图）");   // 整条对话的第一句，续聊的那条不换标题
         const note = mkEl("span", "neo-agent-session-note");
         note.textContent = sessionStatus(s.status) + " · " + tf("{n} 次工具", { n: s.tools || 0 })
             + (s.tokens ? " · ~" + tokenText(s.tokens) + " tokens" : "")
@@ -958,7 +960,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
             const row = mkEl("button", "neo-agent-recent-row");
             row.type = "button";
             const text = mkEl("span", "neo-agent-recent-text");
-            text.textContent = s.text || t("（只给了附件图）");
+            text.textContent = s.title || s.text || t("（只给了附件图）");
             const time = mkEl("span", "neo-agent-recent-time");
             time.textContent = s.created ? new Date(s.created * 1000).toLocaleDateString() : "-";
             row.append(text, time);
@@ -1053,7 +1055,8 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
         showTranscript();
         transcript.replaceChildren();
         transcript.prepend(titleBar);
-        setConversationTitle(rec.text || t("（只给了附件图）"));
+        // 标题是整条对话的第一句话（后端落盘时定下来的），不是这一发自己那句
+        setConversationTitle(rec.title || rec.text || t("（只给了附件图）"));
         if (empty.parentNode) empty.remove();
         const head = mkEl("div", "neo-agent-session-head");
         const title = mkEl("span", "neo-agent-session-title");
@@ -1091,7 +1094,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
         transcript.replaceChildren();
         transcript.prepend(titleBar);
         transcript.appendChild(empty);
-        titleBar.hidden = true;
+        setConversationTitle("");   // 标题行收回，舞台页眉跟着回默认
         resumeId = "";
         retryBar.hidden = true;   // 「＋ 新增会话」与清空历史都收掉失败那一行
         renderResumeBar();
