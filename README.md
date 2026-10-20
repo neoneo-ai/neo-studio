@@ -6,11 +6,9 @@
 and MiniMax H3 multi-segment video direction — all in one plugin. The LLM can run inside the ComfyUI process
 with zero extra dependencies.
 
-![One-click recipe send to workflow](docs/assets/videos/hero-recipes-send-poster.jpg)
-<video src="docs/assets/videos/hero-recipes-send.mp4" poster="docs/assets/videos/hero-recipes-send-poster.jpg" controls muted loop playsinline preload="none" style="max-width:100%">
-  Your browser does not support the video tag; download
-  <a href="docs/assets/videos/hero-recipes-send.mp4">hero-recipes-send.mp4</a> to watch it.
-</video>
+[![One-click recipe send to workflow](docs/assets/videos/hero-recipes-send-poster.jpg)](https://github.com/neoneo-ai/neo-studio/blob/main/docs/assets/videos/hero-recipes-send.mp4)
+
+▶ [Watch the 57s demo video (3.9 MB, MP4)](https://github.com/neoneo-ai/neo-studio/blob/main/docs/assets/videos/hero-recipes-send.mp4)
 
 **Install**: search `Neo Studio` in ComfyUI Manager (published to the ComfyUI Registry), see [Installation](#installation).
 
