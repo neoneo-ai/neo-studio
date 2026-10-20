@@ -48,3 +48,6 @@ gallery/civitai_bookmarks/
 
 # 智能体会话落盘：一次运行一个 JSON，含用户提示词与本机路径，只存本机
 agent_sessions/
+
+# 未压源的 hero 录屏原片（42MB 级，只作本地重压素材，不入库）
+docs/assets/vidoes/
