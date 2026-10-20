@@ -1,6 +1,6 @@
 [project]
 name = "comfyui-neo-studio"
-version = "1.3.0"
+version = "1.4.0"
 # comfy-cli 把这段文本原样写进 Registry 列表，Manager 与前端搜索都靠它匹配，
 # 所以这里列真实节点名，不写抽象介绍。
 description = "Neo Studio (ComfyUI kernel plugin): Neo Prompt Encoder and Neo Prompt Agent (LLM prompt enhance, generate, reverse, translate, classify), Neo Image Gen & Edit (skill-template text-to-image, editing and outpaint with Autogrow reference images), Neo Reference Grid, Neo Grid Split, Neo Bundle Expand, Neo H3 Video Director with Neo H3 Add Keyframe, Add Context and Add Guides, Neo H3 Segment Run, plus built-in image and video generation settings, Gallery asset library with LoRA tagging, Recipes one-click send, Model Hub downloads, workflow repair, and the Neo Studio and Backyard pages."

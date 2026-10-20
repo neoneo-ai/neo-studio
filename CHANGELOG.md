@@ -4,6 +4,8 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-10-20
+
 - **Switching director recipes is one atomic move.** With the embedded editor holding unsaved changes, clicking a
   recipe card moved the card highlight, the segment chips and the size / steps echo to the clicked recipe while the
   editor stayed on the old one behind the dirty bar — **🎬 生成整片** then ran a recipe the user was not looking at and
