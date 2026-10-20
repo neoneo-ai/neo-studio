@@ -654,6 +654,15 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   blue 「💾 保存并关闭」/ red 「放弃修改」/ gray 「继续编辑」 semantics, the 取消 red outline is untouched, and
   `.rs-btn:disabled` keeps its dimmed state. Covered by `studio/tests/js/studio-desktop.test.mjs`; CSS only.
 
+- **Two main-branch CI cases stop depending on wall-clock.** The agent attachment case waited a fixed
+  `sleep(40)` for the dropped file to come back through `FileReader` — real async I/O, so on a loaded runner
+  the read had not resolved when the assertion ran, and the case failed on `main` while passing locally. It
+  now waits for the chip thumbnail to appear, bounded at 1 s. The `ResolveDir` case asserted
+  `_resolve_dir("D:/presets") == Path("D:/presets").resolve()`, which holds on Windows only: a drive-letter
+  string is a relative path on Linux, so `_resolve_dir` prefixes the data root and the compare is
+  `/tmp/…/D:/presets` against the checkout root. The absolute-path case now uses a path under the test data
+  root, which is the pass-through `_resolve_dir` documents.
+
 ## [1.3.0] - 2026-10-17
 
 - **Upgrading from `comfyui-neo-nodes`: disable the old folder yourself.** Nothing in this release touches

@@ -87,7 +87,9 @@ class ResolveDir(unittest.TestCase):
         # 插件目录那份 gallery/presets 是空的，按插件根解析预处理扫不到任何素材
         self.assertEqual(backyard._resolve_dir("gallery/presets/"),
                          (plugin_paths.DATA_ROOT / "gallery/presets").resolve())
-        self.assertEqual(backyard._resolve_dir("D:/presets"), Path("D:/presets").resolve())
+        # 绝对路径原样透传；用 Windows 盘符写法的话 Linux 上它是相对路径，断言会挂
+        abs_path = plugin_paths.DATA_ROOT / "presets"
+        self.assertEqual(backyard._resolve_dir(str(abs_path)), abs_path.resolve())
 
 
 class SingleDirSource(unittest.TestCase):

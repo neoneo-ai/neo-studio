@@ -949,7 +949,8 @@ test("拖入图片：进附件缩略图，发送时随请求体走并清空", as
     mockAgentStream([{ kind: "content", text: "图里是一只橘猫" }]);
 
     dropFiles(dock().querySelector(".neo-agent-composer"), [makeFile("cat.png", "image/png")]);
-    await sleep(40);
+    // 附件图是 FileReader 真异步读出来的，CI 满载 runner 上固定 40ms 读不完，等到缩略图出现
+    for (let i = 0; i < 50 && !dock().querySelector(".neo-agent-chip img"); i += 1) await sleep(20);
     assert.ok(dock().querySelector(".neo-agent-chip img"), "拖入的图片应进附件缩略图");
 
     inputText(dock().querySelector(".neo-agent-input"), "这张图能做什么");
