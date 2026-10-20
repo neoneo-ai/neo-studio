@@ -527,6 +527,15 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
         };
         const slot = (cls) => card && card.querySelector("." + cls);
 
+        // 参数与返回是一行行的 JSON 原文，铺出来就是一条长串：展开成两档缩进，配着块内滚动才看得全。
+        // 解析不动的原文（人话回答、报错行）照铺，不动它一个字符
+        const prettyJson = (raw) => {
+            try {
+                const v = JSON.parse(raw);
+                return (v && typeof v === "object") ? JSON.stringify(v, null, 2) : raw;
+            } catch { return raw; }
+        };
+
         // 任务卡上的取消：后端 /neo_agent/cancel 走 MCP cancel_task，四种任务类型由它自己找路由
         function mkCancel(host, taskId) {
             const btn = mkEl("button", "neo-agent-cancel");
@@ -552,7 +561,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
                 const title = mkEl("div", "neo-agent-tool-title");
                 title.textContent = "🔧 " + name;
                 const body = mkEl("pre", "neo-agent-tool-args");
-                body.textContent = args;
+                body.textContent = prettyJson(args);
                 const preview = mkEl("div", "neo-agent-tool-preview neo-dtl-live");
                 const status = mkEl("div", "neo-agent-tool-status");
                 const out = mkEl("pre", "neo-agent-tool-out");
@@ -578,7 +587,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
             toolResult(text, media) {
                 const out = slot("neo-agent-tool-out");
                 if (!out) return;
-                out.textContent = text;
+                out.textContent = prettyJson(text);
                 const btn = slot("neo-agent-cancel");
                 if (btn) btn.remove();       // 任务到终态，取消入口跟着收掉
                 if (live) { live.pause(); live = null; }   // 预览定格在最后一帧，产物媒体条另铺在卡下

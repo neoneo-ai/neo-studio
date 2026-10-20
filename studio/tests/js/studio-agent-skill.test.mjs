@@ -123,6 +123,44 @@ test("点生成：请求带界面上下文，出计划行与最终回答，面�
     assert.equal(runBtn().disabled, false, "收尾后应解禁主按钮");
 });
 
+test("工具卡的参数与返回：JSON 展开成缩进多行，长载荷在块内滚动而不是截断", async () => {
+    mountStudio();
+    await openStudio("#/gallery");
+    mockAgentStream([
+        { kind: "tool_call", tool: "list_models", text: '{"q":"刘亦菲","group":"loras","limit":120}' },
+        {
+            kind: "tool_result", tool: "list_models",
+            text: '{"loras":[{"name":"krea2_刘亦菲.safetensors","dir":"krea2/"},{"name":"zi_lyf.safetensors","dir":"stars/"}],"matched":2,"truncated":false}',
+        },
+        { kind: "tool_call", tool: "generate_prompt", text: '{"text":"古装美女"}' },
+        { kind: "tool_result", tool: "generate_prompt", text: "一位身着华丽繁复古装的绝世美女，眼神神秘而高贵。" },
+        { kind: "content", text: "好" },
+    ]);
+    inputText(dock().querySelector(".neo-agent-input"), "找刘亦菲的 LoRA");
+    click(runBtn());
+    await flush(40);
+
+    const cards = [...dock().querySelectorAll(".neo-agent-tool")];
+    assert.equal(cards.length, 2, "应有两张工具卡");
+    const args = cards[0].querySelector(".neo-agent-tool-args");
+    const out = cards[0].querySelector(".neo-agent-tool-out");
+    assert.ok(args.textContent.includes("\n  \"q\""), `参数要展开成缩进多行：${args.textContent}`);
+    assert.deepEqual(JSON.parse(args.textContent), { q: "刘亦菲", group: "loras", limit: 120 },
+        "展开后的参数解析回来要原样相等");
+    assert.ok(out.textContent.split("\n").length > 4, `长返回要铺成多行：${out.textContent}`);
+    assert.equal(JSON.parse(out.textContent).loras.length, 2, "展开后的返回解析回来要原样相等");
+    // 解析不动的原文（人话回答）一个字都不动
+    assert.equal(cards[1].querySelector(".neo-agent-tool-out").textContent,
+        "一位身着华丽繁复古装的绝世美女，眼神神秘而高贵。", "非 JSON 的返回照原文铺");
+
+    assert.match(cssText, /\.neo-agent-tool-args,\s*\.neo-agent-tool-out\s*\{[^}]*overflow:\s*auto;/,
+        "参数与返回要块内滚动");
+    assert.doesNotMatch(cssText, /\.neo-agent-tool-args,\s*\.neo-agent-tool-out\s*\{[^}]*overflow:\s*hidden;/,
+        "定高配 hidden 会把 JSON 尾巴吃掉");
+    assert.match(cssText, /\.neo-agent-tool-out::-webkit-scrollbar\s*\{/);
+});
+
+
 test("MCP 入口只做跳转：点入口不发智能体请求", async () => {
     mountStudio();
     await openStudio("#/gallery");

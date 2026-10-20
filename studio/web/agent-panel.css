@@ -114,28 +114,39 @@
 }
 
 .neo-agent-transcript:hover,
-.neo-agent-mcp-body:hover {
+.neo-agent-mcp-body:hover,
+.neo-agent-tool-args:hover,
+.neo-agent-tool-out:hover {
     scrollbar-color: #5090cc transparent;
 }
 
 .neo-agent-transcript::-webkit-scrollbar,
-.neo-agent-mcp-body::-webkit-scrollbar {
+.neo-agent-mcp-body::-webkit-scrollbar,
+.neo-agent-tool-args::-webkit-scrollbar,
+.neo-agent-tool-out::-webkit-scrollbar {
     width: 8px;
+    height: 8px;
 }
 
 .neo-agent-transcript::-webkit-scrollbar-track,
-.neo-agent-mcp-body::-webkit-scrollbar-track {
+.neo-agent-mcp-body::-webkit-scrollbar-track,
+.neo-agent-tool-args::-webkit-scrollbar-track,
+.neo-agent-tool-out::-webkit-scrollbar-track {
     background: transparent;
 }
 
 .neo-agent-transcript::-webkit-scrollbar-thumb,
-.neo-agent-mcp-body::-webkit-scrollbar-thumb {
+.neo-agent-mcp-body::-webkit-scrollbar-thumb,
+.neo-agent-tool-args::-webkit-scrollbar-thumb,
+.neo-agent-tool-out::-webkit-scrollbar-thumb {
     background: transparent;
     border-radius: 4px;
 }
 
 .neo-agent-transcript:hover::-webkit-scrollbar-thumb,
-.neo-agent-mcp-body:hover::-webkit-scrollbar-thumb {
+.neo-agent-mcp-body:hover::-webkit-scrollbar-thumb,
+.neo-agent-tool-args:hover::-webkit-scrollbar-thumb,
+.neo-agent-tool-out:hover::-webkit-scrollbar-thumb {
     background: #5090cc;
 }
 
@@ -369,12 +380,19 @@
     color: var(--neo-vsc-accent);
 }
 
+/* 参数与返回的长载荷：块内滚动看全。overflow: hidden 配定高等于把 JSON 的尾巴直接吃掉，
+   右下角那个抓手（resize: vertical）留着，用户想看得更高自己拖 */
 .neo-agent-tool-args,
 .neo-agent-tool-out {
     margin: 0;
     border: none;
-    max-height: 120px;
-    overflow: hidden;
+    max-height: 220px;
+    overflow: auto;
+    resize: vertical;
+    white-space: pre-wrap;
+    word-break: break-word;
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
     color: var(--neo-vsc-fg-dim);
 }
 

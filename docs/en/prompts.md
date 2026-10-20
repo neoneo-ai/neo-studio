@@ -155,7 +155,9 @@ Both nodes share the same layout (the Agent shows no status bar):
   `segment_run` / `assemble_run` film chain included). The transcript shows the plan line, one card per tool call
   (arguments / progress / result with result thumbnails — an image skill lays out the picture and a film task a muted
   clip, and a click opens the popup viewer for the full image or the playback instead of taking over the whole window)
-  and the final answer; a running task card carries a Cancel button. Links inside the timeline stay in the page: a
+  and the final answer; a running task card carries a Cancel button. The arguments and the result on a tool card are
+  one-line JSON payloads: the card expands them with two-space indentation, keeps the block 220px tall and scrolls the
+  overflow inside it (the bottom-right grip stretches the block), and text that does not parse as JSON lands verbatim. Links inside the timeline stay in the page: a
   result link opens the popup viewer, an external link opens a new window, and the window never navigates to the
   bare image / video page — navigating away and coming back reloads the Studio page, taking the startup status
   and the whole transcript with it. The main button **✨ Generate** sits in the bottom-right corner of the composer's
