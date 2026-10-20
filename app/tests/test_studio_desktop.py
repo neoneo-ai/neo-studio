@@ -2370,7 +2370,9 @@ class PluginSyncTests(unittest.TestCase):
         self.plugin = self.base / "ComfyUI" / "custom_nodes" / "comfyui-neo-studio"
         for rel in ("web/studio", "tests", "__pycache__", "data", "configs"):
             (self.source / rel).mkdir(parents=True)
-        (self.source / "web" / "studio" / "index.html").write_text("new", encoding="utf-8")
+        # 源文件比目标长一档：NTFS 的修改时间粒度是 10ms，同为 3 字节的两份在同一 tick 里
+        # 写出来时大小与 mtime 全对得上，同步会跳过那一个，用例就在「old」上红
+        (self.source / "web" / "studio" / "index.html").write_text("new-code", encoding="utf-8")
         (self.source / "pyproject.toml").write_text('version = "1.2.0"\n', encoding="utf-8")
         (self.source / "configs" / "laya_config.json").write_text("{}", encoding="utf-8")
         (self.source / "tests" / "test_x.py").write_text("x", encoding="utf-8")
@@ -2391,7 +2393,7 @@ class PluginSyncTests(unittest.TestCase):
 
     def test_changed_code_lands_and_target_only_files_survive(self):
         self.assertGreater(app.sync_plugin(self.plugin, self.source), 0)
-        self.assertEqual(self._index().read_text(encoding="utf-8"), "new")
+        self.assertEqual(self._index().read_text(encoding="utf-8"), "new-code")
         self.assertEqual((self.plugin / "extra.js").read_text(encoding="utf-8"), "keep")
         self.assertEqual((self.plugin / "configs" / "gallery_settings.json").read_text(encoding="utf-8"), "user")
 
