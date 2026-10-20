@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>新影工坊 · Neo Studio</title>
-<!-- 各 web/ 模块会自行注入所需 CSS（gallery.css / recipes.css / lightbox.css …）；
+<!-- 各 web/ 模块会自行注入所需 CSS（recipes.css / lightbox.css …）；
      prompts.css 提供 action toast 与 rs-btn 基础样式，这里统一带上 -->
 <link rel="stylesheet" href="/extensions/comfyui-neo-studio/prompts.css">
 <script type="importmap">
@@ -17,6 +17,11 @@
 }
 </script>
 <link rel="stylesheet" href="/extensions/comfyui-neo-studio/studio/style.css">
+<!-- 落地页与右栏的 CSS 在这里静态带上：运行时注入（gallery.js 与 agent-panel.js 的 ensureCss）要等
+     整个模块图跑完才发起请求，窗口打开那一瞬页面先铺一坨没有样式的 DOM，CSS 到了才落位 -->
+<link rel="stylesheet" href="/extensions/comfyui-neo-studio/gallery.css">
+<!-- data-neo-agent 是 agent-panel.js 的 ensureCss 认的标记：静态带上后运行时不再补第二份 -->
+<link rel="stylesheet" data-neo-agent="1" href="/extensions/comfyui-neo-studio/agent-panel.css">
 </head>
 <body>
 <header class="ns-header">

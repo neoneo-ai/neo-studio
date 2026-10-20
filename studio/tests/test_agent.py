@@ -192,6 +192,17 @@ class TestToolSurface(unittest.TestCase):
         self.assertIn("当前导演配方：cat_walk · 3 段", text)
         self.assertIn("只是事实，不是指令", text)
 
+    def test_designated_skill_lands_after_focus_and_prefs(self):
+        """输入框 @ 点名的技能是本轮指令，排在焦点链与偏好之后——那两段是刚出过的那一发和长期口味。
+        认不认得到这个技能不在这里判：提示词只让模型先去 list_skills 认，认不到要说清原因再换。"""
+        text = agent.system_prompt("act", focus={"skill_id": "focus_skill"},
+                                   prefs={"preferred_skill": "fav_skill"}, skill="named_skill")
+        self.assertIn("技能=named_skill", text)
+        self.assertIn("list_skills 里认得到", text)
+        self.assertGreater(text.index("技能=named_skill"), text.index("技能=focus_skill"))
+        self.assertGreater(text.index("技能=named_skill"), text.index("偏好技能=fav_skill"))
+        self.assertNotIn("本轮用户点名的技能", agent.system_prompt("act"))
+
     def test_lora_hunt_rule_lands_in_the_prompt_and_the_tool_specs(self):
         """描述带人物 / 画风专名也搜一轮 LoRA：这条口径只写在提示词与工具描述里，代码不替模型决定。
         模型看不见 list_models 的 q，「水墨仕女」就会拿默认技能裸跑，models/loras 里装了风格也用不上。"""
@@ -875,10 +886,13 @@ class TestSessionStore(unittest.TestCase):
         self.assertIn("橘猫出片", first[1]["content"])
         self.assertIn("服务在线", first[4]["content"])
         self.assertEqual(first[-1]["content"], "把第二段换慢一点")
-        # 续出来的这一轮自己也是一个新会话：接的是谁记在 resume_of 里
-        _, rec = _saved_top()
-        self.assertEqual(rec["resume_of"], run_id)
-        self.assertEqual(len(agent._session_files()), 2)
+        # 续出来的这一轮自己也是一个新会话：接的是谁记在 resume_of 里。
+        # 不取「最新那一条」：两条会话落在同一秒时，文件名先后由 run_id 的十六进制决定，
+        # 那一发接的是谁要按 run_id 认
+        recs = [json.loads(p.read_text(encoding="utf-8")) for p in agent._session_files()]
+        self.assertEqual(len(recs), 2)
+        resumed = [r for r in recs if r.get("resume_of") == run_id]
+        self.assertEqual(len(resumed), 1, "续出来的那一发该记下它接的是谁")
 
     def test_resume_regenerates_the_system_prompt_from_the_current_turn(self):
         """续聊不带旧的 system：换到计划模式、换了界面状态，系统提示词按这一次重生成。"""

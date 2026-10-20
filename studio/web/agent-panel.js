@@ -3,8 +3,9 @@
  *
  * 聊天区挂桌面端右栏：一次「✨ 生成」交给后端智能体（POST /neo_agent/run 的 SSE 时间线：
  * 计划 / 工具卡 / 状态 / 产物图 / 暂停 / 继续 / 最终回答），后端那一侧是 MCP 客户端，工具经
- * mcp_server 的 JSON-RPC 走，右栏不直接调后端函数；右栏不再选技能，界面当前状态（当前页 /
- * 当前导演配方 / 绘画页模式 / 素材库目录）由宿主随请求体交给后端进系统提示词。MCP 区
+ * mcp_server 的 JSON-RPC 走，右栏不直接调后端函数；界面当前状态（当前页 /
+ * 当前导演配方 / 绘画页模式 / 素材库目录）由宿主随请求体交给后端进系统提示词；输入框里的 @ 只点名技能
+ * （候选是后端真能跑的生图与出片技能，选中随请求体 skill_id 交后端）。MCP 区
  * （注册表 / 连接 / 工具调用）交给设置页的「MCP 服务」栏，右栏只在输入框底栏留一个跳转入口；用户级偏好走同一条路，表单在设置页「智能体偏好」栏，右栏的 ⚙ 与焦点链上的「设为偏好」都只做跳转。
  * 输入框按 Cline 的口径做：只读上下文条、附件图 chip、文本框，底栏一行是 📎 附件图、🔌 MCP、
  * 「📝 计划 / ⚡ 执行」与右下角主按钮（生成 / 暂停 / 继续）；整行「⏹ 取消」只在跑起来之后出现。
@@ -22,10 +23,12 @@ import { app } from "../../scripts/app.js";
 import { t, tf } from "./js/core/i18n.js";
 import { COMMON_EDGES, COMMON_RATIOS, LORA_FAMILY_HINTS, modelFamily } from "./image-gen.js";
 import { icon, setIcon } from "./js/core/icons.js";
-import { renderMarkdown } from "./skill.js";
+import { renderMarkdown, skillDisplayName } from "./skill.js";
 import { fileToBase64, imagesFromClipboard, sseStream } from "./prompt-service.js";
 import { Lightbox } from "./lightbox.js";
 import { grabDataType, copyGalleryToInput } from "./media-transfer.js";
+import { createQuickInputHistory } from "./quick-input-history.js";
+import { createSlashSkillPicker } from "./slash-picker.js";
 import { createFramePlayer } from "./live-preview.js";
 import { DIRECTOR_RECIPE_SAVED_EVENT } from "./director.js";
 
@@ -241,23 +244,27 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
     }
 
     const composer = mkEl("div", "neo-agent-composer");
-    // 上下文条：宿主（studio-app.js）在切页 / 选配方 / 切绘画模式时把当前页签那一栏状态交过来。
-    // 条上的 ✕ 是本轮取消位：用户点名「别管界面，照我写的做」时连这一栏也不交；点条恢复，
-    // 宿主下一次刷新（切页 / 选配方 / 切模式）也恢复——取消位跨页留着，下一次点生成就没上下文了
+    // 上下文条：宿主（studio-app.js）在切页 / 选配方 / 切绘画模式时把当前页签那一栏状态交过来，条上画的就是它。
+    // 界面状态默认不交 —— 多数轮次要的是「照我写的做」，界面状态掺进去是干扰。点条启用、条上的 ✕ 关掉，
+    // 这条选择存本机，换页重载沿用；宿主刷新只换条上显示，不改用户的这条选择
+    const CTX_KEY = "neo_studio_agent_ctx_on";
     const ctxBar = mkEl("div", "neo-agent-ctx");
     const ctxText = mkEl("span", "neo-agent-ctx-text");
     const ctxOffBtn = mkEl("button", "neo-agent-ctx-off-btn");
     ctxOffBtn.type = "button";
     ctxOffBtn.textContent = "✕";
-    ctxOffBtn.title = t("取消本轮上下文：这一轮不带界面状态，切页 / 选配方 / 切模式后自动恢复");
-    ctxOffBtn.onclick = (e) => { e.stopPropagation(); ctxOff = true; renderCtx(); };
-    ctxBar.onclick = () => { if (ctxOff) { ctxOff = false; renderCtx(); } };
+    ctxOffBtn.title = t("✕ 本轮不带界面上下文：点条可再启用");
+    ctxOffBtn.onclick = (e) => { e.stopPropagation(); setCtxOn(false); };
+    ctxBar.onclick = () => { if (ctxOff) setCtxOn(true); };
     ctxBar.append(ctxText, ctxOffBtn);
-    let ctxOff = false;
+    let ctxOff = true;
+    try { ctxOff = localStorage.getItem(CTX_KEY) !== "1"; } catch { /* 私有上下文里读不到：按默认不交 */ }
     const chips = mkEl("div", "neo-agent-chips");
     const input = mkEl("textarea", "neo-agent-input");
-    input.rows = 3;
-    input.placeholder = t("描述要生成的提示词，或要改写的方向；可粘贴 / 拖入图片（含素材库卡片），↑ ↓ 翻历史输入");
+    input.rows = 2;
+    // 占位两行都压到 faint 一档：第一行说这一栏收什么，第二行只留操作短语，长句留在悬停说明里
+    input.placeholder = t("描述要生成或改写的提示词\n粘贴 / 拖入图片 · ↑↓ 翻历史 · @ 选技能");
+    input.title = t("描述要生成的提示词，或要改写的方向；可粘贴 / 拖入图片（含素材库卡片），↑ ↓ 翻历史输入，@ 直接选技能");
     // 框高跟着内容走：rows 只给初值，长提示词撑出来的高度在窗口里不会自己缩回，
     // 拖拽手柄一并禁掉（agent-panel.css 的 resize: none），发送与 Esc 后收回初值
     function fitInput() {
@@ -266,42 +273,26 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
         if (h > 0) input.style.height = h + "px";
     }
 
-    // 上下箭头翻历史输入（shell 输入框口径）：发出去的原文在本机 localStorage 存一份，换页重载之后还翻得到。
-    // 进入历史要看光标贴边（↑ 看文本最前、↓ 看文本最后），进去之后连按就一路翻 —— 多行提示词光标落在中间那一下归光标自己
-    const HISTORY_KEY = "neo_studio_agent_history";
-    const HISTORY_MAX = 30;
-    const history = { list: [], at: -1, draft: "" };
-    try {
-        history.list = (JSON.parse(localStorage.getItem(HISTORY_KEY)) || [])
-            .filter((s) => typeof s === "string" && s.trim());
-    } catch { /* 手改过的非 JSON 就当没有历史 */ }
-
-    function pushHistory(text) {
-        if (!text) return;   // 只给图不给字的一轮没有原文可翻
-        history.list = history.list.filter((s) => s !== text);
-        history.list.unshift(text);
-        history.list.length = Math.min(history.list.length, HISTORY_MAX);
-        history.at = -1;
-        history.draft = "";
-        try { localStorage.setItem(HISTORY_KEY, JSON.stringify(history.list)); } catch { /* 配额写不进：本机这一轮翻得到就够 */ }
+    // 程序改文本一律走这一条：发一次 input 事件，框高跟着撑，历史工厂也借此退出导航态
+    function setInput(text) {
+        input.value = text;
+        input.dispatchEvent(new Event("input", { bubbles: true }));
     }
 
-    // dir: -1 更早 / +1 更新；翻到边界返回 false，让浏览器按光标自己处理
-    function stepHistory(dir) {
-        if (dir < 0) {
-            if (history.at + 1 >= history.list.length) return false;
-            if (history.at < 0) history.draft = input.value;   // 写了一半的草稿腾开，翻回最新一条时还在
-            history.at += 1;
-            input.value = history.list[history.at];
-        } else {
-            if (history.at < 0) return false;
-            history.at -= 1;
-            input.value = history.at < 0 ? history.draft : history.list[history.at];
-        }
-        input.selectionStart = input.selectionEnd = input.value.length;
-        fitInput();
-        return true;
-    }
+    // 上下箭头翻历史输入：发出去的原文在本机 localStorage 存一份（去重、最新在前、30 条上限），换页重载还翻得到。
+    // ↑↓ 口径与绘画页快捷输入、生成素材弹窗共用同一份工厂 quick-input-history.js：光标在第一行按 ↑ 顶成上一条
+    // 原文、自己写的一半腾成草稿；光标落到第二行起，那一下归光标自己
+    const inputHistory = createQuickInputHistory(input, { storageKey: "neo_studio_agent_history", cap: 30 });
+    // 工厂只写值不管框高：顶出多行原文时把高度跟着撑开（注册在工厂之后，值已是翻出来的那条）
+    input.addEventListener("keydown", (e) => {
+        if (e.key === "ArrowUp" || e.key === "ArrowDown") fitInput();
+    });
+    // 输入 @ 唤起技能选择器：看光标前一个字符，支持在文本中间插入（与提示词页的 / 同一套弹层）。
+    //  ↑↓ 翻历史顶出来的原文里带 @ 时也会开一次——那一发本来就是要选技能
+    input.addEventListener("input", () => {
+        const caret = input.selectionStart || 0;
+        if (caret > 0 && input.value[caret - 1] === "@") openSkillPicker();
+    });
 
     // Cline 的口径：取消只在跑起来之后存在，整行铺在文本框上面，空闲时这一行不占位
     const cancelBar = mkEl("button", "neo-agent-cancelbar");
@@ -345,13 +336,65 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
     labelSpans(mcpEntry, "🔌 MCP");
     mcpEntry.title = t("MCP 服务设置");
     mcpEntry.onclick = () => onOpenMcp && onOpenMcp();
+    // @ 直接点名技能：候选只收后端那三条生成工具真跑得动的技能——generate_image 与出片三条都要技能
+    // 带 workflow.json（见 image_gen_edit._gen_image_skills / h3_video_gen._gen_video_skills），提示词增强
+    // 与任务类技能在这里选了也出不了东西。选中的技能跨轮保持，随请求体 skill_id 交后端进系统提示词
+    const SKILL_KEY = "neo_studio_agent_skill";
+    let skillId = "", skillName = "";
+    const skillChip = mkEl("span", "neo-agent-skill");
+    const skillChipName = mkEl("span", "neo-agent-skill-name");
+    const skillChipDel = mkEl("button", "neo-agent-skill-del");
+    skillChipDel.type = "button";
+    skillChipDel.textContent = "✕";
+    skillChipDel.title = t("取消点名技能");
+    skillChipDel.onclick = () => setSkill("", "");
+    // 整颗都是取消入口：窄栏里收得只剩图标时，图标就是那颗的 ✕
+    skillChip.onclick = () => setSkill("", "");
+    skillChip.append(skillChipName, skillChipDel);
+    skillChip.hidden = true;
+    function setSkill(id, name) {
+        skillId = id;
+        skillName = id ? (name || id) : "";
+        skillChip.hidden = !skillId;
+        skillChipName.textContent = "🧩 " + (skillName || skillId);
+        skillChip.title = tf("本轮点名技能：{skill}；生成默认用它，点 ✕ 取消", { skill: skillName || skillId });
+        try {
+            if (skillId) localStorage.setItem(SKILL_KEY, JSON.stringify({ id: skillId, name: skillName }));
+            else localStorage.removeItem(SKILL_KEY);
+        } catch { /* 配额写不进：本轮记住就够 */ }
+    }
+    try {
+        const saved = JSON.parse(localStorage.getItem(SKILL_KEY) || "null");
+        if (saved && saved.id) setSkill(String(saved.id), String(saved.name || saved.id));
+    } catch { /* 存过的值不是 JSON：当没点过 */ }
+    const openSkillPicker = createSlashSkillPicker({
+        quickInput: input,
+        triggerChar: "@",
+        prefix: "neo-agent-picker",
+        commit: (s) => setSkill(String(s.id), String(s.cn_name || s.name || s.id || "")),
+        filter: (s) => (s.gen_image || s.gen_video) && s.has_workflow && s.available !== false,
+        rowText: (s) => (s.gen_video ? "🎬 " : "🖼️ ") + skillDisplayName(s),
+        categoryLabel: (s) => (s.gen_video ? t("出片") : t("生图")),
+        sort: (a, b) => (Number(!!a.gen_video) - Number(!!b.gen_video))
+            || String(a.cn_name || a.name || a.id).localeCompare(String(b.cn_name || b.name || b.id)),
+        // 技能目录是生成侧的接口：桌面端离线服务不打包提示词预设，这一发回 409 时交回空表，
+        // 弹层里只剩那一句无匹配，铺不出假候选（能力表见 app/studio_caps.py）
+        listSkills: async () => {
+            const res = await getJson("/rs_prompts/skills");
+            return Array.isArray(res) ? res : [];
+        },
+    });
     // 主按钮在右下角，一个钮三态（生成 / 暂停 / 继续）——空闲时它就是发送键
     const run = mkEl("button", "neo-agent-run");
     run.type = "button";
     labelSpans(run, t("✨ 生成"));
     run.title = t("✨ 生成");
-    toolbar.append(attach, fileInput, mcpEntry, modes, run);
-    composer.append(ctxBar, chips, cancelBar, input, toolbar);
+    toolbar.append(attach, fileInput, mcpEntry, skillChip, modes, run);
+    // 输入卡：上下文条 / 取消行 / 文本框 / 附件缩略图 / 底栏收进同一块圆角 field，整排控件落在同一个坑里。
+    // 附件缩略图铺在文本框下面（同 Cline 口径：图落在正文下面，不进卡顶挤走上下文条）
+    const field = mkEl("div", "neo-agent-field");
+    field.append(ctxBar, cancelBar, input, chips, toolbar);
+    composer.append(field);
 
     // 界面当前状态：宿主只交当前选中页签自己那一栏（studio-app.js 的 agentContext 负责裁剪），
     // 这一条把它拼成一行给用户看，随请求体原样交后端
@@ -369,12 +412,17 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
     function ctxLine() { return ctxOff ? "" : currentContext().join(" · "); }
     function renderCtx() {
         const line = ctxLine();
-        ctxText.textContent = "📍 " + (line || t(ctxOff ? "已取消上下文" : "无当前上下文"));
+        // 带界面状态才画那枚 📍；不带的默认态只留一行淡小字，不跟正文抢视线
+        ctxText.textContent = line ? "📍 " + line : (ctxOff ? t("不带界面上下文 · 点此启用") : "📍 " + t("无当前上下文"));
         ctxOffBtn.hidden = !line;
         ctxBar.classList.toggle("neo-agent-ctx-off", ctxOff);
-        ctxBar.title = ctxOff ? t("点此恢复本轮界面上下文") : "";
+        ctxBar.title = ctxOff ? t("默认不带界面上下文；点此给后面的轮次带上") : "";
     }
-    function resetCtx() { ctxOff = false; }   // 宿主交来新状态 = 界面上下文回来
+    function setCtxOn(on) {
+        ctxOff = !on;
+        try { localStorage.setItem(CTX_KEY, on ? "1" : "0"); } catch { /* 配额写不进：本轮记住就够 */ }
+        renderCtx();
+    }
     renderCtx();
 
     // 附件图：本地文件读成 data URI 随请求体走（与 llm-chat 的附加图同一口径），
@@ -524,7 +572,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
             const chosen = mkEl("div", "neo-agent-answer-chosen");
             chosen.textContent = "✔ " + item;
             box.appendChild(chosen);
-            input.value = item;
+            setInput(item);
             generate();
         };
         block.items.forEach((item, i) => {
@@ -549,6 +597,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
         let planBox = null;      // 执行清单那一块：后端每划掉一条重发整张，原地重铺
         let focusCard = null, focusChips = null, focusFacts = {};   // 焦点链卡与「设为偏好」照的这份
         let metaRow = null;      // 上下文与 token 统计共用的那一行
+        let shown = new Set();   // 本轮铺过的产物 url：generate_image 卡下铺过的那张，收场那一栏不再铺第二遍
         const metaPart = (which) => {
             if (!metaRow) {
                 metaRow = mkEl("div", "neo-agent-runmeta");
@@ -630,6 +679,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
                 const btn = slot("neo-agent-cancel");
                 if (btn) btn.remove();       // 任务到终态，取消入口跟着收掉
                 if (live) { live.pause(); live = null; }   // 预览定格在最后一帧，产物媒体条另铺在卡下
+                (media || []).forEach((m) => m && m.url && shown.add(m.url));
                 if (media.length) renderGenMedia(card, media);
             },
             // 中途的选项确认：后端 ask_user 发一问就挂在循环上，点选即把方向交回 /neo_agent/answer。
@@ -763,7 +813,11 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
             finish(text, media, options) {
                 const block = splitAnswerOptions(text);
                 final.innerHTML = renderMarkdown(block ? block.body : text);
-                if (media.length) renderGenMedia(final, media);
+                // finish_task 交的是这一轮的产物清单，generate_image 卡下已经铺过同一批；
+                // 收场这一栏只补卡下没铺过的，同一张图不在右栏铺两遍
+                const fresh = (media || []).filter((m) => m && m.url && !shown.has(m.url));
+                fresh.forEach((m) => shown.add(m.url));
+                if (fresh.length) renderGenMedia(final, fresh);
                 const items = block ? block.items : (options || []);
                 if (items.length >= 2) renderAnswerOptions(final, block || { title: t("下一步选项"), items });
                 mkCopyBtn(answerBox, () => text);
@@ -792,7 +846,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
     resumeBar.type = "button";
     resumeBar.hidden = true;
     resumeBar.onclick = () => { resumeId = ""; restartFrom = 0; renderResumeBar(); };
-    composer.insertBefore(resumeBar, cancelBar);
+    field.insertBefore(resumeBar, cancelBar);
 
     // 失败收场那一行：输入框在提交这一步就清空了，LLM 502 这类一次性失败要用户把整段提示词重打
     // 一遍是说不过去的。这一行按上一发的文本、模式与附件图原样重发；下一次提交与新会话收掉它
@@ -800,7 +854,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
     retryBar.type = "button";
     retryBar.hidden = true;
     retryBar.onclick = () => retryLastTurn();
-    composer.insertBefore(retryBar, input);
+    field.insertBefore(retryBar, input);
 
     function showRetryBar() {
         if (!lastTurn) return;
@@ -821,8 +875,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
             return;
         }
         retryBar.hidden = true;
-        input.value = lastTurn.text;
-        fitInput();
+        setInput(lastTurn.text);
         setMode(lastTurn.mode);
         clearAttachments();
         lastTurn.files.forEach((a) => attachments.push({ ...a }));
@@ -1069,7 +1122,8 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
     }
 
     // 智能体路径：一次请求换一路 SSE。界面当前状态随请求体进后端系统提示词，
-    // mode 决定计划还是执行，images 是附件图，preview_side 是这一轮要的采样预览档（舞台那档大、右栏那档紧凑，关掉是 0）
+    // mode 决定计划还是执行，images 是附件图，preview_side 是这一轮要的采样预览档（舞台那档大、右栏那档紧凑，关掉是 0），
+    // skill_id 是输入框 @ 点名的技能（没点名就不给这个字段）
     async function runAgent(answer, text, planMode, images, context, markFail) {
         const view = agentTimeline(answer);
         activeView = view;
@@ -1109,7 +1163,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
             // 后端两条失败口径都汇到这一条（raw [ERROR] 行与 content 帧里的 [ERROR] 前缀），
             // 用户主动取消的断流不走这条，那一行不会在取消后铺出来
             onError: (err) => { markFail(); view.error(String(err || t("生成失败"))); },
-        }, { text, mode: planMode, images, context, preview_side: previewSide && previewSide(), resume: resumeId || undefined, from: restartFrom || undefined });
+        }, { text, mode: planMode, images, context, preview_side: previewSide && previewSide(), resume: resumeId || undefined, from: restartFrom || undefined, skill_id: skillId || undefined });
     }
 
     // 「⏸ 暂停」只置后端一个位，SSE 不断：后端在下一个轮次 / 轮询边界把在飞的任务掐掉、发
@@ -1171,10 +1225,9 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
         // 按文件名给后端（与绘画页参考图同一口径），本地粘贴 / 选图仍是 data URI
         const images = attachments.map((a) => (a.data ? { kind: "data", data: a.data } : { kind: "input", value: a.input }));
         if (!text && !images.length) return;
-        pushHistory(text);
+        inputHistory.record(text);   // 只给图不给字的一轮没有原文可记
         // 发出去的话交进时间线留档，输入框立刻清出来：一条长提示词留在框里只挡下一句
-        input.value = "";
-        fitInput();
+        setInput("");
         // 交回焦点：整段原文留在时间线里可复制，输入框清空后不抢焦点的话，下一句要点一下框才写得到
         input.focus();
 
@@ -1191,7 +1244,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
         if (empty.parentNode) empty.remove();
         const turn = mkEl("div", "neo-agent-turn");
         const meta = mkEl("div", "neo-agent-meta");
-        meta.textContent = (ctxLine() || t("无当前上下文"))
+        meta.textContent = (ctxLine() || t(ctxOff ? "不带界面上下文" : "无当前上下文"))
             + (planMode === "plan" ? " · " + t("计划") : "")
             + (resumeId ? " · " + t("接上次会话") : "")
             + (restartFrom ? " · " + tf("从第 {n} 条消息重开", { n: restartFrom }) : "");
@@ -1247,36 +1300,24 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
     };
     input.addEventListener("input", fitInput);
 
+    // ↑↓ 归历史工厂自己那条监听，这一条只管发送与清空
     input.addEventListener("keydown", (e) => {
-        if ((e.key === "ArrowUp" || e.key === "ArrowDown") && !e.ctrlKey && !e.metaKey && !e.altKey) {
-            const up = e.key === "ArrowUp";
-            const edge = up
-                ? (input.selectionStart === 0 && input.selectionEnd === 0)
-                : (input.selectionStart === input.value.length && input.selectionEnd === input.value.length);
-            if ((history.at >= 0 || edge) && stepHistory(up ? -1 : 1)) {
-                e.preventDefault();
-                e.stopPropagation();
-            }
-            return;
-        }
         if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
             e.stopPropagation();
             if (!running) generate();
         }
         if (e.key === "Escape" && !running) {
-            // Esc 收掉写了一半的长提示词：写过整段的原文在时间线里可复制，框里清空重开
+            // Esc 收掉写了一半的长提示词：写过整段的原文在时间线里可复制，框里清空重开。
+            // 走 setInput 清空：input 事件让历史工厂退出导航态，下一次 ↑ 从空框起头
             e.preventDefault();
             e.stopPropagation();
-            input.value = "";
-            fitInput();
-            history.at = -1;   // 草稿被丢掉：下一次 ↑ 从空框起头
-            history.draft = "";
+            setInput("");
         }
     });
 
     renderRecent();
-    return { box, renderCtx, resetCtx };
+    return { box, renderCtx };
 }
 
 
@@ -1480,7 +1521,7 @@ export function createAgentPanel(host, opts = {}) {
     host.appendChild(root);
     return {
         root,
-        refresh() { chat.resetCtx(); chat.renderCtx(); },
+        refresh() { chat.renderCtx(); },
     };
 }
 

@@ -26,6 +26,8 @@ const SKILLS = [
 
 function mountStudio() {
     resetEnv();
+    localStorage.removeItem("neo_studio_agent_ctx_on");   // 这条开关跨用例串味：每条用例从默认不带你开始
+    localStorage.removeItem("neo_studio_agent_skill");    // @ 点名的技能是本机持久态，同上复位
     document.body.innerHTML = studioBody;
     mockRoute("/neo_studio/version", jsonResponse({
         success: true, plugin_version: "9.9.9", comfyui_version: "0.1", recipes: [],
@@ -57,6 +59,9 @@ const cancelBar = () => dock().querySelector(".neo-agent-cancelbar");
 const meta = () => dock().querySelector(".neo-agent-meta");
 const metaLines = () => [...dock().querySelectorAll(".neo-agent-meta")];
 const ctxOffBtn = () => dock().querySelector(".neo-agent-ctx-off-btn");
+const ctxEnabled = () => !ctxBar().classList.contains("neo-agent-ctx-off");
+// 界面上下文默认不带：要把宿主界面状态交进请求的用例先点条启用
+const enableCtx = () => { if (!ctxEnabled()) click(ctxBar()); };
 const finalRow = () => dock().querySelector(".neo-agent-answer-body");  // 智能体时间线的最终回答
 const toolCard = () => dock().querySelector(".neo-agent-tool");
 const statusLine = () => dock().querySelector(".neo-agent-tool-status");
@@ -91,17 +96,22 @@ test("右栏没有技能下拉：主按钮在底栏右下角，上下文条画�
     mountStudio();
     await openStudio("#/gallery");
 
-    assert.equal(dock().querySelector(".neo-agent-skill"), null, "右栏不该再有技能下拉");
+    assert.equal(dock().querySelector(".neo-agent-composer select"), null, "右栏不该再有技能下拉");
+    assert.ok(dock().querySelector(".neo-agent-skill").hidden, "没点名技能时那颗 chip 不占位");
     const toolbar = dock().querySelector(".neo-agent-toolbar");
     assert.equal(toolbar.lastElementChild, runBtn(), "主按钮应是底栏最右一个");
     assert.equal(runBtn().textContent, "✨ 生成", "空闲时主按钮是生成");
-    assert.ok(ctxBar().textContent.includes("素材库"), `上下文条应画出当前页：${ctxBar().textContent}`);
     assert.ok(cancelBar().hidden, "没跑起来就没有取消键：空闲时那一行不占位");
+    assert.ok(!ctxEnabled() && ctxBar().textContent.includes("点此启用"),
+        `界面上下文默认不带：${ctxBar().textContent}`);
+    enableCtx();
+    assert.ok(ctxBar().textContent.includes("素材库"), `上下文条应画出当前页：${ctxBar().textContent}`);
 });
 
 test("点生成：请求带界面上下文，出计划行与最终回答，面板不发流式提示词", async () => {
     mountStudio();
     await openStudio("#/gallery");
+    enableCtx();
     mockAgentStream([
         { kind: "plan", text: "先扩写提示词再出图" },
         { kind: "content", text: "已按素材库现状出图" },
@@ -163,6 +173,19 @@ test("输入框上下箭头翻历史输入：光标贴边进历史，连按一�
     askBox().setSelectionRange(4, 4);
     assert.equal(pressKey(askBox(), "ArrowUp"), false, "光标在中间按 ↑ 不该抢键");
     assert.equal(askBox().value, "第一行\n第二行", "光标在中间时不许把文本换成历史");
+
+    // 写了一句新话、光标停在句尾：↑ 顶成最近发出去的那一条，自己那句腾开成草稿（bash 句尾口径）
+    inputText(askBox(), "新写的一句");
+    askBox().setSelectionRange(5, 5);
+    assert.ok(pressKey(askBox(), "ArrowUp"), "光标贴在句尾按 ↑ 应顶成历史");
+    assert.equal(askBox().value, "第二条需求", "句尾的 ↑ 先翻到最近发出去的那一条");
+    pressKey(askBox(), "ArrowDown");
+    assert.equal(askBox().value, "新写的一句", "↓ 走过最新一条交回自己写的那句");
+
+    // 共享工厂的口径：光标落在第一行（哪怕带着选区）按 ↑ 就顶历史；多行文本里光标到第二行才交回光标
+    askBox().setSelectionRange(0, 4);
+    assert.ok(pressKey(askBox(), "ArrowUp"), "光标在第一行带选区按 ↑ 同绘画页口径顶历史");
+    assert.equal(askBox().value, "第二条需求", "第一行按 ↑ 顶成最近发出去的那一条");
 
     assert.deepEqual(JSON.parse(localStorage.getItem("neo_studio_agent_history")), ["第二条需求", "第一条需求"],
         "发出去的原文按最近在前存进本机历史");
@@ -622,21 +645,24 @@ function mockPendingRunFrames(frames) {
     }));
 }
 
-test("输入区：上下文条只读、取消行只在运行中出现、底栏一行有附件图 / MCP 入口 / 模式开关 / 主按钮，默认停在执行", async () => {
+test("输入区：一块深底输入卡收整排控件，上下文条只读、取消行只在运行中出现、底栏一行有附件图 / MCP 入口 / 模式开关 / 主按钮，默认停在执行", async () => {
     mountStudio();
     await openStudio("#/gallery");
 
     const composer = dock().querySelector(".neo-agent-composer");
+    const field = composer.querySelector(".neo-agent-field");
     const resumeBar = dock().querySelector(".neo-agent-resumebar");
-    assert.equal(composer.children[0], ctxBar(), "输入区顶上应是只读上下文条");
-    assert.equal(composer.children[2], resumeBar, "续聊条铺在取消行上面");
-    assert.equal(composer.children[3], cancelBar(), "取消行应铺在文本框上面");
+    assert.equal(field, composer.lastElementChild, "输入区里只该有一块输入卡");
+    assert.equal(field.children[0], ctxBar(), "卡顶上应是只读上下文条");
+    assert.equal(field.children[1], resumeBar, "续聊条铺在取消行上面");
+    assert.equal(field.children[2], cancelBar(), "取消行应铺在文本框上面");
     const retryBar = dock().querySelector(".neo-agent-retrybar");
-    assert.equal(composer.children[4], retryBar, "失败重发那一行铺在文本框上面");
+    assert.equal(field.children[3], retryBar, "失败重发那一行铺在文本框上面");
     assert.ok(retryBar.hidden, "空闲时没有失败可重发，那一行不占位");
-    assert.equal(composer.children[5], dock().querySelector(".neo-agent-input"), "重发行下面应是文本框");
-    assert.equal(composer.lastElementChild, composer.querySelector(".neo-agent-toolbar"),
-        "输入框下面只该有底栏这一行");
+    assert.equal(field.children[4], dock().querySelector(".neo-agent-input"), "重发行下面应是文本框");
+    assert.equal(field.children[5], dock().querySelector(".neo-agent-chips"), "附件缩略图铺在文本框下面");
+    assert.equal(field.lastElementChild, field.querySelector(".neo-agent-toolbar"),
+        "附件缩略图下面只该有底栏这一行");
     assert.deepEqual(modeBtns().map((b) => b.dataset.mode), ["plan", "act"], "应有计划与执行两档");
     assert.ok(modeBtns()[1].classList.contains("active"), "默认应停在执行模式");
     assert.ok(dock().querySelector(".neo-agent-attach"), "应有附件图入口");
@@ -659,15 +685,41 @@ test("输入区：上下文条只读、取消行只在运行中出现、底栏�
         ["📎 添加图片", "🔌 MCP", "📝 计划", "⚡ 执行"], "每颗钮都要带上整串可访问名");
 });
 
-test("窄栏底栏的 CSS：composer 是容器、底栏可换行、300px 以下只收文字段", () => {
+test("窄栏底栏的 CSS：composer 是容器、输入卡深底、焦点框只归整卡一条、底栏可换行、334px 以下只收文字段", () => {
     assert.match(cssText, /\.neo-agent-composer\s*\{[^}]*container-type:\s*inline-size;/);
+    assert.match(cssText, /\.neo-agent-field\s*\{[^}]*background:\s*var\(--neo-vsc-bg\);/);
+    assert.match(cssText, /\.neo-agent-field:has\(\.neo-agent-input:focus\)\s*\{[^}]*border-color:\s*var\(--neo-vsc-accent\);/);
+    assert.ok(!/^\.neo-agent-field:focus-within/m.test(cssText), "整卡 :focus-within 会让底栏每颗钮都亮卡，焦点框就多了");
+    assert.ok(!/^\.neo-agent-input:focus-visible/m.test(cssText), "文本框自己不再画焦点框：那一条归整卡");
+    assert.match(cssText, /\.neo-agent-input\s*\{[^}]*background:\s*none;[^}]*border:\s*0;/);
     assert.match(cssText, /\.neo-agent-toolbar\s*\{[^}]*flex-wrap:\s*wrap;/);
-    assert.match(cssText, /@container \(max-width: 300px\)\s*\{[^}]*\.neo-agent-toolbar \.neo-agent-btn-text\s*\{[^}]*display: none;/);
+    assert.match(cssText, /@container \(max-width: 334px\)\s*\{[^}]*\.neo-agent-toolbar \.neo-agent-btn-text\s*\{[^}]*display: none;/);
+    assert.match(cssText, /\.neo-agent-ctx-off\s*\{[^}]*opacity:\s*\.45;[^}]*font-size:\s*10px;/,
+        "默认不带的上下文条要收成淡小字，不跟正文抢视线");
+    assert.match(cssText, /\.neo-agent-input::placeholder\s*\{[^}]*--neo-vsc-fg-faint\);[^}]*font-size:\s*12px;/,
+        "占位提示压到 faint 一档：空框里的提示不跟正文同强度");
+    assert.match(cssText, /\.neo-agent-run\s*\{[^}]*background:\s*var\(--neo-vsc-primary-soft\);[^}]*border:\s*0;/,
+        "发送钮扁平：淡蓝底加主色字，实心胶囊加白字会把整排底栏顶起来");
+    assert.match(cssText, /\.neo-agent-attach,\s*\.neo-agent-entry\s*\{[^}]*background:\s*none;[^}]*border:\s*0;/,
+        "附件与 MCP 入口是同一条扁平文字钮规则");
+    assert.match(cssText, /\.neo-agent-modes\s*\{[^}]*margin-left:\s*auto;\s*\}/,
+        "模式开关没有胶囊壳：多一圈描边就是这一排多出来的重量");
+    assert.ok(!/\.neo-agent-mode-btn\.active\s*\{[^}]*box-shadow/.test(cssText),
+              "选中态只吃一层淡蓝底，内描边环会把它顶成一颗实心钮");
+    assert.match(cssText, /\.neo-agent-skill\s*\{[^}]*background:\s*none;[^}]*border:\s*0;[^}]*color:\s*var\(--neo-vsc-accent\);/,
+        "点名那颗是无底无框的一行浅蓝字：带底就成了一只按钮，清除完看着还剩一颗");
+    assert.match(cssText, /\.neo-agent-skill\[hidden\]\s*\{\s*display:\s*none/,
+        "清除后整颗必须消失：[hidden] 要压过 chip 自己的 inline-flex");
+    assert.match(cssText, /@container \(max-width: 334px\)\s*\{[\s\S]*?\.neo-agent-skill-name,\s*\.neo-agent-skill-del\s*\{\s*display:\s*none/,
+        "窄栏里收得只剩图标：图标加 ✕ 并排就是一只没名字的按钮");
+    assert.match(cssText, /\.neo-agent-picker\s*\{[^}]*var\(--ns-panel/,
+        "技能弹层挂 body 上，颜色吃 :root 的 --ns-*：吃 .neo-agent 的局部变量就是一路回落值");
 });
 
 test("切页与切绘画模式：上下文条跟着宿主走，请求带的是切过之后的状态", async () => {
     mountStudio();
     await openStudio("#/gallery");
+    enableCtx();
     assert.ok(ctxBar().textContent.includes("素材库"), `素材页应报素材库：${ctxBar().textContent}`);
 
     click(document.querySelector('.ns-tabs a[data-tab="paint"]'));
@@ -687,14 +739,17 @@ test("切页与切绘画模式：上下文条跟着宿主走，请求带的是�
     assert.equal(agentCalls()[0].body.context.paint_mode, "edit", "请求应带上切过之后的绘画模式");
 });
 
-test("上下文只带当前页签那一栏；条上的 ✕ 让本轮不带界面上下文，点条恢复", async () => {
+test("界面上下文默认不带：点条启用后才带、条上的 ✕ 再关掉，这条选择存本机", async () => {
     mountStudio();
     await openStudio("#/gallery");
     click(document.querySelector('.ns-tabs a[data-tab="paint"]'));
     await flush(40);
+    assert.ok(!ctxEnabled(), "默认不该带界面上下文");
+
+    enableCtx();
     const modeLabel = ctxBar().textContent.includes("文生图") ? "文生图" : "图片编辑";
     assert.ok(ctxBar().textContent.includes("绘画页 · " + modeLabel),
-        `绘画页应报自己那一栏（模式存过就落回存过的那档）：${ctxBar().textContent}`);
+        `启用后应报自己那一栏（模式存过就落回存过的那档）：${ctxBar().textContent}`);
 
     click(document.querySelector('.ns-tabs a[data-tab="skills"]'));
     await flush(40);
@@ -704,20 +759,27 @@ test("上下文只带当前页签那一栏；条上的 ✕ 让本轮不带界面
 
     mockAgentStream([{ kind: "content", text: "好" }]);
     click(ctxOffBtn());
-    assert.ok(ctxBar().textContent.includes("已取消上下文"), `取消位要写明本轮不带上下文：${ctxBar().textContent}`);
+    assert.ok(ctxBar().textContent.includes("不带界面上下文 · 点此启用") && !ctxBar().textContent.includes("📍"),
+        `关掉要写明不带上下文，且不画那枚图钉：${ctxBar().textContent}`);
     inputText(dock().querySelector(".neo-agent-input"), "照我写的做，别管界面");
     click(runBtn());
     await flush(40);
-    assert.equal(agentCalls()[0].body.context, null, "取消位下请求不带界面上下文");
-    assert.ok(metaLines()[0].textContent.includes("无当前上下文"),
+    assert.equal(agentCalls()[0].body.context, null, "不带的轮次请求不带界面上下文");
+    assert.ok(metaLines()[0].textContent.includes("不带界面上下文"),
         `回合头要写明这一轮没有上下文：${metaLines()[0].textContent}`);
 
     click(ctxBar());
-    assert.ok(ctxBar().textContent.includes("技能页"), `点条把本轮上下文点回来：${ctxBar().textContent}`);
+    assert.ok(ctxBar().textContent.includes("技能页"), `点条把界面上下文点回来：${ctxBar().textContent}`);
     inputText(dock().querySelector(".neo-agent-input"), "接着来");
     click(runBtn());
     await flush(40);
-    assert.equal(agentCalls()[1].body.context.page, "skills", "恢复后请求重新带上当前页");
+    assert.equal(agentCalls()[1].body.context.page, "skills", "启用后请求重新带上当前页");
+    assert.equal(localStorage.getItem("neo_studio_agent_ctx_on"), "1", "启用态写进本机存储");
+
+    mountStudio();
+    localStorage.setItem("neo_studio_agent_ctx_on", "1");   // 本机存过启用态：重载后沿用
+    await openStudio("#/gallery");
+    assert.ok(ctxEnabled(), "换页重载后沿用本机存的启用态");
 });
 
 test("素材库目录标了 👤 角色图：上下文带上这个标记，未标记的目录不带", async () => {
@@ -727,6 +789,7 @@ test("素材库目录标了 👤 角色图：上下文带上这个标记，未�
     const view = { mode: "directory", source: "Cloud Presets", categoryPath: ["明朝人物"] };
     let marked = true;
     studioApp.neoGallery = { currentView: view, isCharacterDir: () => marked };
+    enableCtx();
     mockAgentStream([{ kind: "content", text: "好" }]);
     inputText(dock().querySelector(".neo-agent-input"), "照这批设定图出个片");
     click(runBtn());
@@ -1255,6 +1318,7 @@ test("导演页在用时存配方：左栏立刻长出新配方并选中，右�
 
     mockAgentStream([{ kind: "tool_call", tool: "director_save", text: '{"name":"我的片子"}' }, RECIPE_SAVED,
                      { kind: "content", text: "配方已保存" }]);
+    enableCtx();
     inputText(dock().querySelector(".neo-agent-input"), "把这一版存成配方");
     click(runBtn());
 
@@ -1382,4 +1446,85 @@ test("复制键在 capture 相位摘走，宿主注入的吞键 handler 接不�
         keydown(input, key, { code, ctrlKey: true });
     }
     assert.deepEqual(seen, ["KeyL"], `放行名单内的键不该再往下传：${seen.join(" ")}`);
+});
+
+// ---------- 输入框 @ 直接点名技能（选择器与提示词页的 / 同一套工厂）----------
+const pickerRows = () => [...document.querySelectorAll(".neo-agent-picker-row")];
+const skillChip = () => dock().querySelector(".neo-agent-skill");
+
+test("输入 @ 只列后端跑得动的生图与出片技能，选中随请求体交后端并留在底栏", async () => {
+    mountStudio();
+    mockRoute("/rs_prompts/skills", jsonResponse([
+        ...SKILLS,
+        { id: "sk_film", name: "h3_film", cn_name: "H3 出片", gen_video: true, has_workflow: true, tags: [] },
+        { id: "sk_nowf", name: "no_workflow", cn_name: "没有工作流", gen_image: true, tags: [] },
+        { id: "sk_unavail", name: "unavail", cn_name: "缺插件的出片", gen_video: true, has_workflow: true, available: false, tags: [] },
+    ]));
+    await openStudio("#/gallery");
+    mockAgentStream([{ kind: "content", text: "已出图" }]);
+
+    const input = dock().querySelector(".neo-agent-input");
+    inputText(input, "@");
+    await sleep(20);   // 候选要过一次 fetch：微任务冲刷追不上这条链
+    assert.deepEqual(pickerRows().map((r) => r.querySelector(".neo-agent-picker-name").textContent),
+        ["🖼️ Krea2 出图", "🎬 H3 出片"],
+        "只列带 workflow 的生图与出片技能，生图在前——没有工作流的技能后端三条生成工具都跑不动");
+    assert.deepEqual(pickerRows().map((r) => r.querySelector(".neo-agent-picker-meta").textContent),
+        ["生图", "出片"], "行右侧标出这一发是哪一类");
+
+    keydown(input, "Enter");
+    await flush(5);
+    assert.equal(pickerRows().length, 0, "提交后弹层要收掉");
+    assert.equal(input.value, "", "选中之后 @ 与 query 那一段要从正文里吃掉");
+    assert.ok(!skillChip().hidden && skillChip().textContent.includes("Krea2 出图"),
+        `点名的技能要留在底栏那一颗上：${skillChip().textContent}`);
+
+    inputText(input, "一只橘猫");
+    click(runBtn());
+    await sleep(20); await flush(40);   // 整条 SSE 要过宏任务：冲刷不够的话下一条用例点第二发时还在「跑着」
+    assert.equal(agentCalls()[0].body.skill_id, "sk_gen", "请求体带点名技能");
+
+    click(skillChip().querySelector(".neo-agent-skill-del"));
+    await flush(2);
+    assert.ok(skillChip().hidden, "✕ 点完那颗收回");
+    assert.equal(localStorage.getItem("neo_studio_agent_skill"), null, "取消后本机不该再存着");
+    inputText(input, "再来一张");
+    click(runBtn());
+    await sleep(20); await flush(40);
+    assert.equal(agentCalls()[1].body.skill_id, undefined, "取消之后不该再发这个字段");
+});
+
+test("@ 点名的技能跨重载沿用", async () => {
+    mountStudio();
+    localStorage.setItem("neo_studio_agent_skill", JSON.stringify({ id: "sk_film", name: "H3 出片" }));
+    await openStudio("#/gallery");   // 建页时读回来的那一份才落进那一颗
+    assert.ok(!skillChip().hidden && skillChip().textContent.includes("H3 出片"),
+        `重载后沿用点名的那一个：${skillChip().textContent}`);
+    mockAgentStream([{ kind: "content", text: "已出片" }]);
+    inputText(dock().querySelector(".neo-agent-input"), "走一段");
+    click(runBtn());
+    await flush(40);
+    assert.equal(agentCalls()[0].body.skill_id, "sk_film", "恢复出来的那一个照发");
+});
+
+test("技能目录回 409：@ 的弹层只给那一句无匹配，请求里没有 skill_id", async () => {
+    mountStudio();
+    mockRoute("/rs_prompts/skills", () => ({ __spec: true, status: 409, body: "offline" }));
+    await openStudio("#/gallery");
+    mockAgentStream([{ kind: "content", text: "好的" }]);
+
+    const input = dock().querySelector(".neo-agent-input");
+    inputText(input, "@");
+    await sleep(20);   // 同上一条用例：这一次 fetch 会走到 409
+    assert.equal(pickerRows().length, 0, "离线服务给不了候选，弹层里不许铺假技能");
+    assert.ok(document.querySelector(".neo-agent-picker-empty"), "空弹层只给那一句无匹配");
+    keydown(input, "Escape");
+    await flush(2);
+    assert.equal(document.querySelector(".neo-agent-picker"), null, "Esc 收掉弹层");
+    assert.equal(input.value, "@", "没选中就不动正文");
+
+    inputText(input, "写一句提示词");
+    click(runBtn());
+    await flush(40);
+    assert.equal(agentCalls()[0].body.skill_id, undefined, "没点名就不给这个字段");
 });

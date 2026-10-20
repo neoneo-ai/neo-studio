@@ -7,7 +7,7 @@
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
 import { fileToBase64, imagesFromClipboard, sseStream, invokePromptStream, createStreamOutputHandlers } from "./prompt-service.js";
-import { listSkills, populateSkillOptions, createSkillDropdown, renderMarkdown, resolveSkillId, openSkillDetailById } from "./skill.js";
+import { listSkills, populateSkillOptions, createSkillDropdown, renderMarkdown, resolveSkillId, openSkillDetailById, CATEGORY_LABELS, skillDisplayName } from "./skill.js";
 import { createModelConfigForm, openLLMSettingsModal } from "./llm-setting.js";
 import { mkEl } from "./dom-utils.js";
 import { collectWorkflowContext } from "./workflow-context.js";
@@ -698,7 +698,15 @@ function createStatusBars() {
     });
 
     // 输入 / 唤起 skill 快捷菜单：随输入实时过滤，↑/↓ + Enter/Tab 提交（写入 skill 下拉），Esc 关闭
-    const openSlashSkillPicker = createSlashSkillPicker({ quickInput, skillSelector, listSkills });
+    // 分类口径在本页定：生视频 / 任务为内部使用技能不在菜单里出现（见 skill.js 的 CATEGORY_LABELS）
+    const openSlashSkillPicker = createSlashSkillPicker({
+        quickInput, skillSelector, listSkills,
+        rowText: (s) => (s.needs_image ? "📷 " : "") + skillDisplayName(s),
+        categoryLabel: (s) => (CATEGORY_LABELS[s.category] || CATEGORY_LABELS.image_enhance).label,
+        filter: (s) => !CATEGORY_LABELS[s.category]?.hidden,
+        sort: (a, b) => ((CATEGORY_LABELS[a.category]?.order ?? 99) - (CATEGORY_LABELS[b.category]?.order ?? 99))
+            || String(a.name || a.id).localeCompare(String(b.name || b.id)),
+    });
 
     // 输入 @ 唤起工作流图片选择器、/ 唤起 skill 快捷菜单（均支持在文本中间插入：看光标前一个字符）
     quickInput.addEventListener("input", (e) => {

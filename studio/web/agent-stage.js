@@ -66,9 +66,11 @@ export function createAgentStage() {
         status.textContent = "";
     }
 
+    // 同一张产物会到两次：generate_image 的 tool_result 交一次，finish_task 收场时把同一批产物名再交一次。
+    // 中间这一轮只认 url，第二遍是重复像素，不是新产物
     // 产物一格一格铺大：点开放大窗口看全图与播放，页面自己不导航（同右栏口径）
     function addMedia(media) {
-        const added = (media || []).filter((m) => m && m.url);
+        const added = (media || []).filter((m) => m && m.url && !items.some((x) => x.url === m.url));
         if (!added.length) return;
         empty = false;
         const start = items.length;

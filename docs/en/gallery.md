@@ -152,7 +152,8 @@ embedded ComfyUI workflow).
   video on the sheet; unmarked directories keep the "one segment per image, image as first frame" behavior. The
   flag also covers subdirectories (mark `stars` and `stars/孟子义` behaves the same), lives in `character_dirs` in
   `gallery_settings.json` (lowercased tokens, same token space as the hide switch), and is dropped when the
-  directory is removed. The agent dock reads the same flag: with the library directory marked, the context bar names it a
+  directory is removed. The agent dock reads the same flag (when the on-screen context is enabled - it is off by default,
+  click the context bar to enable it): with the library directory marked, the context bar names it a
   character directory, the request body carries `character_dir`, and the recipe the agent builds from its attachments
   defaults to one full-reference segment — the same rule as these two entries (see [prompts.md](prompts.md)).
   Cloud preset directories ship the default in the index itself: the publisher tags a sheet

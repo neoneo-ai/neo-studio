@@ -274,6 +274,29 @@ test("finish 帧落最终回答：正文、产物缩略图与可点的下一步�
     assert.equal(calls.length, 2, "点方向就是把它当下一句输入发出去");
     assert.equal(calls[1].body.text, "再来一张同风格的");
 });
+// 产物在右栏只铺一遍：generate_image 的产物铺在卡下，finish_task 交的是同一批清单，
+// 收场那一栏只补卡下没铺过的，同一张图不在右栏出现两次
+test("产物不在右栏铺两遍：卡下铺过的图，收场栏只补新产物", async () => {
+    mountStudio();
+    await openStudio();
+    await run([
+        { kind: "tool_call", tool: "generate_image", text: "{}" },
+        { kind: "tool_result", tool: "generate_image", text: "出了 1 张", media:
+            [{ kind: "image", title: "cat_0001.png", url: "/view?filename=cat_0001.png&type=output" }] },
+        { kind: "finish", text: "出好了：2 张", media: [
+            { kind: "image", title: "cat_0001.png", url: "/view?filename=cat_0001.png&type=output" },
+            { kind: "image", title: "cat_0002.png", url: "/view?filename=cat_0002.png&type=output" }],
+          options: [] }]);
+
+    const cardImgs = [...dock().querySelectorAll(".neo-agent-tool .neo-agent-media img")]
+        .map((n) => n.getAttribute("src"));
+    const finalImgs = [...finalRow().querySelectorAll(":scope > .neo-agent-media img")]
+        .map((n) => n.getAttribute("src"));
+    assert.deepEqual(cardImgs, ["/view?filename=cat_0001.png&type=output"], "generate_image 卡下铺这一张");
+    assert.deepEqual(finalImgs, ["/view?filename=cat_0002.png&type=output"],
+        "收场栏只补卡下没铺过的 cat_0002");
+});
+
 
 // ====== 旧会话的「从这条消息重新开始」 ======
 test("旧会话里每条用户消息一个重开入口，点它之后生成带 from 序号", async () => {

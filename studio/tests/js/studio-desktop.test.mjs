@@ -122,6 +122,19 @@ test("顶栏标题是回首页（素材页）的链接", async () => {
     assert.match(css, /\.ns-logo:hover/, "应有 hover 反馈");
 });
 
+test("启动页样式随文档一并带上：右栏与素材页不靠运行时注入", () => {
+    const html = fs.readFileSync(path.join(webDir, "studio", "index.html"), "utf8");
+    const head = html.match(/<head>([\s\S]*?)<\/head>/)[1];
+    const bootScript = html.indexOf('<script type="module"');
+    const panelCss = head.indexOf("agent-panel.css");
+    const galleryCss = head.indexOf("gallery.css");
+    assert.ok(panelCss > -1 && galleryCss > -1, "右栏与落地页的 CSS 要在 head 里静态带上");
+    assert.ok(panelCss < bootScript && galleryCss < bootScript,
+              "样式排在应用模块之前：模块图跑完才注入的 CSS 会让页面先挤成无样式的一坨再落位");
+    assert.match(head, /<link[^>]*data-neo-agent="1"[^>]*agent-panel\.css/,
+                 "静态那份带 ensureCss 认的标记，运行时不再补第二份");
+});
+
 test("无边框窗口控件：默认隐藏，最小化 / 最大化 / 全屏 / 关闭齐备", async () => {
     const html = fs.readFileSync(path.join(webDir, "studio", "index.html"), "utf8");
     const css = fs.readFileSync(path.join(webDir, "studio", "style.css"), "utf8");

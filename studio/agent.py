@@ -32,6 +32,7 @@ provider 每轮报的 token 统计逐轮累进 run.usage 并随会话落盘，�
 「从这条消息重新开始」带 from 时从那条会话的第 N 条用户消息截断，本轮从那个点重新长出去。
 用户级偏好在 configs/agent_prefs.json（一台机器一份，右栏「设为偏好」写它），逐轮进系统提示词，
 排在焦点链之后——本会话刚出过那一发的真值优先。
+输入框 @ 点名的技能是本轮指令，排在偏好与焦点链之后：用户明说了这一发用哪个技能，就出哪一发。
 """
 from __future__ import annotations
 
@@ -290,6 +291,8 @@ class _Run:
         # 用户级偏好的快照（configs/agent_prefs.json 在请求开始时读一次）：一轮跑一半用户改了
         # 偏好不该影响正在跑的这一条循环
         self.prefs: dict = dict(DEFAULT_PREFS)
+        # 输入框 @ 点名的技能：本轮指令，比偏好与焦点链都近。只认形态，认得到与否由循环里那次 list_skills 定
+        self.user_skill = ""
         # 本次运行真出现过的产物：名字 → 产物项。finish_task 只认这份表里的名字
         self.media_urls: dict[str, dict] = {}
 
@@ -1052,9 +1055,26 @@ def _prefs_block(prefs: dict) -> str:
               "偏好尺寸与技能支持的宽高对不上就按技能自己的来。")
 
 
+def _skill_block(skill_id: str) -> str:
+    """本轮用户在输入框里 @ 点名的技能：他选了哪一发，本轮就出哪一发。
+
+    这一段排在偏好与焦点链之后——那两段是这台机器的长期口味和刚出过的那一发，这一段是用户明说的本轮
+    指令。认不认得到这个技能由循环自己查 list_skills：技能目录不在本模块里，agent 只通过工具看得到技能，
+    在这里 import skill.py 就是把两层焊在一起。空值不产出这一段。"""
+    sid = str(skill_id or "").strip()
+    if not sid:
+        return ""
+    return ("\n\n本轮用户点名的技能（他在输入框里用 @ 选的，比偏好与焦点链都近）：\n"
+            f"- 技能={sid}\n"
+            "本轮出图 / 出片默认就用这一个技能，宽高与步数照技能自己的默认；先在 list_skills 里认得到它"
+            "就直接用，认不到（技能不存在、缺工作流、缺插件）就说清原因并照 list_skills 换一个、说明换了哪个，"
+            "不要静默换。用户在正文里另点了别的技能时照他说的换。")
+
+
 def system_prompt(mode: str = "act", context: str = "", focus: dict | None = None,
-                  plan_steps: list | None = None, prefs: dict | None = None) -> str:
-    """系统提示词 = 静态提示词 + 界面状态 + 焦点链 + 用户级偏好（+ 计划模式说明 + 执行清单）。
+                  plan_steps: list | None = None, prefs: dict | None = None,
+                  skill: str = "") -> str:
+    """系统提示词 = 静态提示词 + 界面状态 + 焦点链 + 用户级偏好 + 本轮点名技能（+ 计划模式说明 + 执行清单）。
     焦点链与执行清单要在每次 LLM 请求前重算：本轮生成工具刚立的事实、清单上刚划掉的那一条
     都得在下一轮请求里可见（见 _run_agent）。执行清单只在执行模式进提示词——
     计划模式这一轮正在写它，还没有清单可照跑。"""
@@ -1065,6 +1085,7 @@ def system_prompt(mode: str = "act", context: str = "", focus: dict | None = Non
     text += context
     text += _focus_block(focus or {})
     text += _prefs_block(prefs or {})
+    text += _skill_block(skill)
     if mode == "plan":
         text += PLAN_MODE_NOTE
     else:
@@ -1180,7 +1201,8 @@ async def _run_agent(client, text: str, emit, run, mode: str = "act",
     每轮请求前压一次上下文（_compress_messages）；出片级工具在跑之前过一道量级确认卡
     （用户偏好里的 confirm_films）；provider 每轮报的 token 统计逐轮累进 run.usage。"""
     messages = [{"role": "system", "content": system_prompt(mode, context, run.focus,
-                                                            run.plan_steps, run.prefs)}]
+                                                            run.plan_steps, run.prefs,
+                                                            run.user_skill)}]
     messages += list(history or [])
     messages.append(_user_message(text, images or []))
     run.messages = messages       # 同一个 list 对象：循环里的 append 逐轮可见，半途收场也留得下
@@ -1196,7 +1218,8 @@ async def _run_agent(client, text: str, emit, run, mode: str = "act",
             return
         # 焦点链、用户偏好与执行清单逐轮重注入：本轮刚立的事实与清单上刚划掉的一条要在这一轮
         # 的请求里可见，而 messages[0] 是循环开头按当时的状态写的
-        messages[0]["content"] = system_prompt(mode, context, run.focus, run.plan_steps, run.prefs)
+        messages[0]["content"] = system_prompt(mode, context, run.focus, run.plan_steps, run.prefs,
+                                               run.user_skill)
         # 上下文在每一轮的边界上压：一次长会话里的技能全表与长工具返回是逐轮攒起来的，
         # 不压就是整请求 400，报错点在 provider 那一侧，比少一轮难查得多
         tokens = _compress_messages(messages)
@@ -1358,7 +1381,7 @@ def _error_response(message: str) -> web.Response:
 
 @routes.post("/neo_agent/run")
 async def agent_run(request):
-    """右栏智能体：一次请求，一路 SSE 时间线。body {text, mode, images, context, preview_side, resume, from}。
+    """右栏智能体：一次请求，一路 SSE 时间线。body {text, mode, images, context, preview_side, resume, from, skill_id}。
     mode 只认 plan / act，其余按 act；images 是输入框附件图，按 prompts 的图片源口径给，
     act 模式下它们默认作为本轮生成的参考图（见 _apply_references）；
     context 是界面当前状态（当前页 / 当前导演配方 / 绘画页模式 / 素材库目录与它的角色图标记），值从前端 DOM 来；
@@ -1368,7 +1391,8 @@ async def agent_run(request):
     （上一次生成的技能 / 参数 / 产物）一起接在系统提示词之后，那条会话在计划模式交出的执行清单
     也在执行模式下接回来照跑；
     from 是「从这条消息重新开始」：连着 resume 给，取那条会话里第 N 条用户消息（1 起），
-    那一条与它之后的原文整段丢掉，本轮的输入从那个点重新长出去。"""
+    那一条与它之后的原文整段丢掉，本轮的输入从那个点重新长出去；
+    skill_id 是输入框 @ 点名的技能：本轮出图 / 出片默认用它，排在偏好与焦点链之后（见 _skill_block）。"""
     try:
         body = await request.json()
     except Exception:
@@ -1421,6 +1445,10 @@ async def agent_run(request):
     run.resume_of, run.resume_from = resume, resume_from
     # 偏好是请求开始时读的一次快照：一轮跑一半用户改了偏好，不该影响正在跑的这条循环
     run.prefs = await asyncio.to_thread(_load_prefs)
+    # skill_id 是输入框 @ 点名的技能（右栏只给形态合法的技能名）：与偏好里的 preferred_skill 同一档校验，
+    # 认不认得到这个技能不在这里判——技能目录在 skill.py 那一层，循环里那次 list_skills 才是认得到的地方
+    raw_skill = str(body.get("skill_id") or "").strip()
+    run.user_skill = raw_skill if PREFS_NAME_RE.match(raw_skill) else ""
     if record is not None:
         saved_focus = record.get("focus")
         if isinstance(saved_focus, dict) and not resume_from:

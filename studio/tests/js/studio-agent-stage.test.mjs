@@ -201,6 +201,25 @@ test("新的 run 帧清场：中间只有当前这一轮，不堆第二条历史
     assert.match(stageMedia()[0].src, /d\.png/, "中间留下的应是这一轮的产物");
 });
 
+// generate_image 的 tool_result 交一次产物，finish_task 收场时按同一批产物名再交一次：中间只认 url，
+// 第二遍是重复像素，不该在结果区铺成第二格
+test("同一张产物只铺一格：finish_task 重交的产物不在中间铺第二遍", async () => {
+    await openStudio();
+    await run([
+        { kind: "run", run_id: RUN_ID },
+        { kind: "tool_result", tool: "generate_image", text: "出了 1 张", media:
+            [{ kind: "image", url: "/view?filename=a.png&subfolder=&type=output", title: "a" }] },
+        { kind: "finish", text: "出好了：2 张", media: [
+            { kind: "image", url: "/view?filename=a.png&subfolder=&type=output", title: "a" },
+            { kind: "image", url: "/view?filename=c.png&subfolder=&type=output", title: "c" }],
+          options: [] },
+    ]);
+    assert.deepEqual(stageMedia().map((n) => n.getAttribute("src")),
+        ["/view?filename=a.png&subfolder=&type=output", "/view?filename=c.png&subfolder=&type=output"],
+        "a.png 只铺一格，收场里没铺过的 c.png 照铺");
+});
+
+
 test("舞台产物点开放大窗口：看大图不把页面切走", async () => {
     await openStudio();
     await run(ROUND);

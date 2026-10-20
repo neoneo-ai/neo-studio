@@ -29,17 +29,25 @@ import {
     releaseLazyThumbnails
 } from './gallery-utils.js';
 
-// Load gallery CSS (with cache-busting to force reload on each page load)
-const galleryCssLink = document.createElement('link');
-galleryCssLink.rel = 'stylesheet';
-galleryCssLink.href = "/extensions/comfyui-neo-studio/gallery.css?v=" + Date.now();
-document.head.appendChild(galleryCssLink);
-
-// Load recipes CSS (with cache-busting)
-const recipesCssLink = document.createElement('link');
-recipesCssLink.rel = 'stylesheet';
-recipesCssLink.href = "/extensions/comfyui-neo-studio/recipes.css?v=" + Date.now();
-document.head.appendChild(recipesCssLink);
+// 启动页里 gallery.css / recipes.css 由 studio/index.html 静态带上（见那里的注释）。在 ComfyUI 里
+// 当扩展加载时没有那份文档，这里补一份带时间戳的：prompts.css 同款坑——按内容估新鲜度的话，
+// CSS 更新后会长期吃旧副本，新样式看着就"不生效"
+function cssLinkInjected(prefix) {
+    return [...document.querySelectorAll('link[rel="stylesheet"]')]
+        .some((l) => (l.getAttribute('href') || '').startsWith(prefix));
+}
+if (!cssLinkInjected('/extensions/comfyui-neo-studio/gallery.css')) {
+    const galleryCssLink = document.createElement('link');
+    galleryCssLink.rel = 'stylesheet';
+    galleryCssLink.href = "/extensions/comfyui-neo-studio/gallery.css?v=" + Date.now();
+    document.head.appendChild(galleryCssLink);
+}
+if (!cssLinkInjected('/extensions/comfyui-neo-studio/recipes.css')) {
+    const recipesCssLink = document.createElement('link');
+    recipesCssLink.rel = 'stylesheet';
+    recipesCssLink.href = "/extensions/comfyui-neo-studio/recipes.css?v=" + Date.now();
+    document.head.appendChild(recipesCssLink);
+}
 
 // Civitai 收藏 view: bookmarked C-site models, shown like the Lora section.
 const CIVITAI_DIR_NAME = t("C站收藏");  // display label only (card name, breadcrumb) — never used for backend matching

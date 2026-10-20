@@ -575,12 +575,16 @@ document.addEventListener("rs.skills.updated", () => {
 // ==========================================
 // Reference external CSS file
 // ==========================================
-const cssLink = document.createElement('link');
-cssLink.rel = 'stylesheet';
-// ?v= 时间戳防启发式缓存：aiohttp 静态服务不带 Cache-Control，浏览器按 Last-Modified
+// Studio 页的 index.html 已静态带上 prompts.css（随文档阻塞加载）。在 ComfyUI 里作为扩展加载时没有
+// 那份文档，这里补一份带 ?v= 时间戳的：aiohttp 静态服务不带 Cache-Control，浏览器按 Last-Modified
 // 估算新鲜度，prompts.css 更新后可能长期使用旧副本（新样式"不生效"多半是这个原因）
-cssLink.href = `/extensions/comfyui-neo-studio/prompts.css?v=${Date.now()}`;
-document.head.appendChild(cssLink);
+if (![...document.querySelectorAll('link[rel="stylesheet"]')]
+        .some((l) => (l.getAttribute('href') || '').startsWith('/extensions/comfyui-neo-studio/prompts.css'))) {
+    const cssLink = document.createElement('link');
+    cssLink.rel = 'stylesheet';
+    cssLink.href = `/extensions/comfyui-neo-studio/prompts.css?v=${Date.now()}`;
+    document.head.appendChild(cssLink);
+}
 
 // ==========================================
 // Main Node Logic for NeoPromptEncoder

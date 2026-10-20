@@ -150,8 +150,16 @@ Both nodes share the same layout (the Agent shows no status bar):
   The first option is the empty "Default" entry: with no skill
   selected the backend decides on its own whether a template applies, and an image with no skill routes to captioning.
   In the desktop agent dock, image and film generation both go through the backend agent
-  (`POST /neo_agent/run`, an SSE timeline — see [api-routes.md](api-routes.md)): the dock has no skill picker, the
-  LLM picks the skill itself through `list_skills`, and the tool list is the whole MCP registry (the `director_run` /
+  (`POST /neo_agent/run`, an SSE timeline — see [api-routes.md](api-routes.md)): typing `@` in the composer names a
+  skill directly — the list holds only the skills the three generation tools can actually run (`gen_image` /
+  `gen_video` with a `workflow.json`, the same test as `_gen_image_skills` / `_gen_video_skills`), each row labeled
+  Image / Film on the right, filtered and driven on the keyboard by the same factory as the prompts page's `/` menu
+  (`studio/web/slash-picker.js`); the picked skill lands as a flat `🧩 skill ✕` chip in the bottom row
+  (`localStorage["neo_studio_agent_skill"]`, kept across turns and reloads, ✕ clears it) and travels in the request
+  body's `skill_id` into the system prompt, after the focus chain and the user prefs — a named skill is this turn's
+  instruction, and whether it exists is settled by the loop's own `list_skills` call: an unknown one has to be
+  explained before the model switches, never silently.
+  With nothing named, the LLM picks the skill itself through `list_skills`, and the tool list is the whole MCP registry (the `director_run` /
   `segment_run` / `assemble_run` film chain included). The transcript shows the plan line, one card per tool call
   (arguments / progress / result with result thumbnails — an image skill lays out the picture and a film task a muted
   clip, and a click opens the popup viewer for the full image or the playback instead of taking over the whole window)
@@ -189,10 +197,11 @@ Both nodes share the same layout (the Agent shows no status bar):
   dock resizes it (260px floor for the dock, the page view keeps 420px), dragging it narrower than 150px closes the
   column, double-click collapses / expands, `←`/`→` nudges it, and a key in the closed state reopens it at the
   width it had. Open state and width live in `localStorage["neo_studio_agent_dock"]`, and closing keeps the width.
-  Drag the dock narrower than 316px and the composer's bottom row keeps only the glyphs (📎 / 🔌 / 📝 / ⚡ / ✨):
+  Drag the dock narrower than 350px and the composer's bottom row keeps only the glyphs (📎 / 🔌 / 📝 / ⚡ / ✨; a named
+  skill keeps just 🧩, and clicking it clears the pick):
   the full label stays in the DOM as the button's `aria-label` (the main button carries it as its tooltip too),
   the row wraps, and the dock's `overflow: hidden` no longer clips the Generate button in the bottom-right corner
-  (`@container (max-width: 300px)` in `studio/web/agent-panel.css`, measured on the composer's inner width —
+  (`@container (max-width: 334px)` in `studio/web/agent-panel.css`, measured on the composer's inner width —
   dock width minus its 16px padding).
   The composer: on top a context bar (📍 current page · current recipe and segment count ·
   paint mode · gallery directory) that the host refreshes on page switch, recipe selection, paint-mode switch and
@@ -201,10 +210,13 @@ Both nodes share the same layout (the Agent shows no status bar):
   mode on the paint page only, and a gallery directory only while the library is on screen, and `_context_block` in
   `studio/agent.py` gates the same payload on the same page. A directory carrying the 👤 character-directory flag shows
   as「directory name（角色图 / character images）」and the request body carries `character_dir: true` — the gallery's
-  `isCharacterDir(view)` decides the flag and the host hands it its own view. A「✕」on the bar drops the context for this
-  turn — the
-  request sends `context: null` and the bar reads「已取消上下文 / Context off for this turn」; clicking the bar brings it
-  back, and so does any host refresh. 📎 attachments (paste, drop, or pick, up to 6, with removable
+  `isCharacterDir(view)` decides the flag and the host hands it its own view. The on-screen context is **off by default**
+  (it interferes more than it helps): the bar reads one dim small-type line「不带界面上下文 · 点此启用 / No on-screen
+  context · click to enable」(no 📍 in this state, 10px at `opacity: .45`), clicking the bar makes later turns carry
+  `context`, and the「✕」on the bar turns it off again. The switch lives
+  in `localStorage["neo_studio_agent_ctx_on"]` and survives a reload; a host refresh only re-renders the bar, and the turn
+  header states what a turn carried or says「不带界面上下文 / No on-screen context this turn」. 📎 attachments (paste, drop,
+  or pick, up to 6, with removable
   thumbnails) travel in
   the request body as multimodal content, so an image with no text is a valid turn; in Act mode they are the references
   this turn generates with — `generate_image` gets them automatically when its `references` argument is left out (a pasted
