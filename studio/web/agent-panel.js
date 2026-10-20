@@ -199,18 +199,6 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
     const historyBox = mkEl("div", "neo-agent-history");
     historyBox.hidden = true;
 
-    // 会话标题 = 整条对话的第一句话，钉在时间线顶上（sticky 见 agent-panel.css 的 .neo-agent-titlebar），
-    // 生成中、读回旧会话、历史列表都认同一句。同一句也交中间舞台的页眉（kind "title" 帧只给舞台画，
-    // 不进后端时间线）。时间线整栏重铺的三条路（新增会话、读回旧会话、删掉读回的会话）都要把标题行放回
-    // 第一个子节点，sticky 才有吸得住的位置
-    const titleBar = mkEl("div", "neo-agent-titlebar");
-    titleBar.hidden = true;
-    function setConversationTitle(text) {
-        titleBar.textContent = text ? "💬 " + text : "";
-        titleBar.hidden = !text;
-        if (onFrame) onFrame({ kind: "title", text });
-    }
-
     // 复制钮一轮只挂一枚，钉在最终回答之后，钮面用 Cline 那枚叠角方块：桌面窗口的 WebView2 只在 dev 态放行
     // Ctrl+C 与右键菜单（app/studio_app.py 把 AreBrowserAcceleratorKeysEnabled / AreDefaultContextMenusEnabled 绑到
     // debug），正文又常被宿主注入的 body{user-select:none;cursor:default} 压得选不动，复制这一句只剩按钮一条路。
@@ -509,12 +497,26 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
             })
             .catch(() => toast("error", t("素材库图片复制失败")));
     }
-    box.append(sectionHead(t("智能体"), [
+    const chatHead = sectionHead(t("智能体"), [
         headBtn("＋", t("新增会话"), () => newSession()),
         headBtn("🗂", t("会话历史"), () => toggleHistory()),
         headBtn(icon("trash"), t("清空对话与历史"), () => clearConversation()),
         headBtn("⚙", t("智能体偏好"), () => onOpenPrefs && onOpenPrefs()),
-    ]), transcript, historyBox, composer);
+    ]);
+    // 会话标题 = 整条对话的第一句话，钉在栏头那一行上（生成中一直在，读回旧会话、历史列表认同一句，
+    // 「＋ 新增会话」才收回），空态回「智能体」。栏头宽度不够时 CSS 截断，整句在悬停说明里。
+    // 同一句也交中间舞台的页眉（kind "title" 帧只给舞台画，不进后端时间线）
+    const headTitle = chatHead.querySelector(".neo-agent-head-title");
+    const headLabel = t("智能体");
+    let titlePinned = false;
+    function setConversationTitle(text) {
+        titlePinned = !!text;
+        headTitle.textContent = text ? "💬 " + text : headLabel;
+        headTitle.title = text || "";
+        headTitle.classList.toggle("neo-agent-head-titled", !!text);
+        if (onFrame) onFrame({ kind: "title", text });
+    }
+    box.append(chatHead, transcript, historyBox, composer);
 
     // 时间线里的链接一律收在页面内：产物进弹出窗口，外部链接交给新窗口。放任 <a> 的默认行为
     // 就是整扇窗口翻到 /view 图片页——返回时 Studio 页重载，启动状态位与整条时间线一起没了
@@ -639,6 +641,26 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
         }
 
         return {
+            // 用户自己那一发：读回旧会话时看得见自己问过什么、附过哪几张图。落盘的附件只存了
+            // input 目录里的名字，图被清出 input 就只剩名字这一条引用
+            turn(text, attachments) {
+                const row = mkEl("div", "neo-agent-turn");
+                const ask = mkEl("div", "neo-agent-ask");
+                ask.textContent = text || t("（只给了附件图）");
+                row.appendChild(ask);
+                if (attachments.length) {
+                    const strip = mkEl("div", "neo-agent-ask-media");
+                    attachments.forEach((name) => {
+                        const thumb = mkEl("img");
+                        thumb.src = attSrc({ input: name });
+                        thumb.alt = name;
+                        thumb.title = name;
+                        strip.appendChild(thumb);
+                    });
+                    row.appendChild(strip);
+                }
+                steps.appendChild(row);
+            },
             plan(text) {
                 const row = mkEl("div", "neo-agent-step");
                 row.textContent = "🧭 " + text;
@@ -1002,7 +1024,8 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
     function replayFrame(view, f) {
         const kind = f?.kind || "content";
         if (kind === "run") return;
-        if (kind === "plan") view.plan(f.text || "");
+        if (kind === "in") view.turn(f.text || "", f.attachments || []);
+        else if (kind === "plan") view.plan(f.text || "");
         else if (kind === "tool_call") view.toolCall(f.tool || "?", f.text || "");
         else if (kind === "status") view.status(f.text || "", "");
         else if (kind === "tool_result") view.toolResult(f.text || "", f.media || []);
@@ -1054,9 +1077,9 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
         }
         showTranscript();
         transcript.replaceChildren();
-        transcript.prepend(titleBar);
-        // 标题是整条对话的第一句话（后端落盘时定下来的），不是这一发自己那句
-        setConversationTitle(rec.title || rec.text || t("（只给了附件图）"));
+        // 标题是整条对话的第一句话（后端落盘时定下来的），不是这一发自己那句；
+        // 早于 title 字段的老会话文件退回它自己的首句，只给附件图的那一发落占位句
+        setConversationTitle(rec.title || (rec.input && rec.input.text) || t("（只给了附件图）"));
         if (empty.parentNode) empty.remove();
         const head = mkEl("div", "neo-agent-session-head");
         const title = mkEl("span", "neo-agent-session-title");
@@ -1075,7 +1098,13 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
         const restart = restartRows(rec);
         if (restart) transcript.appendChild(restart);
         const view = agentTimeline(transcript);
-        (rec.frames || []).forEach((f) => replayFrame(view, f));
+        const frames = rec.frames || [];
+        // 早于 in 帧的会话文件里没有用户自己那一发：从 input 里补一条，读回时不至于只看得见产物
+        if (!frames.some((f) => f && f.kind === "in")
+            && ((rec.input && rec.input.text) || (rec.input && rec.input.images || []).length)) {
+            frames.unshift({ kind: "in", text: (rec.input && rec.input.text) || "", attachments: (rec.input && rec.input.images) || [] });
+        }
+        frames.forEach((f) => replayFrame(view, f));
         restartFrom = 0;
         resumeId = rec.run_id;
         renderResumeBar();
@@ -1089,12 +1118,11 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
         showTranscript();
     }
 
-    // 收回空态：标题行跟着收起并占住第一个子节点，下一条消息一到就换成新的第一句话
+    // 收回空态：栏头标题跟着收回，下一条消息一到就换成新的第一句话
     function resetTranscript() {
         transcript.replaceChildren();
-        transcript.prepend(titleBar);
         transcript.appendChild(empty);
-        setConversationTitle("");   // 标题行收回，舞台页眉跟着回默认
+        setConversationTitle("");   // 栏头回「智能体」，舞台页眉跟着回默认
         resumeId = "";
         retryBar.hidden = true;   // 「＋ 新增会话」与清空历史都收掉失败那一行
         renderResumeBar();
@@ -1138,6 +1166,8 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
                 if (onFrame) onFrame(frame);
                 const kind = frame?.kind || "content";
                 if (kind === "run") { runId = frame.run_id || ""; return; }
+                // 用户这一发的原文与附件在 generate 里已经就地铺过一块卡，流里的这一帧只交舞台
+                if (kind === "in") return;
                 if (kind === "plan") view.plan(frame.text || "");
                 else if (kind === "tool_call") view.toolCall(frame.tool || "?", frame.text || "");
                 else if (kind === "status") view.status(frame.text || "", frame.task_id || "", frame.preview);
@@ -1234,10 +1264,8 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
         // 交回焦点：整段原文留在时间线里可复制，输入框清空后不抢焦点的话，下一句要点一下框才写得到
         input.focus();
 
-        if (titleBar.hidden) {
-            transcript.prepend(titleBar);
-            setConversationTitle(text);
-        }
+        // 栏头标题只认整条对话的第一句话：第二发起就不换它，「＋ 新增会话」收回后才重新钉
+        if (!titlePinned) setConversationTitle(text || t("（只给了附件图）"));
         const planMode = mode;
         const context = ctxOff ? null : (getContext && getContext()) || null;
         // 附件图在这一步就清空了，文本与模式也一样：失败收场要原样重发，就得在这一发交出去之前

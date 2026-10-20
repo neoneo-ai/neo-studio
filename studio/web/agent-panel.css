@@ -84,14 +84,26 @@
     border-bottom: 1px solid var(--neo-vsc-border);
 }
 
+/* 会话标题占这一行的左半：整条对话的第一句话钉在这里（agent-panel.js 的 setConversationTitle），
+   栏头宽度不够时截断，整句在悬停说明里 */
 .neo-agent-head-title {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     font-size: 12px;
     font-weight: 600;
     color: var(--neo-vsc-fg-dim);
 }
 
+.neo-agent-head-titled {
+    color: var(--neo-vsc-fg);
+}
+
 .neo-agent-head-actions {
     display: flex;
+    flex: 0 0 auto;
     gap: 4px;
 }
 
@@ -231,22 +243,6 @@
     flex: 0 0 auto;
     color: var(--neo-vsc-fg-dim);
     font-size: 11px;
-}
-
-/* 会话标题：这一轮的第一句话，钉在时间线顶上随滚动常驻。放在 .neo-agent-transcript 的第一个子节点，
-   时间线就是它的 sticky 滚动容器（见 agent-panel.js 的 titleBar） */
-.neo-agent-titlebar {
-    position: sticky;
-    top: 0;
-    z-index: 3;
-    padding: 4px;
-    background: var(--neo-vsc-bg-alt);
-    border-bottom: 1px solid var(--neo-vsc-border);
-    font-size: 12px;
-    font-weight: 600;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
 }
 
 /* 复制钮：正文选不动时的复制出口（agent-panel.js 的 mkCopyBtn），一轮一枚，钉在最终回答容器之后。

@@ -409,6 +409,12 @@ def _image_refs(raw) -> list:
     return [r for r in refs if r]
 
 
+def _turn_frame(text: str, image_refs) -> dict:
+    """用户这一发自己进时间线并随会话落盘：读回旧会话时看得见自己问过什么、附过哪几张图。
+    续聊那一发记的是它自己那句，整条对话的标题在 title 字段里，跟第一句话走。"""
+    return {"kind": "in", "text": text, "attachments": list(image_refs or [])}
+
+
 def _first_user_text(messages) -> str:
     for msg in messages or []:
         if isinstance(msg, dict) and msg.get("role") == "user":
@@ -1374,6 +1380,10 @@ async def _events(run, text: str, mode: str = "act", images: list | None = None,
     try:
         # 首帧报 run_id：前端的「⏹ 取消」与「选项回答」都要靠它认这次运行
         yield _sse({"kind": "run", "run_id": run.run_id})
+        # 用户这一发自己进时间线并随会话落盘：读回旧会话时看得见自己问过什么、附过哪几张图
+        turn = _turn_frame(text, run.image_refs)
+        run.frames.append(turn)
+        yield _sse(turn)
         try:
             async for frame in _pump(runner):
                 yield _sse(frame)

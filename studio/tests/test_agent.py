@@ -670,8 +670,10 @@ class TestRoutes(unittest.TestCase):
             resp = asyncio.run(agent.agent_run(TestRoutes._req({"text": "橘猫"})))
             lines = _data_lines(resp)     # SSE 是惰性的：替掉的接缝要在收流之前还回去
         self.assertEqual(resp.headers["Content-Type"], "text/event-stream")
-        self.assertEqual(json.loads(lines[1]), {"kind": "plan", "text": "先看状态"})
-        self.assertEqual(json.loads(lines[3])["kind"], "tool_result")
+        # 第二帧就是用户自己那一发：读回旧会话要看得见自己问过什么
+        self.assertEqual(json.loads(lines[1]), {"kind": "in", "text": "橘猫", "attachments": []})
+        self.assertEqual(json.loads(lines[2]), {"kind": "plan", "text": "先看状态"})
+        self.assertEqual(json.loads(lines[4])["kind"], "tool_result")
         self.assertEqual(json.loads(lines[-2])["text"], "服务在线")
         self.assertEqual(lines[-1], "[DONE]")
 
@@ -807,10 +809,10 @@ class TestSessionStore(unittest.TestCase):
         self.assertEqual(rec["run_id"], run_id)
         self.assertEqual(rec["status"], "succeeded")
         self.assertEqual(rec["mode"], "act")
-        self.assertEqual(_kinds(rec["frames"]), ["plan", "tool_call", "tool_result", "content"])
+        self.assertEqual(_kinds(rec["frames"]), ["in", "plan", "tool_call", "tool_result", "content"])
         self.assertEqual(rec["input"]["text"], "橘猫出片")
         self.assertIn("cat_walk · 2 段", rec["input"]["context"])
-        self.assertLessEqual(len(rec["frames"][1]["text"]), agent.ARGS_CLIP + 1)
+        self.assertLessEqual(len(rec["frames"][2]["text"]), agent.ARGS_CLIP + 1)
 
     def test_saved_session_drops_the_preview_frames(self):
         """预览载荷只给界面：base64 帧写进会话文件，一步就能把 SESSION_FILE_MAX 顶满。"""
@@ -1004,6 +1006,16 @@ class TestSessionStore(unittest.TestCase):
         path.write_text(json.dumps(rec, ensure_ascii=False), encoding="utf-8")
         self.assertEqual([s["title"] for s in agent._list_sessions()], ["老会话第一句"])
 
+    def test_the_run_records_its_own_user_turn_in_the_timeline(self):
+        """读回旧会话要看得见自己问过什么：用户那一发作为 in 帧进时间线并随会话落盘，
+        附件只留 input 目录里的名字。"""
+        frame = agent._turn_frame("画一只橘猫在窗台上", ["cat.png", "[粘贴图]"])
+        self.assertEqual(frame, {"kind": "in", "text": "画一只橘猫在窗台上",
+                                 "attachments": ["cat.png", "[粘贴图]"]})
+        run = _fake_run(None, text="画一只橘猫在窗台上", frames=[frame])
+        agent._save_session(run)
+        self.assertEqual(_saved_top()[1]["frames"][0], frame)
+
     def test_overflow_prune_keeps_the_newest(self):
         with mock.patch.object(agent, "MAX_SESSIONS", 3):
             for i in range(5):
@@ -1087,7 +1099,7 @@ class TestSessionStore(unittest.TestCase):
     def test_session_route_reads_the_timeline_back(self):
         _, run_id = self._one_run({"text": "橘猫出片"}, [{"content": "好了"}])
         data = json.loads(asyncio.run(agent.agent_session(self._req({}, {"run_id": run_id}))).text)
-        self.assertEqual(_kinds(data["session"]["frames"]), ["content"])
+        self.assertEqual(_kinds(data["session"]["frames"]), ["in", "content"])
         self.assertEqual([m["role"] for m in data["session"]["messages"]], ["user", "assistant"])
 
     def test_session_route_rejects_bad_and_missing_run_id(self):
