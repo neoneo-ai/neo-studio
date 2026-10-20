@@ -5,9 +5,9 @@
 **「一句话 → 提示词 → 成图 → 成片」**：提示词 AI 增强、生图与参考编辑、MiniMax H3 多段导演，全在一个插件里；
 LLM 可在 ComfyUI 进程内零依赖运行。
 
-[![配方一键发送到工作流](docs/assets/videos/hero-recipes-send-poster.jpg)](https://github.com/neoneo-ai/neo-studio/blob/main/docs/assets/videos/hero-recipes-send.mp4)
+https://github.com/user-attachments/assets/6b69cc54-ab74-4201-9b54-6a3e3ae0f394
 
-▶ [播放 57 秒演示视频（3.9 MB，MP4）](https://github.com/neoneo-ai/neo-studio/blob/main/docs/assets/videos/hero-recipes-send.mp4)
+▶ [播放 57 秒演示](https://github.com/user-attachments/assets/6b69cc54-ab74-4201-9b54-6a3e3ae0f394) · [下载 MP4（3.9 MB）](https://github.com/neoneo-ai/neo-studio/raw/main/docs/assets/videos/hero-recipes-send.mp4)
 
 **安装**：ComfyUI Manager 搜 `Neo Studio` 一键安装（已发布至 ComfyUI Registry），详见 [安装](#安装)。
 
