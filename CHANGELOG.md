@@ -4,6 +4,24 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **A designated skill that has no template now runs its own flow.** The dock's `@` picker only offered the
+  template-backed generation skills (`workflow.json`), so naming one of the body-only skills — the
+  `SKILL.md` + `references/` kind that writes a script, a storyboard or a finished prompt — was impossible, and
+  naming it through MCP `generate_image` produced nothing at all. The picker now offers both kinds
+  (generation skills first, body-only skills after them; `task` skills stay out, they produce no artifact):
+  a template skill keeps going as the `skill_id` of `generate_image` / video, and a body-only skill runs as
+  `generate_prompt(skill_id=…)`, where the server reads the skill body and its `references/` on demand inside
+  that call. The dock fetches the named skill's summary once per run (`/rs_prompts/load_skill`: category,
+  description, template flag, reference-file list) and never sends the skill body into its own context; a skill
+  deleted mid-run falls back to the id-only block. A body-only run gets its own turn cap (20 instead of 12) and
+  its own ask cap (6, one `ask_user` per confirm gate in the skill body) while ordinary runs keep asking once.
+  `list_skills` rows now carry
+  `category` and a 300-character `description` (the only self-introduction a body-only skill has) and `q`
+  matches them, so an external client can find one; `has_workflow` was added to the `load_skill` payload.
+  Covered by `studio/tests/test_agent.py` (`TestNamedSkillRouting`), the `list_skills` case in
+  `studio/tests/test_mcp_server.py` and `studio/tests/js/studio-agent-skill.test.mjs`. Docs in `docs/skills.md`,
+  `docs/mcp.md`, `docs/api-routes.md` and their `docs/en/` mirrors.
+
 ## [1.4.0] - 2026-10-20
 
 - **Switching director recipes is one atomic move.** With the embedded editor holding unsaved changes, clicking a

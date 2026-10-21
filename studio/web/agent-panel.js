@@ -246,6 +246,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
     ctxOffBtn.title = t("✕ 本轮不带界面上下文：点条可再启用");
     ctxOffBtn.onclick = (e) => { e.stopPropagation(); setCtxOn(false); };
     ctxBar.onclick = () => { if (ctxOff) setCtxOn(true); };
+    // 界面状态收在行最右（CSS 里 margin-left:auto 贴右、单行省略），✕ 紧跟它，弱于左侧的点名技能
     ctxBar.append(ctxText, ctxOffBtn);
     let ctxOff = true;
     try { ctxOff = localStorage.getItem(CTX_KEY) !== "1"; } catch { /* 私有上下文里读不到：按默认不交 */ }
@@ -326,11 +327,16 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
     labelSpans(mcpEntry, "🔌 MCP");
     mcpEntry.title = t("MCP 服务设置");
     mcpEntry.onclick = () => onOpenMcp && onOpenMcp();
-    // @ 直接点名技能：候选只收后端那三条生成工具真跑得动的技能——generate_image 与出片三条都要技能
-    // 带 workflow.json（见 image_gen_edit._gen_image_skills / h3_video_gen._gen_video_skills），提示词增强
-    // 与任务类技能在这里选了也出不了东西。选中的技能跨轮保持，随请求体 skill_id 交后端进系统提示词
-    const SKILL_KEY = "neo_studio_agent_skill";
-    let skillId = "", skillName = "";
+    // @ 直接点名技能，两类候选：带 workflow.json 的生成技能（后端三条生成工具要它当 skill_id，见
+    // image_gen_edit._gen_image_skills / h3_video_gen._gen_video_skills），和正文型技能（只有 SKILL.md
+    // 那套流程与 references/，没有模板，点了它本轮走 generate_prompt 跑技能自己的流程，见 agent.py
+    // 的 _skill_block）。task 类不在候选里——那一发要的是配方与在跑的任务，在这里点了没有产出。
+    // 选中的技能只活在当前这一条会话里，随请求体 skill_id 交后端进系统提示词；新增会话、清空对话、
+    // 断开续聊、读回另一条会话都收回它。不写本机：页面重载回到空态就是没有会话，那颗本就不该在
+    const PROMPT_SKILL_CATEGORIES = ["image_enhance", "video_enhance", "custom", "vision"];
+    const isGenSkill = (s) => (s.gen_image || s.gen_video) && s.has_workflow;
+    const isPromptSkill = (s) => !s.has_workflow && PROMPT_SKILL_CATEGORIES.includes(s.category);
+    let skillId = "", skillName = "", skillKind = ""; // "gen" | "video" | "prompt"
     const skillChip = mkEl("span", "neo-agent-skill");
     const skillChipName = mkEl("span", "neo-agent-skill-name");
     const skillChipDel = mkEl("button", "neo-agent-skill-del");
@@ -338,34 +344,63 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
     skillChipDel.textContent = "✕";
     skillChipDel.title = t("取消点名技能");
     skillChipDel.onclick = () => setSkill("", "");
-    // 整颗都是取消入口：窄栏里收得只剩图标时，图标就是那颗的 ✕
-    skillChip.onclick = () => setSkill("", "");
+    // 整颗都是取消入口：窄栏里收得只剩图标时，图标就是那颗的 ✕；阻止冒泡，别误触上下文条的启用
+    skillChip.onclick = (e) => { e.stopPropagation(); setSkill("", ""); };
     skillChip.append(skillChipName, skillChipDel);
     skillChip.hidden = true;
-    function setSkill(id, name) {
+    // 点名技能 chip 落在上下文条最左侧；界面状态文本收在最右侧、弱化；悬停 chip 时把完整说明浮出来
+    ctxBar.prepend(skillChip);
+    const skillFloat = mkEl("div", "neo-agent-skill-float");
+    skillFloat.hidden = true;
+    document.body.appendChild(skillFloat);
+    function skillKindLabel() {
+        if (skillKind === "video") return t("出片");
+        if (skillKind === "gen") return t("生图");
+        return t("文案 / 分镜");
+    }
+    function renderSkillFloat() {
+        if (!skillId) { skillFloat.hidden = true; return; }
+        let kindLine = "";
+        if (skillKind === "video") kindLine = t("出片技能：本轮当 skill_id 交给出片工具，产出视频");
+        else if (skillKind === "gen") kindLine = t("生成技能：本轮当 skill_id 交给生图工具，产出图片");
+        else if (skillKind === "prompt") kindLine = t("正文型技能：本轮走 generate_prompt，正文与 references/ 由服务端按需读取");
+        const name = mkEl("div", "neo-agent-skill-float-name");
+        name.textContent = skillName || skillId;
+        const line = mkEl("div", "neo-agent-skill-float-line");
+        line.textContent = kindLine;
+        skillFloat.replaceChildren(name, line);
+        const rect = skillChip.getBoundingClientRect();
+        skillFloat.style.left = rect.left + "px";
+        skillFloat.style.top = (rect.bottom + 7) + "px";
+    }
+    skillChip.addEventListener("mouseenter", () => { renderSkillFloat(); skillFloat.hidden = false; });
+    skillChip.addEventListener("mouseleave", () => { skillFloat.hidden = true; });
+    function setSkill(id, name, kindCode) {
         skillId = id;
         skillName = id ? (name || id) : "";
+        skillKind = kindCode || "";
         skillChip.hidden = !skillId;
         skillChipName.textContent = "🧩 " + (skillName || skillId);
-        skillChip.title = tf("本轮点名技能：{skill}；生成默认用它，点 ✕ 取消", { skill: skillName || skillId });
-        try {
-            if (skillId) localStorage.setItem(SKILL_KEY, JSON.stringify({ id: skillId, name: skillName }));
-            else localStorage.removeItem(SKILL_KEY);
-        } catch { /* 配额写不进：本轮记住就够 */ }
+        skillChip.title = skillKind === "prompt"
+            ? tf("本会话点名技能：{skill}（{kind}）；每一轮按它的流程走，点 ✕ 取消", { skill: skillName || skillId, kind: skillKindLabel() })
+            : skillKind
+            ? tf("本会话点名技能：{skill}（{kind}）；点 ✕ 取消", { skill: skillName || skillId, kind: skillKindLabel() })
+            : tf("本会话点名技能：{skill}；点 ✕ 取消", { skill: skillName || skillId });
+        renderSkillFloat();
     }
-    try {
-        const saved = JSON.parse(localStorage.getItem(SKILL_KEY) || "null");
-        if (saved && saved.id) setSkill(String(saved.id), String(saved.name || saved.id));
-    } catch { /* 存过的值不是 JSON：当没点过 */ }
     const openSkillPicker = createSlashSkillPicker({
         quickInput: input,
         triggerChar: "@",
         prefix: "neo-agent-picker",
-        commit: (s) => setSkill(String(s.id), String(s.cn_name || s.name || s.id || "")),
-        filter: (s) => (s.gen_image || s.gen_video) && s.has_workflow && s.available !== false,
-        rowText: (s) => (s.gen_video ? "🎬 " : "🖼️ ") + skillDisplayName(s),
-        categoryLabel: (s) => (s.gen_video ? t("出片") : t("生图")),
-        sort: (a, b) => (Number(!!a.gen_video) - Number(!!b.gen_video))
+        commit: (s) => {
+            const kind = s.gen_video ? "video" : isGenSkill(s) ? "gen" : "prompt";
+            setSkill(String(s.id), String(s.cn_name || s.name || s.id || ""), kind);
+        },
+        filter: (s) => (isGenSkill(s) || isPromptSkill(s)) && s.available !== false,
+        rowText: (s) => (s.gen_video ? "🎬 " : isGenSkill(s) ? "🖼️ " : "🧩 ") + skillDisplayName(s),
+        categoryLabel: (s) => (s.gen_video ? t("出片") : isGenSkill(s) ? t("生图") : t("文案 / 分镜")),
+        sort: (a, b) => (Number(!isGenSkill(a)) - Number(!isGenSkill(b)))
+            || (Number(!!a.gen_video) - Number(!!b.gen_video))
             || String(a.cn_name || a.name || a.id).localeCompare(String(b.cn_name || b.name || b.id)),
         // 技能目录是生成侧的接口：桌面端离线服务不打包提示词预设，这一发回 409 时交回空表，
         // 弹层里只剩那一句无匹配，铺不出假候选（能力表见 app/studio_caps.py）
@@ -379,7 +414,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
     run.type = "button";
     labelSpans(run, t("✨ 生成"));
     run.title = t("✨ 生成");
-    toolbar.append(attach, fileInput, mcpEntry, skillChip, modes, run);
+    toolbar.append(attach, fileInput, mcpEntry, modes, run);
     // 输入卡：上下文条 / 取消行 / 文本框 / 附件缩略图 / 底栏收进同一块圆角 field，整排控件落在同一个坑里。
     // 附件缩略图铺在文本框下面（同 Cline 口径：图落在正文下面，不进卡顶挤走上下文条）
     const field = mkEl("div", "neo-agent-field");
@@ -865,11 +900,12 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
     let lastTurn = null;   // 上一发的原文、模式与附件图：失败收场那一行靠它原样重发
 
     // 「接上次会话」条铺在文本框上方，与「⏹ 取消」同一位置口径：打开过一条旧会话才出现，
-    // 点一下断开。下一次「✨ 生成」带着 resume 打后端，旧对话原文接在系统提示词之后
+    // 点一下断开。下一次「✨ 生成」带着 resume 打后端，旧对话原文接在系统提示词之后。
+    // 断开就是离开这条会话：它点名的技能跟着收回，下一条消息开一条干净的会话
     const resumeBar = mkEl("button", "neo-agent-resumebar");
     resumeBar.type = "button";
     resumeBar.hidden = true;
-    resumeBar.onclick = () => { resumeId = ""; restartFrom = 0; renderResumeBar(); };
+    resumeBar.onclick = () => { resumeId = ""; restartFrom = 0; setSkill("", ""); renderResumeBar(); };
     field.insertBefore(resumeBar, cancelBar);
 
     // 失败收场那一行：输入框在提交这一步就清空了，LLM 502 这类一次性失败要用户把整段提示词重打
@@ -1107,6 +1143,8 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
         frames.forEach((f) => replayFrame(view, f));
         restartFrom = 0;
         resumeId = rec.run_id;
+        // 换了一条会话就换了一整套点名：上一条会话点的那个技能不属于这一条，那颗收回
+        setSkill("", "");
         renderResumeBar();
         transcript.scrollTop = transcript.scrollHeight;
     }
@@ -1124,6 +1162,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
         transcript.appendChild(empty);
         setConversationTitle("");   // 栏头回「智能体」，舞台页眉跟着回默认
         resumeId = "";
+        setSkill("", "");   // 收回空态就是没有会话：上一条会话点名的技能跟着消失
         retryBar.hidden = true;   // 「＋ 新增会话」与清空历史都收掉失败那一行
         renderResumeBar();
         renderRecent();

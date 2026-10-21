@@ -25,6 +25,10 @@ MAX_TEXT = 12000          # 单次工具返回文本上限，超出截断
 MAX_B64_IMAGES = 4        # 单次返回 base64 图片张数上限
 MAX_B64_BYTES = 1_500_000  # base64 回传的单张图字节上限（超出只给 url）
 MAX_IMAGES = 8            # 单次返回的产物图条目上限（与 image_gen 的批量上限一致）
+# list_skills 行里的 description 上限：正文型技能（Agent Skills 那类）没有模板可看，
+# frontmatter 的 description 就是它唯一的自我介绍（"Use when ... / Not for ..."），整份技能表
+# 逐行带它进上下文，全表长度就压到这一档
+SKILL_DESC_CLIP = 300
 SSE_TIMEOUT = 600         # LLM 流式端点读超时（整段提示词生成可能很慢）
 STORYBOARD_POLL_SEC = 2.0
 STORYBOARD_WAIT_SEC = 900.0   # 分镜逐段串行跑图：每段数十秒起，超时就回 task_id 让智能体用 task_status 续查
@@ -258,8 +262,9 @@ def tool_neo_status(ctx, args):
 
 def tool_list_skills(ctx, args):
     """技能清单（id 就是 generate_image 的 skill_id）；默认只列生图 / 生视频技能，all=true 列全部。
-    q 连 mode 的值一起匹配：q=t2i 列出 mode=t2i 与 t2i_edit，q=edit 列出 mode=edit 与 t2i_edit——
-    只匹配 id / 名称时，q=t2i_edit 这类按模式搜的词谁都命中不了，调用方就会沿用到手的第一批编辑技能。"""
+    q 连 mode 的值与 description 一起匹配：q=t2i 列出 mode=t2i 与 t2i_edit，q=edit 列出 mode=edit 与
+    t2i_edit——只匹配 id / 名称时，q=t2i_edit 这类按模式搜的词谁都命中不了，调用方就会沿用到手的第一批
+    编辑技能。description 是正文型技能唯一的自我介绍（它没有模板可看），也是 all=true 时挑技能的唯一依据。"""
     q = str(args.get("q") or "").strip().lower()
     want_all = bool(args.get("all"))
     rows = []
@@ -267,10 +272,13 @@ def tool_list_skills(ctx, args):
         row = {"id": s.get("id"), "name": s.get("name"), "cn_name": s.get("cn_name"),
                "has_workflow": bool(s.get("has_workflow")), "gen_image": bool(s.get("gen_image")),
                "gen_video": bool(s.get("gen_video")), "mode": str(s.get("mode") or ""),
-               "requires_ref": bool(s.get("requires_ref"))}
+               "requires_ref": bool(s.get("requires_ref")),
+               "category": str(s.get("category") or ""),
+               "description": str(s.get("description") or "").strip()[:SKILL_DESC_CLIP]}
         if not want_all and not (row["gen_image"] or row["gen_video"]):
             continue
-        if q and q not in " ".join(str(row[k] or "") for k in ("id", "name", "cn_name", "mode")).lower():
+        if q and q not in " ".join(str(row[k] or "") for k in
+                                   ("id", "name", "cn_name", "mode", "category", "description")).lower():
             continue
         rows.append(row)
     return dump({"count": len(rows), "skills": rows}, None)
@@ -863,10 +871,10 @@ SEGMENT = s("integer", "段序号，1 起（第 1 段 = 时间轴第一段）")
 
 TOOLS = [
     tool("neo_status", "Neo Studio / ComfyUI 版本、队列长度、导演配方数；先调它确认服务在线", {}),
-    tool("list_skills", "列出技能（id 即 generate_image 的 skill_id）；默认只列生图 / 生视频技能，all=true 列全部，q 按 id / 名称 / 中文名 / mode 子串过滤（q=t2i 列 mode=t2i 与 t2i_edit，q=edit 列 mode=edit 与 t2i_edit）；本轮没有 references 就是纯文生图，要选 mode=t2i / t2i_edit（无 mode 时 requires_ref=false）的技能，mode=edit 的纯编辑技能没有参考图跑不出编辑结果；带参考图出图要选 mode=edit / t2i_edit 的技能（没有 mode 声明时看 requires_ref=true），mode=t2i 的纯文生图技能会把参考图直接丢掉；技能 id 与中文名里的家族词（krea2 / qwen）就是它模板的主模型家族，挂 LoRA 时要在同一家族里选",
+    tool("list_skills", "列出技能（id 即 generate_image 的 skill_id）；默认只列生图 / 生视频技能，all=true 列全部，q 按 id / 名称 / 中文名 / mode 子串过滤（q=t2i 列 mode=t2i 与 t2i_edit，q=edit 列 mode=edit 与 t2i_edit）；本轮没有 references 就是纯文生图，要选 mode=t2i / t2i_edit（无 mode 时 requires_ref=false）的技能，mode=edit 的纯编辑技能没有参考图跑不出编辑结果；带参考图出图要选 mode=edit / t2i_edit 的技能（没有 mode 声明时看 requires_ref=true），mode=t2i 的纯文生图技能会把参考图直接丢掉；技能 id 与中文名里的家族词（krea2 / qwen）就是它模板的主模型家族，挂 LoRA 时要在同一家族里选；has_workflow=false 的技能没有出图模板，不能当 generate_image 的 skill_id，行里的 description 写的就是它自己那套流程，要跑它就拿它调 generate_prompt",
          {"all": s("boolean", "true 时连任务类技能一起列（较长）"),
-          "q": s("string", "按 id / 名称 / 中文名 / mode 子串过滤")}),
-    tool("generate_prompt", "把简短想法扩写成成品提示词（LLM 同步返回文本）",
+          "q": s("string", "按 id / 名称 / 中文名 / mode / category / description 子串过滤")}),
+    tool("generate_prompt", "把简短想法扩写成成品提示词（LLM 同步返回文本）；带 skill_id 时该技能的正文就是服务端这一趟的系统提示词，正文写的流程（连它自己的 references 由服务端按需读取）在服务端跑完，返回的就是它产出的成品文本；list_skills 里 has_workflow=false 的正文型技能就靠这一条工具跑",
          {"text": s("string", "简短想法或草稿提示词"),
           "skill_id": s("string", "可选：按该技能的模板上下文扩写")}, ("text",),
          {"text": "一只在窗台打盹的橘猫，暖色阳光，写实"}),

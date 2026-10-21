@@ -27,7 +27,6 @@ const SKILLS = [
 function mountStudio() {
     resetEnv();
     localStorage.removeItem("neo_studio_agent_ctx_on");   // 这条开关跨用例串味：每条用例从默认不带你开始
-    localStorage.removeItem("neo_studio_agent_skill");    // @ 点名的技能是本机持久态，同上复位
     document.body.innerHTML = studioBody;
     mockRoute("/neo_studio/version", jsonResponse({
         success: true, plugin_version: "9.9.9", comfyui_version: "0.1", recipes: [],
@@ -654,6 +653,9 @@ test("输入区：一块深底输入卡收整排控件，上下文条只读、�
     const resumeBar = dock().querySelector(".neo-agent-resumebar");
     assert.equal(field, composer.lastElementChild, "输入区里只该有一块输入卡");
     assert.equal(field.children[0], ctxBar(), "卡顶上应是只读上下文条");
+    assert.deepEqual([...ctxBar().children].map((el) => el.className),
+        ["neo-agent-skill", "neo-agent-ctx-text", "neo-agent-ctx-off-btn"],
+        "点名那颗排在这行最左，界面状态与它的 ✕ 收在右侧：界面状态优先级低于技能");
     assert.equal(field.children[1], resumeBar, "续聊条铺在取消行上面");
     assert.equal(field.children[2], cancelBar(), "取消行应铺在文本框上面");
     const retryBar = dock().querySelector(".neo-agent-retrybar");
@@ -712,6 +714,12 @@ test("窄栏底栏的 CSS：composer 是容器、输入卡深底、焦点框只�
         "清除后整颗必须消失：[hidden] 要压过 chip 自己的 inline-flex");
     assert.match(cssText, /@container \(max-width: 334px\)\s*\{[\s\S]*?\.neo-agent-skill-name,\s*\.neo-agent-skill-del\s*\{\s*display:\s*none/,
         "窄栏里收得只剩图标：图标加 ✕ 并排就是一只没名字的按钮");
+    assert.match(cssText, /\.neo-agent-skill\s*\{[^}]*flex:\s*0 0 auto/,
+        "点名那颗不许收缩：栏子一窄先没的该是右侧界面状态，技能被挤没就是优先级排反了");
+    assert.match(cssText, /\.neo-agent-ctx-text\s*\{[^}]*flex:\s*0 1 auto;[^}]*margin-left:\s*auto;[^}]*text-overflow:\s*ellipsis;[^}]*white-space:\s*nowrap/,
+        "界面状态只吃自己那点内容宽度、贴右、单行省略：flex:1 会把它铺满整行，压过点名的技能");
+    assert.ok(!/\.neo-agent-ctx\s*\{[^}]*background:\s*var\(--neo-vsc-bg-alt\)/.test(cssText),
+        "上下文条这一行不铺实底：一层实底就是一只横条，比它要报的状态本身显眼");
     assert.match(cssText, /\.neo-agent-picker\s*\{[^}]*var\(--ns-panel/,
         "技能弹层挂 body 上，颜色吃 :root 的 --ns-*：吃 .neo-agent 的局部变量就是一路回落值");
 });
@@ -1453,12 +1461,13 @@ test("复制键在 capture 相位摘走，宿主注入的吞键 handler 接不�
 const pickerRows = () => [...document.querySelectorAll(".neo-agent-picker-row")];
 const skillChip = () => dock().querySelector(".neo-agent-skill");
 
-test("输入 @ 只列后端跑得动的生图与出片技能，选中随请求体交后端并留在底栏", async () => {
+test("输入 @ 列出生成技能与正文型技能：生成在前、文案在后，选中随请求体交后端并留在上下文条", async () => {
     mountStudio();
     mockRoute("/rs_prompts/skills", jsonResponse([
         ...SKILLS,
         { id: "sk_film", name: "h3_film", cn_name: "H3 出片", gen_video: true, has_workflow: true, tags: [] },
         { id: "sk_nowf", name: "no_workflow", cn_name: "没有工作流", gen_image: true, tags: [] },
+        { id: "sk_task", name: "task", cn_name: "任务技能", category: "task", tags: [] },
         { id: "sk_unavail", name: "unavail", cn_name: "缺插件的出片", gen_video: true, has_workflow: true, available: false, tags: [] },
     ]));
     await openStudio("#/gallery");
@@ -1468,44 +1477,140 @@ test("输入 @ 只列后端跑得动的生图与出片技能，选中随请求�
     inputText(input, "@");
     await sleep(20);   // 候选要过一次 fetch：微任务冲刷追不上这条链
     assert.deepEqual(pickerRows().map((r) => r.querySelector(".neo-agent-picker-name").textContent),
-        ["🖼️ Krea2 出图", "🎬 H3 出片"],
-        "只列带 workflow 的生图与出片技能，生图在前——没有工作流的技能后端三条生成工具都跑不动");
+        ["🖼️ Krea2 出图", "🎬 H3 出片", "🧩 柴犬技能", "🧩 橘猫技能"],
+        "带 workflow 的生成技能在前，正文型技能（没有 workflow.json 的提示词 / 文案技能）排在后面——"
+        + "没有工作流的生图技能三条生成工具都跑不动，task 类点了没有产出");
     assert.deepEqual(pickerRows().map((r) => r.querySelector(".neo-agent-picker-meta").textContent),
-        ["生图", "出片"], "行右侧标出这一发是哪一类");
+        ["生图", "出片", "文案 / 分镜", "文案 / 分镜"], "行右侧标出这一发是哪一类");
 
     keydown(input, "Enter");
     await flush(5);
     assert.equal(pickerRows().length, 0, "提交后弹层要收掉");
     assert.equal(input.value, "", "选中之后 @ 与 query 那一段要从正文里吃掉");
     assert.ok(!skillChip().hidden && skillChip().textContent.includes("Krea2 出图"),
-        `点名的技能要留在底栏那一颗上：${skillChip().textContent}`);
+        `点名的技能要留在上下文条那一颗上：${skillChip().textContent}`);
 
     inputText(input, "一只橘猫");
     click(runBtn());
     await sleep(20); await flush(40);   // 整条 SSE 要过宏任务：冲刷不够的话下一条用例点第二发时还在「跑着」
     assert.equal(agentCalls()[0].body.skill_id, "sk_gen", "请求体带点名技能");
+    assert.equal(localStorage.getItem("neo_studio_agent_skill"), null,
+        "点名的技能不落本机：会话一没它就该没，不该在机器上留一份粘到下一条会话");
 
     click(skillChip().querySelector(".neo-agent-skill-del"));
     await flush(2);
     assert.ok(skillChip().hidden, "✕ 点完那颗收回");
-    assert.equal(localStorage.getItem("neo_studio_agent_skill"), null, "取消后本机不该再存着");
     inputText(input, "再来一张");
     click(runBtn());
     await sleep(20); await flush(40);
     assert.equal(agentCalls()[1].body.skill_id, undefined, "取消之后不该再发这个字段");
 });
 
-test("@ 点名的技能跨重载沿用", async () => {
+test("@ 选中正文型技能：请求体带它的 id，那颗上写的是按它的流程走，不是「生成默认用它」", async () => {
     mountStudio();
+    mockRoute("/rs_prompts/skills", jsonResponse(SKILLS));
+    await openStudio("#/gallery");
+    mockAgentStream([{ kind: "content", text: "脚本交回来了" }]);
+
+    const input = dock().querySelector(".neo-agent-input");
+    inputText(input, "@");
+    await sleep(20);   // 弹层在 @ 那一下开，之后随输入过滤
+    inputText(input, "@dog");
+    await flush(5);
+    assert.deepEqual(pickerRows().map((r) => r.querySelector(".neo-agent-picker-name").textContent),
+        ["🧩 柴犬技能"], "没有 workflow.json 的提示词技能要在 @ 的候选里");
+    keydown(input, "Enter");
+    await flush(5);
+    assert.ok(!skillChip().hidden && skillChip().textContent.includes("柴犬技能"),
+        `点名的正文型技能要留在上下文条那一颗上：${skillChip().textContent}`);
+    assert.ok(skillChip().title.includes("本会话点名技能") && skillChip().title.includes("每一轮按它的流程走"),
+        `这一颗要说的是本会话点名、每一轮按它的流程走：${skillChip().title}`);
+
+    inputText(input, "写一段动画短片的脚本");
+    click(runBtn());
+    await sleep(20); await flush(40);
+    assert.equal(agentCalls()[0].body.skill_id, "sk_dog", "正文型技能的 id 要照原样交后端");
+});
+
+test("@ 点名的技能不跨重载：重载回到空态时那颗收回，请求体不带 skill_id", async () => {
+    mountStudio();
+    // 早先那一版把它写进本机、建页时粘回上下文条；会话没了那颗就不该再出现
     localStorage.setItem("neo_studio_agent_skill", JSON.stringify({ id: "sk_film", name: "H3 出片" }));
-    await openStudio("#/gallery");   // 建页时读回来的那一份才落进那一颗
-    assert.ok(!skillChip().hidden && skillChip().textContent.includes("H3 出片"),
-        `重载后沿用点名的那一个：${skillChip().textContent}`);
+    await openStudio("#/gallery");
+    assert.ok(skillChip().hidden, "开局没有会话：不该把机器上存过的那一份粘回来");
     mockAgentStream([{ kind: "content", text: "已出片" }]);
     inputText(dock().querySelector(".neo-agent-input"), "走一段");
     click(runBtn());
     await flush(40);
-    assert.equal(agentCalls()[0].body.skill_id, "sk_film", "恢复出来的那一个照发");
+    assert.equal(agentCalls()[0].body.skill_id, undefined, "机器上存过的技能不该再交后端");
+});
+
+test("新增会话收回上一条会话点名的技能：新开的这一条不带 skill_id", async () => {
+    mountStudio();
+    mockRoute("/neo_agent/sessions", jsonResponse({ success: true, sessions: RECENT_SESSIONS.slice(0, 2) }));
+    await openStudio("#/gallery");
+    mockAgentStream([{ kind: "content", text: "已出图" }]);
+    const input = dock().querySelector(".neo-agent-input");
+    inputText(input, "@");
+    await sleep(20);
+    keydown(input, "Enter");
+    await flush(5);
+    assert.ok(!skillChip().hidden, "开局点名的技能应落在上下文条上");
+    inputText(input, "一只橘猫");
+    click(runBtn());
+    await sleep(20); await flush(40);
+    assert.equal(agentCalls()[0].body.skill_id, "sk_gen", "这条会话的第一发带着点名的技能");
+
+    click(dock().querySelector('.neo-agent-head-btn[title="新增会话"]'));
+    await until(() => skillChip().hidden, "新增会话应把上一条会话点名的技能收回");
+    inputText(input, "再来一张");
+    click(runBtn());
+    await sleep(20); await flush(40);
+    assert.equal(agentCalls()[1].body.skill_id, undefined, "新开的会话不该接着用上一条会话的技能");
+});
+
+test("读回另一条会话与断开续聊都收回点名技能：那条会话归那条会话", async () => {
+    mountStudio();
+    mockRoute("/neo_agent/sessions", jsonResponse({ success: true, sessions: RECENT_SESSIONS.slice(0, 2) }));
+    mockRoute("/neo_agent/session", jsonResponse({
+        success: true,
+        session: {
+            run_id: "r0", created: 1000, mode: "act", status: "succeeded", text: "第 0 次",
+            frames: [{ kind: "run", run_id: "r0" }, { kind: "content", text: "上一轮的回答" }],
+        },
+    }));
+    await openStudio("#/gallery");
+    const input = dock().querySelector(".neo-agent-input");
+    inputText(input, "@");
+    await sleep(20);
+    keydown(input, "Enter");
+    await flush(5);
+    assert.ok(!skillChip().hidden, "开局点名的技能应落在上下文条上");
+
+    click(recentRows()[0]);
+    await until(() => finalRow(), "点最近行应把那条会话铺回右栏");
+    assert.ok(skillChip().hidden, "上一条会话点的那个不属于这一条：那颗收回");
+    mockAgentStream([{ kind: "content", text: "接上了" }]);
+    inputText(input, "接着改一句");
+    click(runBtn());
+    await sleep(20); await flush(40);
+    assert.equal(agentCalls()[0].body.skill_id, undefined, "续聊这一发不带上一条会话的技能");
+    assert.equal(agentCalls()[0].body.resume, "r0", "续聊带的应是这一条会话的 run_id");
+
+    // 这条会话里再点一个，断开续聊就是离开它：那颗跟着收回，下一条开一条干净的会话
+    inputText(input, "@");
+    await sleep(20);
+    keydown(input, "Enter");
+    await flush(5);
+    assert.ok(!skillChip().hidden, "这条会话里点的技能应落在上下文条上");
+    click(dock().querySelector(".neo-agent-resumebar"));
+    await flush(2);
+    assert.ok(skillChip().hidden, "断开续聊就是离开这条会话：它点名的技能跟着收回");
+    inputText(input, "开一条新的");
+    click(runBtn());
+    await sleep(20); await flush(40);
+    assert.equal(agentCalls()[1].body.skill_id, undefined, "断开之后新开的会话不带技能");
+    assert.equal(agentCalls()[1].body.resume, undefined, "断开之后不带 resume");
 });
 
 test("技能目录回 409：@ 的弹层只给那一句无匹配，请求里没有 skill_id", async () => {

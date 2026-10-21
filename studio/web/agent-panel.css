@@ -558,26 +558,32 @@
     outline: none;
 }
 
-/* 上下文条：宿主交来的界面当前状态，右栏只画不解释；条上的 ✕ 只决定本轮请求带不带这份状态。
-   卡里它是一颗实心 chip（吃 --neo-vsc-bg-alt 实底，比卡底 #17171b 亮一档），不再画虚线框——
-   输入区里的框线归整卡那一条 */
+/* 上下文条这一行：宿主交来的界面当前状态，右栏只画不解释；条上的 ✕ 只决定本轮请求带不带这份状态。
+   这一行的优先级低于左边的点名技能那颗：行本身透明无底（铺一层实底就是一只横条，比状态本身显眼），
+   界面状态只吃自己那点内容宽度、贴最右，栏子收窄时它最先被挤掉 */
 .neo-agent-ctx {
     display: flex;
     align-items: center;
     gap: 4px;
-    padding: 3px 6px;
-    background: var(--neo-vsc-bg-alt);
+    min-width: 0;
+    padding: 0 2px;
+    background: none;
     border: 0;
-    border-radius: 4px;
     font-size: 11px;
     color: var(--neo-vsc-fg);
-    white-space: pre-wrap;
-    word-break: break-word;
 }
 
+/* 界面当前状态：行里优先级最低的一颗——不撑开、贴右、单行省略，挤不下先没的是它，
+   不是左边的点名技能 */
 .neo-agent-ctx-text {
-    flex: 1;
+    flex: 0 1 auto;
     min-width: 0;
+    margin-left: auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--neo-vsc-fg-dim);
+    font-size: 10px;
 }
 
 .neo-agent-ctx-off-btn {
@@ -730,12 +736,13 @@
     }
 }
 
-/* @ 点名技能后落在底栏的那一颗：无底无框的一行浅蓝字——带底就是一只按钮，
-   和「Add image / MCP / Plan」那排扁平文字钮顶在一起，清除完看着还剩一颗。
-   名字可能长，超出就截断，完整名字在悬停说明里；整颗点一下即取消点名 */
+/* @ 点名技能后落在上下文条那一颗：无底无框的一行浅蓝字——带底就是一只按钮，
+   和上下文条顶在一行，清除完看着还剩一颗。名字可能长，超出就截断，完整名字
+   在悬停说明里；悬停还会浮出本轮走哪条流程，整颗点一下即取消点名 */
 .neo-agent-skill {
     display: inline-flex;
     align-items: center;
+    flex: 0 0 auto;
     gap: 2px;
     max-width: 132px;
     padding: 0;
@@ -771,6 +778,36 @@
 
 .neo-agent-skill-del:hover {
     color: var(--neo-vsc-fg);
+}
+
+/* 技能 chip 悬停浮出的详情：固定定位贴着 chip 下方，不挤占上下文条那一行，
+   只告诉用户这颗本轮走哪条流程；无阴影，吃右栏的同一套边框与底色 */
+.neo-agent-skill-float {
+    position: fixed;
+    z-index: 60;
+    padding: 6px 8px;
+    background: var(--neo-vsc-bg-alt);
+    border: 1px solid var(--neo-vsc-border-soft);
+    border-radius: 6px;
+    color: var(--neo-vsc-fg);
+    font-size: 11.5px;
+    line-height: 1.4;
+    white-space: normal;
+    word-break: break-word;
+    min-width: 150px;
+    max-width: 260px;
+}
+.neo-agent-skill-float[hidden] {
+    display: none;
+}
+.neo-agent-skill-float-name {
+    font-weight: 600;
+    color: var(--neo-vsc-accent);
+    margin-bottom: 2px;
+}
+.neo-agent-skill-float-line {
+    color: var(--neo-vsc-fg-dim);
+    font-size: 11px;
 }
 
 /* 附件图 chips：空容器不占行，缩略图带一个移除键 */

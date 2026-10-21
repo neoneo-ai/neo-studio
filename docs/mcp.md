@@ -87,9 +87,9 @@ id 就能跑通。
 | 工具 | 说明 |
 |------|------|
 | `neo_status` | 版本 / 队列 / 导演配方数，先调它确认服务在线 |
-| `list_skills` | 生图技能 id（含 `mode` / `requires_ref`，判参考图就看这两项；`q` 连 `mode` 的值一起匹配，`q=t2i` 列出 `mode=t2i` 与 `t2i_edit`） |
+| `list_skills` | 技能 id（含 `mode` / `requires_ref`，判参考图就看这两项；`has_workflow=false` 的技能没有出图模板，只能当 `generate_prompt` 的 `skill_id`；行里带 `category` 与 `description`（截到 300 字符），`q` 连 `mode` / `category` / `description` 一起匹配，`q=t2i` 列出 `mode=t2i` 与 `t2i_edit`） |
 | `list_models` | 生图 / 出片扫到的模型与 LoRA：`q` 按 目录/文件名 过滤，`group` 只看一组，`scope=video` 走 H3 扫描，`near=<主模型名>` 把同目录条目排最前（每项带 `dir`），`group=diffusion_models` 的每一项带 `skills`（家族对得上的技能 id，空 = 词表认不出这一家），另带回 `suggested_*` 自动挑选值 |
-| `generate_prompt` | 简短想法 → 成品提示词（走 LLM，需已配置模型） |
+| `generate_prompt` | 简短想法 → 成品提示词（走 LLM，需已配置模型）；带 `skill_id` 时该技能正文就是服务端这一趟的系统提示词，正文写的流程（连它的 `references/` 由服务端按需读取）在这一趟跑完，返回的就是它产出的成品文本——`has_workflow=false` 的正文型技能就靠这条工具跑 |
 | `generate_image` | 提交生图，立即返回 `task_id` 与 `skill_id`（这一发用的技能）；`model` / `loras` 是这一次的覆盖，技能里的自定参数不动 |
 | `task_status` `list_tasks` `cancel_task` | 任务快照 / 列表 / 取消（五套任务表共用 `task_id`：生图 / 整片 / 单段 / 拼接 / 图片分镜）；生图快照与列表行带 `skill_id` |
 | `get_media` | 取产物文件：图片（png）与视频（mp4）都给 `/view` 地址；图片可 `base64=true` 回字节，视频与音频只给 URL |
@@ -172,7 +172,8 @@ director_plan(mode=plan, idea|script, segment_seconds[, characters])    → 分�
 - **出片默认口径是一段 5 秒**：智能体出片默认只规划一段、5 秒、VDN 技能（`minimax_h3_vdn_*`，技能
   config 里 8 步）走 `segment_run`；多段整片要用户点名才跑。`director_plan` 的 `segment_seconds` 缺省 5，
   非 VDN 的 `minimax_h3_*` 是 20 步、慢一倍。
-- **生图技能必须带模板**：`generate_image` 的 `skill_id` 必须是 `list_skills` 里 `has_workflow=true` 的技能。
+- **生图技能必须带模板**：`generate_image` 的 `skill_id` 必须是 `list_skills` 里 `has_workflow=true` 的技能；
+  `has_workflow=false` 的正文型技能没有模板，当 `skill_id` 出不了东西，要跑它就把它交给 `generate_prompt`。
   没有这种技能时先在前端技能管理里保存一个工作流模板；MCP 层不会替你挑，空 `skill_id` 在发出请求之前就报错。
 - **`skill_id` 是这一发用过的技能**：`generate_image` 的响应、`list_tasks` 的每行与生图的 `task_status` 快照都带它。
   右栏智能体把这份事实记进会话的焦点链、逐轮注入系统提示词，续聊时接上；外部 MCP 客户端要在自己一侧留着它——

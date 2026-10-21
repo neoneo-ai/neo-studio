@@ -189,8 +189,11 @@ Neo Studio 独立页面（`web/studio/index.html`）的后端。素材 / 生图 
 | POST | `/neo_agent/session/delete` | 删一条会话：body `{run_id}`（校验同上），只删那一个文件，没有 404 |
 | POST | `/neo_agent/session/delete_all` | 「清空对话」连着清历史：只删会话目录里按名字认出来的文件，目录与别的文件不碰 |
 
-- 一轮对话全程由 LLM 规划并调工具，轮次上限 12；右栏没有技能选择器，用哪个技能由 LLM 自己查
-  `list_skills` 定，`context` 就是它判断「围绕哪个配方、哪种绘画模式干活」的唯一依据。
+- 一轮对话全程由 LLM 规划并调工具，轮次上限按本轮点名的技能给：默认 12，`@` 点名没有模板的正文型技能
+  那一轮放宽到 20；右栏的 `@` 能点名技能（带 `workflow.json` 的直接当 `skill_id`，正文型的走
+  `generate_prompt`），没点名时由 LLM 自己查 `list_skills` 定，`context` 就是它判断「围绕哪个配方、
+  哪种绘画模式干活」的唯一依据。一次运行只取一次点名技能的摘要（`/rs_prompts/load_skill`：类别 /
+  `description` / 有无模板 / 引用文件清单），技能正文不进右栏的上下文，取不到时（技能被删）交回只报 id 的那一份。
 - `context` 只当事实进系统提示词，不当指令：`page` 只认 `gallery` / `director` / `paint` / `skills` /
   `settings`，`paint_mode` 只在 `page=paint` 时生效且只认 `text` / `edit`，配方名与素材库目录按 120 字裁剪，
   `segments` 只取整数；表外的值整行丢掉。
@@ -266,7 +269,8 @@ Neo Studio 独立页面（`web/studio/index.html`）的后端。素材 / 生图 
 - `skills` 里的生图 / 生视频技能另带可选 `gen_config` 摘要（主模型、LoRA 名列表、长边尺寸、默认比例、步数），
   全空时不附该字段。
 - `load_skill` 返回正文、附属 `.md` 清单、`max_tokens`、生图 / 生视频标记、视频模式、参考图要求、
-  是否存在本地配置覆盖。
+  是否存在本地配置覆盖，以及目录里有没有 `workflow.json` 模板（`has_workflow`；右栏智能体靠这一项认出
+  正文型技能只能走 `generate_prompt`，见 `docs/skills.md`）。
 - `save_skill` 校验名称唯一性（与其它技能重名返回 409）；可选字段缺省沿用 frontmatter 既有值，显式假值移除该字段。
 - LLM 配置与标题提取（`get_models` / `native_models` / `set_model` / `remote_llm_config` /
   `llm_connection_test` / `llm_mode` / `extract_title` / `fetch_remote_models`）由 `llm.py` 的

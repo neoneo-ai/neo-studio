@@ -129,8 +129,9 @@ LLM 模式与本地安装见 [llm.md](llm.md)。
   桌面端右栏的出图与出片一律交给后端智能体（`POST /neo_agent/run` 的 SSE 时间线，见 [api-routes.md](api-routes.md)）：
   输入框里打 `@` 直接点名技能——候选只收三条生成工具真跑得动的那批（`gen_image` / `gen_video` 且带
   `workflow.json`，与 `_gen_image_skills` / `_gen_video_skills` 同一判法），行右侧标出「生图 / 出片」，
-  过滤与键盘口径与提示词页的 `/` 快捷菜单同一套工厂（`studio/web/slash-picker.js`）；选中的技能落在底栏
-  一颗 `🧩 技能名 ✕` 上（存 `localStorage["neo_studio_agent_skill"]`，跨轮与重载沿用，点 ✕ 取消），
+  过滤与键盘口径与提示词页的 `/` 快捷菜单同一套工厂（`studio/web/slash-picker.js`）；选中的技能落在上下文条
+  最左一颗 `🧩 技能名 ✕` 上（点 ✕ 取消；点名的技能只在当前这一条会话里有效——「＋ 新增会话」、「清空对话」、
+  断开续聊、读回另一条会话都收回它，不存本机，页面重载回到空态就是没有会话，那颗也就没有），
   随请求体 `skill_id` 进系统提示词，排在焦点链与用户偏好之后——本轮明说了用哪一发出图 / 出片就用哪一发，
   认不认得到这个技能由循环里那次 `list_skills` 定，认不到要说清原因再换，不许静默换。
   没点名时用哪个技能由 LLM 自己查 `list_skills` 定，工具表就是 MCP 全集

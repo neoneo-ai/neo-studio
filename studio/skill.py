@@ -2129,6 +2129,9 @@ async def rs_prompts_load_skill(request):
             "description": meta.get("description", ""),
             "inputs": meta.get("inputs") or ["text"],
             "category": meta.get("category", "image_enhance"),
+            # 目录里有没有 workflow.json：右栏智能体靠这一项认出「这份技能没有出图模板，
+            # 点名它的那一发只能走 generate_prompt」（见 agent.py 的 _skill_info_of）
+            "has_workflow": load_skill_workflow(skill_id) is not None,
             "content": load_skill_content(skill_id) or "",
             "files": files,
             "max_tokens": meta.get("max_tokens"),

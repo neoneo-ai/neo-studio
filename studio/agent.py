@@ -5,7 +5,7 @@
 tool_result / status / content / ask / paused / resumed / context / usage / plan_steps /
 focus / finish。运行一律由 LLM 规划并调工具；
 界面当前状态（当前页、当前导演配方、绘画页模式、素材库目录）随请求体进系统提示词，
-右栏不再让用户选技能，用哪个技能由 LLM 自己查 list_skills 定。
+右栏的 @ 能点名技能（生成型直接当 skill_id，正文型走 generate_prompt），没点名时由 LLM 自己查 list_skills 定。
 
 工具调用一律经进程内 MCP 客户端逐行走 mcp_server.serve 的 JSON-RPC，与外部
 智能体连 MCP 是同一套口径：右栏看到的工具表就是 MCP 的全集，出片链路（director_run /
@@ -72,6 +72,9 @@ FOCUS_LABELS = (("skill_id", "技能"), ("model", "主模型"), ("loras", "LoRA"
                 ("images", "产物图"), ("film", "成片"), ("task_id", "最近任务"))
 
 MAX_TURNS = 12
+PROMPT_SKILL_MAX_TURNS = 20   # 点名正文型技能那一轮的轮次上限：一道确认门一轮 ask，加 generate_prompt 与出片链路
+ASK_ROUNDS = 1                # 一轮运行的提问上限：方向有分叉问一次就够
+PROMPT_SKILL_ASK_ROUNDS = 6   # 正文型技能的确认门数上限（技能 frontmatter 的 allowed-tools: askuserquestion(6) 那一档）
 MAX_TOKENS = 900
 TASK_POLL_SEC = 2.0
 TASK_WAIT_SEC = 600.0
@@ -79,6 +82,11 @@ FILM_WAIT_SEC = 2400.0      # 整片是多段 × 每段数分钟，按单图的 
 COMFY_TIMEOUT = 30
 ARGS_CLIP = 300
 RESULT_CLIP = 1500
+# 正文型技能（Agent Skills 那类：只有 SKILL.md 那套流程，没有 workflow.json 模板）的 category 集合；
+# task 类（分镜时长 / 导出 / 上传）不在这里——那一发要的是配方与在跑的任务，右栏点了没有产出
+PROMPT_SKILL_CATEGORIES = ("image_enhance", "video_enhance", "custom", "vision")
+SKILL_DESC_CLIP = 300       # 点名的技能那一行说明的上限，与 list_skills 行同档
+SKILL_REF_MAX = 12          # 引用文件只列路径：告诉模型这套流程有几步，不往提示词里灌文件内容
 TASK_FINAL = ("succeeded", "failed", "cancelled")
 # cancel 的 task_id 从请求体来，会被拼进 /view 与 cancel 路由的路径段，只收 UUID 形态
 TASK_ID_RE = re.compile(r"^[0-9a-fA-F-]{8,64}$")
@@ -133,16 +141,19 @@ MSG_OVERHEAD = 4          # OpenAI 一条消息的固定壳开销
 FILM_GATE_TOOLS = ("director_run", "segment_run", "assemble_run", "director_keyframes")
 GATE_OPTIONS = ("✅ 跑这一发", "⏹ 先不跑")
 
-# 右栏伪工具：只进本次运行的 LLM 工具表，不进 MCP 注册表，外部 MCP 客户端看不到
-ASK_TOOL = {"type": "function", "function": {
-    "name": "ask_user",
-    "description": ("要用户在几个方向里定一个时调用：把问题与 2-5 个互斥选项发给用户，等到回答再继续。"
-                    "一次运行最多问一次；能用查询工具确定的事不要问用户。"),
-    "parameters": {"type": "object", "properties": {
-        "question": {"type": "string", "description": "要用户决定什么，一句话说清"},
-        "options": {"type": "array", "items": {"type": "string"},
-                    "description": "2-5 个用户可以直接照选的方向"}},
-        "required": ["question", "options"]}}}
+# 右栏伪工具：只进本次运行的 LLM 工具表，不进 MCP 注册表，外部 MCP 客户端看不到。
+# 提问上限逐轮跟着运行走：普通运行一问就够，点名正文型技能那一轮要照它正文里的确认门逐道问
+def _ask_tool(max_asks: int) -> dict:
+    return {"type": "function", "function": {
+        "name": "ask_user",
+        "description": (f"要用户在几个方向里定一个时调用：把问题与 2-5 个互斥选项发给用户，等到回答再继续。"
+                        f"一次运行最多问 {max_asks} 次，要用户定的每一道门各问一次，不要把几道门攒成一堆问题一次问完；"
+                        "能用查询工具确定的事不要问用户。"),
+        "parameters": {"type": "object", "properties": {
+            "question": {"type": "string", "description": "要用户决定什么，一句话说清"},
+            "options": {"type": "array", "items": {"type": "string"},
+                        "description": "2-5 个用户可以直接照选的方向"}},
+            "required": ["question", "options"]}}}
 FINISH_TOOL = {"type": "function", "function": {
     "name": "finish_task",
     "description": ("收场时调用，把交付物一次性交回来：做了什么与产物是什么（result）、"
@@ -293,6 +304,12 @@ class _Run:
         self.prefs: dict = dict(DEFAULT_PREFS)
         # 输入框 @ 点名的技能：本轮指令，比偏好与焦点链都近。只认形态，认得到与否由循环里那次 list_skills 定
         self.user_skill = ""
+        # 点名技能的摘要（类别 / 说明 / 有无模板 / 引用文件清单）：整条运行取一次，随运行结束消失，
+        # 不留跨运行的全局技能表——_skill_block 靠它认出「这一发是正文型技能，得走 generate_prompt」
+        self.user_skill_info: dict = {}
+        # 本轮轮次与提问上限：默认 MAX_TURNS / ASK_ROUNDS，点名正文型技能时放宽（见 _run_agent 取技能摘要那一处）
+        self.max_turns = MAX_TURNS
+        self.max_asks = ASK_ROUNDS
         # 本次运行真出现过的产物：名字 → 产物项。finish_task 只认这份表里的名字
         self.media_urls: dict[str, dict] = {}
 
@@ -1089,25 +1106,77 @@ def _prefs_block(prefs: dict) -> str:
               "偏好尺寸与技能支持的宽高对不上就按技能自己的来。")
 
 
-def _skill_block(skill_id: str) -> str:
+def _skill_refs_of(info: dict) -> list:
+    """引用文件的相对路径清单：只列子目录里的那几份（references/ 下的小文件）。
+    顶层的 md 就是正文本身，generate_prompt 那一趟服务端已经把它读进系统提示词，列在这里没有信息量。"""
+    return [str(f.get("name") or "") for f in (info.get("files") or [])
+            if isinstance(f, dict) and "/" in str(f.get("name") or "")][:SKILL_REF_MAX]
+
+
+def _skill_info_of(client, skill_id: str) -> dict:
+    """本轮点名技能的摘要：一次运行取一次，挂在运行对象上。
+
+    技能正文不进右栏的上下文——正文型技能（Agent Skills 那类）的正文与它的 references 由服务端在
+    generate_prompt 那一趟按需读取，右栏只要认出它是哪一类、它干什么、引用文件有几份。
+    取不到是正常路径：技能在运行中途被删掉时 /rs_prompts/load_skill 就 404，交回只报 id 的那一份。"""
+    try:
+        info = client.ctx.comfy.post("/rs_prompts/load_skill", {"id": skill_id})
+    except Exception as e:
+        logger.info(f"[Neo Studio] agent skill info skipped: {skill_id} {e}")
+        return {}
+    if not isinstance(info, dict):
+        return {}
+    return {"id": str(info.get("id") or skill_id),
+            "category": str(info.get("category") or ""),
+            "description": str(info.get("description") or "").strip(),
+            "has_workflow": bool(info.get("has_workflow")),
+            "gen_image": bool(info.get("gen_image")),
+            "gen_video": bool(info.get("gen_video")),
+            "refs": _skill_refs_of(info)}
+
+
+def _is_prompt_skill(info: dict) -> bool:
+    """点名的技能是不是正文型：没有出图 / 出片模板，只有 SKILL.md 那套流程。"""
+    return bool(info) and not (info.get("has_workflow") or info.get("gen_image")
+                               or info.get("gen_video")) and info.get("category") in PROMPT_SKILL_CATEGORIES
+
+
+def _skill_block(skill_id: str, info: dict | None = None) -> str:
     """本轮用户在输入框里 @ 点名的技能：他选了哪一发，本轮就出哪一发。
 
     这一段排在偏好与焦点链之后——那两段是这台机器的长期口味和刚出过的那一发，这一段是用户明说的本轮
-    指令。认不认得到这个技能由循环自己查 list_skills：技能目录不在本模块里，agent 只通过工具看得到技能，
-    在这里 import skill.py 就是把两层焊在一起。空值不产出这一段。"""
+    指令。带 workflow.json 模板的技能照旧当 skill_id 出；正文型技能（Agent Skills 那类：只有 SKILL.md
+    那套流程）没有模板，当 skill_id 出不了东西，本轮就让它走 generate_prompt，正文与 references 由
+    服务端在那一趟按需读取。认不认得到这个技能由循环自己查：技能目录不在本模块里，agent 只通过工具
+    看得到技能，在这里 import skill.py 就是把两层焊在一起。空值不产出这一段。"""
     sid = str(skill_id or "").strip()
     if not sid:
         return ""
-    return ("\n\n本轮用户点名的技能（他在输入框里用 @ 选的，比偏好与焦点链都近）：\n"
-            f"- 技能={sid}\n"
-            "本轮出图 / 出片默认就用这一个技能，宽高与步数照技能自己的默认；先在 list_skills 里认得到它"
-            "就直接用，认不到（技能不存在、缺工作流、缺插件）就说清原因并照 list_skills 换一个、说明换了哪个，"
-            "不要静默换。用户在正文里另点了别的技能时照他说的换。")
+    named = ("\n\n本轮用户点名的技能（他在输入框里用 @ 选的，比偏好与焦点链都近）：\n"
+             f"- 技能={sid}\n")
+    if not _is_prompt_skill(info):
+        return named + ("本轮出图 / 出片默认就用这一个技能，宽高与步数照技能自己的默认；先在 list_skills 里认得到它"
+                        "就直接用，认不到（技能不存在、缺工作流、缺插件）就说清原因并照 list_skills 换一个、说明换了哪个，"
+                        "不要静默换。用户在正文里另点了别的技能时照他说的换。")
+    refs = info.get("refs") or []
+    text = named + (
+        f"- 它是正文型技能（category={info.get('category')}，没有 workflow.json 模板）：不能当 generate_image 的"
+        " skill_id，也不能写进配方的段 skill_id。\n"
+        f"- 它干什么：{_clip(info.get('description') or '（这份技能没有写说明）', SKILL_DESC_CLIP)}\n"
+        "- 本轮先调 generate_prompt(skill_id=这个技能, text=用户的想法)，让它跑自己那套流程：技能正文与它的引用文件"
+        "由服务端在那一趟按需读取，你不要抄正文，也不要自己写它要产出的那份东西。\n"
+        f"- 正文里的每道确认门各发一次 ask_user（问题一句话说清要定什么，选项 2-5 条照正文给的方向写），"
+        f"本轮最多问 {PROMPT_SKILL_ASK_ROUNDS} 次；正文要求分段的产物就分次调 generate_prompt，一次返回最多 {mcp.MAX_TEXT} 字符。\n")
+    if refs:
+        text += (f"- 它的引用文件（服务端在 generate_prompt 那一趟自己读，你只用它判断这套流程有几步）："
+                 f"{'、'.join(refs)}\n")
+    return text + ("- 拿到它产出的文本（脚本 / 分镜 / 镜头表 / 成品提示词）之后，再按配方法则建配方出片、"
+                   f"或按技能规则出图；本轮轮次放宽到 {PROMPT_SKILL_MAX_TURNS} 轮。")
 
 
 def system_prompt(mode: str = "act", context: str = "", focus: dict | None = None,
                   plan_steps: list | None = None, prefs: dict | None = None,
-                  skill: str = "") -> str:
+                  skill: str = "", skill_info: dict | None = None) -> str:
     """系统提示词 = 静态提示词 + 界面状态 + 焦点链 + 用户级偏好 + 本轮点名技能（+ 计划模式说明 + 执行清单）。
     焦点链与执行清单要在每次 LLM 请求前重算：本轮生成工具刚立的事实、清单上刚划掉的那一条
     都得在下一轮请求里可见（见 _run_agent）。执行清单只在执行模式进提示词——
@@ -1119,7 +1188,7 @@ def system_prompt(mode: str = "act", context: str = "", focus: dict | None = Non
     text += context
     text += _focus_block(focus or {})
     text += _prefs_block(prefs or {})
-    text += _skill_block(skill)
+    text += _skill_block(skill, skill_info)
     if mode == "plan":
         text += PLAN_MODE_NOTE
     else:
@@ -1231,20 +1300,27 @@ async def _run_agent(client, text: str, emit, run, mode: str = "act",
     ask_user / finish_task / write_plan 是右栏的伪工具，不发 MCP：ask 帧挂起等用户点选，
     write_plan 在计划模式收场前把执行清单交下来，finish_task 在执行模式交收场载荷与产物名。
     history 是续聊带回来的旧会话原文（不含 system）：带它时这一轮接在那条会话后面跑，
-    轮次预算是新一轮自己的 12 轮。
+    轮次预算是新一轮自己的那一档（run.max_turns，默认 MAX_TURNS，点名正文型技能时放宽）。
     每轮请求前压一次上下文（_compress_messages）；出片级工具在跑之前过一道量级确认卡
     （用户偏好里的 confirm_films）；provider 每轮报的 token 统计逐轮累进 run.usage。"""
+    if run.user_skill:
+        # 点名技能的摘要在循环开头取一次：认出它是正文型（没有 workflow.json 模板）才能把本轮改走
+        # generate_prompt 并把轮次放宽。一次运行一次读取，挂在运行对象上，不留跨运行的技能表
+        run.user_skill_info = await asyncio.to_thread(_skill_info_of, client, run.user_skill)
+        if _is_prompt_skill(run.user_skill_info):
+            run.max_turns = PROMPT_SKILL_MAX_TURNS
+            run.max_asks = PROMPT_SKILL_ASK_ROUNDS
     messages = [{"role": "system", "content": system_prompt(mode, context, run.focus,
                                                             run.plan_steps, run.prefs,
-                                                            run.user_skill)}]
+                                                            run.user_skill, run.user_skill_info)}]
     messages += list(history or [])
     messages.append(_user_message(text, images or []))
     run.messages = messages       # 同一个 list 对象：循环里的 append 逐轮可见，半途收场也留得下
-    tools = _openai_tools(client.tool_list(), plan=(mode == "plan")) + [ASK_TOOL]
+    tools = _openai_tools(client.tool_list(), plan=(mode == "plan")) + [_ask_tool(run.max_asks)]
     tools += [PLAN_TOOL] if mode == "plan" else [FINISH_TOOL]
     answered = False
     sent_tokens = -1
-    for _ in range(MAX_TURNS):
+    for _ in range(run.max_turns):
         if run.stop.is_set():
             await emit({"kind": "content", "text": CANCELLED_TEXT})
             return
@@ -1253,7 +1329,7 @@ async def _run_agent(client, text: str, emit, run, mode: str = "act",
         # 焦点链、用户偏好与执行清单逐轮重注入：本轮刚立的事实与清单上刚划掉的一条要在这一轮
         # 的请求里可见，而 messages[0] 是循环开头按当时的状态写的
         messages[0]["content"] = system_prompt(mode, context, run.focus, run.plan_steps, run.prefs,
-                                               run.user_skill)
+                                               run.user_skill, run.user_skill_info)
         # 上下文在每一轮的边界上压：一次长会话里的技能全表与长工具返回是逐轮攒起来的，
         # 不压就是整请求 400，报错点在 provider 那一侧，比少一轮难查得多
         tokens = _compress_messages(messages)
@@ -1354,7 +1430,7 @@ async def _run_agent(client, text: str, emit, run, mode: str = "act",
             break
     if not answered:
         await emit({"kind": "content",
-                    "text": f"跑了 {MAX_TURNS} 轮还没有结论：把需求说具体些（要什么画面、用哪个技能）再试。"})
+                    "text": f"跑了 {run.max_turns} 轮还没有结论：把需求说具体些（要什么画面、用哪个技能）再试。"})
 
 
 # ---------------------------------------------------------------------------
@@ -1430,7 +1506,9 @@ async def agent_run(request):
     也在执行模式下接回来照跑；
     from 是「从这条消息重新开始」：连着 resume 给，取那条会话里第 N 条用户消息（1 起），
     那一条与它之后的原文整段丢掉，本轮的输入从那个点重新长出去；
-    skill_id 是输入框 @ 点名的技能：本轮出图 / 出片默认用它，排在偏好与焦点链之后（见 _skill_block）。"""
+    skill_id 是输入框 @ 点名的技能：带模板的技能本轮出图 / 出片默认用它，排在偏好与焦点链之后；
+    正文型技能（只有 SKILL.md 那套流程、没有 workflow.json）本轮走 generate_prompt，
+    两者的分别由 _run_agent 开头那次取技能摘要定（见 _skill_block）。"""
     try:
         body = await request.json()
     except Exception:

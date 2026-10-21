@@ -193,11 +193,14 @@ class BaseToolTests(unittest.TestCase):
 
     def test_list_skills_and_models(self):
         skills = [{"id": "qwen_image_21", "name": "Qwen", "cn_name": "写实", "has_workflow": True,
-                   "gen_image": True, "gen_video": False, "mode": "t2i_edit", "requires_ref": False},
+                   "gen_image": True, "gen_video": False, "mode": "t2i_edit", "requires_ref": False,
+                   "category": "image_gen", "description": "写实人像出图模板"},
                   {"id": "qwen_image_21_face_swap", "name": "Swap", "cn_name": "换脸", "has_workflow": True,
-                   "gen_image": True, "gen_video": False, "mode": "edit", "requires_ref": True},
+                   "gen_image": True, "gen_video": False, "mode": "edit", "requires_ref": True,
+                   "category": "image_gen", "description": "换脸" + "长" * 400},
                   {"id": "translate", "name": "Translate", "cn_name": "翻译", "has_workflow": False,
-                   "gen_image": False, "gen_video": False}]
+                   "gen_image": False, "gen_video": False, "category": "custom",
+                   "description": "把一句话翻成中英双语，Not for 出图"}]
         data = json.loads(text_of(call_tool("list_skills", {},
                                            {("GET", "/rs_prompts/skills"): skills})[0]))
         self.assertEqual(data["count"], 2)          # 默认只列生图 / 生视频技能
@@ -206,15 +209,25 @@ class BaseToolTests(unittest.TestCase):
         # 只能挑到纯文生图技能上，参考图被模板丢掉，智能体那边看不出任何痕迹
         self.assertEqual(data["skills"][0]["mode"], "t2i_edit")
         self.assertFalse(data["skills"][0]["requires_ref"])
-
+        self.assertEqual(data["skills"][0]["description"], "写实人像出图模板")
+        self.assertEqual(data["skills"][0]["category"], "image_gen")
+        # 正文型技能（has_workflow=false）没有模板可看，description 就是它唯一的自我介绍，行里必须带着；
+        # 整张表逐行进智能体的上下文，所以逐行压到 SKILL_DESC_CLIP 那一档
         data = json.loads(text_of(call_tool("list_skills", {"all": True},
                                            {("GET", "/rs_prompts/skills"): skills})[0]))
         self.assertEqual([s["id"] for s in data["skills"]],
                          ["qwen_image_21", "qwen_image_21_face_swap", "translate"])
+        by_id = {s["id"]: s for s in data["skills"]}
+        self.assertEqual(by_id["translate"]["description"], "把一句话翻成中英双语，Not for 出图")
+        self.assertEqual(len(by_id["qwen_image_21_face_swap"]["description"]), mcp.SKILL_DESC_CLIP)
         data = json.loads(text_of(call_tool("list_skills", {"q": "翻译", "all": True},
                                            {("GET", "/rs_prompts/skills"): skills})[0]))
         self.assertEqual([s["id"] for s in data["skills"]], ["translate"])
-        self.assertNotIn("description", data["skills"][0])
+        # q 连 description 一起匹配：正文型技能的本事只写在 description 里（「分镜」「脚本」这类词），
+        # 不匹配它时调用方搜「分镜」搜不到任何技能，只能拿 id 猜
+        data = json.loads(text_of(call_tool("list_skills", {"q": "中英双语", "all": True},
+                                           {("GET", "/rs_prompts/skills"): skills})[0]))
+        self.assertEqual([s["id"] for s in data["skills"]], ["translate"])
         # q 连 mode 的值一起匹配：只匹配 id / 名称时，q=t2i_edit 这类按模式搜的词谁都命中不了，
         # 调用方就沿用到手的第一批编辑技能（会话 20261019-125206 的 q=edit / q=t2i_edit 两轮空搜）
         data = json.loads(text_of(call_tool("list_skills", {"q": "t2i"},

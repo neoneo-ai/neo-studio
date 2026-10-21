@@ -35,12 +35,23 @@ skip = unittest.skipUnless(AVAILABLE, f"agent module unavailable: {_IMPORT_ERR}"
 class FakeClient:
     """替掉 McpClient.call：按工具名喂预设载荷，记录调用顺序。
 
-    预设值可以是 dict（自动转 JSON 文本）、list（按次弹出，用于轮询序列）或异常（抛出）。"""
+    预设值可以是 dict（自动转 JSON 文本）、list（按次弹出，用于轮询序列）或异常（抛出）。
+    ctx.comfy.post 是取点名技能摘要的那条接缝（/rs_prompts/load_skill）：预设给 dict 就是技能读到了，
+    给异常就是读不到（技能在运行中途被删掉）。"""
 
-    def __init__(self, replies, names=()):
+    def __init__(self, replies, names=(), skill_info=None):
         self.replies = dict(replies)
         self.names = list(names)
         self.calls = []
+        self.skill = skill_info
+        self.skill_posts = []
+        self.ctx = SimpleNamespace(comfy=SimpleNamespace(post=self._post_skill))
+
+    def _post_skill(self, path, body=None):
+        self.skill_posts.append((path, body))
+        if isinstance(self.skill, Exception):
+            raise self.skill
+        return self.skill
 
     def call(self, name, args):
         self.calls.append((name, args))
@@ -185,7 +196,7 @@ class TestToolSurface(unittest.TestCase):
         self.assertIn("__no_such_prompt__.md", str(got.exception))
 
     def test_context_block_lands_in_the_system_prompt(self):
-        """右栏没有技能选择器了：界面当前状态是 LLM 判断该围绕哪个配方干活的唯一来源。"""
+        """右栏没有配方选择器：界面当前状态是 LLM 判断该围绕哪个配方干活的唯一来源。"""
         text = agent.system_prompt("act", agent._context_block(
             {"page": "director", "recipe": "cat_walk", "segments": 3}))
         self.assertIn("当前页面：director", text)
@@ -2252,6 +2263,143 @@ class TestResumeFrom(unittest.TestCase):
         self.assertEqual((rec["resume_of"], rec["resume_from"]), (self.run_id, 2))
         row = [r for r in agent._list_sessions() if r["run_id"] == run_id][0]
         self.assertEqual(row["resume_from"], 2)
+
+
+@skip
+class TestNamedSkillRouting(unittest.TestCase):
+    """输入框 @ 点名的技能分两条路：带 workflow.json 的生成技能照旧当 skill_id 出；正文型技能
+    （只有 SKILL.md 那套流程与 references/，没有模板）本轮走 generate_prompt——正文与 references
+    由服务端在那一趟按需读取，右栏的请求里只有它的说明与引用文件清单，没有正文。"""
+
+    STORY = {"id": "minimax_storyboard", "category": "video_enhance",
+             "description": "写一段动画短片的脚本与分镜，Not for 直接出图",
+             "has_workflow": False, "gen_image": False, "gen_video": False,
+             "content": "技能正文：第一步先问用户题材，再按分镜格式出镜头表",
+             "files": [{"name": "skill.md", "size": 4096},
+                       {"name": "references/storyboard-format.md", "size": 900},
+                       {"name": "references/pacing.md", "size": 700}]}
+    GEN = {"id": "krea2_gen", "category": "image_gen", "description": "Krea2 文生图模板",
+           "has_workflow": True, "gen_image": True, "gen_video": False,
+           "content": "这一份正文不该进右栏的请求",
+           "files": [{"name": "skill.md", "size": 10}]}
+
+    @staticmethod
+    def _chat_that_records(seen):
+        def chat(messages, tools):
+            seen.append(messages[0]["content"])
+            return {"content": "这一发交回来了"}
+        return chat
+
+    def test_the_skill_body_never_enters_the_panel_request(self):
+        """摘要只留类别 / 说明 / 有无模板 / 引用清单：正文（content）整段留在服务端，
+        一次运行只读一次，不逐轮重读。"""
+        client = FakeClient({}, skill_info=self.STORY)
+        info = agent._skill_info_of(client, "minimax_storyboard")
+        self.assertEqual(client.skill_posts, [("/rs_prompts/load_skill", {"id": "minimax_storyboard"})])
+        self.assertNotIn("content", info)
+        self.assertNotIn("第一步先问用户题材", agent._skill_block("minimax_storyboard", info))
+
+    def test_a_generator_skill_keeps_the_skill_id_route(self):
+        """带模板的技能一行指令不动：照旧当 skill_id 出，认不到要去 list_skills 换。"""
+        info = agent._skill_info_of(FakeClient({}, skill_info=self.GEN), "krea2_gen")
+        self.assertTrue(info["has_workflow"])
+        self.assertFalse(agent._is_prompt_skill(info))
+        for one in (None, info):
+            block = agent._skill_block("krea2_gen", one)
+            self.assertIn("本轮出图 / 出片默认就用这一个技能", block)
+            self.assertNotIn("generate_prompt(skill_id", block)
+        self.assertNotIn("这一份正文不该进右栏", agent._skill_block("krea2_gen", info))
+        self.assertEqual(agent._skill_block("", self.STORY), "")
+
+    def test_a_prompt_skill_routes_the_turn_through_generate_prompt(self):
+        """正文型技能没有模板，当 skill_id 出不了东西：本轮先调 generate_prompt 让它跑自己的流程，
+        确认门逐道问，引用文件只列路径。"""
+        info = agent._skill_info_of(FakeClient({}, skill_info=self.STORY), "minimax_storyboard")
+        self.assertTrue(agent._is_prompt_skill(info))
+        block = agent._skill_block("minimax_storyboard", info)
+        self.assertIn("正文型技能", block)
+        self.assertIn("不能当 generate_image 的 skill_id", block)
+        self.assertIn("generate_prompt(skill_id", block)
+        self.assertIn("写一段动画短片的脚本与分镜", block)
+        self.assertIn("references/storyboard-format.md", block)
+        self.assertIn(f"本轮轮次放宽到 {agent.PROMPT_SKILL_MAX_TURNS} 轮", block)
+
+    def test_a_skill_that_is_gone_falls_back_to_the_id_only_line(self):
+        """运行中途技能被删掉时 /rs_prompts/load_skill 回 404：交回只报 id 的那一份，
+        模型照旧先去 list_skills 认，认不到要说清原因再换，整条运行不该因此断流。"""
+        client = FakeClient({}, skill_info=RuntimeError("HTTP 404 Skill not found"))
+        info = agent._skill_info_of(client, "minimax_storyboard")
+        self.assertEqual(info, {})
+        block = agent._skill_block("minimax_storyboard", info)
+        self.assertIn("本轮出图 / 出片默认就用这一个技能", block)
+        self.assertNotIn("正文型技能", block)
+
+    def test_reference_list_and_description_are_clipped(self):
+        """整份摘要逐轮进系统提示词：引用清单只列子目录里的文件并封顶，说明压到一档——
+        references 上百份、说明上千字的技能不能把提示词顶满。"""
+        wide = dict(self.STORY, description="说" * 600,
+                    files=[{"name": f"references/part{i}.md", "size": 10} for i in range(30)]
+                    + [{"name": "skill.md", "size": 4096}])
+        info = agent._skill_info_of(FakeClient({}, skill_info=wide), "minimax_storyboard")
+        self.assertEqual(len(info["refs"]), agent.SKILL_REF_MAX)
+        self.assertNotIn("skill.md", info["refs"])
+        block = agent._skill_block("minimax_storyboard", info)
+        self.assertIn("说" * agent.SKILL_DESC_CLIP, block)
+        self.assertNotIn("说" * (agent.SKILL_DESC_CLIP + 1), block)
+
+    def test_a_named_prompt_skill_widens_the_turn_budget_for_that_run(self):
+        """12 轮跑不完「问题材 → 问风格 → 出脚本 → 出分镜 → 出片」：点名正文型技能那一轮放宽。"""
+        client = FakeClient({}, skill_info=self.STORY, names=("neo_status",))
+        run = _runobj(client)
+        run.user_skill = "minimax_storyboard"
+        seen = []
+        with mock.patch.object(agent, "_chat", self._chat_that_records(seen)):
+            frames = _run(lambda emit: agent._run_agent(client, "做个短片", emit, run))
+        self.assertEqual(run.max_turns, agent.PROMPT_SKILL_MAX_TURNS)
+        self.assertIn("generate_prompt(skill_id", seen[0])
+        self.assertNotIn("第一步先问用户题材", seen[0])
+        self.assertEqual(frames[-1]["kind"], "content")
+
+    def test_a_named_generator_skill_keeps_the_turn_budget(self):
+        client = FakeClient({}, skill_info=self.GEN, names=("neo_status",))
+        run = _runobj(client)
+        run.user_skill = "krea2_gen"
+        seen = []
+        with mock.patch.object(agent, "_chat", self._chat_that_records(seen)):
+            _run(lambda emit: agent._run_agent(client, "出张图", emit, run))
+        self.assertEqual(run.max_turns, agent.MAX_TURNS)
+        self.assertIn("本轮出图 / 出片默认就用这一个技能", seen[0])
+
+    def test_the_ask_cap_follows_the_designated_skill_kind(self):
+        """正文型技能要逐道问确认门，普通运行一问就够：ask_user 在工具表里写的那句上限跟着运行走。"""
+        asked = []
+
+        def chat(messages, tools):
+            asked.append([t["function"]["description"] for t in tools
+                          if t["function"]["name"] == "ask_user"][0])
+            return {"content": "交回来了"}
+
+        for info, cap in ((self.STORY, agent.PROMPT_SKILL_ASK_ROUNDS), (self.GEN, agent.ASK_ROUNDS)):
+            client = FakeClient({}, skill_info=info, names=("neo_status",))
+            run = _runobj(client)
+            run.user_skill = info["id"]
+            asked.clear()
+            with mock.patch.object(agent, "_chat", chat):
+                _run(lambda emit: agent._run_agent(client, "跑这一发", emit, run))
+            self.assertIn(f"最多问 {cap} 次", asked[0])
+
+    def test_the_request_skill_id_reaches_the_routing_line_in_the_first_request(self):
+        """请求体的 skill_id → 运行对象 → 取一次摘要 → 进第一轮请求的系统提示词：这一条链断在
+        哪一环，右栏点了正文型技能就只剩一个名字，模型照旧拿它当 skill_id 出图。"""
+        client = FakeClient({}, skill_info=self.STORY, names=("neo_status",))
+        seen = []
+        with mock.patch.object(agent, "McpClient", lambda base, timeout=30: client), \
+             mock.patch.object(agent, "_chat", self._chat_that_records(seen)):
+            lines = _drive(agent.agent_run(TestRoutes._req(
+                {"text": "做个短片", "skill_id": "minimax_storyboard"})))
+        self.assertEqual(lines[-1], "[DONE]")
+        self.assertIn("技能=minimax_storyboard", seen[0])
+        self.assertIn("generate_prompt(skill_id", seen[0])
 
 
 if __name__ == "__main__":

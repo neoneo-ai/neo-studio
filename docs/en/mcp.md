@@ -101,9 +101,9 @@ Example — expose only the image pipeline:
 | Tool | Purpose |
 |------|---------|
 | `neo_status` | Versions / queue / director recipe count — call it first to confirm the service is up |
-| `list_skills` | Skill ids (with `mode` / `requires_ref`, the two fields the reference check reads; `q` also matches the `mode` value, so `q=t2i` lists `mode=t2i` and `t2i_edit`) |
+| `list_skills` | Skill ids (with `mode` / `requires_ref`, the two fields the reference check reads; a row with `has_workflow=false` has no image template and can only be `generate_prompt`'s `skill_id`; rows carry `category` and `description` clipped to 300 characters, and `q` also matches the `mode` / `category` / `description` values, so `q=t2i` lists `mode=t2i` and `t2i_edit`) |
 | `list_models` | Models and LoRAs scanned for image / video: `q` filters by directory+filename, `group` lists one group, `scope=video` uses the H3 scan, `near=<main model name>` puts the same-directory entries first (every item carries its `dir`), every item of `group=diffusion_models` carries `skills` (the skill ids that family can run, empty when the family word list does not recognize it), plus the `suggested_*` auto-picks |
-| `generate_prompt` | Short idea → finished prompt (uses the LLM, requires a configured model) |
+| `generate_prompt` | Short idea → finished prompt (uses the LLM, requires a configured model); with `skill_id` the skill's body is this call's system prompt, so the flow written in the body (its `references/` included, read by the server on demand) runs inside the call and the response is what it produces — that is how a body-only skill (`has_workflow=false`) runs |
 | `generate_image` | Submits an image job and returns a `task_id` plus the `skill_id` that run used; `model` / `loras` override that one request only |
 | `task_status` `list_tasks` `cancel_task` | Task snapshot / list / cancel (all five task tables share `task_id`: image / full film / segment / assembly / image storyboard); image snapshots and list rows carry `skill_id` |
 | `get_media` | Fetch an output file: images (png) and videos (mp4) both return a `/view` URL; base64 bytes only for images with `base64=true` |
@@ -199,8 +199,9 @@ The image sentence only runs when the machine has an image skill with a `workflo
   `segment_run`; a multi-segment full film only runs when the user asks for one. `director_plan.segment_seconds`
   defaults to 5, and the non-VDN `minimax_h3_*` skills run 20 steps — twice as slow.
 - **Image generation needs a skill with a template**: `generate_image.skill_id` must be a `list_skills`
-  entry with `has_workflow=true`. The MCP layer never picks one for you, and an empty `skill_id` fails with
-  that pointer before any request reaches the backend.
+  entry with `has_workflow=true`; a body-only skill (`has_workflow=false`) has no template, so it cannot be a
+  `skill_id` — hand it to `generate_prompt` instead. The MCP layer never picks one for you, and an empty `skill_id`
+  fails with that pointer before any request reaches the backend.
 - **`skill_id` names the skill a run used**: the `generate_image` response, every `list_tasks` row and an image
   `task_status` snapshot carry it. The dock's agent writes it into the session's focus chain, re-injects it into the
   system prompt every turn and restores it on resume; an external MCP client keeps it on its own side — the image

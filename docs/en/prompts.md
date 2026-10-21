@@ -154,8 +154,10 @@ Both nodes share the same layout (the Agent shows no status bar):
   skill directly — the list holds only the skills the three generation tools can actually run (`gen_image` /
   `gen_video` with a `workflow.json`, the same test as `_gen_image_skills` / `_gen_video_skills`), each row labeled
   Image / Film on the right, filtered and driven on the keyboard by the same factory as the prompts page's `/` menu
-  (`studio/web/slash-picker.js`); the picked skill lands as a flat `🧩 skill ✕` chip in the bottom row
-  (`localStorage["neo_studio_agent_skill"]`, kept across turns and reloads, ✕ clears it) and travels in the request
+  (`studio/web/slash-picker.js`); the picked skill lands as a flat `🧩 skill ✕` chip at the left end of the context
+  bar (✕ clears it, and the designation lives only inside the current conversation — **＋ 新增会话**, clearing the
+  conversation, dropping the resume bar, or opening another session all clear it; nothing is stored locally, so a
+  reload lands in the empty state with no chip) and travels in the request
   body's `skill_id` into the system prompt, after the focus chain and the user prefs — a named skill is this turn's
   instruction, and whether it exists is settled by the loop's own `list_skills` call: an unknown one has to be
   explained before the model switches, never silently.

@@ -205,9 +205,13 @@ included), and the dock never calls a handler directly.
 | POST | `/neo_agent/session/delete` | Delete one session: body `{run_id}` (validated as above); it unlinks that one file only, missing is 404 |
 | POST | `/neo_agent/session/delete_all` | **Clear conversation** clears the saved history too: it deletes only the session files this module wrote — the directory and any other file stay untouched |
 
-- The whole turn is planned by the LLM calling tools, with a 12-turn cap. The dock has no skill picker — the LLM
-  picks the skill itself through `list_skills`, and `context` is its only evidence for which recipe and which paint
-  mode the work should revolve around.
+- The whole turn is planned by the LLM calling tools, with a per-turn cap: 12 by default, widened to 20 when the
+  `@` picker designates a body-only skill (no `workflow.json`). The dock's `@` can designate a skill (a template
+  skill becomes the `skill_id`, a body-only skill runs through `generate_prompt`); when nothing is designated the
+  LLM picks the skill itself through `list_skills`, and `context` is its only evidence for which recipe and which
+  paint mode the work should revolve around. One run reads the designated skill's summary once
+  (`/rs_prompts/load_skill`: category / `description` / template flag / reference-file list); the skill body never
+  enters the dock's context, and a skill that cannot be read (deleted mid-run) falls back to naming the id only.
 - `context` enters the system prompt as facts, never as instructions: `page` accepts only `gallery` / `director` /
   `paint` / `skills` / `settings`, `paint_mode` counts only on the paint page and accepts only `text` / `edit`,
   recipe names and library paths are clipped to 120 characters, `segments` is taken as an integer, and any value
@@ -300,7 +304,9 @@ included), and the dock never calls a handler directly.
 - Image / video generation skills in `skills` also carry an optional `gen_config` summary (main model, LoRA name
   list, long-edge size, default ratio, steps); the field is omitted when everything is empty.
 - `load_skill` returns the body, the list of companion `.md` files, `max_tokens`, the image / video generation
-  flags, the video mode, the reference-image requirement, and whether a local configuration override exists.
+  flags, the video mode, the reference-image requirement, whether a local configuration override exists, and
+  whether the directory has a `workflow.json` template (`has_workflow`; the dock agent uses that flag to know a
+  body-only skill can only run through `generate_prompt` — see `docs/en/skills.md`).
 - `save_skill` validates name uniqueness (a collision with another skill returns 409); omitted optional fields keep
   the existing frontmatter values, and an explicit falsy value removes the field.
 - The LLM configuration and title-extraction routes (`get_models` / `native_models` / `set_model` /

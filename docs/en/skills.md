@@ -23,6 +23,23 @@ Image and video skills additionally have a `config.json` (saved settings: model 
 prefix …) and a `workflow.json` (an API-format workflow template with runtime variables as `{{...}}`
 placeholders).
 
+## How the right agent dock uses skills
+
+The `@` in the agent dock's input designates a skill, and the candidates come in two kinds:
+
+| Kind | How to tell | What a designated turn does |
+|------|-------------|------------------------------|
+| Generator skill | Has `workflow.json` and `gen_image` / `gen_video` | Becomes `generate_image`'s `skill_id`; on film work it is written into the recipe's segment `skill_id` |
+| Body-only skill | No `workflow.json`; `category` is image / video prompt enhance, vision, or custom | Runs as `generate_prompt(skill_id=…)` — the skill body and its `references/` are read by the server inside that call, which produces the script / storyboard / shot list / finished prompt to generate from |
+
+`task` skills are not candidates — that work needs a recipe and running tasks, so designating one produces
+nothing. The designated skill stays across turns and travels in the request body as `skill_id`; one run reads
+that skill's summary once (category, `description`, template flag, reference-file list) and the body never enters
+the dock's context. A turn that designates a body-only skill gets its turn cap widened to 20 and its ask cap
+widened to 6 (every gate in the body gets its own `ask_user`); every other run keeps 12 turns and one question.
+An imported Agent Skills folder (`SKILL.md` + `references/`) is the second kind:
+the whole `references/` tree lands with the skill and the server reads it on demand inside `generate_prompt`.
+
 ## Skill manager window
 
 Two entry points: the 🅝 menu's "🗂 Skill Management" opens the unified window (left: collapsible
