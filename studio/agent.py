@@ -171,11 +171,15 @@ SKILL_PROSE_NAG_MAX = 2      # 实测见过认死的那一发：催一次它把�
 # 选项行带「标签：说明」也算——实测第 2 发的门就是「- A. 温馨治愈系：暖黄灯光、柔和阴影…」。
 # 认「表态句」不认「交代句」：报流程清单那一发的引导句（「这是这套流程要走的主要步骤：」）与交付说明
 # 末尾那排「下一步：1. 跑整片」都是交代，右栏的下一步方向本来就是可点按钮，不该被当门催。
+# 「现在需要确认两个关键参数」这种陈述式问句也算表态：实测模型把两问道门连选项塞进 1./2. 编号项下面。
 PROSE_OPTION_RE = re.compile(r"^\s*(?:[-*•]\s*)?(?:\*\*)?(?:[A-Za-z]|\d+)[\.、\)）]\s*\S")
-PROSE_ASK_RE = re.compile(r"请回复|请从|请选|请挑|请决定|请确认|回复\s*[A-D]|选(一|择一|定一)个|择一|哪种|要不要|是否")
+PROSE_LETTER_RE = re.compile(r"^\s*(?:[-*•]\s*)?(?:\*\*)?[A-Za-z][\.、\)）]")
+PROSE_ASK_RE = re.compile(r"请回复|请从|请选|请挑|请决定|请确认|需要确认|确认一下|你来定|你定|选择|哪个|哪种"
+                          r"|回复\s*[A-D]|选(一|择一|定一)个|择一|要不要|是否")
 PROSE_LEAD_LIST_RE = re.compile(r"步骤|清单|流程|产出|下一步|交付")
 PROSE_RUN_MIN = 2         # 两条选项才是一道门；一条是顺口给的替代方案
-PROSE_RUN_MAX = 6         # ask_user 的门最多 5 条选项；更长的编号块是流程清单
+PROSE_RUN_MAX = 12        # 两问道门连着编号小标题能到七八行；更长的编号块是流程清单
+PROSE_LETTER_MIN = 2      # 门给的是 A/B/C 方向，流程清单给的是 1./2./3. 步骤：字母行少于两行就不是门
 PROSE_OPTION_MAX_LEN = 72     # 门上的选项一行说清一个方向，长过这个行数的是清单里那一步的说明
 
 
@@ -198,7 +202,8 @@ def _asks_in_prose(text: str) -> bool:
         end = i
         while end < len(lines) and _is_prose_option(lines[end]):
             end += 1
-        if PROSE_RUN_MIN <= end - i <= PROSE_RUN_MAX:
+        if PROSE_RUN_MIN <= end - i <= PROSE_RUN_MAX \
+                and sum(1 for ln in lines[i:end] if PROSE_LETTER_RE.match(ln)) >= PROSE_LETTER_MIN:
             lead = lines[max(0, i - 2):i]
             tail = lines[end:end + 2]
             if any(PROSE_ASK_RE.search(ln) and not PROSE_LEAD_LIST_RE.search(ln) for ln in lead) \

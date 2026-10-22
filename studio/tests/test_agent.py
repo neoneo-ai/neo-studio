@@ -2635,6 +2635,17 @@ class TestSkillProcessGates(unittest.TestCase):
                    "- D. **吉卜力式手绘 3D**：细腻毛发/羽毛、柔焦高光、自然风、轻古典钢琴。\n\n"
                    "选一个字母（A–E），我就按这个基调往下拆故事大纲。")
 
+    # 实测第 3 次会话原文：门藏在「1. 画面比例：」这种编号项下面，表态句是「需要确认两个关键参数」
+    PROSE_GATE5 = ("收到！现在需要确认两个关键参数：\n\n"
+                   "1.  **画面比例**：\n"
+                   "    *   A. 16:9 横屏（电影短片推荐）\n"
+                   "    *   B. 9:16 竖屏（短视频）\n"
+                   "    *   C. 1:1 方形\n"
+                   "    *   D. 自定义\n\n"
+                   "2.  **总时长**：\n"
+                   "    *   A. 30 秒\n"
+                   "    *   B. 60 秒")
+
     @staticmethod
     def _tool_call(name, args, tc_id):
         return {"content": "", "tool_calls": [{"id": tc_id, "function": {
@@ -2835,6 +2846,7 @@ class TestSkillProcessGates(unittest.TestCase):
         self.assertTrue(agent._asks_in_prose(self.PROSE_GATE2))
         self.assertTrue(agent._asks_in_prose(self.PROSE_GATE3))
         self.assertTrue(agent._asks_in_prose(self.PROSE_GATE4))
+        self.assertTrue(agent._asks_in_prose(self.PROSE_GATE5))
         client, run = self._named_run({})
         frames = self._loop(client, run, [{"content": intro}, {"content": delivery}])
         self.assertEqual([m for m in run.messages

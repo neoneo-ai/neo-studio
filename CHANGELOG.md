@@ -18,7 +18,9 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   `_focus_block` prints so the run continues from the current step instead of re-asking step 1. Gates the model
   writes as answer text (`A. B. C.` lines plus a question) leave the user typing an answer — only `ask_user` renders
   clickable options — so a final answer of that shape is nagged into an `ask_user` call, twice at most per run (the
-  second nag demands that single tool call; a model that keeps answering in prose still finishes). Covered by
+  second nag demands that single tool call; a model that keeps answering in prose still finishes). A gate also counts
+  when its options hang under numbered sub-headings (`1. 画面比例：` then `A. B. C.`) and when the question is written
+  as a statement (`现在需要确认两个关键参数：`) — the shape a 14B model actually produces. Covered by
   `studio/tests/test_agent.py` (`TestSkillProcessGates`); docs in `docs/skills.md` and its `docs/en/` mirror.
 
 - **The body-only skill's step list, gates and recipe delivery are enforced by the backend.** Four end-to-end runs of a
