@@ -1,0 +1,8 @@
+{
+  "name": "neo-studio-dsh-probe",
+  "private": true,
+  "description": "dev-only dsh 内核探针的安装点。npm 的项目根是向上找最近的 package.json，这份文件的作用是把安装关在本目录里，不进仓库根的测试清单。",
+  "dependencies": {
+    "@deepseek-ai/dsh": "0.2.1-rc.2"
+  }
+}

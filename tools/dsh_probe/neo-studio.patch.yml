@@ -1,0 +1,62 @@
+# Neo Studio dsh 内核探针的 profile 叠加层（dev-only，tools/ 不进 Registry 包）。
+# 叠在 @deepseek-ai/dsh-sdk-minimal 那棵完整树上：按 id 换整行配置，插新行走 insert。
+# 行名与默认值照上游 packages/bundle/sdk-minimal/cordis.patch.yml。
+
+# 生成类工具是分钟级量级：一次并发多条生成会把「逐发问人」的闸打散，串行才有闸的落点。
+- id: agent-loop
+  config:
+    maxParallelToolCalls: 1
+
+# 闸不在 dsh 侧：这棵树没有 approval 与 interactions 行，闸落在我们自己的工具层。
+# 摘 shell 与 subprocess 是同一件事的另一半：sandbox-policy 是 danger-full-access 且
+# tool-fs 的 write 与 edit 本来就 false，shell 与 subprocess 是这棵树里仅剩的写盘与起进程通道。
+# subprocess 与 pty 的 install script 被 npm 的 allow-scripts 拦掉（spawn helper 没生成），
+# 留着它们只会在工具表里挂一条跑不通的工具。
+- id: persistent-bash
+  disabled: true
+- id: persistent-pwsh
+  disabled: true
+- id: terminal-bash
+  disabled: true
+- id: terminal-pwsh
+  disabled: true
+- id: subprocess
+  disabled: true
+- id: pty
+  disabled: true
+
+# sessionTitle 是 ctx.sessionTitle 的唯一 provider，留着：摘掉它生成标题就没有生产者。
+- id: sandbox-policy
+  config:
+    mode: danger-full-access
+    workspaceRoot: !!js process.env.NEO_PROBE_WORKSPACE || process.cwd()
+
+# 系统提示词灌我们那一份（studio/prompts/agent/system_prompt.md，约 19KB）：personaPrefix 在
+# order 0，先于自带引导；这棵树的 includeHarnessIdentity 本来就关着。
+# 正文不能在这里现读：!!js 是 new Function，dsh 是 ESM 包，函数体里没有 require（实测落
+# 兜底句）。正文由 dsh_host.py 在运行时把本文件的 __NEO_SYSTEM_PROMPT__ 行换成缩进好的
+# 文本再交 --patch，正文与代码同源，不进第二份拷贝。
+- id: system-prompt
+  config:
+    includeHarnessIdentity: false
+    includeRuntimeContext: false
+    personaPrefix: |-
+      __NEO_SYSTEM_PROMPT__
+
+# 能力面全在 Neo Studio 的 MCP server：stdio、强制本机回环、只用标准库。
+# toolCallTimeoutMs 抬到 15 分钟：客户端默认 60 秒，分镜串行是段乘数分钟，第一段还没出图
+# 整条 tools/call 就被掐掉。
+- insert:
+  - id: mcp-neo
+    name: '@deepseek-ai/dsh-mcp-client'
+    config:
+      serverName: neo
+      transport: stdio
+      command: !!js process.env.NEO_PYTHON || "python"
+      args:
+        - !!js process.env.NEO_MCP_SERVER
+        - "--comfy-url"
+        - !!js process.env.NEO_MCP_COMFY_URL || "http://127.0.0.1:8188"
+      env:
+        NEO_MCP_COMFY_URL: !!js process.env.NEO_MCP_COMFY_URL || "http://127.0.0.1:8188"
+      toolCallTimeoutMs: 900000
