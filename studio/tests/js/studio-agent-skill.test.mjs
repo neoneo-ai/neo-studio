@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { resetEnv, flush, sleep, mockRoute, jsonResponse, sseResponse, click, keydown, inputText, fetchLog, dropFiles, makeFile, setConfirmAnswer, dialogs } from "./setup.mjs";
+import { resetEnv, flush, sleep, mockRoute, jsonResponse, sseResponse, click, keydown, inputText, fetchLog, dropFiles, makeFile, pasteClipboard, setConfirmAnswer, dialogs } from "./setup.mjs";
 import { appState } from "./mocks/comfy-app.mjs";
 import { app as studioApp } from "../../web/studio/shim/app.js";
 import { setLang } from "../../web/js/core/i18n.js";
@@ -973,6 +973,102 @@ test("拖入图片：进附件缩略图，发送时随请求体走并清空", as
     assert.ok(dock().querySelector(".neo-agent-ask-media img"), "回合里应留下附件缩略图");
 });
 
+// ====== 附件图竞态与缺素材可见性 ======
+// 用户以为「粘进输入框就是给了素材」：界面上的缩略图与请求体里的图必须同一份口径——粘贴 / 拖入 /
+// 素材库拖入都是异步读出来的，生成这一步要等在飞读图上（不自动补发，发送始终是用户那一击）。
+// 零素材那一发要在时间线上写明没带图；出片那一侧的闸门在后端（studio/agent.py 的缺素材闸）。
+test("粘贴后立刻点生成：读图先落地，图进请求体，只发一次请求", async () => {
+    mountStudio();
+    await openStudio("#/gallery");
+    mockAgentStream([{ kind: "content", text: "图里是一只橘猫" }]);
+
+    pasteClipboard(dock().querySelector(".neo-agent-input"), [makeFile("cat.png", "image/png")]);
+    inputText(dock().querySelector(".neo-agent-input"), "这张图能做什么");
+    click(runBtn());
+    await until(() => agentCalls().length === 1, "生成这一步要等在飞读图，读完就发这一发");
+    await flush(40);
+
+    const calls = agentCalls();
+    assert.equal(calls[0].body.images.length, 1, "粘贴的图要进请求体，不能停在零附件那一发");
+    assert.ok(calls[0].body.images[0].data.startsWith("data:image/"), "附件图按 data URI 给后端");
+    assert.equal(dock().querySelector(".neo-agent-chip"), null, "发送后附件清空");
+    // 收场才离开这条用例：跑到最终回答再等流跑完，不把在飞的运行漏给下一条
+    await until(() => dock().querySelector(".neo-agent-answer-body"), "这一发应跑到最终回答");
+    await flush(40);
+});
+
+test("回合头写明这一发带几张图、零图那一发写明不带", async () => {
+    mountStudio();
+    await openStudio("#/gallery");
+    mockAgentStream([{ kind: "content", text: "两张都是橘猫" }]);
+
+    pasteClipboard(dock().querySelector(".neo-agent-input"),
+                   [makeFile("a.png", "image/png"), makeFile("b.png", "image/png")]);
+    inputText(dock().querySelector(".neo-agent-input"), "看这两张图");
+    click(runBtn());
+    await until(() => agentCalls().length === 1, "两张图读完后应发出这一发");
+    await flush(40);
+    assert.ok(metaLines()[0].textContent.includes("附件图 2 张"),
+              `回合头应写明图数：${metaLines()[0].textContent}`);
+    assert.equal(agentCalls()[0].body.images.length, 2, "两张图都要进请求体");
+
+    mockAgentStream([{ kind: "content", text: "换个说法" }]);
+    inputText(dock().querySelector(".neo-agent-input"), "换个说法");
+    click(runBtn());
+    await until(() => agentCalls().length === 2, "第二发应发出");
+    await flush(40);
+    assert.ok(metaLines()[1].textContent.includes("不带附件图"),
+              `零图那一发要写明不带：${metaLines()[1].textContent}`);
+    assert.equal(agentCalls()[1].body.images.length, 0);
+    await until(() => dock().querySelectorAll(".neo-agent-answer-body").length === 2, "第二发应跑到最终回答");
+    await flush(40);
+});
+
+test("零附件零产物那一发：时间线上铺一行补素材的提醒", async () => {
+    mountStudio();
+    await openStudio("#/gallery");
+    mockAgentStream([{ kind: "content", text: "缺素材，先问方向" }]);
+
+    inputText(dock().querySelector(".neo-agent-input"), "做个品牌宣传片，参考我们的 logo 和 APP 界面");
+    click(runBtn());
+    await until(() => dock().querySelector(".neo-agent-no-media"), "零附件零产物应铺出补素材提醒");
+    assert.ok(dock().querySelector(".neo-agent-no-media").textContent.includes("没有附件图"),
+              `提醒行应写明缺什么：${dock().querySelector(".neo-agent-no-media").textContent}`);
+    await flush(20);
+});
+
+test("产物到了、带了图、计划模式收场：都不铺补素材提醒行", async () => {
+    mountStudio();
+    await openStudio("#/gallery");
+    mockAgentStream([IMAGE_RESULT, { kind: "content", text: "出好了" }]);
+    inputText(dock().querySelector(".neo-agent-input"), "画一只橘猫");
+    click(runBtn());
+    await until(() => agentCalls().length === 1 && finalRow(), "第一发应跑到最终回答");
+    await flush(40);
+    assert.equal(dock().querySelector(".neo-agent-no-media"), null, "有产物就不该提醒缺素材");
+
+    mockAgentStream([{ kind: "content", text: "图里是一只橘猫" }]);
+    dropFiles(dock().querySelector(".neo-agent-composer"), [makeFile("cat.png", "image/png")]);
+    for (let i = 0; i < 50 && !dock().querySelector(".neo-agent-chip img"); i += 1) await sleep(20);
+    inputText(dock().querySelector(".neo-agent-input"), "这张图能做什么");
+    click(runBtn());
+    await until(() => agentCalls().length === 2 && dock().querySelector(".neo-agent-ask-media img"),
+                "带了图的第二发应跑到时间线上");
+    await flush(40);
+    assert.equal(dock().querySelector(".neo-agent-no-media"), null, "带了图的零产物不是缺素材");
+
+    mockAgentStream([{ kind: "content", text: "计划已给出" }]);
+    click(modeBtns().find((b) => b.dataset.mode === "plan"));
+    inputText(dock().querySelector(".neo-agent-input"), "先规划一下");
+    click(runBtn());
+    await until(() => agentCalls().length === 3, "计划模式那一发应发出");
+    await flush(40);
+    assert.equal(agentCalls()[2].body.mode, "plan", "这一发是计划模式");
+    assert.equal(dock().querySelector(".neo-agent-no-media"), null, "计划模式本就不出产物，不该提醒");
+    await until(() => dock().querySelectorAll(".neo-agent-answer-body").length === 3, "计划那一发应跑到最终回答");
+    await flush(40);
+});
+
 // 素材库卡片只带自定义 MIME，dataTransfer 里没有文件（与画廊拖放用例同一载荷）
 function dropGalleryCard(el, payload) {
     const ev = new window.Event("drop", { bubbles: true, cancelable: true });
@@ -1086,7 +1182,8 @@ test("执行模式存配方：结果一落地就广播刚写的配方名，一�
 
     inputText(dock().querySelector(".neo-agent-input"), "把这一版存成配方");
     click(runBtn());
-    await flush(40);
+    await until(() => savedEvents.length, "director_save 的结果一落地就该广播配方名");
+    await flush(20);
 
     assert.deepEqual(savedEvents, [{ name: "我的片子", created: true }],
         "只该按 director_save 的结果广播一次，出片结果不再报配方");
@@ -1103,7 +1200,8 @@ test("执行模式复制配方：副本按新名字广播", async () => {
 
     inputText(dock().querySelector(".neo-agent-input"), "复制一份这个配方");
     click(runBtn());
-    await flush(40);
+    await until(() => savedEvents.length, "副本落盘就该广播副本名");
+    await flush(20);
 
     assert.deepEqual(savedEvents, [{ name: "我的片子·副本", created: true }], "副本应按副本名广播");
 });
@@ -1123,7 +1221,8 @@ test("计划模式：后端拒回的那一发不写文件，不广播保存事�
     click(modeBtns()[0]);
     inputText(dock().querySelector(".neo-agent-input"), "出个片");
     click(runBtn());
-    await flush(40);
+    await until(() => toolCard(), "这一发的工具卡应铺进时间线");
+    await flush(20);
 
     assert.equal(agentCalls()[0].body.mode, "plan", "请求应带计划模式");
     assert.ok(toolCard(), "时间线里应留下这一发的工具卡");
@@ -1245,22 +1344,6 @@ test("列表里删除会话要二次确认：确认否掉不发删除请求，�
     await until(() => sessionDeleteCalls().length === 1, "确认后应发出一次删除请求");
     assert.equal(dialogs.confirms.length, 2, "两次点击各问一次");
     await until(() => historyDelBtns().length === 1, "重列后列表里该只剩剩下那条会话");
-});
-
-test("清空对话连着删历史：空态的最近列表跟着收空，提示行留下", async () => {
-    mountStudio();
-    let cleared = false;
-    mockRoute("/neo_agent/sessions", () => jsonResponse({ success: true, sessions: cleared ? [] : RECENT_SESSIONS.slice(0, 2) }));
-    mockRoute("/neo_agent/session/delete_all", () => {
-        cleared = true;
-        return jsonResponse({ success: true, deleted: 2 });
-    });
-    await openStudio("#/gallery");
-    await until(() => recentRows().length === 2, "开局空态应铺出两条最近会话");
-    click(dock().querySelector('.neo-agent-head-btn[title="清空对话与历史"]'));
-    await until(() => !recentRows().length, "清空后空态不该再列会话");
-
-    assert.ok(dock().querySelector(".neo-agent-empty-hint"), "提示行应留在空态里");
 });
 
 test("新增会话：铺开的会话收回空态，续聊条断开，后端历史原样留着", async () => {

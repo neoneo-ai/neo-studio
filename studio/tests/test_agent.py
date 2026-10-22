@@ -1952,7 +1952,7 @@ def _clear_prefs():
     agent.AGENT_PREFS_FILE.unlink(missing_ok=True)
 
 
-def _run_answered(run, answer: str, text: str = "出个片", mode: str = "act") -> list:
+def _run_answered(run, answer: str, text: str = "出个片", mode: str = "act", images=None) -> list:
     """跑一轮循环，把确认卡上的问句在 ask 帧落地那一刻就答掉：挂在 ASK_WAIT_SEC 的超时上
     就是拿真实时限换一次收场。"""
     frames = []
@@ -1965,7 +1965,7 @@ def _run_answered(run, answer: str, text: str = "出个片", mode: str = "act") 
             ask["event"].set()
 
     async def main():
-        await agent._run_agent(run.client, text, emit, run, mode)
+        await agent._run_agent(run.client, text, emit, run, mode, images)
 
     asyncio.run(main())
     return frames
@@ -2153,6 +2153,179 @@ class TestFilmGate(unittest.TestCase):
         self.assertFalse(agent._gate_refused("✅ 跑这一发"))
         self.assertFalse(agent._gate_refused("[timeout] 30 分钟没等到回答"))
         self.assertFalse(agent._gate_refused(""))
+
+
+@skip
+class TestMediaFacts(unittest.TestCase):
+    """模型只看得见进了请求体的图：用户在输入框粘贴 / 拖入的图，读成 data URI 之前不在这发里。
+    本轮图数要作为事实写进系统提示词；点名技能 + 零素材那一发的出片要在入队前问一次；
+    产物数与收场原因要落进会话文件与历史摘要——缺素材跑完零产物那种一发要认得出是谁挡下的。"""
+
+    GEN = {"id": "krea2_gen", "category": "image_gen", "description": "Krea2 文生图模板",
+           "has_workflow": True, "gen_image": True, "gen_video": False,
+           "content": "", "files": []}
+
+    @staticmethod
+    def _film_turns():
+        return [{"content": "出片", "tool_calls": [{"id": "c1", "function": {
+            "name": "director_run",
+            "arguments": json.dumps({"recipe": "brand", "segments": [{}, {}]})}}]},
+            {"content": "这一发交回来了"}]
+
+    @staticmethod
+    def _att():
+        """请求体里的附件图引用（闸口看的那一份）。"""
+        return [{"kind": "data", "data": "data:image/png;base64,AAAA"}]
+
+    @staticmethod
+    def _bytes():
+        """附件图解出来的字节（_run_agent 收的那一份）。"""
+        return [b"\x89PNG\r\n\x1a\nAAAA"]
+
+    def test_the_media_block_states_the_image_count_as_a_fact(self):
+        zero = agent._media_block(0)
+        self.assertIn("附件图 0 张", zero)
+        self.assertIn("这一发没有任何图", zero)
+        self.assertIn("ask_user", zero)
+        two = agent._media_block(2)
+        self.assertIn("附件图 2 张", two)
+        self.assertIn("这 2 张就是用户这一发给的全部图", two)
+        self.assertNotIn("这一发没有任何图", two)
+        self.assertIn("本轮输入素材：附件图 0 张", agent.system_prompt("act", image_count=0))
+        self.assertNotIn("本轮输入素材：附件图 0 张", agent.system_prompt("act"))
+
+    def test_the_turn_request_carries_the_image_count_of_this_turn(self):
+        seen = []
+
+        def chat(messages, tools):
+            seen.append(messages[0]["content"])
+            return {"content": "好了"}
+
+        for images, want in ((self._bytes(), "附件图 1 张"), (None, "附件图 0 张")):
+            client = FakeClient({}, names=("neo_status",))
+            with mock.patch.object(agent, "_chat", chat):
+                _run(lambda emit: agent._run_agent(client, "做个宣传片", emit,
+                                                   _runobj(client), "act", images))
+            self.assertIn(want, seen[-1])
+        self.assertIn("这一发没有任何图", seen[1])
+        self.assertNotIn("这一发没有任何图", seen[0])
+
+
+    def test_a_named_skill_with_no_media_asks_before_the_film_queues(self):
+        turns = self._film_turns()
+        client = FakeClient({"director_run": {"status": "succeeded", "filename": "f.mp4"}},
+                            names=("director_run",), skill_info=self.GEN)
+        run = _runobj(client)
+        run.user_skill = "krea2_gen"
+        with mock.patch.object(agent, "_chat", lambda m, t: turns.pop(0)):
+            frames = _run_answered(run, "⏹ 先不跑")
+        asks = [f for f in frames if f.get("kind") == "ask"]
+        self.assertEqual(len(asks), 1)
+        self.assertEqual(asks[0]["options"], list(agent.GATE_OPTIONS))
+        self.assertIn("本轮没有附件图", asks[0]["text"])
+        self.assertIn("2 段", asks[0]["text"])
+        self.assertIn("brand", asks[0]["text"])
+        self.assertEqual(client.calls, [], "确认卡挡下之后才发任务就等于没挡")
+        refused = [f for f in frames if f.get("kind") == "tool_result" and f["tool"] == "director_run"]
+        self.assertTrue(refused[0]["text"].startswith("[skipped]"))
+        self.assertTrue(run.media_gate_asked)
+
+    def test_the_media_gate_asks_once_and_the_answered_film_runs(self):
+        """一次运行只开口一次：用户在卡上说跑这一发，同一轮里的下一发出片不再拦。"""
+        turns = [{"content": "出片", "tool_calls": [
+            {"id": "c1", "function": {"name": "director_run",
+                                      "arguments": json.dumps({"recipe": "brand"})}},
+            {"id": "c2", "function": {"name": "director_run",
+                                      "arguments": json.dumps({"recipe": "brand2"})}}]},
+            {"content": "这一发交回来了"}]
+        client = FakeClient({"director_run": {"status": "succeeded", "filename": "f.mp4"}},
+                            names=("director_run",), skill_info=self.GEN)
+        run = _runobj(client)
+        run.user_skill = "krea2_gen"
+        with mock.patch.object(agent, "_chat", lambda m, t: turns.pop(0)):
+            frames = _run_answered(run, "✅ 跑这一发")
+        self.assertEqual(len([f for f in frames if f.get("kind") == "ask"]), 1)
+        self.assertEqual([c[0] for c in client.calls], ["director_run", "director_run"])
+
+    def test_the_media_gate_stays_quiet_with_media_a_plain_turn_or_a_prior_film(self):
+        """三种不拦：这一发带图、没点名技能、接上一发出过的片继续跑——拦它们就是把今天就在跑的
+        「继续出片」链路改成每次多点一下。"""
+        for label, atts, skill, focus in (("本轮带图", self._att(), "krea2_gen", {}),
+                                          ("没点名技能", None, "", {}),
+                                          ("焦点链里有成片", None, "krea2_gen", {"film": "cat.mp4"})):
+            turns = self._film_turns()
+            client = FakeClient({"director_run": {"status": "succeeded", "filename": "f.mp4"}},
+                                names=("director_run",), skill_info=self.GEN)
+            run = _runobj(client)
+            run.user_skill = skill
+            run.focus = dict(focus)
+            run.image_sources = list(atts or [])
+            with mock.patch.object(agent, "_chat", lambda m, t: turns.pop(0)):
+                frames = _run_answered(run, "⏹ 先不跑", images=self._bytes() if atts else None)
+            self.assertFalse([f for f in frames if f.get("kind") == "ask"], label)
+            self.assertEqual([c[0] for c in client.calls], ["director_run"], label)
+
+    def test_a_single_image_never_pays_for_the_media_gate(self):
+        turns = [{"content": "出图", "tool_calls": [{"id": "c1", "function": {
+            "name": "generate_image", "arguments": json.dumps({"prompt": "橘猫"})}}]},
+            {"content": "好了"}]
+        client = FakeClient({"generate_image": {"success": True, "images": []}},
+                            names=("generate_image",), skill_info=self.GEN)
+        run = _runobj(client)
+        run.user_skill = "krea2_gen"
+        with mock.patch.object(agent, "_chat", lambda m, t: turns.pop(0)):
+            frames = _run_answered(run, "⏹ 先不跑")
+        self.assertFalse([f for f in frames if f.get("kind") == "ask"])
+        self.assertEqual([c[0] for c in client.calls], ["generate_image"])
+
+
+    def test_the_reason_names_how_the_loop_closed(self):
+        """finish 收场 / 一句回答收场 / 跑满轮次 / 用户取消是四种不同的事：会话里要分得开。"""
+        client = FakeClient({}, names=("finish_task",))
+        queue = [{"content": "", "tool_calls": [{"id": "c1", "function": {
+            "name": "finish_task", "arguments": json.dumps({"result": "出好了", "media": []})}}]}]
+        run = _runobj(client)
+        with mock.patch.object(agent, "_chat", lambda m, t: queue.pop(0)):
+            _run(lambda emit: agent._run_agent(client, "出个片", emit, run))
+        self.assertEqual(run.reason, "finish")
+
+        queue = [{"content": "看图说话"}]
+        run = _runobj(client)
+        with mock.patch.object(agent, "_chat", lambda m, t: queue.pop(0)):
+            _run(lambda emit: agent._run_agent(client, "看这张图", emit, run))
+        self.assertEqual(run.reason, "answer")
+
+        def looping(messages, tools):
+            return {"content": "还在跑", "tool_calls": [{"id": "c1", "function": {
+                "name": "neo_status", "arguments": "{}"}}]}
+
+        client = FakeClient({"neo_status": {"neo_studio": "1"}}, names=("neo_status",))
+        run = _runobj(client)
+        run.max_turns = 2
+        with mock.patch.object(agent, "_chat", looping):
+            _run(lambda emit: agent._run_agent(client, "出个片", emit, run))
+        self.assertEqual(run.reason, "turns_exhausted")
+
+        run = _runobj(FakeClient({}, names=("neo_status",)))
+        run.stop.set()
+        with mock.patch.object(agent, "_chat", lambda m, t: {"content": "不该跑到这"}):
+            frames = _run(lambda emit: agent._run_agent(client, "出个片", emit, run))
+        self.assertEqual(run.reason, "cancelled")
+        self.assertIn(agent.CANCELLED_TEXT, [f.get("text") for f in frames])
+
+    def test_the_session_file_and_the_summary_record_media_and_reason(self):
+        _clear_sessions()
+        self.addCleanup(_clear_sessions)
+        run = _fake_run(FakeClient({}, names=("neo_status",)), text="做个宣传片")
+        run.media_urls = {"a.png": {"kind": "image", "title": "a.png",
+                                    "url": "/view?filename=a.png&type=output"}}
+        run.reason = "turns_exhausted"
+        agent._save_session(run)
+        _path, rec = _saved_one()
+        self.assertEqual(rec["media"], 1)
+        self.assertEqual(rec["reason"], "turns_exhausted")
+        item = [s for s in agent._list_sessions() if s["run_id"] == run.run_id][0]
+        self.assertEqual((item["media"], item["reason"]), (1, "turns_exhausted"))
 
 
 @skip

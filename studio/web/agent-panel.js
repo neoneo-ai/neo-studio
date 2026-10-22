@@ -331,7 +331,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
     // image_gen_edit._gen_image_skills / h3_video_gen._gen_video_skills），和正文型技能（只有 SKILL.md
     // 那套流程与 references/，没有模板，点了它本轮走 generate_prompt 跑技能自己的流程，见 agent.py
     // 的 _skill_block）。task 类不在候选里——那一发要的是配方与在跑的任务，在这里点了没有产出。
-    // 选中的技能只活在当前这一条会话里，随请求体 skill_id 交后端进系统提示词；新增会话、清空对话、
+    // 选中的技能只活在当前这一条会话里，随请求体 skill_id 交后端进系统提示词；新增会话、
     // 断开续聊、读回另一条会话都收回它。不写本机：页面重载回到空态就是没有会话，那颗本就不该在
     const PROMPT_SKILL_CATEGORIES = ["image_enhance", "video_enhance", "custom", "vision"];
     const isGenSkill = (s) => (s.gen_image || s.gen_video) && s.has_workflow;
@@ -454,6 +454,12 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
     // 后端按 prompts 的图片源解析并等比缩边，面板这边只管增删与预览
     const MAX_IMAGES = 6;
     const attachments = [];
+    // 在飞读图作业：粘贴 / 拖入 / 素材库拖入都是异步落地的。发送这一步先等它们落进 attachments，
+    // 否则「粘完图立刻点生成」会把图留在请求体外——后端收到的就是零附件那一发，模型看不见图
+    const inflight = new Set();
+    async function settleAttachments() {
+        while (inflight.size) await Promise.allSettled(Array.from(inflight));
+    }
     function renderChips() {
         chips.replaceChildren();
         attachments.forEach((img, i) => {
@@ -483,16 +489,18 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
         Array.from(files || [])
             .filter((f) => f.type && f.type.startsWith("image/"))
             .forEach((f) => {
-                if (attachments.length >= MAX_IMAGES) return;
+                if (attachments.length + inflight.size >= MAX_IMAGES) return;
                 // 浏览器画不动的图（HEIC 这类）退回原始 data URI：后端 PIL 认得的原图比缩过的副本更值得给
-                fileToBase64(f)
+                const job = fileToBase64(f)
                     .catch(() => rawFileToDataUri(f))
                     .then((img) => {
                         if (!img) return;
                         attachments.push(img);
                         renderChips();
                     })
-                    .catch(() => {});
+                    .catch(() => toast("error", t("附件图读取失败，这一发没带上它")));
+                inflight.add(job);
+                job.finally(() => inflight.delete(job));
             });
     }
     function clearAttachments() { attachments.length = 0; renderChips(); }
@@ -522,20 +530,21 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
         try { payload = JSON.parse(raw); } catch { return; }
         if (!payload || !payload.filename) return;
         e.preventDefault();
-        if (attachments.length >= MAX_IMAGES) { toast("warning", tf("附件图最多 {n} 张", { n: MAX_IMAGES })); return; }
+        if (attachments.length + inflight.size >= MAX_IMAGES) { toast("warning", tf("附件图最多 {n} 张", { n: MAX_IMAGES })); return; }
         if (!GALLERY_IMAGE.test(payload.filename)) { toast("warning", t("素材库里的视频和音频不能当参考图")); return; }
-        copyGalleryToInput(raw)
+        const job = copyGalleryToInput(raw)
             .then((copied) => {
                 if (!copied) { toast("error", t("素材库图片复制失败")); return; }
                 attachments.push({ input: copied, name: copied });
                 renderChips();
             })
             .catch(() => toast("error", t("素材库图片复制失败")));
+        inflight.add(job);
+        job.finally(() => inflight.delete(job));
     }
     const chatHead = sectionHead(t("智能体"), [
         headBtn("＋", t("新增会话"), () => newSession()),
         headBtn("🗂", t("会话历史"), () => toggleHistory()),
-        headBtn(icon("trash"), t("清空对话与历史"), () => clearConversation()),
         headBtn("⚙", t("智能体偏好"), () => onOpenPrefs && onOpenPrefs()),
     ]);
     // 会话标题 = 整条对话的第一句话，钉在栏头那一行上（生成中一直在，读回旧会话、历史列表认同一句，
@@ -898,6 +907,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
     let restartFrom = 0;   // 「从这条消息重新开始」的序号：旧会话里第几条用户消息（1 起），0 = 整条接上
     let historyOpen = false;
     let lastTurn = null;   // 上一发的原文、模式与附件图：失败收场那一行靠它原样重发
+    let cancelledRun = false;   // 用户自己按的取消：这一发的零产物不是缺素材，不该弹素材提醒
 
     // 「接上次会话」条铺在文本框上方，与「⏹ 取消」同一位置口径：打开过一条旧会话才出现，
     // 点一下断开。下一次「✨ 生成」带着 resume 打后端，旧对话原文接在系统提示词之后。
@@ -1163,17 +1173,9 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
         setConversationTitle("");   // 栏头回「智能体」，舞台页眉跟着回默认
         resumeId = "";
         setSkill("", "");   // 收回空态就是没有会话：上一条会话点名的技能跟着消失
-        retryBar.hidden = true;   // 「＋ 新增会话」与清空历史都收掉失败那一行
+        retryBar.hidden = true;   // 收回空态就收掉失败那一行
         renderResumeBar();
         renderRecent();
-    }
-
-    // 垃圾桶图标的「清空对话与历史」连着清后端保存的历史：删掉的是整目录里的会话文件，先确认再动手
-    async function clearConversation() {
-        newSession();
-        if (!window.confirm(t("清空对话会同时删掉后端保存的历史会话，继续？"))) return;
-        await postJson("/neo_agent/session/delete_all", {});
-        renderRecent();   // 后端历史已清空：空态里的最近列表跟着收空，不能留在屏幕上
     }
 
     // 主按钮三态：空闲「✨ 生成」、运行中「⏸ 暂停」、暂停中「▶ 继续」。整行「⏹ 取消」跟着
@@ -1198,6 +1200,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
         const view = agentTimeline(answer);
         activeView = view;
         controller = new AbortController();
+        let mediaCount = 0;   // 这一发真交出去的产物数：零素材零产物的提醒行靠它判
         await sseStream("/neo_agent/run", {
             signal: controller.signal,
             onChunk: (frame) => {
@@ -1212,6 +1215,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
                 else if (kind === "status") view.status(frame.text || "", frame.task_id || "", frame.preview);
                 else if (kind === "tool_result") {
                     view.toolResult(frame.text || "", frame.media || []);
+                    mediaCount += (frame.media || []).length;
                     // 配方落盘只发生在后端，界面这一侧要有人接：广播后导演页左栏刷新并选中新配方，
                     // 用户点开即进编辑器调整，跑整片与单段都在那里复用同一份配方
                     const saved = savedRecipeName(frame.tool || "", frame.text || "");
@@ -1228,7 +1232,10 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
                 else if (kind === "focus") view.focus(frame.focus || {});
                 else if (kind === "usage") view.usage(frame);
                 else if (kind === "context") view.context(frame);
-                else if (kind === "finish") view.finish(frame.text || "", frame.media || [], frame.options || []);
+                else if (kind === "finish") {
+                    view.finish(frame.text || "", frame.media || [], frame.options || []);
+                    mediaCount += (frame.media || []).length;
+                }
                 else view.answer(frame.text || "");
                 transcript.scrollTop = transcript.scrollHeight;
             },
@@ -1236,6 +1243,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
             // 用户主动取消的断流不走这条，那一行不会在取消后铺出来
             onError: (err) => { markFail(); view.error(String(err || t("生成失败"))); },
         }, { text, mode: planMode, images, context, preview_side: previewSide && previewSide(), resume: resumeId || undefined, from: restartFrom || undefined, skill_id: skillId || undefined });
+        return mediaCount;
     }
 
     // 「⏸ 暂停」只置后端一个位，SSE 不断：后端在下一个轮次 / 轮询边界把在飞的任务掐掉、发
@@ -1270,6 +1278,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
     // 不给一个空 run_id 去打接口
     async function stopRun() {
         if (!running || !controller) return;
+        cancelledRun = true;   // 用户自己收的场：零产物不是缺素材
         run.disabled = true;
         cancelBar.hidden = true;
         labelSpans(run, t("⏳ 取消中"));
@@ -1291,7 +1300,9 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
 
     async function generate() {
         if (running) return;
+        await settleAttachments();   // 在飞读图先落地：发送口径必须和界面上的缩略图一致
         retryBar.hidden = true;
+        cancelledRun = false;
         const text = input.value.trim();
         // 只给图不给字是合法输入（看图说话），两头都空才拦。素材库拖入的图已在 input 目录里，
         // 按文件名给后端（与绘画页参考图同一口径），本地粘贴 / 选图仍是 data URI
@@ -1311,13 +1322,15 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
         // 把三份都留在面板里。重发是新的一轮，不带 resume 与「从这条消息重开」
         lastTurn = { text, mode: planMode, files: attachments.map((a) => ({ ...a })) };
         let failed = false;
+        let produced = 0;   // 这一发真交出去的产物数
         if (empty.parentNode) empty.remove();
         const turn = mkEl("div", "neo-agent-turn");
         const meta = mkEl("div", "neo-agent-meta");
         meta.textContent = (ctxLine() || t(ctxOff ? "不带界面上下文" : "无当前上下文"))
             + (planMode === "plan" ? " · " + t("计划") : "")
             + (resumeId ? " · " + t("接上次会话") : "")
-            + (restartFrom ? " · " + tf("从第 {n} 条消息重开", { n: restartFrom }) : "");
+            + (restartFrom ? " · " + tf("从第 {n} 条消息重开", { n: restartFrom }) : "")
+            + (images.length ? " · " + tf("附件图 {n} 张", { n: images.length }) : " · " + t("不带附件图"));
         const ask = mkEl("div", "neo-agent-ask");
         ask.textContent = text;
         turn.appendChild(meta);
@@ -1345,7 +1358,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
         // 运行中锁模式：一轮跑到一半换模式等于把工具表从脚下抽走，计划要留到下一轮
         modeBtns.forEach((b) => { b.disabled = true; });
         try {
-            await runAgent(answer, text, planMode, images, context, () => { failed = true; });
+            produced = await runAgent(answer, text, planMode, images, context, () => { failed = true; });
         } catch (e) {
             failed = true;
             answer.textContent = String(e);
@@ -1360,6 +1373,14 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
             setRunState("run");
             modeBtns.forEach((b) => { b.disabled = false; });
             if (failed) showRetryBar();
+            // 零素材那一发跑完零产物：把「这一发没带图」写在时间线上。用户以为粘进输入框就算给了素材，
+            // 这一行是界面唯一一处把事实说给他听的地方，不用他猜模型有没有看到图
+            if (planMode !== "plan" && !failed && !cancelledRun && !images.length && !produced) {
+                const tip = mkEl("div", "neo-agent-no-media");
+                tip.textContent = t("这一发没有附件图，也没有产物：需要 LOGO / UI 截图 / 产品图这类素材时，把图粘贴进输入框或从素材库拖进来，再发一次");
+                turn.appendChild(tip);
+                transcript.scrollTop = transcript.scrollHeight;
+            }
         }
     }
 

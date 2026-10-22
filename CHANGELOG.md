@@ -4,6 +4,26 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **An attached image is in a turn only when it reached the request.** Pasting, dropping and library-dropping an image
+  read it asynchronously, so **✨ 生成** right after a paste took `attachments` while the read was still in flight: the
+  turn went out with zero images, the model saw the text alone, and a brand film with no logo or UI screenshot was built
+  out of the words and ran for minutes before the user noticed. The composer now keeps every read in flight in a panel-
+  owned set and `generate` settles it before taking the attachments — the chips on screen and the images in the request
+  body are one set, and a paste never sends by itself (sending stays the user's click); a read that fails says so in a
+  toast instead of vanishing. The turn header names 「附件图 N 张 / N attached image(s)」 and writes 「不带附件图 / no
+  attached images」 on a turn with none, and an Act run that ends with no attachments and no produced media lays a
+  「这一发没有附件图，也没有产物」 reminder row on the timeline (plan mode, an `[ERROR]` ending, a user **⏹ Cancel** and a
+  turn that carried images never show it). The backend gets the same fact: the system prompt carries
+  「本轮输入素材：附件图 N 张」 every turn, and a designated skill with no source image (attachments empty, focus chain
+  carrying no produced image or film) opens a material card on the first call of the four film tools — 「⏹ 先不跑」
+  keeps the call out of the queue as a `[skipped]` result, 「✅ 跑这一发」 runs it as written, and the card opens once
+  per run, separate from the `confirm_films` scale card. Each saved session records its produced-media count `media`
+  and closing `reason` (`finish` / `answer` / `turns_exhausted` / `cancelled`, the run's terminal status when the loop
+  never reached a closing branch), and `GET /neo_agent/sessions` carries the same pair, so a zero-media
+  `turns_exhausted` session reads that way in the list. Covered by `studio/tests/test_agent.py` (`TestMediaFacts`) and
+  `studio/tests/js/studio-agent-skill.test.mjs`. Docs in `docs/prompts.md`, `docs/api-routes.md` and their `docs/en/`
+  mirrors.
+
 - **A designated skill that has no template now runs its own flow.** The dock's `@` picker only offered the
   template-backed generation skills (`workflow.json`), so naming one of the body-only skills — the
   `SKILL.md` + `references/` kind that writes a script, a storyboard or a finished prompt — was impossible, and

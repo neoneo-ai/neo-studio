@@ -184,7 +184,7 @@ Neo Studio 独立页面（`web/studio/index.html`）的后端。素材 / 生图 
 | POST | `/neo_agent/cancel` | 取消：带 `run_id` 停整条智能体循环并掐掉在跑的任务（`run_id` 只收 `run` 帧发过的形态，查不到 404）；带 `task_id` 只掐那一个任务（走 MCP `cancel_task`，图片 / 整片 / 单段 / 拼接四类由协议自己找路由），`task_id` 只收 UUID 形态 |
 | POST | `/neo_agent/pause` | 暂停：body `{run_id}`（校验同 cancel），让循环停在下一个轮次 / 轮询边界，SSE 开着不收尾；在飞的 ComfyUI 任务没有暂停态，边界上掐掉它并交回 `cancelled`，恢复后不自动重发 |
 | POST | `/neo_agent/resume` | 继续：body `{run_id}`（校验同 cancel），放开正等在暂停检查点上的循环；没在暂停时是空操作，重复点「继续」不会把运行推过检查点 |
-| GET | `/neo_agent/sessions` | 「🗂 历史」列表：新的在前，只回摘要（时间 / 模式 / 终态 / 首句 / 工具数 / `focus_skill`）；读时顺带收掉落盘超 7 天的会话 |
+| GET | `/neo_agent/sessions` | 「🗂 历史」列表：新的在前，只回摘要（时间 / 模式 / 终态 / 首句 / 工具数 / 产物数 / `reason` 收场原因 / `focus_skill`）；读时顺带收掉落盘超 7 天的会话 |
 | GET | `/neo_agent/session` | 按 `run_id`（查询串，只收 `run` 帧发过的形态）读回一条会话：`frames` 逐帧时间线、续聊要用的 `messages` 与 `focus`（焦点链）；形态不对 400、没有 404 |
 | POST | `/neo_agent/session/delete` | 删一条会话：body `{run_id}`（校验同上），只删那一个文件，没有 404 |
 | POST | `/neo_agent/session/delete_all` | 「清空对话」连着清历史：只删会话目录里按名字认出来的文件，目录与别的文件不碰 |

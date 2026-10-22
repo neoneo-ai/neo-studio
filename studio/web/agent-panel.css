@@ -287,6 +287,15 @@
     color: var(--neo-vsc-fg-dim);
 }
 
+/* 零素材零产物的提醒行：界面说的，不是智能体的回答，视觉上要退到正文之外 */
+.neo-agent-no-media {
+    margin-top: 6px;
+    padding: 4px 6px;
+    border-left: 2px solid var(--neo-vsc-border);
+    font-size: 11px;
+    color: var(--neo-vsc-fg-dim);
+}
+
 .neo-agent-ask {
     white-space: pre-wrap;
     word-break: break-word;

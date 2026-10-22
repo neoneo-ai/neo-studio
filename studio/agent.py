@@ -312,6 +312,10 @@ class _Run:
         self.max_asks = ASK_ROUNDS
         # 本次运行真出现过的产物：名字 → 产物项。finish_task 只认这份表里的名字
         self.media_urls: dict[str, dict] = {}
+        # 缺素材闸的一次性位：点名技能 + 零素材那一轮，出片级工具只开口问一次，问过就放行
+        self.media_gate_asked = False
+        # 收场原因：finish / answer / turns_exhausted / cancelled；循环没走到收场分支时落状态名
+        self.reason = ""
 
     async def await_answer(self, emit, question: str, options: list) -> str:
         """发一问，等到用户点选或超时。超时是真实失败模式：整页导航走、SSE 还挂着，
@@ -464,6 +468,8 @@ def _save_session(run) -> None:
                "title": _session_title(run),
                "resume_of": run.resume_of, "resume_from": run.resume_from, "focus": run.focus,
                "usage": run.usage, "plan_steps": run.plan_steps,
+               # 本轮产物数与收场原因：零素材跑完零产物那种一发，在历史里要一眼认得出是谁挡下的
+               "media": len(run.media_urls), "reason": run.reason,
                "input": {"text": run.text, "images": run.image_refs, "context": run.context},
                "frames": run.frames, "messages": _stored_messages(run.messages)}
     data = json.dumps(_json_safe(payload), ensure_ascii=False)
@@ -525,7 +531,11 @@ def _list_sessions() -> list:
                     # 这条会话烧掉多少 token：长上下文的会话在列表里就该看得出来
                     "tokens": int(usage.get("total_tokens") or 0),
                     "resume_from": int(data.get("resume_from") or 0),
-                    "tools": sum(1 for f in (data.get("frames") or []) if f.get("kind") == "tool_call")})
+                    "tools": sum(1 for f in (data.get("frames") or []) if f.get("kind") == "tool_call"),
+                    # 这条会话交出了几个产物、怎么收场的：零产物 + turns_exhausted 这种形状
+                    # 在历史列表里就该看得出来，不用打开会话查
+                    "media": int(data.get("media") or 0),
+                    "reason": str(data.get("reason") or "")})
     return out
 
 
@@ -964,6 +974,17 @@ def _gate_refused(text: str) -> bool:
     return any(key in line for key in ("先不跑", "不出片", "别跑", "不跑", "取消"))
 
 
+def _no_source_media(run) -> bool:
+    """这一发有没有可用图：本轮附件图与焦点链的产物全空才算没有素材。
+
+    接上一发的产物接着跑（焦点链里有产物图或成片）不算缺素材——那一发的素材早就落进配方与
+    段参考里了，拦它等于把「继续出片」这条今天就在跑的链路改成每次多点一下。"""
+    if run.image_sources:
+        return False
+    focus = run.focus
+    return not (focus.get("images") or focus.get("film"))
+
+
 # ---------------------------------------------------------------------------
 # 焦点链：本会话最近一次生成的既定事实
 # ---------------------------------------------------------------------------
@@ -1174,13 +1195,33 @@ def _skill_block(skill_id: str, info: dict | None = None) -> str:
                    f"或按技能规则出图；本轮轮次放宽到 {PROMPT_SKILL_MAX_TURNS} 轮。")
 
 
+def _media_block(count: int) -> str:
+    """本轮进请求体的附件图数：模型唯一的素材事实来源。
+
+    后端只认请求体里真到了的图——用户在输入框粘贴 / 拖入的图，读成 data URI 之前不在这发里，
+    模型看不见「他以为给了图」这件事，零素材那一发就照文字凭空出片（品牌宣传片没有 LOGO 与
+    UI 截图也能拼出一条片子，跑完用户才发现素材没进去）。这一段把有没有图写成事实，
+    缺素材的活才有开口问人的依据；用户明说只要文字方向时照他说的跑，不为此挡路。"""
+    head = f"\n\n本轮输入素材：附件图 {count} 张。"
+    if count:
+        return head + f"- 这 {count} 张就是用户这一发给的全部图：先按图说话，再定技能与参数。\n"
+    return head + (
+        "- 这一发没有任何图：输入框里粘贴 / 拖入却没进请求体的图就是没给，你看不到它，"
+        "也不要在回答里说用了用户的图。\n"
+        "- 要参考素材才能做的活（LOGO / UI 截图 / 产品图 / 角色图 / 改已有画面）：先 ask_user "
+        "问清要哪几张、什么内容，等回答再动生成工具，不要照文字凭空出片。\n"
+        "- 用户明说只要文字方向（纯文生图、照脚本出片）时照他说的跑，不用再要图。\n")
+
+
 def system_prompt(mode: str = "act", context: str = "", focus: dict | None = None,
                   plan_steps: list | None = None, prefs: dict | None = None,
-                  skill: str = "", skill_info: dict | None = None) -> str:
-    """系统提示词 = 静态提示词 + 界面状态 + 焦点链 + 用户级偏好 + 本轮点名技能（+ 计划模式说明 + 执行清单）。
+                  skill: str = "", skill_info: dict | None = None,
+                  image_count: int | None = None) -> str:
+    """系统提示词 = 静态提示词 + 界面状态 + 焦点链 + 用户级偏好 + 本轮点名技能（+ 本轮素材数 + 计划模式说明 + 执行清单）。
     焦点链与执行清单要在每次 LLM 请求前重算：本轮生成工具刚立的事实、清单上刚划掉的那一条
     都得在下一轮请求里可见（见 _run_agent）。执行清单只在执行模式进提示词——
-    计划模式这一轮正在写它，还没有清单可照跑。"""
+    计划模式这一轮正在写它，还没有清单可照跑。image_count 是本轮真进请求体的附件图数，
+    None 是不写这一段（离线取提示词的调用与测试）。"""
     try:
         text = SYSTEM_PROMPT_FILE.read_text(encoding="utf-8")
     except OSError as e:
@@ -1189,6 +1230,8 @@ def system_prompt(mode: str = "act", context: str = "", focus: dict | None = Non
     text += _focus_block(focus or {})
     text += _prefs_block(prefs or {})
     text += _skill_block(skill, skill_info)
+    if image_count is not None:
+        text += _media_block(image_count)
     if mode == "plan":
         text += PLAN_MODE_NOTE
     else:
@@ -1310,9 +1353,11 @@ async def _run_agent(client, text: str, emit, run, mode: str = "act",
         if _is_prompt_skill(run.user_skill_info):
             run.max_turns = PROMPT_SKILL_MAX_TURNS
             run.max_asks = PROMPT_SKILL_ASK_ROUNDS
+    image_count = len(images or [])   # 本轮真进请求体的附件图数：模型唯一的素材事实来源
     messages = [{"role": "system", "content": system_prompt(mode, context, run.focus,
                                                             run.plan_steps, run.prefs,
-                                                            run.user_skill, run.user_skill_info)}]
+                                                            run.user_skill, run.user_skill_info,
+                                                            image_count)}]
     messages += list(history or [])
     messages.append(_user_message(text, images or []))
     run.messages = messages       # 同一个 list 对象：循环里的 append 逐轮可见，半途收场也留得下
@@ -1322,6 +1367,7 @@ async def _run_agent(client, text: str, emit, run, mode: str = "act",
     sent_tokens = -1
     for _ in range(run.max_turns):
         if run.stop.is_set():
+            run.reason = "cancelled"
             await emit({"kind": "content", "text": CANCELLED_TEXT})
             return
         if not await run.await_resume(emit):
@@ -1329,7 +1375,7 @@ async def _run_agent(client, text: str, emit, run, mode: str = "act",
         # 焦点链、用户偏好与执行清单逐轮重注入：本轮刚立的事实与清单上刚划掉的一条要在这一轮
         # 的请求里可见，而 messages[0] 是循环开头按当时的状态写的
         messages[0]["content"] = system_prompt(mode, context, run.focus, run.plan_steps, run.prefs,
-                                               run.user_skill, run.user_skill_info)
+                                               run.user_skill, run.user_skill_info, image_count)
         # 上下文在每一轮的边界上压：一次长会话里的技能全表与长工具返回是逐轮攒起来的，
         # 不压就是整请求 400，报错点在 provider 那一侧，比少一轮难查得多
         tokens = _compress_messages(messages)
@@ -1359,6 +1405,7 @@ async def _run_agent(client, text: str, emit, run, mode: str = "act",
             await emit({"kind": "plan" if calls else "content", "text": content})
             if not calls:
                 answered = True
+                run.reason = "answer"
                 break       # 最终回答到了就收场，不能把剩下的轮次继续喂给 LLM
         for tc in calls:
             fn = tc.get("function") or {}
@@ -1387,6 +1434,22 @@ async def _run_agent(client, text: str, emit, run, mode: str = "act",
                 # 计划模式里模型仍可能硬调写操作：拒回原文它才会改口去写计划
                 result = (f"[error] 计划模式不执行 {name}：把要做的事写进计划，"
                           f"让用户切到执行模式再跑")
+            elif (mode == "act" and name in FILM_GATE_TOOLS and run.user_skill
+                  and _no_source_media(run) and not run.media_gate_asked):
+                # 点名了技能、这一发零素材：出片要的 LOGO / UI 截图 / 产品图不在这发里，跑完就是照文字
+                # 凭空拼出来的片子，整片是数分钟 × 多段，跑下去再喊停就晚了一半。闸口一次运行只开口一次：
+                # 用户在卡上说照文字出片，下一发直接跑
+                run.media_gate_asked = True
+                answer = await run.await_answer(
+                    emit,
+                    f"本轮没有附件图：{name}（{_gate_cost(name, args)}）要用的素材不在这发里。"
+                    "把 LOGO / UI 截图 / 产品图粘贴进输入框或从素材库拖进来再发这一发；照文字直接出片就点确认。",
+                    list(GATE_OPTIONS))
+                if _gate_refused(answer):
+                    result = (f"[skipped] 用户选择这一发不跑（{name}）：把「用户挡下了这一发」写进结论，"
+                              f"请用户补素材或换一个更小的方向，不要自己重发同一发")
+                else:
+                    result = await _tool_result(client, name, args, emit, run)
             elif mode == "act" and name in FILM_GATE_TOOLS and run.prefs.get("confirm_films", False):
                 # 一次整片是三段 × 每段数分钟起步：跑下去再喊停就晚了一半，先在卡上把量级报出来。
                 # 确认要在入队之前——挡下之后才发任务就等于没挡
@@ -1419,16 +1482,19 @@ async def _run_agent(client, text: str, emit, run, mode: str = "act",
             elif _plan_mark(run, name, result):
                 await emit({"kind": "plan_steps", "steps": run.plan_steps})
             if finish:
+                run.reason = "finish"
                 await emit({"kind": "finish", "text": finish["result"],
                             "media": finish["media"], "options": finish["options"]})
                 answered = True
                 break
             if run.stop.is_set():
+                run.reason = "cancelled"
                 await emit({"kind": "content", "text": CANCELLED_TEXT})
                 return
         if finish:
             break
     if not answered:
+        run.reason = "turns_exhausted"
         await emit({"kind": "content",
                     "text": f"跑了 {run.max_turns} 轮还没有结论：把需求说具体些（要什么画面、用哪个技能）再试。"})
 
@@ -1480,6 +1546,9 @@ async def _events(run, text: str, mode: str = "act", images: list | None = None,
         if run.status == "running":
             # 断流收尾时循环没机会写终态：落了 interrupted，历史里看得见这一条没跑完
             run.status = "interrupted"
+        if not run.reason:
+            # 循环没走到收场分支（报错、断流、取消落在轮次边界外）：原因落状态名，历史里不留空字段
+            run.reason = run.status
         # 落盘挂成后台任务：收尾路径上 await 不动它（前端 abort 时这个生成器正被关掉），
         # 半途收场的运行也要在历史里留下这一条
         asyncio.create_task(asyncio.to_thread(_save_session, run))

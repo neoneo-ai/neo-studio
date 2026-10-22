@@ -155,8 +155,8 @@ Both nodes share the same layout (the Agent shows no status bar):
   `gen_video` with a `workflow.json`, the same test as `_gen_image_skills` / `_gen_video_skills`), each row labeled
   Image / Film on the right, filtered and driven on the keyboard by the same factory as the prompts page's `/` menu
   (`studio/web/slash-picker.js`); the picked skill lands as a flat `🧩 skill ✕` chip at the left end of the context
-  bar (✕ clears it, and the designation lives only inside the current conversation — **＋ 新增会话**, clearing the
-  conversation, dropping the resume bar, or opening another session all clear it; nothing is stored locally, so a
+  bar (✕ clears it, and the designation lives only inside the current conversation — **＋ 新增会话**, dropping the
+  resume bar, or opening another session all clear it; nothing is stored locally, so a
   reload lands in the empty state with no chip) and travels in the request
   body's `skill_id` into the system prompt, after the focus chain and the user prefs — a named skill is this turn's
   instruction, and whether it exists is settled by the loop's own `list_skills` call: an unknown one has to be
@@ -220,7 +220,13 @@ Both nodes share the same layout (the Agent shows no status bar):
   header states what a turn carried or says「不带界面上下文 / No on-screen context this turn」. 📎 attachments (paste, drop,
   or pick, up to 6, with removable
   thumbnails) travel in
-  the request body as multimodal content, so an image with no text is a valid turn; in Act mode they are the references
+  the request body as multimodal content, so an image with no text is a valid turn (the paste, drop and library-drop
+  reads are async: **✨ Generate**, Enter and 「🔁 Retry」 settle the reads in flight before the attachments are taken, so
+  the chips on screen and the images in the request body are always the same set, and a paste never sends by itself — a
+  turn starts on the user's click; the turn header names 「附件图 N 张 / N attached image(s)」 and writes
+  「不带附件图 / no attached images」 on a turn with none, and an Act run that ends with no attachments and no produced
+  media lays a 「这一发没有附件图，也没有产物 / No images attached and nothing produced」 reminder row on the timeline —
+  plan mode, an `[ERROR]` ending, a user **⏹ Cancel**, and a turn that carried images never show it); in Act mode they are the references
   this turn generates with — `generate_image` gets them automatically when its `references` argument is left out (a pasted
   image lands in `input/NeoAgent/`, deduplicated by content hash and written once per run), and film references land on the
   recipe this turn creates (character references and per-segment `refs.images`; an existing recipe is left untouched), and in
@@ -252,13 +258,21 @@ Both nodes share the same layout (the Agent shows no status bar):
   parameters; and when the backend's `ask_user` asks a question the loop parks on it, the timeline shows a choice card
   (the question, 2-5 options, and a free-text box) whose answer goes back through `POST /neo_agent/answer` — the card
   locks after answering, a 30-minute wait continues with a note that the user never replied, and cancelling by `run_id`
-  settles a parked question.
+  settles a parked question. In Act mode, a turn that names a skill with `@` and carries no attachment (with no produced
+  image or film in the focus chain either) opens a material card on the first call of the four film tools
+  (`director_run` / `segment_run` / `assemble_run` / `director_keyframes`): the card says 「本轮没有附件图 / No images
+  attached this turn」 with this call's segment count and scale, 「⏹ 先不跑 / Don't run it」 keeps the call out of the
+  queue as a `[skipped]` result and 「✅ 跑这一发 / Run it」 runs it as written, and the card opens once per run — it is a
+  separate card from the `confirm_films` scale card, each asking its own question. The system prompt carries
+  「本轮输入素材 / Input material this turn: N attached image(s)」 on every turn, where N is the number of images that
+  actually reached the request body; at N=0 the prompt requires asking the user for the material before any generation
+  tool runs, instead of composing a film out of the text alone.
   A turn that ends with `[ERROR]` (a one-shot failure like a remote LLM 502) lays a 「🔁 Retry」 row above the text box:
   it resends that turn's text, mode and attachments as-is, reads the interface context at the moment of the retry, and
   starts a fresh run with no `resume`. The row goes away on the next **✨ Generate**, on **＋** new session, and after a
   run that completes; a user-initiated **⏹ Cancel** never shows it. Clicking it with a draft still in the text box only
   warns to clear the box first — the draft is never overwritten.
-  The empty composer shows the three most recent sessions by default (the same summary as 🗂: one row per run, title + date); clicking a row replays that session read-only and arms the continue bar, **View all ›** opens the full list, and clearing the conversation or deleting a session empties the list; session history is plain files under `agent_sessions/`, and the desktop service lists, reads and deletes them itself, so the list still shows with ComfyUI stopped (only `/neo_agent/run` waits for the kernel). The **＋** header button starts a new session (the timeline drops back to the empty state with the recent list, the continue bar detaches, and the next message opens a fresh session — saved history stays untouched); the **🗂** header button opens the session list (`GET /neo_agent/sessions`: one row per run, newest first, with time /
+  The empty composer shows the three most recent sessions by default (the same summary as 🗂: one row per run, title + date); clicking a row replays that session read-only and arms the continue bar, **View all ›** opens the full list, and deleting a session empties the list; session history is plain files under `agent_sessions/`, and the desktop service lists, reads and deletes them itself, so the list still shows with ComfyUI stopped (only `/neo_agent/run` waits for the kernel). The **＋** header button starts a new session (the timeline drops back to the empty state with the recent list, the continue bar detaches, and the next message opens a fresh session — saved history stays untouched); the **🗂** header button opens the session list (`GET /neo_agent/sessions`: one row per run, newest first, with time /
   mode / status / title / tool count); the full-page list carries its own header **✕** back to the timeline. The session title is the first sentence of the whole conversation, fixed when the session file is
   written: the dock header carries it through the whole run (truncated when the header is too narrow, the full sentence in its tooltip), the middle stage head carries the same sentence, and the list rows and a reopened session show it — a resumed turn never replaces it, and an image-only turn takes the 「(image only)」placeholder.
   **Open** replays that session's timeline into the dock **read-only** — your own turn's text and its attachment thumbnails are part of the replay (the stored `in` frame; sessions written before that frame get the sentence back from `input`) — a
@@ -266,8 +280,11 @@ Both nodes share the same layout (the Agent shows no status bar):
   「↩ continue the last session」 bar: the next **✨ Generate** posts that session's `run_id` as `resume`, and the saved
   conversation goes back in after the system prompt for the LLM to continue from (resuming into plan mode works the
   same way — the old system message is never stored, so this turn rebuilds it). One run lands as one JSON in
-  `agent_sessions/` under the data root, and the trash icon button deletes the saved history too, behind one in-page confirm; the row delete and the replay header's delete are
-the same trash icon, and deleting one session is confirmed before its file goes.
+  `agent_sessions/` under the data root, with the produced-media count (`media`) and the closing reason (`reason`:
+  `finish` / `answer` / `turns_exhausted` / `cancelled`, the run's terminal status when the loop never reached a closing
+  branch) in it, and `GET /neo_agent/sessions` carries the same pair — a zero-media `turns_exhausted` session reads that
+  way in the list. The only delete the UI offers is one session at a time: the list row's delete and the replay header's delete are
+the same trash icon, confirmed before that session's file goes.
   The dock can run that same chain: `director_plan` (split, writing `story`) → `director_save` →
   `director_keyframes` (keyframes land in the recipe's `assets/`) → echo the returned `segments` / `shared` /
   `story` back to `director_save` (records `storyboard` and the first frame of non-r2v segments) →
