@@ -92,9 +92,12 @@ class StdioTransport:
     def __init__(self, server: dict, timeout: float = REQUEST_TIMEOUT):
         argv = _resolve_command(str(server.get("command", "")), server.get("args") or [])
         env = server.get("env")
-        popen_env = None
+        # 子进程的 stdio 一律 UTF-8：不钉 PYTHONUTF8，python 写的 MCP server 按本机代码页
+        # （中文 Windows 是 cp936）写 stdout / stderr，JSON-RPC 正文和「缺依赖，请先 pip
+        # install mcp」都成了乱码，用户看不出要装什么。
+        popen_env = dict(os.environ)
+        popen_env["PYTHONUTF8"] = "1"
         if isinstance(env, dict) and env:
-            popen_env = dict(os.environ)
             popen_env.update({k: str(v) for k, v in env.items()})
         self.proc = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                      stderr=subprocess.PIPE, bufsize=0, env=popen_env,

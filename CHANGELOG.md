@@ -4,6 +4,11 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **MCP stdio servers run with UTF-8 pipes.** A python MCP server writes stdout and stderr in the locale code page, so on a
+  Chinese Windows the JSON-RPC body and the "缺依赖，请先 pip install mcp" tail came out as mojibake once the desktop
+  process ran in UTF-8 mode. The spawn now pins `PYTHONUTF8=1` in the child environment (`app/mcp_client.py`), a
+  configured `env` still overrides it, and the existing UTF-8 decode of both pipes is then always correct.
+
 - **A named body-only skill reports its step list once, and its gates are clickable.** The per-run gates above were
   per-run state only, so every follow-up message in the same conversation re-ran the same opening: the first
   `generate_prompt` was refused again, the model re-listed the whole flow, and the first gate was asked again from
