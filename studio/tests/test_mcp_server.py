@@ -18,6 +18,9 @@ sys.path.insert(0, _NODE_DIR)
 
 import mcp_server as mcp  # noqa: E402
 
+# 右栏这一发绑定 run 时的工具表：闸与收场三个工具只在这张表里出现
+BOUND_TOOLS = mcp.TOOLS + mcp.AGENT_TOOLS
+
 
 class Resp:
     def __init__(self, payload: bytes):
@@ -82,19 +85,20 @@ def sse(*frames) -> bytes:
     return ("\n".join(lines) + "\n").encode("utf-8")
 
 
-def rpc(fake, lines, tools=None, b64=False):
+def rpc(fake, lines, tools=None, b64=False, run_id=""):
     stdin = io.StringIO("".join(json.dumps(m, ensure_ascii=False) + "\n" for m in lines))
     stdout = io.StringIO()
     with mock.patch.object(mcp.urllib.request, "urlopen", fake):
-        mcp.serve(mcp.Ctx(mcp.Comfy("http://127.0.0.1:8188", 5), b64), tools or mcp.TOOLS, stdin, stdout)
+        mcp.serve(mcp.Ctx(mcp.Comfy("http://127.0.0.1:8188", 5), b64, run_id),
+                  tools or mcp.TOOLS, stdin, stdout)
     return [json.loads(x) for x in stdout.getvalue().splitlines()]
 
 
-def call_tool(name, args, routes=None, b64=False):
+def call_tool(name, args, routes=None, b64=False, run_id="", tools=None):
     """跑一轮 tools/call，返回 (响应, 假 HTTP 记录)。"""
     fake = FakeHttp(routes)
     out = rpc(fake, [{"jsonrpc": "2.0", "id": 1, "method": "tools/call",
-                      "params": {"name": name, "arguments": args}}], b64=b64)
+                      "params": {"name": name, "arguments": args}}], tools=tools, b64=b64, run_id=run_id)
     return out[0], fake
 
 
@@ -134,7 +138,8 @@ class ProtocolTests(unittest.TestCase):
 
     def test_tools_list_shape(self):
         tools = rpc(FakeHttp(), init_lines() + [{"jsonrpc": "2.0", "id": 2, "method": "tools/list"}])[1]["result"]["tools"]
-        self.assertEqual({t["name"] for t in tools}, set(mcp.HANDLERS))
+        # HANDLERS 是全量表：闸与收场三条只在绑定 run 时进表，默认这一份就是 TOOLS
+        self.assertEqual({t["name"] for t in tools}, {t["name"] for t in mcp.TOOLS})
         for t in tools:
             self.assertTrue(t["description"])
             schema = t["inputSchema"]
@@ -905,6 +910,114 @@ class DirectorTests(unittest.TestCase):
 # 启动参数与安全边界
 # ===========================================================================
 
+class TaskWaitTests(unittest.TestCase):
+    """task_status 的长轮询：一次调用等到终态。没有等待原语的内核只能在循环里反复调，
+    实测一轮导演任务 647 次调用、token 烧到 18 万，wait_ms 就是把那个循环收回服务端。"""
+
+    def test_wait_ms_polls_until_the_task_settles(self):
+        seq = [{"task_id": "T1", "status": "running"},
+               {"task_id": "T1", "status": "running"},
+               {"task_id": "T1", "status": "succeeded", "images": []}]
+
+        def route(req):
+            return Resp(json.dumps([seq.pop(0) if len(seq) > 1 else seq[0]]).encode("utf-8"))
+
+        sleeps = []
+        with mock.patch.object(mcp.time, "sleep", sleeps.append):
+            resp, fake = call_tool("task_status", {"task_id": "T1", "wait_ms": 60000},
+                                   {("GET", "/neo_image_gen/tasks"): route})
+        self.assertEqual(json.loads(text_of(resp))["status"], "succeeded")
+        self.assertEqual(sleeps, [mcp.TASK_WAIT_POLL_SEC] * 2, "轮询节奏由服务端定，不交给模型数")
+        self.assertEqual(len([p for p in fake.paths() if p[1] == "/neo_image_gen/tasks"]), 3)
+
+    def test_without_wait_ms_it_reads_one_snapshot(self):
+        with mock.patch.object(mcp.time, "sleep", side_effect=AssertionError("默认不该等")):
+            resp, fake = call_tool("task_status", {"task_id": "T1"},
+                                   {("GET", "/neo_image_gen/tasks"): [{"task_id": "T1", "status": "running"}]})
+        self.assertEqual(json.loads(text_of(resp))["status"], "running")
+        self.assertEqual(len(fake.calls), 1)
+
+    def test_wait_is_capped_to_the_client_timeout_budget(self):
+        clock = {"t": 1000.0}
+
+        def tick(sec):
+            clock["t"] += sec
+
+        # 没有 status 的快照永远不是终态：只有上限能收住这次调用
+        with mock.patch.object(mcp.time, "sleep", tick), \
+                mock.patch.object(mcp.time, "time", lambda: clock["t"]):
+            resp, _ = call_tool("task_status", {"task_id": "T1", "wait_ms": mcp.TASK_WAIT_MAX_MS * 10},
+                                {("GET", "/neo_image_gen/tasks"): [{"task_id": "T1"}]})
+        self.assertFalse(resp["result"]["isError"], text_of(resp))
+        elapsed = clock["t"] - 1000.0
+        self.assertLessEqual(elapsed, mcp.TASK_WAIT_MAX_MS / 1000 + mcp.TASK_WAIT_POLL_SEC)
+        self.assertGreater(elapsed, mcp.TASK_WAIT_MAX_MS / 1000 - 2 * mcp.TASK_WAIT_POLL_SEC)
+
+
+class AgentGateToolTests(unittest.TestCase):
+    """闸与收场三个工具：只在右栏这一发绑定了 run 时进表，实现打到循环那一份路由上。"""
+
+    RUN = "ab" * 16
+
+    def test_gate_tools_stay_out_of_the_plain_table(self):
+        names = [t["name"] for t in mcp.TOOLS]
+        for name in ("ask_user", "finish_task", "write_plan"):
+            self.assertNotIn(name, names, "外部 MCP 客户端不该看见闸与收场")
+        self.assertEqual([t["name"] for t in mcp.AGENT_TOOLS],
+                         ["ask_user", "finish_task", "write_plan"])
+
+    def test_ask_user_posts_the_question_and_returns_the_answer(self):
+        resp, fake = call_tool("ask_user", {"question": "收尾走哪种？", "options": ["淡出", "硬切"]},
+                               {("POST", "/neo_agent/ask"): {"success": True, "text": "淡出"}},
+                               run_id=self.RUN, tools=BOUND_TOOLS)
+        self.assertEqual(json.loads(text_of(resp)), {"answer": "淡出"})
+        body = fake.body("POST", "/neo_agent/ask")
+        self.assertEqual(body["run_id"], self.RUN)
+        self.assertEqual(body["options"], ["淡出", "硬切"], "选项原样送到右栏，别自己加一栏")
+
+    def test_ask_user_needs_two_options(self):
+        resp, fake = call_tool("ask_user", {"question": "走哪种？", "options": ["淡出"]},
+                               run_id=self.RUN, tools=BOUND_TOOLS)
+        self.assertTrue(resp["result"]["isError"])
+        self.assertEqual(fake.calls, [], "一个选项的问句不该发出去")
+
+    def test_finish_task_hands_the_rejection_back_to_the_model(self):
+        resp, _ = call_tool("finish_task", {"result": "出好了", "media": ["x.png"]},
+                            {("POST", "/neo_agent/finish"): {"success": False,
+                                                             "error": "[error] 产物名没出现过"}},
+                            run_id=self.RUN, tools=BOUND_TOOLS)
+        self.assertEqual(json.loads(text_of(resp)),
+                         {"accepted": False, "error": "[error] 产物名没出现过"})
+
+    def test_finish_task_returns_the_receipt(self):
+        resp, fake = call_tool("finish_task", {"result": "出一张图", "media": ["a.png"],
+                                               "next_options": ["再来一张"]},
+                               {("POST", "/neo_agent/finish"): {"success": True, "result": "出一张图",
+                                                                "media": [{"kind": "image", "title": "a.png"}],
+                                                                "options": ["再来一张"]}},
+                               run_id=self.RUN, tools=BOUND_TOOLS)
+        self.assertTrue(json.loads(text_of(resp))["accepted"])
+        body = fake.body("POST", "/neo_agent/finish")
+        self.assertEqual(body["media"], ["a.png"])
+        self.assertEqual(body["next_options"], ["再来一张"])
+
+    def test_write_plan_passes_steps_through(self):
+        resp, _ = call_tool("write_plan", {"steps": [{"tool": "neo_status"}]},
+                            {("POST", "/neo_agent/plan"): {"success": True,
+                                                           "steps": [{"tool": "neo_status", "done": False}]}},
+                            run_id=self.RUN, tools=BOUND_TOOLS)
+        self.assertEqual(json.loads(text_of(resp))["steps"][0]["tool"], "neo_status")
+
+    def test_the_tools_refuse_without_a_bound_run(self):
+        for name, args in (("ask_user", {"question": "q", "options": ["a", "b"]}),
+                           ("finish_task", {"result": "done"}),
+                           ("write_plan", {"steps": []})):
+            resp, fake = call_tool(name, args, tools=BOUND_TOOLS)
+            self.assertTrue(resp["result"]["isError"], name)
+            self.assertIn("NEO_AGENT_RUN", text_of(resp))
+            self.assertEqual(fake.calls, [], f"{name} 没有 run 时不该打 ComfyUI")
+
+
 class CliTests(unittest.TestCase):
     def test_comfy_base_is_loopback_only(self):
         self.assertEqual(mcp.comfy_base(None), "http://127.0.0.1:8188")
@@ -924,9 +1037,19 @@ class CliTests(unittest.TestCase):
 
     def test_selftest_and_env_whitelist(self):
         err = io.StringIO()
-        with mock.patch.object(sys, "stderr", err):
+        # 默认这一份是 TOOLS：闸与收场三条只在绑定 run 时进表。先清空这个变量，
+        # 免得开发机（或上一个用例）留下的 NEO_AGENT_RUN 把默认表顶成 24 条
+        with mock.patch.dict(os.environ, {mcp.AGENT_RUN_ENV: ""}), \
+                mock.patch.object(sys, "stderr", err):
             mcp.main(["--selftest"])
-        self.assertIn(f"{len(mcp.HANDLERS)} 工具", err.getvalue())
+        self.assertIn(f"{len(mcp.TOOLS)} 工具", err.getvalue())
+
+        err = io.StringIO()
+        with mock.patch.dict(os.environ, {mcp.AGENT_RUN_ENV: "ab" * 16}), \
+                mock.patch.object(sys, "stderr", err):
+            mcp.main(["--selftest"])
+        self.assertIn(f"{len(BOUND_TOOLS)} 工具", err.getvalue())
+        self.assertIn("ask_user", err.getvalue())
 
         err = io.StringIO()
         with mock.patch.dict(os.environ, {"NEO_MCP_TOOLS": "neo_status"}), \

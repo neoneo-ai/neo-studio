@@ -2908,6 +2908,111 @@ class TestSkillProcessGates(unittest.TestCase):
         self.assertIn("答过的确认门", text)
 
 
+@skip
+class TestGateRoutes(unittest.TestCase):
+    """闸与收场三条路由：MCP 侧那三个工具打到循环这一份实现上，帧还进同一条时间线。
+
+    问句的挂起与放开用真实现跑：ask 路由 → _Run.await_answer → /neo_agent/answer 交回，
+    三处都是循环自己在用的那段代码，测试要盯的正是这条链没被复制成第二份。"""
+
+    @staticmethod
+    def _recorder(frames, on_frame=None):
+        async def emit(frame):
+            frames.append(frame)
+            if on_frame:
+                await on_frame(frame)
+        return emit
+
+    def test_ask_route_parks_on_the_loop_gate_until_the_answer_route_releases_it(self):
+        run = agent._Run(FakeClient({}))
+        frames = []
+
+        async def answer_on_ask(frame):
+            if frame.get("kind") == "ask":
+                resp = await agent.agent_answer(TestRoutes._req(
+                    {"run_id": run.run_id, "ask_id": frame["ask_id"], "text": "淡出"}))
+                self.assertEqual(resp.status, 200)
+
+        run.emit = self._recorder(frames, answer_on_ask)
+        agent._RUNS[run.run_id] = run
+        try:
+            resp = asyncio.run(agent.agent_ask(TestRoutes._req(
+                {"run_id": run.run_id, "question": "收尾走哪种？", "options": ["淡出", "硬切"]})))
+        finally:
+            agent._RUNS.pop(run.run_id, None)
+        self.assertEqual(json.loads(resp.text), {"success": True, "text": "淡出"})
+        self.assertEqual([f["kind"] for f in frames], ["ask"])
+        self.assertEqual(frames[0]["options"], ["淡出", "硬切"], "选项原样进 ask 帧，卡片照旧画")
+
+    def test_ask_route_refuses_a_question_without_two_options(self):
+        run = agent._Run(FakeClient({}))
+        agent._RUNS[run.run_id] = run
+        try:
+            resp = asyncio.run(agent.agent_ask(TestRoutes._req(
+                {"run_id": run.run_id, "question": "走哪种？", "options": ["淡出"]})))
+        finally:
+            agent._RUNS.pop(run.run_id, None)
+        self.assertEqual(resp.status, 400)
+
+    def test_finish_route_uses_the_loop_receipt(self):
+        run = agent._Run(FakeClient({}))
+        frames = []
+        run.emit = self._recorder(frames)
+        run.media_urls["a.png"] = {"kind": "image", "title": "a.png", "url": "http://127.0.0.1:8188/view"}
+        agent._RUNS[run.run_id] = run
+        try:
+            resp = asyncio.run(agent.agent_finish(TestRoutes._req(
+                {"run_id": run.run_id, "result": "出一张图", "media": ["a.png"],
+                 "next_options": ["再来一张"]})))
+        finally:
+            agent._RUNS.pop(run.run_id, None)
+        data = json.loads(resp.text)
+        self.assertTrue(data["success"])
+        self.assertEqual(data["media"][0]["title"], "a.png")
+        self.assertEqual(run.reason, "finish")
+        self.assertEqual(frames[-1]["kind"], "finish")
+        self.assertEqual(frames[-1]["options"], ["再来一张"])
+
+    def test_finish_route_hands_back_a_rejected_media_name(self):
+        run = agent._Run(FakeClient({}))
+        run.emit = self._recorder([])
+        agent._RUNS[run.run_id] = run
+        try:
+            resp = asyncio.run(agent.agent_finish(TestRoutes._req(
+                {"run_id": run.run_id, "result": "做好了", "media": ["ghost.png"]})))
+        finally:
+            agent._RUNS.pop(run.run_id, None)
+        data = json.loads(resp.text)
+        self.assertFalse(data["success"])
+        self.assertIn("ghost.png", data["error"])
+        self.assertEqual(run.reason, "", "拒回不算收场")
+
+    def test_plan_route_lands_the_steps_and_respects_the_mode(self):
+        client = FakeClient({}, names=("neo_status",))
+        run = agent._Run(client)
+        frames = []
+        run.emit = self._recorder(frames)
+        agent._RUNS[run.run_id] = run
+        try:
+            act = asyncio.run(agent.agent_plan(TestRoutes._req(
+                {"run_id": run.run_id, "steps": [{"tool": "neo_status"}]})))
+            self.assertFalse(json.loads(act.text)["success"], "执行模式不收计划")
+            run.mode = "plan"
+            ok = asyncio.run(agent.agent_plan(TestRoutes._req(
+                {"run_id": run.run_id, "steps": [{"tool": "neo_status", "key_args": "",
+                                                  "note": "查状态"}]})))
+        finally:
+            agent._RUNS.pop(run.run_id, None)
+        self.assertTrue(json.loads(ok.text)["success"])
+        self.assertEqual(run.plan_steps[0]["tool"], "neo_status")
+        self.assertEqual(frames[-1]["kind"], "plan_steps")
+
+    def test_all_three_routes_404_on_a_run_that_left(self):
+        body = {"run_id": "0" * 32, "question": "q", "options": ["a", "b"], "result": "x", "steps": []}
+        for route in (agent.agent_ask, agent.agent_finish, agent.agent_plan):
+            self.assertEqual(asyncio.run(route(TestRoutes._req(body))).status, 404)
+
+
 if __name__ == "__main__":
     unittest.main()
 

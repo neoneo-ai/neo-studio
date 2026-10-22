@@ -197,6 +197,9 @@ included), and the dock never calls a handler directly.
 |--------|-------|-------------|
 | POST | `/neo_agent/run` | One agent turn, SSE timeline; body `{text, mode, images, context, preview_side, resume, skill_id}` (`mode` accepts `plan` / `act`, default `act`; `skill_id` is the skill named with `@` in the composer — accepted only in the form `^[A-Za-z0-9_.\-]{1,64}$`, placed in the system prompt after the focus chain and the user prefs, and whether it exists is settled by the loop's own `list_skills` call; `images` are composer attachments in the image-source shape, up to 6; `context` is the current UI state, dropped whole when it is not an object; `preview_side` is the preview longest side (px) this turn wants — non-numeric values fall back to the 384 dock tier, the painting page's center stage asks for 1024, and 0 or a negative switches the sampling preview off (the backend does not read the preview tables, the SSE carries no `preview` payload); `resume` carries the `run_id` of a saved session and this turn continues after it — that run still going, or an unknown session, ends with `[ERROR]` before the first frame), first frame `run` (carries the `run_id` the cancel / pause / resume / answer routes need), frames `plan` / `tool_call` / `status` / `tool_result` / `ask` / `paused` / `resumed` / `content`, ending with `[ERROR]` / `[DONE]` |
 | POST | `/neo_agent/answer` | Answer an `ask` frame: body `{run_id, ask_id, text}` hands the user's choice back to the loop parked on `ask_user`; `run_id` / `ask_id` accept only the shapes the `run` / `ask` frames issued — finished run is 404, finished question is 404 |
+| POST | `/neo_agent/ask` | Entry point for the MCP `ask_user`: body `{run_id, question, options}` sends the question and its 2-5 options out as an `ask` frame on the same timeline and parks there; the user's pick still comes back through `/neo_agent/answer`; `run_id` validated as above, 404 once the run is over, 400 for an empty question or fewer than two options |
+| POST | `/neo_agent/finish` | Entry point for the MCP `finish_task`: body `{run_id, result, media, next_options}`, accepted by the loop's own receipt rule (media names must have appeared in this run), records the finish reason and appends a `finish` frame; a rejection answers `success: false` with the original text so the model can correct it |
+| POST | `/neo_agent/plan` | Entry point for the MCP `write_plan`: body `{run_id, steps}`, accepted in plan mode only, and every step's tool name must exist in this turn's tool list; on success it lands a `plan_steps` frame |
 | POST | `/neo_agent/cancel` | Cancel: with `run_id` it stops the whole agent loop and kills the in-flight task (`run_id` accepts only the shape the `run` frame issued; unknown id is 404); with `task_id` it kills just that task (through MCP `cancel_task`, which resolves the image / film / segment / assemble route itself), `task_id` accepts UUID shapes only |
 | POST | `/neo_agent/pause` | Pause: body `{run_id}` (validated like cancel) parks the loop at the next turn / poll boundary and leaves the SSE stream open; an in-flight ComfyUI task has no paused state, so the boundary kills it and returns `cancelled`, and the resumed loop does not resend it |
 | POST | `/neo_agent/resume` | Resume: body `{run_id}` (validated like cancel) releases the loop parked on the pause checkpoint; a no-op when nothing is paused, so clicking Resume repeatedly never pushes a run past the checkpoint |
@@ -219,10 +222,11 @@ included), and the dock never calls a handler directly.
 - `mode=plan` is plan mode: `generate_image` / `director_run` / `segment_run` / `assemble_run` /
   `director_save` / `director_copy` / `cancel_task` stay out of the LLM's tool list, and calling one anyway is
   refused with an error; the query tools stay available.
-- `ask_user` is a dock-only pseudo tool, absent from the MCP registry: the loop emits an `ask` frame (with
-  `ask_id`, the question and 2-5 options) and parks on it, `/neo_agent/answer` hands the choice back, and after
-  30 minutes without an answer the loop continues noting that the user never replied; cancelling by `run_id`
-  settles any parked question.
+- `ask_user` / `write_plan` / `finish_task` have exactly one implementation: the loop calls it directly, and a
+  run-bound MCP child reaches it through the three routes above (`NEO_AGENT_RUN` is injected by the kernel, so an
+  external MCP client neither has it nor sees these tools). The question parks on the run's `asks`,
+  `/neo_agent/answer` hands the answer back, 30 minutes without one continues noting that the user never replied,
+  and cancelling by `run_id` settles a parked question — four behaviours, one piece of code.
 - Pause and stop only take effect at turn and tool boundaries: a single in-flight LLM request cannot be cut, so the
   run ends at the first boundary after it returns. Pause emits a `paused` frame and parks on the checkpoint waiting
   for `/neo_agent/resume`; 30 minutes without a resume ends the run as a paused timeout. Cancel also releases

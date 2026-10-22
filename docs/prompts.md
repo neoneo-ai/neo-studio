@@ -234,6 +234,20 @@ LLM 模式与本地安装见 [llm.md](llm.md)。
 - **快捷输入历史** - 底部快捷输入栏支持命令终端式 ↑/↓ 召回之前用过的输入
   （本地持久化、去重、最新在前、上限 20 条）；编辑内容即退出导航态，两类节点共用同一份历史。
 
+### 执行后端（可选 dsh 内核）
+
+右栏默认走内置循环（`loop`）。把 `configs/agent_prefs.json` 的 `backend` 写成 `dsh`、`dsh_bin` 指到本机
+`@deepseek-ai/dsh` 的 `lib/bin.js`（另需本机 node 22.18+ 与 `DEEPSEEK_API_KEY` 环境变量）之后，执行模式那一发
+交给 dsh 内核跑：
+
+- 时间线、闸与收场是同一套：`ask_user` / `finish_task` 经 `/neo_agent/ask` / `/neo_agent/finish` 打回循环那一份
+  实现，选项确认卡、产物名白名单、收场文本原样复用；内核的 MCP 子进程带着这一次运行的 `run_id` 起来，
+  模型看不见也选不了它。
+- 逐轮 token 照 provider 报的累进，右栏那一栏与会话摘要读的是同一组数字。
+- 四种形态回退循环：计划模式、带附件图的一发、带 `resume` 的续聊、dsh 不可用（缺 node / 缺入口 / 缺 key）；
+  回退原因写进后端日志，不静默。
+- dsh 的 profile、工作目录与 JSONL 会话落在数据根的 `dsh/`；装包本身不在插件里，入口由 `dsh_bin` 指。
+
 ## 技能管理
 
 技能构成、技能管理窗口、工作流区内嵌编辑、技能 ⇄ 画布导入与回写、回写确认与变更记录见 [skills.md](skills.md)。

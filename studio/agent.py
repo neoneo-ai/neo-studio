@@ -49,6 +49,7 @@ from urllib.parse import quote
 
 from aiohttp import web
 
+from . import agent_kernel
 from . import mcp_server as mcp
 from .plugin_paths import AGENT_SESSIONS_DIR, CONFIGS_DIR, PLUGIN_DIR
 from .util import _json_safe
@@ -117,7 +118,10 @@ AGENT_PREFS_FILE = CONFIGS_DIR / "agent_prefs.json"
 # confirm_films 默认关：出片确认卡只在用户自己打开它时才拦——默认拦住整片会把「✨ 生成 → 出片」
 # 这条今天就在跑的链路变成每次多点一下，而这一发的取舍本来就是用户开口要出片时给过的
 DEFAULT_PREFS = {"preferred_skill": "", "preferred_size": "", "preferred_family": "",
-                 "style_notes": "", "avoid": "", "confirm_films": False}
+                 "style_notes": "", "avoid": "", "confirm_films": False,
+                 # backend=dsh 把执行模式交给外部 dsh 内核（agent_kernel.py）；缺 node / 缺入口 /
+                 # 缺 key 就回退循环，见 _use_kernel。dsh_bin 指 npm 装出来的 lib/bin.js
+                 "backend": "loop", "dsh_bin": ""}
 PREFS_TEXT_MAX = 400
 PREFS_NAME_RE = re.compile(r"^[A-Za-z0-9_.\-]{1,64}$")     # 技能 id 与模型家族名的形态
 PREFS_SIZE_RE = re.compile(r"^\d{3,4}x\d{3,4}$|^\d{1,2}:\d{1,2}$")    # 1024x1024 或 16:9
@@ -338,6 +342,9 @@ class _Run:
         self.resume = asyncio.Event()
         self.task_id = ""
         self.asks: dict[str, dict] = {}
+        # 这条 SSE 的出口：闸与收场从 MCP 侧调进来时（/neo_agent/ask 等三条路由）要把帧塞回同一条
+        # 时间线，出口只能挂在运行对象上——_events 的 record 在开跑前写进来
+        self.emit = None
         # 会话落盘面，挂在同一个对象上：收尾时整份写进数据根的 agent_sessions/，
         # 前端「🗂 历史」读回时间线，「继续这次会话」接的是 messages
         self.created = time.time()
@@ -404,6 +411,16 @@ class _Run:
         for ask in self.asks.values():
             ask["text"] = text
             ask["event"].set()
+
+    async def push(self, frame: dict) -> None:
+        """把一帧塞进这条时间线。流已经走了（页面关了、这条已经收场）就只留在会话帧里：
+        record 先把帧落进 frames 再往 SSE 上发，断流不该让收场本身失败。"""
+        if self.emit is None:
+            return
+        try:
+            await self.emit(frame)
+        except RuntimeError:
+            pass
 
     async def await_resume(self, emit) -> bool:
         """暂停检查点：没在暂停直接过；暂停了就发 paused 帧等在「继续」上。
@@ -640,6 +657,11 @@ def _clean_prefs(raw) -> dict:
     for key in ("style_notes", "avoid"):
         out[key] = _clip(str(raw.get(key) or "").strip(), PREFS_TEXT_MAX)
     out["confirm_films"] = bool(raw.get("confirm_films", DEFAULT_PREFS["confirm_films"]))
+    out["backend"] = "dsh" if str(raw.get("backend") or "").strip() == "dsh" else "loop"
+    # 入口路径只收到 300 字：它是给子进程 argv 用的，形态不对的（含换行、超长）落回空，由
+    # agent_kernel 报「没有指定 dsh 入口」而不是拿一串怪字符串去起进程
+    dsh_bin = str(raw.get("dsh_bin") or "").strip()
+    out["dsh_bin"] = dsh_bin if 0 < len(dsh_bin) <= 300 and "\n" not in dsh_bin else ""
     return out
 
 
@@ -1690,8 +1712,24 @@ def _sse(frame) -> bytes:
     return ("data: " + json.dumps(_json_safe(frame), ensure_ascii=False) + "\n\n").encode("utf-8")
 
 
+def _use_kernel(run, mode: str, images: list | None, history: list | None) -> bool:
+    """这一发走不走 dsh 内核：偏好选了 dsh，且这一发没有它接不住的东西。
+
+    计划模式（工具过滤与执行清单）、附件图（多模态）、续聊原文都在循环里实现，dsh 侧没有对应物，
+    接了就是静默丢东西；这些形态一律回退循环，回退原因进日志。"""
+    if run.prefs.get("backend") != "dsh":
+        return False
+    if mode != "act" or images or history:
+        return False
+    why = agent_kernel.unavailable(run.prefs)
+    if why:
+        logger.info(f"[Neo Studio] dsh 后端回退循环：{why}")
+        return False
+    return True
+
+
 async def _events(run, text: str, mode: str = "act", images: list | None = None,
-                  context: str = "", history: list | None = None):
+                  context: str = "", history: list | None = None, kernel: bool = False):
     async def runner(emit):
         # 逐帧记在运行对象上：历史里打开旧会话要的就是这一串帧，前端不留第二份
         async def record(frame):
@@ -1699,7 +1737,13 @@ async def _events(run, text: str, mode: str = "act", images: list | None = None,
             run.frames.append({k: v for k, v in frame.items() if k != "preview"})
             await emit(frame)
 
-        await _run_agent(run.client, text, record, run, mode, images, context, history)
+        # 闸与收场从 MCP 侧调回来时要往同一条时间线塞帧，出口挂在运行对象上
+        run.emit = record
+        if kernel:
+            # dsh 那一侧自己带系统提示词（内联进 patch）、自己调 MCP 工具，这里只翻事件
+            await agent_kernel.run(run, text, record, mode)
+        else:
+            await _run_agent(run.client, text, record, run, mode, images, context, history)
 
     _RUNS[run.run_id] = run
     try:
@@ -1832,7 +1876,8 @@ async def agent_run(request):
     run.image_sources = [src for src in (body.get("images") or [])
                          if isinstance(src, dict)][:MAX_IMAGES]
     return web.Response(
-        body=_events(run, text, mode, images, context, history),
+        body=_events(run, text, mode, images, context, history,
+                     kernel=_use_kernel(run, mode, images, history)),
         content_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no",
                  "Connection": "keep-alive"},
@@ -1865,6 +1910,77 @@ async def agent_answer(request):
     ask["text"] = _clip(text, ANSWER_CLIP)
     ask["event"].set()
     return web.json_response({"success": True, "run_id": run_id, "ask_id": ask_id})
+
+
+@routes.post("/neo_agent/ask")
+async def agent_ask(request):
+    """MCP 侧的 ask_user 走这条，闸还是循环那一份 _Run.await_answer。
+
+    dsh 那类内核没有右栏的伪工具层，闸只能从工具侧调进来；问句照旧以 ask 帧进同一条时间线，
+    用户点选仍经 /neo_agent/answer 交回，30 分钟无回应按「用户没回应」继续——三处都是同一段代码。"""
+    try:
+        body = await request.json()
+    except Exception:
+        return web.json_response({"success": False, "error": "请求不是合法 JSON"}, status=400)
+    body = body if isinstance(body, dict) else {}
+    run_id = str(body.get("run_id") or "").strip()
+    if not RUN_ID_RE.match(run_id):
+        return web.json_response({"success": False, "error": "run_id 不合法"}, status=400)
+    run = _RUNS.get(run_id)
+    if run is None:
+        return web.json_response({"success": False, "error": "这次运行已经收场"}, status=404)
+    question = _clip(str(body.get("question") or "").strip(), 500)
+    options = [_clip(str(o).strip(), 200) for o in (body.get("options") or []) if str(o).strip()][:5]
+    if not question or len(options) < 2:
+        return web.json_response({"success": False, "error": "问题要有正文与 2-5 个互斥选项"}, status=400)
+    text = await run.await_answer(run.push, question, options)
+    return web.json_response({"success": True, "text": text})
+
+
+@routes.post("/neo_agent/finish")
+async def agent_finish(request):
+    """MCP 侧的 finish_task 走这条：验收用循环那一份 _finish_of，产物名只认本次运行真出现过的；
+    收场帧照旧进同一条时间线，右栏的产物栏与下一步方向不用另写一条路。"""
+    try:
+        body = await request.json()
+    except Exception:
+        return web.json_response({"success": False, "error": "请求不是合法 JSON"}, status=400)
+    body = body if isinstance(body, dict) else {}
+    run_id = str(body.get("run_id") or "").strip()
+    if not RUN_ID_RE.match(run_id):
+        return web.json_response({"success": False, "error": "run_id 不合法"}, status=400)
+    run = _RUNS.get(run_id)
+    if run is None:
+        return web.json_response({"success": False, "error": "这次运行已经收场"}, status=404)
+    reject, payload = _finish_of(run, body, run.mode)
+    if reject:
+        return web.json_response({"success": False, "error": reject})
+    run.reason = "finish"
+    await run.push({"kind": "finish", "text": payload["result"],
+                    "media": payload["media"], "options": payload["options"]})
+    return web.json_response({"success": True, **payload})
+
+
+@routes.post("/neo_agent/plan")
+async def agent_plan(request):
+    """MCP 侧的 write_plan 走这条：清单验收用循环那一份 _plan_of，工具名必须是工具表里的真名。"""
+    try:
+        body = await request.json()
+    except Exception:
+        return web.json_response({"success": False, "error": "请求不是合法 JSON"}, status=400)
+    body = body if isinstance(body, dict) else {}
+    run_id = str(body.get("run_id") or "").strip()
+    if not RUN_ID_RE.match(run_id):
+        return web.json_response({"success": False, "error": "run_id 不合法"}, status=400)
+    run = _RUNS.get(run_id)
+    if run is None:
+        return web.json_response({"success": False, "error": "这次运行已经收场"}, status=404)
+    reject, steps = _plan_of(run, body, run.mode)
+    if reject:
+        return web.json_response({"success": False, "error": reject})
+    run.plan_steps = steps
+    await run.push({"kind": "plan_steps", "steps": steps})
+    return web.json_response({"success": True, "steps": steps})
 
 
 @routes.post("/neo_agent/cancel")

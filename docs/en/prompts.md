@@ -308,6 +308,22 @@ the same trash icon, confirmed before that session's file goes.
   inputs (locally persisted, deduplicated, newest first, capped at 20); editing the text leaves
   navigation mode, and both node types share one history.
 
+### Execution backend (optional dsh kernel)
+
+The dock runs the built-in loop (`loop`) by default. Set `backend` in `configs/agent_prefs.json` to `dsh` and point
+`dsh_bin` at a local `@deepseek-ai/dsh` `lib/bin.js` (node 22.18+ and a `DEEPSEEK_API_KEY` in the environment are
+required too), and an act-mode turn is handed to the dsh kernel:
+
+- The timeline, the gates and the finish are the same: `ask_user` / `finish_task` come back through
+  `/neo_agent/ask` / `/neo_agent/finish` into the loop's own implementation, so the choice card, the media-name
+  allowlist and the finish wording are reused as-is; the kernel's MCP child starts with this run's `run_id` in its
+  environment, which the model can neither see nor choose.
+- Per-turn tokens accumulate from what the provider reports — the same numbers the rail and the saved summary read.
+- Four shapes fall back to the loop: plan mode, a turn with attachments, a resumed session, and an unusable dsh
+  (no node / no entry / no key). The reason goes into the backend log rather than being swallowed.
+- dsh's profile, workspace and JSONL sessions live under `dsh/` in the data root; the install itself is not part of
+  the plugin — `dsh_bin` points at it.
+
 ## Skill management
 
 Skill composition, the skill manager window, the embedded workflow editor, skill ⇄ canvas import and

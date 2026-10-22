@@ -6,7 +6,8 @@ generate_image、director_run、segment_run、assemble_run；任务类 task_stat
 cancel_task；配方写操作 director_plan、director_save、director_copy；取产物文件 get_media。
 右栏另有三个伪工具 ask_user / write_plan / finish_task：ask_user 把问题与 2-5 个选项发给用户，
 等到他点选再往下走；write_plan 只在计划模式收场前把这份计划交成结构化清单；
-finish_task 只在执行模式收场时把交付物交回来。它们不发给 MCP，外部 MCP 客户端看不见。
+finish_task 只在执行模式收场时把交付物交回来。这三个是右栏自己的实现，外部 MCP 客户端看不见；
+内核把某一次运行绑给它的 MCP 子进程时，它们会以 MCP 工具的身份进表，走的是同一段代码。
 右栏没有配方选择器——围绕哪个配方由你自己定。技能由你自己查 list_skills 定，用户在输入框里用 @ 点名了
 哪一个时，系统提示词末尾会带一段本轮点名技能的指令，那一段写清了这一发该怎么用它。
 

@@ -30,8 +30,18 @@ MAX_IMAGES = 8            # 单次返回的产物图条目上限（与 image_gen
 # 逐行带它进上下文，全表长度就压到这一档
 SKILL_DESC_CLIP = 300
 SSE_TIMEOUT = 600         # LLM 流式端点读超时（整段提示词生成可能很慢）
+# 右栏这一次运行的 run_id 由内核注入 MCP 子进程的环境：闸与收场三个工具只在它非空时才进工具表，
+# 外部 MCP 客户端（Claude Desktop / Cursor）拿不到它，也就看不到这三个工具
+AGENT_RUN_ENV = "NEO_AGENT_RUN"
+AGENT_ASK_TIMEOUT = 1860  # 提问长轮询的读超时：右栏那边等回答的上限是 1800 秒
 STORYBOARD_POLL_SEC = 2.0
 STORYBOARD_WAIT_SEC = 900.0   # 分镜逐段串行跑图：每段数十秒起，超时就回 task_id 让智能体用 task_status 续查
+# task_status 的长轮询：没有等待原语的内核（实测 sdk-minimal 那类）只能一轮一轮调，一次
+# 导演任务能调 647 次、token 烧到 18 万；wait_ms 让一次调用压住几分钟，节奏由服务端定。
+# 上限压在 240 秒：MCP 客户端的工具调用超时普遍在 5 分钟这一档，再长就被客户端先掐掉。
+TASK_WAIT_POLL_SEC = 1.5
+TASK_WAIT_MAX_MS = 240_000
+TASK_TERMINAL = frozenset({"succeeded", "failed", "error", "cancelled", "canceled", "done"})
 KEYFRAME_REF_MAX = 9          # 段参考图上限（与 H3 参考生视频的 autogrow 槽位一致）
 
 
@@ -168,9 +178,11 @@ class Comfy:
 
 
 class Ctx:
-    def __init__(self, comfy: Comfy, b64_images: bool = False):
+    def __init__(self, comfy: Comfy, b64_images: bool = False, run_id: str = ""):
         self.comfy = comfy
         self.b64_images = b64_images
+        # 右栏这一次运行的 run_id：只有内核对它起的 MCP 子进程注入，空的这一份是外部客户端
+        self.run_id = run_id
 
 
 def clip(text) -> str:
@@ -531,14 +543,14 @@ def tool_generate_image(ctx, args):
                  "images": image_items(ctx.comfy, snap.get("images"))})
 
 
-def tool_task_status(ctx, args):
-    tid = need(args, "task_id")
+def _task_snapshot(ctx, tid: str):
+    """一次任务快照查询：生图任务先查 image tasks，再按 TASK_STATUS_ROUTES 查其余几类。"""
     for t in (ctx.comfy.get_soft("/neo_image_gen/tasks") or []):
         if t.get("task_id") == tid:
             out = {"kind": "image", **t}
             out.pop("preview", None)       # 预览帧是 base64 载荷，智能体只要产物名
             out["images"] = image_items(ctx.comfy, t.get("images"), MAX_IMAGES)
-            return dump(out)
+            return out
     for kind, route in TASK_STATUS_ROUTES:
         data = ctx.comfy.get_soft(route.format(tid=tid))
         if data is None:
@@ -561,8 +573,26 @@ def tool_task_status(ctx, args):
                                   "total": prog.get("total_segments"),
                                   "step": prog.get("step"),
                                   "total_steps": prog.get("total_steps")}
-        return dump(out)
-    raise ToolError(f"任务不存在（结束后被清理也会这样）：{tid}")
+        return out
+    return None
+
+
+def tool_task_status(ctx, args):
+    tid = need(args, "task_id")
+    try:
+        wait_ms = int(args.get("wait_ms") or 0)
+    except (TypeError, ValueError):
+        wait_ms = 0
+    wait_ms = max(0, min(wait_ms, TASK_WAIT_MAX_MS))
+    deadline = time.time() + wait_ms / 1000.0
+    while True:
+        snap = _task_snapshot(ctx, tid)
+        if snap is None:
+            raise ToolError(f"任务不存在（结束后被清理也会这样）：{tid}")
+        if not wait_ms or snap.get("status") in TASK_TERMINAL or time.time() >= deadline:
+            return dump(snap)
+        time.sleep(TASK_WAIT_POLL_SEC)
+
 
 
 def tool_list_tasks(ctx, args):
@@ -581,6 +611,54 @@ def tool_cancel_task(ctx, args):
             continue
         return dump({"kind": kind, **data})
     raise ToolError(f"任务不存在：{tid}")
+
+
+# ---------------------------------------------------------------------------
+# 闸与收场：右栏那一份实现，经 HTTP 用到 MCP 侧
+#
+# dsh 那类内核没有右栏的伪工具层，闸与收场只能从工具侧调进来；实现不复制第二份——三条路由
+# 落到 _Run.await_answer / _finish_of / _plan_of，与循环自己用的是同一段代码。run_id 由内核
+# 注入环境，模型看不见也选不了，外部客户端没有这一份就看不到这三个工具。
+# ---------------------------------------------------------------------------
+
+def _agent_run(ctx) -> str:
+    if not ctx.run_id:
+        raise ToolError("这套工具只在右栏智能体的一次运行里可用：run 绑定由内核注入（NEO_AGENT_RUN），"
+                        "外部 MCP 客户端没有它；要问用户就在回答里写清楚要他定什么")
+    return ctx.run_id
+
+
+def tool_ask_user(ctx, args):
+    question = need(args, "question")
+    options = [str(o).strip() for o in (args.get("options") or []) if str(o).strip()][:5]
+    if len(options) < 2:
+        raise ToolError("ask_user 要给 2-5 个互斥选项：用户照着点，自由输入另有一栏")
+    data = ctx.comfy.post("/neo_agent/ask", {"run_id": _agent_run(ctx), "question": question,
+                                             "options": options},
+                          timeout=AGENT_ASK_TIMEOUT) or {}
+    if not data.get("success"):
+        raise ToolError(str(data.get("error") or "提问没有送到右栏"))
+    return dump({"answer": str(data.get("text") or "")})
+
+
+def tool_finish_task(ctx, args):
+    body = {"run_id": _agent_run(ctx), "result": str(args.get("result") or ""),
+            "media": [str(n) for n in (args.get("media") or []) if str(n).strip()][:8],
+            "next_options": [str(o) for o in (args.get("next_options") or []) if str(o).strip()][:6]}
+    data = ctx.comfy.post("/neo_agent/finish", body, timeout=60) or {}
+    if not data.get("success"):
+        # 拒回原文交回模型改正：编造的产物名、缺 result 都是可修的用法错误，不是工具故障
+        return dump({"accepted": False, "error": str(data.get("error") or "")})
+    return dump({"accepted": True, "result": str(data.get("result") or ""),
+                 "media": data.get("media") or []})
+
+
+def tool_write_plan(ctx, args):
+    data = ctx.comfy.post("/neo_agent/plan", {"run_id": _agent_run(ctx),
+                                              "steps": args.get("steps") or []}, timeout=60) or {}
+    if not data.get("success"):
+        return dump({"accepted": False, "error": str(data.get("error") or "")})
+    return dump({"accepted": True, "steps": data.get("steps") or []})
 
 
 def tool_get_media(ctx, args):
@@ -903,8 +981,10 @@ TOOLS = [
          {"skill_id": "<list_skills 里 has_workflow=true 的技能 id>",
           "prompt": "一只橘猫坐在窗台，暖色阳光，写实", "width": 1024, "height": 1024}),
 
-    tool("task_status", "查任务快照（生图 / 整片 / 单段 / 拼接共用 task_id）；生图 succeeded 后 images 带取图 URL，导演类 succeeded 后 filename 是 mp4 产物、url 是可直接转给用户的播放/下载链接，别自己拼",
-         {"task_id": TASK_ID}, ("task_id",), {"task_id": "<generate_image / director_run 返回的 task_id>"}),
+    tool("task_status", "查任务快照（生图 / 整片 / 单段 / 拼接共用 task_id）；生图 succeeded 后 images 带取图 URL，导演类 succeeded 后 filename 是 mp4 产物、url 是可直接转给用户的播放/下载链接，别自己拼。异步任务用 wait_ms 一次等到终态（服务端每 1.5 秒查一次），不要自己在循环里反复调",
+         {"task_id": TASK_ID,
+          "wait_ms": s("integer", "长轮询毫秒数：等到终态或超时再返回，上限 240000；默认 0 只查一次")},
+         ("task_id",), {"task_id": "<generate_image / director_run 返回的 task_id>", "wait_ms": 60000}),
     tool("list_tasks", "列出最近的生图任务（每行带 skill_id：出这一发用的技能）", {}),
     tool("cancel_task", "取消任务（未执行出队，执行中中断）", {"task_id": TASK_ID}, ("task_id",),
          {"task_id": "<list_tasks 里的 task_id>"}),
@@ -984,6 +1064,37 @@ TOOLS = [
          {"recipe": "<director_recipes 里的配方名>", "segments": [1]}),
 ]
 
+# 闸与收场：只在 NEO_AGENT_RUN 绑定了这一发运行之后才进工具表（见 main），
+# 外部 MCP 客户端看不到它们，右栏那边的伪工具照旧存在——两条路走同一份实现
+AGENT_TOOLS = [
+    tool("ask_user", "要用户在几个方向里定一个时调用：把问题与 2-5 个互斥选项发到右栏，等到用户点选再继续；"
+                     "能用查询工具确定的事不要问用户，要用户定的每一道门各问一次",
+         {"question": s("string", "要用户决定什么，一句话说清"),
+          "options": {"type": "array", "items": {"type": "string"},
+                      "description": "2-5 个用户可以直接照选的方向"}},
+         ("question", "options"),
+         {"question": "成片收尾走哪种？", "options": ["淡出", "硬切", "循环"]}),
+    tool("finish_task", "收场时调用，把交付物一次性交回来：做了什么与产物是什么（result）、产物文件名"
+                        "（media，只能填本次运行真出现过的工具结果里的文件名）、用户可以照着点的下一步方向"
+                        "（next_options）。不调它直接写一段话也能收场，但产物与下一步只能靠这一份结构传下来",
+         {"result": s("string", "两三句中文，说清做了什么、产物是什么"),
+          "media": {"type": "array", "items": {"type": "string"},
+                    "description": "产物文件名，逐字照抄工具结果里的 filename；没有产物就留空"},
+          "next_options": {"type": "array", "items": {"type": "string"},
+                           "description": "2-5 个用户可以照着点的下一步，写成能直接发出去的一句话"}},
+         ("result",),
+         {"result": "已出一张 1024×1024 的橘猫图", "media": []}),
+    tool("write_plan", "计划模式收场前调用，把计划交成结构化清单：每步 {tool, key_args, note}，"
+                       "tool 必须是工具表里的真名，key_args 写关键参数，note 一句话说明这一步要产出什么",
+         {"steps": {"type": "array", "description": "1-12 步清单，顺序即执行顺序",
+                    "items": {"type": "object", "properties": {
+                        "tool": s("string", "要调的工具名，照工具表里的真名写"),
+                        "key_args": s("string", "这一步的关键参数，一行写完"),
+                        "note": s("string", "这一步要产出什么")}}}},
+         ("steps",), {"steps": [{"tool": "neo_status", "key_args": "", "note": "确认服务在线"}]}),
+]
+
+
 HANDLERS = {
     "neo_status": tool_neo_status,
     "list_skills": tool_list_skills,
@@ -1006,6 +1117,10 @@ HANDLERS = {
     "director_run": tool_director_run,
     "segment_run": tool_segment_run,
     "assemble_run": tool_assemble_run,
+    # 闸与收场：绑定 run 的 MCP 子进程才有这三个入口（见 AGENT_TOOLS）
+    "ask_user": tool_ask_user,
+    "finish_task": tool_finish_task,
+    "write_plan": tool_write_plan,
 }
 
 
@@ -1104,14 +1219,18 @@ def main(argv=None) -> int:
     unknown = allow - set(HANDLERS)
     if unknown:
         raise SystemExit(f"工具白名单里有未知工具：{', '.join(sorted(unknown))}")
-    tools = [t for t in TOOLS if not allow or t["name"] in allow]
+    # 闸与收场的三个工具只在右栏这一次运行绑定时进表：外部 MCP 客户端拿不到 run_id，
+    # 给它们一张用不了的 ask_user 只会换来一次 UNKNOWN_TOOL 式的死路
+    run_id = os.environ.get(AGENT_RUN_ENV, "").strip()
+    table = TOOLS + (AGENT_TOOLS if run_id else [])
+    tools = [t for t in table if not allow or t["name"] in allow]
 
     if args.selftest:
         log(f"Neo Studio MCP Server v{plugin_version()} · {len(tools)} 工具："
             + ", ".join(t["name"] for t in tools))
         return 0
 
-    ctx = Ctx(Comfy(comfy_base(args.comfy_url), args.timeout), args.image_base64)
+    ctx = Ctx(Comfy(comfy_base(args.comfy_url), args.timeout), args.image_base64, run_id)
     log(f"Neo Studio MCP Server v{plugin_version()} · {len(tools)} 工具 · {ctx.comfy.base}")
     # Windows 控制台默认不是 UTF-8，协议要求按 UTF-8 收发
     if hasattr(sys.stdin, "reconfigure"):

@@ -1,0 +1,51 @@
+# Neo Studio 的 dsh 内核叠加层：叠在 @deepseek-ai/dsh-sdk-minimal 那棵完整的树上。
+# 只有把 agent_backend 选成 dsh、并且指了 dsh 入口之后才会被读到（studio/agent_kernel.py）。
+# personaPrefix 那一行是占位：桥在每次运行前把系统提示词正文按同一份模板渲染进数据根。
+- id: agent-loop
+  config:
+    maxParallelToolCalls: 1
+
+# 摘 shell 与 subprocess：sandbox-policy 是 danger-full-access 且 tool-fs 的写与编辑本来就关着，
+# shell 是这棵树里仅剩的写盘与起进程通道；右栏的能力面全在 MCP 那一侧。
+- id: persistent-bash
+  disabled: true
+- id: persistent-pwsh
+  disabled: true
+- id: terminal-bash
+  disabled: true
+- id: terminal-pwsh
+  disabled: true
+- id: subprocess
+  disabled: true
+- id: pty
+  disabled: true
+
+- id: sandbox-policy
+  config:
+    mode: danger-full-access
+    workspaceRoot: !!js process.env.NEO_DSH_WORKSPACE || process.cwd()
+
+- id: system-prompt
+  config:
+    includeHarnessIdentity: false
+    includeRuntimeContext: false
+    personaPrefix: |-
+      __NEO_SYSTEM_PROMPT__
+
+# 能力面就是 Neo Studio 自己的 MCP server：它带着 NEO_AGENT_RUN 起来，闸与收场三个工具
+# 因此在工具表里，打回 /neo_agent/ask 等路由落到循环那一份实现上。
+# toolCallTimeoutMs 抬到 15 分钟：分镜串行是段乘数分钟，客户端默认 60 秒会先掐掉。
+- insert:
+  - id: mcp-neo
+    name: '@deepseek-ai/dsh-mcp-client'
+    config:
+      serverName: neo
+      transport: stdio
+      command: !!js process.env.NEO_PYTHON || "python"
+      args:
+        - !!js process.env.NEO_MCP_SERVER
+        - "--comfy-url"
+        - !!js process.env.NEO_MCP_COMFY_URL || "http://127.0.0.1:8188"
+      env:
+        NEO_MCP_COMFY_URL: !!js process.env.NEO_MCP_COMFY_URL || "http://127.0.0.1:8188"
+      toolCallTimeoutMs: 900000

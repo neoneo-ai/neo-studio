@@ -181,6 +181,9 @@ Neo Studio 独立页面（`web/studio/index.html`）的后端。素材 / 生图 
 |------|------|------|
 | POST | `/neo_agent/run` | 智能体一轮对话，SSE 时间线；body `{text, mode, images, context, preview_side, resume, skill_id}`（`mode` 只认 `plan` / `act`，缺省 `act`；`skill_id` 是输入框 `@` 点名的技能，只认 `^[A-Za-z0-9_.\-]{1,64}$` 的形态，进系统提示词排在焦点链与用户偏好之后，认不认得到由循环里那次 `list_skills` 定；`images` 是输入框附件图，按图片源口径给，最多 6 张；`context` 是界面当前状态，非 dict 整块丢掉；`preview_side` 是这一轮要的采样预览最长边（像素），非数按右栏卡片那档 384，绘画页中间舞台挂着时要 1024，0 与负数是关掉采样预览（后端不读预览表，SSE 不带 `preview` 载荷）；`resume` 带旧会话的 `run_id` 时这一轮接在那条会话后面跑，那条还在跑与查不到都在首帧前 `[ERROR]` 收场），首帧 `run`（带 `run_id`，取消 / 暂停 / 继续整条循环与回答问句都要用），帧 `plan` / `tool_call` / `status` / `tool_result` / `ask` / `paused` / `resumed` / `content`，收尾 `[ERROR]` / `[DONE]` |
 | POST | `/neo_agent/answer` | 回答 `ask` 帧：body `{run_id, ask_id, text}`，把用户选的方向交回正等在 `ask_user` 上的循环；`run_id` / `ask_id` 只收 `run` / `ask` 帧发过的形态，运行收场 404、问句已收场 404 |
+| POST | `/neo_agent/ask` | MCP 侧 `ask_user` 的入口：body `{run_id, question, options}`，问题与 2-5 个选项进同一条时间线的 `ask` 帧并挂住，用户点选仍经 `/neo_agent/answer` 交回；`run_id` 校验同上，运行收场 404，问题为空或选项少于两个 400 |
+| POST | `/neo_agent/finish` | MCP 侧 `finish_task` 的入口：body `{run_id, result, media, next_options}`，验收用循环那一份（产物名只认本次运行真出现过的），成功时写收场原因并补一帧 `finish`；拒回时 `success: false` 带原文，逐字交回模型改正 |
+| POST | `/neo_agent/plan` | MCP 侧 `write_plan` 的入口：body `{run_id, steps}`，只有计划模式收，清单里每步的工具名必须是本轮工具表里的真名；成功时落 `plan_steps` 帧 |
 | POST | `/neo_agent/cancel` | 取消：带 `run_id` 停整条智能体循环并掐掉在跑的任务（`run_id` 只收 `run` 帧发过的形态，查不到 404）；带 `task_id` 只掐那一个任务（走 MCP `cancel_task`，图片 / 整片 / 单段 / 拼接四类由协议自己找路由），`task_id` 只收 UUID 形态 |
 | POST | `/neo_agent/pause` | 暂停：body `{run_id}`（校验同 cancel），让循环停在下一个轮次 / 轮询边界，SSE 开着不收尾；在飞的 ComfyUI 任务没有暂停态，边界上掐掉它并交回 `cancelled`，恢复后不自动重发 |
 | POST | `/neo_agent/resume` | 继续：body `{run_id}`（校验同 cancel），放开正等在暂停检查点上的循环；没在暂停时是空操作，重复点「继续」不会把运行推过检查点 |
@@ -200,9 +203,10 @@ Neo Studio 独立页面（`web/studio/index.html`）的后端。素材 / 生图 
 - `mode=plan` 是计划模式：`generate_image` / `director_run` / `segment_run` / `assemble_run` /
   `director_save` / `director_copy` / `cancel_task` 不进 LLM 的工具表，硬调也拒回错误；
   查询类工具照旧可用。
-- `ask_user` 是右栏伪工具，不在 MCP 注册表里：循环发 `ask` 帧（带 `ask_id`、问题与 2-5 个选项）
-  后挂在等回答上，`/neo_agent/answer` 交回答案，30 分钟无回应就按「用户没回应」继续；
-  按 `run_id` 取消时挂着的问句一并交收。
+- `ask_user` / `write_plan` / `finish_task` 的实现只在这一处：循环直接调用，绑定了 run 的 MCP 子进程经
+  上面三条路由调进来（`NEO_AGENT_RUN` 由内核注入，外部 MCP 客户端没有它，也就看不到这三个工具）。
+  问句挂在运行的 `asks` 上、`/neo_agent/answer` 交回答案、30 分钟无回应按「用户没回应」继续、
+  按 `run_id` 取消时挂着的问句一并交收——四件事都只有一段代码。
 - 暂停与停止都只在轮次与工具边界生效：LLM 的单轮请求在飞时掐不掉，回来后的第一个边界收场。
   暂停是发 `paused` 帧后挂在检查点上等 `/neo_agent/resume`，30 分钟无「继续」按「暂停超时」收场；
   取消会同时放开 `resume`，正挂在检查点上的循环也退得出来，时间线补一行「已取消」。

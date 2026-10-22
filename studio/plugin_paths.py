@@ -58,6 +58,9 @@ PROMPTS_DIR = DATA_ROOT / "prompts"
 RECIPES_DIR = DATA_ROOT / "recipes"
 SKILLS_DIR = DATA_ROOT / "skills"
 AGENT_SESSIONS_DIR = DATA_ROOT / "agent_sessions"   # 智能体一次运行的会话落盘，只存本机
+# 可选 dsh 内核的家目录（DSH_HOME）：装出来的 profile 与 JSONL 会话都住在数据根里，
+# 不落用户家目录，也不跟着插件目录走
+DSH_HOME_DIR = DATA_ROOT / "dsh"
 
 
 def seed_presets() -> None:
