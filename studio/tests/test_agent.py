@@ -2481,6 +2481,8 @@ class TestNamedSkillRouting(unittest.TestCase):
             block = agent._skill_block("krea2_gen", one)
             self.assertIn("本轮出图 / 出片默认就用这一个技能", block)
             self.assertNotIn("generate_prompt(skill_id", block)
+            self.assertNotIn("本轮第一句话先把它列给用户", block)
+            self.assertNotIn("director_save 落配方", block)
         self.assertNotIn("这一份正文不该进右栏", agent._skill_block("krea2_gen", info))
         self.assertEqual(agent._skill_block("", self.STORY), "")
 
@@ -2496,6 +2498,24 @@ class TestNamedSkillRouting(unittest.TestCase):
         self.assertIn("写一段动画短片的脚本与分镜", block)
         self.assertIn("references/storyboard-format.md", block)
         self.assertIn(f"本轮轮次放宽到 {agent.PROMPT_SKILL_MAX_TURNS} 轮", block)
+
+    def test_a_prompt_skill_announces_its_steps_before_the_first_tool(self):
+        """正文型技能流程长、确认门多：步骤要在第一句话报出来，用户不该跑到中途才发现还剩一道门没问。"""
+        info = agent._skill_info_of(FakeClient({}, skill_info=self.STORY), "minimax_storyboard")
+        block = agent._skill_block("minimax_storyboard", info)
+        self.assertIn("本轮第一句话先把它列给用户", block)
+        self.assertIn("列完再调第一个工具", block)
+        self.assertLess(block.index("本轮第一句话先把它列给用户"),
+                        block.index("正文里的每道确认门"))
+
+    def test_a_prompt_skill_delivers_a_director_recipe(self):
+        """产出的镜头表照它写成一份新导演配方交出去：逐段裸调生成工具的话，用户手里没有一份可复用的配方。"""
+        info = agent._skill_info_of(FakeClient({}, skill_info=self.STORY), "minimax_storyboard")
+        block = agent._skill_block("minimax_storyboard", info)
+        self.assertIn("director_plan 分段", block)
+        self.assertIn("director_save 落配方", block)
+        self.assertIn("不要拿它逐段裸调 segment_run / director_run", block)
+        self.assertIn("收场 result 写明配方名与段数", block)
 
     def test_a_skill_that_is_gone_falls_back_to_the_id_only_line(self):
         """运行中途技能被删掉时 /rs_prompts/load_skill 回 404：交回只报 id 的那一份，

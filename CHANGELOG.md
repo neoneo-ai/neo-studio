@@ -4,6 +4,22 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **A long body-only skill announces its steps, and its prompts land as a director recipe.** Naming a video-prompt
+  skill (the `SKILL.md` + `references/` kind with several confirm gates and output produced in passes) started the flow
+  with no shape: the dock's first card was the first `generate_prompt` call, and the user learned how many gates were
+  still coming only when one of them asked. The designated-skill block the backend injects for that turn
+  (`_skill_block` in `studio/agent.py`, and the same rules in `studio/prompts/agent/system_prompt.md` for a skill the
+  model picks itself) now requires the first sentence of the turn to list the steps — one line per step, saying which
+  step asks the user and which step produces what — before the first tool call; that list lands on the timeline's
+  existing plan line, and the recipe-saved toast is unchanged, so no new UI is involved. The produced text is now
+  named as the content of the turn's deliverable: the film-shaped one (script / storyboard / shot list / per-segment
+  finished prompts) is written up as a new director recipe — `director_plan` splits it, `director_save` lands it with
+  the segment prompts copied from that output and a `story` carrying the idea and character references, the recipe
+  name is reported, and the film runs from that recipe instead of naked `segment_run` / `director_run` calls per
+  segment; the image-shaped one generates images by the skill's own rules. `finish_task`'s `result` names the recipe
+  and its segment count. Covered by `studio/tests/test_agent.py` (`TestNamedSkillRouting`); docs in `docs/skills.md`
+  and its `docs/en/` mirror.
+
 - **An attached image is in a turn only when it reached the request.** Pasting, dropping and library-dropping an image
   read it asynchronously, so **✨ 生成** right after a paste took `attachments` while the read was still in flight: the
   turn went out with zero images, the model saw the text alone, and a brand film with no logo or UI screenshot was built

@@ -1169,7 +1169,9 @@ def _skill_block(skill_id: str, info: dict | None = None) -> str:
     指令。带 workflow.json 模板的技能照旧当 skill_id 出；正文型技能（Agent Skills 那类：只有 SKILL.md
     那套流程）没有模板，当 skill_id 出不了东西，本轮就让它走 generate_prompt，正文与 references 由
     服务端在那一趟按需读取。认不认得到这个技能由循环自己查：技能目录不在本模块里，agent 只通过工具
-    看得到技能，在这里 import skill.py 就是把两层焊在一起。空值不产出这一段。"""
+    看得到技能，在这里 import skill.py 就是把两层焊在一起。空值不产出这一段。正文型技能那一段带本轮的两条
+    交付要求：第一句话先把这套流程的几步报给用户——长流程跑到中途才报步骤，用户就是陪跑到最后一刻才发现还剩
+    一道门；它产出的镜头表写成一份新导演配方交出去——逐段裸调生成工具的话，用户手里没有一份可复用的配方。"""
     sid = str(skill_id or "").strip()
     if not sid:
         return ""
@@ -1186,13 +1188,19 @@ def _skill_block(skill_id: str, info: dict | None = None) -> str:
         f"- 它干什么：{_clip(info.get('description') or '（这份技能没有写说明）', SKILL_DESC_CLIP)}\n"
         "- 本轮先调 generate_prompt(skill_id=这个技能, text=用户的想法)，让它跑自己那套流程：技能正文与它的引用文件"
         "由服务端在那一趟按需读取，你不要抄正文，也不要自己写它要产出的那份东西。\n"
+        "- 这套流程有几步，本轮第一句话先把它列给用户（照正文与引用文件判断，一步一句，写明哪一步要问他、哪一步出"
+        "什么产物），列完再调第一个工具：这类技能正文长、门多，用户跑到中途才知道有几步，就是陪跑到最后一刻才发现"
+        "还剩一道门没问。\n"
         f"- 正文里的每道确认门各发一次 ask_user（问题一句话说清要定什么，选项 2-5 条照正文给的方向写），"
         f"本轮最多问 {PROMPT_SKILL_ASK_ROUNDS} 次；正文要求分段的产物就分次调 generate_prompt，一次返回最多 {mcp.MAX_TEXT} 字符。\n")
     if refs:
         text += (f"- 它的引用文件（服务端在 generate_prompt 那一趟自己读，你只用它判断这套流程有几步）："
                  f"{'、'.join(refs)}\n")
-    return text + ("- 拿到它产出的文本（脚本 / 分镜 / 镜头表 / 成品提示词）之后，再按配方法则建配方出片、"
-                   f"或按技能规则出图；本轮轮次放宽到 {PROMPT_SKILL_MAX_TURNS} 轮。")
+    return text + ("- 它产出的那份文本就是本轮的交付物内容，不要拿它逐段裸调 segment_run / director_run：出片用的那份"
+                   "（脚本 / 分镜 / 镜头表 / 每段成片提示词）按配方法则写成一份新导演配方交给他——director_plan 分段、"
+                   "director_save 落配方（段提示词照抄产出，story 带上主题与角色参考），新配方名报给用户，跑整片与"
+                   "单段都从这份配方跑；出图用的那份（图像提示词）按技能规则出图。"
+                   f"本轮轮次放宽到 {PROMPT_SKILL_MAX_TURNS} 轮；收场 result 写明配方名与段数。")
 
 
 def _media_block(count: int) -> str:
