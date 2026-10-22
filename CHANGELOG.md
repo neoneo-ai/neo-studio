@@ -4,6 +4,21 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **The body-only skill's step list, gates and recipe delivery are enforced by the backend.** Four end-to-end runs of a
+  named video-prompt skill against a local 27B model showed the prompt-only contract does not hold there: every run
+  called `generate_prompt` as its first action and announced the steps only after the skill body came back, one run
+  re-asked the same confirm gate fifteen times until the 20-turn budget was gone with nothing delivered, and the
+  closing `finish_task` was refused because the recipe it had just saved was not in the accepted product names. Three
+  gates now live in the loop (`studio/agent.py`): a designated body-only skill that calls `generate_prompt` before the
+  turn has said anything visible to the user gets refused once (`[error]` naming the numbered step list it must send
+  first — one nag only, so a silent model still reaches the delivery path), `ask_user` past the run's gate cap is
+  refused with the default-spec delivery path, and re-asking a gate the user already answered is refused without
+  parking on a new question (the question is compared with whitespace and punctuation stripped). `finish_task` accepts
+  the recipe name this run's `director_save` saved — its receipt is `{success, name}` with no media items — as a product
+  in `media`, reported as `{"kind": "recipe", "title": …, "url": ""}` so the dock's product row skips it and the recipe
+  name reaches the user through `result`. The wording is in `_skill_block` and `studio/prompts/agent/system_prompt.md`.
+  Covered by `studio/tests/test_agent.py` (`TestSkillProcessGates`); docs in `docs/skills.md` and its `docs/en/` mirror.
+
 - **A long body-only skill announces its steps, and its prompts land as a director recipe.** Naming a video-prompt
   skill (the `SKILL.md` + `references/` kind with several confirm gates and output produced in passes) started the flow
   with no shape: the dock's first card was the first `generate_prompt` call, and the user learned how many gates were

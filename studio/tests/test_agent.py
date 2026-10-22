@@ -2595,6 +2595,150 @@ class TestNamedSkillRouting(unittest.TestCase):
         self.assertIn("generate_prompt(skill_id", seen[0])
 
 
+@skip
+class TestSkillProcessGates(unittest.TestCase):
+    """点名正文型技能那一轮的三条后端闸：跑技能之前先把流程报给用户、确认门问得完也问不重复、
+    本轮保存的配方算收场产物。闸只活在本次循环调用里，不跨运行留状态。"""
+
+    STORY = {"id": "minimax_storyboard", "category": "video_enhance",
+             "description": "写一段动画短片的脚本与分镜", "has_workflow": False,
+             "gen_image": False, "gen_video": False,
+             "content": "正文：先问题材与风格，再出镜头表", "files": []}
+
+    @staticmethod
+    def _tool_call(name, args, tc_id):
+        return {"content": "", "tool_calls": [{"id": tc_id, "function": {
+            "name": name, "arguments": json.dumps(args, ensure_ascii=False)}}]}
+
+    @classmethod
+    def _loop(cls, client, run, turns, answer="按默认规格"):
+        """跑一条脚本化的循环：ask 帧上就地交回答复，等同前端点选项的时机。"""
+        def chat(messages, tools):
+            return turns.pop(0) if turns else {"content": "交回来了"}
+
+        async def main():
+            frames = []
+
+            async def emit(frame):
+                frames.append(frame)
+                if frame["kind"] == "ask":
+                    run.asks[frame["ask_id"]]["text"] = answer
+                    run.asks[frame["ask_id"]]["event"].set()
+
+            with mock.patch.object(agent, "_chat", chat):
+                await agent._run_agent(client, "做个短片", emit, run)
+            return frames
+        return asyncio.run(main())
+
+    def _named_run(self, replies):
+        """点名了正文型技能的那一条运行：轮次与门数上限都已放宽，闸才是生效的那一条。"""
+        client = FakeClient(replies, names=("generate_prompt", "ask_user"), skill_info=self.STORY)
+        run = _runobj(client)
+        run.user_skill = self.STORY["id"]
+        return client, run
+
+    def test_generate_prompt_waits_for_the_step_announcement(self):
+        """四条实测运行全在第一句话就调 generate_prompt，等拿到技能正文才开始报步骤：
+        闸要在它之前把那一发拦下来，拒回原文把编号清单要出来。"""
+        call = self._tool_call("generate_prompt",
+                               {"skill_id": self.STORY["id"], "text": "怕黑的猫头鹰学会了开灯"}, "t1")
+        client, run = self._named_run({"generate_prompt": {"text": "镜头表 4 段"}})
+        frames = self._loop(client, run, [call,
+                                          dict(self._tool_call("generate_prompt",
+                                                               {"skill_id": self.STORY["id"], "text": "短片"}, "t2"),
+                                               content="本轮五步：1 问题材 2 问风格 3 出脚本 4 出分镜 5 落配方"),
+                                          {"content": "交回来了"}])
+        refused = [f for f in frames if f["kind"] == "tool_result" and f["text"].startswith("[error]")]
+        self.assertEqual(len(refused), 1)
+        self.assertIn("编号列给用户", refused[0]["text"])
+        self.assertEqual(len(client.calls), 1, "拒回的那一发不进 MCP")
+        plans = [f for f in frames if f["kind"] == "plan"]
+        self.assertEqual(len(plans), 1)
+        self.assertTrue(plans[0]["text"].startswith("本轮五步"))
+
+    def test_the_gate_opens_once_the_steps_are_out(self):
+        """第一句话报了步骤那一发直接跑：闸只拦没跟用户讲话的那一发，不挡正常交付。"""
+        client, run = self._named_run({"generate_prompt": {"text": "镜头表 4 段"}})
+        frames = self._loop(client, run, [
+            dict(self._tool_call("generate_prompt", {"skill_id": self.STORY["id"], "text": "短片"}, "t1"),
+                 content="本轮五步：1 问题材 2 问风格 3 出脚本 4 出分镜 5 落配方"),
+            {"content": "交回来了"}])
+        self.assertEqual(len(client.calls), 1)
+        results = [f for f in frames if f["kind"] == "tool_result"]
+        self.assertTrue(results[0]["text"].startswith("{"))
+        self.assertEqual(len(results), 1)
+
+    def test_the_gate_nags_once_and_then_lets_the_run_through(self):
+        """一个字都不说的模型也要收场：闸只拦一次，不能把放宽到的轮次烧在同一句拒回上。"""
+        client, run = self._named_run({"generate_prompt": {"text": "镜头表"}})
+        turns = [self._tool_call("generate_prompt", {"skill_id": self.STORY["id"], "text": f"第{i}次"}, f"t{i}")
+                 for i in range(1, 6)]
+        frames = self._loop(client, run, turns + [{"content": "交回来了"}])
+        results = [f for f in frames if f["kind"] == "tool_result" and f["tool"] == "generate_prompt"]
+        self.assertEqual(len(results), 5)
+        self.assertEqual(sum(1 for f in results if f["text"].startswith("[error]")), 1)
+        self.assertEqual(len(client.calls), 4)
+
+
+    def test_a_repeated_gate_is_refused_instead_of_parking_again(self):
+        """实测过的烧轮形状：同一道门（只差标点与空格）连着问，回答每次都是同一句，轮次烧光
+        零交付。第二次不再挂问句，拒回把循环推回交付路径。"""
+        client, run = self._named_run({})
+        frames = self._loop(client, run, [
+            self._tool_call("ask_user", {"question": "角色参考图 选哪个？", "options": ["有", "无"]}, "a1"),
+            self._tool_call("ask_user", {"question": "角色参考图选哪个", "options": ["有", "无"]}, "a2"),
+            {"content": "交回来了"}])
+        self.assertEqual(len([f for f in frames if f["kind"] == "ask"]), 1)
+        refused = [f for f in frames if f["kind"] == "tool_result" and "本轮问过" in f["text"]]
+        self.assertEqual(len(refused), 1)
+        self.assertIn("粘进输入框", refused[0]["text"])
+
+    def test_the_ask_cap_is_enforced_by_the_loop(self):
+        """门数上限不能只写在 ask_user 的工具描述里：问满了后端拒回，并给出按默认规格交付的路径。"""
+        gates = [self._tool_call("ask_user", {"question": f"门 {i}？", "options": ["甲", "乙"]}, f"a{i}")
+                 for i in range(1, 8)]
+        client, run = self._named_run({})
+        with mock.patch.object(agent, "PROMPT_SKILL_ASK_ROUNDS", 3):
+            frames = self._loop(client, run, gates + [{"content": "交回来了"}])
+        self.assertEqual(len([f for f in frames if f["kind"] == "ask"]), 3)
+        over = [f for f in frames if f["kind"] == "tool_result" and "问满了" in f["text"]]
+        self.assertEqual(len(over), 4)
+        self.assertIn("director_save 落一份新配方", over[0]["text"])
+
+    def test_the_recipe_saved_this_run_is_a_finished_product(self):
+        """director_save 的回执只有 {success, name}，没有媒体条目：只认图名的收场把正文型技能
+        刚交出去的配方报成「本次运行还没有产物」，模型照这句再存一遍配方。"""
+        run = _fake_run(FakeClient({}, names=("director_save",)))
+        run.focus = {"recipe": "e2e3d_owl_light"}
+        err, out = agent._finish_of(run, {"result": "写好 4 段配方", "media": ["e2e3d_owl_light"]}, "act")
+        self.assertEqual(err, "")
+        self.assertEqual(out["media"], [{"kind": "recipe", "title": "e2e3d_owl_light", "url": ""}])
+        err, _out = agent._finish_of(run, {"result": "x", "media": ["编的成片.mp4"]}, "act")
+        self.assertIn("编的成片.mp4", err)
+        self.assertIn("e2e3d_owl_light", err)
+
+    def test_a_run_without_a_recipe_still_reports_only_real_media(self):
+        """图名的验收不动：焦点链没有配方时，收场产物只有工具结果里真出现过的那一张。"""
+        run = _fake_run(FakeClient({}, names=("generate_image",)))
+        run.media_urls["cat_0001.png"] = {"kind": "image", "title": "cat_0001.png", "url": "/view?x"}
+        _err, out = agent._finish_of(run, {"result": "出好了", "media": ["cat_0001.png"]}, "act")
+        self.assertEqual(out["media"], [{"kind": "image", "title": "cat_0001.png", "url": "/view?x"}])
+        self.assertNotIn("recipe", agent._finish_products(run))
+
+    def test_the_named_skill_block_names_the_gates(self):
+        """闸要在本轮点名技能那一段指令里写明白：跑技能前的编号清单、问满与重问的拒回。"""
+        info = agent._skill_info_of(FakeClient({}, skill_info=self.STORY), self.STORY["id"])
+        block = agent._skill_block(self.STORY["id"], info)
+        self.assertIn("任何一次工具调用之前", block)
+        self.assertIn("被后端拒回一次", block)
+        self.assertIn("重问同一道门后端都会拒回", block)
+
+    def test_the_system_prompt_carries_the_gate_wording(self):
+        text = agent.system_prompt()
+        self.assertIn("没发就调 generate_prompt 会被后端拒回一次", text)
+        self.assertIn("director_save 保存下来的配方名也算在内", text)
+
+
 if __name__ == "__main__":
     unittest.main()
 

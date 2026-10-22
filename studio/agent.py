@@ -140,6 +140,12 @@ MSG_OVERHEAD = 4          # OpenAI 一条消息的固定壳开销
 # 出片级工具的量级确认卡：一次整片是三段 × 每段数分钟起步，跑下去再喊停就晚了一半
 FILM_GATE_TOOLS = ("director_run", "segment_run", "assemble_run", "director_keyframes")
 GATE_OPTIONS = ("✅ 跑这一发", "⏹ 先不跑")
+# 正文型技能的流程交代闸：提示词里那句「第一句话先把流程列给用户」在短 token 的本地模型上不成立——
+# 四条实测运行全都在第一句话就调 generate_prompt，等它拿到技能正文才开始报步骤，用户就是陪跑到
+# 最后一刻才知道还剩几道门。调用点上拦一次才落地；只拦一次，认死的模型不会被卡在闸上烧轮次
+SKILL_INTRO_TOOLS = ("generate_prompt",)
+SKILL_INTRO_NOTE = ("[error] 先别调 generate_prompt：本轮点名了正文型技能，第一句话先把这套流程要走的几步"
+                    "编号列给用户（一步一句，写明哪一步要问他、哪一步出什么产物），列完再调这个工具")
 
 # 右栏伪工具：只进本次运行的 LLM 工具表，不进 MCP 注册表，外部 MCP 客户端看不到。
 # 提问上限逐轮跟着运行走：普通运行一问就够，点名正文型技能那一轮要照它正文里的确认门逐道问
@@ -915,6 +921,19 @@ def _plan_block(steps: list) -> str:
               "清单跑完用 finish_task 收场，media 只报本次运行真出现过的产物名。")
 
 
+def _finish_products(run) -> dict:
+    """finish_task 认的产物名：工具结果里的图与成片，加上本轮刚保存的导演配方。
+
+    director_save 的回执是 {success, name}，里面没有媒体条目，_media_of 一条也取不到；只认图名的
+    收场会把正文型技能刚交出去的配方报成「本次运行还没有产物」，模型照这句再存一遍配方。
+    配方项没有可播的 URL：前端收场那一栏按 url 过滤，它不进产物卡，配方名照 result 那句话报给用户。"""
+    out = dict(run.media_urls)
+    recipe = str(run.focus.get("recipe") or "").strip()
+    if recipe and recipe not in out:
+        out[recipe] = {"kind": "recipe", "title": recipe, "url": ""}
+    return out
+
+
 def _finish_of(run, args: dict, mode: str) -> tuple[str, dict]:
     """finish_task 的验收，返回 (拒回原文, 收场载荷)。
 
@@ -927,13 +946,14 @@ def _finish_of(run, args: dict, mode: str) -> tuple[str, dict]:
     if not result:
         return ("[error] finish_task 缺 result：把做了什么与产物是什么写清楚再收场", {})
     names = [str(n).strip() for n in (args.get("media") or []) if str(n).strip()][:8]
-    fake = [n for n in names if n not in run.media_urls]
+    products = _finish_products(run)
+    fake = [n for n in names if n not in products]
     if fake:
-        seen = "、".join(sorted(list(run.media_urls)[:8])) or "（本次运行还没有产物）"
+        seen = "、".join(sorted(list(products)[:8])) or "（本次运行还没有产物）"
         return (f"[error] finish_task 的产物名在本次运行的工具结果里没有：{'、'.join(fake)}。"
                 f"本次出现过的产物是 {seen}；只报这些名字，没有产物就把 media 留空", {})
     return "", {"result": _clip(result, RESULT_CLIP),
-                "media": [run.media_urls[n] for n in names],
+                "media": [products[n] for n in names],
                 "options": [_clip(str(o).strip(), 200) for o in (args.get("next_options") or [])
                             if str(o).strip()][:6]}
 
@@ -1190,9 +1210,12 @@ def _skill_block(skill_id: str, info: dict | None = None) -> str:
         "由服务端在那一趟按需读取，你不要抄正文，也不要自己写它要产出的那份东西。\n"
         "- 这套流程有几步，本轮第一句话先把它列给用户（照正文与引用文件判断，一步一句，写明哪一步要问他、哪一步出"
         "什么产物），列完再调第一个工具：这类技能正文长、门多，用户跑到中途才知道有几步，就是陪跑到最后一刻才发现"
-        "还剩一道门没问。\n"
+        "还剩一道门没问。这段清单要在任何一次工具调用之前发出去——没发就先调 generate_prompt，那一发会被后端拒回一次"
+        "（闸只拦这一次），把编号清单发出来再调它。\n"
         f"- 正文里的每道确认门各发一次 ask_user（问题一句话说清要定什么，选项 2-5 条照正文给的方向写），"
-        f"本轮最多问 {PROMPT_SKILL_ASK_ROUNDS} 次；正文要求分段的产物就分次调 generate_prompt，一次返回最多 {mcp.MAX_TEXT} 字符。\n")
+        f"本轮最多问 {PROMPT_SKILL_ASK_ROUNDS} 次；问满这一档与重问同一道门后端都会拒回：那时按默认规格把剩下的"
+        f"决定定下来（出片就 director_plan 分段、director_save 落一份新配方），把你替用户定了什么写进收场 result；"
+        f"正文要求分段的产物就分次调 generate_prompt，一次返回最多 {mcp.MAX_TEXT} 字符。\n")
     if refs:
         text += (f"- 它的引用文件（服务端在 generate_prompt 那一趟自己读，你只用它判断这套流程有几步）："
                  f"{'、'.join(refs)}\n")
@@ -1354,11 +1377,13 @@ async def _run_agent(client, text: str, emit, run, mode: str = "act",
     轮次预算是新一轮自己的那一档（run.max_turns，默认 MAX_TURNS，点名正文型技能时放宽）。
     每轮请求前压一次上下文（_compress_messages）；出片级工具在跑之前过一道量级确认卡
     （用户偏好里的 confirm_films）；provider 每轮报的 token 统计逐轮累进 run.usage。"""
+    prompt_skill = False
     if run.user_skill:
         # 点名技能的摘要在循环开头取一次：认出它是正文型（没有 workflow.json 模板）才能把本轮改走
         # generate_prompt 并把轮次放宽。一次运行一次读取，挂在运行对象上，不留跨运行的技能表
         run.user_skill_info = await asyncio.to_thread(_skill_info_of, client, run.user_skill)
-        if _is_prompt_skill(run.user_skill_info):
+        prompt_skill = _is_prompt_skill(run.user_skill_info)
+        if prompt_skill:
             run.max_turns = PROMPT_SKILL_MAX_TURNS
             run.max_asks = PROMPT_SKILL_ASK_ROUNDS
     image_count = len(images or [])   # 本轮真进请求体的附件图数：模型唯一的素材事实来源
@@ -1373,6 +1398,13 @@ async def _run_agent(client, text: str, emit, run, mode: str = "act",
     tools += [PLAN_TOOL] if mode == "plan" else [FINISH_TOOL]
     answered = False
     sent_tokens = -1
+    # 正文型技能本轮的三条闸，只活在本次调用里，不留跨运行状态：第一句话没跟用户讲话就拦一次
+    # generate_prompt；确认门问满 max_asks 与重问同一道门（run1 实测过同一道门问十五遍）都拒回，
+    # 把循环从「逐道问到底」逼回 director_save / finish_task 那条交付路径
+    intro_reported = False
+    intro_nagged = False
+    ask_used = 0
+    ask_seen: set[str] = set()
     for _ in range(run.max_turns):
         if run.stop.is_set():
             run.reason = "cancelled"
@@ -1410,6 +1442,7 @@ async def _run_agent(client, text: str, emit, run, mode: str = "act",
             assistant["tool_calls"] = calls
         messages.append(assistant)
         if content:
+            intro_reported = True     # 用户看得见这一句：流程交代闸认的就是它，plan 帧那段同样算交代过
             await emit({"kind": "plan" if calls else "content", "text": content})
             if not calls:
                 answered = True
@@ -1428,9 +1461,22 @@ async def _run_agent(client, text: str, emit, run, mode: str = "act",
             await emit({"kind": "tool_call", "tool": name,
                         "text": _clip(json.dumps(args, ensure_ascii=False), ARGS_CLIP)})
             if name == "ask_user":
-                result = await run.await_answer(
-                    emit, str(args.get("question") or "").strip(),
-                    [str(o).strip() for o in (args.get("options") or []) if str(o).strip()][:5])
+                question = str(args.get("question") or "").strip()
+                asked_key = re.sub(r"[\s，。、？！：；,.?!:;]", "", question)
+                if ask_used >= run.max_asks:
+                    result = (f"[error] 本轮的 {run.max_asks} 道确认门问满了：剩下的决定按默认口径自己定"
+                              "（出片就 director_plan 分段、director_save 落一份新配方），"
+                              "在收场 result 里写清你替用户定了什么")
+                elif asked_key and asked_key in ask_seen:
+                    result = ("[error] 这道门本轮问过、用户已经答过：照上一句回答继续往下做，"
+                              "要用户补素材就请他把图粘进输入框，不要原地重问同一道门")
+                else:
+                    ask_used += 1
+                    ask_seen.add(asked_key)
+                    intro_reported = True     # 问句同样是用户看得见的一句话
+                    result = await run.await_answer(
+                        emit, question,
+                        [str(o).strip() for o in (args.get("options") or []) if str(o).strip()][:5])
             elif name == "finish_task":
                 result, finish = _finish_of(run, args, mode)
             elif name == "write_plan":
@@ -1442,6 +1488,10 @@ async def _run_agent(client, text: str, emit, run, mode: str = "act",
                 # 计划模式里模型仍可能硬调写操作：拒回原文它才会改口去写计划
                 result = (f"[error] 计划模式不执行 {name}：把要做的事写进计划，"
                           f"让用户切到执行模式再跑")
+            elif prompt_skill and mode == "act" and name in SKILL_INTRO_TOOLS \
+                    and not intro_reported and not intro_nagged:
+                intro_nagged = True
+                result = SKILL_INTRO_NOTE
             elif (mode == "act" and name in FILM_GATE_TOOLS and run.user_skill
                   and _no_source_media(run) and not run.media_gate_asked):
                 # 点名了技能、这一发零素材：出片要的 LOGO / UI 截图 / 产品图不在这发里，跑完就是照文字

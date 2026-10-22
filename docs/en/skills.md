@@ -37,6 +37,9 @@ nothing. The designated skill stays across turns and travels in the request body
 that skill's summary once (category, `description`, template flag, reference-file list) and the body never enters
 the dock's context. A turn that designates a body-only skill gets its turn cap widened to 20 and its ask cap
 widened to 6 (every gate in the body gets its own `ask_user`); every other run keeps 12 turns and one question.
+The backend enforces that cap on `ask_user` itself, not just in its tool description: asking past the cap and
+re-asking a gate the user already answered (spacing and punctuation differences count as the same gate) are both
+refused, and the refusal tells the model to settle the rest on defaults and deliver.
 An imported Agent Skills folder (`SKILL.md` + `references/`) is the second kind:
 the whole `references/` tree lands with the skill and the server reads it on demand inside `generate_prompt`.
 
@@ -45,14 +48,18 @@ requirements on that turn, injected by the backend into the system prompt (`_ski
 the same rules for the unnamed path live in `studio/prompts/agent/system_prompt.md`): **the first sentence of the
 turn lists the steps this flow is going to take** — one line per step, naming which step asks the user and which
 step produces what, and the first tool call comes only after that list. When a long flow keeps its step count
-secret until halfway through, the user spends the whole run finding out one gate was still open. The text the skill
+secret until halfway through, the user spends the whole run finding out one gate was still open. That rule is
+enforced at the call site: calling `generate_prompt` before the turn has said anything visible to the user is
+refused once — one nag only, so a model that never speaks still reaches the delivery path. The text the skill
 produces is the content of this turn's deliverable: the film-shaped one (script / storyboard / shot list /
 per-segment finished prompts) is written up as **a new director recipe** and handed over — `director_plan` splits
 it, `director_save` lands the recipe (segment prompts copied from that output, `story` carrying the idea and the
 character references), the new recipe name is reported to the user, and the whole film and each single segment run
 from that recipe instead of calling `segment_run` / `director_run` naked per segment; the image-shaped one
 (image prompts) generates images by the skill's own rules. The closing `finish_task` `result` names the recipe and
-its segment count. The step list lands on the timeline's existing plan line (a content frame that comes with tool
+its segment count, and the recipe name `director_save` saved this run counts as a product in `media` — its receipt
+carries only `{success, name}` with no media items, so a media check that knows image names alone reports the
+just-saved recipe as no product at all. The step list lands on the timeline's existing plan line (a content frame that comes with tool
 calls renders as a plan card), and saving a recipe still refreshes the director page's recipe list with the
 `✅ Recipe saved` toast — no second UI surface is built for this in the dock.
 
