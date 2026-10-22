@@ -40,17 +40,26 @@ widened to 6 (every gate in the body gets its own `ask_user`); every other run k
 The backend enforces that cap on `ask_user` itself, not just in its tool description: asking past the cap and
 re-asking a gate the user already answered (spacing and punctuation differences count as the same gate) are both
 refused, and the refusal tells the model to settle the rest on defaults and deliver.
+Answered gates (question → answer) and the skills whose step list was already reported travel in the focus chain
+(`gate_answers` / `intro_skills`, carried out on the `focus` frame): they count for the whole conversation — a gate
+is not asked a second time in it, and the step list is not re-listed a second time in it.
 An imported Agent Skills folder (`SKILL.md` + `references/`) is the second kind:
 the whole `references/` tree lands with the skill and the server reads it on demand inside `generate_prompt`.
 
-The long body-only flows (the video-prompt kind: several confirm gates, output produced in passes) carry two more
+The long body-only flows (the video-prompt kind: several confirm gates, output produced in passes) carry three more
 requirements on that turn, injected by the backend into the system prompt (`_skill_block` in `studio/agent.py`;
 the same rules for the unnamed path live in `studio/prompts/agent/system_prompt.md`): **the first sentence of the
 turn lists the steps this flow is going to take** — one line per step, naming which step asks the user and which
 step produces what, and the first tool call comes only after that list. When a long flow keeps its step count
 secret until halfway through, the user spends the whole run finding out one gate was still open. That rule is
 enforced at the call site: calling `generate_prompt` before the turn has said anything visible to the user is
-refused once — one nag only, so a model that never speaks still reaches the delivery path. The text the skill
+refused once — one nag only, so a model that never speaks still reaches the delivery path — and the list is
+reported once per conversation: a skill already in the focus chain runs straight through. **Directions the user
+must pick go through `ask_user` and nothing else** — its options are clickable buttons in the dock, while the
+`A. B. C.` options written into the answer text are not clickable and leave the user typing the answer; handing
+back a question with numbered options as the final answer is nagged into an `ask_user` call — twice at most per
+run, the second nag demanding that single tool call, so a model that keeps answering in prose still finishes.
+The text the skill
 produces is the content of this turn's deliverable: the film-shaped one (script / storyboard / shot list /
 per-segment finished prompts) is written up as **a new director recipe** and handed over — `director_plan` splits
 it, `director_save` lands the recipe (segment prompts copied from that output, `story` carrying the idea and the

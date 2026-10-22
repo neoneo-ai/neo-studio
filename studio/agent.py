@@ -146,6 +146,67 @@ GATE_OPTIONS = ("✅ 跑这一发", "⏹ 先不跑")
 SKILL_INTRO_TOOLS = ("generate_prompt",)
 SKILL_INTRO_NOTE = ("[error] 先别调 generate_prompt：本轮点名了正文型技能，第一句话先把这套流程要走的几步"
                     "编号列给用户（一步一句，写明哪一步要问他、哪一步出什么产物），列完再调这个工具")
+# 门的归属闸：正文型技能的确认门是给用户的，不是给模型的——第 5 场实测里，模型把门写成正文，
+# 被催过之后改成自己替用户定方向（正文报完门直接分段出片，风格自己填了「温馨治愈系」），用户等于
+# 没参与。闸口放在分段与出片那一发之前——那正是回不了的量级；只拦一次，认死的模型不会被卡在闸上烧轮次
+SKILL_GATE_TOOLS = ("director_plan",) + FILM_GATE_TOOLS
+SKILL_GATE_ASK_NOTE = ("[error] 先别分段出片：本轮点名了正文型技能，正文里的确认门要由用户点选，"
+                       "这一发还没有问过任何一道门。先把当前这道门发成一次 ask_user"
+                       "（问题一句话，选项照正文抄 2-5 条，一次只问一道），拿到用户的回答再分段出片")
+# 清单与门答在整条会话里都算数，只写在一次循环里的话，用户每回一句「继续」都要重报一遍清单、
+# 从第一步重问一遍（实测会话就是这个形状）：这两份事实走焦点链，随会话落盘、逐发重注入
+SKILL_INTRO_KEY = "intro_skills"      # 焦点链：本会话报过编号清单的技能名
+SKILL_GATE_KEY = "gate_answers"       # 焦点链：本会话答过的确认门（问→答）
+SKILL_GATE_MAX = 6                    # 焦点每发都要进系统提示词：门只留最近六道
+SKILL_GATE_CLIP = 80                  # 问句是 LLM 写的、答案是用户打的，逐条裁长度再进提示词
+# 正文里的编号选项在右栏不是按钮，用户只能自己打字回答（实测会话就是模型把门写成正文）
+SKILL_PROSE_ASK_NOTE = (
+    "[error] 这道门写进正文了：正文里的编号选项点不动，用户只能自己打字。把要他定的那一门与那几条"
+    "选项用 ask_user 重发一次（一次一道门），不要重报整张流程清单")
+SKILL_PROSE_ASK_RETRY = (
+    "[error] 还是正文里的门，右栏依旧没有按钮：只发一个 ask_user 工具调用，把这一门的问句与"
+    "几条选项写进参数，不要再抄一遍这段正文")
+SKILL_PROSE_NAG_MAX = 2      # 实测见过认死的那一发：催一次它把同一道门重抄成正文，第二次才发 ask_user
+# 正文里的一道门长什么样（实测会话逐字取回）：一句要用户表态的话挨着 2-6 行编号选项。
+# 选项行带「标签：说明」也算——实测第 2 发的门就是「- A. 温馨治愈系：暖黄灯光、柔和阴影…」。
+# 认「表态句」不认「交代句」：报流程清单那一发的引导句（「这是这套流程要走的主要步骤：」）与交付说明
+# 末尾那排「下一步：1. 跑整片」都是交代，右栏的下一步方向本来就是可点按钮，不该被当门催。
+PROSE_OPTION_RE = re.compile(r"^\s*(?:[-*•]\s*)?(?:\*\*)?(?:[A-Za-z]|\d+)[\.、\)）]\s*\S")
+PROSE_ASK_RE = re.compile(r"请回复|请从|请选|请挑|请决定|请确认|回复\s*[A-D]|选(一|择一|定一)个|择一|哪种|要不要|是否")
+PROSE_LEAD_LIST_RE = re.compile(r"步骤|清单|流程|产出|下一步|交付")
+PROSE_RUN_MIN = 2         # 两条选项才是一道门；一条是顺口给的替代方案
+PROSE_RUN_MAX = 6         # ask_user 的门最多 5 条选项；更长的编号块是流程清单
+PROSE_OPTION_MAX_LEN = 72     # 门上的选项一行说清一个方向，长过这个行数的是清单里那一步的说明
+
+
+def _is_prose_option(line: str) -> bool:
+    """一行编号选项：A. / 1. / - A) / **A.** 开头，长度像一句方向说明。"""
+    return bool(PROSE_OPTION_RE.match(line)) and len(line) <= PROSE_OPTION_MAX_LEN
+
+
+def _asks_in_prose(text: str) -> bool:
+    """正文里写着要用户回答的一道门：模型爱把确认门写成 A. B. C. 那种正文，
+    右栏对这种文字铺不出可点的按钮，用户只能自己打字回答。
+    表态句（「请从下面选一个方向：」「请回复 A/B/C/D」）在选项块前面两行或后面两行内任一句即可；
+    前面那句里带「步骤/清单/流程/下一步」的是交代句，不算表态——那一发是报清单与交付说明。"""
+    lines = [ln.strip() for ln in str(text or "").splitlines() if ln.strip()]
+    i = 0
+    while i < len(lines):
+        if not _is_prose_option(lines[i]):
+            i += 1
+            continue
+        end = i
+        while end < len(lines) and _is_prose_option(lines[end]):
+            end += 1
+        if PROSE_RUN_MIN <= end - i <= PROSE_RUN_MAX:
+            lead = lines[max(0, i - 2):i]
+            tail = lines[end:end + 2]
+            if any(PROSE_ASK_RE.search(ln) and not PROSE_LEAD_LIST_RE.search(ln) for ln in lead) \
+                    or any(PROSE_ASK_RE.search(ln) for ln in tail):
+                return True
+        i = end
+    return False
+
 
 # 右栏伪工具：只进本次运行的 LLM 工具表，不进 MCP 注册表，外部 MCP 客户端看不到。
 # 提问上限逐轮跟着运行走：普通运行一问就够，点名正文型技能那一轮要照它正文里的确认门逐道问
@@ -1065,8 +1126,24 @@ def _focus_update(run, name: str, args: dict, result: str) -> None:
     run.focus.update(facts)
 
 
+def _gate_note(run, question: str, answer: str) -> None:
+    """确认门答完就把「问→答」记进焦点链：ask_seen 只活在一次循环里，用户回一句「继续」
+    是一条新循环，看不到上一发的门答过，就照旧从第一步重问。"""
+    answer = str(answer or "").strip()
+    if not answer:
+        return      # 停下的那一发没有答案，不记「答过」
+    qa = f"{_clip(question, SKILL_GATE_CLIP)}→{_clip(answer, SKILL_GATE_CLIP)}"
+    notes = [n for n in (run.focus.get(SKILL_GATE_KEY) or []) if isinstance(n, str)]
+    if qa in notes:
+        return
+    notes.append(qa)
+    run.focus[SKILL_GATE_KEY] = notes[-SKILL_GATE_MAX:]
+
+
 def _focus_block(focus: dict) -> str:
-    """焦点链压成一段事实。空焦点不产出这一段：提示词里一段空的「既定事实」是噪声。"""
+    """焦点链压成一段事实。空焦点不产出这一段：提示词里一段空的「既定事实」是噪声。
+    生成事实之后追加正文型技能的那两份会话级事实（答过的门、报过清单的技能）：那正是
+    「每发重报清单、每发从第一步重问」的形状，模型要在请求里看得见它们才停得下来。"""
     lines = []
     for key, label in FOCUS_LABELS:
         value = focus.get(key)
@@ -1075,13 +1152,25 @@ def _focus_block(focus: dict) -> str:
         if isinstance(value, list):
             value = "、".join(str(v) for v in value)
         lines.append(_clip(f"{label}={value}", 320))   # 一行 320 字符封顶：这一段每轮整段进请求
+    gates = [str(n) for n in (focus.get(SKILL_GATE_KEY) or []) if isinstance(n, str)]
+    intro = [str(n) for n in (focus.get(SKILL_INTRO_KEY) or []) if isinstance(n, str)]
     if not lines:
-        return ""
-    return ("\n\n本会话的既定事实（最近一次生成用的技能、参数与产物）：\n"
-            + "\n".join(f"- {x}" for x in lines)
-            + "\n本轮要继续出图就默认沿用这里的技能与参数，不要为了「再来一张」去重查 "
-              "list_skills / list_models；用户点名要换技能、换模型、换尺寸就按他说的换。"
-              "要完全复刻上一张就照这里的种子与技能出图；只说「再来一张」时按需要换种子。")
+        if not gates and not intro:
+            return ""
+        out = ""
+    else:
+        out = ("\n\n本会话的既定事实（最近一次生成用的技能、参数与产物）：\n"
+               + "\n".join(f"- {x}" for x in lines)
+               + "\n本轮要继续出图就默认沿用这里的技能与参数，不要为了「再来一张」去重查 "
+                 "list_skills / list_models；用户点名要换技能、换模型、换尺寸就按他说的换。"
+                 "要完全复刻上一张就照这里的种子与技能出图；只说「再来一张」时按需要换种子。")
+    if gates:
+        out += ("\n\n本会话答过的确认门（问→答）：照这些答案接着往下做，同一道门不要问第二遍：\n"
+                + "\n".join(f"- {_clip(x, 200)}" for x in gates))
+    if intro:
+        out += ("\n\n这些技能的流程编号清单本会话已经报过了：本轮从当前那一步接着做，"
+                "不要再整张重报一遍清单：\n- " + "、".join(intro))
+    return out
 
 
 CONTEXT_PAGES = ("gallery", "director", "paint", "skills", "settings")
@@ -1211,8 +1300,11 @@ def _skill_block(skill_id: str, info: dict | None = None) -> str:
         "- 这套流程有几步，本轮第一句话先把它列给用户（照正文与引用文件判断，一步一句，写明哪一步要问他、哪一步出"
         "什么产物），列完再调第一个工具：这类技能正文长、门多，用户跑到中途才知道有几步，就是陪跑到最后一刻才发现"
         "还剩一道门没问。这段清单要在任何一次工具调用之前发出去——没发就先调 generate_prompt，那一发会被后端拒回一次"
-        "（闸只拦这一次），把编号清单发出来再调它。\n"
+        "（闸只拦这一次），把编号清单发出来再调它。清单在整条会话里只报一次：本会话的既定事实里已经报过这套清单的"
+        "技能，本轮从当前那一步接着做，不要再整张重报一遍。\n"
         f"- 正文里的每道确认门各发一次 ask_user（问题一句话说清要定什么，选项 2-5 条照正文给的方向写），"
+        "要用户定的方向只能这么发：ask_user 的选项在右栏是点得到的按钮，正文里的编号选项点不动，用户那一发只能自己"
+        f"打字。把带编号选项的问句当最终回答交回来，那一发会被后端催着改用 ask_user（最多催两次）。"
         f"本轮最多问 {PROMPT_SKILL_ASK_ROUNDS} 次；问满这一档与重问同一道门后端都会拒回：那时按默认规格把剩下的"
         f"决定定下来（出片就 director_plan 分段、director_save 落一份新配方），把你替用户定了什么写进收场 result；"
         f"正文要求分段的产物就分次调 generate_prompt，一次返回最多 {mcp.MAX_TEXT} 字符。\n")
@@ -1398,13 +1490,26 @@ async def _run_agent(client, text: str, emit, run, mode: str = "act",
     tools += [PLAN_TOOL] if mode == "plan" else [FINISH_TOOL]
     answered = False
     sent_tokens = -1
-    # 正文型技能本轮的三条闸，只活在本次调用里，不留跨运行状态：第一句话没跟用户讲话就拦一次
-    # generate_prompt；确认门问满 max_asks 与重问同一道门（run1 实测过同一道门问十五遍）都拒回，
-    # 把循环从「逐道问到底」逼回 director_save / finish_task 那条交付路径
-    intro_reported = False
+    # 正文型技能的闸：闸本身只活在本次调用里（拦一次、问满拒回、重问拒回），会话级的事实在
+    # 焦点链里——报过清单的技能与答过的门：闸状态只写一次运行一份的话，用户每回一句「继续」
+    # 都要重报一遍清单、从第一步重问一遍
+    intro_skills = [x for x in (run.focus.get(SKILL_INTRO_KEY) or []) if isinstance(x, str)]
+    intro_reported = bool(run.user_skill) and run.user_skill in intro_skills
     intro_nagged = False
+    gate_ask_nagged = False
     ask_used = 0
     ask_seen: set[str] = set()
+    nag_left = SKILL_PROSE_NAG_MAX
+
+    def mark_intro() -> bool:
+        """把「这套流程清单本会话报过了」写进焦点链，返回这一发有没有新写：
+        清单只报一次是整条会话的事，只写在一次循环里的话，用户每回一句「继续」都要重报一遍。"""
+        if not intro_reported or not run.user_skill or run.user_skill in intro_skills:
+            return False
+        intro_skills.append(run.user_skill)
+        run.focus[SKILL_INTRO_KEY] = intro_skills[-FOCUS_MEDIA_MAX:]
+        return True
+
     for _ in range(run.max_turns):
         if run.stop.is_set():
             run.reason = "cancelled"
@@ -1443,8 +1548,19 @@ async def _run_agent(client, text: str, emit, run, mode: str = "act",
         messages.append(assistant)
         if content:
             intro_reported = True     # 用户看得见这一句：流程交代闸认的就是它，plan 帧那段同样算交代过
+            if not calls and mark_intro():
+                # 清单报出去了就是会话级事实：下一发照它不再重报，焦点要在收场那句话之前落盘
+                await emit({"kind": "focus", "focus": run.focus})
             await emit({"kind": "plan" if calls else "content", "text": content})
             if not calls:
+                if prompt_skill and nag_left and _asks_in_prose(content):
+                    # 门写成正文 = 用户在右栏没有按钮可点，只能自己打字（实测会话就是这个形状）：
+                    # 催它发 ask_user，催两次封顶，认死的模型照旧交正文
+                    nag_left -= 1
+                    messages.append({"role": "user", "content":
+                                     SKILL_PROSE_ASK_NOTE if nag_left == SKILL_PROSE_NAG_MAX - 1
+                                     else SKILL_PROSE_ASK_RETRY})
+                    continue
                 answered = True
                 run.reason = "answer"
                 break       # 最终回答到了就收场，不能把剩下的轮次继续喂给 LLM
@@ -1477,6 +1593,7 @@ async def _run_agent(client, text: str, emit, run, mode: str = "act",
                     result = await run.await_answer(
                         emit, question,
                         [str(o).strip() for o in (args.get("options") or []) if str(o).strip()][:5])
+                    _gate_note(run, question, result)
             elif name == "finish_task":
                 result, finish = _finish_of(run, args, mode)
             elif name == "write_plan":
@@ -1492,6 +1609,13 @@ async def _run_agent(client, text: str, emit, run, mode: str = "act",
                     and not intro_reported and not intro_nagged:
                 intro_nagged = True
                 result = SKILL_INTRO_NOTE
+            elif prompt_skill and mode == "act" and name in SKILL_GATE_TOOLS \
+                    and ask_used == 0 and not run.focus.get(SKILL_GATE_KEY) \
+                    and run.max_asks > 0 and not gate_ask_nagged:
+                # 门没问过就直接分段出片（第 5 场实测：正文报完门直接 director_plan，风格自己填了
+                # 「温馨治愈系」）：在调用点上逼它把当前这道门发成 ask_user，用户点了才放行
+                gate_ask_nagged = True
+                result = SKILL_GATE_ASK_NOTE
             elif (mode == "act" and name in FILM_GATE_TOOLS and run.user_skill
                   and _no_source_media(run) and not run.media_gate_asked):
                 # 点名了技能、这一发零素材：出片要的 LOGO / UI 截图 / 产品图不在这发里，跑完就是照文字
@@ -1530,6 +1654,7 @@ async def _run_agent(client, text: str, emit, run, mode: str = "act",
                 if title:
                     run.media_urls[title] = item
             messages.append({"role": "tool", "tool_call_id": tc.get("id", ""), "content": result})
+            mark_intro()      # 清单与门答是会话级事实：随这一发的焦点一起落盘
             before = json.dumps(run.focus, ensure_ascii=False, sort_keys=True)
             _focus_update(run, name, args, result)
             if json.dumps(run.focus, ensure_ascii=False, sort_keys=True) != before:

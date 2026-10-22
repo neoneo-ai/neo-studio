@@ -2597,13 +2597,43 @@ class TestNamedSkillRouting(unittest.TestCase):
 
 @skip
 class TestSkillProcessGates(unittest.TestCase):
-    """点名正文型技能那一轮的三条后端闸：跑技能之前先把流程报给用户、确认门问得完也问不重复、
-    本轮保存的配方算收场产物。闸只活在本次循环调用里，不跨运行留状态。"""
+    """点名正文型技能那一轮的后端闸：跑技能之前先把流程报给用户（整条会话只报一次）、确认门问得完
+    也问不重复、门要发成右栏点得到的 ask_user、本轮保存的配方算收场产物。闸只活在本次循环调用里，
+    清单报过哪些技能与答过哪些门走焦点链，随会话落盘。"""
 
     STORY = {"id": "minimax_storyboard", "category": "video_enhance",
              "description": "写一段动画短片的脚本与分镜", "has_workflow": False,
              "gen_image": False, "gen_video": False,
              "content": "正文：先问题材与风格，再出镜头表", "files": []}
+
+    # 实测会话里模型把门写进正文的两发原文（逐字取自 tmp/e2e_video_skill_frames.json）
+    PROSE_GATE = ("好的，我们按技能正文的流程一步步来。现在进入**第 1 步：项目简报 (Project Brief)**。\n\n"
+                  "请为这只猫头鹰短片选定一个**视觉风格基调**（这将决定后续所有画面的质感）：\n"
+                  "A. **低多边形 (Low Poly)** - 棱角分明、色彩明快，适合轻松可爱的氛围。\n"
+                  "B. **粘土质感 (Claymation Style)** - 柔和圆润、触感柔软，适合温馨治愈的故事。\n"
+                  "C. **手绘素描 (Hand-drawn Sketch)** - 线条感强、略带粗糙，适合略带童趣的表达。")
+
+    PROSE_GATE2 = ("### 选项卡 2：确认故事结构\n为了构建温馨治愈的叙事弧光，我建议采用三幕式结构：\n"
+                   "- **A) 确认上述四段式结构（推荐）** — 节奏流畅，情绪递进自然。\n"
+                   "- **B) 更强调内心挣扎** — 增加犹豫、反复尝试的细节。\n"
+                   "- **C) 更快进入行动** — 缩短心理描写。\n\n"
+                   "*(请回复 A/B/C/D 或直接输入新结构描述，确认后进入 STEP 2)*")
+
+    # 实测第 1 发原文的尾部：报完清单同一条里就写着门，末尾那句「请从…中选一个」
+    PROSE_GATE3 = ("### 🧭 当前待决：第 1 步「项目简报」的风格方向\n"
+                   "**A. 写实风格** —— 偏向真实光影与材质，适合电影感短片\n"
+                   "**B. 卡通风格** —— 明快色彩、夸张表情，适合儿童向内容\n"
+                   "**C. 极简风格** —— 低多边形或扁平化渲染，强调几何与线条美感\n\n"
+                   "> 请从 **A / B / C / D** 中选一个风格方向，确认后我们继续下一步。")
+
+    # 实测第 2 发（发 2 认死那一发）原文：选项行带「标签：说明」的门
+    PROSE_GATE4 = ("好的，我们按技能正文的流程，一道门一道门地问：\n\n"
+                   "**第一道门：项目简报风格基调**\n请从下面选一个方向（A–E）：\n\n"
+                   "- A. **温馨治愈系**：暖黄灯光、柔和阴影、圆润线条、轻快 BGM，强调“安全感回归”。\n"
+                   "- B. **暗黑童话风**：高对比度蓝黑底色、荧光绿/橙点缀、轻微胶片噪点，带点悬疑后反转。\n"
+                   "- C. **极简几何 3D**：低多边形建模、强轮廓光、干净背景、电子音乐。\n"
+                   "- D. **吉卜力式手绘 3D**：细腻毛发/羽毛、柔焦高光、自然风、轻古典钢琴。\n\n"
+                   "选一个字母（A–E），我就按这个基调往下拆故事大纲。")
 
     @staticmethod
     def _tool_call(name, args, tc_id):
@@ -2668,6 +2698,34 @@ class TestSkillProcessGates(unittest.TestCase):
         self.assertTrue(results[0]["text"].startswith("{"))
         self.assertEqual(len(results), 1)
 
+    def test_the_film_gate_waits_for_the_skill_gate_to_be_asked(self):
+        """第 5 场实测的形状：正文把门报完就直接 director_plan 分段出片，风格自己填了「温馨治愈系」，
+        用户等于没参与。分段那一发在调用点上拦一次，模型改发 ask_user，门答过了才放行。"""
+        client = FakeClient({"generate_prompt": {"text": "镜头表 4 段"},
+                             "director_plan": {"segments": 4}},
+                            names=("generate_prompt", "ask_user", "director_plan"), skill_info=self.STORY)
+        run = _runobj(client)
+        run.user_skill = self.STORY["id"]
+        frames = self._loop(client, run, [
+            dict(self._tool_call("generate_prompt", {"skill_id": self.STORY["id"], "text": "短片"}, "t1"),
+                 content="本轮五步：1 问题材 2 问风格 3 出脚本 4 出分镜 5 落配方"),
+            self._tool_call("director_plan", {"title": "怕黑的猫头鹰", "segments": []}, "t2"),
+            self._tool_call("ask_user", {"question": "风格基调选哪个方向？",
+                                         "options": ["温馨治愈系", "暗黑童话风", "极简几何 3D"]}, "a1"),
+            self._tool_call("director_plan", {"title": "怕黑的猫头鹰", "segments": []}, "t3"),
+            {"content": "交回来了"}])
+        plans = [f for f in frames if f["kind"] == "tool_call" and f["tool"] == "director_plan"]
+        self.assertEqual(len(plans), 2)
+        results = [f for f in frames if f["kind"] == "tool_result" and f["tool"] == "director_plan"]
+        self.assertEqual(len(results), 2)
+        self.assertIn("确认门要由用户点选", results[0]["text"])
+        self.assertIn("ask_user", results[0]["text"])
+        self.assertTrue(results[1]["text"].startswith("{"))
+        self.assertEqual(len([f for f in frames if f["kind"] == "ask"]), 1)
+        self.assertEqual([c[0] for c in client.calls], ["generate_prompt", "director_plan"],
+                         "拦下那一发不进 MCP，ask_user 是伪工具")
+        self.assertEqual(run.focus[agent.SKILL_GATE_KEY], ["风格基调选哪个方向？→按默认规格"])
+
     def test_the_gate_nags_once_and_then_lets_the_run_through(self):
         """一个字都不说的模型也要收场：闸只拦一次，不能把放宽到的轮次烧在同一句拒回上。"""
         client, run = self._named_run({"generate_prompt": {"text": "镜头表"}})
@@ -2678,6 +2736,110 @@ class TestSkillProcessGates(unittest.TestCase):
         self.assertEqual(len(results), 5)
         self.assertEqual(sum(1 for f in results if f["text"].startswith("[error]")), 1)
         self.assertEqual(len(client.calls), 4)
+
+    def test_the_step_list_is_reported_once_per_conversation(self):
+        """闸状态只写一次运行一份的形状：用户每回一句「继续」，第一发 generate_prompt 都被拒回一次，
+        模型就再报一遍整张清单——用户看到的正是「每发都重报流程」。报过清单的技能要随会话落盘。"""
+        call = self._tool_call("generate_prompt", {"skill_id": self.STORY["id"], "text": "短片"}, "t1")
+        client, run = self._named_run({"generate_prompt": {"text": "镜头表 4 段"}})
+        first = self._loop(client, run, [
+            call,
+            dict(self._tool_call("generate_prompt", {"skill_id": self.STORY["id"], "text": "短片"}, "t2"),
+                 content="本轮五步：1 问题材 2 问风格 3 出脚本 4 出分镜 5 落配方"),
+            {"content": "交回来了"}])
+        self.assertEqual(len([f for f in first
+                              if str(f.get("text") or "").startswith("[error]")]), 1)
+        self.assertEqual(run.focus[agent.SKILL_INTRO_KEY], [self.STORY["id"]])
+        client2, run2 = self._named_run({"generate_prompt": {"text": "脚本 3 段"}})
+        run2.focus = dict(run.focus)
+        frames = self._loop(client2, run2, [call, {"content": "交回来了"}])
+        self.assertEqual(len(client2.calls), 1, "清单报过那一发直接跑，不进拒回")
+        self.assertEqual([f for f in frames if str(f.get("text") or "").startswith("[error]")], [])
+        self.assertEqual([f for f in frames if f["kind"] == "plan"], [], "清单不再整张重报一遍")
+
+    def test_an_answered_gate_becomes_a_conversation_fact(self):
+        """门答过只活在 ask_seen 那份集合里：用户回一句「继续」是一条新循环，看不到上一发的门答过，
+        就照旧从第一步重问。答过的门要进焦点链。"""
+        client, run = self._named_run({})
+        frames = self._loop(client, run, [
+            self._tool_call("ask_user", {"question": "风格基调选哪个？", "options": ["甲", "乙"]}, "a1"),
+            {"content": "交回来了"}])
+        self.assertEqual(len([f for f in frames if f["kind"] == "ask"]), 1)
+        self.assertEqual(run.focus[agent.SKILL_GATE_KEY], ["风格基调选哪个？→按默认规格"])
+        block = agent._focus_block(run.focus)
+        self.assertIn("答过的确认门", block)
+        self.assertIn("风格基调选哪个？→按默认规格", block)
+
+    def test_the_focus_block_carries_the_session_level_facts(self):
+        """焦点链里那两份会话级事实要能在提示词里单独成段：一条正文型技能的会话可以还没有任何
+        生成产物，那时它们就是模型唯一的历史事实来源。"""
+        block = agent._focus_block({agent.SKILL_GATE_KEY: ["门 1→按默认规格"],
+                                    agent.SKILL_INTRO_KEY: [self.STORY["id"]]})
+        self.assertIn("答过的确认门", block)
+        self.assertIn("已经报过了", block)
+        self.assertIn(self.STORY["id"], block)
+        self.assertEqual(agent._focus_block({}), "")
+
+    def test_a_prose_gate_is_sent_back_as_a_clickable_ask(self):
+        """实测会话的形状：模型把确认门写成正文里的 A. B. C.，右栏对这种文字铺不出按钮，
+        用户只能自己打字回答。收场那一发是「引导句 + 编号选项」时后端催一次，要它用 ask_user 重发。"""
+        client, run = self._named_run({})
+        frames = self._loop(client, run, [
+            {"content": self.PROSE_GATE4},
+            self._tool_call("ask_user", {"question": "风格基调选哪个？",
+                                         "options": ["童话插画风", "写实电影风"]}, "a1"),
+            {"content": "定了"}])
+        nags = [m for m in run.messages if m.get("content") == agent.SKILL_PROSE_ASK_NOTE]
+        self.assertEqual(len(nags), 1)
+        self.assertEqual(len([f for f in frames if f["kind"] == "ask"]), 1)
+        self.assertEqual([f for f in frames if f["kind"] == "content"][-1]["text"], "定了")
+
+    def test_a_prose_gate_is_nagged_twice_at_most(self):
+        """实测形状：催一次，认死的模型把同一道门重抄成正文（第 1 发就是这样收的）；
+        第二次催要它只发 ask_user。两次封顶后照旧交正文收场，不能把轮次烧在同一句催上。"""
+        client, run = self._named_run({})
+        frames = self._loop(client, run, [{"content": self.PROSE_GATE}] * 4)
+        self.assertEqual(len([m for m in run.messages
+                              if m.get("content") == agent.SKILL_PROSE_ASK_NOTE]), 1)
+        self.assertEqual(len([m for m in run.messages
+                              if m.get("content") == agent.SKILL_PROSE_ASK_RETRY]), 1)
+        self.assertEqual(len([f for f in frames if f["kind"] == "content"]), 3)
+        self.assertEqual(run.reason, "answer")
+
+    def test_a_plain_answer_is_not_nagged(self):
+        """交付说明不是门：没有问句与编号选项的收场不催，正常回答要一次就收。"""
+        client, run = self._named_run({})
+        self._loop(client, run, [{"content": "配方 e2e3d_owl 写好 4 段，去导演页跑整片。"}])
+        self.assertEqual([m for m in run.messages
+                          if m.get("content") == agent.SKILL_PROSE_ASK_NOTE], [])
+        self.assertEqual(run.reason, "answer")
+
+    def test_the_step_list_answer_is_not_a_gate(self):
+        """流程清单那一发（实测第 1 发原文的清单部分）是「步骤名：说明」的编号行；
+        交付说明末尾那排「下一步：1. 跑整片 2. 单段调试」在右栏本来就是可点按钮：
+        两发都是交代，不是门，不能被催成 ask_user。"""
+        intro = ("好的，这是 `@3d-animation-short-generator` 这套流程要走的主要步骤：\n"
+                 "1.  **项目简报 (Project Brief)**：定义风格基调、目标受众与核心情绪。\n"
+                 "2.  **故事大纲 (Story Outline)**：梳理情节转折与节奏点。\n"
+                 "3.  **角色与环境卡 (Cards)**：细化外观特征及场景氛围。\n"
+                 "4.  **标准化镜头规划 (Shot Planning)**：拆成镜头序列，指定景别与运镜。\n"
+                 "5.  **视频模型选择 (Model Selection)**：根据风格选定具体 VDN 技能。")
+        delivery = ("### 交付完成：新导演配方已创建\n**配方名：** `e2e3d_night_awake`\n"
+                    "### 下一步建议\n您可以随时从以下方向继续操作：\n"
+                    "1.  **跑整片**：直接用 director_run 生成完整短片（约 33 秒）。\n"
+                    "2.  **单段调试**：用 segment_run 逐段生成或重生成。\n"
+                    "3.  **关键帧预览**：先用 director_keyframes 出每段关键帧。")
+        self.assertFalse(agent._asks_in_prose(intro))
+        self.assertFalse(agent._asks_in_prose(delivery))
+        self.assertTrue(agent._asks_in_prose(self.PROSE_GATE))
+        self.assertTrue(agent._asks_in_prose(self.PROSE_GATE2))
+        self.assertTrue(agent._asks_in_prose(self.PROSE_GATE3))
+        self.assertTrue(agent._asks_in_prose(self.PROSE_GATE4))
+        client, run = self._named_run({})
+        frames = self._loop(client, run, [{"content": intro}, {"content": delivery}])
+        self.assertEqual([m for m in run.messages
+                          if m.get("content") == agent.SKILL_PROSE_ASK_NOTE], [])
+        self.assertEqual(frames[-1]["kind"], "content")
 
 
     def test_a_repeated_gate_is_refused_instead_of_parking_again(self):
@@ -2726,17 +2888,24 @@ class TestSkillProcessGates(unittest.TestCase):
         self.assertNotIn("recipe", agent._finish_products(run))
 
     def test_the_named_skill_block_names_the_gates(self):
-        """闸要在本轮点名技能那一段指令里写明白：跑技能前的编号清单、问满与重问的拒回。"""
+        """闸要在本轮点名技能那一段指令里写明白：跑技能前的编号清单（整条会话只报一次）、
+        门要走 ask_user、问满与重问的拒回。"""
         info = agent._skill_info_of(FakeClient({}, skill_info=self.STORY), self.STORY["id"])
         block = agent._skill_block(self.STORY["id"], info)
         self.assertIn("任何一次工具调用之前", block)
         self.assertIn("被后端拒回一次", block)
         self.assertIn("重问同一道门后端都会拒回", block)
+        self.assertIn("清单在整条会话里只报一次", block)
+        self.assertIn("正文里的编号选项点不动", block)
+        self.assertIn("会被后端催着改用 ask_user（最多催两次）", block)
 
     def test_the_system_prompt_carries_the_gate_wording(self):
         text = agent.system_prompt()
         self.assertIn("没发就调 generate_prompt 会被后端拒回一次", text)
         self.assertIn("director_save 保存下来的配方名也算在内", text)
+        self.assertIn("清单在整条会话里", text)
+        self.assertIn("会被后端催着改用 ask_user（最多催两次）", text)
+        self.assertIn("答过的确认门", text)
 
 
 if __name__ == "__main__":

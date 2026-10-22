@@ -4,6 +4,18 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **A named body-only skill reports its step list once, and its gates are clickable.** The per-run gates above were
+  per-run state only, so every follow-up message in the same conversation re-ran the same opening: the first
+  `generate_prompt` was refused again, the model re-listed the whole flow, and the first gate was asked again from
+  step 1. Two session-level facts now ride the focus chain (`gate_answers`, `intro_skills`, emitted on the `focus`
+  frame and saved with the conversation): the skills whose numbered step list was already reported — the intro gate
+  runs straight through for them — and the gates the user already answered (question → answer), which
+  `_focus_block` prints so the run continues from the current step instead of re-asking step 1. Gates the model
+  writes as answer text (`A. B. C.` lines plus a question) leave the user typing an answer — only `ask_user` renders
+  clickable options — so a final answer of that shape is nagged into an `ask_user` call, twice at most per run (the
+  second nag demands that single tool call; a model that keeps answering in prose still finishes). Covered by
+  `studio/tests/test_agent.py` (`TestSkillProcessGates`); docs in `docs/skills.md` and its `docs/en/` mirror.
+
 - **The body-only skill's step list, gates and recipe delivery are enforced by the backend.** Four end-to-end runs of a
   named video-prompt skill against a local 27B model showed the prompt-only contract does not hold there: every run
   called `generate_prompt` as its first action and announced the steps only after the skill body came back, one run
