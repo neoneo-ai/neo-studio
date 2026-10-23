@@ -1430,7 +1430,9 @@ test("导演页在用时切计划模式：不写配方就不重建配方列表�
     savedEvents.length = 0;
     await openStudio("#/director");
     await until(() => dirCards().length === 1 && dirSelected() === "R1", "进页时左栏只有 R1 且自动选中");
-    const listCallsBefore = fetchLog.filter((c) => c.path === "/rs_recipes/list").length;
+    // 数 fetch 分不清谁发的：发送后输入框交回焦点会预热 @ 候选，配方那一条也在预热里。
+    // 这条用例要拦的是左栏那一份列表被重建，认 DOM 那一块就行
+    const cardBefore = dirCards()[0];
 
     mockAgentStream([{ kind: "plan", text: "计划：director_plan → director_save → segment_run" },
                      PLAN_REFUSED,
@@ -1441,8 +1443,7 @@ test("导演页在用时切计划模式：不写配方就不重建配方列表�
     await flush(60);
 
     assert.equal(savedEvents.length, 0, "计划模式没有落盘，不该广播保存事件");
-    assert.equal(fetchLog.filter((c) => c.path === "/rs_recipes/list").length, listCallsBefore,
-                 "没有落盘就不该重建配方列表");
+    assert.equal(dirCards()[0], cardBefore, "没有落盘就不重建左栏那一份列表");
     assert.equal(dirSelected(), "R1", "选中的配方照旧");
     assert.equal(dirCards().length, 1, "左栏列表照旧只有 R1");
 });

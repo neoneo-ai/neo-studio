@@ -25,11 +25,11 @@ if __package__ not in (None, ""):
     # 这里统一挂进 ComfyUI 路由表（server.add_routes 会一并生成 /api 前缀副本）；
     # 桌面端离线服务复用同一批 handler，不经过 PromptServer。
     from . import (gallery, gallery_lora, gallery_oss, bookmark, lora_tag, skill, llm, recipes,
-                   video_gen, image_gen_files, model_hub, backyard)
+                   video_gen, image_gen_files, model_hub, backyard, prompt_names)
 
     from server import PromptServer
     for _mod in (gallery_lora, gallery_oss, gallery, bookmark, lora_tag, skill, llm, recipes,
-                 video_gen, image_gen_files, model_hub, backyard):
+                 video_gen, image_gen_files, model_hub, backyard, prompt_names):
         for _route in _mod.routes:
             PromptServer.instance.routes.route(_route.method, _route.path, **_route.kwargs)(_route.handler)
 

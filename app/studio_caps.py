@@ -66,6 +66,11 @@ _SKILL = {
     ("POST", "/rs_prompts/delete_skill_file"),
 }
 
+# 提示词点名候选：只扫数据根 prompts/ 目录的名字与标签，正文与生成侧那条 list_prompts 不在这里
+_PROMPTS = {
+    ("POST", "/rs_prompts/list_prompt_names"),
+}
+
 # 配方：文件与素材读写；生成 / 拆分 / 送工作流不在这里
 _RECIPES = {
     ("POST", "/rs_recipes/list"),
@@ -179,7 +184,7 @@ _AGENT = {
     ("POST", "/neo_agent/prefs"),
 }
 
-DESKTOP_ROUTES = (_GALLERY | _BOOKMARK | _SKILL | _RECIPES | _SETTINGS | _LLM | _MODEL_HUB
+DESKTOP_ROUTES = (_GALLERY | _BOOKMARK | _SKILL | _PROMPTS | _RECIPES | _SETTINGS | _LLM | _MODEL_HUB
                   | _BACKYARD | _MCP | _AGENT)
 
 # 前端门控用的功能开关：功能 → 代表路由。桌面端服务时该功能可用，否则按钮指向「启动 ComfyUI」。

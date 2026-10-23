@@ -278,6 +278,17 @@ Neo Studio 独立页面（`web/studio/index.html`）的后端。素材 / 生图 
 
 LLM 模式与配置见 [llm.md](llm.md)，技能设计见 [skills.md](skills.md)。
 
+## prompt_names.py — `/rs_prompts/list_prompt_names`
+
+| 方法 | 路由 | 说明 |
+|------|------|------|
+| POST | `/rs_prompts/list_prompt_names` | 提示词名字与标签（@ 点名弹层的候选） |
+
+- 只从目录列表取名字：一次请求 = `presets/` 与 `custom/` 各一次目录列表、各开一份 `_tags_index.json`，
+  全程不逐个 stat `.txt`，也不打开任何正文；正文是选中那一发才读。custom 在前、presets 在后，与 `list_prompts` 同序。
+- 写侧（`save_prompt` / `delete_prompt` 更新标签索引）留在 `prompts.py`；这条读侧在 `prompt_names.py`，
+  模块不碰 PromptServer，桌面端离线同样服务。
+
 ## model_hub.py — `/neo_model_hub/*`
 
 模型库（Comfy-Org 专区 · ModelScope / Hugging Face 双源搜索与断点续传下载），细节见 [model-hub.md](model-hub.md)。
@@ -310,6 +321,7 @@ LLM 模式与配置见 [llm.md](llm.md)，技能设计见 [skills.md](skills.md)
 | GET | `/extensions/comfyui-neo-studio/*` | 前端静态文件 |
 | GET/POST | `/neo_gallery/*` `/neo_bookmark/*` | 素材库与收藏（含删除 / 上传 / 打标 / OSS 同步） |
 | GET/POST | `/rs_prompts/skills` `load_skill` `save_skill` `delete_skill` `*_*_skill_file` | 技能编辑 |
+| POST | `/rs_prompts/list_prompt_names` | @ 点名弹层的提示词候选（只扫数据根 `prompts/` 的名字与标签） |
 | GET/POST | `/rs_recipes/*` | 配方读写、LLM 重写 / 逐格描述 / 分段 / 宫格切分 |
 | GET/POST | `/neo_image_gen/settings` `models` `input_images` `skill_config` `skill_workflow` `*workflow_skill*` `copy_skill_files`、`/neo_video_gen/settings` `models` | 生图 / 生视频设置 |
 | GET/POST | `/rs_prompts/get_models` `native_models` `set_model` `remote_llm_config` `llm_connection_test` `llm_mode` `extract_title` `fetch_remote_models` | LLM 配置与标题提取（只读 `configs/` 与 8080 服务） |

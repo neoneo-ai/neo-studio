@@ -11,6 +11,7 @@ Entry point for developers: [../../Developer_EN.md](../../Developer_EN.md).
 studio/
 ├── __init__.py                # plugin entry: register API routes, merge node mappings, declare WEB_DIRECTORY
 ├── prompts.py                 # prompt nodes + /rs_prompts/* routes
+├── prompt_names.py            # prompt name and tag scan + /rs_prompts/list_prompt_names
 ├── prompt_lines.py            # multi-line prompt collection parsing
 ├── skill.py                   # skill system + skill routes
 ├── llm.py                     # LLM inference: remote API / native safetensors / local GGUF
@@ -67,6 +68,7 @@ studio/
 | Module | Responsibility |
 |------|------|
 | `prompts.py` | Prompt nodes + preset CRUD + image parsing |
+| `prompt_names.py` | Prompt name and tag scan (the @ picker's candidates); touches no `PromptServer`, shared with the offline desktop service |
 | `prompt_lines.py` | Parsing and random selection of the multi-line prompt collections under `collections/` |
 | `skill.py` | Skill scanning and loading, multi-result contract, reference-file tool loop, skill routes |
 | `llm.py` | Remote OpenAI-compatible calls, domestic cloud providers, native safetensors text generation, local GGUF inference |

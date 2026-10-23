@@ -9,6 +9,8 @@
  * {category, id, name, source}（提示词那两类多带 text，正文在选中那一发取回）。
  * 模型与提示词那两条是同步目录扫描，每按一次 @ 全扫一遍会拖住弹层：走 cache.js 的 TTL 兜住，
  * 保存配方那一发显式清掉（agent-panel.js 接 DIRECTOR_RECIPE_SAVED_EVENT 调 clear）。
+ * items(onBatch) 把每一类到手的那一批交回调用方：弹层不必等最慢的一条（模型目录扫描）。
+ * warm() 是给输入框聚焦用的预热，@ 那一下落在缓存上。
  */
 import { ttlCache } from "./js/core/cache.js";
 
@@ -41,17 +43,20 @@ function isVideoPrompt(name) {
 
 function createMentionSource({ getJson, postJson, listSkills }) {
     const cache = ttlCache(MENTION_TTL_MS);
+    // 同一条接口在飞的只跑一次：预热、@ 弹层、手打记号对回 id（syncMentions）撞在一起时不重扫目录
+    const inflight = new Map();
 
-    async function cached(key, load) {
+    function cached(key, load) {
         const hit = cache.get(key);
-        if (hit !== undefined) return hit;
-        let rows;
-        try {
-            rows = await load();
-        } catch {
-            return [];   // 这一条接口不在这台机器上服务：这一类空着，不给假候选
+        if (hit !== undefined) return Promise.resolve(hit);
+        let run = inflight.get(key);
+        if (!run) {
+            run = Promise.resolve().then(load).then(
+                (rows) => { inflight.delete(key); return cache.set(key, rows); },
+                () => { inflight.delete(key); return []; });   // 这一条接口不在这台机器上服务：这一类空着，不给假候选
+            inflight.set(key, run);
         }
-        return cache.set(key, rows);
+        return run;
     }
 
     async function skills() {
@@ -82,8 +87,9 @@ function createMentionSource({ getJson, postJson, listSkills }) {
     }
 
     async function prompts() {
+        // 名字与标签就够铺这一类：list_prompt_names 只从目录列表取名字，正文选中那一发才读
         const rows = await cached("prompts", async () => {
-            const res = await postJson("/rs_prompts/list_prompts", {});
+            const res = await postJson("/rs_prompts/list_prompt_names", {});
             return (res && !res.offline && Array.isArray(res)) ? res : [];
         });
         return rows.map((p) => {
@@ -105,11 +111,11 @@ function createMentionSource({ getJson, postJson, listSkills }) {
         }));
     }
 
-    async function items() {
-        const groups = await Promise.all([skills(), models(), prompts(), recipes()]);
+    // 四个坑位与四条接口同序：谁先回来谁先填进自己那一格，弹层里的顺序与到达先后无关
+    function mergeGroups(slots) {
         const seen = new Set();
         const out = [];
-        for (const group of groups) {
+        for (const group of slots) {
             for (const m of group) {
                 if (!m.name || !m.category) continue;
                 const key = mentionToken(m.category, m.name);
@@ -121,7 +127,21 @@ function createMentionSource({ getJson, postJson, listSkills }) {
         return out;
     }
 
-    return { items, clear: () => cache.clear() };
+    function items(onBatch) {
+        const slots = [];
+        const fill = (i, rows) => {
+            slots[i] = rows;
+            if (onBatch) onBatch(mergeGroups(slots.filter(Boolean)));
+        };
+        return Promise.all([
+            skills().then((rows) => fill(0, rows)),
+            models().then((rows) => fill(1, rows)),
+            prompts().then((rows) => fill(2, rows)),
+            recipes().then((rows) => fill(3, rows)),
+        ]).then(() => mergeGroups(slots.filter(Boolean)));
+    }
+
+    return { items, warm: () => items(), clear: () => cache.clear() };
 }
 
 export { MENTION_CATEGORIES, MENTION_LABELS, mentionName, mentionToken, modelLabel, createMentionSource };

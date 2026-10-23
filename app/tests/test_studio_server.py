@@ -236,6 +236,22 @@ class OfflineServiceTests(_ServerCase):
         self.assertIn("GET /neo_gallery/txt", data["routes"])
         self.assertEqual(self.get("/neo_gallery/txt?filename=&subfolder=")[0], 400)
 
+    def test_prompt_names_served_offline(self):
+        """@ 点名弹层的图像/视频提示词候选要离线出得来：只读 prompts/ 目录的名字与标签，
+        生成侧那条 list_prompts 带 mtime 与正文解析，不在桌面端的能力表里。"""
+        data = json.loads(self.get("/neo_studio/version")[1])
+        self.assertIn("POST /rs_prompts/list_prompt_names", data["routes"])
+        status, body = self.post_json("/rs_prompts/list_prompt_names", {})
+        self.assertEqual(status, 200)
+        rows = json.loads(body)
+        self.assertTrue([r for r in rows if r["source"] == "presets"], "内置 presets 要出得来")
+        sources = [r["source"] for r in rows]
+        self.assertEqual(sources, ["custom"] * sources.count("custom") + ["presets"] * sources.count("presets"),
+                         "custom 在前、presets 在后，与 list_prompts 同序")
+        for row in rows:
+            self.assertFalse(row["name"].endswith(".txt"), "名字去掉 .txt 后缀")
+            self.assertIsInstance(row["tags"], list)
+
     def test_agent_session_history_served_offline(self):
         """历史会话是数据根 agent_sessions/ 里的文件：列 / 读 / 删在桌面端就能做完，
         右栏空态的最近列表不该等 ComfyUI 起来才铺得出来。"""

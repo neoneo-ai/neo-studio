@@ -283,6 +283,7 @@ const EN = {
     "全部 ({n})": "All ({n})",
     "工作流中没有可用的 Load Image 图片": "No Load Image images available in this workflow",
     "无匹配 skill": "No matching skill",
+    "…其余 {n} 条未显示，继续输入缩小范围": "…{n} more rows hidden — keep typing to narrow it",
     "🎲 已随机抽取 {n} 条提示词": "🎲 Drew {n} random prompts",
     "🎲 已随机抽取一条新提示词": "🎲 Drew one new random prompt",
     "💭 思考中…": "💭 Thinking…",

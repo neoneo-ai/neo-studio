@@ -27,10 +27,10 @@ DATA_ROOT_ENV = "NEO_STUDIO_DATA"   # 插件模块 import 期认的用户数据�
 
 # 桌面端进程加载的插件模块，按依赖顺序：handler 只依赖 folder_paths、文件系统与 8080 LLM 服务。
 DESKTOP_MODULES = ("util", "civitai", "bookmark", "gallery_lora", "gallery_oss", "gallery",
-                 "minimax_h3", "skill", "laya_router", "prompt_lines", "llm", "lora_tag",
+                 "minimax_h3", "skill", "laya_router", "prompt_names", "prompt_lines", "llm", "lora_tag",
                  "recipes", "video_gen", "image_gen_files", "model_hub", "backyard", "agent")
 DESKTOP_ROUTE_MODULES = ("gallery_lora", "gallery_oss", "gallery", "bookmark", "lora_tag",
-                       "skill", "llm", "recipes", "video_gen", "image_gen_files", "model_hub",
+                       "skill", "prompt_names", "llm", "recipes", "video_gen", "image_gen_files", "model_hub",
                        "backyard", "agent")
 
 USERDATA_PATH = "/userdata/neo_gallery_data.json"

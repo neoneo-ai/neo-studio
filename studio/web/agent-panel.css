@@ -1355,10 +1355,12 @@
     z-index: 9100;
     display: flex;
     flex-direction: column;
+    padding: 2px;
     max-width: calc(100vw - 16px);
     background: var(--ns-panel, #202024);
     border: 1px solid var(--ns-border, #333);
     border-radius: 6px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
 }
 
 .neo-agent-picker-list {

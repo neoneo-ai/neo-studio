@@ -414,8 +414,8 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
     let mentionTextSettled = Promise.resolve();   // 图像 / 视频提示词正文取回的链：发快照前先等到手
     const mentionSource = createMentionSource({
         getJson, postJson,
-        // 技能目录是生成侧的接口：桌面端离线服务不打包提示词预设与配方扫描，那几条回 409 时
-        // 各自交回空表，弹层里只剩那一句无匹配，铺不出假候选（能力表见 app/studio_caps.py）
+        // 四条候选接口都在桌面端能力表里（技能 / 模型扫描 / 提示词名字 / 配方，表见 app/studio_caps.py）：
+        // 离线桌面端六类候选铺得齐，缺的只是把这一发出图跑起来的 ComfyUI
         listSkills: async () => {
             const res = await getJson("/rs_prompts/skills");
             return Array.isArray(res) ? res : [];
@@ -423,7 +423,9 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
     });
     // 配方与技能那两份是带 TTL 的缓存：导演页存过一份新配方、智能体写过一份，
     // 下一次 @ 的候选就要看得到那个名字，不能等缓存自己过期
-    window.addEventListener(DIRECTOR_RECIPE_SAVED_EVENT, () => mentionSource.clear());
+    window.addEventListener(DIRECTOR_RECIPE_SAVED_EVENT, () => { mentionSource.clear(); mentionSource.warm(); });
+    // 输入框一聚焦就先把候选捞起来：@ 那一下落在缓存上，弹层不等模型目录扫描那条慢接口
+    input.addEventListener("focus", () => mentionSource.warm());
     // 技能那一类沿用原来那套候选口径：能跑的生图与出片技能 + 没有模板的正文型技能，
     // task 类点了没有产出，缺插件的技能后端跑不动
     const isMentionable = (m) => m.category !== "skill"

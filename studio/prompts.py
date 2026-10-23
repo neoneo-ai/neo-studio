@@ -17,7 +17,6 @@ import base64
 from typing import Optional
 from server import PromptServer
 
-from . import plugin_paths
 from .util import PrefixFilter
 
 logger = logging.getLogger(__name__)
@@ -28,24 +27,10 @@ from . import skill
 from .llm import strip_inline_thinking
 from .bundles import create_bundle
 
-PROMPTS_DIR = str(plugin_paths.PROMPTS_DIR)
-TAGS_FILE = os.path.join(PROMPTS_DIR, "_tags_index.json")
-PRESETS_DIR = os.path.join(PROMPTS_DIR, "presets")
-CUSTOM_DIR = os.path.join(PROMPTS_DIR, "custom")
-PRESETS_TAGS_FILE = os.path.join(PRESETS_DIR, "_tags_index.json")
-CUSTOM_TAGS_FILE = os.path.join(CUSTOM_DIR, "_tags_index.json")
-
-if not os.path.exists(PROMPTS_DIR):
-    os.makedirs(PROMPTS_DIR)
-if not os.path.exists(PRESETS_DIR):
-    os.makedirs(PRESETS_DIR)
-if not os.path.exists(CUSTOM_DIR):
-    os.makedirs(CUSTOM_DIR)
+from .prompt_names import (PROMPTS_DIR, PRESETS_DIR, CUSTOM_DIR,
+                           tags_file_path, load_tags_index)
 
 PENDING_PROMPTS = {}
-
-_tags_lock = threading.Lock()
-
 
 _tags_lock = threading.Lock()
 
@@ -263,19 +248,7 @@ async def neo_store_bundle_refs(request):
     return web.json_response({"success": True})
 
 
-def _load_tags_index(tags_file: str = TAGS_FILE) -> dict:
-    """Load tags index from the dedicated tags file."""
-    if not os.path.exists(tags_file):
-        return {}
-    try:
-        with open(tags_file, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except (json.JSONDecodeError, Exception) as e:
-        logger.warning(f"Error loading tags index from {tags_file}: {e}")
-        return {}
-
-
-def _save_tags_index(index: dict, tags_file: str = TAGS_FILE) -> None:
+def _save_tags_index(index: dict, tags_file: str) -> None:
     """Save tags index to the dedicated tags file."""
     try:
         with open(tags_file, 'w', encoding='utf-8') as f:
@@ -284,18 +257,11 @@ def _save_tags_index(index: dict, tags_file: str = TAGS_FILE) -> None:
         logger.error(f"Error saving tags index to {tags_file}: {e}")
 
 
-def _get_tags_file_path(source: str) -> str:
-    """根据来源返回对应的标签索引文件路径"""
-    if source == "presets":
-        return PRESETS_TAGS_FILE
-    return CUSTOM_TAGS_FILE
-
-
 def _update_tags_index(prompt_name: str, tags: list[str] | None = None, source: str = "custom") -> None:
     """更新指定来源的标签索引"""
-    tags_file = _get_tags_file_path(source)
+    tags_file = tags_file_path(source)
     with _tags_lock:
-        index = _load_tags_index(tags_file)
+        index = load_tags_index(tags_file)
         if tags is None:
             index.pop(prompt_name, None)
         else:
@@ -303,15 +269,11 @@ def _update_tags_index(prompt_name: str, tags: list[str] | None = None, source: 
         _save_tags_index(index, tags_file)
 
 
-def _get_tags_for_prompt(prompt_name: str, source: str = "custom") -> list:
-    """获取指定来源的标签"""
-    tags_file = _get_tags_file_path(source)
-    index = _load_tags_index(tags_file)
-    return index.get(prompt_name, [])
+def _scan_prompts_recursive(base_dir: str, source: str, tags_index: dict, prefix: str = "") -> list:
+    """递归扫描目录，返回 prompt 列表，支持多级子目录
 
-
-def _scan_prompts_recursive(base_dir: str, prefix: str = "", source: str = "custom") -> list:
-    """递归扫描目录，返回 prompt 列表，支持多级子目录"""
+    标签索引由调用方读一次交下来：每个 .txt 各读一遍同一份 json，一次列表就是上百次文件打开。
+    """
     prompts = []
     if not os.path.exists(base_dir):
         return prompts
@@ -321,19 +283,24 @@ def _scan_prompts_recursive(base_dir: str, prefix: str = "", source: str = "cust
         if os.path.isdir(full_path):
             # 递归处理子目录
             sub_prefix = f"{prefix}{entry}/" if prefix else f"{entry}/"
-            prompts.extend(_scan_prompts_recursive(full_path, sub_prefix, source))
+            prompts.extend(_scan_prompts_recursive(full_path, source, tags_index, sub_prefix))
         elif entry.endswith('.txt') and not entry.startswith('_'):
             name = entry[:-4]  # 去掉 .txt 后缀
             display_name = f"{prefix}{name}" if prefix else name
             mtime = os.path.getmtime(full_path)
-            tags = _get_tags_for_prompt(display_name, source)
             prompts.append({
                 "name": display_name,
-                "tags": tags,
+                "tags": tags_index.get(display_name, []),
                 "source": source,
                 "_mtime": mtime
             })
     return prompts
+
+
+def _scan_prompts(source: str) -> list:
+    """一个来源（presets / custom）的全部提示词条目"""
+    base_dir = PRESETS_DIR if source == "presets" else CUSTOM_DIR
+    return _scan_prompts_recursive(base_dir, source, load_tags_index(tags_file_path(source)))
 
 
 def _resolve_collection_file(name: str, source: str = "custom") -> str | None:
@@ -673,8 +640,8 @@ async def rs_prompts_save_prompt(request):
 async def rs_prompts_list_prompts(request):
     try:
         # 递归扫描 presets 和 custom 目录
-        presets_prompts = _scan_prompts_recursive(PRESETS_DIR, source="presets")
-        custom_prompts = _scan_prompts_recursive(CUSTOM_DIR, source="custom")
+        presets_prompts = _scan_prompts("presets")
+        custom_prompts = _scan_prompts("custom")
         
         # 按 mtime 倒序排序（每组内最新的在前）
         def sort_key(x):
@@ -1217,8 +1184,8 @@ async def rs_prompts_random_prompt(request):
     """Random prompt - pick a random preset from the list."""
     try:
         # 获取 preset list
-        presets_prompts = _scan_prompts_recursive(PRESETS_DIR, source="presets")
-        custom_prompts = _scan_prompts_recursive(CUSTOM_DIR, source="custom")
+        presets_prompts = _scan_prompts("presets")
+        custom_prompts = _scan_prompts("custom")
         all_prompts = custom_prompts + presets_prompts
         
         if not all_prompts:

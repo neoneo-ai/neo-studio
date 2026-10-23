@@ -4,6 +4,24 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **The `@` picker's prompt candidates answer on the desktop port, and the popup stops re-laying a thousand rows.**
+  With the page pinned to the desktop port the six candidate categories come from four routes, and
+  `/rs_prompts/list_prompt_names` was not in `app/studio_caps.py` — that request answered `409 offline`, so the
+  image / video prompt rows stayed empty until ComfyUI finished booting while skills, models, LoRAs and recipes were
+  already there. The name-and-tag read side now lives in `studio/prompt_names.py` (two directory listings plus one
+  tag index per source, no `PromptServer`, no per-file stat) and the desktop service mounts it like the other leaf
+  modules; the write side (tag index updates from `save_prompt` / `delete_prompt`) stays in `prompts.py`.
+  The other half of the lag was in the popup: with ~740 LoRAs registered it laid every filtered row and re-sorted
+  the whole filtered set on each keystroke. Candidates are now sorted once per arriving batch, at most 120 rows are
+  laid, and the rest collapses into one「…其余 N 条未显示，继续输入缩小范围」line above them — `End` and `Enter`
+  act on the laid rows, so the highlighted row is the row that gets committed. The popup also stopped floating: it
+  measured a fixed 220px of height and a fixed 340px of width, so with the composer near the window bottom the
+  「doesn't fit below」branch always fired and a three-row popup sat 224px above the input, narrower than it. The
+  position is now recomputed per render from the laid rows' real height and the input's own width, the list box
+  shrinks to the space actually available, and the popup keeps the input's left edge. Covered by
+  `app/tests/test_studio_server.py` (`test_prompt_names_served_offline`) and
+  `studio/tests/js/studio-agent-mention.test.mjs` (row cap, hint count, `End` + `Enter` on the last laid row).
+
 - **An `@`-mention skips the discovery step it already settled, and skips it visibly.** A named main model, LoRA,
   recipe, skill, or prompt body decides "which one" for this turn, yet a weak model still ran the discovery step after
   naming it — `list_models` after `@model`, `search_loras` after `@lora`, `list_recipes` after `@recipe`,

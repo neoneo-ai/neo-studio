@@ -316,6 +316,18 @@ included), and the dock never calls a handler directly.
 
 LLM modes and configuration: [llm.md](llm.md). Skill design: [skills.md](skills.md).
 
+## prompt_names.py — `/rs_prompts/list_prompt_names`
+
+| Method | Route | Description |
+|------|------|------|
+| POST | `/rs_prompts/list_prompt_names` | Prompt names and tags — the @ picker's candidates |
+
+- Names come from the directory listing only: one request = one directory listing for `presets/` and one for
+  `custom/`, each opening its own `_tags_index.json` once. No per-file `stat`, no prompt text is opened; the text
+  is fetched when one entry gets picked. `custom` first, `presets` after — the same order as `list_prompts`.
+- The write side (`save_prompt` / `delete_prompt` updating the tag index) stays in `prompts.py`; this read side
+  lives in `prompt_names.py`, which touches no `PromptServer` and serves identically in the Studio desktop offline.
+
 ## model_hub.py — `/neo_model_hub/*`
 
 The model hub (Comfy-Org curated section · ModelScope / Hugging Face dual-source search and resumable downloads);
@@ -353,6 +365,7 @@ the table answers 409. Startup sequence, close teardown and cache conventions: [
 | GET | `/extensions/comfyui-neo-studio/*` | Frontend static files |
 | GET/POST | `/neo_gallery/*` `/neo_bookmark/*` | Asset library and bookmarks (including delete / upload / tagging / OSS sync) |
 | GET/POST | `/rs_prompts/skills` `load_skill` `save_skill` `delete_skill` `*_*_skill_file` | Skill editing |
+| POST | `/rs_prompts/list_prompt_names` | Prompt candidates for the @ picker (names and tags from the data-root `prompts/` scan) |
 | GET/POST | `/rs_recipes/*` | Recipe read/write, LLM rewrite / per-panel description / segmentation / grid split |
 | GET/POST | `/neo_image_gen/settings` `models` `input_images` `skill_config` `skill_workflow` `*workflow_skill*` `copy_skill_files`, `/neo_video_gen/settings` `models` | Image / video generation settings |
 | GET/POST | `/rs_prompts/get_models` `native_models` `set_model` `remote_llm_config` `llm_connection_test` `llm_mode` `extract_title` `fetch_remote_models` | LLM configuration and title extraction (reads only `configs/` and the 8080 service) |

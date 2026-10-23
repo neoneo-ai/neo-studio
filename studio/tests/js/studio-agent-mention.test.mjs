@@ -45,6 +45,8 @@ function mockMentions() {
     }));
     mockRoute("/rs_prompts/skills", jsonResponse(SKILLS));
     mockRoute("/neo_image_gen/models", jsonResponse(MODELS));
+    // @ 弹层只要名字与标签（list_prompt_names 只从目录列表取名字）；提示词页那份带正文的 list_prompts 是另一条
+    mockRoute("/rs_prompts/list_prompt_names", jsonResponse(PROMPTS));
     mockRoute("/rs_prompts/list_prompts", jsonResponse(PROMPTS));
     mockRoute("/rs_recipes/list", jsonResponse(RECIPES));
     mockRoute("/rs_prompts/load_prompt", (body) => jsonResponse({ text: `正文:${body.name}` }));
@@ -186,9 +188,9 @@ test("斜杠预设名：取回正文非名字才交后端，名字不进 prompt"
     await openStudio("#/gallery");
     mockAgentStream([{ kind: "content", text: "已出片" }]);
     // 真实预设是带斜杠的子目录名；取正文要按整条斜杠名发，回来的必须是正文而不是名字本身
-    mockRoute("/rs_prompts/list_prompts", jsonResponse([
-        { name: "精美图像提示词/女孩衬衫正面", source: "presets", tags: [] },
-    ]));
+    const SLASHED = [{ name: "精美图像提示词/女孩衬衫正面", source: "presets", tags: [] }];
+    mockRoute("/rs_prompts/list_prompt_names", jsonResponse(SLASHED));
+    mockRoute("/rs_prompts/list_prompts", jsonResponse(SLASHED));
     mockRoute("/rs_prompts/load_prompt", (body) => jsonResponse({
         text: `正文:${body.name}`,
     }));
@@ -281,5 +283,117 @@ test("提示词页的 / 不给 tokenOf：提交只写下拉，正文里不留记
     await flush(5);
     assert.equal(selector.value, "sk_cat", "/ 选技能照旧写下拉");
     assert.equal(box.value, "", "不给 tokenOf 就只吃掉触发字符那一段，正文里不写记号");
+});
+
+
+const MENTION_PATHS = ["/rs_prompts/skills", "/neo_image_gen/models",
+                       "/rs_prompts/list_prompt_names", "/rs_recipes/list"];
+const mentionFetches = () => fetchLog.filter((c) => MENTION_PATHS.includes(c.path));
+const pickerBox = () => document.querySelector(".neo-agent-picker");
+const emptyTip = () => document.querySelector(".neo-agent-picker-empty");
+
+// openPicker 那条要等四类候选全落袋才断言，这几条看的是候选还在路上的那一段
+async function typeOut(text) {
+    const box = inputBox();
+    for (const ch of text) {
+        const caret = box.selectionStart || 0;
+        box.value = box.value.slice(0, caret) + ch + box.value.slice(caret);
+        box.setSelectionRange(caret + 1, caret + 1);
+        fire(box, "input");
+    }
+}
+
+test("输入框一聚焦就把候选捞起来：@ 那一下落在缓存上，四条接口不再重发", async () => {
+    mountStudio();
+    await openStudio("#/gallery");
+    const before = mentionFetches().length;
+    assert.equal(pickerBox(), null, "没打字不开弹层");
+
+    fire(inputBox(), "focus");
+    await sleep(20); await flush(40);
+    const warmed = mentionFetches().length;
+    assert.equal(warmed - before, 4, "预热把四类候选各捞一次");
+
+    await typeOut("@krea2");
+    await sleep(20); await flush(40);
+    assert.deepEqual(rowNames(), ["🖼️ Krea2 出图", "💿 krea2_turbo_fp8", "🎨 mood_lora"]);
+    assert.equal(mentionFetches().length, warmed,
+        "开弹层与逐字过滤都吃缓存：@ 那一下不等模型目录扫描");
+});
+
+test("@ 弹层不等最慢的那条：先回来的候选先画行，模型目录晚到补进同一份列表", async () => {
+    mountStudio();
+    await openStudio("#/gallery");
+    mockRoute("/neo_image_gen/models", async () => { await sleep(40); return jsonResponse(MODELS); });
+
+    await typeOut("@");
+    await sleep(10); await flush(20);
+    assert.ok(pickerBox(), "候选还在路上，弹层已经开着");
+    assert.ok(rowNames().includes("🧩 柴犬技能"), "技能与提示词先到手就先画行");
+    assert.ok(rowNames().includes("📝 精美图像提示词/红杯"));
+    assert.ok(!rowNames().some((n) => n.includes("krea2_turbo_fp8")), "没到手的模型不铺假候选");
+
+    await sleep(60); await flush(20);
+    assert.ok(rowNames().some((n) => n.includes("krea2_turbo_fp8")), "晚到的模型补进同一份列表");
+});
+
+test("候选上千时弹层只铺 120 行：余下的收成一行提示，Enter 取的是高亮那一行", async () => {
+    mountStudio();
+    await openStudio("#/gallery");
+    const loras = Array.from({ length: 400 }, (_, i) => `bulk\\lora_${String(i).padStart(3, "0")}.safetensors`);
+    mockRoute("/neo_image_gen/models", jsonResponse({
+        diffusion_models: [], loras, text_encoders: [], vae: [],
+    }));
+
+    await typeOut("@lora_");
+    await sleep(30); await flush(40);
+    const rows = pickerRows();
+    assert.equal(rows.length, 120, "一次弹层最多铺 120 行，400 个 LoRA 不整棵铺进 DOM");
+    assert.equal(emptyTip().textContent.includes("280"), true,
+                 `提示行报没铺出来的条数：${emptyTip().textContent}`);
+    keydown(inputBox(), "End");
+    await flush(3);
+    assert.ok(rows[119].classList.contains("rs-picker-row-active"), "End 落在最后铺出来的那一行");
+    keydown(inputBox(), "Enter");
+    await flush(5);
+    assert.ok(inputBox().value.includes("@lora:lora_119"),
+              `Enter 交的是高亮那一项：${inputBox().value}`);
+});
+
+test("候选一条都没到手时弹层空着：那一句无匹配要等四类都落袋", async () => {
+    mountStudio();
+    await openStudio("#/gallery");
+    for (const path of MENTION_PATHS)
+        mockRoute(path, async () => { await sleep(50); return jsonResponse([]); });
+
+    await typeOut("@zzz");
+    await sleep(10); await flush(20);
+    assert.ok(pickerBox(), "弹层开着");
+    assert.equal(pickerRows().length, 0);
+    assert.equal(emptyTip(), null, "候选没到齐就报无匹配，是把慢当成了没有");
+
+    await sleep(60);
+    assert.ok(emptyTip(), "四类都落袋、名字真的对不上，才报无匹配");
+});
+
+test("@ 弹层贴住输入框：宽度吃输入框自己的宽度，位置按铺出来的真实高度算", async () => {
+    mountStudio();
+    await openStudio("#/gallery");
+    const box = inputBox();
+    // jsdom 不铺布局：输入框的位置与弹层的真实高度得交进去，量出来的那两条才有数可依
+    box.getBoundingClientRect = () => ({ left: 40, top: 640, bottom: 656, right: 540, width: 500, height: 16 });
+    await typeOut("@krea2");
+    await sleep(20); await flush(40);
+    const picker = pickerBox();
+    Object.defineProperty(picker, "offsetHeight", { value: 300, configurable: true });
+    fire(box, "input");   // 一次重画即一次重新定位：候选数变了，弹层高度跟着变
+    await flush(5);
+
+    assert.equal(picker.style.width, "500px", "弹层与输入框同宽：窄一截的弹层看着像掉出来的");
+    assert.equal(picker.style.left, "40px", "左沿贴输入框左沿");
+    assert.equal(picker.style.top, "336px",
+        "输入框下方只剩 100px，300px 高的弹层翻到输入框上方，贴着它，不是悬在两百度外");
+    assert.equal(picker.querySelector(".neo-agent-picker-list").style.maxHeight, "220px",
+                 "列表盒收在上下两侧里装得下的那点");
 });
 

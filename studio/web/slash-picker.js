@@ -3,6 +3,8 @@
  * 输入框快捷选择器：输入触发字符（默认 /）唤起，随输入实时过滤 skill 列表（按 name/id/tags，含中文拼音），
  * ↑/↓/Home/End 移动高亮、Enter/Tab 提交当前高亮项、Esc 关闭。
  * 只过滤不自动提交：始终需要按一次键确认，不会边打边跳。
+ * 一次弹层最多铺 MAX_ROWS 行，余下的收成一行提示：@ 弹层那六类候选上千条时，逐键重铺整棵列表
+ * 就是把输入拖慢的那一段；排序只随候选批次算一次，不在每次过滤里重排。
  * 两个调用方差在参数上：提示词页是 / 选技能写进技能下拉；智能体面板是 @ 选技能、选中交后端当本轮点名技能。
  * tokenOf 给定时提交换成往输入框写一个可见记号（智能体面板的 @category:name），不给就照原样吃掉触发字符到光标那一段。
  * 技能分类与显示名由调用方交进来（filter / sort / rowText / categoryLabel）：本模块只认一个列表和一组回调，
@@ -11,7 +13,10 @@
  */
 
 import { mkEl } from "./dom-utils.js";
-import { t } from "./js/core/i18n.js";
+import { t, tf } from "./js/core/i18n.js";
+
+const MAX_ROWS = 120;   // 一次弹层铺的行数上限：候选上千时逐键重铺整棵列表，输入的延迟压在这里
+const LIST_MAX_PX = 220;   // CSS 没给列表盒 max-height 时的兜底高度；定位时要拿真实的那个数
 
 function createSlashSkillPicker({ quickInput, listSkills, skillSelector = null, commit = null,
                                   triggerChar = "/", filter = null, sort = null,
@@ -27,9 +32,12 @@ function createSlashSkillPicker({ quickInput, listSkills, skillSelector = null, 
         const slashIndex = sel - 1;
         if (slashIndex < 0 || quickInput.value[slashIndex] !== triggerChar) return;
 
-        const skills = await listSkills();
-        // await 期间用户可能改动了输入：触发字符不在原位置则放弃
-        if (quickInput.value[slashIndex] !== triggerChar) return;
+        // 弹层先开门、候选随后补：@ 弹层那六类由四条接口汇成，最慢的一条（模型目录扫描）
+        // 压不住已经到手的那几类，见 mention-picker.js 的 items(onBatch)
+        let pool = [];   // 这一批候选里可选的那些，已按调用方的 sort 排好一次
+        let settled = false;
+
+        const queryNow = () => quickInput.value.slice(slashIndex + 1, quickInput.selectionStart || 0);
 
         let activeIndex = 0;
         let currentItems = [];
@@ -57,13 +65,18 @@ function createSlashSkillPicker({ quickInput, listSkills, skillSelector = null, 
             quickInput.dispatchEvent(new Event("input", { bubbles: true }));
         };
 
-        // 按 query 过滤：name / id / tags（含后端追加的中文拼音标签）任一包含（忽略大小写）；
-        // 调用方的 filter 决定这一份列表里哪些技能可选，空 query 时按调用方的 sort 稳定排一次
+        // 每到手一批候选就重建一次这份池子：filter 与 sort 只看候选自身，随批算一次就定序，
+        // 逐字过滤那条路上不再排上千项
+        const setPool = (rows) => {
+            pool = filter ? rows.filter(filter) : rows.slice();
+            if (sort) pool.sort(sort);
+        };
+
+        // 按 query 过滤：name / id / tags（含后端追加的中文拼音标签）任一包含（忽略大小写）
         const filterSkills = (query) => {
             const q = (query || "").trim().toLowerCase();
-            const matched = skills.filter(s => {
-                if (filter && !filter(s)) return false;
-                if (!q) return true;
+            if (!q) return pool;
+            return pool.filter(s => {
                 if ((s.name || "").toLowerCase().includes(q)) return true;
                 if ((s.id || "").toLowerCase().includes(q)) return true;
                 for (const tag of (s.tags || [])) {
@@ -71,8 +84,6 @@ function createSlashSkillPicker({ quickInput, listSkills, skillSelector = null, 
                 }
                 return false;
             });
-            if (!q && sort) matched.sort(sort);
-            return matched;
         };
 
         const picker = mkEl("div", prefix);
@@ -106,13 +117,25 @@ function createSlashSkillPicker({ quickInput, listSkills, skillSelector = null, 
             list.innerHTML = "";
             currentItems = filterSkills(query);
             if (!currentItems.length) {
+                // 一批候选都没到手：弹层先空着，别报"无匹配"骗用户去改 query
+                if (!settled) return;
                 const empty = mkEl("div", `${prefix}-empty`);
                 empty.textContent = t("无匹配 skill");
                 list.appendChild(empty);
                 activeIndex = 0;
+                place();
                 return;
             }
-            currentItems.forEach((s, idx) => {
+            const visible = currentItems.slice(0, MAX_ROWS);
+            const omitted = currentItems.length - visible.length;
+            if (omitted > 0) {
+                // 列表盒只有 220px 高：提示画在末尾永远滚不到，画在最上面才看得到"还剩多少"
+                // 这一行不带 -row 类：方向键的钳制与 Enter 取的那一项都按 -row 数，不能算它一份
+                const more = mkEl("div", `${prefix}-empty`);
+                more.textContent = tf("…其余 {n} 条未显示，继续输入缩小范围", { n: omitted });
+                list.appendChild(more);
+            }
+            visible.forEach((s, idx) => {
                 const row = mkEl("div", `${prefix}-row`);
                 const name = mkEl("span", `${prefix}-name`);
                 name.textContent = rowTextOf(s);
@@ -127,8 +150,9 @@ function createSlashSkillPicker({ quickInput, listSkills, skillSelector = null, 
                 row.addEventListener("mousemove", () => setActiveRow(idx));
                 list.appendChild(row);
             });
-            activeIndex = Math.max(0, Math.min(activeIndex, currentItems.length - 1));
+            activeIndex = Math.max(0, Math.min(activeIndex, visible.length - 1));
             syncActive();
+            place();
         };
 
         let handleKey = null;
@@ -148,8 +172,7 @@ function createSlashSkillPicker({ quickInput, listSkills, skillSelector = null, 
         // 输入变化：触发字符被删或 query 出现空白则关闭，否则重新过滤（不自动提交）。焦点留在 quickInput，继续打字即更新 value 触发这里。
         handleInputChange = () => {
             if (quickInput.value[slashIndex] !== triggerChar) { closePicker(); return; }
-            const caret = quickInput.selectionStart || 0;
-            const query = quickInput.value.slice(slashIndex + 1, caret);
+            const query = queryNow();
             if (/\s/.test(query)) { closePicker(); return; }
             render(query);
         };
@@ -172,20 +195,38 @@ function createSlashSkillPicker({ quickInput, listSkills, skillSelector = null, 
         };
         document.addEventListener("keydown", handleKey, true);
 
+        // 定位：贴住输入框。宽度吃输入框自己的宽度，高度量刚铺完行的真实值——写死一个 220 估高，
+        // 输入框贴着窗口下沿时下方必判「装不下」，三行候选的弹层就悬在输入框上方两百多像素处
+        const place = () => {
+            const r = quickInput.getBoundingClientRect();   // fixed 覆盖层，这里的坐标已含画布缩放
+            const w = Math.min(Math.max(r.width, 300), window.innerWidth - 16);
+            const roomBelow = window.innerHeight - r.bottom - 12;
+            const roomAbove = r.top - 12;
+            // 列表盒缩到上下两侧里装得下的那点：翻到上方时铺到第 120 行也不会被窗口上沿切掉。
+            // 上限认列表盒自己的 CSS——两个宿主页给的 max-height 不是一个数
+            const cap = parseFloat(getComputedStyle(list).maxHeight) || LIST_MAX_PX;
+            list.style.maxHeight = Math.min(cap, Math.max(roomBelow, roomAbove)) + "px";
+            picker.style.width = w + "px";
+            const h = picker.offsetHeight;
+            picker.style.top = (roomBelow >= h ? r.bottom + 4 : Math.max(8, r.top - h - 4)) + "px";
+            picker.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 8 - w)) + "px";
+        };
+
         // 焦点保留在 quickInput：继续打字即过滤，方向键/回车由上面的捕获监听接管
-        render(quickInput.value.slice(slashIndex + 1, quickInput.selectionStart || 0));
+        render(queryNow());
         setTimeout(() => setActiveRow(0), 0);
 
-        // 定位：锚定到输入框下方（fixed 覆盖层，getBoundingClientRect 已含画布缩放），超视口则上翻/靠边
-        const r = quickInput.getBoundingClientRect();
-        const width = 340;
-        let left = Math.max(8, Math.min(r.left, window.innerWidth - 8 - width));
-        let top = r.bottom + 4;
-        const estHeight = 220;
-        if (top + estHeight > window.innerHeight - 8) top = Math.max(8, r.top - estHeight - 4);
-        picker.style.left = left + "px";
-        picker.style.top = top + "px";
-        picker.style.width = width + "px";
+        // 候选源每取回一批就回调重画（items(onBatch)）；最后一批到手才算 settled，
+        // 此后空列表才配得上"无匹配"那一句
+        const rows = await listSkills((batch) => {
+            setPool(batch);
+            if (pickerEl) render(queryNow());
+        });
+        // 取回期间用户可能改动了输入：触发字符不在原位置就丢掉这一批
+        if (quickInput.value[slashIndex] !== triggerChar) return;
+        setPool(rows);
+        settled = true;
+        render(queryNow());
     }
 
     return openSlashSkillPicker;
