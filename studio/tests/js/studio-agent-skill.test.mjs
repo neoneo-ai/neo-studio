@@ -682,7 +682,7 @@ test("输入区：一块深底输入卡收整排控件，上下文条只读、�
     assert.equal(runBtn().getAttribute("aria-label"), "✨ 生成", "整串标签要进 aria-label");
     assert.ok(runBtn().title, "主按钮要有悬停说明：只剩字形时靠它读全名");
     assert.deepEqual([...dock().querySelectorAll(".neo-agent-toolbar .neo-agent-btn-text")].map((s) => s.textContent),
-        ["添加图片", "MCP", "计划", "执行", "生成"], "底栏每颗钮的文字段应各自独立成 span");
+        ["点名", "添加图片", "MCP", "计划", "执行", "生成"], "底栏每颗钮的文字段应各自独立成 span");
     assert.deepEqual([...dock().querySelectorAll(".neo-agent-toolbar .neo-agent-attach, .neo-agent-toolbar .neo-agent-entry, .neo-agent-toolbar .neo-agent-mode-btn")].map((b) => b.getAttribute("aria-label")),
         ["📎 添加图片", "🔌 MCP", "📝 计划", "⚡ 执行"], "每颗钮都要带上整串可访问名");
 });
@@ -1540,7 +1540,7 @@ test("复制键在 capture 相位摘走，宿主注入的吞键 handler 接不�
     assert.deepEqual(seen, ["KeyL"], `放行名单内的键不该再往下传：${seen.join(" ")}`);
 });
 
-// ---------- 输入框 @ 直接点名技能（选择器与提示词页的 / 同一套工厂）----------
+// ---------- 输入框 @ 点名（技能 / 主模型 / LoRA / 图像与视频提示词 / 配方；选择器与提示词页的 / 同一套工厂）----------
 const pickerRows = () => [...document.querySelectorAll(".neo-agent-picker-row")];
 const skillChip = () => dock().querySelector(".neo-agent-skill");
 
@@ -1560,23 +1560,26 @@ test("输入 @ 列出生成技能与正文型技能：生成在前、文案在�
     inputText(input, "@");
     await sleep(20);   // 候选要过一次 fetch：微任务冲刷追不上这条链
     assert.deepEqual(pickerRows().map((r) => r.querySelector(".neo-agent-picker-name").textContent),
-        ["🖼️ Krea2 出图", "🎬 H3 出片", "🧩 柴犬技能", "🧩 橘猫技能"],
-        "带 workflow 的生成技能在前，正文型技能（没有 workflow.json 的提示词 / 文案技能）排在后面——"
-        + "没有工作流的生图技能三条生成工具都跑不动，task 类点了没有产出");
+        ["🖼️ Krea2 出图", "🎬 H3 出片", "🧩 柴犬技能", "🧩 橘猫技能", "📚 R1"],
+        "带 workflow 的生成技能在前，正文型技能（没有 workflow.json 的提示词 / 文案技能）排在后面，"
+        + "本机有的配方也点得到——没有工作流的生图技能三条生成工具都跑不动，task 类点了没有产出");
     assert.deepEqual(pickerRows().map((r) => r.querySelector(".neo-agent-picker-meta").textContent),
-        ["生图", "出片", "文案 / 分镜", "文案 / 分镜"], "行右侧标出这一发是哪一类");
+        ["生图", "出片", "文案 / 分镜", "文案 / 分镜", "配方"], "行右侧标出这一发是哪一类");
 
     keydown(input, "Enter");
     await flush(5);
     assert.equal(pickerRows().length, 0, "提交后弹层要收掉");
-    assert.equal(input.value, "", "选中之后 @ 与 query 那一段要从正文里吃掉");
+    assert.equal(input.value, "@skill:Krea2_出图", "选中之后正文里留一个 @category:name 的记号，@ 与 query 那一段换掉");
     assert.ok(!skillChip().hidden && skillChip().textContent.includes("Krea2 出图"),
         `点名的技能要留在上下文条那一颗上：${skillChip().textContent}`);
 
-    inputText(input, "一只橘猫");
+    inputText(input, "@skill:Krea2_出图 一只橘猫");
     click(runBtn());
     await sleep(20); await flush(40);   // 整条 SSE 要过宏任务：冲刷不够的话下一条用例点第二发时还在「跑着」
     assert.equal(agentCalls()[0].body.skill_id, "sk_gen", "请求体带点名技能");
+    assert.deepEqual(agentCalls()[0].body.mentions,
+        [{ category: "skill", id: "sk_gen", name: "Krea2 出图", source: "" }],
+        "记号在正文里，点名的那一项就随请求体交后端");
     assert.equal(localStorage.getItem("neo_studio_agent_skill"), null,
         "点名的技能不落本机：会话一没它就该没，不该在机器上留一份粘到下一条会话");
 
@@ -1587,6 +1590,8 @@ test("输入 @ 列出生成技能与正文型技能：生成在前、文案在�
     click(runBtn());
     await sleep(20); await flush(40);
     assert.equal(agentCalls()[1].body.skill_id, undefined, "取消之后不该再发这个字段");
+    assert.equal(agentCalls()[1].body.mentions, undefined,
+        "正文里的记号被换掉，交后端的那一项跟着掉，不留一个正文里已经没有了的点名");
 });
 
 test("@ 选中正文型技能：请求体带它的 id，那颗上写的是按它的流程走，不是「生成默认用它」", async () => {
@@ -1696,16 +1701,17 @@ test("读回另一条会话与断开续聊都收回点名技能：那条会话�
     assert.equal(agentCalls()[1].body.resume, undefined, "断开之后不带 resume");
 });
 
-test("技能目录回 409：@ 的弹层只给那一句无匹配，请求里没有 skill_id", async () => {
+test("候选接口回 409：@ 的弹层只给那一句无匹配，请求里没有 skill_id", async () => {
     mountStudio();
     mockRoute("/rs_prompts/skills", () => ({ __spec: true, status: 409, body: "offline" }));
+    mockRoute("/rs_recipes/list", () => ({ __spec: true, status: 409, body: "offline" }));
     await openStudio("#/gallery");
     mockAgentStream([{ kind: "content", text: "好的" }]);
 
     const input = dock().querySelector(".neo-agent-input");
     inputText(input, "@");
     await sleep(20);   // 同上一条用例：这一次 fetch 会走到 409
-    assert.equal(pickerRows().length, 0, "离线服务给不了候选，弹层里不许铺假技能");
+    assert.equal(pickerRows().length, 0, "离线服务给不了候选，弹层里不许铺假候选");
     assert.ok(document.querySelector(".neo-agent-picker-empty"), "空弹层只给那一句无匹配");
     keydown(input, "Escape");
     await flush(2);

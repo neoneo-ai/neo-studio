@@ -145,6 +145,10 @@ export function createAgentStage() {
         if (kind === "tool_call") {
             empty = false;
             status.textContent = "🔧 " + (frame.tool || "?");
+        } else if (kind === "tool_skipped") {
+            // 点名已经把这一步定好了，后端在调用点上直接跳过：状态行报一句跳过，不铺工具卡
+            empty = false;
+            status.textContent = "⤷ " + t("已跳过") + " " + (frame.tool || "?");
         } else if (kind === "status") {
             empty = false;
             status.textContent = frame.text || "";

@@ -1556,6 +1556,7 @@ const EN = {
     "⏳ 取消中": "⏳ Cancelling",
     "已暂停": "Paused",
     "已继续": "Resumed",
+    "已跳过": "Skipped",
     "暂停失败": "Pause failed",
     "继续失败": "Resume failed",
     "桌面端服务未就绪": "The desktop service is not ready",

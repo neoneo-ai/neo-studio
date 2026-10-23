@@ -2920,6 +2920,461 @@ class TestSkillProcessGates(unittest.TestCase):
         self.assertIn("答过的确认门", text)
 
 
+@skip
+class TestMentions(unittest.TestCase):
+    """输入框 @ 点名的那几项（技能 / 主模型 / LoRA / 图像与视频提示词 / 配方）：右栏交结构化那一份，
+    后端只认形态并把名字当事实写进系统提示词。认不认得到名字在循环里的工具上判，不在这里判。"""
+
+    def test_mentions_keep_the_six_categories_and_drop_the_rest(self):
+        kept = agent._clean_mentions([
+            {"category": "skill", "id": "sk_gen", "name": "Krea2 出图"},
+            {"category": "model", "id": "Krea2\\krea2_turbo.safetensors", "name": "krea2_turbo"},
+            {"category": "lora", "id": "krea2\\mood.safetensors", "name": "mood"},
+            {"category": "image_prompt", "id": "presets/红杯", "name": "presets/红杯", "source": "presets"},
+            {"category": "video_prompt", "id": "video/片头", "name": "video/片头"},
+            {"category": "recipe", "id": "cat_walk", "name": "cat_walk"},
+            {"category": "gallery_dir", "name": "角色图"},   # 不在这六类里
+            {"category": "model", "name": ""},               # 名字空的整条丢掉
+            "一句正文",                                      # 项不是对象
+        ])
+        self.assertEqual([m["category"] for m in kept],
+                         ["skill", "model", "lora", "image_prompt", "video_prompt", "recipe"])
+        self.assertEqual(kept[1]["id"], "Krea2\\krea2_turbo.safetensors")
+        self.assertEqual(kept[3]["source"], "presets")
+        self.assertEqual(agent._clean_mentions(None), [])
+        self.assertEqual(agent._clean_mentions("一串字"), [])
+        self.assertEqual(len(agent._clean_mentions(
+            [{"category": "model", "name": f"m{i}"} for i in range(40)])), agent.MENTION_LIMIT)
+
+    def test_the_same_name_in_one_category_is_named_once(self):
+        kept = agent._clean_mentions([{"category": "lora", "name": "mood"},
+                                      {"category": "lora", "name": "MOOD"},
+                                      {"category": "model", "name": "mood"}])
+        self.assertEqual([(m["category"], m["name"]) for m in kept],
+                         [("lora", "mood"), ("model", "mood")],
+                         "同一类里重名只点一次；跨类同名是两个对象")
+
+    def test_only_the_prompt_mentions_carry_a_body(self):
+        kept = agent._clean_mentions([
+            {"category": "image_prompt", "name": "红杯", "text": "一只红色陶瓷杯"},
+            {"category": "video_prompt", "name": "片头", "text": "x" * (agent.MENTION_TEXT_CLIP + 500)},
+            {"category": "recipe", "name": "cat_walk", "text": "配方正文"},
+            {"category": "model", "name": "krea2_turbo", "text": "不该带正文"},
+        ])
+        self.assertEqual(kept[0]["text"], "一只红色陶瓷杯")
+        self.assertEqual(len(kept[1]["text"]), agent.MENTION_TEXT_CLIP + 1, "超长正文裁到上限")
+        self.assertNotIn("text", kept[2], "配方有 load_recipe 可读，不随点名灌正文")
+        self.assertNotIn("text", kept[3])
+
+    def test_the_mention_block_names_each_item_and_stays_quiet_when_empty(self):
+        self.assertEqual(agent._mention_block([]), "")
+        text = agent._mention_block(agent._clean_mentions([
+            {"category": "model", "id": "Krea2\\krea2_turbo.safetensors", "name": "krea2_turbo"},
+            {"category": "lora", "id": "krea2\\mood.safetensors", "name": "mood"},
+            {"category": "image_prompt", "name": "红杯", "source": "presets", "text": "一只红色陶瓷杯"},
+            {"category": "recipe", "name": "cat_walk"},
+        ]))
+        self.assertIn("主模型=krea2_turbo", text)
+        self.assertIn("路径 Krea2\\krea2_turbo.safetensors", text)
+        self.assertIn("LoRA=mood", text)
+        self.assertIn("图像提示词=红杯（presets）", text)
+        self.assertIn("正文：一只红色陶瓷杯", text)
+        self.assertIn("配方=cat_walk", text)
+        self.assertIn("generate_image", text)
+        self.assertIn("list_models", text)
+        self.assertIn("director_spec", text)
+        self.assertIn("不能当 skill_id", text)
+
+    def test_the_system_prompt_carries_mentions_after_the_named_skill(self):
+        self.assertNotIn("@ 点名的对象", agent.system_prompt("act"))
+        text = agent.system_prompt("act", skill="named_skill",
+                                   mentions=[{"category": "model", "name": "krea2_turbo", "id": ""}])
+        self.assertIn("技能=named_skill", text)
+        self.assertIn("主模型=krea2_turbo", text)
+        self.assertLess(text.index("本轮用户点名的技能"), text.index("用 @ 点名的对象"),
+                        "点名技能那一段（skill_id 的用法）在前，点名对象的事实段在后")
+
+    def test_a_run_puts_the_named_names_into_this_turns_request(self):
+        seen = []
+
+        def chat(messages, tools):
+            seen.append(messages[0]["content"])
+            return {"content": "好了"}
+
+        body = {"text": "用这只杯出图", "mentions": [
+            {"category": "model", "id": "Krea2\\krea2_turbo.safetensors", "name": "krea2_turbo"},
+            {"category": "image_prompt", "name": "presets/红杯", "text": "一只红色陶瓷杯"}]}
+        with mock.patch.object(agent, "McpClient", lambda base, timeout=30:
+                               FakeClient({}, names=("neo_status",))), \
+             mock.patch.object(agent, "_chat", chat):
+            lines = _drive(agent.agent_run(TestRoutes._req(body)))
+        self.assertEqual(lines[-1], "[DONE]")
+        self.assertIn("主模型=krea2_turbo", seen[0])
+        self.assertIn("正文：一只红色陶瓷杯", seen[0])
+
+    def test_a_run_without_mentions_writes_no_mention_block(self):
+        seen = []
+
+        def chat(messages, tools):
+            seen.append(messages[0]["content"])
+            return {"content": "好了"}
+
+        with mock.patch.object(agent, "McpClient", lambda base, timeout=30:
+                               FakeClient({}, names=("neo_status",))), \
+             mock.patch.object(agent, "_chat", chat):
+            _drive(agent.agent_run(TestRoutes._req({"text": "出张图", "mentions": "一串字"})))
+        self.assertNotIn("用 @ 点名的对象", seen[0], "请求体里那一段形态不对就当没点名")
+
+
+    def test_prompt_mention_body_is_used_verbatim_and_must_not_be_regenerated(self):
+        # 斜杠预设名的正文要在系统提示词里逐字给到模型，且明令禁止拿名字调 generate_prompt 现编
+        body = "1个女孩，正面镜头，黑色商务西装外套，纯白色背景"
+        block = agent._mention_block(agent._clean_mentions([
+            {"category": "image_prompt", "name": "精美图像提示词/女孩衬衫正面",
+             "source": "presets", "text": body},
+        ]))
+        self.assertIn("图像提示词=精美图像提示词/女孩衬衫正面", block)
+        self.assertIn(f"正文：{body}", block)
+        self.assertIn("generate_image 的 prompt", block, "点名正文要逐字写进生图 prompt")
+        self.assertIn("不要拿名字去调 generate_prompt", block, "禁止拿名字现编一份丢掉正文")
+
+    def test_a_run_carries_the_preset_body_not_the_name_as_the_prompt(self):
+        seen = []
+
+        def chat(messages, tools):
+            seen.append(messages[0]["content"])
+            return {"content": "好了"}
+
+        body = "1个女孩，正面镜头，黑色商务西装外套，纯白色背景"
+        run_body = {"text": "生成一张图片", "mentions": [
+            {"category": "image_prompt", "name": "精美图像提示词/女孩衬衫正面",
+             "source": "presets", "text": body}]}
+        with mock.patch.object(agent, "McpClient", lambda base, timeout=30:
+                               FakeClient({}, names=("neo_status",))), \
+             mock.patch.object(agent, "_chat", chat):
+            lines = _drive(agent.agent_run(TestRoutes._req(run_body)))
+        self.assertEqual(lines[-1], "[DONE]")
+        self.assertIn(f"正文：{body}", seen[0], "交进本轮请求的是预设正文")
+        self.assertIn("图像提示词=精美图像提示词/女孩衬衫正面", seen[0])
+
+    def test_a_named_body_skips_generate_prompt_and_routes_to_generate_image(self):
+        """实测形状：@ 点名了带正文的图像提示词，模型把那份正文原样丢给 generate_prompt 现编再出图。
+        点名跳过闸在调用点上直接跳过这一发：不发 tool_call 卡（时间线上不留「执行过了」那一发），
+        那一发不进 MCP，理由交回模型照点名正文调 generate_image。"""
+        body = "1个女孩，正面镜头，黑色商务西装外套，纯白色背景，撩人感"
+        turns = [{"content": "用这份预设出图", "tool_calls": [{"id": "c1", "function": {
+            "name": "generate_prompt", "arguments": json.dumps({"text": body})}}]},
+            {"content": "照正文直接出图", "tool_calls": [{"id": "c2", "function": {
+                "name": "generate_image", "arguments": json.dumps({"prompt": body})}}]},
+            {"content": "好了"}]
+        client = FakeClient({"generate_image": {"images": [{
+            "url": "/view?filename=a.png&type=output", "filename": "a.png"}]}},
+            names=("generate_prompt", "generate_image"))
+        run = _runobj(client)
+        run.mentions = agent._clean_mentions([
+            {"category": "image_prompt", "name": "精美图像提示词/女孩衬衫正面",
+             "source": "presets", "text": body}])
+        with mock.patch.object(agent, "_chat", lambda m, t: turns.pop(0)):
+            frames = _run(lambda emit: agent._run_agent(client, "生成一张图片", emit, run))
+        self.assertFalse([f for f in frames if f["kind"] == "tool_call" and f["tool"] == "generate_prompt"],
+                         "被跳过的那一发不该发工具卡——发了就是看起来执行到了")
+        skipped = [f for f in frames if f["kind"] == "tool_skipped" and f["tool"] == "generate_prompt"]
+        self.assertEqual(len(skipped), 1, "跳过行要落在时间线上，认得出这一发被点名跳过了")
+        self.assertIn("generate_image", skipped[0]["text"], "跳过理由要把出图这条路指回去")
+        called = [n for n, _ in client.calls]
+        self.assertNotIn("generate_prompt", called, "被跳过的那一发不进 MCP")
+        self.assertIn("generate_image", called, "跳过闸放行后模型直接照正文出图")
+
+    def test_a_named_preset_name_reuse_skips_generate_prompt(self):
+        """实测形状（截图那条）：@ 点名了带正文的图像提示词，模型不抄正文，把预设名丢进
+        generate_prompt 现编——正文已在点名段里已知，这一发展开是冗余，同一条闸跳过它。"""
+        body = "一个穿着精致连衣裙的女孩，正面视角，神情宁静安详，高分辨率，8k 画质"
+        turns = [{"content": "", "tool_calls": [{"id": "c1", "function": {
+            "name": "generate_prompt", "arguments": json.dumps(
+                {"text": "精美图像提示词/女孩连衣裙正面宁静"})}}]},
+            {"content": "照正文直接出图", "tool_calls": [{"id": "c2", "function": {
+                "name": "generate_image", "arguments": json.dumps({"prompt": body})}}]},
+            {"content": "好了"}]
+        client = FakeClient({"generate_image": {"images": [{
+            "url": "/view?filename=a.png&type=output", "filename": "a.png"}]}},
+            names=("generate_prompt", "generate_image"))
+        run = _runobj(client)
+        run.mentions = agent._clean_mentions([
+            {"category": "image_prompt", "name": "精美图像提示词/女孩连衣裙正面宁静",
+             "source": "presets", "text": body}])
+        with mock.patch.object(agent, "_chat", lambda m, t: turns.pop(0)):
+            frames = _run(lambda emit: agent._run_agent(client, "生成一张图", emit, run))
+        self.assertFalse([f for f in frames if f["kind"] == "tool_call" and f["tool"] == "generate_prompt"],
+                         "模型传预设名现编的那一发同样不该发工具卡")
+        self.assertEqual(len([f for f in frames
+                              if f["kind"] == "tool_skipped" and f["tool"] == "generate_prompt"]), 1)
+        called = [n for n, _ in client.calls]
+        self.assertNotIn("generate_prompt", called, "按名字复用点名预设同样不进 MCP")
+        self.assertIn("generate_image", called)
+
+    def test_generate_prompt_on_a_free_idea_runs_despite_a_named_preset(self):
+        """点名了预设，模型扩写的却是用户的另一句想法（既不等于名字也不等于正文）：这一发不跳。"""
+        body = "一个穿着精致连衣裙的女孩，正面视角，神情宁静安详"
+        turns = [{"content": "", "tool_calls": [{"id": "c1", "function": {
+            "name": "generate_prompt", "arguments": json.dumps({"text": "一只在雪地里的柴犬"})}}]},
+            {"content": "好了"}]
+        client = FakeClient({}, names=("generate_prompt", "generate_image"))
+        run = _runobj(client)
+        run.mentions = agent._clean_mentions([
+            {"category": "image_prompt", "name": "精美图像提示词/女孩连衣裙正面宁静",
+             "source": "presets", "text": body}])
+        with mock.patch.object(agent, "_chat", lambda m, t: turns.pop(0)):
+            frames = _run(lambda emit: agent._run_agent(client, "画只柴犬", emit, run))
+        self.assertEqual([f for f in frames if f["kind"] == "tool_skipped"], [])
+        self.assertIn("generate_prompt", [n for n, _ in client.calls], "扩写用户想法照跑")
+
+    def test_a_named_model_skips_the_model_search_step(self):
+        """@ 点名主模型 = 主模型定了：模型照旧去 list_models 挑，那一发被点名跳过，不进 MCP。"""
+        turns = [{"content": "", "tool_calls": [{"id": "c1", "function": {
+            "name": "list_models", "arguments": json.dumps({"scope": "image"})}}]},
+            {"content": "照点名主模型出图", "tool_calls": [{"id": "c2", "function": {
+                "name": "generate_image", "arguments": json.dumps({"model": "krea2_turbo"})}}]},
+            {"content": "好了"}]
+        client = FakeClient({"generate_image": {"images": [{
+            "url": "/view?filename=a.png&type=output", "filename": "a.png"}]}},
+            names=("list_models", "generate_image"))
+        run = _runobj(client)
+        run.mentions = agent._clean_mentions([
+            {"category": "model", "id": "Krea2\\krea2_turbo.safetensors", "name": "krea2_turbo"}])
+        with mock.patch.object(agent, "_chat", lambda m, t: turns.pop(0)):
+            frames = _run(lambda emit: agent._run_agent(client, "出张图", emit, run))
+        self.assertEqual([f["kind"] for f in frames if f.get("tool") == "list_models"], ["tool_skipped"],
+                         "点名主模型后那一发 list_models 应被跳过成一行跳过，不发工具卡也不发结果")
+        self.assertNotIn("list_models", [n for n, _ in client.calls], "被跳过的那一发不进 MCP")
+        self.assertIn("generate_image", [n for n, _ in client.calls], "跳过挑模型后模型照点名主模型出图")
+
+    def test_named_lora_and_recipe_skip_their_search_steps(self):
+        """@ 点名 LoRA 跳过 list_models(group=loras)、@ 点名配方跳过 list_recipes：每一发都不进 MCP。"""
+        turns = [{"content": "", "tool_calls": [{"id": "c1", "function": {
+            "name": "list_models", "arguments": json.dumps({"group": "loras", "q": "mood"})}}]},
+            {"content": "", "tool_calls": [{"id": "c2", "function": {
+                "name": "list_recipes", "arguments": json.dumps({})}}]},
+            {"content": "交回来了"}]
+        client = FakeClient({}, names=("list_models", "list_recipes"))
+        run = _runobj(client)
+        run.mentions = agent._clean_mentions([
+            {"category": "lora", "id": "krea2\\mood.safetensors", "name": "mood"},
+            {"category": "recipe", "name": "cat_walk"}])
+        with mock.patch.object(agent, "_chat", lambda m, t: turns.pop(0)):
+            frames = _run(lambda emit: agent._run_agent(client, "跑配方", emit, run))
+        kinds = {f["tool"]: f["kind"] for f in frames if f.get("tool") in ("list_models", "list_recipes")}
+        self.assertEqual(kinds, {"list_models": "tool_skipped", "list_recipes": "tool_skipped"},
+                         "点名 LoRA / 配方后这两发发现步都该被跳过，不留执行痕迹")
+        self.assertEqual(client.calls, [], "被跳过的发现步一发都不进 MCP")
+
+    def test_a_named_skill_skips_the_skill_search_step(self):
+        """@ 点名技能 = 技能定了：模型照旧去 list_skills 挑，那一发被点名跳过，不进 MCP。"""
+        turns = [{"content": "", "tool_calls": [{"id": "c1", "function": {
+            "name": "list_skills", "arguments": json.dumps({})}}]},
+            {"content": "照点名技能出图", "tool_calls": [{"id": "c2", "function": {
+                "name": "generate_image", "arguments": json.dumps({"skill_id": "krea2_gen"})}}]},
+            {"content": "好了"}]
+        client = FakeClient({"generate_image": {"images": [{
+            "url": "/view?filename=a.png&type=output", "filename": "a.png"}]}},
+            names=("list_skills", "generate_image"))
+        run = _runobj(client)
+        run.user_skill = "krea2_gen"
+        run.mentions = agent._clean_mentions([{"category": "skill", "name": "krea2_gen"}])
+        with mock.patch.object(agent, "_chat", lambda m, t: turns.pop(0)):
+            frames = _run(lambda emit: agent._run_agent(client, "出张图", emit, run))
+        self.assertEqual([f["kind"] for f in frames if f.get("tool") == "list_skills"], ["tool_skipped"])
+        self.assertNotIn("list_skills", [n for n, _ in client.calls])
+        self.assertIn("generate_image", [n for n, _ in client.calls])
+
+    def test_a_skip_gate_opens_once_a_stubborn_model_is_not_stuck(self):
+        """认死的模型被跳过一次后照旧调同一个发现工具：闸第二次放行，不在闸上烧满轮次。"""
+        body = "1个女孩，正面镜头，纯白色背景"
+        turns = [{"content": "", "tool_calls": [{"id": "c1", "function": {
+            "name": "generate_prompt", "arguments": json.dumps({"text": body})}}]},
+            {"content": "", "tool_calls": [{"id": "c2", "function": {
+                "name": "generate_prompt", "arguments": json.dumps({"text": body})}}]},
+            {"content": "交回来了"}]
+        client = FakeClient({"generate_prompt": {"text": "改写版"}}, names=("generate_prompt",))
+        run = _runobj(client)
+        run.mentions = agent._clean_mentions([{"category": "image_prompt", "name": "红杯", "text": body}])
+        with mock.patch.object(agent, "_chat", lambda m, t: turns.pop(0)):
+            frames = _run(lambda emit: agent._run_agent(client, "出张图", emit, run))
+        self.assertEqual(len([f for f in frames if f["kind"] == "tool_skipped"]), 1, "跳过闸只跳一次")
+        self.assertEqual(len(client.calls), 1, "第二次放行，那一发进了 MCP")
+
+    def test_generate_prompt_on_the_users_idea_runs_without_the_gate(self):
+        """没点提示词正文、generate_prompt 的入参是用户想法时正常跑：闸只认逐字复用点名正文那一发。"""
+        body = "1个女孩，正面镜头，纯白色背景"
+        turns = [{"content": "", "tool_calls": [{"id": "c1", "function": {
+            "name": "generate_prompt",
+            "arguments": json.dumps({"text": "帮我把这个想法扩写成成品提示词"})}}]},
+            {"content": "交回来了"}]
+        client = FakeClient({"generate_prompt": {"text": "扩写版成品提示词"}},
+                            names=("generate_prompt",))
+        run = _runobj(client)
+        run.mentions = agent._clean_mentions([{"category": "image_prompt", "name": "红杯", "text": body}])
+        with mock.patch.object(agent, "_chat", lambda m, t: turns.pop(0)):
+            frames = _run(lambda emit: agent._run_agent(client, "出张图", emit, run))
+        self.assertEqual(len(client.calls), 1, "扩写用户想法那一发不该被跳过")
+        self.assertFalse([f for f in frames if f["kind"] == "tool_skipped"], "扩写用户想法不留跳过行")
+
+    def test_an_empty_body_mention_skips_nothing(self):
+        """点名里没有正文的提示词项（名字在、正文空）：generate_prompt 照跑，闸不认空正文。"""
+        turns = [{"content": "", "tool_calls": [{"id": "c1", "function": {
+            "name": "generate_prompt", "arguments": json.dumps({"text": "一只红色陶瓷杯"})}}]},
+            {"content": "交回来了"}]
+        client = FakeClient({"generate_prompt": {"text": "成品提示词"}}, names=("generate_prompt",))
+        run = _runobj(client)
+        run.mentions = agent._clean_mentions([{"category": "image_prompt", "name": "红杯"}])
+        with mock.patch.object(agent, "_chat", lambda m, t: turns.pop(0)):
+            frames = _run(lambda emit: agent._run_agent(client, "出张图", emit, run))
+        self.assertEqual(len(client.calls), 1, "空正文的点名不该把 generate_prompt 跳过")
+        self.assertFalse([f for f in frames if f["kind"] == "tool_skipped"])
+
+
+class TestMentionSkipMatrix(unittest.TestCase):
+    """每一类 @ 点名的跳过矩阵：这一类的点名只跳它那一发的发现步，别类和生成步一律不动。"""
+
+    DISCOVERY = ("list_models", "list_skills", "list_recipes")
+    # 跳过理由必须把这一发指回它该写的字段：逐字比这一个词就够，理由换了写法就报错
+    FIELD_WORDS = {"model": "model", "skill": "skill_id", "recipe": "recipe", "lora": "loras"}
+
+    def _gate(self, tool, args, mentions, twice=False):
+        """让模型连发同一发发现工具（twice 时发两回），看闸的落点：跳过几张卡、发几张卡、进几次 MCP。"""
+        calls = [{"id": f"c{i}", "function": {"name": tool,
+                  "arguments": json.dumps(args) if args else "{}"}}
+                 for i in range(2 if twice else 1)]
+        turns = [{"content": "", "tool_calls": calls}, {"content": "交回来了"}]
+        client = FakeClient({}, names=tuple(self.DISCOVERY) + ("generate_prompt", "generate_image"))
+        run = _runobj(client)
+        run.mentions = agent._clean_mentions(mentions)
+        with mock.patch.object(agent, "_chat", lambda m, t: turns.pop(0)):
+            frames = _run(lambda emit: agent._run_agent(client, "出张图", emit, run))
+        return ([f for f in frames if f["kind"] == "tool_skipped" and f["tool"] == tool],
+                [f for f in frames if f["kind"] == "tool_call" and f["tool"] == tool],
+                [n for n, _ in client.calls])
+
+    def test_list_models_group_says_which_mention_can_skip_it(self):
+        """本机挑主模型与挑 LoRA 都是 list_models：闸按 group / scope 判这一发在挑哪一类。"""
+        model = [{"category": "model", "name": "sd3.safetensors",
+                  "id": "diffusion_models/sd3.safetensors"}]
+        lora = [{"category": "lora", "name": "AddDetail", "id": "loras/AddDetail.safetensors"}]
+        cases = [("挑 LoRA 那一发，点名 LoRA 时跳过", "list_models", {"group": "loras", "q": "氛围"}, lora,
+                  (1, 0, []), "lora"),
+                 ("点名 LoRA 不替挑主模型那一发定", "list_models", {"group": "diffusion_models"}, lora,
+                  (0, 1, ["list_models"]), ""),
+                 ("点名主模型不替搜 LoRA 那一发定", "list_models", {"group": "loras", "q": "氛围"}, model,
+                  (0, 1, ["list_models"]), ""),
+                 ("挑主模型那一发，点名主模型时跳过", "list_models", {"group": "diffusion_models"}, model,
+                  (1, 0, []), "model"),
+                 ("text_encoders 是另一发，两边点名都不跳", "list_models", {"group": "text_encoders"},
+                  model + lora, (0, 1, ["list_models"]), ""),
+                 ("出片扫描里没有主模型与 LoRA 这一发", "list_models",
+                  {"scope": "video", "group": "diffusion_models"}, model, (0, 1, ["list_models"]), ""),
+                 ("不带 group 的整表扫描，两边点名任一边都算这一发", "list_models", {}, model,
+                  (1, 0, []), "model")]
+        for why, tool, args, mentions, want, word in cases:
+            skips, cards, called = self._gate(tool, args, mentions)
+            self.assertEqual((len(skips), len(cards), called), want, why)
+            if word:
+                self.assertIn(self.FIELD_WORDS[word], skips[0]["text"])
+
+    def test_a_skill_mention_without_the_slash_skill_skips_list_skills(self):
+        """点名来的技能（右栏点的，不是斜杠技能）同样跳 list_skills——闸认的是点名的那一类。"""
+        skips, cards, called = self._gate("list_skills", {"q": "出图"},
+                                          [{"category": "skill", "name": "krea2_gen"}])
+        self.assertEqual((len(skips), len(cards), called), (1, 0, []),
+                         "点名技能要让 list_skills 这一发不发卡、不进 MCP")
+
+    def test_named_video_prompt_skips_generate_prompt_on_body_and_on_name(self):
+        """视频预设与图像预设同一条闸：抄正文进 generate_prompt 和丢名字进去现编，两种都跳。"""
+        body = "镜头从海边推向灯塔，黄昏暖色，35mm 胶片质感"
+        for text in (body, "视频提示词/海边灯塔"):
+            skips, cards, called = self._gate("generate_prompt", {"text": text},
+                                              [{"category": "video_prompt",
+                                                "name": "视频提示词/海边灯塔",
+                                                "source": "presets", "text": body}])
+            self.assertEqual((len(skips), len(cards), called), (1, 0, []),
+                             f"视频预设按{'正文' if text == body else '名字'}复用同样要跳过")
+
+    def test_a_named_model_name_does_not_skip_generate_prompt(self):
+        """复用闸只认图像 / 视频点名的名字与正文：把点名模型名当 text 传进 generate_prompt 照跑。"""
+        skips, cards, called = self._gate(
+            "generate_prompt", {"text": "sd3.safetensors"},
+            [{"category": "model", "name": "sd3.safetensors",
+              "id": "diffusion_models/sd3.safetensors"}])
+        self.assertEqual((len(skips), len(cards), called), (0, 1, ["generate_prompt"]),
+                         "模型名不在复用判据里，这一发不该被跳过")
+
+    def test_a_mention_skips_only_its_own_category_step(self):
+        """各管各的：点名主模型不跳 list_skills，点名技能不跳 list_models，
+        点名配方不跳搜 LoRA 那一发，点名 LoRA 不跳 list_recipes。"""
+        named = [("list_skills", {}, [{"category": "model", "name": "sd3.safetensors",
+                                       "id": "diffusion_models/sd3.safetensors"}]),
+                 ("list_models", {"group": "diffusion_models"}, [{"category": "skill", "name": "krea2_gen"}]),
+                 ("list_models", {"group": "loras", "q": "氛围"}, [{"category": "recipe", "name": "五段短片"}]),
+                 ("list_recipes", {}, [{"category": "lora", "name": "AddDetail"}])]
+        for tool, args, mentions in named:
+            skips, cards, called = self._gate(tool, args, mentions)
+            self.assertEqual((len(skips), len(cards)), (0, 1),
+                             f"{tool}{args} 挑的不是点名的 {mentions[0]['category']} 那一类，不该跳")
+            self.assertEqual(called, [tool], "没跳的那一发要照旧进 MCP")
+
+    def test_a_discovery_tool_gate_opens_after_one_skip(self):
+        """认死的模型跳过一次之后照调同一个发现工具：闸第二次放行，不在闸上烧满轮次。"""
+        skips, cards, called = self._gate(
+            "list_models", {"q": "查"},
+            [{"category": "model", "name": "sd3.safetensors",
+              "id": "diffusion_models/sd3.safetensors"}], twice=True)
+        self.assertEqual((len(skips), len(cards)), (1, 1), "第一发跳过、第二发放行")
+        self.assertEqual(called, ["list_models"])
+
+    def test_the_mention_block_labels_a_video_prompt_and_carries_its_body(self):
+        body = "镜头从海边推向灯塔，黄昏暖色"
+        text = agent._mention_block(agent._clean_mentions([
+            {"category": "video_prompt", "name": "视频提示词/海边灯塔",
+             "source": "presets", "text": body}]))
+        self.assertIn("视频提示词=视频提示词/海边灯塔（presets）", text)
+        self.assertIn(f"正文：{body}", text, "视频预设的正文同样要逐字进点名段")
+
+    def test_all_six_categories_named_skips_every_discovery_step_once(self):
+        """六类一起点名（实测最重的形状）：三个发现步各跳一次、现编那一发按正文跳过，
+        发现步与 generate_prompt 全不进 MCP，时间线上只留出图那一张卡。"""
+        body = "一个穿红裙的女孩站在雨夜的街灯下，电影感逆光"
+        mentions = [{"category": "skill", "name": "krea2_gen"},
+                    {"category": "model", "name": "sd3.safetensors",
+                     "id": "diffusion_models/sd3.safetensors"},
+                    {"category": "lora", "name": "AddDetail", "id": "loras/AddDetail.safetensors"},
+                    {"category": "image_prompt", "name": "红裙雨夜", "source": "presets", "text": body},
+                    {"category": "video_prompt", "name": "雨夜街灯", "source": "presets", "text": body},
+                    {"category": "recipe", "name": "五段短片"}]
+        turns = [{"content": "", "tool_calls": [
+            {"id": f"c{i}", "function": {"name": t, "arguments": "{}"}}
+            for i, t in enumerate(("list_models", "list_skills", "list_recipes"), 1)]},
+            {"content": "", "tool_calls": [{"id": "g1", "function": {
+                "name": "generate_prompt", "arguments": json.dumps({"text": body})}}]},
+            {"content": "出好了", "tool_calls": [{"id": "g2", "function": {
+                "name": "generate_image", "arguments": json.dumps(
+                    {"prompt": body, "model": "sd3.safetensors",
+                     "loras": ["AddDetail"], "skill_id": "krea2_gen"})}}]},
+            {"content": "完"}]
+        client = FakeClient({"generate_image": {"images": [{
+            "url": "/view?filename=a.png&type=output", "filename": "a.png"}]}},
+            names=tuple(self.DISCOVERY) + ("generate_prompt", "generate_image"))
+        run = _runobj(client)
+        run.mentions = agent._clean_mentions(mentions)
+        with mock.patch.object(agent, "_chat", lambda m, t: turns.pop(0)):
+            frames = _run(lambda emit: agent._run_agent(client, "出张图", emit, run))
+        skips = {f["tool"] for f in frames if f["kind"] == "tool_skipped"}
+        self.assertEqual(skips, {"list_models", "list_skills", "list_recipes",
+                                 "generate_prompt"})
+        self.assertEqual([n for n, _ in client.calls], ["generate_image"],
+                         "被跳过的发现步与现编那一发一发都不进 MCP")
+        self.assertEqual([f["kind"] for f in frames if f.get("tool") == "generate_image"],
+                         ["tool_call", "tool_result"], "时间线上只留生成工具那一张卡")
+
+
+
 if __name__ == "__main__":
     unittest.main()
 

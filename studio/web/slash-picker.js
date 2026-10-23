@@ -4,6 +4,7 @@
  * ↑/↓/Home/End 移动高亮、Enter/Tab 提交当前高亮项、Esc 关闭。
  * 只过滤不自动提交：始终需要按一次键确认，不会边打边跳。
  * 两个调用方差在参数上：提示词页是 / 选技能写进技能下拉；智能体面板是 @ 选技能、选中交后端当本轮点名技能。
+ * tokenOf 给定时提交换成往输入框写一个可见记号（智能体面板的 @category:name），不给就照原样吃掉触发字符到光标那一段。
  * 技能分类与显示名由调用方交进来（filter / sort / rowText / categoryLabel）：本模块只认一个列表和一组回调，
  * 不 import skill.js 的分类表——面板那份候选集是「能跑的生图与出片技能 + 没有模板的正文型技能」，
  * 跟提示词页要显示的不是一批。
@@ -14,7 +15,8 @@ import { t } from "./js/core/i18n.js";
 
 function createSlashSkillPicker({ quickInput, listSkills, skillSelector = null, commit = null,
                                   triggerChar = "/", filter = null, sort = null,
-                                  rowText = null, categoryLabel = null, prefix = "rs-slash-picker" }) {
+                                  rowText = null, categoryLabel = null, tokenOf = null,
+                                  prefix = "rs-slash-picker" }) {
     let pickerEl = null; // 已打开的弹层句柄：防止重复叠加，关闭时置空
     const rowTextOf = rowText || ((s) => (s.needs_image ? "📷 " : "") + (s.cn_name || s.name || s.id || ""));
 
@@ -41,13 +43,17 @@ function createSlashSkillPicker({ quickInput, listSkills, skillSelector = null, 
                 skillSelector.value = skill.id;
                 skillSelector.dispatchEvent(new Event("change", { bubbles: true }));
             }
-            // 保留触发字符之前的内容与光标之后的内容，删除中间的 query
+            // 保留触发字符之前的内容与光标之后的内容，删除中间的 query；
+            // 调用方给了 tokenOf 就换上一个可见记号（智能体面板的 @category:name），
+            // 没给就是原样吃掉那一段（提示词页的 / 只写下拉，正文不留记号）
             const caret = quickInput.selectionStart || 0;
             const before = quickInput.value.slice(0, slashIndex);
             const after = quickInput.value.slice(caret);
-            quickInput.value = before + after;
+            const token = tokenOf ? String(tokenOf(skill) || "") : "";
+            quickInput.value = before + token + after;
+            const at = before.length + token.length;
             quickInput.focus({ preventScroll: true });
-            quickInput.setSelectionRange(before.length, before.length);
+            quickInput.setSelectionRange(at, at);
             quickInput.dispatchEvent(new Event("input", { bubbles: true }));
         };
 

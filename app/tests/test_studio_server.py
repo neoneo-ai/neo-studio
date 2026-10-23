@@ -256,8 +256,11 @@ class OfflineServiceTests(_ServerCase):
             status, body = self.get("/neo_agent/sessions")
             self.assertEqual(status, 200)
             rows = json.loads(body)["sessions"]
-            self.assertEqual([r["run_id"] for r in rows], [run_id])
-            self.assertEqual(rows[0]["text"], "上一轮的首句")
+            # 列表里本来就可能有这台机器上跑过的会话：认自己写的那一条在不在、摘要对不对，
+            # 别假设数据根是空的——用户跑过一轮智能体之后这条就该炸
+            mine = [r for r in rows if r["run_id"] == run_id]
+            self.assertEqual(len(mine), 1, "自己写的那一条要在最近列表里")
+            self.assertEqual(mine[0]["text"], "上一轮的首句")
             self.assertEqual(self.get(f"/neo_agent/session?run_id={run_id}")[0], 200)
         finally:
             session.unlink(missing_ok=True)

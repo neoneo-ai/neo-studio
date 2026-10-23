@@ -5,7 +5,8 @@
 tool_result / status / content / ask / paused / resumed / context / usage / plan_steps /
 focus / finish。运行一律由 LLM 规划并调工具；
 界面当前状态（当前页、当前导演配方、绘画页模式、素材库目录）随请求体进系统提示词，
-右栏的 @ 能点名技能（生成型直接当 skill_id，正文型走 generate_prompt），没点名时由 LLM 自己查 list_skills 定。
+右栏的 @ 能点名技能（生成型直接当 skill_id，正文型走 generate_prompt），没点名时由 LLM 自己查 list_skills 定；
+点名的主模型 / LoRA / 图像与视频提示词 / 配方随请求体 mentions 进系统提示词（见 _mention_block）。
 
 工具调用一律经进程内 MCP 客户端逐行走 mcp_server.serve 的 JSON-RPC，与外部
 智能体连 MCP 是同一套口径：右栏看到的工具表就是 MCP 的全集，出片链路（director_run /
@@ -121,6 +122,12 @@ DEFAULT_PREFS = {"preferred_skill": "", "preferred_size": "", "preferred_family"
 PREFS_TEXT_MAX = 400
 PREFS_NAME_RE = re.compile(r"^[A-Za-z0-9_.\-]{1,64}$")     # 技能 id 与模型家族名的形态
 PREFS_SIZE_RE = re.compile(r"^\d{3,4}x\d{3,4}$|^\d{1,2}:\d{1,2}$")    # 1024x1024 或 16:9
+# 输入框 @ 点名的那几项：右栏交 {category, id, name, source[, text]}，只认这六个类别。
+# 名字在本机认不认得到不在这里判（见 _clean_mentions）
+MENTION_CATEGORIES = ("skill", "model", "lora", "image_prompt", "video_prompt", "recipe")
+MENTION_LIMIT = 12          # 一次运行最多几条点名：这一段每一轮都整段进系统提示词
+MENTION_NAME_CLIP = 200
+MENTION_TEXT_CLIP = 1200    # 点名图像 / 视频提示词时随点名带回来的正文上限
 # 计划模式不许执行的工具：生成入队、配方写、取消在跑的任务，全是改状态的动作
 PLAN_BLOCKED_TOOLS = frozenset(("generate_image", "director_run", "segment_run", "assemble_run",
                                 "director_save", "director_copy", "director_keyframes", "cancel_task"))
@@ -167,6 +174,37 @@ SKILL_PROSE_ASK_RETRY = (
     "[error] 还是正文里的门，右栏依旧没有按钮：只发一个 ask_user 工具调用，把这一门的问句与"
     "几条选项写进参数，不要再抄一遍这段正文")
 SKILL_PROSE_NAG_MAX = 2      # 实测见过认死的那一发：催一次它把同一道门重抄成正文，第二次才发 ask_user
+# 点名跳过闸：@ 点名已经把这一发要挑的东西挑好了，实测里弱模型点完名照旧去跑发现步（点完主模型还
+# list_models、点完 LoRA 还 list_models(group=loras)、点完配方还 list_recipes、点完技能还 list_skills、
+# 点完带正文的提示词还把那份正文丢给 generate_prompt 现编），整发跑完就在时间线上多留一张"执行过了"的卡。
+# 这一发在调用点上直接跳过，连工具卡都不发，理由当工具结果交回模型照点名值出片。每个工具只跳一次：
+# 点名的主模型认不到、generate_image 拒回之后，模型第二发 list_models 照跑，不在闸上卡死
+MENTION_SKIP_TOOLS = {
+    "list_skills": "skill",
+    "list_recipes": "recipe",
+}
+MENTION_SKIP_NOTES = {
+    "model": "本轮已 @ 点名主模型：跳过挑模型这一发，把点名的主模型逐字写进 generate_image 的 model",
+    "skill": "本轮已 @ 点名技能：跳过挑技能这一发，把点名的技能 id 逐字写进生成工具的 skill_id",
+    "recipe": "本轮已 @ 点名配方：跳过列配方这一发，把点名的配方名逐字写进出片工具的 recipe",
+    "lora": "本轮已 @ 点名 LoRA：跳过检索 LoRA 这一发，把点名的 LoRA 逐字写进 generate_image 的 loras",
+    "prompt": "本轮 @ 点名的图像 / 视频提示词正文已经逐字写在系统提示词点名段里：跳过现编这一发，"
+              "直接调 generate_image 把那份正文逐字写进它的 prompt，不要现编、改写、扩写",
+}
+# 本机挑主模型与挑 LoRA 都是 list_models 这一发（group=diffusion_models / group=loras），点名的值只替
+# 它自己那一类定：text_encoders 与 vae 是另一发，出片扫描（scope=video）里没有主模型与 LoRA 这一发，
+# 都不在闸上。实测过点名主模型后模型去 group=loras 搜 LoRA，整支认到 model 上会把这一发误跳。
+def _list_model_cats(args: dict) -> set:
+    if str(args.get("scope") or "image").strip().lower() != "image":
+        return set()
+    group = str(args.get("group") or "").strip().lower()
+    if group == "loras":
+        return {"lora"}
+    if group == "diffusion_models":
+        return {"model"}
+    if group:
+        return set()
+    return {"model", "lora"}   # 不带 group 的整表扫描：这一发两样都在挑
 # 正文里的一道门长什么样（实测会话逐字取回）：一句要用户表态的话挨着 2-6 行编号选项。
 # 选项行带「标签：说明」也算——实测第 2 发的门就是「- A. 温馨治愈系：暖黄灯光、柔和阴影…」。
 # 认「表态句」不认「交代句」：报流程清单那一发的引导句（「这是这套流程要走的主要步骤：」）与交付说明
@@ -379,6 +417,9 @@ class _Run:
         # 点名技能的摘要（类别 / 说明 / 有无模板 / 引用文件清单）：整条运行取一次，随运行结束消失，
         # 不留跨运行的全局技能表——_skill_block 靠它认出「这一发是正文型技能，得走 generate_prompt」
         self.user_skill_info: dict = {}
+        # 输入框 @ 点名的那几项（技能 / 主模型 / LoRA / 图像与视频提示词 / 配方）：本轮指令，
+        # 与点名技能同一档近——技能那一项另有 skill_id 走生成工具，这一段进系统提示词报事实
+        self.mentions: list = []
         # 本轮轮次与提问上限：默认 MAX_TURNS / ASK_ROUNDS，点名正文型技能时放宽（见 _run_agent 取技能摘要那一处）
         self.max_turns = MAX_TURNS
         self.max_asks = ASK_ROUNDS
@@ -386,6 +427,9 @@ class _Run:
         self.media_urls: dict[str, dict] = {}
         # 缺素材闸的一次性位：点名技能 + 零素材那一轮，出片级工具只开口问一次，问过就放行
         self.media_gate_asked = False
+        # 点名跳过闸：本轮已经跳过一次的发现类工具名。@ 点名把"挑哪个"定死了，模型照旧去跑发现步时
+        # 那一发直接跳过；只跳一次，点名的值本机认不到被生成工具拒回之后，第二发发现步照跑，不在闸上卡死
+        self.mention_skipped: set[str] = set()
         # 收场原因：finish / answer / turns_exhausted / cancelled；循环没走到收场分支时落状态名
         self.reason = ""
 
@@ -1241,6 +1285,113 @@ def _prefs_block(prefs: dict) -> str:
               "偏好尺寸与技能支持的宽高对不上就按技能自己的来。")
 
 
+def _clean_mentions(raw) -> list:
+    """请求体里 @ 点名的那几项：右栏交来 {category, id, name, source[, text]}。
+
+    只认形态与上限——类别不在这六个里、名字空的整条丢掉，同一类别下重名的留第一条。
+    名字在本机认不认得到（模型装没装、配方在不在）不在这里判：list_models 与 list_recipes
+    在循环里，那一发才是认得到的地方。"""
+    out, seen = [], set()
+    for item in (raw if isinstance(raw, list) else [])[:MENTION_LIMIT]:
+        if not isinstance(item, dict):
+            continue
+        category = str(item.get("category") or "").strip()
+        name = _clip(str(item.get("name") or "").strip(), MENTION_NAME_CLIP)
+        if category not in MENTION_CATEGORIES or not name:
+            continue
+        key = (category, name.lower())
+        if key in seen:
+            continue
+        seen.add(key)
+        row = {"category": category, "name": name,
+               "id": _clip(str(item.get("id") or "").strip(), MENTION_NAME_CLIP * 2),
+               "source": _clip(str(item.get("source") or "").strip(), 40)}
+        text = _clip(str(item.get("text") or "").strip(), MENTION_TEXT_CLIP)
+        if text and category in ("image_prompt", "video_prompt"):
+            row["text"] = text   # 提示词预设没有按名字取正文的工具：正文随点名交进来
+        out.append(row)
+    return out
+
+
+def _named_prompt_bodies(mentions: list) -> list:
+    """本轮 @ 点名的图像 / 视频提示词里带正文的那几项，取成 (名字, 正文) 对。
+
+    复用闸认这两样：正文是用户逐字写好的画面；名字是模型爱复用的那一条——实测里模型不抄正文，
+    把预设名（"精美图像提示词/女孩连衣裙正面宁静"）丢进 generate_prompt 现编，正文已在点名段里
+    已知，这一发就是冗余。generate_prompt 入参归一化后等于任一项的名字或正文，就是在复用它，
+    不是扩写用户的想法。"""
+    return [(m["name"], m["text"]) for m in mentions
+            if m.get("text") and m.get("category") in ("image_prompt", "video_prompt")]
+
+
+def _is_named_body(text: str, bodies: list) -> bool:
+    """generate_prompt 的入参归一化（去空白）后是否逐字等于某份点名预设的名字或正文。
+
+    实测见过两种复用：把预设正文原样抄进 text，和把预设名丢进来现编。两种都在点名段里给出了
+    成品画面，逐字比对任一样就能认出这一发。"""
+    key = re.sub(r"\s+", "", str(text or ""))
+    if not key:
+        return False
+    return any(key == re.sub(r"\s+", "", v) for pair in bodies for v in pair)
+
+
+def _mention_skip_note(run, name: str, args: dict, named_bodies: list, prompt_skill: bool) -> str:
+    """这一发要挑 / 要现编的东西，本轮 @ 点名已经定好了：返回跳过理由，空串表示照常跑。
+
+    点名是本轮指令：@ 主模型 = 主模型定了，@ 带正文的提示词 = 那份画面定了。实测里弱模型点完名照旧
+    跑发现步，整发跑完就在时间线上多留一张"执行过了"的卡。这一发不进 MCP，连工具卡都不发。
+    只认"答案已经在点名里"的那一发：generate_prompt 只认逐字复用点名正文（扩写用户想法照跑），
+    list_* 只认它挑的那一类被点名的类，正文型技能走 generate_prompt 不跳。"""
+    cats = {m.get("category") for m in run.mentions}
+    if run.user_skill:
+        cats.add("skill")
+    if name == "generate_prompt":
+        if named_bodies and not prompt_skill and _is_named_body(args.get("text"), named_bodies):
+            return MENTION_SKIP_NOTES["prompt"]
+        return ""
+    if name == "list_models":
+        hit = _list_model_cats(args) & cats
+        cat = next((c for c in ("model", "lora") if c in hit), "")
+    else:
+        cat = MENTION_SKIP_TOOLS.get(name)
+    return MENTION_SKIP_NOTES[cat] if cat and cat in cats else ""
+
+
+def _mention_block(mentions: list) -> str:
+    """本轮输入框里 @ 点名的那几项：用户在右栏点出来的对象，比焦点链与偏好都近。
+
+    空的点名不产出这一段——每一轮都整段进请求，一段空的点名是噪声。"""
+    if not mentions:
+        return ""
+    labels = {"skill": "技能", "model": "主模型", "lora": "LoRA",
+              "image_prompt": "图像提示词", "video_prompt": "视频提示词", "recipe": "配方"}
+    lines = []
+    for m in mentions:
+        line = f"- {labels[m['category']]}={m['name']}"
+        if m.get("source"):
+            line += f"（{m['source']}）"
+        if m["category"] in ("model", "lora") and m.get("id"):
+            line += f"，路径 {m['id']}"
+        lines.append(_clip(line, FOCUS_CLIP))
+        if m.get("text"):
+            lines.append(_clip(f"  正文：{m['text']}", MENTION_TEXT_CLIP + 40))
+    return ("\n\n本轮用户用 @ 点名的对象（他在右栏里点出来的，是他已经定好的，不是要你挑的候选）：\n"
+            + "\n".join(lines)
+            + "\n- 点名就是把这一发的\"挑哪个\"替你定好了：照着点名的值直接用，跳过为挑它而存在的那一步——"
+              "点名主模型就不要再 list_models 挑模型，点名 LoRA 就不要再 list_models(group=loras) 检索，点名配方就不要再 "
+              "list_recipes 列配方，点名技能就不要再 list_skills 挑技能；这一发后端会把重复的发现步直接跳过。"
+              "点名的值本机认不到（模型没装、配方不在）时，生成工具会拒回并给出原因，那时再查表换一个、"
+              "说明换了哪个，不要静默换。\n"
+              + "- 主模型逐字写进 generate_image 的 model，LoRA 逐字写进它的 loras，配方名逐字写进出片工具的 "
+              "recipe_name，技能 id 逐字写进生成工具的 skill_id。\n"
+              + "- 图像 / 视频提示词照上面给出的正文逐字用：直接写进 generate_image 的 prompt，不要拿名字去调 "
+              "generate_prompt 现编一份，也不要改写、扩写、翻译这份正文；只有点名里没有正文的那一项，才照名字"
+              "自己写。\n"
+              + "- 配方先 director_spec 看清段数与每段的 skill_id，再 segment_run / director_run；改内容先"
+                " load_recipe 读它，不要另建一份同名的。\n"
+              + "- 主模型 / LoRA / 提示词 / 配方这些名字不能当 skill_id 传给生成工具。")
+
+
 def _skill_refs_of(info: dict) -> list:
     """引用文件的相对路径清单：只列子目录里的那几份（references/ 下的小文件）。
     顶层的 md 就是正文本身，generate_prompt 那一趟服务端已经把它读进系统提示词，列在这里没有信息量。"""
@@ -1344,12 +1495,12 @@ def _media_block(count: int) -> str:
 def system_prompt(mode: str = "act", context: str = "", focus: dict | None = None,
                   plan_steps: list | None = None, prefs: dict | None = None,
                   skill: str = "", skill_info: dict | None = None,
-                  image_count: int | None = None) -> str:
+                  image_count: int | None = None, mentions: list | None = None) -> str:
     """系统提示词 = 静态提示词 + 界面状态 + 焦点链 + 用户级偏好 + 本轮点名技能（+ 本轮素材数 + 计划模式说明 + 执行清单）。
     焦点链与执行清单要在每次 LLM 请求前重算：本轮生成工具刚立的事实、清单上刚划掉的那一条
     都得在下一轮请求里可见（见 _run_agent）。执行清单只在执行模式进提示词——
     计划模式这一轮正在写它，还没有清单可照跑。image_count 是本轮真进请求体的附件图数，
-    None 是不写这一段（离线取提示词的调用与测试）。"""
+    None 是不写这一段（离线取提示词的调用与测试）。mentions 是本轮 @ 点名的那几项，排在点名技能之后。"""
     try:
         text = SYSTEM_PROMPT_FILE.read_text(encoding="utf-8")
     except OSError as e:
@@ -1358,6 +1509,7 @@ def system_prompt(mode: str = "act", context: str = "", focus: dict | None = Non
     text += _focus_block(focus or {})
     text += _prefs_block(prefs or {})
     text += _skill_block(skill, skill_info)
+    text += _mention_block(mentions or [])
     if image_count is not None:
         text += _media_block(image_count)
     if mode == "plan":
@@ -1483,11 +1635,12 @@ async def _run_agent(client, text: str, emit, run, mode: str = "act",
         if prompt_skill:
             run.max_turns = PROMPT_SKILL_MAX_TURNS
             run.max_asks = PROMPT_SKILL_ASK_ROUNDS
+    named_bodies = _named_prompt_bodies(run.mentions)   # 复用闸要比对的点名提示词正文，整条运行取一次
     image_count = len(images or [])   # 本轮真进请求体的附件图数：模型唯一的素材事实来源
     messages = [{"role": "system", "content": system_prompt(mode, context, run.focus,
                                                             run.plan_steps, run.prefs,
                                                             run.user_skill, run.user_skill_info,
-                                                            image_count)}]
+                                                            image_count, run.mentions)}]
     messages += list(history or [])
     messages.append(_user_message(text, images or []))
     run.messages = messages       # 同一个 list 对象：循环里的 append 逐轮可见，半途收场也留得下
@@ -1525,7 +1678,8 @@ async def _run_agent(client, text: str, emit, run, mode: str = "act",
         # 焦点链、用户偏好与执行清单逐轮重注入：本轮刚立的事实与清单上刚划掉的一条要在这一轮
         # 的请求里可见，而 messages[0] 是循环开头按当时的状态写的
         messages[0]["content"] = system_prompt(mode, context, run.focus, run.plan_steps, run.prefs,
-                                               run.user_skill, run.user_skill_info, image_count)
+                                               run.user_skill, run.user_skill_info, image_count,
+                                               run.mentions)
         # 上下文在每一轮的边界上压：一次长会话里的技能全表与长工具返回是逐轮攒起来的，
         # 不压就是整请求 400，报错点在 provider 那一侧，比少一轮难查得多
         tokens = _compress_messages(messages)
@@ -1576,6 +1730,17 @@ async def _run_agent(client, text: str, emit, run, mode: str = "act",
                 args = json.loads(fn.get("arguments") or "{}")
             except ValueError:
                 args = {}
+            if mode == "act" and name not in run.mention_skipped:
+                skip = _mention_skip_note(run, name, args, named_bodies, prompt_skill)
+                if skip:
+                    # @ 点名已经把这一发要挑的东西挑好了：在发 tool_call 帧之前跳过，时间线上
+                    # 不留「执行过了」那一发，理由当工具结果交回模型照点名值往下出片
+                    run.mention_skipped.add(name)
+                    await emit({"kind": "tool_skipped", "tool": name,
+                                "text": _clip(skip, RESULT_CLIP), "id": tc.get("id", "")})
+                    messages.append({"role": "tool", "tool_call_id": tc.get("id", ""),
+                                     "name": name, "content": skip})
+                    continue
             if mode == "act" and name in REF_TOOLS:
                 # 注入要在发 tool_call 帧之前：时间线的工具卡上得看得见这次真用了哪些参考图
                 await _apply_references(client, name, args, run)
@@ -1822,6 +1987,13 @@ async def agent_run(request):
     # 认不认得到这个技能不在这里判——技能目录在 skill.py 那一层，循环里那次 list_skills 才是认得到的地方
     raw_skill = str(body.get("skill_id") or "").strip()
     run.user_skill = raw_skill if PREFS_NAME_RE.match(raw_skill) else ""
+    # mentions 是输入框 @ 点名的那几项（六类一起交）：这里只收净形态，认名字那一发在循环里的工具上
+    run.mentions = _clean_mentions(body.get("mentions"))
+    for m in run.mentions:
+        # 提示词点名只交回名字、正文为空 = 右栏那条 load_prompt 没取回正文：
+        # 系统提示词里只剩名字，模型就照名字现编一份，把预设正文丢了。报出来好定位是哪条没取到。
+        if m["category"] in ("image_prompt", "video_prompt") and not m.get("text"):
+            logger.info(f"[Neo Studio] agent 点名 {m['category']} 正文为空，本轮提示词只有名字：{m['name'][:40]}")
     if record is not None:
         saved_focus = record.get("focus")
         if isinstance(saved_focus, dict) and not resume_from:

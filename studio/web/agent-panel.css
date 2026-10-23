@@ -381,6 +381,11 @@
     color: var(--neo-vsc-warn);
 }
 
+/* 被点名跳过的发现步：要比计划行更弱，时间线上认得出是跳过、不是跑过 */
+.neo-agent-step-skipped {
+    opacity: .65;
+}
+
 .neo-agent-tool {
     display: flex;
     flex-direction: column;
@@ -649,7 +654,7 @@
     outline: none;
 }
 
-/* 输入区底栏一行：附件图 + MCP 入口 + 计划 / 执行（模式开关靠右，运行中锁）。
+/* 输入区底栏一行：@ 点名 + 附件图 + MCP 入口 + 计划 / 执行（模式开关靠右，运行中锁）。
    允许换行：栏子窄到放不下整排时按钮整块换到下一行，主按钮不会被裁掉 */
 .neo-agent-toolbar {
     display: flex;
@@ -660,6 +665,7 @@
 
 /* 标签由 agent-panel.js 的 labelSpans 拆成图标 + 文字两段：整串标签不许在钮内折行 */
 .neo-agent-toolbar .neo-agent-run,
+.neo-agent-toolbar .neo-agent-mention,
 .neo-agent-toolbar .neo-agent-attach,
 .neo-agent-toolbar .neo-agent-entry,
 .neo-agent-toolbar .neo-agent-mode-btn {
@@ -699,7 +705,8 @@
     cursor: default;
 }
 
-/* 附件图与 MCP 入口：同一条扁平规则，靠 hover 的淡底给出可点反馈，不各写一份 */
+/* 点名、附件图与 MCP 入口：同一条扁平规则，靠 hover 的淡底给出可点反馈，不各写一份 */
+.neo-agent-mention,
 .neo-agent-attach,
 .neo-agent-entry {
     height: 22px;
@@ -712,6 +719,7 @@
     cursor: pointer;
 }
 
+.neo-agent-mention:hover,
 .neo-agent-attach:hover,
 .neo-agent-entry:hover,
 .neo-agent-entry:focus-visible {

@@ -4,8 +4,9 @@
  * 聊天区挂桌面端右栏：一次「✨ 生成」交给后端智能体（POST /neo_agent/run 的 SSE 时间线：
  * 计划 / 工具卡 / 状态 / 产物图 / 暂停 / 继续 / 最终回答），后端那一侧是 MCP 客户端，工具经
  * mcp_server 的 JSON-RPC 走，右栏不直接调后端函数；界面当前状态（当前页 /
- * 当前导演配方 / 绘画页模式 / 素材库目录）由宿主随请求体交给后端进系统提示词；输入框里的 @ 只点名技能
- * （候选是后端真能跑的生图与出片技能，选中随请求体 skill_id 交后端）。MCP 区
+ * 当前导演配方 / 绘画页模式 / 素材库目录）由宿主随请求体交给后端进系统提示词；输入框里的 @ 点名技能、
+ * 主模型、LoRA、图像 / 视频提示词与配方（候选源见 mention-picker.js，选中往正文写一个 @category:name 的可见记号，
+ * 技能那一发另随请求体 skill_id 交后端，六类一起随请求体 mentions 交后端进系统提示词）。MCP 区
  * （注册表 / 连接 / 工具调用）交给设置页的「MCP 服务」栏，右栏只在输入框底栏留一个跳转入口；用户级偏好走同一条路，表单在设置页「智能体偏好」栏，右栏的 ⚙ 与焦点链上的「设为偏好」都只做跳转。
  * 输入框按 Cline 的口径做：只读上下文条、附件图 chip、文本框，底栏一行是 📎 附件图、🔌 MCP、
  * 「📝 计划 / ⚡ 执行」与右下角主按钮（生成 / 暂停 / 继续）；整行「⏹ 取消」只在跑起来之后出现。
@@ -29,6 +30,7 @@ import { Lightbox } from "./lightbox.js";
 import { grabDataType, copyGalleryToInput } from "./media-transfer.js";
 import { createQuickInputHistory } from "./quick-input-history.js";
 import { createSlashSkillPicker } from "./slash-picker.js";
+import { createMentionSource, mentionName, mentionToken } from "./mention-picker.js";
 import { createFramePlayer } from "./live-preview.js";
 import { DIRECTOR_RECIPE_SAVED_EVENT } from "./director.js";
 
@@ -254,8 +256,8 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
     const input = mkEl("textarea", "neo-agent-input");
     input.rows = 2;
     // 占位两行都压到 faint 一档：第一行说这一栏收什么，第二行只留操作短语，长句留在悬停说明里
-    input.placeholder = t("描述要生成或改写的提示词\n粘贴 / 拖入图片 · ↑↓ 翻历史 · @ 选技能");
-    input.title = t("描述要生成的提示词，或要改写的方向；可粘贴 / 拖入图片（含素材库卡片），↑ ↓ 翻历史输入，@ 直接选技能");
+    input.placeholder = t("描述要生成或改写的提示词\n粘贴 / 拖入图片 · ↑↓ 翻历史 · @ 点名");
+    input.title = t("描述要生成的提示词，或要改写的方向；可粘贴 / 拖入图片（含素材库卡片），↑ ↓ 翻历史输入，@ 点名技能 / 主模型 / LoRA / 图像与视频提示词 / 配方");
     // 框高跟着内容走：rows 只给初值，长提示词撑出来的高度在窗口里不会自己缩回，
     // 拖拽手柄一并禁掉（agent-panel.css 的 resize: none），发送与 Esc 后收回初值
     function fitInput() {
@@ -283,6 +285,11 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
     input.addEventListener("input", () => {
         const caret = input.selectionStart || 0;
         if (caret > 0 && input.value[caret - 1] === "@") openSkillPicker();
+    });
+    // 正文一改就把结构化那几项对齐一遍：记号被删、被粘贴覆盖、被 ↑↓ 顶成历史原文，
+    // 交后端的那一份都要跟着掉，不能留一个正文里已经没有了的点名
+    input.addEventListener("input", () => {
+        mentionSettled = mentionSettled.then(() => syncMentions());
     });
 
     // Cline 的口径：取消只在跑起来之后存在，整行铺在文本框上面，空闲时这一行不占位
@@ -388,33 +395,132 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
             : tf("本会话点名技能：{skill}；点 ✕ 取消", { skill: skillName || skillId });
         renderSkillFloat();
     }
-    const openSkillPicker = createSlashSkillPicker({
-        quickInput: input,
-        triggerChar: "@",
-        prefix: "neo-agent-picker",
-        commit: (s) => {
-            const kind = s.gen_video ? "video" : isGenSkill(s) ? "gen" : "prompt";
-            setSkill(String(s.id), String(s.cn_name || s.name || s.id || ""), kind);
-        },
-        filter: (s) => (isGenSkill(s) || isPromptSkill(s)) && s.available !== false,
-        rowText: (s) => (s.gen_video ? "🎬 " : isGenSkill(s) ? "🖼️ " : "🧩 ") + skillDisplayName(s),
-        categoryLabel: (s) => (s.gen_video ? t("出片") : isGenSkill(s) ? t("生图") : t("文案 / 分镜")),
-        sort: (a, b) => (Number(!isGenSkill(a)) - Number(!isGenSkill(b)))
-            || (Number(!!a.gen_video) - Number(!!b.gen_video))
-            || String(a.cn_name || a.name || a.id).localeCompare(String(b.cn_name || b.name || b.id)),
-        // 技能目录是生成侧的接口：桌面端离线服务不打包提示词预设，这一发回 409 时交回空表，
-        // 弹层里只剩那一句无匹配，铺不出假候选（能力表见 app/studio_caps.py）
+    // @ 点名的对象：六类候选（技能 / 主模型 / LoRA / 图像提示词 / 视频提示词 / 配方）汇成一份列表。
+    // 选中往正文写一个 @category:name 的可见记号，随请求体交后端的是结构化那一份 {category, id, name, source}；
+    // 两份共用同一条口径——正文里删掉记号，交后端的那一项跟着掉（syncMentions 逐次对齐文本）
+    const PROMPT_MENTION_CLIP = 1200;   // 点名提示词的正文上限：这一段整段进系统提示词，长预设吃掉整轮预算
+    const MENTION_RANK = { skill: 0, model: 1, lora: 2, image_prompt: 3, video_prompt: 4, recipe: 5 };
+    // 记号吃洗过的名字（空格与冒号进候选名就断词），交后端的那一份吃原名：两口径分在两处写死
+    const mentionNameOf = (m) => String(m.name || m.id || "");
+    const mentionTokenOf = (m) => mentionToken(m.category, mentionNameOf(m));
+    const mentionIcon = (m) => (m.category === "skill"
+        ? (m.raw.gen_video ? "🎬 " : isGenSkill(m.raw) ? "🖼️ " : "🧩 ")
+        : m.category === "model" ? "💿 " : m.category === "lora" ? "🎨 "
+        : m.category === "recipe" ? "📚 " : m.category === "video_prompt" ? "🎬 " : "📝 ");
+    const mentions = [];
+    let knownMentions = [];   // 最近一次 @ 弹层的候选：手打的记号靠它对回 id 与 source
+    // 记号对齐是异步取候选的：发送那一步先等这一串落地，正文里的记号才不会漏交
+    let mentionSettled = Promise.resolve();
+    let mentionTextSettled = Promise.resolve();   // 图像 / 视频提示词正文取回的链：发快照前先等到手
+    const mentionSource = createMentionSource({
+        getJson, postJson,
+        // 技能目录是生成侧的接口：桌面端离线服务不打包提示词预设与配方扫描，那几条回 409 时
+        // 各自交回空表，弹层里只剩那一句无匹配，铺不出假候选（能力表见 app/studio_caps.py）
         listSkills: async () => {
             const res = await getJson("/rs_prompts/skills");
             return Array.isArray(res) ? res : [];
         },
+    });
+    // 配方与技能那两份是带 TTL 的缓存：导演页存过一份新配方、智能体写过一份，
+    // 下一次 @ 的候选就要看得到那个名字，不能等缓存自己过期
+    window.addEventListener(DIRECTOR_RECIPE_SAVED_EVENT, () => mentionSource.clear());
+    // 技能那一类沿用原来那套候选口径：能跑的生图与出片技能 + 没有模板的正文型技能，
+    // task 类点了没有产出，缺插件的技能后端跑不动
+    const isMentionable = (m) => m.category !== "skill"
+        || ((isGenSkill(m.raw) || isPromptSkill(m.raw)) && m.raw.available !== false);
+    function clearMentions() { mentions.length = 0; pendingTokens.clear(); }
+    const pendingTokens = new Set();
+    function loadMentionText(item) {
+        // 提示词预设没有按名字取正文的工具：选中这一发把正文带回来，交后端才有内容可用；取不到就只交名字
+        // 这条 fetch 是异步的：挂到 mentionTextSettled 链上，settleAttachments 发快照前先等它落地，
+        // 不然正文里的 @image_prompt/@video_prompt 就会交上去，text 却还是空的（占位没被正文填满）。
+        const p = postJson("/rs_prompts/load_prompt", { name: item.id })
+            .then((d) => {
+                const body = String((d && d.text) || "");
+                if (body) item.text = body.slice(0, PROMPT_MENTION_CLIP);
+            })
+            .catch(() => {});
+        mentionTextSettled = mentionTextSettled.then(() => p);
+        return p;
+    }
+    function addMention(m) {
+        const token = mentionToken(m.category, mentionName(m.name || m.id || ""));
+        if (mentions.some((x) => mentionTokenOf(x) === token)) return;
+        const item = { category: m.category, id: String(m.id || ""), name: mentionNameOf(m),
+                       source: String(m.source || "") };
+        mentions.push(item);
+        if (m.category === "image_prompt" || m.category === "video_prompt") loadMentionText(item);
+    }
+    function addKnownMention(cat, nm) {
+        // 记号里的名字是洗过的（Krea2 出图 → Krea2_出图），对候选要按同一条口径洗一遍
+        const hit = knownMentions.find((m) => mentionTokenOf(m) === mentionToken(cat, nm));
+        addMention(hit || { category: cat, id: nm, name: nm });
+    }
+    const MENTION_TOKEN_RE = /@(skill|model|lora|image_prompt|video_prompt|recipe):([^\s@:]+)/g;
+    // 正文里的记号是唯一的真源：弹层选中、手打、从旧会话粘进来都走这一条对齐，
+    // 交后端的那一份永远与正文里在的那几处一致（setInput("") 清空正文时也一样收干净）
+    async function syncMentions() {
+        const found = [...input.value.matchAll(MENTION_TOKEN_RE)];
+        for (let i = mentions.length - 1; i >= 0; i--) {
+            if (!found.some(([tok]) => tok === mentionTokenOf(mentions[i]))) {
+                mentions.splice(i, 1);
+            }
+        }
+        const missing = found.filter(([tok]) => {
+            if (mentions.some((m) => mentionTokenOf(m) === tok)) return false;
+            // 同一段记号只补一次：异步取候选那几发会并发跑到这里
+            const key = tok + "\u0000" + found.findIndex(([t]) => t === tok);
+            if (pendingTokens.has(key)) return false;
+            pendingTokens.add(key);
+            return true;
+        });
+        if (!missing.length) return;
+        try { knownMentions = await mentionSource.items(); } catch { knownMentions = []; }
+        for (const [, cat, nm] of missing) addKnownMention(cat, nm);
+    }
+    const openSkillPicker = createSlashSkillPicker({
+        quickInput: input,
+        triggerChar: "@",
+        prefix: "neo-agent-picker",
+        commit: (m) => {
+            if (m.category === "skill") {
+                const kind = m.raw.gen_video ? "video" : isGenSkill(m.raw) ? "gen" : "prompt";
+                setSkill(String(m.id), skillDisplayName(m.raw), kind);
+            }
+            addMention(m);
+        },
+        filter: isMentionable,
+        rowText: (m) => mentionIcon(m) + (m.category === "skill" ? skillDisplayName(m.raw) : mentionNameOf(m)),
+        categoryLabel: (m) => (m.category === "skill"
+            ? (m.raw.gen_video ? t("出片") : isGenSkill(m.raw) ? t("生图") : t("文案 / 分镜"))
+            : t(m.label)),
+        sort: (a, b) => (MENTION_RANK[a.category] - MENTION_RANK[b.category])
+            // 技能一类里生成技能在前（出图的又在出片前），正文型在后：点了跑不动的那类排在能跑的后面
+            || (a.category === "skill"
+                ? (isGenSkill(a.raw) ? Number(!!a.raw.gen_video) : 2)
+                - (isGenSkill(b.raw) ? Number(!!b.raw.gen_video) : 2) : 0)
+            || mentionNameOf(a).localeCompare(mentionNameOf(b)),
+        tokenOf: (m) => mentionToken(m.category, mentionNameOf(m)),
+        listSkills: mentionSource.items,
     });
     // 主按钮在右下角，一个钮三态（生成 / 暂停 / 继续）——空闲时它就是发送键
     const run = mkEl("button", "neo-agent-run");
     run.type = "button";
     labelSpans(run, t("✨ 生成"));
     run.title = t("✨ 生成");
-    toolbar.append(attach, fileInput, mcpEntry, modes, run);
+    // 底栏最左是 @ 点名：点一下把 @ 写进光标处，随后就是那套弹层（与直接打 @ 同一条路径）
+    const mentionBtn = mkEl("button", "neo-agent-mention");
+    mentionBtn.type = "button";
+    labelSpans(mentionBtn, "@ " + t("点名"));
+    mentionBtn.title = t("@ 点名技能 / 主模型 / LoRA / 图像与视频提示词 / 配方：选中写进正文，随这一发交后端");
+    mentionBtn.onclick = () => {
+        const at = input.selectionStart || 0;
+        input.value = input.value.slice(0, at) + "@" + input.value.slice(at);
+        input.setSelectionRange(at + 1, at + 1);
+        input.focus({ preventScroll: true });
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+    };
+    toolbar.append(mentionBtn, attach, fileInput, mcpEntry, modes, run);
     // 输入卡：上下文条 / 取消行 / 文本框 / 附件缩略图 / 底栏收进同一块圆角 field，整排控件落在同一个坑里。
     // 附件缩略图铺在文本框下面（同 Cline 口径：图落在正文下面，不进卡顶挤走上下文条）
     const field = mkEl("div", "neo-agent-field");
@@ -458,6 +564,8 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
     // 否则「粘完图立刻点生成」会把图留在请求体外——后端收到的就是零附件那一发，模型看不见图
     const inflight = new Set();
     async function settleAttachments() {
+        await mentionSettled;   // 手打的记号还在异步对回结构化那一份：等它落地再抄，别让正文里的点名漏交
+        await mentionTextSettled;   // 图像 / 视频提示词的正文要按名字取回来，发快照前先等到手，否则 text 漏交
         while (inflight.size) await Promise.allSettled(Array.from(inflight));
     }
     function renderChips() {
@@ -710,6 +818,13 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
                 row.textContent = "🧭 " + text;
                 steps.appendChild(row);
             },
+            // 点名已经把这一步定好了：这一发被后端直接跳过。铺一行 dim 的「跳过」，不铺工具卡，
+            // 时间线上不留「执行过了」那一发
+            skipped(name, text) {
+                const row = mkEl("div", "neo-agent-step neo-agent-step-skipped");
+                row.textContent = "⤷ " + t("已跳过") + " " + name + "：" + text;
+                steps.appendChild(row);
+            },
             toolCall(name, args) {
                 card = mkEl("div", "neo-agent-tool");
                 const title = mkEl("div", "neo-agent-tool-title");
@@ -915,7 +1030,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
     const resumeBar = mkEl("button", "neo-agent-resumebar");
     resumeBar.type = "button";
     resumeBar.hidden = true;
-    resumeBar.onclick = () => { resumeId = ""; restartFrom = 0; setSkill("", ""); renderResumeBar(); };
+    resumeBar.onclick = () => { resumeId = ""; restartFrom = 0; setSkill("", ""); clearMentions(); renderResumeBar(); };
     field.insertBefore(resumeBar, cancelBar);
 
     // 失败收场那一行：输入框在提交这一步就清空了，LLM 502 这类一次性失败要用户把整段提示词重打
@@ -946,6 +1061,10 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
         }
         retryBar.hidden = true;
         setInput(lastTurn.text);
+        // 记号随原文一起回填，结构化那一份也要接回来：setInput 那一下已把当前这份对齐掉，
+        // 不补回来的话重发的那一发只剩正文里的记号、交不出点名的对象
+        clearMentions();
+        (lastTurn.mentions || []).forEach((m) => mentions.push({ ...m }));
         setMode(lastTurn.mode);
         clearAttachments();
         lastTurn.files.forEach((a) => attachments.push({ ...a }));
@@ -1073,6 +1192,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
         if (kind === "in") view.turn(f.text || "", f.attachments || []);
         else if (kind === "plan") view.plan(f.text || "");
         else if (kind === "tool_call") view.toolCall(f.tool || "?", f.text || "");
+        else if (kind === "tool_skipped") view.skipped(f.tool || "?", f.text || "");
         else if (kind === "status") view.status(f.text || "", "");
         else if (kind === "tool_result") view.toolResult(f.text || "", f.media || []);
         else if (kind === "ask") view.ask(f.text || "", f.options || [], "");
@@ -1153,8 +1273,9 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
         frames.forEach((f) => replayFrame(view, f));
         restartFrom = 0;
         resumeId = rec.run_id;
-        // 换了一条会话就换了一整套点名：上一条会话点的那个技能不属于这一条，那颗收回
+        // 换了一条会话就换了一整套点名：上一条会话点的那些不属于这一条，那颗与那几项跟着收回
         setSkill("", "");
+        clearMentions();
         renderResumeBar();
         transcript.scrollTop = transcript.scrollHeight;
     }
@@ -1172,7 +1293,8 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
         transcript.appendChild(empty);
         setConversationTitle("");   // 栏头回「智能体」，舞台页眉跟着回默认
         resumeId = "";
-        setSkill("", "");   // 收回空态就是没有会话：上一条会话点名的技能跟着消失
+        setSkill("", "");   // 收回空态就是没有会话：上一条会话点名的技能与那几项跟着消失
+        clearMentions();
         retryBar.hidden = true;   // 收回空态就收掉失败那一行
         renderResumeBar();
         renderRecent();
@@ -1195,8 +1317,8 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
 
     // 智能体路径：一次请求换一路 SSE。界面当前状态随请求体进后端系统提示词，
     // mode 决定计划还是执行，images 是附件图，preview_side 是这一轮要的采样预览档（舞台那档大、右栏那档紧凑，关掉是 0），
-    // skill_id 是输入框 @ 点名的技能（没点名就不给这个字段）
-    async function runAgent(answer, text, planMode, images, context, markFail) {
+    // skill_id 是输入框 @ 点名的技能（没点名就不给这个字段），mentions 是这一发 @ 点名的那几项（六类一起交，没点名就不给）
+    async function runAgent(answer, text, planMode, images, context, markFail, mentionList) {
         const view = agentTimeline(answer);
         activeView = view;
         controller = new AbortController();
@@ -1212,6 +1334,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
                 if (kind === "in") return;
                 if (kind === "plan") view.plan(frame.text || "");
                 else if (kind === "tool_call") view.toolCall(frame.tool || "?", frame.text || "");
+                else if (kind === "tool_skipped") view.skipped(frame.tool || "?", frame.text || "");
                 else if (kind === "status") view.status(frame.text || "", frame.task_id || "", frame.preview);
                 else if (kind === "tool_result") {
                     view.toolResult(frame.text || "", frame.media || []);
@@ -1242,7 +1365,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
             // 后端两条失败口径都汇到这一条（raw [ERROR] 行与 content 帧里的 [ERROR] 前缀），
             // 用户主动取消的断流不走这条，那一行不会在取消后铺出来
             onError: (err) => { markFail(); view.error(String(err || t("生成失败"))); },
-        }, { text, mode: planMode, images, context, preview_side: previewSide && previewSide(), resume: resumeId || undefined, from: restartFrom || undefined, skill_id: skillId || undefined });
+        }, { text, mode: planMode, images, context, preview_side: previewSide && previewSide(), resume: resumeId || undefined, from: restartFrom || undefined, skill_id: skillId || undefined, mentions: mentionList && mentionList.length ? mentionList : undefined });
         return mediaCount;
     }
 
@@ -1308,6 +1431,9 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
         // 按文件名给后端（与绘画页参考图同一口径），本地粘贴 / 选图仍是 data URI
         const images = attachments.map((a) => (a.data ? { kind: "data", data: a.data } : { kind: "input", value: a.input }));
         if (!text && !images.length) return;
+        // 点名的那几项在这一步先抄一份：setInput 清空正文会连着把结构化那一份一起对齐掉，
+        // 交后端与失败重发用的都是发出这一发时的快照
+        const turnMentions = mentions.map((m) => ({ ...m }));
         inputHistory.record(text);   // 只给图不给字的一轮没有原文可记
         // 发出去的话交进时间线留档，输入框立刻清出来：一条长提示词留在框里只挡下一句
         setInput("");
@@ -1320,7 +1446,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
         const context = ctxOff ? null : (getContext && getContext()) || null;
         // 附件图在这一步就清空了，文本与模式也一样：失败收场要原样重发，就得在这一发交出去之前
         // 把三份都留在面板里。重发是新的一轮，不带 resume 与「从这条消息重开」
-        lastTurn = { text, mode: planMode, files: attachments.map((a) => ({ ...a })) };
+        lastTurn = { text, mode: planMode, files: attachments.map((a) => ({ ...a })), mentions: turnMentions };
         let failed = false;
         let produced = 0;   // 这一发真交出去的产物数
         if (empty.parentNode) empty.remove();
@@ -1330,7 +1456,8 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
             + (planMode === "plan" ? " · " + t("计划") : "")
             + (resumeId ? " · " + t("接上次会话") : "")
             + (restartFrom ? " · " + tf("从第 {n} 条消息重开", { n: restartFrom }) : "")
-            + (images.length ? " · " + tf("附件图 {n} 张", { n: images.length }) : " · " + t("不带附件图"));
+            + (images.length ? " · " + tf("附件图 {n} 张", { n: images.length }) : " · " + t("不带附件图"))
+            + (turnMentions.length ? " · " + tf("点名 {names}", { names: turnMentions.map((m) => m.name).slice(0, 3).join("、") }) : "");
         const ask = mkEl("div", "neo-agent-ask");
         ask.textContent = text;
         turn.appendChild(meta);
@@ -1358,7 +1485,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
         // 运行中锁模式：一轮跑到一半换模式等于把工具表从脚下抽走，计划要留到下一轮
         modeBtns.forEach((b) => { b.disabled = true; });
         try {
-            produced = await runAgent(answer, text, planMode, images, context, () => { failed = true; });
+            produced = await runAgent(answer, text, planMode, images, context, () => { failed = true; }, turnMentions);
         } catch (e) {
             failed = true;
             answer.textContent = String(e);

@@ -4,6 +4,18 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **An `@`-mention skips the discovery step it already settled, and skips it visibly.** A named main model, LoRA,
+  recipe, skill, or prompt body decides "which one" for this turn, yet a weak model still ran the discovery step after
+  naming it — `list_models` after `@model`, `search_loras` after `@lora`, `list_recipes` after `@recipe`,
+  `list_skills` after `@skill`, and `generate_prompt` re-writing a named prompt body — leaving a "🔧 tool ran" card in
+  the timeline for a step that was already decided. The gate now intercepts that call **before** the `tool_call` frame:
+  the step is skipped, MCP is never reached, and the timeline lands a dim「⤷ 已跳过」line (`tool_skipped` frame,
+  `studio/web/agent-panel.js` / `agent-stage.js`), not a tool card. The note tells the model to write the named value
+  verbatim into the generation tool. The gate fires once per tool per run, so a named value the machine rejects
+  (model not installed, recipe missing) lets the model run the discovery step on the next call instead of looping.
+  Covered by `studio/tests/test_agent.py` (`TestMentions`: each category skips, stubborn model not stuck, user-idea
+  `generate_prompt` and empty-body mentions run).
+
 - **MCP stdio servers run with UTF-8 pipes.** A python MCP server writes stdout and stderr in the locale code page, so on a
   Chinese Windows the JSON-RPC body and the "缺依赖，请先 pip install mcp" tail came out as mojibake once the desktop
   process ran in UTF-8 mode. The spawn now pins `PYTHONUTF8=1` in the child environment (`app/mcp_client.py`), a
