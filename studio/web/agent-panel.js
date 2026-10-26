@@ -531,7 +531,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
 
     // 界面当前状态：宿主只交当前选中页签自己那一栏（studio-app.js 的 agentContext 负责裁剪），
     // 这一条把它拼成一行给用户看，随请求体原样交后端
-    const PAGE_NAMES = { gallery: "素材库", director: "导演页", paint: "绘画页", skills: "技能页", settings: "设置页" };
+    const PAGE_NAMES = { home: "首页", gallery: "素材库", director: "导演页", paint: "绘画页", skills: "技能页", settings: "设置页" };
     function currentContext() {
         const ctx = (getContext && getContext()) || {};
         const parts = [];

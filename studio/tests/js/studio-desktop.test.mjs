@@ -111,15 +111,36 @@ test("就绪路径不刷新页面：刷新会清掉未保存的编辑", () => {
                  "页面只剩 F5 热键一处刷新，就绪路径不许刷新");
 });
 
-test("顶栏标题是回首页（素材页）的链接", async () => {
+test("顶栏标题是回首页的链接", async () => {
     const html = fs.readFileSync(path.join(webDir, "studio", "index.html"), "utf8");
     const logo = html.match(/<a class="ns-logo" href="([^"]+)" title="([^"]+)">/);
     assert.ok(logo, "顶栏标题应为可点击链接");
-    assert.equal(logo[1], "#/gallery", "应指向默认素材页");
+    assert.equal(logo[1], "#/home", "应指向首页");
     assert.match(logo[2], /首页/, "应有返回首页提示");
     const css = fs.readFileSync(path.join(webDir, "studio", "style.css"), "utf8");
     assert.match(css, /\.ns-logo \{[^}]*text-decoration: none/, "链接不应带下划线");
     assert.match(css, /\.ns-logo:hover/, "应有 hover 反馈");
+});
+
+test("默认落地首页：意图卡片挂满主区，素材卡直达素材页", async () => {
+    mountStudio();
+    await import("../../web/studio/studio-app.js?homeLanding=1");
+    await flush();
+    const home = document.querySelector(".ns-page.ns-home");
+    assert.ok(home, "首页视图应挂载");
+    assert.ok(!home.classList.contains("ns-hidden"), "首页应是当前显示的视图");
+    assert.ok(document.querySelector('.ns-tabs a[data-tab="home"]').classList.contains("active"),
+              "顶栏首页签应高亮");
+    assert.equal(home.querySelector("h1").textContent, "今天想创作什么？");
+    assert.deepEqual([...home.querySelectorAll(".ns-home-card-title")].map((e) => e.textContent),
+        ["生成图片", "图片编辑", "导演视频", "素材库", "技能", "设置"]);
+
+    const libCard = [...home.querySelectorAll(".ns-home-card")][3];
+    libCard.click();
+    await flush();
+    assert.ok(home.classList.contains("ns-hidden"), "跳素材页后首页应收起");
+    const shown = [...document.querySelectorAll("#ns-view .ns-page")].find((p) => !p.classList.contains("ns-hidden"));
+    assert.ok(shown?.querySelector(".ns-gallery-host"), "素材卡应直达挂着素材库宿主的素材页");
 });
 
 test("启动页样式随文档一并带上：右栏与素材页不靠运行时注入", () => {

@@ -179,7 +179,7 @@ no floating window, no ✕ and no "from canvas" export button.
   highlight and `#1a3a5a` small blue buttons, which is a whole palette away from the shell's grey + `#7aa2ff`.
   The shell remaps that set onto shell tokens inside the `.ns-skills` scope (`#17171b` page, `#202024` title
   bars, `#2a2a2e` + `#444` inputs and buttons, the settings tab's translucent blue for the selected row), so
-  Assets / Paint / Director / Settings / Skills sit on one palette. The skill modal and the node skill picker
+  Home / Assets / Paint / Director / Settings / Skills sit on one palette. The skill modal and the node skill picker
   inside ComfyUI keep the modal palette.
 - The modal's "🗂 Skill Management" title bar is hidden on the page: the header tab already names the page, and
   nothing here is a draggable window.

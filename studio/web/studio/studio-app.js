@@ -1,4 +1,4 @@
-// Neo Studio 外桌面端：hash 路由（#/gallery #/director #/skills #/settings）+ 各视图挂载。
+// Neo Studio 外桌面端：hash 路由（#/home #/gallery #/paint #/director #/skills #/settings）+ 各视图挂载。
 // 功能全部复用 web/ 现有模块（import-map 把 scripts/* 指到 shim）：
 // - 素材：NeoGallery（gallery.js 注册的扩展，侧栏 tab 的 render 直接挂进主区）
 // - 导演：配方面板（recipes.js）+ 整片生成面板（POST /neo_studio/director/generate）
@@ -677,6 +677,7 @@ async function buildDirector(el) {
 // ====== 绘画页：左 = 素材库（常驻，与素材页同一个画廊）；右 = 文生图 / 图片编辑面板（模式切换，一次铺满整栏） ======
 const PAINT_SIDE_COL_KEY = "neo_studio_paint_side_col";
 const PAINT_MODE_KEY = "neo_studio_paint_mode";
+let paintModeCtl = null;    // buildPaint 建页时交出的模式切换入口：首页卡片直达文生图 / 图片编辑
 
 function buildPaint(el) {
     const page = $el("div", { className: "ns-paint" });
@@ -723,6 +724,7 @@ function buildPaint(el) {
         notifyAgentCtx();
         try { localStorage.setItem(PAINT_MODE_KEY, mode); } catch { /* 偏好写不进不影响用 */ }
     };
+    paintModeCtl = setMode;
     try { setMode(localStorage.getItem(PAINT_MODE_KEY) === "edit" ? "edit" : "text"); } catch { setMode("text"); }
 
     // 绘画面板内嵌进本视图（同导演编辑器 setDirectorEditorHost 语义）：两块面板进页就铺好，
@@ -738,6 +740,46 @@ function buildPaint(el) {
     openGenMaterialDialog(app.neoGallery, { container: textHost });
     openImageEditDialog(app.neoGallery, null, "", { container: editHost });
     ready = true;
+}
+
+// ====== 首页：意图卡片 —— 大字标题 + 生成三卡 + 素材三卡，点卡直达对应页 ======
+function openPaintMode(mode) {
+    paintModeCtl?.(mode);   // 绘画页常驻：先把面板切到卡片承诺的模式，再跳页
+    go("paint");
+}
+
+function homeCard(iconName, title, sub, onClick) {
+    return $el("button", { className: "ns-home-card", type: "button", onclick: onClick }, [
+        $el("span", { className: "ns-home-card-icon" }, [icon(iconName, 22)]),
+        $el("span", { className: "ns-home-card-text" }, [
+            $el("span", { className: "ns-home-card-title", textContent: t(title) }),
+            $el("span", { className: "ns-home-card-sub", textContent: t(sub) }),
+        ]),
+        icon("chevron", 16),
+    ]);
+}
+
+function buildHome(el) {
+    el.classList.add("ns-home");
+    el.append(
+        $el("div", { className: "ns-home-hero" }, [
+            $el("h1", {}, [t("今天想"), $el("span", { className: "ns-home-accent", textContent: t("创作") }), t("什么？")]),
+            $el("p", { textContent: t("一句话到一段成片，全部在你自己的电脑上完成") }),
+            $el("button", { className: "ns-home-cta", type: "button", textContent: t("✨ 一句话出图"), onclick: () => openPaintMode("text") }),
+        ]),
+        $el("h2", { className: "ns-home-section", textContent: t("开始创作") }),
+        $el("div", { className: "ns-home-grid" }, [
+            homeCard("sparkles", "生成图片", "描述画面，直接出图", () => openPaintMode("text")),
+            homeCard("pencil", "图片编辑", "拖入素材，写下要改成什么样", () => openPaintMode("edit")),
+            homeCard("film", "导演视频", "多段配方，生成整片视频", () => go("director")),
+        ]),
+        $el("h2", { className: "ns-home-section", textContent: t("素材与配置") }),
+        $el("div", { className: "ns-home-grid" }, [
+            homeCard("folder", "素材库", "浏览与管理全部生成素材", () => go("gallery")),
+            homeCard("wand", "技能", "管理预设与技能包", () => go("skills")),
+            homeCard("gear", "设置", "生成默认值与界面语言", () => go("settings")),
+        ]),
+    );
 }
 
 // ====== 技能页：统一技能管理（与顶栏「🗂 技能管理」同组件）直接挂满主区，无弹窗外桌面端 ======
@@ -1823,8 +1865,10 @@ function initAgentDock() {
 }
 
 function route() {
-    const name = (location.hash || "#/gallery").replace(/^#\//, "").split("?")[0] || "gallery";
-    // 导演页 / 绘画页视图常驻：内嵌宿主要在素材页第一次点「🎬 新建导演配方 / 🖼️ 生成素材 / 🖼️ 图片编辑」之前就注册好
+    const name = (location.hash || "#/home").replace(/^#\//, "").split("?")[0] || "home";
+    // 首页 / 导演页 / 绘画页视图常驻：首页卡片直达后两页，内嵌宿主要在第一次点
+    // 「🎬 新建导演配方 / 🖼️ 生成素材 / 🖼️ 图片编辑」之前就要注册好
+    ensureView("home", buildHome);
     ensureView("director", buildDirector);
     ensureView("paint", buildPaint);
     if (name === "skills") ensureView("skills", buildSkills);
@@ -1838,7 +1882,7 @@ function route() {
             if (tab === "agent") agentPrefs.prefill(query);   // 焦点链的技能与宽高照深链落进表单
         }
     }
-    else ensureView("gallery", buildGallery);
+    else if (name !== "home") ensureView("gallery", buildGallery);
     showView(name);
 }
 

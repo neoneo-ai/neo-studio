@@ -17,6 +17,24 @@ export const LANGS = [
 const EN = {
     // 顶栏 🅝 菜单
     "🎬 新影工坊": "🎬 Neo Studio",
+    // Studio 首页（意图卡片）
+    "首页": "Home",
+    "今天想": "What do you want to ",
+    "创作": "create",
+    "什么？": " today?",
+    "一句话到一段成片，全部在你自己的电脑上完成":
+        "From one line to a finished video - all on your own machine.",
+    "✨ 一句话出图": "✨ Generate from one line",
+    "开始创作": "Create",
+    "素材与配置": "Assets & Setup",
+    "生成图片": "Generate Images",
+    "描述画面，直接出图": "Describe a picture, get the picture",
+    "拖入素材，写下要改成什么样": "Drop in an asset and describe the edit",
+    "导演视频": "Direct a Video",
+    "多段配方，生成整片视频": "Chain recipe segments into a finished video",
+    "浏览与管理全部生成素材": "Browse and manage every generated asset",
+    "管理预设与技能包": "Manage presets and skill packs",
+    "生成默认值与界面语言": "Generation defaults and UI language",
     // 绘画页
     "🖼️ 文生图": "🖼️ Text to Image",
     "🎨 图片编辑": "🎨 Image Edit",

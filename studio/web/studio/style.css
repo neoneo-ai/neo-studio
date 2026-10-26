@@ -752,3 +752,41 @@ body {
 .ns-agent-stage-answer { font-size: 13px; max-height: 180px; overflow: auto; }
 .ns-agent-stage-answer img { max-width: 100%; }
 
+/* ====== 首页：意图卡片（大字标题 + 生成三卡 + 素材三卡） ====== */
+.ns-home { padding: 30px 28px 56px; }
+.ns-home > * { max-width: 1020px; margin-left: auto; margin-right: auto; }
+.ns-home-hero { text-align: center; padding: 16px 0 8px; }
+.ns-home-hero h1 { margin: 0 0 8px; font-size: 27px; font-weight: 700; color: #fff; }
+.ns-home-accent { color: var(--ns-accent); }
+.ns-home-hero p { margin: 0 0 18px; color: var(--ns-dim); }
+.ns-home-cta {
+    border: 1px solid var(--ns-primary); border-radius: 8px;
+    background: var(--ns-primary); color: #fff;
+    font-size: 14px; padding: 8px 22px; cursor: pointer;
+}
+.ns-home-cta:hover { background: var(--ns-primary-hover); }
+.ns-home-section {
+    margin: 24px 0 10px; font-size: 12px; font-weight: 600;
+    letter-spacing: .08em; color: var(--ns-dim);
+}
+.ns-home-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.ns-home-card {
+    display: flex; align-items: center; gap: 14px; text-align: left;
+    background: var(--ns-panel); border: 1px solid var(--ns-border);
+    border-radius: 10px; padding: 16px 18px; color: var(--ns-fg); cursor: pointer;
+}
+.ns-home-card:hover { border-color: var(--ns-accent); background: var(--ns-raised); }
+.ns-home-card-icon {
+    flex: none; display: flex; align-items: center; justify-content: center;
+    width: 40px; height: 40px; border-radius: 8px;
+    background: var(--ns-primary-soft); color: var(--ns-accent);
+}
+.ns-home-card-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.ns-home-card-title { font-size: 15px; font-weight: 600; color: #fff; }
+.ns-home-card-sub {
+    font-size: 12px; color: var(--ns-dim);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ns-home-card > svg:last-child { flex: none; margin-left: auto; color: var(--ns-dim); }
+@media (max-width: 900px) { .ns-home-grid { grid-template-columns: 1fr 1fr; } }
+

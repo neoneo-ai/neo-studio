@@ -43,7 +43,7 @@ test("Studio 顶栏标题点击后回首页", async (t) => {
         await page.goto(STUDIO_URL, { waitUntil: "networkidle", timeout: 30000 });
         await page.evaluate(() => { location.hash = "#/director"; });
         await page.click(".ns-logo");
-        await page.waitForFunction(() => location.hash === "#/gallery", null, { timeout: 15000 });
+        await page.waitForFunction(() => location.hash === "#/home", null, { timeout: 15000 });
         assert.ok(page.url().includes("neo-studio"), `回首页不应离开 Studio（${page.url()}）`);
     } finally {
         await page.close();
@@ -60,7 +60,10 @@ test("Studio 页面：四视图加载、版本信息、导演生成面板", asyn
         // 版本号不在顶栏（只在下面设置「关于」里查）
         assert.equal(await page.locator("#ns-version").count(), 0, "顶栏不应再显示版本号");
 
-        // 默认视图 = 素材：NeoGallery 挂载
+        // 落地页从首页进素材页，NeoGallery 挂载（首配方自动选中会打开编辑器跳导演页，落地不断言，显式导航）
+        await page.evaluate(() => { location.hash = "#/home"; });
+        await page.waitForSelector(".ns-home .ns-home-card", { timeout: 15000 });
+        await page.evaluate(() => { location.hash = "#/gallery"; });
         await page.waitForSelector("#ns-view .neo-gallery-panel", { timeout: 15000 });
 
         // 导演视图：整片生成面板 + 配方面板
