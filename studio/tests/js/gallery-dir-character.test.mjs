@@ -1,4 +1,4 @@
-// Neo Gallery 目录管理：角色图目录标记（👤）——提交 set_character，行内亮起「角色图」徽标，画廊据此把
+// Neo Gallery 目录管理：角色图目录标记（）——提交 set_character，行内亮起「角色图」徽标，画廊据此把
 // 多选建配方切成全参考（见 gallery-director-recipe.test.mjs）。
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -51,7 +51,7 @@ function setup(characterDirs = [], customDirs = []) {
     return state;
 }
 
-test("👤 标记角色图目录：提交小写无关的 token，行内亮起徽标与常亮按钮", async () => {
+test("标记角色图目录：提交小写无关的 token，行内亮起徽标与常亮按钮", async () => {
     setup();
     const gallery = await makeGallery();
     await gallery.settings.buildDirModal(gallery);
@@ -76,7 +76,7 @@ test("👤 标记角色图目录：提交小写无关的 token，行内亮起徽
     assert.ok(!gallery.characterDirs.has("cloud presets/角色杂图"));
 });
 
-test("👤 已标记目录：打开弹窗就带徽标（设置里读到的 character_dirs 回显）", async () => {
+test("已标记目录：打开弹窗就带徽标（设置里读到的 character_dirs 回显）", async () => {
     setup(["cloud presets/角色杂图"]);
     const gallery = await makeGallery();
     await gallery.settings.buildDirModal(gallery);

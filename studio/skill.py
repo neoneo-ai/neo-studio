@@ -511,7 +511,7 @@ def _skill_agent_core(skill_id: str, text: str, images=None, context=None, enabl
         result = _run_llm_inference(system, text, max_tokens, images=images or None, use_remote=remote_mode, enable_thinking=enable_thinking)
         if audit_kind == "h3" and result:
             if on_step:
-                on_step("🔍 格式自检中…")
+                on_step("格式自检中…")
             return _h3_audit_and_repair(result, skill_id, text, context, max_tokens, on_step=on_step)
         return result or ""
 
@@ -567,7 +567,7 @@ def _skill_agent_core(skill_id: str, text: str, images=None, context=None, enabl
         raise RuntimeError(f"Skill '{skill_id}' produced no output")
     if audit_kind == "h3":
         if on_step:
-            on_step("🔍 格式自检中…")
+            on_step("格式自检中…")
         content = _h3_audit_and_repair(content, skill_id, text, context, max_tokens, on_step=on_step)
     return content
 
@@ -659,7 +659,7 @@ def _skill_agent_core_stream(skill_id: str, text: str, images=None, context=None
             what.append("读取技能引用文件")
         if ref_images:
             what.append(f"查看 {len(ref_images)} 张已连参考图")
-        yield {"text": f"⏳ 生成中（按需{'、'.join(what)}）…", "kind": "status"}
+        yield {"text": f"生成中（按需{'、'.join(what)}）…", "kind": "status"}
     steps = []
     content = _skill_agent_core(skill_id, text, images, context, enable_thinking=enable_thinking,
                                 reasoning_effort=reasoning_effort, on_step=steps.append)
@@ -680,7 +680,7 @@ def run_skill_agent_stream(skill_id: str, text: str, images=None, context=None, 
         # 思考模型可能把 max_tokens 预算全花在 reasoning 上，导致正文为空。
         # 此时给一条可见提示，避免前端在思考结束后静默无响应（最终只保留正文）。
         if not saw_content:
-            yield {"text": "[未生成最终提示词：模型思考占用了全部 token 预算。请在 ✨ 菜单将「思考深度」设为「不思考」，或调大该技能的 max_tokens 后重试。]", "kind": "content"}
+            yield {"text": "[未生成最终提示词：模型思考占用了全部 token 预算。请在 菜单将「思考深度」设为「不思考」，或调大该技能的 max_tokens 后重试。]", "kind": "content"}
     except Exception as e:
         logger.error(f"Skill agent error for '{skill_id}': {e}")
         yield {"text": f"[ERROR] {str(e)}", "kind": "content"}

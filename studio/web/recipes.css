@@ -773,7 +773,7 @@
     color: #fff;
 }
 
-/* LLM 配置弹窗：标题栏 🤖 打开，居中模态。z-index 高于编辑器浮层（9700），
+/* LLM 配置弹窗：标题栏 打开，居中模态。z-index 高于编辑器浮层（9700），
    低于 combo 下拉（9847）与技能选择窗（9846）：弹窗内模型/LoRA 下拉须可见。 */
 .neo-director-llm-overlay {
     position: fixed;
@@ -869,8 +869,8 @@
     color: #7ce38b;
 }
 
-/* 顶栏 🅝 菜单的统一设置弹窗：与 Studio 设置页同款版式 —— 左栏 tab、右栏内容，一张卡里两栏。
-   外壳复用 .neo-director-llm-*，这里只加宽面板并给体内两栏；标题栏 🤖 的 LLM 配置弹窗
+/* 顶栏 菜单的统一设置弹窗：与 Studio 设置页同款版式 —— 左栏 tab、右栏内容，一张卡里两栏。
+   外壳复用 .neo-director-llm-*，这里只加宽面板并给体内两栏；标题栏 的 LLM 配置弹窗
    共用同一外壳、单表单，靠 .neo-settings-modal 这层隔离，宽度与体内布局都不受它影响 */
 .neo-settings-modal {
     width: min(760px, 94vw);
@@ -1190,7 +1190,7 @@
     min-height: 0;    /* 卡片填满 segs；提示词区伸缩，首帧资产区钉在卡片底部 */
 }
 
-/* 多帧单次分块标记：会合并进同一次 ref2va 运行的连续兼容段（左边框 + 首段 ⚡ 徽章） */
+/* 多帧单次分块标记：会合并进同一次 ref2va 运行的连续兼容段（左边框 + 首段 徽章） */
 .neo-director-seg.neo-director-chunk {
     border-left: 3px solid #9c6ade;
 }
@@ -1386,7 +1386,7 @@
     margin-left: 0;   /* 贴右由 ♻ 承担 */
 }
 
-/* 「🎨 图片分镜」卡片的生成按钮 + 状态：并入「生图模式 / 生图技能」行最右侧（不独占一行） */
+/* 「图片分镜」卡片的生成按钮 + 状态：并入「生图模式 / 生图技能」行最右侧（不独占一行） */
 /* 每步一个动作：各卡标题行右侧的动作组（状态 + 唯一按钮），统一靠卡右上角 */
 .neo-director-step-act {
     margin-left: auto;
@@ -1396,7 +1396,7 @@
     flex: none;
 }
 
-/* 步骤徽标（故事板分镜页四步）：序号表达先后关系——✓ = 已完成、序号高亮 = 轮到这一步、序号变淡 = 前置未满足 */
+/* 步骤徽标（故事板分镜页四步）：序号表达先后关系——= 已完成、序号高亮 = 轮到这一步、序号变淡 = 前置未满足 */
 .neo-director-step-badge {
     flex: none;
     display: inline-flex;
@@ -1431,7 +1431,7 @@
 /* 各步唯一动作：前置没满足时置灰（缺什么见按钮 title），不用点了才知道。
    所有动作按钮都挂 rs-btn，由 prompts.css 的 .rs-btn:disabled 统一置灰 */
 
-/* 故事板分镜页 band 0：「👤 角色参考图」紧凑盒（标题 / 身份参考 / 素材库 + 网格都集成在盒内，独占顶部一行） */
+/* 故事板分镜页 band 0：「角色参考图」紧凑盒（标题 / 身份参考 / 素材库 + 网格都集成在盒内，独占顶部一行） */
 .neo-director-setup-char {
     display: flex;
     flex-direction: column;
@@ -1467,7 +1467,7 @@
     display: none;
 }
 
-/* 故事板分镜页 band 1：🧩 宫格图故事板卡（拆分唯一分段来源，文字故事板由右栏智能体承接） */
+/* 故事板分镜页 band 1：宫格图故事板卡（拆分唯一分段来源，文字故事板由右栏智能体承接） */
 .neo-director-src-card {
     display: flex;
     flex-direction: column;
@@ -1975,7 +1975,7 @@
     border-color: #4a4d55;
 }
 
-/* 页签内容面板（📖 故事板分镜 / 🎞️ 分镜时间线） */
+/* 页签内容面板（故事板分镜 / 分镜时间线） */
 .neo-director-pane {
     display: flex;
     flex-direction: column;
@@ -1988,14 +1988,14 @@
     padding-top: 4px;
 }
 
-/* 📖 故事板分镜页：band（第一行来源+角色参考 / 来源卡 / 各段对照） */
+/* 故事板分镜页：band（第一行来源+角色参考 / 来源卡 / 各段对照） */
 .neo-director-band {
     display: flex;
     flex-direction: column;
     gap: 8px;
 }
 
-/* band 0：👤 角色参考图盒独占顶部一行 */
+/* band 0：角色参考图盒独占顶部一行 */
 .neo-director-band-top {
     flex-direction: row;
     align-items: center;
@@ -2023,7 +2023,7 @@
     min-width: 0;
 }
 
-/* 「📖 故事板分镜」页各段两栏对照（左 = 分镜图 / 右 = 提示词） */
+/* 「故事板分镜」页各段两栏对照（左 = 分镜图 / 右 = 提示词） */
 .neo-director-setup-segs {
     display: flex;
     flex-direction: column;
@@ -2331,7 +2331,7 @@
     padding: 5px 20px;
 }
 
-/* 「🎬 保存并生成整片」（桌面端内嵌）：底部唯一的主行动按钮，与生成面板同款壳内半透明蓝 + 饱和蓝描边；
+/* 「保存并生成整片」（桌面端内嵌）：底部唯一的主行动按钮，与生成面板同款壳内半透明蓝 + 饱和蓝描边；
    实心 #2f6fed 在满幅灰底里是一块高饱和蓝板，压过同排的 取消 / 保存 */
 .neo-director-foot .neo-director-save-run {
     background: rgba(47, 111, 237, 0.18);

@@ -2,13 +2,13 @@
 
 拿真实社区工作流 user/default/workflows/MMH3/MiniMax H3全能参考工作流 .json（75 节点），
 把模型名换成作者机器上的原始权重名（fp16 / fp8），本机只有量化版；按 ComfyUI 存图的写法
-把 UI 工作流写进 PNG 的 workflow tEXt 块，落到 input/NeoDemo/。素材库灯箱「⤷ 导入工作流」
-载入画布后模型路径全部失效，顶栏 🅝 亮红点。
+把 UI 工作流写进 PNG 的 workflow tEXt 块，落到 input/NeoDemo/。素材库灯箱「导入工作流」
+载入画布后模型路径全部失效，顶栏 Neo 图标亮红点。
 
 三行演示位（旁路节点不参与修复）：
   - UNET 只差量化标记（fp8 ↔ 本机 int8_convrot，置信度 90%，标准档自动匹配）
-  - CLIP 相似度不够（0.84，手动改选 + 「📥 模型库」按钮）
-  - VAE 本机没有（「📥 模型库」按钮）
+  - CLIP 相似度不够（0.84，手动改选 + 「模型库」按钮）
+  - VAE 本机没有（「模型库」按钮）
 其余模型名精确命中本机文件（100%，不产生修复行）。
 
 参考图与音频是程序画的抽象几何素材（机甲 / 异形 / 废墟 + 一段音），全部落在 input/NeoDemo/，
@@ -33,7 +33,7 @@ OUT = os.path.join(DEMO, "minimax-h3-community.png")
 MODEL_EXTS = (".safetensors", ".pt", ".ckpt", ".pth", ".bin", ".gguf", ".onnx")
 FONT = r"C:\Windows\Fonts\msyh.ttc"
 # 作者机器上的原始权重名（社区工作流原样），本机只有量化版
-# UNET / CLIP 只差量化标记（90% 置信度），VAE 本机没有（修复弹窗给「📥 模型库」按钮）
+# UNET / CLIP 只差量化标记（90% 置信度），VAE 本机没有（修复弹窗给「模型库」按钮）
 OVERRIDES = {
     201: "MiniMaxH3/minimax_h3_ref2va_pruned_fp16.safetensors",
     127: "MiniMaxH3/minimax_h3_ref2va_pruned_fp16.safetensors",

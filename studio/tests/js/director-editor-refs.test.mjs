@@ -62,7 +62,7 @@ test("导演编辑器：非混合模式统一选择技能（紧邻生成模式�
     });
     await sleep(60);
 
-    // 位置：🎞️ 分镜时间线页首行「生成模式」之后（生成设置归时间线页，故事板分镜与生成模式无关）
+    // 位置：分镜时间线页首行「生成模式」之后（生成设置归时间线页，故事板分镜与生成模式无关）
     const stRow = document.querySelector(".neo-director-pane-timeline .neo-director-shared");
     const kids = Array.from(stRow.children);
     const gSkillSel = stRow.querySelector(".neo-director-global-skill");
@@ -171,7 +171,7 @@ test("导演编辑器：技能下拉按步数排序，新建配方默认取步�
 
     // 图库卡片菜单路径：传的是 { name: '' }（对象非 null），同样算新建 → 默认与排序都要生效
     const card = await openWith({ name: "", shared: { mode: "f2v" }, segments: [{ first_frame: "a.png", duration_sec: 5 }] });
-    assert.equal(card.value, "minimax_h3_vdn_multiframe", "卡片「🎬 新建导演配方」默认也是步数最少的");
+    assert.equal(card.value, "minimax_h3_vdn_multiframe", "卡片「新建导演配方」默认也是步数最少的");
     assert.equal(card.opts[0], card.value, "默认即列表首项");
 
     // r2v 新建：池内只有两种 r2v，取 8 步的 VDN
@@ -214,7 +214,7 @@ test("导演编辑器：参考素材区标题行「素材库」按钮打开/收�
 });
 
 
-test("导演编辑器：「📖 故事板分镜」页签——时间轴页生成模式联动本页素材区", async () => {
+test("导演编辑器：「故事板分镜」页签——时间轴页生成模式联动本页素材区", async () => {
     const { openDirectorEditor } = await import("../../web/director.js");
     appState.graph = { _nodes: [] };
     mockRoute("/rs_prompts/skills", () => jsonResponse([{ id: "sk-a", name: "技能 A", gen_video: true }]));
@@ -228,13 +228,13 @@ test("导演编辑器：「📖 故事板分镜」页签——时间轴页生成
     });
     await sleep(60);
 
-    // 标题栏：🎬 分镜视频导演 + 两个页签：📖 故事板分镜 / 🎞️ 分镜时间线
-    assert.equal(document.querySelector(".neo-director-title-left > span").textContent, "🎬 分镜视频导演", "弹窗标题 = 分镜视频导演");
+    // 标题栏：分镜视频导演 + 两个页签：故事板分镜 / 分镜时间线
+    assert.equal(document.querySelector(".neo-director-title-left > span").textContent, "分镜视频导演", "弹窗标题 = 分镜视频导演");
     const tabs = Array.from(document.querySelectorAll(".neo-director-tab"));
     assert.equal(tabs.length, 2, "标题栏共两个页签");
     const tabStory = tabs.find((t) => t.textContent.includes("故事板分镜"));
-    assert.ok(tabStory, "含「📖 故事板分镜」页签");
-    assert.ok(tabs.find((t) => t.textContent.includes("分镜时间线")), "含「🎞️ 分镜时间线」页签");
+    assert.ok(tabStory, "含「故事板分镜」页签");
+    assert.ok(tabs.find((t) => t.textContent.includes("分镜时间线")), "含「分镜时间线」页签");
 
     // 切到故事板分镜页：story 面板显示，时间轴隐藏
     tabStory.click();
@@ -243,7 +243,7 @@ test("导演编辑器：「📖 故事板分镜」页签——时间轴页生成
     assert.equal(document.querySelector(".neo-director-pane-story").style.display, "");
     assert.equal(document.querySelector(".neo-director-pane-timeline").style.display, "none");
 
-    // 生成模式 / 统一技能在「🎞️ 分镜时间线」页首行（故事板分镜与生成模式无关，本页不重复）
+    // 生成模式 / 统一技能在「分镜时间线」页首行（故事板分镜与生成模式无关，本页不重复）
     const setupPane = document.querySelector(".neo-director-pane-story");
     const tlRow = document.querySelector(".neo-director-pane-timeline .neo-director-shared");
     assert.ok(tlRow.querySelector(".neo-director-mode"), "生成模式下拉在时间轴页");
@@ -325,7 +325,7 @@ test("导演编辑器：「生成所有分段的提示词」逐段循环生成�
     assert.equal(tas2[1].value, "integrated_multimodal_description: [Shot 1] 段一…", "第 2 段写回（同一 mock）");
     assert.ok(document.querySelector(".neo-director-opt-status").textContent.includes("已生成 2 段"), "状态显示完成段数");
 
-    // 「📖 故事板分镜」页两栏对照：左 = 该段分镜图（宫格各格），右 = 该段提示词
+    // 「故事板分镜」页两栏对照：左 = 该段分镜图（宫格各格），右 = 该段提示词
     const setupItems = Array.from(document.querySelectorAll(".neo-director-setup-segs .neo-director-story-seg-item"));
     assert.equal(setupItems.length, 2, "本页显示 2 段");
     let cells = setupItems[0].querySelectorAll(".neo-director-setup-seg-cols > div");
@@ -391,7 +391,7 @@ test("导演编辑器：打开旧配方回显各段对照（分镜图 / 提示�
     });
     await sleep(60);
 
-    // 「📖 故事板分镜」页两栏对照：左 = 该段落盘的分镜图，右 = 该段当前提示词
+    // 「故事板分镜」页两栏对照：左 = 该段落盘的分镜图，右 = 该段当前提示词
     Array.from(document.querySelectorAll(".neo-director-tab")).find((t) => t.textContent.includes("故事板分镜")).click();
     await sleep(20);
     const setupItems = Array.from(document.querySelectorAll(".neo-director-setup-segs .neo-director-story-seg-item"));

@@ -20,7 +20,7 @@ const harnessDom = `
   <div class="rs-skill-modal rs-skill-detail" style="width:640px;">
     <div class="rs-skill-modal-content">
       <div class="rs-gen-settings rs-skill-gen-settings">
-        <div class="rs-config-row rs-gen-settings-header"><label class="rs-form-label">🖼️ 出图设置（优先于默认设置）</label></div>
+        <div class="rs-config-row rs-gen-settings-header"><label class="rs-form-label">出图设置（优先于默认设置）</label></div>
         <div class="rs-gen-model-section">
           <div class="rs-config-row"><label class="rs-form-label">Model</label><select></select></div>
           <div class="rs-config-row"><label class="rs-form-label">LoRA</label><div class="rs-gen-lora-list"></div><button type="button" class="rs-gen-lora-add">+ 添加 LoRA</button></div>
@@ -131,7 +131,7 @@ test("技能弹窗出图设置：各配置行标签左|控件右（模型/LoRA/�
 const headerDom = `
 <div class="rs-skill-modal rs-skill-detail" style="width:640px">
   <div class="rs-skill-modal-header">
-    <span class="rs-skill-modal-title">📝 技能</span>
+    <span class="rs-skill-modal-title">技能</span>
     <div class="rs-skill-name-wrap"><span class="rs-skill-name-view">技能名</span></div>
     <span class="rs-source-badge rs-skill-detail-badge">SYS</span>
     <button type="button" class="rs-btn rs-btn-local rs-skill-doc-btn">?</button>

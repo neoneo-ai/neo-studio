@@ -1,5 +1,5 @@
 // Neo Gallery 卡片「生成九宫格分镜图」：原图当参考 + 宫格指令，产物落独立 grid 目录，
-// 供导演编辑器「🧩 宫格分镜图拆分」按行优先切成视频关键帧。
+// 供导演编辑器「宫格分镜图拆分」按行优先切成视频关键帧。
 import test from "node:test";
 import assert from "node:assert/strict";
 import { beforeEach } from "node:test";
@@ -113,7 +113,7 @@ test("⋯ 菜单「生成九宫格分镜图」：填故事后带参考图请求�
     openMenu(card, gallery);
 
     const item = itemByLabel("生成九宫格分镜图");
-    assert.equal(item?.textContent, "\uD83E\uDDE9 生成九宫格分镜图");
+    assert.equal(item?.textContent, "生成九宫格分镜图");
     click(item);
     assert.equal(document.querySelector(".neo-gallery-collect-menu"), null, "菜单应关闭");
 
@@ -261,7 +261,7 @@ test("⋯ 菜单「生成九宫格分镜图」：生图失败弹 action toast �
     assert.equal(toast.querySelector(".neo-at-action").textContent, "打开技能详情");
 });
 
-test("小窗「✨ LLM 生成分镜故事」：简要故事按所选宫格技能生成逐格故事（不带参考图），覆盖写入上方故事框", async () => {
+test("小窗「LLM 生成分镜故事」：简要故事按所选宫格技能生成逐格故事（不带参考图），覆盖写入上方故事框", async () => {
     const { GalleryCard } = await import("../../web/gallery-card.js");
     const toasts = [];
     const { gallery } = makeGallery(toasts);
@@ -277,7 +277,7 @@ test("小窗「✨ LLM 生成分镜故事」：简要故事按所选宫格技能
     const overlay = document.querySelector(".neo-gallery-story-modal-overlay");
     assert.ok(overlay, "应弹出填故事小窗");
     const llmBtn = [...overlay.querySelectorAll(".neo-gallery-story-btn")]
-        .find((b) => b.textContent === "✨ LLM 生成分镜故事");
+        .find((b) => b.textContent === "LLM 生成分镜故事");
     assert.ok(llmBtn, "应有「LLM 生成分镜故事」按钮");
     // 现有输入框（九宫格故事）下面还要有个「简要故事 / 想法」输入框
     const ideaBox = overlay.querySelector(".neo-gallery-story-idea");
@@ -322,10 +322,10 @@ test("小窗「✨ LLM 生成分镜故事」：简要故事按所选宫格技能
     assert.equal(overlay.querySelector(".neo-gallery-story-input").value, "雨夜的地铁口，她收起伞仰望。\n他站在灯下，两人相望。");
     assert.match(overlay.querySelector(".neo-gallery-story-hint").textContent, /已生成分镜故事/);
     assert.equal(llmBtn.disabled, false, "完成后按钮应恢复可用");
-    assert.equal(llmBtn.textContent, "✨ LLM 生成分镜故事");
+    assert.equal(llmBtn.textContent, "LLM 生成分镜故事");
 });
 
-test("小窗「✨ LLM 生成分镜故事」：简要故事留空则按格数自行编故事（细节提取为空时不给人物描述）", async () => {
+test("小窗「LLM 生成分镜故事」：简要故事留空则按格数自行编故事（细节提取为空时不给人物描述）", async () => {
     const { GalleryCard } = await import("../../web/gallery-card.js");
     const { gallery } = makeGallery([]);
     const card = new GalleryCard(gallery);
@@ -334,7 +334,7 @@ test("小窗「✨ LLM 生成分镜故事」：简要故事留空则按格数自
 
     const overlay = document.querySelector(".neo-gallery-story-modal-overlay");
     const llmBtn = [...overlay.querySelectorAll(".neo-gallery-story-btn")]
-        .find((b) => b.textContent === "✨ LLM 生成分镜故事");
+        .find((b) => b.textContent === "LLM 生成分镜故事");
 
     mockRoute("/neo_gallery/copy_to_input", () => jsonResponse({ success: true, filename: "shot.png" }));
     let llmBody = null;

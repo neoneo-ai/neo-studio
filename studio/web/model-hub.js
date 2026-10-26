@@ -1,8 +1,8 @@
 /**
  * model-hub.js — 模型库（Comfy-Org 专区 · Hugging Face / ModelScope / Civitai 三源）
- * 顶栏 🅝 → 📥 模型库：搜索仓库 → 文件清单（按 split_files 前缀自动归类 + 已存在标记）
+ * 顶栏 → 模型库：搜索仓库 → 文件清单（按 split_files 前缀自动归类 + 已存在标记）
  * → 流式下载（进度 / 速度 / 取消，.part 断点续传）。落盘子目录取类别目录下已有子目录成下拉
- * （默认自动探查，可选「＋ 新建子目录…」现填）。⚙ 面板管理默认源、HF 端点、两侧 Token、
+ * （默认自动探查，可选「＋ 新建子目录…」现填）。面板管理默认源、HF 端点、两侧 Token、
  * LLM 子目录与超时。Civitai 源走 LoRA 搜索（类型 / 底模 / 排序 / NSFW）→ 版本权重清单，
  * API KEY 与代理沿用画廊设置里的 C 站配置。技能修复弹窗可用 openModelHub({ query, category })
  * 预填并定位下载目标。
@@ -117,7 +117,7 @@ function fillFiles(h) {
         o.dataset.existsSub = f.exists_sub || "";
         o.textContent = `${f.filename}  [${f.category}]  ${fmtSize(f.size)}` +
             `${f.version_name ? `  〈${f.version_name}〉` : ""}` +
-            `${f.exists ? `  ${t("✓ 已存在")}${f.exists_sub ? ` (${f.exists_sub})` : ""}` : ""}`;
+            `${f.exists ? `  ${t("已存在")}${f.exists_sub ? ` (${f.exists_sub})` : ""}` : ""}`;
         sel.appendChild(o);
     }
     updateTarget(h);
@@ -246,12 +246,12 @@ function buildUI(h) {
     refreshBtn.type = "button";
     refreshBtn.title = t("跳过缓存重新拉取仓库与文件清单");
     refreshBtn.addEventListener("click", () => loadRepos(h, true));
-    const settingsBtn = el("button", "neo-hub-icon-btn", "⚙");
+    const settingsBtn = el("button", "neo-hub-icon-btn", "");
     settingsBtn.type = "button";
     settingsBtn.title = t("模型库设置（源 / 端点 / Token / LLM 子目录 / 超时）");
     const closeBtn = el("button", "neo-hub-icon-btn", "✕");
     closeBtn.type = "button";
-    head.append(el("span", "neo-hub-title", t("📥 模型库 · Comfy-Org")), srcWrap, refreshBtn, settingsBtn, closeBtn);
+    head.append(el("span", "neo-hub-title", t("模型库 · Comfy-Org")), srcWrap, refreshBtn, settingsBtn, closeBtn);
 
     const searchRow = el("div", "neo-hub-row");
     const searchInput = el("input", "neo-hub-input neo-hub-search");
@@ -330,7 +330,7 @@ function buildUI(h) {
         el("span", "neo-hub-label", t("子目录")), subSel, subNew, destText);
 
     const actRow = el("div", "neo-hub-row");
-    const dlBtn = el("button", "neo-hub-btn neo-hub-dl", t("⬇ 下载"));
+    const dlBtn = el("button", "neo-hub-btn neo-hub-dl", t("下载"));
     dlBtn.type = "button";
     const cancelBtn = el("button", "neo-hub-btn neo-hub-cancel", t("取消"));
     cancelBtn.type = "button";

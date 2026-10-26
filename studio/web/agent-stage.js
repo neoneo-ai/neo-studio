@@ -24,7 +24,7 @@ export function createAgentStage() {
     const el = mkEl("div", "ns-agent-stage");
     const head = mkEl("div", "ns-agent-stage-head");
     const title = mkEl("span", "ns-agent-stage-title");
-    title.textContent = "✨ " + t("智能体");
+    title.textContent = "" + t("智能体");
     const status = mkEl("span", "ns-agent-stage-status");
     head.append(title, status);
     const idle = mkEl("div", "ns-agent-stage-idle");
@@ -111,7 +111,7 @@ export function createAgentStage() {
     function planRows(list) {
         const rows = list.map((s, i) => {
             const row = mkEl("div", "ns-agent-stage-plan-row" + (s.done ? " ns-agent-stage-plan-done" : ""));
-            row.textContent = `${s.done ? "✅" : "▢"} ${i + 1}. ${s.tool}`
+            row.textContent = `${s.done ? "" : "▢ "}${i + 1}. ${s.tool}`
                 + (s.key_args ? `（${s.key_args}）` : "") + (s.note ? `：${s.note}` : "");
             return row;
         });
@@ -140,11 +140,11 @@ export function createAgentStage() {
         const kind = frame?.kind || "";
         // 会话标题帧是前端自己发的显示帧（agent-panel.js 在标题定下来那一发交过来，不进后端时间线）：
         // 页眉在整场生成里挂同一句，清空标题回到默认那一句
-        if (kind === "title") { title.textContent = frame.text ? "💬 " + frame.text : "✨ " + t("智能体"); return; }
+        if (kind === "title") { title.textContent = frame.text ? "" + frame.text : "" + t("智能体"); return; }
         if (kind === "run") { clear(); status.textContent = t("本轮开始"); render(); return; }
         if (kind === "tool_call") {
             empty = false;
-            status.textContent = "🔧 " + (frame.tool || "?");
+            status.textContent = "" + (frame.tool || "?");
         } else if (kind === "tool_skipped") {
             // 点名已经把这一步定好了，后端在调用点上直接跳过：状态行报一句跳过，不铺工具卡
             empty = false;
@@ -177,10 +177,10 @@ export function createAgentStage() {
             addMedia(frame.media);
             if (live) live.pause();   // 产物上台，采样预览退场：那一块换给结果图
             previewOff = true;
-            status.textContent = "✅ " + (frame.tool || "");
+            status.textContent = "" + (frame.tool || "");
         } else if (kind === "ask") {
             empty = false;
-            status.textContent = "❓ " + (frame.text || "");
+            status.textContent = "" + (frame.text || "");
         } else if (kind === "paused") {
             status.textContent = t("已暂停");
         } else if (kind === "resumed") {

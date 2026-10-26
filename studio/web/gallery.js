@@ -54,7 +54,7 @@ const CIVITAI_DIR_NAME = t("C站收藏");  // display label only (card name, bre
 const CIVITAI_DIR_KEY = "civitai_bookmarks";  // stable dir_name key sent to the backend (must match bookmark.CIVITAI_DIR_KEY)
 const CIVITAI_VIEW_SOURCE = CIVITAI_DIR_KEY;  // same stable identifier reused in the URL state
 
-// 角色图目录建配方的上限：与导演编辑器的每段参考图（MiniMaxH3ReferenceToVideo 槽位）和 👤 角色参考图一致
+// 角色图目录建配方的上限：与导演编辑器的每段参考图（MiniMaxH3ReferenceToVideo 槽位）和 角色参考图一致
 const DIRECTOR_REF_MAX = 9;
 const DIRECTOR_CHAR_MAX = 6;
 
@@ -164,7 +164,7 @@ export class NeoGallery {
                 $el("button", {
                     className: "neo-gallery-gm-btn",
                     title: t("生成新素材（默认 Krea2 文生图，产物保存到 Output 目录）"),
-                    textContent: t("🖼️ 生成素材"),
+                    textContent: t("生成素材"),
                     onclick: () => openGenMaterialDialog(this)
                 })
             ]),
@@ -202,7 +202,7 @@ export class NeoGallery {
                     if (customDir) {
                         const displayName = customDir.split(/[\\/]/).pop();
                         this.customDirSettingBtn.title = customDir + '\n(Click to change)\nCurrent: ' + displayName;
-                        this.customDirSettingBtn.textContent = "\uD83D\uDCC1";
+                        this.customDirSettingBtn.textContent = "";
                     } else {
                         this.customDirSettingBtn.title = "Set custom directory\n(Currently not configured)";
                         this.customDirSettingBtn.textContent = "+";
@@ -556,7 +556,7 @@ export class NeoGallery {
         const typeBadge = $el("div", {
             className: "neo-gallery-card-type-badge type-directory",
             title: t("本地收藏（记录路径，打开时基于路径查找）")
-        }, ["\uD83D\uDCCD"]);
+        }, [""]);
         const nameEl = $el("span", { className: "neo-gallery-card-name", textContent: t("本地收藏") });
         const info = $el("div", { className: "neo-gallery-card-info" }, [nameEl]);
         card.appendChild(typeBadge);
@@ -648,7 +648,7 @@ export class NeoGallery {
         const typeBadge = $el("div", {
             className: `neo-gallery-card-type-badge ${isAudio ? "type-audio" : (isFile ? "type-image" : "type-directory")}`,
             title: tf("{src}收藏 · {path}", { src: sourceLabel, path: [item.dir, item.subfolder, item.filename].filter(Boolean).join("/") })
-        }, [isAudio ? "\u266A" : (item.source === "oss" ? "\u2601\uFE0F" : (isFile ? "\uD83D\uDDBC\uFE0F" : "\uD83D\uDCCD"))]);
+        }, [isAudio ? "\u266A" : (item.source === "oss" ? "\u2601" : (isFile ? "" : ""))]);
         const menuBtn = $el("div", {
             className: "neo-gallery-thumb-bookmark-btn",
             title: t("更多操作"),
@@ -734,7 +734,7 @@ export class NeoGallery {
         const typeBadge = $el("div", {
             className: "neo-gallery-card-type-badge type-directory",
             title: t("C站收藏（可保存为配方）")
-        }, ["\uD83D\uDCC1"]);
+        }, [""]);
         const nameEl = $el("span", { className: "neo-gallery-card-name", textContent: CIVITAI_DIR_NAME });
         const info = $el("div", { className: "neo-gallery-card-info" }, [nameEl]);
 
@@ -864,13 +864,13 @@ export class NeoGallery {
         const typeBadge = $el("div", {
             className: "neo-gallery-card-type-badge type-directory",
             title: typeLabel || t("Civitai 模型")
-        }, ["\uD83D\uDCC1"]);
+        }, [""]);
 
         const saveBtn = $el("div", {
             className: "neo-gallery-card-civitai-save-btn",
             title: t("保存为配方"),
             onclick: (e) => { e.stopPropagation(); this._saveCivitaiBookmarkAsRecipe(item, saveBtn); }
-        }, ["\uD83D\uDCBE"]);
+        }, [""]);
 
         card.appendChild(typeBadge);
         card.appendChild(coverWrapper);
@@ -1006,7 +1006,7 @@ export class NeoGallery {
         if (button.dataset.saving === "1") return;
         const url = `https://civitai.com/models/${item.id}`;
         button.dataset.saving = "1";
-        button.textContent = "\u23F3";
+        button.textContent = "";
         try {
             const resolveResp = await api.fetchApi('/neo_bookmark/civitai/resolve', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url })
@@ -1014,7 +1014,7 @@ export class NeoGallery {
             const resolved = await resolveResp.json();
             if (!resolved.success) {
                 showInlineFeedback(button, resolved.error || t("解析失败"), "error");
-                button.textContent = "\uD83D\uDCBE";
+                button.textContent = "";
                 return;
             }
             const saveResp = await api.fetchApi('/rs_recipes/save_from_civitai', {
@@ -1029,15 +1029,15 @@ export class NeoGallery {
             const saved = await saveResp.json();
             if (!saved.success) {
                 showInlineFeedback(button, saved.error || t("保存失败"), "error");
-                button.textContent = "\uD83D\uDCBE";
+                button.textContent = "";
                 return;
             }
             showInlineFeedback(button, t("已保存为配方"), "success");
-            button.textContent = "\u2705";
+            button.textContent = "";
         } catch (e) {
             console.error('[Neo Gallery] Failed to save Civitai recipe:', e);
             showInlineFeedback(button, String(e), "error");
-            button.textContent = "\uD83D\uDCBE";
+            button.textContent = "";
         } finally {
             button.dataset.saving = "";
         }
@@ -1282,7 +1282,7 @@ export class NeoGallery {
     }
 
     /** 导演配方草稿：卡片菜单（单图）与多选操作条共用。
-     *  角色图目录 → 一段全参考：图进该段参考图，同时填 👤 角色参考图（身份参考 + r2i 图片分镜）；
+     *  角色图目录 → 一段全参考：图进该段参考图，同时填 角色参考图（身份参考 + r2i 图片分镜）；
      *  其余目录 → 每图一段、图作首帧。三视图是设定图，当首帧会让视频从设定图开镜。 */
     directorDraft(frames) {
         if (!this.isCharacterDir()) {
@@ -1354,14 +1354,14 @@ export class NeoGallery {
                 className: "neo-gallery-selection-btn neo-gallery-selection-btn-danger",
                 title: t("仅删除勾选的素材，不影响未选中文件"),
                 onclick: () => this.deleteSelected()
-            }, [t("\uD83D\uDDD1\uFE0F 删除")]),
+            }, [t("删除")]),
             $el("div", {
                 className: "neo-gallery-selection-btn",
                 title: charDir
-                    ? t("角色图目录：整批合成一段全参考配方，图片进该段参考图（前 9 张）与 👤 角色参考图，不当关键帧")
+                    ? t("角色图目录：整批合成一段全参考配方，图片进该段参考图（前 9 张）与 角色参考图，不当关键帧")
                     : t("将选中图片设为分镜图，新建视频导演配方"),
                 onclick: () => this.createDirectorFromSelection()
-            }, [charDir ? t("\uD83C\uDFAC 新建导演配方（全参考）") : t("\uD83C\uDFAC 新建导演配方")]),
+            }, [charDir ? t("新建导演配方（全参考）") : t("新建导演配方")]),
             $el("div", { className: "neo-gallery-selection-btn", onclick: () => this.clearSelection() }, [t("✕ 清空")])
         ]);
         this.element.appendChild(bar);
@@ -1576,7 +1576,7 @@ export class NeoGallery {
         this.accordion.appendChild($el("div", {
             className: "neo-gallery-no-files-message"
         }, [
-            $el("div", { className: "neo-gallery-no-files-message-icon", textContent: "\uD83D\uDCF7" }),
+            $el("div", { className: "neo-gallery-no-files-message-icon", textContent: "" }),
             $el("p", { className: "neo-gallery-no-files-message-text", textContent: "No presets found. Add images + .txt files to gallery/presets/ or click \u{1F4C1} to add custom directories." })
         ]));
     }
@@ -1651,7 +1651,7 @@ export class NeoGallery {
             targetNode.onWidgetChanged(targetWidget.name, targetWidget.value);
         }
         app.graph.setDirtyCanvas(true, true);
-        showInlineFeedback(button, '\u2705 Lora Sent!', 'success');
+        showInlineFeedback(button, 'Lora Sent!', 'success');
         showToast(this.app, 'success', 'Lora Sent!', `${targetWidget.value} \u2192 ${targetNode.title || 'Node'}`);
     }
 

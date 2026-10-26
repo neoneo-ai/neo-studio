@@ -89,7 +89,7 @@ export class GalleryList {
     // ====== Breadcrumb Navigation ======
 
     createBreadcrumbHome(gallery) {
-        return createBreadcrumbItem("\uD83C\uDFE0", () => gallery.showCategoryCards(), { isHome: true });
+        return createBreadcrumbItem("⌂", () => gallery.showCategoryCards(), { isHome: true });
     }
 
     updateBreadcrumb(gallery, pathSegments, sourceName) {

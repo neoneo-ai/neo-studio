@@ -76,7 +76,7 @@
 .neo-dtl-edit:hover { border-color: #8cf; color: #fff; }
 .neo-dtl-edit:disabled { opacity: 0.5; cursor: default; }
 
-/* 时间轴左侧「👁」实时预览开关：与节点 preview 输入同步（亮 = 开、灰 = 关） */
+/* 时间轴左侧「」实时预览开关：与节点 preview 输入同步（亮 = 开、灰 = 关） */
 .neo-dtl-preview {
   flex: 0 0 auto;
   width: 20px;

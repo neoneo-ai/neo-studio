@@ -44,7 +44,7 @@ test("⋯ 菜单「生成角色图」：小窗显示参考图，点生成后窗�
 
     const item = [...document.querySelectorAll(".neo-gallery-collect-item")]
         .find((el) => el.textContent.includes("生成角色图"));
-    assert.equal(item?.textContent, "\uD83E\uDDAC 生成角色图（多视图）");
+    assert.equal(item?.textContent, "生成角色图（多视图）");
     click(item);
     assert.equal(document.querySelector(".neo-gallery-collect-menu"), null, "菜单应关闭");
 

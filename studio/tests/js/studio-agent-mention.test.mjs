@@ -107,8 +107,8 @@ test("@ 点名按钮在底栏最左：点一下把 @ 写进光标处，弹层汇
     await sleep(20);
     assert.equal(inputBox().value, "@", "点一下只写一个 @，弹层接着收 query");
     assert.deepEqual(rowNames(), [
-        "🖼️ Krea2 出图", "🧩 柴犬技能", "💿 krea2_turbo_fp8", "💿 qwen_img_edit",
-        "🎨 mood_lora", "📝 精美图像提示词/红杯", "🎬 video/片头三段", "📚 cat_walk",
+        "Krea2 出图", "柴犬技能", "krea2_turbo_fp8", "qwen_img_edit",
+        "mood_lora", "精美图像提示词/红杯", "video/片头三段", "cat_walk",
     ], "技能在前，主模型、LoRA、图像与视频提示词、配方按类排后面");
     keydown(inputBox(), "Escape");
     await flush(2);
@@ -118,7 +118,7 @@ test("@ 的过滤跨类：同一份 query 里技能与模型与 LoRA 一起筛�
     mountStudio();
     await openStudio("#/gallery");
     await openPicker("@krea");
-    assert.deepEqual(rowNames(), ["🖼️ Krea2 出图", "💿 krea2_turbo_fp8", "🎨 mood_lora"],
+    assert.deepEqual(rowNames(), ["Krea2 出图", "krea2_turbo_fp8", "mood_lora"],
         `按名字子串筛：${rowNames().join(" | ")}`);
 });
 
@@ -316,7 +316,7 @@ test("输入框一聚焦就把候选捞起来：@ 那一下落在缓存上，四
 
     await typeOut("@krea2");
     await sleep(20); await flush(40);
-    assert.deepEqual(rowNames(), ["🖼️ Krea2 出图", "💿 krea2_turbo_fp8", "🎨 mood_lora"]);
+    assert.deepEqual(rowNames(), ["Krea2 出图", "krea2_turbo_fp8", "mood_lora"]);
     assert.equal(mentionFetches().length, warmed,
         "开弹层与逐字过滤都吃缓存：@ 那一下不等模型目录扫描");
 });
@@ -329,8 +329,8 @@ test("@ 弹层不等最慢的那条：先回来的候选先画行，模型目录
     await typeOut("@");
     await sleep(10); await flush(20);
     assert.ok(pickerBox(), "候选还在路上，弹层已经开着");
-    assert.ok(rowNames().includes("🧩 柴犬技能"), "技能与提示词先到手就先画行");
-    assert.ok(rowNames().includes("📝 精美图像提示词/红杯"));
+    assert.ok(rowNames().includes("柴犬技能"), "技能与提示词先到手就先画行");
+    assert.ok(rowNames().includes("精美图像提示词/红杯"));
     assert.ok(!rowNames().some((n) => n.includes("krea2_turbo_fp8")), "没到手的模型不铺假候选");
 
     await sleep(60); await flush(20);

@@ -251,7 +251,7 @@ def _effective_character_dirs(settings: dict) -> list:
     """角色图目录的有效 token：用户标记的目录 + 索引里打 character-sheet 标签的云端目录。
 
     标签是目录属性、和卡片在首页的位置无关：发布者给设定图目录打上 character-sheet 标签，别人拿到
-    索引就自带角色图默认值（多选建配方走全参考），不用逐个点 👤。用户显式取消过的目录记在
+    索引就自带角色图默认值（多选建配方走全参考），不用逐个点 。用户显式取消过的目录记在
     character_dirs_off 里，读取时剔掉，默认值不会把它顶回来。
     """
     marked = _character_token_list(settings.get("character_dirs"))

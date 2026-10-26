@@ -3,7 +3,7 @@
  * 宫格槽位（1~12，工具条 −/+ 运行时调整，不随工作流保存）：画廊拖入 / 本地批量添加 →
  * 文件名写入隐藏 refs widget（JSON 数组，随工作流序列化）；布局按节点宽度流式排布（auto-fill），
  * 节点高度跟随内容。瓷砖支持拖放重排、✕ 移除、点击 Lightbox 查看；
- * 工具条：−/+ 槽位数、清空、💾 保存配方；右侧组：素材面板（pi-images，同 Neo Gallery）、
+ * 工具条：−/+ 槽位数、清空、保存配方；右侧组：素材面板（pi-images，同 Neo Gallery）、
  * 本地批量添加、☰ 加载配方（选择窗：普通含图配方，排除多段导演；悬停预览封面/图片条/提示词摘要，点击载入宫格）。
  * 提示词框同步隐藏 prompt_text widget。
  * 输出 autogrow image_1..image_12（默认显示前 3 槽，连线后增长），同 bundle-expand.js 模式。
@@ -89,13 +89,13 @@ function openTileLightbox(list, index) {
 function openRecipeDialog(node) {
     const overlay = $el("div", { className: "neo-rg-overlay" });
     const nameInput = $el("input", { type: "text", className: "neo-rg-input", placeholder: t("配方名称") });
-    const hint = $el("div", { className: "neo-rg-dialog-hint", textContent: t("⏳ 正在收集工作流资源...") });
+    const hint = $el("div", { className: "neo-rg-dialog-hint", textContent: t("正在收集工作流资源...") });
     collectWorkflowAssets(node).then(assets => {
         const p = (node._neoRg?.getPrompt() || "").trim();
         hint.textContent = tf("配方将包含 {n} 个资源（宫格图 + 当前子图中已连线的 LoadImage）{p}。", { n: assets.length, p: p ? t(" + 当前提示词") : "" });
     }).catch(e => {
         console.error("[Neo RefGrid] collect assets failed:", e);
-        hint.textContent = t("⚠️ 工作流资源收集失败");
+        hint.textContent = t("工作流资源收集失败");
     });
 
     const saveBtn = $el("button", { className: "neo-rg-btn neo-rg-dialog-save", textContent: t("保存") });
@@ -195,7 +195,7 @@ function openRecipePicker(node) {
         const q = search.value.trim().toLowerCase();
         const shown = items.filter(r => !q || r.name.toLowerCase().includes(q));
         if (!shown.length) {
-            listBox.appendChild($el("div", { className: "neo-rg-picker-empty", textContent: items.length ? t("无匹配配方") : t("暂无含图片的配方（可先用 📦 保存）") }));
+            listBox.appendChild($el("div", { className: "neo-rg-picker-empty", textContent: items.length ? t("无匹配配方") : t("暂无含图片的配方（可先用 保存）") }));
             focused = null;
             renderPreview();
             return;
@@ -283,7 +283,7 @@ function buildGridUI(node) {
         $el("button", { className: "neo-rg-btn", title: t("清空宫格"), onclick: () => { if (!list.length) return; list.length = 0; render(); markDirty(node); } }, [icon("trash")]),
         $el("button", { className: "neo-rg-btn", title: t("保存配方（提示词 + 宫格图）"), onclick: () => openRecipeDialog(node) }, [$el("i", { className: "pi pi-save" })]),
         $el("button", { className: "neo-rg-btn neo-rg-right", title: t("打开素材面板（从画廊拖图到宫格）"), onclick: () => toggleGallerySidebar() }, [$el("i", { className: "pi pi-images" })]),
-        $el("button", { className: "neo-rg-btn", title: t("本地批量添加图片（可多选）"), textContent: "⬆️", onclick: () => localInput.click() }),
+        $el("button", { className: "neo-rg-btn", title: t("本地批量添加图片（可多选）"), textContent: "", onclick: () => localInput.click() }),
         $el("button", { className: "neo-rg-btn", title: t("加载配方（提示词 + 图片入宫格）"), onclick: () => openRecipePicker(node) }, [$el("i", { className: "pi pi-list" })]),
     ]);
 

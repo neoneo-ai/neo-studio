@@ -1,4 +1,4 @@
-// 导演编辑器「👤 角色身份参考开关」：默认启用、关掉随 shared.identity_refs 落盘并重开回显。
+// 导演编辑器「角色身份参考开关」：默认启用、关掉随 shared.identity_refs 落盘并重开回显。
 import test from "node:test";
 import assert from "node:assert/strict";
 import { beforeEach } from "node:test";
@@ -31,10 +31,10 @@ test("导演编辑器：身份参考开关默认开，关掉后随 shared 落盘
     await sleep(30);
     const setupPane = document.querySelector(".neo-director-pane-story");
     const chk = setupPane.querySelector(".neo-director-identity-refs");
-    assert.ok(chk, "📖 故事板分镜页有身份参考开关");
+    assert.ok(chk, "故事板分镜页有身份参考开关");
     assert.equal(chk.checked, true, "默认启用");
     assert.ok(setupPane.querySelector(".neo-director-setup-char .neo-director-identity-refs"),
-        "开关集成在「👤 角色参考图」盒标题行内");
+        "开关集成在「角色参考图」盒标题行内");
     document.querySelector(".neo-director-save").click();
     await sleep(50);
     const onCall = fetchLog.filter((c) => c.path === "/rs_recipes/save").pop();

@@ -804,7 +804,7 @@ class DirectorTests(unittest.TestCase):
         self.assertNotIn("first_frame", second, "全参考段不设首帧")
         self.assertEqual(second["refs"]["images"], ["storyboard_雨夜_02.png", "keep.png"], "全参考段把关键帧进参考图池")
         self.assertEqual(data["shared"], {"width": 1344}, "shared 要回带：save 是整份覆盖")
-        self.assertEqual(data["story"]["idea"], "雨夜便利店", "story 要回带，否则 📖 页的主题与角色参考会被清掉")
+        self.assertEqual(data["story"]["idea"], "雨夜便利店", "story 要回带，否则 页的主题与角色参考会被清掉")
         self.assertNotIn("preview_url", text_of(resp))
 
     def test_director_keyframes_rejects_bad_segments_and_mode(self):

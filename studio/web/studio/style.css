@@ -59,6 +59,20 @@ body {
 }
 .ns-tabs a:hover { color: #fff; }
 .ns-tabs a.active { color: #fff; border-bottom-color: #7aa2ff; }
+/* 顶栏分组：首页 | 创作（素材·绘画·导演）| 管理（技能·设置）。
+   分隔线落在组边界的页签上，DOM 结构不动，.ns-tabs a 的既有选择器全兼容 */
+.ns-tabs a[data-tab="gallery"],
+.ns-tabs a[data-tab="skills"] { margin-left: 10px; }
+.ns-tabs a[data-tab="gallery"]::before,
+.ns-tabs a[data-tab="skills"]::before {
+    content: "";
+    display: inline-block;
+    width: 1px;
+    height: 14px;
+    margin-right: 10px;
+    background: #3a3a44;
+    vertical-align: middle;
+}
 /* 顶栏 ComfyUI 状态位：只报状态，启停在「设置 → 启动设置」顶部；端口 / PID 收在提示里 */
 .ns-comfy-status { margin-left: auto; font-size: 12px; color: #9a9aa8; white-space: nowrap; }
 .ns-comfy-run { color: #7bc47f; }
@@ -88,8 +102,9 @@ body {
 
 /* 右栏智能体：顶栏开合按钮 + 常驻右缘的栏子（默认收起，开合与宽度存 neo_studio_agent_dock）。
    栏子宽度由 .ns-body 上的 --ns-agent-w 决定，没拖过就用样式里的默认宽度；页面视图让位（.ns-body 的 flex 行）。
-   按钮里的 sparkle 与栏内「✨ 生成」同一字形，两处图标一致 */
+   按钮里的 sparkle 与栏内「生成」同一字形，两处图标一致 */
 .ns-agent-toggle {
+    display: inline-flex; align-items: center; justify-content: center;
     width: 30px; height: 26px; margin-left: 12px;
     border: 1px solid transparent; border-radius: 4px;
     background: transparent; cursor: pointer;
@@ -136,7 +151,7 @@ body {
 
 /* 导演页：左 = 导演配方列表（常驻）/ 右 = 上导演编辑器 + 分隔条 + 下整片生成面板 */
 .ns-director {
-    --ns-side-w: 360px;   /* 左栏宽度：分隔条拖动写进内联样式；素材库打开时默认 380px（360 = 标题行「配方 ↻ 📦导入 🎬新增导演配方」单行放得下，英文界面需 340） */
+    --ns-side-w: 360px;   /* 左栏宽度：分隔条拖动写进内联样式；素材库打开时默认 380px（360 = 标题行「配方 ↻ 导入 新增导演配方」单行放得下，英文界面需 340） */
     display: grid;
     grid-template-columns: var(--ns-side-w) 18px 1fr;
     height: 100%;
@@ -202,7 +217,7 @@ body {
    摘掉元素会让分隔条与主栏各左移一列（主栏落进 18px 那列）。visibility 保住槽位、0 宽裁掉内容 */
 .ns-director.ns-side-collapsed .ns-director-side,
 .ns-paint.ns-side-collapsed .ns-paint-side { visibility: hidden; }
-/* 素材库抽屉：左栏切换条「🖼 素材」或导演编辑器「素材库」按钮把左栏从配方列表切成素材库，
+/* 素材库抽屉：左栏切换条「素材」或导演编辑器「素材库」按钮把左栏从配方列表切成素材库，
    整栏加宽到画廊宽度，右侧编辑器随 grid 让位（不遮挡编辑区），素材卡片直接拖进右侧首帧 / 参考位 */
 .ns-director:has(.ns-lib-open) { --ns-side-w: 380px; }
 .ns-director-lib { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
@@ -323,10 +338,10 @@ body {
 /* 取消生成：仅排队/运行中显示；红描边与蓝色「生成整片」区分开 */
 .ns-gen-cancel { border-color: #9a3a3a; background: #5a1a1a; color: #f87171; }
 .ns-gen-cancel:hover { background: #6a2a2a; color: #fff; }
-/* 导演页其余按钮走外壳 .ns-btn 灰底（同技能页 519 行）：编辑器底部的 取消 / 保存、提示词行的 ✦ 生成修改、时间轴旁的
-   ＋ 添加段、✨ 生成所有分段的提示词、✂️ 拆分、逐段行的 生成这一段 / 取消任务 / 拼回成片，与面板的 全选 / 清空，
+/* 导演页其余按钮走外壳 .ns-btn 灰底（同技能页 519 行）：编辑器底部的 取消 / 保存、提示词行的 生成修改、时间轴旁的
+   ＋ 添加段、生成所有分段的提示词、✂拆分、逐段行的 生成这一段 / 取消任务 / 拼回成片，与面板的 全选 / 清空，
    原本全吃 prompts.css 的蓝底蓝字（#1a3a5a 底 / #60a5fa 字），一整排蓝里主行动反而挑不出来。
-   写成白名单：未保存确认条的 💾保存并关闭 / 放弃修改 / 继续编辑 自带蓝-红-灰语义色，不该被这排灰底压掉 */
+   写成白名单：未保存确认条的 保存并关闭 / 放弃修改 / 继续编辑 自带蓝-红-灰语义色，不该被这排灰底压掉 */
 .ns-director .neo-director-panel :is(.neo-director-save, .neo-director-cancel, .neo-director-mod-btn,
     .neo-director-add, .neo-director-optimize, .neo-director-grid-split, .neo-director-regen-run,
     .neo-director-regen-cancel, .neo-director-merge-run, .neo-director-merge-cancel),

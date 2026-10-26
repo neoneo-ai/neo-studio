@@ -124,7 +124,7 @@ test("隐藏 C站收藏行：该卡消失，本地收藏卡保留", async () => 
     assert.equal(document.querySelector(".neo-gallery-civitai-home"), null, "C站收藏卡应移除");
 });
 
-test("Lora 行的 ⚙ 展开 C 站设置区与同步目录，再点一次收起", async () => {
+test("Lora 行的 展开 C 站设置区与同步目录，再点一次收起", async () => {
     setup();
     const gallery = await makeGallery();
     await gallery.settings.buildDirModal(gallery);
@@ -145,7 +145,7 @@ test("Lora 行的 ⚙ 展开 C 站设置区与同步目录，再点一次收起"
     assert.equal(area.style.display, "none", "再次点击应收起");
 });
 
-test("C站收藏行的 ⚙ 展开 C 站设置区并聚焦 API KEY，再点一次收起", async () => {
+test("C站收藏行的 展开 C 站设置区并聚焦 API KEY，再点一次收起", async () => {
     setup();
     const gallery = await makeGallery();
     await gallery.settings.buildDirModal(gallery);

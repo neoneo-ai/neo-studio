@@ -821,7 +821,7 @@ BACK_JS = """
         const en = lang === 'en';
         const b = document.createElement('button');
         b.id = 'neo-studio-back';
-        b.textContent = en ? '🎬 Back to Studio' : '🎬 返回 Studio';
+        b.textContent = en ? 'Back to Studio' : '返回 Studio';
         b.title = en ? 'Back to Neo Studio' : '返回 Neo Studio 主页';
         // 挂视口右上角：左上角是工作流页签，56px 那排是 ComfyUI 自己的菜单栏，胶囊挤进去会盖住菜单
         b.style.cssText = 'position:fixed;top:8px;right:8px;z-index:100000;padding:5px 12px;'
@@ -1481,8 +1481,8 @@ function mark(id, ok, okText, badText) {
 }
 async function refresh() {
   var r = await api().check_setup(el('root').value, el('py').value);
-  mark('rst', r.root_ok, '✓ 找到 main.py：' + r.root, '需要选择：这个目录下没有 main.py');
-  mark('pst', r.python_ok, '✓ ' + r.python, '需要选择：请指向 python.exe');
+  mark('rst', r.root_ok, '找到 main.py：' + r.root, '需要选择：这个目录下没有 main.py');
+  mark('pst', r.python_ok, '' + r.python, '需要选择：请指向 python.exe');
   el('go').disabled = !(r.root_ok && r.python_ok);
 }
 el('broot').onclick = async function () {
@@ -1816,7 +1816,7 @@ def main() -> int:
     if icon:
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(APP_ID)
 
-    # 配方导出 / 模型库的 blob 下载要放行；「⤒ 主画布编辑」与顶栏「🎬 新影工坊」这类 _blank 链接
+    # 配方导出 / 模型库的 blob 下载要放行；「⤒ 主画布编辑」与顶栏「新影工坊」这类 _blank 链接
     # 留在桌面端窗口里：edgechromium 的 NewWindowRequested 走 load_url，交接与返回都不弹浏览器标签页
     webview.settings["ALLOW_DOWNLOADS"] = True
     webview.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"] = False

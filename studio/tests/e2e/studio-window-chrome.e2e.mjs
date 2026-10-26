@@ -73,7 +73,7 @@ test("无边框桌面端窗口：顶栏出最小化 / 最大化 / 全屏 / 关�
         await page.click("#ns-win-max");
         await page.waitForFunction(() => window.__calls.includes("win_maximize"), null, { timeout: 5000 });
         assert.equal(await page.getAttribute("#ns-win-max", "title"), "还原", "最大化后按钮变还原");
-        assert.equal((await page.textContent("#ns-win-max")).trim(), "🗗");
+        assert.equal((await page.textContent("#ns-win-max")).trim(), "");
 
         await page.click("#ns-win-fs");
         await page.waitForFunction(() => window.__calls.includes("win_fullscreen"), null, { timeout: 5000 });

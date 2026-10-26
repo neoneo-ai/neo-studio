@@ -30,7 +30,7 @@ function segRefImgs() {
         .map((tile) => tile.dataset.file);
 }
 
-// 配方级 👤 角色参考图
+// 配方级 角色参考图
 function charRefs() {
     return [...document.querySelectorAll(".neo-director-setup-char .neo-director-refpick-item")]
         .map((tile) => tile.dataset.file);
@@ -86,7 +86,7 @@ test("卡片菜单「新建导演配方」：input 根目录图不拷贝，直�
     assert.deepEqual(ffImgs(), ["/view?filename=root.jpg&subfolder=&type=input"]);
 });
 
-test("卡片菜单「新建导演配方」：角色图目录里单图也走全参考（图进参考图与 👤 角色参考图）", async () => {
+test("卡片菜单「新建导演配方」：角色图目录里单图也走全参考（图进参考图与 角色参考图）", async () => {
     resetEnv();
     clearRoutes();
     const { GalleryCard, NeoGallery } = await loadModules();
@@ -103,7 +103,7 @@ test("卡片菜单「新建导演配方」：角色图目录里单图也走全�
 
     const item = [...document.querySelectorAll(".neo-gallery-collect-item")]
         .find((el) => el.textContent.includes("新建导演配方"));
-    assert.equal(item.textContent, "🎬 新建导演配方（全参考）", "菜单项在角色图目录里标出全参考");
+    assert.equal(item.textContent, "新建导演配方（全参考）", "菜单项在角色图目录里标出全参考");
     click(item);
     await flush();
     await sleep(60);
@@ -112,7 +112,7 @@ test("卡片菜单「新建导演配方」：角色图目录里单图也走全�
     assert.equal(document.querySelectorAll(".neo-director-segs .neo-director-seg").length, 1);
     assert.deepEqual(segRefImgs(), ["sheet_in.png"], "图进该段参考图");
     assert.deepEqual(ffImgs(), [], "不当首帧");
-    assert.deepEqual(charRefs(), ["sheet_in.png"], "同时进 👤 角色参考图");
+    assert.deepEqual(charRefs(), ["sheet_in.png"], "同时进 角色参考图");
 });
 
 test("多选操作条「新建导演配方」：仅子文件夹图被拷贝，各段首帧按落盘名建配方并清空选中", async () => {
@@ -143,7 +143,7 @@ test("多选操作条「新建导演配方」：仅子文件夹图被拷贝，�
     assert.equal(gallery._selectedItems.size, 0, "建配方后选中集合清空");
 });
 
-test("角色图目录多选「新建导演配方」：整批合成一段全参考，图进参考图与 👤 角色参考图", async () => {
+test("角色图目录多选「新建导演配方」：整批合成一段全参考，图进参考图与 角色参考图", async () => {
     resetEnv();
     clearRoutes();
     const { NeoGallery } = await loadModules();
@@ -164,7 +164,7 @@ test("角色图目录多选「新建导演配方」：整批合成一段全参�
     assert.equal(document.querySelector(".neo-director-mode").value, "r2v", "默认全参考生视频");
     assert.deepEqual(segRefImgs(), ["a.png", "b.png", "c.png"], "图按选中顺序进该段参考图");
     assert.deepEqual(ffImgs(), [], "三视图不再当关键帧");
-    assert.deepEqual(charRefs(), ["a.png", "b.png", "c.png"], "同时进 👤 角色参考图");
+    assert.deepEqual(charRefs(), ["a.png", "b.png", "c.png"], "同时进 角色参考图");
     assert.equal(gallery._selectedItems.size, 0, "建配方后选中集合清空");
 });
 

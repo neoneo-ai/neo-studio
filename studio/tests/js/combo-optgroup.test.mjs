@@ -15,9 +15,9 @@ test("combo：optgroup 分类标题渲染 + 过滤 + 键盘导航跳过标题", 
     def.value = "";
     def.textContent = "默认";
     const g1 = document.createElement("optgroup");
-    g1.label = "⚡ 出图 (Krea2)";
+    g1.label = "出图 (Krea2)";
     const g2 = document.createElement("optgroup");
-    g2.label = "🎨 风格模板";
+    g2.label = "风格模板";
     const opt1 = document.createElement("option");
     opt1.value = "gen_a";
     opt1.textContent = "出图A";
@@ -44,8 +44,8 @@ test("combo：optgroup 分类标题渲染 + 过滤 + 键盘导航跳过标题", 
     const categories = Array.from(listEl.querySelectorAll(".rs-combo-category"));
     const items = Array.from(listEl.querySelectorAll("[data-value]"));
     assert.equal(categories.length, 2, "应渲染两个分类标题");
-    assert.equal(categories[0].textContent, "⚡ 出图 (Krea2)");
-    assert.equal(categories[1].textContent, "🎨 风格模板");
+    assert.equal(categories[0].textContent, "出图 (Krea2)");
+    assert.equal(categories[1].textContent, "风格模板");
     assert.equal(items.length, 4, "应渲染 默认 + 三个选项");
     assert.equal(items[0].dataset.value, "", "首项为默认占位");
     assert.equal(items[1].dataset.value, "gen_a");

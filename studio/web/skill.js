@@ -141,7 +141,7 @@ function createSkillStatusRow(opts) {
         if (agg.missingNodes.length) parts.push(tf("{n} 个节点未安装", { n: agg.missingNodes.length }));
         const label = document.createElement("span");
         label.className = "neo-skill-status-label";
-        label.textContent = "⚠️ " + parts.join(" · ");
+        label.textContent = "" + parts.join(" · ");
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = "neo-skill-status-open";
@@ -195,7 +195,7 @@ function promptSkillTitle(defaultValue = "", plan = null) {
     const modal = mkEl("div", "rs-skill-modal rs-skill-title-dialog");
     const header = mkEl("div", "rs-skill-modal-header");
     const titleSpan = mkEl("span", "rs-skill-modal-title");
-    titleSpan.textContent = t("📋 从画布创建技能");
+    titleSpan.textContent = t("从画布创建技能");
     header.appendChild(titleSpan);
 
     const body = mkEl("div", "rs-skill-modal-content");
@@ -257,7 +257,7 @@ function promptSkillTitle(defaultValue = "", plan = null) {
     }
     for (const w of (plan && plan.warnings) || []) {
         const warn = mkEl("div", "rs-skill-title-binds-note");
-        warn.textContent = `⚠ ${w}`;
+        warn.textContent = `${w}`;
         binds.appendChild(warn);
     }
     body.appendChild(binds);
@@ -307,7 +307,7 @@ function promptSkillTitle(defaultValue = "", plan = null) {
     return promise;
 }
 
-/** 「📋 从画布」两个入口共用：序列化画布 → 预览可替换的 widget → 名称 + 勾选 → 保存 */
+/** 「从画布」两个入口共用：序列化画布 → 预览可替换的 widget → 名称 + 勾选 → 保存 */
 async function exportCanvasAsSkill() {
     const { output, error } = await serializeCanvasPrompt();
     if (error || !output || !Object.keys(output).length) {
@@ -409,7 +409,7 @@ function skillItemsFromMeta(skills, allowed) {
         }
         if (!value) continue;
         const item = skillItemFromMeta(s, value, String(value).endsWith("（不可用）") ? value : skillDisplayName(s));
-        item.badge = s.needs_image ? "📷" : "";
+        item.badge = s.needs_image ? "" : "";
         item.tags = (s.tags || []).join(" ");
         item.group = CATEGORY_LABELS[s.category]?.label || "";
         items.push(item);
@@ -421,7 +421,7 @@ function skillItemsFromMeta(skills, allowed) {
     return items;
 }
 
-/** 底部管理工具栏按钮（+ New Skill / ⬆ ZIP / ⬆ Folder / 📋 From Canvas）；onClose 在动作前关闭当前容器 */
+/** 底部管理工具栏按钮（+ New Skill / ZIP / Folder / From Canvas）；onClose 在动作前关闭当前容器 */
 function buildSkillManagementButtons(onClose) {
     const makeBtn = (label, title) => {
         const b = mkEl("button", "rs-btn rs-btn-local rs-skill-footer-btn");
@@ -433,12 +433,12 @@ function buildSkillManagementButtons(onClose) {
     };
     const newBtn = makeBtn("+ New Skill", "Create a new custom skill");
     newBtn.addEventListener("click", (e) => { e.stopPropagation(); onClose(); getSkillDetailPopup().openNew(); });
-    const zipBtn = makeBtn("⬆ ZIP", "Upload a .zip skill package");
+    const zipBtn = makeBtn("ZIP", "Upload a .zip skill package");
     zipBtn.addEventListener("click", (e) => { e.stopPropagation(); onClose(); getSkillUploadInputs().zipInput.click(); });
-    const dirBtn = makeBtn("⬆ Folder", "Upload a skill folder (all .md files)");
+    const dirBtn = makeBtn("Folder", "Upload a skill folder (all .md files)");
     dirBtn.addEventListener("click", (e) => { e.stopPropagation(); onClose(); getSkillUploadInputs().dirInput.click(); });
     // 把当前画布工作流（API prompt）导出为生图技能：后端自动抽模板占位符 + LoRA 槽位
-    const canvasBtn = makeBtn("📋 From Canvas", "Export the current canvas workflow as a skill (image or H3 video)");
+    const canvasBtn = makeBtn("From Canvas", "Export the current canvas workflow as a skill (image or H3 video)");
     canvasBtn.addEventListener("click", async (e) => {
         e.stopPropagation();
         onClose();
@@ -602,7 +602,7 @@ function renderSkillPreview(preview, it, ctx = {}) {
         const rv = mkEl("span", "rs-skill-preview-val");
         rv.textContent = ratio || t("默认 (1:1)");
         addRow(t("默认比例"), rv);
-        // 步数：详情「🎬 生视频设置」的「步数」输入框 / 模板 {{STEPS}}，缺省 20（与后端 resolve 一致）
+        // 步数：详情「生视频设置」的「步数」输入框 / 模板 {{STEPS}}，缺省 20（与后端 resolve 一致）
         const steps = Number.isFinite(cfg.steps) && cfg.steps > 0 ? cfg.steps : null;
         const sv = mkEl("span", "rs-skill-preview-val");
         sv.textContent = steps ? String(steps) : t("默认 (20)");
@@ -670,7 +670,7 @@ function openSkillPickerModal(opts = {}) {
 
     const search = mkEl("input", "rs-form-input rs-skill-picker-search");
     search.type = "text";
-    search.placeholder = t("🔍 输入过滤...");
+    search.placeholder = t("输入过滤...");
 
     const list = mkEl("div", "rs-skill-picker-list");
     panel.append(search, list);
@@ -888,7 +888,7 @@ function createSkillDropdown() {
     const selectEl = mkEl("select", "rs-tpl-selector");
     selectEl.title = "Select a skill";
 
-    // 底部工具栏：+ New Skill / ⬆ ZIP / ⬆ Folder / 📋 From Canvas —— 管理入口（与技能选择弹窗共用同一组按钮）
+    // 底部工具栏：+ New Skill / ZIP / Folder / From Canvas —— 管理入口（与技能选择弹窗共用同一组按钮）
     const skillFooter = mkEl("div", "rs-skill-dropdown-footer");
     buildSkillManagementButtons(() => combo.close()).forEach((b) => skillFooter.appendChild(b));
 
@@ -941,18 +941,18 @@ function createSkillDropdown() {
 
     // combo 声明在其后：footer / 预览卡闭包只在用户交互时执行，届时 combo 已赋值
     const combo = attachComboBox(selectEl, {
-        placeholder: t("🔍 输入过滤 skill..."),
+        placeholder: t("输入过滤 skill..."),
         emptyText: t("无匹配 skill"),
         listMinWidth: 306,
         footerEl: skillFooter,
         onItemFocus,
     });
 
-    // hover 已选 skill 时右侧出现 👁 按钮，点击打开详情弹窗（覆盖 caret 区域）
+    // hover 已选 skill 时右侧出现 按钮，点击打开详情弹窗（覆盖 caret 区域）
     const wrap = combo.box.firstElementChild;
     const viewBtn = mkEl("button", "rs-skill-view-btn");
     viewBtn.type = "button";
-    viewBtn.textContent = "👁";
+    viewBtn.textContent = "";
     viewBtn.title = t("查看当前技能详情");
     viewBtn.style.cssText = "position:absolute;right:24px;top:50%;transform:translateY(-50%);opacity:0;pointer-events:none;background:none;border:none;cursor:pointer;font-size:13px;padding:2px 4px;color:#ccc;z-index:2;transition:opacity .15s;line-height:1;";
     viewBtn.addEventListener("mousedown", (e) => { e.preventDefault(); e.stopPropagation(); });
@@ -984,7 +984,7 @@ function createSkillDropdown() {
 // ==========================================
 // 统一技能管理 UI：左侧技能列表（搜索 + 分类分组）+ 右侧技能详情（内嵌 createSkillDetailPopup）
 // createSkillManager(host, opts) 直接挂进给定容器，返回 { el, closeBtn, close }；
-// openSkillManager() 包一层模态遮罩作顶栏 🅝 菜单「🗂 技能管理」入口（跨节点单例，重复打开不叠加）；
+// openSkillManager() 包一层模态遮罩作顶栏 菜单「技能管理」入口（跨节点单例，重复打开不叠加）；
 // Neo Studio「技能」页签直接挂主区（无弹窗外壳）。
 // 技能增删改/上传均广播 rs.skills.updated，左侧列表随之自动刷新。
 // ==========================================
@@ -998,10 +998,10 @@ const SKILL_RIGHT_MIN_W = 320;
 function createSkillManager(host, { showClose = true, showCanvasBtn = true } = {}) {
     const box = mkEl("div", "rs-skill-manager");
 
-    // 顶部标题栏：🗂 技能管理 + ✕（关闭整窗；内嵌模式无 ✕）
+    // 顶部标题栏：技能管理 + ✕（关闭整窗；内嵌模式无 ✕）
     const head = mkEl("div", "rs-skill-manager-head");
     const title = mkEl("span", "rs-skill-manager-title");
-    title.textContent = t("🗂 技能管理");
+    title.textContent = t("技能管理");
     head.appendChild(title);
     let closeBtn = null;
     if (showClose) {
@@ -1024,7 +1024,7 @@ function createSkillManager(host, { showClose = true, showCanvasBtn = true } = {
     const search = document.createElement("input");
     search.type = "text";
     search.className = "rs-skill-picker-search";
-    search.placeholder = t("🔍 搜索技能…");
+    search.placeholder = t("搜索技能…");
     search.addEventListener("input", () => renderList());
     const list = mkEl("div", "rs-skill-picker-list");
     const mgmt = mkEl("div", "rs-skill-dropdown-footer");
@@ -1214,13 +1214,13 @@ function createSkillManager(host, { showClose = true, showCanvasBtn = true } = {
         await popup.openNew();
         syncEmpty();
     });
-    const zipBtn = makeMgmtBtn("⬆ ZIP", t("上传 .zip 技能包"));
+    const zipBtn = makeMgmtBtn("ZIP", t("上传 .zip 技能包"));
     zipBtn.addEventListener("click", (e) => { e.stopPropagation(); getSkillUploadInputs().zipInput.click(); });
-    const dirBtn = makeMgmtBtn(t("⬆ 目录"), t("上传技能目录（全部 .md）"));
+    const dirBtn = makeMgmtBtn(t("目录"), t("上传技能目录（全部 .md）"));
     dirBtn.addEventListener("click", (e) => { e.stopPropagation(); getSkillUploadInputs().dirInput.click(); });
     mgmt.append(newBtn, zipBtn, dirBtn);
     if (showCanvasBtn) {
-        const canvasBtn = makeMgmtBtn(t("📋 从画布"), t("把当前画布工作流导出为技能"));
+        const canvasBtn = makeMgmtBtn(t("从画布"), t("把当前画布工作流导出为技能"));
         canvasBtn.addEventListener("click", async (e) => {
             e.stopPropagation();
             try {
@@ -1279,7 +1279,7 @@ function openSkillManager() {
             prevRect = { left: box.style.left, top: box.style.top, width: box.style.width, height: box.style.height };
             Object.assign(box.style, { position: "absolute", left: "8px", top: "8px", width: "calc(100vw - 16px)", height: "calc(100vh - 16px)" });
             maximized = true;
-            maxBtn.textContent = "🗗";
+            maxBtn.textContent = "";
             maxBtn.title = t("还原窗口");
         }
     };

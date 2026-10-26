@@ -10,6 +10,7 @@ import { fileToBase64, imagesFromClipboard, sseStream, invokePromptStream, creat
 import { listSkills, populateSkillOptions, createSkillDropdown, renderMarkdown, resolveSkillId, openSkillDetailById, CATEGORY_LABELS, skillDisplayName } from "./skill.js";
 import { createModelConfigForm, openLLMSettingsModal } from "./llm-setting.js";
 import { mkEl } from "./dom-utils.js";
+import { icon } from "./js/core/icons.js";
 import { collectWorkflowContext } from "./workflow-context.js";
 import { saveTextToStorage, markQuickInputConsumed } from "./node-behavior.js";
 import { createAtImagePicker } from "./at-picker.js";
@@ -47,20 +48,20 @@ function failAction(skillId, err) {
 // ==========================================
 
 const QUICK_INPUT_TIPS = [
-    t("✨ 输入描述，AI 自动帮你生成提示词"),
-    t("📝 输入改写需求，如：'去掉动漫风格，改成写实'"),
-    t("🌐 输入翻译需求，如：'翻译成中文'"),
-    t("🎨 输入风格要求，如：'改成赛博朋克风格'"),
-    t("📷 输入场景描述，如：'夕阳下的海边日落'"),
-    t("🔍 输入关键词搜索已有提示词"),
-    t("🚀 输入描述后按 Enter 生成，Shift+Enter 换行"),
-    t("⬆️ 按 ↑/↓ 召回之前生成用过的输入"),
-    t("🔄 输入修改指令，如：'增加细节描述'"),
-    t("🎭 输入角色描述，如：'一个穿着汉服的女孩'"),
-    t("🌅 输入时间场景，如：'清晨的森林，阳光穿透树叶'"),
-    t("🏙️ 输入城市描述，如：'未来科幻城市，高楼林立'"),
-    t("💾 点击保存按钮将提示词存为预设"),
-    t("▾ 自动增强菜单内配置 LLM，🎛️ 管理技能/模板")
+    t("输入描述，AI 自动帮你生成提示词"),
+    t("输入改写需求，如：'去掉动漫风格，改成写实'"),
+    t("输入翻译需求，如：'翻译成中文'"),
+    t("输入风格要求，如：'改成赛博朋克风格'"),
+    t("输入场景描述，如：'夕阳下的海边日落'"),
+    t("输入关键词搜索已有提示词"),
+    t("输入描述后按 Enter 生成，Shift+Enter 换行"),
+    t("按 ↑/↓ 召回之前生成用过的输入"),
+    t("输入修改指令，如：'增加细节描述'"),
+    t("输入角色描述，如：'一个穿着汉服的女孩'"),
+    t("输入时间场景，如：'清晨的森林，阳光穿透树叶'"),
+    t("输入城市描述，如：'未来科幻城市，高楼林立'"),
+    t("点击保存按钮将提示词存为预设"),
+    t("▾ 自动增强菜单内配置 LLM，管理技能/模板")
 ];
 
 function getRandomTip() {
@@ -291,10 +292,10 @@ function createStatusBars() {
     statusBar.appendChild(toggleWrapper);
 
     const randomBtn = mkEl("button", "rs-random-btn");
-    randomBtn.textContent = "🎲";
+    randomBtn.textContent = "";
     randomBtn.setAttribute("data-rs-tooltip", "Random prompt");
 
-    // 🎲 主点击=立即随机填入；▾ 展开运行时随机的运行期配置菜单
+    // 主点击=立即随机填入；▾ 展开运行时随机的运行期配置菜单
     // （勾选状态由 NodeBehaviors.wireRuntimeRandom 接线持久化到 properties 与隐藏控件）
     const randomWrap = mkEl("div", "rs-random-wrap");
     const randomCaret = mkEl("button", "rs-random-caret");
@@ -424,11 +425,11 @@ function createStatusBars() {
     const inputToolbar = mkEl("div", "rs-input-toolbar");
 
     const generateBtn = mkEl("button", "rs-generate-btn");
-    generateBtn.textContent = "✨";
+    generateBtn.replaceChildren(icon("sparkles", 16));
     generateBtn.setAttribute("data-rs-tooltip", "Generate from description");
 
-    // Auto-generate 复选框并入 ✨ 的 ▾ 菜单（参照骰子菜单交互）：
-    // ✨ 主点击=立即生成；▾ 展开"运行时自动增强"开关。保留原 checkbox 元素身份，
+    // Auto-generate 复选框并入 的 ▾ 菜单（参照骰子菜单交互）：
+    // 主点击=立即生成；▾ 展开"运行时自动增强"开关。保留原 checkbox 元素身份，
     // 使 prompts.js 既有接线（恢复/持久化/rs_auto_generate 事件）零改动。
     const autoGenerateCheckbox = document.createElement("input");
     autoGenerateCheckbox.type = "checkbox";
@@ -497,13 +498,13 @@ function createStatusBars() {
     const autoTabs = mkEl("div", "rs-auto-tabs");
     const llmTabBtn = mkEl("button", "rs-auto-tab rs-auto-tab-active");
     llmTabBtn.type = "button";
-    llmTabBtn.textContent = "🤖 LLM Settings";
+    llmTabBtn.textContent = "LLM Settings";
     const genTabBtn = mkEl("button", "rs-auto-tab");
     genTabBtn.type = "button";
-    genTabBtn.textContent = t("🖼️ 生图默认设置");
+    genTabBtn.textContent = t("生图默认设置");
     const videoTabBtn = mkEl("button", "rs-auto-tab");
     videoTabBtn.type = "button";
-    videoTabBtn.textContent = t("🎬 生视频模型");
+    videoTabBtn.textContent = t("生视频模型");
     autoTabs.append(llmTabBtn, genTabBtn, videoTabBtn);
     const llmPanel = mkEl("div", "rs-auto-panel");
     llmPanel.appendChild(modelForm.el);
@@ -537,11 +538,11 @@ function createStatusBars() {
     const dirtyConfirm = mkEl("div", "rs-gen-dirty-confirm");
     dirtyConfirm.hidden = true;
     const dirtyText = mkEl("span", "rs-gen-dirty-text");
-    dirtyText.textContent = t("⚠ 有未保存的修改");
+    dirtyText.textContent = t("有未保存的修改");
     const dirtyActions = mkEl("div", "rs-gen-dirty-actions");
     const btnSaveClose = mkEl("button", "rs-btn rs-gen-dirty-save");
     btnSaveClose.type = "button";
-    btnSaveClose.textContent = t("💾 保存并关闭");
+    btnSaveClose.textContent = t("保存并关闭");
     const btnDiscard = mkEl("button", "rs-btn rs-gen-dirty-discard");
     btnDiscard.type = "button";
     btnDiscard.textContent = t("放弃修改");
@@ -701,7 +702,7 @@ function createStatusBars() {
     // 分类口径在本页定：生视频 / 任务为内部使用技能不在菜单里出现（见 skill.js 的 CATEGORY_LABELS）
     const openSlashSkillPicker = createSlashSkillPicker({
         quickInput, skillSelector, listSkills,
-        rowText: (s) => (s.needs_image ? "📷 " : "") + skillDisplayName(s),
+        rowText: (s) => (s.needs_image ? "" : "") + skillDisplayName(s),
         categoryLabel: (s) => (CATEGORY_LABELS[s.category] || CATEGORY_LABELS.image_enhance).label,
         filter: (s) => !CATEGORY_LABELS[s.category]?.hidden,
         sort: (a, b) => ((CATEGORY_LABELS[a.category]?.order ?? 99) - (CATEGORY_LABELS[b.category]?.order ?? 99))
@@ -726,7 +727,7 @@ function createStatusBars() {
     const actionRow = mkEl("div", "rs-btn-row rs-action-row");
 
     const saveBtn = mkEl("button", "rs-btn rs-action-btn");
-    saveBtn.textContent = "💾";
+    saveBtn.textContent = "";
     saveBtn.setAttribute("data-rs-tooltip", "Save as preset");
 
     // Note: saveBtn is NOT added to actionRow here.
@@ -737,7 +738,7 @@ function createStatusBars() {
 }
 
 // ==========================================
-// LLM 生成：✨ / Enter 触发，三条流式分支共用同一 SSE 处理
+// LLM 生成：/ Enter 触发，三条流式分支共用同一 SSE 处理
 // ==========================================
 // 追踪节点 image 输入插槽的上游节点（如 LoadImage），取其图片文件名
 // 返回 {kind:"input", value:"<filename>"}、{kind:"unresolved"}（图已连接但读不到文件名）或 null（未连接）
@@ -806,7 +807,7 @@ async function runChatImageGeneration({ generateBtn, controller }, text, referen
     const hasRefs = resolvedRefs.length > 0;
 
     generateBtn.disabled = true;
-    generateBtn.textContent = "⏳";
+    generateBtn.textContent = "";
 
     if (useRefs) {
         // image 输入已连接但解析不到文件名：直接报错，绝不静默降级（优先于「缺图」）
@@ -819,7 +820,7 @@ async function runChatImageGeneration({ generateBtn, controller }, text, referen
             });
             showToast(app, "error", t("参考图读取失败"), t("图片输入已连接但无法解析出图片文件"));
             generateBtn.disabled = false;
-            generateBtn.textContent = "✨";
+            generateBtn.textContent = "";
             return;
         }
         // 四视图缺参考图：通知 + 节点底部提示区，不提交（不弹 alert）
@@ -832,7 +833,7 @@ async function runChatImageGeneration({ generateBtn, controller }, text, referen
             });
             showToast(app, "error", t("缺少参考图"), t("四视图需要参考图才能生图"));
             generateBtn.disabled = false;
-            generateBtn.textContent = "✨";
+            generateBtn.textContent = "";
             return;
         }
     }
@@ -939,7 +940,7 @@ async function runChatImageGeneration({ generateBtn, controller }, text, referen
         // 等待期间被清空（代际更替）时不动按钮，避免解禁新一轮正在进行的生成
         if (!controller.isStale(myToken)) {
             generateBtn.disabled = false;
-            generateBtn.textContent = "✨";
+            generateBtn.textContent = "";
             // 生图失败：action toast 引导到技能详情页处理（缺模型/缺节点等），不自动关闭
             if (state.error) {
                 const skillName = opt?.value || "";
@@ -1053,7 +1054,7 @@ function createGenerateHandler(promptUI) {
         const selectedSkillId = skillSelector?.value || "";
 
         generateBtn.disabled = true;
-        generateBtn.textContent = "⏳";
+        generateBtn.textContent = "";
 
         // 三条流式分支共用的 SSE 输出框处理器（正文 rAF 批量写回 / 思考面板 / 状态行，见 prompt-service）：
         // onDone 先把正文落进 textarea 再持久化 widget；failOpts = (err) => ({ summary, actionLabel, onAction })，失败时按错误来源给处理入口
@@ -1078,7 +1079,7 @@ function createGenerateHandler(promptUI) {
         try {
             if (hasImages) {
                 // 图片 -> skill 路由（反推等 vision skill，流式）
-                generateBtn.textContent = "⏳"; // 统一短反馈，而非长串处理文案
+                generateBtn.textContent = ""; // 统一短反馈，而非长串处理文案
 
                 const skillId = selectedSkillId || "reverse_prompt";
 
@@ -1096,7 +1097,7 @@ function createGenerateHandler(promptUI) {
                 await invokePromptStream(payload, handlers);
             } else if (selectedSkillId) {
                 // 使用选中的模板进行生成（流式）
-                generateBtn.textContent = "⏳"; // 统一短反馈
+                generateBtn.textContent = ""; // 统一短反馈
 
                 // If quickInput has content, combine with currentPrompt; otherwise use currentPrompt alone
                 const userPrompt = quickText ? (currentPrompt ? `${currentPrompt}\n\n---\n\n${quickText}` : quickText) : currentPrompt;
@@ -1112,7 +1113,7 @@ function createGenerateHandler(promptUI) {
                 });
             } else {
                 // 使用 LLM 智能判断（流式）：LLM 直接判断用户意图并生成/改写
-                generateBtn.textContent = "⏳"; // 统一短反馈
+                generateBtn.textContent = ""; // 统一短反馈
                 // 拼接 currentPrompt 和 quickText（与选择了模版时保持一致）
                 const userPrompt = quickText ? (currentPrompt ? `${currentPrompt}\n\n---\n\n${quickText}` : quickText) : currentPrompt;
                 handlers = streamHandlers("Smart prompt stream error:", (err) => failAction("", err));
@@ -1128,7 +1129,7 @@ function createGenerateHandler(promptUI) {
             showToast(app, "error", t("网络错误"), e.message || String(e));
         } finally {
             generateBtn.disabled = false;
-            generateBtn.textContent = "✨";
+            generateBtn.textContent = "";
             // 补落尚未执行的合并帧（正常路径 onDone 已落过，幂等）
             handlers?.flush();
         }
@@ -1184,14 +1185,14 @@ function triggerTextChange(textareaEl) {
 /**
  * 提示词输出区：textarea + Markdown 预览层 + 清空按钮 + 多轮技能提示。
  * actions 是宿主自己的动作按钮（保存/随机/列表），按传入顺序组合进按钮组，
- * 👁 预览按钮始终排最后；写入 textarea 时派发原生 input 事件供外部同步 widget。
+ * 预览按钮始终排最后；写入 textarea 时派发原生 input 事件供外部同步 widget。
  */
 function createPromptOutputArea({ customTextarea, skillSelector, actions = [] }) {
     // Create wrapper for custom textarea and buttons
     const customTextareaWrapper = mkEl("div", "rs-custom-textarea-wrapper");
     customTextareaWrapper.appendChild(customTextarea);
 
-    // Markdown 预览层：覆盖在 textarea 区域，点 👁 切换显示（复用 skill.js 的 renderMarkdown）
+    // Markdown 预览层：覆盖在 textarea 区域，点 切换显示（复用 skill.js 的 renderMarkdown）
     const mdPreview = mkEl("div", "rs-md-preview rs-prompt-md-preview");
     mdPreview.style.display = "none";
     customTextareaWrapper.appendChild(mdPreview);
@@ -1200,9 +1201,9 @@ function createPromptOutputArea({ customTextarea, skillSelector, actions = [] })
     const buttonGroup = mkEl("div", "rs-button-group");
     for (const action of actions) buttonGroup.appendChild(action);
 
-    // Markdown 预览切换按钮（👁）：默认随按钮组折叠，hover 展开，激活时常亮高亮
+    // Markdown 预览切换按钮（）：默认随按钮组折叠，hover 展开，激活时常亮高亮
     const mdPreviewBtn = mkEl("button", "rs-action-btn rs-md-preview-btn");
-    mdPreviewBtn.textContent = "👁";
+    mdPreviewBtn.textContent = "";
     mdPreviewBtn.setAttribute("data-rs-tooltip", t("Markdown 预览 / 编辑"));
     buttonGroup.appendChild(mdPreviewBtn);
 
@@ -1382,7 +1383,7 @@ function createPromptOutputArea({ customTextarea, skillSelector, actions = [] })
             genStatusEl.appendChild(genStatusLabel);
             genStatusCancel = null;
         }
-        genStatusText.textContent = tf("🖼️ 生图 · {status}", { status: genState.statusText });
+        genStatusText.textContent = tf("生图 · {status}", { status: genState.statusText });
         paintGenFill();
         paintGenLabel();
         // 取消按钮：cancelId 在提交任务后出现（phase 未变时增量补挂），点击后禁用防重复
@@ -1416,7 +1417,7 @@ function createPromptOutputArea({ customTextarea, skillSelector, actions = [] })
         for (const warn of genState.warnings || []) {
             hasContent = true;
             const warnEl = mkEl("div", "rs-gen-warn");
-            warnEl.textContent = `⚠ ${warn}`;
+            warnEl.textContent = `${warn}`;
             block.appendChild(warnEl);
         }
         if (genState.error) {
@@ -1498,7 +1499,7 @@ function createPromptOutputArea({ customTextarea, skillSelector, actions = [] })
 
     // 多轮交互提示：每次生成只推进一个阶段，需补充返回的问询后再次运行
     const skillHint = mkEl("div", "rs-skill-hint");
-    skillHint.textContent = t("多轮技能：每次仅推进一阶段，补充问询后再点 ✨");
+    skillHint.textContent = t("多轮技能：每次仅推进一阶段，补充问询后再点 ");
     // 按需显示：仅当前选中的 skill 声明了 multi_turn 时才出现（默认隐藏）
     skillHint.style.display = "none";
     function updateSkillHint() {

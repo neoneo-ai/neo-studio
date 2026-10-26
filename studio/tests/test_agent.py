@@ -262,7 +262,7 @@ class TestToolSurface(unittest.TestCase):
         self.assertNotIn("当前导演配方", paint)
 
     def test_context_block_marks_the_character_directory(self):
-        """👤 角色图目录是画廊的事实，智能体自己没有这份数据：写明它，基于这里的附件图建配方
+        """角色图目录是画廊的事实，智能体自己没有这份数据：写明它，基于这里的附件图建配方
         才默认走全参考。这一栏只认前端给的 true，字符串形态的标记当没有。"""
         marked = agent._context_block({"page": "gallery", "gallery_path": "Cloud Presets/明朝人物",
                                        "character_dir": True})
@@ -721,7 +721,7 @@ class TestRoutes(unittest.TestCase):
 
     def test_run_makes_a_new_recipe_full_reference_in_a_character_directory(self):
         """请求体里的角色图标记一路走到参考注入：本轮新建的配方补上 shared.mode=r2v，
-        与画廊 👤 目录卡片菜单的「🎬 新建导演配方（全参考）」同一条口径。"""
+        与画廊 目录卡片菜单的「新建导演配方（全参考）」同一条口径。"""
         turns = [{"content": "建配方", "tool_calls": [{"id": "c1", "function": {
             "name": "director_save",
             "arguments": json.dumps({"name": "明朝人物",
@@ -1936,7 +1936,7 @@ class TestPlanContract(unittest.TestCase):
         self.assertIn("[DONE]", lines[-1])
         self.assertIn("执行清单", seen[0])
         self.assertIn("neo_status", seen[0])
-        self.assertIn("✅ 已完成", seen[1])       # 划掉的那一条在第二轮请求里就看得见
+        self.assertIn("已完成", seen[1])       # 划掉的那一条在第二轮请求里就看得见
 
     def test_a_failed_tool_does_not_mark_a_plan_step_done(self):
         """[error] 那一发没产出东西：划成已完成就是报假进度。"""
@@ -1981,7 +1981,7 @@ class TestUserPrefs(unittest.TestCase):
         self.addCleanup(_clear_prefs)
 
     def test_the_film_gate_toggle_defaults_off(self):
-        """默认拦住整片会把「✨ 生成 → 出片」这条今天就在跑的链路变成每次多点一下。"""
+        """默认拦住整片会把「生成 → 出片」这条今天就在跑的链路变成每次多点一下。"""
         self.assertFalse(agent.DEFAULT_PREFS["confirm_films"])
         self.assertFalse(_runobj(None).prefs["confirm_films"])
 
@@ -2087,7 +2087,7 @@ class TestFilmGate(unittest.TestCase):
         run = _runobj(client)
         run.prefs = dict(agent.DEFAULT_PREFS, confirm_films=True)
         with mock.patch.object(agent, "_chat", lambda m, t: turns.pop(0)):
-            frames = _run_answered(run, "⏹ 先不跑")
+            frames = _run_answered(run, "先不跑")
         asks = [f for f in frames if f.get("kind") == "ask"]
         self.assertEqual(len(asks), 1)
         self.assertEqual(asks[0]["options"], list(agent.GATE_OPTIONS))
@@ -2107,7 +2107,7 @@ class TestFilmGate(unittest.TestCase):
         run = _runobj(client)
         run.prefs = dict(agent.DEFAULT_PREFS, confirm_films=True)
         with mock.patch.object(agent, "_chat", lambda m, t: turns.pop(0)):
-            frames = _run_answered(run, "✅ 跑这一发")
+            frames = _run_answered(run, "跑这一发")
         self.assertEqual([c[0] for c in client.calls], ["director_run"])
         done = [f for f in frames if f.get("kind") == "tool_result" and f["tool"] == "director_run"]
         self.assertIn("succeeded", done[0]["text"])
@@ -2131,7 +2131,7 @@ class TestFilmGate(unittest.TestCase):
         run = _runobj(client)
         run.prefs = dict(agent.DEFAULT_PREFS, confirm_films=True)
         with mock.patch.object(agent, "_chat", lambda m, t: turns.pop(0)):
-            frames = _run_answered(run, "⏹ 先不跑")
+            frames = _run_answered(run, "先不跑")
         self.assertFalse([f for f in frames if f.get("kind") == "ask"])
         self.assertEqual([c[0] for c in client.calls], ["generate_image"])
 
@@ -2148,9 +2148,9 @@ class TestFilmGate(unittest.TestCase):
         self.assertEqual(agent._gate_cost("director_run", {}), "参数在配方里")
 
     def test_the_gate_recognises_a_refusal_and_not_a_timeout(self):
-        self.assertTrue(agent._gate_refused("⏹ 先不跑"))
+        self.assertTrue(agent._gate_refused("先不跑"))
         self.assertTrue(agent._gate_refused("这发别跑"))
-        self.assertFalse(agent._gate_refused("✅ 跑这一发"))
+        self.assertFalse(agent._gate_refused("跑这一发"))
         self.assertFalse(agent._gate_refused("[timeout] 30 分钟没等到回答"))
         self.assertFalse(agent._gate_refused(""))
 
@@ -2218,7 +2218,7 @@ class TestMediaFacts(unittest.TestCase):
         run = _runobj(client)
         run.user_skill = "krea2_gen"
         with mock.patch.object(agent, "_chat", lambda m, t: turns.pop(0)):
-            frames = _run_answered(run, "⏹ 先不跑")
+            frames = _run_answered(run, "先不跑")
         asks = [f for f in frames if f.get("kind") == "ask"]
         self.assertEqual(len(asks), 1)
         self.assertEqual(asks[0]["options"], list(agent.GATE_OPTIONS))
@@ -2243,7 +2243,7 @@ class TestMediaFacts(unittest.TestCase):
         run = _runobj(client)
         run.user_skill = "krea2_gen"
         with mock.patch.object(agent, "_chat", lambda m, t: turns.pop(0)):
-            frames = _run_answered(run, "✅ 跑这一发")
+            frames = _run_answered(run, "跑这一发")
         self.assertEqual(len([f for f in frames if f.get("kind") == "ask"]), 1)
         self.assertEqual([c[0] for c in client.calls], ["director_run", "director_run"])
 
@@ -2261,7 +2261,7 @@ class TestMediaFacts(unittest.TestCase):
             run.focus = dict(focus)
             run.image_sources = list(atts or [])
             with mock.patch.object(agent, "_chat", lambda m, t: turns.pop(0)):
-                frames = _run_answered(run, "⏹ 先不跑", images=self._bytes() if atts else None)
+                frames = _run_answered(run, "先不跑", images=self._bytes() if atts else None)
             self.assertFalse([f for f in frames if f.get("kind") == "ask"], label)
             self.assertEqual([c[0] for c in client.calls], ["director_run"], label)
 
@@ -2274,7 +2274,7 @@ class TestMediaFacts(unittest.TestCase):
         run = _runobj(client)
         run.user_skill = "krea2_gen"
         with mock.patch.object(agent, "_chat", lambda m, t: turns.pop(0)):
-            frames = _run_answered(run, "⏹ 先不跑")
+            frames = _run_answered(run, "先不跑")
         self.assertFalse([f for f in frames if f.get("kind") == "ask"])
         self.assertEqual([c[0] for c in client.calls], ["generate_image"])
 
@@ -2620,7 +2620,7 @@ class TestSkillProcessGates(unittest.TestCase):
                    "*(请回复 A/B/C/D 或直接输入新结构描述，确认后进入 STEP 2)*")
 
     # 实测第 1 发原文的尾部：报完清单同一条里就写着门，末尾那句「请从…中选一个」
-    PROSE_GATE3 = ("### 🧭 当前待决：第 1 步「项目简报」的风格方向\n"
+    PROSE_GATE3 = ("### 当前待决：第 1 步「项目简报」的风格方向\n"
                    "**A. 写实风格** —— 偏向真实光影与材质，适合电影感短片\n"
                    "**B. 卡通风格** —— 明快色彩、夸张表情，适合儿童向内容\n"
                    "**C. 极简风格** —— 低多边形或扁平化渲染，强调几何与线条美感\n\n"

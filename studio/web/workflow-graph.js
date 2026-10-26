@@ -811,11 +811,11 @@ function attachDragPan(svg, scroller) {
     svg.addEventListener("pointercancel", end);
 }
 
-// 复制缺失项名称：优先异步 Clipboard API；不可用（非安全上下文等）回落 execCommand。按钮上即时反馈 ✓/✗。
+// 复制缺失项名称：优先异步 Clipboard API；不可用（非安全上下文等）回落 execCommand。按钮上即时反馈 /✗。
 function copyName(text, btn) {
     const feedback = (ok) => {
-        btn.textContent = ok ? "✓" : "✗";
-        setTimeout(() => { btn.textContent = "📋"; }, 1000);
+        btn.textContent = ok ? "" : "✗";
+        setTimeout(() => { btn.textContent = ""; }, 1000);
     };
     if (typeof navigator.clipboard?.writeText === "function") {
         navigator.clipboard.writeText(text).then(() => feedback(true), () => feedback(false));
@@ -1003,10 +1003,10 @@ export function renderWorkflowGraph(container, workflow, validation, summaryTarg
     const c = (validation && validation.counts) || { missingNodes: 0, missingModels: 0, templates: 0 };
     const tokenChips = filledTokenChips(wf, validation && validation.definitions);
     const parts = [];
-    if (c.missingNodes) parts.push(tf("⚠️ {n} 个节点未安装", { n: c.missingNodes }));
-    if (c.missingModels) parts.push(tf("⚠️ {n} 个模型缺失", { n: c.missingModels }));
-    if (c.templates) parts.push(tf("🔵 {n} 个模板变量运行时填入", { n: c.templates }));
-    if (tokenChips.length) parts.push(tf("🟦 {n} 个变量由技能设置填入", { n: tokenChips.length }));
+    if (c.missingNodes) parts.push(tf("{n} 个节点未安装", { n: c.missingNodes }));
+    if (c.missingModels) parts.push(tf("{n} 个模型缺失", { n: c.missingModels }));
+    if (c.templates) parts.push(tf("{n} 个模板变量运行时填入", { n: c.templates }));
+    if (tokenChips.length) parts.push(tf("{n} 个变量由技能设置填入", { n: tokenChips.length }));
     const countLine = document.createElement("div");
     countLine.className = "rs-wf-summary-count";
     countLine.textContent = parts.join(" · ");
@@ -1035,7 +1035,7 @@ export function renderWorkflowGraph(container, workflow, validation, summaryTarg
             const btn = document.createElement("button");
             btn.className = "rs-wf-copy";
             btn.type = "button";
-            btn.textContent = "📋";
+            btn.textContent = "";
             btn.title = t("复制名称");
             btn.onclick = () => copyName(i.value, btn);
             chip.append(name, btn);
@@ -1065,7 +1065,7 @@ export function renderWorkflowGraph(container, workflow, validation, summaryTarg
             const btn = document.createElement("button");
             btn.className = "rs-wf-copy";
             btn.type = "button";
-            btn.textContent = "📋";
+            btn.textContent = "";
             btn.title = t("复制变量");
             btn.onclick = () => copyName(tk.token, btn);
             chip.append(name, btn);

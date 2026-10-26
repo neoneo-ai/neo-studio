@@ -292,7 +292,7 @@
     margin-left: 8px;
 }
 
-/* 「生成素材」弹窗：💾 保存为新技能（选中主模型 / LoRA 后才显示） */
+/* 「生成素材」弹窗：保存为新技能（选中主模型 / LoRA 后才显示） */
 .neo-gallery-gm-save-skill {
     margin-top: 6px;
     padding: 2px 10px;
@@ -309,7 +309,7 @@
     border-color: #FF6A00;
 }
 
-/* 「生成素材」弹窗：agent 式增强区——quick input（矮框，描述 / 修改指令）+ [增强技能 + ✨] 行 */
+/* 「生成素材」弹窗：agent 式增强区——quick input（矮框，描述 / 修改指令）+ [增强技能 + ] 行 */
 .neo-gallery-gm-quick-input {
     width: 100%;
     box-sizing: border-box;
@@ -330,7 +330,7 @@
     border-color: rgba(76, 154, 255, 0.6);
 }
 
-/* llm-chat 式双框：output 框右下角浮出按钮组（🎲 ▾ ☰，半透明、hover 变实）+ quick input 内部底边工具栏（增强技能 + ✨） */
+/* llm-chat 式双框：output 框右下角浮出按钮组（▾ ☰，半透明、hover 变实）+ quick input 内部底边工具栏（增强技能 + ） */
 .neo-gallery-gm-output-wrap {
     position: relative;
 }

@@ -80,7 +80,7 @@ function createOverlayWithSearch() {
     // Search input at top of the panel
     const searchBar = mkEl("input", "rs-preset-search-input");
     searchBar.type = "text";
-    searchBar.placeholder = "🔍 Search presets...";
+    searchBar.placeholder = "Search presets...";
     const tabBar = mkEl("div", "rs-preset-tabs");
     const body = mkEl("div", "rs-preset-list-body");
     overlay.appendChild(searchBar);
@@ -92,7 +92,7 @@ function createOverlayWithSearch() {
 function createInputModal() {
     const modal = mkEl("div", "rs-preset-name-input");
     const aiStatus = mkEl("div", "rs-ai-status processing");
-    aiStatus.innerHTML = t("⏳ AI 正在分析提示词...");
+    aiStatus.innerHTML = t("AI 正在分析提示词...");
 
     const label = mkEl("div", "rs-input-label");
     label.textContent = t("名称:");
@@ -398,7 +398,7 @@ function createPromptManagerUI() {
     });
 
     // 输出区（textarea + Markdown 预览 + 清空 + 多轮提示）归 llm-chat.js 所有；
-    // 💾/🎲/📋 三个动作按钮作为不透明节点组合进它的按钮组，顺序保持不变。
+    // //三个动作按钮作为不透明节点组合进它的按钮组，顺序保持不变。
     const promptOutput = createPromptOutputArea({ customTextarea, skillSelector, actions: [saveBtn, randomWrap, listBtn] });
 
     root.appendChild(promptOutput.el);
@@ -476,20 +476,20 @@ function createPromptManagerUI() {
 
             recipeHint.style.display = allowRecipe ? "block" : "none";
             if (allowRecipe) {
-                recipeHint.textContent = t("⏳ 正在收集工作流资源...");
+                recipeHint.textContent = t("正在收集工作流资源...");
                 collectWorkflowAssets(node).then(assets => {
                     const p = (customTextarea?.value || currentText).trim();
                     recipeHint.textContent = tf("配方将包含 {n} 个资源（当前子图中已连线的 LoadImage/LoadVideo/LoadAudio）{p}。", { n: assets.length, p: p ? t(" + 当前提示词") : "" });
                 }).catch(e => {
                     console.error("[Neo Recipes] Collect failed:", e);
-                    recipeHint.textContent = t("⚠️ 工作流资源收集失败");
+                    recipeHint.textContent = t("工作流资源收集失败");
                 });
             }
 
             if (currentText.trim()) {
                 saveBtn.disabled = true;
                 aiStatus.className = "rs-ai-status processing";
-                aiStatus.innerHTML = t("⏳ AI 正在分析提示词...");
+                aiStatus.innerHTML = t("AI 正在分析提示词...");
 
                 Promise.all([
                     extractTitle(currentText),
@@ -511,10 +511,10 @@ function createPromptManagerUI() {
                             }
                         });
                         aiStatus.className = "rs-ai-status success";
-                        aiStatus.innerHTML = t("✅ AI 分析完成");
+                        aiStatus.innerHTML = t("AI 分析完成");
                     } else {
                         aiStatus.className = "rs-ai-status error";
-                        aiStatus.innerHTML = t("❌ AI 分析失败，请手动填写");
+                        aiStatus.innerHTML = t("AI 分析失败，请手动填写");
                         llmAnalysisErrorToast(dataClassify.error || dataTitle.error || t("未能识别标题与标签"));
                     }
                 }).catch(e => {
@@ -615,7 +615,7 @@ function createPromptManagerUI() {
                     const name = typeof item === 'string' ? item : item.name;
                     const tags = typeof item === 'string' ? [] : (item.tags || []);
                     const source = typeof item === 'object' ? item.source : "custom";
-                    const shown = isCollectionName(name) ? `\ud83d\udcda ${name}` : name;
+                    const shown = name;
 
                     const row = document.createElement("div");
                     row.className = "rs-preset-item";
@@ -791,7 +791,7 @@ function createPromptManagerUI() {
 
             const box = mkEl("div", "rs-collection-matches");
             const head = mkEl("div", "rs-loading");
-            head.textContent = tf("📚 集合内匹配 {shown} / {total} 条", { shown: entries.length, total });
+            head.textContent = tf("集合内匹配 {shown} / {total} 条", { shown: entries.length, total });
             box.appendChild(head);
 
             entries.forEach(({ title, text, name, source }) => {

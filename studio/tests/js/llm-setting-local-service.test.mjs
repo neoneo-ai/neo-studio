@@ -53,7 +53,7 @@ test("本地服务模型列表：未加载的模型也可选，并标注状态�
     assert.equal(texts.length, 2, "应列出服务端全部可用模型");
     assert.match(texts[0], /○ 未加载/, "未加载模型应标注状态");
     assert.match(texts[0], /16\.8GB/, "应显示文件大小");
-    assert.match(texts[0], /🖼️/, "视觉能力应标注");
+    assert.match(texts[0], /视觉/, "视觉能力应标注");
     assert.match(texts[1], /● 已加载/);
     assert.equal(modelSelect().value, "google/gemma-4-26b-a4b", "未加载也照常参与回填选择");
 });
@@ -75,6 +75,6 @@ test("服务不可达：显示连接失败态", async () => {
     await llmForm.load();
     await flush(60);
 
-    assert.deepEqual(optionTexts(), ["❌ 无法连接服务"]);
+    assert.deepEqual(optionTexts(), ["无法连接服务"]);
     assert.equal(modelSelect().value, "");
 });

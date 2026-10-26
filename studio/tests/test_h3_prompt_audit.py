@@ -283,7 +283,7 @@ class TestH3AuditEvents(unittest.TestCase):
     def test_pass_yields_status_only(self):
         events = self._events(REF_PROMPT)
         self.assertEqual([e["kind"] for e in events], ["status", "status"])
-        self.assertIn("✅ 格式自检通过", events[1]["text"])
+        self.assertIn("格式自检通过", events[1]["text"])
 
     def test_repair_yields_replace(self):
         draft = REF_PROMPT.replace(" (S1)", "")

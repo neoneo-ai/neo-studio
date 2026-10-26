@@ -8,7 +8,7 @@
 
 import { t } from "./js/core/i18n.js";
 
-const ICONS = { error: "❌", warning: "⚠️", success: "✅", info: "ℹ️" };
+const ICONS = { error: "", warning: "", success: "", info: "" };
 // 正常级别（success/info）自动消失时长，与 ComfyUI 内置 toast 一致；异常级别不自动关闭。
 const AUTO_DISMISS_MS = 5000;
 

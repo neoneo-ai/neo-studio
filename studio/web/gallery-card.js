@@ -122,7 +122,7 @@ export class GalleryCard {
 
         const dropdown = $el("div", { id: "neo-gallery-lora-send-menu", className: "neo-gallery-send-menu" });
         for (const item of menuItems) {
-            const label = item.isSelected ? `${item.label} \u2713` : item.label;
+            const label = item.isSelected ? `${item.label} ` : item.label;
             const el = $el("div", {
                 className: "neo-gallery-send-menu-item" + (item.isSelected ? " neo-gallery-send-menu-selected" : ""),
                 onclick: (e) => { e.stopPropagation(); this._removeLoraSendMenu(); gallery.sendLoraToNode(loraPath, `${item.nodeId}:widget:${item.widgetIndex}`, button); },
@@ -156,7 +156,7 @@ export class GalleryCard {
         const fail = (err) => {
             console.error('[Neo Gallery] Copy image failed:', err);
             const msg = String(err && err.message || err);
-            if (feedbackBtn) showInlineFeedback(feedbackBtn, '\u274C ' + msg.slice(0, 20), 'error');
+            if (feedbackBtn) showInlineFeedback(feedbackBtn, '' + msg.slice(0, 20), 'error');
             else showToast(this.gallery.app, 'error', 'Copy Failed', msg);
         };
         if (!navigator.clipboard || typeof ClipboardItem === 'undefined') {
@@ -212,7 +212,7 @@ export class GalleryCard {
             else showToast(this.gallery.app, 'success', 'Tags Copied!', `Copied to clipboard`);
         }).catch((err) => {
             console.error('[Neo Gallery] Clipboard write failed:', err);
-            if (feedbackBtn) showInlineFeedback(feedbackBtn, '\u274C Failed', 'error');
+            if (feedbackBtn) showInlineFeedback(feedbackBtn, 'Failed', 'error');
         });
     }
 
@@ -255,7 +255,7 @@ export class GalleryCard {
         const typeBadge = $el("div", {
             className: "neo-gallery-card-type-badge " + (isRemote ? "type-remote" : "type-directory"),
             title: isRemote ? "Remote (OSS)" : "Directory"
-        }, [isRemote ? "\u2601\uFE0F" : "\uD83D\uDCC1"]);
+        }, [isRemote ? "\u2601" : icon("folder", 12)]);
 
         // Pending lora fetch (queued/running/failed) status badge.
         if (isPending) {
@@ -282,7 +282,7 @@ export class GalleryCard {
                     e.stopPropagation();
                     this._showLoraSendMenu(gallery, loraPath, loraBtn);
                 }
-            }, ["\uD83D\uDCE4"]);
+            }, [icon("send", 13)]);
             card.appendChild(loraBtn);
         }
 
@@ -349,7 +349,7 @@ export class GalleryCard {
         const typeBadge = $el("div", {
             className: "neo-gallery-card-type-badge type-directory",
             title: "Directory"
-        }, ["\uD83D\uDCC1"]);
+        }, [icon("folder", 12)]);
 
         const coverWrapper = $el("div", {
             className: "neo-gallery-card-cover-wrapper skeleton-loading"
@@ -380,7 +380,7 @@ export class GalleryCard {
                     e.stopPropagation();
                     this._showLoraSendMenu(gallery, loraPath, loraBtn);
                 }
-            }, ["\uD83D\uDCE4"]);
+            }, [icon("send", 13)]);
             card.appendChild(loraBtn);
         }
 
@@ -499,14 +499,14 @@ export class GalleryCard {
             source === "oss";
     }
 
-    /** ⋯ 菜单「🎬 新建导演配方」：角色图目录里走全参考（图进该段参考图 + 👤 角色参考图），否则图作首帧。
+    /** ⋯ 菜单「新建导演配方」：角色图目录里走全参考（图进该段参考图 + 角色参考图），否则图作首帧。
      *  草稿形状由 gallery.directorDraft 决定，与多选操作条共用同一份逻辑。 */
     _directorMenuItem(gallery, image, subfolder) {
         const charDir = !!gallery.isCharacterDir?.();
         return $el("div", {
             className: "neo-gallery-collect-item",
             title: charDir
-                ? t("角色图目录：建一段全参考配方，这张图进该段参考图与 👤 角色参考图，不当首帧")
+                ? t("角色图目录：建一段全参考配方，这张图进该段参考图与 角色参考图，不当首帧")
                 : t("以此图为首帧，新建视频导演配方"),
             onclick: async () => {
                 this._removeCollectMenu();
@@ -521,7 +521,7 @@ export class GalleryCard {
                     showToast(gallery.app, "error", t("新建导演配方失败"), String(err.message || err));
                 }
             }
-        }, [charDir ? t("\uD83C\uDFAC 新建导演配方（全参考）") : t("\uD83C\uDFAC 新建导演配方")]);
+        }, [charDir ? t("新建导演配方（全参考）") : t("新建导演配方")]);
     }
 
     _showCollectMenu(gallery, image, subfolder, source, anchor, unfavorite = null) {
@@ -555,7 +555,7 @@ export class GalleryCard {
                     showToast(gallery.app, "error", t("导入失败"), String(err.message || err));
                 }
             }
-        }, [t("\u2937 导入工作流")]);
+        }, [t("导入工作流")]);
         this._fetchMediaMeta(image, subfolder).then(meta => {
             if (meta && meta.has && (meta.workflow || meta.prompt)) wfItem.style.display = "";
         }).catch(() => {});
@@ -573,19 +573,19 @@ export class GalleryCard {
             $el("div", {
                 className: "neo-gallery-collect-item",
                 onclick: () => { collectFile(); this._removeCollectMenu(); }
-            }, [t("\u2B50 收藏本图")]),
+            }, [t("收藏本图")]),
             ...buildGenerationMenuItems({ card: this, gallery, image, subfolder }),
             isImageFile(image.filename) ? this._directorMenuItem(gallery, image, subfolder) : null,
             (isImageFile(image.filename) && canDelete) ? $el("div", {
                 className: "neo-gallery-collect-item",
                 onclick: () => { this._removeCollectMenu(); openReversePromptDialog(image, subfolder); }
-            }, [t("🔍 图片反推")]) : null,
+            }, [t("图片反推")]) : null,
             ...(image.lora_path ? [
                 $el("div", {
                     className: "neo-gallery-collect-item",
                     title: t("发送到画布上的 LoraLoader"),
                     onclick: () => { this._removeCollectMenu(); this._showLoraSendMenu(gallery, image.lora_path, anchor); }
-                }, [t("\uD83D\uDCE4 发送 Lora")]),
+                }, [t("发送 Lora")]),
                 $el("div", {
                     className: "neo-gallery-collect-path neo-gallery-collect-lora-path",
                     title: image.lora_path,
@@ -692,7 +692,7 @@ export class GalleryCard {
                 className: "neo-gallery-collect-item",
                 title: t("为目录内每张图片生成标准化标签 .txt，可选先转 HEIC 为 PNG 并顺序编号"),
                 onclick: () => { this._removeCollectMenu(); openLoraTagDialog(gallery, dirPath); }
-            }, [t("🏷️ LoRA 打标")])
+            }, [t("LoRA 打标")])
         ]);
         this._attachPopupMenu(menu, anchor);
     }
@@ -713,7 +713,7 @@ export class GalleryCard {
                 className: "neo-gallery-collect-item",
                 title: t("重读目录内每个 LORA 的 safetensors 头部元数据（base_model / 触发词 / dtype），不重新下载示例图"),
                 onclick: () => { this._removeCollectMenu(); this._refreshLoraDirMeta(gallery, dirPath); }
-            }, [t("🔄 刷新元数据")])
+            }, [t("刷新元数据")])
         ]);
         this._attachPopupMenu(menu, anchor);
     }
@@ -796,7 +796,7 @@ export class GalleryCard {
                     e.stopPropagation();
                     this._showLoraSendMenu(gallery, image.lora_path, imgSendBtn);
                 }
-            }, ["\uD83D\uDCE4"]);
+            }, [icon("send", 13)]);
         }
 
         // 右上角信息扩展按钮：点击弹出扩展菜单（收藏 / Lora 发送 / 提示词预览 / 导入工作流 / 删除）。
@@ -810,7 +810,7 @@ export class GalleryCard {
         }, ["\u22EF"]);
 
         // 左上角勾选框：多选后由底部操作条批量删除（可删除来源才给，与 ⋯ 菜单 canDelete 一致）。
-        // 角色图目录例外：多选的用处是「🎬 新建导演配方」，云端预设图由 copy_to_input 现下到 input，
+        // 角色图目录例外：多选的用处是「新建导演配方」，云端预设图由 copy_to_input 现下到 input，
         // 删除仍会跳过只读项（deleteSelected 按 isDeletableItem 过滤），所以这些卡片也给勾选框。
         const readOnlySource = this._isReadOnlySource(subfolder, source);
         const selectable = !isAudioFileResult && (!readOnlySource || !!gallery.isCharacterDir?.());
@@ -848,7 +848,7 @@ export class GalleryCard {
             // Unknown type - show placeholder
             mediaEl = $el("div", {
                 className: "neo-gallery-thumb-img neo-gallery-thumb-placeholder",
-                textContent: "\uD83D\uDCCB"
+                textContent: ""
             });
         }
 
@@ -1288,14 +1288,14 @@ export class GalleryCard {
         if (meta.workflow || meta.prompt) {
             const loadBtn = document.createElement('div');
             loadBtn.className = "neo-lightbox-panel-btn";
-            loadBtn.textContent = "\u2937 \u5BFC\u5165\u5DE5\u4F5C\u6D41";
+            loadBtn.textContent = "\u5BFC\u5165\u5DE5\u4F5C\u6D41";
             loadBtn.title = t("将此示例内嵌的 ComfyUI 工作流载入画布");
             loadBtn.onclick = async (e) => {
                 e.stopPropagation();
                 if (loadBtn.disabled) return;
                 loadBtn.disabled = true;
                 const origLabel = loadBtn.textContent;
-                loadBtn.textContent = t("⏳ 检测中…");
+                loadBtn.textContent = t("检测中…");
                 loadBtn.style.opacity = "0.6";
                 try {
                     await this._importWorkflowFromMedia(gallery, image, subfolder);

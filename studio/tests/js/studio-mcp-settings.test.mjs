@@ -1,4 +1,4 @@
-// MCP 注册表在设置页「MCP 服务」栏：tab 激活时拉注册表；右栏「✨ 生成」下面只留一个入口，点它深链 #/settings?tab=mcp。
+// MCP 注册表在设置页「MCP 服务」栏：tab 激活时拉注册表；右栏「生成」下面只留一个入口，点它深链 #/settings?tab=mcp。
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";

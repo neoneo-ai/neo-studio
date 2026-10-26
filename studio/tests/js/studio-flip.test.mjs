@@ -92,7 +92,7 @@ test("已停止后在启动设置点「启动内核」，就绪后页面原地�
         assert.deepEqual(reloads, [], "就绪刷新会清掉未保存的编辑，不许刷新");
         assert.equal(document.body.classList.contains("ns-offline"), false, "离线标记应随翻面摘掉");
         assert.equal(run.classList.contains("ns-gen-off"), false, "生成按钮应还回原功能");
-        assert.equal(run.textContent, "🎬 生成整片", "按钮文案要还原");
+        assert.equal(run.textContent, "生成整片", "按钮文案要还原");
         assert.match(FakeWebSocket.instances.at(-1).url, /^ws:\/\/127\.0\.0\.1:8190\/ws\?clientId=/,
                      "事件流要换到 ComfyUI 的真流");
         assert.equal(status.textContent, "● 运行中");

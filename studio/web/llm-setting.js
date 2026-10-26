@@ -5,7 +5,7 @@
  * createModelConfigForm() 返回 { el, load, save, isDirty }：
  *   el      —— 表单 DOM（追加到宿主容器）
  *   load    —— 读取已保存配置并回填（打开时调用），resolve 时模型列表已填充完毕
- *   save    —— 立即落盘当前表单值（💾 按钮 / 「保存并关闭」调用），返回是否成功
+ *   save    —— 立即落盘当前表单值（按钮 / 「保存并关闭」调用），返回是否成功
  *   isDirty —— 加载窗口内恒 false，此后表示有未保存改动（快照对比）
  */
 
@@ -119,7 +119,7 @@ export function createModelConfigForm() {
 
     // Path convention hint
     const localDirHint = mkEl("div", "rs-form-hint");
-    localDirHint.innerHTML = t("📁 供应商(可选)/模型名称/模型文件(.gguf) · 同目录 mmproj 自动匹配");
+    localDirHint.innerHTML = t("供应商(可选)/模型名称/模型文件(.gguf) · 同目录 mmproj 自动匹配");
     localDirHint.style.cssText = 'font-size:10px;color:#888;margin-top:2px;line-height:1.3;';
     localDirRow.appendChild(localDirHint);
 
@@ -197,15 +197,15 @@ export function createModelConfigForm() {
     // 显式保存按钮：替代防抖自动保存（单模型下拉不触发 change、blur 时序难排查，落盘时机不可靠）
     const saveBtn = mkEl("button", "rs-gen-save");
     saveBtn.type = "button";
-    saveBtn.textContent = t("💾 保存设置");
+    saveBtn.textContent = t("保存设置");
     let saveResetTimer = null;
     saveBtn.addEventListener("click", async () => {
         saveBtn.disabled = true;
         const ok = await saveForm();
         saveBtn.disabled = false;
-        saveBtn.textContent = ok ? t("✓ 已保存") : t("✕ 保存失败");
+        saveBtn.textContent = ok ? t("已保存") : t("✕ 保存失败");
         clearTimeout(saveResetTimer);
-        saveResetTimer = setTimeout(() => { saveBtn.textContent = t("💾 保存设置"); }, 1600);
+        saveResetTimer = setTimeout(() => { saveBtn.textContent = t("保存设置"); }, 1600);
     });
     const saveRow = mkEl("div", "llm-btn-row");
     saveRow.appendChild(saveBtn);
@@ -214,7 +214,7 @@ export function createModelConfigForm() {
     // 连接测试按钮：用当前表单值发送「你好」，成功返回回复摘要（本地模型不适用）
     const testBtn = mkEl("button", "rs-gen-test");
     testBtn.type = "button";
-    testBtn.textContent = t("🔌 测试连接");
+    testBtn.textContent = t("测试连接");
     let testBusy = false;
     testBtn.addEventListener("click", async () => {
         if (testBusy) return;
@@ -225,7 +225,7 @@ export function createModelConfigForm() {
         }
         testBusy = true;
         testBtn.disabled = true;
-        testBtn.textContent = t("⏳ 测试中…");
+        testBtn.textContent = t("测试中…");
         setLocalStatusMsg(t("正在测试连接…"), "#999", false);
         try {
             const result = await window.NeoNodes?.testLLMConnection?.({
@@ -235,16 +235,16 @@ export function createModelConfigForm() {
                 model: getModelValue(),
             });
             if (result && result.success) {
-                setLocalStatusMsg(t("✅ 连接正常：") + (result.reply || ""), "#22c55e", false);
+                setLocalStatusMsg(t("连接正常：") + (result.reply || ""), "#22c55e", false);
             } else {
-                setLocalStatusMsg(t("❌ 连接失败：") + ((result && result.error) || t("未知错误")), "#dc2626", false);
+                setLocalStatusMsg(t("连接失败：") + ((result && result.error) || t("未知错误")), "#dc2626", false);
             }
         } catch (e) {
-            setLocalStatusMsg(t("❌ 测试出错：") + (e.message || e), "#dc2626", false);
+            setLocalStatusMsg(t("测试出错：") + (e.message || e), "#dc2626", false);
         } finally {
             testBusy = false;
             testBtn.disabled = false;
-            testBtn.textContent = t("🔌 测试连接");
+            testBtn.textContent = t("测试连接");
         }
     });
     saveRow.insertBefore(testBtn, saveBtn);
@@ -270,7 +270,7 @@ export function createModelConfigForm() {
         targetSelect.innerHTML = '';
         const loadingOpt = document.createElement('option');
         loadingOpt.value = '__loading__';
-        loadingOpt.textContent = t("⏳ 加载模型中…");
+        loadingOpt.textContent = t("加载模型中…");
         targetSelect.appendChild(loadingOpt);
         targetSelect.disabled = true;
         
@@ -305,7 +305,7 @@ export function createModelConfigForm() {
                 // 服务端收到请求时按需加载（同 Cline），这里只做状态提示
                 const size = m && m.size > 0 ? `  (${formatFileSize(m.size)})` : '';
                 const state = m && m.loaded === true ? t("  ● 已加载") : (m && m.loaded === false ? t("  ○ 未加载") : '');
-                const vision = m && m.vision ? ' 🖼️' : '';
+                const vision = m && m.vision ? " 视觉" : "";
                 const label = m && m.name && m.name !== id ? `${m.name} (${id})` : id;
                 opt.textContent = label + size + state + vision;
                 targetSelect.appendChild(opt);
@@ -319,7 +319,7 @@ export function createModelConfigForm() {
             }
         } catch (e) {
             console.warn('Failed to fetch models:', e);
-            targetSelect.innerHTML = `<option value="">${t("❌ 无法连接服务")}</option>`;
+            targetSelect.innerHTML = `<option value="">${t("无法连接服务")}</option>`;
         } finally {
             targetSelect.disabled = false;
         }
@@ -378,7 +378,7 @@ export function createModelConfigForm() {
         localModelSelectEl.innerHTML = '';
         const loadingOpt = document.createElement('option');
         loadingOpt.value = '__loading__';
-        loadingOpt.textContent = t("⏳ 加载模型中…");
+        loadingOpt.textContent = t("加载模型中…");
         localModelSelectEl.appendChild(loadingOpt);
         localModelSelectEl.disabled = true;
 
@@ -394,7 +394,7 @@ export function createModelConfigForm() {
                     const opt = document.createElement('option');
                     opt.value = m.key;
                     const sz = m.file_size > 0 ? formatFileSize(m.file_size) : '';
-                    opt.textContent = (m.name || m.key) + (sz ? `  (${sz})` : '') + (m.multimodal ? ' 🖼️' : '');
+                    opt.textContent = (m.name || m.key) + (sz ? `  (${sz})` : '') + (m.multimodal ? ' ' : '');
                     if (m.key === result.current_model) {
                         opt.selected = true;
                     }
@@ -408,7 +408,7 @@ export function createModelConfigForm() {
             }
         } catch (e) {
             console.warn('Failed to fetch local models:', e);
-            localModelSelectEl.innerHTML = `<option value="">${t("❌ 模型列表加载失败")}</option>`;
+            localModelSelectEl.innerHTML = `<option value="">${t("模型列表加载失败")}</option>`;
         } finally {
             localModelSelectEl.disabled = false;
         }
@@ -419,7 +419,7 @@ export function createModelConfigForm() {
         localModelSelectEl.innerHTML = '';
         const loadingOpt = document.createElement('option');
         loadingOpt.value = '__loading__';
-        loadingOpt.textContent = t("⏳ 加载模型中…");
+        loadingOpt.textContent = t("加载模型中…");
         localModelSelectEl.appendChild(loadingOpt);
         localModelSelectEl.disabled = true;
 
@@ -445,7 +445,7 @@ export function createModelConfigForm() {
             }
         } catch (e) {
             console.warn('Failed to fetch native models:', e);
-            localModelSelectEl.innerHTML = `<option value="">${t("❌ 模型列表加载失败")}</option>`;
+            localModelSelectEl.innerHTML = `<option value="">${t("模型列表加载失败")}</option>`;
         } finally {
             localModelSelectEl.disabled = false;
         }
@@ -550,11 +550,11 @@ export function createModelConfigForm() {
         }
     };
 
-    // Provider 切换只负责 UI 显隐与加载对应配置，落盘统一走 💾 按钮
+    // Provider 切换只负责 UI 显隐与加载对应配置，落盘统一走 按钮
     providerSelect.addEventListener("change", () => handleProviderChange());
 
     // ==========================================
-    // 显式保存：💾 按钮 / 关菜单「保存并关闭」，不再防抖自动保存
+    // 显式保存：按钮 / 关菜单「保存并关闭」，不再防抖自动保存
     // （自动保存漏掉单模型下拉不触发 change 的场景，且落盘时机难排查）
     // ==========================================
     // 加载窗口标记：loadModelConfig 回填期间 saveForm 不落盘、isDirty 恒 false
@@ -610,7 +610,7 @@ export function createModelConfigForm() {
         // 云厂商必填 API Key：输入框空且服务端也没存过时给一条醒目提示
         // （留空=沿用已存密钥，所以只在两处都没有时提示，避免误报）
         if (def.requires_api_key && !config.api_key && !isMaskedKey(cfg.providers?.[provider]?.api_key)) {
-            setLocalStatusMsg(t("⚠️ 云供应商必填 API Key，否则调用会 401"), "#eab308");
+            setLocalStatusMsg(t("云供应商必填 API Key，否则调用会 401"), "#eab308");
         }
 
         // 本地模式：额外经 set_model 持久化 + 切换常驻模型（覆盖单模型不触发 change 的场景）；
@@ -619,12 +619,12 @@ export function createModelConfigForm() {
             try {
                 const setResult = await setCurrentModel(config.model);
                 if (!setResult || !setResult.success) {
-                    setLocalStatusMsg("❌ Model switch failed: " + (setResult?.error || config.model), "#dc2626");
+                    setLocalStatusMsg("Model switch failed: " + (setResult?.error || config.model), "#dc2626");
                     return false;
                 }
             } catch (e) {
                 console.error("Failed to switch local model:", e);
-                setLocalStatusMsg("❌ " + (e.message || "Model switch failed"), "#dc2626");
+                setLocalStatusMsg("" + (e.message || "Model switch failed"), "#dc2626");
                 return false;
             }
         }
@@ -714,7 +714,7 @@ export function createModelConfigForm() {
 
 // ---- LLM 配置弹窗（全局单例，与具体节点/编辑器无关）：复用 createModelConfigForm()。
 // 打开即后台 load() 回填、load 落定前关闭不判脏；有未保存修改时 ✕/点遮罩/Esc 先出确认条
-// （💾 保存并关闭 / 放弃修改 / 继续编辑）。幂等：已打开时重复调用不叠加。
+// （保存并关闭 / 放弃修改 / 继续编辑）。幂等：已打开时重复调用不叠加。
 let _llmConfigModal = null;
 
 export function openLLMSettingsModal() {
@@ -722,17 +722,17 @@ export function openLLMSettingsModal() {
     if (_llmConfigModal) return;   // 已打开：忽略，避免叠加
     const form = createModelConfigForm();
 
-    const saveCloseBtn = $el('button', { className: 'neo-director-llm-btn-save', type: 'button', textContent: t("💾 保存并关闭") });
+    const saveCloseBtn = $el('button', { className: 'neo-director-llm-btn-save', type: 'button', textContent: t("保存并关闭") });
     const discardBtn = $el('button', { className: 'neo-director-llm-btn-discard', type: 'button', textContent: t("放弃修改") });
     const keepBtn = $el('button', { className: 'neo-director-llm-btn-keep', type: 'button', textContent: t("继续编辑") });
     const dirtyConfirm = $el('div', { className: 'neo-director-llm-dirty', hidden: true }, [
-        $el('span', { textContent: t("⚠ 有未保存的修改") }),
+        $el('span', { textContent: t("有未保存的修改") }),
         $el('div', { className: 'neo-director-llm-dirty-actions' }, [saveCloseBtn, discardBtn, keepBtn]),
     ]);
 
     const closeBtn = $el('button', { className: 'neo-director-llm-close', type: 'button', title: t("关闭（Esc）"), textContent: '✕' });
     const head = $el('div', { className: 'neo-director-llm-head' }, [
-        $el('span', { textContent: t("🤖 LLM 配置") }),
+        $el('span', { textContent: t("LLM 配置") }),
         closeBtn,
     ]);
     const bodyEl = $el('div', { className: 'neo-director-llm-body' }, [form.el]);

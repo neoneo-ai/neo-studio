@@ -102,5 +102,5 @@ test("横幅文案跟随界面语言", async () => {
     mockRoute("/system_stats", DEAD);
     dispatchApiEvent("reconnecting");
     await flush();
-    assert.equal(banner()?.textContent, "🔒 ComfyUI is not running · canvas is read-only");
+    assert.equal(banner()?.textContent, "ComfyUI is not running · canvas is read-only");
 });

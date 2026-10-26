@@ -45,7 +45,7 @@ test("非 LoRA 目录卡：不显示刷新按钮", async () => {
     assert.equal(card.querySelector(".neo-gallery-card-dir-menu-btn"), null, "非 LoRA 空目录无 ⋯ 按钮");
 });
 
-test("点 ⋯：菜单显示「🔄 刷新元数据」与目录路径", async () => {
+test("点 ⋯：菜单显示「刷新元数据」与目录路径", async () => {
     const gallery = makeGallery();
     const card = await makeCard(gallery, "SDXL", "Lora", ["SDXL"], { image_count: 0 });
     click(card.querySelector(".neo-gallery-card-dir-menu-btn"));
@@ -54,7 +54,7 @@ test("点 ⋯：菜单显示「🔄 刷新元数据」与目录路径", async ()
         "路径应为 models/loras 相对目录");
 });
 
-test("点「🔄 刷新元数据」：POST lora_refresh_dir 传目录并重显当前视图", async () => {
+test("点「刷新元数据」：POST lora_refresh_dir 传目录并重显当前视图", async () => {
     const gallery = makeGallery();
     const card = await makeCard(gallery, "SDXL", "Lora", ["SDXL"], { image_count: 0 });
 

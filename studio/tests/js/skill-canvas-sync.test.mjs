@@ -1,4 +1,4 @@
-// 技能 ⇄ 画布同步：详情弹窗工作流区带「⤒ 导入到画布」/「💾 回写入技能」
+// 技能 ⇄ 画布同步：详情弹窗工作流区带「⤒ 导入到画布」/「回写入技能」
 // 导入把技能 workflow.json 按当前设置预渲染后 app.loadApiJson 落画布；回写把画布 API prompt 落盘该技能 workflow.json。
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -49,7 +49,7 @@ function writeBtn() {
     const all = document.querySelectorAll(".rs-wf-canvas-btns button.rs-wf-canvas-write-btn");
     return all.length ? all[all.length - 1] : null;
 }
-// 导入后的待回写提示：🅝 顶菜单按钮绿点。画布上没有回写卡片，落盘走顶菜单「💾 回写入技能」
+// 导入后的待回写提示：顶菜单按钮绿点。画布上没有回写卡片，落盘走顶菜单「回写入技能」
 function menuBtnEl() {
     let btn = document.querySelector(".neo-n-menu-btn");
     if (!btn) {
@@ -65,7 +65,7 @@ function writebackArmed() {
 function toastCards() {
     return document.querySelectorAll("#neo-action-toast-stack .neo-at:not(.neo-at-out)").length;
 }
-// 回写确认弹窗（后端预览的变更清单 + 「💾 确认保存」）
+// 回写确认弹窗（后端预览的变更清单 + 「确认保存」）
 function writeConfirmDialog() {
     return document.querySelector(".rs-wf-write-confirm");
 }
@@ -81,13 +81,13 @@ function mockPreview(changes = [], warnings = [], genVideo = false, extra = {}) 
         jsonResponse({ success: true, id: "custom_a", changes, warnings, gen_video: genVideo, ...extra }));
 }
 
-test("详情弹窗：带 workflow 技能挂「⤒ 导入到画布」「💾 回写入技能」在工作流区头部", async () => {
+test("详情弹窗：带 workflow 技能挂「⤒ 导入到画布」「回写入技能」在工作流区头部", async () => {
     await openPopup({ id: "custom_a", source: "custom" });
     const btns = document.querySelector(".rs-wf-canvas-btns");
     assert.ok(btns, "工作流区头部应挂画布按钮行");
     assert.ok(btns.parentElement.classList.contains("rs-skill-workflow-head"), "按钮应在工作流区头部");
     assert.deepEqual(Array.from(btns.querySelectorAll("button")).map((b) => b.textContent),
-        ["⤒ 导入到画布", "💾 回写入技能", "🕘 变更记录"]);
+        ["⤒ 导入到画布", "回写入技能", "变更记录"]);
 });
 
 test("导入到画布：按设置预渲染后 app.loadApiJson（number widget 归 number、参考图留占串）", async () => {
@@ -110,7 +110,7 @@ test("导入到画布：按设置预渲染后 app.loadApiJson（number widget �
     assert.strictEqual(wf["4"].inputs.steps, 20);
     assert.equal(wf["5"].inputs.filename_prefix, "NeoAgent", "非 number widget 保持字符串");
     assert.equal(wf["9"].inputs.image, "{{REF_IMAGE}}", "参考图槽位留占串（画布里选图后回写）");
-    assert.ok(writebackArmed(), "导入后应点亮 🅝 绿点（画布上有技能待回写）");
+    assert.ok(writebackArmed(), "导入后应点亮 绿点（画布上有技能待回写）");
 });
 
 test("导入到画布：toast 逐条说明哪些模板变量被灌成写死值（画布上没有 {{变量}}）", async () => {
@@ -178,7 +178,7 @@ test("导入到画布：按流程图同一套布局重排画布节点（分层�
     }
 });
 
-test("导入到画布：点亮 🅝 绿点，顶菜单「💾 回写入技能」确认变更后把画布落盘该技能", async () => {
+test("导入到画布：点亮 绿点，顶菜单「回写入技能」确认变更后把画布落盘该技能", async () => {
     let posted = null;
     mockPreview([{ field: "model", from: "old.safetensors", to: "m.safetensors" }]);
     mockRoute("/neo_image_gen/update_workflow_skill", (b) => {
@@ -194,7 +194,7 @@ test("导入到画布：点亮 🅝 绿点，顶菜单「💾 回写入技能」
     click(importBtn());
     await sleep(80);
 
-    assert.ok(writebackArmed(), "导入后 🅝 按钮应点亮绿点（画布上有技能待回写）");
+    assert.ok(writebackArmed(), "导入后 按钮应点亮绿点（画布上有技能待回写）");
     assert.equal(toastCards(), 0, "画布上不应有常驻回写卡片");
     appState.toasts.length = 0;
     const { runCanvasSkillWriteback } = await import("../../web/skill.js");
@@ -296,7 +296,7 @@ test("Studio 内嵌详情（无画布）：工作流区只挂「⤒ 主画布编
         await openPopup({ id: "custom_a", source: "custom", canvasBtns: false });
         assert.ok(document.querySelector(".rs-skill-workflow"), "工作流区仍渲染");
         const btns = document.querySelectorAll(".rs-wf-canvas-btns button");
-        assert.deepEqual(Array.from(btns).map((b) => b.textContent), ["⤒ 主画布编辑", "🕘 变更记录"], "内嵌只挂交接与记录按钮");
+        assert.deepEqual(Array.from(btns).map((b) => b.textContent), ["⤒ 主画布编辑", "变更记录"], "内嵌只挂交接与记录按钮");
         click(btns[0]);
         await sleep(20);
         assert.deepEqual(opened, [{ url: "/?neo_wf_edit=custom_a", target: "_blank" }], "应带技能 id 打开主界面");
@@ -348,7 +348,7 @@ test("交接导入：按技能 config.json 预渲染灌画布并点亮绿点，�
     assert.equal(api.data["4"].inputs.seed, 0, "SEED 归 0");
     assert.equal(api.data["9"].inputs.image, "{{REF_IMAGE}}", "参考图槽位留占串");
 
-    assert.ok(writebackArmed(), "导入后 🅝 按钮应点亮绿点");
+    assert.ok(writebackArmed(), "导入后 按钮应点亮绿点");
     assert.equal(toastCards(), 0, "画布上不应有常驻回写卡片");
     appState.toasts.length = 0;
     const savedP = runCanvasSkillWriteback();
@@ -605,7 +605,7 @@ test("回写确认：预览失败时不发回写请求并 toast 提示", async (
 });
 
 
-// ---- 待回写状态：顶菜单入口与 🅝 绿点（状态在 skill-writeback.js，绿点是唯一画布侧提示）----
+// ---- 待回写状态：顶菜单入口与 绿点（状态在 skill-writeback.js，绿点是唯一画布侧提示）----
 
 test("导入后待回写状态：绿点在场，切走 tab 收起、切回恢复", async () => {
     mockSkillRoutes();
@@ -621,7 +621,7 @@ test("导入后待回写状态：绿点在场，切走 tab 收起、切回恢复
         assert.equal(toastCards(), 0, "画布上不应有常驻回写卡片");
         const pending = getPendingWriteback();
         assert.ok(pending && pending.id === "custom_a", "导入后应登记待回写（顶菜单入口靠它）");
-        assert.ok(btn.classList.contains("neo-writeback-hint"), "待回写时 🅝 按钮应挂绿点");
+        assert.ok(btn.classList.contains("neo-writeback-hint"), "待回写时 按钮应挂绿点");
 
         setActive(otherWf);
         assert.equal(btn.classList.contains("neo-writeback-hint"), false, "切走技能 tab 应收起绿点");
@@ -668,7 +668,7 @@ test("顶菜单入口落盘：确认后清待回写、清绿点并解绑 tab 监
     }
 });
 
-test("变更记录：确认回写后按技能记录变更清单，详情弹窗「🕘 变更记录」可查并可清空", async () => {
+test("变更记录：确认回写后按技能记录变更清单，详情弹窗「变更记录」可查并可清空", async () => {
     localStorage.removeItem("neo.skillWriteLog");
     mockPreview([
         { field: "model", from: "old.safetensors", to: "m.safetensors" },

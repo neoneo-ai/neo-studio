@@ -84,9 +84,9 @@ test("模型库：文件清单归类与已存在标记，选文件带出落盘�
 
     const opts = [...overlay.querySelectorAll(".neo-hub-files option")];
     assert.deepEqual(opts.map((o) => o.textContent), [
-        "z_image_bfp.safetensors  [diffusion_models]  12.00 GB  ✓ 已存在 (Flux2-Klein)",
+        "z_image_bfp.safetensors  [diffusion_models]  12.00 GB  已存在 (Flux2-Klein)",
         "qwen3_8b.safetensors  [text_encoders]  8.20 GB",
-        "qwen3_8b_q4_k_m.gguf  [llm]  5.00 GB  ✓ 已存在 (z_image)",
+        "qwen3_8b_q4_k_m.gguf  [llm]  5.00 GB  已存在 (z_image)",
     ], "文件清单条目不符");
 
     // 选 GGUF → 落盘类别自动带出，子目录按已有目录重拉并自动探查默认，LLM 预览含强制仓库目录

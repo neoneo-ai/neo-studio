@@ -708,7 +708,7 @@ def _wait_storyboard(ctx, task_id):
 
 def _keyframe_segments(segments, frames, shared):
     """把关键帧接回段：storyboard 记图名，非全参考段同时设首帧（i2v 吃这张图，只写 storyboard
-    时后端只把它当多帧分块锚点），r2v 段进参考图池 —— 与 📖 故事板页 generateAllStoryboards 同口径。
+    时后端只把它当多帧分块锚点），r2v 段进参考图池 —— 与 故事板页 generateAllStoryboards 同口径。
     save 是整份覆盖，所以这里回整份段清单，智能体原样喂回 director_save 就行。"""
     shared_mode = str((shared or {}).get("mode") or "").strip()
     out = []

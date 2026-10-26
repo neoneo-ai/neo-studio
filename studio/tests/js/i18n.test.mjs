@@ -16,13 +16,13 @@ test("默认语言跟随浏览器语言（jsdom 为 en-US）", async () => {
 
 test("英文模式：字典命中出英文，缺项回落中文原文", () => {
     setLang("en");
-    assert.equal(t("⚙️ 设置"), "⚙️ Settings");
+    assert.equal(t("设置"), "Settings");
     assert.equal(t("这句没进字典"), "这句没进字典");
 });
 
 test("中文模式：原文原样返回", () => {
     setLang("zh");
-    assert.equal(t("⚙️ 设置"), "⚙️ 设置");
+    assert.equal(t("设置"), "设置");
     assert.equal(t("这句没进字典"), "这句没进字典");
 });
 

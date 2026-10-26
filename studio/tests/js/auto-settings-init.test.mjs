@@ -1,6 +1,6 @@
 // 设置面板初始化回归：异步回填（含模型列表晚到、下拉默认落首项）不得触发任何
 // 配置写请求/本地模型切换，也不得把表单判为未保存修改；load 全部落定后才放行脏检查。
-// LLM 侧已改为显式 💾 保存：用户改动只标脏不落盘，点按钮才保存并切换本地常驻模型
+// LLM 侧已改为显式 保存：用户改动只标脏不落盘，点按钮才保存并切换本地常驻模型
 // （单模型下拉永不触发 change 的场景靠显式保存 + 后端单模型回落覆盖）。
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -96,7 +96,7 @@ test("LLM 初始化：模型列表晚到时（load 未完成）的 change 不落
     assert.equal(saveLlmCalls().length, 0, "整个初始化期间不触发自动保存写请求");
 });
 
-test("LLM 用户改动只标脏不落盘，点 💾 才保存并切换本地模型", async () => {
+test("LLM 用户改动只标脏不落盘，点 才保存并切换本地模型", async () => {
     await llmForm.load();
     await flush();
     assert.equal(llmForm.isDirty(), false, "无改动不算 dirty");
@@ -107,8 +107,8 @@ test("LLM 用户改动只标脏不落盘，点 💾 才保存并切换本地模�
     await flush();
 
     assert.equal(llmForm.isDirty(), true, "改动未点保存即 dirty");
-    assert.equal(saveLlmCalls().length, 0, "不点 💾 不触发写请求");
-    assert.equal(setModelCalls().length, 0, "不点 💾 不切换本地模型");
+    assert.equal(saveLlmCalls().length, 0, "不点 不触发写请求");
+    assert.equal(setModelCalls().length, 0, "不点 不切换本地模型");
 
     llmForm.el.querySelector(".rs-gen-save").click();
     await sleep(400);
@@ -123,7 +123,7 @@ test("LLM 用户改动只标脏不落盘，点 💾 才保存并切换本地模�
     assert.equal(llmForm.isDirty(), false, "保存成功后不再 dirty");
 });
 
-test("单模型目录：change 永不触发，点 💾 显式保存即落盘并设为当前模型", async () => {
+test("单模型目录：change 永不触发，点 显式保存即落盘并设为当前模型", async () => {
     mockRoute("/rs_prompts/get_models", () => jsonResponse({
         current_model: "",
         models: [{ key: "only.gguf", name: "only.gguf", file_size: 1024 }],

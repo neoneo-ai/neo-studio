@@ -335,7 +335,7 @@ class SetCharacterTests(DirManageBase):
 
 
     def test_settings_route_adds_tagged_cloud_dirs(self):
-        # 索引里打了 character 标签的云端目录自带角色图默认值，用户不用逐个点 👤
+        # 索引里打了 character 标签的云端目录自带角色图默认值，用户不用逐个点 
         _SETTINGS["custom_directories"] = [str(self.dir_a)]
         _post({"action": "set_character", "path": str(self.dir_a), "character": True})
         with mock.patch.object(gallery, "_oss_character_dir_tokens",
@@ -346,7 +346,7 @@ class SetCharacterTests(DirManageBase):
         self.assertIn("cloud presets/角色杂图", chars)
 
     def test_tagged_cloud_dir_off_survives_reload(self):
-        # 点 👤 取消云端目录要记进 character_dirs_off，读取时不会被默认值顶回来
+        # 点 取消云端目录要记进 character_dirs_off，读取时不会被默认值顶回来
         _SETTINGS["custom_directories"] = []
         with mock.patch.multiple(gallery,
                                  _oss_home_dir_tokens=lambda: ["Cloud Presets/明朝人物"],

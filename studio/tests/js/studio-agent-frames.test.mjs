@@ -70,7 +70,7 @@ const prefsForm = () => document.querySelector(".ns-agent-prefs");
 const prefsField = (key) => prefsForm().querySelector(`[name="${key}"]`);
 const prefsOptions = (key) => [...prefsField(key).options].map((o) => o.value);
 const prefsTab = () => [...document.querySelectorAll(".ns-settings-tab")].find((b) => b.textContent.includes("智能体偏好"));
-const gear = () => headBtns().find((b) => b.textContent === "⚙");
+const gear = () => headBtns().find((b) => b.title.includes("智能体偏好"));
 const hashQuery = () => new URLSearchParams(window.location.hash.split("?")[1] || "");
 const restartRows = () => [...dock().querySelectorAll(".neo-agent-restart-row")];
 const resumeBar = () => dock().querySelector(".neo-agent-resumebar");
@@ -217,8 +217,8 @@ test("保存偏好：下拉提交档位值，档位外的焦点链值按后端�
     assert.ok(appState.toasts.some((x) => (x.detail || "").includes("偏好")), "保存要给出提示");
 });
 
-// ====== 栏头 ⚙ 跳设置页那一栏：枚举三项是固定下拉，当前偏好只读一次 ======
-test("栏头 ⚙ 跳「智能体偏好」栏：枚举三项是下拉，档位来自技能与已装主模型", async () => {
+// ====== 栏头 跳设置页那一栏：枚举三项是固定下拉，当前偏好只读一次 ======
+test("栏头 跳「智能体偏好」栏：枚举三项是下拉，档位来自技能与已装主模型", async () => {
     SAVED_PREFS = { preferred_skill: "sk_cat", preferred_size: "16:9", preferred_family: "krea2",
         style_notes: "夜戏冷色", avoid: "旁白", confirm_films: true };
     mountStudio();
@@ -343,7 +343,7 @@ test("历史列表摘要写明这条会话烧掉多少 token、最后用的哪�
     mountStudio();
     mockRoute("/neo_agent/sessions", jsonResponse({ success: true, sessions: [TWO_TURN.summary] }));
     await openStudio();
-    click(headBtns().find((b) => b.textContent.includes("🗂")));
+    click(headBtns().find((b) => b.title.includes("会话历史")));
     await flush(20);
 
     const note = dock().querySelector(".neo-agent-session-row .neo-agent-session-note").textContent;

@@ -17,7 +17,7 @@ import { createQuickInputHistory } from "./quick-input-history.js";
 // ==========================================
 // 本地模型自动卸载由后端在生成完成时处理：
 // - 工作流自动生成：prompts.py 两条 auto-generate 路径
-// - 手动 ✨ 生成：llm.py handle_llm_api_stream
+// - 手动 生成：llm.py handle_llm_api_stream
 // 均按 local 模式 + auto_unload_local 配置判断，无需前端监听执行事件。
 // ==========================================
 
@@ -178,7 +178,7 @@ app.registerExtension({
 
             // Initialize prompt manager - get UI elements
             // Pass textWidget so save handler can read current prompt text for AI extraction
-            // allowRecipe: 在 💾 保存弹窗中启用「保存配方」按钮
+            // allowRecipe: 在 保存弹窗中启用「保存配方」按钮
             const {
                 generateBtn, randomBtn, quickInput,
                 customTextarea, statusBar, toggleSwitch, localTab, externalTab,
@@ -448,7 +448,7 @@ app.registerExtension({
 
             randomBtn.addEventListener("click", NodeBehaviors.createRandomHandler(promptUIRef));
 
-            // 运行时随机（🎲 ▾ 菜单）：状态持久化到 properties 与隐藏控件
+            // 运行时随机（▾ 菜单）：状态持久化到 properties 与隐藏控件
             NodeBehaviors.wireRuntimeRandom(node, randomBtn);
 
             // ==========================================
@@ -754,7 +754,7 @@ app.registerExtension({
                 waitingOverlay = mkEl("div", "rs-waiting-overlay");
                 const messageDiv = mkEl("div", "rs-waiting-message");
                 messageDiv.innerHTML = `
-                    <div style="color:#fbbf24; font-size:14px; margin-bottom:10px; font-weight:bold;">✏️ EDITING MODE</div>
+                    <div style="color:#fbbf24; font-size:14px; margin-bottom:10px; font-weight:bold;">✏EDITING MODE</div>
                     <div style="color:#ccc; font-size:12px;">Edit the prompt below and click APPROVE</div>
                 `;
                 waitingOverlay.appendChild(messageDiv);
@@ -992,7 +992,7 @@ app.registerExtension({
 
             randomBtn.addEventListener("click", NodeBehaviors.createRandomHandler(promptUIRef));
 
-            // 运行时随机（🎲 ▾ 菜单）：状态持久化到 properties 与隐藏控件
+            // 运行时随机（▾ 菜单）：状态持久化到 properties 与隐藏控件
             NodeBehaviors.wireRuntimeRandom(node, randomBtn);
 
             // ==========================================

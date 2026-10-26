@@ -2,7 +2,7 @@
 // 功能全部复用 web/ 现有模块（import-map 把 scripts/* 指到 shim）：
 // - 素材：NeoGallery（gallery.js 注册的扩展，侧栏 tab 的 render 直接挂进主区）
 // - 导演：配方面板（recipes.js）+ 整片生成面板（POST /neo_studio/director/generate）
-// - 技能：统一技能管理（skill.js createSkillManager，与顶栏「🗂 技能管理」同组件，直接展开无弹窗）
+// - 技能：统一技能管理（skill.js createSkillManager，与顶栏「技能管理」同组件，直接展开无弹窗）
 // - 设置：生图/生视频/LLM 设置表单（内嵌，无弹窗）
 import { app, initExtensions, getSidebarTab, onSidebarTabChange } from "./shim/app.js";
 import { api, reconnectSocket } from "./shim/api.js";
@@ -40,7 +40,7 @@ function agentContext() {
     const view = app.neoGallery?.currentView;
     const lib = (view?.mode === "directory" && view.source)
         ? [view.source, ...(view.categoryPath || [])].join("/") : "";
-    // 素材库目录带 👤 角色图标记时一并报出去：右栏智能体基于这些附件图建导演配方
+    // 素材库目录带 角色图标记时一并报出去：右栏智能体基于这些附件图建导演配方
     // 要照画廊 ⋯ 菜单那条口径走全参考，它自己没有目录标记这份数据
     const withLib = (ctx) => {
         if (!lib) return ctx;
@@ -99,7 +99,7 @@ function showView(name) {
 }
 // 内嵌宿主（绘画面板 / 导演编辑器）的「打开时切到本页」入口一律走这里：直接 showView 会把
 // location.hash 留在上一页，之后点顶栏那一页的 tab（href 与 hash 相同）不动，页面就再也切不回去
-// （素材页「🖼️ 生成素材」→ 绘画页 → 点「素材」无反应）
+// （素材页「生成素材」→ 绘画页 → 点「素材」无反应）
 function go(name) {
     if (location.hash === `#/${name}`) {
         showView(name);
@@ -197,7 +197,7 @@ function updateGenStatus(task) {
         // 成片就地替换实时预览（定格帧一并清掉）；也可在浏览器单独打开
         genState.mediaRight.replaceChildren(
             $el("video", { className: "ns-gen-preview ns-gen-final", controls: true, src: url }),
-            $el("a", { className: "ns-gen-final", href: url, textContent: tf("🎬 {filename}（在浏览器中打开）", { filename: task.filename }) })
+            $el("a", { className: "ns-gen-final", href: url, textContent: tf("{filename}（在浏览器中打开）", { filename: task.filename }) })
         );
         refreshRecipesPanel();
     } else if (task.status === "failed") {
@@ -372,8 +372,8 @@ function buildSideColSplit(page, side, key = SIDE_COL_KEY, min = SIDE_COL_MIN) {
 // 素材卡片直接拖进右侧的首帧 / 参考位 / 参考图区 ======
 function buildLibDrawer(side, sideCol, view) {
     const libHost = $el("div", { className: "ns-gallery-host", dataset: { libScope: "director" } });
-    const tabRecipes = $el("button", { className: "ns-side-tab", type: "button", title: t("切回配方列表"), textContent: t("📋 配方") });
-    const tabLib = $el("button", { className: "ns-side-tab", type: "button", title: t("打开素材库，素材卡片直接拖进右侧编辑器"), textContent: t("🖼 素材") });
+    const tabRecipes = $el("button", { className: "ns-side-tab", type: "button", title: t("切回配方列表"), textContent: t("配方") });
+    const tabLib = $el("button", { className: "ns-side-tab", type: "button", title: t("打开素材库，素材卡片直接拖进右侧编辑器"), textContent: t("素材") });
     side.prepend($el("div", { className: "ns-side-tabs" }, [tabRecipes, tabLib]));
     side.appendChild($el("div", { className: "ns-director-lib" }, [libHost]));
     const closeLib = () => {
@@ -426,7 +426,7 @@ async function buildDirector(el) {
     new MutationObserver(() => editorHost.classList.toggle("ns-editor-open", !!editorHost.querySelector(".neo-director-panel")))
         .observe(editorHost, { childList: true });
     // 导演编辑器内嵌进本视图（含素材页「新建导演配方」入口 → 切到导演页）；
-    // 编辑器底部的「🎬 保存并生成整片」保存成功后直接提交整片生成
+    // 编辑器底部的「保存并生成整片」保存成功后直接提交整片生成
     setDirectorEditorHost(editorHost, () => go("director"), () => submitGenerate());
     let currentRecipeName = null;   // 当前选中的导演配方（由左栏配方面板点选回传，直接喂给整片生成区）
 
@@ -443,10 +443,10 @@ async function buildDirector(el) {
     // --- 整片生成面板 ---
     // 生成参数（分辨率 / 步数 / 种子 / 连续性 / 上下文帧）全部在上方导演编辑器里保存进配方，
     // 本面板只做「跑哪几段 + 看结果」，不再重复一套控件。
-    const runBtn = $el("button", { className: "rs-btn ns-gen-run", type: "button", textContent: t("🎬 生成整片") });
-    gateRunButton(runBtn, "director", t("🎬 生成整片"));
+    const runBtn = $el("button", { className: "rs-btn ns-gen-run", type: "button", textContent: t("生成整片") });
+    gateRunButton(runBtn, "director", t("生成整片"));
 
-    const cancelBtn = $el("button", { className: "rs-btn ns-gen-cancel", type: "button", textContent: t("⏹ 取消"), style: { display: "none" } });
+    const cancelBtn = $el("button", { className: "rs-btn ns-gen-cancel", type: "button", textContent: t("取消"), style: { display: "none" } });
     const statusEl = $el("div", { className: "ns-gen-status" });
     const barEl = $el("div", { className: "ns-gen-progress" }, [$el("div")]);
 
@@ -545,7 +545,7 @@ async function buildDirector(el) {
         if (GEN_TERMINAL.includes(detail.status)) stopPolling();
     }
 
-    // 提交整片生成：「生成整片」按钮与编辑器底部「🎬 保存并生成整片」共用同一份参数组装。
+    // 提交整片生成：「生成整片」按钮与编辑器底部「保存并生成整片」共用同一份参数组装。
     // 参数本体（分辨率/步数/种子/连续性/上下文帧）都在配方里，这里只发配方名 + 勾选的段。
     async function submitGenerate() {
         const recipe = currentRecipeName;
@@ -700,8 +700,8 @@ function buildPaint(el) {
 
     // 模式切换：文生图与图片编辑各占满右栏，一次只看一个（不像导演页那样编辑 + 生成同屏抢高度）
     const modeBtns = {
-        text: $el("button", { className: "ns-paint-mode-btn", type: "button", textContent: t("🖼️ 文生图"), onclick: () => setMode("text") }),
-        edit: $el("button", { className: "ns-paint-mode-btn", type: "button", textContent: t("🎨 图片编辑"), onclick: () => setMode("edit") }),
+        text: $el("button", { className: "ns-paint-mode-btn", type: "button", textContent: t("文生图"), onclick: () => setMode("text") }),
+        edit: $el("button", { className: "ns-paint-mode-btn", type: "button", textContent: t("图片编辑"), onclick: () => setMode("edit") }),
     };
     const textHost = $el("div", { className: "ns-paint-panel ns-paint-text" });
     const editHost = $el("div", { className: "ns-paint-panel ns-paint-edit" });
@@ -728,7 +728,7 @@ function buildPaint(el) {
     try { setMode(localStorage.getItem(PAINT_MODE_KEY) === "edit" ? "edit" : "text"); } catch { setMode("text"); }
 
     // 绘画面板内嵌进本视图（同导演编辑器 setDirectorEditorHost 语义）：两块面板进页就铺好，
-    // 左栏素材库的「🖼️ 生成素材」与图片卡菜单「🖼️ 图片编辑」只做模式切换（面板复用，不重建）；
+    // 左栏素材库的「生成素材」与图片卡菜单「图片编辑」只做模式切换（面板复用，不重建）；
     // 素材页的同类入口由 onOpen 先跳到本页再铺面板。ComfyUI 插件模式没有宿主，照旧弹浮层窗。
     let ready = false;
     setPaintHost({
@@ -765,7 +765,7 @@ function buildHome(el) {
         $el("div", { className: "ns-home-hero" }, [
             $el("h1", {}, [t("今天想"), $el("span", { className: "ns-home-accent", textContent: t("创作") }), t("什么？")]),
             $el("p", { textContent: t("一句话到一段成片，全部在你自己的电脑上完成") }),
-            $el("button", { className: "ns-home-cta", type: "button", textContent: t("✨ 一句话出图"), onclick: () => openPaintMode("text") }),
+            $el("button", { className: "ns-home-cta", type: "button", textContent: t("一句话出图"), onclick: () => openPaintMode("text") }),
         ]),
         $el("h2", { className: "ns-home-section", textContent: t("开始创作") }),
         $el("div", { className: "ns-home-grid" }, [
@@ -782,7 +782,7 @@ function buildHome(el) {
     );
 }
 
-// ====== 技能页：统一技能管理（与顶栏「🗂 技能管理」同组件）直接挂满主区，无弹窗外桌面端 ======
+// ====== 技能页：统一技能管理（与顶栏「技能管理」同组件）直接挂满主区，无弹窗外桌面端 ======
 function buildSkills(el) {
     el.classList.add("ns-skills");
     // Studio 无画布：不显示 ✕ 与「从画布」导出按钮
@@ -989,7 +989,7 @@ function createLauncherPanel() {
                 : tf(" · 端口 {port} · {by}", { port: s.port, by: t(s.mine ? "桌面端启动" : "外部启动") }))
             + (s.pid ? ` · PID ${s.pid}` : "");
         kernelState.classList.toggle("ns-kernel-run", running);
-        startBtn.textContent = booting ? t("🚀 启动中…") : (s.remote ? t("🚀 重连远端") : t("▶ 启动内核"));
+        startBtn.textContent = booting ? t("启动中…") : (s.remote ? t("重连远端") : t("▶ 启动内核"));
         startBtn.disabled = booting || s.running;
         stopBtn.disabled = booting || !s.running || !!s.remote;
     }
@@ -1038,7 +1038,7 @@ let settingsShow = null;   // 设置页的 tab 切换函数：深链 #/settings?
 let agentPrefs = null;   // 设置页那张偏好表单：深链 #/settings?tab=agent&skill=.. 的预填要走它
 
 function buildSettings(el) {
-    // 三个表单工厂均返回 { el, load, save, isDirty }，挂 .el、后台 load（💾 保存按钮在表单内部）
+    // 三个表单工厂均返回 { el, load, save, isDirty }，挂 .el、后台 load（保存按钮在表单内部）
     const genForm = createImageGenSettingsForm();
     const videoForm = createVideoGenSettingsForm();
     const llmForm = createModelConfigForm();
@@ -1257,8 +1257,8 @@ window.addEventListener("neo-offline-request", () => {
 // 那些接口只读写文件与 8080 服务，桌面端自己就能服务。
 const RUN_GATES = [
     [".neo-gallery-gm-btn", "image_gen", t("生成素材")],
-    [".neo-agent-run", "agent", t("✨ 生成")],
-    [".ns-gen-run", "director", t("🎬 生成整片")],
+    [".neo-agent-run", "agent", t("生成")],
+    [".ns-gen-run", "director", t("生成整片")],
     [".neo-director-regen-run", "segment", t("生成这一段")],
     [".neo-director-merge-run", "segment", t("拼回成片")],
     [".ns-paint .neo-gallery-story-btn-primary", "image_gen", t("生成")],   // 绘画页文生图 / 图片编辑面板的生成
@@ -1502,8 +1502,8 @@ function initWindowChrome() {
         state = s;
         document.body.classList.toggle("ns-frameless", !!s.frameless);
         btn("ns-wctl").hidden = !s.frameless;
-        set("ns-win-max", s.maximized ? "🗗" : "▢", s.maximized ? t("还原") : t("最大化"));
-        set("ns-win-fs", s.fullscreen ? "🗗" : "⛶", s.fullscreen ? t("退出全屏") : t("全屏"));
+        set("ns-win-max", s.maximized ? "❐" : "▢", s.maximized ? t("还原") : t("最大化"));
+        set("ns-win-fs", "⛶", s.fullscreen ? t("退出全屏") : t("全屏"));
     };
     const wire = (bridge) => {
         bridge.window_state().then((s) => {
@@ -1625,7 +1625,7 @@ function buildMemBar() {
     ]);
     const btn = $el("button", {
         className: "ns-mem-clear", type: "button",
-        title: t("卸载空闲模型并释放显存缓存 · 生成后显存迟迟不降时用"), textContent: t("🧹 清理"),
+        title: t("卸载空闲模型并释放显存缓存 · 生成后显存迟迟不降时用"), textContent: t("清理"),
     });
     btn.addEventListener("click", async () => {
         btn.disabled = true;
@@ -1633,11 +1633,11 @@ function buildMemBar() {
         try {
             const r = await api.fetchApi("/neo_studio/clear_memory", { method: "POST" });
             const data = await r.json().catch(() => null);
-            btn.textContent = data?.success ? tf("释放 {n} ✓", { n: fmtBytes(data.freed_bytes) }) : t("清理失败");
+            btn.textContent = data?.success ? tf("释放 {n} ", { n: fmtBytes(data.freed_bytes) }) : t("清理失败");
         } catch {
             btn.textContent = t("清理失败");
         }
-        setTimeout(() => { btn.disabled = false; btn.textContent = t("🧹 清理"); }, 2500);
+        setTimeout(() => { btn.disabled = false; btn.textContent = t("清理"); }, 2500);
         pollMemStats();   // 立即刷新一次
     });
     bar.appendChild(btn);
@@ -1723,7 +1723,7 @@ function setStatus(kind, text, title) {
 function localizeShell() {
     document.title = t("新影工坊 · Neo Studio");
     const logo = document.querySelector(".ns-logo");
-    if (logo) { logo.textContent = t("🎬 新影工坊"); logo.title = t("返回首页"); }
+    if (logo) { logo.textContent = t("新影工坊"); logo.title = t("返回首页"); }
     for (const a of document.querySelectorAll(".ns-tabs a")) a.textContent = t(a.textContent.trim());
     for (const id of ["ns-win-min", "ns-win-max", "ns-win-fs", "ns-win-close", "ns-agent-toggle"]) {
         const b = document.getElementById(id);
@@ -1773,6 +1773,8 @@ function initAgentDock() {
     const toggle = document.getElementById("ns-agent-toggle");
     const body = document.querySelector(".ns-body");
     if (!dock || !toggle || !body) return;
+    // 按钮字形走中央图标层（顶栏那颗星与首页「生成图片」卡同款）：title 走 i18n，字形不占文案
+    toggle.replaceChildren(icon("sparkles", 15));
     const panel = createAgentPanel(dock, {
         // MCP 注册表在设置页那一栏，右栏入口只做跳转（pushState 与 go() 同一理由：不碰 location.hash）
         onOpenMcp: () => {
@@ -1867,14 +1869,14 @@ function initAgentDock() {
 function route() {
     const name = (location.hash || "#/home").replace(/^#\//, "").split("?")[0] || "home";
     // 首页 / 导演页 / 绘画页视图常驻：首页卡片直达后两页，内嵌宿主要在第一次点
-    // 「🎬 新建导演配方 / 🖼️ 生成素材 / 🖼️ 图片编辑」之前就要注册好
+    // 「新建导演配方 / 生成素材 / 图片编辑」之前就要注册好
     ensureView("home", buildHome);
     ensureView("director", buildDirector);
     ensureView("paint", buildPaint);
     if (name === "skills") ensureView("skills", buildSkills);
     else if (name === "settings") {
         ensureView("settings", buildSettings);
-        // 深链 #/settings?tab=mcp：右栏「🔌 MCP」入口跳来这，视图常驻时也要落到那一栏
+        // 深链 #/settings?tab=mcp：右栏「MCP」入口跳来这，视图常驻时也要落到那一栏
         const query = new URLSearchParams(location.hash.split("?")[1] || "");
         const tab = query.get("tab");
         if (tab && settingsShow) {

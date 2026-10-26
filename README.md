@@ -1,6 +1,6 @@
 # Neo Studio
 
-> 🇨🇳 中文: [README_ZH.md](README_ZH.md)
+> 中文: [README_ZH.md](README_ZH.md)
 
 **From one sentence to prompt, image, and film**: AI prompt enhancement, image generation and reference editing,
 and MiniMax H3 multi-segment video direction — all in one plugin. The LLM can run inside the ComfyUI process

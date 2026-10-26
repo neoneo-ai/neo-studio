@@ -1,6 +1,6 @@
 /**
  * skill-writeback.js
- * 工作流回写与画布交接：回写确认弹窗、变更记录弹窗、导入画布后的待回写状态（🅝 绿点）、
+ * 工作流回写与画布交接：回写确认弹窗、变更记录弹窗、导入画布后的待回写状态（绿点）、
  * Studio 与主画布交接（?neo_wf_edit=<skill_id>）与顶菜单回写入技能入口。
  */
 
@@ -23,7 +23,7 @@ export function showSkillWriteLogDialog(skillId) {
     const { body, foot, close } = makeRepairDialog(skillId ? tf("变更记录 · {id}（{n}）", { id: skillId, n: log.length }) : tf("变更记录（{n}）", { n: log.length }), "rs-skill-write-log-overlay");
     if (!log.length) {
         const empty = mkEl("div", "rs-repair-log-empty");
-        empty.textContent = t("暂无回写记录 — 画布改完点「💾 回写入技能」并确认后，每次变更会按技能记录在这里。");
+        empty.textContent = t("暂无回写记录 — 画布改完点「回写入技能」并确认后，每次变更会按技能记录在这里。");
         body.appendChild(empty);
     } else {
         for (const entry of log) {
@@ -65,7 +65,7 @@ export function showSkillWriteLogDialog(skillId) {
         showToast(app, "info", skillId ? t("本技能变更记录已清空") : t("全部变更记录已清空"));
     });
 }
-/** 回写确认弹窗：先预览变更清单与 warnings，点「💾 确认保存」才落盘；返回是否已保存 */
+/** 回写确认弹窗：先预览变更清单与 warnings，点「确认保存」才落盘；返回是否已保存 */
 function confirmWorkflowWrite(id, source, workflow, displayName, onSaved) {
     const label = displayName || id;
     return previewWorkflowSkill(id, workflow).then((preview) => new Promise((resolve) => {
@@ -104,7 +104,7 @@ function confirmWorkflowWrite(id, source, workflow, displayName, onSaved) {
         cancelBtn.textContent = t("取消");
         const saveBtn = mkEl("button", "rs-btn");
         saveBtn.type = "button";
-        saveBtn.textContent = t("💾 确认保存");
+        saveBtn.textContent = t("确认保存");
         foot.append(hint, cancelBtn, saveBtn);
         cancelBtn.addEventListener("click", close);
         saveBtn.addEventListener("click", async () => {
@@ -163,7 +163,7 @@ async function writeWorkflowToSkill(id, origin, displayName) {
 }
 
 // 导入画布后的待回写状态：Studio 交接与技能管理「⤒ 导入到画布」共用同一套行为。
-// 画布上不挂常驻 toast 卡片——顶菜单「💾 回写入技能」是唯一落盘入口，🅝 绿点就是待回写提示。
+// 画布上不挂常驻 toast 卡片——顶菜单「回写入技能」是唯一落盘入口，绿点就是待回写提示。
 // 状态绑定灌入时那张画布（graph 实例）：切走 tab 绿点收起、切回恢复；同画布后导入的顶掉前一个。
 let pendingWriteback = null;   // { id, source, wf } —— 灌入技能的那张画布
 let _wbUnwatchTab = null;
@@ -175,7 +175,7 @@ function writebackCanvasActive() {
     return wfStore.activeWorkflow === pendingWriteback.wf;
 }
 
-// 🅝 顶菜单按钮绿点（workflow.js 修复红点同款机制）：绿色 = 当前画布有技能待回写
+// 顶菜单按钮绿点（workflow.js 修复红点同款机制）：绿色 = 当前画布有技能待回写
 function applyWritebackHint() {
     const btn = document.querySelector(".neo-n-menu-btn");
     if (!btn) return;
@@ -228,7 +228,7 @@ function getPendingWriteback() {
     return { id: pendingWriteback.id, source: pendingWriteback.source };
 }
 
-/** 顶菜单「💾 回写入技能」：画布上没有回写卡片，这里是待回写技能的唯一落盘入口 */
+/** 顶菜单「回写入技能」：画布上没有回写卡片，这里是待回写技能的唯一落盘入口 */
 async function runCanvasSkillWriteback() {
     if (!pendingWriteback) {
         showToast(app, "info", t("回写入技能"), t("当前画布没有待回写的技能：技能管理「⤒ 导入到画布」后此入口可用"));
@@ -237,7 +237,7 @@ async function runCanvasSkillWriteback() {
     return await writeWorkflowToSkill(pendingWriteback.id, "canvas", pendingWriteback.displayName);
 }
 
-/** 技能工作流灌进画布后登记待回写：点亮 🅝 绿点，顶菜单「💾 回写入技能」据此可用 */
+/** 技能工作流灌进画布后登记待回写：点亮 绿点，顶菜单「回写入技能」据此可用 */
 function armCanvasWriteback(id, source, displayName, notes) {
     setPendingWriteback(id, source, displayName);
     watchWritebackTab();
@@ -252,7 +252,7 @@ function armCanvasWriteback(id, source, displayName, notes) {
 
 // ---- Studio ⇄ 主画布交接 ----
 // Studio 没有 LiteGraph，工作流编辑交回主界面：技能详情「⤒ 主画布编辑」开 /?neo_wf_edit=<skill_id>，
-// 主界面扩展 setup 消费该参数灌画布，灌入后点亮 🅝 绿点、顶菜单「💾 回写入技能」落盘（技能详情弹窗不在场也能写）。
+// 主界面扩展 setup 消费该参数灌画布，灌入后点亮 绿点、顶菜单「回写入技能」落盘（技能详情弹窗不在场也能写）。
 const WF_EDIT_PARAM = "neo_wf_edit";
 
 function openSkillWorkflowInMainUi(id) {

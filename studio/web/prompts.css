@@ -865,7 +865,7 @@
     z-index: 5 !important;
 }
 
-/* Markdown 预览切换按钮（👁）：始终可见作为模式指示，激活时高亮 */
+/* Markdown 预览切换按钮（）：始终可见作为模式指示，激活时高亮 */
 .rs-button-group > .rs-md-preview-btn {
     filter: none;
     display: block !important;
@@ -2637,7 +2637,7 @@
 }
 
 /* ==========================================
-   自动增强菜单设置 tab：🤖 LLM Settings / 🖼️ 出图设置 / 🎬 生视频模型
+   自动增强菜单设置 tab：LLM Settings / 出图设置 / 生视频模型
    ========================================== */
 .rs-auto-tabs {
     display: flex;
@@ -2923,7 +2923,7 @@
 .rs-wf-badge-error { fill: #e5484d; }
 .rs-wf-badge-tpl { fill: #5090cc; }
 .rs-wf-summary { font-size: 12px; color: #999; min-height: 14px; }
-/* 缺失项摘要：未安装节点/缺失模型名称芯片 + 复制按钮（点击复制，✓/✗ 短暂反馈） */
+/* 缺失项摘要：未安装节点/缺失模型名称芯片 + 复制按钮（点击复制，/✗ 短暂反馈） */
 .rs-wf-missing { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
 .rs-wf-missing-item { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; font-size: 12px; color: #d9a7a7; background: #33272a; border: 1px solid #5c3b3e; border-radius: 4px; padding: 1px 5px 1px 8px; }
 .rs-wf-missing-name { word-break: break-all; }
@@ -2935,7 +2935,7 @@
 /* ---- 技能详情弹窗：出图设置两栏表格（仅 .rs-skill-gen-settings，全局出图设置菜单不受影响）---- */
 .rs-skill-gen-settings { gap: 12px; }
 .rs-skill-gen-settings .rs-gen-settings-header { margin-top: 12px; margin-bottom: 10px; }
-/* 设置区头部（生图/生视频共用）：标题+提示在左，「💾 Save / ↺ 恢复默认」顶到该行最右侧 */
+/* 设置区头部（生图/生视频共用）：标题+提示在左，「Save / ↺ 恢复默认」顶到该行最右侧 */
 .rs-gen-settings-header { flex-direction: row; align-items: center; flex-wrap: wrap; }
 .rs-gen-cfg-btns { display: flex; gap: 8px; margin-left: auto; }
 .rs-gen-cfg-btns .rs-btn { flex: none; padding: 4px 12px; }
@@ -3038,7 +3038,7 @@
     user-select: none;
 }
 
-/* 「思考深度」下拉（✨ 菜单内） */
+/* 「思考深度」下拉（菜单内） */
 .rs-thinking-depth-select {
     margin-left: auto;
     background: #333;
@@ -3653,7 +3653,7 @@ body.rs-skill-resizing { cursor: col-resize; user-select: none; }
 .rs-skill-manager-cat.is-open .rs-skill-manager-cat-label { font-weight: 600; }
 .rs-skill-manager-cat-caret { flex-shrink: 0; width: 10px; font-size: 10px; line-height: 1; }
 
-/* 技能下拉底部管理工具栏（+ New Skill / ⬆ ZIP / ⬆ Folder） */
+/* 技能下拉底部管理工具栏（+ New Skill / ZIP / Folder） */
 .rs-skill-dropdown-footer {
     display: flex;
     align-items: center;

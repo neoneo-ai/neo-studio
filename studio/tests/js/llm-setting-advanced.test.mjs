@@ -179,7 +179,7 @@ test("填入 API Key 后自动重拉模型列表并携带新密钥", async () =>
     assert.equal(calls[calls.length - 1].body.api_key, "sk-new", "新填密钥应随请求发送");
 });
 
-test("连接测试：远程 provider 点「🔌 测试连接」发当前表单值并回显回复", async () => {
+test("连接测试：远程 provider 点「测试连接」发当前表单值并回显回复", async () => {
     await llmForm.load();
     await flush();
     mockRoute("/rs_prompts/llm_connection_test", () => jsonResponse({ success: true, reply: "你好！" }));

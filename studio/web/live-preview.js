@@ -40,7 +40,7 @@ export function createFramePlayer(box, onFrame) {
         btn.title = title;
         return btn;
     };
-    const playBtn = mkBtn("neo-dtl-live-play", "⏸", t("暂停动画"));
+    const playBtn = mkBtn("neo-dtl-live-play", "", t("暂停动画"));
     const framePrev = mkBtn("neo-dtl-live-frame-prev", "⏪", t("上一帧（自动暂停）"));
     const frameLabel = document.createElement("span");
     frameLabel.className = "neo-dtl-live-label";
@@ -94,7 +94,7 @@ export function createFramePlayer(box, onFrame) {
             cancelAnimationFrame(raf);   // 暂停即停掉时钟，画面留在当前帧不再空转
             raf = 0;
         }
-        playBtn.textContent = on ? "⏸" : "▶";
+        playBtn.textContent = on ? "" : "▶";
         playBtn.title = on ? t("暂停动画") : t("继续动画");
     };
 

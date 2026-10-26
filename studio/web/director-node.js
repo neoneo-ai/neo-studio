@@ -201,7 +201,7 @@ app.registerExtension({
             const cancelBtn = document.createElement("button");
             cancelBtn.type = "button";
             cancelBtn.className = "neo-dtl-live-btn neo-dtl-live-cancel";
-            cancelBtn.textContent = "⏹";
+            cancelBtn.textContent = "";
             cancelBtn.title = t("取消生成");
             cancelBtn.style.display = "none";
             previewBox.appendChild(cancelBtn);
@@ -522,13 +522,13 @@ app.registerExtension({
             editBtn.addEventListener("click", (e) => { e.stopPropagation(); openEditor(); });
             tlRow.appendChild(editBtn);
 
-            // 时间轴左侧「👁」实时预览开关：与节点输入 preview（BOOLEAN）双向同步，随工作流保存。
+            // 时间轴左侧「」实时预览开关：与节点输入 preview（BOOLEAN）双向同步，随工作流保存。
             // 开（默认）= 采样期间用 taeh3 真彩预览；关 = 本次生成完全不出预览（不受全局预览设置影响）。
             const previewWidget = node.widgets?.find(w => w.name === "preview");
             const previewBtn = document.createElement("button");
             previewBtn.type = "button";
             previewBtn.className = "neo-dtl-preview";
-            previewBtn.textContent = "👁";
+            previewBtn.textContent = "";
             const syncPreviewBtn = () => {
                 const on = previewWidget ? !!previewWidget.value : true;
                 previewBtn.classList.toggle("neo-dtl-preview-on", on);

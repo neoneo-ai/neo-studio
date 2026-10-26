@@ -1,4 +1,4 @@
-// 统一技能管理窗口（顶栏 🅝 菜单「🗂 技能管理」）：左侧技能列表（搜索 + 分类分组）+ 右侧内嵌详情。
+// 统一技能管理窗口（顶栏 菜单「技能管理」）：左侧技能列表（搜索 + 分类分组）+ 右侧内嵌详情。
 // 覆盖：开窗布局 / 点击切换详情 / 搜索过滤 / 关闭整窗 / rs.skills.updated 刷新 / 未保存修改切换确认。
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -56,7 +56,7 @@ test("打开技能管理窗口：左侧列表按分类分组，右侧内嵌详�
     const modal = right.querySelector(".rs-skill-modal");
     assert.ok(modal, "右侧应内嵌 .rs-skill-modal");
     assert.notEqual(modal.style.display, "none", "详情应可见（默认选中第一项）");
-    // 默认选中「🖼️ 直接生图或编辑」分类（默认展开）的第一项，而非按分组名排序的列表首项
+    // 默认选中「直接生图或编辑」分类（默认展开）的第一项，而非按分组名排序的列表首项
     const sel = box.querySelector(".rs-skill-picker-item.is-selected");
     assert.ok(sel && sel.textContent.includes("预设生图"), "默认应选中展开分类的第一项（预设生图）");
     const openCat = box.querySelector(".rs-skill-manager-cat.is-open");
@@ -431,7 +431,7 @@ test("标题栏 ⛶ 放大铺满视口（留 8px 边距），再点还原回放�
     assert.equal(box.style.width, "calc(100vw - 16px)");
     assert.equal(box.style.height, "calc(100vh - 16px)");
     assert.equal(box.style.left, "8px");
-    assert.equal(maxBtn.textContent, "🗗");
+    assert.equal(maxBtn.textContent, "");
     click(maxBtn);
     assert.equal(box.style.width, "", "还原回放大前宽度");
     assert.equal(box.style.height, "");
@@ -685,7 +685,7 @@ async function openMgrWf(opts, expand = true) {
 }
 
 const wfBarBtn = (wf, text) => Array.from(wf.querySelectorAll(".rs-wf-editor-bar button")).find((b) => b.textContent.includes(text));
-// 保存工作流走「变更确认弹窗」：预览 mock + 点「💾 确认保存」
+// 保存工作流走「变更确认弹窗」：预览 mock + 点「确认保存」
 function mockWfPreview({ preset = false, structural = false } = {}) {
     mockRoute("/neo_image_gen/update_workflow_skill_preview", () =>
         jsonResponse({ success: true, id: "wf_demo", changes: [], warnings: [], gen_video: false, preset, structural }));
@@ -1107,7 +1107,7 @@ test("导入到画布：成功后关闭整个技能管理窗口（不遮挡画�
     await sleep(120);
     await flush();
     assert.ok(!document.querySelector(".rs-skill-manager-overlay"), "导入成功后应关闭整个技能管理窗口");
-    assert.ok(menuBtn.classList.contains("neo-writeback-hint"), "整窗关闭后 🅝 绿点仍在（顶菜单回写入口可用）");
+    assert.ok(menuBtn.classList.contains("neo-writeback-hint"), "整窗关闭后 绿点仍在（顶菜单回写入口可用）");
 });
 
 test("技能名称在标题栏内行内编辑：点文字进入编辑，Enter 提交、Esc 还原为已保存名，只读技能不可改名", async () => {

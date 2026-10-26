@@ -197,7 +197,7 @@ test("导演页按钮走外壳配色：生成按钮半透明蓝，同排按钮�
     assert.ok(saveRun, "编辑器底部「保存并生成整片」要有配色规则");
     assert.match(saveRun[0], /background:\s*rgba\(47, 111, 237/, "「保存并生成整片」与生成面板同款半透明蓝");
     assert.ok(/\.ns-director \.neo-director-panel :is\(\.neo-director-save[^{]*\{[^}]*background:\s*#2a2a2e/.test(css),
-              "编辑器里的 取消 / 保存 / ✦ 生成修改 走外壳灰底；白名单写法，未保存确认条的蓝-红-灰语义色不在其内");
+              "编辑器里的 取消 / 保存 / 生成修改 走外壳灰底；白名单写法，未保存确认条的蓝-红-灰语义色不在其内");
     assert.ok(/\.neo-director-dirty-discard\s*\{[^}]*background:\s*#3a2a2a/.test(recipes),
               "未保存确认条的「放弃修改」保持红底语义色，灰底排不覆盖它");
 });
@@ -523,7 +523,7 @@ test("远程模式：内核行报远端地址，停止内核禁用，启动内�
         assert.equal(line.textContent, "ComfyUI 运行中 · 远程 http://192.168.0.20:8188",
             "远程模式没有本机端口 / 谁启动 / PID 可报");
         assert.equal(stop.disabled, true, "远端进程不归本机管，停止内核要禁用");
-        assert.equal(start.textContent, "🚀 重连远端");
+        assert.equal(start.textContent, "重连远端");
         assert.equal(status.textContent, "● 运行中");
         assert.match(status.title, /远程 ComfyUI 运行中 · http:\/\/192\.168\.0\.20:8188/);
         assert.equal(stops.length, 0);
@@ -579,7 +579,7 @@ test("启动设置：每行带 ⓘ 说明，远程前提与开发模式要重启
 test("ComfyUI 在跑时生成入口不受门控：点它不该去启动 ComfyUI", async () => {
     mountStudio();
     document.body.insertAdjacentHTML("beforeend",
-        '<button class="neo-gallery-gm-btn" type="button">🖼️ 生成素材</button>' +
+        '<button class="neo-gallery-gm-btn" type="button">生成素材</button>' +
         '<button class="neo-director-regen-run" type="button">生成这一段</button>' +
         '<button class="neo-director-merge-run" type="button">拼回成片</button>');
     const starts = [];
@@ -676,5 +676,16 @@ test("版本快照不落地也要能拖窗口：桥注入完那一刻就挂上�
         .dispatchEvent(new window.MouseEvent("mousedown", { button: 0, bubbles: true }));
     await flush();
     assert.ok(calls.includes("drag"), "桥一到顶栏空白处按下就能拖窗");
+});
+
+// 顶栏分组：六个页签分三组，分隔线只落在组边界（gallery 与 skills 前的页签）上
+test("顶栏分组：分隔线落在素材页签与技能页签前，页签结构不动", () => {
+    const css = fs.readFileSync(path.join(webDir, "studio", "style.css"), "utf8");
+    assert.match(css, /\.ns-tabs a\[data-tab="gallery"\]::before[^}]*background/, "素材页签前要有组边界分隔线");
+    assert.match(css, /\.ns-tabs a\[data-tab="skills"\]::before[^}]*background/, "技能页签前要有组边界分隔线");
+    const html = fs.readFileSync(path.join(webDir, "studio", "index.html"), "utf8");
+    assert.deepEqual([...html.matchAll(/data-tab="(\w+)"/g)].map((m) => m[1]),
+        ["home", "gallery", "paint", "director", "skills", "settings"],
+        "分组走 CSS，页签 DOM 保持六个平铺 <a>");
 });
 

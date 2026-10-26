@@ -375,7 +375,7 @@ test("导演编辑器：打开带分镜图的旧配方 → 不报 TDZ，段行�
     await openDirectorEditor(existing);   // 修复前：seg.storyboard 触发 row TDZ，此处会 reject
     await sleep(60);
 
-    // 时间轴段行：不再有「分镜图」缩略行（分镜图只在「📖 故事板分镜」页对照表第一列展示），
+    // 时间轴段行：不再有「分镜图」缩略行（分镜图只在「故事板分镜」页对照表第一列展示），
     // 但 dataset 仍记录已存分镜图与提示词快照（保存时随 storyboard 落盘）
     const rows = Array.from(document.querySelectorAll(".neo-director-seg"));
     assert.equal(rows.length, 2);
@@ -384,7 +384,7 @@ test("导演编辑器：打开带分镜图的旧配方 → 不报 TDZ，段行�
     assert.equal(rows[0].dataset.storyboard, "sb_0_ab12cd.png", "dataset 记录已存分镜图（保存时随 storyboard 落盘）");
     assert.equal(rows[0].dataset.storyboardPrompt, "一只机器猫", "dataset 记录分镜提示词快照");
 
-    // 「📖 故事板分镜」页对照表：第一列 = 分镜图（逐段图片分镜方式 → 该段关键帧）
+    // 「故事板分镜」页对照表：第一列 = 分镜图（逐段图片分镜方式 → 该段关键帧）
     const tabSetup = Array.from(document.querySelectorAll(".neo-director-tab")).find((t) => t.textContent.includes("故事板分镜"));
     tabSetup.click();
     await sleep(20);

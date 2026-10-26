@@ -48,7 +48,7 @@ function el(tag, className, cssText = "") {
 }
 
 export function attachComboBox(selectEl, opts = {}) {
-    const placeholder = opts.placeholder || t("🔍 输入过滤或点击选择...");
+    const placeholder = opts.placeholder || t("输入过滤或点击选择...");
     const emptyText = opts.emptyText || t("无匹配模型");
 
     const box = el("div", "rs-model-select-box", "display:none;");

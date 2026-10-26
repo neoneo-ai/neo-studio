@@ -572,7 +572,7 @@ class NeoPrompts:
                 NeoPrompts._encode_cache.clear()
             NeoPrompts._encode_cache[cache_key] = (pos_cond, neg_cond)
 
-        # 节点执行结束：勾选自动卸载时释放本地/原生模型（手动 ✨ 生成不走节点执行，不受影响）
+        # 节点执行结束：勾选自动卸载时释放本地/原生模型（手动 生成不走节点执行，不受影响）
         _auto_unload_after_generate()
         return {
             "ui": {"text": [current_text]},
@@ -1415,7 +1415,7 @@ class NeoPromptAgent:
         elif gen_meta["task"]:
             multi_rule = LLM_TASKS.get(gen_meta["task"], {}).get("multi_result")
         elif skill_id:
-            # 节点未参与生成（如前端✨生成后直接出队）：按所选模板/任务契约拆分
+            # 节点未参与生成（如前端生成后直接出队）：按所选模板/任务契约拆分
             multi_rule = skill.load_skill_multi_result(skill_id)
             if multi_rule is None and skill_id in LLM_TASKS:
                 multi_rule = LLM_TASKS[skill_id].get("multi_result")
@@ -1425,7 +1425,7 @@ class NeoPromptAgent:
             prompts_list = list(random_picked)
             current_text = prompts_list[0]
 
-        # 节点执行结束：勾选自动卸载时释放本地/原生模型（手动 ✨ 生成不走节点执行，不受影响）
+        # 节点执行结束：勾选自动卸载时释放本地/原生模型（手动 生成不走节点执行，不受影响）
         _auto_unload_after_generate()
         # 运行时 bundle：把本次 prompt/连接图/skill 打包成临时 id，供下游 H3/Krea2 按 id 消费
         # references = 连线张量 + 前端采集的 @引用/本地上传图（按节点 id 暂存，取出即删）

@@ -36,7 +36,7 @@ function createSkillDetailPopup(host, canvasBtns = true, opts = {}) {
     // ---- 头部：标题 + 技能名称（点击进入行内编辑）+ 来源徽标 + 复制为自定义 + 关闭 ----
     const header = mkEl("div", "rs-skill-modal-header");
     const titleSpan = mkEl("span", "rs-skill-modal-title");
-    titleSpan.textContent = t("📝 技能");
+    titleSpan.textContent = t("技能");
     const nameView = mkEl("span", "rs-skill-name-view");
     nameView.title = t("点击编辑技能名称（Enter / 失焦提交，Esc 还原）");
     const nameInput = mkEl("input", "rs-form-input rs-tpl-name rs-skill-name-input");
@@ -97,7 +97,7 @@ function createSkillDetailPopup(host, canvasBtns = true, opts = {}) {
 
     // 不可用说明：依赖 VDN 加速节点的视频技能在插件未装时顶部提示（不影响查看/编辑）
     const unavailableBanner = mkEl("div", "rs-skill-unavailable-banner");
-    unavailableBanner.textContent = t("⚠️ 该技能依赖 VDN 加速节点（ComfyUI-VDN-H3 插件），当前未注册，暂不能用于生成。可继续查看与编辑其设置。");
+    unavailableBanner.textContent = t("该技能依赖 VDN 加速节点（ComfyUI-VDN-H3 插件），当前未注册，暂不能用于生成。可继续查看与编辑其设置。");
     unavailableBanner.style.display = "none";
 
     // multi_turn 勾选：每次生成仅推进一个阶段（节点底部会显示多轮提示）
@@ -107,7 +107,7 @@ function createSkillDetailPopup(host, canvasBtns = true, opts = {}) {
     multiTurnChk.className = "rs-skill-multiturn-chk";
     const multiTurnLabel = mkEl("label", "rs-skill-multiturn-label");
     multiTurnLabel.textContent = "Multi-turn (multi_turn)";
-    multiTurnLabel.title = t("每次生成仅推进一个阶段，需补充返回的问询后再次点击 ✨ 继续");
+    multiTurnLabel.title = t("每次生成仅推进一个阶段，需补充返回的问询后再次点击 继续");
     multiTurnRow.append(multiTurnChk, multiTurnLabel);
 
     const contentRow = mkEl("div", "rs-config-row");
@@ -150,7 +150,7 @@ function createSkillDetailPopup(host, canvasBtns = true, opts = {}) {
     const modeBtns = mkEl("div", "rs-content-mode");
     const previewBtn = mkEl("button", "rs-btn rs-btn-local rs-content-mode-btn");
     previewBtn.type = "button";
-    previewBtn.textContent = t("👁 预览");
+    previewBtn.textContent = t("预览");
     const editBtn = mkEl("button", "rs-btn rs-btn-local rs-content-mode-btn");
     editBtn.type = "button";
     editBtn.textContent = t("✎ 编辑");
@@ -170,7 +170,7 @@ function createSkillDetailPopup(host, canvasBtns = true, opts = {}) {
     genSettingsWrap.style.display = "none";
     const genSettingsHeader = mkEl("div", "rs-config-row rs-gen-settings-header");
     const genSettingsTitle = mkEl("label", "rs-form-label");
-    genSettingsTitle.textContent = t("🖼️ 生图设置");
+    genSettingsTitle.textContent = t("生图设置");
     genSettingsTitle.title = t("仅对本技能生效，未填项回落全局生图设置");
     const genLocalHint = mkEl("span", "rs-gen-readonly-hint");
     genLocalHint.textContent = t("预设的设置改动保存为本地覆盖，不修改预设文件");
@@ -178,7 +178,7 @@ function createSkillDetailPopup(host, canvasBtns = true, opts = {}) {
     genLocalHint.style.display = "none";
     const genSaveCfgBtn = mkEl("button", "rs-btn rs-btn-local");
     genSaveCfgBtn.type = "button";
-    genSaveCfgBtn.textContent = t("💾 保存");
+    genSaveCfgBtn.textContent = t("保存");
     genSaveCfgBtn.title = t("保存本技能生图设置（预设技能存为本地覆盖）");
     genSaveCfgBtn.style.display = "none";
     const genRestoreCfgBtn = mkEl("button", "rs-btn rs-delete-cancel-btn");
@@ -224,7 +224,7 @@ function createSkillDetailPopup(host, canvasBtns = true, opts = {}) {
     videoGenSettingsWrap.style.display = "none";
     const videoGenSettingsHeader = mkEl("div", "rs-config-row rs-gen-settings-header");
     const videoGenSettingsTitle = mkEl("label", "rs-form-label");
-    videoGenSettingsTitle.textContent = t("🎬 生视频设置");
+    videoGenSettingsTitle.textContent = t("生视频设置");
     videoGenSettingsTitle.title = t("仅对本技能生效，未填项回落全局「生视频模型」设置");
     const videoLocalHint = mkEl("span", "rs-gen-readonly-hint");
     videoLocalHint.textContent = t("预设的设置改动保存为本地覆盖，不修改预设文件");
@@ -232,7 +232,7 @@ function createSkillDetailPopup(host, canvasBtns = true, opts = {}) {
     videoLocalHint.style.display = "none";
     const videoSaveCfgBtn = mkEl("button", "rs-btn rs-btn-local");
     videoSaveCfgBtn.type = "button";
-    videoSaveCfgBtn.textContent = t("💾 保存");
+    videoSaveCfgBtn.textContent = t("保存");
     videoSaveCfgBtn.title = t("保存本技能生视频设置（预设技能存为本地覆盖）");
     videoSaveCfgBtn.style.display = "none";
     const videoRestoreCfgBtn = mkEl("button", "rs-btn rs-delete-cancel-btn");
@@ -265,7 +265,7 @@ function createSkillDetailPopup(host, canvasBtns = true, opts = {}) {
     const workflowCaret = mkEl("span", "rs-wf-caret");
     workflowCaret.textContent = "▾";
     const workflowTitle = mkEl("label", "rs-form-label");
-    workflowTitle.textContent = t("🔀 工作流（内嵌编辑）");
+    workflowTitle.textContent = t("工作流（内嵌编辑）");
     workflowTitle.title = t("技能 workflow.json 模板按本技能 config 初始化后直接内嵌编辑；无 LiteGraph 的视图回落只读流程图");
     const workflowBody = mkEl("div", "rs-wf-body");
     const workflowSummary = mkEl("div", "rs-wf-summary");
@@ -291,11 +291,11 @@ function createSkillDetailPopup(host, canvasBtns = true, opts = {}) {
         const wfImportBtn = mkEl("button", "rs-btn rs-wf-canvas-import-btn");
         wfImportBtn.type = "button";
         wfImportBtn.textContent = t("⤒ 导入到画布");
-        wfImportBtn.title = t("把本技能 workflow.json 载入画布（模板变量按当前设置预渲染，参考图槽位留占串），画里后点「💾 回写入技能」落盘");
+        wfImportBtn.title = t("把本技能 workflow.json 载入画布（模板变量按当前设置预渲染，参考图槽位留占串），画里后点「回写入技能」落盘");
         wfImportBtn.addEventListener("click", (e) => { e.stopPropagation(); importWorkflowToCanvas(); });
         const wfWriteBtn = mkEl("button", "rs-btn rs-wf-canvas-write-btn");
         wfWriteBtn.type = "button";
-        wfWriteBtn.textContent = t("💾 回写入技能");
+        wfWriteBtn.textContent = t("回写入技能");
         wfWriteBtn.title = t("把整画布工作流落盘本技能 workflow.json（先列出变更、确认后写入；仅 API 工作流，画布节点位置等界面布局不写入；预设技能只写模型值到本地覆盖，结构变更自动复制为自定义技能）");
         wfWriteBtn.addEventListener("click", (e) => { e.stopPropagation(); writeWorkflowBackToSkill(); });
         wfCanvasBtns.append(wfImportBtn, wfWriteBtn);
@@ -303,13 +303,13 @@ function createSkillDetailPopup(host, canvasBtns = true, opts = {}) {
         const wfOpenBtn = mkEl("button", "rs-btn rs-wf-canvas-import-btn");
         wfOpenBtn.type = "button";
         wfOpenBtn.textContent = t("⤒ 主画布编辑");
-        wfOpenBtn.title = t("在主 ComfyUI 界面打开本技能 workflow.json 编辑（按技能设置预渲染），改完点「💾 回写入技能」落盘本技能");
+        wfOpenBtn.title = t("在主 ComfyUI 界面打开本技能 workflow.json 编辑（按技能设置预渲染），改完点「回写入技能」落盘本技能");
         wfOpenBtn.addEventListener("click", (e) => { e.stopPropagation(); openSkillWorkflowInMainUi(currentSkillId); });
         wfCanvasBtns.append(wfOpenBtn);
     }
     const wfLogBtn = mkEl("button", "rs-btn rs-wf-write-log-btn");
     wfLogBtn.type = "button";
-    wfLogBtn.textContent = t("🕘 变更记录");
+    wfLogBtn.textContent = t("变更记录");
     wfLogBtn.title = t("查看本技能的回写历史（每次确认保存的变更清单，本机本地记录）");
     wfLogBtn.addEventListener("click", (e) => { e.stopPropagation(); showSkillWriteLogDialog(currentSkillId); });
     wfCanvasBtns.appendChild(wfLogBtn);
@@ -322,14 +322,14 @@ function createSkillDetailPopup(host, canvasBtns = true, opts = {}) {
     const wfEditBar = mkEl("div", "rs-wf-editor-bar");
     const wfSaveBtn = mkEl("button", "rs-btn rs-btn-local");
     wfSaveBtn.type = "button";
-    wfSaveBtn.textContent = t("💾 保存工作流");
+    wfSaveBtn.textContent = t("保存工作流");
     const wfReloadBtn = mkEl("button", "rs-btn rs-btn-local");
     wfReloadBtn.type = "button";
     wfReloadBtn.textContent = t("↺ 重新载入");
     wfReloadBtn.title = t("丢弃画布上的改动，按技能当前 workflow.json 与 config 重载");
     const wfFitBtn = mkEl("button", "rs-btn rs-btn-local");
     wfFitBtn.type = "button";
-    wfFitBtn.textContent = t("🧭 适配视图");
+    wfFitBtn.textContent = t("适配视图");
     wfEditBar.append(wfSaveBtn, wfReloadBtn, wfFitBtn);
     const wfCanvasBox = mkEl("div", "rs-wf-editor-canvas-box");
     wfEditWrap.append(wfEditBar, wfCanvasBox);
@@ -337,18 +337,18 @@ function createSkillDetailPopup(host, canvasBtns = true, opts = {}) {
 
     // 失效模型路径修复：复用后端 /neo_nodes/skill_model_suggest（与工作流修复同款 match_model_file），
     // 弹窗列出 config 里所有失效字段与候选/置信度，批量套用后回填对应设置区，用户再点 Save 写入 config.json。
-    // 「🔧 修复失效路径」+「📋 修复记录」并排放在各设置区头部（随 gen/video 设置区显隐）。config.json 恒可编辑（模型路径因机器而异、无统一预设），设置区无只读态。
+    // 「修复失效路径」+「修复记录」并排放在各设置区头部（随 gen/video 设置区显隐）。config.json 恒可编辑（模型路径因机器而异、无统一预设），设置区无只读态。
     let genRepairBtn = null, videoRepairBtn = null;   // 各设置区「修复」按钮引用：检测/应用后切换红框+右上角红点告警态
     const makeSectionRepairBtns = () => {
         const group = mkEl("div", "rs-model-repair-group");
         const repairBtn = mkEl("button", "rs-btn rs-model-repair-btn");
         repairBtn.type = "button";
-        repairBtn.textContent = t("🔧 修复失效路径");
+        repairBtn.textContent = t("修复失效路径");
         repairBtn.title = t("检测本技能 config 里失效的模型路径，给出候选并批量套用（复用工作流修复匹配）");
         repairBtn.addEventListener("click", (e) => { e.stopPropagation(); openModelRepairDialog(); });
         const logBtn = mkEl("button", "rs-btn rs-model-repair-log-btn");
         logBtn.type = "button";
-        logBtn.textContent = t("📋 修复记录");
+        logBtn.textContent = t("修复记录");
         logBtn.title = t("查看本技能的模型路径修复历史（本机本地记录）");
         logBtn.addEventListener("click", (e) => { e.stopPropagation(); openSkillRepairLogDialog(); });
         group.append(repairBtn, logBtn);
@@ -385,7 +385,7 @@ function createSkillDetailPopup(host, canvasBtns = true, opts = {}) {
         return n;
     }
 
-    // 设置区头部「💾 Save / ↺ 恢复默认」与本地覆盖提示的显隐（仅预设；恢复仅在存在覆盖时显示）
+    // 设置区头部「Save / ↺ 恢复默认」与本地覆盖提示的显隐（仅预设；恢复仅在存在覆盖时显示）
     // 检测当前活动设置区是否有失效模型路径 → 「修复」按钮红框+右上角红点；无缺失则清除。
     // 打开/重载技能、应用修复后调用；异步结果按「技能未切换且该区仍显示」校验，避免过期覆盖。
     async function checkRepairStatus() {
@@ -420,7 +420,7 @@ function createSkillDetailPopup(host, canvasBtns = true, opts = {}) {
         const { body, foot, close } = makeRepairDialog(tf("修复记录（{n}）", { n: log.length }), "rs-skill-repair-log-overlay");
         if (!log.length) {
             const empty = mkEl("div", "rs-repair-log-empty");
-            empty.textContent = t("本技能暂无修复记录 — 点「🔧 修复失效路径」套用后，修改会记录在这里。");
+            empty.textContent = t("本技能暂无修复记录 — 点「修复失效路径」套用后，修改会记录在这里。");
             body.appendChild(empty);
         } else {
             for (const entry of log) {
@@ -621,7 +621,7 @@ function createSkillDetailPopup(host, canvasBtns = true, opts = {}) {
             // 本地缺这个模型 → 直接进模型库搜索下载（预填失效文件名 + 对应落盘类别）
             const hubBtn = mkEl("button", "rs-repair-hub-btn");
             hubBtn.type = "button";
-            hubBtn.textContent = t("📥 模型库");
+            hubBtn.textContent = t("模型库");
             hubBtn.title = t("在模型库（Comfy-Org · Hugging Face / ModelScope）搜索并下载此模型");
             hubBtn.addEventListener("click", (e) => {
                 e.stopPropagation();
@@ -636,7 +636,7 @@ function createSkillDetailPopup(host, canvasBtns = true, opts = {}) {
             if (r.kind === "lora" && !r.suggestion && !(r.candidates && r.candidates.length)) {
                 const civBtn = mkEl("button", "rs-repair-civitai-btn");
                 civBtn.type = "button";
-                civBtn.textContent = t("🔍 C站");
+                civBtn.textContent = t("C站");
                 civBtn.title = t("从 Civitai 搜索并下载此 LoRA");
                 const subPanel = mkEl("div", "rs-repair-civitai-panel");
                 subPanel.style.display = "none";
@@ -785,7 +785,7 @@ function createSkillDetailPopup(host, canvasBtns = true, opts = {}) {
     // ---- 底部按钮：随状态显隐（保存 / 删除）；关闭走标题栏 ✕，复制走标题栏「复制为自定义」----
     const footerBtns = mkEl("div", "rs-modal-btns rs-skill-detail-actions");
     const saveBtn = mkEl("button", "rs-btn rs-btn-local rs-tpl-save-btn");
-    saveBtn.textContent = t("💾 保存");
+    saveBtn.textContent = t("保存");
     const deleteBtn = mkEl("button", "rs-btn rs-delete-cancel-btn");
     setIconLabel(deleteBtn, "trash", t("删除"));
     footerBtns.append(saveBtn, deleteBtn);
@@ -811,7 +811,7 @@ function createSkillDetailPopup(host, canvasBtns = true, opts = {}) {
     const docModal = mkEl("div", "rs-skill-modal rs-skill-doc-modal");
     const docHeader = mkEl("div", "rs-skill-modal-header");
     const docTitle = mkEl("span", "rs-skill-modal-title");
-    docTitle.textContent = t("📖 技能说明（skill.md）");
+    docTitle.textContent = t("技能说明（skill.md）");
     const docClose = mkEl("button", "rs-skill-modal-close");
     docClose.textContent = "✕";
     docClose.setAttribute("aria-label", "Close");
@@ -1183,7 +1183,7 @@ function createSkillDetailPopup(host, canvasBtns = true, opts = {}) {
     // ---- 打开：查看/编辑已有 skill ----
     async function openExisting(id, source) {
         showDetail();
-        titleSpan.textContent = t("📝 技能");
+        titleSpan.textContent = t("技能");
         currentSkillId = id;
         currentSource = source || "custom";
         setBadge();
@@ -1279,7 +1279,7 @@ function createSkillDetailPopup(host, canvasBtns = true, opts = {}) {
     // ---- 打开：新建空表单 ----
     function openNew() {
         showDetail();
-        titleSpan.textContent = t("✨ 新建技能");
+        titleSpan.textContent = t("新建技能");
         currentSkillId = null;
         currentFiles = [];
         currentSource = "custom";
@@ -1340,11 +1340,11 @@ function createSkillDetailPopup(host, canvasBtns = true, opts = {}) {
     const dirtyConfirm = mkEl("div", "rs-gen-dirty-confirm");
     dirtyConfirm.hidden = true;
     const dirtyText = mkEl("span", "rs-gen-dirty-text");
-    dirtyText.textContent = t("⚠ 有未保存的修改");
+    dirtyText.textContent = t("有未保存的修改");
     const dirtyActions = mkEl("div", "rs-gen-dirty-actions");
     const btnSaveClose = mkEl("button", "rs-btn rs-gen-dirty-save");
     btnSaveClose.type = "button";
-    btnSaveClose.textContent = t("💾 保存并关闭");
+    btnSaveClose.textContent = t("保存并关闭");
     const btnDiscard = mkEl("button", "rs-btn rs-gen-dirty-discard");
     btnDiscard.type = "button";
     btnDiscard.textContent = t("放弃修改");
@@ -1373,7 +1373,7 @@ function createSkillDetailPopup(host, canvasBtns = true, opts = {}) {
     });
 
     // ---- 保存（新建主文件 / 已有 skill 的当前选中文件）----
-    // 自定义技能：生图设置区随主 Save 一起写入该技能 config.json；预设技能：走设置区头部「💾 Save」（本地覆盖，见 savePresetGenSettings）
+    // 自定义技能：生图设置区随主 Save 一起写入该技能 config.json；预设技能：走设置区头部「Save」（本地覆盖，见 savePresetGenSettings）
     async function persistGenSettings() {
         if (!currentSkillId || !isCustom()) return;
         try {

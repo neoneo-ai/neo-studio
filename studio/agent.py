@@ -115,7 +115,7 @@ SESSION_FILE_RE = re.compile(r"^\d{8}-\d{6}-[0-9a-f]{32}\.json$")
 # 用户级偏好：一台机器一份，落在数据根的 configs/agent_prefs.json——这个文件用户会自己在编辑器里
 # 打开改，写盘走 .tmp 再 replace；代码里的 DEFAULT_PREFS 就是缺文件时的读入口，不往数据根落默认副本
 AGENT_PREFS_FILE = CONFIGS_DIR / "agent_prefs.json"
-# confirm_films 默认关：出片确认卡只在用户自己打开它时才拦——默认拦住整片会把「✨ 生成 → 出片」
+# confirm_films 默认关：出片确认卡只在用户自己打开它时才拦——默认拦住整片会把「生成 → 出片」
 # 这条今天就在跑的链路变成每次多点一下，而这一发的取舍本来就是用户开口要出片时给过的
 DEFAULT_PREFS = {"preferred_skill": "", "preferred_size": "", "preferred_family": "",
                  "style_notes": "", "avoid": "", "confirm_films": False}
@@ -146,7 +146,7 @@ IMAGE_TOKENS = 1000       # 附件图按定值计：base64 的字符数会把一
 MSG_OVERHEAD = 4          # OpenAI 一条消息的固定壳开销
 # 出片级工具的量级确认卡：一次整片是三段 × 每段数分钟起步，跑下去再喊停就晚了一半
 FILM_GATE_TOOLS = ("director_run", "segment_run", "assemble_run", "director_keyframes")
-GATE_OPTIONS = ("✅ 跑这一发", "⏹ 先不跑")
+GATE_OPTIONS = ("跑这一发", "先不跑")
 # 正文型技能的流程交代闸：提示词里那句「第一句话先把流程列给用户」在短 token 的本地模型上不成立——
 # 四条实测运行全都在第一句话就调 generate_prompt，等它拿到技能正文才开始报步骤，用户就是陪跑到
 # 最后一刻才知道还剩几道门。调用点上拦一次才落地；只拦一次，认死的模型不会被卡在闸上烧轮次
@@ -371,7 +371,7 @@ class _Run:
     不会把下一次暂停直接放过去。
 
     落盘面（created / mode / frames / messages / focus / 终态）挂在同一个对象上，_events 收尾时整份
-    写进数据根的 agent_sessions/：前端「🗂 历史」读回的就是这一份。"""
+    写进数据根的 agent_sessions/：前端「历史」读回的就是这一份。"""
 
     def __init__(self, client):
         self.client = client
@@ -382,7 +382,7 @@ class _Run:
         self.task_id = ""
         self.asks: dict[str, dict] = {}
         # 会话落盘面，挂在同一个对象上：收尾时整份写进数据根的 agent_sessions/，
-        # 前端「🗂 历史」读回时间线，「继续这次会话」接的是 messages
+        # 前端「历史」读回时间线，「继续这次会话」接的是 messages
         self.created = time.time()
         self.mode = "act"
         self.text = ""
@@ -392,7 +392,7 @@ class _Run:
         # image_names 是落盘后的 input/ 名字缓存，两者都不进会话落盘（落盘不带图字节）
         self.image_sources: list[dict] = []
         self.image_names: list[str] = []
-        # 素材库当前目录是否标了 👤 角色图：注入参考时决定新建配方走不走全参考（见 _apply_references）
+        # 素材库当前目录是否标了 角色图：注入参考时决定新建配方走不走全参考（见 _apply_references）
         self.character_dir = False
         # 采样预览要的档（像素最长边，0 = 这一轮关掉采样预览）：没给请求体的调用方按右栏卡片那一档，见 _preview_of
         self.preview_side = AGENT_PREVIEW_SIDE
@@ -482,7 +482,7 @@ class _Run:
 
 
 # ---------------------------------------------------------------------------
-# 会话落盘：一次运行一个文件，供「🗂 历史」读回时间线、供「继续这次会话」接上下文
+# 会话落盘：一次运行一个文件，供「历史」读回时间线、供「继续这次会话」接上下文
 # ---------------------------------------------------------------------------
 
 def _session_files() -> list:
@@ -841,7 +841,7 @@ def _resolve_images(raw: list) -> list:
 
 def _attachment_names(sources: list) -> list:
     """本轮附件落成参考图名（出图与出片共用）。粘贴 / 拖入的图由 image_gen._reference_name
-    写进 input/NeoAgent/ 按内容哈希去重——同一张图重发不重复落盘，也是 🎨 绘画页出图今天就在写的文件；
+    写进 input/NeoAgent/ 按内容哈希去重——同一张图重发不重复落盘，也是 绘画页出图今天就在写的文件；
     素材库拖入的图本来就是 input/ 名，原样返回。名字要在生成工具真正被调到时才要，纯问答的一轮不写文件。"""
     if not sources:
         return []
@@ -869,7 +869,7 @@ async def _apply_references(client, name: str, args: dict, run) -> None:
     出片侧不塞 run 工具的参数——段的参考集由配方拥有，多帧块还要求块内各段参考逐字一致，
     运行时加参考会打破分块。所以出片的参考落在本轮新建配方上：director_plan 的角色参考、
     director_save 各段的 refs.images，写已有配方一个字不改。
-    素材库当前目录标了 👤 角色图时，新建配方照画廊 ⋯ 菜单同一条口径补上全参考模式。
+    素材库当前目录标了 角色图时，新建配方照画廊 ⋯ 菜单同一条口径补上全参考模式。
     技能收不收参考图不在这里判：那条判法归 generate_image 的 MCP 层，右栏走的是同一条调用。"""
     refs = await _run_references(run)
     if not refs:
@@ -1024,7 +1024,7 @@ def _plan_block(steps: list) -> str:
             line += f"（{_clip(step['key_args'], 200)}）"
         if step.get("note"):
             line += f"：{_clip(step['note'], 200)}"
-        lines.append(line + ("　✅ 已完成" if step.get("done") else ""))
+        lines.append(line + ("　已完成" if step.get("done") else ""))
     return ("\n\n本轮照这份执行清单跑（用户刚从计划模式切过来，这是他自己认下的计划）：\n"
             + "\n".join(lines)
             + "\n按顺序逐条做，做完一条才做下一条；要改顺序或跳过某条就把理由讲给用户。"
@@ -1250,7 +1250,7 @@ def _context_block(raw) -> str:
         lines.append(f"绘画页模式：{CONTEXT_MODES[mode]}")
     gallery = _clip(str(raw.get("gallery_path") or ""), CONTEXT_CLIP).strip()
     if gallery and page in CONTEXT_LIB_PAGES:
-        # 👤 角色图目录是画廊的事实，智能体自己没有这份数据：三视图是设定图，基于这些图
+        # 角色图目录是画廊的事实，智能体自己没有这份数据：三视图是设定图，基于这些图
         # 建配方默认走全参考（与画廊 ⋯ 菜单同一条口径），只认前端给的 true
         mark = "（角色图目录：基于这里的图建导演配方默认全参考）" if raw.get("character_dir") is True else ""
         lines.append(f"素材库当前目录：{gallery}{mark}")
@@ -1873,7 +1873,7 @@ async def _events(run, text: str, mode: str = "act", images: list | None = None,
 
     _RUNS[run.run_id] = run
     try:
-        # 首帧报 run_id：前端的「⏹ 取消」与「选项回答」都要靠它认这次运行
+        # 首帧报 run_id：前端的「取消」与「选项回答」都要靠它认这次运行
         yield _sse({"kind": "run", "run_id": run.run_id})
         # 用户这一发自己进时间线并随会话落盘：读回旧会话时看得见自己问过什么、附过哪几张图
         turn = _turn_frame(text, run.image_refs)
@@ -2116,7 +2116,7 @@ async def agent_resume(request):
 
 @routes.get("/neo_agent/sessions")
 async def agent_sessions(request):
-    """「🗂 历史」的列表：新的在前，只回摘要（时间 / 模式 / 终态 / 标题 / 工具数），
+    """「历史」的列表：新的在前，只回摘要（时间 / 模式 / 终态 / 标题 / 工具数），
     整条时间线由 /neo_agent/session 按 run_id 读回。"""
     return web.json_response(_json_safe({"ok": True, "sessions": await asyncio.to_thread(_list_sessions)}))
 

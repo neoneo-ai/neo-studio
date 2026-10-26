@@ -30,7 +30,7 @@ function mockHubRoutes() {
 }
 
 // 本地 text_encoders 为空：CLIPLoader 的 clip_name 无候选 → 必须出现模型库按钮
-test("本地无候选的失效行出现「📥 模型库」按钮", () => {
+test("本地无候选的失效行出现「模型库」按钮", () => {
     const changes = [{
         node: "2", input: "clip_name", type: "CLIPLoader",
         old: "qwen3vl_8b_int8_convrot.safetensors", new: null, candidates: [],

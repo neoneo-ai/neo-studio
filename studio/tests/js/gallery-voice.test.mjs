@@ -1,4 +1,4 @@
-// Neo Gallery 音频卡片「🔊 生成语音」：CosyVoice 零样本克隆，参考音频经 copy_to_input 落
+// Neo Gallery 音频卡片「生成语音」：CosyVoice 零样本克隆，参考音频经 copy_to_input 落
 // input/ 作 {{REF_AUDIO_1}}，目标文字走 {{PROMPT}}，产物落 Output/Voice，弹窗内显示波形并播放。
 import test from "node:test";
 import assert from "node:assert/strict";

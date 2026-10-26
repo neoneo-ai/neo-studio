@@ -24,7 +24,7 @@ const resultLayer = (w, h) =>
 const body = (w, h, outpaint) => `
 <div class="neo-gallery-story-modal-overlay neo-gallery-edit-modal-overlay">
   <div class="neo-gallery-story-modal neo-gallery-edit-modal">
-    <div class="neo-gallery-story-titlebar"><span class="neo-gallery-story-title">🖼️ 图片编辑</span><span class="neo-gallery-story-close">×</span></div>
+    <div class="neo-gallery-story-titlebar"><span class="neo-gallery-story-title">图片编辑</span><span class="neo-gallery-story-close">×</span></div>
     <div class="neo-gallery-edit-compare">
       <div>
         <div class="neo-gallery-edit-compare-label">原图 / 编辑结果（拖拽分割线对比）</div>

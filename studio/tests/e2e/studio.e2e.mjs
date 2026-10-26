@@ -203,7 +203,7 @@ test("Studio 绘画页：左素材库 + 右模式条，文生图铺满右栏", a
             };
         });
         assert.match(layout.page, /^380px /, "绘画页应为左素材库 + 右主栏两列");
-        assert.deepEqual(layout.modes, ["🖼️ 文生图", "🎨 图片编辑"], "模式条两枚按钮");
+        assert.deepEqual(layout.modes, ["文生图", "图片编辑"], "模式条两枚按钮");
         assert.equal(layout.editHidden, "none", "默认图片编辑收起（一次只铺满一块）");
         assert.ok(Math.abs(layout.panel.width - layout.main.width) <= 1, "文生图铺满右栏宽度");
         assert.ok(layout.panel.height > layout.main.height * 0.8, "文生图铺满右栏高度");
@@ -222,7 +222,7 @@ test("Studio 绘画页：左素材库 + 右模式条，文生图铺满右栏", a
                 overlays: document.querySelectorAll(".neo-gallery-story-modal-overlay").length,
             };
         });
-        assert.ok(eager.textPanel, "进页就铺好文生图面板：不必先点「🖼️ 生成素材」");
+        assert.ok(eager.textPanel, "进页就铺好文生图面板：不必先点「生成素材」");
         assert.ok(eager.textBtns.includes("生成") && !eager.textBtns.includes("取消"), "页内面板只有「生成」，没有「取消」");
         assert.ok(eager.editPanel, "进页就铺好图片编辑面板：不必先进图片卡菜单");
         assert.ok(eager.editEmpty, "无原图时预览区是拖放落点（从左栏拖图进来即可）");
@@ -287,7 +287,7 @@ test("Studio 绘画页：素材页「生成素材」→ 绘画页 → 回素材�
         await page.evaluate(() => { location.hash = "#/gallery"; });
         await page.waitForSelector(".neo-gallery-gm-btn", { timeout: 15000 });
 
-        // 第一次：素材页顶栏「🖼️ 生成素材」→ 面板铺进绘画页并切到绘画页
+        // 第一次：素材页顶栏「生成素材」→ 面板铺进绘画页并切到绘画页
         await page.click(".neo-gallery-gm-btn");
         await page.waitForSelector(".ns-paint:not(.ns-hidden) .ns-paint-text .neo-gallery-gen-panel", { timeout: 15000 });
         assert.equal(await page.evaluate(() => location.hash), "#/paint", "切页走 hash：顶栏 tab 与路由同步（hash 停在素材页时点「素材」不触发 hashchange）");
@@ -317,7 +317,7 @@ test("Studio 绘画页：素材页「生成素材」→ 绘画页 → 回素材�
     }
 });
 
-test("Studio 绘画页：左栏素材库「🖼️ 生成素材」面板留在本页", async (t) => {
+test("Studio 绘画页：左栏素材库「生成素材」面板留在本页", async (t) => {
     if (!guard(t)) return;
     const page = await browser.newPage();
     await pinZh(page);

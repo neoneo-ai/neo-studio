@@ -1,4 +1,4 @@
-// Neo Gallery 目录卡「🏷️ LoRA 打标」：可写叶子图片目录卡显示 ⋯ 按钮，点开弹窗（触发词 + 自动标准化），
+// Neo Gallery 目录卡「LoRA 打标」：可写叶子图片目录卡显示 ⋯ 按钮，点开弹窗（触发词 + 自动标准化），
 // 调 /neo_gallery/tag_dir 批量生成标签 .txt。仅可写来源且含图片的目录卡显示该入口。
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -53,7 +53,7 @@ test("目录卡：无图片的目录（image_count=0）不显示 ⋯ 按钮", as
     assert.equal(card.querySelector(".neo-gallery-card-dir-menu-btn"), null);
 });
 
-test("点 ⋯：菜单显示「🏷️ LoRA 打标」与目录路径", async () => {
+test("点 ⋯：菜单显示「LoRA 打标」与目录路径", async () => {
     const { gallery } = makeGallery();
     const card = await makeCard(gallery, "关晓彤", "Input", ["stars", "关晓彤"], { image_count: 12 });
     click(card.querySelector(".neo-gallery-card-dir-menu-btn"));
@@ -62,7 +62,7 @@ test("点 ⋯：菜单显示「🏷️ LoRA 打标」与目录路径", async () 
     assert.equal(pathEl.textContent, "Input/stars/关晓彤");
 });
 
-test("点「🏷️ LoRA 打标」：弹窗 preflight 填建议触发词，点「开始打标」调 /neo_gallery/tag_dir 并显示结果", async () => {
+test("点「LoRA 打标」：弹窗 preflight 填建议触发词，点「开始打标」调 /neo_gallery/tag_dir 并显示结果", async () => {
     const { gallery } = makeGallery();
     const card = await makeCard(gallery, "关晓彤", "Input", ["stars", "关晓彤"], { image_count: 12 });
 

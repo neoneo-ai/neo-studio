@@ -23,7 +23,7 @@ function createSlashSkillPicker({ quickInput, listSkills, skillSelector = null, 
                                   rowText = null, categoryLabel = null, tokenOf = null,
                                   prefix = "rs-slash-picker" }) {
     let pickerEl = null; // 已打开的弹层句柄：防止重复叠加，关闭时置空
-    const rowTextOf = rowText || ((s) => (s.needs_image ? "📷 " : "") + (s.cn_name || s.name || s.id || ""));
+    const rowTextOf = rowText || ((s) => (s.needs_image ? "" : "") + (s.cn_name || s.name || s.id || ""));
 
     async function openSlashSkillPicker() {
         if (pickerEl) return;

@@ -1,4 +1,4 @@
-// 画廊搜索行「🖼️ 生成素材」：纯提示词一键生成新素材，默认 Krea2 文生图（image_gen），
+// 画廊搜索行「生成素材」：纯提示词一键生成新素材，默认 Krea2 文生图（image_gen），
 // 成功后可打开 Output 下实际落盘的日期子目录。
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -458,7 +458,7 @@ test("生成素材弹窗：选中的主模型+LoRA 组合可保存为新技能",
     assert.equal(skillSel.value, "qwen_image_21_style_a", "失败时下拉选择不变");
 });
 
-test("生成素材弹窗：✨ 增强仿 agent quick input + output，支持选择增强 skill", async () => {
+test("生成素材弹窗：增强仿 agent quick input + output，支持选择增强 skill", async () => {
     resetEnv();
     clearRoutes();
     localStorage.clear();
@@ -478,7 +478,7 @@ test("生成素材弹窗：✨ 增强仿 agent quick input + output，支持选�
         const enc = new TextEncoder();
         const lines = [
             'data: {"text":"分析主体……","kind":"thinking"}\n',
-            'data: {"text":"⏳ 生成中（按需读引用文件）…","kind":"status"}\n',
+            'data: {"text":"生成中（按需读引用文件）…","kind":"status"}\n',
             'data: {"text":"红色陶瓷杯，","kind":"content"}\n',
             'data: {"text":"白底产品图，柔和布光。","kind":"content"}\n',
             "data: [DONE]\n",
@@ -517,17 +517,17 @@ test("生成素材弹窗：✨ 增强仿 agent quick input + output，支持选�
     assert.ok(modalChildren.indexOf(outputWrap) < modalChildren.indexOf(quickWrap), "output 框应在 quick input 上方（chat 习惯）");
     assert.equal([...enhanceSel.options].map(o => o.value).join(","), ",general_enhance", "增强下拉只列图像增强技能（顶部默认空选项，task / 生图类排除）");
 
-    const enhanceBtn = [...overlay.querySelectorAll(".neo-gallery-story-btn")].find(b => b.textContent === "✨ 增强");
-    assert.ok(enhanceBtn, "应有「✨ 增强」按钮");
+    const enhanceBtn = [...overlay.querySelectorAll(".neo-gallery-story-btn")].find(b => b.textContent === "增强");
+    assert.ok(enhanceBtn, "应有「增强」按钮");
 
-    // llm-chat 式布局：增强下拉 + ✨ 集成在 quick input 内部底边工具栏；🎲/▾/☰ 浮出在 output 框右下角
+    // llm-chat 式布局：增强下拉 + 集成在 quick input 内部底边工具栏；/▾/☰ 浮出在 output 框右下角
     const inputToolbar = overlay.querySelector(".neo-gallery-gm-input-toolbar");
     assert.ok(quickWrap && inputToolbar && quickWrap.contains(inputToolbar), "增强工具栏应在 quick input 包装内");
     assert.equal(inputToolbar.querySelector(".neo-gallery-gm-enhance-skill"), enhanceSel, "增强下拉应在工具栏内");
-    assert.ok(inputToolbar.contains(enhanceBtn), "✨ 增强应在工具栏内");
+    assert.ok(inputToolbar.contains(enhanceBtn), "增强应在工具栏内");
     const floatGroup = overlay.querySelector(".neo-gallery-gm-float-group");
     assert.ok(outputWrap && outputWrap.contains(floatGroup), "浮出按钮组应在 output 框包装内");
-    assert.equal(floatGroup.querySelectorAll(".neo-gallery-gm-tool-btn").length, 3, "浮出组应有 🎲/▾/☰ 三个按钮");
+    assert.equal(floatGroup.querySelectorAll(".neo-gallery-gm-tool-btn").length, 3, "浮出组应有 /▾/☰ 三个按钮");
 
     // 双框皆空：不发请求
     click(enhanceBtn);
@@ -557,7 +557,7 @@ test("生成素材弹窗：✨ 增强仿 agent quick input + output，支持选�
     assert.ok(!outputInput.value.includes("生成中"), "status 不应写入 output");
     assert.equal(outputInput.value, "红色陶瓷杯，白底产品图，柔和布光。");
     assert.equal(quickInput.value, "红色陶瓷杯", "增强成功后 quick input 保留不自动清空");
-    assert.equal(enhanceBtn.textContent, "✨ 增强", "完成后按钮应恢复");
+    assert.equal(enhanceBtn.textContent, "增强", "完成后按钮应恢复");
 
     // 第二轮：output 已有提示词 + quick input 新指令 → 按 \n\n---\n\n 拼接（同节点）；所选增强 skill 随请求发出并被记住
     mockRoute("/rs_prompts/stream_generate_prompt", (b) => {
@@ -646,7 +646,7 @@ test("快捷输入命令终端式历史：↑/↓ 召回之前生成的提示词
     document.querySelector(".neo-gallery-gm-modal-overlay")?.remove();
 });
 
-test("快捷输入历史只记快捷输入：✨ 增强后入史的是快捷输入内容，不是增强的长文", async () => {
+test("快捷输入历史只记快捷输入：增强后入史的是快捷输入内容，不是增强的长文", async () => {
     resetEnv();
     clearRoutes();
     const { openGenMaterialDialog } = await import("../../web/gallery-gen.js");
@@ -666,7 +666,7 @@ test("快捷输入历史只记快捷输入：✨ 增强后入史的是快捷输�
     const output = overlay.querySelector(".neo-gallery-story-input");
 
     inputText(quick, "红色陶瓷杯");
-    click([...overlay.querySelectorAll(".neo-gallery-story-btn")].find(b => b.textContent === "✨ 增强"));
+    click([...overlay.querySelectorAll(".neo-gallery-story-btn")].find(b => b.textContent === "增强"));
     await sleep(80);
     assert.equal(output.value, "红色陶瓷杯，白底产品图，柔和布光，高清细节。");
     assert.equal(quick.value, "红色陶瓷杯", "增强成功后 quick input 保留不自动清空");
@@ -706,7 +706,7 @@ test("output 框独立历史：增强+生成后 ↑ 在 output 召回最终提�
 
     // 增强 → 用 output 的增强内容生成
     inputText(quick, "红色陶瓷杯");
-    click([...overlay.querySelectorAll(".neo-gallery-story-btn")].find(b => b.textContent === "✨ 增强"));
+    click([...overlay.querySelectorAll(".neo-gallery-story-btn")].find(b => b.textContent === "增强"));
     await sleep(80);
     const finalPrompt = "红色陶瓷杯，白底产品图，柔和布光，高清细节。";
     assert.equal(output.value, finalPrompt);
@@ -731,7 +731,7 @@ test("output 框独立历史：增强+生成后 ↑ 在 output 召回最终提�
     document.querySelector(".neo-gallery-gm-modal-overlay")?.remove();
 });
 
-test("🎲 随机填入：从运行时混合池抽一条填入 output 框", async () => {
+test("随机填入：从运行时混合池抽一条填入 output 框", async () => {
     resetEnv();
     clearRoutes();
     const { openGenMaterialDialog } = await import("../../web/gallery-gen.js");
@@ -746,7 +746,7 @@ test("🎲 随机填入：从运行时混合池抽一条填入 output 框", asyn
     const overlay = document.querySelector(".neo-gallery-gm-modal-overlay");
     await sleep(50);
 
-    click([...overlay.querySelectorAll(".neo-gallery-gm-tool-btn")].find(b => b.textContent === "🎲"));
+    click([...overlay.querySelectorAll(".neo-gallery-gm-tool-btn")].find(b => b.textContent === ""));
     await sleep(80);
 
     assert.equal(overlay.querySelector(".neo-gallery-story-input").value, "混合池里的一条随机提示词", "随机抽到的提示词应填入 output 框");

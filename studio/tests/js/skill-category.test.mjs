@@ -27,10 +27,10 @@ test("populateSkillOptions：增强类排最前，video_gen / task 隐藏", asyn
     const labelOf = (id) => groupOf(id)?.label;
 
     // 增强类排最前、生图随后；未知分类仍回落 image_enhance
-    assert.equal(labelOf("anime_style"), "🎨 图像提示词增强");
-    assert.equal(labelOf("full_ref"), "🎬 视频提示词增强");
-    assert.equal(labelOf("krea2"), "🖼️ 直接生图或编辑");
-    assert.equal(labelOf("weird"), "🎨 图像提示词增强");
+    assert.equal(labelOf("anime_style"), "图像提示词增强");
+    assert.equal(labelOf("full_ref"), "视频提示词增强");
+    assert.equal(labelOf("krea2"), "直接生图或编辑");
+    assert.equal(labelOf("weird"), "图像提示词增强");
 
     // video_gen / task 隐藏：下拉中无对应 option
     assert.equal(groupOf("h3_t2v"), null);
@@ -39,9 +39,9 @@ test("populateSkillOptions：增强类排最前，video_gen / task 隐藏", asyn
 
     const order = Array.from(select.querySelectorAll("optgroup")).map((g) => g.label);
     assert.deepEqual(order, [
-        "🎨 图像提示词增强",
-        "🎬 视频提示词增强",
-        "⚡ 图像 / 反推",
-        "🖼️ 直接生图或编辑",
+        "图像提示词增强",
+        "视频提示词增强",
+        "图像 / 反推",
+        "直接生图或编辑",
     ]);
 });

@@ -4,9 +4,9 @@ body
       div "默认"
     div.rs-skill-dropdown-footer
       button.rs-btn.rs-btn-local.rs-skill-footer-btn <type=button title=Create a new custom skill> "+ New Skill"
-      button.rs-btn.rs-btn-local.rs-skill-footer-btn <type=button title=Upload a .zip skill package> "⬆ ZIP"
-      button.rs-btn.rs-btn-local.rs-skill-footer-btn <type=button title=Upload a skill folder (all .md files)> "⬆ Folder"
-      button.rs-btn.rs-btn-local.rs-skill-footer-btn <type=button title=Export the current canvas workflow as a skill (image or H3 video)> "📋 From Canvas"
+      button.rs-btn.rs-btn-local.rs-skill-footer-btn <type=button title=Upload a .zip skill package> "ZIP"
+      button.rs-btn.rs-btn-local.rs-skill-footer-btn <type=button title=Upload a skill folder (all .md files)> "Folder"
+      button.rs-btn.rs-btn-local.rs-skill-footer-btn <type=button title=Export the current canvas workflow as a skill (image or H3 video)> "From Canvas"
   div.rs-runtime-menu
     label.rs-runtime-row.rs-runtime-toggle
       input.rs-auto-generate-checkbox <type=checkbox val="on">
@@ -31,9 +31,9 @@ body
     div.rs-runtime-hint "默认标准思考；不思考直接输出，更快更稳（需服务端支持）"
     div.rs-runtime-divider
     div.rs-auto-tabs
-      button.rs-auto-tab.rs-auto-tab-active <type=button> "🤖 LLM Settings"
-      button.rs-auto-tab <type=button> "🖼️ 生图默认设置"
-      button.rs-auto-tab <type=button> "🎬 生视频模型"
+      button.rs-auto-tab.rs-auto-tab-active <type=button> "LLM Settings"
+      button.rs-auto-tab <type=button> "生图默认设置"
+      button.rs-auto-tab <type=button> "生视频模型"
     div.rs-auto-panel
       div.rs-remote-form
         div.rs-settings-info
@@ -49,18 +49,18 @@ body
         div.rs-config-row <display=none>
           label.rs-form-label "本地模型目录"
           input#rs-local-models-dir.rs-form-input.rs-local-models-dir <type=text placeholder=默认：ComfyUI/models/LLM>
-          div.rs-form-hint "📁 供应商(可选)/模型名称/模型文件(.gguf) · 同目录 mmproj 自动匹配"
+          div.rs-form-hint "供应商(可选)/模型名称/模型文件(.gguf) · 同目录 mmproj 自动匹配"
         div#rs-model-input-wrapper.rs-config-row
           label.rs-form-label "模型"
           input#rs-remote-model.rs-form-input.rs-remote-model <type=text display=none>
           div.rs-model-select-box <display=none>
             div
-              input.rs-form-input.rs-combo-input <type=text placeholder=🔍 输入过滤或点击选择...>
+              input.rs-form-input.rs-combo-input <type=text placeholder=输入过滤或点击选择...>
               span.rs-combo-caret "▾"
             select#rs-remote-model-select.rs-form-input.rs-remote-model <display=none>
           div.rs-model-select-box <display=none>
             div
-              input.rs-form-input.rs-combo-input <type=text placeholder=🔍 输入过滤或点击选择...>
+              input.rs-form-input.rs-combo-input <type=text placeholder=输入过滤或点击选择...>
               span.rs-combo-caret "▾"
             select#rs-local-model-select.rs-form-input.rs-local-model-select <display=none>
         details.rs-remote-advanced <display=none>
@@ -80,29 +80,29 @@ body
             input#rs-native-auto-unload.rs-form-checkbox <type=checkbox val="on">
             label.rs-form-label "本节点执行完自动卸载原生模型"
         div.llm-btn-row
-          button.rs-gen-test <type=button> "🔌 测试连接"
-          button.rs-gen-save <type=button> "💾 保存设置"
+          button.rs-gen-test <type=button> "测试连接"
+          button.rs-gen-save <type=button> "保存设置"
     div.rs-auto-panel <display=none>
       div.rs-gen-settings
         div.rs-config-row
           label.rs-form-label "生图模型"
           div.rs-model-select-box <display=none>
             div
-              input.rs-form-input.rs-combo-input <type=text placeholder=🔍 输入过滤或点击选择...>
+              input.rs-form-input.rs-combo-input <type=text placeholder=输入过滤或点击选择...>
               span.rs-combo-caret "▾"
             select
         div.rs-config-row
           label.rs-form-label "Text Encoder"
           div.rs-model-select-box <display=none>
             div
-              input.rs-form-input.rs-combo-input <type=text placeholder=🔍 输入过滤或点击选择...>
+              input.rs-form-input.rs-combo-input <type=text placeholder=输入过滤或点击选择...>
               span.rs-combo-caret "▾"
             select
         div.rs-config-row
           label.rs-form-label "VAE"
           div.rs-model-select-box <display=none>
             div
-              input.rs-form-input.rs-combo-input <type=text placeholder=🔍 输入过滤或点击选择...>
+              input.rs-form-input.rs-combo-input <type=text placeholder=输入过滤或点击选择...>
               span.rs-combo-caret "▾"
             select
         div.rs-config-row
@@ -112,7 +112,7 @@ body
           label.rs-form-label "输出前缀"
           input.rs-form-input <type=text placeholder=NeoAgent>
         div.rs-config-row
-          button.rs-gen-save <type=button> "💾 保存设置"
+          button.rs-gen-save <type=button> "保存设置"
     div.rs-auto-panel <display=none>
       div.rs-gen-settings
         div.rs-gen-video-heading "生视频模型（MiniMax H3）"
@@ -120,36 +120,36 @@ body
           label.rs-form-label "视频模型"
           div.rs-model-select-box <display=none>
             div
-              input.rs-form-input.rs-combo-input <type=text placeholder=🔍 输入过滤或点击选择...>
+              input.rs-form-input.rs-combo-input <type=text placeholder=输入过滤或点击选择...>
               span.rs-combo-caret "▾"
             select
         div.rs-config-row
           label.rs-form-label "Text Encoder (视频)"
           div.rs-model-select-box <display=none>
             div
-              input.rs-form-input.rs-combo-input <type=text placeholder=🔍 输入过滤或点击选择...>
+              input.rs-form-input.rs-combo-input <type=text placeholder=输入过滤或点击选择...>
               span.rs-combo-caret "▾"
             select
         div.rs-config-row
           label.rs-form-label "VAE (视频)"
           div.rs-model-select-box <display=none>
             div
-              input.rs-form-input.rs-combo-input <type=text placeholder=🔍 输入过滤或点击选择...>
+              input.rs-form-input.rs-combo-input <type=text placeholder=输入过滤或点击选择...>
               span.rs-combo-caret "▾"
             select
         div.rs-config-row
           label.rs-form-label "VAE (音频)"
           div.rs-model-select-box <display=none>
             div
-              input.rs-form-input.rs-combo-input <type=text placeholder=🔍 输入过滤或点击选择...>
+              input.rs-form-input.rs-combo-input <type=text placeholder=输入过滤或点击选择...>
               span.rs-combo-caret "▾"
             select
         div.rs-config-row
-          button.rs-gen-save <type=button> "💾 保存设置"
+          button.rs-gen-save <type=button> "保存设置"
     div.rs-gen-dirty-confirm
-      span.rs-gen-dirty-text "⚠ 有未保存的修改"
+      span.rs-gen-dirty-text "有未保存的修改"
       div.rs-gen-dirty-actions
-        button.rs-btn.rs-gen-dirty-save <type=button> "💾 保存并关闭"
+        button.rs-btn.rs-gen-dirty-save <type=button> "保存并关闭"
         button.rs-btn.rs-gen-dirty-discard <type=button> "放弃修改"
         button.rs-btn.rs-gen-dirty-keep <type=button> "继续编辑"
   div.rs-combo-list <display=none>
@@ -162,14 +162,14 @@ body
   div.rs-combo-list <display=none>
   div.rs-combo-list <display=none>
   div.rs-preset-list-overlay
-    input.rs-preset-search-input <type=text placeholder=🔍 Search presets...>
+    input.rs-preset-search-input <type=text placeholder=Search presets...>
     div.rs-preset-tabs
       button.rs-preset-tab.rs-preset-tab-active <type=button> "图像"
       button.rs-preset-tab <type=button> "视频"
       button.rs-preset-tab <type=button> "配方"
     div.rs-preset-list-body
   div.rs-preset-name-input
-    div.rs-ai-status.processing "⏳ AI 正在分析提示词..."
+    div.rs-ai-status.processing "AI 正在分析提示词..."
     div.rs-input-label "名称:"
     div.rs-input-wrapper
       input.rs-input-field <placeholder=Enter preset name...>

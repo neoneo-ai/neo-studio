@@ -61,9 +61,9 @@ test("会话标题钉在栏头那一行：第二发不换，新增会话才收�
     await openStudio("#/gallery");
     assert.equal(headTitle().textContent, "智能体", "空态栏头就是「智能体」");
     await send("画一只橘猫在窗台上");
-    assert.equal(headTitle().textContent, "💬 画一只橘猫在窗台上");
+    assert.equal(headTitle().textContent, "画一只橘猫在窗台上");
     await send("换成蓝色");
-    assert.equal(headTitle().textContent, "💬 画一只橘猫在窗台上", "第二发不该把整条对话的标题换掉");
+    assert.equal(headTitle().textContent, "画一只橘猫在窗台上", "第二发不该把整条对话的标题换掉");
     // 标题不再占时间线里单独一行：那条空标题条整块删掉了，栏头是它唯一的位置
     assert.equal(dock().querySelector(".neo-agent-titlebar"), null);
     click(headBtn("＋"));
@@ -91,13 +91,13 @@ test("历史列表与读回的旧会话都显示整条对话的标题，不是�
         },
     }));
     await openStudio("#/gallery");
-    click(headBtn("🗂"));
+    click(headBtn(""));
     await flush(20);
     assert.ok(historyTexts().includes("画一只橘猫在窗台上"), `列表行要显示标题：${historyTexts()}`);
     click([...document.querySelectorAll(".neo-agent-session-row .neo-agent-head-btn")]
         .find((b) => b.textContent === "打开"));
     await flush(20);
-    assert.equal(headTitle().textContent, "💬 画一只橘猫在窗台上");
+    assert.equal(headTitle().textContent, "画一只橘猫在窗台上");
 });
 
 test("读回旧会话时用户自己那一发在时间线里：原文与附件图都看得见", async () => {
@@ -117,7 +117,7 @@ test("读回旧会话时用户自己那一发在时间线里：原文与附件�
         },
     }));
     await openStudio("#/gallery");
-    click(headBtn("🗂"));
+    click(headBtn(""));
     await flush(20);
     click([...document.querySelectorAll(".neo-agent-session-row .neo-agent-head-btn")]
         .find((b) => b.textContent === "打开"));
@@ -142,12 +142,12 @@ test("早于 in 帧的老会话从 input 补一句自己问的话；只给附件
         },
     }));
     await openStudio("#/gallery");
-    click(headBtn("🗂"));
+    click(headBtn(""));
     await flush(20);
     click([...document.querySelectorAll(".neo-agent-session-row .neo-agent-head-btn")]
         .find((b) => b.textContent === "打开"));
     await flush(20);
-    assert.equal(headTitle().textContent, "💬 老会话第一句");
+    assert.equal(headTitle().textContent, "老会话第一句");
     assert.ok(askedLines().includes("老会话第一句"), `老会话也要补上自己那句：${askedLines()}`);
 });
 
@@ -158,14 +158,14 @@ test("中间舞台页眉挂会话标题：整场生成同一句，清空回默�
     document.body.appendChild(stage.el);
     stage.setEnabled(true);
     const head = () => stage.el.querySelector(".ns-agent-stage-title").textContent;
-    assert.equal(head(), "✨ 智能体");
+    assert.equal(head(), "智能体");
     stage.onFrame({ kind: "title", text: "画一只橘猫在窗台上" });
-    assert.equal(head(), "💬 画一只橘猫在窗台上");
+    assert.equal(head(), "画一只橘猫在窗台上");
     stage.onFrame({ kind: "run", run_id: "a".repeat(32) });
     stage.onFrame({ kind: "in", text: "换成蓝色", attachments: [] });
     stage.onFrame({ kind: "finish", text: "出好了", options: [] });
-    assert.equal(head(), "💬 画一只橘猫在窗台上", "新一轮清场与收尾都不摘页眉上的标题");
+    assert.equal(head(), "画一只橘猫在窗台上", "新一轮清场与收尾都不摘页眉上的标题");
     stage.onFrame({ kind: "title", text: "" });
-    assert.equal(head(), "✨ 智能体");
+    assert.equal(head(), "智能体");
     stage.el.remove();
 });

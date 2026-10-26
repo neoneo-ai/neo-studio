@@ -974,13 +974,13 @@ class TestSkillAgent(unittest.TestCase):
             {"kind": "video", "source": {"kind": "input", "value": "v.mp4"}},
         ]}
         chunks = list(self.skill.run_skill_agent_stream("myskill", "hi", context=ctx))
-        self.assertEqual(chunks[0], {"text": "⏳ 生成中（按需查看 2 张已连参考图）…", "kind": "status"})
+        self.assertEqual(chunks[0], {"text": "生成中（按需查看 2 张已连参考图）…", "kind": "status"})
         self.assertEqual("".join(c["text"] for c in chunks if c["kind"] == "content"), "DONE")
 
         # 只有技能引用文件、无已连参考图
         self._write(os.path.join("references", "ref.txt"), "REFERENCE CONTENT")
         chunks = list(self.skill.run_skill_agent_stream("myskill", "hi"))
-        self.assertEqual(chunks[0], {"text": "⏳ 生成中（按需读取技能引用文件）…", "kind": "status"})
+        self.assertEqual(chunks[0], {"text": "生成中（按需读取技能引用文件）…", "kind": "status"})
 
     def test_stream_single_turn_forwards_thinking_and_content(self):
         # 远程思考模型：reasoning_content（thinking）与 content 分开打标透传，不再丢弃思考

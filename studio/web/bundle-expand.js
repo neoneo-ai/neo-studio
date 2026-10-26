@@ -86,7 +86,7 @@ function renderView(node, root, output) {
     const images = (output && Array.isArray(output.images)) ? output.images : [];
 
     // 提示词区
-    root.appendChild(makeLabel("💬", t("提示词")));
+    root.appendChild(makeLabel("", t("提示词")));
     const promptBox = document.createElement("div");
     promptBox.className = "neo-be-prompt";
     if (prompt) {
@@ -99,7 +99,7 @@ function renderView(node, root, output) {
 
     // 参考图区：编号对应 image_N 输出槽位；坏参考槽位为 null，跳过显示但保留槽位编号。
     const validCount = images.filter(u => u).length;
-    root.appendChild(makeLabel("🖼️", t("参考图"), validCount || null));
+    root.appendChild(makeLabel("", t("参考图"), validCount || null));
 
     if (validCount) {
         const grid = document.createElement("div");

@@ -56,10 +56,10 @@ async function boot() {
     // 否则它会排在测试的点击后面，把刚切过去的绘画页又拽回素材页
     await settle();
     await settle();
-    // 素材页宿主换成顶栏「🖼️ 生成素材」按钮（onclick 与真素材页同款），省掉整页画廊的取数
+    // 素材页宿主换成顶栏「生成素材」按钮（onclick 与真素材页同款），省掉整页画廊的取数
     const shim = await import("../../web/studio/shim/app.js");
     const { openGenMaterialDialog } = await import("../../web/gallery-gen.js");
-    // 素材页宿主换成顶栏「🖼️ 生成素材」按钮（onclick 与真素材页同款），省掉整页画廊的取数。
+    // 素材页宿主换成顶栏「生成素材」按钮（onclick 与真素材页同款），省掉整页画廊的取数。
     // 真画廊是单例元素、render 时整体搬进宿主，这里照搬这个语义：换宿主时上一页的宿主会空掉
     const galleryEl = document.createElement("div");
     galleryEl.className = "neo-gallery";
@@ -97,7 +97,7 @@ test("绘画页：进页就铺好文生图面板与空图片编辑面板，入�
     assert.ok(!gmBtn(), "画廊单例一次只挂一处：素材页宿主此时应是空的");
     assert.ok(!overlay(), "内嵌模式不应建浮层遮罩");
 
-    // 文生图：进页即就绪，写提示词就能生成（不必先点「🖼️ 生成素材」）
+    // 文生图：进页即就绪，写提示词就能生成（不必先点「生成素材」）
     const panel = textPanel();
     assert.ok(panel, "进页应铺好文生图面板");
     assert.ok(panel.querySelector(".neo-gallery-story-modal--embedded"), "内嵌面板应带内嵌标记（样式去窗壳靠它）");
@@ -117,7 +117,7 @@ test("绘画页：进页就铺好文生图面板与空图片编辑面板，入�
     assert.match(hintOf(ep), /把左栏素材拖进预览区当原图/, "空面板说明先拖原图");
     assert.ok(paintEdit().classList.contains("ns-hidden"), "编辑宿主应随模式收起");
 
-    // 左栏「🖼️ 生成素材」：面板已在位，点它只切模式，已写的提示词不能被清掉
+    // 左栏「生成素材」：面板已在位，点它只切模式，已写的提示词不能被清掉
     panel.querySelector(".neo-gallery-gm-quick-input").value = "红色陶瓷杯的白底产品图";
     click(paintLib().querySelector(".neo-gallery-gm-btn"));
     await settle();
@@ -139,7 +139,7 @@ test("绘画页：进页就铺好文生图面板与空图片编辑面板，入�
     assert.ok(!overlay(), "内嵌模式不应建浮层遮罩");
 });
 
-test("绘画页：图片卡菜单「🖼️ 图片编辑」把这张图换进现成面板当原图", async () => {
+test("绘画页：图片卡菜单「图片编辑」把这张图换进现成面板当原图", async () => {
     await boot();
     await clickTab("paint");
     const ep = editPanel();

@@ -578,7 +578,7 @@ def _normalize_director_story(data: dict, orig_to_copied: dict, existing_assets:
 
 
 def _normalize_director_setup(data: dict, orig_to_copied: dict, existing_assets: set | None = None) -> dict | None:
-    """规范化「🎯 统一设置」区的可选内容：统一参考素材 / 首帧 / 尾帧（编辑器里已选中的状态）+ 优化前后提示词对照。
+    """规范化「统一设置」区的可选内容：统一参考素材 / 首帧 / 尾帧（编辑器里已选中的状态）+ 优化前后提示词对照。
 
     仅用于重新打开时回显，执行读各段自己的字段。引用名与段参考一样回写为落盘最终名；
     引用未保存资产的条目直接丢弃——缺一条不该让整份配方保存失败。
@@ -1020,9 +1020,9 @@ _README_TEMPLATES = {
         "samples": "- 示例结果：{samples} 个（samples/ 目录）",
         "usage": "【快速应用】",
         "install_step": "1. 安装 Neo Studio 插件：https://github.com/neoneo-ai/neo-studio",
-        "import_step": "2. 在 ComfyUI 侧边栏「配方」页点「📦 导入」，选择本 zip 包完成导入。",
+        "import_step": "2. 在 ComfyUI 侧边栏「配方」页点「导入」，选择本 zip 包完成导入。",
         "use_director": "3. 添加 NeoH3VideoDirector 节点，在 recipe（配方）下拉中选择该配方后运行。",
-        "use_normal": '3. 在配方列表点该配方的「✈️ 发送到工作流」，即可将配方包含的图片、音频等参考资源和提示词载入工作流。',
+        "use_normal": '3. 在配方列表点该配方的「✈发送到工作流」，即可将配方包含的图片、音频等参考资源和提示词载入工作流。',
     },
     "en": {
         "title": "# Recipe package: {name}",
@@ -1034,9 +1034,9 @@ _README_TEMPLATES = {
         "samples": "- Sample results: {samples} (in samples/)",
         "usage": "[Quick start]",
         "install_step": "1. Install the Neo Studio plugin: https://github.com/neoneo-ai/neo-studio",
-        "import_step": '2. In the ComfyUI sidebar, open the "Recipes" page and click "📦 Import" to import this zip.',
+        "import_step": '2. In the ComfyUI sidebar, open the "Recipes" page and click "Import" to import this zip.',
         "use_director": "3. Add a NeoH3VideoDirector node, select this recipe from the recipe dropdown, then run it.",
-        "use_normal": '3. In the recipe list, click "✈️ Send to workflow" on this recipe to load its prompt and reference assets into the workflow.',
+        "use_normal": '3. In the recipe list, click "✈Send to workflow" on this recipe to load its prompt and reference assets into the workflow.',
     },
 }
 

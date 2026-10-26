@@ -22,7 +22,7 @@
   cursor: pointer;
 }
 
-/* 控制条：◀ 第 k/n 步 ▶ ⏪ f/n 帧 ⏩ ⏸ */
+/* 控制条：◀ 第 k/n 步 ▶ ⏪ f/n 帧 ⏩ */
 .neo-dtl-live-bar {
   flex: 0 0 auto;
   display: flex;

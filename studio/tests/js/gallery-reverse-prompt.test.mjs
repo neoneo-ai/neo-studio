@@ -1,4 +1,4 @@
-// Neo Gallery 卡片「🔍 图片反推」：弹窗展示参考图，调用 /rs_prompts/reverse_prompt 反推提示词，
+// Neo Gallery 卡片「图片反推」：弹窗展示参考图，调用 /rs_prompts/reverse_prompt 反推提示词，
 // 后端把结果存成与图片同目录的 .txt。仅可写来源的图片显示该菜单项。
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -33,7 +33,7 @@ function openMenu(card, gallery, image, subfolder, source) {
     card._showCollectMenu(gallery, image, subfolder, source, anchor);
 }
 
-test("卡片 ⋯ 菜单：可写来源的图片显示「🔍 图片反推」", async () => {
+test("卡片 ⋯ 菜单：可写来源的图片显示「图片反推」", async () => {
     const { GalleryCard } = await import("../../web/gallery-card.js");
     const { gallery } = makeGallery();
     const card = new GalleryCard(gallery);
@@ -41,7 +41,7 @@ test("卡片 ⋯ 菜单：可写来源的图片显示「🔍 图片反推」", a
     assert.ok(itemByLabel("图片反推"), "可写来源的图片应有「图片反推」菜单项");
 });
 
-test("卡片 ⋯ 菜单：只读来源（presets）不显示「🔍 图片反推」", async () => {
+test("卡片 ⋯ 菜单：只读来源（presets）不显示「图片反推」", async () => {
     const { GalleryCard } = await import("../../web/gallery-card.js");
     const { gallery } = makeGallery();
     const card = new GalleryCard(gallery);
@@ -49,7 +49,7 @@ test("卡片 ⋯ 菜单：只读来源（presets）不显示「🔍 图片反推
     assert.equal(itemByLabel("图片反推"), undefined, "只读来源不应有「图片反推」菜单项");
 });
 
-test("卡片 ⋯ 菜单：非图片文件不显示「🔍 图片反推」", async () => {
+test("卡片 ⋯ 菜单：非图片文件不显示「图片反推」", async () => {
     const { GalleryCard } = await import("../../web/gallery-card.js");
     const { gallery } = makeGallery();
     const card = new GalleryCard(gallery);
@@ -57,7 +57,7 @@ test("卡片 ⋯ 菜单：非图片文件不显示「🔍 图片反推」", asyn
     assert.equal(itemByLabel("图片反推"), undefined, "视频文件不应有「图片反推」菜单项");
 });
 
-test("点「🔍 图片反推」：弹窗展示参考图，点「反推」调 /rs_prompts/reverse_prompt 并显示结果", async () => {
+test("点「图片反推」：弹窗展示参考图，点「反推」调 /rs_prompts/reverse_prompt 并显示结果", async () => {
     const { GalleryCard } = await import("../../web/gallery-card.js");
     const { gallery } = makeGallery();
     const card = new GalleryCard(gallery);

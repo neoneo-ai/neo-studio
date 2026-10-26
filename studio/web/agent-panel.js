@@ -1,15 +1,15 @@
 /**
  * agent-panel.js — Neo Agent 面板（Neo Studio 桌面端 Studio 页右栏）
  *
- * 聊天区挂桌面端右栏：一次「✨ 生成」交给后端智能体（POST /neo_agent/run 的 SSE 时间线：
+ * 聊天区挂桌面端右栏：一次「生成」交给后端智能体（POST /neo_agent/run 的 SSE 时间线：
  * 计划 / 工具卡 / 状态 / 产物图 / 暂停 / 继续 / 最终回答），后端那一侧是 MCP 客户端，工具经
  * mcp_server 的 JSON-RPC 走，右栏不直接调后端函数；界面当前状态（当前页 /
  * 当前导演配方 / 绘画页模式 / 素材库目录）由宿主随请求体交给后端进系统提示词；输入框里的 @ 点名技能、
  * 主模型、LoRA、图像 / 视频提示词与配方（候选源见 mention-picker.js，选中往正文写一个 @category:name 的可见记号，
  * 技能那一发另随请求体 skill_id 交后端，六类一起随请求体 mentions 交后端进系统提示词）。MCP 区
- * （注册表 / 连接 / 工具调用）交给设置页的「MCP 服务」栏，右栏只在输入框底栏留一个跳转入口；用户级偏好走同一条路，表单在设置页「智能体偏好」栏，右栏的 ⚙ 与焦点链上的「设为偏好」都只做跳转。
- * 输入框按 Cline 的口径做：只读上下文条、附件图 chip、文本框，底栏一行是 📎 附件图、🔌 MCP、
- * 「📝 计划 / ⚡ 执行」与右下角主按钮（生成 / 暂停 / 继续）；整行「⏹ 取消」只在跑起来之后出现。
+ * （注册表 / 连接 / 工具调用）交给设置页的「MCP 服务」栏，右栏只在输入框底栏留一个跳转入口；用户级偏好走同一条路，表单在设置页「智能体偏好」栏，右栏的 与焦点链上的「设为偏好」都只做跳转。
+ * 输入框按 Cline 的口径做：只读上下文条、附件图 chip、文本框，底栏一行是 附件图、MCP、
+ * 「计划 / 执行」与右下角主按钮（生成 / 暂停 / 继续）；整行「取消」只在跑起来之后出现。
  * 空态按 Cline 首页 RECENT 的口径默认铺最近几条会话，点一行直接读回那条会话续聊。时间线里的选项确认卡
  * （后端 ask_user 发一问就挂在循环上，点选经 POST /neo_agent/answer 交回去）；最终回答末尾的
  * 「下一步选项」编号列表铺成一排可点的方向，点一下即把这句话当作下一轮输入发出。
@@ -96,19 +96,15 @@ function headBtn(label, title, onClick) {
 }
 
 // 底栏按钮的标签拆成图标与文字两段：栏子拖窄时容器查询只收文字（agent-panel.css 的
-// @container (max-width: 300px)），字形留下，主按钮不会被栏子的 overflow: hidden 裁掉。
-// 图标 span 带尾随空格，两段拼起来与整串标签逐字相同；整串进 aria-label，文字收掉后还能认出按钮
-function labelSpans(btn, label) {
-    const cut = label.indexOf(" ");
-    if (cut < 0) {
-        btn.textContent = label;
-        return;
-    }
-    const icon = mkEl("span", "neo-agent-btn-icon");
-    icon.textContent = label.slice(0, cut + 1);
+// @container (max-width: 300px)），图标留下，主按钮不会被栏子的 overflow: hidden 裁掉。
+// 整串标签进 aria-label，文字收掉后还能认出按钮；face 传 core/icons.js 的图标名，
+// 字形节点（@ 这类文本）直接原样传入。
+function labelSpans(btn, label, face) {
+    const ic = mkEl("span", "neo-agent-btn-icon");
+    if (face) ic.replaceChildren(typeof face === "string" ? icon(face, 13) : face);
     const text = mkEl("span", "neo-agent-btn-text");
-    text.textContent = label.slice(cut + 1);
-    btn.replaceChildren(icon, text);
+    text.textContent = label;
+    btn.replaceChildren(ic, text);
     btn.setAttribute("aria-label", label);
 }
 
@@ -295,7 +291,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
     // Cline 的口径：取消只在跑起来之后存在，整行铺在文本框上面，空闲时这一行不占位
     const cancelBar = mkEl("button", "neo-agent-cancelbar");
     cancelBar.type = "button";
-    cancelBar.textContent = "⏹ " + t("取消");
+    cancelBar.textContent = "" + t("取消");
     cancelBar.title = t("取消这次运行：断流并掐掉在跑的任务");
     cancelBar.hidden = true;
     cancelBar.onclick = () => stopRun();
@@ -303,11 +299,11 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
     const toolbar = mkEl("div", "neo-agent-toolbar");
     const modes = mkEl("div", "neo-agent-modes");
     let mode = "act";
-    const modeBtns = [["plan", t("📝 计划")], ["act", t("⚡ 执行")]].map(([key, label]) => {
+    const modeBtns = [["plan", t("计划")], ["act", t("执行")]].map(([key, label]) => {
         const btn = mkEl("button", "neo-agent-mode-btn");
         btn.type = "button";
         btn.dataset.mode = key;
-        labelSpans(btn, label);
+        labelSpans(btn, label, key === "plan" ? "list" : "play");
         btn.title = key === "plan" ? t("只查询与规划，不执行生成") : t("按计划直接执行生成");
         btn.onclick = () => setMode(key);
         modes.appendChild(btn);
@@ -320,7 +316,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
     setMode("act");
     const attach = mkEl("button", "neo-agent-attach");
     attach.type = "button";
-    labelSpans(attach, "📎 " + t("添加图片"));
+    labelSpans(attach, t("添加图片"), "image");
     attach.title = t("附加参考图（粘贴、从素材库拖入或点选，最多 6 张）");
     const fileInput = mkEl("input", "neo-agent-file");
     fileInput.type = "file";
@@ -331,7 +327,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
     // MCP 注册表在设置页那一栏，这一行只留一个跳转入口
     const mcpEntry = mkEl("button", "neo-agent-entry");
     mcpEntry.type = "button";
-    labelSpans(mcpEntry, "🔌 MCP");
+    labelSpans(mcpEntry, "MCP", "plug");
     mcpEntry.title = t("MCP 服务设置");
     mcpEntry.onclick = () => onOpenMcp && onOpenMcp();
     // @ 直接点名技能，两类候选：带 workflow.json 的生成技能（后端三条生成工具要它当 skill_id，见
@@ -387,7 +383,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
         skillName = id ? (name || id) : "";
         skillKind = kindCode || "";
         skillChip.hidden = !skillId;
-        skillChipName.textContent = "🧩 " + (skillName || skillId);
+        skillChipName.textContent = "" + (skillName || skillId);
         skillChip.title = skillKind === "prompt"
             ? tf("本会话点名技能：{skill}（{kind}）；每一轮按它的流程走，点 ✕ 取消", { skill: skillName || skillId, kind: skillKindLabel() })
             : skillKind
@@ -404,9 +400,9 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
     const mentionNameOf = (m) => String(m.name || m.id || "");
     const mentionTokenOf = (m) => mentionToken(m.category, mentionNameOf(m));
     const mentionIcon = (m) => (m.category === "skill"
-        ? (m.raw.gen_video ? "🎬 " : isGenSkill(m.raw) ? "🖼️ " : "🧩 ")
-        : m.category === "model" ? "💿 " : m.category === "lora" ? "🎨 "
-        : m.category === "recipe" ? "📚 " : m.category === "video_prompt" ? "🎬 " : "📝 ");
+        ? (m.raw.gen_video ? "" : isGenSkill(m.raw) ? "" : "")
+        : m.category === "model" ? "" : m.category === "lora" ? ""
+        : m.category === "recipe" ? "" : m.category === "video_prompt" ? "" : "");
     const mentions = [];
     let knownMentions = [];   // 最近一次 @ 弹层的候选：手打的记号靠它对回 id 与 source
     // 记号对齐是异步取候选的：发送那一步先等这一串落地，正文里的记号才不会漏交
@@ -508,12 +504,12 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
     // 主按钮在右下角，一个钮三态（生成 / 暂停 / 继续）——空闲时它就是发送键
     const run = mkEl("button", "neo-agent-run");
     run.type = "button";
-    labelSpans(run, t("✨ 生成"));
-    run.title = t("✨ 生成");
+    labelSpans(run, t("生成"), "sparkles");
+    run.title = t("生成");
     // 底栏最左是 @ 点名：点一下把 @ 写进光标处，随后就是那套弹层（与直接打 @ 同一条路径）
     const mentionBtn = mkEl("button", "neo-agent-mention");
     mentionBtn.type = "button";
-    labelSpans(mentionBtn, "@ " + t("点名"));
+    labelSpans(mentionBtn, t("点名"), document.createTextNode("@"));
     mentionBtn.title = t("@ 点名技能 / 主模型 / LoRA / 图像与视频提示词 / 配方：选中写进正文，随这一发交后端");
     mentionBtn.onclick = () => {
         const at = input.selectionStart || 0;
@@ -545,8 +541,8 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
     function ctxLine() { return ctxOff ? "" : currentContext().join(" · "); }
     function renderCtx() {
         const line = ctxLine();
-        // 带界面状态才画那枚 📍；不带的默认态只留一行淡小字，不跟正文抢视线
-        ctxText.textContent = line ? "📍 " + line : (ctxOff ? t("不带界面上下文 · 点此启用") : "📍 " + t("无当前上下文"));
+        // 带界面状态才画那枚 ；不带的默认态只留一行淡小字，不跟正文抢视线
+        ctxText.textContent = line ? "" + line : (ctxOff ? t("不带界面上下文 · 点此启用") : "" + t("无当前上下文"));
         ctxOffBtn.hidden = !line;
         ctxBar.classList.toggle("neo-agent-ctx-off", ctxOff);
         ctxBar.title = ctxOff ? t("默认不带界面上下文；点此给后面的轮次带上") : "";
@@ -654,8 +650,8 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
     }
     const chatHead = sectionHead(t("智能体"), [
         headBtn("＋", t("新增会话"), () => newSession()),
-        headBtn("🗂", t("会话历史"), () => toggleHistory()),
-        headBtn("⚙", t("智能体偏好"), () => onOpenPrefs && onOpenPrefs()),
+        headBtn(icon("history"), t("会话历史"), () => toggleHistory()),
+        headBtn(icon("gear"), t("智能体偏好"), () => onOpenPrefs && onOpenPrefs()),
     ]);
     // 会话标题 = 整条对话的第一句话，钉在栏头那一行上（生成中一直在，读回旧会话、历史列表认同一句，
     // 「＋ 新增会话」才收回），空态回「智能体」。栏头宽度不够时 CSS 截断，整句在悬停说明里。
@@ -665,7 +661,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
     let titlePinned = false;
     function setConversationTitle(text) {
         titlePinned = !!text;
-        headTitle.textContent = text ? "💬 " + text : headLabel;
+        headTitle.textContent = text ? "" + text : headLabel;
         headTitle.title = text || "";
         headTitle.classList.toggle("neo-agent-head-titled", !!text);
         if (onFrame) onFrame({ kind: "title", text });
@@ -728,7 +724,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
             box.classList.add("neo-agent-answer-opts-locked");
             box.querySelectorAll("button").forEach((b) => { b.disabled = true; });
             const chosen = mkEl("div", "neo-agent-answer-chosen");
-            chosen.textContent = "✔ " + item;
+            chosen.textContent = "" + item;
             box.appendChild(chosen);
             setInput(item);
             generate();
@@ -817,7 +813,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
             },
             plan(text) {
                 const row = mkEl("div", "neo-agent-step");
-                row.textContent = "🧭 " + text;
+                row.textContent = "" + text;
                 steps.appendChild(row);
             },
             // 点名已经把这一步定好了：这一发被后端直接跳过。铺一行 dim 的「跳过」，不铺工具卡，
@@ -830,7 +826,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
             toolCall(name, args) {
                 card = mkEl("div", "neo-agent-tool");
                 const title = mkEl("div", "neo-agent-tool-title");
-                title.textContent = "🔧 " + name;
+                title.textContent = "" + name;
                 const body = mkEl("pre", "neo-agent-tool-args");
                 body.textContent = prettyJson(args);
                 const preview = mkEl("div", "neo-agent-tool-preview neo-dtl-live");
@@ -874,7 +870,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
                 // 恢复出来的旧会话没有 run_id 可交：循环早收场了，这一击铺出来就是死钮
                 const dead = !askId;
                 const q = mkEl("div", "neo-agent-choice-q");
-                q.textContent = "❓ " + question;
+                q.textContent = "" + question;
                 const opts = mkEl("div", "neo-agent-choice-opts");
                 const free = mkEl("input", "neo-agent-choice-free");
                 free.placeholder = t("或自己写一个方向");
@@ -886,7 +882,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
                     [...opts.children].forEach((b) => { b.disabled = true; });
                     free.disabled = true;
                     send.disabled = true;
-                    chosen.textContent = "✔ " + text;
+                    chosen.textContent = "" + text;
                     card.appendChild(chosen);
                     postJson("/neo_agent/answer", { run_id: runId, ask_id: askId, text });
                 };
@@ -918,17 +914,17 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
                 if (block) renderAnswerOptions(final, block);
                 mkCopyBtn(answerBox, () => text);   // 按钮落在正文容器外，划正文文本时不带进剪贴板
             },
-            // 「⏹ 取消」落在步骤区，不覆盖最终回答那一行；取消请求本身失败要留在时间线上——
-            // 主按钮在断流收尾时就被「✨ 生成」盖回去，写在那里没人看得见
+            // 「取消」落在步骤区，不覆盖最终回答那一行；取消请求本身失败要留在时间线上——
+            // 主按钮在断流收尾时就被「生成」盖回去，写在那里没人看得见
             cancelled(note) {
                 const row = mkEl("div", "neo-agent-step");
-                row.textContent = "⏹ " + t("已取消") + (note ? "（" + note + "）" : "");
+                row.textContent = "" + t("已取消") + (note ? "（" + note + "）" : "");
                 steps.appendChild(row);
             },
             // 暂停 / 继续各落一行：暂停点在飞的任务由后端掐掉，恢复后要不要再生成由 LLM 定
             paused() {
                 const row = mkEl("div", "neo-agent-step neo-agent-step-paused");
-                row.textContent = "⏸ " + t("已暂停");
+                row.textContent = "" + t("已暂停");
                 steps.appendChild(row);
             },
             resumed() {
@@ -946,7 +942,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
                 }
                 const rows = list.map((s, i) => {
                     const row = mkEl("div", "neo-agent-plan-row" + (s.done ? " neo-agent-plan-done" : ""));
-                    row.textContent = `${s.done ? "✅" : "▢"} ${i + 1}. ${s.tool}`
+                    row.textContent = `${s.done ? "" : "▢"} ${i + 1}. ${s.tool}`
                         + (s.key_args ? `（${s.key_args}）` : "") + (s.note ? `：${s.note}` : "");
                     return row;
                 });
@@ -964,7 +960,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
                     focusChips = mkEl("span", "neo-agent-focus-chips");
                     const btn = mkEl("button", "neo-agent-focus-prefs");
                     btn.type = "button";
-                    btn.textContent = "⚙ " + t("设为偏好");
+                    btn.textContent = "" + t("设为偏好");
                     btn.title = t("把这一发的技能与尺寸写进偏好，下一条输入照它跑");
                     btn.onclick = () => onOpenPrefs && onOpenPrefs(focusFacts);
                     focusCard.append(focusChips, btn);
@@ -984,11 +980,11 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
             },
             // 上下文与 token 统计两帧都是「当前整份」：各占那一行里的一段，逐轮重写
             context(frame) {
-                metaPart("ctx").textContent = "🧮 " + tf("上下文 ~{n}（{pct}%）",
+                metaPart("ctx").textContent = "" + tf("上下文 ~{n}（{pct}%）",
                     { n: tokenText(frame.approx_tokens || 0), pct: Math.round((frame.ratio || 0) * 100) });
             },
             usage(frame) {
-                metaPart("usage").textContent = "🧾 " + tf("token {total}（提示 {p} · 补全 {c}）· {n} 轮",
+                metaPart("usage").textContent = "" + tf("token {total}（提示 {p} · 补全 {c}）· {n} 轮",
                     { total: tokenText(frame.total_tokens || 0), p: tokenText(frame.prompt_tokens || 0),
                       c: tokenText(frame.completion_tokens || 0), n: frame.turns || 0 });
             },
@@ -1026,8 +1022,8 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
     let lastTurn = null;   // 上一发的原文、模式与附件图：失败收场那一行靠它原样重发
     let cancelledRun = false;   // 用户自己按的取消：这一发的零产物不是缺素材，不该弹素材提醒
 
-    // 「接上次会话」条铺在文本框上方，与「⏹ 取消」同一位置口径：打开过一条旧会话才出现，
-    // 点一下断开。下一次「✨ 生成」带着 resume 打后端，旧对话原文接在系统提示词之后。
+    // 「接上次会话」条铺在文本框上方，与「取消」同一位置口径：打开过一条旧会话才出现，
+    // 点一下断开。下一次「生成」带着 resume 打后端，旧对话原文接在系统提示词之后。
     // 断开就是离开这条会话：它点名的技能跟着收回，下一条消息开一条干净的会话
     const resumeBar = mkEl("button", "neo-agent-resumebar");
     resumeBar.type = "button";
@@ -1046,7 +1042,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
     function showRetryBar() {
         if (!lastTurn) return;
         const head = lastTurn.text.length > 22 ? lastTurn.text.slice(0, 22) + "…" : lastTurn.text;
-        retryBar.textContent = "🔁 " + t("重试") + (head ? " · " + head : "");
+        retryBar.textContent = "" + t("重试") + (head ? " · " + head : "");
         retryBar.title = tf("按上一发原样重发（{mode}，附件图照带）：{text}",
             { mode: lastTurn.mode === "plan" ? t("计划") : t("执行"), text: lastTurn.text });
         retryBar.hidden = false;
@@ -1119,7 +1115,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
     }
 
     // 空态默认铺最近几条会话（Cline 首页 RECENT 的口径：进页面就能点开上一条接着聊）。
-    // 摘要与「🗂」列表同源；桌面端服务回 409、请求直连不到或没有会话时，空态只剩提示行，不给假列表
+    // 摘要与「」列表同源；桌面端服务回 409、请求直连不到或没有会话时，空态只剩提示行，不给假列表
     const RECENT_MAX = 3;
     function renderEmpty() {
         const hint = mkEl("div", "neo-agent-empty-hint");
@@ -1162,7 +1158,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
     async function renderHistory() {
         const data = await getJson("/neo_agent/sessions");
         historyBox.replaceChildren();
-        // 整页列表由「🗂」或「查看全部」铺满右栏：栏头自带 ✕，回时间线不用绕栏头那一排
+        // 整页列表由「」或「查看全部」铺满右栏：栏头自带 ✕，回时间线不用绕栏头那一排
         historyBox.appendChild(sectionHead(t("会话历史"), [headBtn("✕", t("关闭会话列表"), showTranscript)]));
         const note = mkEl("div", "neo-agent-history-note");
         if (data.offline) {
@@ -1302,12 +1298,13 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
         renderRecent();
     }
 
-    // 主按钮三态：空闲「✨ 生成」、运行中「⏸ 暂停」、暂停中「▶ 继续」。整行「⏹ 取消」跟着
+    // 主按钮三态：空闲「生成」、运行中「暂停」、暂停中「▶ 继续」。整行「取消」跟着
     // 运行出现——Cline 的口径：没在跑就没有取消键，空闲时那一行不占位
     function setRunState(next) {
-        const label = next === "run" ? t("✨ 生成")
-            : next === "paused" ? t("▶ 继续") : t("⏸ 暂停");
-        labelSpans(run, label);
+        const face = next === "run" ? "sparkles" : next === "paused" ? "play" : "pause";
+        const label = next === "run" ? t("生成")
+            : next === "paused" ? t("继续") : t("暂停");
+        labelSpans(run, label, face);
         run.title = label;
         run.classList.toggle("neo-agent-paused", next === "paused");
         cancelBar.hidden = next === "run";
@@ -1371,7 +1368,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
         return mediaCount;
     }
 
-    // 「⏸ 暂停」只置后端一个位，SSE 不断：后端在下一个轮次 / 轮询边界把在飞的任务掐掉、发
+    // 「暂停」只置后端一个位，SSE 不断：后端在下一个轮次 / 轮询边界把在飞的任务掐掉、发
     // paused 帧挂住循环。首帧 run_id 还没到就没有可暂停的运行。按钮先翻成「继续」，
     // paused 帧到了会再对一次——两边对不上时以帧为准
     async function pauseRun() {
@@ -1398,7 +1395,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
         setRunState("running");
     }
 
-    // 「⏹ 取消」：断流 + 让后端停循环并掐在跑的任务（后端同时放开 resume，挂在暂停检查点上的
+    // 「取消」：断流 + 让后端停循环并掐在跑的任务（后端同时放开 resume，挂在暂停检查点上的
     // 循环也退得出来）。首帧的 run_id 还没到就只断流——断开路径上后端会兜底掐任务，
     // 不给一个空 run_id 去打接口
     async function stopRun() {
@@ -1406,7 +1403,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
         cancelledRun = true;   // 用户自己收的场：零产物不是缺素材
         run.disabled = true;
         cancelBar.hidden = true;
-        labelSpans(run, t("⏳ 取消中"));
+        labelSpans(run, t("取消中"));
         controller.abort();
         let note = "";
         if (runId) {
@@ -1727,7 +1724,7 @@ export function createMcpPanel() {
 // ==========================================
 
 /**
- * 把聊天面板挂进宿主（桌面端 Studio 右栏）。opts.onOpenMcp 是「🔌 MCP」入口的跳转回调，opts.onOpenPrefs 是「⚙ 智能体偏好」与焦点链「设为偏好」跳设置页的回调；
+ * 把聊天面板挂进宿主（桌面端 Studio 右栏）。opts.onOpenMcp 是「MCP」入口的跳转回调，opts.onOpenPrefs 是「智能体偏好」与焦点链「设为偏好」跳设置页的回调；
  * opts.getContext 交回界面当前状态，只有当前选中页签自己那一栏（导演页的配方、绘画页的模式、
  * 上屏那几页的素材库目录），面板只把它画进上下文条并随请求体交后端，不解释它。
  * 返回 { root, refresh }：refresh 恢复条上的取消位并重画，宿主在切页 / 选配方 / 切绘画模式时调。

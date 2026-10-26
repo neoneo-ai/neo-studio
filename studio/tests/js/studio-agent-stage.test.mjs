@@ -89,7 +89,7 @@ const ROUND = [
     { kind: "finish", text: "出好了：2 张", media: [{ kind: "image", url: "/view?filename=c.png&subfolder=&type=output", title: "c" }], options: [] },
 ];
 
-const gear = () => [...dock().querySelectorAll(".neo-agent-head-btn")].find((b) => b.textContent === "⚙");
+const gear = () => [...dock().querySelectorAll(".neo-agent-head-btn")].find((b) => b.title.includes("智能体偏好"));
 const SIX_PREFS = ["avoid", "confirm_films", "preferred_family", "preferred_size", "preferred_skill", "style_notes"];
 
 test("绘画页下方有中间舞台：一轮跑完后过程、焦点事实与产物铺在生成面板下面", async () => {
@@ -108,7 +108,7 @@ test("绘画页下方有中间舞台：一轮跑完后过程、焦点事实与�
     assert.equal(stageMedia().length, 3, "两次产物共 3 张图 / 片铺成大图格");
     assert.equal(stageMedia()[1].tagName.toLowerCase(), "video", "mp4 产物铺成可播放的片");
     assert.equal(stageRows().length, 2, "执行清单整份重铺，两条一步不落");
-    assert.match(stageRows()[0], /^✅ 1\. generate_image（1 张）：出图$/, "划掉的行打勾并带上关键参数");
+    assert.match(stageRows()[0], /^1\. generate_image（1 张）：出图$/, "划掉的行打勾并带上关键参数");
     assert.match(stageFoot(), /1\/2 已完成/, "进度按整张清单算");
     assert.deepEqual(stageFacts(), ["技能 sk_cat", "主模型 krea2/krea2_turbo.safetensors",
         "LoRA a.safetensors", "宽 1024", "高 1024"], "中间只铺用户在放映区认得出的事实");

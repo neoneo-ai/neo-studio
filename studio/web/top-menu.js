@@ -1,11 +1,11 @@
 /**
- * top-menu.js — 顶栏 🅝 菜单（插件统一入口）
- * 把插件入口收敛为顶栏一个动作按钮（🅝 图标），悬停约 0.3 秒或点击展开下拉菜单
+ * top-menu.js — 顶栏 菜单（插件统一入口）
+ * 把插件入口收敛为顶栏一个动作按钮（图标），悬停约 0.3 秒或点击展开下拉菜单
  * （悬停刚展开 0.5 秒内的点击算同一次手势、不收起，之后点击正常收起）：
- *   🎬 新影工坊 / 🖼️ 生成素材 / 🎥 新建导演配方 / 🧩 创建节点（二级菜单，往画布当前可见区的空白处添加 Neo 节点）
- *   🔧 修复工作流（右键 = 修复映射管理）/ 💾 回写入技能（画布上有技能待回写时可用）/ 📜 修复记录 / 📜 变更记录（技能回写历史）
- *   ⚙️ 设置（统一设置弹窗：LLM / 生图默认 / 生视频模型 / 界面语言四 tab）/ 📥 模型库 / 🗂 技能管理
- *   ℹ️ 关于插件。
+ *   新影工坊 / 生成素材 / 新建导演配方 / 创建节点（二级菜单，往画布当前可见区的空白处添加 Neo 节点）
+ *   修复工作流（右键 = 修复映射管理）/ 回写入技能（画布上有技能待回写时可用）/ 修复记录 / 变更记录（技能回写历史）
+ *   设置（统一设置弹窗：LLM / 生图默认 / 生视频模型 / 界面语言四 tab）/ 模型库 / 技能管理
+ *   关于插件。
  * 提示点由外部状态驱动、本模块只提供 .neo-n-menu-btn 按钮与样式：
  * 红点 = workflow.js 的 setRepairHint（失效模型路径），绿点 = skill.js 的画布技能待回写。
  */
@@ -27,13 +27,13 @@ const REPO_URL = "https://github.com/neoneo-ai/neo-studio";
 // 创建节点子菜单：主节点；运行时按 LiteGraph.registeredNodes 过滤（模块加载失败自动隐藏）
 // NeoH3SegmentRun 为内部节点（/neo_video_gen/run_segment 组装 prompt 用），不列进菜单
 const NODE_ITEMS = [
-    { type: "NeoPromptAgent", label: t("⚡ Neo Prompt Agent（提示词智能体）") },
-    { type: "NeoPromptEncoder", label: t("📝 Neo Prompt Encoder（提示词编码器）") },
-    { type: "NeoImageGenEdit", label: t("🎨 Neo Image Gen & Edit（图像生成与编辑）") },
-    { type: "NeoH3VideoDirector", label: t("🎞️ Neo H3 Video Director（视频导演）") },
-    { type: "NeoBundleExpand", label: t("📦 Neo Bundle Expand（Bundle 展开）") },
-    { type: "NeoRefGrid", label: t("🔲 Neo Reference Grid（参考图宫格）") },
-    { type: "NeoGridSplit", label: t("🧩 Neo Grid Split（宫格图拆分）") },
+    { type: "NeoPromptAgent", label: t("Neo Prompt Agent（提示词智能体）") },
+    { type: "NeoPromptEncoder", label: t("Neo Prompt Encoder（提示词编码器）") },
+    { type: "NeoImageGenEdit", label: t("Neo Image Gen & Edit（图像生成与编辑）") },
+    { type: "NeoH3VideoDirector", label: t("Neo H3 Video Director（视频导演）") },
+    { type: "NeoBundleExpand", label: t("Neo Bundle Expand（Bundle 展开）") },
+    { type: "NeoRefGrid", label: t("Neo Reference Grid（参考图宫格）") },
+    { type: "NeoGridSplit", label: t("Neo Grid Split（宫格图拆分）") },
 ];
 
 let menuEl = null;
@@ -44,7 +44,7 @@ let _hoverBound = false;
 
 // 悬停展开 / 移出收起：actionBarButtons 是声明式渲染，按钮 DOM 由前端重建，
 // 一律在 document 层按类名委托，不绑定到具体元素
-const HOVER_OPEN_MS = 300;    // 悬停 🅝 按钮多久后自动展开
+const HOVER_OPEN_MS = 300;    // 悬停 按钮多久后自动展开
 const HOVER_CLOSE_MS = 500;   // 指针离开按钮与菜单多久后自动收起
 const HOVER_CLICK_GRACE_MS = 500;   // 悬停刚展开后的宽限期：期内点击算同一次手势，不收起
 let _hoverOpenTimer = 0;
@@ -58,7 +58,7 @@ function clearHoverTimers() {
     _hoverCloseTimer = 0;
 }
 
-// 热区 = 🅝 按钮本体 + 已展开的菜单
+// 热区 = 按钮本体 + 已展开的菜单
 function inMenuZone(target) {
     if (!(target instanceof Element)) return false;
     return !!target.closest(".neo-n-menu-btn") || !!(menuEl && menuEl.contains(target));
@@ -119,7 +119,7 @@ function menuItem(label, onClick) {
     return btn;
 }
 
-// 菜单项右侧引导点：与 🅝 按钮上的提示点同步（红=待修复，绿=待回写）
+// 菜单项右侧引导点：与 按钮上的提示点同步（红=待修复，绿=待回写）
 function menuDot(item, cls) {
     const dot = document.createElement("span");
     dot.className = `neo-n-menu-dot ${cls}`;
@@ -278,7 +278,7 @@ function showAboutDialog() {
 // ---- 统一设置弹窗（全局单例，与具体节点无关）：LLM / 生图默认 / 生视频模型 / 界面语言四 tab。
 // 版式与 Studio 设置页同款：弹窗外壳复用 .neo-director-llm-*（recipes.css），体内左栏 tab + 右栏内容。
 // 打开即四个表单后台 load、全部落定前关闭不判脏；有未保存修改时 ✕/点遮罩/Esc 先出确认条
-// （💾 保存并关闭 / 放弃修改 / 继续编辑）。幂等：已打开时重复调用不叠加。
+// （保存并关闭 / 放弃修改 / 继续编辑）。幂等：已打开时重复调用不叠加。
 // 界面语言表单：单选当前语言，保存即落盘并整页刷新（模块级文案与已渲染 DOM 都要按新语言重建）
 function createLangSettingsForm() {
     const el = document.createElement("div");
@@ -323,10 +323,10 @@ function openSettingsModal() {
     if (_settingsModal) return;   // 已打开：忽略，避免叠加
 
     const forms = [
-        { key: "llm", label: t("🤖 LLM 设置"), form: createModelConfigForm() },
-        { key: "gen", label: t("🖼️ 生图默认设置"), form: createImageGenSettingsForm() },
-        { key: "video", label: t("🎬 生视频模型"), form: createVideoGenSettingsForm() },
-        { key: "lang", label: t("🌐 界面语言"), form: createLangSettingsForm() },
+        { key: "llm", label: t("LLM 设置"), form: createModelConfigForm() },
+        { key: "gen", label: t("生图默认设置"), form: createImageGenSettingsForm() },
+        { key: "video", label: t("生视频模型"), form: createVideoGenSettingsForm() },
+        { key: "lang", label: t("界面语言"), form: createLangSettingsForm() },
     ];
     const tabs = document.createElement("div");
     tabs.className = "neo-settings-tabs";
@@ -358,7 +358,7 @@ function openSettingsModal() {
     const saveCloseBtn = document.createElement("button");
     saveCloseBtn.type = "button";
     saveCloseBtn.className = "neo-director-llm-btn-save";
-    saveCloseBtn.textContent = t("💾 保存并关闭");
+    saveCloseBtn.textContent = t("保存并关闭");
     const discardBtn = document.createElement("button");
     discardBtn.type = "button";
     discardBtn.className = "neo-director-llm-btn-discard";
@@ -371,7 +371,7 @@ function openSettingsModal() {
     dirtyConfirm.className = "neo-director-llm-dirty";
     dirtyConfirm.hidden = true;
     dirtyConfirm.append(
-        Object.assign(document.createElement("span"), { textContent: t("⚠ 有未保存的修改") }),
+        Object.assign(document.createElement("span"), { textContent: t("有未保存的修改") }),
         (() => { const a = document.createElement("div"); a.className = "neo-director-llm-dirty-actions"; a.append(saveCloseBtn, discardBtn, keepBtn); return a; })(),
     );
 
@@ -382,7 +382,7 @@ function openSettingsModal() {
     closeBtn.textContent = "✕";
     const head = document.createElement("div");
     head.className = "neo-director-llm-head";
-    head.append(Object.assign(document.createElement("span"), { textContent: t("⚙️ 设置") }), closeBtn);
+    head.append(Object.assign(document.createElement("span"), { textContent: t("设置") }), closeBtn);
     const bodyEl = document.createElement("div");
     bodyEl.className = "neo-director-llm-body neo-settings-body";
     bodyEl.append(tabs, content);
@@ -433,17 +433,17 @@ function openMenu(anchor, byHover = false) {
     menuEl = document.createElement("div");
     menuEl.className = "neo-n-menu";
 
-    menuEl.appendChild(menuItem(t("🎬 新影工坊"), () => window.open(STUDIO_URL, "_blank")));
+    menuEl.appendChild(menuItem(t("新影工坊"), () => window.open(STUDIO_URL, "_blank")));
     // 生成素材：纯提示词一键出图（与画廊搜索行同一弹窗），app.neoGallery 由 gallery.js setup 挂全局
-    menuEl.appendChild(menuItem(t("🖼️ 生成素材"), () => openGenMaterialDialog(app.neoGallery)));
-    menuEl.appendChild(menuItem(t("🎥 新建导演配方"), () => openDirectorEditor(null)));
+    menuEl.appendChild(menuItem(t("生成素材"), () => openGenMaterialDialog(app.neoGallery)));
+    menuEl.appendChild(menuItem(t("新建导演配方"), () => openDirectorEditor(null)));
 
     // 创建节点：飞出式二级菜单（仅点击行展开/收起，悬停不弹）
     const nodeRow = document.createElement("button");
     nodeRow.type = "button";
     nodeRow.className = "neo-n-menu-item neo-n-node-row";
     const nodeLabel = document.createElement("span");
-    nodeLabel.textContent = t("🧩 创建节点");
+    nodeLabel.textContent = t("创建节点");
     const caret = document.createElement("span");
     caret.className = "neo-n-caret";
     caret.textContent = "▸";
@@ -478,12 +478,12 @@ function openMenu(anchor, byHover = false) {
     menuEl.append(nodeRow, subEl);
 
     menuEl.appendChild(separator());
-    const repairItem = menuItem(t("🔧 修复工作流"), runRepair);
+    const repairItem = menuItem(t("修复工作流"), runRepair);
     repairItem.classList.add("neo-n-menu-item-repair");   // 右键 → 修复映射管理
     if (anchor.classList.contains("neo-repair-hint")) menuDot(repairItem, "neo-n-menu-dot-red");   // 按钮红点 → 引导修复
     menuEl.appendChild(repairItem);
     // 画布上有技能待回写（「⤒ 导入到画布」后）：画布上没有卡片，这里是唯一落盘入口；无待回写时置灰
-    const writebackItem = menuItem(t("💾 回写入技能"), () => runCanvasSkillWriteback());
+    const writebackItem = menuItem(t("回写入技能"), () => runCanvasSkillWriteback());
     const pendingWb = getPendingWriteback();
     if (!pendingWb) {
         writebackItem.disabled = true;
@@ -495,16 +495,16 @@ function openMenu(anchor, byHover = false) {
     }
     if (anchor.classList.contains("neo-writeback-hint")) menuDot(writebackItem, "neo-n-menu-dot-green");   // 按钮绿点 → 引导回写
     menuEl.appendChild(writebackItem);
-    menuEl.appendChild(menuItem(t("📜 修复记录"), showRepairLogDialog));
-    menuEl.appendChild(menuItem(t("📜 变更记录"), () => showSkillWriteLogDialog()));
+    menuEl.appendChild(menuItem(t("修复记录"), showRepairLogDialog));
+    menuEl.appendChild(menuItem(t("变更记录"), () => showSkillWriteLogDialog()));
 
     menuEl.appendChild(separator());
-    menuEl.appendChild(menuItem(t("⚙️ 设置"), openSettingsModal));
-    menuEl.appendChild(menuItem(t("📥 模型库"), openModelHub));
-    menuEl.appendChild(menuItem(t("🗂 技能管理"), openSkillManager));
+    menuEl.appendChild(menuItem(t("设置"), openSettingsModal));
+    menuEl.appendChild(menuItem(t("模型库"), openModelHub));
+    menuEl.appendChild(menuItem(t("技能管理"), openSkillManager));
 
     menuEl.appendChild(separator());
-    menuEl.appendChild(menuItem(t("ℹ️ 关于插件"), showAboutDialog));
+    menuEl.appendChild(menuItem(t("关于插件"), showAboutDialog));
 
     document.body.appendChild(menuEl);
 
@@ -514,7 +514,7 @@ function openMenu(anchor, byHover = false) {
 
     _outsideHandler = (e) => {
         if (!menuEl) return;
-        // 点在菜单内或 🅝 按钮上（由 onClick 负责 toggle）→ 不关
+        // 点在菜单内或 按钮上（由 onClick 负责 toggle）→ 不关
         if (e.target instanceof Element && (menuEl.contains(e.target) || e.target.closest(".neo-n-menu-btn"))) return;
         closeMenu();
     };
@@ -528,15 +528,15 @@ function openMenu(anchor, byHover = false) {
 app.registerExtension({
     name: "comfy.neo.topMenu",
     setup() {
-        // 🅝 图标：前端把 icon 字段渲染为 <i class=...>，用 ::before 出 emoji 字符（构建期 Tailwind 不保证自定义类）
+        // 图标：前端把 icon 字段渲染为 <i class=...>，用 ::before 出 emoji 字符（构建期 Tailwind 不保证自定义类）
         const styleId = "neo-n-menu-style";
         if (!document.getElementById(styleId)) {
             const style = document.createElement("style");
             style.id = styleId;
             style.textContent =
-                // 🅝 胶囊按钮：图标放大 + “Neo” 文字标签（标签放 .neo-n-menu-icon::after，按钮 ::after 留给红点）
+                // 胶囊按钮：图标放大 + “Neo” 文字标签（标签放 .neo-n-menu-icon::after，按钮 ::after 留给红点）
                 ".neo-n-menu-icon{display:inline-flex;align-items:center;width:auto;height:auto;font-size:13px;line-height:1;color:#ddd;}" +
-                ".neo-n-menu-icon::before{content:\"🅝\";display:inline-block;font-size:15px;line-height:1;}" +
+                ".neo-n-menu-icon::before{content:\"\";display:inline-block;font-size:15px;line-height:1;}" +
                 ".neo-n-menu-icon::after{content:\"Neo\";margin-left:6px;font-weight:600;letter-spacing:.3px;}" +
                 ".neo-n-menu-btn{position:relative;display:flex;align-items:center;padding:4px 12px;border-radius:999px;background:#262626;border:1px solid #3a3a3a;transition:background .2s,border-color .2s,box-shadow .2s;}" +
                 ".neo-n-menu-btn:hover{background:#2e2e2e;border-color:#4a4a4a;}" +
@@ -550,7 +550,7 @@ app.registerExtension({
                 ".neo-n-menu-item{display:flex;align-items:center;gap:8px;width:100%;padding:7px 10px;border:none;background:transparent;color:#ddd;font-size:13px;text-align:left;border-radius:6px;cursor:pointer;}" +
                 ".neo-n-menu-item:hover{background:#2a2a2a;color:#fff;}" +
                 ".neo-n-menu-item:disabled{opacity:.45;cursor:default;}" +
-                // 菜单项右侧引导点：与 🅝 按钮提示点同步（红=待修复，绿=待回写）
+                // 菜单项右侧引导点：与 按钮提示点同步（红=待修复，绿=待回写）
                 ".neo-n-menu-dot{width:7px;height:7px;border-radius:50%;margin-left:auto;box-shadow:0 0 0 2px rgba(0,0,0,.25);}" +
                 ".neo-n-menu-dot-red{background:var(--error-red,#f87171);}" +
                 ".neo-n-menu-dot-green{background:var(--success-green,#4ade80);}" +
@@ -567,7 +567,7 @@ app.registerExtension({
             document.addEventListener("pointerover", onHoverOver);
             document.addEventListener("pointerout", onHoverOut);
         }
-        // 右键「🔧 修复工作流」菜单项 → 修复映射管理（actionBarButtons 是声明式渲染，按类名在 document 层拦截）
+        // 右键「修复工作流」菜单项 → 修复映射管理（actionBarButtons 是声明式渲染，按类名在 document 层拦截）
         if (!_ctxMenuBound) {
             _ctxMenuBound = true;
             document.addEventListener("contextmenu", (e) => {

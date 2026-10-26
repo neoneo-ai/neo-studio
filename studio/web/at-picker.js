@@ -200,7 +200,7 @@ function createAtImagePicker({ quickInput, attachedImages, imageKey, addImageInp
 
             // 徽章语义：
             // - 有参数位（pictureNo）：蓝色 #N，点击插入/引用 <Picture N>
-            // - 无参数位但已附加：灰色 ✓，点击无操作（仅作反推附件）
+            // - 无参数位但已附加：灰色 ，点击无操作（仅作反推附件）
             const existIdx = attachedImages.findIndex(im => imageKey(im.input) === imageKey(img.value));
             if (img.pictureNo != null) {
                 const picBadge = mkEl("span", "rs-picker-pic-badge");
@@ -208,7 +208,7 @@ function createAtImagePicker({ quickInput, attachedImages, imageKey, addImageInp
                 row.append(thumb, picBadge);
             } else if (existIdx >= 0) {
                 const refBadge = mkEl("span", "rs-picker-ref-badge");
-                refBadge.textContent = "✓";
+                refBadge.textContent = "";
                 row.append(thumb, refBadge);
             } else {
                 row.append(thumb);
@@ -403,7 +403,7 @@ function createAtImagePicker({ quickInput, attachedImages, imageKey, addImageInp
                 row.append(thumb, picBadge);
             } else if (existIdx >= 0) {
                 const refBadge = mkEl("span", "rs-picker-ref-badge");
-                refBadge.textContent = "\u2713";
+                refBadge.textContent = "";
                 row.append(thumb, refBadge);
             } else {
                 row.append(thumb);

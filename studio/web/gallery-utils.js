@@ -315,7 +315,7 @@ export { _coverImgSrc as coverImgSrc };
 /** Generic placeholder tile for an empty or failed non-audio cover. */
 export function buildPlaceholderTile() {
     const tile = $el("div", { className: "neo-gallery-card-placeholder" });
-    tile.appendChild($el("span", { className: "neo-gallery-card-placeholder-icon", textContent: "\uD83D\uDCC1" }));
+    tile.appendChild($el("span", { className: "neo-gallery-card-placeholder-icon", textContent: "" }));
     return tile;
 }
 
@@ -484,7 +484,7 @@ export function sortByMtime(items) {
  */
 export function showNoFilesMessage(container, message = "No images found") {
     container.appendChild($el("div", { className: "neo-gallery-no-files" }, [
-        $el("div", { className: "neo-gallery-no-files-icon", textContent: "\uD83D\uDE14" }),
+        $el("div", { className: "neo-gallery-no-files-icon", textContent: "" }),
         $el("div", { className: "neo-gallery-no-files-text", textContent: message })
     ]));
 }

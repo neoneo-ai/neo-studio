@@ -8,14 +8,14 @@ div.rs-root.rs-theme-local
     textarea.comfy-multiline-input <placeholder=Enter your prompt here...>
     div.rs-md-preview.rs-prompt-md-preview <display=none>
     div.rs-button-group
-      button.rs-btn.rs-action-btn "💾"
+      button.rs-btn.rs-action-btn
       div.rs-random-wrap
-        button.rs-random-btn "🎲"
+        button.rs-random-btn
         button.rs-random-caret <type=button>
           svg
             path
       button.rs-list-btn "☰"
-      button.rs-action-btn.rs-md-preview-btn "👁"
+      button.rs-action-btn.rs-md-preview-btn
     button.rs-clear-btn "✕"
   div.rs-buttons-wrapper
     div.rs-btn-row.rs-action-row
@@ -27,25 +27,31 @@ div.rs-root.rs-theme-local
       button.rs-attach-btn <title=附加图片（反推/多模态 skill）> "+"
       div.rs-model-select-box
         div
-          input.rs-form-input.rs-combo-input <type=text placeholder=🔍 输入过滤 skill... title=默认 val="默认">
+          input.rs-form-input.rs-combo-input <type=text placeholder=输入过滤 skill... title=默认 val="默认">
           span.rs-combo-caret "▾"
-          button.rs-skill-view-btn <type=button title=查看当前技能详情> "👁"
+          button.rs-skill-view-btn <type=button title=查看当前技能详情>
         select.rs-tpl-selector <title=Select a skill>
           option <value= selected> "默认"
-          optgroup <label=🎨 图像提示词增强>
+          optgroup <label=图像提示词增强>
             option <value=anime_style> "动漫风格"
-          optgroup <label=🎬 视频提示词增强>
-            option <value=minimax_h3_full_ref> "📷 全参考"
-          optgroup <label=⚡ 图像 / 反推>
-            option <value=reverse_prompt> "📷 反推提示词"
-          optgroup <label=🖼️ 直接生图或编辑>
+          optgroup <label=视频提示词增强>
+            option <value=minimax_h3_full_ref> "全参考"
+          optgroup <label=图像 / 反推>
+            option <value=reverse_prompt> "反推提示词"
+          optgroup <label=直接生图或编辑>
             option <value=image_gen> "出图 Krea2 三视图"
       div.rs-spacer
       div.rs-auto-wrap
-        button.rs-generate-btn "✨"
+        button.rs-generate-btn
+          svg
+            path
+            path
+            path
+            path
+            path
         button.rs-random-caret <type=button>
           svg
             path
     input <type=file accept=image/* display=none>
-  div.rs-skill-hint <display=none> "多轮技能：每次仅推进一阶段，补充问询后再点 ✨"
+  div.rs-skill-hint <display=none> "多轮技能：每次仅推进一阶段，补充问询后再点"
   div.rs-gen-status <display=none>

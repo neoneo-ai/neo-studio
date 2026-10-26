@@ -74,7 +74,7 @@ function state(node, el) {
     );
 }
 
-test("🎲 随机按钮：取 preset 列表并写入提示词", async () => {
+test("随机按钮：取 preset 列表并写入提示词", async () => {
     mockRoute("/rs_prompts/list_prompts", () => jsonResponse([{ name: "cats" }]));
     mockRoute("/rs_prompts/load_prompt", (body) => jsonResponse({ text: `preset-text:${body.name}` }));
 
@@ -129,10 +129,10 @@ test("H3 审计事件：status 累计显示阶段、replace 整段替换正文�
     const H3_CHUNKS = [
         'data: {"text":"draft ","kind":"content"}',
         'data: {"text":"prompt","kind":"content"}',
-        'data: {"text":"🔍 格式自检中…","kind":"status"}',
-        'data: {"text":"⚠️ 自检发现 1 处格式问题：缺少镜头编号","kind":"status"}',
-        'data: {"text":"✏️ 自动修复中…","kind":"status"}',
-        'data: {"text":"✏️ 已自动修复格式（1 处问题）","kind":"status"}',
+        'data: {"text":"格式自检中…","kind":"status"}',
+        'data: {"text":"自检发现 1 处格式问题：缺少镜头编号","kind":"status"}',
+        'data: {"text":"✏自动修复中…","kind":"status"}',
+        'data: {"text":"✏已自动修复格式（1 处问题）","kind":"status"}',
         'data: {"text":"repaired final prompt","kind":"replace"}',
         "data: [DONE]",
     ];
@@ -208,8 +208,8 @@ test("输入 / 唤起 skill 快捷菜单：实时过滤 + Enter 提交写入下�
     await sleep(60);
     picker = document.querySelector(".rs-slash-picker");
     assert.strictEqual(picker.querySelectorAll(".rs-slash-picker-row").length, 1, "过滤后剩 1 行");
-    // 副标题显示类别名称（image_enhance → 🎨 图像提示词增强），不再是 id
-    assert.strictEqual(picker.querySelector(".rs-slash-picker-meta").textContent, "🎨 图像提示词增强", "meta 显示类别名称");
+    // 副标题显示类别名称（image_enhance → 图像提示词增强），不再是 id
+    assert.strictEqual(picker.querySelector(".rs-slash-picker-meta").textContent, "图像提示词增强", "meta 显示类别名称");
 
     // Enter 提交：写入下拉、清除 /query、关闭弹层
     keydown(picker, "Enter");

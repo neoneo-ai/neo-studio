@@ -4,6 +4,7 @@
 import { $el } from "../../../../scripts/ui.js";
 import { api } from "../../../../scripts/api.js";
 import { showToast } from './gallery-utils.js';
+import { icon } from "./js/core/icons.js";
 import { t, tf } from "./js/core/i18n.js";
 
 export class GallerySetting {
@@ -63,7 +64,7 @@ export class GallerySetting {
 
         // Title bar
         const titleBar = $el("div", { className: "neo-gallery-dir-modal-titlebar" }, [
-            $el("span", { className: "neo-gallery-dir-modal-title", textContent: "\uD83D\uDCC1 Manage Directories" }),
+            $el("span", { className: "neo-gallery-dir-modal-title", textContent: "Manage Directories" }),
             $el("button", {
                 className: "neo-gallery-dir-modal-refresh",
                 title: t("强制重新拉取云端预设索引，新目录立刻出现在首页"),
@@ -178,24 +179,21 @@ export class GallerySetting {
                         onclick: (e) => {
                             e.stopPropagation();
                             toggleCivitaiSettings(token === "civitai_bookmarks" ? civitaiKeyInput : null);
-                        },
-                        textContent: "\u2699"
-                    }));
+                        }
+                    }, [icon("gear", 13)]));
                 }
                 actions.push($el("button", {
                     className: "neo-gallery-dir-ctl-btn neo-gallery-dir-char-btn" + (isCharacter(token) ? " is-on" : ""),
                     title: isCharacter(token)
                         ? t("角色图目录（已标记）：从这里多选图片新建导演配方时默认全参考")
                         : t("标记为角色图目录：从这里多选图片新建导演配方时默认全参考，三视图不当关键帧"),
-                    onclick: () => toggleDirCharacter(token),
-                    textContent: "\uD83D\uDC64"
-                }));
+                    onclick: () => toggleDirCharacter(token)
+                }, [icon("user", 13)]));
                 actions.push($el("button", {
                     className: "neo-gallery-dir-ctl-btn",
                     title: hidden ? t("显示") : t("隐藏（不在素材库中列出）"),
-                    onclick: () => toggleDirHidden(token),
-                    textContent: "\uD83D\uDC41"
-                }));
+                    onclick: () => toggleDirHidden(token)
+                }, [icon("eye", 13)]));
                 if (!builtin && !isOss(token)) {
                     actions.push($el("button", {
                         className: "neo-gallery-dir-remove-btn",
@@ -425,11 +423,11 @@ export class GallerySetting {
         const netResult = $el("div", { className: "neo-gallery-net-result", textContent: "" });
         const testNetBtn = $el("button", {
             className: "neo-gallery-dir-bulk-btn",
-            textContent: t("\uD83D\uDD0C 测试 C 站连通性"),
+            textContent: t("测试 C 站连通性"),
             onclick: async () => {
                 const label = testNetBtn.textContent;
                 testNetBtn.disabled = true;
-                testNetBtn.textContent = t("\uD83D\uDD04 测试中...");
+                testNetBtn.textContent = t("测试中...");
                 netResult.className = "neo-gallery-net-result warn";
                 netResult.textContent = t("正在连接 civitai.com（最长 20 秒）...");
                 try {
@@ -506,7 +504,7 @@ export class GallerySetting {
         };
         const loraDirsToggle = $el("button", {
             className: "neo-gallery-dir-bulk-btn",
-            textContent: "\uD83D\uDCC2 Select LORA Directories",
+            textContent: "Select LORA Directories",
             onclick: () => {
                 const hidden = loraDirsList.style.display === "none";
                 loraDirsList.style.display = hidden ? "" : "none";
@@ -514,7 +512,7 @@ export class GallerySetting {
             }
         });
 
-        // Lora / C站收藏行的 ⚙：展开（默认隐藏）或收起 C 站设置区
+        // Lora / C站收藏行的 ：展开（默认隐藏）或收起 C 站设置区
         const toggleCivitaiSettings = (focusInput) => {
             if (civitaiArea.style.display !== "none") {
                 civitaiArea.style.display = "none";
@@ -535,7 +533,7 @@ export class GallerySetting {
         const loraProgress = $el("div", { className: "neo-gallery-lora-progress", textContent: "" });
         const retryBtn = $el("button", {
             className: "neo-gallery-dir-bulk-btn",
-            textContent: "\uD83D\uDD04 Retry Failed",
+            textContent: "Retry Failed",
             style: { display: "none" },
             onclick: async () => {
                 try {

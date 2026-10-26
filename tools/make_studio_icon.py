@@ -1,4 +1,4 @@
-"""生成桌面端图标 web/neo-studio.ico：拍板造型，与 Studio 顶栏的「🎬 新影工坊」一致。
+"""生成桌面端图标 web/neo-studio.ico：拍板造型，与 Studio 顶栏的「新影工坊」一致。
 用法：python tools/make_studio_icon.py
 """
 from pathlib import Path

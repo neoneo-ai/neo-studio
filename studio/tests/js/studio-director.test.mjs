@@ -147,7 +147,7 @@ test("Studio 导演页：点配方卡内嵌打开编辑器 + 「保存并生成�
     assert.ok(document.querySelector(".ns-director-editor .neo-director-panel").classList.contains("neo-director-embedded"));
     assert.ok(document.querySelector(".ns-director-editor").classList.contains("ns-editor-open"), "编辑器挂上后收起占位提示");
 
-    // 「🎬 保存并生成整片」：走完整保存路径，成功后由宿主提交整片生成
+    // 「保存并生成整片」：走完整保存路径，成功后由宿主提交整片生成
     const before = fetchLog.length;
     const panel = document.querySelector(".ns-director-editor .neo-director-panel");
     click(document.querySelector(".neo-director-save-run"));
@@ -420,7 +420,7 @@ test("Studio 导演页：编辑器「素材库」按钮开合左栏素材库（�
     await until(() => !libOpen(), "再点收起素材库");
     assert.ok(!galleryIn(".ns-director-lib .ns-gallery-host"), "收起后画廊离开左栏宿主");
 
-    // 左栏顶部切换条：点「🖼 素材」开素材库、点「📋 配方」收起，高亮跟着左栏的 ns-lib-open
+    // 左栏顶部切换条：点「素材」开素材库、点「配方」收起，高亮跟着左栏的 ns-lib-open
     const tabRecipes = () => document.querySelector(".ns-side-tabs .ns-side-tab:first-child");
     const tabLib = () => document.querySelector(".ns-side-tabs .ns-side-tab:last-child");
     assert.ok(tabRecipes().classList.contains("active") && !tabLib().classList.contains("active"), "进页时切换条停在配方");

@@ -457,13 +457,13 @@ function renderMarkdown(src) {
 // 提示词节点技能列表：图像/视频提示词增强排最前（仅次于 select 顶部的「默认」项，原生 option 恒在 optgroup 之前），
 // 反推 / 直接生图或编辑 / custom 依次跟随；video_gen（生视频）与 task 为内部使用技能，不在下拉与 / 快捷菜单显示（hidden），task 也不进技能管理窗口左列表（managerHidden）；未知分类回落 image_enhance
 const CATEGORY_LABELS = {
-    "image_enhance": { label: t("🎨 图像提示词增强"), order: 0 },
-    "video_enhance": { label: t("🎬 视频提示词增强"), order: 1 },
-    "vision": { label: t("⚡ 图像 / 反推"), order: 2 },
-    "image_gen": { label: t("🖼️ 直接生图或编辑"), order: 3 },
-    "custom": { label: t("📝 自定义"), order: 4 },
-    "video_gen": { label: t("🎬 生视频 (H3)"), order: 5, hidden: true },
-    "task": { label: t("⚙️ 任务"), order: 6, hidden: true, managerHidden: true }
+    "image_enhance": { label: t("图像提示词增强"), order: 0 },
+    "video_enhance": { label: t("视频提示词增强"), order: 1 },
+    "vision": { label: t("图像 / 反推"), order: 2 },
+    "image_gen": { label: t("直接生图或编辑"), order: 3 },
+    "custom": { label: t("自定义"), order: 4 },
+    "video_gen": { label: t("生视频 (H3)"), order: 5, hidden: true },
+    "task": { label: t("任务"), order: 6, hidden: true, managerHidden: true }
 };
 
 /** 技能显示名：中文界面用 cn_name（中文名）；英文界面不回落中文名，直接用 name / id。
@@ -492,7 +492,7 @@ function skillAcceptsRef(s) {
     return m === "edit" || m === "t2i_edit";
 }
 
-/** 把 skills 元数据填充进原生 <select>：按 category 分组为 optgroup，option 带 📷(需图) 徽标与 multiTurn 标记；
+/** 把 skills 元数据填充进原生 <select>：按 category 分组为 optgroup，option 带 (需图) 徽标与 multiTurn 标记；
  *  includeHidden=true 时连 hidden 分类（task / video_gen）一起列出 */
 function populateSkillOptions(selectEl, skills, { includeHidden = false } = {}) {
     if (!skills || !skills.length) return;
@@ -519,7 +519,7 @@ function populateSkillOptions(selectEl, skills, { includeHidden = false } = {}) 
             // tags（含后端追加的中文拼音/首字母缩写）供 combo box 搜索匹配
             opt.dataset.tags = (s.tags || []).join(" ");
             opt.__skillMeta = s; // 完整元数据（gen_config / 分类 / 名称）供浮动预览卡读取
-            const imgBadge = s.needs_image ? "📷 " : "";
+            const imgBadge = s.needs_image ? "" : "";
             opt.textContent = `${imgBadge}${skillDisplayName(s)}`;
             optgroup.appendChild(opt);
         });

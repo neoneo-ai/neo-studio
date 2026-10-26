@@ -207,12 +207,12 @@ test("共享模块用原生 fetch 撞 409：同样提示需要 ComfyUI", async (
     await sleep(100);
 });
 
-test("离线素材页：「🖼️ 生成素材」不发请求，点一下交给桌面端拉起 ComfyUI", async () => {
+test("离线素材页：「生成素材」不发请求，点一下交给桌面端拉起 ComfyUI", async () => {
     mockOfflineDesktop();
     const starts = [];
     mockDesktopApi(starts);
     document.body.insertAdjacentHTML("beforeend",
-        '<button class="neo-gallery-gm-btn" type="button">🖼️ 生成素材</button>');
+        '<button class="neo-gallery-gm-btn" type="button">生成素材</button>');
     await import("../../web/studio/studio-app.js?offGallery=1");
     await flush();
 
@@ -259,7 +259,7 @@ test("离线配方编辑器：编辑类按钮不被门控，逐格生成提示�
     mockDesktopApi([]);
     mockRoute("/rs_recipes/director_describe_panel", jsonResponse({ success: true }));
     document.body.insertAdjacentHTML("beforeend",
-        '<button class="neo-director-gen-seg-prompts" type="button">📝 逐格生成提示词</button>');
+        '<button class="neo-director-gen-seg-prompts" type="button">逐格生成提示词</button>');
     document.querySelector(".neo-director-gen-seg-prompts").addEventListener("click", () => {
         fetch("/rs_recipes/director_describe_panel", { method: "POST", body: "{}" });
     });

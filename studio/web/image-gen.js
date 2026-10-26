@@ -392,7 +392,7 @@ export function sendImageToLoadImage(image, anchorEl) {
     for (const tgt of targets) {
         const item = mkEl("button", "rs-gen-send-menu-item");
         item.type = "button";
-        item.textContent = `#${tgt.node.id} ${tgt.node.title || tgt.node.type || "LoadImage"}${selectedIds.has(tgt.node.id) ? "  ✓" : ""}`;
+        item.textContent = `#${tgt.node.id} ${tgt.node.title || tgt.node.type || "LoadImage"}${selectedIds.has(tgt.node.id) ? "  " : ""}`;
         item.addEventListener("click", () => {
             closeSendMenu();
             applyImageToTarget(tgt, image)
@@ -883,15 +883,15 @@ export function createImageGenSettingsForm() {
     // 显式保存按钮：选择后立即落盘，不依赖关菜单时的静默保存
     const saveBtn = mkEl("button", "rs-gen-save");
     saveBtn.type = "button";
-    saveBtn.textContent = t("💾 保存设置");
+    saveBtn.textContent = t("保存设置");
     let saveResetTimer = null;
     saveBtn.addEventListener("click", async () => {
         saveBtn.disabled = true;
         const ok = await save();
         saveBtn.disabled = false;
-        saveBtn.textContent = ok ? t("✓ 已保存") : t("✕ 保存失败");
+        saveBtn.textContent = ok ? t("已保存") : t("✕ 保存失败");
         clearTimeout(saveResetTimer);
-        saveResetTimer = setTimeout(() => { saveBtn.textContent = t("💾 保存设置"); }, 1600);
+        saveResetTimer = setTimeout(() => { saveBtn.textContent = t("保存设置"); }, 1600);
     });
     const saveRow = mkEl("div", "rs-config-row");
     saveRow.appendChild(saveBtn);
@@ -982,15 +982,15 @@ export function createVideoGenSettingsForm() {
     // 显式保存按钮：选择后立即落盘，不依赖关菜单时的静默保存
     const saveBtn = mkEl("button", "rs-gen-save");
     saveBtn.type = "button";
-    saveBtn.textContent = t("💾 保存设置");
+    saveBtn.textContent = t("保存设置");
     let saveResetTimer = null;
     saveBtn.addEventListener("click", async () => {
         saveBtn.disabled = true;
         const ok = await save();
         saveBtn.disabled = false;
-        saveBtn.textContent = ok ? t("✓ 已保存") : t("✕ 保存失败");
+        saveBtn.textContent = ok ? t("已保存") : t("✕ 保存失败");
         clearTimeout(saveResetTimer);
-        saveResetTimer = setTimeout(() => { saveBtn.textContent = t("💾 保存设置"); }, 1600);
+        saveResetTimer = setTimeout(() => { saveBtn.textContent = t("保存设置"); }, 1600);
     });
     const saveRow = mkEl("div", "rs-config-row");
     saveRow.appendChild(saveBtn);

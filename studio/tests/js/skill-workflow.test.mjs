@@ -1,5 +1,5 @@
 // 出图技能工作流导出与每技能设置 UI：
-// 技能下拉「📋 From Canvas」把画布 API prompt 导出为出图技能（空画布不发请求）；
+// 技能下拉「From Canvas」把画布 API prompt 导出为出图技能（空画布不发请求）；
 // 详情弹窗对 gen_image 技能显示 config.json 覆盖区（自定义可编辑保存 / 预设可编辑存本地覆盖+一键恢复默认 / 非出图技能隐藏）。
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -18,7 +18,7 @@ beforeEach(() => {
 // combo 列表（含底部工具栏）挂在 document.body 上，按钮从 body 里找
 function canvasBtn() {
     return Array.from(document.querySelectorAll(".rs-skill-footer-btn"))
-        .find((b) => b.textContent === "📋 From Canvas");
+        .find((b) => b.textContent === "From Canvas");
 }
 
 test("From Canvas：单标题对话框导出画布 API prompt 为技能", async () => {
@@ -226,17 +226,17 @@ test("详情弹窗：预设 gen_image 技能设置区可编辑（本地覆盖保
     const loraStrength = wrap.querySelector(".rs-gen-lora-strength");
     assert.ok(loraStrength, "预设 config 的 LoRA 行应回填");
     assert.equal(loraStrength.disabled, false);
-    // 设置区头部：独立 💾 Save（底部主 Save 仍隐藏）；无覆盖时不显示「↺ 恢复默认」
+    // 设置区头部：独立 Save（底部主 Save 仍隐藏）；无覆盖时不显示「↺ 恢复默认」
     const cfgBtns = wrap.querySelector(".rs-gen-cfg-btns");
     assert.ok(cfgBtns && cfgBtns.style.display === "flex", "预设设置区应显示保存按钮行");
-    const sectionSave = Array.from(cfgBtns.querySelectorAll("button")).find((b) => b.textContent === "💾 保存");
+    const sectionSave = Array.from(cfgBtns.querySelectorAll("button")).find((b) => b.textContent === "保存");
     assert.ok(sectionSave, "设置区应有独立保存按钮");
     let restoreBtn = Array.from(cfgBtns.querySelectorAll("button")).find((b) => b.textContent.includes("恢复默认"));
     assert.ok(restoreBtn && restoreBtn.style.display === "none", "无覆盖时不应显示「恢复默认」");
     const footerSave = document.querySelector(".rs-tpl-save-btn");
     assert.ok(footerSave && footerSave.style.display === "none", "预设技能底部 Save 应隐藏");
 
-    // 点设置区 💾 Save → POST skill_config（本地覆盖），不写正文
+    // 点设置区 Save → POST skill_config（本地覆盖），不写正文
     loraStrength.value = "0.9";
     sectionSave.click();
     await sleep(80);
@@ -462,7 +462,7 @@ test("详情弹窗：缺失节点/模型摘要给出名称芯片与复制按钮�
     for (const c of chips) { c.querySelector(".rs-wf-copy").click(); }
     await sleep(30);
     assert.deepEqual(copied.sort(), ["SaveImage", "no_such_model.safetensors"], "点击复制按钮把名称写入剪贴板");
-    assert.ok(chips.every((c) => c.querySelector(".rs-wf-copy").textContent === "✓"), "复制成功按钮短暂显示 ✓");
+    assert.ok(chips.every((c) => c.querySelector(".rs-wf-copy").textContent === ""), "复制成功按钮短暂显示 ");
 });
 
 test("详情弹窗：非生图技能不渲染工作流区、不发请求", async () => {
@@ -1054,7 +1054,7 @@ test("详情弹窗关闭保护：正文有未保存修改时 ✕ 先出确认条
     await popup.openExisting("my-skill", "custom");
     document.querySelector(".rs-skill-detail textarea").value = "body v2";
     closeX();
-    barBtn("💾 保存并关闭");
+    barBtn("保存并关闭");
     await sleep(80);
     assert.ok(savedSkill, "应发出 /rs_prompts/save_skill");
     assert.equal(savedSkill.content, "body v2");
@@ -1073,7 +1073,7 @@ test("详情弹窗关闭保护：预设技能设置区未保存时，保存并�
     const bar = document.querySelector(".rs-skill-detail .rs-gen-dirty-confirm");
     assert.ok(!bar.hidden, "应显示未保存修改确认条");
 
-    click(Array.from(bar.querySelectorAll("button")).find((b) => b.textContent === "💾 保存并关闭"));
+    click(Array.from(bar.querySelectorAll("button")).find((b) => b.textContent === "保存并关闭"));
     await sleep(80);
     assert.ok(r.saved, "应 POST /neo_image_gen/skill_config（本地覆盖）");
     assert.equal(r.saved.config.count, 3);

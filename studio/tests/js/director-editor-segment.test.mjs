@@ -95,7 +95,7 @@ test("时间轴说明行最右侧「拉伸」控制条：点按钮/拖滑块驱�
     assert.ok(zoomGroup, "说明行最右侧有「拉伸」控制条");
     const toggle = zoomGroup.querySelector(".neo-director-zoom-toggle");
     const slider = zoomGroup.querySelector(".neo-director-zoom-slider");
-    assert.ok(toggle && toggle.textContent.includes("拉伸"), "🔍 拉伸按钮");
+    assert.ok(toggle && toggle.textContent.includes("拉伸"), "拉伸按钮");
     assert.ok(slider && slider.type === "range", "滑块存在");
 
     // canvas 可视宽 320（供 setZoom 后按像素宽断言）
@@ -792,10 +792,10 @@ test("导演编辑器：宫格来源的分步状态——选图后 ① 当前、
     assert.deepEqual(states(), ["current", "todo"], "选图后 ① 当前、② 仍等分镜图");
     assert.equal(splitBtn.disabled, false, "有宫格图 → 拆分到各段可用");
 
-    // 拆分 → 各格都有分镜图：① 完成（✓）、② 轮到生成提示词
+    // 拆分 → 各格都有分镜图：① 完成（）、② 轮到生成提示词
     splitBtn.click();
     await sleep(60);
-    assert.equal(badges[0].textContent, "✓", "拆分完成显示对勾");
+    assert.equal(badges[0].textContent, "", "拆分完成显示对勾");
     assert.deepEqual(states(), ["done", "current"], "拆分后 ① 完成、② 当前");
     assert.equal(story.querySelector(".neo-director-optimize").disabled, false, "各格有分镜图 → 生成所有分段的提示词可用");
 

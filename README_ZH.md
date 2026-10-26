@@ -1,6 +1,6 @@
 # Neo Studio
 
-> 📄 English: [README.md](README.md)
+> English: [README.md](README.md)
 
 **「一句话 → 提示词 → 成图 → 成片」**：提示词 AI 增强、生图与参考编辑、MiniMax H3 多段导演，全在一个插件里；
 LLM 可在 ComfyUI 进程内零依赖运行。

@@ -1,4 +1,4 @@
-// 顶栏 🅝 菜单（top-menu.js）：单按钮注册、下拉条目、节点子菜单过滤、关于弹窗、界面语言
+// 顶栏 菜单（top-menu.js）：单按钮注册、下拉条目、节点子菜单过滤、关于弹窗、界面语言
 import test, { beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { clearBody, mockRoute, mockObjectInfo, jsonResponse, flush, sleep } from "./setup.mjs";
@@ -14,7 +14,7 @@ beforeEach(() => {
     setLang("zh");            // jsdom 的 navigator.language 是 en-US，用例基线固定为中文
 });
 
-test("top-menu.js 注册单个 🅝 菜单按钮", async () => {
+test("top-menu.js 注册单个 菜单按钮", async () => {
     const ext = getExtension("comfy.neo.topMenu");
     assert.ok(ext, "扩展 comfy.neo.topMenu 未注册");
     assert.equal(ext.actionBarButtons.length, 1);
@@ -32,7 +32,7 @@ test("点击按钮展开菜单且包含全部条目", async () => {
     const menu = document.querySelector(".neo-n-menu");
     assert.ok(menu, "菜单未展开");
     const labels = [...menu.querySelectorAll(".neo-n-menu-item")].map((el) => el.textContent);
-    for (const want of ["🎬 新影工坊", "🖼️ 生成素材", "🎥 新建导演配方", "🧩 创建节点", "🔧 修复工作流", "💾 回写入技能", "📜 修复记录", "📜 变更记录", "ℹ️ 关于插件"]) {
+    for (const want of ["新影工坊", "生成素材", "新建导演配方", "创建节点", "修复工作流", "回写入技能", "修复记录", "变更记录", "关于插件"]) {
         assert.ok(labels.some((l) => l.includes(want)), `缺少条目: ${want}`);
     }
     // 再点一次收起
@@ -50,16 +50,16 @@ test("菜单条目顺序：设置 / 模型库 / 技能管理 分割在修复工�
         .filter((el) => !el.classList.contains("neo-n-menu-sep") && !el.classList.contains("neo-n-submenu"))
         .map((el) => el.textContent.trim());
     assert.deepEqual(labels, [
-        "🎬 新影工坊", "🖼️ 生成素材", "🎥 新建导演配方",
-        "🧩 创建节点▸",
-        "🔧 修复工作流", "💾 回写入技能", "📜 修复记录", "📜 变更记录",
-        "⚙️ 设置", "📥 模型库", "🗂 技能管理",
-        "ℹ️ 关于插件",
+        "新影工坊", "生成素材", "新建导演配方",
+        "创建节点▸",
+        "修复工作流", "回写入技能", "修复记录", "变更记录",
+        "设置", "模型库", "技能管理",
+        "关于插件",
     ], "条目顺序不符");
     assert.equal(kids.filter((el) => el.classList.contains("neo-n-menu-sep")).length, 3, "分组分隔线数量不符");
 });
 
-test("🖼️ 生成素材：点击打开生成素材弹窗", async () => {
+test("生成素材：点击打开生成素材弹窗", async () => {
     mockRoute("/rs_prompts/skills", () => jsonResponse([
         { id: "image_gen", cn_name: "Krea2文生图", category: "image_gen", gen_image: true },
     ]));
@@ -68,7 +68,7 @@ test("🖼️ 生成素材：点击打开生成素材弹窗", async () => {
     ext.actionBarButtons[0].onClick({ currentTarget: document.createElement("button") });
     const item = [...document.querySelectorAll(".neo-n-menu-item")]
         .find((el) => el.textContent.includes("生成素材"));
-    assert.ok(item, "菜单缺少 🖼️ 生成素材条目");
+    assert.ok(item, "菜单缺少 生成素材条目");
     item.click();
     assert.equal(document.querySelector(".neo-n-menu"), null, "点菜单项后菜单未收起");
     assert.ok(document.querySelector(".neo-gallery-gm-modal-overlay"), "生成素材弹窗未打开");
@@ -125,7 +125,7 @@ test("关于插件弹窗显示源码与 License", async () => {
     assert.equal(document.querySelector(".neo-n-menu"), null, "点菜单项后菜单未收起");
 });
 
-test("⚙️ 设置打开统一设置弹窗（四 tab，切 tab 显隐同步）", async () => {
+test("设置打开统一设置弹窗（四 tab，切 tab 显隐同步）", async () => {
     mockRoute("/neo_image_gen/settings", () => jsonResponse({}));
     mockRoute("/neo_image_gen/models", () => jsonResponse({ diffusion_models: [], text_encoders: [], vae: [] }));
     mockRoute("/neo_video_gen/settings", () => jsonResponse({}));
@@ -134,14 +134,14 @@ test("⚙️ 设置打开统一设置弹窗（四 tab，切 tab 显隐同步）"
     ext.actionBarButtons[0].onClick({ currentTarget: document.createElement("button") });
     const settingsItem = [...document.querySelectorAll(".neo-n-menu-item")]
         .find((el) => el.textContent.includes("设置"));
-    assert.ok(settingsItem, "菜单缺少 ⚙️ 设置条目");
+    assert.ok(settingsItem, "菜单缺少 设置条目");
     settingsItem.click();
     assert.equal(document.querySelector(".neo-n-menu"), null, "点菜单项后菜单未收起");
 
     const overlay = document.querySelector(".neo-director-llm-overlay");
     assert.ok(overlay, "设置弹窗未打开");
     const tabs = [...overlay.querySelectorAll(".neo-settings-tab")].map((el) => el.textContent);
-    assert.deepEqual(tabs, ["🤖 LLM 设置", "🖼️ 生图默认设置", "🎬 生视频模型", "🌐 界面语言"], "tab 顺序/文案不符");
+    assert.deepEqual(tabs, ["LLM 设置", "生图默认设置", "生视频模型", "界面语言"], "tab 顺序/文案不符");
     const panels = [...overlay.querySelectorAll(".neo-settings-panel")];
     assert.equal(panels.length, 4, "四个设置面板缺失");
     assert.equal(panels.filter((p) => p.style.display !== "none").length, 1, "默认只显示一个面板");
@@ -159,7 +159,7 @@ test("⚙️ 设置打开统一设置弹窗（四 tab，切 tab 显隐同步）"
     assert.equal(document.querySelector(".neo-director-llm-overlay"), null, "无改动 ✕ 未直接关闭");
 });
 
-test("⚙️ 设置有未保存修改时先出确认条，放弃修改后关闭", async () => {
+test("设置有未保存修改时先出确认条，放弃修改后关闭", async () => {
     mockRoute("/neo_image_gen/settings", () => jsonResponse({}));
     mockRoute("/neo_image_gen/models", () => jsonResponse({ diffusion_models: ["diffusion/krea2.safetensors"], text_encoders: [], vae: [] }));
     mockRoute("/neo_video_gen/settings", () => jsonResponse({}));
@@ -193,7 +193,7 @@ test("⚙️ 设置有未保存修改时先出确认条，放弃修改后关闭"
 });
 
 
-test("悬停 🅝 按钮自动展开，指针在菜单内不收起，离开热区自动收起", async () => {
+test("悬停 按钮自动展开，指针在菜单内不收起，离开热区自动收起", async () => {
     const ext = getExtension("comfy.neo.topMenu");
     ext.setup();
     const btn = document.createElement("button");
@@ -400,7 +400,7 @@ test("创建节点：空画布落在当前可见区正中", () => {
     }
 });
 
-// ---- 画布技能待回写：顶菜单「💾 回写入技能」入口 + 🅝 绿点（状态由 skill.js 持有）----
+// ---- 画布技能待回写：顶菜单「回写入技能」入口 + 绿点（状态由 skill.js 持有）----
 const WF_MIN = { "1": { class_type: "SaveImage", inputs: { images: ["2", 0] } } };
 
 function mockHandoffRoutes(id = "custom_a", source = "custom") {
@@ -420,17 +420,17 @@ function writebackItem() {
     return [...document.querySelectorAll(".neo-n-menu-item")].find((el) => el.textContent.includes("回写入技能"));
 }
 
-test("顶菜单「💾 回写入技能」：画布无待回写技能时置灰", () => {
+test("顶菜单「回写入技能」：画布无待回写技能时置灰", () => {
     const ext = getExtension("comfy.neo.topMenu");
     ext.actionBarButtons[0].onClick({ currentTarget: document.createElement("button") });
     const item = writebackItem();
-    assert.ok(item, "菜单缺少「💾 回写入技能」条目");
+    assert.ok(item, "菜单缺少「回写入技能」条目");
     assert.equal(item.disabled, true, "无待回写技能应置灰");
     assert.match(item.title, /导入到画布/);
     ext.actionBarButtons[0].onClick({ currentTarget: document.createElement("button") });
 });
 
-test("顶菜单「💾 回写入技能」：导入到画布后绿点亮、条目可用，确认后落盘并清绿点", async () => {
+test("顶菜单「回写入技能」：导入到画布后绿点亮、条目可用，确认后落盘并清绿点", async () => {
     mockHandoffRoutes();
     let posted = null;
     mockRoute("/neo_image_gen/update_workflow_skill", (b) => {
@@ -445,7 +445,7 @@ test("顶菜单「💾 回写入技能」：导入到画布后绿点亮、条目
     const { openSkillWorkflowOnCanvas } = await import("../../web/skill.js");
     await openSkillWorkflowOnCanvas("custom_a");
     await sleep(80);
-    assert.ok(btn.classList.contains("neo-writeback-hint"), "导入后 🅝 按钮应挂绿点（绿色 = 有可保存的变更）");
+    assert.ok(btn.classList.contains("neo-writeback-hint"), "导入后 按钮应挂绿点（绿色 = 有可保存的变更）");
 
     const ext = getExtension("comfy.neo.topMenu");
     ext.actionBarButtons[0].onClick({ currentTarget: btn });
@@ -465,7 +465,7 @@ test("顶菜单「💾 回写入技能」：导入到画布后绿点亮、条目
     assert.equal(btn.classList.contains("neo-writeback-hint"), false, "落盘后应清绿点");
 });
 
-test("顶菜单「💾 回写入技能」：预设技能待回写时点亮绿点、条目可用", async () => {
+test("顶菜单「回写入技能」：预设技能待回写时点亮绿点、条目可用", async () => {
     mockHandoffRoutes("image_gen", "presets");
     appState.promptGraph = { output: { "10": { class_type: "SaveImage", inputs: {} } }, workflow: "{}" };
     const btn = document.createElement("button");
@@ -565,7 +565,7 @@ test("切到英文：菜单条目、节点子菜单、回写提示为英文", ()
         const ext = getExtension("comfy.neo.topMenu");
         ext.actionBarButtons[0].onClick({ currentTarget: document.createElement("button") });
         const labels = [...document.querySelectorAll(".neo-n-menu-item")].map((el) => el.textContent);
-        for (const want of ["⚙️ Settings", "🖼️ Generate Assets", "💾 Write Back to Skill", "ℹ️ About Plugin"]) {
+        for (const want of ["Settings", "Generate Assets", "Write Back to Skill", "About Plugin"]) {
             assert.ok(labels.some((l) => l.includes(want)), `缺少英文条目: ${want}`);
         }
         const writeback = [...document.querySelectorAll(".neo-n-menu-item")]
@@ -573,7 +573,7 @@ test("切到英文：菜单条目、节点子菜单、回写提示为英文", ()
         assert.ok(!/[\u4e00-\u9fff]/.test(writeback.title), `回写条目提示未翻译: ${writeback.title}`);
         document.querySelector(".neo-n-node-row").click();
         assert.equal(document.querySelector(".neo-n-submenu .neo-n-menu-item").textContent,
-            "⚡ Neo Prompt Agent", "英文下应去掉中文括号注释");
+            "Neo Prompt Agent", "英文下应去掉中文括号注释");
     } finally {
         delete globalThis.LiteGraph;
         setLang("zh");
@@ -581,7 +581,7 @@ test("切到英文：菜单条目、节点子菜单、回写提示为英文", ()
     }
 });
 
-test("设置弹窗「🌐 界面语言」：单选当前语言，保存落盘并整页刷新", async () => {
+test("设置弹窗「界面语言」：单选当前语言，保存落盘并整页刷新", async () => {
     mockRoute("/neo_image_gen/settings", () => jsonResponse({}));
     mockRoute("/neo_image_gen/models", () => jsonResponse({ diffusion_models: [], text_encoders: [], vae: [] }));
     mockRoute("/neo_video_gen/settings", () => jsonResponse({}));

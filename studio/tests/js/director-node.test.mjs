@@ -648,8 +648,8 @@ test("创建时保留工作流已存值，切换配方后按新配方要求初�
 });
 
 // 节点内实时预览开关：与 preview 输入同一份状态（widget.value 随工作流保存），
-// 点「👁」= 改输入值 + 触发回调；输入被别处改动 / 工作流还原后按钮态同步。
-test("「👁」实时预览开关与 preview 输入双向同步", async () => {
+// 点「」= 改输入值 + 触发回调；输入被别处改动 / 工作流还原后按钮态同步。
+test("「」实时预览开关与 preview 输入双向同步", async () => {
     resetEnv();
     const seen = [];
     const node = await createDirectorNode("", [
@@ -660,7 +660,7 @@ test("「👁」实时预览开关与 preview 输入双向同步", async () => {
     const previewWidget = node.widgets.find((w) => w.name === "preview");
     const root = node.domWidgets.find((w) => w.name === "director_timeline").el;
     const btn = root.querySelector(".neo-dtl-preview");
-    assert.ok(btn, "时间轴左侧缺少「👁」预览开关");
+    assert.ok(btn, "时间轴左侧缺少「」预览开关");
     assert.equal(root.querySelector(".neo-dtl-tlrow").firstElementChild, btn, "开关应在时间轴左侧");
     assert.ok(btn.classList.contains("neo-dtl-preview-on"), "默认开：与后端 preview 默认值一致");
 

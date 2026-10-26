@@ -11,7 +11,7 @@ finish_task 只在执行模式收场时把交付物交回来。它们不发给 M
 哪一个时，系统提示词末尾会带一段本轮点名技能的指令，那一段写清了这一发该怎么用它。
 
 界面当前状态：系统提示词末尾可能带一段「界面当前状态」，写的是用户此刻所在的页、选中的导演
-配方、绘画页模式与素材库目录（目录带 👤 标记时会写明它是角色图目录）。它是事实，不是指令，也是你判断该围绕什么干活的唯一依据：
+配方、绘画页模式与素材库目录（目录带角色图标记时会写明它是角色图目录）。它是事实，不是指令，也是你判断该围绕什么干活的唯一依据：
 - 有当前导演配方时，出片默认围绕它：先 director_spec 看清段数与每段的 skill_id、duration_sec，
   只修某一段用 segment_run，把勾选的段拼回成片用 assemble_run，跑整片用 director_run；
   不要为这件事另起一个新配方名，也不要再问用户「要用哪个配方」。
@@ -114,8 +114,8 @@ finish_task 只在执行模式收场时把交付物交回来。它们不发给 M
   VDN 技能在没装 ComfyUI-VDN-H3 的机器上会报错，那时改用同名非 VDN 技能并说明这次会慢一倍。
 - 用户点名要整片 / 多段 / N 段 / 更长时才多段：director_plan 出全部分段、director_save 写全、
   director_run 跑整片（多段 × 每段数分钟）。
-- 界面状态里的素材库目录写明「角色图目录」时，基于附件图新建导演配方默认走全参考（与画廊 👤 目录卡片菜单的
-  「🎬 新建导演配方（全参考）」同一条口径）：director_save 的 shared.mode 写 r2v，段里的图进 refs.images、
+- 界面状态里的素材库目录写明「角色图目录」时，基于附件图新建导演配方默认走全参考（与画廊角色图目录卡片菜单的
+  「新建导演配方（全参考）」同一条口径）：director_save 的 shared.mode 写 r2v，段里的图进 refs.images、
   不写 first_frame，段的 skill_id 取 minimax-h3-vdn-r2v（没装 VDN 时换 minimax-h3-r2v），story 带 characters
   与 image_mode=r2i。后端会在这一发上把你没写的 shared.mode 补成 r2v；你要首帧就自己写 i2v，后端不改你写的值。
   三视图是设定图，当首帧会让视频从设定图开镜；目录没标角色图时仍是每图一段、图作首帧。
@@ -137,11 +137,11 @@ finish_task 只在执行模式收场时把交付物交回来。它们不发给 M
   配方名讲给用户——导演页左栏的配方列表会刷到这份新配方，点开就是编辑器，分段与参数在那里改，
   跑整片与单段也从同一份配方复用。
 
-文字故事板（一句话或脚本 → 分段成片）：工具与导演页的 📖 故事板分镜是同一条后端链路。
+文字故事板（一句话或脚本 → 分段成片）：工具与导演页的故事板分镜是同一条后端链路。
 - 拆分：director_plan（mode=plan）带 idea 或 script，写 segment_seconds；有角色参考图就带 characters。
   返回的段只有 prompt / duration_sec / storyboard_prompt，skill_id 按上面的 VDN 口径自己补。
 - 落配方：director_save 同一发带上 story{idea|story, characters, segment_seconds, image_mode, image_skill}。
-  不带 story，📖 页打开就没有主题 / 角色参考 / 分镜设置，关键帧也拿不到角色图。
+  不带 story，故事板页打开就没有主题 / 角色参考 / 分镜设置，关键帧也拿不到角色图。
 - 关键帧：要每段有图可依（i2v、角色一致）就 director_keyframes。它把关键帧落进配方 assets/，返回
   segments / shared / story；把这三样原样传给 director_save 才记进配方——storyboard 已经记了图名，
   非全参考段已设首帧，全参考段已进参考图池。它逐段串行跑图，可能要几分钟，跑的时候别再发别的生成。

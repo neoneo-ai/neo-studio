@@ -13,7 +13,7 @@ beforeEach(async () => {
     resetDirectorTabMemory();   // 页签记忆是模块级会话状态，逐用例清零避免跨用例串味
 });
 
-test("导演编辑器：👤 角色参考图缩略点击打开 Lightbox（←/→ 切换各张，✕ 移除不触发）", async () => {
+test("导演编辑器：角色参考图缩略点击打开 Lightbox（←/→ 切换各张，✕ 移除不触发）", async () => {
     const { openDirectorEditor } = await import("../../web/director.js");
     appState.graph = { _nodes: [] };
     mockRoute("/rs_prompts/skills", () => jsonResponse([{ id: "sk-a", name: "技能 A", gen_video: true }]));
@@ -63,7 +63,7 @@ test("导演编辑器：👤 角色参考图缩略点击打开 Lightbox（←/�
 });
 
 
-test("导演编辑器：🧩 宫格分镜图拆分卡片——自动/手动行列，拆分替换分段并回填首帧与分镜图，逐格 LLM 描述", async () => {
+test("导演编辑器：宫格分镜图拆分卡片——自动/手动行列，拆分替换分段并回填首帧与分镜图，逐格 LLM 描述", async () => {
     const { openDirectorEditor } = await import("../../web/director.js");
     appState.graph = { _nodes: [] };
     mockRoute("/rs_prompts/skills", () => jsonResponse([{ id: "sk-a", name: "技能 A", gen_video: true }]));
@@ -93,7 +93,7 @@ test("导演编辑器：🧩 宫格分镜图拆分卡片——自动/手动行�
     await sleep(20);
 
     const card = document.querySelector(".neo-director-src-card-grid");
-    assert.ok(card, "宫格拆分卡片在「📖 故事板分镜」页");
+    assert.ok(card, "宫格拆分卡片在「故事板分镜」页");
 
     // 宫格图是唯一分镜来源：卡片常驻；来源二选一 radio 行与逐段图片分镜卡都已移除
     assert.equal(card.style.display, "", "宫格卡片常驻显示（唯一来源）");
@@ -375,7 +375,7 @@ test("宫格分镜图拆分：图片输入区支持本地上传 + 素材库/本�
     await sleep(20);
 });
 
-test("标题栏右侧「🤖 LLM 配置」按钮：打开弹窗复用 LLM 表单，✕/Esc 关闭，脏改动出确认条", async () => {
+test("标题栏右侧「LLM 配置」按钮：打开弹窗复用 LLM 表单，✕/Esc 关闭，脏改动出确认条", async () => {
     const { openDirectorEditor } = await import("../../web/director.js");
     appState.graph = { _nodes: [] };
     mockRoute("/rs_prompts/skills", () => jsonResponse([{ id: "sk-a", name: "技能 A", gen_video: true }]));
@@ -397,9 +397,9 @@ test("标题栏右侧「🤖 LLM 配置」按钮：打开弹窗复用 LLM 表单
     await openDirectorEditor(existing);
     await sleep(40);
 
-    // 🤖 按钮在标题栏右侧按钮组最左（⛶/✕ 之前）
+    // 按钮在标题栏右侧按钮组最左（⛶/✕ 之前）
     const titleBtns = Array.from(document.querySelector(".neo-director-title-btns").children);
-    assert.ok(titleBtns[0].classList.contains("neo-director-llm-config"), "🤖 按钮在最左");
+    assert.ok(titleBtns[0].classList.contains("neo-director-llm-config"), "按钮在最左");
 
     // 点击打开弹窗：复用 LLM 表单（provider 下拉已填充）
     document.querySelector(".neo-director-llm-config").click();

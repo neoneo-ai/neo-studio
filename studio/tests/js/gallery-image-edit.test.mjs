@@ -1050,7 +1050,7 @@ test("图片编辑弹窗：扩图锁定比例拖拽只等比缩放，不变形�
     assert.ok(w <= 1600 + 1e-6 && h <= 1200 + 1e-6, `封顶失效：${w}×${h}`);
 });
 
-test("图片编辑弹窗：看大图——点原图/点分割线（未拖动）进灯箱，拖过阈值才算拖窗帘；🔍 按钮各模式通用", async () => {
+test("图片编辑弹窗：看大图——点原图/点分割线（未拖动）进灯箱，拖过阈值才算拖窗帘；按钮各模式通用", async () => {
     resetEnv();
     clearRoutes();
     const { openImageEditDialog } = await import("../../web/gallery-gen.js");

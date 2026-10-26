@@ -27,7 +27,7 @@ function showBanner() {
     const bar = document.createElement("div");
     bar.id = "neo-canvas-offline";
     bar.className = "neo-canvas-offline";
-    bar.textContent = t("🔒 ComfyUI 未运行 · 画布只读");
+    bar.textContent = t("ComfyUI 未运行 · 画布只读");
     document.body.appendChild(bar);
 }
 

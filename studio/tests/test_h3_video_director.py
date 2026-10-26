@@ -3763,7 +3763,7 @@ class StoryboardGenerateTests(unittest.TestCase):
         self.assertEqual(st["details"][0]["filename"], "storyboard_sb-e2e_01.png")
 
     def test_force_regenerates_existing_storyboard(self):
-        # 再次点「🎨 生成图片分镜」带 force=True：已有产物的段也重新生成（不做幂等跳过）
+        # 再次点「生成图片分镜」带 force=True：已有产物的段也重新生成（不做幂等跳过）
         _write_png(os.path.join(self.assets_dir, "storyboard_sb-e2e_01.png"))
         self.captured.clear()
         st = self._generate(segments=[{"prompt": "段一"}, {"prompt": "段二"}], force=True)

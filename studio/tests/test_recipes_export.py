@@ -216,7 +216,7 @@ class ExportTests(unittest.TestCase):
         readme = zf.read("导演导出测试/Readme.txt").decode("utf-8")
         for token in ("导演导出测试", "分镜视频导演配方", "2 段", "960×544", "总时长 12s",
                       "Neo Studio", "https://github.com/neoneo-ai/neo-studio",
-                      "📦 导入", "NeoH3VideoDirector"):
+                      "导入", "NeoH3VideoDirector"):
             self.assertIn(token, readme)
         self.assertNotIn("【来源】", readme)
         # Readme 只进包内，不落盘到配方目录

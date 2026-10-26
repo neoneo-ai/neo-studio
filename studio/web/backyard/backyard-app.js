@@ -191,7 +191,7 @@ function buildConfig(el) {
             });
             const data = await resp.json();
             if (data.success) {
-                statusEl.textContent = t("✓ 已保存");
+                statusEl.textContent = t("已保存");
                 statusEl.className = "by-status ok";
                 for (const key of SECRET_KEYS) {
                     if (data.config[key]) inputs[key].placeholder = t("已保存（留空沿用）");
@@ -253,7 +253,7 @@ function buildPreprocess(el) {
     form.appendChild(r4);
 
     const btnRow = $el("div", { className: "by-form-row" });
-    const runBtn = $el("button", { className: "by-btn", textContent: t("🚀 执行预处理") });
+    const runBtn = $el("button", { className: "by-btn", textContent: t("执行预处理") });
     btnRow.appendChild(runBtn);
     form.appendChild(btnRow);
     section.appendChild(form);
@@ -307,7 +307,7 @@ function buildUpload(el) {
 
     const infoRow = $el("div", { className: "by-form-row" });
     const pathLabel = $el("span", { className: "by-dir-path-label", textContent: "" });
-    const refreshBtn = $el("button", { className: "by-btn", textContent: t("🔄 刷新清单") });
+    const refreshBtn = $el("button", { className: "by-btn", textContent: t("刷新清单") });
     infoRow.appendChild($el("label", { textContent: t("上传源目录") }));
     infoRow.appendChild(pathLabel);
     infoRow.appendChild(refreshBtn);
@@ -327,7 +327,7 @@ function buildUpload(el) {
     form.appendChild(r2);
 
     const btnRow = $el("div", { className: "by-form-row" });
-    const runBtn = $el("button", { className: "by-btn", textContent: t("📤 执行上传") });
+    const runBtn = $el("button", { className: "by-btn", textContent: t("执行上传") });
     btnRow.appendChild(runBtn);
     form.appendChild(btnRow);
     section.appendChild(form);
@@ -381,7 +381,7 @@ function buildUpload(el) {
             }
             for (const d of data.directories) {
                 const item = $el("div", { className: "by-dir-item" });
-                item.appendChild($el("span", { className: "by-dir-icon", textContent: "📁" }));
+                item.appendChild($el("span", { className: "by-dir-icon", textContent: "" }));
                 item.appendChild($el("span", { className: "by-dir-name", textContent: d.name }));
                 item.appendChild($el("span", {
                     className: "by-dir-meta",
@@ -435,7 +435,7 @@ function buildManage(el) {
 
     const infoRow = $el("div", { className: "by-form-row" });
     const pathLabel = $el("span", { className: "by-dir-path-label", textContent: "" });
-    const refreshBtn = $el("button", { className: "by-btn", textContent: t("🔄 刷新") });
+    const refreshBtn = $el("button", { className: "by-btn", textContent: t("刷新") });
     infoRow.appendChild($el("label", { textContent: t("输出目录") }));
     infoRow.appendChild(pathLabel);
     infoRow.appendChild(refreshBtn);
@@ -462,16 +462,16 @@ function buildManage(el) {
             }
             indexEl.innerHTML = "";
             const summary = $el("div", { className: "by-index-stats" });
-            summary.textContent = tf("📊 {dirs} 个目录 / {items} 个条目", { dirs: data.total_dirs, items: data.total_items }) +
+            summary.textContent = tf("{dirs} 个目录 / {items} 个条目", { dirs: data.total_dirs, items: data.total_items }) +
                 (data.base_url ? ` | ${data.base_url}` : "");
             indexEl.appendChild(summary);
 
             const dirList = $el("div", { className: "by-dir-list" });
             for (const [name, info] of Object.entries(data.directories)) {
                 const item = $el("div", { className: "by-dir-item" });
-                item.appendChild($el("span", { className: "by-dir-icon", textContent: "📁" }));
+                item.appendChild($el("span", { className: "by-dir-icon", textContent: "" }));
                 item.appendChild($el("span", { className: "by-dir-name", textContent: name }));
-                const meta = tf("{count} 项 ({images}🖼 {videos}🎬)", { count: info.count, images: info.images, videos: info.videos });
+                const meta = tf("{count} 项 ({images}{videos})", { count: info.count, images: info.images, videos: info.videos });
                 item.appendChild($el("span", { className: "by-dir-meta", textContent: meta }));
                 dirList.appendChild(item);
             }
@@ -497,7 +497,7 @@ function buildManage(el) {
             listEl.innerHTML = "";
             for (const entry of data.entries) {
                 const item = $el("div", { className: "by-dir-item" });
-                item.appendChild($el("span", { className: "by-dir-icon", textContent: entry.is_dir ? "📁" : "📄" }));
+                item.appendChild($el("span", { className: "by-dir-icon", textContent: entry.is_dir ? "" : "" }));
                 item.appendChild($el("span", { className: "by-dir-name", textContent: entry.name }));
                 const meta = entry.is_dir ? tf("{n} 个文件", { n: entry.file_count }) : formatSize(entry.size);
                 item.appendChild($el("span", { className: "by-dir-meta", textContent: meta }));

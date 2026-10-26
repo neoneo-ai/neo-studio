@@ -76,7 +76,7 @@ function galleryState() {
 const homeCard = (name) => [...document.querySelectorAll(".neo-gallery-category-card")]
     .find((c) => c.querySelector(".neo-gallery-card-name")?.textContent === name);
 
-// 面包屑形如「🏠>Output↩」，判目录只看它是否指向 Output
+// 面包屑形如「>Output↩」，判目录只看它是否指向 Output
 const atOutput = () => assert.ok(galleryState().crumb.includes("Output"), `应停在 Output：${galleryState().crumb}`);
 
 let gallery;

@@ -1428,7 +1428,7 @@ class MainWindowTests(unittest.TestCase):
              patch.object(app, "probe", lambda port, timeout=3.0: True), \
              patch.object(sys, "argv", ["studio_app.py"]):
             self.assertEqual(app.main(), 0)
-        # 「⤒ 主画布编辑」与顶栏「🎬 新影工坊」的 _blank 链接留在桌面端窗口内导航；blob 下载仍放行
+        # 「⤒ 主画布编辑」与顶栏「新影工坊」的 _blank 链接留在桌面端窗口内导航；blob 下载仍放行
 
         self.assertFalse(fake.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"])
         self.assertTrue(fake.settings["ALLOW_DOWNLOADS"])

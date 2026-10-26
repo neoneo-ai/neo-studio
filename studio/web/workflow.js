@@ -7,7 +7,7 @@
  *    让用户选择「修复 / 取消」；自动匹配失败的项可在弹窗中手动选择替换文件，
  *    勾选「记住手动选择」后保存为服务端修复映射，之后相同失效路径自动替换；
  *    确认的每次修复按工作流关联写入本地修复日志（localStorage），供后续复查修改点。
- * 2. 顶栏 🅝 菜单（top-menu.js）：本模块提供 runRepair / showRepairLogDialog / showRepairMappingsDialog
+ * 2. 顶栏 菜单（top-menu.js）：本模块提供 runRepair / showRepairLogDialog / showRepairMappingsDialog
  *    与失效路径红点提示，按钮本体与下拉菜单归 top-menu.js。
  */
 import { api } from "../../../../scripts/api.js";
@@ -258,13 +258,13 @@ function buildPickSelect(c, onPick) {
 }
 
 /**
- * 「📥 模型库」按钮：本地没有可用文件时（模型压根没装，如空的 text_encoders 目录），
+ * 「模型库」按钮：本地没有可用文件时（模型压根没装，如空的 text_encoders 目录），
  * 手动选择下拉是空的、无法修复——给一条去模型库搜索下载的出路。
  */
 function buildHubBtn(c) {
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.textContent = t('📥 模型库');
+    btn.textContent = t('模型库');
     btn.title = t('本地没有可用文件，去模型库搜索并下载此模型');
     btn.style.cssText = 'flex:none;padding:2px 8px;background:#2a3a4a;color:#9ab;border:1px solid #445;border-radius:4px;cursor:pointer;font-size:11.5px;';
     btn.onclick = (e) => {
@@ -671,19 +671,19 @@ function installImportRepairHook() {
     }
 }
 
-// ===== 顶栏 🅝 菜单（top-menu.js）=====
+// ===== 顶栏 菜单（top-menu.js）=====
 
 // 修复期间防止重复触发（actionBarButtons 为声明式渲染，无法直接改按钮 disabled/opacity）
 let repairBusy = false;
 
-// 顶部 🅝 菜单按钮提示：检测到失效模型路径时给按钮加红框和右上角红点（不弹窗），点击按钮后清除。
+// 顶部 菜单按钮提示：检测到失效模型路径时给按钮加红框和右上角红点（不弹窗），点击按钮后清除。
 // actionBarButtons 为声明式渲染，切页/焦点模式等会重建按钮，故用 MutationObserver 同步提示
 // （与 LoRA Manager 一致）。观察器在首次需要提示时懒启动——此时画布已载入、操作栏已渲染。
 let _repairHintCount = 0;
 let _hintObserver = null;
 
 function applyRepairHint() {
-    const btn = document.querySelector('.neo-n-menu-btn');   // 顶栏 🅝 菜单按钮（top-menu.js）
+    const btn = document.querySelector('.neo-n-menu-btn');   // 顶栏 菜单按钮（top-menu.js）
     if (!btn) return;
     if (_repairHintCount > 0) {
         btn.dataset.origAria ??= btn.getAttribute('aria-label');
@@ -955,7 +955,7 @@ export async function showRepairMappingsDialog() {
 app.registerExtension({
     name: "comfy.neo.workflowRepairHook",
     // 导入工作流后自动检测失效模型路径并提示修复（挂载 loadGraphData / loadApiJson）。
-    // 顶栏 🅝 菜单按钮与下拉菜单归 top-menu.js（runRepair / showRepairLogDialog /
+    // 顶栏 菜单按钮与下拉菜单归 top-menu.js（runRepair / showRepairLogDialog /
     // showRepairMappingsDialog 由本模块导出供其调用）。
     setup() {
         installImportRepairHook();

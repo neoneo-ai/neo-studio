@@ -128,7 +128,7 @@ function createRandomHandler(promptUI) {
 }
 
 /**
- * 运行时随机选词（🎲 ▾ 菜单）状态接线：恢复 UI、持久化到 properties 与同名隐藏控件。
+ * 运行时随机选词（▾ 菜单）状态接线：恢复 UI、持久化到 properties 与同名隐藏控件。
  * 编码器（NeoPromptEncoder）单输出固定每次抽 1 条并隐藏数量行；
  * 生成器（NeoPromptAgent）按列表输出，支持一次抽取多条循环消费。
  */
@@ -246,7 +246,7 @@ function showRandomPickToast(anchorEl, count) {
     if (!anchorEl || !anchorEl.getBoundingClientRect) return;
     const toast = document.createElement("div");
     toast.className = "rs-random-pick-toast";
-    toast.textContent = count > 1 ? tf("🎲 已随机抽取 {n} 条提示词", { n: count }) : t("🎲 已随机抽取一条新提示词");
+    toast.textContent = count > 1 ? tf("已随机抽取 {n} 条提示词", { n: count }) : t("已随机抽取一条新提示词");
     const r = anchorEl.getBoundingClientRect();
     const vw = window.innerWidth;
     toast.style.left = Math.max(8, Math.min(r.right - 190, vw - 198)) + "px";
@@ -312,13 +312,13 @@ function createOnTextChangeCallback(statusBar, updateStatusAndUI, node) {
             if (updateStatusAndUI) updateStatusAndUI();
             
             // 显示切换提示
-            statusTextEl.textContent = "⚡ Switched to LOCAL PROMPT";
+            statusTextEl.textContent = "Switched to LOCAL PROMPT";
             statusBar.style.background = "#1a3a1a";
             statusBar.style.color = "#4ade80";
             
             setTimeout(() => {
                 if (statusTextEl) {
-                    statusTextEl.textContent = "🟢 LOCAL PROMPT";
+                    statusTextEl.textContent = "LOCAL PROMPT";
                 }
                 statusBar.style.background = "";
                 statusBar.style.color = "";
