@@ -121,7 +121,7 @@ test("重挂载回到离开时的视图：侧栏 tab 重画不得把二级目录
     assert.equal(gallery._navRestoring, false, "重挂载结束要清掉 _navRestoring");
 });
 
-test("素材目录按宿主分开记录：导演抽屉与绘画页左栏互不覆盖", async () => {
+test("素材目录按宿主分开记录：导演弹窗与绘画页弹窗互不覆盖", async () => {
     resetEnv();
     clearRoutes();
     await loadNeoGallery();
@@ -135,7 +135,7 @@ test("素材目录按宿主分开记录：导演抽屉与绘画页左栏互不�
     await gallery.showDirectoryStructure("Output", ["a"]);
     gallery.rememberView(directorHost);
 
-    // 绘画页左栏没有记录：沿用当前视图；它自己翻进的目录只记在自己名下
+    // 绘画页弹窗没有记录：沿用当前视图；它自己翻进的目录只记在自己名下
     directorHost.removeChild(gallery.element);
     gallery.applyView(paintHost);
     assert.equal(gallery.currentView.categoryPath.join("/"), "a", "没有记录的宿主沿用当前视图");
@@ -148,9 +148,9 @@ test("素材目录按宿主分开记录：导演抽屉与绘画页左栏互不�
     assert.deepEqual(gallery._libViews.paint.categoryPath, ["x"], "绘画页的记录不被导演页覆盖");
 });
 
-// 导演页关抽屉时收留宿主正是素材页宿主：render 先清空目标宿主，会把画廊从当前宿主摘走，
-// 旧宿主身份丢失 → 抽屉里浏览的目录记不下来，重开抽屉落回首页。
-test("导演抽屉开合（收留宿主=素材页宿主）不丢抽屉里的目录", async () => {
+// 关弹窗时收留宿主正是画廊页宿主：render 先清空目标宿主，会把画廊从当前宿主摘走，
+// 旧宿主身份丢失 → 弹窗里浏览的目录记不下来，重开弹窗落回首页。
+test("素材库弹窗开合（收留宿主=画廊页宿主）不丢弹窗里的目录", async () => {
     resetEnv();
     clearRoutes();
     await loadNeoGallery();
@@ -162,16 +162,16 @@ test("导演抽屉开合（收留宿主=素材页宿主）不丢抽屉里的目�
     document.body.append(pageHost, directorHost);
 
     await gallery.mountTo(pageHost);
-    await gallery.showDirectoryStructure("Output", ["a"]);   // 素材页在 Output/a
-    await gallery.mountTo(directorHost);                       // 开抽屉：带过来
-    await gallery.showDirectoryStructure("Input", ["x"]);    // 抽屉里翻进 Input/x
+    await gallery.showDirectoryStructure("Output", ["a"]);   // 画廊页在 Output/a
+    await gallery.mountTo(directorHost);                       // 开弹窗：带过来
+    await gallery.showDirectoryStructure("Input", ["x"]);    // 弹窗里翻进 Input/x
 
-    await gallery.mountTo(pageHost);                          // 关抽屉（收留宿主=素材页宿主）
-    assert.deepEqual(gallery.currentView.categoryPath, ["a"], "关抽屉回到素材页自己的目录");
+    await gallery.mountTo(pageHost);                          // 关弹窗（收留宿主=画廊页宿主）
+    assert.deepEqual(gallery.currentView.categoryPath, ["a"], "关弹窗回到画廊页自己的目录");
 
-    await gallery.mountTo(directorHost);                      // 重开抽屉
+    await gallery.mountTo(directorHost);                      // 重开弹窗
     assert.equal(gallery.currentView.mode, "directory");
     assert.equal(gallery.currentView.source, "Input");
-    assert.deepEqual(gallery.currentView.categoryPath, ["x"], "重开抽屉回到抽屉里那个目录");
+    assert.deepEqual(gallery.currentView.categoryPath, ["x"], "重开弹窗回到弹窗里那个目录");
 });
 

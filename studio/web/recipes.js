@@ -1352,8 +1352,12 @@ export async function createRecipesPanel(options = {}) {
                 const name = (options.initialSelection && list.some(x => x.name === options.initialSelection))
                     ? options.initialSelection : list[0].name;
                 const first = list.find(x => x.name === name);
-                selectRecipe(first);
-                openOnSelect(first);
+                // initialSelection 命中 = 宿主本来就选中这一份：只恢复高亮，不重放 onSelect。
+                // 重放的话「点配方按钮 → 刷新列表」会把刚打开的配方弹窗关掉（onSelect 里就是关窗），
+                // openOnSelect 还会把编辑器里没保存的改动重铺一遍
+                const restore = first.name === options.initialSelection;
+                selectRecipe(first, !restore);
+                if (!restore) openOnSelect(first);
             }
         }
     }

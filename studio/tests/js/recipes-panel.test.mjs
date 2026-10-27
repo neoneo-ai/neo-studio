@@ -494,7 +494,7 @@ test("配方面板：autoSelectFirst 首次加载自动选中首个配方", asyn
     assert.ok(panel.querySelector(".neo-recipes-card").classList.contains("neo-recipes-card-selected"), "首个卡片高亮");
 });
 
-test("配方面板：initialSelection 恢复指定配方选中（刷新后保持）", async () => {
+test("配方面板：initialSelection 只恢复高亮，不重放 onSelect（弹窗开着刷新不能被选中关掉）", async () => {
     const { createRecipesPanel } = await import("../../web/recipes.js");
     appState.graph = { _nodes: [] };
     mockRoute("/rs_prompts/skills", () => jsonResponse([]));
@@ -505,7 +505,7 @@ test("配方面板：initialSelection 恢复指定配方选中（刷新后保持
     document.body.appendChild(panel);
     await sleep(80);
 
-    assert.deepEqual(selected, ["dir-b"], "恢复指定配方");
+    assert.deepEqual(selected, [], "宿主已选中这份就不重放 onSelect");
     const cards = [...panel.querySelectorAll(".neo-recipes-card")];
     assert.ok(cards[1].classList.contains("neo-recipes-card-selected"), "dir-b 高亮");
 });

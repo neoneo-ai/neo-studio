@@ -493,14 +493,23 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
         return { row, getSelected: () => list.slice(), set, insert };
     }
 
+    /** 弹窗取用的落地：画廊素材进 input/ 根目录（导演帧一律走 /view?subfolder=），根目录图直接原名。 */
+    const galleryPickFname = async (im) =>
+        im.subfolder ? await copyGalleryToInput(JSON.stringify(im)) : im.filename;
+
     /** 「素材库」按钮：打开 ComfyUI 左侧 Neo Gallery 面板（首帧行 / 参考区共用）。
-     *  target 传主目录名（"CharacterSheet" / "StoryBoard"，就是 /neo_gallery/list 的 dir_name）时顺带导航到该目录，按钮文案随之具体化（角色素材库 / 宫格图素材库），便于直接取角色图 / 分镜图。 */
-    const buildAssetLibButton = (target) => {
+     *  target 传主目录名（"CharacterSheet" / "StoryBoard"，就是 /neo_gallery/list 的 dir_name）时顺带导航到该目录，按钮文案随之具体化（角色素材库 / 宫格图素材库），便于直接取角色图 / 分镜图。
+     *  onPick 传取用回调（Studio 弹窗点卡片 / 批量取用时调用，参数 [{filename, subfolder}]）：
+     *  经 neo:media-pick 事件交给 Studio 宿主；ComfyUI 模式没有监听，照旧只是开侧栏拖拽。 */
+    const buildAssetLibButton = (target, onPick) => {
         const label = target === 'CharacterSheet' ? t('角色素材库') : target === 'StoryBoard' ? t('宫格图素材库') : t('素材库');
         return $el('button', {
             className: 'neo-director-ff-lib',
-            title: target ? tf("打开左侧素材面板（{target}）", { target }) : t('打开/收起左侧素材面板'),
-            onclick: () => toggleGallerySidebar(target, []),
+            title: target ? tf("打开素材库（{target}）", { target }) : t('打开素材库'),
+            onclick: () => {
+                window.dispatchEvent(new CustomEvent('neo:media-pick', { detail: { target, onPick } }));
+                toggleGallerySidebar(target, []);
+            },
         }, [
             $el('i', { className: 'pi pi-images' }),
             $el('span', { textContent: label }),
@@ -638,7 +647,12 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
             $el('div', { className: 'neo-director-refs-head' }, [
                 $el('span', { className: 'neo-director-field-label', textContent: t('参考素材（参考生视频技能用：图 / 视频 / 音频）') }),
                 syncBtn,
-                buildAssetLibButton(),
+                buildAssetLibButton(null, async (imgs) => {
+                    for (const im of imgs) {
+                        const fname = await galleryPickFname(im);
+                        if (fname) segRefRows[0].insert(fname);
+                    }
+                }),
             ]),
             segRefRows[0].row,  // 参考图独占一行（最多 9 个，需要更多空间）
             $el('div', { className: 'neo-director-ref-row-pair' }, [
@@ -1515,7 +1529,13 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
         $el('span', { textContent: t('角色参考图') }),
     ]);
     charTitle.addEventListener('click', () => setCharOpen(charCard.classList.contains('neo-director-setup-char-collapsed')));
-    const charLibBtn = buildAssetLibButton('CharacterSheet');
+    const charLibBtn = buildAssetLibButton('CharacterSheet', async (imgs) => {
+        setCharOpen(true);
+        for (const im of imgs) {
+            const fname = await galleryPickFname(im);
+            if (fname) charRefRow.insert(fname);
+        }
+    });
     charLibBtn.addEventListener('click', () => setCharOpen(true));   // 素材库的图要拖进网格：先展开
     charCard = $el('div', { className: 'neo-director-setup-char' }, [
         $el('div', { className: 'neo-director-refs-head' }, [charTitle, identityRefsRow, charLibBtn]),
@@ -1595,7 +1615,12 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
     });
     // 输入区右下角操作条：「宫格素材库」在前、「+」（基于角色图生成九宫格）在后
     const gridSrcActions = $el('div', { className: 'neo-director-grid-src-actions' }, [
-        buildAssetLibButton('StoryBoard'),
+        buildAssetLibButton('StoryBoard', async (imgs) => {
+            const im = imgs[0];
+            if (!im) return;
+            const fname = await galleryPickFname(im);
+            if (fname) { setGridSrc(fname); markDirty(); }
+        }),
         gridSbBtn,
     ]);
     gridSrcActions.addEventListener('click', (e) => e.stopPropagation());   // 操作条内点击不触发输入区「本地上传」

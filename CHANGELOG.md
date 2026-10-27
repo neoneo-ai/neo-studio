@@ -4,6 +4,41 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **The director and paint pages hand their left column back to the editor; recipes and the asset library open in a window modal.**
+  The director page's 360px recipe column (with its recipe / asset switch and its own splitter) and the paint page's
+  left column with the image-recipe list took width from the editor while the user was editing. The director page is
+  now a top bar (**📋 配方** / **🖼 素材库** + the VRAM bar) above a full-width editor / generation stack, and the paint
+  page is a top bar (mode bar + asset library + VRAM) above one full-width panel. Both lists open in the shared window
+  modal `studio/web/js/core/lib-modal.js`: it covers the window by default, dragging the title bar turns it into a
+  floating window, the maximize button / right-edge handle / `Esc` / backdrop / **✕** behave like the other Studio
+  windows, and geometry lives in `localStorage["neo_studio_libmodal_recipes"]` and
+  `localStorage["neo_studio_libmodal_assets"]`. The gallery stays one element with three hosts (gallery page / modal /
+  standby), and the host record is written on **mount**, so opening the library lands on the directory you were
+  browsing and a reopen lands on that same directory — writing it only when the panel is pulled away is what made the
+  library alternate home / directory. Clicking an asset card now goes to the page that opened the modal: the director
+  editor fills the slot its **🖼 素材库** button announced (`setDirectorAssetTarget` names first / last / reference n),
+  the paint page loads the image-edit source preview, and the modal closes on the pick; clicks nobody claims keep the
+  lightbox, and multi-select uses the footer **📥 N selected**. The paint page's image-recipe list is gone. Covered by
+  `studio/tests/js/studio-director.test.mjs` (modal open, pick, host handoff), `studio-paint.test.mjs` (single-column
+  layout, modal pick), `studio-gallery-host.test.mjs` (directory memory across open / close) and
+  `studio/tests/e2e/studio.e2e.mjs` (maximize, title-bar drag, `Esc`).
+
+- **Opening the recipes modal no longer closes it again.** The **📋 配方** button refreshes the list on open, and the rebuilt
+  panel auto-selects its `initialSelection` — the recipe the page already had selected — and replayed `onSelect`, whose
+  first statement closes the modal, so the window vanished the moment the list arrived. A refresh that lands on the host's
+  current recipe now only restores the card highlight (`selectRecipe(r, false)`: no `onSelect`, no editor re-open, so
+  unsaved edits survive); the segment chips and size/steps echo that used to ride on that replay are refreshed by the
+  recipe-saved event in `studio-app.js`. Covered by `studio/tests/js/recipes-panel.test.mjs` (restore replays nothing) and
+  `studio/tests/js/studio-director.test.mjs` (open modal, list lands, modal still open).
+
+- **Dragging the library / recipes window no longer sticks to the mouse.** The title-bar drag and the right-edge
+  resize handle collected `pointermove` / `pointerup` on themselves, so the moment the cursor left that 8px-wide strip
+  the release event never passed through the element that started the gesture: the gesture never ended and the window
+  kept following the mouse (same for releasing outside the pywebview window). Moves and releases are collected on
+  `window` now, the start element takes pointer capture, and closing the modal mid-drag (`Esc` / backdrop / **✕**)
+  ends the gesture and unbinds the listeners. Covered by `studio/tests/js/lib-modal-geometry.test.mjs` (release over
+  the content area, release outside the resize strip, `Esc` while dragging).
+
 - **The `@` picker's prompt candidates answer on the desktop port, and the popup stops re-laying a thousand rows.**
   With the page pinned to the desktop port the six candidate categories come from four routes, and
   `/rs_prompts/list_prompt_names` was not in `app/studio_caps.py` — that request answered `409 offline`, so the

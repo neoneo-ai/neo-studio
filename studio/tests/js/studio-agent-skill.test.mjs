@@ -1392,20 +1392,19 @@ function mockDirectorRoutes() {
     }));
     mockRoute("/neo_video_gen/director_progress", jsonResponse({ active: false, segment_index: -1, total_segments: 0 }));
     mockRoute("/userdata/neo_recipes_data.json", jsonResponse({}));
-    localStorage.setItem("neo_studio_director_side_col", JSON.stringify({ side: 240, lib: 420 }));
 }
 
-const dirCards = () => document.querySelectorAll(".ns-director-side .neo-recipes-card");
+const dirCards = () => document.querySelectorAll(".ns-director-recipes .neo-recipes-card");
 const dirSelected = () => document.querySelector(".neo-recipes-card-selected .neo-recipes-card-name span")?.textContent;
 
-test("导演页在用时存配方：左栏立刻长出新配方并选中，右栏上下文跟着换配方", async () => {
+test("导演页在用时存配方：配方弹窗立刻长出新配方并选中，上下文条跟着换配方", async () => {
     mountStudio();
     mockDirectorRoutes();
     appState.graph = { _nodes: [] };   // 无 Load* 节点 → 编辑器内无媒体候选
     appState.toasts.length = 0;
     savedEvents.length = 0;
     await openStudio("#/director");
-    await until(() => dirCards().length === 1 && dirSelected() === "R1", "进页时左栏只有 R1 且自动选中");
+    await until(() => dirCards().length === 1 && dirSelected() === "R1", "进页时配方宿主里只有 R1 且自动选中");
     assert.ok(document.querySelector(".ns-gen-panel"), "下方生成面板已铺好");
 
     mockAgentStream([{ kind: "tool_call", tool: "director_save", text: '{"name":"我的片子"}' }, RECIPE_SAVED,
@@ -1414,10 +1413,10 @@ test("导演页在用时存配方：左栏立刻长出新配方并选中，右�
     inputText(dock().querySelector(".neo-agent-input"), "把这一版存成配方");
     click(runBtn());
 
-    await until(() => dirCards().length === 2, "保存后左栏长出新配方");
+    await until(() => dirCards().length === 2, "保存后配方列表长出新配方");
     assert.deepEqual(savedEvents, [{ name: "我的片子", created: true }], "广播的是刚写的配方名");
     await until(() => dirSelected() === "我的片子", "新配方直接选中，下方生成面板跟着是它");
-    await until(() => ctxBar().textContent.includes("我的片子"), "右栏上下文条跟着换配方");
+    await until(() => ctxBar().textContent.includes("我的片子"), "上下文条跟着换配方");
     assert.ok(savedToastTexts().some((s) => s.includes("我的片子")),
         `应弹带配方名的保存提示：${JSON.stringify(savedToastTexts())}`);
 });
@@ -1429,9 +1428,9 @@ test("导演页在用时切计划模式：不写配方就不重建配方列表�
     appState.toasts.length = 0;
     savedEvents.length = 0;
     await openStudio("#/director");
-    await until(() => dirCards().length === 1 && dirSelected() === "R1", "进页时左栏只有 R1 且自动选中");
+    await until(() => dirCards().length === 1 && dirSelected() === "R1", "进页时配方宿主里只有 R1 且自动选中");
     // 数 fetch 分不清谁发的：发送后输入框交回焦点会预热 @ 候选，配方那一条也在预热里。
-    // 这条用例要拦的是左栏那一份列表被重建，认 DOM 那一块就行
+    // 这条用例要拦的是配方面板那一份列表被重建，认 DOM 那一块就行
     const cardBefore = dirCards()[0];
 
     mockAgentStream([{ kind: "plan", text: "计划：director_plan → director_save → segment_run" },
@@ -1443,9 +1442,9 @@ test("导演页在用时切计划模式：不写配方就不重建配方列表�
     await flush(60);
 
     assert.equal(savedEvents.length, 0, "计划模式没有落盘，不该广播保存事件");
-    assert.equal(dirCards()[0], cardBefore, "没有落盘就不重建左栏那一份列表");
+    assert.equal(dirCards()[0], cardBefore, "没有落盘就不重建配方面板那一份列表");
     assert.equal(dirSelected(), "R1", "选中的配方照旧");
-    assert.equal(dirCards().length, 1, "左栏列表照旧只有 R1");
+    assert.equal(dirCards().length, 1, "配方列表照旧只有 R1");
 });
 
 

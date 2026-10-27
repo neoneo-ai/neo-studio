@@ -1,4 +1,4 @@
-// Neo Studio 导演页：左配方列表 + 上内嵌导演编辑器 + 分隔条 + 下整片生成面板；
+// Neo Studio 导演页：顶部工具条（配方 / 素材库弹窗）+ 上内嵌导演编辑器 + 分隔条 + 下整片生成面板；
 // 分段勾选条（一格一段，勾选只跑其中几段）、生成中实时预览（载荷按 task_id 路由、终态定格）、分隔条偏好。
 // studio-app.js 顶层会取 #ns-view 并连 WebSocket，导入前必须先备好 DOM 与 WS 桩。
 import test from "node:test";
@@ -53,8 +53,6 @@ mockRoute("/rs_recipes/list", jsonResponse([
     ]},
 ])); // listRecipes 直接返回数组
 mockRoute("/rs_prompts/skills", jsonResponse([{ id: "sk-a", name: "技能 A", gen_video: true }]));
-// 左栏宽度偏好：导演页首次构建前备好，构建时按配方列表档（side）回灌
-localStorage.setItem("neo_studio_director_side_col", JSON.stringify({ side: 240, lib: 420 }));
 
 const frame = (name) => `data:image/jpeg;base64,${name}`;
 function wsSend(type, data) {
@@ -124,19 +122,19 @@ test("Studio 导演页：点配方卡内嵌打开编辑器 + 「保存并生成�
     location.hash = "#/director";
     await until(() => document.querySelector(".ns-gen-panel"), "生成面板挂载");
 
-    // 首个配方自动选中（左栏配方面板）
+    // 首个配方自动选中（配方弹窗宿主）
     await until(() => {
         const sel = document.querySelector(".neo-recipes-card-selected .neo-recipes-card-name span");
         return sel && sel.textContent === "R1";
     }, "配方自动选中");
-    assert.ok(document.querySelector(".ns-director-side .neo-recipes-list"), "配方列表挂在左栏");
+    assert.ok(document.querySelector(".ns-director-recipes .neo-recipes-list"), "配方列表挂在配方弹窗宿主里");
     // 进页时自动选中的配方已经在右上宿主编好：不用先点一张卡才出编辑器
     const autoPanel = document.querySelector(".ns-director-editor .neo-director-panel");
     assert.ok(autoPanel, "进页即有内嵌编辑器");
     assert.ok(document.querySelector(".ns-director-editor").classList.contains("ns-editor-open"), "有编辑器时占位提示收起");
 
     // 点配方卡 → 在同一个内嵌宿主里打开（分段格子只管勾选，不再负责开编辑器）
-    click(document.querySelector(".ns-director-side .neo-recipes-card"));
+    click(document.querySelector(".ns-director-recipes .neo-recipes-card"));
 
     // 编辑器内嵌进右上宿主（不建浮层窗口）
     await until(() => document.querySelector(".ns-director-editor .neo-director-panel"), "编辑器内嵌出现");
@@ -165,14 +163,14 @@ test("Studio 导演页：点配方卡内嵌打开编辑器 + 「保存并生成�
     await sleep(20);
 });
 
-test("Studio 导演页：点左栏配方卡直接在内嵌宿主里打开编辑器（重复点击不重载）", async () => {
+test("Studio 导演页：点配方卡直接在内嵌宿主里打开编辑器（重复点击不重载）", async () => {
     await import("../../web/studio/studio-app.js");
     appState.graph = { _nodes: [] };
     location.hash = "#/director";
-    await until(() => document.querySelector(".ns-director-side .neo-recipes-card"), "配方卡片挂载");
+    await until(() => document.querySelector(".ns-director-recipes .neo-recipes-card"), "配方卡片挂载");
     assert.equal(document.querySelector(".ns-director-editor .neo-director-panel"), null, "上一用例关掉编辑器后不自动重开");
 
-    const card = document.querySelector(".ns-director-side .neo-recipes-card");
+    const card = document.querySelector(".ns-director-recipes .neo-recipes-card");
     click(card);
     click(card);   // 构建中（异步扫描未落地）的重复点击：忽略，不叠出第二个编辑器
     await until(() => document.querySelector(".ns-director-editor .neo-director-panel"), "点卡片即内嵌打开编辑器");
@@ -337,7 +335,7 @@ test("Studio 导演页：勾选段后只提交勾选的段（运行期临时状�
     // 分段换掉（重选配方 → 重拉 spec）→ 勾选作废：勾选是运行期临时状态，不跨配方保留
     click(chip(1));
     assert.equal(chip(1).getAttribute("aria-pressed"), "true");
-    click(document.querySelector(".ns-director-side .neo-recipes-card"));
+    click(document.querySelector(".ns-director-recipes .neo-recipes-card"));
     await until(() => hint().includes("未勾选"), "重选配方后勾选作废");
     await until(() => document.querySelector(".ns-director-editor .neo-director-panel"), "重选配方同时打开编辑器");
     click(document.querySelector(".neo-director-close"));
@@ -380,19 +378,17 @@ test("Studio 导演页：分隔条调生成面板高度、双击收起 / 展开�
     localStorage.removeItem("neo_studio_director_split");
 });
 
-test("Studio 导演页：编辑器「素材库」按钮开合左栏素材库（画廊随宿主搬移）", async () => {
+test("Studio 导演页：编辑器「素材库」按钮开合素材库弹窗（画廊随宿主搬移）", async () => {
     await import("../../web/studio/studio-app.js");
     appState.graph = { _nodes: [] };
     location.hash = "#/director";
-    await until(() => document.querySelector(".ns-director-side .neo-recipes-card"), "配方卡片挂载");
-    click(document.querySelector(".ns-director-side .neo-recipes-card"));
+    await until(() => document.querySelector(".ns-director-recipes .neo-recipes-card"), "配方卡片挂载");
+    click(document.querySelector(".ns-director-recipes .neo-recipes-card"));
     await until(() => document.querySelector(".ns-director-editor .neo-director-panel"), "编辑器内嵌出现");
 
-    const lib = () => document.querySelector(".ns-director-lib");
-    const libOpen = () => document.querySelector(".ns-director-side").classList.contains("ns-lib-open");
-    const galleryIn = (hostSel) => !!document.querySelector(`${hostSel} .neo-gallery-panel`);
-    assert.ok(!libOpen(), "进入导演页不自动开素材库");
-    assert.ok(lib().parentNode === document.querySelector(".ns-director-side"), "素材库与配方列表同在左栏");
+    const modal = () => document.querySelector(".ns-libmodal:not(.ns-hidden)");
+    const galleryIn = (root) => !!root?.querySelector(".neo-gallery-panel");
+    assert.ok(!modal(), "进入导演页不自动开素材库弹窗");
 
     // Studio 页面里 scripts/app.js 就是 shim（同一份 sidebarTab / sidebarTabs）；测试钩子把 scripts/app.js
     // 指到 mock，这里把 shim 侧栏写入接回 mock 的调用方，并给 shim 注册素材 tab 的替身
@@ -408,104 +404,55 @@ test("Studio 导演页：编辑器「素材库」按钮开合左栏素材库（�
         render: async (el) => { el.innerHTML = ""; el.appendChild(galleryEl); },
     });
 
-    // 素材库按钮在「故事板分镜」页：点它 → 左栏切成素材库，Neo Gallery 挂进左栏宿主（Studio 没有 ComfyUI 侧栏）
+    // 素材库按钮在「故事板分镜」页：点它 → 素材库弹窗打开，Neo Gallery 挂进弹窗宿主（Studio 没有 ComfyUI 侧栏）
     click(document.querySelector(".neo-director-tab"));
     const btn = document.querySelector(".neo-director-ff-lib");
     click(btn);
-    await until(() => libOpen(), "点素材库开素材库");
-    assert.ok(galleryIn(".ns-director-lib .ns-gallery-host"), "左栏素材库挂上 Neo Gallery");
+    await until(() => !!modal(), "点素材库开弹窗");
+    assert.ok(galleryIn(modal().querySelector(".ns-gallery-host")), "弹窗宿主挂上 Neo Gallery");
 
-    // 再点同一按钮 = 收起：画廊离开左栏宿主
+    // 再点同一按钮 = 收起：画廊离开弹窗宿主
     click(btn);
-    await until(() => !libOpen(), "再点收起素材库");
-    assert.ok(!galleryIn(".ns-director-lib .ns-gallery-host"), "收起后画廊离开左栏宿主");
+    await until(() => !modal(), "再点收起弹窗");
+    assert.ok(!galleryIn(document.querySelector(".ns-libmodal .ns-gallery-host")), "收起后画廊离开弹窗宿主");
 
-    // 左栏顶部切换条：点「素材」开素材库、点「配方」收起，高亮跟着左栏的 ns-lib-open
-    const tabRecipes = () => document.querySelector(".ns-side-tabs .ns-side-tab:first-child");
-    const tabLib = () => document.querySelector(".ns-side-tabs .ns-side-tab:last-child");
-    assert.ok(tabRecipes().classList.contains("active") && !tabLib().classList.contains("active"), "进页时切换条停在配方");
-    click(tabLib());
-    await until(() => libOpen(), "点切换条开素材库");
-    assert.ok(galleryIn(".ns-director-lib .ns-gallery-host"), "切换条开出的素材库挂上 Neo Gallery");
-    assert.ok(tabLib().classList.contains("active") && !tabRecipes().classList.contains("active"), "素材库打开时切换条高亮素材");
-    click(tabRecipes());
-    await until(() => !libOpen(), "点配方收起素材库");
-    assert.ok(!galleryIn(".ns-director-lib .ns-gallery-host"), "收起后画廊离开左栏宿主");
+    // 顶部工具条「配方」：配方面板在配方弹窗里，选卡直接关窗
+    const recipesBtn = document.querySelector(".ns-director-bar button");
+    click(recipesBtn);
+    assert.ok(modal(), "配方按钮打开配方弹窗");
+    click(document.querySelector(".ns-director-recipes .neo-recipes-card"));
+    await sleep(20);
+    assert.ok(!modal(), "点配方卡关窗并进编辑器");
 
-    // 切到素材页：素材库收起，画廊回到素材页宿主
+    // 切到素材页：弹窗收起，画廊回到素材页宿主
     location.hash = "#/gallery";
-    await until(() => galleryIn(".ns-page:not(.ns-hidden) .ns-gallery-host"), "素材页挂上画廊");
-    assert.ok(!libOpen(), "离开导演页收起素材库");
+    await until(() => galleryIn(document.querySelector(".ns-page:not(.ns-hidden) .ns-gallery-host")), "素材页挂上画廊");
+    assert.ok(!modal(), "离开导演页收起弹窗");
     await sleep(20);
 });
 
-test("Studio 导演页：左栏分隔条拖动宽度（配方列表 / 素材库各记各的，拖到最窄收起整栏）", async () => {
+test("Studio 导演页：配方弹窗开着刷新列表不关窗（当前配方只恢复高亮）", async () => {
     await import("../../web/studio/studio-app.js");
+    appState.graph = { _nodes: [] };
     location.hash = "#/director";
-    await until(() => document.querySelector(".ns-director-side .neo-recipes-card"), "配方卡片挂载");
-    await sleep(20);   // 等 hashchange 任务落地：素材库抽屉按当前页归属，路由没落地时 currentView 还是上一页
+    // 上一用例排在队列里的 #/gallery 导航先落地：它落地的 showView 会把本用例刚打开的窗关掉
+    await until(() => !!document.querySelector(".ns-page:not(.ns-hidden) .ns-director-bar"), "导演页就位");
+    await sleep(20);
+    await until(() => document.querySelector(".ns-director-recipes .neo-recipes-card-selected"), "首屏自动选中配方");
 
-    const page = document.querySelector(".ns-director");
-    const side = document.querySelector(".ns-director-side");
-    const main = document.querySelector(".ns-director-main");
-    const split = document.querySelector(".ns-director-colsplit");
-    const pref = () => JSON.parse(localStorage.getItem("neo_studio_director_side_col") || "{}");
-    const width = () => page.style.getPropertyValue("--ns-side-w");
-    const mouse = (type, x) => new window.MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX: x, clientY: 0 });
-    const at = (el) => [...page.children].indexOf(el);
-
-    assert.ok(split, "左栏分隔条存在");
-    assert.ok(at(side) < at(split) && at(split) < at(main), "分隔条夹在左栏与编辑器之间");
-    assert.equal(width(), "240px", "构建时回灌配方列表档的存盘宽度");
-
-    // 拖动：宽度写进内联样式并落盘（jsdom 无布局，clientWidth=0 → 钳到下限 200）
-    split.dispatchEvent(mouse("mousedown", 240));
-    assert.ok(page.classList.contains("ns-colsplit-drag"), "拖动中关掉 grid 过渡");
-    window.dispatchEvent(mouse("mousemove", 400));
-    assert.equal(width(), "200px", "拖动写入左栏宽度");
-    window.dispatchEvent(mouse("mouseup", 400));
-    assert.ok(!page.classList.contains("ns-colsplit-drag") && !split.classList.contains("ns-colsplit-drag"), "松手恢复过渡");
-    assert.ok("side" in pref(), "配方列表档宽度落盘");
-    assert.equal(pref().lib, 420, "拖配方列表不该抹掉素材库档的宽度");
-
-    // 键盘微调走同一套收起阈值：jsdom 无布局（左栏 offsetWidth=0），按 → 落进阈值即收起，收起态再按 → 展开
-    const key = (k) => split.dispatchEvent(new window.KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true }));
-    key("ArrowRight");
-    assert.ok(page.classList.contains("ns-side-collapsed"), "键盘微调过收起阈值就收起整栏");
-    assert.equal(width(), "0px", "收起写 0 宽");
-    key("ArrowRight");
-    assert.ok(!page.classList.contains("ns-side-collapsed"), "收起态按 → 展开到下限");
-
-    // 开素材库 → 素材库档宽度；收起 → 回到配方列表档宽度
-    click(document.querySelector(".neo-director-tab"));
-    click(document.querySelector(".neo-director-ff-lib"));
-    await until(() => side.classList.contains("ns-lib-open"), "开素材库");
-    assert.equal(width(), "420px", "素材库用素材库档的存盘宽度");
-    click(document.querySelector(".neo-director-ff-lib"));
-    await until(() => !side.classList.contains("ns-lib-open"), "收起素材库");
-    assert.equal(width(), "240px", "收起回到配方列表档宽度");
-
-    // 拖过收起阈值 = 整栏关掉：宽度写 0、页面挂收起类，宽度偏好留着（拖回来还是这一档的宽）
-    split.dispatchEvent(mouse("mousedown", 240));
-    window.dispatchEvent(mouse("mousemove", 40));
-    assert.ok(page.classList.contains("ns-side-collapsed"), "拖到最窄收起整栏");
-    assert.equal(width(), "0px", "拖动收起写 0 宽");
-    assert.equal(split.getAttribute("aria-expanded"), "false", "分隔条播报收起状态");
-    window.dispatchEvent(mouse("mouseup", 40));
-    assert.equal(pref().side_closed, true, "收起状态落盘");
-    assert.equal(pref().side, 240, "收起不抹掉收起前的宽度");
-
-    // 双击 = 收起 / 展开：从收起态双击展开，回收起前这一档的宽度；再双击收起
-    split.dispatchEvent(mouse("dblclick", 0));
-    assert.ok(!page.classList.contains("ns-side-collapsed"), "收起态双击展开左栏");
-    assert.equal(width(), "240px", "展开回收起前这一档的宽度");
-    assert.equal(pref().side_closed, false, "展开状态落盘");
-    split.dispatchEvent(mouse("dblclick", 0));
-    assert.ok(page.classList.contains("ns-side-collapsed"), "展开态双击收起左栏");
-    assert.equal(width(), "0px", "双击收起写 0 宽");
-    assert.equal(pref().side_closed, true, "双击收起同样落盘");
-    localStorage.removeItem("neo_studio_director_side_col");
+    const box = () => document.querySelector(".ns-libmodal[data-lib-scope='recipes']");
+    const isOpen = () => !!box() && !box().classList.contains("ns-hidden");
+    click(document.querySelector(".ns-director-bar button"));
+    assert.ok(isOpen(), "配方按钮打开配方弹窗");
+    // 列表取数落地那一下：旧实现自动选中会重放 onSelect，而 onSelect 第一句就是关窗 → 一打开就关闭
+    await until(() => document.querySelectorAll(".ns-director-recipes .neo-recipes-card").length >= 2, "配方列表加载完");
+    await sleep(20);
+    assert.ok(isOpen(), "列表加载完弹窗还开着");
+    assert.ok(document.querySelector(".ns-director-recipes .neo-recipes-card-selected"), "当前配方卡保持高亮");
+    click(box().querySelector(".ns-libmodal-close"));
+    assert.ok(!isOpen(), "✕ 关窗");
 });
+
 
 test("Studio 导演页：切配方撞上未保存修改 → 确认条处理完才切过去（选中与分段格子不提前跑）", async () => {
     await import("../../web/studio/studio-app.js");
@@ -519,7 +466,7 @@ test("Studio 导演页：切配方撞上未保存修改 → 确认条处理完�
     assert.equal(cardName(), "R1", "首屏自动选中 R1");
 
     inputText(document.querySelector(".ns-director-editor .neo-director-prompt"), "改过的段一");
-    const r2Card = [...document.querySelectorAll(".ns-director-side .neo-recipes-card")]
+    const r2Card = [...document.querySelectorAll(".ns-director-recipes .neo-recipes-card")]
         .find((c) => c.querySelector(".neo-recipes-card-name span")?.textContent === "R2");
     assert.ok(r2Card, "列表里有第二份导演配方");
     click(r2Card);
@@ -538,7 +485,7 @@ test("Studio 导演页：切配方撞上未保存修改 → 确认条处理完�
     assert.equal(document.querySelector(".ns-gen-spec").textContent, "1344×768 · 8 步", "回显切到 R2 的尺寸/步数");
 
     // 干净切换（编辑器不脏）→ 一次点击直接切过去
-    click([...document.querySelectorAll(".ns-director-side .neo-recipes-card")]
+    click([...document.querySelectorAll(".ns-director-recipes .neo-recipes-card")]
         .find((c) => c.querySelector(".neo-recipes-card-name span")?.textContent === "R1"));
     await until(() => document.querySelectorAll(".ns-gen-seg-chip").length === 2, "切回 R1 两段格子");
     assert.equal(editorName(), "R1", "无未保存修改时直接切换");

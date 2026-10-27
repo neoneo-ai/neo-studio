@@ -207,7 +207,7 @@ Both nodes share the same layout (the Agent shows no status bar):
   dock width minus its 16px padding).
   The composer: on top a context bar (📍 current page · current recipe and segment count ·
   paint mode · gallery directory) that the host refreshes on page switch, recipe selection, paint-mode switch and
-  opening / closing the director page's library drawer. Only the selected tab's own fields are reported and travel in
+  opening / closing the asset-library modal. Only the selected tab's own fields are reported and travel in
   the request body's `context` into the system prompt: a director recipe is reported on the director page only, a paint
   mode on the paint page only, and a gallery directory only while the library is on screen, and `_context_block` in
   `studio/agent.py` gates the same payload on the same page. A directory carrying the 👤 character-directory flag shows

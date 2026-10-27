@@ -80,10 +80,10 @@ the unsaved content of the director editor and the settings forms, and a cross-o
 
 ## Director page layout
 
-The director page is a **360px recipe list** in the left column (director recipes only) plus a right main column
-split into two panes: **top = the director editor**, **bottom = the film generation panel**, with a
-**splitter** between them. A **📋 Recipes / 🖼 Assets** switch bar on top of the left column flips that column
-between the recipe list and the asset library (widened to 380px), so assets are one click away while editing.
+The director page is a **top bar** (**📋 Recipes** / **🖼 Asset library** entries plus the VRAM readout) above a
+full-width main column split into two panes: **top = the director editor**, **bottom = the film generation panel**,
+with a **splitter** between them. The recipe list and the asset library both open in modals
+(`js/core/lib-modal.js`), so the whole width stays with the editor.
 
 - The director editor is embedded in Studio (`setDirectorEditorHost` registers the host): it fills the
   top-right pane with no overlay window, so title-bar dragging / ⛶ maximize / the resize handle do not appear.
@@ -93,7 +93,7 @@ between the recipe list and the asset library (widened to 380px), so assets are 
   footer **Cancel**, the dirty bar's "Save & close", or switching to another recipe (the singleton reload path).
 - **Entering the page opens the editor**: as soon as the recipe list lands, the first director recipe (or the one
   last selected) is selected, and it is opened embedded in the top-right pane — no card click needed.
-  **Clicking a left-column recipe card selects it and opens it embedded** (clicking the same card again only switches
+  **Clicking a recipe card selects it, opens it embedded and closes the recipe modal** (clicking the same card again only switches
   the current segment, so unsaved edits survive). When the editor has unsaved changes the click is blocked by the dirty
   bar and nothing moves — the card highlight, the segment chips and the size echo all stay on the old recipe — and
   "Save & close" / "Discard" on that bar closes the old editor and opens the recipe that was clicked, while
@@ -101,29 +101,28 @@ between the recipe list and the asset library (widened to 380px), so assets are 
   director page and opens it embedded. After **✕** / Cancel closes the editor the top-right pane **takes no space**:
   it collapses to zero, the dashed placeholder no longer blocks the layout, and the generation panel fills the whole
   column (the splitter steps out); clicking a recipe card reopens the editor and returns to the top/bottom split.
-- The **📋 Recipes / 🖼 Assets** switch bar on top of the left column is that column's switch: "🖼 Assets" turns
-  the whole column into the **asset library** (`.ns-director-lib`, the column widens to 380px), "📋 Recipes"
-  turns it back. The **asset library** button inside the director editor drives the same switch (Studio has no
-  ComfyUI left sidebar, so `media-transfer` writes `sidebarTab.activeSidebarTabId` and the shim forwards it to
-  that column), and the switch bar follows the button's open / close. The library is the same Neo Gallery the gallery
-  page uses (one element moved between the two hosts, wide styling), breadcrumbs and directory navigation work
-  there, and cards drag straight into the editor's first-frame / reference slots. The widening is driven by the
-  grid column, so the editor gives way instead of being covered. Leaving the director page closes it automatically.
+- "**📋 Recipes**" in the top bar opens the recipe modal (`.ns-libmodal[data-lib-scope="recipes"]`, director
+  recipes only) and "**🖼 Asset library**" opens the asset modal (`data-lib-scope="assets"`, the same instance the
+  paint page uses). The **🖼 Asset library** button inside the director editor drives the same entry (Studio has no
+  ComfyUI left sidebar, so `media-transfer` writes `sidebarTab.activeSidebarTabId` and the shim forwards it to the
+  modal), and the top-bar button lights while it is open. The library is the same Neo Gallery the gallery
+  page uses (one element moved between the gallery host, the modal host and the standby host, wide styling),
+  breadcrumbs and directory navigation work there, every host you leave behind stays on **the directory you were
+  browsing** (never the home root), and cards drag straight into the editor's first-frame / reference slots.
+  **Clicking a card in the modal fills the slot that was clicked and closes the modal**; multi-select goes
+  through the footer **📥 N selected**, which lays the batch out from the slot the editor announced.
+- Modal geometry: it covers the whole window by default, dragging the title bar turns it into a floating window
+  (its own position and size, shared across pages), and the maximize button, the right-edge resize handle
+  (640px floor), `Esc`, the backdrop and **✕** all work like the other Studio windows. Width, position and the
+  maximized flag live in `localStorage["neo_studio_libmodal_recipes"]` and
+  `localStorage["neo_studio_libmodal_assets"]`. Switching pages closes the modal of the page you left, and the
+  gallery goes back to the standby host.
 - Splitter: drag to resize the generation panel (editor floor 240px, panel floor 90px), double-click to
   collapse / expand the panel, `↑`/`↓` resize and `Enter` collapses from the keyboard. Height and collapsed
   state live in `localStorage["neo_studio_director_split"]`. Dragging the panel taller or shorter stretches the
   result column on the right (live preview / final film) with it, instead of leaving a blank strip under a
-  fixed 640×360 preview box.
-- Left-column divider: a vertical line between the left column and the editor that doubles as a drag handle —
-  drag it to resize the column (recipe-list floor 200px, asset-library floor 320px, editor floor 420px); drag it
-  narrower than 160px and the whole column closes (zero width, content hidden, the main column takes the full
-  width). `←`/`→` nudges, `→` reopens a closed column, and double-click collapses / expands. Each mode keeps its
-  own width and closed flag in `localStorage["neo_studio_director_side_col"]` — closing only writes the flag, so
-  a reopen lands on the width you had before the collapse. The divider disappears in the stacked narrow layout,
-  and the closed state has no effect there (no grab zone to drag). Both splitters share one look: an 18px grab
-  zone with a 1px hairline that thickens to 4px and turns accent blue on hover, keyboard focus and while dragging,
-  plus a three-dot grip dead-centre (the VS Code sash) that stays lit on hover and while the column is closed —
-  that grip is how a closed column gets dragged back out.
+  fixed 640×360 preview box. The grab zone is 18px wide with a 1px hairline that thickens to 4px and turns
+  accent blue on hover, keyboard focus and while dragging, with a three-dot grip dead-centre (the VS Code sash).
 - The generation panel only answers "which segments to run, and what came out" — it carries no parameter
   controls, and its control area is squeezed onto **one line**: **Select all** / **Clear** / the **segment chip
   strip** (one chip per segment, the chip shows only its number) / the check hint / one read-only echo
@@ -144,29 +143,30 @@ between the recipe list and the asset library (widened to 380px), so assets are 
 - The generation status freezes on the first terminal status (succeeded / failed / cancelled): a payload issued
   before the terminal event and landing after it is dropped, so the progress bar and **⏹ Cancel** never come
   back (cancelling a finished task only answers "任务已结束，无法取消").
-- Narrow windows shrink the left column first (340px below 1180px); below 900px the columns stack. The default
-  width is wide enough for the recipe header row ("Recipe ↻ 📦 Import 🎬 New director recipe") to stay on one line.
+- The main column is a single stack, so a narrow window only squeezes the editor / generation column; the
+  recipe and asset modals cover the window with a 640px minimum width.
 
 ## Paint page layout
 
-The paint page is a **left column with the image recipes** (`gen_type = "image"` only) plus a right main column
-holding the **text-to-image** and **image-edit** panels under a mode bar. Only one panel fills the column at a
-time — unlike the director page, no editor and generation panel fight for the same height. The asset-library
-drawer, the left-column divider, the scrollbars and the narrow-window rules are shared with the director page.
+The paint page is a **top bar** (the **text-to-image / image-edit** mode bar plus the **🖼 Asset library** entry
+and the VRAM readout) above one full-width panel. Only one panel fills the page at a time — unlike the director
+page, no editor and generation panel fight for the same height. The asset modal, the scrollbars and the
+narrow-window rules are shared with the director page (one modal instance, one geometry in
+`localStorage["neo_studio_libmodal_assets"]`).
 
-- The paint panels are embedded in Studio (`setPaintHost` registers the hosts): they fill the right column with
+- The paint panels are embedded in Studio (`setPaintHost` registers the hosts): they fill the page with
   no overlay window, so title-bar dragging and the ✕ do not appear. The main canvas (the ComfyUI page) registers
   no host, so "🖼️ Generate asset" and "🖼️ Edit image" stay overlay windows there.
 - "🖼️ Generate asset" in the gallery page header and "🖼️ Edit image" in an image card's menu both switch to the
-  paint page in Studio and open in the matching panel. Clicking an image recipe card switches to text-to-image
-  and prefills that recipe's prompt into the output box; "🖼️ New image recipe" opens a blank text-to-image panel.
-- The chosen mode lives in `localStorage["neo_studio_paint_mode"]`, and the column width is the paint page's own
-  `localStorage["neo_studio_paint_side_col"]` — dragging it never overwrites the director page's width, and the
-  closed state is remembered per page the same way.
-- Asset-library drawers are per page (`libDrawers[view]`, one for the director page and one for the paint page):
-  `media-transfer` writes only reach the current page's drawer, and leaving the page closes it. Leaving the gallery
+  paint page in Studio and open in the matching panel; "🖼️ New image recipe" opens a blank text-to-image panel.
+  The paint page no longer carries an image-recipe list.
+- The chosen mode lives in `localStorage["neo_studio_paint_mode"]`.
+- The gallery in the asset modal is the same element the gallery page and the director page use: a
+  `media-transfer` write only opens the current page's modal, and leaving the page closes it. Leaving the gallery
   page resets `sidebarTab.activeSidebarTabId` — mounting the gallery sets it to `neo.gallery`, and without the
-  reset the page's own asset-library button writes the same id, gets deduped, and never opens the drawer.
+  reset the page's own asset-library button writes the same id, gets deduped, and never opens the modal.
+  **Clicking a card in the modal fills the image-edit source preview and closes the modal**; the footer
+  **📥 N selected** collects a batch and lays it out in one go.
 - The VRAM / RAM bar exists once per generation page (director and paint), and polling only runs on those pages.
 
 ## Skills page layout

@@ -178,7 +178,37 @@ test("Studio 页面：四视图加载、版本信息、导演生成面板", asyn
     }
 });
 
-test("Studio 绘画页：左素材库 + 右模式条，文生图铺满右栏", async (t) => {
+test("Studio 导演页：配方弹窗开着刷新列表不关窗（当前配方只恢复高亮）", async (t) => {
+    if (!guard(t)) return;
+    const page = await browser.newPage();
+    await pinZh(page);
+    try {
+        await page.goto(STUDIO_URL, { waitUntil: "networkidle", timeout: 30000 });
+        await page.evaluate(() => { location.hash = "#/director"; });
+        await page.waitForSelector(".ns-director-bar button:has-text('配方')", { timeout: 15000 });
+        await page.click(".ns-director-bar button:has-text('配方')");
+        await page.waitForSelector('.ns-libmodal[data-lib-scope="recipes"]:not(.ns-hidden)', { timeout: 15000 });
+        // 列表取数落地那一下：旧实现自动选中会重放 onSelect，而 onSelect 第一句就是关窗 → 弹窗一打开就关闭
+        await page.waitForSelector('.ns-libmodal[data-lib-scope="recipes"] .neo-recipes-card', { timeout: 15000 });
+        await page.waitForTimeout(600);
+        const st = await page.evaluate(() => {
+            const m = document.querySelector('.ns-libmodal[data-lib-scope="recipes"]');
+            return {
+                open: !!m && !m.classList.contains("ns-hidden"),
+                hi: document.querySelectorAll(".ns-director-recipes .neo-recipes-card-selected").length,
+            };
+        });
+        assert.ok(st.open, "列表加载完配方弹窗还开着");
+        assert.equal(st.hi, 1, "当前配方卡保持高亮");
+        await page.keyboard.press("Escape");
+        await page.waitForFunction(() => !document.querySelector('.ns-libmodal[data-lib-scope="recipes"]:not(.ns-hidden)'),
+            null, { timeout: 5000 });
+    } finally {
+        await page.close();
+    }
+});
+
+test("Studio 绘画页：顶栏模式条 + 素材库弹窗，文生图铺满整幅", async (t) => {
     if (!guard(t)) return;
     const page = await browser.newPage();
     await pinZh(page);
@@ -186,30 +216,47 @@ test("Studio 绘画页：左素材库 + 右模式条，文生图铺满右栏", a
         await page.goto(STUDIO_URL, { waitUntil: "networkidle", timeout: 30000 });
         await page.evaluate(() => { location.hash = "#/paint"; });
         await page.waitForSelector(".ns-paint .ns-paint-mode-btn", { timeout: 15000 });
-        await page.waitForSelector(".ns-paint .ns-gallery-host .neo-gallery-topbar", { timeout: 15000 });
 
         const layout = await page.evaluate(() => {
             const cs = (s) => getComputedStyle(document.querySelector(s));
             const box = (s) => document.querySelector(s).getBoundingClientRect();
             return {
-                page: cs(".ns-paint").gridTemplateColumns,
                 modes: [...document.querySelectorAll(".ns-paint-mode-btn")].map((b) => b.textContent),
+                page: box(".ns-paint"),
                 main: box(".ns-paint-main"),
                 panel: box(".ns-paint-text"),
                 editHidden: cs(".ns-paint-edit").display,
-                lib: !!document.querySelector(".ns-paint .ns-gallery-host .neo-gallery-topbar"),
+                sideCol: !!document.querySelector(".ns-paint-side"),
                 recipes: !!document.querySelector(".ns-paint-recipes"),
-                split: !!document.querySelector(".ns-paint-side + .ns-director-colsplit"),
+                libInPage: !!document.querySelector(".ns-paint .ns-gallery-host"),
+                libBtn: [...document.querySelectorAll(".ns-paint-bar button")].some((b) => b.textContent.includes("素材库")),
             };
         });
-        assert.match(layout.page, /^380px /, "绘画页应为左素材库 + 右主栏两列");
         assert.deepEqual(layout.modes, ["文生图", "图片编辑"], "模式条两枚按钮");
         assert.equal(layout.editHidden, "none", "默认图片编辑收起（一次只铺满一块）");
-        assert.ok(Math.abs(layout.panel.width - layout.main.width) <= 1, "文生图铺满右栏宽度");
-        assert.ok(layout.panel.height > layout.main.height * 0.8, "文生图铺满右栏高度");
-        assert.ok(layout.lib, "左栏素材库就位（与素材页同一个画廊）");
+        assert.ok(Math.abs(layout.panel.width - layout.main.width) <= 1, "文生图铺满整幅宽度");
+        assert.ok(layout.panel.height > layout.main.height * 0.8, "文生图铺满整幅高度");
+        assert.ok(!layout.sideCol, "绘画页不再有常驻左栏");
+        assert.ok(!layout.libInPage, "素材库不常驻在页里（顶栏按钮开弹窗）");
+        assert.ok(layout.libBtn, "顶栏有素材库入口");
         assert.ok(!layout.recipes, "绘画页不再有图片配方列表");
-        assert.ok(layout.split, "左栏与右栏之间有分隔条");
+
+        // 开弹窗 = 同一个画廊挂进弹窗宿主；点卡片填进图片编辑预览后关弹窗
+        await page.click(".ns-paint-bar button:has-text('素材库')");
+        await page.waitForSelector(".ns-libmodal:not(.ns-hidden) .ns-gallery-host .neo-gallery-topbar", { timeout: 15000 });
+        const inModal = await page.evaluate(() => {
+            const modal = document.querySelector(".ns-libmodal:not(.ns-hidden)");
+            return {
+                inHost: !!modal.querySelector(".ns-gallery-host .neo-gallery-panel"),
+                pick: !!modal.querySelector(".ns-libmodal-pick"),
+            };
+        });
+        assert.ok(inModal.inHost, "画廊挂进素材库弹窗宿主");
+        assert.ok(inModal.pick, "弹窗底部有多选收集条");
+        await page.click(".ns-libmodal-close");
+        await page.waitForFunction(() => !document.querySelector(".ns-libmodal:not(.ns-hidden)"), null, { timeout: 5000 });
+        assert.equal(await page.evaluate(() => document.querySelectorAll(".ns-paint .ns-gallery-host").length), 0,
+            "关弹窗后绘画页不养画廊");
 
         // 进页即就绪：文生图可直接写提示词，图片编辑铺着空面板等拖图（都不必先点入口）
         const eager = await page.evaluate(() => {
@@ -225,7 +272,7 @@ test("Studio 绘画页：左素材库 + 右模式条，文生图铺满右栏", a
         assert.ok(eager.textPanel, "进页就铺好文生图面板：不必先点「生成素材」");
         assert.ok(eager.textBtns.includes("生成") && !eager.textBtns.includes("取消"), "页内面板只有「生成」，没有「取消」");
         assert.ok(eager.editPanel, "进页就铺好图片编辑面板：不必先进图片卡菜单");
-        assert.ok(eager.editEmpty, "无原图时预览区是拖放落点（从左栏拖图进来即可）");
+        assert.ok(eager.editEmpty, "无原图时预览区是拖放落点（从素材库弹窗拖图进来即可）");
         assert.equal(eager.overlays, 0, "页内面板不建浮层遮罩");
 
         // 切到图片编辑：编辑铺满、文生图收起，偏好落盘
@@ -242,37 +289,32 @@ test("Studio 绘画页：左素材库 + 右模式条，文生图铺满右栏", a
         assert.equal(after.mode, "edit", "模式偏好落盘");
         assert.equal(after.textHidden, "none", "文生图收起");
         assert.ok(after.on.includes("图片编辑"), "模式条高亮切到的一边");
-        assert.ok(Math.abs(after.w - after.main) <= 1, "图片编辑同样铺满右栏");
+        assert.ok(Math.abs(after.w - after.main) <= 1, "图片编辑同样铺满整幅");
 
-        // 拖到最窄 = 收起左栏：素材库不占宽，右栏吃满，分隔条上的三点抓手还在（靠它拖回来）
-        const sp = await page.locator(".ns-paint-side + .ns-director-colsplit").boundingBox();
-        await page.mouse.move(sp.x + 9, sp.y + 80);
+        // 弹窗默认铺满 → 最大化落盘 → 拖标题栏转浮窗 → Esc 关闭
+        await page.click(".ns-paint-bar button:has-text('素材库')");
+        await page.waitForSelector('.ns-libmodal[data-lib-scope="assets"]:not(.ns-hidden)', { timeout: 5000 });
+        const geo = await page.evaluate(() => JSON.parse(localStorage.getItem("neo_studio_libmodal_assets") || "{}"));
+        assert.equal(geo.max, false, "首次打开记为非最大化");
+        await page.click(".ns-libmodal-max");
+        await page.waitForFunction(() => document.querySelector(".ns-libmodal").classList.contains("ns-libmodal-maximized"),
+            null, { timeout: 5000 });
+        const tb = await page.locator(".ns-libmodal-titlebar").boundingBox();
+        await page.mouse.move(tb.x + 60, tb.y + 12);
         await page.mouse.down();
-        await page.mouse.move(sp.x - 300, sp.y + 80, { steps: 10 });
+        await page.mouse.move(tb.x + 180, tb.y + 90, { steps: 8 });
         await page.mouse.up();
-        // grid 列宽有 .16s 过渡，等它落到收起那一格再量
-        await page.waitForFunction(() => document.querySelector(".ns-paint").classList.contains("ns-side-collapsed")
-            && document.querySelector(".ns-paint-main").getBoundingClientRect().width > 700, null, { timeout: 5000 });
-        const closed = await page.evaluate(() => ({
-            side: document.querySelector(".ns-paint-side").getBoundingClientRect().width,
-            main: document.querySelector(".ns-paint-main").getBoundingClientRect().width,
-            grip: getComputedStyle(document.querySelector(".ns-paint-side + .ns-director-colsplit"), "::before").opacity,
+        const moved = await page.evaluate(() => ({
+            geo: JSON.parse(localStorage.getItem("neo_studio_libmodal_assets") || "{}"),
+            floated: document.querySelector(".ns-libmodal").classList.contains("ns-libmodal-floated"),
         }));
-        assert.equal(closed.side, 0, "收起后左栏不占宽");
-        assert.ok(closed.main > 700, "收起后右栏吃满整幅");
-        assert.equal(closed.grip, "1", "收起后分隔条上的三点抓手常驻");
-
-        // 双击展开：左栏回到存下来的宽度
-        await page.dblclick(".ns-paint-side + .ns-director-colsplit");
-        await page.waitForFunction(() => !document.querySelector(".ns-paint").classList.contains("ns-side-collapsed")
-            && document.querySelector(".ns-paint-side").getBoundingClientRect().width >= 340, null, { timeout: 5000 });
-        const back = await page.evaluate(() => ({
-            side: document.querySelector(".ns-paint-side").getBoundingClientRect().width,
-            pref: JSON.parse(localStorage.getItem("neo_studio_paint_side_col") || "{}"),
-        }));
-        assert.ok(back.side >= 340, `展开回到左栏宽度（${back.side}）`);
-        assert.equal(back.pref.side_closed, false, "展开状态落盘");
-        await page.evaluate(() => localStorage.removeItem("neo_studio_paint_side_col"));
+        assert.ok(moved.floated, "拖过标题栏后变浮窗");
+        assert.ok(moved.geo.x > geo.x, `拖标题栏挪窗后 left 应离开 0：${JSON.stringify(moved.geo)}`);
+        assert.equal(moved.geo.max, true, "最大化状态落盘");
+        await page.keyboard.press("Escape");
+        await page.waitForFunction(() => !document.querySelector('.ns-libmodal[data-lib-scope="assets"]:not(.ns-hidden)'),
+            null, { timeout: 5000 });
+        await page.evaluate(() => localStorage.removeItem("neo_studio_libmodal_assets"));
     } finally {
         await page.close();
     }
@@ -304,29 +346,31 @@ test("Studio 绘画页：素材页「生成素材」→ 绘画页 → 回素材�
             overlays: document.querySelectorAll(".neo-gallery-story-modal-overlay").length,
             titlebar: getComputedStyle(document.querySelector(".ns-paint-text .neo-gallery-story-titlebar")).display,
             btns: [...document.querySelectorAll(".ns-paint-text .neo-gallery-story-btn")].map((b) => b.textContent.trim()),
-            lib: !!document.querySelector(".ns-paint .ns-gallery-host .neo-gallery-topbar"),
+            modeBar: !!document.querySelector(".ns-paint .ns-paint-mode-btn"),
             prompt: document.querySelector(".ns-paint-text .neo-gallery-gen-panel textarea")?.value,
         }));
         assert.equal(state.panels, 1, "宿主里只有一块文生图面板");
         assert.equal(state.overlays, 0, "页内面板不建浮层遮罩");
         assert.equal(state.titlebar, "none", "页内面板收起标题栏（标题由上方模式条承担）");
         assert.ok(state.btns.includes("生成") && !state.btns.includes("取消"), "页内面板只有「生成」，没有「取消」");
-        assert.ok(state.lib, "离开再回绘画页，左栏素材库仍在");
+        assert.ok(state.modeBar, "离开再回绘画页，模式条与面板照旧");
     } finally {
         await page.close();
     }
 });
 
-test("Studio 绘画页：左栏素材库「生成素材」面板留在本页", async (t) => {
+test("Studio 绘画页：素材库弹窗里「生成素材」面板留在本页", async (t) => {
     if (!guard(t)) return;
     const page = await browser.newPage();
     await pinZh(page);
     try {
         await page.goto(STUDIO_URL, { waitUntil: "networkidle", timeout: 30000 });
         await page.evaluate(() => { location.hash = "#/paint"; });
-        await page.waitForSelector(".ns-paint .ns-gallery-host .neo-gallery-gm-btn", { timeout: 15000 });
+        await page.waitForSelector(".ns-paint .ns-paint-mode-btn", { timeout: 15000 });
+        await page.click(".ns-paint-bar button:has-text('素材库')");
+        await page.waitForSelector(".ns-libmodal:not(.ns-hidden) .neo-gallery-gm-btn", { timeout: 15000 });
 
-        await page.click(".ns-paint .ns-gallery-host .neo-gallery-gm-btn");
+        await page.click(".ns-libmodal:not(.ns-hidden) .neo-gallery-gm-btn");
         await page.waitForSelector(".ns-paint:not(.ns-hidden) .ns-paint-text .neo-gallery-gen-panel", { timeout: 15000 });
         const state = await page.evaluate(() => ({
             hash: location.hash,
@@ -337,11 +381,13 @@ test("Studio 绘画页：左栏素材库「生成素材」面板留在本页", a
             gen: [...document.querySelectorAll(".ns-paint-text .neo-gallery-story-btn")]
                 .map((b) => b.textContent.trim()).includes("生成"),
         }));
-        assert.equal(state.hash, "#/paint", "左栏入口不跳页：本页解决");
+        assert.equal(state.hash, "#/paint", "弹窗入口不跳页：本页解决");
         assert.equal(state.overlays, 0, "不建浮层遮罩");
         assert.equal(state.panels, 1, "只有一块内嵌面板");
         assert.ok(Math.abs(state.panel.height - state.host.height) <= 2, "面板铺满宿主，不留空白");
         assert.ok(state.gen, "idle 有「生成」");
+        assert.ok(await page.evaluate(() => !document.querySelector('.ns-libmodal[data-lib-scope="assets"]:not(.ns-hidden)')),
+            "进绘画页时素材库弹窗关掉");
     } finally {
         await page.close();
     }
@@ -376,7 +422,7 @@ test("Studio 绘画页：图片编辑面板进页就绪，拖放落点与「生�
             const main = box(".ns-paint-main");
             const stage = box(".ns-paint-edit .neo-gallery-edit-compare-stage");
             const empty = box(".ns-paint-edit .neo-gallery-edit-empty");
-            // 显存条整块被右栏拉成整行，居中要看里面那几枚读数的跨度
+            // 显存条整块被顶栏拉成整行，居中要看里面那几枚读数的跨度
             const memParts = [...document.querySelectorAll(".ns-paint-main .ns-mem > *")].map((e) => e.getBoundingClientRect());
             const memOffCenter = memParts.length
                 ? Math.abs((Math.min(...memParts.map((b) => b.left)) + Math.max(...memParts.map((b) => b.right))) / 2 - (main.left + main.right) / 2)
@@ -411,7 +457,7 @@ test("Studio 绘画页：图片编辑面板进页就绪，拖放落点与「生�
         assert.equal(geo.on.border, "rgb(74, 77, 85)", "选中页签出边框 #4a4d55");
         assert.equal(geo.off.bg, "rgba(0, 0, 0, 0)", "未选中页签无底");
         assert.equal(geo.off.border, "rgba(0, 0, 0, 0)", "未选中页签无边框");
-        assert.ok(geo.barOffCenter <= 2, "模式条在右栏里居中");
+        assert.ok(geo.barOffCenter <= 2, "模式条在顶栏里居中");
         assert.ok(geo.barTopGap >= 10, "模式条不贴窗口顶边");
         assert.ok(geo.memOffCenter <= 2, `显存条与模式条同轴居中（偏 ${geo.memOffCenter.toFixed(1)}px）`);
         // 拖入框铺满预览区，并随窗口伸缩

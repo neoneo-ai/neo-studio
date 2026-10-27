@@ -1,6 +1,6 @@
-// Studio 页里的画廊宿主：素材页进入目录 → 导演页素材库抽屉 → 反复开合，目录必须一路跟着走。
-// 开合一次落首页、再开一次落目录这种交替，就是宿主记录只在摘走时写造成的（抽屉里刚浏览的
-// 目录要等下次才生效）。这里用真实 studio-app.js 的切页与抽屉开合驱动，画廊也是真模块。
+// Studio 页里的画廊宿主：素材页进入目录 → 导演页素材库弹窗 → 反复开合，目录必须一路跟着走。
+// 开合一次落首页、再开一次落目录这种交替，就是宿主记录只在摘走时写造成的（弹窗里刚浏览的
+// 目录要等下次才生效）。这里用真实 studio-app.js 的切页与弹窗开合驱动，画廊也是真模块。
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mockRoute, jsonResponse, sleep, click, flush, missingRoutes } from "./setup.mjs";
@@ -80,10 +80,11 @@ const homeCard = (name) => [...document.querySelectorAll(".neo-gallery-category-
 const atOutput = () => assert.ok(galleryState().crumb.includes("Output"), `应停在 Output：${galleryState().crumb}`);
 
 let gallery;
-const sideTab = (label) => [...document.querySelectorAll(".ns-side-tabs .ns-side-tab")]
+const barBtn = (label) => [...document.querySelectorAll(".ns-director-bar button")]
     .find((b) => b.textContent.includes(label));
+const libModal = () => document.querySelector(".ns-libmodal:not(.ns-hidden)");
 
-test("素材页进入目录 → 导演页素材库抽屉：目录跟着进抽屉，反复开合不落首页", async () => {
+test("素材页进入目录 → 导演页素材库弹窗：目录跟着进弹窗，反复开合不落首页", async () => {
     document.body.innerHTML = `<div class="ns-header"><nav class="ns-tabs"><a href="#/gallery" data-tab="gallery">素材</a><a href="#/director" data-tab="director">导演</a><a href="#/skills" data-tab="skills">技能</a></nav></div><div id="ns-view"></div>`;
     await import("../../web/gallery.js");
     // 跑 gallery 扩展的 setup：真 NeoGallery 实例与真 tab 定义都在里面，交给替身侧栏
@@ -99,28 +100,29 @@ test("素材页进入目录 → 导演页素材库抽屉：目录跟着进抽屉
     await until(() => galleryState().dir, "进入 Output 目录");
     assert.ok(galleryState().crumb.includes("Output"), `面包屑应指向 Output：${galleryState().crumb}`);
 
-    // 切到导演页开抽屉：抽屉里就是刚浏览的那个目录，不是首页
+    // 切到导演页开弹窗：弹窗里就是刚浏览的那个目录，不是首页
     location.hash = "#/director";
-    await until(() => sideTab("素材"), "导演页素材库入口");
-    click(sideTab("素材"));
-    await until(() => galleryState().host === "director", "画廊挂进导演页抽屉");
-    assert.equal(galleryState().dir, true, "开抽屉应停在刚浏览的目录");
-    assert.equal(galleryState().home, false, "开抽屉不落首页");
+    await until(() => barBtn("素材库"), "导演页素材库入口");
+    click(barBtn("素材库"));
+    await until(() => galleryState().host === "director", "画廊挂进素材库弹窗");
+    assert.equal(galleryState().dir, true, "开弹窗应停在刚浏览的目录");
+    assert.equal(galleryState().home, false, "开弹窗不落首页");
     atOutput();
 
-    // 关抽屉再开：还是那个目录（旧实现这里一次首页、一次目录）
-    click(sideTab("配方"));
+    // 关弹窗再开：还是那个目录（旧实现这里一次首页、一次目录）
+    click(libModal().querySelector(".ns-libmodal-close"));
     await flush(3);
-    click(sideTab("素材"));
+    click(barBtn("素材库"));
     await flush(3);
     assert.equal(galleryState().host, "director");
-    assert.equal(galleryState().dir, true, "重开抽屉仍是目录");
+    assert.equal(galleryState().dir, true, "重开弹窗仍是目录");
     atOutput();
 
-    // 同一 tab 连点：不重挂、不刷新视图
-    click(sideTab("素材"));
+    // 弹窗开着时连点同一按钮：不重挂、不刷新视图
+    click(barBtn("素材库"));
     await flush(3);
-    assert.equal(galleryState().dir, true, "重复点同一 tab 不落首页");
+    assert.ok(libModal(), "连点同一按钮弹窗保持打开");
+    assert.equal(galleryState().dir, true, "重复点同一按钮不落首页");
     atOutput();
 
     // 回素材页，在目录里连点顶栏「素材」tab：锚点不能交给浏览器导航
@@ -140,7 +142,7 @@ test("素材页进入目录 → 导演页素材库抽屉：目录跟着进抽屉
 
     // 切导演页再切回：路由接管后 URL 参数原样保留，画廊仍停在目录
     click(document.querySelector('a[data-tab="director"]'));
-    await until(() => sideTab("素材"), "导演页");
+    await until(() => barBtn("素材库"), "导演页");
     assert.equal(location.hash, "#/director");
     assert.match(location.search, /gallery=/, "切页不该清掉 gallery 参数");
     click(navTab);

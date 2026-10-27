@@ -146,8 +146,8 @@ Execution details: [h3-video-gen.md](h3-video-gen.md).
 
 - **Section visibility**:
   - First-frame area (`f2v`): a single-select thumbnail grid; pick a LoadImage wired on the canvas, or drag
-    from the asset panel on the left (in desktop Studio: the asset library the director page's left column
-    switches to); clicking the selected image again clears it.
+    from the asset panel on the left (in desktop Studio: the asset-library modal opened from the top bar);
+    clicking the selected image again clears it.
   - Last-frame area (`f2v`): an identical independent grid; under `fl2v` the first- and last-frame areas sit
     side by side in one row.
   - Reference media area (`r2v`): three used-lists (reference images ≤9 / reference videos ≤3 / reference
@@ -168,7 +168,7 @@ Execution details: [h3-video-gen.md](h3-video-gen.md).
   double-clicking the title bar restores. When the window is tall, the story topic / script input area and the
   current segment's prompt area fill the available height.
 - **Embedded in desktop Studio**: the Studio director page lays the editor out directly inside the top-right
-  pane (the recipe list stays in the left column, the generation panel below), with no overlay window — no
+  pane (the recipe list opens from the top bar's **📋 Recipes** modal, the generation panel below), with no overlay window — no
   title-bar dragging, no **⛶** maximize, no resize handle; close with the title-bar **✕**. The footer gains
   **🎬 Save & Generate Film**: it runs the full save path and, on success, submits the film with the parameters
   just saved into the recipe plus the segments checked in the generation panel. An embedded save leaves the

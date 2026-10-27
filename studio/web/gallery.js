@@ -113,7 +113,7 @@ export class NeoGallery {
         this._navPos = -1;
         this._navRestoring = false;
 
-        // 各宿主的素材目录（scope → 视图快照）：导演抽屉 / 绘画页左栏 / 素材页共用同一个
+        // 各宿主的素材目录（scope → 视图快照）：导演弹窗 / 绘画页弹窗 / 画廊页共用同一个
         // gallery.element，摘走时记下、挂上时恢复（rememberView / applyView），互不覆盖
         this._libViews = {};
 
@@ -446,7 +446,7 @@ export class NeoGallery {
         this._navPos = this._navStack.length - 1;
         this._updateNavButtons();
         // 视图一变就记在当前宿主名下。等摘走时才写的话，切走那一下套用的是目标宿主的上一次
-        // 记录：抽屉里刚浏览的目录要等下次才生效，开合素材库就变成一次首页、一次目录。
+        // 记录：弹窗里刚浏览的目录要等下次才生效，开合素材库就变成一次首页、一次目录。
         this.rememberView(this.element.parentNode);
         this.savePluginData({ currentView: this.currentView, libViews: this._libViews });
     }
@@ -476,7 +476,7 @@ export class NeoGallery {
     }
 
     // 每个宿主各记自己停在哪个目录，挂上时恢复它记的那个（applyView）。
-    // 三个宿主共用一个 currentView 的话，在导演抽屉里翻进二级目录，绘画页左栏会跟着跳过去。
+    // 三个宿主共用一个 currentView 的话，在导演弹窗里翻进二级目录，绘画页弹窗会跟着跳过去。
     // 写入点在 _recordNavState：视图一变就记，切走那一下套用的才是目标宿主自己的目录。
     // 宿主靠 data-lib-scope 认身份；没收标记的（收留宿主、ComfyUI 侧栏）不进这张表。
     rememberView(hostEl) {
@@ -520,9 +520,9 @@ export class NeoGallery {
         this.startScrollListener();
     }
 
-    // 重挂载（切页、开合素材库抽屉）不是导航：画离开时那个视图。
+    // 重挂载（切页、开合素材库弹窗）不是导航：画离开时那个视图。
     // 侧栏 tab 的 render 旧代码在这里固定画首页，用户从二级目录切走再切回就被拽回首页。
-    // _navRestoring 挡住 showDirectoryStructure 的 pushState，免得每次开关抽屉
+    // _navRestoring 挡住 showDirectoryStructure 的 pushState，免得每次开关弹窗
     // 都在浏览器历史里堆一条同视图记录（后退键要点好几次才离开素材库）。
     async renderCurrentView() {
         const view = this.currentView;
@@ -1346,6 +1346,8 @@ export class NeoGallery {
     _updateSelectionBar() {
         if (this._selectionBar) { this._selectionBar.remove(); this._selectionBar = null; }
         const count = this._selectedItems.size;
+        // 宿主订阅点多选变化：Studio 素材库弹窗据此开合底部取用条；无订阅者零开销
+        if (typeof this.onSelectionChange === "function") this.onSelectionChange(count);
         if (count === 0) return;
         const charDir = this.isCharacterDir();
         const bar = $el("div", { className: "neo-gallery-selection-bar" }, [

@@ -162,7 +162,7 @@ LLM 模式与本地安装见 [llm.md](llm.md)。
   （主按钮还带同名悬停说明），按钮整排可换行，右下角主按钮不会被栏子的 `overflow: hidden` 裁掉
   （`studio/web/agent-panel.css` 的 `@container (max-width: 334px)`，量的是 composer 内宽 = 栏宽 − 16px 内缩）。
   输入区里：顶上一条上下文条（📍 当前页 · 当前配方与段数 · 绘画模式 · 素材库目录），宿主在切页 /
-  选配方 / 切绘画模式 / 开合导演页素材库抽屉时刷新它，交来的只有当前选中页签自己那一栏：配方只在导演页报、
+  选配方 / 切绘画模式 / 开合素材库弹窗时刷新它，交来的只有当前选中页签自己那一栏：配方只在导演页报、
   模式只在绘画页报、素材库目录只在这三页上屏时报（`studio/agent.py` 的 `_context_block` 对同一份 payload 按同一页界收），
   目录带 👤 角色图标记时条上写「目录名（角色图）」、请求体的 `context` 带 `character_dir: true`（标记由画廊
   `isCharacterDir(视图)` 判，宿主交来的是自己那份视图），
@@ -220,7 +220,7 @@ LLM 模式与本地安装见 [llm.md](llm.md)。
   右栏也能走这条链：`director_plan`（拆分，写 `story`）→ `director_save` → `director_keyframes`（关键帧落进配方
   `assets/`）→ 把返回的 `segments` / `shared` / `story` 原样喂回 `director_save`（记 `storyboard` 与非全参考段的
   首帧）→ `segment_run` / `director_run`；与 📖 页同一套后端，见 [mcp.md](mcp.md)。
-  执行模式里 `director_save` / `director_copy` 一保存成功，右栏就广播导演编辑器那条同一份的保存事件：导演页左栏的
+  执行模式里 `director_save` / `director_copy` 一保存成功，右栏就广播导演编辑器那条同一份的保存事件：导演页配方弹窗的
   配方列表当场刷到这份新配方并选中它，点开即进编辑器改分段与参数，整片与单段从同一份配方复用；计划模式这两个工具
   不进工具表。
   最终回答末尾的「下一步选项」编号列表铺成一排整行可点的方向（标题只认一行的短标题：「下一步 / 接下来 / 后续」

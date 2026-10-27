@@ -218,7 +218,7 @@ Neo Studio 独立页面（`web/studio/index.html`）的后端。素材 / 生图 
   `{kind:"video", url}` 的 `/view` 地址（单段与拼接的快照只给文件名，子目录按生成模块的产物目录补）。右栏的产物
   缩略图与产物链接只认这一份列表。
 - `director_save` / `director_copy` 的结果 JSON 带 `name`：右栏认出来就广播导演编辑器那条保存事件
-  （窗口事件 `neo-director-recipe-saved`，`{name, created:true}`），导演页左栏的配方列表随之刷新并选中这份新配方，
+  （窗口事件 `neo-director-recipe-saved`，`{name, created:true}`），导演页配方弹窗随之刷新并选中这份新配方，
   点开即进编辑器改分段与参数；重放旧会话的那一路不广播，读一次历史不改动界面。
 - 工具回指的 ComfyUI 取本次请求自己的来源，请求体里没有地址可注入。
 - 一次运行落一个会话文件在数据根的 `agent_sessions/`（`<创建时间>-<run_id>.json`，原子写；最多 100 条、

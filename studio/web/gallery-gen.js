@@ -1052,7 +1052,7 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
     if (reusePaintPanel(host, "edit", image, subfolder)) return;
     const panel = storyPanelRoot(host, "neo-gallery-edit-modal-overlay", "edit");
     const overlay = panel.root;
-    // 原图可以后补：绘画页进页铺的就是空面板，从左栏把素材拖进预览区即成原图
+    // 原图可以后补：绘画页进页铺的就是空面板，把素材拖进预览区即成原图
     let source = image ? { filename: image.filename || image.name, subfolder: subfolder || "" } : null;
     const pathLabel = () => (source.subfolder ? `${source.subfolder}/` : "") + source.filename;
     const origUrl = () => `/neo_gallery/image?filename=${encodeURIComponent(source.filename)}&subfolder=${encodeURIComponent(source.subfolder)}`;
@@ -1133,7 +1133,7 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
     };
 
     const renderIdle = () => {
-        const hint = !source ? t("把左栏素材拖进预览区当原图，再写编辑指令")
+        const hint = !source ? t("把素材拖进预览区当原图，再写编辑指令")
             : panel.embedded ? t("写编辑指令、拖素材进预览区换原图，生成结果与原图左右对比")
             : t("填写编辑指令后点「生成」，原图将作为参考图传入所选技能。");
         fill(statusBox, $el("div", { className: "neo-gallery-story-hint", textContent: hint }));
@@ -1188,7 +1188,7 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
 
     const start = async () => {
         if (running) return;
-        if (!source && !refName) { renderError(t("先把左栏素材拖进预览区当原图")); return; }
+        if (!source && !refName) { renderError(t("先把素材拖进预览区当原图")); return; }
         if (editMode === "local" && !painted) { renderError(t("请先涂抹要编辑的区域")); return; }
         if (editMode === "remove" && !removePoints.length) { renderError(t("请先点击原图标记要删除的物体")); return; }
         restoreOrigImage();   // 上一轮换过的缩放图先还原，避免扩图/局部的基准尺寸跟着变
@@ -1375,8 +1375,8 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
     const resultClip = $el("div", { className: "neo-gallery-edit-result-clip", style: { display: "none" } }, [resultImg]);
     const divider = $el("div", { className: "neo-gallery-edit-divider", style: { display: "none" } });
     imgWrap.append(origImg, resultClip, divider);
-    // 空面板进页就在位：预览区即拖放落点，从左栏素材库拖一张进来当原图
-    const emptyDrop = source ? null : $el("div", { className: "neo-gallery-edit-empty", textContent: t("把左栏素材拖到这里当原图") });
+    // 空面板进页就在位：预览区即拖放落点，从素材库拖一张进来当原图
+    const emptyDrop = source ? null : $el("div", { className: "neo-gallery-edit-empty", textContent: t("把素材拖到这里当原图") });
     if (emptyDrop) {
         origImg.style.display = "none";
         imgWrap.classList.add("neo-gallery-edit-empty-stage");
@@ -2772,7 +2772,7 @@ export function openGenMaterialDialog(gallery, opts = null) {
 
     const renderIdle = () => {
         // 页内面板没有「取消」可点（收起面板 = 切到另一个模式），说明也走短句
-        fill(statusBox, $el("div", { className: "neo-gallery-story-hint", textContent: panel.embedded ? t("描述写在下方输入框，生成后存进 Output/NeoAgent/<日期>，左栏素材库直接可见") : t("填写素材描述后点「生成」，图片保存到 Output 目录（NeoAgent/<日期>），可在素材面板浏览。") }));
+        fill(statusBox, $el("div", { className: "neo-gallery-story-hint", textContent: panel.embedded ? t("描述写在下方输入框，生成后存进 Output/NeoAgent/<日期>，素材库直接可见") : t("填写素材描述后点「生成」，图片保存到 Output 目录（NeoAgent/<日期>），可在素材面板浏览。") }));
         fill(actionsBox, panel.embedded ? null : btn(t("取消"), close), btn(t("生成"), start, true));
     };
 
