@@ -360,8 +360,9 @@ test("图片编辑弹窗：局部开关切到局部技能、涂抹画布出现�
         Object.defineProperty(origImg, key, { value, configurable: true });
     }
 
-    const localBtn = overlay.querySelector(".neo-gallery-edit-outpaint-btn:nth-of-type(2)");
-    assert.ok(localBtn && localBtn.textContent.includes("局部"), "应有「局部」按钮");
+    const localBtn = [...overlay.querySelectorAll(".neo-gallery-edit-outpaint-btn")].find((b) => b.title.includes("局部"));
+    assert.ok(localBtn, "应有「局部」图标开关（模式名在 title 里）");
+
     click(localBtn);
     await sleep(10);
 
@@ -436,8 +437,9 @@ test("图片编辑弹窗：点选删除——点击后 SAM3 分割出遮罩预�
 
     // 开点选删除：控制行出现、宽高输入隐藏、透明点击层出现，技能保持 Qwen Image 2.1
     const removeBtn = [...overlay.querySelectorAll(".neo-gallery-edit-outpaint-btn")]
-        .find((b) => b.textContent.includes("点选删除"));
-    assert.ok(removeBtn, "应有「点选删除」按钮");
+        .find((b) => b.title.includes("点选删除"));
+    assert.ok(removeBtn, "应有「点选删除」图标开关");
+
     click(removeBtn);
     await sleep(30);   // 含 copy_to_input 请求
     const skillSel = overlay.querySelector(".neo-gallery-story-form-row select");
@@ -579,8 +581,9 @@ test("图片编辑弹窗：姿势开关切到姿势编辑技能并预填默认�
     const overlay = document.querySelector(".neo-gallery-edit-modal-overlay");
     await sleep(20);
 
-    const poseBtn = [...overlay.querySelectorAll(".neo-gallery-edit-outpaint-btn")].find((b) => b.textContent.includes("姿势"));
-    assert.ok(poseBtn, "应有「姿势」开关");
+    const poseBtn = [...overlay.querySelectorAll(".neo-gallery-edit-outpaint-btn")].find((b) => b.title.includes("姿势编辑"));
+    assert.ok(poseBtn, "应有「姿势」图标开关");
+
     click(poseBtn);
     await sleep(10);
 

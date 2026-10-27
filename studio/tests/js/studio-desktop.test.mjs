@@ -163,7 +163,8 @@ test("无边框窗口控件：默认隐藏，最小化 / 最大化 / 全屏 / �
     assert.ok(wctl, "顶栏应有窗口控件组，且默认隐藏（系统标题栏在时不需要）");
     for (const id of ["ns-win-min", "ns-win-max", "ns-win-fs", "ns-win-close"])
         assert.ok(wctl[1].includes(`id="${id}"`), `应有 ${id} 按钮`);
-    assert.match(wctl[1], /全屏/, "除最小化 / 最大化 / 关闭外还要有全屏按钮");
+    const faces = [...wctl[1].matchAll(/<button[^>]*>([^<]*)/g)].map((m) => m[1].trim());
+    assert.ok(faces.length === 4 && faces.every((f) => !f), "钮面只有图标不带字形（字形在 WebView2 里会掉色成 emoji）");
     assert.match(css, /\.ns-frameless \.ns-header \{[^}]*cursor: move/, "无边框时顶栏空白处可拖窗");
     assert.ok(!/\.ns-version\b/.test(css), "版本位不在顶栏样式里");
 });

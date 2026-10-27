@@ -70,16 +70,26 @@ background overlay, title bar drags the window) that creates new assets from a p
 
 #### Skill & parameters
 
-- **Skill** - Krea2 text-to-image by default; other pure text-to-image skills can be selected and the last
-  choice is remembered.
-- **Ad-hoc parameters** - temporarily pick the main model / LoRA / aspect ratio / longest side (like wiring a
-  model onto a node; nothing is written back to the global settings). A combination you like can be saved as a
-  new skill in one click: the name is generated from the main model name + LoRA name, the ratio and longest
-  side are stored as chosen, and every other setting follows the current skill.
+- **Skill / ratio / max-side chips** - one chip row above the input: the skill (Krea2 text-to-image by
+  default, other text-taking skills selectable, last choice remembered), the aspect ratio and the longest
+  side, all rounded native dropdowns. Empty = follow the skill config and the global image-gen settings;
+  picking a value overrides it for this run only.
+- **Ad-hoc parameters** - the collapse row at the end of the chip row: expand it to pick the main model /
+  LoRA for this run (like wiring a model onto a node; nothing is written back to the global settings).
+  A combination you like can be saved as a new skill in one click: the name is generated from the main
+  model name + LoRA name, the ratio and longest side are stored as chosen in the chips, and every other
+  setting follows the current skill.
+- **⋯ More** - one `⋯` menu at the bottom-right of the output box holds the three tools: fill in a random
+  prompt / runtime random prompts (batch count) / preset list. The `⋯` stays highlighted while runtime
+  random is on, and the switch and count persist in localStorage. Esc closes this menu first, then the
+  preset overlay.
 
 #### Enhancement & history
 
+- **Collapsing output box** - the output box is one line while it is empty (the main path is a single
+  description field): focus, typing, ↑/↓ recall, or an enhance write expands it into the full box.
 - **✨ Enhance** - an agent-style enhancement area (output box on top, quick input below, mirroring the
+
   NeoPromptAgent node): type a description or an editing instruction in the quick input, pick an enhancement
   skill (only image-enhancement skills are listed, auto-routing by default, last choice remembered) and click
   ✨ for streaming enhancement. It reuses the node's agent logic (the selected skill's skill.md as system
@@ -224,9 +234,12 @@ embedded ComfyUI workflow).
 
 ### Image editing
 
-Opens a small window (image on top, controls below: source / result comparison area + an editing skill dropdown
-and an editing instruction box). Qwen Image 2.1 is used by default and any other `image_gen` skill can be
+Opens a small window (image on top, controls below: source / result comparison area + one chip row +
+an editing instruction box). Qwen Image 2.1 is used by default and any other `image_gen` skill can be
 selected; the source is passed as a reference image, you type the editing instruction and click "Generate".
+The chip row is the edit-skill chip + five mode icons (outpaint / masked / click-to-remove / blend / pose,
+the mode name lives in the hover title) + the "ad-hoc parameters" collapse row.
+
 
 - **Curtain comparison** - the result appears in place as a "source | result" curtain comparison (the divider
   starts at the left edge, so you see the whole result first). A drag counts as curtain dragging only after
@@ -239,15 +252,18 @@ selected; the source is passed as a reference image, you type the editing instru
   (←/→ to page); the "🔍 view large" button to the right of the comparison labels works in every mode, and in
   outpaint mode clicking the empty area of the drag box follows the same curtain rule. In masked / click modes
   a click paints or marks, so only the button works there.
-- **Target resolution** - the source size by default, aligned to a multiple of 32, capped proportionally by the
+- **Size chip** - one line reading "target resolution 1024×1024"; click it to reveal the width and height
+  inputs. The source size by default, aligned to a multiple of 32, capped proportionally by the
   "model working resolution" when it exceeds it (1.5MP by default); after generation the comparison window's
-  left side becomes that scaled image too, since pixel-by-pixel alignment needs both sides the same size. Size
-  details: [image-gen.md](image-gen.md).
-- **Custom parameters** - a collapse row at the end of the "target resolution" row: expand it to pick the main
+  left side becomes that scaled image too, since pixel-by-pixel alignment needs both sides the same size.
+  Size details: [image-gen.md](image-gen.md). Outpaint / masked / click-to-remove size themselves, so the
+  chip collapses in those modes.
+- **Custom parameters** - the collapse row at the end of the chip row: expand it to pick the main
   model / LoRAs for this run (the same control as in the generate-material popup, nothing is written back to the
   global settings). Empty = follow this skill's `config.json` and the global image-gen settings, and switching
   skills or the outpaint / masked / pose switches replays that skill's model and LoRAs. Aspect ratio and max
-  side are not exposed here - the output size follows the source (the "target resolution" row above).
+  side are not exposed here - the output size follows the source (the size chip above).
+
 - **Outpaint** - a switch in the window that automatically selects the "Qwen Image 2.1 outpaint" skill. Drag a
   box on the source to set the padding on the four sides (dragging the box pans it and redistributes the
   padding; expansion only outward, with free / 1:1 / 16:9 / 2.35:1 and similar ratio presets; when the canvas

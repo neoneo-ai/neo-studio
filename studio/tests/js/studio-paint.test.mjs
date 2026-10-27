@@ -40,6 +40,8 @@ const textPanel = () => paintText()?.querySelector(".neo-gallery-gen-panel");
 const editPanel = () => paintEdit()?.querySelector(".neo-gallery-gen-panel");
 const modeBtns = (panel) => [...panel.querySelectorAll(".neo-gallery-edit-outpaint-btn")];
 const hintOf = (panel) => panel.querySelector(".neo-gallery-story-hint").textContent;
+const heroOf = (panel) => panel.querySelector(".neo-gallery-gm-hero-sub").textContent;
+
 
 // hashchange 由 jsdom 作为宏任务派发：微任务 flush 不够，等一轮事件循环
 const settle = async () => { await sleep(0); await flush(); };
@@ -111,7 +113,8 @@ test("绘画页：进页就铺好文生图面板与空图片编辑面板，入�
     assert.ok(panel.querySelector(".neo-gallery-story-modal--embedded"), "内嵌面板应带内嵌标记（样式去窗壳靠它）");
     assert.ok(btnTexts(panel).includes("生成"), "idle 应有「生成」");
     assert.ok(!btnTexts(panel).includes("取消"), "页内面板不应有「取消」：收起 = 切到另一个模式");
-    assert.match(hintOf(panel), /素材库直接可见/, "页内面板走短句说明");
+    assert.match(heroOf(panel), /素材库直接可见/, "页内面板 idle 铺空画布（hero 副标题带说明）");
+
     assert.ok(!paintText().classList.contains("ns-hidden"), "默认模式应是文生图");
 
     // 图片编辑：空面板同样在位，预览区就是拖放落点（拖进来才解锁各编辑模式）
@@ -138,7 +141,10 @@ test("绘画页：进页就铺好文生图面板与空图片编辑面板，入�
     assert.equal(textPanel(), panel, "入口应复用现成面板，不重建");
     assert.equal(textPanel().querySelector(".neo-gallery-gm-quick-input").value, "红色陶瓷杯的白底产品图", "复用不能清掉已写的提示词");
     assert.equal(location.hash, "#/paint", "弹窗入口不应跳页，hash 留在绘画页");
-    click(modal.querySelector(".ns-libmodal-close"));
+    assert.ok(!libModal(), "入口把面板铺好后弹窗应让位给绘画页（同页 go 不触发收起）");
+    click(libBtn());
+    await settle();
+    click(libModal().querySelector(".ns-libmodal-close"));
     await settle();
     assert.ok(!libModal(), "标题栏 ✕ 应关闭弹窗");
 

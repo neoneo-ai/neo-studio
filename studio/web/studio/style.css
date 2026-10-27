@@ -79,7 +79,7 @@ body {
 .ns-comfy-starting { color: #e0b070; }
 /* 无边框窗口：桌面端摘掉系统标题栏后，最小化 / 最大化 / 全屏 / 关闭由顶栏自己出（只在桌面端窗口出现） */
 .ns-wctl { display: flex; align-items: center; gap: 2px; margin-left: 12px; }
-.ns-wctl-btn { width: 34px; height: 26px; border: none; border-radius: 4px; background: transparent; color: #b8b8c2; font-size: 13px; line-height: 1; cursor: pointer; }
+.ns-wctl-btn { width: 34px; height: 26px; display: inline-flex; align-items: center; justify-content: center; border: none; border-radius: 4px; background: transparent; color: #b8b8c2; font-size: 13px; line-height: 1; cursor: pointer; }
 .ns-wctl-btn:hover { background: #33333a; color: #fff; }
 .ns-wctl-close:hover { background: #a83232; color: #fff; }
 .ns-frameless .ns-header { cursor: move; user-select: none; }
@@ -393,10 +393,11 @@ body {
 .neo-recipes-card-actions .rs-btn { flex: none; }
 
 /* 绘画页：满幅 = 文生图 / 图片编辑面板（模式切换，一次铺满整栏）；素材库走弹窗取用 */
-.ns-paint { display: flex; flex-direction: column; height: 100%; min-height: 520px; }
+.ns-paint { display: flex; flex-direction: column; height: 100%; }
 /* 顶部留白：本页顶部内边距被素材页那条「sticky 工具条贴顶」规则清成 0，主栏自己补回一段，
-   模式条不贴着窗口边 */
-.ns-paint-main { flex: 1 1 auto; display: flex; flex-direction: column; gap: 8px; padding-top: 12px; min-width: 0; min-height: 0; }
+   模式条不贴着窗口边；保底高度只写在这一条（窄窗口下媒体查询换小一档） */
+.ns-paint-main { flex: 1 1 auto; display: flex; flex-direction: column; gap: 8px; padding-top: 12px; min-width: 0; min-height: 520px; }
+
 /* 显存条：主栏纵向 flex 把它拉成整行、读数默认贴左，与上方居中的模式条同轴才不显得挂在角落 */
 .ns-paint-main .ns-mem { justify-content: center; }
 /* 模式切换：样式与导演编辑的页签（.neo-director-tab）同款——居中一排，
@@ -435,10 +436,16 @@ body {
     box-shadow: none;
 }
 .ns-paint-panel .neo-gallery-story-titlebar { display: none; }
-/* 文生图：输出框吃掉栏内剩余高度，面板下方不留一整片空白 */
-.ns-paint-text .neo-gallery-gm-output-wrap { flex: 1 1 auto; min-height: 140px; }
-.ns-paint-text .neo-gallery-story-input { height: 100%; min-height: 140px; resize: none; }
+/* 文生图：idle 时空画布吃掉栏内剩余高度（输出框收成一行、说明收在画布里），
+   输出框展开或生成中才把这一段高度换给它——面板下方不留一整片空白 */
+.ns-paint-text .neo-gallery-cs-status { flex: 1 1 auto; min-height: 0; }
+.ns-paint-text .neo-gallery-gm-hero,
+.ns-paint-text .neo-gallery-gm-preview,
+.ns-paint-text .neo-gallery-cs-result { flex: 1 1 auto; min-height: 120px; }
+.ns-paint-text .neo-gallery-gm-output-open { flex: 1 1 auto; min-height: 140px; }
+.ns-paint-text .neo-gallery-gm-output-open .neo-gallery-story-input { height: 100%; min-height: 140px; resize: none; }
 .ns-paint-text .neo-gallery-gm-quick-input { min-height: 64px; }
+
 /* 图片编辑：预览按栏高缩放（弹窗那套 50vh / 90vh 在页内会把表单挤到折叠线以下、底部按钮被显存条切掉），
    表单固定在下方收尾。gallery.css 是运行时注入的，平局它赢 —— 这里多带一个类压过它 */
 .ns-paint-panel .neo-gallery-story-modal.neo-gallery-edit-modal {

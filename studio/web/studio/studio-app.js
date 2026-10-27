@@ -20,7 +20,7 @@ import { createSkillManager } from "../skill.js";
 import { createAgentPanel, createMcpPanel, createAgentPrefsForm } from "../agent-panel.js";
 import { createAgentStage } from "../agent-stage.js";
 import { t, tf, getLang, applyLang, LANGS } from "../js/core/i18n.js";
-import { icon, setIconLabel } from "../js/core/icons.js";
+import { icon, setIcon, setIconLabel } from "../js/core/icons.js";
 import { createLibraryModal } from "../js/core/lib-modal.js";
 
 const view = document.getElementById("ns-view");
@@ -682,7 +682,9 @@ function buildPaint(el) {
     setPaintHost({
         text: textHost,
         edit: editHost,
-        onOpen: (kind) => { if (!ready) return; go("paint"); setMode(kind); },
+        // 已在绘画页时 go() 是同页空转，showView 里「离开该页收起弹窗」那段不触发：
+        // 交还给本页面板后弹窗会盖在面板上，所以入口自己收
+        onOpen: (kind) => { if (!ready) return; go("paint"); setMode(kind); libModal?.close(); },
     });
     // 文生图直接写提示词就能生成；图片编辑铺空面板，从左栏把素材拖进预览区当原图即可
     openGenMaterialDialog(app.neoGallery, { container: textHost });
@@ -1443,15 +1445,18 @@ function initWindowChrome() {
     const btn = (id) => document.getElementById(id);
     const set = (id, ico, title) => {
         const b = btn(id);
-        if (b) { b.textContent = ico; b.title = title; }
+        if (b) { setIcon(b, ico); b.title = title; }
     };
     let state = { frameless: false, maximized: false, fullscreen: false };
     const render = (s) => {
         state = s;
         document.body.classList.toggle("ns-frameless", !!s.frameless);
         btn("ns-wctl").hidden = !s.frameless;
-        set("ns-win-max", s.maximized ? "❐" : "▢", s.maximized ? t("还原") : t("最大化"));
-        set("ns-win-fs", "⛶", s.fullscreen ? t("退出全屏") : t("全屏"));
+        // 钮面只出图标：字形（▢ ❐ ⛶ – ✕）随字体变样，WebView2 里还会掉色成 emoji
+        set("ns-win-min", "minimize", t("最小化"));
+        set("ns-win-max", s.maximized ? "restore" : "maximize", s.maximized ? t("还原") : t("最大化"));
+        set("ns-win-fs", s.fullscreen ? "restore" : "fullscreen", s.fullscreen ? t("退出全屏") : t("全屏"));
+        set("ns-win-close", "cross", t("关闭"));
     };
     const wire = (bridge) => {
         bridge.window_state().then((s) => {

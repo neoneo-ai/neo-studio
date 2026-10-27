@@ -34,6 +34,8 @@ const PATHS = {
     eye: '<path d="M2.062 12.348a1 1 0 0 0 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 0 0 .696 10.75 10.75 0 0 1-19.876 0Z"/><circle cx="12" cy="12" r="3"/>',
     maximize: '<path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M16 3h3a2 2 0 0 1 2 2v3"/><path d="M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/>',
     restore: '<path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 0-2 2v3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/>',
+    minimize: '<path d="M5 12h14"/>',
+    fullscreen: '<polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><path d="m21 3-7 7"/><path d="m3 21 7-7"/>',
 
 };
 

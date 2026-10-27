@@ -4,6 +4,32 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **Panel handover closes the asset modal, and glyph buttons become real icons.** On the paint page, `生成素材` /
+  `图片编辑` clicked while the page is already open left the asset library modal covering the panel: `go()` on the
+  same page skips the `showView()` close, so the entry closes the modal itself after switching mode. The five
+  image-edit mode buttons and the frameless window controls (minimize / maximize / fullscreen / close) draw through
+  `setIcon()` in `studio/web/js/core/icons.js` instead of the characters they used to carry, which shifted with the
+  font and dropped into colored emoji in WebView2; mode names live in the hover titles. The cold-start toast key
+  `ComfyUI 启动中…就绪后自动接上生成` has its English entry. Covered by `studio-paint.test.mjs`,
+  `studio-desktop.test.mjs` and `studio-window-chrome.e2e.mjs`.
+
+- **The paint page composer is one chip row plus one description field.** The text-to-image panel spread the same
+  choices over five rows (skill row with a 「生成技能」 label, a 随机填入/▾/☰ float group on the output box, a 自定参数
+  box holding ratio and max side, an enhance toolbar, an idle hint line above everything), and the image-edit panel
+  laid out a skill dropdown next to five text mode buttons and two always-visible width/height inputs. Now the skill,
+  aspect ratio and longest side are chips on one row (native `<select>`s in a rounded shell — `.value`,
+  `fillSkillOptions`, `setGmAutoLabel`, `applySkillModelConfig` and the request body stay as they were), the three
+  tools are a single `⋯` menu at the bottom-right of the output box (`随机填入` / the runtime-random toggle and count /
+  `预设列表`; Esc closes that menu before the preset overlay), the output box collapses to one line while it is empty
+  and expands on focus, typing, ↑/↓ recall or an enhance write, and the page's idle state is an empty canvas
+  (title + one line) in the preview area instead of a hint line above the boxes. The image-edit panel takes the same
+  shape: the skill is a chip, 扩图 / 局部 / 点选删除 / 融合 / 姿势 are icon buttons (mode name in the hover title),
+  and the size is a chip reading 「目标分辨率 1024×1024」 that opens the `#img-edit-width` / `#img-edit-height`
+  inputs, collapsed in the modes that size themselves. Covered by `studio/tests/js/gallery-gen-material.test.mjs`
+  (chip row, ⋯ menu, Esc chain, collapsing output), `gallery-image-edit.test.mjs` (icon mode switches, size chip),
+  `studio-paint.test.mjs` (idle hero) and the paint-page e2e cases, whose asset-library selector was refreshed to
+  `.ns-paint-lib-btn`.
+
 - **The director and paint pages hand their left column back to the editor; recipes and the asset library open in a window modal.**
   The director page's 360px recipe column (with its recipe / asset switch and its own splitter) and the paint page's
   left column with the image-recipe list took width from the editor while the user was editing. The director page is

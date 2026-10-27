@@ -69,26 +69,29 @@ test("Studio 页面：四视图加载、版本信息、导演生成面板", asyn
         // 导演视图：整片生成面板 + 配方面板
         await page.evaluate(() => { location.hash = "#/director"; });
         await page.waitForSelector(".ns-gen-panel .rs-btn.ns-gen-run", { timeout: 15000 });
-        await page.waitForSelector(".neo-recipes-panel", { timeout: 15000 });
+        // 配方库在窗口弹窗里（顶栏「配方」开窗）：关着时面板挂在 DOM 里但不可见，按可见等会超时
+        await page.waitForSelector(".neo-recipes-panel", { state: "attached", timeout: 15000 });
         // .rs-btn 基础样式 flex:1；满幅主区里不应拉伸成长条
         const runFlex = await page.evaluate(() =>
             getComputedStyle(document.querySelector(".ns-gen-panel .rs-btn.ns-gen-run")).flexGrow);
         assert.equal(runFlex, "0", "生成整片按钮不应被 flex 拉伸");
-        // 导演页 = 左配方列表 + 右主栏（上导演编辑器 / 分隔条 / 下整片生成面板）
+        // 导演页 = 顶栏（配方 / 素材库入口）+ 主栏（上编辑器 / 分隔条 / 下整片生成面板）；配方列表在弹窗里
         const layout = await page.evaluate(() => {
             const cs = (s) => getComputedStyle(document.querySelector(s));
             return {
-                page: cs(".ns-director").gridTemplateColumns,
-                list: cs(".ns-director .neo-recipes-list").gridTemplateColumns,
+                page: cs(".ns-director").display,
+                bar: !!document.querySelector(".ns-director-bar"),
+                list: cs('.ns-libmodal[data-lib-scope="recipes"] .neo-recipes-list').gridTemplateColumns,
                 main: cs(".ns-director-main").flexDirection,
                 editor: !!document.querySelector(".ns-director-editor"),
                 split: !!document.querySelector(".ns-director-split"),
             };
         });
-        assert.match(layout.page, /^360px /, "导演页应为左配方列表 + 右主栏两列");
-        assert.ok(!layout.list.includes("px "), "左栏配方列表单列排布");
-        assert.equal(layout.main, "column", "右主栏上下排布（编辑器在上、生成面板在下）");
-        assert.ok(layout.editor, "右上编辑器宿主就位");
+        assert.equal(layout.page, "flex", "导演页是顶栏 + 主栏的纵向排布（配方库进弹窗后没有常驻 360px 左列）");
+        assert.ok(layout.bar, "顶栏有配方 / 素材库入口");
+        assert.ok(!layout.list.includes("px "), "配方列表单列排布");
+        assert.equal(layout.main, "column", "主栏上下排布（编辑器在上、生成面板在下）");
+        assert.ok(layout.editor, "编辑器宿主就位");
         assert.ok(layout.split, "编辑器与生成面板之间有分隔条");
 
         // 首个配方自动选中：对应卡片高亮，分段格子按 director_spec 分段刷出，尺寸/步数只读回显（参数在编辑器里）
@@ -149,7 +152,8 @@ test("Studio 页面：四视图加载、版本信息、导演生成面板", asyn
         // 浏览器里没有桌面端桥，启动设置那一栏是异步摘掉的：等它摘完再数，否则数到 7
         await page.waitForFunction(() => !document.querySelector('[data-key="launch"]'), null, { timeout: 10000 });
         const sections = await page.locator(".ns-settings-section").count();
-        assert.equal(sections, 6);
+        // 9 栏里只有「启动设置」不带 .ns-settings-section 外壳
+        assert.equal(sections, 8);
         // 版本号只在设置「关于」里显示
         assert.match(await page.textContent("#ns-about-version"), /Neo Studio .+ · ComfyUI .+/);
         await page.click(".ns-settings-tab[data-key='gen']");
@@ -225,24 +229,33 @@ test("Studio 绘画页：顶栏模式条 + 素材库弹窗，文生图铺满整�
                 page: box(".ns-paint"),
                 main: box(".ns-paint-main"),
                 panel: box(".ns-paint-text"),
+                // 主栏里自己占高的行：模式条 + 显存条 + 舞台（舞台开着时把面板挤小，算进保底）
+                chrome: ["ns-paint-modes", "ns-mem", "ns-paint-stage"].reduce((s, c) => {
+                    const el = document.querySelector("." + c);
+                    return s + (el ? Math.round(el.getBoundingClientRect().height) : 0);
+                }, 0),
                 editHidden: cs(".ns-paint-edit").display,
                 sideCol: !!document.querySelector(".ns-paint-side"),
                 recipes: !!document.querySelector(".ns-paint-recipes"),
                 libInPage: !!document.querySelector(".ns-paint .ns-gallery-host"),
-                libBtn: [...document.querySelectorAll(".ns-paint-bar button")].some((b) => b.textContent.includes("素材库")),
+                libBtn: !!document.querySelector(".ns-paint-lib-btn"),
+
             };
         });
         assert.deepEqual(layout.modes, ["文生图", "图片编辑"], "模式条两枚按钮");
         assert.equal(layout.editHidden, "none", "默认图片编辑收起（一次只铺满一块）");
         assert.ok(Math.abs(layout.panel.width - layout.main.width) <= 1, "文生图铺满整幅宽度");
-        assert.ok(layout.panel.height > layout.main.height * 0.8, "文生图铺满整幅高度");
+        // 保底里扣掉主栏的内边距与三段 gap（12 + 8*3，显存条自带的外沿余量一并算进来）
+        assert.ok(layout.panel.height > layout.main.height - layout.chrome - 70,
+            `文生图铺满主栏里模式条 / 显存条 / 舞台以外的高度（面板 ${Math.round(layout.panel.height)}，主栏 ${Math.round(layout.main.height)}，占高行 ${layout.chrome}）`);
         assert.ok(!layout.sideCol, "绘画页不再有常驻左栏");
         assert.ok(!layout.libInPage, "素材库不常驻在页里（顶栏按钮开弹窗）");
         assert.ok(layout.libBtn, "顶栏有素材库入口");
         assert.ok(!layout.recipes, "绘画页不再有图片配方列表");
 
         // 开弹窗 = 同一个画廊挂进弹窗宿主；点卡片填进图片编辑预览后关弹窗
-        await page.click(".ns-paint-bar button:has-text('素材库')");
+        await page.click(".ns-paint-lib-btn");
+
         await page.waitForSelector(".ns-libmodal:not(.ns-hidden) .ns-gallery-host .neo-gallery-topbar", { timeout: 15000 });
         const inModal = await page.evaluate(() => {
             const modal = document.querySelector(".ns-libmodal:not(.ns-hidden)");
@@ -253,7 +266,7 @@ test("Studio 绘画页：顶栏模式条 + 素材库弹窗，文生图铺满整�
         });
         assert.ok(inModal.inHost, "画廊挂进素材库弹窗宿主");
         assert.ok(inModal.pick, "弹窗底部有多选收集条");
-        await page.click(".ns-libmodal-close");
+        await page.click('.ns-libmodal[data-lib-scope="assets"]:not(.ns-hidden) .ns-libmodal-close');
         await page.waitForFunction(() => !document.querySelector(".ns-libmodal:not(.ns-hidden)"), null, { timeout: 5000 });
         assert.equal(await page.evaluate(() => document.querySelectorAll(".ns-paint .ns-gallery-host").length), 0,
             "关弹窗后绘画页不养画廊");
@@ -292,21 +305,22 @@ test("Studio 绘画页：顶栏模式条 + 素材库弹窗，文生图铺满整�
         assert.ok(Math.abs(after.w - after.main) <= 1, "图片编辑同样铺满整幅");
 
         // 弹窗默认铺满 → 最大化落盘 → 拖标题栏转浮窗 → Esc 关闭
-        await page.click(".ns-paint-bar button:has-text('素材库')");
+        await page.click(".ns-paint-lib-btn");
+
         await page.waitForSelector('.ns-libmodal[data-lib-scope="assets"]:not(.ns-hidden)', { timeout: 5000 });
         const geo = await page.evaluate(() => JSON.parse(localStorage.getItem("neo_studio_libmodal_assets") || "{}"));
         assert.equal(geo.max, false, "首次打开记为非最大化");
-        await page.click(".ns-libmodal-max");
-        await page.waitForFunction(() => document.querySelector(".ns-libmodal").classList.contains("ns-libmodal-maximized"),
+        await page.click('.ns-libmodal[data-lib-scope="assets"]:not(.ns-hidden) .ns-libmodal-max');
+        await page.waitForFunction(() => document.querySelector('.ns-libmodal[data-lib-scope="assets"]').classList.contains("ns-libmodal-maximized"),
             null, { timeout: 5000 });
-        const tb = await page.locator(".ns-libmodal-titlebar").boundingBox();
+        const tb = await page.locator('.ns-libmodal[data-lib-scope="assets"]:not(.ns-hidden) .ns-libmodal-titlebar').boundingBox();
         await page.mouse.move(tb.x + 60, tb.y + 12);
         await page.mouse.down();
         await page.mouse.move(tb.x + 180, tb.y + 90, { steps: 8 });
         await page.mouse.up();
         const moved = await page.evaluate(() => ({
             geo: JSON.parse(localStorage.getItem("neo_studio_libmodal_assets") || "{}"),
-            floated: document.querySelector(".ns-libmodal").classList.contains("ns-libmodal-floated"),
+            floated: document.querySelector('.ns-libmodal[data-lib-scope="assets"]').classList.contains("ns-libmodal-floated"),
         }));
         assert.ok(moved.floated, "拖过标题栏后变浮窗");
         assert.ok(moved.geo.x > geo.x, `拖标题栏挪窗后 left 应离开 0：${JSON.stringify(moved.geo)}`);
@@ -367,8 +381,9 @@ test("Studio 绘画页：素材库弹窗里「生成素材」面板留在本页"
         await page.goto(STUDIO_URL, { waitUntil: "networkidle", timeout: 30000 });
         await page.evaluate(() => { location.hash = "#/paint"; });
         await page.waitForSelector(".ns-paint .ns-paint-mode-btn", { timeout: 15000 });
-        await page.click(".ns-paint-bar button:has-text('素材库')");
+        await page.click(".ns-paint-lib-btn");
         await page.waitForSelector(".ns-libmodal:not(.ns-hidden) .neo-gallery-gm-btn", { timeout: 15000 });
+
 
         await page.click(".ns-libmodal:not(.ns-hidden) .neo-gallery-gm-btn");
         await page.waitForSelector(".ns-paint:not(.ns-hidden) .ns-paint-text .neo-gallery-gen-panel", { timeout: 15000 });

@@ -225,12 +225,11 @@ test("生成素材弹窗：自定参数——宽高比与最长边可选并写�
 
     // 展开自定参数区，验证比例与最长边下拉存在（同行）
     click(overlay.querySelector(".neo-gallery-gm-model-toggle"));
-    const modelBox = overlay.querySelector(".neo-gallery-gm-model-box");
-    assert.notEqual(modelBox.style.display, "none", "应展开");
-    const sizeRow = modelBox.querySelector(".neo-gallery-gm-size-row");
+    const sizeRow = overlay.querySelector(".neo-gallery-gm-size-row");
     const [ratioSel, edgeSel] = sizeRow.querySelectorAll("select");
-    assert.ok(ratioSel, "应有「宽高比」下拉");
-    assert.ok(edgeSel, "应有「最长边」下拉");
+    assert.ok(ratioSel, "应有「宽高比」片");
+    assert.ok(edgeSel, "应有「最长边」片");
+
     assert.equal(ratioSel.value, "", "默认态为空（跟随设置）");
     assert.equal(edgeSel.value, "", "默认态为空（跟随设置）");
     // 比例选项与导演编辑页同源：值纯比例、显示带中文备注
@@ -527,7 +526,10 @@ test("生成素材弹窗：增强仿 agent quick input + output，支持选择�
     assert.ok(inputToolbar.contains(enhanceBtn), "增强应在工具栏内");
     const floatGroup = overlay.querySelector(".neo-gallery-gm-float-group");
     assert.ok(outputWrap && outputWrap.contains(floatGroup), "浮出按钮组应在 output 框包装内");
-    assert.equal(floatGroup.querySelectorAll(".neo-gallery-gm-tool-btn").length, 3, "浮出组应有 /▾/☰ 三个按钮");
+    assert.equal(floatGroup.querySelectorAll(".neo-gallery-gm-tool-btn").length, 1, "浮出组只剩一枚 ⋯：随机填入 / 运行时随机 / 预设列表收进菜单");
+    assert.equal(overlay.querySelector(".neo-gallery-gm-more-btn").textContent, "⋯", "⋯ 应带三点字形");
+    assert.ok(overlay.querySelector(".neo-gallery-gm-more-menu .neo-gallery-gm-menu-item"), "⋯ 菜单里应有条目按钮");
+
 
     // 双框皆空：不发请求
     click(enhanceBtn);
@@ -746,8 +748,10 @@ test("随机填入：从运行时混合池抽一条填入 output 框", async () 
     const overlay = document.querySelector(".neo-gallery-gm-modal-overlay");
     await sleep(50);
 
-    click([...overlay.querySelectorAll(".neo-gallery-gm-tool-btn")].find(b => b.textContent === ""));
+    click(overlay.querySelector(".neo-gallery-gm-more-btn"));
+    click([...overlay.querySelectorAll(".neo-gallery-gm-menu-item")].find(b => b.textContent === "随机填入一条提示词"));
     await sleep(80);
+
 
     assert.equal(overlay.querySelector(".neo-gallery-story-input").value, "混合池里的一条随机提示词", "随机抽到的提示词应填入 output 框");
     const req = fetchLog.filter(c => c.path === "/rs_prompts/random_prompts").at(-1);
@@ -783,17 +787,19 @@ test("运行时随机批量：启用后逐张生成 N 张，状态持久化到 l
     const overlay = document.querySelector(".neo-gallery-gm-modal-overlay");
     await sleep(50);
 
-    // ▾ 打开运行时随机设置菜单：启用 + 数量调为 2
-    const caret = [...overlay.querySelectorAll(".neo-gallery-gm-tool-btn")].find(b => b.textContent === "▾");
-    click(caret);
-    const menu = overlay.querySelector(".rs-runtime-menu");
-    assert.equal(menu.style.display, "block", "设置菜单应打开");
+    // ⋯ 打开工具菜单：启用运行时随机 + 数量调为 2
+    const moreBtn = overlay.querySelector(".neo-gallery-gm-more-btn");
+    click(moreBtn);
+    const menu = overlay.querySelector(".neo-gallery-gm-more-menu");
+    assert.equal(menu.style.display, "block", "⋯ 菜单应打开");
     const runtimeCheck = menu.querySelector("input[type=checkbox]");
     runtimeCheck.checked = true;
     fire(runtimeCheck, "change");
     click([...menu.querySelectorAll(".rs-runtime-count-btn")].find(b => b.textContent === "+"));
     assert.equal(menu.querySelector(".rs-runtime-count-val").textContent, "2", "数量应设为 2");
-    click(caret); // 关菜单
+    assert.ok(moreBtn.classList.contains("neo-gallery-gm-tool-on"), "运行时随机开启时 ⋯ 应高亮");
+    click(moreBtn); // 关菜单
+
 
     // 生成 → 批量：抽 2 条逐张生成
     click([...overlay.querySelectorAll(".neo-gallery-story-btn")].find(b => b.textContent === "生成"));
@@ -878,8 +884,10 @@ test("☰ 预设列表：搜索 + 点击填入 output 框（无配方条目）",
     const overlay = document.querySelector(".neo-gallery-gm-modal-overlay");
     await sleep(50);
 
-    click([...overlay.querySelectorAll(".neo-gallery-gm-tool-btn")].find(b => b.textContent === "☰"));
+    click(overlay.querySelector(".neo-gallery-gm-more-btn"));
+    click([...overlay.querySelectorAll(".neo-gallery-gm-menu-item")].find(b => b.textContent === "预设列表"));
     await sleep(80);
+
 
     const presetOverlay = overlay.querySelector(".rs-preset-list-overlay");
     assert.equal(presetOverlay.style.display, "flex", "预设列表浮层应打开");
@@ -916,6 +924,66 @@ test("生成素材弹窗：文生图下拉按技能输入形态分类——两�
     const skillSel = overlay.querySelector(".neo-recipes-sort");
     assert.deepEqual([...skillSel.options].map(o => o.value), ["image_gen", "qwen_image_21"],
         "文生图页只列吃文字的技能：换脸这类必须带参考图的技能在本页没有图可给，列出来只会出废图");
+    overlay.remove();
+});
+
+
+test("输出框空态收成一行：聚焦 / 输入展开，空内容失焦收回", async () => {
+    resetEnv();
+    clearRoutes();
+    const { openGenMaterialDialog } = await import("../../web/gallery-gen.js");
+
+    mockRoute("/rs_prompts/skills", () => jsonResponse([
+        { id: "image_gen", cn_name: "Krea2文生图", category: "image_gen", gen_image: true },
+    ]));
+
+    openGenMaterialDialog({ showDirectoryStructure: () => {} });
+    const overlay = document.querySelector(".neo-gallery-gm-modal-overlay");
+    await sleep(50);
+    const output = overlay.querySelector(".neo-gallery-story-input");
+    const wrap = overlay.querySelector(".neo-gallery-gm-output-wrap");
+    assert.ok(!wrap.classList.contains("neo-gallery-gm-output-open"), "idle 空态输出框应收成一行");
+
+    fire(output, "focus");
+    assert.ok(wrap.classList.contains("neo-gallery-gm-output-open"), "聚焦后应展开");
+    fire(output, "blur");
+    assert.ok(!wrap.classList.contains("neo-gallery-gm-output-open"), "空内容失焦应收回");
+
+    inputText(output, "红色陶瓷杯");
+    keydown(output, "ArrowUp");
+    assert.ok(wrap.classList.contains("neo-gallery-gm-output-open"), "输入 / 键盘召回后应展开");
+    fire(output, "blur");
+    assert.ok(wrap.classList.contains("neo-gallery-gm-output-open"), "有内容时失焦不收回");
+    overlay.remove();
+});
+
+test("⋯ 菜单：Esc 先关菜单，再关预设浮层", async () => {
+    resetEnv();
+    clearRoutes();
+    localStorage.removeItem("neo.gallery.gen_material.runtime_random");
+    const { openGenMaterialDialog } = await import("../../web/gallery-gen.js");
+
+    mockRoute("/rs_prompts/skills", () => jsonResponse([
+        { id: "image_gen", cn_name: "Krea2文生图", category: "image_gen", gen_image: true },
+    ]));
+    mockRoute("/rs_prompts/list_prompts", () => jsonResponse([{ name: "红色陶瓷杯", source: "presets" }]));
+
+    openGenMaterialDialog({ showDirectoryStructure: () => {} });
+    const overlay = document.querySelector(".neo-gallery-gm-modal-overlay");
+    await sleep(50);
+
+    const moreBtn = overlay.querySelector(".neo-gallery-gm-more-btn");
+    const menu = overlay.querySelector(".neo-gallery-gm-more-menu");
+    click(moreBtn);
+    assert.equal(menu.style.display, "block", "点 ⋯ 应打开菜单");
+    keydown(document, "Escape");
+    assert.equal(menu.style.display, "none", "Esc 应先关 ⋯ 菜单，不关窗");
+
+    click([...overlay.querySelectorAll(".neo-gallery-gm-menu-item")].find(b => b.textContent === "预设列表"));
+    const presetOverlay = overlay.querySelector(".rs-preset-list-overlay");
+    assert.equal(presetOverlay.style.display, "flex", "菜单条目应打开预设列表");
+    keydown(document, "Escape");
+    assert.equal(presetOverlay.style.display, "none", "Esc 再关预设浮层");
     overlay.remove();
 });
 

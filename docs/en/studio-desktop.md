@@ -160,6 +160,15 @@ narrow-window rules are shared with the director page (one modal instance, one g
 - "🖼️ Generate asset" in the gallery page header and "🖼️ Edit image" in an image card's menu both switch to the
   paint page in Studio and open in the matching panel; "🖼️ New image recipe" opens a blank text-to-image panel.
   The paint page no longer carries an image-recipe list.
+- The text-to-image panel is a compact composer ("one chip row + one description field"): while idle the
+  preview area becomes an empty canvas (title + one line of guidance), the output box collapses to a single
+  line and only takes the leftover column height once expanded, and fill-random / runtime random / preset list
+  live in the `⋯` menu at the bottom-right of the output box (control list: [gallery.md](gallery.md),
+  "Generate assets" and "Image editing").
+
+- On the paint page, "Generate asset" in the asset modal and "Edit image" in an image card's menu close the modal
+  once the panel is in place — `go()` on the same page skips the `showView()` close, so the modal would stay over
+  the panel.
 - The chosen mode lives in `localStorage["neo_studio_paint_mode"]`.
 - The gallery in the asset modal is the same element the gallery page and the director page use: a
   `media-transfer` write only opens the current page's modal, and leaving the page closes it. Leaving the gallery
