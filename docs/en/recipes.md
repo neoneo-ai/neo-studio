@@ -106,7 +106,7 @@ Execution details: [h3-video-gen.md](h3-video-gen.md).
   / the ✎ in the top-right of a `NeoH3VideoDirector` node (entering through a block positions the editor on
   that segment; when the window is already open, clicking another block only switches the current segment).
 - Desktop Studio director page: entering the page selects the first (or the last-selected) director recipe and opens it
-  embedded in the top-right pane; clicking a left-column recipe card selects it and opens it there too (the card's ✎
+  embedded in the left pane; clicking a recipe card in the **📋 Recipes** modal selects it and opens it there too (the card's ✎
   works as well).
 - The **＋** in the bottom-right outside the node's timeline display opens the create editor directly (after
   saving, the recipe is added to the `recipe` dropdown and selected).
@@ -167,13 +167,14 @@ Execution details: [h3-video-gen.md](h3-video-gen.md).
   bottom-right handle resizes; **⛶** maximizes to the largest size in one click, clicking again or
   double-clicking the title bar restores. When the window is tall, the story topic / script input area and the
   current segment's prompt area fill the available height.
-- **Embedded in desktop Studio**: the Studio director page lays the editor out directly inside the top-right
-  pane (the recipe list opens from the top bar's **📋 Recipes** modal, the generation panel below), with no overlay window — no
-  title-bar dragging, no **⛶** maximize, no resize handle; close with the title-bar **✕**. The footer gains
+- **Embedded in desktop Studio**: the Studio director page lays the editor out directly inside the left
+  pane (the recipe list opens from the top bar's **📋 Recipes** modal, the generation panel on the right), with
+  no overlay window — no title-bar dragging, no **⛶** maximize, no resize handle; close with the title-bar **✕**.
+  The footer gains
   **🎬 Save & Generate Film**: it runs the full save path and, on success, submits the film with the parameters
   just saved into the recipe plus the segments checked in the generation panel. An embedded save leaves the
-  editor open (the film runs in the pane below); closing is the **✕**, **Cancel**, or the dirty bar's
-  "Save & close". With no editor open the top-right pane takes no space and the generation panel fills the
+  editor open (the film runs in the pane on the right); closing is the **✕**, **Cancel**, or the dirty bar's
+  "Save & close". With no editor open the left pane takes no space and the generation panel fills the
   column. See [studio-desktop.md](studio-desktop.md).
 - **🤖 LLM config** on the right of the title bar opens the embedded LLM configuration form (values are
   backfilled in the background on open, 💾 writes them out).

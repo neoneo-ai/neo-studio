@@ -135,10 +135,12 @@ body {
 .ns-gallery-host { height: 100%; }
 .ns-gallery-host .neo-gallery-topbar { margin: -10px -16px 8px; padding: 8px 16px; }
 
-/* 导演页：顶部一行工具条（配方 / 素材库弹窗入口）+ 满幅的编辑器 + 分隔条 + 整片生成面板 */
-.ns-director { display: flex; flex-direction: column; gap: 8px; height: 100%; min-height: 520px; }
-.ns-director-bar { flex: none; display: flex; align-items: center; gap: 8px; }
-.ns-director-bar .ns-btn { display: inline-flex; align-items: center; gap: 6px; }
+/* 导演页：满幅主栏（左编辑器 │ 竖向分隔条 │ 右整片生成面板），收起编辑器时整栏换成引导页。
+   左右分栏要两部并排才立得住，窄窗口交给页面出横向滚动，不把两块压成读不了的窄条。
+   配方 / 素材库入口不占独立一行：同一组按钮挂进编辑器标题行左端，编辑器收起时住在引导页里 */
+.ns-director { display: flex; flex-direction: column; gap: 8px; height: 100%; min-height: 520px; min-width: 620px; }
+.ns-director-libbtns { flex: none; display: inline-flex; align-items: center; gap: 8px; }
+.ns-director-libbtns .ns-btn { display: inline-flex; align-items: center; gap: 6px; }
 
 /* ===== 素材库 / 配方弹窗：深色遮罩 + 居中卡片，最大化铺满窗口（js/core/lib-modal.js 建 DOM）
    z-index 在故事面板浮层（9845）与灯箱（9999）之下：弹窗里点开的大图要盖得住弹窗 ===== */
@@ -175,66 +177,71 @@ body {
 .ns-libmodal-pick-count { flex: 1; font-size: 12px; color: #9a9aa8; }
 .ns-libmodal-pick-use { background: rgba(47, 111, 237, 0.18); border-color: #2f6fed; color: #cfe0ff; }
 .ns-libmodal-pick-use:hover { background: rgba(47, 111, 237, 0.3); }
-.ns-director-main { flex: 1 1 auto; display: flex; flex-direction: column; gap: 8px; min-width: 0; min-height: 0; }
-/* 右上编辑器宿主：导演编辑器内嵌铺满这里；没有编辑器时出占位提示 */
-.ns-director-editor { flex: 1 1 auto; min-height: 0; overflow: hidden; }
-.ns-director-editor-hint {
-    height: 100%;
+.ns-director-main { flex: 1 1 auto; display: flex; flex-direction: row; gap: 8px; min-width: 0; min-height: 0; }
+/* 左编辑器宿主：导演编辑器内嵌铺满这里，编辑器卸载后宿主空着（整栏由引导页接管） */
+.ns-director-editor { flex: 1 1 auto; min-width: 360px; min-height: 0; overflow: hidden; }
+/* 引导页：编辑器收起（标题栏 ✕ / 底部取消 / 没有配方）时占满整栏，生成面板与分隔条随编辑器一起退场——
+   半条生成面板单独占一栏没有意义，回到「从哪开始」的空白引导页。引导页在这里给「配方」与「新建配方」，
+   素材库只属于编辑器标题行（没有编辑器可拖就无需占位）。
+   编辑器挂回来时 ns-director-editorless 侧失效，主栏交还给分隔条写的内联宽度 */
+.ns-director-empty { display: none; }
+.ns-director-editorless .ns-director-empty {
     display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    border: 1px dashed #3a3a44;
-    border-radius: 8px;
-    color: #8a8a96;
-    font-size: 13px;
+    gap: 22px;
 }
-.ns-director-editor.ns-editor-open .ns-director-editor-hint { display: none; }
-/* 编辑器关掉后（右上没有内嵌面板）：宿主收成 0，虚线占位不再占住整栏，生成面板吃满整栏。
-   分隔条与它的收起态一并退场；编辑器回来时 :has 侧失效，面板高度交还给分隔条写的内联值。 */
-.ns-director-editor:not(.ns-editor-open) { flex: none; height: 0; }
-.ns-director-main:has(.ns-director-editor:not(.ns-editor-open)) .ns-director-split { display: none; }
-.ns-director-main:has(.ns-director-editor:not(.ns-editor-open)) .ns-gen-panel {
-    flex: 1 1 auto;
-    display: flex !important;   /* 面板被分隔条双击收起过，也要吃满整栏 */
-    height: auto !important;    /* 分隔条写的内联高度在整栏布局里作废 */
+.ns-director-editorless .ns-director-main { display: none; }
+/* 起手说明照绘画页 / 视频页的 idle 版式（.neo-gallery-gm-idle 主行 + 细注行）+ 四角括号；
+   padding-top 那 16vh 是给结果区留白的，这里居中排布要收掉 */
+.ns-director-empty-card {
+    position: relative;
+    max-width: 700px;
+    padding: 40px 60px;
 }
-.ns-director-main:has(.ns-director-editor:not(.ns-editor-open)) .ns-gen-media-right .ns-gen-preview,
-.ns-director-main:has(.ns-director-editor:not(.ns-editor-open)) .ns-gen-media-right .ns-gen-live {
-    max-width: 1280px;   /* 整栏布局下面板高度不再等于 --ns-gen-h，预览按右栏宽度吃满 */
-}
-/* 分隔条：18px 宽热区里一条横线，悬停 / 键盘聚焦 / 拖动时加宽变蓝（照 VSCode 的 sash）；
-   拖动调生成面板高度，双击收起 / 展开（收起后条上给出展开入口），键盘 ↑↓ 调高、Enter 收起 */
+.ns-director-empty-card.neo-gallery-gm-idle { padding-top: 40px; }
+.ns-director-empty-actions { display: flex; align-items: center; gap: 10px; }
+.ns-director-empty-actions .ns-btn { display: inline-flex; align-items: center; gap: 6px; }
+/* 分隔条：18px 宽热区里一条竖线，悬停 / 键盘聚焦 / 拖动时加宽变蓝（照 VSCode 的 sash）；
+   拖动调生成面板宽度，拖过下限一截 = 关闭面板，收起后向外拖出重新展开，键盘 ←→ 调宽、Enter 收起 */
 .ns-director-split {
     flex: none;
-    height: 18px;
+    width: 18px;
     position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
-    cursor: ns-resize;
+    cursor: ew-resize;
     user-select: none;
 }
 .ns-director-split::after {
     content: "";
     position: absolute;
-    left: 0;
-    right: 0;
-    top: 8px;
-    height: 1px;
+    top: 0;
+    bottom: 0;
+    left: 8px;
+    width: 1px;
     background: #333;
-    transition: height .12s ease, top .12s ease, background .12s ease;
+    transition: width .12s ease, left .12s ease, background .12s ease;
 }
 .ns-director-split:hover::after, .ns-director-split:focus-visible::after,
-.ns-director-split.ns-split-drag::after { top: 6px; height: 4px; background: #5090cc; }
+.ns-director-split.ns-split-drag::after { left: 6px; width: 4px; background: #5090cc; }
 .ns-director-split:focus-visible { outline: 1px solid #5090cc; }
 /* 拖动中关掉行高过渡，否则每一帧都在补间、拖起来发黏 */
 .ns-director-main.ns-split-drag { transition: none; user-select: none; }
-.ns-director-split-label { position: relative; z-index: 1; font-size: 11px; color: #8a9aa8; line-height: 1; }
-.ns-director-collapsed .ns-director-split { cursor: pointer; }
-/* 生成面板：高度由分隔条写进内联样式（同时写 --ns-gen-h），收起时整块隐藏、编辑器吃满整栏 */
+/* 收起后条里那一行竖排字就是「向外拖出」的入口：18px 宽的竖条只装得下竖排的一行字 */
+.ns-director-split-label { position: relative; z-index: 1; font-size: 11px; color: #8a9aa8; line-height: 1; writing-mode: vertical-rl; }
+.ns-director-split:hover .ns-director-split-label, .ns-director-split:focus-visible .ns-director-split-label { color: #5090cc; }
+/* 收起态那行字是个可点的入口：向外拖是主路，点一下给拖不动的人（展开态条上不留字，指针保持 ew-resize） */
+.ns-director-collapsed .ns-director-split-label { cursor: pointer; }
+/* 生成面板：宽度由分隔条写进内联样式，收起时整块隐藏、编辑器吃满整栏 */
 .ns-director-main .ns-gen-panel { flex: none; overflow: hidden; }
 .ns-gen-panel {
-    --ns-gen-h: 375px;
+    width: 640px;
+    min-width: 200px;
     display: flex;
     flex-direction: column;
     background: transparent;   /* 与段卡片 / 配方卡同一套扁平观感：底色交给页面，面板只留细边 */
@@ -242,7 +249,8 @@ body {
     border-radius: 4px;
     padding: 12px 14px;
 }
-.ns-gen-row { display: flex; align-items: center; gap: 10px; min-width: 0; }
+/* 控制行：宽面板里就是一行；面板拖窄到装不下时自己换行（勾选条、提示、按钮各成一行），不横向滚 */
+.ns-gen-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; min-width: 0; }
 /* 分段勾选条：一格一段，格内只有段号，与控制项同占一行。点格子 = 勾选要跑的段（未勾选 = 整片）；
    运行中由 director_progress 给当前段挂 ns-gen-seg-running。
    段数多时格子条自己横向滚（细滚动条），不把这一行顶成两行——竖向空间整块留给结果区 */
@@ -261,13 +269,13 @@ body {
 .ns-gen-seg-chip:hover { background: #1f1f24; color: #fff; }
 .ns-gen-seg-chip[aria-pressed="true"] { background: #24406e; border-color: #4a7fd0; color: #fff; }
 .ns-gen-seg-chip.ns-gen-seg-running { border-color: #7aa2ff; box-shadow: 0 0 0 1px #7aa2ff; }
-/* 勾选提示 + 尺寸/步数回显：只读，值来自配方（要改参数去上方编辑器）；行窄时提示自己截断，不挤掉格子条 */
+/* 勾选提示 + 尺寸/步数回显：只读，值来自配方（要改参数去左侧编辑器）；行窄时提示自己截断，不挤掉格子条 */
 .ns-gen-segs-hint { font-size: 12px; color: #8a9aa8; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ns-gen-spec { font-size: 12px; color: #7aa2ff; white-space: nowrap; flex: none; }
 /* 生成/取消按钮贴行右端 */
 .ns-gen-run-group { display: flex; align-items: center; gap: 10px; flex: none; margin-left: auto; }
 /* 主行动按钮：走壳内半透明蓝（同技能页 Save / 设置页「保存并重启 ComfyUI」）。实心 #2f6fed 在满幅 #17171b 灰底上是
-   一块高饱和蓝板，把整行与上方编辑器的观感全压住；描边留饱和蓝 + 亮字，主行动仍是这一行最显眼的控件 */
+   一块高饱和蓝板，把整行与左侧编辑器的观感全压住；描边留饱和蓝 + 亮字，主行动仍是这一行最显眼的控件 */
 .ns-gen-panel .ns-gen-run { background: rgba(47, 111, 237, 0.18); border-color: #2f6fed; color: #cfe0ff; font-weight: 600; padding: 6px 18px; }
 .ns-gen-panel .ns-gen-run:hover:not([disabled]) { background: rgba(47, 111, 237, 0.3); border-color: #3f7ffe; color: #fff; }
 /* 取消生成：仅排队/运行中显示；红描边与蓝色「生成整片」区分开 */
@@ -306,27 +314,33 @@ body {
     display: none;
 }
 .ns-gen-progress > div { height: 100%; width: 0; background: #7aa2ff; transition: width .4s; }
-/* 生成面板两列：左 = 一行控制（全选 / 清空 / 分段格子 / 回显 / 生成，占满剩余宽度），右 = 结果区（实时预览 / 成片，吃满右栏） */
-.ns-gen-body { display: flex; gap: 14px; align-items: stretch; flex: 1 1 auto; min-height: 0; }
-.ns-gen-left { flex: 1 1 420px; min-width: 360px; display: flex; flex-direction: column; gap: 10px; }
-.ns-gen-media-right { flex: 0 1 850px; min-width: 0; min-height: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; }
-/* 结果区吃满右栏：右栏高度 = 面板内容高度（分隔条写进 --ns-gen-h 的面板高度减上下内边距与状态行），
-   宽上限按 16:9 换算；面板拖高结果区一起长大、拖矮一起缩，画面按 object-fit 居中留边，
-   既不会被面板裁掉也不会在下面留一片空白 */
+/* 生成面板内部两块：上 = 一行控制（全选 / 清空 / 分段格子 / 回显 / 生成），下 = 结果区（实时预览 / 成片，吃满剩余高度）。
+   编辑器关闭、面板吃满整栏时退回「左控制 / 右结果」两列，见上面的 :has 规则 */
+.ns-gen-body { display: flex; flex-direction: column; gap: 12px; flex: 1 1 auto; min-height: 0; }
+.ns-gen-left { flex: none; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+/* 没有画面时左侧这块吃满面板剩余高度，虚线占位才撑得起整块面板 */
+.ns-gen-body.ns-gen-empty .ns-gen-left { flex: 1 1 auto; }
+.ns-gen-media-right { flex: 1 1 auto; min-width: 0; min-height: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; container-type: size; }
+/* 结果区按这份配方的画面比例占位：横屏就是横的一条，竖屏就是竖的一条，面板不必跟着宽。
+   宽度贴住面板宽；画面比这块高时按容器高收窄（100cqh × 宽高比）后居中，不在画面两侧留一片黑 */
 .ns-gen-media-right .ns-gen-preview,
 .ns-gen-media-right .ns-gen-live {
-    flex: 1 1 auto;
+    flex: 0 1 auto;
     min-height: 0;
     width: 100%;
-    max-width: min(1280px, max(320px, calc((var(--ns-gen-h) - 50px) * 16 / 9)));
+    max-width: min(1280px, calc(100cqh * var(--ns-gen-ar, 1.777778)));
+    height: auto;
+    aspect-ratio: var(--ns-gen-ratio, 16 / 9);
+    max-height: 100%;
+    margin: auto;
 }
 /* 成片就地替换实时预览：按画面比例 letterbox */
 .ns-gen-media-right .ns-gen-preview { background: #000; border-radius: 4px; }
 .ns-gen-media-right a.ns-gen-final { color: #7aa2ff; text-decoration: none; font-size: 13px; }
 .ns-gen-media-right a.ns-gen-final:hover { text-decoration: underline; }
-/* 实时预览面板：与成片同宽同高（吃满右栏），首个载荷到达时由 onFrame 清掉内联高度交给 CSS */
+/* 实时预览面板：与成片同宽同高（占住结果区），首个载荷到达时由 onFrame 清掉内联高度交给 CSS */
 .ns-gen-live { border-radius: 4px; overflow: hidden; }
-/* 没有画面时右栏整块收起：控制行吃满整幅宽度，下方出虚线占位（占位吃满面板剩余高度） */
+/* 没有画面时结果区整块收起：一行控制在上，下方出虚线占位（占位吃满面板剩余高度） */
 .ns-gen-empty-hint { display: none; }
 .ns-gen-body.ns-gen-empty .ns-gen-media-right { display: none; }
 .ns-gen-body.ns-gen-empty .ns-gen-empty-hint {

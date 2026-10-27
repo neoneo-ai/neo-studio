@@ -10,7 +10,7 @@ import { configure as configureRoutes, resolve as resolvePath } from "./shim/rou
 import { $el } from "./shim/ui.js";
 
 import "../gallery.js";   // 注册 comfy.neo.gallery 扩展（NeoGallery + 侧栏 tab 定义）
-import { setDirectorEditorHost, DIRECTOR_RECIPE_SAVED_EVENT, SEG_MODES, MODE_LABELS, LEGACY_MODE_MAP } from "../director.js";
+import { setDirectorEditorHost, openDirectorEditor, DIRECTOR_RECIPE_SAVED_EVENT, SEG_MODES, MODE_LABELS, LEGACY_MODE_MAP } from "../director.js";
 import { setPaintHost, openGenMaterialDialog, openImageEditDialog, chipButton, skillParamsChip } from "../gallery-gen.js";
 import { createFramePlayer, DOCK_PREVIEW_SIDE, AGENT_PREVIEW_SIDE } from "../live-preview.js";
 import { createRecipesPanel } from "../recipes.js";
@@ -281,68 +281,94 @@ async function refreshRecipesPanel() {
 
 let recipesHost = null;   // 配方弹窗里的配方面板宿主（buildDirector 建）
 
-// ====== 导演页：上导演编辑器 + 分隔条 + 下整片生成面板（配方与素材库走弹窗） ======
+// ====== 导演页：左导演编辑器 + 竖向分隔条 + 右整片生成面板（配方与素材库走弹窗） ======
 const SPLIT_KEY = "neo_studio_director_split";
-const SPLIT_PANEL_MIN = 90;   // 生成面板下限：一行控制 + 进度 + 状态行还能用
-const SPLIT_EDITOR_MIN = 240;  // 编辑器下限：编辑器内部自带滚动，再小就没法编辑了
+const CLOSED_KEY = "neo_studio_director_closed";   // 关过编辑器就停在引导页：列表默认按修改时间排，刚编辑的那份总在首位，不记这一笔的话下次进页又把它铺回来
+const SPLIT_PANEL_MIN = 200;   // 生成面板下限：竖屏配方只要窄窄一条，控制行在这里换行
+const SPLIT_EDITOR_MIN = 360;  // 编辑器下限：编辑器内部自带滚动，再窄就没法编辑了
+const SPLIT_CLOSE_SLOP = 90;   // 拖过下限再多拖这么多就当作关闭：拖到底继续拖 = 收起面板
+
+let dragged = false;   // 一条拖动走过之后，落点那一下点击不再被当成「展开」
 
 function buildDirectorSplit(main, genPanel) {
     const label = $el("span", { className: "ns-director-split-label" });
     const split = $el("div", {
-        className: "ns-director-split", role: "separator", "aria-orientation": "horizontal", tabindex: "0",
-        title: t("拖动调整高度 · 双击收起 / 展开生成面板"),
+        className: "ns-director-split", role: "separator", "aria-orientation": "vertical", tabindex: "0",
+        title: t("拖动调整宽度 · 拖过下限关闭 · 收起后向外拖出展开"),
     }, [label]);
     let saved = null;
     try { saved = JSON.parse(localStorage.getItem(SPLIT_KEY) || "null"); } catch { /* 偏好读不到就用默认 */ }
     let collapsed = !!saved?.collapsed;
 
-    const clamp = (h) => {
-        const max = Math.max(SPLIT_PANEL_MIN, main.clientHeight - split.offsetHeight - SPLIT_EDITOR_MIN);
-        return Math.max(SPLIT_PANEL_MIN, Math.min(h, max));
+    const clamp = (w) => {
+        const max = Math.max(SPLIT_PANEL_MIN, main.clientWidth - split.offsetWidth - SPLIT_EDITOR_MIN);
+        return Math.max(SPLIT_PANEL_MIN, Math.min(w, max));
     };
-    const setHeight = (h) => {
-        const v = Math.round(clamp(h)) + "px";
-        genPanel.style.height = v;
-        genPanel.style.setProperty("--ns-gen-h", v);   // 结果区（实时预览 / 成片）按面板高度伸缩
+    const setWidth = (w) => {
+        genPanel.style.width = Math.round(clamp(w)) + "px";
     };
-    const persist = () => localStorage.setItem(SPLIT_KEY, JSON.stringify({ height: genPanel.offsetHeight, collapsed }));
+    const persist = () => localStorage.setItem(SPLIT_KEY, JSON.stringify({ width: genPanel.offsetWidth, collapsed }));
     const apply = () => {
         main.classList.toggle("ns-director-collapsed", collapsed);
         genPanel.style.display = collapsed ? "none" : "";
-        label.textContent = collapsed ? t("▸ 生成面板") : "";
+        label.textContent = collapsed ? t("◂ 生成面板") : "";
     };
     const restore = () => {
-        if (collapsed || !saved || !(Number(saved.height) > 0) || main.clientHeight <= 0) return;
-        setHeight(saved.height);
-        saved = null;   // 只在首次布局量得到高度时回灌一次
+        if (collapsed || !saved || !(Number(saved.width) > 0) || main.clientWidth <= 0) return;
+        setWidth(saved.width);
+        saved = null;   // 只在首次布局量得到宽度时回灌一次
     };
     apply();
     restore();
     requestAnimationFrame(restore);
 
     split.addEventListener("mousedown", (e) => {
-        if (e.button !== 0 || collapsed) return;
+        if (e.button !== 0) return;
         e.preventDefault();
-        const startY = e.clientY, startH = genPanel.offsetHeight;
-        const move = (ev) => setHeight(startH + (startY - ev.clientY));
-        const up = () => {
+        dragged = false;
+        const startX = e.clientX, startW = collapsed ? 0 : genPanel.offsetWidth;
+        const opened = !collapsed;   // 关闭只发生在「从展开态拖出去」的那一条拖动上
+        const finish = () => {
             window.removeEventListener("mousemove", move);
             window.removeEventListener("mouseup", up);
             split.classList.remove("ns-split-drag");
             main.classList.remove("ns-split-drag");
-            persist();
         };
+        const move = (ev) => {
+            const dx = startX - ev.clientX;   // 向左拖 = 生成面板变宽
+            if (collapsed) {
+                if (dx < 8) return;           // 收起态只认向外拖：向内已经无可收
+                dragged = true;
+                collapsed = false; apply();   // 向外拖出一点就把面板放回来，接着按拖出来的宽度走
+            }
+            const w = startW + dx;
+            if (opened && w < SPLIT_PANEL_MIN - SPLIT_CLOSE_SLOP) {
+                dragged = true;
+                finish();                     // 拖过下限一截就到此为止：这一下就是把面板拖到关闭
+                collapsed = true; apply(); persist();
+                return;
+            }
+            if (Math.abs(dx) >= 4) dragged = true;
+            setWidth(w);
+        };
+        const up = () => { finish(); persist(); };
         split.classList.add("ns-split-drag");
         main.classList.add("ns-split-drag");
         window.addEventListener("mousemove", move);
         window.addEventListener("mouseup", up);
     });
-    split.addEventListener("dblclick", () => { collapsed = !collapsed; apply(); persist(); });
+    // 收起后条上那行字就是「向外拖出」的入口；拖不动它的人点一下也认。
+    // 拖动松手会跟着来一次 click，那一下只吃掉 dragged 守卫，不展开面板。
+    split.addEventListener("click", () => {
+        if (!collapsed) return;
+        if (dragged) { dragged = false; return; }
+        collapsed = false; apply(); persist();
+    });
     split.addEventListener("keydown", (e) => {
-        if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+        if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
             if (collapsed) return;
             e.preventDefault();
-            setHeight(genPanel.offsetHeight + (e.key === "ArrowUp" ? 24 : -24));
+            setWidth(genPanel.offsetWidth + (e.key === "ArrowLeft" ? 24 : -24));
             persist();
         } else if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
@@ -356,7 +382,7 @@ function buildDirectorSplit(main, genPanel) {
 async function buildDirector(el) {
     const page = $el("div", { className: "ns-director" });
     el.appendChild(page);
-    // 顶部工具条：配方列表与素材库都在弹窗里打开，整幅宽度留给编辑器与生成面板
+    // 配方 / 素材库入口：同一组按钮，编辑器开着挂进编辑器标题行左端，收起时住在引导页里（只有一处入口）
     recipesHost = $el("div", { className: "ns-director-recipes" });
     recipesModal = createLibraryModal({ storageKey: "neo_studio_libmodal_recipes", scope: "recipes" });
     recipesModal.setContent(recipesHost);
@@ -367,16 +393,49 @@ async function buildDirector(el) {
     const libBtn = $el("button", { className: "ns-btn", type: "button", title: t("打开素材库：点卡片取用并关窗，素材卡片直接拖进右侧编辑器") });
     setIconLabel(libBtn, "folder", t("素材库"));
     libBtn.onclick = () => openLibModal("director");
-    page.appendChild($el("div", { className: "ns-director-bar" }, [recipesBtn, libBtn]));
+    // 新建配方：空白导演配方直接内嵌进本视图（保存后刷新配方列表，同配方弹窗里「新增导演配方」那条路）
+    const openNewDirector = () => openDirectorEditor(null, refreshRecipesPanel);
+    const newBtn = $el("button", { className: "ns-btn", type: "button", title: t("新建一份分镜视频导演配方，直接进编辑器") });
+    setIconLabel(newBtn, "film", t("新建配方"));
+    newBtn.onclick = () => openNewDirector();
+    // 标题行的家只装「素材库」；「配方」在两块之间搬：编辑器开着在标题行，收起时在引导页
+    const titleActions = $el("div", { className: "ns-director-libbtns" }, [libBtn]);
+    const guideActions = $el("div", { className: "ns-director-empty-actions" }, [recipesBtn, newBtn]);
     const main = $el("div", { className: "ns-director-main" });
-    const editorHost = $el("div", { className: "ns-director-editor" }, [
-        $el("div", { className: "ns-director-editor-hint", textContent: t("点「配方」弹窗选卡即在此编辑整片脚本") }),
-    ]);
+    const editorHost = $el("div", { className: "ns-director-editor" });
+    // 收起编辑器 = 生成面板同栏退场：整栏只剩这块引导页，从「配方」选卡或「新建配方」起头（生成面板与编辑器共生）
+    // 起手说明照绘画页 / 视频页的 idle 版式（主行 + 细注行 + 四角括号），三页空白态长一个样
+    page.appendChild($el("div", { className: "ns-director-empty" }, [
+        $el("div", { className: "ns-director-empty-card neo-gallery-gm-idle" }, [
+            $el("div", { className: "neo-gallery-gm-idle-title", textContent: t("导演视频") }),
+            $el("div", { className: "neo-gallery-gm-idle-sub", textContent: t("多段配方，生成整片视频") }),
+            $el("i", { className: "ns-video-corner c-tl" }),
+            $el("i", { className: "ns-video-corner c-tr" }),
+            $el("i", { className: "ns-video-corner c-bl" }),
+            $el("i", { className: "ns-video-corner c-br" }),
+        ]),
+        guideActions,
+    ]));
     page.appendChild(main);
     main.appendChild(editorHost);
-    // 编辑器挂进宿主 / 关闭后收起占位提示
-    new MutationObserver(() => editorHost.classList.toggle("ns-editor-open", !!editorHost.querySelector(".neo-director-panel")))
-        .observe(editorHost, { childList: true });
+    page.classList.add("ns-director-editorless");   // 开局没有编辑器，引导页先站着
+    // 编辑器挂进宿主 / 卸载：整栏在「编辑器 + 生成面板」与引导页之间切换，「配方」入口跟着搬进标题行或搬回引导页
+    // （标题行那组随面板卸载一起离开文档，下次挂载搬回新面板的标题行；素材库只属于标题行）
+    const rememberClose = (closed) => {
+        try { closed ? localStorage.setItem(CLOSED_KEY, "1") : localStorage.removeItem(CLOSED_KEY); }
+        catch { /* 隐私模式记不住就算了，不挡界面 */ }
+    };
+    const closedBefore = () => { try { return localStorage.getItem(CLOSED_KEY) === "1"; } catch { return false; } };
+    new MutationObserver(() => {
+        const open = !!editorHost.querySelector(".neo-director-panel");
+        rememberClose(!open);
+        editorHost.classList.toggle("ns-editor-open", open);
+        page.classList.toggle("ns-director-editorless", !open);
+        if (open) {
+            titleActions.prepend(recipesBtn);
+            editorHost.querySelector(".neo-director-title-left")?.prepend(titleActions);
+        } else guideActions.prepend(recipesBtn);
+    }).observe(editorHost, { childList: true });
     // 导演编辑器内嵌进本视图（含素材页「新建导演配方」入口 → 切到导演页）；
     // 编辑器底部的「保存并生成整片」保存成功后直接提交整片生成
     setDirectorEditorHost(editorHost, () => go("director"), () => submitGenerate());
@@ -389,12 +448,13 @@ async function buildDirector(el) {
         notifyAgentCtx();
         applyRecipe(r.name);   // 刷新分段格子 + 尺寸/步数回显
     };
-    const panelOpts = () => ({ directorOnly: true, autoSelectFirst: true, initialSelection: currentRecipeName, openEditorOnSelect: true, onSelect });
+    // 弹窗里「新增导演配方」照点卡那条路：关窗让位，空白配方直接内嵌进本视图
+    const panelOpts = () => ({ directorOnly: true, autoSelectFirst: !closedBefore(), initialSelection: currentRecipeName, openEditorOnSelect: true, onSelect, onNewRecipe: () => { recipesModal?.close(); openNewDirector(); } });
     directorPanelOpts = panelOpts;
     onDirectorShown = () => { if (currentRecipeName) applyRecipe(currentRecipeName); };
 
     // --- 整片生成面板 ---
-    // 生成参数（分辨率 / 步数 / 种子 / 连续性 / 上下文帧）全部在上方导演编辑器里保存进配方，
+    // 生成参数（分辨率 / 步数 / 种子 / 连续性 / 上下文帧）全部在左侧导演编辑器里保存进配方，
     // 本面板只做「跑哪几段 + 看结果」，不再重复一套控件。
     const runBtn = $el("button", { className: "rs-btn ns-gen-run", type: "button", textContent: t("生成整片") });
     gateRunButton(runBtn, "director", t("生成整片"));
@@ -446,12 +506,12 @@ async function buildDirector(el) {
     segsClearBtn.onclick = () => setChecked([]);
     setChecked([]);
 
-    // --- 实时预览：与节点内同款帧播放器；载荷按 task_id（后端 unique_id）过滤，尺寸由结果区随面板高度定 ---
+    // --- 实时预览：与节点内同款帧播放器；载荷按 task_id（后端 unique_id）过滤，尺寸由结果区按面板宽度定 ---
     const mediaRight = $el("div", { className: "ns-gen-media-right" });
     const liveBox = $el("div", { className: "ns-gen-live neo-dtl-live" });
     const livePlayer = createFramePlayer(liveBox, () => {
-        liveBox.style.height = "";                       // 高度交给 CSS：结果区随面板高度伸缩
-        genBody.classList.remove("ns-gen-empty");   // 预览一有画面就占住右栏
+        liveBox.style.height = "";                       // 高度交给 CSS：结果区按面板宽度贴 16:9
+        genBody.classList.remove("ns-gen-empty");   // 预览一有画面就占住结果区
     });
     mediaRight.appendChild(liveBox);
 
@@ -480,6 +540,9 @@ async function buildDirector(el) {
         setChecked([]);   // 分段已换（切配方 / 配方内容变更）→ 勾选作废
         const d = spec?.defaults;
         specEl.textContent = d ? tf("{w}×{h} · {steps} 步", { w: d.width, h: d.height, steps: d.steps }) : "";
+        // 结果区按这份配方的画面比例占位：竖屏配方就是竖的一条，横屏是横的一条，面板不必跟着宽
+        mediaRight.style.setProperty("--ns-gen-ratio", d ? `${d.width} / ${d.height}` : "");
+        mediaRight.style.setProperty("--ns-gen-ar", d ? String(d.width / d.height) : "");
     }
 
     function stopPolling() {
@@ -502,7 +565,7 @@ async function buildDirector(el) {
     // 参数本体（分辨率/步数/种子/连续性/上下文帧）都在配方里，这里只发配方名 + 勾选的段。
     async function submitGenerate() {
         const recipe = currentRecipeName;
-        if (!recipe) { statusEl.textContent = t("请先在下方选择一个配方"); return; }
+        if (!recipe) { statusEl.textContent = t("请先在配方弹窗里选择一份配方"); return; }
         const body = {
             recipe,
             only_segments: checkedSegments.map((i) => i + 1).join(","),   // 勾选的段（空 = 整片）
@@ -598,7 +661,7 @@ async function buildDirector(el) {
     const ctrlRow = $el("div", { className: "ns-gen-row" }, [segsAllBtn, segsClearBtn, segsBox, segsHint, specEl, runGroup]);
     const emptyHint = $el("div", { className: "ns-gen-empty-hint", textContent: t("生成后在此显示实时预览") });
     const genLeft = $el("div", { className: "ns-gen-left" }, [ctrlRow, emptyHint]);
-    // 右栏没有画面时整块收起，分段格子与预览占位共用整幅宽度
+    // 结果区没有画面时整块收起，控制行与预览占位上下排满面板
     const genBody = $el("div", { className: "ns-gen-body ns-gen-empty" }, [genLeft, mediaRight]);
     // 面板底部一行：状态文字 + 显存/内存读数（只有导演生成吃显存，监控跟着生成面板走）
     const foot = $el("div", { className: "ns-gen-foot" }, [statusEl]);
@@ -611,7 +674,7 @@ async function buildDirector(el) {
     main.appendChild(buildDirectorSplit(main, genPanel));
     main.appendChild(genPanel);
 
-    // --- 配方面板（左栏常驻：点卡片 = 选中喂给下方生成区 + 直接进右上编辑器；只列多段导演配方） ---
+    // --- 配方面板（配方弹窗里：点卡片 = 选中喂给右侧生成区 + 直接进左侧编辑器；只列多段导演配方） ---
     recipesPanelEl = await createRecipesPanel(panelOpts());
     recipesHost.appendChild(recipesPanelEl);
     // 编辑器保存后：刷新配方列表、清 spec 缓存、同步默认值与时间轴分段（新建配方直接选中，其余保持当前选中）

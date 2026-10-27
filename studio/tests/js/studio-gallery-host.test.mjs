@@ -80,9 +80,16 @@ const homeCard = (name) => [...document.querySelectorAll(".neo-gallery-category-
 const atOutput = () => assert.ok(galleryState().crumb.includes("Output"), `应停在 Output：${galleryState().crumb}`);
 
 let gallery;
-const barBtn = (label) => [...document.querySelectorAll(".ns-director-bar button")]
+const barBtn = (label) => [...document.querySelectorAll(".ns-director-libbtns button")]
     .find((b) => b.textContent.includes(label));
 const libModal = () => document.querySelector(".ns-libmodal:not(.ns-hidden)");
+const guideBtn = (label) => [...document.querySelectorAll(".ns-director-empty-actions button")]
+    .find((b) => b.textContent.includes(label));
+// 素材库入口只在编辑器标题行（引导页只有配方 / 新建配方）：弹窗流程要先起一份空白配方把编辑器挂起来
+async function openEditorForLib() {
+    click(guideBtn("新建配方"));
+    await until(() => document.querySelector(".ns-director-editor .neo-director-panel"), "空白配方挂进导演页");
+}
 
 test("素材页进入目录 → 导演页素材库弹窗：目录跟着进弹窗，反复开合不落首页", async () => {
     document.body.innerHTML = `<div class="ns-header"><nav class="ns-tabs"><a href="#/gallery" data-tab="gallery">素材</a><a href="#/director" data-tab="director">导演</a><a href="#/skills" data-tab="skills">技能</a></nav></div><div id="ns-view"></div>`;
@@ -102,7 +109,8 @@ test("素材页进入目录 → 导演页素材库弹窗：目录跟着进弹窗
 
     // 切到导演页开弹窗：弹窗里就是刚浏览的那个目录，不是首页
     location.hash = "#/director";
-    await until(() => barBtn("素材库"), "导演页素材库入口");
+    await until(() => document.querySelector(".ns-director-empty-actions"), "导演页就位");
+    await openEditorForLib();
     click(barBtn("素材库"));
     await until(() => galleryState().host === "director", "画廊挂进素材库弹窗");
     assert.equal(galleryState().dir, true, "开弹窗应停在刚浏览的目录");
@@ -142,7 +150,7 @@ test("素材页进入目录 → 导演页素材库弹窗：目录跟着进弹窗
 
     // 切导演页再切回：路由接管后 URL 参数原样保留，画廊仍停在目录
     click(document.querySelector('a[data-tab="director"]'));
-    await until(() => barBtn("素材库"), "导演页");
+    await until(() => document.querySelector(".ns-director-empty-actions"), "导演页");
     assert.equal(location.hash, "#/director");
     assert.match(location.search, /gallery=/, "切页不该清掉 gallery 参数");
     click(navTab);

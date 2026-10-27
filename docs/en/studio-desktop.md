@@ -80,32 +80,41 @@ the unsaved content of the director editor and the settings forms, and a cross-o
 
 ## Director page layout
 
-The director page is a **top bar** (**📋 Recipes** / **🖼 Asset library** entries plus the VRAM readout) above a
-full-width main column split into two panes: **top = the director editor**, **bottom = the film generation panel**,
-with a **splitter** between them. The recipe list and the asset library both open in modals
-(`js/core/lib-modal.js`), so the whole width stays with the editor.
+The director page is a full-width main column split into two panes: **left = the director editor**,
+**right = the film generation panel**, with a **vertical splitter** between them. The **📋 Recipes** /
+**🖼 Asset library** entries take no row of their own — while the editor is open they sit at the left end of the
+editor's title row, and they leave with it (assets are what you use while editing). The recipe
+list and the asset library both open in modals (`js/core/lib-modal.js`), so the whole width goes to editing and running.
 
 - The director editor is embedded in Studio (`setDirectorEditorHost` registers the host): it fills the
-  top-right pane with no overlay window, so title-bar dragging / ⛶ maximize / the resize handle do not appear.
+  left pane with no overlay window, so title-bar dragging / ⛶ maximize / the resize handle do not appear.
   The main canvas (the ComfyUI page) registers no host, so the editor stays an overlay window there.
   An embedded save (including **🎬 Save & Generate Film**) leaves the editor **in place** — the film runs in the
-  pane below and the editor the user was just editing is not pulled away. Closing is the title-bar **✕**, the
+  pane on the right and the editor the user was just editing is not pulled away. Closing is the title-bar **✕**, the
   footer **Cancel**, the dirty bar's "Save & close", or switching to another recipe (the singleton reload path).
-- **Entering the page opens the editor**: as soon as the recipe list lands, the first director recipe (or the one
-  last selected) is selected, and it is opened embedded in the top-right pane — no card click needed.
+- **Entering the page opens the editor**: unless a recipe has been closed on this machine, the first director recipe
+  is auto-selected as soon as the recipe list lands and opened embedded in the left pane — no card click needed.
+  One close is remembered (`neo_studio_director_closed`), so later visits stay on the guide page until a recipe is
+  picked with **📋 Recipes** or started with **📝 New recipe** — the list sorts by modification time, so the recipe
+  just edited is always the top card and would otherwise be reopened on every visit.
   **Clicking a recipe card selects it, opens it embedded and closes the recipe modal** (clicking the same card again only switches
   the current segment, so unsaved edits survive). When the editor has unsaved changes the click is blocked by the dirty
   bar and nothing moves — the card highlight, the segment chips and the size echo all stay on the old recipe — and
   "Save & close" / "Discard" on that bar closes the old editor and opens the recipe that was clicked, while
   "Keep editing" cancels the switch. "🎬 New director recipe" on the gallery page switches to the
-  director page and opens it embedded. After **✕** / Cancel closes the editor the top-right pane **takes no space**:
-  it collapses to zero, the dashed placeholder no longer blocks the layout, and the generation panel fills the whole
-  column (the splitter steps out); clicking a recipe card reopens the editor and returns to the top/bottom split.
-- "**📋 Recipes**" in the top bar opens the recipe modal (`.ns-libmodal[data-lib-scope="recipes"]`, director
+  director page and opens it embedded, and the recipe modal's "新增导演配方" takes the same path — the modal closes
+  and the blank recipe fills the pane, instead of an editor stacked behind an open modal. After **✕** / Cancel closes
+  the editor the generation panel **leaves with it**: the main column steps out entirely and the whole column is the
+  guide page — the opening line in the same idle style as the paint and video pages (title + fine note + four corner
+  marks), worded as the home entry card is (**Direct a Video** / chain recipe segments into a finished video), and two
+  entries **📋 Recipes** / **📝 New recipe** (the Recipes button instance moves here from the title row, so there is
+  only one on screen, and the asset library is not on the guide page); clicking a recipe card or
+  "新建配方" reopens the editor and returns to the left/right split.
+- "**📋 Recipes**" opens the recipe modal (`.ns-libmodal[data-lib-scope="recipes"]`, director
   recipes only) and "**🖼 Asset library**" opens the asset modal (`data-lib-scope="assets"`, the same instance the
   paint page uses). The **🖼 Asset library** button inside the director editor drives the same entry (Studio has no
   ComfyUI left sidebar, so `media-transfer` writes `sidebarTab.activeSidebarTabId` and the shim forwards it to the
-  modal), and the top-bar button lights while it is open. The library is the same Neo Gallery the gallery
+  modal), and the entry button lights while it is open. The library is the same Neo Gallery the gallery
   page uses (one element moved between the gallery host, the modal host and the standby host, wide styling),
   breadcrumbs and directory navigation work there, every host you leave behind stays on **the directory you were
   browsing** (never the home root), and cards drag straight into the editor's first-frame / reference slots.
@@ -117,18 +126,23 @@ with a **splitter** between them. The recipe list and the asset library both ope
   maximized flag live in `localStorage["neo_studio_libmodal_recipes"]` and
   `localStorage["neo_studio_libmodal_assets"]`. Switching pages closes the modal of the page you left, and the
   gallery goes back to the standby host.
-- Splitter: drag to resize the generation panel (editor floor 240px, panel floor 90px), double-click to
-  collapse / expand the panel, `↑`/`↓` resize and `Enter` collapses from the keyboard. Height and collapsed
-  state live in `localStorage["neo_studio_director_split"]`. Dragging the panel taller or shorter stretches the
-  result column on the right (live preview / final film) with it, instead of leaving a blank strip under a
-  fixed 640×360 preview box. The grab zone is 18px wide with a 1px hairline that thickens to 4px and turns
-  accent blue on hover, keyboard focus and while dragging, with a three-dot grip dead-centre (the VS Code sash).
+- Splitter: a vertical line between the two panes that is also the drag zone — drag to resize the generation panel
+  (editor floor 360px, panel floor 200px, and dragging 90px past that floor is treated as dragging the panel shut;
+  like the VS Code sash, collapsing and expanding are both done by dragging). Once collapsed the strip carries a
+  vertical **◂ Generate panel** caption: drag outward a bit and the panel comes back, and clicking that caption
+  works too for anyone who can't get the drag going — the click that trails a released drag is ignored. An
+  expanded strip carries no caption. `←`/`→` resize and `Enter` collapses and expands from the keyboard. Width and
+  collapsed state live in `localStorage["neo_studio_director_split"]`. Dragging the panel wider or narrower
+  stretches the result area inside it (live preview / final film) at the recipe's own `width × height` ratio, so a
+  portrait recipe stays a narrow strip, instead of leaving a blank strip under a fixed preview box. The grab zone is
+  18px wide with a 1px vertical hairline that thickens to 4px and turns accent blue on hover, keyboard focus and
+  while dragging; the caption only gets a pointer cursor in the collapsed state.
 - The generation panel only answers "which segments to run, and what came out" — it carries no parameter
-  controls, and its control area is squeezed onto **one line**: **Select all** / **Clear** / the **segment chip
-  strip** (one chip per segment, the chip shows only its number) / the check hint / one read-only echo
-  (`width×height · steps` for the run, taken from the recipe) / **🎬 Generate Film** / **⏹ Cancel** all share
-  that line, and with many segments the chip strip scrolls sideways on its own so the vertical space stays with
-  the result column. **Clicking a chip checks the segment to run; nothing checked = the whole film**;
+  controls. Inside it the control area is squeezed onto **one row at the top**: **Select all** / **Clear** / the
+  **segment chip strip** (one chip per segment, the chip shows only its number) / the check hint / one read-only
+  echo (`width×height · steps` for the run, taken from the recipe) / **🎬 Generate Film** / **⏹ Cancel** all share
+  that row; with many segments the chip strip scrolls sideways on its own, and a panel dragged narrower than the row
+  wraps that row onto extra lines instead of scrolling sideways, so the height below stays with the result area. **Clicking a chip checks the segment to run; nothing checked = the whole film**;
   **Select all** / **Clear** act on the whole strip, and hovering a chip shows that segment's shot description.
   The selection is runtime-only: switching recipes clears it, and it is never written into the recipe. The chip
   of the segment being generated is highlighted while the run is live.
@@ -143,14 +157,14 @@ with a **splitter** between them. The recipe list and the asset library both ope
 - The generation status freezes on the first terminal status (succeeded / failed / cancelled): a payload issued
   before the terminal event and landing after it is dropped, so the progress bar and **⏹ Cancel** never come
   back (cancelling a finished task only answers "任务已结束，无法取消").
-- The main column is a single stack, so a narrow window only squeezes the editor / generation column; the
-  recipe and asset modals cover the window with a 640px minimum width.
+- The main column is a left/right split, so a narrow window scrolls sideways instead of squeezing both panes into
+  unreadable strips; the recipe and asset modals cover the window with a 640px minimum width.
 
 ## Paint page layout
 
 The paint page is a **top bar** (the **text-to-image / image-edit** mode bar plus the **🖼 Asset library** entry
 and the VRAM readout) above one full-width panel. Only one panel fills the page at a time — unlike the director
-page, no editor and generation panel fight for the same height. The asset modal, the scrollbars and the
+page, no editor and generation panel split one width. The asset modal, the scrollbars and the
 narrow-window rules are shared with the director page (one modal instance, one geometry in
 `localStorage["neo_studio_libmodal_assets"]`).
 

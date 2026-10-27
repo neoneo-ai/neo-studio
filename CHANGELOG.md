@@ -4,6 +4,50 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **Closing a director recipe stops it from reopening itself.** The recipe list sorts by modification time, so the
+  recipe just edited is the top card, and the page auto-opened the top card on entry: close a recipe with **✕** /
+  **Cancel** and the next visit showed it open again. The editor mount/unmount observer now records the close in a
+  local preference (`neo_studio_director_closed`) and the recipe panel is built with `autoSelectFirst` off while it
+  stands, so entry and every panel rebuild (modal refresh, post-save refresh) land on the guide page. Clicking a
+  card, **New recipe** and the modal's "新增导演配方" are explicit opens and clear the preference. Covered by
+  `studio/tests/js/studio-director.test.mjs` (close records the preference, a panel rebuild with it set opens no
+  editor, an explicit open clears it); docs: `docs/studio-desktop.md` / `docs/en/studio-desktop.md`.
+
+- **The director page has no toolbar row, and closing the editor closes the panel with it.** **📋 Recipes** /
+  **🖼 Asset library** were a row of their own above the split; they are now one set of buttons with one home, the
+  editor's title row at its left end — assets are what you use while editing, so they leave with the editor. Closing
+  the editor with **✕** / **Cancel** no longer leaves a lone generation panel filling the column: the main column
+  (editor, sash, panel) steps out — `ns-director-editorless` on `.ns-director`, driven by the same observer that
+  mounts the editor — and the column shows a guide page in the same idle style as the paint and video pages (title +
+  fine note + four corner marks) with **📋 Recipes** and **📝 New recipe**. **New recipe** mounts a blank recipe
+  through the embedded host, and the recipe modal's "新增导演配方" now closes the modal and does the same, instead of
+  an editor stacked behind an open modal. Covered by `studio/tests/js/studio-director.test.mjs` (title-row entries
+  while the editor is open, guide entries and the idle card after **✕**, the modal closing on new recipe) and the
+  `studio/tests/e2e/studio.e2e.mjs` layout case (no bar row, exactly one entry home);
+  docs: `docs/studio-desktop.md` / `docs/en/studio-desktop.md`.
+
+- **The director page is a left/right split: editor on the left, the film on the right.** The main column was a
+  stack — editor on top, a horizontal sash, the film generation panel underneath — so the run results shared the
+  window's height with the editor: dragging the panel taller took height away from the timeline being edited, and
+  the result box was as wide as the whole window while the film is 16:9. `.ns-director-main` is now a row: the
+  editor fills the left pane, the sash is vertical (`ew-resize`, a 1px vertical hairline, keyboard `←`/`→`), and
+  inside the panel the two blocks stack — the one-row control bar on top, the result area below it sized off the
+  panel width at the recipe's own `width × height` ratio (`--ns-gen-ratio` / `--ns-gen-ar` under
+  `container-type: size`, so a portrait recipe stays a narrow strip; the `--ns-gen-h` custom property and its
+  `calc()` width cap are gone). Floors: editor 360px, panel 200px — a panel that narrow wraps the control row onto
+  extra lines instead of scrolling sideways, dragging 90px past the floor closes the panel, and reopening is a drag
+  outward from the sash: the vertical **◂ Generate panel** caption is the affordance, clicking it works too for
+  anyone who can't get the drag going, and the click that trails a released drag is ignored (the VS Code sash —
+  collapse and expand are drags, and an expanded sash carries no caption); the
+  saved preference is `{width, collapsed}`, an old `{height, collapsed}` keeps its collapsed flag and falls back to
+  the default width, and `.ns-director` carries a 620px min-width so a narrow window scrolls
+  sideways instead of squeezing both panes into unreadable strips. Closing the editor takes the panel out with it
+  (see the guide-page entry above).
+  Covered by `studio/tests/js/studio-director.test.mjs` (the sash case drags to resize, drags past the floor to
+  close, drags outward to reopen, key-resizes, `Enter`-collapses, and clicks the caption to reopen after a drag) and the
+  `studio/tests/e2e/studio.e2e.mjs` layout case (`flexDirection: row`, the control row stays one line);
+  docs: `docs/studio-desktop.md` / `docs/en/studio-desktop.md`, `docs/recipes.md` / `docs/en/recipes.md`.
+
 - **The agent page dropped the center stage; results show enlarged in the panel itself.** The page was a two-column
   grid — panel left, an enlarged stage right, and a draggable sash between them that collapsed, reopened, persisted
   its width and acted as a drop band. The stage duplicated what the panel's timeline already draws, so it is gone:

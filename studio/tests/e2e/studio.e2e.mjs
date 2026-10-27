@@ -75,24 +75,37 @@ test("Studio 页面：四视图加载、版本信息、导演生成面板", asyn
         const runFlex = await page.evaluate(() =>
             getComputedStyle(document.querySelector(".ns-gen-panel .rs-btn.ns-gen-run")).flexGrow);
         assert.equal(runFlex, "0", "生成整片按钮不应被 flex 拉伸");
-        // 导演页 = 顶栏（配方 / 素材库入口）+ 主栏（上编辑器 / 分隔条 / 下整片生成面板）；配方列表在弹窗里
+        // 导演页 = 主栏（左编辑器 / 竖向分隔条 / 右整片生成面板）；配方 / 素材库入口不占独立一行，
+        // 编辑器开着住在标题行左端，收起时住在引导页里；配方列表在弹窗里
         const layout = await page.evaluate(() => {
             const cs = (s) => getComputedStyle(document.querySelector(s));
             return {
                 page: cs(".ns-director").display,
-                bar: !!document.querySelector(".ns-director-bar"),
+                barRow: !!document.querySelector(".ns-director-bar"),
+                entryTitle: !!document.querySelector(".neo-director-title .ns-director-libbtns"),
+                entryHome: [...document.querySelectorAll(".ns-director-libbtns button")].map((b) => b.textContent.trim()),
+                guideBtns: [...document.querySelectorAll(".ns-director-empty-actions button")].map((b) => b.textContent.trim()),
+                guideIdle: !!document.querySelector(".ns-director-empty .neo-gallery-gm-idle-title"),
+                guideCorners: document.querySelectorAll(".ns-director-empty .ns-video-corner").length,
+                guide: !!document.querySelector(".ns-director-empty"),
                 list: cs('.ns-libmodal[data-lib-scope="recipes"] .neo-recipes-list').gridTemplateColumns,
                 main: cs(".ns-director-main").flexDirection,
                 editor: !!document.querySelector(".ns-director-editor"),
                 split: !!document.querySelector(".ns-director-split"),
             };
         });
-        assert.equal(layout.page, "flex", "导演页是顶栏 + 主栏的纵向排布（配方库进弹窗后没有常驻 360px 左列）");
-        assert.ok(layout.bar, "顶栏有配方 / 素材库入口");
+        assert.equal(layout.page, "flex", "导演页是主栏 + 引导页的纵向排布（配方库进弹窗后没有常驻 360px 左列）");
+        assert.ok(!layout.barRow, "配方 / 素材库没有独立一行");
+        assert.deepEqual(layout.entryHome, ["配方", "素材库"], "编辑器开着时入口只在标题行");
+        assert.deepEqual(layout.guideBtns, ["新建配方"], "引导页只剩「新建配方」，素材库不在引导页");
+        assert.ok(layout.entryTitle, "入口挂进编辑器标题行");
+        assert.ok(layout.guide, "引导页就位（编辑器收起时整栏只剩它）");
+        assert.ok(layout.guideIdle, "引导页给起手说明");
+        assert.equal(layout.guideCorners, 4, "起手说明四角括号齐全");
         assert.ok(!layout.list.includes("px "), "配方列表单列排布");
-        assert.equal(layout.main, "column", "主栏上下排布（编辑器在上、生成面板在下）");
+        assert.equal(layout.main, "row", "主栏左右排布（编辑器在左、生成面板在右）");
         assert.ok(layout.editor, "编辑器宿主就位");
-        assert.ok(layout.split, "编辑器与生成面板之间有分隔条");
+        assert.ok(layout.split, "编辑器与生成面板之间有竖向分隔条");
 
         // 首个配方自动选中：对应卡片高亮，分段格子按 director_spec 分段刷出，尺寸/步数只读回显（参数在编辑器里）
         const spec = await page.evaluate(async () => {
@@ -182,15 +195,18 @@ test("Studio 页面：四视图加载、版本信息、导演生成面板", asyn
     }
 });
 
-test("Studio 导演页：配方弹窗开着刷新列表不关窗（当前配方只恢复高亮）", async (t) => {
+test("Studio 导演页：配方弹窗开着刷新列表不关窗；新增配方关窗进编辑器；关掉后刷新不回铺", async (t) => {
     if (!guard(t)) return;
     const page = await browser.newPage();
     await pinZh(page);
     try {
         await page.goto(STUDIO_URL, { waitUntil: "networkidle", timeout: 30000 });
         await page.evaluate(() => { location.hash = "#/director"; });
-        await page.waitForSelector(".ns-director-bar button:has-text('配方')", { timeout: 15000 });
-        await page.click(".ns-director-bar button:has-text('配方')");
+        // 「配方」入口两处都会出现：编辑器开着在标题行，收起时在引导页；取可见那一个
+        // （:has-text 会把引导页的「新建配方」也算进来，编辑器开着时它是隐藏的）
+        const entry = page.locator(".ns-director-libbtns button:has-text('配方'):visible, .ns-director-empty-actions button:has-text('配方'):visible").first();
+        await entry.waitFor({ timeout: 15000 });
+        await entry.click();
         await page.waitForSelector('.ns-libmodal[data-lib-scope="recipes"]:not(.ns-hidden)', { timeout: 15000 });
         // 列表取数落地那一下：旧实现自动选中会重放 onSelect，而 onSelect 第一句就是关窗 → 弹窗一打开就关闭
         await page.waitForSelector('.ns-libmodal[data-lib-scope="recipes"] .neo-recipes-card', { timeout: 15000 });
@@ -204,9 +220,28 @@ test("Studio 导演页：配方弹窗开着刷新列表不关窗（当前配方�
         });
         assert.ok(st.open, "列表加载完配方弹窗还开着");
         assert.equal(st.hi, 1, "当前配方卡保持高亮");
-        await page.keyboard.press("Escape");
+        // 弹窗里「新增导演配方」照点卡那条路：关窗让位，空白配方内嵌进本页
+        await page.evaluate(() => { document.querySelector(".ns-director-editor .neo-director-panel").dataset.probe = "old"; });
+        await page.click('.ns-libmodal[data-lib-scope="recipes"] button:has-text("新增导演配方")');
         await page.waitForFunction(() => !document.querySelector('.ns-libmodal[data-lib-scope="recipes"]:not(.ns-hidden)'),
             null, { timeout: 5000 });
+        await page.waitForFunction(() => {
+            const p = document.querySelector(".ns-director-editor .neo-director-panel");
+            return !!p && p.dataset.probe !== "old";
+        }, null, { timeout: 15000 });
+
+        // 关掉配方记进浏览器偏好：整页刷新后停在引导页，不把上次那份铺回来
+        // （配方列表按修改时间排，刚编辑的那份就在首位，不记这笔的话刷新即「打开上次的配方」）
+        await page.click(".ns-director-editor .neo-director-close");
+        await page.waitForSelector(".ns-director.ns-director-editorless", { timeout: 5000 });
+        await page.reload({ waitUntil: "networkidle", timeout: 30000 });
+        await page.evaluate(() => { location.hash = "#/director"; });
+        await page.waitForSelector(".ns-director-empty-actions", { timeout: 15000 });
+        await page.waitForTimeout(1200);
+        assert.equal(await page.locator(".neo-director-panel").count(), 0, "刷新后不把上次的配方铺回来");
+        const guideBtns = await page.locator(".ns-director-empty-actions button")
+            .evaluateAll((bs) => bs.map((b) => b.textContent.trim()));
+        assert.deepEqual(guideBtns, ["配方", "新建配方"], "引导页只有配方与新建配方");
     } finally {
         await page.close();
     }
