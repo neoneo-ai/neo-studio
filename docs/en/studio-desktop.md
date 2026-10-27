@@ -160,11 +160,14 @@ narrow-window rules are shared with the director page (one modal instance, one g
 - "🖼️ Generate asset" in the gallery page header and "🖼️ Edit image" in an image card's menu both switch to the
   paint page in Studio and open in the matching panel; "🖼️ New image recipe" opens a blank text-to-image panel.
   The paint page no longer carries an image-recipe list.
-- The text-to-image panel is a compact composer ("one chip row + one description field"): while idle the
-  preview area becomes an empty canvas (title + one line of guidance), the output box collapses to a single
-  line and only takes the leftover column height once expanded, and fill-random / runtime random / preset list
-  live in the `⋯` menu at the bottom-right of the output box (control list: [gallery.md](gallery.md),
-  "Generate assets" and "Image editing").
+- The text-to-image panel is a composer ("one prompt box + a bottom chip row: skill / ratio /
+  max side / ad-hoc parameters … `⋯` Generate") docked at the bottom of the page (the input bar follows the
+  ArtCraft promptbox): one line in the box is enough to generate, the three chips are pill buttons with menus
+  that float open upward (the native selects stay inside as state containers and never show), fill-random /
+  prompt enhance / runtime random / preset list live in the `⋯` menu, and the ad-hoc parameter drawer opens
+  above the composer. The panel fills the column height: progress and finished images stack from the top above
+  the composer, and idle leaves one start hint in the result area ("Write a prompt, then hit Generate") with no
+  empty canvas (control list: [gallery.md](gallery.md), "Generate assets" and "Image editing").
 
 - On the paint page, "Generate asset" in the asset modal and "Edit image" in an image card's menu close the modal
   once the panel is in place — `go()` on the same page skips the `showView()` close, so the modal would stay over

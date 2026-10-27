@@ -212,7 +212,7 @@ test("Studio 导演页：配方弹窗开着刷新列表不关窗（当前配方�
     }
 });
 
-test("Studio 绘画页：顶栏模式条 + 素材库弹窗，文生图铺满整幅", async (t) => {
+test("Studio 绘画页：顶栏模式条 + 素材库弹窗，文生图输入卡贴底、结果区在上方", async (t) => {
     if (!guard(t)) return;
     const page = await browser.newPage();
     await pinZh(page);
@@ -226,14 +226,28 @@ test("Studio 绘画页：顶栏模式条 + 素材库弹窗，文生图铺满整�
             const box = (s) => document.querySelector(s).getBoundingClientRect();
             return {
                 modes: [...document.querySelectorAll(".ns-paint-mode-btn")].map((b) => b.textContent),
-                page: box(".ns-paint"),
                 main: box(".ns-paint-main"),
                 panel: box(".ns-paint-text"),
-                // 主栏里自己占高的行：模式条 + 显存条 + 舞台（舞台开着时把面板挤小，算进保底）
-                chrome: ["ns-paint-modes", "ns-mem", "ns-paint-stage"].reduce((s, c) => {
-                    const el = document.querySelector("." + c);
-                    return s + (el ? Math.round(el.getBoundingClientRect().height) : 0);
-                }, 0),
+                composer: box(".ns-paint-text .neo-gallery-gm-composer"),
+                // 空轮舞台与空画布都不该在页里占位；输入区只能有一个框，增强不在默认视野
+                stageVisible: !!document.querySelector(".ns-paint-stage:not(.ns-hidden)"),
+                hero: !!document.querySelector(".neo-gallery-gm-hero"),
+                boxes: document.querySelectorAll(".ns-paint-text textarea").length,
+                genInComposer: !!document.querySelector(".neo-gallery-gm-composer .neo-gallery-gm-gen-btn"),
+                enhanceInMenu: !!document.querySelector(".neo-gallery-gm-more-menu .neo-gallery-gm-enhance-group"),
+                enhanceInComposer: !!document.querySelector(".neo-gallery-gm-composer .neo-gallery-gm-enhance-group"),
+                // 控件行是胶囊 chip（按钮 + 向上菜单），不露原生下拉
+                chipBtns: [...document.querySelectorAll(".ns-paint-text .neo-gallery-gm-composer-bar .neo-gallery-gm-chip-btn")]
+                    .map((b) => [b.textContent.trim(), b.title]),
+                visibleSelects: [...document.querySelectorAll(".ns-paint-text .neo-gallery-gm-composer-bar select")]
+                    .filter((s) => !s.hidden && !s.closest(".neo-gallery-gm-chip-panel")).length,
+                idleInComposer: !!document.querySelector(".neo-gallery-gm-composer .neo-gallery-gm-idle"),
+                idleTop: document.querySelector(".ns-paint-text .neo-gallery-gm-idle")?.getBoundingClientRect().top ?? null,
+                // 无原图时模式 chip 是禁用的：标签要读得到，提示要说出缺什么
+                modeChip: (() => {
+                    const b = document.querySelector(".ns-paint-edit .neo-gallery-edit-mode-select").parentElement.querySelector(".neo-gallery-gm-chip-btn");
+                    return [b.textContent.trim(), b.disabled, b.title];
+                })(),
                 editHidden: cs(".ns-paint-edit").display,
                 sideCol: !!document.querySelector(".ns-paint-side"),
                 recipes: !!document.querySelector(".ns-paint-recipes"),
@@ -245,13 +259,78 @@ test("Studio 绘画页：顶栏模式条 + 素材库弹窗，文生图铺满整�
         assert.deepEqual(layout.modes, ["文生图", "图片编辑"], "模式条两枚按钮");
         assert.equal(layout.editHidden, "none", "默认图片编辑收起（一次只铺满一块）");
         assert.ok(Math.abs(layout.panel.width - layout.main.width) <= 1, "文生图铺满整幅宽度");
-        // 保底里扣掉主栏的内边距与三段 gap（12 + 8*3，显存条自带的外沿余量一并算进来）
-        assert.ok(layout.panel.height > layout.main.height - layout.chrome - 70,
-            `文生图铺满主栏里模式条 / 显存条 / 舞台以外的高度（面板 ${Math.round(layout.panel.height)}，主栏 ${Math.round(layout.main.height)}，占高行 ${layout.chrome}）`);
+        assert.ok(!layout.hero, "idle 不铺一块空画布");
+        assert.equal(layout.boxes, 1, "文生图只有一个提示词框");
+        assert.ok(layout.genInComposer, "「生成」在输入卡的控件行里");
+        assert.ok(layout.enhanceInMenu && !layout.enhanceInComposer, "增强收在 ⋯ 菜单里，不在输入卡默认视野（默认 = 写一句直接生成）");
+        assert.ok(!layout.stageVisible, "空轮时舞台整块收起：面板底下不留一片空框");
+        assert.equal(layout.chipBtns.length, 4, "技能 / 比例 / 最长边 / 自定参数是四枚真 chip 按钮");
+        assert.ok(layout.chipBtns.every(([text, title]) => text.length > 0 && title.length > 0),
+            "chip 有文字标签与悬停提示（说清这一枚在改什么）");
+        assert.equal(layout.visibleSelects, 0, "控件行里没有浏览器下拉框：原生 select 只当状态容器");
+        assert.ok(layout.idleTop !== null && !layout.idleInComposer, "idle 起手提示挂在结果区，不塞进输入卡");
+        assert.ok(layout.idleTop < layout.composer.top, "起手提示在输入卡上方（结果区在上方）");
+        // 面板铺满主栏、输入卡钉在面板底边（ArtCraft 式输入条），中间空的一段是页面背景
+        assert.ok(layout.panel.top - layout.main.top < layout.main.height * 0.4,
+            `文生图面板从主栏上部铺起（偏移 ${Math.round(layout.panel.top - layout.main.top)}）`);
+        assert.ok(layout.panel.height >= 200, `文生图面板自身可用高度 ${Math.round(layout.panel.height)}`);
+        assert.ok(layout.panel.bottom <= layout.main.bottom + 2, "面板不溢出主栏");
+        assert.ok(layout.composer.top > layout.panel.top + layout.panel.height * 0.5, "输入卡贴在面板下半（钉在底部）");
+        assert.ok(layout.panel.bottom - layout.composer.bottom < 60,
+            `输入卡收到面板底边（间距 ${Math.round(layout.panel.bottom - layout.composer.bottom)}）`);
+        assert.ok(layout.modeChip[0].startsWith("常规"), "编辑模式收在一枚 chip 里，chip 显示当前模式");
+        assert.ok(layout.modeChip[1] && /先拖入原图/.test(layout.modeChip[2]),
+            "无原图时模式 chip 禁用，提示说明缺的是原图");
         assert.ok(!layout.sideCol, "绘画页不再有常驻左栏");
         assert.ok(!layout.libInPage, "素材库不常驻在页里（顶栏按钮开弹窗）");
         assert.ok(layout.libBtn, "顶栏有素材库入口");
         assert.ok(!layout.recipes, "绘画页不再有图片配方列表");
+
+        // 自定参数卡片：展开后贴在输入卡正上方（与输入卡一组钉底），字段是生图模型 + LoRA
+        const drawer = await page.evaluate(() => {
+            const box = (s) => document.querySelector(s).getBoundingClientRect();
+            const panelEl = document.querySelector(".ns-paint-text .neo-gallery-gm-chip-panel");
+            const toggle = panelEl.parentElement.querySelector(".neo-gallery-gm-chip-btn");
+            const hiddenBefore = getComputedStyle(panelEl).display;
+            toggle.click();
+            const d = box(".ns-paint-text .neo-gallery-gm-chip-panel");
+            const c = box(".ns-paint-text .neo-gallery-gm-composer");
+            const p = box(".ns-paint-text");
+            const labels = [...document.querySelectorAll(".ns-paint-text .neo-gallery-gm-model-box .rs-form-label")]
+                .map(l => l.textContent.trim());
+            const searchable = document.querySelectorAll(".ns-paint-text .neo-gallery-gm-model-box .rs-model-select-box").length;
+            toggle.click();
+            return { d, c, p, labels, searchable, hiddenBefore, closedAfter: getComputedStyle(panelEl).display };
+        });
+        assert.equal(drawer.hiddenBefore, "none", "自定参数默认不显示");
+        assert.ok(drawer.d.height > 40, `点开后是一块浮层面板（高 ${Math.round(drawer.d.height)}）`);
+        assert.ok(drawer.d.bottom <= drawer.c.bottom && drawer.d.top >= drawer.p.top - 1,
+            "面板从 chip 上方浮出，不超出文生图面板");
+        assert.deepEqual(drawer.labels, ["生图模型", "LoRA"], "面板只露生图模型与 LoRA（Text Encoder / VAE 不露出）");
+        assert.ok(drawer.searchable >= 1, "模型与 LoRA 用可搜索下拉壳（模型列表长，纯菜单翻不动）");
+        assert.equal(drawer.closedAfter, "none", "再点一次「自定参数」应收起");
+
+        // 矮窗口（缩小的窗口）：输入卡与显存条必须仍在视口内，页面不产生裁切
+        await page.setViewportSize({ width: 1280, height: 660 });
+        const short = await page.evaluate(() => {
+            const box = (s) => document.querySelector(s).getBoundingClientRect();
+            const view = document.querySelector(".ns-view");
+            return {
+                composer: box(".ns-paint-text .neo-gallery-gm-composer"),
+                gen: box(".ns-paint-text .neo-gallery-gm-gen-btn"),
+                mem: box(".ns-paint-main .ns-mem"),
+                view: box(".ns-view"),
+                clipped: view.scrollHeight - view.clientHeight,
+                ta: box(".ns-paint-text .neo-gallery-gm-quick-input").height,
+            };
+        });
+        assert.ok(short.composer.bottom <= short.view.bottom + 2,
+            `矮窗口里输入卡落在视口内（底边 ${Math.round(short.composer.bottom)} / 视口底 ${Math.round(short.view.bottom)}）`);
+        assert.ok(short.mem.bottom <= short.view.bottom + 2, "矮窗口里显存条不被裁掉");
+        assert.ok(short.clipped <= 2, `矮窗口里文生图不溢出视口（溢出 ${short.clipped}px）`);
+        assert.ok(short.ta < short.view.height * 0.35, `输入框高度跟着窗口收（${Math.round(short.ta)}px）`);
+        assert.ok(short.gen.width > 40 && short.gen.height > 18, "「生成」钮在矮窗口里没被挤扁");
+        await page.setViewportSize({ width: 1600, height: 950 });
 
         // 开弹窗 = 同一个画廊挂进弹窗宿主；点卡片填进图片编辑预览后关弹窗
         await page.click(".ns-paint-lib-btn");
@@ -437,6 +516,8 @@ test("Studio 绘画页：图片编辑面板进页就绪，拖放落点与「生�
             const main = box(".ns-paint-main");
             const stage = box(".ns-paint-edit .neo-gallery-edit-compare-stage");
             const empty = box(".ns-paint-edit .neo-gallery-edit-empty");
+            const composer = box(".ns-paint-edit .neo-gallery-gm-composer");
+            const composerBar = document.querySelector(".ns-paint-edit .neo-gallery-gm-composer-bar");
             // 显存条整块被顶栏拉成整行，居中要看里面那几枚读数的跨度
             const memParts = [...document.querySelectorAll(".ns-paint-main .ns-mem > *")].map((e) => e.getBoundingClientRect());
             const memOffCenter = memParts.length
@@ -452,7 +533,13 @@ test("Studio 绘画页：图片编辑面板进页就绪，拖放落点与「生�
                 heightGap: Math.abs(panel.height - host.height),
                 overlays: document.querySelectorAll(".neo-gallery-story-modal-overlay").length,
                 titlebar: getComputedStyle(document.querySelector(".ns-paint-edit .neo-gallery-story-titlebar")).display,
-                disabled: [...document.querySelectorAll(".ns-paint-edit .neo-gallery-edit-outpaint-btn")].every((b) => b.disabled),
+                modeChipDisabled: document.querySelector(".ns-paint-edit .neo-gallery-edit-mode-select").parentElement.querySelector(".neo-gallery-gm-chip-btn").disabled,
+                // 编辑控件与文生图同一组贴底控件：一个输入卡 + 底行 chips
+                chips: [...composerBar.querySelectorAll(".neo-gallery-gm-chip-btn")].map((b) => b.textContent.trim()),
+                genInComposer: !!composerBar.querySelector(".neo-gallery-gm-gen-btn"),
+                visibleSelects: [...composerBar.querySelectorAll("select")].filter((s) => !s.hidden && !s.closest(".neo-gallery-gm-chip-panel")).length,
+                composerInFold: inFold(composer),
+                paramsInBar: composerBar.contains(document.querySelector(".ns-paint-edit .neo-gallery-gm-chip-panel")),
                 on: look(btns.find((b) => b.classList.contains("ns-paint-mode-on"))),
                 off: look(btns.find((b) => !b.classList.contains("ns-paint-mode-on"))),
                 barOffCenter: Math.abs((bar.left + bar.right) / 2 - (main.left + main.right) / 2),
@@ -463,7 +550,12 @@ test("Studio 绘画页：图片编辑面板进页就绪，拖放落点与「生�
         assert.ok(geo.emptyInFold, "拖放落点整块在折叠线内（预览区没被挤到屏幕外）");
         assert.ok(geo.genInFold, "「生成」按钮可见可点，不被显存条切掉");
         assert.ok(geo.formInFold, "编辑表单收尾在视口内");
-        assert.ok(geo.disabled, "无原图时扩图 / 局部 / 点选删除 / 融合 / 姿势先收起");
+        assert.ok(geo.modeChipDisabled, "无原图时模式 chip 先禁用（扩图 / 局部 / 删除 / 融合 / 姿势都藏在 chip 里）");
+        assert.ok(geo.genInComposer, "「生成」在编辑输入卡的 chips 行里");
+        assert.equal(geo.chips.length, 4, "编辑输入卡底行 = 技能 chip + 模式 chip + 尺寸 chip + 自定参数 chip");
+        assert.equal(geo.visibleSelects, 0, "编辑控件行里没有浏览器下拉框：原生 select 只当状态容器");
+        assert.ok(geo.composerInFold, "输入卡整块在折叠线内");
+        assert.ok(geo.paramsInBar, "自定参数面板挂在底行 chip 上（不占输入卡上方空间）");
         assert.equal(geo.titlebar, "none", "页内面板收起标题栏（标题由上方模式条承担）");
         assert.equal(geo.overlays, 0, "不建浮层遮罩");
         assert.ok(geo.heightGap <= 2, "面板铺满宿主，不留大片空白");
@@ -482,6 +574,37 @@ test("Studio 绘画页：图片编辑面板进页就绪，拖放落点与「生�
         await page.waitForTimeout(150);
         const shrunk = await page.evaluate(() => document.querySelector(".ns-paint-edit .neo-gallery-edit-empty")?.getBoundingClientRect().height || 0);
         assert.ok(shrunk > 0 && shrunk < geo.emptyH - 40, `窗口变矮时拖入框跟着缩（${geo.emptyH.toFixed(0)} → ${shrunk.toFixed(0)}）`);
+
+        // 矮窗口：输入卡钉底不被显存条切掉，自定参数展开也不把输入卡顶出视口
+        await page.setViewportSize({ width: 1280, height: 660 });
+        await page.waitForTimeout(200);
+        const short = await page.evaluate(() => {
+            const box = (s) => document.querySelector(s)?.getBoundingClientRect();
+            const inFold = (b) => !!b && b.top >= 0 && b.bottom <= window.innerHeight && b.height > 0;
+            const panelEl = document.querySelector(".ns-paint-edit .neo-gallery-gm-chip-panel");
+            const chip = panelEl.parentElement.querySelector(".neo-gallery-gm-chip-btn");
+            const panelHidden = getComputedStyle(panelEl).display;
+            chip.click();
+            const p = box(".ns-paint-edit .neo-gallery-gm-chip-panel");
+            const c = box(".ns-paint-edit .neo-gallery-gm-composer");
+            const bar = box(".ns-paint-edit .neo-gallery-gm-composer-bar");
+            const ta = box(".ns-paint-edit .neo-gallery-gm-quick-input");
+            chip.click();
+            return {
+                panelHidden,
+                panelInFold: inFold(p),
+                panelAboveChip: p && chip.getBoundingClientRect().top > p.bottom,
+                composerInFold: inFold(c),
+                barInFold: inFold(bar),
+                taHeight: Math.round(ta.height),
+            };
+        });
+        assert.equal(short.panelHidden, "none", "自定参数默认不显示");
+        assert.ok(short.panelInFold, "矮窗口里自定参数展开后在折叠线内");
+        assert.ok(short.panelAboveChip, "自定参数面板从 chip 上方浮出（输入卡钉在底边，只能朝上开）");
+        assert.ok(short.composerInFold, "矮窗口里输入卡整块在折叠线内（没被顶出视口）");
+        assert.ok(short.barInFold, "矮窗口里底行 chips 与「生成」不被切掉");
+        assert.ok(short.taHeight < 200, `矮窗口里指令框压矮（${short.taHeight}px），给预览区留位置`);
     } finally {
         await page.close();
     }

@@ -4,31 +4,58 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **The paint composer docks to the bottom, and its controls become real chips.** The text-to-image panel filled the
+  top of the column with the input card and left a strip of empty page under it, and its 技能 / 宽高比 / 最长边
+  controls were native `<select>` dropdowns wrapped in a rounded shell — a 240px clip of a model path
+  (`Krea2 RedCraft2-Krea2RedMix2.1-Int8-Conv…`) with a painted ▾, which reads as a broken field, not a control.
+  The panel now fills the column height and the composer is pinned to the panel bottom
+  (`.ns-paint-text .neo-gallery-gm-composer { margin-top: auto }`, the old `flex: none` panel override is gone):
+  progress and finished images stack from the top above the composer, idle leaves only a start hint
+  (`.neo-gallery-gm-idle`) in the result area, and the 自定参数 drawer moved above the composer so opening it pushes
+  nothing off screen. The three controls are real chips (`chipButton()`): a pill button with an icon, the value in
+  effect, and a caret, that floats an option menu open upward (the composer sits at the bottom, so menus open
+  upward); the native select stays inside the chip as the state container and is hidden, so skill switching,
+  「保存为新技能」 and the payload builders read the same values as before. A chip shows the effective value, not a
+  field name — `16:9 (宽屏)` / `2048` when it follows the skill config, the chosen option when overriding, 「默认」
+  when nothing is configured — and the ratio chip's rectangle is shaped by the ratio (9:16 tall, 16:9 wide), so the
+  two labels `比例 默认` / `边长 默认` and their i18n keys are gone. Covered by `studio/tests/js/gallery-gen-material.test.mjs`
+  (chip click → menu → payload, chip labels follow skill config replay), `studio-paint.test.mjs` (result area above
+  the composer, three chips, no visible select) and the paint-page e2e layout case, which now measures
+  composer-at-bottom / hint-above-composer geometry.
+
+- **The paint page composer is one box, and 增强 stops reading as the default.** The text-to-image panel spread the
+  same choices over five rows — a labelled skill row, a 随机填入/▾/☰ float group, a 自定参数 box, an enhance toolbar,
+  and an output box sitting above a description box, so nobody could tell which box the prompt goes in. The panel is
+  now one card: a single prompt textarea over a bottom row of chips (技能 / 宽高比 / 最长边 / 自定参数 … ⋯ 生成), and
+  what is in that box is the final prompt — generation sends `skip_enhance: true`. 随机填入 / 运行时随机 / 预设列表
+  and the whole enhance row (增强方式 + 增强) live in the `⋯` menu, so the default view is the box and the 生成
+  button; an enhance streams into the same box and restores the pre-enhance text when the LLM returns nothing, which
+  leaves one text history (the prompts actually generated, newest first) and no second box to keep in sync. The idle
+  preview area drew a dashed empty canvas (`.neo-gallery-gm-hero`) and the bottom agent stage `.ns-paint-stage` sat
+  under the panel with one idle line: with both removed the text panel stopped being stretched to the full column and
+  the stage host takes `ns-hidden` whenever the current round has nothing to show — `createAgentStage({ onContent })`
+  reports that, and `createAgentStage()` has no idle row left. The five image-edit mode buttons are disabled without
+  a source image, which read as broken controls in icon-only mode: they carry their labels, `cursor: not-allowed`, and
+  a title naming the missing piece
+  (「先拖入原图（从素材库取一张，或把图片文件拖进来）」). Covered by `studio/tests/js/studio-paint.test.mjs`
+  (idle empty-state, enhance inside the ⋯ menu, disabled affordance), `studio-agent-stage.test.mjs` (host hidden when
+  the round is empty), `gallery-gen-material.test.mjs` (single box, menu contents, enhance write-back, chip labels)
+  and the paint-page e2e layout case.
+
 - **Panel handover closes the asset modal, and glyph buttons become real icons.** On the paint page, `生成素材` /
   `图片编辑` clicked while the page is already open left the asset library modal covering the panel: `go()` on the
   same page skips the `showView()` close, so the entry closes the modal itself after switching mode. The five
   image-edit mode buttons and the frameless window controls (minimize / maximize / fullscreen / close) draw through
   `setIcon()` in `studio/web/js/core/icons.js` instead of the characters they used to carry, which shifted with the
-  font and dropped into colored emoji in WebView2; mode names live in the hover titles. The cold-start toast key
+  font and dropped into colored emoji in WebView2; each mode button keeps its short label beside the icon. The cold-start toast key
   `ComfyUI 启动中…就绪后自动接上生成` has its English entry. Covered by `studio-paint.test.mjs`,
   `studio-desktop.test.mjs` and `studio-window-chrome.e2e.mjs`.
 
-- **The paint page composer is one chip row plus one description field.** The text-to-image panel spread the same
-  choices over five rows (skill row with a 「生成技能」 label, a 随机填入/▾/☰ float group on the output box, a 自定参数
-  box holding ratio and max side, an enhance toolbar, an idle hint line above everything), and the image-edit panel
-  laid out a skill dropdown next to five text mode buttons and two always-visible width/height inputs. Now the skill,
-  aspect ratio and longest side are chips on one row (native `<select>`s in a rounded shell — `.value`,
-  `fillSkillOptions`, `setGmAutoLabel`, `applySkillModelConfig` and the request body stay as they were), the three
-  tools are a single `⋯` menu at the bottom-right of the output box (`随机填入` / the runtime-random toggle and count /
-  `预设列表`; Esc closes that menu before the preset overlay), the output box collapses to one line while it is empty
-  and expands on focus, typing, ↑/↓ recall or an enhance write, and the page's idle state is an empty canvas
-  (title + one line) in the preview area instead of a hint line above the boxes. The image-edit panel takes the same
-  shape: the skill is a chip, 扩图 / 局部 / 点选删除 / 融合 / 姿势 are icon buttons (mode name in the hover title),
-  and the size is a chip reading 「目标分辨率 1024×1024」 that opens the `#img-edit-width` / `#img-edit-height`
-  inputs, collapsed in the modes that size themselves. Covered by `studio/tests/js/gallery-gen-material.test.mjs`
-  (chip row, ⋯ menu, Esc chain, collapsing output), `gallery-image-edit.test.mjs` (icon mode switches, size chip),
-  `studio-paint.test.mjs` (idle hero) and the paint-page e2e cases, whose asset-library selector was refreshed to
-  `.ns-paint-lib-btn`.
+- **The image-edit panel takes the same composer shape.** The skill is a chip, 扩图 / 局部 / 删除 / 融合 / 姿势 are
+  icon buttons with their short label beside the icon, and the size is a chip reading 「目标分辨率 1024×1024」 that
+  opens the `#img-edit-width` / `#img-edit-height` inputs, collapsed in the modes that size themselves. Covered by
+  `studio/tests/js/gallery-image-edit.test.mjs` (icon mode switches, size chip), `studio-paint.test.mjs` (mode
+  buttons) and the paint-page e2e cases, whose asset-library selector was refreshed to `.ns-paint-lib-btn`.
 
 - **The director and paint pages hand their left column back to the editor; recipes and the asset library open in a window modal.**
   The director page's 360px recipe column (with its recipe / asset switch and its own splitter) and the paint page's

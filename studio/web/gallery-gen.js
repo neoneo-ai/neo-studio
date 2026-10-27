@@ -1037,9 +1037,120 @@ function storyPanelRoot(host, overlayClass, kind) {
     return { root, embedded: true, host };
 }
 
-/** chips 外壳：原生 select 换成一枚圆角小片，▾ 由外壳画（appearance:none 下原生箭头会消失） */
-function chipWrap(sel) {
-    return $el("span", { className: "neo-gallery-gm-chip" }, [sel]);
+/** 宽高比 glyph：描边小方框按选中比例定形（16:9 出扁长框、9:16 出瘦高框），chip 上少写字也知道是哪一项 */
+function ratioGlyph() {
+    const el = $el("span", { className: "neo-gallery-gm-chip-glyph" });
+    const sync = (v) => {
+        const [a, b] = String(v || "1:1").split(":").map(Number);
+        if (!a || !b) return;
+        el.style.width = `${a >= b ? 15 : Math.max(6, Math.round(15 * a / b))}px`;
+        el.style.height = `${a >= b ? Math.max(6, Math.round(15 * b / a)) : 15}px`;
+    };
+    return { el, sync };
+}
+
+/** 真 chip（输入条样式参考 ArtCraft）：一枚胶囊按钮 + 从上方浮出的选项菜单——输入卡钉在页面底部，
+ *  菜单只能朝上开。原生 select 收在壳里当状态容器并隐藏：chip 显示生效值（覆盖值 / 跟随值 / 默认），
+ *  点菜单项写 value 并派发 change；切技能重放配置是程序改 value，不触发 change，调用方要跟着 sync() */
+function chipButton(sel, { icon: iconName, glyph = null } = {}) {
+    sel.hidden = true;
+    const icoSlot = iconName ? $el("span", { className: "neo-gallery-gm-chip-icon" }, [icon(iconName, 12)]) : null;
+    const label = $el("span", { className: "neo-gallery-gm-chip-label" });
+    const chip = $el("button", { className: "neo-gallery-gm-chip-btn", type: "button", title: sel.title }, [
+        glyph ? glyph.el : icoSlot,
+        label,
+        $el("span", { className: "neo-gallery-gm-chip-caret", textContent: "▾" }),
+    ]);
+    const menu = $el("div", { className: "rs-runtime-menu neo-gallery-gm-chip-menu" });
+    const wrap = $el("span", { className: "neo-gallery-gm-chip-wrap" }, [chip, menu, sel]);
+    let open = false;
+    const sync = () => {
+        const v = sel.value || sel.dataset.follow || "";
+        label.textContent = v ? (sel.value ? (sel.options[sel.selectedIndex]?.textContent || v) : v) : t("默认");
+        const optTitle = sel.options[sel.selectedIndex]?.title;
+        chip.title = optTitle || sel.title;
+        if (glyph) glyph.sync(v);
+    };
+    const setIcon = (name) => {
+        if (!icoSlot) return;
+        icoSlot.textContent = "";
+        icoSlot.appendChild(icon(name, 12));
+    };
+    const close = () => {
+        if (!open) return;
+        open = false;
+        menu.style.display = "none";
+        chip.classList.remove("neo-gallery-gm-chip-open");
+    };
+    chip.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (open) { close(); return; }
+        menu.textContent = "";
+        for (const o of sel.options) {
+            const item = $el("button", {
+                className: "neo-gallery-gm-menu-item" + (o.value === sel.value ? " neo-gallery-gm-menu-on" : ""),
+                type: "button", textContent: o.textContent,
+            });
+            if (o.title) item.title = o.title;
+            item.addEventListener("click", () => {
+                close();
+                sel.value = o.value;
+                sel.dispatchEvent(new Event("change", { bubbles: true }));
+            });
+            menu.appendChild(item);
+        }
+        menu.style.display = "block";
+        open = true;
+        chip.classList.add("neo-gallery-gm-chip-open");
+        const r = chip.getBoundingClientRect();
+        menu.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - menu.offsetWidth - 8))}px`;
+        const above = r.top - menu.offsetHeight - 6;
+        menu.style.top = `${above > 8 ? above : r.bottom + 6}px`;
+    });
+    sel.addEventListener("change", sync);
+    sync();
+    return {
+        el: wrap, chip, sync, close, setIcon,
+        isOpen: () => open,
+        closeOnOutside: (target) => { if (open && !wrap.contains(target)) close(); },
+    };
+}
+
+/** chip 挂面板（自定参数）：胶囊 chip 点开才从上方浮出参数面板。收起时面板不占输入卡一行，
+ *  展开即成为底行上方的一排控件；面板留在输入卡 DOM 里，chip 只控制显隐与位置 */
+function chipPanel(content, { label: labelText, icon: iconName, title = "" } = {}) {
+    const label = $el("span", { className: "neo-gallery-gm-chip-label", textContent: labelText });
+    const chip = $el("button", { className: "neo-gallery-gm-chip-btn", type: "button", title }, [
+        icon(iconName, 12),
+        label,
+        $el("span", { className: "neo-gallery-gm-chip-caret", textContent: "▾" }),
+    ]);
+    const menu = $el("div", { className: "rs-runtime-menu neo-gallery-gm-chip-menu neo-gallery-gm-chip-panel" }, [content]);
+    const wrap = $el("span", { className: "neo-gallery-gm-chip-wrap" }, [chip, menu]);
+    let open = false;
+    const close = () => {
+        if (!open) return;
+        open = false;
+        menu.style.display = "none";
+        chip.classList.remove("neo-gallery-gm-chip-open");
+    };
+    chip.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (open) { close(); return; }
+        menu.style.display = "block";
+        open = true;
+        chip.classList.add("neo-gallery-gm-chip-open");
+        const r = chip.getBoundingClientRect();
+        menu.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - menu.offsetWidth - 8))}px`;
+        const above = r.top - menu.offsetHeight - 6;
+        menu.style.top = `${above > 8 ? above : r.bottom + 6}px`;
+    });
+    return {
+        el: wrap, chip, close,
+        setLabel: (v) => { label.textContent = v; },
+        isOpen: () => open,
+        closeOnOutside: (target) => { if (open && !wrap.contains(target)) close(); },
+    };
 }
 
 // 绘画页进页就把两块面板铺好（常驻），入口再点只做模式切换：重建面板会把用户写了一半的
@@ -1067,7 +1178,7 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
     const statusBox = $el("div", { className: "neo-gallery-cs-status" });
     const actionsBox = $el("div", { className: "neo-gallery-story-actions" });
     const promptInput = $el("textarea", {
-        className: "neo-gallery-story-input",
+        className: "neo-gallery-story-input neo-gallery-gm-quick-input",
         rows: 4,
         placeholder: t("描述你想对这张图做的修改，例如：把背景换成海边日落、给角色加一顶帽子……")
     });
@@ -1083,8 +1194,10 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
         $el("button", { className: "neo-gallery-story-btn" + (primary ? " neo-gallery-story-btn-primary" : ""), textContent: label, onclick });
 
     // 技能下拉：只列吃参考图的 image_gen 技能（必须带图的编辑类 + Qwen 2.1 这类两栖类）；
-    // 纯文生图技能挂上原图也会被模板丢掉，不在本页列出。默认 Qwen Image 2.1
-    const skillSel = $el("select", { className: "neo-recipes-sort" });
+    // 纯文生图技能挂上原图也会被模板丢掉，不在本页列出。默认 Qwen Image 2.1。
+    // 下拉收进输入卡的技能 chip：胶囊按钮 + 向上菜单，与文生图输入条同一枚控件
+    const skillSel = $el("select", { className: "neo-recipes-sort neo-gallery-gm-chip-select", title: t("编辑技能：只列吃参考图的生图技能（编辑类 + 两栖类）") });
+    const skillChip = chipButton(skillSel, { icon: "pencil" });
     let _genSkills = [];
     (async () => {
         try {
@@ -1102,23 +1215,24 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
         } catch {
             skillSel.value = QWEN_IMAGE_SKILL_ID;
         }
+        skillChip.sync();   // 下拉整份重建过：chip 标签跟着新选中项
     })();
-    // 自定参数（同「生成素材」弹窗）：本次临时换主模型 / LoRA，留空 = 跟随该技能 config 与全局生图设置。
-    // 宽高比 / 最长边不在这里露出：编辑出图尺寸跟原图走（「目标分辨率」行），比例覆盖在这条路上不生效。
+    // 自定参数（同「生成素材」弹窗）：chip 点开才从上方浮出主模型 / LoRA 面板，收起时不占输入卡空间。
+    // 宽高比 / 最长边不在这里露出：编辑出图尺寸跟原图走（「目标分辨率」chip），比例覆盖在这条路上不生效。
     const editModelCfg = createModelConfigSection();
     for (const row of editModelCfg.el.querySelectorAll(".rs-gen-adv-row")) row.remove();
-    const editModelBox = $el("div", { className: "neo-gallery-edit-model-box", style: { display: "none" } });
+    const editModelBox = $el("div", { className: "neo-gallery-edit-model-box" });
     editModelBox.appendChild(editModelCfg.el);
-    const editModelToggle = $el("button", {
-        className: "neo-gallery-gm-model-toggle", type: "button",
-        textContent: t("自定参数 ▸"),
+    const editParamsChip = chipPanel(editModelBox, {
+        label: t("自定参数"), icon: "gear",
         title: t("本次临时换主模型 / LoRA：留空 = 跟随该技能配置与全局生图设置"),
     });
-    editModelToggle.addEventListener("click", () => {
-        const open = editModelBox.style.display === "none";
-        editModelBox.style.display = open ? "" : "none";
-        editModelToggle.textContent = tf("自定参数 {arrow}", { arrow: open ? "▾" : "▸" });
-    });
+    // chip 说出当前生效值：选了模型就显示模型名，只加了 LoRA 就显示条数，全空 = 跟随配置
+    const syncEditParamsChip = () => {
+        const ov = editModelCfg.collect();
+        editParamsChip.setLabel(ov.model || (ov.loras.length ? tf("LoRA ×{n}", { n: ov.loras.length }) : t("自定参数")));
+    };
+    editModelBox.addEventListener("change", syncEditParamsChip);
     let editGenModels = null;   // 开窗拉一次模型列表，切技能重放配置时复用
     const applyEditModelCfg = async (skillId) => {
         if (!editGenModels || !skillId) return;
@@ -1128,7 +1242,8 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
         try {
             editGenModels = await listGenModels();
             editModelCfg.load({}, editGenModels);   // 先按「自动」渲染，避免下拉为空
-            applyEditModelCfg(skillSel.value);      // 再覆盖为当前技能配置
+            await applyEditModelCfg(skillSel.value);   // 再覆盖为当前技能配置
+            syncEditParamsChip();
         } catch { /* 模型列表拉不到就保持「自动」，不挡生成 */ }
     })();
     // 切换技能时自动填入默认提示词（如换脸触发词）
@@ -1136,7 +1251,7 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
         const sk = _genSkills.find(s => s.id === skillSel.value);
         const dp = sk?.gen_config?.default_prompt;
         if (dp) promptInput.value = dp;
-        applyEditModelCfg(skillSel.value);
+        applyEditModelCfg(skillSel.value).then(syncEditParamsChip);
     };
 
     const renderIdle = () => {
@@ -1144,7 +1259,7 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
             : panel.embedded ? t("写编辑指令、拖素材进预览区换原图，生成结果与原图左右对比")
             : t("填写编辑指令后点「生成」，原图将作为参考图传入所选技能。");
         fill(statusBox, $el("div", { className: "neo-gallery-story-hint", textContent: hint }));
-        fill(actionsBox, panel.embedded ? null : btn(t("取消"), close), btn(t("生成"), start, true));
+        fill(actionsBox, panel.embedded ? null : btn(t("取消"), close));
     };
 
     const renderRunning = (label, progress) => {
@@ -1178,13 +1293,13 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
             showEditedCanvas(final.canvas);
         }
         fill(statusBox, $el("div", { className: "neo-gallery-story-hint", textContent: t("已生成编辑结果。") }));
-        // 保留「再生成」入口：编辑支持连续重复生成，不必关窗重开（与 renderError 的「重试」一致）
-        fill(actionsBox, btn(t("再生成"), start), panel.embedded ? null : btn(t("关闭"), close, true));
+        // 「生成」常驻输入卡：连续编辑直接再点它，不再挂一枚重复的「再生成」
+        fill(actionsBox, panel.embedded ? null : btn(t("关闭"), close, true));
     };
 
     const renderError = (message) => {
         fill(statusBox, $el("div", { className: "neo-gallery-story-hint neo-gallery-story-hint-error", textContent: message || t("生成失败") }));
-        fill(actionsBox, btn(t("重试"), start), panel.embedded ? null : btn(t("关闭"), close));
+        fill(actionsBox, panel.embedded ? null : btn(t("关闭"), close));
     };
 
     // 生图失败：窗内留错误 + 重试，另弹 action toast 引导去技能详情修模型（缺模型/节点等非 LLM 问题）
@@ -1271,14 +1386,30 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
     };
 
     const onKey = (e) => {
-        if (e.key === "Escape" && !panel.embedded) close();   // 内嵌面板由绘画页自己管生命周期，Esc 不销毁
+        if (e.key === "Escape") {
+            // 输入卡 chip 菜单开着时先关菜单，没有菜单才关窗
+            if (composerChips.some(c => c.isOpen())) { for (const c of composerChips) c.close(); }
+            else if (!panel.embedded) close();   // 内嵌面板由绘画页自己管生命周期，Esc 不销毁
+        }
         else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) start();
     };
 
-    // 扩图控件：开关按钮、目标比例、目标像素数（MP）、结果尺寸标签
-    const outpaintBtn = $el("button", { className: "neo-gallery-edit-outpaint-btn", type: "button" });
-    setIcon(outpaintBtn, "maximize");
-    outpaintBtn.title = t("扩图：在原图上拖框定四边留白量，由模型补全周边场景");
+    // 编辑模式 chip（与技能 chip 同一枚控件）：一枚胶囊 + 向上菜单，选模式即切 setEditMode；
+    // 图标跟着模式换（扩图=补边框、局部=画笔、删除=叉、融合=叠图、姿势=人形），模式说明挂在菜单项上
+    const MODE_ICONS = { normal: "wand", outpaint: "maximize", local: "pencil", remove: "cross", blend: "copy", pose: "user" };
+    const modeSel = $el("select", { className: "neo-recipes-sort neo-gallery-gm-chip-select neo-gallery-edit-mode-select", title: t("编辑模式：决定在原图上怎么动手") });
+    for (const [mode, name, tip] of [
+        ["normal", t("常规"), t("常规编辑：按编辑指令整图重绘，原图作参考")],
+        ["outpaint", t("扩图"), t("扩图：在原图上拖框定四边留白量，由模型补全周边场景")],
+        ["local", t("局部"), t("高分局部编辑：涂抹要修改的区域，自动裁剪放大重绘后合并回原图")],
+        ["remove", t("删除"), t("点选删除：在原图上点击要删除的物体，SAM3 自动分割并叠加红色遮罩预览，确认后移除（已预填默认删除指令，可修改）")],
+        ["blend", t("融合"), t("多图融合：添加多张参考图，由模型自动融合为一张连贯画面")],
+        ["pose", t("姿势"), t("姿势编辑：按提示词改原图人物的姿势；在参考图区拖入第 2 张图（人物图或骨架图）则把它的姿势搬到原图人物上，触发词自动切换")],
+    ]) {
+        modeSel.appendChild($el("option", { value: mode, textContent: name, title: tip }));
+    }
+    const modeChip = chipButton(modeSel, { icon: MODE_ICONS.normal });
+    modeSel.addEventListener("change", () => setEditMode(modeSel.value));
 
     const sizeLabel = $el("span", { className: "neo-gallery-edit-size-label" });
     sizeLabel.style.display = "none";
@@ -1301,10 +1432,6 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
     outpaintRow.style.display = "none";
 
     // 局部编辑控件：画笔大小 / 橡皮 / 清空（涂抹画布叠加在原图上）
-    const localBtn = $el("button", { className: "neo-gallery-edit-outpaint-btn", type: "button" });
-    setIcon(localBtn, "pencil");
-
-    localBtn.title = t("高分局部编辑：涂抹要修改的区域，自动裁剪放大重绘后合并回原图");
     const brushInput = $el("input", { type: "range", className: "neo-gallery-edit-brush", min: 8, max: 200, step: 4, value: "48" });
     brushInput.title = t("画笔大小（显示像素）");
     const eraserChk = $el("input", { type: "checkbox" });
@@ -1320,10 +1447,6 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
     localRow.style.display = "none";
 
     // 点选删除控件：在原图上点击标记要删的物体（最多 5 点），SAM3 分割后走局部编辑管线移除
-    const removeBtn = $el("button", { className: "neo-gallery-edit-outpaint-btn", type: "button" });
-    setIcon(removeBtn, "cross");
-
-    removeBtn.title = t("点选删除：在原图上点击要删除的物体，SAM3 自动分割并叠加红色遮罩预览，确认后移除（已预填默认删除指令，可修改）");
     const removeHint = $el("span", { className: "neo-gallery-edit-size-label" });
     const removeClearBtn = $el("button", { className: "neo-gallery-story-btn", type: "button", textContent: t("清空标记") });
     const removeRow = $el("div", { className: "neo-gallery-edit-outpaint-row" }, [
@@ -1333,17 +1456,7 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
     ]);
     removeRow.style.display = "none";
 
-    // 多图融合控件：添加多张参考图，模型自动融合为一张
-    const blendBtn = $el("button", { className: "neo-gallery-edit-outpaint-btn", type: "button" });
-    setIcon(blendBtn, "copy");
-    blendBtn.title = t("多图融合：添加多张参考图，由模型自动融合为一张连贯画面");
-
-    // 姿势编辑控件：切到姿势编辑技能，提示词预填该技能 config.json 的默认触发词
-    const poseBtn = $el("button", { className: "neo-gallery-edit-outpaint-btn", type: "button" });
-    setIcon(poseBtn, "user");
-    poseBtn.title = t("姿势编辑：按提示词改原图人物的姿势；在参考图区拖入第 2 张图（人物图或骨架图）则把它的姿势搬到原图人物上，触发词自动切换");
-
-    // 出图尺寸片：默认跟原图走（原图探测完按目标像素数填 32 对齐的默认值），点开才露出宽高输入
+    // 出图尺寸 chip：默认跟原图走（原图探测完按目标像素数填 32 对齐的默认值），点开才露出宽高输入
     const widthInput = $el("input", { type: "number", className: "neo-recipes-sort", id: "img-edit-width", min: 256, max: 8192, step: 32, placeholder: t("宽") });
     const heightInput = $el("input", { type: "number", className: "neo-recipes-sort", id: "img-edit-height", min: 256, max: 8192, step: 32, placeholder: t("高") });
     const sizeEditor = $el("div", { className: "neo-gallery-edit-size-editor" }, [
@@ -1352,9 +1465,12 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
     sizeEditor.style.display = "none";
     const sizeChipVal = $el("span", { className: "neo-gallery-edit-size-chip-val", textContent: t("跟随原图") });
     const sizeChip = $el("button", {
-        className: "neo-gallery-edit-size-chip", type: "button",
+        className: "neo-gallery-gm-chip-btn neo-gallery-edit-size-chip", type: "button",
         title: t("本次出图尺寸：默认 = 原图缩放到目标像素数（生图默认设置里的 MP）；点开可手改宽高"),
-    }, [resLabelEl, sizeChipVal]);
+    }, [
+        icon("fullscreen", 12),
+        $el("span", { className: "neo-gallery-gm-chip-label" }, [resLabelEl, sizeChipVal]),
+    ]);
     const syncSizeChip = () => {
         const w = widthInput.value, h = heightInput.value;
         sizeChipVal.textContent = (w && h) ? `${w}×${h}` : t("跟随原图");
@@ -1427,9 +1543,16 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
         title: t("灯箱查看原图、编辑结果与参考图"),
         onclick: () => openCompareLightbox(false)
     });
-    // 扩图 / 局部 / 点选删除 / 融合 / 姿势都要在原图上动手，没原图时先收起这些入口
+    // 扩图 / 局部 / 点选删除 / 融合 / 姿势都要在原图上动手，没原图时先收起这些入口。
+    // 禁用态要自己说出缺什么：一枚灰 chip 挂着一句「在原图上拖框」的 tooltip，在用户眼里就是点坏了的控件
+    const sourceBtns = [modeChip.chip, zoomBtn];
+    const sourceTitles = sourceBtns.map((b) => b.title);
+    const noSourceTitle = t("先拖入原图（从素材库取一张，或把图片文件拖进来）");
     const setSourceModeBtns = (on) => {
-        for (const b of [outpaintBtn, localBtn, removeBtn, blendBtn, poseBtn, zoomBtn]) b.disabled = !on;
+        sourceBtns.forEach((b, i) => {
+            b.disabled = !on;
+            b.title = on ? sourceTitles[i] : noSourceTitle;
+        });
     };
     setSourceModeBtns(!!source);
     const compareLabelRow = $el("div", { className: "neo-gallery-edit-compare-label-row" }, [compareLabel, zoomBtn]);
@@ -1510,6 +1633,24 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
         setDividerPos(0);
     };
 
+    // 输入卡（与文生图同一组贴底控件）：编辑指令框 + 底行 chip（技能 / 模式 / 出图尺寸 / 自定参数 … 生成）；
+    // 点「出图尺寸」chip 才在底行下方露出宽高输入，点「自定参数」chip 从上方浮出模型 / LoRA 面板
+    const genBtn = btn(t("生成"), start, true);
+    genBtn.classList.add("neo-gallery-gm-gen-btn");
+    const composerChips = [skillChip, modeChip, editParamsChip];
+    const composer = $el("div", { className: "neo-gallery-gm-composer" }, [
+        promptInput,
+        $el("div", { className: "neo-gallery-gm-composer-bar neo-gallery-gm-chips" }, [
+            skillChip.el,
+            modeChip.el,
+            sizeChip,
+            editParamsChip.el,
+            $el("div", { className: "neo-gallery-gm-composer-gap" }),
+            genBtn,
+        ]),
+        sizeEditor
+    ]);
+
     overlay.appendChild($el("div", { className: "neo-gallery-story-modal neo-gallery-edit-modal" + (panel.embedded ? " neo-gallery-story-modal--embedded" : "") }, [
         $el("div", { className: "neo-gallery-story-titlebar" }, [
             $el("span", { className: "neo-gallery-story-title", textContent: t("图片编辑") }),
@@ -1518,38 +1659,24 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
         // 图片在上、操作在下：对比区（原图 | 编辑结果 + 分割线滑块）固定在窗内上方
         compareBox,
         $el("div", { className: "neo-gallery-edit-form" }, [
-            $el("div", { className: "neo-gallery-edit-form-top-row" }, [
-                $el("div", { className: "neo-gallery-story-form-row neo-gallery-edit-chips" }, [
-                    chipWrap(skillSel),
-                    outpaintBtn,
-                    localBtn,
-                    removeBtn,
-                    blendBtn,
-                    poseBtn,
-                    editModelToggle
-                ]),
-                $el("div", { className: "neo-gallery-story-form-row neo-gallery-edit-size-row" }, [
-                    sizeChip,
-                    sizeEditor
-                ])
-            ]),
             refDropContainer,
             outpaintRow,
-
             localRow,
             removeRow,
-            editModelBox,
-            promptInput,
             statusBox,
+            composer,
             actionsBox
         ])
     ]));
 
     renderIdle();
+    const onDocClick = (e) => { for (const chip of composerChips) chip.closeOnOutside(e.target); };
     document.addEventListener("keydown", onKey);
+    document.addEventListener("click", onDocClick);
     const origRemove = overlay.remove.bind(overlay);
     overlay.remove = () => {
         document.removeEventListener("keydown", onKey);
+        document.removeEventListener("click", onDocClick);
         document.removeEventListener("pointermove", onDividerMove);
         document.removeEventListener("pointerup", onDividerEnd);
         origRemove();
@@ -1842,12 +1969,10 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
 
         restoreOrigImage();
 
-        // 按钮状态
-        outpaintBtn.classList.toggle("on", mode === "outpaint");
-        localBtn.classList.toggle("on", mode === "local");
-        removeBtn.classList.toggle("on", mode === "remove");
-        blendBtn.classList.toggle("on", mode === "blend");
-        poseBtn.classList.toggle("on", mode === "pose");
+        // 模式 chip：菜单里的选中值与图标跟着模式换（程序改 value 不触发 change，sync 自己跟上）
+        modeSel.value = mode;
+        modeChip.sync();
+        modeChip.setIcon(MODE_ICONS[mode]);
 
         // 模式专属行
         outpaintRow.style.display = mode === "outpaint" ? "" : "none";
@@ -1868,7 +1993,9 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
 
         // 技能选择（程序改 value 不触发 onchange，自定参数要自己重放到新技能的配置）
         skillSel.value = { outpaint: QWEN_OUTPAINT_SKILL_ID, local: QWEN_LOCAL_EDIT_SKILL_ID, pose: QWEN_POSE_EDIT_SKILL_ID }[mode] || QWEN_IMAGE_SKILL_ID;
-        applyEditModelCfg(skillSel.value);
+        skillChip.sync();
+        await applyEditModelCfg(skillSel.value);
+        syncEditParamsChip();
 
         // 模式专属 setup
         if (mode === "outpaint") {
@@ -1898,7 +2025,6 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
     };
 
 
-    outpaintBtn.addEventListener("click", () => setEditMode(editMode === "outpaint" ? "normal" : "outpaint"));
     ratioSel.addEventListener("change", snapBoxToRatio);
     mpInput.addEventListener("input", updateSizeLabel);
 
@@ -2015,8 +2141,6 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
         painted = false;
         redrawPaintOverlay();
     });
-
-    localBtn.addEventListener("click", () => setEditMode(editMode === "local" ? "normal" : "local"));
 
     // ---- 点选删除：透明点击层对齐原图 contain 显示盒，标记点存自然像素坐标 ----
     let removePoints = [];   // [{x, y}] 原图像素坐标
@@ -2153,10 +2277,6 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
         removeSegSeq++;
         redrawRemoveOverlay();
     });
-
-    removeBtn.addEventListener("click", () => setEditMode(editMode === "remove" ? "normal" : "remove"));
-    blendBtn.addEventListener("click", () => setEditMode(editMode === "blend" ? "normal" : "blend"));
-    poseBtn.addEventListener("click", () => setEditMode(editMode === "pose" ? "normal" : "pose"));
 
     // ---- 参考图区（autogrow：拖入一张追加新空槽，最多 9 张） ----
     let extraRefs = [];   // [{filename, subfolder}]
@@ -2464,11 +2584,10 @@ export function openGenMaterialDialog(gallery, opts = null) {
 
     const statusBox = $el("div", { className: "neo-gallery-cs-status" });
     const actionsBox = $el("div", { className: "neo-gallery-story-actions" });
-    // agent 式双框（chat 习惯）：output 在上（增强提示词，作最终生成提示词；为空时回退 quick input）
-    // + quick input 在下（描述 / 修改指令，增强后保留不自动清空），与 NeoPromptAgent 节点的输入/输出结构一致
+    // 一个输入框就是生成用的提示词：写一句直接生成，「增强」（可选）把扩写结果写回同一个框
     const quickInput = $el("textarea", {
         className: "neo-gallery-gm-quick-input",
-        rows: 2,
+        rows: 3,
         placeholder: t("描述要生成的素材，例如：红色陶瓷杯的白底产品图……或输入修改指令（↑/↓ 调出历史）")
     });
 
@@ -2479,8 +2598,8 @@ export function openGenMaterialDialog(gallery, opts = null) {
         t("描述要生成的素材，例如：红色陶瓷杯的白底产品图"),
         t("✏输入修改指令，例如：去掉动漫风格，改成写实"),
         t("加风格要求，例如：改成赛博朋克风格"),
-        t("输入描述后点「增强」，LLM 帮你扩写成详细提示词"),
-        t("点 随机填入一条提示词（配方不入池）"),
+        t("在 ⋯ 菜单点「增强」，LLM 把描述扩写成详细提示词"),
+        t("在 ⋯ 菜单随机填入一条提示词（配方不入池）"),
         t("按 ↑/↓ 召回之前生成用过的提示词")
     ];
     let tipTimer = null;
@@ -2488,15 +2607,9 @@ export function openGenMaterialDialog(gallery, opts = null) {
     const stopQuickTips = () => { if (tipTimer) { clearInterval(tipTimer); tipTimer = null; } };
     quickInput.addEventListener("focus", () => { setQuickTip(); stopQuickTips(); tipTimer = setInterval(setQuickTip, 5000); });
     quickInput.addEventListener("blur", () => { stopQuickTips(); setQuickTip(); });
-    const outputInput = $el("textarea", {
-        className: "neo-gallery-story-input",
-        rows: 4,
-        placeholder: t("增强后的提示词会显示在这里（不增强时可直接填写，↑/↓ 调出历史）")
-    });
-    // output 框独立 ↑/↓ 历史：只记生成实际用过的最终提示词（增强长文 / 手填内容），与快捷输入历史互不相干
-    const gmOutputHistory = createQuickInputHistory(outputInput, { storageKey: "neo.gallery.gen_material.output_history" });
 
-    // ── llm-chat 式布局：随机填入 / ▾ 运行时随机设置 / ☰ 预设列表（无配方条目）浮出在 output 框右下角；增强技能下拉 + 增强集成在 quick input 内部底边 ──
+    // ── 输入卡：一个提示词框 + 底部一行（技能 / 宽高比 / 最长边 / 自定参数 … ⋯ 生成）；
+    // ⋯ 菜单收 随机填入 / 运行时随机批量 / 预设列表 / 提示词增强 ──
     const GM_RANDOM_KEY = "neo.gallery.gen_material.runtime_random";
     let gmRandom = { enabled: false, count: 1 };
     try {
@@ -2507,15 +2620,7 @@ export function openGenMaterialDialog(gallery, opts = null) {
     } catch {}
     const saveGmRandom = () => { try { localStorage.setItem(GM_RANDOM_KEY, JSON.stringify(gmRandom)); } catch {} };
 
-    const moreBtn = $el("button", { className: "neo-gallery-gm-tool-btn neo-gallery-gm-more-btn", type: "button", textContent: "⋯", title: t("更多：随机填入 / 运行时随机批量 / 预设列表") });
-    // 浮出组（参考 llm-chat rs-button-group）：output 框右下角只剩一枚 ⋯，半透明、hover 变实
-    const floatGroup = $el("div", { className: "neo-gallery-gm-float-group" }, [moreBtn]);
-    const outputWrap = $el("div", { className: "neo-gallery-gm-output-wrap" }, [outputInput, floatGroup]);
-    // 输出框空态收成一行（面板里下方不再挂一整块空框）：聚焦 / 输入 / 键盘召回 / 增强写入才展开成整块
-    const setOutputOpen = (on) => outputWrap.classList.toggle("neo-gallery-gm-output-open", on);
-    for (const ev of ["focus", "input", "keydown"]) outputInput.addEventListener(ev, () => setOutputOpen(true));
-    outputInput.addEventListener("blur", () => { if (!outputInput.value.trim()) setOutputOpen(false); });
-    setOutputOpen(false);
+    const moreBtn = $el("button", { className: "neo-gallery-gm-tool-btn neo-gallery-gm-more-btn", type: "button", textContent: "⋯", title: t("更多：随机填入 / 提示词增强 / 运行时随机批量 / 预设列表") });
 
     // ⋯ 菜单（复用 Prompt Agent 节点运行时菜单样式；运行时随机状态 localStorage 持久化）
     const moreMenu = $el("div", { className: "rs-runtime-menu neo-gallery-gm-more-menu" });
@@ -2565,7 +2670,7 @@ export function openGenMaterialDialog(gallery, opts = null) {
         $el("button", { className: "rs-preset-close", type: "button", textContent: "×" })
     ]);
     const presetSearch = presetHeader.querySelector("input");
-    presetHeader.querySelector("button").addEventListener("click", () => { presetOverlay.style.display = "none"; outputInput.focus(); });
+    presetHeader.querySelector("button").addEventListener("click", () => { presetOverlay.style.display = "none"; quickInput.focus(); });
     const presetBody = $el("div", { className: "rs-preset-list-body" });
     presetOverlay.append(presetHeader, presetBody);
 
@@ -2586,9 +2691,9 @@ export function openGenMaterialDialog(gallery, opts = null) {
             row.addEventListener("click", async () => {
                 try {
                     const data = await loadPrompt(it.name);
-                    outputInput.value = data.text || "";
+                    quickInput.value = data.text || "";
                     presetOverlay.style.display = "none";
-                    outputInput.focus();
+                    quickInput.focus();
                 } catch (e) {
                     console.error("[Gallery] load preset failed:", e);
                     actionToast({ severity: "error", summary: t("加载预设失败"), detail: String(e?.message || e) });
@@ -2624,6 +2729,7 @@ export function openGenMaterialDialog(gallery, opts = null) {
     // 技能下拉：只列吃文字的生图技能（纯文生图 + Qwen 2.1 这类两栖类）；必须带参考图的编辑类
     // 在本页没有图可给，列出来只会出废图。记住上次选中的技能（localStorage），失效时回 Krea2 文生图
     const skillSel = $el("select", { className: "neo-recipes-sort neo-gallery-gm-chip-select", title: t("生成技能：只列吃文字输入的生图技能（纯文生图 + 两栖类）") });
+    const skillChip = chipButton(skillSel, { icon: "sparkles" });
     let rememberedSkill = "";
 
     try { rememberedSkill = localStorage.getItem(GM_LAST_SKILL_KEY) || ""; } catch {}
@@ -2642,6 +2748,7 @@ export function openGenMaterialDialog(gallery, opts = null) {
         } catch {
             skillSel.value = KREA2_T2I_SKILL_ID;
         }
+        skillChip.sync();   // 下拉整份重建过：chip 标签跟着新选中项
         applySkillModelConfig(skillSel.value); // 自定参数同步为该技能配置（模型列表未就绪时为空操作）
     };
     fillSkillOptions();
@@ -2675,7 +2782,7 @@ export function openGenMaterialDialog(gallery, opts = null) {
     // Text Encoder / VAE 很少变，弹窗里不露出（共享组件保留行，这里裁掉）
     const modelCfg = createModelConfigSection();
     for (const row of modelCfg.el.querySelectorAll(".rs-gen-adv-row")) row.remove();
-    const modelBox = $el("div", { className: "neo-gallery-gm-model-box", style: { display: "none" } });
+    const modelBox = $el("div", { className: "neo-gallery-gm-model-box" });
     modelBox.appendChild(modelCfg.el);
     // 宽高比 / 最长边：本次临时覆盖（空值 = 跟随技能配置 / 全局设置），同行紧凑布局
     // 宽高比选项与导演编辑页同源（DIRECTOR_ASPECTS）：值保持纯比例，显示带中文备注
@@ -2693,7 +2800,7 @@ export function openGenMaterialDialog(gallery, opts = null) {
 
         const auto = document.createElement("option");
         auto.value = "";
-        auto.textContent = t("默认"); // 技能配置就绪后由 setGmAutoLabel 补上跟随值
+        auto.textContent = t("默认");   // 跟随值由 setGmAutoLabel 写进这一项与 chip
         select.appendChild(auto);
         for (const opt of options) {
             const [value, text] = Array.isArray(opt) ? opt : [opt, opt];
@@ -2704,14 +2811,19 @@ export function openGenMaterialDialog(gallery, opts = null) {
         }
         return select;
     };
-    // 「默认」选项显示当前技能配置跟随的值（切换技能时更新）
-    const setGmAutoLabel = (sel, v) => { sel.options[0].textContent = v ? tf("默认 ({v})", { v }) : t("默认"); };
+    // 跟随值 = 当前技能配置的生效值（切技能时更新）：菜单里写出值，chip 标签与比例 glyph 直接用这份
+    const setGmAutoLabel = (sel, v) => {
+        sel.dataset.follow = v || "";
+        sel.options[0].textContent = v ? tf("默认 ({v})", { v }) : t("默认");
+    };
     const sizeRow = $el("div", { className: "neo-gallery-gm-size-row neo-gallery-gm-chip-group" });
     const ratioSel = makeGmSelect(GM_RATIO_OPTIONS);
     ratioSel.title = t("宽高比：本次临时覆盖出图比例，默认 = 跟随技能配置与全局生图设置");
     const edgeSel = makeGmSelect(GM_EDGES);
     edgeSel.title = t("最长边：本次临时覆盖出图最长边像素，默认 = 跟随技能配置与全局生图设置");
-    sizeRow.append(chipWrap(ratioSel), chipWrap(edgeSel));
+    const ratioChip = chipButton(ratioSel, { glyph: ratioGlyph() });
+    const edgeChip = chipButton(edgeSel, { icon: "maximize" });
+    sizeRow.append(ratioChip.el, edgeChip.el);
 
     // 保存为新技能：把当前选的「主模型 + LoRA + 宽高比 + 最长边」存成新技能（名称自动生成 = 主模型名+LoRA 名，其余设置沿用当前技能）
     const saveSkillBtn = $el("button", {
@@ -2767,6 +2879,9 @@ export function openGenMaterialDialog(gallery, opts = null) {
         edgeSel.value = GM_EDGES.includes(String(cfg.base_resolution)) ? String(cfg.base_resolution) : "";
         setGmAutoLabel(ratioSel, cfg.default_ratio ? (GM_RATIO_AUTO_TEXT[cfg.default_ratio] || cfg.default_ratio) : "");
         setGmAutoLabel(edgeSel, cfg.base_resolution);
+        ratioChip.sync();   // 程序改 value 不触发 change：chip 标签与 glyph 自己跟上
+        edgeChip.sync();
+        syncParamsChip();
     }
     (async () => {
         try {
@@ -2777,46 +2892,49 @@ export function openGenMaterialDialog(gallery, opts = null) {
             // 同上：静默保持「自动」
         }
     })();
-    const modelToggle = $el("button", {
-        className: "neo-gallery-gm-model-toggle",
-        type: "button",
-        textContent: t("自定参数 ▸"),
+    // 自定参数：chip 点开才从上方浮出主模型 / LoRA 面板，收起时不占输入卡一行
+    const paramsChip = chipPanel(modelBox, {
+        label: t("自定参数"), icon: "gear",
+        title: t("本次临时换主模型 / LoRA：留空 = 跟随该技能配置与全局生图设置"),
     });
-    modelToggle.addEventListener("click", () => {
-        const open = modelBox.style.display === "none";
-        modelBox.style.display = open ? "" : "none";
-        modelToggle.textContent = tf("自定参数 {arrow}", { arrow: open ? "▾" : "▸" });
-    });
+    const syncParamsChip = () => {
+        const ov = modelCfg.collect();
+        paramsChip.setLabel(ov.model || (ov.loras.length ? tf("LoRA ×{n}", { n: ov.loras.length }) : t("自定参数")));
+    };
+    modelBox.addEventListener("change", syncParamsChip);
 
-    // 增强：仿 NeoPromptAgent 节点——quick input + output 双框，复用节点 agent 逻辑
-    // （所选增强 skill 的 skill.md 作系统提示词 + 按需读引用文件）直调 /rs_prompts/stream_generate_prompt；
-    // 输出框行为与节点共用（思考面板 / 流程状态行 / rAF 批量写回）；quick input 有内容时与
-    // output 已有提示词按 \n\n---\n\n 拼接（同节点），增强结束后 quick input 保留不自动清空
+    // 增强：可选步骤，整条收进 ⋯ 菜单，默认视野只剩输入框 = 写一句直接生成。
+    // 复用节点 agent 逻辑（所选增强 skill 的 skill.md 作系统提示词 + 按需读引用文件）直调
+    // /rs_prompts/stream_generate_prompt，扩写结果流式写回同一个输入框；原句先进历史，↑ 可召回
     const enhanceBtn = $el("button", { className: "neo-gallery-story-btn", textContent: t("增强") });
-    // quick input 内部底边工具栏（参考 llm-chat rs-input-toolbar）：增强技能下拉在左（flex）+ 增强在右
-    const gmInputToolbar = $el("div", { className: "neo-gallery-gm-input-toolbar" }, [enhanceSel, enhanceBtn]);
-    const quickWrap = $el("div", { className: "neo-gallery-gm-quick-wrap" }, [quickInput, gmInputToolbar]);
+    const enhanceGroup = $el("div", { className: "neo-gallery-gm-enhance-group" }, [
+        $el("div", { className: "neo-director-field-label", textContent: t("提示词增强（可选）") }),
+        $el("div", { className: "rs-runtime-row" }, [enhanceSel, enhanceBtn]),
+    ]);
+    moreMenu.insertBefore(enhanceGroup, presetItem);
     let enhancing = false;
     enhanceBtn.addEventListener("click", async () => {
         if (enhancing || running) return;
-        const quickText = quickInput.value.trim();
-        const outputText = outputInput.value.trim();
-        const text = quickText ? (outputText ? `${outputText}\n\n---\n\n${quickText}` : quickText) : outputText;
-        if (!text) { quickInput.focus(); return; }
-        // 快捷输入内容记入历史（增强产物是 LLM 长文，不入史；与节点一致在提交时记录）
-        if (quickText) gmHistory.record(quickText);
+        const text = quickInput.value.trim();
+        if (!text) { closeMoreMenu(); quickInput.focus(); return; }
+        gmHistory.record(text);
+        const original = quickInput.value;
         enhancing = true;
-        setOutputOpen(true);   // 增强正文要写进输出框：先展开再流式写入
+        closeMoreMenu();
         enhanceBtn.textContent = t("增强中…");
 
         try {
             await invokePromptStream({ text, skillId: enhanceSel.value }, createStreamOutputHandlers({
-                textarea: outputInput,
+                textarea: quickInput,
                 onDone: (acc) => {
-                    if (!acc.trim()) actionToast({ severity: "warning", summary: t("增强失败"), detail: t("LLM 未返回内容") });
-                    outputInput.focus();
+                    if (!acc.trim()) {
+                        quickInput.value = original;
+                        actionToast({ severity: "warning", summary: t("增强失败"), detail: t("LLM 未返回内容") });
+                    }
+                    quickInput.focus();
                 },
                 onError: (e) => {
+                    quickInput.value = original;
                     console.error("[Gallery] gen material enhance failed:", e);
                     actionToast({ severity: "error", summary: t("提示词增强失败"), detail: String(e?.message || e), actionLabel: t("打开 LLM 设置"), onAction: openLLMSettingsModal });
                 }
@@ -2828,15 +2946,15 @@ export function openGenMaterialDialog(gallery, opts = null) {
     });
 
     const renderIdle = () => {
-        // 页内面板没有「取消」可点（收起面板 = 切到另一个模式）：idle 直接铺一块空画布（标题 + 一行说明），
-        // 弹窗里空间小，仍走一句短 hint
+        // 页内 idle 不在中间铺一整块空画布：那块没有内容的框把输入区顶到屏幕正中，
+        // 用户先看到的是框不是控件。弹窗空间小，仍走一句短 hint
         fill(statusBox, panel.embedded
-            ? $el("div", { className: "neo-gallery-gm-hero" }, [
-                $el("div", { className: "neo-gallery-gm-hero-title", textContent: t("写一句，出一张") }),
-                $el("div", { className: "neo-gallery-gm-hero-sub", textContent: t("描述写在下方输入框，生成后存进 Output/NeoAgent/<日期>，素材库直接可见") }),
+            ? $el("div", { className: "neo-gallery-gm-idle" }, [
+                $el("div", { className: "neo-gallery-gm-idle-title", textContent: t("写一句提示词，点生成") }),
+                $el("div", { className: "neo-gallery-gm-idle-sub", textContent: t("结果图出现在输入卡上方，产物保存到 Output 目录（NeoAgent/<日期>）") }),
             ])
             : $el("div", { className: "neo-gallery-story-hint", textContent: t("填写素材描述后点「生成」，图片保存到 Output 目录（NeoAgent/<日期>），可在素材面板浏览。") }));
-        fill(actionsBox, panel.embedded ? null : btn(t("取消"), close), btn(t("生成"), start, true));
+        fill(actionsBox, panel.embedded ? null : btn(t("取消"), close));
     };
 
 
@@ -2894,7 +3012,7 @@ export function openGenMaterialDialog(gallery, opts = null) {
                 deleting = false;
             }
         };
-        fill(actionsBox, btn(t("打开输出目录"), openOutputDir), btn(t("再生成"), start), btn(t("删除"), deleteResult), panel.embedded ? null : btn(t("关闭"), close, true));
+        fill(actionsBox, btn(t("打开输出目录"), openOutputDir), btn(t("删除"), deleteResult), panel.embedded ? null : btn(t("关闭"), close, true));
     };
 
     const renderSuccess = (final) => {
@@ -2976,7 +3094,7 @@ export function openGenMaterialDialog(gallery, opts = null) {
                 const oldHint = statusBox.querySelector(".neo-gallery-story-hint");
                 if (oldHint) oldHint.remove();
                 statusBox.appendChild($el("div", { className: "neo-gallery-story-hint neo-gallery-story-hint-error", textContent: tf("第 {i}/{total} 张生成失败：{err}", { i: i + 1, total, err: final.error || t("未知错误") }) }));
-                fill(actionsBox, btn(t("再生成"), start), panel.embedded ? null : btn(t("关闭"), close, true));
+                fill(actionsBox, panel.embedded ? null : btn(t("关闭"), close, true));
                 return;
             }
         }
@@ -3004,9 +3122,8 @@ export function openGenMaterialDialog(gallery, opts = null) {
             const data = await randomPrompts(1);
             const text = (data.texts || [])[0] || "";
             if (text.trim()) {
-                outputInput.value = text;
-                setOutputOpen(true);
-                outputInput.focus();
+                quickInput.value = text;
+                quickInput.focus();
                 closeMoreMenu();
             } else {
                 actionToast({ severity: "error", summary: t("随机提示词失败"), detail: t("提示词库为空") });
@@ -3035,6 +3152,7 @@ export function openGenMaterialDialog(gallery, opts = null) {
     });
     const onDocClick = (e) => {
         if (moreMenuOpen && !moreMenu.contains(e.target)) closeMoreMenu();
+        for (const chip of composerChips) chip.closeOnOutside(e.target);
     };
     document.addEventListener("click", onDocClick);
 
@@ -3064,17 +3182,13 @@ export function openGenMaterialDialog(gallery, opts = null) {
             prompts = (res.texts || []).filter(t => t && t.trim());
             if (!prompts.length) { failGen(t("提示词库为空，抽不到随机提示词")); return; }
         } else {
-            // 生成用 output 内容作最终提示词（为空回退 quick input），固定 skip_enhance
-            const prompt = outputInput.value.trim() || quickInput.value.trim();
+            // 一个框就是最终提示词，固定 skip_enhance（增强是 ⋯ 里的显式动作）
+            const prompt = quickInput.value.trim();
             if (!prompt) { quickInput.focus(); return; }
             prompts = [prompt];
         }
         const batch = prompts.length > 1;
-        // 两份历史各自独立：output 为空记快捷输入，非空记 output 的最终提示词（批量模式不记）
-        if (!batch) {
-            if (outputInput.value.trim()) gmOutputHistory.record(prompts[0]);
-            else gmHistory.record(prompts[0]);
-        }
+        if (!batch) gmHistory.record(prompts[0]);
         running = true;
         cancelRequested = false;
         try {
@@ -3099,7 +3213,8 @@ export function openGenMaterialDialog(gallery, opts = null) {
     const onKey = (e) => {
         if (e.key === "Escape") {
             // 有浮层先关浮层，无浮层才关窗
-            if (moreMenuOpen) closeMoreMenu();
+            if (composerChips.some(c => c.isOpen())) { for (const c of composerChips) c.close(); }
+            else if (moreMenuOpen) closeMoreMenu();
 
             else if (presetOverlay.style.display === "flex") presetOverlay.style.display = "none";
             else if (!panel.embedded) close();   // 内嵌面板由绘画页自己管生命周期，Esc 不销毁
@@ -3107,22 +3222,30 @@ export function openGenMaterialDialog(gallery, opts = null) {
         else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) start();
     };
 
-    // 结果区在上（预览/成品原位替换），输入区在下：chips 行（技能 / 宽高比 / 最长边 / 自定参数）→
-    // 输出框（右下角一枚 ⋯）→ 描述框（内嵌 增强工具栏）→ 操作按钮收尾
+    // 输入卡：一个提示词框 + 底行（技能 / 宽高比 / 最长边 / 自定参数 … ⋯ 生成）；
+    // 结果区在上（预览/成品原位替换），生成后在卡下补操作按钮
+    const genBtn = btn(t("生成"), start, true);
+    genBtn.classList.add("neo-gallery-gm-gen-btn");
+    const composerChips = [skillChip, ratioChip, edgeChip, paramsChip];
+    const composer = $el("div", { className: "neo-gallery-gm-composer" }, [
+        quickInput,
+        $el("div", { className: "neo-gallery-gm-composer-bar neo-gallery-gm-chips" }, [
+            skillChip.el,
+            sizeRow,
+            paramsChip.el,
+            $el("div", { className: "neo-gallery-gm-composer-gap" }),
+            moreBtn,
+            genBtn,
+        ]),
+    ]);
+
     const modal = $el("div", { className: "neo-gallery-story-modal" + (panel.embedded ? " neo-gallery-story-modal--embedded" : "") }, [
         $el("div", { className: "neo-gallery-story-titlebar" }, [
             $el("span", { className: "neo-gallery-story-title", textContent: t("生成素材") }),
             $el("span", { className: "neo-gallery-story-close", textContent: "\u00D7", onclick: close })
         ]),
         statusBox,
-        $el("div", { className: "neo-gallery-story-form-row neo-gallery-gm-chips" }, [
-            chipWrap(skillSel),
-            sizeRow,
-            modelToggle
-        ]),
-        modelBox,
-        outputWrap,
-        quickWrap,
+        composer,
         actionsBox
     ]);
     overlay.appendChild(modal);

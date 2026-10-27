@@ -231,47 +231,36 @@
     margin-left: auto;
 }
 
-/* 「生成素材」弹窗与「图片编辑」面板的「自定参数」折叠行：展开后显示主模型 / LoRA 等临时选择区 */
-.neo-gallery-gm-model-toggle {
-    flex-shrink: 0;
-    white-space: nowrap;
-    padding: 4px 0;
-    font-size: 12px;
-    color: #9aa4b2;
-    background: none;
-    border: none;
-    cursor: pointer;
-}
-
-.neo-gallery-gm-model-toggle:hover {
-    color: #FF9944;
-}
-
+/* 自定参数面板（挂在 chip 的浮出菜单里）：生图模型与 LoRA 两列自适应
+   （minmax 上限 320px：宽窗口也不会把一条下拉拉成整行宽），窄窗口自己掉成一列；
+   菜单壳自带边框与底色，面板只排内容 */
 .neo-gallery-gm-model-box,
 .neo-gallery-edit-model-box {
-    margin: 4px 0 8px;
+    box-sizing: border-box;
     display: flex;
     flex-direction: column;
     gap: 8px;
 }
-
-/* 自定参数区紧凑布局：标签与控件同行（覆盖 .rs-config-row 默认纵向堆叠） */
 .neo-gallery-gm-model-box .rs-gen-model-section,
 .neo-gallery-edit-model-box .rs-gen-model-section {
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 320px));
     gap: 8px;
 }
 .neo-gallery-gm-model-box .rs-config-row,
 .neo-gallery-edit-model-box .rs-config-row {
     flex-direction: row;
     align-items: center;
+    min-width: 0;
     gap: 8px;
 }
 .neo-gallery-gm-model-box .rs-config-row > .rs-form-label,
 .neo-gallery-edit-model-box .rs-config-row > .rs-form-label {
-    flex-shrink: 0;
+    flex: none;
+    width: 58px;
     margin-bottom: 0;
+    font-size: 12px;
+    color: #9aa4b2;
 }
 .neo-gallery-gm-model-box .rs-config-row .rs-model-select-box,
 .neo-gallery-edit-model-box .rs-config-row .rs-model-select-box {
@@ -283,69 +272,104 @@
     flex: 1;
     min-width: 0;
 }
-/* chips 行：技能 / 宽高比 / 最长边 换成原生下拉套壳的圆角小片，行尾挂「自定参数」折叠行 */
-.neo-gallery-gm-chips,
-.neo-gallery-edit-chips {
+/* LoRA 行 = 模型 + 强度 + ✕：列宽只有 320px，挤不下时让强度与删除换行，不裁控件 */
+.neo-gallery-gm-model-box .rs-gen-lora-row,
+.neo-gallery-edit-model-box .rs-gen-lora-row {
     flex-wrap: wrap;
-    row-gap: 6px;
+}
+/* chips 行：输入卡底行是一枚枚真 chip —— 胶囊按钮 + 上方浮出的菜单，见下面 .neo-gallery-gm-chip-btn。
+   短窗口换行的 chip 会落到底行下方、跟着输入卡一起被折叠线切掉，所以底行永不换行 */
+.neo-gallery-gm-chips {
+    flex-wrap: nowrap;
 }
 .neo-gallery-gm-chips .neo-recipes-sort,
-.neo-gallery-gm-chips select,
-.neo-gallery-edit-chips select {
+.neo-gallery-gm-chips select {
     flex: 0 1 auto;
     margin-left: 0;
-}
-.neo-gallery-gm-chip {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-}
-/* ▾ 由外壳画：appearance:none 下原生箭头消失，靠右留出的内边距给它落位 */
-.neo-gallery-gm-chip::after {
-    content: "▾";
-    position: absolute;
-    top: 50%;
-    right: 8px;
-    transform: translateY(-50%);
-    font-size: 9px;
-    color: #9aa4b2;
-    pointer-events: none;
-}
-.neo-gallery-gm-chip-select {
-    appearance: none;
-    -webkit-appearance: none;
-    max-width: 240px;
-    padding: 4px 20px 4px 10px;
-    font-size: 12px;
-    color: #dfe3ea;
-    background: rgba(0, 0, 0, 0.35);
-    border: 1px solid rgba(255, 255, 255, 0.18);
-    border-radius: 14px;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-    cursor: pointer;
-}
-.neo-gallery-gm-chip-select:hover {
-    border-color: #FF6A00;
-    color: #fff;
-}
-.neo-gallery-gm-chip-select:focus {
-    outline: none;
-    border-color: rgba(255, 106, 0, 0.6);
 }
 .neo-gallery-gm-chip-group {
     display: inline-flex;
     align-items: center;
     gap: 6px;
 }
-.neo-gallery-gm-size-row select {
-    width: auto;
+/* 真 chip：胶囊按钮 + 从上方浮出的选项菜单（输入卡钉在页面底部，菜单朝上开）。
+   壳里的原生 select 是状态容器（hidden），不露出来 */
+.neo-gallery-gm-chip-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+}
+.neo-gallery-gm-chip-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 250px;
+    padding: 4px 10px;
+    font-size: 12px;
+    color: #dfe3ea;
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 999px;
+    cursor: pointer;
+    transition: border-color .15s, color .15s, background .15s;
+}
+.neo-gallery-gm-chip-btn:hover,
+.neo-gallery-gm-chip-btn.neo-gallery-gm-chip-open {
+    color: #fff;
+    border-color: #FF6A00;
+    background: rgba(255, 106, 0, 0.12);
+}
+/* 尺寸 chip 的「已手改宽高」态与「没有原图」禁用态 */
+.neo-gallery-gm-chip-btn.on {
+    color: #fff;
+    border-color: #4fc3f7;
+    background: rgba(79, 195, 247, 0.18);
+}
+.neo-gallery-gm-chip-btn:disabled {
+    opacity: .4;
+    cursor: not-allowed;
+}
+.neo-gallery-gm-chip-label {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+.neo-gallery-gm-chip-icon {
+    flex: none;
+    display: inline-flex;
+}
+.neo-gallery-gm-chip-caret {
+    flex: none;
+    font-size: 9px;
+    color: #9aa4b2;
+}
+/* 比例 glyph：描边小方框按选中比例定形，长宽由 gallery-gen.js 写行内样式 */
+.neo-gallery-gm-chip-glyph {
+    flex: none;
+    box-sizing: border-box;
+    border: 1px solid currentColor;
+    border-radius: 2px;
+    opacity: .75;
+}
+.neo-gallery-gm-chip-menu {
+    min-width: 190px;
+    max-height: 320px;
+    overflow: auto;
+}
+/* 自定参数面板菜单：宽度跟内容走（两列模型 / LoRA 比 chip 宽得多），窄窗口不溢出屏幕 */
+.neo-gallery-gm-chip-panel {
+    min-width: 0;
+    width: min(720px, 94vw);
+    max-height: 62vh;
+}
+.neo-gallery-gm-menu-on {
+    color: #FF9944;
 }
 
 
 /* 「生成素材」弹窗：保存为新技能（选中主模型 / LoRA 后才显示） */
 .neo-gallery-gm-save-skill {
-    margin-top: 6px;
+    margin-top: 0;
     padding: 2px 10px;
     font-size: 12px;
     color: #9aa4b2;
@@ -360,82 +384,80 @@
     border-color: #FF6A00;
 }
 
-/* 「生成素材」弹窗：agent 式增强区——quick input（矮框，描述 / 修改指令）+ [增强技能 + ] 行 */
+/* 输入卡：一个提示词框 = 生成用的提示词，底行是 技能 / 宽高比 / 最长边 / 自定参数 … ⋯ 生成 */
+.neo-gallery-gm-composer {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px;
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 10px;
+}
+
+.neo-gallery-gm-composer:focus-within {
+    border-color: rgba(76, 154, 255, 0.55);
+}
+
 .neo-gallery-gm-quick-input {
     width: 100%;
     box-sizing: border-box;
-    min-height: 48px;
-    padding: 8px 8px 34px;
+    min-height: 96px;
+    max-height: 42vh;
+    padding: 2px 4px;
     font-family: inherit;
-    font-size: 12px;
+    font-size: 13px;
     line-height: 1.5;
     color: #eee;
-    background: rgba(0, 0, 0, 0.35);
-    border: 1px solid rgba(255, 255, 255, 0.18);
-    border-radius: 6px;
+    background: none;
+    border: none;
     resize: vertical;
 }
 
 .neo-gallery-gm-quick-input:focus {
     outline: none;
-    border-color: rgba(76, 154, 255, 0.6);
 }
 
-/* llm-chat 式双框：output 框右下角浮出按钮组（▾ ☰，半透明、hover 变实）+ quick input 内部底边工具栏（增强技能 + ） */
-.neo-gallery-gm-output-wrap {
-    position: relative;
-}
-
-.neo-gallery-gm-float-group {
-    position: absolute;
-    bottom: 6px;
-    right: 6px;
-    z-index: 10;
-    display: flex;
-    border-radius: 6px;
-    overflow: hidden;
-    background: rgba(15, 15, 22, .55);
-    opacity: .55;
-    transition: opacity .2s;
-}
-
-.neo-gallery-gm-float-group:hover {
-    opacity: 1;
-}
-
-.neo-gallery-gm-float-group .neo-gallery-gm-tool-btn {
-    width: 26px;
-    height: 24px;
-    border: none;
-    border-radius: 0;
-    background: transparent;
-}
-
-.neo-gallery-gm-float-group .neo-gallery-gm-tool-btn:hover {
-    background: rgba(124, 108, 240, .18);
-}
-
-.neo-gallery-gm-quick-wrap {
-    position: relative;
-}
-
-.neo-gallery-gm-input-toolbar {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
+.neo-gallery-gm-composer-bar {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 4px 8px;
 }
 
-.neo-gallery-gm-input-toolbar .neo-gallery-gm-enhance-skill {
-    flex: 1;
+/* 自定参数与 ⋯ 之间把余量留给中间，两组控件各贴一头 */
+.neo-gallery-gm-composer-gap {
+    flex: 1 1 auto;
+}
+
+.neo-gallery-gm-gen-btn {
+    flex-shrink: 0;
+}
+
+/* 页内 idle：结果区在输入卡上方留白处只给一句起手提示（不铺空画布框） */
+.neo-gallery-gm-idle {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding-top: 16vh;
+    text-align: center;
+}
+.neo-gallery-gm-idle-title {
+    font-size: 19px;
+    font-weight: 600;
+    color: #6b7280;
+}
+.neo-gallery-gm-idle-sub {
+    font-size: 12px;
+    color: #575e69;
+}
+
+/* 增强行在 ⋯ 菜单里（可选步骤，默认视野不出现）：下拉吃掉整行余宽，按钮贴右 */
+.neo-gallery-gm-enhance-group .neo-gallery-gm-enhance-skill {
+    flex: 1 1 auto;
     min-width: 0;
 }
 
-.neo-gallery-gm-input-toolbar .neo-gallery-story-btn {
+.neo-gallery-gm-enhance-group .neo-gallery-story-btn {
     flex-shrink: 0;
 }
 
@@ -2726,23 +2748,6 @@ Accordion Section Buttons (Clear)
     border-color: rgba(76, 154, 255, 0.6);
 }
 
-/* 图片编辑弹窗：技能选择行（label + select 横排） */
-.neo-gallery-story-form-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.neo-gallery-story-form-row .neo-director-field-label {
-    flex-shrink: 0;
-    white-space: nowrap;
-}
-
-.neo-gallery-story-form-row select {
-    flex: 1;
-    min-width: 0;
-}
-
 /* 图片编辑弹窗：上方图片对比，下方表单 */
 .neo-gallery-story-modal.neo-gallery-edit-modal {
     width: min(92vw, 980px);
@@ -2879,7 +2884,7 @@ Accordion Section Buttons (Clear)
     cursor: zoom-in;
 }
 
-/* 下方表单区 */
+/* 下方表单区：参考图区 / 模式控制行在上，自定参数抽屉 + 输入卡贴底 */
 .neo-gallery-edit-form {
     display: flex;
     flex-direction: column;
@@ -2898,58 +2903,8 @@ Accordion Section Buttons (Clear)
     width: 80px;
 }
 
-/* 编辑弹窗顶部行：技能 + 分辨率并排 */
-.neo-gallery-edit-form-top-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-}
-
-/* 「目标分辨率」行末挂着「自定参数」折叠行：绘画页右栏窄，让它换行而不是挤出弹窗 */
-.neo-gallery-edit-size-row {
-    flex-wrap: wrap;
-}
-
-/* 模式图标（扩图 / 局部 / 点选删除 / 融合 / 姿势）：只留字形，说明在 title 里 */
-.neo-gallery-edit-outpaint-btn {
-    flex: none;
-    width: 32px;
-    height: 28px;
-    padding: 0;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 14px;
-    color: #eee;
-    background: rgba(0, 0, 0, 0.35);
-    border: 1px solid rgba(255, 255, 255, 0.18);
-    border-radius: 14px;
-    cursor: pointer;
-}
-.neo-gallery-edit-outpaint-btn:disabled {
-    opacity: .45;
-    cursor: default;
-}
-
-/* 尺寸片：默认收成一行「目标分辨率 1024×1024」，点开才露出宽高输入（出图尺寸跟原图走，很少要改） */
-.neo-gallery-edit-size-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 12px;
-    font-size: 12px;
-    color: #dfe3ea;
-    background: rgba(0, 0, 0, 0.35);
-    border: 1px solid rgba(255, 255, 255, 0.18);
-    border-radius: 14px;
-    cursor: pointer;
-}
-.neo-gallery-edit-size-chip:hover,
-.neo-gallery-edit-size-chip.on {
-    border-color: #4fc3f7;
-    color: #fff;
-}
+/* 分辨率 chip（输入卡底行）：默认收成一行「目标分辨率 1024×1024」，点开才在底行下方露出宽高输入
+   （出图尺寸跟原图走，很少要改）；胶囊壳、按下态、禁用态都复用 .neo-gallery-gm-chip-btn */
 .neo-gallery-edit-size-chip .neo-director-field-label {
     margin-bottom: 0;
     color: #9aa4b2;
@@ -2963,13 +2918,6 @@ Accordion Section Buttons (Clear)
     display: inline-flex;
     align-items: center;
     gap: 6px;
-}
-
-
-.neo-gallery-edit-outpaint-btn.on {
-    background: rgba(79, 195, 247, 0.25);
-    border-color: #4fc3f7;
-    color: #fff;
 }
 
 /* 扩图控制行（目标比例 + 目标像素数） */
@@ -3226,6 +3174,11 @@ Accordion Section Buttons (Clear)
     gap: 8px;
 }
 
+/* 输入卡自带「生成」后，页内 idle 的操作区是空的：空块在贴底布局里仍吃掉一行 gap */
+.neo-gallery-story-actions:empty {
+    display: none;
+}
+
 .neo-gallery-story-btn {
     padding: 5px 14px;
     font-size: 12px;
@@ -3343,48 +3296,7 @@ Accordion Section Buttons (Clear)
     cursor: zoom-in;
 }
 
-/* 输出框空态收成一行：主路径只剩描述框一格里写；聚焦 / 输入 / 增强写入才展开成整块 */
-.neo-gallery-gm-output-wrap .neo-gallery-story-input {
-    height: 34px;
-    min-height: 34px;
-    padding: 6px 62px 8px 8px;
-    overflow: hidden;
-    resize: none;
-}
-.neo-gallery-gm-output-open .neo-gallery-story-input {
-    height: auto;
-    min-height: 96px;
-    overflow: auto;
-    resize: vertical;
-}
-
-
-/* 绘画页文生图 idle：预览区当空画布（标题 + 一行说明），生成时进度与成品原位替换它 */
-.neo-gallery-gm-hero {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    min-height: 110px;
-    padding: 18px 12px;
-    text-align: center;
-    background: rgba(0, 0, 0, 0.28);
-    border: 1px dashed rgba(255, 255, 255, 0.16);
-    border-radius: 6px;
-}
-.neo-gallery-gm-hero-title {
-    font-size: 17px;
-    font-weight: 600;
-    color: #e6e9ef;
-}
-.neo-gallery-gm-hero-sub {
-    font-size: 12px;
-    color: #8a8a96;
-}
-
-/* 「生成素材」弹窗：生成中预览区（spinner + 进度条），成功后由结果图原位替换（容器换 .neo-gallery-cs-result） */
-
+/* 「生成素材」弹窗与绘画页的生成中预览区（spinner + 进度条），成功后由结果图原位替换（容器换 .neo-gallery-cs-result） */
 .neo-gallery-gm-preview {
     display: flex;
     flex-direction: column;

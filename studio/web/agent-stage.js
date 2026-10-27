@@ -20,21 +20,21 @@ const STAGE_FACTS = [["skill_id", "技能"], ["model", "主模型"], ["loras", "
 const PREVIEW_MAX_SIDE = 480;
 const STAGE_MAX_W = 720;
 
-export function createAgentStage() {
+export function createAgentStage(options = {}) {
+    // 宿主块只在有内容时占位由调用方决定：绘画页空轮不该在页面底下留一块空面板
+    const onContent = options.onContent || null;
     const el = mkEl("div", "ns-agent-stage");
     const head = mkEl("div", "ns-agent-stage-head");
     const title = mkEl("span", "ns-agent-stage-title");
     title.textContent = "" + t("智能体");
     const status = mkEl("span", "ns-agent-stage-status");
     head.append(title, status);
-    const idle = mkEl("div", "ns-agent-stage-idle");
-    idle.textContent = t("在右栏「智能体」里提需求，这一轮的过程、采样预览与产物大图就铺在这里");
     const planBox = mkEl("div", "ns-agent-stage-plan");
     const factBox = mkEl("div", "ns-agent-stage-facts");
     const previewBox = mkEl("div", "ns-agent-stage-preview");
     const mediaBox = mkEl("div", "ns-agent-stage-media");
     const answerBox = mkEl("div", "ns-agent-stage-answer");
-    el.append(head, idle, planBox, factBox, previewBox, mediaBox, answerBox);
+    el.append(head, planBox, factBox, previewBox, mediaBox, answerBox);
 
     let on = false;
     let empty = true;
@@ -45,12 +45,12 @@ export function createAgentStage() {
 
     function render() {
         el.hidden = !on;
-        idle.hidden = !empty;
         planBox.hidden = empty || !planBox.children.length;
         factBox.hidden = empty || !factBox.children.length;
         previewBox.hidden = empty || previewOff || !previewOn;
         mediaBox.hidden = empty || !mediaBox.children.length;
         answerBox.hidden = empty || !answerBox.textContent;
+        if (onContent) onContent(on && (!empty || !!status.textContent));
     }
 
     function clear() {

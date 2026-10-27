@@ -1,9 +1,17 @@
 // Neo Gallery 卡片「图片编辑」：以原图为参考，用所选技能 + 编辑指令生成新图；
-// 成功后保留「再生成」按钮，支持连续重复生成，不必关窗重开。
+// 「生成」常驻输入卡，连续重复生成直接再点它，不必关窗重开。
 import test from "node:test";
 import assert from "node:assert/strict";
 import { resetEnv, mockRoute, clearRoutes, jsonResponse, fetchLog, sleep, click, inputText, window } from "./setup.mjs";
 import { dispatchApiEvent } from "./mocks/comfy-api.mjs";
+
+/** 模式 chip：从菜单选模式（常规 / 扩图 / 局部 / 删除 / 融合 / 姿势）——五种模式收在一枚 chip 里，测试照用户动线点 */
+const pickEdit = async (overlay, label) => {
+    const wrap = overlay.querySelector(".neo-gallery-edit-mode-select").parentElement;
+    click(wrap.querySelector(".neo-gallery-gm-chip-btn"));
+    click([...wrap.querySelectorAll(".neo-gallery-gm-menu-item")].find((b) => b.textContent === label));
+    await sleep(20);   // setEditMode 是 async：模式 setup 与技能配置重放走完再断言
+};
 
 test("图片编辑弹窗：目标分辨率默认取原图尺寸（32 对齐），原图过大按设置的 MP 等比封顶", async () => {
     resetEnv();
@@ -29,7 +37,7 @@ test("图片编辑弹窗：目标分辨率默认取原图尺寸（32 对齐）�
     globalThis.Image = realImage;
 });
 
-test("图片编辑弹窗：idle 有「生成」，成功后保留「再生成」可连续重复生成", async () => {
+test("图片编辑弹窗：输入卡里有「生成」，成功后再点它连续重复生成", async () => {
     resetEnv();
     clearRoutes();
     const { openImageEditDialog } = await import("../../web/gallery-gen.js");
@@ -41,9 +49,9 @@ test("图片编辑弹窗：idle 有「生成」，成功后保留「再生成」
     const overlay = document.querySelector(".neo-gallery-edit-modal-overlay");
     assert.ok(overlay, "应弹出图片编辑弹窗");
 
-    // idle：有「生成」按钮，且尚未发请求
-    const btns = () => [...overlay.querySelectorAll(".neo-gallery-story-btn")].map((b) => b.textContent);
-    const idleGenBtn = [...overlay.querySelectorAll(".neo-gallery-story-btn")].find((b) => b.textContent === "生成");
+    // idle：输入卡里有「生成」按钮，且尚未发请求
+    const genBtn = () => overlay.querySelector(".neo-gallery-gm-composer .neo-gallery-story-btn-primary");
+    const idleGenBtn = genBtn();
     assert.ok(idleGenBtn, "idle 应有「生成」按钮");
     assert.equal(fetchLog.filter((c) => c.path === "/neo_image_gen/generate").length, 0);
 
@@ -73,18 +81,78 @@ test("图片编辑弹窗：idle 有「生成」，成功后保留「再生成」
     click(idleGenBtn);
     await sleep(80);
 
-    // 第一次生成成功：结果显示，且操作区保留「再生成」+「关闭」（核心修复点）
+    // 第一次生成成功：结果显示，输入卡里仍只有那枚「生成」（操作区不再挂重复的「再生成」）
+    const btns = () => [...overlay.querySelectorAll(".neo-gallery-story-btn")].map((b) => b.textContent);
     const resultImg = overlay.querySelector(".neo-gallery-edit-compare-img[alt='编辑结果']");
     assert.match(resultImg?.getAttribute("src") || "", /\/neo_gallery\/thumbnail\?filename=edit_00001_\.png/);
-    assert.ok(btns().includes("再生成"), "成功后应保留「再生成」按钮");
+    assert.ok(btns().includes("生成"), "成功后输入卡里仍应有「生成」按钮");
+    assert.ok(!btns().includes("再生成"), "「生成」常驻输入卡，成功区不该再挂一枚重复的「再生成」");
     assert.ok(btns().includes("关闭"), "成功后应有「关闭」按钮");
     assert.equal(genCount, 1);
 
-    // 点「再生成」→ 再次发请求，无需关窗重开（连续重复生成）
-    const regenBtn = [...overlay.querySelectorAll(".neo-gallery-story-btn")].find((b) => b.textContent === "再生成");
-    click(regenBtn);
+    // 再点输入卡里的「生成」→ 再次发请求，无需关窗重开（连续重复生成）
+    click(genBtn());
     await sleep(80);
-    assert.equal(genCount, 2, "点「再生成」应再次发出 /neo_image_gen/generate 请求");
+    assert.equal(genCount, 2, "再点「生成」应再次发出 /neo_image_gen/generate 请求");
+});
+
+test("图片编辑弹窗：chips 收在输入卡底行，自定参数默认不显示、点开才浮出", async () => {
+    resetEnv();
+    clearRoutes();
+    const { openImageEditDialog } = await import("../../web/gallery-gen.js");
+
+    mockRoute("/rs_prompts/skills", () => jsonResponse([
+        { id: "qwen_image_21", cn_name: "Qwen Image 2.1", category: "image_gen", gen_image: true, mode: "t2i_edit" },
+        { id: "qwen_image_21_outpaint", cn_name: "Qwen Image 2.1 扩图", category: "image_gen", gen_image: true, mode: "edit", requires_ref: true },
+    ]));
+
+    openImageEditDialog({ app: {}, maxThumbnailSize: 320, displayLabels: true },
+                        { name: "portrait", filename: "portrait.png" }, "");
+    const overlay = document.querySelector(".neo-gallery-edit-modal-overlay");
+    await sleep(50);   // 技能列表 → chip 标签
+
+    const composer = overlay.querySelector(".neo-gallery-edit-form .neo-gallery-gm-composer");
+    assert.ok(composer, "图片编辑应有输入卡");
+    assert.ok(composer.contains(overlay.querySelector(".neo-gallery-story-input")), "编辑指令框应在输入卡内");
+    const bar = composer.querySelector(".neo-gallery-gm-composer-bar");
+    assert.equal(bar.querySelectorAll(".neo-gallery-gm-chip-btn").length, 4, "底行 = 技能 chip + 模式 chip + 尺寸 chip + 自定参数 chip");
+    assert.ok(bar.contains(bar.querySelector(".neo-gallery-gm-gen-btn")), "「生成」应在输入卡底行");
+    assert.equal(composer.querySelector(".neo-gallery-gm-chip-label").textContent, "Qwen Image 2.1", "技能 chip 显示生效技能");
+
+    // 技能菜单从 chip 上方浮出：点菜单项写回隐藏的 select，chip 标签跟着变
+    const skillChip = bar.querySelector(".neo-gallery-gm-chip-btn");
+    click(skillChip);
+    const items = () => [...skillChip.parentElement.querySelectorAll(".neo-gallery-gm-menu-item")];
+    assert.deepEqual(items().map((b) => b.textContent), ["Qwen Image 2.1", "Qwen Image 2.1 扩图"], "chip 菜单应列出吃参考图的技能");
+    click(items()[1]);
+    assert.equal(overlay.querySelector(".neo-gallery-gm-chip-select").value, "qwen_image_21_outpaint", "点菜单项应切技能");
+    await sleep(20);
+    assert.equal(skillChip.querySelector(".neo-gallery-gm-chip-label").textContent, "Qwen Image 2.1 扩图", "切技能后 chip 标签跟着变");
+
+    // 模式 chip：菜单列全六种模式，说明挂在菜单项上（原来五枚开关各一句 title）
+    const modeWrap = overlay.querySelector(".neo-gallery-edit-mode-select").parentElement;
+    click(modeWrap.querySelector(".neo-gallery-gm-chip-btn"));
+    const modeItems = [...modeWrap.querySelectorAll(".neo-gallery-gm-menu-item")];
+    assert.deepEqual(modeItems.map((b) => b.textContent), ["常规", "扩图", "局部", "删除", "融合", "姿势"], "模式 chip 应列全六种模式");
+    assert.ok(modeItems.every((b) => b.title.length > 4), "模式说明应挂在菜单项上");
+
+    // 宽高输入收在底行下方，点尺寸 chip 才露出（出图尺寸跟原图走，很少要改）
+    const sizeEditor = composer.querySelector(".neo-gallery-edit-size-editor");
+    assert.equal(sizeEditor.style.display, "none", "宽高输入默认收起");
+    click(overlay.querySelector(".neo-gallery-edit-size-chip"));
+    assert.notEqual(sizeEditor.style.display, "none", "点尺寸 chip 应露出宽高输入");
+
+    // 自定参数默认不显示：面板挂在 chip 的浮层里，点 chip 才浮出、再点收起
+    const paramsWrap = bar.querySelectorAll(".neo-gallery-gm-chip-wrap")[2];
+    const panel = paramsWrap.querySelector(".neo-gallery-gm-chip-panel");
+    assert.ok(panel?.contains(overlay.querySelector(".neo-gallery-edit-model-box")), "自定参数面板应挂在自定参数 chip 上");
+    assert.ok(panel.classList.contains("rs-runtime-menu"), "自定参数面板是浮层，收起态由 CSS 关掉");
+    click(paramsWrap.querySelector(".neo-gallery-gm-chip-btn"));
+    assert.equal(panel.style.display, "block", "点自定参数 chip 应浮出面板");
+    click(paramsWrap.querySelector(".neo-gallery-gm-chip-btn"));
+    assert.equal(panel.style.display, "none", "再点一次应收起");
+    const visibleSelects = [...bar.querySelectorAll("select")].filter((s) => !s.hidden && !panel.contains(s));
+    assert.equal(visibleSelects.length, 0, "底行不露原生下拉");
 });
 
 test("图片编辑弹窗：扩图开关切到扩图技能，拖框后请求带 outpaint 且不带 loras", async () => {
@@ -111,17 +179,16 @@ test("图片编辑弹窗：扩图开关切到扩图技能，拖框后请求带 o
         Object.defineProperty(origImg, key, { value, configurable: true });
     }
 
-    // 打开扩图：技能切到扩图技能、控制行出现、宽高输入隐藏、提示词预填默认触发词
-    const outpaintBtn = overlay.querySelector(".neo-gallery-edit-outpaint-btn");
-    click(outpaintBtn);
-    const skillSel = overlay.querySelector(".neo-gallery-story-form-row select");
+    // 打开扩图（模式 chip 选「扩图」）：技能切到扩图技能、控制行出现、宽高输入隐藏、提示词预填默认触发词
+    await pickEdit(overlay, "扩图");
+    const skillSel = overlay.querySelector(".neo-gallery-gm-chip-select");
     assert.equal(skillSel.value, "qwen_image_21_outpaint", "开扩图应切到扩图技能");
     assert.notEqual(overlay.querySelector(".neo-gallery-edit-outpaint-row").style.display, "none");
     assert.equal(overlay.querySelector("#img-edit-width").style.display, "none");
     assert.match(overlay.querySelector(".neo-gallery-story-input").value, /Outpaint the image/);
 
     // 默认跟随原图：未拖框时目标尺寸 = 原图自然尺寸（不套目标像素、不缩放）
-    assert.equal(overlay.querySelector(".neo-gallery-edit-size-label").textContent, "目标 800×600",
+    assert.equal(overlay.querySelector(".neo-gallery-edit-size-editor .neo-gallery-edit-size-label").textContent, "目标 800×600",
         "开扩图应先按原图尺寸，扩图大小要由拖框决定");
     assert.equal(overlay.querySelector(".neo-gallery-edit-mp").value, "1.5", "默认目标像素 1.5MP（与参考工作流一致）");
 
@@ -144,7 +211,7 @@ test("图片编辑弹窗：扩图开关切到扩图技能，拖框后请求带 o
     assert.equal(canvasEl.style.getPropertyValue("--op-inv"), "1.2500");
 
     // 结果尺寸标签：补边画布（1MP 层 1184×896 + 留白 296/179）整幅缩放到 1.5MP → 1472×1056
-    assert.equal(overlay.querySelector(".neo-gallery-edit-size-label").textContent, "目标 1472×1056",
+    assert.equal(overlay.querySelector(".neo-gallery-edit-size-editor .neo-gallery-edit-size-label").textContent, "目标 1472×1056",
         "目标尺寸 = 补边画布缩放到目标像素后的出图尺寸");
 
     mockRoute("/neo_gallery/copy_to_input", () => jsonResponse({ success: true, filename: "portrait.png" }));
@@ -177,10 +244,10 @@ test("图片编辑弹窗：扩图开关切到扩图技能，拖框后请求带 o
     const mpInput = overlay.querySelector(".neo-gallery-edit-mp");
     mpInput.value = "2";
     mpInput.dispatchEvent(new window.Event("input", { bubbles: true }));
-    assert.equal(overlay.querySelector(".neo-gallery-edit-size-label").textContent, "目标 1696×1248");
+    assert.equal(overlay.querySelector(".neo-gallery-edit-size-editor .neo-gallery-edit-size-label").textContent, "目标 1696×1248");
     mpInput.value = "1.5";
     mpInput.dispatchEvent(new window.Event("input", { bubbles: true }));
-    assert.equal(overlay.querySelector(".neo-gallery-edit-size-label").textContent, "目标 1472×1056");
+    assert.equal(overlay.querySelector(".neo-gallery-edit-size-editor .neo-gallery-edit-size-label").textContent, "目标 1472×1056");
 
     // 扩图结果层挂进画布：结果就是整幅补边画布，落在画布里才和原图区域逐像素对齐
     // （挂图片盒会被 contain 缩放到原图尺寸 → 对比时看着整体偏移）
@@ -189,8 +256,8 @@ test("图片编辑弹窗：扩图开关切到扩图技能，拖框后请求带 o
     assert.equal(overlay.querySelector(".neo-gallery-edit-divider").parentElement, canvasEl,
         "扩图分割线应挂在画布内（百分比按画布宽算）");
 
-    // 关闭扩图：技能切回、拖框移除
-    click(outpaintBtn);
+    // 关闭扩图（模式 chip 选回「常规」）：技能切回、拖框移除
+    await pickEdit(overlay, "常规");
     assert.equal(skillSel.value, "qwen_image_21");
     assert.equal(overlay.querySelector(".neo-gallery-edit-outpaint-box"), null);
     const imgWrapEl = overlay.querySelector(".neo-gallery-edit-compare-imgwrap");
@@ -222,7 +289,7 @@ test("图片编辑弹窗：扩图拖框画布边长封顶 4× 原图，超出舞
         Object.defineProperty(origImg, key, { value, configurable: true });
     }
 
-    click(overlay.querySelector(".neo-gallery-edit-outpaint-btn"));
+    await pickEdit(overlay, "扩图");
     const pointerAt = (el, type, x, y) => {
         const ev = new window.Event(type, { bubbles: true, cancelable: true });
         ev.clientX = x;
@@ -268,7 +335,7 @@ test("图片编辑弹窗：扩图基准取 contain 后的可见图片尺寸，�
         Object.defineProperty(stage, key, { value, configurable: true });
     }
 
-    click(overlay.querySelector(".neo-gallery-edit-outpaint-btn"));
+    await pickEdit(overlay, "扩图");
 
     // contain: min(800/800, 300/600)=0.5 → 画布 400×300（把元素盒当画布会得到 800×300，即"点开自动变大"）
     const canvasEl = overlay.querySelector(".neo-gallery-edit-outpaint-canvas");
@@ -279,7 +346,7 @@ test("图片编辑弹窗：扩图基准取 contain 后的可见图片尺寸，�
     assert.equal(origImg.style.height, "300px");
     assert.equal(canvasEl.style.transform, "scale(1)");
     // 无留白 → 目标尺寸就是原图自然尺寸（默认不套 MP 目标）
-    assert.equal(overlay.querySelector(".neo-gallery-edit-size-label").textContent, "目标 800×600");
+    assert.equal(overlay.querySelector(".neo-gallery-edit-size-editor .neo-gallery-edit-size-label").textContent, "目标 800×600");
 });
 
 test("图片编辑弹窗：扩图拖框体是平移留白，不会把框缩回原图", async () => {
@@ -303,7 +370,7 @@ test("图片编辑弹窗：扩图拖框体是平移留白，不会把框缩回�
         Object.defineProperty(origImg, key, { value, configurable: true });
     }
 
-    click(overlay.querySelector(".neo-gallery-edit-outpaint-btn"));
+    await pickEdit(overlay, "扩图");
     const pointerAt = (el, type, x, y) => {
         const ev = new window.Event(type, { bubbles: true, cancelable: true });
         ev.clientX = x;
@@ -336,7 +403,7 @@ test("图片编辑弹窗：扩图拖框体是平移留白，不会把框缩回�
     assert.equal(origImg.style.left, "100px");
 
     // 留白只是从右边换到左边，画布尺寸不变 → 出图尺寸也不变
-    assert.equal(overlay.querySelector(".neo-gallery-edit-size-label").textContent, "目标 1472×1056");
+    assert.equal(overlay.querySelector(".neo-gallery-edit-size-editor .neo-gallery-edit-size-label").textContent, "目标 1472×1056");
 });
 
 test("图片编辑弹窗：局部开关切到局部技能、涂抹画布出现，未涂抹禁止生成", async () => {
@@ -360,13 +427,9 @@ test("图片编辑弹窗：局部开关切到局部技能、涂抹画布出现�
         Object.defineProperty(origImg, key, { value, configurable: true });
     }
 
-    const localBtn = [...overlay.querySelectorAll(".neo-gallery-edit-outpaint-btn")].find((b) => b.title.includes("局部"));
-    assert.ok(localBtn, "应有「局部」图标开关（模式名在 title 里）");
+    await pickEdit(overlay, "局部");
 
-    click(localBtn);
-    await sleep(10);
-
-    const skillSel = overlay.querySelector(".neo-gallery-story-form-row select");
+    const skillSel = overlay.querySelector(".neo-gallery-gm-chip-select");
     assert.equal(skillSel.value, "qwen_image_21_local_edit", "开局部应切到局部技能");
     const localRow = [...overlay.querySelectorAll(".neo-gallery-edit-outpaint-row")]
         .find((r) => r.contains(overlay.querySelector(".neo-gallery-edit-brush")));
@@ -384,9 +447,8 @@ test("图片编辑弹窗：局部开关切到局部技能、涂抹画布出现�
     assert.equal(genCount, 0, "未涂抹不应发出请求");
     assert.match(overlay.querySelector(".neo-gallery-story-hint-error")?.textContent || "", /涂抹/);
 
-    // 关闭局部：技能切回、画布移除
-    click(localBtn);
-    await sleep(10);
+    // 关闭局部（模式 chip 选回「常规」）：技能切回、画布移除
+    await pickEdit(overlay, "常规");
     assert.equal(skillSel.value, "qwen_image_21");
     assert.equal(overlay.querySelector(".neo-gallery-edit-paint-canvas"), null);
 });
@@ -413,8 +475,7 @@ test("图片编辑弹窗：点选删除——点击后 SAM3 分割出遮罩预�
     }
 
     const promptInput = overlay.querySelector(".neo-gallery-story-input");
-    const genBtn = () => [...overlay.querySelectorAll(".neo-gallery-story-btn")]
-        .find((b) => ["生成", "再生成", "重试"].includes(b.textContent));
+    const genBtn = () => overlay.querySelector(".neo-gallery-gm-composer .neo-gallery-story-btn-primary");
     let genBody = null;
     let genCount = 0;
     let segCount = 0;
@@ -436,13 +497,9 @@ test("图片编辑弹窗：点选删除——点击后 SAM3 分割出遮罩预�
     }));
 
     // 开点选删除：控制行出现、宽高输入隐藏、透明点击层出现，技能保持 Qwen Image 2.1
-    const removeBtn = [...overlay.querySelectorAll(".neo-gallery-edit-outpaint-btn")]
-        .find((b) => b.title.includes("点选删除"));
-    assert.ok(removeBtn, "应有「点选删除」图标开关");
-
-    click(removeBtn);
+    await pickEdit(overlay, "删除");
     await sleep(30);   // 含 copy_to_input 请求
-    const skillSel = overlay.querySelector(".neo-gallery-story-form-row select");
+    const skillSel = overlay.querySelector(".neo-gallery-gm-chip-select");
     assert.equal(skillSel.value, "qwen_image_21", "点选删除应走 Qwen Image 2.1 编辑链");
     const removeRow = [...overlay.querySelectorAll(".neo-gallery-edit-outpaint-row")]
         .find((r) => r.textContent.includes("清空标记"));
@@ -510,9 +567,8 @@ test("图片编辑弹窗：点选删除——点击后 SAM3 分割出遮罩预�
     await sleep(40);
     assert.equal(genCount, 1, "无标记不应发出请求");
 
-    // 关闭点选：点击层移除
-    click(removeBtn);
-    await sleep(10);
+    // 关闭点选（模式 chip 选回「常规」）：点击层移除
+    await pickEdit(overlay, "常规");
     assert.equal(overlay.querySelector(".neo-gallery-edit-remove-canvas"), null, "关闭后点击层应移除");
 });
 
@@ -557,9 +613,7 @@ test("图片编辑弹窗：第二参考图拖放选中后随请求发送，扩�
     assert.deepEqual(genBody.references[1], { kind: "input", value: "body_b.png" });
 
     // 开扩图：第二参考不可用且被清除
-    const outpaintBtn = overlay.querySelector(".neo-gallery-edit-outpaint-btn");
-    click(outpaintBtn);
-    await sleep(10);
+    await pickEdit(overlay, "扩图");
     assert.ok(overlay.querySelector(".neo-gallery-edit-refdrop-row").classList.contains("disabled"), "扩图模式下拖放区应禁用");
     assert.equal(overlay.querySelector(".neo-gallery-edit-refchip-img"), null, "扩图模式应清除已选第二参考");
 });
@@ -581,15 +635,11 @@ test("图片编辑弹窗：姿势开关切到姿势编辑技能并预填默认�
     const overlay = document.querySelector(".neo-gallery-edit-modal-overlay");
     await sleep(20);
 
-    const poseBtn = [...overlay.querySelectorAll(".neo-gallery-edit-outpaint-btn")].find((b) => b.title.includes("姿势编辑"));
-    assert.ok(poseBtn, "应有「姿势」图标开关");
+    await pickEdit(overlay, "姿势");
 
-    click(poseBtn);
-    await sleep(10);
-
-    const skillSel = overlay.querySelector(".neo-gallery-story-form-row select");
+    const skillSel = overlay.querySelector(".neo-gallery-gm-chip-select");
     assert.equal(skillSel.value, "qwen_image_21_pose_edit", "开姿势应切到姿势编辑技能");
-    assert.ok(poseBtn.classList.contains("on"), "姿势开关应高亮");
+    assert.equal(overlay.querySelector(".neo-gallery-edit-mode-select").value, "pose", "模式 chip 应停在姿势");
     const promptInput = overlay.querySelector(".neo-gallery-story-input");
     assert.match(promptInput.value, /Change the pose of the person in <image1>/,
         "无参考图时应预填技能 config.json 的默认姿势触发词");
@@ -631,11 +681,9 @@ test("图片编辑弹窗：姿势开关切到姿势编辑技能并预填默认�
     await sleep(30);
     assert.equal(promptInput.value, "自定义姿势指令", "已有自定义提示词时不应被默认词覆盖");
 
-    // 关姿势 → 回常规编辑技能，已选姿势参考保留
-    click(poseBtn);
-    await sleep(10);
+    // 关姿势（模式 chip 选回「常规」）→ 回常规编辑技能，已选姿势参考保留
+    await pickEdit(overlay, "常规");
     assert.equal(skillSel.value, "qwen_image_21", "关姿势应回到常规编辑技能");
-    assert.ok(!poseBtn.classList.contains("on"), "关姿势后开关应熄灭");
     assert.ok(overlay.querySelector(".neo-gallery-edit-refchip-img"), "关姿势后已选参考图应保留");
 });
 
@@ -666,9 +714,9 @@ test("图片编辑弹窗：生成失败（缺模型）弹 action toast 引导去
     dispatchApiEvent("rs.image_gen.status", { task_id: "ie5", status: "failed", error: "找不到模型 Qwen/qwen_image_2.1_int8_convrot.safetensors（diffusion_models）；候选: QwenImage2.1\\qwen_image_2.1_int8_convrot.safetensors" });
     await sleep(10);
 
-    // 窗内留错误 + 可重试
+    // 窗内留错误；重试就是再点输入卡里那枚常驻「生成」
     assert.match(overlay.querySelector(".neo-gallery-story-hint-error")?.textContent || "", /找不到模型/);
-    assert.ok([...overlay.querySelectorAll(".neo-gallery-story-btn")].find((b) => b.textContent === "重试"), "可重试");
+    assert.ok(overlay.querySelector(".neo-gallery-gm-composer .neo-gallery-story-btn-primary"), "可重试");
 
     // 弹 action toast：summary/detail + 「打开技能详情」入口（而非仅提示）
     const toast = [...document.querySelectorAll(".neo-at")].at(-1);
@@ -806,7 +854,7 @@ test("图片编辑弹窗：常规编辑成功后左侧换成缩放后的原图�
     assert.match(label().textContent, /原图（缩放到 32×32）/, "标题应写明缩放尺寸");
 
     // 切到扩图：基准要用原图自然尺寸，左侧必须还原成原图
-    click(overlay.querySelector(".neo-gallery-edit-outpaint-btn"));
+    await pickEdit(overlay, "扩图");
     assert.match(origImg().getAttribute("src"), /filename=portrait\.png/, "扩图模式下左侧应还原成原图");
     assert.equal(label().textContent, "原图 / 编辑结果（拖拽分割线对比）");
 });
@@ -836,7 +884,7 @@ test("图片编辑弹窗：扩图模式不替换左侧原图（扩图基准要�
         images: [{ filename: "outp_00001_.png", subfolder: "Output/2026-10-03", url: "/o.png" }],
     }));
 
-    click(overlay.querySelector(".neo-gallery-edit-outpaint-btn"));   // 开扩图
+    await pickEdit(overlay, "扩图");   // 开扩图
     click([...overlay.querySelectorAll(".neo-gallery-story-btn")].find((b) => b.textContent === "生成"));
     await sleep(80);
 
@@ -867,7 +915,7 @@ test("图片编辑弹窗：扩图比例预设按原图取最小覆盖框，反�
                                 ["naturalWidth", 800], ["naturalHeight", 600]]) {
         Object.defineProperty(origImgEl, key, { value, configurable: true });
     }
-    click(overlay.querySelector(".neo-gallery-edit-outpaint-btn"));
+    await pickEdit(overlay, "扩图");
 
     const canvasEl = overlay.querySelector(".neo-gallery-edit-outpaint-canvas");
     // 拖框由 CSS 铺满画布，几何要从画布盒 + 原图在画布内的偏移反读（+0 归一化 -0）
@@ -937,14 +985,14 @@ test("图片编辑面板：自定参数——默认收起不带覆盖，选主�
     const overlay = document.querySelector(".neo-gallery-edit-modal-overlay");
     await sleep(50);   // 模型列表 → 当前技能 config
 
-    // 默认收起；展开后只有生图模型 + LoRA（TE / VAE 行裁掉），主模型回到「自动」
-    const toggle = overlay.querySelector(".neo-gallery-edit-form .neo-gallery-gm-model-toggle");
-    assert.ok(toggle, "图片编辑面板应有「自定参数」折叠行");
+    // 默认不显示：自定参数面板挂在 chip 的浮层里，点开才有；面板里只有生图模型 + LoRA（TE / VAE 行裁掉）
+    const bar = overlay.querySelector(".neo-gallery-gm-composer-bar");
+    const paramsChip = bar.querySelectorAll(".neo-gallery-gm-chip-wrap")[2];
+    const panel = paramsChip.querySelector(".neo-gallery-gm-chip-panel");
     const box = overlay.querySelector(".neo-gallery-edit-model-box");
-    assert.ok(box, "应有自定参数区");
-    assert.equal(box.style.display, "none", "默认收起");
-    click(toggle);
-    assert.notEqual(box.style.display, "none", "点击后应展开");
+    assert.ok(panel?.contains(box), "自定参数面板应在自定参数 chip 的浮层里");
+    click(paramsChip.querySelector(".neo-gallery-gm-chip-btn"));
+    assert.equal(panel.style.display, "block", "点 chip 应浮出自定参数面板");
     assert.equal(box.querySelectorAll(".rs-gen-adv-row").length, 0, "只露出生图模型与 LoRA（无 TE / VAE 行）");
     const modelSel = box.querySelector(".rs-gen-model-section select");
     assert.equal(modelSel.value, "", "默认「自动」（跟随技能配置与全局设置），不预填");
@@ -958,14 +1006,14 @@ test("图片编辑面板：自定参数——默认收起不带覆盖，选主�
     assert.ok(!("model" in (req.body || {})), "自动态请求体不应带 model 覆盖");
     assert.ok(!("loras" in (req.body || {})), "自动态请求体不应带 loras 覆盖");
 
-    // 选主模型 + 加一条 LoRA（强度 0.8）→「再生成」请求体带上覆盖
+    // 选主模型 + 加一条 LoRA（强度 0.8）→ 再点「生成」，请求体带上覆盖
     modelSel.value = "krea2.safetensors";
     click(box.querySelector(".rs-gen-lora-add"));
     const loraRow = box.querySelector(".rs-gen-lora-row");
     assert.ok(loraRow, "应有 LoRA 行");
     loraRow.querySelector("select").value = "style_a.safetensors";
     loraRow.querySelector(".rs-gen-lora-strength").value = "0.8";
-    click([...overlay.querySelectorAll(".neo-gallery-story-btn")].find((b) => b.textContent === "再生成"));
+    click(overlay.querySelector(".neo-gallery-gm-composer .neo-gallery-story-btn-primary"));
     await sleep(80);
     req = fetchLog.filter((c) => c.path === "/neo_image_gen/generate").at(-1);
     assert.equal(req.body.model, "krea2.safetensors", "请求体应带所选主模型");
@@ -977,7 +1025,7 @@ test("图片编辑面板：自定参数——默认收起不带覆盖，选主�
                                 ["naturalWidth", 800], ["naturalHeight", 600]]) {
         Object.defineProperty(origImg, key, { value, configurable: true });
     }
-    click(overlay.querySelector(".neo-gallery-edit-outpaint-btn"));
+    await pickEdit(overlay, "扩图");
     await sleep(50);
     assert.equal(modelSel.value, "qwen_image_2.1.safetensors", "切扩图后主模型应重放该技能配置");
     assert.deepEqual([...box.querySelectorAll(".rs-gen-lora-row select")].map((s) => s.value),
@@ -1004,7 +1052,7 @@ test("图片编辑弹窗：扩图锁定比例拖拽只等比缩放，不变形�
                                 ["naturalWidth", 800], ["naturalHeight", 600]]) {
         Object.defineProperty(origImgEl, key, { value, configurable: true });
     }
-    click(overlay.querySelector(".neo-gallery-edit-outpaint-btn"));
+    await pickEdit(overlay, "扩图");
 
     const canvasEl = overlay.querySelector(".neo-gallery-edit-outpaint-canvas");
     const boxRect = () => [-parseFloat(origImgEl.style.left || "0") + 0, -parseFloat(origImgEl.style.top || "0") + 0,
@@ -1105,8 +1153,7 @@ test("图片编辑弹窗：看大图——点原图/点分割线（未拖动）�
     assert.equal(lightbox(), null, "在原图上拖过阈值是拖窗帘，不应打开灯箱");
 
     // 开扩图：拖框铺满画布，原图点不到 → 框体上按下即抬起就是点图
-    click(overlay.querySelector(".neo-gallery-edit-outpaint-btn"));
-    await sleep(10);
+    await pickEdit(overlay, "扩图");
     const boxEl = overlay.querySelector(".neo-gallery-edit-outpaint-box");
 
     pointerAt(boxEl, "pointerdown", 200, 150);

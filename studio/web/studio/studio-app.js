@@ -637,9 +637,11 @@ function buildPaint(el) {
     page.appendChild(main);
 
     // 中间舞台挂在页面下方：右栏那一轮的过程与产物在生成面板下面放大，模式条与面板不被产物挤下去；
-    // 关掉开关整块不挂，回到没有舞台的布局
+    // 空轮整块收起（宿主加 ns-hidden），关掉开关整块不挂，两种情况都不在页面底下留一块空面板
     stageHost = $el("div", { className: "ns-paint-stage" });
-    agentStage = createAgentStage();
+    agentStage = createAgentStage({
+        onContent: (has) => stageHost.classList.toggle("ns-hidden", !has),
+    });
     agentStage.setPreviewMode(previewOn);   // 建好就把本机那份采样预览偏好交进去，本页之前不开过设置页也一样
 
     // 模式切换：文生图与图片编辑各占满右栏，一次只看一个（不像导演页那样编辑 + 生成同屏抢高度）

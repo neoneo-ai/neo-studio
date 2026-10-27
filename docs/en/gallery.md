@@ -68,48 +68,54 @@ library plus several user-defined directories.
 "🖼️ Generate assets" next to the search box opens a small window (like the director recipe window: no
 background overlay, title bar drags the window) that creates new assets from a prompt alone.
 
-#### Skill & parameters
+#### Composer
 
-- **Skill / ratio / max-side chips** - one chip row above the input: the skill (Krea2 text-to-image by
-  default, other text-taking skills selectable, last choice remembered), the aspect ratio and the longest
-  side, all rounded native dropdowns. Empty = follow the skill config and the global image-gen settings;
-  picking a value overrides it for this run only.
-- **Ad-hoc parameters** - the collapse row at the end of the chip row: expand it to pick the main model /
-  LoRA for this run (like wiring a model onto a node; nothing is written back to the global settings).
+- **One prompt box** - the composer holds a single text box and one line of text is enough to generate:
+  what is in the box is the final prompt (no enhancement by default). The placeholder rotates through usage
+  hints as it gains focus; ↑/↓ is a terminal-style history (persisted in localStorage, newest first) that
+  remembers the prompts actually generated and the original descriptions before an enhance.
+- **Skill / ratio / max-side chips** - the chip row at the bottom of the composer is three pill chips (icon + the
+  value in effect + ▾); a click floats an option menu open upward (the composer is docked at the bottom of the
+  page, so menus open upward): the skill is Krea2 text-to-image by default, other text-taking skills are
+  selectable and the last choice is remembered; ratio and max side sitting on 「默认」 follow the skill config and
+  the global image-gen settings, and the chip prints the followed value itself (`16:9 (宽屏)` / `2048`), the ratio
+  chip's little rectangle shaped by the ratio in effect; picking another value overrides it for this run only.
+- **Ad-hoc parameters** - the collapse row at the end of the chip row: it opens as a compact card docked directly
+  on top of the composer, the two of them pinned together at the panel bottom (with the drawer closed the composer
+  docks alone, and opening it never leaves a strip of empty page in between). Inside the card 生图模型 and LoRA
+  sit in an auto-fit two-column grid (side by side in a wide panel, one column when the panel is narrow), the
+  controls keep the searchable combobox shell (a chip menu cannot scroll a long model list), and the card height is
+  capped with internal scroll so it never pushes the result area off screen. It picks the main model / LoRA for this
+  run (like wiring a model onto a node; nothing is written back to the global settings).
   A combination you like can be saved as a new skill in one click: the name is generated from the main
   model name + LoRA name, the ratio and longest side are stored as chosen in the chips, and every other
   setting follows the current skill.
-- **⋯ More** - one `⋯` menu at the bottom-right of the output box holds the three tools: fill in a random
-  prompt / runtime random prompts (batch count) / preset list. The `⋯` stays highlighted while runtime
-  random is on, and the switch and count persist in localStorage. Esc closes this menu first, then the
-  preset overlay.
+- **Generate** - the primary button at the right end of the composer row: it fires as soon as the box has
+  content, and turns into "Cancel task" while a generation runs.
+- **⋯ More** - one `⋯` menu at the right end of that row holds the four tools: fill in a random prompt /
+  prompt enhance (optional) / runtime random prompts (batch count) / preset list. The `⋯` stays highlighted
+  while runtime random is on, and the switch and count persist in localStorage. Esc closes the chip menus and
+  this menu first, then the preset overlay.
 
-#### Enhancement & history
+#### Enhance (optional)
 
-- **Collapsing output box** - the output box is one line while it is empty (the main path is a single
-  description field): focus, typing, ↑/↓ recall, or an enhance write expands it into the full box.
-- **✨ Enhance** - an agent-style enhancement area (output box on top, quick input below, mirroring the
-
-  NeoPromptAgent node): type a description or an editing instruction in the quick input, pick an enhancement
-  skill (only image-enhancement skills are listed, auto-routing by default, last choice remembered) and click
-  ✨ for streaming enhancement. It reuses the node's agent logic (the selected skill's skill.md as system
-  prompt + reference files read on demand), writes the answer into the output box, and shows the reasoning /
-  pipeline state in a temporary panel above the output. On success the quick input clears, and when a prompt
-  already exists the new instruction is appended after a separator.
-- **History** - the quick input and the output each keep their own terminal-style ↑/↓ history (persisted in
-  localStorage): the quick input remembers the inputs you used, the output remembers the final prompts that
-  were actually generated.
+- **✨ Enhance** - tucked inside the `⋯` menu, so the default view is only the input box: write the
+  description in the box, pick an enhancement skill (only image-enhancement skills are listed, auto-routing
+  by default, last choice remembered) and click ✨ — the streamed expansion is written back into the same
+  box. It reuses the node's agent logic (the selected skill's skill.md as system prompt + reference files
+  read on demand) and shows the reasoning / pipeline state in a temporary panel above the box. When the LLM
+  returns nothing or the request fails, the pre-enhance text is restored; that original also enters the
+  history, so ↑ recalls it.
 
 #### Generation & products
 
-- **Generate** - uses the output box as the final prompt (falling back to the quick input when empty);
-  products land in `Output/NeoAgent/<date>/`, and after success you can jump straight to the landed directory,
-  or delete the result images in one click when you do not like them.
-- **Helper buttons** - 🎲 fills in a random entry (sampled from the mixed pool); ▾ runtime random settings
-  (when enabled, "Generate" becomes a batch that samples N entries and generates them one by one, cancelling
-  keeps what was already generated, and recipes are not part of the pool); ☰ the preset list (search, click to
-  fill the output box, with no recipe entries).
-- The quick input's placeholder rotates through usage hints as it gains focus.
+- **Generate** - the box content is the final prompt (`skip_enhance` is always sent); products land in
+  `Output/NeoAgent/<date>/`, and after success you can jump straight to the landed directory, or delete the
+  result images in one click when you do not like them.
+- **Helper tools** - the three inside the `⋯` menu: fill in a random entry (sampled from the mixed pool);
+  runtime random settings (when enabled, "Generate" becomes a batch that samples N entries and generates
+  them one by one, cancelling keeps what was already generated, and recipes are not part of the pool); the
+  preset list (search, click to fill the box, with no recipe entries).
 
 ## Lightbox viewer
 

@@ -54,7 +54,6 @@ const stageRows = () => [...stage().querySelectorAll(".ns-agent-stage-plan-row")
 const stageFoot = () => stage().querySelector(".ns-agent-stage-plan-foot").textContent;
 const stageFacts = () => [...stage().querySelectorAll(".ns-agent-stage-fact")].map((c) => c.textContent);
 const stageStatus = () => stage().querySelector(".ns-agent-stage-status").textContent;
-const stageIdle = () => stage().querySelector(".ns-agent-stage-idle");
 const stageAnswer = () => stage().querySelector(".ns-agent-stage-answer");
 const stageToggle = () => document.querySelector('.ns-agent-prefs [name="stage_mode"]');
 const previewToggle = () => document.querySelector('.ns-agent-prefs [name="preview_mode"]');
@@ -100,11 +99,11 @@ test("绘画页下方有中间舞台：一轮跑完后过程、焦点事实与�
     // 舞台挂在生成面板与显存条之后：产物那一大块放大时不把本页原界面挤下去
     assert.equal([...paintMain().children].at(-1), stageHost(), "舞台宿主应是右栏最后一块");
     assert.ok(paintMain().querySelector(".ns-paint-panel"), "生成面板应在舞台之上");
-    assert.match(stageIdle().textContent, /右栏/, "没跑过就只有一行说明");
+    assert.ok(stageHost().classList.contains("ns-hidden"), "没跑过轮次时宿主收起：页面底下不留一块空面板");
 
     await run(ROUND);
 
-    assert.ok(stageIdle().hidden, "跑起来后不该还铺那行说明");
+    assert.ok(!stageHost().classList.contains("ns-hidden"), "有内容后宿主应展开");
     assert.equal(stageMedia().length, 3, "两次产物共 3 张图 / 片铺成大图格");
     assert.equal(stageMedia()[1].tagName.toLowerCase(), "video", "mp4 产物铺成可播放的片");
     assert.equal(stageRows().length, 2, "执行清单整份重铺，两条一步不落");

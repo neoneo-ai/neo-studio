@@ -21,10 +21,7 @@ const resultLayer = (w, h) =>
 
 // 与 gallery-gen.js 的 openImageEditDialog 同构（图片在上、操作在下）
 // 非扩图：结果层/分割线挂在图片盒内；扩图：三者都进画布（结果的坐标随画布一起缩放）
-const body = (w, h, outpaint) => `
-<div class="neo-gallery-story-modal-overlay neo-gallery-edit-modal-overlay">
-  <div class="neo-gallery-story-modal neo-gallery-edit-modal">
-    <div class="neo-gallery-story-titlebar"><span class="neo-gallery-story-title">图片编辑</span><span class="neo-gallery-story-close">×</span></div>
+const modalInner = (w, h, outpaint) => `
     <div class="neo-gallery-edit-compare">
       <div>
         <div class="neo-gallery-edit-compare-label">原图 / 编辑结果（拖拽分割线对比）</div>
@@ -38,19 +35,62 @@ const body = (w, h, outpaint) => `
       </div>
     </div>
     <div class="neo-gallery-edit-form">
-      <div class="neo-gallery-edit-form-top-row">
-        <div class="neo-gallery-story-form-row"><label class="neo-director-field-label">编辑技能</label><select><option>Qwen Image 2.1</option></select></div>
-        <div class="neo-gallery-story-form-row"><label class="neo-director-field-label">目标分辨率</label><input type="number" id="img-edit-width" value="${w}"><span> × </span><input type="number" id="img-edit-height" value="${h}"></div>
-      </div>
-      <textarea class="neo-gallery-story-input" rows="4"></textarea>
+      <div class="neo-gallery-edit-refdrop-row"><div class="neo-gallery-edit-refdrop"><span class="neo-gallery-edit-refdrop-icon">＋</span></div></div>
       <div class="neo-gallery-cs-status"><div class="neo-gallery-story-hint">填写编辑指令后点「生成」。</div></div>
-      <div class="neo-gallery-story-actions"><button class="neo-gallery-story-btn">取消</button><button class="neo-gallery-story-btn">生成</button></div>
-    </div>
+      <div class="neo-gallery-gm-composer">
+        <textarea class="neo-gallery-story-input neo-gallery-gm-quick-input" rows="4"></textarea>
+        <div class="neo-gallery-gm-composer-bar neo-gallery-gm-chips">
+          <span class="neo-gallery-gm-chip-wrap">
+            <button class="neo-gallery-gm-chip-btn"><span class="neo-gallery-gm-chip-icon"></span><span class="neo-gallery-gm-chip-label">Qwen Image 2.1</span><span class="neo-gallery-gm-chip-caret">▾</span></button>
+            <div class="rs-runtime-menu neo-gallery-gm-chip-menu"></div>
+            <select class="neo-recipes-sort neo-gallery-gm-chip-select" hidden><option>Qwen Image 2.1</option></select>
+          </span>
+          <span class="neo-gallery-gm-chip-wrap">
+            <button id="e2e-mode-chip" class="neo-gallery-gm-chip-btn"><span class="neo-gallery-gm-chip-icon"></span><span class="neo-gallery-gm-chip-label">常规</span><span class="neo-gallery-gm-chip-caret">▾</span></button>
+            <div class="rs-runtime-menu neo-gallery-gm-chip-menu"></div>
+            <select class="neo-recipes-sort neo-gallery-gm-chip-select neo-gallery-edit-mode-select" hidden><option>常规</option></select>
+          </span>
+          <button class="neo-gallery-gm-chip-btn neo-gallery-edit-size-chip"><span class="neo-gallery-gm-chip-icon"></span><span class="neo-gallery-gm-chip-label"><label class="neo-director-field-label">目标分辨率</label><span class="neo-gallery-edit-size-chip-val">${w}×${h}</span></span></button>
+          <span class="neo-gallery-gm-chip-wrap">
+            <button id="e2e-params-chip" class="neo-gallery-gm-chip-btn"><span class="neo-gallery-gm-chip-icon"></span><span class="neo-gallery-gm-chip-label">自定参数</span><span class="neo-gallery-gm-chip-caret">▾</span></button>
+            <div id="e2e-params-panel" class="rs-runtime-menu neo-gallery-gm-chip-menu neo-gallery-gm-chip-panel"><div class="neo-gallery-edit-model-box"><div class="rs-gen-model-section"></div></div></div>
+          </span>
+          <div class="neo-gallery-gm-composer-gap"></div>
+          <button class="neo-gallery-story-btn neo-gallery-story-btn-primary neo-gallery-gm-gen-btn">生成</button>
+        </div>
+        <div class="neo-gallery-edit-size-editor" style="display:none"><input type="number" id="img-edit-width" value="${w}"><span> × </span><input type="number" id="img-edit-height" value="${h}"></div>
+      </div>
+      <div class="neo-gallery-story-actions"><button class="neo-gallery-story-btn">取消</button></div>
+    </div>`;
+
+const body = (w, h, outpaint) => `
+<div class="neo-gallery-story-modal-overlay neo-gallery-edit-modal-overlay">
+  <div class="neo-gallery-story-modal neo-gallery-edit-modal">
+    <div class="neo-gallery-story-titlebar"><span class="neo-gallery-story-title">图片编辑</span><span class="neo-gallery-story-close">×</span></div>
+    ${modalInner(w, h, outpaint)}
   </div>
 </div>`;
 
+// 桌面绘画页内嵌形态：面板铺在 .ns-paint-panel 宿主里（贴底布局由 studio/style.css 管）
+const embeddedBody = (w, h) => `
+<div class="ns-page ns-paint"><div class="ns-paint-panel ns-paint-panel--edit ns-paint-edit">
+  <div class="neo-gallery-gen-panel">
+    <div class="neo-gallery-story-modal neo-gallery-edit-modal neo-gallery-story-modal--embedded">
+      ${modalInner(w, h, false)}
+    </div>
+  </div>
+</div></div>`;
+
+// chip 菜单的收起态与浮出定位由 prompts.css 的 .rs-runtime-menu 基座给；本页只注入 gallery.css，
+// 这里补一份基座，chip 菜单在布局里才是「收起时不占位」的浮层
+const baseCss = `.rs-runtime-menu { display: none; position: fixed; z-index: 9400; background: #2a2a2a; border: 1px solid #5090cc; border-radius: 6px; padding: 8px 10px; min-width: 210px; }`;
+const styleCss = fs.readFileSync(path.join(webDir, "studio", "style.css"), "utf8");
+
 const html = (w, h, outpaint) =>
-    `<!doctype html><html><head><style>${css}</style></head><body>${body(w, h, outpaint)}</body></html>`;
+    `<!doctype html><html><head><style>${baseCss}${css}</style></head><body>${body(w, h, outpaint)}</body></html>`;
+
+const embeddedHtml = (w, h) =>
+    `<!doctype html><html><head><style>${baseCss}${css}${styleCss}</style></head><body>${embeddedBody(w, h)}</body></html>`;
 
 const measure = () => {
     const box = (sel) => {
@@ -63,6 +103,12 @@ const measure = () => {
         stage: box(".neo-gallery-edit-compare-stage"),
         compare: box(".neo-gallery-edit-compare"),
         prompt: box(".neo-gallery-story-input"),
+        composer: box(".neo-gallery-gm-composer"),
+        bar: box(".neo-gallery-gm-composer-bar"),
+        genBtn: box(".neo-gallery-gm-composer-bar .neo-gallery-gm-gen-btn"),
+        modeChip: box("#e2e-mode-chip"),
+        paramsChip: box("#e2e-params-chip"),
+        paramsPanel: box("#e2e-params-panel"),
         status: box(".neo-gallery-cs-status"),
         actions: box(".neo-gallery-story-actions"),
         wrap: box(".neo-gallery-edit-compare-imgwrap"),
@@ -125,6 +171,14 @@ for (const [w, h] of [[848, 1280], [1280, 848], [4000, 1000], [300, 200]]) {
         // 图片在上、操作在下：对比区必须在指令输入框/状态/按钮之上
         assert.ok(m.compare.y + m.compare.h <= m.prompt.y + 1, `对比区应在指令输入框上方：compare=${JSON.stringify(m.compare)} prompt=${JSON.stringify(m.prompt)}`);
         assert.ok(m.status.y + m.status.h <= m.actions.y + 1, `按钮应在状态文字下方：status=${JSON.stringify(m.status)} actions=${JSON.stringify(m.actions)}`);
+        // 操作区在输入卡下方收尾，指令框在底行 chips 上方，「生成」钉在输入卡里
+        assert.ok(m.genBtn.y + m.genBtn.h <= m.actions.y + 1, `输入卡应在操作区上方：gen=${JSON.stringify(m.genBtn)} actions=${JSON.stringify(m.actions)}`);
+        assert.ok(m.prompt.y + m.prompt.h <= m.genBtn.y + 1, `指令框应在输入卡底行上方：prompt=${JSON.stringify(m.prompt)} gen=${JSON.stringify(m.genBtn)}`);
+        assert.ok(within(m.genBtn, m.composer), `「生成」应在输入卡内：gen=${JSON.stringify(m.genBtn)} composer=${JSON.stringify(m.composer)}`);
+        // 底行 = 技能 / 模式 / 尺寸 / 自定参数 chip + 生成；自定参数默认不显示（点 chip 才浮出）
+        assert.ok(within(m.modeChip, m.bar), `模式 chip 应在输入卡底行内：mode=${JSON.stringify(m.modeChip)} bar=${JSON.stringify(m.bar)}`);
+        assert.ok(within(m.paramsChip, m.bar), `自定参数 chip 应在输入卡底行内：params=${JSON.stringify(m.paramsChip)} bar=${JSON.stringify(m.bar)}`);
+        assert.ok(m.paramsPanel.w === 0 && m.paramsPanel.h === 0, `自定参数面板默认不显示：panel=${JSON.stringify(m.paramsPanel)}`);
 
         // 窗帘：分割线在 50% 时，结果图层仍是整幅原图盒（只被裁切，不缩放/不位移）
         assert.equal(reveal.computed, "inset(0px 0px 0px 50%)", "窗帘应由 clip-path 裁掉左侧 50%");
@@ -186,4 +240,19 @@ test("图片编辑对比区：开扩图后图片盒仍是满宽 50vh 舞台（�
     assert.ok(sameBox(m.clipImg, m.canvas), `扩图结果图（200% 宽）应被拉到画布尺寸：img=${JSON.stringify(m.clipImg)}`);
     assert.equal(reveal.clipBox.w, m.canvas.w, "窗帘裁切宽度必须是整幅画布宽");
     assert.equal(reveal.clipBox.h, m.canvas.h);
+});
+
+test("图片编辑输入卡：短窗口里底行 chips 与「生成」都在视口内的同一行", { timeout: 60000 }, async () => {
+    const page = await browser.newPage({ viewport: { width: 1280, height: 620 } });
+    await page.setContent(embeddedHtml(1280, 848));
+    await page.waitForTimeout(80);
+    const m = await page.evaluate(measure);
+    await page.close();
+
+    assert.ok(m.bar.y + m.bar.h <= 621, `输入卡底行应落在视口内：bar=${JSON.stringify(m.bar)}`);
+    assert.ok(within(m.modeChip, m.bar) && within(m.paramsChip, m.bar) && within(m.genBtn, m.bar),
+        `chip 与「生成」都应在底行内：mode=${JSON.stringify(m.modeChip)} params=${JSON.stringify(m.paramsChip)} gen=${JSON.stringify(m.genBtn)}`);
+    assert.ok(Math.abs(m.modeChip.y - m.genBtn.y) < m.genBtn.h,
+        `短窗口底行不换行（换行的 chip 会被折叠线切掉）：mode=${JSON.stringify(m.modeChip)} gen=${JSON.stringify(m.genBtn)}`);
+    assert.ok(m.prompt.h <= Math.round(620 * 0.42) + 1, `指令框高度应被视口压住：prompt=${JSON.stringify(m.prompt)}`);
 });

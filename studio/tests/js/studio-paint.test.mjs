@@ -38,9 +38,10 @@ const overlay = () => document.querySelector(".neo-gallery-story-modal-overlay")
 const btnTexts = (root) => [...root.querySelectorAll(".neo-gallery-story-btn")].map((b) => b.textContent.trim());
 const textPanel = () => paintText()?.querySelector(".neo-gallery-gen-panel");
 const editPanel = () => paintEdit()?.querySelector(".neo-gallery-gen-panel");
-const modeBtns = (panel) => [...panel.querySelectorAll(".neo-gallery-edit-outpaint-btn")];
+const modeChip = (panel) => panel.querySelector(".neo-gallery-edit-mode-select").parentElement;
+const modeChipBtn = (panel) => modeChip(panel).querySelector(".neo-gallery-gm-chip-btn");
 const hintOf = (panel) => panel.querySelector(".neo-gallery-story-hint").textContent;
-const heroOf = (panel) => panel.querySelector(".neo-gallery-gm-hero-sub").textContent;
+const paintStageHost = () => document.querySelector(".ns-paint .ns-paint-stage");
 
 
 // hashchange 由 jsdom 作为宏任务派发：微任务 flush 不够，等一轮事件循环
@@ -113,7 +114,25 @@ test("绘画页：进页就铺好文生图面板与空图片编辑面板，入�
     assert.ok(panel.querySelector(".neo-gallery-story-modal--embedded"), "内嵌面板应带内嵌标记（样式去窗壳靠它）");
     assert.ok(btnTexts(panel).includes("生成"), "idle 应有「生成」");
     assert.ok(!btnTexts(panel).includes("取消"), "页内面板不应有「取消」：收起 = 切到另一个模式");
-    assert.match(heroOf(panel), /素材库直接可见/, "页内面板 idle 铺空画布（hero 副标题带说明）");
+    assert.ok(panel.querySelector(".neo-gallery-gm-quick-input"), "idle 直接给输入框：写一句就生成");
+    assert.equal(panel.querySelectorAll("textarea").length, 1, "文生图只有一个提示词框：两个框会让人不知道往哪写");
+    assert.ok(panel.querySelector(".neo-gallery-gm-composer-bar")?.querySelector(".neo-gallery-gm-gen-btn"), "「生成」在输入卡的控件行里");
+    assert.ok(!panel.querySelector(".neo-gallery-gm-hero"), "idle 不铺空画布占位");
+    assert.ok(panel.querySelector(".neo-gallery-gm-idle"), "idle 在结果区给一句起手提示（结果区在输入卡上方）");
+    const bar = panel.querySelector(".neo-gallery-gm-composer-bar");
+    assert.equal(bar.querySelectorAll(".neo-gallery-gm-chip-btn").length, 4, "技能 / 比例 / 最长边 / 自定参数是真 chip 按钮");
+    const gmPanel = bar.querySelector(".neo-gallery-gm-chip-panel");
+    const visibleSelects = [...bar.querySelectorAll("select")].filter((s) => !s.hidden && !gmPanel.contains(s));
+    assert.equal(visibleSelects.length, 0, "控件行里没有浏览器下拉框：原生 select 只当状态容器");
+    const modalKids = [...panel.querySelector(".neo-gallery-story-modal--embedded").children];
+    assert.ok(modalKids.indexOf(panel.querySelector(".neo-gallery-cs-status")) < modalKids.indexOf(panel.querySelector(".neo-gallery-gm-composer")),
+        "结果区排在上、输入卡排最后一块（样式把它钉在面板底部）");
+    const gmModelBox = panel.querySelector(".neo-gallery-gm-model-box");
+    const enhanceGroup = panel.querySelector(".neo-gallery-gm-enhance-group");
+    assert.ok(enhanceGroup && panel.querySelector(".neo-gallery-gm-more-menu").contains(enhanceGroup),
+        "增强收在 ⋯ 菜单里（默认视野只剩输入框 = 写一句直接生成）");
+    assert.ok(gmPanel?.contains(gmModelBox), "自定参数默认不显示：面板挂在自定参数 chip 的浮层里");
+    assert.ok(paintStageHost().classList.contains("ns-hidden"), "空轮时舞台宿主收起，不在面板底下留一块空框");
 
     assert.ok(!paintText().classList.contains("ns-hidden"), "默认模式应是文生图");
 
@@ -122,10 +141,24 @@ test("绘画页：进页就铺好文生图面板与空图片编辑面板，入�
     assert.ok(ep, "进页应铺好图片编辑面板");
     assert.ok(ep.querySelector(".neo-gallery-story-modal--embedded"), "内嵌面板应带内嵌标记");
     assert.ok(ep.querySelector(".neo-gallery-edit-empty"), "无原图时预览区应是拖放落点");
-    assert.ok(modeBtns(ep).length && modeBtns(ep).every((b) => b.disabled), "无原图时扩图 / 局部 / 点选删除 / 融合 / 姿势先收起");
+    assert.ok(modeChipBtn(ep).disabled, "无原图时编辑模式 chip 先禁用");
+    assert.ok(modeChip(ep).querySelector(".neo-gallery-gm-chip-label").textContent.trim(), "模式 chip 显示当前模式名");
+    assert.match(modeChipBtn(ep).title, /先拖入原图/, "禁用态的提示说明缺的是原图");
     assert.ok(btnTexts(ep).includes("生成"), "idle 应有「生成」");
     assert.ok(!btnTexts(ep).includes("取消"), "页内面板不应有「取消」");
     assert.match(hintOf(ep), /把素材拖进预览区当原图/, "空面板说明先拖原图");
+    // 编辑控件与文生图同一组：一个输入卡 + 底行 chips（技能 / 模式 / 尺寸 / 自定参数）
+    const ebar = ep.querySelector(".neo-gallery-gm-composer-bar");
+    assert.ok(ebar && ebar.querySelector(".neo-gallery-gm-gen-btn"), "「生成」在编辑输入卡的 chips 行里");
+    assert.equal(ebar.querySelectorAll(".neo-gallery-gm-chip-btn").length, 4, "技能 / 模式 / 尺寸 / 自定参数是真 chip 按钮");
+    const editParamsPanel = ebar.querySelector(".neo-gallery-gm-chip-panel");
+    const visibleEditSelects = [...ebar.querySelectorAll("select")].filter((s) => !s.hidden && !editParamsPanel.contains(s));
+    assert.equal(visibleEditSelects.length, 0, "编辑控件行里没有浏览器下拉框");
+    assert.ok(ebar.querySelector(".neo-gallery-edit-size-chip"), "出图尺寸收成一枚 chip");
+    assert.ok(editParamsPanel?.contains(ep.querySelector(".neo-gallery-edit-model-box")),
+        "编辑自定参数默认不显示：面板挂在自定参数 chip 的浮层里");
+    assert.ok(ep.querySelector(".neo-gallery-story-actions").children.length === 0,
+        "页内 idle 操作区是空的（样式让空块不占位）");
     assert.ok(paintEdit().classList.contains("ns-hidden"), "编辑宿主应随模式收起");
 
     // 素材库弹窗：画廊单例挂进弹窗宿主；弹窗里的「生成素材」入口复用现成面板，提示词不被清掉
@@ -192,7 +225,8 @@ test("绘画页：图片卡菜单「图片编辑」把这张图换进现成面�
     assert.equal(editPanel(), ep, "卡片菜单入口应复用现成面板，不重建");
     assert.ok(!ep.querySelector(".neo-gallery-edit-empty"), "原图到位后拖放落点应收起");
     assert.match(ep.querySelector(".neo-gallery-edit-compare-img").getAttribute("src"), /portrait\.png/, "预览区应换成这张原图");
-    assert.ok(modeBtns(ep).every((b) => !b.disabled), "原图到位应解锁扩图 / 局部 / 点选删除 / 融合 / 姿势");
+    assert.ok(!modeChipBtn(ep).disabled, "原图到位应解锁编辑模式 chip");
+    assert.equal(modeChip(ep).querySelectorAll("option").length, 6, "模式 chip 列全六种模式");
     assert.match(hintOf(ep), /生成结果与原图左右对比/, "有原图后说明换回编辑说明");
     assert.ok(!document.querySelector(".neo-gallery-edit-modal-overlay"), "内嵌模式不应建图片编辑浮层遮罩");
     assert.ok(!paintEdit().classList.contains("ns-hidden"), "编辑宿主应切到可见");

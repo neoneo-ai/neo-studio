@@ -395,8 +395,9 @@ body {
 /* 绘画页：满幅 = 文生图 / 图片编辑面板（模式切换，一次铺满整栏）；素材库走弹窗取用 */
 .ns-paint { display: flex; flex-direction: column; height: 100%; }
 /* 顶部留白：本页顶部内边距被素材页那条「sticky 工具条贴顶」规则清成 0，主栏自己补回一段，
-   模式条不贴着窗口边；保底高度只写在这一条（窄窗口下媒体查询换小一档） */
-.ns-paint-main { flex: 1 1 auto; display: flex; flex-direction: column; gap: 8px; padding-top: 12px; min-width: 0; min-height: 520px; }
+   模式条不贴着窗口边。主栏与两块面板都不写保底高度：.ns-view 是 overflow:hidden，
+   保底高度在矮窗口里不会出滚动条，只会把钉底的输入卡与显存条裁掉看不见 */
+.ns-paint-main { flex: 1 1 auto; display: flex; flex-direction: column; gap: 8px; padding-top: 12px; min-width: 0; }
 
 /* 显存条：主栏纵向 flex 把它拉成整行、读数默认贴左，与上方居中的模式条同轴才不显得挂在角落 */
 .ns-paint-main .ns-mem { justify-content: center; }
@@ -436,15 +437,18 @@ body {
     box-shadow: none;
 }
 .ns-paint-panel .neo-gallery-story-titlebar { display: none; }
-/* 文生图：idle 时空画布吃掉栏内剩余高度（输出框收成一行、说明收在画布里），
-   输出框展开或生成中才把这一段高度换给它——面板下方不留一整片空白 */
-.ns-paint-text .neo-gallery-cs-status { flex: 1 1 auto; min-height: 0; }
-.ns-paint-text .neo-gallery-gm-hero,
+/* 两块面板共用一组贴底控件：结果与进度在上方按内容排、成品从上往下长，
+   输入卡靠 margin-top:auto 收到面板底边；自定参数是输入卡里的 chip 点开的一层浮层，
+   收起时不占面板一行，展开时从 chip 上方浮出 */
+.ns-paint-panel .neo-gallery-gm-composer { flex: none; margin-top: auto; }
+.ns-paint-panel .neo-gallery-story-actions { flex: none; }
+/* 输入框高度跟着窗口走：600px 高的窗口里 150px 固定值会吃掉四分之一屏，预览图没地方落 */
+.ns-paint-panel .neo-gallery-gm-quick-input { min-height: clamp(88px, 16vh, 150px); }
+/* 文生图结果区：只按内容长高，超出一屏自己滚，不把输入卡顶出底边 */
+.ns-paint-text .neo-gallery-cs-status { flex: none; min-height: 0; }
 .ns-paint-text .neo-gallery-gm-preview,
-.ns-paint-text .neo-gallery-cs-result { flex: 1 1 auto; min-height: 120px; }
-.ns-paint-text .neo-gallery-gm-output-open { flex: 1 1 auto; min-height: 140px; }
-.ns-paint-text .neo-gallery-gm-output-open .neo-gallery-story-input { height: 100%; min-height: 140px; resize: none; }
-.ns-paint-text .neo-gallery-gm-quick-input { min-height: 64px; }
+.ns-paint-text .neo-gallery-cs-result { flex: none; max-height: 40vh; overflow: auto; }
+.ns-paint-text .neo-gallery-gm-idle { padding-top: clamp(20px, 8vh, 96px); }
 
 /* 图片编辑：预览按栏高缩放（弹窗那套 50vh / 90vh 在页内会把表单挤到折叠线以下、底部按钮被显存条切掉），
    表单固定在下方收尾。gallery.css 是运行时注入的，平局它赢 —— 这里多带一个类压过它 */
@@ -455,10 +459,14 @@ body {
     min-height: 0;
     overflow: hidden;
 }
+/* 预览区可收缩并裁掉溢出：原图再大也不能把输入卡顶出折叠线 */
 .ns-paint-panel .neo-gallery-edit-compare,
 .ns-paint-panel .neo-gallery-edit-compare > div,
-.ns-paint-panel .neo-gallery-edit-compare-stage { flex: 1 1 auto; min-height: 0; max-height: 100%; }
-.ns-paint-panel .neo-gallery-edit-compare-img { max-height: 100%; }
+.ns-paint-panel .neo-gallery-edit-compare-stage { flex: 1 1 auto; min-height: 0; max-height: 100%; overflow: hidden; }
+/* 原图按视口收：顶栏 + 页签 + 标题行 + 第二参考图槽 + 输入卡合计约 420px，剩下都给预览。
+   图片盒是 fit-content，max-height:100% 在里面算不出值（父高是 auto），只能用视口算；
+   110px 是窗口压到 520 高时的保底——预览小一点，输入卡与「生成」仍要留在折叠线内 */
+.ns-paint-panel .neo-gallery-edit-compare-img { max-width: 100%; max-height: max(110px, calc(100vh - 420px)); }
 .ns-paint-panel .neo-gallery-edit-compare-imgwrap.neo-gallery-edit-outpaint { height: 100%; }
 .ns-paint-panel .neo-gallery-edit-form { flex: none; margin-top: 0; }
 /* 空面板拖入框：铺满整块预览区，随窗口高度伸缩（弹窗里仍是 320×220 的小落点） */
@@ -478,7 +486,6 @@ body {
 @media (max-width: 900px) {
     .ns-director, .ns-paint { height: auto; min-height: 0; }
     .ns-director-main { min-height: 620px; }
-    .ns-paint-main { min-height: 480px; }
 }
 
 /* 技能页：统一技能管理直接挂满主区。组件本身是弹窗出身 —— prompts.css 那套 #1a1a2a 底、#1a2a3a 标题条、
@@ -702,10 +709,9 @@ body {
 .ns-prefs-save { width: auto; padding: 6px 20px; justify-self: start; }
 .ns-prefs-note { grid-column: 1 / -1; font-size: 12px; color: #9a9aa8; }
 
-/* 中间舞台：右栏那一轮的当前过程与产物在绘画页生成面板下方放大，模式条与面板留在上方不被挤下去；关掉开关整块不挂
-   （studio-app.js 的 neo_studio_agent_stage）。上限按结果图那 480px 的块给：舞台在下，上方面板按 flex 让出这一段高 */
+/* 中间舞台：右栏那一轮的当前过程与产物在绘画页生成面板下方放大，模式条与面板留在上方不被挤下去。
+   关掉开关整块不挂（studio-app.js 的 neo_studio_agent_stage）；空轮由舞台自己报空，宿主收起成 0 高 */
 .ns-paint-stage { display: flex; flex-direction: column; gap: 8px; flex: none; max-height: 56vh; overflow: auto; }
-.ns-paint-stage:empty { display: none; }
 .ns-agent-stage {
     display: flex; flex-direction: column; gap: 8px;
     border: 1px solid var(--ns-border-soft); border-radius: 6px; padding: 10px 12px; background: var(--ns-panel);
@@ -714,7 +720,6 @@ body {
 .ns-agent-stage-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .ns-agent-stage-title { font-weight: 600; }
 .ns-agent-stage-status { font-size: 12px; color: var(--ns-dim); }
-.ns-agent-stage-idle { font-size: 12px; color: var(--ns-dim); }
 .ns-agent-stage-plan { display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
 .ns-agent-stage-plan-done { opacity: .55; }
 .ns-agent-stage-plan-foot { color: var(--ns-dim); }
