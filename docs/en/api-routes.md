@@ -94,7 +94,7 @@ entries carry `items` keeps working unchanged (counts and covers are derived fro
 | POST | `/rs_recipes/director_describe_panel` | Per-panel description → finished single-segment prompt |
 | POST | `/rs_recipes/director_modify_segment` | Rewrite a segment prompt from an edit instruction (SSE) |
 
-## h3_video_director.py / h3_segment.py / h3_assemble.py — `/neo_video_gen/*`
+## h3_video_director.py / h3_segment.py / h3_assemble.py / simple_video.py — `/neo_video_gen/*`
 
 | Method | Route | Description |
 |------|------|------|
@@ -106,6 +106,9 @@ entries carry `items` keeps working unchanged (counts and covers are derived fro
 | POST | `/neo_video_gen/assemble_segments` | Stitch the checked segments back into a full film |
 | GET | `/neo_video_gen/assemble_segments/{task_id}` | Assembly task snapshot |
 | POST | `/neo_video_gen/assemble_segments/{task_id}/cancel` | Cancel an assembly |
+| POST | `/neo_video_gen/simple` | Enqueue a simple video (skill template + SaveVideo, lands in `output/NeoSimple/`) |
+| GET | `/neo_video_gen/simple/{task_id}` | Simple video task snapshot |
+| POST | `/neo_video_gen/simple/{task_id}/cancel` | Cancel a simple video task |
 | GET | `/neo_video_gen/settings` | Read the "video model" settings |
 | POST | `/neo_video_gen/settings` | Save the "video model" settings |
 | GET | `/neo_video_gen/models` | Scan H3 models and report the auto-selection result |
@@ -122,6 +125,12 @@ entries carry `items` keeps working unchanged (counts and covers are derived fro
   → re-encodes, uses no model and no execution queue, runs on a background thread, and cancellation is cooperative.
   The new film is written to `output/neo_director_merge/`, and the `results` entry carries the real per-segment
   frame counts in `layout`, which later single-segment regenerations use to locate segment boundaries.
+- `simple_video.py` is the standalone "one line + first frame → one clip" entry (the Studio `#/video` page, independent
+  of the director's multi-segment flow): it reuses `resolve_video_params` + `render_template` to turn the request into
+  skill-template parameters, attaches a `SaveVideo` to the terminal VIDEO output, and writes to `output/NeoSimple/`
+  with no recipe and no entry in any recipe's `results`; generation goes through the execution queue and the artifact
+  is only played back. With no first frame, `references` is empty (the t2v path), and the duration arrives in seconds
+  and is converted to the template `length` on the H3 frame grid.
 - Live preview during sampling goes through the plugin's own taeh3 channel (WS event `rs.h3.preview`), pushed back to
   the matching node panel by `node_id`.
 

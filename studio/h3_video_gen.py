@@ -53,6 +53,11 @@ def _resolve_skill_id(value):
     return by_key.get(v, v)
 
 
+# 单次请求允许覆盖的技能配置键（与 image_gen._OVERRIDE_KEYS 同一口径）：视频页自定参数面板的
+# 非空值进请求体；空项跳过 = 这一发继续跟着技能 config 与全局生视频设置
+_VIDEO_OVERRIDE_KEYS = ("model", "text_encoder", "vae", "audio_vae", "loras", "steps")
+
+
 def is_multiframe_skill(value) -> bool:
     """该 skill（name 或 id）是否标记为多帧单次（frontmatter multi_frame: true）。"""
     if not value:
@@ -86,11 +91,19 @@ def resolve_video_params(body: dict, cfg: dict, skip_model: bool = False) -> dic
 
     cfg 为 skill 的 config.json：model/text_encoder/vae 优先取 cfg，缺省回落到独立「生视频模型」
     设置（video_gen.json / get_video_settings），仍空则按 H3 名称线索自动挑选；width/height/length 缺省用 H3 默认。
+    请求体里 _VIDEO_OVERRIDE_KEYS 的非空值先并入 cfg（视频页自定参数面板本发临时换的模型 / LoRA / 步数）。
     skip_model=True 时跳过主模型解析/校验（外部 MODEL 注入模式，内部 UNETLoader 会被剪掉）。
     """
     prompt_text = str(body.get("prompt") or "").strip()
     if not prompt_text:
         raise ValueError("提示词为空")
+
+    # 会话页自定参数面板本发填的覆盖值先并进技能配置：空值跳过 = 这一发跟着技能配置与全局生视频设置走，
+    # 下面每条解析只看合并后的 cfg，回退链一律不变
+    cfg = dict(cfg)
+    for key in _VIDEO_OVERRIDE_KEYS:
+        if body.get(key):
+            cfg[key] = body[key]
 
     # H3 模型/文本编码器/VAE：skill config.json 优先，回落到独立「生视频模型」设置（video_gen.json），
     # 仍空则按 H3 名称线索自动挑选（与生图 suggest_model 一致）；都拿不到才报错

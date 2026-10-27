@@ -133,7 +133,7 @@ test("配方详情：导演配方显示段数/模式/技能/宽×高/总时长�
     await sleep(80);
     let meta = document.querySelector(".neo-recipes-detail-meta");
     assert.ok(meta, "导演配方详情有概览行");
-    assert.equal(meta.textContent, "3 段 · 分镜生视频 · 技能 A ×3 · 1344×768 · 总时长 15s", "统一模式概览行内容（旧 t2v 显示为 f2v）");
+    assert.equal(meta.textContent, "3 段 · 关键帧生视频 · 技能 A ×3 · 1344×768 · 总时长 15s", "统一模式概览行内容（旧 t2v 显示为 f2v）");
 
     // 混合模式：多技能并列、小数总时长
     document.querySelector(".neo-recipes-detail-close")?.click();
@@ -165,7 +165,7 @@ test("配方卡片：多段导演配方正文显示摘要行（代替无提示�
     const panel = await createRecipesPanel();
     document.body.appendChild(panel);
     const meta = panel.querySelector(".neo-recipes-card-summary");
-    assert.equal(meta.textContent, "2 段 · 分镜生视频 · 技能 A ×2 · 960×544 · 总时长 10s", "多段导演卡片摘要行（折叠区）显示概览（旧 i2v 显示为 f2v）");
+    assert.equal(meta.textContent, "2 段 · 关键帧生视频 · 技能 A ×2 · 960×544 · 总时长 10s", "多段导演卡片摘要行（折叠区）显示概览（旧 i2v 显示为 f2v）");
 });
 
 

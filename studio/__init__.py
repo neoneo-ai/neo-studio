@@ -131,6 +131,13 @@ if __package__ not in (None, ""):
     except Exception as e:
         print(f"[Neo Studio] studio 路由注册失败（Neo Studio 整片生成不可用）: {e}")
 
+    # Neo Studio 简单版视频生成：/neo_video_gen/simple* 路由（一句话+首帧出一段视频）；
+    # 复用 h3_video_gen/image_gen/skill 的参数链，依赖它们已加载，导入失败时优雅降级。
+    try:
+        from . import simple_video  # noqa: F401
+    except Exception as e:
+        print(f"[Neo Studio] simple_video 路由注册失败（简单视频生成不可用）: {e}")
+
     # Neo Grid Split：宫格图拆分节点，一张分镜宫格图 → 各格 IMAGE（行优先）+ 原图内嵌提示词。
     # 复用 grid_split.py 纯像素核心；导入失败时优雅降级。
     GRID_SPLIT_MAPPINGS = {}

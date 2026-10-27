@@ -47,6 +47,7 @@ COMFY_ONLY_ROUTES = (
     "/neo_image_gen/skill_dims?skill_id=x",
     "/neo_video_gen/run_segment",
     "/neo_video_gen/assemble_segments",
+    "/neo_video_gen/simple",
     "/neo_voice/generate",
     "/neo_studio/director/generate",
     "/neo_studio/mem_stats",
@@ -144,6 +145,7 @@ class OfflineServiceTests(_ServerCase):
         # 生成 / 显存类功能离线不可用；纯文件功能（宫格切分）可用
         self.assertFalse(data["caps"]["image_gen"])
         self.assertFalse(data["caps"]["director"])
+        self.assertFalse(data["caps"]["simple_video"])
         self.assertFalse(data["caps"]["memory"])
         self.assertTrue(data["caps"]["grid_split"])
 
@@ -162,6 +164,8 @@ class OfflineServiceTests(_ServerCase):
         self.assertIn("GET /neo_gallery/list", data["routes"], "桌面端能服务的要列出来")
         self.assertNotIn("POST /neo_studio/director/generate", data["routes"],
                          "要执行队列的归 ComfyUI，页面直连过去")
+        self.assertNotIn("POST /neo_video_gen/simple", data["routes"],
+                         "简单视频生成要执行队列，页面直连 ComfyUI")
 
     def test_version_carries_the_direct_target_only_when_desktop_reports_it(self):
         # 空 = 这路 ComfyUI 不认桌面端 origin（未就绪 / 附着 / 远程），页面留在离线形态

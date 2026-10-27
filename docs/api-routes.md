@@ -88,7 +88,7 @@ StoryBoard / CharacterSheet 主目录的只读预设区；未归类的目录仍�
 | POST | `/rs_recipes/director_describe_panel` | 逐格描述生成单段成品提示词 |
 | POST | `/rs_recipes/director_modify_segment` | 按修改指令重写段提示词（SSE） |
 
-## h3_video_director.py / h3_segment.py / h3_assemble.py — `/neo_video_gen/*`
+## h3_video_director.py / h3_segment.py / h3_assemble.py / simple_video.py — `/neo_video_gen/*`
 
 | 方法 | 路由 | 说明 |
 |------|------|------|
@@ -100,6 +100,9 @@ StoryBoard / CharacterSheet 主目录的只读预设区；未归类的目录仍�
 | POST | `/neo_video_gen/assemble_segments` | 把勾选的段拼回完整成片 |
 | GET | `/neo_video_gen/assemble_segments/{task_id}` | 拼接任务快照 |
 | POST | `/neo_video_gen/assemble_segments/{task_id}/cancel` | 取消拼接 |
+| POST | `/neo_video_gen/simple` | 简单视频生成入队（技能模板 + SaveVideo，落 `output/NeoSimple/`） |
+| GET | `/neo_video_gen/simple/{task_id}` | 简单视频任务快照 |
+| POST | `/neo_video_gen/simple/{task_id}/cancel` | 取消简单视频任务 |
 | GET | `/neo_video_gen/settings` | 读取「生视频模型」设置 |
 | POST | `/neo_video_gen/settings` | 保存「生视频模型」设置 |
 | GET | `/neo_video_gen/models` | 扫描 H3 模型并给出自动挑选结果 |
@@ -112,6 +115,10 @@ StoryBoard / CharacterSheet 主目录的只读预设区；未归类的目录仍�
   它只做解码 → 拼接 → 再编码，不用模型、不占执行队列，在后台线程跑，取消为协作式。
   新成片写 `output/neo_director_merge/`，记进 `results` 时带逐段真实帧数 `layout`，
   后续单段重生成按它定位段边界。
+- `simple_video.py` 是「一句话 + 首帧出一段视频」的独立入口（Studio `#/video` 页，与导演多段流程互不影响）：
+  复用 `resolve_video_params` + `render_template` 把请求解析成技能模板参数，在末端 VIDEO 上接一个 `SaveVideo`
+  落 `output/NeoSimple/`，不建配方、不进配方 `results`；生成走执行队列，产物只播放。首帧缺省时 `references` 为空
+  （t2v 路径），时长以秒进来按 H3 帧网格换算成模板 `length`。
 - 采样期间的实时预览走插件自己的 taeh3 通道（WS 事件 `rs.h3.preview`），按 `node_id` 推回对应节点面板。
 
 ## studio.py — `/neo_studio/*`

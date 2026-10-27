@@ -4,6 +4,48 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **The `f2v` mode is named for what it consumes: 关键帧生视频 / "Keyframe → video".** The old word 分镜生视频 /
+  "Storyboard → video" named the director's 分镜 board instead of the input the mode takes — f2v eats the first / last
+  frame slots, while the 分镜 board (grid storyboard, per-segment comparison, timeline) keeps its own name.
+  `SEG_MODES` / `MODE_LABELS` in `studio/web/director.js` is the single source, so the director's global and
+  per-segment mode dropdowns, the Video page's skill group headers, the recipe overview line and the card summary
+  lines all read the one label; the English wording is the `studio/web/js/core/i18n.js` pair.
+
+- **Chip popups open above the chip and stay inside the window.** A popup's `top` / `left` are relative to its
+  containing block while the placement math computed viewport numbers: the story composer sits in a draggable modal
+  whose top is at the window top, so the 技能 panel looked right there, while the Video page's composer card is pinned
+  to the window bottom — the same numbers buried the whole panel below the window, leaving only the group header row
+  reachable with 主模型 / 步数 / 「完成」 out of reach. `placeChipPanel()` in `studio/web/gallery-gen.js` is shared by
+  `chipButton()`'s menu and `skillParamsChip()`'s panel: prefer 6px above the chip, drop below only when the space
+  above is too small, clamp inside the window, subtract the containing block's viewport position, then measure the
+  real rect and push the whole popup back in. Covered by `studio/tests/js/studio-video.test.mjs` (opens above the
+  chip, clamps at the window bottom, the story composer's numbers byte-identical, the 分辨率 menu opens above and
+  stays clickable).
+
+- **A standalone simple video page (`#/video`): one line plus a first frame, straight to one clip.** The only video
+  entry was the director — a multi-segment recipe you edit, save, then generate as a whole, which is more than someone
+  wants who just has a line and a first frame. The new Studio `#/video` page is one editor like the ArtCraft create-video
+  screen: the page is a stage, a big 「创建视频」 title sits on it while it is empty, and a rounded composer card floats at
+  the bottom edge — first / last frame and reference squares, a prompt box with a character counter, a chips row
+  (技能 / 分辨率 / 时长 / 种子) and a generate button at the card's right end; the finished clip lands as a card on the
+  stage and the title fades out. The card, the squares, the prompt box, the chips and the generate button are the
+  story composer's own pieces, not a second copy of them: `.neo-gallery-gm-composer` / `.neo-gallery-edit-refdrop` /
+  `.neo-gallery-gm-quick-input` / `.neo-gallery-story-btn` carry the look, and 技能 / 分辨率 / 时长 are the same
+  `chipButton()` pill the Paint page's composer uses (hidden select, menu floats up, chip shows the effective value).
+  It touches nothing in the director flow. The backend `studio/simple_video.py` reuses the director's own parameter
+  chain (`_resolve_skill_id` / `load_skill_workflow` / `get_skill_gen_config` / `resolve_video_params` / `render_template`)
+  to turn the request into a skill template, attaches a `SaveVideo` to the terminal VIDEO output, and submits the graph
+  to the execution queue (VRAM, step progress and cancellation come from the executor) — the output lands in
+  `output/NeoSimple/`, is played back via `/view?type=output`, and is not recorded into any recipe. Duration arrives in
+  seconds and is mapped onto the H3 17k+5 frame grid; a seed of -1 randomizes. The page is a Home card and a nav tab peer
+  to Home / Paint / Director; the generate button is gated by the `simple_video` capability so the offline desktop
+  directs the user to launch ComfyUI. Covered by `studio/tests/js/studio-video.test.mjs` (stage, hero title and floating composer render, skill
+  dropdown lists only `gen_video` skills, the generate payload shape, poll running → succeeded swaps in the `<video>`,
+  cancel hits the cancel route) and `studio/tests/test_simple_video.py` (`_video_terminal` finds the unconsumed VIDEO
+  output / skips `SaveVideo` / raises with none, `_run_prompt` attaches `SaveVideo` and maps `duration_sec` → frames
+  and a negative seed → a resolved one, generate / cancel routes). `app/studio_caps.py` registers `simple_video` as a
+  ComfyUI-only feature, asserted by `app/tests/test_studio_server.py`.
+
 - **The image-edit composer pairs the references with the prompt box, Nano Banana Pro style.** The reference row sat
   as its own row above the composer, so the panel read as two stacked focus boxes, and picking from the library meant
   dragging from the ComfyUI sidebar. The composer is now one rounded card whose top row pairs a 56px 「＋参考」 slot with

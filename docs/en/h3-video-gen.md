@@ -59,7 +59,7 @@ MiniMax H3 video generation: single-segment BUNDLE and multi-segment director re
 
   | Mode | Carries | Editor shows |
   |------|------|-----------|
-  | `f2v` storyboard to video | decided by the first/last frame slots: no frame = text-to-video, first frame only = image-to-video, last frame only = L2VA, both = first-last frame | first-frame area + last-frame area |
+  | `f2v` keyframe to video | decided by the first/last frame slots: no frame = text-to-video, first frame only = image-to-video, last frame only = L2VA, both = first-last frame | first-frame area + last-frame area |
   | `r2v` full-reference video | reference images ≤9 / reference videos ≤3 (the first is the source video) / reference audios ≤3 | reference media area |
 
   Validation: image-to-video and first-last-frame segments need a first frame (or the previous segment's last
@@ -161,6 +161,27 @@ Each video skill directory contains:
 Model resolution priority: skill `config.json` → the global "video generation model" setting → automatic pick
 by name clues → error. The audio VAE is resolved separately and must stay separate from the video VAE.
 `width` / `height` / `length` are defaults and can be overridden by node inputs.
+
+### Single-shot generation on the Video page
+
+The Video page (one line of text plus material, one finished clip, via `/neo_video_gen/simple`) shares the
+same two-pane "skill + custom parameters" chip as the drawing pages. Skills are grouped by generation mode,
+and the group headers are the director page's two words: **Keyframe → video** (t2v / i2v / fl2v) and
+**Full-reference video** (r2v). The media slots follow the family: the keyframe family shows the first /
+last frame slots, the full-reference family shows the reference image / video / audio slots. Slots hidden by
+the family are excluded from the request, and they are intact again when you switch back.
+The panel and the chip option menus open 6px above the chip whenever they fit there (below only when
+the space above is too small) and stay clamped inside the window: with the dock pinned to the window
+bottom the panel opens upward, so main model / steps / "Done" never end up below the fold.
+
+- The panel's custom parameters are a **per-request override**: main model / Text Encoder / video VAE /
+  audio VAE / LoRA / steps are sent in the body only when non-empty (`model` / `text_encoder` / `vae` /
+  `audio_vae` / `loras` / `steps`); the backend merges them into the skill config and runs the same
+  resolution chain. Empty means keep following the skill's `config.json` and the global "video generation
+  model" setting.
+- Skills with `requires_ref: true` are blocked in the frontend when material is missing: a storyboard skill
+  without a first / last frame, or a full-reference skill without a reference image, sends nothing and the
+  status line names what is missing.
 
 ### Template variables
 

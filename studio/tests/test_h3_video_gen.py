@@ -333,6 +333,46 @@ class ResolveVideoParamsTests(unittest.TestCase):
             {"prompt": "x", "width": 512, "height": 512, "length": 97}, self._cfg())
         self.assertEqual((p["width"], p["height"], p["length"]), (512, 512, 97))
 
+    def test_body_model_override_wins_over_cfg(self):
+        # 会话页自定参数面板填了主模型 = 这一发换模型，技能钉的那一颗让位
+        p = h3_video_gen.resolve_video_params(
+            {"prompt": "x", "model": "krea2/krea2_turbo_fp16.safetensors"}, self._cfg())
+        self.assertEqual(p["model"], "krea2/krea2_turbo_fp16.safetensors")
+
+    def test_body_encoder_and_vae_overrides(self):
+        p = h3_video_gen.resolve_video_params(
+            {"prompt": "x", "text_encoder": "qwen3vl/qwen3_vl_4b_fp8_scaled.safetensors",
+             "vae": "krea2/diffusion_pytorch_model.safetensors"}, self._cfg())
+        self.assertEqual(p["text_encoder"], "qwen3vl/qwen3_vl_4b_fp8_scaled.safetensors")
+        self.assertEqual(p["vae"], "krea2/diffusion_pytorch_model.safetensors")
+
+    def test_body_audio_vae_override(self):
+        # 音频 VAE 覆盖同样经存在性适配：桩环境 vae 目录里只有 _fp32 这一颗音频模型
+        p = h3_video_gen.resolve_video_params(
+            {"prompt": "x", "audio_vae": "minimax_h3_audio_vae_fp32.safetensors"}, self._cfg())
+        self.assertEqual(p["audio_vae"], "minimax_h3_audio_vae_fp32.safetensors")
+
+    def test_body_steps_and_loras_override_cfg(self):
+        cfg = self._cfg()
+        cfg["steps"] = 30
+        cfg["loras"] = [{"name": "h3/style_lora.safetensors", "strength": 0.8}]
+        p = h3_video_gen.resolve_video_params(
+            {"prompt": "x", "steps": 12,
+             "loras": [{"name": "h3/style_lora.safetensors", "strength": 0.3}]}, cfg)
+        self.assertEqual(p["steps"], 12)
+        self.assertEqual(p["loras"], [{"name": "h3/style_lora.safetensors", "strength": 0.3}])
+
+    def test_empty_body_override_follows_cfg(self):
+        # 面板留空 = 请求体不发值；后端这一发沿用技能钉的模型与步数（与生图覆盖同一口径）
+        cfg = self._cfg()
+        cfg["steps"] = 30
+        p = h3_video_gen.resolve_video_params(
+            {"prompt": "x", "model": "", "loras": [], "steps": 0, "vae": "  "}, cfg)
+        self.assertEqual(p["model"], cfg["model"])
+        self.assertEqual(p["steps"], 30)
+        self.assertEqual(p["vae"], cfg["vae"])
+        self.assertEqual(p["loras"], [])
+
     def test_missing_prompt_raises(self):
         with self.assertRaises(ValueError):
             h3_video_gen.resolve_video_params({"prompt": "   "}, self._cfg())

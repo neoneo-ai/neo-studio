@@ -136,7 +136,7 @@ Execution details: [h3-video-gen.md](h3-video-gen.md).
     last-frame chaining (only the previous segment's last frame, no regeneration window).
   Recipes missing these keys keep the original defaults (skill-config steps, continuity on, 22 context frames).
 - **Generation mode & skill**: the first row of the "🎞️ Storyboard timeline" page holds the global generation
-  mode dropdown (storyboard to video / full-reference video / mixed) and the unified "skill" picker (clicking
+  mode dropdown (keyframe to video / full-reference video / mixed) and the unified "skill" picker (clicking
   opens a centered search window, options filtered by the global mode, sorted by ascending steps). In
   non-mixed modes all segments share that skill and the per-segment skill dropdown in the segment title row is
   hidden; switching to `mixed` moves mode and skill to per-segment selection. The default skill of a new

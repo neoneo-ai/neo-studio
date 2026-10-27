@@ -36,6 +36,10 @@ const PATHS = {
     restore: '<path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 0-2 2v3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/>',
     minimize: '<path d="M5 12h14"/>',
     fullscreen: '<polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><path d="m21 3-7 7"/><path d="m3 21 7-7"/>',
+    plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
+    "arrow-up": '<path d="M12 19V5"/><path d="m5 12 7-7 7 7"/>',
+    clock: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+    ratio: '<rect width="18" height="14" x="3" y="5" rx="2"/><path d="M7 12h10"/>',
 
 };
 

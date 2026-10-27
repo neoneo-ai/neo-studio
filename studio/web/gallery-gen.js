@@ -1050,10 +1050,34 @@ function ratioGlyph() {
     return { el, sync };
 }
 
+/** chip 浮层落点（chipButton 的菜单与 skillParamsChip 的双栏面板共用这一套）：
+ *  浮层是绝对定位层，样式坐标相对它的包含块——会话页 composer 在可拖动弹层里（带 transform），
+ *  弹层顶贴近窗口顶，照视口算的数与相对包含块的数几乎同值，所以浮层今天就是「弹在 chip 上方」；
+ *  视频页 dock 贴窗口底（style.css .ns-video-dock bottom:18px），包含块是 .ns-video-page，
+ *  壳顶在几百像素开外，照视口那串数直接写出来浮层整块沉到窗底以下，只剩组头一行露在窗口里。
+ *  所以：先照视口算期望落点（优先 chip 上方 6px，放不下才落 chip 下方）并夹进窗口，
+ *  再减掉包含块自己的视口位置换算成样式坐标；最后量浮层真实矩形兜底，越窗就整块推回窗内。
+ *  会话页那枚本来就落在窗内：换算量为 0、夹位不触发，弹法与今天逐字一致。 */
+function placeChipPanel(el, chipRect) {
+    const shell = (el.offsetParent || document.documentElement).getBoundingClientRect();
+    const h = el.offsetHeight;
+    const w = el.offsetWidth;
+    const above = chipRect.top - h - 6;
+    const top = Math.max(8, Math.min(above > 8 ? above : chipRect.bottom + 6, window.innerHeight - h - 8));
+    const left = Math.max(8, Math.min(chipRect.left, window.innerWidth - w - 8));
+    el.style.top = `${top - shell.top}px`;
+    el.style.left = `${left - shell.left}px`;
+    const box = el.getBoundingClientRect();
+    const dx = Math.min(0, window.innerWidth - 8 - box.right);
+    const dy = Math.min(0, window.innerHeight - 8 - box.bottom);
+    if (dx < 0) el.style.left = `${parseFloat(el.style.left) + dx}px`;
+    if (dy < 0) el.style.top = `${parseFloat(el.style.top) + dy}px`;
+}
+
 /** 真 chip（输入条样式参考 ArtCraft）：一枚胶囊按钮 + 从上方浮出的选项菜单——输入卡钉在页面底部，
  *  菜单只能朝上开。原生 select 收在壳里当状态容器并隐藏：chip 显示生效值（覆盖值 / 跟随值 / 默认），
  *  点菜单项写 value 并派发 change；切技能重放配置是程序改 value，不触发 change，调用方要跟着 sync() */
-function chipButton(sel, { icon: iconName, glyph = null } = {}) {
+export function chipButton(sel, { icon: iconName, glyph = null } = {}) {
     sel.hidden = true;
     const icoSlot = iconName ? $el("span", { className: "neo-gallery-gm-chip-icon" }, [icon(iconName, 12)]) : null;
     const label = $el("span", { className: "neo-gallery-gm-chip-label" });
@@ -1104,9 +1128,7 @@ function chipButton(sel, { icon: iconName, glyph = null } = {}) {
         open = true;
         chip.classList.add("neo-gallery-gm-chip-open");
         const r = chip.getBoundingClientRect();
-        menu.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - menu.offsetWidth - 8))}px`;
-        const above = r.top - menu.offsetHeight - 6;
-        menu.style.top = `${above > 8 ? above : r.bottom + 6}px`;
+        placeChipPanel(menu, r);
     });
     sel.addEventListener("change", sync);
     sync();
@@ -1125,8 +1147,9 @@ const SKILL_FAMILY_LABELS = { qwen: "Qwen Image", krea2: "Krea2", moss: "MOSS" }
  *  技能行一律可点：点技能会走 modelCfg.load(该技能 config)，右栏主模型与 LoRA 整份被该技能自己的配置替换，
  *  家族对撞在这一发里根本留不住；跨家族行只把「会换成哪个主模型」写在副标题上（↻ 前缀）。
  *  真正必败的是「当前技能 + 手填的别家族主模型」，那条由 guardMainModelFamily 在填的那一刻拦。
- *  原生 select 收在壳里只当状态容器：点技能写 value 并派发 change；切技能重放配置是程序改 value，调用方要跟着 sync() */
-function skillParamsChip(sel, paramsEl, { icon: iconName = "sparkles", getOverride } = {}) {
+ *  原生 select 收在壳里只当状态容器：点技能写 value 并派发 change；切技能重放配置是程序改 value，调用方要跟着 sync()
+ *  分组规则由调用方给：视频页按生成模式分组（groupOf 取 skill 的 mode），组头名与组序都取 groupLabels 的键序。 */
+export function skillParamsChip(sel, paramsEl, { icon: iconName = "sparkles", getOverride, groupOf = skillFamily, groupLabels = SKILL_FAMILY_LABELS } = {}) {
     sel.hidden = true;
     const icoSlot = $el("span", { className: "neo-gallery-gm-chip-icon" }, [icon(iconName, 12)]);
     const label = $el("span", { className: "neo-gallery-gm-chip-label" });
@@ -1150,20 +1173,20 @@ function skillParamsChip(sel, paramsEl, { icon: iconName = "sparkles", getOverri
     panel.style.display = "none";
     const wrap = $el("span", { className: "neo-gallery-gm-chip-wrap" }, [chip, panel, sel]);
     let open = false;
-    // 组序 = 家族词表序，词表认不出的技能落「其他」排最后
-    const famOrder = (fam) => (fam ? LORA_FAMILY_HINTS.indexOf(fam) : 99);
+    // 组序 = groupLabels 的键序，词表认不出的技能落「其他」排最后
+    const famOrder = (fam) => { const i = Object.keys(groupLabels).indexOf(fam); return i < 0 ? 99 : i; };
 
     /** 左栏整列重建（技能十几行，开面板与 sync 时各一次） */
     const renderSkills = () => {
         skillsCol.textContent = "";
-        const rows = [...sel.options].map((o) => ({ o, fam: skillFamily(o.__skillMeta) }));
+        const rows = [...sel.options].map((o) => ({ o, fam: groupOf(o.__skillMeta) }));
         const fams = [...new Set(rows.map((r) => r.fam))].sort((a, b) => famOrder(a) - famOrder(b));
         const modelFam = modelFamily((getOverride ? getOverride() : {}).model || "");
         for (const fam of fams) {
             if (fams.length > 1) {
                 skillsCol.appendChild($el("div", {
                     className: "neo-gallery-gm-skill-group",
-                    textContent: SKILL_FAMILY_LABELS[fam] || t("其他"),
+                    textContent: groupLabels[fam] || t("其他"),
                 }));
             }
             // fam: rowFam —— 内层不能再绑 fam，filter 回调认的是外层组循环那个 fam
@@ -1185,7 +1208,7 @@ function skillParamsChip(sel, paramsEl, { icon: iconName = "sparkles", getOverri
                 }
                 if (cross) {
                     item.title = tf("{a} 家族的技能：选中会改用该技能自带的主模型（当前主模型 / LoRA 覆盖会被替换）", {
-                        a: SKILL_FAMILY_LABELS[rowFam] || rowFam,
+                        a: groupLabels[rowFam] || rowFam,
                     });
                 }
                 item.addEventListener("click", (e) => {
@@ -1224,9 +1247,7 @@ function skillParamsChip(sel, paramsEl, { icon: iconName = "sparkles", getOverri
         open = true;
         chip.classList.add("neo-gallery-gm-chip-open");
         const r = chip.getBoundingClientRect();
-        panel.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - panel.offsetWidth - 8))}px`;
-        const above = r.top - panel.offsetHeight - 6;
-        panel.style.top = `${above > 8 ? above : r.bottom + 6}px`;
+        placeChipPanel(panel, r);
     });
     sel.addEventListener("change", sync);
     sync();

@@ -10,11 +10,13 @@ import { configure as configureRoutes, resolve as resolvePath } from "./shim/rou
 import { $el } from "./shim/ui.js";
 
 import "../gallery.js";   // 注册 comfy.neo.gallery 扩展（NeoGallery + 侧栏 tab 定义）
-import { setDirectorEditorHost, DIRECTOR_RECIPE_SAVED_EVENT } from "../director.js";
-import { setPaintHost, openGenMaterialDialog, openImageEditDialog } from "../gallery-gen.js";
+import { setDirectorEditorHost, DIRECTOR_RECIPE_SAVED_EVENT, SEG_MODES, MODE_LABELS, LEGACY_MODE_MAP } from "../director.js";
+import { setPaintHost, openGenMaterialDialog, openImageEditDialog, chipButton, skillParamsChip } from "../gallery-gen.js";
 import { createFramePlayer, DOCK_PREVIEW_SIDE, STAGE_PREVIEW_SIDE } from "../live-preview.js";
 import { createRecipesPanel } from "../recipes.js";
-import { createImageGenSettingsForm, createVideoGenSettingsForm, modelFamily } from "../image-gen.js";
+import { listVideoSkills } from "../recipes.js";
+import { skillDisplayName } from "../skill.js";
+import { createImageGenSettingsForm, createVideoGenSettingsForm, createVideoModelConfigSection, listVideoGenModels, getSkillGenConfig, modelFamily } from "../image-gen.js";
 import { createModelConfigForm } from "../llm-setting.js";
 import { createSkillManager } from "../skill.js";
 import { createAgentPanel, createMcpPanel, createAgentPrefsForm } from "../agent-panel.js";
@@ -91,7 +93,7 @@ function showView(name) {
     currentView = name;
     agentCtx.page = name;
     notifyAgentCtx();
-    setMemActive(name === "director" || name === "paint");   // 显存读数只在生成页（导演 / 绘画）轮询
+    setMemActive(name === "director" || name === "paint" || name === "video");   // 显存读数只在生成页（导演 / 绘画 / 视频）轮询
     if (name === "director" && onDirectorShown) onDirectorShown();
     // 画廊单例的宿主跟着视图走：素材页 = 整片宿主；弹窗开着 = 弹窗宿主；其余页 = 交还素材页 / 收留宿主
     // 一次只挂一处：切页时不会两次 render 抢同一个元素（后落的那次会把画廊拽回上一页）
@@ -722,8 +724,9 @@ function buildHome(el) {
         $el("h2", { className: "ns-home-section", textContent: t("开始创作") }),
         $el("div", { className: "ns-home-grid" }, [
             homeCard("sparkles", "生成图片", "描述画面，直接出图", () => openPaintMode("text")),
+            homeCard("film", "生成视频", "一句话加首帧，出一段视频", () => go("video")),
             homeCard("pencil", "图片编辑", "拖入素材，写下要改成什么样", () => openPaintMode("edit")),
-            homeCard("film", "导演视频", "多段配方，生成整片视频", () => go("director")),
+            homeCard("play", "导演视频", "多段配方，生成整片视频", () => go("director")),
         ]),
         $el("h2", { className: "ns-home-section", textContent: t("素材与配置") }),
         $el("div", { className: "ns-home-grid" }, [
@@ -733,6 +736,371 @@ function buildHome(el) {
         ]),
     );
 }
+
+// ====== 视频页：一句话 + 首帧（可选尾帧 / 参考图）直接出一段视频 ======
+// 独立于导演多段流程：不建配方、不读配方，参数在本页 composer 里现填，提交后端简单视频接口。
+// 版面照 ArtCraft 的 Create Video：整页是舞台，空着时 hero 大字标题盖在正中，底部浮一张胶囊
+// composer（素材方块 + 提示词 + 芯片行 + 生成钮）；出片后标题淡出，成片卡片进舞台滚动。
+const VIDEO_SIZE_CHOICES = [
+    [624, 352, "352p 横屏"], [768, 432, "432p 横屏"], [1024, 576, "576p 横屏"],
+    [1280, 720, "720p 横屏"], [1344, 768, "768p 横屏"], [1920, 1080, "1080p 横屏"],
+];
+const VIDEO_DUR_CHOICES = [3, 5, 8, 10, 15];
+const VIDEO_MAX_REF = 9;   // 参考图上限（与 H3 参考节点 image 槽一致）
+const VIDEO_TERMINAL = ["succeeded", "failed", "cancelled"];
+// 技能分组 = 导演页那套生成模式：组头名与组序直接取 director 的 SEG_MODES，两处模式词永远一致。
+// 技能的 mode 经 LEGACY_MODE_MAP 归并（t2v / i2v / fl2v → 关键帧生视频，r2v 留全参考生视频），
+// 没标 mode 的旧视频技能落关键帧生视频——首帧留空就是文生视频，本来就是这一家族里的一发
+const VIDEO_GROUP_LABELS = Object.fromEntries(SEG_MODES.map(([key]) => [key, MODE_LABELS.get(key)]));
+const VIDEO_LAST_SKILL_KEY = "neo.video.skill";
+const videoModeGroup = (meta) => LEGACY_MODE_MAP.get(meta?.mode) || meta?.mode || "f2v";
+const videoSkillSteps = (s) => Number((s.gen_config || {}).steps) || 20;
+
+// 默认技能 = 关键帧生视频家族里步数最少的可用技能（后端 _default_video_skill 同口径，先进页就能直接出片）
+function defaultVideoSkill(list) {
+    const usable = list.filter((s) => s.available !== false);
+    const pool = usable.filter((s) => videoModeGroup(s) === "f2v");
+    const by = pool.length ? pool : usable;
+    if (!by.length) return "";
+    return by.reduce((a, b) => (videoSkillSteps(b) < videoSkillSteps(a) ? b : a)).id;
+}
+
+// 素材库弹窗点卡片 → copy_to_input 落进 input 根目录，返回加载节点可用的文件名
+async function copyPickedToInput(img) {
+    const query = "filename=" + encodeURIComponent(img.filename || "")
+        + (img.subfolder ? "&subfolder=" + encodeURIComponent(img.subfolder) : "");
+    const resp = await api.fetchApi("/neo_gallery/copy_to_input?" + query);
+    const data = await resp.json().catch(() => null);
+    if (!resp.ok || !data?.success) throw new Error(data?.error || t("无法读取该图片"));
+    return data.filename;
+}
+
+function buildVideo(el) {
+    el.classList.add("ns-video");
+    const page = $el("div", { className: "ns-video-page" });
+    el.appendChild(page);
+
+    const stage = $el("div", { className: "ns-video-stage" });
+    const hero = $el("section", { className: "ns-video-hero" }, [
+        $el("div", { className: "ns-video-hero-card" }, [
+            $el("h1", { textContent: t("创建视频") }),
+            $el("p", { textContent: t("选一张图，写一句话，然后生成") }),
+            $el("i", { className: "ns-video-corner c-tl" }),
+            $el("i", { className: "ns-video-corner c-tr" }),
+            $el("i", { className: "ns-video-corner c-bl" }),
+            $el("i", { className: "ns-video-corner c-br" }),
+        ]),
+    ]);
+
+    // 素材方块工厂：方块壳直接借会话页的参考位 .neo-gallery-edit-refdrop（虚线方块 + 底部角标 +
+    // 填满转实心），点它开素材库弹窗；填上后铺缩略图 + ✕。multiple=true 收多张（参考图），单槽一张。
+    function mediaSlot(label, multiple, maxN) {
+        const items = [];   // {value}：input 目录里的相对文件名
+        const thumbs = $el("div", { className: "ns-video-thumbs" + (multiple ? " ns-video-thumbs-multi" : "") });
+        const add = $el("button", { className: "ns-video-slot-add", type: "button" });
+        setIcon(add, "plus", 18);
+        const cap = $el("span", { className: "neo-gallery-edit-refdrop-cap" });
+        const slot = $el("div", { className: "ns-video-slot neo-gallery-edit-refdrop" }, [thumbs, add, cap]);
+        const render = () => {
+            thumbs.textContent = "";
+            for (const it of items.slice()) {
+                const wrap = $el("span", { className: "ns-video-thumb" }, [
+                    $el("img", {
+                        alt: it.value,
+                        src: `/view?filename=${encodeURIComponent(it.value)}&subfolder=&type=input`,
+                    }),
+                ]);
+                const del = $el("button", { className: "neo-gallery-edit-refchip-x", type: "button", title: t("移除"), textContent: "✕" });
+                del.onclick = () => { items.splice(items.indexOf(it), 1); render(); };
+                wrap.appendChild(del);
+                thumbs.appendChild(wrap);
+            }
+            add.style.display = (multiple && items.length >= maxN) ? "none" : "";
+            cap.textContent = items.length && !multiple ? t("换图") : t(label);
+            slot.classList.toggle("has-img", items.length > 0);
+        };
+        add.onclick = () => openLibModal("video", async (picked) => {
+            for (const p of picked) {
+                if (multiple && items.length >= maxN) break;
+                try {
+                    const value = await copyPickedToInput(p);
+                    if (multiple) items.push({ value });
+                    else { items.length = 0; items.push({ value }); }
+                } catch (e) { toast(tf("取用素材失败：{msg}", { msg: e.message })); }
+            }
+            render();
+            if (!multiple) libModal?.close();   // 首帧 / 尾帧取一张即收窗；参考图留着弹窗好连选
+        });
+        render();
+        return { el: slot, get: () => items.map((it) => ({ value: it.value })), first: () => items[0] || null };
+    }
+
+    const firstSlot = mediaSlot("首帧", false, 1);
+    const lastSlot = mediaSlot("尾帧", false, 1);
+    const refSlot = mediaSlot("参考图", true, VIDEO_MAX_REF);
+
+    const promptIn = $el("textarea", {
+        className: "ns-video-prompt neo-gallery-gm-quick-input", rows: "2", spellcheck: "false",
+        placeholder: t("描述这段视频要拍成什么样…"),
+    });
+    const promptCount = $el("span", { className: "ns-video-count", textContent: "0 / ∞" });
+    promptIn.addEventListener("input", () => { promptCount.textContent = `${promptIn.value.length} / ∞`; });
+
+    const skillSel = $el("select", { className: "ns-video-skill", title: t("技能与自定参数：主模型 / LoRA 留空 = 跟随该技能配置与全局生视频设置") });
+    skillSel.appendChild($el("option", { value: "", textContent: t("（加载视频技能…）") }));
+    // 自定参数（本次临时换主模型 / 编码器 / VAE / 步数 / LoRA，空值 = 跟随该技能配置与全局生视频设置）：
+    // 与技能同一枚 chip，点开从上方浮出双栏面板——左栏技能按生成模式分组，右栏生视频模型 / 步数 / LoRA
+    const videoCfg = createVideoModelConfigSection();
+    const videoParamsBox = $el("div", { className: "neo-gallery-gm-model-box" });
+    videoParamsBox.appendChild(videoCfg.el);
+    const skillChip = skillParamsChip(skillSel, videoParamsBox, {
+        icon: "film",
+        groupOf: videoModeGroup,
+        groupLabels: VIDEO_GROUP_LABELS,
+        getOverride: () => videoCfg.collect(),
+    });
+    videoParamsBox.addEventListener("change", () => skillChip.sync());
+
+    const selectedMeta = () => skillSel.options[skillSel.selectedIndex]?.__skillMeta || null;
+    const selectedGroup = () => videoModeGroup(selectedMeta());
+    let videoModels = null;   // 自定参数面板的模型列表：没拉到就整块不发覆盖值，技能配置照常生效
+
+    // 素材槽位随技能家族显隐：关键帧生视频给首帧 / 尾帧，全参考生视频给参考图。
+    // 隐藏的槽位不进 payload——留着上一家族的首帧去跑 r2v，后端按资产推模式就会推错
+    const applyVideoSlots = () => {
+        const f2v = selectedGroup() === "f2v";
+        firstSlot.el.classList.toggle("ns-hidden", !f2v);
+        lastSlot.el.classList.toggle("ns-hidden", !f2v);
+        refSlot.el.classList.toggle("ns-hidden", f2v);
+    };
+
+    // 换技能 = 把自定参数整块换成该技能 config 里钉的那一套（与绘画页同一语义）
+    const applySkillConfig = async (skillId) => {
+        if (!skillId || !videoModels) return;
+        const cfg = await getSkillGenConfig(skillId);
+        videoCfg.load(cfg || {}, videoModels);
+        skillChip.sync();   // 程序改 value 不触发 change：chip 标签自己跟上
+    };
+
+    skillSel.addEventListener("change", () => {
+        applyVideoSlots();
+        applySkillConfig(skillSel.value);
+        try { localStorage.setItem(VIDEO_LAST_SKILL_KEY, skillSel.value); } catch { /* 隐私模式下记不住就算了，不挡生成 */ }
+    });
+    applyVideoSlots();
+
+    listVideoSkills().then((list) => {
+        skillSel.textContent = "";
+        for (const s of list) {
+            const opt = $el("option", { value: s.id, textContent: skillDisplayName(s) });
+            opt.__skillMeta = s;   // 分组与主模型副标题取这份元数据（会话页技能面板同一约定）
+            skillSel.appendChild(opt);
+        }
+        if (!list.length) skillSel.appendChild($el("option", { value: "", textContent: t("（无可用视频技能）") }));
+        let last = "";
+        try { last = localStorage.getItem(VIDEO_LAST_SKILL_KEY) || ""; } catch { last = ""; }
+        skillSel.value = list.some((s) => s.id === last) ? last : defaultVideoSkill(list);
+        skillChip.sync();   // 技能是异步填进 select 的，chip 显示的生效值得跟着重读
+        applyVideoSlots();
+        applySkillConfig(skillSel.value);
+    }).catch(() => {
+        skillSel.textContent = "";
+        skillSel.appendChild($el("option", { value: "", textContent: t("（无可用视频技能）") }));
+        skillChip.sync();
+    });
+
+    // 模型列表拉一次：先按「自动」渲染覆盖区，再覆盖成当前技能配置；拉不到保持空下拉（等效跟随设置，不挡生成）
+    listVideoGenModels().then((models) => {
+        videoModels = models || {};
+        videoCfg.load({}, videoModels);
+        applySkillConfig(skillSel.value);
+    }).catch(() => {});
+
+    const sizeSel = $el("select", { className: "ns-video-size" });
+    for (const [w, h, label] of VIDEO_SIZE_CHOICES)
+        sizeSel.appendChild($el("option", { value: `${w},${h}`, textContent: tf("{w}×{h} · {label}", { w, h, label: t(label) }) }));
+    sizeSel.value = "1344,768";
+
+    const durSel = $el("select", { className: "ns-video-dur" });
+    for (const sec of VIDEO_DUR_CHOICES)
+        durSel.appendChild($el("option", { value: String(sec), textContent: tf("{n} 秒", { n: sec }) }));
+    durSel.value = "5";
+
+    const seedIn = $el("input", { className: "ns-video-seed neo-gallery-gm-chip-btn", type: "number", min: "-1", placeholder: t("随机") });
+    const seedRoll = $el("button", { className: "ns-video-seed-roll", type: "button", title: t("换一个随机种子") });
+    setIcon(seedRoll, "sparkles", 13);
+    seedRoll.onclick = () => { seedIn.value = String(Math.floor(Math.random() * 1e15)); };
+
+    // 芯片行就是会话页那枚工厂的产物：胶囊 chip + 从上方浮出的选项菜单，原生 select 收在壳里当状态容器
+    const sizeChip = chipButton(sizeSel, { icon: "ratio" });
+    const durChip = chipButton(durSel, { icon: "clock" });
+    const chips = [skillChip, sizeChip, durChip];
+    for (const c of chips) c.el.classList.add("ns-video-chip");
+    const seedChip = $el("label", { className: "ns-video-chip neo-gallery-gm-chip-group", title: t("种子") }, [icon("sparkles", 12), seedIn, seedRoll]);
+    // 菜单开着的 chip 要点外面才收；换页会重建这一页，页面离场时把监听摘掉，别一次次堆在 document 上
+    const onDocClick = (e) => {
+        if (!document.body.contains(page)) { document.removeEventListener("click", onDocClick); return; }
+        for (const c of chips) c.closeOnOutside(e.target);
+    };
+    document.addEventListener("click", onDocClick);
+
+    const runBtn = $el("button", { className: "ns-video-run neo-gallery-story-btn neo-gallery-story-btn-primary neo-gallery-gm-gen-btn", type: "button", textContent: t("生成") });
+    gateRunButton(runBtn, "simple_video", t("生成视频"));
+    const cancelBtn = $el("button", { className: "ns-video-cancel neo-gallery-story-btn", type: "button", textContent: t("取消"), style: { display: "none" } });
+
+    const statusEl = $el("div", { className: "ns-video-status" });
+    const barEl = $el("div", { className: "ns-gen-progress ns-video-progress" }, [$el("div")]);
+
+    const dock = $el("div", { className: "ns-video-dock" }, [
+        $el("div", { className: "ns-video-card neo-gallery-gm-composer" }, [
+            $el("div", { className: "ns-video-head" }, [statusEl, barEl]),
+            $el("div", { className: "ns-video-top" }, [
+                $el("div", { className: "ns-video-deck" }, [firstSlot.el, lastSlot.el, refSlot.el]),
+                $el("div", { className: "ns-video-input" }, [promptIn, promptCount]),
+            ]),
+            $el("div", { className: "ns-video-chips neo-gallery-gm-composer-bar neo-gallery-gm-chips" }, [
+                skillChip.el,
+                sizeChip.el,
+                durChip.el,
+                seedChip,
+                $el("div", { className: "neo-gallery-gm-composer-gap" }),
+                cancelBtn,
+                runBtn,
+            ]),
+        ]),
+    ]);
+    page.appendChild(stage);
+    page.appendChild(hero);
+    page.appendChild(dock);
+    const memBar = buildMemBar();   // 视频页同样是生成页：显存 / 内存读数，浮在舞台右上角
+    if (memBar) page.appendChild(memBar);
+
+
+    // --- 生成 + 轮询 + 取消（无画布、无采样实时预览：只有排队 / 进度条 / 成片） ---
+    let state = null;   // {task_id, pollTimer, terminal, done}
+    const stopPolling = () => { if (state?.pollTimer) clearInterval(state.pollTimer); };
+
+    // 成片进舞台：新卡插到最前，hero 标题淡出（淡出后 pointer-events 本就关着，卡片照常可点）
+    const addClip = (task) => {
+        const url = `/view?filename=${encodeURIComponent(task.filename)}&subfolder=${encodeURIComponent(task.subfolder || "")}&type=output`;
+        stage.prepend($el("div", { className: "ns-video-clip" }, [
+            $el("video", { className: "ns-video-player", controls: true, autoplay: true, src: url }),
+            $el("div", { className: "ns-video-clip-meta" }, [
+                $el("span", { className: "ns-video-clip-name", textContent: task.filename }),
+                $el("a", { className: "ns-video-open", href: url, target: "_blank", rel: "noreferrer", textContent: t("在浏览器中打开") }),
+            ]),
+        ]));
+        hero.classList.add("ns-video-hero-off");
+    };
+
+    const renderTask = (task) => {
+        if (!state || task.task_id !== state.task_id) return;
+        if (state.terminal && !VIDEO_TERMINAL.includes(task.status)) return;   // 终态后在途旧载荷不得复活进度条 / 取消
+        if (VIDEO_TERMINAL.includes(task.status)) {
+            state.terminal = true;
+            cancelBtn.style.display = "none";
+        }
+        barEl.style.display = task.status === "running" ? "block" : "none";
+        if (task.status === "queued") {
+            statusEl.textContent = t("排队中…");
+        } else if (task.status === "running") {
+            const p = task.progress;
+            statusEl.textContent = p ? tf("生成中… {value}/{max}", { value: p.value, max: p.max }) : t("生成中…");
+            if (p) barEl.firstElementChild.style.width = `${Math.round(100 * p.value / p.max)}%`;
+        } else if (task.status === "succeeded" && !state.done) {
+            state.done = true;   // 终态可能在途轮询重复到达：成片卡片只挂一次
+            statusEl.textContent = tf("已完成：{filename}", { filename: task.filename });
+            addClip(task);
+        } else if (task.status === "failed") {
+            statusEl.textContent = tf("失败：{error}", { error: task.error || t("未知错误") });
+        } else if (task.status === "cancelled") {
+            statusEl.textContent = t("已取消");
+        }
+        runBtn.disabled = task.status === "queued" || task.status === "running";
+        cancelBtn.style.display = (task.status === "queued" || task.status === "running") ? "" : "none";
+    };
+
+    const startPolling = (task) => {
+        state = { task_id: task.task_id, pollTimer: null, terminal: false, done: false };
+        renderTask(task);
+        const poll = async () => {
+            try {
+                const r = await api.fetchApi(`/neo_video_gen/simple/${task.task_id}`);
+                const d = await r.json();
+                if (!state || state.terminal) return;
+                if (d?.success) { renderTask(d); if (VIDEO_TERMINAL.includes(d.status)) stopPolling(); }
+            } catch { /* 网络抖动忽略，下一轮再试 */ }
+        };
+        state.pollTimer = setInterval(poll, 2000);
+    };
+
+    async function submitVideo() {
+        const meta = selectedMeta();
+        // 只发当前家族用得上的槽位：切过家族留下的旧素材混进这一发，就是让它替模式说话
+        const f2v = selectedGroup() === "f2v";
+        const first = f2v ? firstSlot.first() : null;
+        const last = f2v ? lastSlot.first() : null;
+        const refs = f2v ? [] : refSlot.get();
+        if (meta?.requires_ref && !first && !last && !refs.length) {
+            // 后端对这批技能是硬要求（无帧的 fl2v / 无参考的 r2v 必败），在这里说清楚比跑完再报错省一整发
+            statusEl.textContent = f2v
+                ? t("该技能需要参考素材：首帧 / 尾帧至少选一张")
+                : t("该技能需要参考素材：至少选一张参考图");
+            return;
+        }
+        const [w, h] = (sizeSel.value || "1344,768").split(",").map(Number);
+        const body = {
+            prompt: promptIn.value.trim(),
+            skill_id: skillSel.value,
+            references: first ? [first, ...refs] : refs,
+            last_frame: last || null,
+            width: w, height: h,
+            duration_sec: Number(durSel.value),
+            seed: seedIn.value === "" ? -1 : Number(seedIn.value),
+        };
+        // 自定参数只带非空项：空 = 这一发跟着技能配置与全局生视频设置走（与生图覆盖同一口径）
+        if (videoModels) {
+            const ov = videoCfg.collect();
+            if (ov.model) body.model = ov.model;
+            if (ov.text_encoder) body.text_encoder = ov.text_encoder;
+            if (ov.vae) body.vae = ov.vae;
+            if (ov.audio_vae) body.audio_vae = ov.audio_vae;
+            if (ov.steps) body.steps = ov.steps;
+            if (ov.loras.length) body.loras = ov.loras;
+        }
+        runBtn.disabled = true;
+        try {
+            const r = await api.fetchApi("/neo_video_gen/simple", {
+                method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+            });
+            const data = await r.json().catch(() => null);
+            if (!r.ok || !data?.success) {
+                statusEl.textContent = tf("生成失败：{msg}", { msg: data?.error || r.status });
+                runBtn.disabled = false;
+                return;
+            }
+            startPolling(data);
+        } catch (e) {
+            statusEl.textContent = tf("生成失败：{msg}", { msg: e.message });
+            runBtn.disabled = false;
+        }
+    }
+
+    runBtn.addEventListener("click", () => submitVideo());
+    cancelBtn.addEventListener("click", async () => {
+        if (!state) return;
+        cancelBtn.disabled = true;
+        try {
+            const r = await api.fetchApi(`/neo_video_gen/simple/${state.task_id}/cancel`, { method: "POST" });
+            const data = await r.json().catch(() => null);
+            if (!r.ok) statusEl.textContent = tf("取消失败：{msg}", { msg: data?.error || r.status });
+        } catch (e) {
+            statusEl.textContent = tf("取消失败：{msg}", { msg: e.message });
+        }
+        cancelBtn.disabled = false;
+    });
+}
+
 
 // ====== 技能页：统一技能管理（与顶栏「技能管理」同组件）直接挂满主区，无弹窗外桌面端 ======
 function buildSkills(el) {
@@ -1211,6 +1579,7 @@ const RUN_GATES = [
     [".neo-gallery-gm-btn", "image_gen", t("生成素材")],
     [".neo-agent-run", "agent", t("生成")],
     [".ns-gen-run", "director", t("生成整片")],
+    [".ns-video-run", "simple_video", t("生成视频")],
     [".neo-director-regen-run", "segment", t("生成这一段")],
     [".neo-director-merge-run", "segment", t("拼回成片")],
     [".ns-paint .neo-gallery-story-btn-primary", "image_gen", t("生成")],   // 绘画页文生图 / 图片编辑面板的生成
@@ -1829,6 +2198,7 @@ function route() {
     ensureView("director", buildDirector);
     ensureView("paint", buildPaint);
     if (name === "skills") ensureView("skills", buildSkills);
+    else if (name === "video") ensureView("video", buildVideo);
     else if (name === "settings") {
         ensureView("settings", buildSettings);
         // 深链 #/settings?tab=mcp：右栏「MCP」入口跳来这，视图常驻时也要落到那一栏

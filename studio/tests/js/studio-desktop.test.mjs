@@ -133,9 +133,9 @@ test("默认落地首页：意图卡片挂满主区，素材卡直达素材页",
               "顶栏首页签应高亮");
     assert.equal(home.querySelector("h1").textContent, "今天想创作什么？");
     assert.deepEqual([...home.querySelectorAll(".ns-home-card-title")].map((e) => e.textContent),
-        ["生成图片", "图片编辑", "导演视频", "素材库", "技能", "设置"]);
+        ["生成图片", "生成视频", "图片编辑", "导演视频", "素材库", "技能", "设置"]);
 
-    const libCard = [...home.querySelectorAll(".ns-home-card")][3];
+    const libCard = [...home.querySelectorAll(".ns-home-card")][4];
     libCard.click();
     await flush();
     assert.ok(home.classList.contains("ns-hidden"), "跳素材页后首页应收起");
@@ -679,14 +679,14 @@ test("版本快照不落地也要能拖窗口：桥注入完那一刻就挂上�
     assert.ok(calls.includes("drag"), "桥一到顶栏空白处按下就能拖窗");
 });
 
-// 顶栏分组：六个页签分三组，分隔线只落在组边界（gallery 与 skills 前的页签）上
+// 顶栏分组：七个页签分三组，分隔线只落在组边界（gallery 与 skills 前的页签）上
 test("顶栏分组：分隔线落在素材页签与技能页签前，页签结构不动", () => {
     const css = fs.readFileSync(path.join(webDir, "studio", "style.css"), "utf8");
     assert.match(css, /\.ns-tabs a\[data-tab="gallery"\]::before[^}]*background/, "素材页签前要有组边界分隔线");
     assert.match(css, /\.ns-tabs a\[data-tab="skills"\]::before[^}]*background/, "技能页签前要有组边界分隔线");
     const html = fs.readFileSync(path.join(webDir, "studio", "index.html"), "utf8");
     assert.deepEqual([...html.matchAll(/data-tab="(\w+)"/g)].map((m) => m[1]),
-        ["home", "gallery", "paint", "director", "skills", "settings"],
-        "分组走 CSS，页签 DOM 保持六个平铺 <a>");
+        ["home", "gallery", "paint", "video", "director", "skills", "settings"],
+        "分组走 CSS，页签 DOM 保持平铺 <a>（视频页与绘画 / 导演同属中部组）");
 });
 

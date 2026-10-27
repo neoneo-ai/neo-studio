@@ -33,11 +33,11 @@ export function setDirectorEditorHost(host, onOpen = null, onSaveAndRun = null) 
 }
 
 // 生成模式（与 ComfyUI_MiniMaxH3_Director 的任务模式对齐；mixed 仅全局可选）：
-// f2v 分镜生视频 = t2v/i2v/fl2v 合并，行为由首/尾帧槽位决定（无帧=文生、仅首帧=图生、仅尾帧=L2VA、两者=首尾帧）；
+// f2v 关键帧生视频 = t2v/i2v/fl2v 合并，行为由首/尾帧槽位决定（无帧=文生、仅首帧=图生、仅尾帧=L2VA、两者=首尾帧）；
 // r2v 全参考生视频 = r2v/v2v/rv2v 合并，参考素材（图/视频/音频）可选；第一个参考视频即源视频（提示词自动加 <Video 1>）；
 // 旧配方的 t2v/i2v/fl2v/v2v/rv2v 载入时静默重映射（后端同样按资产推导）。
 export const SEG_MODES = [
-    ['f2v', t('分镜生视频')],
+    ['f2v', t('关键帧生视频')],
     ['r2v', t('全参考生视频')],
 ];
 export const MODE_LABELS = new Map([...SEG_MODES, ['mixed', t('混合模式')]]);
@@ -561,7 +561,7 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
         const promptTa = $el('textarea', { className: 'neo-director-prompt', placeholder: t('该段画面 / 运动描述（必填）'), value: seg.prompt || '' });
         const durInp = $el('input', { className: 'neo-director-dur', type: 'number', min: 1, max: 3600, value: (seg.duration_sec != null ? seg.duration_sec : 5) });
 
-        // 分镜生视频（f2v）：与故事板分镜对照表同构的两栏——左栏首帧槽位 / 右栏提示词；
+        // 关键帧生视频（f2v）：与故事板分镜对照表同构的两栏——左栏首帧槽位 / 右栏提示词；
         // 尾帧用得少（默认衔接下一段首帧），收在扩展按钮里。槽位体验同分镜缩略位：拖入 / 点击上传 / 悬停 ✕ / Lightbox。
         let ffVal = seg.first_frame || '';
         let lfVal = seg.last_frame || '';
@@ -611,7 +611,7 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
         renderFfSlot();
         renderLfState();
         
-        // 本段模式（仅全局“混合模式”下显示）：分镜生视频 / 全参考
+        // 本段模式（仅全局“混合模式”下显示）：关键帧生视频 / 全参考
         const segModeSel = $el('select', { className: 'neo-director-segmode' });
         for (const [val, label] of SEG_MODES) segModeSel.appendChild($el('option', { value: val, textContent: label }));
         const segModeVal = LEGACY_MODE_MAP.get(seg.mode || '') || seg.mode || '';   // 旧 t2v/i2v/fl2v/v2v/rv2v → f2v/r2v，其余原样保留
@@ -984,7 +984,7 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
     renumberSegs();
 
     // 按有效模式过滤视频技能（skill.mode 由后端 frontmatter 提供）；无匹配时回退全量，避免空下拉。
-    const FRAME_SKILL_MODES = ['t2v', 'i2v', 'l2v', 'fl2v'];   // 分镜生视频（f2v）技能的模式值（全部进同一池，含多帧单次）
+    const FRAME_SKILL_MODES = ['t2v', 'i2v', 'l2v', 'fl2v'];   // 关键帧生视频（f2v）技能的模式值（全部进同一池，含多帧单次）
     // 池内按步数从少到多排（skill config 未写 steps 的按后端缺省 20 计），同分偏好 H3 连续多段合成 (VDN)；
     // 原生下拉与居中技能选择窗都按这个顺序显示，新建配方的默认技能就是池里第一个可用的（见 newDefaultSkill）。
     const SKILL_PREF = ['minimax_h3_vdn_multiframe', 'minimax_h3_multiframe'];
@@ -1665,7 +1665,7 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
             row.dataset.storyboard = fname;   // 对照表「分镜图」列显示本格（保存时随 storyboard 落盘）
             segsWrap.appendChild(row);
         }
-        if (modeSel && modeSel.value !== 'f2v') modeSel.value = 'f2v';   // 宫格拆分各段均带首帧（图生）：同步全局为分镜生视频模式
+        if (modeSel && modeSel.value !== 'f2v') modeSel.value = 'f2v';   // 宫格拆分各段均带首帧（图生）：同步全局为关键帧生视频模式
         renumberSegs(); showSeg(0); applyGlobalMode();
         renderSetupSegs();   // 对照表按各格分镜图刷新（内部会重算徽标与动作可用性）
         const p0 = panels[0] || {};
@@ -1758,8 +1758,8 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
         addBtn,
         $el('div', { className: 'neo-director-zoom' }, [zoomToggle, zoomSlider]),
     ]);
-    // 全局生成模式：分镜生视频 / 全参考 / 混合（决定各段携带哪些帧与参考）。
-    // 旧配方的 t2v/i2v/fl2v/v2v/rv2v 静默重映射为 f2v/r2v；无 shared.mode 时按各段内容推断：有参考素材=r2v、其余=分镜生视频（旧 v2v/rv2v 源视频已在载入时并入参考视频）。
+    // 全局生成模式：关键帧生视频 / 全参考 / 混合（决定各段携带哪些帧与参考）。
+    // 旧配方的 t2v/i2v/fl2v/v2v/rv2v 静默重映射为 f2v/r2v；无 shared.mode 时按各段内容推断：有参考素材=r2v、其余=关键帧生视频（旧 v2v/rv2v 源视频已在载入时并入参考视频）。
     const initMode = (() => {
         const m = LEGACY_MODE_MAP.get(exShared.mode) || exShared.mode;
         if (MODE_LABELS.has(m)) return m;

@@ -1221,7 +1221,7 @@
     flex-shrink: 0;
 }
 
-/* 本段模式行（仅混合模式显示）：label 左、分镜生视频/全参考选择器右 */
+/* 本段模式行（仅混合模式显示）：label 左、关键帧生视频/全参考选择器右 */
 .neo-director-segmode-row {
     display: flex;
     align-items: center;

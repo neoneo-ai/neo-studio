@@ -194,6 +194,7 @@ FEATURE_ROUTES = {
     "voice": ("POST", "/neo_voice/generate"),
     "segment": ("POST", "/neo_video_gen/run_segment"),
     "director": ("POST", "/neo_studio/director/generate"),
+    "simple_video": ("POST", "/neo_video_gen/simple"),
     "grid_split": ("POST", "/rs_recipes/grid_split"),
     "memory": ("GET", "/neo_studio/mem_stats"),
     "repair": ("POST", "/neo_nodes/repair"),

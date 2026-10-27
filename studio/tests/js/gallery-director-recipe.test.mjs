@@ -139,7 +139,7 @@ test("多选操作条「新建导演配方」：仅子文件夹图被拷贝，�
         "/view?filename=a_in.png&subfolder=&type=input",
         "/view?filename=b.png&subfolder=&type=input",
     ]);
-    assert.equal(document.querySelector(".neo-director-mode").value, "f2v", "普通目录仍按分镜生视频（图作首帧）");
+    assert.equal(document.querySelector(".neo-director-mode").value, "f2v", "普通目录仍按关键帧生视频（图作首帧）");
     assert.equal(gallery._selectedItems.size, 0, "建配方后选中集合清空");
 });
 

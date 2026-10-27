@@ -264,7 +264,7 @@ test("recipe 选择窗预览卡：焦点配方显示概览行 + 只读时间轴�
     const preview = document.querySelector(".rs-skill-picker-preview");
     assert.ok(preview, "预览卡应渲染");
     const meta = preview.querySelector(".rs-skill-preview-meta");
-    assert.equal(meta?.textContent, "3 段 · 分镜生视频 · 技能 A ×3 · 960×544 · 总时长 20s", "预览卡显示概览行（旧 i2v 显示为 f2v）");
+    assert.equal(meta?.textContent, "3 段 · 关键帧生视频 · 技能 A ×3 · 960×544 · 总时长 20s", "预览卡显示概览行（旧 i2v 显示为 f2v）");
     assert.ok(preview.querySelector(".neo-dtl-canvas"), "预览卡内嵌只读时间轴 canvas");
     assert.ok(!preview.textContent.includes("加载中"), "预览卡不应停留在加载态");
 
