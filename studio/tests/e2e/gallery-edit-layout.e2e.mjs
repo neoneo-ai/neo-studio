@@ -41,10 +41,19 @@ const modalInner = (w, h, outpaint) => `
       </div>
     </div>
     <div class="neo-gallery-edit-form">
-      <div class="neo-gallery-edit-refdrop-row"><div class="neo-gallery-edit-refdrop"><span class="neo-gallery-edit-refdrop-icon">＋</span></div></div>
       <div class="neo-gallery-cs-status"><div class="neo-gallery-story-hint">填写编辑指令后点「生成」。</div></div>
       <div class="neo-gallery-gm-composer">
-        <textarea class="neo-gallery-story-input neo-gallery-gm-quick-input" rows="4"></textarea>
+        <div class="neo-gallery-edit-refline">
+          <div class="neo-gallery-edit-refdrop-row">
+            <div class="neo-gallery-edit-refdrop"><span class="neo-gallery-edit-refdrop-icon">＋</span><span class="neo-gallery-edit-refdrop-cap">参考</span></div>
+            <div class="neo-gallery-edit-refpicks">
+              <div class="neo-gallery-edit-refcount"><span>参考图</span><span class="neo-gallery-edit-refcount-num">0/9</span></div>
+              <button class="neo-gallery-edit-refpick">⬆ 本地上传</button>
+              <button class="neo-gallery-edit-refpick">🖼 素材库取用</button>
+            </div>
+          </div>
+          <textarea class="neo-gallery-story-input neo-gallery-gm-quick-input" rows="4"></textarea>
+        </div>
         <div class="neo-gallery-gm-composer-bar neo-gallery-gm-chips">
           <span class="neo-gallery-gm-chip-wrap">
             <button id="e2e-skill-chip" class="neo-gallery-gm-chip-btn"><span class="neo-gallery-gm-chip-icon"></span><span class="neo-gallery-gm-chip-label">Qwen Image 2.1</span><span class="neo-gallery-gm-chip-caret">▾</span></button>
@@ -66,6 +75,7 @@ const modalInner = (w, h, outpaint) => `
                 ${pickItem("同事给的技能包", "")}
               </div>
               <div class="neo-gallery-gm-params-col"><div class="neo-gallery-edit-model-box"><div class="rs-gen-model-section"></div></div></div>
+              <div class="neo-gallery-gm-panel-foot"><button class="neo-gallery-gm-panel-done">完成</button></div>
             </div>
             <select class="neo-recipes-sort neo-gallery-gm-chip-select neo-gallery-gm-skill-sel" hidden><option>Qwen Image 2.1</option></select>
           </span>
@@ -290,12 +300,14 @@ const openPanel = () => {
     panel.style.top = `${above > 8 ? above : r.bottom + 6}px`;
     const box = (el) => { const b = el.getBoundingClientRect(); return { x: Math.round(b.x), y: Math.round(b.y), w: Math.round(b.width), h: Math.round(b.height) }; };
     const col = panel.querySelector(".neo-gallery-gm-skills-col");
+    const done = panel.querySelector(".neo-gallery-gm-panel-done");
     const out = {
-        panel: box(panel), chip: box(chip), col: box(col),
+        panel: box(panel), chip: box(chip), col: box(col), foot: done ? box(done) : null,
         colScrollH: col.scrollHeight,
+        panelScrollH: panel.scrollHeight, panelClientH: panel.clientHeight,
         cols: panel.children.length,
         colOverflow: getComputedStyle(col).overflowY,
-        colMax: getComputedStyle(col).maxHeight, panelMax: getComputedStyle(panel).maxHeight,
+        panelMax: getComputedStyle(panel).maxHeight,
         vw: window.innerWidth, vh: window.innerHeight,
     };
     panel.style.display = "none";
@@ -310,14 +322,20 @@ for (const [vw, vh] of [[1600, 950], [1280, 620], [1280, 520]]) {
         const p = await page.evaluate(openPanel);
         await page.close();
 
-        assert.equal(p.cols, 2, `面板是左右两栏（技能 / 主模型 + LoRA）：${vw}×${vh}`);
+        assert.equal(p.cols, 3, `面板是「技能栏 + 自定参数栏 + 完成 foot」三个直接子节点：${vw}×${vh}`);
         assert.ok(p.panel.h > 60, `面板是一块有内容的浮层：panel=${JSON.stringify(p.panel)}`);
         assert.ok(p.panel.y >= 0 && p.panel.y + p.panel.h <= p.vh + 1,
             `面板纵向落在视口内：panel=${JSON.stringify(p.panel)} vh=${p.vh}`);
         assert.ok(p.panel.x >= 0 && p.panel.x + p.panel.w <= p.vw + 1,
             `面板横向落在视口内：panel=${JSON.stringify(p.panel)} vw=${p.vw}`);
         assert.ok(p.panel.y + p.panel.h <= p.chip.y + 1, `面板从 chip 上方浮出：panel=${JSON.stringify(p.panel)} chip=${JSON.stringify(p.chip)}`);
-        assert.equal(p.colMax, p.panelMax, "左栏跟着壳的高度收（max-height:inherit），溢出不留给面板");
+        // 结果断言（不钉旧机制值）：技能再多，面板自身不滚 —— 溢出收进左栏，「完成」钉在面板底
+        assert.ok(p.panelScrollH <= p.panelClientH + 1,
+            `面板自身不滚动（溢出留给左栏，「完成」靠滚面板才见就是这里失守）：panelScrollH=${p.panelScrollH} clientH=${p.panelClientH}`);
+        assert.ok(p.foot && p.foot.y >= 0 && p.foot.y + p.foot.h <= p.vh + 1,
+            `「完成」落在视口内（不滚动就可见）：foot=${JSON.stringify(p.foot)} vh=${p.vh}`);
+        assert.ok(p.foot && p.foot.y + p.foot.h <= p.panel.y + p.panel.h + 1,
+            `「完成」收在面板底边内：foot=${JSON.stringify(p.foot)} panel=${JSON.stringify(p.panel)}`);
         assert.ok(p.col.h <= p.colScrollH + 1, `技能列不溢出自己的盒子：col=${JSON.stringify(p.col)} scrollH=${p.colScrollH}`);
         if (p.colScrollH > p.col.h) {
             assert.equal(p.colOverflow, "auto", `技能多于壳高时由左栏出滚动条（面板整块不再长高）：${vw}×${vh}`);

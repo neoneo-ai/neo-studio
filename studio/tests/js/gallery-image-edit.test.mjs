@@ -2,7 +2,7 @@
 // 「生成」常驻输入卡，连续重复生成直接再点它，不必关窗重开。
 import test from "node:test";
 import assert from "node:assert/strict";
-import { resetEnv, mockRoute, clearRoutes, jsonResponse, fetchLog, sleep, click, inputText, window } from "./setup.mjs";
+import { resetEnv, mockRoute, clearRoutes, jsonResponse, fetchLog, sleep, click, inputText, makeFile, window } from "./setup.mjs";
 import { dispatchApiEvent } from "./mocks/comfy-api.mjs";
 
 /** 模式 chip：从菜单选模式（常规 / 扩图 / 局部 / 删除 / 融合 / 姿势）——五种模式收在一枚 chip 里，测试照用户动线点 */
@@ -1257,5 +1257,130 @@ test("图片编辑弹窗：点图看大图按窗帘位置定——窗帘右侧�
     document.querySelector(".neo-lightbox-next").click();
     assert.equal(caption(), "edit_00013_.png", "→ 翻页应能翻到结果大图");
     closeLightbox();
+});
+
+// ── 统一输入卡：参考图位与编辑指令框合并进同一块输入卡，取图走本地文件 / 素材库 ──
+
+test("图片编辑输入卡：参考图位与编辑指令框合进同一块输入卡，卡里只剩一处主焦点", async () => {
+    resetEnv();
+    clearRoutes();
+    const { openImageEditDialog } = await import("../../web/gallery-gen.js");
+    mockRoute("/rs_prompts/skills", () => jsonResponse([
+        { id: "qwen_image_21", cn_name: "Qwen Image 2.1", category: "image_gen", gen_image: true, mode: "t2i_edit" },
+    ]));
+    openImageEditDialog({ app: {}, maxThumbnailSize: 320, displayLabels: true },
+                        { name: "portrait", filename: "portrait.png" }, "");
+    const overlay = document.querySelector(".neo-gallery-edit-modal-overlay");
+    await sleep(20);
+
+    const composer = overlay.querySelector(".neo-gallery-gm-composer");
+    const form = overlay.querySelector(".neo-gallery-edit-form");
+    const refRow = overlay.querySelector(".neo-gallery-edit-refdrop-row");
+    const input = overlay.querySelector(".neo-gallery-story-input");
+    assert.ok(composer.contains(refRow), "参考图位应在这块输入卡内");
+    assert.ok(composer.contains(input), "编辑指令框应与参考图位同在这块输入卡内");
+    assert.notEqual(refRow.parentElement, form, "参考图位不再是 form 直接子节点（不占独立焦点框）");
+    assert.equal(composer.querySelectorAll("textarea").length, 1, "输入卡里只有一处主焦点（提示词框）");
+    assert.ok(refRow.querySelector(".neo-gallery-edit-refpick"), "参考行应带取图按钮");
+});
+
+test("图片编辑输入卡：素材库取图按钮派发 neo:media-pick，取用的图进参考位并随生成发送", async () => {
+    resetEnv();
+    clearRoutes();
+    const { openImageEditDialog } = await import("../../web/gallery-gen.js");
+    mockRoute("/rs_prompts/skills", () => jsonResponse([
+        { id: "qwen_image_21", cn_name: "Qwen Image 2.1", category: "image_gen", gen_image: true, mode: "t2i_edit" },
+    ]));
+    mockRoute("/neo_gallery/copy_to_input", () => jsonResponse({ success: true, filename: "lib_ref.png" }));
+    openImageEditDialog({ app: {}, maxThumbnailSize: 320, displayLabels: true },
+                        { name: "portrait", filename: "portrait.png" }, "");
+    const overlay = document.querySelector(".neo-gallery-edit-modal-overlay");
+    await sleep(20);
+
+    // 扮演 Studio 宿主：听 neo:media-pick，拿到取用回调后喂一张素材库图
+    let picked = null;
+    const onMsg = (e) => { picked = e.detail?.onPick; };
+    window.addEventListener("neo:media-pick", onMsg);
+
+    const libBtn = [...overlay.querySelectorAll(".neo-gallery-edit-refpick")].find((b) => b.textContent.includes("素材库"));
+    assert.ok(libBtn, "参考行应有素材库取图按钮");
+    click(libBtn);
+    assert.equal(typeof picked, "function", "素材库按钮应派发带 onPick 的 neo:media-pick");
+    await picked([{ filename: "lib_ref.png", subfolder: "people" }]);
+    await sleep(20);
+    window.removeEventListener("neo:media-pick", onMsg);
+
+    const chipImg = overlay.querySelector(".neo-gallery-edit-refchip-img");
+    assert.ok(chipImg, "取用的素材库图应显示为参考缩略图");
+    assert.match(chipImg.getAttribute("src"), /filename=lib_ref\.png/);
+
+    let genBody = null;
+    mockRoute("/neo_image_gen/generate", (body) => { genBody = body; return jsonResponse({ task_id: "ieL", status: "queued", images: [] }); });
+    mockRoute("/neo_image_gen/status/ieL", () => jsonResponse({ task_id: "ieL", status: "succeeded", width: 1024, height: 1024, images: [] }));
+    inputText(overlay.querySelector(".neo-gallery-story-input"), "融合这张参考");
+    click([...overlay.querySelectorAll(".neo-gallery-story-btn")].find((b) => b.textContent === "生成"));
+    await sleep(60);
+    assert.ok(genBody, "应发出生成请求");
+    assert.equal(genBody.references.length, 2, "原图 + 取用的参考图");
+    assert.deepEqual(genBody.references[1], { kind: "input", value: "lib_ref.png" });
+});
+
+test("图片编辑输入卡：本地图片按钮走多选，onchange 上传后追加参考位", async () => {
+    resetEnv();
+    clearRoutes();
+    const { openImageEditDialog } = await import("../../web/gallery-gen.js");
+    mockRoute("/rs_prompts/skills", () => jsonResponse([
+        { id: "qwen_image_21", cn_name: "Qwen Image 2.1", category: "image_gen", gen_image: true, mode: "t2i_edit" },
+    ]));
+    mockRoute("/upload/image", () => jsonResponse({ name: "local_a.png", subfolder: "", type: "input" }));
+    openImageEditDialog({ app: {}, maxThumbnailSize: 320, displayLabels: true },
+                        { name: "portrait", filename: "portrait.png" }, "");
+    const overlay = document.querySelector(".neo-gallery-edit-modal-overlay");
+    await sleep(20);
+
+    const localBtn = [...overlay.querySelectorAll(".neo-gallery-edit-refpick")].find((b) => b.textContent.includes("本地"));
+    assert.ok(localBtn, "参考行应有本地图片按钮");
+    const refInput = overlay.querySelector(".neo-gallery-edit-refdrop-row input[type=file]");
+    assert.ok(refInput.multiple, "本地文件输入应支持多选");
+
+    // jsdom 弹不出系统文件框：本地按钮设成追加模式（_targetIndex=null）后，直接喂 files 走 onchange
+    click(localBtn);
+    assert.equal(refInput._targetIndex, null, "取图按钮进来应是往后追加（不补指定空槽）");
+    Object.defineProperty(refInput, "files", { value: [makeFile("a.png"), makeFile("b.png")], configurable: true });
+    await refInput.onchange();
+    await sleep(30);
+    assert.equal(overlay.querySelectorAll(".neo-gallery-edit-refchip-img").length, 2, "本地多选应追加两张参考");
+});
+
+test("图片编辑取图浮层：hover 桥接带关闭宽限，鼠标跨过方块与浮层的间隙点得中", async () => {
+    resetEnv();
+    clearRoutes();
+    const { openImageEditDialog } = await import("../../web/gallery-gen.js");
+    mockRoute("/rs_prompts/skills", () => jsonResponse([
+        { id: "qwen_image_21", cn_name: "Qwen Image 2.1", category: "image_gen", gen_image: true, mode: "t2i_edit" },
+    ]));
+    openImageEditDialog({ app: {}, maxThumbnailSize: 320, displayLabels: true },
+                        { name: "portrait", filename: "portrait.png" }, "");
+    const overlay = document.querySelector(".neo-gallery-edit-modal-overlay");
+    await sleep(20);
+    const row = overlay.querySelector(".neo-gallery-edit-refdrop-row");
+    const picks = overlay.querySelector(".neo-gallery-edit-refpicks");
+    const enter = (el) => el.dispatchEvent(new Event("mouseenter"));
+    const leave = (el) => el.dispatchEvent(new Event("mouseleave"));
+
+    enter(row);
+    assert.ok(row.classList.contains("picks-open"), "移入方块行应打开取图浮层");
+
+    // 离开方块去够上方浮层：行盒短暂失 hover 的宽限期内，浮层不能立刻收起（纯 :hover 在这里就消失了，点不中）
+    leave(row);
+    assert.ok(row.classList.contains("picks-open"), "离开方块进入关闭宽限期，浮层不立刻收起");
+    enter(picks);   // 宽限内移入浮层 → 取消关闭
+    await sleep(300);
+    assert.ok(row.classList.contains("picks-open"), "宽限内移入浮层应取消关闭，浮层保持打开");
+
+    // 从浮层移开且不再回来：宽限过后收起
+    leave(picks);
+    await sleep(300);
+    assert.ok(!row.classList.contains("picks-open"), "移开浮层且宽限过后应收起");
 });
 

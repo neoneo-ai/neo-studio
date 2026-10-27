@@ -92,7 +92,8 @@ background overlay, title bar drags the window) that creates new assets from a p
   generation validation enforces; with the main model on 「自动」 no family conflict is possible.
   Closed, the panel takes no room in the composer; its height
   is capped (62vh, clamped further by the paint panel's top edge) and the skill column scrolls on its own, so it
-  never pushes the result area off screen. The chip label prints the skill name, plus the short model name and
+  never pushes the result area off screen and the 完成 footer stays pinned at the panel bottom, reachable without
+  scrolling the panel. The chip label prints the skill name, plus the short model name and
   `LoRA ×n` when an override is set. Picking a skill row leaves the panel open - the right column shows the main
   model and LoRAs this run will use, and the 完成 button in the panel footer closes it when you are done reading.
   The model and LoRA dropdown lists are wider than the input box (up to 520px, clamped inside the viewport), so a
@@ -253,11 +254,22 @@ embedded ComfyUI workflow).
 
 ### Image editing
 
-Opens a small window (image on top, controls below: source / result comparison area + one chip row +
-an editing instruction box). Qwen Image 2.1 is used by default and any other `image_gen` skill can be
-selected; the source is passed as a reference image, you type the editing instruction and click "Generate".
+Opens a small window (image on top, controls below: source / result comparison area + the input card).
+Qwen Image 2.1 is used by default and any other `image_gen` skill can be selected; the source is passed as a
+reference image, you type the editing instruction and click "Generate". The input card is one rounded composer whose
+top row pairs a 56px "＋ Reference" slot with the prompt box on its right, plus the bottom chip row; the reference
+slot sits at the top-left corner of the prompt box, and the pick controls are revealed on hover. The prompt textarea
+is integrated into the card — the card outline is the single focus frame, with no inner border drawn around the text.
 The chip row is the skill+params chip + the mode chip (regular / outpaint / masked / click-to-remove / blend /
 pose folded into one chip's menu, each mode explained on its menu item) + the target-resolution chip + "Generate".
+
+- **Reference slot** - reference images (up to 9, the Qwen Image 2.1 limit) live in a 56px "＋ Reference" slot inline at
+  the top-left of the prompt box. Hovering the "＋ Reference" slot floats open a pick menu: a "Reference N/9" count
+  header, "⬆ Upload" (picks several local files at once), and "🖼 Pick from library" (picks cards from the asset-library
+  modal, shared by the paint and director pages; in the ComfyUI sidebar you drag cards straight onto a slot). The menu
+  stays open while the cursor moves into it (a 250ms close grace spans the gap between the slot and the menu, so the buttons stay reachable), and closes after a pick; clicking an empty slot still fills just that slot. The `×` on a slot removes that
+  reference. Outpaint / masked / click-to-remove use only the first reference, so the row is disabled and extra
+  references are cleared there.
 
 
 - **Curtain comparison** - the result appears in place as a "source | result" curtain comparison (the divider

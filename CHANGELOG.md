@@ -4,6 +4,20 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **The image-edit composer pairs the references with the prompt box, Nano Banana Pro style.** The reference row sat
+  as its own row above the composer, so the panel read as two stacked focus boxes, and picking from the library meant
+  dragging from the ComfyUI sidebar. The composer is now one rounded card whose top row pairs a 56px 「＋参考」 slot with
+  the prompt textarea on its right, and a chips row (技能 / 模式 / 目标分辨率 / 生成) sits below. Hovering the 「＋参考」
+  slot floats open a pick menu — a 「参考图 N/9」 header, 「⬆ 本地上传」 (a multi-select file input through the existing
+  `uploadLocalFiles()` path), and 「🖼 素材库取用」 (dispatches `neo:media-pick` so the Studio asset-library modal hands
+  picked cards back to `addRefImages()`; ComfyUI has no listener and keeps the sidebar drag). The menu is hidden until
+  hover / focus, and clicking an empty slot still fills just that slot. Covered by `studio/tests/js/gallery-image-edit.test.mjs`
+  (one composer, one textarea, the reference row is not a direct child of the form, library pick lands a reference that
+  reaches the generate payload, local multi-select appends two slots).
+- **The composer prompt box integrates into the card.** The textarea carried the story-input border inside the card, so the composer read as a frame with a second focus box drawn around the text. That inner border, background, corner radius, and resize handle are dropped in the composer — the card outline is the single focus frame, the prompt text flows straight into the card, and the 「＋参考」 square stays as the reference slot. Covered by `studio/tests/e2e/gallery-edit-layout.e2e.mjs`.
+- **The 技能与自定参数 panel keeps 完成 on screen.** The panel's first grid row was auto-height, so the skills column grew to the full shell (62vh) and the 完成 foot row landed below the fold - reaching it meant scrolling the whole panel. The rows are now `minmax(0, 1fr) auto`: the skill / model row shrinks to the space above 完成 and scrolls on its own, so 完成 stays pinned at the panel bottom with no panel scroll. Covered by `studio/tests/e2e/gallery-edit-layout.e2e.mjs` (panel self-overflow, 完成 inside the viewport at 1600×950 / 1280×620 / 1280×520).
+- **The 参考图 pick menu is clickable.** The menu opens 6px above the 「＋参考」 slot, and a pure `:hover` reveal can't be crossed: the mouse leaves the slot row, the row loses `:hover`, the menu drops to `pointer-events: none`, and it vanishes before the cursor reaches it - the 「本地上传」 / 「素材库取用」 buttons were unhittable. The reveal is now JS-driven with a 250ms close grace (`mouseenter` / `mouseleave` on the row and the menu): leaving the slot starts a timer, moving into the menu cancels it, so the cursor crosses the gap and lands on a button; clicking a pick closes the menu. Covered by `studio/tests/js/gallery-image-edit.test.mjs` (row enter opens, leave keeps it open through the grace, re-entering the menu cancels the close, leaving it collapses after the grace).
+
 - **The composer drops to three chips: 技能 and 自定参数 are one chip, and MOSS joins the family list.** Four chips
   in one row (技能 / 宽高比 / 最长边 / 自定参数, plus 模式 in the edit panel) kept the skill picker and the model
   override as two unrelated controls, so nothing connected a skill's pinned main model with the model used to

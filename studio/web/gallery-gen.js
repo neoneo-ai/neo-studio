@@ -16,7 +16,7 @@ import { inOpenComboList } from "./combo-box.js";
 import { requestVoiceGeneration, watchVoiceTask, cancelVoiceTask, buildVoiceRequest, VOICE_SKILL_ID } from "./voice-gen.js";
 import { invokePromptStream, createStreamOutputHandlers, randomPrompts, listPrompts, loadPrompt } from "./prompt-service.js";
 import { createQuickInputHistory } from "./quick-input-history.js";
-import { openGallerySidebar, grabDataType, copyGalleryToInput, uploadLocalFiles } from "./media-transfer.js";
+import { openGallerySidebar, toggleGallerySidebar, grabDataType, copyGalleryToInput, uploadLocalFiles } from "./media-transfer.js";
 import { ttlCache } from "./js/core/cache.js";
 import { t, tf } from "./js/core/i18n.js";
 import { icon, setIcon, setIconLabel } from "./js/core/icons.js";
@@ -1587,13 +1587,50 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
 
 
     // 参考图区（autogrow）：拖入一张追加新空槽，最多 9 张（Qwen Image 2.1 上限）
+    // 这一行挂在输入卡里（提示词框上方），与提示词框同一块描边，不再单独占一块焦点框
     const MAX_EXTRA_REFS = 9;
     const refDropContainer = $el("div", { className: "neo-gallery-edit-refdrop-row" });
     const refFileInput = document.createElement("input");
     refFileInput.type = "file";
     refFileInput.accept = "image/*";
+    refFileInput.multiple = true;
     refFileInput.style.display = "none";
     refDropContainer.appendChild(refFileInput);
+    // 取图浮层：hover 左上角「＋参考」方块才浮出，头部计数 + 本地上传 / 素材库取用两项
+    const refPickRow = $el("div", { className: "neo-gallery-edit-refpicks" }, [
+        $el("div", { className: "neo-gallery-edit-refcount" }, [
+            $el("span", { textContent: t("参考图") }),
+            $el("span", { className: "neo-gallery-edit-refcount-num", textContent: `0/${MAX_EXTRA_REFS}` }),
+        ]),
+        $el("button", {
+            className: "neo-gallery-edit-refpick", type: "button", textContent: "⬆ " + t("本地上传"),
+            title: t("从本地文件选图作参考（可多选）"),
+            onclick: () => { refFileInput._targetIndex = null; refFileInput.click(); closePicks(); },
+        }),
+        $el("button", {
+            className: "neo-gallery-edit-refpick", type: "button", textContent: "🖼 " + t("素材库取用"),
+            title: t("从素材库取图作参考：弹窗里点卡片取用，或从素材库拖进图位"),
+            onclick: () => {
+                // Studio 宿主听 neo:media-pick 开素材库弹窗取用；ComfyUI 里没有监听，开侧栏照旧拖拽
+                refFileInput._targetIndex = null;
+                window.dispatchEvent(new CustomEvent("neo:media-pick", { detail: { target: null, onPick: addRefImages } }));
+                toggleGallerySidebar();
+                closePicks();
+            },
+        }),
+    ]);
+    refDropContainer.appendChild(refPickRow);
+    const refCountNum = refPickRow.querySelector(".neo-gallery-edit-refcount-num");
+    const syncRefCount = () => { refCountNum.textContent = `${extraRefs.length}/${MAX_EXTRA_REFS}`; };
+    // 浮层带 6px 间隙开在方块上方，纯 :hover 跨不过间隙（鼠标一离开方块行就失 hover、浮层变不可点，点不中）：
+    // JS 开关 + 关闭宽限，离开后留一段定时器，期间移入浮层取消关闭，鼠标来得及跨过间隙点中两项
+    let pickCloseTimer = 0;
+    const openPicks = () => { clearTimeout(pickCloseTimer); refDropContainer.classList.add("picks-open"); };
+    const closePicks = () => { clearTimeout(pickCloseTimer); pickCloseTimer = setTimeout(() => refDropContainer.classList.remove("picks-open"), 250); };
+    refDropContainer.addEventListener("mouseenter", openPicks);
+    refDropContainer.addEventListener("mouseleave", closePicks);
+    refPickRow.addEventListener("mouseenter", openPicks);
+    refPickRow.addEventListener("mouseleave", closePicks);
 
     // 图片对比区（前后叠加 + 拖拽窗帘）
     const refFullUrl = (it) => `/neo_gallery/image?filename=${encodeURIComponent(it.filename)}&subfolder=${encodeURIComponent(it.subfolder ? `input/${it.subfolder}` : "input")}`;
@@ -1742,8 +1779,9 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
     const genBtn = btn(t("生成"), start, true);
     genBtn.classList.add("neo-gallery-gm-gen-btn");
     const composerChips = [skillChip, modeChip];
+    // 参考图位与编辑指令框在同一块输入卡里：一框一事，卡里只有一处主焦点
     const composer = $el("div", { className: "neo-gallery-gm-composer" }, [
-        promptInput,
+        $el("div", { className: "neo-gallery-edit-refline" }, [refDropContainer, promptInput]),
         $el("div", { className: "neo-gallery-gm-composer-bar neo-gallery-gm-chips" }, [
             skillChip.el,
             modeChip.el,
@@ -1762,7 +1800,6 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
         // 图片在上、操作在下：对比区（原图 | 编辑结果 + 分割线滑块）固定在窗内上方
         compareBox,
         $el("div", { className: "neo-gallery-edit-form" }, [
-            refDropContainer,
             outpaintRow,
             localRow,
             removeRow,
@@ -2395,7 +2432,8 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
             slot.appendChild($el("img", { className: "neo-gallery-edit-refchip-img", src: refThumbUrl(ref, 128), alt: ref.filename, title: t("点击放大查看"), onclick: () => Lightbox.open({ items: buildLightboxItems(), index: index + 1 }) }));
             slot.appendChild($el("span", { className: "neo-gallery-edit-refchip-x", textContent: "×", onclick: (e) => { e.stopPropagation(); extraRefs.splice(index, 1); renderRefSlots(); } }));
         } else {
-            slot.appendChild($el("span", { className: "neo-gallery-edit-refdrop-icon", textContent: "" }));
+            slot.appendChild($el("span", { className: "neo-gallery-edit-refdrop-icon", textContent: "＋" }));
+            slot.appendChild($el("span", { className: "neo-gallery-edit-refdrop-cap", textContent: t("参考") }));
         }
         // 拖放
         slot.addEventListener("dragover", (e) => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; slot.classList.add("drop-active"); });
@@ -2415,23 +2453,43 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
     }
 
     function renderRefSlots() {
-        // 保留 file input，清除其余子节点
-        while (refDropContainer.children.length > 1) refDropContainer.lastChild.remove();
+        // 图位整列重建；file input 与取图按钮行是常驻节点，按类名清掉上一批图位
+        for (const node of [...refDropContainer.children]) {
+            if (node.classList.contains("neo-gallery-edit-refdrop")) node.remove();
+        }
         const count = Math.max(1, extraRefs.length + (extraRefs.length < MAX_EXTRA_REFS ? 1 : 0));
         for (let i = 0; i < count; i++) {
-            refDropContainer.appendChild(makeRefSlot(i));
+            refDropContainer.insertBefore(makeRefSlot(i), refPickRow);
         }
+        syncRefCount();
         syncPosePrompt();
     }
     renderRefSlots();
 
+    /** 取用一批参考图（素材库弹窗回调 / 本地多选共用）：画廊素材先复制进 input/ 根目录，落不下的跳过 */
+    async function addRefImages(items) {
+        for (const it of items || []) {
+            if (extraRefs.length >= MAX_EXTRA_REFS) break;
+            const fname = it.subfolder ? await copyGalleryToInput(JSON.stringify(it)) : it.filename;
+            if (fname) extraRefs.push({ filename: fname, subfolder: "" });
+        }
+        renderRefSlots();
+    }
+
     refFileInput.onchange = async () => {
-        const file = refFileInput.files && refFileInput.files[0];
-        if (!file) return;
-        const [fname] = await uploadLocalFiles([file]);
+        const files = [...(refFileInput.files || [])];
+        if (!files.length) return;
+        const names = await uploadLocalFiles(files);
         refFileInput.value = "";
-        const idx = refFileInput._targetIndex ?? extraRefs.length;
-        if (fname) { extraRefs[idx] = { filename: fname, subfolder: "" }; renderRefSlots(); }
+        // 点空槽进来的是「补这一格」（空槽下标 = 现有张数），取图按钮进来的是「往后追加」
+        const at = refFileInput._targetIndex;
+        refFileInput._targetIndex = null;
+        for (const fname of names) {
+            if (!fname || extraRefs.length >= MAX_EXTRA_REFS) continue;
+            if (at != null && at === extraRefs.length) extraRefs[at] = { filename: fname, subfolder: "" };
+            else extraRefs.push({ filename: fname, subfolder: "" });
+        }
+        renderRefSlots();
     };
 
     // 扩图/局部/点选模式只用首张参考，额外参考不可用（融合模式允许多张）

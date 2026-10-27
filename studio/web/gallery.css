@@ -367,16 +367,20 @@
 .neo-gallery-gm-skills-panel {
     display: grid;
     grid-template-columns: minmax(190px, 250px) 1fr;
+    grid-template-rows: minmax(0, 1fr) auto;
     gap: 12px;
 }
-/* 技能列自己滚：短窗口里 62vh 的壳先切到技能列表，不跟着整块面板一起顶出输入卡 */
+/* 技能列自滚：行1 在 minmax(0,1fr) 下收缩到「壳高 − foot − gap」，左栏 overflow 在行内滚；
+   旧的 max-height:inherit 让左栏能长到整壳 62vh，加 foot 顶穿壳底，「完成」被挤到折叠线下要滚动才见 */
 .neo-gallery-gm-skills-col {
     min-width: 0;
-    max-height: inherit;
+    min-height: 0;
     overflow: auto;
 }
 .neo-gallery-gm-params-col {
     min-width: 0;
+    min-height: 0;
+    overflow: auto;
 }
 /* 面板底部「完成」：跨两栏。点技能行不关面板（要在右栏看该技能钉的主模型），点它才收起 */
 .neo-gallery-gm-panel-foot {
@@ -444,7 +448,7 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
-    padding: 10px;
+    padding: 12px;
     background: rgba(0, 0, 0, 0.35);
     border: 1px solid rgba(255, 255, 255, 0.18);
     border-radius: 10px;
@@ -3083,6 +3087,106 @@ Accordion Section Buttons (Clear)
     line-height: 1;
     cursor: pointer;
     color: #eee;
+}
+
+/* 参考图内联在提示词框左上角：参考列限宽在左，文字占右侧与方块并排流式排 */
+.neo-gallery-edit-refline {
+    display: flex;
+    gap: 8px;
+    align-items: stretch;
+}
+.neo-gallery-edit-refline .neo-gallery-edit-refdrop-row {
+    position: relative;
+    flex: 0 0 auto;
+    max-width: 118px;
+    gap: 6px;
+    align-content: flex-start;
+}
+.neo-gallery-edit-refline .neo-gallery-gm-quick-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    background: none;
+    border: none;
+    border-radius: 0;
+    padding: 4px 2px;
+    resize: none;
+}
+/* 提示词框融进输入卡：卡片外框就是唯一的焦点框，框内不再套一层文本框边框（story-input 族的边框在这里收掉） */
+.neo-gallery-edit-refline .neo-gallery-gm-quick-input:focus {
+    border: none;
+}
+.neo-gallery-gm-composer .neo-gallery-edit-refdrop {
+    width: 56px;
+    height: 56px;
+}
+.neo-gallery-gm-composer .neo-gallery-edit-refdrop-icon {
+    font-size: 20px;
+}
+.neo-gallery-edit-refdrop-cap {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 6px;
+    text-align: center;
+    font-size: 10px;
+    color: #9aa4b2;
+}
+
+/* 取图浮层：hover / focus「＋参考」列才浮出，头部计数 + 本地上传 / 素材库取用，从方块上方开 */
+.neo-gallery-edit-refpicks {
+    position: absolute;
+    left: 0;
+    bottom: calc(100% + 6px);
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+    min-width: 140px;
+    padding: 6px;
+    background: #2a2a31;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 9px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+    opacity: 0;
+    pointer-events: none;
+    z-index: 6;
+}
+/* hover / focus 即时基态；.picks-open 由 JS 开关驱动，带关闭宽限让鼠标跨得过方块与浮层之间的间隙（见 gallery-gen.js） */
+.neo-gallery-edit-refdrop-row:hover .neo-gallery-edit-refpicks,
+.neo-gallery-edit-refdrop-row:focus-within .neo-gallery-edit-refpicks,
+.neo-gallery-edit-refdrop-row.picks-open .neo-gallery-edit-refpicks {
+    opacity: 1;
+    pointer-events: auto;
+}
+.neo-gallery-edit-refcount {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 2px 4px 5px;
+    font-size: 11px;
+    letter-spacing: 0.4px;
+    color: #8a8a96;
+    text-transform: uppercase;
+}
+.neo-gallery-edit-refcount-num { color: #b9c0cc; }
+.neo-gallery-edit-refpick {
+    width: 100%;
+    text-align: left;
+    padding: 7px 8px;
+    font-size: 12px;
+    line-height: 1.2;
+    color: #cfcfd6;
+    background: none;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.neo-gallery-edit-refpick:hover {
+    color: #eee;
+    background: rgba(79, 195, 247, 0.16);
+    border-color: #4fc3f7;
 }
 
 /* 扩图：imgwrap 变为中心舞台，画布（原图+留白）超出时整体等比缩小 */
