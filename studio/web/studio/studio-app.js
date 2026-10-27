@@ -12,7 +12,7 @@ import { $el } from "./shim/ui.js";
 import "../gallery.js";   // 注册 comfy.neo.gallery 扩展（NeoGallery + 侧栏 tab 定义）
 import { setDirectorEditorHost, DIRECTOR_RECIPE_SAVED_EVENT, SEG_MODES, MODE_LABELS, LEGACY_MODE_MAP } from "../director.js";
 import { setPaintHost, openGenMaterialDialog, openImageEditDialog, chipButton, skillParamsChip } from "../gallery-gen.js";
-import { createFramePlayer, DOCK_PREVIEW_SIDE, STAGE_PREVIEW_SIDE } from "../live-preview.js";
+import { createFramePlayer, DOCK_PREVIEW_SIDE, AGENT_PREVIEW_SIDE } from "../live-preview.js";
 import { createRecipesPanel } from "../recipes.js";
 import { listVideoSkills } from "../recipes.js";
 import { skillDisplayName } from "../skill.js";
@@ -20,7 +20,6 @@ import { createImageGenSettingsForm, createVideoGenSettingsForm, createVideoMode
 import { createModelConfigForm } from "../llm-setting.js";
 import { createSkillManager } from "../skill.js";
 import { createAgentPanel, createMcpPanel, createAgentPrefsForm } from "../agent-panel.js";
-import { createAgentStage } from "../agent-stage.js";
 import { t, tf, getLang, applyLang, LANGS } from "../js/core/i18n.js";
 import { icon, setIcon, setIconLabel } from "../js/core/icons.js";
 import { createLibraryModal } from "../js/core/lib-modal.js";
@@ -30,12 +29,13 @@ const REPO_URL = "https://github.com/neoneo-ai/neo-studio";   // 设置「关于
 let directorPanelOpts = null;   // 导演页配方面板选项（buildDirector 设置；含 onSelect 回传选中配方）
 let onDirectorShown = null;     // 进导演页时补拉的活：隐藏期间跳过的 director_spec 在进本页时补一次
 
-// ====== 右栏智能体的界面上下文：宿主只交事实，右栏画进上下文条并随请求体交后端进系统提示词 ======
+// ====== 智能体的界面上下文：宿主只交事实，面板画进上下文条并随请求体交后端进系统提示词 ======
 // 只交当前选中页签自己那一栏：导演页的配方、绘画页的模式、素材页的目录各留自己那页，切到技能 / 设置页
 // 就只剩页面本身——在技能页还带着「当前配方 X」出片，就是拿没在看的页签干扰这一轮。
 // 素材库目录在取用时现读画廊：画廊导航没有对外事件，读一次现值比在 gallery.js 里插监听便宜
 const agentCtx = { page: "gallery", recipe: "", segments: 0, paint_mode: "text" };
-let agentCtxRefresh = null;     // 右栏展开时挂上的重画回调，收起时没有右栏可通知
+let agentCtxRefresh = null;     // 智能体页建好时挂上的重画回调，页面没建过就没有面板可通知
+let agentEntryBtn = null;       // 顶栏那颗入口按钮：showView 靠它标出当前在不在智能体页
 
 function notifyAgentCtx() { if (agentCtxRefresh) agentCtxRefresh(); }
 
@@ -43,7 +43,7 @@ function agentContext() {
     const view = app.neoGallery?.currentView;
     const lib = (view?.mode === "directory" && view.source)
         ? [view.source, ...(view.categoryPath || [])].join("/") : "";
-    // 素材库目录带 角色图标记时一并报出去：右栏智能体基于这些附件图建导演配方
+    // 素材库目录带 角色图标记时一并报出去：智能体基于这些附件图建导演配方
     // 要照画廊 ⋯ 菜单那条口径走全参考，它自己没有目录标记这份数据
     const withLib = (ctx) => {
         if (!lib) return ctx;
@@ -91,9 +91,10 @@ function showView(name) {
         if (tab && name !== "gallery") tab.activeSidebarTabId = null;
     }
     currentView = name;
-    agentCtx.page = name;
+    if (name !== "agent") agentCtx.page = name;   // 智能体页不抢上下文：条上继续报上一个生成页（配方 / 绘画模式还在用）
     notifyAgentCtx();
-    setMemActive(name === "director" || name === "paint" || name === "video");   // 显存读数只在生成页（导演 / 绘画 / 视频）轮询
+    agentEntryBtn?.classList.toggle("ns-agent-toggle-on", name === "agent");
+    setMemActive(name === "director" || name === "paint" || name === "video" || name === "agent");   // 显存读数只在生成页（导演 / 绘画 / 视频 / 智能体）轮询
     if (name === "director" && onDirectorShown) onDirectorShown();
     // 画廊单例的宿主跟着视图走：素材页 = 整片宿主；弹窗开着 = 弹窗宿主；其余页 = 交还素材页 / 收留宿主
     // 一次只挂一处：切页时不会两次 render 抢同一个元素（后落的那次会把画廊拽回上一页）
@@ -384,7 +385,7 @@ async function buildDirector(el) {
     const onSelect = (r) => {
         recipesModal?.close();       // 点卡片 = 选中并进编辑器，弹窗让位
         currentRecipeName = r.name;
-        agentCtx.recipe = r.name;      // 右栏上下文：智能体默认围绕这一份配方出片
+        agentCtx.recipe = r.name;      // 智能体上下文：默认围绕这一份配方出片
         notifyAgentCtx();
         applyRecipe(r.name);   // 刷新分段格子 + 尺寸/步数回显
     };
@@ -474,7 +475,7 @@ async function buildDirector(el) {
         }
         tlSegments = spec?.segments || [];
         if (genState && !genState.terminal) tlProgress = { active: false, segment_index: -1, total_segments: 0 };   // 生成中切配方：进度高亮属于正在跑的那份配方，不许打到新配方的格子上
-        agentCtx.segments = tlSegments.length;   // 右栏上下文要报得出这份配方有几段
+        agentCtx.segments = tlSegments.length;   // 智能体上下文要报得出这份配方有几段
         notifyAgentCtx();
         setChecked([]);   // 分段已换（切配方 / 配方内容变更）→ 勾选作废
         const d = spec?.defaults;
@@ -617,7 +618,7 @@ async function buildDirector(el) {
     window.addEventListener(DIRECTOR_RECIPE_SAVED_EVENT, async (e) => {
         specCache.clear();
         if (e?.detail?.created) currentRecipeName = e.detail.name;
-        agentCtx.recipe = currentRecipeName || "";   // 保存会换配方名，右栏上下文跟着走
+        agentCtx.recipe = currentRecipeName || "";   // 保存会换配方名，智能体上下文跟着走
         notifyAgentCtx();
         await refreshRecipesPanel();
         // 刷新只恢复卡片高亮（不重放 onSelect），分段格子与尺寸/步数回显在这里跟着新配方重取
@@ -638,15 +639,7 @@ function buildPaint(el) {
     const main = $el("div", { className: "ns-paint-main" });
     page.appendChild(main);
 
-    // 中间舞台挂在页面下方：右栏那一轮的过程与产物在生成面板下面放大，模式条与面板不被产物挤下去；
-    // 空轮整块收起（宿主加 ns-hidden），关掉开关整块不挂，两种情况都不在页面底下留一块空面板
-    stageHost = $el("div", { className: "ns-paint-stage" });
-    agentStage = createAgentStage({
-        onContent: (has) => stageHost.classList.toggle("ns-hidden", !has),
-    });
-    agentStage.setPreviewMode(previewOn);   // 建好就把本机那份采样预览偏好交进去，本页之前不开过设置页也一样
-
-    // 模式切换：文生图与图片编辑各占满右栏，一次只看一个（不像导演页那样编辑 + 生成同屏抢高度）
+    // 模式切换：文生图与图片编辑各占满整栏，一次只看一个（不像导演页那样编辑 + 生成同屏抢高度）
     const modeBtns = {
         text: $el("button", { className: "ns-paint-mode-btn", type: "button", textContent: t("文生图"), onclick: () => setMode("text") }),
         edit: $el("button", { className: "ns-paint-mode-btn", type: "button", textContent: t("图片编辑"), onclick: () => setMode("edit") }),
@@ -662,8 +655,6 @@ function buildPaint(el) {
     main.appendChild(editHost);
     const memBar = buildMemBar();   // 显存 / 内存读数 + 清理：绘画页同样是生成页
     if (memBar) main.appendChild(memBar);
-    main.appendChild(stageHost);   // 舞台排在原界面之后：产物那一块放大不占页面顶部
-    mountStage();
 
     let mode = "text";
     const setMode = (m) => {
@@ -672,7 +663,7 @@ function buildPaint(el) {
         modeBtns.edit.classList.toggle("ns-paint-mode-on", mode === "edit");
         textHost.classList.toggle("ns-hidden", mode !== "text");
         editHost.classList.toggle("ns-hidden", mode !== "edit");
-        agentCtx.paint_mode = mode;   // 右栏上下文：智能体知道这一栏现在是文生图还是图片编辑
+        agentCtx.paint_mode = mode;   // 智能体上下文：知道绘画页现在是文生图还是图片编辑
         notifyAgentCtx();
         try { localStorage.setItem(PAINT_MODE_KEY, mode); } catch { /* 偏好写不进不影响用 */ }
     };
@@ -696,7 +687,7 @@ function buildPaint(el) {
     ready = true;
 }
 
-// ====== 首页：意图卡片 —— 大字标题 + 生成三卡 + 素材三卡，点卡直达对应页 ======
+// ====== 首页：意图卡片 —— 大字标题 + 创造五卡 + 素材三卡，点卡直达对应页 ======
 function openPaintMode(mode) {
     paintModeCtl?.(mode);   // 绘画页常驻：先把面板切到卡片承诺的模式，再跳页
     go("paint");
@@ -727,6 +718,7 @@ function buildHome(el) {
             homeCard("film", "生成视频", "一句话加首帧，出一段视频", () => go("video")),
             homeCard("pencil", "图片编辑", "拖入素材，写下要改成什么样", () => openPaintMode("edit")),
             homeCard("play", "导演视频", "多段配方，生成整片视频", () => go("director")),
+            homeCard("target", "智能体", "说出目标，工具链多轮跑完", () => go("agent")),
         ]),
         $el("h2", { className: "ns-home-section", textContent: t("素材与配置") }),
         $el("div", { className: "ns-home-grid" }, [
@@ -739,8 +731,8 @@ function buildHome(el) {
 
 // ====== 视频页：一句话 + 首帧（可选尾帧 / 参考图）直接出一段视频 ======
 // 独立于导演多段流程：不建配方、不读配方，参数在本页 composer 里现填，提交后端简单视频接口。
-// 版面照 ArtCraft 的 Create Video：整页是舞台，空着时 hero 大字标题盖在正中，底部浮一张胶囊
-// composer（素材方块 + 提示词 + 芯片行 + 生成钮）；出片后标题淡出，成片卡片进舞台滚动。
+// 版面照 ArtCraft 的 Create Video：整页是舞台，空着时正中盖一句起手提示（版式同绘画页 idle），
+// 底部浮一张胶囊 composer（素材方块 + 提示词 + 芯片行 + 生成钮）；出片后提示淡出，成片卡片进舞台滚动。
 const VIDEO_SIZE_CHOICES = [
     [624, 352, "352p 横屏"], [768, 432, "432p 横屏"], [1024, 576, "576p 横屏"],
     [1280, 720, "720p 横屏"], [1344, 768, "768p 横屏"], [1920, 1080, "1080p 横屏"],
@@ -782,9 +774,10 @@ function buildVideo(el) {
 
     const stage = $el("div", { className: "ns-video-stage" });
     const hero = $el("section", { className: "ns-video-hero" }, [
-        $el("div", { className: "ns-video-hero-card" }, [
-            $el("h1", { textContent: t("创建视频") }),
-            $el("p", { textContent: t("选一张图，写一句话，然后生成") }),
+        // 文案样式直接借绘画页的页内 idle（.neo-gallery-gm-idle 那三级类），两页起手提示长一个样
+        $el("div", { className: "ns-video-hero-card neo-gallery-gm-idle" }, [
+            $el("div", { className: "neo-gallery-gm-idle-title", textContent: t("创建视频") }),
+            $el("div", { className: "neo-gallery-gm-idle-sub", textContent: t("选一张图，写一句话，然后生成") }),
             $el("i", { className: "ns-video-corner c-tl" }),
             $el("i", { className: "ns-video-corner c-tr" }),
             $el("i", { className: "ns-video-corner c-bl" }),
@@ -1419,7 +1412,6 @@ function buildSettings(el) {
     const launcher = createLauncherPanel();
     const mcp = createMcpPanel();
     const prefs = createAgentPrefsForm({
-        stageMode: () => stageOn, setStageMode: applyStageMode,
         previewMode: () => previewOn, setPreviewMode: applyPreviewMode,
     });
     agentPrefs = prefs;   // 深链带预填参数进来时，route() 要把焦点链那份值交给这张表单
@@ -2055,57 +2047,36 @@ function localizeShell() {
     }
 }
 
-// ====== 中间舞台：右栏那一轮的当前过程与产物在绘画页生成面板下方放大 ======
-// 开关在设置页「智能体偏好」栏，与右栏开合同类：本机界面偏好存 localStorage，不进 configs/agent_prefs.json
+// ====== 采样预览：这一轮要不要逐采样步的动画帧 ======
+// 界面就是面板本身，没有第二块舞台。这一项是本机界面偏好，存 localStorage，不进 configs/agent_prefs.json
 // （那六个字段会进系统提示词，界面布局不该进去）
-const AGENT_STAGE_KEY = "neo_studio_agent_stage";
 const AGENT_PREVIEW_KEY = "neo_studio_agent_preview";
-let agentStage = null;    // 绘画页建页时建一次：舞台只吃实时帧，不留第二份状态
-let stageHost = null;     // 绘画页下方那块宿主；关掉开关时把舞台摘掉，布局回到没有舞台的样子
-let stageOn = true;
-let previewOn = true;     // 采样预览开关：关掉就是这一轮不给后端要采样帧（preview_side 0），SSE 里不再有 base64 帧
-try { stageOn = localStorage.getItem(AGENT_STAGE_KEY) !== "0"; } catch { /* 偏好读不到就用默认 */ }
-try { previewOn = localStorage.getItem(AGENT_PREVIEW_KEY) !== "0"; } catch { /* 同上 */ }
-
-function applyStageMode(on) {
-    stageOn = !!on;
-    try { localStorage.setItem(AGENT_STAGE_KEY, stageOn ? "1" : "0"); } catch { /* 偏好写不进不影响用 */ }
-    mountStage();
-}
+let previewOn = true;     // 关掉就是这一轮不给后端要采样帧（preview_side 0），SSE 里不再有 base64 帧
+try { previewOn = localStorage.getItem(AGENT_PREVIEW_KEY) !== "0"; } catch { /* 偏好读不到就用默认 */ }
+// 中间舞台与可拖分隔条已删掉：清掉旧版留下的那两份本机开关，不留死键
+try { localStorage.removeItem("neo_studio_agent_stage"); localStorage.removeItem("neo_studio_agent_split"); } catch { /* 写不进就不清 */ }
 
 function applyPreviewMode(on) {
     previewOn = !!on;
     try { localStorage.setItem(AGENT_PREVIEW_KEY, previewOn ? "1" : "0"); } catch { /* 偏好写不进不影响用 */ }
-    if (agentStage) agentStage.setPreviewMode(previewOn);   // 中途关掉就把在跑的动画收掉
 }
 
-function mountStage() {
-    if (!agentStage) return;
-    agentStage.setEnabled(stageOn);
-    if (!stageOn) agentStage.el.remove();
-    else if (stageHost && !stageHost.contains(agentStage.el)) stageHost.appendChild(agentStage.el);
-}
+// ====== 智能体页：独占整页，面板是界面本身、结果就铺在面板里；入口是顶栏那颗星形按钮与首页创造区的卡 ======
+// 导航栏不给它留位：页面靠 go("agent") 进，与其余页同一条路由，视图常驻不重建（会话时间线不丢）
 
-// ====== 右栏智能体：常驻窗口右缘，顶栏按钮开合（默认收起），开合与栏宽存 localStorage ======
-const AGENT_DOCK_KEY = "neo_studio_agent_dock";
-const AGENT_DOCK_MIN = 260;        // 右栏下限：上下文条与工具卡参数框还看得下
-const AGENT_DOCK_COLLAPSE = 150;   // 收起阈值：拖到比这更窄就关掉整栏，靠分隔条上的三点抓手拖回来
-const AGENT_VIEW_MIN = 420;        // 左侧页面视图下限：与导演编辑器下限同档
-
-function initAgentDock() {
-    const dock = document.getElementById("ns-agent-dock");
-    const toggle = document.getElementById("ns-agent-toggle");
-    const body = document.querySelector(".ns-body");
-    if (!dock || !toggle || !body) return;
-    // 按钮字形走中央图标层（顶栏那颗星与首页「生成图片」卡同款）：title 走 i18n，字形不占文案
-    toggle.replaceChildren(icon("sparkles", 15));
-    const panel = createAgentPanel(dock, {
-        // MCP 注册表在设置页那一栏，右栏入口只做跳转（pushState 与 go() 同一理由：不碰 location.hash）
+function buildAgentPage(el) {
+    el.classList.add("ns-agent-page");
+    const chatHost = $el("div", { className: "ns-agent-chat" });
+    el.appendChild(chatHost);
+    const memBar = buildMemBar();   // 智能体页的出片走同一条执行队列：显存 / 内存读数照给
+    if (memBar) el.appendChild(memBar);
+    const panel = createAgentPanel(chatHost, {
+        // MCP 注册表在设置页那一栏，面板入口只做跳转（pushState 与 go() 同一理由：不碰 location.hash）
         onOpenMcp: () => {
             history.pushState(null, "", "#/settings?tab=mcp");
             route();
         },
-        // 用户级偏好的表单在设置页那一栏，右栏只跳过去（pushState 与 MCP 入口同一理由：不碰 location.hash）；
+        // 用户级偏好的表单在设置页那一栏，面板只跳过去（pushState 与 MCP 入口同一理由：不碰 location.hash）；
         // 焦点链上的「设为偏好」把这一发的技能、宽高与主模型家族带进表单，用户不用自己抄——
         // 家族取的是这一发用的主模型命中家族线索的那一个（导演配方名是中文，过不了后端家族名的形态）
         onOpenPrefs: (fact) => {
@@ -2117,77 +2088,23 @@ function initAgentDock() {
             history.pushState(null, "", `#/settings?${q}`);
             route();
         },
-        // 界面当前状态由宿主交：右栏把它画进上下文条，并把同一份值随请求体交后端进系统提示词
+        // 界面当前状态由宿主交：面板把它画进上下文条，并把同一份值随请求体交后端进系统提示词
         getContext: agentContext,
-        // 实时帧同时交中间舞台：舞台只画当前这一轮，右栏时间线照旧逐帧追加
-        onFrame: (frame) => { if (agentStage) agentStage.onFrame(frame); },
-        // 采样预览要哪一档由两个开关定：关掉这一轮就不要采样帧（0 = 后端不读预览表）；
-        // 舞台那块比栏子宽得多，384 的帧铺在中间是糊的
-        previewSide: () => (previewOn ? (stageOn ? STAGE_PREVIEW_SIDE : DOCK_PREVIEW_SIDE) : 0),
+        // 采样预览要哪一档由开关定：关掉这一轮就不要采样帧（0 = 后端不读预览表）；
+        // 结果与动画都铺在面板里，要 1024 那一档才铺得开
+        previewSide: () => (previewOn ? AGENT_PREVIEW_SIDE : 0),
     });
-    const refresh = () => panel.refresh();
-    agentCtxRefresh = refresh;   // 切页 / 选配方 / 切绘画模式时重画右栏上下文条
-    // 分隔条夹在页面视图与栏子之间，样式与左栏那条共用（.ns-director-colsplit）
-    const split = $el("div", {
-        className: "ns-director-colsplit", role: "separator", "aria-orientation": "vertical", tabindex: "0",
-        title: t("拖动调整右栏宽度 · 拖到最窄收起整栏 · 双击收起 / 展开"),
-    });
-    body.insertBefore(split, dock);
-    let saved = null;
-    try { saved = JSON.parse(localStorage.getItem(AGENT_DOCK_KEY) || "null"); } catch { /* 偏好读不到就用默认 */ }
-    let closed = saved?.closed !== false;   // 默认收起：只有存过展开才开局展开
-    let width = Number(saved?.w) > 0 ? Number(saved.w) : 0;   // 0 = 用样式里的默认宽度
-    const render = () => {
-        body.classList.toggle("ns-agent-closed", closed);
-        dock.classList.toggle("ns-hidden", closed);
-        split.setAttribute("aria-expanded", String(!closed));
-        toggle.classList.toggle("ns-agent-toggle-on", !closed);
-        if (width > 0) body.style.setProperty("--ns-agent-w", width + "px");
-        else body.style.removeProperty("--ns-agent-w");
-    };
-    const persist = () => localStorage.setItem(AGENT_DOCK_KEY, JSON.stringify({ w: width, closed }));
-    const open = () => { closed = false; persist(); render(); refresh(); };
-    const close = () => { closed = true; persist(); render(); };
-    const toggleDock = () => (closed ? open() : close());
-    const setWidth = (w) => {
-        const max = Math.max(AGENT_DOCK_MIN, body.clientWidth - split.offsetWidth - AGENT_VIEW_MIN);
-        closed = w < AGENT_DOCK_COLLAPSE;   // 拖过阈值 = 关掉整栏，松手后三点抓手还在
-        width = Math.round(Math.max(AGENT_DOCK_MIN, Math.min(w, max)));
-        render();
-    };
-    render();
-    if (!closed) refresh();
-    toggle.onclick = toggleDock;
+    agentCtxRefresh = () => panel.refresh();   // 切页 / 选配方 / 切绘画模式时重画面板上的上下文条
+}
+
+// 顶栏入口：字形走中央图标层（与首页「生成图片」卡同款），title 走 i18n，字形不占文案
+function initAgentEntry() {
+    const toggle = document.getElementById("ns-agent-toggle");
+    if (!toggle) return;
+    toggle.replaceChildren(icon("sparkles", 15));
+    toggle.onclick = () => go("agent");
     toggle.hidden = false;
-    split.addEventListener("mousedown", (e) => {
-        if (e.button !== 0) return;
-        e.preventDefault();
-        const startX = e.clientX, startW = dock.offsetWidth;
-        const move = (ev) => setWidth(startW + (startX - ev.clientX));   // 往左拖 = 右栏变宽
-        const up = () => {
-            window.removeEventListener("mousemove", move);
-            window.removeEventListener("mouseup", up);
-            split.classList.remove("ns-colsplit-drag");
-            body.classList.remove("ns-colsplit-drag");
-            persist();
-        };
-        split.classList.add("ns-colsplit-drag");
-        body.classList.add("ns-colsplit-drag");
-        window.addEventListener("mousemove", move);
-        window.addEventListener("mouseup", up);
-    });
-    split.addEventListener("dblclick", toggleDock);
-    split.addEventListener("keydown", (e) => {
-        if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
-            if (closed) { open(); return; }   // 收起态按方向键展开，落回收起前那一档宽度
-            e.preventDefault();
-            setWidth(dock.offsetWidth + (e.key === "ArrowLeft" ? 24 : -24));
-            persist();
-        } else if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            toggleDock();
-        }
-    });
+    agentEntryBtn = toggle;
 }
 
 function route() {
@@ -2199,9 +2116,10 @@ function route() {
     ensureView("paint", buildPaint);
     if (name === "skills") ensureView("skills", buildSkills);
     else if (name === "video") ensureView("video", buildVideo);
+    else if (name === "agent") ensureView("agent", buildAgentPage);
     else if (name === "settings") {
         ensureView("settings", buildSettings);
-        // 深链 #/settings?tab=mcp：右栏「MCP」入口跳来这，视图常驻时也要落到那一栏
+        // 深链 #/settings?tab=mcp：智能体页「MCP」入口跳来这，视图常驻时也要落到那一栏
         const query = new URLSearchParams(location.hash.split("?")[1] || "");
         const tab = query.get("tab");
         if (tab && settingsShow) {
@@ -2232,7 +2150,7 @@ if (view) {
         initComfyStatus();
         initClipboardKeys();
         initReloadHotkey();
-        initAgentDock();
+        initAgentEntry();
     }).catch(e => {
         console.error("[Neo Studio] startup failed:", e);
         desktopLog(`STARTUP FAILED ${e?.stack || e}`);

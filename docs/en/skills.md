@@ -23,9 +23,9 @@ Image and video skills additionally have a `config.json` (saved settings: model 
 prefix …) and a `workflow.json` (an API-format workflow template with runtime variables as `{{...}}`
 placeholders).
 
-## How the right agent dock uses skills
+## How the agent page uses skills
 
-The `@` in the agent dock's input designates a skill, and the candidates come in two kinds:
+The `@` in the agent page's input designates a skill, and the candidates come in two kinds:
 
 | Kind | How to tell | What a designated turn does |
 |------|-------------|------------------------------|

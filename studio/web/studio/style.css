@@ -1,9 +1,9 @@
 /* Neo Studio 外壳样式：顶栏 + 视图容器。功能模块的样式由各自 CSS 注入（gallery.css / recipes.css …）。 */
 :root {
     color-scheme: dark;
-    /* 外壳调色单点：素材页 / 导演页 / 设置页与右栏智能体共用这一组值。
-       右栏（agent-panel.css）只吃这组变量：右栏唯一的宿主是本页，不在 ComfyUI 里渲染，
-       原先回落 ComfyUI 主题变量就是右栏与页面其它区域两套色的来源 */
+    /* 外壳调色单点：素材页 / 导演页 / 设置页与智能体共用这一组值。
+       智能体面板（agent-panel.css）只吃这组变量：
+       它们的宿主是本页，不在 ComfyUI 里渲染，原先回落 ComfyUI 主题变量就是面板与页面其它区域两套色的来源 */
     --ns-bg: #17171b;
     --ns-panel: #202024;
     --ns-raised: #26262c;
@@ -100,9 +100,7 @@ body {
 }
 .ns-about-copy:hover, .ns-about-open:hover { background: #33333a; color: #fff; }
 
-/* 右栏智能体：顶栏开合按钮 + 常驻右缘的栏子（默认收起，开合与宽度存 neo_studio_agent_dock）。
-   栏子宽度由 .ns-body 上的 --ns-agent-w 决定，没拖过就用样式里的默认宽度；页面视图让位（.ns-body 的 flex 行）。
-   按钮里的 sparkle 与栏内「生成」同一字形，两处图标一致 */
+/* 智能体页入口：顶栏那颗星形按钮（字形与面板内「生成」同一字形），落在智能体页时点亮 */
 .ns-agent-toggle {
     display: inline-flex; align-items: center; justify-content: center;
     width: 30px; height: 26px; margin-left: 12px;
@@ -112,18 +110,6 @@ body {
 }
 .ns-agent-toggle:hover { background: var(--ns-raised); }
 .ns-agent-toggle-on { background: var(--ns-primary-soft); border-color: var(--ns-primary); color: var(--ns-primary-fg); }
-.ns-agent-dock {
-    flex: none; width: var(--ns-agent-w, 360px); min-width: 0;
-    background: var(--ns-bg);
-    border-left: 1px solid var(--ns-border); overflow: hidden; transition: width .16s ease;
-}
-/* 右栏分隔条：与左栏那条共用样式（.ns-director-colsplit），在 flex 行里占 18px 热区。
-   收起态栏子不显示、分隔条留着，三点抓手常驻 = 它就是把栏子拖回来的那个把手 */
-.ns-body > .ns-director-colsplit { flex: none; width: 18px; }
-.ns-body.ns-agent-closed > .ns-director-colsplit::before { opacity: 1; }
-/* 拖动时关掉宽度过渡，否则每一帧都在补间、拖起来发黏 */
-.ns-body.ns-colsplit-drag { user-select: none; }
-.ns-body.ns-colsplit-drag .ns-agent-dock { transition: none; }
 
 /* 桌面端的离线素材页：body.ns-offline 只用来压暗生成入口与收起显存条，离线页不叠横幅 */
 .ns-gen-off { opacity: .75; }
@@ -137,7 +123,7 @@ body {
 .ns-offline .neo-director-sb-gen { opacity: .6; }
 
 
-/* 主区一行两栏：左 = 页面视图，右 = 智能体栏（顶栏按钮开合） */
+/* 主区就一片页面视图：智能体页与其余页同一条路由，独占整片视图 */
 .ns-body { flex: 1; display: flex; min-height: 0; }
 .ns-view { flex: 1; min-width: 0; overflow: hidden; position: relative; }
 .ns-page { height: 100%; overflow: auto; padding: 16px; }
@@ -189,36 +175,6 @@ body {
 .ns-libmodal-pick-count { flex: 1; font-size: 12px; color: #9a9aa8; }
 .ns-libmodal-pick-use { background: rgba(47, 111, 237, 0.18); border-color: #2f6fed; color: #cfe0ff; }
 .ns-libmodal-pick-use:hover { background: rgba(47, 111, 237, 0.3); }
-/* 左右分隔条（右栏智能体用）：18px 宽热区里一条竖线，悬停 / 键盘聚焦 / 拖动时加宽变蓝（照 VSCode 的 sash） */
-.ns-director-colsplit { position: relative; min-width: 0; cursor: col-resize; user-select: none; }
-.ns-director-colsplit::after {
-    content: "";
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    left: 8px;
-    width: 1px;
-    background: #333;
-    transition: width .12s ease, left .12s ease, background .12s ease;
-}
-.ns-director-colsplit:hover::after, .ns-director-colsplit:focus-visible::after,
-.ns-director-colsplit.ns-colsplit-drag::after { left: 6px; width: 4px; background: #5090cc; }
-.ns-director-colsplit:focus-visible { outline: 1px solid #5090cc; }
-/* VSCode 的 sash 抓手：热区正中三枚点。悬停 / 键盘聚焦 / 拖动时显形；左栏收起后常驻，收起的栏靠它拖回来 */
-.ns-director-colsplit::before {
-    content: "";
-    position: absolute;
-    top: 50%;
-    left: 9px;
-    width: 4px;
-    height: 21px;
-    transform: translate(-50%, -50%);
-    background: radial-gradient(circle, #9a9aa6 1.5px, transparent 2px) center / 4px 7px repeat-y;
-    opacity: 0;
-    transition: opacity .12s ease;
-}
-.ns-director-colsplit:hover::before, .ns-director-colsplit:focus-visible::before,
-.ns-director-colsplit.ns-colsplit-drag::before { opacity: 1; }
 .ns-director-main { flex: 1 1 auto; display: flex; flex-direction: column; gap: 8px; min-width: 0; min-height: 0; }
 /* 右上编辑器宿主：导演编辑器内嵌铺满这里；没有编辑器时出占位提示 */
 .ns-director-editor { flex: 1 1 auto; min-height: 0; overflow: hidden; }
@@ -420,8 +376,9 @@ body {
 /* 双类选择器压过 :hover，选中页签悬停时不落回半透明底（与 .neo-director-tab.active 同构） */
 .ns-paint-mode-btn.ns-paint-mode-on { color: #fff; background: #2a2d33; border-color: #4a4d55; }
 /* 面板宿主：铺满剩余栏高；两块面板进页就铺好，是本页的一块内容——
-   窗口外壳（边框 / 圆角 / 底色 / 内衬 / 阴影）与标题栏全部去掉，标题由上方模式条承担 */
-.ns-paint-panel { flex: 1 1 auto; min-height: 0; overflow: hidden; }
+   中间舞台摘掉之后这块面板就是绘画页唯一的画面，外壳（边框 / 圆角 / 内衬）由宿主承担，
+   输入卡贴的是这块壳的底边，不再悬在一条看不见的容器上；标题由上方模式条承担 */
+.ns-paint-panel { flex: 1 1 auto; min-height: 0; overflow: hidden; border: 1px solid var(--ns-border); border-radius: 8px; padding: 12px 14px; }
 .ns-paint-panel .neo-gallery-gen-panel { display: flex; flex-direction: column; height: 100%; min-height: 0; }
 .ns-paint-panel .neo-gallery-story-modal--embedded {
     flex: 1 1 auto;
@@ -451,7 +408,10 @@ body {
 .ns-paint-text .neo-gallery-cs-status { flex: none; min-height: 0; }
 .ns-paint-text .neo-gallery-gm-preview,
 .ns-paint-text .neo-gallery-cs-result { flex: none; max-height: 40vh; overflow: auto; }
-.ns-paint-text .neo-gallery-gm-idle { padding-top: clamp(20px, 8vh, 96px); }
+/* 起手提示吃满输入卡上方的空档垂直居中：中间舞台摘掉后那块空档整块露了出来，
+   16vh 的 padding-top 在宽栏里把字吊在半空、底下空一片，让它自己撑满空档才落在正中 */
+.ns-paint-text .neo-gallery-cs-status:has(.neo-gallery-gm-idle) { flex: 1 1 auto; min-height: 0; }
+.ns-paint-text .neo-gallery-gm-idle { margin: auto; padding-top: 0; }
 
 /* 图片编辑：预览按栏高缩放（弹窗那套 50vh / 90vh 在页内会把表单挤到折叠线以下、底部按钮被显存条切掉），
    表单固定在下方收尾。gallery.css 是运行时注入的，平局它赢 —— 这里多带一个类压过它 */
@@ -712,33 +672,10 @@ body {
 .ns-prefs-save { width: auto; padding: 6px 20px; justify-self: start; }
 .ns-prefs-note { grid-column: 1 / -1; font-size: 12px; color: #9a9aa8; }
 
-/* 中间舞台：右栏那一轮的当前过程与产物在绘画页生成面板下方放大，模式条与面板留在上方不被挤下去。
-   关掉开关整块不挂（studio-app.js 的 neo_studio_agent_stage）；空轮由舞台自己报空，宿主收起成 0 高 */
-.ns-paint-stage { display: flex; flex-direction: column; gap: 8px; flex: none; max-height: 56vh; overflow: auto; }
-.ns-agent-stage {
-    display: flex; flex-direction: column; gap: 8px;
-    border: 1px solid var(--ns-border-soft); border-radius: 6px; padding: 10px 12px; background: var(--ns-panel);
-}
-.ns-agent-stage[hidden] { display: none; }
-.ns-agent-stage-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-.ns-agent-stage-title { font-weight: 600; }
-.ns-agent-stage-status { font-size: 12px; color: var(--ns-dim); }
-.ns-agent-stage-plan { display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
-.ns-agent-stage-plan-done { opacity: .55; }
-.ns-agent-stage-plan-foot { color: var(--ns-dim); }
-.ns-agent-stage-facts { display: flex; flex-wrap: wrap; gap: 6px; }
-.ns-agent-stage-fact { border: 1px solid var(--ns-border-soft); border-radius: 4px; padding: 2px 7px; font-size: 12px; background: var(--ns-field); }
-/* 采样预览块：宽由 agent-stage.js 按载荷的画面宽高比定（竖图 = 480 高 × 比例宽），高跟着图走。
-   固定高度配 100% 宽会把竖图裁成头部特写——竖图那一档只能让宽跟着画面走 */
-.ns-agent-stage-preview { max-width: 720px; overflow: hidden; border-radius: 6px; background: #000; }
-.ns-agent-stage-preview .neo-dtl-live-img { max-height: 480px; }
-/* 产物是这一轮的主体：预览退场后结果图占最大一块（与采样预览同档），清单与回答收在下面 */
-.ns-agent-stage-media { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 8px; }
-.ns-agent-stage-media img, .ns-agent-stage-media video {
-    width: 100%; max-height: 480px; object-fit: contain; border-radius: 8px; background: #000; cursor: zoom-in;
-}
-.ns-agent-stage-answer { font-size: 13px; max-height: 180px; overflow: auto; }
-.ns-agent-stage-answer img { max-width: 100%; }
+/* 智能体页：面板就是界面本身，一栏居中，结果与采样动画都铺在面板里（中间舞台与分隔条已删）。
+   1280px 封顶居中：更宽的窗口两边留白，正文行宽也该收在这一档 */
+.ns-agent-page { display: flex; flex-direction: column; gap: 10px; height: 100%; overflow: hidden; }
+.ns-agent-chat { flex: 1 1 auto; min-width: 0; min-height: 0; max-width: 1280px; margin-inline: auto; width: 100%; border: 1px solid var(--ns-border); border-radius: 8px; overflow: hidden; background: var(--ns-bg); }
 
 /* ====== 首页：意图卡片（大字标题 + 生成三卡 + 素材三卡） ====== */
 .ns-home { padding: 30px 28px 56px; }
@@ -806,9 +743,11 @@ body {
     padding: 0 24px 220px; transition: opacity .7s ease;
 }
 .ns-video-hero-off { opacity: 0; }
-.ns-video-hero-card { position: relative; max-width: 820px; text-align: center; padding: 46px 54px; display: flex; flex-direction: column; gap: 16px; }
-.ns-video-hero-card h1 { margin: 0; font-size: clamp(34px, 6vw, 74px); font-weight: 800; letter-spacing: -.03em; color: #fff; }
-.ns-video-hero-card p { margin: 0; font-size: 15px; color: var(--ns-dim); }
+/* 文案版式交给绘画页的 .neo-gallery-gm-idle 三级类（19px/600 主行 + 12px 细注行），两页起手提示一个样。
+   卡片自身规则提一层权重：index.html 里 gallery.css 排在 style.css 之后，同级选择器会压过这里；
+   绘画页的 idle 用 padding-top 把提示顶在结果区上沿，这里是 flex 居中，那笔要抹掉 */
+.ns-video-hero .ns-video-hero-card { position: relative; max-width: 820px; text-align: center; padding: 46px 54px; gap: 6px; }
+.ns-video-hero .neo-gallery-gm-idle { padding-top: 0; }
 /* 四角定位标记：hero 版面四根细线角标 */
 .ns-video-corner { position: absolute; width: 16px; height: 16px; border: 1px solid var(--ns-border); }
 .ns-video-corner.c-tl { top: 0; left: 0; border-right: none; border-bottom: none; }

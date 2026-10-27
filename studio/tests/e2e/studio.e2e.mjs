@@ -270,7 +270,7 @@ test("Studio 绘画页：顶栏模式条 + 素材库弹窗，文生图输入卡�
         assert.equal(layout.visibleSelects, 0, "控件行里没有浏览器下拉框：原生 select 只当状态容器");
         assert.ok(layout.idleTop !== null && !layout.idleInComposer, "idle 起手提示挂在结果区，不塞进输入卡");
         assert.ok(layout.idleTop < layout.composer.top, "起手提示在输入卡上方（结果区在上方）");
-        // 面板铺满主栏、输入卡钉在面板底边（ArtCraft 式输入条），中间空的一段是页面背景
+        // 面板铺满主栏、输入卡钉在面板底边（ArtCraft 式输入条），起手提示在壳内空档正中垂直居中
         assert.ok(layout.panel.top - layout.main.top < layout.main.height * 0.4,
             `文生图面板从主栏上部铺起（偏移 ${Math.round(layout.panel.top - layout.main.top)}）`);
         assert.ok(layout.panel.height >= 200, `文生图面板自身可用高度 ${Math.round(layout.panel.height)}`);

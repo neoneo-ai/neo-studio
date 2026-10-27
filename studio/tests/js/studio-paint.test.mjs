@@ -41,7 +41,6 @@ const editPanel = () => paintEdit()?.querySelector(".neo-gallery-gen-panel");
 const modeChip = (panel) => panel.querySelector(".neo-gallery-edit-mode-select").parentElement;
 const modeChipBtn = (panel) => modeChip(panel).querySelector(".neo-gallery-gm-chip-btn");
 const hintOf = (panel) => panel.querySelector(".neo-gallery-story-hint").textContent;
-const paintStageHost = () => document.querySelector(".ns-paint .ns-paint-stage");
 
 
 // hashchange 由 jsdom 作为宏任务派发：微任务 flush 不够，等一轮事件循环
@@ -132,7 +131,6 @@ test("绘画页：进页就铺好文生图面板与空图片编辑面板，入�
     assert.ok(enhanceGroup && panel.querySelector(".neo-gallery-gm-more-menu").contains(enhanceGroup),
         "增强收在 ⋯ 菜单里（默认视野只剩输入框 = 写一句直接生成）");
     assert.ok(gmPanel?.contains(gmModelBox), "自定参数默认不显示：面板挂在自定参数 chip 的浮层里");
-    assert.ok(paintStageHost().classList.contains("ns-hidden"), "空轮时舞台宿主收起，不在面板底下留一块空框");
 
     assert.ok(!paintText().classList.contains("ns-hidden"), "默认模式应是文生图");
 

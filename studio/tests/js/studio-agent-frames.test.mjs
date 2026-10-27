@@ -1,6 +1,6 @@
-// 右栏智能体新增的几类帧：执行清单 / 焦点链 / 上下文与 token 统计 / finish 收场，
+// 智能体页的几类帧：执行清单 / 焦点链 / 上下文与 token 统计 / finish 收场，
 // 外加旧会话的「从这条消息重新开始」与用户级偏好：表单在设置页「智能体偏好」栏（configs/agent_prefs.json
-// 读写），右栏只留齿轮与焦点链「设为偏好」两个入口，点了跳过去并把这一发的技能 / 宽高 / 配方带进表单。
+// 读写），面板只留齿轮与焦点链「设为偏好」两个入口，点了跳过去并把这一发的技能 / 宽高 / 配方带进表单。
 // 共同口径是「整份重发就地重写」——后端每划掉一条清单、每累加一次 token 都发整张，
 // 界面逐帧追加就是刷屏。
 import test from "node:test";
@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { resetEnv, flush, mockRoute, jsonResponse, sseResponse, click, inputText, fetchLog } from "./setup.mjs";
+import { resetEnv, flush, sleep, mockRoute, jsonResponse, sseResponse, click, inputText, fetchLog } from "./setup.mjs";
 import { appState } from "./mocks/comfy-app.mjs";
 
 const webDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../web");
@@ -51,15 +51,18 @@ function mountStudio() {
         call.method === "POST" ? { ok: true, prefs: cleanPrefs(body) } : { ok: true, prefs: SAVED_PREFS }));
 }
 
+// hashchange 在 jsdom 里是宏任务：设完 hash 要等一轮事件循环，路由才把智能体页切过去
+const settle = async () => { await sleep(0); await flush(); };
+
 async function openStudio() {
     window.location.hash = "#/gallery";
     await importApp();
-    await flush(40);
-    click(document.getElementById("ns-agent-toggle"));
-    await flush(20);
+    await settle();
+    window.location.hash = "#/agent";   // 面板住在智能体页：进页才建得出面板
+    await settle();
 }
 
-const dock = () => document.querySelector("#ns-agent-dock");
+const dock = () => document.querySelector(".ns-agent-chat");
 const runBtn = () => dock().querySelector(".neo-agent-run");
 const input = () => dock().querySelector(".neo-agent-input");
 const finalRow = () => dock().querySelector(".neo-agent-answer-body");
@@ -174,7 +177,7 @@ test("focus 帧铺焦点链，点「设为偏好」跳设置页并把这一发�
     assert.ok(labels.some((s) => s.includes("a.safetensors / b.safetensors")),
         `LoRA 列表合并成一条 chip：${JSON.stringify(labels)}`);
     assert.ok(!labels.some((s) => s.includes("橘猫")), "提示词不进 chip（工具卡上本来就看得见）");
-    assert.equal(dock().querySelector(".neo-agent-prefs"), null, "右栏不嵌整份偏好表单，只留入口");
+    assert.equal(dock().querySelector(".neo-agent-prefs"), null, "面板不嵌整份偏好表单，只留入口");
 
     click(dock().querySelector(".neo-agent-focus-prefs"));
     await flush(20);
@@ -226,7 +229,7 @@ test("栏头 跳「智能体偏好」栏：枚举三项是下拉，档位来自�
     click(gear());
     await flush(20);
 
-    assert.equal(hashQuery().get("tab"), "agent", "齿轮只做跳转，右栏不展开表单");
+    assert.equal(hashQuery().get("tab"), "agent", "齿轮只做跳转，面板不展开表单");
     assert.ok(prefsTab().classList.contains("active"), "设置页要落在「智能体偏好」这一栏");
     assert.deepEqual(["preferred_skill", "preferred_size", "preferred_family"].map((k) => prefsField(k).tagName),
         ["SELECT", "SELECT", "SELECT"], "枚举三项给下拉，不让用户手打 1024x1024");
@@ -274,9 +277,9 @@ test("finish 帧落最终回答：正文、产物缩略图与可点的下一步�
     assert.equal(calls.length, 2, "点方向就是把它当下一句输入发出去");
     assert.equal(calls[1].body.text, "再来一张同风格的");
 });
-// 产物在右栏只铺一遍：generate_image 的产物铺在卡下，finish_task 交的是同一批清单，
-// 收场那一栏只补卡下没铺过的，同一张图不在右栏出现两次
-test("产物不在右栏铺两遍：卡下铺过的图，收场栏只补新产物", async () => {
+// 产物在面板里只铺一遍：generate_image 的产物铺在卡下，finish_task 交的是同一批清单，
+// 收场那一栏只补卡下没铺过的，同一张图不在面板里出现两次
+test("产物不在面板里铺两遍：卡下铺过的图，收场栏只补新产物", async () => {
     mountStudio();
     await openStudio();
     await run([

@@ -1,13 +1,13 @@
 /**
- * agent-panel.js — Neo Agent 面板（Neo Studio 桌面端 Studio 页右栏）
+ * agent-panel.js — Neo Agent 面板（Neo Studio 桌面端智能体页）
  *
- * 聊天区挂桌面端右栏：一次「生成」交给后端智能体（POST /neo_agent/run 的 SSE 时间线：
+ * 智能体面板挂在智能体页左栏：一次「生成」交给后端智能体（POST /neo_agent/run 的 SSE 时间线：
  * 计划 / 工具卡 / 状态 / 产物图 / 暂停 / 继续 / 最终回答），后端那一侧是 MCP 客户端，工具经
- * mcp_server 的 JSON-RPC 走，右栏不直接调后端函数；界面当前状态（当前页 /
+ * mcp_server 的 JSON-RPC 走，面板不直接调后端函数；界面当前状态（当前页 /
  * 当前导演配方 / 绘画页模式 / 素材库目录）由宿主随请求体交给后端进系统提示词；输入框里的 @ 点名技能、
  * 主模型、LoRA、图像 / 视频提示词与配方（候选源见 mention-picker.js，选中往正文写一个 @category:name 的可见记号，
  * 技能那一发另随请求体 skill_id 交后端，六类一起随请求体 mentions 交后端进系统提示词）。MCP 区
- * （注册表 / 连接 / 工具调用）交给设置页的「MCP 服务」栏，右栏只在输入框底栏留一个跳转入口；用户级偏好走同一条路，表单在设置页「智能体偏好」栏，右栏的 与焦点链上的「设为偏好」都只做跳转。
+ * （注册表 / 连接 / 工具调用）交给设置页的「MCP 服务」栏，面板只在输入框底栏留一个跳转入口；用户级偏好走同一条路，表单在设置页「智能体偏好」栏，面板的 与焦点链上的「设为偏好」都只做跳转。
  * 输入框按 Cline 的口径做：只读上下文条、附件图 chip、文本框，底栏一行是 附件图、MCP、
  * 「计划 / 执行」与右下角主按钮（生成 / 暂停 / 继续）；整行「取消」只在跑起来之后出现。
  * 空态按 Cline 首页 RECENT 的口径默认铺最近几条会话，点一行直接读回那条会话续聊。时间线里的选项确认卡
@@ -15,7 +15,7 @@
  * 「下一步选项」编号列表铺成一排可点的方向，点一下即把这句话当作下一轮输入发出。
  * stdio 型 MCP 服务是子进程，浏览器起不了，连接只活在桌面端进程里：面板只发 HTTP 打 /neo_mcp/*，
  * 桌面端服务不在时这些接口回 409，面板据此把 MCP 区收成一句离线说明，不给假成功。
- * 宿主是 studio 外壳（studio-app.js 挂右栏与设置页），不是 ComfyUI 画布侧栏：本模块不注册扩展。
+ * 宿主是 studio 外壳（studio-app.js 挂智能体页与设置页），不是 ComfyUI 画布侧栏：本模块不注册扩展。
  * 样式全在 agent-panel.css，作用域收在 .neo-agent 下。
  */
 import { mkEl } from "./dom-utils.js";
@@ -38,7 +38,7 @@ const AGENT_CSS_HREF = "/extensions/comfyui-neo-studio/agent-panel.css";
 
 const OFFLINE_HINT = t("MCP 连接由 Neo Studio 桌面端提供：桌面端服务未就绪时无法连接外部 MCP 服务");
 
-// focus 帧里的键 → 右栏 chip 上的标签：与后端 _focus_block 是同一批事实，只挑用户在右栏认得出
+// focus 帧里的键 → 面板 chip 上的标签：与后端 _focus_block 是同一批事实，只挑用户在面板里认得出
 // 的那几项（产物图与最近任务在工具卡上本来就看得见，不重复铺）
 const FOCUS_FACTS = [["skill_id", "技能"], ["model", "主模型"], ["loras", "LoRA"],
                      ["width", "宽"], ["height", "高"], ["seed", "种子"], ["recipe", "导演配方"]];
@@ -60,7 +60,7 @@ function modelFamilies(files) {
     }
     return found.length ? found : [...LORA_FAMILY_HINTS];
 }
-// token 数在右栏那一栏宽里只写一档量级：24000 写作 24k，几百不缩写
+// token 数在面板这一栏宽里只写一档量级：24000 写作 24k，几百不缩写
 const tokenText = (n) => (n >= 1000 ? (n / 1000).toFixed(1) + "k" : String(n));
 
 const toast = (severity, detail) =>
@@ -95,8 +95,8 @@ function headBtn(label, title, onClick) {
     return btn;
 }
 
-// 底栏按钮的标签拆成图标与文字两段：栏子拖窄时容器查询只收文字（agent-panel.css 的
-// @container (max-width: 300px)），图标留下，主按钮不会被栏子的 overflow: hidden 裁掉。
+// 底栏按钮的标签拆成图标与文字两段：面板拖窄时容器查询只收文字（agent-panel.css 的
+// @container (max-width: 300px)），图标留下，主按钮不会被面板的 overflow: hidden 裁掉。
 // 整串标签进 aria-label，文字收掉后还能认出按钮；face 传 core/icons.js 的图标名，
 // 字形节点（@ 这类文本）直接原样传入。
 function labelSpans(btn, label, face) {
@@ -184,7 +184,7 @@ function splitAnswerOptions(text) {
 }
 
 // ==========================================
-// 聊天区：一问一答，正文按 Markdown 渲染
+// 智能体时间线：一问一答，正文按 Markdown 渲染
 // ==========================================
 
 function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
@@ -193,7 +193,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
     const empty = mkEl("div", "neo-agent-empty");
     renderEmpty();
     transcript.appendChild(empty);
-    // 历史列表与时间线互斥显示：列表整页铺满右栏，读回的旧会话落回时间线本体
+    // 历史列表与时间线互斥显示：列表整页铺满面板，读回的旧会话落回时间线本体
     const historyBox = mkEl("div", "neo-agent-history");
     historyBox.hidden = true;
 
@@ -618,15 +618,19 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
         addFiles(files);
     });
     composer.addEventListener("dragover", (e) => e.preventDefault());
-    composer.addEventListener("drop", (e) => {
+    // 拖放收在一处：文件走 fileToBase64 那一路，素材库卡片只带自定义 MIME、dataTransfer 里没有文件，
+    // 走 addGalleryImage
+    function dropExternal(e) {
         const files = e.dataTransfer && e.dataTransfer.files;
         if (files && files.length) {
             e.preventDefault();
             addFiles(files);
-            return;
+            return true;
         }
-        addGalleryImage(e);   // 素材库卡片只带自定义 MIME，dataTransfer 里没有文件
-    });
+        addGalleryImage(e);
+        return false;
+    }
+    composer.addEventListener("drop", (e) => { dropExternal(e); });
     // 素材库卡片拖入：载荷是 {filename, subfolder}，走 copy_to_input 落进 input 后按文件名引用
     // （与导演页参考图宫格同一通道）。视频音频挡在这一步——后端只把字节当图片喂给视觉模型，
     // 喂进去就是一次看不懂的失败；拖进来的是文字时载荷连 JSON 都不是，静默放过。
@@ -690,7 +694,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
         window.open(href, "_blank", "noopener");
     });
 
-    // 产物缩略图：右栏窄，整幅铺图 / 铺片；点击进弹出窗口看大图与播放，页面自己不导航
+    // 产物缩略图：面板这一栏窄，整幅铺图 / 铺片；点击进弹出窗口看大图与播放，页面自己不导航
     function renderGenMedia(host, media) {
         const box = mkEl("div", "neo-agent-media");
         const items = media.map((m) => ({ kind: m.kind || "image", url: m.url, title: m.title || "" }));
@@ -713,7 +717,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
 
     // 回答末尾的方向铺成一排可点的行（Cline 的口径：可选项是能点的按钮，不是让用户抄的文本）。
     // 点一下走的就是用户自己敲这句话那条路：填进输入框直接开跑。整行铺满栏宽、文字折行，
-    // 右栏拖到 260px 下限也只是折行，不截断。
+    // 面板收到 320px 下限也只是折行，不截断。
     function renderAnswerOptions(host, block) {
         const box = mkEl("div", "neo-agent-answer-opts");
         const title = mkEl("div", "neo-agent-answer-opts-title");
@@ -995,7 +999,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
                 const block = splitAnswerOptions(text);
                 final.innerHTML = renderMarkdown(block ? block.body : text);
                 // finish_task 交的是这一轮的产物清单，generate_image 卡下已经铺过同一批；
-                // 收场这一栏只补卡下没铺过的，同一张图不在右栏铺两遍
+                // 收场这一栏只补卡下没铺过的，同一张图不在面板里铺两遍
                 const fresh = (media || []).filter((m) => m && m.url && !shown.has(m.url));
                 fresh.forEach((m) => shown.add(m.url));
                 if (fresh.length) renderGenMedia(final, fresh);
@@ -1119,7 +1123,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
     const RECENT_MAX = 3;
     function renderEmpty() {
         const hint = mkEl("div", "neo-agent-empty-hint");
-        hint.textContent = t("输入需求，Enter 生成；右栏会带着界面当前状态去规划");
+        hint.textContent = t("输入需求，Enter 生成；智能体页会带着界面当前状态去规划");
         empty.replaceChildren(hint);
     }
     async function renderRecent() {
@@ -1158,7 +1162,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
     async function renderHistory() {
         const data = await getJson("/neo_agent/sessions");
         historyBox.replaceChildren();
-        // 整页列表由「」或「查看全部」铺满右栏：栏头自带 ✕，回时间线不用绕栏头那一排
+        // 整页列表由「」或「查看全部」铺满面板：栏头自带 ✕，回时间线不用绕栏头那一排
         historyBox.appendChild(sectionHead(t("会话历史"), [headBtn("✕", t("关闭会话列表"), showTranscript)]));
         const note = mkEl("div", "neo-agent-history-note");
         if (data.offline) {
@@ -1315,7 +1319,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
     }
 
     // 智能体路径：一次请求换一路 SSE。界面当前状态随请求体进后端系统提示词，
-    // mode 决定计划还是执行，images 是附件图，preview_side 是这一轮要的采样预览档（舞台那档大、右栏那档紧凑，关掉是 0），
+    // mode 决定计划还是执行，images 是附件图，preview_side 是这一轮要的采样预览档（面板铺得开的那档大，关掉是 0），
     // skill_id 是输入框 @ 点名的技能（没点名就不给这个字段），mentions 是这一发 @ 点名的那几项（六类一起交，没点名就不给）
     async function runAgent(answer, text, planMode, images, context, markFail, mentionList) {
         const view = agentTimeline(answer);
@@ -1325,7 +1329,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
         await sseStream("/neo_agent/run", {
             signal: controller.signal,
             onChunk: (frame) => {
-                // 同一帧同时交中间舞台：右栏与舞台各自画当前这一轮，先后无干系
+                // 同一帧同时交中间舞台：面板与舞台各自画当前这一轮，先后无干系
                 if (onFrame) onFrame(frame);
                 const kind = frame?.kind || "content";
                 if (kind === "run") { runId = frame.run_id || ""; return; }
@@ -1534,7 +1538,7 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
     });
 
     renderRecent();
-    return { box, renderCtx };
+    return { box, renderCtx, dropExternal };
 }
 
 
@@ -1551,7 +1555,7 @@ function contentText(result) {
 
 /**
  * 挂出 MCP 服务面板。返回 { root, refresh }：refresh 拉注册表与已连服务的工具表，
- * 宿主在栏子激活时调。
+ * 宿主在智能体页激活时调。
  */
 export function createMcpPanel() {
     ensureCss();
@@ -1724,11 +1728,11 @@ export function createMcpPanel() {
 // ==========================================
 
 /**
- * 把聊天面板挂进宿主（桌面端 Studio 右栏）。opts.onOpenMcp 是「MCP」入口的跳转回调，opts.onOpenPrefs 是「智能体偏好」与焦点链「设为偏好」跳设置页的回调；
+ * 把智能体面板挂进宿主（桌面端智能体页左栏）。opts.onOpenMcp 是「MCP」入口的跳转回调，opts.onOpenPrefs 是「智能体偏好」与焦点链「设为偏好」跳设置页的回调；
  * opts.getContext 交回界面当前状态，只有当前选中页签自己那一栏（导演页的配方、绘画页的模式、
  * 上屏那几页的素材库目录），面板只把它画进上下文条并随请求体交后端，不解释它。
  * 返回 { root, refresh }：refresh 恢复条上的取消位并重画，宿主在切页 / 选配方 / 切绘画模式时调。
- * opts.onFrame 把实时帧同时交给中间舞台（agent-stage.js）：舞台与右栏消费同一路帧，各自画当前这一轮。
+ * opts.onFrame 把实时帧同时交给宿主在面板之外另画的地方，没有就别传（面板时间线照旧逐帧追加）。
  */
 export function createAgentPanel(host, opts = {}) {
     ensureCss();
@@ -1739,6 +1743,7 @@ export function createAgentPanel(host, opts = {}) {
     return {
         root,
         refresh() { chat.renderCtx(); },
+        dropExternal: chat.dropExternal,
     };
 }
 
@@ -1747,16 +1752,15 @@ export function createAgentPanel(host, opts = {}) {
 // ==========================================
 
 /**
- * 用户级偏好落在数据根的 configs/agent_prefs.json，一台机器一份：表单在设置页那一栏，右栏只留入口
- * （栏子拖到 260px 宽时塞不下六个字段）。返回 { el, load, prefill }：load 读当前偏好，prefill 把
+ * 用户级偏好落在数据根的 configs/agent_prefs.json，一台机器一份：表单在设置页那一栏，面板只留入口
+ * （六个字段一次铺满面板太挤）。返回 { el, load, prefill }：load 读当前偏好，prefill 把
  * 焦点链上的技能 / 宽高 / 导演配方填进表单。
  * 技能 / 尺寸 / 家族是枚举值，给固定下拉：技能取 /rs_prompts/skills 的 id（标签是中文名），尺寸取
  * 生图那批比例与长边正方形档，家族取家族线索在已装主模型里的命中集。焦点链带进来的值不在档位里
  * （1280x720 这种具体宽高、后来被删掉的技能 id）时追加成一项，用户看得见自己点进来的是什么。
  * 保存按后端 _clean_prefs 收净的返回值回填——越界的技能名与尺寸在后端被丢回默认值，表单留着用户刚写的
  * 那一份就是演它存上了。字段与后端收净的那六个一一对应（select 是枚举，area 是长文本，check 是开关）。
- * opts.stageMode / opts.setStageMode 与 opts.previewMode / opts.setPreviewMode 是中间舞台、采样预览这两个
- * 界面开关的读写口：开关不在这六个字段里，宿主存本地。
+ * opts.previewMode / opts.setPreviewMode 是采样预览这一个界面开关的读写口：开关不在这六个字段里，宿主存本地。
  */
 export function createAgentPrefsForm(opts = {}) {
     const form = mkEl("div", "ns-agent-prefs");
@@ -1777,25 +1781,13 @@ export function createAgentPrefsForm(opts = {}) {
     });
     const note = mkEl("div", "ns-prefs-note");
 
-    // 中间舞台是本机界面开关（宿主存 localStorage），与右栏开合同类：偏好文件里那六个字段会进系统
-    // 提示词，界面布局不该进去，所以这一项不在 PREFS_FIELDS 里、不进保存请求体
-    const stageRow = mkEl("div", "rs-config-row ns-prefs-row ns-prefs-check");
-    const stageLab = mkEl("label", "rs-form-label");
-    stageLab.textContent = t("中间舞台（过程与产物显示在页面下方）");
-    stageLab.title = t("关掉就回到只在右栏看智能体的布局；这一项是本机界面开关，不写进偏好文件");
-    const stageBox = mkEl("input", "rs-form-input");
-    stageBox.type = "checkbox";
-    stageBox.name = "stage_mode";
-    stageBox.checked = opts.stageMode ? opts.stageMode() : true;
-    stageBox.onchange = () => opts.setStageMode && opts.setStageMode(stageBox.checked);
-    stageRow.append(stageLab, stageBox);
-
-    // 采样预览同为机界面开关（同一份 localStorage 偏好）：关掉就是这一轮不给后端要采样帧
-    // （请求里的 preview_side 给 0），SSE 里不再有 base64 帧，中间与右栏都不铺动画
+    // 采样预览是本机界面开关（宿主存 localStorage）：偏好文件里那六个字段会进系统提示词，
+    // 界面开关不该进去，所以这一项不在 PREFS_FIELDS 里、不进保存请求体；
+    // 关掉就是这一轮不给后端要采样帧（请求里的 preview_side 给 0），SSE 里不再有 base64 帧，面板不铺动画
     const previewRow = mkEl("div", "rs-config-row ns-prefs-row ns-prefs-check");
     const previewLab = mkEl("label", "rs-form-label");
     previewLab.textContent = t("采样预览（生成时逐采样步铺动画）");
-    previewLab.title = t("关掉后中间舞台与右栏卡片都不铺采样动画，SSE 不再传预览帧；正在跑的这一轮收尾时收掉。这一项是本机界面开关，不写进偏好文件");
+    previewLab.title = t("关掉后面板卡片不铺采样动画，SSE 不再传预览帧。这一项是本机界面开关，不写进偏好文件");
     const previewBox = mkEl("input", "rs-form-input");
     previewBox.type = "checkbox";
     previewBox.name = "preview_mode";
@@ -1873,13 +1865,12 @@ export function createAgentPrefsForm(opts = {}) {
         skills = Array.isArray(skillRes) ? skillRes : [];
         modelFiles = modelRes?.diffusion_models || [];
         fill(data.prefs || {});
-        if (opts.stageMode) stageBox.checked = !!opts.stageMode();   // 两个界面开关以宿主那份为准，后端读回来的只有六个字段
-        if (opts.previewMode) previewBox.checked = !!opts.previewMode();
+        if (opts.previewMode) previewBox.checked = !!opts.previewMode();   // 界面开关以宿主那份为准，后端读回来的只有六个字段
         applyPending();
     }
 
     // 焦点链带过来的三个值走深链 #/settings?tab=agent&skill=..&size=..&family=..：预填要先落下，
-    // 再在晚到的那次读之后盖回去——进栏子时的 GET 晚于预填落地，先把用户刚点进来的值抹平就是演它读上了
+    // 再在晚到的那次读之后盖回去——进智能体页时的 GET 晚于预填落地，先把用户刚点进来的值抹平就是演它读上了
     let pending = null;
     function applyPending() {
         if (!pending) return;
@@ -1895,7 +1886,7 @@ export function createAgentPrefsForm(opts = {}) {
         applyPending();
     }
 
-    form.append(desc, ...rows, stageRow, previewRow, save, note);
+    form.append(desc, ...rows, previewRow, save, note);
     return { el: form, load, prefill };
 }
 

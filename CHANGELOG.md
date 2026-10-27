@@ -4,6 +4,20 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **The agent page dropped the center stage; results show enlarged in the panel itself.** The page was a two-column
+  grid — panel left, an enlarged stage right, and a draggable sash between them that collapsed, reopened, persisted
+  its width and acted as a drop band. The stage duplicated what the panel's timeline already draws, so it is gone:
+  `studio/web/agent-stage.js`, `buildAgentSplit()`, the `.ns-agent-cols` grid, the `.ns-agent-stage*` /
+  `.ns-agent-split` / `.ns-agent-collapsed` rules and the 中间舞台 switch in the Agent preferences section are
+  deleted, the two old localStorage keys (`neo_studio_agent_stage`, `neo_studio_agent_split`) are removed at startup,
+  and the panel is a single centered column capped at 1280px. Enlarging the result follows: the sampling preview asks
+  for the 1024 tier (renamed `STAGE_PREVIEW_SIDE` → `AGENT_PREVIEW_SIDE` in `studio/web/live-preview.js`), and the
+  panel's result images — `.neo-agent-media img/video` and the markdown answer images — cap at 460px tall over full
+  column width (was 240px) with the popup viewer for the full picture. Covered by `studio-agent-title.test.mjs`
+  (the stage-head title case deleted with the module) and the remaining agent suites (`studio-agent-frames`,
+  `studio-agent-skill`, `studio-agent-mention`); `studio-agent-split.test.mjs`, `studio-agent-stage.test.mjs` and
+  `live-preview.test.mjs` are deleted with the code they covered.
+
 - **The `f2v` mode is named for what it consumes: 关键帧生视频 / "Keyframe → video".** The old word 分镜生视频 /
   "Storyboard → video" named the director's 分镜 board instead of the input the mode takes — f2v eats the first / last
   frame slots, while the 分镜 board (grid storyboard, per-segment comparison, timeline) keeps its own name.
@@ -25,10 +39,11 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 - **A standalone simple video page (`#/video`): one line plus a first frame, straight to one clip.** The only video
   entry was the director — a multi-segment recipe you edit, save, then generate as a whole, which is more than someone
   wants who just has a line and a first frame. The new Studio `#/video` page is one editor like the ArtCraft create-video
-  screen: the page is a stage, a big 「创建视频」 title sits on it while it is empty, and a rounded composer card floats at
+  screen: the page is a stage, and while it is empty the Paint page's idle hint sits centered on it — the same 19px muted
+  title plus a small note line, not a poster headline — with a rounded composer card floating at
   the bottom edge — first / last frame and reference squares, a prompt box with a character counter, a chips row
   (技能 / 分辨率 / 时长 / 种子) and a generate button at the card's right end; the finished clip lands as a card on the
-  stage and the title fades out. The card, the squares, the prompt box, the chips and the generate button are the
+  stage and the hint fades out. The card, the squares, the prompt box, the chips and the generate button are the
   story composer's own pieces, not a second copy of them: `.neo-gallery-gm-composer` / `.neo-gallery-edit-refdrop` /
   `.neo-gallery-gm-quick-input` / `.neo-gallery-story-btn` carry the look, and 技能 / 分辨率 / 时长 are the same
   `chipButton()` pill the Paint page's composer uses (hidden select, menu floats up, chip shows the effective value).
@@ -39,7 +54,7 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   `output/NeoSimple/`, is played back via `/view?type=output`, and is not recorded into any recipe. Duration arrives in
   seconds and is mapped onto the H3 17k+5 frame grid; a seed of -1 randomizes. The page is a Home card and a nav tab peer
   to Home / Paint / Director; the generate button is gated by the `simple_video` capability so the offline desktop
-  directs the user to launch ComfyUI. Covered by `studio/tests/js/studio-video.test.mjs` (stage, hero title and floating composer render, skill
+  directs the user to launch ComfyUI. Covered by `studio/tests/js/studio-video.test.mjs` (stage, idle hint and floating composer render, skill
   dropdown lists only `gen_video` skills, the generate payload shape, poll running → succeeded swaps in the `<video>`,
   cancel hits the cancel route) and `studio/tests/test_simple_video.py` (`_video_terminal` finds the unconsumed VIDEO
   output / skips `SaveVideo` / raises with none, `_run_prompt` attaches `SaveVideo` and maps `duration_sec` → frames

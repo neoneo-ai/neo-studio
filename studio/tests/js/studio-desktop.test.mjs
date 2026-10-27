@@ -133,9 +133,9 @@ test("默认落地首页：意图卡片挂满主区，素材卡直达素材页",
               "顶栏首页签应高亮");
     assert.equal(home.querySelector("h1").textContent, "今天想创作什么？");
     assert.deepEqual([...home.querySelectorAll(".ns-home-card-title")].map((e) => e.textContent),
-        ["生成图片", "生成视频", "图片编辑", "导演视频", "素材库", "技能", "设置"]);
+        ["生成图片", "生成视频", "图片编辑", "导演视频", "智能体", "素材库", "技能", "设置"]);
 
-    const libCard = [...home.querySelectorAll(".ns-home-card")][4];
+    const libCard = [...home.querySelectorAll(".ns-home-card")][5];
     libCard.click();
     await flush();
     assert.ok(home.classList.contains("ns-hidden"), "跳素材页后首页应收起");
@@ -143,13 +143,13 @@ test("默认落地首页：意图卡片挂满主区，素材卡直达素材页",
     assert.ok(shown?.querySelector(".ns-gallery-host"), "素材卡应直达挂着素材库宿主的素材页");
 });
 
-test("启动页样式随文档一并带上：右栏与素材页不靠运行时注入", () => {
+test("启动页样式随文档一并带上：智能体页与素材页不靠运行时注入", () => {
     const html = fs.readFileSync(path.join(webDir, "studio", "index.html"), "utf8");
     const head = html.match(/<head>([\s\S]*?)<\/head>/)[1];
     const bootScript = html.indexOf('<script type="module"');
     const panelCss = head.indexOf("agent-panel.css");
     const galleryCss = head.indexOf("gallery.css");
-    assert.ok(panelCss > -1 && galleryCss > -1, "右栏与落地页的 CSS 要在 head 里静态带上");
+    assert.ok(panelCss > -1 && galleryCss > -1, "智能体页与落地页的 CSS 要在 head 里静态带上");
     assert.ok(panelCss < bootScript && galleryCss < bootScript,
               "样式排在应用模块之前：模块图跑完才注入的 CSS 会让页面先挤成无样式的一坨再落位");
     assert.match(head, /<link[^>]*data-neo-agent="1"[^>]*agent-panel\.css/,

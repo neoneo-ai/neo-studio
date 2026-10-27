@@ -17,7 +17,7 @@
 }
 </script>
 <link rel="stylesheet" href="/extensions/comfyui-neo-studio/studio/style.css">
-<!-- 落地页与右栏的 CSS 在这里静态带上：运行时注入（gallery.js 与 agent-panel.js 的 ensureCss）要等
+<!-- 落地页与智能体页的 CSS 在这里静态带上：运行时注入（gallery.js 与 agent-panel.js 的 ensureCss）要等
      整个模块图跑完才发起请求，窗口打开那一瞬页面先铺一坨没有样式的 DOM，CSS 到了才落位 -->
 <link rel="stylesheet" href="/extensions/comfyui-neo-studio/gallery.css">
 <!-- data-neo-agent 是 agent-panel.js 的 ensureCss 认的标记：静态带上后运行时不再补第二份 -->
@@ -46,7 +46,6 @@
 </header>
 <div class="ns-body">
     <main id="ns-view" class="ns-view"></main>
-    <aside class="ns-agent-dock ns-hidden" id="ns-agent-dock"></aside>
 </div>
 <script type="module" src="/extensions/comfyui-neo-studio/studio/studio-app.js"></script>
 </body>

@@ -1,5 +1,5 @@
 // 视频页回归：一句话 + 首帧（可选尾帧 / 参考图）出一段视频，独立于导演多段流程。
-// 一、进页就铺好整页舞台：空舞台盖 hero 大字标题，底部浮一张胶囊 composer（首帧 / 尾帧 / 参考
+// 一、进页就铺好整页舞台：空舞台盖一句起手提示（版式类同绘画页 idle），底部浮一张胶囊 composer（首帧 / 尾帧 / 参考
 //     三方块、提示词框 + 字数计数、技能 / 分辨率 / 时长 / 种子芯片、生成钮）。
 // 二、生成把 composer 现填的参数打成 payload 打 /neo_video_gen/simple，轮询 /simple/{id} 出进度，
 //     终态用 /view?type=output 换出成片播放；首帧缺省时 references 为空（t2v 路径）。
@@ -156,7 +156,7 @@ async function boot() {
     await settle();
 }
 
-test("视频页：进页铺好舞台 + hero 标题 + 底部胶囊（三方块 / 提示词 / 芯片行 / 生成钮）", async () => {
+test("视频页：进页铺好舞台 + 起手提示 + 底部胶囊（三方块 / 提示词 / 芯片行 / 生成钮）", async () => {
     await boot();
     await clickTab("video");
     assert.ok(videoPage(), "进页应铺好视频页");
@@ -164,8 +164,9 @@ test("视频页：进页铺好舞台 + hero 标题 + 底部胶囊（三方块 / 
     assert.ok(document.querySelector(".ns-video .ns-video-stage"), "应有整页舞台");
     assert.equal(document.querySelectorAll(".ns-video .ns-video-slot").length, 3, "应有首帧 / 尾帧 / 参考三方块");
     assert.equal(slotAdd().length, 3, "每方块各带一枚取用钮");
-    assert.match(document.querySelector(".ns-video-hero-card h1").textContent, /创建视频/, "空舞台应盖 hero 大字标题");
-    assert.match(document.querySelector(".ns-video-hero-card p").textContent, /选一张图/, "hero 应带副标题");
+    assert.match(document.querySelector(".ns-video-hero-card .neo-gallery-gm-idle-title").textContent, /创建视频/, "空舞台应盖起手提示主行");
+    assert.match(document.querySelector(".ns-video-hero-card .neo-gallery-gm-idle-sub").textContent, /选一张图/, "提示应带副行");
+    assert.ok(document.querySelector(".ns-video-hero-card").classList.contains("neo-gallery-gm-idle"), "hero 文案应复用绘画页 idle 版式");
     assert.ok(document.querySelector(".ns-video .ns-video-dock"), "应有底部浮动胶囊");
     assert.ok(promptBox(), "应有提示词框");
     assert.equal(document.querySelector(".ns-video .ns-video-count").textContent, "0 / ∞", "字数计数应从 0 起");

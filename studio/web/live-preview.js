@@ -10,9 +10,9 @@ const PREVIEW_STEPS = 40; // 保留的采样步数上限，超出丢最旧（每
 const PREVIEW_FPS = 4;    // 载荷未带 fps 时的兜底播放帧率（与后端 PREVIEW_FPS 同值）
 
 // 采样预览要的档（随 /neo_agent/run 的 preview_side 交后端选载荷）：后端每步存两档，
-// 右栏卡片只有栏子那么宽（384），中间舞台是页面中间那一大块（1024）——要小了铺在中间是糊的
+// 智能体页的结果与动画都铺在面板里（1024），要小了铺在面板里是糊的；导演节点那张右栏卡片只有栏子那么宽（384）
 export const DOCK_PREVIEW_SIDE = 384;
-export const STAGE_PREVIEW_SIDE = 1024;
+export const AGENT_PREVIEW_SIDE = 1024;
 
 function ensureCss() {
     if (document.querySelector('link[data-neo-live="1"]')) return;

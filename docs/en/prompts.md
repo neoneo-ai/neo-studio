@@ -149,7 +149,7 @@ Both nodes share the same layout (the Agent shows no status bar):
   ⬆ Folder at the bottom of the dropdown are the skill-management entries.
   The first option is the empty "Default" entry: with no skill
   selected the backend decides on its own whether a template applies, and an image with no skill routes to captioning.
-  In the desktop agent dock, image and film generation both go through the backend agent
+  In the desktop agent page, image and film generation both go through the backend agent
   (`POST /neo_agent/run`, an SSE timeline — see [api-routes.md](api-routes.md)): typing `@` in the composer names a
   skill directly — the list holds only the skills the three generation tools can actually run (`gen_image` /
   `gen_video` with a `workflow.json`, the same test as `_gen_image_skills` / `_gen_video_skills`), each row labeled
@@ -170,18 +170,15 @@ Both nodes share the same layout (the Agent shows no status bar):
   overflow inside it (the bottom-right grip stretches the block), and text that does not parse as JSON lands verbatim. Links inside the timeline stay in the page: a
   result link opens the popup viewer, an external link opens a new window, and the window never navigates to the
   bare image / video page — navigating away and coming back reloads the Studio page, taking the startup status
-  and the whole transcript with it. The stage below the paint panel follows the current round only: the mode bar
-  and the generation panel stay on top, the sampling animation fills the block below while it runs, and once a
-  result lands the preview retires and the result image
-  takes that block, with the plan list and the final answer below it. The sampling-preview block is as wide as the
-  frame's aspect ratio (a portrait is its 480px long side times that ratio, a landscape fills the 720px block cap):
-  a fixed height with a 100% width crops a portrait into a head close-up. The stage and the sampling preview each
-  have their own local switch in the settings page's Agent preferences section
-  (`localStorage["neo_studio_agent_stage"]` / `localStorage["neo_studio_agent_preview"]`, never the six
+  and the whole transcript with it. Results lay out directly in the panel's timeline: the sampling animation runs on
+  the tool card, a result image fills the column width (460px height cap, letterboxed, a click opens the popup viewer
+  for the full picture) and the final answer follows below. The center stage (the enlarged preview pane beside the
+  panel) is removed — results show enlarged inside the panel itself. The sampling preview has one local switch
+  in the settings page's Agent preferences section
+  (`localStorage["neo_studio_agent_preview"]`, never the six
   `configs/agent_prefs.json` fields that reach the system prompt): with the sampling preview off, that round's
   request sends `preview_side: 0`, the backend does not read the preview tables at all, no base64 frames are
-  streamed, and neither the center stage nor the rail tool cards build an animation — flipping the switch mid-round
-  clears the animation that is running. `↑` / `↓` in the textarea walks your recent
+  streamed, and the panel's tool cards build no animation. `↑` / `↓` in the textarea walks your recent
   sends: the last 30 are kept locally (`localStorage["neo_studio_agent_history"]`, so they survive a page reload),
   `↑` starts walking when the caret sits at the very start and `↓` when it sits at the end, inside the history
   further presses keep walking, walking past the newest entry returns the draft you were typing, and `Esc` clears
@@ -195,16 +192,15 @@ Both nodes share the same layout (the Agent shows no status bar):
   backend stops the loop, kills the task in flight and releases resume, letting a loop parked on a pause checkpoint exit
   too, and the timeline lands a「⏹ 已取消 / Cancelled」row. A stream cut by navigating away or closing the page cancels
   the background loop and the task the same way, so nothing keeps polling once the page is gone.
-  The dock starts closed and the header **✨** button opens it; a sash between the page view and the
-  dock resizes it (260px floor for the dock, the page view keeps 420px), dragging it narrower than 150px closes the
-  column, double-click collapses / expands, `←`/`→` nudges it, and a key in the closed state reopens it at the
-  width it had. Open state and width live in `localStorage["neo_studio_agent_dock"]`, and closing keeps the width.
-  Drag the dock narrower than 350px and the composer's bottom row keeps only the glyphs (📎 / 🔌 / 📝 / ⚡ / ✨; a named
-  skill keeps just 🧩, and clicking it clears the pick):
+  The agent page is the panel itself: one column centered with a 1280px cap, whitespace on wider windows, results
+  and sampling animation all laid out inside the panel. The center stage and the draggable sash are removed
+  (the two old local switches `neo_studio_agent_stage` / `neo_studio_agent_split` are cleared by the page at startup).
+  Drag the panel narrower than 350px and the
+  composer's bottom row keeps only the glyphs (📎 / 🔌 / 📝 / ⚡ / ✨):
   the full label stays in the DOM as the button's `aria-label` (the main button carries it as its tooltip too),
-  the row wraps, and the dock's `overflow: hidden` no longer clips the Generate button in the bottom-right corner
+  the row wraps, and the panel's `overflow: hidden` no longer clips the Generate button in the bottom-right corner
   (`@container (max-width: 334px)` in `studio/web/agent-panel.css`, measured on the composer's inner width —
-  dock width minus its 16px padding).
+  panel width minus its 16px padding). A designated skill chip keeps only 🧩 and ✕ when narrow; clicking it clears the pick.
   The composer: on top a context bar (📍 current page · current recipe and segment count ·
   paint mode · gallery directory) that the host refreshes on page switch, recipe selection, paint-mode switch and
   opening / closing the asset-library modal. Only the selected tab's own fields are reported and travel in
@@ -274,8 +270,8 @@ Both nodes share the same layout (the Agent shows no status bar):
   warns to clear the box first — the draft is never overwritten.
   The empty composer shows the three most recent sessions by default (the same summary as 🗂: one row per run, title + date); clicking a row replays that session read-only and arms the continue bar, **View all ›** opens the full list, and deleting a session empties the list; session history is plain files under `agent_sessions/`, and the desktop service lists, reads and deletes them itself, so the list still shows with ComfyUI stopped (only `/neo_agent/run` waits for the kernel). The **＋** header button starts a new session (the timeline drops back to the empty state with the recent list, the continue bar detaches, and the next message opens a fresh session — saved history stays untouched); the **🗂** header button opens the session list (`GET /neo_agent/sessions`: one row per run, newest first, with time /
   mode / status / title / tool count); the full-page list carries its own header **✕** back to the timeline. The session title is the first sentence of the whole conversation, fixed when the session file is
-  written: the dock header carries it through the whole run (truncated when the header is too narrow, the full sentence in its tooltip), the middle stage head carries the same sentence, and the list rows and a reopened session show it — a resumed turn never replaces it, and an image-only turn takes the 「(image only)」placeholder.
-  **Open** replays that session's timeline into the dock **read-only** — your own turn's text and its attachment thumbnails are part of the replay (the stored `in` frame; sessions written before that frame get the sentence back from `input`) — a
+  written: the panel header carries it through the whole run (truncated when the header is too narrow, the full sentence in its tooltip), the list rows and a reopened session show it — a resumed turn never replaces it, and an image-only turn takes the 「(image only)」placeholder.
+  **Open** replays that session's timeline into the panel **read-only** — your own turn's text and its attachment thumbnails are part of the replay (the stored `in` frame; sessions written before that frame get the sentence back from `input`) — a
   finished loop has no task to cancel and its choice card is fully greyed out. The composer then shows a
   「↩ continue the last session」 bar: the next **✨ Generate** posts that session's `run_id` as `resume`, and the saved
   conversation goes back in after the system prompt for the LLM to continue from (resuming into plan mode works the
@@ -285,7 +281,7 @@ Both nodes share the same layout (the Agent shows no status bar):
   branch) in it, and `GET /neo_agent/sessions` carries the same pair — a zero-media `turns_exhausted` session reads that
   way in the list. The only delete the UI offers is one session at a time: the list row's delete and the replay header's delete are
 the same trash icon, confirmed before that session's file goes.
-  The dock can run that same chain: `director_plan` (split, writing `story`) → `director_save` →
+  The agent page can run that same chain: `director_plan` (split, writing `story`) → `director_save` →
   `director_keyframes` (keyframes land in the recipe's `assets/`) → echo the returned `segments` / `shared` /
   `story` back to `director_save` (records `storyboard` and the first frame of non-r2v segments) →
   `segment_run` / `director_run`; same backend as the 📖 page, see [mcp.md](mcp.md).
@@ -297,7 +293,7 @@ the same trash icon, confirmed before that session's file goes.
   a one-line title — 下一步 / 接下来 / 后续 with 选项 / 方向 / 建议 / 操作, or English Options / Choices / Next options):
   a click fills the composer and posts that sentence as the next turn, which is the same path as typing it, the picked
   group locks with a「✔ …」line, and the rows left by earlier turns stay locked while a run is in flight and come back
-  once it ends; every row spans the dock and wraps, so nothing is clipped at the 260px floor. Fewer than 2 or more than
+  once it ends; every row spans the panel and wraps, so nothing is clipped at the 260px floor. Fewer than 2 or more than
   6 numbered items, and any numbered list with no such heading (plan mode's step-by-step plan), stays plain text.
   Enhancement skills only produce a prompt through `/rs_prompts/stream_generate_prompt`.
 - **Multi-turn skills** - when a skill that declares `multi_turn` is selected, a line of small text

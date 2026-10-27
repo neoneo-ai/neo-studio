@@ -1,4 +1,4 @@
-// 右栏输入框的 @ 点名：底栏最左那颗把 @ 写进光标处，弹层汇六类候选（技能 / 主模型 / LoRA /
+// 智能体页输入框的 @ 点名：底栏最左那颗把 @ 写进光标处，弹层汇六类候选（技能 / 主模型 / LoRA /
 // 图像提示词 / 视频提示词 / 配方，候选源见 web/mention-picker.js）。选中往正文写一个
 // @category:name 的可见记号，随请求体交后端的是结构化那一份 mentions；正文里删掉记号，
 // 交后端的那一项跟着掉。提示词页的 / 走同一套工厂，不给 tokenOf 就只写下拉、正文不留记号。
@@ -54,16 +54,19 @@ function mockMentions() {
     mockRoute("/neo_mcp/tools", jsonResponse({ success: true, tools: [] }));
 }
 
+// hashchange 在 jsdom 里是宏任务：设完 hash 要等一轮事件循环，路由才把智能体页切过去
+const settle = async () => { await sleep(0); await flush(); };
+
 async function openStudio(hash) {
     mockMentions();
     window.location.hash = hash;
     await importApp();
-    await flush(40);
-    click(document.getElementById("ns-agent-toggle"));   // 右栏默认收起：栏内用例先展开
-    await flush(20);
+    await settle();
+    window.location.hash = "#/agent";   // 面板住在智能体页：进页才建得出面板
+    await settle();
 }
 
-const dock = () => document.querySelector("#ns-agent-dock");
+const dock = () => document.querySelector(".ns-agent-chat");
 const inputBox = () => dock().querySelector(".neo-agent-input");
 const runBtn = () => dock().querySelector(".neo-agent-run");
 const mentionBtn = () => dock().querySelector(".neo-agent-mention");

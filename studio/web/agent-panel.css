@@ -1,13 +1,13 @@
 /**
- * agent-panel.css — Neo Agent 面板（桌面端 Studio 页右栏）
+ * agent-panel.css — Neo Agent 面板（桌面端 Studio 智能体页）
  *
  * 颜色吃 studio/style.css 的 :root --ns-* 那组外壳值：填充主按钮是主蓝 #2f6fed，描边 / 链接 / 焦点环是
  * 浅蓝 #7aa2ff，次按钮走外壳灰底钮（#2a2a2e 底 / #444 描边），选中态是半透明蓝底 + 内描边。
  * 紧凑字号、4px 网格、1px 边框、无阴影无渐变是这一栏自己的密度，只在外壳配色里做密度。
- * 右栏唯一的宿主是 Studio 页（studio-app.js 的 createAgentPanel），不在 ComfyUI 里渲染，
+ * 面板唯一的宿主是智能体页（studio-app.js 的 createAgentPanel），不在 ComfyUI 里渲染，
  * 颜色不再回落 ComfyUI 主题变量（--bg-2 / --accent-color 那串）——回落就是把用户 ComfyUI 主题的色
- * 漏进右栏、让它和页面其它区域对不上的那条路。
- * 全部选择器收在 .neo-agent 作用域下：聊天区由 studio/style.css 的 .ns-agent-dock 提供栏子外壳
+ * 漏进面板、让它和页面其它区域对不上的那条路。
+ * 全部选择器收在 .neo-agent 作用域下：面板本体由 studio/style.css 的 .ns-agent-chat 提供面板外壳
  * （宽度 / 边框），MCP 服务面板由 .ns-mcp-section 提供设置页里的高度。
  */
 .neo-agent {
@@ -346,11 +346,11 @@
     color: var(--neo-vsc-accent);
 }
 
-/* Markdown 正文里的产物图按原尺寸铺进右栏：1536x864 直接撑出横向滚动条，一张图占满整屏。
-   限宽限高 letterbox，点击进弹出窗口看大图（见 agent-panel.js 的正文图点击） */
+/* Markdown 正文里的产物图按栏宽铺进面板：结果就是这一页的主体，限到 240px 小得看不清细节。
+   100% 宽 + 460px 限高 letterbox，点击进弹出窗口看全图（见 agent-panel.js 的正文图点击） */
 .neo-agent-answer img {
     max-width: 100%;
-    max-height: 240px;
+    max-height: 460px;
     object-fit: contain;
     background: var(--neo-vsc-bg-alt);
     border-radius: 4px;
@@ -439,7 +439,7 @@
     display: none;
 }
 
-/* 采样预览播放器（live-preview.js 的 neo-dtl-live 布局）在右栏这一档的下限高度：
+/* 采样预览播放器（live-preview.js 的 neo-dtl-live 布局）在面板这一档的下限高度：
    卡片宽度就这么点，画面按 object-fit 等比缩；reset() 写过的内联高度由 onFrame 清掉 */
 .neo-agent .neo-agent-tool-preview {
     min-height: 168px;
@@ -467,7 +467,7 @@
     opacity: 0.6;
 }
 
-/* 产物缩略图：右栏窄，缩略图整幅铺满，点击进弹出窗口看大图 / 播放（页面自己不导航） */
+/* 产物图是这一轮的主体：铺满栏宽，点击进弹出窗口看全图 / 播放（页面自己不导航） */
 .neo-agent-media {
     display: flex;
     flex-direction: column;
@@ -477,8 +477,8 @@
 .neo-agent-media img,
 .neo-agent-media video {
     width: 100%;
-    /* 铺满栏宽时竖图（1024x1536）会拉到栏宽的一点五倍高，一屏只剩这一张；限高 letterbox 后点击放大 */
-    max-height: 240px;
+    /* 铺满栏宽时竖图（1024x1536）会拉到栏宽的一点五倍高，一屏只剩这一张；460px 限高 letterbox 后点击放大 */
+    max-height: 460px;
     object-fit: contain;
     border-radius: 4px;
     cursor: zoom-in;
@@ -493,7 +493,7 @@
 
 
 /* 输入区：Cline 的口径——顶上一条只读上下文条、附件 chips、文本框、底栏一行工具，主按钮在底栏右下角；
-   整行取消只在运行中出现。8px 内缩：栏子外壳只给一条 border-left，4px 时按钮与文本框直接压在栏子边框上 */
+   整行取消只在运行中出现。8px 内缩：面板外壳只给一条 border-left，4px 时按钮与文本框直接压在面板边框上 */
 .neo-agent-composer {
     display: flex;
     flex-direction: column;
@@ -505,7 +505,7 @@
 }
 
 /* 输入卡：上下文条 / 附件图 / 取消行 / 文本框 / 底栏收进同一块圆角 field。底色吃最深那档
-   --ns-bg，比右栏 chrome 与钮底（#2a2a2e）各深一档，整排控件落在同一个坑里。焦点框全区只留一条：
+   --ns-bg，比面板 chrome 与钮底（#2a2a2e）各深一档，整排控件落在同一个坑里。焦点框全区只留一条：
    文本框拿到焦点时亮整卡描边（:has 认焦点落在文本框上，不是 :focus-within 那样任何一颗钮都亮卡），
    底栏那颗钮自己的焦点环归钮；文本框自己不画框（style.css 的 .neo-agent-input:focus-visible 已撤） */
 .neo-agent-field {
@@ -572,9 +572,9 @@
     outline: none;
 }
 
-/* 上下文条这一行：宿主交来的界面当前状态，右栏只画不解释；条上的 ✕ 只决定本轮请求带不带这份状态。
+/* 上下文条这一行：宿主交来的界面当前状态，面板只画不解释；条上的 ✕ 只决定本轮请求带不带这份状态。
    这一行的优先级低于左边的点名技能那颗：行本身透明无底（铺一层实底就是一只横条，比状态本身显眼），
-   界面状态只吃自己那点内容宽度、贴最右，栏子收窄时它最先被挤掉 */
+   界面状态只吃自己那点内容宽度、贴最右，面板收窄时它最先被挤掉 */
 .neo-agent-ctx {
     display: flex;
     align-items: center;
@@ -655,7 +655,7 @@
 }
 
 /* 输入区底栏一行：@ 点名 + 附件图 + MCP 入口 + 计划 / 执行（模式开关靠右，运行中锁）。
-   允许换行：栏子窄到放不下整排时按钮整块换到下一行，主按钮不会被裁掉 */
+   允许换行：面板窄到放不下整排时按钮整块换到下一行，主按钮不会被裁掉 */
 .neo-agent-toolbar {
     display: flex;
     align-items: center;
@@ -728,9 +728,9 @@
     outline: none;
 }
 
-/* 栏子拖到 350px 以下时底栏只留字形：四个按钮连文字要 320px 以上，卡里这一行的可用宽是 composer
+/* 面板拖到 350px 以下时底栏只留字形：四个按钮连文字要 320px 以上，卡里这一行的可用宽是 composer
    内宽（栏宽 − 16px composer 内缩）再减卡自己的 14px（6px 内缩 ×2 + 1px 描边 ×2），所以收字阈值比
-   卡出现前的 300px 高 34px。收字前主按钮会被栏子的 overflow: hidden 裁在右下角。图标 span 带尾随
+   卡出现前的 300px 高 34px。收字前主按钮会被面板的 overflow: hidden 裁在右下角。图标 span 带尾随
    空格，两段拼起来与整串标签逐字相同，收掉的只是文字那一段 */
 @container (max-width: 334px) {
     .neo-agent-toolbar .neo-agent-btn-text {
@@ -798,7 +798,7 @@
 }
 
 /* 技能 chip 悬停浮出的详情：固定定位贴着 chip 下方，不挤占上下文条那一行，
-   只告诉用户这颗本轮走哪条流程；无阴影，吃右栏的同一套边框与底色 */
+   只告诉用户这颗本轮走哪条流程；无阴影，吃面板的同一套边框与底色 */
 .neo-agent-skill-float {
     position: fixed;
     z-index: 60;
@@ -943,7 +943,7 @@
     color: var(--neo-vsc-ok);
 }
 
-/* 最终回答末尾的下一步方向：一栏一行、整行可点。右栏窄到 260px 下限靠折行装下长句子，
+/* 最终回答末尾的下一步方向：一栏一行、整行可点。面板窄到 260px 下限靠折行装下长句子，
    不截断也不溢出；已选过的那组只靠 locked 类与 disabled 表态，不留第二条可点的路 */
 .neo-agent-answer-opts {
     display: flex;
@@ -1142,7 +1142,7 @@
 }
 
 /* 会话历史（「历史」）：一次运行一行——时间 · 模式 · 首句 · 终态与工具数 · 打开 / 删除。
-   列表整页铺满右栏，打开后落回时间线本体，读回的卡片一律只读 */
+   列表整页铺满面板，打开后落回时间线本体，读回的卡片一律只读 */
 .neo-agent-history {
     flex: 1 1 auto;
     min-height: 0;
@@ -1262,7 +1262,7 @@
     color: var(--neo-vsc-fg-dim);
 }
 
-/* 上下文量级与 token 统计共用一行：右栏拖窄时换行，不截断 */
+/* 上下文量级与 token 统计共用一行：面板拖窄时换行，不截断 */
 .neo-agent-runmeta {
     display: flex;
     flex-wrap: wrap;

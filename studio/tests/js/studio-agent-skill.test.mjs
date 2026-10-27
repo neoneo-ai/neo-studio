@@ -1,4 +1,4 @@
-// 右栏智能体：没有技能下拉，主按钮在顶上（生成 / 暂停 / 继续），界面当前状态随请求体交后端；
+// 智能体页：没有技能下拉，主按钮在顶上（生成 / 暂停 / 继续），界面当前状态随请求体交后端；
 // 出图与出片一律走后端 /neo_agent/run 的 SSE 时间线，面板自己不发 /neo_image_gen/generate，
 // 也不发流式提示词请求。
 import test from "node:test";
@@ -40,18 +40,21 @@ function mountStudio() {
     mockRoute("/neo_mcp/tools", jsonResponse({ success: true, tools: [] }));
 }
 
+// hashchange 在 jsdom 里是宏任务：设完 hash 要等一轮事件循环，路由才把页面切过去
+const settle = async () => { await sleep(0); await flush(); };
+
 async function openStudio(hash, open = true) {
     window.location.hash = hash;
     await importApp();
-    await flush(40);
-    // 右栏默认收起：栏内用例先按顶栏按钮展开（技能表在展开时才拉）
+    await settle();
+    // 面板住在智能体页（技能表在进页时才拉）：先落上下文页，再进智能体页
     if (open) {
-        click(document.getElementById("ns-agent-toggle"));
-        await flush(20);
+        window.location.hash = "#/agent";
+        await settle();
     }
 }
 
-const dock = () => document.querySelector("#ns-agent-dock");
+const dock = () => document.querySelector(".ns-agent-chat");
 const ctxBar = () => dock().querySelector(".neo-agent-ctx");
 const runBtn = () => dock().querySelector(".neo-agent-run");
 const cancelBar = () => dock().querySelector(".neo-agent-cancelbar");
@@ -91,11 +94,11 @@ const FILM_RESULT = {
     media: [{ kind: "video", title: "cat_walk.mp4", url: "/view?filename=cat_walk.mp4&subfolder=NeoDirector%2Fcat_walk&type=output" }],
 };
 
-test("右栏没有技能下拉：主按钮在底栏右下角，上下文条画出宿主交来的界面状态", async () => {
+test("智能体页没有技能下拉：主按钮在底栏右下角，上下文条画出宿主交来的界面状态", async () => {
     mountStudio();
     await openStudio("#/gallery");
 
-    assert.equal(dock().querySelector(".neo-agent-composer select"), null, "右栏不该再有技能下拉");
+    assert.equal(dock().querySelector(".neo-agent-composer select"), null, "面板不该再有技能下拉");
     assert.ok(dock().querySelector(".neo-agent-skill").hidden, "没点名技能时那颗 chip 不占位");
     const toolbar = dock().querySelector(".neo-agent-toolbar");
     assert.equal(toolbar.lastElementChild, runBtn(), "主按钮应是底栏最右一个");
@@ -125,7 +128,7 @@ test("点生成：请求带界面上下文，出计划行与最终回答，面�
     assert.equal(calls[0].body.skill_id, undefined, "请求体不再带技能");
     assert.equal(calls[0].body.context.page, "gallery", "请求应带上宿主交来的当前页");
     assert.equal(calls[0].body.text, "一只橘猫", "智能体请求应带上输入文本");
-    assert.equal(streamCalls().length, 0, "右栏不该发流式提示词请求");
+    assert.equal(streamCalls().length, 0, "面板不该发流式提示词请求");
     assert.equal(dock().querySelector(".neo-agent-step").textContent, "先扩写提示词再出图", "应渲染计划行");
     assert.equal(finalRow().textContent.trim(), "已按素材库现状出图", "应渲染最终回答");
     assert.ok(meta().textContent.includes("素材库"), `回合头应写明这一轮的上下文：${meta().textContent}`);
@@ -258,7 +261,7 @@ test("点生成走后端智能体出图：工具卡 / 状态 / 产物缩略图 /
     assert.equal(calls.length, 1, "应发出一次智能体请求");
     assert.equal(calls[0].body.skill_id, undefined, "请求体不再带技能，用哪个技能由后端 LLM 定");
     assert.equal(genCalls().length, 0, "出图由后端 MCP 工具发起，面板不该自己打 /neo_image_gen/generate");
-    assert.equal(streamCalls().length, 0, "右栏不再发流式提示词请求");
+    assert.equal(streamCalls().length, 0, "面板不再发流式提示词请求");
     assert.equal(toolCard().querySelector(".neo-agent-tool-title").textContent, "generate_image", "应渲染工具卡");
     assert.ok(statusLine().textContent.includes("running 10/20"), "状态行应显示采样进度");
     const img = toolCard().querySelector("img");
@@ -328,12 +331,12 @@ test("出图与出片缩略图进弹出窗口：卡片收小、成片可播，�
     const film = cards[1].querySelector(".neo-agent-media video");
     assert.ok(img, "出图应给图片缩略");
     assert.ok(film, "出片应给视频缩略");
-    assert.ok(film.muted, "成片缩略静音：右栏不自动播声");
+    assert.ok(film.muted, "成片缩略静音：面板里不自动播声");
 
     click(img);
     await flush(10);
     assert.ok(lightbox(), "点缩略图应弹出灯箱");
-    assert.ok(lightbox().classList.contains("neo-lightbox-compact"), "右栏产物用弹出窗口形态，不铺满整扇窗口");
+    assert.ok(lightbox().classList.contains("neo-lightbox-compact"), "面板产物用弹出窗口形态，不铺满整扇窗口");
     assert.match(String(lightbox().querySelector(".neo-lightbox-media").src), /cat_0001\.png/);
     lbClose();
     await flush(10);
@@ -547,75 +550,33 @@ test("后端报错帧：时间线显示错误原文，不留缩略图，解禁�
     assert.equal(runBtn().disabled, false, "失败后应解禁生成按钮");
 });
 
-// ====== 栏子本体：默认收起、开合与宽度落盘、分隔条拖动（样式与左栏那条共用） ======
-const body = () => document.querySelector(".ns-body");
-const split = () => document.querySelector(".ns-body > .ns-director-colsplit");
+// ====== 智能体页入口：顶栏那颗星形按钮 + 首页创造区的卡（导航栏不给它留位） ======
 const toggleBtn = () => document.getElementById("ns-agent-toggle");
-const pref = () => JSON.parse(localStorage.getItem("neo_studio_agent_dock") || "{}");
-const widthVar = () => body().style.getPropertyValue("--ns-agent-w");
-const mouse = (type, x = 0) => new window.MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX: x, clientY: 0 });
-const key = (k) => split().dispatchEvent(new window.KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true }));
+const homeCardOf = (title) => [...document.querySelectorAll(".ns-home-card")]
+    .find((c) => c.querySelector(".ns-home-card-title")?.textContent === title);
 
-test("右栏默认收起：顶栏按钮开合，开合状态落盘", async () => {
+test("顶栏入口：点一下进智能体页，面板在页里且按钮高亮", async () => {
     mountStudio();
-    localStorage.removeItem("neo_studio_agent_dock");
     await openStudio("#/gallery", false);
-
-    assert.ok(dock().classList.contains("ns-hidden"), "默认不展开右栏");
-    assert.ok(!toggleBtn().classList.contains("ns-agent-toggle-on"), "收起时顶栏按钮不高亮");
-    assert.ok(split(), "右栏分隔条存在");
-    const at = (el) => [...body().children].indexOf(el);
-    assert.ok(at(split()) > at(document.getElementById("ns-view")), "分隔条在页面视图右侧");
-    assert.ok(at(split()) < at(dock()), "分隔条在栏子左侧");
+    assert.equal(toggleBtn().hidden, false, "入口按钮应可见");
+    assert.ok(!toggleBtn().classList.contains("ns-agent-toggle-on"), "不在智能体页时不高亮");
+    assert.equal(document.querySelector(".ns-agent-chat"), null, "没进页就不该建出智能体面板");
 
     click(toggleBtn());
-    assert.ok(!dock().classList.contains("ns-hidden"), "点顶栏按钮展开右栏");
-    assert.ok(toggleBtn().classList.contains("ns-agent-toggle-on"), "展开时按钮高亮");
-    assert.equal(pref().closed, false, "展开状态落盘");
-    click(toggleBtn());
-    assert.ok(dock().classList.contains("ns-hidden"), "再点一次收起整栏");
-    assert.equal(pref().closed, true, "收起状态落盘");
+    await flush(20);
+    assert.match(window.location.hash, /#\/agent/, "点入口应进智能体页");
+    assert.ok(dock(), "页里应挂着智能体面板");
+    assert.ok(toggleBtn().classList.contains("ns-agent-toggle-on"), "在智能体页时按钮应高亮");
 });
 
-test("存过展开与宽度：开局按存盘展开并回灌栏宽", async () => {
+test("首页创造区的智能体卡：点卡直达智能体页", async () => {
     mountStudio();
-    localStorage.setItem("neo_studio_agent_dock", JSON.stringify({ w: 420, closed: false }));
-    await openStudio("#/gallery", false);
-
-    assert.ok(!dock().classList.contains("ns-hidden"), "存过展开就开局展开");
-    assert.equal(widthVar(), "420px", "回灌存盘宽度");
-});
-
-test("右栏分隔条：拖动调宽落盘，拖过收起阈值关栏，方向键 / 双击展开落回原宽度", async () => {
-    mountStudio();
-    localStorage.removeItem("neo_studio_agent_dock");
-    await openStudio("#/gallery", false);
-    click(toggleBtn());
-
-    // 拖动：宽度写进内联样式并落盘（jsdom 无布局，clientWidth=0 → 钳到下限 260）
-    split().dispatchEvent(mouse("mousedown", 900));
-    assert.ok(body().classList.contains("ns-colsplit-drag"), "拖动中关掉宽度过渡");
-    window.dispatchEvent(mouse("mousemove", 700));   // 往左拖 200px
-    assert.equal(widthVar(), "260px", "拖动写入右栏宽度");
-    window.dispatchEvent(mouse("mouseup", 700));
-    assert.ok(!body().classList.contains("ns-colsplit-drag") && !split().classList.contains("ns-colsplit-drag"), "松手恢复过渡");
-    assert.equal(pref().w, 260, "宽度落盘");
-    assert.equal(pref().closed, false, "下限之上不算收起");
-
-    // 键盘微调走同一套收起阈值：jsdom 无布局（栏子 offsetWidth=0），按方向键落进阈值即收起
-    key("ArrowLeft");
-    assert.ok(body().classList.contains("ns-agent-closed"), "键盘微调过收起阈值就关掉整栏");
-    assert.equal(pref().closed, true, "收起状态落盘");
-    assert.equal(pref().w, 260, "收起不抹掉宽度");
-    key("ArrowLeft");
-    assert.ok(!body().classList.contains("ns-agent-closed"), "收起态按方向键展开");
-    assert.equal(widthVar(), "260px", "展开落回收起前那一档宽度");
-
-    split().dispatchEvent(mouse("dblclick"));
-    assert.ok(body().classList.contains("ns-agent-closed"), "双击收起整栏");
-    split().dispatchEvent(mouse("dblclick"));
-    assert.ok(!body().classList.contains("ns-agent-closed"), "再双击展开");
-    assert.equal(widthVar(), "260px", "展开仍是收起前那一档宽度");
+    await openStudio("#/home", false);
+    const card = homeCardOf("智能体");
+    assert.ok(card, "创造区应有智能体卡");
+    click(card);
+    await flush(20);
+    assert.match(window.location.hash, /#\/agent/, "点卡应进智能体页");
 });
 
 const ASK_ID = "ab".repeat(16);
@@ -715,7 +676,7 @@ test("窄栏底栏的 CSS：composer 是容器、输入卡深底、焦点框只�
     assert.match(cssText, /@container \(max-width: 334px\)\s*\{[\s\S]*?\.neo-agent-skill-name,\s*\.neo-agent-skill-del\s*\{\s*display:\s*none/,
         "窄栏里收得只剩图标：图标加 ✕ 并排就是一只没名字的按钮");
     assert.match(cssText, /\.neo-agent-skill\s*\{[^}]*flex:\s*0 0 auto/,
-        "点名那颗不许收缩：栏子一窄先没的该是右侧界面状态，技能被挤没就是优先级排反了");
+        "点名那颗不许收缩：面板一窄先没的该是右侧界面状态，技能被挤没就是优先级排反了");
     assert.match(cssText, /\.neo-agent-ctx-text\s*\{[^}]*flex:\s*0 1 auto;[^}]*margin-left:\s*auto;[^}]*text-overflow:\s*ellipsis;[^}]*white-space:\s*nowrap/,
         "界面状态只吃自己那点内容宽度、贴右、单行省略：flex:1 会把它铺满整行，压过点名的技能");
     assert.ok(!/\.neo-agent-ctx\s*\{[^}]*background:\s*var\(--neo-vsc-bg-alt\)/.test(cssText),
@@ -804,7 +765,7 @@ test("素材库目录标了 角色图：上下文带上这个标记，未标记�
     await flush(40);
     assert.equal(agentCalls()[0].body.context.gallery_path, "Cloud Presets/明朝人物");
     assert.equal(agentCalls()[0].body.context.character_dir, true,
-                 "角色图目录要带标记，右栏据此把新建配方出成全参考");
+                 "角色图目录要带标记，智能体据此把新建配方出成全参考");
     assert.ok(metaLines()[0].textContent.includes("角色图"),
               `回合头应写明这是角色图目录：${metaLines()[0].textContent}`);
 
@@ -1292,7 +1253,7 @@ test("空态默认铺最近会话：五条只铺最近三条，点一行直接�
     assert.ok(dock().querySelector(".neo-agent-recent-all"), "空态应给出「查看全部」入口");
 
     click(rows[0]);
-    await until(() => finalRow(), "点最近行应把那条会话的时间线铺回右栏");
+    await until(() => finalRow(), "点最近行应把那条会话的时间线铺回时间线");
     assert.equal(finalRow().textContent.trim(), "上一轮的回答", "应照原文铺出会话里的回答");
     assert.equal(dock().querySelector(".neo-agent-resumebar").hidden, false, "读回后应给出「接上次会话」条");
 });
@@ -1305,7 +1266,7 @@ test("「查看全部」的整页列表带栏头：铺得开也收得回时间�
 
     click(dock().querySelector(".neo-agent-recent-all"));
     await until(() => historyCloseBtn() && historyDelBtn(), "整页列表应铺出栏头关闭钮与会话行删除钮");
-    assert.equal(dock().querySelector(".neo-agent-history").hidden, false, "列表应铺在右栏");
+    assert.equal(dock().querySelector(".neo-agent-history").hidden, false, "列表应铺在面板里");
     assert.equal(dock().querySelector(".neo-agent-transcript").hidden, true, "列表铺开时时间线收起");
 
     click(historyCloseBtn());
@@ -1360,7 +1321,7 @@ test("新增会话：铺开的会话收回空态，续聊条断开，后端历�
     await until(() => recentRows().length === 2, "开局空态应铺出两条最近会话");
 
     click(recentRows()[0]);
-    await until(() => finalRow(), "点最近行应把会话铺回右栏");
+    await until(() => finalRow(), "点最近行应把会话铺回时间线");
     assert.equal(dock().querySelector(".neo-agent-resumebar").hidden, false, "读回后应挂出「接上次会话」条");
 
     click(dock().querySelector('.neo-agent-head-btn[title="新增会话"]'));
@@ -1676,7 +1637,7 @@ test("读回另一条会话与断开续聊都收回点名技能：那条会话�
     assert.ok(!skillChip().hidden, "开局点名的技能应落在上下文条上");
 
     click(recentRows()[0]);
-    await until(() => finalRow(), "点最近行应把那条会话铺回右栏");
+    await until(() => finalRow(), "点最近行应把那条会话铺回时间线");
     assert.ok(skillChip().hidden, "上一条会话点的那个不属于这一条：那颗收回");
     mockAgentStream([{ kind: "content", text: "接上了" }]);
     inputText(input, "接着改一句");

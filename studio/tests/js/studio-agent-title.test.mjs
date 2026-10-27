@@ -1,4 +1,4 @@
-// 文件说明：会话标题的四处显示 —— 钉在右栏栏头那一行（生成中一直在）、第二发不换、
+// 文件说明：会话标题的四处显示 —— 钉在栏头那一行（生成中一直在）、第二发不换、
 // 历史列表与读回的旧会话、中间舞台页眉。标题 = 整条对话的第一句话，后端落盘时定下来
 // （agent.py 的 title 字段），前端只做四处显示。
 // 同一次落盘还带用户自己那一发（in 帧）：读回旧会话时时间线里要看得见自己问过什么。
@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { resetEnv, flush, mockRoute, jsonResponse, sseResponse, click, inputText } from "./setup.mjs";
+import { resetEnv, flush, sleep, mockRoute, jsonResponse, sseResponse, click, inputText } from "./setup.mjs";
 
 const webDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../web");
 const studioBody = fs.readFileSync(path.join(webDir, "studio", "index.html"), "utf8").match(/<body>([\s\S]*?)<\/body>/)[1];
@@ -28,15 +28,18 @@ function mountStudio() {
     mockRoute("/neo_mcp/tools", jsonResponse({ success: true, tools: [] }));
 }
 
+// hashchange 在 jsdom 里是宏任务：设完 hash 要等一轮事件循环，路由才把智能体页切过去
+const settle = async () => { await sleep(0); await flush(); };
+
 async function openStudio(hash) {
     window.location.hash = hash;
     await importApp();
-    await flush(40);
-    click(document.getElementById("ns-agent-toggle"));   // 右栏默认收起
-    await flush(20);
+    await settle();
+    window.location.hash = "#/agent";   // 面板住在智能体页：进页才建得出面板
+    await settle();
 }
 
-const dock = () => document.querySelector("#ns-agent-dock");
+const dock = () => document.querySelector(".ns-agent-chat");
 const askBox = () => dock().querySelector(".neo-agent-input");
 const runBtn = () => dock().querySelector(".neo-agent-run");
 const headTitle = () => dock().querySelector(".neo-agent-head-title");
@@ -149,23 +152,4 @@ test("早于 in 帧的老会话从 input 补一句自己问的话；只给附件
     await flush(20);
     assert.equal(headTitle().textContent, "老会话第一句");
     assert.ok(askedLines().includes("老会话第一句"), `老会话也要补上自己那句：${askedLines()}`);
-});
-
-test("中间舞台页眉挂会话标题：整场生成同一句，清空回默认", async () => {
-    resetEnv();
-    const { createAgentStage } = await import("../../web/agent-stage.js");
-    const stage = createAgentStage();
-    document.body.appendChild(stage.el);
-    stage.setEnabled(true);
-    const head = () => stage.el.querySelector(".ns-agent-stage-title").textContent;
-    assert.equal(head(), "智能体");
-    stage.onFrame({ kind: "title", text: "画一只橘猫在窗台上" });
-    assert.equal(head(), "画一只橘猫在窗台上");
-    stage.onFrame({ kind: "run", run_id: "a".repeat(32) });
-    stage.onFrame({ kind: "in", text: "换成蓝色", attachments: [] });
-    stage.onFrame({ kind: "finish", text: "出好了", options: [] });
-    assert.equal(head(), "画一只橘猫在窗台上", "新一轮清场与收尾都不摘页眉上的标题");
-    stage.onFrame({ kind: "title", text: "" });
-    assert.equal(head(), "智能体");
-    stage.el.remove();
 });

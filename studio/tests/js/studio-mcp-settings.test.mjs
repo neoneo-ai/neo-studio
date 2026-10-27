@@ -1,10 +1,10 @@
-// MCP 注册表在设置页「MCP 服务」栏：tab 激活时拉注册表；右栏「生成」下面只留一个入口，点它深链 #/settings?tab=mcp。
+// MCP 注册表在设置页「MCP 服务」栏：tab 激活时拉注册表；智能体页「生成」下面只留一个入口，点它深链 #/settings?tab=mcp。
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { resetEnv, flush, mockRoute, jsonResponse, click } from "./setup.mjs";
+import { resetEnv, flush, sleep, mockRoute, jsonResponse, click } from "./setup.mjs";
 
 const webDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../web");
 const studioBody = fs.readFileSync(path.join(webDir, "studio", "index.html"), "utf8").match(/<body>([\s\S]*?)<\/body>/)[1];
@@ -30,27 +30,30 @@ function mountStudio() {
     }));
 }
 
+// hashchange 在 jsdom 里是宏任务：设完 hash 要等一轮事件循环，路由才把页面切过去
+const settle = async () => { await sleep(0); await flush(); };
+
 async function openStudio(hash) {
     window.location.hash = hash;
     await importApp();
-    await flush();
+    await settle();
 }
 
 const mcpTab = () => document.querySelector('.ns-settings-tab[data-key="mcp"]');
 const mcpSection = () => document.querySelector(".ns-mcp-section");
 
-test("右栏：输入框底栏有 MCP 入口，栏内不再有 MCP 区", async () => {
+test("智能体页：输入框底栏有 MCP 入口，栏内不再有 MCP 区", async () => {
     mountStudio();
-    await openStudio("#/gallery");
+    await openStudio("#/agent");
 
-    const dock = document.querySelector("#ns-agent-dock");
-    assert.ok(dock.querySelector(".neo-agent-chat"), "右栏应有聊天区");
-    assert.ok(!dock.querySelector(".neo-agent-mcp"), "右栏不应再有 MCP 区");
+    const chat = document.querySelector(".ns-agent-chat");
+    assert.ok(chat.querySelector(".neo-agent-chat"), "智能体页应有面板");
+    assert.ok(!chat.querySelector(".neo-agent-mcp"), "面板不应再有 MCP 区");
 
-    const entry = dock.querySelector(".neo-agent-entry");
+    const entry = chat.querySelector(".neo-agent-entry");
     assert.ok(entry, "底栏应有 MCP 入口");
     const row = entry.closest(".neo-agent-toolbar");
-    const run = dock.querySelector(".neo-agent-run");
+    const run = chat.querySelector(".neo-agent-run");
     const kids = [...row.children];
     assert.ok(kids.includes(entry) && kids.includes(run), "MCP 入口与生成按钮应在底栏同一行");
     assert.ok(kids.indexOf(entry) < kids.indexOf(run), "生成按钮应是底栏最右一个");
@@ -82,11 +85,11 @@ test("深链 #/settings?tab=mcp：进设置页直接落到 MCP 栏", async () =>
     assert.equal(mcpSection().style.display, "", "MCP 栏应可见");
 });
 
-test("右栏入口：跳到设置页并落到 MCP 栏", async () => {
+test("智能体页入口：跳到设置页并落到 MCP 栏", async () => {
     mountStudio();
-    await openStudio("#/gallery");
+    await openStudio("#/agent");
 
-    click(document.querySelector("#ns-agent-dock .neo-agent-entry"));
+    click(document.querySelector(".ns-agent-chat .neo-agent-entry"));
     await flush();
 
     assert.equal(window.location.hash, "#/settings?tab=mcp", "入口应深链到设置页 MCP 栏");
