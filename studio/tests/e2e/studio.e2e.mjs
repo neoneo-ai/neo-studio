@@ -264,7 +264,7 @@ test("Studio 绘画页：顶栏模式条 + 素材库弹窗，文生图输入卡�
         assert.ok(layout.genInComposer, "「生成」在输入卡的控件行里");
         assert.ok(layout.enhanceInMenu && !layout.enhanceInComposer, "增强收在 ⋯ 菜单里，不在输入卡默认视野（默认 = 写一句直接生成）");
         assert.ok(!layout.stageVisible, "空轮时舞台整块收起：面板底下不留一片空框");
-        assert.equal(layout.chipBtns.length, 4, "技能 / 比例 / 最长边 / 自定参数是四枚真 chip 按钮");
+        assert.equal(layout.chipBtns.length, 3, "技能与自定参数 / 比例 / 最长边是三枚真 chip 按钮");
         assert.ok(layout.chipBtns.every(([text, title]) => text.length > 0 && title.length > 0),
             "chip 有文字标签与悬停提示（说清这一枚在改什么）");
         assert.equal(layout.visibleSelects, 0, "控件行里没有浏览器下拉框：原生 select 只当状态容器");
@@ -286,7 +286,7 @@ test("Studio 绘画页：顶栏模式条 + 素材库弹窗，文生图输入卡�
         assert.ok(layout.libBtn, "顶栏有素材库入口");
         assert.ok(!layout.recipes, "绘画页不再有图片配方列表");
 
-        // 自定参数卡片：展开后贴在输入卡正上方（与输入卡一组钉底），字段是生图模型 + LoRA
+        // 技能与自定参数并成一块双栏浮层：左栏技能按家族分组，右栏是生图模型 + LoRA，贴在输入卡正上方
         const drawer = await page.evaluate(() => {
             const box = (s) => document.querySelector(s).getBoundingClientRect();
             const panelEl = document.querySelector(".ns-paint-text .neo-gallery-gm-chip-panel");
@@ -299,16 +299,24 @@ test("Studio 绘画页：顶栏模式条 + 素材库弹窗，文生图输入卡�
             const labels = [...document.querySelectorAll(".ns-paint-text .neo-gallery-gm-model-box .rs-form-label")]
                 .map(l => l.textContent.trim());
             const searchable = document.querySelectorAll(".ns-paint-text .neo-gallery-gm-model-box .rs-model-select-box").length;
+            const skills = [...document.querySelectorAll(".ns-paint-text .neo-gallery-gm-skill-item")]
+                .map(b => [b.querySelector(".neo-gallery-gm-skill-name")?.textContent.trim(),
+                           b.querySelector(".neo-gallery-gm-skill-sub")?.textContent.trim() || ""]);
+            const groups = [...document.querySelectorAll(".ns-paint-text .neo-gallery-gm-skill-group")].map(g => g.textContent.trim());
             toggle.click();
-            return { d, c, p, labels, searchable, hiddenBefore, closedAfter: getComputedStyle(panelEl).display };
+            return { d, c, p, labels, searchable, skills, groups, hiddenBefore, closedAfter: getComputedStyle(panelEl).display };
         });
-        assert.equal(drawer.hiddenBefore, "none", "自定参数默认不显示");
+        assert.equal(drawer.hiddenBefore, "none", "技能与自定参数默认不显示");
         assert.ok(drawer.d.height > 40, `点开后是一块浮层面板（高 ${Math.round(drawer.d.height)}）`);
         assert.ok(drawer.d.bottom <= drawer.c.bottom && drawer.d.top >= drawer.p.top - 1,
             "面板从 chip 上方浮出，不超出文生图面板");
-        assert.deepEqual(drawer.labels, ["生图模型", "LoRA"], "面板只露生图模型与 LoRA（Text Encoder / VAE 不露出）");
+        assert.deepEqual(drawer.labels, ["生图模型", "LoRA"], "右栏只露生图模型与 LoRA（Text Encoder / VAE 不露出）");
         assert.ok(drawer.searchable >= 1, "模型与 LoRA 用可搜索下拉壳（模型列表长，纯菜单翻不动）");
-        assert.equal(drawer.closedAfter, "none", "再点一次「自定参数」应收起");
+        assert.ok(drawer.skills.length >= 1, "左栏列出本页可吃的生图技能");
+        assert.ok(drawer.skills.every(([name]) => name.length > 0), "每行技能都叫得出名字");
+        assert.ok(drawer.groups.length === 0 || drawer.groups.length >= 2,
+            `技能只有一个家族时不写组头，多家族时每个家族一条：${JSON.stringify(drawer.groups)}`);
+        assert.equal(drawer.closedAfter, "none", "再点一次「技能与自定参数」应收起");
 
         // 矮窗口（缩小的窗口）：输入卡与显存条必须仍在视口内，页面不产生裁切
         await page.setViewportSize({ width: 1280, height: 660 });
@@ -552,10 +560,10 @@ test("Studio 绘画页：图片编辑面板进页就绪，拖放落点与「生�
         assert.ok(geo.formInFold, "编辑表单收尾在视口内");
         assert.ok(geo.modeChipDisabled, "无原图时模式 chip 先禁用（扩图 / 局部 / 删除 / 融合 / 姿势都藏在 chip 里）");
         assert.ok(geo.genInComposer, "「生成」在编辑输入卡的 chips 行里");
-        assert.equal(geo.chips.length, 4, "编辑输入卡底行 = 技能 chip + 模式 chip + 尺寸 chip + 自定参数 chip");
+        assert.equal(geo.chips.length, 3, "编辑输入卡底行 = 技能与自定参数 chip + 模式 chip + 尺寸 chip");
         assert.equal(geo.visibleSelects, 0, "编辑控件行里没有浏览器下拉框：原生 select 只当状态容器");
         assert.ok(geo.composerInFold, "输入卡整块在折叠线内");
-        assert.ok(geo.paramsInBar, "自定参数面板挂在底行 chip 上（不占输入卡上方空间）");
+        assert.ok(geo.paramsInBar, "技能与自定参数面板挂在底行 chip 上（不占输入卡上方空间）");
         assert.equal(geo.titlebar, "none", "页内面板收起标题栏（标题由上方模式条承担）");
         assert.equal(geo.overlays, 0, "不建浮层遮罩");
         assert.ok(geo.heightGap <= 2, "面板铺满宿主，不留大片空白");
@@ -599,9 +607,9 @@ test("Studio 绘画页：图片编辑面板进页就绪，拖放落点与「生�
                 taHeight: Math.round(ta.height),
             };
         });
-        assert.equal(short.panelHidden, "none", "自定参数默认不显示");
-        assert.ok(short.panelInFold, "矮窗口里自定参数展开后在折叠线内");
-        assert.ok(short.panelAboveChip, "自定参数面板从 chip 上方浮出（输入卡钉在底边，只能朝上开）");
+        assert.equal(short.panelHidden, "none", "技能与自定参数默认不显示");
+        assert.ok(short.panelInFold, "矮窗口里技能与自定参数面板展开后在折叠线内");
+        assert.ok(short.panelAboveChip, "面板从 chip 上方浮出（输入卡钉在底边，只能朝上开）");
         assert.ok(short.composerInFold, "矮窗口里输入卡整块在折叠线内（没被顶出视口）");
         assert.ok(short.barInFold, "矮窗口里底行 chips 与「生成」不被切掉");
         assert.ok(short.taHeight < 200, `矮窗口里指令框压矮（${short.taHeight}px），给预览区留位置`);

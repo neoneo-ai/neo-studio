@@ -9,9 +9,9 @@ import { getImageHeight, getThumbnailSrc, isImageFile, isAudioFile, getAudioSrc,
 import { DIRECTOR_ASPECTS } from "./director.js";
 import { openLLMSettingsModal } from "./llm-setting.js";
 import { actionToast } from "./toast.js";
-import { openSkillDetailById, listSkills, populateSkillOptions, skillDisplayName, skillAcceptsText, skillAcceptsRef } from "./skill.js";
+import { openSkillDetailById, listSkills, populateSkillOptions, skillDisplayName, skillAcceptsText, skillAcceptsRef, skillFamily } from "./skill.js";
 import { Lightbox } from "./lightbox.js";
-import { requestGeneration, watchTask, cancelTask, createModelConfigSection, listGenModels, getSkillGenConfig, getGenSettings } from "./image-gen.js";
+import { requestGeneration, watchTask, cancelTask, createModelConfigSection, listGenModels, getSkillGenConfig, getGenSettings, shortModelName, modelFamily, LORA_FAMILY_HINTS } from "./image-gen.js";
 import { requestVoiceGeneration, watchVoiceTask, cancelVoiceTask, buildVoiceRequest, VOICE_SKILL_ID } from "./voice-gen.js";
 import { invokePromptStream, createStreamOutputHandlers, randomPrompts, listPrompts, loadPrompt } from "./prompt-service.js";
 import { createQuickInputHistory } from "./quick-input-history.js";
@@ -1116,41 +1116,134 @@ function chipButton(sel, { icon: iconName, glyph = null } = {}) {
     };
 }
 
-/** chip 挂面板（自定参数）：胶囊 chip 点开才从上方浮出参数面板。收起时面板不占输入卡一行，
- *  展开即成为底行上方的一排控件；面板留在输入卡 DOM 里，chip 只控制显隐与位置 */
-function chipPanel(content, { label: labelText, icon: iconName, title = "" } = {}) {
-    const label = $el("span", { className: "neo-gallery-gm-chip-label", textContent: labelText });
-    const chip = $el("button", { className: "neo-gallery-gm-chip-btn", type: "button", title }, [
-        icon(iconName, 12),
-        label,
-        $el("span", { className: "neo-gallery-gm-chip-caret", textContent: "▾" }),
+// 家族组头显示名：家族词表词是小写英文（image-gen.js 的 LORA_FAMILY_HINTS），组头用产品名
+const SKILL_FAMILY_LABELS = { qwen: "Qwen Image", krea2: "Krea2", moss: "MOSS" };
+
+/** 技能 + 自定参数合成一枚 chip（输入条样式参考 ArtCraft 的模型菜单）：点开一个双栏浮层，
+ *  左栏技能按家族分组（组头 = 家族，副标题 = 该技能钉的主模型），右栏 = 传进来的主模型 / LoRA 控件。
+ *  技能行一律可点：点技能会走 modelCfg.load(该技能 config)，右栏主模型与 LoRA 整份被该技能自己的配置替换，
+ *  家族对撞在这一发里根本留不住；跨家族行只把「会换成哪个主模型」写在副标题上（↻ 前缀）。
+ *  真正必败的是「当前技能 + 手填的别家族主模型」，那条由 guardMainModelFamily 在填的那一刻拦。
+ *  原生 select 收在壳里只当状态容器：点技能写 value 并派发 change；切技能重放配置是程序改 value，调用方要跟着 sync() */
+function skillParamsChip(sel, paramsEl, { icon: iconName = "sparkles", getOverride } = {}) {
+    sel.hidden = true;
+    const icoSlot = $el("span", { className: "neo-gallery-gm-chip-icon" }, [icon(iconName, 12)]);
+    const label = $el("span", { className: "neo-gallery-gm-chip-label" });
+    const chip = $el("button", { className: "neo-gallery-gm-chip-btn", type: "button", title: sel.title }, [
+        icoSlot, label, $el("span", { className: "neo-gallery-gm-chip-caret", textContent: "▾" }),
     ]);
-    const menu = $el("div", { className: "rs-runtime-menu neo-gallery-gm-chip-menu neo-gallery-gm-chip-panel" }, [content]);
-    const wrap = $el("span", { className: "neo-gallery-gm-chip-wrap" }, [chip, menu]);
+    const skillsCol = $el("div", { className: "neo-gallery-gm-skills-col" });
+    const panel = $el("div", {
+        className: "rs-runtime-menu neo-gallery-gm-chip-menu neo-gallery-gm-chip-panel neo-gallery-gm-skills-panel",
+    }, [skillsCol, $el("div", { className: "neo-gallery-gm-params-col" }, [paramsEl])]);
+    // 双栏样式自带 display:grid，盖过 .rs-runtime-menu 基座的 display:none：收起态由这里钉住
+    panel.style.display = "none";
+    const wrap = $el("span", { className: "neo-gallery-gm-chip-wrap" }, [chip, panel, sel]);
     let open = false;
+    // 组序 = 家族词表序，词表认不出的技能落「其他」排最后
+    const famOrder = (fam) => (fam ? LORA_FAMILY_HINTS.indexOf(fam) : 99);
+
+    /** 左栏整列重建（技能十几行，开面板与 sync 时各一次） */
+    const renderSkills = () => {
+        skillsCol.textContent = "";
+        const rows = [...sel.options].map((o) => ({ o, fam: skillFamily(o.__skillMeta) }));
+        const fams = [...new Set(rows.map((r) => r.fam))].sort((a, b) => famOrder(a) - famOrder(b));
+        const modelFam = modelFamily((getOverride ? getOverride() : {}).model || "");
+        for (const fam of fams) {
+            if (fams.length > 1) {
+                skillsCol.appendChild($el("div", {
+                    className: "neo-gallery-gm-skill-group",
+                    textContent: SKILL_FAMILY_LABELS[fam] || t("其他"),
+                }));
+            }
+            // fam: rowFam —— 内层不能再绑 fam，filter 回调认的是外层组循环那个 fam
+            for (const { o, fam: rowFam } of rows.filter((r) => r.fam === fam)) {
+                const item = $el("button", {
+                    className: "neo-gallery-gm-menu-item neo-gallery-gm-skill-item"
+                        + (o.value === sel.value ? " neo-gallery-gm-menu-on" : ""),
+                    type: "button",
+                });
+                item.appendChild($el("span", { className: "neo-gallery-gm-skill-name", textContent: o.textContent }));
+                const model = ((o.__skillMeta || {}).gen_config || {}).model || "";
+                const cross = !!modelFam && !!rowFam && rowFam !== modelFam;
+                if (model) {
+                    // 跨家族行的副标题带 ↻：点它是「换成这个技能钉的主模型」，不是「配不上」
+                    item.appendChild($el("span", {
+                        className: "neo-gallery-gm-skill-sub",
+                        textContent: (cross ? "↻ " : "") + shortModelName(model),
+                    }));
+                }
+                if (cross) {
+                    item.title = tf("{a} 家族的技能：选中会改用该技能自带的主模型（当前主模型 / LoRA 覆盖会被替换）", {
+                        a: SKILL_FAMILY_LABELS[rowFam] || rowFam,
+                    });
+                }
+                item.addEventListener("click", () => {
+                    close();
+                    sel.value = o.value;
+                    sel.dispatchEvent(new Event("change", { bubbles: true }));
+                });
+                skillsCol.appendChild(item);
+            }
+        }
+    };
     const close = () => {
         if (!open) return;
         open = false;
-        menu.style.display = "none";
+        panel.style.display = "none";
         chip.classList.remove("neo-gallery-gm-chip-open");
+    };
+    // chip 说出当前生效值：技能名，有覆盖时带上主模型短名与 LoRA 条数
+    const sync = () => {
+        const ov = (getOverride ? getOverride() : {}) || {};
+        const loras = ov.loras || [];
+        const parts = [sel.options[sel.selectedIndex]?.textContent || ""];
+        if (ov.model) parts.push(shortModelName(ov.model));
+        if (loras.length) parts.push(tf("LoRA ×{n}", { n: loras.length }));
+        label.textContent = parts.filter(Boolean).join(" · ");
+        chip.classList.toggle("on", !!(ov.model || loras.length));
+        if (open) renderSkills();
     };
     chip.addEventListener("click", (e) => {
         e.stopPropagation();
         if (open) { close(); return; }
-        menu.style.display = "block";
+        renderSkills();
+        panel.style.display = "grid";   // 双栏靠这里钉住：.rs-runtime-menu 基座在 gallery.css 之后加载，样式表分不出胜负
         open = true;
         chip.classList.add("neo-gallery-gm-chip-open");
         const r = chip.getBoundingClientRect();
-        menu.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - menu.offsetWidth - 8))}px`;
-        const above = r.top - menu.offsetHeight - 6;
-        menu.style.top = `${above > 8 ? above : r.bottom + 6}px`;
+        panel.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - panel.offsetWidth - 8))}px`;
+        const above = r.top - panel.offsetHeight - 6;
+        panel.style.top = `${above > 8 ? above : r.bottom + 6}px`;
     });
+    sel.addEventListener("change", sync);
+    sync();
     return {
-        el: wrap, chip, close,
-        setLabel: (v) => { label.textContent = v; },
+        el: wrap, chip, sync, close,
         isOpen: () => open,
         closeOnOutside: (target) => { if (open && !wrap.contains(target)) close(); },
     };
+}
+
+/** 手填主模型与当前技能家族对撞就收回这一选（两块生图输入卡共用）：家族不同的 conditioning 维度
+ *  对不上，这一发在后端是必败的生成（MCP 生成校验 tool_generate_image 同一口径）。
+ *  切技能不经过这里：技能自带配置由 modelCfg.load() 整份写入，家族天然一致。
+ *  收回后落回空值 = 「自动」，也就是该技能 config 里钉的那个主模型；combo 的 .value setter 会同步
+ *  输入框文本，界面不会停在被拒的那个名字上 */
+function guardMainModelFamily(modelCfg, skillSel) {
+    modelCfg.modelSelect.addEventListener("change", () => {
+        const fam = skillFamily(skillSel.options[skillSel.selectedIndex]?.__skillMeta);
+        const pickedFam = modelFamily(modelCfg.modelSelect.value);
+        if (!fam || !pickedFam || fam === pickedFam) return;
+        modelCfg.modelSelect.value = "";
+        actionToast({
+            severity: "info",
+            summary: t("主模型与技能家族不同"),
+            detail: tf("{a} 家族的技能配不上 {b} 家族的主模型：家族不同的 conditioning 维度对不上，这一发必败。主模型留空 = 跟随该技能自带的主模型；要用这一家族的主模型就换技能", {
+                a: SKILL_FAMILY_LABELS[fam] || fam, b: SKILL_FAMILY_LABELS[pickedFam] || pickedFam,
+            }),
+        });
+    });
 }
 
 // 绘画页进页就把两块面板铺好（常驻），入口再点只做模式切换：重建面板会把用户写了一半的
@@ -1196,8 +1289,21 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
     // 技能下拉：只列吃参考图的 image_gen 技能（必须带图的编辑类 + Qwen 2.1 这类两栖类）；
     // 纯文生图技能挂上原图也会被模板丢掉，不在本页列出。默认 Qwen Image 2.1。
     // 下拉收进输入卡的技能 chip：胶囊按钮 + 向上菜单，与文生图输入条同一枚控件
-    const skillSel = $el("select", { className: "neo-recipes-sort neo-gallery-gm-chip-select", title: t("编辑技能：只列吃参考图的生图技能（编辑类 + 两栖类）") });
-    const skillChip = chipButton(skillSel, { icon: "pencil" });
+    const skillSel = $el("select", { className: "neo-recipes-sort neo-gallery-gm-chip-select neo-gallery-gm-skill-sel", title: t("技能与自定参数：只列吃参考图的生图技能；主模型 / LoRA 留空 = 跟随该技能配置与全局生图设置") });
+    // 自定参数（同「生成素材」弹窗）：与技能同一枚 chip，点开从上方浮出双栏面板（左技能 / 右主模型 + LoRA），
+    // 收起时不占输入卡空间。宽高比 / 最长边不在这里露出：编辑出图尺寸跟原图走（「目标分辨率」chip），比例覆盖在这条路上不生效。
+    const editModelCfg = createModelConfigSection();
+    for (const row of editModelCfg.el.querySelectorAll(".rs-gen-adv-row")) row.remove();
+    const editModelBox = $el("div", { className: "neo-gallery-edit-model-box" });
+    editModelBox.appendChild(editModelCfg.el);
+    const skillChip = skillParamsChip(skillSel, editModelBox, {
+        icon: "pencil",
+        getOverride: () => editModelCfg.collect(),
+    });
+    // 换主模型 / 加 LoRA 后 chip 标签跟上（技能名 + 覆盖态）
+    const syncEditParamsChip = () => skillChip.sync();
+    editModelBox.addEventListener("change", syncEditParamsChip);
+    guardMainModelFamily(editModelCfg, skillSel);
     let _genSkills = [];
     (async () => {
         try {
@@ -1206,6 +1312,7 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
             _genSkills = (Array.isArray(skills) ? skills : []).filter(s => s.category === "image_gen" && s.gen_image && skillAcceptsRef(s));
             _genSkills.forEach(s => {
                 const opt = $el("option", { value: s.id, textContent: skillDisplayName(s) });
+                opt.__skillMeta = s;   // 家族与主模型副标题取这份元数据（populateSkillOptions 同一约定）
                 if (s.id === QWEN_IMAGE_SKILL_ID) opt.selected = true;
                 skillSel.appendChild(opt);
             });
@@ -1217,22 +1324,6 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
         }
         skillChip.sync();   // 下拉整份重建过：chip 标签跟着新选中项
     })();
-    // 自定参数（同「生成素材」弹窗）：chip 点开才从上方浮出主模型 / LoRA 面板，收起时不占输入卡空间。
-    // 宽高比 / 最长边不在这里露出：编辑出图尺寸跟原图走（「目标分辨率」chip），比例覆盖在这条路上不生效。
-    const editModelCfg = createModelConfigSection();
-    for (const row of editModelCfg.el.querySelectorAll(".rs-gen-adv-row")) row.remove();
-    const editModelBox = $el("div", { className: "neo-gallery-edit-model-box" });
-    editModelBox.appendChild(editModelCfg.el);
-    const editParamsChip = chipPanel(editModelBox, {
-        label: t("自定参数"), icon: "gear",
-        title: t("本次临时换主模型 / LoRA：留空 = 跟随该技能配置与全局生图设置"),
-    });
-    // chip 说出当前生效值：选了模型就显示模型名，只加了 LoRA 就显示条数，全空 = 跟随配置
-    const syncEditParamsChip = () => {
-        const ov = editModelCfg.collect();
-        editParamsChip.setLabel(ov.model || (ov.loras.length ? tf("LoRA ×{n}", { n: ov.loras.length }) : t("自定参数")));
-    };
-    editModelBox.addEventListener("change", syncEditParamsChip);
     let editGenModels = null;   // 开窗拉一次模型列表，切技能重放配置时复用
     const applyEditModelCfg = async (skillId) => {
         if (!editGenModels || !skillId) return;
@@ -1633,18 +1724,17 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
         setDividerPos(0);
     };
 
-    // 输入卡（与文生图同一组贴底控件）：编辑指令框 + 底行 chip（技能 / 模式 / 出图尺寸 / 自定参数 … 生成）；
-    // 点「出图尺寸」chip 才在底行下方露出宽高输入，点「自定参数」chip 从上方浮出模型 / LoRA 面板
+    // 输入卡（与文生图同一组贴底控件）：编辑指令框 + 底行 chip（技能与自定参数 / 模式 / 出图尺寸 … 生成）；
+    // 点「出图尺寸」chip 才在底行下方露出宽高输入，点「技能」chip 从上方浮出技能 / 主模型双栏面板
     const genBtn = btn(t("生成"), start, true);
     genBtn.classList.add("neo-gallery-gm-gen-btn");
-    const composerChips = [skillChip, modeChip, editParamsChip];
+    const composerChips = [skillChip, modeChip];
     const composer = $el("div", { className: "neo-gallery-gm-composer" }, [
         promptInput,
         $el("div", { className: "neo-gallery-gm-composer-bar neo-gallery-gm-chips" }, [
             skillChip.el,
             modeChip.el,
             sizeChip,
-            editParamsChip.el,
             $el("div", { className: "neo-gallery-gm-composer-gap" }),
             genBtn,
         ]),
@@ -2728,8 +2818,21 @@ export function openGenMaterialDialog(gallery, opts = null) {
 
     // 技能下拉：只列吃文字的生图技能（纯文生图 + Qwen 2.1 这类两栖类）；必须带参考图的编辑类
     // 在本页没有图可给，列出来只会出废图。记住上次选中的技能（localStorage），失效时回 Krea2 文生图
-    const skillSel = $el("select", { className: "neo-recipes-sort neo-gallery-gm-chip-select", title: t("生成技能：只列吃文字输入的生图技能（纯文生图 + 两栖类）") });
-    const skillChip = chipButton(skillSel, { icon: "sparkles" });
+    const skillSel = $el("select", { className: "neo-recipes-sort neo-gallery-gm-chip-select neo-gallery-gm-skill-sel", title: t("技能与自定参数：只列吃文字输入的生图技能；主模型 / LoRA 留空 = 跟随该技能配置与全局生图设置") });
+    // 自定参数（本次临时选主模型 / LoRA，类似节点上接模型，空值 = 跟随全局生图设置）：
+    // 与技能同一枚 chip，点开从上方浮出双栏面板；Text Encoder / VAE 很少变，弹窗里不露出（共享组件保留行，这里裁掉）
+    const modelCfg = createModelConfigSection();
+    for (const row of modelCfg.el.querySelectorAll(".rs-gen-adv-row")) row.remove();
+    const modelBox = $el("div", { className: "neo-gallery-gm-model-box" });
+    modelBox.appendChild(modelCfg.el);
+    const skillChip = skillParamsChip(skillSel, modelBox, {
+        icon: "sparkles",
+        getOverride: () => modelCfg.collect(),
+    });
+    // 换主模型 / 加 LoRA 后 chip 标签跟上（技能名 + 覆盖态）
+    const syncParamsChip = () => skillChip.sync();
+    modelBox.addEventListener("change", syncParamsChip);
+    guardMainModelFamily(modelCfg, skillSel);
     let rememberedSkill = "";
 
     try { rememberedSkill = localStorage.getItem(GM_LAST_SKILL_KEY) || ""; } catch {}
@@ -2740,7 +2843,11 @@ export function openGenMaterialDialog(gallery, opts = null) {
             const skills = await res.json();
             const genSkills = (Array.isArray(skills) ? skills : []).filter(s => s.gen_image && skillAcceptsText(s));
             skillSel.textContent = "";
-            genSkills.forEach(s => skillSel.appendChild($el("option", { value: s.id, textContent: skillDisplayName(s) })));
+            genSkills.forEach(s => {
+                const opt = $el("option", { value: s.id, textContent: skillDisplayName(s) });
+                opt.__skillMeta = s;   // 家族与主模型副标题取这份元数据（populateSkillOptions 同一约定）
+                skillSel.appendChild(opt);
+            });
             const ids = genSkills.map(s => s.id);
             if (preferId && ids.includes(preferId)) skillSel.value = preferId;
             else if (rememberedSkill && ids.includes(rememberedSkill)) skillSel.value = rememberedSkill;
@@ -2778,12 +2885,6 @@ export function openGenMaterialDialog(gallery, opts = null) {
         try { localStorage.setItem(GM_ENHANCE_SKILL_KEY, enhanceSel.value); } catch {}
     });
 
-    // 自定参数：本次临时选主模型 / LoRA / 比例 / 最长边（类似节点上接模型），空值 = 跟随全局生图设置；
-    // Text Encoder / VAE 很少变，弹窗里不露出（共享组件保留行，这里裁掉）
-    const modelCfg = createModelConfigSection();
-    for (const row of modelCfg.el.querySelectorAll(".rs-gen-adv-row")) row.remove();
-    const modelBox = $el("div", { className: "neo-gallery-gm-model-box" });
-    modelBox.appendChild(modelCfg.el);
     // 宽高比 / 最长边：本次临时覆盖（空值 = 跟随技能配置 / 全局设置），同行紧凑布局
     // 宽高比选项与导演编辑页同源（DIRECTOR_ASPECTS）：值保持纯比例，显示带中文备注
     const GM_RATIO_OPTIONS = DIRECTOR_ASPECTS.map(([label]) => [label.split(" ")[0], t(label)]);
@@ -2892,17 +2993,6 @@ export function openGenMaterialDialog(gallery, opts = null) {
             // 同上：静默保持「自动」
         }
     })();
-    // 自定参数：chip 点开才从上方浮出主模型 / LoRA 面板，收起时不占输入卡一行
-    const paramsChip = chipPanel(modelBox, {
-        label: t("自定参数"), icon: "gear",
-        title: t("本次临时换主模型 / LoRA：留空 = 跟随该技能配置与全局生图设置"),
-    });
-    const syncParamsChip = () => {
-        const ov = modelCfg.collect();
-        paramsChip.setLabel(ov.model || (ov.loras.length ? tf("LoRA ×{n}", { n: ov.loras.length }) : t("自定参数")));
-    };
-    modelBox.addEventListener("change", syncParamsChip);
-
     // 增强：可选步骤，整条收进 ⋯ 菜单，默认视野只剩输入框 = 写一句直接生成。
     // 复用节点 agent 逻辑（所选增强 skill 的 skill.md 作系统提示词 + 按需读引用文件）直调
     // /rs_prompts/stream_generate_prompt，扩写结果流式写回同一个输入框；原句先进历史，↑ 可召回
@@ -3222,17 +3312,16 @@ export function openGenMaterialDialog(gallery, opts = null) {
         else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) start();
     };
 
-    // 输入卡：一个提示词框 + 底行（技能 / 宽高比 / 最长边 / 自定参数 … ⋯ 生成）；
+    // 输入卡：一个提示词框 + 底行（技能与自定参数 / 宽高比 / 最长边 … ⋯ 生成）；
     // 结果区在上（预览/成品原位替换），生成后在卡下补操作按钮
     const genBtn = btn(t("生成"), start, true);
     genBtn.classList.add("neo-gallery-gm-gen-btn");
-    const composerChips = [skillChip, ratioChip, edgeChip, paramsChip];
+    const composerChips = [skillChip, ratioChip, edgeChip];
     const composer = $el("div", { className: "neo-gallery-gm-composer" }, [
         quickInput,
         $el("div", { className: "neo-gallery-gm-composer-bar neo-gallery-gm-chips" }, [
             skillChip.el,
             sizeRow,
-            paramsChip.el,
             $el("div", { className: "neo-gallery-gm-composer-gap" }),
             moreBtn,
             genBtn,

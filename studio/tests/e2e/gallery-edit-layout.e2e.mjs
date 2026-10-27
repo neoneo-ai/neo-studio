@@ -21,6 +21,12 @@ const resultLayer = (w, h) =>
 
 // 与 gallery-gen.js 的 openImageEditDialog 同构（图片在上、操作在下）
 // 非扩图：结果层/分割线挂在图片盒内；扩图：三者都进画布（结果的坐标随画布一起缩放）
+/** 技能与自定参数面板左栏的一行：技能名 + 它钉的主模型短名（与 skillParamsChip 的 renderSkills 同构） */
+const pickItem = (name, main, on = false) =>
+    `<button class="neo-gallery-gm-menu-item neo-gallery-gm-skill-item${on ? " neo-gallery-gm-menu-on" : ""}">`
+    + `<span class="neo-gallery-gm-skill-name">${name}</span>`
+    + (main ? `<span class="neo-gallery-gm-skill-sub">${main}</span>` : "") + `</button>`;
+
 const modalInner = (w, h, outpaint) => `
     <div class="neo-gallery-edit-compare">
       <div>
@@ -41,9 +47,27 @@ const modalInner = (w, h, outpaint) => `
         <textarea class="neo-gallery-story-input neo-gallery-gm-quick-input" rows="4"></textarea>
         <div class="neo-gallery-gm-composer-bar neo-gallery-gm-chips">
           <span class="neo-gallery-gm-chip-wrap">
-            <button class="neo-gallery-gm-chip-btn"><span class="neo-gallery-gm-chip-icon"></span><span class="neo-gallery-gm-chip-label">Qwen Image 2.1</span><span class="neo-gallery-gm-chip-caret">▾</span></button>
-            <div class="rs-runtime-menu neo-gallery-gm-chip-menu"></div>
-            <select class="neo-recipes-sort neo-gallery-gm-chip-select" hidden><option>Qwen Image 2.1</option></select>
+            <button id="e2e-skill-chip" class="neo-gallery-gm-chip-btn"><span class="neo-gallery-gm-chip-icon"></span><span class="neo-gallery-gm-chip-label">Qwen Image 2.1</span><span class="neo-gallery-gm-chip-caret">▾</span></button>
+            <div id="e2e-skill-panel" class="rs-runtime-menu neo-gallery-gm-chip-menu neo-gallery-gm-chip-panel neo-gallery-gm-skills-panel" style="display:none">
+              <div class="neo-gallery-gm-skills-col">
+                <div class="neo-gallery-gm-skill-group">Qwen Image</div>
+                ${pickItem("Qwen Image 2.1", "qwen_image_2.1_int8_convrot", true)}
+                ${pickItem("Qwen 换脸", "qwen_image_2.1_int8_convrot")}
+                ${pickItem("Qwen 局部重绘", "qwen_image_2.1_int8_convrot")}
+                ${pickItem("Qwen 扩图", "qwen_image_2.1_int8_convrot")}
+                <div class="neo-gallery-gm-skill-group">Krea2</div>
+                ${pickItem("Krea2文生图", "krea2")}
+                ${pickItem("Krea2 风格", "krea2")}
+                <div class="neo-gallery-gm-skill-group">MOSS</div>
+                ${pickItem("MOSS 文生图", "MOSS-TS-MOSS-Image-SFT-0715-Stage2_int8_convrot")}
+                ${pickItem("MOSS 图编辑", "MOSS-TS-MOSS-Image-SFT-0715-Stage2_int8_convrot")}
+                <div class="neo-gallery-gm-skill-group">其他</div>
+                ${pickItem("我的自定技能", "")}
+                ${pickItem("同事给的技能包", "")}
+              </div>
+              <div class="neo-gallery-gm-params-col"><div class="neo-gallery-edit-model-box"><div class="rs-gen-model-section"></div></div></div>
+            </div>
+            <select class="neo-recipes-sort neo-gallery-gm-chip-select neo-gallery-gm-skill-sel" hidden><option>Qwen Image 2.1</option></select>
           </span>
           <span class="neo-gallery-gm-chip-wrap">
             <button id="e2e-mode-chip" class="neo-gallery-gm-chip-btn"><span class="neo-gallery-gm-chip-icon"></span><span class="neo-gallery-gm-chip-label">常规</span><span class="neo-gallery-gm-chip-caret">▾</span></button>
@@ -51,10 +75,6 @@ const modalInner = (w, h, outpaint) => `
             <select class="neo-recipes-sort neo-gallery-gm-chip-select neo-gallery-edit-mode-select" hidden><option>常规</option></select>
           </span>
           <button class="neo-gallery-gm-chip-btn neo-gallery-edit-size-chip"><span class="neo-gallery-gm-chip-icon"></span><span class="neo-gallery-gm-chip-label"><label class="neo-director-field-label">目标分辨率</label><span class="neo-gallery-edit-size-chip-val">${w}×${h}</span></span></button>
-          <span class="neo-gallery-gm-chip-wrap">
-            <button id="e2e-params-chip" class="neo-gallery-gm-chip-btn"><span class="neo-gallery-gm-chip-icon"></span><span class="neo-gallery-gm-chip-label">自定参数</span><span class="neo-gallery-gm-chip-caret">▾</span></button>
-            <div id="e2e-params-panel" class="rs-runtime-menu neo-gallery-gm-chip-menu neo-gallery-gm-chip-panel"><div class="neo-gallery-edit-model-box"><div class="rs-gen-model-section"></div></div></div>
-          </span>
           <div class="neo-gallery-gm-composer-gap"></div>
           <button class="neo-gallery-story-btn neo-gallery-story-btn-primary neo-gallery-gm-gen-btn">生成</button>
         </div>
@@ -107,8 +127,8 @@ const measure = () => {
         bar: box(".neo-gallery-gm-composer-bar"),
         genBtn: box(".neo-gallery-gm-composer-bar .neo-gallery-gm-gen-btn"),
         modeChip: box("#e2e-mode-chip"),
-        paramsChip: box("#e2e-params-chip"),
-        paramsPanel: box("#e2e-params-panel"),
+        skillChip: box("#e2e-skill-chip"),
+        skillPanel: box("#e2e-skill-panel"),
         status: box(".neo-gallery-cs-status"),
         actions: box(".neo-gallery-story-actions"),
         wrap: box(".neo-gallery-edit-compare-imgwrap"),
@@ -175,10 +195,10 @@ for (const [w, h] of [[848, 1280], [1280, 848], [4000, 1000], [300, 200]]) {
         assert.ok(m.genBtn.y + m.genBtn.h <= m.actions.y + 1, `输入卡应在操作区上方：gen=${JSON.stringify(m.genBtn)} actions=${JSON.stringify(m.actions)}`);
         assert.ok(m.prompt.y + m.prompt.h <= m.genBtn.y + 1, `指令框应在输入卡底行上方：prompt=${JSON.stringify(m.prompt)} gen=${JSON.stringify(m.genBtn)}`);
         assert.ok(within(m.genBtn, m.composer), `「生成」应在输入卡内：gen=${JSON.stringify(m.genBtn)} composer=${JSON.stringify(m.composer)}`);
-        // 底行 = 技能 / 模式 / 尺寸 / 自定参数 chip + 生成；自定参数默认不显示（点 chip 才浮出）
+        // 底行 = 技能与自定参数 chip + 模式 chip + 尺寸 chip + 生成；双栏面板默认不显示（点 chip 才浮出）
         assert.ok(within(m.modeChip, m.bar), `模式 chip 应在输入卡底行内：mode=${JSON.stringify(m.modeChip)} bar=${JSON.stringify(m.bar)}`);
-        assert.ok(within(m.paramsChip, m.bar), `自定参数 chip 应在输入卡底行内：params=${JSON.stringify(m.paramsChip)} bar=${JSON.stringify(m.bar)}`);
-        assert.ok(m.paramsPanel.w === 0 && m.paramsPanel.h === 0, `自定参数面板默认不显示：panel=${JSON.stringify(m.paramsPanel)}`);
+        assert.ok(within(m.skillChip, m.bar), `技能 chip 应在输入卡底行内：skill=${JSON.stringify(m.skillChip)} bar=${JSON.stringify(m.bar)}`);
+        assert.ok(m.skillPanel.w === 0 && m.skillPanel.h === 0, `技能与自定参数面板默认不显示：panel=${JSON.stringify(m.skillPanel)}`);
 
         // 窗帘：分割线在 50% 时，结果图层仍是整幅原图盒（只被裁切，不缩放/不位移）
         assert.equal(reveal.computed, "inset(0px 0px 0px 50%)", "窗帘应由 clip-path 裁掉左侧 50%");
@@ -250,9 +270,57 @@ test("图片编辑输入卡：短窗口里底行 chips 与「生成」都在视�
     await page.close();
 
     assert.ok(m.bar.y + m.bar.h <= 621, `输入卡底行应落在视口内：bar=${JSON.stringify(m.bar)}`);
-    assert.ok(within(m.modeChip, m.bar) && within(m.paramsChip, m.bar) && within(m.genBtn, m.bar),
-        `chip 与「生成」都应在底行内：mode=${JSON.stringify(m.modeChip)} params=${JSON.stringify(m.paramsChip)} gen=${JSON.stringify(m.genBtn)}`);
+    assert.ok(within(m.modeChip, m.bar) && within(m.skillChip, m.bar) && within(m.genBtn, m.bar),
+        `chip 与「生成」都应在底行内：mode=${JSON.stringify(m.modeChip)} skill=${JSON.stringify(m.skillChip)} gen=${JSON.stringify(m.genBtn)}`);
     assert.ok(Math.abs(m.modeChip.y - m.genBtn.y) < m.genBtn.h,
         `短窗口底行不换行（换行的 chip 会被折叠线切掉）：mode=${JSON.stringify(m.modeChip)} gen=${JSON.stringify(m.genBtn)}`);
     assert.ok(m.prompt.h <= Math.round(620 * 0.42) + 1, `指令框高度应被视口压住：prompt=${JSON.stringify(m.prompt)}`);
 });
+
+// 技能与自定参数并成双栏面板后，宽度与高度都是新的溢出风险：贴底 chip 向上开，
+// 壳的 max-height（62vh + 绘画页按面板上沿收）要在三种窗口里都装得下，溢出留给左栏滚
+const openPanel = () => {
+    const chip = document.querySelector("#e2e-skill-chip");
+    const panel = document.querySelector("#e2e-skill-panel");
+    panel.style.display = "grid";   // 与 gallery-gen.js 开面板时写死的值一致（双栏不吃样式表顺序）
+    // 与 gallery-gen.js 开面板同一套定位：钉在 chip 上方，右缘不出屏
+    const r = chip.getBoundingClientRect();
+    panel.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - panel.offsetWidth - 8))}px`;
+    const above = r.top - panel.offsetHeight - 6;
+    panel.style.top = `${above > 8 ? above : r.bottom + 6}px`;
+    const box = (el) => { const b = el.getBoundingClientRect(); return { x: Math.round(b.x), y: Math.round(b.y), w: Math.round(b.width), h: Math.round(b.height) }; };
+    const col = panel.querySelector(".neo-gallery-gm-skills-col");
+    const out = {
+        panel: box(panel), chip: box(chip), col: box(col),
+        colScrollH: col.scrollHeight,
+        cols: panel.children.length,
+        colOverflow: getComputedStyle(col).overflowY,
+        colMax: getComputedStyle(col).maxHeight, panelMax: getComputedStyle(panel).maxHeight,
+        vw: window.innerWidth, vh: window.innerHeight,
+    };
+    panel.style.display = "none";
+    return out;
+};
+
+for (const [vw, vh] of [[1600, 950], [1280, 620], [1280, 520]]) {
+    test(`图片编辑输入卡：${vw}×${vh} 里技能与自定参数双栏面板整块落在视口内`, { timeout: 60000 }, async () => {
+        const page = await browser.newPage({ viewport: { width: vw, height: vh } });
+        await page.setContent(embeddedHtml(vw, 848));
+        await page.waitForTimeout(80);
+        const p = await page.evaluate(openPanel);
+        await page.close();
+
+        assert.equal(p.cols, 2, `面板是左右两栏（技能 / 主模型 + LoRA）：${vw}×${vh}`);
+        assert.ok(p.panel.h > 60, `面板是一块有内容的浮层：panel=${JSON.stringify(p.panel)}`);
+        assert.ok(p.panel.y >= 0 && p.panel.y + p.panel.h <= p.vh + 1,
+            `面板纵向落在视口内：panel=${JSON.stringify(p.panel)} vh=${p.vh}`);
+        assert.ok(p.panel.x >= 0 && p.panel.x + p.panel.w <= p.vw + 1,
+            `面板横向落在视口内：panel=${JSON.stringify(p.panel)} vw=${p.vw}`);
+        assert.ok(p.panel.y + p.panel.h <= p.chip.y + 1, `面板从 chip 上方浮出：panel=${JSON.stringify(p.panel)} chip=${JSON.stringify(p.chip)}`);
+        assert.equal(p.colMax, p.panelMax, "左栏跟着壳的高度收（max-height:inherit），溢出不留给面板");
+        assert.ok(p.col.h <= p.colScrollH + 1, `技能列不溢出自己的盒子：col=${JSON.stringify(p.col)} scrollH=${p.colScrollH}`);
+        if (p.colScrollH > p.col.h) {
+            assert.equal(p.colOverflow, "auto", `技能多于壳高时由左栏出滚动条（面板整块不再长高）：${vw}×${vh}`);
+        }
+    });
+}

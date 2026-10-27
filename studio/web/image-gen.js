@@ -460,8 +460,9 @@ export function videoVideoVaeSuggestion(files) {
 }
 
 // 主模型家族名称线索（与后端 _MODEL_HINTS 同风格）：命中则同家族条目在模型下拉里靠前；
-// 智能体偏好的「主模型家族」档位与焦点链预填取的都是这条线索在模型路径里的命中
-export const LORA_FAMILY_HINTS = ["qwen", "krea2"];
+// 智能体偏好的「主模型家族」档位与焦点链预填取的都是这条线索在模型路径里的命中。
+// moss = MOSS 生图线（主模型 MOSS\moss_image_*，TE/VAE 走 flux2 那套），与 qwen / krea2 权重互不通用
+export const LORA_FAMILY_HINTS = ["qwen", "krea2", "moss"];
 
 /** 模型路径 / 模型名 → 家族名：命中家族线索的那一个，没命中回空。 */
 export function modelFamily(name) {
@@ -664,7 +665,8 @@ export function createModelConfigSection() {
         };
     }
 
-    return { el: section, load, collect };
+    // modelSelect 供调用方拦「主模型家族与技能家族对撞」（gallery-gen.js 的 guardMainModelFamily）
+    return { el: section, load, collect, modelSelect: modelCtl.select };
 }
 
 /** 生图张数 / 长边尺寸 / 默认比例 / 输出前缀 控件区（每技能生图设置用）。 */

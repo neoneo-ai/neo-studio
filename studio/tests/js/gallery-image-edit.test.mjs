@@ -115,7 +115,7 @@ test("图片编辑弹窗：chips 收在输入卡底行，自定参数默认不�
     assert.ok(composer, "图片编辑应有输入卡");
     assert.ok(composer.contains(overlay.querySelector(".neo-gallery-story-input")), "编辑指令框应在输入卡内");
     const bar = composer.querySelector(".neo-gallery-gm-composer-bar");
-    assert.equal(bar.querySelectorAll(".neo-gallery-gm-chip-btn").length, 4, "底行 = 技能 chip + 模式 chip + 尺寸 chip + 自定参数 chip");
+    assert.equal(bar.querySelectorAll(".neo-gallery-gm-chip-btn").length, 3, "底行 = 技能与自定参数 chip + 模式 chip + 尺寸 chip");
     assert.ok(bar.contains(bar.querySelector(".neo-gallery-gm-gen-btn")), "「生成」应在输入卡底行");
     assert.equal(composer.querySelector(".neo-gallery-gm-chip-label").textContent, "Qwen Image 2.1", "技能 chip 显示生效技能");
 
@@ -125,7 +125,7 @@ test("图片编辑弹窗：chips 收在输入卡底行，自定参数默认不�
     const items = () => [...skillChip.parentElement.querySelectorAll(".neo-gallery-gm-menu-item")];
     assert.deepEqual(items().map((b) => b.textContent), ["Qwen Image 2.1", "Qwen Image 2.1 扩图"], "chip 菜单应列出吃参考图的技能");
     click(items()[1]);
-    assert.equal(overlay.querySelector(".neo-gallery-gm-chip-select").value, "qwen_image_21_outpaint", "点菜单项应切技能");
+    assert.equal(overlay.querySelector(".neo-gallery-gm-skill-sel").value, "qwen_image_21_outpaint", "点菜单项应切技能");
     await sleep(20);
     assert.equal(skillChip.querySelector(".neo-gallery-gm-chip-label").textContent, "Qwen Image 2.1 扩图", "切技能后 chip 标签跟着变");
 
@@ -142,13 +142,14 @@ test("图片编辑弹窗：chips 收在输入卡底行，自定参数默认不�
     click(overlay.querySelector(".neo-gallery-edit-size-chip"));
     assert.notEqual(sizeEditor.style.display, "none", "点尺寸 chip 应露出宽高输入");
 
-    // 自定参数默认不显示：面板挂在 chip 的浮层里，点 chip 才浮出、再点收起
-    const paramsWrap = bar.querySelectorAll(".neo-gallery-gm-chip-wrap")[2];
+    // 技能与自定参数同一枚 chip：面板默认不显示，点 chip 才浮出、再点收起
+    const paramsWrap = bar.querySelector(".neo-gallery-gm-chip-wrap");
     const panel = paramsWrap.querySelector(".neo-gallery-gm-chip-panel");
-    assert.ok(panel?.contains(overlay.querySelector(".neo-gallery-edit-model-box")), "自定参数面板应挂在自定参数 chip 上");
-    assert.ok(panel.classList.contains("rs-runtime-menu"), "自定参数面板是浮层，收起态由 CSS 关掉");
+    assert.ok(panel?.contains(overlay.querySelector(".neo-gallery-edit-model-box")), "自定参数控件应在技能 chip 的双栏面板右栏");
+    assert.ok(panel?.querySelector(".neo-gallery-gm-skills-col"), "技能清单应在同一块面板的左栏");
+    assert.ok(panel.classList.contains("rs-runtime-menu"), "面板是浮层，收起态由 CSS 关掉");
     click(paramsWrap.querySelector(".neo-gallery-gm-chip-btn"));
-    assert.equal(panel.style.display, "block", "点自定参数 chip 应浮出面板");
+    assert.equal(panel.style.display, "grid", "点技能 chip 应浮出双栏面板");
     click(paramsWrap.querySelector(".neo-gallery-gm-chip-btn"));
     assert.equal(panel.style.display, "none", "再点一次应收起");
     const visibleSelects = [...bar.querySelectorAll("select")].filter((s) => !s.hidden && !panel.contains(s));
@@ -181,7 +182,7 @@ test("图片编辑弹窗：扩图开关切到扩图技能，拖框后请求带 o
 
     // 打开扩图（模式 chip 选「扩图」）：技能切到扩图技能、控制行出现、宽高输入隐藏、提示词预填默认触发词
     await pickEdit(overlay, "扩图");
-    const skillSel = overlay.querySelector(".neo-gallery-gm-chip-select");
+    const skillSel = overlay.querySelector(".neo-gallery-gm-skill-sel");
     assert.equal(skillSel.value, "qwen_image_21_outpaint", "开扩图应切到扩图技能");
     assert.notEqual(overlay.querySelector(".neo-gallery-edit-outpaint-row").style.display, "none");
     assert.equal(overlay.querySelector("#img-edit-width").style.display, "none");
@@ -985,14 +986,14 @@ test("图片编辑面板：自定参数——默认收起不带覆盖，选主�
     const overlay = document.querySelector(".neo-gallery-edit-modal-overlay");
     await sleep(50);   // 模型列表 → 当前技能 config
 
-    // 默认不显示：自定参数面板挂在 chip 的浮层里，点开才有；面板里只有生图模型 + LoRA（TE / VAE 行裁掉）
+    // 默认不显示：技能与自定参数的双栏面板挂在 chip 的浮层里，点开才有；右栏只有生图模型 + LoRA（TE / VAE 行裁掉）
     const bar = overlay.querySelector(".neo-gallery-gm-composer-bar");
-    const paramsChip = bar.querySelectorAll(".neo-gallery-gm-chip-wrap")[2];
+    const paramsChip = bar.querySelector(".neo-gallery-gm-chip-wrap");
     const panel = paramsChip.querySelector(".neo-gallery-gm-chip-panel");
     const box = overlay.querySelector(".neo-gallery-edit-model-box");
-    assert.ok(panel?.contains(box), "自定参数面板应在自定参数 chip 的浮层里");
+    assert.ok(panel?.contains(box), "自定参数控件应在技能 chip 的浮层右栏");
     click(paramsChip.querySelector(".neo-gallery-gm-chip-btn"));
-    assert.equal(panel.style.display, "block", "点 chip 应浮出自定参数面板");
+    assert.equal(panel.style.display, "grid", "点 chip 应浮出技能与自定参数双栏面板");
     assert.equal(box.querySelectorAll(".rs-gen-adv-row").length, 0, "只露出生图模型与 LoRA（无 TE / VAE 行）");
     const modelSel = box.querySelector(".rs-gen-model-section select");
     assert.equal(modelSel.value, "", "默认「自动」（跟随技能配置与全局设置），不预填");

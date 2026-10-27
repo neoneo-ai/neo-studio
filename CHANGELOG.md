@@ -4,6 +4,32 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **The composer drops to three chips: 技能 and 自定参数 are one chip, and MOSS joins the family list.** Four chips
+  in one row (技能 / 宽高比 / 最长边 / 自定参数, plus 模式 in the edit panel) kept the skill picker and the model
+  override as two unrelated controls, so nothing connected a skill's pinned main model with the model used to
+  override it: pick a Qwen skill, set a MOSS model in 自定参数, and the LoRAs and weight shapes do not match - the
+  failure only shows up in the backend. `skillParamsChip()` in `studio/web/gallery-gen.js` merges them into one chip
+  that opens a two-column panel above the composer: the left column lists the page's skills grouped by main-model
+  family (`Qwen Image` / `Krea2` / `MOSS`, unrecognized skills under 「其他」) with that skill's own pinned model as a
+  subtitle (`shortModelName(row.gen_config.model)`), the right column keeps the existing 生图模型 / LoRA controls and
+  the native selects as state containers. Skills of a foreign family stay selectable: picking a skill replays that
+  skill's own pinned model, which replaces the override, so the cross-family pair cannot survive the click - the row
+  only carries a `↻` before its subtitle and a hover title naming the model the selection switches to. The pair that
+  does survive a click is the one the backend rejects: a manual main model whose family differs from the current
+  skill's family is taken back to 「自动」 by `guardMainModelFamily()` with a toast naming the conditioning match, the
+  same rule `studio/mcp_server.py` enforces on the payload, whose `MODEL_FAMILY_HINTS["image"]` gains `moss` to match
+  `LORA_FAMILY_HINTS` in `studio/web/image-gen.js`; an empty main model follows each skill's own config, so the
+  default state blocks nothing. `skillFamily()` in
+  `studio/web/skill/skill-core.js` reads the family from the skill id and display name first and the pinned model
+  path second, and returns empty when neither matches: grouping never guesses a family. The panel writes
+  `display: grid` inline when opening, because the `.rs-runtime-menu` base in `prompts.css` loads after
+  `gallery.css` and no stylesheet order wins that contest. Covered by `studio/tests/js/gallery-gen-material.test.mjs`
+  (family groups, subtitles, auto state, cross-family rows selectable with the `↻` mark, the manual family clash
+  taken back to auto with a toast, chip label), `gallery-image-edit.test.mjs` and
+  `studio-paint.test.mjs` (three chips, panel ownership), and the layout e2e
+  `studio/tests/e2e/gallery-edit-layout.e2e.mjs` (panel fully inside the viewport at 1600×950 / 1280×620 / 1280×520,
+  skills column scrolling on its own).
+
 - **The paint composer docks to the bottom, and its controls become real chips.** The text-to-image panel filled the
   top of the column with the input card and left a strip of empty page under it, and its 技能 / 宽高比 / 最长边
   controls were native `<select>` dropdowns wrapped in a rounded shell — a 240px clip of a model path

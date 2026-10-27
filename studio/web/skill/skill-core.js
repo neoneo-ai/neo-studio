@@ -14,7 +14,7 @@ import { mkEl } from "../dom-utils.js";
 import { applyWorkflowParams, injectRuntimeLoras, canvasLayout } from "../workflow-graph.js";
 import { getNodeDef } from "../js/core/object-info.js";
 import { showToast } from "../gallery-utils.js";
-import { copySkillFiles, videoSuggestion, videoAudioVaeSuggestion, videoVideoVaeSuggestion } from "../image-gen.js";
+import { copySkillFiles, videoSuggestion, videoAudioVaeSuggestion, videoVideoVaeSuggestion, modelFamily } from "../image-gen.js";
 import { t, getLang } from "../js/core/i18n.js";
 
 // 共享 UI 小工具：技能增删改广播、弹窗内指针事件拦截（不冒泡到画布选节点）
@@ -492,6 +492,14 @@ function skillAcceptsRef(s) {
     return m === "edit" || m === "t2i_edit";
 }
 
+/** 技能家族：家族词先取技能 id / 中文名，两处都没有词就看它钉的主模型路径（技能表 gen_config.model）。
+ *  词表认不出回空串 —— 家族只用来分组与跨家族置灰，不在这里猜家族（MCP 的 skill_family_index 同一口径）。 */
+function skillFamily(s) {
+    if (!s) return "";
+    return modelFamily(`${s.id || ""} ${s.cn_name || s.name || ""}`)
+        || modelFamily(((s.gen_config || {}).model) || "");
+}
+
 /** 把 skills 元数据填充进原生 <select>：按 category 分组为 optgroup，option 带 (需图) 徽标与 multiTurn 标记；
  *  includeHidden=true 时连 hidden 分类（task / video_gen）一起列出 */
 function populateSkillOptions(selectEl, skills, { includeHidden = false } = {}) {
@@ -575,6 +583,6 @@ export {
     makeSkillLog, SKILL_WRITE_LOG_LIMIT, WRITE_SOURCE_LABELS, WRITE_API_ONLY_NOTE,
     writeLog, buildWriteChangesTable,
     escapeHtml, renderMarkdown, CATEGORY_LABELS, populateSkillOptions, skillDisplayName,
-    skillImageMode, skillAcceptsText, skillAcceptsRef,
+    skillImageMode, skillAcceptsText, skillAcceptsRef, skillFamily,
     SKILL_CHANGED_EVENT, dispatchSkillChanged, copySkillAsCustom
 };

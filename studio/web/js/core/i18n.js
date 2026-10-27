@@ -1417,7 +1417,8 @@ const EN = {
     "看大图": "View full size",
     "灯箱查看原图、编辑结果与参考图": "View the original, the edit result and the references in the lightbox",
     "原图（缩放到 {cw}×{ch}）/ 编辑结果（拖拽分割线对比）": "Original (scaled to {cw}×{ch}) / edit result (drag the divider to compare)",
-    "生成技能：只列吃文字输入的生图技能（纯文生图 + 两栖类）": "Generation skill: only skills that take text input (text-to-image and hybrid ones)",
+    "技能与自定参数：只列吃文字输入的生图技能；主模型 / LoRA 留空 = 跟随该技能配置与全局生图设置":
+        "Skill & custom parameters: only skills that take text input; empty main model / LoRAs = follow this skill's config and the global image-gen settings",
     "写一句提示词，点生成": "Write a prompt, then hit Generate",
     "结果图出现在输入卡上方，产物保存到 Output 目录（NeoAgent/<日期>）": "Results appear above the composer; images save to Output (NeoAgent/<date>)",
     "目标 {w}×{h}": "Target {w}×{h}",
@@ -1463,9 +1464,13 @@ const EN = {
     "保存中…": "Saving…",
     "已保存为新技能「{name}」": "Saved as new skill “{name}”",
     "保存为新技能失败": "Failed to save as new skill",
-    "自定参数 ▸": "Custom parameters ▸",
-    "自定参数 {arrow}": "Custom parameters {arrow}",
-    "本次临时换主模型 / LoRA：留空 = 跟随该技能配置与全局生图设置": "Temporarily switch the main model / LoRAs for this run: empty = follow this skill's config and the global image-gen settings",
+    "技能与自定参数：只列吃参考图的生图技能；主模型 / LoRA 留空 = 跟随该技能配置与全局生图设置":
+        "Skill & custom parameters: only skills that take a reference image; empty main model / LoRAs = follow this skill's config and the global image-gen settings",
+    "{a} 家族的技能：选中会改用该技能自带的主模型（当前主模型 / LoRA 覆盖会被替换）":
+        "{a} skill: picking it switches to the main model this skill pins (your current main model / LoRA override is replaced)",
+    "主模型与技能家族不同": "Main model and skill families differ",
+    "{a} 家族的技能配不上 {b} 家族的主模型：家族不同的 conditioning 维度对不上，这一发必败。主模型留空 = 跟随该技能自带的主模型；要用这一家族的主模型就换技能":
+        "{a} skills do not run on a {b} main model - the conditioning dimensions differ by family, so this run is doomed. Leave the main model empty to follow this skill's own main model; to use a {b} main model, switch skills",
     "增强": "Enhance",
     "扩图": "Outpaint",
     "局部": "Local",

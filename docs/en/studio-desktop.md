@@ -160,12 +160,12 @@ narrow-window rules are shared with the director page (one modal instance, one g
 - "🖼️ Generate asset" in the gallery page header and "🖼️ Edit image" in an image card's menu both switch to the
   paint page in Studio and open in the matching panel; "🖼️ New image recipe" opens a blank text-to-image panel.
   The paint page no longer carries an image-recipe list.
-- The text-to-image panel is a composer ("one prompt box + a bottom chip row: skill / ratio /
-  max side / ad-hoc parameters … `⋯` Generate") docked at the bottom of the page (the input bar follows the
-  ArtCraft promptbox): one line in the box is enough to generate, the three chips are pill buttons with menus
-  that float open upward (the native selects stay inside as state containers and never show), fill-random /
-  prompt enhance / runtime random / preset list live in the `⋯` menu, and the ad-hoc parameter drawer opens
-  above the composer. The panel fills the column height: progress and finished images stack from the top above
+- The text-to-image panel is a composer ("one prompt box + a bottom chip row: skill+params / ratio /
+  max side … `⋯` Generate") docked at the bottom of the page (the input bar follows the
+  ArtCraft promptbox): one line in the box is enough to generate, the three chips are pill buttons with panels
+  that float open upward (the native selects stay inside as state containers and never show; the skill list and
+  the main model / LoRA controls share the one two-column panel of the first chip), fill-random /
+  prompt enhance / runtime random / preset list live in the `⋯` menu. The panel fills the column height: progress and finished images stack from the top above
   the composer, and idle leaves one start hint in the result area ("Write a prompt, then hit Generate") with no
   empty canvas (control list: [gallery.md](gallery.md), "Generate assets" and "Image editing").
 

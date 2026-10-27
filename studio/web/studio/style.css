@@ -438,10 +438,13 @@ body {
 }
 .ns-paint-panel .neo-gallery-story-titlebar { display: none; }
 /* 两块面板共用一组贴底控件：结果与进度在上方按内容排、成品从上往下长，
-   输入卡靠 margin-top:auto 收到面板底边；自定参数是输入卡里的 chip 点开的一层浮层，
+   输入卡靠 margin-top:auto 收到面板底边；技能与自定参数是输入卡里的 chip 点开的一层双栏浮层，
    收起时不占面板一行，展开时从 chip 上方浮出 */
 .ns-paint-panel .neo-gallery-gm-composer { flex: none; margin-top: auto; }
 .ns-paint-panel .neo-gallery-story-actions { flex: none; }
+/* 浮层从贴底 chip 往上开，头顶到面板上沿就是它的全部空间：62vh 的壳在矮窗口里够不到顶，
+   按面板上方的实际空间收，超了让左栏技能自己滚 */
+.ns-paint-panel .neo-gallery-gm-chip-panel { max-height: min(62vh, calc(100vh - 240px)); }
 /* 输入框高度跟着窗口走：600px 高的窗口里 150px 固定值会吃掉四分之一屏，预览图没地方落 */
 .ns-paint-panel .neo-gallery-gm-quick-input { min-height: clamp(88px, 16vh, 150px); }
 /* 文生图结果区：只按内容长高，超出一屏自己滚，不把输入卡顶出底边 */

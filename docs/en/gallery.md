@@ -74,19 +74,28 @@ background overlay, title bar drags the window) that creates new assets from a p
   what is in the box is the final prompt (no enhancement by default). The placeholder rotates through usage
   hints as it gains focus; ↑/↓ is a terminal-style history (persisted in localStorage, newest first) that
   remembers the prompts actually generated and the original descriptions before an enhance.
-- **Skill / ratio / max-side chips** - the chip row at the bottom of the composer is three pill chips (icon + the
-  value in effect + ▾); a click floats an option menu open upward (the composer is docked at the bottom of the
-  page, so menus open upward): the skill is Krea2 text-to-image by default, other text-taking skills are
-  selectable and the last choice is remembered; ratio and max side sitting on 「默认」 follow the skill config and
+- **Skill+params / ratio / max-side chips** - the chip row at the bottom of the composer is three pill chips
+  (icon + the value in effect + ▾); a click floats a panel open upward (the composer is docked at the bottom of
+  the page, so panels open upward). The first chip is skill and ad-hoc parameters merged into one two-column
+  panel: the left column lists the text-taking image-gen skills, grouped by main-model family (`Qwen Image` /
+  `Krea2` / `MOSS`; skills whose family the hint list does not recognize fall under 「其他」), and each row prints
+  the short name of the main model that skill pins in a small second line; the right column holds 生图模型 and
+  LoRA in the searchable combobox shell (a chip menu cannot scroll a long model list). The skill is Krea2
+  text-to-image by default, other text-taking skills are selectable and the last choice is remembered; an empty
+  main model / LoRA set follows this skill's `config.json` and the global image-gen settings (an override for
+  this run only, like wiring a model onto a node - nothing is written back). A skill from a foreign family stays
+  selectable: picking a skill replays that skill's own pinned main model, which replaces the override, so the
+  mismatch cannot survive the click - the row is marked with a `↻` in front of its subtitle and a hover title
+  saying the selection switches to that skill's own model. The one combination that cannot work, a skill family
+  against a manually picked main model of another family, is taken back on the spot: the main model falls to
+  「自动」 (the backend picks it from the skill's template) and a toast says why - the same rule the MCP
+  generation validation enforces; with the main model on 「自动」 no family conflict is possible.
+  Closed, the panel takes no room in the composer; its height
+  is capped (62vh, clamped further by the paint panel's top edge) and the skill column scrolls on its own, so it
+  never pushes the result area off screen. The chip label prints the skill name, plus the short model name and
+  `LoRA ×n` when an override is set. Ratio and max side sitting on 「默认」 follow the skill config and
   the global image-gen settings, and the chip prints the followed value itself (`16:9 (宽屏)` / `2048`), the ratio
   chip's little rectangle shaped by the ratio in effect; picking another value overrides it for this run only.
-- **Ad-hoc parameters** - the collapse row at the end of the chip row: it opens as a compact card docked directly
-  on top of the composer, the two of them pinned together at the panel bottom (with the drawer closed the composer
-  docks alone, and opening it never leaves a strip of empty page in between). Inside the card 生图模型 and LoRA
-  sit in an auto-fit two-column grid (side by side in a wide panel, one column when the panel is narrow), the
-  controls keep the searchable combobox shell (a chip menu cannot scroll a long model list), and the card height is
-  capped with internal scroll so it never pushes the result area off screen. It picks the main model / LoRA for this
-  run (like wiring a model onto a node; nothing is written back to the global settings).
   A combination you like can be saved as a new skill in one click: the name is generated from the main
   model name + LoRA name, the ratio and longest side are stored as chosen in the chips, and every other
   setting follows the current skill.
@@ -243,8 +252,8 @@ embedded ComfyUI workflow).
 Opens a small window (image on top, controls below: source / result comparison area + one chip row +
 an editing instruction box). Qwen Image 2.1 is used by default and any other `image_gen` skill can be
 selected; the source is passed as a reference image, you type the editing instruction and click "Generate".
-The chip row is the edit-skill chip + five mode icons (outpaint / masked / click-to-remove / blend / pose,
-the mode name lives in the hover title) + the "ad-hoc parameters" collapse row.
+The chip row is the skill+params chip + the mode chip (regular / outpaint / masked / click-to-remove / blend /
+pose folded into one chip's menu, each mode explained on its menu item) + the target-resolution chip + "Generate".
 
 
 - **Curtain comparison** - the result appears in place as a "source | result" curtain comparison (the divider
@@ -264,11 +273,14 @@ the mode name lives in the hover title) + the "ad-hoc parameters" collapse row.
   left side becomes that scaled image too, since pixel-by-pixel alignment needs both sides the same size.
   Size details: [image-gen.md](image-gen.md). Outpaint / masked / click-to-remove size themselves, so the
   chip collapses in those modes.
-- **Custom parameters** - the collapse row at the end of the chip row: expand it to pick the main
-  model / LoRAs for this run (the same control as in the generate-material popup, nothing is written back to the
-  global settings). Empty = follow this skill's `config.json` and the global image-gen settings, and switching
-  skills or the outpaint / masked / pose switches replays that skill's model and LoRAs. Aspect ratio and max
-  side are not exposed here - the output size follows the source (the size chip above).
+- **Skill + ad-hoc parameters chip** - the same chip and the same two-column panel as in the generate-material
+  popup (skills on the left, main model + LoRA on the right, skills grouped by main-model family): an empty
+  main model / LoRA set follows this skill's `config.json` and the global image-gen settings, and switching
+  skills or the outpaint / masked / pose switches replays that skill's model and LoRAs. Skills from a foreign
+  family stay selectable, marked with a `↻` meaning "this picks that skill's own main model" - a manually set
+  model of another family is replaced by that replay, and picking it directly is taken back to 「自动」.
+  Aspect ratio and max side are not exposed here - the output size follows the source
+  (the size chip above).
 
 - **Outpaint** - a switch in the window that automatically selects the "Qwen Image 2.1 outpaint" skill. Drag a
   box on the source to set the padding on the four sides (dragging the box pans it and redistributes the

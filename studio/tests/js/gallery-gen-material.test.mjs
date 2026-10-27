@@ -162,7 +162,7 @@ test("生成素材弹窗：自定参数——自动不带覆盖，选主模型+L
     const modelBox = overlay.querySelector(".neo-gallery-gm-model-box");
     assert.ok(chipPanel.contains(modelBox), "自定参数面板应挂在自定参数 chip 上");
     click(paramsChip);
-    assert.equal(chipPanel.style.display, "block", "点 chip 应浮出自定参数面板");
+    assert.equal(chipPanel.style.display, "grid", "点 chip 应浮出技能与自定参数双栏面板");
     const modelSel = overlay.querySelector(".rs-gen-model-section select");
     assert.ok(modelSel, "展开后应有主模型下拉");
     assert.equal(overlay.querySelectorAll(".rs-gen-model-section .rs-gen-adv-row").length, 0, "覆盖区只露出生图模型与 LoRA（无 TE / VAE 行）");
@@ -277,7 +277,7 @@ test("生成素材弹窗：比例 chip 是按钮 + 向上菜单，选中项写�
 
     const composer = overlay.querySelector(".neo-gallery-gm-composer");
     const [skillChip, ratioChip, edgeChip] = composer.querySelectorAll(".neo-gallery-gm-chip-btn");
-    assert.equal(composer.querySelectorAll(".neo-gallery-gm-chip-btn").length, 4, "技能 / 比例 / 最长边 / 自定参数是四枚真 chip");
+    assert.equal(composer.querySelectorAll(".neo-gallery-gm-chip-btn").length, 3, "技能与自定参数合并后 = 技能 / 比例 / 最长边三枚真 chip");
     const paramsPanel = composer.querySelector(".neo-gallery-gm-chip-panel");
     assert.equal([...composer.querySelectorAll("select")].filter(s => !s.hidden && !paramsPanel.contains(s)).length, 0, "控件行里没有露出来的下拉框");
     assert.equal(skillChip.querySelector(".neo-gallery-gm-chip-label").textContent, "Krea2文生图", "技能 chip 显示技能名");
@@ -444,7 +444,7 @@ test("生成素材弹窗：选中的主模型+LoRA 组合可保存为新技能",
 
     mockRoute("/rs_prompts/skills", () => jsonResponse([
         { id: "image_gen", cn_name: "Krea2文生图", category: "image_gen", gen_image: true },
-        { id: "qwen_image_21_style_a", cn_name: "qwen_image_2.1-style_a", category: "image_gen", gen_image: true },
+        { id: "krea2_style_a", cn_name: "krea2-style_a", category: "image_gen", gen_image: true },
     ]));
     mockRoute("/neo_image_gen/models", () => jsonResponse({
         diffusion_models: ["krea2.safetensors", "qwen_image_2.1.safetensors"],
@@ -454,8 +454,8 @@ test("生成素材弹窗：选中的主模型+LoRA 组合可保存为新技能",
     }));
     // 新技能的 config.json = 保存的组合（与后端 save_combo_as_skill 一致），切到它后覆盖区重放不变
     mockRoute("/neo_image_gen/skill_config", (b, call) => jsonResponse(
-        call.query.get("skill_id") === "qwen_image_21_style_a"
-            ? { model: "qwen_image_2.1.safetensors", loras: [{ name: "style_a.safetensors", strength: 0.8 }] }
+        call.query.get("skill_id") === "krea2_style_a"
+            ? { model: "krea2.safetensors", loras: [{ name: "style_a.safetensors", strength: 0.8 }] }
             : {}));
 
     openGenMaterialDialog({ showDirectoryStructure: () => {} });
@@ -469,7 +469,7 @@ test("生成素材弹窗：选中的主模型+LoRA 组合可保存为新技能",
 
     // 选主模型 + LoRA → 保存按钮出现
     const modelSel = overlay.querySelector(".rs-gen-model-section select");
-    changeValue(modelSel, "qwen_image_2.1.safetensors");
+    changeValue(modelSel, "krea2.safetensors");
     click(overlay.querySelector(".rs-gen-lora-add"));
     const loraRow = overlay.querySelector(".rs-gen-lora-row");
     changeValue(loraRow.querySelector("select"), "style_a.safetensors");
@@ -484,21 +484,21 @@ test("生成素材弹窗：选中的主模型+LoRA 组合可保存为新技能",
 
     // 点保存 → 请求体带当前技能 + 主模型 + LoRA + 比例 + 最长边；成功后下拉选中新技能并记住
     mockRoute("/neo_image_gen/save_combo_skill", () => jsonResponse({
-        success: true, id: "qwen_image_21_style_a", name: "qwen_image_2.1-style_a",
+        success: true, id: "krea2_style_a", name: "krea2-style_a",
     }));
     click(saveBtn);
     await sleep(50);
     const saveReq = fetchLog.filter(c => c.path === "/neo_image_gen/save_combo_skill").at(-1);
     assert.equal(saveReq?.body.skill_id, "image_gen", "请求体应带当前技能");
-    assert.equal(saveReq?.body.model, "qwen_image_2.1.safetensors");
+    assert.equal(saveReq?.body.model, "krea2.safetensors");
     assert.deepEqual(saveReq?.body.loras, [{ name: "style_a.safetensors", strength: 0.8 }]);
     assert.equal(saveReq?.body.ratio, "16:9", "请求体应带所选宽高比");
     assert.equal(saveReq?.body.edge, "2048", "请求体应带所选最长边");
 
     const skillSel = overlay.querySelector(".neo-recipes-sort");
-    assert.ok([...skillSel.options].some(o => o.value === "qwen_image_21_style_a"), "新技能应出现在下拉里");
-    assert.equal(skillSel.value, "qwen_image_21_style_a", "保存后下拉应选中新技能");
-    assert.equal(localStorage.getItem("neo.gallery.gen_material.skill"), "qwen_image_21_style_a", "新技能应被记住");
+    assert.ok([...skillSel.options].some(o => o.value === "krea2_style_a"), "新技能应出现在下拉里");
+    assert.equal(skillSel.value, "krea2_style_a", "保存后下拉应选中新技能");
+    assert.equal(localStorage.getItem("neo.gallery.gen_material.skill"), "krea2_style_a", "新技能应被记住");
 
     // 失败：后端 400 → 错误 toast，下拉选择不变
     mockRoute("/neo_image_gen/save_combo_skill", () => jsonResponse({ error: "请先选择主模型或 LoRA" }, 400));
@@ -506,7 +506,7 @@ test("生成素材弹窗：选中的主模型+LoRA 组合可保存为新技能",
     await sleep(50);
     const toasts = [...document.querySelectorAll(".neo-at")].map(t => t.textContent).join("|");
     assert.match(toasts, /保存为新技能失败/, "失败应弹错误 toast");
-    assert.equal(skillSel.value, "qwen_image_21_style_a", "失败时下拉选择不变");
+    assert.equal(skillSel.value, "krea2_style_a", "失败时下拉选择不变");
 });
 
 test("生成素材弹窗：增强是 ⋯ 里的可选动作，支持选择增强 skill", async () => {
@@ -989,6 +989,87 @@ test("⋯ 菜单：Esc 先关菜单，再关预设浮层", async () => {
     assert.equal(presetOverlay.style.display, "flex", "菜单条目应打开预设列表");
     keydown(document, "Escape");
     assert.equal(presetOverlay.style.display, "none", "Esc 再关预设浮层");
+    overlay.remove();
+});
+
+test("生成素材弹窗：技能与自定参数同一枚 chip——技能按家族分组，跨家族技能照选", async () => {
+    resetEnv();
+    clearRoutes();
+    localStorage.clear();
+    const { openGenMaterialDialog } = await import("../../web/gallery-gen.js");
+
+    const MOSS_MODEL = "MOSS/MOSS-TS-MOSS-Image-SFT-0715-Stage2/MOSS-TS-MOSS-Image-SFT-0715-Stage2_int8_convrot.safetensors";
+    mockRoute("/rs_prompts/skills", () => jsonResponse([
+        { id: "image_gen", cn_name: "Krea2文生图", category: "image_gen", gen_image: true, gen_config: { model: "krea2.safetensors" } },
+        { id: "qwen_t2i", cn_name: "Qwen 文生图", category: "image_gen", gen_image: true, gen_config: { model: "QwenImage2.1/qwen_image_2.1_int8_convrot.safetensors" } },
+        { id: "moss_t2i", cn_name: "MOSS 文生图", category: "image_gen", gen_image: true, gen_config: { model: MOSS_MODEL } },
+        { id: "custom_t2i", cn_name: "我的自定技能", category: "image_gen", gen_image: true },
+    ]));
+    mockRoute("/neo_image_gen/models", () => jsonResponse({
+        diffusion_models: ["krea2.safetensors", MOSS_MODEL, "QwenImage2.1/qwen_image_2.1_int8_convrot.safetensors"],
+        loras: ["style_a.safetensors"],
+    }));
+    mockRoute("/neo_image_gen/skill_config", () => jsonResponse({}));
+
+    openGenMaterialDialog({ showDirectoryStructure: () => {} });
+    const overlay = document.querySelector(".neo-gallery-gm-modal-overlay");
+    await sleep(60);   // 技能列表 + 模型列表 + 技能配置
+
+    const chip = overlay.querySelector(".neo-gallery-gm-composer-bar .neo-gallery-gm-chip-btn");
+    const panel = chip.parentElement.querySelector(".neo-gallery-gm-chip-panel");
+    const modelSel = panel.querySelector(".rs-gen-model-section select");
+    assert.equal(overlay.querySelectorAll(".neo-gallery-gm-composer-bar .neo-gallery-gm-chip-btn").length, 3,
+        "技能与自定参数并成一枚 chip 后输入卡只剩三枚");
+    assert.ok(panel.querySelector(".neo-gallery-gm-skills-col"), "面板左栏是技能清单");
+    assert.ok(panel.querySelector(".neo-gallery-gm-model-box"), "面板右栏是自定参数（主模型 / LoRA）");
+
+    click(chip);
+    assert.deepEqual([...panel.querySelectorAll(".neo-gallery-gm-skill-group")].map((g) => g.textContent),
+        ["Qwen Image", "Krea2", "MOSS", "其他"], "技能按家族分组，词表认不出的落「其他」");
+    const named = (name) => [...panel.querySelectorAll(".neo-gallery-gm-skill-item")]
+        .find((b) => b.querySelector(".neo-gallery-gm-skill-name").textContent === name);
+    assert.equal(named("MOSS 文生图").querySelector(".neo-gallery-gm-skill-sub").textContent,
+        "MOSS-TS-MOSS-Image-SFT-0715-Stage2_int8_convrot", "技能行副标题 = 该技能钉的主模型短名");
+    assert.ok(!named("我的自定技能").querySelector(".neo-gallery-gm-skill-sub"),
+        "没钉主模型的技能不编个空副标题");
+    assert.equal(panel.querySelectorAll(".neo-gallery-gm-skill-item:disabled").length, 0,
+        "主模型「自动」时没有家族可比对，一律不置灰");
+
+    // 先切到 MOSS 技能（config 为空 = 主模型自动），再覆盖成 MOSS 主模型：家族与技能一致，覆盖成立
+    click(named("MOSS 文生图"));
+    await sleep(30);
+    click(chip);
+    changeValue(modelSel, MOSS_MODEL);
+    await sleep(20);
+    assert.match(chip.querySelector(".neo-gallery-gm-chip-label").textContent,
+        /MOSS-TS-MOSS-Image-SFT-0715-Stage2_int8_convrot/, "chip 标签带上覆盖的主模型短名");
+    // 跨家族行照选（点技能会重放该技能自己的主模型），只标出「选了会换模型」
+    assert.equal(panel.querySelectorAll(".neo-gallery-gm-skill-item:disabled").length, 0,
+        "跨家族技能行不禁用：家族对撞在切技能的那一次重放里就被替换掉了");
+    assert.equal(named("Krea2文生图").querySelector(".neo-gallery-gm-skill-sub").textContent,
+        "↻ krea2", "跨家族行的副标题带 ↻，写的是这个技能自己钉的主模型");
+    assert.match(named("Krea2文生图").title, /主模型/, "说明选中会换成哪个主模型");
+    assert.equal(named("MOSS 文生图").querySelector(".neo-gallery-gm-skill-sub").textContent,
+        "MOSS-TS-MOSS-Image-SFT-0715-Stage2_int8_convrot", "同家族行不带 ↻");
+
+    // 点跨家族那行 → 切技能并收起；技能配置重放把 MOSS 覆盖换成该技能自己的（此例 config 为空 = 自动）
+    click(named("Krea2文生图"));
+    assert.equal(overlay.querySelector(".neo-gallery-gm-skill-sel").value, "image_gen", "点跨家族行应切技能");
+    assert.equal(panel.style.display, "none", "选完技能收起面板");
+    await sleep(30);
+    assert.equal(modelSel.value, "", "技能配置重放替换掉上一发的 MOSS 覆盖");
+    assert.match(chip.querySelector(".neo-gallery-gm-chip-label").textContent, /^Krea2文生图$/,
+        "覆盖清空后 chip 只报技能名");
+
+    // 真正必败的组合：当前技能家族 + 手填的别家族主模型 → 收回这一选，落回「自动」
+    changeValue(modelSel, MOSS_MODEL);
+    await sleep(10);
+    assert.equal(modelSel.value, "", "家族对撞的主模型被收回，主模型落回「自动」让后端按技能模板挑");
+    const toast = document.querySelector(".neo-at-info");
+    assert.ok(toast, "收回这一选要说明为什么");
+    assert.match(toast.querySelector(".neo-at-detail").textContent, /conditioning/, "说明家族对撞的代价");
+    assert.match(chip.querySelector(".neo-gallery-gm-chip-label").textContent, /^Krea2文生图$/,
+        "收回后 chip 不落在这个主模型上");
     overlay.remove();
 });
 

@@ -362,6 +362,42 @@
     width: min(720px, 94vw);
     max-height: 62vh;
 }
+/* 技能 + 自定参数双栏面板：左栏技能按家族分组（组头 + 该技能主模型短名），右栏主模型 / LoRA。
+   左栏定宽让技能名可读，右栏吃掉剩余（下拉仍走 .neo-gallery-gm-model-box 的 320px 上限） */
+.neo-gallery-gm-skills-panel {
+    display: grid;
+    grid-template-columns: minmax(190px, 250px) 1fr;
+    gap: 12px;
+}
+/* 技能列自己滚：短窗口里 62vh 的壳先切到技能列表，不跟着整块面板一起顶出输入卡 */
+.neo-gallery-gm-skills-col {
+    min-width: 0;
+    max-height: inherit;
+    overflow: auto;
+}
+.neo-gallery-gm-params-col {
+    min-width: 0;
+}
+.neo-gallery-gm-skill-group {
+    margin-top: 6px;
+    padding-bottom: 2px;
+    font-size: 11px;
+    color: #9aa4b2;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+.neo-gallery-gm-skill-group:first-child {
+    margin-top: 0;
+}
+.neo-gallery-gm-skill-name,
+.neo-gallery-gm-skill-sub {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+.neo-gallery-gm-skill-sub {
+    font-size: 11px;
+    color: #8b95a5;
+}
 .neo-gallery-gm-menu-on {
     color: #FF9944;
 }
@@ -384,7 +420,7 @@
     border-color: #FF6A00;
 }
 
-/* 输入卡：一个提示词框 = 生成用的提示词，底行是 技能 / 宽高比 / 最长边 / 自定参数 … ⋯ 生成 */
+/* 输入卡：一个提示词框 = 生成用的提示词，底行是 技能与自定参数 / 宽高比 / 最长边 … ⋯ 生成 */
 .neo-gallery-gm-composer {
     display: flex;
     flex-direction: column;
@@ -507,6 +543,12 @@
 .neo-gallery-gm-menu-item:disabled {
     opacity: .6;
     cursor: default;
+}
+/* 技能行与 ⋯ 菜单共用 .neo-gallery-gm-menu-item，同名特异度比书写顺序：这条必须在它之后，
+   技能名与主模型短名才分两行，不然被 display:block 拉成一行连字 */
+.neo-gallery-gm-skill-item {
+    display: grid;
+    gap: 1px;
 }
 
 
@@ -2884,7 +2926,7 @@ Accordion Section Buttons (Clear)
     cursor: zoom-in;
 }
 
-/* 下方表单区：参考图区 / 模式控制行在上，自定参数抽屉 + 输入卡贴底 */
+/* 下方表单区：参考图区 / 模式控制行在上，输入卡贴底（技能与自定参数面板是它的浮层） */
 .neo-gallery-edit-form {
     display: flex;
     flex-direction: column;

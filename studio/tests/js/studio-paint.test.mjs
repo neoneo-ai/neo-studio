@@ -120,7 +120,7 @@ test("绘画页：进页就铺好文生图面板与空图片编辑面板，入�
     assert.ok(!panel.querySelector(".neo-gallery-gm-hero"), "idle 不铺空画布占位");
     assert.ok(panel.querySelector(".neo-gallery-gm-idle"), "idle 在结果区给一句起手提示（结果区在输入卡上方）");
     const bar = panel.querySelector(".neo-gallery-gm-composer-bar");
-    assert.equal(bar.querySelectorAll(".neo-gallery-gm-chip-btn").length, 4, "技能 / 比例 / 最长边 / 自定参数是真 chip 按钮");
+    assert.equal(bar.querySelectorAll(".neo-gallery-gm-chip-btn").length, 3, "技能与自定参数 / 比例 / 最长边是真 chip 按钮");
     const gmPanel = bar.querySelector(".neo-gallery-gm-chip-panel");
     const visibleSelects = [...bar.querySelectorAll("select")].filter((s) => !s.hidden && !gmPanel.contains(s));
     assert.equal(visibleSelects.length, 0, "控件行里没有浏览器下拉框：原生 select 只当状态容器");
@@ -150,7 +150,7 @@ test("绘画页：进页就铺好文生图面板与空图片编辑面板，入�
     // 编辑控件与文生图同一组：一个输入卡 + 底行 chips（技能 / 模式 / 尺寸 / 自定参数）
     const ebar = ep.querySelector(".neo-gallery-gm-composer-bar");
     assert.ok(ebar && ebar.querySelector(".neo-gallery-gm-gen-btn"), "「生成」在编辑输入卡的 chips 行里");
-    assert.equal(ebar.querySelectorAll(".neo-gallery-gm-chip-btn").length, 4, "技能 / 模式 / 尺寸 / 自定参数是真 chip 按钮");
+    assert.equal(ebar.querySelectorAll(".neo-gallery-gm-chip-btn").length, 3, "技能与自定参数 / 模式 / 尺寸是真 chip 按钮");
     const editParamsPanel = ebar.querySelector(".neo-gallery-gm-chip-panel");
     const visibleEditSelects = [...ebar.querySelectorAll("select")].filter((s) => !s.hidden && !editParamsPanel.contains(s));
     assert.equal(visibleEditSelects.length, 0, "编辑控件行里没有浏览器下拉框");

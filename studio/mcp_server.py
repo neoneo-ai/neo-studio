@@ -296,7 +296,7 @@ MODEL_SCANS = {"image": "/neo_image_gen/models", "video": "/neo_video_gen/models
 MODEL_GROUPS = ("diffusion_models", "text_encoders", "vae", "loras")
 # 家族关键词与前端 image-gen.js 的 LORA_FAMILY_HINTS、后端 video_gen._VIDEO_MODEL_HINTS 同步；
 # 词表分叉时 near 的同目录档还在，同家族那一档会退化成原序。
-MODEL_FAMILY_HINTS = {"image": ("qwen", "krea2"), "video": ("minimax_h3", "minimaxh3", "minimax", "h3")}
+MODEL_FAMILY_HINTS = {"image": ("qwen", "krea2", "moss"), "video": ("minimax_h3", "minimaxh3", "minimax", "h3")}
 MODEL_LIMIT = 60
 
 
@@ -324,7 +324,7 @@ def skill_family_index(rows) -> dict:
 
 def model_item(name: str, families) -> dict:
     """扫描表里的一项：名字与所在目录。主模型额外带 skills —— 家族对得上的技能 id 列表，
-    空列表就是词表（只有 qwen / krea2）认不出这一家，别在这里猜家族。"""
+    空列表就是词表（qwen / krea2 / moss）认不出这一家，别在这里猜家族。"""
     item = {"name": name, "dir": model_dir(name)}
     if families is not None:
         item["skills"] = families.get(_model_family(name), [])
