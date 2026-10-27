@@ -378,6 +378,25 @@
 .neo-gallery-gm-params-col {
     min-width: 0;
 }
+/* 面板底部「完成」：跨两栏。点技能行不关面板（要在右栏看该技能钉的主模型），点它才收起 */
+.neo-gallery-gm-panel-foot {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: flex-end;
+    padding-top: 6px;
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+.neo-gallery-gm-panel-done {
+    padding: 4px 16px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #dbe6ff;
+    background: rgba(76, 154, 255, 0.22);
+    border: 1px solid rgba(122, 180, 255, 0.45);
+    border-radius: 7px;
+    cursor: pointer;
+}
+.neo-gallery-gm-panel-done:hover { background: rgba(76, 154, 255, 0.34); }
 .neo-gallery-gm-skill-group {
     margin-top: 6px;
     padding-bottom: 2px;

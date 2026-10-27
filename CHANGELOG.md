@@ -30,6 +30,16 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   `studio/tests/e2e/gallery-edit-layout.e2e.mjs` (panel fully inside the viewport at 1600×950 / 1280×620 / 1280×520,
   skills column scrolling on its own).
 
+- **The skill panel closes on 完成, and long model names read on one line.** Picking a skill closed the
+  技能与自定参数 panel, so the main model and LoRAs that skill pins only became visible after reopening the chip,
+  and the model / LoRA dropdown lists were exactly as wide as their input box - `MOSS/xxx_int8_convrot.safetensors`
+  showed as a clipped tail. A skill row click now stops propagating, the panel stays open with the right column
+  showing what the selection pins, and a 完成 footer button closes the panel; the combobox list takes
+  `listMinWidth: 520` through the existing viewport clamp in `studio/web/combo-box.js`, and the exported
+  `inOpenComboList()` lets the chip panel count a click inside a body-mounted dropdown list as an inside click.
+  Covered by `studio/tests/js/gallery-gen-material.test.mjs` (row click keeps the panel open, 完成 closes it,
+  chip label replay after the switch).
+
 - **The paint composer docks to the bottom, and its controls become real chips.** The text-to-image panel filled the
   top of the column with the input card and left a strip of empty page under it, and its 技能 / 宽高比 / 最长边
   controls were native `<select>` dropdowns wrapped in a rounded shell — a 240px clip of a model path

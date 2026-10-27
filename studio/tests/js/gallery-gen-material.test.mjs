@@ -1038,7 +1038,7 @@ test("生成素材弹窗：技能与自定参数同一枚 chip——技能按家
     // 先切到 MOSS 技能（config 为空 = 主模型自动），再覆盖成 MOSS 主模型：家族与技能一致，覆盖成立
     click(named("MOSS 文生图"));
     await sleep(30);
-    click(chip);
+    // 点技能不收面板，这里不重开 chip —— chip 已是展开态，再点一次就收起来了
     changeValue(modelSel, MOSS_MODEL);
     await sleep(20);
     assert.match(chip.querySelector(".neo-gallery-gm-chip-label").textContent,
@@ -1052,14 +1052,17 @@ test("生成素材弹窗：技能与自定参数同一枚 chip——技能按家
     assert.equal(named("MOSS 文生图").querySelector(".neo-gallery-gm-skill-sub").textContent,
         "MOSS-TS-MOSS-Image-SFT-0715-Stage2_int8_convrot", "同家族行不带 ↻");
 
-    // 点跨家族那行 → 切技能并收起；技能配置重放把 MOSS 覆盖换成该技能自己的（此例 config 为空 = 自动）
+    // 点跨家族那行 → 切技能但面板不收；技能配置重放把 MOSS 覆盖换成该技能自己的（此例 config 为空 = 自动）
     click(named("Krea2文生图"));
     assert.equal(overlay.querySelector(".neo-gallery-gm-skill-sel").value, "image_gen", "点跨家族行应切技能");
-    assert.equal(panel.style.display, "none", "选完技能收起面板");
+    assert.equal(panel.style.display, "grid", "点技能行不收面板：右栏要当场显示该技能钉的主模型");
+    assert.ok(named("Krea2文生图").classList.contains("neo-gallery-gm-menu-on"), "左栏高亮跟到新技能");
     await sleep(30);
     assert.equal(modelSel.value, "", "技能配置重放替换掉上一发的 MOSS 覆盖");
     assert.match(chip.querySelector(".neo-gallery-gm-chip-label").textContent, /^Krea2文生图$/,
         "覆盖清空后 chip 只报技能名");
+    click(panel.querySelector(".neo-gallery-gm-panel-done"));
+    assert.equal(panel.style.display, "none", "「完成」收起面板");
 
     // 真正必败的组合：当前技能家族 + 手填的别家族主模型 → 收回这一选，落回「自动」
     changeValue(modelSel, MOSS_MODEL);

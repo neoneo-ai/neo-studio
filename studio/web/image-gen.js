@@ -560,7 +560,8 @@ export function createModelConfigSection() {
         const label = mkEl("label", "rs-form-label");
         label.textContent = labelText;
         const select = document.createElement("select");
-        const combo = attachComboBox(select, { placeholder }).box;
+        // 模型名带目录（QwenImage2.1\xxx.safetensors），列表弹层比输入框宽才读得完
+        const combo = attachComboBox(select, { placeholder, listMinWidth: 520 }).box;
         row.append(label, combo);
         return { row, select };
     };

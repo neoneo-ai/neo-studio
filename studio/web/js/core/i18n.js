@@ -1419,6 +1419,7 @@ const EN = {
     "原图（缩放到 {cw}×{ch}）/ 编辑结果（拖拽分割线对比）": "Original (scaled to {cw}×{ch}) / edit result (drag the divider to compare)",
     "技能与自定参数：只列吃文字输入的生图技能；主模型 / LoRA 留空 = 跟随该技能配置与全局生图设置":
         "Skill & custom parameters: only skills that take text input; empty main model / LoRAs = follow this skill's config and the global image-gen settings",
+    "关闭技能与自定参数面板": "Close the skill & parameters panel",
     "写一句提示词，点生成": "Write a prompt, then hit Generate",
     "结果图出现在输入卡上方，产物保存到 Output 目录（NeoAgent/<日期>）": "Results appear above the composer; images save to Output (NeoAgent/<date>)",
     "目标 {w}×{h}": "Target {w}×{h}",

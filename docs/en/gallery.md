@@ -93,7 +93,11 @@ background overlay, title bar drags the window) that creates new assets from a p
   Closed, the panel takes no room in the composer; its height
   is capped (62vh, clamped further by the paint panel's top edge) and the skill column scrolls on its own, so it
   never pushes the result area off screen. The chip label prints the skill name, plus the short model name and
-  `LoRA ×n` when an override is set. Ratio and max side sitting on 「默认」 follow the skill config and
+  `LoRA ×n` when an override is set. Picking a skill row leaves the panel open - the right column shows the main
+  model and LoRAs this run will use, and the 完成 button in the panel footer closes it when you are done reading.
+  The model and LoRA dropdown lists are wider than the input box (up to 520px, clamped inside the viewport), so a
+  model path with a directory (`MOSS/xxx_int8_convrot.safetensors`) reads on one line.
+  Ratio and max side sitting on 「默认」 follow the skill config and
   the global image-gen settings, and the chip prints the followed value itself (`16:9 (宽屏)` / `2048`), the ratio
   chip's little rectangle shaped by the ratio in effect; picking another value overrides it for this run only.
   A combination you like can be saved as a new skill in one click: the name is generated from the main

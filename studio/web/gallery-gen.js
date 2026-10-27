@@ -12,6 +12,7 @@ import { actionToast } from "./toast.js";
 import { openSkillDetailById, listSkills, populateSkillOptions, skillDisplayName, skillAcceptsText, skillAcceptsRef, skillFamily } from "./skill.js";
 import { Lightbox } from "./lightbox.js";
 import { requestGeneration, watchTask, cancelTask, createModelConfigSection, listGenModels, getSkillGenConfig, getGenSettings, shortModelName, modelFamily, LORA_FAMILY_HINTS } from "./image-gen.js";
+import { inOpenComboList } from "./combo-box.js";
 import { requestVoiceGeneration, watchVoiceTask, cancelVoiceTask, buildVoiceRequest, VOICE_SKILL_ID } from "./voice-gen.js";
 import { invokePromptStream, createStreamOutputHandlers, randomPrompts, listPrompts, loadPrompt } from "./prompt-service.js";
 import { createQuickInputHistory } from "./quick-input-history.js";
@@ -1133,9 +1134,18 @@ function skillParamsChip(sel, paramsEl, { icon: iconName = "sparkles", getOverri
         icoSlot, label, $el("span", { className: "neo-gallery-gm-chip-caret", textContent: "▾" }),
     ]);
     const skillsCol = $el("div", { className: "neo-gallery-gm-skills-col" });
+    // 完成按钮：点技能不关面板（选完要在右栏看该技能钉的主模型效果），看完点完成才收起
+    // 类名不带 neo-gallery-story-btn：输入卡的「生成」是那族按钮，共用会让面板里的按钮被当成生成
+    const foot = $el("div", { className: "neo-gallery-gm-panel-foot" }, [
+        $el("button", {
+            className: "neo-gallery-gm-panel-done",
+            type: "button", textContent: t("完成"), title: t("关闭技能与自定参数面板"),
+            onclick: () => close(),
+        }),
+    ]);
     const panel = $el("div", {
         className: "rs-runtime-menu neo-gallery-gm-chip-menu neo-gallery-gm-chip-panel neo-gallery-gm-skills-panel",
-    }, [skillsCol, $el("div", { className: "neo-gallery-gm-params-col" }, [paramsEl])]);
+    }, [skillsCol, $el("div", { className: "neo-gallery-gm-params-col" }, [paramsEl]), foot]);
     // 双栏样式自带 display:grid，盖过 .rs-runtime-menu 基座的 display:none：收起态由这里钉住
     panel.style.display = "none";
     const wrap = $el("span", { className: "neo-gallery-gm-chip-wrap" }, [chip, panel, sel]);
@@ -1178,8 +1188,10 @@ function skillParamsChip(sel, paramsEl, { icon: iconName = "sparkles", getOverri
                         a: SKILL_FAMILY_LABELS[rowFam] || rowFam,
                     });
                 }
-                item.addEventListener("click", () => {
-                    close();
+                item.addEventListener("click", (e) => {
+                    // 不收面板：这一发的效果要在右栏看见（主模型 / LoRA 被该技能整份替换），看完点完成
+                    // .stopPropagation：面板里的选择不算「点面板外」，chip 的文档级收起循环会把它当外点
+                    e.stopPropagation();
                     sel.value = o.value;
                     sel.dispatchEvent(new Event("change", { bubbles: true }));
                 });
@@ -1221,7 +1233,8 @@ function skillParamsChip(sel, paramsEl, { icon: iconName = "sparkles", getOverri
     return {
         el: wrap, chip, sync, close,
         isOpen: () => open,
-        closeOnOutside: (target) => { if (open && !wrap.contains(target)) close(); },
+        // 模型 / LoRA 下拉的列表弹层挂在 body 上，点在弹层里不算「面板外」
+        closeOnOutside: (target) => { if (open && !wrap.contains(target) && !inOpenComboList(target)) close(); },
     };
 }
 

@@ -40,6 +40,12 @@ function unbindSharedIfIdle() {
     window.removeEventListener("scroll", onReposition, true);
 }
 
+/** 列表弹层挂在 document.body 上，宿主浮层（技能 + 自定参数面板）据此判定「点在弹层里」不收自己 */
+export function inOpenComboList(el) {
+    for (const inst of instances) if (inst.listEl.contains(el)) return true;
+    return false;
+}
+
 function el(tag, className, cssText = "") {
     const n = document.createElement(tag);
     if (className) n.className = className;
