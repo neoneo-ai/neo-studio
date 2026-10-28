@@ -13,6 +13,7 @@ import { mkEl } from "./dom-utils.js";
 import { showToast } from "./gallery-utils.js";
 import { sseStream } from "./prompt-service.js";
 import { t, tf } from "./js/core/i18n.js";
+import { queueTrack } from "./queue-panel.js";
 
 const GEN_API = "/neo_image_gen";
 const TERMINAL_STATUSES = new Set(["succeeded", "failed", "cancelled"]);
@@ -82,6 +83,8 @@ export async function requestGeneration(payload) {
     });
     const data = await resp.json().catch(() => null);
     if (!resp.ok || !data || data.error) throw new Error(data?.error || `HTTP ${resp.status}`);
+    // 提交成功就登记进顶栏「队列」：生图窗随后关掉，进度在顶栏跟
+    queueTrack("image", data, { label: payload?.prompt });
     return data;
 }
 

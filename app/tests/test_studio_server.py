@@ -50,6 +50,7 @@ COMFY_ONLY_ROUTES = (
     "/neo_video_gen/simple",
     "/neo_voice/generate",
     "/neo_studio/director/generate",
+    "/neo_studio/queue",
     "/neo_studio/mem_stats",
     "/neo_studio/clear_memory",
     "/neo_nodes/repair",

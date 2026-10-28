@@ -291,6 +291,128 @@ class WatcherTests(_RecipeCase):
         self.assertEqual(task["status"], "succeeded")
         self.assertEqual(seen.get("progress"), {"value": 3, "max": 10})
 
+    def test_snapshot_payload_carries_queue_fields(self):
+        # 顶栏队列吃 rs.director.status 实时推进：快照少了 created/updated/progress 行就定不了位置
+        self.write_recipe("R")
+        item = {"status": {"completed": True, "messages": []},
+                "outputs": {"2": {"images": [{"filename": "R_1.mp4", "subfolder": "NeoDirector", "type": "output"}],
+                                  "animated": [True]}}}
+        data, task = self._drive({"recipe": "R"}, lookup=lambda pid: ("done", item))
+        snap = studio._snapshot(task)
+        for key in ("task_id", "status", "progress", "created", "updated", "recipe",
+                    "filename", "subfolder"):
+            self.assertIn(key, snap)
+        self.assertEqual(snap["task_id"], data["task_id"])
+        self.assertEqual(snap["status"], "succeeded")
+        self.assertEqual((snap["filename"], snap["subfolder"]), ("R_1.mp4", "NeoDirector"))
+
+
+class QueueRowsTests(_RecipeCase):
+    """顶栏队列聚合（GET /neo_studio/queue）：六张表的行都带页面落点，按提交时间倒序，条数封顶。"""
+
+    def setUp(self):
+        super().setUp()
+        # 六张任务表在模块级，全套件共享：进用例先清空，行集才是本用例放的这几行
+        studio.image_gen.TASKS.clear()
+        studio.image_gen._WATCHERS.clear()
+        studio.voice_gen.TASKS.clear()
+        studio.voice_gen.WATCHERS.clear()
+        studio.simple_video._TASKS.clear()
+        studio.simple_video._WATCHERS.clear()
+        studio.h3_segment._SEGMENT_TASKS.clear()
+        studio.h3_segment._SEGMENT_WATCHERS.clear()
+        studio.h3_assemble._TASKS.clear()
+
+    def _rows(self):
+        loop = asyncio.new_event_loop()
+        try:
+            resp = loop.run_until_complete(studio.queue_route(None))
+        finally:
+            loop.close()
+        self.assertEqual(resp.status, 200)
+        body = json.loads(resp.body)
+        self.assertTrue(body["success"])
+        return body["rows"]
+
+    def test_queue_route_pages_rows_from_all_six_tables(self):
+        studio._TASKS["f1"] = {"task_id": "f1", "prompt_id": "p", "status": "queued",
+                               "recipe": "R", "seed": 1, "filename": None, "subfolder": "",
+                               "progress": None, "error": "", "created": 6, "updated": 6}
+        studio.image_gen.TASKS["i1"] = {"task_id": "i1", "prompt_id": "p", "status": "running",
+                                        "params": {"prompt": "一只猫"}, "images": [],
+                                        "progress": {"value": 3, "max": 20}, "created": 5, "updated": 5}
+        studio.voice_gen.TASKS["v1"] = {"task_id": "v1", "prompt_id": "p", "status": "succeeded",
+                                        "params": {"prompt": "你好"}, "audios": [],
+                                        "progress": None, "error": "", "created": 4, "updated": 4}
+        studio.voice_gen.TASKS["v1"]["audios"] = [{"filename": "a.mp3", "subfolder": "NeoVoice", "url": ""}]
+        studio.simple_video._TASKS["s1"] = {"task_id": "s1", "status": "queued", "prompt": "开场镜头",
+                                            "filename": None, "subfolder": "", "progress": None,
+                                            "created": 3, "updated": 3}
+        studio.h3_segment._SEGMENT_TASKS["g1"] = {"task_id": "g1", "status": "succeeded",
+                                                  "recipe": "R", "segment": 1, "filename": "seg.mp4",
+                                                  "subfolder": "NeoDirector", "progress": None,
+                                                  "created": 2, "updated": 2}
+        studio.h3_assemble._TASKS["a1"] = {"task_id": "a1", "status": "running", "recipe": "R",
+                                           "use": [0, 2], "filename": None, "subfolder": "",
+                                           "progress": None, "created": 1, "updated": 1}
+        by = {row["kind"]: row for row in self._rows()}
+        self.assertEqual(set(by), {"image", "voice", "simple", "segment", "assemble", "film"})
+        self.assertEqual(by["image"]["label"], "一只猫")
+        self.assertEqual(by["image"]["page"], "paint")
+        self.assertIsNone(by["image"]["result"])
+        self.assertEqual(by["voice"]["label"], "你好")
+        self.assertEqual(by["voice"]["page"], "gallery")
+        self.assertEqual(by["voice"]["result"], {"filename": "a.mp3", "subfolder": "NeoVoice"})
+        self.assertEqual(by["simple"]["label"], "开场镜头")
+        self.assertEqual(by["simple"]["page"], "video")
+        self.assertEqual(by["film"]["label"], "R")
+        self.assertEqual(by["film"]["page"], "director")
+        self.assertIsNone(by["film"]["result"])
+        self.assertEqual(by["segment"]["label"], "R 第 2 段")
+        self.assertEqual(by["segment"]["result"], {"filename": "seg.mp4", "subfolder": "NeoDirector"})
+        self.assertEqual(by["assemble"]["label"], "R 拼接 2 段")
+        self.assertEqual([row["created"] for row in self._rows()],
+                         sorted((row["created"] for row in self._rows()), reverse=True))
+
+    def test_queue_rows_carry_count_and_time_pair_for_panel_meta(self):
+        # 面板行第二行的三件（提交时刻 / 时长 / 张数）全读行上的 created / updated / count：
+        # 少一件，多图行就只说「看图」、终态行报不出耗时
+        studio.image_gen.TASKS["i1"] = {"task_id": "i1", "prompt_id": "p", "status": "succeeded",
+                                        "params": {"prompt": "一只猫"},
+                                        "images": [{"filename": "n_1.png", "subfolder": "Neo/Paint", "url": ""},
+                                                   {"filename": "n_2.png", "subfolder": "Neo/Paint", "url": ""}],
+                                        "progress": None, "error": "", "created": 10.0, "updated": 22.3}
+        studio.voice_gen.TASKS["v1"] = {"task_id": "v1", "prompt_id": "p", "status": "succeeded",
+                                        "params": {"prompt": "你好"},
+                                        "audios": [{"filename": "a.mp3", "subfolder": "NeoVoice", "url": ""},
+                                                   {"filename": "b.mp3", "subfolder": "NeoVoice", "url": ""}],
+                                        "progress": None, "error": "", "created": 8.0, "updated": 11.0}
+        studio.simple_video._TASKS["s1"] = {"task_id": "s1", "status": "succeeded", "prompt": "开场镜头",
+                                            "filename": "s.mp4", "subfolder": "NeoVideo", "progress": None,
+                                            "error": "", "created": 5.0, "updated": 41.5}
+        by = {row["kind"]: row for row in self._rows()}
+        self.assertEqual(by["image"]["count"], 2)
+        self.assertEqual(by["voice"]["count"], 2)
+        self.assertEqual(by["simple"]["count"], 1)
+        self.assertEqual((by["image"]["created"], by["image"]["updated"]), (10.0, 22.3))
+        self.assertEqual((by["voice"]["created"], by["voice"]["updated"]), (8.0, 11.0))
+        self.assertEqual((by["simple"]["created"], by["simple"]["updated"]), (5.0, 41.5))
+        # 缩略图取首个产物的名字与目录，行上的 result 就是缩略路由的入参
+        self.assertEqual(by["image"]["result"], {"filename": "n_1.png", "subfolder": "Neo/Paint"})
+        self.assertEqual(by["voice"]["result"], {"filename": "a.mp3", "subfolder": "NeoVoice"})
+
+    def test_queue_route_caps_rows_at_limit(self):
+        for i in range(studio.QUEUE_LIMIT + 12):
+            studio.simple_video._TASKS[f"s{i}"] = {"task_id": f"s{i}", "status": "succeeded",
+                                                   "prompt": f"镜头 {i}", "filename": f"{i}.mp4",
+                                                   "subfolder": "NeoVideo", "progress": None,
+                                                   "created": i, "updated": i}
+        rows = self._rows()
+        self.assertEqual(len(rows), studio.QUEUE_LIMIT)
+        self.assertTrue(all(row["kind"] == "simple" for row in rows))
+        # 封顶丢的是最旧（updated 最小）的空闲行，最新的必须留下
+        self.assertEqual(rows[0]["created"], studio.QUEUE_LIMIT + 11)
+
 
 class VideoFromHistoryTests(unittest.TestCase):
     def test_finds_video_entry(self):

@@ -1,0 +1,78 @@
+/* 顶栏「队列」：入口徽标 + 挂在顶栏下方的跨页任务列表（queue-panel.js 建 DOM） */
+.ns-queue-toggle {
+    position: relative;
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 26px; padding: 0 10px;
+    border: 1px solid var(--ns-border); border-radius: 4px;
+    background: transparent; color: var(--ns-fg);
+    font-size: 12px; line-height: 1; white-space: nowrap; cursor: pointer;
+}
+.ns-queue-toggle:hover { background: var(--ns-raised); }
+.ns-queue-badge {
+    min-width: 18px; padding: 2px 5px; border-radius: 9px;
+    background: var(--ns-primary); color: #fff;
+    font-size: 11px; line-height: 1; text-align: center;
+}
+
+.ns-queue {
+    position: fixed; top: 40px; right: 12px; z-index: 9690;   /* 在素材 / 配方弹窗（9700）之下、显存条之上：面板开着时弹窗照样盖得住 */
+    display: flex; flex-direction: column; gap: 6px;
+    width: 420px; max-width: calc(100vw - 24px); max-height: 62vh;
+    padding: 10px 12px;
+    border: 1px solid var(--ns-border-soft); border-radius: 8px;
+    background: var(--ns-panel); box-shadow: 0 8px 26px rgba(0, 0, 0, .45);
+    overflow: auto;
+}
+/* [hidden] 依赖 UA display:none，会被上面的显式 display:flex 盖掉 → 默认收起要显式补一条 */
+.ns-queue[hidden] { display: none; }
+.ns-queue-head { display: flex; align-items: baseline; gap: 10px; }
+.ns-queue-title { font-size: 13px; font-weight: 600; color: var(--ns-fg); }
+.ns-queue-note { font-size: 11px; color: var(--ns-dim); }
+.ns-queue-list { display: flex; flex-direction: column; gap: 4px; }
+.ns-queue-empty { padding: 8px 2px; font-size: 12px; color: var(--ns-dim); }
+
+.ns-queue-day { font-size: 11px; color: var(--ns-dim); padding-top: 2px; }
+
+/* 行 = 缩略格 + 主列（类别 标签 / 时间·时长·张数 / 进度条）+ 右列（状态 / 动作），
+   缩略图走 /neo_gallery/thumbnail，与 ComfyUI 任务队列的读法一致 */
+.ns-queue-row {
+    display: grid;
+    grid-template-columns: 46px minmax(0, 1fr) auto;
+    grid-template-areas: "thumb main side";
+    gap: 2px 8px; align-items: start;
+    padding: 5px 6px;
+    border: 1px solid var(--ns-border); border-radius: 6px;
+    background: var(--ns-raised);
+    font-size: 12px;
+}
+.ns-queue-thumb {
+    grid-area: thumb; width: 46px; height: 46px;
+    border-radius: 4px; background: var(--ns-field); overflow: hidden;
+}
+.ns-queue-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; cursor: zoom-in; }
+.ns-queue-main { grid-area: main; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ns-queue-top { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.ns-queue-kind { color: var(--ns-accent); white-space: nowrap; }
+.ns-queue-label {
+    min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    color: var(--ns-fg);
+}
+.ns-queue-meta { display: flex; gap: 8px; font-size: 11px; color: var(--ns-dim); }
+.ns-queue-time, .ns-queue-dur, .ns-queue-cnt { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ns-queue-side { grid-area: side; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; }
+.ns-queue-status { color: var(--ns-dim); white-space: nowrap; }
+.ns-queue-bar { height: 3px; margin-top: 3px; border-radius: 2px; background: var(--ns-field); overflow: hidden; }
+.ns-queue-bar > div { height: 100%; background: var(--ns-primary); }
+.ns-queue-actions { display: flex; justify-content: flex-end; gap: 6px; }
+.ns-queue-act {
+    display: inline-flex; align-items: center;
+    border: 1px solid var(--ns-field-bd); border-radius: 4px;
+    background: transparent; color: var(--ns-dim);
+    font-size: 11px; line-height: 1; padding: 3px 7px;
+    text-decoration: none; cursor: pointer;
+}
+.ns-queue-act:hover { background: var(--ns-field-hover); color: var(--ns-fg); }
+.ns-queue-status-failed { color: var(--ns-err); }
+.ns-queue-status-done { color: var(--ns-ok); }
+/* 离线形态：队列要吃 ComfyUI 执行队列，顶栏入口与面板整块不出 */
+.ns-offline .ns-queue { display: none; }

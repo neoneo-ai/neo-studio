@@ -132,6 +132,7 @@ Neo Studio 独立页面（`web/studio/index.html`）的后端。素材 / 生图 
 | POST | `/neo_studio/director/generate` | 整片生成入队（可只跑勾选的段） |
 | GET | `/neo_studio/director/{task_id}` | 整片任务快照 |
 | POST | `/neo_studio/director/{task_id}/cancel` | 取消整片任务 |
+| GET | `/neo_studio/queue` | 顶栏队列面板的聚合行：六表按提交时间倒序、条数封顶；行带 `kind` `label` `status` `progress` `created` `updated` `count` `result` `page`，行缩略图按 `result` 取 `/neo_gallery/thumbnail` |
 | GET | `/neo_studio/version` | 插件 / ComfyUI 版本与导演配方列表，附「设置 → 关于」的路径行 `data_root` / `comfy_local`（`remote` 留空，远程地址只有桌面端知道） |
 | GET | `/neo_studio/log` | ComfyUI 控制台日志（`app.logger` 环形缓冲 300 条），Studio「设置 → 日志」轮询 |
 | POST | `/neo_studio/clear_memory` | 卸载模型并清理显存缓存 |

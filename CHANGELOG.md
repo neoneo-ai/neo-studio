@@ -4,6 +4,25 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **Queue panel rows now carry thumbnails, submit time and duration, like ComfyUI's own task list.** Every row is a
+  46px thumbnail tile (images scaled by the gallery thumbnail route, videos by ffmpeg's first frame, audio rows keep an
+  empty tile), then the kind + label line, and a meta line with the submit clock (`14:32`), the elapsed seconds —
+  `12.10s`, settled on terminal rows and advancing with every progress event — plus the result count (`3 张`). Rows are
+  grouped under `今天` / `昨天` / date headers, and clicking a tile opens the Lightbox: the image viewer for images, the
+  in-page video player (`/neo_gallery/video`) for the four video kinds. Covered by
+  `studio/tests/js/studio-queue.test.mjs` (thumbnail src on `/neo_gallery/thumbnail?...&size=96`, no thumbnail for audio
+  rows, `HH:MM` + `12.00s` + `3 张` meta, `今天` group header, video tile opening the player) and
+  `studio/tests/test_studio.py` (rows carry the `created` / `updated` / `count` and first-`result` fields the panel
+  reads); docs: `docs/api-routes.md` / `docs/en/api-routes.md`.
+
+- **The top-bar 队列 panel opens only when you click it.** The panel's own `display: flex` rule overrode the browser's
+  `[hidden] { display: none }`, so the queue dropdown floated open on every page the moment Studio came online, before
+  any task was submitted — and clicking **队列** only flipped an attribute the CSS ignored. `queue-panel.css` now pins
+  `.ns-queue[hidden] { display: none }`; the panel starts collapsed, the badge stays as the counter, and the click is
+  what seeds and shows the rows. Covered by `studio/tests/js/studio-queue.test.mjs` (panel `hidden` right after an
+  online boot, visible only after the toggle click, `/neo_studio/queue` fetched on that click) and the static case that
+  keeps the CSS rule in the file.
+
 - **Closing a director recipe stops it from reopening itself.** The recipe list sorts by modification time, so the
   recipe just edited is the top card, and the page auto-opened the top card on entry: close a recipe with **✕** /
   **Cancel** and the next visit showed it open again. The editor mount/unmount observer now records the close in a

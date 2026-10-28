@@ -61,6 +61,7 @@ _RUNS: dict = {}
 TASK_TTL = 3600.0     # 任务记录保留时长（秒）
 POLL_INTERVAL = 0.5   # 轮询队列状态的间隔（秒）
 SEG_OUT_SUBDIR = "neo_director_regen"   # 单段重生成落盘的输出目录（拼接成片在 h3_assemble 里落 neo_director_merge）
+STATUS_EVENT = "rs.segment.status"   # 单段任务快照事件：顶栏队列面板靠它实时推进
 
 
 def _safe_name(text) -> str:
@@ -423,6 +424,27 @@ def _snapshot(task: dict) -> dict:
         "filename", "subfolder", "film", "progress", "warnings", "error", "created", "updated")}
 
 
+def _notify(task: dict) -> None:
+    """单段任务快照有变化时经 WebSocket 推给所有客户端（前端按 task_id 过滤）。"""
+    PromptServer.instance.send_sync(STATUS_EVENT, _snapshot(task))
+
+
+def queue_rows() -> list:
+    """顶栏队列面板的行：段号进标签，产物只留文件名与目录。"""
+    rows = []
+    for task in list(_SEGMENT_TASKS.values()):
+        rows.append({
+            "kind": "segment", "task_id": task["task_id"], "status": task["status"],
+            "label": f"{task['recipe']} 第 {int(task['segment']) + 1} 段",
+            "progress": task.get("progress"),
+            "created": task["created"], "updated": task["updated"],
+            "result": {"filename": task["filename"], "subfolder": task["subfolder"]}
+            if task["filename"] else None,
+            "count": 1,
+        })
+    return rows
+
+
 def _prune_tasks() -> None:
     """清掉过期或超额的历史任务记录（运行中的不动）。"""
     now = time.time()
@@ -464,15 +486,20 @@ async def _watch(task_id: str) -> None:
             task["progress"] = None
             task["updated"] = time.time()
             _SEGMENT_WATCHERS.pop(task_id, None)
+            _notify(task)
             if error and not cancelled:
                 logger.warning(f"segment task {task_id} failed: {error}")
             return
         if state == "running":
+            changed = task["status"] != "running"
             task["status"] = "running"
-        progress = _progress_for(prompt_id)
-        if progress is not None:
-            task["progress"] = progress
-        task["updated"] = time.time()
+            progress = _progress_for(prompt_id)
+            if progress is not None and task.get("progress") != progress:
+                task["progress"] = progress
+                changed = True
+            task["updated"] = time.time()
+            if changed:
+                _notify(task)
 
 
 def _frame_count_error(actual: int, total: int, continuity: bool, context_frames: int, film: str = "") -> str:

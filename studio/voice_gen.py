@@ -197,6 +197,22 @@ def _prune_tasks() -> None:
         TASKS.pop(oldest["task_id"], None)
 
 
+def queue_rows() -> list:
+    """顶栏队列面板的行：音频列表不进列表，只留目标文字与首个产物名。"""
+    rows = []
+    for task in list(TASKS.values()):
+        first = task["audios"][0] if task["audios"] else None
+        rows.append({
+            "kind": "voice", "task_id": task["task_id"], "status": task["status"],
+            "label": str(task["params"]["prompt"])[:40],
+            "progress": task.get("progress"),
+            "created": task["created"], "updated": task["updated"],
+            "result": {"filename": first["filename"], "subfolder": first["subfolder"]} if first else None,
+            "count": len(task["audios"]),
+        })
+    return rows
+
+
 routes = PromptServer.instance.routes
 
 

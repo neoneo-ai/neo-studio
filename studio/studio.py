@@ -2,7 +2,7 @@
 
 Studio 页面（web/studio/index.html）由 /neo-studio 短路径提供（同 /extensions/ 静态路由），
 前端直接复用 web/ 现有模块；素材、生图、配方、单段、拼接、故事板、LLM 等功能全部复用已有路由，
-本模块只补三样东西：
+本模块只补这几样东西：
 
 - 整片生成：ComfyUI 里由画布上的 NeoH3VideoDirector 节点跑，Studio 没有画布，这里把
   「NeoH3VideoDirector + SaveVideo」两节点图提交进执行队列（显存/进度/取消都由执行器负责），
@@ -10,6 +10,8 @@ Studio 页面（web/studio/index.html）由 /neo-studio 短路径提供（同 /e
 - /neo-studio：Studio 页面短路径（同 /extensions/comfyui-neo-studio/studio/index.html）。
 - /neo_studio/version：插件 + ComfyUI 版本，供 Studio 首页展示升级信息。
 - /neo_studio/log：ComfyUI 控制台日志（app.logger 环形缓冲），Studio「设置 → 日志」轮询用。
+- /neo_studio/queue：生图 / 语音 / 简单视频 / 整片 / 单段 / 拼接六张任务表的汇总行，
+  Studio 顶栏「队列」面板播种与补漏用（实时进度走各自的 rs.*.status 事件）。
 """
 
 import asyncio
@@ -23,6 +25,7 @@ import folder_paths
 from aiohttp import web
 from server import PromptServer
 
+from . import h3_assemble, h3_segment, image_gen, simple_video, voice_gen
 from .h3_preview import clear_latest_preview, get_latest_preview
 from .h3_video_director import parse_segment_selection
 from .plugin_paths import DATA_ROOT
@@ -36,6 +39,11 @@ logger.addFilter(PrefixFilter())
 TASK_TTL = 3600.0     # 任务记录保留时长（秒）
 POLL_INTERVAL = 1.0   # 轮询队列状态的间隔（秒）
 STATUS_EVENT = "rs.director.status"
+
+# 顶栏队列面板：类别 →「跳到该页」要打开的 Studio 页面，与一次列表的行数上限
+QUEUE_PAGES = {"image": "paint", "voice": "gallery", "simple": "video",
+               "film": "director", "segment": "director", "assemble": "director"}
+QUEUE_LIMIT = 48
 
 _TASKS: dict = {}
 _WATCHERS: dict = {}
@@ -64,6 +72,22 @@ def _snapshot(task: dict) -> dict:
     return {key: task[key] for key in (
         "task_id", "prompt_id", "status", "recipe", "seed",
         "filename", "subfolder", "progress", "error", "created", "updated")}
+
+
+def queue_rows() -> list:
+    """顶栏队列面板的行：整片任务一行，配方名进标签。"""
+    rows = []
+    for task in list(_TASKS.values()):
+        rows.append({
+            "kind": "film", "task_id": task["task_id"], "status": task["status"],
+            "label": task["recipe"],
+            "progress": task.get("progress"),
+            "created": task["created"], "updated": task["updated"],
+            "result": {"filename": task["filename"], "subfolder": task["subfolder"]}
+            if task["filename"] else None,
+            "count": 1,
+        })
+    return rows
 
 
 def _prune_tasks() -> None:
@@ -234,6 +258,22 @@ async def director_cancel_route(request):
     if not dequeued and not interrupted:
         return web.json_response({"success": False, "error": "任务已结束，无法取消"}, status=409)
     return web.json_response({"success": True, "dequeued": dequeued, "interrupted": interrupted})
+
+
+@PromptServer.instance.routes.get("/neo_studio/queue")
+async def queue_route(request):
+    """六张生成任务表（生图 / 语音 / 简单视频 / 整片 / 单段 / 拼接）的当前行，按提交时间倒序。
+
+    顶栏队列面板进页面时播种一次、WS 断线后补漏一次；实时进度由各自的 rs.*.status 事件推，
+    这条不做常驻轮询。采样预览的 base64 不在这里——各模块的 queue_rows 只交状态、进度与产物名。
+    """
+    rows = (image_gen.queue_rows() + voice_gen.queue_rows() + simple_video.queue_rows()
+            + h3_segment.queue_rows() + h3_assemble.queue_rows() + queue_rows())
+    rows.sort(key=lambda row: row["created"], reverse=True)
+    rows = rows[:QUEUE_LIMIT]
+    for row in rows:
+        row["page"] = QUEUE_PAGES.get(row["kind"], "")
+    return web.json_response({"success": True, "rows": rows})
 
 
 @PromptServer.instance.routes.get("/neo-studio")

@@ -30,6 +30,7 @@ logger.addFilter(PrefixFilter())
 TASK_TTL = 3600.0     # 任务记录保留时长（秒）
 POLL_INTERVAL = 1.0   # 轮询队列状态的间隔（秒）
 OUT_SUBDIR = "NeoSimple"   # 简单视频落盘子目录（SaveVideo 的 filename_prefix 前缀）
+STATUS_EVENT = "rs.simple_video.status"   # 任务快照事件：顶栏队列面板靠它实时推进，不轮询
 _VIDEO_EXT = (".mp4", ".webm", ".mov", ".mkv", ".gif")
 # 找末端 VIDEO 输出时跳过的落盘节点：它们对 VIDEO 的引用不算「消费」，且自身不作为产物端点
 _SKIP_OUTPUT_NODES = {"SaveImage", "PreviewImage", "SaveVideo"}
@@ -92,6 +93,27 @@ def _snapshot(task: dict) -> dict:
         "error", "created", "updated")}
 
 
+def _notify(task: dict) -> None:
+    """任务快照有变化时经 WebSocket 推给所有客户端（前端按 task_id 过滤）。"""
+    PromptServer.instance.send_sync(STATUS_EVENT, _snapshot(task))
+
+
+def queue_rows() -> list:
+    """顶栏队列面板的行：提示词进标签，产物只留文件名与目录。"""
+    rows = []
+    for task in list(_TASKS.values()):
+        rows.append({
+            "kind": "simple", "task_id": task["task_id"], "status": task["status"],
+            "label": str(task["prompt"])[:40],
+            "progress": task.get("progress"),
+            "created": task["created"], "updated": task["updated"],
+            "result": {"filename": task["filename"], "subfolder": task["subfolder"]}
+            if task["filename"] else None,
+            "count": 1,
+        })
+    return rows
+
+
 def _prune_tasks() -> None:
     """清掉过期或超额的历史任务记录（运行中的不动）。"""
     now = time.time()
@@ -126,15 +148,20 @@ async def _watch(task_id: str) -> None:
             task["progress"] = None
             task["updated"] = time.time()
             _WATCHERS.pop(task_id, None)
+            _notify(task)
             if error and not cancelled:
                 logger.warning(f"simple video task {task_id} failed: {error}")
             return
         if state == "running":
+            changed = task["status"] != "running"
             task["status"] = "running"
             progress = _progress_for(task["prompt_id"])
-            if progress is not None:
+            if progress is not None and task.get("progress") != progress:
                 task["progress"] = progress
+                changed = True
             task["updated"] = time.time()
+            if changed:
+                _notify(task)
 
 
 def _run_prompt(data: dict) -> dict:
@@ -228,4 +255,5 @@ async def simple_cancel_route(request):
     watcher = _WATCHERS.pop(task["task_id"], None)
     if watcher is not None:
         watcher.cancel()
+    _notify(task)   # 出队是本地直接落终态：不推一条，顶栏队列会一直显示「生成中」
     return web.json_response({"success": True, "dequeued": dequeued, "interrupted": interrupted})

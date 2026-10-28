@@ -1269,6 +1269,22 @@ def _prune_tasks() -> None:
         _PREVIEWS.pop(oldest["prompt_id"], None)
 
 
+def queue_rows() -> list:
+    """顶栏队列面板的行：采样预览 base64 与出图列表不进列表，只留状态、进度与首图名。"""
+    rows = []
+    for task in list(TASKS.values()):
+        first = task["images"][0] if task["images"] else None
+        rows.append({
+            "kind": "image", "task_id": task["task_id"], "status": task["status"],
+            "label": str(task["params"]["prompt"])[:40],
+            "progress": task.get("progress"),
+            "created": task["created"], "updated": task["updated"],
+            "result": {"filename": first["filename"], "subfolder": first["subfolder"]} if first else None,
+            "count": len(task["images"]),
+        })
+    return rows
+
+
 def _notify(task: dict) -> None:
     """任务快照有变化时经 WebSocket 推给所有客户端（前端按 task_id 过滤）。"""
     PromptServer.instance.send_sync(STATUS_EVENT, _snapshot(task))

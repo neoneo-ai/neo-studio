@@ -22,6 +22,8 @@
 <link rel="stylesheet" href="/extensions/comfyui-neo-studio/gallery.css">
 <!-- data-neo-agent 是 agent-panel.js 的 ensureCss 认的标记：静态带上后运行时不再补第二份 -->
 <link rel="stylesheet" data-neo-agent="1" href="/extensions/comfyui-neo-studio/agent-panel.css">
+<!-- 顶栏「队列」面板的样式（queue-panel.js 建 DOM，入口在顶栏） -->
+<link rel="stylesheet" href="/extensions/comfyui-neo-studio/queue-panel.css">
 </head>
 <body>
 <header class="ns-header">
@@ -36,6 +38,7 @@
         <a href="#/settings" data-tab="settings">设置</a>
     </nav>
     <span class="ns-comfy-status" id="ns-comfy-status" hidden></span>
+    <button class="ns-queue-toggle" id="ns-queue-toggle" type="button" title="队列" hidden><span id="ns-queue-label">队列</span><span class="ns-queue-badge" id="ns-queue-badge" hidden></span></button>
     <button class="ns-agent-toggle" id="ns-agent-toggle" type="button" title="智能体" hidden></button>
     <span class="ns-wctl" id="ns-wctl" hidden>
         <button class="ns-wctl-btn" id="ns-win-min" type="button"></button>

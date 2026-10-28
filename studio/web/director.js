@@ -17,6 +17,7 @@ import { openStoryboardDialog } from "./gallery-gen.js";
 import { isImageFile, isVideoFile, isAudioFile } from "./gallery-utils.js";
 import { t, tf } from "./js/core/i18n.js";
 import { icon } from "./js/core/icons.js";
+import { queueTrack } from "./queue-panel.js";
 
 // 配方编辑器保存成功后广播：节点内时间轴等监听方据此刷新下拉候选 + 重载 spec。
 export const DIRECTOR_RECIPE_SAVED_EVENT = "neo-director-recipe-saved";
@@ -239,6 +240,7 @@ function runSegmentTask(body, handlers = {}) {
             if (!res.ok || !data?.success) throw new Error(data?.error || `HTTP ${res.status}`);
             taskId = data.task_id;
             onStatus({ ...data, status: data.status || 'queued' });
+            queueTrack("segment", data);   // 顶栏「队列」接手进度，编辑器留在这里
             timer = setInterval(poll, 1000);
             poll();
         } catch (err) {
@@ -815,6 +817,7 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
                 const data = await res.json().catch(() => null);
                 if (!res.ok || !data?.success) throw new Error(data?.error || `HTTP ${res.status}`);
                 taskId = data.task_id;
+                queueTrack("assemble", data);   // 顶栏「队列」跟拼接进度，导演编辑器留在这里
             } catch (err) {
                 setMergeIdle(tf("提交失败：{err}", { err: err.message }));
                 app.extensionManager.toast.add({ severity: 'error', summary: t('拼接提交失败'), detail: err.message, life: 8000 });

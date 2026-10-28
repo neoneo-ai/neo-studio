@@ -146,6 +146,7 @@ version information:
 | POST | `/neo_studio/director/generate` | Enqueue a full-film run (optionally only the checked segments) |
 | GET | `/neo_studio/director/{task_id}` | Full-film task snapshot |
 | POST | `/neo_studio/director/{task_id}/cancel` | Cancel a full-film task |
+| GET | `/neo_studio/queue` | Header queue panel rows: the six task tables newest-submit first, row count capped; rows carry `kind` `label` `status` `progress` `created` `updated` `count` `result` `page`, and the row thumbnail is fetched for `result` via `/neo_gallery/thumbnail` |
 | GET | `/neo_studio/version` | Plugin / ComfyUI versions and the director recipe list, plus the Settings → About path fields `data_root` / `comfy_local` (`remote` is empty here — only the desktop knows the remote address) |
 | GET | `/neo_studio/log` | ComfyUI console log (a 300-entry `app.logger` ring buffer), polled by Studio "Settings → Logs" |
 | POST | `/neo_studio/clear_memory` | Unload models and clear the VRAM cache |

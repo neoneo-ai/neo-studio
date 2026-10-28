@@ -7,6 +7,7 @@
 
 import { api } from "../../../../scripts/api.js";
 import { t } from "./js/core/i18n.js";
+import { queueTrack } from "./queue-panel.js";
 
 const VOICE_API = "/neo_voice";
 const VOICE_STATUS_EVENT = "rs.voice_gen.status";
@@ -39,6 +40,7 @@ export async function requestVoiceGeneration(payload) {
     });
     const data = await resp.json().catch(() => null);
     if (!resp.ok || !data || data.error) throw new Error(data?.error || `HTTP ${resp.status}`);
+    queueTrack("voice", data, { label: payload?.prompt });
     return data;
 }
 

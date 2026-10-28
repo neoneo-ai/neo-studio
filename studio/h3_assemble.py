@@ -37,6 +37,7 @@ MERGE_DIR = "neo_director_merge"     # 拼接成片的输出目录（片段在 n
 MERGE_CRF = 16                       # 拼接要重编码沿用段：用高码率压低代际损失（默认码率连续拼接会越拼越糊）
 MAX_TASKS = 16
 TASK_TTL = 3600.0
+STATUS_EVENT = "rs.assemble.status"   # 拼接任务快照事件：顶栏队列面板靠它实时推进
 
 
 class _Cancelled(Exception):
@@ -209,6 +210,27 @@ def _snapshot(task: dict) -> dict:
         "progress", "stage", "clips", "warnings", "error", "created", "updated")}
 
 
+def _notify(task: dict) -> None:
+    """拼接跑在后台线程：send_sync 内部是 call_soon_threadsafe，从线程里推是安全的。"""
+    PromptServer.instance.send_sync(STATUS_EVENT, _snapshot(task))
+
+
+def queue_rows() -> list:
+    """顶栏队列面板的行：拼接没有 prompt_id，替换的段数进标签。"""
+    rows = []
+    for task in list(_TASKS.values()):
+        rows.append({
+            "kind": "assemble", "task_id": task["task_id"], "status": task["status"],
+            "label": f"{task['recipe']} 拼接 {len(task['use'])} 段",
+            "progress": task.get("progress"),
+            "created": task["created"], "updated": task["updated"],
+            "result": {"filename": task["filename"], "subfolder": task["subfolder"]}
+            if task["filename"] else None,
+            "count": 1,
+        })
+    return rows
+
+
 def _prune_tasks() -> None:
     now = time.time()
     for task in [t for t in _TASKS.values() if t["status"] not in ("queued", "running")]:
@@ -229,12 +251,14 @@ def _run_task(task_id: str) -> None:
         return
     task["status"] = "running"
     task["updated"] = time.time()
+    _notify(task)
 
     def on_progress(stage, value, total):
         task["stage"] = stage
         if total:
             task["progress"] = {"value": int(value), "max": int(total)}
         task["updated"] = time.time()
+        _notify(task)   # 每个片段/编码边界一条，频率是段数级
 
     try:
         result = assemble_film(task["recipe"], task["use"], film=task["film"], blend=task["blend"],
@@ -252,6 +276,7 @@ def _run_task(task_id: str) -> None:
         logger.error(f"assemble task {task_id} failed: {e}")
         task.update({"status": "failed", "error": str(e), "progress": None, "stage": ""})
     task["updated"] = time.time()
+    _notify(task)
 
 
 @PromptServer.instance.routes.post("/neo_video_gen/assemble_segments")

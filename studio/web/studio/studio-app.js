@@ -23,6 +23,7 @@ import { createAgentPanel, createMcpPanel, createAgentPrefsForm } from "../agent
 import { t, tf, getLang, applyLang, LANGS } from "../js/core/i18n.js";
 import { icon, setIcon, setIconLabel } from "../js/core/icons.js";
 import { createLibraryModal } from "../js/core/lib-modal.js";
+import { initQueuePanel, setQueueOnline, refreshQueue, queueTrack } from "../queue-panel.js";
 
 const view = document.getElementById("ns-view");
 const REPO_URL = "https://github.com/neoneo-ai/neo-studio";   // 设置「关于」里的仓库行，与顶栏「关于插件」同一地址
@@ -229,6 +230,13 @@ window.addEventListener("neo:media-pick", (e) => { libPendingPick = e.detail?.on
 // ====== 导演页：整片生成面板 + 配方列表 ======
 let genState = null;   // 当前整片任务 {task_id, statusEl, barEl, runBtn, cancelBtn}
 const GEN_TERMINAL = ["succeeded", "failed", "cancelled"];
+// 实时预览落点：顶栏队列放开并发后，切配方 / 再提交都不许把正在跑那一发的预览帧掐掉，
+// 所以整页只挂一条订阅，按 task_id 分发给当前这一发的播放器（node_id 就是提交时的 task_id）。
+let activeLive = null;   // { task_id, apply(payload) }
+api.addEventListener("rs.h3.preview", ({ detail }) => {
+    if (!detail || !activeLive || String(detail.node_id) !== activeLive.task_id) return;
+    activeLive.apply(detail);
+});
 
 function updateGenStatus(task) {
     if (!genState || task.task_id !== genState.task_id) return;
@@ -241,10 +249,12 @@ function updateGenStatus(task) {
         genState.terminal = true;   // 界面就此定格，后续旧载荷一律作废
         genState.livePlayer?.pause();
         genState.onTerminal?.();
+        activeLive = null;   // 这一发跑完：预览帧不再往播放器上送
     }
+    // 页内进度留一条紧凑状态行，生成钮不锁：这一发的进度在顶栏「队列」里跟
     barEl.style.display = task.status === "running" ? "block" : "none";
     if (task.status === "queued") {
-        statusEl.textContent = tf("排队中…（{recipe}）", { recipe: task.recipe });
+        statusEl.textContent = tf("排队中…（{recipe}）· 顶栏「队列」看进度", { recipe: task.recipe });
     } else if (task.status === "running") {
         const p = task.progress;
         statusEl.textContent = p ? tf("生成中… {value}/{max}", { value: p.value, max: p.max }) : t("生成中…");
@@ -265,7 +275,6 @@ function updateGenStatus(task) {
     } else if (task.status === "cancelled") {
         statusEl.textContent = t("已取消");
     }
-    genState.runBtn.disabled = task.status === "queued" || task.status === "running";
     genState.cancelBtn.style.display = (task.status === "queued" || task.status === "running") ? "" : "none";
 }
 
@@ -549,10 +558,6 @@ async function buildDirector(el) {
     function stopPolling() {
         if (genState && genState.pollTimer) clearInterval(genState.pollTimer);
         api.removeEventListener("rs.director.status", onStatusEvent);
-        if (genState?.previewListener) {
-            api.removeEventListener("rs.h3.preview", genState.previewListener);
-            genState.previewListener = null;
-        }
     }
 
     function onStatusEvent({ detail }) {
@@ -561,6 +566,17 @@ async function buildDirector(el) {
         // 终态即停轮询（WS 与下方轮询兜底两条路都覆盖，否则轮询拿到终态后会永远跑下去）
         if (GEN_TERMINAL.includes(detail.status)) stopPolling();
     }
+
+    // 实时预览按 task_id 订阅：顶栏队列放开并发后，切配方 / 再提交都不许把正在跑那一发的
+    // 预览订阅摘掉，所以整页只挂一条订阅，由 activeLive 决定当前这一发的帧落在哪个播放器上。
+    function applyPreview(p) {
+        if (!p || !Array.isArray(p.frames) || !p.frames.length) return;
+        const st = Number(p.step);
+        if (Number.isFinite(st) && st <= genState.lastPreviewStep) return;
+        if (Number.isFinite(st)) genState.lastPreviewStep = st;
+        livePlayer.apply(p);
+    }
+    activeLive = null;
 
     // 提交整片生成：「生成整片」按钮与编辑器底部「保存并生成整片」共用同一份参数组装。
     // 参数本体（分辨率/步数/种子/连续性/上下文帧）都在配方里，这里只发配方名 + 勾选的段。
@@ -599,28 +615,17 @@ async function buildDirector(el) {
         }
         genState = {
             task_id: data.task_id, statusEl, barEl, fillEl: barEl.firstElementChild,
-            runBtn, cancelBtn, mediaRight, pollTimer: null, previewListener: null,
+            runBtn, cancelBtn, mediaRight, pollTimer: null,
             done: false, terminal: false, lastPreviewStep: 0,   // done：成片只替换一次；terminal：终态已落地，旧载荷一律作废；lastPreviewStep：预览帧按步号单调推进（WS / 轮询同源）
             livePlayer,   // 终态时定格在最后一帧
             onTerminal: () => { tlProgress = { active: false, segment_index: -1, total_segments: 0 }; renderSegs(); },
         };
         api.addEventListener("rs.director.status", onStatusEvent);
-        // 预览帧只按步号向前推进：WS 为主、轮询 latest_preview 兜底，旧帧不得覆盖新帧
-        const applyPreview = (p) => {
-            if (!p || !Array.isArray(p.frames) || !p.frames.length) return;
-            const st = Number(p.step);
-            if (Number.isFinite(st) && st <= genState.lastPreviewStep) return;
-            if (Number.isFinite(st)) genState.lastPreviewStep = st;
-            livePlayer.apply(p);
-        };
-        // 实时预览载荷（后端广播，按 task_id 过滤到本次任务）
-        const onPreviewEvent = ({ detail }) => {
-            if (!detail || String(detail.node_id) !== data.task_id) return;
-            applyPreview(detail);
-        };
-        api.addEventListener("rs.h3.preview", onPreviewEvent);
-        genState.previewListener = onPreviewEvent;
+        activeLive = { task_id: data.task_id, apply: applyPreview };   // 这一发的预览帧从此刻起进这个播放器
+        queueTrack("film", data, { label: recipe });
+        toast(tf("已加入队列：{label} · 顶栏「队列」看进度", { label: recipe }));
         updateGenStatus(data);
+        runBtn.disabled = false;   // 提交成功就把按钮交回：这一发在顶栏队列里跑，用户能接着排下一发
         // WS 事件为主，轮询兜底（页面晚于任务打开 / 断线重连窗口）
         const poll = async () => {
             try {
@@ -1059,7 +1064,7 @@ function buildVideo(el) {
         }
         barEl.style.display = task.status === "running" ? "block" : "none";
         if (task.status === "queued") {
-            statusEl.textContent = t("排队中…");
+            statusEl.textContent = t("排队中…· 顶栏「队列」看进度");
         } else if (task.status === "running") {
             const p = task.progress;
             statusEl.textContent = p ? tf("生成中… {value}/{max}", { value: p.value, max: p.max }) : t("生成中…");
@@ -1073,7 +1078,6 @@ function buildVideo(el) {
         } else if (task.status === "cancelled") {
             statusEl.textContent = t("已取消");
         }
-        runBtn.disabled = task.status === "queued" || task.status === "running";
         cancelBtn.style.display = (task.status === "queued" || task.status === "running") ? "" : "none";
     };
 
@@ -1137,6 +1141,9 @@ function buildVideo(el) {
                 return;
             }
             startPolling(data);
+            queueTrack("simple", data, { label: body.prompt });
+            toast(tf("已加入队列：{label} · 顶栏「队列」看进度", { label: body.prompt.slice(0, 40) }));
+            runBtn.disabled = false;   // 提交成功就把按钮交回：这一发在顶栏队列里跑，用户能接着排下一发
         } catch (e) {
             statusEl.textContent = tf("生成失败：{msg}", { msg: e.message });
             runBtn.disabled = false;
@@ -1825,6 +1832,7 @@ async function flipOnline() {
         ungateRunButtons();
         mountMemBars();
         reconnectSocket();
+        refreshQueue();     // 事件流刚换到 ComfyUI：面板与徽标照六张表的现值重播
         desktopLog("FLIP online in-place");
     } catch {
         flipStarted = false;
@@ -1842,6 +1850,7 @@ async function flipOffline() {
     await loadVersion();   // 桌面端快照：comfy_base 已空，能力表与离线标记回到离线形态
     reGateRunButtons();
     reconnectSocket();     // 事件流切回桌面端的桩，别对着死端口重连
+    setQueueOnline(false);   // 队列要吃执行队列：离线形态收掉顶栏入口
 }
 
 function reGateRunButtons() {
@@ -2105,10 +2114,12 @@ function localizeShell() {
     const logo = document.querySelector(".ns-logo");
     if (logo) { logo.textContent = t("新影工坊"); logo.title = t("返回首页"); }
     for (const a of document.querySelectorAll(".ns-tabs a")) a.textContent = t(a.textContent.trim());
-    for (const id of ["ns-win-min", "ns-win-max", "ns-win-fs", "ns-win-close", "ns-agent-toggle"]) {
+    for (const id of ["ns-win-min", "ns-win-max", "ns-win-fs", "ns-win-close", "ns-agent-toggle", "ns-queue-toggle"]) {
         const b = document.getElementById(id);
         if (b) b.title = t(b.title);
     }
+    const queueLabel = document.getElementById("ns-queue-label");
+    if (queueLabel) queueLabel.textContent = t("队列");
 }
 
 // ====== 采样预览：这一轮要不要逐采样步的动画帧 ======
@@ -2215,6 +2226,7 @@ if (view) {
         initClipboardKeys();
         initReloadHotkey();
         initAgentEntry();
+        initQueuePanel({ toast, go, can: () => can("queue") });   // 顶栏「队列」：离线收掉入口，就绪后播种
     }).catch(e => {
         console.error("[Neo Studio] startup failed:", e);
         desktopLog(`STARTUP FAILED ${e?.stack || e}`);
