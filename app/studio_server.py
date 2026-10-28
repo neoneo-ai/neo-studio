@@ -28,10 +28,10 @@ DATA_ROOT_ENV = "NEO_STUDIO_DATA"   # 插件模块 import 期认的用户数据�
 # 桌面端进程加载的插件模块，按依赖顺序：handler 只依赖 folder_paths、文件系统与 8080 LLM 服务。
 DESKTOP_MODULES = ("util", "civitai", "bookmark", "gallery_lora", "gallery_oss", "gallery",
                  "minimax_h3", "skill", "laya_router", "prompt_names", "prompt_lines", "llm", "lora_tag",
-                 "recipes", "video_gen", "image_gen_files", "model_hub", "backyard", "agent")
+                 "recipes", "video_gen", "image_gen_files", "model_hub", "backyard", "agent", "pose")
 DESKTOP_ROUTE_MODULES = ("gallery_lora", "gallery_oss", "gallery", "bookmark", "lora_tag",
                        "skill", "prompt_names", "llm", "recipes", "video_gen", "image_gen_files", "model_hub",
-                       "backyard", "agent")
+                       "backyard", "agent", "pose")
 
 USERDATA_PATH = "/userdata/neo_gallery_data.json"
 
@@ -256,6 +256,9 @@ def build_app(root: Path, plugin_dir: Path, flags: dict = None, launcher: dict =
             if caps.owner(route.method, route.path) == "desktop":
                 routes.route(route.method, route.path, **route.kwargs)(route.handler)
 
+    # 摆姿包的静态前缀：数据根里的 vite 产物，逐请求判断装没装，能力表不给静态文件逐条打表
+    sys.modules[f"{DESKTOP_PKG}.pose"].register_static(routes)
+
     routes.get(USERDATA_PATH)(userdata_get)
     routes.post(USERDATA_PATH)(userdata_post)
     routes.get("/neo_studio/version")(studio_version)
@@ -266,7 +269,12 @@ def build_app(root: Path, plugin_dir: Path, flags: dict = None, launcher: dict =
     routes.get("/view")(view_file)
     routes.get("/ws")(studio_ws)
 
-    app = web.Application(middlewares=[no_store])
+    # aiohttp 默认只收 1MB 请求体：自备素体（35MB GLB 走 base64 约 47MB）与 ControlNet 图组会在
+    # handler 之前被 transport 挡成 413，插件端（ComfyUI 的 --max-upload-size 默认 100MB）能跑的
+    # 体积到了桌面端就白跑。这里放到接口自身上限之上，让「超过上限」由接口的 400 说清楚。
+    pose_mod = sys.modules[f"{DESKTOP_PKG}.pose"]
+    app = web.Application(middlewares=[no_store],
+                          client_max_size=pose_mod.MAX_BODY_BYTES + 8 * 1024 * 1024)
     app["flags"] = flags if flags is not None else {}
     app["studio_index"] = plugin_dir / "web" / "studio" / "index.html"
     app["userdata"] = Path(folder_paths.get_user_directory()) / "default" / "neo_gallery_data.json"

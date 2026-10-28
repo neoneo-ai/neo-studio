@@ -84,7 +84,7 @@ test("英文模式：顶栏静态壳、设置页 tab、语言提示都出英文"
 
     assert.equal(document.title, "Neo Studio", "窗口标题应换英文");
     assert.deepEqual([...document.querySelectorAll(".ns-tabs a")].map((a) => a.textContent),
-        ["Home", "Assets", "Paint", "Video", "Director", "Skills", "Settings"]);
+        ["Home", "Assets", "Paint", "Video", "Director", "Pose 3D", "Skills", "Settings"]);
     assert.equal(document.querySelector(".ns-logo").textContent, "Neo Studio");
     assert.equal(document.querySelector(".ns-logo").title, "Back to home");
     assert.equal(document.querySelector('.ns-settings-tab[data-key="lang"]').textContent, "Language");

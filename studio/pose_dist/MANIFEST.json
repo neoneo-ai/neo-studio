@@ -1,0 +1,48 @@
+{
+  "format": "3dpose.package/1",
+  "generator": "tools/build_pose_package.ps1",
+  "built_utc": "2026-10-28T11:10:10Z",
+  "total_bytes": 4092587,
+  "files": [
+    {
+      "path": "assets/index-C0Ohd41z.js",
+      "bytes": 1110877,
+      "sha256": "846ae4c5ef5ccb64fcd644023942f4329ac2b7b194ba88ec84d23fd59e3fc18b"
+    },
+    {
+      "path": "assets/index-CR1FdUgI.css",
+      "bytes": 29270,
+      "sha256": "cf8d1201d2100d34c08a2ea3a59235f33d91fa629975661ad9db4215fecd6fd9"
+    },
+    {
+      "path": "index.html",
+      "bytes": 14489,
+      "sha256": "e22c308fc66af0ca9065746dff3557abc6c09303938aff9f3694025f73355c93"
+    },
+    {
+      "path": "LICENSE",
+      "bytes": 1087,
+      "sha256": "1d4a66cca236223102c5e7f001a8588b642b3540a66117c73f3c2ef01b1f049b"
+    },
+    {
+      "path": "models/ATTRIBUTION.md",
+      "bytes": 5403,
+      "sha256": "6996f7c16935ecbc6677f8a132a1add7cf45b0b309bd454276847f3caf6f089b"
+    },
+    {
+      "path": "models/props/index.json",
+      "bytes": 631,
+      "sha256": "5a58247cddae76d0268055a0a947bc1a80703ff23f2719ea0397cbc96d95d4df"
+    },
+    {
+      "path": "models/ybot.glb",
+      "bytes": 2930032,
+      "sha256": "002f8d269de68e5dce3d25195caf390d1aa359bbfaae3fcf4c8dc78ec36c3ba5"
+    },
+    {
+      "path": "THIRD-PARTY.md",
+      "bytes": 798,
+      "sha256": "03e1db926fcf6e14d9184b7c2d2e77f97ba1c7dc97fb59718d769ec624b1b220"
+    }
+  ]
+}

@@ -40,6 +40,7 @@ const PATHS = {
     "arrow-up": '<path d="M12 19V5"/><path d="m5 12 7-7 7 7"/>',
     clock: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
     ratio: '<rect width="18" height="14" x="3" y="5" rx="2"/><path d="M7 12h10"/>',
+    pose: '<circle cx="12" cy="4.5" r="2"/><path d="m9 20 3-6 3 6"/><path d="m6 8.5 6 2 6-2"/><path d="M12 10.5V14"/>',
 
 };
 

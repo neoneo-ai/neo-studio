@@ -7,6 +7,11 @@
 # configs/ 预设配置、example_workflows/、README.md/LICENSE/pyproject.toml/requirements.txt。
 # 应用仓库的 README_ZH、Developer.md 与 docs/ 在 studio/ 之外，不进 Registry 包。
 #
+# pose_dist/ 随包发：「3D 摆姿」的最小授权副本（tools\build_pose_package.ps1 生成，3.9MB，代码 +
+# CC0 素体 + 授权与逐文件 sha256 的 MANIFEST.json），装完插件就能开摆姿页，不必先跑同步脚本。
+# 数据根那份全量产物与用户写的场景、参考图、自备素体 GLB 都在 data/ 下，不跟踪，因此不进包——
+# 把别人的模型与素材发进每个人的插件目录不是我们要的事。
+#
 # configs/ 只随包发预设：llm_providers / model_registry / oss_presets /
 # laya_config。用户配置与运行时缓存一律 gitignore 不进包——
 # remote_llm_config.json 与 backyard_oss.json 是密钥，model_hub.json 的
@@ -32,5 +37,6 @@ test-results/
 
 # 仓库文件
 .gitignore
+.gitattributes
 .comfyignore
 AGENTS.md

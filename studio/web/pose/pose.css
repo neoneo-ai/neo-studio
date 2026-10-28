@@ -1,0 +1,271 @@
+/* pose.css — 桌面端「3D 摆姿」页：工具条 + 姿势库 / iframe 舞台 / 控制面板 + 缺包提示。
+   颜色一律取 studio/style.css 的 --ns-* 变量，页面自身不引入第二套色板。 */
+
+.ns-pose {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    padding: 0;
+}
+
+.ns-pose-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: none;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--ns-border);
+    background: var(--ns-panel);
+}
+
+.ns-pose-bar[hidden] { display: none; }
+
+.ns-pose-bar-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    margin-right: 8px;
+    font-weight: 600;
+    color: var(--ns-fg);
+}
+
+.ns-pose-sep {
+    flex: 1;
+}
+
+.ns-pose-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 11px;
+    border: 1px solid var(--ns-border-soft);
+    border-radius: 8px;
+    background: var(--ns-raised);
+    color: var(--ns-fg);
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.ns-pose-btn:hover { background: var(--ns-field-hover); border-color: var(--ns-accent); }
+
+.ns-pose-btn:disabled { opacity: .45; cursor: default; }
+
+.ns-pose-btn-primary {
+    border-color: var(--ns-primary);
+    background: var(--ns-primary-soft);
+    color: var(--ns-primary-fg);
+}
+
+.ns-pose-btn-primary:hover { background: var(--ns-primary); color: #fff; }
+
+.ns-pose-name {
+    width: 116px;
+    padding: 6px 9px;
+    border: 1px solid var(--ns-field-bd);
+    border-radius: 8px;
+    background: var(--ns-field);
+    color: var(--ns-fg);
+    font: inherit;
+    font-size: 13px;
+}
+
+.ns-pose-stage {
+    flex: 1;
+    min-height: 0;
+    position: relative;
+}
+
+.ns-pose-frame {
+    width: 100%;
+    height: 100%;
+    border: 0;
+    display: block;
+    background: #000;
+}
+
+.ns-pose-hint,
+.ns-pose-empty {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 28px;
+    text-align: center;
+    color: var(--ns-dim);
+}
+
+.ns-pose-empty h3 { margin: 0; font-size: 16px; color: var(--ns-fg); }
+
+.ns-pose-empty p { margin: 0; max-width: 560px; line-height: 1.7; }
+
+/* 三栏主体：左姿势库 / 中画布 / 右控制面板。窄窗口下侧栏各自滚，画布吃掉剩余宽度 */
+.ns-pose-body {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: 232px minmax(0, 1fr) 296px;
+}
+
+.ns-pose-side {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 10px;
+    border-right: 1px solid var(--ns-border);
+    background: var(--ns-panel);
+}
+
+.ns-pose-panel {
+    border-right: 0;
+    border-left: 1px solid var(--ns-border);
+}
+
+.ns-pose-stage { min-width: 0; }
+
+.ns-pose-bridge {
+    padding: 3px 9px;
+    border: 1px solid var(--ns-border-soft);
+    border-radius: 999px;
+    font-size: 12px;
+    color: var(--ns-dim);
+}
+
+.ns-pose-head {
+    margin-top: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: .04em;
+    color: var(--ns-dim);
+}
+
+.ns-pose-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--ns-border);
+}
+
+.ns-pose-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.ns-pose-list {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    max-height: 168px;
+    overflow-y: auto;
+}
+
+.ns-pose-item {
+    padding: 5px 8px;
+    border: 1px solid transparent;
+    border-radius: 7px;
+    font-size: 13px;
+    color: var(--ns-fg);
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ns-pose-item:hover { background: var(--ns-field-hover); }
+
+.ns-pose-item-on {
+    border-color: var(--ns-accent);
+    background: var(--ns-field);
+}
+
+.ns-pose-blank {
+    padding: 6px 8px;
+    font-size: 12px;
+    color: var(--ns-dim);
+}
+
+/* 自备素体的文件选择器：只借浏览器那套选择框，控件本身不上界面 */
+.ns-pose-file {
+    display: none;
+}
+
+.ns-pose-sel {
+    min-width: 0;
+    flex: 1;
+    padding: 6px 8px;
+    border: 1px solid var(--ns-field-bd);
+    border-radius: 8px;
+    background: var(--ns-field);
+    color: var(--ns-fg);
+    font: inherit;
+    font-size: 13px;
+}
+
+.ns-pose-sel:disabled { opacity: .45; }
+
+.ns-pose-checkrow {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 13px;
+    color: var(--ns-fg);
+}
+
+.ns-pose-check { accent-color: var(--ns-accent); }
+
+.ns-pose-checkrow:has(.ns-pose-check:disabled) { opacity: .45; }
+
+.ns-pose-formats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px 8px;
+}
+
+.ns-pose-format {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--ns-fg);
+}
+
+.ns-pose-state {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.ns-pose-state-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 12px;
+}
+
+.ns-pose-state-key { color: var(--ns-dim); }
+
+.ns-pose-state-val {
+    color: var(--ns-fg);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ns-pose-notice {
+    padding: 8px 10px;
+    border: 1px solid var(--ns-accent);
+    border-radius: 8px;
+    background: var(--ns-primary-soft);
+    color: var(--ns-primary-fg);
+    font-size: 12px;
+    line-height: 1.6;
+}

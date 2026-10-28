@@ -141,6 +141,39 @@ Neo Studio 独立页面（`web/studio/index.html`）的后端。素材 / 生图 
 - `only_segments` 为只读时间轴上勾选的段号文本（1 基、逗号分隔，空 = 整片）；勾选是运行期临时状态，不写进配方。
 - 任务跟踪与 `run_segment` 同一套做法：入队 + 轮询快照 + WS 事件按变化推送。
 
+## pose.py — `/neo-pose` 与摆姿包静态前缀
+
+「3D 摆姿」页后端：伺服 3d-pose-art 的构建产物 + 与页面之间的桥接口。页面与桥接口只做文件读写，桌面端
+离线服务同样答这些路由；桥消息与装包方式见 [studio-pose.md](studio-pose.md)。
+
+| 方法   | 路由                        | 说明                                                                         |
+|--------|-----------------------------|------------------------------------------------------------------------------|
+| GET    | `/neo-pose`                 | 摆姿页短路径：两级落点里有入口页就 302 到 `/pose-dist/index.html`，都没有回 404 与安装提示 |
+| GET    | `/pose-dist/{path}`         | 摆姿包子资源，由 iframe 内部直接加载；逐请求按 `<数据根>/pose/dist` → `studio/pose_dist` 两级找（两端各自直接注册，不进能力归属表） |
+| GET    | `/models/{path}`            | 产物里写死的根路径前缀（道具注册表 `props/index.json`、素体与道具的 `<file>.glb`）；与 `/pose-dist/{path}` 同一套两级查找、同一个根内校验 |
+| GET    | `/neo_pose/status`          | 装没装、生效那一级（`dist_source`）、随包清单与在着的 GLB、能力位、已存场景与姿态、桥消息名单、缺包提示 |
+| GET    | `/neo_pose/scenes`          | 场景列表（`name` / `size` / `mtime`）                                        |
+| GET    | `/neo_pose/scene?name=`     | 读一份场景                                                                   |
+| POST   | `/neo_pose/scene`           | 写场景（`.tmp` + replace 原子落盘）                                          |
+| GET    | `/neo_pose/presets`         | 姿势库列表（`name` / `size` / `mtime`，按修改时间倒序）                      |
+| GET    | `/neo_pose/preset?name=`    | 读一份姿态（PoseFile v1 原样交回）                                           |
+| POST   | `/neo_pose/preset`          | 写姿态 `{name, pose}`（`.tmp` + replace 原子落盘）                           |
+| POST   | `/neo_pose/preset/delete`   | 删一份姿态（单条，名字过同一套白名单）                                       |
+| POST   | `/neo_pose/import_image`    | 把素材库的一张图交进页面                                                     |
+| POST   | `/neo_pose/import_model`    | 自备素体 GLB 写进 `<数据根>/pose/dist/models/<key>.glb`，回 `{key, name, url, size, from}` |
+| GET    | `/neo_pose/refs/{name}`     | 伺服交进页面的那张参考图                                                     |
+| POST   | `/neo_pose/export_image`    | 页面画布导出落进素材库「我的上传」，回 `{filename, subfolder, size}`         |
+| POST   | `/neo_pose/export_set`      | ControlNet 图组落进素材库「我的上传」（≤12 张），回 `{saved, count}`         |
+
+前缀本身（`/pose-dist/`，空路径）落到入口页，地址栏直接敲前缀也要进页面。产物里的资源路径是构建时写死的
+两条根路径：页面与脚本走 `/pose-dist/...`，道具注册表与 GLB 走 `/models/props/index.json`、
+`/models/<file>.glb`。两条前缀是同一条静态伺服挂的两个名字 —— 同一个两级落点、同一个根内校验，出根的
+请求 400、缺文件 404，绝不回一份空注册表让页面把「加具失败」当成用户的问题。`import_model` 收
+`{key, data}`（base64）或 `{key, filename, subfolder, type}`（素材库里的文件），key 过场景名那套白名单、
+体积 ≤ 35MB、文件头须为 `glTF`，四道校验都在写盘之前（35MB 是 base64 进 JSON 后还装得进 48MB
+请求体上限的那一档，桌面端服务的请求体上限也按这条抬到接口之上，不会先被 transport 挡成 413）。桥的页面侧实现是
+3d-pose-art 的 `src/neoBridge.js`，口径见 [studio-pose.md](studio-pose.md)。
+
 ## workflow.py — `/neo_nodes/*`
 
 | 方法 | 路由 | 说明 |
@@ -324,22 +357,23 @@ LLM 模式与配置见 [llm.md](llm.md)，技能设计见 [skills.md](skills.md)
 远程下载 / 打 8080 LLM 服务」；需要执行队列、显存、节点定义的归 ComfyUI，表外接口一律 409。
 桌面端服务的启动序列、关窗回收与缓存约定见 [studio-desktop.md](studio-desktop.md)。
 
-| 方法 | 路由 | 说明 |
-|------|------|------|
-| GET | `/neo-studio` | Studio 页面（桌面端同一份 `web/studio/index.html`） |
-| GET | `/extensions/comfyui-neo-studio/*` | 前端静态文件 |
-| GET/POST | `/neo_gallery/*` `/neo_bookmark/*` | 素材库与收藏（含删除 / 上传 / 打标 / OSS 同步） |
-| GET/POST | `/rs_prompts/skills` `load_skill` `save_skill` `delete_skill` `*_*_skill_file` | 技能编辑 |
-| POST | `/rs_prompts/list_prompt_names` | @ 点名弹层的提示词候选（只扫数据根 `prompts/` 的名字与标签） |
-| GET/POST | `/rs_recipes/*` | 配方读写、LLM 重写 / 逐格描述 / 分段 / 宫格切分 |
-| GET/POST | `/neo_image_gen/settings` `models` `input_images` `skill_config` `skill_workflow` `*workflow_skill*` `copy_skill_files`、`/neo_video_gen/settings` `models` | 生图 / 生视频设置 |
-| GET/POST | `/rs_prompts/get_models` `native_models` `set_model` `remote_llm_config` `llm_connection_test` `llm_mode` `extract_title` `fetch_remote_models` | LLM 配置与标题提取（只读 `configs/` 与 8080 服务） |
-| GET/POST | `/neo_model_hub/*` `/neo_backyard/*` | 模型库与 Backyard |
-| GET/POST | `/userdata/neo_gallery_data.json` | 素材库状态文件（`user/default/`，写入走 `.tmp` + replace） |
-| GET | `/neo_studio/version` | 能力快照：`offline: true` + `caps` + `starting` + `routes` + `comfy_base` + `data_root` / `comfy_local` / `remote`（「设置 → 关于」的路径行），前端据此门控与选目标 |
-| GET | `/neo_studio/comfy_state` | 内核状态快照（端口 / PID / 谁启动 / 运行 / 就绪 / 启动中）：整页刷新后 pywebview 的桥晚于页面注入，顶栏状态位靠它从 HTTP 侧补上；桌面端还没装配出内核时 `409` |
-| GET | `/neo_studio/log` `/view` `/ws` | 启动日志 / 图片只读 / WS 桩 |
-| ANY | 其余 `/neo_*` `/rs_*` `/userdata/*` `/api/*` | `409 {"success": false, "offline": true}` |
+| 方法     | 路由                                                                                                                                                        | 说明                                                                                                                                                                |
+|----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| GET      | `/neo-studio`                                                                                                                                               | Studio 页面（桌面端同一份 `web/studio/index.html`）                                                                                                                 |
+| GET      | `/extensions/comfyui-neo-studio/*`                                                                                                                          | 前端静态文件                                                                                                                                                        |
+| GET      | `/neo-pose` `/neo_pose/*`                                                                                                                                   | 摆姿页跳转与桥接口；`/pose-dist/*` 与 `/models/*` 是摆姿包静态前缀（两端直接注册，不在能力表）                                                                                     |
+| GET/POST | `/neo_gallery/*` `/neo_bookmark/*`                                                                                                                          | 素材库与收藏（含删除 / 上传 / 打标 / OSS 同步）                                                                                                                     |
+| GET/POST | `/rs_prompts/skills` `load_skill` `save_skill` `delete_skill` `*_*_skill_file`                                                                              | 技能编辑                                                                                                                                                            |
+| POST     | `/rs_prompts/list_prompt_names`                                                                                                                             | @ 点名弹层的提示词候选（只扫数据根 `prompts/` 的名字与标签）                                                                                                        |
+| GET/POST | `/rs_recipes/*`                                                                                                                                             | 配方读写、LLM 重写 / 逐格描述 / 分段 / 宫格切分                                                                                                                     |
+| GET/POST | `/neo_image_gen/settings` `models` `input_images` `skill_config` `skill_workflow` `*workflow_skill*` `copy_skill_files`、`/neo_video_gen/settings` `models` | 生图 / 生视频设置                                                                                                                                                   |
+| GET/POST | `/rs_prompts/get_models` `native_models` `set_model` `remote_llm_config` `llm_connection_test` `llm_mode` `extract_title` `fetch_remote_models`             | LLM 配置与标题提取（只读 `configs/` 与 8080 服务）                                                                                                                  |
+| GET/POST | `/neo_model_hub/*` `/neo_backyard/*`                                                                                                                        | 模型库与 Backyard                                                                                                                                                   |
+| GET/POST | `/userdata/neo_gallery_data.json`                                                                                                                           | 素材库状态文件（`user/default/`，写入走 `.tmp` + replace）                                                                                                          |
+| GET      | `/neo_studio/version`                                                                                                                                       | 能力快照：`offline: true` + `caps` + `starting` + `routes` + `comfy_base` + `data_root` / `comfy_local` / `remote`（「设置 → 关于」的路径行），前端据此门控与选目标 |
+| GET      | `/neo_studio/comfy_state`                                                                                                                                   | 内核状态快照（端口 / PID / 谁启动 / 运行 / 就绪 / 启动中）：整页刷新后 pywebview 的桥晚于页面注入，顶栏状态位靠它从 HTTP 侧补上；桌面端还没装配出内核时 `409`       |
+| GET      | `/neo_studio/log` `/view` `/ws`                                                                                                                             | 启动日志 / 图片只读 / WS 桩                                                                                                                                         |
+| ANY      | 其余 `/neo_*` `/rs_*` `/userdata/*` `/api/*`                                                                                                                | `409 {"success": false, "offline": true}`                                                                                                                           |
 
 - `routes` 是归属表（`studio_caps.route_list()`，形如 `"GET /neo_gallery/list"`）：页面钉在桌面端端口上时，
   前端按它判定每条请求打桌面端还是打 ComfyUI，不在前端另立第二份清单。

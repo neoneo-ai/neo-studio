@@ -83,6 +83,7 @@ studio/
 ├── backyard.py                # Backyard preprocessing & OSS upload page
 ├── recipes.py                 # recipe backend + /rs_recipes/* routes
 ├── studio.py                  # Neo Studio backend + /neo_studio/* routes
+├── pose.py                    # 3D Pose backend + /neo-pose and /neo_pose/* routes
 ├── model_hub.py               # model hub + /neo_model_hub/* routes
 ├── model_download.py          # download and placement
 ├── workflow.py                # workflow repair + /neo_nodes/* routes
@@ -142,6 +143,7 @@ studio/
 | `backyard.py` | Backyard page: Gallery preprocessing and OSS upload management |
 | `recipes.py` | Recipe CRUD, one-click send, director recipes and storyboards, import/export |
 | `studio.py` | Neo Studio backend: standalone page entry and full-film generation jobs |
+| `pose.py` | 3D Pose backend: serves the pose package, scene read/write and canvas export into the library |
 | `app/studio_app.py` | Studio desktop: launches ComfyUI and hosts the WebView2 window (geometry / localStorage persistence) |
 | `workflow.py` | Workflow model-path repair, repair mappings, skill model suggestions |
 | `util.py` | Media extension constants, media probing, metadata and prompt collection |
@@ -192,6 +194,7 @@ studio/
 | `toast.js` | Notification bars |
 | `quick-input-history.js` | Quick-input history |
 | `studio/` | Neo Studio standalone page (index.html + studio-app.js + shim/) |
+| `pose/pose.js` | 3D Pose host view: iframe host, toolbar and the postMessage bridge |
 | `*.css` | Styles per module |
 
 ## Node registration

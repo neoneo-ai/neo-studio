@@ -1,0 +1,10 @@
+{
+  "_readme": [
+    "GLB 道具注册表：把模型文件放进 public/models/props/，然后在这里登记一行。",
+    "propKey = glb:<file>，写进场景文件（3dpose.scene/1）的 subjects[].propKey。",
+    "file 必须是本目录下的文件名（不能带路径 / ..），scale 是注册表级缩放（与用户摆放时的 scale 相乘）。",
+    "内置道具（builtin:chair 等）由 src/core/propKit.js 定义，不需要在这里登记 —— 空注册表也能用。",
+    "模型来源与授权请一并登记进 public/models/ATTRIBUTION.md（同素体的处理方式）。"
+  ],
+  "props": []
+}

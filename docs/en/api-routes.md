@@ -156,6 +156,43 @@ version information:
   the whole film); checking is transient runtime state and is never written into the recipe.
 - Task tracking follows the same approach as `run_segment`: enqueue + poll snapshots + WS events pushed on change.
 
+## pose.py — `/neo-pose` and the pose package static prefixes
+
+The 3D Pose backend: it serves the 3d-pose-art build and the bridge routes the page talks to. The
+page and the bridge only read and write files, so the offline desktop service answers them too; the
+bridge messages and how to install the package are in [studio-pose.md](studio-pose.md).
+
+| Method   | Route                       | Purpose                                                                                                         |
+|----------|-----------------------------|-----------------------------------------------------------------------------------------------------------------|
+| GET      | `/neo-pose`                 | Short path: 302 to `/pose-dist/index.html` when an entry page exists in either landing path, 404 with the install hint when neither has one |
+| GET      | `/pose-dist/{path}`         | Package subresources the iframe loads directly; looked up per request through `<data root>/pose/dist` then `studio/pose_dist` (registered by each host directly, outside the capability table) |
+| GET      | `/models/{path}`            | The origin-root path baked into the build (prop registry `props/index.json`, body and prop `<file>.glb`); same two-level lookup and same root check as `/pose-dist/{path}` |
+| GET      | `/neo_pose/status`          | Install state, which landing path is live (`dist_source`), the shipped manifest and the GLBs present, capability flags, saved scenes and poses, bridge names, install hint |
+| GET      | `/neo_pose/scenes`          | Scene list (`name` / `size` / `mtime`)                                                                          |
+| GET      | `/neo_pose/scene?name=`     | Read one scene                                                                                                  |
+| POST     | `/neo_pose/scene`           | Write a scene (`.tmp` + replace, atomic)                                                                        |
+| GET      | `/neo_pose/presets`         | Pose library list (`name` / `size` / `mtime`, newest first)                                                     |
+| GET      | `/neo_pose/preset?name=`    | Read one pose (PoseFile v1, passed through unchanged)                                                           |
+| POST     | `/neo_pose/preset`          | Write a pose `{name, pose}` (`.tmp` + replace, atomic)                                                          |
+| POST     | `/neo_pose/preset/delete`   | Delete one pose (single item, same name whitelist)                                                              |
+| POST     | `/neo_pose/import_image`    | Hand one library asset to the page                                                                              |
+| POST     | `/neo_pose/import_model`    | Write an own-figure GLB to `<data root>/pose/dist/models/<key>.glb`, replies `{key, name, url, size, from}`   |
+| GET      | `/neo_pose/refs/{name}`     | Serve that reference image back to the page (same-origin)                                                       |
+| POST     | `/neo_pose/export_image`    | Store the page canvas into the library's "My Upload", replies `{filename, subfolder, size}`                     |
+| POST     | `/neo_pose/export_set`      | Store a ControlNet image set into "My Upload" (≤12 files), replies `{saved, count}`                             |
+
+The prefix itself (`/pose-dist/`, an empty path) lands on the entry page, so typing the prefix in the
+address bar opens the page. The asset paths inside the build are fixed at build time and they are two
+origin-root paths: the page and its scripts come through `/pose-dist/...`, the prop registry and the
+GLBs through `/models/props/index.json` and `/models/<file>.glb`. The two prefixes are one static
+handler mounted twice — the same two-level lookup, the same in-root check, 400 for a path that leaves
+the dist and 404 for a missing file, never an empty registry that makes the page report a prop failure
+as the user's problem. `import_model` takes `{key, data}` (base64) or `{key, filename, subfolder,
+type}` (a library file); the key goes through the scene-name whitelist, the byte count stays under 35 MB
+(the size that still fits the 48 MB request-body cap once base64 is packed into JSON), the
+header has to be `glTF`, and all four checks run before anything is written. The page side of the bridge
+is `src/neoBridge.js` in 3d-pose-art; the contract is in [studio-pose.md](studio-pose.md).
+
 ## workflow.py — `/neo_nodes/*`
 
 | Method | Route | Description |
@@ -370,22 +407,23 @@ the handlers that plugin modules attach to their own `RouteTableDef`s, according
 service"; anything needing the execution queue, VRAM, or node definitions belongs to ComfyUI, and every route outside
 the table answers 409. Startup sequence, close teardown and cache conventions: [studio-desktop.md](studio-desktop.md).
 
-| Method | Route | Description |
-|------|------|------|
-| GET | `/neo-studio` | The Studio page (the same `web/studio/index.html` on the desktop side) |
-| GET | `/extensions/comfyui-neo-studio/*` | Frontend static files |
-| GET/POST | `/neo_gallery/*` `/neo_bookmark/*` | Asset library and bookmarks (including delete / upload / tagging / OSS sync) |
-| GET/POST | `/rs_prompts/skills` `load_skill` `save_skill` `delete_skill` `*_*_skill_file` | Skill editing |
-| POST | `/rs_prompts/list_prompt_names` | Prompt candidates for the @ picker (names and tags from the data-root `prompts/` scan) |
-| GET/POST | `/rs_recipes/*` | Recipe read/write, LLM rewrite / per-panel description / segmentation / grid split |
-| GET/POST | `/neo_image_gen/settings` `models` `input_images` `skill_config` `skill_workflow` `*workflow_skill*` `copy_skill_files`, `/neo_video_gen/settings` `models` | Image / video generation settings |
-| GET/POST | `/rs_prompts/get_models` `native_models` `set_model` `remote_llm_config` `llm_connection_test` `llm_mode` `extract_title` `fetch_remote_models` | LLM configuration and title extraction (reads only `configs/` and the 8080 service) |
-| GET/POST | `/neo_model_hub/*` `/neo_backyard/*` | Model hub and Backyard |
-| GET/POST | `/userdata/neo_gallery_data.json` | Asset library state file (`user/default/`, writes go through `.tmp` + replace) |
-| GET | `/neo_studio/version` | Capability snapshot: `offline: true` + `caps` + `starting` + `routes` + `comfy_base` + `data_root` / `comfy_local` / `remote` (the Settings → About path rows); the frontend gates on it and picks the request target |
-| GET | `/neo_studio/comfy_state` | Kernel state snapshot (port / PID / who launched / running / ready / starting): after a full-page reload the pywebview bridge lands later than the page script, so the header status chip falls back to this route; `409` while the desktop has no kernel assembled |
-| GET | `/neo_studio/log` `/view` `/ws` | Startup log / read-only images / WS stub |
-| ANY | any other `/neo_*` `/rs_*` `/userdata/*` `/api/*` | `409 {"success": false, "offline": true}` |
+| Method   | Route                                                                                                                                                       | Description                                                                                                                                                                                                                                                         |
+|----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| GET      | `/neo-studio`                                                                                                                                               | The Studio page (the same `web/studio/index.html` on the desktop side)                                                                                                                                                                                              |
+| GET      | `/extensions/comfyui-neo-studio/*`                                                                                                                          | Frontend static files                                                                                                                                                                                                                                               |
+| GET      | `/neo-pose` `/neo_pose/*`                                                                                                                                   | Pose page redirect and bridge routes; `/pose-dist/*` and `/models/*` are the pose package static prefixes (registered by each host directly, not in the capability table)                                                                                                              |
+| GET/POST | `/neo_gallery/*` `/neo_bookmark/*`                                                                                                                          | Asset library and bookmarks (including delete / upload / tagging / OSS sync)                                                                                                                                                                                        |
+| GET/POST | `/rs_prompts/skills` `load_skill` `save_skill` `delete_skill` `*_*_skill_file`                                                                              | Skill editing                                                                                                                                                                                                                                                       |
+| POST     | `/rs_prompts/list_prompt_names`                                                                                                                             | Prompt candidates for the @ picker (names and tags from the data-root `prompts/` scan)                                                                                                                                                                              |
+| GET/POST | `/rs_recipes/*`                                                                                                                                             | Recipe read/write, LLM rewrite / per-panel description / segmentation / grid split                                                                                                                                                                                  |
+| GET/POST | `/neo_image_gen/settings` `models` `input_images` `skill_config` `skill_workflow` `*workflow_skill*` `copy_skill_files`, `/neo_video_gen/settings` `models` | Image / video generation settings                                                                                                                                                                                                                                   |
+| GET/POST | `/rs_prompts/get_models` `native_models` `set_model` `remote_llm_config` `llm_connection_test` `llm_mode` `extract_title` `fetch_remote_models`             | LLM configuration and title extraction (reads only `configs/` and the 8080 service)                                                                                                                                                                                 |
+| GET/POST | `/neo_model_hub/*` `/neo_backyard/*`                                                                                                                        | Model hub and Backyard                                                                                                                                                                                                                                              |
+| GET/POST | `/userdata/neo_gallery_data.json`                                                                                                                           | Asset library state file (`user/default/`, writes go through `.tmp` + replace)                                                                                                                                                                                      |
+| GET      | `/neo_studio/version`                                                                                                                                       | Capability snapshot: `offline: true` + `caps` + `starting` + `routes` + `comfy_base` + `data_root` / `comfy_local` / `remote` (the Settings → About path rows); the frontend gates on it and picks the request target                                               |
+| GET      | `/neo_studio/comfy_state`                                                                                                                                   | Kernel state snapshot (port / PID / who launched / running / ready / starting): after a full-page reload the pywebview bridge lands later than the page script, so the header status chip falls back to this route; `409` while the desktop has no kernel assembled |
+| GET      | `/neo_studio/log` `/view` `/ws`                                                                                                                             | Startup log / read-only images / WS stub                                                                                                                                                                                                                            |
+| ANY      | any other `/neo_*` `/rs_*` `/userdata/*` `/api/*`                                                                                                           | `409 {"success": false, "offline": true}`                                                                                                                                                                                                                           |
 
 - `routes` is the ownership table (`studio_caps.route_list()`, entries like `"GET /neo_gallery/list"`): with the page
   pinned to the desktop port, the frontend decides per request whether it goes to the desktop service or to ComfyUI,

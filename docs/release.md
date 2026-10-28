@@ -19,6 +19,15 @@ Registry 安装只读 `pyproject.toml` 的 `dependencies`，`requirements.txt` �
 Registry 与前端搜索的命中靠 `pyproject.toml` 的 `description` / `keywords`，以及节点自身的
 `SEARCH_ALIASES`（约定见 [architecture.md](architecture.md) 的「节点元数据」，由 `tests/test_node_metadata.py` 校验）。
 
+「3D 摆姿」随包发的那份产物在 `studio/pose_dist/`（git 已跟踪，`tools\build_pose_package.ps1` 生成，
+3.9MB：代码 + CC0 素体 `ybot.glb` + `LICENSE` / `THIRD-PARTY.md` / `models/ATTRIBUTION.md` /
+逐文件 sha256 的 `MANIFEST.json`）。数据根那份全量产物在 `data/pose/dist/`，`data/` 不进包，用户写的
+场景、参考图与自备素体 GLB 也都落在那里。发什么由摆姿仓库 `models/ATTRIBUTION.md` 的授权口径决定
+（Mixamo 与 SMPL 派生素体不入库），发完用 `tools\test_pose_package.ps1` 逐文件核对清单与体积上限，
+口径见 [studio-pose.md](studio-pose.md)。清单比的是字节，仓库根 `.gitattributes` 把整棵 `pose_dist/`
+钉成不转换行尾（`-text`，GLB / wasm / ktx2 记 binary）：`core.autocrlf=true` 的机器 checkout 出来的
+文本带 CRLF，那份包的字节数与 sha256 就会全对不上，自检会指着正常的包报错。
+
 ### Git Action 方式
 
 - Registry 元数据在 `studio/pyproject.toml` 的 `[tool.comfy]`（PublisherId `neoneo-ai`，DisplayName `Neo Studio`）。

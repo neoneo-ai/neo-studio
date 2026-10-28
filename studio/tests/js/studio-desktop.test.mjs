@@ -133,9 +133,9 @@ test("默认落地首页：意图卡片挂满主区，素材卡直达素材页",
               "顶栏首页签应高亮");
     assert.equal(home.querySelector("h1").textContent, "今天想创作什么？");
     assert.deepEqual([...home.querySelectorAll(".ns-home-card-title")].map((e) => e.textContent),
-        ["生成图片", "生成视频", "图片编辑", "导演视频", "智能体", "素材库", "技能", "设置"]);
+        ["生成图片", "生成视频", "图片编辑", "导演视频", "智能体", "3D 摆姿", "素材库", "技能", "设置"]);
 
-    const libCard = [...home.querySelectorAll(".ns-home-card")][5];
+    const libCard = [...home.querySelectorAll(".ns-home-card")][6];
     libCard.click();
     await flush();
     assert.ok(home.classList.contains("ns-hidden"), "跳素材页后首页应收起");
@@ -686,7 +686,7 @@ test("顶栏分组：分隔线落在素材页签与技能页签前，页签结�
     assert.match(css, /\.ns-tabs a\[data-tab="skills"\]::before[^}]*background/, "技能页签前要有组边界分隔线");
     const html = fs.readFileSync(path.join(webDir, "studio", "index.html"), "utf8");
     assert.deepEqual([...html.matchAll(/data-tab="(\w+)"/g)].map((m) => m[1]),
-        ["home", "gallery", "paint", "video", "director", "skills", "settings"],
-        "分组走 CSS，页签 DOM 保持平铺 <a>（视频页与绘画 / 导演同属中部组）");
+        ["home", "gallery", "paint", "video", "director", "pose", "skills", "settings"],
+        "分组走 CSS，页签 DOM 保持平铺 <a>（视频页与摆姿页同绘画 / 导演属中部组）");
 });
 

@@ -18,6 +18,7 @@ This directory splits the plugin documentation by major module. The entry points
 | [gallery.md](gallery.md) | Asset library: browsing, lightbox, file management, Civitai LORA, bookmarks |
 | [workflow-repair.md](workflow-repair.md) | Workflow model-path repair |
 | [model-hub.md](model-hub.md) | Model hub: Comfy-Org curated section, dual-source search, resumable downloads |
+| [studio-pose.md](studio-pose.md) | 3D Pose: installing the pose package, the page and bridge routes, scenes and exports |
 
 ## Developer documentation
 

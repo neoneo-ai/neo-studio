@@ -24,6 +24,7 @@ import { t, tf, getLang, applyLang, LANGS } from "../js/core/i18n.js";
 import { icon, setIcon, setIconLabel } from "../js/core/icons.js";
 import { createLibraryModal } from "../js/core/lib-modal.js";
 import { initQueuePanel, setQueueOnline, queueTrack } from "../queue-panel.js";
+import { createPoseView } from "../pose/pose.js";
 
 const view = document.getElementById("ns-view");
 const REPO_URL = "https://github.com/neoneo-ai/neo-studio";   // 设置「关于」里的仓库行，与顶栏「关于插件」同一地址
@@ -217,6 +218,17 @@ function paintPickImage(images) {
     if (!img) return;
     openImageEditDialog(app.neoGallery, { filename: img.filename }, img.subfolder);
 }
+
+/** 摆姿页取用素材：点卡片取一张喂进场景并收窗（一次只摆一个参考物） */
+function openPoseMaterial(onPick) {
+    openLibModal("pose", (picked) => {
+        onPick(picked);
+        libModal?.close();
+    });
+}
+
+// 摆姿视图的依赖在这汇聚：api 走 shim（离线/在线同一条路），素材取用复用上面那个弹窗
+const buildPose = createPoseView({ api, $el, toast, openMaterial: openPoseMaterial });
 
 onSidebarTabChange((id) => {
     if (currentView !== "director" && currentView !== "paint") return;
@@ -783,6 +795,7 @@ function buildHome(el) {
             homeCard("pencil", "图片编辑", "拖入素材，写下要改成什么样", () => openPaintMode("edit")),
             homeCard("play", "导演视频", "多段配方，生成整片视频", () => go("director")),
             homeCard("target", "智能体", "说出目标，工具链多轮跑完", () => go("agent")),
+            homeCard("pose", "3D 摆姿", "摆姿 · 场景 · 全景", () => go("pose")),
         ]),
         $el("h2", { className: "ns-home-section", textContent: t("素材与配置") }),
         $el("div", { className: "ns-home-grid" }, [
@@ -2091,6 +2104,7 @@ function route() {
     if (name === "skills") ensureView("skills", buildSkills);
     else if (name === "video") ensureView("video", buildVideo);
     else if (name === "agent") ensureView("agent", buildAgentPage);
+    else if (name === "pose") ensureView("pose", buildPose);
     else if (name === "settings") {
         ensureView("settings", buildSettings);
         // 深链 #/settings?tab=mcp：智能体页「MCP」入口跳来这，视图常驻时也要落到那一栏

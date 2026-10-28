@@ -1,0 +1,8 @@
+# 随包摆姿包按字节发货：MANIFEST.json 里逐文件记 sha256 与体积，装机后自检要逐条对上。
+# core.autocrlf=true 的机器会把文本 checkout 成 CRLF，字节数与哈希就全变了 —— 自检会指着
+# 正常的一份包说「清单对不上」。这条把整棵 pose_dist 钉成不转换行尾，GLB 直接当二进制。
+# 口径见 docs/release.md「打包范围」与 tools/test_pose_package.ps1。
+studio/pose_dist/** -text
+studio/pose_dist/**/*.glb binary
+studio/pose_dist/**/*.wasm binary
+studio/pose_dist/**/*.ktx2 binary

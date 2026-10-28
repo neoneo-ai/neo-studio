@@ -661,5 +661,246 @@ class McpRouteTests(_ServerCase):
         self.assertTrue(data["caps"]["mcp"], "MCP 只有桌面端能服务，页面据此门控")
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """短路径的 302 要看得见面包缺没缺：跟着跑就只能看见入口页正文。"""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+class PoseBridgeTests(_ServerCase):
+    """3D 摆姿页在桌面端离线服务里的形态：页面、子资源前缀、场景往返与能力门控。
+
+    摆姿包（3d-pose-art 的 vite 产物）装在数据根 <data_root>/pose/dist/，装没装逐请求判断。
+    产物文件与场景都写在这个目录下，用例只删自己创建的文件。"""
+
+    def setUp(self):
+        self.pose_dir = _data_root() / "pose"
+        self.pose_module = sys.modules[f"{ns.DESKTOP_PKG}.pose"]
+        self.created = []
+        # 随包副本（studio/pose_dist）挪开：这一组用例单独看数据根那一级，兜底行为由下面那条用例单独测
+        self._real_pkg_dist = self.pose_module.PACKAGE_DIST
+        self.pose_module.PACKAGE_DIST = _data_root() / "unit_pkg_dist_missing"
+
+    def tearDown(self):
+        self.pose_module.PACKAGE_DIST = self._real_pkg_dist
+        for path in self.created:
+            try:
+                path.unlink(missing_ok=True)
+            except PermissionError:
+                # Windows 上 FileResponse 的文件句柄要等 executor 线程收尾才释放，机器忙时这一下
+                # 落在 tearDown 之后。用例写的是 conftest 钉下的临时数据根，退出时整棵摘掉。
+                pass
+
+    def write(self, path: Path, content: str):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+        self.created.append(path)
+        return path
+
+    def get_full(self, path):
+        """要读响应头：子资源的 MIME 与缓存策略就是这条前缀的全部行为。"""
+        opener = urllib.request.build_opener(_NoRedirect)
+        try:
+            with opener.open(f"http://127.0.0.1:{self.port}{path}", timeout=20) as resp:
+                return resp.status, dict(resp.headers), resp.read()
+        except urllib.error.HTTPError as exc:
+            return exc.code, dict(exc.headers), exc.read()
+
+    def test_status_carries_caps_and_install_state(self):
+        status, body = self.get("/neo_pose/status")
+        data = json.loads(body)
+        self.assertEqual(status, 200)
+        self.assertTrue(data["success"])
+        # 摆姿、时间轴、导出全在浏览器里跑，离线服务只给文件；估点/网格/pano 要 pose-art 那套
+        # Python sidecar，桌面端进程起不动，页面按这几位置灰控件。自备素体导入是桌面端自己那条路。
+        self.assertTrue(data["caps"]["pose"])
+        self.assertTrue(data["caps"]["export"])
+        self.assertTrue(data["caps"]["body_import"])
+        for sidecar_only in ("photo3d", "mesh", "pano", "lib_write"):
+            self.assertFalse(data["caps"][sidecar_only], f"{sidecar_only} 在桌面端不可用")
+        self.assertEqual(data["installed"], (self.pose_dir / "dist" / "index.html").is_file())
+        self.assertEqual(data["bridge"], list(self.pose_module.BRIDGE_MESSAGES),
+                         "桥消息名单由后端下发，宿主与摆姿页都按它校验")
+        # 两级落点与随包清单都在 status 里：装机的人一眼看到页面跑在哪一级、装到了什么
+        for key in ("dist_source", "package_installed", "models_present", "manifest_version"):
+            self.assertIn(key, data, f"status 要报出 {key}")
+
+    def test_package_copy_serves_the_page_when_data_root_is_empty(self):
+        """随包副本是兜底那一级：数据根没装摆姿包时，页面与 CC0 素体都从插件目录里出来。"""
+        pkg = self.pose_module.PACKAGE_DIST
+        self.pose_module.PACKAGE_DIST = self.pose_dir / "unit_pkg_copy"
+        try:
+            self.write(self.pose_module.PACKAGE_DIST / "index.html",
+                       '<!doctype html><html><body>pose-unit-pkg</body></html>')
+            self.write(self.pose_module.PACKAGE_DIST / "models" / "ybot.glb", "glb-bytes")
+            status, data = self.get("/neo_pose/status")
+            payload = json.loads(data)
+            self.assertTrue(payload["installed"])
+            self.assertEqual(payload["dist_source"], "package")
+            self.assertTrue(payload["package_installed"])
+            self.assertEqual(payload["models_present"], ["ybot.glb"])
+            status, body = self.get("/neo-pose")
+            self.assertEqual(status, 200, "兜底那一级要接住短路径的跳转")
+            self.assertIn(b"pose-unit-pkg", body)
+            status, _, _ = self.get_full("/pose-dist/models/ybot.glb")
+            self.assertEqual(status, 200)
+        finally:
+            self.pose_module.PACKAGE_DIST = pkg
+
+    def test_page_route_serves_pose_page_once_dist_is_there(self):
+        """iframe 的 src 就是这条短路径：短路径跳到前缀下的入口页，产物才有相对深度可解析。"""
+        self.write(self.pose_dir / "dist" / "index.html",
+                   '<!doctype html><html><body>pose-unit-page</body></html>')
+        status, body = self.get("/neo-pose")
+        self.assertEqual(status, 200, "302 要跟着走到前缀下的入口页")
+        self.assertIn(b"pose-unit-page", body)
+
+    def test_page_route_says_the_package_is_missing(self):
+        (self.pose_dir / "dist" / "index.html").unlink(missing_ok=True)
+        status, body = self.get("/neo-pose")
+        self.assertEqual(status, 404)
+        self.assertIn("未安装".encode(), body, "缺包要说清楚，不能让 iframe 自己黑屏")
+
+    def test_dist_prefix_serves_wasm_and_hashes_only_assets(self):
+        self.write(self.pose_dir / "dist" / "assets" / "pose_unit-abc.wasm", "wasm-bytes")
+        self.write(self.pose_dir / "dist" / "pose_unit.svg", "<svg/>")
+        status, headers, body = self.get_full("/pose-dist/assets/pose_unit-abc.wasm")
+        self.assertEqual(status, 200)
+        self.assertEqual(headers.get("Content-Type"), "application/wasm",
+                         "WebView 按 MIME 编译，text/plain 的话 wasm 解码直接失败")
+        self.assertIn("immutable", headers.get("Cache-Control", ""))
+
+        status, headers, _ = self.get_full("/pose-dist/pose_unit.svg")
+        self.assertEqual(status, 200)
+        self.assertNotIn("immutable", headers.get("Cache-Control", ""),
+                         "无哈希的产物改动即失效，不能让它缓存一年")
+
+    def test_dist_prefix_stays_inside_the_package(self):
+        status, _, _ = self.get_full("/pose-dist/../../configs/data_root.json")
+        self.assertIn(status, (400, 404), "前缀不能把数据根里的配置发出去")
+
+    def test_models_prefix_serves_the_registries_the_page_asks_for(self):
+        """道具与素体注册表在产物里写的是 origin 根上的绝对路径 /models/...：页面挂在
+        /pose-dist/ 下时这些请求落回 origin 根，只有前缀伺服的话注册表就是空的 ——
+        道具面板一条都不出、加具逐条失败，页面不会说「缺包」，只会一直说加具失败。"""
+        pkg = self.pose_module.PACKAGE_DIST
+        self.pose_module.PACKAGE_DIST = self.pose_dir / "unit_models_pkg"
+        try:
+            pkg_dist = self.pose_module.PACKAGE_DIST
+            self.write(pkg_dist / "index.html", '<!doctype html><html><body>pose-unit-pkg</body></html>')
+            self.write(pkg_dist / "models" / "props" / "index.json",
+                       json.dumps({"props": [{"file": "box.glb", "label": "箱体"}]}, ensure_ascii=False))
+            self.write(pkg_dist / "models" / "props" / "box.glb", "glTF\x02unit-prop")
+
+            status, headers, body = self.get_full("/models/props/index.json")
+            self.assertEqual(status, 200, "道具注册表要按页面写死的那条路径答出来")
+            self.assertEqual(json.loads(body)["props"][0]["file"], "box.glb")
+
+            status, headers, _ = self.get_full("/models/props/box.glb")
+            self.assertEqual(status, 200)
+            self.assertEqual(headers.get("Content-Type"), "model/gltf-binary",
+                             "注册表里的 file 就按这条路径取，MIME 不对页面解不出几何")
+
+            # 自备素体落进数据根后，页面同样按 /models/<key>.glb 取它
+            import base64
+            saved = json.loads(self.post_json("/neo_pose/import_model", {
+                "key": "unit_models_body",
+                "data": base64.b64encode(b"glTF\x02" + b"unit-models-body").decode()})[1])
+            self.created.append(self.pose_dir / "dist" / "models" / "unit_models_body.glb")
+            status, _, _ = self.get_full("/models/unit_models_body.glb")
+            self.assertEqual(status, 200, f"导入回来的 {saved['key']} 要在这条前缀上取得到")
+
+            # 数据根那份压住随包的同名文件：道具注册表按数据根那条答
+            self.write(self.pose_dir / "dist" / "models" / "props" / "index.json",
+                       json.dumps({"props": [{"file": "wide.glb", "label": "全量"}]}, ensure_ascii=False))
+            status, _, body = self.get_full("/models/props/index.json")
+            self.assertEqual(json.loads(body)["props"][0]["file"], "wide.glb")
+
+            status, _, _ = self.get_full("/models/../../launcher_config.json")
+            self.assertIn(status, (400, 404), "这条前缀不能把摆姿包 models 之外的文件发出去")
+        finally:
+            self.pose_module.PACKAGE_DIST = pkg
+
+    def test_scene_round_trip_offline(self):
+        saved = json.loads(self.post_json("/neo_pose/scene",
+                                          {"name": "pose_unit_scene", "scene": {"camYaw": 42}})[1])
+        self.assertTrue(saved["success"])
+        try:
+            rows = json.loads(self.get("/neo_pose/scenes")[1])["scenes"]
+            self.assertIn("pose_unit_scene", [row["name"] for row in rows])
+            scene = json.loads(self.get("/neo_pose/scene?name=pose_unit_scene")[1])["scene"]
+            self.assertEqual(scene["camYaw"], 42)
+        finally:
+            (self.pose_dir / "scenes" / "pose_unit_scene.json").unlink(missing_ok=True)
+
+    def test_pose_routes_are_desktop_owned(self):
+        """页面与桥接口归桌面端；子资源前缀是静态伺服，不进能力表。
+
+        逐条核对摆姿模块注册的那张表：能力归属表漏一条，桌面端就会把那个接口报成「要 ComfyUI 在跑」。"""
+        registered = {(route.method.upper(), route.path) for route in self.pose_module.routes}
+        missing = sorted(item for item in registered
+                         if item[1].startswith("/neo") and item not in caps.DESKTOP_ROUTES)
+        self.assertEqual(missing, [], "这些桥接口没登记进桌面端能力表")
+        self.assertEqual(caps.owner("GET", "/neo-pose"), "desktop")
+        self.assertEqual(caps.owner("GET", "/neo_pose/status"), "desktop")
+        self.assertEqual(caps.owner("POST", "/neo_pose/export_image"), "desktop")
+        self.assertEqual(caps.owner("POST", "/neo_pose/scene"), "desktop")
+        self.assertEqual(caps.owner("POST", "/neo_pose/import_model"), "desktop",
+                         "自备素体导入是桌面端自己那条路，不依赖 ComfyUI 运行时")
+        self.assertNotIn(("GET", "/pose-dist/{path}"), caps.DESKTOP_ROUTES,
+                         "整条前缀逐条打表只会让能力表里的条目数随构建产物变动")
+        self.assertNotIn(("GET", "/models/{path}"), caps.DESKTOP_ROUTES,
+                         "道具注册表与素体 GLB 的根前缀也是静态伺服，与子资源同一条路")
+
+    def test_import_model_offline_lands_in_data_root(self):
+        """离线服务里导入一份自备 GLB：落点在数据根的 pose/dist/models，页面那条前缀取得到。"""
+        import base64
+        payload = base64.b64encode(b"glTF\x02\x00\x00\x00" + bytes(32)).decode()
+        status, body = self.post_json("/neo_pose/import_model", {"key": "unit_body", "data": payload})
+        self.assertEqual(status, 200)
+        data = json.loads(body)
+        self.assertTrue(data["success"])
+        self.assertEqual(data["url"], "/pose-dist/models/unit_body.glb")
+        dest = self.pose_dir / "dist" / "models" / "unit_body.glb"
+        self.created.append(dest)
+        self.assertTrue(dest.is_file())
+        status, _, raw = self.get_full("/pose-dist/models/unit_body.glb")
+        self.assertEqual(status, 200)
+        self.assertEqual(raw[:4], b"glTF")
+        status, body = self.post_json("/neo_pose/import_model", {"key": "../escape", "data": payload})
+        self.assertEqual(status, 400, "key 里不许有路径")
+
+    def test_import_model_accepts_real_glb_size(self):
+        """真实素体体积的那一份要进得来：aiohttp 默认只收 1MB 请求体，桌面端不抬高就会 413。
+
+        插件端那条走 ComfyUI 自己的 app（--max-upload-size 默认 100MB），桌面端这条是自建 app，
+        两边体积口径必须一致，否则「自备素体」在插件端能跑、在独立窗口里就是死路。
+        """
+        import base64
+        big = b"glTF\x02\x00\x00\x00" + bytes(2 * 1024 * 1024)   # 2MB，远超 transport 默认上限
+        status, body = self.post_json("/neo_pose/import_model",
+                                      {"key": "unit_big", "data": base64.b64encode(big).decode()})
+        self.assertEqual(status, 200, f"2MB 素体导入被挡：{status} {body[:200]}")
+        dest = self.pose_dir / "dist" / "models" / "unit_big.glb"
+        self.created.append(dest)
+        self.assertEqual(dest.stat().st_size, len(big))
+
+    def test_import_model_caps_are_reported_by_the_interface(self):
+        """体积上限由接口说清楚，而不是 transport 抢答：超 GLB 上限与超请求体上限都回 400。"""
+        import base64
+        over_glb = base64.b64encode(b"glTF\x02\x00\x00\x00"
+                                    + bytes(self.pose_module.MAX_GLB_BYTES + 1)).decode()
+        status, body = self.post_json("/neo_pose/import_model",
+                                      {"key": "unit_over", "data": over_glb})
+        self.assertEqual(status, 400)
+        self.assertIn("GLB 超过", json.loads(body)["error"], "要说的是素体上限，不是请求体上限")
+        (self.pose_dir / "dist" / "models" / "unit_over.glb").unlink(missing_ok=True)
+        over_body = json.dumps({"key": "unit_over2", "data": "A" * (self.pose_module.MAX_BODY_BYTES + 1)})
+        status, body = self.get("/neo_pose/import_model", data=over_body.encode())
+        self.assertEqual(status, 400)
+        self.assertIn("请求体超过", json.loads(body)["error"], "请求体上限也要由接口回 400")
+
+
 if __name__ == "__main__":
     unittest.main()

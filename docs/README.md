@@ -18,6 +18,7 @@
 | [gallery.md](gallery.md) | 素材库：浏览、灯箱、文件管理、Civitai LORA、收藏 |
 | [workflow-repair.md](workflow-repair.md) | 工作流模型路径修复 |
 | [model-hub.md](model-hub.md) | 模型库：Comfy-Org 专区双源搜索与断点续传下载 |
+| [studio-pose.md](studio-pose.md) | 3D 摆姿：摆姿包安装、页面与桥接口、场景与导出 |
 
 ## 开发者文档
 

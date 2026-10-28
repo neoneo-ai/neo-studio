@@ -25,13 +25,17 @@ if __package__ not in (None, ""):
     # 这里统一挂进 ComfyUI 路由表（server.add_routes 会一并生成 /api 前缀副本）；
     # 桌面端离线服务复用同一批 handler，不经过 PromptServer。
     from . import (gallery, gallery_lora, gallery_oss, bookmark, lora_tag, skill, llm, recipes,
-                   video_gen, image_gen_files, model_hub, backyard, prompt_names)
+                   video_gen, image_gen_files, model_hub, backyard, prompt_names, pose)
 
     from server import PromptServer
     for _mod in (gallery_lora, gallery_oss, gallery, bookmark, lora_tag, skill, llm, recipes,
-                 video_gen, image_gen_files, model_hub, backyard, prompt_names):
+                 video_gen, image_gen_files, model_hub, backyard, prompt_names, pose):
         for _route in _mod.routes:
             PromptServer.instance.routes.route(_route.method, _route.path, **_route.kwargs)(_route.handler)
+
+    # 摆姿包的静态前缀直接注册：vite 产物在数据根，子资源由 iframe 内部相对加载，
+    # 不走模块路由表（理由见 studio/pose.py 的 register_static）
+    pose.register_static(PromptServer.instance.routes)
 
     # Import workflow module (workflow repair API; registers /neo_nodes/repair route)
     from . import workflow

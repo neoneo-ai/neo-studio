@@ -4,6 +4,80 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **3D Pose (3D 摆姿) is a page in the window, and its scenes, poses and exports are yours on disk.** The top bar
+  gains a Pose tab and the home page a 3D Pose card; the page runs the 3d-pose-art build in a sandboxed iframe, and
+  the window supplies the controls: a left column for the pose library and scenes (save the current pose, load one,
+  delete one; save a scene, load a saved scene), a right control panel for the canvas state, figures, pose-mode
+  switches, props and the ControlNet export, and a bar button that imports an asset from the library as a reference
+  plane. Posing happens in the page through the `pose:call` channel and the canvas state mirrors back into the panel,
+  so the page's own demo toolbar steps aside while the window panel is driving. Exported images - a canvas snapshot
+  or a whole ControlNet set (skeleton / depth / silhouette per view) - land in the library's "My Upload" folder, so
+  the gallery list and drag-into-node read them like any other asset; a set is validated as a batch, so a rejected
+  file leaves no half group behind. Poses are written atomically under `<data root>/pose/presets/<name>.pose.json`
+  and scenes under `<data root>/pose/scenes/`, and the short path `/neo-pose` redirects into the package
+  prefix `/pose-dist/` so the vite build's relative imports resolve. The pose package is installed separately:
+  `pwsh tools\sync_pose_dist.ps1 -Source <3d-pose-art repo>` puts the build under `<data root>/pose/dist/`, and until
+  anything is installed the page says so with the install hint instead of showing a blank frame; with an older pose
+  package that has no host command layer
+  the panel states what to run instead of showing controls that do nothing. Photo point estimation, mesh generation,
+  pano and library writes need the pose project's Python sidecar and stay greyed out in the desktop
+  window. The bridge accepts messages only from its own iframe and only from the page's own origin, and one request's
+  reply is only accepted on its own reply port. Covered by
+  `studio/tests/test_pose_bridge.py` (path containment and symlinks, the scene and pose name whitelists, wasm MIME,
+  hashed vs unhashed caching, atomic scene and pose writes, the ControlNet group validated as a batch into the
+  library, the redirect), `app/tests/test_studio_server.py`
+  (`PoseBridgeTests`: served offline, no escaping the package, scene round trip, capability flags, route ownership) and
+  `studio/tests/js/pose-bridge.test.mjs` (not-installed form, iframe sandbox, source/origin gate, the `pose:call`
+  round trip and reply-port isolation, the panel gate, the state mirror, the library and export routes);
+  docs: `docs/studio-pose.md` / `docs/en/studio-pose.md`, `docs/api-routes.md` / `docs/en/api-routes.md`,
+  `docs/architecture.md` / `docs/en/architecture.md`. The pose page answers the bridge on its own side
+  (`src/neoBridge.js` in 3d-pose-art): it serializes the whole scene for a save, hands over the same
+  clean canvas snapshot the Download screenshot button makes, takes a library asset as a reference
+  plane, and puts a stored scene back on the stage - and it attaches no listener at all when the page
+  runs standalone. Typing the package prefix `/pose-dist/` in the address bar opens the page. Covered
+  by `tests/neoBridge.node.test.mjs` in 3d-pose-art (when the bridge exists, the source and origin
+  gates, the reply-port answers, how a failure is voiced).
+
+  Two fixes on the installed page. The build's own GLB assets (`/models/ybot.glb` and the prop registry)
+  are now addressed from the page's own directory, so under the `/pose-dist/` prefix the figures load
+  instead of falling back to the armless procedural skeleton - a root deployment (GitHub Pages,
+  `npm run dev`) keeps requesting the exact same URLs. The page's six-row toolbar also collapses: the
+  bottom-left 面板 button and the `T` key keep only its first row, the state is remembered across reloads,
+  and the first row stays clickable. Covered by `tests/appBase.node.test.mjs` (root deployment unchanged,
+  prefix deployment folds asset URLs into the prefix) and the 3d-pose-art browser suite (the default
+  figure GLB is fetched through the deployment root; collapsing keeps one row and persists).
+
+- **The 3D Pose page installs with the plugin, and the figures the licence allows ship inside it.** The pose build now
+  has two landing paths: the package you sync into `<data root>/pose/dist/` (the full build, `*.map` included) and a
+  minimal licensed copy that ships in `studio/pose_dist/` — the code plus the CC0 figure `ybot.glb`, `LICENSE`,
+  `THIRD-PARTY.md`, `models/ATTRIBUTION.md` and a `MANIFEST.json` with a sha256 per file, 3.9 MB in total. Requests look
+  through the data root first, so a fresh build and your own imported figures take precedence, and with no sync at all
+  the page still opens — the left column then says plainly that the page runs on the bundled copy and that only the CC0
+  figure ships with it. Both prefixes the build asks for are answered: the page and its scripts come through `/pose-dist/`,
+  the prop registry and the GLBs through the origin-root `/models/` the build bakes in (`/models/props/index.json`,
+  `/models/<file>.glb`), one static handler under two names with the same two-level lookup and the same in-root check.
+  With only `/pose-dist/` mounted the registry request landed as a 404, so the page read it as empty and reported every
+  "add prop" and every GLB body as a failure while the page itself ran fine. What ships is decided by the licence rows
+  in the pose project's `models/ATTRIBUTION.md`, not by
+  size: Mixamo and the SMPL-derived bodies, the prop GLBs and the source maps stay out, and the prop registry ships
+  empty (the procedural props stay available). The panel's **导入自备素体** button takes a `.glb` you own — a Mixamo
+  download, your own rig — writes it to `<data root>/pose/dist/models/<key>.glb` through `/neo_pose/import_model`
+  (key whitelist, 35 MB cap - the size that fits the 48 MB request-body cap after base64 - `glTF` header, all
+  checked before anything is written; the standalone service raises its own request-body cap above that line, since
+  aiohttp's 1 MB default rejected a 2.9 MB figure before the handler ever ran) and reports the key you register in
+  the pose page's own local import area; re-syncing the pose package no longer deletes those imported figures, because
+  `tools\sync_pose_dist.ps1` keeps the files the source build does not have. `/neo_pose/status` reports which landing
+  path is live (`dist_source`), the shipped manifest and the GLBs present, and `caps.body_import` is now `true`. Covered
+  by `studio/tests/test_pose_bridge.py` (the bundled copy as fallback, the data root shadowing same-named files, the
+  prop-registry prefix resolving in both levels, the manifest inside status, the import landing path with its five
+  checks), `app/tests/test_studio_server.py`
+  (`PoseBridgeTests`: the bundled-copy fallback offline, the `/models` prefix answering the registry and the prop GLBs,
+  importing a figure offline with the 35 MB cap and the request-body cap above it, the pose route table checked one by
+  one), `studio/tests/js/pose-bridge.test.mjs` (the bundled-copy note, the base64 upload, the key and file-type checks)
+  and `tools\test_pose_package.ps1` (manifest hashes and size cap, the GLB whitelist, the forbidden shapes); docs:
+  `docs/studio-pose.md` / `docs/en/studio-pose.md`, `docs/api-routes.md` / `docs/en/api-routes.md`,
+  `docs/release.md` / `docs/en/release.md`, `tools/AGENTS.md`.
+
 - **VRAM / RAM monitoring and 清理 now live in the top-bar 队列 panel.** The readout used to sit once per generation
   page (director, paint, video, agent) and polled every 3 seconds while you were on one of them. It is now a single
   strip under the panel header — `显存 12.0G/16.0G` and `内存 20.1G/32.0G`, orange above 60% and red above 85% — with
