@@ -805,15 +805,18 @@ export async function createRecipesPanel(options = {}) {
     const fixedFilter = directorOnly ? 'director' : null;
     // selectable（Studio 导演页）：点卡片即选中并回传 onSelect，直接喂给上方整片生成区（不再用顶部下拉选配方）
     const selectable = typeof options.onSelect === 'function';
-    // openEditorOnSelect（Studio 导演页）：选中后顺手在内嵌宿主里打开该配方，省得再去找 ✎
-    const openEditorOnSelect = !!options.openEditorOnSelect;
+    // openEditorOnSelect（Studio 导演页）：选中后顺手在内嵌宿主里打开该配方，省得再去找 ✎。
+    // 传函数时每次现算：开机那份配方面板是随首页一起建好的，铺编辑器会触发宿主的「打开时切到本页」
+    // 回调，窗口就从首页跳到导演页了
+    const openEditorOnSelect = () => typeof options.openEditorOnSelect === 'function'
+        ? !!options.openEditorOnSelect() : !!options.openEditorOnSelect;
     const autoSelectFirst = !!options.autoSelectFirst;
     let selectedName = null;
     // 选中即打开内嵌编辑器（Studio 导演页）：点卡片与首屏自动选中走同一条路径。
     // 自动选中只回 onSelect 的话，进页时右上宿主是空的 —— 得再点一次配方卡才有编辑器
     const openOnSelect = (r) => {
         // 选中由编辑器 adopt 回传：脏态挡下时卡片高亮与上方生成区一律不动，确认条处理完才跟着切过去
-        if (openEditorOnSelect && r.type === 'video_director') openDirectorEditor(r, renderList, -1, { onAdopt: () => selectRecipe(r) });
+        if (openEditorOnSelect() && r.type === 'video_director') openDirectorEditor(r, renderList, -1, { onAdopt: () => selectRecipe(r) });
     };
 
     // 面板状态（搜索/筛选/排序/分组折叠）：存 /userdata/neo_recipes_data.json，刷新后回显
@@ -1155,7 +1158,7 @@ export async function createRecipesPanel(options = {}) {
             // openEditorOnSelect 时同一次点击直接在内嵌宿主里打开该配方（重复点同一配方只切段，不重载）
             const pick = () => {
                 // 导演配方：选中跟着编辑器走（编辑器 adopt 才回传 onSelect）
-                if (openEditorOnSelect && r.type === 'video_director') { openOnSelect(r); return; }
+                if (openEditorOnSelect() && r.type === 'video_director') { openOnSelect(r); return; }
                 selectRecipe(r);
             };
             card.addEventListener('click', pick);

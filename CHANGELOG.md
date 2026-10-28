@@ -4,6 +4,16 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **The window opens on the home page, and nothing jumps it away.** The Studio page reads its tab from the URL
+  fragment. An unrecognised tab - a bookmarked tab link, a deep link saved from an older build - hid every view and
+  left a window with nothing but the top bar, and the director page was pulling the window off home by itself: the
+  recipe list lands during launch, auto-selects its first director recipe, opens that recipe in the embedded editor,
+  and the editor host then switches to its own page. The first recipe is still auto-selected - the film generate pane
+  and the agent context read it - but the editor is only opened by clicking the card, so a launch stays on **首页**
+  and the director page starts on its guide page. An unrecognised tab now falls back to **首页** as well. Covered by
+  `studio/tests/js/studio-starting.test.mjs` and `studio/tests/js/studio-director.test.mjs`; the js harness resets the
+  URL fragment between cases, so a case no longer inherits the tab the previous case left in the shared window.
+
 - **3D Pose (3D 摆姿) is a page in the window, and its scenes, poses and exports are yours on disk.** The top bar
   gains a Pose tab and the home page a 3D Pose card; the page runs the 3d-pose-art build in a sandboxed iframe, and
   the window supplies the controls: a left column for the pose library and scenes (save the current pose, load one,

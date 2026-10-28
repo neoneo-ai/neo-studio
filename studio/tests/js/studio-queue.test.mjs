@@ -114,8 +114,10 @@ test("队列：导演页提交整片即时登记，终态事件给成片链接�
         error: "", status: "queued", progress: null, filename: null, created: 120, updated: 120,
     }));
     window.location.hash = "#/director";
+    await until(() => document.querySelector(".ns-director-recipes .neo-recipes-card-selected"), "首个导演配方自动选中");
+    click(document.querySelector(".ns-director-recipes .neo-recipes-card-selected"));
     await until(() => document.querySelectorAll(".ns-director-editor .neo-director-seg").length === 2,
-        "进页自动打开编辑器");
+        "点卡打开编辑器");
     click(document.querySelector(".ns-gen-run"));
     await until(() => rowBy("全片A"), "整片行登记");
     assert.equal(rowBy("全片A").querySelector(".ns-queue-kind").textContent, "整片");

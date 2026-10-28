@@ -67,6 +67,17 @@ async function until(fn, what) {
     assert.fail(`等待超时：${what}`);
 }
 
+test("开机落首页：导演配方列表落地不自动铺编辑器，窗口不被拽到导演页", async () => {
+    await import("../../web/studio/studio-app.js");
+    await until(() => document.querySelector(".ns-director-recipes .neo-recipes-panel"), "开机建好的配方面板");
+    await sleep(300);   // 自动选中 → 铺编辑器 → 跳页这条链跑完还不跳，才算断了
+    assert.ok(document.querySelector(".ns-home:not(.ns-hidden)"), "落地页是首页");
+    assert.notEqual(location.hash, "#/director", "开机不跳导演页");
+    assert.equal(document.querySelector(".ns-director-editor .neo-director-panel"), null, "开机不把首个导演配方铺进编辑器");
+    assert.ok(document.querySelector(".ns-director-empty"), "导演页停在引导页");
+    location.hash = "#/director";   // 本文件每条用例都从这一行起头：这里落回导演页，下一条照旧
+});
+
 test("Studio 导演页：分段勾选条 + 生成中实时预览", async () => {
     await import("../../web/studio/studio-app.js");
     appState.graph = { _nodes: [] }; // 无 Load* 节点 → 编辑器内无媒体候选
@@ -82,8 +93,10 @@ test("Studio 导演页：分段勾选条 + 生成中实时预览", async () => {
         return sel && sel.textContent === "R1";
     }, "配方自动选中");
     await until(() => document.querySelectorAll(".ns-gen-seg-chip").length === 2, "一格一段（mock spec 2 段）");
-    // 自动选中的配方直接铺进右上宿主：进页即有编辑器，不用先点一张配方卡
-    await until(() => document.querySelectorAll(".ns-director-editor .neo-director-seg").length === 2, "进页自动打开编辑器");
+    // 落地在首页时不铺编辑器：点这张已选中的卡才把它铺进左栏宿主
+    assert.equal(document.querySelector(".ns-director-editor .neo-director-panel"), null, "进页不自动铺编辑器");
+    click(document.querySelector(".ns-director-recipes .neo-recipes-card-selected"));
+    await until(() => document.querySelectorAll(".ns-director-editor .neo-director-seg").length === 2, "点卡打开编辑器");
     assert.ok(document.querySelector(".ns-director-editor").classList.contains("ns-editor-open"), "编辑器挂上后收起占位提示");
     assert.equal(document.querySelector(".ns-gen-seg-chip").textContent, "1", "格内只有段号");
     // 参数不在面板上：尺寸 / 步数只读回显来自配方 defaults

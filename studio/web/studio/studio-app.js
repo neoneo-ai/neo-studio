@@ -470,7 +470,9 @@ async function buildDirector(el) {
         applyRecipe(r.name);   // 刷新分段格子 + 尺寸/步数回显
     };
     // 弹窗里「新增导演配方」照点卡那条路：关窗让位，空白配方直接内嵌进本视图
-    const panelOpts = () => ({ directorOnly: true, autoSelectFirst: !closedBefore(), initialSelection: currentRecipeName, openEditorOnSelect: true, onSelect, onNewRecipe: () => { recipesModal?.close(); openNewDirector(); } });
+    // 自动选中照旧，「铺编辑器」只在本页站着时做：开机这份面板是随首页一起建好的，那一下铺编辑器会
+    // 经宿主的「打开时切到本页」回调把窗口从首页拽到导演页
+    const panelOpts = () => ({ directorOnly: true, autoSelectFirst: !closedBefore(), initialSelection: currentRecipeName, openEditorOnSelect: () => currentView === "director", onSelect, onNewRecipe: () => { recipesModal?.close(); openNewDirector(); } });
     directorPanelOpts = panelOpts;
     onDirectorShown = () => { if (currentRecipeName) applyRecipe(currentRecipeName); };
 
@@ -2095,7 +2097,7 @@ function initAgentEntry() {
 }
 
 function route() {
-    const name = (location.hash || "#/home").replace(/^#\//, "").split("?")[0] || "home";
+    let name = (location.hash || "#/home").replace(/^#\//, "").split("?")[0] || "home";
     // 首页 / 导演页 / 绘画页视图常驻：首页卡片直达后两页，内嵌宿主要在第一次点
     // 「新建导演配方 / 生成素材 / 图片编辑」之前就要注册好
     ensureView("home", buildHome);
@@ -2116,6 +2118,9 @@ function route() {
         }
     }
     else if (name !== "home") ensureView("gallery", buildGallery);
+    // 认不出的 tab 名（深链、别的构建里已删掉的页）没有视图可显：showView 会把全部视图一起隐掉，
+    // 窗口停在只剩顶栏的空白页
+    if (!views.has(name)) name = "home";
     showView(name);
 }
 

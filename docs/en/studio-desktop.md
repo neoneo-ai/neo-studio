@@ -93,11 +93,13 @@ list and the asset library both open in modals (`js/core/lib-modal.js`), so the 
   An embedded save (including **🎬 Save & Generate Film**) leaves the editor **in place** — the film runs in the
   pane on the right and the editor the user was just editing is not pulled away. Closing is the title-bar **✕**, the
   footer **Cancel**, the dirty bar's "Save & close", or switching to another recipe (the singleton reload path).
-- **Entering the page opens the editor**: unless a recipe has been closed on this machine, the first director recipe
-  is auto-selected as soon as the recipe list lands and opened embedded in the left pane — no card click needed.
-  One close is remembered (`neo_studio_director_closed`), so later visits stay on the guide page until a recipe is
-  picked with **📋 Recipes** or started with **📝 New recipe** — the list sorts by modification time, so the recipe
-  just edited is always the top card and would otherwise be reopened on every visit.
+- **Startup always lands on home, and only a click opens the editor**: when the recipe list lands, the first director
+  recipe is auto-selected (the film generate pane and the agent context read it) but is **not** opened embedded in the
+  left pane — opening it fires the host's "open → switch to this page" entry and drags the window from home to the
+  director page. The director page stays on the guide page until a recipe is picked with **📋 Recipes** or started with
+  **📝 New recipe**. One close is remembered (`neo_studio_director_closed`), and from then on the panel stops
+  auto-selecting — the list sorts by modification time, so the recipe just edited is always the top card and would
+  otherwise come back selected on every launch.
   **Clicking a recipe card selects it, opens it embedded and closes the recipe modal** (clicking the same card again only switches
   the current segment, so unsaved edits survive). When the editor has unsaved changes the click is blocked by the dirty
   bar and nothing moves — the card highlight, the segment chips and the size echo all stay on the old recipe — and

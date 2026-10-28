@@ -15,6 +15,11 @@ globalThis.WebSocket = class {
 
 const studioBody = `<div class="ns-header"></div><div id="ns-view"></div><span class="ns-comfy-status" id="ns-comfy-status" hidden></span>`;
 
+// 带 tab 条的那份 fixture：落在哪一页就断言 active 落在哪个 tab 上
+const tabsBody = `<div class="ns-header"></div>` +
+    `<div class="ns-tabs"><a href="#/home" data-tab="home">首页</a><a href="#/director" data-tab="director">导演</a></div>` +
+    `<div id="ns-view"></div><span class="ns-comfy-status" id="ns-comfy-status" hidden></span>`;
+
 const OFFLINE_CAPS = {
     image_gen: false, storyboard: false, voice: false, segment: false,
     director: false, grid_split: true, memory: false, repair: false,
@@ -87,3 +92,25 @@ test("启动中点「⤒ 主画布编辑」：不开桌面端根路径的死页�
     assert.equal(opened.length, 0, "启动中不该开主画布页 —— 离线页的 \"/\" 是桌面端只读服务，根路径没有画布页");
     assert.match(appState.toasts.at(-1).detail, /ComfyUI 启动中/);
 });
+
+test("开机落首页：不带 hash 与认不出的 tab 名都落首页，窗口不停在只剩顶栏的空白页", async () => {
+    mockStartingDesktop();
+    document.body.innerHTML = tabsBody;
+    await import("../../web/studio/studio-app.js?landing=1");
+    await flush();
+    const active = () => document.querySelector(".ns-tabs a.active")?.dataset.tab;
+    assert.equal(active(), "home", "开机不带 hash 落首页");
+    assert.equal(document.querySelectorAll(".ns-page:not(.ns-hidden)").length, 1, "开机只有一页可见");
+
+    window.location.hash = "#/director";
+    window.dispatchEvent(new Event("hashchange"));
+    await flush();
+    assert.equal(active(), "director", "导演页照常切得过去");
+
+    window.location.hash = "#/no-such-tab";
+    window.dispatchEvent(new Event("hashchange"));
+    await flush();
+    assert.equal(active(), "home", "认不出的 tab 名落回首页");
+    assert.equal(document.querySelectorAll(".ns-page:not(.ns-hidden)").length, 1, "认不出的 tab 名不停在空白页");
+});
+
