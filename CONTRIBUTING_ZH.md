@@ -3,7 +3,8 @@
 > 📄 English: [CONTRIBUTING.md](CONTRIBUTING.md)
 
 Apache-2.0、公开仓库：fork 之后直接提 Pull Request 即可，不需要加入组织。下面这些就是评审时对照的规则；
-完整规则在 [AGENTS.md](AGENTS.md)，模块地图在 [Developer.md](Developer.md)，测试清单在 [docs/testing.md](docs/testing.md)。
+完整规则在 [AGENTS.md](AGENTS.md) 与 `studio/`、`studio/web/`、`app/`、`tools/` 各自的 `AGENTS.md`，
+模块地图在 [Developer.md](Developer.md)，测试清单在 [docs/testing.md](docs/testing.md)。
 
 ## 环境
 

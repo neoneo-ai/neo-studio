@@ -4,12 +4,54 @@
 
 Project structure, backend and frontend module responsibilities, node registration and data directories.
 Entry point for developers: [../../Developer_EN.md](../../Developer_EN.md).
+The rules for changing a layer live in that directory's `AGENTS.md` (`studio/`, `studio/web/`, `app/`,
+`tools/`); the cross-cutting invariants live in [../../AGENTS.md](../../AGENTS.md).
 
 ## Project structure
 
 ```
+Neo-Studio/                            desktop app repo; root pyproject lists desktop deps, publishes no package
+├── AGENTS.md                          cross-cutting rules and product invariants
+├── CLAUDE.md                          pointer to AGENTS.md
+├── Developer.md · Developer_EN.md     module map (Chinese / English)
+├── CONTRIBUTING.md · CONTRIBUTING_ZH.md
+├── CHANGELOG.md                       English, one entry per user-visible change
+├── conftest.py · pytest.ini           test stubs and suite config (data root pinned to a temp dir)
+├── docs/ · docs/en/                   architecture / desktop / MCP / release / testing (mirrored pair)
+├── app/                               desktop app: window, offline service, launcher
+│   ├── AGENTS.md                      window-first startup, ports, child process chain, routes
+│   ├── studio_app.py                  pywebview + WebView2, plugin sync, process reaping
+│   ├── studio_server.py               offline service: no ComfyUI runtime
+│   ├── studio_caps.py                 the offline capability table, the only offline gate
+│   └── mcp_client.py · mcp_routes.py
+├── studio/                            the kernel plugin comfyui-neo-studio (the Registry package ships from here)
+│   ├── AGENTS.md                      node contract, plugin Python style
+│   ├── __init__.py                    merges node mappings and routes, prints the version banner
+│   ├── plugin_paths.py · util.py      standard-library leaves: data root, shared helpers
+│   ├── mcp_server.py                  stdio MCP subprocess, standard library only
+│   ├── web/                           frontend, WEB_DIRECTORY = "./web"
+│   │   ├── AGENTS.md                  no build step, shim boundary, golden snapshots
+│   │   ├── studio/                    standalone Studio page; shim/ is its ComfyUI boundary
+│   │   ├── js/core/                   cross-node shared tool layer
+│   │   └── docs/                      node help docs, one file per node key
+│   ├── configs/ prompts/ skills/ recipes/ example_workflows/   built-in presets
+│   ├── gallery/                       preset media; the cache here is the data-root fallback
+│   ├── pyproject.toml · requirements.txt · .comfyignore   publish metadata, dependencies, package boundary
+│   └── tests/                         node metadata and behavior unit tests
+├── __init__.py                        clone-into-custom_nodes compat entry only
+├── tests/                             run-tests.ps1: the two pytest suites and the JS runner
+├── tools/                             offline dev and release scripts, never packaged
+│   └── AGENTS.md                      script groups, gallery preset pipeline, exe build
+├── pyproject.toml                     desktop dependencies
+└── package.json                       npm test / npm run e2e / npm run update-goldens
+```
+
+## Kernel plugin files
+
+One node group per module: each carries its own `routes` and `NODE_CLASS_MAPPINGS`, merged by `studio/__init__.py`.
+
+```
 studio/
-├── __init__.py                # plugin entry: register API routes, merge node mappings, declare WEB_DIRECTORY
 ├── prompts.py                 # prompt nodes + /rs_prompts/* routes
 ├── prompt_names.py            # prompt name and tag scan + /rs_prompts/list_prompt_names
 ├── prompt_lines.py            # multi-line prompt collection parsing
@@ -41,24 +83,11 @@ studio/
 ├── backyard.py                # Backyard preprocessing & OSS upload page
 ├── recipes.py                 # recipe backend + /rs_recipes/* routes
 ├── studio.py                  # Neo Studio backend + /neo_studio/* routes
-├── app/studio_app.py          # Studio desktop (pywebview + WebView2): launches ComfyUI and hosts the window
-├── neo-studio-app.bat         # Studio desktop debug entry (with console)
-├── neo-studio-app.vbs         # Studio desktop double-click entry (pythonw, no console window)
+├── model_hub.py               # model hub + /neo_model_hub/* routes
+├── model_download.py          # download and placement
 ├── workflow.py                # workflow repair + /neo_nodes/* routes
-├── util.py                    # media constants and shared utilities
-├── requirements.txt           # Python dependencies
-├── pyproject.toml             # Registry publishing metadata
-├── pytest.ini                 # test configuration
-├── configs/                   # runtime configuration (see "Data & configuration directories")
-├── locals/                    # localization resources (zh_CN.json)
-├── prompts/                   # prompt directories (presets / custom)
-├── skills/                    # skill directories (presets / tasks / custom)
-├── gallery/                   # asset media and caches
-├── recipes/                   # recipe directories (presets / custom)
-├── tools/                     # offline tool scripts (make_studio_icon.py / build_studio_exe.ps1)
-├── tests/                     # pytest unit tests + JS/E2E tests
-├── web/                       # frontend assets (WEB_DIRECTORY)
-└── .github/workflows/         # Registry publishing Action
+├── neo-studio-app.bat         # Studio desktop debug entry (with console)
+└── neo-studio-app.vbs         # Studio desktop double-click entry (pythonw, no console window)
 ```
 
 ## Backend modules

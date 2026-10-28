@@ -4,10 +4,11 @@
 
 Entry point for developers: [../../Developer_EN.md](../../Developer_EN.md).
 
-The pytest configuration is in `pytest.ini` (`testpaths = tests`, runnable without starting ComfyUI):
+The pytest configuration is in `pytest.ini` (`testpaths = studio/tests app/tests`, runnable without starting ComfyUI):
 
 ```bash
-python -m pytest tests -v
+python -m pytest -q studio/tests   # kernel plugin suite
+python -m pytest -q app/tests      # desktop suite (needs the sibling ComfyUI root)
 ```
 
 A full run is split across processes (`tests/run-tests.ps1` with no arguments runs `studio/tests` and
@@ -18,28 +19,28 @@ never touch the real data under `Neo-Studio/data/` or the plugin directory.
 
 ## Python unit tests
 
-- `tests/test_llm.py` — remote configuration loading / migration, model downloads (ModelScope / HuggingFace
+- `studio/tests/test_llm.py` — remote configuration loading / migration, model downloads (ModelScope / HuggingFace
   fallback), translation cache, language detection, text normalization.
-- `tests/test_skills.py` — skill scanning and grouping, built-in task skill presence, image decode & scaling,
+- `studio/tests/test_skills.py` — skill scanning and grouping, built-in task skill presence, image decode & scaling,
   multi-result parsing, the skill agent (language-exclusive main-file selection, reference lists, out-of-bounds
   reads refused, on-demand reference reads in the tool loop, local-mode fallback), `gen_image` / `requires_ref`
   metadata pass-through and preservation on edit-save.
-- `tests/test_skill_pose_edit.py` / `tests/test_skill_controlnet.py` — the pose-editing and ControlNet preset
+- `studio/tests/test_skill_pose_edit.py` / `studio/tests/test_skill_controlnet.py` — the pose-editing and ControlNet preset
   skills: scanning and dedup, `default_prompt` exposure, template placeholders, control chain
   (preprocessor → model patch → sampler) wiring, the control image not occupying an encoder reference slot
   (`control_ref`).
-- `tests/test_workflow_repair.py` — the model-path repair matching algorithm: exact / normalized matching,
+- `studio/tests/test_workflow_repair.py` — the model-path repair matching algorithm: exact / normalized matching,
   quantized-variant replacement, ambiguity rejection, extension constraints.
-- `tests/test_image_gen.py` — built-in generation parameter resolution: ratio and size rounding, output-prefix
+- `studio/tests/test_image_gen.py` — built-in generation parameter resolution: ratio and size rounding, output-prefix
   sanitizing, automatic model selection, dropdown ordering and auto-selection results, missing-LoRA warnings,
   reference landing, empty-slot pruning in multi-chain slots, image-count override, outpaint / local edit
   restricted to the Qwen Image 2.1 template, ControlNet template slot expansion and reference-count floor,
   workflow graph structure and sidecar writing.
-- `tests/test_image_gen_edit.py` — the mini-executor: topological sort and cycle detection, reference resolution
+- `studio/tests/test_image_gen_edit.py` — the mini-executor: topological sort and cycle detection, reference resolution
   and output normalization, terminal IMAGE collection and SaveImage skipping, unknown-node errors, tensor →
   base64 PNG round trip, request assembly (missing `workflow.json` errors / references ordered by slot / bundle
   references preferred / count capped by `config.json`'s `max_refs`).
-- `tests/test_studio_desktop.py` — the Studio desktop (`app/studio_app.py`): ComfyUI root and python path
+- `app/tests/test_studio_desktop.py` — the Studio desktop (`app/studio_app.py`): ComfyUI root and python path
   resolution (a sibling `python/` of the bundled distribution wins), `/neo_studio/version` probing and polling,
   window geometry read/write (missing file / bad JSON / partial fields), single-instance port occupancy,
   messages going through the system message box (pythonw has no console), suppressing the child console window
@@ -79,29 +80,29 @@ never touch the real data under `Neo-Studio/data/` or the plugin directory.
   list so they never enter the exe; `tests` / `tools` / `docs` and similar whole directories are excluded;
   non-ASCII file names must go through the NUL-separated output of `git ls-files -z`, since the default output
   escapes them into fake names.
-- `tests/test_studio.py` — full-film generation routes and the job watcher, version route, log route
+- `studio/tests/test_studio.py` — full-film generation routes and the job watcher, version route, log route
   (`/neo_studio/log` reads the `app.logger` ring buffer).
-- `tests/test_studio_server.py` — the desktop-side service (`app/studio_server.py`, a process with no ComfyUI runtime):
+- `app/tests/test_studio_server.py` — the desktop-side service (`app/studio_server.py`, a process with no ComfyUI runtime):
   a real service is started and hit for real, asserting that with ComfyUI not running the Studio page, frontend
   static files, directory listings, thumbnails and the bookmarks file all come through, while write operations and
   generation routes answer `409 offline`; the gallery module family carries its own `RouteTableDef` and its source no longer
   mentions `PromptServer` (there is no ComfyUI runtime in the desktop process); the startup-settings route
   `/neo_studio/launcher` GET reads the configuration and POST validates before writing (a root without `main.py`
   is refused, an unknown action is refused).
-- `tests/test_node_metadata.py` — the node metadata contract: the registry key list, the `NEO_NODES` list in
+- `studio/tests/test_node_metadata.py` — the node metadata contract: the registry key list, the `NEO_NODES` list in
   `__init__.py` matching the registry, every node having a `web/docs/<node key>.md` help document (the path the
   ComfyUI native "Info" tab fetches), `SEARCH_ALIASES` (lowercase, deduplicated, including Chinese aliases),
   `DESCRIPTION`, `OUTPUT_TOOLTIPS` aligned in count with `RETURN_TYPES`, input tooltips on visible widgets, and V3
   node schema metadata.
 
-## Frontend regression tests (tests/js)
+## Frontend regression tests (studio/tests/js)
 
 Frontend modules are loaded under jsdom with ComfyUI `api` / `app` stand-ins, and golden snapshots lock the UI
 structure, hidden-widget states and request traces. Run them once before refactoring `prompt-manager.js` /
 `node-behavior.js`, and rewrite the goldens only after confirming the behavior change is intentional.
 
 ```bash
-npm test                 # compares tests/js/golden/*.txt
+npm test                 # compares studio/tests/js/golden/*.txt
 npm run update-goldens   # NEO_UPDATE_GOLDENS=1, writes new goldens
 ```
 
@@ -119,7 +120,7 @@ npm run update-goldens   # NEO_UPDATE_GOLDENS=1, writes new goldens
 **JS tests must run with `--test-force-exit`.** Creating nodes starts `setInterval`s that are never cleaned up,
 so without that flag the `node --test` child process can never exit naturally — pending timers keep the event loop
 non-idle, which looks like every test passing followed by a hang until timeout. So **never run
-`node --test tests/js/*.test.mjs` bare**. Both entry points already carry the flag: `npm test` (package.json) and
+`node --test studio/tests/js/*.test.mjs` bare**. Both entry points already carry the flag: `npm test` (package.json) and
 `tests/run-tests.ps1` (which additionally force-kills the node process tree on timeout and supports fuzzy file-name
 matching).
 
@@ -137,7 +138,7 @@ pwsh tests/run-tests.ps1 -Timeout 60
 
 Exit codes: `0` = all passed, `1` = failures / no matching files, `2` = forced exit on timeout.
 
-## Browser end-to-end tests (tests/e2e)
+## Browser end-to-end tests (studio/tests/e2e)
 
 Playwright drives the real ComfyUI frontend, verifying what jsdom cannot cover: window controls, the embedded
 LiteGraph canvas and similar. **ComfyUI must be running locally (`http://127.0.0.1:8188` by default, overridable
@@ -145,8 +146,8 @@ with the `COMFY_BASE_URL` environment variable)**; when the service is unreachab
 failing.
 
 ```bash
-npm run e2e                       # tests/e2e/*.e2e.mjs
-node --test --test-force-exit --test-timeout=180000 tests/e2e/skill-manager.e2e.mjs
+npm run e2e                       # studio/tests/e2e/*.e2e.mjs
+node --test --test-force-exit --test-timeout=180000 studio/tests/e2e/skill-manager.e2e.mjs
 ```
 
 - `skill-manager.e2e.mjs` — the skill manager window: overlay pointer pass-through, ⛶ maximize/restore,

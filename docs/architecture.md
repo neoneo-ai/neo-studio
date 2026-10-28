@@ -1,12 +1,54 @@
 # 架构与模块
 
 项目结构、前后端模块职责、节点注册与数据目录。总入口见 [../Developer.md](../Developer.md)。
+本页讲结构与职责；改动某一层的规则见该目录的 `AGENTS.md`（`studio/`、`studio/web/`、`app/`、`tools/`），
+跨层不变量见 [../AGENTS.md](../AGENTS.md)。
 
 ## 项目结构
 
 ```
+Neo-Studio/                            桌面端仓库；根 pyproject 只声明桌面端依赖，不发 Python 包
+├── AGENTS.md                          跨层规则与产品不变量
+├── CLAUDE.md                          指向 AGENTS.md 的指针
+├── Developer.md · Developer_EN.md     模块地图（中 / 英）
+├── CONTRIBUTING.md · CONTRIBUTING_ZH.md
+├── CHANGELOG.md                       英文，一条用户可见改动一条
+├── conftest.py · pytest.ini           测试桩与套件配置（数据根钉到临时目录）
+├── docs/ · docs/en/                   架构 / 桌面端 / MCP / 发布 / 测试清单（中 / 英镜像）
+├── app/                               桌面端：窗口、离线服务、启动器
+│   ├── AGENTS.md                      窗口优先、端口、进程链、路由
+│   ├── studio_app.py                  pywebview + WebView2、插件同步、进程回收
+│   ├── studio_server.py               离线服务：不依赖 ComfyUI 运行时
+│   ├── studio_caps.py                 离线能力表，唯一的离线闸门
+│   └── mcp_client.py · mcp_routes.py
+├── studio/                            内核插件 comfyui-neo-studio（Registry 包在这层发）
+│   ├── AGENTS.md                      节点契约、插件 Python 风格
+│   ├── __init__.py                    合并节点映射与路由，打印版本 banner
+│   ├── plugin_paths.py · util.py      只用标准库的叶子：数据根、共享 helper
+│   ├── mcp_server.py                  stdio MCP 子进程，标准库
+│   ├── web/                           前端，WEB_DIRECTORY = "./web"
+│   │   ├── AGENTS.md                  无构建步骤、shim 边界、golden 快照
+│   │   ├── studio/                    Studio 独立页面，shim/ 是它的 ComfyUI 边界
+│   │   ├── js/core/                   跨节点共享工具层
+│   │   └── docs/                      节点帮助文档，一键一文件
+│   ├── configs/ prompts/ skills/ recipes/ example_workflows/   内置预设
+│   ├── gallery/                       预设素材；这里的缓存是数据根兜底
+│   ├── pyproject.toml · requirements.txt · .comfyignore   发布元数据、依赖、包边界
+│   └── tests/                         节点元数据与行为单测
+├── __init__.py                        clone 进 custom_nodes 的兼容入口
+├── tests/                             run-tests.ps1：两套 pytest 套件与 JS runner
+├── tools/                             离线开发与发布脚本，不进包
+│   └── AGENTS.md                      脚本分组、预设管线、exe 构建
+├── pyproject.toml                     桌面端依赖
+└── package.json                       npm test / npm run e2e / npm run update-goldens
+```
+
+## 内核插件文件
+
+一组节点一个模块，每个模块自带 `routes` 与 `NODE_CLASS_MAPPINGS`，由 `studio/__init__.py` 合并：
+
+```
 studio/
-├── __init__.py                # 插件入口：注册 API 路由、合并节点映射、声明 WEB_DIRECTORY
 ├── prompts.py                 # 提示词节点 + /rs_prompts/* 路由
 ├── prompt_names.py            # 提示词名字与标签扫描 + /rs_prompts/list_prompt_names
 ├── prompt_lines.py            # 多行提示词集合解析
@@ -38,24 +80,11 @@ studio/
 ├── backyard.py                # Backyard 预处理与 OSS 上传页
 ├── recipes.py                 # 配方后端 + /rs_recipes/* 路由
 ├── studio.py                  # 新影工坊后端 + /neo_studio/* 路由
-├── app/studio_app.py          # 桌面端（pywebview + WebView2）：拉起 ComfyUI 并托管窗口
-├── neo-studio-app.bat         # 桌面端调试入口（带控制台）
-├── neo-studio-app.vbs         # 桌面端双击入口（pythonw，无控制台窗口）
+├── model_hub.py               # 模型仓库 + /neo_model_hub/* 路由
+├── model_download.py          # 下载与落位
 ├── workflow.py                # 工作流修复 + /neo_nodes/* 路由
-├── util.py                    # 媒体常量与共享工具
-├── requirements.txt           # Python 依赖
-├── pyproject.toml             # Registry 发布元数据
-├── pytest.ini                 # 测试配置
-├── configs/                   # 运行时配置（见「数据与配置目录」）
-├── locals/                    # 本地化资源（zh_CN.json）
-├── prompts/                   # 提示词目录（presets / custom）
-├── skills/                    # 技能目录（presets / tasks / custom）
-├── gallery/                   # 素材媒体与缓存
-├── recipes/                   # 配方目录（presets / custom）
-├── tools/                     # 离线工具脚本（make_studio_icon.py / build_studio_exe.ps1）
-├── tests/                     # pytest 单元测试 + JS/E2E 测试
-├── web/                       # 前端资源（WEB_DIRECTORY）
-└── .github/workflows/         # Registry 发布 Action
+├── neo-studio-app.bat         # 桌面端调试入口（带控制台）
+└── neo-studio-app.vbs         # 桌面端双击入口（pythonw，无控制台窗口）
 ```
 
 ## 后端模块

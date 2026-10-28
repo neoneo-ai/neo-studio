@@ -23,6 +23,10 @@ Feature module docs (user guide + implementation details):
 [h3-video-gen](docs/en/h3-video-gen.md) · [recipes](docs/en/recipes.md) · [gallery](docs/en/gallery.md) ·
 [workflow-repair](docs/en/workflow-repair.md)
 
+Agent and contributor rules do not live in `docs/`: the root [AGENTS.md](AGENTS.md) holds only the
+cross-cutting rules and product invariants, while `studio/`, `studio/web/`, `app/` and `tools/` each
+carry their own `AGENTS.md` with the rules specific to that layer.
+
 ## Quick tour
 
 - **Plugin entry** `__init__.py`: imports the backend modules to register API routes, merges node mappings following

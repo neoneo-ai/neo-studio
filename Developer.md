@@ -22,6 +22,9 @@
 [prompts](docs/prompts.md) · [skills](docs/skills.md) · [image-gen](docs/image-gen.md) · [h3-video-gen](docs/h3-video-gen.md) ·
 [recipes](docs/recipes.md) · [gallery](docs/gallery.md) · [workflow-repair](docs/workflow-repair.md)
 
+智能体与贡献者规则不在 `docs/` 里：根 [AGENTS.md](AGENTS.md) 只写跨层不变量与产品规则，
+`studio/`、`studio/web/`、`app/`、`tools/` 各有一份 `AGENTS.md` 写该层独有的规则。
+
 ## 速览
 
 - **插件入口** `__init__.py`：导入后端模块注册 API 路由，按 `NEO_NODES` 清单合并节点映射并打印版本 banner，

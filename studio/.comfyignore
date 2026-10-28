@@ -33,3 +33,4 @@ test-results/
 # 仓库文件
 .gitignore
 .comfyignore
+AGENTS.md

@@ -3,7 +3,8 @@
 > 🇨🇳 中文：[CONTRIBUTING_ZH.md](CONTRIBUTING_ZH.md)
 
 Apache-2.0, public repository. Fork and open a pull request — no organization membership required. The rules
-below are what a change gets reviewed against; the full rule set is [AGENTS.md](AGENTS.md), the module map is
+below are what a change gets reviewed against; the full rule set is [AGENTS.md](AGENTS.md) plus the
+`AGENTS.md` in `studio/`, `studio/web/`, `app/`, and `tools/`, the module map is
 [Developer.md](Developer.md), and the test inventory is [docs/testing.md](docs/testing.md).
 
 ## Set up

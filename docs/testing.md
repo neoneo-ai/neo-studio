@@ -2,10 +2,11 @@
 
 总入口见 [../Developer.md](../Developer.md)。
 
-pytest 配置见 `pytest.ini`（`testpaths = tests`，无需启动 ComfyUI 即可运行）：
+pytest 配置见 `pytest.ini`（`testpaths = studio/tests app/tests`，无需启动 ComfyUI 即可运行）：
 
 ```bash
-python -m pytest tests -v
+python -m pytest -q studio/tests   # 内核插件套件
+python -m pytest -q app/tests      # 桌面端套件（需同级 ComfyUI 根）
 ```
 
 全量跑要分进程（`tests/run-tests.ps1` 不带参数依次跑 `studio/tests` 与 `app/tests`）：
@@ -15,23 +16,23 @@ python -m pytest tests -v
 
 ## Python 单测
 
-- `tests/test_llm.py` — 远程配置加载 / 迁移、模型下载（ModelScope / HuggingFace 回退）、翻译缓存、
+- `studio/tests/test_llm.py` — 远程配置加载 / 迁移、模型下载（ModelScope / HuggingFace 回退）、翻译缓存、
   语言检测、文本规范化。
-- `tests/test_skills.py` — 技能扫描与分组、内置任务技能存在性、图片解码缩放、多结果解析、
+- `studio/tests/test_skills.py` — 技能扫描与分组、内置任务技能存在性、图片解码缩放、多结果解析、
   技能代理（语言互斥主文件选择、引用列表、越界读取拒绝、工具循环按需读引用、本地模式回退）、
   `gen_image` / `requires_ref` 元数据透传与编辑保存保留。
-- `tests/test_skill_pose_edit.py` / `tests/test_skill_controlnet.py` — 姿势编辑与 ControlNet 预设技能：
+- `studio/tests/test_skill_pose_edit.py` / `studio/tests/test_skill_controlnet.py` — 姿势编辑与 ControlNet 预设技能：
   扫描与去重、`default_prompt` 透出、模板占位符、控制链（预处理 → 模型补丁 → 采样器）接线、
   控制图不占编码器参考槽（`control_ref`）。
-- `tests/test_workflow_repair.py` — 模型路径修复匹配算法：精确 / 归一化匹配、量化变体替换、歧义拒绝、
+- `studio/tests/test_workflow_repair.py` — 模型路径修复匹配算法：精确 / 归一化匹配、量化变体替换、歧义拒绝、
   扩展名约束。
-- `tests/test_image_gen.py` — 内置生图参数解析：比例与尺寸取整、输出前缀消毒、模型自动挑选、
+- `studio/tests/test_image_gen.py` — 内置生图参数解析：比例与尺寸取整、输出前缀消毒、模型自动挑选、
   下拉展示排序与自动挑选结果、LoRA 缺失告警、参考图落地、多路槽位空槽裁剪、生图张数覆盖、
   扩图 / 局部编辑仅 Qwen Image 2.1 模板、ControlNet 模板槽位展开与参考张数下限拦截、工作流图结构与 sidecar 写入。
-- `tests/test_image_gen_edit.py` — mini-executor：拓扑排序与环检测、引用解析与输出归一化、
+- `studio/tests/test_image_gen_edit.py` — mini-executor：拓扑排序与环检测、引用解析与输出归一化、
   末端 IMAGE 收集与 SaveImage 跳过、未知节点报错、张量 → base64 PNG 往返、请求组装
   （缺 `workflow.json` 报错 / 参考图按槽位排序 / bundle 参考图优先 / 按 `config.json` 的 `max_refs` 限张数）。
-- `tests/test_studio_desktop.py` — 桌面端（`app/studio_app.py`）：ComfyUI 根与 python 路径解析（整合包同级 `python/` 优先）、
+- `app/tests/test_studio_desktop.py` — 桌面端（`app/studio_app.py`）：ComfyUI 根与 python 路径解析（整合包同级 `python/` 优先）、
   `/neo_studio/version` 探活与轮询、窗口几何读写（缺文件 / 坏 JSON / 部分字段）、单实例端口占用判定、
   提示走系统消息框（pythonw 无控制台）、拉起 ComfyUI 时压制子控制台窗口、桌面端日志落盘
   `data/studio_desktop.log` 与 pywebview 日志 handler（pythonw 的 `stderr` 是 None，控制台 handler 会打断窗口创建）、
@@ -58,23 +59,23 @@ python -m pytest tests -v
 - 内置插件副本（`tools\build_studio_exe.ps1` 的 `build_bundle()`）：边界是「git 已跟踪 - 开发目录」，
   `configs/` 只剩预设，用户配置与密钥不在跟踪列表里因此进不了 exe；`tests` / `tools` / `docs` 等整目录排除；
   非 ASCII 文件名必须走 `git ls-files -z` 的 NUL 分条，默认输出会把它们转义成假名字。
-- `tests/test_studio.py` — 整片生成路由与任务 watcher、版本路由、日志路由（`/neo_studio/log` 读 `app.logger` 环形缓冲）。
-- `tests/test_studio_server.py` — 桌面端服务（`app/studio_server.py`，进程里没有 ComfyUI 运行时）：起真服务打真接口，断言 ComfyUI 不在跑时
+- `studio/tests/test_studio.py` — 整片生成路由与任务 watcher、版本路由、日志路由（`/neo_studio/log` 读 `app.logger` 环形缓冲）。
+- `app/tests/test_studio_server.py` — 桌面端服务（`app/studio_server.py`，进程里没有 ComfyUI 运行时）：起真服务打真接口，断言 ComfyUI 不在跑时
   Studio 页面 / 前端静态文件 / 目录列表 / 缩略图 / 收藏文件都出得来，写操作与生成类接口回 `409 offline`；
   gallery 模块族自带 `RouteTableDef` 且源码不再出现 `PromptServer`（桌面端进程里没有 ComfyUI 运行时）；
   启动设置路由 `/neo_studio/launcher` GET 读配置、POST 校验后落盘（根目录缺 `main.py` 拒绝、未知动作拒绝）。
 
-- `tests/test_node_metadata.py` — 节点元数据契约：注册表键清单、`__init__.py` 的 `NEO_NODES` 清单与注册表一致、
+- `studio/tests/test_node_metadata.py` — 节点元数据契约：注册表键清单、`__init__.py` 的 `NEO_NODES` 清单与注册表一致、
   每个节点都有 `web/docs/<节点键>.md` 帮助文档（ComfyUI 原生「信息」页的取用路径）、`SEARCH_ALIASES`（小写、去重、含中文别名）、
   `DESCRIPTION`、`OUTPUT_TOOLTIPS` 与 `RETURN_TYPES` 数量对齐、可见 widget 的输入提示词、V3 节点 schema 元数据。
 
-## 前端回归测试（tests/js）
+## 前端回归测试（studio/tests/js）
 
 前端模块在 jsdom + ComfyUI `api` / `app` 替身下加载，用 golden 快照锁定 UI 结构、隐藏控件状态与请求轨迹。
 重构 `prompt-manager.js` / `node-behavior.js` 前先跑一遍，确认行为有意变化后再重写 golden。
 
 ```bash
-npm test                 # 比对 tests/js/golden/*.txt
+npm test                 # 比对 studio/tests/js/golden/*.txt
 npm run update-goldens   # NEO_UPDATE_GOLDENS=1，写入新 golden
 ```
 
@@ -89,7 +90,7 @@ npm run update-goldens   # NEO_UPDATE_GOLDENS=1，写入新 golden
 
 **跑 JS 测试必须带 `--test-force-exit`。** 节点创建会启动未清理的 `setInterval`，
 不带该参数时 `node --test` 子进程因 pending timer 使 event loop 永不空闲而无法自然退出——
-表现为测试已全部通过却卡到超时。因此**不要裸跑 `node --test tests/js/*.test.mjs`**。
+表现为测试已全部通过却卡到超时。因此**不要裸跑 `node --test studio/tests/js/*.test.mjs`**。
 两个入口都已内置该参数：`npm test`（package.json）与 `tests/run-tests.ps1`
 （后者额外提供超时强杀 node 进程树、文件名模糊匹配）。
 
@@ -107,15 +108,15 @@ pwsh tests/run-tests.ps1 -Timeout 60
 
 退出码：`0` = 全部通过，`1` = 有测试失败 / 无匹配文件，`2` = 超时强制终止。
 
-## 浏览器端到端测试（tests/e2e）
+## 浏览器端到端测试（studio/tests/e2e）
 
 Playwright 驱动真实 ComfyUI 前端，验证窗口控制、内嵌 LiteGraph 画布等 jsdom 覆盖不了的行为。
 **需要本机已启动 ComfyUI（默认 `http://127.0.0.1:8188`，可用环境变量 `COMFY_BASE_URL` 覆盖）**；
 服务不可达时用例自动 skip 而不是失败。
 
 ```bash
-npm run e2e                       # tests/e2e/*.e2e.mjs
-node --test --test-force-exit --test-timeout=180000 tests/e2e/skill-manager.e2e.mjs
+npm run e2e                       # studio/tests/e2e/*.e2e.mjs
+node --test --test-force-exit --test-timeout=180000 studio/tests/e2e/skill-manager.e2e.mjs
 ```
 
 - `skill-manager.e2e.mjs` — 技能管理窗口：overlay 指针穿透、⛶ 放大还原、标题栏双击放大、Esc 关闭、
