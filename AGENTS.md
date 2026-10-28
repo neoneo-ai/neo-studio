@@ -1,9 +1,29 @@
 # AGENTS.md
 
-Agent-facing rules for the Neo Studio repo. Read [Developer.md](Developer.md) for the
-module map, [docs/architecture.md](docs/architecture.md) for directories and routes, and
-[docs/testing.md](docs/testing.md) for the full test inventory. This file carries only
-the rules a change has to obey.
+Agent-facing rules for the Neo Studio repo. Read them in this order:
+
+1. This file: the rules a change has to obey, product invariants first.
+2. [Developer.md](Developer.md): the module map.
+3. The doc for the area being changed: [docs/architecture.md](docs/architecture.md) for
+   directories, modules and routes, [docs/testing.md](docs/testing.md) for the test
+   inventory, [docs/studio-desktop.md](docs/studio-desktop.md) for the desktop
+   implementation, [docs/release.md](docs/release.md) for packaging.
+
+## Project Overview
+
+Neo Studio turns one sentence into prompts, images, and multi-segment film. It ships as
+one product in two artifacts: the ComfyUI plugin `comfyui-neo-studio` and the Neo Studio
+desktop window, both built from one tagged version.
+
+- The core is usable the moment it is installed: no model, no API key, no extra
+  dependency. Civitai, ModelScope, Hugging Face, remote OpenAI-compatible LLM providers,
+  and Aliyun OSS are the optional layer on top, and each degrades on its own.
+- User-visible surfaces: the `Neo Studio` node category, the Gallery and Recipes
+  sidebars, the top-menu items (Workflow Repair, Model Hub, Skill Management), the
+  standalone Studio page at `/neo-studio`, the desktop window with its offline asset
+  pages, and the stdio MCP server.
+- Two shipped artifacts: the Registry package built from `studio/`, and the desktop exe
+  built by `tools\build_studio_exe.ps1`.
 
 ## Engineering Style
 
@@ -35,7 +55,39 @@ the rules a change has to obey.
   handle truncation behind an `OpenProcess` `restype`, the pending timer that
   keeps `node --test` alive. A comment that names no real failure mode is noise.
 
-## Repo Layers
+## Repository Map
+
+```
+Neo-Studio/                          desktop app repo; publishes no Python package
+├── AGENTS.md                        these rules
+├── Developer.md / Developer_EN.md   module map, Chinese / English
+├── CONTRIBUTING.md / CONTRIBUTING_ZH.md   contributor-facing short rules
+├── CHANGELOG.md                     English, one entry per user-visible change
+├── docs/ · docs/en/                 architecture, desktop, mcp, release, testing mirrors
+├── app/                             desktop app: window, offline service, launcher
+│   ├── studio_app.py                pywebview + WebView2, plugin sync, child reaping
+│   ├── studio_server.py             offline service: no ComfyUI runtime, not a no-write service
+│   ├── studio_caps.py               the offline capability table, the only offline gate
+│   └── mcp_client.py · mcp_routes.py
+├── studio/                          the ComfyUI kernel plugin comfyui-neo-studio
+│   ├── __init__.py                  merges node mappings and routes, prints the load banner
+│   ├── <group>.py                   one module per node group, each with its own routes
+│   ├── plugin_paths.py · util.py    stdlib-only leaves: data root, shared helpers
+│   ├── mcp_server.py                stdio MCP subprocess, standard library only
+│   ├── web/                         frontend, served through WEB_DIRECTORY = "./web"
+│   │   ├── studio/                  standalone Studio page; shim/ is its ComfyUI boundary
+│   │   ├── js/core/                 cross-node shared tool layer
+│   │   └── docs/                    node help docs, one file per node key
+│   ├── configs/ prompts/ skills/ recipes/ example_workflows/   built-in presets
+│   ├── gallery/                     preset media; the cache here is the data-root fallback
+│   ├── pyproject.toml · requirements.txt · .comfyignore   Registry metadata, package boundary
+│   └── tests/                       node metadata and behavior unit tests
+├── __init__.py                      clone-into-custom_nodes compat entry only
+├── tests/                           run-tests.ps1: the two pytest suites, the JS runner
+├── tools/                           offline dev and release scripts, never packaged
+├── pyproject.toml                   desktop dependencies only
+└── package.json                     npm test / npm run e2e / npm run update-goldens
+```
 
 - Repo root is the desktop app repository. The root
   `pyproject.toml` declares desktop dependencies only and publishes
@@ -49,13 +101,6 @@ the rules a change has to obey.
   launch and leaves the user data (`gallery/`, `locals/`, `configs/`) where it is.
   A fix written there is overwritten by the next launch: edit `studio/` and let the
   sync carry it.
-- `app/` is the desktop app: `studio_app.py` (pywebview + WebView2
-  window), `studio_server.py` (offline service: a local process with no ComfyUI
-  runtime, not a no-write service), `studio_caps.py`
-  (capability table). It owns window, process, and launcher concerns.
-- `studio/web/` is the frontend, served through `WEB_DIRECTORY = "./web"`.
-  `studio/web/studio/` is the standalone Studio page;
-  `studio/web/js/core/` is the cross-node shared tool layer.
 - `tools/` holds offline dev and release scripts.
   Nothing in `tools/` ships in the Registry package.
 - The version number has one source: `util.plugin_version()`,
@@ -63,6 +108,48 @@ the rules a change has to obey.
   version in a banner, a test, a doc snippet, or the MCP server.
 - Registry `description` and `keywords` are the search surface that `comfy-cli`
   writes into the Registry list. They name real nodes, not abstract marketing text.
+
+## File Layout
+
+Read a file top-down as "what it defines, then where execution starts, then the details".
+
+- Constants go right after the imports. The primary class, node, route table, or page
+  module comes next; option lists, sub-structures, and leaf formatters go below it.
+- A helper an entry point calls goes below that entry point, so the call chain reads
+  downward. Module-private helpers stay inside the module: promote one to
+  `studio/web/js/core/` or `util.py` only when a second module needs it.
+- Test files: imports, fixture constants, cases, helpers last. Group cases by subject
+  and keep nesting two levels deep at most.
+- Apply this to new files and to the code this change adds. Do not reorder a file the
+  change does not need to touch.
+
+## Product Surface
+
+- User-visible copy is Chinese-first. Desktop-window strings go through
+  `studio/web/js/core/i18n.js` with the Chinese text as the key, so a missing English
+  entry falls back to Chinese instead of showing a raw key. Only desktop-owned copy gets
+  translated: the top bar and window controls, the director generate panel, the startup
+  settings, the top-bar status chips, the VRAM bar. The shared gallery, skill, LLM,
+  image, and video modules stay in their original Chinese.
+- Every startup setting row carries a ⓘ tip (`TIPS` in `studio/web/studio/studio-app.js`)
+  naming its precondition and when it takes effect: applies immediately, needs a window
+  restart, or needs "save and restart ComfyUI". A new setting shipped without that tip is
+  unfinished.
+- A control that cannot work is not shipped. What the desktop service answers `409` for
+  is decided by the table in `app/studio_caps.py`; a missing `oss2`, `laya`, or
+  `pillow-heif` leaves its page inert. Say in the UI that the capability is unavailable;
+  never leave an option that is only going to fail.
+- Installed copies stay readable. `launcher_config.json`, the `configs/*.json` files,
+  recipes, skill `workflow.json`, and saved user workflows are read by a plugin build and
+  an exe older than the one being edited. Add fields with a compatible read and ignore
+  unknown keys; never change what an existing field means, and never add a legacy alias
+  for an API this repo no longer uses.
+- One feature has five names and they are one change: the UI label, the node key with its
+  `NODE_DISPLAY_NAME_MAPPINGS` entry, the route path, `studio/web/docs/<node key>.md`,
+  and the matching `docs/` page. Renaming any one of them renames all five.
+- Destructive actions stay on the single-item routes the UI already offers. Do not add a
+  bulk "clear everything" action to a product surface; the delete rules live in
+  Data, Config, and Secrets.
 
 ## Architecture Boundaries
 
@@ -155,6 +242,9 @@ the rules a change has to obey.
   in `app/studio_app.py`, the cache paths above, and the single-item routes
   the UI already offers. A script that walks a user tree with
   `Remove-Item -Recurse -Force` is a data-loss bug, not a cleanup.
+- Pruning this repo deletes Git-tracked paths only. Untracked and gitignored local files
+  (`node_modules/`, `tmp/`, `build/`, `data/`, and the cache paths above) are not cleanup
+  targets, and clearing any of them needs the same explicit confirmation as a delete.
 - The Registry package boundary is "git-tracked minus `studio/.comfyignore`".
   `tests/`, `tools/`, `docs/`, `.vscode/`, `.github/`, and dev-only scripts
   stay out of the package. When adding a file, decide which side of that
@@ -216,31 +306,16 @@ the rules a change has to obey.
 - Plugin sync copies same-name files from `studio/` into `custom_nodes` and deletes
   nothing in the target. A git checkout is never overwritten; the bundled copy replaces
   an installed copy only when its version is newer, and skips when the directory is busy.
-- `tools/watch_web.py` hot-syncs `studio/web/` into the installed plugin web directory so
-  a frontend edit lands on a page reload instead of a relaunch. Same semantics as the
-  plugin sync: same-name overwrite, nothing deleted in the target.
-- pywebview binds WebView2's browser accelerator keys, the default context menu, and DevTools all
-  to `debug`, and the value is fixed when the CoreWebView2 environment is created: without it,
-  F5, Ctrl+F5, Ctrl+R, and the right-click menu are off in the window. Dev mode is the startup
-  setting that turns that flag on (`dev_mode` in `launcher_config.json`) and takes effect on the
-  next window start; the Studio page owns its own reload hotkey in page JS, so a frontend reload
-  never waits on dev mode.
-- The LAN listen startup setting (`listen` in `launcher_config.json`) is ComfyUI's `--listen`; empty keeps the
-  loopback-only default. A NIC address always gets `127.0.0.1` added in `comfy_listen()`: the window navigates to
-  loopback and `port_busy()` probes loopback, so a listen list without it leaves the window unopenable and a running
-  ComfyUI reads as a free port. `save_config()` writes root, interpreter, port, the toggles and the remote address
-  together, so "Save and restart" cannot drop a stored setting.
-- The remote startup setting (`remote` in `launcher_config.json`) is a base URL normalized by `comfy_remote()`
-  (`http(s)://host[:port]`, no path / query / fragment / credentials). It moves the window URL, the probe target
-  (`probe()` takes a base URL) and the ready jump to the remote machine; in that mode the desktop never runs
-  `port_busy()`, `free_comfy_port()`, `start_comfy()`, `port_owner()` or `kill_pid()`, kernel stop is disabled, and
-  the remote machine owns its own root, interpreter, port and listen setting. The remote needs the plugin installed
-  and listening, and has no authentication — network access is a firewall and trusted-network decision.
-- Frozen builds resolve the ComfyUI root by walking the exe's ancestor
-  directories, and package resources go through `_MEIPASS`. Both the onefile
-  layout and the onedir layout, which has one extra directory level, resolve.
-- When the exe sits in a non-writable directory, the app
-  state directory falls back to `%APPDATA%\Neo Studio`.
+  `tools/watch_web.py` hot-syncs `studio/web/` with the same semantics, so a frontend
+  edit lands on a page reload instead of a relaunch.
+- "Save and restart" writes the whole launcher config in one write: root, interpreter,
+  port, the toggles, and the remote address together, so a stored setting can never be
+  dropped by a partial save.
+- Window plumbing is specified in [docs/studio-desktop.md](docs/studio-desktop.md): dev
+  mode and the WebView2 accelerator keys, LAN listen and `comfy_listen()`, remote ComfyUI
+  and `comfy_remote()`, the Job Object close chain, the frozen-build root and `_MEIPASS`
+  resolution, and the `%APPDATA%` state-directory fallback. Implement to that doc; do not
+  restate one rule in two places.
 
 ## State Ownership
 
@@ -358,6 +433,12 @@ the rules a change has to obey.
 - Pylance needs `.vscode/settings.json`'s `python.analysis.extraPaths`
   pointed at the sibling ComfyUI root to resolve `folder_paths`, `server`,
   and `comfy.*`; keep that assumption aligned with `tools/install_plugin.ps1`.
+- Test the user-visible failure path: a missing config falling back to
+  `DEFAULT_SETTINGS`, the three-step data-root resolution, a path re-validated at the
+  load/save boundary, an older recipe or config reading a field this change added, and
+  the offline `409` gate.
+- Do not add cases for trivial construction or plain getters, and do not keep a case for
+  a code path this change deleted.
 
 ## Docs Discipline
 
@@ -379,6 +460,12 @@ the rules a change has to obey.
 - Node help docs stay at `studio/web/docs/<node key>.md`
   and cover the widgets, sentinels, and modes.
 - Registry `description` and `keywords` are user-facing search text: name real nodes.
+- Markdown tables get read raw in terminals, diffs, and editors at least as often as they
+  get rendered: pad every cell to its column width so the columns line up as plain text.
+  Pad the tables this change touches; leave a table it does not touch alone.
+- `AGENTS.md`, `CONTRIBUTING.md`, and `CONTRIBUTING_ZH.md` are not part of the
+  `docs/` mirror pair and carry no translated twin. A rule lands in this file once;
+  do not open an `AGENTS_ZH.md` beside it.
 
 ## Commit and Review Habits
 
@@ -389,6 +476,10 @@ the rules a change has to obey.
   that needs it, and its tests belong in the same commit when they are inseparable.
 - Keep PR descriptions short: the problem, the behavioral
   change, the tests run. No implementation diary.
+- Do not bump the version in a feature change. A release is a maintainer act: tagging
+  `vX.Y.Z` publishes the Registry package and builds the desktop exe.
+- A user-visible change gets its `CHANGELOG.md` entry in the same change: English,
+  naming the behavior the user gets, not the files touched.
 - In reviews, prioritize real user impact in this order: a node that silently vanishes
   at load, a data root that points at the plugin directory, a secret or user config that
   lands in the Registry package, an orphan ComfyUI process after the window closes, a

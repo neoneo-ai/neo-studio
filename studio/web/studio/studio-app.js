@@ -178,7 +178,7 @@ function ensureLibModal() {
     document.body.appendChild(modal.el);
     modal.setOnClose(() => {
         const g = app.neoGallery;
-        if (g) { g.onSelectionChange = null; g.clearSelection(); }   // 勾选不能带出弹窗
+        if (g) { g.isPickMode = false; g.onSelectionChange = null; g.clearSelection(); }   // 勾选与取用模式不能带出弹窗
         app.extensionManager.sidebarTab.activeSidebarTabId = null;   // 替身侧栏归位，下次写同一 id 不被去重吃掉
         mountGallery(galleryStandby()).then(notifyAgentCtx);         // 弹窗关了：素材库不在本页上屏，画廊交还
     });
@@ -192,6 +192,7 @@ function openLibModal(scope, onPick) {
     const g = app.neoGallery;
     libScope = scope;
     libModalHost.dataset.libScope = scope;
+    if (g) g.isPickMode = !!onPick;   // 取用模式：点卡片即选中，不开灯箱，不出 ⋯ 菜单；纯浏览则照旧
     if (g) g.onSelectionChange = (n) => modal.setPickCount(n);
     modal.setPickMode({
         onPick: onPick || null,

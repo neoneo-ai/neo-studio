@@ -73,6 +73,7 @@ export class NeoGallery {
         this._renderedCount = 0;
         this.isFocused = false;
         this.isVisible = false;
+        this.isPickMode = false;    // 素材库弹窗取用模式：点卡片即选中，不开灯箱，不出 ⋯ 菜单
         
         // UI components
         this.list = new GalleryList(this);

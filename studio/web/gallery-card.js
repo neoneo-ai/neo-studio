@@ -763,6 +763,8 @@ export class GalleryCard {
         const isDraggableMedia = (isImageFileResult || isVideoFileResult || isAudioFileResult) && !image.lora_path;
         const reservedSpace = getReservedSpace(gallery.displayLabels);
         const imageHeight = getImageHeight(gallery.maxThumbnailSize, gallery.displayLabels);
+        // 素材库弹窗取用模式：点卡片由弹窗的 capture 监听做“选中并关窗”，不开灯箱；非弹窗照旧点开大图。
+        const pickMode = !!gallery.isPickMode;
 
         const container = $el("div", {
             className: isAudioFileResult
@@ -772,9 +774,8 @@ export class GalleryCard {
                 height: `${gallery.maxThumbnailSize}px`,
                 width: `${gallery.maxThumbnailSize}px`
             },
-            // 音频卡片不需要灯箱：点击容器不打开大图（播放由卡片自身处理）
-            onclick: () => {
-                if (isAudioFileResult) return;
+            // 音频卡片不需要灯箱；取用模式下点卡片即选中（交给弹窗 capture 处理），不开灯箱。
+            onclick: pickMode || isAudioFileResult ? undefined : () => {
                 this.showLightbox(gallery, image, subfolder);
             },
             draggable: isDraggableMedia,
@@ -799,8 +800,8 @@ export class GalleryCard {
             }, [icon("send", 13)]);
         }
 
-        // 右上角信息扩展按钮：点击弹出扩展菜单（收藏 / Lora 发送 / 提示词预览 / 导入工作流 / 删除）。
-        const bookmarkBtn = $el("div", {
+        // 右上角信息扩展按钮：取用模式下不出 ⋯ 菜单（卡片单点即选中，菜单也被弹窗遮层挡住）；非弹窗照旧保留。
+        const bookmarkBtn = pickMode ? null : $el("div", {
             className: "neo-gallery-thumb-bookmark-btn",
             title: t("更多操作"),
             onclick: (e) => {
