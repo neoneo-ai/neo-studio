@@ -188,6 +188,17 @@ stays silent on the reply port so the host times out with "the pose page did not
 hands the host an error object for the host to write into its scenes directory as a scene. The contract
 and the failure paths are in the pose repository's `docs/neo-studio-bridge.md`.
 
+The prop row is a dropdown plus a name box. The dropdown shows the Chinese prop name, while the value sent
+to the page has to be the propKey the page understands (`builtin:chair` for a procedural prop,
+`glb:<file>` for a registry one); the name box takes a typed name and the host resolves it against the prop
+list `meta/list` sends down - the Chinese names (椅子 / 凳子 / 桌子 / 木箱 / 木桶 / 大球 / 小球 / 圆柱 / 斜坡 /
+单杠 / 台座 / 垫子 / 剑 / 短剑 / 长矛 / 弓 / 盾, plus every registry label), a bare id (`chair`,
+`arrow.glb`, `arrow`) and the full key all land on the same entry, and a full-width bracket suffix in a
+label (细剑（Sting）) resolves by the name in front of it. When the name is not on that list the panel says
+plainly that the prop table has no such prop, reports what can be typed and how many entries there are, and
+sends no `pose:call` - the prop definitions live in one place, inside the pose package, and the host does
+not guess them.
+
 ## What the desktop does not offer
 
 In `/neo_pose/status`, the flags `photo3d`, `mesh`, `pano` and `lib_write` are always

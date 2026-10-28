@@ -59,6 +59,36 @@ export function poseMaterialUrl(item) {
     return `/view?${q}`;
 }
 
+/** 道具显示名归一：页面 label 带全角括号后缀（细剑（Sting））时，括号前的名字也算同一个名字 */
+function propChoiceName(text) {
+    return String(text ?? "").trim().toLowerCase()
+        .replace(/[（(].*?[)）]\s*$/, "")
+        .replace(/\s+/g, "");
+}
+
+/**
+ * 自由填写的道具名 → 页面认的 propKey（内置 `builtin:chair`、注册表 `glb:arrow.glb`）。
+ *
+ * 面板上看见的是中文 label（椅子），页面 addProp 要的是带前缀的 propKey，中间这一层只能
+ * 宿主做：内置道具表在摆姿包里，宿主不许复刻它的定义，只做「名字 → 清单里那一项」的查找。
+ * 认四种写法：全 key、裸 id（chair / arrow.glb）、中文 label（椅子 / 细剑）。
+ * @param {string} input 用户输入
+ * @param {Array<{key?: string, propKey?: string, label?: string}>} options meta/list 的道具项
+ * @returns {string|null} 命中的 propKey；清单里没有这个定义时 null
+ */
+export function resolvePropChoice(input, options) {
+    const full = propChoiceName(input);
+    if (!full) return "";
+    const q = full.replace(/\.glb$/, "");   // 带扩展名的写法（arrow.glb）与裸名（arrow）同一个落点
+    const rows = Array.isArray(options) ? options : [];
+    const keyOf = (r) => String(r.key ?? r.propKey ?? "");
+    const bareOf = (r) => propChoiceName(keyOf(r).replace(/^(builtin|glb):/, "")).replace(/\.glb$/, "");
+    const hit = rows.find((r) => propChoiceName(keyOf(r)) === full)
+        || rows.find((r) => propChoiceName(r.label) === full)
+        || rows.find((r) => bareOf(r) === q);
+    return hit ? keyOf(hit) : null;
+}
+
 /**
  * 建「3D 摆姿」视图。依赖由宿主注入：api 走 shim（离线与在线同一条路），
  * openMaterial 打开素材库弹窗并把选中项交回来。
@@ -72,6 +102,7 @@ export function createPoseView({ api, $el, toast, openMaterial }) {
         let pickedPreset = "";
         let pickedScene = "";
         let pickedProp = "";
+        let propChoices = [];   // meta/list 的道具项：自由填写的名字只在这份清单里解析，不猜定义
         const canvas = {};
 
         // 两层门控：读写本机文件只认 pose:ready；摆姿动作还要 caps.hostUi —— 旧摆姿包没有
@@ -170,6 +201,7 @@ export function createPoseView({ api, $el, toast, openMaterial }) {
         const btnImportBody = btn("导入自备素体", "folder", libGate);
         const bodyFile = $el("input", { className: "ns-pose-file", type: "file", accept: ".glb" });
         btnImportBody.title = t("自备素体只支持 .glb");
+        const propName = field("道具名（例：椅子）");
         const btnAddProp = btn("添加道具", "plus", panelGate);
         const btnAttachProp = btn("挂到骨点", "plug", panelGate);
         const btnGroundProp = btn("落地", "target", panelGate);
@@ -185,7 +217,8 @@ export function createPoseView({ api, $el, toast, openMaterial }) {
                 row([bodyKey, btnImportBody]), bodyFile]),
             group("摆姿", [row([presetSel, btnApplyPreset]), ...toggles.map((tg) => tg.row), row([lookSel])]),
             group("道具", [
-                row([propSel, btnAddProp]),
+                row([propSel, propName]),
+                row([btnAddProp]),
                 propList,
                 row([boneSel, btnAttachProp]),
                 row([btnGroundProp, btnDelProp]),
@@ -248,7 +281,12 @@ export function createPoseView({ api, $el, toast, openMaterial }) {
 
         const fill = (select, rows, placeholder) => select.replaceChildren(
             $el("option", { value: "", textContent: t(placeholder) }),
-            ...rows.map((r) => $el("option", { value: r.key, textContent: r.label || r.key })),
+            // 道具那一项页面给的是 { propKey, label }：value 落空时浏览器会拿 label 文本当 value，
+            // 面板发出去的就是「椅子」这种显示名，页面的道具定义表查不到
+            ...rows.map((r) => $el("option", {
+                value: r.key ?? r.propKey ?? "",
+                textContent: r.label || r.key || r.propKey,
+            })),
         );
 
         /** meta/list 一次给全：面板每个下拉与勾选组都从这份清单来，不再逐样问页面 */
@@ -256,7 +294,8 @@ export function createPoseView({ api, $el, toast, openMaterial }) {
             fill(modelSel, m.models || [], "选择素体…");
             fill(presetSel, m.presets || [], "选择预设…");
             fill(lookSel, m.looks || [], "外观");
-            fill(propSel, m.props || [], "选择道具…");
+            propChoices = m.props || [];
+            fill(propSel, propChoices, "选择道具…");
             fill(boneSel, (m.bones || []).map((b) => ({ key: String(b), label: String(b) })), "挂点骨…");
             fill(viewSel, m.views || [], "视角");
             fill(sizeSel, (m.sizes || []).map((n) => ({ key: String(n), label: `${n}px` })), "尺寸");
@@ -423,8 +462,16 @@ export function createPoseView({ api, $el, toast, openMaterial }) {
         lookSel.onchange = () => run(() => action("look/set", { key: lookSel.value }));
 
         btnAddProp.onclick = () => run(async () => {
-            if (!propSel.value) { toast(t("先选一个道具")); return; }
-            await action("prop/add", { key: propSel.value });
+            const typed = propName.value.trim();
+            const key = typed ? resolvePropChoice(typed, propChoices) : propSel.value;
+            propName.value = "";   // 一次性输入：写完就清，与自备素体 key 同一口径
+            if (typed && !key) {
+                toast(tf("道具表里没有「{name}」：可输入 椅子 / 桌子 / 剑 这类名字（共 {n} 项），或从下拉选",
+                    { name: typed, n: propChoices.length }));
+                return;
+            }
+            if (!key) { toast(t("先选一个道具")); return; }
+            await action("prop/add", { key });
             await refreshProps();
         });
         btnAttachProp.onclick = () => run(async () => {

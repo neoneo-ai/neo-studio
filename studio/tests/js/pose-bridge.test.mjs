@@ -4,7 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { resetEnv, mockRoute, clearRoutes, jsonResponse, fetchLog, click, changeValue, inputText, flush, sleep, window } from "./setup.mjs";
 import { $el } from "../../web/studio/shim/ui.js";
-import { createPoseView, poseMaterialUrl, POSE_PAGE_URL } from "../../web/pose/pose.js";
+import { createPoseView, poseMaterialUrl, resolvePropChoice, POSE_PAGE_URL } from "../../web/pose/pose.js";
 
 const api = { fetchApi: (path, opts) => fetch(path, opts) };
 const LIB = ".ns-pose-side:not(.ns-pose-panel)";
@@ -17,7 +17,12 @@ const settle = async () => { await flush(); await sleep(0); await flush(); };
 const META = {
     models: [{ key: "girl", label: "少女" }],
     presets: [{ key: "run", label: "奔跑" }],
-    props: [{ key: "sword", label: "长剑" }],
+    // 道具项的真实形状来自摆姿页 src/core/propKit.js 的 listPropOptions：键名是 propKey，不是 key
+    props: [
+        { propKey: "builtin:chair", label: "椅子", source: "builtin" },
+        { propKey: "glb:arrow.glb", label: "箭", source: "glb" },
+        { propKey: "glb:sting-sword.glb", label: "细剑（Sting）", source: "glb" },
+    ],
     formats: [
         { key: "skeleton", label: "骨架图", suffix: "openpose", hint: "OpenPose 输入" },
         { key: "depth", label: "深度图", suffix: "depth", hint: "depth 输入" },
@@ -28,7 +33,7 @@ const META = {
     looks: [{ key: "studio", label: "棚拍" }],
     maxExportSize: 1024,
 };
-const PROPS = { items: [{ id: "p1", label: "长剑", attach: null }], options: META.props, bones: META.bones };
+const PROPS = { items: [{ id: "p1", label: "椅子", attach: null }], options: META.props, bones: META.bones };
 const STATE = {
     ready: true, model: "girl", members: 2, poseMode: true, snap: false,
     outline: true, subjects: true, look: "studio", props: 1,
@@ -190,13 +195,65 @@ test("pose:call 往返：meta/list 渲染下拉，回复只认自己那条端口
     env.replyCall(env.calls("prop/list")[0], PROPS);
     await settle();
     assert.equal(env.sel(0).options.length, 0, "道具的回复不许解掉 meta/list 那条请求");
-    assert.match(env.host.querySelector(PANEL + " .ns-pose-item").textContent, /长剑 · 未挂载/);
+    assert.match(env.host.querySelector(PANEL + " .ns-pose-item").textContent, /椅子 · 未挂载/);
     env.replyCall(env.calls("meta/list")[0], META);
     await settle();
     assert.deepEqual([...env.sel(0).options].map((o) => o.value), ["", "girl"], "素体下拉来自 meta");
     assert.deepEqual([...env.sel(5).options].map((o) => o.value), ["", "front", "side"], "视角下拉来自 meta");
     assert.deepEqual([...env.sel(6).options].map((o) => o.value), ["", "256", "512", "1024", "2048"]);
     assert.equal(env.host.querySelectorAll(PANEL + " .ns-pose-format input").length, 2, "格式勾选组来自 meta");
+});
+
+test("道具添加：下拉的 value 必须是页面的 propKey，中文 label 只当显示名", async () => {
+    resetEnv();
+    const env = await mounted();
+    await env.ready();
+    env.replyCall(env.calls("meta/list")[0], META);
+    env.replyCall(env.calls("prop/list")[0], PROPS);
+    await settle();
+    assert.deepEqual([...env.sel(3).options].map((o) => o.value),
+        ["", "builtin:chair", "glb:arrow.glb", "glb:sting-sword.glb"],
+        "value 落空时浏览器拿「椅子」当 value，页面收到的就是显示名");
+    changeValue(env.sel(3), "builtin:chair");
+    click(env.button("添加道具"));
+    await settle();
+    assert.deepEqual(env.calls("prop/add")[0].msg.args, { key: "builtin:chair" });
+});
+
+test("道具添加：自由填写的道具名解析成 propKey，清单里没有的名字不发请求", async () => {
+    resetEnv();
+    const env = await mounted();
+    await env.ready();
+    env.replyCall(env.calls("meta/list")[0], META);
+    env.replyCall(env.calls("prop/list")[0], PROPS);
+    await settle();
+    inputText(env.panelField(1), "椅子");
+    click(env.button("添加道具"));
+    await settle();
+    assert.deepEqual(env.calls("prop/add")[0].msg.args, { key: "builtin:chair" },
+        "面板上看见中文 label，页面 addProp 要的是带前缀的 propKey");
+    assert.equal(env.panelField(1).value, "", "名字框是一次性的：写完就清，下一发不覆盖上一发");
+    inputText(env.panelField(1), "细剑");
+    click(env.button("添加道具"));
+    await settle();
+    assert.deepEqual(env.calls("prop/add")[1].msg.args, { key: "glb:sting-sword.glb" },
+        "label 的全角括号后缀（细剑（Sting））按括号前的名字认");
+    inputText(env.panelField(1), "沙发");
+    click(env.button("添加道具"));
+    await settle();
+    assert.equal(env.calls("prop/add").length, 2, "道具表里没有的定义不许发请求");
+    assert.match(env.toasts.join("|"), /道具表里没有「沙发」/);
+});
+
+test("resolvePropChoice：全 key、裸 id、中文名三种写法落到同一个 propKey", () => {
+    assert.equal(resolvePropChoice("builtin:chair", META.props), "builtin:chair");
+    assert.equal(resolvePropChoice("chair", META.props), "builtin:chair");
+    assert.equal(resolvePropChoice("椅子", META.props), "builtin:chair");
+    assert.equal(resolvePropChoice(" 箭 ", META.props), "glb:arrow.glb");
+    assert.equal(resolvePropChoice("arrow.glb", META.props), "glb:arrow.glb");
+    assert.equal(resolvePropChoice("ARROW", META.props), "glb:arrow.glb");
+    assert.equal(resolvePropChoice("", META.props), "", "空输入交回空串，调用处走下拉那条路");
+    assert.equal(resolvePropChoice("沙发", META.props), null, "没有的定义交回 null 让调用处提示");
 });
 
 test("pose:state 镜像：状态栏与开关跟着画布对账", async () => {
@@ -247,7 +304,7 @@ test("ControlNet 图组：页面交回 files，宿主 POST 进 /neo_pose/export_
     await settle();
     changeValue(env.sel(5), "side");
     changeValue(env.sel(6), "512");
-    inputText(env.panelField(1), "hero");   // 面板里第一个输入框是自备素体的 key，第二个才是导出标签
+    inputText(env.panelField(2), "hero");   // 面板输入框依次是自备素体 key、道具名、导出标签
     click(env.button("导出图组到素材库"));
     await settle();
     const call = env.calls("export/images")[0];

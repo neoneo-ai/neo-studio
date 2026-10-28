@@ -107,6 +107,10 @@ const EN = {
     "摆姿包不含宿主命令层：运行 tools\\sync_pose_dist.ps1 同步最新构建产物。": "The pose package has no host command layer: run tools\\sync_pose_dist.ps1 to sync the latest build.",
     "先选一个预设": "Pick a preset first",
     "先选一个道具": "Pick a prop first",
+    // 自由填写的道具名：定义在摆姿包的道具表里，面板只在 meta/list 那份清单里找，找不到要说清能输什么
+    "道具名（例：椅子）": "Prop name (e.g. 椅子)",
+    "道具表里没有「{name}」：可输入 椅子 / 桌子 / 剑 这类名字（共 {n} 项），或从下拉选":
+        "No prop \"{name}\" in the prop list: type a name like 椅子 / 桌子 / 剑 ({n} available), or pick one from the dropdown",
     "先选道具与挂点骨": "Pick a prop and a bone first",
     "先勾要导出的格式": "Tick the formats to export first",
     "请先写姿态名": "Write a pose name first",

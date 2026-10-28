@@ -78,6 +78,16 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   `docs/studio-pose.md` / `docs/en/studio-pose.md`, `docs/api-routes.md` / `docs/en/api-routes.md`,
   `docs/release.md` / `docs/en/release.md`, `tools/AGENTS.md`.
 
+- **3D Pose: the panel adds a prop by the name you type.** The prop dropdown carries the page's own prop key
+  (`builtin:chair`, `glb:arrow.glb`) as its value, so picking 椅子 now adds the chair instead of answering
+  "prop definition not found: 椅子" - the panel used to send the displayed label, which is not a key the page
+  owns. A name box sits next to the dropdown: 椅子, chair, builtin:chair, 箭, arrow.glb and glb:arrow.glb all
+  resolve to the same entry against the prop list the page sends, a registry label with a bracket suffix
+  (细剑（Sting）) resolves by the name in front of the bracket, and a name that is not in the prop table is
+  answered with what you can type and how many props there are, with no request sent. Covered by
+  `studio/tests/js/pose-bridge.test.mjs` (the fixture now mirrors the page's `{propKey, label, source}` shape,
+  the dropdown values, the typed-name round trips, the name that never leaves the panel); docs:
+  `docs/studio-pose.md` / `docs/en/studio-pose.md`.
 - **VRAM / RAM monitoring and 清理 now live in the top-bar 队列 panel.** The readout used to sit once per generation
   page (director, paint, video, agent) and polled every 3 seconds while you were on one of them. It is now a single
   strip under the panel header — `显存 12.0G/16.0G` and `内存 20.1G/32.0G`, orange above 60% and red above 85% — with
