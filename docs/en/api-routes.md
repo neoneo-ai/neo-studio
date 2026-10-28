@@ -178,8 +178,8 @@ bridge messages and how to install the package are in [studio-pose.md](studio-po
 | POST     | `/neo_pose/import_image`    | Hand one library asset to the page                                                                              |
 | POST     | `/neo_pose/import_model`    | Write an own-figure GLB to `<data root>/pose/dist/models/<key>.glb`, replies `{key, name, url, size, from}`   |
 | GET      | `/neo_pose/refs/{name}`     | Serve that reference image back to the page (same-origin)                                                       |
-| POST     | `/neo_pose/export_image`    | Store the page canvas into the library's "My Upload", replies `{filename, subfolder, size}`                     |
-| POST     | `/neo_pose/export_set`      | Store a ControlNet image set into "My Upload" (≤12 files), replies `{saved, count}`                             |
+| POST     | `/neo_pose/export_image`    | Store the page canvas into `output/Pose`, replies `{filename, subfolder, size}`                               |
+| POST     | `/neo_pose/export_set`      | Store a ControlNet image set into `output/Pose` (≤12 files), replies `{saved, count}`                         |
 
 The prefix itself (`/pose-dist/`, an empty path) lands on the entry page, so typing the prefix in the
 address bar opens the page. The asset paths inside the build are fixed at build time and they are two

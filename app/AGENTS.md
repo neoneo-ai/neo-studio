@@ -27,8 +27,12 @@ Python 写法（SPDX 头、原子写配置、`_json_safe()`、注释纪律）与
   `netstat` and reads to users as a second ComfyUI that survives the window close.
 - Closing the window stores the geometry and reaps the ComfyUI child the app started.
   A close that lands during the launch cancels the launch that just started, so the
-  app never leaves an orphan ComfyUI behind. `kill_pid()` declares `OpenProcess`'s
-  `restype` explicitly, or the 64-bit handle is truncated and the kill fails silently.
+  app never leaves an orphan ComfyUI behind. That covers the child this session spawned;
+  a child an earlier session spawned and an interrupted teardown left behind is claimed
+  through the `data/comfy_child.json` marker (pid + port, the port re-checked before the
+  kill), while a ComfyUI the user started has no marker and is never stopped. `kill_pid()`
+  declares `OpenProcess`'s `restype` explicitly, or the 64-bit handle is truncated and the
+  kill fails silently.
 - `pythonw` has no console and its `stderr` is `None`. A console
   logging handler interrupts window creation, so desktop logging goes to
   `data/studio_desktop.log` and the pywebview handlers stay console-free.

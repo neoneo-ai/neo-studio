@@ -162,8 +162,8 @@ Neo Studio 独立页面（`web/studio/index.html`）的后端。素材 / 生图 
 | POST   | `/neo_pose/import_image`    | 把素材库的一张图交进页面                                                     |
 | POST   | `/neo_pose/import_model`    | 自备素体 GLB 写进 `<数据根>/pose/dist/models/<key>.glb`，回 `{key, name, url, size, from}` |
 | GET    | `/neo_pose/refs/{name}`     | 伺服交进页面的那张参考图                                                     |
-| POST   | `/neo_pose/export_image`    | 页面画布导出落进素材库「我的上传」，回 `{filename, subfolder, size}`         |
-| POST   | `/neo_pose/export_set`      | ControlNet 图组落进素材库「我的上传」（≤12 张），回 `{saved, count}`         |
+| POST   | `/neo_pose/export_image`    | 页面画布导出落进 `output/Pose`，回 `{filename, subfolder, size}`             |
+| POST   | `/neo_pose/export_set`      | ControlNet 图组落进 `output/Pose`（≤12 张），回 `{saved, count}`             |
 
 前缀本身（`/pose-dist/`，空路径）落到入口页，地址栏直接敲前缀也要进页面。产物里的资源路径是构建时写死的
 两条根路径：页面与脚本走 `/pose-dist/...`，道具注册表与 GLB 走 `/models/props/index.json`、

@@ -424,6 +424,45 @@ class MainDirDeleteTests(unittest.TestCase):
         self.assertTrue(cached.exists())
 
 
+class PoseDirLandingTests(unittest.TestCase):
+    """摆姿导出的落点 output/Pose：它是 output 下的普通子目录，列表、缩略图寻址与单条
+    删除全部复用系统目录那一条路，素材库不需要为它注册任何东西。"""
+
+    _FILE = "pose_front_skeleton.png"
+
+    def setUp(self):
+        self.pose_dir = Path(_OUTPUT) / "Pose"
+        self.target = _write(self.pose_dir / self._FILE, b"png")
+
+    def tearDown(self):
+        if self.target.exists():
+            self.target.unlink()   # 只清本用例写的那一张，目录留给用户
+
+    def test_pose_dir_lands_under_the_output_dir(self):
+        self.assertEqual(gallery.POSE_DIR, Path(_OUTPUT) / "Pose")
+        self.assertEqual(gallery.POSE_DIR_NAME, "Pose")
+
+    def test_output_browsing_lists_the_pose_subdir_with_relative_subfolder(self):
+        out = _payload(_call(gallery.get_gallery_list(
+            _GetRequest({"dir_name": "Output", "path": "Pose"}))))
+        resp_dir = out["directories"][0]
+        self.assertEqual([it["filename"] for it in resp_dir["items"]], [self._FILE])
+        self.assertEqual(resp_dir["items"][0]["subfolder"], "Pose")
+
+        # 深链写法（素材页二级导航就是这个名字）落进同一个目录
+        deep = _payload(_call(gallery.get_gallery_list(_GetRequest({"dir_name": "Output/Pose"}))))
+        self.assertEqual([it["filename"] for it in deep["directories"][0]["items"]], [self._FILE])
+        self.assertEqual(deep["directories"][0]["items"][0]["subfolder"], "Pose")
+
+    def test_pose_relative_subfolder_resolves_for_preview_and_delete(self):
+        found = gallery._find_source_media(self._FILE, "Pose")
+        self.assertEqual(found.resolve(), self.target.resolve())
+        resp = _call(gallery.delete_gallery_item(
+            _PostRequest({"filename": self._FILE, "subfolder": "Pose"})))
+        self.assertEqual(resp.status, 200)
+        self.assertFalse(self.target.exists())
+
+
 class MainDirCoverTests(unittest.TestCase):
     """主目录每一层级都要给「当前目录 + 直接子目录」返回封面，子目录卡片才有缩略图。"""
 

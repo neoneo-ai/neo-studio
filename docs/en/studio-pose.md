@@ -127,10 +127,12 @@ Page and scene names go through a whitelist: an alphanumeric first character, at
 only `A-Za-z0-9_.-`. The figure key goes through the same one (the file name is `<key>.glb`).
 Subresource paths resolve symlinks and are forced inside one of the two landing paths; a URL
 with `..`, a drive letter or an absolute path is `400`. Pose file names are
-`<data root>/pose/presets/<name>.pose.json`, through the same whitelist. Exported images land in the
-library's "My Upload" directory - the same place `gallery/list` and drag-into-node read from; a single
-image is de-duplicated and replies `{filename, subfolder, size}`, and a set is validated file by file
-before any file is written, replying `{saved, count}` - one invalid file writes nothing at all.
+`<data root>/pose/presets/<name>.pose.json`, through the same whitelist. Exported images land in
+`output/Pose` - a subfolder of the normal output directory, the same place the library browses any other
+output. A single image is de-duplicated and replies `{filename, subfolder, size}` with `subfolder` set to
+`Pose`, and a set is validated file by file before any file is written, replying `{saved, count}` - one
+invalid file writes nothing at all. Thumbnails, full-size previews, drag-into-node and the "⋯ → Delete"
+action all resolve through that same relative `Pose` subfolder, and the panel's export toast names it.
 
 Scenes go to `<data root>/pose/scenes/<name>.json`, the pose library to `<data root>/pose/presets/`,
 reference copies to `<data root>/pose/refs/`, and imported figures to `<data root>/pose/dist/models/`;
@@ -145,11 +147,23 @@ is not a capability-table entry.
 The desktop top bar's Pose tab and the home card "3D Pose" open `#/pose`; the host module is
 `studio/web/pose/pose.js`. The host panel has five groups: Pose (import an asset, canvas snapshot),
 Pose library (save, apply, delete), Scene (write a name and save, pick one and load), ControlNet export
-(tick the formats, export the set) and Canvas state (one read-only line); the character row carries
+(tick the formats, export the set) and Canvas state (one read-only line);
+the character row carries
 "Import Own Character" with a key field, and the bottom of the left column explains that only the CC0
 figure ships when the page runs on the bundled copy. Every control stays disabled
 until `pose:ready`, and the panel appears with it; the bridge is torn down with `pose:dispose`, so
 leaving the page leaves no listener behind.
+
+The panel has no 摆姿模式 / 吸附 / 轮廓线 / 主体层 checkboxes: posing starts by clicking the figure, which
+makes the page enter pose mode on its own and leave it on an empty-space click, the page starts with snap
+and outline off, and the figure stays visible - so the canvas state line mirrors only the character, its
+count and the prop count. The ControlNet set is untouched by this: the line-art pass turns the outline
+shells on and off inside the export itself. The two looks come from the page (studio grey / dark), and the
+page opens grey, so once `meta/list` lands the panel puts the appearance on 暗色 and sends `look/set`; a
+pose package whose list has no dark look is left alone. The shipped package's dark look draws a readable floor
+grid: its grid lines are `0x6d7786` fully opaque, because the desktop window renders at `devicePixelRatio` 1, where
+a 1px line is anti-aliased to about half coverage, so the colour carries the contrast and both hosts show the
+same floor.
 
 "Import Own Character" does not depend on the page's command layer (it calls the host's own
 `/neo_pose/import_model`), so it stays clickable on an old package (`caps.hostUi` false, the panel

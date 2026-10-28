@@ -195,9 +195,9 @@ async def pose_ref(request):
 
 @routes.post("/neo_pose/export_image")
 async def pose_export_image(request):
-    """摆姿页 canvas 导出 → 素材库「我的上传」：落点复用 Gallery 的 custom 目录，
-    Gallery 列表、缩略图与送节点通道因此都不需要第二条路径。"""
-    from .gallery import CUSTOM_DIR
+    """摆姿页 canvas 导出 → 素材库的 Pose 目录（output/Pose）：落点就是 ComfyUI 自己的
+    输出目录下的一个子目录，Gallery 列表、缩略图、送节点与单条删除都不需要第二条路径。"""
+    from .gallery import POSE_DIR as EXPORT_DIR, POSE_DIR_NAME as EXPORT_SUBFOLDER
     data, err = await _json_body(request)
     if err is not None:
         return err
@@ -214,9 +214,9 @@ async def pose_export_image(request):
     if not body:
         return _bad_request("data 为空")
     stem = re.sub(r"[^\w\-]+", "_", str(data.get("name") or "pose")).strip("_")[:48] or "pose"
-    dest = await asyncio.to_thread(_unique_path, CUSTOM_DIR, stem, ext)
+    dest = await asyncio.to_thread(_unique_path, EXPORT_DIR, stem, ext)
     await asyncio.to_thread(dest.write_bytes, body)
-    return web.json_response({"success": True, "filename": dest.name, "subfolder": "",
+    return web.json_response({"success": True, "filename": dest.name, "subfolder": EXPORT_SUBFOLDER,
                               "size": len(body)})
 
 
@@ -313,9 +313,9 @@ async def pose_delete_preset(request):
 
 @routes.post("/neo_pose/export_set")
 async def pose_export_set(request):
-    """ControlNet 图组 → 素材库「我的上传」：骨架图 / 深度图 / 剪影图一次一组落进去，
-    生成侧（ControlNet 技能）要的就是素材库里的这几张，不另开第二条素材通路。"""
-    from .gallery import CUSTOM_DIR
+    """ControlNet 图组 → 素材库的 Pose 目录（output/Pose）：骨架图 / 深度图 / 剪影图一次一组
+    落进去，生成侧（ControlNet 技能）要的就是素材库里的这几张，不另开第二条素材通路。"""
+    from .gallery import POSE_DIR as EXPORT_DIR, POSE_DIR_NAME as EXPORT_SUBFOLDER
     data, err = await _json_body(request)
     if err is not None:
         return err
@@ -347,10 +347,11 @@ async def pose_export_set(request):
     for item, ext, body in staged:
         # 名字是页面拼好的 pose_<场景>_<视角>_<格式>.png：只留文件名安全段，重名追加序号
         stem = re.sub(r"[^\w\-]+", "_", str(item.get("name") or "pose")).strip("_")[:48] or "pose"
-        dest = await asyncio.to_thread(_unique_path, CUSTOM_DIR, stem, ext)
+        dest = await asyncio.to_thread(_unique_path, EXPORT_DIR, stem, ext)
         await asyncio.to_thread(dest.write_bytes, body)
         saved.append(dest.name)
-    return web.json_response({"success": True, "saved": saved, "count": len(saved)})
+    return web.json_response({"success": True, "saved": saved, "count": len(saved),
+                              "subfolder": EXPORT_SUBFOLDER})
 
 
 @routes.post("/neo_pose/import_model")

@@ -702,6 +702,49 @@ def start_comfy(python: Path, root: Path, port: int, listen: str = "", cors: str
     return proc
 
 
+COMFY_CHILD = STATE / "comfy_child.json"
+
+
+def spawn_comfy(python: Path, root: Path, port: int, listen: str = "",
+                cors: str = "") -> subprocess.Popen:
+    """拉起 ComfyUI，并把「这一路是桌面端起的」记进数据根。
+
+    收尾链之外还有两条路会让进程活下来：附着到上一轮的残留（self.comfy 是 None），
+    以及桌面端在收尾跑到之前被结束。标记是下一轮关窗仍然认得它的依据 —— 用户自己
+    启动的 ComfyUI 没有标记，关窗不碰。
+    """
+    proc = start_comfy(python, root, port, listen, cors)
+    try:
+        COMFY_CHILD.parent.mkdir(parents=True, exist_ok=True)
+        tmp = COMFY_CHILD.with_name(COMFY_CHILD.name + ".tmp")
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump({"pid": proc.pid, "port": port}, f)
+        os.replace(tmp, COMFY_CHILD)
+    except OSError:
+        log_line(f"comfy child marker failed pid={proc.pid}")
+    return proc
+
+
+def comfy_child_marker() -> dict:
+    """桌面端上一轮拉起、还没被收走的 ComfyUI：{pid, port}；没有可用标记返回 {}。"""
+    try:
+        with open(COMFY_CHILD, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    pid, port = int(data.get("pid") or 0), int(data.get("port") or 0)
+    return {"pid": pid, "port": port} if pid and port else {}
+
+
+def forget_comfy_child() -> None:
+    try:
+        COMFY_CHILD.unlink()
+    except OSError:
+        pass
+
+
 def port_busy(port: int) -> bool:
     with socket.socket() as s:
         s.settimeout(0.4)
@@ -1045,6 +1088,7 @@ class StudioDesktop:
                 break
             time.sleep(0.5)
         self.pid = 0
+        forget_comfy_child()   # 停止已经把进程收走：标记留着会让下一轮关窗去找一个没有的 PID
         st = self.comfy_state()
         log_line(f"comfy stop {st}")
         # 直连那路的窗口本来就钉在桌面端页面上，停完不用跳；跳一次等于整页刷新，白丢未保存的编辑
@@ -1058,20 +1102,31 @@ class StudioDesktop:
         只认自己那份 PID：terminate 之后回收子进程，回收超时（真没退出）才按 PID 兜底强杀。
         必须回收 —— 不回收的话进程只剩内核对象，pid_alive 会一直报「还活着」，关窗固定睡满
         等待上限、兜底强杀也必然失败；回收刚成功时进程对象也还会残留几毫秒，判活会读到假活。
-        不做 comfy_stop 的按端口扫荡 —— 关窗路上重扫监听者会误杀抢端口的残留进程；
-        用户自己启动的那路没有句柄（self.comfy 是 None），这里完全不碰。"""
-        if self.comfy is None or self._closed:
+        不做 comfy_stop 的按端口扫荡 —— 关窗路上重扫监听者会误杀抢端口的残留进程。
+        附着模式（self.comfy 是 None）只认数据根里的标记：上一轮桌面端拉起、在收尾跑到之前
+        活下来的 ComfyUI 才是我们的，按端口核对过 PID 才杀。用户自己启动的那路没有标记，
+        关窗不碰；插件代码在孤儿进程内存里是旧的，放它活着，下一轮导出全落在旧路径上。"""
+        if self._closed:
             return
         self._closed = True
         self.starting = False
-        pid = self.comfy.pid
-        self.comfy.terminate()
-        try:
-            self.comfy.wait(timeout=1.2)   # TerminateProcess 是异步的，正常收尾远快于此；等满上限就是「关得慢」
-        except subprocess.TimeoutExpired:
-            kill_pid(pid)
-            log_line(f"comfy close kill pid={pid}")
-        log_line(f"comfy closed with desktop pid={pid}")
+        if self.comfy is not None:
+            pid = self.comfy.pid
+            self.comfy.terminate()
+            try:
+                self.comfy.wait(timeout=1.2)   # TerminateProcess 是异步的，正常收尾远快于此；等满上限就是「关得慢」
+            except subprocess.TimeoutExpired:
+                kill_pid(pid)
+                log_line(f"comfy close kill pid={pid}")
+            log_line(f"comfy closed with desktop pid={pid}")
+        else:
+            marker = comfy_child_marker()
+            if marker and port_owner(marker["port"]) == marker["pid"]:
+                if kill_pid(marker["pid"]):
+                    log_line(f"comfy closed attached pid={marker['pid']}")
+                else:
+                    log_line(f"comfy close attached pid={marker['pid']} 失败：没有权限终止该进程")
+        forget_comfy_child()
 
     def comfy_start(self) -> dict:
         """胶囊的启动路径：停止后重新拉起 ComfyUI，就绪后接上完整 Studio（直连那路原地翻面）。"""
@@ -1101,7 +1156,7 @@ class StudioDesktop:
             threading.Thread(target=self._jump_when_ready, daemon=True).start()
             return self.comfy_state()
         self.port = free_comfy_port(self.port, self.desktop_port)
-        self.comfy = start_comfy(resolve_python(self.root, self.python_arg), self.root, self.port,
+        self.comfy = spawn_comfy(resolve_python(self.root, self.python_arg), self.root, self.port,
                                  self.listen, comfy_cors(self.listen, self.remote, self.desktop_port))
         self.url = self.studio_url()
         self.pid = self.comfy.pid
@@ -1791,8 +1846,8 @@ def main() -> int:
         # 远程模式没有本机端口可探、也不拉本机进程：窗口直接指向远端，通不通看远端探活
         if state == ST_OK and not desktop.remote and not port_busy(port) and not desktop.closing:
             desktop.port = free_comfy_port(port, desktop.desktop_port)
-            desktop.comfy = start_comfy(python, root, desktop.port, desktop.listen,
-                                         comfy_cors(desktop.listen, desktop.remote, desktop.desktop_port))
+            desktop.comfy = spawn_comfy(python, root, desktop.port, desktop.listen,
+                                        comfy_cors(desktop.listen, desktop.remote, desktop.desktop_port))
             desktop.pid = desktop.comfy.pid
             desktop.url = desktop.studio_url()
             desktop.starting = True

@@ -4,6 +4,15 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **Closing the window now stops the ComfyUI an earlier session left behind.** A ComfyUI the desktop app had spawned
+  could survive a close that never reached its teardown (a crash, "End task", a signed-out session). The next window
+  found the port taken and attached to that orphan, which kept running the plugin code it had imported hours earlier:
+  disk syncs put the new files in `custom_nodes`, but the process never re-imported them, so a pose export still
+  landed in the old place no matter how current the files were. The app now records the pid and port of every
+  ComfyUI it spawns in `data/comfy_child.json` and, when it had to attach, takes that process down on close after
+  checking the port still belongs to the recorded pid. A ComfyUI started by the user has no marker and is still
+  never touched.
+
 - **The window opens on the home page, and nothing jumps it away.** The Studio page reads its tab from the URL
   fragment. An unrecognised tab - a bookmarked tab link, a deep link saved from an older build - hid every view and
   left a window with nothing but the top bar, and the director page was pulling the window off home by itself: the
@@ -21,9 +30,10 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   switches, props and the ControlNet export, and a bar button that imports an asset from the library as a reference
   plane. Posing happens in the page through the `pose:call` channel and the canvas state mirrors back into the panel,
   so the page's own demo toolbar steps aside while the window panel is driving. Exported images - a canvas snapshot
-  or a whole ControlNet set (skeleton / depth / silhouette per view) - land in the library's "My Upload" folder, so
-  the gallery list and drag-into-node read them like any other asset; a set is validated as a batch, so a rejected
-  file leaves no half group behind. Poses are written atomically under `<data root>/pose/presets/<name>.pose.json`
+  or a whole ControlNet set (skeleton / depth / silhouette per view) - land in `output/Pose`, a subfolder of the
+  normal ComfyUI output directory, so the material library browses them exactly like any other output, and
+  previews, drag-into-node and per-item delete work on them unchanged; a set is validated as a batch, so a
+  rejected file leaves no half group behind, and the export toast names the Pose folder. Poses are written atomically under `<data root>/pose/presets/<name>.pose.json`
   and scenes under `<data root>/pose/scenes/`, and the short path `/neo-pose` redirects into the package
   prefix `/pose-dist/` so the vite build's relative imports resolve. The pose package is installed separately:
   `pwsh tools\sync_pose_dist.ps1 -Source <3d-pose-art repo>` puts the build under `<data root>/pose/dist/`, and until
@@ -98,6 +108,13 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   `studio/tests/js/pose-bridge.test.mjs` (the fixture now mirrors the page's `{propKey, label, source}` shape,
   the dropdown values, the typed-name round trips, the name that never leaves the panel); docs:
   `docs/studio-pose.md` / `docs/en/studio-pose.md`.
+- **3D Pose: the control panel is smaller, and the canvas opens dark.** The 摆姿模式 / 吸附 / 轮廓线 /
+  主体层 checkboxes are gone - clicking the figure on the canvas enters pose mode by itself, the page
+  already starts with snap and outline off, and the figure stays visible, so the state line now mirrors
+  only the character, its count and the prop count. The appearance dropdown opens on 暗色 (the page itself
+  opens grey), and a pose package without that look gets no request. Covered by
+  `studio/tests/js/pose-bridge.test.mjs` (the three state rows with no checkbox rows, the dark look sent on
+  open, the old package left alone); docs: `docs/studio-pose.md` / `docs/en/studio-pose.md`.
 - **VRAM / RAM monitoring and 清理 now live in the top-bar 队列 panel.** The readout used to sit once per generation
   page (director, paint, video, agent) and polled every 3 seconds while you were on one of them. It is now a single
   strip under the panel header — `显存 12.0G/16.0G` and `内存 20.1G/32.0G`, orange above 60% and red above 85% — with
@@ -484,6 +501,15 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   Covered by `studio/tests/test_agent.py` (`TestNamedSkillRouting`), the `list_skills` case in
   `studio/tests/test_mcp_server.py` and `studio/tests/js/studio-agent-skill.test.mjs`. Docs in `docs/skills.md`,
   `docs/mcp.md`, `docs/api-routes.md` and their `docs/en/` mirrors.
+
+- **The 3D Pose dark look shows its floor grid.** The dark appearance drew its grid lines at `0x2a2f3a` over a
+  `0x1b1e24` floor at 55% opacity, so the stage read as empty space with nothing but the two blue axis lines — the
+  grid a pose is set against is the point of the dark look. The shipped pose package draws it at `0x6d7786` fully
+  opaque now: the desktop window renders at `devicePixelRatio` 1, where a 1px grid line is anti-aliased to about half
+  coverage, so the colour carries the contrast on its own and the web page and the window show the same floor. The
+  fix is in the pose project (`src/core/scene.js`); `pwsh tools\sync_pose_dist.ps1 -Source <3d-pose-art repo>` and
+  `pwsh tools\build_pose_package.ps1` carry it into the data-root build and into the bundled copy.
+
 
 ## [1.4.0] - 2026-10-20
 

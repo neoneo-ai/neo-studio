@@ -275,12 +275,17 @@ js_api（`check_setup` / `pick_root` / `pick_python` / `start_setup`），根目
 
 ## 关窗与进程回收
 
-只带走桌面端自己拉起的那路；用户自己启动的 ComfyUI 没有句柄，完全不碰。
+只带走桌面端自己拉起的那路：这一轮拉起的用 `Popen` 句柄，上一轮拉起的用 `data/comfy_child.json` 标记认领；
+用户自己启动的 ComfyUI 没有标记，完全不碰。
 
 - 拉起的那路一出生就挂进 Job Object（`KILL_ON_JOB_CLOSE`）：桌面端进程一死，OS 关句柄连带杀掉作业里的进程
   （含 ComfyUI 自己起的子进程）。收尾链只在桌面端自己走到退出代码时才跑，Ctrl+C、任务管理器结束进程、注销、
   崩溃都把它掐在收尾之前 —— 没有这层内核约束，ComfyUI 就留在端口上成了孤儿，下一轮桌面端探到端口有人监听只能
   附着（`self.comfy` 是 `None`），之后每次关窗都不杀它。
+- 附着模式下（`self.comfy` 是 `None`）关窗按 `data/comfy_child.json` 认领孤儿：`spawn_comfy()` 拉起那一路时
+  记下 pid + port，收尾时端口仍在监听、监听者仍是这个 pid 才杀。上一轮桌面端拉起、在收尾跑到之前活下来的
+  ComfyUI 因此在下次关窗时被带走 —— 它的内存里是几小时前导入的插件代码，磁盘上的文件同步得再新也不会重新
+  导入，放它活着下一次导出依旧落在旧路径上。`comfy_stop` 与 `comfy_close` 收尾后都清掉标记。
 - 第一次 `closing` 只存几何 + 放行关闭（返回 `False`），收尾（杀进程 → 挂「正在停止 ComfyUI」→ 收桌面端服务 →
   `destroy`）全在后台线程走完 —— 杀进程排在挂提示前面，`evaluate_js` 卡住也拖不住带走内核；`closing` 同步跑在
   UI 线程，收尾睡多久窗口就冻多久（桌面端服务正忙时 `join` 吃满 5 秒），`evaluate_js` 更要等 UI 线程回消息循环

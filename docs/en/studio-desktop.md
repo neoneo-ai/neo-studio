@@ -386,8 +386,9 @@ startable once the root is filled in.
 
 ## Window close and process reaping
 
-Only the ComfyUI the desktop started itself is taken away; ComfyUI started by the user has no handle and is never
-touched.
+Only the ComfyUI the desktop started itself is taken away — the one spawned this session through its `Popen` handle,
+the one spawned by an earlier session through the `data/comfy_child.json` marker. ComfyUI started by the user has no
+marker and is never touched.
 
 - The spawned ComfyUI is put into a Job Object (`KILL_ON_JOB_CLOSE`) the moment it starts: when the desktop process
   dies, the OS closes the handle and kills everything inside the job (including the children ComfyUI spawned
@@ -395,6 +396,13 @@ touched.
   or a crash cut it off before the kill. Without this kernel-level constraint ComfyUI stays on the port as an orphan,
   the next desktop run finds the port taken and can only attach (`self.comfy` is `None`), so every later close kills
   nothing.
+- In attach mode (`self.comfy` is `None`) the close claims the orphan through `data/comfy_child.json`:
+  `spawn_comfy()` records pid + port when it starts that instance, and the teardown kills it only when the port is
+  still listening and the listener is still that pid. A ComfyUI an earlier session spawned and an interrupted
+  teardown left behind is therefore taken away on the next close — the plugin modules in its memory were imported
+  hours ago, files synced to disk since are never re-imported, and while it lives every export keeps landing in the
+  old place. A ComfyUI the user started has no marker; both `comfy_stop` and `comfy_close` clear the marker when
+  they finish.
 - The first `closing` only saves geometry and lets the close through (returns `False`); the teardown (kill the
   process → show "stopping ComfyUI" → shut the desktop-side service → `destroy`) all runs on a background thread —
   the kill comes before the notice, so a stuck `evaluate_js` cannot delay taking the kernel with it. `closing` runs

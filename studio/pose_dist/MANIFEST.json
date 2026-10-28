@@ -1,13 +1,13 @@
 {
   "format": "3dpose.package/1",
   "generator": "tools/build_pose_package.ps1",
-  "built_utc": "2026-10-28T11:10:10Z",
-  "total_bytes": 4092587,
+  "built_utc": "2026-10-28T14:19:31Z",
+  "total_bytes": 4092711,
   "files": [
     {
-      "path": "assets/index-C0Ohd41z.js",
-      "bytes": 1110877,
-      "sha256": "846ae4c5ef5ccb64fcd644023942f4329ac2b7b194ba88ec84d23fd59e3fc18b"
+      "path": "assets/index-BKzQo_MZ.js",
+      "bytes": 1111001,
+      "sha256": "f3f1c4a6576c9311c00189fc2a20277f41c1d3890840a242a2cad6ca13bcb024"
     },
     {
       "path": "assets/index-CR1FdUgI.css",
@@ -17,7 +17,7 @@
     {
       "path": "index.html",
       "bytes": 14489,
-      "sha256": "e22c308fc66af0ca9065746dff3557abc6c09303938aff9f3694025f73355c93"
+      "sha256": "10af44967c949148c18cfabb6c6133c8f614577013b4e8654ca32b104d4baf38"
     },
     {
       "path": "LICENSE",

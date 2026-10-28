@@ -30,7 +30,8 @@ const META = {
     views: [{ key: "front", label: "正面" }, { key: "side", label: "侧面" }],
     sizes: [256, 512, 1024, 2048],
     bones: ["hips", "head"],
-    looks: [{ key: "studio", label: "棚拍" }],
+    // 外观两档来自摆姿页 core/scene.js 的 LOOKS：studio 是页面开局的摄影棚灰，dark 是暗色
+    looks: [{ key: "studio", label: "摄影棚" }, { key: "dark", label: "暗色" }],
     maxExportSize: 1024,
 };
 const PROPS = { items: [{ id: "p1", label: "椅子", attach: null }], options: META.props, bones: META.bones };
@@ -96,7 +97,6 @@ function mounted(status = STATUS) {
         button: (label, scope = PANEL) => [...host.querySelectorAll(scope + " .ns-pose-btn")]
             .find((b) => b.textContent.includes(label)),
         sel: (i) => [...host.querySelectorAll(PANEL + " .ns-pose-sel")][i],
-        checks: () => [...host.querySelectorAll(PANEL + " .ns-pose-checkrow input")],
         libField: (i) => [...host.querySelectorAll(LIB + " .ns-pose-name")][i],
         panelField: (i = 0) => [...host.querySelectorAll(PANEL + " .ns-pose-name")][i],
         item: (name, scope) => [...host.querySelectorAll(scope + " .ns-pose-item")].find((r) => r.textContent === name),
@@ -256,7 +256,7 @@ test("resolvePropChoice：全 key、裸 id、中文名三种写法落到同一�
     assert.equal(resolvePropChoice("沙发", META.props), null, "没有的定义交回 null 让调用处提示");
 });
 
-test("pose:state 镜像：状态栏与开关跟着画布对账", async () => {
+test("pose:state 镜像：状态栏只镜像素体、人数与道具数", async () => {
     resetEnv();
     const env = await mounted();
     env.from({ type: "pose:state", state: STATE });
@@ -264,9 +264,35 @@ test("pose:state 镜像：状态栏与开关跟着画布对账", async () => {
     const rows = [...env.host.querySelectorAll(PANEL + " .ns-pose-state-row")].map((r) => r.textContent);
     assert.ok(rows.some((r) => r.includes("girl")), "素体要落进状态栏");
     assert.ok(rows.some((r) => r.includes("素体数") && r.endsWith("2")), "人数要落进状态栏");
-    assert.ok(rows.some((r) => r.includes("摆姿模式") && r.endsWith("开")), "摆姿模式显示为开");
-    assert.equal(env.checks()[0].checked, true);
-    assert.equal(env.checks()[1].checked, false);
+    assert.ok(rows.some((r) => r.includes("道具数") && r.endsWith("1")), "道具数要落进状态栏");
+    assert.equal(rows.length, 3, "模式开关不进状态栏：摆姿靠点人物，轮廓线与吸附页面默认就是关");
+    assert.equal(env.host.querySelectorAll(PANEL + " .ns-pose-checkrow").length, 0,
+        "面板不出摆姿模式 / 吸附 / 轮廓线 / 主体层四个勾选");
+});
+
+test("外观默认暗色：meta/list 到位后面板把外观定在暗色档并下发 look/set", async () => {
+    resetEnv();
+    const env = await mounted();
+    await env.ready();
+    env.replyCall(env.calls("meta/list")[0], META);
+    env.replyCall(env.calls("prop/list")[0], PROPS);
+    await settle();
+    const look = env.calls("look/set")[0];
+    assert.deepEqual(look.msg.args, { key: "dark" },
+        "页面开局是摄影棚灰，面板按产品口径切到暗色档");
+    assert.equal(env.sel(2).value, "dark", "外观下拉要显示当前档位，用户看得见切到了哪一档");
+    env.replyCall(look, { look: "dark" });
+    await settle();
+});
+
+test("外观默认暗色：旧摆姿包没有暗色档时不发只会失败的动作", async () => {
+    resetEnv();
+    const env = await mounted();
+    await env.ready();
+    env.replyCall(env.calls("meta/list")[0], { ...META, looks: [{ key: "studio", label: "摄影棚" }] });
+    env.replyCall(env.calls("prop/list")[0], PROPS);
+    await settle();
+    assert.equal(env.calls("look/set").length, 0, "清单里没有的档位不发");
 });
 
 test("姿势库：存为姿态走 pose/export 写文件，载入读文件交回 pose/apply，删除走单条接口", async () => {

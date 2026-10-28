@@ -51,6 +51,18 @@ WAVEFORM_DIR = GALLERY_DIR / "waveform_cache"  # decoded audio waveform peaks (J
 OUTPUT_DIR = Path(folder_paths.output_directory).resolve()
 GRID_DIR = OUTPUT_DIR / "StoryBoard"
 CHARACTER_DIR = OUTPUT_DIR / "CharacterSheet"
+# 摆姿导出的落点：output/Pose。挂在 output 下面就是素材库现成的浏览路径——首页 Output
+# 卡里的一个子目录卡，缩略图、大图、拖放进节点与单条删除全走系统目录那一条寻址
+# （_find_source_media 认相对 subfolder "Pose"）。导出项在列表与接口里回的都是
+# subfolder="Pose"，素材项与 ComfyUI 自己的输出项在界面上一模一样。
+POSE_DIR = OUTPUT_DIR / "Pose"
+POSE_DIR_NAME = POSE_DIR.name   # 素材项 subfolder 上的锚定值
+# 插件加载时就把目录建好：摆姿导出前用户在素材库与文件管理器里都能看到它，
+# 只读网络共享上建不出来时导入照常继续（导出时会再试一次）。
+try:
+    POSE_DIR.mkdir(parents=True, exist_ok=True)
+except OSError:
+    pass
 THUMBNAIL_SIZE = 320  # Fixed thumbnail size in pixels
 
 

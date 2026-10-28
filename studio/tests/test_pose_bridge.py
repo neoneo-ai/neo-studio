@@ -270,10 +270,11 @@ class _GalleryStubCase(_PoseCase):
     def setUp(self):
         super().setUp()
         self._saved = snapshot((GALLERY_STUB,))
-        self.stub_custom = pose.DIST_DIR.parent / "stub_gallery" / "custom"
+        self.stub_pose_dir = pose.DIST_DIR.parent / "stub_output" / "Pose"
         self.source = None
         mod = types.ModuleType(GALLERY_STUB)
-        mod.CUSTOM_DIR = self.stub_custom
+        mod.POSE_DIR = self.stub_pose_dir
+        mod.POSE_DIR_NAME = "Pose"
         mod._find_source_media = lambda filename, subfolder: self.source
         sys.modules[GALLERY_STUB] = mod
 
@@ -308,16 +309,16 @@ class RefImageTests(_GalleryStubCase):
 
 
 class ExportImageTests(_GalleryStubCase):
-    def test_export_lands_in_gallery_custom(self):
-        """导出落点复用 Gallery 的 custom 目录：素材库列表与送节点通道不需要第二条路径。"""
+    def test_export_lands_in_the_pose_output_dir(self):
+        """导出落点是 output 下的 Pose 子目录：素材库浏览 output 就能看到，接口回相对 subfolder。"""
         resp = _run(pose.pose_export_image,
                     _request(body={"data": base64.b64encode(PNG).decode(), "name": "pose shot"}))
         data = json.loads(resp.body)
         self.assertTrue(data["success"])
-        dest = self.stub_custom / data["filename"]
+        dest = self.stub_pose_dir / data["filename"]
         self.created.append(dest)
         self.assertEqual(dest.read_bytes(), PNG)
-        self.assertEqual(data["subfolder"], "")
+        self.assertEqual(data["subfolder"], "Pose")
 
     def test_export_rejects_bad_payload(self):
         self.assertEqual(_run(pose.pose_export_image, _request(body={"data": "%%%"})).status, 400)
@@ -327,23 +328,24 @@ class ExportImageTests(_GalleryStubCase):
 
 
 class ExportSetTests(_GalleryStubCase):
-    """ControlNet 图组 → 素材库「我的上传」：一次一组落进 Gallery 的 custom，
+    """ControlNet 图组 → 素材库的 Pose 目录：一次一组落进 output/Pose，
     页面拼的名字只留文件名安全段，重名由 _unique_path 追加序号。"""
 
     def _png(self):
         return base64.b64encode(PNG).decode()
 
-    def test_set_lands_in_gallery_custom(self):
+    def test_set_lands_in_the_pose_output_dir(self):
         resp = _run(pose.pose_export_set, _request(body={"files": [
             {"name": "pose_a_front_skeleton", "data": self._png()},
             {"name": "data:pose a front depth", "data": "data:image/png;base64," + self._png()}]}))
         data = json.loads(resp.body)
         self.assertTrue(data["success"])
         self.assertEqual(data["count"], 2)
+        self.assertEqual(data["subfolder"], "Pose")
         for name in data["saved"]:
             self.assertTrue(name.endswith(".png"), f"落盘要带扩展名：{name}")
             self.assertNotIn(" ", name, f"名字里的空格要换成下划线：{name}")
-            dest = self.stub_custom / name
+            dest = self.stub_pose_dir / name
             self.created.append(dest)
             self.assertEqual(dest.read_bytes(), PNG)
 
@@ -351,7 +353,7 @@ class ExportSetTests(_GalleryStubCase):
         """超出 MAX_SET_FILES 在写盘之前挡掉：不能留下半组图。"""
         over = [{"name": f"unit_set_{n}", "data": self._png()} for n in range(pose.MAX_SET_FILES + 1)]
         self.assertEqual(_run(pose.pose_export_set, _request(body={"files": over})).status, 400)
-        self.assertEqual(list(self.stub_custom.glob("unit_set_*")), [])
+        self.assertEqual(list(self.stub_pose_dir.glob("unit_set_*")), [])
         self.assertEqual(_run(pose.pose_export_set, _request(body={"files": []})).status, 400)
         self.assertEqual(_run(pose.pose_export_set, _request(body={"files": [{"name": "u", "data": "%%%"}]})).status, 400)
         self.assertEqual(_run(pose.pose_export_set,
@@ -364,7 +366,7 @@ class ExportSetTests(_GalleryStubCase):
             {"name": "unit_pair_skeleton", "data": self._png()},
             {"name": "unit_pair_depth", "data": "%%%", "ext": ".png"}]}))
         self.assertEqual(resp.status, 400)
-        self.assertEqual(list(self.stub_custom.glob("unit_pair_*")), [])
+        self.assertEqual(list(self.stub_pose_dir.glob("unit_pair_*")), [])
 
 
 GLB_STUB = b"glTF\x02\x00\x00\x00" + bytes(64)

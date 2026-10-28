@@ -9,7 +9,7 @@
  *
  * 桥的消息名与方向 —— 名单由 /neo_pose/status 下发，宿主、摆姿页、后端测试三处同名：
  *   页面 → 宿主  pose:ready        页面装配完，宿主立刻回一份 pose:theme
- *   页面 → 宿主  pose:state        画布状态快照（摆姿模式 / 吸附 / 素体 / 人数），面板镜像它
+ *   页面 → 宿主  pose:state        画布状态快照（素体 / 人数 / 道具数），面板镜像它
  *   宿主 → 页面  pose:theme        能力位与语言：caps.hostUi 决定页面收不收 demo 控件
  *   宿主 → 页面  neo:import-image  素材库里选中的一张图（同源 /view URL）
  *   宿主 → 页面  pose:export-image 请求导出画布，页面从回复端口回 {data, name}
@@ -40,13 +40,8 @@ const MAX_SET_FILES = 12;        // /neo_pose/export_set 一次落盘的上限�
 const MAX_GLB_BYTES = 48 * 1024 * 1024;   // /neo_pose/import_model 的一份自备素体上限，与后端同值
 const BODY_KEY_RE = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/;   // 素体 key：与后端 SCENE_NAME_RE 同一条
 
-/** 面板开关 → 宿主动作：勾一下发一条 pose:call，画布状态再由 pose:state 校正 */
-const TOGGLES = [
-    ["poseMode", "posemode/set", "摆姿模式"],
-    ["snap", "snap/set", "吸附"],
-    ["outline", "outline/set", "轮廓线"],
-    ["subjects", "subjects/set", "主体层"],
-];
+/** 页面开局是摄影棚灰（摆姿页 core/scene.js 的 LOOKS.studio），面板按产品口径把外观定在暗色档 */
+const DEFAULT_LOOK_KEY = "dark";
 
 /** 素材库选中项 → 摆姿页能直接吃的图片 URL：iframe 与宿主同源，就是原生 /view */
 export function poseMaterialUrl(item) {
@@ -185,11 +180,6 @@ export function createPoseView({ api, $el, toast, openMaterial }) {
         const viewSel = sel("视角", panelGate);
         const sizeSel = sel("尺寸", panelGate);
         const exportLabel = field("标签（默认 pose）");
-        const toggles = TOGGLES.map(([key, name, label]) => {
-            const box = $el("input", { type: "checkbox", className: "ns-pose-check" });
-            panelGate.push(box);
-            return { key, name, box, row: $el("label", { className: "ns-pose-checkrow" }, [box, t(label)]) };
-        });
 
         const btnApplyPreset = btn("套用预设", "target", panelGate);
         const btnAddMember = btn("加素体", "plus", panelGate);
@@ -215,7 +205,7 @@ export function createPoseView({ api, $el, toast, openMaterial }) {
             group("画布状态", [stateBox]),
             group("素体", [row([modelSel, btnAddMember]), row([btnDelMember, btnResetPose]),
                 row([bodyKey, btnImportBody]), bodyFile]),
-            group("摆姿", [row([presetSel, btnApplyPreset]), ...toggles.map((tg) => tg.row), row([lookSel])]),
+            group("摆姿", [row([presetSel, btnApplyPreset]), row([lookSel])]),
             group("道具", [
                 row([propSel, propName]),
                 row([btnAddProp]),
@@ -304,25 +294,27 @@ export function createPoseView({ api, $el, toast, openMaterial }) {
             }, [$el("input", { type: "checkbox", className: "ns-pose-check", value: f.key, checked: "checked" }), f.label])));
         }
 
+        /** 外观定在暗色档：摆姿页的 LOOKS 只有摄影棚灰与暗色两档，旧包没有暗色档就不动 */
+        async function applyDefaultLook(m) {
+            const hit = (m.looks || []).find((l) => l.key === DEFAULT_LOOK_KEY);
+            if (!hit) return;
+            lookSel.value = hit.key;
+            await action("look/set", { key: hit.key }).catch(() => {});
+        }
+
         const stateRow = (key, value) => $el("div", { className: "ns-pose-state-row" }, [
             $el("span", { className: "ns-pose-state-key", textContent: t(key) }),
             $el("span", { className: "ns-pose-state-val", textContent: value }),
         ]);
 
-        /** 画布状态镜像到状态栏与开关：页面侧自己改了控件（点画布、按快捷键），面板跟着对账 */
+        /** 画布状态镜像到状态栏：页面侧自己改了控件（点画布、按快捷键），面板跟着对账 */
         function paintState(s) {
             Object.assign(canvas, s || {});
-            const onOff = (key) => (canvas[key] ? t("开") : t("关"));
             stateBox.replaceChildren(
                 stateRow("素体", canvas.model || "—"),
                 stateRow("素体数", String(canvas.members ?? "—")),
                 stateRow("道具数", String(canvas.props ?? 0)),
-                stateRow("摆姿模式", onOff("poseMode")),
-                stateRow("吸附", onOff("snap")),
-                stateRow("轮廓线", onOff("outline")),
-                stateRow("主体层", onOff("subjects")),
             );
-            for (const tg of toggles) tg.box.checked = !!canvas[tg.key];
         }
 
         const paintFileList = (box, rows, picked, onPick) => {
@@ -456,9 +448,6 @@ export function createPoseView({ api, $el, toast, openMaterial }) {
             if (!presetSel.value) { toast(t("先选一个预设")); return; }
             paintState(await action("preset/apply", { key: presetSel.value }));
         });
-        for (const tg of toggles) {
-            tg.box.onchange = () => run(() => action(tg.name, { on: tg.box.checked }).then(paintState));
-        }
         lookSel.onchange = () => run(() => action("look/set", { key: lookSel.value }));
 
         btnAddProp.onclick = () => run(async () => {
@@ -490,7 +479,7 @@ export function createPoseView({ api, $el, toast, openMaterial }) {
             await refreshProps();
         });
 
-        /* ControlNet 图组：页面交回 {name, data} 列表，后端落进素材库「我的上传」 */
+        /* ControlNet 图组：页面交回 {name, data} 列表，后端落进素材库的 Pose 目录（output/Pose） */
         btnExportSet.onclick = () => run(async () => {
             const formats = [...formatBox.querySelectorAll("input:checked")].map((b) => b.value);
             if (!formats.length) { toast(t("先勾要导出的格式")); return; }
@@ -502,13 +491,13 @@ export function createPoseView({ api, $el, toast, openMaterial }) {
                 label: exportLabel.value.trim() || null,
             });
             const saved = await json("/neo_pose/export_set", { files: r.files });
-            toast(tf("已导出 {n} 张到素材库", { n: saved.count ?? (saved.saved || []).length }));
+            toast(tf("已导出 {n} 张到素材库的 Pose 目录", { n: saved.count ?? (saved.saved || []).length }));
         });
 
         btnShot.onclick = () => run(async () => {
             const { data } = await action("snapshot");
             const saved = await json("/neo_pose/export_image", { data, name: "pose_shot" });
-            toast(tf("画布截图已进素材库：{name}", { name: saved.filename }));
+            toast(tf("画布截图已进素材库的 Pose 目录：{name}", { name: saved.filename }));
         });
 
         window.addEventListener("message", (event) => {
@@ -527,8 +516,10 @@ export function createPoseView({ api, $el, toast, openMaterial }) {
                 notice.hidden = true;
                 bridgePill.textContent = t("桥已连接");
                 setPanel(true);
-                action("meta/list").then(paintMeta)
-                    .catch((e) => toast(tf("读取摆姿元数据失败：{msg}", { msg: e.message })));
+                action("meta/list").then(async (m) => {
+                    paintMeta(m);
+                    await applyDefaultLook(m);
+                }).catch((e) => toast(tf("读取摆姿元数据失败：{msg}", { msg: e.message })));
                 refreshProps();
                 return;
             }

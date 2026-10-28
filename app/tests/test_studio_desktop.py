@@ -288,6 +288,30 @@ class ComfyJobTests(unittest.TestCase):
                 proc.wait(timeout=10)
 
 
+class ComfyChildMarkerTests(unittest.TestCase):
+    """关窗带走 ComfyUI 的标记：附着模式下只有桌面端自己拉起的那一路才认。"""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self._prev = app.COMFY_CHILD
+        app.COMFY_CHILD = pathlib.Path(self._tmp.name) / "comfy_child.json"
+
+    def tearDown(self):
+        app.COMFY_CHILD = self._prev
+        self._tmp.cleanup()
+
+    def test_marker_round_trips_pid_and_port(self):
+        app.COMFY_CHILD.write_text(json.dumps({"pid": 4321, "port": 8188}), encoding="utf-8")
+        self.assertEqual(app.comfy_child_marker(), {"pid": 4321, "port": 8188})
+        app.forget_comfy_child()
+        self.assertEqual(app.comfy_child_marker(), {})
+
+    def test_marker_without_port_is_ignored(self):
+        # 拉起中途被结束：缺端口的标记按「没有」处理，不拿半截 PID 去杀进程
+        app.COMFY_CHILD.write_text(json.dumps({"pid": 4321}), encoding="utf-8")
+        self.assertEqual(app.comfy_child_marker(), {})
+
+
 class GeometryTests(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
