@@ -135,7 +135,8 @@ Neo Studio 独立页面（`web/studio/index.html`）的后端。素材 / 生图 
 | GET | `/neo_studio/queue` | 顶栏队列面板的聚合行：六表按提交时间倒序、条数封顶；行带 `kind` `label` `status` `progress` `created` `updated` `count` `result` `page`，行缩略图按 `result` 取 `/neo_gallery/thumbnail` |
 | GET | `/neo_studio/version` | 插件 / ComfyUI 版本与导演配方列表，附「设置 → 关于」的路径行 `data_root` / `comfy_local`（`remote` 留空，远程地址只有桌面端知道） |
 | GET | `/neo_studio/log` | ComfyUI 控制台日志（`app.logger` 环形缓冲 300 条），Studio「设置 → 日志」轮询 |
-| POST | `/neo_studio/clear_memory` | 卸载模型并清理显存缓存 |
+| GET | `/neo_studio/mem_stats` | 驱动级显存占用（含全部进程）：顶栏队列面板展开时每 3 秒取一次读数 |
+| POST | `/neo_studio/clear_memory` | 卸载模型并清理显存缓存（顶栏队列面板的「清理」钮） |
 
 - `only_segments` 为只读时间轴上勾选的段号文本（1 基、逗号分隔，空 = 整片）；勾选是运行期临时状态，不写进配方。
 - 任务跟踪与 `run_segment` 同一套做法：入队 + 轮询快照 + WS 事件按变化推送。

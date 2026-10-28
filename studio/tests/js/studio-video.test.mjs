@@ -122,7 +122,6 @@ async function boot() {
     mockRoute("/neo_gallery/copy_to_input", (body, call) =>
         jsonResponse({ success: true, filename: `copied_${call.query.get("filename")}` }));
     mockRoute("/rs_recipes/list", jsonResponse([]));
-    mockRoute("/neo_studio/mem_stats", jsonResponse({}));
     mockRoute("/neo_video_gen/simple", (body) => {
         boot.lastBody = body;
         return jsonResponse({ success: true, task_id: "T1", status: "queued", progress: null, filename: null });

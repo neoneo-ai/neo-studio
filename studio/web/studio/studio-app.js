@@ -23,7 +23,7 @@ import { createAgentPanel, createMcpPanel, createAgentPrefsForm } from "../agent
 import { t, tf, getLang, applyLang, LANGS } from "../js/core/i18n.js";
 import { icon, setIcon, setIconLabel } from "../js/core/icons.js";
 import { createLibraryModal } from "../js/core/lib-modal.js";
-import { initQueuePanel, setQueueOnline, refreshQueue, queueTrack } from "../queue-panel.js";
+import { initQueuePanel, setQueueOnline, queueTrack } from "../queue-panel.js";
 
 const view = document.getElementById("ns-view");
 const REPO_URL = "https://github.com/neoneo-ai/neo-studio";   // 设置「关于」里的仓库行，与顶栏「关于插件」同一地址
@@ -95,7 +95,6 @@ function showView(name) {
     if (name !== "agent") agentCtx.page = name;   // 智能体页不抢上下文：条上继续报上一个生成页（配方 / 绘画模式还在用）
     notifyAgentCtx();
     agentEntryBtn?.classList.toggle("ns-agent-toggle-on", name === "agent");
-    setMemActive(name === "director" || name === "paint" || name === "video" || name === "agent");   // 显存读数只在生成页（导演 / 绘画 / 视频 / 智能体）轮询
     if (name === "director" && onDirectorShown) onDirectorShown();
     // 画廊单例的宿主跟着视图走：素材页 = 整片宿主；弹窗开着 = 弹窗宿主；其余页 = 交还素材页 / 收留宿主
     // 一次只挂一处：切页时不会两次 render 抢同一个元素（后落的那次会把画廊拽回上一页）
@@ -669,10 +668,8 @@ async function buildDirector(el) {
     const genLeft = $el("div", { className: "ns-gen-left" }, [ctrlRow, emptyHint]);
     // 结果区没有画面时整块收起，控制行与预览占位上下排满面板
     const genBody = $el("div", { className: "ns-gen-body ns-gen-empty" }, [genLeft, mediaRight]);
-    // 面板底部一行：状态文字 + 显存/内存读数（只有导演生成吃显存，监控跟着生成面板走）
+    // 面板底部一行：状态文字（显存 / 内存读数与清理在顶栏队列面板里，不跟着生成页走）
     const foot = $el("div", { className: "ns-gen-foot" }, [statusEl]);
-    const memBar = buildMemBar();
-    if (memBar) foot.appendChild(memBar);
     const genPanel = $el("div", { className: "ns-gen-panel" }, [
         genBody,
         barEl, foot,
@@ -722,8 +719,6 @@ function buildPaint(el) {
     main.appendChild($el("div", { className: "ns-paint-modes" }, [modeBtns.text, modeBtns.edit, paintLibBtn]));
     main.appendChild(textHost);
     main.appendChild(editHost);
-    const memBar = buildMemBar();   // 显存 / 内存读数 + 清理：绘画页同样是生成页
-    if (memBar) main.appendChild(memBar);
 
     let mode = "text";
     const setMode = (m) => {
@@ -1034,8 +1029,6 @@ function buildVideo(el) {
     page.appendChild(stage);
     page.appendChild(hero);
     page.appendChild(dock);
-    const memBar = buildMemBar();   // 视频页同样是生成页：显存 / 内存读数，浮在舞台右上角
-    if (memBar) page.appendChild(memBar);
 
 
     // --- 生成 + 轮询 + 取消（无画布、无采样实时预览：只有排队 / 进度条 / 成片） ---
@@ -1830,9 +1823,8 @@ async function flipOnline() {
         renderVersionInfo();
         setOfflineMark(false);
         ungateRunButtons();
-        mountMemBars();
         reconnectSocket();
-        refreshQueue();     // 事件流刚换到 ComfyUI：面板与徽标照六张表的现值重播
+        setQueueOnline(true);   // 事件流刚换到 ComfyUI：顶栏入口浮出、面板照六张表的现值重播、读数条补建
         desktopLog("FLIP online in-place");
     } catch {
         flipStarted = false;
@@ -1857,20 +1849,6 @@ function reGateRunButtons() {
     for (const [selector, feature, label] of RUN_GATES) {
         for (const btn of document.querySelectorAll(selector)) {
             if (!gatedButtons.some((g) => g.btn === btn)) gateRunButton(btn, feature, label);
-        }
-    }
-}
-
-// 显存条在视图 build 期按能力决定出不出（离线整块不出）：翻面后补挂到生成面板原来的位置。
-// 不重建视图 —— 重建会把设置页表单与导演编辑器里未保存的内容清掉，那正是本轮要保的东西。
-const MEM_BAR_HOSTS = [".ns-gen-foot", ".ns-paint-main"];
-
-function mountMemBars() {
-    for (const sel of MEM_BAR_HOSTS) {
-        for (const host of document.querySelectorAll(sel)) {
-            if (host.querySelector(":scope > .ns-mem")) continue;
-            const bar = buildMemBar();
-            if (bar) host.appendChild(bar);
         }
     }
 }
@@ -1966,83 +1944,6 @@ function initClipboardKeys() {
     document.addEventListener("keydown", (e) => {
         if ((e.ctrlKey || e.metaKey) && !e.altKey && CLIP_KEYS.has(e.code)) e.stopImmediatePropagation();
     }, true);
-}
-
-// ====== 显存/内存监控（导演页生成面板底部） ======
-// 只有导演生成会把显存吃满：读数挂在导演页，进导演页才轮询，离开即停
-function fmtBytes(n) {
-    if (!Number.isFinite(n) || n <= 0) return "--";
-    const gb = n / (1024 * 1024 * 1024);
-    return gb >= 1 ? `${gb.toFixed(1)}G` : `${Math.round(n / (1024 * 1024))}M`;
-}
-
-function setMemItem(el, used, total, label) {
-    if (!Number.isFinite(total) || total <= 0) { el.textContent = `${label} --`; return; }
-    const pct = used / total;
-    el.textContent = `${label} ${fmtBytes(used)}/${fmtBytes(total)}`;
-    el.classList.toggle("warn", pct >= 0.6 && pct < 0.85);
-    el.classList.toggle("crit", pct >= 0.85);
-}
-
-async function pollMemStats() {
-    const bars = document.querySelectorAll(".ns-mem");   // 导演页 / 绘画页各一条读数条
-    if (!bars.length) return;
-    let vram = null, ram = null;
-    try {
-        // 驱动级显存占用（含全部进程）；/system_stats 的 vram_free 把 torch reserved 空闲重复计入，不准
-        const r = await api.fetchApi("/neo_studio/mem_stats");
-        const data = await r.json();
-        if (data?.success) vram = data;
-    } catch { /* 网络抖动忽略 */ }
-    try {
-        const r = await api.fetchApi("/system_stats");
-        const data = await r.json();
-        if (data?.system) ram = data.system;
-    } catch { /* 网络抖动忽略 */ }
-    for (const bar of bars) {
-        if (vram) setMemItem(bar.querySelector(".ns-vram"), vram.vram_used, vram.vram_total, t("显存"));
-        if (ram) setMemItem(bar.querySelector(".ns-ram"), (ram.ram_total || 0) - (ram.ram_free || 0), ram.ram_total, t("内存"));
-    }
-}
-
-// 读数 + 清理按钮：导演页生成面板底部那一行；离线（无 memory 能力）整块不出
-function buildMemBar() {
-    if (!can("memory")) return null;
-    const bar = $el("div", { className: "ns-mem" }, [
-        $el("span", { className: "ns-mem-item ns-vram", title: t("GPU 显存占用（含全部进程）"), textContent: `${t("显存")} --` }),
-        $el("span", { className: "ns-mem-item ns-ram", title: t("系统内存占用"), textContent: `${t("内存")} --` }),
-    ]);
-    const btn = $el("button", {
-        className: "ns-mem-clear", type: "button",
-        title: t("卸载空闲模型并释放显存缓存 · 生成后显存迟迟不降时用"), textContent: t("清理"),
-    });
-    btn.addEventListener("click", async () => {
-        btn.disabled = true;
-        btn.textContent = t("清理中…");
-        try {
-            const r = await api.fetchApi("/neo_studio/clear_memory", { method: "POST" });
-            const data = await r.json().catch(() => null);
-            btn.textContent = data?.success ? tf("释放 {n} ", { n: fmtBytes(data.freed_bytes) }) : t("清理失败");
-        } catch {
-            btn.textContent = t("清理失败");
-        }
-        setTimeout(() => { btn.disabled = false; btn.textContent = t("清理"); }, 2500);
-        pollMemStats();   // 立即刷新一次
-    });
-    bar.appendChild(btn);
-    return bar;
-}
-
-let memTimer = null;
-
-function setMemActive(on) {
-    if (!on) {
-        if (memTimer) { clearInterval(memTimer); memTimer = null; }
-        return;
-    }
-    if (memTimer || !can("memory")) return;   // 离线：显存与清理都要 ComfyUI，别每 3s 撞 409
-    pollMemStats();
-    memTimer = setInterval(pollMemStats, 3000);
 }
 
 // ====== 顶栏 ComfyUI 状态位（桌面端窗口里才有：状态由 js_api 的 comfy_state 与桌面端服务的
@@ -2143,8 +2044,6 @@ function buildAgentPage(el) {
     el.classList.add("ns-agent-page");
     const chatHost = $el("div", { className: "ns-agent-chat" });
     el.appendChild(chatHost);
-    const memBar = buildMemBar();   // 智能体页的出片走同一条执行队列：显存 / 内存读数照给
-    if (memBar) el.appendChild(memBar);
     const panel = createAgentPanel(chatHost, {
         // MCP 注册表在设置页那一栏，面板入口只做跳转（pushState 与 go() 同一理由：不碰 location.hash）
         onOpenMcp: () => {
@@ -2226,7 +2125,7 @@ if (view) {
         initClipboardKeys();
         initReloadHotkey();
         initAgentEntry();
-        initQueuePanel({ toast, go, can: () => can("queue") });   // 顶栏「队列」：离线收掉入口，就绪后播种
+        initQueuePanel({ toast, go, can });   // 顶栏「队列」：离线收掉入口，就绪后播种；显存 / 内存读数与清理在面板里
     }).catch(e => {
         console.error("[Neo Studio] startup failed:", e);
         desktopLog(`STARTUP FAILED ${e?.stack || e}`);

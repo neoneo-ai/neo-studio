@@ -111,7 +111,7 @@ body {
 .ns-agent-toggle:hover { background: var(--ns-raised); }
 .ns-agent-toggle-on { background: var(--ns-primary-soft); border-color: var(--ns-primary); color: var(--ns-primary-fg); }
 
-/* 桌面端的离线素材页：body.ns-offline 只用来压暗生成入口与收起显存条，离线页不叠横幅 */
+/* 桌面端的离线素材页：body.ns-offline 只用来压暗生成入口与收起顶栏队列面板，离线页不叠横幅 */
 .ns-gen-off { opacity: .75; }
 .ns-comfy-hint { animation: ns-blink 1s ease-in-out 3; }
 @keyframes ns-blink { 50% { box-shadow: 0 0 0 3px #e0b070; } }
@@ -294,17 +294,9 @@ body {
     .neo-director-regen-cancel, .neo-director-merge-run, .neo-director-merge-cancel):hover,
 .ns-gen-panel :is(.ns-gen-segs-all, .ns-gen-segs-clear):hover { background: #333338; border-color: #555; color: #fff; }
 .ns-gen-status { font-size: 12px; color: #a9a9b6; margin-top: 8px; min-height: 16px; white-space: pre-wrap; }
-/* 生成面板底部：状态行 + 显存 / 内存读数（只有导演生成吃显存，监控就挂在导演页，进页面才轮询）
-   整行居中：状态文字不撑满整行，读数才不会挂在右下角（与绘画页那条居中的显存条同轴） */
+/* 生成面板底部：状态行整行居中（显存 / 内存读数与清理在顶栏队列面板里，生成页不再各铺一条） */
 .ns-gen-foot { display: flex; align-items: center; justify-content: center; gap: 12px; }
 .ns-gen-foot .ns-gen-status { flex: 0 1 auto; min-width: 0; }
-.ns-mem { display: flex; align-items: center; gap: 8px; font-size: 11px; color: #a9a9b6; white-space: nowrap; flex: none; }
-.ns-mem-item { background: #2a2a2e; padding: 2px 8px; border-radius: 3px; font-variant-numeric: tabular-nums; }
-.ns-mem-item.warn { color: #f0a050; }
-.ns-mem-item.crit { color: #f06060; }
-.ns-mem-clear { background: #2a2a2e; border: 1px solid #444; color: #b8b8c2; font-size: 11px; padding: 2px 8px; border-radius: 3px; cursor: pointer; }
-.ns-mem-clear:hover { background: #36363a; color: #fff; border-color: #666; }
-.ns-mem-clear:disabled { opacity: 0.5; cursor: wait; }
 .ns-gen-progress {
     height: 6px;
     background: #333;
@@ -366,11 +358,9 @@ body {
 .ns-paint { display: flex; flex-direction: column; height: 100%; }
 /* 顶部留白：本页顶部内边距被素材页那条「sticky 工具条贴顶」规则清成 0，主栏自己补回一段，
    模式条不贴着窗口边。主栏与两块面板都不写保底高度：.ns-view 是 overflow:hidden，
-   保底高度在矮窗口里不会出滚动条，只会把钉底的输入卡与显存条裁掉看不见 */
+   保底高度在矮窗口里不会出滚动条，只会把钉底的输入卡裁掉看不见 */
 .ns-paint-main { flex: 1 1 auto; display: flex; flex-direction: column; gap: 8px; padding-top: 12px; min-width: 0; }
 
-/* 显存条：主栏纵向 flex 把它拉成整行、读数默认贴左，与上方居中的模式条同轴才不显得挂在角落 */
-.ns-paint-main .ns-mem { justify-content: center; }
 /* 模式切换：样式与导演编辑的页签（.neo-director-tab）同款——居中一排，
    平时只出文字、选中那枚才落底出边框；文生图与图片编辑各占满主栏，一次只看一个。
    素材库入口钉在这一行的右端，与居中模式条各行其职 */
@@ -427,7 +417,7 @@ body {
 .ns-paint-text .neo-gallery-cs-status:has(.neo-gallery-gm-idle) { flex: 1 1 auto; min-height: 0; }
 .ns-paint-text .neo-gallery-gm-idle { margin: auto; padding-top: 0; }
 
-/* 图片编辑：预览按栏高缩放（弹窗那套 50vh / 90vh 在页内会把表单挤到折叠线以下、底部按钮被显存条切掉），
+/* 图片编辑：预览按栏高缩放（弹窗那套 50vh / 90vh 在页内会把表单挤到折叠线以下、底部按钮被裁掉看不见），
    表单固定在下方收尾。gallery.css 是运行时注入的，平局它赢 —— 这里多带一个类压过它 */
 .ns-paint-panel .neo-gallery-story-modal.neo-gallery-edit-modal {
     max-width: 1180px;
@@ -642,7 +632,7 @@ body {
 .ns-tabs a:focus-visible,
 .ns-btn:focus-visible,
 .rs-btn:focus-visible,
-.ns-mem-clear:focus-visible,
+.ns-queue-mem-clear:focus-visible,
 .ns-wctl-btn:focus-visible,
 .ns-agent-toggle:focus-visible,
 .neo-agent-json:focus-visible,
@@ -735,8 +725,6 @@ body {
 /* ===== 视频页：整页舞台 + 底部浮动胶囊 composer（照 ArtCraft Create Video 的单编辑器版面） ===== */
 .ns-video { height: 100%; }
 .ns-video-page { position: relative; height: 100%; overflow: hidden; }
-/* 显存 / 内存读数浮在舞台右上角，不和 hero 标题抢中线 */
-.ns-video-page .ns-mem { position: absolute; top: 10px; right: 14px; z-index: 4; }
 
 /* 舞台吃满整页：成片卡片从这滚，底部内边距躲开浮动 composer */
 .ns-video-stage {

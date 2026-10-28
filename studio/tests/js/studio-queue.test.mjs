@@ -1,12 +1,12 @@
 // 顶栏「队列」面板：入口显隐、GET /neo_studio/queue 播种、六条 rs.*.status 按 task_id 合并、
 // 徽标只数活跃行、取消打各自类别的取消路由、图像行开 Lightbox、非图像行给 /view 链接、
-// 「到该页」跳页、终态行移除；能力表关掉 queue 时收起入口。
-// 页面提交这一发由 queueTrack 即时登记，不等播种。
+// 「到该页」跳页、终态行移除；能力表关掉 queue 时收起入口。显存 / 内存读数与清理也在这块面板里，
+// 面板展开时才轮询。页面提交这一发由 queueTrack 即时登记，不等播种。
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { mockRoute, jsonResponse, click, inputText, fetchLog, resetEnv, clearRoutes, sleep } from "./setup.mjs";
+import { mockRoute, jsonResponse, click, inputText, fetchLog, resetEnv, clearRoutes, sleep, flush } from "./setup.mjs";
 import { dispatchApiEvent, resetApiState } from "./mocks/comfy-api.mjs";
 import { appState } from "./mocks/comfy-app.mjs";
 import { t, tf, setLang } from "../../web/js/core/i18n.js";
@@ -42,6 +42,11 @@ const SEED_ROWS = [
       created: 98, updated: 98, result: null, page: "director" },
 ];
 
+// 显存 / 内存读数 fixture：mem_stats 与 system_stats 的回包，用例里换值就是换占用率
+const GB = 1024 ** 3;
+let memStats = { success: true, vram_used: 12 * GB, vram_total: 16 * GB };
+let memRam = { ram_total: 32 * GB, ram_free: 12 * GB };
+
 async function until(fn, what) {
     for (let i = 0; i < 50; i++) {
         if (fn()) return;
@@ -76,6 +81,9 @@ async function boot({ caps = null, rows = SEED_ROWS } = {}) {
     mockRoute("/neo_image_gen/settings", jsonResponse({ success: true }));
     mockRoute("/neo_studio/queue", () => jsonResponse({ success: true, rows }));
     mockRoute("/neo_video_gen/simple/vid-1/cancel", () => jsonResponse({ success: true, dequeued: true }));
+    mockRoute("/neo_studio/mem_stats", () => jsonResponse(memStats));
+    mockRoute("/system_stats", () => jsonResponse({ system: memRam }));
+    mockRoute("/neo_studio/clear_memory", () => jsonResponse({ success: true, freed_bytes: 2 * GB }));
     document.body.innerHTML = bodyMarkup;
     window.location.hash = "#/home";
     await importApp();
@@ -316,6 +324,58 @@ test("队列：行内缩略图走素材库缓存路由，配提交时刻 / 时�
 });
 
 
+test("队列：显存 / 内存读数与清理在面板里，收起面板即停表", async () => {
+    await boot();
+    const strip = document.querySelector(".ns-queue-mem");
+    assert.ok(strip, "在线形态面板里铺显存 / 内存读数条");
+    assert.equal(strip.querySelector(".ns-queue-mem-vram").textContent, `${t("显存")} --`);
+    const memFetches = () => fetchLog.filter((c) => c.path === "/neo_studio/mem_stats").length;
+    assert.equal(memFetches(), 0, "面板收起时不轮询显存");
+    openPanel();
+    await until(() => strip.querySelector(".ns-queue-mem-vram").textContent.includes("12.0G"), "显存读数刷新");
+    assert.equal(strip.querySelector(".ns-queue-mem-vram").textContent, "显存 12.0G/16.0G");
+    assert.equal(strip.querySelector(".ns-queue-mem-ram").textContent, "内存 20.0G/32.0G");
+    assert.ok(strip.querySelector(".ns-queue-mem-vram").classList.contains("warn"), "75% 占用落 warn");
+    assert.ok(!strip.querySelector(".ns-queue-mem-vram").classList.contains("crit"), "75% 不落 crit");
+    const clear = strip.querySelector(".ns-queue-mem-clear");
+    click(clear);
+    await until(() => clear.textContent.includes("释放"), "清理钮回报释放量");
+    assert.ok(fetchLog.some((c) => c.method === "POST" && c.path === "/neo_studio/clear_memory"),
+        "清理打 /neo_studio/clear_memory");
+    click(toggle());   // 收起面板
+    assert.equal(panel().hidden, true, "点一下收起面板");
+    await flush();
+    await flush();
+    const settled = memFetches();
+    dispatchApiEvent("rs.simple_video.status", {
+        task_id: "vid-1", kind: "simple", status: "running",
+        progress: { value: 12, max: 20 }, created: 99, updated: 106,
+    });
+    assert.equal(memFetches(), settled, "面板收起后不再打读数请求");
+});
+
+test("队列：显存读数按占用比例变色", async () => {
+    memStats = { success: true, vram_used: 15 * GB, vram_total: 16 * GB };
+    try {
+        await boot();
+        openPanel();
+        await until(() => document.querySelector(".ns-queue-mem-vram").textContent.includes("15.0G"), "高占用读数刷新");
+        assert.ok(document.querySelector(".ns-queue-mem-vram").classList.contains("crit"), "94% 占用落 crit");
+    } finally {
+        memStats = { success: true, vram_used: 12 * GB, vram_total: 16 * GB };
+    }
+});
+
+test("队列：能力表关掉 memory 时面板不出读数条，不发 mem_stats 请求", async () => {
+    await boot({ caps: { memory: false } });
+    assert.equal(document.querySelector(".ns-queue-mem"), null, "无 memory 能力时不铺读数条");
+    openPanel();
+    assert.ok(rows().length >= 3, "队列行照常铺出");
+    assert.equal(fetchLog.filter((c) => c.path === "/neo_studio/mem_stats").length, 0,
+                 "面板展开也不发显存读数请求");
+});
+
+
 test("队列静态完整性：顶栏入口、面板类名、Lightbox 图标与英文文案各就各位", async () => {
     assert.match(studioHtml, /class="ns-queue-toggle" id="ns-queue-toggle"[^>]*hidden/);
     assert.match(studioHtml, /class="ns-queue-badge" id="ns-queue-badge"/);
@@ -323,7 +383,8 @@ test("队列静态完整性：顶栏入口、面板类名、Lightbox 图标与�
     for (const cls of [".ns-queue", ".ns-queue[hidden]", ".ns-queue-row", ".ns-queue-kind", ".ns-queue-label",
         ".ns-queue-status", ".ns-queue-bar", ".ns-queue-actions", ".ns-queue-act",
         ".ns-queue-badge", ".ns-queue-thumb", ".ns-queue-main", ".ns-queue-side",
-        ".ns-queue-meta", ".ns-queue-time", ".ns-queue-dur", ".ns-queue-cnt", ".ns-queue-day"]) {
+        ".ns-queue-meta", ".ns-queue-time", ".ns-queue-dur", ".ns-queue-cnt", ".ns-queue-day",
+        ".ns-queue-mem", ".ns-queue-mem-item", ".ns-queue-mem-clear"]) {
         assert.ok(css.includes(cls), `queue-panel.css 缺 ${cls}`);
     }
     // .ns-queue 显式 display:flex 会盖掉 [hidden] 的 UA display:none：缺这条面板就默认展开
@@ -333,6 +394,16 @@ test("队列静态完整性：顶栏入口、面板类名、Lightbox 图标与�
     // 缩略图必须走素材库那条带缓存的缩略路由，不能整图拉 /view
     assert.match(panelSrc, /\/neo_gallery\/thumbnail\?/, "缩略图走 /neo_gallery/thumbnail");
     assert.match(panelSrc, /size=\$\{THUMB_SIZE\}/, "缩略图按固定尺寸取缓存");
+    // 显存 / 内存读数与清理统一在面板里：读 mem_stats、打 clear_memory
+    assert.match(panelSrc, /\/neo_studio\/mem_stats/, "读数打 /neo_studio/mem_stats");
+    assert.match(panelSrc, /\/neo_studio\/clear_memory/, "清理打 /neo_studio/clear_memory");
+    // 生成页上的读数条已经搬空：Studio 页与页面样式里不该再留 ns-mem 那一套
+    const appSrc = readFileSync(fileURLToPath(new URL("../../web/studio/studio-app.js", import.meta.url)), "utf8");
+    const appCss = readFileSync(fileURLToPath(new URL("../../web/studio/style.css", import.meta.url)), "utf8");
+    for (const dead of ["ns-mem", "buildMemBar", "setMemActive", "mountMemBars"]) {
+        assert.ok(!appSrc.includes(dead), `studio-app.js 还留着 ${dead}`);
+        assert.ok(!appCss.includes(dead), `studio/style.css 还留着 ${dead}`);
+    }
     setLang("en");
     assert.equal(t("到该页"), "Go to page");
     assert.equal(t("排队中"), "Queued");

@@ -149,7 +149,8 @@ version information:
 | GET | `/neo_studio/queue` | Header queue panel rows: the six task tables newest-submit first, row count capped; rows carry `kind` `label` `status` `progress` `created` `updated` `count` `result` `page`, and the row thumbnail is fetched for `result` via `/neo_gallery/thumbnail` |
 | GET | `/neo_studio/version` | Plugin / ComfyUI versions and the director recipe list, plus the Settings → About path fields `data_root` / `comfy_local` (`remote` is empty here — only the desktop knows the remote address) |
 | GET | `/neo_studio/log` | ComfyUI console log (a 300-entry `app.logger` ring buffer), polled by Studio "Settings → Logs" |
-| POST | `/neo_studio/clear_memory` | Unload models and clear the VRAM cache |
+| GET | `/neo_studio/mem_stats` | Driver-level VRAM in use (all processes): the header queue panel fetches it every 3s while the panel is open |
+| POST | `/neo_studio/clear_memory` | Unload models and clear the VRAM cache (the header queue panel's Clear button) |
 
 - `only_segments` is the text of segment numbers checked on the read-only timeline (1-based, comma-separated, empty =
   the whole film); checking is transient runtime state and is never written into the recipe.

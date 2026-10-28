@@ -269,7 +269,7 @@ const EN = {
         "The desktop window draws its own title bar (minimize / maximize / fullscreen / close); uncheck to go back to the system title bar.\nApplies at once and is written to the launcher config, so the next launch keeps it.",
     "打开刷新键 / 右键菜单 / 开发者工具，排查窗口白屏与前端问题用。\npywebview 在建窗口时定值：勾完要重启桌面端窗口才生效。":
         "Enables the reload key, the context menu, and devtools — for debugging a blank window and frontend issues.\npywebview fixes this when the window is created: restart the desktop window after checking it.",
-    // 桌面端：顶栏状态位、生成按钮门控、显存条
+    // 桌面端：顶栏状态位、生成按钮门控、队列面板的显存 / 内存读数与清理
     "启动中": "Starting",
     "运行中": "Running",
     "已停止": "Stopped",

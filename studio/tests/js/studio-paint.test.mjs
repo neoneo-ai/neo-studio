@@ -16,7 +16,7 @@ import { resetEnv, flush, mockRoute, clearRoutes, jsonResponse, sleep, click } f
 const webDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../web");
 const studioBody = fs.readFileSync(path.join(webDir, "studio", "index.html"), "utf8").match(/<body>([\s\S]*?)<\/body>/)[1];
 
-// 显存读数 / 状态位连的是 WebSocket，jsdom 没有真 WS：桩掉，只留构造与 close
+// 顶栏状态位 / 队列面板连的是 WebSocket，jsdom 没有真 WS：桩掉，只留构造与 close
 globalThis.WebSocket = class {
     constructor(url) { this.url = url; this.onopen = null; this.onmessage = null; this.onclose = null; }
     close() {}
@@ -52,7 +52,6 @@ async function boot() {
     mockRoute("/neo_studio/version", jsonResponse({ success: true, plugin_version: "9.9.9", comfyui_version: "0.1", recipes: [] }));
     mockRoute("/rs_prompts/skills", jsonResponse([{ id: "image_gen", cn_name: "Krea2文生图", category: "image_gen", gen_image: true }]));
     mockRoute("/rs_recipes/list", jsonResponse([]));
-    mockRoute("/neo_studio/mem_stats", jsonResponse({}));
     mockRoute("/neo_image_gen/settings", jsonResponse({ target_megapixels: 1.5 }));
     document.body.innerHTML = studioBody;
     window.location.hash = "#/gallery";

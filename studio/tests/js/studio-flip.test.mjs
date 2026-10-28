@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { resetEnv, flush, sleep, mockRoute, click } from "./setup.mjs";
+import { resetEnv, flush, sleep, mockRoute, click, jsonResponse } from "./setup.mjs";
 
 const webDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../web");
 
@@ -36,6 +36,9 @@ test("已停止后在启动设置点「启动内核」，就绪后页面原地�
         routes: ["GET /neo_gallery/list"], comfy_base: "", recipes: [],
     };
     mockRoute("/neo_studio/version", () => snap);
+    mockRoute("/neo_studio/queue", () => jsonResponse({ success: true, rows: [] }));
+    mockRoute("/neo_studio/mem_stats", () => jsonResponse({ success: false }));
+    mockRoute("/system_stats", () => jsonResponse({}));
     const status = document.getElementById("ns-comfy-status");
     const starts = [];
     const reloads = [];
@@ -96,6 +99,11 @@ test("已停止后在启动设置点「启动内核」，就绪后页面原地�
         assert.match(FakeWebSocket.instances.at(-1).url, /^ws:\/\/127\.0\.0\.1:8190\/ws\?clientId=/,
                      "事件流要换到 ComfyUI 的真流");
         assert.equal(status.textContent, "● 运行中");
+        const queueToggle = document.getElementById("ns-queue-toggle");
+        assert.equal(queueToggle.hidden, false, "就绪后顶栏队列入口浮出");
+        click(queueToggle);
+        assert.ok(document.querySelector(".ns-queue-mem"), "翻面后队列面板补上显存 / 内存读数条");
+        click(queueToggle);   // 收起：读数条留着，轮询停掉
     } finally {
         Object.defineProperty(globalThis, "location", { value: realLocation, configurable: true, writable: true });
     }

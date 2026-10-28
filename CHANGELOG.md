@@ -4,6 +4,17 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **VRAM / RAM monitoring and 清理 now live in the top-bar 队列 panel.** The readout used to sit once per generation
+  page (director, paint, video, agent) and polled every 3 seconds while you were on one of them. It is now a single
+  strip under the panel header — `显存 12.0G/16.0G` and `内存 20.1G/32.0G`, orange above 60% and red above 85% — with
+  the **🧹 清理** button at its right end, reporting `释放 2.0G` where it freed. Opening the panel starts the refresh and
+  closing it stops it, so a window that flips back to the offline form no longer keeps hitting
+  `/neo_studio/mem_stats` for nothing, and the four generation pages no longer carry their own bar. Covered by
+  `studio/tests/js/studio-queue.test.mjs` (readout renders from `/neo_studio/mem_stats` + `/system_stats`, warn / crit
+  colour, 清理 POSTs `/neo_studio/clear_memory`, closing the panel stops the fetches, `caps.memory = false` ships no
+  strip) and `studio/tests/js/studio-offline.test.mjs` (offline form: no strip, no `mem_stats` request); docs:
+  `docs/studio-desktop.md` / `docs/en/studio-desktop.md`, `docs/api-routes.md` / `docs/en/api-routes.md`.
+
 - **Queue panel rows now carry thumbnails, submit time and duration, like ComfyUI's own task list.** Every row is a
   46px thumbnail tile (images scaled by the gallery thumbnail route, videos by ffmpeg's first frame, audio rows keep an
   empty tile), then the kind + label line, and a meta line with the submit clock (`14:32`), the elapsed seconds —

@@ -172,7 +172,7 @@ node --test --test-force-exit --test-timeout=180000 studio/tests/e2e/skill-manag
   touched); the
   third case asserts the cold-start window shows the splash page first, then lands on the Studio page served by the
   desktop service (port +3, offline mark and thumbnails shown, writes answered `409`), connects generation in place once
-  ComfyUI is ready (same URL, offline mark dropped, memory bar mounted, the desktop origin accepted by ComfyUI), and flips
+  ComfyUI is ready (same URL, offline mark dropped, queue panel reseeded, the desktop origin accepted by ComfyUI), and flips
   back to the offline form after stopping it with no uncaught errors.
   **It opens a real window and is skipped by default; enable with `NEO_STUDIO_APP=1` (prerequisites: `pywebview`
   installed in the bundled distribution's python, and no other Neo Studio desktop holding the single-instance port

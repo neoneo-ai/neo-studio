@@ -34,14 +34,18 @@ const KIND_LABEL = { image: "生图", voice: "语音", film: "整片", simple: "
 const STATUS_LABEL = { queued: "排队中", running: "生成中", succeeded: "已完成", failed: "失败", cancelled: "已取消" };
 const ACTIVE = ["queued", "running"];
 const LIMIT = 48;   // 与后端 /neo_studio/queue 的行数上限同一份
+const MEM_POLL_MS = 3000;   // 显存 / 内存读数的刷新节拍（面板展开时才有这一条）
 
 const rows = new Map();   // task_id -> 行：面板与各页共用这一份
 let renderPanel = null;   // createQueuePanel 挂上的重画回调
 let toast = null;         // 宿主提示（Studio 顶栏的 toast）
 let goPage = null;        // 宿主换页（面板「到该页」）
 let canQueue = () => false;
+let canMem = () => false;
 let toggleEl = null;
 let panelEl = null;
+let memStrip = null;      // 显存 / 内存读数 + 清理：只在面板展开时轮询
+let memTimer = null;
 
 function labelOf(kind, snap) {
     if (kind === "film") return String(snap.recipe || "");
@@ -296,6 +300,8 @@ function rowEl(row) {
 
 /** 面板 DOM：挂在顶栏入口下方，由 initQueuePanel 建好并摆进顶栏。 */
 function createQueuePanel() {
+    setMemPolling(false);   // 旧面板连同读数条随上一次 boot 的 DOM 一起废掉，别留一张对着死节点的表
+    memStrip = null;
     const list = $el("div", { className: "ns-queue-list" });
     const empty = $el("div", { className: "ns-queue-empty", textContent: t("没有生成任务") });
     const el = $el("div", { className: "ns-queue", hidden: true }, [
@@ -322,7 +328,87 @@ function createQueuePanel() {
         empty.hidden = sorted.length > 0;
         renderBadge();
     };
+    panelEl = el;   // 翻面接上内核后补建读数条要用到它
     return el;
+}
+
+// 显存 / 内存读数 + 清理：四条生成页各铺一条的日子结束了，统一在面板头部下面这条，
+// 面板展开时才轮询（收起即停表；能力表没有 memory 时整块不出）。
+function buildMemStrip() {
+    const strip = $el("div", { className: "ns-queue-mem" }, [
+        $el("span", { className: "ns-queue-mem-item ns-queue-mem-vram", title: t("GPU 显存占用（含全部进程）"), textContent: `${t("显存")} --` }),
+        $el("span", { className: "ns-queue-mem-item ns-queue-mem-ram", title: t("系统内存占用"), textContent: `${t("内存")} --` }),
+    ]);
+    const btn = $el("button", {
+        className: "ns-queue-mem-clear", type: "button",
+        title: t("卸载空闲模型并释放显存缓存 · 生成后显存迟迟不降时用"), textContent: t("清理"),
+    });
+    btn.addEventListener("click", async () => {
+        btn.disabled = true;
+        btn.textContent = t("清理中…");
+        try {
+            const r = await api.fetchApi("/neo_studio/clear_memory", { method: "POST" });
+            const data = await r.json().catch(() => null);
+            btn.textContent = data?.success ? tf("释放 {n} ", { n: fmtBytes(data.freed_bytes) }) : t("清理失败");
+        } catch {
+            btn.textContent = t("清理失败");
+        }
+        setTimeout(() => { btn.disabled = false; btn.textContent = t("清理"); }, 2500);
+        pollMemStats();   // 立即刷新一次
+    });
+    strip.appendChild(btn);
+    return strip;
+}
+
+/** 能力翻面补建：离线形态起的面板没有这块，接上 ComfyUI 后开面板才有读数。 */
+function ensureMemStrip() {
+    if (memStrip || !canMem() || !panelEl) return memStrip;
+    memStrip = buildMemStrip();
+    panelEl.insertBefore(memStrip, panelEl.querySelector(".ns-queue-list"));
+    return memStrip;
+}
+
+function fmtBytes(n) {
+    if (!Number.isFinite(n) || n <= 0) return "--";
+    const gb = n / (1024 * 1024 * 1024);
+    return gb >= 1 ? `${gb.toFixed(1)}G` : `${Math.round(n / (1024 * 1024))}M`;
+}
+
+function setMemItem(el, used, total, label) {
+    if (!Number.isFinite(total) || total <= 0) { el.textContent = `${label} --`; return; }
+    const pct = used / total;
+    el.textContent = `${label} ${fmtBytes(used)}/${fmtBytes(total)}`;
+    el.classList.toggle("warn", pct >= 0.6 && pct < 0.85);
+    el.classList.toggle("crit", pct >= 0.85);
+}
+
+async function pollMemStats() {
+    if (!memStrip) return;
+    let vram = null, ram = null;
+    try {
+        // 驱动级显存占用（含全部进程）；/system_stats 的 vram_free 把 torch reserved 空闲重复计入，不准
+        const r = await api.fetchApi("/neo_studio/mem_stats");
+        const data = await r.json();
+        if (data?.success) vram = data;
+    } catch { /* 网络抖动忽略 */ }
+    try {
+        const r = await api.fetchApi("/system_stats");
+        const data = await r.json();
+        if (data?.system) ram = data.system;
+    } catch { /* 网络抖动忽略 */ }
+    if (vram) setMemItem(memStrip.querySelector(".ns-queue-mem-vram"), vram.vram_used, vram.vram_total, t("显存"));
+    if (ram) setMemItem(memStrip.querySelector(".ns-queue-mem-ram"), (ram.ram_total || 0) - (ram.ram_free || 0), ram.ram_total, t("内存"));
+}
+
+/** 面板展开即开表、收起即停表：收起后没人看读数，别每 3s 空跑两次请求。 */
+function setMemPolling(on) {
+    if (!on) {
+        if (memTimer) { clearInterval(memTimer); memTimer = null; }
+        return;
+    }
+    if (memTimer || !ensureMemStrip()) return;
+    pollMemStats();
+    memTimer = setInterval(pollMemStats, MEM_POLL_MS);
 }
 
 /**
@@ -334,12 +420,16 @@ export function initQueuePanel(opts = {}) {
     if (!toggleEl) return null;
     toast = opts.toast || null;
     goPage = opts.go || null;
-    canQueue = opts.can || (() => true);
+    const can = opts.can || (() => true);
+    canQueue = () => can("queue");
+    canMem = () => can("memory");
     panelEl = createQueuePanel();
     document.querySelector(".ns-header")?.appendChild(panelEl);
     toggleEl.onclick = () => {
         panelEl.hidden = !panelEl.hidden;
-        if (!panelEl.hidden) seed();
+        if (panelEl.hidden) { setMemPolling(false); return; }
+        seed();
+        setMemPolling(true);
     };
     for (const [kind, event] of Object.entries(STATUS_EVENTS)) {
         api.addEventListener(event, ({ detail }) => merge(kind, detail));
@@ -356,12 +446,9 @@ export function setQueueOnline(on) {
     toggleEl.hidden = !on;
     if (!on) {
         panelEl.hidden = true;
+        setMemPolling(false);   // 内核停了就读不到数：停表，别每 3s 撞 409
         return;
     }
-    seed();
-}
-
-/** 补种一次（页面翻面接上 ComfyUI 后叫）：面板与徽标跟随后端六张表的现值。 */
-export function refreshQueue() {
+    ensureMemStrip();   // 离线形态起的面板没有读数这块，接上内核后补建
     seed();
 }

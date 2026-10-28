@@ -64,9 +64,10 @@ the unsaved content of the director editor and the settings forms, and a cross-o
   mode never get the flag and keep the full-page navigation: an instance exposed to a NIC does not trade that defence
   for convenience.
 - The flip happens as one step and nothing flips until ComfyUI answers: the capability table becomes ComfyUI's, gated
-  buttons drop their blocking listener and restore their labels, the `body.ns-offline` mark is dropped, the memory bar is
-  mounted into the generation panel where it belongs, and `/ws` moves from the desktop stub to the real ComfyUI event
-  stream. Enabling the buttons without moving the event stream is the half-online state where a task is accepted and
+  buttons drop their blocking listener and restore their labels, the `body.ns-offline` mark is dropped, the header queue
+  entry shows up and reseeds from the six task tables (the VRAM / RAM readout is built with it), and `/ws` moves from
+  the desktop stub to the real ComfyUI event stream. Enabling the buttons without moving the event stream is the
+  half-online state where a task is accepted and
   no progress ever comes back.
 - The flip is driven by `ready`, not by who launched the kernel: the desktop clears `starting` in the very snapshot that
   reports readiness, so gating the flip on `starting` never fires for a cold start where the desktop launched the kernel
@@ -162,8 +163,8 @@ list and the asset library both open in modals (`js/core/lib-modal.js`), so the 
 
 ## Paint page layout
 
-The paint page is a **top bar** (the **text-to-image / image-edit** mode bar plus the **🖼 Asset library** entry
-and the VRAM readout) above one full-width panel. Only one panel fills the page at a time — unlike the director
+The paint page is a **top bar** (the **text-to-image / image-edit** mode bar plus the **🖼 Asset library** entry)
+above one full-width panel. Only one panel fills the page at a time — unlike the director
 page, no editor and generation panel split one width. The asset modal, the scrollbars and the
 narrow-window rules are shared with the director page (one modal instance, one geometry in
 `localStorage["neo_studio_libmodal_assets"]`).
@@ -193,7 +194,8 @@ narrow-window rules are shared with the director page (one modal instance, one g
   reset the page's own asset-library button writes the same id, gets deduped, and never opens the modal.
   **Clicking a card in the modal fills the image-edit source preview and closes the modal**; the footer
   **📥 N selected** collects a batch and lays it out in one go.
-- The VRAM / RAM bar exists once per generation page (director and paint), and polling only runs on those pages.
+- The VRAM / RAM readout and the **Clear** button live in the header queue panel: polling runs only while that panel is
+  open, and generation pages no longer carry their own bar.
 
 ## Skills page layout
 
@@ -343,7 +345,7 @@ startable once the root is filled in.
 - The choice lives in `localStorage["neo_studio_lang"]` and defaults to the browser language. The desktop window and
   a browser tab are different origins, so each keeps its own language choice.
 - Translated: the desktop app's own strings — header and window controls, the director generation panel, startup
-  settings (including the ⓘ notes), the header status pill, and the VRAM bar. The assets and
+  settings (including the ⓘ notes), the header status pill, and the queue panel's VRAM / RAM readout. The assets and
   skills views and the LLM / image / video forms are shared modules and keep their Chinese source text.
 - Entries live in `studio/web/js/core/i18n.js`: Chinese source strings are the keys, so a missing English entry falls
   back to Chinese instead of exposing a placeholder.

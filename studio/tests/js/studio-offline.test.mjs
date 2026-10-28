@@ -223,13 +223,14 @@ test("离线素材页：「生成素材」不发请求，点一下交给桌面�
                  "离线页不该发生图请求");
 });
 
-test("离线导演页不轮询显存：不出显存块，不发 mem_stats 请求", async () => {
+test("离线形态不出显存读数：队列面板里没有读数条，不发 mem_stats 请求", async () => {
     mockOfflineDesktop();
     window.location.hash = "#/director";
     await import("../../web/studio/studio-app.js?offMem=1");
     await flush();
     await sleep(50);
-    assert.equal(document.querySelector(".ns-gen-panel .ns-mem"), null, "离线导演页不应出显存块");
+    assert.equal(document.querySelector(".ns-queue-mem"), null, "离线形态不出显存 / 内存读数条");
+    assert.equal(document.querySelector(".ns-queue-mem-clear"), null, "离线形态不出清理钮");
     assert.equal(fetchLog.filter((c) => c.path === "/neo_studio/mem_stats").length, 0,
                  "离线时显存轮询应停掉，不每 3s 撞 409");
 });
