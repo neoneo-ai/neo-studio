@@ -8,6 +8,7 @@ token；云端目录由索引的 character 标签自带默认值，用户显式�
 """
 
 import asyncio
+import contextlib
 import json
 import os
 import sys
@@ -152,6 +153,29 @@ def _get_settings():
     return json.loads(resp.body.decode())
 
 
+@contextlib.contextmanager
+def _unc_io_guard():
+    """UNC 路径上的 resolve() / exists() 一律判失败。
+
+    共享掉线时这两步各挂一次 SMB 超时，而配置扫描跑在桌面端服务的事件循环里：谁把它们
+    放回来，素材库、配方列表、摆姿页就一起不回包。
+    """
+    real_resolve, real_exists = Path.resolve, Path.exists
+
+    def resolve(self, *args, **kwargs):
+        if str(self).startswith("\\\\"):
+            raise AssertionError(f"UNC 路径做了 resolve()：{self}")
+        return real_resolve(self, *args, **kwargs)
+
+    def exists(self, *args, **kwargs):
+        if str(self).startswith("\\\\"):
+            raise AssertionError(f"UNC 路径做了 exists()：{self}")
+        return real_exists(self, *args, **kwargs)
+
+    with mock.patch.object(Path, "resolve", resolve), mock.patch.object(Path, "exists", exists):
+        yield
+
+
 class DirManageBase(unittest.TestCase):
     """三个真实素材目录 + 可写 settings JSON（_get_user_custom_dirs 直接读文件）。"""
 
@@ -206,6 +230,27 @@ class HiddenDirTests(DirManageBase):
     def test_no_hidden_key_lists_everything(self):
         self._write_file_settings([str(self.dir_a), str(self.dir_b)])
         self.assertEqual(gallery._get_user_custom_dirs(), [self.dir_a, self.dir_b])
+
+
+class UncDirTests(DirManageBase):
+    """配了 NAS 目录的机器：扫描不许摸网络，掉线的共享只该从首页消失，不该冻住服务。"""
+
+    UNC = "\\\\NAS3330B8\\Download\\mediax\\AI\\images"
+
+    def setUp(self):
+        super().setUp()
+        gallery._invalidate_user_custom_dirs()
+
+    def test_hidden_unc_dir_is_never_probed(self):
+        """隐藏的 NAS 目录既不 resolve() 也不 exists()：两次都是 SMB 往返。"""
+        self._write_file_settings([str(self.dir_a), self.UNC], hidden=[self.UNC])
+        with _unc_io_guard():
+            self.assertEqual(gallery._get_user_custom_dirs(), [self.dir_a])
+
+    def test_hidden_unc_entry_stays_a_string_key(self):
+        _SETTINGS["hidden_directories"] = [self.UNC]
+        with _unc_io_guard():
+            self.assertIn(self.UNC.lower(), gallery._get_hidden_entries())
 
 
 

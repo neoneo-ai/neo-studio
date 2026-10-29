@@ -4,6 +4,17 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **A gallery folder on an unreachable network share no longer freezes the desktop window.** The desktop service read
+  the configured gallery folders on its request loop, and every hidden entry and every folder went through
+  `Path.resolve()` - a realpath round trip on an SMB share. With a NAS folder in `custom_directories` /
+  `hidden_directories` and that share offline, the first `/neo_gallery/list` blocked inside the OS filesystem call and
+  the whole service stopped answering: the material library stayed empty, the recipe list showed no entries, and the
+  3D pose page sat on "读取摆姿状态…" without its stylesheet, every request queued behind the same block. UNC entries
+  now keep their lowercase string as the directory key (no realpath on a share), a hidden folder is matched before
+  anything touches the disk, and the folder scan runs off the request loop, so a slow share costs one gallery request
+  instead of the window. Covered by `studio/tests/test_gallery_dir_manage.py` (`UncDirTests`: a hidden UNC folder is
+  never resolved or stat'ed).
+
 - **Closing the window now stops the ComfyUI an earlier session left behind.** A ComfyUI the desktop app had spawned
   could survive a close that never reached its teardown (a crash, "End task", a signed-out session). The next window
   found the port taken and attached to that orphan, which kept running the plugin code it had imported hours earlier:

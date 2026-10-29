@@ -129,6 +129,23 @@ def _invalidate_user_custom_dirs() -> None:
     _CUSTOM_DIRS_KEY = None
 
 
+def _dir_key(path: Path) -> str:
+    """目录的归一 key：UNC 路径只做字符串归一，不做 resolve()。
+
+    resolve() 是 realpath，一次网络往返；共享掉线时它卡在 SMB 超时上，而这段扫描跑在
+    aiohttp 的事件循环里（gallery 的路由共用一个循环），配置里一条 NAS 目录就能把桌面端
+    服务整个冻住：素材库、配方列表、摆姿页的接口一起不回包。UNC 没有盘符映射与 8.3 短名
+    要展开，小写字符串对隐藏目录匹配和 realpath 是同一个答案。
+    """
+    text = str(path)
+    if text.startswith("\\\\"):
+        return text.lower()
+    try:
+        return str(path.resolve()).lower()
+    except OSError:
+        return text.lower()
+
+
 def _scan_user_custom_dirs() -> list[Path]:
     """Read the configured dirs, dropping hidden ones and the ComfyUI system dirs."""
     picked: list[tuple[Path, str]] = []
@@ -145,10 +162,7 @@ def _scan_user_custom_dirs() -> list[Path]:
                     if not h:
                         continue
                     hidden.add(str(h).lower())
-                    try:
-                        hidden.add(str(Path(h).resolve()).lower())
-                    except OSError:
-                        pass
+                    hidden.add(_dir_key(Path(h)))
             if isinstance(user_dirs, list):
                 candidates = [d for d in user_dirs if d]
             elif user_dirs:
@@ -157,16 +171,12 @@ def _scan_user_custom_dirs() -> list[Path]:
                 candidates = []
             for d in candidates:
                 p = Path(d)
-                if not p.exists():
-                    continue
-                # 每个目录只 resolve() 一次：旧代码在系统目录过滤和隐藏过滤里各
-                # 解析一遍，NAS 路径就是两次往返。
-                resolved_key = str(p).lower()
-                try:
-                    resolved_key = str(p.resolve()).lower()
-                except OSError:
-                    pass
+                # 隐藏匹配只认字符串，并且放在 exists() 之前：隐藏掉的目录（掉线的 NAS 常见）
+                # 不该为了「它还在不在」付一次网络往返。
+                resolved_key = _dir_key(p)
                 if str(p).lower() in hidden or resolved_key in hidden:
+                    continue
+                if not p.exists():
                     continue
                 picked.append((p, resolved_key))
     except Exception:
@@ -209,10 +219,7 @@ def _get_hidden_entries() -> set:
             if not h:
                 continue
             hidden.add(str(h).lower())
-            try:
-                hidden.add(str(Path(h).resolve()).lower())
-            except OSError:
-                pass
+            hidden.add(_dir_key(Path(h)))
     return hidden
 
 
@@ -1200,9 +1207,10 @@ async def get_gallery_list(request):
     else:
         requested_fields = set()
     
-    user_custom_dirs = _get_user_custom_dirs()
-    
-    # Determine which fields to return
+    # 配置扫描是文件系统探测：配了网络盘的机器上连 exists() 都是一次 SMB 往返。离开事件
+    # 循环，一条掉线的共享目录只慢这一个请求，顶栏、摆姿页、配方列表的接口照常回包。
+    user_custom_dirs = await asyncio.to_thread(_get_user_custom_dirs)
+    hidden_entries = await asyncio.to_thread(_get_hidden_entries)
     has_dir_name = bool(dir_name_param)
     if has_dir_name:
         # When dir_name is provided, default to all fields
@@ -1238,20 +1246,20 @@ async def get_gallery_list(request):
             if not rel_path_param and dir_name_lower != "presets":
                 rel_path_param = dir_name_lower[len("presets/"):]
         elif dir_name_lower == "lora" or dir_name_lower.startswith("lora/"):
-            if not _load_settings().get("civitai_lora_enabled") or _is_home_entry_hidden("Lora", _get_hidden_entries()):
+            if not _load_settings().get("civitai_lora_enabled") or _is_home_entry_hidden("Lora", hidden_entries):
                 return web.json_response({"directories": [], "total": 0})
             base = LORA_CACHE_DIR
             if not rel_path_param:
                 rel_path_param = dir_name_param[len("lora/"):]
             await _ensure_auto_cache()
         elif dir_name_lower == CIVITAI_DIR_KEY.lower() or dir_name_lower.startswith(CIVITAI_DIR_KEY.lower() + "/"):
-            if not _is_civitai_bookmark_enabled() or _is_home_entry_hidden(CIVITAI_DIR_KEY, _get_hidden_entries()):
+            if not _is_civitai_bookmark_enabled() or _is_home_entry_hidden(CIVITAI_DIR_KEY, hidden_entries):
                 return web.json_response({"directories": [], "total": 0})
             base = CIVITAI_BOOKMARK_DIR
             if not rel_path_param and dir_name_lower != CIVITAI_DIR_KEY.lower():
                 rel_path_param = dir_name_param[len(CIVITAI_DIR_KEY) + 1:]
         else:
-            if _is_home_entry_hidden(dir_name_lower.split("/", 1)[0], _get_hidden_entries()):
+            if _is_home_entry_hidden(dir_name_lower.split("/", 1)[0], hidden_entries):
                 return web.json_response({"directories": [], "total": 0})
             system = _resolve_system_dir(dir_name_param)
             if system:
@@ -1269,7 +1277,7 @@ async def get_gallery_list(request):
         if dir_name_lower == "cloud presets" or dir_name_lower.startswith("cloud presets/"):
             return await _handle_oss_gallery_list(dir_name_param, rel_path_param,
                                                    include_dirs, include_items, include_covers, search_mode,
-                                                   _get_hidden_entries())
+                                                   hidden_entries)
 
         if base is None or not base.exists():
             return web.json_response({"error": "Directory not found"}, status=404)
@@ -1367,7 +1375,6 @@ async def get_gallery_list(request):
         })
     
     # Original behavior: full listing (no dir_name) - process all directories using unified function
-    hidden_entries = _get_hidden_entries()
     # 首页目录卡与封面共用同一次一级枚举：网络盘上一次 scandir 就是一次往返，
     # 封面阶段再扫一遍等于把这段开销付两次。
     home_scans: dict[str, tuple[list[os.DirEntry], list[os.DirEntry]]] = {}
