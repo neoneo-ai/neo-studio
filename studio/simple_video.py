@@ -19,7 +19,7 @@ from aiohttp import web
 import nodes as comfy_nodes
 from server import PromptServer
 
-from .h3_video_gen import _resolve_skill_id, _seconds_to_frames, resolve_video_params
+from .h3_video_gen import _resolve_skill_id, _seconds_to_frames, ensure_reference_tags, resolve_video_params
 from .image_gen import _error_from_history, _lookup, _progress_for, render_template, submit_graph
 from .skill import get_skill_gen_config, load_skill_workflow
 from .util import PrefixFilter
@@ -182,12 +182,14 @@ def _run_prompt(data: dict) -> dict:
 
     seed_in = body.get("seed")
     params = resolve_video_params(body, cfg)   # seed 缺省时内部已随机
+    ensure_reference_tags(template, params)
     graph, _warns = render_template(template, params)
 
     nid, idx = _video_terminal(graph)
     graph["9000"] = {"class_type": "SaveVideo", "inputs": {
         "video": [nid, idx],
-        "filename_prefix": f"{OUT_SUBDIR}/{_safe_name(params['prompt'][:24])}",
+        # 文件名取用户原提示词：缺失的参考标签在后面追加，那行不该进文件名
+        "filename_prefix": f"{OUT_SUBDIR}/{_safe_name(str(body.get('prompt') or '')[:24])}",
         "format": "auto",   # 新版核心 SaveVideo 必填（无默认值）
     }}
     explicit_seed = seed_in is not None and int(seed_in) >= 0

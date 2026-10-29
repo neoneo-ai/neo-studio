@@ -4,6 +4,14 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **Attached references no longer condition nothing.** A reference on an H3 reference-to-video skill reaches the model
+  only when the prompt names it with `<Picture N>` / `<Video N>` / `<Audio N>`; a prompt written without those tags
+  produced output identical to running with no references at all, with nothing in the UI saying so. The video page,
+  the director's segments and the multi-frame chunks now append the missing binding line for every supplied reference
+  kind, using the same per-kind 1-based numbering the prompt audit applies, and leave prompts that already name their
+  references as they are. First frames of the image and first-last-frame skills keep getting no tag: they bind through
+  the first-frame anchor, not a reference slot.
+
 - **The 3D pose page no longer flashes the standalone 3d-pose-art editor before the host layout.** Opening the Pose
   tab used to draw the pose package's own demo chrome - the six-row toolbar, the aside panels and the bottom hint,
   all of it static in the entry page - and fold it away only after the default figure GLB (3 MB) had loaded, the page

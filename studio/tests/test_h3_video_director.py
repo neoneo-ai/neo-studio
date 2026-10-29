@@ -1417,22 +1417,15 @@ class DirectorOrchestrationTests(unittest.TestCase):
         self.assertIn("尾帧", err or "")
 
     def test_r2v_segment_attaches_refs_without_first_frame(self):
-        # 全参考段：只挂参考素材即可，不需要首帧；第一个参考视频即源视频（提示词自动加 <Video 1>）
+        # 全参考段：只挂参考素材即可，不需要首帧；提示词不在这里改写（缺标签由执行链补）
         bodies, err = self._run_single({"skill_id": "s", "prompt": "p", "duration_sec": 5, "mode": "r2v",
                                         "ref_input": None,
                                         "refs": {"images": ["a.png"], "videos": ["v.mp4"], "audios": ["s.wav"]}})
         self.assertIsNone(err)
         self.assertEqual([(r["value"], r.get("media")) for r in bodies[0]["references"]],
                          [("a.png", None), ("v.mp4", "video"), ("s.wav", "audio")])
-        self.assertEqual(bodies[0]["prompt"], "<Video 1> p")
+        self.assertEqual(bodies[0]["prompt"], "p")
         self.assertNotIn("last_frame", bodies[0])
-
-    def test_r2v_prompt_keeps_existing_video_tag(self):
-        # 提示词已含 <Video 1> 时不重复添加
-        bodies, err = self._run_single({"skill_id": "s", "prompt": "<Video 1> p", "duration_sec": 5, "mode": "r2v",
-                                        "ref_input": None, "refs": {"videos": ["v.mp4"]}})
-        self.assertIsNone(err)
-        self.assertEqual(bodies[0]["prompt"], "<Video 1> p")
 
     def test_r2v_segment_without_refs_runs_as_t2v(self):
         # 全参考段无参考素材：按文生执行（不硬报错，编辑器保存时已提示）

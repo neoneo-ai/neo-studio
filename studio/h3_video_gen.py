@@ -11,6 +11,7 @@ import random
 
 import nodes as comfy_nodes
 
+from .h3_prompt_audit import reference_tags
 from .image_gen import _reference_name, _resolve_loras, render_template, resolve_model
 from .video_gen import get_video_settings, suggest_audio_vae, suggest_video_model
 from .skill import load_skill_workflow, scan_skills
@@ -184,6 +185,45 @@ def resolve_video_params(body: dict, cfg: dict, skip_model: bool = False) -> dic
         "ref_videos": ref_videos,
         "ref_audios": ref_audios,
     }
+
+
+# MiniMaxH3ReferenceToVideo 的参考槽只有被提示词里的 <Picture N>/<Video N>/<Audio N> 指代才会进条件。
+# 对照实验（tmp/l0_h3 的 G5）：vae 已接、图与参考视频都挂上，但提示词没有标签时，输出与完全不挂
+# 参考的基线逐帧相同——参考数量多少、vae 接没接都不影响，结果是零条件化。
+_REFERENCE_NODE = "MiniMaxH3ReferenceToVideo"
+# (params 里的参考分组, 标签类型, 该类型在提示词里承担的作用)
+_REF_TAG_KINDS = (("ref_images", "Picture", "外观与空间结构"),
+                  ("ref_videos", "Video", "运镜与时间结构"),
+                  ("ref_audios", "Audio", "音色"))
+
+
+def ensure_reference_tags(template: dict, params: dict) -> None:
+    """参考挂上了、提示词却没有该类型标签时，追加一行指代（就地改 params["prompt"]）。
+
+    只对含 MiniMaxH3ReferenceToVideo 的模板生效：只有这个节点的 ref_* 槽会被模型读到；图生 /
+    首尾帧技能的首帧走 first_frame 锚点，不需要标签，补了反而会多出没有指代对象的标签。
+    模板没声明某类型的槽位时也不加——那条加载链会被 render_template 整条裁掉，加了就是悬空标签。
+    编号与 h3_prompt_audit.context_media_tags 一致：同类型第 N 个参考（1 基）。
+    """
+    slotted = set()
+    for node in template.values():
+        if isinstance(node, dict) and node.get("class_type") == _REFERENCE_NODE:
+            for key in (node.get("inputs") or {}):
+                head = key.split(".", 1)[0]
+                if head in ("ref_images", "ref_videos", "ref_audios"):
+                    slotted.add(head)
+    if not slotted:
+        return
+    tags = reference_tags(params["prompt"])
+    clauses = []
+    for key, label, role in _REF_TAG_KINDS:
+        names = params.get(key) or []
+        if not names or key not in slotted or any(t.startswith(f"<{label} ") for t in tags):
+            continue
+        items = "、".join(f"<{label} {i}>" for i in range(1, len(names) + 1))
+        clauses.append(f"{items} 作{role}参考")
+    if clauses:
+        params["prompt"] += "\n参考素材：" + "；".join(clauses) + "。"
 
 
 def _require_vdn_plugin(graph):

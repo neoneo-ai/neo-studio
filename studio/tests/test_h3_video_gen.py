@@ -893,6 +893,68 @@ class RealTemplateExecutionTests(unittest.TestCase):
                                 if k.startswith("ref_images.")), list(range(9)))
 
 
+class ReferenceTagTests(unittest.TestCase):
+    """参考标签兜底：参考挂上了但提示词没写标签时补一行指代。
+
+    没标签 = 参考零条件化（NeoL0 v2 的 G5 与无参考基线逐帧相同），所以缺标签必须补，
+    而图生 / 首尾帧的首帧走 first_frame 锚点，补了反而是悬空标签。
+    """
+
+    _CFG = {"model": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+            "text_encoder": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+            "vae": "minimax_h3_video_vae_fp16.safetensors"}
+
+    def _template(self, preset):
+        with open(os.path.join(PLUGIN_DIR, "skills", "presets", preset, "workflow.json"),
+                  encoding="utf-8") as f:
+            return json.load(f)
+
+    def _params(self, prompt, images=0, videos=0, audios=0):
+        refs = ([{"kind": "data", "data": _data_uri("image/png", bytes([i]))} for i in range(images)]
+                + [{"kind": "data", "data": _data_uri("video/mp4", bytes([i])), "media": "video"}
+                   for i in range(videos)]
+                + [{"kind": "data", "data": _data_uri("audio/wav", bytes([i])), "media": "audio"}
+                   for i in range(audios)])
+        return h3_video_gen.resolve_video_params({"prompt": prompt, "references": refs}, self._CFG)
+
+    def test_missing_tags_are_appended_for_every_kind(self):
+        template = self._template("minimax-h3-r2v")
+        params = self._params("a cat walks the loft", images=1, videos=1, audios=1)
+        h3_video_gen.ensure_reference_tags(template, params)
+        for tag in ("<Picture 1>", "<Video 1>", "<Audio 1>"):
+            self.assertIn(tag, params["prompt"])
+        graph, _ = h3_video_gen.render_template(template, params)   # 补的标签要真的进条件节点
+        self.assertIn("<Video 1>", graph["5"]["inputs"]["prompt"])
+
+    def test_numbering_follows_reference_count(self):
+        params = self._params("walk", images=3, videos=2)
+        h3_video_gen.ensure_reference_tags(self._template("minimax-h3-r2v"), params)
+        for tag in ("<Picture 1>", "<Picture 2>", "<Picture 3>", "<Video 1>", "<Video 2>"):
+            self.assertEqual(params["prompt"].count(tag), 1)
+        self.assertNotIn("<Picture 4>", params["prompt"])
+        self.assertNotIn("<Video 3>", params["prompt"])
+
+    def test_kind_already_tagged_is_not_duplicated(self):
+        params = self._params("<Picture 1> 是主角", images=2, videos=1)
+        h3_video_gen.ensure_reference_tags(self._template("minimax-h3-r2v"), params)
+        self.assertEqual(params["prompt"].count("<Picture"), 1)   # 用户写的指代保持原样
+        self.assertIn("<Video 1>", params["prompt"])
+
+    def test_keyframe_template_gets_no_tags(self):
+        # 图生技能的首帧进 first_frame 锚点，不是参考槽：补标签会凭空多一个没有对象的 <Picture 1>
+        params = self._params("a cat walks", images=1)
+        h3_video_gen.ensure_reference_tags(self._template("minimax_h3_i2v"), params)
+        self.assertEqual(params["prompt"], "a cat walks")
+
+    def test_kind_without_template_slot_gets_no_tag(self):
+        # 模板没声明该类型的槽位（那条加载链会被整条裁掉）时不加标签，否则是悬空标签
+        template = self._template("minimax-h3-r2v")
+        del template["5"]["inputs"]["ref_audios.ref_audio_0"]
+        params = self._params("walk", audios=1)
+        h3_video_gen.ensure_reference_tags(template, params)
+        self.assertNotIn("<Audio", params["prompt"])
+
+
 class VideoModelsSortTests(unittest.TestCase):
     """/neo_video_gen/models 下拉展示：H3 相关靠前（与生图 krea2-first 独立）。"""
 

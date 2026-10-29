@@ -38,7 +38,7 @@ from server import PromptServer
 from .bundles import get_bundle
 from .image_gen import render_template
 from .image_gen_edit import _image_to_data_uri, _model_injection_node, execute_graph_inprocess
-from .h3_video_gen import H3_FPS, _default_video_skill, _gen_video_skills, _resolve_skill_id, _require_vdn_plugin, _seconds_to_frames, _skill_label, is_multiframe_skill, resolve_video_params
+from .h3_video_gen import H3_FPS, _default_video_skill, _gen_video_skills, _resolve_skill_id, _require_vdn_plugin, _seconds_to_frames, _skill_label, ensure_reference_tags, is_multiframe_skill, resolve_video_params
 from .h3_preview import load_h3_tiny_vae, preview_override
 from .skill import get_skill_gen_config, load_skill_workflow
 from .recipes import list_director_recipes, load_director_spec
@@ -826,6 +826,7 @@ def _run_segment_graph(body, skill_id, model, steps, label="", vae=None, preview
     if window > 0 and context_mode == CONTEXT_MODES[0]:
         params["length"] = _align_frame_count_nearest(int(params.get("length") or 124) + window,
                                                      minimum=window + 5)
+    ensure_reference_tags(template, params)
     graph, _warns = render_template(template, params)
     overrides = None
     if model is not None:
@@ -855,12 +856,14 @@ def _run_multiframe_unit(body, skill_id, model, steps, label="", vae=None, previ
     """
     real_id = _resolve_skill_id(skill_id or "")
     cfg = get_skill_gen_config(real_id)
+    template = load_skill_workflow(real_id)
     params = resolve_video_params(body, cfg, skip_model=(model is not None))
     if steps is not None and int(steps) > 0:
         params["steps"] = int(steps)
     if on_total is not None:
         on_total(int(params.get("steps") or 0))   # 真实总步数，供前端进度条按比例推进
-    graph, _warns = render_template(load_skill_workflow(real_id), params)
+    ensure_reference_tags(template, params)
+    graph, _warns = render_template(template, params)
     overrides = None
     if model is not None:
         x_id, pruned = _model_injection_node(graph)
@@ -1128,7 +1131,7 @@ class NeoH3VideoDirector:
                 # 按段模式组装参考（T2V 段不带任何参考）：
                 #   i2v/fl2v 首帧：本段分镜首帧图优先；否则窗口第 0 帧 / Tier A 链入上段尾帧
                 #   l2v 只带尾帧锁收尾（不注首帧，节点侧保持 L2VA）
-                #   r2v 全参考：参考素材（图/视频/音频），第一个参考视频即源视频（提示词自动加 <Video 1>）
+                #   r2v 全参考：参考素材（图/视频/音频），第一个参考视频即源视频
                 #   fl2v 另带尾帧锁收尾
                 refs = []
                 chained = False
@@ -1157,10 +1160,6 @@ class NeoH3VideoDirector:
                         refs.append({"kind": "input", "value": name, "media": "video"})
                     for name in (seg_refs.get("audios") or []):
                         refs.append({"kind": "input", "value": name, "media": "audio"})
-                # r2v：第一个参考视频即源视频，提示词缺 <Video 1> 时自动补上
-                if mode == "r2v" and any(r.get("media") == "video" for r in refs):
-                    if "<Video 1>" not in body["prompt"]:
-                        body["prompt"] = f"<Video 1> {body['prompt']}"
                 # 身份参考：配方角色参考图 + 段自带参考，注入每个还没有这些图的段
                 # （首段也在内——分镜关键帧没脸时它是唯一的身份锚点；段自带的参考不重复注入）
                 sent = {r["value"] for r in refs if r.get("kind") == "input"}
