@@ -9,6 +9,15 @@
     <title>3D Pose Art — Web 角色摆姿编辑器</title>
     <meta name="description" content="基于 three.js 的 Web 3D 角色摆姿编辑器，支持 FK 旋转与 CCD IK 末端拖拽。" />
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎨</text></svg>" />
+    <!-- 被 Neo Studio 装进 iframe 时，demo 控件从首帧起就收掉（真正隐藏的是 styles/main.css 的
+         html[data-host-ui] 规则）。工具条、六个 aside 面板与底部提示都在 body 里静态写着，而页面
+         模块要等默认素体（3MB 的 ybot.glb）加载完才建桥、宿主才回 pose:theme —— 之前这段时间里
+         宿主打开摆姿页先看到的是整套单机 demo 页面，之后才「跳」成宿主版。
+         判据与 src/neoBridge.js 同一条：parent === window 是单机部署（npm run dev / Pages / 静态站），
+         那个标记不落、行为逐字不变；旧宿主不带 caps.hostUi 时桥会把标记撤掉，回落成 demo 全量控件。 -->
+    <script>
+      if (window.parent !== window) document.documentElement.setAttribute('data-host-ui', '1');
+    </script>
     <script type="module" crossorigin src="./assets/index-BKzQo_MZ.js"></script>
     <link rel="stylesheet" crossorigin href="./assets/index-CR1FdUgI.css">
   </head>

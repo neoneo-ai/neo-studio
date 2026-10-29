@@ -232,9 +232,12 @@ page is running on, instead of leaving people to think the figure list is broken
 
 `hostUi` is `true`: the host ships its own panel (import an asset, the pose library, scenes, ControlNet
 export, the canvas state line) and sends it down with `pose:theme`, so the page folds away the demo
-toolbar meant for standalone runs - only one set of controls is ever on screen. The old-package fallback
-lives on the host: when `caps.hostUi` is not `true` the panel is disabled with a notice to re-run
-`tools\sync_pose_dist.ps1`, so no button is left standing there only to idle.
+toolbar meant for standalone runs - only one set of controls is ever on screen. That chrome is hidden
+before the page's first paint as well: the entry page's inline head script sets `data-host-ui` whenever
+it runs inside an iframe (the same `parent !== window` predicate the bridge uses), so opening Pose no
+longer shows the standalone 3d-pose-art editor for a moment and then swaps to the host layout. The
+old-package fallback lives on the host: when `caps.hostUi` is not `true` the panel is disabled with a
+notice to re-run `tools\sync_pose_dist.ps1`, so no button is left standing there only to idle.
 
 ## Not installed
 

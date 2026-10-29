@@ -4,6 +4,16 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **The 3D pose page no longer flashes the standalone 3d-pose-art editor before the host layout.** Opening the Pose
+  tab used to draw the pose package's own demo chrome - the six-row toolbar, the aside panels and the bottom hint,
+  all of it static in the entry page - and fold it away only after the default figure GLB (3 MB) had loaded, the page
+  had posted `pose:ready` and the host had answered `pose:theme`. The entry page now sets the host-mode marker in an
+  inline head script whenever it runs inside an iframe (the same `parent !== window` predicate the bridge uses), so
+  the first paint is already the host layout; standalone runs (`npm run dev`, GitHub Pages, a static site) are
+  unchanged, and an old host that never sends `caps.hostUi` still gets the full demo controls back. Run
+  `pwsh tools\sync_pose_dist.ps1 -Source <3d-pose-art repo>` and `pwsh tools\build_pose_package.ps1` to carry the
+  rebuilt page into the data root and the bundled copy.
+
 - **The Skills page opens on a guide page with an import path.** Landing on Skills no longer drops straight into the
   manager: the page starts on the same blank-state card as Paint / Video / Director and offers **Import workflow**,
   **New template skill** and **Skill list**. Import takes the API-format `.json` ComfyUI writes with "Export (API)",

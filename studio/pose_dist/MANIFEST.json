@@ -1,8 +1,8 @@
 {
   "format": "3dpose.package/1",
   "generator": "tools/build_pose_package.ps1",
-  "built_utc": "2026-10-28T14:19:31Z",
-  "total_bytes": 4092711,
+  "built_utc": "2026-10-29T01:23:10Z",
+  "total_bytes": 4093576,
   "files": [
     {
       "path": "assets/index-BKzQo_MZ.js",
@@ -16,8 +16,8 @@
     },
     {
       "path": "index.html",
-      "bytes": 14489,
-      "sha256": "10af44967c949148c18cfabb6c6133c8f614577013b4e8654ca32b104d4baf38"
+      "bytes": 15354,
+      "sha256": "0f79efab60b996345a447517ab7a055a00f09fc40621a7788f9ffbf3e672eb5d"
     },
     {
       "path": "LICENSE",
