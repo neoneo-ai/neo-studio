@@ -201,18 +201,31 @@ narrow-window rules are shared with the director page (one modal instance, one g
 
 ## Skills page layout
 
-The Skills page is the unified skill manager mounted full-bleed in the main area
-(`createSkillManager(host, { showClose: false, showCanvasBtn: false })`): left list + splitter + right detail,
-no floating window, no ✕ and no "from canvas" export button.
+The Skills page starts on a **guide page**: the same blank-state layout as the paint / video / director pages
+(heading line + hint line + corner brackets), with three entries below it:
+**📂 Import workflow** / **✏ New template skill** / **🗂 Skill list**. The manager is assembled only when an entry
+is picked; landing on the guide does not fetch the skill list.
 
+- **Import workflow** accepts only the `.json` ComfyUI writes with "Export (API)" (a flat
+  `node_id → class_type / inputs` map): the file first goes through `plan_workflow_skill` to preview the bindable
+  variables, then the "Create skill from an imported workflow" dialog asks for the name and the variables to bind,
+  and `save_workflow_skill` writes a custom generation skill. The list opens with the new skill selected. An
+  interface workflow (ComfyUI's plain "Save" with `nodes` / `links`) is rejected with a hint to re-export it as API
+  format; it is never written into the skill folder.
+- **New template skill** opens the new-skill form of the unified manager: it writes `skill.md` only and has no
+  `workflow.json`.
+- **Skill list** opens the unified manager (`createSkillManager(host, { showClose: false, showCanvasBtn: false, autoSelect: false })`):
+  left list + splitter + right detail, no floating window, no ✕ and no "from canvas" export button; the first item
+  of the expanded category is selected by default. **← Guide** in the list-mode title bar returns to the guide;
+  unsaved detail changes are confirmed first, and the whole manager is unmounted so the next visit assembles it again.
 - The component is modal-born: `prompts.css` gives it the `#1a1a2a` panel, `#1a2a3a` title bar, `#5090cc` blue
   highlight and `#1a3a5a` small blue buttons, which is a whole palette away from the shell's grey + `#7aa2ff`.
   The shell remaps that set onto shell tokens inside the `.ns-skills` scope (`#17171b` page, `#202024` title
   bars, `#2a2a2e` + `#444` inputs and buttons, the settings tab's translucent blue for the selected row), so
   Home / Assets / Paint / Director / Settings / Skills sit on one palette. The skill modal and the node skill picker
   inside ComfyUI keep the modal palette.
-- The modal's "🗂 Skill Management" title bar is hidden on the page: the header tab already names the page, and
-  nothing here is a draggable window.
+- The guide state hides the "🗂 Skill Management" title bar (the header tab already names the page); list mode shows
+  it, titled "Skill list" and carrying the back-to-guide entry.
 - Left-column width drag and memory (`localStorage["neo.skillManagerLeftWidth"]`), the category accordion, the
   per-row copy / delete icons and the + New / ⬆ ZIP / ⬆ Folder footer behave exactly as in the standalone window.
 - Copy and delete icons all come from `studio/web/js/core/icons.js`: icon-only buttons carry no text,

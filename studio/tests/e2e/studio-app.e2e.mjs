@@ -160,6 +160,8 @@ test("桌面端窗口加载 Neo Studio 四视图", async () => {
         await page.waitForSelector(".ns-director .neo-recipes-card", { timeout: 15000 });
 
         await page.evaluate(() => { location.hash = "#/skills"; });
+        await page.waitForSelector(".ns-skills-guide", { timeout: 15000 });
+        await page.click(".ns-skills-guide-actions .ns-btn:has-text('技能列表')");
         await page.waitForSelector(".ns-skills .rs-skill-manager", { timeout: 15000 });
 
         await page.evaluate(() => { location.hash = "#/settings"; });

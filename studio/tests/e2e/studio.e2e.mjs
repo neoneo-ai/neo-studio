@@ -151,8 +151,13 @@ test("Studio 页面：四视图加载、版本信息、导演生成面板", asyn
             }
         }
 
-        // 技能视图：统一技能管理直接挂满主区（无弹窗外壳，无 ✕ / 无「从画布」）
+        // 技能视图：默认停在引导页（导入工作流 / 新建模板技能 / 技能列表）；点「技能列表」才挂统一技能管理
+        // （无弹窗外壳，无 ✕ / 无「从画布」）
         await page.evaluate(() => { location.hash = "#/skills"; });
+        await page.waitForSelector(".ns-skills-guide .neo-gallery-gm-idle-title", { timeout: 15000 });
+        const guideBtns = (await page.locator(".ns-skills-guide-actions .ns-btn").allTextContents()).map((s) => s.trim());
+        assert.deepEqual(guideBtns, ["导入工作流", "新建模板技能", "技能列表"], "技能引导页给三个入口");
+        await page.click(".ns-skills-guide-actions .ns-btn:has-text('技能列表')");
         await page.waitForSelector(".ns-skills .rs-skill-manager", { timeout: 15000 });
         await page.waitForSelector(".ns-skills .rs-skill-picker-item", { timeout: 15000 });
         assert.equal(await page.locator(".ns-skills .rs-skill-manager-head .rs-skill-modal-close").count(), 0, "技能页不应有 ✕");

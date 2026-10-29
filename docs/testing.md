@@ -83,6 +83,8 @@ npm run update-goldens   # NEO_UPDATE_GOLDENS=1，写入新 golden
 - `prompt-manager-dom.test.mjs` — 节点创建后的 UI 结构、body 弹层、隐藏控件状态。
 - `cache-guard.test.mjs` — 共享 TTL 缓存守卫：命中、过期失效、显式清空。
 - `node-behavior-flows.test.mjs` — 随机取词、Enter 流式生成、技能路由请求体、@ 图片选择器、运行时随机菜单。
+- `studio-skills.test.mjs` — 技能页引导页：默认不装配管理组件、三个入口、导入 API 工作流（界面工作流被挡下）、
+  返回引导页与新建模板技能。
 - `llm-setting-advanced.test.mjs` — 有预设 Base URL 的供应商默认收起「自定义端点」，展开后改写仍能落盘；
   无预设的 OpenAI Compatible 常显，Local GGUF 整体隐藏。
 

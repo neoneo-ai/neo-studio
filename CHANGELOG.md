@@ -4,6 +4,15 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **The Skills page opens on a guide page with an import path.** Landing on Skills no longer drops straight into the
+  manager: the page starts on the same blank-state card as Paint / Video / Director and offers **Import workflow**,
+  **New template skill** and **Skill list**. Import takes the API-format `.json` ComfyUI writes with "Export (API)",
+  previews the bindable variables, asks for a name, and lands the result as a custom generation skill with the new
+  entry selected; an interface workflow is refused with a hint to re-export it as API format instead of being written
+  into the skill folder. New template skill opens the blank `skill.md` form, and Skill list opens the manager with a
+  **← Guide** entry in its title bar that returns to the guide (unsaved changes are confirmed first). Covered by
+  `studio/tests/js/studio-skills.test.mjs`.
+
 - **A gallery folder on an unreachable network share no longer freezes the desktop window.** The desktop service read
   the configured gallery folders on its request loop, and every hidden entry and every folder went through
   `Path.resolve()` - a realpath round trip on an SMB share. With a NAS folder in `custom_directories` /

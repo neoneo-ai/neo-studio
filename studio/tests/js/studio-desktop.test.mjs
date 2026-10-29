@@ -169,12 +169,14 @@ test("无边框窗口控件：默认隐藏，最小化 / 最大化 / 全屏 / �
     assert.ok(!/\.ns-version\b/.test(css), "版本位不在顶栏样式里");
 });
 
-test("技能页：技能管理换外壳配色，弹窗标题条收起", () => {
+test("技能页：技能管理换外壳配色，标题条只在列表态出现", () => {
     const css = fs.readFileSync(path.join(webDir, "studio", "style.css"), "utf8");
     const rules = [...css.matchAll(/\.ns-skills[^{]*\{[^}]*\}/g)].map((m) => m[0]);
     assert.ok(rules.length > 5, "技能页要有外壳配色的一组规则");
     assert.ok(rules.some((r) => /\.rs-skill-manager-head\s*\{[^}]*display:\s*none/.test(r)),
-              "页里的「技能管理」标题条要收起（顶栏 tab 已给页名，且整页没有可拖的窗）");
+              "引导页态没有标题条（顶栏 tab 已给页名，整页没有可拖的窗）");
+    assert.ok(rules.some((r) => /\.ns-skills-editing \.rs-skill-manager-head\s*\{[^}]*display:\s*flex/.test(r)),
+              "列表态露出标题条：标题写「技能列表」，兼作返回引导页的入口");
     assert.ok(rules.some((r) => /\.rs-skill-manager\s*\{[^}]*background:\s*#17171b/.test(r)),
               "整页底色走外壳 #17171b，不用弹窗的 #1a1a2a");
     assert.ok(rules.some((r) => /\.rs-skill-modal-header\s*\{[^}]*background:\s*#202024/.test(r)),

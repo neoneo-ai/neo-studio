@@ -186,7 +186,7 @@ function createSkillStatusRow(opts) {
 // config.json 的键 → 技能设置面板里的控件名（设置弹窗用的就是这两个词，行上要用同一个词才认得出改哪儿）
 const SETTING_LABELS = { base_resolution: "长边尺寸", default_ratio: "默认比例" };
 let _activeTitleDialog = null;
-function promptSkillTitle(defaultValue = "", plan = null) {
+function promptSkillTitle(defaultValue = "", plan = null, heading = "从画布创建技能") {
     if (_activeTitleDialog) return _activeTitleDialog; // 避免重复弹层
     let resolveFn;
     const promise = new Promise((r) => { resolveFn = r; });
@@ -195,7 +195,7 @@ function promptSkillTitle(defaultValue = "", plan = null) {
     const modal = mkEl("div", "rs-skill-modal rs-skill-title-dialog");
     const header = mkEl("div", "rs-skill-modal-header");
     const titleSpan = mkEl("span", "rs-skill-modal-title");
-    titleSpan.textContent = t("从画布创建技能");
+    titleSpan.textContent = t(heading);
     header.appendChild(titleSpan);
 
     const body = mkEl("div", "rs-skill-modal-content");
@@ -208,7 +208,7 @@ function promptSkillTitle(defaultValue = "", plan = null) {
     row.append(label, input);
     body.appendChild(row);
 
-    // 变量替换清单：固定项由后端固定规则替换，候选项逐项勾选，不勾的保持画布里的写死值
+    // 变量替换清单：固定项由后端固定规则替换，候选项逐项勾选，不勾的保持来源里的写死值
     const binds = mkEl("div", "rs-skill-title-binds");
     const head = mkEl("div", "rs-skill-title-binds-head");
     head.textContent = t("替换为技能变量");
@@ -224,8 +224,8 @@ function promptSkillTitle(defaultValue = "", plan = null) {
         box.type = "checkbox";
         box.checked = true;
         const shown = String(c.value === undefined ? "" : c.value).replace(/\s+/g, " ").trim();
-        // 尺寸两行的主语换成技能里真正存的那两项：画布上的 megapixels 不是设置项，勾上后
-        // config.json 落的是 base_resolution / default_ratio，画布上那个数只是「当前值」参考
+        // 尺寸两行的主语换成技能里真正存的那两项：来源里的 megapixels 不是设置项，勾上后
+        // config.json 落的是 base_resolution / default_ratio，来源里那个数只是「当前值」参考
         const setting = c.setting && c.setting.key ? c.setting : null;
         const span = mkEl("span", "");
         span.textContent = setting
@@ -234,11 +234,11 @@ function promptSkillTitle(defaultValue = "", plan = null) {
             })
             : `${c.class_type} #${c.node} · ${c.field} → {{${c.token}}}`;
         const hint = !setting ? "" : c.token === "MEGAPIXELS"
-            ? t("生成时按本次宽高重算，画布上的 megapixels 不保存")
+            ? t("生成时按本次宽高重算，当前的 megapixels 不保存")
             : t("生成时取 ResolutionSelector 下拉认得的那一项");
         span.title = `${c.class_type} #${c.node} · ${c.field} = ${shown}` + (hint ? ` · ${hint}` : "");
         const value = mkEl("span", "rs-skill-title-bind-value");
-        const text = (setting ? t("画布当前 ") : "") + shown;
+        const text = (setting ? t("当前值 ") : "") + shown;
         value.textContent = text.length > 26 ? `${text.slice(0, 26)}…` : text;
         line.append(box, span, value);
         binds.appendChild(line);
@@ -246,13 +246,13 @@ function promptSkillTitle(defaultValue = "", plan = null) {
     }
     if (!rows.length) {
         const none = mkEl("div", "rs-skill-title-binds-note");
-        none.textContent = t("画布里没有可额外勾选的替换项");
+        none.textContent = t("没有可额外勾选的替换项");
         binds.appendChild(none);
     } else if (rows.some((r) => r.binding.token === "MEGAPIXELS" || r.binding.token === "ASPECT_RATIO")) {
-        // 行上的 base_resolution 是按画布这一次的 megapixels 反算出来的：不写这一行，用户会以为
-        // 保存的是画布上的宽高（照字面理解 = 冻结当前值），也不知道 megapixels 这项数从哪来
+        // 行上的 base_resolution 是按这一次的 megapixels 反算出来的：不写这一行，用户会以为
+        // 保存的是来源里的宽高（照字面理解 = 冻结当前值），也不知道 megapixels 这项数从哪来
         const calc = mkEl("div", "rs-skill-title-binds-note");
-        calc.textContent = t("megapixels 不是技能设置项：它是「长边尺寸 × 默认比例」得到的宽高 ÷ 1024² 算出来的（夹在 0.1–16）；勾选只按画布这一次的值反算出上面两项设置，出图尺寸生成时按本次宽高重算");
+        calc.textContent = t("megapixels 不是技能设置项：它是「长边尺寸 × 默认比例」得到的宽高 ÷ 1024² 算出来的（夹在 0.1–16）；勾选只按这一次的值反算出上面两项设置，出图尺寸生成时按本次宽高重算");
         binds.appendChild(calc);
     }
     for (const w of (plan && plan.warnings) || []) {
@@ -307,6 +307,27 @@ function promptSkillTitle(defaultValue = "", plan = null) {
     return promise;
 }
 
+/** 「从画布 / 导入工作流」两条入口共用：预览可替换的 widget → 名称 + 勾选 → 保存。
+ *  plan 传 undefined 表示预览失败也照常创建（画布那条路）；传 null 表示已确认没有候选。 */
+async function createSkillFromWorkflow(workflow, { name = "my-workflow", plan, heading = "从画布创建技能" } = {}) {
+    if (plan === undefined) {
+        try {
+            plan = await planWorkflowSkill(workflow);
+        } catch (e) {
+            // 预览拿不到候选也照常创建：模板只按固定规则替换
+            plan = null;
+        }
+    }
+    const picked = await promptSkillTitle(name, plan, heading);
+    if (!picked) return null; // 用户在标题对话框取消
+    const r = await saveWorkflowSkill({
+        name: picked.name, description: "", tags: [], workflow, bindings: picked.bindings,
+    });
+    showToast(app, "success", tf("已保存{kind}技能 \"{id}\"", { kind: r.gen_video ? t("生视频") : t("生图"), id: r.id }), (r.warnings || []).join("\n"));
+    dispatchSkillsUpdated();
+    return r;
+}
+
 /** 「从画布」两个入口共用：序列化画布 → 预览可替换的 widget → 名称 + 勾选 → 保存 */
 async function exportCanvasAsSkill() {
     const { output, error } = await serializeCanvasPrompt();
@@ -314,19 +335,15 @@ async function exportCanvasAsSkill() {
         showToast(app, "warning", t("无法导出"), t("画布上没有有效工作流") + (error?.message ? tf("（{msg}）", { msg: error.message }) : ""));
         return;
     }
-    let plan = null;
-    try {
-        plan = await planWorkflowSkill(output);
-    } catch (e) {
-        // 预览拿不到候选也照常创建：模板只按固定规则替换
-    }
-    const picked = await promptSkillTitle("my-workflow", plan);
-    if (!picked) return; // 用户在标题对话框取消
-    const r = await saveWorkflowSkill({
-        name: picked.name, description: "", tags: [], workflow: output, bindings: picked.bindings,
-    });
-    showToast(app, "success", tf("已保存{kind}技能 \"{id}\"", { kind: r.gen_video ? t("生视频") : t("生图"), id: r.id }), (r.warnings || []).join("\n"));
-    dispatchSkillsUpdated();
+    await createSkillFromWorkflow(output);
+}
+
+/** 导入 API 工作流 JSON 新建技能（Studio 技能页引导入口）。
+ *  plan 先跑一次：文件不是 API prompt 时后端在这里就拒，不弹命名框；错误交给调用方提示。
+ *  返回 { id, warnings, gen_video }，取消返回 null。 */
+async function importWorkflowSkill(workflow, defaultName = "my-workflow") {
+    const plan = await planWorkflowSkill(workflow);
+    return createSkillFromWorkflow(workflow, { name: defaultName, plan, heading: "导入工作流创建技能" });
 }
 
 // 共享的 ZIP / 目录上传隐藏 input：多个节点的技能下拉共用同一对，change 时上传并广播刷新
@@ -983,9 +1000,11 @@ function createSkillDropdown() {
 
 // ==========================================
 // 统一技能管理 UI：左侧技能列表（搜索 + 分类分组）+ 右侧技能详情（内嵌 createSkillDetailPopup）
-// createSkillManager(host, opts) 直接挂进给定容器，返回 { el, closeBtn, close }；
+// createSkillManager(host, opts) 直接挂进给定容器，返回
+// { el, head, closeBtn, close, ready, openNew, openSkill, selectFirst, refresh, isDirty }；
+// autoSelect=false 时首屏不选第一项（技能页引导页自己决定进列表还是直接开新建表单）。
 // openSkillManager() 包一层模态遮罩作顶栏 菜单「技能管理」入口（跨节点单例，重复打开不叠加）；
-// Neo Studio「技能」页签直接挂主区（无弹窗外壳）。
+// Neo Studio「技能」页签从引导页按需装配到主区（无弹窗外壳）。
 // 技能增删改/上传均广播 rs.skills.updated，左侧列表随之自动刷新。
 // ==========================================
 let _skillManagerOpen = false;
@@ -995,7 +1014,7 @@ const SKILL_LEFT_W_KEY = "neo.skillManagerLeftWidth";
 const SKILL_LEFT_MIN_W = 180;
 const SKILL_RIGHT_MIN_W = 320;
 
-function createSkillManager(host, { showClose = true, showCanvasBtn = true } = {}) {
+function createSkillManager(host, { showClose = true, showCanvasBtn = true, autoSelect = true } = {}) {
     const box = mkEl("div", "rs-skill-manager");
 
     // 顶部标题栏：技能管理 + ✕（关闭整窗；内嵌模式无 ✕）
@@ -1192,8 +1211,23 @@ function createSkillManager(host, { showClose = true, showCanvasBtn = true } = {
         if (popup.isDirty() && !confirm(t("当前技能有未保存的修改，放弃并切换？"))) return;
         selectedId = it.value;
         renderList();
+        placeholder.hidden = true;   // 详情开始加载就收起占位：占位是居中绝对定位，会压在正在铺开的表单上
         await popup.openExisting(it.skillId || it.value, it.source);
         syncEmpty();
+    }
+
+    // 「技能列表」入口：选中默认展开分类的第一项（与左侧展开的分类一致，而非按分组排序的列表首项）
+    function selectFirst() {
+        if (selectedId || !allItems.length) return;
+        return selectSkill(allItems.find((it) => it.group === openGroup) || allItems[0]);
+    }
+
+    // 按 id 定位刚建好的技能（导入工作流之后）；列表里没有就只留列表，不报错
+    async function openSkill(id) {
+        const it = allItems.find((x) => String(x.skillId) === String(id) || String(x.value) === String(id));
+        if (!it) return;
+        if (it.group && it.group !== openGroup) openGroup = it.group;   // 视频技能可能落在折叠的分类里
+        await selectSkill(it);
     }
 
     // 管理工具栏按钮：新建进右侧内嵌详情；上传/导出广播 rs.skills.updated 自动刷新列表
@@ -1205,15 +1239,17 @@ function createSkillManager(host, { showClose = true, showCanvasBtn = true } = {
         b.addEventListener("mousedown", (e) => { e.preventDefault(); e.stopPropagation(); });
         return b;
     };
-    const newBtn = makeMgmtBtn(t("+ 新建"), t("新建自定义技能"));
-    newBtn.addEventListener("click", async (e) => {
-        e.stopPropagation();
-        if (popup.isDirty() && !confirm(t("当前技能有未保存的修改，放弃并新建？"))) return;
+    // 新建入口：底栏「+ 新建」与技能页引导页的「新建模板技能」共用同一条路
+    const openNewSkill = async () => {
+        if (popup.isDirty() && !confirm(t("当前技能有未保存的修改，放弃并新建？"))) return false;
         selectedId = null;
         renderList();
         await popup.openNew();
         syncEmpty();
-    });
+        return true;
+    };
+    const newBtn = makeMgmtBtn(t("+ 新建"), t("新建自定义技能"));
+    newBtn.addEventListener("click", (e) => { e.stopPropagation(); openNewSkill(); });
     const zipBtn = makeMgmtBtn("ZIP", t("上传 .zip 技能包"));
     zipBtn.addEventListener("click", (e) => { e.stopPropagation(); getSkillUploadInputs().zipInput.click(); });
     const dirBtn = makeMgmtBtn(t("目录"), t("上传技能目录（全部 .md）"));
@@ -1241,13 +1277,14 @@ function createSkillManager(host, { showClose = true, showCanvasBtn = true } = {
         box.remove();
     };
 
-    // 初始加载 + 默认选中「默认展开分类」的第一项（与左侧展开的分类一致，而非按分组排序的列表首项）
-    loadList().then(() => {
-        if (selectedId || !allItems.length) return;
-        selectSkill(allItems.find((it) => it.group === openGroup) || allItems[0]);
-    });
+    // 初始加载；技能页引导页自己决定进来先选第一项，还是直接开新建表单
+    const ready = loadList().then(() => { if (autoSelect) selectFirst(); });
 
-    return { el: box, head, closeBtn, close };
+    return {
+        el: box, head, closeBtn, close, ready,
+        openNew: openNewSkill, openSkill, selectFirst, refresh: loadList,
+        isDirty: () => popup.isDirty(),
+    };
 }
 
 function openSkillManager() {
@@ -1398,6 +1435,7 @@ export {
     openSkillPickerModal,
     createSkillManager,
     openSkillManager,
+    importWorkflowSkill,
     openSkillWorkflowInMainUi,
     openSkillWorkflowOnCanvas,
     runSkillWorkflowHandoff,

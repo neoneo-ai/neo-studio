@@ -94,8 +94,8 @@ test("From Canvas：候选变量默认全勾，取消勾选的不进 bindings", 
     assert.ok(rows[2].textContent.includes("技能设置「默认比例」1:1 → {{ASPECT_RATIO}}"),
         "比例行的主语是默认比例这项真设置，不是画布上的 aspect_ratio 控件：" + rows[2].textContent);
     const sizeValue = rows[1].querySelector(".rs-skill-title-bind-value");
-    assert.ok(sizeValue.textContent.includes("画布当前 1.05"),
-        "画布上的数字只作为「画布当前」参考值：" + sizeValue.textContent);
+    assert.ok(sizeValue.textContent.includes("当前值 1.05"),
+        "来源里的数字只作为「当前值」参考：" + sizeValue.textContent);
     assert.ok(rows[1].querySelector("input").checked, "候选默认勾上");
     const notes = Array.from(dlg.querySelectorAll(".rs-skill-title-binds-note")).map((n) => n.textContent).join("\n");
     assert.ok(notes.includes("长边尺寸 × 默认比例"), "尺寸候选要写明尺寸由「长边尺寸 × 默认比例」按本次宽高算，megapixels 是算出来的");

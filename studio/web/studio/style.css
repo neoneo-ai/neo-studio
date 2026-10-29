@@ -455,13 +455,37 @@ body {
     .ns-director-main { min-height: 620px; }
 }
 
+/* 技能页：引导页（默认）+ 统一技能管理两块按页状态切换。引导起手版式照导演页 / 视频页的空白态
+   （.neo-gallery-gm-idle 主行 + 细注行 + 四角括号），入口一排三枚：导入工作流 / 新建模板技能 / 技能列表。
+   管理组件点了入口才装配，装配后标题条兼作返回引导页的入口 */
+.ns-skills-page { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.ns-skills-guide {
+    flex: 1 1 auto; min-height: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px;
+}
+.ns-skills-guide-card { position: relative; max-width: 700px; padding: 40px 60px; }
+.ns-skills-guide-card.neo-gallery-gm-idle { padding-top: 40px; }
+.ns-skills-guide-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px; }
+.ns-skills-guide-actions .ns-btn { display: inline-flex; align-items: center; gap: 6px; }
+.ns-skills-manager { display: none; flex: 1 1 auto; min-height: 0; }
+.ns-skills-editing .ns-skills-guide { display: none; }
+.ns-skills-editing .ns-skills-manager { display: flex; }
+.ns-skills-file { display: none; }
+
 /* 技能页：统一技能管理直接挂满主区。组件本身是弹窗出身 —— prompts.css 那套 #1a1a2a 底、#1a2a3a 标题条、
    #5090cc 蓝高亮、#1a3a5a 小蓝按钮，在素材页 / 设置页的灰底 + #7aa2ff 旁边就是另一套色。
    这里只在外壳层把弹窗色换成外壳色（.ns-skills 作用域），ComfyUI 里的技能弹窗与节点技能选择窗不动。 */
 .ns-skills { padding: 0; }
 .ns-skills .rs-skill-manager { width: 100%; height: 100%; border: none; border-radius: 0; box-shadow: none; background: #17171b; }
-/* 标题条在页里就是重复的页名（顶栏 tab 已经写了 Skills），且整页没有可拖的窗 → 收起，左栏搜索框直接顶到页头 */
-.ns-skills .rs-skill-manager-head { display: none; }
+/* 引导页态没有标题条：顶栏 tab 已给页名，那一行只会重复；列表态才让它出现，兼作「← 引导页」的落点 */
+.ns-skills .rs-skill-manager-head { display: none; background: #202024; border-bottom-color: #333; }
+.ns-skills-editing .rs-skill-manager-head { display: flex; cursor: default; }
+.ns-skills-back {
+    flex: none; padding: 3px 8px;
+    background: transparent; border: 1px solid transparent; border-radius: 4px;
+    color: #9a9aa8; font-size: 12px; cursor: pointer;
+}
+.ns-skills-back:hover { background: #2a2a2e; border-color: #444; color: #fff; }
 .ns-skills .rs-skill-manager-left { background: #1b1b1f; }
 .ns-skills .rs-skill-picker-search { background: #2a2a2e; border-color: #444; }
 .ns-skills .rs-skill-picker-search:focus { border-color: #7aa2ff; box-shadow: 0 0 0 2px rgba(122, 162, 255, 0.18); }

@@ -111,6 +111,8 @@ npm run update-goldens   # NEO_UPDATE_GOLDENS=1, writes new goldens
 - `cache-guard.test.mjs` — the shared TTL cache guard: hit, expiry, explicit clear.
 - `node-behavior-flows.test.mjs` — random word picking, Enter streaming generation, skill-routed request bodies,
   the @ image picker, the runtime random menu.
+- `studio-skills.test.mjs` — the Skills guide page: the manager is not assembled by default, the three entries,
+  importing an API workflow (an interface workflow is refused), returning to the guide and the new template form.
 - `llm-setting-advanced.test.mjs` — providers with a preset Base URL keep "custom endpoint" collapsed and an
   edited value still saves after expanding; OpenAI Compatible without a preset stays visible, and Local GGUF hides
   the whole area.

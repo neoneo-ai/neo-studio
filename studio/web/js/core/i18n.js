@@ -968,15 +968,15 @@ const EN = {
         "Always replaced: model / encoder / VAE / prompt / width & height / length",
     "固定替换：模型 / 编码器 / VAE / Seed / 张数 / 输出前缀 / 参考图 / 提示词编码":
         "Always replaced: model / encoder / VAE / seed / count / output prefix / reference images / prompt encoding",
-    "画布里没有可额外勾选的替换项": "Nothing else on the canvas can be bound to a variable",
+    "没有可额外勾选的替换项": "Nothing else can be bound to a variable",
     "技能设置「{label}」{value} → {token}": "Skill setting “{label}” {value} → {token}",
-    "画布当前 ": "Canvas value ",
-    "生成时按本次宽高重算，画布上的 megapixels 不保存":
-        "Recomputed from this request's width and height; the canvas megapixels is not stored",
+    "当前值 ": "Current value ",
+    "生成时按本次宽高重算，当前的 megapixels 不保存":
+        "Recomputed from this request's width and height; the current megapixels is not stored",
     "生成时取 ResolutionSelector 下拉认得的那一项":
         "Each request snaps to an option the ResolutionSelector dropdown accepts",
-    "megapixels 不是技能设置项：它是「长边尺寸 × 默认比例」得到的宽高 ÷ 1024² 算出来的（夹在 0.1–16）；勾选只按画布这一次的值反算出上面两项设置，出图尺寸生成时按本次宽高重算":
-        "megapixels is not a skill setting: it is derived from the width and height that “Long edge × Default ratio” produces, divided by 1024² (clamped to 0.1–16). Checking a row only back-solves the two settings above from this canvas run; the output size is recomputed from each request's width and height",
+    "megapixels 不是技能设置项：它是「长边尺寸 × 默认比例」得到的宽高 ÷ 1024² 算出来的（夹在 0.1–16）；勾选只按这一次的值反算出上面两项设置，出图尺寸生成时按本次宽高重算":
+        "megapixels is not a skill setting: it is derived from the width and height that “Long edge × Default ratio” produces, divided by 1024² (clamped to 0.1–16). Checking a row only back-solves the two settings above from this run; the output size is recomputed from each request's width and height",
     "用 ↑ / ↓ 或悬停浏览技能": "Use ↑ / ↓ or hover to browse skills",
     "自动（{m}）": "Auto ({m})",
     "主模型": "Main model",
@@ -1012,6 +1012,29 @@ const EN = {
     "放大到最大": "Maximize",
     "还原窗口": "Restore window",
     "拖拽调整窗口大小": "Drag to resize the window",
+    // ===== 技能页引导页（桌面端窗口） =====
+    "导入工作流，或从模板新建技能": "Import a workflow, or start from a template",
+    "导入工作流": "Import workflow",
+    "选择 ComfyUI 导出的 API 工作流（.json），新建一份带工作流的生成技能":
+        "Pick an API workflow exported from ComfyUI (.json) to create a generation skill backed by it",
+    "新建模板技能": "New template skill",
+    "写一份 skill.md 模板技能，不绑定工作流": "Write a skill.md template skill without a workflow",
+    "技能列表": "Skill list",
+    "浏览、编辑和删除已有技能": "Browse, edit, and delete existing skills",
+    "← 引导页": "← Guide",
+    "返回技能引导页": "Back to the skill guide",
+    "当前技能有未保存的修改，返回引导页将丢弃这些修改。":
+        "The current skill has unsaved changes — returning to the guide will discard them.",
+    "导入工作流创建技能": "Create skill from an imported workflow",
+    "导入失败：无法读取文件": "Import failed: cannot read the file",
+    "导入失败：文件不是合法的 JSON": "Import failed: the file is not valid JSON",
+    "导入失败：": "Import failed: ",
+    "导入失败：{msg}": "Import failed: {msg}",
+    "文件里没有工作流": "The file contains no workflow",
+    "这是 ComfyUI 的界面工作流，请在 ComfyUI 里用「导出（API）」保存后再导入":
+        "This is a ComfyUI interface workflow — save it with “Export (API)” in ComfyUI and import that file",
+    "文件不是 API 工作流（节点缺少 class_type / inputs）":
+        "The file is not an API workflow (a node is missing class_type / inputs)",
     // ===== Backyard 管理页 =====
     "（预设素材）": "(preset assets)",
     "（角色素材）": "(character assets)",
