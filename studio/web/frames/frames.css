@@ -1,0 +1,254 @@
+/* frames.css — 「视频抽帧」页：工具条 / 播放器与进度条 / 抽帧参数 / 帧结果网格 / 起手卡片。
+   颜色一律取 studio/style.css 的 --ns-* 变量，页面自身不引入第二套色板。 */
+
+.ns-frames {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    padding: 0;
+}
+
+.ns-frames-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: none;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--ns-border);
+    background: var(--ns-panel);
+}
+
+.ns-frames-bar-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    margin-right: 8px;
+    font-weight: 600;
+    color: var(--ns-fg);
+}
+
+.ns-frames-sep {
+    flex: 1;
+}
+
+.ns-frames-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 11px;
+    border: 1px solid var(--ns-border-soft);
+    border-radius: 8px;
+    background: var(--ns-raised);
+    color: var(--ns-fg);
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.ns-frames-btn:hover { background: var(--ns-field-hover); border-color: var(--ns-accent); }
+
+.ns-frames-btn:disabled { opacity: .45; cursor: default; }
+
+.ns-frames-btn-primary {
+    border-color: var(--ns-primary);
+    background: var(--ns-primary-soft);
+    color: var(--ns-primary-fg);
+}
+
+.ns-frames-btn-primary:hover { background: var(--ns-primary); color: #fff; }
+
+.ns-frames-pill {
+    padding: 3px 9px;
+    border: 1px solid var(--ns-border-soft);
+    border-radius: 999px;
+    font-size: 12px;
+    color: var(--ns-dim);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 320px;
+}
+
+.ns-frames-main {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    overflow-y: auto;
+    padding: 14px 16px 20px;
+}
+
+.ns-frames-main[hidden] { display: none; }
+
+.ns-frames-stage {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.ns-frames-stage[hidden],
+.ns-frames-settings[hidden],
+.ns-frames-out[hidden],
+.ns-frames-empty[hidden] { display: none; }
+
+.ns-frames-video {
+    width: 100%;
+    max-height: 62vh;
+    background: #000;
+    border: 1px solid var(--ns-border);
+    border-radius: 10px;
+}
+
+/* 进度条：一条按播放位置填色，起抽点是一根拖出来的黄线 —— 拖到哪就从那秒起抽，不跟着播放走 */
+.ns-frames-track {
+    position: relative;
+    height: 12px;
+    border-radius: 6px;
+    background: var(--ns-field);
+    cursor: ew-resize;
+    /* 拖着的时候浏览器别把这道手势当页面滚动：触控板与触摸上拖才落在进度条上 */
+    touch-action: none;
+    user-select: none;
+}
+
+.ns-frames-track.dragging { cursor: grabbing; }
+
+.ns-frames-played {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 0;
+    border-radius: 6px;
+    background: var(--ns-primary-soft);
+    pointer-events: none;
+}
+
+.ns-frames-marker {
+    position: absolute;
+    top: -3px;
+    left: 0;
+    width: 3px;
+    height: 18px;
+    margin-left: -1.5px;
+    border-radius: 2px;
+    background: var(--ns-accent);
+    pointer-events: none;
+}
+
+.ns-frames-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.ns-frames-controls .ns-frames-track { flex: 1; min-width: 160px; }
+
+.ns-frames-time,
+.ns-frames-info {
+    font-size: 12px;
+    color: var(--ns-dim);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.ns-frames-settings {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 10px 12px;
+    border: 1px solid var(--ns-border);
+    border-radius: 10px;
+    background: var(--ns-panel);
+}
+
+.ns-frames-field {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--ns-dim);
+}
+
+.ns-frames-num {
+    width: 78px;
+    padding: 6px 8px;
+    border: 1px solid var(--ns-field-bd);
+    border-radius: 8px;
+    background: var(--ns-field);
+    color: var(--ns-fg);
+    font: inherit;
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+}
+
+.ns-frames-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: .04em;
+    color: var(--ns-dim);
+}
+
+.ns-frames-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 10px;
+}
+
+.ns-frames-card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px;
+    border: 1px solid var(--ns-border);
+    border-radius: 10px;
+    background: var(--ns-panel);
+}
+
+.ns-frames-card img {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    object-fit: contain;
+    background: #000;
+    border-radius: 6px;
+}
+
+.ns-frames-stamp {
+    font-size: 12px;
+    color: var(--ns-dim);
+    font-variant-numeric: tabular-nums;
+}
+
+.ns-frames-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    min-height: 60%;
+    padding: 28px;
+    text-align: center;
+    color: var(--ns-dim);
+}
+
+.ns-frames-empty h3 { margin: 0; font-size: 16px; color: var(--ns-fg); }
+
+.ns-frames-empty p { margin: 0; max-width: 560px; line-height: 1.7; }
+
+.ns-frames-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+/* 本机文件的选择器：只借浏览器那套选择框，控件本身不上界面 */
+.ns-frames-file {
+    display: none;
+}

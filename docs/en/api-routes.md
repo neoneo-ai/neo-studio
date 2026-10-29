@@ -193,6 +193,21 @@ type}` (a library file); the key goes through the scene-name whitelist, the byte
 header has to be `glTF`, and all four checks run before anything is written. The page side of the bridge
 is `src/neoBridge.js` in 3d-pose-art; the contract is in [studio-pose.md](studio-pose.md).
 
+## frames.py — `/neo_frames/*`
+
+The video frame extractor page: extraction happens in the browser, so this module only serves the video and
+writes frames. Usage and rationale in [studio-frames.md](../studio-frames.md).
+
+| Method  | Route                   | Purpose                                                                                                |
+|---------|-------------------------|--------------------------------------------------------------------------------------------------------|
+| GET     | `/neo_frames/video`     | Range response for that library video (`FileResponse`, which is how seeking lands); non-video 400      |
+| POST    | `/neo_frames/save`      | Writes one PNG frame into `output/Frames`, replies `{filename, subfolder, size}`, one request per frame|
+
+The video has to come back with range support: `FileResponse` sends `Accept-Ranges`, so the browser re-reads only
+the bytes it needs when it seeks repeatedly; a whole-file body makes every seek land at the beginning, and the run
+becomes repeated first frames. The landing path is the `Frames` directory in `studio/gallery.py`, the same output
+path convention as the Pose page exports. The extractor shares no backend code with the Pose page.
+
 ## workflow.py — `/neo_nodes/*`
 
 | Method | Route | Description |
@@ -412,6 +427,7 @@ the table answers 409. Startup sequence, close teardown and cache conventions: [
 | GET      | `/neo-studio`                                                                                                                                               | The Studio page (the same `web/studio/index.html` on the desktop side)                                                                                                                                                                                              |
 | GET      | `/extensions/comfyui-neo-studio/*`                                                                                                                          | Frontend static files                                                                                                                                                                                                                                               |
 | GET      | `/neo-pose` `/neo_pose/*`                                                                                                                                   | Pose page redirect and bridge routes; `/pose-dist/*` and `/models/*` are the pose package static prefixes (registered by each host directly, not in the capability table)                                                                                                              |
+| GET/POST | `/neo_frames/video` `/neo_frames/save`                                                                                                                      | Frame extraction: the video the player reads, frames written into Frames                                                                                                                                                                                            |
 | GET/POST | `/neo_gallery/*` `/neo_bookmark/*`                                                                                                                          | Asset library and bookmarks (including delete / upload / tagging / OSS sync)                                                                                                                                                                                        |
 | GET/POST | `/rs_prompts/skills` `load_skill` `save_skill` `delete_skill` `*_*_skill_file`                                                                              | Skill editing                                                                                                                                                                                                                                                       |
 | POST     | `/rs_prompts/list_prompt_names`                                                                                                                             | Prompt candidates for the @ picker (names and tags from the data-root `prompts/` scan)                                                                                                                                                                              |

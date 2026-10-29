@@ -16,6 +16,7 @@
 | [h3-video-gen.md](h3-video-gen.md) | 生视频：导演配方执行、单段重生成、宫格拆分、模板 |
 | [recipes.md](recipes.md) | 配方：保存、发送到工作流、导演配方编辑器 |
 | [gallery.md](gallery.md) | 素材库：浏览、灯箱、文件管理、Civitai LORA、收藏 |
+| [studio-frames.md](studio-frames.md) | 视频抽帧：播放器、起抽点与间隔、帧落进 `output/Frames` |
 | [workflow-repair.md](workflow-repair.md) | 工作流模型路径修复 |
 | [model-hub.md](model-hub.md) | 模型库：Comfy-Org 专区双源搜索与断点续传下载 |
 | [studio-pose.md](studio-pose.md) | 3D 摆姿：摆姿包安装、页面与桥接口、场景与导出 |

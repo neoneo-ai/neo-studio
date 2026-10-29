@@ -211,8 +211,17 @@ _POSE = {
     ("POST", "/neo_pose/preset/delete"),
 }
 
+# 视频抽帧（studio/frames.py）：抽帧在浏览器里做（video seek + canvas 取帧），本机服务只回两样 ——
+# 素材库那条视频的分段响应与把抽出来的一帧 PNG 写进 output/Frames。都在文件层，桌面端没有
+# ComfyUI 运行时也能答。/neo_frames/video 不用 Gallery 那条整份读进内存的视频响应：没有分段响应
+# 时浏览器只会顺序往后读，seek 落回开头，抽出来的帧全是片头那一帧
+_FRAMES = {
+    ("GET", "/neo_frames/video"),
+    ("POST", "/neo_frames/save"),
+}
+
 DESKTOP_ROUTES = (_GALLERY | _BOOKMARK | _SKILL | _PROMPTS | _RECIPES | _SETTINGS | _LLM | _MODEL_HUB
-                  | _BACKYARD | _MCP | _AGENT | _POSE)
+                  | _BACKYARD | _MCP | _AGENT | _POSE | _FRAMES)
 
 # 前端门控用的功能开关：功能 → 代表路由。桌面端服务时该功能可用，否则按钮指向「启动 ComfyUI」。
 FEATURE_ROUTES = {

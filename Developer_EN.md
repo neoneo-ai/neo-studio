@@ -21,7 +21,8 @@ split by major module under `docs/en/` (index: [docs/en/README.md](docs/en/READM
 Feature module docs (user guide + implementation details):
 [prompts](docs/en/prompts.md) · [skills](docs/en/skills.md) · [image-gen](docs/en/image-gen.md) ·
 [h3-video-gen](docs/en/h3-video-gen.md) · [recipes](docs/en/recipes.md) · [gallery](docs/en/gallery.md) ·
-[workflow-repair](docs/en/workflow-repair.md)
+[workflow-repair](docs/en/workflow-repair.md) · [3D Pose](docs/en/studio-pose.md) ·
+[video frame extraction](docs/en/studio-frames.md)
 
 Agent and contributor rules do not live in `docs/`: the root [AGENTS.md](AGENTS.md) holds only the
 cross-cutting rules and product invariants, while `studio/`, `studio/web/`, `app/` and `tools/` each

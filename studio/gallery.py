@@ -57,10 +57,15 @@ CHARACTER_DIR = OUTPUT_DIR / "CharacterSheet"
 # subfolder="Pose"，素材项与 ComfyUI 自己的输出项在界面上一模一样。
 POSE_DIR = OUTPUT_DIR / "Pose"
 POSE_DIR_NAME = POSE_DIR.name   # 素材项 subfolder 上的锚定值
+# 抽出来的帧的落点：output/Frames。帧是图片，素材库浏览 output 就看得见它，寻址与 Pose 同一条
+# （subfolder="Frames"）；帧名带时间戳（frame-00_07_125.png），重名由抽帧页逐条存的时候防住。
+FRAMES_DIR = OUTPUT_DIR / "Frames"
+FRAMES_DIR_NAME = FRAMES_DIR.name   # 素材项 subfolder 上的锚定值
 # 插件加载时就把目录建好：摆姿导出前用户在素材库与文件管理器里都能看到它，
 # 只读网络共享上建不出来时导入照常继续（导出时会再试一次）。
 try:
     POSE_DIR.mkdir(parents=True, exist_ok=True)
+    FRAMES_DIR.mkdir(parents=True, exist_ok=True)
 except OSError:
     pass
 THUMBNAIL_SIZE = 320  # Fixed thumbnail size in pixels

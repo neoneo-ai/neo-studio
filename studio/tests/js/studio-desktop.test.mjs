@@ -133,7 +133,7 @@ test("默认落地首页：意图卡片挂满主区，素材卡直达素材页",
               "顶栏首页签应高亮");
     assert.equal(home.querySelector("h1").textContent, "今天想创作什么？");
     assert.deepEqual([...home.querySelectorAll(".ns-home-card-title")].map((e) => e.textContent),
-        ["生成图片", "生成视频", "图片编辑", "导演视频", "智能体", "3D 摆姿", "素材库", "技能", "设置"]);
+        ["生成图片", "生成视频", "图片编辑", "导演视频", "智能体", "3D 摆姿", "素材库", "视频抽帧", "技能", "设置"]);
 
     const libCard = [...home.querySelectorAll(".ns-home-card")][6];
     libCard.click();

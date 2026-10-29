@@ -25,6 +25,7 @@ import { icon, setIcon, setIconLabel } from "../js/core/icons.js";
 import { createLibraryModal } from "../js/core/lib-modal.js";
 import { initQueuePanel, setQueueOnline, queueTrack } from "../queue-panel.js";
 import { createPoseView } from "../pose/pose.js";
+import { createFramesView } from "../frames/frames.js";
 
 const view = document.getElementById("ns-view");
 const REPO_URL = "https://github.com/neoneo-ai/neo-studio";   // 设置「关于」里的仓库行，与顶栏「关于插件」同一地址
@@ -229,6 +230,17 @@ function openPoseMaterial(onPick) {
 
 // 摆姿视图的依赖在这汇聚：api 走 shim（离线/在线同一条路），素材取用复用上面那个弹窗
 const buildPose = createPoseView({ api, $el, toast, openMaterial: openPoseMaterial });
+
+/** 抽帧页取视频：点卡片取一条换进播放器（一次只看一条视频） */
+function openFramesMaterial(onPick) {
+    openLibModal("frames", (picked) => {
+        onPick(picked);
+        libModal?.close();
+    });
+}
+
+// 抽帧页与摆姿页不共享任何东西：取用同一套弹窗，抽帧自己在浏览器里做（见 studio/web/frames/frames.js）
+const buildFrames = createFramesView({ api, $el, toast, openMaterial: openFramesMaterial });
 
 onSidebarTabChange((id) => {
     if (currentView !== "director" && currentView !== "paint") return;
@@ -802,6 +814,7 @@ function buildHome(el) {
         $el("h2", { className: "ns-home-section", textContent: t("素材与配置") }),
         $el("div", { className: "ns-home-grid" }, [
             homeCard("folder", "素材库", "浏览与管理全部生成素材", () => go("gallery")),
+            homeCard("film", "视频抽帧", "挑一条视频，抽帧存进素材库", () => go("frames")),
             homeCard("wand", "技能", "管理预设与技能包", () => go("skills")),
             homeCard("gear", "设置", "生成默认值与界面语言", () => go("settings")),
         ]),
@@ -2213,6 +2226,7 @@ function route() {
     else if (name === "video") ensureView("video", buildVideo);
     else if (name === "agent") ensureView("agent", buildAgentPage);
     else if (name === "pose") ensureView("pose", buildPose);
+    else if (name === "frames") ensureView("frames", buildFrames);
     else if (name === "settings") {
         ensureView("settings", buildSettings);
         // 深链 #/settings?tab=mcp：智能体页「MCP」入口跳来这，视图常驻时也要落到那一栏

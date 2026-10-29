@@ -16,6 +16,7 @@ This directory splits the plugin documentation by major module. The entry points
 | [h3-video-gen.md](h3-video-gen.md) | Video generation: director recipe execution, single-segment regeneration, grid split, templates |
 | [recipes.md](recipes.md) | Recipes: saving, sending to the workflow, the director recipe editor |
 | [gallery.md](gallery.md) | Asset library: browsing, lightbox, file management, Civitai LORA, bookmarks |
+| [studio-frames.md](studio-frames.md) | Video frame extraction: the player, the start point and gap, frames landing in `output/Frames` |
 | [workflow-repair.md](workflow-repair.md) | Workflow model-path repair |
 | [model-hub.md](model-hub.md) | Model hub: Comfy-Org curated section, dual-source search, resumable downloads |
 | [studio-pose.md](studio-pose.md) | 3D Pose: installing the pose package, the page and bridge routes, scenes and exports |

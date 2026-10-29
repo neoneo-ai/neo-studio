@@ -4,6 +4,20 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **Video frame extraction gets its own Studio page.** Opening a video in the library and wanting a frame out of
+  it used to have no path: the only way was to hand the clip to ComfyUI and load the result back. The home card
+  **视频抽帧** (Video Frame Extraction) opens a page that plays the clip and drags the start point along the
+  progress bar, queues the timestamps after it by the frame count and gap, and shows every captured frame as a
+  card. Frames are
+  captured in the browser - seeking the player and drawing it onto a canvas - and each PNG is saved on its own
+  request into `output/Frames`, so the library browses them like any other generated asset; a frame name carries
+  its timestamp (`frame-00_07_125.png`). The backend adds only two routes: `/neo_frames/video` serves the chosen
+  clip with range support, which is what makes a seek land on that timestamp instead of the first frame, and
+  `/neo_frames/save` writes one PNG. Both are answered by the desktop service without a ComfyUI runtime, so
+  extraction works in the window with the kernel switched off. Picking a local file stays in the browser and never
+  uploads. The page ships with its own view (`studio/web/frames/frames.js`) and does not share code with the Pose
+  page or the gallery.
+
 - **Prompts now name the references they attach.** A reference on an H3 reference-to-video skill conditions the model
   on its own; the `<Picture N>` / `<Video N>` / `<Audio N>` tag says what that reference is for, and a prompt written
   without those tags left every attached reference without a stated role. The video page, the director's segments and

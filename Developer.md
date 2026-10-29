@@ -21,7 +21,7 @@
 功能模块文档（用户说明 + 实现细节）：
 [prompts](docs/prompts.md) · [skills](docs/skills.md) · [image-gen](docs/image-gen.md) · [h3-video-gen](docs/h3-video-gen.md) ·
 [recipes](docs/recipes.md) · [gallery](docs/gallery.md) · [workflow-repair](docs/workflow-repair.md) ·
-[3D 摆姿](docs/studio-pose.md)
+[3D 摆姿](docs/studio-pose.md) · [视频抽帧](docs/studio-frames.md)
 
 智能体与贡献者规则不在 `docs/` 里：根 [AGENTS.md](AGENTS.md) 只写跨层不变量与产品规则，
 `studio/`、`studio/web/`、`app/`、`tools/` 各有一份 `AGENTS.md` 写该层独有的规则。

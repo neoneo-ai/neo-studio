@@ -174,6 +174,19 @@ Neo Studio 独立页面（`web/studio/index.html`）的后端。素材 / 生图 
 请求体上限的那一档，桌面端服务的请求体上限也按这条抬到接口之上，不会先被 transport 挡成 413）。桥的页面侧实现是
 3d-pose-art 的 `src/neoBridge.js`，口径见 [studio-pose.md](studio-pose.md)。
 
+## frames.py — `/neo_frames/*`
+
+「视频抽帧」页后端：抽帧在浏览器里做，这里只有视频伺服与帧写盘；口径与用法见 [studio-frames.md](studio-frames.md)。
+
+| 方法    | 路由                    | 说明                                                                              |
+|---------|-------------------------|-----------------------------------------------------------------------------------|
+| GET     | `/neo_frames/video`     | 素材库那条视频的分段响应（`FileResponse`，浏览器 seek 靠它定位）；非视频 400      |
+| POST    | `/neo_frames/save`      | 一帧 PNG 写进 `output/Frames`，回 `{filename, subfolder, size}`，一条请求一帧     |
+
+视频必须回分段响应：`FileResponse` 带 `Accept-Ranges`，浏览器才会在反复 seek 时回读需要的字节；直接 `FileResponse`
+之外的整份回读会让 seek 落回开头，抽出来的帧全是片头那一帧。写盘落点在 `studio/gallery.py` 的 `Frames` 目录，
+与摆姿页的导出落点是同一条 output 路径口径。抽帧页与摆姿页不共享任何后端代码。
+
 ## workflow.py — `/neo_nodes/*`
 
 | 方法 | 路由 | 说明 |
@@ -362,6 +375,7 @@ LLM 模式与配置见 [llm.md](llm.md)，技能设计见 [skills.md](skills.md)
 | GET      | `/neo-studio`                                                                                                                                               | Studio 页面（桌面端同一份 `web/studio/index.html`）                                                                                                                 |
 | GET      | `/extensions/comfyui-neo-studio/*`                                                                                                                          | 前端静态文件                                                                                                                                                        |
 | GET      | `/neo-pose` `/neo_pose/*`                                                                                                                                   | 摆姿页跳转与桥接口；`/pose-dist/*` 与 `/models/*` 是摆姿包静态前缀（两端直接注册，不在能力表）                                                                                     |
+| GET/POST | `/neo_frames/video` `/neo_frames/save`                                                                                                                      | 抽帧页的视频伺服与帧落盘                                                                                                                                            |
 | GET/POST | `/neo_gallery/*` `/neo_bookmark/*`                                                                                                                          | 素材库与收藏（含删除 / 上传 / 打标 / OSS 同步）                                                                                                                     |
 | GET/POST | `/rs_prompts/skills` `load_skill` `save_skill` `delete_skill` `*_*_skill_file`                                                                              | 技能编辑                                                                                                                                                            |
 | POST     | `/rs_prompts/list_prompt_names`                                                                                                                             | @ 点名弹层的提示词候选（只扫数据根 `prompts/` 的名字与标签）                                                                                                        |
