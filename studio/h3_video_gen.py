@@ -187,9 +187,9 @@ def resolve_video_params(body: dict, cfg: dict, skip_model: bool = False) -> dic
     }
 
 
-# MiniMaxH3ReferenceToVideo 的参考槽只有被提示词里的 <Picture N>/<Video N>/<Audio N> 指代才会进条件。
-# 对照实验（tmp/l0_h3 的 G5）：vae 已接、图与参考视频都挂上，但提示词没有标签时，输出与完全不挂
-# 参考的基线逐帧相同——参考数量多少、vae 接没接都不影响，结果是零条件化。
+# MiniMaxH3ReferenceToVideo 的参考槽（autogrow 点号键 ref_images.ref_image_N）有值就进条件；
+# <Picture N>/<Video N>/<Audio N> 只说明这一路参考用来干什么，缺标签不影响条件化。补一行是为了给
+# 参考一个明确的语义角色：同 seed 下补与不补的画面构图一致，差别只在参考挂没挂上。
 _REFERENCE_NODE = "MiniMaxH3ReferenceToVideo"
 # (params 里的参考分组, 标签类型, 该类型在提示词里承担的作用)
 _REF_TAG_KINDS = (("ref_images", "Picture", "外观与空间结构"),

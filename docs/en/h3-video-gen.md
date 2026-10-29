@@ -206,11 +206,14 @@ bottom the panel opens upward, so main model / steps / "Done" never end up below
   declare every maximum slot.
 - A first-last-frame template with only one side degrades to I2VA / L2VA; with neither it reports "this skill
   needs reference images".
-- Prompts refer to references by number with `<Picture i>` / `<Video k>` / `<Audio j>`, and a reference only
-  conditions the model when the prompt names it. A supplied kind the prompt never names gets a binding line appended
-  before execution (the audit's per-kind 1-based numbering); prompts that already name their references are left
-  alone, and the first frame of the image / first-last skills needs no tag and gets none, because it binds through
-  the first-frame anchor rather than a reference slot.
+- A supplied reference conditions the model on its own: a filled `ref_images.ref_image_N` /
+  `ref_videos.ref_video_N` slot of `MiniMaxH3ReferenceToVideo` enters the conditioning whether or not the
+  prompt names it.
+- `<Picture i>` / `<Video k>` / `<Audio j>` says what a given reference is for, and measures as a small
+  difference. A supplied kind the prompt never names gets a binding line appended before execution (the
+  audit's per-kind 1-based numbering); prompts that already name their references are left alone, and the
+  first frame of the image / first-last skills needs no tag and gets none, because it binds through the
+  first-frame anchor rather than a reference slot.
 
 ### Runtime injection
 
