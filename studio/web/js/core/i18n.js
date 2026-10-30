@@ -665,6 +665,7 @@ const EN = {
     // ===== 素材库工具条 / 面包屑 =====
     "后退 (Back)": "Back",
     "前进 (Forward)": "Forward",
+    "重新扫描（刷新当前视图）": "Rescan (refresh this view)",
     "{seg}\n点击显示同级目录": "{seg}\nClick to show sibling folders",
     "上一级": "Up one level",
     "返回上级": "Back to the parent",

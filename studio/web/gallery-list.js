@@ -86,6 +86,24 @@ export class GalleryList {
         gallery.customDirSettingBtn = btn;
         return btn;
     }
+
+    createRefreshBtn(gallery) {
+        const btn = $el("button", {
+            className: "neo-gallery-nav-btn",
+            title: t("重新扫描（刷新当前视图）"),
+            textContent: "\u27f3",
+            onclick: async () => {
+                btn.disabled = true;
+                try {
+                    await gallery.refreshCurrent();
+                } finally {
+                    btn.disabled = false;
+                }
+            }
+        });
+        gallery.refreshBtn = btn;
+        return btn;
+    }
     // ====== Breadcrumb Navigation ======
 
     createBreadcrumbHome(gallery) {

@@ -232,8 +232,8 @@
 }
 
 /* 自定参数面板（挂在 chip 的浮出菜单里）：生图模型与 LoRA 两列自适应
-   （minmax 上限 320px：宽窗口也不会把一条下拉拉成整行宽），窄窗口自己掉成一列；
-   菜单壳自带边框与底色，面板只排内容 */
+   （下限 300px 决定几列，上限走 1fr：单列吃掉右栏整片余宽）。旧的 320px 上限
+   让单列只到 320px，LoRA 行里的模型下拉被压到 250px 左右，长模型名截断、强度与 ✕ 换行 */
 .neo-gallery-gm-model-box,
 .neo-gallery-edit-model-box {
     box-sizing: border-box;
@@ -244,13 +244,14 @@
 .neo-gallery-gm-model-box .rs-gen-model-section,
 .neo-gallery-edit-model-box .rs-gen-model-section {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 320px));
+    grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
     gap: 8px;
 }
 .neo-gallery-gm-model-box .rs-config-row,
 .neo-gallery-edit-model-box .rs-config-row {
     flex-direction: row;
     align-items: center;
+    flex-wrap: wrap;
     min-width: 0;
     gap: 8px;
 }
@@ -272,10 +273,17 @@
     flex: 1;
     min-width: 0;
 }
-/* LoRA 行 = 模型 + 强度 + ✕：列宽只有 320px，挤不下时让强度与删除换行，不裁控件 */
+/* LoRA 行 = 模型 + 强度 + ✕：窄列（掉成一列的窗口）挤不下时让强度与删除换行，不裁控件 */
 .neo-gallery-gm-model-box .rs-gen-lora-row,
 .neo-gallery-edit-model-box .rs-gen-lora-row {
     flex-wrap: wrap;
+}
+/* 「+ 添加 LoRA」与 LoRA 行同排时白吃掉约 84px，长模型名的下拉只剩 190px；
+   让它整行占位、内容靠左，下拉拿到列的余宽，按钮照旧贴在列表下边 */
+.neo-gallery-gm-model-box .rs-gen-lora-add,
+.neo-gallery-edit-model-box .rs-gen-lora-add {
+    flex: 0 0 100%;
+    width: fit-content;
 }
 /* chips 行：输入卡底行是一枚枚真 chip —— 胶囊按钮 + 上方浮出的菜单，见下面 .neo-gallery-gm-chip-btn。
    短窗口换行的 chip 会落到底行下方、跟着输入卡一起被折叠线切掉，所以底行永不换行 */
@@ -381,6 +389,13 @@
     min-width: 0;
     min-height: 0;
     overflow: auto;
+}
+/* 浮层不足 720px 宽时（窗口 < ~700px）双栏收成单列：右栏自定参数不再被 190~250px 的技能列挤到三百 px 以下，
+   LoRA 下拉拿到整幅宽度；技能清单落在第一行，自己滚 */
+@media (max-width: 700px) {
+    .neo-gallery-gm-skills-panel {
+        grid-template-columns: 1fr;
+    }
 }
 /* 面板底部「完成」：跨两栏。点技能行不关面板（要在右栏看该技能钉的主模型），点它才收起 */
 .neo-gallery-gm-panel-foot {

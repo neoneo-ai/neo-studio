@@ -13,6 +13,9 @@ library plus several user-defined directories.
 - **Breadcrumb navigation** - clear hierarchy across nested subdirectories, one click back to the parent.
 - **Forward / back** - next to the header title, move forward and back along your browsing trail (the browser
   Back follows the same trail; Alt+Left / Backspace go to the parent directory).
+- **Rescan** - the toolbar's ⟳ re-reads what is on disk: the current folder re-opens in place, the home and
+  bookmark views redraw from the fresh directory tree, and that click does not count as a navigation step, so
+  back still returns to where you stood before it.
 - **Sort by time** - sorted by file modification time, newest/oldest order switchable and remembered.
 - **Scroll position memory** - the browsing position of every directory is saved and restored in place when
   you return.

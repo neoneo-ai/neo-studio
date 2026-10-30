@@ -182,3 +182,9 @@ node --test --test-force-exit --test-timeout=180000 studio/tests/e2e/skill-manag
 - `prompt-width.e2e.mjs` — prompt node panel width: after creation, `setSize`, and restoring the width through
   workflow `configure`, every `prompt_ui` DOM widget width equals `node.size[0]` (LiteGraph's size setter does not
   fire `onResize`, so the plugin re-syncs in `onConfigure`).
+- `paint-panel-layout.e2e.mjs` — Paint text-to-image panel and chip popup layout invariants: the result area
+  absorbs the free space above the prompt card and progress / finished images grow upward from the card (content
+  starts from the container top when that space runs out, the start hint sits in the middle of it); the LoRA
+  dropdown in the popup's right column takes the column's remaining width with strength and ✕ staying on one row.
+  Pure frontend: injects `web/studio/style.css`, `web/gallery.css` and `web/prompts.css` into a DOM mirroring the
+  real page, no running ComfyUI required.

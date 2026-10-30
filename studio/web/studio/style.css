@@ -398,23 +398,26 @@ body {
     box-shadow: none;
 }
 .ns-paint-panel .neo-gallery-story-titlebar { display: none; }
-/* 两块面板共用一组贴底控件：结果与进度在上方按内容排、成品从上往下长，
-   输入卡靠 margin-top:auto 收到面板底边；技能与自定参数是输入卡里的 chip 点开的一层双栏浮层，
-   收起时不占面板一行，展开时从 chip 上方浮出 */
-.ns-paint-panel .neo-gallery-gm-composer { flex: none; margin-top: auto; }
+/* 两块面板共用一组贴底控件：输入卡与操作区按内容定高、贴在结果区下面；
+   技能与自定参数是输入卡里的 chip 点开的一层双栏浮层，收起时不占面板一行，展开时从 chip 上方浮出。
+   贴底靠结果区（.neo-gallery-cs-status）与画布吃满余隙，不再用 margin-top:auto 吊卡：
+   那条 auto 会把整段余隙吸走，结果区即使 flex:1 也长不出来，中间就空一片 */
+.ns-paint-panel .neo-gallery-gm-composer { flex: none; }
 .ns-paint-panel .neo-gallery-story-actions { flex: none; }
 /* 浮层从贴底 chip 往上开，头顶到面板上沿就是它的全部空间：62vh 的壳在矮窗口里够不到顶，
    按面板上方的实际空间收，超了让左栏技能自己滚 */
 .ns-paint-panel .neo-gallery-gm-chip-panel { max-height: min(62vh, calc(100vh - 240px)); }
 /* 输入框高度跟着窗口走：600px 高的窗口里 150px 固定值会吃掉四分之一屏，预览图没地方落 */
 .ns-paint-panel .neo-gallery-gm-quick-input { min-height: clamp(88px, 16vh, 150px); }
-/* 文生图结果区：只按内容长高，超出一屏自己滚，不把输入卡顶出底边 */
-.ns-paint-text .neo-gallery-cs-status { flex: none; min-height: 0; }
+/* 文生图结果区吃满输入卡上方的余隙：进度与成品贴着输入卡往上长，中间不再留一大片空白
+   （余隙原来被输入卡的 margin-top:auto 吸走，结果区 flex:1 拿不到空间）。
+   空档收在首 child 的 margin-top:auto 上：内容超出容器时它自动归零，照旧从顶部铺开，不会把上方内容裁成滚不动的死角；
+   起手提示（.neo-gallery-gm-idle）自带 margin:auto，两头都吃空档，落在那片余隙正中 */
+.ns-paint-text .neo-gallery-cs-status { flex: 1 1 auto; min-height: 0; }
+.ns-paint-text .neo-gallery-cs-status > :first-child { margin-top: auto; }
 .ns-paint-text .neo-gallery-gm-preview,
 .ns-paint-text .neo-gallery-cs-result { flex: none; max-height: 40vh; overflow: auto; }
-/* 起手提示吃满输入卡上方的空档垂直居中：中间舞台摘掉后那块空档整块露了出来，
-   16vh 的 padding-top 在宽栏里把字吊在半空、底下空一片，让它自己撑满空档才落在正中 */
-.ns-paint-text .neo-gallery-cs-status:has(.neo-gallery-gm-idle) { flex: 1 1 auto; min-height: 0; }
+/* 起手提示不再靠 16vh 的 padding-top 吊高：那块余隙现在由 flex 算，宽栏里居中也就不吊顶不贴输入卡 */
 .ns-paint-text .neo-gallery-gm-idle { margin: auto; padding-top: 0; }
 
 /* 图片编辑：预览按栏高缩放（弹窗那套 50vh / 90vh 在页内会把表单挤到折叠线以下、底部按钮被裁掉看不见），

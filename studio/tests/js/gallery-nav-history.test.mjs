@@ -1,4 +1,4 @@
-// Neo Gallery 顶部前进/后退按钮：导航历史栈、按钮禁用态、新导航截断前进分支、重挂载回到离开时的视图。
+// Neo Gallery 顶部工具条：前进/后退与重扫按钮、导航历史栈、按钮禁用态、新导航截断前进分支、重挂载回到离开时的视图。
 import test from "node:test";
 import assert from "node:assert/strict";
 import { resetEnv, clearRoutes, mockRoute, flush } from "./setup.mjs";
@@ -73,7 +73,7 @@ test("导航历史：新导航截断前进分支", async () => {
     assert.equal(gallery.navForwardBtn.disabled, true, "新导航后前进分支被截断");
 });
 
-test("头部渲染两个导航按钮，禁用态下点击不触发", async () => {
+test("头部渲染三颗工具条按钮（后退 / 前进 / 重扫），禁用态下点击不触发", async () => {
     resetEnv();
     clearRoutes();
     await loadNeoGallery();
@@ -81,9 +81,10 @@ test("头部渲染两个导航按钮，禁用态下点击不触发", async () =>
     document.body.appendChild(gallery.element);
 
     const btns = [...document.querySelectorAll(".neo-gallery-nav-btn")];
-    assert.equal(btns.length, 2);
+    assert.equal(btns.length, 3, "后退 / 前进 / 重扫三颗");
     assert.equal(btns[0].title, "后退 (Back)");
     assert.equal(btns[1].title, "前进 (Forward)");
+    assert.equal(btns[2].title, "重新扫描（刷新当前视图）", "重扫紧跟在导航按钮后面");
 
     let called = 0;
     gallery.navigateHistory = async () => { called += 1; return false; };
@@ -91,6 +92,39 @@ test("头部渲染两个导航按钮，禁用态下点击不触发", async () =>
     btns[0].click();
     await flush();
     assert.equal(called, 0, "禁用按钮点击不应触发导航");
+});
+
+test("重扫按钮：重进当前目录，刷新期间禁用自己", async () => {
+    resetEnv();
+    clearRoutes();
+    await loadNeoGallery();
+    const gallery = makeGallery();
+    document.body.appendChild(gallery.element);
+
+    const btn = [...document.querySelectorAll(".neo-gallery-nav-btn")][2];
+    gallery.currentView = { mode: "directory", source: "Output", categoryPath: ["a"] };
+    const calls = [];
+    gallery.showDirectoryStructure = async (src, segs) => { calls.push([src, segs, btn.disabled]); };
+    btn.click();
+    await flush();
+    assert.deepEqual(calls, [["Output", ["a"], true]], "刷的是当前目录，且刷新期间按钮禁用");
+    assert.equal(btn.disabled, false, "重扫完成后按钮恢复可点");
+});
+
+test("首页重扫：重读目录树再重绘，导航恢复标记复位", async () => {
+    resetEnv();
+    clearRoutes();
+    await loadNeoGallery();
+    const gallery = makeGallery();
+    document.body.appendChild(gallery.element);
+
+    gallery.currentView = { mode: "categories", source: null, categoryPath: [] };
+    const calls = [];
+    gallery.loadGallery = async () => { calls.push(["load", gallery._navRestoring]); };
+    gallery.list.sortAndDisplayImages = async () => { calls.push(["draw", gallery._navRestoring]); };
+    await gallery.refreshCurrent();
+    assert.deepEqual(calls, [["load", true], ["draw", true]], "先重读目录树再重绘，全程不算一次导航");
+    assert.equal(gallery._navRestoring, false, "刷新完把导航恢复标记交回去");
 });
 
 test("重挂载回到离开时的视图：侧栏 tab 重画不得把二级目录拽回首页", async () => {

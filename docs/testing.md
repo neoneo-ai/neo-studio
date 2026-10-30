@@ -140,3 +140,7 @@ node --test --test-force-exit --test-timeout=180000 studio/tests/e2e/skill-manag
 - `prompt-width.e2e.mjs` — prompt 节点面板宽度：创建、`setSize`、工作流 `configure` 还原宽度后，
   `prompt_ui` DOM widget 宽度都等于 `node.size[0]`（LiteGraph 的 size setter 不触发 `onResize`，
   插件在 `onConfigure` 补同步）。
+- `paint-panel-layout.e2e.mjs` — 绘画页文生图面板与 chip 浮层的布局不变量：结果区吃掉输入卡上方的余隙、
+  进度与成品贴着输入卡往上长（空档不足时内容从容器顶部铺开、起手提示落在那片余隙正中）；浮层右栏的
+  LoRA 下拉拿到列的余宽，强度与 ✕ 不掉行。纯前端：注入 `web/studio/style.css`、`web/gallery.css`、
+  `web/prompts.css` 与真实同构 DOM，不需要 ComfyUI 在跑。

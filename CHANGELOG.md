@@ -4,6 +4,23 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **The asset library toolbar has a rescan control.** Files written by an external run, a model download, or a
+  hand-copied folder did not show up without a full page reload: the toolbar now carries a **⟳** (Rescan) button
+  beside back / forward. It re-reads the listing on the spot - the current folder is re-opened in place, the home
+  and bookmark views redraw from a fresh directory tree - and the click does not add a navigation entry, so back
+  still returns to where you were before.
+
+- **The Paint page's result sits against the prompt card.** The text-to-image result area grew only from its own
+  content while the card was pinned to the panel bottom, so a finished image left a full blank band between it and
+  the prompt box. The result area now fills the space above the card and anchors its content to the bottom edge,
+  so progress and finished images grow upward from the card; the start hint still centres itself.
+
+- **The LoRA dropdown keeps the whole column in the chip's parameter panel.** The 技能 / 自定参数 popup capped each
+  column at 320px, so a single column squeezed the LoRA model dropdown to roughly 250px - long model names were
+  truncated and the strength field plus the ✕ wrapped onto their own line. Columns now follow the panel width, the
+  **+ 添加 LoRA** button takes its own line under the list instead of eating the row's width, and a popup under
+  720px wide stacks its two columns into one.
+
 - **The pose panel applies a pose in one click.** Picking a preset used to be a two-step act: the dropdown only
   filled itself, and the pose had to be applied with a separate **套用预设** (Apply Preset) button - the same second
   step the pose library had, where clicking an entry only marked it selected and **载入姿态** (Load Pose) did the

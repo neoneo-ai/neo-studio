@@ -145,15 +145,17 @@ export class NeoGallery {
 
         const customDirBtn = this.list.createCustomDirSettingBtn(this);
         const navGroup = this.list.createNavButtons(this);
+        const refreshBtn = this.list.createRefreshBtn(this);
 
         // Main content area
         this.accordion = $el("div", { className: "neo-gallery-accordion" });
 
-        // 头部一条粘性工具条：前进后退 / + 目录 / 面包屑 / 尺寸滑杆 / 搜索 / 生成素材
+        // 头部一条粘性工具条：前进后退 / 重扫 / + 目录 / 面包屑 / 尺寸滑杆 / 搜索 / 生成素材
         // 全塞进同一块，宽宿主（桌面素材页）排成一行，窄侧栏自动换行；样式见 .neo-gallery-topbar
         this.element = $el("div", { id: this.elementId, className: "neo-gallery-panel" }, [
             $el("div", { className: "neo-gallery-topbar" }, [
                 navGroup,
+                refreshBtn,
                 customDirBtn,
                 $el("div", {
                     id: "neo-gallery-breadcrumb",
@@ -474,6 +476,25 @@ export class NeoGallery {
             this._navRestoring = false;
         }
         return true;
+    }
+
+    /**
+     * 顶栏「⟳」：重读盘上的文件并重绘当前视图。同视图重进不算一次导航 ——
+     * _navRestoring 挡住 pushState 与导航入栈，免得刷新一次就多一条重复条目。
+     */
+    async refreshCurrent() {
+        const view = this.currentView;
+        this._navRestoring = true;
+        try {
+            if (view.mode === 'directory' && view.source) {
+                await this.showDirectoryStructure(view.source, view.categoryPath || []);
+            } else {
+                await this.loadGallery();
+                await this.list.sortAndDisplayImages();
+            }
+        } finally {
+            this._navRestoring = false;
+        }
     }
 
     // 每个宿主各记自己停在哪个目录，挂上时恢复它记的那个（applyView）。
