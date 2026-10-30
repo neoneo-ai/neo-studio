@@ -4,6 +4,11 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **The Studio desktop page keeps loading on older WebKit browsers.** Some macOS WebKit
+  builds expose `crypto` without `crypto.randomUUID`, which crashed Studio shell startup
+  with only the top bar visible. The client id generator now falls back to
+  `crypto.getRandomValues`, and node instance UID generation uses the same fallback.
+
 - **The desktop launcher now runs on macOS.** Windows remains the full local desktop path
   (ComfyUI spawning, Job Object cleanup, WebView2 window controls and `%APPDATA%` fallback).
   macOS v1 ships the remote ComfyUI path, uses the native title bar by default, and splits the

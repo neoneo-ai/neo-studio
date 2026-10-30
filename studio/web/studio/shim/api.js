@@ -3,7 +3,21 @@
 // 断线重连后补发 "reconnected"；这里照同一契约实现，web/ 模块无需改动。
 import { resolve, wsUrl } from "./route.js";
 
-const clientId = crypto.randomUUID();
+function newClientId() {
+    // WebKit / non-secure http origin may not expose crypto.randomUUID; the
+    // ComfyUI client id only needs to be unique enough for the websocket bridge.
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+        return crypto.randomUUID();
+    }
+    if (typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function") {
+        const bytes = crypto.getRandomValues(new Uint8Array(16));
+        const hex = [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+        return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+    }
+    return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+const clientId = newClientId();
 const listeners = new Map();
 
 // 409 {offline:true} = 桌面端服务不认的接口（要 ComfyUI 执行队列）：广播给页面统一提示，

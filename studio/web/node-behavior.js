@@ -23,6 +23,16 @@ function resetQuickInputConsumed(node) {
     if (node?.properties) node.properties.rs_quick_input_used = false;
 }
 
+function randomHex() {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+        return crypto.randomUUID().replace(/-/g, "");
+    }
+    if (typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function") {
+        return [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, "0")).join("");
+    }
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+}
+
 /**
  * 获取实例 UID
  */
@@ -34,7 +44,7 @@ function getInstanceUid(node) {
     if (uidWidget?.value) {
         return uidWidget.value;
     }
-    return 'rs_inst_' + crypto.randomUUID().replace(/-/g, '');
+    return 'rs_inst_' + randomHex();
 }
 
 /**
