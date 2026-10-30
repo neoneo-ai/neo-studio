@@ -75,6 +75,10 @@ tools\build_studio_exe.ps1 -Mode both -Sign -CertThumbprint <thumbprint>   # sig
 tools\build_studio_exe.ps1 -Notarize -AppleTeamId <TeamID>          # macOS notarytool (macOS only)
 tools\build_studio_exe.ps1 -Publish                                  # comfy node publish
 
+# macOS remote-only packaging: PyInstaller .app, output tools/Neo-Studio.app
+# Requires a build-time PyInstaller dependency; run from the repository root
+bash tools/build_studio_mac.sh
+
 # Source install of the kernel plugin: code and built-in presets only, writes the
 # configs/data_root.json data-root pointer, never deletes anything in the target directory
 # The script is UTF-8 without BOM, run it with pwsh (PowerShell 7); Windows PowerShell 5.1
@@ -102,6 +106,11 @@ The window and taskbar icon is the clapperboard `web/neo-studio.ico`, generated 
 
 The default is `both`, so a tag attaches both forms; for a manual dispatch that builds only one, type
 `onefile` or `onedir` into `mode`.
+
+The macOS remote-only `.app` is not published from GitHub Actions yet; build it locally with
+`bash tools/build_studio_mac.sh`, and the artifact lives at `tools/Neo-Studio.app`. First launch may show a
+Gatekeeper prompt; for an unsigned local build, use right-click → Open first, or
+`xattr -dr com.apple.quarantine tools/Neo-Studio.app`.
 
 The assets are unsigned, so expect a SmartScreen prompt on first run; signing and notarization stay
 local (`-Sign` / `-Notarize`), since CI has no machine certificate and cannot run the macOS path.

@@ -37,7 +37,7 @@ carry their own `AGENTS.md` with the rules specific to that layer.
 - **API routes**: the gallery family and `llm.py` (LLM configuration / title extraction) carry their own
   `web.RouteTableDef` and are mounted onto `PromptServer.instance.routes` by `__init__.py` (the remaining modules
   still register with direct decorators); the list is in [docs/en/api-routes.md](docs/en/api-routes.md).
-- **Studio desktop**: `app/studio_app.py` (pywebview + WebView2) starts ComfyUI and hosts the window; the
+- **Studio desktop**: `app/studio_app.py` (Windows: pywebview + WebView2 full path; macOS v1: remote-mode window) starts or attaches ComfyUI and hosts the window; the
   desktop-side service reuses the same handlers on the ComfyUI port +3 to run the offline Studio
   (`app/studio_server.py` plus the `app/studio_caps.py` capability table). Startup sequence, guide page, frameless
   window and dragging, close and process reaping, single-instance lock, plugin sync, cache and logs:

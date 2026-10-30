@@ -4,6 +4,16 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **The desktop launcher now runs on macOS.** Windows remains the full local desktop path
+  (ComfyUI spawning, Job Object cleanup, WebView2 window controls and `%APPDATA%` fallback).
+  macOS v1 ships the remote ComfyUI path, uses the native title bar by default, and splits the
+  platform-specific plumbing through a shared child-spawn helper: Windows uses the named mutex
+  singleton, `NO_WINDOW` child spawning, Win32 alerts and `%APPDATA%`; macOS uses `flock`,
+  `start_new_session`, `osascript`, `~/Library/Application Support` and Cocoa. Settings now expose
+  `remote_ok` / `remote_down`, hide the frameless toggle on macOS, and desktop tests skip
+  Windows-only behavior on macOS while covering POSIX process behavior. macOS remote-only `.app`
+  packaging lives in `tools/build_studio_mac.sh` and produces `tools/Neo-Studio.app`.
+
 - **The asset library toolbar has a rescan control.** Files written by an external run, a model download, or a
   hand-copied folder did not show up without a full page reload: the toolbar now carries a **⟳** (Rescan) button
   beside back / forward. It re-reads the listing on the spot - the current folder is re-opened in place, the home

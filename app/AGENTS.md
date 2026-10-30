@@ -22,7 +22,7 @@ Python 写法（SPDX 头、原子写配置、`_json_safe()`、注释纪律）与
   `comfy_cors()`: ComfyUI's `--enable-cors-header` replaces its origin_only middleware, so
   without the flag the page's cross-origin requests are 403, and the flag is never given for
   LAN listen or remote mode, where the navigation path stays.
-- The single-instance lock is a named mutex that lives until the process
+- The single-instance lock is a named mutex on Windows and a `flock` on macOS, and it lives until the process
   exits. Do not implement it as a port listener: a listener on 8189 shows up in
   `netstat` and reads to users as a second ComfyUI that survives the window close.
 - Closing the window stores the geometry and reaps the ComfyUI child the app started.
@@ -30,9 +30,9 @@ Python 写法（SPDX 头、原子写配置、`_json_safe()`、注释纪律）与
   app never leaves an orphan ComfyUI behind. That covers the child this session spawned;
   a child an earlier session spawned and an interrupted teardown left behind is claimed
   through the `data/comfy_child.json` marker (pid + port, the port re-checked before the
-  kill), while a ComfyUI the user started has no marker and is never stopped. `kill_pid()`
-  declares `OpenProcess`'s `restype` explicitly, or the 64-bit handle is truncated and the
-  kill fails silently.
+  kill), while a ComfyUI the user started has no marker and is never stopped. On Windows,
+  `kill_pid()` declares `OpenProcess`'s `restype` explicitly, or the 64-bit handle is truncated and the
+  kill fails silently. On macOS, `kill_pid()` uses POSIX signals and remote mode does not reap processes.
 - `pythonw` has no console and its `stderr` is `None`. A console
   logging handler interrupts window creation, so desktop logging goes to
   `data/studio_desktop.log` and the pywebview handlers stay console-free.

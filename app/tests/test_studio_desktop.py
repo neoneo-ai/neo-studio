@@ -22,6 +22,8 @@ sys.path.insert(0, str(_APP_DIR))
 
 import studio_app as app
 
+WINDOWS_ONLY = unittest.skipUnless(app.IS_WINDOWS, "Windows-only desktop behavior")
+
 
 class FrozenPathTests(unittest.TestCase):
     def test_source_layout(self):
@@ -32,7 +34,8 @@ class FrozenPathTests(unittest.TestCase):
         self.assertEqual(app.state_dir(), _REPO_ROOT / "data")
 
     def test_studio_icon_is_a_bundled_resource(self):
-        self.assertEqual(app.STUDIO_ICON, _PLUGIN_DIR / "web" / "neo-studio.ico")
+        ext = ".icns" if app.IS_MAC else ".ico"
+        self.assertEqual(app.STUDIO_ICON, _PLUGIN_DIR / "web" / ("neo-studio" + ext))
 
     def test_state_dir_prefers_exe_side_data(self):
         # exe 可以放在任意可写目录：状态目录就在它旁边的 data/
@@ -43,17 +46,25 @@ class FrozenPathTests(unittest.TestCase):
                              exe_dir / "data")
 
     def test_state_dir_falls_back_to_appdata(self):
-        # exe 旁的 data/ 写不出来（那里是个文件）：退到 %APPDATA%\Neo Studio
+        # exe 旁的 data/ 写不出来（那里是个文件）：按平台回退
         with tempfile.TemporaryDirectory() as tmp:
             exe_dir = pathlib.Path(tmp) / "exe"
             exe_dir.mkdir()
             (exe_dir / "data").write_text("x", encoding="utf-8")
             appdata = pathlib.Path(tmp) / "appdata"
-            self.assertEqual(app.pick_state_dir(exe_dir, str(appdata)), appdata / app.APP_NAME)
-            self.assertTrue((appdata / app.APP_NAME).is_dir())
+            if app.IS_MAC:
+                home = pathlib.Path(tmp) / "home"
+                with patch.object(app.Path, "home", lambda: home):
+                    self.assertEqual(app.pick_state_dir(exe_dir, str(appdata)),
+                                     home / "Library" / "Application Support" / app.APP_NAME)
+                    self.assertTrue((home / "Library" / "Application Support" / app.APP_NAME).is_dir())
+            else:
+                self.assertEqual(app.pick_state_dir(exe_dir, str(appdata)), appdata / app.APP_NAME)
+                self.assertTrue((appdata / app.APP_NAME).is_dir())
 
 
 class ResolveTests(unittest.TestCase):
+    @WINDOWS_ONLY
     def test_root_default_is_comfyui(self):
         # 目标布局：Neo-Studio 与 ComfyUI 内核并排放在同一个工作区里
         self.assertEqual(app.resolve_root(""), _COMFY_ROOT)
@@ -165,9 +176,12 @@ class ProbeTests(unittest.TestCase):
         self.assertEqual(popen.call_args[0][0],
                          [str(pathlib.Path("D:/python/python.exe")), str(pathlib.Path("D:/ComfyUI") / "main.py"),
                           "--port", "8188"])
-        # 桌面端用 pythonw 启动时没有控制台，子进程必须压制新建的控制台窗口
-        self.assertEqual(popen.call_args.kwargs["creationflags"], app.NO_WINDOW)
-        # CREATE_NO_WINDOW 下不重定向就等于把启动报错丢进黑洞：必须落到 data/comfy_run.log
+        # Windows 压制控制台窗口；macOS 新会话给后续进程组收尾留出余地
+        if app.IS_WINDOWS:
+            self.assertEqual(popen.call_args.kwargs["creationflags"], app.NO_WINDOW)
+        else:
+            self.assertTrue(popen.call_args.kwargs["start_new_session"])
+        # 启动报错不能丢进黑洞：必须落到 data/comfy_run.log
         self.assertIs(popen.call_args.kwargs["stderr"], app.subprocess.STDOUT)
         self.assertIn("comfy_run.log", popen.call_args.kwargs["stdout"].name)
         popen.call_args.kwargs["stdout"].close()
@@ -226,14 +240,32 @@ class PortOwnerTests(unittest.TestCase):
                "  TCP    [::1]:8188             [::]:0                 LISTENING       12345\n"
                "  TCP    127.0.0.1:8189         127.0.0.1:52000        ESTABLISHED   999\n")
 
+    @WINDOWS_ONLY
     def test_port_owner_from_netstat(self):
         with patch.object(app.subprocess, "run", lambda *a, **k: SimpleNamespace(stdout=self.NETSTAT)):
             self.assertEqual(app.port_owner(8188), 12345)
 
+    @WINDOWS_ONLY
     def test_port_owner_missing_is_zero(self):
         with patch.object(app.subprocess, "run", lambda *a, **k: SimpleNamespace(stdout=self.NETSTAT)):
             self.assertEqual(app.port_owner(8187), 0)
 
+    def test_port_owner_posix_lsof(self):
+        with patch.object(app.shutil, "which", lambda _: "lsof"), \
+             patch.object(app.subprocess, "run", lambda *a, **k: SimpleNamespace(stdout="12345\n")):
+            self.assertEqual(app.port_owner(8188), 12345)
+
+    def test_port_owner_posix_missing_is_zero(self):
+        with patch.object(app.shutil, "which", lambda _: "lsof"), \
+             patch.object(app.subprocess, "run", lambda *a, **k: SimpleNamespace(stdout="")):
+            self.assertEqual(app.port_owner(8187), 0)
+
+    def test_port_owner_posix_without_lsof_is_zero(self):
+        with patch.object(app.shutil, "which", lambda _: None), \
+             patch.object(app.subprocess, "run", _no_local_path):
+            self.assertEqual(app.port_owner(8188), 0)
+
+    @WINDOWS_ONLY
     def test_kill_pid_uses_kernel32(self):
         # 必须用 PROCESS_TERMINATE(0x0001)：0x1000 拿到的句柄没有终止权，TerminateProcess 会失败
         calls = []
@@ -244,12 +276,14 @@ class PortOwnerTests(unittest.TestCase):
             self.assertTrue(app.kill_pid(4321))
         self.assertEqual(calls, [("open", (0x0001, False, 4321)), ("term", 7), ("close", 7)])
 
+    @WINDOWS_ONLY
     def test_kill_pid_without_handle_reports_failure(self):
         # 没有权限时 OpenProcess 返回 0，必须报失败让桌面端日志说清原因
         kernel32 = SimpleNamespace(OpenProcess=lambda *a: 0)
         with patch.object(app, "k32", kernel32):
             self.assertFalse(app.kill_pid(4321))
 
+    @WINDOWS_ONLY
     def test_pid_alive_checks_openprocess(self):
         calls = []
         kernel32 = SimpleNamespace(OpenProcess=lambda *a: calls.append(a) or 7,
@@ -259,6 +293,30 @@ class PortOwnerTests(unittest.TestCase):
         self.assertEqual(calls, [(0x1000, False, 4321), ("close", 7)])
         dead = SimpleNamespace(OpenProcess=lambda *a: 0)
         with patch.object(app, "k32", dead):
+            self.assertFalse(app.pid_alive(4321))
+
+    def test_kill_pid_posix_uses_sigkill(self):
+        calls = []
+        with patch.object(app.os, "kill", lambda pid, sig: calls.append((pid, sig))):
+            self.assertTrue(app.kill_pid(4321))
+        self.assertEqual(calls, [(4321, app.signal.SIGKILL)])
+
+    def test_kill_pid_posix_reports_failure_for_missing_pid(self):
+        def boom(pid, sig):
+            raise ProcessLookupError()
+        with patch.object(app.os, "kill", boom):
+            self.assertFalse(app.kill_pid(4321))
+
+    def test_pid_alive_posix_uses_signal_zero(self):
+        calls = []
+        with patch.object(app.os, "kill", lambda pid, sig: calls.append((pid, sig))):
+            self.assertTrue(app.pid_alive(4321))
+        self.assertEqual(calls, [(4321, 0)])
+
+    def test_pid_alive_posix_reports_dead_process(self):
+        def boom(pid, sig):
+            raise ProcessLookupError()
+        with patch.object(app.os, "kill", boom):
             self.assertFalse(app.pid_alive(4321))
 
 
@@ -271,6 +329,7 @@ class ComfyJobTests(unittest.TestCase):
             popen.call_args.kwargs["stdout"].close()
         self.assertIs(job.call_args[0][0], popen.return_value)
 
+    @WINDOWS_ONLY
     def test_job_close_kills_the_child(self):
         # 真实进程 + 真实作业：关句柄就是桌面端进程退出时 OS 收句柄的那一步，子进程必须跟着没
         proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(120)"],
@@ -408,7 +467,8 @@ class FolderPickerTests(unittest.TestCase):
             self.assertEqual(app.pick_python_file("D:\\python"), "D:\\python\\python.exe")
         self.assertEqual(calls[0]["dialog_type"], app.FileDialog.OPEN)
         self.assertEqual(calls[0]["directory"], "D:\\python")
-        self.assertEqual(calls[0]["file_types"], app.PY_FILE_TYPES)
+        expected = app.PY_FILE_TYPES if app.IS_WINDOWS else ("可执行文件", "*.python*")
+        self.assertEqual(calls[0]["file_types"], expected)
 
     def test_pick_folder_starts_at_given_path(self):
         """打开时定位到传进来的目录，别每次从桌面根开始翻。"""
@@ -488,11 +548,21 @@ class SplashPageTests(unittest.TestCase):
 class AlertTests(unittest.TestCase):
     def test_alert_uses_message_box(self):
         calls = []
-        user32 = SimpleNamespace(MessageBoxW=lambda *a: calls.append(a))
-        with patch.object(app.ctypes, "windll", SimpleNamespace(user32=user32)):
-            app.alert("未找到 python")
-        self.assertEqual(calls[0][1], "未找到 python")
-        self.assertEqual(calls[0][2], "Neo Studio")
+        if app.IS_WINDOWS:
+            user32 = SimpleNamespace(MessageBoxW=lambda *a: calls.append(a))
+            with patch.object(app.ctypes, "windll", SimpleNamespace(user32=user32)):
+                app.alert("未找到 python")
+            self.assertEqual(calls[0][1], "未找到 python")
+            self.assertEqual(calls[0][2], "Neo Studio")
+        else:
+            def fake_run(cmd, timeout=5, stdout=None, stderr=None):
+                calls.append(cmd)
+                return SimpleNamespace(returncode=0)
+
+            with patch.object(app.subprocess, "run", fake_run):
+                app.alert("未找到 python")
+            self.assertIn("/usr/bin/osascript", calls[0])
+            self.assertIn("未找到 python", " ".join(calls[0]))
 
     def test_missing_pywebview_alerts_and_exits(self):
         with patch.object(app, "webview", None), patch.object(app, "alert") as alert, \
@@ -567,8 +637,9 @@ class WebCacheTests(unittest.TestCase):
             self.assertTrue((profile / "EBWebView" / "Default" / "Local Storage").exists())
 
 
+@WINDOWS_ONLY
 class SingletonTests(unittest.TestCase):
-    """单实例锁是命名互斥体：句柄活着 = 锁被占，CloseHandle = 释放。测试用假 kernel32。"""
+    """单实例锁是 Windows 命名互斥体：句柄活着 = 锁被占，CloseHandle = 释放。测试用假 kernel32。"""
     class _K32:
         def __init__(self):
             self.names = {}
@@ -625,6 +696,44 @@ class SingletonTests(unittest.TestCase):
         src = inspect.getsource(app.singleton)
         self.assertNotIn("bind", src)
         self.assertIn("CreateMutexW", src)
+
+
+@unittest.skipUnless(app.IS_MAC, "macOS flock singleton")
+class MacSingletonTests(unittest.TestCase):
+    """macOS 第一版单实例锁是数据目录里的 flock；第二个实例拿不到锁就应当退出。"""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        tmp = pathlib.Path(self._tmp.name)
+        self.lock = tmp / "single_instance.lock"
+        for attr, value in (("STATE", tmp), ("SINGLETON_LOCK_FILE", self.lock), ("SINGLETON_HANDLE", None)):
+            patcher = patch.object(app, attr, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def tearDown(self):
+        handle = getattr(app, "SINGLETON_HANDLE", None)
+        if handle is not None:
+            app.release_singleton()
+        self._tmp.cleanup()
+
+    def test_second_instance_exits(self):
+        first = app.singleton()
+        self.assertIsNotNone(first)
+        self.assertTrue(self.lock.exists())
+        app.SINGLETON_HANDLE = first
+        self.addCleanup(app.release_singleton)
+        self.assertIsNone(app.singleton())
+
+    def test_release_frees_the_lock_for_a_relaunch(self):
+        first = app.singleton()
+        self.assertIsNotNone(first)
+        app.SINGLETON_HANDLE = first
+        app.release_singleton()
+        self.assertIsNone(app.SINGLETON_HANDLE)
+        second = app.singleton()
+        self.assertIsNotNone(second)
+        app.SINGLETON_HANDLE = second
 
 
 class _Event:
@@ -696,6 +805,7 @@ class _SyncThread(threading.Thread):
 
 
 
+@WINDOWS_ONLY
 class StudioDesktopTests(unittest.TestCase):
     def setUp(self):
         # 假 pid 的关窗记录不能写进真实桌面端日志 data/studio_desktop.log
@@ -1395,6 +1505,7 @@ class StudioDesktopTests(unittest.TestCase):
         self.assertEqual(sum(1 for line in logs if line.startswith("page loaded ")), 2)
 
 
+@WINDOWS_ONLY
 class MainWindowTests(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
@@ -1905,6 +2016,7 @@ class LauncherConfigTests(unittest.TestCase):
                 self.assertEqual(app.load_config()["frameless"], False)
                 self.assertEqual(app.load_config()["remote"], "http://192.168.0.20:8188")
 
+    @WINDOWS_ONLY
     def test_set_frameless_keeps_the_rest_of_the_config(self):
         # 无边框开关只改自己那一项：根目录 / 解释器 / 端口不能被它带跑
         with tempfile.TemporaryDirectory() as tmp:
@@ -1926,17 +2038,18 @@ class LauncherConfigTests(unittest.TestCase):
             with patch.object(app, "CONFIG_FILE", pathlib.Path(tmp) / "none.json"):
                 self.assertEqual(app.load_config(), {})
 
-    def test_config_without_frameless_defaults_to_borderless(self):
-        # 无边框是新默认：老配置没这一项也走无边框，用户在设置里勾掉才回系统标题栏
+    def test_config_without_frameless_defaults_by_platform(self):
+        # Windows 默认无边框；macOS 第一版用原生标题栏。老配置没这一项也要按平台落默认
         with tempfile.TemporaryDirectory() as tmp:
             cfg = pathlib.Path(tmp) / "launcher_config.json"
             cfg.write_text(json.dumps({"version": app.CONFIG_VERSION, "root": "D:/ComfyUI"}), encoding="utf-8")
             with patch.object(app, "CONFIG_FILE", cfg):
                 loaded = app.load_config()
                 self.assertNotIn("frameless", loaded)
-                self.assertTrue(app.StudioDesktop("u", None, 8188, pathlib.Path("D:/ComfyUI"),
-                                                launcher=loaded).frameless)
+                self.assertEqual(app.StudioDesktop("u", None, 8188, pathlib.Path("D:/ComfyUI"),
+                                                   launcher=loaded).frameless, not app.IS_MAC)
 
+    @WINDOWS_ONLY
     def test_root_priority_cli_then_config_then_plugin(self):
         with tempfile.TemporaryDirectory() as tmp:
             cfg = pathlib.Path(tmp) / "launcher_config.json"
@@ -2284,6 +2397,7 @@ class StartupStateTests(unittest.TestCase):
         self.assertIn("pip install -r", msg)
         self.assertIn(str(self.plugin / "requirements.txt"), msg)
 
+    @WINDOWS_ONLY
     def test_deps_probe_accepts_the_real_interpreter(self):
         # 真数据：跑测试的这个 ComfyUI 解释器必须过探测（ComfyUI 自带 yaml / Pillow / aiohttp）
         self.assertTrue(app.deps_ok(pathlib.Path(sys.executable)))

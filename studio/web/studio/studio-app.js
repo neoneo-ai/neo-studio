@@ -1359,6 +1359,8 @@ function createLauncherPanel() {
 
     const STATE_TEXT = {
         ok: "就绪",
+        remote_ok: "远程就绪",
+        remote_down: "远程不可达",
         bad_root: "根目录无效",
         missing_python: "找不到 Python",
         deps_missing: "缺少插件依赖",
@@ -1412,7 +1414,7 @@ function createLauncherPanel() {
         listenSel.value = key;
         renderLanHint();
         status.textContent = t(STATE_TEXT[s.state] || s.state || "") + (s.error ? ` · ${s.error}` : "");
-        status.classList.toggle("ns-launch-bad", !!s.state && s.state !== "ok");
+        status.classList.toggle("ns-launch-bad", !!s.state && s.state !== "ok" && s.state !== "remote_ok");
         info.textContent = tf("插件 {plugin} · 状态 {state} · {mode}", {
             plugin: s.plugin_dir, state: s.state_dir, mode: t(s.portable ? "便携模式" : "插件内运行"),
         });
@@ -1420,6 +1422,7 @@ function createLauncherPanel() {
         fixBtn.style.display = s.state === "install_failed" ? "" : "none";
         framelessIn.checked = !!s.frameless;
         devIn.checked = !!s.dev_mode;
+        framelessRow.style.display = s.platform === "mac" ? "none" : "";
     }
 
     // 动作 → 桌面端 js_api 上的方法名：桥在就直接问桌面端，不在才走桌面端服务的 HTTP 路由
@@ -1508,6 +1511,9 @@ function createLauncherPanel() {
     startBtn.addEventListener("click", () => { startBtn.disabled = true; startKernel(); });
     stopBtn.addEventListener("click", () => { stopBtn.disabled = true; stopKernel(); });
 
+    const framelessRow = row(t("无边框窗口"), t(TIPS.frameless), framelessIn);
+    const devRow = row(t("开发模式"), t(TIPS.dev), devIn);
+
     const el = $el("div", { className: "ns-settings-section" }, [
         $el("h3", { textContent: t("启动设置") }),
         $el("div", { className: "ns-kernel" }, [
@@ -1520,8 +1526,8 @@ function createLauncherPanel() {
         portRow,
         listenRow,
         remoteRow,
-        row(t("无边框窗口"), t(TIPS.frameless), framelessIn),
-        row(t("开发模式"), t(TIPS.dev), devIn),
+        framelessRow,
+        devRow,
         $el("div", { className: "ns-launch-actions" }, [applyBtn, depsBtn, fixBtn]),
         lanHint,
         info,

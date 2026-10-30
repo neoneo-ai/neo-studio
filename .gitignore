@@ -16,6 +16,8 @@ tmp/
 # 打包产物与离线工具输出
 /tools/neo-studio.exe
 /tools/neo-studio/
+/tools/Neo-Studio.app
+/Neo-Studio.spec
 /tools/output/
 /tools/data/
 

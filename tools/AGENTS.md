@@ -9,8 +9,8 @@ exe 里随包的插件副本只取 `studio/` 的跟踪文件，`tools/` 不在�
 
 - 素材管线：`build_gallery_presets.py` → `gallery_preprocess.py` → `gallery_deploy_oss.py`，
   配套 `format_tags.py`、`profile_gallery.py`。
-- 打包与安装：`build_studio_exe.ps1`（`Neo-Studio.spec`）、`install_plugin.ps1`、
-  `mcp_setup.ps1`。
+- 打包与安装：`build_studio_exe.ps1`（`Neo-Studio.spec`）、`build_studio_mac.sh`
+  （macOS remote-only `.app`）、`install_plugin.ps1`、`mcp_setup.ps1`。
 - 摆姿包：`build_pose_package.ps1` 生成随包最小副本 `studio/pose_dist/`，`sync_pose_dist.ps1`
   把全量产物同步进 `<数据根>/pose/dist/`，`test_pose_package.ps1` 复查随包那份（发货清单逐文件核对）。
 - 取证与性能：`e2e_ref_grid.mjs`、`bench-director-timeline.mjs`、`capture-gif.mjs`、
@@ -56,6 +56,7 @@ webp 缩略图与 `index.json`，`gallery_deploy_oss.py` 按 `OSS_ACCESS_KEY_ID`
 
 ```
 pwsh tools\build_studio_exe.ps1 -DryRun          # 只验打包清单，不出 exe
+bash tools/build_studio_mac.sh                   # macOS remote-only .app；需 PyInstaller
 pwsh tools\build_pose_package.ps1 -Source <3d-pose-art 仓库根> -Build
 pwsh tools\test_pose_package.ps1                 # 随包摆姿包自检：清单哈希、白名单、体积上限
 python tools\gallery_preprocess.py --output <dir> --dirs <dir1>

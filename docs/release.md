@@ -63,6 +63,10 @@ tools\build_studio_exe.ps1 -Mode both -Sign -CertThumbprint <指纹>   # signtoo
 tools\build_studio_exe.ps1 -Notarize -AppleTeamId <TeamID>          # macOS notarytool（只能在 mac 上）
 tools\build_studio_exe.ps1 -Publish                                  # comfy node publish
 
+# macOS remote-only 打包：PyInstaller .app，产物 tools/Neo-Studio.app
+# 需要构建期依赖 PyInstaller；可在仓库根运行
+bash tools/build_studio_mac.sh
+
 # 源码安装内核插件：只装代码与内置预设，写好 configs/data_root.json 数据根指针，不删目标目录里的东西
 # 脚本是 UTF-8 无 BOM，用 pwsh（PowerShell 7）跑；Windows PowerShell 5.1 会把中文注释读成乱码
 pwsh -NoProfile -ExecutionPolicy Bypass -File tools/install_plugin.ps1 -ComfyUI <ComfyUI 根> -DataRoot <数据根> [-SkipDeps] [-DryRun]
@@ -84,6 +88,10 @@ git 检出的那份不碰。
   解压后整目录直接用，启动不解包、出窗口更快）
 
 默认 `both`，两种形态一起挂上 Release；手动触发只想出一种时把 `mode` 填成 `onefile` 或 `onedir`。
+
+macOS remote-only `.app` 目前不在 GitHub Actions 里发布，本地用 `bash tools/build_studio_mac.sh` 打包，
+产物在 `tools/Neo-Studio.app`；首次运行可能遇到 Gatekeeper 提示，本地未签名构建可先右键「打开」或
+`xattr -dr com.apple.quarantine tools/Neo-Studio.app`。
 
 产物是未签名版，首次运行会有 SmartScreen 提示；签名与公证仍走本地 `-Sign` / `-Notarize`（CI 里没有
 机器证书，也不在 mac 上跑）。Registry 发布由 `publish.yaml` 负责，两条工作流互不依赖。

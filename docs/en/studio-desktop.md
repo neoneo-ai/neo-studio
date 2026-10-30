@@ -12,10 +12,11 @@ Source runs and the packaged exe go through the same `app/studio_app.py`.
 | `app/studio_app.py` | Window, self-check, start / stop ComfyUI, frameless window, close teardown, startup settings |
 | `app/studio_server.py` | Desktop-side aiohttp service (ComfyUI port +3, `DESKTOP_PORT_OFFSET`); loads the plugin modules' own `RouteTableDef` handlers by directory |
 | `app/studio_caps.py` | Capability table: which routes the desktop service owns; everything outside answers `409 offline` |
-| `data/` | State directory: `studio_window.json` (geometry), `studio_profile` (WebView2 profile / localStorage), `launcher_config.json` (root / python / port / frameless / dev_mode / listen / remote), `studio_desktop.log`, `comfy_run.log` |
+| `data/` | State directory: `studio_window.json` (geometry), `studio_profile` (Windows WebView2 profile / localStorage), `launcher_config.json` (root / python / port / frameless / dev_mode / listen / remote), `studio_desktop.log`, `comfy_run.log` |
 
-Source runs keep state in the repository's `data/`; the exe prefers `data/` beside the exe and falls back to
-`%APPDATA%\Neo Studio` when the exe sits in a non-writable directory.
+Source runs keep state in the repository's `data/`; the Windows exe prefers `data/` beside the exe and falls back to
+`%APPDATA%\Neo Studio` when the exe sits in a non-writable directory. macOS v1 uses remote mode and prefers the
+project/user-directory `data/` when writable, falling back to `~/Library/Application Support/Neo Studio`.
 
 ## Offline gating
 
@@ -271,11 +272,12 @@ startable once the root is filled in.
 
 ## Frameless window and dragging
 
-- Frameless is a startup setting, stored as `frameless` in `launcher_config.json` (on by default; unchecking it
-  restores the system title bar): it is fed to pywebview at window creation and switched as style bits at runtime
-  (only `WS_CAPTION` is removed, `WS_THICKFRAME` stays set — pywebview's frameless uses `FormBorderStyle=None`,
-  which drops edge-drag resizing as well, restored by `ensure_resizable_frame` after the window is Shown; the native
-  window is only created inside `start()`, so there is no hwnd at creation time).
+- Frameless is a startup setting stored as `frameless` in `launcher_config.json`: Windows defaults it on, and macOS v1
+  defaults it off with the native title bar; on macOS the window controls belong to the native title bar and the
+  settings page hides the frameless toggle. On Windows the setting is fed to pywebview at window creation and switched
+  as style bits at runtime (only `WS_CAPTION` is removed, `WS_THICKFRAME` stays set — pywebview's frameless uses
+  `FormBorderStyle=None`, which drops edge-drag resizing as well, restored by `ensure_resizable_frame` after the
+  window is Shown; the native window is only created inside `start()`, so there is no hwnd at creation time).
 - The window background is set explicitly at creation time to the page color (`WINDOW_BG` = `#17171b`, the same as
   the `body` background in `studio/web/studio/style.css`): pywebview's `background_color` defaults to `#FFFFFF` and
   sets both the WinForms `Form.BackColor` and the WebView2 control's `DefaultBackgroundColor`. Dragging a window edge
@@ -388,6 +390,18 @@ startable once the root is filled in.
 - Remote mode never starts a local process: `port_busy`, `free_comfy_port`, `start_comfy`, `port_owner` and `kill_pid`
   are not involved. "Start kernel" becomes "reconnect to the remote", and "Stop kernel" is disabled — the remote
   machine starts and stops its own ComfyUI.
+- macOS v1 ships remote-only mode: `python app/studio_app.py --remote <http://host:port>` or the stored `remote`
+  field points at the remote machine; local rows stay disabled. The desktop snapshot exposes `remote_ok` /
+  `remote_down`, the header shows "Remote ready" / "Remote unreachable", and unreachable remote mode keeps the
+  window on the remote guide, where the user can refill the remote address and retry without starting local ComfyUI
+  or the local desktop service.
+- The macOS remote-only `.app` is built with `bash tools/build_studio_mac.sh`, and the artifact lives at
+  `tools/Neo-Studio.app`; launch it with `open tools/Neo-Studio.app --args --remote <http://host:port>` or
+  double-click it from Finder. The local artifact is an unsigned ad-hoc build, so Gatekeeper may prompt on first
+  launch.
+- macOS uses `flock` on `data/.studio.lock`, `osascript` alerts, and `.app` / `.command` interpreter file types instead
+  of the Windows named mutex, Win32 alert and `python.exe` picker; remote data reads and writes are delegated to the
+  remote machine.
 - The remote machine must have `comfyui-neo-studio` installed and must open its own listen address under
   "Startup settings → LAN listen". When the probe fails the window stays on the offline page and reports
   "Remote ComfyUI unreachable: <address>".

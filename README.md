@@ -165,6 +165,7 @@ ComfyUI log). Canvas-only actions show a hint instead of failing.
 | `neo-studio-app.vbs` | The same page in its own WebView2 window — no console, no browser tab; window geometry and Studio state survive restarts (needs `pywebview`; the WebView2 Runtime ships with Windows) |
 | `neo-studio-app.bat` | Console/debug entry for the same window (`--debug` opens DevTools) |
 | `tools/neo-studio.exe` | Packaged launcher with the clapperboard icon — built by `tools\build_studio_exe.ps1` ([release.md](docs/en/release.md)) |
+| `python app/studio_app.py --remote <url>` | macOS v1 remote-only window: connects to a reachable remote ComfyUI with `comfyui-neo-studio` installed (needs `pywebview`) |
 
 - **Offline service** — `app/studio_server.py` on ComfyUI port + 3 (`8191` by default) keeps browsing, skill /
   recipe editing, settings (LLM included), Model Hub, bookmarks and LoRA tagging working while ComfyUI is down.
@@ -180,6 +181,10 @@ ComfyUI log). Canvas-only actions show a hint instead of failing.
   already listening on the port is attached to, never doubled.
 - **Canvas jumps stay in the window** — "⤒ 主画布编辑" and "🎬 新影工坊" switch in place, and the desktop
   re-injects a "🎬 返回 Studio" pill on every non-Studio page.
+- **macOS v1 remote mode** — macOS desktop starts as a remote-only window connected to a reachable remote
+  ComfyUI with Neo Studio installed; local root / interpreter / port / LAN listen settings stay disabled, and
+  unreachable remote mode stays on the remote address guide for retrying without starting local ComfyUI.
+
 - ComfyUI's log is under Settings → Log; the desktop's own trace (startup, page jumps, window drags) goes to
   `data/studio_desktop.log`.
 

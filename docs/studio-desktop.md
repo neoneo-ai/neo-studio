@@ -11,9 +11,11 @@
 | `app/studio_app.py` | 窗口、自检、拉起 / 停止 ComfyUI、无边框窗口、关窗收尾、启动设置 |
 | `app/studio_server.py` | 桌面端 aiohttp 服务（ComfyUI 端口 +3，`DESKTOP_PORT_OFFSET`），按目录加载插件模块挂在各自 `RouteTableDef` 上的 handler |
 | `app/studio_caps.py` | 能力表：哪些路由归桌面端服务，表外一律 `409 offline` |
-| `data/` | 状态目录：`studio_window.json`（几何）、`studio_profile`（WebView2 profile / localStorage）、`launcher_config.json`（root / python / port / frameless / dev_mode / listen / remote）、`studio_desktop.log`、`comfy_run.log` |
+| `data/` | 状态目录：`studio_window.json`（几何）、`studio_profile`（Windows 的 WebView2 profile / localStorage）、`launcher_config.json`（root / python / port / frameless / dev_mode / listen / remote）、`studio_desktop.log`、`comfy_run.log` |
 
-源码运行的状态目录是仓库根的 `data/`；exe 优先 exe 旁的 `data/`，落在不可写目录时退回 `%APPDATA%\Neo Studio`。
+源码运行的状态目录是仓库根的 `data/`；Windows exe 优先 exe 旁的 `data/`，落在不可写目录时退回
+`%APPDATA%\Neo Studio`；macOS v1 走远程模式时优先项目或用户目录旁的 `data/`，不可写时退回
+`~/Library/Application Support/Neo Studio`。
 
 ## 离线门控
 
@@ -190,7 +192,8 @@ js_api（`check_setup` / `pick_root` / `pick_python` / `start_setup`），根目
 
 ## 无边框窗口与拖动
 
-- 无边框是启动设置里的一项，存 `launcher_config.json` 的 `frameless`（缺省开，勾掉回系统标题栏）：建窗时喂
+- 无边框是启动设置里的一项，存 `launcher_config.json` 的 `frameless`：Windows 缺省开，macOS v1 缺省关并
+  用原生标题栏；macOS 的窗口控件由原生标题栏承担，设置页不展示无边框开关。Windows 下建窗时喂
   pywebview，运行中改样式位（只摘 `WS_CAPTION`，`WS_THICKFRAME` 恒置 —— pywebview 的 frameless 走
   `FormBorderStyle=None`，拖边缩放会一起被摘掉，窗口 Shown 之后由 `ensure_resizable_frame` 补回；原生窗口在
   `start()` 里才建出来，建窗时拿不到 hwnd）。
@@ -275,6 +278,15 @@ js_api（`check_setup` / `pick_root` / `pick_python` / `start_setup`），根目
   （`probe` 收的是目标 base，本机模式是 `http://127.0.0.1:端口`）；留空 = 连本机，也是默认。
 - 远程模式下本机不拉进程：`port_busy`、`free_comfy_port`、`start_comfy`、`port_owner`、`kill_pid` 全不参与。
   「启动内核」变成重连远端，「停止内核」禁用 —— 远端进程由远端那台机器自己起停。
+- macOS v1 只走远程模式：`python app/studio_app.py --remote <http://主机:端口>` 或配置里的
+  `remote` 都指向远端；本机启动项（根目录 / 解释器 / 端口 / 局域网监听）保持灰掉。桌面端状态快照会带上
+  `remote_ok` / `remote_down`，顶栏显示「远程就绪 / 远程不可达」。远程不可达时窗口停在远程引导页，只让人
+  重新填远程地址并重连，不会启动本机 ComfyUI，也不会开本机离线桌面服务。
+- macOS remote-only `.app` 用 `bash tools/build_studio_mac.sh` 打包，产物在 `tools/Neo-Studio.app`；启动用
+  `open tools/Neo-Studio.app --args --remote <http://主机:端口>`，也可以从 Finder 双击。本地产物是未签名
+  ad-hoc 构建，首次运行可能遇到 Gatekeeper 提示。
+- macOS 单实例锁使用 `data/.studio.lock` 的 `flock`，远程告警改用 `osascript`，解释器选择器收
+  `.app` / `.command` 而不是 `python.exe`；远程模式的数据读写都交给远端那台机器。
 - 远端要自己装好 `comfyui-neo-studio` 插件，并在它自己的「启动设置 → 局域网监听」里放开监听；探活打不通时窗口停在
   离线页并提示「远程 ComfyUI 不可达：<地址>」。
 - 远程模式读写的是远端的插件数据（配方 / 技能 / 设置都在远端那台机器上）；离线页仍是本机的桌面端服务，浏览本机素材目录。

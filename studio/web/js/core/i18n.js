@@ -355,6 +355,8 @@ const EN = {
     "无边框窗口": "Frameless window",
     "开发模式": "Dev mode",
     "就绪": "Ready",
+    "远程就绪": "Remote ready",
+    "远程不可达": "Remote unreachable",
     "根目录无效": "Invalid root folder",
     "找不到 Python": "Python not found",
     "缺少插件依赖": "Plugin dependencies missing",

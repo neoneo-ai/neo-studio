@@ -31,7 +31,6 @@ js_api 注入之前页面就知道在启动中），界面只出「ComfyUI 启�
 
 import argparse
 import ctypes
-from ctypes import wintypes
 import ipaddress
 import json
 import logging
@@ -52,7 +51,12 @@ from typing import Optional
 from studio_server import DesktopServer, build_app
 import mcp_client
 
+IS_MAC = sys.platform == "darwin"
+IS_WINDOWS = sys.platform == "win32"
 IS_FROZEN = bool(getattr(sys, "frozen", False))
+if not IS_WINDOWS:
+    import fcntl
+    import signal
 APP_DIR = Path(__file__).resolve().parent
 REPO_ROOT = APP_DIR.parent
 EXE_DIR = Path(sys.executable).resolve().parent if IS_FROZEN else APP_DIR
@@ -79,12 +83,19 @@ def _writable(path: Path) -> bool:
         return False
 
 
+def _mac_state_dir() -> Path:
+    """macOS 打包后的状态目录：~/Library/Application Support/Neo Studio。
+
+    .app 里的 Resources 可能只读，状态不能塞进 bundle 旁边；macOS 原生位置是 Application Support。"""
+    return Path.home() / "Library" / "Application Support" / APP_NAME
+
+
 def pick_state_dir(exe_dir: Path, appdata: str = "") -> Path:
-    """exe 旁的 data/ 优先；exe 丢在不可写目录时退到 %APPDATA%\\Neo Studio。"""
+    """exe 旁的 data/ 优先；exe 丢在不可写目录时按平台回退。"""
     cand = exe_dir / "data"
     if _writable(cand):
         return cand
-    base = Path(appdata or str(exe_dir)) / APP_NAME
+    base = _mac_state_dir() if IS_MAC else Path(appdata or str(exe_dir)) / APP_NAME
     try:
         base.mkdir(parents=True, exist_ok=True)
     except OSError:
@@ -101,7 +112,10 @@ def state_dir() -> Path:
     global _state_dir
     if _state_dir is not None:
         return _state_dir
-    _state_dir = REPO_ROOT / "data" if not IS_FROZEN else pick_state_dir(EXE_DIR, os.environ.get("APPDATA", ""))
+    if IS_FROZEN:
+        _state_dir = _mac_state_dir() if IS_MAC else pick_state_dir(EXE_DIR, os.environ.get("APPDATA", ""))
+    else:
+        _state_dir = REPO_ROOT / "data"
     return _state_dir
 
 
@@ -135,123 +149,163 @@ READY_TIMEOUT = 90      # ComfyUI 冷启动（扫描模型目录）留 90 秒
 
 POLL_INTERVAL = 2.0
 WEBVIEW_CACHE = PROFILE_DIR / "EBWebView" / "Default" / "Cache"   # WebView2 的 HTTP 缓存，跨会话留着
-STUDIO_ICON = (RES_DIR / "web" / "neo-studio.ico") if IS_FROZEN else (PLUGIN_SOURCE_DIR / "web" / "neo-studio.ico")   # tools/make_studio_icon.py 生成
+
 # coreclr 兜底要的运行时配置：System.Windows.Forms 在 Microsoft.WindowsDesktop.App 里，
 # clr_loader 默认只会挑 Microsoft.NETCore.App，不给这份配置兜底必崩
 CORECLR_CONFIG = (RES_DIR / "runtime" / "coreclr.runtimeconfig.json") if IS_FROZEN else (REPO_ROOT / "tools" / "coreclr.runtimeconfig.json")
 APP_ID = "Neo.Studio"
-NO_WINDOW = subprocess.CREATE_NO_WINDOW   # 桌面端无控制台时子进程会新建控制台窗口，必须压制
-PROCESS_TERMINATE = 0x0001
-PROCESS_QUERY_LIMITED = 0x1000
-# restype 默认是 c_int，64 位句柄会被截断，TerminateProcess 拿到无效句柄静默失败
-k32 = ctypes.windll.kernel32
-k32.OpenProcess.restype = wintypes.HANDLE
-k32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
-k32.TerminateProcess.restype = wintypes.BOOL
-k32.TerminateProcess.argtypes = [wintypes.HANDLE, wintypes.UINT]
-k32.CloseHandle.argtypes = [wintypes.HANDLE]
-k32.CreateMutexW.restype = wintypes.HANDLE
-k32.CreateMutexW.argtypes = [ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR]
-k32.GetLastError.restype = wintypes.DWORD
-k32.CreateJobObjectW.restype = wintypes.HANDLE
-k32.CreateJobObjectW.argtypes = [ctypes.c_void_p, wintypes.LPCWSTR]
-k32.SetInformationJobObject.restype = wintypes.BOOL
-k32.SetInformationJobObject.argtypes = [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, ctypes.c_int]
-k32.AssignProcessToJobObject.restype = wintypes.BOOL
-k32.AssignProcessToJobObject.argtypes = [wintypes.HANDLE, wintypes.HANDLE]
+GUI_BACKEND = "cocoa" if IS_MAC else "edgechromium"   # macOS 用 Cocoa WebView；Windows 用 WebView2
+STUDIO_ICON = (RES_DIR / "web" / ("neo-studio.icns" if IS_MAC else "neo-studio.ico")) if IS_FROZEN else (PLUGIN_SOURCE_DIR / "web" / ("neo-studio.icns" if IS_MAC else "neo-studio.ico"))   # tools/make_studio_icon.py 生成（mac 侧另有 .icns）
+NO_WINDOW = subprocess.CREATE_NO_WINDOW if IS_WINDOWS else 0   # 桌面端无控制台时子进程会新建控制台窗口，Windows 必须压制
 
-# 无边框窗口：pywebview 的 frameless 只在建窗时生效，运行中切换走 Win32 样式位。
-# 只摘 WS_CAPTION（标题栏 + 系统按钮），WS_THICKFRAME 留着 —— 窗口边缘仍可拖拽缩放。
-u32 = ctypes.windll.user32
-GWL_STYLE = -16
-WS_CAPTION = 0x00C80000
-WS_THICKFRAME = 0x00040000
-SWP_NOSIZE = 0x0001
-SWP_NOMOVE = 0x0002
-SWP_NOZORDER = 0x0004
-SWP_NOACTIVATE = 0x0010
-SWP_FRAMECHANGED = 0x0020
-VK_LBUTTON = 0x01
-SPI_GETWORKAREA = 0x0030
-SM_CXDRAG = 116   # 系统拖动阈值：按下后光标走出这个距离才算真拖动
-# 默认按 c_int 传句柄，64 位上的 HWND 会被截断，样式位与拖动消息都作用到别的窗口上
-u32.GetWindowLongW.argtypes = [wintypes.HWND, wintypes.INT]
-u32.SetWindowLongW.argtypes = [wintypes.HWND, wintypes.INT, wintypes.LONG]
-u32.SetWindowPos.argtypes = [wintypes.HWND, wintypes.HWND, wintypes.INT, wintypes.INT,
-                             wintypes.INT, wintypes.INT, wintypes.UINT]
-u32.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
-u32.SystemParametersInfoW.argtypes = [wintypes.UINT, wintypes.UINT, ctypes.c_void_p, wintypes.UINT]
 
+def _child_spawn_kwargs() -> dict:
+    """Windows 隐藏控制台；macOS 新会话让 terminate/kill 可以打到进程组，后续本地模式更可靠。"""
+    if IS_WINDOWS:
+        return {"creationflags": NO_WINDOW}
+    if IS_MAC:
+        return {"start_new_session": True}
+    return {}
+WINDOW_BG = "#17171b"
 # 拖边框缩放走系统缩放模态循环，循环里 Form 与 Dock=Fill 的 WebView2 子控件被一起改尺寸，
 # 新暴露的客户区先由各自的背景色刷出来，页面合成落后一帧 —— 底色是白的就是白窗闪一下。
 # pywebview 的 background_color 默认 #FFFFFF，且同时定 Form.BackColor 与 WebView2 的
 # DefaultBackgroundColor，建窗时必须显式给成页面底色（studio/web/studio/style.css 的 body 背景）。
-WINDOW_BG = "#17171b"
-# 补回的 WS_THICKFRAME 那一圈由 DWM 按系统主题色画：浅色主题下缩放时边框线本身就是白的，
-# 钉成页面底色。Win10 不认这两个属性，DwmSetWindowAttribute 只回非零 HRESULT，没有分支要走。
-DWMWA_BORDER_COLOR = 34
-DWMWA_CAPTION_COLOR = 35
-dwm = ctypes.windll.dwmapi
-dwm.DwmSetWindowAttribute.argtypes = [wintypes.HWND, wintypes.DWORD, ctypes.c_void_p, wintypes.DWORD]
+
+if IS_WINDOWS:
+    from ctypes import wintypes
+    PROCESS_TERMINATE = 0x0001
+    PROCESS_QUERY_LIMITED = 0x1000
+    # restype 默认是 c_int，64 位句柄会被截断，TerminateProcess 拿到无效句柄静默失败
+    k32 = ctypes.windll.kernel32
+    k32.OpenProcess.restype = wintypes.HANDLE
+    k32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    k32.TerminateProcess.restype = wintypes.BOOL
+    k32.TerminateProcess.argtypes = [wintypes.HANDLE, wintypes.UINT]
+    k32.CloseHandle.argtypes = [wintypes.HANDLE]
+    k32.CreateMutexW.restype = wintypes.HANDLE
+    k32.CreateMutexW.argtypes = [ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR]
+    k32.GetLastError.restype = wintypes.DWORD
+    k32.CreateJobObjectW.restype = wintypes.HANDLE
+    k32.CreateJobObjectW.argtypes = [ctypes.c_void_p, wintypes.LPCWSTR]
+    k32.SetInformationJobObject.restype = wintypes.BOOL
+    k32.SetInformationJobObject.argtypes = [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, ctypes.c_int]
+    k32.AssignProcessToJobObject.restype = wintypes.BOOL
+    k32.AssignProcessToJobObject.argtypes = [wintypes.HANDLE, wintypes.HANDLE]
+
+    # 无边框窗口：pywebview 的 frameless 只在建窗时生效，运行中切换走 Win32 样式位。
+    # 只摘 WS_CAPTION（标题栏 + 系统按钮），WS_THICKFRAME 留着 —— 窗口边缘仍可拖拽缩放。
+    u32 = ctypes.windll.user32
+    GWL_STYLE = -16
+    WS_CAPTION = 0x00C80000
+    WS_THICKFRAME = 0x00040000
+    SWP_NOSIZE = 0x0001
+    SWP_NOMOVE = 0x0002
+    SWP_NOZORDER = 0x0004
+    SWP_NOACTIVATE = 0x0010
+    SWP_FRAMECHANGED = 0x0020
+    VK_LBUTTON = 0x01
+    SPI_GETWORKAREA = 0x0030
+    SM_CXDRAG = 116   # 系统拖动阈值：按下后光标走出这个距离才算真拖动
+    # 默认按 c_int 传句柄，64 位上的 HWND 会被截断，样式位与拖动消息都作用到别的窗口上
+    u32.GetWindowLongW.argtypes = [wintypes.HWND, wintypes.INT]
+    u32.SetWindowLongW.argtypes = [wintypes.HWND, wintypes.INT, wintypes.LONG]
+    u32.SetWindowPos.argtypes = [wintypes.HWND, wintypes.HWND, wintypes.INT, wintypes.INT,
+                                 wintypes.INT, wintypes.INT, wintypes.UINT]
+    u32.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
+    u32.SystemParametersInfoW.argtypes = [wintypes.UINT, wintypes.UINT, ctypes.c_void_p, wintypes.UINT]
+
+    # 补回的 WS_THICKFRAME 那一圈由 DWM 按系统主题色画：浅色主题下缩放时边框线本身就是白的，
+    # 钉成页面底色。Win10 不认这两个属性，DwmSetWindowAttribute 只回非零 HRESULT，没有分支要走。
+    DWMWA_BORDER_COLOR = 34
+    DWMWA_CAPTION_COLOR = 35
+    dwm = ctypes.windll.dwmapi
+    dwm.DwmSetWindowAttribute.argtypes = [wintypes.HWND, wintypes.DWORD, ctypes.c_void_p, wintypes.DWORD]
+else:
+    k32 = u32 = dwm = None
 
 
-class POINT(ctypes.Structure):
-    _fields_ = [("x", wintypes.LONG), ("y", wintypes.LONG)]
+def _apple_escape(text: str) -> str:
+    """AppleScript 字符串字面量里只有反斜杠和引号会破坏语句；换行转成空格，消息框保持一行。"""
+    return text.replace("\\", "\\\\").replace('"', '\\"').replace("\r", " ").replace("\n", " ")
 
 
-u32.GetCursorPos.argtypes = [ctypes.POINTER(POINT)]
-u32.SetCapture.argtypes = [wintypes.HWND]
-u32.GetAsyncKeyState.argtypes = [wintypes.INT]
-u32.GetAsyncKeyState.restype = wintypes.SHORT
-u32.GetSystemMetrics.argtypes = [wintypes.INT]
-u32.GetSystemMetrics.restype = wintypes.INT
+if IS_WINDOWS:
+    class POINT(ctypes.Structure):
+        _fields_ = [("x", wintypes.LONG), ("y", wintypes.LONG)]
 
+    u32.GetCursorPos.argtypes = [ctypes.POINTER(POINT)]
+    u32.SetCapture.argtypes = [wintypes.HWND]
+    u32.GetAsyncKeyState.argtypes = [wintypes.INT]
+    u32.GetAsyncKeyState.restype = wintypes.SHORT
+    u32.GetSystemMetrics.argtypes = [wintypes.INT]
+    u32.GetSystemMetrics.restype = wintypes.INT
 
-def _cursor_pos() -> tuple:
-    pt = POINT()
-    u32.GetCursorPos(ctypes.byref(pt))
-    return pt.x, pt.y
+    def _cursor_pos() -> tuple:
+        pt = POINT()
+        u32.GetCursorPos(ctypes.byref(pt))
+        return pt.x, pt.y
 
+    def _left_button_down() -> bool:
+        """左键还按着没有：桌面端的拖动循环靠它收尾（鼠标可能已经在窗口外面，只有全局键态靠得住）。"""
+        return bool(u32.GetAsyncKeyState(VK_LBUTTON) & 0x8000)
 
-def _left_button_down() -> bool:
-    """左键还按着没有：桌面端的拖动循环靠它收尾（鼠标可能已经在窗口外面，只有全局键态靠得住）。"""
-    return bool(u32.GetAsyncKeyState(VK_LBUTTON) & 0x8000)
+    def _colorref(hex_color: str) -> int:
+        """#rrggbb → COLORREF：Win32 的颜色是 0x00bbggrr，照网页那串顺序传进去颜色是反的。"""
+        h = hex_color.lstrip("#")
+        return int(h[4:6], 16) << 16 | int(h[2:4], 16) << 8 | int(h[0:2], 16)
 
+    def set_window_frame(hwnd: int, frameless: bool) -> None:
+        # WS_THICKFRAME 恒置：pywebview 的 frameless 走 FormBorderStyle=None，可拖拽边框一起摘掉，
+        # 这里补回来；有框时它本来就在，等于不动
+        style = u32.GetWindowLongW(hwnd, GWL_STYLE)
+        style = (style & ~WS_CAPTION if frameless else style | WS_CAPTION) | WS_THICKFRAME
+        u32.SetWindowLongW(hwnd, GWL_STYLE, style)
+        bg = ctypes.c_int(_colorref(WINDOW_BG))
+        dwm.DwmSetWindowAttribute(hwnd, DWMWA_BORDER_COLOR, ctypes.byref(bg), 4)
+        dwm.DwmSetWindowAttribute(hwnd, DWMWA_CAPTION_COLOR, ctypes.byref(bg), 4)
+        u32.SetWindowPos(hwnd, 0, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOZORDER | SWP_FRAMECHANGED)
 
-def _colorref(hex_color: str) -> int:
-    """#rrggbb → COLORREF：Win32 的颜色是 0x00bbggrr，照网页那串顺序传进去颜色是反的。"""
-    h = hex_color.lstrip("#")
-    return int(h[4:6], 16) << 16 | int(h[2:4], 16) << 8 | int(h[0:2], 16)
+    def window_rect(hwnd: int) -> tuple:
+        r = wintypes.RECT()
+        u32.GetWindowRect(hwnd, ctypes.byref(r))
+        return (r.left, r.top, r.right, r.bottom)
 
+    def work_area() -> tuple:
+        """主屏去掉任务栏的那块：无边框窗口走系统 maximize 是整屏矩形，任务栏会被盖住。"""
+        r = wintypes.RECT()
+        u32.SystemParametersInfoW(SPI_GETWORKAREA, 0, ctypes.byref(r), 0)
+        return (r.left, r.top, r.right, r.bottom)
+else:
+    def _cursor_pos() -> tuple:
+        return 0, 0
 
-def set_window_frame(hwnd: int, frameless: bool) -> None:
-    # WS_THICKFRAME 恒置：pywebview 的 frameless 走 FormBorderStyle=None，可拖拽边框一起摘掉，
-    # 这里补回来；有框时它本来就在，等于不动
-    style = u32.GetWindowLongW(hwnd, GWL_STYLE)
-    style = (style & ~WS_CAPTION if frameless else style | WS_CAPTION) | WS_THICKFRAME
-    u32.SetWindowLongW(hwnd, GWL_STYLE, style)
-    bg = ctypes.c_int(_colorref(WINDOW_BG))
-    dwm.DwmSetWindowAttribute(hwnd, DWMWA_BORDER_COLOR, ctypes.byref(bg), 4)
-    dwm.DwmSetWindowAttribute(hwnd, DWMWA_CAPTION_COLOR, ctypes.byref(bg), 4)
-    u32.SetWindowPos(hwnd, 0, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOZORDER | SWP_FRAMECHANGED)
+    def _left_button_down() -> bool:
+        return False
 
+    def set_window_frame(hwnd: int, frameless: bool) -> None:
+        """macOS 第一版走原生标题栏；自绘无边框窗口尚未移植，这里保持 no-op。"""
 
-def window_rect(hwnd: int) -> tuple:
-    r = wintypes.RECT()
-    u32.GetWindowRect(hwnd, ctypes.byref(r))
-    return (r.left, r.top, r.right, r.bottom)
+    def window_rect(hwnd: int) -> tuple:
+        return 0, 0, 0, 0
 
-
-def work_area() -> tuple:
-    """主屏去掉任务栏的那块：无边框窗口走系统 maximize 是整屏矩形，任务栏会被盖住。"""
-    r = wintypes.RECT()
-    u32.SystemParametersInfoW(SPI_GETWORKAREA, 0, ctypes.byref(r), 0)
-    return (r.left, r.top, r.right, r.bottom)
+    def work_area() -> tuple:
+        return 0, 0, 0, 0
 
 
 def alert(text: str) -> None:
-    """pythonw 没有 stdout，提示走系统消息框。"""
-    ctypes.windll.user32.MessageBoxW(0, text, "Neo Studio", 0x40)
+    """pythonw 没有 stdout，提示走系统消息框；macOS 用 AppleScript alert，Linux 只写日志。"""
+    if IS_WINDOWS:
+        ctypes.windll.user32.MessageBoxW(0, text, "Neo Studio", 0x40)
+        return
+    if IS_MAC:
+        try:
+            subprocess.run(["/usr/bin/osascript", "-e", f'display alert "{_apple_escape(text)}"'],
+                           timeout=5, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except OSError:
+            log_line(f"alert failed text={text}")
+        return
+    log_line(f"alert {text}")
 
 
 def log_line(text: str) -> None:
@@ -287,12 +341,16 @@ def resolve_root(root: str) -> Optional[Path]:
 
 
 def find_python(root: Path, python: str) -> Optional[Path]:
-    """整合包布局（python 与 ComfyUI 同级）优先，再回退 ComfyUI 内部；找不到回 None。
+    """Windows 整合包布局优先；macOS 再找常见 venv/bin/python。找不到回 None。
 
     找不到不是错误：引导页负责让用户选一个。"""
     if python:
         return Path(python)
     for cand in (root.parent / "python" / "python.exe", root / "python" / "python.exe"):
+        if cand.exists():
+            return cand
+    for cand in (root.parent / "python" / "bin" / "python", root / "python" / "bin" / "python",
+                 root / "venv" / "bin" / "python", root / ".venv" / "bin" / "python"):
         if cand.exists():
             return cand
     return None
@@ -317,6 +375,8 @@ ST_BAD_ROOT = "bad_root"
 ST_NO_PYTHON = "missing_python"
 ST_NO_DEPS = "deps_missing"
 ST_INSTALL_FAIL = "install_failed"
+ST_REMOTE = "remote_ok"          # 纯远程模式：本机不要求 ComfyUI root / Python
+ST_REMOTE_DOWN = "remote_down"   # 远程地址有效，但远端现在不可达；引导页或启动设置可重连
 
 # 插件 import 期硬依赖。ComfyUI 自带 pyyaml / Pillow / aiohttp，任何跑得起来的
 # ComfyUI 环境都满足；openai / pypinyin / laya 是懒导入或自带降级，不检查也不拦。
@@ -343,8 +403,9 @@ def load_config() -> dict:
 
 def save_config(root: Path, python: str, port: int, flags: dict) -> bool:
     """写启动配置：开关与远程地址跟着根目录 / 解释器 / 端口一起落盘，「保存并重启」不能把它们写没。"""
-    return write_config({"version": CONFIG_VERSION, "root": str(root), "python": str(python),
-                         "port": int(port), "frameless": bool(flags.get("frameless", True)),
+    root_s = "" if not root or str(root) in ("", ".") else str(root)
+    return write_config({"version": CONFIG_VERSION, "root": root_s, "python": str(python or ""),
+                         "port": int(port), "frameless": bool(flags.get("frameless", not IS_MAC)),
                          "dev_mode": bool(flags.get("dev_mode")),
                          "listen": str(flags.get("listen", "")),
                          "remote": str(flags.get("remote", ""))})
@@ -368,7 +429,7 @@ def deps_ok(python: Path) -> bool:
         return False
     try:
         proc = subprocess.run([str(python), "-c", DEPS_PROBE],
-                              creationflags=NO_WINDOW, timeout=180)
+                              timeout=180, **_child_spawn_kwargs())
     except (OSError, subprocess.SubprocessError):
         return False
     return proc.returncode == 0
@@ -380,8 +441,7 @@ def install_deps(python: Path, plugin_dir: Path) -> dict:
     if not req.is_file():
         return {"ok": False, "error": f"找不到依赖清单：{req}"}
     proc = subprocess.run([str(python), "-m", "pip", "install", "--no-warn-script-location",
-                           "-r", str(req)],
-                          creationflags=NO_WINDOW)
+                           "-r", str(req)], **_child_spawn_kwargs())
     if proc.returncode:
         return {"ok": False, "error": f"pip 退出码 {proc.returncode}，检查网络与代理后重试。"}
     return {"ok": True, "msg": "依赖安装完成。"}
@@ -539,6 +599,19 @@ def ensure_plugin(plugin_dir: Path, source_dir: Path = PLUGIN_SOURCE_DIR) -> tup
     return True, ""
 
 
+def remote_startup_state(remote: str, timeout: float = 2.0) -> tuple[str, str]:
+    """纯远程模式的启动状态：远端地址有效、能答话就是 ok；答不通是 remote_down。
+
+    远端 Neo Studio 插件是数据的真正归属，本机不需要 ComfyUI 根目录、解释器、插件副本与依赖自检。
+    这里只问远端是否就绪，不替远端装插件或启动进程。"""
+    if not remote:
+        return ST_BAD_ROOT, "远程地址为空"
+    if probe(remote, timeout):
+        return ST_REMOTE, ""
+    return ST_REMOTE_DOWN, (f"远程 ComfyUI 不可达：{remote}。检查远端是否已启动、是否开启局域网监听、"
+                            f"防火墙是否放行该端口，并确认远端已安装 Neo Studio 插件。")
+
+
 def startup_state(root: Path, python: Path, plugin_dir: Path) -> tuple[str, str]:
     """拉起 ComfyUI 前的自检；插件缺失直接自动安装，不需要用户动手。"""
     if not root_ok(root):
@@ -590,12 +663,13 @@ def wait_attach(base: str, seconds: float, busy) -> bool:
 
 
 def on_screen(x: int, y: int, w: int, h: int) -> bool:
-    """位置必须与虚拟屏幕（所有显示器并集）相交。最小化时 Windows 报 -32000 系坐标，拔掉的外接屏同理，
-    这种位置存下来下次启动窗口就在屏幕外看不见。"""
-    u = ctypes.windll.user32
-    vx, vy = u.GetSystemMetrics(76), u.GetSystemMetrics(77)
-    vw, vh = u.GetSystemMetrics(78), u.GetSystemMetrics(79)
-    return x < vx + vw and x + w > vx and y < vy + vh and y + h > vy
+    """位置必须与可见屏幕相交；macOS 第一版用保守下界，避免最小化态的 -32000 坐标落盘。"""
+    if IS_WINDOWS:
+        u = ctypes.windll.user32
+        vx, vy = u.GetSystemMetrics(76), u.GetSystemMetrics(77)
+        vw, vh = u.GetSystemMetrics(78), u.GetSystemMetrics(79)
+        return x < vx + vw and x + w > vx and y < vy + vh and y + h > vy
+    return x >= -20000 and y >= -20000
 
 
 def load_geometry() -> dict:
@@ -696,8 +770,8 @@ def start_comfy(python: Path, root: Path, port: int, listen: str = "", cors: str
     if cors:
         argv += ["--enable-cors-header", cors]
     proc = subprocess.Popen(argv,
-                            cwd=str(root), creationflags=NO_WINDOW, env=env,
-                            stdout=log, stderr=subprocess.STDOUT)
+                            cwd=str(root), env=env, stdout=log, stderr=subprocess.STDOUT,
+                            **_child_spawn_kwargs())
     assign_comfy_job(proc)
     return proc
 
@@ -771,68 +845,100 @@ def reap(proc: subprocess.Popen, timeout: float) -> None:
         pass
 
 
-def port_owner(port: int) -> int:
-    """按监听端口找进程 PID（netstat -ano）；没有监听者返回 0。"""
-    out = subprocess.run(["netstat", "-ano", "-p", "TCP"], capture_output=True, text=True,
-                         encoding="utf-8", errors="replace", creationflags=NO_WINDOW)
+def _posix_port_owner(port: int) -> int:
+    """macOS/Linux 按 TCP LISTEN 找 PID；lsof 不在则当作没人监听。"""
+    if not shutil.which("lsof"):
+        return 0
+    out = subprocess.run(["lsof", "-nP", f"-iTCP:{port}", "-sTCP=LISTEN", "-t"],
+                         capture_output=True, text=True, errors="replace")
     for line in out.stdout.splitlines():
-        f = line.split()
-        if len(f) >= 5 and f[3] == "LISTENING" and f[1].split(":")[-1] == str(port):
-            return int(f[4])
+        try:
+            return int(line.split()[0])
+        except (IndexError, ValueError):
+            continue
     return 0
+
+
+def port_owner(port: int) -> int:
+    """按监听端口找进程 PID；没有监听者返回 0。"""
+    if IS_WINDOWS:
+        out = subprocess.run(["netstat", "-ano", "-p", "TCP"], capture_output=True, text=True,
+                             encoding="utf-8", errors="replace", creationflags=NO_WINDOW)
+        for line in out.stdout.splitlines():
+            f = line.split()
+            if len(f) >= 5 and f[3] == "LISTENING" and f[1].split(":")[-1] == str(port):
+                return int(f[4])
+        return 0
+    return _posix_port_owner(port)
 
 
 def kill_pid(pid: int) -> bool:
     """按 PID 终止进程：用户自己启动的 ComfyUI 没有桌面端的 Popen 句柄。"""
-    h = k32.OpenProcess(PROCESS_TERMINATE, False, pid)
-    if not h:
+    if pid <= 0:
         return False
-    ok = k32.TerminateProcess(h, 0)
-    k32.CloseHandle(h)
-    return bool(ok)
+    if IS_WINDOWS:
+        h = k32.OpenProcess(PROCESS_TERMINATE, False, pid)
+        if not h:
+            return False
+        ok = k32.TerminateProcess(h, 0)
+        k32.CloseHandle(h)
+        return bool(ok)
+    try:
+        os.kill(pid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        return False
+    except OSError:
+        return False
+    return True
 
 
 def pid_alive(pid: int) -> bool:
-    """进程是否还活着（OpenProcess 拿到句柄即活着）：比每次重跑 netstat 便宜。"""
-    h = k32.OpenProcess(PROCESS_QUERY_LIMITED, False, pid)
-    if h:
-        k32.CloseHandle(h)
-    return bool(h)
-
-
-KILL_ON_JOB_CLOSE = 0x2000
-EXTENDED_LIMIT_INFO = 9
-
-
-class IO_COUNTERS(ctypes.Structure):
-    _fields_ = [("ReadOpCount", ctypes.c_ulonglong), ("WriteOpCount", ctypes.c_ulonglong),
-                ("OtherOpCount", ctypes.c_ulonglong), ("ReadByteCount", ctypes.c_ulonglong),
-                ("WriteByteCount", ctypes.c_ulonglong), ("OtherByteCount", ctypes.c_ulonglong)]
-
-
-class JOBOBJECT_EXTENDED_LIMIT_INFORMATION(ctypes.Structure):
-    # JOBOBJECT_BASIC_LIMIT_INFORMATION 摊平在前九个字段里，与 Win32 布局一致
-    _fields_ = [("PerProcessUserTimeLimit", ctypes.c_int64), ("PerJobUserTimeLimit", ctypes.c_int64),
-                ("LimitFlags", wintypes.DWORD), ("MinimumWorkingSetSize", ctypes.c_size_t),
-                ("MaximumWorkingSetSize", ctypes.c_size_t), ("ActiveProcessLimit", wintypes.DWORD),
-                ("Affinity", ctypes.c_size_t), ("PriorityClass", wintypes.DWORD),
-                ("SchedulingClass", wintypes.DWORD), ("IoInfo", IO_COUNTERS),
-                ("ProcessMemoryLimit", ctypes.c_size_t), ("JobMemoryLimit", ctypes.c_size_t),
-                ("PeakProcessMemoryUsed", ctypes.c_size_t), ("PeakJobMemoryUsed", ctypes.c_size_t)]
+    """进程是否还活着；比每次重跑端口列表便宜。"""
+    if pid <= 0:
+        return False
+    if IS_WINDOWS:
+        h = k32.OpenProcess(PROCESS_QUERY_LIMITED, False, pid)
+        if h:
+            k32.CloseHandle(h)
+        return bool(h)
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        # POSIX 下 EPERM 说明 PID 存在但不属于本用户；桌面端第一版没有跨用户杀进程的需求。
+        return True
+    except OSError:
+        return False
+    return True
 
 
 COMFY_JOB = None   # 关句柄等于「杀作业里的全部进程」，所以它必须活到桌面端进程结束
 
 
 def assign_comfy_job(proc: subprocess.Popen) -> bool:
-    """把桌面端拉起的 ComfyUI 挂进 Job Object，带 KILL_ON_JOB_CLOSE。
-
-    关窗的收尾链（on_closing → close_out → comfy_close）只在桌面端进程自己走到退出代码时才跑；
-    Ctrl+C、任务管理器结束进程、注销、崩溃都把它掐在收尾之前，子进程就留在端口上成了孤儿。
-    下一轮桌面端探到端口有人监听只能附着（self.comfy 是 None），之后每次关窗都不杀它 ——
-    用户读成「关窗口不关 ComfyUI」。作业是内核层的约束：桌面端进程一死，OS 关句柄，
-    作业里的进程（含 ComfyUI 自己起的子进程）跟着没，跟收尾跑没跑到无关。"""
+    """Windows Job Object；macOS/Linux 第一版 no-op。"""
+    if not IS_WINDOWS:
+        return False
     global COMFY_JOB
+    KILL_ON_JOB_CLOSE = 0x2000
+    EXTENDED_LIMIT_INFO = 9
+
+    class IO_COUNTERS(ctypes.Structure):
+        _fields_ = [("ReadOpCount", ctypes.c_ulonglong), ("WriteOpCount", ctypes.c_ulonglong),
+                    ("OtherOpCount", ctypes.c_ulonglong), ("ReadByteCount", ctypes.c_ulonglong),
+                    ("WriteByteCount", ctypes.c_ulonglong), ("OtherByteCount", ctypes.c_ulonglong)]
+
+    class JOBOBJECT_EXTENDED_LIMIT_INFORMATION(ctypes.Structure):
+        # JOBOBJECT_BASIC_LIMIT_INFORMATION 摊平在前九个字段里，与 Win32 布局一致
+        _fields_ = [("PerProcessUserTimeLimit", ctypes.c_int64), ("PerJobUserTimeLimit", ctypes.c_int64),
+                    ("LimitFlags", wintypes.DWORD), ("MinimumWorkingSetSize", ctypes.c_size_t),
+                    ("MaximumWorkingSetSize", ctypes.c_size_t), ("ActiveProcessLimit", wintypes.DWORD),
+                    ("Affinity", ctypes.c_size_t), ("PriorityClass", wintypes.DWORD),
+                    ("SchedulingClass", wintypes.DWORD), ("IoInfo", IO_COUNTERS),
+                    ("ProcessMemoryLimit", ctypes.c_size_t), ("JobMemoryLimit", ctypes.c_size_t),
+                    ("PeakProcessMemoryUsed", ctypes.c_size_t), ("PeakJobMemoryUsed", ctypes.c_size_t)]
+
     if COMFY_JOB is None:
         COMFY_JOB = k32.CreateJobObjectW(None, None)
         if not COMFY_JOB:
@@ -929,8 +1035,8 @@ class StudioDesktop:
         self.flags = flags if flags is not None else {"starting": False}
         # 启动设置快照：桌面端服务与 js_api 共用同一份 dict，设置页与离线横幅都读它
         self.launcher = launcher if launcher is not None else {}
-        # 无边框窗口：建窗时喂给 pywebview，运行中由 set_frameless 改样式位；缺省开
-        self.frameless = bool(self.launcher.get("frameless", True))
+        # 无边框窗口：Windows 默认开；macOS 第一版用原生标题栏。运行中由 set_frameless 改样式位。
+        self.frameless = bool(self.launcher.get("frameless", not IS_MAC))
         self.listen = comfy_listen(self.launcher.get("listen", "")) or ""   # 局域网监听：空 = 只监听本机
         # 远程 ComfyUI：非空时窗口指向远端，本机不拉进程（远端进程不归本机管）
         self.remote = comfy_remote(self.launcher.get("remote", "")) or ""
@@ -1038,6 +1144,9 @@ class StudioDesktop:
         else:
             self.starting = False   # 没起来：离线横幅回到「未运行 + 启动」，别卡在启动中
             log_line("comfy restart not ready")
+            if self.remote:
+                state, msg = remote_startup_state(self.base, timeout=1.0)
+                self.launcher.update(state=state, error=msg)
 
 
     def comfy_state(self) -> dict:
@@ -1114,7 +1223,7 @@ class StudioDesktop:
             pid = self.comfy.pid
             self.comfy.terminate()
             try:
-                self.comfy.wait(timeout=1.2)   # TerminateProcess 是异步的，正常收尾远快于此；等满上限就是「关得慢」
+                self.comfy.wait(timeout=1.2)   # terminate 是异步的，正常收尾远快于此；等满上限就是「关得慢」
             except subprocess.TimeoutExpired:
                 kill_pid(pid)
                 log_line(f"comfy close kill pid={pid}")
@@ -1172,7 +1281,12 @@ class StudioDesktop:
         return dict(self.launcher)
 
     def set_frameless(self, on: bool) -> dict:
-        """无边框窗口开关：立刻摘掉 / 装回标题栏，并写进启动配置 —— 下次开机沿用。"""
+        """无边框窗口开关：Windows 立刻摘掉 / 装回标题栏；macOS 第一版只走原生标题栏。"""
+        if not IS_WINDOWS:
+            self.frameless = False
+            self.launcher["frameless"] = False
+            return {"ok": False, "frameless": False,
+                    "error": "macOS 第一版尚未移植自绘无边框窗口，继续使用系统标题栏"}
         self.frameless = bool(on)
         self.launcher["frameless"] = self.frameless
         if self._window is not None:
@@ -1186,6 +1300,8 @@ class StudioDesktop:
                 "msg": "无边框窗口已开启" if self.frameless else "已恢复系统标题栏"}
 
     def _hwnd(self) -> int:
+        if not IS_WINDOWS:
+            return 0
         return int(self._window.native.Handle.ToInt64())
 
     def set_dev_mode(self, on: bool) -> dict:
@@ -1212,7 +1328,7 @@ class StudioDesktop:
         （platforms/edgechromium.py 建核时写死），Ctrl+C / Ctrl+V / Ctrl+A 在 WebView2 层就被吞了；
         页面又跑在 http://127.0.0.1 非安全上下文，navigator.clipboard 不存在，复制没有原生出口。
         建核后补开加速器键，DevTools 与右键菜单保持关，开发模式另开。"""
-        if self._window is None:
+        if self._window is None or not IS_WINDOWS:
             return
         try:
             settings = self._window.browser.webview.CoreWebView2.Settings
@@ -1230,6 +1346,15 @@ class StudioDesktop:
         self._window.minimize()
 
     def win_maximize(self) -> dict:
+        if not IS_WINDOWS:
+            # macOS 原生标题栏：系统 zoom/restore 自己管还原态，第一版不跟 Win32 那套工作区矩形。
+            if self.maximized:
+                self._window.restore()
+                self.maximized = False
+            else:
+                self._window.maximize()
+                self.maximized = True
+            return self.window_state()
         # 无边框下系统 maximize 给的是整屏矩形，任务栏会被盖住：自己铺工作区，还原用的几何留着
         if self.maximized:
             self.maximized = False
@@ -1269,8 +1394,11 @@ class StudioDesktop:
         SetWindowPos，左键一松就停。
         必须跑在窗口所属线程上：SetCapture 只认窗口的所属线程，捕获不过来的话 WebView2 继续吃
         鼠标消息（拖动时选中文本之类），松手也传不到这边。
-        按下没走出系统拖动阈值不算拖动：窗口一动不动，最大化 / 全屏也留到走出阈值那一刻才退 ——
-        最大化下 SetWindowPos 会把窗口打回还原态，单击顶栏跟着还原不是原生标题栏的语义。"""
+        macOS 第一版走原生标题栏：自绘无边框拖动尚未移植，这里明确 no-op。"""
+        if not IS_WINDOWS:
+            log_line("drag skipped: no custom frameless drag on this platform")
+            return
+
         def _drag() -> None:
             hwnd = self._hwnd()
             left, top, _, _ = window_rect(hwnd)
@@ -1333,15 +1461,37 @@ class StudioDesktop:
                             or "桌面端服务起不来，原因见启动器日志"}
         return self.apply_launcher(root, python, self.port)
 
+    def start_remote(self, remote: str) -> dict:
+        """macOS 远程引导页：保存一个远端地址并连过去。本机不装插件、不找 Python、不起 ComfyUI。"""
+        base = comfy_remote(remote)
+        if base is None:
+            return {"ok": False, "error": "远程地址无效：请输入 http://主机:端口"}
+        self.remote = base
+        self.url = self.studio_url()
+        self.root, self.python_arg = Path(""), ""
+        self.offline_url = ""
+        self.launcher.update(remote=base, root="", python="", plugin_dir=str(PLUGIN_SOURCE_DIR),
+                             state=ST_REMOTE, error="")
+        if not save_config(Path(""), "", self.port, self.launcher):
+            return {"ok": False, "error": f"写入启动配置失败：{CONFIG_FILE}"}
+        log_line(f"remote guide saved {base}")
+        state, msg = remote_startup_state(base)
+        self.launcher.update(state=state, error=msg)
+        st = self.comfy_start()
+        self.launcher.update(comfy=st)
+        if state == ST_REMOTE:
+            return {"ok": True, "state": state, "comfy": st, "msg": "已连接远端 ComfyUI"}
+        return {"ok": True, "state": state, "comfy": st, "error": msg,
+                "msg": "远程地址已保存，当前不可达，稍后会继续重连"}
+
     def apply_launcher(self, root: str, python: str, port: int, listen: str = None,
                        remote: str = None) -> dict:
         """保存启动设置并重启 ComfyUI：换根目录、换解释器、换端口、换监听地址、换远程地址都走这一条路。"""
         root_s, py_s = str(root).strip(), str(python).strip()
         root_p, py = Path(root_s), Path(py_s)
-        if not root_s or not root_ok(root_p):
-            return {"ok": False, "error": f"不是 ComfyUI 根目录（找不到 main.py）：{root_s}"}
-        if not py_s or not py.is_file():
-            return {"ok": False, "error": f"Python 解释器不存在：{py_s}"}
+        base = self.remote if remote is None else comfy_remote(remote)
+        if base is None:
+            return {"ok": False, "error": f"远程地址不是 http(s)://主机[:端口]（留空 = 连本机）：{remote}"}
         try:
             port = int(port)
         except (TypeError, ValueError):
@@ -1352,9 +1502,30 @@ class StudioDesktop:
         addr = self.listen if listen is None else comfy_listen(listen)
         if addr is None:
             return {"ok": False, "error": f"监听地址不是 IP（逗号分隔多个，留空 = 只监听本机）：{listen}"}
-        base = self.remote if remote is None else comfy_remote(remote)
-        if base is None:
-            return {"ok": False, "error": f"远程地址不是 http(s)://主机[:端口]（留空 = 连本机）：{remote}"}
+
+        remote_only = bool(base) and (not root_s or not py_s)
+        if remote_only:
+            self.listen = addr
+            self.remote = base
+            self.launcher.update(listen=addr, remote=base, port=port,
+                                 root="", python="", plugin_dir=str(PLUGIN_SOURCE_DIR))
+            if not save_config(Path(""), "", port, self.launcher):
+                return {"ok": False, "error": f"写入启动配置失败：{CONFIG_FILE}"}
+            self.root, self.python_arg, self.port = Path(""), "", port
+            self.url = self.studio_url()
+            self.offline_url = ""   # 纯远程模式不拿本机只读服务当离线页
+            log_line(f"launcher apply remote-only {base} port={port}")
+            state, msg = remote_startup_state(base)
+            self.launcher.update(state=state, error=msg)
+            st = self.comfy_start()
+            self.launcher.update(comfy=st)
+            return {"ok": True, "state": state, "comfy": st,
+                    "msg": "已保存，正在连接远端 ComfyUI…"}
+
+        if not root_s or not root_ok(root_p):
+            return {"ok": False, "error": f"不是 ComfyUI 根目录（找不到 main.py）：{root_s}"}
+        if not py_s or not py.is_file():
+            return {"ok": False, "error": f"Python 解释器不存在：{py_s}"}
         self.listen = addr
         self.remote = base
         self.launcher["listen"] = addr
@@ -1413,7 +1584,12 @@ _studio_window = None   # main() 建好窗口后回填：对话框走窗口模�
 
 
 def _on_sta(call):
-    """对话框是 STA 的 COM 对象；js_api 的调用线程来自线程池，apartment 不由我们定。"""
+    """对话框是 STA 的 COM 对象；js_api 的调用线程来自线程池，apartment 不由我们定。
+
+    macOS/Linux 直接用 pywebview 的 native 对话框。"""
+    if not IS_WINDOWS:
+        return call()
+
     out: list = [None]
 
     def run():
@@ -1431,23 +1607,28 @@ def _on_sta(call):
     return out[0]
 
 
-def pick_folder(start: str = "") -> str:
-    """原生目录选择器：直接用 pywebview 自带的 FOLDER 对话框。
+def _dialog_result(result) -> str:
+    if isinstance(result, (list, tuple)):
+        return result[0] if result else ""
+    return str(result or "")
 
-    Windows 后端是 WinForms 的 CreateVistaDialog + FOS_PICKFOLDERS，就是资源管理器那套现代对话框：
-    地址栏能直接敲绝对路径，底部「文件夹」编辑框可见。自己 CoCreateInstance 建 FileOpenDialog 在这台
-    机器上必崩 —— 经典 CLSID 没注册（REGDB_E_CLASSNOTREG），机器上注册的那个 4dde 变体只认 IUnknown，
-    现代对话框只有 WinForms 自己的激活上下文拿得到。
-    """
+
+def pick_folder(start: str = "") -> str:
+    """原生目录选择器：macOS 走 pywebview Cocoa dialog，Windows 走 WinForms 目录对话框。"""
+    if _studio_window is None:
+        return ""
     res = _on_sta(lambda: _studio_window.create_file_dialog(FileDialog.FOLDER, directory=start))
-    return res[0] if res else ""
+    return _dialog_result(res)
 
 
 def pick_python_file(start: str = "") -> str:
-    """选 python.exe：pywebview 原生文件对话框。只在引导页用，那时窗口已在，宿主跑不掉。"""
+    """选解释器：macOS 选 venv/bin/python 或裸 python；Windows 选 python.exe。"""
+    if _studio_window is None:
+        return ""
+    file_types = (("可执行文件", "*.python*") if IS_MAC else PY_FILE_TYPES) if not IS_WINDOWS else PY_FILE_TYPES
     res = _on_sta(lambda: _studio_window.create_file_dialog(FileDialog.OPEN, directory=start,
-                                                             file_types=PY_FILE_TYPES))
-    return res[0] if res else ""
+                                                            file_types=file_types))
+    return _dialog_result(res)
 
 
 SPLASH_JS = """
@@ -1560,8 +1741,64 @@ refresh();
 """
 
 
+REMOTE_GUIDE_JS = """
+var S = __STATE__;
+var el = function (id) { return document.getElementById(id); };
+function api() { return window.pywebview && window.pywebview.api; }
+el('remote').value = S.remote || '';
+el('msg').textContent = S.error || '';
+el('msg').className = S.error ? 'bad' : '';
+el('go').onclick = async function () {
+  el('go').disabled = true;
+  el('msg').textContent = '正在连接远端 ComfyUI…';
+  el('msg').className = '';
+  var r = await api().start_remote(el('remote').value);
+  if (!r.ok) {
+    el('go').disabled = false;
+    el('msg').textContent = r.error || '连接失败';
+    el('msg').className = 'bad';
+  }
+};
+"""
+
+
+def remote_guide_html(state: dict) -> str:
+    """macOS 远程引导页：只要一个远端 ComfyUI 地址，本机不找 root、不装插件、不起进程。"""
+    return ('<!doctype html><meta charset=utf-8><title>新影工坊 · Neo Studio 远程连接</title>'
+            '<style>'
+            'html,body{height:100%;margin:0;background:#1e1e1e;color:#d7dae0;font:14px/1.7 system-ui}'
+            '.wrap{max-width:820px;margin:0 auto;padding:40px 32px}'
+            'h1{font-size:20px;font-weight:600;margin:0}'
+            '.sub{font-size:13px;color:#8a8f98;margin:6px 0 26px}'
+            '.row{margin-bottom:20px}'
+            '.row b{display:block;margin-bottom:6px}'
+            '.line{display:flex;gap:8px}'
+            'input{flex:1;min-width:0;background:#262626;color:#d7dae0;border:1px solid #3d3d3d;'
+            'border-radius:6px;padding:8px 10px;font:13px system-ui}'
+            'button{background:#2f6feb;color:#fff;border:0;border-radius:6px;padding:8px 16px;'
+            'font:13px system-ui;cursor:pointer}'
+            'button:disabled{opacity:.45;cursor:default}'
+            '.go{margin-top:6px;text-align:right}'
+            '#msg{font-size:13px;color:#8a8f98;margin-top:14px;white-space:pre-wrap}'
+            '.bad{color:#e0a94a}'
+            '</style>'
+            '<div class=wrap>'
+            '<h1>新影工坊 · Neo Studio</h1>'
+            '<div class=sub>输入局域网内那台 ComfyUI 的地址。本机不需要安装 ComfyUI，也不需要选择根目录。</div>'
+            '<div class=row><b>远程 ComfyUI 地址</b><div class=line>'
+            '<input id=remote spellcheck=false placeholder="http://192.168.0.7:8188"></div>'
+            '<div class=sub>远端需要已启动 ComfyUI，并已开启 --listen 与 Neo Studio 插件。</div></div>'
+            '<div class=go><button id=go>连接</button></div>'
+            '<div id=msg></div>'
+            '</div>'
+            '<script>' + REMOTE_GUIDE_JS.replace("__STATE__", json.dumps(state, ensure_ascii=False)) + '</script>')
+
+
 def guide_html(state: dict) -> str:
-    """首次设置页：补齐 ComfyUI 根目录与 Python 解释器，自动找到的直接预填，缺哪个补哪个。
+    """首次设置页：macOS 远程第一版走远程引导，Windows 仍走补齐 ComfyUI 根目录与解释器的本地引导。"""
+    if state.get("remote_guide"):
+        return remote_guide_html(state)
+    """补齐 ComfyUI 根目录与 Python 解释器，自动找到的直接预填，缺哪个补哪个。
 
     页面走 load_html + js_api，不碰桌面端服务 —— 根目录无效时 build_app 连 folder_paths 都 import 不了，
     服务本来就起不来。校验与拉起都在桌面端里，页面只收路径和显示原因。"""
@@ -1599,37 +1836,67 @@ def guide_html(state: dict) -> str:
             '<script>' + GUIDE_JS.replace("__STATE__", json.dumps(state, ensure_ascii=False)) + '</script>')
 
 
+SINGLETON_LOCK_FILE = STATE / "single_instance.lock"
+
+
 def singleton():
     """已有桌面端窗口返回 None：第二个实例直接退出，避免多窗口抢显存。
 
-    用命名互斥体，不占端口 —— 在 127.0.0.1:8189 挂一个监听，netstat 里看着就像第二路 ComfyUI，
-    用户会读成「起了 8188 和 8189 两个端口，关窗只掉 8189」。句柄必须活到进程结束，锁才成立。
-    已存在的信号只能问 kernel32.GetLastError()：ctypes.get_last_error() 在这条调用上拿不到 183。"""
-    h = k32.CreateMutexW(None, False, SINGLETON_MUTEX)
-    if k32.GetLastError() == ERROR_ALREADY_EXISTS:
-        k32.CloseHandle(h)
+    Windows 仍用命名互斥体；macOS 第一版用同一份数据目录里的 flock。锁文件不占端口，
+    也不会像 ComfyUI 残留标记那样混进素材库或启动配置。"""
+    if IS_WINDOWS:
+        h = k32.CreateMutexW(None, False, SINGLETON_MUTEX)
+        if k32.GetLastError() == ERROR_ALREADY_EXISTS:
+            k32.CloseHandle(h)
+            return None
+        return h or None
+    try:
+        STATE.mkdir(parents=True, exist_ok=True)
+        fd = os.open(SINGLETON_LOCK_FILE, os.O_RDWR | os.O_CREAT, 0o600)
+    except OSError:
         return None
-    return h or None
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        os.close(fd)
+        return None
+    try:
+        os.truncate(fd, 0)
+        os.write(fd, str(os.getpid()).encode("utf-8"))
+        os.fsync(fd)
+    except OSError:
+        pass   # 锁仍有效；写入 PID 只是给调试时看，失败不能把单实例拦住
+    return fd
 
 
 SINGLETON_HANDLE = None
 
 
 def release_singleton() -> None:
-    """交还互斥体。锁只在进程退出时由系统释放，关窗收尾那一两秒里重开就被「窗口已在运行」拦住 ——
+    """交还互斥体/文件锁。锁只在进程退出时由系统释放，关窗收尾那一两秒里重开就被「窗口已在运行」拦住 ——
     用户读成「关完要等一会才能启动」。收尾一开头就交还，窗口还没落地也能重开。"""
     global SINGLETON_HANDLE
     if SINGLETON_HANDLE:
-        k32.CloseHandle(SINGLETON_HANDLE)
+        if IS_WINDOWS:
+            k32.CloseHandle(SINGLETON_HANDLE)
+        else:
+            try:
+                fcntl.flock(SINGLETON_HANDLE, fcntl.LOCK_UN)
+            except OSError:
+                pass
+            try:
+                os.close(SINGLETON_HANDLE)
+            except OSError:
+                pass
         SINGLETON_HANDLE = None
 
 
 def ensure_clr() -> None:
     """开窗口前把 pythonnet 的 CLR 宿主装好，netfx 起不来就换 coreclr。
 
-    pywebview 自己的 coreclr 兜底是失效的：netfx 的 runtime 对象已经占住 pythonnet._RUNTIME，
-    它改完环境变量再 import 走的还是那个坏掉的 netfx，异常原样抛出来（窗口都开不出来）。
-    换 coreclr 必须显式 set_runtime 覆盖 _RUNTIME，运行时配置走 CORECLR_CONFIG（桌面运行时）。"""
+    macOS Cocoa 不需要 pythonnet；这里只在 Windows edgechromium 前跑一次。"""
+    if not IS_WINDOWS:
+        return
     try:
         import clr  # noqa: F401
         return
@@ -1648,6 +1915,7 @@ def main() -> int:
     ap.add_argument("--port", type=int, default=0)
     ap.add_argument("--python", default="")
     ap.add_argument("--root", default="")
+    ap.add_argument("--remote", default="", help="远程 ComfyUI：http(s)://主机[:端口]；空 = 连本机/读取已存配置")
     ap.add_argument("--cdp", type=int, default=0, help="WebView2 远程调试端口（E2E 用）")
     ap.add_argument("--debug", action="store_true")
     args = ap.parse_args()
@@ -1657,6 +1925,12 @@ def main() -> int:
         return 1
 
     cfg = load_config()
+    raw_remote = args.remote if args.remote else str(cfg.get("remote", ""))
+    remote = comfy_remote(raw_remote)
+    if remote is None:
+        alert(f"远程地址无效：{raw_remote}（需要 http(s)://主机[:端口]，或留空连本机）")
+        return 1
+
     port = args.port or int(cfg.get("port") or DEFAULT_PORT)
     log_line(f"start port={port} state={STATE}")
     lock = singleton()
@@ -1667,29 +1941,42 @@ def main() -> int:
     global SINGLETON_HANDLE
     SINGLETON_HANDLE = lock   # 句柄活到进程结束锁才成立；交还点在 on_closing
 
-    root = resolve_root(args.root)
-    python = find_python(root, args.python or cfg.get("python", "")) if root is not None else None
-    # 根目录无效或解释器找不到：窗口先开在引导页补齐，选完再起服务、拉起 ComfyUI
-    need_guide = root is None or not root_ok(root) or python is None
-    plugin_dir = plugin_dir_for(root) if root is not None else PLUGIN_SOURCE_DIR
-    # flags 由桌面端服务与 js_api 共用：拉起 ComfyUI 的那一刻起，页面的版本快照就是「启动中」
-    # 插件缺失且自动安装失败：桌面端服务退回内置副本，素材库照旧离线可浏览
-    serve_dir = plugin_dir if plugin_dir.is_dir() else PLUGIN_SOURCE_DIR
+    # 纯远程 macOS 第一版：有 remote 就完全绕开本机 ComfyUI 根目录、解释器与桌面端只读服务。
+    # 本地模式仍保留给 Windows；macOS 无 remote 时先走远程引导页，避免把本机自检当必选项。
+    remote_only = bool(remote) and (IS_MAC or bool(args.remote)) and not args.root
+    if remote_only:
+        root = None
+        python = None
+        plugin_dir = serve_dir = PLUGIN_SOURCE_DIR
+        need_guide = False
+    else:
+        root = resolve_root(args.root)
+        python = find_python(root, args.python or cfg.get("python", "")) if root is not None else None
+        # 根目录无效或解释器找不到：窗口先开在引导页补齐，选完再起服务、拉起 ComfyUI
+        need_guide = root is None or not root_ok(root) or python is None
+        plugin_dir = plugin_dir_for(root) if root is not None else PLUGIN_SOURCE_DIR
+        # flags 由桌面端服务与 js_api 共用：拉起 ComfyUI 的那一刻起，页面的版本快照就是「启动中」
+        # 插件缺失且自动安装失败：桌面端服务退回内置副本，素材库照旧离线可浏览
+        serve_dir = plugin_dir if plugin_dir.is_dir() else PLUGIN_SOURCE_DIR
     flags = {"starting": False}
+    remote_guide = IS_MAC and not remote_only and not remote
     launcher = {"root": str(root or ""), "python": str(python or ""), "port": port,
                 "plugin_dir": str(plugin_dir), "state_dir": str(STATE),
-                "portable": IS_FROZEN, "state": ST_OK, "error": "",
-                # 无边框是新默认：老配置没这一项也走无边框，设置里可关
-                "frameless": bool(cfg.get("frameless", True)),
+                "portable": IS_FROZEN, "state": ST_REMOTE if remote_only else ST_OK, "error": "",
+                # 无边框是 Windows 新默认；macOS 第一版用原生标题栏，老配置也不能把自绘拖动带过来
+                "frameless": bool(cfg.get("frameless", not IS_MAC)),
                 # 开发模式默认关：pywebview 把 WebView2 的刷新键 / 右键菜单 / 开发者工具全绑在 debug 上
                 "dev_mode": bool(cfg.get("dev_mode")),
                 # 局域网监听默认空 = ComfyUI 只监听 127.0.0.1；lan_ips 是给设置页抄的提示地址
                 # remote 非空 = 连远端那台 ComfyUI：本机不拉进程，窗口直接指向远端
                 "listen": comfy_listen(cfg.get("listen", "")) or "", "lan_ips": lan_ips(),
-                "remote": comfy_remote(cfg.get("remote", "")) or ""}
+                "remote": remote, "remote_guide": remote_guide,
+                "remote_only": remote_only, "platform": "mac" if IS_MAC else "windows"}
     launcher_api: dict = {}   # 桌面端路由延迟取桌面端的方法：服务先起，桌面端的方法随后补上
     if need_guide:
-        state, msg = ((ST_BAD_ROOT, "还没确定 ComfyUI 根目录")
+        state, msg = ((ST_REMOTE_DOWN, "还没填写远程 ComfyUI 地址")
+                      if remote_guide
+                      else (ST_BAD_ROOT, "还没确定 ComfyUI 根目录")
                       if root is None or not root_ok(root)
                       else (ST_NO_PYTHON, "还没确定 Python 解释器"))
         launcher.update(state=state, error=msg)
@@ -1742,7 +2029,8 @@ def main() -> int:
     desktop = StudioDesktop(f"http://127.0.0.1:{port}/neo-studio", None, port, root or Path(""),
                         str(python or ""), "", port + DESKTOP_PORT_OFFSET, flags, launcher)
     desktop.ensure_server = ensure_server
-    launcher_api.update(apply=desktop.apply_launcher, install_plugin=desktop.install_plugin,
+    launcher_api.update(apply=desktop.apply_launcher, start_remote=desktop.start_remote,
+                        install_plugin=desktop.install_plugin,
                         install_deps=desktop.install_deps, pick_root=desktop.pick_root,
                         set_frameless=desktop.set_frameless, set_dev_mode=desktop.set_dev_mode,
                         state=desktop.launcher_state)
@@ -1834,6 +2122,20 @@ def main() -> int:
 
     def boot_sequence() -> None:
         """窗口先出之后在后台走完的启动序列：自检 → 桌面端服务 → 拉起 ComfyUI → 把窗口指过去。"""
+        if remote_only:
+            state, msg = remote_startup_state(desktop.remote, timeout=2.0)
+            launcher.update(state=state, error=msg)
+            log_line(f"startup state={state} {msg}")
+            if desktop.closing:
+                return
+            if state == ST_REMOTE:
+                desktop.starting = True
+                threading.Thread(target=desktop._jump_when_ready, daemon=True).start()
+                return
+            desktop.starting = False
+            window.load_html(guide_html(launcher))
+            desktop.rearm()
+            return
         state, msg = startup_state(root, python, plugin_dir)
         launcher.update(state=state, error=msg)
         log_line(f"startup state={state} {msg}")
@@ -1868,7 +2170,7 @@ def main() -> int:
     # 任务栏图标：pythonw 没有 AppUserModelID，任务栏按钮会与其他 pythonw 窗口合并成通用 Python 图标；
     # 显式设 ID 后 start(icon=...) 才落到桌面端自己的图标（edgechromium 后端读 _state['icon']）
     icon = str(STUDIO_ICON) if STUDIO_ICON.exists() else None
-    if icon:
+    if icon and IS_WINDOWS:
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(APP_ID)
 
     # 配方导出 / 模型库的 blob 下载要放行；「⤒ 主画布编辑」与顶栏「新影工坊」这类 _blank 链接
@@ -1886,7 +2188,7 @@ def main() -> int:
     purge_web_cache()   # 历史缓存里的旧插件 JS 会把模块图撕开，开窗口前清掉
     on_start = None if need_guide else (lambda: threading.Thread(target=boot_sequence,
                                                                  daemon=True).start())
-    webview.start(on_start, private_mode=False, storage_path=str(PROFILE_DIR), gui="edgechromium",
+    webview.start(on_start, private_mode=False, storage_path=str(PROFILE_DIR), gui=GUI_BACKEND,
                   debug=debug, icon=icon)
     log_line("webview end")
     if closing["thread"] is not None:

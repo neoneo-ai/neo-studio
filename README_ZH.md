@@ -195,6 +195,7 @@ git clone https://github.com/neoneo-ai/neo-studio.git ComfyUI/custom_nodes/comfy
 | `neo-studio-app.vbs` | 同一页面跑在独立 WebView2 窗口：无控制台黑窗、不占浏览器标签，窗口几何与状态重开保留（需 `pywebview`，Windows 自带 WebView2 Runtime 即可） |
 | `neo-studio-app.bat` | 同一窗口的带控制台调试入口（`--debug` 开 DevTools） |
 | `tools/neo-studio.exe` | 拍板造型图标的打包启动器，由 `tools\build_studio_exe.ps1` 产出（见 [docs/release.md](docs/release.md)） |
+| `python app/studio_app.py --remote <url>` | macOS v1 远程模式窗口：连接到已装 Neo Studio 插件且可访问的远程 ComfyUI（需 `pywebview`） |
 
 - **桌面端是启动器，不只是窗口** — 自带离线服务（`app/studio_server.py`，ComfyUI 端口 +3，默认 `8191`），
   ComfyUI 没在跑时素材浏览 / 技能与配方编辑 / 设置（含 LLM 配置）/ 模型库 / 收藏 / LoRA 打标照常可用；
@@ -207,6 +208,9 @@ git clone https://github.com/neoneo-ai/neo-studio.git ComfyUI/custom_nodes/comfy
   绝不另起第二路。
 - **画布跳转留在窗口内** — 「⤒ 主画布编辑」与「🎬 新影工坊」在桌面端窗口内切换，非 Studio 页左上角由桌面端
   挂一枚「🎬 返回 Studio」胶囊。
+- **macOS v1 远程模式** — 只连接到已装 Neo Studio 插件且可访问的远程 ComfyUI；本机根目录 / 解释器 /
+  端口 / 局域网监听保持灰掉，远程不可达时停在远程地址引导页，可重新填写地址并重连。
+
 - ComfyUI 后台日志在「设置 → 日志」里看；桌面端自己的启动 / 跳转 / 拖动过程落在 `data/studio_desktop.log`。
 
 无边框窗口、窗口与任务栏图标、exe 打包、便携启动器与源码同步：见 [Developer.md](Developer.md)。

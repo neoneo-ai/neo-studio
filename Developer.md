@@ -34,7 +34,7 @@
   另含 `image_gen_edit.py` 的 NeoImageGenEdit（V3 节点 + Autogrow 参考图）。
 - **API 路由**：gallery 系列与 `llm.py`（LLM 配置 / 标题提取）自带 `web.RouteTableDef`，由 `__init__.py` 统一挂进
   `PromptServer.instance.routes`（其余模块仍直接装饰注册），清单见 [docs/api-routes.md](docs/api-routes.md)。
-- **桌面端**：`app/studio_app.py`（pywebview + WebView2）拉起 ComfyUI 并托管窗口，桌面端服务在 ComfyUI 端口 +3
+- **桌面端**：`app/studio_app.py`（Windows 为 pywebview + WebView2 全功能路径；macOS v1 为远程模式窗口）拉起或附着 ComfyUI 并托管窗口，桌面端服务在 ComfyUI 端口 +3
   复用同一批 handler 跑离线 Studio（`app/studio_server.py` + `app/studio_caps.py` 能力表）。启动序列、引导页、
   无边框窗口与拖动、关窗与进程回收、单实例锁、插件同步、缓存与日志的约定见
   [docs/studio-desktop.md](docs/studio-desktop.md)。
