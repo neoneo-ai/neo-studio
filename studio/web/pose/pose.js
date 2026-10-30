@@ -11,7 +11,7 @@
  *   页面 → 宿主  pose:ready        页面装配完，宿主立刻回一份 pose:theme
  *   页面 → 宿主  pose:state        画布状态快照（素体 / 人数 / 道具数），面板镜像它
  *   宿主 → 页面  pose:theme        能力位与语言：caps.hostUi 决定页面收不收 demo 控件
- *   宿主 → 页面  neo:import-image  素材库里选中的一张图（同源 /view URL）
+ *   宿主 → 页面  neo:import-image  素材库里选中的一张图（后端 pose/refs/ 伺服的同源 URL）
  *   宿主 → 页面  pose:export-image 请求导出画布，页面从回复端口回 {data, name}
  *   宿主 → 页面  pose:save-scene   请求序列化场景，页面从回复端口回 {scene}
  *   宿主 → 页面  pose:open-scene   把已存场景装回页面
@@ -43,16 +43,15 @@ const BODY_KEY_RE = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/;   // 素体 key：与�
 /** 页面开局是摄影棚灰（摆姿页 core/scene.js 的 LOOKS.studio），面板按产品口径把外观定在暗色档 */
 const DEFAULT_LOOK_KEY = "dark";
 
-/** 素材库选中项 → 摆姿页能直接吃的图片 URL：iframe 与宿主同源，就是原生 /view */
-export function poseMaterialUrl(item) {
-    if (!item?.filename) return "";
-    const q = new URLSearchParams({
-        filename: item.filename,
-        subfolder: item.subfolder || "",
-        type: item.type || "output",
-    });
-    return `/view?${q}`;
-}
+/**
+ * 素材库选中项交进摆姿页：先经 /neo_pose/import_image 把这张图落进 pose/refs/，
+ * 页面拿回的是后端自己伺服的同源地址。
+ *
+ * 拼原生 /view 不行：它只认 ComfyUI 的 output / input 两棵树，素材库里的自定义目录、收藏与 OSS
+ * 预设缓存全靠 gallery 那套解析（`_find_source_media`），这些卡片拼出来的 /view 一律 404，
+ * 页面拿到坏地址就什么都不画 —— 一次点击就成了「没效果」。
+ */
+const IMPORT_IMAGE_ROUTE = "/neo_pose/import_image";
 
 /** 道具显示名归一：页面 label 带全角括号后缀（细剑（Sting））时，括号前的名字也算同一个名字 */
 function propChoiceName(text) {
@@ -352,12 +351,19 @@ export function createPoseView({ api, $el, toast, openMaterial }) {
         const refreshProps = () => action("prop/list").then(paintProps)
             .catch((e) => toast(tf("道具列表失败：{msg}", { msg: e.message })));
 
-        btnImport.onclick = () => openMaterial((picked) => {
+        btnImport.onclick = () => openMaterial(async (picked) => {
             const item = Array.isArray(picked) ? picked[0] : picked;
-            const url = poseMaterialUrl(item);
-            if (!url) { toast(t("没取到图片")); return; }
-            post("neo:import-image", { url, name: item.filename });
-            toast(t("已送入摆姿页"));
+            if (!item?.filename) { toast(t("没取到图片")); return; }
+            // 落进 pose/refs/ 才交得出地址：后端认素材库那套解析，自定义目录与缓存都算得出来，
+            // 失败（素材不在、非图片）在这一层就报进 toast，不再默默送一个页面接不住的 URL
+            await run(async () => {
+                const data = await json(IMPORT_IMAGE_ROUTE, {
+                    filename: item.filename,
+                    subfolder: item.subfolder || "",
+                });
+                post("neo:import-image", { url: data.url, name: item.filename });
+                toast(tf("已贴上参考图：{name}", { name: data.name || item.filename }));
+            });
         });
 
         /* 自备素体：GLB 从本机读进内存再交后端 —— 素材库列表只列图片，用户从 Mixamo 下来的那份

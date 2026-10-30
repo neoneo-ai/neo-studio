@@ -38,6 +38,14 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   that file back and sends `pose/apply` on the click. The Apply Preset button is gone; Load Pose stays for a name
   typed into the field.
 
+- **The Pose page's 导入素材 puts the picked card on the tracing plane.** Clicking it used to hand the pose page a
+  `/view` URL built from the card's filename and subfolder: `/view` reads only ComfyUI's output and input trees, so a
+  card from a custom directory, a bookmark, or the OSS preset cache resolved to an address the page could not fetch,
+  and the click drew nothing while the toast claimed it had been sent. The picked card now goes through
+  `/neo_pose/import_image`, which resolves the library's own coordinates, copies the image into
+  `<data root>/pose/refs/`, and replies with the address the pose backend serves itself; an asset that is missing or
+  is not an image now reports the reason in the toast instead of doing nothing at all.
+
 - **Video frame extraction gets its own Studio page.** Opening a video in the library and wanting a frame out of
   it used to have no path: the only way was to hand the clip to ComfyUI and load the result back. The home card
   **视频抽帧** (Video Frame Extraction) opens a page that plays the clip and drags the start point along the

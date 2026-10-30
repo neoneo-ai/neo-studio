@@ -4,7 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { resetEnv, mockRoute, clearRoutes, jsonResponse, fetchLog, click, changeValue, inputText, flush, sleep, window } from "./setup.mjs";
 import { $el } from "../../web/studio/shim/ui.js";
-import { createPoseView, poseMaterialUrl, resolvePropChoice, POSE_PAGE_URL } from "../../web/pose/pose.js";
+import { createPoseView, resolvePropChoice, POSE_PAGE_URL } from "../../web/pose/pose.js";
 
 const api = { fetchApi: (path, opts) => fetch(path, opts) };
 const LIB = ".ns-pose-side:not(.ns-pose-panel)";
@@ -409,16 +409,39 @@ test("页面拒绝动作：原因进 toast，控件按能力位解锁", async ()
         "失败之后控件要解锁，不许锁死面板");
 });
 
-test("导入素材：素材库选中项变成同源 /view URL 送进页面", async () => {
+test("导入素材：选中的那张经 /neo_pose/import_image 落进 refs，伺服地址送进页面", async () => {
     resetEnv();
-    assert.equal(poseMaterialUrl(null), "");
     const env = await mounted();
     await env.ready();
+    mockRoute("/neo_pose/import_image", () => jsonResponse({
+        success: true, name: "a.png", url: "/neo_pose/refs/a.png",
+    }));
     click(env.button("导入素材", ".ns-pose-bar"));   // 先开素材库，回调才交到手上来
-    env.pick([{ filename: "a.png", subfolder: "角色", type: "output" }]);
+    env.pick([{ filename: "a.png", subfolder: "角色" }]);
+    await settle();
+    const posted = fetchLog.find((f) => f.method === "POST" && f.path === "/neo_pose/import_image");
+    assert.deepEqual(posted.body, { filename: "a.png", subfolder: "角色" },
+        "素材库的坐标原样交后端解析：自定义目录、收藏与 OSS 预设缓存都只有它算得出来");
     const imported = env.sent.find((s) => s.msg.type === "neo:import-image");
-    assert.match(imported.msg.url, /^\/view\?filename=a\.png/);
-    assert.match(imported.msg.url, /subfolder=/);
+    assert.equal(imported.msg.url, "/neo_pose/refs/a.png",
+        "页面吃的必须是后端伺服的那份 —— 拼原生 /view 的话素材库自定义目录那张只会 404，画布上什么都不画");
+    assert.equal(imported.msg.name, "a.png");
+    assert.match(env.toasts.join("|"), /已贴上参考图：a\.png/);
+});
+
+test("导入素材：后端没落成交付时原因进 toast，不送坏地址，按钮解锁", async () => {
+    resetEnv();
+    const env = await mounted();
+    await env.ready();
+    mockRoute("/neo_pose/import_image", () => jsonResponse(
+        { success: false, error: "素材不存在：a.png" }, 404));
+    click(env.button("导入素材", ".ns-pose-bar"));
+    env.pick([{ filename: "a.png", subfolder: "" }]);
+    await settle();
+    assert.match(env.toasts.join("|"), /素材不存在：a\.png/);
+    assert.equal(env.sent.find((s) => s.msg.type === "neo:import-image"), undefined,
+        "落不成就不许发 neo:import-image：页面接到坏地址只会静默什么都不画");
+    assert.equal(env.button("导入素材", ".ns-pose-bar").disabled, false, "失败之后按钮要解锁");
 });
 
 test("跑在随包副本上：左栏说明只有 CC0 素体随包；跑在数据根那份上不出这句", async () => {

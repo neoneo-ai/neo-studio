@@ -90,7 +90,7 @@ const EN = {
     "摆姿页回复不可读": "The pose page reply is unreadable",
     "摆姿页拒绝了动作": "The pose page rejected the action",
     "没取到图片": "No image picked",
-    "已送入摆姿页": "Sent to the pose page",
+    "已贴上参考图：{name}": "Reference image added: {name}",
     "读取摆姿状态…": "Reading pose status…",
     "摆姿状态读不到": "Pose status unavailable",
     "后端未就绪：刷新页面重试。": "The backend is not ready: reload the page.",
