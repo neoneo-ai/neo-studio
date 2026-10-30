@@ -3065,7 +3065,9 @@ export function openGenMaterialDialog(gallery, opts = null) {
     let genModels = null; // 打开时拉取的模型列表，切换技能重放配置时复用
     // 切换生成技能后把自定参数同步为该技能配置的主模型 / LoRA / 比例 / 最长边（无配置 = 自动跟随全局设置）
     async function applySkillModelConfig(skillId) {
-        if (!genModels) return; // 模型列表未就绪：首次加载 / 技能列表回调稍后会应用
+        // 模型列表未就绪，或技能列表还没回填（下拉为空串）：后者问后端必回 400（后端只在带 skill_id 时答配置），
+        // 且会把刚渲染的「自动」覆盖成一份空配置。fillSkillOptions 填完选项会重放这一次。
+        if (!genModels || !skillId) return;
         const cfg = await getSkillGenConfig(skillId);
         modelCfg.load(cfg, genModels);
         ratioSel.value = GM_RATIOS.includes(cfg.default_ratio) ? cfg.default_ratio : "";

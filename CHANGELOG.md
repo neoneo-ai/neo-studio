@@ -4,6 +4,12 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **The "Generate material" dialog no longer asks for a skill config before a skill is selected.** Opening the dialog
+  when the model list answered before the skill list fired `GET /neo_image_gen/skill_config?skill_id=`, which the
+  backend rejects with `400` and the browser logged a red failed request on every open. The dialog now applies the
+  skill config only after the skill list lands, then replays the selected skill's own defaults
+  (main model / LoRA / ratio / longest edge).
+
 - **The Studio desktop page keeps loading on older WebKit browsers.** Some macOS WebKit
   builds expose `crypto` without `crypto.randomUUID`, which crashed Studio shell startup
   with only the top bar visible. The client id generator now falls back to

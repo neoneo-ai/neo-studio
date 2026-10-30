@@ -1076,3 +1076,41 @@ test("生成素材弹窗：技能与自定参数同一枚 chip——技能按家
     overlay.remove();
 });
 
+test("生成素材弹窗：模型列表先到时不许问空技能，技能列表落地后再重放配置", async () => {
+    resetEnv();
+    clearRoutes();
+    localStorage.clear();
+    const { openGenMaterialDialog } = await import("../../web/gallery-gen.js");
+
+    // 模型列表与技能列表各自扫一遍目录，谁先回不定：模型先到时下拉还是空的，
+    // 空串问 /neo_image_gen/skill_config 必吃后端 400（后端只在带 skill_id 时答配置）。
+    // 这里把技能列表压后，复现「模型先到」那一路（弹窗与 chip 各拉一次技能列表，两个都要压住）。
+    const releases = [];
+    mockRoute("/rs_prompts/skills", () => new Promise((resolve) => { releases.push(resolve); }));
+    mockRoute("/neo_image_gen/models", () => jsonResponse({
+        diffusion_models: ["krea2.safetensors"], loras: [],
+    }));
+    mockRoute("/neo_image_gen/skill_config", (_body, call) => call.query.get("skill_id")
+        ? jsonResponse({ default_ratio: "16:9" })
+        : jsonResponse({ error: "缺少 skill_id" }, 400));
+
+    openGenMaterialDialog({ showDirectoryStructure: () => {} });
+    const overlay = document.querySelector(".neo-gallery-gm-modal-overlay");
+    await sleep(50);   // 模型列表已落地，技能列表还挂着
+    const ratioSel = overlay.querySelector(".neo-gallery-gm-size-row select");
+    assert.equal(ratioSel.value, "", "技能没落地时自定参数保持「自动」");
+    assert.equal(fetchLog.filter((c) => c.path === "/neo_image_gen/skill_config").length, 0,
+        "没有选中技能就不该问技能配置");
+
+    const skills = jsonResponse([{ id: "image_gen", cn_name: "Krea2文生图", category: "image_gen", gen_image: true }]);
+    for (const release of releases) release(skills);
+    await sleep(50);   // 技能落地后重放该技能自己的配置
+    const cfgReqs = fetchLog.filter((c) => c.path === "/neo_image_gen/skill_config");
+    assert.ok(cfgReqs.length, "技能落地后应问一次该技能的配置");
+    assert.ok(cfgReqs.every((c) => c.query.get("skill_id")), "每条配置请求都带上选中的技能 id");
+    assert.equal(cfgReqs.at(-1).query.get("skill_id"), "image_gen", "重放问的是当前选中的技能");
+    assert.equal(ratioSel.value, "16:9", "重放把自定参数按到该技能配置的默认比例");
+    assert.equal(ratioSel.dataset.follow, "16:9 宽屏", "「默认」项与 chip 写出该技能的跟随值");
+    overlay.remove();
+});
+
