@@ -181,7 +181,6 @@ export function createPoseView({ api, $el, toast, openMaterial }) {
         const sizeSel = sel("尺寸", panelGate);
         const exportLabel = field("标签（默认 pose）");
 
-        const btnApplyPreset = btn("套用预设", "target", panelGate);
         const btnAddMember = btn("加素体", "plus", panelGate);
         const btnDelMember = btn("删当前素体", "cross", panelGate);
         const btnResetPose = btn("重置姿态", "history", panelGate);
@@ -205,7 +204,7 @@ export function createPoseView({ api, $el, toast, openMaterial }) {
             group("画布状态", [stateBox]),
             group("素体", [row([modelSel, btnAddMember]), row([btnDelMember, btnResetPose]),
                 row([bodyKey, btnImportBody]), bodyFile]),
-            group("摆姿", [row([presetSel, btnApplyPreset]), row([lookSel])]),
+            group("摆姿", [row([presetSel]), row([lookSel])]),
             group("道具", [
                 row([propSel, propName]),
                 row([btnAddProp]),
@@ -342,7 +341,8 @@ export function createPoseView({ api, $el, toast, openMaterial }) {
         }
 
         const refreshPresets = () => json("/neo_pose/presets").then((d) => {
-            paintFileList(presetList, d.presets || [], pickedPreset, (n) => { pickedPreset = n; refreshPresets(); });
+            /* 点一条 = 选它并把它套上：姿势库的卡片本来就是「用这份姿势」，不该再要一步 */
+            paintFileList(presetList, d.presets || [], pickedPreset, (n) => run(() => loadPoseFile(n)));
         }).catch(() => paintFileList(presetList, [], "", () => {}));
 
         const refreshScenes = () => json("/neo_pose/scenes").then((d) => {
@@ -403,13 +403,26 @@ export function createPoseView({ api, $el, toast, openMaterial }) {
             toast(tf("已存入姿势库：{name}", { name: typed }));
         });
 
-        btnLoadPreset.onclick = () => run(async () => {
-            const name = presetName.value.trim() || pickedPreset;
-            if (!name) { toast(t("先在姿势库里选一个姿态")); return; }
+        /* 预设下拉一改就套：面板不再要「套用预设」第二步 —— 下拉里那一项就是用户要的结果 */
+        presetSel.onchange = () => run(async () => {
+            if (!presetSel.value) return;
+            paintState(await action("preset/apply", { key: presetSel.value }));
+        });
+
+        /* 姿势库的一条 = 读文件并套上：点一下就是结果，不再要「载入姿态」第二步 */
+        async function loadPoseFile(name) {
+            pickedPreset = name;
+            await refreshPresets();
             const data = await json(`/neo_pose/preset?name=${encodeURIComponent(name)}`);
             const r = await action("pose/apply", { file: data.pose });
             toast(tf("已套用姿态：{name}（骨骼 {applied} 处，缺 {missing} 处）",
                 { name, applied: r.applied ?? 0, missing: (r.missing || []).length }));
+        }
+
+        btnLoadPreset.onclick = () => run(async () => {
+            const name = presetName.value.trim() || pickedPreset;
+            if (!name) { toast(t("先在姿势库里选一个姿态")); return; }
+            await loadPoseFile(name);
         });
 
         btnDelPreset.onclick = () => run(async () => {
@@ -444,10 +457,6 @@ export function createPoseView({ api, $el, toast, openMaterial }) {
             action("member/add", modelSel.value ? { key: modelSel.value } : {}).then(paintState));
         btnDelMember.onclick = () => run(() => action("member/remove").then(paintState));
         btnResetPose.onclick = () => run(() => action("scene/reset").then(paintState));
-        btnApplyPreset.onclick = () => run(async () => {
-            if (!presetSel.value) { toast(t("先选一个预设")); return; }
-            paintState(await action("preset/apply", { key: presetSel.value }));
-        });
         lookSel.onchange = () => run(() => action("look/set", { key: lookSel.value }));
 
         btnAddProp.onclick = () => run(async () => {

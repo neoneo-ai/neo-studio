@@ -4,6 +4,13 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **The pose panel applies a pose in one click.** Picking a preset used to be a two-step act: the dropdown only
+  filled itself, and the pose had to be applied with a separate **套用预设** (Apply Preset) button - the same second
+  step the pose library had, where clicking an entry only marked it selected and **载入姿态** (Load Pose) did the
+  work. The preset dropdown now sends `preset/apply` as soon as the value changes, and a pose-library entry reads
+  that file back and sends `pose/apply` on the click. The Apply Preset button is gone; Load Pose stays for a name
+  typed into the field.
+
 - **Video frame extraction gets its own Studio page.** Opening a video in the library and wanting a frame out of
   it used to have no path: the only way was to hand the clip to ComfyUI and load the result back. The home card
   **视频抽帧** (Video Frame Extraction) opens a page that plays the clip and drags the start point along the

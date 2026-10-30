@@ -309,16 +309,35 @@ test("姿势库：存为姿态走 pose/export 写文件，载入读文件交回 
     assert.deepEqual(saved.body.pose, { version: 1, rig: {} }, "PoseFile 原样落盘，宿主不改一个字段");
     assert.match(env.toasts.join("|"), /hero pose/);
 
+    /* 点库里的一条就把它套上：不再有「载入姿态」第二步 */
     click(env.item("run pose", LIB));
-    click(env.button("载入姿态", LIB));
     await settle();
     assert.deepEqual(env.calls("pose/apply")[0].msg.args.file, { version: 1, rig: {} },
-        "载入是把库里的文件交回页面套用");
+        "点一条就是把库里那份交回页面套用");
+    /* 输入框里的名字还是另一条路：手打的名称也能套，走的还是同一条套用路径 */
+    inputText(env.libField(0), "run pose");
+    click(env.button("载入姿态", LIB));
+    await settle();
+    assert.equal(env.calls("pose/apply").length, 2, "载入姿态复用同一条套用，不另写一份逻辑");
 
     click(env.button("删姿态", LIB));
     await settle();
     const del = fetchLog.find((c) => c.method === "POST" && c.path === "/neo_pose/preset/delete");
     assert.equal(del.body.name, "run pose");
+});
+
+test("预设下拉一改就套：不再要「套用预设」第二步", async () => {
+    resetEnv();
+    const env = await mounted();
+    await env.ready();
+    env.replyCall(env.calls("meta/list")[0], META);
+    env.replyCall(env.calls("prop/list")[0], PROPS);
+    await settle();
+    assert.ok(!env.button("套用预设", PANEL), "面板不再出这颗按钮");
+    changeValue(env.sel(1), "run");
+    await settle();
+    assert.deepEqual(env.calls("preset/apply")[0].msg.args, { key: "run" }, "改下拉就是套用");
+    assert.equal(env.sel(1).options.length, 2, "预设下拉来自 meta/list 那份清单");
 });
 
 test("ControlNet 图组：页面交回 files，宿主 POST 进 /neo_pose/export_set", async () => {

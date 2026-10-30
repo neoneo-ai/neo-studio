@@ -154,6 +154,10 @@ figure ships when the page runs on the bundled copy. Every control stays disable
 until `pose:ready`, and the panel appears with it; the bridge is torn down with `pose:dispose`, so
 leaving the page leaves no listener behind.
 
+The preset and the pose library apply in one click: changing the preset dropdown sends `preset/apply`,
+and clicking a library entry reads that file back and sends `pose/apply` (the Load Pose button is kept
+for a typed-in name), so the panel no longer has an "Apply Preset" step.
+
 The panel has no 摆姿模式 / 吸附 / 轮廓线 / 主体层 checkboxes: posing starts by clicking the figure, which
 makes the page enter pose mode on its own and leave it on an empty-space click, the page starts with snap
 and outline off, and the figure stays visible - so the canvas state line mirrors only the character, its

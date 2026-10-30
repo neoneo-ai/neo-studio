@@ -1,13 +1,13 @@
 {
   "format": "3dpose.package/1",
   "generator": "tools/build_pose_package.ps1",
-  "built_utc": "2026-10-29T01:23:10Z",
-  "total_bytes": 4093576,
+  "built_utc": "2026-10-30T02:28:34Z",
+  "total_bytes": 4118751,
   "files": [
     {
-      "path": "assets/index-BKzQo_MZ.js",
-      "bytes": 1111001,
-      "sha256": "f3f1c4a6576c9311c00189fc2a20277f41c1d3890840a242a2cad6ca13bcb024"
+      "path": "assets/index-CO24L2vj.js",
+      "bytes": 1136111,
+      "sha256": "e0b7f84ea673e49d6be678e04a798d5169e0317aa0ab4a69b4d5cf573e737e66"
     },
     {
       "path": "assets/index-CR1FdUgI.css",
@@ -16,8 +16,8 @@
     },
     {
       "path": "index.html",
-      "bytes": 15354,
-      "sha256": "0f79efab60b996345a447517ab7a055a00f09fc40621a7788f9ffbf3e672eb5d"
+      "bytes": 15419,
+      "sha256": "16f927bc4b5476fbb7711949a5a313d871ec958914c62d532a84d334205ab8ce"
     },
     {
       "path": "LICENSE",

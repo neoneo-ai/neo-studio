@@ -50,7 +50,6 @@ const EN = {
     "删姿态": "Delete Pose",
     "存为场景": "Save Scene",
     "载入场景": "Load Scene",
-    "套用预设": "Apply Preset",
     "加素体": "Add Character",
     "删当前素体": "Remove Character",
     // 自备素体：随包只发授权干净的 CC0 素体，Mixamo 与 SMPL 那几份由用户自备 GLB 导入
@@ -99,7 +98,6 @@ const EN = {
     "未找到摆姿包。": "The pose package was not found.",
     "重新检查": "Check again",
     "摆姿包不含宿主命令层：运行 tools\\sync_pose_dist.ps1 同步最新构建产物。": "The pose package has no host command layer: run tools\\sync_pose_dist.ps1 to sync the latest build.",
-    "先选一个预设": "Pick a preset first",
     "先选一个道具": "Pick a prop first",
     // 自由填写的道具名：定义在摆姿包的道具表里，面板只在 meta/list 那份清单里找，找不到要说清能输什么
     "道具名（例：椅子）": "Prop name (e.g. 椅子)",
