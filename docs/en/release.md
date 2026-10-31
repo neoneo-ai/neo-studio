@@ -107,6 +107,10 @@ The window and taskbar icon is the clapperboard `web/neo-studio.ico`, generated 
 The default is `both`, so a tag attaches both forms; for a manual dispatch that builds only one, type
 `onefile` or `onedir` into `mode`.
 
+The version has one source: `studio/pyproject.toml`, which is what `util.plugin_version()` reads. A tag
+build uses the tag name and a manual dispatch reads the same file; the root `pyproject.toml` only declares
+the desktop dependencies and never names the assets.
+
 The macOS remote-only `.app` is not published from GitHub Actions yet; build it locally with
 `bash tools/build_studio_mac.sh`, and the artifact lives at `tools/Neo-Studio.app`. First launch may show a
 Gatekeeper prompt; for an unsigned local build, use right-click → Open first, or

@@ -40,6 +40,8 @@ jobs:
       - name: Install build dependencies
         run: pip install pyinstaller pywebview pythonnet aiohttp PyYAML pypinyin Pillow
 
+      # 版本只有一个源：studio/pyproject.toml（util.plugin_version() 读的就是它）。tag 触发直接用 tag 名，
+      # 手动触发读同一份文件；根 pyproject.toml 只声明桌面端依赖，别再读它。
       - name: Resolve version
         id: ver
         shell: bash
@@ -47,7 +49,7 @@ jobs:
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
           else
-            echo "version=$(python -c "import tomllib;print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")" >> "$GITHUB_OUTPUT"
+            echo "version=$(python -c "import tomllib;print(tomllib.load(open('studio/pyproject.toml','rb'))['project']['version'])")" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Build the launcher

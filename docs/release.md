@@ -89,6 +89,9 @@ git 检出的那份不碰。
 
 默认 `both`，两种形态一起挂上 Release；手动触发只想出一种时把 `mode` 填成 `onefile` 或 `onedir`。
 
+版本号只有一个源：`studio/pyproject.toml`（`util.plugin_version()` 读的就是它）。tag 触发直接用 tag 名，
+手动触发读同一份文件；根 `pyproject.toml` 只声明桌面端依赖，不参与命名。
+
 macOS remote-only `.app` 目前不在 GitHub Actions 里发布，本地用 `bash tools/build_studio_mac.sh` 打包，
 产物在 `tools/Neo-Studio.app`；首次运行可能遇到 Gatekeeper 提示，本地未签名构建可先右键「打开」或
 `xattr -dr com.apple.quarantine tools/Neo-Studio.app`。
