@@ -71,7 +71,7 @@ jobs:
           Get-ChildItem dist | ForEach-Object { "{0}  {1:N1} MB" -f $_.Name, ($_.Length / 1MB) }
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: neo-studio-app-${{ steps.ver.outputs.version }}
           path: dist/
