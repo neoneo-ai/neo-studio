@@ -15,7 +15,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # studio/tests/_comfy_api_bootstrap.py 把同级 ComfyUI 根插进 sys.path 导入真实 comfy_api
       # （_comfy_root 找 <repo 父目录>/ComfyUI/comfy_api/latest），V3 节点用例离了它必炸。
@@ -50,7 +50,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Node
         uses: actions/setup-node@v4
