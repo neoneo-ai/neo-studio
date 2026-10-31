@@ -34,8 +34,8 @@ pwsh tools\test_pose_package.ps1                                        # re-che
 pwsh tools\sync_pose_dist.ps1 -Source <3d-pose-art repo root>           # full build into the data root (the preferred level)
 ```
 
-`robocopy /MIR` mirrors `dist/` only, so the scenes and assets the user wrote in
-`<data root>/pose/scenes/` and `pose/refs/` stay out of the mirror - and so do the GLBs the panel's
+`robocopy /MIR` mirrors `dist/` only, so the scenes the user wrote in
+`<data root>/pose/scenes/` stay out of the mirror - and so do the GLBs the panel's
 "Import Own Character" wrote into `pose/dist/models/`, which the source build does not contain: the sync
 script parks those "files the source does not have" in a temporary directory and moves them back after
 mirroring, so reinstalling the pose package never silently deletes an imported figure. `LICENSE` /
@@ -48,7 +48,7 @@ sync: the installed check runs per request, so the window does not need a restar
 The library is the batch of poses 3d-pose-art accumulated with their previews, and it lands on one path
 only: `<data root>/pose/lib/`. It never ships in the bundled copy - its licence rule differs from the pose
 package's, so `tools\build_pose_package.ps1` does not package it - the sync script is what lands it. The
-whole directory is a cache: delete it and resync any time. `scenes/`, `refs/` and `presets/` under `pose/`
+whole directory is a cache: delete it and resync any time. `scenes/` and `presets/` under `pose/`
 are what the user wrote, and stay out of the mirror.
 
 | Landing path                     | Contents                                                       | Where it comes from         |
@@ -146,9 +146,7 @@ path-with-a-directory form - the registry and the props - reaches the pose handl
 | GET      | `/neo_pose/preset?name=`   | Read one pose (PoseFile v1 returned verbatim)                                                  |
 | POST     | `/neo_pose/preset`         | Write a pose (`{name, pose}`, `.tmp` + replace, atomic)                                        |
 | POST     | `/neo_pose/preset/delete`  | Delete one pose (single item, same name whitelist)                                             |
-| POST     | `/neo_pose/import_image`   | Hand one library asset to the page (`{filename, subfolder, type}`)                             |
 | POST     | `/neo_pose/import_model`   | Write an own-figure GLB to `pose/dist/models/<key>.glb`                                        |
-| GET      | `/neo_pose/refs/{name}`    | Serve that reference image back to the page (same-origin)                                      |
 | POST     | `/neo_pose/export_image`   | Store the page canvas (`{data: dataURL, name}`) into the library                               |
 | POST     | `/neo_pose/export_set`     | Store a ControlNet set (`{files: [{name, data}]}`, ≤12) into the library                       |
 
@@ -181,18 +179,18 @@ invalid file writes nothing at all. Thumbnails, full-size previews, drag-into-no
 action all resolve through that same relative `Pose` subfolder, and the panel's export toast names it.
 
 Scenes go to `<data root>/pose/scenes/<name>.json`, the pose library to `<data root>/pose/presets/`,
-reference copies to `<data root>/pose/refs/`, and imported figures to `<data root>/pose/dist/models/`;
-none of the four survives as part of what `tools\sync_pose_dist.ps1` mirrors (the script parks the files
+and imported figures to `<data root>/pose/dist/models/`;
+none of the three survives as part of what `tools\sync_pose_dist.ps1` mirrors (the script parks the files
 the source build does not have and moves them back), so reinstalling the package leaves them alone.
 
-All thirteen routes only read and write files, so the offline desktop service answers every one of them
+All eleven routes only read and write files, so the offline desktop service answers every one of them
 (`_POSE` in `app/studio_caps.py`). `/pose-dist` and `/pose-lib` are static prefixes each host registers
 directly and neither is a capability-table entry.
 
 ## Host view and message directions
 
 The desktop top bar's Pose tab and the home card "3D Pose" open `#/pose`; the host module is
-`studio/web/pose/pose.js`. The host panel has five groups: Pose (import an asset, canvas snapshot),
+`studio/web/pose/pose.js`. The host panel has five groups: Pose (canvas snapshot),
 Pose library (save, apply, delete), Scene (write a name and save, pick one and load), ControlNet export
 (tick the formats, export the set) and Canvas state (one read-only line);
 the character row carries
@@ -248,7 +246,6 @@ and the state is stored in the page's own localStorage - nothing to do with the 
 |---------------------|-------------|---------------------------|--------------------------------------------------------|
 | `pose:ready`        | page → host | none                      | The page finished setup; the host replies `pose:theme` |
 | `pose:theme`        | host → page | `{caps, lang}`            | Capability flags and language: greys out unavailable controls |
-| `neo:import-image`  | host → page | `{url, name}`             | The asset picked in the library                        |
 | `pose:export-image` | host → page | reply port `{data, name}` | Ask for the canvas; the page answers with a dataURL    |
 | `pose:save-scene`   | host → page | reply port `{name, scene}` | Ask for the scene; the page answers with scene JSON    |
 | `pose:open-scene`   | host → page | `{scene}`                 | Put a stored scene back into the page                  |
@@ -263,10 +260,10 @@ own origin, and any message name outside the list is dropped. The iframe sandbox
 
 The page-side bridge is `src/neoBridge.js` in the pose repository: it exists only when the page really
 runs inside the same-origin iframe, and a standalone deployment (`npm run dev`, a static site) attaches
-no listener at all. The bridge adds no capability of its own - it reuses three paths the page already
-has: whole-scene serialization (save), the clean snapshot (joints, gizmo and the reference-plane layer
-are hidden before the canvas is read, the same code the Download screenshot button uses), and the
-reference-plane add (import an asset), and the page's own commands (apply a pose, the ControlNet render,
+no listener at all. The bridge adds no capability of its own - it reuses two paths the page already
+has: whole-scene serialization (save) and the clean snapshot (joints, gizmo and the reference-plane layer
+are hidden before the canvas is read, the same code the Download screenshot button uses), plus
+the page's own commands (apply a pose, the ControlNet render,
 the canvas snapshot) - which is what the panel's `pose:call` runs. When serialization fails the page
 stays silent on the reply port so the host times out with "the pose page did not answer" - it never
 hands the host an error object for the host to write into its scenes directory as a scene. The contract
@@ -302,7 +299,7 @@ The page's built-in figure registry lists six GLB figures while the package ship
 copy the other entries cannot fetch their file; that is why the left column says plainly which level the
 page is running on, instead of leaving people to think the figure list is broken.
 
-`hostUi` is `true`: the host ships its own panel (import an asset, the pose library, scenes, ControlNet
+`hostUi` is `true`: the host ships its own panel (the pose library, scenes, ControlNet
 export, the canvas state line) and sends it down with `pose:theme`, so the page folds away the demo
 toolbar meant for standalone runs - only one set of controls is ever on screen. That chrome is hidden
 before the page's first paint as well: the entry page's inline head script sets `data-host-ui` whenever
@@ -333,8 +330,8 @@ file and an unsynced library are the same 404, so the modal decides by whether t
 ## Tests
 
 - `studio/tests/test_pose_bridge.py`: path containment, the scene-name whitelist, wasm MIME,
-  hashed/unhashed caching, atomic scene and pose writes, the pose round trip, preset deletion, the
-  reference copy with its page-side result, exporting one image and a ControlNet set into the library,
+  hashed/unhashed caching, atomic scene and pose writes, the pose round trip, preset deletion,
+  exporting one image and a ControlNet set into the library,
   the set that is refused whole with nothing left on disk, the short-path redirect; both landing paths
   (the bundled copy as fallback, the data root shadowing same-named files, the hint when both are
   missing), the prop-registry prefix resolving in both levels, the shipped manifest inside `status`,
@@ -352,7 +349,7 @@ file and an unsynced library are the same 404, so the modal decides by whether t
   pose file in the offline service, the four `lib_*` fields in `status`, and `/pose-lib` staying out of the
   capability table.
 - `studio/tests/js/pose-bridge.test.mjs`: the host's not-installed form, the iframe attributes, the
-  bridge's source and origin checks, the hostUi gating, the import / export / pose-apply / scene /
+  bridge's source and origin checks, the hostUi gating, the export / pose-apply / scene /
   set-export paths, the routes each message reaches, the note shown on the bundled copy, and importing
   an own figure (the base64 upload and the key checks); the library modal's index rendering with grouping,
   search and load-more, applying a library pose (the route it reads and the modal closing), the sync hint

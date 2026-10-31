@@ -3,7 +3,7 @@
 
 摆姿页在 iframe 里跑，桥的契约是消息名而不是代码：宿主页面、摆姿页、这份用例三处同名，
 所以先把消息名与能力位钉死。其余用例覆盖 dist 子资源的路径包含、场景与姿势库落盘、ControlNet
-图组导出到素材库、参考图伺服，以及「摆姿包没装」这条用户一定会撞上的路。全程只在根 conftest.py
+图组导出到素材库，以及「摆姿包没装」这条用户一定会撞上的路。全程只在根 conftest.py
 钉住的临时数据根里读写。
 """
 
@@ -67,7 +67,6 @@ class _PoseCase(unittest.TestCase):
     def setUp(self):
         self.created = []
         pose.SCENES_DIR.mkdir(parents=True, exist_ok=True)
-        pose.REFS_DIR.mkdir(parents=True, exist_ok=True)
 
     def tearDown(self):
         for path in self.created:
@@ -90,8 +89,8 @@ class _PoseCase(unittest.TestCase):
 class BridgeContractTests(unittest.TestCase):
     def test_bridge_message_names_are_the_contract(self):
         self.assertEqual(pose.BRIDGE_MESSAGES,
-                         ("pose:ready", "pose:theme", "neo:import-image",
-                          "pose:export-image", "pose:save-scene", "pose:open-scene",
+                         ("pose:ready", "pose:theme", "pose:export-image",
+                          "pose:save-scene", "pose:open-scene",
                           "pose:call", "pose:state"))
 
     def test_caps_gate_the_sidecar_only_features(self):
@@ -341,31 +340,6 @@ class _GalleryStubCase(_PoseCase):
         super().tearDown()
 
 
-class RefImageTests(_GalleryStubCase):
-    def test_import_image_copies_gallery_asset_into_refs(self):
-        self.source = self.write_png(pose.DIST_DIR.parent / "stub_gallery" / "src" / "unit_ref.png")
-        resp = _run(pose.pose_import_image,
-                    _request(body={"filename": "unit_ref.png", "subfolder": "CharacterSheet"}))
-        data = json.loads(resp.body)
-        self.assertTrue(data["success"])
-        self.created.append(pose.REFS_DIR / data["name"])
-        self.assertEqual(data["url"], f"/neo_pose/refs/{data['name']}")
-        self.assertEqual((pose.REFS_DIR / data["name"]).read_bytes(), PNG)
-
-    def test_import_image_rejects_missing_asset(self):
-        self.source = None
-        resp = _run(pose.pose_import_image, _request(body={"filename": "nope.png", "subfolder": ""}))
-        self.assertEqual(resp.status, 404)
-
-    def test_refs_serve_only_image_names(self):
-        self.write_png(pose.REFS_DIR / "unit_ref.png")
-        resp = _run(pose.pose_ref, _request(match_info={"name": "unit_ref.png"}))
-        self.assertEqual(resp.status, 200)
-        self.assertIn("max-age", resp.headers["Cache-Control"])
-        self.assertEqual(_run(pose.pose_ref, _request(match_info={"name": "unit.exe"})).status, 400)
-        self.assertEqual(_run(pose.pose_ref, _request(match_info={"name": "gone.png"})).status, 404)
-
-
 class ExportImageTests(_GalleryStubCase):
     def test_export_lands_in_the_pose_output_dir(self):
         """导出落点是 output 下的 Pose 子目录：素材库浏览 output 就能看到，接口回相对 subfolder。"""
@@ -430,7 +404,7 @@ class ExportSetTests(_GalleryStubCase):
 GLB_STUB = b"glTF\x02\x00\x00\x00" + bytes(64)
 
 PATCHED = ("DIST_DIR", "PACKAGE_DIST", "MODELS_DIR", "INDEX_HTML", "SCENES_DIR",
-           "PRESETS_DIR", "REFS_DIR", "MAX_GLB_BYTES")
+           "PRESETS_DIR", "MAX_GLB_BYTES")
 
 
 class PackageDistTests(_GalleryStubCase):
@@ -453,7 +427,6 @@ class PackageDistTests(_GalleryStubCase):
         pose.INDEX_HTML = self.data_dist / "index.html"
         pose.SCENES_DIR = root / "scenes"
         pose.PRESETS_DIR = root / "presets"
-        pose.REFS_DIR = root / "refs"
         pose.plugin_paths.DATA_ROOT = root
 
     def tearDown(self):

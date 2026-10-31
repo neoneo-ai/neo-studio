@@ -115,10 +115,8 @@ function mounted(status = STATUS) {
     const sent = [];
     const toasts = [];
     const cw = { postMessage: (msg, origin, ports = []) => sent.push({ msg, origin, ports }) };
-    let pickCb = null;
     const env = {
         host, sent, toasts, cw,
-        pick: (item) => pickCb?.(item),
         button: (label, scope = PANEL) => [...host.querySelectorAll(scope + " .ns-pose-btn")]
             .find((b) => b.textContent.includes(label)),
         sel: (i) => [...host.querySelectorAll(PANEL + " .ns-pose-sel")][i],
@@ -139,11 +137,7 @@ function mounted(status = STATUS) {
         reply: (type, payload) => sent.find((s) => s.msg.type === type).ports[0].postMessage(payload),
         ready: async () => { env.from({ type: "pose:ready" }); await settle(); },
     };
-    const build = createPoseView({
-        api, $el,
-        toast: (m) => toasts.push(m),
-        openMaterial: (cb) => { pickCb = cb; },
-    });
+    const build = createPoseView({ api, $el, toast: (m) => toasts.push(m) });
     return build(host).then(() => {
         // 视图建完才有 iframe：contentWindow 在 jsdom 里是 null，桩成消息记录器挂上去
         if (env.host.querySelector(".ns-pose-frame")) {
@@ -162,7 +156,6 @@ test("缺包：不出 iframe，两侧栏收起并给出装包提示", async () =
     assert.match(env.host.querySelector(".ns-pose-empty").textContent, /sync_pose_dist/);
     assert.equal(env.host.querySelector(LIB).hidden, true, "没有包就不出姿势库");
     assert.equal(env.host.querySelector(PANEL).hidden, true, "没有包就不出控制面板");
-    assert.equal(env.host.querySelector(".ns-pose-bar .ns-pose-btn").hidden, true, "没有包就不出导入按钮");
 });
 
 test("装好包：iframe 指短路径并带沙箱，pose:ready 之前控件全禁用", async () => {
@@ -171,6 +164,7 @@ test("装好包：iframe 指短路径并带沙箱，pose:ready 之前控件全�
     const frame = env.host.querySelector(".ns-pose-frame");
     assert.equal(frame.getAttribute("src"), POSE_PAGE_URL);
     assert.equal(frame.getAttribute("sandbox"), "allow-scripts allow-same-origin allow-downloads");
+    assert.equal(env.host.querySelector(".ns-pose-bar"), null, "顶栏那条「3D 摆姿」行整条不出");
     const gated = () => [...env.host.querySelectorAll(".ns-pose-btn, .ns-pose-sel, .ns-pose-checkrow input")];
     assert.ok(gated().length > 15, "面板与库的控件要在位");
     assert.ok(gated().every((n) => n.disabled), "页面没 ready 时控件不能点");
@@ -196,7 +190,6 @@ test("旧摆姿包（caps.hostUi 关）：面板禁用并说明缺什么，场�
     await env.ready();
     assert.equal(env.host.querySelector(PANEL + " .ns-pose-notice").hidden, false, "旧包要出提示");
     assert.match(env.host.querySelector(PANEL + " .ns-pose-notice").textContent, /sync_pose_dist/);
-    assert.equal(env.host.querySelector(".ns-pose-bridge").textContent, "桥过旧");
     const panelBtns = [...env.host.querySelectorAll(PANEL + " .ns-pose-btn")];
     const importBody = env.button("导入自备素体");
     assert.ok(panelBtns.every((b) => b === importBody || b.disabled),
@@ -432,41 +425,6 @@ test("页面拒绝动作：原因进 toast，控件按能力位解锁", async ()
     assert.match(env.toasts.join("|"), /场上只剩一个素体/);
     assert.ok([...env.host.querySelectorAll(PANEL + " .ns-pose-btn")].every((b) => !b.disabled),
         "失败之后控件要解锁，不许锁死面板");
-});
-
-test("导入素材：选中的那张经 /neo_pose/import_image 落进 refs，伺服地址送进页面", async () => {
-    resetEnv();
-    const env = await mounted();
-    await env.ready();
-    mockRoute("/neo_pose/import_image", () => jsonResponse({
-        success: true, name: "a.png", url: "/neo_pose/refs/a.png",
-    }));
-    click(env.button("导入素材", ".ns-pose-bar"));   // 先开素材库，回调才交到手上来
-    env.pick([{ filename: "a.png", subfolder: "角色" }]);
-    await settle();
-    const posted = fetchLog.find((f) => f.method === "POST" && f.path === "/neo_pose/import_image");
-    assert.deepEqual(posted.body, { filename: "a.png", subfolder: "角色" },
-        "素材库的坐标原样交后端解析：自定义目录、收藏与 OSS 预设缓存都只有它算得出来");
-    const imported = env.sent.find((s) => s.msg.type === "neo:import-image");
-    assert.equal(imported.msg.url, "/neo_pose/refs/a.png",
-        "页面吃的必须是后端伺服的那份 —— 拼原生 /view 的话素材库自定义目录那张只会 404，画布上什么都不画");
-    assert.equal(imported.msg.name, "a.png");
-    assert.match(env.toasts.join("|"), /已贴上参考图：a\.png/);
-});
-
-test("导入素材：后端没落成交付时原因进 toast，不送坏地址，按钮解锁", async () => {
-    resetEnv();
-    const env = await mounted();
-    await env.ready();
-    mockRoute("/neo_pose/import_image", () => jsonResponse(
-        { success: false, error: "素材不存在：a.png" }, 404));
-    click(env.button("导入素材", ".ns-pose-bar"));
-    env.pick([{ filename: "a.png", subfolder: "" }]);
-    await settle();
-    assert.match(env.toasts.join("|"), /素材不存在：a\.png/);
-    assert.equal(env.sent.find((s) => s.msg.type === "neo:import-image"), undefined,
-        "落不成就不许发 neo:import-image：页面接到坏地址只会静默什么都不画");
-    assert.equal(env.button("导入素材", ".ns-pose-bar").disabled, false, "失败之后按钮要解锁");
 });
 
 test("跑在随包副本上：左栏说明只有 CC0 素体随包；跑在数据根那份上不出这句", async () => {

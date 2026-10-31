@@ -4,6 +4,13 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **The Pose page has no 导入素材 (Import Asset) bar any more.** The pose view's top row - the 3D Pose
+  title, the bridge state pill and the 导入素材 button - is gone, so the page opens straight on the pose
+  library, the canvas and the control panel. Picking an asset-library card as a reference plane went
+  with it: `/neo_pose/import_image`, `/neo_pose/refs/{name}` and `<data root>/pose/refs/` no longer exist
+  and the host no longer sends `neo:import-image`. Nothing else moved - poses, scenes, ControlNet exports,
+  canvas snapshots and 导入自备素体 (Import Own Character) all stay.
+
 - **The 3D Pose page browses the pose library in a dialog.** 载入姿态 (Load Pose) knew only a name typed into the
   field and 载入场景 (Load Scene) only the flat list of saved scenes, so the library 3d-pose-art accumulates -
   hundreds of poses with their `clay` / `skeleton` / `silhouette` / `depth` previews - had no way in. Two buttons

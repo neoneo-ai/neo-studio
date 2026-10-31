@@ -176,9 +176,7 @@ bridge messages and how to install the package are in [studio-pose.md](studio-po
 | GET      | `/neo_pose/preset?name=`    | Read one pose (PoseFile v1, passed through unchanged)                                                           |
 | POST     | `/neo_pose/preset`          | Write a pose `{name, pose}` (`.tmp` + replace, atomic)                                                          |
 | POST     | `/neo_pose/preset/delete`   | Delete one pose (single item, same name whitelist)                                                              |
-| POST     | `/neo_pose/import_image`    | Hand one library asset to the page                                                                              |
 | POST     | `/neo_pose/import_model`    | Write an own-figure GLB to `<data root>/pose/dist/models/<key>.glb`, replies `{key, name, url, size, from}`   |
-| GET      | `/neo_pose/refs/{name}`     | Serve that reference image back to the page (same-origin)                                                       |
 | POST     | `/neo_pose/export_image`    | Store the page canvas into `output/Pose`, replies `{filename, subfolder, size}`                               |
 | POST     | `/neo_pose/export_set`      | Store a ControlNet image set into `output/Pose` (≤12 files), replies `{saved, count}`                         |
 

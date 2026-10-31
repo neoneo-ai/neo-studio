@@ -11,7 +11,6 @@
  *   页面 → 宿主  pose:ready        页面装配完，宿主立刻回一份 pose:theme
  *   页面 → 宿主  pose:state        画布状态快照（素体 / 人数 / 道具数），面板镜像它
  *   宿主 → 页面  pose:theme        能力位与语言：caps.hostUi 决定页面收不收 demo 控件
- *   宿主 → 页面  neo:import-image  素材库里选中的一张图（后端 pose/refs/ 伺服的同源 URL）
  *   宿主 → 页面  pose:export-image 请求导出画布，页面从回复端口回 {data, name}
  *   宿主 → 页面  pose:save-scene   请求序列化场景，页面从回复端口回 {scene}
  *   宿主 → 页面  pose:open-scene   把已存场景装回页面
@@ -20,7 +19,7 @@
  * 冒充不了回复。入站通知另外认两件事 —— 来源必须是本页这张 iframe，origin 必须与宿主同源。
  */
 import { t, tf, getLang } from "../js/core/i18n.js";
-import { icon, setIconLabel } from "../js/core/icons.js";
+import { setIconLabel } from "../js/core/icons.js";
 import { createLibraryModal } from "../js/core/lib-modal.js";
 
 // 组件样式在第一次建视图时注入（幂等）：本模块也会被主画布页的扩展图加载，
@@ -54,16 +53,6 @@ const LIB_SYNC_HINT = "姿势库未同步：跑 tools\\sync_pose_lib.ps1 -Source
 /** 页面开局是摄影棚灰（摆姿页 core/scene.js 的 LOOKS.studio），面板按产品口径把外观定在暗色档 */
 const DEFAULT_LOOK_KEY = "dark";
 
-/**
- * 素材库选中项交进摆姿页：先经 /neo_pose/import_image 把这张图落进 pose/refs/，
- * 页面拿回的是后端自己伺服的同源地址。
- *
- * 拼原生 /view 不行：它只认 ComfyUI 的 output / input 两棵树，素材库里的自定义目录、收藏与 OSS
- * 预设缓存全靠 gallery 那套解析（`_find_source_media`），这些卡片拼出来的 /view 一律 404，
- * 页面拿到坏地址就什么都不画 —— 一次点击就成了「没效果」。
- */
-const IMPORT_IMAGE_ROUTE = "/neo_pose/import_image";
-
 /** 道具显示名归一：页面 label 带全角括号后缀（细剑（Sting））时，括号前的名字也算同一个名字 */
 function propChoiceName(text) {
     return String(text ?? "").trim().toLowerCase()
@@ -94,11 +83,8 @@ export function resolvePropChoice(input, options) {
     return hit ? keyOf(hit) : null;
 }
 
-/**
- * 建「3D 摆姿」视图。依赖由宿主注入：api 走 shim（离线与在线同一条路），
- * openMaterial 打开素材库弹窗并把选中项交回来。
- */
-export function createPoseView({ api, $el, toast, openMaterial }) {
+/** 建「3D 摆姿」视图。依赖由宿主注入：api 走 shim（离线与在线同一条路） */
+export function createPoseView({ api, $el, toast }) {
     return async function buildPose(el) {
         ensureCss();
         el.classList.add("ns-pose");
@@ -133,15 +119,6 @@ export function createPoseView({ api, $el, toast, openMaterial }) {
         const list = (extra = "") => $el("div", { className: "ns-pose-list" + extra });
         const head = (label) => $el("div", { className: "ns-pose-head", textContent: t(label) });
         const group = (label, kids) => $el("section", { className: "ns-pose-group" }, [head(label), ...kids]);
-
-        const bridgePill = $el("span", { className: "ns-pose-bridge", textContent: t("桥未连接") });
-        const btnImport = btn("导入素材", "image", libGate, " ns-pose-btn-primary");
-        const bar = $el("div", { className: "ns-pose-bar" }, [
-            $el("span", { className: "ns-pose-bar-title" }, [icon("pose", 18), t("3D 摆姿")]),
-            bridgePill,
-            $el("span", { className: "ns-pose-sep" }),
-            btnImport,
-        ]);
 
         /* 左栏：姿势库（pose/export 的产物）与场景（pose:save-scene 的产物），都是数据根里的文件 */
         const presetList = list();
@@ -229,12 +206,12 @@ export function createPoseView({ api, $el, toast, openMaterial }) {
         ]);
 
         const stage = $el("div", { className: "ns-pose-stage" });
-        el.append(bar, $el("div", { className: "ns-pose-body" }, [lib, stage, panel]));
+        el.append($el("div", { className: "ns-pose-body" }, [lib, stage, panel]));
 
         const setLib = (on) => libGate.forEach((n) => { n.disabled = !on; });
         const setPanel = (on) => panelGate.forEach((n) => { n.disabled = !on; });
         // 缺包与后端未就绪时整幅侧栏收起：那时每个控件都只会失败
-        const setChrome = (on) => { lib.hidden = !on; panel.hidden = !on; btnImport.hidden = !on; };
+        const setChrome = (on) => { lib.hidden = !on; panel.hidden = !on; };
         setLib(false);
         setPanel(false);
 
@@ -520,21 +497,6 @@ export function createPoseView({ api, $el, toast, openMaterial }) {
         const refreshProps = () => action("prop/list").then(paintProps)
             .catch((e) => toast(tf("道具列表失败：{msg}", { msg: e.message })));
 
-        btnImport.onclick = () => openMaterial(async (picked) => {
-            const item = Array.isArray(picked) ? picked[0] : picked;
-            if (!item?.filename) { toast(t("没取到图片")); return; }
-            // 落进 pose/refs/ 才交得出地址：后端认素材库那套解析，自定义目录与缓存都算得出来，
-            // 失败（素材不在、非图片）在这一层就报进 toast，不再默默送一个页面接不住的 URL
-            await run(async () => {
-                const data = await json(IMPORT_IMAGE_ROUTE, {
-                    filename: item.filename,
-                    subfolder: item.subfolder || "",
-                });
-                post("neo:import-image", { url: data.url, name: item.filename });
-                toast(tf("已贴上参考图：{name}", { name: data.name || item.filename }));
-            });
-        });
-
         /* 自备素体：GLB 从本机读进内存再交后端 —— 素材库列表只列图片，用户从 Mixamo 下来的那份
            走的是文件选择器，落点由后端定（<数据根>/pose/dist/models/<key>.glb）。
            登记动作不在宿主这边：页面自己的本地导入区按 key 认它，宿主只把 key 报给用户。 */
@@ -694,11 +656,9 @@ export function createPoseView({ api, $el, toast, openMaterial }) {
                 if (caps.hostUi !== true) {
                     // 旧摆姿包没有宿主命令层：面板说明缺什么，不摆点了只会空转的控件
                     notice.hidden = false;
-                    bridgePill.textContent = t("桥过旧");
                     return;
                 }
                 notice.hidden = true;
-                bridgePill.textContent = t("桥已连接");
                 setPanel(true);
                 action("meta/list").then(async (m) => {
                     paintMeta(m);
@@ -714,7 +674,6 @@ export function createPoseView({ api, $el, toast, openMaterial }) {
             stage.replaceChildren($el("div", { className: "ns-pose-hint", textContent: t("读取摆姿状态…") }));
             setLib(false);
             setPanel(false);
-            bridgePill.textContent = t("桥未连接");
             frame = null;
             let status = null;
             try { status = await json("/neo_pose/status"); } catch { status = null; }

@@ -1,4 +1,4 @@
-/* pose.css — 桌面端「3D 摆姿」页：工具条 + 姿势库 / iframe 舞台 / 控制面板 + 缺包提示。
+/* pose.css — 桌面端「3D 摆姿」页：姿势库 / iframe 舞台 / 控制面板 + 缺包提示。
    颜色一律取 studio/style.css 的 --ns-* 变量，页面自身不引入第二套色板。 */
 
 .ns-pose {
@@ -6,31 +6,6 @@
     flex-direction: column;
     height: 100%;
     padding: 0;
-}
-
-.ns-pose-bar {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex: none;
-    padding: 10px 16px;
-    border-bottom: 1px solid var(--ns-border);
-    background: var(--ns-panel);
-}
-
-.ns-pose-bar[hidden] { display: none; }
-
-.ns-pose-bar-title {
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    margin-right: 8px;
-    font-weight: 600;
-    color: var(--ns-fg);
-}
-
-.ns-pose-sep {
-    flex: 1;
 }
 
 .ns-pose-btn {
@@ -128,14 +103,6 @@
 }
 
 .ns-pose-stage { min-width: 0; }
-
-.ns-pose-bridge {
-    padding: 3px 9px;
-    border: 1px solid var(--ns-border-soft);
-    border-radius: 999px;
-    font-size: 12px;
-    color: var(--ns-dim);
-}
 
 .ns-pose-head {
     margin-top: 4px;

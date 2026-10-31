@@ -220,16 +220,8 @@ function paintPickImage(images) {
     openImageEditDialog(app.neoGallery, { filename: img.filename }, img.subfolder);
 }
 
-/** 摆姿页取用素材：点卡片取一张喂进场景并收窗（一次只摆一个参考物） */
-function openPoseMaterial(onPick) {
-    openLibModal("pose", (picked) => {
-        onPick(picked);
-        libModal?.close();
-    });
-}
-
-// 摆姿视图的依赖在这汇聚：api 走 shim（离线/在线同一条路），素材取用复用上面那个弹窗
-const buildPose = createPoseView({ api, $el, toast, openMaterial: openPoseMaterial });
+// 摆姿视图的依赖在这汇聚：api 走 shim（离线/在线同一条路）
+const buildPose = createPoseView({ api, $el, toast });
 
 /** 抽帧页取视频：点卡片取一条换进播放器（一次只看一条视频） */
 function openFramesMaterial(onPick) {

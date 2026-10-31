@@ -28,7 +28,7 @@ pwsh tools\test_pose_package.ps1                                       # 复查�
 pwsh tools\sync_pose_dist.ps1 -Source <3d-pose-art 仓库根>            # 全量产物同步进数据根（优先那一级）
 ```
 
-`robocopy /MIR` 只镜像 `dist/`：`<数据根>/pose/scenes/` 与 `pose/refs/` 里用户写的场景与素材不在镜像
+`robocopy /MIR` 只镜像 `dist/`：`<数据根>/pose/scenes/` 里用户写的场景不在镜像
 范围内；用户经面板「导入自备素体」写进 `pose/dist/models/` 的 GLB 也不在源产物里，同步脚本先把这些
 「源里没有的文件」存进临时目录、镜像完原样搬回，一次重装摆姿包不会无声清掉用户导入的素体。源仓库根的
 `LICENSE` / `NOTICE` 一并落进产物目录（摆姿包是 MIT 作品，装机副本必须带着它的许可证与致谢）。
@@ -38,7 +38,7 @@ pwsh tools\sync_pose_dist.ps1 -Source <3d-pose-art 仓库根>            # 全�
 
 库里是摆姿仓库攒下来的那批姿态与它们的预览图，落点只有一级：`<数据根>/pose/lib/`。库不进随包副本 ——
 授权口径与摆姿包不同，`tools\build_pose_package.ps1` 不打包它 —— 只由同步脚本落地。整目录当缓存看待：
-随时可删可重同步。`pose/` 下的 `scenes/`、`refs/`、`presets/` 是用户写的东西，不在镜像范围内。
+随时可删可重同步。`pose/` 下的 `scenes/`、`presets/` 是用户写的东西，不在镜像范围内。
 
 | 落点                           | 内容                                                            | 怎么来                    |
 |--------------------------------|-----------------------------------------------------------------|---------------------------|
@@ -122,9 +122,7 @@ ComfyUI 自己占了 `/models`（模型类型清单）与单段的 `/models/<nam
 | GET      | `/neo_pose/preset?name=`      | 读一份姿态（PoseFile v1 原样交回，宿主不改一个字段）            |
 | POST     | `/neo_pose/preset`            | 写姿态（`{name, pose}`，`.tmp` + replace 原子落盘）             |
 | POST     | `/neo_pose/preset/delete`     | 删一份姿态（单条，名字过同一套白名单）                          |
-| POST     | `/neo_pose/import_image`      | 取一张素材进页面（`{filename, subfolder, type}`）               |
 | POST     | `/neo_pose/import_model`      | 自备素体 GLB 写进 `pose/dist/models/<key>.glb`                  |
-| GET      | `/neo_pose/refs/{name}`       | 伺服交进页面的那张参考图（页面与宿主同源，直接取）              |
 | POST     | `/neo_pose/export_image`      | 页面画布导出（`{data: dataURL, name}`）落进素材库               |
 | POST     | `/neo_pose/export_set`        | ControlNet 图组（`{files: [{name, data}]}`，≤12 张）落素材库    |
 
@@ -148,20 +146,20 @@ ComfyUI 自己占了 `/models`（模型类型清单）与单段的 `/models/<nam
 导出项与 ComfyUI 自己的输出项同址同口径：缩略图、大图、拖放进节点与「⋯ → 删除」都按相对
 subfolder `Pose` 寻址，面板的导出提示点名 Pose 目录。
 
-场景写进 `<数据根>/pose/scenes/<名字>.json`，姿势库写进 `<数据根>/pose/presets/`，参考图落进
-`<数据根>/pose/refs/`，自备素体 GLB 落进 `<数据根>/pose/dist/models/`，四处都不在
+场景写进 `<数据根>/pose/scenes/<名字>.json`，姿势库写进 `<数据根>/pose/presets/`，自备素体 GLB 落进
+`<数据根>/pose/dist/models/`，三处都不在
 `tools\sync_pose_dist.ps1` 与 `tools\build_pose_package.ps1` 的镜像结果里（同步脚本把「源里没有的文件」
 先存后还），重装摆姿包不动它们。
 
-这十三条接口只做文件读写，桌面端离线服务全部自己答（`app/studio_caps.py` 的 `_POSE`）；`/pose-dist`
+这十一条接口只做文件读写，桌面端离线服务全部自己答（`app/studio_caps.py` 的 `_POSE`）；`/pose-dist`
 与 `/pose-lib` 是两端各自直接注册的静态前缀，不进能力表。
 
 ## 宿主视图与消息方向
 
 桌面端顶栏「摆姿」页签与首页卡片「3D 摆姿」进 `#/pose`；宿主模块是 `studio/web/pose/pose.js`。
-宿主面板分五组：摆姿（导入素材、画布截图）、姿势库（存、套、删）、场景（写名保存、选场景载入）、
+宿主面板分五组：摆姿（画布截图）、姿势库（存、套、删）、场景（写名保存、选场景载入）、
 ControlNet 导出（勾格式、导出图组）、画布状态（只读一行）；素体一栏带着「导入自备素体」与一个 key
-输入框，左栏底部在跑随包副本时出「随包只有 CC0 素体」的说明。工具条控件与 `pose:ready` 之前全部禁用，
+输入框，左栏底部在跑随包副本时出「随包只有 CC0 素体」的说明。面板控件在 `pose:ready` 之前全部禁用，
 面板随 `pose:ready` 出现；桥随 `pose:dispose` 拆掉，离开页面时不留监听器。摆姿页被嵌进 iframe 时，
 入口页 `<head>` 的内联脚本在首帧之前就落 `data-host-ui`（判据同 `src/neoBridge.js` 的
 `parent !== window`）—— 打开摆姿页不会先画出整套 3d-pose-art 单机 demo 控件再折成宿主版；
@@ -203,7 +201,6 @@ ControlNet 导出（勾格式、导出图组）、画布状态（只读一行）
 |---------------------|------------|-----------------------------|--------------------------------------------|
 | `pose:ready`        | 页面 → 宿主 | 无                          | 页面装配完，宿主立刻回一份 `pose:theme`    |
 | `pose:theme`        | 宿主 → 页面 | `{caps, lang}`              | 能力位与语言，页面据此置灰不可用的控件     |
-| `neo:import-image`  | 宿主 → 页面 | `{url, name}`               | 素材库里选中的一张图                       |
 | `pose:export-image` | 宿主 → 页面 | 回复端口 `{data, name}`     | 请求导出画布，页面从回复端口交回 dataURL   |
 | `pose:save-scene`   | 宿主 → 页面 | 回复端口 `{name, scene}`    | 请求序列化场景，页面从回复端口交回场景 JSON |
 | `pose:open-scene`   | 宿主 → 页面 | `{scene}`                   | 把已存场景装回页面                         |
@@ -217,8 +214,8 @@ ControlNet 导出（勾格式、导出图组）、画布状态（只读一行）
 
 页面侧的桥在摆姿仓库的 `src/neoBridge.js`：只在页面真被装进同源 iframe 时存在，单机部署
 （`npm run dev`、静态站）一个监听器都不挂。桥不新造能力，只复用页面已有的通路 —— 整场序列化
-（存场景）、干净截图（关节球 / gizmo / 参考图层整层隐藏后才读画布，与「下载截图」按钮同一条）、
-参考图层贴上（导入素材），以及页面自己的命令（套姿态、ControlNet 出图、画布快照），面板上的动作走
+（存场景）、干净截图（关节球 / gizmo / 参考图层整层隐藏后才读画布，与「下载截图」按钮同一条），
+以及页面自己的命令（套姿态、ControlNet 出图、画布快照），面板上的动作走
 `pose:call` 那一行。序列化失败时页面不回包，让宿主超时后报「摆姿页未响应」，绝不让宿主把一份
 错误对象当场景写进它的场景目录。口径与失败路径见摆姿仓库的 `docs/neo-studio-bridge.md`。
 
@@ -243,7 +240,7 @@ pano 与库写入要 3d-pose-art 那套 Python sidecar（`pose_server.py`），�
 页面内置注册表引用了六个 GLB 素体，随包只发其中一个，跑在随包副本上时列表里其余几项点了会取不到文件，
 所以左栏要把「跑在随包副本上」说明白，别让人以为素体列表坏了。
 
-`hostUi` 恒为 `true`：宿主带着自己的面板（导入素材、姿势库、场景、ControlNet 导出、画布状态），
+`hostUi` 恒为 `true`：宿主带着自己的面板（姿势库、场景、ControlNet 导出、画布状态），
 随 `pose:theme` 交下去，摆姿页据此收起面向独立部署的那套 demo 工具条 —— 场上同一时刻只留一套控件。
 页面对旧摆姿包（没有宿主命令层）的兜底在宿主这边：`caps.hostUi` 不为 `true` 时面板整片禁用并说明要
 重装摆姿包，不给用户留一条点了只会空转的按钮。
@@ -267,7 +264,7 @@ pano 与库写入要 3d-pose-art 那套 Python sidecar（`pose_server.py`），�
 ## 测试
 
 - `studio/tests/test_pose_bridge.py`：路径包含与场景名白名单、wasm MIME、哈希/未哈希缓存、场景与姿态
-  原子写、姿态往返、删姿态、参考图落 refs 与页面侧结果、单张导出与 ControlNet 图组落素材库、整批拒绝
+  原子写、姿态往返、删姿态、单张导出与 ControlNet 图组落素材库、整批拒绝
   且不留半个文件、短路径 302；两级落点（随包副本兜底、数据根压同名文件、两级都缺的提示）、道具注册表
   那条根前缀在两级都取得到、随包清单进 status、自备素体落点与五条校验（key / 来源 / 体积 / 文件头 /
   素材库体积）、素材库来源解析、挡下的请求不留痕迹；姿势库的清单与姿态文件与预览图伺服、目录落到
@@ -279,7 +276,7 @@ pano 与库写入要 3d-pose-art 那套 Python sidecar（`pose_server.py`），�
   请求体上限落在导入接口之上；`/pose-lib` 前缀在离线服务里答出清单与姿态文件、status 的 `lib_*` 四项、
   `/pose-lib` 不进能力归属表。
 - `studio/tests/js/pose-bridge.test.mjs`：宿主视图的缺包形态、iframe 属性、桥的来源与同源校验、
-  `hostUi` 门、导入 / 导出 / 套姿态 / 场景 / 图组五条路径落到的接口、跑在随包副本上的说明、
+  `hostUi` 门、导出 / 套姿态 / 场景 / 图组四条路径落到的接口、跑在随包副本上的说明、
   自备素体导入（base64 上报与 key 校验）；姿势库弹窗的清单渲染与分组 / 搜索 / 加载更多、套库内姿态
   落到的接口与弹窗收起、库没同步的指引、门禁锁住弹窗那一片、本机姿势与场景文件两条路。
 - `tools\test_pose_package.ps1`：随包摆姿包的自检 —— 必需文件、产物形状、不该发货的形态（`*.map`、

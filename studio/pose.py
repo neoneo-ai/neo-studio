@@ -21,7 +21,6 @@ import json
 import logging
 import mimetypes
 import re
-import shutil
 from pathlib import Path
 
 from aiohttp import web
@@ -38,7 +37,6 @@ POSE_DIR = plugin_paths.DATA_ROOT / "pose"
 DIST_DIR = POSE_DIR / "dist"
 SCENES_DIR = POSE_DIR / "scenes"
 PRESETS_DIR = POSE_DIR / "presets"
-REFS_DIR = POSE_DIR / "refs"
 INDEX_HTML = DIST_DIR / "index.html"
 # 随包分发的最小摆姿包：与插件代码同批进 Registry 包与 exe，用户不跑同步脚本也能开页面。
 # 它是可重建的产物镜像（tools\build_pose_package.ps1 的落点），运行期只读，任何写入都不落这里。
@@ -69,8 +67,8 @@ MODELS_PREFIX = "/models"
 LIB_PREFIX = "/pose-lib"
 
 # 桥的契约是接口不是代码：宿主、摆姿页、桥接用例三处同名，改动必须同批落地
-BRIDGE_MESSAGES = ("pose:ready", "pose:theme", "neo:import-image",
-                   "pose:export-image", "pose:save-scene", "pose:open-scene",
+BRIDGE_MESSAGES = ("pose:ready", "pose:theme", "pose:export-image",
+                   "pose:save-scene", "pose:open-scene",
                    "pose:call", "pose:state")
 
 # 摆姿、时间轴、导出全在浏览器里跑（three.js），本机服务只提供文件；照片估点、网格、pano 要
@@ -190,41 +188,6 @@ def register_static(routes):
     routes.get(STATIC_PREFIX + "/{path:.*}")(pose_static)
     routes.get(MODELS_PREFIX + "/{path:.*}")(pose_models)
     routes.get(LIB_PREFIX + "/{path:.*}")(pose_lib)
-
-
-@routes.post("/neo_pose/import_image")
-async def pose_import_image(request):
-    """素材库 → 摆姿参考图：图片落进 pose/refs/，摆姿页用同源 URL 贴上参考平面。"""
-    data, err = await _json_body(request)
-    if err is not None:
-        return err
-    filename = str(data.get("filename", ""))
-    subfolder = str(data.get("subfolder", ""))
-    if not filename or ".." in filename:
-        return _bad_request("filename 不合法")
-    from .gallery import _find_source_media   # 素材解析与 Gallery 同一套；惰性导入避免 import 期依赖
-    source = await asyncio.to_thread(_find_source_media, filename, subfolder)
-    if source is None or not source.is_file():
-        return web.json_response({"success": False, "error": f"素材不存在：{filename}"}, status=404)
-    if source.suffix.lower() not in IMAGE_EXT:
-        return _bad_request(f"摆姿参考图只支持图片：{source.suffix}")
-    dest = await asyncio.to_thread(_unique_path, REFS_DIR, source.stem, source.suffix.lower())
-    await asyncio.to_thread(shutil.copy2, source, dest)
-    return web.json_response({"success": True, "name": dest.name,
-                              "url": f"/neo_pose/refs/{dest.name}"})
-
-
-@routes.get("/neo_pose/refs/{name}")
-async def pose_ref(request):
-    name = request.match_info["name"]
-    if not SCENE_NAME_RE.fullmatch(name) or Path(name).suffix.lower() not in IMAGE_EXT:
-        return web.Response(status=400)
-    target = inside_dir(REFS_DIR, name)
-    if target is None or not target.is_file():
-        return web.Response(status=404)
-    resp = _file_response(target)
-    resp.headers["Cache-Control"] = "public, max-age=86400"   # 文件名唯一，内容不会原地变
-    return resp
 
 
 @routes.post("/neo_pose/export_image")

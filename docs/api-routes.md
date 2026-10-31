@@ -160,9 +160,7 @@ Neo Studio 独立页面（`web/studio/index.html`）的后端。素材 / 生图 
 | GET    | `/neo_pose/preset?name=`    | 读一份姿态（PoseFile v1 原样交回）                                           |
 | POST   | `/neo_pose/preset`          | 写姿态 `{name, pose}`（`.tmp` + replace 原子落盘）                           |
 | POST   | `/neo_pose/preset/delete`   | 删一份姿态（单条，名字过同一套白名单）                                       |
-| POST   | `/neo_pose/import_image`    | 把素材库的一张图交进页面                                                     |
 | POST   | `/neo_pose/import_model`    | 自备素体 GLB 写进 `<数据根>/pose/dist/models/<key>.glb`，回 `{key, name, url, size, from}` |
-| GET    | `/neo_pose/refs/{name}`     | 伺服交进页面的那张参考图                                                     |
 | POST   | `/neo_pose/export_image`    | 页面画布导出落进 `output/Pose`，回 `{filename, subfolder, size}`             |
 | POST   | `/neo_pose/export_set`      | ControlNet 图组落进 `output/Pose`（≤12 张），回 `{saved, count}`             |
 

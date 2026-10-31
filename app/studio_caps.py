@@ -197,9 +197,7 @@ _AGENT = {
 _POSE = {
     ("GET", "/neo-pose"),
     ("GET", "/neo_pose/status"),
-    ("POST", "/neo_pose/import_image"),
     ("POST", "/neo_pose/import_model"),
-    ("GET", "/neo_pose/refs/{name}"),
     ("POST", "/neo_pose/export_image"),
     ("POST", "/neo_pose/export_set"),
     ("GET", "/neo_pose/scenes"),
