@@ -53,6 +53,10 @@ ComfyUI 没就绪时点它只会得到「页面不存在」。`openSkillWorkflow
   页面直连就是全红。
 - 代价是这路 ComfyUI 的 origin_only 这道 CSRF 防线让位，所以局域网监听（`--listen`）与远程模式一律不给 flag，
   那两路保留整页跳转：暴露到网卡的实例不在防线上让位换体验。
+- 整页跳到 ComfyUI 端口的那几路在地址上带 `?neo_desktop=http://127.0.0.1:<桌面端口>`（`StudioDesktop.studio_target`，
+  只加在完整 Studio 的目标上，离线页与引导页不带）：MCP 注册表与 stdio 会话只活在桌面端进程里，页面据此把
+  `/neo_mcp/*` 送回桌面端口，`app/studio_server.py` 的 `mcp_cross_origin` 只为回环 origin 回 CORS 头
+  （预检 `204`，非回环 origin 的预检 `403`）。直连那路页面本来就钉在桌面端口上，同源，不带这个参数。
 - 翻面一次做完，ComfyUI 答话之前整块不翻：能力表换成 ComfyUI 的、门控按钮摘监听并还原文案、`body.ns-offline`
   离线标记摘掉、顶栏队列入口浮出并按六张表补种一次（显存 / 内存读数条随之补建）、`/ws` 从桌面端的桩换到 ComfyUI 的
   真事件流。只解禁按钮不换事件流就是

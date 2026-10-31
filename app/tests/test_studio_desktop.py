@@ -1434,7 +1434,27 @@ class StudioDesktopTests(unittest.TestCase):
         with patch.object(app, "wait_attach", lambda base, seconds, busy: True), \
              patch.object(app, "log_line", lambda text: None):
             desktop._jump_when_ready()
-        desktop.loader.assert_called_once_with("http://127.0.0.1:8188/neo-studio")
+        desktop.loader.assert_called_once_with(
+            "http://127.0.0.1:8188/neo-studio?neo_desktop=http://127.0.0.1:8191")
+
+    def test_studio_target_marks_the_desktop_origin_for_the_comfyui_page(self):
+        # MCP 注册表与 stdio 会话只在桌面端进程里：页面跳到 ComfyUI 端口时得知道把它打回哪儿
+        desktop = app.StudioDesktop("http://127.0.0.1:8188/neo-studio", None, 8188,
+                                    pathlib.Path("root"), "", "http://127.0.0.1:8191/neo-studio", 8191)
+        self.assertEqual(desktop.studio_target(desktop.url),
+                         "http://127.0.0.1:8188/neo-studio?neo_desktop=http://127.0.0.1:8191")
+
+    def test_studio_target_leaves_the_offline_page_and_direct_mode_bare(self):
+        # 离线页也在桌面端端口上：带上标记会让 _leave_offline 的认页判断失效，就绪后跳不回来
+        desktop = app.StudioDesktop("http://127.0.0.1:8188/neo-studio", None, 8188,
+                                    pathlib.Path("root"), "", "http://127.0.0.1:8191/neo-studio", 8191)
+        self.assertEqual(desktop.studio_target(desktop.offline_url), desktop.offline_url)
+        comfy = SimpleNamespace(pid=1234, poll=lambda: None)
+        direct = app.StudioDesktop("http://127.0.0.1:8188/neo-studio", comfy, 8188,
+                                   pathlib.Path("root"), "", "http://127.0.0.1:8191/neo-studio", 8191)
+        self.assertTrue(direct.direct)
+        self.assertEqual(direct.studio_target(direct.url), direct.url,
+                         "直连那路页面钉在桌面端口上，MCP 同源，不用带标记")
 
     def test_ready_poll_reports_the_base_and_stays_on_the_page(self):
         # 顶栏那份 5 秒探活是直连那路的收尾：报出 comfy_base 让页面原地翻面，不碰窗口导航
@@ -1550,7 +1570,8 @@ class MainWindowTests(unittest.TestCase):
         self.assertEqual(cw.call_args.kwargs["html"], app.splash_html())
         self.assertIsNone(cw.call_args.kwargs["js_api"].comfy)
         self.assertFalse(cw.call_args.kwargs["js_api"].flags["starting"], "已就绪不报启动中")
-        window.load_url.assert_called_once_with("http://127.0.0.1:8188/neo-studio")
+        window.load_url.assert_called_once_with(
+            "http://127.0.0.1:8188/neo-studio?neo_desktop=http://127.0.0.1:8191")
 
     def test_links_stay_in_desktop_window(self):
         window = _fake_window()
@@ -1965,7 +1986,8 @@ class MainWindowTests(unittest.TestCase):
              patch.object(sys, "argv", ["studio_app.py"]):
             self.assertEqual(app.main(), 0)
         self.assertEqual(spawned, [], "热启动同样不许拉第二路")
-        window.load_url.assert_called_once_with("http://127.0.0.1:8188/neo-studio")
+        window.load_url.assert_called_once_with(
+            "http://127.0.0.1:8188/neo-studio?neo_desktop=http://127.0.0.1:8191")
 
     def test_close_during_spawn_kills_the_process_it_just_started(self):
         """窗口先出之后，用户可以在自检与拉起之间关窗。收尾线程收的是「当时已有」的那路，

@@ -14,13 +14,14 @@
  * （后端 ask_user 发一问就挂在循环上，点选经 POST /neo_agent/answer 交回去）；最终回答末尾的
  * 「下一步选项」编号列表铺成一排可点的方向，点一下即把这句话当作下一轮输入发出。
  * stdio 型 MCP 服务是子进程，浏览器起不了，连接只活在桌面端进程里：面板只发 HTTP 打 /neo_mcp/*，
- * 桌面端服务不在时这些接口回 409，面板据此把 MCP 区收成一句离线说明，不给假成功。
+ * 桌面端服务不在（409 / 404 / 跨源连接被拒）时把 MCP 区收成一句离线说明，不给假成功。
  * 宿主是 studio 外壳（studio-app.js 挂智能体页与设置页），不是 ComfyUI 画布侧栏：本模块不注册扩展。
  * 样式全在 agent-panel.css，作用域收在 .neo-agent 下。
  */
 import { mkEl } from "./dom-utils.js";
 import { isMediaHref, mediaKindOf } from "./js/core/media-href.js";
 import { app } from "../../scripts/app.js";
+import { api } from "../../scripts/api.js";
 import { t, tf } from "./js/core/i18n.js";
 import { COMMON_EDGES, COMMON_RATIOS, LORA_FAMILY_HINTS, modelFamily } from "./image-gen.js";
 import { icon, setIcon } from "./js/core/icons.js";
@@ -109,13 +110,13 @@ function labelSpans(btn, label, face) {
 }
 
 async function getJson(path) {
-    const res = await fetch(path);
+    const res = await api.fetchApi(path);   // 走 shim 的归属表：桌面端 / ComfyUI 由 route.js 决定
     if (res.status === 409 || res.status === 404) return { offline: true };
     return await res.json();
 }
 
 async function postJson(path, body) {
-    const res = await fetch(path, {
+    const res = await api.fetchApi(path, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -123,6 +124,12 @@ async function postJson(path, body) {
     if (res.status === 409 || res.status === 404) return { offline: true };
     return await res.json();
 }
+
+// MCP 那族只活在桌面端进程里：页面被整页跳到 ComfyUI 端口时，route.js 按 ?neo_desktop= 把
+// /neo_mcp/* 指回桌面端口。那一发是跨源的，桌面端服务不在（或 origin 不被放行）时 fetch 直接
+// reject —— 与 409 / 404 一样按「桌面端没起来」说话，不给假成功。
+const mcpGet = (path) => getJson(path).catch(() => ({ offline: true }));
+const mcpPost = (path, body) => postJson(path, body).catch(() => ({ offline: true }));
 
 // 智能体写完配方要广播编辑器保存那一条同一个事件：导演页左栏的配方列表、节点内时间轴
 // 都监听它，收不到就只能等下一次建页。结果文本是 MCP 回的 JSON（带 name），
@@ -1601,7 +1608,7 @@ export function createMcpPanel() {
             note(t("注册表不是合法 JSON"), "err");
             return;
         }
-        const res = await postJson("/neo_mcp/servers", { servers: parsed });
+        const res = await mcpPost("/neo_mcp/servers", { servers: parsed });
         if (res.offline) { note(OFFLINE_HINT, "warn"); return; }
         if (!res.success) { note(res.error || t("保存失败"), "err"); return; }
         note(t("已保存"), "ok");
@@ -1626,7 +1633,7 @@ export function createMcpPanel() {
             btn.textContent = on ? t("断开") : t("连接");
             btn.onclick = async () => {
                 btn.disabled = true;
-                const res = await postJson(on ? "/neo_mcp/disconnect" : "/neo_mcp/connect", { name: srv.name });
+                const res = await mcpPost(on ? "/neo_mcp/disconnect" : "/neo_mcp/connect", { name: srv.name });
                 btn.disabled = false;
                 if (res.offline) { note(OFFLINE_HINT, "warn"); return; }
                 if (!res.success) note(res.error || t("连接失败"), "err");
@@ -1677,7 +1684,7 @@ export function createMcpPanel() {
                 }
                 result.hidden = false;
                 result.textContent = t("调用中…");
-                const res = await postJson("/neo_mcp/tools/call",
+                const res = await mcpPost("/neo_mcp/tools/call",
                     { name: tool.server, tool: tool.name, arguments: payload });
                 result.textContent = res.offline ? OFFLINE_HINT
                     : (res.success ? contentText(res.result) : (res.error || t("调用失败")));
@@ -1699,7 +1706,7 @@ export function createMcpPanel() {
     }
 
     async function load() {
-        const data = await getJson("/neo_mcp/servers");
+        const data = await mcpGet("/neo_mcp/servers");
         if (data.offline) {
             servers = [];
             emptyHint(OFFLINE_HINT);
@@ -1715,7 +1722,7 @@ export function createMcpPanel() {
         body.replaceChildren();
         renderServers(data.connected || []);
         if (editorBox.hidden) editor.value = JSON.stringify(servers, null, 2);
-        const tools = await getJson("/neo_mcp/tools");
+        const tools = await mcpGet("/neo_mcp/tools");
         if (!tools.offline && tools.success) renderTools(tools.tools || []);
     }
 

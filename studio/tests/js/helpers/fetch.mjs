@@ -98,7 +98,7 @@ export async function handleFetch(input, init = {}) {
     } else if (body) {
         body = "[non-json]";
     }
-    const call = { path: url.pathname, query: url.searchParams, method, body, signal: init.signal ?? null };
+    const call = { path: url.pathname, origin: url.origin, query: url.searchParams, method, body, signal: init.signal ?? null };
     fetchLog.push(call);
 
     const match = matchRoute(url.pathname);

@@ -4,6 +4,14 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **The MCP tab works while the window sits on the ComfyUI port.** With LAN listen, or when the desktop attaches to a
+  ComfyUI it did not spawn, the window lands on the ComfyUI port, where `/neo_mcp/*` does not exist: Settings →
+  MCP 服务 answered "the desktop service is not ready" and the registry never listed. The desktop now appends
+  `?neo_desktop=http://127.0.0.1:<desktop port>` to that navigation target, the page routes the MCP family back to the
+  desktop port, and the desktop service answers CORS for loopback origins only (preflight `204`, a non-loopback
+  origin's preflight `403`). Direct mode is unchanged — that page already sits on the desktop port — and a remote
+  ComfyUI page keeps the offline note, since its origin is not loopback.
+
 - **The asset library got quick-filter chips for virtual kinds.** A row under the home toolbar aggregates the whole
   library by type and purpose: 图片 / 视频 / 音频 / 角色图 / 姿势图 / 分镜图 / 帧图, each chip carrying its own count.
   Clicking a chip opens the aggregated waterfall of exactly that kind - sorted by modification time, covers

@@ -14,6 +14,7 @@ import sys
 import threading
 import asyncio
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from aiohttp import web
 
@@ -24,6 +25,8 @@ import mcp_routes
 OFFLINE_ERROR = "ComfyUI 未运行"
 DESKTOP_PKG = "_neo_studio_desktop"
 DATA_ROOT_ENV = "NEO_STUDIO_DATA"   # 插件模块 import 期认的用户数据根
+MCP_PREFIX = "/neo_mcp"
+LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
 
 # 桌面端进程加载的插件模块，按依赖顺序：handler 只依赖 folder_paths、文件系统与 8080 LLM 服务。
 DESKTOP_MODULES = ("util", "civitai", "bookmark", "gallery_lora", "gallery_oss", "gallery",
@@ -74,6 +77,37 @@ async def no_store(request, handler):
     if request.path.startswith("/extensions/"):
         resp.headers["Cache-Control"] = "no-store"
     return resp
+
+
+@web.middleware
+async def mcp_cross_origin(request, handler):
+    """ComfyUI 端口上的 Studio 页面打桌面端端口的 MCP：这一发是跨源的，浏览器先要响应头。
+
+    MCP 路由只注册在桌面端服务上（stdio 子进程只活在这个进程里，app/mcp_routes.py），
+    局域网监听 / 附着 / 远程那路整页跳到 ComfyUI 端口后，页面靠 app/studio_app.py 挂的
+    ?neo_desktop= 把 /neo_mcp/* 打回来。只放行回环 origin：服务绑在 127.0.0.1，外部站点
+    即使把域名解析到回环（DNS 重绑）也拿不到 MCP 子进程的句柄；不带 Origin 的是本机脚本
+    与桌面端口上的同源页面，照旧放过。"""
+    if not request.path.startswith(MCP_PREFIX):
+        return await handler(request)
+    origin = request.headers.get("Origin", "")
+    allowed = not origin or _loopback_origin(origin)
+    headers = ({"Access-Control-Allow-Origin": origin,
+                "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type",
+                "Access-Control-Max-Age": "600", "Vary": "Origin"}
+               if allowed and origin else {})
+    if request.method == "OPTIONS":
+        # 路由表里只有 GET / POST：预检在这里收口，别落到 aiohttp 的 405 上（那儿没有 CORS 头）
+        return web.Response(status=204 if allowed else 403, headers=headers)
+    resp = await handler(request)
+    resp.headers.update(headers)
+    return resp
+
+
+def _loopback_origin(origin: str) -> bool:
+    parts = urlsplit(origin)
+    return parts.scheme in ("http", "https") and parts.hostname in LOOPBACK_HOSTS
 
 
 async def studio_page(request):
@@ -273,7 +307,7 @@ def build_app(root: Path, plugin_dir: Path, flags: dict = None, launcher: dict =
     # handler 之前被 transport 挡成 413，插件端（ComfyUI 的 --max-upload-size 默认 100MB）能跑的
     # 体积到了桌面端就白跑。这里放到接口自身上限之上，让「超过上限」由接口的 400 说清楚。
     pose_mod = sys.modules[f"{DESKTOP_PKG}.pose"]
-    app = web.Application(middlewares=[no_store],
+    app = web.Application(middlewares=[no_store, mcp_cross_origin],
                           client_max_size=pose_mod.MAX_BODY_BYTES + 8 * 1024 * 1024)
     app["flags"] = flags if flags is not None else {}
     app["studio_index"] = plugin_dir / "web" / "studio" / "index.html"

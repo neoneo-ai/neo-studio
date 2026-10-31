@@ -59,8 +59,9 @@ COMFY_ONLY_ROUTES = (
 
 
 
-def _request(port, path, data=None):
-    req = urllib.request.Request(f"http://127.0.0.1:{port}{path}", data=data)
+def _request(port, path, data=None, method=None, headers=None):
+    req = urllib.request.Request(f"http://127.0.0.1:{port}{path}", data=data,
+                                 headers=headers or {}, method=method)
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
             return resp.status, resp.read()
@@ -659,6 +660,45 @@ class McpRouteTests(_ServerCase):
         self.assertIn("GET /neo_mcp/servers", data["routes"])
         self.assertIn("POST /neo_mcp/tools/call", data["routes"])
         self.assertTrue(data["caps"]["mcp"], "MCP 只有桌面端能服务，页面据此门控")
+
+    # 局域网监听 / 附着那路的页面在 ComfyUI 端口上：MCP 族跨源打回桌面端口，浏览器要这份响应头
+    def full(self, path, method=None, headers=None):
+        req = urllib.request.Request(f"http://127.0.0.1:{self.port}{path}", method=method,
+                                     headers=headers or {})
+        try:
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                return resp.status, {k.lower(): v for k, v in resp.headers.items()}
+        except urllib.error.HTTPError as exc:
+            return exc.code, {k.lower(): v for k, v in exc.headers.items()}
+
+    def test_mcp_answers_cross_origin_from_a_loopback_page(self):
+        status, headers = self.full("/neo_mcp/servers", headers={"Origin": "http://127.0.0.1:8188"})
+        self.assertEqual(status, 200)
+        self.assertEqual(headers.get("access-control-allow-origin"), "http://127.0.0.1:8188")
+
+    def test_mcp_preflight_allows_the_json_post(self):
+        status, headers = self.full("/neo_mcp/tools/call", method="OPTIONS", headers={
+            "Origin": "http://127.0.0.1:8188", "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type"})
+        self.assertEqual(status, 204)
+        self.assertEqual(headers.get("access-control-allow-origin"), "http://127.0.0.1:8188")
+        self.assertEqual(headers.get("access-control-allow-headers"), "Content-Type")
+
+    def test_mcp_refuses_a_page_from_outside_the_machine(self):
+        # 外部站点把域名解析到回环（DNS 重绑）也拿不到 MCP 子进程：不回过源头，预检直接 403
+        status, headers = self.full("/neo_mcp/servers", headers={"Origin": "http://evil.example"})
+        self.assertEqual(status, 200, "响应照发，浏览器按缺响应头自己拦")
+        self.assertNotIn("access-control-allow-origin", headers)
+        status, headers = self.full("/neo_mcp/connect", method="OPTIONS",
+                                    headers={"Origin": "http://evil.example"})
+        self.assertEqual(status, 403)
+        self.assertNotIn("access-control-allow-origin", headers)
+
+    def test_mcp_keeps_working_without_an_origin(self):
+        # 本机脚本 / 单测不带 Origin：与以前一样拿注册表，响应里不掺 CORS 头
+        status, headers = self.full("/neo_mcp/servers")
+        self.assertEqual(status, 200)
+        self.assertNotIn("access-control-allow-origin", headers)
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):

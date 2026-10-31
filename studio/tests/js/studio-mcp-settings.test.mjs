@@ -69,7 +69,7 @@ test("设置页「MCP 服务」栏：tab 激活时拉注册表并列出服务", 
     assert.equal(mcpSection().style.display, "none", "未激活的 tab 不应显示");
 
     click(tab);
-    await flush();
+    await flush(40);
     assert.equal(mcpSection().style.display, "", "激活后应显示 MCP 栏");
     assert.ok(mcpSection().querySelector(".neo-agent-name")?.textContent.includes("neo-studio"),
         "应列出注册表里的服务");

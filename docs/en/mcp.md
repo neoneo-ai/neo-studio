@@ -71,7 +71,11 @@ from the startup settings, the script is the `mcp_server.py` inside the installe
 the registry has been saved the file is the only source: a saved empty list stays empty and the built-in
 entry never reappears; a file that exists but is malformed reads as empty, and the built-in entry never
 overwrites JSON the user broke. In remote ComfyUI mode there is no built-in entry and the tab points at
-the external MCP clients instead.
+the external MCP clients instead. With LAN listen, or when the desktop attaches to a ComfyUI it did not
+spawn, the window navigates to the ComfyUI port and the desktop appends `?neo_desktop=` to that URL: the
+tab sends `/neo_mcp/*` back to the desktop port, so the registry and tool calls keep working. A remote
+ComfyUI page keeps the offline note — its origin is not loopback, and the stdio server only reaches a
+local ComfyUI anyway.
 
 The agent dock's **✨ Generate** is a second client on the same protocol: `studio/agent.py` feeds
 `mcp_server.serve` line by line in-process, the tool list it hands the LLM is the whole MCP registry (the film

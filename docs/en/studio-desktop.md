@@ -64,6 +64,11 @@ the unsaved content of the director editor and the settings forms, and a cross-o
 - The price is that this ComfyUI instance gives up its origin_only CSRF defence, so LAN listen (`--listen`) and remote
   mode never get the flag and keep the full-page navigation: an instance exposed to a NIC does not trade that defence
   for convenience.
+- The paths that navigate to the ComfyUI port carry `?neo_desktop=http://127.0.0.1:<desktop port>` on the URL
+  (`StudioDesktop.studio_target`, added only to the full Studio target, never to the offline or guide page): the MCP
+  registry and its stdio sessions live in the desktop process only, so the page sends `/neo_mcp/*` back to the desktop
+  port, where `mcp_cross_origin` in `app/studio_server.py` answers CORS for loopback origins only (preflight `204`, a
+  non-loopback origin's preflight `403`). Direct mode is unaffected: that page already sits on the desktop port.
 - The flip happens as one step and nothing flips until ComfyUI answers: the capability table becomes ComfyUI's, gated
   buttons drop their blocking listener and restore their labels, the `body.ns-offline` mark is dropped, the header queue
   entry shows up and reseeds from the six task tables (the VRAM / RAM readout is built with it), and `/ws` moves from

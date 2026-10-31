@@ -1102,10 +1102,23 @@ class StudioDesktop:
     def _goto(self, target: str) -> None:
         if not target or self.loader is None:
             return
+        target = self.studio_target(target)
         self.page = target
         log_line(f"goto {target}")
         self.loader(target)
         self.rearm()
+
+    def studio_target(self, target: str) -> str:
+        """整页跳到 ComfyUI 端口的完整 Studio 时，把桌面端 origin 挂在 URL 上。
+
+        MCP 注册表与 stdio 会话只活在桌面端进程里（app/mcp_routes.py）：页面在 8188 上打
+        /neo_mcp/* 只会拿到 404，MCP 栏就只剩一句「桌面端服务未就绪」。页面拿到这个参数
+        就把那族请求送回桌面端口（studio/web/studio/shim/route.js）。
+        直连那路页面本来就钉在桌面端端口上，离线页 / 引导页也在本进程上，都不带。"""
+        if self.direct or not self.desktop_port or target != self.url:
+            return target
+        sep = "&" if "?" in target else "?"
+        return f"{target}{sep}neo_desktop=http://127.0.0.1:{self.desktop_port}"
 
     def _leave_offline(self, ready: bool) -> None:
         """窗口停在离线页、服务已经答话：接上 ComfyUI，横幅随状态一起收。
