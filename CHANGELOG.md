@@ -4,6 +4,8 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-10-31
+
 - **The MCP tab works while the window sits on the ComfyUI port.** With LAN listen, or when the desktop attaches to a
   ComfyUI it did not spawn, the window lands on the ComfyUI port, where `/neo_mcp/*` does not exist: Settings →
   MCP 服务 answered "the desktop service is not ready" and the registry never listed. The desktop now appends
