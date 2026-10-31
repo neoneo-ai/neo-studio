@@ -723,7 +723,8 @@ class PoseBridgeTests(_ServerCase):
         self.assertEqual(data["bridge"], list(self.pose_module.BRIDGE_MESSAGES),
                          "桥消息名单由后端下发，宿主与摆姿页都按它校验")
         # 两级落点与随包清单都在 status 里：装机的人一眼看到页面跑在哪一级、装到了什么
-        for key in ("dist_source", "package_installed", "models_present", "manifest_version"):
+        for key in ("dist_source", "package_installed", "models_present", "manifest_version",
+                    "lib_dir", "lib_installed", "lib_entries"):
             self.assertIn(key, data, f"status 要报出 {key}")
 
     def test_package_copy_serves_the_page_when_data_root_is_empty(self):
@@ -779,6 +780,26 @@ class PoseBridgeTests(_ServerCase):
     def test_dist_prefix_stays_inside_the_package(self):
         status, _, _ = self.get_full("/pose-dist/../../configs/data_root.json")
         self.assertIn(status, (400, 404), "前缀不能把数据根里的配置发出去")
+
+    def test_pose_lib_prefix_serves_the_synced_library(self):
+        """姿势库弹窗跑在离线窗口里：库文件按 `/pose-lib/` 这条前缀伺服，弹窗读的就是这些地址。"""
+        index = {"format": "3dpose.index/1",
+                 "entries": [{"id": "a", "label": "A-Pose", "path": "poses/stand/a.pose.json",
+                             "groups": ["stand"], "preview": {"clay": "preview/a.clay.png"}}]}
+        self.write(self.pose_dir / "lib" / "index.json", json.dumps(index, ensure_ascii=False))
+        self.write(self.pose_dir / "lib" / "poses" / "stand" / "a.pose.json",
+                   '{"format":"pose-file/v1","rig":{}}')
+        status, headers, body = self.get_full("/pose-lib/index.json")
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body)["entries"][0]["id"], "a")
+        status, headers, _ = self.get_full("/pose-lib/poses/stand/a.pose.json")
+        self.assertEqual(status, 200, "弹窗按 entry.path 取姿态文件交回 pose/apply")
+        self.assertNotIn("immutable", headers.get("Cache-Control", ""),
+                         "库会被同步脚本重新生成，不许长缓存")
+        status, _, _ = self.get_full("/pose-lib/../../scenes/unit_pose_scene.json")
+        self.assertIn(status, (400, 404), "这条前缀不能把库外的文件发出去")
+        status, _, _ = self.get_full("/pose-lib/no_such.pose.json")
+        self.assertEqual(status, 404)
 
     def test_models_prefix_serves_the_registries_the_page_asks_for(self):
         """道具与素体注册表在产物里写的是 origin 根上的绝对路径 /models/...：页面挂在
@@ -852,6 +873,8 @@ class PoseBridgeTests(_ServerCase):
                          "整条前缀逐条打表只会让能力表里的条目数随构建产物变动")
         self.assertNotIn(("GET", "/models/{path}"), caps.DESKTOP_ROUTES,
                          "道具注册表与素体 GLB 的根前缀也是静态伺服，与子资源同一条路")
+        self.assertNotIn(("GET", "/pose-lib/{path:.*}"), caps.DESKTOP_ROUTES,
+                         "姿势库的整条前缀同静态伺服，不进能力表")
 
     def test_import_model_offline_lands_in_data_root(self):
         """离线服务里导入一份自备 GLB：落点在数据根的 pose/dist/models，页面那条前缀取得到。"""

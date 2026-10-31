@@ -151,7 +151,8 @@ Neo Studio 独立页面（`web/studio/index.html`）的后端。素材 / 生图 
 | GET    | `/neo-pose`                 | 摆姿页短路径：两级落点里有入口页就 302 到 `/pose-dist/index.html`，都没有回 404 与安装提示 |
 | GET    | `/pose-dist/{path}`         | 摆姿包子资源，由 iframe 内部直接加载；逐请求按 `<数据根>/pose/dist` → `studio/pose_dist` 两级找（两端各自直接注册，不进能力归属表） |
 | GET    | `/models/{path}`            | 产物里写死的根路径前缀（道具注册表 `props/index.json`、素体与道具的 `<file>.glb`）；与 `/pose-dist/{path}` 同一套两级查找、同一个根内校验 |
-| GET    | `/neo_pose/status`          | 装没装、生效那一级（`dist_source`）、随包清单与在着的 GLB、能力位、已存场景与姿态、桥消息名单、缺包提示 |
+| GET    | `/pose-lib/{path}`          | 姿势库的只读伺服（`index.json`、`poses/**`、`preview/*.png`、`categories.json`）；落点只有 `<数据根>/pose/lib`，逐条过根内校验，未同步回 404（两端各自直接注册，不进能力归属表） |
+| GET    | `/neo_pose/status`          | 装没装、生效那一级（`dist_source`）、随包清单与在着的 GLB、能力位、已存场景与姿态、桥消息名单、缺包提示、库状态（`lib_installed` / `lib_entries` / `lib_bytes` / `lib_dir`） |
 | GET    | `/neo_pose/scenes`          | 场景列表（`name` / `size` / `mtime`）                                        |
 | GET    | `/neo_pose/scene?name=`     | 读一份场景                                                                   |
 | POST   | `/neo_pose/scene`           | 写场景（`.tmp` + replace 原子落盘）                                          |
@@ -168,7 +169,9 @@ Neo Studio 独立页面（`web/studio/index.html`）的后端。素材 / 生图 
 前缀本身（`/pose-dist/`，空路径）落到入口页，地址栏直接敲前缀也要进页面。产物里的资源路径是构建时写死的
 两条根路径：页面与脚本走 `/pose-dist/...`，道具注册表与 GLB 走 `/models/props/index.json`、
 `/models/<file>.glb`。两条前缀是同一条静态伺服挂的两个名字 —— 同一个两级落点、同一个根内校验，出根的
-请求 400、缺文件 404，绝不回一份空注册表让页面把「加具失败」当成用户的问题。`import_model` 收
+请求 400、缺文件 404，绝不回一份空注册表让页面把「加具失败」当成用户的问题。`/pose-lib/{path}` 挂的是
+第三个名字：落点只有 `<数据根>/pose/lib`，库由 `tools\sync_pose_lib.ps1` 同步进来、后端只读它，未同步时
+整条前缀回 404，同步每次重写文件因此这条前缀回 `no-cache` 而不是长缓存。`import_model` 收
 `{key, data}`（base64）或 `{key, filename, subfolder, type}`（素材库里的文件），key 过场景名那套白名单、
 体积 ≤ 35MB、文件头须为 `glTF`，四道校验都在写盘之前（35MB 是 base64 进 JSON 后还装得进 48MB
 请求体上限的那一档，桌面端服务的请求体上限也按这条抬到接口之上，不会先被 transport 挡成 413）。桥的页面侧实现是
@@ -374,7 +377,7 @@ LLM 模式与配置见 [llm.md](llm.md)，技能设计见 [skills.md](skills.md)
 |----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | GET      | `/neo-studio`                                                                                                                                               | Studio 页面（桌面端同一份 `web/studio/index.html`）                                                                                                                 |
 | GET      | `/extensions/comfyui-neo-studio/*`                                                                                                                          | 前端静态文件                                                                                                                                                        |
-| GET      | `/neo-pose` `/neo_pose/*`                                                                                                                                   | 摆姿页跳转与桥接口；`/pose-dist/*` 与 `/models/*` 是摆姿包静态前缀（两端直接注册，不在能力表）                                                                                     |
+| GET      | `/neo-pose` `/neo_pose/*` `/pose-dist/*` `/models/*` `/pose-lib/*`                                                                                          | 摆姿页跳转与桥接口；三条静态前缀（不在能力表）                                                                                                                      |
 | GET/POST | `/neo_frames/video` `/neo_frames/save`                                                                                                                      | 抽帧页的视频伺服与帧落盘                                                                                                                                            |
 | GET/POST | `/neo_gallery/*` `/neo_bookmark/*`                                                                                                                          | 素材库与收藏（含删除 / 上传 / 打标 / OSS 同步）                                                                                                                     |
 | GET/POST | `/rs_prompts/skills` `load_skill` `save_skill` `delete_skill` `*_*_skill_file`                                                                              | 技能编辑                                                                                                                                                            |

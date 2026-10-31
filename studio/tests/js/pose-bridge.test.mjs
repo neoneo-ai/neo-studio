@@ -4,7 +4,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { resetEnv, mockRoute, clearRoutes, jsonResponse, fetchLog, click, changeValue, inputText, flush, sleep, window } from "./setup.mjs";
 import { $el } from "../../web/studio/shim/ui.js";
-import { createPoseView, resolvePropChoice, POSE_PAGE_URL } from "../../web/pose/pose.js";
+
+// pose.js 现在经 lib-modal.js 拉 scripts/ui.js 的 shim：静态导入会在 setup.mjs 装好钩子之前就解完
+// 整张模块图，所以按 lib-modal-geometry.test.mjs 那条路动态取
+const { createPoseView, resolvePropChoice, POSE_PAGE_URL, previewOf, libFilter, libGroups, libTagsOf } =
+    await import("../../web/pose/pose.js");
 
 const api = { fetchApi: (path, opts) => fetch(path, opts) };
 const LIB = ".ns-pose-side:not(.ns-pose-panel)";
@@ -51,6 +55,24 @@ const STATUS = {
     hint: "",
 };
 
+/** pose-lib 的索引 fixture：形状来自摆姿仓库 poseLibrary.js 的 buildIndex（3dpose.index/1）。
+    条目带 groups / categories / preview，四档预览各留一条，缩略图优先级与分层口径都钉在这份上 */
+const POSE_LIB = {
+    format: "3dpose.index/1",
+    count: 3,
+    groups: [{ key: "stand", label: "站立", count: 2 }, { key: "fight", label: "格斗与武器", count: 1 }],
+    entries: [
+        { id: "a", label: "A-Pose 标定", path: "poses/stand/a.pose.json", kind: "pose", groups: ["stand"],
+          categories: ["站立", "standing-poses"], tags: ["preset"], source: "preset",
+          preview: { skeleton: "preview/a.skeleton.png", silhouette: "preview/a.silhouette.png" } },
+        { id: "calm-1", label: "双臂伸展 1", path: "poses/calm/calm-1.pose.json", kind: "pose",
+          groups: ["calm", "stand"], categories: ["手臂绘图参考", "arm-drawing-reference"], source: "photo3d",
+          preview: { clay: "preview/calm-1.clay.png", skeleton: "preview/calm-1.skeleton.png" } },
+        { id: "sword", label: "双手持剑", path: "poses/fight/sword.pose.json", kind: "pose", groups: ["fight"],
+          categories: ["格斗", "sword"], source: "preset", preview: { depth: "preview/sword.depth.png" } },
+    ],
+};
+
 // jsdom 没有 MessageChannel：回复端口桩成同步直投（宿主的 port1.onmessage 立刻收到）
 class StubPort {
     constructor() { this.onmessage = null; this.peer = null; }
@@ -84,6 +106,9 @@ function mounted(status = STATUS) {
         saved: (body?.files || []).map((f) => f.name),
         count: (body?.files || []).length,
     }));
+    // 姿势库的两条静态读：索引清单不带 success 外壳，库里的一份姿态就是 PoseFile 原样
+    mockRoute("/pose-lib/index.json", () => jsonResponse(status.lib === undefined ? POSE_LIB : status.lib));
+    mockRoute("/pose-lib/poses/calm/calm-1.pose.json", () => jsonResponse({ format: "pose-file/v1", rig: {} }));
 
     const host = $el("div");
     document.body.appendChild(host);
@@ -508,4 +533,140 @@ test("自备素体：key 输入框优先，非法 key 与非 .glb 都挡在发�
     const post = fetchLog.find((c) => c.method === "POST" && c.path === "/neo_pose/import_model");
     assert.equal(post.body.key, "my_body", "key 输入框优先于文件名");
     assert.equal(env.panelField().value, "", "key 是一次性的：写完就清，下一发不覆盖上一发");
+});
+
+test("previewOf / libFilter / libGroups / libTagsOf：缩略图优先级与搜索分层口径", () => {
+    assert.equal(previewOf(POSE_LIB.entries[1]), "preview/calm-1.clay.png", "clay 是写实渲染那张，优先");
+    assert.equal(previewOf(POSE_LIB.entries[0]), "preview/a.skeleton.png", "缺 clay 才落到 skeleton");
+    assert.equal(previewOf({ preview: { depth: "x.depth.png" } }), "x.depth.png", "四档都没有时才落到 depth");
+    assert.equal(previewOf({}), "", "没预览的条目交回空串，卡片自己出占位槽");
+    assert.deepEqual(libFilter(POSE_LIB.entries, { q: "sword" }).map((e) => e.id), ["sword"]);
+    assert.deepEqual(libFilter(POSE_LIB.entries, { q: "手臂绘图" }).map((e) => e.id), ["calm-1"],
+        "分类名与 label 一起进搜索：库里分类名中英文各一条");
+    assert.deepEqual(libFilter(POSE_LIB.entries, { group: "fight" }).map((e) => e.id), ["sword"]);
+    assert.deepEqual(libGroups(POSE_LIB.entries, POSE_LIB.groups).map((s) => [s.key, s.items.length]),
+        [["stand", 2], ["fight", 1]], "多组条目只落排最前的那个组，同 id 不许出现两张卡");
+    assert.equal(libTagsOf(POSE_LIB.entries[1]), "手臂绘图参考 / arm-drawing-reference · photo3d");
+    assert.equal(libTagsOf(POSE_LIB.entries[0]), "站立 / standing-poses", "preset 来源不上卡片副标题");
+});
+
+test("姿势库弹窗：卡片按预览优先级出缩略图，点卡片读库文件交回 pose/apply 并收窗", async () => {
+    resetEnv();
+    const env = await mounted();
+    await env.ready();
+    click(env.button("浏览姿势库…", LIB));
+    await settle();
+    const modal = () => env.host.querySelector(".ns-libmodal:not(.ns-hidden)");
+    assert.ok(modal(), "弹窗要开着");
+    assert.ok(fetchLog.some((c) => c.path === "/pose-lib/index.json"), "打开弹窗读一次索引清单");
+    const cards = () => [...modal().querySelectorAll(".ns-pose-lib-card")];
+    assert.equal(cards().length, 3, "库里三条 = 三张卡");
+    const thumb = (id) => cards().find((c) => c.dataset.libId === id).querySelector(".ns-pose-lib-thumb");
+    assert.equal(thumb("calm-1").getAttribute("src"), "/pose-lib/preview/calm-1.clay.png");
+    assert.equal(thumb("a").getAttribute("src"), "/pose-lib/preview/a.skeleton.png");
+    assert.equal(thumb("sword").getAttribute("src"), "/pose-lib/preview/sword.depth.png");
+    assert.equal(modal().querySelector(".ns-pose-lib-more").hidden, true, "库里只有三条，不出加载更多");
+    click(cards().find((c) => c.dataset.libId === "calm-1"));
+    await settle();
+    const apply = env.calls("pose/apply")[0];
+    assert.deepEqual(apply.msg.args.file, { format: "pose-file/v1", rig: {} },
+        "库里那份 PoseFile 原样交回页面，宿主不补字段");
+    env.replyCall(apply, { applied: 42, missing: [] });
+    await settle();
+    assert.equal(env.host.querySelector(".ns-libmodal").classList.contains("ns-hidden"), true, "套用完要收窗");
+    assert.match(env.toasts.join("|"), /双臂伸展 1/);
+});
+
+test("姿势库弹窗：搜索与分组下拉同一条过滤口径，卡片区按归并组分层", async () => {
+    resetEnv();
+    const env = await mounted();
+    await env.ready();
+    click(env.button("浏览姿势库…", LIB));
+    await settle();
+    const modal = () => env.host.querySelector(".ns-libmodal:not(.ns-hidden)");
+    const titles = () => [...modal().querySelectorAll(".ns-pose-lib-group-title")].map((h) => h.textContent);
+    assert.deepEqual(titles(), ["站立（2）", "格斗与武器（1）"], "分层按 index.json 的 groups 顺序走");
+    inputText(modal().querySelector(".ns-pose-lib-search"), "双手持剑");
+    assert.deepEqual([...modal().querySelectorAll(".ns-pose-lib-card")].map((c) => c.dataset.libId), ["sword"]);
+    assert.equal(modal().querySelector(".ns-pose-lib-blank").hidden, true, "有匹配就不出空态文案");
+    inputText(modal().querySelector(".ns-pose-lib-search"), "没有这个词");
+    assert.equal(modal().querySelectorAll(".ns-pose-lib-card").length, 0);
+    assert.equal(modal().querySelector(".ns-pose-lib-blank").hidden, false);
+    assert.match(modal().querySelector(".ns-pose-lib-blank").textContent, /没有匹配/);
+    inputText(modal().querySelector(".ns-pose-lib-search"), "");
+    changeValue(modal().querySelector(".ns-pose-lib-group"), "fight");
+    assert.deepEqual([...modal().querySelectorAll(".ns-pose-lib-card")].map((c) => c.dataset.libId), ["sword"],
+        "分组下拉按 index.json 的 groups key 过滤");
+    assert.deepEqual([...modal().querySelector(".ns-pose-lib-group").options].map((o) => o.value),
+        ["", "stand", "fight"], "分组下拉来自索引的 groups，label 带中文归并组名与条数");
+});
+
+test("姿势库未同步：出同步指引，不给一个空浏览器", async () => {
+    resetEnv();
+    const env = await mounted({ ...STATUS, lib: null });
+    await env.ready();
+    click(env.button("浏览姿势库…", LIB));
+    await settle();
+    const blank = env.host.querySelector(".ns-pose-lib-blank");
+    assert.equal(blank.hidden, false);
+    assert.match(blank.textContent, /sync_pose_lib/);
+    assert.equal(env.host.querySelectorAll(".ns-pose-lib-card").length, 0, "库没同步就不该渲染卡片");
+    assert.match(env.toasts.join("|"), /pose-lib\/index\.json/);
+});
+
+test("本机姿势文件：读成 PoseFile 交回 pose/apply，坏 JSON 挡在发请求之前", async () => {
+    resetEnv();
+    const env = await mounted({ ...STATUS, lib: null });   // 库没同步也要能从本机挑一份
+    await env.ready();
+    click(env.button("浏览姿势库…", LIB));
+    await settle();
+    const input = [...env.host.querySelectorAll(".ns-pose-file")].find((i) => i.accept.includes(".pose.json"));
+    assert.ok(input, "弹窗里的本机文件选择器要在界面上（CSS 里藏着，借浏览器那套选择框）");
+    const pick = (text) => {
+        Object.defineProperty(input, "files", {
+            value: [new window.File([text], "mine.pose.json", { type: "application/json" })],
+            configurable: true,
+        });
+        input.dispatchEvent(new window.Event("change", { bubbles: true }));
+    };
+    pick("{ not json");
+    await sleep(20);
+    await settle();
+    assert.match(env.toasts.join("|"), /本机文件不是一份 JSON 对象/);
+    assert.equal(env.calls("pose/apply").length, 0, "坏 JSON 不许发 pose:call");
+    pick(JSON.stringify({ format: "pose-file/v1", rig: {} }));
+    await sleep(20);
+    await settle();
+    const apply = env.calls("pose/apply")[0];
+    assert.deepEqual(apply.msg.args.file, { format: "pose-file/v1", rig: {} });
+    env.replyCall(apply, { applied: 1, missing: [] });
+    await settle();
+    assert.match(env.toasts.join("|"), /mine\.pose\.json/);
+    assert.equal(env.host.querySelector(".ns-libmodal").classList.contains("ns-hidden"), true, "套用完要收窗");
+});
+
+test("场景弹窗：列数据根的存档，点一条装进页面并收窗；本机场景文件同一条装载路", async () => {
+    resetEnv();
+    const env = await mounted();
+    await env.ready();
+    click(env.button("浏览场景…", LIB));
+    await settle();
+    const rows = [...env.host.querySelectorAll(".ns-pose-lib-list .ns-pose-item")];
+    assert.deepEqual(rows.map((r) => r.textContent), ["hero"], "弹窗里列的是数据根 pose/scenes 那份存档");
+    click(rows[0]);
+    await settle();
+    assert.equal(env.sent.find((s) => s.msg.type === "pose:open-scene").msg.scene.camYaw, 42);
+    assert.equal(env.host.querySelector(".ns-libmodal").classList.contains("ns-hidden"), true, "装载完要收窗");
+    const input = [...env.host.querySelectorAll(".ns-pose-file")].find((i) => i.accept === ".json");
+    Object.defineProperty(input, "files", {
+        value: [new window.File([JSON.stringify({ camYaw: 7 })], "local.json", { type: "application/json" })],
+        configurable: true,
+    });
+    input.dispatchEvent(new window.Event("change", { bubbles: true }));
+    await sleep(20);
+    await settle();
+    const opened = env.sent.filter((s) => s.msg.type === "pose:open-scene");
+    assert.equal(opened.length, 2, "本机那份与数据根那条走同一条装载路");
+    assert.deepEqual(opened[1].msg.scene, { camYaw: 7 });
+    assert.match(env.toasts.join("|"), /local\.json/);
 });

@@ -117,6 +117,27 @@ const EN = {
     "已套用姿态：{name}（骨骼 {applied} 处，缺 {missing} 处）": "Pose applied: {name} ({applied} bones, {missing} missing)",
     "场景已保存：{name}": "Scene saved: {name}",
     "已载入场景：{name}": "Scene loaded: {name}",
+    // 姿势库弹窗（pose-lib 的库浏览器 + 本机文件两条路）：卡片按 clay 优先出缩略图，库未同步出同步指引
+    "浏览姿势库…": "Browse Pose Library…",
+    "浏览场景…": "Browse Scenes…",
+    "本机姿势文件…": "Local Pose File…",
+    "本机场景文件…": "Local Scene File…",
+    "本机文件不是一份 JSON 对象": "This file is not a JSON object",
+    "搜索姿势（名字 / 分类 / 标签）": "Search poses (name / category / tag)",
+    "分组": "Group",
+    "全部分组": "All groups",
+    "无预览": "No preview",
+    "没有匹配的姿势": "No matching poses",
+    "加载更多（还有 {n} 条）": "Load more ({n} left)",
+    "{total} 个姿势 · 显示 {shown}": "{total} poses · showing {shown}",
+    "读不到库文件：{path}": "Cannot read the library file: {path}",
+    "姿势库未同步：跑 tools\\sync_pose_lib.ps1 -Source <3d-pose-art 仓库根> 把 pose-lib 同步进 <数据根>/pose/lib。":
+        "The pose library is not synced: run tools\\sync_pose_lib.ps1 -Source <3d-pose-art repo> to put pose-lib into <data root>/pose/lib.",
+    "已套用库内姿态：{name}（骨骼 {applied} 处，缺 {missing} 处）":
+        "Library pose applied: {name} ({applied} bones, {missing} missing)",
+    "已套用本机姿态：{name}（骨骼 {applied} 处，缺 {missing} 处）":
+        "Local pose applied: {name} ({applied} bones, {missing} missing)",
+    "已载入本机场景：{name}": "Local scene loaded: {name}",
     "一次最多导出 {n} 张": "At most {n} images per export",
     "已导出 {n} 张到素材库的 Pose 目录": "Exported {n} images to the library's Pose folder",
     "画布截图已进素材库的 Pose 目录：{name}": "Canvas snapshot in the library's Pose folder: {name}",

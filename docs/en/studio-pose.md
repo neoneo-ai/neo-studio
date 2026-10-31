@@ -43,13 +43,59 @@ mirroring, so reinstalling the pose package never silently deletes an imported f
 so an installed copy must carry its license text and attribution). Reloading the page is enough after a
 sync: the installed check runs per request, so the window does not need a restart.
 
+## The pose library (pose-lib)
+
+The library is the batch of poses 3d-pose-art accumulated with their previews, and it lands on one path
+only: `<data root>/pose/lib/`. It never ships in the bundled copy - its licence rule differs from the pose
+package's, so `tools\build_pose_package.ps1` does not package it - the sync script is what lands it. The
+whole directory is a cache: delete it and resync any time. `scenes/`, `refs/` and `presets/` under `pose/`
+are what the user wrote, and stay out of the mirror.
+
+| Landing path                     | Contents                                                       | Where it comes from         |
+|----------------------------------|----------------------------------------------------------------|-----------------------------|
+| `<data root>/pose/lib/poses/`    | One `.pose.json` per pose (the exported PoseFile, verbatim)    | `tools\sync_pose_lib.ps1`   |
+| `<data root>/pose/lib/preview/`  | `<id>.<tier>.png`: `clay` / `skeleton` / `silhouette` / `depth`| same script                 |
+| `<data root>/pose/lib/index.json`| `id / label / groups / categories / tags / path / preview`     | `npm run lib` in 3d-pose-art|
+
+The index is generated in 3d-pose-art and carried over verbatim: `-Source` accepts the repo root or its
+`pose-lib`, and when `index.json` or `poses\` is missing the script exits and prints the `npm run lib --
+reindex` command to run. Editing `poses/` by hand does not touch the index: re-run reindex, then sync.
+Previews sync per tier:
+
+```
+pwsh tools\sync_pose_lib.ps1 -Source <3d-pose-art repo root>         # default tier: clay + skeleton + silhouette
+pwsh tools\sync_pose_lib.ps1 -Source <3d-pose-art repo root> -Light  # skeleton + silhouette only: the leanest thumbnails the modal needs
+pwsh tools\sync_pose_lib.ps1 -Source <3d-pose-art repo root> -All    # all four tiers, the depth previews included
+```
+
+`/MIR` mirrors `preview/` with per-tier `/XF` exclusions; a tier excluded now may already have landed from a
+wider run, and `/MIR` does not clear excluded files, so the script then strips those leftovers by
+`*depth.png` / `*clay.png` - a wide run followed by a narrow one leaves the library without two tiers mixed.
+
+The backend read route is `/pose-lib/{path}` alone: `index.json`, `poses/**`, `preview/*.png`,
+`categories.json`. Its root is `<data root>/pose/lib`, every path goes through the `inside_dir` containment
+check (`..`, a drive letter and an absolute path are 400), an empty path and a path naming a directory land
+on `index.json`, and a missing file is 404 - an unsynced library and a missing file give the same answer,
+and the modal decides by whether the index can be read (`index.json` failing means not synced), so nobody
+browses an empty library. Every sync rewrites the files, so the whole prefix answers
+`Cache-Control: no-cache`: a long cache would keep the index and the previews on the previous version after
+a resync, and neither `index.json` nor a pose file may carry `immutable`. The write side stays the three
+existing routes (`/neo_pose/presets`, `/neo_pose/preset`, `/neo_pose/preset/delete`); the library is read
+only throughout.
+
+`/pose-lib` follows the same rule as `/pose-dist`: a static prefix each host registers directly, outside the
+capability table, answered by the offline desktop service too. `/neo_pose/status` reports the library level:
+`lib_dir` (the landing path), `lib_installed` (the index reads and entries are not empty), `lib_entries`
+(the entry count), `lib_bytes` (the size of the whole directory).
+
 ## Page and static prefix
 
-| Method | Route               | Purpose                                                             |
-|--------|---------------------|---------------------------------------------------------------------|
-| GET    | `/neo-pose`         | Short path: 302 to the entry page when installed, 404 with the install hint when not |
-| GET    | `/pose-dist/{path}` | Package subresources (`index.html`, `assets/**`, GLB, wasm)          |
-| GET    | `/models/{path}`    | The origin-root path baked into the build: the prop registry and the GLBs |
+| Method | Route               | Purpose                                                                             |
+|--------|---------------------|-------------------------------------------------------------------------------------|
+| GET    | `/neo-pose`         | Short path: 302 to the entry page when installed, 404 with the install hint when not|
+| GET    | `/pose-dist/{path}` | Package subresources (`index.html`, `assets/**`, GLB, wasm)                         |
+| GET    | `/pose-lib/{path}`  | Read-only pose library serving: the index, pose files and previews                  |
+| GET    | `/models/{path}`    | The origin-root path baked into the build: the prop registry and the GLBs           |
 
 The build uses `base: './'` relative imports, so the page must sit on a URL with directory depth:
 only then does `./assets/x.js` resolve to `/pose-dist/assets/x.js`. Serving the page directly at the
@@ -140,8 +186,9 @@ none of the four survives as part of what `tools\sync_pose_dist.ps1` mirrors (th
 the source build does not have and moves them back), so reinstalling the package leaves them alone.
 
 All thirteen routes only read and write files, so the offline desktop service answers every one of them
-(`_POSE` in `app/studio_caps.py`). `/pose-dist` is a static prefix each host registers directly and
-is not a capability-table entry.
+(`_POSE` in `app/studio_caps.py`). `/pose-dist` and `/pose-lib` are static prefixes each host registers
+directly and neither is a capability-table entry.
+
 ## Host view and message directions
 
 The desktop top bar's Pose tab and the home card "3D Pose" open `#/pose`; the host module is
@@ -157,6 +204,25 @@ leaving the page leaves no listener behind.
 The preset and the pose library apply in one click: changing the preset dropdown sends `preset/apply`,
 and clicking a library entry reads that file back and sends `pose/apply` (the Load Pose button is kept
 for a typed-in name), so the panel no longer has an "Apply Preset" step.
+
+"Browse Pose Library…" and "Browse Scenes…" share one modal shell (the asset library's): the pose tab lists
+the `pose-lib` library, the scene tab lists the `pose/scenes/` saves. A library card picks its preview by
+`clay → skeleton → silhouette → depth` (the rule the pose page's `thumbOf` uses in `src/ui/libraryPanel.js`),
+and a card with none of the four reads "no preview". The group dropdown is filled from the index's `groups`
+with their `count`, "all groups" returns to the whole library, and the search filters on
+`label / categories / tags / id / source` (the field table 3d-pose-art's `filterIndex` uses in
+`poseLibrary.js`). A pose can belong to several groups and its card lands only in the highest-ranked one -
+two cards with the same id would cross wires on click. A page is 200 cards (640+ in the DOM at once breaks
+both the first paint and scrolling) and the rest sit behind "load more (N left)". Clicking a card reads that
+`.pose.json` and sends `pose/apply`, and a successful apply closes the modal with "bones N / missing M" -
+the same path the left column's Load Pose takes. The modal's search, group dropdown and load-more sit behind
+the same `libGate` as the left column: they stay disabled until `pose:ready`, and the pane locks after an
+apply until the result comes back, because two quick clicks send two `pose/apply` calls and the second
+silently overwrites the first. When the library is not synced the modal shows the sync command with a line
+of explanation instead of an empty grid: an empty browser is not what a library looks like. The modal
+carries two more entries, "local pose file…" and "local scene file…", which take a JSON file from this
+machine through the same `pose/apply` and `pose:open-scene` path - a file outside the library applies just
+the same.
 
 The panel has no 摆姿模式 / 吸附 / 轮廓线 / 主体层 checkboxes: posing starts by clicking the figure, which
 makes the page enter pose mode on its own and leave it on an empty-space click, the page starts with snap
@@ -226,6 +292,8 @@ and the host exposes no route for them. Those panels already degrade through the
 (`/__pose3d/ping`, `/__pose-lib/ping`): the endpoints exist only in vite dev/preview, so on a statically
 served host the probes fail and the panels disable themselves with the project's existing "the answer is
 not the estimation service" rule. `caps` is the host confirming that same state, not a second switch.
+`lib_write` closes only the library's write side: reading needs no sidecar, the index and the files are
+served by the host itself (`/pose-lib`), so the modal still lists the library and still applies a pose.
 
 `body_import` is `true`, and it is the host's own path: only the licence-clean CC0 figure ships, the rest
 are figures the user supplies, written into the data root through `/neo_pose/import_model` and registered
@@ -257,6 +325,11 @@ the registry as empty. Check that path's status code in the browser's Network pa
 `dist_source` from `/neo_pose/status` to see which landing path is live. The bundled copy carries no
 props by design (the licence rule), so props need the full build via `tools\sync_pose_dist.ps1`.
 
+An unsynced library is a different matter, and the pose page stays usable: the whole `/pose-lib` prefix
+answers 404, `/neo_pose/status` reports `lib_installed: false` with `lib_entries: 0`, and the "Browse Pose
+Library…" modal shows that sync command with a line of explanation instead of an empty list - a missing
+file and an unsynced library are the same 404, so the modal decides by whether the index can be read.
+
 ## Tests
 
 - `studio/tests/test_pose_bridge.py`: path containment, the scene-name whitelist, wasm MIME,
@@ -266,17 +339,24 @@ props by design (the licence rule), so props need the full build via `tools\sync
   (the bundled copy as fallback, the data root shadowing same-named files, the hint when both are
   missing), the prop-registry prefix resolving in both levels, the shipped manifest inside `status`,
   the imported-figure landing path with its five checks (key / source / size / header / library size),
-  the library-source resolution, and refused requests leaving no trace.
+  the library-source resolution, and refused requests leaving no trace; the pose-library serving of the
+  index, a pose file and a preview, a directory landing on `index.json`, an out-of-root `400`, an unsynced
+  `404`, `no-cache` on the whole prefix, a broken index leaving `status` standing, and the four `lib_*`
+  fields in `status`.
 - `app/tests/test_studio_server.py::PoseBridgeTests`: the redirect, serving subresources offline and
   refusing to escape the package, the `/models` prefix answering the registry and the prop GLBs
   (including the imported figure and the data root shadowing the bundled copy), the scene round trip,
   the pose round trip, the flags and route ownership (checked against the pose module's own route
   table, one by one), the bundled-copy fallback level, importing an own figure offline with the 35 MB
-  cap, and the request-body cap sitting above that route.
+  cap, and the request-body cap sitting above that route; the `/pose-lib` prefix answering the index and a
+  pose file in the offline service, the four `lib_*` fields in `status`, and `/pose-lib` staying out of the
+  capability table.
 - `studio/tests/js/pose-bridge.test.mjs`: the host's not-installed form, the iframe attributes, the
   bridge's source and origin checks, the hostUi gating, the import / export / pose-apply / scene /
   set-export paths, the routes each message reaches, the note shown on the bundled copy, and importing
-  an own figure (the base64 upload and the key checks).
+  an own figure (the base64 upload and the key checks); the library modal's index rendering with grouping,
+  search and load-more, applying a library pose (the route it reads and the modal closing), the sync hint
+  when the library is unsynced, the gate locking that pane, and the local pose and scene file paths.
 - `tools\test_pose_package.ps1`: the shipped package's own self-check - required files, build shape,
   forbidden shapes (`*.map`, GLBs outside the whitelist, prop GLBs, loose JSON), per-file sha256 and
   byte verification, an empty prop registry, development-machine absolute paths, and the size cap.

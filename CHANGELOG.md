@@ -4,6 +4,18 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **The 3D Pose page browses the pose library in a dialog.** 载入姿态 (Load Pose) knew only a name typed into the
+  field and 载入场景 (Load Scene) only the flat list of saved scenes, so the library 3d-pose-art accumulates -
+  hundreds of poses with their `clay` / `skeleton` / `silhouette` / `depth` previews - had no way in. Two buttons
+  beside them, **浏览姿势库…** (Browse Pose Library) and **浏览场景…** (Browse Scenes), open one dialog on the asset
+  library's shell: the pose pane lists the synced library with a search box, a group filter, preview thumbnails and
+  a 200-card window that grows on demand, the scene pane lists the scenes in the data root, and both panes carry a
+  local-file picker, so a `.pose.json` or a scene `.json` from anywhere loads without being copied in first. A
+  library entry is a plain PoseFile, so it goes through the same `pose/apply` and `pose:open-scene` the typed path
+  uses. The library lands in `<data root>/pose/lib/` through
+  `pwsh tools\sync_pose_lib.ps1 -Source <3d-pose-art repo root>` (`-Light` / `-All` pick the preview tiers); until
+  it is synced the dialog shows that command instead of an empty list, and the page itself keeps working.
+
 - **The "Generate material" dialog no longer asks for a skill config before a skill is selected.** Opening the dialog
   when the model list answered before the skill list fired `GET /neo_image_gen/skill_config?skill_id=`, which the
   backend rejects with `400` and the browser logged a red failed request on every open. The dialog now applies the

@@ -269,3 +269,115 @@
     font-size: 12px;
     line-height: 1.6;
 }
+
+/* 姿势库弹窗的内容（外壳是 js/core/lib-modal.js，样式取本页面自己的 --ns-* 色板）：
+   卡片网格里每张缩略图按库自己的路径拼地址，缺图的那一档留一个占位槽，卡片不会被撑歪 */
+.ns-pose-libpane {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px;
+    overflow: auto;
+}
+
+.ns-pose-lib-search {
+    flex: 1;
+    min-width: 120px;
+    padding: 6px 9px;
+    border: 1px solid var(--ns-field-bd);
+    border-radius: 8px;
+    background: var(--ns-field);
+    color: var(--ns-fg);
+    font: inherit;
+    font-size: 13px;
+}
+
+.ns-pose-lib-meta {
+    margin: 0;
+    font-size: 12px;
+    color: var(--ns-dim);
+}
+
+.ns-pose-lib-blank {
+    margin: 0;
+    padding: 14px 4px;
+    font-size: 13px;
+    line-height: 1.8;
+    color: var(--ns-dim);
+}
+
+.ns-pose-lib-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(152px, 1fr));
+    gap: 10px;
+}
+
+.ns-pose-lib-group-title {
+    grid-column: 1 / -1;
+    margin: 6px 0 0;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: .04em;
+    color: var(--ns-dim);
+}
+
+.ns-pose-lib-card {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 6px;
+    border: 1px solid var(--ns-border);
+    border-radius: 8px;
+    background: var(--ns-raised);
+    font: inherit;
+    color: var(--ns-fg);
+    text-align: left;
+    cursor: pointer;
+}
+
+.ns-pose-lib-card:hover { border-color: var(--ns-accent); }
+
+.ns-pose-lib-thumb,
+.ns-pose-lib-noimg {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    border-radius: 6px;
+}
+
+.ns-pose-lib-thumb {
+    display: block;
+    object-fit: cover;
+    background: #000;
+}
+
+.ns-pose-lib-noimg {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    color: var(--ns-dim);
+    background: var(--ns-field);
+}
+
+.ns-pose-lib-label,
+.ns-pose-lib-tags {
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ns-pose-lib-label { font-size: 12px; }
+
+.ns-pose-lib-tags { font-size: 11px; color: var(--ns-dim); }
+
+.ns-pose-lib-more { justify-self: start; }
+
+/* 弹窗里的场景列表比左栏那条长：整块随弹窗滚，不再自己截一段高度 */
+.ns-pose-lib-list { max-height: none; }
+
+.ns-pose-lib-grid[hidden],
+.ns-pose-lib-blank[hidden],
+.ns-pose-lib-more[hidden] { display: none; }

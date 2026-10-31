@@ -21,6 +21,7 @@
  */
 import { t, tf, getLang } from "../js/core/i18n.js";
 import { icon, setIconLabel } from "../js/core/icons.js";
+import { createLibraryModal } from "../js/core/lib-modal.js";
 
 // 组件样式在第一次建视图时注入（幂等）：本模块也会被主画布页的扩展图加载，
 // 放在模块顶层会让画布为一份用不上的样式表发一次请求。
@@ -39,6 +40,16 @@ const CALL_TIMEOUT_MS = 15000;   // 页面不回包就解锁控件：一次点�
 const MAX_SET_FILES = 12;        // /neo_pose/export_set 一次落盘的上限，与后端常量同值
 const MAX_GLB_BYTES = 48 * 1024 * 1024;   // /neo_pose/import_model 的一份自备素体上限，与后端同值
 const BODY_KEY_RE = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/;   // 素体 key：与后端 SCENE_NAME_RE 同一条
+
+// 姿势库（pose-lib）：库数据由 tools\sync_pose_lib.ps1 同步进 <数据根>/pose/lib，静态伺服挂在 /pose-lib/
+// 上一级（studio/pose.py 的 LIB_PREFIX）。库里一份条目就是画布导出的 PoseFile，套进画布走的是
+// 「载入姿态」那条 pose/apply —— 库只是多出来的另一批文件，不造第二条套用通路。
+const LIB_PREFIX = "/pose-lib";
+const LIB_INDEX = `${LIB_PREFIX}/index.json`;
+const LIB_PAGE = 200;      // 一次渲染的卡片上限：库里 600+ 条全塞进 DOM，首屏与滚动都撑不住
+const LIB_VARIANTS = ["clay", "skeleton", "silhouette", "depth"];   // 缩略图优先级，与摆姿页 thumbOf 同一条
+const LIB_SYNC_HINT = "姿势库未同步：跑 tools\\sync_pose_lib.ps1 -Source <3d-pose-art 仓库根>" +
+    " 把 pose-lib 同步进 <数据根>/pose/lib。";
 
 /** 页面开局是摄影棚灰（摆姿页 core/scene.js 的 LOOKS.studio），面板按产品口径把外观定在暗色档 */
 const DEFAULT_LOOK_KEY = "dark";
@@ -140,8 +151,10 @@ export function createPoseView({ api, $el, toast, openMaterial }) {
         const btnSavePreset = btn("存为姿态", "copy", panelGate);
         const btnLoadPreset = btn("载入姿态", "send", panelGate);
         const btnDelPreset = btn("删姿态", "trash", libGate);
+        const btnBrowseLib = btn("浏览姿势库…", "list", panelGate);   // pose-lib 的库浏览器 + 本机姿势文件
         const btnSaveScene = btn("存为场景", "copy", libGate);
         const btnLoadScene = btn("载入场景", "folder", libGate);
+        const btnBrowseScenes = btn("浏览场景…", "list", libGate);    // 数据根的场景列表 + 本机场景文件
         // 跑在随包副本上要说清楚：随包只发 CC0 那一份素体，其余 GLB 素体不在页面上。
         // 不写这一句，用户只会以为素体列表坏了
         const pkgNote = $el("div", {
@@ -153,11 +166,11 @@ export function createPoseView({ api, $el, toast, openMaterial }) {
             head("姿势库"),
             presetList,
             row([presetName, btnSavePreset]),
-            row([btnLoadPreset, btnDelPreset]),
+            row([btnLoadPreset, btnDelPreset, btnBrowseLib]),
             head("场景"),
             sceneList,
             row([sceneName, btnSaveScene]),
-            row([btnLoadScene]),
+            row([btnBrowseScenes, btnLoadScene]),
             head("摆姿包"),
             pkgNote,
         ]);
@@ -277,6 +290,59 @@ export function createPoseView({ api, $el, toast, openMaterial }) {
             })),
         );
 
+        /* ===== 姿势库 / 场景弹窗：pose-lib 的库浏览器与本机文件两条路共用素材库那扇弹窗外壳 =====
+           库是数据根里另一批读得到的文件（<数据根>/pose/lib），Neo Studio 这边只读它：
+           「存为姿态」写的还是 pose/presets/，库里一份条目读回来就是一次 pose/apply。 */
+        const libModal = createLibraryModal({ storageKey: "neo_studio_pose_libmodal", scope: "pose" });
+        let libIndex = null;      // index.json 读到的那份；null = 库还没同步或读不成，弹窗出同步指引
+        let libShown = LIB_PAGE;
+        const libSearch = $el("input", {
+            className: "ns-pose-lib-search", type: "search", spellcheck: "false",
+            placeholder: t("搜索姿势（名字 / 分类 / 标签）"),
+        });
+        const libGroupSel = $el("select", { className: "ns-pose-sel ns-pose-lib-group", title: t("分组") });
+        const libMeta = $el("p", { className: "ns-pose-lib-meta" });
+        const libBlank = $el("p", { className: "ns-pose-lib-blank" });
+        const libGrid = $el("div", { className: "ns-pose-lib-grid" });
+        const libMore = $el("button", { className: "ns-pose-btn ns-pose-lib-more", type: "button" });
+        libGate.push(libMore, libSearch, libGroupSel);   // 弹窗里的这一片与左栏同一把门禁：ready 之前不可点
+        const modalSceneList = list(" ns-pose-lib-list");
+        const btnLibLocal = btn("本机姿势文件…", "folder", panelGate);
+        const btnSceneLocal = btn("本机场景文件…", "folder", libGate);
+        // 两个隐藏的文件选择器：库里没有想要的姿势 / 场景时从本机挑一份，走的还是同一条套用与装载路
+        const libFile = $el("input", { className: "ns-pose-file", type: "file", accept: ".pose.json,.json" });
+        const sceneFile = $el("input", { className: "ns-pose-file", type: "file", accept: ".json" });
+        const libPane = $el("div", { className: "ns-pose-libpane" }, [
+            row([libSearch, libGroupSel, btnLibLocal]), libMeta, libBlank, libGrid, libMore,
+        ]);
+        const scenePane = $el("div", { className: "ns-pose-libpane" }, [row([btnSceneLocal]), modalSceneList]);
+        libModal.setContent(libPane);
+        el.append(libModal.el, libFile, sceneFile);
+
+        /** 库文件的一条 JSON：库自己的 PoseFile 不带 success 字段，json() 会把缺 success 的当失败 */
+        const libJson = async (path) => {
+            const resp = await api.fetchApi(path);
+            const data = await resp.json().catch(() => null);
+            if (!resp.ok || !data) throw new Error(tf("读不到库文件：{path}", { path }));
+            return data;
+        };
+
+        /** 本机的一份 JSON 文件（姿态 / 场景）：与自备素体同一条 FileReader 路，不是 JSON 对象就在这出声 */
+        const readJsonFile = (file) => new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+                let parsed = null;
+                try { parsed = JSON.parse(String(reader.result)); } catch { /* 空文件与坏 JSON 一起当无效 */ }
+                if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+                    reject(new Error(t("本机文件不是一份 JSON 对象")));
+                    return;
+                }
+                resolve(parsed);
+            };
+            reader.onerror = () => reject(new Error(t("读文件失败")));
+            reader.readAsText(file);
+        });
+
         /** meta/list 一次给全：面板每个下拉与勾选组都从这份清单来，不再逐样问页面 */
         function paintMeta(m) {
             fill(modelSel, m.models || [], "选择素体…");
@@ -339,6 +405,97 @@ export function createPoseView({ api, $el, toast, openMaterial }) {
             fill(boneSel, (data.bones || []).map((b) => ({ key: String(b), label: String(b) })), "挂点骨…");
         }
 
+        const libCard = (entry) => {
+            const label = entry.label || entry.id;
+            const thumb = previewOf(entry);
+            const img = thumb
+                ? $el("img", { className: "ns-pose-lib-thumb", src: `${LIB_PREFIX}/${thumb}`, alt: label, loading: "lazy" })
+                : $el("div", { className: "ns-pose-lib-noimg", textContent: t("无预览") });
+            const card = $el("button", {
+                className: "ns-pose-lib-card", type: "button", title: label,
+                dataset: { libId: String(entry.id) },
+            }, [img, $el("p", { className: "ns-pose-lib-label", textContent: label }),
+                $el("p", { className: "ns-pose-lib-tags", textContent: libTagsOf(entry) })]);
+            card.onclick = () => run(async () => {
+                const file = await libJson(`${LIB_PREFIX}/${entry.path}`);
+                const r = await action("pose/apply", { file });
+                libModal.close();
+                toast(tf("已套用库内姿态：{name}（骨骼 {applied} 处，缺 {missing} 处）",
+                    { name: label, applied: r.applied ?? 0, missing: (r.missing || []).length }));
+            });
+            return card;
+        };
+
+        function renderLibIndex() {
+            const rows = libFilter(libIndex?.entries, { q: libSearch.value, group: libGroupSel.value });
+            const sections = libGroups(rows.slice(0, libShown), libIndex?.groups);
+            libGrid.replaceChildren(...sections.flatMap((sec) => [
+                $el("h4", { className: "ns-pose-lib-group-title", textContent: `${sec.label}（${sec.items.length}）` }),
+                ...sec.items.map(libCard),
+            ]));
+            libGrid.hidden = !rows.length;
+            libBlank.hidden = rows.length > 0;
+            // 库没同步出同步指引，同步了才说「没有匹配」：一个空浏览器不是库的样子
+            libBlank.textContent = libIndex ? t("没有匹配的姿势") : t(LIB_SYNC_HINT);
+            libMore.hidden = rows.length <= libShown;
+            libMore.textContent = tf("加载更多（还有 {n} 条）", { n: rows.length - libShown });
+            libMeta.textContent = libIndex
+                ? tf("{total} 个姿势 · 显示 {shown}", { total: libIndex.count ?? rows.length, shown: rows.length })
+                : "";
+        }
+
+        /** 弹窗开在哪一档：场景那一档列数据根的存档，姿势那一档列 pose-lib 的库 */
+        async function openLibModal(kind) {
+            libModal.setContent(kind === "scene" ? scenePane : libPane);
+            libModal.open(kind === "scene" ? t("载入场景") : t("姿势库"));
+            if (kind === "scene") return;
+            if (libIndex === null) {
+                try {
+                    libIndex = await libJson(LIB_INDEX);
+                    fill(libGroupSel, (libIndex.groups || []).map((g) => ({
+                        key: g.key, label: `${g.label || g.key}（${g.count ?? 0}）`,
+                    })), "全部分组");
+                } catch {
+                    // 读不出索引 = 库没同步：这句就是弹窗里那句同步指引要说的同一件事
+                    toast(tf("读不到库文件：{path}", { path: LIB_INDEX }));
+                }
+            }
+            libShown = LIB_PAGE;
+            renderLibIndex();
+        }
+
+        libSearch.oninput = () => renderLibIndex();
+        libGroupSel.onchange = () => renderLibIndex();
+        libMore.onclick = () => { libShown += LIB_PAGE; renderLibIndex(); };
+        btnBrowseLib.onclick = () => openLibModal("pose");
+        btnBrowseScenes.onclick = () => openLibModal("scene");
+        btnLibLocal.onclick = () => { libFile.value = ""; libFile.click(); };
+        btnSceneLocal.onclick = () => { sceneFile.value = ""; sceneFile.click(); };
+
+        libFile.onchange = () => {
+            const pickedFile = libFile.files && libFile.files[0];
+            libFile.value = "";
+            if (!pickedFile) return;
+            run(async () => {
+                const file = await readJsonFile(pickedFile);
+                const r = await action("pose/apply", { file });
+                libModal.close();
+                toast(tf("已套用本机姿态：{name}（骨骼 {applied} 处，缺 {missing} 处）",
+                    { name: pickedFile.name, applied: r.applied ?? 0, missing: (r.missing || []).length }));
+            });
+        };
+
+        sceneFile.onchange = () => {
+            const pickedFile = sceneFile.files && sceneFile.files[0];
+            sceneFile.value = "";
+            if (!pickedFile) return;
+            run(async () => {
+                post("pose:open-scene", { scene: await readJsonFile(pickedFile) });
+                libModal.close();
+                toast(tf("已载入本机场景：{name}", { name: pickedFile.name }));
+            });
+        };
+
         const refreshPresets = () => json("/neo_pose/presets").then((d) => {
             /* 点一条 = 选它并把它套上：姿势库的卡片本来就是「用这份姿势」，不该再要一步 */
             paintFileList(presetList, d.presets || [], pickedPreset, (n) => run(() => loadPoseFile(n)));
@@ -346,7 +503,19 @@ export function createPoseView({ api, $el, toast, openMaterial }) {
 
         const refreshScenes = () => json("/neo_pose/scenes").then((d) => {
             paintFileList(sceneList, d.scenes || [], pickedScene, (n) => { pickedScene = n; refreshScenes(); });
-        }).catch(() => paintFileList(sceneList, [], "", () => {}));
+            /* 弹窗里点一条 = 读那份场景装进页面再收起弹窗：同一批文件在两处列（左栏与弹窗），装载只有一条路 */
+            paintFileList(modalSceneList, d.scenes || [], pickedScene, (n) => run(async () => {
+                pickedScene = n;
+                await refreshScenes();
+                const data = await json(`/neo_pose/scene?name=${encodeURIComponent(n)}`);
+                post("pose:open-scene", { scene: data.scene });
+                libModal.close();
+                toast(tf("已载入场景：{name}", { name: n }));
+            }));
+        }).catch(() => {
+            paintFileList(sceneList, [], "", () => {});
+            paintFileList(modalSceneList, [], "", () => {});
+        });
 
         const refreshProps = () => action("prop/list").then(paintProps)
             .catch((e) => toast(tf("道具列表失败：{msg}", { msg: e.message })));
@@ -586,4 +755,54 @@ export function createPoseView({ api, $el, toast, openMaterial }) {
         }
         await render();
     };
+}
+
+/** 卡片缩略图优先级：clay 是写实渲染那张，一眼看得出姿势；缺 clay 的条目落到 skeleton / silhouette / depth。
+    口径与摆姿页 src/ui/libraryPanel.js 的 thumbOf 同一条（库的 inbox 源图不在同步范围内，不作候选）。 */
+export function previewOf(entry) {
+    const p = entry?.preview || {};
+    for (const key of LIB_VARIANTS) { if (p[key]) return String(p[key]); }
+    return "";
+}
+
+/** 搜索口径与摆姿仓库 poseLibrary.js 的 filterIndex 同一份字段表：label / 分类 / 标签 / id / source */
+export function libFilter(entries, { q = "", group = "" } = {}) {
+    const text = String(q || "").trim().toLowerCase();
+    return (entries || []).filter((e) => {
+        if (group && !(e.groups || []).includes(group)) return false;
+        if (!text) return true;
+        const hay = [e.label, ...(e.categories || []), ...(e.tags || []), e.id, e.source]
+            .join(" ").toLowerCase();
+        return hay.includes(text);
+    });
+}
+
+/** 按归并组分层：一条姿态可能挂多个组，只落在排最前的那个组里 —— 弹窗里出现两张同 id 的卡，点击会串 */
+export function libGroups(entries, groups) {
+    const rank = new Map((groups || []).map((g, i) => [String(g.key), i]));
+    const labelOf = new Map((groups || []).map((g) => [String(g.key), g.label || g.key]));
+    const seen = new Set();
+    const buckets = new Map();
+    for (const e of entries || []) {
+        const id = String(e?.id ?? "");
+        if (seen.has(id)) continue;
+        seen.add(id);
+        const keys = (e.groups || []).map((k) => String(k));
+        const key = keys.length
+            ? keys.sort((a, b) => (rank.get(a) ?? 99) - (rank.get(b) ?? 99))[0]
+            : "other";
+        if (!buckets.has(key)) buckets.set(key, []);
+        buckets.get(key).push(e);
+    }
+    return [...buckets.entries()]
+        .sort((a, b) => (rank.get(a[0]) ?? 99) - (rank.get(b[0]) ?? 99))
+        .map(([key, items]) => ({ key, label: labelOf.get(key) || key, items }));
+}
+
+/** 卡片副标题：分类头两条 + 来源；库里 preset / manual 这两种来源满库都是，标出来没意义，
+    只有 photo3d / mixamo 这类真实来源值得用户看见（口径与摆姿页卡片副标题同一份字段表） */
+export function libTagsOf(entry) {
+    const cats = [...new Set(entry?.categories || [])].slice(0, 2).join(" / ");
+    const source = entry?.source;
+    return source && source !== "manual" && source !== "preset" ? `${cats} · ${source}` : cats;
 }

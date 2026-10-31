@@ -198,6 +198,64 @@ class DistAssetTests(_PoseCase):
         self.assertEqual(resp.status, 404)
 
 
+class LibAssetTests(_PoseCase):
+    """姿势库（pose-lib 的库数据）：`/pose-lib/` 一条前缀伺服数据根那一级，全程只读。"""
+
+    def index(self) -> Path:
+        return self.write(pose.LIB_DIR / "index.json", json.dumps(
+            {"format": "3dpose.index/1", "count": 2,
+             "groups": [{"key": "stand", "label": "站立", "count": 2}],
+             "entries": [{"id": "a", "label": "A-Pose", "path": "poses/stand/a.pose.json",
+                          "groups": ["stand"], "preview": {"clay": "preview/a.clay.png"}},
+                         {"id": "b", "label": "Rest", "path": "poses/stand/b.pose.json",
+                          "groups": ["stand"], "preview": {}}]}))
+
+    def test_lib_index_serves_json_and_its_pose_file(self):
+        self.index()
+        self.write(pose.LIB_DIR / "poses" / "stand" / "a.pose.json", '{"format":"pose-file/v1","rig":{}}')
+        resp = _run(pose.pose_lib, _request(match_info={"path": "index.json"}))
+        self.assertEqual(resp.status, 200)
+        self.assertEqual(resp.headers["Content-Type"], "application/json")
+        got = _run(pose.pose_lib, _request(match_info={"path": "poses/stand/a.pose.json"}))
+        self.assertEqual(got.status, 200)
+        self.assertEqual(got.headers["Content-Type"], "application/json")
+        # 库文件会被同步脚本重新生成：不许长缓存，改库后刷新页面要拿到新的姿态
+        self.assertEqual(got.headers["Cache-Control"], "no-cache")
+
+    def test_lib_dir_read_serves_index(self):
+        """弹窗按库目录取一次清单：目录请求落到 index.json，与摆姿包前缀根同一条口径。"""
+        self.index()
+        resp = _run(pose.pose_lib, _request(match_info={"path": ""}))
+        self.assertEqual(resp.status, 200)
+        self.assertEqual(resp.headers["Content-Type"], "application/json")
+
+    def test_lib_path_stays_in_lib(self):
+        self.index()
+        for escape in ("../dist/index.html", "lib/../../pose.py", "C:/Windows/x.js"):
+            self.assertEqual(_run(pose.pose_lib, _request(match_info={"path": escape})).status, 400,
+                            f"{escape} 不能给出库外的文件")
+
+    def test_lib_missing_is_404(self):
+        """库没同步时整条前缀 404：弹窗先看 status 的 lib_installed 出同步指引。"""
+        self.assertEqual(_run(pose.pose_lib, _request(match_info={"path": "index.json"})).status, 404)
+
+    def test_status_reports_the_synced_library(self):
+        self.index()
+        self.write(pose.LIB_DIR / "preview" / "a.clay.png", "x")
+        payload = pose.status_payload()
+        self.assertTrue(payload["lib_installed"])
+        self.assertEqual(payload["lib_entries"], 2)
+        self.assertEqual(payload["lib_dir"], str(pose.LIB_DIR))
+
+    def test_status_reports_library_missing_or_broken(self):
+        """读不出索引（没同步 / 坏 JSON）一律报 0 条：弹窗出同步指引，不是空浏览器。"""
+        payload = pose.status_payload()
+        self.assertFalse(payload["lib_installed"])
+        self.assertEqual(payload["lib_entries"], 0)
+        self.write(pose.LIB_DIR / "index.json", "{ not json")
+        self.assertEqual(pose.status_payload()["lib_entries"], 0)
+
+
 class SceneTests(_PoseCase):
     def test_scene_round_trip_leaves_no_temp_file(self):
         """场景落盘先写 .tmp 再替换：窗口中途关掉不能留下半份 JSON。"""

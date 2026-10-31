@@ -45,6 +45,10 @@ INDEX_HTML = DIST_DIR / "index.html"
 PACKAGE_DIST = Path(__file__).parent / "pose_dist"
 MODELS_DIR = DIST_DIR / "models"          # 自备素体 GLB 的落点（页面按 <key>.glb 取它）
 MANIFEST_NAME = "MANIFEST.json"           # 随包发货清单：逐文件 sha256 与体积
+# 姿势库（3d-pose-art 的 pose-lib 库数据）：另一级数据根内容，由 tools\sync_pose_lib.ps1 同步进来，
+# 本模块全程只读。库里一份 poses/<组>/<id>.pose.json 与姿势库存的是同一形状（PoseFile v1），
+# 所以宿主弹窗取一条库条目 = 读那个文件 + 一次 pose/apply，不需要转换。
+LIB_DIR = POSE_DIR / "lib"
 
 # 摆姿页与它的子资源都走这条前缀：vite 产物是 base:'./' 的相对 import，页面必须落在有目录深度的
 # URL 上，./assets/x.js 才会解析成 <前缀>/assets/x.js。挂在根级 /neo-pose 上时子资源全解析成
@@ -58,6 +62,11 @@ PAGE_URL = f"{STATIC_PREFIX}/index.html"
 # 打开时这些请求落回 origin 根，前缀伺服一条都接不到。注册表读空的页面不会报错，
 # 它按空注册表出控件清单 —— 道具面板空着，加具全部失败，GLB 素体一个都加载不出来。
 MODELS_PREFIX = "/models"
+# 姿势库的静态前缀与摆姿包同一条路子：库里 index.json、poses/**.pose.json 与 preview/*.png
+# 由宿主弹窗逐条取（缩略图与姿态文件都是库自己的文件），逐条打表没有意义，不进 /neo 命名空间。
+# 前缀名与摆姿仓库自己的那条 `/pose-lib/` 同名：库条目的 preview.path 与 entry.path 原样拼地址，
+# 宿主与摆姿页对同一份库文件说的是同一个名字。
+LIB_PREFIX = "/pose-lib"
 
 # 桥的契约是接口不是代码：宿主、摆姿页、桥接用例三处同名，改动必须同批落地
 BRIDGE_MESSAGES = ("pose:ready", "pose:theme", "neo:import-image",
@@ -148,6 +157,30 @@ def _dist_response(rel: str) -> web.StreamResponse:
     return web.Response(status=404)
 
 
+async def pose_lib(request):
+    """姿势库的静态伺服：`index.json`、`poses/**.pose.json`、`preview/*.png`、`categories.json`。
+
+    库只有数据根那一级（`<数据根>/pose/lib`），由 `tools\\sync_pose_lib.ps1` 同步进来，本模块只读它：
+    库里一份条目就是画布导出的 PoseFile，弹窗按 `entry.path` 读它再走一次 `pose/apply`。
+    未同步时整条前缀回 404 —— 弹窗先看 `/neo_pose/status` 的 `lib_installed` 出同步指引，
+    不让用户翻进一个空库。
+    """
+    # 空路径 = 前缀本身：与摆姿包同一口径，地址栏直接敲前缀落到索引清单，看得见库的形态
+    return _lib_response(request.match_info["path"] or "index.json")
+
+
+def _lib_response(rel: str) -> web.StreamResponse:
+    """库根内的一个文件：出根 400，目录按 index.json 进，文件不在就 404（未同步与缺文件同一答案）。"""
+    target = inside_dir(LIB_DIR, rel)
+    if target is None:
+        return web.Response(status=400)
+    if target.is_dir():
+        target = target / "index.json"
+    if target.is_file():
+        return _file_response(target)
+    return web.Response(status=404)
+
+
 def register_static(routes):
     """把摆姿包挂上前缀：ComfyUI 端与桌面端各自直接注册，与伺服前端静态同一条路。
 
@@ -156,6 +189,7 @@ def register_static(routes):
     """
     routes.get(STATIC_PREFIX + "/{path:.*}")(pose_static)
     routes.get(MODELS_PREFIX + "/{path:.*}")(pose_models)
+    routes.get(LIB_PREFIX + "/{path:.*}")(pose_lib)
 
 
 @routes.post("/neo_pose/import_image")
@@ -447,6 +481,7 @@ def status_payload() -> dict:
     active = active_dist_dir()
     manifest = _package_manifest() or {}
     files = manifest.get("files")
+    lib_entries = _lib_entries()
     return {
         "success": True,
         "installed": active is not None,
@@ -464,6 +499,12 @@ def status_payload() -> dict:
         "manifest_bytes": int(manifest.get("total_bytes") or 0),
         "data_root": str(plugin_paths.DATA_ROOT),
         "assets_bytes": _tree_bytes((active or DIST_DIR) / "assets"),
+        # 姿势库与摆姿包各一级：库里一份姿态就是画布导出的 PoseFile，宿主弹窗按 entry.path 读它。
+        # 未同步时 lib_entries 是 0，弹窗出同步指引而不是一个空浏览器。
+        "lib_dir": str(LIB_DIR),
+        "lib_installed": lib_entries > 0,
+        "lib_entries": lib_entries,
+        "lib_bytes": _tree_bytes(LIB_DIR),
         "caps": dict(BRIDGE_CAPS),
         "bridge": list(BRIDGE_MESSAGES),
         "scenes": _scene_rows(),
@@ -522,6 +563,20 @@ def _preset_rows() -> list:
     except OSError:
         return []
     return sorted(rows, key=lambda row: -row["mtime"])
+
+
+def _lib_entries() -> int:
+    """姿势库的条目数：`<数据根>/pose/lib/index.json` 的 `entries` 数组长度。
+
+    读不出（缺文件 / 坏 JSON / 缺 entries）报 0，status 按 0 报「未同步」：库没同步时宿主弹窗
+    出同步指引，而不是一个空浏览器 —— 与摆姿包缺包出提示是同一口径。
+    """
+    try:
+        payload = json.loads((LIB_DIR / "index.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return 0
+    rows = payload.get("entries") if isinstance(payload, dict) else None
+    return len(rows) if isinstance(rows, list) else 0
 
 
 def _write_json_atomic(path: Path, payload: dict) -> None:
