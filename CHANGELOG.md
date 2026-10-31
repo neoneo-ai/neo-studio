@@ -4,6 +4,18 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **The asset library got quick-filter chips for virtual kinds.** A row under the home toolbar aggregates the whole
+  library by type and purpose: 图片 / 视频 / 音频 / 角色图 / 姿势图 / 分镜图 / 帧图, each chip carrying its own count.
+  Clicking a chip opens the aggregated waterfall of exactly that kind - sorted by modification time, covers
+  lazy-loading, and drag-into-node, multi-select, delete and the lightbox behaving exactly as in a directory view;
+  the breadcrumb shows the chip name, back and 返回上级 follow the same browsing trail, and Esc leaves the view.
+  Nothing moves on disk: a chip is a virtual filter over `GET /neo_gallery/kind_items`, which scans the directories
+  the home page shows (three levels deep at most, hidden entries skipped, cloud presets excluded) and returns the
+  counts plus the first 400 items of that kind. 角色图 covers `output/CharacterSheet` and the directories marked as
+  character images in directory management (a marked parent marks its children); 姿势图 and 帧图 also match the
+  `pose_` / `frame-` filename prefixes exported before those directories existed. A kind with nothing in it gets no
+  chip, and the row hides itself when the library holds fewer than two kinds.
+
 - **The Pose page has no 导入素材 (Import Asset) bar any more.** The pose view's top row - the 3D Pose
   title, the bridge state pill and the 导入素材 button - is gone, so the page opens straight on the pose
   library, the canvas and the control panel. Picking an asset-library card as a reference plane went

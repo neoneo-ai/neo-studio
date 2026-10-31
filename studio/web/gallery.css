@@ -134,6 +134,47 @@
     border-bottom: 1px solid #2a2a2a;
 }
 
+/* 归类标签栏：flex 占满整幅换到下一行，控件行了不够宽就自己掉行，窄侧栏与弹窗宿主都不会挤散。
+   条数写在 chip 上，点之前就知道这一类有没有东西。 */
+.neo-gallery-kind-bar {
+    flex: 1 1 100%;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+}
+
+.neo-gallery-kind-chip {
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: transparent;
+    color: #ccc;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.neo-gallery-kind-chip:hover {
+    border-color: #FF6A00;
+    color: #fff;
+}
+
+.neo-gallery-kind-chip.active {
+    background: #FF6A00;
+    border-color: #FF6A00;
+    color: #fff;
+}
+
+/* 归类列表触到上限时的说明：这一类剩下的素材还在目录里，这里只是其中一截 */
+.neo-gallery-kind-hint {
+    padding: 10px 16px;
+    font-size: 12px;
+    color: #999;
+    text-align: center;
+}
+
 /* Custom directory setting button in header */
 .neo-gallery-custom-dir-btn {
     width: 28px;

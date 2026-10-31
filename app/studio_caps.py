@@ -10,6 +10,7 @@
 # 素材库：浏览 + 写入（删除 / 上传 txt / 清缩略图 / 拷进 input / 目录封面 / 设置）
 _GALLERY = {
     ("GET", "/neo_gallery/list"),
+    ("GET", "/neo_gallery/kind_items"),
     ("GET", "/neo_gallery/css"),
     ("GET", "/neo_gallery/placeholder.png"),
     ("GET", "/neo_gallery/subdirs"),

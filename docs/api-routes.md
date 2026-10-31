@@ -11,6 +11,7 @@
 | 方法 | 路由 | 说明 |
 |------|------|------|
 | GET | `/neo_gallery/list` | 目录内容列表（预设 / 自定义 / 系统聚合） |
+| GET | `/neo_gallery/kind_items` | 虚拟归类聚合（`kind` 留空只回各标签计数，给 kind 时带回条目与 `truncated`） |
 | GET | `/neo_gallery/css` | 内置素材 CSS 资源 |
 | GET | `/neo_gallery/placeholder.png` | 占位图 |
 | GET | `/neo_gallery/subdirs` | 子目录列表 |

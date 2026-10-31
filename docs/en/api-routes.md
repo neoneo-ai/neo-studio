@@ -13,6 +13,7 @@ source code.
 | Method | Route | Description |
 |------|------|------|
 | GET | `/neo_gallery/list` | Directory content listing (presets / custom / system aggregation) |
+| GET | `/neo_gallery/kind_items` | Virtual-kind aggregation (empty `kind` returns chip counts only; a `kind` returns items plus `truncated`) |
 | GET | `/neo_gallery/css` | Built-in asset CSS resources |
 | GET | `/neo_gallery/placeholder.png` | Placeholder image |
 | GET | `/neo_gallery/subdirs` | Subdirectory listing |

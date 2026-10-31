@@ -27,6 +27,28 @@ library plus several user-defined directories.
 - **Lazy loading** - the list renders in pages and covers load only when they scroll into view, so even large
   libraries stay smooth.
 
+### Quick-filter chips
+
+The row of chips under the home toolbar gathers assets scattered across every directory by type and purpose,
+without moving a file or creating a directory:
+
+- **Images / Videos / Audios** - judged by extension. The scan covers the directories the home page shows
+  (system dirs, custom dirs, built-in presets, the enabled LoRA cache), three levels deep at most; entries
+  hidden on the home page and cloud preset directories stay out of the aggregation.
+- **Character images** - the `CharacterSheet` main directory under `output`, plus the custom directories marked
+  as character images in directory management (a marked parent marks its children too).
+- **Poses** - the `Pose` directory under `output`, plus the `pose_` filename prefix (the batches exported before
+  that directory existed).
+- **Frames** - the `Frames` directory under `output`, plus the `frame-` filename prefix (the frames extracted into
+  the asset library).
+- **Storyboards** - the `StoryBoard` directory under `output`.
+- Each chip carries its own count; a kind with nothing in it gets no chip, and the whole row hides itself when the
+  library holds fewer than two kinds.
+- A chip opens the aggregated waterfall of exactly that kind: sorted by modification time, covers lazy-load, and
+  drag-into-node, multi-select, delete and the lightbox behave exactly as they do in a directory view. The
+  breadcrumb shows the chip name, back and 返回上级 follow the same browsing trail, and Esc leaves the view.
+- An aggregated view returns at most 400 items at a time, and the page says so under the list when it truncates.
+
 ### Card layout
 
 #### Arrangement rules

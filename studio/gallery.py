@@ -214,6 +214,15 @@ def _get_user_custom_dirs() -> list[Path]:
 HOME_BUILTINS = ("Output", "Input", "local_bookmarks", "civitai_bookmarks", "Lora")
 DEFAULT_HOME_ORDER = ("Output", "Input", "local_bookmarks", "civitai_bookmarks")
 
+# 虚拟归类标签（顶部快捷筛选）：类型按扩展名，用途按目录锚定与文件名前缀。
+# 一张文件可以同时进多个标签（CharacterSheet 里的 png 既是图片也是角色图），
+# 判定口径与前端 gallery-utils.js 的 KIND_FILTERS 同一份，两边都要改才算改全。
+KIND_KEYS = ("image", "video", "audio", "character", "pose", "storyboard", "frames")
+KIND_POSE_PREFIX = "pose"     # 摆姿导出名 pose_<场景>_<视角>_<格式> / pose_shot
+KIND_FRAMES_PREFIX = "frame"  # 抽帧存进素材库的帧名 frame-00_07_125
+KIND_MAX_ITEMS = 400          # 一个标签一次交回的条数上限，超出的部分带 truncated 标记
+KIND_WALK_DEPTH = 3           # 从目录根往下走几层：够到 StoryBoard/CharacterSheet 的 <日期>/ 与 Pose/、Frames/
+
 
 def _get_hidden_entries() -> set:
     """Lowercased hidden entries: custom dir paths and built-in home keys."""
@@ -1507,6 +1516,146 @@ async def get_gallery_list(request):
         response_data["covers"] = covers
 
     return web.json_response(response_data)
+
+
+@routes.get("/neo_gallery/kind_items")
+async def get_kind_items(request):
+    """按虚拟标签把全库素材归到一起（图片 / 视频 / 音频 / 角色图 / 姿势图 / 分镜图 / 帧图）。
+
+    kind 为空时只回各标签的计数：顶部 chip 栏要显示数量，不必带条目。
+    条目带的是与首页一致的目录名前缀 subfolder（"Output/Pose"、"Lora/detail"、"Presets/明朝人物"），
+    缩略图、灯箱、拖进节点、取用、单条删除全部照现有寻址走，这里不额外加代码。
+    """
+    kind_param = (request.rel_url.query.get("kind", "") or "").strip().lower()
+    want = kind_param if kind_param in KIND_KEYS else ""
+
+    counts, rows = await asyncio.to_thread(_collect_kind_items, want)
+    response: dict = {"counts": {key: counts.get(key, 0) for key in KIND_KEYS}}
+    if want:
+        rows.sort(key=lambda row: row["mtime"], reverse=True)
+        response["kind"] = want
+        response["items"] = rows[:KIND_MAX_ITEMS]
+        response["truncated"] = len(rows) > KIND_MAX_ITEMS
+    return web.json_response(response)
+
+
+def _collect_kind_items(kind: str) -> tuple[dict, list[dict]]:
+    """扫首页可见的那些目录，数出每个标签的量；kind 给了就把该标签的条目一并带回。
+
+    云端预设（OSS 只读源）不在这里：一个云端目录的完整条目要一次索引下载，首页那张表
+    已经把云端卡算进去了，虚拟归类只扫本地。
+    """
+    character_dirs = set(_effective_character_dirs(_load_settings()))
+    counts = {key: 0 for key in KIND_KEYS}
+    rows: list[dict] = []
+    for root_name, base in _kind_roots():
+        root_tokens = _kind_root_tokens(root_name, base)
+        for entry, media_type, rel in _kind_walk(base, "", KIND_WALK_DEPTH):
+            marked = bool(character_dirs) and _marked_character(rel, root_tokens, character_dirs)
+            keys = _kind_keys(entry.name, media_type, rel, marked)
+            for key in keys:
+                counts[key] = counts.get(key, 0) + 1
+            if kind and kind in keys:
+                try:
+                    mtime = entry.stat(follow_symlinks=False).st_mtime
+                except OSError:
+                    mtime = 0.0
+                rows.append({
+                    "name": _entry_stem(entry),
+                    "filename": entry.name,
+                    "type": media_type,
+                    "dir_name": root_name,
+                    "subfolder": f"{root_name}/{rel}" if rel else root_name,
+                    "custom_source": root_name,
+                    "mtime": mtime,
+                })
+    return counts, rows
+
+
+def _kind_roots() -> list[tuple[str, Path]]:
+    """归类扫的目录根：首页可见的那些（系统目录、自定义目录、预设、启用的 Lora 缓存）。"""
+    hidden = _get_hidden_entries()
+    roots: list[tuple[str, Path]] = []
+    for info in _get_system_dirs():
+        if not _is_home_entry_hidden(info["name"], hidden):
+            roots.append((info["name"], info["path"]))
+    for dir_path in _get_user_custom_dirs():
+        name = dir_path.name or str(dir_path)
+        if not _is_home_entry_hidden(name, hidden):
+            roots.append((name, dir_path))
+    roots.append(("Presets", PRESETS_DIR))
+    if _load_settings().get("civitai_lora_enabled") and not _is_home_entry_hidden("Lora", hidden):
+        roots.append(("Lora", LORA_CACHE_DIR))
+    return roots
+
+
+def _kind_root_tokens(root_name: str, base: Path) -> list[str]:
+    """角色标记比对用的目录 token：内置卡与系统目录用名字，自定义目录用路径。
+
+    目录管理弹窗把用户写的那条路径原样存进 character_dirs，画廊按目录名寻素材，标记按路径存。
+    自定义目录这里同时认字符串与归一 key（同一目录的两种写法，盘符大小写与 8.3 短名）：
+    resolve 只落在根上，不落在每个文件上，共享盘上不会为一次归类拖几十次网络往返。
+    """
+    if root_name in HOME_BUILTINS or _resolve_system_dir(root_name):
+        return [root_name.lower()]
+    return list(dict.fromkeys([str(base).lower(), _dir_key(base)]))
+
+
+def _marked_character(rel: str, root_tokens: list[str], character_dirs: set) -> bool:
+    """这条素材落在标记过的角色图目录里吗：逐段往上找，父目录标了，子目录里的图也认角色图。"""
+    for token in root_tokens:
+        probe = f"{token}/{rel}".lower() if rel else f"{token}".lower()
+        if any(t in character_dirs for t in _kind_token_ancestors(probe)):
+            return True
+    return False
+
+
+def _kind_token_ancestors(token: str) -> list[str]:
+    """一条 token 从最具体到最宽的几级祖先，逐段拼出来的（stars/孟子义 → stars）。
+
+    按两种分隔符切而不重拼：Windows 的自定义目录在 character_dirs 里存的是带反斜杠的完整路径，
+    把祖先拼成斜杠形式的话跟存的 token 对不上，父目录标了标记、子目录里的图就不认角色图了。
+    """
+    ancestors = [token]
+    rest = token
+    while True:
+        cut = max(rest.rfind("/"), rest.rfind("\\"))
+        if cut <= 0:
+            return ancestors
+        rest = rest[:cut]
+        ancestors.append(rest)
+
+
+def _kind_walk(directory: Path, rel: str, depth: int) -> list[tuple[os.DirEntry, str, str]]:
+    """这一个目录树里的媒体文件（不读 .txt、不解析宽高与工作流），回 (entry, 媒体类型, 相对路径)。"""
+    files, dirs = _scandir_split(directory)
+    rows = [(entry, media_type, rel)
+            for entry, media_type, _txt in _pick_media_entries(directory, files)]
+    if depth > 0:
+        for entry in dirs:
+            rows.extend(_kind_walk(Path(entry.path),
+                                   f"{rel}/{entry.name}" if rel else entry.name, depth - 1))
+    return rows
+
+
+def _kind_keys(filename: str, media_type: str, rel: str, marked: bool) -> list[str]:
+    """一张文件属于哪些标签：类型标签按媒体类型给，用途标签按目录锚定与文件名前缀给。
+
+    角色图认的是目录标记（逐段继承）与 CharacterSheet 主目录锚定；摆姿与抽帧的落点是
+    output 下的 Pose / Frames，它们的文件名前缀覆盖导出的旧批次（那时还没有这两个目录）。
+    """
+    keys = [media_type]
+    anchor = rel.split("/", 1)[0].lower() if rel else ""
+    name_lower = filename.lower()
+    if anchor == POSE_DIR_NAME.lower() or name_lower.startswith(KIND_POSE_PREFIX):
+        keys.append("pose")
+    if anchor == FRAMES_DIR_NAME.lower() or name_lower.startswith(KIND_FRAMES_PREFIX):
+        keys.append("frames")
+    if anchor == GRID_DIR.name.lower():
+        keys.append("storyboard")
+    if anchor == CHARACTER_DIR.name.lower() or marked:
+        keys.append("character")
+    return keys
 
 
 CURRENT_WEB_DIR = CURRENT_DIR / "web"

@@ -2,6 +2,7 @@
  * Gallery Utilities - Constants and helper functions
  */
 import { $el } from "../../../../scripts/ui.js";
+import { t } from "./js/core/i18n.js";
 
 // Constants
 export const PAGE_SIZE = 100;
@@ -17,6 +18,23 @@ export const THUMBNAIL_SIZE_DEFAULT = 320;
 export const THUMBNAIL_CACHE_SIZE = 400; // Fixed thumbnail cache size
 export const WIDE_CARD_MAX = 320;
 export const MOSAIC_MIN_CARD_WIDTH = 240;
+
+// 虚拟归类快捷筛选：标签把散在各级目录里的素材按类型与用途归到一起，不搬动文件。
+// 判定口径在 gallery.py 的 _kind_keys（目录锚定与文件名前缀同一套），改一边就是改漏。
+export const KIND_FILTERS = [
+    { key: "image", label: "图片" },
+    { key: "video", label: "视频" },
+    { key: "audio", label: "音频" },
+    { key: "character", label: "角色图" },
+    { key: "pose", label: "姿势图" },
+    { key: "storyboard", label: "分镜图" },
+    { key: "frames", label: "帧图" },
+];
+
+export function kindLabel(key) {
+    const entry = KIND_FILTERS.find((f) => f.key === key);
+    return entry ? t(entry.label) : key;
+}
 
 /**
  * Get reserved space based on label display setting

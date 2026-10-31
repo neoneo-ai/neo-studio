@@ -3,7 +3,7 @@
  */
 import { $el } from "../../../../scripts/ui.js";
 import { api } from "../../../../scripts/api.js";
-import { THUMBNAIL_SIZE_MIN, THUMBNAIL_SIZE_MAX, THUMBNAIL_SIZE_STEP, getCardHeight, cardColumnWidth, createBreadcrumbItem, createBreadcrumbSeparator, PAGE_SIZE, sortByMtime, isImageFile, showNoFilesMessage, showToast, releaseLazyThumbnails } from './gallery-utils.js';
+import { THUMBNAIL_SIZE_MIN, THUMBNAIL_SIZE_MAX, THUMBNAIL_SIZE_STEP, getCardHeight, cardColumnWidth, createBreadcrumbItem, createBreadcrumbSeparator, PAGE_SIZE, sortByMtime, isImageFile, showNoFilesMessage, showToast, releaseLazyThumbnails, KIND_FILTERS, kindLabel } from './gallery-utils.js';
 import { attachMasonry } from './gallery-masonry.js';
 import { t, tf } from "./js/core/i18n.js";
 
@@ -173,6 +173,77 @@ export class GalleryList {
         }
     }
 
+    // ====== 虚拟归类快捷筛选（顶部标签栏） ======
+
+    createKindBar(gallery) {
+        const bar = $el("div", { className: "neo-gallery-kind-bar", style: { display: "none" } });
+        gallery.kindBar = bar;
+        return bar;
+    }
+
+    /** 按当前计数与视图重绘标签栏：一种素材也没有的标签不进栏里，两种以下的标签整排都不出。 */
+    renderKindBar(gallery) {
+        const bar = gallery.kindBar;
+        if (!bar) return;
+        const counts = gallery.kindCounts || {};
+        const usable = KIND_FILTERS.filter((f) => (counts[f.key] || 0) > 0);
+        if (usable.length < 2) {
+            bar.innerHTML = "";
+            bar.style.display = "none";
+            return;
+        }
+        bar.innerHTML = "";
+        const active = gallery.currentView.mode === 'kind' ? gallery.currentView.source : null;
+        bar.appendChild($el("button", {
+            className: "neo-gallery-kind-chip" + (active ? "" : " active"),
+            textContent: t("全部"),
+            title: t("回到目录卡首页"),
+            onclick: () => gallery.showCategoryCards()
+        }));
+        for (const filter of usable) {
+            const label = kindLabel(filter.key);
+            bar.appendChild($el("button", {
+                className: "neo-gallery-kind-chip" + (active === filter.key ? " active" : ""),
+                textContent: `${label} ${counts[filter.key]}`,
+                title: tf("{label}：全库这一类的条数，点开只看这一类", { label }),
+                onclick: () => gallery.showKindView(filter.key)
+            }));
+        }
+        bar.style.display = "";
+    }
+
+    updateKindBreadcrumb(gallery, label) {
+        const breadcrumb = document.getElementById("neo-gallery-breadcrumb");
+        if (!breadcrumb) return;
+        this._removeSiblingDropdown();
+        breadcrumb.style.display = 'flex';
+        breadcrumb.innerHTML = '';
+        breadcrumb.appendChild(this.createBreadcrumbHome(gallery));
+        breadcrumb.appendChild(createBreadcrumbSeparator());
+        breadcrumb.appendChild(createBreadcrumbItem(label, null, { isCurrent: true }));
+        breadcrumb.appendChild(createBreadcrumbItem("\u21A9", () => gallery.showCategoryCards(), { isUp: true, title: t("返回上级") }));
+    }
+
+    /**
+     * 归类视图铺瀑布流。条目是后端全库聚合出来的，每条已经带上首页一致的目录名前缀
+     * subfolder（"Output/Pose"、"Lora/detail"），所以不走 renderImagesFromStructure 的
+     * 目录名兜底，卡片寻址、缩略图、拖进节点全部照现有那一条路走。
+     */
+    renderKindItems(items, truncated) {
+        if (!items.length) {
+            this.gallery._currentDirImages = [];
+            showNoFilesMessage(this.gallery.accordion, t("这一类还没有素材"));
+            return;
+        }
+        this.renderImagesFromStructure(items, "", []);
+        if (truncated) {
+            this.gallery.accordion.appendChild($el("div", {
+                className: "neo-gallery-kind-hint",
+                textContent: tf("只列了前 {n} 条，这一类还有更多：继续滚动加载，或按目录卡片浏览", { n: items.length })
+            }));
+        }
+    }
+
     // ====== Sibling Directory Dropdown ======
 
     _removeSiblingDropdown() {
@@ -257,6 +328,8 @@ export class GalleryList {
         this.gallery._scrollRestoreLock = true;
         releaseLazyThumbnails(this.gallery.accordion);
         this.gallery.accordion.innerHTML = "";
+        // 首页目录卡与搜索结果都不是归类视图：标签栏的「全部」跟着这次重绘亮起来
+        this.renderKindBar(this.gallery);
 
         const dirsToDisplay = this.gallery.isSearchActive ? this.gallery.filteredDirectories : this.gallery.allDirectories;
 
@@ -824,6 +897,10 @@ export class GalleryList {
     _getScrollKey() {
         if (this.gallery.currentView.mode === 'directory' && this.gallery.currentView.source) {
             return `gallery_v2:${encodeURIComponent(this.gallery.currentView.source)}:${this.gallery.currentView.categoryPath.join('/')}`;
+        }
+        // 归类视图与 URL 深链同名：每个标签各记自己的滚动位置，回退时不落到首页的位置上
+        if (this.gallery.currentView.mode === 'kind' && this.gallery.currentView.source) {
+            return `gallery_kind:${this.gallery.currentView.source}`;
         }
         return 'gallery_categories';
     }

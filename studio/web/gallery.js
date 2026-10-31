@@ -26,7 +26,8 @@ import {
     showInlineFeedback,
     isAudioFile,
     isImageFile,
-    releaseLazyThumbnails
+    releaseLazyThumbnails,
+    kindLabel
 } from './gallery-utils.js';
 
 // 启动页里 gallery.css / recipes.css 由 studio/index.html 静态带上（见那里的注释）。在 ComfyUI 里
@@ -97,6 +98,7 @@ export class NeoGallery {
         this.characterDirs = new Set();      // 角色图目录（小写 token）：从这里多选建导演配方默认全参考
         this._customDirTokens = new Map();   // 自定义目录名 → 绝对路径（画廊按目录名寻址，设置里存路径）
         this._loraRefreshTimer = null;       // auto-refresh polling for the Lora section
+        this.kindCounts = {};                // 虚拟归类标签的条数（顶部标签栏，见 loadKindCounts）
         this.placeholderImageUrl = `${window.location.protocol}//${window.location.host}/neo_gallery/placeholder.png`;
         this.sectionStates = {};
         this.isSearchActive = false;
@@ -146,12 +148,14 @@ export class NeoGallery {
         const customDirBtn = this.list.createCustomDirSettingBtn(this);
         const navGroup = this.list.createNavButtons(this);
         const refreshBtn = this.list.createRefreshBtn(this);
+        const kindBar = this.list.createKindBar(this);
 
         // Main content area
         this.accordion = $el("div", { className: "neo-gallery-accordion" });
 
         // 头部一条粘性工具条：前进后退 / 重扫 / + 目录 / 面包屑 / 尺寸滑杆 / 搜索 / 生成素材
         // 全塞进同一块，宽宿主（桌面素材页）排成一行，窄侧栏自动换行；样式见 .neo-gallery-topbar
+        // 归类标签栏整排占一行（.neo-gallery-kind-bar 靠 flex 换行），跟着顶栏粘在页顶
         this.element = $el("div", { id: this.elementId, className: "neo-gallery-panel" }, [
             $el("div", { className: "neo-gallery-topbar" }, [
                 navGroup,
@@ -169,7 +173,8 @@ export class NeoGallery {
                     title: t("生成新素材（默认 Krea2 文生图，产物保存到 Output 目录）"),
                     textContent: t("生成素材"),
                     onclick: () => openGenMaterialDialog(this)
-                })
+                }),
+                kindBar
             ]),
             this.accordion,
             this.customDirInput
@@ -350,6 +355,8 @@ export class NeoGallery {
             this.allDirectories = [];
             this.filteredDirectories = this.allDirectories;
         }
+        // 标签栏的数量跟着这次目录扫描补一次：不 await，视图先画出来，chip 栏在响应回来时填上
+        this.loadKindCounts();
     }
 
     // ====== Smart Workflow Matching (智能感知) ======
@@ -471,6 +478,7 @@ export class NeoGallery {
             if (view.mode === 'categories') await this.showCategoryCards();
             else if (view.mode === 'local_bookmarks') await this.showLocalBookmarks();
             else if (view.mode === 'civitai_bookmarks') await this.showCivitaiBookmarks();
+            else if (view.mode === 'kind') await this.showKindView(view.source);
             else await this.showDirectoryStructure(view.source, view.categoryPath);
         } finally {
             this._navRestoring = false;
@@ -488,6 +496,8 @@ export class NeoGallery {
         try {
             if (view.mode === 'directory' && view.source) {
                 await this.showDirectoryStructure(view.source, view.categoryPath || []);
+            } else if (view.mode === 'kind' && view.source) {
+                await this.showKindView(view.source);
             } else {
                 await this.loadGallery();
                 await this.list.sortAndDisplayImages();
@@ -553,6 +563,7 @@ export class NeoGallery {
             if (view.mode === 'directory' && view.source) await this.showDirectoryStructure(view.source, view.categoryPath || []);
             else if (view.mode === 'local_bookmarks') await this.showLocalBookmarks();
             else if (view.mode === 'civitai_bookmarks') await this.showCivitaiBookmarks();
+            else if (view.mode === 'kind' && view.source) await this.showKindView(view.source);
             else await this.list.sortAndDisplayImages();
         } finally {
             this._navRestoring = false;
@@ -1170,6 +1181,62 @@ export class NeoGallery {
         this._recordNavState();
     }
 
+    // ====== 虚拟归类快捷筛选 ======
+
+    /** 标签栏的数量：只请求计数（kind 留空），一次目录扫描顺手补一回。 */
+    async loadKindCounts() {
+        try {
+            const resp = await api.fetchApi('/neo_gallery/kind_items?kind=');
+            // 问不到条数就撤整排标签：点不动的控件不该留在界面上
+            this.kindCounts = resp.ok ? ((await resp.json()).counts || {}) : {};
+        } catch (error) {
+            console.error('[Neo Gallery] Failed to load kind counts:', error);
+            this.kindCounts = {};
+        }
+        this.list.renderKindBar(this);
+    }
+
+    /**
+     * 归类视图：把全库这一类的素材铺成瀑布流。文件不搬、目录不建，标签只是虚拟归类；
+     * 条目带的是首页一致的目录名前缀 subfolder，缩略图与取用照现有寻址走。
+     */
+    async showKindView(kindKey) {
+        this.clearSelection();
+        if (this.currentView.mode !== 'kind' || this.currentView.source !== kindKey) {
+            await this.list._saveCurrentScrollPosition();
+        }
+        this.stopLoraRefresh();
+        releaseLazyThumbnails(this.accordion);
+        this.accordion.innerHTML = "";
+        const loadingEl = showLoadingOverlay(this.accordion, this.maxThumbnailSize);
+        const stateKey = `gallery_kind:${kindKey}`;
+        try {
+            const resp = await api.fetchApi(`/neo_gallery/kind_items?kind=${encodeURIComponent(kindKey)}`);
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const data = await resp.json();
+            if (data.counts) this.kindCounts = data.counts;
+            this.currentView.mode = 'kind';
+            this.currentView.source = kindKey;
+            this.currentView.categoryPath = [];
+            this.list.updateKindBreadcrumb(this, kindLabel(kindKey));
+            this.list.renderKindItems(data.items || [], !!data.truncated);
+            this.list.renderKindBar(this);
+            if (!this._navRestoring) {
+                // 深链写法与滚动位置同名（gallery-list 的 _getScrollKey）
+                const currentUrl = new URL(window.location.href);
+                currentUrl.searchParams.set('gallery', stateKey);
+                history.pushState({ galleryState: stateKey }, '', currentUrl.toString());
+            }
+            this._recordNavState();
+        } catch (error) {
+            console.error('[Neo Gallery] Failed to load kind items:', error);
+            showToast(this.app, 'error', 'Error', t('加载归类列表失败'));
+            await this.showCategoryCards();
+        } finally {
+            if (loadingEl.parentNode) loadingEl.remove();
+        }
+    }
+
     // ====== Actions ======
 
     async deleteItem(name, subfolder, { silent = false } = {}) {
@@ -1294,6 +1361,8 @@ export class NeoGallery {
      *  子目录继承父目录的标记：标了 stars，stars/孟子义 里的图同样按角色图处理。
      *  宿主（studio-app.js 的右栏上下文）要问的是自己那份视图，传进来查，不读画廊现值。 */
     isCharacterDir(view = this.currentView) {
+        // 角色图标签页里的全是角色图：多选建配方照目录视图走全参考
+        if (view && view.mode === 'kind') return view.source === 'character';
         const token = this._dirTokenOf(view);
         if (!token) return false;
         const parts = token.split('/');
@@ -1355,6 +1424,15 @@ export class NeoGallery {
 
     /** Ctrl+A：选中当前视图内所有可删除素材。 */
     selectAllVisible() {
+        // 归类视图的条目来自全库聚合，不在 allDirectories 里：选中序列走当前渲染的那一份
+        if (this.currentView.mode === 'kind') {
+            for (const item of this._currentDirImages || []) {
+                if (!this.isDeletableItem(item.name, item.subfolder)) continue;
+                this._selectedItems.add(this._selectionKey(item.name, item.subfolder));
+            }
+            this._updateSelectionBar();
+            return;
+        }
         const items = this.isSearchActive ? this.filteredDirectories : this.allDirectories;
         for (const dir of items || []) {
             for (const item of Array.isArray(dir.items) ? dir.items : []) {
@@ -1689,6 +1767,16 @@ export class NeoGallery {
         const galleryParam = params.get('gallery');
         if (galleryParam) {
             let dirName, pathSegments;
+            const kindMatch = galleryParam.match(/^gallery_kind:(\w+)$/);
+            if (kindMatch) {
+                // 归类视图深链：刷新页面或直接开链接都落进同一个标签（见 showKindView 的 stateKey）
+                this.currentView.mode = 'kind';
+                this.currentView.source = kindMatch[1];
+                this.currentView.categoryPath = [];
+                await this.loadGallery();
+                await this.showKindView(kindMatch[1]);
+                return; // skip normal init
+            }
             const v2Match = galleryParam.match(/^gallery_v2:(.+):(.*)$/);
             if (v2Match) {
                 dirName = decodeURIComponent(v2Match[1]);
@@ -1749,6 +1837,8 @@ export class NeoGallery {
                 this.selectAllVisible();
             } else if (e.key === 'Escape' && this._selectedItems.size > 0) {
                 this.clearSelection();
+            } else if (e.key === 'Escape' && this.currentView.mode === 'kind') {
+                this.showCategoryCards();
             } else if (e.key === 'Backspace') {
                 e.preventDefault();
                 e.stopPropagation();
@@ -1768,9 +1858,10 @@ export class NeoGallery {
         const loadingEl = showLoadingOverlay(this.accordion, this.maxThumbnailSize);
         
         // 直接加载（不额外增加延迟）
-        // 宿主自己记的目录（applyView 已写进 currentView）优先于上次退出时的全局视图
-        const sv = (this.currentView.mode === 'directory' && this.currentView.source)
-            ? { mode: 'directory', source: this.currentView.source, categoryPath: [...this.currentView.categoryPath] }
+        // 宿主自己记的视图（applyView 已写进 currentView）优先于上次退出时的全局视图
+        const ownView = this.currentView.source && (this.currentView.mode === 'directory' || this.currentView.mode === 'kind');
+        const sv = ownView
+            ? { mode: this.currentView.mode, source: this.currentView.source, categoryPath: [...this.currentView.categoryPath] }
             : this._savedView;
         this._savedView = null;
         if (sv && sv.mode === 'directory' && sv.source) {
@@ -1779,6 +1870,9 @@ export class NeoGallery {
                 this.loadGallery(),
                 this.showDirectoryStructure(sv.source, sv.categoryPath || [])
             ]);
+        } else if (sv && sv.mode === 'kind' && sv.source) {
+            await this.loadGallery();
+            await this.showKindView(sv.source);
         } else {
             await this.loadGallery();
             await this.list.sortAndDisplayImages();
