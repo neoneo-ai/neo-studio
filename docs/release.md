@@ -111,6 +111,42 @@ CI 打包固定 Python 3.12，与本地验证过的构建一致。
 `Microsoft.WindowsDesktop.App` 里），随包带的配置是 `tools/coreclr.runtimeconfig.json` → `_internal/runtime/`。
 切换会记一行 `clr switched to coreclr` 到 `data/studio_desktop.log`。
 
+## 最小整合包
+
+`tools\build_minimal_package.ps1` 产出一个「装完就能跑、模型自己放」的整合包：ComfyUI 核心 + 清单里锁 commit 的
+必需插件 + Neo Studio（App 源码与装好的插件副本）+ 便携 Python + 相对路径启动器。
+
+- 随包发：`ComfyUI\`（排除 `.git`、`custom_nodes`、`user`、`output`、`input`、`temp`）、清单里的必需插件、
+  `Neo-Studio\`（排除 `.venv` 与 `data`）、`studio/` 复制成 `ComfyUI\custom_nodes\comfyui-neo-studio\`（排除 `tests`）、
+  便携 Python、空的 `ComfyUI\models\` 目录树，以及只指包内相对路径的 `extra_model_paths.yaml`。
+- 不随包发：模型与权重（含 `comfyui_controlnet_aux\ckpts` 预打包 annotator 模型与
+  `comfyui_fl-cosyvoice3\FL_CosyVoice3` 这两处插件自带权重）、`.git`、`__pycache__`、`user` 数据、用户数据根、
+  密钥文件（`remote_llm_config.json`、`backyard_oss.json`）、带开发机盘符的路径，以及 `comfyui-krea2edit`。
+- 必需插件按内置预设用到的节点定：`tools\minimal_plugins.json` 写死 commit、插件提供的节点名与用到它的预设 ——
+  `comfyui_controlnet_aux`（AIO_Preprocessor）、`ComfyUI-VDN-H3`（ApplyVDNH3Advanced）、
+  `comfyui_fl-cosyvoice3`（FL_CosyVoice3_*）。`ResolutionSelector`、`TextEncodeQwenImage21`、`MiniMaxH3*`、
+  `CreateVideo` 这些在 ComfyUI 0.42.5 是核心节点，不为它们装插件。
+- 依赖在构建时装进包内那个 `python\`：`torch` + CUDA、`ComfyUI\requirements.txt`、`studio\requirements.txt`、
+  桌面 App 的 `pyproject.toml` 依赖、每个必需插件的 `requirements.txt`，桌面 App 与内核共用它，包开箱即用。
+  `setup_runtime.bat` / `setup_app.bat` 是换掉 `python\` 之后或缺依赖时的修复路径，`-SkipPluginDeps` 跳过预装。
+  pip 带的约束是包内已装版本（`pip list --format=freeze`）：不钉版本时 `mediapipe` 要求的 `numpy<2` 会把 numpy
+  降级，`pyarrow` 当场导入不了；带约束解不动的那几条退化成 `--no-deps` 只装清单里列的包。启动器只认包内
+  `python\pythonw.exe`，并把 `PYTHONUTF8=1` 传给子进程（打印非 ASCII 的插件在 GBK 控制台下导入会失败）；
+  复用已装好的可移植 Python 用 `mklink /J python "<可移植 Python 根目录>"`，包内 `python\` 已是链接时构建不复制不清它。
+- 自检分两级：`tools\check_minimal_package.py` 扫 `NODE_CLASS_MAPPINGS` 与 `node_id=` 注册，比对预设用到的节点，
+  整包模式还核对布局、空 models 树、盘符路径、密钥文件、`comfyui-krea2edit` 痕迹，以及清单 `import_smoke`
+  里的依赖在包内 python 里 import 得出（`import_notes` 点过名的模块只报说明）；`tools\verify_minimal_package.ps1`
+  在它之上核对清单插件、随包预设集与安装脚本。预设与被排除插件节点的一致性由 `studio/tests/test_minimal_package.py` 钉住。
+
+```powershell
+pwsh tools\build_minimal_package.ps1 -DryRun              # 只打印要做的事，不写文件
+pwsh tools\build_minimal_package.ps1 -Target <包根>       # 复制整包（-PluginMode git 按清单 clone）
+python tools\check_minimal_package.py --comfyui <ComfyUI root> --studio <repo root>\studio
+python tools\check_minimal_package.py --package <包根>    # 整包体检
+pwsh tools\verify_minimal_package.ps1 -Package <包根>     # 自检 + 清单/预设/脚本验收
+```
+
+
 ## 离线工具
 
 `tools/` 下的脚本用于构建 / 部署素材预设，不在 ComfyUI 运行时加载：

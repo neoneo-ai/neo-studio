@@ -384,9 +384,33 @@ class RenderTemplateTests(unittest.TestCase):
         with open(os.path.join(PLUGIN_DIR, "skills", "presets", "image_gen", "workflow.json"),
                   encoding="utf-8") as f:
             cls.text_template = json.load(f)
-        with open(os.path.join(PLUGIN_DIR, "skills", "presets", "image_gen_image", "workflow.json"),
-                  encoding="utf-8") as f:
-            cls.ref_template = json.load(f)
+        # 参考图编辑链模板内联：原 image_gen_image 预设依赖整合包不含的 comfyui-krea2edit
+        # （Krea2EditModelPatch / Krea2EditGroundedEncode），已随预设删除。这里用内置节点复现
+        # 它的形状（单路 {{REF_IMAGE}} → 画布缩放 → LoRA 槽位 → 槽位后串联到采样链），
+        # 「参考图槽位填充 + LoRA 动态串联」这条渲染路径才有覆盖。
+        cls.ref_template = {
+            "1": {"class_type": "UNETLoader", "inputs": {"unet_name": "{{MODEL}}"}},
+            "2": {"class_type": "CLIPLoader", "inputs": {"clip_name": "{{TEXT_ENCODER}}", "type": "krea2"}},
+            "3": {"class_type": "VAELoader", "inputs": {"vae_name": "{{VAE}}"}},
+            "4": {"class_type": "CLIPTextEncode", "inputs": {"clip": ["2", 0], "prompt": "{{PROMPT}}"}},
+            "5": {"class_type": "CLIPTextEncode", "inputs": {"clip": ["2", 0], "prompt": ""}},
+            "6": {"class_type": "LoadImage", "inputs": {"image": "{{REF_IMAGE}}"}},
+            "7": {"class_type": "ImageScale", "inputs": {"image": ["6", 0], "upscale_method": "lanczos",
+                                                         "width": "{{REF_WIDTH}}", "height": "{{REF_HEIGHT}}",
+                                                         "crop": "disabled"}},
+            "8": {"class_type": "VAEEncode", "inputs": {"pixels": ["7", 0], "vae": ["3", 0]}},
+            "9": {"class_type": "EmptySD3LatentImage", "inputs": {"width": "{{WIDTH}}",
+                                                                  "height": "{{HEIGHT}}", "batch_size": 1}},
+            "20": {"class_type": "LoraLoaderModelOnly", "inputs": {"model": ["1", 0],
+                                                                   "lora_name": "{{LORA_1_NAME}}",
+                                                                   "strength_model": "{{LORA_1_STRENGTH}}"}},
+            "14": {"class_type": "ModelSamplingSD3", "inputs": {"model": ["20", 0], "shift": 3.0}},
+            "10": {"class_type": "KSampler", "inputs": {"model": ["14", 0], "seed": "{{SEED}}",
+                                                        "steps": "{{STEPS}}", "cfg": 1.0,
+                                                        "sampler_name": "euler", "scheduler": "simple",
+                                                        "positive": ["4", 0], "negative": ["5", 0],
+                                                        "latent_image": ["9", 0], "denoise": 1.0}},
+        }
 
     def params(self, **overrides):
         settings = base_settings()
@@ -457,7 +481,7 @@ class RenderTemplateTests(unittest.TestCase):
         self.assertAlmostEqual(graph["20"]["inputs"]["strength_model"], 0.5)
         self.assertEqual(graph["21"]["inputs"], {"model": ["20", 0], "lora_name": "sub/style_b.safetensors",
                                                  "strength_model": 1.0})
-        self.assertEqual(graph["14"]["inputs"]["model"], ["21", 0])   # model patch 吃链尾
+        self.assertEqual(graph["14"]["inputs"]["model"], ["21", 0])   # 采样链头吃链尾
         self.assertAlmostEqual(graph["10"]["inputs"]["denoise"], 1.0)  # 采样参数写死在模板
 
     def test_ref_template_requires_reference(self):
@@ -1032,7 +1056,7 @@ class StartGenerationTemplateRouteTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self._run(
                 self.PLAIN_TEMPLATE,
-                {"skill_id": "image_gen_image", "prompt": "extend",
+                {"skill_id": "qwen_image_21", "prompt": "extend",
                  "references": [{"kind": "input", "value": "portrait.png"}],
                  "outpaint": {"left": 64}})
 
@@ -1063,7 +1087,7 @@ class StartGenerationTemplateRouteTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self._run(
                 self.PLAIN_TEMPLATE,
-                {"skill_id": "image_gen_image", "prompt": "fix",
+                {"skill_id": "qwen_image_21", "prompt": "fix",
                  "local_edit": True,
                  "references": [{"kind": "input", "value": "portrait.png"}]})
 

@@ -135,6 +135,53 @@ setting the environment variable reuses the broken netfx). coreclr needs the des
 `tools/coreclr.runtimeconfig.json` → `_internal/runtime/`. A switch logs `clr switched to coreclr` into
 `data/studio_desktop.log`.
 
+## Minimal package
+
+`tools\build_minimal_package.ps1` produces a package that runs as soon as it is installed and ships no models:
+the ComfyUI core, the required plugins pinned by commit in the manifest, Neo Studio (the app source plus the
+installed plugin copy), a portable Python, and relative-path launchers.
+
+- What ships: `ComfyUI\` (excluding `.git`, `custom_nodes`, `user`, `output`, `input`, `temp`), the required
+  plugins from the manifest, `Neo-Studio\` (excluding `.venv` and `data`), `studio/` copied to
+  `ComfyUI\custom_nodes\comfyui-neo-studio\` (excluding `tests`), the portable Python, an empty
+  `ComfyUI\models\` tree, and an `extra_model_paths.yaml` that only points at relative paths inside the package.
+- What never ships: models and weights (including the two plugin-bundled weight bundles
+  `comfyui_controlnet_aux\ckpts` and `comfyui_fl-cosyvoice3\FL_CosyVoice3`), `.git`, `__pycache__`, the
+  `user` tree, the user data root, secret files (`remote_llm_config.json`, `backyard_oss.json`), paths carrying
+  a development drive letter, and `comfyui-krea2edit`.
+- The required plugin set follows the nodes the built-in presets use. `tools\minimal_plugins.json` pins each
+  commit, the nodes the plugin provides, and the presets that use it: `comfyui_controlnet_aux`
+  (AIO_Preprocessor), `ComfyUI-VDN-H3` (ApplyVDNH3Advanced) and `comfyui_fl-cosyvoice3` (FL_CosyVoice3_*).
+  `ResolutionSelector`, `TextEncodeQwenImage21`, `MiniMaxH3*` and `CreateVideo` are core nodes in ComfyUI 0.42.5,
+  so nothing is installed for them.
+- Dependencies are installed into the one `python\` inside the package at build time — `torch` + CUDA,
+  `ComfyUI\requirements.txt`, `studio\requirements.txt`, the desktop app dependencies from `pyproject.toml` and
+  every required plugin's `requirements.txt` — so the package runs as soon as it is copied. The app and the
+  kernel share that interpreter. `setup_runtime.bat` / `setup_app.bat` stay as the repair path after replacing
+  `python\` or when a dependency is missing, and `-SkipPluginDeps` skips the pre-install. pip runs with the
+  package's own installed versions as constraints (`pip list --format=freeze`): unpinned, the `numpy<2` that
+  `mediapipe` asks for downgrades numpy and `pyarrow` stops importing; a requirement file pip cannot solve with
+  those constraints falls back to `--no-deps`, installing only the packages that file names. The launcher only
+  accepts `python\pythonw.exe` inside the package and passes `PYTHONUTF8=1` to the child (a plugin that prints
+  non-ASCII fails to import under a GBK console); reuse an installed portable Python with
+  `mklink /J python "<portable Python root>"` — when the package's `python\` is already a link, the build
+  copies nothing into it and mirrors nothing against it.
+- Two validation levels: `tools\check_minimal_package.py` reads `NODE_CLASS_MAPPINGS` and `node_id=`
+  registrations, compares them with the nodes the presets use, and in package mode also checks the layout, the
+  empty models tree, drive-letter paths, secret files, any `comfyui-krea2edit` trace, and that every module in
+  the manifest's `import_smoke` imports inside the package Python (modules named in `import_notes` are reported,
+  not imported); `tools\verify_minimal_package.ps1` adds the manifest plugin set, the shipped preset set and the
+  setup scripts. `studio/tests/test_minimal_package.py` pins the consistency between presets and excluded plugin nodes.
+
+```powershell
+pwsh tools\build_minimal_package.ps1 -DryRun              # print the plan, write nothing
+pwsh tools\build_minimal_package.ps1 -Target <package root>   # build it (-PluginMode git clones per manifest)
+python tools\check_minimal_package.py --comfyui <ComfyUI root> --studio <repo root>\studio
+python tools\check_minimal_package.py --package <package root>   # whole-package check
+pwsh tools\verify_minimal_package.ps1 -Package <package root>    # self-check + manifest/preset audit
+```
+
+
 ## Offline tools
 
 The scripts under `tools/` build and deploy the asset presets; they are never loaded by the ComfyUI

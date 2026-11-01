@@ -1,0 +1,71 @@
+{
+  "comment": "最小整合包的插件清单。commit 锁版本、nodes 写死插件必须提供的节点、strip 写复制时要剥掉的东西。",
+  "comfyui": {
+    "repo": "https://github.com/Comfy-Org/ComfyUI",
+    "commit": "483dae4326356b81de05d27aca3f433dd323cc25",
+    "version": "0.42.5"
+  },
+  "python": {
+    "version": "3.12.10",
+    "win": "win-amd64"
+  },
+  "strip": [
+    "**/.git",
+    "**/__pycache__",
+    "ComfyUI/user/**",
+    "ComfyUI/output/**",
+    "ComfyUI/input/**",
+    "ComfyUI/temp/**",
+    "ComfyUI/models/checkpoints/**",
+    "ComfyUI/models/diffusion_models/**",
+    "Neo-Studio/data/**",
+    "Neo-Studio/.venv/**"
+  ],
+  "required": [
+    {
+      "name": "comfyui_controlnet_aux",
+      "repo": "https://github.com/Fannin1106/ComfyUI-ControlNet-Aux",
+      "commit": "00c2730b36111a38d85316f751c9b94a907575d2",
+      "nodes": ["AIO_Preprocessor"],
+      "used_by": ["qwen_image_21_controlnet"],
+      "strip": ["ckpts", "anmodels"],
+      "import_smoke": ["cv2", "onnxruntime", "skimage", "matplotlib", "trimesh", "rtree", "mediapipe"],
+      "import_notes": {
+        "mediapipe": "mediapipe 串起来的 tensorflow 是 numpy 1.x 编译的，numpy 2.5 下 import 失败；ControlNet 的 face 类预处理器因此不可用，要用的话 python\\python.exe -m pip install \"numpy<2\""
+      },
+      "note": "ckpts 里是预打包的 annotator 模型（2.25GB）不随包发；首次运行 AIO_Preprocessor 时插件把要用的模型下载到 anmodels"
+    },
+    {
+      "name": "ComfyUI-VDN-H3",
+      "repo": "https://github.com/vrgamedevgirl84/ComfyUI-VDN-H3",
+      "commit": "15cfd0214c7cf54a36fa8dbe87325e09c5915739",
+      "nodes": ["ApplyVDNH3", "ApplyVDNH3Advanced"],
+      "used_by": ["minimax_h3_vdn_t2v", "minimax_h3_vdn_i2v", "minimax_h3_vdn_fl2v", "minimax_h3_vdn_multiframe", "minimax-h3-vdn-r2v"],
+      "strip": [],
+      "import_smoke": [],
+      "note": "纯 pip 依赖（numpy / einops / torch），无捆绑权重；requirements.txt 里没有要装的东西，走 ComfyUI 核心的 torch"
+    },
+    {
+      "name": "comfyui_fl-cosyvoice3",
+      "repo": "https://github.com/flaoua/comfyui_fl-cosyvoice3",
+      "commit": "1c4295539f43a441e3a553717d06b57458922a92",
+      "nodes": ["FL_CosyVoice3_ModelLoader", "FL_CosyVoice3_Dialog", "FL_CosyVoice3_ZeroShot", "FL_CosyVoice3_Play"],
+      "used_by": ["cosyvoice_voice"],
+      "strip": ["FL_CosyVoice3"],
+      "import_smoke": ["modelscope", "transformers", "librosa", "soundfile", "onnxruntime", "hyperpyyaml", "ruamel.yaml", "conformer", "omegaconf", "inflect", "hydra", "pydantic", "x_transformers", "diffusers", "wetext", "pyarrow", "pyworld", "whisper"],
+      "import_notes": {
+        "whisper": "openai-whisper 依赖的 numba 只支持 numpy 2.3 及以下，numpy 2.5 下 import 失败；语音克隆主路径不用 whisper，要它就得 python\\python.exe -m pip install \"numpy<2.4\""
+      },
+      "note": "插件启动时打印 braille ASCII banner，输出编码不是 UTF-8 时 import 直接失败；整合包启动器已置 PYTHONUTF8=1。1.4GB 权重不随包发，要用的话放回 custom_nodes/comfyui_fl-cosyvoice3/FL_CosyVoice3"
+    }
+  ],
+  "excluded": [
+    {
+      "name": "comfyui-krea2edit",
+      "repo": "https://github.com/Yakuxzz/comfyui-krea2edit",
+      "commit": "8f364a9c2188c14bda28ae0f4eb0d36e9d93d320",
+      "nodes": ["Krea2EditModelPatch", "Krea2EditGroundedEncode"],
+      "reason": "Krea2 Edit 模型的下载链路属于这个插件；唯一引用它的 image_gen_image 预设已删除。在 ComfyUI 0.42.5 下导入还会崩，因为 core nodes 缺 typing 里的 List 枚举类型"
+    }
+  ]
+}

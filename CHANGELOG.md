@@ -4,6 +4,32 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **The 参考图编辑 preset is gone, together with the plugin it needed.** `image_gen_image` was the only built-in
+  preset whose graph called `Krea2EditModelPatch` / `Krea2EditGroundedEncode`, and those two nodes only exist when
+  `comfyui-krea2edit` is installed - a plugin the minimal ComfyUI package does not ship, that fails to import on
+  ComfyUI 0.42.5 (core `nodes` no longer exposes the `List` typing member it patches in), and that owns the Krea2
+  Edit model download path. The preset is removed from `studio/skills/presets/`, so a fresh data root no longer
+  seeds it and the skill picker no longer lists it; the reference-image edit path in 图片生成 (the inline
+  `{{REF_IMAGE}}` canvas + LoRA slot chain in `studio/image_gen.py`) is unchanged and keeps its tests.
+  `tools/minimal_plugins.json` records the plugin as excluded, `studio/tests/test_minimal_package.py` fails if any
+  shipped preset asks for its nodes, and `tools/check_minimal_package.py` fails a package that carries a trace of it.
+
+- **A minimal ComfyUI + Neo Studio package now builds from this repo.** `tools\build_minimal_package.ps1` assembles
+  a portable folder - ComfyUI core, the plugins the built-in presets actually need (pinned to commits in
+  `tools\minimal_plugins.json`), the Neo Studio app plus its installed plugin copy, portable Python, an empty
+  `ComfyUI\models\` tree and relative-path launchers (`NeoStudio.bat` → `NeoStudio.vbs`): no models, no
+  plugin-bundled weights, no `.git`, no caches, no user data, no API keys and no development drive-letter paths.
+  Every dependency (torch + CUDA, ComfyUI's, the plugin's, the desktop app's) is installed into the package's own
+  `python\` at build time, so the target machine only double-clicks `NeoStudio.bat`; `setup_runtime.bat` and
+  `setup_app.bat` stay as the repair path after `python\` is replaced. `组件清单.md` inside the package says which
+  model goes where. Two checkers back it:
+  `tools\check_minimal_package.py` (source mode compares the nodes every preset needs with what ComfyUI core,
+  `comfy_extras` and the installed plugins register; package mode also audits layout, empty models, drive-letter
+  paths, secret files, excluded plugins, and that each manifest `import_smoke` dependency imports inside the
+  package Python) and `tools\verify_minimal_package.ps1` (manifest plugin set, shipped
+  preset set, setup scripts, size). Details: [docs/release.md](docs/release.md).
+
+
 - **The 3D Pose page's left panel is one 场景库 (Scene Library) now.** Its pose half - 姿态名, 存为姿态,
   载入姿态, 删姿态 and 浏览姿势库… - drove the old single-body pose folder
   (`<data root>/pose/presets/`), and that is exactly the thing the SceneFile migration replaced: every card the

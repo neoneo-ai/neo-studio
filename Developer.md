@@ -15,7 +15,7 @@
 | [docs/studio-desktop.md](docs/studio-desktop.md) | 桌面端：启动序列 / 无边框窗口 / 关窗回收 / 插件同步 / 缓存与日志 |
 | [docs/mcp.md](docs/mcp.md) | MCP 服务器（`studio/mcp_server.py`，stdio，外部智能体调用生图 / 导演能力） |
 | [docs/testing.md](docs/testing.md) | pytest 单测与 JS 回归测试（golden 快照、run-tests.ps1） |
-| [docs/release.md](docs/release.md) | Registry 发布与离线工具（预设预处理 / OSS 部署） |
+| [docs/release.md](docs/release.md) | Registry 发布与离线工具（预设预处理 / OSS 部署 / 最小整合包打包与验收） |
 | [docs/llm.md](docs/llm.md) | LLM 模式、本地 GGUF 安装、模型目录规范 |
 
 功能模块文档（用户说明 + 实现细节）：

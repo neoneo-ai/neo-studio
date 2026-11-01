@@ -15,7 +15,7 @@ split by major module under `docs/en/` (index: [docs/en/README.md](docs/en/READM
 | [docs/en/studio-desktop.md](docs/en/studio-desktop.md) | Studio desktop: startup sequence, frameless window, close teardown, plugin sync, cache and logs |
 | [docs/en/mcp.md](docs/en/mcp.md) | MCP server (`studio/mcp_server.py`, stdio, external agents calling image & director capabilities) |
 | [docs/en/testing.md](docs/en/testing.md) | pytest unit tests and JS regression tests (golden snapshots, run-tests.ps1) |
-| [docs/en/release.md](docs/en/release.md) | Registry publishing and offline tooling (preset preprocessing / OSS deployment) |
+| [docs/en/release.md](docs/en/release.md) | Registry publishing and offline tooling (preset preprocessing / OSS deployment / minimal package build and audit) |
 | [docs/en/llm.md](docs/en/llm.md) | LLM modes, local GGUF installation, model directory conventions |
 
 Feature module docs (user guide + implementation details):

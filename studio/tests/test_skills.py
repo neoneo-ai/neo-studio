@@ -1583,20 +1583,12 @@ class TestGenImageSkill(unittest.TestCase):
         self.assertFalse(s["gen_image"])
         self.assertNotIn("ratio", s, "skill 声明比例已废弃，扫描结果不再输出")
 
-    def test_preset_image_gen_skill_scanned(self):
-        s = self._scanned().get("image_gen_image")
-        self.assertIsNotNone(s)
-        self.assertTrue(s["gen_image"])
-        self.assertTrue(s["requires_ref"], "参考图 skill 必须声明 requires_ref")
-        self.assertEqual(s["category"], "image_gen")
-
     # 生图预设的输入形态（skill.md 的 mode）决定「文生图」页与「图片编辑」页各列哪些技能。
     # 编辑类模板的参考图槽位是可空的 Autogrow，运行时判不出「必须有图」，只能靠声明。
     _PRESET_IMAGE_MODES = {
         "image_gen": "t2i",
         "image_gen_text_subject": "t2i",
         "nine_grid_storyboard": "t2i",
-        "image_gen_image": "edit",
         "qwen_image_21": "t2i_edit",
         "qwen_image_21_body_swap": "edit",
         "qwen_image_21_controlnet": "edit",
@@ -1617,6 +1609,24 @@ class TestGenImageSkill(unittest.TestCase):
             self.assertEqual(
                 bool(s["requires_ref"]), mode == "edit",
                 f"{sid} 的 requires_ref 必须与 mode 一致：文生图页与 LLM 生图都按它决定是否带参考图")
+
+    # 内置预设只能跑在整合包自带的节点上：comfyui-krea2edit（Krea2EditModelPatch /
+    # Krea2EditGroundedEncode）不在整合包清单里，一旦写进预设，出厂包里的这条技能提交即失败。
+    _MISSING_PLUGIN_NODES = ("Krea2Edit",)
+
+    def test_preset_workflows_avoid_missing_plugin_nodes(self):
+        preset_dir = os.path.join(_NODE_DIR, "skills", "presets")
+        checked = 0
+        for sid in sorted(os.listdir(preset_dir)):
+            wf = os.path.join(preset_dir, sid, "workflow.json")
+            if not os.path.isfile(wf):
+                continue
+            checked += 1
+            with open(wf, encoding="utf-8") as f:
+                classes = [n.get("class_type") for n in json.load(f).values() if isinstance(n, dict)]
+            bad = [c for c in classes if c and c.startswith(self._MISSING_PLUGIN_NODES)]
+            self.assertFalse(bad, f"预设 {sid} 用了整合包不含的插件节点 {bad}")
+        self.assertGreater(checked, 10, "内置预设工作流应全部被扫描到")
 
     def test_save_skill_main_preserves_gen_meta(self):
         self._write_skill("gen-c", [
