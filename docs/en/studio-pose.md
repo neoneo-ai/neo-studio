@@ -201,7 +201,13 @@ the two sharing one load path.
 "Browse Scene Library…" opens one modal (the asset library's shell) holding the `pose-lib` whole-scene
 library. A card picks its preview by `clay → skeleton → silhouette → depth` (the rule the pose page's
 `thumbOf` uses in `src/ui/libraryPanel.js`), a card with none of the four reads "no preview", and the
-subtitle reports "N people · M props". The group dropdown is filled from the index's `groups` with their
+subtitle reports "N people · M props". A preview is rendered from the scene file itself: the pose repo clears
+the stage to one figure per rig, empties the props and switches off every visible object outside those subjects
+before the shot, and the card corner carries a "reference render" badge marking it a render and not a photo.
+The figures in the picture are the scene file's headcount, and the toast reports what the page staged. A library
+synced from before this change re-renders with `npm run build` then `npm run lib -- preview --all` in the pose
+repo, followed by the sync.
+The group dropdown is filled from the index's `groups` with their
 `count`, "all groups" returns to the whole library, and the search filters on
 `label / categories / tags / id / source` (the field table 3d-pose-art's `filterIndex` uses in
 `poseLibrary.js`). A scene can belong to several groups and its card lands only in the highest-ranked one -

@@ -109,6 +109,8 @@ const EN = {
     "分组": "Group",
     "全部分组": "All groups",
     "无预览": "No preview",
+    // 库卡片的预览图是摆姿仓库对来源参考图的渲染，参考图版式可以把同一个人画两遍
+    "参考图": "reference render",
     "没有匹配的场景": "No matching scenes",
     "加载更多（还有 {n} 条）": "Load more ({n} left)",
     "{total} 个场景 · 显示 {shown}": "{total} scenes · showing {shown}",

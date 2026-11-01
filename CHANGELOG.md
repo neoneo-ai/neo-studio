@@ -15,7 +15,10 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   in that scene (adding the missing figures) and applies the scene's own camera, so a two- or three-person card
   arrives as the whole scene instead of the one figure already on the canvas. When the page cannot stage it, the
   panel reports the page's own reason and keeps the dialog open. Card subtitles read `N人 · M道具`, so the headcount
-  is visible before picking.
+  is visible before picking, and the thumbnail carries a `参考图` (reference render) badge: a library preview is
+  rendered from the scene file itself - the pose repo clears the stage to one figure per rig, empties the props
+  and switches off everything outside those subjects before the shot - so the picture's headcount is the file's,
+  and the toast reports what the page staged.
 
 - **Pose library entries carry hands, multiple people and props.** The importer now reads 21 MediaPipe hand landmarks
   for every detected person and writes the finger bones from them, so a card keeps an open hand, a fist or a grip

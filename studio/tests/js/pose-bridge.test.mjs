@@ -57,7 +57,8 @@ const STATUS = {
 
 /** pose-lib 的索引 fixture：形状来自摆姿仓库 poseLibrary.js 的 buildIndex（3dpose.index/1）。
     库里一份条目是一整场（people / props 在清单里），条目带 groups / categories / preview，
-    四档预览各留一条，缩略图优先级与分层口径都钉在这份上 */
+    preview 是「档位 → 图」的对象（clay 优先、缺档往下落），库里确有四档全无的条目，
+    缩略图优先级、无预览占位与分层口径都钉在这份上 */
 const POSE_LIB = {
     format: "3dpose.index/1",
     count: 3,
@@ -73,7 +74,7 @@ const POSE_LIB = {
           preview: { clay: "preview/calm-1.clay.png", skeleton: "preview/calm-1.skeleton.png" } },
         { id: "sword", label: "双手持剑", path: "poses/fight/sword.scene.json", kind: "scene",
           people: 2, props: 1, groups: ["fight"], categories: ["格斗", "sword"], source: "preset",
-          preview: { depth: "preview/sword.depth.png" } },
+          preview: {} },
     ],
 };
 
@@ -518,11 +519,17 @@ test("场景库弹窗：卡片按预览优先级出缩略图与人数，点卡�
     assert.ok(fetchLog.some((c) => c.path === "/pose-lib/index.json"), "打开弹窗读一次索引清单");
     const cards = () => [...modal().querySelectorAll(".ns-pose-lib-card")];
     assert.equal(cards().length, 3, "库里三条 = 三张卡");
-    const thumb = (id) => cards().find((c) => c.dataset.libId === id).querySelector(".ns-pose-lib-thumb");
-    assert.equal(thumb("calm-1").getAttribute("src"), "/pose-lib/preview/calm-1.clay.png");
-    assert.equal(thumb("a").getAttribute("src"), "/pose-lib/preview/a.skeleton.png");
-    assert.equal(thumb("sword").getAttribute("src"), "/pose-lib/preview/sword.depth.png");
-    assert.match(cards().find((c) => c.dataset.libId === "calm-1").textContent, /2人/,
+    const card = (id) => cards().find((c) => c.dataset.libId === id);
+    assert.equal(card("calm-1").querySelector(".ns-pose-lib-thumb").getAttribute("src"),
+        "/pose-lib/preview/calm-1.clay.png");
+    assert.equal(card("a").querySelector(".ns-pose-lib-thumb").getAttribute("src"),
+        "/pose-lib/preview/a.skeleton.png");
+    assert.ok(!card("sword").querySelector(".ns-pose-lib-thumb"), "四档全无的条目出占位，不出图");
+    assert.match(card("sword").textContent, /无预览/);
+    assert.ok(card("calm-1").querySelector(".ns-pose-lib-ref") && card("a").querySelector(".ns-pose-lib-ref"),
+        "预览是摆姿仓库对参考图的渲染，卡片要标住它是参考图：参考图版式能把同一个人画两遍");
+    assert.ok(!card("sword").querySelector(".ns-pose-lib-ref"), "没图的卡片不标参考图");
+    assert.match(card("calm-1").textContent, /2人/,
         "多人场景要在卡片副标题上看得见，挑的时候就知道这场有几个人");
     assert.equal(modal().querySelector(".ns-pose-lib-more").hidden, true, "库里只有三条，不出加载更多");
     click(cards().find((c) => c.dataset.libId === "calm-1"));

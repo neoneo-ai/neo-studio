@@ -319,6 +319,21 @@
     background: #000;
 }
 
+.ns-pose-lib-thumbbox { position: relative; }
+
+/* 参考图角标：预览是摆姿仓库对参考图的渲染，图上的人数可以比副标题多，角上说一句 */
+.ns-pose-lib-ref {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    padding: 1px 5px;
+    border-radius: 5px;
+    font-size: 10px;
+    color: var(--ns-dim);
+    background: rgb(0 0 0 / 62%);
+    pointer-events: none;
+}
+
 .ns-pose-lib-noimg {
     display: flex;
     align-items: center;

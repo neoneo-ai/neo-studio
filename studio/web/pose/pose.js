@@ -371,13 +371,19 @@ export function createPoseView({ api, $el, toast }) {
         const libCard = (entry) => {
             const label = entry.label || entry.id;
             const thumb = previewOf(entry);
-            const img = thumb
-                ? $el("img", { className: "ns-pose-lib-thumb", src: `${LIB_PREFIX}/${thumb}`, alt: label, loading: "lazy" })
+            // 预览图是摆姿仓库对着来源参考图渲染的那一张：参考图版式可以把同一个人画两遍
+            // （「手臂绘图参考」就是一张纸两个视角），图上的个数比场景文件里的人数多。
+            // 角上标住这张是参考图，人数只在副标题那一行按场景文件说。
+            const pic = thumb
+                ? $el("div", { className: "ns-pose-lib-thumbbox" }, [
+                    $el("img", { className: "ns-pose-lib-thumb", src: `${LIB_PREFIX}/${thumb}`, alt: label, loading: "lazy" }),
+                    $el("span", { className: "ns-pose-lib-ref", textContent: t("参考图") }),
+                ])
                 : $el("div", { className: "ns-pose-lib-noimg", textContent: t("无预览") });
             const card = $el("button", {
                 className: "ns-pose-lib-card", type: "button", title: label,
                 dataset: { libId: String(entry.id) },
-            }, [img, $el("p", { className: "ns-pose-lib-label", textContent: label }),
+            }, [pic, $el("p", { className: "ns-pose-lib-label", textContent: label }),
                 $el("p", { className: "ns-pose-lib-tags", textContent: libTagsOf(entry) })]);
             card.onclick = () => run(async () => {
                 const file = await libJson(`${LIB_PREFIX}/${entry.path}`);
