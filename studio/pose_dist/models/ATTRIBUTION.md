@@ -50,11 +50,17 @@ npm run import -- "G:/Downloads/Ch38_nonPBR.fbx" --key ch38 --label "男性素�
 
 ## 道具模型（public/models/props/）
 
-| 文件 | 上游文件 | 作者 / 授权 | 说明 |
-|---|---|---|---|
-| `prop_test_box.glb` | 无上游（脚本生成） | 本项目自制 | `scripts/makePropGlb.mjs` 生成的最小 glTF 2.0 箱体，GLB 道具通路（node / E2E 测试）的基准文件 |
-| `arrow.glb` | `ARROW.obj`（本地下载的 ARROW.obj（来源与授权待确认）） | 见来源页授权 | Tony 于 2026-10-25 用 `scripts/importProp.mjs` 导入：.obj → 烘焙 实测主方向→Y、单位 ×1；6346 三角面，上场 0.26×1.00×0.12m |
-| `sting-sword.glb` | `Sting-Sword.glb`（本地下载，来源页与授权待确认） | 见来源页授权 | Tony 于 2026-10-25 用 `scripts/importProp.mjs` 导入：.glb 直通（原拓扑 + 原材质，未去贴图）、单位 ×0.01、根节点把 z 轴立到 +Y；4 网格 / 1234 三角面，上场 0.21 × 1.00 × 0.03 m（长宽比 37:1） |
+| 文件                | 上游文件                                                       | 作者 / 授权          | 说明                                                                                                                                   |
+| :------------------ | :------------------------------------------------------------- | :------------------- | :------------------------------------------------------------------------------------------------------------------------------------- |
+| `prop_test_box.glb` | 无上游（脚本生成）                                             | 本项目自制           | `scripts/makePropGlb.mjs` 生成的最小 glTF 2.0 箱体，GLB 道具通路（node / E2E 测试）的基准文件                                          |
+| `stick.glb`         | 无上游（脚本生成）                                             | 本项目自制           | `node scripts/makePropGlb.mjs --builtin stick` 生成：与内置 `builtin:stick` 同一份零件清单（棍身 + 打击端），随产物分发（可再分发）     |
+| `sword.glb`         | 无上游（脚本生成）                                             | 本项目自制           | `node scripts/makePropGlb.mjs --builtin sword` 生成：与内置 `builtin:sword` 同一份零件清单（刃 / 护手 / 柄 / 首），随产物分发          |
+| `arrow.glb`         | `ARROW.obj`（本地下载的 ARROW.obj（来源与授权待确认））        | 见来源页授权         | Tony 于 2026-10-25 用 `scripts/importProp.mjs` 导入：.obj → 烘焙 实测主方向→Y、单位 ×1；6346 三角面，上场 0.26×1.00×0.12m                |
+| `sting-sword.glb`   | `Sting-Sword.glb`（本地下载，来源页与授权待确认）              | 见来源页授权         | Tony 于 2026-10-25 用 `scripts/importProp.mjs` 导入：.glb 直通（原拓扑 + 原材质，未去贴图）、单位 ×0.01、根节点把 z 轴立到 +Y；4 网格 / 1234 三角面，上场 0.21 × 1.00 × 0.03 m（长宽比 37:1） |
+
+> `stick.glb` / `sword.glb` 是**脚本生成的自制道具**：几何来自 `src/core/propKit.js` 的零件清单，
+> 授权口径与 `prop_test_box.glb` 相同，可随产物与插件包分发（`tools/build_pose_package.ps1` 的
+> GLB 白名单里有它们）；改动零件清单后重跑上面两条命令即可重新生成。
 
 > `arrow.glb` / `sting-sword.glb` 是**本地导入产物**：来源页授权确认之前不随仓库分发（在 `.gitignore` 内，与 `ch38` / `ch07` 同口径）。
 > 克隆后重新生成：`npm run prop:import -- "你的ARROW.obj" --file arrow --label 箭 --source 来源URL --author 我`；

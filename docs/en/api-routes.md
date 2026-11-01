@@ -168,15 +168,11 @@ bridge messages and how to install the package are in [studio-pose.md](studio-po
 | GET      | `/neo-pose`                 | Short path: 302 to `/pose-dist/index.html` when an entry page exists in either landing path, 404 with the install hint when neither has one |
 | GET      | `/pose-dist/{path}`         | Package subresources the iframe loads directly; looked up per request through `<data root>/pose/dist` then `studio/pose_dist` (registered by each host directly, outside the capability table) |
 | GET      | `/models/{path}`            | The origin-root path baked into the build (prop registry `props/index.json`, body and prop `<file>.glb`); same two-level lookup and same root check as `/pose-dist/{path}` |
-| GET      | `/pose-lib/{path}`          | Read-only pose library serving (`index.json`, `poses/**`, `preview/*.png`, `categories.json`); the only root is `<data root>/pose/lib`, every path passes the in-root check, an unsynced library answers 404 (registered by each host directly, outside the capability table) |
-| GET      | `/neo_pose/status`          | Install state, which landing path is live (`dist_source`), the shipped manifest and the GLBs present, capability flags, saved scenes and poses, bridge names, install hint, library state (`lib_dir` / `lib_installed` / `lib_entries` / `lib_bytes`) |
+| GET      | `/pose-lib/{path}`          | Read-only scene library serving (`index.json`, `poses/**` - whole-scene `3dpose.scene/1` - `preview/*.png`, `categories.json`); the only root is `<data root>/pose/lib`, every path passes the in-root check, an unsynced library answers 404 (registered by each host directly, outside the capability table) |
+| GET      | `/neo_pose/status`          | Install state, which landing path is live (`dist_source`), the shipped manifest and the GLBs present, capability flags, saved scenes, bridge names, install hint, library state (`lib_dir` / `lib_installed` / `lib_entries` / `lib_bytes`) |
 | GET      | `/neo_pose/scenes`          | Scene list (`name` / `size` / `mtime`)                                                                          |
 | GET      | `/neo_pose/scene?name=`     | Read one scene                                                                                                  |
 | POST     | `/neo_pose/scene`           | Write a scene (`.tmp` + replace, atomic)                                                                        |
-| GET      | `/neo_pose/presets`         | Pose library list (`name` / `size` / `mtime`, newest first)                                                     |
-| GET      | `/neo_pose/preset?name=`    | Read one pose (PoseFile v1, passed through unchanged)                                                           |
-| POST     | `/neo_pose/preset`          | Write a pose `{name, pose}` (`.tmp` + replace, atomic)                                                          |
-| POST     | `/neo_pose/preset/delete`   | Delete one pose (single item, same name whitelist)                                                              |
 | POST     | `/neo_pose/import_model`    | Write an own-figure GLB to `<data root>/pose/dist/models/<key>.glb`, replies `{key, name, url, size, from}`   |
 | POST     | `/neo_pose/export_image`    | Store the page canvas into `output/Pose`, replies `{filename, subfolder, size}`                               |
 | POST     | `/neo_pose/export_set`      | Store a ControlNet image set into `output/Pose` (≤12 files), replies `{saved, count}`                         |

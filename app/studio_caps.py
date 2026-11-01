@@ -191,8 +191,8 @@ _AGENT = {
 # 按站点根写死的 /models/...，逐条给静态文件打表只会让条目数随构建产物变动），
 # 理由见 studio/pose.py 的 register_static。
 # 照片估点 / 网格 / pano 要 pose-art 那套 Python sidecar，桌面端起不动它，
-# 状态接口的 caps 里这几位是 False，页面据此置灰按钮。姿势库（pose/presets/）与场景一样是数据根里的
-# 文件，删只走 UI 上选中的那一条 /neo_pose/preset/delete，没有「清空姿势库」。
+# 状态接口的 caps 里这几位是 False，页面据此置灰按钮。场景存档是数据根里的文件，删只走 UI 上选中的
+# 那一条 /neo_gallery/delete 式的单条路，没有「清空场景库」；场景库（<数据根>/pose/lib）本身只读。
 # 素体导入（caps 的 body_import）走桌面端自己那条路：随包只发授权干净的 CC0 素体，其余 GLB 由用户
 # 自备，/neo_pose/import_model 把它写进 <数据根>/pose/dist/models/，登记动作留在页面本地导入区。
 _POSE = {
@@ -204,10 +204,6 @@ _POSE = {
     ("GET", "/neo_pose/scenes"),
     ("GET", "/neo_pose/scene"),
     ("POST", "/neo_pose/scene"),
-    ("GET", "/neo_pose/presets"),
-    ("GET", "/neo_pose/preset"),
-    ("POST", "/neo_pose/preset"),
-    ("POST", "/neo_pose/preset/delete"),
 }
 
 # 视频抽帧（studio/frames.py）：抽帧在浏览器里做（video seek + canvas 取帧），本机服务只回两样 ——

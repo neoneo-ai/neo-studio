@@ -4,6 +4,36 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **The 3D Pose page's left panel is one 场景库 (Scene Library) now.** Its pose half - 姿态名, 存为姿态,
+  载入姿态, 删姿态 and 浏览姿势库… - drove the old single-body pose folder
+  (`<data root>/pose/presets/`), and that is exactly the thing the SceneFile migration replaced: every card the
+  library holds is a whole scene (people + props + camera). The panel keeps 场景名, 存为场景, 载入场景 and
+  浏览场景库…; clicking a saved scene loads it in one click, and the browse dialog is a single grid of library
+  cards that apply through `scene/apply`, with 本机场景文件… for a file off the library. The four
+  `/neo_pose/preset*` routes go with it: the library stays read-only, and a scene is the only file this page writes.
+  A card hands its own file to the pose page's `scene/apply` command over `pose:call` - the page stages every person
+  in that scene (adding the missing figures) and applies the scene's own camera, so a two- or three-person card
+  arrives as the whole scene instead of the one figure already on the canvas. When the page cannot stage it, the
+  panel reports the page's own reason and keeps the dialog open. Card subtitles read `N人 · M道具`, so the headcount
+  is visible before picking.
+
+- **Pose library entries carry hands, multiple people and props.** The importer now reads 21 MediaPipe hand landmarks
+  for every detected person and writes the finger bones from them, so a card keeps an open hand, a fist or a grip
+  instead of the flat bind pose; `derived.openpose` gains `hand_keypoints_2d` / `hand_keypoints_3d` (21 × 3 per hand,
+  `hand_order` names the sides). Photos with two side-by-side people become one whole-scene card
+  (`3dpose.scene/1`, `kind: "scene"`) that stages both skeletons and, for the weapon reference folders, a prop
+  attached to the weapon hand - `glb:stick.glb` for 功夫姿势, `glb:sword.glb` for 剑攻击姿势, `builtin:bow` for the
+  bow and archery folders. Both prop GLBs are generated from the procedural parts table
+  (`node scripts/makePropGlb.mjs --builtin <key>`), so they are self-authored and ship with the plugin package; the
+  bundled prop registry lists exactly those two. The pose library dialog badges a scene card with `N人 · M道具`,
+  applies it through the new `scene/apply` action (which tops up the skeleton count, lays them out left to right and
+  restores props by id), and the 3D Pose page's bundled build is regenerated so the hand panel is available offline.
+
+- **The pose importer skips a photo it cannot trust instead of saving a half body.** `--persons` now keeps only
+  people whose legs are visible; a photo whose every detection box fails the phantom check is reported as a failure
+  and nothing is written, and an entry that used to be a single-person pose is replaced in place when it becomes a
+  scene (same id, the other file is pruned, so the library never shows two cards for one photo).
+
 ## [1.5.0] - 2026-10-31
 
 - **The MCP tab works while the window sits on the ComfyUI port.** With LAN listen, or when the desktop attaches to a

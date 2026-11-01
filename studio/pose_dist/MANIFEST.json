@@ -1,23 +1,23 @@
 {
   "format": "3dpose.package/1",
   "generator": "tools/build_pose_package.ps1",
-  "built_utc": "2026-10-30T02:28:34Z",
-  "total_bytes": 4118751,
+  "built_utc": "2026-11-01T02:52:31Z",
+  "total_bytes": 4203009,
   "files": [
     {
-      "path": "assets/index-CO24L2vj.js",
-      "bytes": 1136111,
-      "sha256": "e0b7f84ea673e49d6be678e04a798d5169e0317aa0ab4a69b4d5cf573e737e66"
+      "path": "assets/index-COkP6ZQ7.js",
+      "bytes": 1148812,
+      "sha256": "58ed0b3345befa4c3e74ec83ae764abfc8d1ab4b513734b47a80bf6b99770271"
     },
     {
-      "path": "assets/index-CR1FdUgI.css",
-      "bytes": 29270,
-      "sha256": "cf8d1201d2100d34c08a2ea3a59235f33d91fa629975661ad9db4215fecd6fd9"
+      "path": "assets/index-pXEjtHEe.css",
+      "bytes": 31043,
+      "sha256": "9c70c198d65c21b5fc30fca017631ffc4f29eebcaa45da1cf81e261d7372f29e"
     },
     {
       "path": "index.html",
-      "bytes": 15419,
-      "sha256": "16f927bc4b5476fbb7711949a5a313d871ec958914c62d532a84d334205ab8ce"
+      "bytes": 15449,
+      "sha256": "80dd3403bb41573f1a2686c76c495e23d94d8450d4637369355d5b8c7e76fbf0"
     },
     {
       "path": "LICENSE",
@@ -26,13 +26,23 @@
     },
     {
       "path": "models/ATTRIBUTION.md",
-      "bytes": 5403,
-      "sha256": "6996f7c16935ecbc6677f8a132a1add7cf45b0b309bd454276847f3caf6f089b"
+      "bytes": 6918,
+      "sha256": "26be9011ca51bf5a45f240d38197cfc816e700333a641ca18758923dec568343"
     },
     {
       "path": "models/props/index.json",
-      "bytes": 631,
-      "sha256": "5a58247cddae76d0268055a0a947bc1a80703ff23f2719ea0397cbc96d95d4df"
+      "bytes": 814,
+      "sha256": "b9d898fac1f9f9078e635596bcc8ce3f3dcf576ea8f8cf921b4a50cfceb26e4c"
+    },
+    {
+      "path": "models/props/stick.glb",
+      "bytes": 14536,
+      "sha256": "60fd2f86e0e0adbf723a532be8ee90d462a2cadc9cd7183bcddec5a1e49b5cce"
+    },
+    {
+      "path": "models/props/sword.glb",
+      "bytes": 53520,
+      "sha256": "0c852730ad27c2860eda16cdc0fd5ae989621f6416c4789eb712599480d18583"
     },
     {
       "path": "models/ybot.glb",

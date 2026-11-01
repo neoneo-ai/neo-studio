@@ -152,15 +152,11 @@ Neo Studio 独立页面（`web/studio/index.html`）的后端。素材 / 生图 
 | GET    | `/neo-pose`                 | 摆姿页短路径：两级落点里有入口页就 302 到 `/pose-dist/index.html`，都没有回 404 与安装提示 |
 | GET    | `/pose-dist/{path}`         | 摆姿包子资源，由 iframe 内部直接加载；逐请求按 `<数据根>/pose/dist` → `studio/pose_dist` 两级找（两端各自直接注册，不进能力归属表） |
 | GET    | `/models/{path}`            | 产物里写死的根路径前缀（道具注册表 `props/index.json`、素体与道具的 `<file>.glb`）；与 `/pose-dist/{path}` 同一套两级查找、同一个根内校验 |
-| GET    | `/pose-lib/{path}`          | 姿势库的只读伺服（`index.json`、`poses/**`、`preview/*.png`、`categories.json`）；落点只有 `<数据根>/pose/lib`，逐条过根内校验，未同步回 404（两端各自直接注册，不进能力归属表） |
-| GET    | `/neo_pose/status`          | 装没装、生效那一级（`dist_source`）、随包清单与在着的 GLB、能力位、已存场景与姿态、桥消息名单、缺包提示、库状态（`lib_installed` / `lib_entries` / `lib_bytes` / `lib_dir`） |
+| GET    | `/pose-lib/{path}`          | 场景库的只读伺服（`index.json`、`poses/**`（整场 `3dpose.scene/1`）、`preview/*.png`、`categories.json`）；落点只有 `<数据根>/pose/lib`，逐条过根内校验，未同步回 404（两端各自直接注册，不进能力归属表） |
+| GET    | `/neo_pose/status`          | 装没装、生效那一级（`dist_source`）、随包清单与在着的 GLB、能力位、已存场景、桥消息名单、缺包提示、库状态（`lib_installed` / `lib_entries` / `lib_bytes` / `lib_dir`） |
 | GET    | `/neo_pose/scenes`          | 场景列表（`name` / `size` / `mtime`）                                        |
 | GET    | `/neo_pose/scene?name=`     | 读一份场景                                                                   |
 | POST   | `/neo_pose/scene`           | 写场景（`.tmp` + replace 原子落盘）                                          |
-| GET    | `/neo_pose/presets`         | 姿势库列表（`name` / `size` / `mtime`，按修改时间倒序）                      |
-| GET    | `/neo_pose/preset?name=`    | 读一份姿态（PoseFile v1 原样交回）                                           |
-| POST   | `/neo_pose/preset`          | 写姿态 `{name, pose}`（`.tmp` + replace 原子落盘）                           |
-| POST   | `/neo_pose/preset/delete`   | 删一份姿态（单条，名字过同一套白名单）                                       |
 | POST   | `/neo_pose/import_model`    | 自备素体 GLB 写进 `<数据根>/pose/dist/models/<key>.glb`，回 `{key, name, url, size, from}` |
 | POST   | `/neo_pose/export_image`    | 页面画布导出落进 `output/Pose`，回 `{filename, subfolder, size}`             |
 | POST   | `/neo_pose/export_set`      | ControlNet 图组落进 `output/Pose`（≤12 张），回 `{saved, count}`             |

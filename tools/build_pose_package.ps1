@@ -6,9 +6,10 @@
 #   ybot.glb                              CC0（PixelMannen 的 Y Bot）—— 唯一写明可自由使用
 #   soldier / ch38 / ch07                 Mixamo 素材，条款与 three.js 的 MIT 不等价，不随包发
 #   body1391 / body-*-thumbnail(.glb)     SMPL 派生几何（Max Planck 授权，用户自备），不入库
-#   props/*.glb                           自制 1 个 + 来源授权待确认 2 个 + 未登记 3 个，全部不随包发
-# 道具注册表是页面运行期读的文件（models/props/index.json），清空 props 数组就等于只发货程序化道具
-# —— 注册表里列一个 dist 里没有的 GLB 就是发一条点了只会失败的控件，所以清表与清文件是同一件事。
+#   props/stick.glb · props/sword.glb     本项目自制（scripts/makePropGlb.mjs 从 propKit 零件清单生成），随包发
+#   props/arrow · sting-sword · 枪械      本地导入，来源页授权待确认 —— 不随包发
+# 道具注册表是页面运行期读的文件（models/props/index.json）：只留随包发了的那两条，
+# 注册表里列一个 dist 里没有的 GLB 就是发一条点了只会失败的控件，所以清单裁剪与文件拷贝是同一件事。
 #
 # 源 map（4.4 MB，占全产物 27%）不进包：产物只有一条 //# sourceMappingURL，浏览器只在 devtools
 # 打开时取它，随包发只会让每个用户多下载 4.4 MB 而运行行为一点不变。map 留在摆姿仓库与数据根全量
@@ -33,9 +34,13 @@ $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 
 # 随包 GLB 白名单：加任何一个都要先在摆姿仓库的 ATTRIBUTION 里有可再分发的授权行
 $allowedGlb = @("ybot.glb")
-# 包体积上限：代码 1.1 MB + Y Bot 2.8 MB 实测 4.0 MB，留 0.5 MB 余量给产物增长
+# 随包道具 GLB：只有本项目自制（scripts/makePropGlb.mjs 从 propKit 零件清单生成）的两份。
+# 本地导入的道具（arrow / sting-sword / 枪械）来源授权待确认，一律不随包 —— 注册表里也不登记。
+$allowedPropGlb = @("stick.glb", "sword.glb")
+# 包体积上限：代码 1.1 MB + Y Bot 2.8 MB + 自制道具 0.07 MB 实测 4.19 MB，留 0.3 MB 余量给产物增长
 $maxPackageBytes = 4.5 * 1MB
-$required = @("index.html", "LICENSE", "models/ATTRIBUTION.md", "models/ybot.glb", "models/props/index.json")
+$required = @("index.html", "LICENSE", "models/ATTRIBUTION.md", "models/ybot.glb", "models/props/index.json",
+              "models/props/stick.glb", "models/props/sword.glb")
 $assetExt = @(".js", ".css", ".wasm", ".json", ".woff", ".woff2", ".ttf", ".ktx2")
 
 function Fail([string]$msg) { Write-Host $msg -ForegroundColor Red; exit 1 }
@@ -67,11 +72,22 @@ $src = (Resolve-Path -LiteralPath $src).Path
 $stage = Join-Path ([System.IO.Path]::GetTempPath()) ("pose_pkg_" + [Guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Force -Path $stage | Out-Null
 try {
-    # 1. 入口页与许可证：入口页每次校验，许可证是产物目录里现成的那份
+    # 1. 入口页与许可证：入口页每次校验；许可证优先取产物目录里那份，
+    #    没有就退回摆姿仓库根 —— vite 只拷 public/，dist 里通常不带 LICENSE
     Copy-File (Join-Path $src "index.html") $stage "index.html"
-    foreach ($name in @("LICENSE", "LICENSE.md", "NOTICE", "NOTICE.md")) {
-        $lic = Join-Path $src $name
-        if (Test-Path -LiteralPath $lic -PathType Leaf) { Copy-File $lic $stage $name; break }
+    $licRoots = @($src)
+    if ($Source) { $licRoots += (Resolve-Path -LiteralPath $Source).Path }
+    $licDone = $false
+    foreach ($root in $licRoots) {
+        foreach ($name in @("LICENSE", "LICENSE.md", "NOTICE", "NOTICE.md")) {
+            $lic = Join-Path $root $name
+            if (Test-Path -LiteralPath $lic -PathType Leaf) {
+                Copy-File $lic $stage $name
+                $licDone = $true
+                break
+            }
+        }
+        if ($licDone) { break }
     }
 
     # 2. 代码：vite 的 assets/ 全量带（js/css/wasm/字体），只摘掉 *.map
@@ -99,13 +115,20 @@ try {
         }
     }
 
-    # 4. 素材：GLB 只带白名单里那一个，道具注册表清空（程序化道具照旧可用，GLB 道具走自备导入）
+    # 4. 素材：素体只带白名单那一个；道具 GLB 只带自制那两份（注册表跟着只留这两条）
     foreach ($glb in $allowedGlb) {
         $p = Join-Path $src (Join-Path "models" $glb)
         if (-not (Test-Path -LiteralPath $p -PathType Leaf)) {
             Fail "随包素体缺失：$p（页面内置清单里的 $glb 不在，页面上就一个 GLB 素体都选不到）"
         }
         Copy-File $p $stage "models\$glb"
+    }
+    foreach ($glb in $allowedPropGlb) {
+        $p = Join-Path $src (Join-Path "models\props" $glb)
+        if (-not (Test-Path -LiteralPath $p -PathType Leaf)) {
+            Fail "随包道具缺失：$p（先跑 node scripts/makePropGlb.mjs --builtin <key> --register 生成）"
+        }
+        Copy-File $p $stage "models\props\$glb"
     }
     $attr = Join-Path $src "models\ATTRIBUTION.md"
     if (Test-Path -LiteralPath $attr -PathType Leaf) { Copy-File $attr $stage "models\ATTRIBUTION.md" }
@@ -114,7 +137,9 @@ try {
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $regDest) | Out-Null
     if (Test-Path -LiteralPath $reg -PathType Leaf) {
         $data = Get-Content -LiteralPath $reg -Raw -Encoding utf8 | ConvertFrom-Json
-        $clean = [ordered]@{ _readme = $data._readme; props = @() }
+        # 只留随包发了的那两个 GLB：列表里出现一个包里没有的文件，就是发一条点了只会失败的控件
+        $keep = @($data.props | Where-Object { $allowedPropGlb -contains $_.file })
+        $clean = [ordered]@{ _readme = $data._readme; props = $keep }
         Write-Text $regDest (($clean | ConvertTo-Json -Depth 6) + "`n")
     } else {
         Write-Text $regDest "{`"props`": []}`n"
@@ -151,8 +176,8 @@ try {
     }
     $forbidden = @($rows | Where-Object {
         ($_.path -like "*.map") -or
-        ($_.path -like "models/*.glb" -and $allowedGlb -notcontains (Split-Path -Leaf $_.path)) -or
-        ($_.path -like "models/props/*.glb") -or
+        ($_.path -like "models/*.glb" -and $_.path -notlike "models/props/*" -and $allowedGlb -notcontains (Split-Path -Leaf $_.path)) -or
+        ($_.path -like "models/props/*.glb" -and $allowedPropGlb -notcontains (Split-Path -Leaf $_.path)) -or
         ($_.path -like "models/*.json" -and $_.path -notlike "models/props/*") -or
         ($_.path -like "*animation-demo*")
     })
@@ -176,8 +201,10 @@ try {
 
     $outFiles = @(Get-ChildItem -LiteralPath $outDir -Recurse -File)
     Write-Host "最小摆姿包已落进 $outDir" -ForegroundColor Green
-    Write-Host ("  {0} 个文件，{1:N2} MB（上限 {2:N1} MB），GLB 素体 {3} 份" -f `
-        $outFiles.Count, ($total / 1MB), ($maxPackageBytes / 1MB), (@($outFiles | Where-Object { $_.Extension -eq ".glb" }).Count))
+    Write-Host ("  {0} 个文件，{1:N2} MB（上限 {2:N1} MB），GLB 素体 {3} 份 · 自制道具 {4} 份" -f `
+        $outFiles.Count, ($total / 1MB), ($maxPackageBytes / 1MB),
+        (@($outFiles | Where-Object { $_.Extension -eq ".glb" -and $_.Directory.Name -ne "props" }).Count),
+        (@($outFiles | Where-Object { $_.Extension -eq ".glb" -and $_.Directory.Name -eq "props" }).Count))
     Write-Host "  清单见 MANIFEST.json（逐文件 sha256）；未随包的 GLB 走宿主面板「自备素体」导入"
     exit 0
 } finally {

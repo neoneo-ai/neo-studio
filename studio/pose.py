@@ -36,16 +36,15 @@ routes = web.RouteTableDef()
 POSE_DIR = plugin_paths.DATA_ROOT / "pose"
 DIST_DIR = POSE_DIR / "dist"
 SCENES_DIR = POSE_DIR / "scenes"
-PRESETS_DIR = POSE_DIR / "presets"
 INDEX_HTML = DIST_DIR / "index.html"
 # 随包分发的最小摆姿包：与插件代码同批进 Registry 包与 exe，用户不跑同步脚本也能开页面。
 # 它是可重建的产物镜像（tools\build_pose_package.ps1 的落点），运行期只读，任何写入都不落这里。
 PACKAGE_DIST = Path(__file__).parent / "pose_dist"
 MODELS_DIR = DIST_DIR / "models"          # 自备素体 GLB 的落点（页面按 <key>.glb 取它）
 MANIFEST_NAME = "MANIFEST.json"           # 随包发货清单：逐文件 sha256 与体积
-# 姿势库（3d-pose-art 的 pose-lib 库数据）：另一级数据根内容，由 tools\sync_pose_lib.ps1 同步进来，
-# 本模块全程只读。库里一份 poses/<组>/<id>.pose.json 与姿势库存的是同一形状（PoseFile v1），
-# 所以宿主弹窗取一条库条目 = 读那个文件 + 一次 pose/apply，不需要转换。
+# 场景库（3d-pose-art 的 pose-lib 库数据）：另一级数据根内容，由 tools\sync_pose_lib.ps1 同步进来，
+# 本模块全程只读。库里一份条目是一整场场景文件（poses/<组>/<id>.scene.json，3dpose.scene/1：多人 + 道具），
+# 宿主弹窗按 entry.path 读它交回 scene/apply，不需要转换。
 LIB_DIR = POSE_DIR / "lib"
 
 # 摆姿页与它的子资源都走这条前缀：vite 产物是 base:'./' 的相对 import，页面必须落在有目录深度的
@@ -60,8 +59,8 @@ PAGE_URL = f"{STATIC_PREFIX}/index.html"
 # 打开时这些请求落回 origin 根，前缀伺服一条都接不到。注册表读空的页面不会报错，
 # 它按空注册表出控件清单 —— 道具面板空着，加具全部失败，GLB 素体一个都加载不出来。
 MODELS_PREFIX = "/models"
-# 姿势库的静态前缀与摆姿包同一条路子：库里 index.json、poses/**.pose.json 与 preview/*.png
-# 由宿主弹窗逐条取（缩略图与姿态文件都是库自己的文件），逐条打表没有意义，不进 /neo 命名空间。
+# 场景库的静态前缀与摆姿包同一条路子：库里 index.json、poses/**.scene.json 与 preview/*.png
+# 由宿主弹窗逐条取（缩略图与场景文件都是库自己的文件），逐条打表没有意义，不进 /neo 命名空间。
 # 前缀名与摆姿仓库自己的那条 `/pose-lib/` 同名：库条目的 preview.path 与 entry.path 原样拼地址，
 # 宿主与摆姿页对同一份库文件说的是同一个名字。
 LIB_PREFIX = "/pose-lib"
@@ -88,7 +87,6 @@ NOT_INSTALLED_HINT = ("未找到摆姿包：<数据根>/pose/dist 与插件目�
 
 SCENE_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.\-]{0,63}")   # 首字符必须是字母数字：挡掉 ".." 与隐藏名
 IMAGE_EXT = {".png", ".jpg", ".jpeg", ".webp"}
-PRESET_SUFFIX = ".pose.json"      # 姿势库里一份姿态的文件名：<姿态名>.pose.json
 MAX_BODY_BYTES = 48 * 1024 * 1024
 # ControlNet 图组一次最多几张：一个视角 6 档，留两个视角的量（面板就是这两档组合）
 MAX_SET_FILES = 12
@@ -156,10 +154,10 @@ def _dist_response(rel: str) -> web.StreamResponse:
 
 
 async def pose_lib(request):
-    """姿势库的静态伺服：`index.json`、`poses/**.pose.json`、`preview/*.png`、`categories.json`。
+    """场景库的静态伺服：`index.json`、`poses/**.scene.json`、`preview/*.png`、`categories.json`。
 
     库只有数据根那一级（`<数据根>/pose/lib`），由 `tools\\sync_pose_lib.ps1` 同步进来，本模块只读它：
-    库里一份条目就是画布导出的 PoseFile，弹窗按 `entry.path` 读它再走一次 `pose/apply`。
+    库里一份条目就是一整场场景文件（3dpose.scene/1），弹窗按 `entry.path` 读它再走一次 `scene/apply`。
     未同步时整条前缀回 404 —— 弹窗先看 `/neo_pose/status` 的 `lib_installed` 出同步指引，
     不让用户翻进一个空库。
     """
@@ -251,60 +249,6 @@ async def pose_save_scene(request):
     if not isinstance(scene, dict):
         return _bad_request("scene 需是 JSON 对象")
     await asyncio.to_thread(_write_json_atomic, SCENES_DIR / f"{name}.json", scene)
-    return web.json_response({"success": True, "name": name})
-
-
-@routes.get("/neo_pose/presets")
-async def pose_list_presets(request):
-    """姿势库列表：摆姿页导出的单份姿态（PoseFile v1），与场景分开存。"""
-    return web.json_response({"success": True, "presets": _preset_rows()})
-
-
-@routes.get("/neo_pose/preset")
-async def pose_get_preset(request):
-    """读一份姿态：整份 PoseFile 交回宿主，宿主再经 pose:call 装进画布。"""
-    name = request.rel_url.query.get("name", "")
-    if not SCENE_NAME_RE.fullmatch(name):
-        return _bad_request("姿态名只允许字母数字与 _ . -（64 字符内）")
-    path = PRESETS_DIR / f"{name}.pose.json"
-    if not path.is_file():
-        return web.json_response({"success": False, "error": f"姿态不存在：{name}"}, status=404)
-    try:
-        pose = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        return web.json_response({"success": False, "error": f"姿态读取失败：{exc}"}, status=500)
-    return web.json_response(_json_safe({"success": True, "name": name, "pose": pose}))
-
-
-@routes.post("/neo_pose/preset")
-async def pose_save_preset(request):
-    """姿态落盘：画布导出的 PoseFile 原样存，字段语义由摆姿页定义（v1）。"""
-    data, err = await _json_body(request)
-    if err is not None:
-        return err
-    name = str(data.get("name", ""))
-    if not SCENE_NAME_RE.fullmatch(name):
-        return _bad_request("姿态名只允许字母数字与 _ . -（64 字符内）")
-    pose = data.get("pose")
-    if not isinstance(pose, dict):
-        return _bad_request("pose 需是 JSON 对象")
-    await asyncio.to_thread(_write_json_atomic, PRESETS_DIR / f"{name}.pose.json", pose)
-    return web.json_response({"success": True, "name": name})
-
-
-@routes.post("/neo_pose/preset/delete")
-async def pose_delete_preset(request):
-    """删一份姿态：只接受 UI 上选中的那一个名字，不提供清空姿势库。"""
-    data, err = await _json_body(request)
-    if err is not None:
-        return err
-    name = str(data.get("name", ""))
-    if not SCENE_NAME_RE.fullmatch(name):
-        return _bad_request("姿态名只允许字母数字与 _ . -（64 字符内）")
-    path = PRESETS_DIR / f"{name}.pose.json"
-    if not path.is_file():
-        return web.json_response({"success": False, "error": f"姿态不存在：{name}"}, status=404)
-    await asyncio.to_thread(path.unlink)
     return web.json_response({"success": True, "name": name})
 
 
@@ -462,7 +406,7 @@ def status_payload() -> dict:
         "manifest_bytes": int(manifest.get("total_bytes") or 0),
         "data_root": str(plugin_paths.DATA_ROOT),
         "assets_bytes": _tree_bytes((active or DIST_DIR) / "assets"),
-        # 姿势库与摆姿包各一级：库里一份姿态就是画布导出的 PoseFile，宿主弹窗按 entry.path 读它。
+        # 场景库与摆姿包各一级：库里一份条目是一整场场景文件（3dpose.scene/1），宿主弹窗按 entry.path 读它。
         # 未同步时 lib_entries 是 0，弹窗出同步指引而不是一个空浏览器。
         "lib_dir": str(LIB_DIR),
         "lib_installed": lib_entries > 0,
@@ -471,7 +415,6 @@ def status_payload() -> dict:
         "caps": dict(BRIDGE_CAPS),
         "bridge": list(BRIDGE_MESSAGES),
         "scenes": _scene_rows(),
-        "presets": _preset_rows(),
         "hint": "" if active is not None else NOT_INSTALLED_HINT,
     }
 
@@ -515,21 +458,8 @@ def _scene_rows() -> list:
     return sorted(rows, key=lambda row: -row["mtime"])
 
 
-def _preset_rows() -> list:
-    """姿势库列表：名字去掉 .pose.json 后缀 —— 接口上的姿态名就是这个名字。"""
-    rows = []
-    try:
-        for path in PRESETS_DIR.glob(f"*{PRESET_SUFFIX}"):
-            stat = path.stat()
-            rows.append({"name": path.name[:-len(PRESET_SUFFIX)],
-                         "size": stat.st_size, "mtime": int(stat.st_mtime)})
-    except OSError:
-        return []
-    return sorted(rows, key=lambda row: -row["mtime"])
-
-
 def _lib_entries() -> int:
-    """姿势库的条目数：`<数据根>/pose/lib/index.json` 的 `entries` 数组长度。
+    """场景库的条目数：`<数据根>/pose/lib/index.json` 的 `entries` 数组长度。
 
     读不出（缺文件 / 坏 JSON / 缺 entries）报 0，status 按 0 报「未同步」：库没同步时宿主弹窗
     出同步指引，而不是一个空浏览器 —— 与摆姿包缺包出提示是同一口径。

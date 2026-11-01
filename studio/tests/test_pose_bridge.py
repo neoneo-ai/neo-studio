@@ -2,7 +2,7 @@
 """「3D 摆姿」桥接口（studio/pose.py）离线单测。
 
 摆姿页在 iframe 里跑，桥的契约是消息名而不是代码：宿主页面、摆姿页、这份用例三处同名，
-所以先把消息名与能力位钉死。其余用例覆盖 dist 子资源的路径包含、场景与姿势库落盘、ControlNet
+所以先把消息名与能力位钉死。其余用例覆盖 dist 子资源的路径包含、场景落盘与场景库伺服、ControlNet
 图组导出到素材库，以及「摆姿包没装」这条用户一定会撞上的路。全程只在根 conftest.py
 钉住的临时数据根里读写。
 """
@@ -198,27 +198,28 @@ class DistAssetTests(_PoseCase):
 
 
 class LibAssetTests(_PoseCase):
-    """姿势库（pose-lib 的库数据）：`/pose-lib/` 一条前缀伺服数据根那一级，全程只读。"""
+    """场景库（pose-lib 的库数据）：`/pose-lib/` 一条前缀伺服数据根那一级，全程只读。"""
 
     def index(self) -> Path:
         return self.write(pose.LIB_DIR / "index.json", json.dumps(
             {"format": "3dpose.index/1", "count": 2,
              "groups": [{"key": "stand", "label": "站立", "count": 2}],
-             "entries": [{"id": "a", "label": "A-Pose", "path": "poses/stand/a.pose.json",
+             "entries": [{"id": "a", "label": "A-Pose", "path": "poses/stand/a.scene.json",
                           "groups": ["stand"], "preview": {"clay": "preview/a.clay.png"}},
-                         {"id": "b", "label": "Rest", "path": "poses/stand/b.pose.json",
+                         {"id": "b", "label": "Rest", "path": "poses/stand/b.scene.json",
                           "groups": ["stand"], "preview": {}}]}))
 
-    def test_lib_index_serves_json_and_its_pose_file(self):
+    def test_lib_index_serves_json_and_its_scene_file(self):
         self.index()
-        self.write(pose.LIB_DIR / "poses" / "stand" / "a.pose.json", '{"format":"pose-file/v1","rig":{}}')
+        self.write(pose.LIB_DIR / "poses" / "stand" / "a.scene.json",
+                   '{"format":"3dpose.scene/1","subjects":[]}')
         resp = _run(pose.pose_lib, _request(match_info={"path": "index.json"}))
         self.assertEqual(resp.status, 200)
         self.assertEqual(resp.headers["Content-Type"], "application/json")
-        got = _run(pose.pose_lib, _request(match_info={"path": "poses/stand/a.pose.json"}))
+        got = _run(pose.pose_lib, _request(match_info={"path": "poses/stand/a.scene.json"}))
         self.assertEqual(got.status, 200)
         self.assertEqual(got.headers["Content-Type"], "application/json")
-        # 库文件会被同步脚本重新生成：不许长缓存，改库后刷新页面要拿到新的姿态
+        # 库文件会被同步脚本重新生成：不许长缓存，改库后刷新页面要拿到新的场景
         self.assertEqual(got.headers["Cache-Control"], "no-cache")
 
     def test_lib_dir_read_serves_index(self):
@@ -285,39 +286,6 @@ class SceneTests(_PoseCase):
     def test_scene_body_must_be_an_object(self):
         resp = _run(pose.pose_save_scene, _request(body={"name": "unit_a", "scene": "[]"}))
         self.assertEqual(resp.status, 400)
-
-
-class PresetTests(_PoseCase):
-    """姿势库存的是画布导出的整份 PoseFile（v1）：字段语义由摆姿页定义，插件只搬运。"""
-
-    POSE_FILE = {"format": "pose-file/v1", "rig": {"id": "v1:humanoid_full",
-                                                    "bones": [{"name": "head", "x": 1.2}]}}
-
-    def setUp(self):
-        super().setUp()
-        pose.PRESETS_DIR.mkdir(parents=True, exist_ok=True)
-
-    def test_preset_save_list_read_delete(self):
-        resp = _run(pose.pose_save_preset, _request(body={"name": "unit_wave", "pose": self.POSE_FILE}))
-        self.assertEqual(resp.status, 200)
-        path = pose.PRESETS_DIR / "unit_wave.pose.json"
-        self.created.append(path)
-        self.assertEqual(json.loads(path.read_text(encoding="utf-8"))["rig"]["bones"][0]["name"], "head")
-        rows = json.loads(_run(pose.pose_list_presets, _request()).body)["presets"]
-        self.assertEqual([row["name"] for row in rows], ["unit_wave"], "列表名字不带 .pose.json 后缀")
-        got = json.loads(_run(pose.pose_get_preset, _request(query={"name": "unit_wave"})).body)
-        self.assertEqual(got["pose"]["format"], "pose-file/v1")
-        self.assertEqual(_run(pose.pose_delete_preset, _request(body={"name": "unit_wave"})).status, 200)
-        self.assertFalse(path.is_file())
-
-    def test_preset_name_and_payload_validation(self):
-        for name in ("a/b", "..", "a\\b", "x" * 65, ""):
-            self.assertEqual(_run(pose.pose_save_preset, _request(body={"name": name, "pose": {}})).status, 400,
-                             f"姿态名 {name!r} 要挡住")
-            self.assertEqual(_run(pose.pose_get_preset, _request(query={"name": name})).status, 400)
-        self.assertEqual(_run(pose.pose_save_preset, _request(body={"name": "unit_a", "pose": "[]"})).status, 400)
-        self.assertEqual(_run(pose.pose_get_preset, _request(query={"name": "unit_gone"})).status, 404)
-        self.assertEqual(_run(pose.pose_delete_preset, _request(body={"name": "unit_gone"})).status, 404)
 
 
 class _GalleryStubCase(_PoseCase):
@@ -403,8 +371,7 @@ class ExportSetTests(_GalleryStubCase):
 
 GLB_STUB = b"glTF\x02\x00\x00\x00" + bytes(64)
 
-PATCHED = ("DIST_DIR", "PACKAGE_DIST", "MODELS_DIR", "INDEX_HTML", "SCENES_DIR",
-           "PRESETS_DIR", "MAX_GLB_BYTES")
+PATCHED = ("DIST_DIR", "PACKAGE_DIST", "MODELS_DIR", "INDEX_HTML", "SCENES_DIR", "MAX_GLB_BYTES")
 
 
 class PackageDistTests(_GalleryStubCase):
@@ -426,7 +393,6 @@ class PackageDistTests(_GalleryStubCase):
         pose.MODELS_DIR = self.data_dist / "models"
         pose.INDEX_HTML = self.data_dist / "index.html"
         pose.SCENES_DIR = root / "scenes"
-        pose.PRESETS_DIR = root / "presets"
         pose.plugin_paths.DATA_ROOT = root
 
     def tearDown(self):

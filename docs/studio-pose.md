@@ -10,13 +10,14 @@
 | 落点                       | 内容                                                            | 怎么来                                                       |
 |----------------------------|-----------------------------------------------------------------|--------------------------------------------------------------|
 | `<数据根>/pose/dist/`      | 全量产物，含 `*.map`，约 16MB                                   | `tools\sync_pose_dist.ps1`                                   |
-| `studio/pose_dist/`        | 最小授权副本，代码 + CC0 素体，3.9MB                            | `tools\build_pose_package.ps1`，随 Registry 包与 exe 分发    |
+| `studio/pose_dist/`        | 最小授权副本，代码 + CC0 素体 + 自制道具，约 4.2MB               | `tools\build_pose_package.ps1`，随 Registry 包与 exe 分发    |
 
 随包那份按**授权口径**取舍，不按体积：`models/ATTRIBUTION.md` 里只有 `ybot.glb`（CC0，PixelMannen 的
-Y Bot）写明可自由再分发，所以它是唯一随包的 GLB；Mixamo（`soldier` / `ch38` / `ch07`）与 SMPL 派生
-（`body1391` 与三份缩略图）各自条款仅限个人使用，道具 GLB 来源待确认，全都不入库。道具注册表
-`models/props/index.json` 清空 `props` 数组 —— 注册表里列一个包里没发的 GLB，等于发一条点了只会失败的
-控件，清表与清文件是同一件事，程序化道具照旧可用。`*.map` 不进包：产物只有一条 `sourceMappingURL`，
+Y Bot）与自制的 `props/stick.glb` / `props/sword.glb`（`scripts/makePropGlb.mjs` 从 `propKit` 零件清单生成）
+写明可自由再分发，所以它们随包；Mixamo（`soldier` / `ch38` / `ch07`）、SMPL 派生（`body1391` 与三份缩略图）
+与本地导入的道具（`arrow` / `sting-sword` / 枪械，来源待确认）全都不入库。道具注册表
+`models/props/index.json` 只留随包发了的那两条 —— 注册表里列一个包里没发的 GLB，等于发一条点了只会失败的
+控件，清表与清文件是同一件事，程序化道具（`builtin:*`）照旧可用。`*.map` 不进包：产物只有一条 `sourceMappingURL`，
 浏览器只在 devtools 打开时取它，发出去只让每个用户多下载 4.4MB。包里另带 `LICENSE`、
 `THIRD-PARTY.md`（terser 删掉的上游许可横幅补在这里）与 `MANIFEST.json`（逐文件 `bytes` + `sha256`）。
 产物里烘进的开发机绝对路径（素体注册表的 `sourceImage`）在打包时清掉，随包发不出去。
@@ -34,17 +35,17 @@ pwsh tools\sync_pose_dist.ps1 -Source <3d-pose-art 仓库根>            # 全�
 `LICENSE` / `NOTICE` 一并落进产物目录（摆姿包是 MIT 作品，装机副本必须带着它的许可证与致谢）。
 装完刷新页面就生效：装没装是逐请求判断的，不必重启窗口。
 
-## 姿势库（pose-lib）
+## 场景库（pose-lib）
 
-库里是摆姿仓库攒下来的那批姿态与它们的预览图，落点只有一级：`<数据根>/pose/lib/`。库不进随包副本 ——
+库里是摆姿仓库攒下来的那批整场与它们的预览图，落点只有一级：`<数据根>/pose/lib/`。库不进随包副本 ——
 授权口径与摆姿包不同，`tools\build_pose_package.ps1` 不打包它 —— 只由同步脚本落地。整目录当缓存看待：
-随时可删可重同步。`pose/` 下的 `scenes/`、`presets/` 是用户写的东西，不在镜像范围内。
+随时可删可重同步。`pose/` 下的 `scenes/` 是用户写的东西，不在镜像范围内。
 
-| 落点                           | 内容                                                            | 怎么来                    |
+| 落点                               | 内容                                                                | 怎么来                         |
 |--------------------------------|-----------------------------------------------------------------|---------------------------|
-| `<数据根>/pose/lib/poses/`     | 一条姿态一个 `.pose.json`（画布导出的那份 PoseFile 原样）       | `tools\sync_pose_lib.ps1` |
-| `<数据根>/pose/lib/preview/`   | `<id>.<档位>.png`：`clay` / `skeleton` / `silhouette` / `depth` | 同上                      |
-| `<数据根>/pose/lib/index.json` | 逐条 `id / label / groups / categories / tags / path / preview` | 摆姿仓库的 `npm run lib`  |
+| `<数据根>/pose/lib/poses/`          | 一条一张 `.scene.json`（`3dpose.scene/1`：多人 + 道具 + 视角）                     | `tools\sync_pose_lib.ps1`   |
+| `<数据根>/pose/lib/preview/`        | `<id>.<档位>.png`：`clay` / `skeleton` / `silhouette` / `depth`      | 同上                          |
+| `<数据根>/pose/lib/index.json`      | 逐条 `id / label / groups / categories / tags / path / preview`     | 摆姿仓库的 `npm run lib`         |
 
 清单由摆姿仓库生成、同步原样带过来：`-Source` 指仓库根或它的 `pose-lib` 都接，缺 `index.json` 与
 `poses\` 时脚本直接退出并把该跑的那条 `npm run lib -- reindex` 报出来。库里手改 `poses/` 不动清单，
@@ -65,8 +66,8 @@ pwsh tools\sync_pose_lib.ps1 -Source <3d-pose-art 仓库根> -All   # 四档全�
 空路径与前缀指到的目录都落到 `index.json`，文件不在回 `404` —— 库没同步与库里缺文件是同一个答案，
 弹窗按清单读不读得到判断（`index.json` 读不成就是没同步），不让用户翻进一个空库。库里每次同步都重写
 文件，整条前缀因此回 `Cache-Control: no-cache`：长缓存会把重同步之后的清单与预览图停在上一版，
-`index.json` 与姿态文件都不许带 `immutable`。写入侧仍是既有的三条（`/neo_pose/presets`、
-`/neo_pose/preset`、`/neo_pose/preset/delete`），库里全程只读。
+`index.json` 与场景文件都不许带 `immutable`。库里全程只读，Neo Studio 这边往库里写文件的路一条都没有，
+写落点只有场景那一条 `/neo_pose/scene`。
 
 `/pose-lib` 与 `/pose-dist` 同一条路子：两端各自直接注册的静态前缀，不进能力归属表，离线桌面服务
 自己答它。`/neo_pose/status` 报库里那一级的状态：`lib_dir`（落点）、`lib_installed`（清单读得到且
@@ -78,7 +79,7 @@ pwsh tools\sync_pose_lib.ps1 -Source <3d-pose-art 仓库根> -All   # 四档全�
 |--------|------------------------------------|------------------------------------------------------------|
 | GET    | `/neo-pose`                        | 短路径：装了包 302 到入口页，没装回 404 与安装提示         |
 | GET    | `/pose-dist/{path}`                | 摆姿包的子资源（`index.html`、`assets/**`、GLB、wasm）     |
-| GET    | `/pose-lib/{path}`                 | 姿势库的只读伺服（清单、姿态文件与预览图）                 |
+| GET    | `/pose-lib/{path}`                 | 场景库的只读伺服（清单、场景文件与预览图）                 |
 | GET    | `/models/{path}`                   | 产物按站点根部署时写死的那条前缀：道具注册表与 GLB         |
 
 产物是 `base: './'` 的相对 import，页面必须落在有目录深度的 URL 上，`./assets/x.js` 才会解析成
@@ -114,14 +115,10 @@ ComfyUI 自己占了 `/models`（模型类型清单）与单段的 `/models/<nam
 
 | 方法     | 路由                          | 说明                                                            |
 |----------|-------------------------------|-----------------------------------------------------------------|
-| GET      | `/neo_pose/status`            | 装没装、生效的那一级、随包清单、在着的 GLB、能力位、场景与姿态、桥消息名单 |
+| GET      | `/neo_pose/status`            | 装没装、生效的那一级、随包清单、在着的 GLB、能力位、场景存档、桥消息名单 |
 | GET      | `/neo_pose/scenes`            | 场景列表（`name` / `size` / `mtime`，按修改时间倒序）           |
 | GET      | `/neo_pose/scene?name=`       | 读一份场景                                                      |
 | POST     | `/neo_pose/scene`             | 写场景（`{name, scene}`，`.tmp` + replace 原子落盘）            |
-| GET      | `/neo_pose/presets`           | 姿势库列表（`name` / `size` / `mtime`，按修改时间倒序）         |
-| GET      | `/neo_pose/preset?name=`      | 读一份姿态（PoseFile v1 原样交回，宿主不改一个字段）            |
-| POST     | `/neo_pose/preset`            | 写姿态（`{name, pose}`，`.tmp` + replace 原子落盘）             |
-| POST     | `/neo_pose/preset/delete`     | 删一份姿态（单条，名字过同一套白名单）                          |
 | POST     | `/neo_pose/import_model`      | 自备素体 GLB 写进 `pose/dist/models/<key>.glb`                  |
 | POST     | `/neo_pose/export_image`      | 页面画布导出（`{data: dataURL, name}`）落进素材库               |
 | POST     | `/neo_pose/export_set`        | ControlNet 图组（`{files: [{name, data}]}`，≤12 张）落素材库    |
@@ -140,24 +137,23 @@ ComfyUI 自己占了 `/models`（模型类型清单）与单段的 `/models/<nam
 
 页面名与场景名都要过白名单：首个字符是字母数字、总长 ≤ 64、只允许 `A-Za-z0-9_.-`；素体 key 过同一套
 （文件名就是 `<key>.glb`）；子资源路径逐条解析符号链接并强制落在两级落点之一内，带 `..`、盘符、绝对路径
-的 URL 一律 `400`。姿态文件名就是 `<数据根>/pose/presets/<名字>.pose.json`，名字过同一套白名单。导出的
+的 URL 一律 `400`。导出的
 图落进 `output/Pose`（素材库 Output 卡里的一个子目录），单张去重后回
 `{filename, subfolder, size}`，`subfolder` 就是 `Pose`；图组整批逐张校验通过才落盘、回 `{saved, count}`，任何一张不合法就整批不写。
 导出项与 ComfyUI 自己的输出项同址同口径：缩略图、大图、拖放进节点与「⋯ → 删除」都按相对
 subfolder `Pose` 寻址，面板的导出提示点名 Pose 目录。
 
-场景写进 `<数据根>/pose/scenes/<名字>.json`，姿势库写进 `<数据根>/pose/presets/`，自备素体 GLB 落进
-`<数据根>/pose/dist/models/`，三处都不在
+场景写进 `<数据根>/pose/scenes/<名字>.json`，自备素体 GLB 落进 `<数据根>/pose/dist/models/`，两处都不在
 `tools\sync_pose_dist.ps1` 与 `tools\build_pose_package.ps1` 的镜像结果里（同步脚本把「源里没有的文件」
 先存后还），重装摆姿包不动它们。
 
-这十一条接口只做文件读写，桌面端离线服务全部自己答（`app/studio_caps.py` 的 `_POSE`）；`/pose-dist`
+这七条接口只做文件读写，桌面端离线服务全部自己答（`app/studio_caps.py` 的 `_POSE`）；`/pose-dist`
 与 `/pose-lib` 是两端各自直接注册的静态前缀，不进能力表。
 
 ## 宿主视图与消息方向
 
 桌面端顶栏「摆姿」页签与首页卡片「3D 摆姿」进 `#/pose`；宿主模块是 `studio/web/pose/pose.js`。
-宿主面板分五组：摆姿（画布截图）、姿势库（存、套、删）、场景（写名保存、选场景载入）、
+宿主面板分四组：摆姿（画布截图）、场景库（写名保存、选存档载入、浏览整场库）、
 ControlNet 导出（勾格式、导出图组）、画布状态（只读一行）；素体一栏带着「导入自备素体」与一个 key
 输入框，左栏底部在跑随包副本时出「随包只有 CC0 素体」的说明。面板控件在 `pose:ready` 之前全部禁用，
 面板随 `pose:ready` 出现；桥随 `pose:dispose` 拆掉，离开页面时不留监听器。摆姿页被嵌进 iframe 时，
@@ -165,21 +161,21 @@ ControlNet 导出（勾格式、导出图组）、画布状态（只读一行）
 `parent !== window`）—— 打开摆姿页不会先画出整套 3d-pose-art 单机 demo 控件再折成宿主版；
 `caps.hostUi` 不是 `true` 的旧宿主仍回落成 demo 全量控件。
 
-预设与姿势库都是选了就套：预设下拉改档即下发 `preset/apply`，姿势库点一条就把那份文件读回来下发
-`pose/apply`（`载入姿态` 按钮留着给手写的名字），面板上不再有「套用预设」这一步。
+预设下拉改档即下发 `preset/apply`，面板上不再有「套用预设」这一步。场景库的存档点一条就是装载那一场
+（读 `/neo_pose/scene` 再下发 `pose:open-scene`），`载入场景` 按钮留着给手写的名字，两条走同一条装载路。
 
-「浏览姿势库…」与「浏览场景…」共用一扇弹窗外壳（素材库的那套）：姿势那一档列 `pose-lib` 的库，
-场景那一档列 `pose/scenes/` 的存档。库卡片按 `clay → skeleton → silhouette → depth` 挑预览图
-（口径同摆姿页 `src/ui/libraryPanel.js` 的 `thumbOf`），四档都没有的卡片显示「无预览」；组下拉按清单的
-`groups` 填并带 `count`，「全部分组」回到全库，搜索按 `label / 分类 / 标签 / id / source` 过滤
-（口径同摆姿仓库 `poseLibrary.js` 的 `filterIndex`）。一条姿态可能挂多个组，卡片只落在排最前的那个组里
-—— 弹窗里出现两张同 id 的卡，点击会串。卡片每 200 条一屏（库里 640+ 条全塞进 DOM，首屏与滚动都撑不住），
-剩下的走「加载更多（还有 N 条）」。点卡片读那份 `.pose.json` 再下发一次 `pose/apply`，套成就收起弹窗并报
-「骨骼 N 处 / 缺 M 处」，与左栏「载入姿态」是同一条通路。弹窗里的搜索、组下拉与「加载更多」在左栏同一把
-门禁里（`libGate`）：`pose:ready` 之前不可点，套完一条姿态后整片锁住到结果回来 —— 连点两条会下发两次
-`pose/apply`，后一条无声盖掉前一条。库没同步时弹窗显示同步命令与一句提示，不是一片空列表：一个空浏览器
-不是库的样子。弹窗里另有两个「本机姿势文件…」与「本机场景文件…」入口，从本机挑一份 JSON，走的还是同一条
-`pose/apply` 与 `pose:open-scene` —— 不在库里的文件也一样套得进。
+「浏览场景库…」开一扇弹窗（素材库的那套外壳），里面就是 `pose-lib` 的整场库。卡片按
+`clay → skeleton → silhouette → depth` 挑预览图（口径同摆姿页 `src/ui/libraryPanel.js` 的 `thumbOf`），
+四档都没有的卡片显示「无预览」，副标题报「N人 · M道具」。组下拉按清单的 `groups` 填并带 `count`，
+「全部分组」回到全库，搜索按 `label / 分类 / 标签 / id / source` 过滤（口径同摆姿仓库 `poseLibrary.js`
+的 `filterIndex`）。一场可以挂多个组，卡片只落在排最前的那个组里 —— 弹窗里出现两张同 id 的卡，点击会串。
+卡片每 200 条一屏（库里 640+ 条全塞进 DOM，首屏与滚动都撑不住），剩下的走「加载更多（还有 N 条）」。
+点卡片读它自己那份文件并下发一次 `scene/apply`，报「N 副骨架 · M 物体」，套成就收起弹窗 —— 整场那一路
+就是左栏「载入场景」与页面「读场景」的实现：按人数补素体、按画面左右排开、物体按 id 覆盖。弹窗里的搜索、
+组下拉与「加载更多」在左栏同一把门禁里（`libGate`）：`pose:ready` 之前不可点，套完一条后整片锁住到结果
+回来 —— 连点两条会下发两次套发，后一条无声盖掉前一条。库没同步时弹窗显示同步命令与一句提示，不是一片
+空列表：一个空浏览器不是库的样子。弹窗里另有一个「本机场景文件…」入口，从本机挑一份 JSON 交
+`pose:open-scene` —— 不在库里的文件一样装得进。
 
 面板不设摆姿模式 / 吸附 / 轮廓线 / 主体层四个勾选：摆姿靠直接点人物（页面在点中人物时自己进摆姿模式，
 点空白退出），吸附与轮廓线在页面侧默认就是关，人物常显，「画布状态」因此只镜像素体、素体数与道具数三行。
@@ -240,7 +236,7 @@ pano 与库写入要 3d-pose-art 那套 Python sidecar（`pose_server.py`），�
 页面内置注册表引用了六个 GLB 素体，随包只发其中一个，跑在随包副本上时列表里其余几项点了会取不到文件，
 所以左栏要把「跑在随包副本上」说明白，别让人以为素体列表坏了。
 
-`hostUi` 恒为 `true`：宿主带着自己的面板（姿势库、场景、ControlNet 导出、画布状态），
+`hostUi` 恒为 `true`：宿主带着自己的面板（场景库、ControlNet 导出、画布状态），
 随 `pose:theme` 交下去，摆姿页据此收起面向独立部署的那套 demo 工具条 —— 场上同一时刻只留一套控件。
 页面对旧摆姿包（没有宿主命令层）的兜底在宿主这边：`caps.hostUi` 不为 `true` 时面板整片禁用并说明要
 重装摆姿包，不给用户留一条点了只会空转的按钮。
@@ -258,29 +254,29 @@ pano 与库写入要 3d-pose-art 那套 Python sidecar（`pose_server.py`），�
 要道具就 `tools\sync_pose_dist.ps1` 同步全量产物。
 
 库没同步是另一件事，摆姿页本身照常用：`/pose-lib` 整条前缀回 `404`，`/neo_pose/status` 报
-`lib_installed: false` 与 `lib_entries: 0`，「浏览姿势库…」弹窗显示那句同步命令与一句提示，
+`lib_installed: false` 与 `lib_entries: 0`，「浏览场景库…」弹窗显示那句同步命令与一句提示，
 而不是一个空列表 —— 库里缺一份文件与库没同步是同一个 `404`，弹窗判据是那份清单读不读得到。
 
 ## 测试
 
-- `studio/tests/test_pose_bridge.py`：路径包含与场景名白名单、wasm MIME、哈希/未哈希缓存、场景与姿态
-  原子写、姿态往返、删姿态、单张导出与 ControlNet 图组落素材库、整批拒绝
+- `studio/tests/test_pose_bridge.py`：路径包含与场景名白名单、wasm MIME、哈希/未哈希缓存、场景
+  原子写、场景往返、单张导出与 ControlNet 图组落素材库、整批拒绝
   且不留半个文件、短路径 302；两级落点（随包副本兜底、数据根压同名文件、两级都缺的提示）、道具注册表
   那条根前缀在两级都取得到、随包清单进 status、自备素体落点与五条校验（key / 来源 / 体积 / 文件头 /
-  素材库体积）、素材库来源解析、挡下的请求不留痕迹；姿势库的清单与姿态文件与预览图伺服、目录落到
+  素材库体积）、素材库来源解析、挡下的请求不留痕迹；场景库的清单与场景文件与预览图伺服、目录落到
   `index.json`、出根 `400`、未同步 `404`、整条前缀 `no-cache`、清单坏 JSON 不炸 status、status 的
   `lib_dir` / `lib_installed` / `lib_entries` / `lib_bytes` 四项。
 - `app/tests/test_studio_server.py::PoseBridgeTests`：离线服务里的页面跳转、子资源伺服与越界拒绝、
-  `/models` 前缀答出注册表与道具 GLB（含自备素体与数据根压随包那份）、场景往返、姿态往返、能力位与
+  `/models` 前缀答出注册表与道具 GLB（含自备素体与数据根压随包那份）、场景往返、能力位与
   归属（逐条核对摆姿模块注册的那张路由表）、随包副本兜底那一层、离线导入自备素体与 35MB 上限、
-  请求体上限落在导入接口之上；`/pose-lib` 前缀在离线服务里答出清单与姿态文件、status 的 `lib_*` 四项、
+  请求体上限落在导入接口之上；`/pose-lib` 前缀在离线服务里答出清单与场景文件、status 的 `lib_*` 四项、
   `/pose-lib` 不进能力归属表。
 - `studio/tests/js/pose-bridge.test.mjs`：宿主视图的缺包形态、iframe 属性、桥的来源与同源校验、
-  `hostUi` 门、导出 / 套姿态 / 场景 / 图组四条路径落到的接口、跑在随包副本上的说明、
-  自备素体导入（base64 上报与 key 校验）；姿势库弹窗的清单渲染与分组 / 搜索 / 加载更多、套库内姿态
-  落到的接口与弹窗收起、库没同步的指引、门禁锁住弹窗那一片、本机姿势与场景文件两条路。
+  `hostUi` 门、导出 / 场景 / 图组三条路径落到的接口、跑在随包副本上的说明、
+  自备素体导入（base64 上报与 key 校验）；场景库弹窗的清单渲染与分组 / 搜索 / 加载更多、点卡片套整场
+  落到的动作与弹窗收起、库没同步的指引、门禁锁住弹窗那一片、本机场景文件那条装载路。
 - `tools\test_pose_package.ps1`：随包摆姿包的自检 —— 必需文件、产物形状、不该发货的形态（`*.map`、
-  白名单外的 GLB、道具 GLB、散 JSON）、逐文件 sha256 与体积核对、道具注册表为空、开发机绝对路径、
+  白名单外的 GLB、白名单外的道具 GLB、散 JSON）、逐文件 sha256 与体积核对、道具注册表只列随包那两条、开发机绝对路径、
   体积上限。
 - 摆姿仓库侧的页面桥：`tests/neoBridge.node.test.mjs`（桥的存在判定、来源与 origin、回复端口回包、
   失败怎么出声）。

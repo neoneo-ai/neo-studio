@@ -50,27 +50,38 @@ const STATUS = {
     manifest_version: "neo-studio-pose-package/1",
     caps: { pose: true, export: true, photo3d: false, hostUi: true, body_import: true },
     scenes: [{ name: "hero", size: 12, mtime: 1 }],
-    presets: [{ name: "run pose", size: 20, mtime: 2 }],
+    lib_installed: true, lib_entries: 3, lib_bytes: 4096,
     bridge: ["pose:ready", "pose:theme", "pose:state", "pose:call"],
     hint: "",
 };
 
 /** pose-lib 的索引 fixture：形状来自摆姿仓库 poseLibrary.js 的 buildIndex（3dpose.index/1）。
-    条目带 groups / categories / preview，四档预览各留一条，缩略图优先级与分层口径都钉在这份上 */
+    库里一份条目是一整场（people / props 在清单里），条目带 groups / categories / preview，
+    四档预览各留一条，缩略图优先级与分层口径都钉在这份上 */
 const POSE_LIB = {
     format: "3dpose.index/1",
     count: 3,
     groups: [{ key: "stand", label: "站立", count: 2 }, { key: "fight", label: "格斗与武器", count: 1 }],
     entries: [
-        { id: "a", label: "A-Pose 标定", path: "poses/stand/a.pose.json", kind: "pose", groups: ["stand"],
+        { id: "a", label: "A-Pose 标定", path: "poses/stand/a.scene.json", kind: "scene",
+          people: 1, props: 0, groups: ["stand"],
           categories: ["站立", "standing-poses"], tags: ["preset"], source: "preset",
           preview: { skeleton: "preview/a.skeleton.png", silhouette: "preview/a.silhouette.png" } },
-        { id: "calm-1", label: "双臂伸展 1", path: "poses/calm/calm-1.pose.json", kind: "pose",
-          groups: ["calm", "stand"], categories: ["手臂绘图参考", "arm-drawing-reference"], source: "photo3d",
+        { id: "calm-1", label: "双臂伸展 1", path: "poses/calm/calm-1.scene.json", kind: "scene",
+          people: 2, props: 0, groups: ["calm", "stand"],
+          categories: ["手臂绘图参考", "arm-drawing-reference"], source: "photo3d",
           preview: { clay: "preview/calm-1.clay.png", skeleton: "preview/calm-1.skeleton.png" } },
-        { id: "sword", label: "双手持剑", path: "poses/fight/sword.pose.json", kind: "pose", groups: ["fight"],
-          categories: ["格斗", "sword"], source: "preset", preview: { depth: "preview/sword.depth.png" } },
+        { id: "sword", label: "双手持剑", path: "poses/fight/sword.scene.json", kind: "scene",
+          people: 2, props: 1, groups: ["fight"], categories: ["格斗", "sword"], source: "preset",
+          preview: { depth: "preview/sword.depth.png" } },
     ],
+};
+
+/** 库里一份场景文件（3dpose.scene/1）：两副骨架加一份视角，套用的就是这一整场 */
+const LIB_SCENE = {
+    format: "3dpose.scene/1",
+    subjects: [{ kind: "rig", id: "rig-1", charKey: "ybot" }, { kind: "rig", id: "rig-2", charKey: "ybot" }],
+    view: { camera: [1.4, 1.4, 4.5], target: [0, 0.9, 0], fov: 45 },
 };
 
 // jsdom 没有 MessageChannel：回复端口桩成同步直投（宿主的 port1.onmessage 立刻收到）
@@ -92,23 +103,18 @@ function mounted(status = STATUS) {
     clearRoutes();
     mockRoute("/neo_pose/status", () => jsonResponse(status));
     mockRoute("/neo_pose/scenes", () => jsonResponse({ success: true, scenes: status.scenes || [] }));
-    mockRoute("/neo_pose/presets", () => jsonResponse({ success: true, presets: status.presets || [] }));
     mockRoute("/neo_pose/scene", (body, call) => call.method === "POST"
         ? jsonResponse({ success: true, name: body?.name })
         : jsonResponse({ success: true, scene: { camYaw: 42 } }));
-    mockRoute("/neo_pose/preset", (body, call) => call.method === "POST"
-        ? jsonResponse({ success: true, name: body?.name })
-        : jsonResponse({ success: true, pose: { version: 1, rig: {} } }));
-    mockRoute("/neo_pose/preset/delete", () => jsonResponse({ success: true, name: "run pose" }));
     mockRoute("/neo_pose/export_image", () => jsonResponse({ success: true, filename: "pose_shot_1.png" }));
     mockRoute("/neo_pose/export_set", (body) => jsonResponse({
         success: true,
         saved: (body?.files || []).map((f) => f.name),
         count: (body?.files || []).length,
     }));
-    // 姿势库的两条静态读：索引清单不带 success 外壳，库里的一份姿态就是 PoseFile 原样
+    // 场景库的两条静态读：索引清单不带 success 外壳，库里的一份场景就是场景文件原样
     mockRoute("/pose-lib/index.json", () => jsonResponse(status.lib === undefined ? POSE_LIB : status.lib));
-    mockRoute("/pose-lib/poses/calm/calm-1.pose.json", () => jsonResponse({ format: "pose-file/v1", rig: {} }));
+    mockRoute("/pose-lib/poses/calm/calm-1.scene.json", () => jsonResponse(LIB_SCENE));
 
     const host = $el("div");
     document.body.appendChild(host);
@@ -313,35 +319,28 @@ test("外观默认暗色：旧摆姿包没有暗色档时不发只会失败的�
     assert.equal(env.calls("look/set").length, 0, "清单里没有的档位不发");
 });
 
-test("姿势库：存为姿态走 pose/export 写文件，载入读文件交回 pose/apply，删除走单条接口", async () => {
+test("场景库：左栏只有场景那一条路，点存档与「载入场景」共用同一次 pose:open-scene", async () => {
     resetEnv();
     const env = await mounted();
     await env.ready();
-    inputText(env.libField(0), "hero pose");
-    click(env.button("存为姿态", LIB));
-    await settle();
-    env.replyCall(env.calls("pose/export")[0], { file: { version: 1, rig: {} } });
-    await settle();
-    const saved = fetchLog.find((c) => c.method === "POST" && c.path === "/neo_pose/preset");
-    assert.equal(saved.body.name, "hero pose");
-    assert.deepEqual(saved.body.pose, { version: 1, rig: {} }, "PoseFile 原样落盘，宿主不改一个字段");
-    assert.match(env.toasts.join("|"), /hero pose/);
+    assert.ok(!env.button("存为姿态", LIB) && !env.button("载入姿态", LIB) && !env.button("删姿态", LIB),
+        "左栏不再写 pose/presets 那批姿态文件，控件就不出");
+    assert.ok(!env.button("浏览姿势库…", LIB) && !env.button("浏览场景…", LIB), "浏览只有一颗钮");
+    assert.ok(env.button("浏览场景库…", LIB), "一颗钮开场景库弹窗");
 
-    /* 点库里的一条就把它套上：不再有「载入姿态」第二步 */
-    click(env.item("run pose", LIB));
+    click(env.item("hero", LIB));
     await settle();
-    assert.deepEqual(env.calls("pose/apply")[0].msg.args.file, { version: 1, rig: {} },
-        "点一条就是把库里那份交回页面套用");
-    /* 输入框里的名字还是另一条路：手打的名称也能套，走的还是同一条套用路径 */
-    inputText(env.libField(0), "run pose");
-    click(env.button("载入姿态", LIB));
-    await settle();
-    assert.equal(env.calls("pose/apply").length, 2, "载入姿态复用同一条套用，不另写一份逻辑");
+    let opened = env.sent.filter((s) => s.msg.type === "pose:open-scene");
+    assert.equal(opened.length, 1, "点一条存档 = 一次装载，不另发第二条消息");
+    assert.equal(opened[0].msg.scene.camYaw, 42, "读回来的那份场景原样交回页面，宿主不改一个字段");
 
-    click(env.button("删姿态", LIB));
+    /* 输入框里的名字是另一条路：手写的名字也装得进，走的还是同一条装载路 */
+    inputText(env.libField(0), "hero");
+    click(env.button("载入场景", LIB));
     await settle();
-    const del = fetchLog.find((c) => c.method === "POST" && c.path === "/neo_pose/preset/delete");
-    assert.equal(del.body.name, "run pose");
+    opened = env.sent.filter((s) => s.msg.type === "pose:open-scene");
+    assert.equal(opened.length, 2, "载入场景复用同一条装载路，不另写一份逻辑");
+    assert.match(env.toasts.join("|"), /hero/);
 });
 
 test("预设下拉一改就套：不再要「套用预设」第二步", async () => {
@@ -404,14 +403,14 @@ test("保存场景：页面回序列化结果，宿主按左栏写的名字写�
     resetEnv();
     const env = await mounted();
     await env.ready();
-    inputText(env.libField(1), "hero scene");
+    inputText(env.libField(0), "hero scene");
     click(env.button("存为场景", LIB));
     await settle();
     env.reply("pose:save-scene", { scene: { camYaw: 42 } });
     await settle();
     const post = fetchLog.find((c) => c.method === "POST" && c.path === "/neo_pose/scene");
     assert.deepEqual(post.body, { name: "hero scene", scene: { camYaw: 42 } });
-    assert.equal(env.libField(1).value, "", "名字是一次性的：写完就清，下一发不覆盖上一发");
+    assert.equal(env.libField(0).value, "", "名字是一次性的：写完就清，下一发不覆盖上一发");
 });
 
 test("页面拒绝动作：原因进 toast，控件按能力位解锁", async () => {
@@ -504,15 +503,15 @@ test("previewOf / libFilter / libGroups / libTagsOf：缩略图优先级与搜�
     assert.deepEqual(libFilter(POSE_LIB.entries, { group: "fight" }).map((e) => e.id), ["sword"]);
     assert.deepEqual(libGroups(POSE_LIB.entries, POSE_LIB.groups).map((s) => [s.key, s.items.length]),
         [["stand", 2], ["fight", 1]], "多组条目只落排最前的那个组，同 id 不许出现两张卡");
-    assert.equal(libTagsOf(POSE_LIB.entries[1]), "手臂绘图参考 / arm-drawing-reference · photo3d");
-    assert.equal(libTagsOf(POSE_LIB.entries[0]), "站立 / standing-poses", "preset 来源不上卡片副标题");
+    assert.equal(libTagsOf(POSE_LIB.entries[1]), "2人 · 0道具 · 手臂绘图参考 / arm-drawing-reference · photo3d");
+    assert.equal(libTagsOf(POSE_LIB.entries[0]), "1人 · 0道具 · 站立 / standing-poses", "preset 来源不上来源那一档");
 });
 
-test("姿势库弹窗：卡片按预览优先级出缩略图，点卡片读库文件交回 pose/apply 并收窗", async () => {
+test("场景库弹窗：卡片按预览优先级出缩略图与人数，点卡片读库文件走一次 scene/apply 并收窗", async () => {
     resetEnv();
     const env = await mounted();
     await env.ready();
-    click(env.button("浏览姿势库…", LIB));
+    click(env.button("浏览场景库…", LIB));
     await settle();
     const modal = () => env.host.querySelector(".ns-libmodal:not(.ns-hidden)");
     assert.ok(modal(), "弹窗要开着");
@@ -523,23 +522,42 @@ test("姿势库弹窗：卡片按预览优先级出缩略图，点卡片读库�
     assert.equal(thumb("calm-1").getAttribute("src"), "/pose-lib/preview/calm-1.clay.png");
     assert.equal(thumb("a").getAttribute("src"), "/pose-lib/preview/a.skeleton.png");
     assert.equal(thumb("sword").getAttribute("src"), "/pose-lib/preview/sword.depth.png");
+    assert.match(cards().find((c) => c.dataset.libId === "calm-1").textContent, /2人/,
+        "多人场景要在卡片副标题上看得见，挑的时候就知道这场有几个人");
     assert.equal(modal().querySelector(".ns-pose-lib-more").hidden, true, "库里只有三条，不出加载更多");
     click(cards().find((c) => c.dataset.libId === "calm-1"));
     await settle();
-    const apply = env.calls("pose/apply")[0];
-    assert.deepEqual(apply.msg.args.file, { format: "pose-file/v1", rig: {} },
-        "库里那份 PoseFile 原样交回页面，宿主不补字段");
-    env.replyCall(apply, { applied: 42, missing: [] });
+    const apply = env.calls("scene/apply")[0];
+    assert.deepEqual(apply.msg.args.file, LIB_SCENE,
+        "库里那份场景文件原样交回页面，宿主不补字段");
+    env.replyCall(apply, { ok: true, rigsApplied: 2, propsApplied: 1 });
     await settle();
     assert.equal(env.host.querySelector(".ns-libmodal").classList.contains("ns-hidden"), true, "套用完要收窗");
-    assert.match(env.toasts.join("|"), /双臂伸展 1/);
+    assert.match(env.toasts.join("|"), /双臂伸展 1.*2 副骨架/, "报清套上了几副骨架，多人场景要看得见");
 });
 
-test("姿势库弹窗：搜索与分组下拉同一条过滤口径，卡片区按归并组分层", async () => {
+test("场景库弹窗：页面报整场没套上时说清原因，不收窗也不报成功", async () => {
     resetEnv();
     const env = await mounted();
     await env.ready();
-    click(env.button("浏览姿势库…", LIB));
+    click(env.button("浏览场景库…", LIB));
+    await settle();
+    const card = [...env.host.querySelectorAll(".ns-pose-lib-card")].find((c) => c.dataset.libId === "calm-1");
+    click(card);
+    await settle();
+    env.replyCall(env.calls("scene/apply")[0],
+        { ok: false, stage: "validate", errors: ["场上素体不足，2 副骨架没套上"] });
+    await settle();
+    assert.match(env.toasts.join("|"), /场上素体不足/, "页面的那一句原因要透到面板上");
+    assert.equal(env.host.querySelector(".ns-libmodal").classList.contains("ns-hidden"), false,
+        "没套成就不收窗，用户可以接着挑一条");
+});
+
+test("场景库弹窗：搜索与分组下拉同一条过滤口径，卡片区按归并组分层", async () => {
+    resetEnv();
+    const env = await mounted();
+    await env.ready();
+    click(env.button("浏览场景库…", LIB));
     await settle();
     const modal = () => env.host.querySelector(".ns-libmodal:not(.ns-hidden)");
     const titles = () => [...modal().querySelectorAll(".ns-pose-lib-group-title")].map((h) => h.textContent);
@@ -559,11 +577,11 @@ test("姿势库弹窗：搜索与分组下拉同一条过滤口径，卡片区�
         ["", "stand", "fight"], "分组下拉来自索引的 groups，label 带中文归并组名与条数");
 });
 
-test("姿势库未同步：出同步指引，不给一个空浏览器", async () => {
+test("场景库未同步：出同步指引，不给一个空浏览器", async () => {
     resetEnv();
     const env = await mounted({ ...STATUS, lib: null });
     await env.ready();
-    click(env.button("浏览姿势库…", LIB));
+    click(env.button("浏览场景库…", LIB));
     await settle();
     const blank = env.host.querySelector(".ns-pose-lib-blank");
     assert.equal(blank.hidden, false);
@@ -572,17 +590,17 @@ test("姿势库未同步：出同步指引，不给一个空浏览器", async ()
     assert.match(env.toasts.join("|"), /pose-lib\/index\.json/);
 });
 
-test("本机姿势文件：读成 PoseFile 交回 pose/apply，坏 JSON 挡在发请求之前", async () => {
+test("本机场景文件：读成场景装进页面并收窗，坏 JSON 挡在发请求之前", async () => {
     resetEnv();
     const env = await mounted({ ...STATUS, lib: null });   // 库没同步也要能从本机挑一份
     await env.ready();
-    click(env.button("浏览姿势库…", LIB));
+    click(env.button("浏览场景库…", LIB));
     await settle();
-    const input = [...env.host.querySelectorAll(".ns-pose-file")].find((i) => i.accept.includes(".pose.json"));
-    assert.ok(input, "弹窗里的本机文件选择器要在界面上（CSS 里藏着，借浏览器那套选择框）");
+    const input = [...env.host.querySelectorAll(".ns-pose-file")].find((i) => i.accept === ".json");
+    assert.ok(input, "弹窗里的本机场景文件选择器要在界面上（CSS 里藏着，借浏览器那套选择框）");
     const pick = (text) => {
         Object.defineProperty(input, "files", {
-            value: [new window.File([text], "mine.pose.json", { type: "application/json" })],
+            value: [new window.File([text], "mine.scene.json", { type: "application/json" })],
             configurable: true,
         });
         input.dispatchEvent(new window.Event("change", { bubbles: true }));
@@ -591,40 +609,15 @@ test("本机姿势文件：读成 PoseFile 交回 pose/apply，坏 JSON 挡在�
     await sleep(20);
     await settle();
     assert.match(env.toasts.join("|"), /本机文件不是一份 JSON 对象/);
-    assert.equal(env.calls("pose/apply").length, 0, "坏 JSON 不许发 pose:call");
-    pick(JSON.stringify({ format: "pose-file/v1", rig: {} }));
-    await sleep(20);
-    await settle();
-    const apply = env.calls("pose/apply")[0];
-    assert.deepEqual(apply.msg.args.file, { format: "pose-file/v1", rig: {} });
-    env.replyCall(apply, { applied: 1, missing: [] });
-    await settle();
-    assert.match(env.toasts.join("|"), /mine\.pose\.json/);
-    assert.equal(env.host.querySelector(".ns-libmodal").classList.contains("ns-hidden"), true, "套用完要收窗");
-});
-
-test("场景弹窗：列数据根的存档，点一条装进页面并收窗；本机场景文件同一条装载路", async () => {
-    resetEnv();
-    const env = await mounted();
-    await env.ready();
-    click(env.button("浏览场景…", LIB));
-    await settle();
-    const rows = [...env.host.querySelectorAll(".ns-pose-lib-list .ns-pose-item")];
-    assert.deepEqual(rows.map((r) => r.textContent), ["hero"], "弹窗里列的是数据根 pose/scenes 那份存档");
-    click(rows[0]);
-    await settle();
-    assert.equal(env.sent.find((s) => s.msg.type === "pose:open-scene").msg.scene.camYaw, 42);
-    assert.equal(env.host.querySelector(".ns-libmodal").classList.contains("ns-hidden"), true, "装载完要收窗");
-    const input = [...env.host.querySelectorAll(".ns-pose-file")].find((i) => i.accept === ".json");
-    Object.defineProperty(input, "files", {
-        value: [new window.File([JSON.stringify({ camYaw: 7 })], "local.json", { type: "application/json" })],
-        configurable: true,
-    });
-    input.dispatchEvent(new window.Event("change", { bubbles: true }));
+    assert.equal(env.sent.filter((s) => s.msg.type === "pose:open-scene").length, 0,
+        "坏 JSON 不许下发装载，也不许发 pose:call");
+    pick(JSON.stringify(LIB_SCENE));
     await sleep(20);
     await settle();
     const opened = env.sent.filter((s) => s.msg.type === "pose:open-scene");
-    assert.equal(opened.length, 2, "本机那份与数据根那条走同一条装载路");
-    assert.deepEqual(opened[1].msg.scene, { camYaw: 7 });
-    assert.match(env.toasts.join("|"), /local\.json/);
+    assert.equal(opened.length, 1, "本机那一份与数据根的存档走同一条装载路");
+    assert.deepEqual(opened[0].msg.scene, LIB_SCENE, "文件里那份场景原样交回页面");
+    assert.match(env.toasts.join("|"), /mine\.scene\.json/);
+    assert.equal(env.host.querySelector(".ns-libmodal").classList.contains("ns-hidden"), true, "装载完要收窗");
 });
+

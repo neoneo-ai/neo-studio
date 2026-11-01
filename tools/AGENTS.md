@@ -12,7 +12,7 @@ exe 里随包的插件副本只取 `studio/` 的跟踪文件，`tools/` 不在�
 - 打包与安装：`build_studio_exe.ps1`（`Neo-Studio.spec`）、`build_studio_mac.sh`
   （macOS remote-only `.app`）、`install_plugin.ps1`、`mcp_setup.ps1`。
 - 摆姿包：`build_pose_package.ps1` 生成随包最小副本 `studio/pose_dist/`，`sync_pose_dist.ps1`
-  把全量产物同步进 `<数据根>/pose/dist/`，`sync_pose_lib.ps1` 把姿势库同步进 `<数据根>/pose/lib/`，
+  把全量产物同步进 `<数据根>/pose/dist/`，`sync_pose_lib.ps1` 把场景库同步进 `<数据根>/pose/lib/`，
   `test_pose_package.ps1` 复查随包那份（发货清单逐文件核对）。
 - 取证与性能：`e2e_ref_grid.mjs`、`bench-director-timeline.mjs`、`capture-gif.mjs`、
   `capture-video.mjs`；`_hub_check.py`、`check_h3_context_layout.py` 是排查脚本。
@@ -41,8 +41,9 @@ webp 缩略图与 `index.json`，`gallery_deploy_oss.py` 按 `OSS_ACCESS_KEY_ID`
 摆姿页产物有两级落点，两个脚本各管一级，`test_pose_package.ps1` 复查随包那一级：
 
 - 随包发什么由摆姿仓库 `models/ATTRIBUTION.md` 的授权口径决定，不由体积决定：GLB 白名单写死在
-  `build_pose_package.ps1`（只有 CC0 的 `ybot.glb`），加一份要先有可再分发的授权行；道具注册表
-  `models/props/index.json` 清空 `props` 数组，与「不随包发道具 GLB」是同一件事。
+  `build_pose_package.ps1`（素体只有 CC0 的 `ybot.glb`，道具只有自制的 `stick.glb` / `sword.glb`），
+  加一份要先有可再分发的授权行；道具注册表 `models/props/index.json` 只留随包发了的那几条，
+  与「本地导入的道具 GLB（arrow / sting-sword / 枪械）不随包发」是同一件事。
 - `*.map` 不进包，`studio/pose_dist` 里的 JS 要清掉开发机绝对路径（注册表的 `sourceImage` 与
   「引号 + 盘符 + 斜杠」的字面量），清不掉就回摆姿仓库改注册表，不在这里打补丁。
 - `MANIFEST.json` 逐文件 `bytes` + `sha256`，清单不含它自己（一份清单算不出自己的哈希）；
@@ -50,7 +51,7 @@ webp 缩略图与 `index.json`，`gallery_deploy_oss.py` 按 `OSS_ACCESS_KEY_ID`
 - `sync_pose_dist.ps1` 的 `robocopy /MIR` 只动 `dist/`：源产物里没有的文件（用户导入的素体 GLB）
   先存进临时目录、镜像完搬回，同步脚本不许成为删用户文件的那只手。场景与参考图在 `pose/` 下的
   别的目录，本来就不在镜像范围内。
-- 姿势库只落 `<数据根>/pose/lib/`，不进随包副本（授权口径与摆姿包不同）：`sync_pose_lib.ps1` 按
+- 场景库只落 `<数据根>/pose/lib/`，不进随包副本（授权口径与摆姿包不同）：`sync_pose_lib.ps1` 按
   `-Light`（skeleton + silhouette）/ 默认（clay + skeleton + silhouette）/ `-All`（四档）镜像预览，
   `index.json` 由摆姿仓库的 `npm run lib` 生成、同步原样带过去。`pose/scenes`、`pose/refs`、
   `pose/presets` 是用户写的东西，同样不在镜像范围内。

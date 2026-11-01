@@ -6,5 +6,16 @@
     "内置道具（builtin:chair 等）由 src/core/propKit.js 定义，不需要在这里登记 —— 空注册表也能用。",
     "模型来源与授权请一并登记进 public/models/ATTRIBUTION.md（同素体的处理方式）。"
   ],
-  "props": []
+  "props": [
+    {
+      "file": "stick.glb",
+      "label": "棍",
+      "scale": 1
+    },
+    {
+      "file": "sword.glb",
+      "label": "剑（自制）",
+      "scale": 1
+    }
+  ]
 }

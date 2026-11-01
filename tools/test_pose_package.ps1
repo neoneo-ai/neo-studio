@@ -18,9 +18,12 @@ $root = if ($Dist) { $Dist } else { Join-Path $repo "studio\pose_dist" }
 
 # 与构建脚本同值：加任何一个 GLB 要先在摆姿仓库的 ATTRIBUTION 里有可再分发的授权行
 $allowedGlb = @("ybot.glb")
+# 自制道具 GLB（本项目 scripts/makePropGlb.mjs 生成）—— 授权口径与 prop_test_box.glb 相同
+$allowedPropGlb = @("stick.glb", "sword.glb")
 $maxPackageBytes = 4.5 * 1MB
 $required = @("index.html", "LICENSE", "THIRD-PARTY.md", "MANIFEST.json",
-              "models/ATTRIBUTION.md", "models/ybot.glb", "models/props/index.json")
+              "models/ATTRIBUTION.md", "models/ybot.glb", "models/props/index.json",
+              "models/props/stick.glb", "models/props/sword.glb")
 
 $problems = [System.Collections.Generic.List[string]]::new()
 function Bad([string]$msg) { $problems.Add($msg) }
@@ -55,10 +58,12 @@ if ($css.Count -ne 1) { Bad "assets/ 里的 index-*.css 应是一份，实测 $(
 #    models 根下的散 JSON（注册表只在 models/props/ 里）、摆姿仓库的动画 demo 文件
 foreach ($row in $files) {
     if ($row.path -like "*.map") { Bad "随包发了 source map：$($row.path)" }
-    if ($row.path -like "models/*.glb" -and $allowedGlb -notcontains (Split-Path -Leaf $row.path)) {
+    if ($row.path -like "models/*.glb" -and $row.path -notlike "models/props/*" -and $allowedGlb -notcontains (Split-Path -Leaf $row.path)) {
         Bad "随包发了白名单外的素体 GLB：$($row.path)"
     }
-    if ($row.path -like "models/props/*.glb") { Bad "随包发了道具 GLB：$($row.path)" }
+    if ($row.path -like "models/props/*.glb" -and $allowedPropGlb -notcontains (Split-Path -Leaf $row.path)) {
+        Bad "随包发了白名单外的道具 GLB：$($row.path)"
+    }
     if ($row.path -like "models/*.json" -and $row.path -notlike "models/props/*") {
         Bad "models/ 根下发了散 JSON：$($row.path)"
     }
@@ -94,12 +99,20 @@ if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
     Bad "缺发货清单：MANIFEST.json"
 }
 
-# 5. 道具注册表必须是空的：注册表里列一个包里没发的 GLB，就是发一条点了只会失败的控件
+# 5. 道具注册表只能列随包发了的那几个 GLB：列一个包里没有的文件就是发一条点了只会失败的控件
 $regPath = Join-Path $root "models\props\index.json"
 if (Test-Path -LiteralPath $regPath -PathType Leaf) {
     $reg = Get-Content -LiteralPath $regPath -Raw -Encoding utf8 | ConvertFrom-Json
-    if (@($reg.props).Count -ne 0) {
-        Bad "道具注册表不是空的（$( @($reg.props).Count) 条）：随包没发道具 GLB，注册表要先清空"
+    $rows = @($reg.props)
+    foreach ($row in $rows) {
+        if ($allowedPropGlb -notcontains [string]$row.file) {
+            Bad "道具注册表列了包里没有的 GLB：$($row.file)（只许 $($allowedPropGlb -join ' / ')）"
+        }
+    }
+    foreach ($glb in $allowedPropGlb) {
+        if (@($rows | Where-Object { [string]$_.file -eq $glb }).Count -eq 0) {
+            Bad "道具注册表缺自制道具：$glb（页面下拉里选不到它）"
+        }
     }
 }
 

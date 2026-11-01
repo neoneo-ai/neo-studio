@@ -1,8 +1,8 @@
-# 把 3d-pose-art 的姿势库（pose-lib 的库数据）同步进数据根，装成「3D 摆姿」页的姿势库。
+# 把 3d-pose-art 的场景库（pose-lib 的库数据）同步进数据根，装成「3D 摆姿」页的场景库。
 #
 # 库只有一份落点：<数据根>/pose/lib/。studio/pose.py 只读这一级（LIB_DIR），静态伺服挂在
 # /pose-lib/ 上；库不进 Registry 包也不进 exe（data/ 不随包分发），所以同步完刷新页面就生效。
-# 库数据在 Neo Studio 这边全程只读：「存为姿态」写的是 pose/presets/，不写库。
+# 库数据在 Neo Studio 这边全程只读：场景写的是 pose/scenes/，不写库。
 #
 # 从仓库根运行：
 #   pwsh tools\sync_pose_lib.ps1 -Source D:\Work\projects\3d-pose-art
@@ -18,7 +18,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 if (-not (Test-Path -LiteralPath $Source -PathType Container)) {
-    Write-Host "找不到姿势库目录：$Source（应指向 3d-pose-art 仓库根或它的 pose-lib）" -ForegroundColor Red
+    Write-Host "找不到场景库目录：$Source（应指向 3d-pose-art 仓库根或它的 pose-lib）" -ForegroundColor Red
     exit 1
 }
 $repo = (Resolve-Path -LiteralPath $Source).Path
@@ -26,12 +26,12 @@ $repo = (Resolve-Path -LiteralPath $Source).Path
 $libSrc = Join-Path $repo "pose-lib"
 if (-not (Test-Path -LiteralPath $libSrc -PathType Container)) { $libSrc = $repo }
 if (-not (Test-Path -LiteralPath (Join-Path $libSrc "index.json") -PathType Leaf)) {
-    Write-Host "姿势库里没有索引清单：$libSrc\index.json。在摆姿仓库里跑 npm run lib -- reindex 生成它。" -ForegroundColor Red
+    Write-Host "场景库里没有索引清单：$libSrc\index.json。在摆姿仓库里跑 npm run lib -- reindex 生成它。" -ForegroundColor Red
     exit 1
 }
 $srcPoses = Join-Path $libSrc "poses"
 if (-not (Test-Path -LiteralPath $srcPoses -PathType Container)) {
-    Write-Host "姿势库里没有 poses\：$srcPoses（库里只有索引清单的话先跑 npm run lib -- save/preview/reindex）" -ForegroundColor Red
+    Write-Host "场景库里没有 poses\：$srcPoses（库里只有索引清单的话先跑 npm run lib -- save/preview/reindex）" -ForegroundColor Red
     exit 1
 }
 
@@ -80,7 +80,7 @@ foreach ($name in @("index.json", "categories.json")) {
 
 $files = @(Get-ChildItem -LiteralPath $dest -Recurse -File)
 $bytes = ($files | Measure-Object -Property Length -Sum).Sum
-Write-Host "姿势库已落进 $dest" -ForegroundColor Green
+Write-Host "场景库已落进 $dest" -ForegroundColor Green
 Write-Host ("  {0} 个文件，{1:N1} MB，预览档位：{2}" -f $files.Count, ($bytes / 1MB), $ship)
 Write-Host "刷新 Neo Studio 窗口的「3D 摆姿」页即可生效（页面逐请求判断库在不在，不必重启）。"
 exit 0

@@ -18,8 +18,8 @@
     <script>
       if (window.parent !== window) document.documentElement.setAttribute('data-host-ui', '1');
     </script>
-    <script type="module" crossorigin src="./assets/index-CO24L2vj.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-CR1FdUgI.css">
+    <script type="module" crossorigin src="./assets/index-COkP6ZQ7.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-pXEjtHEe.css">
   </head>
   <body>
     <div id="canvas-host"></div>
@@ -61,8 +61,6 @@
       <select id="presetSel" title="一键套用姿态预设"></select>
       <button id="btnSave">保存姿态</button>
       <button id="btnLoad">恢复姿态</button>
-      <button id="btnPoseSave" title="导出 PoseFile v1：骨架指纹 + 骨骼差值 + 走位 + 机位 + 元数据 + OpenPose 关键点">存 PoseFile</button>
-      <button id="btnPoseLoad" title="读取 .pose.json 套用：按骨骼短名跨素体迁移 + 指纹校验 + 导入自检">读 PoseFile</button>
       <button id="btnSceneSave" title="导出场景文件 3dpose.scene/1：场上全部素体（N 副骨架）+ 全部物体 + 参考图平面 + 机位，一个文件 = 一张卡片">存场景</button>
       <button id="btnSceneLoad" title="读取 .scene.json 套用：按人数自动补素体、按左右对号入座、物体按 id 覆盖、参考图整层重建">读场景</button>
       <button id="btnProps" title="物体面板：添加椅子 / 桌子 / 木箱等道具，可挂到骨骼上跟着姿势走。3D 里点物体就出操作手柄（默认移动；双击换档：移动→旋转→缩放），点空白取消；Shift 拖=抬高 / Alt 拖=转朝向 / Ctrl 拖=缩放">物体</button>
@@ -92,6 +90,13 @@
         title="身材形变：滑杆改这具身体的绑定姿态网格（身高 / 腿长 / 臂长 / 胸腰髋围 / 四肢粗细 / 肩宽 / 躯干长），旁边实时显示量出来的 cm。只改网格、骨骼与权重不动 → 摆姿 / IK / 动画照常；按素体存在本机，刷新后自动恢复"
       >
         身材
+      </button>
+
+      <button
+        id="btnHand"
+        title="手部手势：一键手势（握拳 / 张开 / 食指指点 / 剪刀手 / OK / 枪指…）、逐指屈伸与展收的滑杆、掌向（翻掌 tilt / roll 与掌心朝哪）。只写腕骨与指骨，身体姿态与走位照旧不动；程序化的无指骨架只出掌向"
+      >
+        手部
       </button>
 
 
@@ -186,6 +191,7 @@
 
     <aside id="bodyPanel" aria-label="照片导入素体面板"></aside>
     <aside id="bodyShapePanel" aria-label="身材形变面板"></aside>
+    <aside id="handPanel" aria-label="手部手势面板"></aside>
 
 
 
@@ -205,10 +211,9 @@
       accept="image/png,image/jpeg,image/jpg,image/webp,image/bmp,.png,.jpg,.jpeg,.webp,.bmp"
       style="display:none"
     />
-    <input type="file" id="fileInputPose" accept=".json,application/json" style="display:none" />
     <!-- HDRI 全景背景：只收环境贴图扩展名（白名单与 src/core/hdriBackground.js 的 HDRI_ACCEPT 对齐） -->
     <input type="file" id="fileInputHdri" accept=".exr,.hdr" style="display:none" />
-    <!-- 场景文件（3dpose.scene/1）：与 .pose.json 分开收，避免「选错文件类型」 -->
+    <!-- 场景文件（3dpose.scene/1）：库里唯一的文件格式，单人也按一副骨架的场存 -->
     <input type="file" id="fileInputScene" accept=".scene.json,.json,application/json" style="display:none" />
     <div id="boneReadout"></div>
     <div id="toast"></div>

@@ -822,7 +822,7 @@ class PoseBridgeTests(_ServerCase):
         self.assertIn(status, (400, 404), "前缀不能把数据根里的配置发出去")
 
     def test_pose_lib_prefix_serves_the_synced_library(self):
-        """姿势库弹窗跑在离线窗口里：库文件按 `/pose-lib/` 这条前缀伺服，弹窗读的就是这些地址。"""
+        """场景库弹窗跑在离线窗口里：库文件按 `/pose-lib/` 这条前缀伺服，弹窗读的就是这些地址。"""
         index = {"format": "3dpose.index/1",
                  "entries": [{"id": "a", "label": "A-Pose", "path": "poses/stand/a.pose.json",
                              "groups": ["stand"], "preview": {"clay": "preview/a.clay.png"}}]}
@@ -914,7 +914,7 @@ class PoseBridgeTests(_ServerCase):
         self.assertNotIn(("GET", "/models/{path}"), caps.DESKTOP_ROUTES,
                          "道具注册表与素体 GLB 的根前缀也是静态伺服，与子资源同一条路")
         self.assertNotIn(("GET", "/pose-lib/{path:.*}"), caps.DESKTOP_ROUTES,
-                         "姿势库的整条前缀同静态伺服，不进能力表")
+                         "场景库的整条前缀同静态伺服，不进能力表")
 
     def test_import_model_offline_lands_in_data_root(self):
         """离线服务里导入一份自备 GLB：落点在数据根的 pose/dist/models，页面那条前缀取得到。"""
