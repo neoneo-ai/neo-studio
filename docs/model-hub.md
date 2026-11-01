@@ -61,6 +61,37 @@
 用于仓库列表分组显示与补齐。分组内仓库按 ModelScope 组织页的**综合排序**排列
 （`SortBy=Default` 的返回顺序），ModelScope 未收录的仓库排在本组末尾。
 
+## 预设模型清单（models.json）
+
+`skills/presets/<id>/models.json` 声明一个预设要用的模型文件，供模型库的「预设就绪」面板（见下）与下载计划使用
+（路由见 [api-routes.md](api-routes.md)）。清单只描述文件层：不检查 ComfyUI 版本、显存、队列，也不预测生成成败。
+
+- 顶层：`family` / `label` / `kind`（`image` / `video`）/ `license` / `notes`（显示用的注意事项）。
+  `extends` 指向同族基座预设，预设自己的清单只写追加项（LoRA 等）；extends 只解一层，环到此为止。
+- `files[]`：`field`（生图 / 生视频配置里的键，`loras` 表示 LoRA 项）、`filename`（预设口径的相对名，含子目录）、
+  `category`（落盘类别）、`gb`、`label`、`optional`（可选项，不计入缺失）、`alt`（同族变体名，本机落到别的名字时靠它认）、
+  `sources[]`（`source` = `modelscope` / `huggingface` / `civitai` + `repo` + `path`，`gated` 标 HF 上要先申请授权的条目；
+  `sources[0]` 为推荐源）。
+- 就位判定跟生成侧一致：配置写死了模型名就按那个相对名精确查；名留空才按推荐名 + `alt` 在类别整棵树里认
+  （大小写与斜杠方向不敏感）。`loras` 项只在该 LoRA 出现在预设 / 全局 LoRA 列表里才算数。
+- 下载计划按模型库当前源出条目，条目 `payload` 就是 `/neo_model_hub/download` 的入参；该源没有这条文件时条目
+  标 `not_on_source` 并给出另一源，不自动换源；出处非法标 `bad_source`。C 站出处必须是 `/api/download/models/<id>?…` 端点。
+- 不吃本地模型文件的预设不带清单：`translate` / `translate_to_chinese` / `translate_to_english` / `cosyvoice_voice`，
+  自检对它们返回 `has_manifest: false`。清单缺失或坏 JSON 同样按无清单降级，不报错。
+
+## 预设就绪面板（模型库 → 预设就绪）
+
+模型库顶栏的「预设就绪」展开就绪面板，把上面的就位检查与下载计划接成一条可点的路径：
+
+1. 展开时读 `GET /neo_skill_models/all`：按族系列出预设数、文件数、总体积与「缺 N 项 · X GB」徽标，
+   没有缺项的族系标「已就绪」；顶部计数是「P 个预设 · F 个族系 · 需要补模型的族系 B 个」。
+2. 点族系里的预设名 → `POST /neo_skill_models/plan`（带模型库当前源与「计划含可选文件」勾选）出计划：
+   每条显示 `名称 · 类别/子目录/落盘名` 与源、体积，条目的 `payload` 就是发给 `/neo_model_hub/download` 的入参。
+   当前源没有这条文件时按钮禁用并写出另一源；出处非法时写明原因；源要 HF Token / C 站 KEY 时在计划头部说去哪填。
+3. 单条「下载」或「全部下载」把计划逐条喂进模型库的下载位（同一时间只有一个下载，上一条完成接下一条），
+   进度条与「取消」沿用下载区；取消即断队列，断点留在当前文件。
+4. 计划下完自动重读就位总览与该预设的计划：刚落盘的文件从缺项里消失，同族预设一起变回「已就绪」。
+
 ## 与技能修复联动
 
 技能修复弹窗中缺模型的条目可直接打开模型库并预填搜索词 / 类别

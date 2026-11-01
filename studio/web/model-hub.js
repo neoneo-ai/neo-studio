@@ -6,6 +6,7 @@
  * LLM 子目录与超时。Civitai 源走 LoRA 搜索（类型 / 底模 / 排序 / NSFW）→ 版本权重清单，
  * API KEY 与代理沿用画廊设置里的 C 站配置。技能修复弹窗可用 openModelHub({ query, category })
  * 预填并定位下载目标。
+ * 预设就绪（/neo_skill_models/*）：族系总览 → 单预设缺失出下载计划 → 逐条走本库下载，下完刷新就位。
  */
 import { app } from "../../../../scripts/app.js";
 import { showToast } from "./gallery-utils.js";
@@ -20,12 +21,14 @@ if (!document.getElementById("neo-hub-css")) {
 }
 
 const API = "/neo_model_hub";
+const SKILL_API = "/neo_skill_models";   // 预设就绪检查与下载计划，计划条目的 payload 直接喂本库下载
 const SOURCE_NAMES = { modelscope: "ModelScope", huggingface: "Hugging Face", civitai: "Civitai" };
 const CIVITAI_TYPE_NAMES = { LORA: "LoRA", LoCon: "LoCon", DoRA: "DoRA" };
 const CIVITAI_SORT_NAMES = {
     "Most Downloaded": t("下载量"), "Highest Rated": t("评分"), "Most Liked": t("最多点赞"),
     "Most Collected": t("最多收藏"), "Newest": t("最新"), "Recently Added": t("最近收录"),
 };
+const READY_KIND_NAMES = { image: t("生图"), video: t("视频") };
 
 let hub = null;
 
@@ -44,14 +47,19 @@ function fmtSize(bytes) {
     return `${n} B`;
 }
 
-async function req(path, body) {
-    const resp = await fetch(API + path, body
+async function apiReq(base, path, body) {
+    const resp = await fetch(base + path, body
         ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
         : undefined);
     const data = await resp.json().catch(() => ({}));
     if (!resp.ok || data.success === false) throw new Error(data.error || `HTTP ${resp.status}`);
     return data;
 }
+
+async function req(path, body) { return apiReq(API, path, body); }
+
+/** 预设就绪接口（/neo_skill_models/*）：与模型库同一套请求口径与报错方式。 */
+async function skillReq(path, body) { return apiReq(SKILL_API, path, body); }
 
 // ---------------------------------------------------------------------------
 // 列表渲染
@@ -238,6 +246,7 @@ function buildUI(h) {
             h.source = key;
             syncSource(h);
             loadRepos(h, false);
+            if (h.readySkill) loadReadyPlan(h, h.readySkill);   // 已出计划时换源重出：计划跟着当前源走
         });
         srcBtns[key] = b;
         srcWrap.appendChild(b);
@@ -246,12 +255,30 @@ function buildUI(h) {
     refreshBtn.type = "button";
     refreshBtn.title = t("跳过缓存重新拉取仓库与文件清单");
     refreshBtn.addEventListener("click", () => loadRepos(h, true));
+    const readyBtn = el("button", "neo-hub-btn neo-hub-ready-toggle", t("预设就绪"));
+    readyBtn.type = "button";
+    readyBtn.title = t("查看每个预设要用的模型文件是否已在本机模型根里");
+    readyBtn.addEventListener("click", () => toggleReady(h));
     const settingsBtn = el("button", "neo-hub-icon-btn", "");
     settingsBtn.type = "button";
     settingsBtn.title = t("模型库设置（源 / 端点 / Token / LLM 子目录 / 超时）");
     const closeBtn = el("button", "neo-hub-icon-btn", "✕");
     closeBtn.type = "button";
-    head.append(el("span", "neo-hub-title", t("模型库 · Comfy-Org")), srcWrap, refreshBtn, settingsBtn, closeBtn);
+    head.append(el("span", "neo-hub-title", t("模型库 · Comfy-Org")), srcWrap, refreshBtn, readyBtn, settingsBtn, closeBtn);
+
+    const readyWrap = el("div", "neo-hub-ready");
+    readyWrap.style.display = "none";
+    const readyHead = el("div", "neo-hub-row");
+    const readySummary = el("span", "neo-hub-ready-summary", t("预设就绪总览加载中…"));
+    const readyOptional = el("label", "neo-hub-check");
+    const readyOptionalInput = el("input");
+    readyOptionalInput.type = "checkbox";
+    readyOptional.append(readyOptionalInput, el("span", "", t("计划含可选文件")));
+    const readyRefresh = el("button", "neo-hub-btn neo-hub-ready-refresh", t("刷新"));
+    readyRefresh.type = "button";
+    readyHead.append(readySummary, readyOptional, readyRefresh);
+    const readyBody = el("div", "neo-hub-ready-body");
+    readyWrap.append(readyHead, readyBody);
 
     const searchRow = el("div", "neo-hub-row");
     const searchInput = el("input", "neo-hub-input neo-hub-search");
@@ -374,7 +401,7 @@ function buildUI(h) {
     saveBtn.type = "button";
     panel.appendChild(saveBtn);
 
-    box.append(head, searchRow, civiRow, repoRow, fileList, targetRow, actRow, bar, progText, panel);
+    box.append(head, readyWrap, searchRow, civiRow, repoRow, fileList, targetRow, actRow, bar, progText, panel);
     overlay.appendChild(box);
 
     h.ui = {
@@ -382,6 +409,7 @@ function buildUI(h) {
         statusText, barFill, progText, panel, inputs, searchInput, settingsBtn, closeBtn,
         civiRow, civiTypeSel, civiBaseSel, civiSortSel, civiNsfwInput, civiNote,
         civiPrevBtn, civiNextBtn,
+        readyWrap, readySummary, readyOptionalInput, readyRefresh, readyBody,
     };
     return overlay;
 }
@@ -525,6 +553,172 @@ async function loadFiles(h, refresh) {
     }
 }
 
+// ---------------------------------------------------------------------------
+// 预设就绪：族系总览 → 单预设计划 → 逐条下载（下载与进度轮询走模型库那套）
+// ---------------------------------------------------------------------------
+
+/** 计划的下载前置：HF 要 Token、C 站要 KEY；缺了就说清去哪填，不让人点了才知道。 */
+function readyTokenNote(plan) {
+    if (plan.needs_token && !plan.has_token) return t("该源需要先在模型库设置里填 HF Token");
+    if (plan.source === "civitai" && !plan.has_token) return t("C 站源需要在画廊设置的 Civitai 区填 API KEY");
+    return "";
+}
+
+function renderReadyOverview(h) {
+    const body = h.ui.readyBody;
+    body.innerHTML = "";
+    for (const fam of h.readyFamilies) {
+        const row = el("div", "neo-hub-ready-family");
+        const main = el("div", "neo-hub-ready-fam-main");
+        main.append(
+            el("span", "neo-hub-ready-name", tf("{label}（{kind_text} · {presets} 预设 · {files} 文件 · {gb} GB）", {
+                label: fam.label || fam.family, kind_text: READY_KIND_NAMES[fam.kind] || fam.kind,
+                presets: fam.preset_count, files: fam.file_count, gb: fam.total_gb,
+            })),
+            el("span", `neo-hub-ready-badge ${fam.blocked ? "neo-hub-ready-missing" : "neo-hub-ready-ok"}`,
+                fam.blocked ? tf("缺 {n} 项 · {gb} GB", { n: fam.missing_count, gb: fam.missing_gb }) : t("已就绪")));
+        row.appendChild(main);
+        const skills = el("div", "neo-hub-ready-skills");
+        for (const sk of fam.skills || []) {
+            const btn = el("button", "neo-hub-btn neo-hub-ready-skill", sk.cn_name);
+            btn.type = "button";
+            btn.dataset.skill = sk.skill_id;
+            if (sk.skill_id === h.readySkill) btn.classList.add("neo-hub-ready-skill-active");
+            btn.addEventListener("click", () => loadReadyPlan(h, sk.skill_id));
+            skills.appendChild(btn);
+        }
+        row.appendChild(skills);
+        body.appendChild(row);
+    }
+}
+
+function readyTotalsText(h) {
+    return tf("{p} 个预设 · {f} 个族系 · 需要补模型的族系 {b} 个", {
+        p: h.readyTotals.preset_count, f: h.readyTotals.family_count, b: h.readyTotals.blocking_count,
+    });
+}
+
+async function loadReadyOverview(h) {
+    h.ui.readySummary.textContent = t("预设就绪总览加载中…");
+    try {
+        const data = await skillReq("/all");
+        h.readyFamilies = data.families || [];
+        h.readyTotals = {
+            family_count: data.family_count || 0,
+            preset_count: data.preset_count || 0,
+            blocking_count: data.blocking_count || 0,
+        };
+        h.ui.readySummary.textContent = readyTotalsText(h);
+        renderReadyOverview(h);
+        if (h.readyPlan) renderReadyPlan(h);
+    } catch (e) {
+        h.ui.readySummary.textContent = t("预设就绪总览读取失败");
+        h.ui.readyBody.innerHTML = "";
+        h.ui.readyBody.appendChild(el("div", "neo-hub-ready-note", String(e.message || e)));
+    }
+}
+
+function planRow(h, item) {
+    const payload = item.payload || null;
+    const row = el("div", "neo-hub-ready-item");
+    row.append(
+        el("span", "neo-hub-ready-name",
+            `${item.label || item.filename} · ${item.category}/${payload && payload.subfolder ? `${payload.subfolder}/` : ""}${payload ? payload.filename : item.base_name}`),
+        el("span", "neo-hub-ready-badge", `${SOURCE_NAMES[item.source] || item.reason || ""} · ${item.gb} GB`));
+    const btn = el("button", "neo-hub-btn neo-hub-ready-dl", t("下载"));
+    btn.type = "button";
+    if (!payload) btn.disabled = true;   // 当前源没有 / 出处非法：没有可下载的东西就不出可用的按钮
+    else btn.addEventListener("click", () => startPlanDownloads(h, [item]));
+    row.appendChild(btn);
+    const note = item.reason === "not_on_source"
+        ? tf("当前源没有这条文件，{source} 有，切到该源后重新出计划", { source: SOURCE_NAMES[item.other_source] || item.other_source })
+        : (item.reason === "bad_source" ? tf("该出处非法：{note}", { note: item.note || "" }) : (item.note || ""));
+    if (note) row.appendChild(el("span", "neo-hub-ready-item-note", note));
+    return row;
+}
+
+function renderReadyPlan(h) {
+    const plan = h.readyPlan;
+    if (!plan) return;
+    const block = el("div", "neo-hub-ready-plan");
+    const headRow = el("div", "neo-hub-row");
+    headRow.append(el("span", "neo-hub-ready-name",
+        tf("{name} · 出计划源 {source}", { name: plan.label || plan.skill_id, source: plan.source_label || plan.source })));
+    const warn = readyTokenNote(plan);
+    if (warn) headRow.appendChild(el("span", "neo-hub-ready-warn", warn));
+    const items = (plan.files || []).filter((i) => i.payload);
+    if (items.length) {
+        const allBtn = el("button", "neo-hub-btn neo-hub-ready-all", t("全部下载"));
+        allBtn.type = "button";
+        allBtn.addEventListener("click", () => startPlanDownloads(h));
+        headRow.appendChild(allBtn);
+    }
+    block.appendChild(headRow);
+    block.appendChild(el("div", "neo-hub-ready-note",
+        plan.has_manifest
+            ? tf("待下载 {n} 项 · {gb} GB", { n: items.length, gb: plan.total_gb || 0 })
+            : t("该预设不声明本地模型文件，无需从这里下载")));
+    for (const line of plan.notes || []) block.appendChild(el("div", "neo-hub-ready-note", line));
+    for (const item of plan.files || []) block.appendChild(planRow(h, item));
+    h.ui.readyBody.appendChild(block);
+}
+
+async function loadReadyPlan(h, skillId) {
+    h.readySkill = skillId;
+    h.ui.readySummary.textContent = t("下载计划生成中…");
+    try {
+        const data = await skillReq("/plan", {
+            skill_id: skillId, source: h.source, include_optional: !!h.ui.readyOptionalInput.checked,
+        });
+        h.readyPlan = data.plan;
+        renderReadyOverview(h);
+        renderReadyPlan(h);
+        h.ui.readySummary.textContent = readyTotalsText(h);   // 出完计划回到计数行，不停在「生成中」
+    } catch (e) {
+        h.readyPlan = null;
+        h.ui.readySummary.textContent = t("下载计划读取失败");
+        showToast(app, "error", t("下载计划读取失败"), String(e.message || e));
+    }
+}
+
+function startPlanDownloads(h, items) {
+    const queue = (items || (h.readyPlan ? h.readyPlan.files.filter((i) => i.payload) : [])).slice();
+    if (!queue.length) { showToast(app, "info", t("没有可下载的条目")); return; }
+    h.planQueue = queue;
+    h.planRunning = true;
+    pumpPlanQueue(h);
+}
+
+/** 计划队列：模型库只有一个下载位，计划逐条喂进去，进度轮询的 done 分支续跑下一条、最后重读就位。 */
+async function pumpPlanQueue(h) {
+    const item = h.planQueue.shift();
+    if (!item) { h.planRunning = false; return; }
+    h.ui.dlBtn.disabled = true;
+    h.ui.statusText.textContent = tf("计划下载中：{name}", { name: item.payload.filename });
+    try {
+        await req("/download", item.payload);
+        startPoll(h);
+    } catch (e) {
+        h.planQueue = [];
+        h.planRunning = false;
+        h.ui.dlBtn.disabled = false;
+        h.ui.statusText.textContent = t("下载启动失败");
+        showToast(app, "error", t("下载启动失败"), String(e.message || e));
+    }
+}
+
+/** 一轮计划下完就重读就位：文件落盘后缺项变少，闭环在这一步合上。 */
+async function refreshReady(h) {
+    await loadReadyOverview(h);
+    if (h.readySkill) await loadReadyPlan(h, h.readySkill);
+}
+
+async function toggleReady(h) {
+    const open = h.ui.readyWrap.style.display === "none";
+    h.ui.readyWrap.style.display = open ? "" : "none";
+    if (open && !h.readyFamilies.length) await loadReadyOverview(h);
+}
+
 function fillSettingsForm(h, settings) {
     for (const [key, input] of Object.entries(h.ui.inputs)) {
         const value = settings[key];
@@ -573,10 +767,17 @@ async function pollProgress(h) {
         renderProgress(h, d);
         showToast(app, "success", t("下载完成"), `${d.category} / ${d.filename}`);
         loadFiles(h, true);
+        if (!h.planRunning) return;
+        if (h.planQueue.length) pumpPlanQueue(h);   // 计划队列：模型库单下载位，一条下完接下一条
+        else { h.planRunning = false; refreshReady(h); }   // 计划下完：重读就位，闭环在这一步合上
     } else if (d.state === "paused") {
+        h.planQueue = [];   // 取消即断队列：断点留在当前文件上，不自动续下一条
+        h.planRunning = false;
         h.ui.statusText.textContent = d.error || t("已取消（断点保留）");
         showToast(app, "info", t("已取消"), t("断点已保留，再次下载同一文件可续传"));
     } else if (d.state === "error") {
+        h.planQueue = [];
+        h.planRunning = false;
         h.ui.statusText.textContent = d.error || t("下载失败");
         showToast(app, "error", t("下载失败"), d.error || "");
     }
@@ -628,6 +829,10 @@ function bindActions(h) {
     });
     h.ui.subSel.addEventListener("change", () => { syncNewSub(h); updateTarget(h); });
     h.ui.subNew.addEventListener("input", () => updateTarget(h));
+    h.ui.readyRefresh.addEventListener("click", () => loadReadyOverview(h));
+    h.ui.readyOptionalInput.addEventListener("change", () => {
+        if (h.readySkill) loadReadyPlan(h, h.readySkill);   // 可选文件勾选只影响出计划的口径
+    });
     h.ui.settingsBtn.addEventListener("click", () => {
         h.ui.panel.style.display = h.ui.panel.style.display === "none" ? "block" : "none";
     });
@@ -662,6 +867,8 @@ export function openModelHub(opts = {}) {
         source: opts.source || "modelscope", repos: [], files: [], registry: {}, categories: [],
         models: [], civiPage: 1, civiCursors: [""], timer: null, ui: {}, wantCategory: opts.category || "",
         wantRepo: opts.repo || "", wantSource: opts.source || "",
+        readyFamilies: [], readyTotals: { family_count: 0, preset_count: 0, blocking_count: 0 },
+        readySkill: "", readyPlan: null, planQueue: [], planRunning: false,
     };
     const overlay = buildUI(h);
     h.overlay = overlay;

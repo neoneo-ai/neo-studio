@@ -1,0 +1,6 @@
+{
+  "family": "qwen_image_21",
+  "label": "Qwen Image 2.1 生图族",
+  "kind": "image",
+  "extends": "qwen_image_21"
+}

@@ -83,6 +83,7 @@ studio/
 ├── pose.py                    # 3D 摆姿页后端 + /neo-pose 与 /neo_pose/* 路由
 ├── frames.py                  # 视频抽帧页后端 + /neo_frames/* 路由
 ├── model_hub.py               # 模型仓库 + /neo_model_hub/* 路由
+├── skill_models.py            # 预设模型清单 models.json + /neo_skill_models/* 路由
 ├── model_download.py          # 下载与落位
 ├── workflow.py                # 工作流修复 + /neo_nodes/* 路由
 ├── neo-studio-app.bat         # 桌面端调试入口（带控制台）

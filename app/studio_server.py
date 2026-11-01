@@ -31,10 +31,11 @@ LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
 # 桌面端进程加载的插件模块，按依赖顺序：handler 只依赖 folder_paths、文件系统与 8080 LLM 服务。
 DESKTOP_MODULES = ("util", "civitai", "bookmark", "gallery_lora", "gallery_oss", "gallery",
                  "minimax_h3", "skill", "laya_router", "prompt_names", "prompt_lines", "llm", "lora_tag",
-                 "recipes", "video_gen", "image_gen_files", "model_hub", "backyard", "agent", "pose", "frames")
+                 "recipes", "video_gen", "image_gen_files", "model_hub", "skill_models",
+                 "backyard", "agent", "pose", "frames")
 DESKTOP_ROUTE_MODULES = ("gallery_lora", "gallery_oss", "gallery", "bookmark", "lora_tag",
                        "skill", "prompt_names", "llm", "recipes", "video_gen", "image_gen_files", "model_hub",
-                       "backyard", "agent", "pose", "frames")
+                       "skill_models", "backyard", "agent", "pose", "frames")
 
 USERDATA_PATH = "/userdata/neo_gallery_data.json"
 

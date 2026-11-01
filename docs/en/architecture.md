@@ -86,6 +86,7 @@ studio/
 ├── pose.py                    # 3D Pose backend + /neo-pose and /neo_pose/* routes
 ├── frames.py                  # Video frame extractor backend + /neo_frames/* routes
 ├── model_hub.py               # model hub + /neo_model_hub/* routes
+├── skill_models.py            # preset model manifests models.json + /neo_skill_models/* routes
 ├── model_download.py          # download and placement
 ├── workflow.py                # workflow repair + /neo_nodes/* routes
 ├── neo-studio-app.bat         # Studio desktop debug entry (with console)

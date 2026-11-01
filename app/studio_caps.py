@@ -150,6 +150,14 @@ _MODEL_HUB = {
     ("POST", "/neo_model_hub/civitai/files"),
 }
 
+# 预设模型自检（studio/skill_models.py）：预设 models.json 的文件层就位检查与双源下载计划，
+# 只读文件与模型库设置，不碰 ComfyUI 运行时；实际下载仍走上面那组 /neo_model_hub/* 路由
+_SKILL_MODELS = {
+    ("GET", "/neo_skill_models/check"),
+    ("GET", "/neo_skill_models/all"),
+    ("POST", "/neo_skill_models/plan"),
+}
+
 _BACKYARD = {
     ("GET", "/neo-studio-backyard"),
     ("GET", "/neo_backyard/config"),
@@ -216,7 +224,7 @@ _FRAMES = {
 }
 
 DESKTOP_ROUTES = (_GALLERY | _BOOKMARK | _SKILL | _PROMPTS | _RECIPES | _SETTINGS | _LLM | _MODEL_HUB
-                  | _BACKYARD | _MCP | _AGENT | _POSE | _FRAMES)
+                  | _SKILL_MODELS | _BACKYARD | _MCP | _AGENT | _POSE | _FRAMES)
 
 # 前端门控用的功能开关：功能 → 代表路由。桌面端服务时该功能可用，否则按钮指向「启动 ComfyUI」。
 FEATURE_ROUTES = {

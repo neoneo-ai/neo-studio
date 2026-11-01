@@ -1,0 +1,60 @@
+{
+  "family": "qwen_image_21",
+  "label": "Qwen Image 2.1 生图族",
+  "kind": "image",
+  "license": "Comfy-Org 重打包权重，许可随 Qwen 原仓库",
+  "files": [
+    {
+      "field": "model",
+      "filename": "QwenImage2.1/qwen_image_2.1_int8_convrot.safetensors",
+      "category": "diffusion_models",
+      "gb": 7.26,
+      "alt": [
+        "qwen_image_2.1_turbo_int8_convrot.safetensors",
+        "qwen_image_2.1_bf16.safetensors",
+        "qwen_image_2.1_turbo_bf16.safetensors"
+      ],
+      "sources": [
+        {"source": "modelscope", "repo": "Comfy-Org/Qwen-Image-2.1", "path": "diffusion_models/qwen_image_2.1_int8_convrot.safetensors"},
+        {"source": "huggingface", "repo": "Comfy-Org/Qwen-Image-2.1", "path": "diffusion_models/qwen_image_2.1_int8_convrot.safetensors"}
+      ]
+    },
+    {
+      "field": "text_encoder",
+      "filename": "qwen3vl_8b_int8_convrot.safetensors",
+      "category": "text_encoders",
+      "gb": 9.35,
+      "alt": [
+        "qwen3vl_8b_w4a8.safetensors",
+        "qwen3vl_8b_bf16.safetensors"
+      ],
+      "sources": [
+        {"source": "modelscope", "repo": "Comfy-Org/Qwen-Image-2.1", "path": "text_encoders/qwen3vl_8b_int8_convrot.safetensors"},
+        {"source": "huggingface", "repo": "Comfy-Org/Qwen-Image-2.1", "path": "text_encoders/qwen3vl_8b_int8_convrot.safetensors"},
+        {"source": "modelscope", "repo": "Comfy-Org/Qwen3-VL", "path": "text_encoders/qwen3vl_8b_int8_convrot.safetensors"},
+        {"source": "huggingface", "repo": "Comfy-Org/Qwen3-VL", "path": "text_encoders/qwen3vl_8b_int8_convrot.safetensors"}
+      ]
+    },
+    {
+      "field": "vae",
+      "filename": "qwen_image_2.1_vae_bf16.safetensors",
+      "category": "vae",
+      "gb": 0.68,
+      "sources": [
+        {"source": "modelscope", "repo": "Comfy-Org/Qwen-Image-2.1", "path": "vae/qwen_image_2.1_vae_bf16.safetensors"},
+        {"source": "huggingface", "repo": "Comfy-Org/Qwen-Image-2.1", "path": "vae/qwen_image_2.1_vae_bf16.safetensors"}
+      ]
+    },
+    {
+      "field": "patch",
+      "filename": "qwen_image_2.1_fun_controlnet_union_int8_convrot.safetensors",
+      "category": "model_patches",
+      "gb": 3.78,
+      "alt": ["qwen_image_2.1_fun_controlnet_union_bf16.safetensors"],
+      "sources": [
+        {"source": "modelscope", "repo": "Comfy-Org/Qwen-Image-2.1", "path": "model_patches/qwen_image_2.1_fun_controlnet_union_int8_convrot.safetensors"},
+        {"source": "huggingface", "repo": "Comfy-Org/Qwen-Image-2.1", "path": "model_patches/qwen_image_2.1_fun_controlnet_union_int8_convrot.safetensors"}
+      ]
+    }
+  ]
+}

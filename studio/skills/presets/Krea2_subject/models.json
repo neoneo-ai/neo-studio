@@ -1,0 +1,6 @@
+{
+  "family": "krea2_image",
+  "label": "Krea2 生图族",
+  "kind": "image",
+  "extends": "image_gen"
+}

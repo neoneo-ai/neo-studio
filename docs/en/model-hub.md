@@ -76,6 +76,50 @@ only, no metadata) and drives the grouping and the fill-in of the repository lis
 group follow the **relevance order** of the ModelScope organization page (the order returned by
 `SortBy=Default`); repositories ModelScope does not list go at the end of their group.
 
+## Preset model manifests (models.json)
+
+`skills/presets/<id>/models.json` declares the model files a preset needs and drives the Model Hub's Preset
+readiness panel (below) and the download plan (routes: [api-routes.md](api-routes.md)). The manifest describes the
+file layer only: it does not check the ComfyUI version, VRAM, the queue, and it does not predict generation.
+
+- Top level: `family` / `label` / `kind` (`image` / `video`) / `license` / `notes` (the notes shown in the UI).
+  `extends` points at the family base preset so the preset's own manifest lists only its additions (LoRA etc.);
+  extends resolves one level deep and a cycle stops there.
+- `files[]`: `field` (the key in the image / video generation config, `loras` marks a LoRA entry),
+  `filename` (the preset-relative name, subfolders included), `category` (the drop-in category), `gb`, `label`,
+  `optional` (an optional entry, never counted as missing), `alt` (family variant names, so a file that landed
+  under a different name is still recognized), `sources[]` (`source` = `modelscope` / `huggingface` / `civitai`
+  + `repo` + `path`, `gated` marks entries that need authorization on HF first; `sources[0]` is the recommended one).
+- Readiness follows the generation side: a config with a pinned model name is looked up by that exact relative
+  name; an empty name matches the recommended name plus `alt` anywhere in the category tree (case and slash
+  insensitive). A `loras` entry only counts when that LoRA is in the preset / global LoRA list.
+- The download plan emits entries for the hub's current source and each entry's `payload` is exactly what
+  `/neo_model_hub/download` takes; a file the current source does not carry is marked `not_on_source` with the
+  other source named, and there is no automatic switch; an illegal source entry is marked `bad_source`.
+  A civitai source must be a `/api/download/models/<id>?…` endpoint.
+- Presets that need no local model files ship no manifest: `translate` / `translate_to_chinese` /
+  `translate_to_english` / `cosyvoice_voice`; readiness returns `has_manifest: false` for them, and a missing or
+  broken manifest degrades the same way instead of raising.
+
+## The readiness panel (Model Hub → Preset readiness)
+
+The "Preset readiness" button in the Model Hub header expands a panel that turns the readiness check and the
+download plan above into one clickable path:
+
+1. Expanding reads `GET /neo_skill_models/all`: one row per family with its preset count, file count, total size
+   and a "missing N · X GB" badge (a family with no gap reads "Ready"); the header counts
+   "P presets · F families · B families need models".
+2. Clicking a preset in a family sends `POST /neo_skill_models/plan` (carrying the hub's current source and the
+   "Plan includes optional files" tick) and renders the plan: each row reads `label · category/subfolder/landed
+   name` with its source and size, and the row's `payload` is what `/neo_model_hub/download` takes. A file the
+   current source does not carry has its button disabled with the other source named; an illegal source entry says
+   why; a source that needs an HF token or a Civitai key says where to fill it in, in the plan header.
+3. "Download" on one row, or "Download all", feeds the plan into the hub's single download slot one item at a time
+   (finishing the previous item starts the next); the progress bar and "Cancel" are the download area's own.
+   Cancelling breaks the queue — the breakpoint stays on the current file.
+4. When the plan finishes, the overview and that preset's plan are re-read: the files that just landed leave the
+   missing list and every preset of the family turns "Ready" together.
+
 ## Link with skill repair
 
 An entry in the skill repair dialog that is missing a model opens the Model Hub with the search query

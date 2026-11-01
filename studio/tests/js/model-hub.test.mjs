@@ -25,6 +25,54 @@ const FILES = [
     { path: "split_files/text_encoders/qwen3_8b.safetensors", filename: "qwen3_8b.safetensors", category: "text_encoders", size: 8.2 * 1024 ** 3, exists: false },
     { path: "qwen3_8b_q4_k_m.gguf", filename: "qwen3_8b_q4_k_m.gguf", category: "llm", size: 5 * 1024 ** 3, exists: true, exists_sub: "z_image" },
 ];
+const READY_ALL = {
+    family_count: 2, preset_count: 3, blocking_count: 1,
+    families: [
+        {
+            family: "qwen_image_21", label: "Qwen-Image 2.1", kind: "image",
+            skills: [{ skill_id: "qwen_image_21_body_swap", cn_name: "身体替换" }],
+            files: [], preset_count: 1, file_count: 4, total_gb: 30.5,
+            missing_count: 2, missing_gb: 18.2, blocked: true,
+        },
+        {
+            family: "ltx2", label: "LTX-2", kind: "video",
+            skills: [{ skill_id: "ltx2_t2v", cn_name: "文生视频" }, { skill_id: "ltx2_i2v", cn_name: "图生视频" }],
+            files: [], preset_count: 2, file_count: 3, total_gb: 21,
+            missing_count: 0, missing_gb: 0, blocked: false,
+        },
+    ],
+};
+const READY_PLAN_FILES = [
+    {
+        field: "model", category: "diffusion_models", filename: "qwen_image_bfp.safetensors",
+        base_name: "qwen_image_bfp.safetensors", label: "基座", gb: 11.4, sources: [], subfolder: "Qwen",
+        on_source: true, reason: "", source: "modelscope", gated: false,
+        payload: { source: "modelscope", repo: "Comfy-Org/Qwen-Image_ComfyUI",
+            path: "split_files/diffusion_models/qwen_image_bfp.safetensors",
+            category: "diffusion_models", subfolder: "Qwen", filename: "qwen_image_bfp.safetensors" },
+    },
+    {
+        field: "vae", category: "vae", filename: "vae.safetensors", base_name: "vae.safetensors",
+        label: "VAE", gb: 0.3, sources: [], subfolder: "", on_source: true, reason: "",
+        source: "modelscope", gated: false,
+        note: "仓库文件落盘名 qwen_image_vae.safetensors 与配置名 vae.safetensors 不同名，就位检查按 qwen_image_vae.safetensors 算",
+        payload: { source: "modelscope", repo: "Comfy-Org/Qwen-Image_ComfyUI",
+            path: "split_files/vae/qwen_image_vae.safetensors",
+            category: "vae", subfolder: "", filename: "qwen_image_vae.safetensors" },
+    },
+    {
+        field: "text_encoder", category: "text_encoders", filename: "qwen3_8b.safetensors",
+        base_name: "qwen3_8b.safetensors", label: "文本编码器", gb: 8.2, sources: [], subfolder: "",
+        on_source: false, reason: "not_on_source", other_source: "huggingface",
+    },
+];
+const READY_PLAN = {
+    skill_id: "qwen_image_21_body_swap", has_manifest: true, family: "qwen_image_21",
+    label: "Qwen-Image 2.1", kind: "image", notes: ["权重为 Apache-2.0 许可，可商用"],
+    source: "modelscope", source_label: "MS", needs_token: false, has_token: true,
+    files: READY_PLAN_FILES, missing: ["文本编码器（text_encoders · 8.2 GB）"],
+    missing_gb: 8.2, total_gb: 11.7,
+};
 
 function mockHub(progress = () => jsonResponse({ download: { state: "idle" } })) {
     mockRoute("/neo_model_hub/settings", (body, call) => jsonResponse(
@@ -453,4 +501,170 @@ test("模型库：C 站下一页按 next_cursor 翻页，上一页回退，过�
     hub.closeModelHub();
     clearBody();
 });
+
+
+// ---------------------------------------------------------------------------
+// 预设就绪面板（/neo_skill_models/*）：总览 → 计划 → 计划队列下完刷新就位
+// ---------------------------------------------------------------------------
+
+test("模型库 · 预设就绪：总览按族系出缺项徽标与预设入口", async () => {
+    resetEnv();
+    clearRoutes();
+    mockHub();
+    mockReady();
+    const overlay = await openHub();
+    assert.equal(overlay.querySelector(".neo-hub-ready").style.display, "none", "默认应收起就绪面板");
+
+    click(overlay.querySelector(".neo-hub-ready-toggle"));
+    await sleep(60);
+    assert.equal(fetchLog.filter((c) => c.path === "/neo_skill_models/all").length, 1, "未拉取族系总览");
+    assert.equal(overlay.querySelector(".neo-hub-ready").style.display, "", "面板未展开");
+    assert.equal(overlay.querySelector(".neo-hub-ready-summary").textContent,
+        "3 个预设 · 2 个族系 · 需要补模型的族系 1 个", "总览计数不符");
+
+    const fams = [...overlay.querySelectorAll(".neo-hub-ready-family")];
+    assert.equal(fams.length, 2, "族系行数不符");
+    assert.equal(fams[0].querySelector(".neo-hub-ready-badge").textContent, "缺 2 项 · 18.2 GB", "缺项徽标不符");
+    assert.equal(fams[1].querySelector(".neo-hub-ready-badge").textContent, "已就绪", "就绪徽标不符");
+    assert.equal(fams[0].querySelector(".neo-hub-ready-name").textContent,
+        "Qwen-Image 2.1（生图 · 1 预设 · 4 文件 · 30.5 GB）", "族系行文案不符");
+    assert.deepEqual([...fams[1].querySelectorAll(".neo-hub-ready-skill")].map((b) => b.textContent),
+        ["文生视频", "图生视频"], "族系内预设入口不符");
+    assert.deepEqual(missingRoutes.filter((r) => r.includes("/neo_skill_models/")), [], "有未覆盖的就绪请求");
+    hub.closeModelHub();
+    clearBody();
+});
+
+test("模型库 · 预设就绪：点预设出计划，条目按当前源给下载按钮与缺源提示", async () => {
+    resetEnv();
+    clearRoutes();
+    mockHub();
+    mockReady();
+    const overlay = await openHub();
+    click(overlay.querySelector(".neo-hub-ready-toggle"));
+    await sleep(60);
+    click(overlay.querySelector(".neo-hub-ready-skill"));
+    await sleep(60);
+
+    assert.deepEqual(fetchLog.filter((c) => c.path === "/neo_skill_models/plan").at(-1).body,
+        { skill_id: "qwen_image_21_body_swap", source: "modelscope", include_optional: false }, "计划请求体不符");
+    const rows = [...overlay.querySelectorAll(".neo-hub-ready-item")];
+    assert.equal(rows.length, 3, "计划行数不符");
+    assert.equal(rows[0].querySelector(".neo-hub-ready-name").textContent,
+        "基座 · diffusion_models/Qwen/qwen_image_bfp.safetensors", "条目落盘目标文案不符");
+    assert.equal(rows[0].querySelector(".neo-hub-ready-dl").disabled, false, "可下载条目按钮应可用");
+    assert.ok(rows[1].querySelector(".neo-hub-ready-item-note").textContent.includes("就位检查按 qwen_image_vae.safetensors 算"),
+        "异名落盘的条目 note 未展示");
+    assert.equal(rows[2].querySelector(".neo-hub-ready-dl").disabled, true, "当前源没有的条目不应可点");
+    assert.ok(rows[2].querySelector(".neo-hub-ready-item-note").textContent.includes("Hugging Face 有，切到该源后重新出计划"),
+        "缺源提示不符");
+    const notes = [...overlay.querySelectorAll(".neo-hub-ready-note")].map((n) => n.textContent);
+    assert.ok(notes.some((n) => n.includes("权重为 Apache-2.0 许可，可商用")), "清单 notes 未展示");
+    assert.ok(notes.some((n) => n.includes("待下载 2 项 · 11.7 GB")), "待下载合计不符");
+    assert.equal(overlay.querySelector(".neo-hub-ready-summary").textContent,
+        "3 个预设 · 2 个族系 · 需要补模型的族系 1 个", "出完计划应回到计数行");
+
+    // 勾选「计划含可选文件」→ 按 include_optional 重出计划
+    const optional = overlay.querySelector(".neo-hub-ready input[type=\"checkbox\"]");
+    optional.checked = true;
+    changeValue(optional, "on");
+    await sleep(60);
+    assert.equal(fetchLog.filter((c) => c.path === "/neo_skill_models/plan").at(-1).body.include_optional, true,
+        "勾选可选项未重出计划");
+
+    // 切到需要 Token 的源 → 按新源重出计划并说明前置
+    click([...overlay.querySelectorAll(".neo-hub-src-btn")].find((b) => b.dataset.source === "huggingface"));
+    await sleep(60);
+    const last = fetchLog.filter((c) => c.path === "/neo_skill_models/plan").at(-1).body;
+    assert.deepEqual([last.source, last.skill_id], ["huggingface", "qwen_image_21_body_swap"], "换源未按当前源重出计划");
+    assert.equal(overlay.querySelector(".neo-hub-ready-warn").textContent,
+        "该源需要先在模型库设置里填 HF Token", "缺 Token 前置未提示");
+    hub.closeModelHub();
+    clearBody();
+});
+
+
+test("模型库 · 预设就绪：全部下载按计划逐条排队，下完重读就位", async () => {
+    resetEnv();
+    clearRoutes();
+    const downloads = [];
+    let prog = { state: "running", total: 1000, done: 100, speed: 100, filename: "qwen_image_bfp.safetensors" };
+    mockHub(() => jsonResponse({ download: prog }));
+    mockReady();
+    mockRoute("/neo_model_hub/download", (body) => {
+        downloads.push(body);
+        return jsonResponse({ success: true, download: { state: "running" } });
+    });
+    const overlay = await openHub();
+    click(overlay.querySelector(".neo-hub-ready-toggle"));
+    await sleep(60);
+    click(overlay.querySelector(".neo-hub-ready-skill"));
+    await sleep(60);
+    const allBefore = fetchLog.filter((c) => c.path === "/neo_skill_models/all").length;
+    const planBefore = fetchLog.filter((c) => c.path === "/neo_skill_models/plan").length;
+
+    click(overlay.querySelector(".neo-hub-ready-all"));
+    await sleep(60);
+    assert.deepEqual(downloads.map((b) => b.filename), ["qwen_image_bfp.safetensors"], "第一条未按 payload 提交");
+    assert.deepEqual(downloads[0], READY_PLAN_FILES[0].payload, "第一条提交体与计划 payload 不符");
+    assert.equal(overlay.querySelector(".neo-hub-dl").disabled, true, "队列占用下载按钮");
+
+    prog = { state: "done", total: 1000, done: 1000, speed: 0, filename: "qwen_image_bfp.safetensors", category: "diffusion_models" };
+    await sleep(300);
+    assert.deepEqual(downloads.map((b) => b.filename),
+        ["qwen_image_bfp.safetensors", "qwen_image_vae.safetensors"], "上一条完成后未接下一条");
+
+    prog = { state: "done", total: 1000, done: 1000, speed: 0, filename: "qwen_image_vae.safetensors", category: "vae" };
+    await sleep(300);
+    assert.equal(downloads.length, 2, "队列不应超出计划条目数");
+    assert.equal(overlay.querySelector(".neo-hub-dl").disabled, false, "队列结束后应恢复下载按钮");
+    assert.equal(fetchLog.filter((c) => c.path === "/neo_skill_models/all").length, allBefore + 1, "队列结束未重读就位总览");
+    assert.equal(fetchLog.filter((c) => c.path === "/neo_skill_models/plan").length, planBefore + 1, "队列结束未重出计划");
+    hub.closeModelHub();
+    clearBody();
+});
+
+test("模型库 · 预设就绪：取消即断队列，不自动续下一条", async () => {
+    resetEnv();
+    clearRoutes();
+    const downloads = [];
+    let prog = { state: "running", total: 1000, done: 100, speed: 100, filename: "qwen_image_bfp.safetensors" };
+    mockHub(() => jsonResponse({ download: prog }));
+    mockReady();
+    mockRoute("/neo_model_hub/download", (body) => {
+        downloads.push(body);
+        return jsonResponse({ success: true, download: { state: "running" } });
+    });
+    const overlay = await openHub();
+    click(overlay.querySelector(".neo-hub-ready-toggle"));
+    await sleep(60);
+    click(overlay.querySelector(".neo-hub-ready-skill"));
+    await sleep(60);
+
+    click(overlay.querySelector(".neo-hub-ready-all"));
+    await sleep(60);
+    click(overlay.querySelector(".neo-hub-cancel"));
+    await sleep(60);
+    prog = { state: "paused", total: 1000, done: 100, speed: 0, error: "已取消（断点保留）" };
+    await sleep(200);
+    assert.equal(downloads.length, 1, "取消后不应自动续下一条");
+    assert.equal(overlay.querySelector(".neo-hub-status").textContent, "已取消（断点保留）", "断点提示不符");
+    hub.closeModelHub();
+    clearBody();
+});
+
+/** 就绪接口桩：总览固定，计划按请求体回显当前源与可选项口径（HF 源标成缺 Token）。 */
+function mockReady() {
+    mockRoute("/neo_skill_models/all", () => jsonResponse(READY_ALL));
+    mockRoute("/neo_skill_models/plan", (body) => {
+        const gated = body.source === "huggingface";
+        return jsonResponse({
+            success: true,
+            plan: {
+                ...READY_PLAN, source: body.source, include_optional: body.include_optional,
+                source_label: gated ? "HF" : "MS", needs_token: gated, has_token: !gated,
+            },
+        });
+    });
+}
 

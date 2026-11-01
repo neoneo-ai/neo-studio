@@ -1,0 +1,20 @@
+{
+  "family": "qwen_image_21",
+  "label": "Qwen Image 2.1 生图族",
+  "kind": "image",
+  "extends": "qwen_image_21",
+  "license": "Comfy-Org 重打包权重 + BFS LoRA（MIT），许可随各自仓库",
+  "files": [
+    {
+      "field": "loras",
+      "filename": "QwenImage2.1/Qwen21-换身bfs_body_swap_v1.0_qwen_2.1.safetensors",
+      "category": "loras",
+      "gb": 0.21,
+      "alt": ["bfs_body_swap_v1.0_qwen_2.1.safetensors"],
+      "sources": [
+        {"source": "huggingface", "repo": "Alissonerdx/BFS-Best-Face-Swap", "path": "bfs_body_swap_v1.0_qwen_2.1.safetensors"},
+        {"source": "civitai", "repo": "civitai/2027766", "path": "/api/download/models/3363725?fileId=3251548"}
+      ]
+    }
+  ]
+}

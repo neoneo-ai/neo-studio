@@ -4,6 +4,32 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **Every built-in preset now declares the models it needs, and the backend reports what is missing.** Each
+  preset under `studio/skills/presets/` that uses local model files ships a `models.json`: drop-in category,
+  preset-relative file name, size, and the ModelScope / Hugging Face / Civitai sources it can come from
+  (`gated` marks the entries that need authorization on HF first). Family presets share one base manifest
+  through `extends`, so the same file is never counted twice. New routes `GET /neo_skill_models/check`,
+  `GET /neo_skill_models/all` and `POST /neo_skill_models/plan` (`studio/skill_models.py`) report per-file
+  readiness for one preset, the family-grouped overview of the 37 manifest presets, and a download plan whose
+  entries post straight to the Model Hub's existing `/neo_model_hub/download` - the plan follows the hub's
+  current source, marks a file `not_on_source` when it lives only on the other source, and reports
+  `needs_token` / `has_token` so a source that needs an HF token or a Civitai key says so. Readiness follows
+  the generation side: a pinned config name is looked up by that exact relative name, an empty name matches the
+  recommended name and the family variant names anywhere in the category tree, and a LoRA counts only when it
+  is in the preset's LoRA list. All three routes read files and hub settings only, so the desktop window
+  answers them offline; generation itself is unchanged, and the four presets with no local model files
+  (`translate`, `translate_to_chinese`, `translate_to_english`, `cosyvoice_voice`) ship no manifest and report
+  `has_manifest: false`. The Model Hub window (🅝 → 模型库) gained a **预设就绪 (Preset readiness)** panel that
+  turns that into one clickable path: the family overview with a "missing N · X GB" badge per family, a per-preset
+  plan on the hub's current source (optional files included by a tick), "Download all" feeding the plan into the
+  hub's single download slot item by item with the existing progress bar and cancel, and a readiness re-read when
+  the plan finishes - a missing model goes from a red badge to a landed file inside the same window. Details:
+  [docs/model-hub.md](docs/model-hub.md), routes in
+  [docs/api-routes.md](docs/api-routes.md). Tests: `studio/tests/test_skill_models.py` (manifest degradation,
+  extends merge, readiness rules, plan payloads through the hub's own validators, and a static check of all 37
+  shipped manifests) plus `studio/tests/js/model-hub.test.mjs` (overview, plan request shape per source,
+  sequential plan queue, readiness refresh after the queue, cancel breaking the queue).
+
 - **The 参考图编辑 preset is gone, together with the plugin it needed.** `image_gen_image` was the only built-in
   preset whose graph called `Krea2EditModelPatch` / `Krea2EditGroundedEncode`, and those two nodes only exist when
   `comfyui-krea2edit` is installed - a plugin the minimal ComfyUI package does not ship, that fails to import on

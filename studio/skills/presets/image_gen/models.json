@@ -1,0 +1,53 @@
+{
+  "family": "krea2_image",
+  "label": "Krea2 生图族",
+  "kind": "image",
+  "license": "Comfy-Org 重打包权重，许可随 Krea 原仓库",
+  "files": [
+    {
+      "field": "model",
+      "filename": "krea2_turbo_int8_convrot.safetensors",
+      "category": "diffusion_models",
+      "gb": 13.49,
+      "alt": [
+        "krea2_raw_int8_convrot.safetensors",
+        "krea2_turbo_fp8_scaled.safetensors",
+        "krea2_raw_fp8_scaled.safetensors",
+        "krea2_turbo_nvfp4.safetensors",
+        "krea2_turbo_mxfp8.safetensors",
+        "krea2_turbo_bf16.safetensors",
+        "krea2_raw_bf16.safetensors"
+      ],
+      "sources": [
+        {"source": "modelscope", "repo": "Comfy-Org/Krea-2", "path": "diffusion_models/krea2_turbo_int8_convrot.safetensors"},
+        {"source": "huggingface", "repo": "Comfy-Org/Krea-2", "path": "diffusion_models/krea2_turbo_int8_convrot.safetensors"}
+      ]
+    },
+    {
+      "field": "text_encoder",
+      "filename": "qwen3vl_4b_int8_convrot.safetensors",
+      "category": "text_encoders",
+      "gb": 4.86,
+      "alt": [
+        "qwen3vl_4b_fp8_scaled.safetensors",
+        "qwen3vl_4b_bf16.safetensors"
+      ],
+      "sources": [
+        {"source": "modelscope", "repo": "Comfy-Org/Krea-2", "path": "text_encoders/qwen3vl_4b_int8_convrot.safetensors"},
+        {"source": "huggingface", "repo": "Comfy-Org/Krea-2", "path": "text_encoders/qwen3vl_4b_int8_convrot.safetensors"}
+      ]
+    },
+    {
+      "field": "vae",
+      "filename": "qwen_image_vae.safetensors",
+      "category": "vae",
+      "gb": 0.25,
+      "sources": [
+        {"source": "modelscope", "repo": "Comfy-Org/Krea-2", "path": "vae/qwen_image_vae.safetensors"},
+        {"source": "huggingface", "repo": "Comfy-Org/Krea-2", "path": "vae/qwen_image_vae.safetensors"},
+        {"source": "modelscope", "repo": "Comfy-Org/Qwen-Image_ComfyUI", "path": "split_files/vae/qwen_image_vae.safetensors"},
+        {"source": "huggingface", "repo": "Comfy-Org/Qwen-Image_ComfyUI", "path": "split_files/vae/qwen_image_vae.safetensors"}
+      ]
+    }
+  ]
+}

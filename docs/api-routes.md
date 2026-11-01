@@ -361,6 +361,21 @@ LLM 模式与配置见 [llm.md](llm.md)，技能设计见 [skills.md](skills.md)
 - ModelScope 组织列表与跨组织搜索走匿名 `dolphin/models` 接口；接口失败时按注册表逐仓库探测存在性（缓存 1 天）。
 - 源侧失败返回带 `code` 的错误：`need_token`（401）、`busy`（409）、`not_on_source`（404，附 `other_source` 建议换源）。
 
+## skill_models.py — `/neo_skill_models/*`
+
+预设模型自检：读 `skills/presets/<id>/models.json` 声明的模型文件，检查本机就位情况，并按模型库当前源出下载计划。
+三条路由只读本地文件与模型库设置，桌面端离线可用；实际下载仍走 `/neo_model_hub/download`，这里不新造下载器。
+
+| 方法  | 路由                       | 说明                                                                                                          |
+|------|---------------------------|---------------------------------------------------------------------------------------------------------------|
+| GET   | `/neo_skill_models/check`  | 单预设就位情况（`skill_id`）：逐文件 ready / active / optional / notes 与缺失体积                             |
+| GET   | `/neo_skill_models/all`    | 全部预设按族系聚合：族内文件去重、体积只计一次，`blocking_count` 数要补模型的族系                             |
+| POST  | `/neo_skill_models/plan`   | 下载计划（`skill_id` / `source?` / `include_optional?`）：条目 payload 直接 POST 给 `/neo_model_hub/download` |
+
+- 清单缺失 / 坏 JSON / 缺字段一律按 `has_manifest: false` 降级，三条路由都不抛错。
+- 计划按当前选定源出：该源没有这条文件时给 `reason: not_on_source` 与 `other_source`，不自动换源；出处非法给 `reason: bad_source`。
+- LoRA 跟随预设 / 全局 LoRA 配置列表，不进下载计划；未勾选的可选项（`optional: true`）也不进。
+
 ## 桌面端服务 — `app/studio_server.py`
 
 桌面端（`app/studio_app.py`）在 ComfyUI 端口 +3（默认 `8191`）起一个 aiohttp 服务，按 `app/studio_caps.py`
@@ -380,7 +395,7 @@ LLM 模式与配置见 [llm.md](llm.md)，技能设计见 [skills.md](skills.md)
 | GET/POST | `/rs_recipes/*`                                                                                                                                             | 配方读写、LLM 重写 / 逐格描述 / 分段 / 宫格切分                                                                                                                     |
 | GET/POST | `/neo_image_gen/settings` `models` `input_images` `skill_config` `skill_workflow` `*workflow_skill*` `copy_skill_files`、`/neo_video_gen/settings` `models` | 生图 / 生视频设置                                                                                                                                                   |
 | GET/POST | `/rs_prompts/get_models` `native_models` `set_model` `remote_llm_config` `llm_connection_test` `llm_mode` `extract_title` `fetch_remote_models`             | LLM 配置与标题提取（只读 `configs/` 与 8080 服务）                                                                                                                  |
-| GET/POST | `/neo_model_hub/*` `/neo_backyard/*`                                                                                                                        | 模型库与 Backyard                                                                                                                                                   |
+| GET/POST | `/neo_model_hub/*` `/neo_skill_models/*` `/neo_backyard/*`                                                                                                                        | 模型库、预设模型自检与 Backyard                                                                                                               |
 | GET/POST | `/userdata/neo_gallery_data.json`                                                                                                                           | 素材库状态文件（`user/default/`，写入走 `.tmp` + replace）                                                                                                          |
 | GET      | `/neo_studio/version`                                                                                                                                       | 能力快照：`offline: true` + `caps` + `starting` + `routes` + `comfy_base` + `data_root` / `comfy_local` / `remote`（「设置 → 关于」的路径行），前端据此门控与选目标 |
 | GET      | `/neo_studio/comfy_state`                                                                                                                                   | 内核状态快照（端口 / PID / 谁启动 / 运行 / 就绪 / 启动中）：整页刷新后 pywebview 的桥晚于页面注入，顶栏状态位靠它从 HTTP 侧补上；桌面端还没装配出内核时 `409`       |

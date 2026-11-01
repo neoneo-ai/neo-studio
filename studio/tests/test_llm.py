@@ -1478,40 +1478,30 @@ class TestLocalServiceModels(unittest.TestCase):
 
     def test_no_model_loaded_not_retried_reports_actionable_error(self):
         # Unsloth Studio 未加载时返回 400「No model loaded」：语义性错误，不重试、不自动加载，直接报可操作建议
-        from aiohttp import web as aweb
-        state = {"chat_calls": 0, "load_calls": 0}
-
-        async def main():
-            async def chat(_):
-                state["chat_calls"] += 1
-                return aweb.json_response(
-                    {"error": {"message": "No model loaded. Call POST /inference/load first.",
-                               "type": "invalid_request_error"}}, status=400)
-
-            async def load(_):
-                state["load_calls"] += 1
-                return aweb.json_response({"status": "loaded"})
-
-            app = aweb.Application()
-            app.router.add_post("/v1/chat/completions", chat)
-            app.router.add_post("/api/inference/load", load)
-            runner = aweb.AppRunner(app)
-            await runner.setup()
-            site = aweb.TCPSite(runner, "127.0.0.1", 18942)
-            await site.start()
-            try:
-                client = llm_mod.RemoteLLMClient(
-                    {"provider": "unsloth", "base_url": "http://127.0.0.1:18942/v1", "model": "m"})
-                with self.assertRaises(RuntimeError) as ctx:
-                    await asyncio.to_thread(client.chat_completion, [{"role": "user", "content": "hi"}])
-                self.assertIn("No model loaded", str(ctx.exception))
-                self.assertIn("Load the model in the server UI", str(ctx.exception))   # 可操作建议
-                self.assertEqual(state["chat_calls"], 1)   # 语义性 4xx 不重试
-                self.assertEqual(state["load_calls"], 0)   # 不自动加载
-            finally:
-                await runner.cleanup()
-
-        asyncio.run(main())
+        # 桩打在 OpenAI SDK 边界上：占端口起本地服务会撞别的套件的监听（Windows 允许重复绑定，
+        # 请求就打到别人身上出 502），瞬态分支还会带 2 秒 sleep，两者都不该进套件。
+        import httpx
+        import openai
+        response = httpx.Response(400, request=httpx.Request("POST", "http://127.0.0.1:18942/v1/chat/completions"))
+        no_model = openai.APIStatusError(
+            "error", response=response,
+            body={"message": "No model loaded. Call POST /inference/load first.",
+                  "type": "invalid_request_error"})
+        create = MagicMock(side_effect=no_model)
+        fake_client = types.SimpleNamespace(
+            chat=types.SimpleNamespace(completions=types.SimpleNamespace(create=create)))
+        orig_build = llm_mod.RemoteLLMClient._build_client
+        llm_mod.RemoteLLMClient._build_client = lambda self: fake_client
+        try:
+            client = llm_mod.RemoteLLMClient(
+                {"provider": "unsloth", "base_url": "http://127.0.0.1:18942/v1", "model": "m"})
+            with self.assertRaises(RuntimeError) as ctx:
+                client.chat_completion([{"role": "user", "content": "hi"}])
+            self.assertIn("No model loaded", str(ctx.exception))
+            self.assertIn("Load the model in the server UI", str(ctx.exception))   # 可操作建议
+            self.assertEqual(create.call_count, 1)   # 语义性 4xx 不重试，客户端也没有自动加载这条路径
+        finally:
+            llm_mod.RemoteLLMClient._build_client = orig_build
 
 
 

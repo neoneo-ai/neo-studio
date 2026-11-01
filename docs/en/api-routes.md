@@ -413,6 +413,24 @@ details in [model-hub.md](model-hub.md).
 - Source-side failures return errors with a `code`: `need_token` (401), `busy` (409), `not_on_source` (404, with an
   `other_source` suggestion to switch source).
 
+## skill_models.py — `/neo_skill_models/*`
+
+Preset model readiness: reads the model files declared by `skills/presets/<id>/models.json`, checks what this machine
+has, and builds a download plan for the model hub's current source. All three routes read local files and the hub
+settings only, so the desktop app serves them offline; the download itself stays on `/neo_model_hub/download`.
+
+| Method  | Route                      | Description                                                                                                                    |
+|--------|---------------------------|--------------------------------------------------------------------------------------------------------------------------------|
+| GET     | `/neo_skill_models/check`  | Readiness of one preset (`skill_id`): per-file ready / active / optional / notes and the missing size                          |
+| GET     | `/neo_skill_models/all`    | All presets grouped by family: family files deduped, bytes counted once, `blocking_count` counts families with gaps            |
+| POST    | `/neo_skill_models/plan`   | Download plan (`skill_id` / `source?` / `include_optional?`): each entry's payload posts straight to `/neo_model_hub/download` |
+
+- A missing manifest, a broken JSON file or missing fields degrade to `has_manifest: false`; no route raises.
+- The plan follows the currently selected source: a file the source does not carry reports `reason: not_on_source`
+  with `other_source`, and there is no automatic source switch; an illegal source entry reports `reason: bad_source`.
+- LoRA entries follow the preset / global LoRA config list and stay out of the plan, as do optional entries
+  (`optional: true`) that the request did not ask for.
+
 ## Desktop-side service — `app/studio_server.py`
 
 The Studio desktop (`app/studio_app.py`) starts an aiohttp service on the ComfyUI port +3 (default `8191`) and mounts
@@ -433,7 +451,7 @@ the table answers 409. Startup sequence, close teardown and cache conventions: [
 | GET/POST | `/rs_recipes/*`                                                                                                                                             | Recipe read/write, LLM rewrite / per-panel description / segmentation / grid split                                                                                                                                                                                  |
 | GET/POST | `/neo_image_gen/settings` `models` `input_images` `skill_config` `skill_workflow` `*workflow_skill*` `copy_skill_files`, `/neo_video_gen/settings` `models` | Image / video generation settings                                                                                                                                                                                                                                   |
 | GET/POST | `/rs_prompts/get_models` `native_models` `set_model` `remote_llm_config` `llm_connection_test` `llm_mode` `extract_title` `fetch_remote_models`             | LLM configuration and title extraction (reads only `configs/` and the 8080 service)                                                                                                                                                                                 |
-| GET/POST | `/neo_model_hub/*` `/neo_backyard/*`                                                                                                                        | Model hub and Backyard                                                                                                                                                                                                                                              |
+| GET/POST | `/neo_model_hub/*` `/neo_skill_models/*` `/neo_backyard/*`                                                                                                                        | Model hub, preset model readiness and Backyard                                                                                                                                                                                                |
 | GET/POST | `/userdata/neo_gallery_data.json`                                                                                                                           | Asset library state file (`user/default/`, writes go through `.tmp` + replace)                                                                                                                                                                                      |
 | GET      | `/neo_studio/version`                                                                                                                                       | Capability snapshot: `offline: true` + `caps` + `starting` + `routes` + `comfy_base` + `data_root` / `comfy_local` / `remote` (the Settings → About path rows); the frontend gates on it and picks the request target                                               |
 | GET      | `/neo_studio/comfy_state`                                                                                                                                   | Kernel state snapshot (port / PID / who launched / running / ready / starting): after a full-page reload the pywebview bridge lands later than the page script, so the header status chip falls back to this route; `409` while the desktop has no kernel assembled |
