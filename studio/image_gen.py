@@ -468,17 +468,25 @@ def resolve_request(body: dict, settings: dict | None = None, max_refs: int = 1)
     if not prompt_text:
         raise ValueError("提示词为空")
 
-    model, err = resolve_model("diffusion_models", merged.get("model"))
-    if err:
-        raise ValueError(err)
-    encoder, err = resolve_model("text_encoders", merged.get("text_encoder"))
-    if err:
-        raise ValueError(err)
-    vae, err = resolve_model("vae", merged.get("vae"))
-    if err:
-        raise ValueError(err)
-
     warnings = []
+    # 生图给回退口径：自定义模型名不在盘上、类别里挑得出默认模型就用默认模型跑，
+    # 「已回退」这句话进 warnings 让用户看见；挑得出才算警告，挑不出照旧是硬报错
+    model, msg = resolve_model("diffusion_models", merged.get("model"), allow_fallback=True)
+    if not model:
+        raise ValueError(msg)
+    if msg:
+        warnings.append(msg)
+    encoder, msg = resolve_model("text_encoders", merged.get("text_encoder"), allow_fallback=True)
+    if not encoder:
+        raise ValueError(msg)
+    if msg:
+        warnings.append(msg)
+    vae, msg = resolve_model("vae", merged.get("vae"), allow_fallback=True)
+    if not vae:
+        raise ValueError(msg)
+    if msg:
+        warnings.append(msg)
+
     loras, lora_warns = _resolve_loras(merged)
     warnings.extend(lora_warns)
 

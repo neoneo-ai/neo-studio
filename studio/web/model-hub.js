@@ -425,13 +425,21 @@ function syncSource(h) {
         : t("搜索仓库名（Comfy-Org 内子串匹配 + 跨组织搜索）");
 }
 
-function renderProgress(h, d) {
+/** 一行进度文本（模型库进度条与生图面板顶部的就地补齐共用同一口径） */
+function progressLine(d) {
     const total = Number(d.total) || 0;
     const done = Number(d.done) || 0;
     const pct = total ? Math.min(100, (done / total) * 100) : 0;
+    return tf("{pct}% · {done} / {total} · {speed}/s", {
+        pct: pct.toFixed(1), done: fmtSize(done), total: fmtSize(total), speed: fmtSize(d.speed || 0),
+    });
+}
+
+function renderProgress(h, d) {
+    const total = Number(d.total) || 0;
+    const pct = total ? Math.min(100, (Number(d.done) || 0) / total * 100) : 0;
     h.ui.barFill.style.width = `${pct.toFixed(1)}%`;
-    h.ui.progText.textContent =
-        `${pct.toFixed(1)}% · ${fmtSize(done)} / ${fmtSize(total)} · ${fmtSize(d.speed || 0)}/s`;
+    h.ui.progText.textContent = progressLine(d);
     h.ui.statusText.textContent = d.state === "running" ? tf("下载中：{name}", { name: d.filename }) : (d.state || "idle");
 }
 
@@ -894,4 +902,71 @@ export function closeModelHub() {
     stopPoll(hub);
     hub.overlay.remove();
     hub = null;
+}
+
+/** 预设缺模型的「就地补齐」：出该预设的下载计划后逐条喂进模型库下载接口，进度回调给调用方渲染
+ *  （生图面板顶部的提示条用它 —— 缺模型就在当前界面补齐，不用先把用户赶去模型库）。
+ *  模型库只有一个下载位，所以计划串行；轮询属于这一次调用，下完 / 失败 / 取消都要清掉，不留 setInterval。
+ *  出不了计划时回 {reason}（源要先填 Token、该源没这文件），由调用方降级成「去模型库」。
+ *  @param {{onFile?: function(string), onProgress?: function(object, string),
+ *           onDone?: function(), onFail?: function(string)}} handlers
+ *  @returns {Promise<{plan, cancel}|{reason}>}
+ */
+/** 预设缺模型的下载计划（生图面板用它决定主按钮是「下载 X GB」还是「去模型库」：
+ *  本机已有同名文件时计划里没有可下载条目，主按钮就不该承诺一次必被「已存在」顶回的下载）。
+ *  @returns {Promise<object>} plan */
+export async function skillModelPlan(skillId) {
+    return (await skillReq("/plan", { skill_id: skillId })).plan;
+}
+
+export async function downloadSkillModels(skillId, handlers = {}) {
+    const plan = await skillModelPlan(skillId);
+    const warn = readyTokenNote(plan);
+    const queue = (plan.files || []).filter((i) => i.payload);
+    if (warn) return { reason: warn, plan };
+    if (!queue.length) return { reason: t("没有可下载的条目"), plan };
+
+    const runner = { timer: null, queue, stopped: false };
+    const stop = () => {
+        runner.stopped = true;
+        if (runner.timer) clearInterval(runner.timer);
+        runner.timer = null;
+    };
+    /** 下一条：模型库单下载位，一条启动成功就交给轮询接力；队尾空即收尾 */
+    const pump = async () => {
+        const item = runner.queue.shift();
+        if (!item) { stop(); handlers.onDone?.(); return false; }
+        handlers.onFile?.(item.payload.filename);
+        try {
+            await req("/download", item.payload);
+        } catch (e) {
+            stop();
+            handlers.onFail?.(String(e.message || e));
+            return false;
+        }
+        return true;
+    };
+    const poll = async () => {
+        let d;
+        try {
+            d = (await req("/progress")).download || {};
+        } catch (e) {
+            return;   // 进度接口短暂读不到就本轮不动，下一轮再看
+        }
+        if (runner.stopped) return;
+        if (d.state === "running") { handlers.onProgress?.(d, progressLine(d)); return; }
+        if (d.state === "done") {
+            handlers.onProgress?.(d, progressLine(d));
+            await pump();
+            return;
+        }
+        stop();
+        handlers.onFail?.(d.error || t("下载失败"));
+    };
+
+    if (await pump()) {
+        runner.timer = setInterval(poll, 800);
+        poll();
+    }
+    return { plan, cancel: () => { stop(); return req("/cancel", {}); } };
 }

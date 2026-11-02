@@ -97,14 +97,18 @@ _OWNERS = {"_skill_dir": (skill_mod, "_skill_dir"),
 
 
 def bind_models(root: Path):
-    """换模型根：skill_models 在导入期绑定的是 folder_paths 模块对象本身，只改 sys.modules 换不到它。"""
-    saved = skill_models.folder_paths
-    skill_models.folder_paths = sys.modules["folder_paths"] = FakeFolderPaths(root)
+    """换模型根：检查侧与生成侧在导入期绑的都是 folder_paths 模块对象本身，只改 sys.modules 换不到它们。
+    两边必须读同一个根，否则就位检查说「文件在」、生成侧 suggest_model 说「没有」，回退口径就自相矛盾。"""
+    saved = (skill_models.folder_paths, image_gen_files.folder_paths)
+    fake = FakeFolderPaths(root)
+    skill_models.folder_paths = sys.modules["folder_paths"] = fake
+    image_gen_files.folder_paths = fake
     return saved
 
 
 def restore_models(saved):
-    skill_models.folder_paths = sys.modules["folder_paths"] = saved
+    skill_models.folder_paths = sys.modules["folder_paths"] = saved[0]
+    image_gen_files.folder_paths = saved[1]
 
 
 @contextmanager
@@ -317,6 +321,23 @@ class TestCheckSkill(_FixtureCase):
         self.assertFalse(chk["blocked"])
         self.assertIn("不是预设推荐名", chk["files"][0]["notes"][0])
 
+    def test_pinned_custom_model_falls_back_to_family_base(self):
+        """自定义模型名不在盘上、族系基础模型在：不拦生成，「已回退默认模型」写在 fallback_of / notes 上给面板提醒。"""
+        self.skill("mix", {"family": "krea2_image", "label": "Krea2 生图族",
+                           "files": [entry("model", "krea2_turbo_int8_convrot.safetensors",
+                                           "diffusion_models", 13.49)]},
+                   cfg={"model": "Krea2\\Moody\\moodyKrea2Mix_v40INT8CONVROT.safetensors"})
+        self.place("diffusion_models", "Krea2/krea2_turbo_int8_convrot.safetensors")
+        chk = self.check("mix")
+        item = chk["files"][0]
+        self.assertEqual((chk["blocked"], chk["missing_count"], item["ready"]), (False, 0, True))
+        self.assertEqual(item["fallback_of"], "Krea2\\Moody\\moodyKrea2Mix_v40INT8CONVROT.safetensors")
+        self.assertEqual(item["found"], "Krea2/krea2_turbo_int8_convrot.safetensors")
+        self.assertIn("已回退默认模型", item["notes"][0])
+        self.assertIn("moodyKrea2Mix_v40INT8CONVROT", item["notes"][0])
+        planned = [i["filename"] for i in self.plan("mix")["files"] if i.get("payload")]
+        self.assertEqual(planned, [], "回退跑的族系文件已在盘上，不该排进下载计划")
+
     def test_auto_pick_accepts_same_name_in_other_subfolder(self):
         self.skill("auto", {"family": "f", "label": "L",
                             "files": [entry("model", "krea2/turbo.safetensors", "diffusion_models", 1.0)]})
@@ -511,17 +532,54 @@ class TestDownloadPlan(_FixtureCase):
     def test_landing_path_follows_repo_relative_subfolder(self):
         plan = self.plan("p")
         item = plan["files"][0]
-        self.assertEqual(item["subfolder"], "diffusion_models/krea")
+        self.assertEqual(item["subfolder"], "krea")
         self.assertEqual(item["payload"]["filename"], "turbo.safetensors")
         self.assertEqual(item["payload"]["path"], "diffusion_models/krea/turbo.safetensors")
         self.assertEqual(item["payload"]["category"], "diffusion_models")
+
+    def test_repo_category_segment_lands_at_the_family_directory(self):
+        """平铺仓库（diffusion_models/xxx.safetensors）不许落类别根，也不许落套目录：
+        套目录里的文件按推荐名精确查认不出，同一个文件会一边算「已存在」一边算「缺 13.49 GB」。
+        本机模型树按族系分目录（QwenImage2.1/、MiniMaxH3/），落点就跟预设族系同名。"""
+        self.skill("flat", {"family": "krea2_image", "label": "Krea2 生图族", "files": [entry(
+            "model", "krea2_turbo_int8_convrot.safetensors", "diffusion_models", 13.49,
+            sources=[ms_source("Comfy-Org/Krea2",
+                               "diffusion_models/krea2_turbo_int8_convrot.safetensors")])]})
+        item = self.plan("flat")["files"][0]
+        self.assertEqual(item["subfolder"], "krea2_image")
+        self.assertEqual(item["payload"]["subfolder"], "krea2_image")
+        self.skill("nofamily", {"label": "L", "files": [entry(
+            "model", "krea2_turbo_int8_convrot.safetensors", "diffusion_models", 13.49,
+            sources=[ms_source("Comfy-Org/Krea2",
+                               "diffusion_models/krea2_turbo_int8_convrot.safetensors")])]})
+        self.assertEqual(self.plan("nofamily")["files"][0]["subfolder"], "")
+        self.assertEqual(model_hub.strip_category_prefix("diffusion_models", "diffusion_models"), "")
+        self.assertEqual(model_hub.strip_category_prefix("diffusion_models", "diffusion_models/krea"), "krea")
+        self.assertEqual(model_hub.strip_category_prefix("diffusion_models", "diffusion_models/diffusion_models"), "")
+        self.assertEqual(model_hub.strip_category_prefix("vae", "vae"), "")
+
+    def test_pinned_missing_name_keeps_existing_file_out_of_the_plan(self):
+        """自定义模型名不在盘上、族系文件已在盘上：模型这项算就位（回退跑它，note 写明），本机已有的清单文件不许排进计划 ——
+        排进去就是「缺 13.49 GB → 点下载 → 模型库说已存在」的死循环。落点在套目录里也算已存在。"""
+        self.place("diffusion_models", "diffusion_models/krea/turbo.safetensors")
+        self.skill("p", cfg={"model": "Krea2\\Moody\\moodyKrea2Mix_v40INT8CONVROT.safetensors"})
+        chk = self.check("p")
+        model = next(f for f in chk["files"] if f["field"] == "model")
+        self.assertEqual((model["ready"], model["fallback_of"]),
+                         (True, "Krea2\\Moody\\moodyKrea2Mix_v40INT8CONVROT.safetensors"))
+        self.assertIn("已回退默认模型", model["notes"][0])
+        self.assertEqual(chk["missing"], ["qwen_vae.safetensors（vae · 0.64 GB）"],
+                         "拦下的只能是真缺的那项，不是本机已有的族系文件")
+        planned = [i["filename"] for i in self.plan("p")["files"] if i.get("payload")]
+        self.assertNotIn("krea/turbo.safetensors", planned)
+        self.assertIn("qwen_vae.safetensors", planned)
 
     def test_plan_payload_passes_hub_validators(self):
         """计划条目要能直接 POST 给 /neo_model_hub/download —— 过模型库自己的校验器（非法就抛 HubError）。"""
         item = self.plan("p")["files"][0]["payload"]
         self.assertEqual(model_hub.validate_repo(item["repo"]), "Fake/Repo")
         self.assertEqual(model_hub.validate_path(item["path"]), "diffusion_models/krea/turbo.safetensors")
-        self.assertEqual(model_hub.sanitize_subfolder(item["subfolder"]), "diffusion_models/krea")
+        self.assertEqual(model_hub.sanitize_subfolder(item["subfolder"]), "krea")
         self.assertEqual(model_hub.sanitize_filename(item["filename"]), "turbo.safetensors")
 
     def test_plan_carries_manifest_notes(self):

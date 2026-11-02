@@ -92,11 +92,20 @@ file layer only: it does not check the ComfyUI version, VRAM, the queue, and it 
   + `repo` + `path`, `gated` marks entries that need authorization on HF first; `sources[0]` is the recommended one).
 - Readiness follows the generation side: a config with a pinned model name is looked up by that exact relative
   name; an empty name matches the recommended name plus `alt` anywhere in the category tree (case and slash
-  insensitive). A `loras` entry only counts when that LoRA is in the preset / global LoRA list.
+  insensitive). A pinned name that is not on disk while the category has a default model to pick counts as ready:
+  `fallback_of` carries the pinned name and the note says generation fell back to the default model - the same
+  model `resolve_model(allow_fallback=True)` picks at generate time. It is missing only when the category offers
+  no default model. A `loras` entry only counts when that LoRA is in the preset / global LoRA list.
 - The download plan emits entries for the hub's current source and each entry's `payload` is exactly what
   `/neo_model_hub/download` takes; a file the current source does not carry is marked `not_on_source` with the
   other source named, and there is no automatic switch; an illegal source entry is marked `bad_source`.
   A civitai source must be a `/api/download/models/<id>?…` endpoint.
+- The landing subfolder is the repo path with its leading category segments dropped; a flat repo
+  (`diffusion_models/xxx.safetensors`) lands in the preset's family folder —
+  `models/<category>/<family>/<file>`, the same family-based layout the local model tree uses — never in a
+  `<category>/<category>/` nested copy, whose file the manifest's exact recommended name cannot see.
+  The plan skips a file the category tree already answers by name; a pinned config name drives readiness
+  only, it never re-plans a file that is on disk.
 - Presets that need no local model files ship no manifest: `translate` / `translate_to_chinese` /
   `translate_to_english` / `cosyvoice_voice`; readiness returns `has_manifest: false` for them, and a missing or
   broken manifest degrades the same way instead of raising.
@@ -130,6 +139,16 @@ manifest through `skillModelCheck` / `manifestGap` / `manifestHubTarget` in `web
   landed, the task is not queued, the failure names the missing files and their size, and the notification
   offers "Open Model Hub" → `openModelHub({ readySkill })`, which expands the readiness panel and builds that
   preset's download plan. Details: [image-gen.md](image-gen.md).
+- **The banner on top of the 自定参数 panel**: picking a preset with a manifest writes the gap there, and its one
+  button repairs it in place - it builds that preset's download plan and starts it
+  (`downloadSkillModels` → `POST /neo_skill_models/plan` + `POST /neo_model_hub/download`, progress from
+  `GET /neo_model_hub/progress`), writes the progress on the banner while the button becomes "✕ Cancel", and
+  collapses itself once the re-read manifest is ready. When the plan needs a token first nothing is downloaded:
+  the button becomes "⬇ Open Model Hub" and expands the readiness panel on that preset. A single missing file
+  makes this banner the only entry; row links appear only from two gaps up. When a pinned model name is not on
+  disk and the family's base model is, the banner names no gap and promises no download: it reads "the model X
+  from your settings is not on disk - generation falls back to the default model Y", generation submits, and the
+  button is absent - only the 模型库 link stays, for going back to a custom model.
 - **The model rows of the generation settings**: the row whose field the manifest marks missing gains a
   "⬇ Model Hub" button that opens the hub with the manifest's source / repository / drop-in category / file
   name prefilled (`openModelHub({ source, repo, category, query })`), its tooltip carrying the size and the

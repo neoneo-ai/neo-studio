@@ -316,6 +316,21 @@ def resolve_target(category, subfolder, filename, settings, repo="") -> Path:
     return dest
 
 
+def strip_category_prefix(category: str, rel_path: str) -> str:
+    """仓库相对路径里开头的类别段就是落盘根，不能当子目录用。
+
+    Comfy-Org 这类仓库把整棵模型树镜像进仓库（diffusion_models/krea2_turbo.safetensors），
+    连类别段一起当子目录就会落出自带名字的套目录 models/diffusion_models/diffusion_models/…；
+    模型库按文件名在类别目录树里认文件，套目录里的文件它认得到，清单的就位检查按推荐名精确查却看不到，
+    于是同一个文件一边算「已存在」、一边算「缺 13.49 GB」。
+    """
+    parts = [p for p in str(rel_path or "").replace("\\", "/").split("/") if p]
+    name = str(category or "").strip().lower()
+    while parts and parts[0].lower() == name:
+        parts = parts[1:]
+    return "/".join(parts)
+
+
 def find_existing(category, filename, settings) -> str:
     """全部注册类别目录内是否已有同名文件（含子目录），返回相对该目录的路径或空串。"""
     try:

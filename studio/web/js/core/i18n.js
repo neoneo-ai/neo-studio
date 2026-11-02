@@ -828,11 +828,27 @@ const EN = {
     // ===== 预设清单 · 缺失模型下载入口 =====
     "⬇ 模型库": "⬇ Model Hub",
     "去模型库": "Open Model Hub",
+    "⬇ 去模型库": "⬇ Open Model Hub",
     "{label} 缺 {n} 项模型文件": "{label} is missing {n} model files",
+    "{label} 缺 {n} 项模型文件（约 {gb} GB）：{detail}": "{label} is missing {n} model files (about {gb} GB): {detail}",
     "约 {gb} GB：{detail}": "About {gb} GB: {detail}",
     "{label} 缺 {n} 项模型文件（约 {gb} GB）：{detail}。到模型库补齐后即可生成。":
         "{label} is missing {n} model files (about {gb} GB): {detail}. Add them in the Model Hub, then generate.",
     "需先在 Hugging Face 接受授权": "Accept the Hugging Face license first",
+    "配置里的 {model} 本机没有，已回退默认模型 {used}":
+        "The model {model} from your settings is not on disk - generation falls back to the default model {used}",
+    "生图按可用模型跑了": "Image generation is running on an available model",
+    // ===== 预设缺模型 · 面板顶部就地补齐（出计划 → 逐条下载 → 进度写在提示条上） =====
+    "到模型库看该预设的下载计划、换源或先填 Token": "Open the model hub for this preset's download plan - to switch sources or add a token",
+    "⬇ 下载 {gb} GB": "⬇ Download {gb} GB",
+    "出计划中…": "Building the plan…",
+    "✕ 取消": "✕ Cancel",
+    "下载中：{name} · {line}": "Downloading: {name} · {line}",
+    "{pct}% · {done} / {total} · {speed}/s": "{pct}% · {done} / {total} · {speed}/s",
+    "补齐失败：{msg}": "Fixing it failed: {msg}",
+    "预设模型已补齐": "The preset's models are in place",
+    "现在可以直接生成": "Generate now - it runs",
+    "{gap}（{reason}）": "{gap} ({reason})",
     // ===== 配方面板 =====
     "普通": "Plain",
     "不含多段导演与内置预设": "Excludes multi-segment director and built-in presets",

@@ -314,7 +314,8 @@ skill = _load("skill", "skill.py")
 image_gen = _load("image_gen", "image_gen.py")
 # storyboard 端到端用例走真实 resolve_request/render_template（验证多参考去重/截断与槽位裁剪），
 # 但不关心模型文件是否存在：桩掉 resolve_model 返回占位名，避免依赖 _MODELS 与 Krea2 名称线索匹配。
-image_gen.resolve_model = lambda folder, wanted: (str(wanted or "").strip() or f"{folder}_stub.safetensors", "")
+image_gen.resolve_model = lambda folder, wanted, allow_fallback=False: (
+    str(wanted or "").strip() or f"{folder}_stub.safetensors", "")
 image_gen_edit = _load("image_gen_edit", "image_gen_edit.py")
 h3_video_gen = _load("h3_video_gen", "h3_video_gen.py")
 video_gen = _load("video_gen", "video_gen.py")

@@ -1114,3 +1114,105 @@ test("生成素材弹窗：模型列表先到时不许问空技能，技能列�
     overlay.remove();
 });
 
+// ============ 自定参数面板里的补齐入口与 LoRA 控件不许把面板 / 弹窗关掉 ============
+
+const GM_GAP_CHECK = {
+    skill_id: "image_gen", label: "Krea2 生图族", has_manifest: true, blocked: true,
+    missing_count: 1, missing_gb: 13.49,
+    missing: ["krea2_turbo_int8_convrot.safetensors（diffusion_models · 13.49 GB）"],
+    files: [{
+        field: "diffusion_models", filename: "krea2_turbo_int8_convrot.safetensors",
+        category: "diffusion_models", gb: 13.49, ready: false,
+        sources: [{ source: "modelscope", repo: "Comfy-Org/Krea2", path: "krea2_turbo_int8_convrot.safetensors" }],
+    }],
+};
+const GM_PLAN = {
+    skill_id: "image_gen", label: "Krea2 生图族", source: "modelscope", source_label: "ModelScope",
+    has_manifest: true, total_gb: 13.49, include_optional: false, needs_token: false, has_token: true, notes: [],
+    files: [{
+        source: "modelscope", gb: 13.49, reason: "",
+        payload: {
+            source: "modelscope", repo: "Comfy-Org/Krea2", path: "krea2_turbo_int8_convrot.safetensors",
+            filename: "krea2_turbo_int8_convrot.safetensors", category: "diffusion_models", subfolder: "",
+        },
+    }],
+};
+const GM_PROGRESS = {
+    state: "running", filename: "krea2_turbo_int8_convrot.safetensors", category: "diffusion_models",
+    total: 1.3e10, done: 1.3e9, speed: 5e6,
+};
+
+test("自定参数面板里点「就地补齐」与选 LoRA：面板与生成素材弹窗都留在原地", async () => {
+    resetEnv();
+    clearRoutes();
+    const { openGenMaterialDialog } = await import("../../web/gallery-gen.js");
+    mockRoute("/rs_prompts/skills", () => jsonResponse([{ id: "image_gen", cn_name: "Krea2文生图", category: "image_gen", gen_image: true }]));
+    mockRoute("/neo_image_gen/models", () => jsonResponse({
+        diffusion_models: ["Krea2/Moody/krea2_turbo_int8_convrot.safetensors"],
+        text_encoders: ["qwen3vl_4b.safetensors"], vae: ["qwen_image_vae.safetensors"],
+        loras: ["style_a.safetensors"],
+        suggested_diffusion_models: "Krea2/Moody/krea2_turbo_int8_convrot.safetensors",
+    }));
+    mockRoute("/neo_skill_models/check", () => jsonResponse({ success: true, check: GM_GAP_CHECK }));
+    mockRoute("/neo_skill_models/plan", () => jsonResponse({ success: true, plan: GM_PLAN }));
+    mockRoute("/neo_model_hub/download", () => jsonResponse({ success: true, download: { state: "running" } }));
+    mockRoute("/neo_model_hub/progress", () => jsonResponse({ success: true, download: GM_PROGRESS }));
+
+    openGenMaterialDialog({ showDirectoryStructure: () => {} });
+    const overlay = document.querySelector(".neo-gallery-gm-modal-overlay");
+    await sleep(60);
+    const panel = overlay.querySelector(".neo-gallery-gm-chip-panel");
+    click(panel.parentElement.querySelector(".neo-gallery-gm-chip-btn"));
+    await sleep(60);
+    const gap = panel.querySelector(".rs-model-gap");
+    assert.ok(gap && gap.style.display !== "none", "自定参数面板里应出缺模型提示条");
+    click(gap.querySelector(".rs-model-gap-btn"));
+    await sleep(60);
+    assert.equal(panel.style.display, "grid", "点「就地补齐」不能收起自定参数面板");
+    assert.ok(document.querySelector(".neo-gallery-gm-modal-overlay"), "点「就地补齐」不能关掉生成素材弹窗");
+    assert.ok(fetchLog.some((c) => c.path === "/neo_model_hub/download"), "点它应直接发起下载");
+    click(panel.querySelector(".rs-gen-lora-add"));
+    await sleep(30);
+    const loraSel = panel.querySelector(".rs-gen-lora-row select");
+    assert.ok(loraSel, "应加上一条 LoRA 行");
+    click(loraSel);
+    await sleep(30);
+    assert.equal(panel.style.display, "grid", "选 LoRA 不能收起自定参数面板");
+    assert.ok(document.querySelector(".neo-gallery-gm-modal-overlay"), "选 LoRA 不能关掉生成素材弹窗");
+    overlay.remove();
+});
+
+test("自定参数面板里的点击不许冒泡到 document（宿主的外点收起循环会连弹窗一起收掉）", async () => {
+    resetEnv();
+    clearRoutes();
+    const { openGenMaterialDialog } = await import("../../web/gallery-gen.js");
+    mockRoute("/rs_prompts/skills", () => jsonResponse([{ id: "image_gen", cn_name: "Krea2文生图", category: "image_gen", gen_image: true }]));
+    mockRoute("/neo_image_gen/models", () => jsonResponse({
+        diffusion_models: ["Krea2/Moody/krea2_turbo_int8_convrot.safetensors"],
+        text_encoders: ["qwen3vl_4b.safetensors"], vae: ["qwen_image_vae.safetensors"],
+        loras: ["style_a.safetensors"],
+        suggested_diffusion_models: "Krea2/Moody/krea2_turbo_int8_convrot.safetensors",
+    }));
+    mockRoute("/neo_skill_models/check", () => jsonResponse({ success: true, check: GM_GAP_CHECK }));
+    mockRoute("/neo_skill_models/plan", () => jsonResponse({ success: true, plan: GM_PLAN }));
+    mockRoute("/neo_model_hub/download", () => jsonResponse({ success: true, download: { state: "running" } }));
+    mockRoute("/neo_model_hub/progress", () => jsonResponse({ success: true, download: GM_PROGRESS }));
+
+    openGenMaterialDialog({ showDirectoryStructure: () => {} });
+    const overlay = document.querySelector(".neo-gallery-gm-modal-overlay");
+    await sleep(60);
+    const panel = overlay.querySelector(".neo-gallery-gm-chip-panel");
+    click(panel.parentElement.querySelector(".neo-gallery-gm-chip-btn"));
+    await sleep(60);
+    const leaks = [];
+    const spy = (e) => leaks.push(e.target);
+    document.addEventListener("click", spy);
+    click(panel.querySelector(".rs-model-gap-btn"));
+    click(panel.querySelector(".rs-model-gap-alt"));
+    click(panel.querySelector(".rs-gen-lora-add"));
+    click(panel.querySelector(".rs-gen-lora-row .rs-gen-lora-del"));
+    document.removeEventListener("click", spy);
+    assert.deepEqual(leaks, [], "面板里的点击必须停在面板里");
+    overlay.remove();
+});
+

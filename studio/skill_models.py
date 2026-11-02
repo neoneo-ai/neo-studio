@@ -242,10 +242,20 @@ def _lora_config_name(configured: list, filename: str) -> str:
     return ""
 
 
+def _missing_text(f: dict) -> str:
+    """缺失项怎么写：配置写死了名字就报那个名字 —— 本机若已有清单推荐名的文件，
+    再喊「缺推荐名 13.49 GB」就是把已下载的文件报成缺，用户按这句话去下载必然被「已存在」顶回来。"""
+    if f["pinned"] and f["wanted"] and not f["found"]:
+        return f"配置写死的 {f['wanted']}（{f['category']} · 不在模型根里）"
+    return f"{f['label'] or f['filename']}（{f['category']} · {f['gb']} GB）"
+
+
 def check_skill(skill_id: str) -> dict | None:
     """预设的模型就位情况；技能目录不存在返回 None，无清单返回 has_manifest=False。
 
-    判定口径跟生成侧对齐：配置写死了模型名就按那个相对名精确查（resolve_model 找不到就是硬报错），
+    判定口径跟生成侧对齐：配置写死了模型名就按那个相对名精确查；写死的名字不在盘上、
+    族系基础模型在盘上时不阻塞 —— 生成侧 resolve_model(allow_fallback=True) 会回退到基础模型，
+    这条 preset 跑得起来，就不该被判成缺模型（回退写在文件项的 fallback_of / notes 上）。
     名留空才按清单推荐名 + 族系变体名在类别树里认。LoRA 只有配置里真的有才计入阻塞。
     """
     from .skill import _skill_dir
@@ -264,8 +274,7 @@ def check_skill(skill_id: str) -> dict | None:
     return {"skill_id": sid, "has_manifest": True, "family": manifest["family"],
             "label": manifest["label"], "kind": manifest["kind"], "files": files,
             "notes": [str(n) for n in (manifest.get("notes") or []) if str(n).strip()],
-            "missing": [f"{f['label'] or f['filename']}（{f['category']} · {f['gb']} GB）"
-                        for f in blocking],
+            "missing": [_missing_text(f) for f in blocking],
             "missing_count": len(blocking),
             "missing_gb": round(sum(f["gb"] for f in blocking), 2),
             "blocked": bool(blocking)}
@@ -273,11 +282,17 @@ def check_skill(skill_id: str) -> dict | None:
 
 
 def _file_state(entry: dict, wanted: dict) -> dict:
-    """单条清单项的就位情况：pinned（配置写死名字）精确查，自动挑选按推荐名 + 族系变体名认。"""
+    """单条清单项的就位情况：pinned（配置写死名字）精确查，自动挑选按推荐名 + 族系变体名认。
+
+    pinned 名不在盘上而族系基础模型在时不阻塞：写死的是用户自己的混音变体，
+    基础模型跑得起来，生成侧 resolve_model(allow_fallback=True) 就回退到它，
+    这里把「回退」记在 fallback_of 上让面板提醒用户，别把跑得起的预设判成缺模型。
+    """
     category = str(entry.get("category") or "").strip()
     filename = str(entry.get("filename") or "").strip().replace("\\", "/")
     field = str(entry.get("field") or "").strip()
     notes = []
+    fallback_of = ""
     if field == LORA_FIELD:
         cfg_name = _lora_config_name(wanted.get(LORA_FIELD) or [], filename)
         active, pinned = bool(cfg_name), bool(cfg_name)
@@ -287,18 +302,27 @@ def _file_state(entry: dict, wanted: dict) -> dict:
         active, pinned = True, bool(cfg_name)
         alts = [str(a) for a in (entry.get("alt") or [])]
         found = locate_exact(category, cfg_name) if cfg_name else locate_by_names(category, [filename] + alts)
+        if pinned and not found:
+            # 回退挑模型的就是生成侧那一个函数：这里说「跑得起来」，resolve_model 那边才不会出现挑不出
+            from .image_gen_files import suggest_model
+
+            found = suggest_model(category)
+            fallback_of = cfg_name if found else ""
     normalized = filename.lower()
-    if pinned and cfg_name.replace("\\", "/").lower() != normalized:
-        notes.append(f"配置用的是 {cfg_name}，不是预设推荐名")
-    if found and found.replace("\\", "/").lower() != normalized:
-        notes.append(f"本机落点 {found}，清单推荐 {filename}")
-    if pinned and cfg_name and not found:
-        notes.append(f"配置写死的 {cfg_name} 不在模型根里")
+    if fallback_of:
+        notes.append(f"配置里的 {fallback_of} 本机没有，已回退默认模型 {found}")
+    else:
+        if pinned and cfg_name.replace("\\", "/").lower() != normalized:
+            notes.append(f"配置用的是 {cfg_name}，不是预设推荐名")
+        if found and found.replace("\\", "/").lower() != normalized:
+            notes.append(f"本机落点 {found}，清单推荐 {filename}")
+        if pinned and cfg_name and not found:
+            notes.append(f"配置写死的 {cfg_name} 不在模型根里")
     return {"field": field, "category": category, "filename": filename,
             "label": str(entry.get("label") or "").strip(),
             "gb": round(float(entry.get("gb") or 0), 2),
             "sources": source_entries(entry), "alt": [str(a) for a in (entry.get("alt") or [])],
-            "pinned": pinned, "wanted": cfg_name, "found": found,
+            "pinned": pinned, "wanted": cfg_name, "found": found, "fallback_of": fallback_of,
             "ready": bool(found), "active": active, "optional": bool(entry.get("optional")),
             "notes": notes}
 
@@ -365,6 +389,9 @@ def download_plan(skill_id: str, source: str = "", include_optional: bool = Fals
     按当前选定源出计划；该源没有这条文件就报 not_on_source 并给出另一源，跨源续传是模型库
     自己的事，这里不自动换源。仓库名 / 仓库内路径 / 落盘子目录都过模型库的校验器；模型库按仓库内
     文件名落盘，与清单推荐名不同名时条目带 note，清单项必须在 alt 里认得它，否则就位检查认不出。
+
+    「已就位、不用再下」按模型库同一条口径判：清单推荐名与族系变体名在类别树里认得到同名文件就不下。
+    配置写死的名字只属于就位检查（生成侧 resolve_model 按它精确查），不该把本机已存在的文件排进计划。
     """
     manifest = resolve_skill_models(str(skill_id or "").strip())
     picked = pick_source(source)
@@ -375,9 +402,10 @@ def download_plan(skill_id: str, source: str = "", include_optional: bool = Fals
                 "label": "", "kind": "image", "notes": [], "source_label": flags["label"],
                 "needs_token": flags["needs_token"], "has_token": flags["has_token"],
                 "files": [], "missing": [], "missing_gb": 0.0, "total_gb": 0.0}
-    state = {(f["category"].lower(), f["filename"].lower()): (f["ready"], f["active"])
+    state = {(f["category"].lower(), f["filename"].lower()):
+             (bool(locate_by_names(f["category"], [f["filename"]] + f["alt"])), f["active"])
              for f in check_skill(skill_id)["files"]}
-    items = [item for item in (_plan_item(e, picked, state, include_optional)
+    items = [item for item in (_plan_item(e, picked, state, include_optional, manifest["family"])
                                for e in manifest["files"]) if item]
     downloadable = [i for i in items if i.get("payload")]
     return {"skill_id": skill_id, "has_manifest": True, "family": manifest["family"],
@@ -392,14 +420,18 @@ def download_plan(skill_id: str, source: str = "", include_optional: bool = Fals
 
 
 
-def _plan_item(entry: dict, picked: str, state: dict, include_optional: bool) -> dict | None:
+def _plan_item(entry: dict, picked: str, state: dict, include_optional: bool,
+               family: str = "") -> dict | None:
     """单条清单项的计划条目；已就位 / 未激活 / 未勾选可选项时返回 None（不进计划）。
 
-    落盘子目录 = 仓库内路径的相对目录，落盘名 = 仓库内文件名，两者都过模型库自己的消毒器，
-    payload 直接 POST 给 /neo_model_hub/download 就能开下。
+    落盘子目录 = 仓库内路径去掉开头的类别段之后的相对目录，仓库没给目录（Comfy-Org 那种
+    `diffusion_models/xxx.safetensors` 平铺仓库）就按预设族系建目录 —— 本机模型树就是按族系分目录的
+    （`diffusion_models/QwenImage2.1/`、`MiniMaxH3/`），下载落回同一个族系目录才看得下去。
+    落盘名 = 仓库内文件名，两者都过模型库自己的消毒器，payload 直接 POST 给
+    /neo_model_hub/download 就能开下。
     """
     from .model_hub import (HubError, other_source, sanitize_filename, sanitize_subfolder,
-                            validate_civitai_path, validate_path, validate_repo)
+                            strip_category_prefix, validate_civitai_path, validate_path, validate_repo)
 
     category = str(entry.get("category") or "").strip()
     filename = str(entry.get("filename") or "").strip().replace("\\", "/")
@@ -415,6 +447,7 @@ def _plan_item(entry: dict, picked: str, state: dict, include_optional: bool) ->
             "base_name": base, "label": str(entry.get("label") or "").strip(),
             "gb": round(float(entry.get("gb") or 0), 2), "sources": sources,
             "subfolder": subfolder_of(filename)}
+    family_dir = sanitize_filename(family)
     src = next((s for s in sources if s["source"] == picked), None)
     if not src:
         other = other_source(picked)
@@ -429,7 +462,7 @@ def _plan_item(entry: dict, picked: str, state: dict, include_optional: bool) ->
         else:
             target = validate_path(path)
             validate_repo(repo)
-            subfolder = sanitize_subfolder(subfolder_of(target))
+            subfolder = sanitize_subfolder(strip_category_prefix(category, subfolder_of(target)) or family_dir)
             land = sanitize_filename(target.split("/")[-1])
     except HubError as exc:
         item.update({"on_source": True, "reason": "bad_source", "note": f"该出处非法：{exc}"})

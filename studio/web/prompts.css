@@ -2972,6 +2972,15 @@
 .rs-model-hub-btn { align-self: flex-start; font-size: 11px; padding: 3px 8px; background: #23303f; color: #9bd18a; border: 1px solid #3b82c4; border-radius: 4px; cursor: pointer; }
 .rs-model-hub-btn:hover { background: #2b3c4f; color: #fff; }
 .rs-gen-lora-row .rs-model-hub-btn { flex: none; }
+/* 生图设置面板顶部的缺模型提示条：预设清单确认要用的模型没落盘时出现，写在当前界面里（通知条在弹窗里容易被点掉） */
+.rs-model-gap { display: flex; align-items: center; gap: 8px; box-sizing: border-box; padding: 5px 8px; margin-bottom: 8px; font-size: 11px; line-height: 1.45; color: #fca5a5; background: #2a1b1f; border: 1px solid #7f2b32; border-radius: 4px; }
+.rs-model-gap-text { flex: 1 1 auto; min-width: 0; }
+.rs-model-gap-btn { flex: none; font-size: 11px; padding: 3px 8px; background: #23303f; color: #9bd18a; border: 1px solid #3b82c4; border-radius: 4px; cursor: pointer; }
+.rs-model-gap-btn:hover { background: #2b3c4f; color: #fff; }
+.rs-model-gap-btn:disabled { opacity: .6; cursor: default; }
+/* 次要入口：文字链（不是第二个按钮）—— 换源 / 先填 Token / 看完整下载计划才用它 */
+.rs-model-gap-alt { flex: none; font-size: 11px; padding: 2px 2px; background: none; color: #8ab4f0; border: none; border-bottom: 1px dashed #3b5f84; border-radius: 0; cursor: pointer; }
+.rs-model-gap-alt:hover { color: #fff; border-bottom-color: #8ab4f0; }
 .rs-repair-civitai-panel { padding: 6px 0 8px 100px; display: flex; flex-direction: column; gap: 4px; border-bottom: 1px solid #2a2a2e; }
 .rs-civ-item { display: flex; align-items: center; gap: 8px; }
 .rs-civ-info { flex: 1; min-width: 0; font-size: 11px; color: #ccc; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

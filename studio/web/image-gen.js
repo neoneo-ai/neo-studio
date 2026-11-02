@@ -15,7 +15,7 @@ import { sseStream } from "./prompt-service.js";
 import { t, tf } from "./js/core/i18n.js";
 import { queueTrack } from "./queue-panel.js";
 import { actionToast } from "./toast.js";
-import { openModelHub } from "./model-hub.js";
+import { openModelHub, downloadSkillModels, skillModelPlan } from "./model-hub.js";
 
 const GEN_API = "/neo_image_gen";
 // 预设模型清单（后端 skill_models.py 读 skills/presets/<id>/models.json）
@@ -90,6 +90,10 @@ export async function requestGeneration(payload) {
     });
     const data = await resp.json().catch(() => null);
     if (!resp.ok || !data || data.error) throw new Error(data?.error || `HTTP ${resp.status}`);
+    // 后端那句「已回退默认模型」要在提交这一刻说出口：用户挑的自定义模型没跑上，必须看得见
+    if ((data?.warnings || []).length) {
+        actionToast({ severity: "info", summary: t("生图按可用模型跑了"), detail: data.warnings.join("；") });
+    }
     // 提交成功就登记进顶栏「队列」：生图窗随后关掉，进度在顶栏跟
     queueTrack("image", data, { label: payload?.prompt });
     return data;
@@ -102,11 +106,9 @@ export async function requestGeneration(payload) {
 const MANIFEST_SOURCE_NAMES = { modelscope: "ModelScope", huggingface: "Hugging Face", civitai: "Civitai" };
 const MODEL_FILE_EXT = /\.(safetensors|bin|pth|pt|ckpt|gguf|onnx|npz)$/i;
 
-/** 生成前预检：清单里有「要下又没落盘」的文件就拦下，返回给用户的那句话（文件名 · 类别 · 体积），
- *  并给一条带「去模型库」的通知；无清单 / 已就位 / 清单接口不可用时回空串，生成照常提交。 */
-async function blockingMissingModels(skillId) {
-    const check = await skillModelCheck(skillId);
-    if (!check?.blocked) return "";
+/** 清单缺口的告知（生成前拦截与「选中技能那一刻」共用同一条）：通知带「去模型库」直达就绪面板，
+ *  返回值是给提交方的一句话（文件名 · 类别 · 体积）。 */
+function missingModelsNotice(check) {
     const label = check.label || check.skill_id;
     const detail = (check.missing || []).join("；");
     actionToast({
@@ -120,13 +122,23 @@ async function blockingMissingModels(skillId) {
         { label, n: check.missing_count, gb: check.missing_gb, detail });
 }
 
+/** 生成前预检：清单里有「要下又没落盘」的文件就拦下，返回给用户的那句话；
+ *  无清单 / 已就位 / 清单接口不可用时回空串，生成照常提交。 */
+async function blockingMissingModels(skillId) {
+    const check = await skillModelCheck(skillId);
+    if (!check?.blocked) return "";
+    return missingModelsNotice(check);
+}
+
 /** 预设清单的就位检查（每次调用读一遍，不跨请求缓存：config.json 与模型根在请求之外也会变）。
+ *  路由回的是 {success, check} 信封，就位数据只在 check 里。
  *  无清单 / 技能不存在 / 路由不可用 → null：缺失模型的 UI 与生成前预检整条降级。 */
 export async function skillModelCheck(skillId) {
     if (!skillId) return null;
     try {
         const data = await getJson(`${SKILL_MODELS_API}/check?skill_id=${encodeURIComponent(skillId)}`);
-        return data && data.has_manifest ? data : null;
+        const check = data?.check;
+        return check?.has_manifest ? check : null;
     } catch (e) {
         console.warn("[Neo Studio] 预设模型清单读取失败:", e);
         return null;
@@ -628,6 +640,29 @@ export function createModelConfigSection(opts = {}) {
     const section = mkEl("div", "rs-gen-model-section");
     const getSkillId = opts.getSkillId || (() => "");
 
+    // 面板内的缺模型提示条：清单确认要用的模型没落盘就在当前界面写明白，主按钮就地补齐
+    // （出计划 → 逐条走模型库下载 → 进度写在这条上 → 下完重读清单收起），模型库只留一个次要文字入口
+    const gapBar = mkEl("div", "rs-model-gap");
+    gapBar.style.display = "none";
+    const gapText = mkEl("span", "rs-model-gap-text");
+    const gapBtn = mkEl("button", "rs-model-gap-btn");
+    gapBtn.type = "button";
+    const gapHubLink = mkEl("button", "rs-model-gap-alt");
+    gapHubLink.type = "button";
+    gapHubLink.textContent = t("模型库");
+    gapHubLink.title = t("到模型库看该预设的下载计划、换源或先填 Token");
+    gapHubLink.addEventListener("click", () => { if (gapSkillId) openModelHub({ readySkill: gapSkillId }); });
+    gapBar.append(gapText, gapBtn, gapHubLink);
+    let gapSkillId = "";
+    let gapRunner = null;   // 就地补齐的进行中句柄（含取消）：下完 / 失败 / 换技能时清空
+    let gapMode = "download";   // download：出计划开下；cancel：正在下，按钮改成取消；hub：补齐做不了，按钮改走去模型库
+    let gapPlanCount = -1;   // 计划里可下载的条目数：-1 = 还没读，0 = 本机已存在（没有能下的东西）
+    gapBtn.addEventListener("click", () => {
+        if (gapMode === "cancel") { gapRunner?.cancel(); return; }
+        if (gapMode === "hub") { if (gapSkillId) openModelHub({ readySkill: gapSkillId }); return; }
+        gapDownload();
+    });
+
     // 行内「⬇ 模型库」：清单确认这个字段缺文件才点亮（openfield 就绪行的 missing 标记同款），点击按清单落点进模型库
     const makeHubBtn = (field, getValue) => {
         let target = null;
@@ -672,7 +707,13 @@ export function createModelConfigSection(opts = {}) {
     loraAddBtn.type = "button";
     loraAddBtn.textContent = t("+ 添加 LoRA");
     loraRow.append(loraLabel, loraList, loraAddBtn);
-    section.append(modelCtl.row, encoderCtl.row, vaeCtl.row, loraRow);
+    section.append(gapBar, modelCtl.row, encoderCtl.row, vaeCtl.row, loraRow);
+
+    // 面板内的一次点击不许冒泡到 document：自定参数 chip 的文档级收起循环（gallery-gen.js 的 closeOnOutside）
+    // 和弹窗宿主的外点关闭都读 document 上的事件，一次点提示条、点 LoRA 行会被判成「点在面板外」，
+    // 整块自定参数面板连带的弹窗一起收掉（技能行当年就是靠各自的 stopPropagation 躲这件事）。
+    // 只拦 click：combo 的下拉靠 document 上的 pointerdown 收起（combo-box.js），连 pointerdown 一起拦会让下拉开着不收。
+    section.addEventListener("click", (e) => e.stopPropagation());
 
     let loraFiles = [];
     let loraMtimes = {};   // LoRA 文件修改时间（模型名 → epoch 秒），随 loraFiles 一起刷新
@@ -736,13 +777,111 @@ export function createModelConfigSection(opts = {}) {
 
     /** 清单缺失项点亮对应行的下载入口；无清单（check 为 null）整条收起，不承诺定位不了的下载点。 */
     function applyManifestTargets(check) {
-        for (const ctl of [modelCtl, encoderCtl, vaeCtl]) ctl.hub.show(manifestGap(check, ctl.field, ctl.select.value));
-        for (const [line, hub] of loraHubs) hub.show(manifestGap(check, "loras", line.querySelector("select")?.value));
+        // 只缺一项时顶部的「⬇ 去模型库」已直达该预设的下载计划，行内再给一个就是同一条路径的两个按钮
+        const single = check?.blocked && check.missing_count === 1;
+        const gapOf = (field, value) => (single ? null : manifestGap(check, field, value));
+        for (const ctl of [modelCtl, encoderCtl, vaeCtl]) ctl.hub.show(gapOf(ctl.field, ctl.select.value));
+        for (const [line, hub] of loraHubs) hub.show(gapOf("loras", line.querySelector("select")?.value));
     }
 
-    /** 每次 load 读一遍该技能的清单（表单打开、技能切换、修复回填后都要重读） */
+    /** 缺模型就写进面板里这条提示：缺几项、多少 GB、缺哪些文件，主按钮就地补齐（出计划直接开下）。
+     *  无清单（自建技能）/ 已就位 → 整条收起，不打扰；换到别的技能时把上一次没下完的补齐断掉。
+     *  自定义模型名不在盘上、族系基础模型在 → 不拦生成，这条只写「已回退默认模型」（没有下载按钮）。 */
+    function applyManifestGap(check) {
+        if (gapRunner && check?.skill_id !== gapSkillId) { gapRunner.cancel(); gapRunner = null; }
+        const fallbacks = (check?.files || []).filter((f) => f.ready && f.fallback_of);
+        if (!check?.blocked) {
+            gapSkillId = "";
+            // 自定义模型名不在盘上、跑的是回退的默认模型：生成照跑，这句话要让用户看见
+            if (fallbacks.length && !gapRunner) {
+                gapText.textContent = fallbacks.map((f) => tf("配置里的 {model} 本机没有，已回退默认模型 {used}",
+                    { model: f.fallback_of, used: f.found })).join("；");
+                gapBtn.style.display = "none";
+                gapHubLink.style.display = "";
+                gapBar.style.display = "";
+                return;
+            }
+            gapBtn.style.display = "";
+            gapBar.style.display = "none";
+            return;
+        }
+        gapSkillId = check.skill_id;
+        if (!gapRunner) {   // 补齐正在进行时按钮已是「✕ 取消」，重读清单只改缺口文本
+            // 本机已有同名文件时计划里没有可下条目：主按钮不承诺一次必被「已存在」顶回的下载，直接走模型库换模型
+            const canDownload = gapPlanCount > 0;
+            gapMode = canDownload ? "download" : "hub";
+            gapBtn.disabled = false;
+            gapBtn.style.display = "";
+            gapBtn.textContent = canDownload ? tf("⬇ 下载 {gb} GB", { gb: check.missing_gb }) : t("⬇ 去模型库");
+            gapHubLink.style.display = "";
+        }
+        gapText.textContent = tf("{label} 缺 {n} 项模型文件（约 {gb} GB）：{detail}", {
+            label: check.label || check.skill_id,
+            n: check.missing_count,
+            gb: check.missing_gb,
+            detail: (check.missing || []).join("；"),
+        });
+        gapBar.style.display = "";
+    }
+
+    /** 就地补齐：出该预设的下载计划 → 逐条走模型库下载 → 进度写在这条提示上 → 下完重读清单（就位即收起）。
+     *  计划要先填 Token / 当前源没这文件时不硬下：写明原因，主按钮改成「去模型库」。 */
+    async function gapDownload() {
+        let settled = false;   // 极快的下完 / 失败会先于 promise 结算：结算后不再挂进行中的句柄
+        gapBtn.disabled = true;
+        gapBtn.textContent = t("出计划中…");
+        gapHubLink.style.display = "none";
+        const res = await downloadSkillModels(gapSkillId, {
+            onFile: (name) => {
+                gapMode = "cancel";
+                gapBtn.disabled = false;
+                gapBtn.textContent = t("✕ 取消");
+                gapText.textContent = tf("下载中：{name}", { name });
+            },
+            onProgress: (d, line) => {
+                gapText.textContent = tf("下载中：{name} · {line}", { name: d.filename, line });
+            },
+            onDone: () => {
+                settled = true;
+                gapRunner = null;
+                gapMode = "download";
+                actionToast({ severity: "success", summary: t("预设模型已补齐"), detail: t("现在可以直接生成") });
+                refreshManifestTargets();   // 重读就位：文件落盘了这条自己收起，行内入口跟着收起
+            },
+            onFail: (msg) => {
+                settled = true;
+                gapRunner = null;
+                gapMode = "download";
+                gapBtn.disabled = false;
+                gapBtn.textContent = t("⬇ 重试");
+                gapHubLink.style.display = "";
+                gapText.textContent = tf("补齐失败：{msg}", { msg });
+            },
+        });
+        if (res?.cancel && !settled) { gapRunner = res; return; }
+        if (res?.cancel) return;
+        gapMode = "hub";
+        gapBtn.disabled = false;
+        gapBtn.textContent = t("⬇ 去模型库");
+        gapText.textContent = tf("{gap}（{reason}）", { gap: gapText.textContent, reason: res.reason });
+    }
+
+    /** 每次 load 读一遍该技能的清单（表单打开、技能切换、修复回填后都要重读）：
+     *  缺文件的行点亮「⬇ 模型库」，缺口同时写在面板顶部 —— 选技能这一刻就看见，不用等点生成才被拦下。
+     *  缺口还在时顺带读一遍下载计划：本机已有同名文件就没有可下条目，顶部主按钮直接是「去模型库」。 */
     function refreshManifestTargets() {
-        skillModelCheck(getSkillId()).then(applyManifestTargets);
+        const sid = getSkillId();
+        skillModelCheck(sid).then(async (check) => {
+            if (getSkillId() !== sid) return;   // 期间换了技能，这一轮清单不属于当前面板
+            applyManifestTargets(check);
+            gapPlanCount = -1;
+            if (check?.blocked) {
+                const plan = await skillModelPlan(sid).catch(() => null);
+                if (getSkillId() !== sid) return;
+                gapPlanCount = (plan?.files || []).filter((i) => i.payload).length;
+            }
+            applyManifestGap(check);
+        });
     }
 
     function load(settings, models) {

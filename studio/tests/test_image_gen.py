@@ -245,6 +245,55 @@ class SuggestTests(unittest.TestCase):
         self._with_files(["Krea2-HD-vae.safetensors", "qwen_image_vae.safetensors"])
         self.assertEqual(image_gen.suggest_model("vae"), "qwen_image_vae.safetensors")
 
+    def test_diffusion_skips_video_model_tree(self):
+        # 用户的 Krea2 混种被放进 H3 视频权重目录：名称线索命中它，生图不能挑走
+        self._with_files(["MiniMaxH3/NSW/moodyKrea2Mix_v70_nvfP4.safetensors",
+                          "MiniMaxH3\\minimax_h3_video_turbo_v3.safetensors"])
+        self.assertEqual(image_gen.suggest_model("diffusion_models"), "")
+
+    def test_diffusion_prefers_real_krea2_over_video_tree_mix(self):
+        self._with_files(["MiniMaxH3/NSW/moodyKrea2Mix_v70_nvfP4.safetensors",
+                          "Krea2/krea2_raw_int8_convrot.safetensors",
+                          "Krea2/krea2_turbo_int8_convrot.safetensors"])
+        self.assertEqual(image_gen.suggest_model("diffusion_models"),
+                         "Krea2/krea2_turbo_int8_convrot.safetensors")
+
+
+class ResolveFallbackTests(unittest.TestCase):
+    """生图的模型名回退：自定义模型名不在盘上、类别里挑得出默认模型就用默认模型跑并给出这句话；
+    挑不出默认模型时照旧硬报错（生视频走的就是这条不回退的口径）"""
+
+    def setUp(self):
+        self._orig = image_gen_files._folder_files
+
+    def tearDown(self):
+        image_gen_files._folder_files = self._orig
+
+    def _with_files(self, files):
+        image_gen_files._folder_files = lambda folder: files
+
+    def test_missing_custom_name_falls_back_to_default(self):
+        self._with_files(["Krea2/krea2_turbo_int8_convrot.safetensors"])
+        model, warn = image_gen_files.resolve_model(
+            "diffusion_models", "Krea2\\Moody\\moodyKrea2Mix_v40INT8CONVROT.safetensors", allow_fallback=True)
+        self.assertEqual(model, "Krea2/krea2_turbo_int8_convrot.safetensors")
+        self.assertIn("已回退默认模型", warn)
+        self.assertIn("moodyKrea2Mix_v40INT8CONVROT", warn)
+
+    def test_no_fallback_flag_keeps_hard_error(self):
+        self._with_files(["Krea2/krea2_turbo_int8_convrot.safetensors"])
+        model, err = image_gen_files.resolve_model("diffusion_models", "Krea2\\Moody\\moody.safetensors")
+        self.assertEqual(model, "")
+        self.assertIn("找不到模型", err)
+
+    def test_fallback_without_any_default_still_errors(self):
+        # 类别里只有 H3 视频权重：生图挑不出可用基座，回退不能把请求放进队列再让它死在加载节点上
+        self._with_files(["MiniMaxH3/minimax_h3_video_turbo_v3.safetensors"])
+        model, err = image_gen_files.resolve_model(
+            "diffusion_models", "Krea2\\Moody\\moody.safetensors", allow_fallback=True)
+        self.assertEqual(model, "")
+        self.assertIn("找不到模型", err)
+
 
 class ScanModelsTests(unittest.TestCase):
     """下拉展示：krea2 相关靠前；各目录自动挑选结果（LoRA 无名称线索，不给出建议）。"""
@@ -342,10 +391,22 @@ class ResolveTests(unittest.TestCase):
         params = image_gen.resolve_request({"prompt": "a cat", "steps": 8}, settings)
         self.assertEqual(params["steps"], 8)
 
+    def test_missing_custom_model_name_falls_back_with_warning(self):
+        """自定义模型名不在盘上、类别里挑得出默认模型：默认模型跑，「已回退」写进 warnings，不拦跑得起的请求。"""
+        params = image_gen.resolve_request({"prompt": "a cat"}, {"model": "Krea2\\Moody\\ghost.safetensors"})
+        self.assertEqual(params["model"], "krea2/krea2_turbo_fp16.safetensors")
+        self.assertIn("已回退默认模型", params["warnings"][0])
+        self.assertIn("ghost.safetensors", params["warnings"][0])
+
     def test_missing_model_folder_raises(self):
-        with self.assertRaises(ValueError):
-            image_gen.resolve_request({"prompt": "a cat"},
-                                      {"model": "ghost.safetensors"})
+        """类别里连可挑的默认模型都没有：照旧硬报错，不把必死在加载节点上的请求放进队列。"""
+        orig = image_gen_files._folder_files
+        image_gen_files._folder_files = lambda folder: [] if folder == "diffusion_models" else orig(folder)
+        try:
+            with self.assertRaises(ValueError):
+                image_gen.resolve_request({"prompt": "a cat"}, {"model": "ghost.safetensors"})
+        finally:
+            image_gen_files._folder_files = orig
 
 
 class ReferenceTests(unittest.TestCase):

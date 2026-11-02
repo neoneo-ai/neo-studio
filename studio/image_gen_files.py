@@ -51,6 +51,10 @@ _MODEL_HINTS = {
     "vae": ("qwen_image", "krea2"),
 }
 
+# 自动挑选要排除的目录段：H3 视频权重树。Krea2 混种（moodyKrea2Mix 这类）常被用户存放在
+# MiniMaxH3\ 下，名称线索 "krea2" 命中它，生图就会挑到视频目录里的权重，执行期报 conditioning 维度错
+_IMAGE_SUGGEST_EXCLUDE_DIRS = ("minimax",)
+
 
 # ===========================================================================
 # 设置
@@ -100,17 +104,26 @@ def suggest_model(folder: str) -> str:
     if not files:
         return ""
     for hint in _MODEL_HINTS.get(folder, ()):
-        matches = [f for f in files if hint in f.lower()]
+        matches = [f for f in files if hint in f.lower() and not _in_excluded_tree(f)]
         if matches:
             matches.sort(key=lambda f: (("turbo" not in f.lower()), len(f)))
             return matches[0]
     return ""
 
 
-def resolve_model(folder: str, wanted: str) -> tuple:
+def _in_excluded_tree(rel_path: str) -> bool:
+    """模型相对路径的目录段里出现视频家族词 → 生图自动挑选不参与挑选。"""
+    dirs = rel_path.replace("\\", "/").lower().split("/")[:-1]
+    return any(word in seg for seg in dirs for word in _IMAGE_SUGGEST_EXCLUDE_DIRS)
+
+
+def resolve_model(folder: str, wanted: str, allow_fallback: bool = False) -> tuple:
     """把设置里的模型名解析成 folder_paths 可用的相对名。
 
-    返回 (resolved, error)：wanted 为空时自动挑选；找不到时给出候选名。
+    返回 (resolved, message)：wanted 为空时自动挑选；找不到时给出候选名。
+    allow_fallback 是生图路径的口径：自定义模型名不在盘上、类别里挑得出默认模型时就用默认模型跑，
+    第二格回的是「已回退」这句话（调用方当提示用，不拦生成）。生视频不给这个口径——
+    那里的模型、编码器、VAE 是一整套配方，换基座等于换配方，报出来比回退诚实。
     """
     files = _folder_files(folder)
     if not files:
@@ -132,6 +145,10 @@ def resolve_model(folder: str, wanted: str) -> tuple:
             return hit, ""
     candidates = difflib.get_close_matches(wanted, files, n=3, cutoff=0.4)
     hint = "；候选: " + ", ".join(candidates) if candidates else ""
+    if allow_fallback:
+        suggested = suggest_model(folder)
+        if suggested:
+            return suggested, f"配置里的 {wanted} 本机没有，已回退默认模型 {suggested}"
     return "", f"找不到模型 {wanted}（{folder}）{hint}"
 
 

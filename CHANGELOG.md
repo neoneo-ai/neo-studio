@@ -4,6 +4,50 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **A preset that pins a custom mix your machine does not have now runs on the family's base model - and tells you.**
+  With `configs/image_gen.json` pinning `Krea2\Moody\moodyKrea2Mix_v40INT8CONVROT.safetensors`, every generation of
+  that preset was refused with 「缺 1 项 · 13.49 GB」 while the family's `krea2_turbo_int8_convrot.safetensors` sat on
+  disk: readiness demanded the exact pinned path and `resolve_model` rejected it at generate time. A pinned name that
+  is not on disk now falls back to the default model the generation side picks - image generation only, video keeps
+  its all-or-nothing recipe: the 自定参数 banner reads 「配置里的 X 本机没有，已回退默认模型 Y」 with no download
+  button and generation submits, and the same sentence arrives as a toast with the submitted task. A manifest file
+  with no family file on disk still blocks, and a file that is already on disk is still never planned.
+  Covered by `studio/tests/test_skill_models.py`, `studio/tests/test_image_gen.py` and
+  `studio/tests/js/skill-models-preflight.test.mjs`.
+
+- **A preset weight now lands in its family folder, and a file you already have is never offered again.**
+  Preset downloads from the 自定参数 gap banner used to land in `models/diffusion_models/diffusion_models/`
+  (the repo path's own category segment became the subfolder) and were planned even when the file was already
+  on disk: the banner blamed a 13.49 GB file you had just downloaded, and pressing 下载 was answered by the
+  Model Hub with 已存在 - a dead loop. Plans now drop the repo's category segment and land in the preset's
+  family folder (`models/diffusion_models/krea2_image/<file>`, like the `QwenImage2.1/`, `MiniMaxH3/` folders
+  on disk), a file whose name the category tree already answers is left out of the plan, and the banner stops
+  promising a download: it names the model your config pins that is not in the model root
+  (「配置写死的 X（类别 · 不在模型根里）」) and its button is ⬇ 去模型库, where picking a real model is the way out.
+  Covered by `studio/tests/test_skill_models.py` and `studio/tests/js/skill-models-preflight.test.mjs`.
+
+- **Choosing a skill with unpicked models now says so inside the popup - and fixes it there.** The manifest check
+  used to bite only at the moment you pressed Generate. Pick the preset in the skill picker's left column or in the
+  自定参数 panel and the panel itself writes "missing N model files (about X GB): \<files\>" on top of the model rows.
+  The banner's one button repairs it in place: it builds that preset's download plan, feeds it to the Model Hub
+  download, writes the live progress (percent · downloaded / total · speed) on the banner - the button is 取消 while
+  it runs - then re-reads the manifest, collapses the banner and posts a 预设模型已补齐 toast once the files land.
+  With two or more gaps each gap row also lights its own ⬇ 模型库 link for precise positioning; with a single missing
+  file the banner is the only entry, so one gap never shows two buttons for the same target. When the plan needs a
+  token first nothing is downloaded: the banner names the precondition and its button becomes ⬇ 去模型库 (a muted
+  模型库 text link always offers the full plan, sources and token settings). Custom skills with no manifest and ready
+  presets show nothing. The panel's own clicks now stop inside the panel (the 自定参数 chip closes the panel, and the
+  dialog with it, on any click its document-level loop reads as an outside click — the banner's download, a LoRA row
+  and the row hub buttons all used to read that way). Covered by
+  `studio/tests/js/skill-models-preflight.test.mjs` and `studio/tests/js/gallery-gen-material.test.mjs`.
+
+- **The auto model pick no longer grabs a weight out of the video-model tree.** A Krea2 mix stored under
+  `MiniMaxH3\` matched the image name clue, so with the Krea2 folder deleted the 生图模型 row filled itself
+  with `MiniMaxH3\NSW\moodyKrea2Mix_...` and the run died in the loader nodes. The auto pick now reads only
+  the image weight directories: when the only name-clue hit lives in a video-model directory, the row stays
+  「自动」 with no model name and submitting reports 没有找到可用的默认模型 instead of queueing a model that
+  cannot run. Tests: `studio/tests/test_image_gen.py` (`SuggestTests`).
+
 - **A missing model now says where to get it, and a blocked generation never reaches the queue.** The model rows
   of the image-generation settings (the skill detail's left column, and the gallery's 生成素材 / 图片编辑 custom
   parameters) gained a **⬇ 模型库** button on the row whose field the preset's `models.json` marks missing: clicking

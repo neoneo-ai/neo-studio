@@ -16,7 +16,10 @@ selected skill, e.g. Krea2 / Qwen Image 2.1).
   `workflow.json`.
 - The generation model / Text Encoder / VAE default to "auto", matched against the skill template, so
   nothing has to be configured by hand; only when nothing matches do you name them in the image
-  generation settings.
+  generation settings. The auto pick reads only the image weight directories - a Krea2 mix stored in the
+  video tree (`MiniMaxH3\`) is not a candidate for image generation. When nothing is picked, the row shows
+  "auto" with no model name and submitting reports "no usable default model found" instead of queueing a
+  weight that cannot run.
 - Every entry in the model dropdowns carries the model file's update date
   (`qwen_image_2.1_int8_convrot · 2026-09-12`), so a file that was just dropped into the model directory is
   easy to spot; entries whose file time cannot be read (a dropped network share, a file moved right after the
@@ -32,6 +35,10 @@ reads "{preset} is missing N model files (about X GB): category / file name", an
 
 - What gets blocked is the class a ComfyUI loader node cannot rescue: a pinned or auto-picked model file that
   is not in the local model root. Inside the queue it only ever becomes a loader stack trace that names no file.
+- A pinned custom model name that is not on disk while the family's base model is does **not** block: generation
+  runs on the auto-picked default model, and the panel and the submitted task both read "the model X from your
+  settings is not on disk - generation falls back to the default model Y". It only raises when the category has
+  no default model to pick.
 - A custom skill with no manifest, an unavailable manifest route, and a request with no skill attached
   (the global generation settings) all degrade the whole check: generation submits as before, with no extra word.
 - The model rows of the generation settings use the same manifest for a "⬇ Model Hub" entry: in the skill
@@ -207,6 +214,8 @@ LoadImage → ImageScaleToTotalPixels(reference 1MP, 32) → ImagePadForOutpaint
 - An empty prompt is prefilled with the default outpaint trigger words.
 - The preset skill `qwen_image_21_outpaint` pins the outpaint LoRA in its `config.json` (a missing file is
   skipped with a warning and does not block generation).
+
+**Checked the moment a skill is picked in the popup, and repaired in place**: select a manifest-carrying preset in the skill picker's left column or in the 自定参数 panel, and the panel writes "missing N model files (about X GB): filenames…" right on top of the model rows — the notice sits in the current view instead of a toast, so you see it before pressing Generate and reading a node-load stack. That banner's one button repairs it in place: it builds the preset's download plan, feeds it to the Model Hub download, writes the progress (percent · downloaded / total · speed) on the banner - the button is "✕ Cancel" while it runs - then re-reads the manifest, collapses itself and posts a "the preset's models are in place" toast once the files land. The muted 模型库 text link beside it is for the full plan, for switching sources and for adding a token. When only one file is missing that banner is the single entry (the rows get no second button for the same target), and with two or more gaps each gap row lights its own ⬇ 模型库 link for precise positioning. When the plan needs a token first, or the current source does not carry the file, nothing is downloaded: the banner names the precondition and the button becomes "⬇ Open Model Hub". When a pinned model name is not on disk and the family's base model is, this banner names no gap and promises no download: it reads "the model X from your settings is not on disk - generation falls back to the default model Y", generation submits, and the same sentence arrives as a toast with the submitted task. Custom skills with no manifest and ready presets show nothing. Every click inside the panel stays inside it - the banner, a LoRA row and the inline entries never bubble to the document, so the host's "click outside closes the panel" loop cannot collapse the 自定参数 panel, and the dialog behind it stays open.
 
 Backend implementation: [architecture.md](architecture.md) (`image_gen.py` / `image_gen_edit.py`),
 API: [api-routes.md](api-routes.md).

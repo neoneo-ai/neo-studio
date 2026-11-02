@@ -63,7 +63,8 @@ const PLAN_ITEM = {
 const GEN_SETTINGS = { model: MODEL_FILE, text_encoder: ENCODER_FILE, vae: "", loras: [{ name: LORA_FILE, strength: 1 }] };
 const GEN_MODELS = { diffusion_models: [MODEL_FILE], text_encoders: [], vae: [], loras: [LORA_FILE] };
 
-function mockCheck(check) { mockRoute("/neo_skill_models/check", () => jsonResponse(check)); }
+/** 就位检查的响应形状就是路由的形状：{success, check} 信封（裸 check 会让前端读不到就位数据） */
+function mockCheck(check) { mockRoute("/neo_skill_models/check", () => jsonResponse({ success: true, check })); }
 
 function mockGenerate() { mockRoute("/neo_image_gen/generate", () => jsonResponse({ task_id: "t1", status: "queued" })); }
 
@@ -86,6 +87,9 @@ function mockHubRoutes() {
 }
 
 const genCalls = () => fetchLog.filter((c) => c.path === "/neo_image_gen/generate");
+
+/** 当前挂在页面上的通知条数（actionToast 的桩渲染 .neo-at） */
+const countActionToasts = () => document.querySelectorAll(".neo-at").length;
 
 /** 生图设置的模型区：load 会按 getSkillId 读一遍清单，行内入口随清单结果点亮 */
 async function modelSection(check, settings = GEN_SETTINGS) {
@@ -243,4 +247,212 @@ test("LoRA 缺失项按当前选名配对：选了别的 LoRA 不点亮", () => 
     assert.match(manifestHubNote(manifestGap(CHECK, "loras", LORA_FILE)), /Hugging Face · comfyanonymous\/girlslikeqweni/);
 });
 
+// ============ 选中技能那一刻就在面板里提示（不走通知条） ============
+
+test("自定参数里选到缺模型的预设：面板内直接写出缺几项多少 GB，次要入口「模型库」带它进就绪面板", async () => {
+    mockGenerate();
+    mockHubRoutes();
+    const section = await modelSection(CHECK);
+    const bar = section.el.querySelector(".rs-model-gap");
+    assert.ok(bar && bar.style.display !== "none", "选到缺模型的预设要在当前界面出提示条");
+    assert.match(bar.textContent, /Qwen-Image 2\.1 缺 2 项模型文件（约 5\.6 GB）/);
+    assert.match(bar.textContent, /文本编码器（text_encoders · 4\.7 GB）/, "要写清缺的是哪几项");
+    assert.equal(countActionToasts(), 0, "面板内的提示不该走通知条");
+    assert.equal(genCalls().length, 0, "提示本身不提交生成任务");
+    click(bar.querySelector(".rs-model-gap-alt"));
+    await sleep(120);
+    const overlay = document.querySelector(".neo-hub-overlay");
+    assert.ok(overlay, "点「模型库」应打开模型库");
+    assert.notEqual(overlay.querySelector(".neo-hub-ready").style.display, "none", "应带该预设展开就绪面板");
+    closeModelHub();
+});
+
+test("无清单的技能（自建）在面板里不打扰：提示条收起", async () => {
+    mockGenerate();
+    const section = await modelSection(NO_MANIFEST);
+    const bar = section.el.querySelector(".rs-model-gap");
+    assert.ok(bar, "提示条应预置在面板里（默认收起）");
+    assert.equal(bar.style.display, "none", "无清单不该出现缺模型提示");
+    assert.equal(countActionToasts(), 0);
+});
+
+test("清单项已就位：提示条收起，生成照常", async () => {
+    mockGenerate();
+    const ready = { ...CHECK, files: CHECK.files.map((f) => ({ ...f, ready: true })), missing: [], missing_count: 0, missing_gb: 0, blocked: false };
+    const section = await modelSection(ready);
+    assert.equal(section.el.querySelector(".rs-model-gap").style.display, "none", "已就位不该提示");
+    assert.equal(countActionToasts(), 0);
+});
+
+test("只缺一项：提示条那一个是唯一入口，行内不再给同一目标的第二个按钮", async () => {
+    mockGenerate();
+    mockHubRoutes();
+    const one = {
+        ...CHECK,
+        files: CHECK.files.map((f) => ({ ...f, ready: f.field !== "text_encoder" })),
+        missing: ["文本编码器（text_encoders · 4.7 GB）"], missing_count: 1, missing_gb: 4.7, blocked: true,
+    };
+    const section = await modelSection(one);
+    const bar = section.el.querySelector(".rs-model-gap");
+    assert.notEqual(bar.style.display, "none", "缺模型仍要写进面板");
+    assert.equal([...section.el.querySelectorAll(".rs-model-hub-btn")].filter(visible).length, 0,
+        "只缺一项时行内不该出现第二个下载入口");
+    assert.match(bar.querySelector(".rs-model-gap-btn").textContent, /⬇ 下载 4\.7 GB/, "那一个按钮就地补齐");
+    click(bar.querySelector(".rs-model-gap-alt"));
+    await sleep(120);
+    assert.notEqual(document.querySelector(".neo-hub-overlay")?.querySelector(".neo-hub-ready").style.display,
+        "none", "次要入口「模型库」带该预设展开就绪面板");
+    closeModelHub();
+});
+
+// ============ 面板顶部就地补齐：出计划 → 走模型库下载 → 进度写在提示条上 ============
+
+const DL_RUNNING = { state: "running", filename: ENCODER_FILE, category: "text_encoders", total: 3e9, done: 1.5e9, speed: 5e6 };
+const DL_DONE = { state: "done", filename: ENCODER_FILE, category: "text_encoders", total: 3e9, done: 3e9, speed: 0 };
+const CHECK_READY = { ...CHECK, files: CHECK.files.map((f) => ({ ...f, ready: true })), missing: [], missing_count: 0, missing_gb: 0, blocked: false };
+
+function mockPlan(overrides = {}) {
+    mockRoute("/neo_skill_models/plan", (body) => jsonResponse({
+        success: true,
+        plan: {
+            skill_id: body.skill_id, label: "Qwen-Image 2.1", source: "modelscope", source_label: "MS",
+            has_manifest: true, total_gb: 4.7, include_optional: false, needs_token: false, has_token: true,
+            notes: [], files: [PLAN_ITEM], ...overrides,
+        },
+    }));
+}
+
+/** 模型库下载接口桩：/download 启动，/progress 按给定的状态序列回（用完重复最后一个） */
+function mockHubDownload(...states) {
+    mockRoute("/neo_model_hub/download", () => jsonResponse({ success: true, download: { state: "running" } }));
+    mockRoute("/neo_model_hub/cancel", () => jsonResponse({ success: true }));
+    let i = 0;
+    mockRoute("/neo_model_hub/progress", () => jsonResponse({
+        success: true, download: states[Math.min(i++, states.length - 1)],
+    }));
+}
+
+const progressCalls = () => fetchLog.filter((c) => c.path === "/neo_model_hub/progress").length;
+
+test("主按钮就地补齐：直接出计划并开下，进度写在这条提示上，按钮换成取消", async () => {
+    mockGenerate();
+    mockHubRoutes();
+    mockPlan();
+    mockHubDownload(DL_RUNNING);
+    const section = await modelSection(CHECK);
+    const bar = section.el.querySelector(".rs-model-gap");
+    const btn = bar.querySelector(".rs-model-gap-btn");
+    assert.match(btn.textContent, /⬇ 下载 5\.6 GB/);
+    click(btn);
+    await sleep(60);
+    const dl = fetchLog.filter((c) => c.path === "/neo_model_hub/download");
+    assert.equal(dl.length, 1, "补齐应直接调用模型库的下载接口，不该先把用户赶去模型库");
+    assert.equal(dl[0].body.filename, ENCODER_FILE, "下载的应是计划里那条缺失文件");
+    assert.match(bar.textContent, /下载中/);
+    assert.match(bar.textContent, /50\.0%/);
+    assert.equal(btn.textContent, "✕ 取消", "正在下载时那一个按钮就是取消");
+    click(btn);
+    await sleep(40);
+    assert.ok(fetchLog.some((c) => c.path === "/neo_model_hub/cancel"), "点取消要断掉模型库那次下载");
+    const seen = progressCalls();
+    await sleep(80);
+    assert.equal(progressCalls(), seen, "取消后轮询必须停，不留后台定时器");
+});
+
+test("补齐下完：重读就位清单，提示条自己收起并给一条「已补齐」通知", async () => {
+    mockGenerate();
+    mockHubRoutes();
+    mockPlan();
+    mockHubDownload(DL_DONE);
+    let served = CHECK;
+    const section = await modelSection(CHECK);
+    mockRoute("/neo_skill_models/check", () => jsonResponse({ success: true, check: served }));
+    click(section.el.querySelector(".rs-model-gap-btn"));
+    served = CHECK_READY;
+    await sleep(60);
+    assert.equal(section.el.querySelector(".rs-model-gap").style.display, "none", "文件落盘后提示条该收起");
+    assert.match(document.querySelector(".neo-at")?.textContent || "", /预设模型已补齐/);
+    assert.equal([...section.el.querySelectorAll(".rs-model-hub-btn")].filter(visible).length, 0,
+        "就位后行内入口一并收起");
+    assert.equal(genCalls().length, 0, "补齐本身不提交生成任务");
+});
+
+test("下载失败：提示条写明原因并给出「⬇ 重试」与「模型库」，不留在取消态", async () => {
+    mockGenerate();
+    mockHubRoutes();
+    mockPlan();
+    mockHubDownload({ state: "error", filename: ENCODER_FILE, category: "text_encoders", total: 3e9, done: 0, speed: 0, error: "连接被重置" });
+    const section = await modelSection(CHECK);
+    const bar = section.el.querySelector(".rs-model-gap");
+    const btn = bar.querySelector(".rs-model-gap-btn");
+    click(btn);
+    await sleep(60);
+    assert.match(bar.textContent, /补齐失败：连接被重置/);
+    assert.equal(btn.textContent, "⬇ 重试");
+    assert.notEqual(bar.querySelector(".rs-model-gap-alt").style.display, "none", "失败后要能改用模型库");
+});
+
+test("计划要先填 Token 时不硬下：写明原因，那一个按钮改成「去模型库」", async () => {
+    mockGenerate();
+    mockHubRoutes();
+    mockPlan({ needs_token: true, has_token: false });
+    mockHubDownload(DL_DONE);
+    const section = await modelSection(CHECK);
+    const bar = section.el.querySelector(".rs-model-gap");
+    const btn = bar.querySelector(".rs-model-gap-btn");
+    click(btn);
+    await sleep(60);
+    assert.match(bar.textContent, /该源需要先在模型库设置里填 HF Token/, "要先做什么写在提示条上");
+    assert.equal(fetchLog.filter((c) => c.path === "/neo_model_hub/download").length, 0, "填 Token 前不该发起下载");
+    assert.equal(btn.textContent, "⬇ 去模型库");
+    click(btn);
+    await sleep(120);
+    assert.ok(document.querySelector(".neo-hub-overlay"), "降级后点它应打开模型库就绪面板");
+    closeModelHub();
+});
+
+
+test("本机已有同名文件（计划里没有可下条目）：主按钮直接是「去模型库」，不发起那次必被「已存在」顶回的下载", async () => {
+    mockGenerate();
+    mockHubRoutes();
+    mockPlan({ total_gb: 0, files: [{ ...PLAN_ITEM, payload: undefined }] });
+    mockHubDownload(DL_DONE);
+    const section = await modelSection(CHECK);
+    const bar = section.el.querySelector(".rs-model-gap");
+    const btn = bar.querySelector(".rs-model-gap-btn");
+    assert.equal(btn.textContent, "⬇ 去模型库", "本机已有的文件不该再承诺一次下载");
+    click(btn);
+    await sleep(120);
+    assert.equal(fetchLog.filter((c) => c.path === "/neo_model_hub/download").length, 0, "不该发起下载");
+    assert.ok(document.querySelector(".neo-hub-overlay"), "点它应把用户带到模型库换模型");
+    closeModelHub();
+});
+
+
+test("自定义模型名不在盘上、族系基础模型在：提示条写明「已回退默认模型」，生成不拦、不发起下载", async () => {
+    const PINNED_NAME = "Krea2\\Moody\\moodyKrea2Mix_v40INT8CONVROT.safetensors";
+    const BASE_NAME = "Krea2/krea2_turbo_int8_convrot.safetensors";
+    const FALLBACK = {
+        ...CHECK,
+        files: CHECK.files.map((f) => (f.field === "model"
+            ? { ...f, ready: true, found: BASE_NAME, fallback_of: PINNED_NAME,
+                notes: [`配置里的 ${PINNED_NAME} 本机没有，已回退默认模型 ${BASE_NAME}`] }
+            : { ...f, ready: true })),
+        missing: [], missing_count: 0, missing_gb: 0, blocked: false,
+    };
+    mockGenerate();
+    mockHubRoutes();
+    mockHubDownload(DL_DONE);
+    const section = await modelSection(FALLBACK);
+    const bar = section.el.querySelector(".rs-model-gap");
+    assert.notEqual(bar.style.display, "none", "回退提醒要写在面板里，不能让用户以为跑的是自己挑的那个模型");
+    assert.match(bar.textContent, /已回退默认模型/);
+    assert.match(bar.textContent, /moodyKrea2Mix_v40INT8CONVROT/);
+    assert.equal(bar.querySelector(".rs-model-gap-btn").style.display, "none", "跑得起来就不该给下载按钮");
+    assert.equal([...section.el.querySelectorAll(".rs-model-hub-btn")].filter(visible).length, 0,
+        "没有要下载的东西，行内入口不该点亮");
+    await requestGeneration({ skill_id: SKILL_ID, prompt: "x" });
+    assert.equal(genCalls().length, 1, "基础模型在盘上不该拦生成");
+    assert.equal(fetchLog.filter((c) => c.path === "/neo_model_hub/download").length, 0, "不该发起那次下载");
+});
 

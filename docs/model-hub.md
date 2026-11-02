@@ -73,8 +73,14 @@
   `sources[]`（`source` = `modelscope` / `huggingface` / `civitai` + `repo` + `path`，`gated` 标 HF 上要先申请授权的条目；
   `sources[0]` 为推荐源）。
 - 就位判定跟生成侧一致：配置写死了模型名就按那个相对名精确查；名留空才按推荐名 + `alt` 在类别整棵树里认
-  （大小写与斜杠方向不敏感）。`loras` 项只在该 LoRA 出现在预设 / 全局 LoRA 列表里才算数。
+  （大小写与斜杠方向不敏感）。写死的名字不在盘上、类别里挑得出默认模型时这项算就位，`fallback_of` 记下写死的
+  名字、note 写明「已回退默认模型」，生成侧 `resolve_model(allow_fallback=True)` 挑的就是同一个模型；
+  类别里挑不出默认模型才算缺失。`loras` 项只在该 LoRA 出现在预设 / 全局 LoRA 列表里才算数。
 - 下载计划按模型库当前源出条目，条目 `payload` 就是 `/neo_model_hub/download` 的入参；该源没有这条文件时条目
+- 计划的落盘子目录 = 仓库内路径去掉开头类别段之后的相对目录；平铺仓库（`diffusion_models/xxx.safetensors`）
+  按预设族系建目录，落 `models/<类别>/<族系>/<文件名>`（本机模型树就是按族系分目录的），不落
+  `<类别>/<类别>/` 套目录 —— 套目录里的文件按清单推荐名精确查认不出。计划按「类别树里认得到同名文件」
+  判不用再下；配置写死的名字只参与就位检查，不把已存在的文件排进计划。
   标 `not_on_source` 并给出另一源，不自动换源；出处非法标 `bad_source`。C 站出处必须是 `/api/download/models/<id>?…` 端点。
 - 不吃本地模型文件的预设不带清单：`translate` / `translate_to_chinese` / `translate_to_english` / `cosyvoice_voice`，
   自检对它们返回 `has_manifest: false`。清单缺失或坏 JSON 同样按无清单降级，不报错。
@@ -100,6 +106,12 @@
 - **生成前预检**：带清单的预设在提交 `/neo_image_gen/generate` 前先读 `GET /neo_skill_models/check`，
   有「要下又没落盘」的文件就不进队列，报错写清缺哪些文件与体积，通知给「去模型库」→
   `openModelHub({ readySkill })` 直接展开就绪面板并出该预设的下载计划。详见 [image-gen.md](image-gen.md)。
+- **自定参数面板顶部的提示条**：选中带清单的预设就写出缺口，那一个按钮就地补齐——出该预设的下载计划并直接开下
+  （`downloadSkillModels` → `POST /neo_skill_models/plan` + `POST /neo_model_hub/download`，进度读 `GET /neo_model_hub/progress`），
+  进度写在这条提示上、按钮换成「✕ 取消」，下完重读就位清单后自己收起；计划要先填 Token 时不硬下，按钮改成
+  「⬇ 去模型库」带该预设展开就绪面板。只缺一项时这一条是唯一入口，缺 2 项以上才在各行给行内入口。
+  配置写死的模型名不在盘上、族系基础模型已落盘时这条不写缺口也不承诺下载，写的是「配置里的 X 本机没有，已回退默认模型 Y」，
+  生成照常提交（按钮不出现，只有「模型库」链带用户去换回自定义模型）。
 - **生图设置的模型行**：清单缺哪个字段就在哪一行出「⬇ 模型库」，点击按清单上的源 / 仓库 / 落盘类别 /
   文件名预选（`openModelHub({ source, repo, category, query })`），提示里写明体积与 gated 的授权前置；
   已就位的行不给，无清单的预设也不给（只保留下拉里的「(缺失)」标记）。

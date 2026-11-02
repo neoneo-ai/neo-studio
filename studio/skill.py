@@ -1074,8 +1074,9 @@ def _effective_gen_config(skill_id: str, is_video: bool) -> dict:
     eff = get_settings()
     eff.update(get_skill_gen_config(skill_id))
     for key, folder in (("model", "diffusion_models"), ("text_encoder", "text_encoders"), ("vae", "vae")):
-        resolved, err = resolve_model(folder, eff.get(key))
-        if not err and resolved:
+        # 生图才给回退口径：视频那三个是一整套配方，基座换了配方就变了，回退出来的值也不是生成侧会用名的
+        resolved, _ = resolve_model(folder, eff.get(key), allow_fallback=not is_video)
+        if resolved:
             eff[key] = resolved
     if is_video:
         # 视频尺寸/时长默认值与前端导入回落值一致：config.json 没有这三键时画布灌的就是它们
