@@ -257,17 +257,26 @@ const lightboxPage = `
   </div>
 </div>`;
 
+// 摆姿页收起钮的图标（几何与 pose.js 的 sideIcon 同一份）：钮面上只有这只两栏框，栏名在左侧
+const poseCollapseBtn = (label, rule, paneX) =>
+    `<button class="ns-pose-collapse ns-pose-btn" type="button" aria-label="收起${label}">`
+    + `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"`
+    + ` stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="flex:none">`
+    + `<rect x="3" y="5" width="18" height="14" rx="3.5"/><path d="M${rule} 7v10"/>`
+    + `<rect class="ns-pose-collapse-pane" x="${paneX}" y="7.5" width="3.3" height="9" rx="1"`
+    + ` stroke="none" fill="currentColor" opacity="0.62"/></svg></button>`;
+
 const posePage = page("ns-pose", `
   <div class="ns-pose">
     <div class="ns-pose-body">
       <aside class="ns-pose-side">
-        <div class="ns-pose-side-head"><span class="ns-pose-side-head-label">场景库</span><button class="ns-pose-collapse ns-pose-btn" type="button">收起</button></div>
+        <div class="ns-pose-side-head"><span class="ns-pose-side-head-label">场景库</span>${poseCollapseBtn("场景库", 9.5, 5.2)}</div>
         <div class="ns-pose-list"><div class="ns-pose-item">hero</div></div>
         <div class="ns-pose-row"><input class="ns-pose-name" placeholder="场景名"><button class="ns-pose-btn" type="button">存为场景</button></div>
       </aside>
       <div class="ns-pose-stage"><canvas></canvas></div>
       <aside class="ns-pose-side ns-pose-panel">
-        <div class="ns-pose-side-head"><span class="ns-pose-side-head-label">控制面板</span><button class="ns-pose-collapse ns-pose-collapse-right ns-pose-btn" type="button">收起</button></div>
+        <div class="ns-pose-side-head"><span class="ns-pose-side-head-label">控制面板</span>${poseCollapseBtn("控制面板", 14.5, 15.5)}</div>
         <section class="ns-pose-group"><div class="ns-pose-head">素体</div>
           <div class="ns-pose-row"><select class="ns-pose-sel"></select><button class="ns-pose-btn" type="button">加素体</button></div></section>
       </aside>
@@ -584,21 +593,28 @@ test("手机摆姿页：画布在上，场景库与控制面板各占一截（�
         const body = document.querySelector(".ns-pose-body");
         body.setAttribute("data-lib", "off");
         document.querySelector(".ns-pose-side").setAttribute("data-collapsed", "1");
-        const one = { libH: Math.round(b(".ns-pose-side").height), stageH: Math.round(b(".ns-pose-stage").height) };
+        const one = { libH: Math.round(b(".ns-pose-side").height), stageH: Math.round(b(".ns-pose-stage").height),
+            stageW: Math.round(b(".ns-pose-stage").width), bodyW: Math.round(b(".ns-pose-body").width) };
         body.setAttribute("data-panel", "off");
         document.querySelector(".ns-pose-panel").setAttribute("data-collapsed", "1");
         return {
             ...one,
             panelH: Math.round(b(".ns-pose-panel").height),
             bothStageH: Math.round(b(".ns-pose-stage").height),
+            bothStageW: Math.round(b(".ns-pose-stage").width),
             barShown: Math.round(b(".ns-pose-panel .ns-pose-side-head").height) > 0,
+            iconW: Math.round(b(".ns-pose-panel .ns-pose-collapse svg").width),
         };
     });
     assert.ok(c.libH >= 30 && c.libH <= 42, `收起的场景库没收成一条横条：${c.libH}px`);
     assert.ok(c.panelH >= 30 && c.panelH <= 42, `收起的控制面板没收成一条横条：${c.panelH}px`);
     assert.ok(c.stageH > m.stageH, `只收一栏时画布没长高：${c.stageH} ≤ ${m.stageH}`);
     assert.ok(c.bothStageH > c.stageH, `两侧都收起时画布没接着长高：${c.bothStageH} ≤ ${c.stageH}`);
+    // 桌面那两条 34px 列规则在收起态仍然生效（媒体查询不改特异性）：手机上不收回去，画布就落进 34px 那一列
+    assert.equal(c.stageW, c.bodyW, `只收一栏时画布没占整幅：${c.stageW} / ${c.bodyW}`);
+    assert.equal(c.bothStageW, c.bodyW, `两侧都收起时画布没占整幅：${c.bothStageW} / ${c.bodyW}`);
     assert.ok(c.barShown, "收起后栏首（展开入口）不在");
+    assert.equal(c.iconW, 16, `收起后的展开入口没有图标（${c.iconW}px）`);
 });
 
 
@@ -712,6 +728,8 @@ test("桌面 1440 宽（续）：设置页两栏、素材页悬停控件、灯�
         out.railPanelW = Math.round(b(".ns-pose-panel").width);
         out.stageW = Math.round(b(".ns-pose-stage").width);
         out.barShown = Math.round(b(".ns-pose-side .ns-pose-side-head").height) > 0;
+        out.railBtnW = Math.round(b(".ns-pose-side[data-collapsed='1'] .ns-pose-collapse").width);
+        out.railIconW = Math.round(b(".ns-pose-side[data-collapsed='1'] .ns-pose-collapse svg").width);
         return out;
     });
     assert.ok(pose.cols >= 3, `桌面摆姿页被压成 ${pose.cols} 列`);
@@ -721,5 +739,8 @@ test("桌面 1440 宽（续）：设置页两栏、素材页悬停控件、灯�
     assert.equal(pose.railPanelW, 34, `右栏收起后没收成一条竖栏：${pose.railPanelW}px`);
     assert.ok(pose.stageW >= pose.bodyW - 70, `收起两侧后画布没吃满整幅：${pose.stageW} / ${pose.bodyW}`);
     assert.ok(pose.barShown, "收起后栏首（展开入口）不在");
+    // 展开入口在 34px 竖栏里只有图标，图标撑不出栏宽就此把竖栏挤宽
+    assert.equal(pose.railBtnW, 24, `收起后栏首的钮撑出 34px 竖栏：${pose.railBtnW}px`);
+    assert.equal(pose.railIconW, 16, `收起后的展开入口没有图标（${pose.railIconW}px）`);
 });
 

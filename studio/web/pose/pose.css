@@ -124,13 +124,15 @@
     color: var(--ns-dim);
 }
 
-.ns-pose-collapse { flex: none; padding: 4px 8px; font-size: 12px; }
-
-/* 收起箭头朝折叠方向：左栏向左收、右栏向右收，收起后翻过来指向展开方向 */
-.ns-pose-side .ns-pose-collapse svg { transform: rotate(180deg); }
-.ns-pose-side[data-collapsed="1"] .ns-pose-collapse svg { transform: none; }
-.ns-pose-panel .ns-pose-collapse svg { transform: none; }
-.ns-pose-panel[data-collapsed="1"] .ns-pose-collapse svg { transform: rotate(180deg); }
+/* 收起钮是纯图标钮：图标是 sideIcon 画的那只两栏框，本栏那一格填实、收起后缩成一条 */
+.ns-pose-collapse {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+}
 
 .ns-pose-side[data-collapsed="1"] {
     padding: 8px 5px;
@@ -143,7 +145,7 @@
     flex-direction: row-reverse;   /* 竖栏里收起钮在上，栏名竖排接在下面 */
     justify-content: flex-start;
 }
-.ns-pose-side[data-collapsed="1"] .ns-pose-collapse { padding: 8px 3px; }
+.ns-pose-side[data-collapsed="1"] .ns-pose-collapse { width: 24px; height: 24px; }
 
 /* 收起的栏把栏宽让给画布（导演页收起生成面板同一口径）；两侧都收起时中间吃满 */
 .ns-pose-body[data-lib="off"] { grid-template-columns: 34px minmax(0, 1fr) 296px; }
@@ -439,7 +441,14 @@
         width: 100%;
     }
     /* 收起的栏在堆叠布局里是一条 34px 横条，腾出来的那一截整块给画布（摆姿要的是画布大一点）；
-       两侧都收起时画布吃满整屏。栏首在堆叠布局里保持横排（竖排是桌面窄栏的写法） */
+       两侧都收起时画布吃满整屏。栏首在堆叠布局里保持横排（竖排是桌面窄栏的写法）。
+       上面桌面那两条 34px 列规则的特异性比这里的单列规则高，媒体查询不改特异性 —— 收起态要在这一栏里
+       把列改回整幅一列，否则画布会落进 34px 那一列（画布宽 34px，手机上等于没有画布） */
+    .ns-pose-body[data-lib="off"],
+    .ns-pose-body[data-panel="off"],
+    .ns-pose-body[data-lib="off"][data-panel="off"] {
+        grid-template-columns: minmax(0, 1fr);
+    }
     .ns-pose-body[data-lib="off"] {
         grid-template-rows: 73% 34px minmax(0, 1fr);
     }

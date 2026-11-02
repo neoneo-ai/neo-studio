@@ -244,10 +244,14 @@ row (the row height is measured at runtime, because wrapping makes the first row
 and the state is stored in the page's own localStorage - nothing to do with the host toolbar.
 
 Each host side panel (the scene library on the left, the control panel on the right) carries a collapse
-button in its head. Collapsing one leaves a 34 px vertical rail - the panel name written vertically, with
+button in its head, drawn as a two-pane sidebar glyph: this panel's pane is filled, and that filled pane
+shrinks to a sliver once collapsed (the left panel's pane sits on the left, the right panel's is mirrored).
+Collapsing one leaves a 34 px vertical rail - the panel name written vertically, with
 the button as the way back out - and the freed column width goes wholly to the canvas; collapsing both
-leaves the canvas the full width. On a phone each panel collapses to a 34 px horizontal strip and the
-freed height goes wholly to the canvas, which takes the whole screen when both are collapsed. Collapsing
+leaves the canvas the full width. On a phone each panel collapses to a 34 px horizontal strip that spans
+the full width, and the
+freed height goes wholly to the canvas, which keeps the full width and takes the whole screen when both are
+collapsed. Collapsing
 is a layout preference stored in localStorage under `neo_studio_pose_sides`, so returning to the page and
 reopening the window land on the same layout; it is not gated by `pose:ready` or `caps.hostUi` - with a
 missing package or an old package that disables every control, both panels still collapse.
@@ -365,6 +369,7 @@ file and an unsynced library are the same 404, so the modal decides by whether t
   grouping, search and load-more, applying a library scene (the action it sends and the modal closing),
   the sync hint when the library is unsynced, the gate locking that pane, and the local scene file path;
   collapsing each side panel (the button outside the gates, the head left behind as the way back out, the
+  icon glyph changing with the collapsed state, the
   preference stored and replayed when the view is rebuilt).
 - `tools\test_pose_package.ps1`: the shipped package's own self-check - required files, build shape,
   forbidden shapes (`*.map`, GLBs outside the whitelist, prop GLBs outside it, loose JSON), per-file sha256 and

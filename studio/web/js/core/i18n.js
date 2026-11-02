@@ -39,9 +39,7 @@ const EN = {
     "摆姿 · 场景 · 全景": "Pose, scenes, panorama",
     "场景库": "Scene Library",
     "控制面板": "Control Panel",
-    // 左右栏收起（栏首的收起钮：收起后那条竖栏就是展开入口）
-    "收起": "Collapse",
-    "展开": "Expand",
+    // 左右栏收起（栏首那枚两栏框图标钮，收起后那条竖栏就是展开入口）
     "收起场景库": "Collapse scene library",
     "展开场景库": "Expand scene library",
     "收起控制面板": "Collapse control panel",

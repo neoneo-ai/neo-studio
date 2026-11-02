@@ -122,11 +122,8 @@ export function createPoseView({ api, $el, toast }) {
         const head = (label) => $el("div", { className: "ns-pose-head", textContent: t(label) });
         const group = (label, kids) => $el("section", { className: "ns-pose-group" }, [head(label), ...kids]);
         // 栏首：栏名与收起钮同一行。收起后这一行就是整栏的全部，栏宽由 .ns-pose-body 的 data-* 收到一条竖栏
-        const sideBar = (label, side) => {
-            const btn = $el("button", {
-                className: "ns-pose-collapse ns-pose-btn" + (side === "panel" ? " ns-pose-collapse-right" : ""),
-                type: "button",
-            });
+        const sideBar = (label) => {
+            const btn = $el("button", { className: "ns-pose-collapse ns-pose-btn", type: "button" });
             const node = $el("div", { className: "ns-pose-side-head" }, [
                 $el("span", { className: "ns-pose-side-head-label", textContent: t(label) }), btn,
             ]);
@@ -147,7 +144,7 @@ export function createPoseView({ api, $el, toast }) {
             textContent: t("摆姿页跑在随包的最小摆姿包上：随包只分发 CC0 素体，其余素体请「导入自备素体」。"),
         });
         pkgNote.hidden = true;
-        const libBar = sideBar("场景库", "lib");
+        const libBar = sideBar("场景库");
         const lib = $el("aside", { className: "ns-pose-side" }, [
             libBar.node,
             sceneList,
@@ -192,7 +189,7 @@ export function createPoseView({ api, $el, toast }) {
         const btnExportSet = btn("导出图组到素材库", "send", panelGate, " ns-pose-btn-primary");
         const btnShot = btn("画布截图", "image", panelGate);
 
-        const panelBar = sideBar("控制面板", "panel");
+        const panelBar = sideBar("控制面板");
         const panel = $el("aside", { className: "ns-pose-side ns-pose-panel" }, [
             panelBar.node,
             notice,
@@ -233,11 +230,13 @@ export function createPoseView({ api, $el, toast }) {
             savedSides[side] = collapsed;
             const aside = side === "lib" ? lib : panel;
             const bar = side === "lib" ? libBar : panelBar;
+            const tip = t(collapsed ? `展开${bar.label}` : `收起${bar.label}`);
             aside.setAttribute("data-collapsed", collapsed ? "1" : "0");
             body.setAttribute(`data-${side}`, collapsed ? "off" : "on");
+            bar.btn.innerHTML = sideIcon(side, collapsed);
+            bar.btn.title = tip;
             bar.btn.setAttribute("aria-expanded", String(!collapsed));
-            bar.btn.title = t(collapsed ? `展开${bar.label}` : `收起${bar.label}`);
-            setIconLabel(bar.btn, "chevron", t(collapsed ? "展开" : "收起"));
+            bar.btn.setAttribute("aria-label", tip);   // 收起钮面上只有图标，读屏要有这一句
             try { localStorage.setItem(SIDE_KEY, JSON.stringify(savedSides)); } catch { /* 偏好写不进不影响用 */ }
         };
         for (const side of ["lib", "panel"]) {
@@ -688,6 +687,22 @@ export function createPoseView({ api, $el, toast }) {
         }
         await render();
     };
+}
+
+/** 收起钮的图标：一只两栏框，本栏那一格填实 —— 左栏的格在左、右栏镜像在右，收起后那一格缩成一条，
+ *  栏现在是宽是窄从图标上就能看出来（钮面上没有字，表意全靠它） */
+function sideIcon(side, collapsed) {
+    const paneW = collapsed ? 1.4 : 3.3;
+    const left = side !== "panel";
+    const rule = left ? 9.5 : 14.5;
+    const paneX = left ? 5.2 : 18.8 - paneW;
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"`
+        + ` fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"`
+        + ` stroke-linejoin="round" aria-hidden="true" style="flex:none">`
+        + `<rect x="3" y="5" width="18" height="14" rx="3.5"/>`
+        + `<path d="M${rule} 7v10"/>`
+        + `<rect class="ns-pose-collapse-pane" x="${paneX}" y="7.5" width="${paneW}" height="9" rx="1"`
+        + ` stroke="none" fill="currentColor" opacity="${collapsed ? 0.45 : 0.62}"/></svg>`;
 }
 
 /** 卡片缩略图优先级：clay 是写实渲染那张，一眼看得出姿势；缺 clay 的条目落到 skeleton / silhouette / depth。

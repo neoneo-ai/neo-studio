@@ -225,18 +225,28 @@ test("左右栏收起：栏首的收起钮收栏，栏首留在原地当展开�
     const body = env.host.querySelector(".ns-pose-body");
     const lib = env.host.querySelector(LIB);
     const panel = env.host.querySelector(PANEL);
+    const sideBtn = (scope) => env.host.querySelector(scope + " .ns-pose-collapse");
+    const paneW = (scope) => Number(sideBtn(scope).querySelector(".ns-pose-collapse-pane").getAttribute("width"));
+    const rulePath = (scope) => sideBtn(scope).querySelector("path").getAttribute("d");
     assert.equal(lib.getAttribute("data-collapsed"), "0", "开局两栏都展开");
     assert.equal(body.getAttribute("data-lib"), "on");
     assert.equal(body.getAttribute("data-panel"), "on");
-    click(env.button("收起", LIB));
+    const wide = paneW(LIB);
+    assert.equal(sideBtn(LIB).querySelector("svg").getAttribute("aria-hidden"), "true", "钮面上只有图标，图标不进读屏");
+    assert.equal(sideBtn(LIB).getAttribute("aria-label"), "收起场景库", "图标钮要有读屏念得出的话");
+    assert.equal(rulePath(LIB), "M9.5 7v10", "左栏图标：分隔线在左，填实格是场景库那一栏");
+    assert.equal(rulePath(PANEL), "M14.5 7v10", "右栏图标镜像：分隔线在右");
+    click(sideBtn(LIB));
     assert.equal(lib.getAttribute("data-collapsed"), "1");
     assert.equal(body.getAttribute("data-lib"), "off", "画布要吃到场景库让出来的那一列");
     assert.equal(lib.querySelector(".ns-pose-side-head").hidden, false, "收起后栏首就是整栏全部，展开入口必须在");
-    assert.equal(env.button("展开", LIB).title, "展开场景库", "钮上的话要说清收的是哪一栏");
-    click(env.button("展开", LIB));
+    assert.equal(sideBtn(LIB).title, "展开场景库", "钮上的话要说清收的是哪一栏");
+    assert.ok(paneW(LIB) < wide, "图标里那一格缩成一条 —— 栏现在是窄的，图标要说得出来");
+    click(sideBtn(LIB));
     assert.equal(lib.getAttribute("data-collapsed"), "0");
     assert.equal(body.getAttribute("data-lib"), "on");
-    click(env.button("收起", PANEL));
+    assert.equal(paneW(LIB), wide, "展开回来图标那一格回到满格");
+    click(sideBtn(PANEL));
     assert.equal(panel.getAttribute("data-collapsed"), "1");
     assert.equal(body.getAttribute("data-panel"), "off");
     assert.equal(JSON.parse(localStorage.getItem("neo_studio_pose_sides")).panel, true,
@@ -248,6 +258,8 @@ test("左右栏收起：栏首的收起钮收栏，栏首留在原地当展开�
         "新视图回灌上次的收起偏好");
     assert.equal(again.host.querySelector(LIB).getAttribute("data-collapsed"), "0",
         "没收过的那一栏照旧展开");
+    assert.equal(again.host.querySelector(PANEL + " .ns-pose-collapse").title, "展开控制面板",
+        "回灌的栏首钮要说得清现在收的是哪一栏");
     localStorage.removeItem("neo_studio_pose_sides");
 });
 
