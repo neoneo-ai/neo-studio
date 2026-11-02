@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
-"""虚拟归类快捷筛选（/neo_gallery/kind_items）：全站聚合的判定、上限与隐藏条目（离线单测）。
+"""虚拟归类快捷筛选（/neo_gallery/kind_items）：全站聚合的判定、上限与目录根（离线单测）。
 
 标签是虚拟归类：文件不搬进新目录，标签按扩展名与目录锚定把全库素材归到一起。
-扫的是首页可见的那些目录；排序表里隐藏的条目一并跳过，云端预设（每个云端目录都要一次索引
-下载）不进聚合，只扫本地。
+扫的是全部已配置的目录根：首页隐藏一张卡只是首页不显示它，素材照进计数；云端预设扫的是
+oss_cache 里已落盘的目录，不下载索引也不联网。
 """
 
 import asyncio
@@ -294,8 +294,55 @@ class KindCustomDirTests(unittest.TestCase):
             _GetRequest({"kind": ""}))))["counts"]["character"], 0)
 
 
+class KindCloudCacheTests(unittest.TestCase):
+    """云端预设按本地缓存进聚合：条目走 Cloud Presets/<目录> 寻址，角色图标记认得云端目录。
+
+    一个云端目录的完整条目要一次索引下载，这里只认 oss_cache 里已落盘的文件；
+    缩略图缓存与 _index.json 不进归类，云端功能关掉时整块不进。
+    """
+
+    def setUp(self):
+        self.settings = _settings()
+        _apply_settings(self.settings)
+        self.cache = Path(_TMP) / "oss_cache"
+        self.cache.mkdir(parents=True, exist_ok=True)
+        self._cache_dir, self._oss_gate = gallery.OSS_CACHE_DIR, gallery._is_oss_enabled
+        gallery.OSS_CACHE_DIR = self.cache
+        gallery._is_oss_enabled = lambda: True
+
+    def tearDown(self):
+        gallery.OSS_CACHE_DIR, gallery._is_oss_enabled = self._cache_dir, self._oss_gate
+        shutil.rmtree(self.cache, ignore_errors=True)
+
+    def test_cached_cloud_dir_counts_and_addresses_by_nav_name(self):
+        _write(self.cache / "明朝人物" / "01_县学生.png")
+        _write(self.cache / "thumbnails" / "01_县学生.png")
+        _write(self.cache / "_index.json", b"{}")
+        self.settings = _settings(character_dirs=["cloud presets/明朝人物"])
+        _apply_settings(self.settings)
+
+        out = _payload(_call(gallery.get_kind_items(_GetRequest({"kind": "character"}))))
+        self.assertEqual(out["counts"]["character"], 1)
+        # 缩略图缓存与索引文件不是素材，不进「图片」计数
+        self.assertEqual(out["counts"]["image"], 1)
+        self.assertEqual(_names(out["items"]), ["01_县学生.png"])
+        self.assertEqual(out["items"][0]["subfolder"], "Cloud Presets/明朝人物")
+
+    def test_unmarked_cloud_dir_is_not_character(self):
+        _write(self.cache / "仙侠玄幻人物" / "01_剑修.png")
+        counts = _payload(_call(gallery.get_kind_items(_GetRequest({"kind": ""}))))["counts"]
+        self.assertEqual(counts["image"], 1)
+        self.assertEqual(counts["character"], 0)
+
+    def test_disabled_oss_leaves_the_cloud_cache_out(self):
+        _write(self.cache / "明朝人物" / "01_县学生.png")
+        gallery._is_oss_enabled = lambda: False
+        counts = _payload(_call(gallery.get_kind_items(_GetRequest({"kind": ""}))))["counts"]
+        self.assertEqual(counts["image"], 0)
+
+
 class KindRootBoundaryTests(unittest.TestCase):
-    """聚合的边界：首页隐藏的条目不进标签，没启用的 Lora 缓存不进标签，条数上限带 truncated。"""
+    """聚合的根与上限：首页隐藏的条目照进标签，没启用的 Lora 缓存不进标签，条数上限带 truncated。"""
 
     def setUp(self):
         self.settings = _settings()
@@ -307,23 +354,31 @@ class KindRootBoundaryTests(unittest.TestCase):
         shutil.rmtree(gallery.LORA_CACHE_DIR, ignore_errors=True)
         gallery._invalidate_user_custom_dirs()
 
-    def test_hidden_custom_dir_is_skipped(self):
+    def test_hidden_custom_dir_still_aggregated(self):
         _write(self.custom / "gone.png")
         self.settings = _settings(custom_directories=[str(self.custom)],
                                   hidden_directories=[str(self.custom)])
         _apply_settings(self.settings)
 
+        # 首页把这张卡藏了，素材库与标签看的是同一份库
         out = _payload(_call(gallery.get_kind_items(_GetRequest({"kind": "image"}))))
-        self.assertEqual(out["counts"]["image"], 0)
-        self.assertEqual(_names(out["items"]), [])
+        self.assertEqual(out["counts"]["image"], 1)
+        self.assertEqual(_names(out["items"]), ["gone.png"])
+        self.assertEqual(out["items"][0]["subfolder"], "hidden_dir")
 
-    def test_hidden_system_dir_is_skipped(self):
-        written = _write(Path(_OUTPUT) / "hidden_output.png")
+    def test_hidden_system_dir_still_aggregated(self):
+        """藏掉的 Output 卡：Output 里的视频与角色图照进标签。"""
+        sheet = _write(Path(_OUTPUT) / "CharacterSheet" / "sheet.png")
+        clip = _write(Path(_OUTPUT) / "clip.mp4")
         self.settings = _settings(hidden_directories=["Output"])
         _apply_settings(self.settings)
-        self.assertEqual(_payload(_call(gallery.get_kind_items(
-            _GetRequest({"kind": "image"}))))["counts"]["image"], 0)
-        written.unlink()
+
+        counts = _payload(_call(gallery.get_kind_items(_GetRequest({"kind": ""}))))["counts"]
+        self.assertEqual(counts["image"], 1)
+        self.assertEqual(counts["video"], 1)
+        self.assertEqual(counts["character"], 1)
+        sheet.unlink()
+        clip.unlink()
 
     def test_disabled_lora_cache_is_not_aggregated(self):
         _write(gallery.LORA_CACHE_DIR / "detail" / "example.png")

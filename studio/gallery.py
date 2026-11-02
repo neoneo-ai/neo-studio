@@ -113,7 +113,7 @@ def _resolve_system_dir(dir_name: str):
 # 自定义目录列表在首页 list 与每一个封面缩略图请求里都要读一遍：settings 文件
 # 要重新解析，NAS 目录的 exists()/resolve() 各是一次网络往返。整份结果以配置
 # 文件的 mtime+size 为键缓存，目录的探测只在配置变化后付一次。
-_CUSTOM_DIRS_CACHE: list[Path] | None = None
+_CUSTOM_DIRS_CACHE: list[tuple[Path, str, bool]] | None = None
 _CUSTOM_DIRS_KEY: tuple | None = None
 
 
@@ -151,9 +151,14 @@ def _dir_key(path: Path) -> str:
         return text.lower()
 
 
-def _scan_user_custom_dirs() -> list[Path]:
-    """Read the configured dirs, dropping hidden ones and the ComfyUI system dirs."""
-    picked: list[tuple[Path, str]] = []
+def _scan_user_custom_dirs() -> list[tuple[Path, str, bool]]:
+    """配置里的自定义目录：(路径, 归一 key, 首页是否隐藏)，去掉与系统目录重复的那条。
+
+    隐藏匹配只认字符串，并且放在 exists() 之前：隐藏掉的目录（掉线的 NAS 常见）不该为了
+    「它还在不在」付一次网络往返，所以隐藏项带着未验身份的形直接交回去，扫描侧自己扛
+    目录不存在的 OSError。
+    """
+    picked: list[tuple[Path, str, bool]] = []
     hidden: set[str] = set()
     try:
         settings_path = CONFIGS_DIR / "gallery_settings.json"
@@ -176,38 +181,37 @@ def _scan_user_custom_dirs() -> list[Path]:
                 candidates = []
             for d in candidates:
                 p = Path(d)
-                # 隐藏匹配只认字符串，并且放在 exists() 之前：隐藏掉的目录（掉线的 NAS 常见）
-                # 不该为了「它还在不在」付一次网络往返。
                 resolved_key = _dir_key(p)
                 if str(p).lower() in hidden or resolved_key in hidden:
+                    picked.append((p, resolved_key, True))
                     continue
                 if not p.exists():
                     continue
-                picked.append((p, resolved_key))
+                picked.append((p, resolved_key, False))
     except Exception:
         return []
 
     system_paths = {str(info["path"]).lower() for info in _get_system_dirs()}
     if system_paths:
-        picked = [(p, key) for (p, key) in picked if key not in system_paths]
-    return [p for (p, _key) in picked]
+        picked = [(p, key, is_hidden) for (p, key, is_hidden) in picked if key not in system_paths]
+    return picked
 
 
-def _get_user_custom_dirs() -> list[Path]:
+def _get_user_custom_dirs(include_hidden: bool = False) -> list[Path]:
     """Get all user-configured custom directory paths from settings.
 
     Input/Output dirs are auto-provided by ComfyUI, so configured duplicates
     of them are skipped to avoid double-listing. Dirs hidden in the Manage
-    Directories modal stay in the config but are not listed.
+    Directories modal stay in the config and are not listed on the home grid;
+    the kind aggregation asks for them with include_hidden, because hiding a
+    card is a home layout choice, not a way to drop files out of the library.
     """
     global _CUSTOM_DIRS_CACHE, _CUSTOM_DIRS_KEY
     key = _settings_stamp()
-    if _CUSTOM_DIRS_CACHE is not None and key == _CUSTOM_DIRS_KEY:
-        return list(_CUSTOM_DIRS_CACHE)
-    dirs = _scan_user_custom_dirs()
-    _CUSTOM_DIRS_CACHE = dirs
-    _CUSTOM_DIRS_KEY = key
-    return list(dirs)
+    if _CUSTOM_DIRS_CACHE is None or key != _CUSTOM_DIRS_KEY:
+        _CUSTOM_DIRS_CACHE = _scan_user_custom_dirs()
+        _CUSTOM_DIRS_KEY = key
+    return [p for (p, _key, is_hidden) in _CUSTOM_DIRS_CACHE if include_hidden or not is_hidden]
 
 
 # Home grid entries: built-in cards share one sort/hide list with the custom dirs.
@@ -373,6 +377,7 @@ def _repair_mislabeled_media() -> None:
 # ---------------------------------------------------------------------------
 from .gallery_oss import (
     OSS_NAV_PREFIX,
+    OSS_CACHE_DIR,
     _is_oss_enabled,
     _load_oss_index_from_disk,
     _fetch_oss_index,
@@ -1540,12 +1545,12 @@ async def get_kind_items(request):
 
 
 def _collect_kind_items(kind: str) -> tuple[dict, list[dict]]:
-    """扫首页可见的那些目录，数出每个标签的量；kind 给了就把该标签的条目一并带回。
+    """扫全部已配置的目录根，数出每个标签的量；kind 给了就把该标签的条目一并带回。
 
-    云端预设（OSS 只读源）不在这里：一个云端目录的完整条目要一次索引下载，首页那张表
-    已经把云端卡算进去了，虚拟归类只扫本地。
+    首页隐藏的条目照数：隐藏只决定首页那张卡显示不显示，素材库与标签看的是同一份库。
+    云端预设算的是 oss_cache 里已落盘的目录（_kind_cloud_roots），未缓存的目录不进计数。
     """
-    character_dirs = set(_effective_character_dirs(_load_settings()))
+    character_dirs = {_kind_token_canonical(t) for t in _effective_character_dirs(_load_settings())}
     counts = {key: 0 for key in KIND_KEYS}
     rows: list[dict] = []
     for root_name, base in _kind_roots():
@@ -1573,48 +1578,75 @@ def _collect_kind_items(kind: str) -> tuple[dict, list[dict]]:
 
 
 def _kind_roots() -> list[tuple[str, Path]]:
-    """归类扫的目录根：首页可见的那些（系统目录、自定义目录、预设、启用的 Lora 缓存）。"""
-    hidden = _get_hidden_entries()
-    roots: list[tuple[str, Path]] = []
-    for info in _get_system_dirs():
-        if not _is_home_entry_hidden(info["name"], hidden):
-            roots.append((info["name"], info["path"]))
-    for dir_path in _get_user_custom_dirs():
-        name = dir_path.name or str(dir_path)
-        if not _is_home_entry_hidden(name, hidden):
-            roots.append((name, dir_path))
+    """归类扫的目录根：首页那些目录全算——在首页隐藏一张卡只是首页不显示它，素材照进归类；
+    云端预设走本地缓存那一条。启用的 Lora 缓存算根，功能没开就不算。"""
+    roots: list[tuple[str, Path]] = [(info["name"], info["path"]) for info in _get_system_dirs()]
+    roots.extend((dir_path.name or str(dir_path), dir_path)
+                 for dir_path in _get_user_custom_dirs(include_hidden=True))
     roots.append(("Presets", PRESETS_DIR))
-    if _load_settings().get("civitai_lora_enabled") and not _is_home_entry_hidden("Lora", hidden):
+    if _load_settings().get("civitai_lora_enabled"):
         roots.append(("Lora", LORA_CACHE_DIR))
+    roots.extend(_kind_cloud_roots())
     return roots
 
 
+def _kind_cloud_roots() -> list[tuple[str, Path]]:
+    """云端预设的本地缓存目录：一张已落盘的目录卡一个根，扫的全是盘上现成的文件。
+
+    云端预设是只读源，缓存目录要按 OSS_NAV_PREFIX 拼成首页那张卡的导航名，角色图标记
+    （character_dirs 里存的就是 "cloud presets/<目录>"）才认得它。一个云端目录的完整条目
+    要一次索引下载，这里不下载、不联网，只认 oss_cache 里已有的文件；thumbnails 是缩略图
+    缓存，进归类会把「图片」计数灌水。
+    """
+    if not _is_oss_enabled():
+        return []
+    try:
+        entries = sorted((e for e in os.scandir(OSS_CACHE_DIR)
+                          if e.is_dir(follow_symlinks=False)), key=lambda e: e.name)
+    except OSError:
+        return []
+    return [(f"{OSS_NAV_PREFIX}/{entry.name}", Path(entry.path))
+            for entry in entries if entry.name != "thumbnails"]
+
+
 def _kind_root_tokens(root_name: str, base: Path) -> list[str]:
-    """角色标记比对用的目录 token：内置卡与系统目录用名字，自定义目录用路径。
+    """角色标记比对用的目录 token：内置卡与系统目录用名字，云端卡用导航名，自定义目录用路径。
 
     目录管理弹窗把用户写的那条路径原样存进 character_dirs，画廊按目录名寻素材，标记按路径存。
     自定义目录这里同时认字符串与归一 key（同一目录的两种写法，盘符大小写与 8.3 短名）：
     resolve 只落在根上，不落在每个文件上，共享盘上不会为一次归类拖几十次网络往返。
     """
+    nav_name = str(root_name).lower()
+    if nav_name.startswith(f"{OSS_NAV_PREFIX}/".lower()):
+        return [nav_name]
     if root_name in HOME_BUILTINS or _resolve_system_dir(root_name):
         return [root_name.lower()]
     return list(dict.fromkeys([str(base).lower(), _dir_key(base)]))
 
 
 def _marked_character(rel: str, root_tokens: list[str], character_dirs: set) -> bool:
-    """这条素材落在标记过的角色图目录里吗：逐段往上找，父目录标了，子目录里的图也认角色图。"""
+    """这条素材落在标记过的角色图目录里吗：逐段往上找，父目录标了，子目录里的图也认角色图。
+
+    两边的 token 都归一成斜杠形再比：根 token 拼 rel 用的是斜杠，Windows 的自定义目录在
+    character_dirs 里存的是带反斜杠的完整路径，直接比的话「标父目录、认子目录」这一档对不上。
+    """
     for token in root_tokens:
-        probe = f"{token}/{rel}".lower() if rel else f"{token}".lower()
-        if any(t in character_dirs for t in _kind_token_ancestors(probe)):
+        probe = f"{token}/{rel}".lower() if rel else str(token).lower()
+        if any(_kind_token_canonical(t) in character_dirs for t in _kind_token_ancestors(probe)):
             return True
     return False
+
+
+def _kind_token_canonical(token: str) -> str:
+    """角色标记比对用的 token 形：反斜杠归一成斜杠，同一目录的两种写法才是同一个字符串。"""
+    return token.replace("\\", "/")
 
 
 def _kind_token_ancestors(token: str) -> list[str]:
     """一条 token 从最具体到最宽的几级祖先，逐段拼出来的（stars/孟子义 → stars）。
 
-    按两种分隔符切而不重拼：Windows 的自定义目录在 character_dirs 里存的是带反斜杠的完整路径，
-    把祖先拼成斜杠形式的话跟存的 token 对不上，父目录标了标记、子目录里的图就不认角色图了。
+    按两种分隔符切而不重拼，切出来的段保留原 token 里的写法；比对交给 _kind_token_canonical
+    归一，斜杠与反斜杠就是同一个目录。
     """
     ancestors = [token]
     rest = token

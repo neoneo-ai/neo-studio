@@ -4,6 +4,14 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **The tag chips count the whole library.** The 图片 / 视频 / 音频 / 角色图 / 姿势图 / 帧图 / 分镜图 counts cover every
+  configured directory. Hiding a card on the home page only hides it there: with Output hidden the 视频, 姿势图, 帧图 and
+  分镜图 chips stay lit, and a custom directory you hid keeps feeding its counts. A Cloud Presets directory lights the chips
+  from its local cache - no index download, no network call - and the 角色图 chip counts it when the directory carries the
+  👤 character mark; the thumbnail cache and `_index.json` are not counted, and the entries keep the `Cloud Presets/<目录>`
+  addressing the lightbox and 送到节点 path use. Marking a parent character directory now also counts the images inside its
+  subdirectories. Covered by `studio/tests/test_gallery_kind_filter.py`.
+
 - **Both pose-page side panels collapse.** The scene library (left) and the control panel (right) each carry a
   sidebar-icon button in their head — a two-pane glyph whose filled pane is the panel itself, and that pane shrinks
   to a sliver once the panel is collapsed. A collapsed panel drops to a 34 px rail — the panel name written

@@ -32,11 +32,13 @@ library plus several user-defined directories.
 The row of chips under the home toolbar gathers assets scattered across every directory by type and purpose,
 without moving a file or creating a directory:
 
-- **Images / Videos / Audios** - judged by extension. The scan covers the directories the home page shows
-  (system dirs, custom dirs, built-in presets, the enabled LoRA cache), three levels deep at most; entries
-  hidden on the home page and cloud preset directories stay out of the aggregation.
-- **Character images** - the `CharacterSheet` main directory under `output`, plus the custom directories marked
-  as character images in directory management (a marked parent marks its children too).
+- **Images / Videos / Audios** - judged by extension. The scan covers every configured directory (system dirs,
+  custom dirs, built-in presets, the enabled LoRA cache, and the locally cached Cloud Presets directories),
+  three levels deep at most; hiding a card on the home page only hides it there and its files stay in the counts,
+  while a cloud directory never downloaded, the thumbnail cache and `_index.json` stay out of the aggregation.
+- **Character images** - the `CharacterSheet` main directory under `output`, plus the directories marked as
+  character images in directory management (custom dirs and cloud preset dirs are markable; a marked parent
+  marks its children too).
 - **Poses** - the `Pose` directory under `output`, plus the `pose_` filename prefix (the batches exported before
   that directory existed).
 - **Frames** - the `Frames` directory under `output`, plus the `frame-` filename prefix (the frames extracted into

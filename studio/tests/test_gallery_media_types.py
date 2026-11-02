@@ -73,6 +73,7 @@ async def _oss_no_items(*a, **k):
 
 _stub("gallery_oss",
       OSS_NAV_PREFIX="Cloud Presets",
+      OSS_CACHE_DIR=Path(_TMP) / "oss_cache",
       _is_oss_enabled=lambda: False,
       _load_oss_index_from_disk=lambda *a, **k: {},
       _fetch_oss_index=lambda *a, **k: None,
