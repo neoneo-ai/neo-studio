@@ -16,6 +16,7 @@ import {
     skillDisplayName, workflowParamValues,
 } from "./skill-core.js";
 import { filledTokenNotes } from "../workflow-graph.js";
+import { canvasOrigin } from "../js/core/canvas-origin.js";
 
 /** 变更记录弹窗：skillId 省略 = 全部技能（按技能分组，新→旧）；纯本地记录，可清空 */
 export function showSkillWriteLogDialog(skillId) {
@@ -257,8 +258,9 @@ const WF_EDIT_PARAM = "neo_wf_edit";
 
 function openSkillWorkflowInMainUi(id) {
     if (!id) { showToast(app, "warning", t("主画布编辑"), t("技能未保存，先保存技能本体")); return; }
-    // 主画布只在 ComfyUI 自己的页面上：离线页里 "/" 是桌面端的只读服务，根路径没有页面，
-    // ComfyUI 没就绪时开出去只会是「页面不存在」。运行状态顶栏已经报了，照它拦一下。
+    // 主画布只在 ComfyUI 自己的页面上：Studio 页面钉在桌面端端口时，相对 "/" 是桌面端自己的
+    // 页面，链接按桌面端报的内核地址开（canvas-origin.js）；ComfyUI 没就绪时桌面端报空，
+    // 开出去只会是「页面不存在」，运行状态顶栏已经报了，照它拦一下。
     if (document.body.classList.contains("ns-offline")) {
         const starting = document.getElementById("ns-comfy-status")?.classList.contains("ns-comfy-starting");
         showToast(app, "warning", t("主画布编辑"), starting
@@ -266,7 +268,7 @@ function openSkillWorkflowInMainUi(id) {
             : t("该功能需要 ComfyUI · 在「设置 → 启动设置」点「启动内核」"));
         return;
     }
-    window.open(`/?${WF_EDIT_PARAM}=${encodeURIComponent(id)}`, "_blank");
+    window.open(`${canvasOrigin()}/?${WF_EDIT_PARAM}=${encodeURIComponent(id)}`, "_blank");
 }
 
 /** 技能 workflow.json 灌进主画布：设置区不在场 → 按技能 config.json + 自动建议模型预渲染（同「导入到画布」） */

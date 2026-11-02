@@ -42,7 +42,7 @@ python -m pytest -q app/tests      # 桌面端套件（需同级 ComfyUI 根）
   到没人监听；`kill_pid()` 用 `PROCESS_TERMINATE` 并显式声明 `OpenProcess` 的 `restype`，否则 64 位句柄被截断、
   杀不动还静默失败）、`comfy_start()`（等旧进程退出再 `start_comfy`）、`pid_alive()`、关窗只存几何。
   窗口先出的启动序列：开窗只解包与建窗口（启动页 / 引导页），自检、桌面端服务、拉起 ComfyUI 在后台线程走完，
-  落点分别是完整 Studio、离线素材页与停在启动页；测试里后台线程同步跑完（`_SyncThread`），落点才断言得准。
+  落点是桌面端端口上那一页 Studio —— 就绪与否由同一份快照原地翻面；测试里后台线程同步跑完（`_SyncThread`），落点才断言得准。
   关窗正好压在拉起这一刻（`desktop.closing` 闸门）：刚起的那路立刻收掉，桌面端退出后不留孤儿 ComfyUI。
 - 启动设置（`launcher_api` / `launcher_config.json`）：插件目录不可写时状态目录退回 `%APPDATA%/NeoStudio`；
   `startup_state()` 的五种状态（就绪 / 根目录无效 / 找不到 Python / 缺少插件依赖 / 插件安装失败）；

@@ -16,7 +16,7 @@ import {
 import { installDialogs, resetDialogs, setConfirmAnswer, dialogs } from "./helpers/dialogs.mjs";
 import { installFetch, mockRoute, clearRoutes, resetFetchLog, fetchLog, missingRoutes, jsonResponse, sseResponse } from "./helpers/fetch.mjs";
 import { clearObjectInfoCache } from "../../web/js/core/object-info.js";
-import { configure as configureRoutes } from "../../web/studio/shim/route.js";
+import { configureCanvasOrigin } from "../../web/js/core/canvas-origin.js";
 import { setLang } from "../../web/js/core/i18n.js";
 
 const dom = new JSDOM("<!DOCTYPE html><html><head></head><body></body></html>", {
@@ -59,5 +59,5 @@ export function resetEnv() {
     window.location.hash = "";   // 上一个个例留在 URL 里的 fragment：开机落哪一页全靠它，不复位就是串味
     document.body.innerHTML = "";
     document.body.className = "";   // 离线标记这类 body 级状态：不清的话会串到后面的用例
-    configureRoutes({ desktopRoutes: [], comfyBase: "" });   // 归属表与直连目标是模块级：不复位的话翻面用例会把后面的用例打到 ComfyUI 上
+    configureCanvasOrigin({});   // 画布落点是模块级：不复位的话翻面用例把后面的用例的「主画布编辑」拽到上一个内核上
 }

@@ -9,19 +9,24 @@ Python 写法（SPDX 头、原子写配置、`_json_safe()`、注释纪律）与
 ## Desktop App
 
 - The window comes first. Opening the app unpacks and creates the window; the
-  self-check, the offline service, and the ComfyUI launch run on a background thread. The
-  landing points are the full Studio page, the offline asset page, and the startup page.
-- Port conventions: ComfyUI on 8188, the desktop asset service
+  self-check, the desktop service, and the ComfyUI launch run on a background thread. The
+  landing points are the startup page, the guide page, and the one Studio page on the desktop port.
+- Port conventions: ComfyUI on 8188, the desktop service
   on the ComfyUI port plus `DESKTOP_PORT_OFFSET`, the cold-start e2e port
   on `NEO_STUDIO_STOP_PORT`. Never stop the user's own ComfyUI on 8188: the
   kernel start/stop controls act only on the instance the desktop app launched.
 - The cold-start page stays on the desktop port and connects generation in place when ComfyUI
   gets ready; a full-page navigation or a reload clears the director editor and the settings
-  forms, so the ready path never navigates. Direct mode is on only for the loopback-only ComfyUI
-  the desktop spawned itself (`StudioDesktop.direct`) and must share its condition with
-  `comfy_cors()`: ComfyUI's `--enable-cors-header` replaces its origin_only middleware, so
-  without the flag the page's cross-origin requests are 403, and the flag is never given for
-  LAN listen or remote mode, where the navigation path stays.
+  forms, so the ready path never navigates. Everything the page needs answers on that one origin:
+  `app/studio_caps.py` decides what the desktop serves (`DESKTOP_ROUTES`), which of the rest the
+  proxy forwards to the kernel (`forwardable()`, `proxy_forward`, the `/ws` tunnel) and that
+  everything else answers `404`; the caps table in `/neo_studio/version` is the page's
+  only gate. `409 offline` is the page's offline signal and comes only from a route that belongs to
+  the kernel when no kernel is up — a route outside both lists answers `409` and the page flips
+  offline right after a successful generation. The proxy strips the browser's identity headers and
+  rewrites Host, so ComfyUI keeps
+  its origin_only middleware and never gets `--enable-cors-header`: the desktop port is never a
+  CORS door, and LAN listen and remote mode keep the same pinned page.
 - The single-instance lock is a named mutex on Windows and a `flock` on macOS, and it lives until the process
   exits. Do not implement it as a port listener: a listener on 8189 shows up in
   `netstat` and reads to users as a second ComfyUI that survives the window close.
@@ -52,8 +57,9 @@ Python 写法（SPDX 头、原子写配置、`_json_safe()`、注释纪律）与
 
 ## Adding a Route
 
-1. 把条目加进 `app/studio_caps.py` 的能力表——表外一律 `409 offline`。同一张表也是 pinned 页面取用的
-   请求归属清单（`/neo_studio/version` 里的 `route_list()`），前端不再留第二份拷贝。
+1. 把条目加进 `app/studio_caps.py` 的能力表——桌面端自服的进 `DESKTOP_ROUTES`，要转给内核的进
+   `forwardable()` 那份清单，两处都不在的答 `404`（不带 `offline`：那是页面的离线信号）。
+   同一张表也是页面门控的唯一来源（`/neo_studio/version` 里的 `caps`），前端不再留第二份拷贝。
 2. 桌面服务要离线提供它，就在 `app/tests/test_studio_server.py` 加用例。
 3. 被复用的 handler 模块自带 `web.RouteTableDef` 且不得碰 ComfyUI 运行时，这条约束写在
    [../studio/AGENTS.md](../studio/AGENTS.md) 的 Architecture Boundaries。

@@ -6,12 +6,12 @@
 
 ## 组成
 
-| 文件 | 职责 |
-|------|------|
-| `app/studio_app.py` | 窗口、自检、拉起 / 停止 ComfyUI、无边框窗口、关窗收尾、启动设置 |
-| `app/studio_server.py` | 桌面端 aiohttp 服务（ComfyUI 端口 +3，`DESKTOP_PORT_OFFSET`），按目录加载插件模块挂在各自 `RouteTableDef` 上的 handler |
-| `app/studio_caps.py` | 能力表：哪些路由归桌面端服务，表外一律 `409 offline` |
-| `data/` | 状态目录：`studio_window.json`（几何）、`studio_profile`（Windows 的 WebView2 profile / localStorage）、`launcher_config.json`（root / python / port / frameless / dev_mode / listen / remote）、`studio_desktop.log`、`comfy_run.log` |
+| 文件                   | 职责                                                                                                                                                                                                                                   |
+| ------                 | ------                                                                                                                                                                                                                                 |
+| `app/studio_app.py`    | 窗口、自检、拉起 / 停止 ComfyUI、无边框窗口、关窗收尾、启动设置                                                                                                                                                                        |
+| `app/studio_server.py` | 桌面端 aiohttp 服务（ComfyUI 端口 +3，`DESKTOP_PORT_OFFSET`），按目录加载插件模块挂在各自 `RouteTableDef` 上的 handler                                                                                                                 |
+| `app/studio_caps.py`   | 能力表：哪些路由归桌面端自服、表外的哪一撮由桌面端转发给内核，其余一律 `409 offline`                                                                                                                                                   |
+| `data/`                | 状态目录：`studio_window.json`（几何）、`studio_profile`（Windows 的 WebView2 profile / localStorage）、`launcher_config.json`（root / python / port / frameless / dev_mode / listen / remote）、`studio_desktop.log`、`comfy_run.log` |
 
 源码运行的状态目录是仓库根的 `data/`；Windows exe 优先 exe 旁的 `data/`，落在不可写目录时退回
 `%APPDATA%\Neo Studio`；macOS v1 走远程模式时优先项目或用户目录旁的 `data/`，不可写时退回
@@ -44,28 +44,35 @@ ComfyUI 没就绪时点它只会得到「页面不存在」。`openSkillWorkflow
 冷启动的窗口停在桌面端服务的 Studio 页上，ComfyUI 就绪后页面**原地接上生成**：不换地址、不刷新、不整页跳转。
 整页跳转与刷新都会清掉导演编辑器和设置表单里未保存的内容，跨源跳转更是全丢。
 
-- 桌面端在 `/neo_studio/version` 里下发 `routes`（归属表，`studio_caps.route_list()`）与 `comfy_base`
-  （生成类请求的直连目标）。前端按归属表判定每条请求打桌面端还是打 ComfyUI；`comfy_base` 为空时表外的请求
-  照旧打桌面端拿 `409`，走统一的「需要 ComfyUI」提示。
-- 直连只在「桌面端自己拉起的那路 + 只监听本机 + 桌面端服务已绑定端口」时开启（`StudioDesktop.direct`）。
-  这条判定必须与 `comfy_cors()` 的取值条件同源：ComfyUI 的 `--enable-cors-header` 与它的 origin_only 中间件互斥
-  （`ComfyUI/server.py`），不给 flag 时从桌面端口 origin 发往 ComfyUI 的请求会因 Host/Origin 不等直接 403，
-  页面直连就是全红。
-- 代价是这路 ComfyUI 的 origin_only 这道 CSRF 防线让位，所以局域网监听（`--listen`）与远程模式一律不给 flag，
-  那两路保留整页跳转：暴露到网卡的实例不在防线上让位换体验。
-- 整页跳到 ComfyUI 端口的那几路在地址上带 `?neo_desktop=http://127.0.0.1:<桌面端口>`（`StudioDesktop.studio_target`，
-  只加在完整 Studio 的目标上，离线页与引导页不带）：MCP 注册表与 stdio 会话只活在桌面端进程里，页面据此把
-  `/neo_mcp/*` 送回桌面端口，`app/studio_server.py` 的 `mcp_cross_origin` 只为回环 origin 回 CORS 头
-  （预检 `204`，非回环 origin 的预检 `403`）。直连那路页面本来就钉在桌面端口上，同源，不带这个参数。
-- 翻面一次做完，ComfyUI 答话之前整块不翻：能力表换成 ComfyUI 的、门控按钮摘监听并还原文案、`body.ns-offline`
-  离线标记摘掉、顶栏队列入口浮出并按六张表补种一次（显存 / 内存读数条随之补建）、`/ws` 从桌面端的桩换到 ComfyUI 的
+- 桌面端在 `/neo_studio/version` 里下发 `caps`（功能可用性表，`studio_caps.features(kernel_ready)`）与内核落点
+  `kernel_ready` / `kernel_port` / `kernel_origin`。生成面随 `kernel_ready` 翻面；页面不判请求归属，也不留第二份清单。
+- 表外的路径由同一层的 `studio_caps.forwardable()` 决定去留：清单内的由 `app/studio_server.py` 的 `proxy_forward`
+  转给内核；清单外是桌面端没有这条接口，答 `404`。带 `offline` 的 `409` 只从「这条归内核、这一轮没有内核」的
+  路径发出，走统一的「需要 ComfyUI」提示 —— 它是页面的离线信号，内核在跑时任何路径都不发它。桌面端口不是一台
+  谁都能打的转发器，插件族按前缀收，ComfyUI 自己的路由逐族点名（队列面板的内存读数读内核的 `/system_stats`）。
+- 转发是桌面端进程替页面发这一发：请求体与响应体都流式过手（出图与整片视频是分钟级响应、上传是几十 MB 的体，
+  两份都不进内存），逐跳头与浏览器身份头（Origin / Referer / Sec-Fetch-*）剥掉、Host 改写成内核地址，ComfyUI 的
+  origin_only 中间件因此照旧生效 —— 桌面端从不给 `--enable-cors-header`，浏览器直接打 ComfyUI 端口仍然 403，
+  这道 CSRF 防线不在代理上让位。局域网监听（`--listen`）与远程模式同样不给 flag，页面同样钉在桌面端口上：
+  那两路从前靠整页跳转，现在翻面与代理都一样。
+- 内核那份版本快照与内核侧能力表走 `/neo_studio/kernel_version` 专用入口转手：两端都有同名的一条
+  `/neo_studio/version`，桌面端这份必须自己答（页面靠它认桌面端的能力表与就绪形态）。
+- `/ws` 由桌面端接力（`studio_ws`）：内核在跑时双向搬到内核的事件流，没在跑时接住挂着（不接的话离线页每 2 秒
+  刷一次连接错误）；内核以 4000 断开「服务重启，请重连」时这个码原样交给页面，页面 2 秒后重连，桌面端每条连接
+  现开一条上行，内核回来隧道跟着回来。
+- 主画布那一发仍要去 ComfyUI 自己的页面：本机内核用「页面自己的主机名 + 内核端口」（局域网对端的主机名就是它
+  那台机器看得到的本机地址），远程内核直接用启动设置里那台地址。桌面端口上没有画布页，代理也不代理画布。
+- MCP 注册表与 stdio 会话只活在桌面端进程里，页面同源，`/neo_mcp/*` 就在桌面端口上；这一族从不回 CORS 头，
+  外站（含 DNS 重绑到回环的）读不到它。
+- 翻面一次做完，ComfyUI 答话之前整块不翻：能力表换成就绪的那份、门控按钮摘监听并还原文案、`body.ns-offline`
+  离线标记摘掉、顶栏队列入口浮出并按六张表补种一次（显存 / 内存读数条随之补建）、`/ws` 从桌面端的桩换到内核的
   真事件流。只解禁按钮不换事件流就是
   「任务交得出去、进度拿不回来」的半在线态。
 - 翻面由 `ready` 驱动，不看是谁拉起内核：桌面端在就绪这同一份快照里才清掉 `starting`，拿 `starting` 当翻面条件时，
   桌面端自己拉起内核的冷启动永远翻不过来 —— 顶栏报「运行中」，页面钉在离线形态，生成请求全 `409`。
 - 离线页不叠横幅：顶栏状态位报「● 已停止」并把入口指向「设置 → 启动设置」，生成入口按能力门控压暗，
   `body.ns-offline` 就是各模块认离线形态的那份标记。
-- 停掉内核后页面翻回离线形态：直连目标清空、生成按钮重新门控、事件流换回桩，窗口导航不动。
+- 停掉内核后页面翻回离线形态：代理目标清空、生成按钮重新门控、事件流换回桩，窗口导航不动。
 
 ## 导演页布局
 
@@ -300,10 +307,10 @@ js_api（`check_setup` / `pick_root` / `pick_python` / `start_setup`），根目
   `http://<局域网 IP>:<端口>/neo-studio` 入口。手机侧不安装任何东西，走的就是上一节的局域网直连。
 - 令牌由桌面端生成，落盘在 `launcher_config.json` 的 `pair_token` / `pair_expires_at` / `pair_host`，5 分钟过期；
   面板上的倒计时到零自动换码，「立即刷新」按钮换新码，落盘只带这三个字段，不碰启动项。
-- 面板取数据有两条通道，语义同一份：桌面窗口里优先走 pywebview 桥的 `pair_info` / `pair_rotate`——顶栏整页跳到
-  ComfyUI 的页面后，页面相对路径打的是 ComfyUI 的 origin，配对那三条路由不在那（局域网那路加不了 CORS，整页
-  跳转是硬约束）；钉在桌面端端口的页面与浏览器里的页面走 `GET /neo-studio/pair/info` 与 `pair_rotate` 动作。
-  桥与桌面端服务共用同一份 `launcher` 与同一份落盘入口（`app/studio_app.py`），两条通道出的是同一个地址、同一张码。
+- 面板取数据有两条通道，语义同一份：桌面窗口里优先走 pywebview 桥的 `pair_info` / `pair_rotate`（桥注入晚于页面
+  脚本，整页刷新后靠它补上），页面里走 `GET /neo-studio/pair/info` 与 `pair_rotate` 动作 —— 页面钉在桌面端端口上，
+  配对那三条路由就在同一个 origin 上。桥与桌面端服务共用同一份 `launcher` 与同一份落盘入口（`app/studio_app.py`），
+  两条通道出的是同一个地址、同一张码。
 - 二维码由 `studio/web/js/core/qrcode-lite.js` 现场生成（QR Model 2 字节模式 + 纠错 L + 八种掩码选优 + 版本自适应），
   以 inline SVG 上屏，不引第三方库。
 - 三条路由 `/neo-studio/pair`、`/neo-studio/pair/check`、`/neo-studio/pair/info` 由桌面端服务自己注册
@@ -312,8 +319,8 @@ js_api（`check_setup` / `pick_root` / `pick_python` / `start_setup`），根目
   上次扫过、现在还是实体网卡的那个地址 → 排好序的第一块实体网卡。排序在 `private_addrs()`：按 192.168 → 10 →
   172.16/12 档位排，名字带 `vEthernet` / `Hyper-WSL` / `Loopback` 字样的虚拟网卡压到最后，169.254 链路本地与公网
   地址不出码（Hyper-WSL 的 `172.24.80.1` 在主机名解析里经常排第一，照它出码就是一张扫开连不上的码）。挑中的地址
-  落盘成 `pair_host`。页面在 ComfyUI 的 origin 上时走桥（桥这边没有 Host 头可认），钉在桌面端端口上时走 `pair/info`。
-  三条回复都带 `Cache-Control: no-store`，配对页对令牌只回「有效 / 无效」两种状态，不区分过期与令牌不符。
+  落盘成 `pair_host`。桥这条通道没有 Host 头可认，出码认的是落盘的 `pair_host`；`pair/info` 这条按请求的 Host
+  认对端。三条回复都带 `Cache-Control: no-store`，配对页对令牌只回「有效 / 无效」两种状态，不区分过期与令牌不符。
 - 局域网监听没放开时这一栏不摆码，直接说明去「启动设置 → 局域网监听」放开——不摆只会失败的控件：链接框、复制与刷新按钮
   一并收起，只有「靠刷新出码」那一状态留着刷新按钮。
 - 测试：`app/tests/test_mobile_pair.py`（令牌生命周期 / 局域网前缀 / Host 门 / 落盘合并 / 桥那份快照 / 出码选卡排序）、

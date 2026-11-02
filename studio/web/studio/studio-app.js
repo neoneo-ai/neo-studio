@@ -6,8 +6,8 @@
 // - 设置：生图/生视频/LLM 设置表单（内嵌，无弹窗）
 import { app, initExtensions, getSidebarTab, onSidebarTabChange } from "./shim/app.js";
 import { api, reconnectSocket } from "./shim/api.js";
-import { configure as configureRoutes, resolve as resolvePath } from "./shim/route.js";
 import { $el } from "./shim/ui.js";
+import { configureCanvasOrigin } from "../js/core/canvas-origin.js";
 
 import "../gallery.js";   // 注册 comfy.neo.gallery 扩展（NeoGallery + 侧栏 tab 定义）
 import { setDirectorEditorHost, openDirectorEditor, DIRECTOR_RECIPE_SAVED_EVENT, SEG_MODES, MODE_LABELS, LEGACY_MODE_MAP } from "../director.js";
@@ -1702,10 +1702,9 @@ function buildSettings(el) {
 }
 
 // ====== 启动：版本信息 + 扩展初始化 + 路由 ======
-let offline = false;   // 页面跑在桌面端的服务上：文件类功能可用，生成类请求由桌面端回 409
+let offline = false;   // 内核没就绪：生成类请求由桌面端回 409
 let starting = false;  // 桌面端已拉起 ComfyUI 还没就绪：这段时间只出「启动中」，其余离线提示一律收起
 let caps = {};         // 桌面端能力表（/neo_studio/version 下发）；ComfyUI 页里缺省即全可用
-let comfyBase = "";    // 生成类请求的直连目标；空 = 这路 ComfyUI 不认桌面端 origin（未就绪 / 附着 / 远程）
 let versionInfo = { plugin: "", comfy: "", offline: false, dataRoot: "", comfyLocal: "", remote: "" };   // 版本号与路径行只在设置「关于」里显示
 
 function can(feature) { return caps[feature] !== false; }
@@ -1833,12 +1832,11 @@ function ungateRunButtons() {
 function runLabel() { return starting ? t("ComfyUI 启动中") : t("需要 ComfyUI"); }
 
 // 共享模块（gallery / director / voice）大量直接用原生 fetch 打接口，不经 api shim：
-// 这里同样按归属表改写目标 —— 就绪后生成类请求直连 ComfyUI，离线时打桌面端拿 409，
-// 让各生成路径统一出「需要 ComfyUI」提示，不静默吞掉。
+// 这里给它们补上同一份 409 处理 —— 内核没就绪时出统一的「需要 ComfyUI」提示，不静默吞掉。
 // 共享模块注册的运行按钮（生成素材 / 生成这一段 / 拼回成片 / 生成图片分镜）在捕获阶段拦掉。
 function initOfflineGate() {
     const nativeFetch = globalThis.fetch.bind(globalThis);
-    globalThis.fetch = (input, init) => nativeFetch(resolvePath(input, init), init).then((res) => {
+    globalThis.fetch = (input, init) => nativeFetch(input, init).then((res) => {
         if (res.status !== 409) return res;
         res.clone().json()
             .then((data) => {
@@ -1943,8 +1941,7 @@ async function loadVersion() {
             offline = !!data.offline;
             starting = !!data.starting;   // 桌面端已拉起 ComfyUI：页面第一份状态就是「启动中」
             caps = data.caps || {};
-            comfyBase = String(data.comfy_base || "");
-            configureRoutes({ desktopRoutes: data.routes, comfyBase });
+            configureCanvasOrigin({ port: data.kernel_port, origin: data.kernel_origin });
             versionInfo = {
                 plugin: data.plugin_version || "", comfy: data.comfyui_version || "", offline,
                 dataRoot: String(data.data_root || ""), comfyLocal: String(data.comfy_local || ""),
@@ -1957,22 +1954,20 @@ async function loadVersion() {
     } catch { /* ComfyUI 未就绪时保持空白 */ }
 }
 
-// 就绪后原地接上生成：页面不换地址、不刷新，只把路由目标 / 能力表 / 门控 / 显存条 / 事件流翻面。
-// 整页跳转与刷新都会清掉导演编辑器和表单里未保存的内容，跨源跳转更是全丢 —— 这里一样都不发生。
+// 就绪后原地接上生成：页面不换地址、不刷新，只把能力表 / 门控 / 显存条 / 事件流翻面。
+// 整页跳转与刷新都会清掉导演编辑器和表单里未保存的内容 —— 这里一样都不发生：请求本来就
+// 打在桌面端端口上，内核的路由由桌面端转发过去（app/studio_server.py 的 proxy_forward）。
 // 五步必须一次做完：只解禁按钮不换事件流，用户点「生成整片」会拿到任务拿不到进度。
-// 直连目标由桌面端快照报（comfy_base），ComfyUI 答话之前整块不翻 —— 翻一半就是按钮能点、进度不来。
+// 内核答话之前整块不翻 —— 翻一半就是按钮能点、进度不来。
 async function flipOnline() {
     if (!offline) return;
     try {
         const desk = await (await api.fetchApi("/neo_studio/version")).json();
-        if (!desk?.success) return;
-        const base = String(desk.comfy_base || "");
-        if (!base) return;   // 这路不认桌面端 origin（附着 / 远程）：整页跳转交给桌面端，页面留在离线形态
-        const comfy = await (await api.fetchApi(`${base}/neo_studio/version`)).json();
+        if (!desk?.success || !desk.kernel_ready) return;   // 桌面端还没认下这路内核：下一轮 5 秒探活再来
+        const comfy = await (await api.fetchApi("/neo_studio/kernel_version")).json();
         if (!comfy?.success) { flipStarted = false; return; }   // 刚就绪还没答话：下一轮 5 秒探活再来
-        configureRoutes({ desktopRoutes: desk.routes, comfyBase: base });
-        comfyBase = base;
-        caps = comfy.caps || {};
+        caps = { ...(desk.caps || {}), ...(comfy.caps || {}) };   // 内核报的那份是这 12 位的权威
+        configureCanvasOrigin({ port: desk.kernel_port, origin: desk.kernel_origin });
         offline = false;
         starting = false;
         userStarting = false;   // 内核已就绪：这轮「等端口」到此为止，顶栏状态位交回正常渲染
@@ -1985,22 +1980,21 @@ async function flipOnline() {
         setOfflineMark(false);
         ungateRunButtons();
         reconnectSocket();
-        setQueueOnline(true);   // 事件流刚换到 ComfyUI：顶栏入口浮出、面板照六张表的现值重播、读数条补建
+        setQueueOnline(true);   // 事件流刚换到内核隧道：顶栏入口浮出、面板照六张表的现值重播、读数条补建
         desktopLog("FLIP online in-place");
     } catch {
         flipStarted = false;
     }
 }
 
-// 翻面后停掉内核：页面要翻回离线形态。不翻的话按钮解禁着、生成请求打到已关掉的端口上，
+// 翻面后停掉内核：页面要翻回离线形态。不翻的话按钮解禁着、生成请求打到没有内核的代理上，
 // 拿不到 409 也拿不到离线提示，比今天「窗口退回离线页」更糟。
 async function flipOffline() {
     if (offline) return;
     offline = true;
     flipStarted = false;   // 下次就绪还能再翻过来
-    configureRoutes({ comfyBase: "" });   // 先把直连目标收掉：下面这份快照必须打到桌面端上
-    comfyBase = "";
-    await loadVersion();   // 桌面端快照：comfy_base 已空，能力表与离线标记回到离线形态
+    await loadVersion();   // 桌面端快照：kernel_ready 已收，能力表与离线标记回到离线形态
+    configureCanvasOrigin({});   // 画布链接随能力表一起收：「主画布编辑」的离线闸门认它
     reGateRunButtons();
     reconnectSocket();     // 事件流切回桌面端的桩，别对着死端口重连
     setQueueOnline(false);   // 队列要吃执行队列：离线形态收掉顶栏入口

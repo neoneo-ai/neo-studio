@@ -1,11 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Neo Studio 桌面端服务：ComfyUI 没在跑时，窗口里也能用大部分 Studio 功能。
+"""Neo Studio 桌面端服务：一个端口上跑完整个 Studio。
 
 桌面端在 ComfyUI 端口之外开一个 HTTP 服务（ComfyUI 端口 + 3），复用插件模块挂在各自 RouteTableDef
-上的 handler 与 Studio 前端静态文件：窗口从打开那一刻就是可用的 Studio。哪些接口桌面端能服务、哪些
-必须 ComfyUI 在跑，由 app/studio_caps.py 一张表说清楚 —— 桌面端按它挂载，表外的一律 409 offline，
-前端据此门控。桌面端自己拉起的 ComfyUI 就绪后，页面留在本端口上把生成类请求直连过去（app/studio_app.py
-的 comfy_cors）；局域网监听与远程那路仍由桌面端整页跳到 ComfyUI 端口的完整 Studio。
+上的 handler 与 Studio 前端静态文件：窗口从打开那一刻就是可用的 Studio，并且**整个会话都留在这一
+个 origin 上** —— 哪些接口桌面端自服由 app/studio_caps.py 一张表说清楚，表外的路径按同一层的
+forwardable() 决定去留：清单内的由这里转发给 ComfyUI 内核（proxy_forward，含 /ws 事件流隧道），
+清单外是桌面端没有这条接口（404），409 offline 只由「归内核却没有内核」的路径发出，前端据此门控。
+转发时剥掉浏览器的身份头（Origin / Referer / Sec-Fetch-*）并把 Host 改写成内核地址，ComfyUI 的
+origin_only 中间件因此照旧生效：内核只认本机脚本与自家前端，浏览器直接打 ComfyUI 端口仍然 403，
+这道防线不在代理上让位。
 """
 
 import importlib.util
@@ -15,8 +18,8 @@ import threading
 import asyncio
 import time
 from pathlib import Path
-from urllib.parse import urlsplit
 
+import aiohttp
 from aiohttp import web
 
 import studio_caps as caps
@@ -28,7 +31,14 @@ OFFLINE_ERROR = "ComfyUI 未运行"
 DESKTOP_PKG = "_neo_studio_desktop"
 DATA_ROOT_ENV = "NEO_STUDIO_DATA"   # 插件模块 import 期认的用户数据根
 MCP_PREFIX = "/neo_mcp"
-LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
+KERNEL_VERSION_PATH = "/neo_studio/kernel_version"   # 内核那份版本快照的专用入口，见 kernel_version
+
+# 转发时逐跳剥掉的头：这些是连接层的事，交给内核与浏览器各自重谈
+HOP_BY_HOP = frozenset({"transfer-encoding", "connection", "keep-alive", "upgrade",
+                        "proxy-authenticate", "proxy-authorization", "te", "trailer",
+                        "content-length", "host"})
+# 出图与整片视频是分钟级的响应；连接失败要快点回，页面才知道「内核没了」
+PROXY_TIMEOUT = aiohttp.ClientTimeout(total=None, connect=10, sock_read=3600)
 
 # 桌面端进程加载的插件模块，按依赖顺序：handler 只依赖 folder_paths、文件系统与 8080 LLM 服务。
 DESKTOP_MODULES = ("util", "civitai", "bookmark", "gallery_lora", "gallery_oss", "gallery",
@@ -80,37 +90,6 @@ async def no_store(request, handler):
     if request.path.startswith("/extensions/"):
         resp.headers["Cache-Control"] = "no-store"
     return resp
-
-
-@web.middleware
-async def mcp_cross_origin(request, handler):
-    """ComfyUI 端口上的 Studio 页面打桌面端端口的 MCP：这一发是跨源的，浏览器先要响应头。
-
-    MCP 路由只注册在桌面端服务上（stdio 子进程只活在这个进程里，app/mcp_routes.py），
-    局域网监听 / 附着 / 远程那路整页跳到 ComfyUI 端口后，页面靠 app/studio_app.py 挂的
-    ?neo_desktop= 把 /neo_mcp/* 打回来。只放行回环 origin：服务绑在 127.0.0.1，外部站点
-    即使把域名解析到回环（DNS 重绑）也拿不到 MCP 子进程的句柄；不带 Origin 的是本机脚本
-    与桌面端口上的同源页面，照旧放过。"""
-    if not request.path.startswith(MCP_PREFIX):
-        return await handler(request)
-    origin = request.headers.get("Origin", "")
-    allowed = not origin or _loopback_origin(origin)
-    headers = ({"Access-Control-Allow-Origin": origin,
-                "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-                "Access-Control-Allow-Headers": "Content-Type",
-                "Access-Control-Max-Age": "600", "Vary": "Origin"}
-               if allowed and origin else {})
-    if request.method == "OPTIONS":
-        # 路由表里只有 GET / POST：预检在这里收口，别落到 aiohttp 的 405 上（那儿没有 CORS 头）
-        return web.Response(status=204 if allowed else 403, headers=headers)
-    resp = await handler(request)
-    resp.headers.update(headers)
-    return resp
-
-
-def _loopback_origin(origin: str) -> bool:
-    parts = urlsplit(origin)
-    return parts.scheme in ("http", "https") and parts.hostname in LOOPBACK_HOSTS
 
 
 # 局域网监听把桌面端端口绑到网卡上之后，网段上的设备就是这台机器的另一块屏幕：页面、素材库、
@@ -201,28 +180,35 @@ async def view_file(request):
         output_dir = full_output_dir
     file = os.path.join(output_dir, os.path.basename(filename))
     if not os.path.isfile(file):
-        return web.Response(status=404)
+        # 本机没有这份文件：交给内核。远端内核的输出目录在远端机器上，桌面端这边按本机目录
+        # 判存在就是把出图整条挡死（生成成功、页面拿不到图）
+        return await proxy_forward(request)
     return web.FileResponse(file)
 
 
 async def studio_version(request):
-    """离线快照：页面靠它完成初始化，并拿到桌面端能力表决定哪些功能可用。
-    starting 一并下发：pywebview 的 js_api 注入晚于页面加载，冷启动那几秒前端只有这份快照
-    知道「桌面端已拉起、端口未就绪」，不会先闪「未运行」与「需要 ComfyUI」提示。
-    routes 是归属表（caps.route_list）；comfy_base 非空表示这路 ComfyUI 认桌面端 origin，
-    页面原地把生成类请求切过去，不整页跳转。"""
+    """页面每 5 秒读的那份快照：初始化、能力门控与就绪翻面全认它。
+
+    pywebview 的 js_api 注入晚于页面加载，冷启动那几秒前端只有这份快照知道「桌面端已拉起、
+    端口未就绪」，不会先闪「未运行」与「需要 ComfyUI」提示。
+    kernel_ready 是生成面的总开关：就绪前后页面是同一个地址，翻面只换这份能力表与事件流目标。
+    kernel_port / kernel_origin 是「主画布编辑」那一发的落点 —— 画布只在 ComfyUI 自己的页面上，
+    本机内核按页面自己的主机名配端口（局域网对端的主机名就是它那台机器看得到的本机地址），
+    远程内核直接用桌面端配的地址。"""
     flags = request.app["flags"]
     launcher = request.app["launcher"]
+    kernel_ready = bool(str(flags.get("kernel_base") or ""))
     return web.json_response({
         "success": True,
         "plugin": "Neo Studio",
         "plugin_version": request.app["plugin_version"],
         "comfyui_version": OFFLINE_ERROR,
-        "offline": True,
+        "offline": not kernel_ready,
         "starting": bool(flags.get("starting")),
-        "caps": caps.features(),
-        "routes": caps.route_list(),
-        "comfy_base": str(flags.get("comfy_base", "")),
+        "kernel_ready": kernel_ready,
+        "kernel_port": int(flags.get("kernel_port") or 0),
+        "kernel_origin": str(flags.get("kernel_origin") or ""),
+        "caps": caps.features(kernel_ready),
         # 「设置 → 关于」里的路径行：桌面端知道自己的数据根、ComfyUI 根与远程地址
         "data_root": str(request.app.get("data_root") or ""),
         "comfy_local": str(request.app.get("comfy_root") or ""),
@@ -255,20 +241,136 @@ async def desktop_log(request):
 
 
 
+def _kernel_base(request) -> str:
+    """转发目标：桌面端报进来的内核地址，空 = 这轮没有内核。"""
+    return str(request.app["flags"].get("kernel_base") or "")
+
+
+def offline_response(request) -> web.Response:
+    """内核不在：与「桌面端不认这条接口」同形，前端据此弹离线提示并照能力表门控。"""
+    return web.json_response({"success": False, "offline": True, "error": OFFLINE_ERROR}, status=409)
+
+
+def _forward_headers(request) -> dict:
+    """转发要带的请求头：逐跳头与浏览器身份全部剥掉。
+
+    ComfyUI 的 origin_only 中间件比的是 Origin/Referer 的 host 与请求的 Host。带上门页的
+    Origin 进内核就是 403；不送 Host 让 aiohttp 按目标地址定，再摘掉 Origin/Referer 与
+    Sec-Fetch-*，内核视之为本机脚本请求 —— 这道防线在 ComfyUI 侧原样留着，浏览器直接打
+    ComfyUI 端口照旧被挡，代理只是本机进程替页面发这一发。"""
+    headers = {}
+    for key, value in request.headers.items():
+        low = key.lower()
+        if low in HOP_BY_HOP or low in ("origin", "referer") or low.startswith("sec-fetch"):
+            continue
+        headers[key] = value
+    return headers
+
+
+async def proxy_forward(request, method: str = "", path: str = "") -> web.StreamResponse:
+    """把内核的路由原样转一手：请求体与响应体都是流式，不整份进内存。
+
+    出图与整片视频是分钟级响应、上传是几十 MB 的体，两份都过内存就是把桌面端服务做成
+    一个缓存层。auto_decompress=False（见 build_app）+ 摘掉逐跳头 = gzip/br 与 Range/206
+    的 Content-Range 原样交回浏览器；allow_redirects=False 让 3xx 照原样透传，桌面端不替
+    页面决定它最终落在哪台主机上。"""
+    base = _kernel_base(request)
+    if not base:
+        return offline_response(request)
+    method = method or request.method
+    target = base + (path or request.path)
+    if request.query_string:
+        target += "?" + request.query_string
+    kwargs = {"headers": _forward_headers(request), "allow_redirects": False}
+    if request.can_read_body:
+        kwargs["data"] = request.content
+        kwargs["chunked"] = True
+    try:
+        async with request.app["proxy_session"].request(method, target, **kwargs) as upstream:
+            resp = web.StreamResponse(status=upstream.status,
+                                      headers={k: v for k, v in upstream.headers.items()
+                                               if k.lower() not in HOP_BY_HOP})
+            await resp.prepare(request)
+            async for chunk in upstream.content.iter_any():
+                await resp.write(chunk)
+            await resp.write_eof()
+            return resp
+    except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
+        log = request.app.get("log")
+        if log:
+            log(f"proxy {method} {target} failed: {exc!r}")
+        return offline_response(request)
+
+
+async def kernel_version(request):
+    """内核那份版本快照：设置页要显示的 ComfyUI 版本与内核侧能力表只有内核知道。
+
+    /neo_studio/version 是两端同名的一条 —— 桌面端必须自己答（页面靠它认桌面端的能力表），
+    内核那份就从这条专用路由转过去。转发清单不收整条 /neo_ 前缀的默认路径，逐条点名。"""
+    return await proxy_forward(request, method="GET", path="/neo_studio/version")
+
+
 async def studio_ws(request):
-    """shim 会连 /ws：接住连接挂着，避免页面刷连接错误。"""
-    ws = web.WebSocketResponse(heartbeat=30.0)
-    await ws.prepare(request)
-    async for _ in ws:
-        pass
-    return ws
+    """页面连的 /ws：内核在跑时双向接力到内核的事件流，没在跑时接住挂着。
+
+    两条都要 —— 不接的话离线页每 2 秒刷一次连接错误；不接力的话就绪后的进度、出图、
+    队列变化全不来。内核重启时主动以 4000 断开（「服务重启，请重连」），这个码原样交给
+    页面：前端 2 秒后重连，桌面端这边每条连接现开一条上行，内核回来隧道跟着回来。"""
+    client = web.WebSocketResponse(heartbeat=30.0)
+    await client.prepare(request)
+    base = _kernel_base(request)
+    if not base:
+        async for _ in client:
+            pass
+        return client
+    url = base.replace("https://", "wss://").replace("http://", "ws://") + "/ws"
+    if request.query_string:
+        url += "?" + request.query_string
+    try:
+        async with request.app["proxy_session"].ws_connect(url, timeout=15) as upstream:
+            to_page = asyncio.create_task(_relay(upstream, client))
+            to_kernel = asyncio.create_task(_relay(client, upstream))
+            try:
+                await asyncio.wait({to_page, to_kernel}, return_when=asyncio.FIRST_COMPLETED)
+            finally:
+                to_page.cancel()
+                to_kernel.cancel()
+            code = upstream.close_code or client.close_code
+            if code and code not in (1000, 1005, 1006):
+                await client.close(code=code)   # 内核的重启码原样传下去，前端认它
+            await upstream.close()
+    except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
+        log = request.app.get("log")
+        if log:
+            log(f"ws tunnel to {url} failed: {exc!r}")
+        await client.close(code=4003, message=str(exc).encode("utf-8")[:200])
+    return client
 
 
-async def offline(request):
-    """桌面端服务不认的插件接口一律明确回「ComfyUI 未运行」，不让前端拿到裸 404。"""
-    if request.path.startswith(("/neo_", "/rs_", "/userdata/", "/api/")):
-        return web.json_response({"success": False, "offline": True, "error": OFFLINE_ERROR}, status=409)
-    return web.Response(status=404)
+async def _relay(src, dst):
+    """一条方向上的帧接力：文本与二进制原样搬，连接层的事到这边为止。"""
+    async for msg in src:
+        if msg.type == aiohttp.WSMsgType.TEXT:
+            await dst.send_str(msg.data)
+        elif msg.type == aiohttp.WSMsgType.BINARY:
+            await dst.send_bytes(msg.data)
+        else:
+            break
+
+
+async def proxy_catch(request):
+    """表外的请求：清单内的转手给内核，清单外是桌面端没有这条接口（404）。
+
+    带 offline 的响应体是页面的离线信号（shim 见它就广播「需要 ComfyUI」），409 因此只从
+    「这条归内核、这一轮却没有内核」的路径发出：清单外的路径在内核在跑时答 409，页面就会在
+    出图成功之后弹一条「需要 ComfyUI · 启动内核」。"""
+    if not caps.forwardable(request.method, request.path):
+        log = request.app.get("log")
+        if log:
+            log(f"desktop 404 {request.method} {request.path}")
+        return web.json_response({"success": False,
+                                  "error": f"桌面端没有这条接口：{request.path}"}, status=404)
+    return await proxy_forward(request)
 
 
 async def launcher_get(request):
@@ -379,15 +481,17 @@ def mcp_config_path(plugin_dir: Path, data_root: Path = None) -> Path:
 def build_app(root: Path, plugin_dir: Path, flags: dict = None, launcher: dict = None,
               launcher_api: dict = None, comfy_log: Path = None,
               data_root: Path = None, mcp_manager=None, kernel_state=None,
-              pair_ctx: dict = None) -> web.Application:
-    """桌面端 app：Studio 页面 + 前端静态文件 + 能力清单里归桌面端的全部路由。
-    flags 是桌面端的启动中标记（与 StudioDesktop 共用同一份 dict），随版本快照下发给页面。
+              pair_ctx: dict = None, log=None) -> web.Application:
+    """桌面端 app：Studio 页面 + 前端静态文件 + 能力清单里归桌面端的全部路由 + 到内核的转发。
+    flags 是桌面端报进来的那份状态（与 StudioDesktop 共用同一份 dict）：kernel_base 是转发目标，
+    kernel_port / kernel_origin 是画布链接的落点，starting 随版本快照下发给页面。
     launcher / launcher_api 同样与 StudioDesktop 共用：设置页在桌面端读快照、发保存。
     data_root 是桌面端的用户数据根：插件模块 import 期按它找 gallery / recipes / configs，
     桌面端服务与桌面端拉起的内核因此读同一份数据。
     mcp_manager 与 StudioDesktop 共用同一份会话登记表：关窗收尾要回收的进程与页面连着的是
     同一批；没给时按 data_root 建一个，注册表落在 <data_root>/configs/mcp_servers.json。
-    kernel_state 是 StudioDesktop.comfy_state 那份内核状态，顶栏状态位刷新后靠它从 HTTP 侧补上。"""
+    kernel_state 是 StudioDesktop.comfy_state 那份内核状态，顶栏状态位刷新后靠它从 HTTP 侧补上。
+    log 是桌面端那份日志函数：转发的失败只活在这一行里，别把「代理没通」写成页面的裸 409。"""
     if str(root) not in sys.path:
         sys.path.insert(0, str(root))
     import folder_paths   # noqa: F401  gallery 在 import 期就要读 output/input 目录
@@ -416,6 +520,7 @@ def build_app(root: Path, plugin_dir: Path, flags: dict = None, launcher: dict =
     routes.get(USERDATA_PATH)(userdata_get)
     routes.post(USERDATA_PATH)(userdata_post)
     routes.get("/neo_studio/version")(studio_version)
+    routes.get(KERNEL_VERSION_PATH)(kernel_version)
     routes.get("/neo_studio/comfy_state")(comfy_state)
     routes.get("/neo_studio/log")(desktop_log)
     routes.get("/neo_studio/launcher")(launcher_get)
@@ -431,9 +536,10 @@ def build_app(root: Path, plugin_dir: Path, flags: dict = None, launcher: dict =
     # handler 之前被 transport 挡成 413，插件端（ComfyUI 的 --max-upload-size 默认 100MB）能跑的
     # 体积到了桌面端就白跑。这里放到接口自身上限之上，让「超过上限」由接口的 400 说清楚。
     pose_mod = sys.modules[f"{DESKTOP_PKG}.pose"]
-    app = web.Application(middlewares=[no_store, mcp_cross_origin, lan_surface],
+    app = web.Application(middlewares=[no_store, lan_surface],
                           client_max_size=pose_mod.MAX_BODY_BYTES + 8 * 1024 * 1024)
     app["flags"] = flags if flags is not None else {}
+    app["log"] = log
     app["studio_index"] = plugin_dir / "web" / "studio" / "index.html"
     app["userdata"] = Path(folder_paths.get_user_directory()) / "default" / "neo_gallery_data.json"
     app["comfy_log"] = Path(comfy_log) if comfy_log else plugin_dir / "tmp" / "comfy_run.log"
@@ -459,10 +565,30 @@ def build_app(root: Path, plugin_dir: Path, flags: dict = None, launcher: dict =
 
     app.add_routes(routes)
     app.add_routes(mcp_routes.routes)
-    # catch-all 必须最后注册：aiohttp 按注册顺序匹配，静态与浏览路由先占位
-    app.router.add_route("GET", "/{path:.*}", offline)
-    app.router.add_route("POST", "/{path:.*}", offline)
+    # catch-all 必须最后注册：aiohttp 按注册顺序匹配，静态与浏览路由先占位。
+    # 方法要收全：ComfyUI 的 /queue/{id} 与 /history/{id} 是 DELETE，只登记 GET/POST 的话
+    # 队列面板的「移出」在桌面端口上直接 405
+    app.router.add_route("*", "/{path:.*}", proxy_catch)
+    app.on_startup.append(_open_proxy_session)
+    app.on_cleanup.append(_close_proxy_session)
     return app
+
+
+async def _open_proxy_session(app):
+    """转发用的连接池：随 app 起、随 app 收，桌面端服务退出时不留半开的到内核连接。
+
+    auto_decompress=False 是硬要求：解掉一份 gzip 再按原 Content-Encoding 头交出去，
+    页面拿到的就是坏字节；Range/206 那一路同理，字节流必须原样透传。
+    trust_env=False：转发目标只有本机内核与用户在启动设置里填的那台远端，不读系统代理。"""
+    app["proxy_session"] = aiohttp.ClientSession(
+        connector=aiohttp.TCPConnector(limit=120),
+        auto_decompress=False,
+        trust_env=False,
+        timeout=PROXY_TIMEOUT)
+
+
+async def _close_proxy_session(app):
+    await app["proxy_session"].close()
 
 
 class DesktopServer:

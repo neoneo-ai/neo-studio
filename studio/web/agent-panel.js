@@ -125,9 +125,8 @@ async function postJson(path, body) {
     return await res.json();
 }
 
-// MCP 那族只活在桌面端进程里：页面被整页跳到 ComfyUI 端口时，route.js 按 ?neo_desktop= 把
-// /neo_mcp/* 指回桌面端口。那一发是跨源的，桌面端服务不在（或 origin 不被放行）时 fetch 直接
-// reject —— 与 409 / 404 一样按「桌面端没起来」说话，不给假成功。
+// MCP 那族只活在桌面端进程里：页面钉在桌面端口上，这一族与页面同源。桌面端服务不在时 fetch
+// 直接 reject —— 与 409 / 404 一样按「桌面端没起来」说话，不给假成功。
 const mcpGet = (path) => getJson(path).catch(() => ({ offline: true }));
 const mcpPost = (path, body) => postJson(path, body).catch(() => ({ offline: true }));
 

@@ -207,9 +207,9 @@ class PersistenceMergeTests(unittest.TestCase):
         self.assertEqual(disk["pair_host"], "10.0.0.9")
 
 class PairBridgeTests(unittest.TestCase):
-    """顶栏整页跳到 ComfyUI 的页面后，设置页只剩 pywebview 桥一条路能拿到配对数据（配对三条路由
-    只在桌面端端口上，局域网那路加不了 CORS）。桥那份与 HTTP 那份同一份语义：出码用落盘的
-    pair_host，端口是桌面端服务当前那个，令牌当场生成并落盘。"""
+    """窗口里 js_api 注入晚于页面脚本，桥与 HTTP 那条 /neo-studio/pair/info 同语义：出码用落盘的
+    pair_host，端口是桌面端服务当前那个，令牌当场生成并落盘。页面钉在桌面端口上，桥是刷新晚到
+    时的那条补路，两份读数必须一模一样。"""
 
     def setUp(self):
         import studio_app as sa
@@ -226,7 +226,7 @@ class PairBridgeTests(unittest.TestCase):
 
     def test_pair_info_answers_the_panel_with_the_live_desktop_port(self):
         sa = self.sa
-        desktop = sa.StudioDesktop("u", None, 8188, Path("root"), desktop_port=43130,
+        desktop = sa.StudioDesktop(None, 8188, Path("root"), desktop_port=43130,
                                    launcher={"listen": "192.168.0.165", "pair_host": "192.168.0.165"})
         info = desktop.pair_info()
         self.assertTrue(info["lan_open"])
@@ -238,7 +238,7 @@ class PairBridgeTests(unittest.TestCase):
         """第一次用这功能时 pair_host 还没落盘过：出码地址取「局域网监听」选定的那块网卡，
         认出来的地址随后落盘，下次出码与手机扫到的必须是同一个。"""
         sa = self.sa
-        desktop = sa.StudioDesktop("u", None, 8188, Path("root"), desktop_port=43130,
+        desktop = sa.StudioDesktop(None, 8188, Path("root"), desktop_port=43130,
                                    launcher={"listen": "192.168.0.165"})
         info = desktop.pair_info()
         self.assertEqual(info["host"], "192.168.0.165")
@@ -249,7 +249,7 @@ class PairBridgeTests(unittest.TestCase):
 
     def test_pair_info_persists_the_token_it_mints(self):
         sa = self.sa
-        desktop = sa.StudioDesktop("u", None, 8188, Path("root"), desktop_port=43130,
+        desktop = sa.StudioDesktop(None, 8188, Path("root"), desktop_port=43130,
                                    launcher={"listen": "192.168.0.165", "pair_host": "192.168.0.165"})
         info = desktop.pair_info()
         self.assertEqual(sa.load_config()["pair_token"], info["token"],
@@ -257,7 +257,7 @@ class PairBridgeTests(unittest.TestCase):
         self.assertNotIn("pair_dirty", desktop.launcher)
 
     def test_pair_info_says_lan_closed_without_a_qr(self):
-        desktop = self.sa.StudioDesktop("u", None, 8188, Path("root"), desktop_port=43130,
+        desktop = self.sa.StudioDesktop(None, 8188, Path("root"), desktop_port=43130,
                                         launcher={"listen": ""})
         info = desktop.pair_info()
         self.assertFalse(info["lan_open"])

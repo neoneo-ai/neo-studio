@@ -51,32 +51,6 @@ test("api shim：fetchApi 透传、WS 消息按 type 派发事件", async () => 
     assert.equal(seen.length, 1, "移除监听后不应再收到");
 });
 
-test("归属路由：表内的打本端口，表外的直连 ComfyUI", async () => {
-    resetEnv();
-    const route = await import("../../web/studio/shim/route.js?own=1");
-    route.configure({ desktopRoutes: ["GET /neo_gallery/list", "POST /neo_gallery/delete"], comfyBase: "" });
-    assert.equal(route.resolve("/neo_gallery/list"), "/neo_gallery/list", "未就绪时照旧打桌面端");
-    assert.equal(route.resolve("/neo_studio/director/generate", { method: "POST" }),
-                 "/neo_studio/director/generate", "未就绪时表外的也打桌面端，拿 409 走统一提示");
-
-    route.configure({ comfyBase: "http://127.0.0.1:8188" });
-    assert.equal(route.resolve("/neo_gallery/list"), "/neo_gallery/list", "桌面端能服务的留在本端口");
-    assert.equal(route.resolve("/neo_gallery/delete", { method: "post" }), "/neo_gallery/delete",
-                 "方法大小写要归一，POST 是桌面端能服务的写入口");
-    assert.equal(route.resolve("/neo_studio/director/generate", { method: "POST" }),
-                 "http://127.0.0.1:8188/neo_studio/director/generate");
-    assert.equal(route.resolve("/neo_gallery/thumbnail?f=a.png"),
-                 "http://127.0.0.1:8188/neo_gallery/thumbnail?f=a.png",
-                 "查询串不参与归属判定，也不能被丢掉");
-    assert.equal(route.resolve("http://other/x"), "http://other/x", "绝对 URL 不动");
-    assert.match(route.wsUrl(), /^ws:\/\/127\.0\.0\.1:8188\/ws$/, "事件流跟着直连目标走");
-
-    route.configure({ comfyBase: "" });
-    assert.match(route.wsUrl(), /^ws:\/\/test\.local\/ws$/, "翻回离线形态时事件流回到桌面端的桩");
-    assert.equal(route.resolve("/neo_studio/director/generate", { method: "POST" }),
-                 "/neo_studio/director/generate", "清空目标后表外的回到桌面端，409 门控恢复");
-});
-
 test("app shim：扩展收集与 setup、settings 持久化、toast 落 DOM", async () => {
     resetEnv();
     const setups = [];
@@ -264,8 +238,7 @@ test("刷新现场桥还没注入：顶栏状态位由桌面端服务的 comfy_s
     document.body.innerHTML = studioBody;
     mockRoute("/neo_studio/version", jsonResponse({
         success: true, plugin_version: "9.9.9", comfyui_version: "ComfyUI 未运行",
-        offline: true, starting: false, caps: {}, routes: ["GET /neo_gallery/list"],
-        comfy_base: "", recipes: [],
+        offline: true, starting: false, kernel_ready: false, caps: {}, recipes: [],
     }));
     mockComfyStateOnce({
         success: true, port: 8188, pid: 4321, mine: true, running: true, ready: false, starting: false,
@@ -288,8 +261,7 @@ test("桥在但结果送不回页面（窗口线程被拖动循环占住）：�
     document.body.innerHTML = studioBody;
     mockRoute("/neo_studio/version", jsonResponse({
         success: true, plugin_version: "9.9.9", comfyui_version: "ComfyUI 未运行",
-        offline: true, starting: false, caps: {}, routes: ["GET /neo_gallery/list"],
-        comfy_base: "", recipes: [],
+        offline: true, starting: false, kernel_ready: false, caps: {}, recipes: [],
     }));
     mockComfyStateOnce({
         success: true, port: 7791, pid: 7791, mine: true, running: true, ready: false, starting: false,
@@ -311,8 +283,7 @@ test("桌面端服务先回非 200 的空档：占位句撑着顶栏，服务答
     document.body.innerHTML = studioBody;
     mockRoute("/neo_studio/version", jsonResponse({
         success: true, plugin_version: "9.9.9", comfyui_version: "ComfyUI 未运行",
-        offline: true, starting: false, caps: {}, routes: ["GET /neo_gallery/list"],
-        comfy_base: "", recipes: [],
+        offline: true, starting: false, kernel_ready: false, caps: {}, recipes: [],
     }));
     let asks = 0;
     mockRoute("/neo_studio/comfy_state", () => (++asks <= 2
@@ -334,8 +305,7 @@ test("origin 不答 comfy_state：连错三发停问，离线页在浏览器标�
     document.body.innerHTML = studioBody;
     mockRoute("/neo_studio/version", jsonResponse({
         success: true, plugin_version: "9.9.9", comfyui_version: "ComfyUI 未运行",
-        offline: true, starting: false, caps: {}, routes: ["GET /neo_gallery/list"],
-        comfy_base: "", recipes: [],
+        offline: true, starting: false, kernel_ready: false, caps: {}, recipes: [],
     }));
     let asks = 0;
     mockRoute("/neo_studio/comfy_state", () => (++asks, jsonResponse({ success: false }, 404)));

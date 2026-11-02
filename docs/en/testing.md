@@ -56,9 +56,10 @@ never touch the real data under `Neo-Studio/data/` or the plugin directory.
   and killing fails silently), `comfy_start()` (waits for the old process to exit before `start_comfy`),
   `pid_alive()`, and window close saving geometry only. The window-first startup sequence: opening the window only
   unpacks and creates it (splash page / setup page) while the self-check, the desktop-side service and the ComfyUI
-  launch run to completion on a background thread, landing on the full Studio, the offline asset page, or staying
-  on the splash page; tests run the background thread synchronously (`_SyncThread`) so the landing point can be
-  asserted. Closing the window exactly during a launch (`desktop.closing` gate): the instance that just started is
+  launch run to completion on a background thread, landing on the one Studio page served on the desktop port -
+  readiness flips in place inside the same snapshot; tests run the background thread synchronously (`_SyncThread`)
+  so the landing point can be asserted. Closing the window exactly during a launch (`desktop.closing` gate): the
+  instance that just started is
   reaped immediately, so the desktop leaves no orphan ComfyUI.
 - Startup settings (`launcher_api` / `launcher_config.json`): when the plugin directory is not writable the state
   directory falls back to `%APPDATA%/NeoStudio`; the five `startup_state()` states (ready / invalid root / python

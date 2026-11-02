@@ -2,10 +2,25 @@
 """Neo Studio 桌面端服务的能力边界：哪些插件接口不依赖 ComfyUI 运行时。
 
 桌面端进程里没有 PromptServer / nodes / comfy，只有 folder_paths 与文件系统。路由模块把 handler
-挂在各自的 RouteTableDef 上，桌面端按这张表挂载，表外的一律 409 offline，前端据此门控。
-判定标准是「这条路由只做文件读写 / 本地检索 / 远程下载」：需要执行队列、显存、节点定义的
-都归 ComfyUI，宁可少给离线能力，也不给前端假成功。
+挂在各自的 RouteTableDef 上，桌面端按这张表挂载，表外的路径由 forwardable() 决定去留：清单内的转给
+内核（内核不在时 409 offline），清单外是桌面端没有这条接口（404）。判定标准是「这条路由只做文件读写
+/ 本地检索 / 远程下载」：需要执行队列、显存、节点定义的都归 ComfyUI，宁可少给离线能力，也不给前端假成功。
 """
+
+# 表外的路径里允许转发给内核的那一撮：按首段点名，桌面端口不是一台谁都能打的转发器。
+# 插件族按前缀收（neo_/rs_ 两族 + ComfyUI 的 /api 别名），ComfyUI 自己的路由逐族点名 ——
+# 页面要跑的只有这些：生成 / 队列 / 历史 / 取消 / 出图与取图 / 上传 / 节点定义 / 事件流 /
+# 前端设置与主题。/extensions 不在这里：插件 JS 由桌面端自己那份挂载（DESKTOP_ROUTES）。
+FORWARD_PREFIXES = ("/neo_", "/rs_", "/api/")
+FORWARD_SEGMENTS = frozenset({
+    "prompt", "queue", "history", "free", "interrupt", "interrupt-all", "view", "view_image",
+    "view_metadata", "folder_info", "upload", "userdata", "models", "object_info",
+    "node_def_info", "ws", "internal", "settings", "themes", "workflow", "i18n", "version",
+    "docs", "profiler", "audio", "video", "embeddings", "modelmetadata", "runs", "assets",
+    "asset", "validation", "validate_prompt",
+    # 队列面板的显存条读桌面端自己的 /neo_studio/mem_stats，内存那一格只有内核这条给得出
+    "system_stats",
+})
 
 # 素材库：浏览 + 写入（删除 / 上传 txt / 清缩略图 / 拷进 input / 目录封面 / 设置）
 _GALLERY = {
@@ -256,14 +271,25 @@ def owner(method: str, path: str) -> str:
     return "desktop" if (method.upper(), path) in DESKTOP_ROUTES else "comfy"
 
 
-def features() -> dict:
-    """当前进程（桌面端）的功能可用性表，随 /neo_studio/version 下发给前端。"""
-    return {name: owner(method, path) == "desktop" for name, (method, path) in FEATURE_ROUTES.items()}
+def forwardable(method: str, path: str) -> bool:
+    """这条请求归谁：桌面端表内自服，表外只有这份清单进内核，其余桌面端没有这条接口。
+
+    前缀按整条路径比（"/neo_" 认不出剥掉头斜杠的 "neo_gallery"，插件族就全成 404 了）。"""
+    if owner(method, path) == "desktop":
+        return False
+    first = path.strip("/").split("/")[0]
+    return path.startswith(FORWARD_PREFIXES) or first in FORWARD_SEGMENTS
 
 
-def route_list() -> list:
-    """DESKTOP_ROUTES 压成 ["GET /neo_gallery/list", ...]，随版本快照下发。
+def features(kernel_ready: bool) -> dict:
+    """功能可用性表，随 /neo_studio/version 下发给前端。
 
-    页面钉在桌面端端口后，comfy 归属的请求由页面自己直连 ComfyUI（app/studio_app.py 的
-    comfy_cors）；前端拿这份表判定归属，表就是这张表，不在前端另立第二份清单。"""
-    return [f"{method} {path}" for method, path in sorted(DESKTOP_ROUTES)]
+    创作面恒可用（桌面端自服）；生成面跟着内核就绪翻面 —— 页面钉在桌面端端口上，
+    就绪前后是同一个地址，翻面只换能力表与事件流目标（app/studio_server.py 的代理）。"""
+    return {name: (name not in KERNEL_FEATURES or kernel_ready)
+            for name in FEATURE_ROUTES}
+
+
+# 要内核的那一撮功能名：FEATURE_ROUTES 里代表路由不在桌面端表内的，从表算，不另立清单
+KERNEL_FEATURES = frozenset(name for name, (method, path) in FEATURE_ROUTES.items()
+                            if (method, path) not in DESKTOP_ROUTES)

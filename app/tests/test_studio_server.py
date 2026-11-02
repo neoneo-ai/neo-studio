@@ -166,23 +166,30 @@ class OfflineServiceTests(_ServerCase):
         data = json.loads(self.get("/neo_studio/version")[1])
         self.assertFalse(data["starting"], "没在拉起时不报启动中")
 
-    def test_version_carries_the_route_ownership_table(self):
-        # 页面钉在桌面端口后由前端判定归属：表由桌面端下发，前端不另立第二份清单
+    def test_version_carries_the_capability_table(self):
+        # 页面钉在桌面端口后由这份能力表门控：表整张由桌面端下发，前端不另立第二份清单
         data = json.loads(self.get("/neo_studio/version")[1])
-        self.assertIn("GET /neo_gallery/list", data["routes"], "桌面端能服务的要列出来")
-        self.assertNotIn("POST /neo_studio/director/generate", data["routes"],
-                         "要执行队列的归 ComfyUI，页面直连过去")
-        self.assertNotIn("POST /neo_video_gen/simple", data["routes"],
-                         "简单视频生成要执行队列，页面直连 ComfyUI")
+        self.assertEqual(set(data["caps"]), set(caps.FEATURE_ROUTES), "能力表整张下发")
+        self.assertFalse(data["caps"]["director"], "要执行队列的归内核，离线时这一位是关的")
+        self.assertTrue(data["caps"]["grid_split"], "纯文件功能离线可用")
+        self.assertNotIn("routes", data, "桌面端不再下发逐条路由清单")
 
-    def test_version_carries_the_direct_target_only_when_desktop_reports_it(self):
-        # 空 = 这路 ComfyUI 不认桌面端 origin（未就绪 / 附着 / 远程），页面留在离线形态
+    def test_version_carries_the_kernel_target_only_when_desktop_reports_it(self):
+        # 空 = 这一轮没有内核：页面停在离线形态，主画布那一发也不报落点
         data = json.loads(self.get("/neo_studio/version")[1])
-        self.assertEqual(data["comfy_base"], "")
-        self.app["flags"]["comfy_base"] = "http://127.0.0.1:8188"
-        data = json.loads(self.get("/neo_studio/version")[1])
-        self.assertEqual(data["comfy_base"], "http://127.0.0.1:8188", "页面靠它把生成类请求原地切过去")
-        self.app["flags"]["comfy_base"] = ""
+        self.assertEqual((data["kernel_ready"], data["kernel_port"], data["kernel_origin"]),
+                         (False, 0, ""))
+        self.app["flags"].update({"kernel_base": "http://127.0.0.1:8188", "kernel_port": 8188,
+                                  "kernel_origin": "http://192.168.0.9:8188"})
+        try:
+            data = json.loads(self.get("/neo_studio/version")[1])
+            self.assertTrue(data["kernel_ready"], "代理目标就位后快照翻面")
+            self.assertTrue(data["caps"]["image_gen"], "生成面随就绪打开")
+            self.assertEqual((data["kernel_port"], data["kernel_origin"]),
+                             (8188, "http://192.168.0.9:8188"), "画布链接认这两位")
+        finally:
+            for key in ("kernel_base", "kernel_port", "kernel_origin"):
+                self.app["flags"].pop(key, None)
 
     def test_version_carries_the_paths_for_the_about_page(self):
         # 「设置 → 关于」的路径行：数据根与 ComfyUI 根由 build_app 存进 app，远程地址读启动设置快照
@@ -244,15 +251,14 @@ class OfflineServiceTests(_ServerCase):
 
     def test_gallery_sidecar_txt_route_served_offline(self):
         """云端预设的提示词全文要在桌面端可读：索引里的 txt_content 只有 500 字预览。"""
-        data = json.loads(self.get("/neo_studio/version")[1])
-        self.assertIn("GET /neo_gallery/txt", data["routes"])
+        self.assertEqual(caps.owner("GET", "/neo_gallery/txt"), "desktop")
         self.assertEqual(self.get("/neo_gallery/txt?filename=&subfolder=")[0], 400)
 
     def test_prompt_names_served_offline(self):
         """@ 点名弹层的图像/视频提示词候选要离线出得来：只读 prompts/ 目录的名字与标签，
         生成侧那条 list_prompts 带 mtime 与正文解析，不在桌面端的能力表里。"""
-        data = json.loads(self.get("/neo_studio/version")[1])
-        self.assertIn("POST /rs_prompts/list_prompt_names", data["routes"])
+        self.assertEqual(caps.owner("POST", "/rs_prompts/list_prompt_names"), "desktop")
+        self.assertEqual(caps.owner("POST", "/rs_prompts/list_prompts"), "comfy")
         status, body = self.post_json("/rs_prompts/list_prompt_names", {})
         self.assertEqual(status, 200)
         rows = json.loads(body)
@@ -267,10 +273,10 @@ class OfflineServiceTests(_ServerCase):
     def test_agent_session_history_served_offline(self):
         """历史会话是数据根 agent_sessions/ 里的文件：列 / 读 / 删在桌面端就能做完，
         右栏空态的最近列表不该等 ComfyUI 起来才铺得出来。"""
-        data = json.loads(self.get("/neo_studio/version")[1])
         for route in ("GET /neo_agent/sessions", "GET /neo_agent/session",
                       "POST /neo_agent/session/delete", "POST /neo_agent/session/delete_all"):
-            self.assertIn(route, data["routes"])
+            method, path = route.split(" ", 1)
+            self.assertEqual(caps.owner(method, path), "desktop")
         agent = sys.modules[f"{ns.DESKTOP_PKG}.agent"]
         run_id = "a" * 32
         session = agent.AGENT_SESSIONS_DIR / f"20260101-000000-{run_id}.json"
@@ -295,8 +301,7 @@ class OfflineServiceTests(_ServerCase):
 
     def test_backyard_upload_plan_served_offline(self):
         """上传页打开就列待上传目录，这份清单在桌面端窗口里也要出得来。"""
-        data = json.loads(self.get("/neo_studio/version")[1])
-        self.assertIn("GET /neo_backyard/upload_plan", data["routes"])
+        self.assertEqual(caps.owner("GET", "/neo_backyard/upload_plan"), "desktop")
         self.assertEqual(self.get("/neo_backyard/upload_plan")[0], 400)
         dist = Path(tempfile.mkdtemp(prefix="neo_backyard_plan_", dir=str(self.tmpdir)))
         (dist / "仙侠玄幻人物").mkdir()
@@ -550,14 +555,10 @@ class DesktopModuleTests(_RealFolderPaths):
         self.assertFalse(caps.DESKTOP_ROUTES - registered,
                          f"能力清单里的桌面端路由在模块里不存在: {sorted(caps.DESKTOP_ROUTES - registered)}")
 
-    def test_route_list_is_the_manifest_in_wire_form(self):
-        # 下发给页面的归属表就是这张表，不在前端另立第二份
-        self.assertEqual(set(caps.route_list()),
-                         {f"{method} {path}" for method, path in caps.DESKTOP_ROUTES})
-
     def test_desktop_app_mounts_exactly_the_manifest(self):
         app = ns.build_app(COMFY_ROOT, PLUGIN_DIR)
         desktop_pages = {("GET", "/neo-studio"), ("GET", "/neo_studio/version"),
+                       ("GET", ns.KERNEL_VERSION_PATH),
                        ("GET", "/neo_studio/comfy_state"),
                        ("GET", "/neo_studio/log"), ("GET", "/neo_studio/launcher"),
                        ("POST", "/neo_studio/launcher")}
@@ -664,12 +665,12 @@ class McpRouteTests(_ServerCase):
         self.assertEqual(json.loads(self.get("/neo_mcp/tools")[1])["connected"], [])
 
     def test_mcp_routes_are_listed_in_the_ownership_table(self):
-        data = json.loads(self.get("/neo_studio/version")[1])
-        self.assertIn("GET /neo_mcp/servers", data["routes"])
-        self.assertIn("POST /neo_mcp/tools/call", data["routes"])
-        self.assertTrue(data["caps"]["mcp"], "MCP 只有桌面端能服务，页面据此门控")
+        for method, path in (("GET", "/neo_mcp/servers"), ("POST", "/neo_mcp/tools/call")):
+            self.assertEqual(caps.owner(method, path), "desktop")
+        self.assertTrue(json.loads(self.get("/neo_studio/version")[1])["caps"]["mcp"],
+                        "MCP 只有桌面端能服务，页面据此门控")
 
-    # 局域网监听 / 附着那路的页面在 ComfyUI 端口上：MCP 族跨源打回桌面端口，浏览器要这份响应头
+    # 页面钉在桌面端口上：MCP 族同源，这一族从不回 CORS 头
     def full(self, path, method=None, headers=None):
         req = urllib.request.Request(f"http://127.0.0.1:{self.port}{path}", method=method,
                                      headers=headers or {})
@@ -679,34 +680,14 @@ class McpRouteTests(_ServerCase):
         except urllib.error.HTTPError as exc:
             return exc.code, {k.lower(): v for k, v in exc.headers.items()}
 
-    def test_mcp_answers_cross_origin_from_a_loopback_page(self):
-        status, headers = self.full("/neo_mcp/servers", headers={"Origin": "http://127.0.0.1:8188"})
-        self.assertEqual(status, 200)
-        self.assertEqual(headers.get("access-control-allow-origin"), "http://127.0.0.1:8188")
-
-    def test_mcp_preflight_allows_the_json_post(self):
-        status, headers = self.full("/neo_mcp/tools/call", method="OPTIONS", headers={
-            "Origin": "http://127.0.0.1:8188", "Access-Control-Request-Method": "POST",
-            "Access-Control-Request-Headers": "content-type"})
-        self.assertEqual(status, 204)
-        self.assertEqual(headers.get("access-control-allow-origin"), "http://127.0.0.1:8188")
-        self.assertEqual(headers.get("access-control-allow-headers"), "Content-Type")
-
-    def test_mcp_refuses_a_page_from_outside_the_machine(self):
-        # 外部站点把域名解析到回环（DNS 重绑）也拿不到 MCP 子进程：不回过源头，预检直接 403
-        status, headers = self.full("/neo_mcp/servers", headers={"Origin": "http://evil.example"})
-        self.assertEqual(status, 200, "响应照发，浏览器按缺响应头自己拦")
-        self.assertNotIn("access-control-allow-origin", headers)
-        status, headers = self.full("/neo_mcp/connect", method="OPTIONS",
-                                    headers={"Origin": "http://evil.example"})
-        self.assertEqual(status, 403)
-        self.assertNotIn("access-control-allow-origin", headers)
-
-    def test_mcp_keeps_working_without_an_origin(self):
-        # 本机脚本 / 单测不带 Origin：与以前一样拿注册表，响应里不掺 CORS 头
-        status, headers = self.full("/neo_mcp/servers")
-        self.assertEqual(status, 200)
-        self.assertNotIn("access-control-allow-origin", headers)
+    def test_mcp_answers_with_no_cors_header_at_all(self):
+        """跨源页面（含 DNS 重绑到回环的外站）读不到 MCP：没有响应头，浏览器自己拦。
+        本机页面与本机脚本照旧拿注册表，响应里也不掺 CORS 头。"""
+        for headers in ({}, {"Origin": "http://127.0.0.1:8188"}, {"Origin": "http://evil.example"}):
+            for method in ("GET", "OPTIONS"):
+                status, got = self.full("/neo_mcp/servers", method=method, headers=headers)
+                self.assertNotIn("access-control-allow-origin", got, f"{method} {headers}")
+        self.assertEqual(self.full("/neo_mcp/servers")[0], 200)
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -1063,10 +1044,8 @@ class MobilePairServiceTests(_RealFolderPaths):
         self.launcher["listen"] = "192.168.0.165"
 
     def test_pair_routes_are_listed_as_desktop_owned(self):
-        data = json.loads(self.get_host("/neo_studio/version", "127.0.0.1:43130")[1])
-        self.assertIn("GET /neo-studio/pair", data["routes"])
-        self.assertIn("GET /neo-studio/pair/check", data["routes"])
-        self.assertIn("GET /neo-studio/pair/info", data["routes"])
+        for path in (pair.PAIR_PATH, pair.PAIR_CHECK_PATH, pair.PAIR_INFO_PATH):
+            self.assertEqual(caps.owner("GET", path), "desktop")
 
 
 class LanSurfaceTests(unittest.TestCase):
@@ -1171,6 +1150,163 @@ class LanSurfaceMiddlewareTest(unittest.TestCase):
         self.assertEqual(json.loads(body)["marker"], "handler")
 
 
+
+
+def _kernel_heads(request):
+    """内核这侧收到的头：桌面端转手要让它认得出「本机脚本」—— Host 与目标一致、不带页面的 Origin/Referer，
+    ComfyUI 的 origin_only 中间件比的就是这两样。"""
+    return {"host": request.headers.get("Host", ""),
+            "origin": request.headers.get("Origin", ""),
+            "referer": request.headers.get("Referer", "")}
+
+
+def _build_fake_kernel():
+    """顶替 ComfyUI 的最小内核：桌面端代理要的这几条接口 + 把收到的头回给用例。"""
+    from aiohttp import web
+
+    async def queue(request):
+        return web.json_response({"running": [], "seen": _kernel_heads(request)})
+
+    async def queue_delete(request):
+        return web.json_response({"deleted": request.match_info["queue_id"]})
+
+    async def version(request):
+        return web.json_response({"plugin": "Neo Studio", "comfyui_version": "kernel-0.3.60"})
+
+    async def prompt(request):
+        return web.json_response({"received": json.loads(await request.read()),
+                                  "seen": _kernel_heads(request)})
+
+    async def system_stats(request):
+        return web.json_response({"system": {"ram_total": 34359738368, "ram_used": 12884901888},
+                                  "seen": _kernel_heads(request)})
+
+    async def events(request):
+        sock = web.WebSocketResponse()
+        await sock.prepare(request)
+        await sock.send_str(json.dumps({"type": "kernel-hello"}))
+        async for _ in sock:
+            pass
+        return sock
+
+    app = web.Application()
+    app.router.add_get("/queue", queue)
+    app.router.add_delete("/queue/{queue_id}", queue_delete)
+    app.router.add_get("/neo_studio/version", version)
+    app.router.add_post("/prompt", prompt)
+    app.router.add_get("/system_stats", system_stats)
+    app.router.add_get("/ws", events)
+    return app
+
+
+class ProxyForwardTests(_RealFolderPaths):
+    """页面钉在桌面端口上：队列、事件流与内核那份版本快照都由桌面端转一手（proxy_forward / studio_ws /
+    kernel_version）。就绪与否由 flags["kernel_base"] 一位决定，代理目标清空就是离线形态。"""
+
+    KERNEL_PORT = 8391
+    DESKTOP_PORT = 8392
+
+    @classmethod
+    def setUpClass(cls):
+        cls._pin_real()
+        cls.flags = {"starting": False, "kernel_base": f"http://127.0.0.1:{cls.KERNEL_PORT}"}
+        cls.kernel = ns.DesktopServer(_build_fake_kernel, cls.KERNEL_PORT)
+        assert cls.kernel.start(), f"顶替内核的服务没起来：{cls.kernel.error}"
+        cls.app = ns.build_app(COMFY_ROOT, PLUGIN_DIR, cls.flags)
+        cls.app["userdata"] = Path(tempfile.mkdtemp(prefix="neo_studio_proxy_")) / "neo_gallery_data.json"
+        cls.desktop = ns.DesktopServer(lambda: cls.app, cls.DESKTOP_PORT)
+        cls.port = cls.desktop.start()
+        assert cls.port, f"桌面端服务没起来：{cls.desktop.error}"
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.desktop.stop()
+        cls.kernel.stop()
+        cls._restore_stubs()
+
+    def get(self, path, data=None, method=None):
+        # 带页面的 Origin/Referer 打桌面端口：代理必须把它们剥掉，内核的 origin_only 才不被触发
+        return _request(self.port, path, data=data, method=method,
+                        headers={"Origin": f"http://127.0.0.1:{self.DESKTOP_PORT}",
+                                 "Referer": f"http://127.0.0.1:{self.DESKTOP_PORT}/"})
+
+    def _no_kernel(self, body):
+        """把代理目标清空跑一段（停内核的形态），跑完照原样接回去。"""
+        self.flags["kernel_base"] = ""
+        try:
+            return body()
+        finally:
+            self.flags["kernel_base"] = f"http://127.0.0.1:{self.KERNEL_PORT}"
+
+    def test_queue_forward_strips_the_page_identity(self):
+        status, body = self.get("/queue")
+        data = json.loads(body)
+        self.assertEqual(status, 200)
+        self.assertEqual(data["seen"]["host"], f"127.0.0.1:{self.KERNEL_PORT}",
+                         "Host 要改写成内核地址，内核才认得出本机脚本")
+        self.assertEqual((data["seen"]["origin"], data["seen"]["referer"]), ("", ""),
+                         "页面的身份头不许进内核")
+
+    def test_delete_method_reaches_the_kernel(self):
+        # 队列面板的「移出」是 DELETE：catch-all 收全方法，桌面端口上不出现 405
+        status, body = self.get("/queue/7", method="DELETE")
+        self.assertEqual((status, json.loads(body)["deleted"]), (200, "7"))
+
+
+    def test_post_body_streams_through(self):
+        payload = json.dumps({"prompt": {"1": {"class_type": "Foo"}}}).encode()
+        status, body = self.get("/prompt", data=payload)
+        data = json.loads(body)
+        self.assertEqual(status, 200)
+        self.assertEqual(data["received"]["prompt"]["1"]["class_type"], "Foo")
+
+    def test_kernel_version_is_the_kernels_copy(self):
+        proxied = json.loads(self.get("/neo_studio/kernel_version")[1])
+        self.assertEqual(proxied["comfyui_version"], "kernel-0.3.60",
+                         "设置页要的 ComfyUI 版本只有内核知道")
+        own = json.loads(self.get("/neo_studio/version")[1])
+        self.assertEqual(own["comfyui_version"], ns.OFFLINE_ERROR, "桌面端这份自己答，不自我转发")
+        self.assertTrue(own["kernel_ready"] and own["caps"]["image_gen"], "就绪的落点与生成面都在这份里")
+
+    def test_system_stats_reaches_the_queue_panel(self):
+        # 队列面板上「内存」那一格只有内核这条给得出：不在清单里时它是 404，格子里留着「--」，
+        # 页面还跟着离线提示弹一条「需要 ComfyUI」
+        status, body = self.get("/system_stats")
+        data = json.loads(body)
+        self.assertEqual((status, data["system"]["ram_total"] > 0), (200, True))
+        self.assertNotIn("offline", data, "内核在跑时这条不许答成离线")
+
+    def test_forward_answers_offline_when_the_kernel_is_gone(self):
+        status, body = self._no_kernel(lambda: self.get("/queue"))
+        self.assertEqual(status, 409)
+        self.assertFalse(json.loads(body)["success"])
+        self.assertTrue(json.loads(body)["offline"], "代理目标清空就是离线形态")
+
+    def test_route_outside_the_forward_list_is_not_a_desktop_route(self):
+        # 清单外是「桌面端没有这条接口」：内核在跑时它不能带 offline，否则出图成功的页面会翻成离线提示
+        status, body = self.get("/neo-studio/nope")
+        self.assertEqual(status, 404)
+        self.assertNotIn("offline", json.loads(body))
+
+    async def _ws_page_read(self, read):
+        async with aiohttp.ClientSession() as session:
+            async with session.ws_connect(f"http://127.0.0.1:{self.port}/ws", timeout=10) as page:
+                return await read(page)
+
+    def test_ws_tunnel_relays_the_kernel_stream(self):
+        async def first(page):
+            return await page.receive(timeout=15)
+
+        msg = asyncio.run(self._ws_page_read(first))
+        self.assertEqual(msg.type, aiohttp.WSMsgType.TEXT)
+        self.assertEqual(json.loads(msg.data)["type"], "kernel-hello", "内核的事件流要搬到页面这一侧")
+
+    def test_ws_is_accepted_without_a_kernel(self):
+        async def open_state(page):
+            return not page.closed
+
+        opened = self._no_kernel(lambda: asyncio.run(self._ws_page_read(open_state)))
+        self.assertTrue(opened, "离线时 /ws 也接得住：不接的话离线页每 2 秒刷一次连接错误")
 
 
 if __name__ == "__main__":

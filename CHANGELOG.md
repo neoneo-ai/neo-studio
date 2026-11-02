@@ -4,6 +4,23 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **The desktop window never leaves the page you are on.** The Studio page now stays on the desktop port for the whole
+  session: when ComfyUI gets ready the same page turns online in place — the capability table flips, the header queue
+  entry and the VRAM readout appear, generation and the event stream reach the kernel through the desktop's own proxy —
+  and stopping the kernel turns the same page back offline. Nothing navigates, so the tab you are on, the director
+  script you were editing and the settings form you were filling all survive. 局域网监听, a ComfyUI you started
+  yourself and a remote kernel behave the same: no full-page jump, no tab pulled back to 首页 twenty seconds after
+  launch. The 「⤒ 主画布编辑」 entry opens ComfyUI's own page (a local kernel on this machine's address with the
+  kernel port, a remote kernel on the address in 启动设置), since the canvas only exists there. Covered by
+  `test_start_ready_flags_the_kernel_without_navigating`,
+  `test_state_poll_flags_a_kernel_that_gets_ready_after_the_budget` and
+  `test_attach_path_flags_the_kernel_without_a_page_jump` in `app/tests/test_studio_desktop.py`, the proxy / `409` gate
+  / `/ws` relay cases in `app/tests/test_studio_server.py`, and `studio/tests/js/studio-flip.test.mjs`.
+  The desktop answers `404` for a path it has no route for; `409 {"offline": true}` — the page's offline signal — comes
+  only from a route that belongs to the kernel when no kernel is up, so a generated image no longer arrives together with
+  a "This feature needs ComfyUI" prompt. The queue panel's 内存 readout reads the kernel's `/system_stats`, which is now
+  in the forward list.
+
 - **The tag chips count the whole library.** The 图片 / 视频 / 音频 / 角色图 / 姿势图 / 帧图 / 分镜图 counts cover every
   configured directory. Hiding a card on the home page only hides it there: with Output hidden the 视频, 姿势图, 帧图 and
   分镜图 chips stay lit, and a custom directory you hid keeps feeding its counts. A Cloud Presets directory lights the chips

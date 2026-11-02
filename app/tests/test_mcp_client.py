@@ -463,7 +463,8 @@ class CommandAndCapabilityTests(unittest.TestCase):
             self.assertEqual(caps.owner(method, path), "desktop", f"{method} {path}")
 
     def test_mcp_feature_flag_is_on_for_the_desktop_process(self):
-        self.assertTrue(caps.features()["mcp"])
+        # stdio 子进程只活在桌面端进程里：内核没起来这一位也是可用的
+        self.assertTrue(caps.features(False)["mcp"])
 
     def test_registry_lands_in_the_data_root_configs(self):
         import studio_server as ns

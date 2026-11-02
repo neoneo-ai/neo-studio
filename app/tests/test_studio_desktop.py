@@ -23,6 +23,7 @@ sys.path.insert(0, str(_APP_DIR))
 import studio_app as app
 
 WINDOWS_ONLY = unittest.skipUnless(app.IS_WINDOWS, "Windows-only desktop behavior")
+POSIX_ONLY = unittest.skipIf(app.IS_WINDOWS, "POSIX-only process behavior")
 
 
 class FrozenPathTests(unittest.TestCase):
@@ -196,28 +197,6 @@ class ProbeTests(unittest.TestCase):
                           "--port", "8188", "--listen", "127.0.0.1,192.168.0.7"])
         popen.call_args.kwargs["stdout"].close()
 
-    def test_start_comfy_argv_with_cors(self):
-        # 页面钉在桌面端口上直连 8188：不给 --enable-cors-header，ComfyUI 的 origin_only 直接 403
-        with patch.object(app.subprocess, "Popen") as popen, patch.object(app, "assign_comfy_job"):
-            app.start_comfy(pathlib.Path("D:/python/python.exe"), pathlib.Path("D:/ComfyUI"), 8188,
-                            cors="http://127.0.0.1:8191")
-        self.assertEqual(popen.call_args[0][0],
-                         [str(pathlib.Path("D:/python/python.exe")), str(pathlib.Path("D:/ComfyUI") / "main.py"),
-                          "--port", "8188", "--enable-cors-header", "http://127.0.0.1:8191"])
-        popen.call_args.kwargs["stdout"].close()
-
-
-class ComfyCorsTests(unittest.TestCase):
-    def test_loopback_desktop_page_gets_the_origin(self):
-        self.assertEqual(app.comfy_cors("", "", 8191), "http://127.0.0.1:8191")
-
-    def test_lan_listen_remote_and_missing_service_get_nothing(self):
-        # 暴露到网卡的实例与远端机器上的实例不在 origin_only 上让位；桌面服务没起来时直连也没有目标
-        self.assertEqual(app.comfy_cors("127.0.0.1,192.168.0.7", "", 8191), "")
-        self.assertEqual(app.comfy_cors("", "http://192.168.0.9:8188", 8191), "")
-        self.assertEqual(app.comfy_cors("", "", 0), "")
-
-
 class FreeComfyPortTests(unittest.TestCase):
     def test_requested_port_when_free(self):
         with patch.object(app, "port_busy", lambda port: False):
@@ -250,16 +229,19 @@ class PortOwnerTests(unittest.TestCase):
         with patch.object(app.subprocess, "run", lambda *a, **k: SimpleNamespace(stdout=self.NETSTAT)):
             self.assertEqual(app.port_owner(8187), 0)
 
+    @POSIX_ONLY
     def test_port_owner_posix_lsof(self):
         with patch.object(app.shutil, "which", lambda _: "lsof"), \
              patch.object(app.subprocess, "run", lambda *a, **k: SimpleNamespace(stdout="12345\n")):
             self.assertEqual(app.port_owner(8188), 12345)
 
+    @POSIX_ONLY
     def test_port_owner_posix_missing_is_zero(self):
         with patch.object(app.shutil, "which", lambda _: "lsof"), \
              patch.object(app.subprocess, "run", lambda *a, **k: SimpleNamespace(stdout="")):
             self.assertEqual(app.port_owner(8187), 0)
 
+    @POSIX_ONLY
     def test_port_owner_posix_without_lsof_is_zero(self):
         with patch.object(app.shutil, "which", lambda _: None), \
              patch.object(app.subprocess, "run", _no_local_path):
@@ -295,24 +277,28 @@ class PortOwnerTests(unittest.TestCase):
         with patch.object(app, "k32", dead):
             self.assertFalse(app.pid_alive(4321))
 
+    @POSIX_ONLY
     def test_kill_pid_posix_uses_sigkill(self):
         calls = []
         with patch.object(app.os, "kill", lambda pid, sig: calls.append((pid, sig))):
             self.assertTrue(app.kill_pid(4321))
         self.assertEqual(calls, [(4321, app.signal.SIGKILL)])
 
+    @POSIX_ONLY
     def test_kill_pid_posix_reports_failure_for_missing_pid(self):
         def boom(pid, sig):
             raise ProcessLookupError()
         with patch.object(app.os, "kill", boom):
             self.assertFalse(app.kill_pid(4321))
 
+    @POSIX_ONLY
     def test_pid_alive_posix_uses_signal_zero(self):
         calls = []
         with patch.object(app.os, "kill", lambda pid, sig: calls.append((pid, sig))):
             self.assertTrue(app.pid_alive(4321))
         self.assertEqual(calls, [(4321, 0)])
 
+    @POSIX_ONLY
     def test_pid_alive_posix_reports_dead_process(self):
         def boom(pid, sig):
             raise ProcessLookupError()
@@ -495,7 +481,7 @@ class GuidePageTests(unittest.TestCase):
         self.assertIn("D:/python/python.exe", html)
 
     def test_check_setup_needs_main_py_and_a_real_file(self):
-        desktop = app.StudioDesktop("", None, 8188, pathlib.Path("root"))
+        desktop = app.StudioDesktop(None, 8188, pathlib.Path("root"))
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp) / "ComfyUI"
             root.mkdir()
@@ -511,7 +497,7 @@ class GuidePageTests(unittest.TestCase):
 
     def test_start_setup_refuses_without_the_desktop_service(self):
         """根目录补完了服务才装配得起来：服务起不来就不谈拉起，原因回给引导页显示。"""
-        desktop = app.StudioDesktop("", None, 8188, pathlib.Path("root"))
+        desktop = app.StudioDesktop(None, 8188, pathlib.Path("root"))
         desktop.ensure_server = lambda: False
         apply = MagicMock()
         with patch.object(desktop, "apply_launcher", apply):
@@ -522,7 +508,7 @@ class GuidePageTests(unittest.TestCase):
         self.assertEqual(desktop.launcher["root"], "D:/ComfyUI")
 
     def test_start_setup_applies_once_the_service_is_up(self):
-        desktop = app.StudioDesktop("", None, 8188, pathlib.Path("root"))
+        desktop = app.StudioDesktop(None, 8188, pathlib.Path("root"))
         desktop.ensure_server = lambda: True
         calls = []
         with patch.object(desktop, "apply_launcher",
@@ -816,7 +802,7 @@ class StudioDesktopTests(unittest.TestCase):
     def test_copy_keys_open_the_webview_accelerators(self):
         """Ctrl+C / Ctrl+V / Ctrl+A 要在生产窗口里活着：pywebview 把加速器键绑在 debug 上，
         非 dev 窗口建核后补开，划词复制才有原生出口（页面跑在非安全上下文，navigator.clipboard 不存在）"""
-        desktop = app.StudioDesktop("u", None, 8188, pathlib.Path("root"))
+        desktop = app.StudioDesktop(None, 8188, pathlib.Path("root"))
         settings = SimpleNamespace(AreBrowserAcceleratorKeysEnabled=False, AreDevToolsEnabled=False)
         desktop._window = SimpleNamespace(browser=SimpleNamespace(
             webview=SimpleNamespace(CoreWebView2=SimpleNamespace(Settings=settings))))
@@ -827,7 +813,7 @@ class StudioDesktopTests(unittest.TestCase):
     def test_copy_keys_degrades_when_the_webview_controls_are_gone(self):
         """pywebview 内部结构换了形状：显示处理器不能抛在事件里，留一行日志，复制只剩页内图标钮一条路"""
         logs = []
-        desktop = app.StudioDesktop("u", None, 8188, pathlib.Path("root"))
+        desktop = app.StudioDesktop(None, 8188, pathlib.Path("root"))
         desktop._window = SimpleNamespace(browser=SimpleNamespace())
         with patch.object(app, "log_line", lambda text: logs.append(text)):
             desktop.enable_copy_keys()
@@ -835,27 +821,27 @@ class StudioDesktopTests(unittest.TestCase):
         self.assertIn("accelerator keys skipped", logs[0])
 
     def test_copy_keys_before_the_window_exists_do_nothing(self):
-        desktop = app.StudioDesktop("u", None, 8188, pathlib.Path("root"))
+        desktop = app.StudioDesktop(None, 8188, pathlib.Path("root"))
         desktop._window = None
         desktop.enable_copy_keys()
 
-    def test_go_studio_loads_studio_url(self):
+    def test_go_studio_loads_the_desktop_page(self):
         loader = MagicMock()
         rearm = MagicMock()
         logs = []
-        desktop = app.StudioDesktop("http://127.0.0.1:8188/neo-studio", None, 8188, pathlib.Path("root"))
+        desktop = app.StudioDesktop(None, 8188, pathlib.Path("root"), desktop_port=8191)
         desktop.loader = loader
         desktop.rearm = rearm
         with patch.object(app, "log_line", lambda text: logs.append(text)):
             desktop.go_studio()
-        loader.assert_called_once_with("http://127.0.0.1:8188/neo-studio")
+        loader.assert_called_once_with("http://127.0.0.1:8191/neo-studio")
         rearm.assert_called_once_with()
-        self.assertEqual(logs, ["goto http://127.0.0.1:8188/neo-studio"], "每次整页跳转记一行")
+        self.assertEqual(logs, ["goto http://127.0.0.1:8191/neo-studio"], "每次导航记一行")
 
     def test_open_url_sends_http_links_to_the_system_browser(self):
         # 无边框窗口没有新标签可开：「设置 → 关于」的仓库链接交系统浏览器，窗口本身不动
         opened = []
-        desktop = app.StudioDesktop("u", None, 8188, pathlib.Path("root"))
+        desktop = app.StudioDesktop(None, 8188, pathlib.Path("root"))
         with patch.object(app.webbrowser, "open", lambda url: opened.append(url)), \
              patch.object(app, "log_line", lambda text: None):
             res = desktop.open_url("https://github.com/neoneo-ai/neo-studio")
@@ -865,7 +851,7 @@ class StudioDesktopTests(unittest.TestCase):
     def test_open_url_refuses_non_http_payloads(self):
         # 桥上的字符串来自页面：file:// 与裸路径落进本机就是执行入口，一律拒绝、一个都不打开
         opened = []
-        desktop = app.StudioDesktop("u", None, 8188, pathlib.Path("root"))
+        desktop = app.StudioDesktop(None, 8188, pathlib.Path("root"))
         with patch.object(app.webbrowser, "open", lambda url: opened.append(url)), \
              patch.object(app, "log_line", lambda text: None):
             for bad in ("file:///C:/Windows/System32/calc.exe", "javascript:alert(1)",
@@ -875,7 +861,7 @@ class StudioDesktopTests(unittest.TestCase):
 
     def test_web_log_is_flattened_for_grep(self):
         # 页面把未捕获错误折成一行报给桌面端：栈是多行的，落盘要一行一条才好 grep
-        desktop = app.StudioDesktop("u", None, 8188, pathlib.Path("root"))
+        desktop = app.StudioDesktop(None, 8188, pathlib.Path("root"))
         logs = []
         with patch.object(app, "log_line", lambda text: logs.append(text)):
             desktop.log("STARTUP FAILED TypeError: x\n    at route (studio-app.js:1)\n    at y")
@@ -898,7 +884,7 @@ class StudioDesktopTests(unittest.TestCase):
 
     def test_window_state_gates_the_custom_titlebar(self):
         # 无边框才出顶栏控件；最大化 / 全屏状态由桌面端自己记 —— pywebview 的 Window 属性是建窗初值
-        desktop = app.StudioDesktop("u", None, 8188, pathlib.Path("root"), launcher={"frameless": False})
+        desktop = app.StudioDesktop(None, 8188, pathlib.Path("root"), launcher={"frameless": False})
         desktop._window = _fake_window()
         self.assertEqual(desktop.window_state(), {"frameless": False, "maximized": False, "fullscreen": False})
         desktop.frameless = True
@@ -909,7 +895,7 @@ class StudioDesktopTests(unittest.TestCase):
     def test_win_maximize_fills_the_work_area_when_frameless(self):
         # 无边框下系统 maximize 给的是整屏矩形，任务栏会被盖住：铺工作区，再点一下还原回原矩形
         window = _fake_window()
-        desktop = app.StudioDesktop("u", None, 8188, pathlib.Path("root"), launcher={"frameless": True})
+        desktop = app.StudioDesktop(None, 8188, pathlib.Path("root"), launcher={"frameless": True})
         desktop._window = window
         pos = []
         u32 = SimpleNamespace(SetWindowPos=lambda h, a, x, y, w, ht, f: pos.append((x, y, w, ht)))
@@ -924,7 +910,7 @@ class StudioDesktopTests(unittest.TestCase):
 
     def test_win_maximize_uses_the_window_when_framed(self):
         window = _fake_window()
-        desktop = app.StudioDesktop("u", None, 8188, pathlib.Path("root"), launcher={"frameless": False})
+        desktop = app.StudioDesktop(None, 8188, pathlib.Path("root"), launcher={"frameless": False})
         desktop._window = window
         self.assertTrue(desktop.win_maximize()["maximized"])
         self.assertFalse(desktop.win_maximize()["maximized"])
@@ -934,7 +920,7 @@ class StudioDesktopTests(unittest.TestCase):
     def test_ensure_resizable_frame_only_touches_borderless(self):
         # pywebview 的 frameless 把可拖拽边框一起摘掉：窗口显示后补回 WS_THICKFRAME，有框那一路不动
         window = _fake_window()
-        desktop = app.StudioDesktop("u", None, 8188, pathlib.Path("root"), launcher={"frameless": True})
+        desktop = app.StudioDesktop(None, 8188, pathlib.Path("root"), launcher={"frameless": True})
         desktop._window = window
         frames = []
         with patch.object(app, "set_window_frame", lambda hwnd, on: frames.append(on)):
@@ -962,7 +948,7 @@ class StudioDesktopTests(unittest.TestCase):
     def test_win_fullscreen_reapplies_the_frame(self):
         # pywebview 退出全屏把 FormBorderStyle 写回建窗时的值，标题栏跟着回来：按桌面端自己那份状态重贴
         window = _fake_window()
-        desktop = app.StudioDesktop("u", None, 8188, pathlib.Path("root"), launcher={"frameless": True})
+        desktop = app.StudioDesktop(None, 8188, pathlib.Path("root"), launcher={"frameless": True})
         desktop._window = window
         frames = []
         with patch.object(app, "set_window_frame", lambda hwnd, on: frames.append(on)):
@@ -976,7 +962,7 @@ class StudioDesktopTests(unittest.TestCase):
         # HTCAPTION，或 WM_SYSCOMMAND·SC_MOUSEMOVE）在这套窗口上起不来，WinForms 的 Form 把非客户区
         # 按下自己吞了，拖动循环 0ms 返回、窗口纹丝不动
         window = _fake_window()
-        desktop = app.StudioDesktop("u", None, 8188, pathlib.Path("root"))
+        desktop = app.StudioDesktop(None, 8188, pathlib.Path("root"))
         desktop._window = window
         moves = []
         capture = []
@@ -997,7 +983,7 @@ class StudioDesktopTests(unittest.TestCase):
 
     def test_press_inside_the_drag_threshold_moves_nothing(self):
         # 最大化下单击顶栏不许还原窗口：按下没走出系统拖动阈值，窗口一动不动，最大化留着
-        desktop = app.StudioDesktop("u", None, 8188, pathlib.Path("root"), launcher={"frameless": True})
+        desktop = app.StudioDesktop(None, 8188, pathlib.Path("root"), launcher={"frameless": True})
         desktop._window = _fake_window()
         desktop.maximized = True
         moved, stopped, logs = [], [], []
@@ -1016,7 +1002,7 @@ class StudioDesktopTests(unittest.TestCase):
         self.assertIn("drag 0 steps", logs)
 
     def test_maximize_exits_once_the_drag_threshold_is_crossed(self):
-        desktop = app.StudioDesktop("u", None, 8188, pathlib.Path("root"), launcher={"frameless": True})
+        desktop = app.StudioDesktop(None, 8188, pathlib.Path("root"), launcher={"frameless": True})
         desktop._window = _fake_window()
         desktop.maximized = True
         moved, stopped = [], []
@@ -1036,7 +1022,7 @@ class StudioDesktopTests(unittest.TestCase):
         # 全屏 / 最大化时拖动先退出：整屏或整块工作区大小的窗口跟着光标跑，看着就像坏了；
         # pywebview 那边还会停在全屏态，再点全屏按钮窗口会跳回旧矩形
         for state in ("fullscreen", "maximized"):
-            desktop = app.StudioDesktop("u", None, 8188, pathlib.Path("root"), launcher={"frameless": True})
+            desktop = app.StudioDesktop(None, 8188, pathlib.Path("root"), launcher={"frameless": True})
             desktop._window = _fake_window()
             setattr(desktop, state, True)
             stopped = []
@@ -1054,7 +1040,7 @@ class StudioDesktopTests(unittest.TestCase):
 
     def test_win_start_drag_runs_on_the_window_thread(self):
         window = _fake_window()
-        desktop = app.StudioDesktop("u", None, 8188, pathlib.Path("root"))
+        desktop = app.StudioDesktop(None, 8188, pathlib.Path("root"))
         desktop._window = window
         invoked = []
         window.native.Invoke = lambda fn: invoked.append(fn) or fn()
@@ -1072,7 +1058,7 @@ class StudioDesktopTests(unittest.TestCase):
         # pywebview 注入 window.pywebview 前会递归遍历 js_api 的非下划线属性
         # （webview.util.inject_pywebview）。窗口对象露在明面上 = 把 WinForms 整张对象图喂进
         # 递归，pythonnet 每次属性访问都造新对象、id 去重失效， Bounds 链爆到递归上限，开机即卡死
-        desktop = app.StudioDesktop("u", None, 8188, pathlib.Path("root"))
+        desktop = app.StudioDesktop(None, 8188, pathlib.Path("root"))
         desktop._window = _fake_window()
         exposed = [n for n in dir(desktop) if not n.startswith("_")]
         self.assertNotIn("window", exposed)
@@ -1084,7 +1070,7 @@ class StudioDesktopTests(unittest.TestCase):
         # 关闭走 window.destroy()：pywebview 6 的 Window 没有 close()，调它就是 AttributeError。
         # 关窗收尾链（存几何、带走 ComfyUI）由 closing 事件驱动
         window = _fake_window()
-        desktop = app.StudioDesktop("u", None, 8188, pathlib.Path("root"))
+        desktop = app.StudioDesktop(None, 8188, pathlib.Path("root"))
         desktop._window = window
         desktop.win_close()
         window.destroy.assert_called_once()
@@ -1093,7 +1079,7 @@ class StudioDesktopTests(unittest.TestCase):
         # 启动中标记由桌面端服务与 js_api 共用同一份 dict：js_api 注入之前页面也能拿到
         flags = {"starting": False}
         comfy = SimpleNamespace(pid=1234, poll=lambda: None, terminate=MagicMock(), wait=MagicMock())
-        desktop = app.StudioDesktop("u", comfy, 8188, pathlib.Path("root"), "", "", 0, flags)
+        desktop = app.StudioDesktop(comfy, 8188, pathlib.Path("root"), "", "", 0, flags)
         self.assertTrue(flags["starting"], "桌面端拉起 ComfyUI 即置启动中")
         desktop.starting = False
         self.assertFalse(flags["starting"], "就绪后收掉启动中，桌面端服务同步")
@@ -1101,7 +1087,7 @@ class StudioDesktopTests(unittest.TestCase):
     def test_state_of_desktop_spawned_comfy(self):
         # 桌面端拉起的那路以端口探活为准：TerminateProcess 是异步的，进程还在收尾时端口已关
         comfy = SimpleNamespace(pid=1234, poll=lambda: None, terminate=MagicMock(), wait=MagicMock())
-        desktop = app.StudioDesktop("u", comfy, 8188, pathlib.Path("root"))
+        desktop = app.StudioDesktop(comfy, 8188, pathlib.Path("root"))
         with patch.object(app, "probe", lambda port, timeout=3.0: False):
             self.assertTrue(desktop.comfy_state()["starting"], "桌面端拉起且端口未就绪要报启动中")
         with patch.object(app, "probe", lambda port, timeout=3.0: True):
@@ -1115,7 +1101,7 @@ class StudioDesktopTests(unittest.TestCase):
     def test_state_of_external_comfy_by_port(self):
         # 外部启动的 ComfyUI 没有 Popen 句柄：按端口找 PID，缓存后只用 OpenProcess 复查
         runs = []
-        desktop = app.StudioDesktop("u", None, 8188, pathlib.Path("root"))
+        desktop = app.StudioDesktop(None, 8188, pathlib.Path("root"))
         with patch.object(app, "port_owner", lambda port: runs.append(port) or 4321), \
              patch.object(app, "pid_alive", lambda pid: True), \
              patch.object(app, "probe", lambda port, timeout=3.0: True):
@@ -1126,7 +1112,7 @@ class StudioDesktopTests(unittest.TestCase):
         self.assertEqual(runs, [8188], "缓存的 PID 还活着时不该重跑 netstat")
 
     def test_state_when_nothing_listens(self):
-        desktop = app.StudioDesktop("u", None, 8188, pathlib.Path("root"))
+        desktop = app.StudioDesktop(None, 8188, pathlib.Path("root"))
         with patch.object(app, "port_owner", lambda port: 0), \
              patch.object(app, "probe", lambda port, timeout=3.0: False):
             self.assertFalse(desktop.comfy_state()["running"])
@@ -1134,7 +1120,7 @@ class StudioDesktopTests(unittest.TestCase):
     def test_external_comfy_running_follows_the_probe_not_the_pid(self):
         # 顶栏胶囊与离线横幅必须读同一份就绪判据：端口上有 PID 只说明有人在监听，
         # 插件还在导入自定义节点时服务不认 —— 报「进程活着」就是胶囊「运行中」+ 横幅「未运行」
-        desktop = app.StudioDesktop("u", None, 8188, pathlib.Path("root"))
+        desktop = app.StudioDesktop(None, 8188, pathlib.Path("root"))
         with patch.object(app, "port_owner", lambda port: 4321), \
              patch.object(app, "pid_alive", lambda pid: True), \
              patch.object(app, "probe", lambda port, timeout=3.0: False):
@@ -1145,7 +1131,7 @@ class StudioDesktopTests(unittest.TestCase):
 
     def test_stop_terminates_desktop_comfy(self):
         comfy = SimpleNamespace(pid=1234, poll=lambda: None, terminate=MagicMock(), wait=MagicMock())
-        desktop = app.StudioDesktop("u", comfy, 8188, pathlib.Path("root"))
+        desktop = app.StudioDesktop(comfy, 8188, pathlib.Path("root"))
         with patch.object(app, "probe", lambda port, timeout=3.0: False), \
              patch.object(app, "port_owner", lambda port: 0):
             desktop.comfy_stop()
@@ -1155,7 +1141,7 @@ class StudioDesktopTests(unittest.TestCase):
         # 监听者未必是桌面端的 Popen：terminate 后按端口反复杀到没人监听
         kills, owners = [], iter([4321, 0])
         comfy = SimpleNamespace(pid=1234, poll=lambda: None, terminate=MagicMock(), wait=MagicMock())
-        desktop = app.StudioDesktop("u", comfy, 8188, pathlib.Path("root"))
+        desktop = app.StudioDesktop(comfy, 8188, pathlib.Path("root"))
         with patch.object(app, "probe", lambda port, timeout=3.0: False), \
              patch.object(app, "port_owner", lambda port: next(owners)), \
              patch.object(app, "pid_alive", lambda pid: True), \
@@ -1167,7 +1153,7 @@ class StudioDesktopTests(unittest.TestCase):
     def test_stop_reports_kill_without_permission(self):
         # OpenProcess 拿不到句柄（权限不足）：报失败并停下，不无限循环杀同一个 PID
         kills, owners, logs = [], iter([4321, 4321, 4321]), []
-        desktop = app.StudioDesktop("u", None, 8188, pathlib.Path("root"))
+        desktop = app.StudioDesktop(None, 8188, pathlib.Path("root"))
         with patch.object(app, "probe", lambda port, timeout=3.0: True), \
              patch.object(app, "port_owner", lambda port: next(owners)), \
              patch.object(app, "pid_alive", lambda pid: True), \
@@ -1175,13 +1161,13 @@ class StudioDesktopTests(unittest.TestCase):
              patch.object(app, "log_line", lambda text: logs.append(text)):
             desktop.comfy_stop()
         self.assertEqual(kills, [4321], "杀不动就不该反复重试")
-        self.assertIn("权限", logs[0])
+        self.assertIn("权限", "".join(logs), "报清是权限挡路，别让运维猜")
 
     def test_stop_skips_owner_that_is_already_exiting(self):
         # terminate 后 netstat 可能还列着正在收尾的进程：它已死，不该报「没有权限」
         kills, logs = [], []
         comfy = SimpleNamespace(pid=1234, poll=lambda: None, terminate=MagicMock(), wait=MagicMock())
-        desktop = app.StudioDesktop("u", comfy, 8188, pathlib.Path("root"))
+        desktop = app.StudioDesktop(comfy, 8188, pathlib.Path("root"))
         with patch.object(app, "probe", lambda port, timeout=3.0: False), \
              patch.object(app, "port_owner", lambda port: 4321), \
              patch.object(app, "pid_alive", lambda pid: False), \
@@ -1195,7 +1181,7 @@ class StudioDesktopTests(unittest.TestCase):
         # 关窗只认自己那份 PID：不扫端口，扫监听者会在关窗路上误杀抢端口的残留进程
         touched, flags = [], {"starting": True}
         comfy = SimpleNamespace(pid=1234, terminate=MagicMock(), wait=MagicMock())
-        desktop = app.StudioDesktop("u", comfy, 8188, pathlib.Path("root"), "", "", 0, flags)
+        desktop = app.StudioDesktop(comfy, 8188, pathlib.Path("root"), "", "", 0, flags)
         with patch.object(app, "port_owner", lambda port: touched.append(port) or 4321), \
              patch.object(app, "kill_pid", lambda pid: touched.append(pid) or True), \
              patch.object(app, "pid_alive", lambda pid: False), \
@@ -1211,7 +1197,7 @@ class StudioDesktopTests(unittest.TestCase):
         kills = []
         comfy = SimpleNamespace(pid=1234, terminate=MagicMock(),
                                 wait=MagicMock(side_effect=subprocess.TimeoutExpired("comfy", 3)))
-        desktop = app.StudioDesktop("u", comfy, 8188, pathlib.Path("root"))
+        desktop = app.StudioDesktop(comfy, 8188, pathlib.Path("root"))
         with patch.object(app, "pid_alive", lambda pid: True), \
              patch.object(app, "kill_pid", lambda pid: kills.append(pid) or True), \
              patch.object(app, "log_line", lambda text: None):
@@ -1223,7 +1209,7 @@ class StudioDesktopTests(unittest.TestCase):
         # pid_alive 永远报「还活着」—— 关窗固定睡满等待上限（用户读成卡死），兜底强杀也必然失败
         logs, kills = [], []
         comfy = SimpleNamespace(pid=1234, terminate=MagicMock(), wait=MagicMock())
-        desktop = app.StudioDesktop("u", comfy, 8188, pathlib.Path("root"))
+        desktop = app.StudioDesktop(comfy, 8188, pathlib.Path("root"))
         with patch.object(app, "pid_alive", lambda pid: False), \
              patch.object(app, "kill_pid", lambda pid: kills.append(pid) or True), \
              patch.object(app, "log_line", lambda text: logs.append(text)):
@@ -1237,7 +1223,7 @@ class StudioDesktopTests(unittest.TestCase):
         # 停止路径那行「没有权限终止该进程」就是这么来的
         kills, logs = [], []
         comfy = SimpleNamespace(pid=1234, poll=lambda: None, terminate=MagicMock(), wait=MagicMock())
-        desktop = app.StudioDesktop("u", comfy, 8188, pathlib.Path("root"))
+        desktop = app.StudioDesktop(comfy, 8188, pathlib.Path("root"))
         with patch.object(app, "probe", lambda port, timeout=3.0: False), \
              patch.object(app, "port_owner", lambda port: 0), \
              patch.object(app, "kill_pid", lambda pid: kills.append(pid) or True), \
@@ -1249,7 +1235,7 @@ class StudioDesktopTests(unittest.TestCase):
     def test_close_is_idempotent(self):
         # closing、closed、退出兜底三处都会调它：只带走一次
         comfy = SimpleNamespace(pid=1234, terminate=MagicMock(), wait=MagicMock())
-        desktop = app.StudioDesktop("u", comfy, 8188, pathlib.Path("root"))
+        desktop = app.StudioDesktop(comfy, 8188, pathlib.Path("root"))
         with patch.object(app, "pid_alive", lambda pid: False), \
              patch.object(app, "log_line", lambda text: None):
             desktop.comfy_close()
@@ -1259,40 +1245,41 @@ class StudioDesktopTests(unittest.TestCase):
     def test_close_leaves_external_comfy_alone(self):
         # 用户自己启动的 ComfyUI 没有桌面端的句柄：关窗完全不动，避免误杀
         touched = []
-        desktop = app.StudioDesktop("u", None, 8188, pathlib.Path("root"))
+        desktop = app.StudioDesktop(None, 8188, pathlib.Path("root"))
         with patch.object(app, "port_owner", lambda port: touched.append(port) or 4321), \
              patch.object(app, "kill_pid", lambda pid: touched.append(pid) or True), \
              patch.object(app, "log_line", lambda text: None):
             desktop.comfy_close()
         self.assertEqual(touched, [])
 
-    def test_jump_waits_by_attach_for_a_foreign_comfy(self):
-        # 附着的那路（桌面端没有句柄）：端口死了要收手回离线页，不能等满超时把窗口卡在「启动中」
+    def test_flag_waits_by_attach_for_a_foreign_comfy(self):
+        # 附着的那路（桌面端没有句柄）：端口死了要收手，别把页面卡在「启动中」
         calls = []
-        desktop = app.StudioDesktop("u", None, 8188, pathlib.Path("root"))
+        desktop = app.StudioDesktop(None, 8188, pathlib.Path("root"))
         with patch.object(app, "wait_attach", lambda *a: calls.append("attach") or False), \
              patch.object(app, "wait_ready", lambda *a: calls.append("ready") or False), \
              patch.object(app, "log_line", lambda text: None):
-            desktop._jump_when_ready()
+            desktop._flag_when_ready()
         self.assertEqual(calls, ["attach"])
-        self.assertFalse(desktop.starting, "收手要收掉启动中，横幅回到「未运行 + 启动」")
+        self.assertFalse(desktop.starting, "收手要收掉启动中，页面回到「未运行 + 启动」")
+        self.assertFalse(desktop.flags.get("kernel_base"), "没就绪就不给代理目标")
 
-    def test_jump_waits_for_the_spawned_child_to_bind_the_port(self):
+    def test_flag_waits_for_the_spawned_child_to_bind_the_port(self):
         # 自己拉起的那路：端口在绑上之前一直是空的，必须按 wait_ready 等，不能按「没人监听」收手
         calls = []
         comfy = SimpleNamespace(pid=1234, terminate=MagicMock(), wait=MagicMock())
-        desktop = app.StudioDesktop("u", comfy, 8188, pathlib.Path("root"))
+        desktop = app.StudioDesktop(comfy, 8188, pathlib.Path("root"))
         with patch.object(app, "wait_attach", lambda *a: calls.append("attach") or False), \
              patch.object(app, "wait_ready", lambda *a: calls.append("ready") or False), \
              patch.object(app, "log_line", lambda text: None):
-            desktop._jump_when_ready()
+            desktop._flag_when_ready()
         self.assertEqual(calls, ["ready"])
 
     def test_start_respawns_after_stop(self):
         comfy = SimpleNamespace(pid=1234, poll=lambda: 1, terminate=MagicMock())
-        desktop = app.StudioDesktop("u", comfy, 8188, pathlib.Path("root"))
+        desktop = app.StudioDesktop(comfy, 8188, pathlib.Path("root"))
         spawned = SimpleNamespace(pid=9999, poll=lambda: None)
-        with patch.object(app, "start_comfy", lambda python, root, port, listen, cors: spawned), \
+        with patch.object(app, "start_comfy", lambda python, root, port, listen: spawned), \
              patch.object(app, "resolve_python", lambda root, arg: pathlib.Path("python.exe")), \
              patch.object(app, "startup_state", lambda *a: ("ok", "")), \
              patch.object(app, "port_busy", lambda port: False), \
@@ -1305,12 +1292,12 @@ class StudioDesktopTests(unittest.TestCase):
 
     def test_start_attaches_when_port_busy(self):
         # 端口上已有一路 ComfyUI（插件没加载时探测会失败，桌面端别上当）：只附着，不在 8189 拉第二路
-        desktop = app.StudioDesktop("http://127.0.0.1:8188/neo-studio", None, 8188, pathlib.Path("root"))
+        desktop = app.StudioDesktop(None, 8188, pathlib.Path("root"))
         spawned = []
         logs = []
         no_thread = lambda target, daemon=True: SimpleNamespace(start=lambda: None)
         with patch.object(app, "port_busy", lambda port: True), \
-             patch.object(app, "start_comfy", lambda python, root, port, listen, cors: spawned.append(port) or MagicMock()), \
+             patch.object(app, "start_comfy", lambda python, root, port, listen: spawned.append(port) or MagicMock()), \
              patch.object(app, "resolve_python", lambda root, arg: pathlib.Path("python.exe")), \
              patch.object(app, "startup_state", lambda *a: ("ok", "")), \
              patch.object(app, "probe", lambda port, timeout=3.0: False), \
@@ -1324,30 +1311,31 @@ class StudioDesktopTests(unittest.TestCase):
         self.assertEqual(state["pid"], 4321, "状态报端口上那路外部 ComfyUI")
         self.assertIn("comfy attach port=8188", logs)
 
-    def test_stop_pulls_window_back_to_offline_gallery(self):
+    def test_stop_leaves_the_window_on_the_desktop_page(self):
         loader = MagicMock()
-        desktop = app.StudioDesktop("http://127.0.0.1:8188/neo-studio", None, 8188,
+        desktop = app.StudioDesktop(None, 8188,
                                 pathlib.Path("root"), "", "http://127.0.0.1:8191/neo-studio")
         desktop.loader = loader
         desktop.rearm = MagicMock()
+        desktop.flags["kernel_base"] = "http://127.0.0.1:8188"
         with patch.object(app, "probe", lambda port, timeout=3.0: False), \
              patch.object(app, "port_owner", lambda port: 0), \
              patch.object(app, "log_line", lambda text: None):
             state = desktop.comfy_stop()
-        # ComfyUI 停了，页面是它的：窗口退回桌面端的只读素材页，不留死页面
+        # 页面本来就钉在桌面端这一页上：导航一次就是整页刷新，白丢未保存的编辑
         self.assertFalse(state["ready"])
-        loader.assert_called_once_with("http://127.0.0.1:8191/neo-studio")
-        desktop.rearm.assert_called_once_with()
+        self.assertEqual(desktop.flags["kernel_base"], "", "代理目标随进程一起收，页面随快照翻回离线形态")
+        loader.assert_not_called()
 
-    def test_start_jumps_to_full_studio_when_ready(self):
+    def test_start_ready_flags_the_kernel_without_navigating(self):
         comfy = SimpleNamespace(pid=1, poll=lambda: 0, terminate=MagicMock())
-        desktop = app.StudioDesktop("http://127.0.0.1:8188/neo-studio", comfy, 8188,
-                                pathlib.Path("root"), "", "http://127.0.0.1:8191/neo-studio")
+        desktop = app.StudioDesktop(comfy, 8188,
+                                pathlib.Path("root"), "", "http://127.0.0.1:8191/neo-studio", 8191)
         desktop.loader = MagicMock()
         desktop.rearm = MagicMock()
         spawned = SimpleNamespace(pid=9999, poll=lambda: None)
         no_thread = lambda target, daemon=True: SimpleNamespace(start=lambda: None)
-        with patch.object(app, "start_comfy", lambda python, root, port, listen, cors: spawned), \
+        with patch.object(app, "start_comfy", lambda python, root, port, listen: spawned), \
              patch.object(app, "resolve_python", lambda root, arg: pathlib.Path("python.exe")), \
              patch.object(app, "startup_state", lambda *a: ("ok", "")), \
              patch.object(app, "port_busy", lambda port: False), \
@@ -1358,15 +1346,15 @@ class StudioDesktopTests(unittest.TestCase):
             desktop.comfy_start()
         with patch.object(app, "wait_ready", lambda port, seconds: True), \
              patch.object(app, "log_line", lambda text: None):
-            desktop._jump_when_ready()
-        loader = desktop.loader
-        loader.assert_called_once_with("http://127.0.0.1:8188/neo-studio")
+            desktop._flag_when_ready()
+        desktop.loader.assert_not_called()   # 就绪不跳转：跳转把未保存的编辑全清掉
+        self.assertEqual(desktop.flags["kernel_base"], "http://127.0.0.1:8188")
+        self.assertFalse(desktop.starting)
 
-    def test_offline_page_jumps_when_comfy_gets_ready_after_the_budget(self):
-        # 用户现场：READY_TIMEOUT 用完 _jump_when_ready 就收手，ComfyUI 之后才就绪
-        # （自定义节点导入慢、或用户自己在外面起的那路）—— 窗口不能永远停在「未运行」横幅上，
-        # 顶栏胶囊那份 5 秒探活就是收尾
-        desktop = app.StudioDesktop("http://127.0.0.1:8188/neo-studio", None, 8188,
+    def test_state_poll_flags_a_kernel_that_gets_ready_after_the_budget(self):
+        # 用户现场：就绪预算用完 _flag_when_ready 收手，ComfyUI 之后才就绪（自定义节点导入慢、
+        # 或用户自己在外面起的那路）—— 页面不能永远停在离线形态，顶栏那份 5 秒探活就是收尾
+        desktop = app.StudioDesktop(None, 8188,
                                     pathlib.Path("root"), "", "http://127.0.0.1:8191/neo-studio")
         desktop.loader = MagicMock()
         desktop.rearm = MagicMock()
@@ -1374,120 +1362,63 @@ class StudioDesktopTests(unittest.TestCase):
              patch.object(app, "pid_alive", lambda pid: True), \
              patch.object(app, "probe", lambda port, timeout=3.0: True), \
              patch.object(app, "log_line", lambda text: None):
-            desktop._goto(desktop.offline_url)
+            desktop._goto(desktop.page_url)
             state = desktop.comfy_state()
         self.assertTrue(state["ready"])
-        desktop.loader.assert_called_with("http://127.0.0.1:8188/neo-studio")
-        self.assertEqual(desktop.page, "http://127.0.0.1:8188/neo-studio", "跳完认页，别反复跳")
+        self.assertEqual(desktop.flags["kernel_base"], "http://127.0.0.1:8188")
+        self.assertEqual(desktop.loader.call_count, 1,
+                         "探活只写 flags：把页面跳走就是清掉未保存的编辑")
 
-    def test_ready_poll_does_not_jump_from_the_full_studio_page(self):
-        desktop = app.StudioDesktop("http://127.0.0.1:8188/neo-studio", None, 8188,
-                                    pathlib.Path("root"), "", "http://127.0.0.1:8191/neo-studio")
-        desktop.loader = MagicMock()
-        desktop.rearm = MagicMock()
-        with patch.object(app, "port_owner", lambda port: 4321), \
-             patch.object(app, "pid_alive", lambda pid: True), \
-             patch.object(app, "probe", lambda port, timeout=3.0: True), \
-             patch.object(app, "log_line", lambda text: None):
-            desktop._goto(desktop.url)
-            for _ in range(3):
-                desktop.comfy_state()
-        self.assertEqual(desktop.loader.call_count, 1, "完整 Studio 里探活不许把页面跳走")
-
-    def test_direct_needs_the_desktop_spawned_loopback_child(self):
-        # 直连那路的判定必须与 comfy_cors 的取值条件同源：flag 没给出去，页面直连必 403
+    def test_canvas_target_is_a_port_for_a_local_kernel(self):
+        # 「主画布编辑」开的是 ComfyUI 自己的页面：本机内核交端口，页面按自己的主机名配它，
+        # 局域网对端打开的才是它那台机器看得到的本机地址
         comfy = SimpleNamespace(pid=1234, poll=lambda: None)
-        self.assertTrue(app.StudioDesktop("u", comfy, 8188, pathlib.Path("root"), desktop_port=8191).direct)
-        self.assertFalse(app.StudioDesktop("u", comfy, 8188, pathlib.Path("root")).direct,
-                         "桌面端服务没绑定端口，就没有 origin 可放行")
-        self.assertFalse(app.StudioDesktop("u", comfy, 8188, pathlib.Path("root"), desktop_port=8191,
-                                           launcher={"listen": "192.168.0.7"}).direct,
-                         "局域网监听保留整页跳转，origin_only 不在网卡实例上让位")
-        self.assertFalse(app.StudioDesktop("u", comfy, 8188, pathlib.Path("root"), desktop_port=8191,
-                                           launcher={"remote": "http://192.168.0.9:8188"}).direct,
-                         "远端机器上的进程加不了 flag")
-        self.assertFalse(app.StudioDesktop("u", None, 8188, pathlib.Path("root"), desktop_port=8191).direct,
-                         "附着的那路没有句柄，flag 给不出去")
-
-    def test_ready_in_place_reports_the_base_instead_of_navigating(self):
-        # 就绪不再整页跳转：跳转会把导演编辑器与表单里未保存的内容全清掉
-        comfy = SimpleNamespace(pid=1234, poll=lambda: None)
-        desktop = app.StudioDesktop("http://127.0.0.1:8188/neo-studio", comfy, 8188,
-                                    pathlib.Path("root"), "", "http://127.0.0.1:8191/neo-studio", 8191)
-        desktop.loader = MagicMock()
-        desktop.rearm = MagicMock()
-        desktop.page = desktop.offline_url
-        with patch.object(app, "wait_ready", lambda base, seconds: True), \
-             patch.object(app, "log_line", lambda text: None):
-            desktop._jump_when_ready()
-        desktop.loader.assert_not_called()
-        self.assertEqual(desktop.flags["comfy_base"], "http://127.0.0.1:8188")
-        self.assertFalse(desktop.starting, "接上前收掉启动中")
-
-    def test_ready_from_the_offline_page_still_jumps_when_direct_is_off(self):
-        # 附着的那路没有 CORS 可用：照旧整页跳过去，别停在「未运行」横幅上
-        desktop = app.StudioDesktop("http://127.0.0.1:8188/neo-studio", None, 8188,
-                                    pathlib.Path("root"), "", "http://127.0.0.1:8191/neo-studio", 8191)
-        desktop.loader = MagicMock()
-        desktop.rearm = MagicMock()
-        desktop.page = desktop.offline_url
-        with patch.object(app, "wait_attach", lambda base, seconds, busy: True), \
-             patch.object(app, "log_line", lambda text: None):
-            desktop._jump_when_ready()
-        desktop.loader.assert_called_once_with(
-            "http://127.0.0.1:8188/neo-studio?neo_desktop=http://127.0.0.1:8191")
-
-    def test_studio_target_marks_the_desktop_origin_for_the_comfyui_page(self):
-        # MCP 注册表与 stdio 会话只在桌面端进程里：页面跳到 ComfyUI 端口时得知道把它打回哪儿
-        desktop = app.StudioDesktop("http://127.0.0.1:8188/neo-studio", None, 8188,
-                                    pathlib.Path("root"), "", "http://127.0.0.1:8191/neo-studio", 8191)
-        self.assertEqual(desktop.studio_target(desktop.url),
-                         "http://127.0.0.1:8188/neo-studio?neo_desktop=http://127.0.0.1:8191")
-
-    def test_studio_target_leaves_the_offline_page_and_direct_mode_bare(self):
-        # 离线页也在桌面端端口上：带上标记会让 _leave_offline 的认页判断失效，就绪后跳不回来
-        desktop = app.StudioDesktop("http://127.0.0.1:8188/neo-studio", None, 8188,
-                                    pathlib.Path("root"), "", "http://127.0.0.1:8191/neo-studio", 8191)
-        self.assertEqual(desktop.studio_target(desktop.offline_url), desktop.offline_url)
-        comfy = SimpleNamespace(pid=1234, poll=lambda: None)
-        direct = app.StudioDesktop("http://127.0.0.1:8188/neo-studio", comfy, 8188,
-                                   pathlib.Path("root"), "", "http://127.0.0.1:8191/neo-studio", 8191)
-        self.assertTrue(direct.direct)
-        self.assertEqual(direct.studio_target(direct.url), direct.url,
-                         "直连那路页面钉在桌面端口上，MCP 同源，不用带标记")
-
-    def test_ready_poll_reports_the_base_and_stays_on_the_page(self):
-        # 顶栏那份 5 秒探活是直连那路的收尾：报出 comfy_base 让页面原地翻面，不碰窗口导航
-        comfy = SimpleNamespace(pid=1234, poll=lambda: None)
-        desktop = app.StudioDesktop("http://127.0.0.1:8188/neo-studio", comfy, 8188,
-                                    pathlib.Path("root"), "", "http://127.0.0.1:8191/neo-studio", 8191)
-        desktop.loader = MagicMock()
-        desktop.rearm = MagicMock()
-        desktop.page = desktop.offline_url
+        desktop = app.StudioDesktop(comfy, 8188, pathlib.Path("root"), "", "", 8191)
         with patch.object(app, "probe", lambda base, timeout=3.0: True), \
              patch.object(app, "log_line", lambda text: None):
-            state = desktop.comfy_state()
-        self.assertTrue(state["ready"])
-        self.assertEqual(desktop.flags["comfy_base"], "http://127.0.0.1:8188")
-        desktop.loader.assert_not_called()
+            desktop.comfy_state()
+        self.assertEqual((desktop.flags["kernel_base"], desktop.flags["kernel_port"],
+                          desktop.flags["kernel_origin"]), ("http://127.0.0.1:8188", 8188, ""))
 
-    def test_stop_clears_the_base_and_does_not_reload_the_page(self):
-        comfy = SimpleNamespace(pid=1234, poll=lambda: 1, terminate=MagicMock(), wait=MagicMock())
-        desktop = app.StudioDesktop("http://127.0.0.1:8188/neo-studio", comfy, 8188,
+    def test_canvas_target_is_the_base_for_a_remote_kernel(self):
+        remote = app.StudioDesktop(None, 8188, pathlib.Path("root"), "", "", 8191,
+                                   launcher={"remote": "http://192.168.0.9:8188"})
+        with patch.object(app, "probe", lambda base, timeout=3.0: True), \
+             patch.object(app, "log_line", lambda text: None):
+            remote.comfy_state()
+        self.assertEqual((remote.flags["kernel_base"], remote.flags["kernel_port"],
+                          remote.flags["kernel_origin"]),
+                         ("http://192.168.0.9:8188", 0, "http://192.168.0.9:8188"))
+
+    def test_window_target_is_the_desktop_page_with_the_remote_page_as_fallback(self):
+        desktop = app.StudioDesktop(None, 8188, pathlib.Path("root"), "", "http://127.0.0.1:8191/neo-studio")
+        self.assertEqual(desktop.window_target, "http://127.0.0.1:8191/neo-studio")
+        # 纯远程那路本机没有 ComfyUI 根目录，桌面端服务装配不起来：窗口停在内核自己那一页上，
+        # 页面与内核同源，跳转与 CSRF 本来就不存在
+        remote = app.StudioDesktop(None, 8188, pathlib.Path("root"), "", "", 0,
+                                   launcher={"remote": "http://192.168.0.9:8188"})
+        self.assertEqual(remote.window_target, "http://192.168.0.9:8188/neo-studio")
+
+    def test_go_studio_loads_the_desktop_page(self):
+        # 主画布页上的「返回 Studio」：画布是 ComfyUI 自己的页面，回来就是回桌面端这一页
+        loader = MagicMock()
+        desktop = app.StudioDesktop(None, 8188, pathlib.Path("root"), "", "http://127.0.0.1:8191/neo-studio")
+        desktop.loader = loader
+        desktop.rearm = MagicMock()
+        desktop.go_studio()
+        loader.assert_called_once_with("http://127.0.0.1:8191/neo-studio")
+
+    def test_attach_path_flags_the_kernel_without_a_page_jump(self):
+        # 附着的那路没有句柄：就绪同样只写 flags，页面原地翻面
+        desktop = app.StudioDesktop(None, 8188,
                                     pathlib.Path("root"), "", "http://127.0.0.1:8191/neo-studio", 8191)
         desktop.loader = MagicMock()
         desktop.rearm = MagicMock()
-        desktop.flags["comfy_base"] = "http://127.0.0.1:8188"
-        desktop.page = desktop.offline_url
-        with patch.object(app, "probe", lambda base, timeout=3.0: False), \
-             patch.object(app, "port_owner", lambda port: 0), \
-             patch.object(app, "reap", lambda proc, seconds: None), \
+        with patch.object(app, "wait_attach", lambda base, seconds, busy: True), \
              patch.object(app, "log_line", lambda text: None):
-            state = desktop.comfy_stop()
-        self.assertFalse(state["ready"])
-        self.assertEqual(desktop.flags["comfy_base"], "", "生成类目标随进程一起收，页面回到离线形态")
+            desktop._flag_when_ready()
         desktop.loader.assert_not_called()
-
+        self.assertEqual(desktop.flags["kernel_base"], "http://127.0.0.1:8188")
 
     def test_pill_is_reinjected_after_every_page_load(self):
         window = _fake_window()
@@ -1566,12 +1497,13 @@ class MainWindowTests(unittest.TestCase):
             window.events.closing.handlers[0]()
         self.assertEqual(touched, [], "非桌面端拉起的 ComfyUI 关窗不许动")
         self.assertTrue(app.GEOMETRY_FILE.exists(), "关窗要存几何")
-        # 窗口先出启动页，后台探活就绪后整页跳进完整 Studio；用户自己的 ComfyUI 不被桌面端接管
+        # 窗口先出启动页，后台探活就绪后停在桌面端这一页；用户自己的 ComfyUI 不被桌面端接管
         self.assertEqual(cw.call_args.kwargs["html"], app.splash_html())
         self.assertIsNone(cw.call_args.kwargs["js_api"].comfy)
         self.assertFalse(cw.call_args.kwargs["js_api"].flags["starting"], "已就绪不报启动中")
-        window.load_url.assert_called_once_with(
-            "http://127.0.0.1:8188/neo-studio?neo_desktop=http://127.0.0.1:8191")
+        window.load_url.assert_called_once_with("http://127.0.0.1:8191/neo-studio")
+        self.assertEqual(cw.call_args.kwargs["js_api"].flags["kernel_base"], "http://127.0.0.1:8188",
+                         "附着的那路就绪后就是代理目标")
 
     def test_links_stay_in_desktop_window(self):
         window = _fake_window()
@@ -1664,15 +1596,15 @@ class MainWindowTests(unittest.TestCase):
              patch.object(app, "probe", lambda port, timeout=3.0: False), \
              patch.object(app, "find_python", lambda root, p: pathlib.Path("D:/python/python.exe")), \
              patch.object(app, "startup_state", lambda *a: ("ok", "")), \
-             patch.object(app, "start_comfy", lambda python, root, port, listen, cors: comfy), \
+             patch.object(app, "start_comfy", lambda python, root, port, listen: comfy), \
              patch.object(app, "wait_ready", wait), \
              patch.object(app, "alert", lambda text: None), \
              patch.object(app, "pid_alive", lambda pid: False), \
              patch.object(sys, "argv", ["studio_app.py"]):
             self.assertEqual(app.main(), 0)
-        # 窗口先出启动页，后台拉起 ComfyUI 后进桌面端只读服务的离线素材页，就绪后整页跳到完整 Studio
+        # 窗口先出启动页，后台拉起 ComfyUI 后停在桌面端这一页：就绪与否由页面快照原地翻面
         self.assertEqual(cw.call_args.kwargs["html"], app.splash_html())
-        self.assertEqual(cw.call_args.kwargs["js_api"].offline_url, "http://127.0.0.1:8191/neo-studio")
+        self.assertEqual(cw.call_args.kwargs["js_api"].page_url, "http://127.0.0.1:8191/neo-studio")
         window.load_url.assert_called_once_with("http://127.0.0.1:8191/neo-studio")
         # 桌面端只读服务与 js_api 共用启动中标记：窗口第一次 /neo_studio/version 就是「启动中」
         self.assertTrue(opened["starting"], "拉起 ComfyUI 后报启动中")
@@ -1695,7 +1627,7 @@ class MainWindowTests(unittest.TestCase):
              patch.object(app, "probe", lambda port, timeout=3.0: False), \
              patch.object(app, "find_python", lambda root, p: pathlib.Path("D:/python/python.exe")), \
              patch.object(app, "startup_state", lambda *a: ("ok", "")), \
-             patch.object(app, "start_comfy", lambda python, root, port, listen, cors: comfy), \
+             patch.object(app, "start_comfy", lambda python, root, port, listen: comfy), \
              patch.object(app, "wait_ready", lambda port, seconds: True), \
              patch.object(app, "pid_alive", lambda pid: False), \
              patch.object(sys, "argv", ["studio_app.py"]):
@@ -1717,7 +1649,7 @@ class MainWindowTests(unittest.TestCase):
              patch.object(app, "probe", lambda port, timeout=3.0: False), \
              patch.object(app, "find_python", lambda root, p: pathlib.Path("D:/python/python.exe")), \
              patch.object(app, "startup_state", lambda *a: ("ok", "")), \
-             patch.object(app, "start_comfy", lambda python, root, port, listen, cors: comfy), \
+             patch.object(app, "start_comfy", lambda python, root, port, listen: comfy), \
              patch.object(app, "wait_ready", lambda port, seconds: True), \
              patch.object(app, "pid_alive", lambda pid: False), \
              patch.object(sys, "argv", ["studio_app.py"]):
@@ -1751,7 +1683,7 @@ class MainWindowTests(unittest.TestCase):
              patch.object(app, "probe", lambda port, timeout=3.0: False), \
              patch.object(app, "find_python", lambda root, p: pathlib.Path("D:/python/python.exe")), \
              patch.object(app, "startup_state", lambda *a: ("ok", "")), \
-             patch.object(app, "start_comfy", lambda python, root, port, listen, cors: comfy), \
+             patch.object(app, "start_comfy", lambda python, root, port, listen: comfy), \
              patch.object(app, "pid_alive", lambda pid: False), \
              patch.object(sys, "argv", ["studio_app.py"]):
             self.assertEqual(app.main(), 0)
@@ -1790,7 +1722,7 @@ class MainWindowTests(unittest.TestCase):
              patch.object(app, "probe", lambda port, timeout=3.0: False), \
              patch.object(app, "find_python", lambda root, p: pathlib.Path("D:/python/python.exe")), \
              patch.object(app, "startup_state", lambda *a: ("ok", "")), \
-             patch.object(app, "start_comfy", lambda python, root, port, listen, cors: comfy), \
+             patch.object(app, "start_comfy", lambda python, root, port, listen: comfy), \
              patch.object(app, "wait_ready", lambda port, seconds: True), \
              patch.object(app, "pid_alive", lambda pid: False), \
              patch.object(sys, "argv", ["studio_app.py"]):
@@ -1809,7 +1741,7 @@ class MainWindowTests(unittest.TestCase):
              patch.object(app, "probe", lambda port, timeout=3.0: False), \
              patch.object(app, "find_python", lambda root, p: pathlib.Path("D:/python/python.exe")), \
              patch.object(app, "startup_state", lambda *a: ("ok", "")), \
-             patch.object(app, "start_comfy", lambda python, root, port, listen, cors: comfy), \
+             patch.object(app, "start_comfy", lambda python, root, port, listen: comfy), \
              patch.object(app, "wait_ready", lambda port, seconds: False), \
              patch.object(app, "alert", lambda text: None), \
              patch.object(app, "pid_alive", lambda pid: False), \
@@ -1962,7 +1894,7 @@ class MainWindowTests(unittest.TestCase):
              patch.object(app, "probe", lambda port, timeout=3.0: False), \
              patch.object(app, "find_python", lambda root, p: pathlib.Path("D:/python/python.exe")), \
              patch.object(app, "startup_state", lambda *a: ("ok", "")), \
-             patch.object(app, "start_comfy", lambda python, root, port, listen, cors: spawned.append(port) or MagicMock()), \
+             patch.object(app, "start_comfy", lambda python, root, port, listen: spawned.append(port) or MagicMock()), \
              patch.object(app, "wait_ready", lambda port, seconds: False), \
              patch.object(app, "wait_attach", lambda *a: False), \
              patch.object(app, "port_owner", lambda port: 4321), \
@@ -1982,12 +1914,11 @@ class MainWindowTests(unittest.TestCase):
              patch.object(app, "singleton", lambda: 7), \
              patch.object(app, "DesktopServer", _fake_desktop_server()), \
              patch.object(app, "probe", lambda port, timeout=3.0: True), \
-             patch.object(app, "start_comfy", lambda python, root, port, listen, cors: spawned.append(port) or MagicMock()), \
+             patch.object(app, "start_comfy", lambda python, root, port, listen: spawned.append(port) or MagicMock()), \
              patch.object(sys, "argv", ["studio_app.py"]):
             self.assertEqual(app.main(), 0)
         self.assertEqual(spawned, [], "热启动同样不许拉第二路")
-        window.load_url.assert_called_once_with(
-            "http://127.0.0.1:8188/neo-studio?neo_desktop=http://127.0.0.1:8191")
+        window.load_url.assert_called_once_with("http://127.0.0.1:8191/neo-studio")
 
     def test_close_during_spawn_kills_the_process_it_just_started(self):
         """窗口先出之后，用户可以在自检与拉起之间关窗。收尾线程收的是「当时已有」的那路，
@@ -1997,7 +1928,7 @@ class MainWindowTests(unittest.TestCase):
         start = lambda *a, **k: a[0]()
         proc = SimpleNamespace(pid=4321, terminate=MagicMock(), wait=MagicMock())
 
-        def spawn(python, root, port, listen, cors):
+        def spawn(python, root, port, listen):
             cw.call_args.kwargs["js_api"].closing = True   # 用户就在这一刻关了窗
             return proc
 
@@ -2045,7 +1976,7 @@ class LauncherConfigTests(unittest.TestCase):
             with patch.object(app, "CONFIG_FILE", pathlib.Path(tmp) / "launcher_config.json"), \
                  patch.object(app, "log_line", lambda text: None):
                 app.save_config(pathlib.Path("D:/ComfyUI"), "D:/python/python.exe", 8188, {"frameless": False})
-                desktop = app.StudioDesktop("u", None, 8188, pathlib.Path("D:/ComfyUI"),
+                desktop = app.StudioDesktop(None, 8188, pathlib.Path("D:/ComfyUI"),
                                         launcher={"root": "D:/ComfyUI", "port": 8188, "frameless": False})
                 self.assertFalse(desktop.frameless, "配置里的 frameless 要读进桌面端")
                 self.assertTrue(desktop.set_frameless(True)["ok"])
@@ -2068,7 +1999,7 @@ class LauncherConfigTests(unittest.TestCase):
             with patch.object(app, "CONFIG_FILE", cfg):
                 loaded = app.load_config()
                 self.assertNotIn("frameless", loaded)
-                self.assertEqual(app.StudioDesktop("u", None, 8188, pathlib.Path("D:/ComfyUI"),
+                self.assertEqual(app.StudioDesktop(None, 8188, pathlib.Path("D:/ComfyUI"),
                                                    launcher=loaded).frameless, not app.IS_MAC)
 
     @WINDOWS_ONLY
@@ -2147,18 +2078,18 @@ class ListenTests(unittest.TestCase):
             self.assertIsNone(app.comfy_listen(raw), raw)
 
     def test_desktop_normalizes_the_saved_listen(self):
-        desktop = app.StudioDesktop("u", None, 8188, pathlib.Path("root"), launcher={"listen": "192.168.0.7"})
+        desktop = app.StudioDesktop(None, 8188, pathlib.Path("root"), launcher={"listen": "192.168.0.7"})
         self.assertEqual(desktop.listen, "127.0.0.1,192.168.0.7")
-        self.assertEqual(app.StudioDesktop("u", None, 8188, pathlib.Path("root"),
+        self.assertEqual(app.StudioDesktop(None, 8188, pathlib.Path("root"),
                                          launcher={"listen": "not-an-ip"}).listen, "",
                          "手改坏的配置退回只监听本机")
 
     def test_start_passes_the_listen_to_comfyui(self):
         spawned = SimpleNamespace(pid=9999, poll=lambda: None)
-        desktop = app.StudioDesktop("u", None, 8188, pathlib.Path("root"), launcher={"listen": "192.168.0.7"})
+        desktop = app.StudioDesktop(None, 8188, pathlib.Path("root"), launcher={"listen": "192.168.0.7"})
         argv = []
         with patch.object(app, "start_comfy",
-                          lambda python, root, port, listen, cors: argv.append(listen) or spawned), \
+                          lambda python, root, port, listen: argv.append(listen) or spawned), \
              patch.object(app, "resolve_python", lambda root, arg: pathlib.Path("python.exe")), \
              patch.object(app, "port_busy", lambda port: False), \
              patch.object(app, "free_comfy_port", lambda port, desktop_port: port), \
@@ -2169,34 +2100,12 @@ class ListenTests(unittest.TestCase):
             desktop.comfy_start()
         self.assertEqual(argv, ["127.0.0.1,192.168.0.7"])
 
-    def test_start_passes_the_cors_origin_only_for_loopback(self):
-        # flag 与 direct 必须同源：局域网监听那路不给，页面就照旧整页跳转
-        seen = []
-        spawned = SimpleNamespace(pid=9999, poll=lambda: None)
-
-        def spawn(python, root, port, listen, cors):
-            seen.append(cors)
-            return spawned
-
-        with patch.object(app, "start_comfy", spawn), \
-             patch.object(app, "resolve_python", lambda root, arg: pathlib.Path("python.exe")), \
-             patch.object(app, "port_busy", lambda port: False), \
-             patch.object(app, "free_comfy_port", lambda port, desktop_port: port), \
-             patch.object(app, "probe", lambda port, timeout=3.0: False), \
-             patch.object(app, "log_line", lambda text: None), \
-             patch.object(app.threading, "Thread",
-                          lambda target, daemon=True: SimpleNamespace(start=lambda: None)):
-            app.StudioDesktop("u", None, 8188, pathlib.Path("root"), desktop_port=8191).comfy_start()
-            app.StudioDesktop("u", None, 8188, pathlib.Path("root"), desktop_port=8191,
-                              launcher={"listen": "192.168.0.7"}).comfy_start()
-        self.assertEqual(seen, ["http://127.0.0.1:8191", ""])
-
     def test_apply_rejects_a_non_address(self):
         # 监听地址不是 IP 就报错：不能把垃圾喂给 ComfyUI 的 --listen
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
             (root / "main.py").write_text("", encoding="utf-8")
-            desktop = app.StudioDesktop("u", None, 8188, root, str(sys.executable),
+            desktop = app.StudioDesktop(None, 8188, root, str(sys.executable),
                                         launcher={"root": str(root), "port": 8188})
             res = desktop.apply_launcher(str(root), str(sys.executable), 8188, "192.168.0.7:8188")
             self.assertFalse(res["ok"])
@@ -2206,7 +2115,7 @@ class ListenTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
             (root / "main.py").write_text("", encoding="utf-8")
-            desktop = app.StudioDesktop("u", None, 8188, root, str(sys.executable),
+            desktop = app.StudioDesktop(None, 8188, root, str(sys.executable),
                                         launcher={"root": str(root), "port": 8188})
             with patch.object(app, "CONFIG_FILE", pathlib.Path(tmp) / "launcher_config.json"), \
                  patch.object(app, "log_line", lambda text: None), \
@@ -2230,7 +2139,7 @@ class RemoteTargetTests(unittest.TestCase):
     REMOTE = "http://192.168.0.20:8188"
 
     def _desktop(self, **launcher):
-        return app.StudioDesktop("http://127.0.0.1:8188/neo-studio", None, 8188,
+        return app.StudioDesktop(None, 8188,
                                  pathlib.Path("root"), launcher=launcher)
 
     def test_comfy_remote_normalizes_a_base_url(self):
@@ -2254,10 +2163,10 @@ class RemoteTargetTests(unittest.TestCase):
     def test_the_window_points_at_the_remote(self):
         desktop = self._desktop(remote=self.REMOTE)
         self.assertEqual(desktop.base, self.REMOTE)
-        self.assertEqual(desktop.url, f"{self.REMOTE}/neo-studio")
+        self.assertEqual(desktop.window_target, f"{self.REMOTE}/neo-studio")
         local = self._desktop()
-        self.assertEqual((local.remote, local.base, local.url),
-                         ("", "http://127.0.0.1:8188", "http://127.0.0.1:8188/neo-studio"))
+        self.assertEqual((local.remote, local.base, local.window_target),
+                         ("", "http://127.0.0.1:8188", ""))
 
     def test_target_busy_probes_the_remote_and_the_local_port_otherwise(self):
         remote, local = self._desktop(remote=self.REMOTE), self._desktop()
@@ -2293,7 +2202,7 @@ class RemoteTargetTests(unittest.TestCase):
         self.assertFalse(state["running"])
 
     def test_remote_stop_leaves_the_remote_process_alone(self):
-        desktop = app.StudioDesktop("u", None, 8188, pathlib.Path("root"), "",
+        desktop = app.StudioDesktop(None, 8188, pathlib.Path("root"), "",
                                     "http://127.0.0.1:8191/neo-studio",
                                     launcher={"remote": self.REMOTE})
         gone = []
@@ -2303,8 +2212,9 @@ class RemoteTargetTests(unittest.TestCase):
              patch.object(app, "log_line", lambda text: None), \
              patch.object(desktop, "_goto", lambda url: gone.append(url)):
             state = desktop.comfy_stop()
-        self.assertEqual(gone, ["http://127.0.0.1:8191/neo-studio"], "窗口退回离线页")
+        self.assertEqual(gone, [], "窗口钉在桌面端这一页上：停止不导航")
         self.assertFalse(state["running"])
+        self.assertFalse(desktop.flags.get("kernel_base"), "代理目标随停止一起收")
 
 
     def _apply(self, desktop, root, *args):
@@ -2328,7 +2238,7 @@ class RemoteTargetTests(unittest.TestCase):
         # 远程地址不是 http(s)://主机[:端口] 就报错：不能把垃圾喂给窗口
         with tempfile.TemporaryDirectory() as tmp:
             root = self._root(tmp)
-            desktop = app.StudioDesktop("u", None, 8188, root, str(sys.executable),
+            desktop = app.StudioDesktop(None, 8188, root, str(sys.executable),
                                         launcher={"root": str(root), "port": 8188})
             res, _ = self._apply(desktop, root, "", "http://host/path")
             self.assertFalse(res["ok"])
@@ -2337,19 +2247,19 @@ class RemoteTargetTests(unittest.TestCase):
     def test_apply_saves_the_remote_and_moves_the_window_there(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = self._root(tmp)
-            desktop = app.StudioDesktop("u", None, 8188, root, str(sys.executable),
+            desktop = app.StudioDesktop(None, 8188, root, str(sys.executable),
                                         launcher={"root": str(root), "port": 8188})
             res, cfg = self._apply(desktop, root, "", self.REMOTE)
             self.assertTrue(res["ok"], res)
             self.assertEqual(cfg["remote"], self.REMOTE)
             self.assertEqual(desktop.remote, self.REMOTE)
-            self.assertEqual(desktop.url, f"{self.REMOTE}/neo-studio")
+            self.assertEqual(desktop.base, self.REMOTE)
 
     def test_apply_without_remote_keeps_the_saved_one(self):
         # 引导页那条路不碰远程：remote 为 None = 沿用已存的
         with tempfile.TemporaryDirectory() as tmp:
             root = self._root(tmp)
-            desktop = app.StudioDesktop("u", None, 8188, root, str(sys.executable),
+            desktop = app.StudioDesktop(None, 8188, root, str(sys.executable),
                                         launcher={"root": str(root), "port": 8188, "remote": self.REMOTE})
             res, cfg = self._apply(desktop, root)
             self.assertTrue(res["ok"], res)
@@ -2359,7 +2269,7 @@ class RemoteTargetTests(unittest.TestCase):
     def test_clearing_the_remote_returns_to_local_mode(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = self._root(tmp)
-            desktop = app.StudioDesktop("u", None, 8188, root, str(sys.executable),
+            desktop = app.StudioDesktop(None, 8188, root, str(sys.executable),
                                         launcher={"root": str(root), "port": 8188, "remote": self.REMOTE})
             res, cfg = self._apply(desktop, root, "", "")
             self.assertTrue(res["ok"], res)

@@ -7,12 +7,12 @@ Source runs and the packaged exe go through the same `app/studio_app.py`.
 
 ## Components
 
-| File | Responsibility |
-|------|----------------|
-| `app/studio_app.py` | Window, self-check, start / stop ComfyUI, frameless window, close teardown, startup settings |
-| `app/studio_server.py` | Desktop-side aiohttp service (ComfyUI port +3, `DESKTOP_PORT_OFFSET`); loads the plugin modules' own `RouteTableDef` handlers by directory |
-| `app/studio_caps.py` | Capability table: which routes the desktop service owns; everything outside answers `409 offline` |
-| `data/` | State directory: `studio_window.json` (geometry), `studio_profile` (Windows WebView2 profile / localStorage), `launcher_config.json` (root / python / port / frameless / dev_mode / listen / remote), `studio_desktop.log`, `comfy_run.log` |
+| File                   | Responsibility                                                                                                                                                                                                                              |
+| ------                 | ----------------                                                                                                                                                                                                                            |
+| `app/studio_app.py`    | Window, self-check, start / stop ComfyUI, frameless window, close teardown, startup settings                                                                                                                                                |
+| `app/studio_server.py` | Desktop-side aiohttp service (ComfyUI port +3, `DESKTOP_PORT_OFFSET`); loads the plugin modules' own `RouteTableDef` handlers by directory                                                                                                  |
+| `app/studio_caps.py`   | Capability table: which routes the desktop service serves itself, which of the rest it proxies to the kernel, and everything else answers `409 offline`                                                                                     |
+| `data/`                | State directory: `studio_window.json` (geometry), `studio_profile` (Windows WebView2 profile / localStorage), `launcher_config.json` (root / python / port / frameless / dev_mode / listen / remote), `studio_desktop.log`, `comfy_run.log` |
 
 Source runs keep state in the repository's `data/`; the Windows exe prefers `data/` beside the exe and falls back to
 `%APPDATA%\Neo Studio` when the exe sits in a non-writable directory. macOS v1 uses remote mode and prefers the
@@ -53,37 +53,52 @@ A cold-start window lands on the Studio page served by the desktop service, and 
 **connects generation in place**: no URL change, no reload, no full-page navigation. A navigation or a reload clears
 the unsaved content of the director editor and the settings forms, and a cross-origin navigation loses all of it.
 
-- The desktop ships `routes` (the ownership table, `studio_caps.route_list()`) and `comfy_base` (the direct target for
-  generation requests) in `/neo_studio/version`. The frontend decides per request which origin it goes to using that
-  table; while `comfy_base` is empty, routes outside the table keep hitting the desktop service and answering `409`,
-  which drives the single "This feature needs ComfyUI" prompt.
-- Direct mode is on only for "the ComfyUI the desktop spawned itself + loopback-only listen + the desktop service has
-  a bound port" (`StudioDesktop.direct`). That decision must share its source with `comfy_cors()`: ComfyUI's
-  `--enable-cors-header` and its origin_only middleware are mutually exclusive (`ComfyUI/server.py`), and without the
-  flag every request from the desktop port origin is rejected with 403 because Host and Origin no longer match.
-- The price is that this ComfyUI instance gives up its origin_only CSRF defence, so LAN listen (`--listen`) and remote
-  mode never get the flag and keep the full-page navigation: an instance exposed to a NIC does not trade that defence
-  for convenience.
-- The paths that navigate to the ComfyUI port carry `?neo_desktop=http://127.0.0.1:<desktop port>` on the URL
-  (`StudioDesktop.studio_target`, added only to the full Studio target, never to the offline or guide page): the MCP
-  registry and its stdio sessions live in the desktop process only, so the page sends `/neo_mcp/*` back to the desktop
-  port, where `mcp_cross_origin` in `app/studio_server.py` answers CORS for loopback origins only (preflight `204`, a
-  non-loopback origin's preflight `403`). Direct mode is unaffected: that page already sits on the desktop port.
-- The flip happens as one step and nothing flips until ComfyUI answers: the capability table becomes ComfyUI's, gated
-  buttons drop their blocking listener and restore their labels, the `body.ns-offline` mark is dropped, the header queue
-  entry shows up and reseeds from the six task tables (the VRAM / RAM readout is built with it), and `/ws` moves from
-  the desktop stub to the real ComfyUI event stream. Enabling the buttons without moving the event stream is the
-  half-online state where a task is accepted and
-  no progress ever comes back.
-- The flip is driven by `ready`, not by who launched the kernel: the desktop clears `starting` in the very snapshot that
-  reports readiness, so gating the flip on `starting` never fires for a cold start where the desktop launched the kernel
-  itself — the header pill says "Running" while the page stays pinned to the offline form and every generation request
-  answers `409`.
+- The desktop ships `caps` (the feature table, `studio_caps.features(kernel_ready)`) plus where the kernel lives
+  (`kernel_ready` / `kernel_port` / `kernel_origin`) in `/neo_studio/version`. The generation side flips with
+  `kernel_ready`; the page never decides which origin a request goes to and keeps no second copy of any list.
+- What a path outside the desktop table does is decided by `forwardable()` in the same layer: inside the list
+  `proxy_forward` in `app/studio_server.py` hands it to the kernel; outside it the desktop has no such route and
+  answers `404`. The `409` that carries `offline` — the one that drives the single "This feature needs ComfyUI"
+  prompt — comes only from a route that belongs to the kernel when no kernel is up: it is the page's offline signal,
+  and no route sends it while the kernel runs. The desktop port is not a forwarder anyone can hit: the plugin
+  families come in by prefix and ComfyUI's own routes are named family by family (the queue panel's 内存 readout
+  reads the kernel's `/system_stats`).
+- The forward is the desktop process sending the page's request on its behalf: request and response bodies both stay
+  streamed (a finished image and a whole film are minute-long responses and an upload is tens of MB — none of them
+  belong in memory), hop-by-hop headers and the browser's identity headers (Origin / Referer / Sec-Fetch-*) are
+  stripped and Host is rewritten to the kernel address, so ComfyUI's origin_only middleware keeps working exactly as
+  before — the desktop never passes `--enable-cors-header`, and a browser hitting the ComfyUI port directly is still
+  403: this CSRF line never moves onto the proxy. LAN listen (`--listen`) and remote mode never get the flag either
+  and keep the same pinned page: those paths used to navigate the whole window, now the flip and the proxy are the
+  same for them.
+- The kernel's own version snapshot and kernel-side caps come through the dedicated `/neo_studio/kernel_version`
+  entry: `/neo_studio/version` exists on both ends and the desktop has to answer its own copy (the page reads the
+  desktop capability table and the offline form from it).
+- `/ws` is relayed by the desktop (`studio_ws`): both directions to the kernel's event stream while it runs, and the
+  connection is held open when it does not (without that the offline page logs a connection error every 2 seconds);
+  when the kernel closes with 4000 — "server restarted, reconnect" — that code reaches the page unchanged, the page
+  reconnects after 2 seconds, every client connection opens its own upstream, and the tunnel comes back with the
+  kernel.
+- The main canvas still lives on ComfyUI's own page: a local kernel is reached on "the page's own hostname plus the
+  kernel port" (for a LAN peer that hostname is the address that machine sees for this box), a remote kernel on the
+  address the startup settings carry. The desktop port has no canvas page and the proxy never proxies one.
+- The MCP registry and its stdio sessions live in the desktop process only, and the page is same origin with them, so
+  `/neo_mcp/*` is on the desktop port. That family never carries a CORS header, so an outside site — including one
+  that DNS-rebinds to loopback — reads nothing.
+- The flip happens as one step and nothing flips until ComfyUI answers: the capability table becomes the ready one,
+  gated buttons drop their blocking listener and restore their labels, the `body.ns-offline` mark is dropped, the
+  header queue entry shows up and reseeds from the six task tables (the VRAM / RAM readout is built with it), and
+  `/ws` moves from the desktop stub to the real kernel event stream. Enabling the buttons without moving the event
+  stream is the half-online state where a task is accepted and no progress ever comes back.
+- The flip is driven by `ready`, not by who launched the kernel: the desktop clears `starting` in the very snapshot
+  that reports readiness, so gating the flip on `starting` never fires for a cold start where the desktop launched
+  the kernel itself — the header pill says "Running" while the page stays pinned to the offline form and every
+  generation request answers `409`.
 - The offline page carries no banner: the header pill reports "● Stopped" and points the start entry at
   "Settings → Startup settings", generation entries are dimmed by the capability gate, and `body.ns-offline` is the
   mark the shared modules read to tell the offline form apart.
-- Stopping the kernel flips the page back to the offline form: the direct target is cleared, the generation buttons are
-  gated again, the event stream goes back to the stub, and the window navigation never moves.
+- Stopping the kernel flips the page back to the offline form: the proxy target is cleared, the generation buttons
+  are gated again, the event stream goes back to the stub, and the window navigation never moves.
 
 ## Director page layout
 
@@ -420,11 +435,11 @@ startable once the root is filled in.
   `pair_expires_at` / `pair_host`, valid 5 minutes; the panel's countdown rotates it at zero, and the "refresh now"
   button rotates it too. The save writes only those three fields and touches no startup setting.
 - The panel reads its data over two channels with the same semantics: inside the desktop window the pywebview
-  bridge (`pair_info` / `pair_rotate`) comes first — once the header takes the window onto ComfyUI's page, a relative
-  request goes to the ComfyUI origin, where the three pair routes do not exist (the LAN route cannot carry CORS, so the
-  full-page navigation is a hard constraint); a page pinned on the desktop-service port, and a page in a browser tab,
-  use `GET /neo-studio/pair/info` and the `pair_rotate` action. The bridge and the desktop service share the same
-  `launcher` dict and the same save entry (`app/studio_app.py`), so both channels yield the same address and the same QR.
+  bridge (`pair_info` / `pair_rotate`) comes first — it lands later than the page script after a full-page reload, so
+  it is what fills the gap — and the page uses `GET /neo-studio/pair/info` and the `pair_rotate` action: the page is
+  pinned to the desktop-service port, and the three pair routes are on that same origin. The bridge and the desktop
+  service share the same `launcher` dict and the same save entry (`app/studio_app.py`), so both channels yield the
+  same address and the same QR.
 - The QR is generated on the spot by `studio/web/js/core/qrcode-lite.js` (QR Model 2 byte mode, EC level L, mask
   scoring, version fitting) and drawn as inline SVG - no third-party library.
 - The three routes `/neo-studio/pair`, `/neo-studio/pair/check` and `/neo-studio/pair/info` are registered by the
@@ -434,8 +449,9 @@ startable once the root is filled in.
   still a physical adapter, then the top of the ranked list. `private_addrs()` ranks 192.168 → 10 → 172.16/12 and
   pushes adapters named `vEthernet` / `Hyper-WSL` / `Loopback` to the end, and link-local 169.254 and public
   addresses never go on a QR (Hyper-WSL's `172.24.80.1` is what hostname resolution reports first on many machines,
-  and a QR built from it opens a NIC the phone cannot reach). The picked address is persisted as `pair_host`. Over the
-  bridge when the page sits on the ComfyUI origin, over `pair/info` when it is pinned on the desktop-service port. All
+  and a QR built from it opens a NIC the phone cannot reach). The picked address is persisted as `pair_host`. The
+  bridge channel has no Host header to read, so it mints the QR from the persisted `pair_host`; `pair/info` reads the
+  peer off the request Host. All
   three replies carry `Cache-Control: no-store`, and the pair page reports only "valid / invalid" - an expired token
   and a wrong token read the same.
 - With LAN listening off the panel shows no QR and names the setting to enable - a control that cannot work is not
