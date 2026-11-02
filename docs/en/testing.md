@@ -192,7 +192,8 @@ node --test --test-force-exit --test-timeout=180000 studio/tests/e2e/skill-manag
   6 tabs, the queue and Settings icon slots, or the two modal layers scrolls horizontally; the top tab strip scrolls
   and the selected tab scrolls into view at a 44px target (the icon slots get the same 44px); the Director, Skills,
   Settings and Pose pages stack their two columns and span the full
-  width (overriding the split-bar's inline widths); the video composer pill spans the full width and clears the
+  width (overriding the split-bar's inline widths); the Pose page's two side panels collapse to 34 px strips
+  with the freed height going wholly to the canvas; the video composer pill spans the full width and clears the
   bottom gesture bar; on Paint the 生成 button is reachable by scrolling and the library button no longer rides on
   the mode row; on the gallery page all six `:hover`-only controls stay permanently visible on touch and inputs
   keep a 16px font. The same shapes are asserted in reverse at 1440×900: the phone tier must not touch the desktop

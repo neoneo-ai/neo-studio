@@ -2,7 +2,7 @@
 // 以及桥接结果落到的那几个 /neo_pose 接口。
 import test from "node:test";
 import assert from "node:assert/strict";
-import { resetEnv, mockRoute, clearRoutes, jsonResponse, fetchLog, click, changeValue, inputText, flush, sleep, window } from "./setup.mjs";
+import { resetEnv, mockRoute, clearRoutes, jsonResponse, fetchLog, click, changeValue, inputText, flush, sleep, clearBody, window } from "./setup.mjs";
 import { $el } from "../../web/studio/shim/ui.js";
 
 // pose.js 现在经 lib-modal.js 拉 scripts/ui.js 的 shim：静态导入会在 setup.mjs 装好钩子之前就解完
@@ -172,9 +172,13 @@ test("装好包：iframe 指短路径并带沙箱，pose:ready 之前控件全�
     assert.equal(frame.getAttribute("src"), POSE_PAGE_URL);
     assert.equal(frame.getAttribute("sandbox"), "allow-scripts allow-same-origin allow-downloads");
     assert.equal(env.host.querySelector(".ns-pose-bar"), null, "顶栏那条「3D 摆姿」行整条不出");
-    const gated = () => [...env.host.querySelectorAll(".ns-pose-btn, .ns-pose-sel, .ns-pose-checkrow input")];
+    // 收起钮是布局入口，不在门禁里：页面没 ready 时也要能把栏收起来看画布
+    const gated = () => [...env.host.querySelectorAll(".ns-pose-btn:not(.ns-pose-collapse), .ns-pose-sel, .ns-pose-checkrow input")];
     assert.ok(gated().length > 15, "面板与库的控件要在位");
     assert.ok(gated().every((n) => n.disabled), "页面没 ready 时控件不能点");
+    assert.ok(env.host.querySelectorAll(".ns-pose-collapse").length === 2, "两栏各一枚收起钮");
+    assert.ok([...env.host.querySelectorAll(".ns-pose-collapse")].every((b) => !b.disabled),
+        "收起钮不吃 ready 门禁");
     await env.ready();
     const theme = env.sent.find((s) => s.msg.type === "pose:theme");
     assert.equal(theme.msg.caps.hostUi, true, "宿主面板能力位要随主题下发");
@@ -184,7 +188,7 @@ test("装好包：iframe 指短路径并带沙箱，pose:ready 之前控件全�
 test("桥只认本页 iframe 的同源消息", async () => {
     resetEnv();
     const env = await mounted();
-    const panelBtn = () => env.host.querySelector(PANEL + " .ns-pose-btn");
+    const panelBtn = () => env.host.querySelector(PANEL + " .ns-pose-btn:not(.ns-pose-collapse)");
     env.from({ type: "pose:ready" }, { postMessage() {} });   // 别的来源冒充页面
     assert.ok(panelBtn().disabled, "来源不是这张 iframe 就不认");
     env.from({ type: "pose:ready" }, env.cw, "http://evil.local");   // 来源对、origin 不对
@@ -197,18 +201,54 @@ test("旧摆姿包（caps.hostUi 关）：面板禁用并说明缺什么，场�
     await env.ready();
     assert.equal(env.host.querySelector(PANEL + " .ns-pose-notice").hidden, false, "旧包要出提示");
     assert.match(env.host.querySelector(PANEL + " .ns-pose-notice").textContent, /sync_pose_dist/);
-    const panelBtns = [...env.host.querySelectorAll(PANEL + " .ns-pose-btn")];
+    const panelBtns = [...env.host.querySelectorAll(PANEL + " .ns-pose-btn")]
+        .filter((b) => !b.classList.contains("ns-pose-collapse"));
     const importBody = env.button("导入自备素体");
     assert.ok(panelBtns.every((b) => b === importBody || b.disabled),
         "没有命令层就不出点了只会空转的控件");
     assert.equal(importBody.disabled, false,
         "自备素体导入走宿主自己的接口，不依赖摆姿页的命令层，旧包也照旧可点");
+    assert.equal(env.host.querySelector(PANEL + " .ns-pose-collapse").disabled, false,
+        "收起栏是布局偏好，不是页面动作：控件整片禁用时栏也收得回去");
     assert.equal(env.calls().length, 0, "旧包不许发 pose:call");
     click(env.item("hero", LIB));
     click(env.button("载入场景", LIB));
     await settle();
     assert.equal(env.sent.find((s) => s.msg.type === "pose:open-scene").msg.scene.camYaw, 42,
         "读写数据根文件的通道不受 hostUi 影响");
+});
+
+test("左右栏收起：栏首的收起钮收栏，栏首留在原地当展开入口", async () => {
+    resetEnv();
+    const env = await mounted();
+    await env.ready();
+    const body = env.host.querySelector(".ns-pose-body");
+    const lib = env.host.querySelector(LIB);
+    const panel = env.host.querySelector(PANEL);
+    assert.equal(lib.getAttribute("data-collapsed"), "0", "开局两栏都展开");
+    assert.equal(body.getAttribute("data-lib"), "on");
+    assert.equal(body.getAttribute("data-panel"), "on");
+    click(env.button("收起", LIB));
+    assert.equal(lib.getAttribute("data-collapsed"), "1");
+    assert.equal(body.getAttribute("data-lib"), "off", "画布要吃到场景库让出来的那一列");
+    assert.equal(lib.querySelector(".ns-pose-side-head").hidden, false, "收起后栏首就是整栏全部，展开入口必须在");
+    assert.equal(env.button("展开", LIB).title, "展开场景库", "钮上的话要说清收的是哪一栏");
+    click(env.button("展开", LIB));
+    assert.equal(lib.getAttribute("data-collapsed"), "0");
+    assert.equal(body.getAttribute("data-lib"), "on");
+    click(env.button("收起", PANEL));
+    assert.equal(panel.getAttribute("data-collapsed"), "1");
+    assert.equal(body.getAttribute("data-panel"), "off");
+    assert.equal(JSON.parse(localStorage.getItem("neo_studio_pose_sides")).panel, true,
+        "收起偏好要落盘，重开窗口停在原处");
+    clearBody();   // 切走再回来：新视图建在干净的 body 上，只剩那份偏好
+    const again = await mounted();
+    await again.ready();
+    assert.equal(again.host.querySelector(PANEL).getAttribute("data-collapsed"), "1",
+        "新视图回灌上次的收起偏好");
+    assert.equal(again.host.querySelector(LIB).getAttribute("data-collapsed"), "0",
+        "没收过的那一栏照旧展开");
+    localStorage.removeItem("neo_studio_pose_sides");
 });
 
 test("pose:call 往返：meta/list 渲染下拉，回复只认自己那条端口", async () => {

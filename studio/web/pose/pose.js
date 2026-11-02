@@ -53,6 +53,9 @@ const LIB_SYNC_HINT = "场景库未同步：跑 tools\\sync_pose_lib.ps1 -Source
 /** 页面开局是摄影棚灰（摆姿页 core/scene.js 的 LOOKS.studio），面板按产品口径把外观定在暗色档 */
 const DEFAULT_LOOK_KEY = "dark";
 
+/** 左右栏收起偏好：画布要整幅时把场景库与控制面板收成两条竖栏，重开窗口停在上次的位置 */
+const SIDE_KEY = "neo_studio_pose_sides";
+
 /** 道具显示名归一：页面 label 带全角括号后缀（细剑（Sting））时，括号前的名字也算同一个名字 */
 function propChoiceName(text) {
     return String(text ?? "").trim().toLowerCase()
@@ -118,6 +121,17 @@ export function createPoseView({ api, $el, toast }) {
         const list = (extra = "") => $el("div", { className: "ns-pose-list" + extra });
         const head = (label) => $el("div", { className: "ns-pose-head", textContent: t(label) });
         const group = (label, kids) => $el("section", { className: "ns-pose-group" }, [head(label), ...kids]);
+        // 栏首：栏名与收起钮同一行。收起后这一行就是整栏的全部，栏宽由 .ns-pose-body 的 data-* 收到一条竖栏
+        const sideBar = (label, side) => {
+            const btn = $el("button", {
+                className: "ns-pose-collapse ns-pose-btn" + (side === "panel" ? " ns-pose-collapse-right" : ""),
+                type: "button",
+            });
+            const node = $el("div", { className: "ns-pose-side-head" }, [
+                $el("span", { className: "ns-pose-side-head-label", textContent: t(label) }), btn,
+            ]);
+            return { node, btn, label };
+        };
 
         /* 左栏：场景库 —— 存的是 pose:save-scene 的产物，浏览的是 pose-lib 同步进来的整场，
            两处都是数据根里的文件，装载只有一条路（pose:open-scene / scene/apply） */
@@ -133,8 +147,9 @@ export function createPoseView({ api, $el, toast }) {
             textContent: t("摆姿页跑在随包的最小摆姿包上：随包只分发 CC0 素体，其余素体请「导入自备素体」。"),
         });
         pkgNote.hidden = true;
+        const libBar = sideBar("场景库", "lib");
         const lib = $el("aside", { className: "ns-pose-side" }, [
-            head("场景库"),
+            libBar.node,
             sceneList,
             row([sceneName, btnSaveScene]),
             row([btnBrowseLib, btnLoadScene]),
@@ -177,8 +192,9 @@ export function createPoseView({ api, $el, toast }) {
         const btnExportSet = btn("导出图组到素材库", "send", panelGate, " ns-pose-btn-primary");
         const btnShot = btn("画布截图", "image", panelGate);
 
+        const panelBar = sideBar("控制面板", "panel");
         const panel = $el("aside", { className: "ns-pose-side ns-pose-panel" }, [
-            head("控制面板"),
+            panelBar.node,
             notice,
             group("画布状态", [stateBox]),
             group("素体", [row([modelSel, btnAddMember]), row([btnDelMember, btnResetPose]),
@@ -196,7 +212,8 @@ export function createPoseView({ api, $el, toast }) {
         ]);
 
         const stage = $el("div", { className: "ns-pose-stage" });
-        el.append($el("div", { className: "ns-pose-body" }, [lib, stage, panel]));
+        const body = $el("div", { className: "ns-pose-body" }, [lib, stage, panel]);
+        el.append(body);
 
         const setLib = (on) => libGate.forEach((n) => { n.disabled = !on; });
         const setPanel = (on) => panelGate.forEach((n) => { n.disabled = !on; });
@@ -204,6 +221,30 @@ export function createPoseView({ api, $el, toast }) {
         const setChrome = (on) => { lib.hidden = !on; panel.hidden = !on; };
         setLib(false);
         setPanel(false);
+
+        /* 左右栏收起：收起后栏首那一行就是整栏全部，画布吃掉栏宽（导演页收起生成面板同一口径）。
+           收起是布局偏好，不进 libGate/panelGate —— 缺包与旧摆姿包把控件整片关掉时，栏也收得回去 */
+        let savedSides = { lib: false, panel: false };
+        try {
+            const saved = JSON.parse(localStorage.getItem(SIDE_KEY) || "null");
+            savedSides = { lib: !!saved?.lib, panel: !!saved?.panel };
+        } catch { /* 隐私模式读不到偏好就两栏都展开 */ }
+        const setSide = (side, collapsed) => {
+            savedSides[side] = collapsed;
+            const aside = side === "lib" ? lib : panel;
+            const bar = side === "lib" ? libBar : panelBar;
+            aside.setAttribute("data-collapsed", collapsed ? "1" : "0");
+            body.setAttribute(`data-${side}`, collapsed ? "off" : "on");
+            bar.btn.setAttribute("aria-expanded", String(!collapsed));
+            bar.btn.title = t(collapsed ? `展开${bar.label}` : `收起${bar.label}`);
+            setIconLabel(bar.btn, "chevron", t(collapsed ? "展开" : "收起"));
+            try { localStorage.setItem(SIDE_KEY, JSON.stringify(savedSides)); } catch { /* 偏好写不进不影响用 */ }
+        };
+        for (const side of ["lib", "panel"]) {
+            const bar = side === "lib" ? libBar : panelBar;
+            bar.btn.onclick = () => setSide(side, !savedSides[side]);
+            setSide(side, savedSides[side]);   // 建视图时回灌上次的收起偏好
+        }
 
         const post = (type, payload, replyPort) => {
             const msg = { type, ...payload };

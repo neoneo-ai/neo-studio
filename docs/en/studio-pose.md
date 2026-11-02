@@ -243,6 +243,15 @@ viewport posing needs: the bottom-left "面板：展开" button and the `T` key 
 row (the row height is measured at runtime, because wrapping makes the first row depend on the width),
 and the state is stored in the page's own localStorage - nothing to do with the host toolbar.
 
+Each host side panel (the scene library on the left, the control panel on the right) carries a collapse
+button in its head. Collapsing one leaves a 34 px vertical rail - the panel name written vertically, with
+the button as the way back out - and the freed column width goes wholly to the canvas; collapsing both
+leaves the canvas the full width. On a phone each panel collapses to a 34 px horizontal strip and the
+freed height goes wholly to the canvas, which takes the whole screen when both are collapsed. Collapsing
+is a layout preference stored in localStorage under `neo_studio_pose_sides`, so returning to the page and
+reopening the window land on the same layout; it is not gated by `pose:ready` or `caps.hostUi` - with a
+missing package or an old package that disables every control, both panels still collapse.
+
 | Message             | Direction   | Payload                   | Purpose                                                |
 |---------------------|-------------|---------------------------|--------------------------------------------------------|
 | `pose:ready`        | page → host | none                      | The page finished setup; the host replies `pose:theme` |
@@ -354,7 +363,9 @@ file and an unsynced library are the same 404, so the modal decides by whether t
   set-export paths, the routes each message reaches, the note shown on the bundled copy, and importing
   an own figure (the base64 upload and the key checks); the scene-library modal's index rendering with
   grouping, search and load-more, applying a library scene (the action it sends and the modal closing),
-  the sync hint when the library is unsynced, the gate locking that pane, and the local scene file path.
+  the sync hint when the library is unsynced, the gate locking that pane, and the local scene file path;
+  collapsing each side panel (the button outside the gates, the head left behind as the way back out, the
+  preference stored and replayed when the view is rebuilt).
 - `tools\test_pose_package.ps1`: the shipped package's own self-check - required files, build shape,
   forbidden shapes (`*.map`, GLBs outside the whitelist, prop GLBs outside it, loose JSON), per-file sha256 and
   byte verification, a prop registry naming only the two bundled props, development-machine absolute paths, and the size cap.

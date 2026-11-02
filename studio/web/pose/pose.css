@@ -78,7 +78,8 @@
 
 .ns-pose-empty p { margin: 0; max-width: 560px; line-height: 1.7; }
 
-/* 三栏主体：左场景库 / 中画布 / 右控制面板。窄窗口下侧栏各自滚，画布吃掉剩余宽度 */
+/* 三栏主体：左场景库 / 中画布 / 右控制面板。窄窗口下侧栏各自滚，画布吃掉剩余宽度。
+   两侧栏都能收成一条竖栏（栏首的收起钮），收起的那一列让位给画布，见下面 data-lib / data-panel 那三条 */
 .ns-pose-body {
     flex: 1;
     min-height: 0;
@@ -103,6 +104,51 @@
 }
 
 .ns-pose-stage { min-width: 0; }
+
+/* 栏首：栏名与收起钮同一行。收起后这一行就是整栏全部 —— 栏宽收到一条竖栏，栏名竖排 */
+.ns-pose-side-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+}
+
+.ns-pose-side-head-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: .04em;
+    color: var(--ns-dim);
+}
+
+.ns-pose-collapse { flex: none; padding: 4px 8px; font-size: 12px; }
+
+/* 收起箭头朝折叠方向：左栏向左收、右栏向右收，收起后翻过来指向展开方向 */
+.ns-pose-side .ns-pose-collapse svg { transform: rotate(180deg); }
+.ns-pose-side[data-collapsed="1"] .ns-pose-collapse svg { transform: none; }
+.ns-pose-panel .ns-pose-collapse svg { transform: none; }
+.ns-pose-panel[data-collapsed="1"] .ns-pose-collapse svg { transform: rotate(180deg); }
+
+.ns-pose-side[data-collapsed="1"] {
+    padding: 8px 5px;
+    gap: 8px;
+    overflow: hidden;
+}
+.ns-pose-side[data-collapsed="1"] > :not(.ns-pose-side-head) { display: none; }
+.ns-pose-side[data-collapsed="1"] .ns-pose-side-head {
+    writing-mode: vertical-rl;
+    flex-direction: row-reverse;   /* 竖栏里收起钮在上，栏名竖排接在下面 */
+    justify-content: flex-start;
+}
+.ns-pose-side[data-collapsed="1"] .ns-pose-collapse { padding: 8px 3px; }
+
+/* 收起的栏把栏宽让给画布（导演页收起生成面板同一口径）；两侧都收起时中间吃满 */
+.ns-pose-body[data-lib="off"] { grid-template-columns: 34px minmax(0, 1fr) 296px; }
+.ns-pose-body[data-panel="off"] { grid-template-columns: 232px minmax(0, 1fr) 34px; }
+.ns-pose-body[data-lib="off"][data-panel="off"] { grid-template-columns: 34px minmax(0, 1fr) 34px; }
 
 .ns-pose-head {
     margin-top: 4px;
@@ -391,5 +437,23 @@
     }
     .ns-pose-name {
         width: 100%;
+    }
+    /* 收起的栏在堆叠布局里是一条 34px 横条，腾出来的那一截整块给画布（摆姿要的是画布大一点）；
+       两侧都收起时画布吃满整屏。栏首在堆叠布局里保持横排（竖排是桌面窄栏的写法） */
+    .ns-pose-body[data-lib="off"] {
+        grid-template-rows: 73% 34px minmax(0, 1fr);
+    }
+    .ns-pose-body[data-panel="off"] {
+        grid-template-rows: 73% minmax(0, 1fr) 34px;
+    }
+    .ns-pose-body[data-lib="off"][data-panel="off"] {
+        grid-template-rows: minmax(0, 1fr) 34px 34px;
+    }
+    .ns-pose-side[data-collapsed="1"] {
+        padding: 4px 10px;
+    }
+    .ns-pose-side[data-collapsed="1"] .ns-pose-side-head {
+        writing-mode: horizontal-tb;
+        flex-direction: row;
     }
 }

@@ -259,16 +259,18 @@ const lightboxPage = `
 
 const posePage = page("ns-pose", `
   <div class="ns-pose">
-    <div class="ns-pose-top">
-      <span class="ns-pose-title">摆姿</span>
-      <input class="ns-pose-name" placeholder="姿势名">
-      <button class="ns-pose-random ns-btn">随机</button>
-      <button class="ns-pose-save ns-btn">保存</button>
-    </div>
     <div class="ns-pose-body">
-      <aside class="ns-pose-side"><div class="ns-pose-lib-grid"><div class="ns-pose-lib-card"><div class="ns-pose-lib-thumb"></div></div></div></aside>
+      <aside class="ns-pose-side">
+        <div class="ns-pose-side-head"><span class="ns-pose-side-head-label">场景库</span><button class="ns-pose-collapse ns-pose-btn" type="button">收起</button></div>
+        <div class="ns-pose-list"><div class="ns-pose-item">hero</div></div>
+        <div class="ns-pose-row"><input class="ns-pose-name" placeholder="场景名"><button class="ns-pose-btn" type="button">存为场景</button></div>
+      </aside>
       <div class="ns-pose-stage"><canvas></canvas></div>
-      <aside class="ns-pose-side ns-pose-panel"><div class="ns-pose-section"><span class="ns-pose-section-title">关节</span></div></aside>
+      <aside class="ns-pose-side ns-pose-panel">
+        <div class="ns-pose-side-head"><span class="ns-pose-side-head-label">控制面板</span><button class="ns-pose-collapse ns-pose-collapse-right ns-pose-btn" type="button">收起</button></div>
+        <section class="ns-pose-group"><div class="ns-pose-head">素体</div>
+          <div class="ns-pose-row"><select class="ns-pose-sel"></select><button class="ns-pose-btn" type="button">加素体</button></div></section>
+      </aside>
     </div>
   </div>`);
 
@@ -567,6 +569,7 @@ test("手机摆姿页：画布在上，场景库与控制面板各占一截（�
         return {
             cols: getComputedStyle(document.querySelector(".ns-pose-body")).gridTemplateColumns.split(" ").length,
             stageW: Math.round(b(".ns-pose-stage").width),
+            stageH: Math.round(b(".ns-pose-stage").height),
             bodyW: Math.round(b(".ns-pose-body").width),
             stageAbove: Math.round(b(".ns-pose-panel").top) >= Math.round(b(".ns-pose-stage").bottom) - 1,
         };
@@ -574,6 +577,28 @@ test("手机摆姿页：画布在上，场景库与控制面板各占一截（�
     assert.equal(m.cols, 1, "摆姿页还是多列");
     assert.equal(m.stageW, m.bodyW, `3D 舞台没独占整幅：${m.stageW} / ${m.bodyW}`);
     assert.ok(m.stageAbove, "控制面板没落在画布下面");
+
+    // 收起：手机上的两栏各收成一条横条，画布吃掉腾出来的那一截（画布是 3D 摆姿的主场）
+    const c = await measure(posePage, MOBILE, { touch: true }, () => {
+        const b = (s) => document.querySelector(s).getBoundingClientRect();
+        const body = document.querySelector(".ns-pose-body");
+        body.setAttribute("data-lib", "off");
+        document.querySelector(".ns-pose-side").setAttribute("data-collapsed", "1");
+        const one = { libH: Math.round(b(".ns-pose-side").height), stageH: Math.round(b(".ns-pose-stage").height) };
+        body.setAttribute("data-panel", "off");
+        document.querySelector(".ns-pose-panel").setAttribute("data-collapsed", "1");
+        return {
+            ...one,
+            panelH: Math.round(b(".ns-pose-panel").height),
+            bothStageH: Math.round(b(".ns-pose-stage").height),
+            barShown: Math.round(b(".ns-pose-panel .ns-pose-side-head").height) > 0,
+        };
+    });
+    assert.ok(c.libH >= 30 && c.libH <= 42, `收起的场景库没收成一条横条：${c.libH}px`);
+    assert.ok(c.panelH >= 30 && c.panelH <= 42, `收起的控制面板没收成一条横条：${c.panelH}px`);
+    assert.ok(c.stageH > m.stageH, `只收一栏时画布没长高：${c.stageH} ≤ ${m.stageH}`);
+    assert.ok(c.bothStageH > c.stageH, `两侧都收起时画布没接着长高：${c.bothStageH} ≤ ${c.stageH}`);
+    assert.ok(c.barShown, "收起后栏首（展开入口）不在");
 });
 
 
@@ -671,9 +696,30 @@ test("桌面 1440 宽（续）：设置页两栏、素材页悬停控件、灯�
     assert.ok(lb.panelRight, "桌面灯箱侧栏被搬到了画面下方");
     assert.equal(lb.closeW, 34, "桌面灯箱圆钮被撑到 44px");
 
-    const pose = await measure(posePage, DESKTOP, {}, () => ({
-        cols: getComputedStyle(document.querySelector(".ns-pose-body")).gridTemplateColumns.split(" ").length,
-    }));
+    const pose = await measure(posePage, DESKTOP, {}, () => {
+        const b = (s) => document.querySelector(s).getBoundingClientRect();
+        const body = document.querySelector(".ns-pose-body");
+        const out = {
+            cols: getComputedStyle(body).gridTemplateColumns.split(" ").length,
+            bodyW: Math.round(b(".ns-pose-body").width),
+            libW: Math.round(b(".ns-pose-side").width),
+            panelW: Math.round(b(".ns-pose-panel").width),
+        };
+        body.setAttribute("data-lib", "off");
+        body.setAttribute("data-panel", "off");
+        for (const aside of document.querySelectorAll(".ns-pose-side")) aside.setAttribute("data-collapsed", "1");
+        out.railLibW = Math.round(b(".ns-pose-side").width);
+        out.railPanelW = Math.round(b(".ns-pose-panel").width);
+        out.stageW = Math.round(b(".ns-pose-stage").width);
+        out.barShown = Math.round(b(".ns-pose-side .ns-pose-side-head").height) > 0;
+        return out;
+    });
     assert.ok(pose.cols >= 3, `桌面摆姿页被压成 ${pose.cols} 列`);
+    assert.equal(pose.libW, 232, "桌面摆姿页左栏宽被改了");
+    assert.equal(pose.panelW, 296, "桌面摆姿页右栏宽被改了");
+    assert.equal(pose.railLibW, 34, `左栏收起后没收成一条竖栏：${pose.railLibW}px`);
+    assert.equal(pose.railPanelW, 34, `右栏收起后没收成一条竖栏：${pose.railPanelW}px`);
+    assert.ok(pose.stageW >= pose.bodyW - 70, `收起两侧后画布没吃满整幅：${pose.stageW} / ${pose.bodyW}`);
+    assert.ok(pose.barShown, "收起后栏首（展开入口）不在");
 });
 

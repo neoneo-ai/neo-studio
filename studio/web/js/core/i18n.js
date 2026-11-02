@@ -39,6 +39,13 @@ const EN = {
     "摆姿 · 场景 · 全景": "Pose, scenes, panorama",
     "场景库": "Scene Library",
     "控制面板": "Control Panel",
+    // 左右栏收起（栏首的收起钮：收起后那条竖栏就是展开入口）
+    "收起": "Collapse",
+    "展开": "Expand",
+    "收起场景库": "Collapse scene library",
+    "展开场景库": "Expand scene library",
+    "收起控制面板": "Collapse control panel",
+    "展开控制面板": "Expand control panel",
     "画布状态": "Canvas State",
     "场景名": "Scene name",
     "标签（默认 pose）": "Label (defaults to pose)",

@@ -4,6 +4,15 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **Both pose-page side panels collapse.** The scene library (left) and the control panel (right) each carry a
+  「收起」 button in their head. A collapsed panel drops to a 34 px rail — the panel name written vertically with the
+  button as the way back out — and the 3D canvas takes the freed column width, the whole width when both are collapsed.
+  On a phone each panel collapses to a 34 px strip and the canvas takes the freed height. The layout is remembered
+  across page switches and window restarts, and the two buttons are not gated: with a missing package or an old pose
+  package whose controls are all disabled, the panels still collapse. Covered by the 「左右栏收起」 case in
+  `studio/tests/js/pose-bridge.test.mjs` and the collapsed rail / row assertions in
+  `studio/tests/e2e/studio-mobile-layout.e2e.mjs`.
+
 - **The paint composer stays docked at the panel bottom in a short window.** Windows display scaling reports a
   physically 800px-tall window as 640 / 533 CSS px, and the 「矮窗口收成内容高」 rule hung on `max-height: 620px`, so in an
   ordinary scaled window the text-to-image panel shrank to its content height: the prompt box and the 生成 button floated
