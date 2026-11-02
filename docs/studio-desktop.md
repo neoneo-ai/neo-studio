@@ -274,6 +274,14 @@ js_api（`check_setup` / `pick_root` / `pick_python` / `start_setup`），根目
   端口探测 `port_busy` 也认回环 —— 回环上没人听的话窗口打不开，在跑的那路还会被读成空位再拉一路。
 - ComfyUI 没有鉴权：开了监听，`/api/*`、`/neo_studio/*`、`/view` 对局域网上的机器全部敞开，只在信任的网段开，
   用完清空这一项。MCP 服务不参与这条网络口（stdio + 回环，见 [mcp.md](mcp.md)）。
+- 手机 / 平板浏览器直连 `http://<局域网 IP>:<端口>/neo-studio` 走的是同一条路，版式由两档媒体查询自己收：
+  `max-width: 720px` 收版式（八页全单列，页内不出横向滚动），`(hover: none) and (pointer: coarse)` 收触摸行为
+  （44px 触摸目标、输入框 16px、平时靠悬停显形的控件在触摸设备上常驻）。两档都只在窄屏 / 触摸档生效，
+  桌面端窗口与 ComfyUI 侧栏一条都不吃。
+- 顶栏 8 枚页签在窄屏是一条可横滚的页签条，选中那枚由 `studio-app.js` 的 `showView` 用
+  `scrollIntoView` 带进可视区；刘海与圆角走 `viewport-fit=cover` + `env(safe-area-inset-*)`，
+  钉在页底的「生成」与视频页 composer 胶囊不被手势条压住。摆姿页只收外壳的三栏（场景库 / 画布 /
+  控制面板上下堆叠），iframe 内的 3D 控件不动。
 
 ## 远程 ComfyUI
 
@@ -351,5 +359,6 @@ ES 模块图后，链接错误发生在 `studio-app.js` 执行之前、JS 捕获
 ## 相关测试
 
 `app/tests/test_studio_desktop.py`、`app/tests/test_studio_server.py` 与 `studio-app.e2e.mjs`，
+窄屏与触摸档的版式不变量在 `studio-mobile-layout.e2e.mjs`（390×844 与 1440×900 两个视口），
 见 [testing.md](testing.md)。
 

@@ -360,3 +360,36 @@
 .ns-pose-lib-grid[hidden],
 .ns-pose-lib-blank[hidden],
 .ns-pose-lib-more[hidden] { display: none; }
+
+/* ===== 移动端：232px 场景库 │ 画布 │ 296px 控制面板 这三栏在手机上把中间的 3D 舞台挤没，
+   改成画布在上、场景库与控制面板在下各吃一屏的一截（DOM 顺序 lib / stage / panel 不动，靠 grid 落位）。
+   两侧栏的内部分隔线原来都冲画布画，堆叠之后改冲下 ===== */
+@media (max-width: 720px) {
+    .ns-pose-body {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-areas:
+            "stage"
+            "side"
+            "panel";
+        grid-template-rows: 56% minmax(0, 1fr) minmax(0, 1fr);
+    }
+    .ns-pose-stage {
+        grid-area: stage;
+        min-height: 240px;
+    }
+    .ns-pose-side {
+        grid-area: side;
+        border-right: 0;
+        border-bottom: 1px solid var(--ns-border);
+    }
+    .ns-pose-panel {
+        grid-area: panel;
+        border-left: 0;
+    }
+    .ns-pose-list {
+        max-height: 116px;
+    }
+    .ns-pose-name {
+        width: 100%;
+    }
+}

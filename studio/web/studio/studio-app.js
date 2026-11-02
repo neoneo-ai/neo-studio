@@ -83,8 +83,13 @@ function ensureView(name, build) {
 
 function showView(name) {
     for (const [key, el] of views) el.classList.toggle("ns-hidden", key !== name);
-    document.querySelectorAll(".ns-tabs a").forEach(a =>
-        a.classList.toggle("active", a.dataset.tab === name));
+    document.querySelectorAll(".ns-tabs a").forEach(a => {
+        const on = a.dataset.tab === name;
+        a.classList.toggle("active", on);
+        // 窄窗口里顶栏是一条可横滚的页签条：选中那枚必须在可视区里，
+        // 否则深链进「导演」时页签滚在右边，用户看不见自己在哪一页
+        if (on) a.scrollIntoView({ inline: "center", block: "nearest" });
+    });
     if (name !== currentView) {
         libModal?.close();      // 离开该页收起素材库弹窗（close 自己把画廊交还宿主）
         recipesModal?.close();  // 配方弹窗同一条路

@@ -415,3 +415,32 @@
     border-radius: 8px;
     padding: 6px 14px;
 }
+
+/* ===== 移动端：侧栏那条 400px 的右栏在手机上把画面压成一条横的，改成画面在上、侧栏在下；
+   翻页 / 关闭 / 全屏三枚圆钮 34px 在触摸上偏小，给到 44px（底部信息条的左右内衬跟着让开） ===== */
+@media (max-width: 720px) {
+    .neo-lightbox {
+        padding: 8px;
+    }
+    .neo-lightbox-box.neo-lightbox-with-panel {
+        flex-direction: column;
+        max-width: 100%;
+    }
+    .neo-lightbox-box.neo-lightbox-with-panel .neo-lightbox-panel {
+        width: 100%;
+        min-width: 0;
+        max-height: 46%;
+        border-left: none;
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+        padding: 10px;
+    }
+    .neo-lightbox-close,
+    .neo-lightbox-nav,
+    .neo-lightbox-full {
+        width: 44px;
+        height: 44px;
+    }
+    .neo-lightbox-meta {
+        padding: 8px 48px;
+    }
+}

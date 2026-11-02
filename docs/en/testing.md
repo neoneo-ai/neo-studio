@@ -188,3 +188,13 @@ node --test --test-force-exit --test-timeout=180000 studio/tests/e2e/skill-manag
   dropdown in the popup's right column takes the column's remaining width with strength and ✕ staying on one row.
   Pure frontend: injects `web/studio/style.css`, `web/gallery.css` and `web/prompts.css` into a DOM mirroring the
   real page, no running ComfyUI required.
+- `studio-mobile-layout.e2e.mjs` — Layout invariants of `/neo-studio` in a 390×844 phone viewport: none of the
+  8 tabs or the two modal layers scrolls horizontally; the top tab strip scrolls and the selected tab scrolls into
+  view at a 44px target; the Director, Skills, Settings and Pose pages stack their two columns and span the full
+  width (overriding the split-bar's inline widths); the video composer pill spans the full width and clears the
+  bottom gesture bar; on Paint the 生成 button is reachable by scrolling and the library button no longer rides on
+  the mode row; on the gallery page all six `:hover`-only controls stay permanently visible on touch and inputs
+  keep a 16px font. The same shapes are asserted in reverse at 1440×900: the phone tier must not touch the desktop
+  wide window or the ComfyUI sidebar layout. Pure frontend: injects `web/studio/style.css`, `web/gallery.css`,
+  `web/prompts.css`, `web/recipes.css`, `web/lightbox.css` and `web/pose/pose.css` into a DOM mirroring the real
+  page, no running ComfyUI required.

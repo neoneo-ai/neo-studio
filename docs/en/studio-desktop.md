@@ -385,6 +385,17 @@ startable once the root is filled in.
 - ComfyUI has no authentication: with listening on, `/api/*`, `/neo_studio/*` and `/view` are open to whatever is on
   the network, so enable it only on a trusted segment and clear the field afterwards. The MCP service is not part of
   this network surface (stdio + loopback — see [mcp.md](mcp.md)).
+- A phone browser on `http://<LAN IP>:<port>/neo-studio` is the same route, and the layout folds itself in two media
+  queries: `max-width: 720px` folds the layout (the 8-tab header becomes one horizontally scrollable strip, all eight
+  pages go single-column, no horizontal overflow inside a page) and `(hover: none) and (pointer: coarse)` folds the
+  touch behaviour (44px targets, 16px inputs so iOS does not zoom the page, the six hover-only gallery controls
+  permanently visible). Neither block reaches the wide desktop window or the ComfyUI sidebar.
+- The drag-to-resize sashes (the director page's gen panel, the 技能 page's skill list) are mouse gestures, so on a
+  phone they are removed and the widths are pinned back by CSS. Safe areas are handled with `viewport-fit=cover` +
+  `env(safe-area-inset-*)` on the header edges, the page bottom padding, the video composer and the asset-picker
+  dialog bars; the input cards switch from `100vh` to `100dvh` under `@supports` so the pinned 生成 button is not
+  hidden behind the mobile browser's toolbars. The 摆姿 page is a three.js iframe: only its shell stacks (scene
+  library and control panel below the canvas), the 3D controls inside keep their layout.
 
 ## Remote ComfyUI
 

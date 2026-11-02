@@ -4,6 +4,20 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **The standalone Studio page now fits a phone.** Opening `http://<LAN IP>:8188/neo-studio` in a phone browser
+  (390×844) used to open the desktop layout: the page min-widths pushed the whole page into horizontal scrolling, the
+  Director / Skills / Settings / Pose pages kept their side-by-side columns as two unreadable slivers, the video
+  composer pill stayed a 430px capsule floating over the clips, and the gallery's six hover-only controls (thumbnail
+  button bar, bookmark star, directory row's 隐藏/删除/设置, card-corner LoRA 取用 / 目录菜单 / 收藏保存) never
+  appeared because a finger leaves no hover state. Two media queries now carry the phone tier: `max-width: 720px` for
+  the layout (single column everywhere, tabs in one scrollable row with the selected tab scrolled into view, pages
+  flush to the viewport, the composer pill full-width and clear of the bottom gesture bar, the 620px director
+  min-width and the split-bar's inline widths released) and `hover: none and pointer: coarse` for touch behaviour
+  (those six controls permanently visible, long-press callout off, inputs at 16px so iOS focus no longer zooms the
+  page and stays zoomed). `index.html`'s viewport meta gains `viewport-fit=cover` and the safe-area insets are spent
+  on the header and the composer pill. Desktop wide-window and ComfyUI sidebar layout are untouched, and the same
+  shapes are asserted in reverse at 1440×900. Covered by `studio/tests/e2e/studio-mobile-layout.e2e.mjs`.
+
 - **Picking a model in the 自定参数 panel no longer closes the panel - 完成 is the only way out.** The
   技能 + 自定参数 panel on the video page collapsed the moment a 主模型 / VAE / LoRA row was picked. The combobox
   closes its body-mounted list inside the list item's `mousedown`, so the release lands on the page element under the

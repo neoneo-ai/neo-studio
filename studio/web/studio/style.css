@@ -73,6 +73,37 @@ body {
     background: #3a3a44;
     vertical-align: middle;
 }
+/* 手机 / 窄窗口：8 枚页签压不进一块手机的宽度，顶栏这一条改成横向可滚的页签条（DOM 与
+   .ns-tabs a 的既有选择器不动，选中页签由 showView 里的 scrollIntoView 带进可视区）。
+   刘海与圆角从这一条的两端挖走，不补回来顶栏的两头就是贴不住屏幕边的 */
+@media (max-width: 720px) {
+    .ns-header {
+        height: auto; min-height: 40px; gap: 6px;
+        padding: 0 max(6px, env(safe-area-inset-right)) 0 max(6px, env(safe-area-inset-left));
+    }
+    .ns-logo { font-size: 13px; }
+    .ns-tabs {
+        flex: 1 1 auto; min-width: 0;
+        overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain;
+    }
+    .ns-tabs::-webkit-scrollbar { display: none; }
+    .ns-tabs a { padding: 0 9px; font-size: 13px; white-space: nowrap; }
+    .ns-tabs a[data-tab="gallery"],
+    .ns-tabs a[data-tab="skills"] { margin-left: 4px; }
+}
+/* 只剩一行时给不出两件事：ComfyUI 状态位与组分隔线让位给页签，启停在「设置 → 启动设置」顶部看 */
+@media (max-width: 430px) {
+    .ns-comfy-status { display: none; }
+    .ns-tabs a[data-tab="gallery"]::before,
+    .ns-tabs a[data-tab="skills"]::before { display: none; }
+}
+/* 触摸档：这一行给到 44px 触摸目标；输入控件字号 16px —— iOS 聚焦字号小于 16px 的输入框时
+   把整页放大，且不会自己缩回去，用户点完一下还得等页面回正 */
+@media (max-width: 720px) and (hover: none) and (pointer: coarse) {
+    .ns-header { min-height: 44px; }
+    .ns-tabs a { min-height: 44px; }
+    input, select, textarea { font-size: 16px; }
+}
 /* 顶栏 ComfyUI 状态位：只报状态，启停在「设置 → 启动设置」顶部；端口 / PID 收在提示里 */
 .ns-comfy-status { margin-left: auto; font-size: 12px; color: #9a9aa8; white-space: nowrap; }
 .ns-comfy-run { color: #7bc47f; }
@@ -122,7 +153,6 @@ body {
 .ns-offline .neo-director-merge-run,
 .ns-offline .neo-director-sb-gen { opacity: .6; }
 
-
 /* 主区就一片页面视图：智能体页与其余页同一条路由，独占整片视图 */
 .ns-body { flex: 1; display: flex; min-height: 0; }
 .ns-view { flex: 1; min-width: 0; overflow: hidden; position: relative; }
@@ -130,10 +160,25 @@ body {
 /* 素材页顶部不留内边距：sticky 停在容器 padding 内侧，上方会露出一条滚动的缩略图；顶部间距由工具条自己的 padding 提供 */
 .ns-page:has(.ns-gallery-host) { padding-top: 0; }
 .ns-hidden { display: none !important; }
+/* 手机 / 窄窗口：页内 16px 内衬在手机上吃掉四分之一幅，一律收到 8px；
+   底部安全区落在这一层的 padding 上，钉在页底的生成按钮与操作行不被圆角与手势条压住 */
+@media (max-width: 720px) {
+    .ns-page {
+        padding: 8px;
+        padding-bottom: max(8px, env(safe-area-inset-bottom));
+    }
+}
 
 /* 素材页：NeoGallery 元素按侧栏设计，这里给它满幅容器（头部工具条自带 sticky，两种宿主通用） */
 .ns-gallery-host { height: 100%; }
 .ns-gallery-host .neo-gallery-topbar { margin: -10px -16px 8px; padding: 8px 16px; }
+/* 窄窗口：工具条换行成两三行后 sticky 常驻顶部，行距与内衬收一档，缩略图才有地方摊开 */
+@media (max-width: 720px) {
+    .ns-gallery-host .neo-gallery-topbar { gap: 4px 8px; padding: 6px 8px; margin: -8px -8px 6px; }
+}
+
+/* 手机整页版式与输入卡高度：见下方各页的移动端块（绘画页 dvh 一档、技能引导卡一档）——
+   那些块都排在各自的桌面规则之后，同特异时后落的赢 */
 
 /* 导演页：满幅主栏（左编辑器 │ 竖向分隔条 │ 右整片生成面板），收起编辑器时整栏换成引导页。
    左右分栏要两部并排才立得住，窄窗口交给页面出横向滚动，不把两块压成读不了的窄条。
@@ -177,6 +222,17 @@ body {
 .ns-libmodal-pick-count { flex: 1; font-size: 12px; color: #9a9aa8; }
 .ns-libmodal-pick-use { background: rgba(47, 111, 237, 0.18); border-color: #2f6fed; color: #cfe0ff; }
 .ns-libmodal-pick-use:hover { background: rgba(47, 111, 237, 0.3); }
+/* 手机：素材库 / 配方弹窗铺满整窗 —— 640px 地板 + 94vw 的居中卡在一块手机上就是横向溢出；
+   右缘调宽条与浮窗摆位是鼠标手势，触摸上拖不动，收掉（标题栏 ✕ 与 Esc 照旧在） */
+@media (max-width: 720px) {
+    .ns-libmodal-box {
+        width: 100%; height: 100%; min-width: 0; max-width: none; max-height: none;
+        border: none; border-radius: 0;
+    }
+    .ns-libmodal-resize { display: none; }
+    .ns-libmodal-titlebar { padding-top: max(8px, env(safe-area-inset-top)); }
+    .ns-libmodal-pickbar { padding-bottom: max(8px, env(safe-area-inset-bottom)); }
+}
 .ns-director-main { flex: 1 1 auto; display: flex; flex-direction: row; gap: 8px; min-width: 0; min-height: 0; }
 /* 左编辑器宿主：导演编辑器内嵌铺满这里，编辑器卸载后宿主空着（整栏由引导页接管） */
 .ns-director-editor { flex: 1 1 auto; min-width: 360px; min-height: 0; overflow: hidden; }
@@ -443,6 +499,36 @@ body {
 .ns-paint-panel .neo-gallery-edit-compare-imgwrap.neo-gallery-edit-empty-stage { width: 100%; }
 .ns-paint-panel .neo-gallery-edit-empty { width: 100%; height: 100%; min-width: 0; min-height: 0; }
 
+/* 手机：面板内衬收到 8px；模式条与钉在右端的素材库按钮在窄栏里叠成一坨，素材库按钮回到行内、
+   整行左对齐换行；底部生成行按钮多，一行压不下就换行。
+   输入卡底行的 chip 在窄屏永不换行（换行的 chip 会被折叠线切掉，见 gallery.css 那条 nowrap）——
+   手机上这一排只能横向滚，滚不动就是「生成」按钮够不着 */
+@media (max-width: 720px) {
+    .ns-paint-panel { padding: 8px; }
+    .ns-paint-main { padding-top: 6px; }
+    .ns-paint-modes { justify-content: flex-start; flex-wrap: wrap; row-gap: 2px; }
+    .ns-paint-lib-btn { position: static; transform: none; }
+    .ns-paint-panel .neo-gallery-story-actions { flex-wrap: wrap; }
+    .ns-paint-panel .neo-gallery-gm-composer-bar,
+    .ns-video-card .ns-video-chips { overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain; }
+    .ns-paint-panel .neo-gallery-gm-composer-bar::-webkit-scrollbar,
+    .ns-video-card .ns-video-chips::-webkit-scrollbar { display: none; }
+}
+
+/* 手机上输入卡那几档按 100vh 算的高度算的是「浏览器工具栏收起后」的视口高，钉底的输入卡与
+   「生成」会被工具栏压住看不见，一律换成 dvh（@supports 兜住不认 dvh 的老浏览器）。
+   排在上面那批 100vh 规则之后：同特异，后落的赢 */
+@supports (height: 100dvh) {
+    @media (max-width: 720px) {
+        .ns-paint-panel .neo-gallery-gm-chip-panel { max-height: min(62dvh, calc(100dvh - 220px)); }
+        .ns-paint-panel .neo-gallery-gm-quick-input { min-height: clamp(88px, 16dvh, 150px); }
+        .ns-paint-text .neo-gallery-gm-preview,
+        .ns-paint-text .neo-gallery-cs-result { max-height: 38dvh; }
+        .ns-paint-panel .neo-gallery-edit-compare-img { max-height: max(110px, calc(100dvh - 380px)); }
+    }
+}
+
+
 /* 配方弹窗：宽弹窗里配方式网格排布；分组标题/空状态跨整行 */
 .ns-director-recipes .neo-recipes-list {
     display: grid;
@@ -457,6 +543,23 @@ body {
     .ns-director, .ns-paint { height: auto; min-height: 0; }
     .ns-director-main { min-height: 620px; }
 }
+/* 手机：导演页「编辑器 │ 分隔条 │ 生成面板」这一栏改成上下堆叠 —— 620px 的栏宽下限在手机上把
+   整页顶成横向滚动，两栏并排各剩一窄条读不了。拖宽用的分隔条在触摸上拖不动，整条收起；
+   面板宽是分隔条写进内联样式的，只有 !important 压得住。整栏交给页面出纵向滚动
+   （上面 900px 那条的 620px 保底在堆叠版式里给不出，编辑器与面板各自给保底高） */
+@media (max-width: 720px) {
+    .ns-director { gap: 6px; min-width: 0; }
+    .ns-director-main { flex-direction: column; min-height: 0; gap: 6px; }
+    .ns-director-editor { min-width: 0; flex: none; height: 72dvh; min-height: 420px; }
+    .ns-director-split { display: none; }
+    .ns-director-main .ns-gen-panel { width: 100% !important; min-width: 0; padding: 10px; }
+    .ns-director-empty-actions { flex-wrap: wrap; justify-content: center; }
+    .ns-director-empty-card,
+    .ns-director-empty-card.neo-gallery-gm-idle { padding: 24px 16px; }
+}
+@supports not (height: 100dvh) {
+    @media (max-width: 720px) { .ns-director-editor { height: 72vh; } }
+}
 
 /* 技能页：引导页（默认）+ 统一技能管理两块按页状态切换。引导起手版式照导演页 / 视频页的空白态
    （.neo-gallery-gm-idle 主行 + 细注行 + 四角括号），入口一排三枚：导入工作流 / 新建模板技能 / 技能列表。
@@ -469,6 +572,12 @@ body {
 .ns-skills-guide-card { position: relative; max-width: 700px; padding: 40px 60px; }
 .ns-skills-guide-card.neo-gallery-gm-idle { padding-top: 40px; }
 .ns-skills-guide-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px; }
+/* 手机：引导卡的 40×60 内衬与「四角括号」在窄屏顶出幅外，内衬收到 8px 一档 */
+@media (max-width: 720px) {
+    .ns-skills-guide-card,
+    .ns-skills-guide-card.neo-gallery-gm-idle { padding: 24px 16px; }
+}
+
 .ns-skills-guide-actions .ns-btn { display: inline-flex; align-items: center; gap: 6px; }
 .ns-skills-manager { display: none; flex: 1 1 auto; min-height: 0; }
 .ns-skills-editing .ns-skills-guide { display: none; }
@@ -564,6 +673,26 @@ body {
 .ns-settings .llm-btn-row .rs-gen-save,
 .ns-settings .llm-btn-row .rs-gen-test,
 .ns-settings .rs-gen-settings .rs-gen-save { width: auto; padding: 6px 20px; align-self: flex-end; }
+/* 手机：左栏 150px 竖 tab 在手机上吃掉半幅，tab 移到顶部成一条可横滚的行（选中那枚的内描边
+   原来贴左缘读作「这一列被选中」，横排里改贴底缘）；启动设置行 label 固定 122px 与输入框在
+   窄栏里各剩一截，label 落上一行；「关于」的路径行同理 —— 标签整行，值与两个按钮占下一行 */
+@media (max-width: 720px) {
+    .ns-settings { flex-direction: column; }
+    .ns-settings-tabs {
+        flex-direction: row; width: auto; gap: 4px; padding: 6px;
+        overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain;
+        border-right: none; border-bottom: 1px solid #2c2c33;
+    }
+    .ns-settings-tabs::-webkit-scrollbar { display: none; }
+    .ns-settings-tab { padding: 6px 10px; white-space: nowrap; }
+    .ns-settings-tab.active { box-shadow: inset 0 -2px 0 #2f6fed; }
+    .ns-settings-content { padding: 10px 12px; }
+    .ns-kernel { flex-wrap: wrap; gap: 8px; }
+    .ns-launch-row { flex-direction: column; align-items: stretch; gap: 4px; }
+    .ns-launch-label { width: auto; }
+    .ns-about-row { flex-wrap: wrap; }
+    .ns-about-label { flex: 0 0 100%; }
+}
 
 /* 启动设置：便携 exe 的 ComfyUI 根目录 / 解释器 / 端口（只有桌面端服务出这个 tab） */
 /* 面板顶部：内核状态 + 启停两枚按钮，此刻做不了的那枚禁用 */
@@ -707,6 +836,11 @@ body {
    1280px 封顶居中：更宽的窗口两边留白，正文行宽也该收在这一档 */
 .ns-agent-page { display: flex; flex-direction: column; gap: 10px; height: 100%; overflow: hidden; }
 .ns-agent-chat { flex: 1 1 auto; min-width: 0; min-height: 0; max-width: 1280px; margin-inline: auto; width: 100%; border: 1px solid var(--ns-border); border-radius: 8px; overflow: hidden; background: var(--ns-bg); }
+/* 手机：智能体页整幅铺满 —— 这一页只有对话一块，外壳那圈边框与圆角在手机上就是两条贴边的线 */
+@media (max-width: 720px) {
+    .ns-agent-page { padding: 0; }
+    .ns-agent-chat { max-width: none; border: none; border-radius: 0; }
+}
 
 /* ====== 首页：意图卡片（大字标题 + 生成三卡 + 素材三卡） ====== */
 .ns-home { padding: 30px 28px 56px; }
@@ -748,6 +882,15 @@ body {
 }
 .ns-home-card > svg:last-child { flex: none; margin-left: auto; color: var(--ns-dim); }
 @media (max-width: 900px) { .ns-home-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+/* 手机：首页是「一句话说清 + 卡片列表」，两列 / 三列在手机上都把标题挤成一截，一律单列；
+   两侧 28px 与页底 56px 的留白在手机上吃掉整屏的滚动距离，收一档 */
+@media (max-width: 720px) {
+    .ns-home { padding: 16px 10px 32px; }
+    .ns-home-hero { padding: 8px 0 4px; }
+    .ns-home-hero h1 { font-size: 21px; }
+    .ns-home-grid { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+    .ns-home-card { padding: 12px 14px; }
+}
 
 /* ===== 视频页：整页舞台 + 底部浮动胶囊 composer（照 ArtCraft Create Video 的单编辑器版面） ===== */
 .ns-video { height: 100%; }
@@ -829,7 +972,6 @@ body {
 .ns-video-seed-roll:hover { color: var(--ns-fg); }
 .ns-video-run { padding: 5px 20px; }
 .ns-video-cancel { padding: 5px 16px; }
-
 @media (max-width: 900px) {
     .ns-video-dock { bottom: 10px; }
     .ns-video-top { flex-wrap: wrap; }
@@ -837,4 +979,30 @@ body {
     .ns-video-stage { padding-bottom: 320px; }
 }
 
-
+/* 手机：composer 胶囊贴满整幅并让开底部手势条；舞台底部留白跟胶囊同档（胶囊在窄屏是三行版式，
+   900px 那条的 320px 保底把最后一块成片压进胶囊底边）；状态行右侧进度条收宽让位给状态文字；
+   hero 卡的 46×54 内衬在手机上连四角括号都顶出幅外。
+   排在 900px 那条之后：那两条同样特异，后落的赢，胶囊底边与舞台留白才轮得到这一档 */
+@media (max-width: 720px) {
+    .ns-video-dock {
+        bottom: max(8px, env(safe-area-inset-bottom));
+        width: calc(100% - 12px);
+    }
+    .ns-video-stage { padding: 12px 10px 340px; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+    .ns-video-hero { padding: 0 12px 320px; }
+    .ns-video-hero .ns-video-hero-card { padding: 24px 18px; }
+    .ns-video-card { gap: 8px; }
+    .ns-video-progress { width: 120px; }
+    .ns-video-deck { flex: 1 1 100%; justify-content: center; }
+    /* chip 排（技能 / 尺寸 / 时长 / 种子 + 取消 / 生成）基态是一行不换行、不滚动的 flex：
+       整页 .ns-video-page 是 overflow:hidden，chip 排超宽时被裁掉，「生成」在手指下永远够不着
+       —— 窄屏给它横向滚动，两枚按钮钉死不跟着 chip 一起被压扁 */
+    .ns-video-card .ns-video-chips {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        min-width: 0;
+        scrollbar-width: none;
+    }
+    .ns-video-card .ns-video-chips::-webkit-scrollbar { display: none; }
+    .ns-video-card :is(.ns-video-run, .ns-video-cancel) { flex: none; }
+}

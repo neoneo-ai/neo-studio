@@ -236,7 +236,8 @@
     cursor: default;
 }
 
-/* 图片搜索用得少：不给它 grow，宽宿主里不拉满整条，窄侧栏里也不抢同排按钮的位置 */
+/* 图片搜索用得少：不给它 grow，宽宿主里不拉满整条，窄侧栏里也不抢同排按钮的位置。
+   整幅窄屏（手机）是个例外：140px 的槽位连一个词都打不全，让它整行占位 */
 .neo-gallery-search-container {
     flex: 0 1 140px;
     min-width: 0;
@@ -3556,3 +3557,36 @@ Accordion Section Buttons (Clear)
     box-shadow: 0 0 0 1px rgba(79, 140, 255, 0.35);
 }
 
+/* ===== 移动端（手机浏览器打 http://<局域网 IP>:8188/neo-studio 的那条路）
+   窄屏那条只管版式，触摸那条只管「靠悬停才显形」这一类在手指上永不发生的交互；
+   桌面端宽窗口与 ComfyUI 侧栏两条都不吃 ===== */
+@media (max-width: 720px) {
+    /* 搜索框整行占位：140px 的槽位在手机上连一个词都打不全 */
+    .neo-gallery-search-container {
+        flex: 1 1 100%;
+    }
+}
+
+/* 缩略图底部操作条、收藏 ⋯、目录行的 隐藏/删除/设置、卡片角的 LoRA 取用 / 目录菜单 / 收藏保存
+   基态全是 opacity:0，靠宿主卡片的 :hover 显形；手指点完不留悬停态，这一类控件在触摸设备上等于不存在
+   —— 触摸档一律常驻。缩略图底部那条显形规则带 !important（:hover 那条也带），这里跟着带 */
+@media (hover: none) and (pointer: coarse) {
+    .neo-gallery-thumb-container .neo-gallery-thumb-btn-bar {
+        opacity: 1 !important;
+    }
+    .neo-gallery-thumb-container .neo-gallery-thumb-bookmark-btn,
+    .neo-gallery-local-card .neo-gallery-thumb-bookmark-btn,
+    .neo-gallery-dir-item .neo-gallery-dir-item-actions > button {
+        opacity: 1;
+    }
+    .neo-gallery-category-card :is(.neo-gallery-card-lora-send-btn, .neo-gallery-card-dir-menu-btn, .neo-gallery-card-civitai-save-btn) {
+        opacity: 1;
+    }
+    /* 长按缩略图落系统的「存储图像」，不弹菜单也不选中字 */
+    .neo-gallery-thumb-container,
+    .neo-gallery-card-cover-wrapper {
+        -webkit-touch-callout: none;
+        -webkit-user-select: none;
+        user-select: none;
+    }
+}
