@@ -108,10 +108,17 @@ body {
     .ns-queue-toggle { min-height: 44px; }
     input, select, textarea { font-size: 16px; }
 }
-/* 顶栏 ComfyUI 状态位：只报状态，启停在「设置 → 启动设置」顶部；端口 / PID 收在提示里 */
-.ns-comfy-status { margin-left: auto; font-size: 12px; color: #9a9aa8; white-space: nowrap; }
+/* 顶栏 ComfyUI 状态位：只报状态，启停在「设置 → 启动设置」顶部；端口 / PID 收在提示里。
+   这一位常驻且宽度固定：读数没来时靠 visibility 收字，flex 位不塌 —— 用 display:none 收起的话
+   右边的队列 / 设置 / 窗口控件整排往左滑，启动那段时间顶栏就是「状态不见了、图标也不对」 */
+.ns-comfy-status {
+    margin-left: auto; font-size: 12px; color: #9a9aa8; white-space: nowrap;
+    min-width: 66px; text-align: right; visibility: hidden;
+}
+.ns-comfy-status:not(:empty) { visibility: visible; }
 .ns-comfy-run { color: #7bc47f; }
 .ns-comfy-starting { color: #e0b070; }
+.ns-comfy-pending { color: #8a8a96; }
 /* 无边框窗口：桌面端摘掉系统标题栏后，最小化 / 最大化 / 全屏 / 关闭由顶栏自己出（只在桌面端窗口出现） */
 .ns-wctl { display: flex; align-items: center; gap: 2px; margin-left: 12px; }
 /* [hidden] 的 UA display:none 被上面这条 display:flex 盖掉：浏览器标签页里 pywebview 桥永不来、

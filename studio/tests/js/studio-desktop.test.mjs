@@ -218,14 +218,16 @@ function mountStudio() {
     return document.getElementById("ns-comfy-status");
 }
 
-test("浏览器标签页里没有桌面端：顶栏 ComfyUI 状态位不显示", async () => {
-    const status = mountStudio();
+test("ComfyUI 直接服务的页面（浏览器标签页 / 手机页）：状态位读「运行中」，右端不空着", async () => {
+    const status = mountStudio();   // 快照没有 offline 字段 = 这一页由运行中的 ComfyUI 自己发
     await import("../../web/studio/studio-app.js?browser=1");
     await flush();
-    assert.equal(status.hidden, true, "没有 pywebview api 时状态位应保持隐藏");
+    assert.equal(status.textContent, "● 运行中", "这一页就是内核发的：没有桌面端的桥，顶栏也要报出依据得来的读数");
+    assert.ok(status.classList.contains("ns-comfy-run"), "运行中是绿色");
+    assert.match(status.title, /直接服务/, "提示里说清这一路的依据");
 });
 
-test("桥对象先到、方法后填：不打断启动链，状态位等齐了再接管", async () => {
+test("桥对象先到、方法后填：状态位先读占位句，方法齐了再接管", async () => {
     const status = mountStudio();
     // pywebview 的桥脚本分两步注入：window.pywebview（含空 api）先到，方法由 finish.js 调 _createApi 后填。
     // 只判断 api 对象存在就 poll，会抛 TypeError 打断启动链 —— 视图再也不挂载，窗口停在只出顶栏的空白页。
@@ -234,18 +236,18 @@ test("桥对象先到、方法后填：不打断启动链，状态位等齐了�
     await flush();
 
     assert.ok(document.querySelector("#ns-view .ns-page"), "方法未就绪也不该打断启动链，视图要照常挂载");
-    assert.equal(status.hidden, true, "方法未就绪先不接管状态位");
+    assert.equal(status.textContent, "● 状态读取中", "桌面端窗口里状态没落地就读占位句：空的那一块是 flex 位，队列 / 设置 / 窗口控件会整排往左滑");
+    assert.ok(status.classList.contains("ns-comfy-pending"), "占位句是中性灰，不装作已就绪");
 
     const state = { port: 8188, pid: 4321, mine: true, running: true, ready: true };
     window.pywebview.api.comfy_state = async () => ({ ...state });
     await sleep(400);   // 300ms 一轮重试（setTimeout 不参与轮询加速）
-    assert.equal(status.hidden, false, "方法齐了就该接管");
-    assert.equal(status.textContent, "● 运行中");
+    assert.equal(status.textContent, "● 运行中", "方法齐了占位句让位给真状态");
 });
 
 // comfy_state 的桩只答第一发：页面每 5 秒一轮问状态，桩常开的话本用例的实例会一直往共享
-// DOM 里写自己的状态，串进后面的用例（每次 import 的实例共用同一个 document）。非 200 的
-// 答复会让页面停问这条路由。
+// DOM 里写自己的状态，串进后面的用例（每次 import 的实例共用同一个 document）。非 200 连到
+// 第三发页面才停问这条路由。
 function mockComfyStateOnce(payload) {
     let asks = 0;
     mockRoute("/neo_studio/comfy_state", () => (++asks <= 1
@@ -272,8 +274,7 @@ test("刷新现场桥还没注入：顶栏状态位由桌面端服务的 comfy_s
     await import("../../web/studio/studio-app.js?httpStatus=1");
     await flush();
     await sleep(120);
-    assert.equal(status.hidden, false, "桥没注入时桌面端服务要顶上状态位");
-    assert.equal(status.textContent, "● 运行中");
+    assert.equal(status.textContent, "● 运行中", "桥没注入时桌面端服务要顶上状态位");
     assert.match(status.title, /端口 8188/, "提示里报端口");
 });
 
@@ -299,9 +300,70 @@ test("桥在但结果送不回页面（窗口线程被拖动循环占住）：�
     await import("../../web/studio/studio-app.js?bridgeStarved=1");
     await flush();
     await sleep(120);
-    assert.equal(status.hidden, false, "桥卡住时桌面端服务要顶上状态位");
-    assert.equal(status.textContent, "● 运行中");
+    assert.equal(status.textContent, "● 运行中", "桥卡住时桌面端服务要顶上状态位");
     assert.match(status.title, /端口 7791/, "提示里报端口");
+});
+
+// 桌面端服务的线程冷启动那阵 /neo_studio/comfy_state 会先回非 200：第一发就把 HTTP 这条来源判死，
+// 顶栏就永远停在「没有状态」的形态 —— 空的那一块是 flex 位，右端的队列 / 设置 / 窗口控件整排往左滑。
+test("桌面端服务先回非 200 的空档：占位句撑着顶栏，服务答话后接上真状态", async () => {
+    resetEnv();
+    document.body.innerHTML = studioBody;
+    mockRoute("/neo_studio/version", jsonResponse({
+        success: true, plugin_version: "9.9.9", comfyui_version: "ComfyUI 未运行",
+        offline: true, starting: false, caps: {}, routes: ["GET /neo_gallery/list"],
+        comfy_base: "", recipes: [],
+    }));
+    let asks = 0;
+    mockRoute("/neo_studio/comfy_state", () => (++asks <= 2
+        ? jsonResponse({ success: false }, 502)
+        : jsonResponse({ success: true, port: 8188, pid: 4321, mine: true, running: true, ready: false })));
+    window.pywebview = { api: {} };   // 桥的方法还没填：这一段只有 HTTP 这条来源
+    const status = document.getElementById("ns-comfy-status");
+    await import("../../web/studio/studio-app.js?httpFlaky=1");
+    await flush();
+    assert.equal(status.textContent, "● 状态读取中", "非 200 的空档里顶栏读占位句，右端图标位不跟着滑");
+    await sleep(140);
+    assert.equal(status.textContent, "● 运行中", "服务答话后接上真状态（第一发非 200 不许判死这条来源）");
+    assert.match(status.title, /端口 8188/, "提示里报端口");
+});
+
+// origin 根本不答这条路由（浏览器标签页 / 远程那路）：连错三发就停问，不再每 5 秒撞一次 404。
+test("origin 不答 comfy_state：连错三发停问，离线页在浏览器标签页里不编读数", async () => {
+    resetEnv();
+    document.body.innerHTML = studioBody;
+    mockRoute("/neo_studio/version", jsonResponse({
+        success: true, plugin_version: "9.9.9", comfyui_version: "ComfyUI 未运行",
+        offline: true, starting: false, caps: {}, routes: ["GET /neo_gallery/list"],
+        comfy_base: "", recipes: [],
+    }));
+    let asks = 0;
+    mockRoute("/neo_studio/comfy_state", () => (++asks, jsonResponse({ success: false }, 404)));
+    await import("../../web/studio/studio-app.js?httpDead=1");
+    await sleep(400);   // 测试里轮询加速到 40ms 一轮：跑到停问为止
+    const stopped = asks;
+    await sleep(120);   // 同进程里前面几个用例各留了一份顶栏轮询，这里只断言「停了」，不比绝对条数
+    assert.ok(stopped >= 3, `连错三发才停问（实际问了 ${stopped} 次）`);
+    assert.equal(asks, stopped, `停问之后不许再撞 404（又多问了 ${asks - stopped} 次）`);
+    assert.equal(document.getElementById("ns-comfy-status").textContent, "",
+                 "桌面端服务的离线页在浏览器标签页里没有状态依据，顶栏不编读数");
+});
+
+// 顶栏右端这一格的宽度是常驻的：状态位用 visibility 收字而不是 display:none，
+// 空着的时候队列 / 设置 / 窗口控件才有固定的位置（顶栏是 flex，位塌掉整排往左滑）
+test("顶栏状态位是常驻位：空着靠 visibility 收字，flex 位不塌", async () => {
+    const html = fs.readFileSync(path.join(webDir, "studio", "index.html"), "utf8");
+    assert.match(html, /<span class="ns-comfy-status" id="ns-comfy-status"><\/span>/,
+                 "状态位不在标记里带 hidden：hidden 是 display:none，flex 位会塌");
+    const css = fs.readFileSync(path.join(webDir, "studio", "style.css"), "utf8");
+    // 取基础档那一条（窄屏档里同名选择器先出现，它是「压不进一行就让位给页签」的规则）
+    const slots = [...css.matchAll(/\.ns-comfy-status\s*\{[^}]*\}/g)].map((m) => m[0]);
+    const base = slots.find((s) => /margin-left:\s*auto/.test(s));
+    assert.ok(base, "基础档的状态位规则在页签之后");
+    assert.match(base, /min-width:\s*\d+px/, "这一格有固定宽度：读数长短不推右边的图标位");
+    assert.match(base, /visibility:\s*hidden/, "没读数时收字不收位");
+    assert.match(css, /\.ns-comfy-status:not\(:empty\)\s*\{\s*visibility:\s*visible/, "有读数才显字");
+    assert.match(css, /\.ns-comfy-pending\s*\{[^}]*color/, "占位句有自己的中性色");
 });
 
 test("前端错误上报：桥没就绪先等，方法齐了再补进桌面端日志", async () => {
@@ -329,8 +391,8 @@ test("顶栏只显状态：端口 / PID / 谁启动收在提示里，动作在�
     await import("../../web/studio/studio-app.js?desktopStatus=1");
     await flush();
 
-    assert.equal(status.hidden, false, "桌面端里应显示状态位");
     assert.equal(status.textContent, "● 运行中", "顶栏只报状态，不写动作");
+    assert.ok(!status.classList.contains("ns-comfy-pending"), "真状态到了不再读占位句");
     assert.ok(status.classList.contains("ns-comfy-run"), "运行中是绿色");
     assert.match(status.title, /端口 8188/, "提示里报端口");
     assert.match(status.title, /外部启动/, "提示里报谁启动");
@@ -612,7 +674,7 @@ test("离线页：body 带离线标记，启动入口只在「设置 → 启动�
         caps: { image_gen: false, grid_split: true }, recipes: [],
     }));
     await import("../../web/studio/studio-app.js?offline=1");
-    await flush();
+    await flush(60);   // 离线标记在版本快照那条 Promise 链末端，前面用例留下的轮询会把它挤出 12 拍微任务
     assert.ok(document.body.classList.contains("ns-offline"), "body 应带离线标记");
     assert.equal(document.getElementById("ns-offline"), null, "离线页不叠横幅");
     assert.equal(document.querySelector(".ns-offline-start"), null, "启动入口不在横幅上，在「设置 → 启动设置」");

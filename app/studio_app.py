@@ -1360,6 +1360,28 @@ class StudioDesktop:
         log_line("pair token rotated")
         return {"ok": True, "token": token, "seconds_left": pair.PAIR_TTL_SECONDS}
 
+    def pair_info(self) -> dict:
+        """「设置 → 手机连接」的快照走桥：顶栏整页跳到 ComfyUI 的页面后，页面相对路径打的是
+        ComfyUI 的 origin，配对那三条路由只在桌面端端口上（局域网那路加不了 CORS，整页跳转是
+        硬约束），桥是窗口里唯一还通着桌面端的通道。出码地址在服务侧是认请求 Host 头的，桥这边
+        没有 Host 头——窗口自己永远是回环：沿用上次落盘的 pair_host，没有就取「启动设置 →
+        局域网监听」选定的网卡地址（手机能连到的就是它），监听填 0.0.0.0 时取本机网卡清单里
+        第一个。令牌在这里生成 / 续期，落盘照 pair_rotate 那套。
+        """
+        host = str(self.launcher.get("pair_host") or "")
+        if not host:
+            ips = lan_ips()
+            picked = [p.strip() for p in self.listen.split(",")]
+            host = next((ip for ip in picked if ip not in ("", "127.0.0.1", "0.0.0.0")), "")
+            host = host or (ips[0] if ips else "")
+        info = pair.pair_payload(self.launcher, host, self.desktop_port, time.time(),
+                                 lan_open=bool(self.listen))
+        if self.launcher.get("pair_dirty"):
+            self.launcher.pop("pair_dirty")
+            persist_pair_state(self.launcher)
+        return info
+
+
     def ensure_resizable_frame(self) -> None:
         """pywebview 的 frameless 走 FormBorderStyle=None，可拖拽边框一起摘掉：窗口显示后补回 WS_THICKFRAME。"""
         if self.frameless and self._window is not None:

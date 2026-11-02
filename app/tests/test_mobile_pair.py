@@ -159,6 +159,64 @@ class PersistenceMergeTests(unittest.TestCase):
         self.assertEqual(disk["pair_token"], "tok2", "「保存并重启」不能把手机连接刚生成的码洗掉")
         self.assertEqual(disk["pair_host"], "10.0.0.9")
 
+class PairBridgeTests(unittest.TestCase):
+    """顶栏整页跳到 ComfyUI 的页面后，设置页只剩 pywebview 桥一条路能拿到配对数据（配对三条路由
+    只在桌面端端口上，局域网那路加不了 CORS）。桥那份与 HTTP 那份同一份语义：出码用落盘的
+    pair_host，端口是桌面端服务当前那个，令牌当场生成并落盘。"""
+
+    def setUp(self):
+        import studio_app as sa
+        self.sa = sa
+        self.tmp = Path(APP_DIR) / "tmp" / "pair_bridge"
+        self.tmp.mkdir(parents=True, exist_ok=True)
+        self.saved = sa.CONFIG_FILE
+        sa.CONFIG_FILE = self.tmp / "launcher_config.json"
+
+    def tearDown(self):
+        self.sa.CONFIG_FILE = self.saved
+        for f in self.tmp.glob("*.json"):
+            f.unlink(missing_ok=True)
+
+    def test_pair_info_answers_the_panel_with_the_live_desktop_port(self):
+        sa = self.sa
+        desktop = sa.StudioDesktop("u", None, 8188, Path("root"), desktop_port=43130,
+                                   launcher={"listen": "192.168.0.165", "pair_host": "192.168.0.165"})
+        info = desktop.pair_info()
+        self.assertTrue(info["lan_open"])
+        self.assertEqual(info["port"], 43130, "出码端口是桌面端服务当前那个，不是 ComfyUI 的 8188")
+        self.assertEqual(info["url"],
+                         f"http://192.168.0.165:43130/neo-studio/pair?token={info['token']}")
+
+    def test_pair_info_picks_the_listening_nic_when_no_host_is_persisted(self):
+        """第一次用这功能时 pair_host 还没落盘过：出码地址取「局域网监听」选定的那块网卡，
+        认出来的地址随后落盘，下次出码与手机扫到的必须是同一个。"""
+        sa = self.sa
+        desktop = sa.StudioDesktop("u", None, 8188, Path("root"), desktop_port=43130,
+                                   launcher={"listen": "192.168.0.165"})
+        info = desktop.pair_info()
+        self.assertEqual(info["host"], "192.168.0.165")
+        self.assertEqual(info["url"],
+                         f"http://192.168.0.165:43130/neo-studio/pair?token={info['token']}")
+        self.assertEqual(sa.load_config()["pair_host"], "192.168.0.165", "认出来的地址要落盘")
+
+
+    def test_pair_info_persists_the_token_it_mints(self):
+        sa = self.sa
+        desktop = sa.StudioDesktop("u", None, 8188, Path("root"), desktop_port=43130,
+                                   launcher={"listen": "192.168.0.165", "pair_host": "192.168.0.165"})
+        info = desktop.pair_info()
+        self.assertEqual(sa.load_config()["pair_token"], info["token"],
+                         "桥这条路与服务那条一样，生成令牌要触发落盘")
+        self.assertNotIn("pair_dirty", desktop.launcher)
+
+    def test_pair_info_says_lan_closed_without_a_qr(self):
+        desktop = self.sa.StudioDesktop("u", None, 8188, Path("root"), desktop_port=43130,
+                                        launcher={"listen": ""})
+        info = desktop.pair_info()
+        self.assertFalse(info["lan_open"])
+        self.assertEqual(info["url"], "", "监听没放开就不出码，面板直接说明去启动设置放开")
+
+
 
 if __name__ == "__main__":
     unittest.main()

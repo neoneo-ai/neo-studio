@@ -1952,6 +1952,7 @@ async function loadVersion() {
             };
             renderVersionInfo();
             setOfflineMark(offline);
+            paintStatusFallback();   // 快照知道这一路是谁服务的了：没有状态来源时顶栏补一句中性读数
         }
     } catch { /* ComfyUI 未就绪时保持空白 */ }
 }
@@ -2127,7 +2128,7 @@ function initComfyStatus() {
             ? tf("ComfyUI 运行中 · 端口 {port} · {by} · PID {pid}", { port: s.port, by: t(s.mine ? "桌面端启动" : "外部启动"), pid: s.pid })
             : t("ComfyUI 已停止 · 在「设置 → 启动设置」点「启动内核」"));
     const render = (s) => {
-        el.hidden = false;   // 状态到了才出字：出字前它是空的，浏览器标签页里没人送状态就一直是空的
+        headerFallback = false;   // 真快照落地：顶栏这一位交回真状态，占位句不再补
         setStarting(!!s.starting);   // 桌面端拉起的启动中：生成按钮文案跟着收
         // 就绪就翻面，不看是谁拉起内核。桌面端在 ready 这同一份快照里才清掉 starting（_jump_when_ready），
         // 5 秒轮询只会看到「启动中·未就绪」紧跟「已就绪·不再启动中」；拿 starting 当翻面条件的话，
@@ -2154,27 +2155,53 @@ function initComfyStatus() {
     // 一串 drag 199 steps，页面到不了 ready，[web] FLIP 一行不出）。HTTP 那条由桌面端服务的线程答，
     // 与窗口线程无关。它是桌面端自己的一层（与 /neo_studio/version 同路，不在归属表里），所以打
     // 绝对地址问页面自己的 origin：页面钉在桌面端端口上，翻面之后归属表把表外路径送去 ComfyUI
-    // 也管不到它。origin 不答这条路由（浏览器标签页 / 远程那路）就停问，别每 5 秒撞一次 404。
-    let httpAsks = true;
+    // 也管不到它。origin 不答这条路由（浏览器标签页 / 远程那路）就停问 —— 桌面端服务冷启动那阵
+    // 也会先回一发非 200，第一发就停就是把这段窗口永远留在没有状态的顶栏上，连错三发才停。
+    let httpMiss = 0;
     const pollHttp = () => fetch(`${location.origin}/neo_studio/comfy_state`)
-        .then((r) => (r.ok ? r.json() : (httpAsks = false, null)))
+        .then((r) => {
+            if (!r.ok) { httpMiss += 1; return null; }
+            httpMiss = 0;
+            return r.json();
+        })
         .then((d) => { if (d?.success) publishComfyState(d); })
-        .catch(() => {});
+        .catch(() => { httpMiss += 1; });
     const poll = () => {
         const api = window.pywebview?.api;
         if (api?.comfy_state) api.comfy_state().then(publishComfyState).catch(() => {});
-        if (httpAsks) pollHttp();
+        if (httpMiss < 3) pollHttp();
     };
     poll();
+    paintStatusFallback();   // 第一轮问话落地之前先出占位读数：右端那一排图标不跟着往左滑
     setInterval(poll, 5000);
 }
 
 function setStatus(kind, text, title) {
     const el = document.getElementById("ns-comfy-status");
     el.textContent = `● ${text}`;
-    el.classList.remove("ns-comfy-run", "ns-comfy-starting");
+    el.classList.remove("ns-comfy-run", "ns-comfy-starting", "ns-comfy-pending");
     if (kind) el.classList.add(`ns-comfy-${kind}`);
     el.title = title;
+}
+
+// 顶栏状态位的占位句：状态来源（桥 / 桌面端服务的 comfy_state）都没落地时顶栏读的那一句。
+// 只给顶栏看，不进 comfyState —— 启动设置的启停按钮认的是真快照，占位句不许驱动它们。
+let headerFallback = false;
+
+function paintStatusFallback() {
+    if (headerFallback || comfyState) return;
+    if (window.pywebview) {
+        // 桌面端窗口：桥晚到（F5 之后实测晚十几秒）、桥被拖动循环饿死、桌面端服务还没开始答话，
+        // 这段时间顶栏不能空着 —— 空着那一块是 flex 位，队列 / 设置 / 窗口控件整排往左滑。
+        setStatus("pending", t("状态读取中"), t("桌面端窗口正在回报内核状态 · 启停在「设置 → 启动设置」"));
+    } else if (!offline) {
+        // ComfyUI 直接服务的那一路（浏览器标签页 / 手机 / 局域网整页跳转）：这一页就是内核发的，
+        // 运行中是页面自己确认得到的事实；桌面端服务的离线页（offline 为真）没有这条依据，不编。
+        setStatus("run", t("运行中"), t("本页由运行中的 ComfyUI 直接服务 · 启停在桌面端「设置 → 启动设置」"));
+    } else {
+        return;
+    }
+    headerFallback = true;
 }
 
 // ====== 顶栏静态壳：index.html 里的中文是原文，按当前语言重画（切语言走整页刷新，不做运行中热替换） ======

@@ -37,7 +37,10 @@
         <a href="#/director" data-tab="director">导演</a>
         <a href="#/pose" data-tab="pose">摆姿</a>
     </nav>
-    <span class="ns-comfy-status" id="ns-comfy-status" hidden></span>
+    <!-- 顶栏右端第一格是 ComfyUI 状态位：这一位从页面挂上起就占住宽度（style.css 的 min-width +
+         visibility），读数到了才显字。用 hidden 收起的话 flex 位塌掉，右边的队列 / 设置 / 窗口控件
+         整排往左滑 —— 冷启动与 F5 那段时间顶栏就是「状态不见了、图标位置也不对」 -->
+    <span class="ns-comfy-status" id="ns-comfy-status"></span>
     <!-- 队列与设置都是图标位（不吃页签宽度），队列在前、设置在后；徽标是图标右上角那枚计数。
          设置是 <a href="#/settings">：路由由 bindHeaderNav 接管，不等扩展模块图跑完 -->
     <button class="ns-queue-toggle" id="ns-queue-toggle" type="button" title="队列" hidden><span class="ns-queue-badge" id="ns-queue-badge" hidden></span></button>

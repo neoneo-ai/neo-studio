@@ -13,12 +13,12 @@ globalThis.WebSocket = class {
     close() {}
 };
 
-const studioBody = `<div class="ns-header"></div><div id="ns-view"></div><span class="ns-comfy-status" id="ns-comfy-status" hidden></span>`;
+const studioBody = `<div class="ns-header"></div><div id="ns-view"></div><span class="ns-comfy-status" id="ns-comfy-status"></span>`;
 
 // 带 tab 条的那份 fixture：落在哪一页就断言 active 落在哪个 tab 上
 const tabsBody = `<div class="ns-header"></div>` +
     `<div class="ns-tabs"><a href="#/home" data-tab="home">首页</a><a href="#/director" data-tab="director">导演</a></div>` +
-    `<div id="ns-view"></div><span class="ns-comfy-status" id="ns-comfy-status" hidden></span>`;
+    `<div id="ns-view"></div><span class="ns-comfy-status" id="ns-comfy-status"></span>`;
 
 const OFFLINE_CAPS = {
     image_gen: false, storyboard: false, voice: false, segment: false,
@@ -51,7 +51,8 @@ test("桌面端拉起 ComfyUI 期间：「启动中」只出顶栏胶囊，不�
     assert.ok(document.body.classList.contains("ns-offline"), "启动中页面还是离线形态");
     assert.equal(document.getElementById("ns-offline"), null, "启动中不叠横幅，顶栏胶囊已经报了「● 启动中」");
     assert.equal(document.getElementById("ns-version"), null, "版本位不在顶栏");
-    assert.ok(document.getElementById("ns-comfy-status").hidden, "js_api 未注入前顶栏状态位不出");
+    assert.equal(document.getElementById("ns-comfy-status").textContent, "",
+                 "浏览器标签页里的桌面端离线页没有状态依据，顶栏不编读数（这一格仍按 style.css 的 min-width 占位）");
     const run = document.querySelector(".ns-gen-run");
     assert.ok(run, "导演页应已挂载");
     assert.match(run.textContent, /ComfyUI 启动中/);

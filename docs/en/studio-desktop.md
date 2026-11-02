@@ -406,14 +406,20 @@ startable once the root is filled in.
   the same LAN direct path described above.
 - The token is minted by the desktop service and persisted in `launcher_config.json` as `pair_token` /
   `pair_expires_at` / `pair_host`, valid 5 minutes; the panel's countdown rotates it at zero, and the "refresh now"
-  button runs the `pair_rotate` action of `POST /neo_studio/launcher`. The save writes only those three fields and
-  touches no startup setting.
+  button rotates it too. The save writes only those three fields and touches no startup setting.
+- The panel reads its data over two channels with the same semantics: inside the desktop window the pywebview
+  bridge (`pair_info` / `pair_rotate`) comes first — once the header takes the window onto ComfyUI's page, a relative
+  request goes to the ComfyUI origin, where the three pair routes do not exist (the LAN route cannot carry CORS, so the
+  full-page navigation is a hard constraint); a page pinned on the desktop-service port, and a page in a browser tab,
+  use `GET /neo-studio/pair/info` and the `pair_rotate` action. The bridge and the desktop service share the same
+  `launcher` dict and the same save entry (`app/studio_app.py`), so both channels yield the same address and the same QR.
 - The QR is generated on the spot by `studio/web/js/core/qrcode-lite.js` (QR Model 2 byte mode, EC level L, mask
   scoring, version fitting) and drawn as inline SVG - no third-party library.
 - The three routes `/neo-studio/pair`, `/neo-studio/pair/check` and `/neo-studio/pair/info` are registered by the
   desktop server itself (`app/mobile_pair.py` + `app/studio_server.py`); the ownership table is `app/studio_caps.py`.
   The pair page and `pair/check` answer LAN hosts only: loopback, `localhost` and public hosts get 403. The desktop
-  window reads `pair/info` and draws the QR from the persisted `pair_host`. All three replies carry
+  window draws the QR from the persisted `pair_host` - over the bridge when the page sits on the ComfyUI origin, over
+  `pair/info` when it is pinned on the desktop-service port. All three replies carry
   `Cache-Control: no-store`, and the pair page reports only "valid / invalid" - an expired token and a wrong token
   read the same.
 - With LAN listening off the panel shows no QR and names the setting to enable - a control that cannot work is not

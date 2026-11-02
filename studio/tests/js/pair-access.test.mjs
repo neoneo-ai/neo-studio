@@ -40,7 +40,9 @@ test("出码：二维码 SVG、配对链接与剩余秒数一起上屏", async (
     await flush(6);
     const svg = panel.el.querySelector(".ns-pair-qr svg");
     assert.ok(svg, "二维码要画成内联 SVG");
-    assert.match(svg.getAttribute("viewBox"), /^0 0 \d+ \d+$/, "SVG 用模块坐标 + 静区边长");
+    // 66 字节的 URL 落进纠错 L 的版本 4（33 模块），加 4 模块静区 = 41；喂字符串进去画不出这个形状
+    assert.equal(svg.getAttribute("viewBox"), "0 0 41 41", "二维码要按真实矩阵画，不是按字符串长度");
+    assert.ok(svg.querySelectorAll("rect").length > 300, "矩阵里的深色模块要成规模出现");
     const url = panel.el.querySelector(".ns-pair-url");
     assert.equal(url.value, OK_INFO.url);
     assert.equal(panel.el.querySelector(".ns-pair-row").hidden, false);
@@ -171,4 +173,57 @@ test("设置页有「手机连接」栏，点开就是二维码与配对链接",
     assert.equal(section.style.display, "", "点开这栏要显示出来");
     assert.ok(section.querySelector(".ns-pair-qr svg"), "栏里要画二维码");
     assert.equal(section.querySelector(".ns-pair-url").value, OK_INFO.url);
+});
+
+
+
+// 桌面窗口的页面被顶栏整页带到 ComfyUI 的 origin 上时，页面相对路径打不到桌面端端口上的配对
+// 路由（局域网那路加不了 CORS），桥是窗口里唯一还通着桌面端的通道。
+test("桥在：配对数据走 pywebview 桥，不打页面相对路径", async () => {
+    const { panel } = mountPanel(OK_INFO);
+    window.pywebview = { api: { pair_info: async () => ({ ...OK_INFO, seconds_left: 120 }) } };
+    panel.refresh();
+    await flush(6);
+    assert.equal(panel.el.querySelector(".ns-pair-url").value, OK_INFO.url);
+    assert.match(panel.el.querySelector(".ns-pair-status").textContent, /120/);
+    assert.equal(fetchLog.filter((f) => f.path === "/neo-studio/pair/info").length, 0,
+                 "页面跑在 ComfyUI 的 origin 上时，那条相对路径打的是 ComfyUI，没有配对路由");
+    panel.stop();
+});
+
+test("立即刷新走桥的 pair_rotate，不再打桌面端的 launcher 动作", async () => {
+    const rotated = [];
+    const { panel } = mountPanel(OK_INFO);
+    window.pywebview = {
+        api: {
+            pair_info: async () => ({ ...OK_INFO, seconds_left: 300 }),
+            pair_rotate: async () => { rotated.push(1); return { ok: true, token: "x", seconds_left: 300 }; },
+        },
+    };
+    panel.refresh();
+    await flush(6);
+    click(panel.el.querySelector(".ns-pair-refresh"));
+    await flush(14);   // 换码后面还跟着一次重读信息，链路要走完
+    assert.equal(rotated.length, 1, "刷新要点桥的 pair_rotate");
+    assert.equal(fetchLog.filter((f) => f.path === "/neo_studio/launcher").length, 0);
+    panel.stop();
+});
+
+test("老构建的 exe 没有 pair_info：照旧走桌面端 HTTP", async () => {
+    const { panel } = mountPanel(OK_INFO);
+    window.pywebview = { api: { comfy_state: async () => ({}) } };
+    panel.refresh();
+    await flush(6);
+    assert.equal(panel.el.querySelector(".ns-pair-url").value, OK_INFO.url);
+    assert.ok(fetchLog.some((f) => f.path === "/neo-studio/pair/info"), "探不到桥方法就回落 HTTP");
+    panel.stop();
+});
+
+test("桥读不到时落回桌面端 HTTP：一条通道断了不导致面板空白", async () => {
+    const { panel } = mountPanel(OK_INFO);
+    window.pywebview = { api: { pair_info: async () => { throw new Error("桌面端没装配出配对状态"); } } };
+    panel.refresh();
+    await flush(6);
+    assert.equal(panel.el.querySelector(".ns-pair-url").value, OK_INFO.url, "HTTP 那条要接上");
+    panel.stop();
 });

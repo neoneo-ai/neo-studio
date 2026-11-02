@@ -418,6 +418,11 @@ const EN = {
     "重连远端 ComfyUI…": "Reconnecting to the remote ComfyUI…",
     "ComfyUI 启动中…就绪后自动接上生成":
         "ComfyUI is starting… generation connects once it is ready",
+    "状态读取中": "Checking status",
+    "桌面端窗口正在回报内核状态 · 启停在「设置 → 启动设置」":
+        "The desktop window is reporting kernel status · start and stop live in Settings → Launcher Settings",
+    "本页由运行中的 ComfyUI 直接服务 · 启停在桌面端「设置 → 启动设置」":
+        "This page is served directly by a running ComfyUI · start and stop live in the desktop app's Settings → Launcher Settings",
     "该功能需要 ComfyUI · 在「设置 → 启动设置」点「启动内核」":
         "This feature needs ComfyUI · click “Start kernel” in Settings → Launcher Settings",
     "生成这一段": "Generate this segment",

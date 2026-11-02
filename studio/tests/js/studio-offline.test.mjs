@@ -11,7 +11,7 @@ globalThis.WebSocket = class {
     close() {}
 };
 
-const studioBody = `<div class="ns-header"></div><div id="ns-view"></div><span class="ns-comfy-status" id="ns-comfy-status" hidden></span>`;
+const studioBody = `<div class="ns-header"></div><div id="ns-view"></div><span class="ns-comfy-status" id="ns-comfy-status"></span>`;
 
 const OFFLINE_CAPS = {
     image_gen: false, storyboard: false, voice: false, segment: false,

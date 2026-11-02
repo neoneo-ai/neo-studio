@@ -96,12 +96,13 @@ def pair_url(host: str, port: int, token: str, path: str = PAIR_PATH) -> str:
 def pair_payload(cfg: dict, host: str, port: int, now: float, lan_open: bool = True) -> dict:
     """设置页轮询的那份数据：配对地址、令牌、剩余秒数，以及监听是否放开。
 
+    监听没放开 = 手机根本连不到这台电脑：不出码也不生成令牌，面板直接说明去哪一项放开。
     host 为空 = 这次请求不是局域网来的（桌面端窗口自己就是回环）：沿用上次落盘的
     主机地址出码，让设置页上的二维码与手机扫码时的地址是同一个。
     """
-    if host:
+    lan_host_ = (host or (cfg.get("pair_host") or "")) if lan_open else ""
+    if lan_open and host:
         cfg["pair_host"] = host
-    lan_host_ = host or (cfg.get("pair_host") or "")
     out = {"success": True, "mode": "lan", "lan_open": bool(lan_open),
            "port": port, "ttl_seconds": PAIR_TTL_SECONDS}
     if not lan_host_:

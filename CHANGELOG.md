@@ -4,6 +4,23 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **The header status reading is never blank, and the right-side icons stay put.** The chip now paints a neutral
+  「状态读取中」 while the desktop is still assembling (window just opened, F5, the pywebview bridge landing after the page
+  script, the desktop service still binding), and swaps in the real reading as soon as it arrives; a page served directly
+  by a running ComfyUI says 「运行中」, and the offline page invents nothing. The chip is a permanent flex slot with a fixed
+  width that hides only its text, so 队列 / 设置 / the window controls no longer slide left and right when a reading comes
+  and goes. A cold desktop service that answers the first status requests with `409`/`404` no longer kills the HTTP
+  status source - three consecutive misses end it, so a real reading still lands.
+- **Phone pairing from Settings works after the header moves the window onto ComfyUI's page.** There the page's relative
+  requests hit the ComfyUI origin, where the pair routes do not exist, so the panel used to stop at 「读不到桌面端服务的
+  配对信息」. Inside the desktop window it now reads the snapshot and rotates the token over the pywebview bridge
+  (`pair_info` / `pair_rotate`), while a page pinned on the desktop-service port and a page in a browser tab keep using
+  the desktop service; both channels yield the same address and the same QR. The bridge has no request `Host` header to
+  read the phone-facing address from (the service side does), so it reuses the persisted `pair_host` and, the first time
+  the panel is opened, the NIC address chosen under 启动设置 → 局域网监听, persisting it as the pair address. The code
+  itself is now drawn from the encoder's module matrix (`qrMatrix` → `qrSvg`): the panel passed the URL text to the SVG
+  formatter, which renders a square with no scannable modules, so the countdown ticked with the QR area blank.
+
 - **Phone pairing from Settings (Wi-Fi only).** "Settings → Phone pairing" now shows a QR code and a pairing link when
   LAN listening is on. A phone on the same Wi-Fi scans the code, its browser verifies a one-time token at
   `/neo-studio/pair`, and the page hands back the `http://<LAN IP>:<port>/neo-studio` entry - nothing is installed on
