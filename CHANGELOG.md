@@ -4,6 +4,17 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **Picking a model in the 自定参数 panel no longer closes the panel - 完成 is the only way out.** The
+  技能 + 自定参数 panel on the video page collapsed the moment a 主模型 / VAE / LoRA row was picked. The combobox
+  closes its body-mounted list inside the list item's `mousedown`, so the release lands on the page element under the
+  closed list and the browser fires `click` on the nearest common inclusive ancestor of the press and release points -
+  `document.body` on that page - which the page's document-level "close the chip on an outside click" loop read as a
+  click outside the panel. The three chip close loops (`studio/web/studio/studio-app.js` video page, two in
+  `studio/web/gallery-gen.js`) now close on the press (`pointerdown`, capture) the way the top menu, the collect menu
+  and the chat auto-menu already do: the press's target is the list item itself, which `inOpenComboList()` already
+  counts as an inside click. Covered by `studio/tests/js/studio-video.test.mjs` (picking a VAE keeps the panel open and
+  writes the value, 完成 closes it, an outside press closes it).
+
 - **A preset that pins a custom mix your machine does not have now runs on the family's base model - and tells you.**
   With `configs/image_gen.json` pinning `Krea2\Moody\moodyKrea2Mix_v40INT8CONVROT.safetensors`, every generation of
   that preset was refused with 「缺 1 项 · 13.49 GB」 while the family's `krea2_turbo_int8_convrot.safetensors` sat on

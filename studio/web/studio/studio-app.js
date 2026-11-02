@@ -1014,12 +1014,16 @@ function buildVideo(el) {
     const chips = [skillChip, sizeChip, durChip];
     for (const c of chips) c.el.classList.add("ns-video-chip");
     const seedChip = $el("label", { className: "ns-video-chip neo-gallery-gm-chip-group", title: t("种子") }, [icon("sparkles", 12), seedIn, seedRoll]);
-    // 菜单开着的 chip 要点外面才收；换页会重建这一页，页面离场时把监听摘掉，别一次次堆在 document 上
-    const onDocClick = (e) => {
-        if (!document.body.contains(page)) { document.removeEventListener("click", onDocClick); return; }
+    // 菜单开着的 chip 要点外面才收；换页会重建这一页，页面离场时把监听摘掉，别一次次堆在 document 上。
+    // 收在 pointerdown 这一发上而不是 click：combo 在列表项的 mousedown 里就收起了挂在 body 上的列表，
+    // 松手落在浮层底下的页面元素上，浏览器按规范把 click 发在按下点与松手点的共同祖先（这一页里就是
+    // document.body）上——照 click 收菜单的话，自定参数面板里选一次 VAE 就成了「点面板外」，
+    // 整块面板连技能列一起收掉。按下点的 target 才是用户真正指的那 element，列表项在 inOpenComboList 里。
+    const onDocPress = (e) => {
+        if (!document.body.contains(page)) { document.removeEventListener("pointerdown", onDocPress, true); return; }
         for (const c of chips) c.closeOnOutside(e.target);
     };
-    document.addEventListener("click", onDocClick);
+    document.addEventListener("pointerdown", onDocPress, true);
 
     const runBtn = $el("button", { className: "ns-video-run neo-gallery-story-btn neo-gallery-story-btn-primary neo-gallery-gm-gen-btn", type: "button", textContent: t("生成") });
     gateRunButton(runBtn, "simple_video", t("生成视频"));

@@ -1831,13 +1831,15 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
     ]));
 
     renderIdle();
-    const onDocClick = (e) => { for (const chip of composerChips) chip.closeOnOutside(e.target); };
+    // chip 菜单收在按下那一发（pointerdown 捕获）上：combo 的模型 / LoRA 列表在 mousedown 里就收了，
+    // 松手落在浮层底下的元素上，click 由浏览器发在两个落点的共同祖先上，照 click 收就把「选个模型」当成点面板外
+    const onDocPress = (e) => { for (const chip of composerChips) chip.closeOnOutside(e.target); };
     document.addEventListener("keydown", onKey);
-    document.addEventListener("click", onDocClick);
+    document.addEventListener("pointerdown", onDocPress, true);
     const origRemove = overlay.remove.bind(overlay);
     overlay.remove = () => {
         document.removeEventListener("keydown", onKey);
-        document.removeEventListener("click", onDocClick);
+        document.removeEventListener("pointerdown", onDocPress, true);
         document.removeEventListener("pointermove", onDividerMove);
         document.removeEventListener("pointerup", onDividerEnd);
         origRemove();
@@ -3334,11 +3336,13 @@ export function openGenMaterialDialog(gallery, opts = null) {
         const above = r.top - moreMenu.offsetHeight - 6;
         moreMenu.style.top = `${above > 8 ? above : r.bottom + 6}px`;
     });
-    const onDocClick = (e) => {
+    // 外关读按下那一发：combo 的列表在 mousedown 里就收了，click 由浏览器发在按下点与松手点的共同祖先上，
+    // 照 click 收就把面板里「选个模型」当成点面板外，整块自定参数面板连 ⋯ 菜单一起收掉
+    const onDocPress = (e) => {
         if (moreMenuOpen && !moreMenu.contains(e.target)) closeMoreMenu();
         for (const chip of composerChips) chip.closeOnOutside(e.target);
     };
-    document.addEventListener("click", onDocClick);
+    document.addEventListener("pointerdown", onDocPress, true);
 
     // 预设列表（无配方条目，点击填入提示词框）
     presetItem.addEventListener("click", () => {
@@ -3444,7 +3448,7 @@ export function openGenMaterialDialog(gallery, opts = null) {
     renderIdle();
     document.addEventListener("keydown", onKey);
     const origRemove = overlay.remove.bind(overlay);
-    overlay.remove = () => { stopQuickTips(); document.removeEventListener("keydown", onKey); document.removeEventListener("click", onDocClick); origRemove(); };
+    overlay.remove = () => { stopQuickTips(); document.removeEventListener("keydown", onKey); document.removeEventListener("pointerdown", onDocPress, true); origRemove(); };
     if (panel.embedded) {
         panel.host.appendChild(overlay);
         panel.host.__neoPanelClose = () => { close(); panel.host.__neoPanelRoot = null; };

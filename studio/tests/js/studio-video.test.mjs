@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { resetEnv, flush, mockRoute, clearRoutes, jsonResponse, sleep, click, fetchLog } from "./setup.mjs";
+import { resetEnv, flush, mockRoute, clearRoutes, jsonResponse, sleep, click, fire, fetchLog } from "./setup.mjs";
 
 const webDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../web");
 const studioBody = fs.readFileSync(path.join(webDir, "studio", "index.html"), "utf8").match(/<body>([\s\S]*?)<\/body>/)[1];
@@ -202,6 +202,35 @@ test("视频页：技能 chip 就是会话页那枚「技能 + 自定参数」�
     click(panel.querySelector(".neo-gallery-gm-panel-done"));
     assert.equal(panel.style.display, "none", "点「完成」才收起面板");
     assert.equal(skillChipLabel().textContent, last.textContent, "chip 显示生效值，说明 change 有接上 sync");
+});
+
+// combo 的列表挂在 body 上，并在这个列表项的 mousedown 里就收起来了：松手落在浮层底下的页面元素上，
+// 浏览器按规范把 click 发在按下点与松手点的共同祖先（视频页里就是 document.body）上。chip 的外关循环
+// 因此必须读按下那一发——照 click 收，面板里选一次 VAE 就成了「点面板外」，整块面板连技能列一起收掉。
+test("视频页：自定参数面板里选模型不收面板——选完那发的 click 落在面板底下的元素上", async () => {
+    await boot();
+    await clickTab("video");
+    await settle();
+    click(skillChipBtn());
+    const panel = skillPanel();
+    const vaeRow = [...panel.querySelectorAll(".rs-config-row")]
+        .find((r) => r.querySelector("label")?.textContent === "VAE（视频）");
+    fire(vaeRow.querySelector(".rs-combo-input"), "focus");   // 聚焦展开全量列表
+    const list = [...document.querySelectorAll(".rs-combo-list")].find((l) => l.style.display !== "none");
+    const item = [...list.querySelectorAll("[data-value]")].find((i) => i.dataset.value === "minimax_h3_video_vae_fp16.safetensors");
+    fire(item, "pointerdown");                                // 列表还挂着：这一发的 target 就是列表项本身
+    fire(item, "mousedown", { cancelable: true });            // combo 在这一发里选值并收起列表
+    click(document.body);                                     // 松手落点 → 浏览器发在两个落点共同祖先上的 click
+    await settle();
+    assert.equal(vaeRow.querySelector("select").value, "minimax_h3_video_vae_fp16.safetensors",
+        "点列表项写进该行的 select（生成 payload 读的就是它）");
+    assert.equal(panel.style.display, "grid", "选 VAE 不收面板——这一发的 click 落点是 body，不是用户点的面板外");
+    click(panel.querySelector(".neo-gallery-gm-panel-done"));
+    assert.equal(panel.style.display, "none", "点「完成」才收起面板");
+    click(skillChipBtn());
+    assert.equal(skillPanel().style.display, "grid", "再点 chip 面板重开");
+    fire(document.querySelector(".ns-video-dock"), "pointerdown");
+    assert.equal(skillPanel().style.display, "none", "真·点面板外：面板外的按下收起面板");
 });
 
 test("视频页：chip 浮层优先弹在 chip 上方并整块落在窗内（会话页那套数值逐字不变）", async () => {

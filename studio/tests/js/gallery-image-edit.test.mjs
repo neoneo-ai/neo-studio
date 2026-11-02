@@ -2,8 +2,11 @@
 // 「生成」常驻输入卡，连续重复生成直接再点它，不必关窗重开。
 import test from "node:test";
 import assert from "node:assert/strict";
-import { resetEnv, mockRoute, clearRoutes, jsonResponse, fetchLog, sleep, click, inputText, makeFile, window } from "./setup.mjs";
+import { resetEnv, mockRoute, clearRoutes, jsonResponse, fetchLog, sleep, click, fire, inputText, makeFile, window } from "./setup.mjs";
 import { dispatchApiEvent } from "./mocks/comfy-api.mjs";
+
+/** 真实的一次点击 = 按下 + 松手：chip 的外关读按下那一发（document pointerdown 捕获），只发 click 的话上一块开着的面板不收 */
+const press = (el) => { fire(el, "pointerdown"); click(el); };
 
 /** 模式 chip：从菜单选模式（常规 / 扩图 / 局部 / 删除 / 融合 / 姿势）——五种模式收在一枚 chip 里，测试照用户动线点 */
 const pickEdit = async (overlay, label) => {
@@ -131,7 +134,7 @@ test("图片编辑弹窗：chips 收在输入卡底行，自定参数默认不�
 
     // 模式 chip：菜单列全六种模式，说明挂在菜单项上（原来五枚开关各一句 title）
     const modeWrap = overlay.querySelector(".neo-gallery-edit-mode-select").parentElement;
-    click(modeWrap.querySelector(".neo-gallery-gm-chip-btn"));
+    press(modeWrap.querySelector(".neo-gallery-gm-chip-btn"));   // 按下这一发先收起技能面板，松手才开模式菜单
     const modeItems = [...modeWrap.querySelectorAll(".neo-gallery-gm-menu-item")];
     assert.deepEqual(modeItems.map((b) => b.textContent), ["常规", "扩图", "局部", "删除", "融合", "姿势"], "模式 chip 应列全六种模式");
     assert.ok(modeItems.every((b) => b.title.length > 4), "模式说明应挂在菜单项上");

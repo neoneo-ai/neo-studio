@@ -709,10 +709,10 @@ export function createModelConfigSection(opts = {}) {
     loraRow.append(loraLabel, loraList, loraAddBtn);
     section.append(gapBar, modelCtl.row, encoderCtl.row, vaeCtl.row, loraRow);
 
-    // 面板内的一次点击不许冒泡到 document：自定参数 chip 的文档级收起循环（gallery-gen.js 的 closeOnOutside）
-    // 和弹窗宿主的外点关闭都读 document 上的事件，一次点提示条、点 LoRA 行会被判成「点在面板外」，
-    // 整块自定参数面板连带的弹窗一起收掉（技能行当年就是靠各自的 stopPropagation 躲这件事）。
-    // 只拦 click：combo 的下拉靠 document 上的 pointerdown 收起（combo-box.js），连 pointerdown 一起拦会让下拉开着不收。
+    // 面板内的一次点击不许冒泡到 document：prompt 节点预设浮层（prompts.js 的 popupCloser）读 document 上的
+    // click，一次点提示条、点 LoRA 行会被判成「点在浮层外」，把浮层连这块面板一起收掉（技能行当年就是靠各自的
+    // stopPropagation 躲这件事）。只拦 click：combo 的下拉靠 document 上的 mousedown 收起（combo-box.js），
+    // 连 mousedown 一起拦会让下拉开着不收。
     section.addEventListener("click", (e) => e.stopPropagation());
 
     let loraFiles = [];
