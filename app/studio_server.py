@@ -113,6 +113,42 @@ def _loopback_origin(origin: str) -> bool:
     return parts.scheme in ("http", "https") and parts.hostname in LOOPBACK_HOSTS
 
 
+# 手机那一面的路径：Studio 页与它的静态文件、版本快照与内核状态、配对页与令牌校验。
+# 局域网监听把桌面端端口绑到网卡上之后，只有桌面端窗口该用的路由（MCP 子进程、启动设置、
+# 日志、用户数据）也一起露在网段里了，收口只放行这一面；pair/info 是出码给窗口看的，
+# 不在这一面里——网段上任何设备都不该读到当前令牌的完整地址。
+LAN_EXACT = {pair.STUDIO_PATH, pair.PAIR_PATH, pair.PAIR_CHECK_PATH,
+             "/neo_studio/version", "/neo_studio/comfy_state"}
+LAN_STATIC = "/extensions/comfyui-neo-studio"
+
+
+def lan_path_open(path: str, peer: str) -> bool:
+    """这条路径对局域网对端开不开（dsh-desktop 里 isPrivateAddress(transportAddress) 那一层）：
+    本机自己（含拿不到对端地址的本地套接字）全通，私段对端只通手机那一面，公网对端全关。"""
+    if not peer or pair.is_loopback(peer):
+        return True
+    if not pair.is_private(peer):
+        return False
+    return path in LAN_EXACT or path.startswith(LAN_STATIC)
+
+
+def _peer_ip(request) -> str:
+    peer = request.transport.get_extra_info("peername")
+    return str(peer[0]) if peer and len(peer) else ""
+
+
+@web.middleware
+async def lan_surface(request, handler):
+    """非回环对端只许碰手机那一面：桌面端服务一旦绑上网卡，路由收口就归这一处，
+    不在各条 handler 里散着判地址。"""
+    if lan_path_open(request.path, _peer_ip(request)):
+        return await handler(request)
+    if request.path.startswith((MCP_PREFIX, "/neo_studio/")):
+        return web.json_response({"success": False, "error": "这条路由只在桌面端窗口里可用"},
+                                 status=403)
+    return web.Response(text="这条路由只在桌面端窗口里可用", status=403)
+
+
 async def studio_page(request):
     resp = web.FileResponse(request.app["studio_index"])
     resp.headers["Cache-Control"] = "no-cache"
@@ -313,9 +349,11 @@ async def pair_info(request):
     ctx = request.app.get("pair_ctx") or {}
     cfg = request.app["launcher"]
     lan_prefixes = ctx.get("lan_prefixes", lambda: [])()
+    listen = str(ctx.get("listen_get", lambda: "")())
     host = pair.lan_host(request.headers.get("Host", ""), lan_prefixes)
-    info = pair.pair_payload(cfg, host, port_of(request), time.time(),
-                             lan_open=bool(ctx.get("listen_get", lambda: "")()))
+    # 桌面端窗口自己就是回环：Host 头给不出局域网地址，交 pair.pick_lan_host 挑同一块网卡
+    host = host or pair.pick_lan_host(str(cfg.get("pair_host") or ""), listen)
+    info = pair.pair_payload(cfg, host, port_of(request), time.time(), lan_open=bool(listen))
     if cfg.get("pair_dirty"):
         cfg.pop("pair_dirty")
         save = ctx.get("save")
@@ -386,7 +424,7 @@ def build_app(root: Path, plugin_dir: Path, flags: dict = None, launcher: dict =
     # handler 之前被 transport 挡成 413，插件端（ComfyUI 的 --max-upload-size 默认 100MB）能跑的
     # 体积到了桌面端就白跑。这里放到接口自身上限之上，让「超过上限」由接口的 400 说清楚。
     pose_mod = sys.modules[f"{DESKTOP_PKG}.pose"]
-    app = web.Application(middlewares=[no_store, mcp_cross_origin],
+    app = web.Application(middlewares=[no_store, mcp_cross_origin, lan_surface],
                           client_max_size=pose_mod.MAX_BODY_BYTES + 8 * 1024 * 1024)
     app["flags"] = flags if flags is not None else {}
     app["studio_index"] = plugin_dir / "web" / "studio" / "index.html"
@@ -423,12 +461,14 @@ def build_app(root: Path, plugin_dir: Path, flags: dict = None, launcher: dict =
 class DesktopServer:
     """桌面端自己的只读 HTTP 服务：后台线程 + 独立事件循环，随窗口退出。"""
 
-    def __init__(self, app_factory, port: int):
+    def __init__(self, app_factory, port: int, bind_hosts=None):
         self.app_factory = app_factory
         self.port = port
+        self.bind_hosts = bind_hosts   # 回环之外还要绑的地址（局域网监听放开时给）：每次起服现问
         self.loop = None
         self.thread = None
         self.bound = 0
+        self.sites = []   # 起服时绑上的那批 TCPSite（回环 + 局域网网卡）
         self.error = None   # 装配失败的原因（缺依赖 / 目录不可读）：start() 只回 0，原因交给桌面端记日志
         self.ready = threading.Event()
 
@@ -445,14 +485,29 @@ class DesktopServer:
     async def _serve(self):
         runner = web.AppRunner(self.app_factory())
         await runner.setup()
+        hosts = ["127.0.0.1"]
+        extra = [h for h in ((self.bind_hosts or (lambda: []))() or []) if h]
+        if any(h in ("0.0.0.0", "::") for h in extra):
+            # 全监听已覆盖回环：同一端口上再绑一次 127.0.0.1 会撞
+            hosts = [h for h in extra if h in ("0.0.0.0", "::")]
+        else:
+            hosts += extra
         for port in range(self.port, self.port + 6):
-            site = web.TCPSite(runner, "127.0.0.1", port)
-            try:
-                await site.start()
+            sites = []
+            for host in hosts:
+                site = web.TCPSite(runner, host, port)
+                try:
+                    await site.start()
+                except OSError:
+                    break
+                sites.append(site)
+            else:
                 self.bound = port
+                self.sites = sites
                 break
-            except OSError:
-                continue
+            # 这块端口没绑全（端口被占 / 填的网卡地址不在本机）：整组让位给下一个端口
+            for site in sites:
+                await site.stop()
         self.ready.set()
         await asyncio.Event().wait()   # 常驻：循环停在这里，直到 stop() 把它叫醒
 

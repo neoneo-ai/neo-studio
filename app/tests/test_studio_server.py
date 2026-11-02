@@ -1065,6 +1065,36 @@ class MobilePairServiceTests(_RealFolderPaths):
         self.assertIn("GET /neo-studio/pair/info", data["routes"])
 
 
+class LanSurfaceTests(unittest.TestCase):
+    """桌面端端口绑上网卡之后的路由收口（dsh-desktop 里 isPrivateAddress(transportAddress) 那一层）：
+    手机那一面之外的路由——MCP 子进程、启动设置、日志、用户数据——只在桌面端窗口里可用。"""
+
+    PHONE = "/neo-studio"
+    LAN_PEER = "192.168.0.20"
+
+    def test_loopback_peer_gets_every_route(self):
+        for path in ("/neo_mcp/servers", "/neo_studio/launcher", pair.PAIR_INFO_PATH,
+                     ns.USERDATA_PATH, "/view", "/ws"):
+            self.assertTrue(ns.lan_path_open(path, "127.0.0.1"), path)
+        self.assertTrue(ns.lan_path_open("/neo_studio/launcher", ""),
+                        "拿不到对端地址的本地套接字照旧全通")
+
+    def test_lan_peer_only_reaches_the_phone_surface(self):
+        for path in (self.PHONE, pair.PAIR_PATH, pair.PAIR_CHECK_PATH,
+                     "/neo_studio/version", "/neo_studio/comfy_state",
+                     "/extensions/comfyui-neo-studio/web/studio/index.html"):
+            self.assertTrue(ns.lan_path_open(path, self.LAN_PEER), path)
+        for path in ("/neo_mcp/servers", "/neo_studio/launcher", "/neo_studio/log",
+                     pair.PAIR_INFO_PATH, ns.USERDATA_PATH, "/view", "/ws"):
+            self.assertFalse(ns.lan_path_open(path, self.LAN_PEER),
+                             f"{path} 是桌面端窗口自己的路由，网段上的设备碰不到")
+
+    def test_public_and_link_local_peer_gets_nothing(self):
+        self.assertFalse(ns.lan_path_open(pair.PAIR_PATH, "8.8.8.8"))
+        self.assertFalse(ns.lan_path_open(self.PHONE, "169.254.92.11"),
+                         "链路本地地址不是手机连进来的那一面")
+
+
 if __name__ == "__main__":
     unittest.main()
 

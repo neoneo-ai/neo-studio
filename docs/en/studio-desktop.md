@@ -385,6 +385,12 @@ startable once the root is filled in.
 - ComfyUI has no authentication: with listening on, `/api/*`, `/neo_studio/*` and `/view` are open to whatever is on
   the network, so enable it only on a trusted segment and clear the field afterwards. The MCP service is not part of
   this network surface (stdio + loopback — see [mcp.md](mcp.md)).
+- With LAN listening on, the desktop service binds itself to the picked NICs too (`lan_bind_hosts`; `0.0.0.0` binds
+  the wildcard alone - binding loopback again on that port collides), because the pairing page lives only on the
+  desktop-service port and a phone cannot reach a 127.0.0.1-only bind. The `lan_surface` middleware gates every
+  non-loopback peer: the Studio page and its static files, the version and kernel-state routes, the pair page and
+  `pair/check`. MCP, the launcher settings, the log, the user data and `pair/info` answer 403 to anything on the
+  network. With LAN listening off the desktop service binds loopback only.
 - A phone browser on `http://<LAN IP>:<port>/neo-studio` is the same route, and the layout folds itself in two media
   queries: `max-width: 720px` folds the layout (the 6-tab header becomes one horizontally scrollable strip, all eight
   pages go single-column, no horizontal overflow inside a page) and `(hover: none) and (pointer: coarse)` folds the
@@ -417,16 +423,22 @@ startable once the root is filled in.
   scoring, version fitting) and drawn as inline SVG - no third-party library.
 - The three routes `/neo-studio/pair`, `/neo-studio/pair/check` and `/neo-studio/pair/info` are registered by the
   desktop server itself (`app/mobile_pair.py` + `app/studio_server.py`); the ownership table is `app/studio_caps.py`.
-  The pair page and `pair/check` answer LAN hosts only: loopback, `localhost` and public hosts get 403. The desktop
-  window draws the QR from the persisted `pair_host` - over the bridge when the page sits on the ComfyUI origin, over
-  `pair/info` when it is pinned on the desktop-service port. All three replies carry
-  `Cache-Control: no-store`, and the pair page reports only "valid / invalid" - an expired token and a wrong token
-  read the same.
+  The pair page and `pair/check` answer LAN hosts only: loopback, `localhost` and public hosts get 403. The address on
+  the QR comes from `pair.pick_lan_host`: the NIC picked in "LAN listen" first, then the persisted address when it is
+  still a physical adapter, then the top of the ranked list. `private_addrs()` ranks 192.168 → 10 → 172.16/12 and
+  pushes adapters named `vEthernet` / `Hyper-WSL` / `Loopback` to the end, and link-local 169.254 and public
+  addresses never go on a QR (Hyper-WSL's `172.24.80.1` is what hostname resolution reports first on many machines,
+  and a QR built from it opens a NIC the phone cannot reach). The picked address is persisted as `pair_host`. Over the
+  bridge when the page sits on the ComfyUI origin, over `pair/info` when it is pinned on the desktop-service port. All
+  three replies carry `Cache-Control: no-store`, and the pair page reports only "valid / invalid" - an expired token
+  and a wrong token read the same.
 - With LAN listening off the panel shows no QR and names the setting to enable - a control that cannot work is not
   shipped: the link box, the copy button and the refresh button collapse together, and only the "a refresh is what
   produces the code" state keeps the refresh button.
-- Tests: `app/tests/test_mobile_pair.py` (token lifecycle / LAN prefixes / host gate / merge-only save),
-  `MobilePairServiceTests` in `app/tests/test_studio_server.py` (the host gate and token checks on the three routes),
+- Tests: `app/tests/test_mobile_pair.py` (token lifecycle / LAN prefixes / host gate / merge-only save / QR host
+  ranking), `MobilePairServiceTests` in `app/tests/test_studio_server.py` (the host gate and token checks on the three
+  routes) and `LanSurfaceTests` (the peer gate once the port is bound to a NIC), the `lan_bind_hosts` cases in
+  `app/tests/test_studio_desktop.py` (which addresses the desktop service binds when LAN listening opens),
   `studio/tests/js/qrcode-lite.test.mjs` (round-trip through its own decoder + spec geometry),
   `studio/tests/js/pair-access.test.mjs` (QR on screen, copy, refresh, polling stops on tab change).
 

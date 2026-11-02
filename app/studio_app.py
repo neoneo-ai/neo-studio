@@ -718,12 +718,9 @@ def save_geometry(window) -> None:
 
 
 def lan_ips() -> list:
-    """本机非回环 IPv4，给「局域网监听」当提示地址。走本机主机名解析，不出网。"""
-    try:
-        addrs = socket.gethostbyname_ex(socket.gethostname())[2]
-    except OSError:
-        return []
-    return [a for a in addrs if not a.startswith("127.")]
+    """本机局域网 IPv4，按手机能不能连到排序：给「局域网监听」当提示地址，也给配对出码当主机。
+    走 psutil 的网卡枚举（app/requirements.txt 里就有），不出网。"""
+    return pair.private_addrs()
 
 
 def comfy_listen(raw: str) -> Optional[str]:
@@ -744,6 +741,19 @@ def comfy_listen(raw: str) -> Optional[str]:
     if "127.0.0.1" not in addrs:
         addrs.insert(0, "127.0.0.1")
     return ",".join(addrs)
+
+
+def lan_bind_hosts(listen: str) -> list:
+    """桌面端服务在回环之外还要绑哪些地址：手机扫的配对页只活在桌面端端口上
+    （app/studio_server.py 的配对路由），只绑 127.0.0.1 的话局域网那台手机根本连不到。
+    「局域网监听」放开时把选中的网卡一起绑上；填 0.0.0.0 时只绑全监听 —— 同一端口上
+    再绑一次回环会撞。不放开就只绑回环，桌面端服务默认只在本地。"""
+    addrs = [a.strip() for a in str(listen or "").split(",") if a.strip()]
+    if "0.0.0.0" in addrs:
+        return ["0.0.0.0"]
+    if "::" in addrs:
+        return ["::"]
+    return [a for a in addrs if a not in ("127.0.0.1", "::1")]
 
 
 def comfy_remote(raw: str) -> Optional[str]:
@@ -1364,16 +1374,10 @@ class StudioDesktop:
         """「设置 → 手机连接」的快照走桥：顶栏整页跳到 ComfyUI 的页面后，页面相对路径打的是
         ComfyUI 的 origin，配对那三条路由只在桌面端端口上（局域网那路加不了 CORS，整页跳转是
         硬约束），桥是窗口里唯一还通着桌面端的通道。出码地址在服务侧是认请求 Host 头的，桥这边
-        没有 Host 头——窗口自己永远是回环：沿用上次落盘的 pair_host，没有就取「启动设置 →
-        局域网监听」选定的网卡地址（手机能连到的就是它），监听填 0.0.0.0 时取本机网卡清单里
-        第一个。令牌在这里生成 / 续期，落盘照 pair_rotate 那套。
+        没有 Host 头——窗口自己永远是回环：交 pair.pick_lan_host 挑（监听选中的网卡 → 上次扫过
+        的实体网卡 → 排好序的第一块实体网卡）。令牌在这里生成 / 续期，落盘照 pair_rotate 那套。
         """
-        host = str(self.launcher.get("pair_host") or "")
-        if not host:
-            ips = lan_ips()
-            picked = [p.strip() for p in self.listen.split(",")]
-            host = next((ip for ip in picked if ip not in ("", "127.0.0.1", "0.0.0.0")), "")
-            host = host or (ips[0] if ips else "")
+        host = pair.pick_lan_host(str(self.launcher.get("pair_host") or ""), self.listen)
         info = pair.pair_payload(self.launcher, host, self.desktop_port, time.time(),
                                  lan_open=bool(self.listen))
         if self.launcher.get("pair_dirty"):
@@ -2066,7 +2070,8 @@ def main() -> int:
                                            mcp_manager=mcp,
                                            kernel_state=lambda: desktop.comfy_state(),
                                            pair_ctx=pair_ctx),
-                         port + DESKTOP_PORT_OFFSET)
+                         port + DESKTOP_PORT_OFFSET,
+                         lambda: lan_bind_hosts(launcher.get("listen", "")))
     offline_url = ""
 
     def start_server() -> bool:

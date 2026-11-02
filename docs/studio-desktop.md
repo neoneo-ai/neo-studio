@@ -274,6 +274,10 @@ js_api（`check_setup` / `pick_root` / `pick_python` / `start_setup`），根目
   端口探测 `port_busy` 也认回环 —— 回环上没人听的话窗口打不开，在跑的那路还会被读成空位再拉一路。
 - ComfyUI 没有鉴权：开了监听，`/api/*`、`/neo_studio/*`、`/view` 对局域网上的机器全部敞开，只在信任的网段开，
   用完清空这一项。MCP 服务不参与这条网络口（stdio + 回环，见 [mcp.md](mcp.md)）。
+- 局域网监听放开时桌面端服务把自己也绑到选中的网卡上（`lan_bind_hosts`：填 `0.0.0.0` 时只绑全监听，同一端口上
+  重复绑回环会撞）——配对页只活在桌面端端口上，只绑 127.0.0.1 的话手机连不到那个口。非回环对端由 `lan_surface`
+  中间件收口：只放行 Studio 页与它的静态文件、版本与内核状态、配对页与 `pair/check`；MCP、启动设置、日志、
+  用户数据与 `pair/info` 对网段上的设备一律 403。监听没放开时桌面端服务只绑回环。
 - 手机 / 平板浏览器直连 `http://<局域网 IP>:<端口>/neo-studio` 走的是同一条路，版式由两档媒体查询自己收：
   `max-width: 720px` 收版式（八页全单列，页内不出横向滚动），`(hover: none) and (pointer: coarse)` 收触摸行为
   （44px 触摸目标、输入框 16px、平时靠悬停显形的控件在触摸设备上常驻）。两档都只在窄屏 / 触摸档生效，
@@ -299,14 +303,17 @@ js_api（`check_setup` / `pick_root` / `pick_python` / `start_setup`），根目
   以 inline SVG 上屏，不引第三方库。
 - 三条路由 `/neo-studio/pair`、`/neo-studio/pair/check`、`/neo-studio/pair/info` 由桌面端服务自己注册
   （`app/mobile_pair.py` + `app/studio_server.py`），归属表在 `app/studio_caps.py`。配对页与 `pair/check` 只答局域网
-  Host：回环、`localhost` 与公网 Host 一律 403；桌面端窗口出码用落盘的 `pair_host`——页面在 ComfyUI 的
-  origin 上时走桥（桥这边没有 Host 头可认：沿用落盘值，没有就取「局域网监听」选定的网卡地址并落盘），
-  钉在桌面端端口上时走 `pair/info`。
+  Host：回环、`localhost` 与公网 Host 一律 403。出码地址由 `pair.pick_lan_host` 挑：「局域网监听」选中的网卡 →
+  上次扫过、现在还是实体网卡的那个地址 → 排好序的第一块实体网卡。排序在 `private_addrs()`：按 192.168 → 10 →
+  172.16/12 档位排，名字带 `vEthernet` / `Hyper-WSL` / `Loopback` 字样的虚拟网卡压到最后，169.254 链路本地与公网
+  地址不出码（Hyper-WSL 的 `172.24.80.1` 在主机名解析里经常排第一，照它出码就是一张扫开连不上的码）。挑中的地址
+  落盘成 `pair_host`。页面在 ComfyUI 的 origin 上时走桥（桥这边没有 Host 头可认），钉在桌面端端口上时走 `pair/info`。
   三条回复都带 `Cache-Control: no-store`，配对页对令牌只回「有效 / 无效」两种状态，不区分过期与令牌不符。
 - 局域网监听没放开时这一栏不摆码，直接说明去「启动设置 → 局域网监听」放开——不摆只会失败的控件：链接框、复制与刷新按钮
   一并收起，只有「靠刷新出码」那一状态留着刷新按钮。
-- 测试：`app/tests/test_mobile_pair.py`（令牌生命周期 / 局域网前缀 / Host 门 / 落盘合并 / 桥那份快照）、
-  `app/tests/test_studio_server.py` 的 `MobilePairServiceTests`（三条路由的 Host 门与令牌校验）、
+- 测试：`app/tests/test_mobile_pair.py`（令牌生命周期 / 局域网前缀 / Host 门 / 落盘合并 / 桥那份快照 / 出码选卡排序）、
+  `app/tests/test_studio_server.py` 的 `MobilePairServiceTests`（三条路由的 Host 门与令牌校验）与 `LanSurfaceTests`
+  （绑上网卡后的对端收口）、`app/tests/test_studio_desktop.py` 的 `lan_bind_hosts`（监听放开时桌面端服务绑哪些地址）、
   `studio/tests/js/qrcode-lite.test.mjs`（自带解码器往返 + 标准几何）、
   `studio/tests/js/pair-access.test.mjs`（面板出码 / 复制 / 刷新 / 切走停轮询）。
 

@@ -4,6 +4,17 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **The pairing address is a NIC the phone can actually reach.** On a machine with Hyper-V / WSL adapters the QR carried
+  `172.24.80.1` — the virtual adapter hostname resolution reports first — and the pairing page lived on a port bound to
+  127.0.0.1 only, so opening the link on the phone reached nothing. The address now comes from the adapter list ranked
+  192.168 → 10 → 172.16/12 with adapters named `vEthernet` / `Hyper-WSL` / `Loopback` pushed last: the NIC picked under
+  启动设置 → 局域网监听 wins, then the last scanned address while it is still a physical adapter, then the top of that
+  list. Opening up LAN listening now binds the desktop service to the picked NICs too, so the pairing page answers on
+  the LAN. A non-loopback peer on that port reaches the phone surface only — the Studio page, its assets, the version and
+  kernel-state reads, the pair page and the token check; MCP, the launcher settings, the log, the user data and the QR
+  data (`pair/info`) answer 403. Covered by `LanAddressTests` in `app/tests/test_mobile_pair.py`, `LanSurfaceTests` in
+  `app/tests/test_studio_server.py` and the new `lan_bind_hosts` cases in `app/tests/test_studio_desktop.py`.
+
 - **The header status reading is never blank, and the right-side icons stay put.** The chip now paints a neutral
   「状态读取中」 while the desktop is still assembling (window just opened, F5, the pywebview bridge landing after the page
   script, the desktop service still binding), and swaps in the real reading as soon as it arrives; a page served directly

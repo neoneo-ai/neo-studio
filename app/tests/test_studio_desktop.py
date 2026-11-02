@@ -785,7 +785,7 @@ def _fake_webview(create_window, start=None):
 def _fake_desktop_server(port=8191):
     """桌面端只读服务的替身：main() 里只关心绑定端口与收尾，不起真服务。
     bound 起先为 0，start() 之后才落定 —— 与真 DesktopServer 一致，桌面端靠它判定服务是否已在。"""
-    def make(factory, port_arg):
+    def make(factory, port_arg, bind_hosts=None):
         srv = SimpleNamespace(bound=0, error=None, stop=lambda: None)
         srv.start = lambda: setattr(srv, "bound", port) or port
         return srv
@@ -2128,6 +2128,18 @@ class ListenTests(unittest.TestCase):
         self.assertEqual(app.comfy_listen("192.168.0.7, 10.0.0.5"), "127.0.0.1,192.168.0.7,10.0.0.5")
         self.assertEqual(app.comfy_listen("127.0.0.1,192.168.0.7"), "127.0.0.1,192.168.0.7",
                          "规范化要能重复套用")
+
+    def test_lan_listen_opens_the_desktop_service_port_too(self):
+        # 手机扫的配对页只活在桌面端端口上：只绑 127.0.0.1 的话手机根本连不到那个口
+        self.assertEqual(app.lan_bind_hosts("127.0.0.1,192.168.0.7"), ["192.168.0.7"])
+        self.assertEqual(app.lan_bind_hosts("0.0.0.0, 192.168.0.7"), ["0.0.0.0"],
+                         "全监听已覆盖回环，同一端口上重复绑会撞")
+        self.assertEqual(app.lan_bind_hosts("127.0.0.1,::"), ["::"])
+
+    def test_loopback_only_listen_binds_nothing_extra(self):
+        self.assertEqual(app.lan_bind_hosts(""), [])
+        self.assertEqual(app.lan_bind_hosts("127.0.0.1"), [],
+                         "局域网监听没放开时桌面端服务只在回环上")
 
     def test_not_an_address_is_rejected(self):
         for raw in ("0.0.0.0:8188", "http://192.168.0.7", "192.168.0", "192.168.0.7,10.0.0",

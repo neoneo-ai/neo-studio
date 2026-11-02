@@ -119,6 +119,53 @@ class PayloadTests(unittest.TestCase):
         self.assertEqual(url, "http://10.0.0.9:8191/neo-studio/pair?token=AbCdEf")
 
 
+class LanAddressTests(unittest.TestCase):
+    """出码地址的选卡（参考 dsh-desktop 的 preferredLanAddress / isPrivateAddress）：
+    Hyper-WSL 虚拟网卡在主机名解析里排第一的机器上，扫开的码必须是手机连得到的那块。"""
+
+    ADAPTERS = [("vEthernet (Default Switch)", "172.24.80.1"),
+                ("以太网", "192.168.0.165"),
+                ("WLAN", "169.254.92.11"),
+                ("以太网 2", "10.1.2.3")]
+
+    def setUp(self):
+        self._adapters = pair._adapter_ips
+        pair._adapter_ips = lambda: list(self.ADAPTERS)
+
+    def tearDown(self):
+        pair._adapter_ips = self._adapters
+
+    def test_rank_orders_the_private_spaces(self):
+        self.assertEqual(pair.lan_rank("192.168.0.165"), 0)
+        self.assertEqual(pair.lan_rank("10.1.2.3"), 1)
+        self.assertEqual(pair.lan_rank("172.24.80.1"), 2)
+        self.assertIsNone(pair.lan_rank("169.254.92.11"), "链路本地地址：手机不会从这一面连进来")
+        self.assertIsNone(pair.lan_rank("8.8.8.8"))
+        self.assertIsNone(pair.lan_rank(""))
+
+    def test_private_addrs_puts_the_virtual_nic_last(self):
+        self.assertEqual(pair.private_addrs(), ["192.168.0.165", "10.1.2.3", "172.24.80.1"])
+        self.assertEqual(pair.private_addrs(virtual=False), ["192.168.0.165", "10.1.2.3"])
+
+    def test_pick_lan_host_prefers_the_listen_nic(self):
+        # 用户在「启动设置 → 局域网监听」挑给手机连的那块，谁也不能替它
+        self.assertEqual(pair.pick_lan_host("", "127.0.0.1,10.1.2.3"), "10.1.2.3")
+
+    def test_pick_lan_host_keeps_a_real_persisted_host(self):
+        self.assertEqual(pair.pick_lan_host("10.1.2.3", "127.0.0.1,0.0.0.0"), "10.1.2.3")
+
+    def test_pick_lan_host_drops_a_persisted_virtual_host(self):
+        # 现场：面板上的码是上次扫的 vEthernet 地址，手机扫开是一张连不上的码
+        self.assertEqual(pair.pick_lan_host("172.24.80.1", "127.0.0.1,0.0.0.0"), "192.168.0.165")
+
+    def test_payload_codes_the_picked_host(self):
+        cfg = {}
+        host = pair.pick_lan_host("", "127.0.0.1,0.0.0.0")
+        out = pair.pair_payload(cfg, host, 8191, time.time(), lan_open=True)
+        self.assertEqual(out["url"], f"http://{host}:8191{pair.PAIR_PATH}?token={out['token']}")
+        self.assertEqual(cfg["pair_host"], "192.168.0.165")
+
+
 class PersistenceMergeTests(unittest.TestCase):
     """配对状态单独落盘：只合入自己的三项，不抹掉设置页写的 root/python/port/listen。"""
 

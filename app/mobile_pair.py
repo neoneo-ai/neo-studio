@@ -11,7 +11,9 @@
 """
 
 import hmac
+import ipaddress
 import secrets
+import socket
 from urllib.parse import urlsplit
 
 PAIR_TTL_SECONDS = 300
@@ -21,6 +23,12 @@ PAIR_INFO_PATH = "/neo-studio/pair/info"
 PAIR_CHECK_PATH = "/neo-studio/pair/check"
 TOKEN_BYTES = 16   # 128 bit：配对页是个免登录入口，令牌的强度按一次性入口的惯例给足
 LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1", "[::1]"}
+# 私段档位 = 下标：192.168/16 最靠得住，10/8 次之，172.16/12 最靠不住
+# （Hyper-WSL 虚拟网卡的默认地址全落在最后这一段）
+PRIVATE_NETS = (ipaddress.ip_network("192.168.0.0/16"), ipaddress.ip_network("10.0.0.0/8"),
+                ipaddress.ip_network("172.16.0.0/12"))
+VIRTUAL_HINTS = ("vethernet", "hyper-v", "hyper-v", "wsl", "docker", "vbox",
+                 "vmware", "citrix", "loopback", "Loopback", "tap-adapter")
 
 
 def new_token() -> str:
@@ -86,6 +94,89 @@ def lan_host(host_header: str, prefixes: list) -> str:
     if not any(host.startswith(p + ".") for p in prefixes or []):
         return ""
     return host
+
+
+def lan_rank(ip: str):
+    """私段档位：0 = 192.168/16，1 = 10/8，2 = 172.16/12；公网与 169.254 链路本地给 None。"""
+    for rank, net in enumerate(PRIVATE_NETS):
+        try:
+            if ipaddress.ip_address(ip) in net:
+                return rank
+        except ValueError:
+            return None
+    return None
+
+
+def is_private(ip: str) -> bool:
+    """RFC1918 私段判定（与 dsh-desktop 的 lan-mobile-bridge.ts isPrivateAddress 同一套）：
+    局域网对端只有落在这三段里才算手机那一面的地址。"""
+    return lan_rank(ip) is not None
+
+
+def is_loopback(ip: str) -> bool:
+    """对端地址是不是本机自己（绑 0.0.0.0 之后回环请求也带对端地址）。"""
+    return str(ip).strip("[]") in LOOPBACK_HOSTS
+
+
+def _adapter_ips() -> list:
+    """(网卡名, IPv4) 清单：psutil 枚举本机网卡，装不上时交回主机名解析那份。
+    只走本机枚举，不出网；回环网卡由 net_if_stats 的 isloopback 挡掉——snicaddr 只有
+    family / address / netmask / ptp / flags 五项，没有 is_internal 可靠。"""
+    try:
+        import psutil
+    except ImportError:
+        return []
+    stats = psutil.net_if_stats()
+    out = []
+    for name, entries in (psutil.net_if_addrs() or {}).items():
+        if getattr(stats.get(name), "isloopback", False):
+            continue
+        for entry in entries:
+            if entry.family == socket.AF_INET:
+                out.append((str(name), entry.address))
+    return out
+
+
+def private_addrs(virtual: bool = True) -> list:
+    """手机能连到的本机 IPv4，从最靠得住的排到最靠不住的。
+
+    不取主机名解析清单的第一项：Hyper-WSL 的 vEthernet 在那份清单里经常排第一
+    （实测 172.24.80.1 排在 192.168.0.165 之前），照它出码就是一张扫开连不上的码。
+    先按档位排 192.168 → 10 → 172.16/12，名字带虚拟字样的网卡再往后压一档；
+    virtual=False 时把这类网卡整块剔掉。
+    """
+    entries = _adapter_ips()
+    if not entries:
+        try:
+            entries = [("", ip) for ip in socket.gethostbyname_ex(socket.gethostname())[2]]
+        except OSError:
+            return []
+    ranked = []
+    for name, ip in entries:
+        rank = lan_rank(ip)
+        if rank is None:
+            continue
+        if any(hint in name.lower() for hint in VIRTUAL_HINTS):
+            if not virtual:
+                continue
+            rank += len(PRIVATE_NETS)
+        ranked.append((rank, socket.inet_aton(ip), ip))
+    ranked.sort(key=lambda item: (item[0], item[1]))
+    return [ip for _, _, ip in ranked]
+
+
+def pick_lan_host(persisted: str = "", listen: str = "") -> str:
+    """出码用的本机地址：「启动设置 → 局域网监听」选中的网卡优先（那是用户挑给手机连的那块），
+    其次沿用上次扫过的那个地址（换 WiFi、拔网线之后它可能已经不在实体网卡上了，重挑），
+    最后取排好序的第一块实体网卡；本机只剩虚拟网卡时照给，面板报的就是它。
+    """
+    for ip in (a.strip() for a in str(listen or "").split(",")):
+        if ip and ip not in ("127.0.0.1", "::1", "0.0.0.0", "::") and lan_rank(ip) is not None:
+            return ip
+    real = private_addrs(virtual=False)
+    if persisted and persisted in real:
+        return persisted
+    return (real or private_addrs() or [""])[0]
 
 
 def pair_url(host: str, port: int, token: str, path: str = PAIR_PATH) -> str:
