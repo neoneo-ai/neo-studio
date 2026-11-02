@@ -332,11 +332,19 @@ async function measure(body, viewport, { touch = false } = {}, fn) {
 const overflowCheck = () => {
     const pages = [...document.querySelectorAll(".ns-page, .ns-libmodal-box, .neo-lightbox-box")];
     const tabs = document.querySelector(".ns-tabs");
+    // 贴右排布的溢出落在滚动原点左边的负区，scrollLeft 钳在 0 —— 手指滚不回去。studio-app.js 的
+    // showView 按「页签宽之和 + 行距」判溢出并落 ns-tabs-scroll 翻成左起；fixture 不跑那段 JS，
+    // 这里同一条测量与同一次 scrollIntoView（下一条顶栏用例）一样复刻过来
+    const links = [...tabs.querySelectorAll("a")];
+    const gap = parseFloat(getComputedStyle(tabs).columnGap) || 0;
+    const need = links.reduce((sum, a) => sum + a.offsetWidth, 0) + gap * Math.max(0, links.length - 1);
+    tabs.classList.toggle("ns-tabs-scroll", need > tabs.clientWidth + 1);
+    tabs.scrollLeft = 9999;   // 左起之后溢出在右侧，滚到末端读回来就是「滚得开」的实证
     return {
         innerWidth: window.innerWidth,
         docScroll: document.documentElement.scrollWidth,
         widest: Math.max(...pages.map((el) => el.scrollWidth)),
-        tabsScroll: tabs.scrollWidth,
+        tabsScrolled: Math.abs(Math.round(tabs.scrollLeft)),
         tabsClient: tabs.clientWidth,
     };
 };
@@ -346,7 +354,7 @@ for (const [name, body] of Object.entries(PAGES)) {
         const m = await measure(body, MOBILE, { touch: true }, overflowCheck);
         assert.ok(m.docScroll <= m.innerWidth + 1, `${name}：整页出横向滚动（scrollWidth ${m.docScroll} > ${m.innerWidth}）`);
         assert.ok(m.widest <= m.innerWidth + 1, `${name}：页面容器溢出视口（${m.widest} > ${m.innerWidth}）`);
-        assert.ok(m.tabsScroll > m.tabsClient, `${name}：顶栏页签条在手机上不可横滚（${m.tabsScroll} ≤ ${m.tabsClient}）`);
+        assert.ok(m.tabsScrolled > 0, `${name}：顶栏页签条在手机上滚不动（滚到 ${m.tabsScrolled} / 可视 ${m.tabsClient}）`);
     });
 }
 

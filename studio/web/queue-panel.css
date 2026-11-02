@@ -8,6 +8,9 @@
     font-size: 12px; line-height: 1; white-space: nowrap; cursor: pointer;
 }
 .ns-queue-toggle:hover { background: var(--ns-raised); }
+/* 同下面 .ns-queue[hidden] 那条：显式 display 盖掉 [hidden] 的 UA display:none，
+   离线时 setQueueOnline(false) 只翻 hidden，入口就留在顶栏点了没反应 */
+.ns-queue-toggle[hidden] { display: none; }
 .ns-queue-badge {
     min-width: 18px; padding: 2px 5px; border-radius: 9px;
     background: var(--ns-primary); color: #fff;

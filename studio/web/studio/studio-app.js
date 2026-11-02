@@ -83,6 +83,17 @@ function ensureView(name, build) {
 
 function showView(name) {
     for (const [key, el] of views) el.classList.toggle("ns-hidden", key !== name);
+    // 页签条装得下就贴右（右侧那一截让给状态位 / 队列 / 智能体 / 窗口控件），装不下回到左起。
+    // 溢出只量条本身不行：贴右排布时溢出长在可视区左边的滚动区里，scrollWidth 不计这一段，
+    // 挤到只剩几十像素的条照旧报「装得下」，首页就此滚出可视区。页签是 flex:none，
+    // 自身宽度就是排版要占的真实宽度，按「页签宽之和 + 行距」判
+    const tabsBar = document.querySelector(".ns-tabs");
+    if (tabsBar) {
+        const links = [...tabsBar.querySelectorAll("a")];
+        const gap = parseFloat(getComputedStyle(tabsBar).columnGap) || 0;
+        const need = links.reduce((sum, a) => sum + a.offsetWidth, 0) + gap * Math.max(0, links.length - 1);
+        tabsBar.classList.toggle("ns-tabs-scroll", need > tabsBar.clientWidth + 1);
+    }
     document.querySelectorAll(".ns-tabs a").forEach(a => {
         const on = a.dataset.tab === name;
         a.classList.toggle("active", on);

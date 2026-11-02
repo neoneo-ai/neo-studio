@@ -4,6 +4,21 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **The painting page fills the window in a narrow desktop window, and the header tab strip stops stacking.** A 900×1200
+  Studio window folded the painting page down to content height - the 文生图 / 图片编辑 composer floated in the middle of the
+  window with its bottom half left as window background - because the phone tier's `height: auto` rode on `max-width: 900px`,
+  so a window narrower than 900px was treated as a phone. That rule keys on window height (`max-height: 620px`), the shape it
+  was solving for: above it the painting page fills the viewport and its composer sits on the panel's bottom edge the way the
+  video page dock does (measured 29px above the window bottom at 950×700, 1265×1225 and 1440×900). The header tab strip is one
+  row at every width - tabs no longer break into 3-line slivers between 720 and 900px - and it sits flush against the 队列
+  button when the 8 tabs fit, switching to left-packed scrolling when they do not: `showView` measures the tab widths plus the
+  gap, because a right-packed overflow lies left of the scroll origin, where `scrollWidth` and a swipe both read zero. In the
+  phone painting composer the 技能 / 尺寸 / 自定参数 chips now give their width to 生成, so 生成 is reachable without scrolling
+  the bar, and a `[hidden]` window-control group no longer reserves its 154px of the header. Covered by
+  `studio/tests/e2e/studio-mobile-layout.e2e.mjs`, whose tab-strip probe now scrolls the strip and reads `scrollLeft` back
+  (the app's own width measurement, replicated the way the file already replicates `scrollIntoView`) instead of comparing
+  `scrollWidth` with `clientWidth`.
+
 - **The standalone Studio page now fits a phone.** Opening `http://<LAN IP>:8188/neo-studio` in a phone browser
   (390×844) used to open the desktop layout: the page min-widths pushed the whole page into horizontal scrolling, the
   Director / Skills / Settings / Pose pages kept their side-by-side columns as two unreadable slivers, the video

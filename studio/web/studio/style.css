@@ -48,14 +48,19 @@ body {
 }
 .ns-logo { font-weight: 700; font-size: 15px; color: #fff; white-space: nowrap; text-decoration: none; }
 .ns-logo:hover { color: #7aa2ff; }
-.ns-tabs { display: flex; gap: 4px; height: 100%; }
+/* 页签条基础档就带横滚：右侧的状态位 / 队列 / 智能体 / 窗口控件吃掉宽度时，这一条自己滚，
+   不把页签挤成竖排两行（720–900 这一档没有手机档的滚动规则，全靠这一条兜住） */
+.ns-tabs { display: flex; gap: 4px; height: 100%; min-width: 0; overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain; }
+.ns-tabs::-webkit-scrollbar { display: none; }
 .ns-tabs a {
     display: flex;
     align-items: center;
+    flex: none;
     padding: 0 14px;
     color: #aaa;
     text-decoration: none;
     border-bottom: 2px solid transparent;
+    white-space: nowrap;
 }
 .ns-tabs a:hover { color: #fff; }
 .ns-tabs a.active { color: #fff; border-bottom-color: #7aa2ff; }
@@ -82,14 +87,15 @@ body {
         padding: 0 max(6px, env(safe-area-inset-right)) 0 max(6px, env(safe-area-inset-left));
     }
     .ns-logo { font-size: 13px; }
-    .ns-tabs {
-        flex: 1 1 auto; min-width: 0;
-        overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain;
-    }
-    .ns-tabs::-webkit-scrollbar { display: none; }
-    .ns-tabs a { padding: 0 9px; font-size: 13px; white-space: nowrap; }
+    .ns-tabs { flex: 1 1 auto; }
+    .ns-tabs a { padding: 0 9px; font-size: 13px; }
     .ns-tabs a[data-tab="gallery"],
     .ns-tabs a[data-tab="skills"] { margin-left: 4px; }
+    /* 页签条压得下时贴着右侧的队列走：logo 之后那一条空白就是「标题栏右边空着」的来源。
+       压不下时回到左起 —— flex-end 的溢出条起点在可视区左边，showView 的 scrollIntoView
+       只会把当前页签推出可视区，溢出的条必须左起才滚得开（ns-tabs-scroll 由 showView 量出来） */
+    .ns-tabs { justify-content: flex-end; }
+    .ns-tabs.ns-tabs-scroll { justify-content: flex-start; }
 }
 /* 只剩一行时给不出两件事：ComfyUI 状态位与组分隔线让位给页签，启停在「设置 → 启动设置」顶部看 */
 @media (max-width: 430px) {
@@ -110,6 +116,9 @@ body {
 .ns-comfy-starting { color: #e0b070; }
 /* 无边框窗口：桌面端摘掉系统标题栏后，最小化 / 最大化 / 全屏 / 关闭由顶栏自己出（只在桌面端窗口出现） */
 .ns-wctl { display: flex; align-items: center; gap: 2px; margin-left: 12px; }
+/* [hidden] 的 UA display:none 被上面这条 display:flex 盖掉：浏览器标签页里 pywebview 桥永不来、
+   hidden 永不翻，不补这一条就是 142px 点了没反应的窗口控件杵在顶栏右端，页签条被挤到只剩一枚 */
+.ns-wctl[hidden] { display: none; }
 .ns-wctl-btn { width: 34px; height: 26px; display: inline-flex; align-items: center; justify-content: center; border: none; border-radius: 4px; background: transparent; color: #b8b8c2; font-size: 13px; line-height: 1; cursor: pointer; }
 .ns-wctl-btn:hover { background: #33333a; color: #fff; }
 .ns-wctl-close:hover { background: #a83232; color: #fff; }
@@ -538,10 +547,29 @@ body {
 .ns-director-recipes .neo-recipes-group-title,
 .ns-director-recipes .neo-recipes-empty { grid-column: 1 / -1; }
 
-/* 窄窗口：导演 / 绘画页整页纵向滚动，生成区给出保底高度 */
+/* 窄窗口：导演页两栏堆叠后整页纵向滚动，生成区给出保底高度 */
 @media (max-width: 900px) {
-    .ns-director, .ns-paint { height: auto; min-height: 0; }
+    .ns-director { height: auto; min-height: 0; }
     .ns-director-main { min-height: 620px; }
+}
+/* 手机：绘画页这一档只管版式，整页高度跟着基础档的 height:100% 走。模式页签各占半行吃掉整行，
+   素材库钉在这一行的最右端，这一行两头不再留半行空白；输入卡底行一行压不进一块手机：
+   技能与自定参数在条内横滚，「生成」与「⋯」钉在最右端——视频页 dock 有这一条，绘画页原本只有
+   composer 自己的 overflow-x auto，生成整枚会滚出可视区够不着 */
+@media (max-width: 720px) {
+    .ns-paint-mode-btn { flex: 1 1 0; min-width: 0; }
+    .ns-paint-lib-btn { margin-left: auto; }
+    .ns-paint-panel .neo-gallery-gm-composer-bar { min-width: 0; }
+    /* chip 里的模型名是一整串不换行的字，flex 子项的自动最小宽度 = 整串宽度，chip 就此让不了位，
+       整条底行溢出到横滚内容右端，「生成」要点一下滚过去才够得着。整串让给「生成」，标签自己截断 */
+    .ns-paint-panel :is(.neo-gallery-gm-chip-wrap, .neo-gallery-gm-size-row, .neo-gallery-gm-chip-btn, .neo-gallery-gm-chip-label) { min-width: 0; }
+    .ns-paint-panel :is(.neo-gallery-gm-gen-btn, .neo-gallery-gm-more-btn, .neo-gallery-gm-tool-btn) { flex: none; }
+}
+/* 矮窗口（含手机横屏）：绘画页收成内容高、整页纵向滚动。绘画页的输入卡贴面板底边，面板铺满
+   整栏就贴窗口底——和 900px 档不冲突时一律走铺满。原本这条挂在 900px 宽度档上，
+   900×1200 这类窄而高的窗口因此被收成内容高，输入卡飘在窗口中间，屏幕下半截全是窗口底 */
+@media (max-height: 620px) {
+    .ns-paint { height: auto; min-height: 0; }
 }
 /* 手机：导演页「编辑器 │ 分隔条 │ 生成面板」这一栏改成上下堆叠 —— 620px 的栏宽下限在手机上把
    整页顶成横向滚动，两栏并排各剩一窄条读不了。拖宽用的分隔条在触摸上拖不动，整条收起；
