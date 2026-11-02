@@ -6,6 +6,7 @@
 生成 / 队列 / 显存类接口必须回 409 offline，不能让前端以为生成成功了。
 """
 
+import asyncio
 import json
 import os
 import shutil
@@ -17,6 +18,9 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
+from unittest.mock import Mock
+
+import aiohttp
 
 APP_DIR = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 PLUGIN_DIR = APP_DIR.parent / "studio"
@@ -1067,25 +1071,41 @@ class MobilePairServiceTests(_RealFolderPaths):
 
 class LanSurfaceTests(unittest.TestCase):
     """桌面端端口绑上网卡之后的路由收口（dsh-desktop 里 isPrivateAddress(transportAddress) 那一层）：
-    手机那一面之外的路由——MCP 子进程、启动设置、日志、用户数据——只在桌面端窗口里可用。"""
+    网段上的设备是这台机器的另一块屏幕，创作面照开，桌面管理与密钥只在桌面端窗口里可用。"""
 
     PHONE = "/neo-studio"
     LAN_PEER = "192.168.0.20"
 
     def test_loopback_peer_gets_every_route(self):
         for path in ("/neo_mcp/servers", "/neo_studio/launcher", pair.PAIR_INFO_PATH,
-                     ns.USERDATA_PATH, "/view", "/ws"):
+                     ns.USERDATA_PATH, "/userdata/configs/remote_llm_config.json", "/view", "/ws"):
             self.assertTrue(ns.lan_path_open(path, "127.0.0.1"), path)
         self.assertTrue(ns.lan_path_open("/neo_studio/launcher", ""),
                         "拿不到对端地址的本地套接字照旧全通")
 
-    def test_lan_peer_only_reaches_the_phone_surface(self):
+    def test_lan_peer_reaches_the_creation_surface(self):
         for path in (self.PHONE, pair.PAIR_PATH, pair.PAIR_CHECK_PATH,
-                     "/neo_studio/version", "/neo_studio/comfy_state",
+                     "/neo_studio/version", "/neo_studio/comfy_state", "/neo_studio/caps",
+                     "/neo_gallery/list", "/neo_gallery/thumbnail", "/neo_gallery/image",
+                     "/neo_pose/status", "/neo_pose/scenes", "/neo-pose",
+                     "/rs_recipes/list", "/rs_prompts/skills", "/neo_agent/sessions",
+                     "/neo-studio-assets/js/studio-app.js", "/userdata/gallery",
                      "/extensions/comfyui-neo-studio/web/studio/index.html"):
-            self.assertTrue(ns.lan_path_open(path, self.LAN_PEER), path)
-        for path in ("/neo_mcp/servers", "/neo_studio/launcher", "/neo_studio/log",
-                     pair.PAIR_INFO_PATH, ns.USERDATA_PATH, "/view", "/ws"):
+            self.assertTrue(ns.lan_path_open(path, self.LAN_PEER),
+                            f"手机上的 Studio 页要读这些，{path} 不能对网段上的设备关着")
+
+    def test_lan_peer_keeps_the_desktop_management_to_itself(self):
+        for path in ("/neo_mcp/servers", "/neo_mcp", "/neo_studio/mcp",
+                     "/neo_studio/launcher", "/neo_studio/launcher/save",
+                     "/neo_studio/restart_comfyui", "/neo_studio/shutdown_app",
+                     "/neo_studio/shutdown_comfyui", "/neo_studio/log",
+                     "/neo_studio/open_log_dir", "/neo_studio/mem_stats",
+                     "/neo-studio/launcher", "/neo-studio/settings",
+                     "/neo-studio/mem_stats", "/neo-studio/open_log_file",
+                     pair.PAIR_INFO_PATH, "/neo_settings/get", "/neo_settings/save",
+                     "/userdata/configs/remote_llm_config.json",
+                     "/userdata/configs/backyard_oss.json",
+                     "/neo_shim/mcp_call", "/neo_shim/launcher_save"):
             self.assertFalse(ns.lan_path_open(path, self.LAN_PEER),
                              f"{path} 是桌面端窗口自己的路由，网段上的设备碰不到")
 
@@ -1093,6 +1113,64 @@ class LanSurfaceTests(unittest.TestCase):
         self.assertFalse(ns.lan_path_open(pair.PAIR_PATH, "8.8.8.8"))
         self.assertFalse(ns.lan_path_open(self.PHONE, "169.254.92.11"),
                          "链路本地地址不是手机连进来的那一面")
+
+
+class LanSurfaceMiddlewareTest(unittest.TestCase):
+    """收口发生在中间件里：非回环对端的 403 由各条 handler 之外统一给出，回环照常落到 handler。"""
+
+    STUDIO = "/neo-studio"
+
+    def _peer_request(self, peer: str, method: str, path: str, host: str):
+        peername = None if not peer else (peer, 51000)
+        transport = Mock()
+        transport.get_extra_info.side_effect = lambda key, default=None: (
+            peername if key == "peername" else default)
+        # 中间件只碰 method / path / headers / transport，按它用到的这几样给一个替身
+        return Mock(method=method, path=path, headers={"Host": host} if host else {},
+                    transport=transport)
+
+    @staticmethod
+    async def _handler(request):
+        return aiohttp.web.json_response({"success": True, "marker": "handler"})
+
+    def _call(self, peer: str, method: str, path: str, host: str = "192.168.0.9:43130"):
+        resp = asyncio.run(ns.lan_surface(self._peer_request(peer, method, path, host), self._handler))
+        return resp.status, resp.text
+
+    def test_loopback_peer_reaches_the_handler(self):
+        for path in ("/neo_gallery/list", "/neo_studio/launcher", pair.PAIR_INFO_PATH, "/neo_mcp/servers"):
+            status, body = self._call("127.0.0.1", "GET", path, "127.0.0.1:43130")
+            self.assertEqual(status, 200, path)
+            self.assertEqual(json.loads(body)["marker"], "handler", path)
+
+    def test_lan_peer_creation_route_reaches_the_handler(self):
+        for path in ("/neo_gallery/list", "/neo_pose/status", "/neo_studio/version",
+                     "/neo-studio/version", self.STUDIO, pair.PAIR_PATH):
+            status, body = self._call("192.168.0.20", "GET", path)
+            self.assertEqual(status, 200, path)
+            self.assertEqual(json.loads(body)["marker"], "handler", path)
+
+    def test_lan_peer_management_route_is_403(self):
+        for path in ("/neo_studio/launcher", "/neo_studio/shutdown_app", "/neo_studio/log",
+                     "/neo_studio/mem_stats", pair.PAIR_INFO_PATH, "/neo_mcp/servers",
+                     "/neo_studio/launcher/save", "/neo_studio/open_log_dir"):
+            self.assertEqual(self._call("192.168.0.20", "GET", path)[0], 403, path)
+        for method in ("POST", "DELETE", "PUT", "PATCH"):
+            self.assertEqual(self._call("192.168.0.20", method, "/neo_studio/shutdown_app")[0], 403, method)
+
+    def test_public_peer_is_403_even_on_the_pair_page(self):
+        # 公网对端从来不是手机连进来的那面：配对页、Studio 页、创作面一律不答
+        for path in (pair.PAIR_PATH, self.STUDIO, "/neo_gallery/list", "/neo_studio/launcher"):
+            self.assertEqual(self._call("8.8.8.8", "GET", path)[0], 403, path)
+
+    def test_lan_peer_userdata_configs_is_403(self):
+        for path in ("/userdata/configs/remote_llm_config.json", "/userdata/configs/model_hub.json"):
+            self.assertEqual(self._call("192.168.0.20", "GET", path)[0], 403, path)
+        status, body = self._call("192.168.0.20", "GET", "/userdata/gallery")
+        self.assertEqual(status, 200, "素材库图片在手机上要出图")
+        self.assertEqual(json.loads(body)["marker"], "handler")
+
+
 
 
 if __name__ == "__main__":

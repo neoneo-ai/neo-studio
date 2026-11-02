@@ -113,23 +113,30 @@ def _loopback_origin(origin: str) -> bool:
     return parts.scheme in ("http", "https") and parts.hostname in LOOPBACK_HOSTS
 
 
-# 手机那一面的路径：Studio 页与它的静态文件、版本快照与内核状态、配对页与令牌校验。
-# 局域网监听把桌面端端口绑到网卡上之后，只有桌面端窗口该用的路由（MCP 子进程、启动设置、
-# 日志、用户数据）也一起露在网段里了，收口只放行这一面；pair/info 是出码给窗口看的，
-# 不在这一面里——网段上任何设备都不该读到当前令牌的完整地址。
-LAN_EXACT = {pair.STUDIO_PATH, pair.PAIR_PATH, pair.PAIR_CHECK_PATH,
-             "/neo_studio/version", "/neo_studio/comfy_state"}
-LAN_STATIC = "/extensions/comfyui-neo-studio"
+# 局域网监听把桌面端端口绑到网卡上之后，网段上的设备就是这台机器的另一块屏幕：页面、素材库、
+# 摆姿页、配方、技能这些数据路由对私段对端照开——只放一张配对页的话，手机上的素材库是空的、
+# 摆姿页报「后端未就绪」，等于把不能用的控件交出去。挡的是桌面管理那一面（MCP 子进程、启动设置、
+# 日志、重启 / 关机 / 显存、出码用的令牌数据与桥上的对应口）和 configs 静态目录
+# （remote_llm_config.json / backyard_oss.json / model_hub.json 都在这底下）。
+LAN_HIDDEN = (
+    "/neo_mcp", "/neo_shim/mcp", "/neo_shim/launcher", "/neo_shim/desktop_log",
+    "/neo_shim/restart", "/neo_shim/shutdown", "/neo_shim/comfyui_shutdown",
+    "/neo_shim/pair_info", "/neo_shim/pair_rotate",
+    "/neo_studio/launcher", "/neo_studio/restart", "/neo_studio/shutdown",
+    "/neo_studio/log", "/neo_studio/open_log", "/neo_studio/mem_stats",
+    "/neo_studio/mcp", "/neo-studio/pair/info", "/neo_studio/pair/info",
+    "/neo-studio/launcher", "/neo-studio/settings", "/neo-studio/open_log",
+    "/neo-studio/restart", "/neo-studio/shutdown", "/neo-studio/mem_stats",
+    "/neo-studio/mcp", "/neo_settings", "/userdata/configs",
+)
 
 
 def lan_path_open(path: str, peer: str) -> bool:
     """这条路径对局域网对端开不开（dsh-desktop 里 isPrivateAddress(transportAddress) 那一层）：
-    本机自己（含拿不到对端地址的本地套接字）全通，私段对端只通手机那一面，公网对端全关。"""
+    本机自己（含拿不到对端地址的本地套接字）全通，私段对端通创作面、挡桌面管理与密钥，公网对端全关。"""
     if not peer or pair.is_loopback(peer):
         return True
-    if not pair.is_private(peer):
-        return False
-    return path in LAN_EXACT or path.startswith(LAN_STATIC)
+    return pair.is_private(peer) and not path.startswith(LAN_HIDDEN)
 
 
 def _peer_ip(request) -> str:

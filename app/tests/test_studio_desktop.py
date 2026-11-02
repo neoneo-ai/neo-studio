@@ -1804,7 +1804,7 @@ class MainWindowTests(unittest.TestCase):
         comfy = SimpleNamespace(pid=1234, terminate=MagicMock(), wait=MagicMock())
         with patch.object(app, "webview", _fake_webview(cw, lambda *a, **k: a[0]())), \
              patch.object(app, "singleton", lambda: 7), \
-             patch.object(app, "DesktopServer", lambda factory, port: SimpleNamespace(
+             patch.object(app, "DesktopServer", lambda factory, port, bind_hosts=None: SimpleNamespace(
                  start=lambda: 0, stop=lambda: None, bound=0, error=None)), \
              patch.object(app, "probe", lambda port, timeout=3.0: False), \
              patch.object(app, "find_python", lambda root, p: pathlib.Path("D:/python/python.exe")), \
