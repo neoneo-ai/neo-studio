@@ -191,6 +191,9 @@ narrow-window rules are shared with the director page (one modal instance, one g
   prompt enhance / runtime random / preset list live in the `⋯` menu. The panel fills the column height: progress and finished images stack from the top above
   the composer, and idle leaves one start hint in the result area ("Write a prompt, then hit Generate") with no
   empty canvas (control list: [gallery.md](gallery.md), "Generate assets" and "Image editing").
+  Filling and docking are independent of how short the window is: Windows display scaling reports an 800px window as
+  640 / 533 CSS px and the composer stays docked at the panel bottom; the result area scrolls on its own, and the
+  page never scrolls vertically — the composer does not float in the middle of the window with an empty lower half.
 
 - On the paint page, "Generate asset" in the asset modal and "Edit image" in an image card's menu close the modal
   once the panel is in place — `go()` on the same page skips the `showView()` close, so the modal would stay over
@@ -388,9 +391,12 @@ startable once the root is filled in.
 - With LAN listening on, the desktop service binds itself to the picked NICs too (`lan_bind_hosts`; `0.0.0.0` binds
   the wildcard alone - binding loopback again on that port collides), because the pairing page lives only on the
   desktop-service port and a phone cannot reach a 127.0.0.1-only bind. The `lan_surface` middleware gates every
-  non-loopback peer: the Studio page and its static files, the version and kernel-state routes, the pair page and
-  `pair/check`. MCP, the launcher settings, the log, the user data and `pair/info` answer 403 to anything on the
-  network. With LAN listening off the desktop service binds loopback only.
+  non-loopback peer by its address: a private-range device uses this machine as a second screen - the page, the gallery,
+  the pose page, the recipes and the skills data routes answer it (a pair page alone leaves the phone's gallery empty
+  and the pose page reading 「后端未就绪」). `lan_path_open` hides the desktop-management surface - `/neo_mcp*`,
+  `/neo_studio/launcher`, restart / shutdown / log / memory, `/neo-studio/settings`, the QR data on `pair/info` and its
+  bridge counterparts - and `/userdata/configs/` (`remote_llm_config.json` / `backyard_oss.json` / `model_hub.json`
+  live there); public and link-local peers get nothing. With LAN listening off the desktop service binds loopback only.
 - A phone browser on `http://<LAN IP>:<port>/neo-studio` is the same route, and the layout folds itself in two media
   queries: `max-width: 720px` folds the layout (the 6-tab header becomes one horizontally scrollable strip, all eight
   pages go single-column, no horizontal overflow inside a page) and `(hover: none) and (pointer: coarse)` folds the

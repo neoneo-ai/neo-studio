@@ -4,16 +4,30 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **The paint composer stays docked at the panel bottom in a short window.** Windows display scaling reports a
+  physically 800px-tall window as 640 / 533 CSS px, and the 「矮窗口收成内容高」 rule hung on `max-height: 620px`, so in an
+  ordinary scaled window the text-to-image panel shrank to its content height: the prompt box and the 生成 button floated
+  in the middle of the window with the whole lower half empty. The collapse step is gone — the panel fills the column at
+  every window height, the result area scrolls on its own when the window is short, and the page never scrolls
+  vertically. Covered by the new 「输入卡钉在面板底边（窗口高 900 / 620 / 560 / 460）」 cases in
+  `studio/tests/e2e/paint-panel-layout.e2e.mjs`, and the live 「面板铺满宿主净高」 assertions in
+  `studio/tests/e2e/studio.e2e.mjs` (the assertions compared the panel with the host including its 12px padding, and the
+  paint page no longer carries its own 显存条 — those stale readings moved into the header queue panel).
+
 - **The pairing address is a NIC the phone can actually reach.** On a machine with Hyper-V / WSL adapters the QR carried
   `172.24.80.1` — the virtual adapter hostname resolution reports first — and the pairing page lived on a port bound to
   127.0.0.1 only, so opening the link on the phone reached nothing. The address now comes from the adapter list ranked
   192.168 → 10 → 172.16/12 with adapters named `vEthernet` / `Hyper-WSL` / `Loopback` pushed last: the NIC picked under
   启动设置 → 局域网监听 wins, then the last scanned address while it is still a physical adapter, then the top of that
-  list. Opening up LAN listening now binds the desktop service to the picked NICs too, so the pairing page answers on
-  the LAN. A non-loopback peer on that port reaches the phone surface only — the Studio page, its assets, the version and
-  kernel-state reads, the pair page and the token check; MCP, the launcher settings, the log, the user data and the QR
-  data (`pair/info`) answer 403. Covered by `LanAddressTests` in `app/tests/test_mobile_pair.py`, `LanSurfaceTests` in
-  `app/tests/test_studio_server.py` and the new `lan_bind_hosts` cases in `app/tests/test_studio_desktop.py`.
+  list. Opening up LAN listening now binds the desktop service to the picked NICs too, so the page and the pairing
+  page answer on the LAN, and a private-range device uses this machine as a second screen: the gallery, the pose page,
+  the recipes and the skills data routes work from the phone (with the gate set to the pair page only, the phone's
+  gallery was empty and the pose page read 「后端未就绪」). The desktop-management surface - MCP, the launcher
+  settings, restart / shutdown / log / memory, the 启动设置 page, the QR data on `pair/info` - and `/userdata/configs/`
+  (where `remote_llm_config.json` / `backyard_oss.json` / `model_hub.json` live) stay loopback-only; public and
+  link-local peers get nothing. Covered by `LanAddressTests` in `app/tests/test_mobile_pair.py`, `LanSurfaceTests` and
+  `LanSurfaceMiddlewareTest` in `app/tests/test_studio_server.py`, and the new `lan_bind_hosts` cases in
+  `app/tests/test_studio_desktop.py`.
 
 - **The header status reading is never blank, and the right-side icons stay put.** The chip now paints a neutral
   「状态读取中」 while the desktop is still assembling (window just opened, F5, the pywebview bridge landing after the page

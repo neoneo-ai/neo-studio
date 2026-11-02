@@ -89,7 +89,7 @@ const chipPanel = () => `
 const embeddedHtml = (body) => `<!doctype html><html><head>
 <meta charset="utf-8"><style>html,body{margin:0;background:#14161a;color:#cfd6e0;font:13px sans-serif}*{box-sizing:border-box}</style>
 <style>${css("studio/style.css")}</style><style>${css("gallery.css")}</style><style>${css("prompts.css")}</style>
-</head><body><div class="ns-view">${body}</div></body></html>`;
+</head><body><div class="ns-body"><div class="ns-view"><div class="ns-page">${body}</div></div></div></body></html>`;
 
 let browser;
 
@@ -184,6 +184,37 @@ test("文生图空档归位：起手提示居中、矮窗口贴底、空档不�
         `空档不够时内容从容器顶部铺开（内容顶 ${tiny.innerTop} / 结果区顶 ${tiny.statusTop}）`);
     assert.ok(tiny.viewScroll <= 2, `460px 高的窗口不溢出（溢出 ${tiny.viewScroll}px）`);
 });
+
+// 输入卡钉死在面板底边：面板铺满整栏，窗口多矮都一样（结果区自己滚）。
+// 这条测的是 Windows 显示缩放下的真实视口：125% / 150% 缩放把 800px 高的窗口报成 640 / 533 CSS px，
+// 原先 max-height:620 那条「收成内容高」在正常窗口上照样触发，面板退成内容高，
+// 输入卡飘在窗口中间、屏幕下半截全是空白 —— 面板底边必须钉在视图底边
+for (const height of [900, 620, 560, 460]) {
+    test(`文生图输入卡钉在面板底边（窗口高 ${height}px）`, async () => {
+        const page = await browser.newPage({ viewport: { width: 1440, height } });
+        await page.setContent(embeddedHtml(paintPanel(IDLE)), { waitUntil: "load" });
+        await page.waitForTimeout(150);
+        const g = await page.evaluate(() => {
+            const b = (s) => document.querySelector(s).getBoundingClientRect();
+            const panel = b(".ns-paint-panel");
+            const composer = b(".neo-gallery-gm-composer");
+            const pageBox = document.querySelector(".ns-page");
+            return {
+                panelTop: Math.round(panel.top), panelBottom: Math.round(panel.bottom),
+                viewBottom: Math.round(b(".ns-view").bottom),
+                composerTop: Math.round(composer.top), composerBottom: Math.round(composer.bottom),
+                pageScroll: pageBox.scrollHeight - pageBox.clientHeight,
+            };
+        });
+        await page.close();
+        assert.ok(Math.abs(g.panelBottom - g.viewBottom) <= 16,
+            `面板没铺满整栏：面板底 ${g.panelBottom} / 视图底 ${g.viewBottom} —— 面板退成内容高，输入卡就飘走了`);
+        assert.ok(g.composerBottom <= g.panelBottom && g.panelBottom - g.composerBottom <= 52,
+            `输入卡不贴面板底边（差 ${g.panelBottom - g.composerBottom}px）`);
+        assert.ok(g.composerTop >= g.panelTop, `输入卡顶出面板上沿：${g.composerTop} < ${g.panelTop}`);
+        assert.ok(g.pageScroll <= 2, `整页出纵向滚动（溢出 ${g.pageScroll}px），钉底页不整页滚`);
+    });
+}
 
 // 浮层里的 LoRA 下拉：三种宿主宽度（宽素材页 / 窄侧栏标签页 / 窄窗口）都要拿到列的余宽，
 // 长模型名不截断，强度与 ✕ 留在同一行

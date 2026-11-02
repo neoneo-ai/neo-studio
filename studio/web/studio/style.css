@@ -482,8 +482,10 @@ body {
 /* 文生图结果区吃满输入卡上方的余隙：进度与成品贴着输入卡往上长，中间不再留一大片空白
    （余隙原来被输入卡的 margin-top:auto 吸走，结果区 flex:1 拿不到空间）。
    空档收在首 child 的 margin-top:auto 上：内容超出容器时它自动归零，照旧从顶部铺开，不会把上方内容裁成滚不动的死角；
-   起手提示（.neo-gallery-gm-idle）自带 margin:auto，两头都吃空档，落在那片余隙正中 */
-.ns-paint-text .neo-gallery-cs-status { flex: 1 1 auto; min-height: 0; }
+   起手提示（.neo-gallery-gm-idle）自带 margin:auto，两头都吃空档，落在那片余隙正中。
+   结果区自己出纵向滚动：窗口矮到装不下「成品 + 起手提示 + 输入卡」时滚的是这一块，
+   输入卡与操作区留在面板底边不动 —— 钉底的输入卡不能被内容顶出去，顶出去就点不到「生成」 */
+.ns-paint-text .neo-gallery-cs-status { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 .ns-paint-text .neo-gallery-cs-status > :first-child { margin-top: auto; }
 .ns-paint-text .neo-gallery-gm-preview,
 .ns-paint-text .neo-gallery-cs-result { flex: none; max-height: 40vh; overflow: auto; }
@@ -570,12 +572,10 @@ body {
     .ns-paint-panel :is(.neo-gallery-gm-chip-wrap, .neo-gallery-gm-size-row, .neo-gallery-gm-chip-btn, .neo-gallery-gm-chip-label) { min-width: 0; }
     .ns-paint-panel :is(.neo-gallery-gm-gen-btn, .neo-gallery-gm-more-btn, .neo-gallery-gm-tool-btn) { flex: none; }
 }
-/* 矮窗口（含手机横屏）：绘画页收成内容高、整页纵向滚动。绘画页的输入卡贴面板底边，面板铺满
-   整栏就贴窗口底——和 900px 档不冲突时一律走铺满。原本这条挂在 900px 宽度档上，
-   900×1200 这类窄而高的窗口因此被收成内容高，输入卡飘在窗口中间，屏幕下半截全是窗口底 */
-@media (max-height: 620px) {
-    .ns-paint { height: auto; min-height: 0; }
-}
+/* 绘画页在任何窗口高度都铺满整栏，输入卡钉在面板底边 —— 不设「矮窗口收成内容高」一档：
+   Windows 显示缩放把物理像素报成视口高，125% / 150% 缩放下 800px 高的窗口只有 640 / 533 CSS px，
+   原先挂在 max-height:620 的收档在正常窗口上照样触发，面板退成内容高，输入卡飘在窗口中间、
+   下半截全是空白。收档摘掉后窗口再矮也铺满：矮出来的空间由结果区自己滚（上面那条 overflow-y:auto） */
 /* 手机：导演页「编辑器 │ 分隔条 │ 生成面板」这一栏改成上下堆叠 —— 620px 的栏宽下限在手机上把
    整页顶成横向滚动，两栏并排各剩一窄条读不了。拖宽用的分隔条在触摸上拖不动，整条收起；
    面板宽是分隔条写进内联样式的，只有 !important 压得住。整栏交给页面出纵向滚动
