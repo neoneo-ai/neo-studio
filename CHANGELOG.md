@@ -4,6 +4,16 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **The header carries six tabs, and 队列 / 设置 are icon slots.** The 技能 tab and the 智能体 button left the header: 技能 and
+  智能体 are entered from their Home cards (技能 under 素材与配置, 智能体 under 开始创作), and 设置 is now a gear slot at the
+  header's right end sitting right after the 队列 slot - the tab strip keeps its width for the pages you create in, and neither
+  right-end slot carries text. The 队列 count badge moved onto the icon's top-right corner inside the button, so a 44px
+  touch-tier button clips none of it, and the touch tier gives both slots the same 44px target as the tabs. Covered by
+  `studio/tests/js/studio-desktop.test.mjs` (header structure: 6 tabs, 队列 before 设置, no agent entry),
+  `studio/tests/js/studio-language.test.mjs` (icon-slot titles translate), `studio/tests/js/studio-queue.test.mjs` (badge
+  placement + injected icon), `studio/tests/js/studio-agent-skill.test.mjs` (the Home card is the only agent entry) and
+  `studio/tests/e2e/studio-mobile-layout.e2e.mjs` (fixed-width slots, one header row at 390 and at 1440).
+
 - **The painting page fills the window in a narrow desktop window, and the header tab strip stops stacking.** A 900×1200
   Studio window folded the painting page down to content height - the 文生图 / 图片编辑 composer floated in the middle of the
   window with its bottom half left as window background - because the phone tier's `height: auto` rode on `max-width: 900px`,
@@ -11,7 +21,7 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   was solving for: above it the painting page fills the viewport and its composer sits on the panel's bottom edge the way the
   video page dock does (measured 29px above the window bottom at 950×700, 1265×1225 and 1440×900). The header tab strip is one
   row at every width - tabs no longer break into 3-line slivers between 720 and 900px - and it sits flush against the 队列
-  button when the 8 tabs fit, switching to left-packed scrolling when they do not: `showView` measures the tab widths plus the
+  slot when the tabs fit, switching to left-packed scrolling when they do not: `showView` measures the tab widths plus the
   gap, because a right-packed overflow lies left of the scroll origin, where `scrollWidth` and a swipe both read zero. In the
   phone painting composer the 技能 / 尺寸 / 自定参数 chips now give their width to 生成, so 生成 is reachable without scrolling
   the bar, and a `[hidden]` window-control group no longer reserves its 154px of the header. Covered by

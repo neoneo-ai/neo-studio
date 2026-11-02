@@ -38,7 +38,6 @@ let onDirectorShown = null;     // 进导演页时补拉的活：隐藏期间跳
 // 素材库目录在取用时现读画廊：画廊导航没有对外事件，读一次现值比在 gallery.js 里插监听便宜
 const agentCtx = { page: "gallery", recipe: "", segments: 0, paint_mode: "text" };
 let agentCtxRefresh = null;     // 智能体页建好时挂上的重画回调，页面没建过就没有面板可通知
-let agentEntryBtn = null;       // 顶栏那颗入口按钮：showView 靠它标出当前在不在智能体页
 
 function notifyAgentCtx() { if (agentCtxRefresh) agentCtxRefresh(); }
 
@@ -83,7 +82,7 @@ function ensureView(name, build) {
 
 function showView(name) {
     for (const [key, el] of views) el.classList.toggle("ns-hidden", key !== name);
-    // 页签条装得下就贴右（右侧那一截让给状态位 / 队列 / 智能体 / 窗口控件），装不下回到左起。
+    // 页签条装得下就贴右（右侧那一截让给状态位 / 队列图标 / 设置图标 / 窗口控件），装不下回到左起。
     // 溢出只量条本身不行：贴右排布时溢出长在可视区左边的滚动区里，scrollWidth 不计这一段，
     // 挤到只剩几十像素的条照旧报「装得下」，首页就此滚出可视区。页签是 flex:none，
     // 自身宽度就是排版要占的真实宽度，按「页签宽之和 + 行距」判
@@ -112,7 +111,7 @@ function showView(name) {
     currentView = name;
     if (name !== "agent") agentCtx.page = name;   // 智能体页不抢上下文：条上继续报上一个生成页（配方 / 绘画模式还在用）
     notifyAgentCtx();
-    agentEntryBtn?.classList.toggle("ns-agent-toggle-on", name === "agent");
+    document.getElementById("ns-settings-btn")?.classList.toggle("ns-head-btn-on", name === "settings");
     if (name === "director" && onDirectorShown) onDirectorShown();
     // 画廊单例的宿主跟着视图走：素材页 = 整片宿主；弹窗开着 = 弹窗宿主；其余页 = 交还素材页 / 收留宿主
     // 一次只挂一处：切页时不会两次 render 抢同一个元素（后落的那次会把画廊拽回上一页）
@@ -2071,6 +2070,14 @@ function initWindowChrome() {
     setInterval(attach, 5000);   // 桥在本模块脚本之前注入完时事件已经过去，补一轮；浏览器标签页里桥永不来
 }
 
+// 顶栏「设置」图标位：字形走中央图标层（与首页「设置」卡同一枚），换页交给 bindHeaderNav
+// 接管的那条锚点路由。挂在静态壳那一步（与窗口控件同一轮），不等扩展模块图 —— 顶栏先空一格、
+// 过几秒才长出齿轮，就是「刚开窗口少一个入口」
+function initSettingsEntry() {
+    const btn = document.getElementById("ns-settings-btn");
+    if (btn) setIcon(btn, "gear", 15);
+}
+
 // ====== 刷新快捷键 ======
 // pywebview 把 WebView2 的浏览器加速器键整个绑在 debug 上（platforms/edgechromium.py 里
 // AreBrowserAcceleratorKeysEnabled = debug）：不带 --debug 启动时 F5 / Ctrl+F5 / Ctrl+R
@@ -2167,12 +2174,10 @@ function localizeShell() {
     const logo = document.querySelector(".ns-logo");
     if (logo) { logo.textContent = t("新影工坊"); logo.title = t("返回首页"); }
     for (const a of document.querySelectorAll(".ns-tabs a")) a.textContent = t(a.textContent.trim());
-    for (const id of ["ns-win-min", "ns-win-max", "ns-win-fs", "ns-win-close", "ns-agent-toggle", "ns-queue-toggle"]) {
+    for (const id of ["ns-win-min", "ns-win-max", "ns-win-fs", "ns-win-close", "ns-settings-btn", "ns-queue-toggle"]) {
         const b = document.getElementById(id);
         if (b) b.title = t(b.title);
     }
-    const queueLabel = document.getElementById("ns-queue-label");
-    if (queueLabel) queueLabel.textContent = t("队列");
 }
 
 // ====== 采样预览：这一轮要不要逐采样步的动画帧 ======
@@ -2189,7 +2194,7 @@ function applyPreviewMode(on) {
     try { localStorage.setItem(AGENT_PREVIEW_KEY, previewOn ? "1" : "0"); } catch { /* 偏好写不进不影响用 */ }
 }
 
-// ====== 智能体页：独占整页，面板是界面本身、结果就铺在面板里；入口是顶栏那颗星形按钮与首页创造区的卡 ======
+// ====== 智能体页：独占整页，面板是界面本身、结果就铺在面板里；入口只有首页创造区的卡 ======
 // 导航栏不给它留位：页面靠 go("agent") 进，与其余页同一条路由，视图常驻不重建（会话时间线不丢）
 
 function buildAgentPage(el) {
@@ -2221,16 +2226,6 @@ function buildAgentPage(el) {
         previewSide: () => (previewOn ? AGENT_PREVIEW_SIDE : 0),
     });
     agentCtxRefresh = () => panel.refresh();   // 切页 / 选配方 / 切绘画模式时重画面板上的上下文条
-}
-
-// 顶栏入口：字形走中央图标层（与首页「生成图片」卡同款），title 走 i18n，字形不占文案
-function initAgentEntry() {
-    const toggle = document.getElementById("ns-agent-toggle");
-    if (!toggle) return;
-    toggle.replaceChildren(icon("sparkles", 15));
-    toggle.onclick = () => go("agent");
-    toggle.hidden = false;
-    agentEntryBtn = toggle;
 }
 
 function route() {
@@ -2269,6 +2264,7 @@ if (view) {
     // 顶栏控件与拖动只吃 index.html 的静态顶栏，不等扩展 setup 与版本快照：那两次请求都打在刚装配、
     // 正拉起 ComfyUI 的桌面端服务上，排在它们后面就是「窗口开出来要过一会才能拖动」
     initWindowChrome();
+    initSettingsEntry();    // 顶栏「设置」图标位：与窗口控件同一轮上屏，不等扩展模块图
     // 未捕获错误与启动失败一并写进桌面端日志：窗口白屏时日志里至少留下证据
     window.addEventListener("error", (e) => desktopLog(`ERROR ${e.message} @ ${e.filename}:${e.lineno}`));
     window.addEventListener("unhandledrejection", (e) => desktopLog(`REJECT ${e.reason?.stack || String(e.reason)}`));
@@ -2281,7 +2277,6 @@ if (view) {
         initComfyStatus();
         initClipboardKeys();
         initReloadHotkey();
-        initAgentEntry();
         initQueuePanel({ toast, go, can });   // 顶栏「队列」：离线收掉入口，就绪后播种；显存 / 内存读数与清理在面板里
     }).catch(e => {
         console.error("[Neo Studio] startup failed:", e);

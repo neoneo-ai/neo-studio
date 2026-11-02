@@ -15,7 +15,7 @@ const css = (f) => fs.readFileSync(path.join(webDir, f), "utf8");
 const MOBILE = { width: 390, height: 844 };
 const DESKTOP = { width: 1440, height: 900 };
 
-// 顶栏与 studio/index.html 同构：8 枚页签 + ComfyUI 状态位，窄屏这一条要能横滚
+// 顶栏与 studio/index.html 同构：6 枚页签 + ComfyUI 状态位 + 队列 / 设置两枚图标位，窄屏这一条要能横滚
 const header = `
 <header class="ns-header">
   <a class="ns-logo" href="#/home">新影工坊</a>
@@ -26,10 +26,10 @@ const header = `
     <a href="#/video" data-tab="video">视频</a>
     <a href="#/director" data-tab="director">导演</a>
     <a href="#/pose" data-tab="pose">摆姿</a>
-    <a href="#/skills" data-tab="skills">技能</a>
-    <a href="#/settings" data-tab="settings">设置</a>
   </nav>
   <span class="ns-comfy-status"><span class="ns-comfy-dot ns-comfy-run"></span>运行中</span>
+  <button class="ns-queue-toggle" id="ns-queue-toggle" type="button" title="队列"><span class="ns-queue-badge" id="ns-queue-badge">3</span></button>
+  <a class="ns-head-btn" id="ns-settings-btn" href="#/settings" title="设置"></a>
 </header>`;
 
 const page = (cls, body) => `<main class="ns-page ${cls}">${body}</main>`;
@@ -358,24 +358,34 @@ for (const [name, body] of Object.entries(PAGES)) {
     });
 }
 
-test("手机顶栏：8 枚页签横滚后，选中那枚滚进可视区（showView 里的 scrollIntoView）", async () => {
+test("手机顶栏：6 枚页签横滚后，选中那枚滚进可视区（showView 里的 scrollIntoView）", async () => {
     const m = await measure(homePage, MOBILE, { touch: true }, () => {
         const tabs = document.querySelector(".ns-tabs");
-        const deep = tabs.querySelector('[data-tab="settings"]');
+        const deep = tabs.querySelector('[data-tab="pose"]');   // 最右那枚：滚得开才够得着
         deep.scrollIntoView({ inline: "center", block: "nearest" });   // 与 studio-app.js 的 showView 同一条调用
         const bar = tabs.getBoundingClientRect();
         const tab = deep.getBoundingClientRect();
+        const b = (s) => document.querySelector(s).getBoundingClientRect();
+        const head = b(".ns-header"), queue = b(".ns-queue-toggle"), settings = b("#ns-settings-btn");
+        const badge = b(".ns-queue-badge");
         return {
             barRight: Math.round(bar.right), tabRight: Math.round(tab.right), tabLeft: Math.round(tab.left),
             tabH: Math.round(tab.height),
-            headerH: Math.round(document.querySelector(".ns-header").getBoundingClientRect().height),
+            headerH: Math.round(head.height),
             statusShown: getComputedStyle(document.querySelector(".ns-comfy-status")).display !== "none",
+            // 触摸档把两枚图标位一起给到 44px：26px 的方钮在手机上就是点不准
+            touchTargets: [Math.round(queue.height), Math.round(settings.height)],
+            headInLine: queue.top >= head.top && settings.bottom <= head.bottom,
+            badgeInHeader: badge.top >= head.top && badge.bottom <= head.bottom,
         };
     });
     assert.ok(m.tabRight <= m.barRight + 1 && m.tabLeft >= 0, `选中页签没进可视区：${m.tabLeft} → ${m.tabRight} / 条右缘 ${m.barRight}`);
     assert.ok(m.tabH >= 44, `页签触摸目标只有 ${m.tabH}px`);
     assert.ok(m.headerH >= 44 && m.headerH <= 52, `顶栏高度 ${m.headerH}px 不是一行的量`);
     assert.ok(!m.statusShown, "390 宽里 ComfyUI 状态位没让位给页签");
+    assert.ok(m.touchTargets.every((h) => h >= 44), `顶栏图标位的触摸目标只有 ${m.touchTargets.join(" / ")}px`);
+    assert.ok(m.headInLine, "图标位掉出顶栏那一行");
+    assert.ok(m.badgeInHeader, "徽标顶出顶栏，会被窗口上缘切掉一角");
 });
 
 test("手机绘画页：素材库按钮不骑在模式条上，chip 排能横滚到「生成」", async () => {
@@ -571,13 +581,19 @@ test("桌面 1440 宽：手机那一档一条都不吃（顶栏一行、两栏�
     const home = await measure(homePage, DESKTOP, {}, () => {
         const b = (s) => document.querySelector(s).getBoundingClientRect();
         const tabs = document.querySelector(".ns-tabs");
+        const head = b(".ns-header"), queue = b(".ns-queue-toggle"), settings = b("#ns-settings-btn");
         return {
-            headerH: Math.round(b(".ns-header").height),
+            headerH: Math.round(head.height),
             tabsScroll: tabs.scrollWidth, tabsClient: tabs.clientWidth,
             statusShown: getComputedStyle(document.querySelector(".ns-comfy-status")).display !== "none",
             gridCols: getComputedStyle(document.querySelector(".ns-home-grid")).gridTemplateColumns.split(" ").length,
             tabH: Math.round(b(".ns-tabs a").height),
             pagePad: getComputedStyle(document.querySelector(".ns-page")).paddingTop,
+            // 图标位是定宽方钮：文字标签会把顶栏右端撑成两枚长条，页签条就此被挤窄
+            queueW: Math.round(queue.width), settingsW: Math.round(settings.width),
+            queueBeforeSettings: queue.right <= settings.left + 1,
+            headInLine: queue.top >= head.top && settings.bottom <= head.bottom + 1,
+            agentBtn: document.getElementById("ns-agent-toggle") ? 1 : 0,
         };
     });
     assert.equal(home.headerH, 38, `桌面顶栏被移动端块改高了：${home.headerH}px`);
@@ -586,6 +602,11 @@ test("桌面 1440 宽：手机那一档一条都不吃（顶栏一行、两栏�
     assert.ok(home.gridCols >= 2, `桌面首页卡片被压成单列（${home.gridCols} 列）`);
     assert.ok(home.tabH < 44, `桌面页签被撑到 ${home.tabH}px`);
     assert.equal(home.pagePad, "30px", "桌面首页内衬被收成了手机那一档");
+    assert.ok(home.queueW <= 32 && home.settingsW <= 32,
+        `顶栏图标位被撑成文字宽：队列 ${home.queueW} / 设置 ${home.settingsW}`);
+    assert.ok(home.queueBeforeSettings, "设置图标位没排在队列之后");
+    assert.ok(home.headInLine, "图标位掉出顶栏那一行");
+    assert.equal(home.agentBtn, 0, "顶栏还留着智能体入口");
 
     const dir = await measure(directorPage, DESKTOP, {}, () => {
         const b = (s) => document.querySelector(s).getBoundingClientRect();

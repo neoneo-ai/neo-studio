@@ -1,20 +1,22 @@
-/* 顶栏「队列」：入口徽标 + 挂在顶栏下方的跨页任务列表（queue-panel.js 建 DOM） */
+/* 顶栏「队列」：图标位 + 徽标计数 + 挂在顶栏下方的跨页任务列表（queue-panel.js 建 DOM） */
 .ns-queue-toggle {
     position: relative;
-    display: inline-flex; align-items: center; gap: 6px;
-    height: 26px; padding: 0 10px;
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 30px; height: 26px; margin-left: 8px;
     border: 1px solid var(--ns-border); border-radius: 4px;
-    background: transparent; color: var(--ns-fg);
-    font-size: 12px; line-height: 1; white-space: nowrap; cursor: pointer;
+    background: transparent; color: var(--ns-fg); cursor: pointer;
 }
 .ns-queue-toggle:hover { background: var(--ns-raised); }
-/* 同下面 .ns-queue[hidden] 那条：显式 display 盖掉 [hidden] 的 UA display:none，
-   离线时 setQueueOnline(false) 只翻 hidden，入口就留在顶栏点了没反应 */
+/* [hidden] 依赖 UA display:none，会被上面的 display:inline-flex 盖掉：不补这一条就是
+   「离线队列入口没关掉、点着没反应」—— queue-panel.js 的 setQueueOnline 只翻 hidden */
 .ns-queue-toggle[hidden] { display: none; }
+/* 徽标是图标右上角那枚计数，贴在钮面内侧：顶栏高度从 38px 到触摸档 44px 都在变，
+   贴出钮面就会被窗口上缘切掉一角（负 top 在 44px 高钮上就是顶出顶栏） */
 .ns-queue-badge {
-    min-width: 18px; padding: 2px 5px; border-radius: 9px;
+    position: absolute; top: 1px; right: 1px;
+    min-width: 16px; padding: 1px 4px; border-radius: 8px;
     background: var(--ns-primary); color: #fff;
-    font-size: 11px; line-height: 1; text-align: center;
+    font-size: 10px; line-height: 1.4; text-align: center;
 }
 
 .ns-queue {

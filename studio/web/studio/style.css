@@ -48,7 +48,7 @@ body {
 }
 .ns-logo { font-weight: 700; font-size: 15px; color: #fff; white-space: nowrap; text-decoration: none; }
 .ns-logo:hover { color: #7aa2ff; }
-/* 页签条基础档就带横滚：右侧的状态位 / 队列 / 智能体 / 窗口控件吃掉宽度时，这一条自己滚，
+/* 页签条基础档就带横滚：右侧的状态位 / 队列 / 设置 / 窗口控件吃掉宽度时，这一条自己滚，
    不把页签挤成竖排两行（720–900 这一档没有手机档的滚动规则，全靠这一条兜住） */
 .ns-tabs { display: flex; gap: 4px; height: 100%; min-width: 0; overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain; }
 .ns-tabs::-webkit-scrollbar { display: none; }
@@ -64,12 +64,10 @@ body {
 }
 .ns-tabs a:hover { color: #fff; }
 .ns-tabs a.active { color: #fff; border-bottom-color: #7aa2ff; }
-/* 顶栏分组：首页 | 创作（素材·绘画·导演）| 管理（技能·设置）。
-   分隔线落在组边界的页签上，DOM 结构不动，.ns-tabs a 的既有选择器全兼容 */
-.ns-tabs a[data-tab="gallery"],
-.ns-tabs a[data-tab="skills"] { margin-left: 10px; }
-.ns-tabs a[data-tab="gallery"]::before,
-.ns-tabs a[data-tab="skills"]::before {
+/* 顶栏分组：首页 | 创作（素材·绘画·视频·导演·摆姿）—— 分隔线只落在组边界那一枚页签上。
+   技能与智能体在首页的卡上、设置与队列是右侧图标位，都不占页签位，也就没有第二条分隔线 */
+.ns-tabs a[data-tab="gallery"] { margin-left: 10px; }
+.ns-tabs a[data-tab="gallery"]::before {
     content: "";
     display: inline-block;
     width: 1px;
@@ -78,7 +76,7 @@ body {
     background: #3a3a44;
     vertical-align: middle;
 }
-/* 手机 / 窄窗口：8 枚页签压不进一块手机的宽度，顶栏这一条改成横向可滚的页签条（DOM 与
+/* 手机 / 窄窗口：六枚页签压不进一块手机的宽度，顶栏这一条改成横向可滚的页签条（DOM 与
    .ns-tabs a 的既有选择器不动，选中页签由 showView 里的 scrollIntoView 带进可视区）。
    刘海与圆角从这一条的两端挖走，不补回来顶栏的两头就是贴不住屏幕边的 */
 @media (max-width: 720px) {
@@ -89,8 +87,7 @@ body {
     .ns-logo { font-size: 13px; }
     .ns-tabs { flex: 1 1 auto; }
     .ns-tabs a { padding: 0 9px; font-size: 13px; }
-    .ns-tabs a[data-tab="gallery"],
-    .ns-tabs a[data-tab="skills"] { margin-left: 4px; }
+    .ns-tabs a[data-tab="gallery"] { margin-left: 4px; }
     /* 页签条压得下时贴着右侧的队列走：logo 之后那一条空白就是「标题栏右边空着」的来源。
        压不下时回到左起 —— flex-end 的溢出条起点在可视区左边，showView 的 scrollIntoView
        只会把当前页签推出可视区，溢出的条必须左起才滚得开（ns-tabs-scroll 由 showView 量出来） */
@@ -100,14 +97,15 @@ body {
 /* 只剩一行时给不出两件事：ComfyUI 状态位与组分隔线让位给页签，启停在「设置 → 启动设置」顶部看 */
 @media (max-width: 430px) {
     .ns-comfy-status { display: none; }
-    .ns-tabs a[data-tab="gallery"]::before,
-    .ns-tabs a[data-tab="skills"]::before { display: none; }
+    .ns-tabs a[data-tab="gallery"]::before { display: none; }
 }
 /* 触摸档：这一行给到 44px 触摸目标；输入控件字号 16px —— iOS 聚焦字号小于 16px 的输入框时
    把整页放大，且不会自己缩回去，用户点完一下还得等页面回正 */
 @media (max-width: 720px) and (hover: none) and (pointer: coarse) {
     .ns-header { min-height: 44px; }
-    .ns-tabs a { min-height: 44px; }
+    .ns-tabs a,
+    .ns-head-btn,
+    .ns-queue-toggle { min-height: 44px; }
     input, select, textarea { font-size: 16px; }
 }
 /* 顶栏 ComfyUI 状态位：只报状态，启停在「设置 → 启动设置」顶部；端口 / PID 收在提示里 */
@@ -140,16 +138,16 @@ body {
 }
 .ns-about-copy:hover, .ns-about-open:hover { background: #33333a; color: #fff; }
 
-/* 智能体页入口：顶栏那颗星形按钮（字形与面板内「生成」同一字形），落在智能体页时点亮 */
-.ns-agent-toggle {
+/* 顶栏图标位（设置）：与窗口控件同一档 30×26 方钮，落在设置页时点亮。
+   入口是 <a href="#/settings">，字形由 initSettingsEntry 注入，页签条不吃这一格宽度 */
+.ns-head-btn {
     display: inline-flex; align-items: center; justify-content: center;
-    width: 30px; height: 26px; margin-left: 12px;
+    width: 30px; height: 26px; margin-left: 8px;
     border: 1px solid transparent; border-radius: 4px;
-    background: transparent; cursor: pointer;
-    font-size: 15px; line-height: 1;
+    background: transparent; color: var(--ns-fg); text-decoration: none;
 }
-.ns-agent-toggle:hover { background: var(--ns-raised); }
-.ns-agent-toggle-on { background: var(--ns-primary-soft); border-color: var(--ns-primary); color: var(--ns-primary-fg); }
+.ns-head-btn:hover { background: var(--ns-raised); }
+.ns-head-btn-on { background: var(--ns-primary-soft); border-color: var(--ns-primary); color: var(--ns-primary-fg); }
 
 /* 桌面端的离线素材页：body.ns-offline 只用来压暗生成入口与收起顶栏队列面板，离线页不叠横幅 */
 .ns-gen-off { opacity: .75; }
@@ -818,7 +816,7 @@ body {
 .rs-btn:focus-visible,
 .ns-queue-mem-clear:focus-visible,
 .ns-wctl-btn:focus-visible,
-.ns-agent-toggle:focus-visible,
+.ns-head-btn:focus-visible,
 .neo-agent-json:focus-visible,
 .neo-agent-tool-args:focus-visible,
 .neo-agent-choice-free:focus-visible,

@@ -230,8 +230,8 @@ is picked; landing on the guide does not fetch the skill list.
   bars, `#2a2a2e` + `#444` inputs and buttons, the settings tab's translucent blue for the selected row), so
   Home / Assets / Paint / Director / Settings / Skills sit on one palette. The skill modal and the node skill picker
   inside ComfyUI keep the modal palette.
-- The guide state hides the "🗂 Skill Management" title bar (the header tab already names the page); list mode shows
-  it, titled "Skill list" and carrying the back-to-guide entry.
+- The guide state hides the "🗂 Skill Management" title bar (the guide page names itself, and the header keeps no
+  tab for the skills page); list mode shows it, titled "Skill list" and carrying the back-to-guide entry.
 - Left-column width drag and memory (`localStorage["neo.skillManagerLeftWidth"]`), the category accordion, the
   per-row copy / delete icons and the + New / ⬆ ZIP / ⬆ Folder footer behave exactly as in the standalone window.
 - Copy and delete icons all come from `studio/web/js/core/icons.js`: icon-only buttons carry no text,
@@ -386,10 +386,11 @@ startable once the root is filled in.
   the network, so enable it only on a trusted segment and clear the field afterwards. The MCP service is not part of
   this network surface (stdio + loopback — see [mcp.md](mcp.md)).
 - A phone browser on `http://<LAN IP>:<port>/neo-studio` is the same route, and the layout folds itself in two media
-  queries: `max-width: 720px` folds the layout (the 8-tab header becomes one horizontally scrollable strip, all eight
+  queries: `max-width: 720px` folds the layout (the 6-tab header becomes one horizontally scrollable strip, all eight
   pages go single-column, no horizontal overflow inside a page) and `(hover: none) and (pointer: coarse)` folds the
-  touch behaviour (44px targets, 16px inputs so iOS does not zoom the page, the six hover-only gallery controls
-  permanently visible). Neither block reaches the wide desktop window or the ComfyUI sidebar.
+  touch behaviour (44px targets including the queue and Settings icon slots, 16px inputs so iOS does not zoom the
+  page, the six hover-only gallery controls permanently visible). Neither block reaches the wide desktop window or
+  the ComfyUI sidebar.
 - The drag-to-resize sashes (the director page's gen panel, the 技能 page's skill list) are mouse gestures, so on a
   phone they are removed and the widths are pinned back by CSS. Safe areas are handled with `viewport-fit=cover` +
   `env(safe-area-inset-*)` on the header edges, the page bottom padding, the video composer and the asset-picker

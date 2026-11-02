@@ -681,14 +681,21 @@ test("版本快照不落地也要能拖窗口：桥注入完那一刻就挂上�
     assert.ok(calls.includes("drag"), "桥一到顶栏空白处按下就能拖窗");
 });
 
-// 顶栏分组：七个页签分三组，分隔线只落在组边界（gallery 与 skills 前的页签）上
-test("顶栏分组：分隔线落在素材页签与技能页签前，页签结构不动", () => {
+// 顶栏结构：六枚页签 + 右侧两枚图标位（队列在前、设置在后），技能与智能体只在首页的卡上
+test("顶栏结构：六枚页签，队列与设置是图标位，技能与智能体不占顶栏位", () => {
     const css = fs.readFileSync(path.join(webDir, "studio", "style.css"), "utf8");
-    assert.match(css, /\.ns-tabs a\[data-tab="gallery"\]::before[^}]*background/, "素材页签前要有组边界分隔线");
-    assert.match(css, /\.ns-tabs a\[data-tab="skills"\]::before[^}]*background/, "技能页签前要有组边界分隔线");
     const html = fs.readFileSync(path.join(webDir, "studio", "index.html"), "utf8");
     assert.deepEqual([...html.matchAll(/data-tab="(\w+)"/g)].map((m) => m[1]),
-        ["home", "gallery", "paint", "video", "director", "pose", "skills", "settings"],
+        ["home", "gallery", "paint", "video", "director", "pose"],
         "分组走 CSS，页签 DOM 保持平铺 <a>（视频页与摆姿页同绘画 / 导演属中部组）");
+    assert.match(css, /\.ns-tabs a\[data-tab="gallery"\]::before[^}]*background/, "素材页签前要有组边界分隔线");
+    assert.ok(!css.includes('[data-tab="skills"]'), "技能不占页签位，组边界分隔线只剩素材前那一条");
+    assert.ok(html.indexOf("ns-queue-toggle") < html.indexOf("ns-settings-btn"), "设置图标位在队列之后");
+    assert.match(html, /<a class="ns-head-btn" id="ns-settings-btn" href="#\/settings" title="设置"><\/a>/,
+                 "设置图标位钮面为空：字形由 initSettingsEntry 注入，换页交给顶栏锚点路由");
+    assert.match(html, /<button class="ns-queue-toggle"[^>]*hidden><span class="ns-queue-badge"[^>]*hidden><\/span><\/button>/,
+                 "队列入口钮面只有徽标：图标由 queue-panel.js 注入，徽标是那枚计数");
+    assert.ok(!html.includes("ns-agent-toggle"), "智能体入口不在顶栏：首页创造区的卡是它唯一的入口");
+    assert.ok(!css.includes(".ns-agent-toggle"), "顶栏不再有智能体按钮的样式");
 });
 

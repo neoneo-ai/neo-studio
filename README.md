@@ -155,9 +155,10 @@ is just deleting the plugin dir). Commands, parameters and release switches:
 
 ## Neo Studio (Standalone App)
 
-Canvas-independent page with four tabs: **Assets** (the full Gallery), **Director** (director recipes + editor +
-full-film generation with progress, cancel and live preview), **Skills**, **Settings** (image / video / LLM /
-ComfyUI log). Canvas-only actions show a hint instead of failing.
+Canvas-independent page with six header tabs — **Home** (every entry card), **Assets** (the full Gallery),
+**Paint**, **Video**, **Director** (director recipes + editor + full-film generation with progress, cancel and
+live preview) and **Pose 3D**; Skills, Agent, frame extraction and Settings are Home entry cards, and the queue
+and Settings sit at the header's right end as icon slots. Canvas-only actions show a hint instead of failing.
 
 | Entry | What it does |
 |-------|--------------|

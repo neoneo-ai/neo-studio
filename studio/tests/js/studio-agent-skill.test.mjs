@@ -550,33 +550,22 @@ test("后端报错帧：时间线显示错误原文，不留缩略图，解禁�
     assert.equal(runBtn().disabled, false, "失败后应解禁生成按钮");
 });
 
-// ====== 智能体页入口：顶栏那颗星形按钮 + 首页创造区的卡（导航栏不给它留位） ======
-const toggleBtn = () => document.getElementById("ns-agent-toggle");
+// ====== 智能体页入口：首页创造区的卡（顶栏不给它留位） ======
 const homeCardOf = (title) => [...document.querySelectorAll(".ns-home-card")]
     .find((c) => c.querySelector(".ns-home-card-title")?.textContent === title);
 
-test("顶栏入口：点一下进智能体页，面板在页里且按钮高亮", async () => {
-    mountStudio();
-    await openStudio("#/gallery", false);
-    assert.equal(toggleBtn().hidden, false, "入口按钮应可见");
-    assert.ok(!toggleBtn().classList.contains("ns-agent-toggle-on"), "不在智能体页时不高亮");
-    assert.equal(document.querySelector(".ns-agent-chat"), null, "没进页就不该建出智能体面板");
-
-    click(toggleBtn());
-    await flush(20);
-    assert.match(window.location.hash, /#\/agent/, "点入口应进智能体页");
-    assert.ok(dock(), "页里应挂着智能体面板");
-    assert.ok(toggleBtn().classList.contains("ns-agent-toggle-on"), "在智能体页时按钮应高亮");
-});
-
-test("首页创造区的智能体卡：点卡直达智能体页", async () => {
+test("首页创造区的智能体卡：点卡直达智能体页，面板在页里", async () => {
     mountStudio();
     await openStudio("#/home", false);
     const card = homeCardOf("智能体");
     assert.ok(card, "创造区应有智能体卡");
+    assert.equal(document.querySelector(".ns-agent-chat"), null, "没进页就不该建出智能体面板");
+    assert.equal(document.getElementById("ns-agent-toggle"), null, "顶栏不给智能体留入口");
+
     click(card);
     await flush(20);
     assert.match(window.location.hash, /#\/agent/, "点卡应进智能体页");
+    assert.ok(dock(), "页里应挂着智能体面板");
 });
 
 const ASK_ID = "ab".repeat(16);
@@ -720,7 +709,7 @@ test("界面上下文默认不带：点条启用后才带、条上的 ✕ 再关
     assert.ok(ctxBar().textContent.includes("绘画页 · " + modeLabel),
         `启用后应报自己那一栏（模式存过就落回存过的那档）：${ctxBar().textContent}`);
 
-    click(document.querySelector('.ns-tabs a[data-tab="skills"]'));
+    click(homeCardOf("技能"));   // 技能不占顶栏位：首页「素材与配置」区那张卡是它的入口
     await flush(40);
     assert.ok(ctxBar().textContent.includes("技能页"), `技能页应报技能页：${ctxBar().textContent}`);
     assert.ok(!ctxBar().textContent.includes("文生图") && !ctxBar().textContent.includes("图片编辑"),

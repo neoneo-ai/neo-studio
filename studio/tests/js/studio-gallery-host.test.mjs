@@ -92,7 +92,7 @@ async function openEditorForLib() {
 }
 
 test("素材页进入目录 → 导演页素材库弹窗：目录跟着进弹窗，反复开合不落首页", async () => {
-    document.body.innerHTML = `<div class="ns-header"><nav class="ns-tabs"><a href="#/gallery" data-tab="gallery">素材</a><a href="#/director" data-tab="director">导演</a><a href="#/skills" data-tab="skills">技能</a></nav></div><div id="ns-view"></div>`;
+    document.body.innerHTML = `<div class="ns-header"><nav class="ns-tabs"><a href="#/gallery" data-tab="gallery">素材</a><a href="#/director" data-tab="director">导演</a></nav><a class="ns-head-btn" id="ns-settings-btn" href="#/settings" title="设置"></a></div><div id="ns-view"></div>`;
     await import("../../web/gallery.js");
     // 跑 gallery 扩展的 setup：真 NeoGallery 实例与真 tab 定义都在里面，交给替身侧栏
     for (const ext of mockAppState.extensions) await ext.setup?.();
@@ -158,9 +158,9 @@ test("素材页进入目录 → 导演页素材库弹窗：目录跟着进弹窗
     assert.equal(galleryState().dir, true, `切页回来仍是目录：${galleryState().crumb}`);
     atOutput();
 
-    // 顶栏换页也走同一条路由：没建过的视图（技能 / 设置按需建）照样要建出来
-    click(document.querySelector('a[data-tab="skills"]'));
-    await flush(3);
+    // 深链进没建过的视图：技能页不占顶栏位（入口是首页那张卡），按需建视图这条路由照样走得通
+    location.hash = "#/skills";
+    await until(() => document.querySelector("#ns-view .ns-page:not(.ns-hidden)"), "技能页挂上");
     assert.equal(location.hash, "#/skills");
     const shown = document.querySelector("#ns-view .ns-page:not(.ns-hidden)");
     assert.ok(shown && !shown.classList.contains("ns-director"), "技能页应作为新视图挂上");

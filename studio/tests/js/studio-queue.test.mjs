@@ -389,8 +389,12 @@ test("队列静态完整性：顶栏入口、面板类名、Lightbox 图标与�
         ".ns-queue-mem", ".ns-queue-mem-item", ".ns-queue-mem-clear"]) {
         assert.ok(css.includes(cls), `queue-panel.css 缺 ${cls}`);
     }
+    // 徽标是图标右上角那枚计数；入口钮面只有图标（文字标签已让给图标，图标由 initQueuePanel 注入）
+    assert.match(css, /\.ns-queue-badge \{[^}]*position: absolute/, "徽标绝对贴在入口右上角");
+    assert.match(css, /\.ns-queue-toggle \{[^}]*width: 30px/, "队列入口是图标方钮，不吃页签宽度");
     // .ns-queue 显式 display:flex 会盖掉 [hidden] 的 UA display:none：缺这条面板就默认展开
     const panelSrc = readFileSync(fileURLToPath(new URL("../../web/queue-panel.js", import.meta.url)), "utf8");
+    assert.match(panelSrc, /toggleEl\.prepend\(icon\("list", 15\)\)/, "入口钮面是中央图标层的列表图标");
     assert.match(panelSrc, /Lightbox\.open\(/, "图像行结果走 Lightbox");
     assert.match(panelSrc, /setIcon\(drop, "cross"\)/, "移除钮是 Lightbox 同源图标");
     // 缩略图必须走素材库那条带缓存的缩略路由，不能整图拉 /view

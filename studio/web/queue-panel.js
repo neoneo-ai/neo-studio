@@ -10,7 +10,7 @@ import { $el } from "../../../../scripts/ui.js";
 import { api } from "../../../../scripts/api.js";
 import { Lightbox } from "./lightbox.js";
 import { t, tf } from "./js/core/i18n.js";
-import { setIcon } from "./js/core/icons.js";
+import { icon, setIcon } from "./js/core/icons.js";
 
 // 类别 → 后端各模块的任务快照事件（image_gen / voice_gen / studio / simple_video / h3_segment / h3_assemble）
 const STATUS_EVENTS = {
@@ -418,6 +418,8 @@ function setMemPolling(on) {
 export function initQueuePanel(opts = {}) {
     toggleEl = document.getElementById("ns-queue-toggle");
     if (!toggleEl) return null;
+    // 钮面只有图标：图标打头，徽标节点留在按钮里交给 renderBadge 写计数
+    toggleEl.prepend(icon("list", 15));
     toast = opts.toast || null;
     goPage = opts.go || null;
     const can = opts.can || (() => true);

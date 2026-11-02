@@ -28,6 +28,7 @@
 <body>
 <header class="ns-header">
     <a class="ns-logo" href="#/home" title="返回首页">新影工坊</a>
+    <!-- 页签只留六枚常去页：技能与智能体在首页的卡上，设置与队列是右侧的图标位 -->
     <nav class="ns-tabs">
         <a href="#/home" data-tab="home">首页</a>
         <a href="#/gallery" data-tab="gallery">素材</a>
@@ -35,12 +36,12 @@
         <a href="#/video" data-tab="video">视频</a>
         <a href="#/director" data-tab="director">导演</a>
         <a href="#/pose" data-tab="pose">摆姿</a>
-        <a href="#/skills" data-tab="skills">技能</a>
-        <a href="#/settings" data-tab="settings">设置</a>
     </nav>
     <span class="ns-comfy-status" id="ns-comfy-status" hidden></span>
-    <button class="ns-queue-toggle" id="ns-queue-toggle" type="button" title="队列" hidden><span id="ns-queue-label">队列</span><span class="ns-queue-badge" id="ns-queue-badge" hidden></span></button>
-    <button class="ns-agent-toggle" id="ns-agent-toggle" type="button" title="智能体" hidden></button>
+    <!-- 队列与设置都是图标位（不吃页签宽度），队列在前、设置在后；徽标是图标右上角那枚计数。
+         设置是 <a href="#/settings">：路由由 bindHeaderNav 接管，不等扩展模块图跑完 -->
+    <button class="ns-queue-toggle" id="ns-queue-toggle" type="button" title="队列" hidden><span class="ns-queue-badge" id="ns-queue-badge" hidden></span></button>
+    <a class="ns-head-btn" id="ns-settings-btn" href="#/settings" title="设置"></a>
     <span class="ns-wctl" id="ns-wctl" hidden>
         <button class="ns-wctl-btn" id="ns-win-min" type="button"></button>
         <button class="ns-wctl-btn" id="ns-win-max" type="button"></button>
