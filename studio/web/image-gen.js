@@ -14,8 +14,12 @@ import { showToast } from "./gallery-utils.js";
 import { sseStream } from "./prompt-service.js";
 import { t, tf } from "./js/core/i18n.js";
 import { queueTrack } from "./queue-panel.js";
+import { actionToast } from "./toast.js";
+import { openModelHub } from "./model-hub.js";
 
 const GEN_API = "/neo_image_gen";
+// 预设模型清单（后端 skill_models.py 读 skills/presets/<id>/models.json）
+const SKILL_MODELS_API = "/neo_skill_models";
 const TERMINAL_STATUSES = new Set(["succeeded", "failed", "cancelled"]);
 const GEN_PLACEHOLDER = "【人物形象描述】";
 // 后端 _watch 按变化推送的任务快照事件（广播，按 task_id 过滤）
@@ -76,6 +80,9 @@ export async function listVideoGenModels() {
 
 /** 提交生图任务，返回任务快照（含 task_id / warnings）；失败抛 Error(后端消息) */
 export async function requestGeneration(payload) {
+    // 生成前预检：清单要用的模型文件没落盘就不进队列 —— 走到 ComfyUI 只剩加载节点的堆栈，用户看不出缺哪个文件
+    const blocking = await blockingMissingModels(payload?.skill_id);
+    if (blocking) throw new Error(blocking);
     const resp = await fetch(`${GEN_API}/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -86,6 +93,68 @@ export async function requestGeneration(payload) {
     // 提交成功就登记进顶栏「队列」：生图窗随后关掉，进度在顶栏跟
     queueTrack("image", data, { label: payload?.prompt });
     return data;
+}
+
+// ==========================================
+// 预设模型清单预检（后端 skill_models.py：skills/presets/<id>/models.json）
+// ==========================================
+
+const MANIFEST_SOURCE_NAMES = { modelscope: "ModelScope", huggingface: "Hugging Face", civitai: "Civitai" };
+const MODEL_FILE_EXT = /\.(safetensors|bin|pth|pt|ckpt|gguf|onnx|npz)$/i;
+
+/** 生成前预检：清单里有「要下又没落盘」的文件就拦下，返回给用户的那句话（文件名 · 类别 · 体积），
+ *  并给一条带「去模型库」的通知；无清单 / 已就位 / 清单接口不可用时回空串，生成照常提交。 */
+async function blockingMissingModels(skillId) {
+    const check = await skillModelCheck(skillId);
+    if (!check?.blocked) return "";
+    const label = check.label || check.skill_id;
+    const detail = (check.missing || []).join("；");
+    actionToast({
+        severity: "error",
+        summary: tf("{label} 缺 {n} 项模型文件", { label, n: check.missing_count }),
+        detail: tf("约 {gb} GB：{detail}", { gb: check.missing_gb, detail }),
+        actionLabel: t("去模型库"),
+        onAction: () => openModelHub({ readySkill: check.skill_id }),
+    });
+    return tf("{label} 缺 {n} 项模型文件（约 {gb} GB）：{detail}。到模型库补齐后即可生成。",
+        { label, n: check.missing_count, gb: check.missing_gb, detail });
+}
+
+/** 预设清单的就位检查（每次调用读一遍，不跨请求缓存：config.json 与模型根在请求之外也会变）。
+ *  无清单 / 技能不存在 / 路由不可用 → null：缺失模型的 UI 与生成前预检整条降级。 */
+export async function skillModelCheck(skillId) {
+    if (!skillId) return null;
+    try {
+        const data = await getJson(`${SKILL_MODELS_API}/check?skill_id=${encodeURIComponent(skillId)}`);
+        return data && data.has_manifest ? data : null;
+    } catch (e) {
+        console.warn("[Neo Studio] 预设模型清单读取失败:", e);
+        return null;
+    }
+}
+
+/** 检查结果里该字段的缺失清单项：选了具体模型名就按文件名对上（配置写死名字时认的就是那个名字）。 */
+export function manifestGap(check, field, value) {
+    const base = (n) => String(n || "").replace(/\\/g, "/").split("/").pop().toLowerCase();
+    return (check?.files || []).find((f) => !f.ready && f.field === field
+        && (!value || base(f.filename) === base(value))) || null;
+}
+
+/** 清单项 → 模型库定位参数：清单认得出就精确到源 / 仓库 / 类别 / 文件名，认不出只给搜索词 + 落盘类别。 */
+export function manifestHubTarget(file, value, fallbackCategory = "") {
+    const src = (file?.sources || []).find((s) => s?.repo && s?.path);
+    const query = String(value || file?.filename || "").split(/[\\/]/).pop().replace(MODEL_FILE_EXT, "");
+    const category = file?.category || fallbackCategory || "";
+    return src ? { source: src.source, repo: src.repo, category, query } : { query, category };
+}
+
+/** 清单项的下载前置说明（行内入口的 title）：文件名 · 类别 · 体积 · 推荐源与仓库，gated 项带上授权前置。 */
+export function manifestHubNote(file) {
+    const src = (file?.sources || []).find((s) => s?.repo && s?.path);
+    const bits = [file?.filename, file?.category, `${file?.gb || 0} GB`];
+    if (src) bits.push(`${MANIFEST_SOURCE_NAMES[src.source] || src.source} · ${src.repo}`);
+    if (src?.gated) bits.push(t("需先在 Hugging Face 接受授权"));
+    return bits.join(" · ");
 }
 
 /**
@@ -553,25 +622,46 @@ function numberRow(labelText, attrs) {
     return { row, input };
 }
 
-/** 生图模型 / Text Encoder / VAE + LoRA 列表控件区（每技能生图设置用）。 */
-export function createModelConfigSection() {
+/** 生图模型 / Text Encoder / VAE + LoRA 列表控件区（每技能生图设置用）。
+ *  opts.getSkillId：本次设置归属的技能 id，用来读预设模型清单；不传 = 不读清单，行内下载入口整条不出。 */
+export function createModelConfigSection(opts = {}) {
     const section = mkEl("div", "rs-gen-model-section");
+    const getSkillId = opts.getSkillId || (() => "");
+
+    // 行内「⬇ 模型库」：清单确认这个字段缺文件才点亮（openfield 就绪行的 missing 标记同款），点击按清单落点进模型库
+    const makeHubBtn = (field, getValue) => {
+        let target = null;
+        const btn = mkEl("button", "rs-model-hub-btn");
+        btn.type = "button";
+        btn.style.display = "none";
+        btn.textContent = t("⬇ 模型库");
+        btn.addEventListener("click", () => { if (target) openModelHub(target); });
+        return {
+            btn,
+            show: (file) => {
+                target = file ? manifestHubTarget(file, getValue()) : null;
+                btn.title = file ? manifestHubNote(file) : "";
+                btn.style.display = target ? "" : "none";
+            },
+        };
+    };
 
     // 三个模型选择行：空值 = 按名称线索自动挑选（后端 suggest_model），用户可显式指定
-    const makeComboRow = (labelText, placeholder, extraClass) => {
+    const makeComboRow = (labelText, field, extraClass) => {
         const row = mkEl("div", "rs-config-row" + (extraClass ? " " + extraClass : ""));
         const label = mkEl("label", "rs-form-label");
         label.textContent = labelText;
         const select = document.createElement("select");
         // 模型名带目录（QwenImage2.1\xxx.safetensors），列表弹层比输入框宽才读得完
-        const combo = attachComboBox(select, { placeholder, listMinWidth: 520 }).box;
-        row.append(label, combo);
-        return { row, select };
+        const combo = attachComboBox(select, { listMinWidth: 520 }).box;
+        const hub = makeHubBtn(field, () => select.value);
+        row.append(label, combo, hub.btn);
+        return { row, select, field, hub };
     };
-    const modelCtl = makeComboRow(t("生图模型"));
+    const modelCtl = makeComboRow(t("生图模型"), "model");
     // Text Encoder / VAE 很少改动：打 rs-gen-adv-row 标记，供技能弹窗收进折叠区（全局菜单不折叠）
-    const encoderCtl = makeComboRow("Text Encoder", undefined, "rs-gen-adv-row");
-    const vaeCtl = makeComboRow("VAE", undefined, "rs-gen-adv-row");
+    const encoderCtl = makeComboRow("Text Encoder", "text_encoder", "rs-gen-adv-row");
+    const vaeCtl = makeComboRow("VAE", "vae", "rs-gen-adv-row");
 
     // LoRA 行：动态增删，每行 = 模型选择 + 强度
     const loraRow = mkEl("div", "rs-config-row");
@@ -587,6 +677,7 @@ export function createModelConfigSection() {
     let loraFiles = [];
     let loraMtimes = {};   // LoRA 文件修改时间（模型名 → epoch 秒），随 loraFiles 一起刷新
     let loadedModels = {};   // 最近一次 load 的 models（切换主模型后按新家族重排四个下拉）
+    const loraHubs = new Map();   // LoRA 行 → 行内下载入口：行随增删走，清单只认当前行的选名
 
     // LoRA 行：动态增删，每行 = 模型选择 + 强度
     function addLoraRow(name = "", strength = 1.0) {
@@ -603,9 +694,11 @@ export function createModelConfigSection() {
         delBtn.type = "button";
         delBtn.textContent = "✕";
         delBtn.setAttribute("data-rs-tooltip", t("移除此 LoRA"));
-        delBtn.addEventListener("click", () => line.remove());
-        line.append(combo, strengthInput, delBtn);
+        delBtn.addEventListener("click", () => { loraHubs.delete(line); line.remove(); });
+        const hub = makeHubBtn("loras", () => select.value);
+        line.append(combo, hub.btn, strengthInput, delBtn);
         fillComboSelect(select, loraFiles, "", name, loraMtimes);
+        loraHubs.set(line, hub);
         loraList.appendChild(line);
     }
 
@@ -641,15 +734,28 @@ export function createModelConfigSection() {
         refreshLoraRows();
     }
 
+    /** 清单缺失项点亮对应行的下载入口；无清单（check 为 null）整条收起，不承诺定位不了的下载点。 */
+    function applyManifestTargets(check) {
+        for (const ctl of [modelCtl, encoderCtl, vaeCtl]) ctl.hub.show(manifestGap(check, ctl.field, ctl.select.value));
+        for (const [line, hub] of loraHubs) hub.show(manifestGap(check, "loras", line.querySelector("select")?.value));
+    }
+
+    /** 每次 load 读一遍该技能的清单（表单打开、技能切换、修复回填后都要重读） */
+    function refreshManifestTargets() {
+        skillModelCheck(getSkillId()).then(applyManifestTargets);
+    }
+
     function load(settings, models) {
         loadedModels = models || {};
         // 按 config 里的主模型定位家族：Qwen Image 2.1 主模型 → 同目录 / 名字含 qwen 的模型与 LoRA 靠前
         fillModelSelects(settings.model || models.suggested_diffusion_models || "", settings);
         loraList.innerHTML = "";
+        loraHubs.clear();
         for (const entry of settings.loras || []) {
             if (typeof entry === "string") addLoraRow(entry, 1.0);
             else if (entry && typeof entry === "object") addLoraRow(entry.name || "", entry.strength ?? 1.0);
         }
+        refreshManifestTargets();
     }
 
     function collect() {

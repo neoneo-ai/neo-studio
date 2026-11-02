@@ -825,6 +825,14 @@ const EN = {
     "该出处非法：{note}": "This source entry is invalid: {note}",
     "没有可下载的条目": "Nothing to download",
     "计划下载中：{name}": "Plan download: {name}",
+    // ===== 预设清单 · 缺失模型下载入口 =====
+    "⬇ 模型库": "⬇ Model Hub",
+    "去模型库": "Open Model Hub",
+    "{label} 缺 {n} 项模型文件": "{label} is missing {n} model files",
+    "约 {gb} GB：{detail}": "About {gb} GB: {detail}",
+    "{label} 缺 {n} 项模型文件（约 {gb} GB）：{detail}。到模型库补齐后即可生成。":
+        "{label} is missing {n} model files (about {gb} GB): {detail}. Add them in the Model Hub, then generate.",
+    "需先在 Hugging Face 接受授权": "Accept the Hugging Face license first",
     // ===== 配方面板 =====
     "普通": "Plain",
     "不含多段导演与内置预设": "Excludes multi-segment director and built-in presets",

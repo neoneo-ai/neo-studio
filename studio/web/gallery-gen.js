@@ -1326,7 +1326,7 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
     const skillSel = $el("select", { className: "neo-recipes-sort neo-gallery-gm-chip-select neo-gallery-gm-skill-sel", title: t("技能与自定参数：只列吃参考图的生图技能；主模型 / LoRA 留空 = 跟随该技能配置与全局生图设置") });
     // 自定参数（同「生成素材」弹窗）：与技能同一枚 chip，点开从上方浮出双栏面板（左技能 / 右主模型 + LoRA），
     // 收起时不占输入卡空间。宽高比 / 最长边不在这里露出：编辑出图尺寸跟原图走（「目标分辨率」chip），比例覆盖在这条路上不生效。
-    const editModelCfg = createModelConfigSection();
+    const editModelCfg = createModelConfigSection({ getSkillId: () => skillSel.value });
     for (const row of editModelCfg.el.querySelectorAll(".rs-gen-adv-row")) row.remove();
     const editModelBox = $el("div", { className: "neo-gallery-edit-model-box" });
     editModelBox.appendChild(editModelCfg.el);
@@ -2913,7 +2913,7 @@ export function openGenMaterialDialog(gallery, opts = null) {
     const skillSel = $el("select", { className: "neo-recipes-sort neo-gallery-gm-chip-select neo-gallery-gm-skill-sel", title: t("技能与自定参数：只列吃文字输入的生图技能；主模型 / LoRA 留空 = 跟随该技能配置与全局生图设置") });
     // 自定参数（本次临时选主模型 / LoRA，类似节点上接模型，空值 = 跟随全局生图设置）：
     // 与技能同一枚 chip，点开从上方浮出双栏面板；Text Encoder / VAE 很少变，弹窗里不露出（共享组件保留行，这里裁掉）
-    const modelCfg = createModelConfigSection();
+    const modelCfg = createModelConfigSection({ getSkillId: () => skillSel.value });
     for (const row of modelCfg.el.querySelectorAll(".rs-gen-adv-row")) row.remove();
     const modelBox = $el("div", { className: "neo-gallery-gm-model-box" });
     modelBox.appendChild(modelCfg.el);

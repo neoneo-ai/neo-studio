@@ -2968,6 +2968,10 @@
 .rs-repair-civitai-btn:hover { background: #3a3a44; color: #fff; border-color: #666; }
 .rs-repair-hub-btn { flex: none; font-size: 11px; padding: 3px 8px; background: #23303f; color: #9bd18a; border: 1px solid #3b82c4; border-radius: 4px; cursor: pointer; }
 .rs-repair-hub-btn:hover { background: #2b3c4f; color: #fff; }
+/* 模型行下方的「⬇ 模型库」：只在预设清单确认这个字段缺文件时出现（.rs-config-row 是纵向行，落在下拉下方） */
+.rs-model-hub-btn { align-self: flex-start; font-size: 11px; padding: 3px 8px; background: #23303f; color: #9bd18a; border: 1px solid #3b82c4; border-radius: 4px; cursor: pointer; }
+.rs-model-hub-btn:hover { background: #2b3c4f; color: #fff; }
+.rs-gen-lora-row .rs-model-hub-btn { flex: none; }
 .rs-repair-civitai-panel { padding: 6px 0 8px 100px; display: flex; flex-direction: column; gap: 4px; border-bottom: 1px solid #2a2a2e; }
 .rs-civ-item { display: flex; align-items: center; gap: 8px; }
 .rs-civ-info { flex: 1; min-width: 0; font-size: 11px; color: #ccc; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

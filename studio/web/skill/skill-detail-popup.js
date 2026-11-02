@@ -9,7 +9,7 @@ import { mkEl } from "../dom-utils.js";
 import { showToast } from "../gallery-utils.js";
 import { openModelHub } from "../model-hub.js";
 import { checkWorkflow, renderWorkflowGraph, applyWorkflowParams, validateWorkflow, injectRuntimeLoras, canvasLayout, filledTokenNotes } from "../workflow-graph.js";
-import { updateWorkflowSkill, getSkillGenConfig, saveSkillGenConfig, listGenModels, createModelConfigSection, createGenSizeRows, createVideoModelConfigSection, listVideoGenModels, shortModelName } from "../image-gen.js";
+import { updateWorkflowSkill, getSkillGenConfig, saveSkillGenConfig, listGenModels, createModelConfigSection, createGenSizeRows, createVideoModelConfigSection, listVideoGenModels, shortModelName, skillModelCheck, manifestGap, manifestHubTarget, manifestHubNote } from "../image-gen.js";
 import {
     dispatchSkillsUpdated, stopPointerBubble, makeRepairDialog, listSkills, loadSkill, loadSkillWorkflow,
     saveSkill, deleteSkill, loadSkillFile, saveSkillFile, deleteSkillFile, resetSkillGenConfig,
@@ -189,7 +189,7 @@ function createSkillDetailPopup(host, canvasBtns = true, opts = {}) {
     const genCfgBtns = mkEl("div", "rs-gen-cfg-btns");
     genCfgBtns.append(genSaveCfgBtn, genRestoreCfgBtn);
     genSettingsHeader.append(genSettingsTitle, genLocalHint, genCfgBtns);
-    const genModelSection = createModelConfigSection();
+    const genModelSection = createModelConfigSection({ getSkillId: () => currentSkillId });
     const genSizeSection = createGenSizeRows();
     // Text Encoder / VAE / 生图张数 / 输出前缀 很少改动：收进可折叠「高级选项」（默认收起），放到最底部
     // 可折叠「高级选项」组（默认收起）：勾选开头复选框展开、取消勾选收起；点标题其余部分不触发（防误点）。纯原生 checkbox + CSS :checked，无 JS 逻辑
@@ -491,9 +491,8 @@ function createSkillDetailPopup(host, canvasBtns = true, opts = {}) {
 
     // ---- 失效模型路径修复：检测 config 里失效字段，弹窗批量套用候选后回填设置区 ----
     const REPAIR_FIELD_LABELS = { model: t("主模型"), text_encoder: "Text Encoder", vae: "VAE", audio_vae: t("音频 VAE") };
-    // 修复项 → 模型库落盘类别；失效文件名去目录与扩展名后作为模型库搜索词
+    // 修复项 → 模型库落盘类别（无清单时的预填口径；有清单走 manifestHubTarget 的精确落点）
     const REPAIR_FIELD_CATEGORY = { model: "diffusion_models", text_encoder: "text_encoders", vae: "vae", audio_vae: "audio_vae", lora: "loras" };
-    const repairHubQuery = (value) => String(value || "").split(/[\\/]/).pop().replace(/\.(safetensors|bin|pth|pt|ckpt|gguf|onnx|npz)$/i, "");
 
     // 「修复失效路径」应用后刷新工作流图：内嵌编辑按修复后的 config 重挂画布；只读预览则用当前设置区值
     // 重新预渲染模板并重新校验，清掉已修好的红框（复用已加载的原始模板，不重新拉 workflow.json）
@@ -575,6 +574,8 @@ function createSkillDetailPopup(host, canvasBtns = true, opts = {}) {
             return;
         }
         if (!data || !data.success) { showToast(app, "error", t("修复检查失败"), (data && data.error) || ""); return; }
+        // 预设模型清单（一次读取，逐行复用）：有清单就按清单上的源与仓库精确落点，无清单回落到失效文件名搜索
+        const manifest = await skillModelCheck(currentSkillId);
         const fields = data.fields || {};
         // 收集失效项（标量字段 + LoRA），保留后端返回顺序
         const rows = [];
@@ -618,17 +619,18 @@ function createSkillDetailPopup(host, canvasBtns = true, opts = {}) {
             if (r.suggestion) sel.value = r.suggestion;   // 高置信默认选中推荐项
             row.append(label, cur, sel);
 
-            // 本地缺这个模型 → 直接进模型库搜索下载（预填失效文件名 + 对应落盘类别）
+            // 本地缺这个模型 → 进模型库下载：清单在就精确到源 / 仓库 / 落盘类别 / 文件名，
+            // 无清单（自建技能）回落到失效文件名搜索 + 字段对应类别
+            const gapFile = manifestGap(manifest, r.kind === "lora" ? "loras" : r.key, r.value);
+            const hubTarget = manifestHubTarget(gapFile, r.value, REPAIR_FIELD_CATEGORY[r.kind === "lora" ? "lora" : r.key] || "");
             const hubBtn = mkEl("button", "rs-repair-hub-btn");
             hubBtn.type = "button";
             hubBtn.textContent = t("模型库");
-            hubBtn.title = t("在模型库（Comfy-Org · Hugging Face / ModelScope）搜索并下载此模型");
+            hubBtn.title = gapFile ? manifestHubNote(gapFile)
+                : t("在模型库（Comfy-Org · Hugging Face / ModelScope）搜索并下载此模型");
             hubBtn.addEventListener("click", (e) => {
                 e.stopPropagation();
-                openModelHub({
-                    query: repairHubQuery(r.value),
-                    category: REPAIR_FIELD_CATEGORY[r.kind === "lora" ? "lora" : r.key] || "",
-                });
+                openModelHub(hubTarget);
             });
             row.appendChild(hubBtn);
 

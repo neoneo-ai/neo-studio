@@ -120,10 +120,24 @@ download plan above into one clickable path:
 4. When the plan finishes, the overview and that preset's plan are re-read: the files that just landed leave the
    missing list and every preset of the family turns "Ready" together.
 
-## Link with skill repair
+## Link with generation (the missing-model download entries)
 
-An entry in the skill repair dialog that is missing a model opens the Model Hub with the search query
-and category prefilled (`openModelHub({ query, category })`).
+The readiness check is not used by the readiness panel alone - the three generation-side entries read the same
+manifest through `skillModelCheck` / `manifestGap` / `manifestHubTarget` in `web/image-gen.js`:
+
+- **Preflight before generating**: a preset with a manifest is checked against
+  `GET /neo_skill_models/check` before `/neo_image_gen/generate` is posted. When a file the run needs has not
+  landed, the task is not queued, the failure names the missing files and their size, and the notification
+  offers "Open Model Hub" → `openModelHub({ readySkill })`, which expands the readiness panel and builds that
+  preset's download plan. Details: [image-gen.md](image-gen.md).
+- **The model rows of the generation settings**: the row whose field the manifest marks missing gains a
+  "⬇ Model Hub" button that opens the hub with the manifest's source / repository / drop-in category / file
+  name prefilled (`openModelHub({ source, repo, category, query })`), its tooltip carrying the size and the
+  gated authorization note. A ready row gets no button, and a preset with no manifest gets none either
+  (only the "(missing)" mark in the dropdown stays).
+- **The skill repair dialog**: a missing entry opens the hub on the manifest's source and repository, and a
+  custom skill with no manifest falls back to the stale file name plus the field's category
+  (`openModelHub({ query, category })`).
 
 ---
 

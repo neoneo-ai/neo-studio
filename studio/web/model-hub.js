@@ -858,8 +858,9 @@ async function loadSettings(h) {
 
 /**
  * 打开模型库弹窗。
- * @param {{query?: string, category?: string, source?: string, repo?: string}} opts
- *   query 预填搜索框；category 预选落盘类别；source 覆盖本次下载源；repo 预选仓库。
+ * @param {{query?: string, category?: string, source?: string, repo?: string, readySkill?: string}} opts
+ *   query 预填搜索框；category 预选落盘类别；source 覆盖本次下载源；repo 预选仓库；
+ *   readySkill 直接展开「预设就绪」并出该预设的下载计划（生成前预检的「去模型库」走这条）。
  */
 export function openModelHub(opts = {}) {
     closeModelHub();
@@ -877,7 +878,14 @@ export function openModelHub(opts = {}) {
     bindActions(h);
     syncSource(h);
     if (opts.query) h.ui.searchInput.value = opts.query;
-    loadSettings(h).then(() => loadRepos(h, false));
+    loadSettings(h).then(async () => {
+        // 就绪面板默认收起：带 readySkill 进来就替用户展开，落点直接是这个预设的下载计划
+        if (!opts.readySkill) return loadRepos(h, false);
+        h.ui.readyWrap.style.display = "";
+        await loadReadyOverview(h);
+        await loadReadyPlan(h, opts.readySkill);
+        return loadRepos(h, false);
+    });
     return overlay;
 }
 

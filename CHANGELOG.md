@@ -4,6 +4,23 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **A missing model now says where to get it, and a blocked generation never reaches the queue.** The model rows
+  of the image-generation settings (the skill detail's left column, and the gallery's 生成素材 / 图片编辑 custom
+  parameters) gained a **⬇ 模型库** button on the row whose field the preset's `models.json` marks missing: clicking
+  it opens the Model Hub with that file's source, repository, drop-in category and file name already picked, and the
+  tooltip carries the size plus the Hugging Face authorization note when the recommended source is gated. A
+  generation submitted for a preset with a manifest is checked first (`GET /neo_skill_models/check`): when a file
+  the run needs is not in the local model root, the task is not posted, the failure reads
+  "{preset} is missing N model files (about X GB): …" and the notification offers **去模型库 (Open Model Hub)**,
+  which opens the hub straight on that preset's download plan. A preset with no manifest, a request with no skill
+  attached, and an unavailable manifest route all keep generating as before - the preflight and the row buttons stay
+  hidden rather than advertise a target that cannot be resolved, and a stale path keeps its "(缺失)" mark in the
+  dropdown. The skill repair dialog reads the manifest as well: a missing entry opens the hub on the manifest's
+  source and repository, falling back to the stale file name plus category for custom skills. Details:
+  [docs/image-gen.md](docs/image-gen.md), [docs/model-hub.md](docs/model-hub.md). Tests:
+  `studio/tests/js/skill-models-preflight.test.mjs` (blocking and fail-open paths, the hub deep link, the row
+  buttons and their manifest targets).
+
 - **Every built-in preset now declares the models it needs, and the backend reports what is missing.** Each
   preset under `studio/skills/presets/` that uses local model files ships a `models.json`: drop-in category,
   preset-relative file name, size, and the ModelScope / Hugging Face / Civitai sources it can come from

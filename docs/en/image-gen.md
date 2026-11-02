@@ -22,6 +22,24 @@ selected skill, e.g. Krea2 / Qwen Image 2.1).
   easy to spot; entries whose file time cannot be read (a dropped network share, a file moved right after the
   listing) carry no date and the list itself is unaffected.
 
+## Preflight before generating (a missing model never reaches the queue)
+
+When the preset ships a model manifest (`skills/presets/<id>/models.json`, see
+[model-hub.md](model-hub.md)), a generation request reads `GET /neo_skill_models/check` before it posts
+`/neo_image_gen/generate`: when a file the run needs has not landed, the task is not submitted, the failure
+reads "{preset} is missing N model files (about X GB): category / file name", and a notification offers
+"Open Model Hub", which opens that preset's download plan.
+
+- What gets blocked is the class a ComfyUI loader node cannot rescue: a pinned or auto-picked model file that
+  is not in the local model root. Inside the queue it only ever becomes a loader stack trace that names no file.
+- A custom skill with no manifest, an unavailable manifest route, and a request with no skill attached
+  (the global generation settings) all degrade the whole check: generation submits as before, with no extra word.
+- The model rows of the generation settings use the same manifest for a "⬇ Model Hub" entry: in the skill
+  detail's left column and in the gallery's "Generate material" / "Image edit" custom parameters, the row whose
+  field is missing lights up and opens the hub with the manifest's source, repository and drop-in category
+  prefilled. A ready row and a preset with no manifest get no entry; a stale path keeps its "(missing)" mark
+  in the dropdown.
+
 ## 🎨 Neo Image Gen & Edit - all-in-one generation / editing node (IMAGE output)
 
 **Generates an image synchronously from the selected skill's `workflow.json` template and outputs the
