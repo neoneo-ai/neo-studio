@@ -284,6 +284,26 @@ js_api（`check_setup` / `pick_root` / `pick_python` / `start_setup`），根目
   钉在页底的「生成」与视频页 composer 胶囊不被手势条压住。摆姿页只收外壳的三栏（场景库 / 画布 /
   控制面板上下堆叠），iframe 内的 3D 控件不动。
 
+## 手机配对（扫码进 Studio）
+
+- 「设置 → 手机连接」在局域网监听放开时给出二维码与配对链接：链接形如
+  `http://<局域网 IP>:<端口>/neo-studio/pair?token=<一次性令牌>`，手机扫码即在浏览器里验证令牌，成功后给出
+  `http://<局域网 IP>:<端口>/neo-studio` 入口。手机侧不安装任何东西，走的就是上一节的局域网直连。
+- 令牌由桌面端生成，落盘在 `launcher_config.json` 的 `pair_token` / `pair_expires_at` / `pair_host`，5 分钟过期；
+  面板上的倒计时到零自动换码，「立即刷新」按钮走 `POST /neo_studio/launcher` 的 `pair_rotate` 动作换新码，
+  落盘只带这三个字段，不碰启动项。
+- 二维码由 `studio/web/js/core/qrcode-lite.js` 现场生成（QR Model 2 字节模式 + 纠错 L + 八种掩码选优 + 版本自适应），
+  以 inline SVG 上屏，不引第三方库。
+- 三条路由 `/neo-studio/pair`、`/neo-studio/pair/check`、`/neo-studio/pair/info` 由桌面端服务自己注册
+  （`app/mobile_pair.py` + `app/studio_server.py`），归属表在 `app/studio_caps.py`。配对页与 `pair/check` 只答局域网
+  Host：回环、`localhost` 与公网 Host 一律 403；桌面端窗口自己读 `pair/info`，用落盘的 `pair_host` 出码。
+  三条回复都带 `Cache-Control: no-store`，配对页对令牌只回「有效 / 无效」两种状态，不区分过期与令牌不符。
+- 局域网监听没放开时这一栏不摆码，直接说明去「启动设置 → 局域网监听」放开——不摆只会失败的控件。
+- 测试：`app/tests/test_mobile_pair.py`（令牌生命周期 / 局域网前缀 / Host 门 / 落盘合并）、
+  `app/tests/test_studio_server.py` 的 `MobilePairServiceTests`（三条路由的 Host 门与令牌校验）、
+  `studio/tests/js/qrcode-lite.test.mjs`（自带解码器往返 + 标准几何）、
+  `studio/tests/js/pair-access.test.mjs`（面板出码 / 复制 / 刷新 / 切走停轮询）。
+
 ## 远程 ComfyUI
 
 - 「启动设置 → 远程 ComfyUI」填 `http://主机[:端口]`（`https` 同样收；path / query / 锚点 / 凭据不收），存

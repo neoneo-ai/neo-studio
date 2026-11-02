@@ -11,6 +11,7 @@ import os
 import shutil
 import sys
 import tempfile
+import time
 import unittest
 import urllib.error
 import urllib.parse
@@ -27,6 +28,7 @@ import studio_caps as caps
 import studio_server as ns
 import mcp_client
 import mcp_routes
+import mobile_pair as pair
 
 TEST_PORT = 8291
 STUDIO_URL = "/neo-studio"
@@ -539,6 +541,8 @@ class DesktopModuleTests(_RealFolderPaths):
                       for table in ns.load_desktop_modules(PLUGIN_DIR) for r in table}
         # MCP 是桌面端自己的一层（浏览器 spawn 不了 stdio 子进程），路由表在 app 层不在插件层
         registered |= {(r.method, r.path) for r in mcp_routes.routes}
+        # 配对三路由同样是桌面端自己注册的：手机只认这三条，插件层没有对应实现
+        registered |= {("GET", p) for p in (pair.PAIR_PATH, pair.PAIR_CHECK_PATH, pair.PAIR_INFO_PATH)}
         self.assertFalse(caps.DESKTOP_ROUTES - registered,
                          f"能力清单里的桌面端路由在模块里不存在: {sorted(caps.DESKTOP_ROUTES - registered)}")
 
@@ -965,5 +969,102 @@ class PoseBridgeTests(_ServerCase):
         self.assertIn("请求体超过", json.loads(body)["error"], "请求体上限也要由接口回 400")
 
 
+class MobilePairServiceTests(_RealFolderPaths):
+    """手机扫码连接的 HTTP 面：局域网门控、令牌校验、设置页轮询的数据与落盘触发。
+
+    配对页与令牌校验只认「主机头落在本机网段」；桌面端窗口自己（回环）读的是
+    pair_info，出码地址取上次落盘的主机地址。端口被占时 DesktopServer 会换端口，
+    出码端口由 pair_ctx 现问 —— 这里就是按那个口打请求。
+    """
+
+    PORT = 8292
+
+    @classmethod
+    def setUpClass(cls):
+        cls._pin_real()
+        cls.saved = []
+        cls.launcher = {"root": str(COMFY_ROOT), "python": "", "port": 8188,
+                        "listen": "192.168.0.165"}
+        cls.app = ns.build_app(COMFY_ROOT, PLUGIN_DIR, {"starting": False},
+                              launcher=cls.launcher,
+                              pair_ctx={"port_get": lambda: cls.port,
+                                        "lan_prefixes": lambda: pair.lan_prefixes(["192.168.0.165"]),
+                                        "listen_get": lambda: cls.launcher.get("listen", ""),
+                                        "save": lambda: cls.saved.append(True)})
+        cls.tmpdir = Path(tempfile.mkdtemp(prefix="neo_studio_pair_"))
+        cls.app["userdata"] = cls.tmpdir / "neo_gallery_data.json"
+        cls.server = ns.DesktopServer(lambda: cls.app, cls.PORT)
+        cls.port = cls.server.start()
+        assert cls.port, f"桌面端服务没起来：{cls.server.error}"
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.server.stop()
+        cls._restore_stubs()
+
+    def get_host(self, path, host, data=None):
+        return _request(self.port, path, data=data, headers={"Host": host})
+
+    def test_pair_page_only_answers_lan_hosts(self):
+        status, body = self.get_host("/neo-studio/pair", "192.168.0.9:43130")
+        self.assertEqual(status, 200)
+        self.assertIn(b"Neo Studio", body)
+        req = urllib.request.Request(f"http://127.0.0.1:{self.port}/neo-studio/pair",
+                                     headers={"Host": "192.168.0.9:43130"})
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            self.assertEqual(resp.headers.get("Cache-Control"), "no-store",
+                             "页面不能缓存：缓存一次就把过期令牌钉在手机上了")
+        for host in ("127.0.0.1:43130", "localhost:43130", "104.20.1.7:43130"):
+            status, body = self.get_host("/neo-studio/pair", host)
+            self.assertEqual(status, 403, f"{host} 不是局域网地址，配对页不服务")
+            self.assertIn("局域网".encode(), body, "403 也要把话说明白")
+
+    def test_pair_check_accepts_live_token_from_lan_host(self):
+        now = time.time()
+        token = pair.ensure_token(self.launcher, now)
+        status, body = self.get_host(f"/neo-studio/pair/check?token={token}", "192.168.0.9:43130")
+        data = json.loads(body)
+        self.assertEqual(status, 200)
+        self.assertTrue(data["valid"])
+        self.assertEqual(data["base_url"], f"http://192.168.0.9:{self.port}/neo-studio",
+                         "入口地址要用手机眼中那台机器的地址，不是本机网卡清单里的第一个")
+
+    def test_pair_check_rejects_loopback_wrong_token_and_expiry(self):
+        token = pair.ensure_token(self.launcher, time.time())
+        status, _ = self.get_host(f"/neo-studio/pair/check?token={token}", "127.0.0.1:43130")
+        self.assertEqual(status, 403, "桌面端窗口自己不算配对设备")
+        status, body = self.get_host("/neo-studio/pair/check?token=not-the-token",
+                                     "192.168.0.9:43130")
+        self.assertFalse(json.loads(body)["valid"])
+        self.launcher["pair_expires_at"] = time.time() - 1
+        status, body = self.get_host(f"/neo-studio/pair/check?token={token}", "192.168.0.9:43130")
+        self.assertFalse(json.loads(body)["valid"], "过期的码与错的码是同一条回复")
+
+    def test_pair_info_from_loopback_page_uses_persisted_host_and_saves(self):
+        self.launcher["pair_host"] = "192.168.0.165"
+        before = len(self.saved)
+        status, body = self.get_host("/neo-studio/pair/info", "127.0.0.1:43130")
+        data = json.loads(body)
+        self.assertEqual(status, 200)
+        self.assertTrue(data["lan_open"])
+        self.assertIn("192.168.0.165", data["url"])
+        self.assertTrue(data["token"])
+        self.assertGreater(data["seconds_left"], 0)
+        self.assertEqual(len(self.saved), before + 1, "生成令牌后要触发一次落盘")
+
+    def test_pair_info_says_unavailable_when_listen_closed(self):
+        self.launcher["listen"] = ""
+        data = json.loads(self.get_host("/neo-studio/pair/info", "127.0.0.1:43130")[1])
+        self.assertFalse(data["lan_open"], "监听没放开就要明确不可用，前端不摆只会失败的码")
+        self.launcher["listen"] = "192.168.0.165"
+
+    def test_pair_routes_are_listed_as_desktop_owned(self):
+        data = json.loads(self.get_host("/neo_studio/version", "127.0.0.1:43130")[1])
+        self.assertIn("GET /neo-studio/pair", data["routes"])
+        self.assertIn("GET /neo-studio/pair/check", data["routes"])
+        self.assertIn("GET /neo-studio/pair/info", data["routes"])
+
+
 if __name__ == "__main__":
     unittest.main()
+

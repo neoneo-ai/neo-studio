@@ -223,8 +223,16 @@ _FRAMES = {
     ("POST", "/neo_frames/save"),
 }
 
+# 手机扫码连接（局域网）：配对页、令牌校验与设置页轮询的二维码数据。只有桌面端服务有这条
+# 链路（app/mobile_pair.py + app/studio_server.py），ComfyUI 端口上没有配对页
+_PAIR = {
+    ("GET", "/neo-studio/pair"),
+    ("GET", "/neo-studio/pair/check"),
+    ("GET", "/neo-studio/pair/info"),
+}
+
 DESKTOP_ROUTES = (_GALLERY | _BOOKMARK | _SKILL | _PROMPTS | _RECIPES | _SETTINGS | _LLM | _MODEL_HUB
-                  | _SKILL_MODELS | _BACKYARD | _MCP | _AGENT | _POSE | _FRAMES)
+                  | _SKILL_MODELS | _BACKYARD | _MCP | _AGENT | _POSE | _FRAMES | _PAIR)
 
 # 前端门控用的功能开关：功能 → 代表路由。桌面端服务时该功能可用，否则按钮指向「启动 ComfyUI」。
 FEATURE_ROUTES = {

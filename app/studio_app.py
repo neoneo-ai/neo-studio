@@ -50,6 +50,7 @@ from typing import Optional
 
 from studio_server import DesktopServer, build_app
 import mcp_client
+import mobile_pair as pair
 
 IS_MAC = sys.platform == "darwin"
 IS_WINDOWS = sys.platform == "win32"
@@ -402,13 +403,33 @@ def load_config() -> dict:
 
 
 def save_config(root: Path, python: str, port: int, flags: dict) -> bool:
-    """写启动配置：开关与远程地址跟着根目录 / 解释器 / 端口一起落盘，「保存并重启」不能把它们写没。"""
+    """写启动配置：开关与远程地址跟着根目录 / 解释器 / 端口一起落盘，「保存并重启」不能把它们写没。
+    手机配对的令牌与主机地址同样跟着走：设置页保存时不能把「手机连接」刚生成的码洗掉。"""
     root_s = "" if not root or str(root) in ("", ".") else str(root)
-    return write_config({"version": CONFIG_VERSION, "root": root_s, "python": str(python or ""),
-                         "port": int(port), "frameless": bool(flags.get("frameless", not IS_MAC)),
-                         "dev_mode": bool(flags.get("dev_mode")),
-                         "listen": str(flags.get("listen", "")),
-                         "remote": str(flags.get("remote", ""))})
+    cfg = {"version": CONFIG_VERSION, "root": root_s, "python": str(python or ""),
+           "port": int(port), "frameless": bool(flags.get("frameless", not IS_MAC)),
+           "dev_mode": bool(flags.get("dev_mode")),
+           "listen": str(flags.get("listen", "")),
+           "remote": str(flags.get("remote", ""))}
+    for key in ("pair_token", "pair_expires_at", "pair_host"):
+        if flags.get(key) not in (None, ""):
+            cfg[key] = flags[key]
+    return write_config(cfg)
+
+
+def persist_pair_state(cfg: dict) -> bool:
+    """手机配对的令牌与主机地址单独落盘：load → 合入 → write，与无边框开关同一套写法。
+
+    只合入这三项，其余键以磁盘那份为准 —— 设置页同时在写 root/python/port/listen，
+    谁后写谁不能把对方的字段抹掉。pair_dirty 是服务侧的「该落盘了」标记，落完即摘。
+    """
+    disk = load_config()
+    for key in ("pair_token", "pair_expires_at", "pair_host"):
+        if cfg.get(key) not in (None, ""):
+            disk[key] = cfg[key]
+    disk.pop("pair_dirty", None)
+    cfg.pop("pair_dirty", None)
+    return write_config(disk)
 
 
 def write_config(cfg: dict) -> bool:
@@ -1331,6 +1352,14 @@ class StudioDesktop:
                 "msg": ("开发模式已开启，重启窗口后生效：F5 / Ctrl+F5 刷新、右键菜单、开发者工具"
                         if self.launcher["dev_mode"] else "开发模式已关闭，重启窗口后生效")}
 
+    def pair_rotate(self) -> dict:
+        """「立即刷新」二维码：换新的配对令牌并落盘，旧码当场失效，寿命从这次重算。"""
+        token = pair.rotate_token(self.launcher, time.time())
+        if not persist_pair_state(self.launcher):
+            return {"ok": False, "error": f"写入启动配置失败：{CONFIG_FILE}"}
+        log_line("pair token rotated")
+        return {"ok": True, "token": token, "seconds_left": pair.PAIR_TTL_SECONDS}
+
     def ensure_resizable_frame(self) -> None:
         """pywebview 的 frameless 走 FormBorderStyle=None，可拖拽边框一起摘掉：窗口显示后补回 WS_THICKFRAME。"""
         if self.frameless and self._window is not None:
@@ -2003,10 +2032,18 @@ def main() -> int:
                                          f"http://127.0.0.1:{port}")
     mcp = mcp_client.McpManager(STATE / "configs" / "mcp_servers.json", log_line,
                                 defaults=[builtin] if builtin else [])
+    # 手机扫码连接的上下文（app/studio_server.py 的配对路由读它）：端口是桌面端服务端口，
+    # 网卡前缀每次现算（网线插拔、换 WiFi 后网卡会变），监听是否放开读设置里那份最新值，
+    # save 是令牌落盘的入口（配对页在服务的 event loop 线程里，写文件丢线程由调用方做）
+    pair_ctx = {"port_get": lambda: desktop.desktop_port,
+                "lan_prefixes": lambda: pair.lan_prefixes(lan_ips()),
+                "listen_get": lambda: launcher.get("listen", ""),
+                "save": lambda: persist_pair_state(launcher)}
     server = DesktopServer(lambda: build_app(boot["root"], boot["serve_dir"], flags, launcher,
                                            launcher_api, COMFY_LOG, data_root=STATE,
                                            mcp_manager=mcp,
-                                           kernel_state=lambda: desktop.comfy_state()),
+                                           kernel_state=lambda: desktop.comfy_state(),
+                                           pair_ctx=pair_ctx),
                          port + DESKTOP_PORT_OFFSET)
     offline_url = ""
 

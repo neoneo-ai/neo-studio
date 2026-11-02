@@ -398,6 +398,31 @@ startable once the root is filled in.
   hidden behind the mobile browser's toolbars. The 摆姿 page is a three.js iframe: only its shell stacks (scene
   library and control panel below the canvas), the 3D controls inside keep their layout.
 
+## Phone pairing (scan to enter Studio)
+
+- "Settings → Phone pairing" shows a QR code and the pairing link once LAN listening is on: the link is
+  `http://<LAN IP>:<port>/neo-studio/pair?token=<one-time token>`; the phone scans it, its browser verifies the token,
+  and a valid scan hands back the `http://<LAN IP>:<port>/neo-studio` entry. Nothing is installed on the phone - this is
+  the same LAN direct path described above.
+- The token is minted by the desktop service and persisted in `launcher_config.json` as `pair_token` /
+  `pair_expires_at` / `pair_host`, valid 5 minutes; the panel's countdown rotates it at zero, and the "refresh now"
+  button runs the `pair_rotate` action of `POST /neo_studio/launcher`. The save writes only those three fields and
+  touches no startup setting.
+- The QR is generated on the spot by `studio/web/js/core/qrcode-lite.js` (QR Model 2 byte mode, EC level L, mask
+  scoring, version fitting) and drawn as inline SVG - no third-party library.
+- The three routes `/neo-studio/pair`, `/neo-studio/pair/check` and `/neo-studio/pair/info` are registered by the
+  desktop server itself (`app/mobile_pair.py` + `app/studio_server.py`); the ownership table is `app/studio_caps.py`.
+  The pair page and `pair/check` answer LAN hosts only: loopback, `localhost` and public hosts get 403. The desktop
+  window reads `pair/info` and draws the QR from the persisted `pair_host`. All three replies carry
+  `Cache-Control: no-store`, and the pair page reports only "valid / invalid" - an expired token and a wrong token
+  read the same.
+- With LAN listening off the panel shows no QR and names the setting to enable - a control that cannot work is not
+  shipped.
+- Tests: `app/tests/test_mobile_pair.py` (token lifecycle / LAN prefixes / host gate / merge-only save),
+  `MobilePairServiceTests` in `app/tests/test_studio_server.py` (the host gate and token checks on the three routes),
+  `studio/tests/js/qrcode-lite.test.mjs` (round-trip through its own decoder + spec geometry),
+  `studio/tests/js/pair-access.test.mjs` (QR on screen, copy, refresh, polling stops on tab change).
+
 ## Remote ComfyUI
 
 - "Startup settings → Remote ComfyUI" takes `http://host[:port]` (`https` too; path / query / fragment / credentials

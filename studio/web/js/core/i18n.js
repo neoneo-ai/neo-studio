@@ -392,8 +392,8 @@ const EN = {
         "The python.exe that runs ComfyUI; it must already have ComfyUI's dependencies installed (when they are missing, an “Install dependencies” button appears below).\nAfter editing, click “Save & restart ComfyUI”.",
     "本机 ComfyUI 的端口，窗口与探活都打在 127.0.0.1:该端口。\n端口被占用时桌面端自动换到下一个空闲端口。改完点「保存并重启 ComfyUI」。":
         "The local ComfyUI port. The window and the health probe both target 127.0.0.1:that port.\nWhen the port is taken, the desktop app moves to the next free one. After editing, click “Save & restart ComfyUI”.",
-    "ComfyUI 的 --listen，默认「仅本机」= 只监听 127.0.0.1，局域网访问不到。\n填网卡地址时会自动带上 127.0.0.1，否则窗口自己打不开。\nComfyUI 没有鉴权：防火墙放行该端口，只在你信任的网段开。改完点「保存并重启 ComfyUI」。":
-        "ComfyUI's --listen. The default “Localhost only” listens on 127.0.0.1 alone, so the LAN cannot reach it.\nA network interface address is saved together with 127.0.0.1, otherwise the window cannot open its own page.\nComfyUI has no auth: open this port in the firewall and use it only on networks you trust. After editing, click “Save & restart ComfyUI”.",
+    "ComfyUI 的 --listen，默认「仅本机」= 只监听 127.0.0.1，局域网访问不到。\n填网卡地址时会自动带上 127.0.0.1，否则窗口自己打不开。\nComfyUI 没有鉴权：防火墙放行该端口，只在你信任的网段开。改完点「保存并重启 ComfyUI」。\n放开后「设置 → 手机连接」才会出手机扫码用的二维码。":
+        "ComfyUI's --listen. The default “Localhost only” listens on 127.0.0.1 alone, so the LAN cannot reach it.\nA network interface address is saved together with 127.0.0.1, otherwise the window cannot open its own page.\nComfyUI has no auth: open this port in the firewall and use it only on networks you trust. After editing, click “Save & restart ComfyUI”.\nOnce listening is open, “Settings → Mobile Connection” shows the QR code the phone scans.",
     "连远端那台 ComfyUI：http(s)://主机[:端口]，留空 = 连本机。\n前提：远端已装 comfyui-neo-studio 插件，并在远端自己的「启动设置 → 局域网监听」放开监听。\n远程模式本机不启动也不停止 ComfyUI：「启动内核」= 重连远端，「停止内核」禁用，根目录 / 解释器 / 端口 / 局域网监听归远端管。\n改完点「保存并重启 ComfyUI」，窗口直接开在远端页面。":
         "Connect to a remote ComfyUI: http(s)://host[:port]; leave it empty to connect locally.\nRequirements: the remote machine has the comfyui-neo-studio plugin installed and has opened listening in its own “Launcher Settings → LAN listening”.\nIn remote mode this machine neither starts nor stops ComfyUI: “Start kernel” reconnects to the remote, “Stop kernel” is disabled, and the root folder / interpreter / port / LAN listening belong to the remote machine.\nAfter editing, click “Save & restart ComfyUI” — the window opens on the remote page.",
     "桌面端窗口自绘标题栏（最小化 / 最大化 / 全屏 / 关闭），勾掉回系统标题栏。\n立刻生效并写进启动配置，下次开机沿用。":
@@ -497,6 +497,27 @@ const EN = {
     "可选：本地/自建服务可留空": "Optional: leave empty for local / self-hosted services",
     "云供应商必填 API Key，否则调用会 401": "This cloud provider requires an API key, or calls fail with 401",
     "LLM 配置": "LLM Config",
+    // ===== 设置「手机连接」：局域网配对二维码 =====
+    "手机连接": "Mobile Connection",
+    "手机与电脑连同一个 WiFi，扫码即在手机浏览器里打开 Neo Studio，不需要装 App。":
+        "Put the phone on the same Wi-Fi as this PC and scan the code to open Neo Studio in the phone's browser - no app to install.",
+    "立即刷新二维码": "Regenerate the code",
+    "还没有可复制的配对链接": "There is no pairing link to copy yet",
+    "配对链接已复制，发到手机浏览器地址栏即可打开": "Pairing link copied - paste it into the phone's browser address bar",
+    "复制失败，请长按上方链接手动复制": "Copy failed - long-press the link above and copy it by hand",
+    "刷新失败：{error}": "Refresh failed: {error}",
+    "桌面端服务未运行：手机连接只在 Neo Studio 桌面端窗口里可用。":
+        "The desktop service is not running: Mobile Connection only works inside the Neo Studio desktop window.",
+    "未放开局域网监听，手机连不到这台电脑。到「启动设置 → 局域网监听」选一个网卡地址并保存重启后，这里才会出二维码。":
+        "LAN listening is off, so the phone cannot reach this PC. Pick a network address under Startup Settings - LAN listening, save and restart, and the code appears here.",
+    "还没拿到本机局域网地址：连上 WiFi 或插好网线后点「立即刷新二维码」。":
+        "No LAN address for this machine yet: join a Wi-Fi or plug in the cable, then press Regenerate the code.",
+    "二维码将在 {n} 秒后自动刷新；手机与电脑需保持同一 WiFi。":
+        "The code refreshes automatically in {n} s; keep the phone and the PC on the same Wi-Fi.",
+    "二维码已过期，点「立即刷新二维码」换一张。":
+        "This code has expired - press Regenerate the code for a new one.",
+    "读不到桌面端服务的配对信息：手机连接只在 Neo Studio 桌面端窗口里可用。":
+        "The desktop service's pairing info is unreachable: Mobile Connection only works inside the Neo Studio desktop window.",
     // ===== 生图 / 生视频设置表单与「发送到 Load Image」 =====
     "等待生图超时，请稍后在 Gallery 查看": "Image generation timed out — check the Gallery later",
     "参考图片中的角色形象": "the character in the reference image",

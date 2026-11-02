@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>连接 Neo Studio</title>
+<style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: flex; flex-direction: column;
+        font-family: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+        background: #0b0d12; color: #e8ecf4; padding: 26px 20px calc(26px + env(safe-area-inset-bottom)); }
+    h1 { font-size: 21px; margin: 0 0 6px; }
+    .sub { color: #9fb0c8; font-size: 14px; line-height: 1.6; margin: 0 0 22px; }
+    .card { border: 1px solid #22283a; border-radius: 14px; background: #12151f; padding: 18px; }
+    .state { font-size: 15px; line-height: 1.7; }
+    .state b { display: block; font-size: 17px; margin-bottom: 6px; }
+    .ok b { color: #7ee2a8; }
+    .bad b { color: #ff9a8a; }
+    .enter { display: block; margin-top: 18px; padding: 14px 18px; border-radius: 12px;
+        background: #2b6ef2; color: #fff; text-align: center; text-decoration: none; font-size: 17px; }
+    .enter[hidden] { display: none; }
+    .link { margin-top: 16px; font-size: 12px; color: #7d8aa5; word-break: break-all; }
+    .link[hidden] { display: none; }
+</style>
+</head>
+<body>
+<h1 id="title">连接 Neo Studio</h1>
+<p class="sub" id="sub"></p>
+<div class="card">
+    <div class="state" id="state"></div>
+    <a class="enter" id="enter" href="#" hidden></a>
+    <div class="link" id="link" hidden></div>
+</div>
+<script type="module">
+// 手机扫码后落在这张页面：只干一件事 —— 把 URL 里的令牌交给桌面端验一次，然后把 Studio 的
+// 局域网地址做成入口。令牌过期与链接无效是同一条提示，不区分（避免把有效令牌的信息透露在页面上）。
+const zh = (navigator.language || "zh").toLowerCase().startsWith("zh");
+const TXT = {
+    title: zh ? "连接 Neo Studio" : "Connect to Neo Studio",
+    sub: zh ? "手机与电脑需连同一个 WiFi。" : "Your phone and this PC must be on the same Wi-Fi.",
+    checking: zh ? "正在验证配对…" : "Checking pairing…",
+    ok: zh ? "配对成功" : "Paired",
+    okBody: zh ? "点下面的入口打开电脑上的 Neo Studio。保持同一 WiFi，二维码 5 分钟后过期。"
+               : "Use the entry below to open Neo Studio on this PC. Stay on the same Wi-Fi - the code expires after 5 minutes.",
+    enter: zh ? "进入 Neo Studio" : "Open Neo Studio",
+    bad: zh ? "二维码已过期或链接无效" : "This code has expired or the link is invalid",
+    badBody: zh ? "请在电脑的「设置 → 手机连接」里重新打开二维码，再扫一次。"
+                : "Open the code again on the PC under Settings - Mobile connection, then scan it once more.",
+    offline: zh ? "连不上这台电脑" : "Can't reach this PC",
+    offlineBody: zh ? "确认手机连的是和电脑同一个 WiFi，并且电脑上的「启动设置 → 局域网监听」已放开。"
+                    : "Check that the phone is on the same Wi-Fi as the PC, and that LAN listening is enabled in the PC's startup settings.",
+    nocode: zh ? "链接里没有配对令牌" : "This link has no pairing code",
+};
+const $ = (id) => document.getElementById(id);
+$("title").textContent = TXT.title;
+$("sub").textContent = TXT.sub;
+const state = $("state"), enter = $("enter"), link = $("link");
+const token = new URL(location.href).searchParams.get("token") || "";
+link.textContent = location.href;
+link.hidden = false;
+
+function set(stateCls, head, body, href) {
+    state.className = "state " + stateCls;
+    state.innerHTML = `<b></b>`;
+    state.querySelector("b").textContent = head;
+    state.append(body);
+    if (href) { enter.href = href; enter.textContent = TXT.enter; enter.hidden = false; }
+}
+
+if (!token) {
+    set("bad", TXT.nocode, TXT.badBody);
+} else {
+    set("", TXT.checking, "");
+    fetch(`/neo-studio/pair/check?token=${encodeURIComponent(token)}`, { cache: "no-store" })
+        .then(async (res) => {
+            const data = await res.json().catch(() => ({}));
+            if (res.status === 403) { set("bad", TXT.offline, TXT.offlineBody); return; }
+            if (data.valid) set("ok", TXT.ok, TXT.okBody, data.base_url);
+            else set("bad", TXT.bad, TXT.badBody);
+        })
+        .catch(() => set("bad", TXT.offline, TXT.offlineBody));
+}
+</script>
+</body>
+</html>

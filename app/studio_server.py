@@ -13,6 +13,7 @@ import os
 import sys
 import threading
 import asyncio
+import time
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -21,6 +22,7 @@ from aiohttp import web
 import studio_caps as caps
 import mcp_client
 import mcp_routes
+import mobile_pair as pair
 
 OFFLINE_ERROR = "ComfyUI 未运行"
 DESKTOP_PKG = "_neo_studio_desktop"
@@ -251,6 +253,77 @@ async def launcher_post(request):
     return web.json_response(res)
 
 
+def _pair_host(request) -> str:
+    """请求的 Host 头是否落在本机网卡网段上（局域网来的请求）。
+
+    配对页与令牌校验只认这个：回环（桌面端窗口自己）与公网地址一律不算，
+    公网 Host 头扫开也连不上，还会把配对入口暴露到不信任的网段之外。
+    """
+    ctx = request.app.get("pair_ctx") or {}
+    return pair.lan_host(request.headers.get("Host", ""), ctx.get("lan_prefixes", lambda: [])())
+
+
+def port_of(request) -> int:
+    """桌面端服务当前绑定的端口：端口被占时 DesktopServer 会换到下一个空闲端口，
+    所以二维码里的端口只能在出码时现问，不能拿启动时算的那个。"""
+    return int((request.app.get("pair_ctx") or {}).get("port_get", lambda: 0)())
+
+
+PAIR_LOOPBACK_TEXT = (
+    "<!doctype html><html lang=\"zh-CN\"><meta charset=\"utf-8\">"
+    "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
+    "<body style=\"font-family:system-ui,sans-serif;background:#0b0d12;color:#e8ecf4;"
+    "padding:28px;line-height:1.7\">"
+    "<h2 style=\"font-size:19px\">请在电脑上看这一步</h2>"
+    "<p style=\"color:#9fb0c8\">这条地址只有局域网里的设备能打开。"
+    "电脑上的 Neo Studio「设置 → 手机连接」里有扫码用的二维码与局域网地址。</p></body>")
+
+
+async def pair_page(request):
+    """手机扫开二维码后的配对页：桌面端服务端口上的独立页面，不需要装 App。
+
+    页面自己要验令牌，服务端在这里只挡两件事：非局域网地址直接来的请求，以及
+    页面文件的缓存（页面会带着新令牌反复打开，缓存一次就把过期令牌钉在手机上了）。
+    """
+    if not _pair_host(request):
+        return web.Response(text=PAIR_LOOPBACK_TEXT, content_type="text/html",
+                            status=403, headers={"Cache-Control": "no-store"})
+    return web.FileResponse(request.app["pair_page"], headers={"Cache-Control": "no-store"})
+
+
+async def pair_check(request):
+    """配对页带着令牌来问一次：令牌有效就把 Studio 的局域网地址交回页面做入口。"""
+    host = _pair_host(request)
+    if not host:
+        return web.json_response({"success": False, "valid": False, "error": "仅限局域网访问"}, status=403)
+    now = time.time()
+    valid = pair.token_ok(request.app["launcher"], request.query.get("token", ""), now)
+    return web.json_response({"success": True, "valid": valid,
+                              "base_url": f"http://{host}:{port_of(request)}{pair.STUDIO_PATH}",
+                              "seconds_left": pair.seconds_left(request.app["launcher"], now)})
+
+
+async def pair_info(request):
+    """设置页「手机连接」的数据：二维码正文、令牌、剩余秒数、监听是否放开。
+
+    桌面端窗口自己就是回环，这里的地址取请求 Host 头（手机眼中的本机地址），
+    头是回环时沿用上次落盘的那份，二维码与手机扫到的始终是同一个地址。
+    令牌在这里生成/续期，落盘由桌面端注入的 save 负责。
+    """
+    ctx = request.app.get("pair_ctx") or {}
+    cfg = request.app["launcher"]
+    lan_prefixes = ctx.get("lan_prefixes", lambda: [])()
+    host = pair.lan_host(request.headers.get("Host", ""), lan_prefixes)
+    info = pair.pair_payload(cfg, host, port_of(request), time.time(),
+                             lan_open=bool(ctx.get("listen_get", lambda: "")()))
+    if cfg.get("pair_dirty"):
+        cfg.pop("pair_dirty")
+        save = ctx.get("save")
+        if save:
+            await asyncio.to_thread(save)
+    return web.json_response(info)
+
+
 def mcp_config_path(plugin_dir: Path, data_root: Path = None) -> Path:
     """MCP 注册表的落点：用户数据根的 configs/。data_root 没给时落插件的 tmp/ ——
     与 comfy_run.log 的兜底同一套，用户数据不落插件目录是硬规矩。"""
@@ -260,7 +333,8 @@ def mcp_config_path(plugin_dir: Path, data_root: Path = None) -> Path:
 
 def build_app(root: Path, plugin_dir: Path, flags: dict = None, launcher: dict = None,
               launcher_api: dict = None, comfy_log: Path = None,
-              data_root: Path = None, mcp_manager=None, kernel_state=None) -> web.Application:
+              data_root: Path = None, mcp_manager=None, kernel_state=None,
+              pair_ctx: dict = None) -> web.Application:
     """桌面端 app：Studio 页面 + 前端静态文件 + 能力清单里归桌面端的全部路由。
     flags 是桌面端的启动中标记（与 StudioDesktop 共用同一份 dict），随版本快照下发给页面。
     launcher / launcher_api 同样与 StudioDesktop 共用：设置页在桌面端读快照、发保存。
@@ -303,6 +377,10 @@ def build_app(root: Path, plugin_dir: Path, flags: dict = None, launcher: dict =
     routes.post("/neo_studio/launcher")(launcher_post)
     routes.get("/view")(view_file)
     routes.get("/ws")(studio_ws)
+    # 手机扫码连接（局域网）：配对页 + 令牌校验 + 设置页轮询的二维码数据
+    routes.get(pair.PAIR_PATH)(pair_page)
+    routes.get(pair.PAIR_CHECK_PATH)(pair_check)
+    routes.get(pair.PAIR_INFO_PATH)(pair_info)
 
     # aiohttp 默认只收 1MB 请求体：自备素体（35MB GLB 走 base64 约 47MB）与 ControlNet 图组会在
     # handler 之前被 transport 挡成 413，插件端（ComfyUI 的 --max-upload-size 默认 100MB）能跑的
@@ -321,6 +399,10 @@ def build_app(root: Path, plugin_dir: Path, flags: dict = None, launcher: dict =
     app["data_root"] = Path(data_root) if data_root else None
     app["plugin_version"] = sys.modules[f"{DESKTOP_PKG}.util"].plugin_version()
     app["kernel_state"] = kernel_state
+    # 手机扫码连接的上下文（端口 / 网卡前缀 / 监听是否放开 / 落盘）与配对页文件，
+    # 由 app/studio_app.py 装配；没给时配对页与非局域网地址同样一律 403
+    app["pair_page"] = plugin_dir / "web" / "studio" / "pair.html"
+    app["pair_ctx"] = pair_ctx or {}
     if mcp_manager is not None:
         app["mcp"] = mcp_manager
     else:

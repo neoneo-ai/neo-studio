@@ -4,6 +4,16 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **Phone pairing from Settings (Wi-Fi only).** "Settings → Phone pairing" now shows a QR code and a pairing link when
+  LAN listening is on. A phone on the same Wi-Fi scans the code, its browser verifies a one-time token at
+  `/neo-studio/pair`, and the page hands back the `http://<LAN IP>:<port>/neo-studio` entry - nothing is installed on
+  the phone. The token is valid 5 minutes, the panel counts it down, the QR regenerates at zero, and "refresh now"
+  rotates it on demand; the panel is reachable from the LAN-listening hint too. With LAN listening off the panel names
+  that setting instead of showing a code that could only fail. The QR is drawn by a self-contained encoder
+  (`studio/web/js/core/qrcode-lite.js`, inline SVG, no dependency), the pair page and token check answer LAN hosts only,
+  and every pair reply is `Cache-Control: no-store`. Covered by `app/tests/test_mobile_pair.py`,
+  `MobilePairServiceTests` in `app/tests/test_studio_server.py`, `studio/tests/js/qrcode-lite.test.mjs` (round-trip
+  through its own decoder) and `studio/tests/js/pair-access.test.mjs`.
 - **The header carries six tabs, and 队列 / 设置 are icon slots.** The 技能 tab and the 智能体 button left the header: 技能 and
   智能体 are entered from their Home cards (技能 under 素材与配置, 智能体 under 开始创作), and 设置 is now a gear slot at the
   header's right end sitting right after the 队列 slot - the tab strip keeps its width for the pages you create in, and neither

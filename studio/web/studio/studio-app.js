@@ -23,6 +23,7 @@ import { createAgentPanel, createMcpPanel, createAgentPrefsForm } from "../agent
 import { t, tf, getLang, applyLang, LANGS } from "../js/core/i18n.js";
 import { icon, setIcon, setIconLabel } from "../js/core/icons.js";
 import { createLibraryModal } from "../js/core/lib-modal.js";
+import { createPairPanel } from "../js/core/pair-access.js";
 import { initQueuePanel, setQueueOnline, queueTrack } from "../queue-panel.js";
 import { createPoseView } from "../pose/pose.js";
 import { createFramesView } from "../frames/frames.js";
@@ -1345,7 +1346,8 @@ function createLauncherPanel() {
             + "端口被占用时桌面端自动换到下一个空闲端口。改完点「保存并重启 ComfyUI」。",
         listen: "ComfyUI 的 --listen，默认「仅本机」= 只监听 127.0.0.1，局域网访问不到。\n"
             + "填网卡地址时会自动带上 127.0.0.1，否则窗口自己打不开。\n"
-            + "ComfyUI 没有鉴权：防火墙放行该端口，只在你信任的网段开。改完点「保存并重启 ComfyUI」。",
+            + "ComfyUI 没有鉴权：防火墙放行该端口，只在你信任的网段开。改完点「保存并重启 ComfyUI」。\n"
+            + "放开后「设置 → 手机连接」才会出手机扫码用的二维码。",
         remote: "连远端那台 ComfyUI：http(s)://主机[:端口]，留空 = 连本机。\n"
             + "前提：远端已装 comfyui-neo-studio 插件，并在远端自己的「启动设置 → 局域网监听」放开监听。\n"
             + "远程模式本机不启动也不停止 ComfyUI：「启动内核」= 重连远端，「停止内核」禁用，"
@@ -1626,6 +1628,7 @@ function buildSettings(el) {
     // tab 顺序：LLM 设置 → 生图设置 → 生视频设置 → 智能体偏好 → 界面语言 → 日志 → 启动设置 → 关于；每个 tab 只显示对应设置区
     const launcher = createLauncherPanel();
     const mcp = createMcpPanel();
+    const pairPanel = createPairPanel({ api, t, tf, toast });
     const prefs = createAgentPrefsForm({
         previewMode: () => previewOn, setPreviewMode: applyPreviewMode,
     });
@@ -1640,6 +1643,7 @@ function buildSettings(el) {
         { key: "mcp", label: t("MCP 服务"), body: $el("div", { className: "ns-settings-section ns-mcp-section" }, [section("MCP 服务"), mcp.root]) },
         { key: "lang", label: t("界面语言"), body: $el("div", { className: "ns-settings-section" }, [section("界面语言"), createLangPanel()]) },
         { key: "log", label: t("日志"), body: $el("div", { className: "ns-settings-section ns-log-section" }, [$el("div", { className: "ns-log-head" }, [section("日志"), copyLogBtn]), logBody]) },
+        { key: "pair", label: t("手机连接"), body: pairPanel.el },
         { key: "launch", label: t("启动设置"), body: launcher.el },
         { key: "about", label: t("关于"), body: $el("div", { className: "ns-settings-section ns-about-section" }, [section("关于"), $el("div", { className: "ns-about-version", id: "ns-about-version", textContent: versionText() }), $el("div", { className: "ns-about-rows", id: "ns-about-rows" })]) },
     ];
@@ -1657,9 +1661,14 @@ function buildSettings(el) {
             mcp.refresh().catch(e => console.error("[Neo Studio] mcp panel refresh failed:", e));
         } else if (key === "agent") {
             prefs.load().catch(e => console.error("[Neo Studio] agent prefs load failed:", e));
-        } else if (logTimer) {
-            clearInterval(logTimer);
-            logTimer = null;
+        } else if (key === "pair") {
+            pairPanel.refresh();   // 二维码倒计时要跟着秒走，离开这栏就停轮询
+        } else {
+            pairPanel.stop();
+            if (logTimer) {
+                clearInterval(logTimer);
+                logTimer = null;
+            }
         }
     };
     settingsShow = showSection;
