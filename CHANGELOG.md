@@ -9,7 +9,9 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   `/neo-studio/pair`, and the page hands back the `http://<LAN IP>:<port>/neo-studio` entry - nothing is installed on
   the phone. The token is valid 5 minutes, the panel counts it down, the QR regenerates at zero, and "refresh now"
   rotates it on demand; the panel is reachable from the LAN-listening hint too. With LAN listening off the panel names
-  that setting instead of showing a code that could only fail. The QR is drawn by a self-contained encoder
+  that setting instead of showing a code that could only fail, and the copy box and refresh button are hidden in every
+  state where they could not work - they come back when there is a link to copy, or when a refresh is what produces one.
+  The QR is drawn by a self-contained encoder
   (`studio/web/js/core/qrcode-lite.js`, inline SVG, no dependency), the pair page and token check answer LAN hosts only,
   and every pair reply is `Cache-Control: no-store`. Covered by `app/tests/test_mobile_pair.py`,
   `MobilePairServiceTests` in `app/tests/test_studio_server.py`, `studio/tests/js/qrcode-lite.test.mjs` (round-trip

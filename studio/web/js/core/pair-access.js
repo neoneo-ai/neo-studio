@@ -90,23 +90,21 @@ export function createPairPanel({ api, t, tf, toast }) {
 
     function renderInfo(info) {
         if (!info || !info.success) {
-            qrBox.innerHTML = "";
-            linkIn.value = "";
+            show({ qr: false, link: false, refresh: false });
             status.textContent = t("桌面端服务未运行：手机连接只在 Neo Studio 桌面端窗口里可用。");
             return;
         }
         if (!info.lan_open) {
-            qrBox.innerHTML = "";
-            linkIn.value = "";
+            show({ qr: false, link: false, refresh: false });
             status.textContent = t("未放开局域网监听，手机连不到这台电脑。到「启动设置 → 局域网监听」选一个网卡地址并保存重启后，这里才会出二维码。");
             return;
         }
         if (!info.url) {
-            qrBox.innerHTML = "";
-            linkIn.value = "";
+            show({ qr: false, link: false, refresh: true });
             status.textContent = t("还没拿到本机局域网地址：连上 WiFi 或插好网线后点「立即刷新二维码」。");
             return;
         }
+        show({ qr: true, link: true, refresh: true });
         qrBox.innerHTML = qrSvg(info.url);
         linkIn.value = info.url;
         seconds = info.seconds_left || 0;
@@ -115,13 +113,21 @@ export function createPairPanel({ api, t, tf, toast }) {
             : t("二维码已过期，点「立即刷新二维码」换一张。");
     }
 
+    /** 用 native hidden 收起当前用不了的控件：复制与刷新在没有可复制内容时点了只会失败。 */
+    function show({ qr, link, refresh }) {
+        qrBox.hidden = !qr;
+        linkRow.hidden = !link;
+        refreshBtn.hidden = !refresh;
+        if (!link) linkIn.value = "";
+        if (!qr) qrBox.innerHTML = "";
+    }
+
     async function poll() {
         try {
             const res = await api.fetchApi("/neo-studio/pair/info");
             renderInfo(await res.json());
         } catch {
-            qrBox.innerHTML = "";
-            linkIn.value = "";
+            show({ qr: false, link: false, refresh: false });
             status.textContent = t("读不到桌面端服务的配对信息：手机连接只在 Neo Studio 桌面端窗口里可用。");
         }
     }

@@ -687,6 +687,8 @@ body {
 .ns-pair-url { flex: 1; min-width: 0; font-size: 12px; font-family: ui-monospace, Consolas, monospace; padding: 7px 9px; border: 1px solid #3a3a42; border-radius: 6px; background: #16161a; color: #cfcfd8; }
 .ns-pair-status { margin-top: 8px; font-size: 12px; color: #9a9aa8; line-height: 1.7; }
 .ns-pair-refresh { margin-top: 10px; }
+/* native hidden 要真收起来：上面几条给了 display，author 规则压过 UA 的 [hidden] */
+.ns-pair-qr[hidden], .ns-pair-row[hidden], .ns-pair-refresh[hidden] { display: none; }
 
 /* MCP 服务栏：面板自带滚动区，高度跟着设置页走，长工具表在面板内滚而不是把设置页撑高 */
 .ns-mcp-section { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }

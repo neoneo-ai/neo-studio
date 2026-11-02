@@ -298,7 +298,8 @@ js_api（`check_setup` / `pick_root` / `pick_python` / `start_setup`），根目
   （`app/mobile_pair.py` + `app/studio_server.py`），归属表在 `app/studio_caps.py`。配对页与 `pair/check` 只答局域网
   Host：回环、`localhost` 与公网 Host 一律 403；桌面端窗口自己读 `pair/info`，用落盘的 `pair_host` 出码。
   三条回复都带 `Cache-Control: no-store`，配对页对令牌只回「有效 / 无效」两种状态，不区分过期与令牌不符。
-- 局域网监听没放开时这一栏不摆码，直接说明去「启动设置 → 局域网监听」放开——不摆只会失败的控件。
+- 局域网监听没放开时这一栏不摆码，直接说明去「启动设置 → 局域网监听」放开——不摆只会失败的控件：链接框、复制与刷新按钮
+  一并收起，只有「靠刷新出码」那一状态留着刷新按钮。
 - 测试：`app/tests/test_mobile_pair.py`（令牌生命周期 / 局域网前缀 / Host 门 / 落盘合并）、
   `app/tests/test_studio_server.py` 的 `MobilePairServiceTests`（三条路由的 Host 门与令牌校验）、
   `studio/tests/js/qrcode-lite.test.mjs`（自带解码器往返 + 标准几何）、

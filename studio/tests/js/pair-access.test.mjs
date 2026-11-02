@@ -43,6 +43,8 @@ test("出码：二维码 SVG、配对链接与剩余秒数一起上屏", async (
     assert.match(svg.getAttribute("viewBox"), /^0 0 \d+ \d+$/, "SVG 用模块坐标 + 静区边长");
     const url = panel.el.querySelector(".ns-pair-url");
     assert.equal(url.value, OK_INFO.url);
+    assert.equal(panel.el.querySelector(".ns-pair-row").hidden, false);
+    assert.equal(panel.el.querySelector(".ns-pair-refresh").hidden, false);
     assert.match(panel.el.querySelector(".ns-pair-status").textContent, /293/);
     panel.stop();
 });
@@ -53,6 +55,8 @@ test("监听未放开：不摆二维码，直接说明去哪一项放开", async
     await flush(6);
     assert.equal(panel.el.querySelector(".ns-pair-qr").innerHTML, "");
     assert.equal(panel.el.querySelector(".ns-pair-url").value, "");
+    assert.equal(panel.el.querySelector(".ns-pair-row").hidden, true, "没有可复制的链接就不摆复制框");
+    assert.equal(panel.el.querySelector(".ns-pair-refresh").hidden, true, "监听没放开时刷新点了也不会通");
     assert.match(panel.el.querySelector(".ns-pair-status").textContent, /局域网监听/);
     panel.stop();
 });
@@ -62,6 +66,19 @@ test("桌面端服务读不到：说清只在桌面端窗口里可用", async ()
     panel.refresh();
     await flush(6);
     assert.match(panel.el.querySelector(".ns-pair-status").textContent, /桌面端/);
+    assert.equal(panel.el.querySelector(".ns-pair-row").hidden, true);
+    assert.equal(panel.el.querySelector(".ns-pair-refresh").hidden, true);
+    panel.stop();
+});
+
+test("监听放开但还没有局域网地址：留刷新按钮，收掉链接框", async () => {
+    const { panel } = mountPanel({ ...OK_INFO, url: "" });
+    panel.refresh();
+    await flush(6);
+    assert.equal(panel.el.querySelector(".ns-pair-qr").innerHTML, "");
+    assert.equal(panel.el.querySelector(".ns-pair-row").hidden, true);
+    assert.equal(panel.el.querySelector(".ns-pair-refresh").hidden, false, "这一状态就是靠刷新出码的");
+    assert.match(panel.el.querySelector(".ns-pair-status").textContent, /立即刷新二维码/);
     panel.stop();
 });
 
@@ -103,6 +120,23 @@ test("切走 tab：停掉轮询，不留后台定时器", async () => {
     await flush(40);
     const after = fetchLog.filter((f) => f.path === "/neo-studio/pair/info").length;
     assert.equal(after, before, "停掉之后不能再有轮询");
+});
+
+test("样式表里 native hidden 真能收起控件：author 的 display 规则不能压过它", async () => {
+    const css = fs.readFileSync(path.join(webDir, "studio", "style.css"), "utf8");
+    const { panel } = mountPanel({ ...OK_INFO, lan_open: false });
+    const style = document.createElement("style");
+    style.textContent = css;
+    document.head.appendChild(style);
+    panel.refresh();
+    await flush(6);
+    assert.equal(getComputedStyle(panel.el.querySelector(".ns-pair-row")).display, "none",
+                 "链接行收起后浏览器里要真的不可见");
+    assert.equal(getComputedStyle(panel.el.querySelector(".ns-pair-refresh")).display, "none");
+    panel.renderInfo(OK_INFO);
+    assert.equal(getComputedStyle(panel.el.querySelector(".ns-pair-row")).display, "flex",
+                 "可用状态要把链接行放回来");
+    panel.stop();
 });
 
 test("配对页：把令牌交给 pair/check 验，成功后给出 Studio 入口", () => {

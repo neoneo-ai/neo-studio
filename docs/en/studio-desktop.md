@@ -417,7 +417,8 @@ startable once the root is filled in.
   `Cache-Control: no-store`, and the pair page reports only "valid / invalid" - an expired token and a wrong token
   read the same.
 - With LAN listening off the panel shows no QR and names the setting to enable - a control that cannot work is not
-  shipped.
+  shipped: the link box, the copy button and the refresh button collapse together, and only the "a refresh is what
+  produces the code" state keeps the refresh button.
 - Tests: `app/tests/test_mobile_pair.py` (token lifecycle / LAN prefixes / host gate / merge-only save),
   `MobilePairServiceTests` in `app/tests/test_studio_server.py` (the host gate and token checks on the three routes),
   `studio/tests/js/qrcode-lite.test.mjs` (round-trip through its own decoder + spec geometry),
