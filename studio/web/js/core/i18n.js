@@ -329,6 +329,10 @@ const EN = {
     "日志": "Log",
     "启动设置": "Launcher Settings",
     "关于": "About",
+    "启动日志": "Startup Log",
+    "ComfyUI 位置": "ComfyUI location",
+    "网络与端口": "Network & port",
+    "桌面窗口": "Desktop window",
     // LLM 设置表单（表单里这几项原本是硬编码英文，中文界面夹英文）
     "LLM 服务商": "LLM Provider",
     "为 AI 功能选择服务商": "Choose a provider for AI features",
@@ -347,6 +351,17 @@ const EN = {
     "已复制选中内容（{n} 行）": "Copied the selection ({n} lines)",
     "日志为空": "The log is empty",
     "复制失败：{msg}": "Copy failed: {msg}",
+    // 启动设置顶栏的启停行：内核就绪后第三枚一键打开这一路 ComfyUI 的地址
+    "打开 ComfyUI": "Open ComfyUI",
+    "在浏览器打开 {url}": "Open {url} in your browser",
+    // 日志页的来源分块与筛选：桌面端里内核那块与桌面端那块拼在一起（按钮只给短标签）
+    "按来源筛选日志": "Filter by source",
+    "桌面端": "Desktop",
+    "内核": "Kernel",
+    "Neo Studio 桌面端": "Neo Studio desktop",
+    "ComfyUI 内核": "ComfyUI kernel",
+    "只看 Neo Studio 桌面端日志": "Desktop trace only",
+    "只看 ComfyUI 内核日志": "Kernel console only",
     // 桌面端：启动设置
     "ComfyUI 根目录": "ComfyUI root folder",
     "python.exe 路径": "python.exe path",

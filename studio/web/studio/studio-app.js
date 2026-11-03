@@ -1336,6 +1336,9 @@ function createLauncherPanel() {
     const kernelState = $el("div", { className: "ns-kernel-state" });
     const startBtn = $el("button", { className: "ns-btn ns-kernel-start", textContent: t("▶ 启动内核") });
     const stopBtn = $el("button", { className: "ns-btn ns-kernel-stop", textContent: t("■ 停止内核") });
+    // 一键打开这一路 ComfyUI 的地址：无边框窗口里没有新标签可开，点了交桌面端的桥开系统浏览器
+    const openBtn = $el("button", { className: "ns-btn ns-kernel-open", textContent: t("打开 ComfyUI") });
+    let kernelUrl = "";
     // 标签旁的 ⓘ：悬停给出前提条件与生效方式 —— 面板里这几项的规矩各不相同（保存并重启 / 重启窗口 / 归远端管）
     const TIPS = {
         root: "ComfyUI 安装目录，要有 main.py。\n"
@@ -1506,7 +1509,7 @@ function createLauncherPanel() {
     portIn.addEventListener("input", renderLanHint);
     remoteIn.addEventListener("input", renderLanHint);
 
-    // 内核启停在面板顶部：状态一行 + 启动 / 停止两枚按钮，此刻做不了的那枚禁用
+    // 内核启停在面板顶部：状态一行 + 启动 / 停止 / 打开地址三枚按钮，此刻做不了的那枚禁用、上不了页面的收起
     // 内核状态行：远程模式没有本机端口 / 谁启动 / PID 可报，只报远端地址；停止内核管不到远端进程，禁用
     function renderKernel(s) {
         const booting = (userStarting || s.starting) && !s.ready;
@@ -1519,10 +1522,15 @@ function createLauncherPanel() {
         startBtn.textContent = booting ? t("启动中…") : (s.remote ? t("重连远端") : t("▶ 启动内核"));
         startBtn.disabled = booting || s.running;
         stopBtn.disabled = booting || !s.running || !!s.remote;
+        // 地址取桌面端报的那一份：本机端口被占用时它会换到下一个空闲端口，配置里那个端口不一定在听
+        kernelUrl = s.remote || `http://127.0.0.1:${s.port || 8188}`;
+        openBtn.title = tf("在浏览器打开 {url}", { url: kernelUrl });
+        openBtn.style.display = running ? "" : "none";   // 端口没人在听时打开就是浏览器报错页
     }
     onComfyState(renderKernel);
     startBtn.addEventListener("click", () => { startBtn.disabled = true; startKernel(); });
     stopBtn.addEventListener("click", () => { stopBtn.disabled = true; stopKernel(); });
+    openBtn.addEventListener("click", () => openExternalUrl(kernelUrl));
 
     const framelessRow = row(t("无边框窗口"), t(TIPS.frameless), framelessIn);
     const devRow = row(t("开发模式"), t(TIPS.dev), devIn);
@@ -1531,14 +1539,19 @@ function createLauncherPanel() {
         $el("h3", { textContent: t("启动设置") }),
         $el("div", { className: "ns-kernel" }, [
             kernelState,
-            $el("div", { className: "ns-kernel-actions" }, [startBtn, stopBtn]),
+            $el("div", { className: "ns-kernel-actions" }, [startBtn, stopBtn, openBtn]),
         ]),
         status,
+        // 栏内九行分三类：这台机器上的 ComfyUI 在哪、这个端口谁连得到、桌面窗口自己的样子。平铺时「局域网监听」与「远程 ComfyUI」
+        // 看不出是一回事，无边框 / 开发模式又混在 ComfyUI 设置里。启停与状态行始终在顶部，保存按钮管前三类
+        $el("div", { className: "ns-launch-group", textContent: t("ComfyUI 位置") }),
         rootRow,
         pyRow,
+        $el("div", { className: "ns-launch-group", textContent: t("网络与端口") }),
         portRow,
         listenRow,
         remoteRow,
+        $el("div", { className: "ns-launch-group", textContent: t("桌面窗口") }),
         framelessRow,
         devRow,
         $el("div", { className: "ns-launch-actions" }, [applyBtn, depsBtn, fixBtn]),
@@ -1573,10 +1586,13 @@ function buildSettings(el) {
     const videoForm = createVideoGenSettingsForm();
     const llmForm = createModelConfigForm();
 
-    // 日志面板：ComfyUI 控制台环形缓冲（app.logger 300 条），tab 激活时轮询
+    // 日志面板：tab 激活时轮询。桌面端里两份日志分块 —— 内核那块是桌面端拉起 ComfyUI 的输出，
+    // 桌面端那块是自身的启动 / 跳转 / 前端错误轨迹；浏览器标签页只有内核那一块，来源筛选不上页面
     const logBody = $el("pre", { className: "ns-log" });
     let logTimer = null;
     let logStick = true;   // 贴底才自动滚；用户往上翻看时停住，翻回底部恢复
+    let logEntries = [];   // 最近一轮的条目：切来源只重渲染这一份，不为此多发一次请求
+    let logSrc = "all";
 
     const logAtBottom = () =>
         logBody.scrollHeight - logBody.scrollTop - logBody.clientHeight <= 40;
@@ -1588,12 +1604,66 @@ function buildSettings(el) {
         return !!sel && !sel.isCollapsed && logBody.contains(sel.anchorNode);
     };
 
+    // 按钮只给短标签（390 宽的手机上整行放不下全称），完整来源名留在鼠标提示与块标题里
+    const SRC_BTN = { all: "全部", studio: "桌面端", comfy: "内核" };
+    const SRC_TITLE = {
+        all: "按来源筛选日志",
+        studio: "只看 Neo Studio 桌面端日志",
+        comfy: "只看 ComfyUI 内核日志",
+    };
+    const SRC_HEAD = { studio: "Neo Studio 桌面端", comfy: "ComfyUI 内核" };
+    const srcBtns = {};
+    const logSrcBar = $el("div", { className: "ns-log-srcs" });
+    for (const key of ["all", "studio", "comfy"]) {
+        srcBtns[key] = $el("button", {
+            className: "ns-btn ns-log-src-btn",
+            title: t(SRC_TITLE[key]),
+            textContent: t(SRC_BTN[key]),
+            onclick: () => {
+                logSrc = key;
+                paintLog();
+                paintSrcBar();
+                if (logStick) logBody.scrollTop = logBody.scrollHeight;
+            },
+        });
+        logSrcBar.appendChild(srcBtns[key]);
+    }
+
+    // 只有一块时不分块：浏览器标签页里没有桌面端那一路，块标题与「桌面端」筛选钮都是多余控件
+    const logSplit = () => logEntries.some((e) => e.src === "studio");
+
+    function paintSrcBar() {
+        const split = logSplit();
+        for (const key of Object.keys(srcBtns)) {
+            srcBtns[key].classList.toggle("is-on", key === logSrc);
+            srcBtns[key].style.display = key === "studio" && !split ? "none" : "";
+        }
+    }
+
+    function paintLog() {
+        // 条目是原始 stdout，自带换行与 ANSI 色码；色码在网页里是乱码，剥掉
+        const split = logSplit();
+        const nodes = [];
+        let shown = null;
+        for (const e of logEntries) {
+            const src = e.src || "comfy";
+            if (logSrc !== "all" && src !== logSrc) continue;
+            if (split && src !== shown) {
+                nodes.push($el("span", { className: "ns-log-src", textContent: `—— ${t(SRC_HEAD[src])} ——\n` }));
+                shown = src;
+            }
+            nodes.push(String(e.m).replace(/\x1b\[[0-9;]*m/g, ""));
+        }
+        logBody.replaceChildren(...nodes);
+    }
+
     async function refreshLog() {
         if (logSelected()) return;
         try {
             const data = await (await api.fetchApi("/neo_studio/log")).json();
-            // 条目是原始 stdout，自带换行与 ANSI 色码；色码在网页里是乱码，剥掉
-            logBody.textContent = (data.entries || []).map(e => String(e.m).replace(/\x1b\[[0-9;]*m/g, "")).join("");
+            logEntries = data.entries || [];
+            paintLog();
+            paintSrcBar();
             if (logStick) logBody.scrollTop = logBody.scrollHeight;
         } catch { /* ComfyUI 未就绪时保留上次内容 */ }
     }
@@ -1624,8 +1694,6 @@ function buildSettings(el) {
         const sel = window.getSelection();
         logSelText = sel && !sel.isCollapsed && logBody.contains(sel.anchorNode) ? sel.toString() : "";
     });
-
-    // tab 顺序：LLM 设置 → 生图设置 → 生视频设置 → 智能体偏好 → 界面语言 → 日志 → 启动设置 → 关于；每个 tab 只显示对应设置区
     const launcher = createLauncherPanel();
     const mcp = createMcpPanel();
     const pairPanel = createPairPanel({ api, t, tf, toast });
@@ -1635,17 +1703,20 @@ function buildSettings(el) {
     agentPrefs = prefs;   // 深链带预填参数进来时，route() 要把焦点链那份值交给这张表单
 
     const section = (title) => $el("h3", { textContent: t(title) });
+    // 左栏自上而下四段：启动与连接（启动设置 / 启动日志 / 手机连接）· 生成（LLM / 生图 / 生视频）·
+    // 智能体（偏好 / MCP）· 语言与关于（界面语言 / 关于）。十项平铺时找「生图默认值」要逐条扫，
+    // 段之间只落一条无文字的细线，界面上的行数就等于设定项的数目；tab 的 key 与深链 #/settings?tab=.. 全不变
     const sections = [
-        { key: "llm", label: t("LLM 设置"), body: $el("div", { className: "ns-settings-section" }, [section("LLM 设置"), llmForm.el]) },
-        { key: "gen", label: t("生图设置"), body: $el("div", { className: "ns-settings-section" }, [section("生图设置"), genForm.el]) },
-        { key: "video", label: t("生视频设置"), body: $el("div", { className: "ns-settings-section" }, [section("生视频设置"), videoForm.el]) },
-        { key: "agent", label: t("智能体偏好"), body: $el("div", { className: "ns-settings-section" }, [section("智能体偏好"), prefs.el]) },
-        { key: "mcp", label: t("MCP 服务"), body: $el("div", { className: "ns-settings-section ns-mcp-section" }, [section("MCP 服务"), mcp.root]) },
-        { key: "lang", label: t("界面语言"), body: $el("div", { className: "ns-settings-section" }, [section("界面语言"), createLangPanel()]) },
-        { key: "log", label: t("日志"), body: $el("div", { className: "ns-settings-section ns-log-section" }, [$el("div", { className: "ns-log-head" }, [section("日志"), copyLogBtn]), logBody]) },
-        { key: "pair", label: t("手机连接"), body: pairPanel.el },
-        { key: "launch", label: t("启动设置"), body: launcher.el },
-        { key: "about", label: t("关于"), body: $el("div", { className: "ns-settings-section ns-about-section" }, [section("关于"), $el("div", { className: "ns-about-version", id: "ns-about-version", textContent: versionText() }), $el("div", { className: "ns-about-rows", id: "ns-about-rows" })]) },
+        { key: "launch", group: "startup", label: t("启动设置"), body: launcher.el },
+        { key: "log", group: "startup", label: t("启动日志"), body: $el("div", { className: "ns-settings-section ns-log-section" }, [$el("div", { className: "ns-log-head" }, [section("启动日志"), logSrcBar, copyLogBtn]), logBody]) },
+        { key: "pair", group: "startup", label: t("手机连接"), body: pairPanel.el },
+        { key: "llm", group: "generate", label: t("LLM 设置"), body: $el("div", { className: "ns-settings-section" }, [section("LLM 设置"), llmForm.el]) },
+        { key: "gen", group: "generate", label: t("生图设置"), body: $el("div", { className: "ns-settings-section" }, [section("生图设置"), genForm.el]) },
+        { key: "video", group: "generate", label: t("生视频设置"), body: $el("div", { className: "ns-settings-section" }, [section("生视频设置"), videoForm.el]) },
+        { key: "agent", group: "agent", label: t("智能体偏好"), body: $el("div", { className: "ns-settings-section" }, [section("智能体偏好"), prefs.el]) },
+        { key: "mcp", group: "agent", label: t("MCP 服务"), body: $el("div", { className: "ns-settings-section ns-mcp-section" }, [section("MCP 服务"), mcp.root]) },
+        { key: "lang", group: "ui", label: t("界面语言"), body: $el("div", { className: "ns-settings-section" }, [section("界面语言"), createLangPanel()]) },
+        { key: "about", group: "ui", label: t("关于"), body: $el("div", { className: "ns-settings-section ns-about-section" }, [section("关于"), $el("div", { className: "ns-about-version", id: "ns-about-version", textContent: versionText() }), $el("div", { className: "ns-about-rows", id: "ns-about-rows" })]) },
     ];
 
     const tabs = $el("div", { className: "ns-settings-tabs" });
@@ -1672,7 +1743,12 @@ function buildSettings(el) {
         }
     };
     settingsShow = showSection;
+    let lastGroup = null;
     for (const s of sections) {
+        if (s.group !== lastGroup) {   // 段间线与 tab 平级放在左栏里：测试与深链都按 [data-key] 取 tab，线只做切段
+            if (tabs.children.length) tabs.appendChild($el("div", { className: "ns-settings-sep" }));
+            lastGroup = s.group;   // 首组顶部不落线，摘掉整组 tab（浏览器形态的启动设置）之后条首不悬空线
+        }
         const btn = $el("button", { className: "ns-settings-tab", textContent: s.label });
         btn.dataset.key = s.key;
         btn.addEventListener("click", () => showSection(s.key));

@@ -5,8 +5,9 @@
 localStorage 落在 data/studio_profile
 （private_mode=False），_blank 链接在桌面端窗口内导航（主画布交接与返回 Studio 都不出窗口），blob 下载放行。
 全程无控制台窗口：neo-studio-app.vbs 双击用 pythonw 启动，提示走系统消息框，排查看
-data/studio_desktop.log；ComfyUI 日志在 Studio「设置 → 日志」看（/neo_studio/log 读 app.logger 环形缓冲），
-ComfyUI 起不来时看 data/comfy_run.log（桌面端拉起它的完整 stdout/stderr，端口冲突与导入报错都在里面）。
+data/studio_desktop.log（桌面端自身轨迹，Studio「设置 → 启动日志」里那一块就是它）；ComfyUI 的
+控制台在同一块面板里（内核在跑时读 app.logger 环形缓冲，桌面端拉起的输出落 data/comfy_run.log，
+端口冲突与导入报错都在里面）。
 窗口先出（引导页 / 启动页），自检、桌面端服务（app/studio_server.py）、拉起 ComfyUI 都在后台线程
 走完：窗口从头到尾停在桌面端服务这一页上 —— 内核的接口由桌面端口转发过去（app/studio_caps.py 的
 forwardable），就绪与否由 /neo_studio/version 的 kernel_ready 报给页面翻面，全程没有整页跳转，
@@ -2022,7 +2023,7 @@ def main() -> int:
                 "listen_get": lambda: launcher.get("listen", ""),
                 "save": lambda: persist_pair_state(launcher)}
     server = DesktopServer(lambda: build_app(boot["root"], boot["serve_dir"], flags, launcher,
-                                           launcher_api, COMFY_LOG, data_root=STATE,
+                                           launcher_api, COMFY_LOG, DESKTOP_LOG, data_root=STATE,
                                            mcp_manager=mcp,
                                            kernel_state=lambda: desktop.comfy_state(),
                                            pair_ctx=pair_ctx, log=log_line),

@@ -895,6 +895,13 @@
     overflow-y: auto;
 }
 
+/* 顶栏 🅝 设置弹窗左栏的段间线：生成三项与界面语言之间一条细线，线里不写字，tab 的 [data-key] 选择器不受影响 */
+.neo-settings-sep {
+    height: 1px;
+    margin: 4px 8px;
+    background: #2c2c33;
+}
+
 .neo-settings-tab {
     text-align: left;
     padding: 7px 10px;

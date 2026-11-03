@@ -116,6 +116,9 @@ class _ServerCase(_RealFolderPaths):
         cls.app["userdata"] = cls.tmpdir / "neo_gallery_data.json"
         cls.app["comfy_log"] = cls.tmpdir / "comfy_run.log"
         cls.app["comfy_log"].write_text("desktop log line 1\ndesktop log line 2\n", encoding="utf-8")
+        cls.app["desktop_log"] = cls.tmpdir / "studio_desktop.log"
+        cls.app["desktop_log"].write_text("[12:00:01] desktop service port=8083\n"
+                                          "[12:00:02] drag 37 steps\n", encoding="utf-8")
         # MCP 注册表落在用例自己的临时目录：注册表写入用例不能碰真实数据根
         cls.mcp_config = cls.tmpdir / "mcp_servers.json"
         cls.app["mcp"] = mcp_client.McpManager(cls.mcp_config)
@@ -345,12 +348,18 @@ class OfflineServiceTests(_ServerCase):
         self.assertEqual(status, 200)
         self.assertEqual(json.loads(body)["sectionStates"]["gallery_categories"]["collapsed"], True)
 
-    def test_offline_log_reads_comfy_run_log(self):
+    def test_offline_log_merges_comfy_run_and_desktop_log(self):
         status, body = self.get("/neo_studio/log")
         data = json.loads(body)
         self.assertEqual(status, 200)
         self.assertTrue(data["success"])
-        self.assertIn("desktop log line 2", "".join(e["m"] for e in data["entries"]))
+        comfy = [e for e in data["entries"] if e["src"] == "comfy"]
+        studio = [e for e in data["entries"] if e["src"] == "studio"]
+        self.assertIn("desktop log line 2", "".join(e["m"] for e in comfy))
+        self.assertIn("desktop service port=8083", "".join(e["m"] for e in studio),
+                      "桌面端自身轨迹要拼进同一块面板，启动排查不用翻文件")
+        self.assertNotIn("drag", "".join(e["m"] for e in studio), "拖动步数不进面板，别把启动轨迹顶出去")
+        self.assertEqual(data["entries"][:len(comfy)], comfy, "内核那块排在桌面端那块之前")
 
     def test_launcher_snapshot_and_apply(self):
         # 设置页读的是桌面端的启动快照；保存由桌面端校验并重启 ComfyUI

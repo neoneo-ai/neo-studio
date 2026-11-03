@@ -1579,6 +1579,20 @@
     gap: 6px;
 }
 
+/* 设置表单的分组（LLM / 生图设置共用）：组标题压在整组上方，整组显隐时标题随行一起收起 */
+.rs-form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.rs-form-group-title {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .4px;
+    color: #8f8f9a;
+}
+
 /* Base URL 折叠区：有预设端点的供应商默认收起，点标题展开改写 */
 .rs-remote-advanced {
     display: flex;

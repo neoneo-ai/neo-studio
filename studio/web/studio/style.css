@@ -675,6 +675,9 @@ body {
     width: 150px; padding: 10px 8px;
     border-right: 1px solid #2c2c33; background: #1b1b1f;
 }
+/* 左栏段间线：十项 tab 平铺时没有层级，用一条细线切段。线里不写字，界面上的行数
+   就等于设定项的数目；线与 tab 平级放进 .ns-settings-tabs，tab 的 [data-key] 选择器与深链都不受影响 */
+.ns-settings-sep { height: 1px; margin: 4px 8px; background: #2c2c33; }
 .ns-settings-tab {
     text-align: left; padding: 7px 10px;
     background: transparent; border: none; border-radius: 6px;
@@ -730,6 +733,8 @@ body {
     }
     .ns-settings-tabs::-webkit-scrollbar { display: none; }
     .ns-settings-tab { padding: 6px 10px; white-space: nowrap; }
+    /* 横滚条里的段间线退化成 1px 竖线：不撑高这一行，随条一起滚，不与 tab 抢位置 */
+    .ns-settings-sep { flex: none; width: 1px; height: auto; align-self: stretch; margin: 6px 2px; }
     .ns-settings-tab.active { box-shadow: inset 0 -2px 0 #2f6fed; }
     .ns-settings-content { padding: 10px 12px; }
     .ns-kernel { flex-wrap: wrap; gap: 8px; }
@@ -746,6 +751,7 @@ body {
 .ns-kernel-run { color: #7bc47f; }
 .ns-kernel-actions { display: flex; gap: 8px; flex: none; }
 .ns-kernel-stop:not([disabled]) { color: #ff8a9a; }
+.ns-launch-group { margin: 14px 0 6px; font-size: 11px; font-weight: 600; letter-spacing: .4px; color: #8f8f9a; }
 .ns-launch-row { display: flex; align-items: center; gap: 10px; }
 .ns-launch-row + .ns-launch-row { margin-top: 10px; }
 .ns-launch-label { font-size: 12px; color: #a9a9b6; width: 122px; flex: none; display: flex; align-items: center; gap: 6px; }
@@ -806,10 +812,14 @@ body {
 .ns-btn:disabled { opacity: 0.5; cursor: default; }
 .ns-launch-apply { background: rgba(47, 111, 237, 0.18); border-color: #2f6fed; color: #cfe0ff; }
 
-/* 日志页：ComfyUI 控制台环形缓冲，tab 激活时轮询 /neo_studio/log；日志区占满主区剩余空间 */
+/* 日志页：内核那块 + 桌面端那块，tab 激活时轮询 /neo_studio/log；日志区占满主区剩余空间 */
 .ns-log-section { flex: 1; display: flex; flex-direction: column; min-height: 0; }
-.ns-log-head { flex: none; display: flex; align-items: center; gap: 10px; }
+.ns-log-head { flex: none; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .ns-log-copy { flex: none; }
+.ns-log-srcs { flex: none; margin-left: auto; display: flex; gap: 6px; }
+.ns-log-src-btn { font-size: 11px; padding: 3px 9px; }
+.ns-log-src-btn.is-on { background: rgba(47, 111, 237, 0.18); border-color: #2f6fed; color: #cfe0ff; }
+.ns-log-src { color: #7aa2ff; }
 .ns-log {
     flex: 1;
     min-height: 0;

@@ -39,51 +39,58 @@ body
         div.rs-settings-info
           div.rs-settings-title "LLM 服务商"
           div.rs-settings-desc "为 AI 功能选择服务商"
-        div.rs-config-row
-          label.rs-form-label "服务商"
-          select#rs-remote-provider.rs-form-input.rs-remote-provider
-            option <value=local selected> "加载中…"
-        div.rs-config-row
-          label.rs-form-label "API Key"
-          input#rs-remote-api-key.rs-form-input.rs-remote-api-key <type=password placeholder=本地服务可不填>
-        div.rs-config-row <display=none>
-          label.rs-form-label "本地模型目录"
-          input#rs-local-models-dir.rs-form-input.rs-local-models-dir <type=text placeholder=默认：ComfyUI/models/LLM>
-          div.rs-form-hint "供应商(可选)/模型名称/模型文件(.gguf) · 同目录 mmproj 自动匹配"
-        div#rs-model-input-wrapper.rs-config-row
-          label.rs-form-label "模型"
-          input#rs-remote-model.rs-form-input.rs-remote-model <type=text display=none>
-          div.rs-model-select-box <display=none>
-            div
-              input.rs-form-input.rs-combo-input <type=text placeholder=输入过滤或点击选择...>
-              span.rs-combo-caret "▾"
-            select#rs-remote-model-select.rs-form-input.rs-remote-model <display=none>
-          div.rs-model-select-box <display=none>
-            div
-              input.rs-form-input.rs-combo-input <type=text placeholder=输入过滤或点击选择...>
-              span.rs-combo-caret "▾"
-            select#rs-local-model-select.rs-form-input.rs-local-model-select <display=none>
-        details.rs-remote-advanced <display=none>
-          summary.rs-remote-advanced-summary "自定义端点"
-          div.rs-remote-adv-content
-            div.rs-config-row
-              label.rs-form-label "Base URL"
-              input#rs-remote-base-url.rs-form-input.rs-remote-base-url <type=text placeholder=Leave empty for default>
+        div.rs-form-group
+          div.rs-form-group-title "服务商与模型"
+          div.rs-config-row
+            label.rs-form-label "服务商"
+            select#rs-remote-provider.rs-form-input.rs-remote-provider
+              option <value=local selected> "加载中…"
+          div#rs-model-input-wrapper.rs-config-row
+            label.rs-form-label "模型"
+            input#rs-remote-model.rs-form-input.rs-remote-model <type=text display=none>
+            div.rs-model-select-box <display=none>
+              div
+                input.rs-form-input.rs-combo-input <type=text placeholder=输入过滤或点击选择...>
+                span.rs-combo-caret "▾"
+              select#rs-remote-model-select.rs-form-input.rs-remote-model <display=none>
+            div.rs-model-select-box <display=none>
+              div
+                input.rs-form-input.rs-combo-input <type=text placeholder=输入过滤或点击选择...>
+                span.rs-combo-caret "▾"
+              select#rs-local-model-select.rs-form-input.rs-local-model-select <display=none>
+        div.rs-form-group
+          div.rs-form-group-title "远程连接"
+          div.rs-config-row
+            label.rs-form-label "API Key"
+            input#rs-remote-api-key.rs-form-input.rs-remote-api-key <type=password placeholder=本地服务可不填>
+          details.rs-remote-advanced <display=none>
+            summary.rs-remote-advanced-summary "自定义端点"
+            div.rs-remote-adv-content
+              div.rs-config-row
+                label.rs-form-label "Base URL"
+                input#rs-remote-base-url.rs-form-input.rs-remote-base-url <type=text placeholder=Leave empty for default>
+        div.rs-form-group <display=none>
+          div.rs-form-group-title "本地模型"
+          div.rs-config-row <display=none>
+            label.rs-form-label "本地模型目录"
+            input#rs-local-models-dir.rs-form-input.rs-local-models-dir <type=text placeholder=默认：ComfyUI/models/LLM>
+            div.rs-form-hint "供应商(可选)/模型名称/模型文件(.gguf) · 同目录 mmproj 自动匹配"
+          div.rs-config-row.rs-local-unload <display=none>
+            div.rs-local-unload-line
+              input#rs-local-auto-unload.rs-form-checkbox <type=checkbox val="on">
+              label.rs-form-label "本节点执行完自动卸载本地模型"
+            div.rs-form-hint
+          div.rs-config-row.rs-local-unload <display=none>
+            div.rs-local-unload-line
+              input#rs-native-auto-unload.rs-form-checkbox <type=checkbox val="on">
+              label.rs-form-label "本节点执行完自动卸载原生模型"
         div.rs-provider-save-status <display=none>
-        div.rs-config-row.rs-local-unload <display=none>
-          div.rs-local-unload-line
-            input#rs-local-auto-unload.rs-form-checkbox <type=checkbox val="on">
-            label.rs-form-label "本节点执行完自动卸载本地模型"
-          div.rs-form-hint
-        div.rs-config-row.rs-local-unload <display=none>
-          div.rs-local-unload-line
-            input#rs-native-auto-unload.rs-form-checkbox <type=checkbox val="on">
-            label.rs-form-label "本节点执行完自动卸载原生模型"
         div.llm-btn-row
           button.rs-gen-test <type=button> "测试连接"
           button.rs-gen-save <type=button> "保存设置"
     div.rs-auto-panel <display=none>
       div.rs-gen-settings
+        div.rs-form-group-title "模型"
         div.rs-config-row
           label.rs-form-label "生图模型"
           div.rs-model-select-box <display=none>
@@ -105,6 +112,7 @@ body
               input.rs-form-input.rs-combo-input <type=text placeholder=输入过滤或点击选择...>
               span.rs-combo-caret "▾"
             select
+        div.rs-form-group-title "输出"
         div.rs-config-row
           label.rs-form-label "目标像素数 (MP)"
           input.rs-form-input <type=number title=Qwen Image 2.1 的工作分辨率：扩图补边画布缩放到该像素数；画廊编辑目标超过它时等比封顶 val="1.5">

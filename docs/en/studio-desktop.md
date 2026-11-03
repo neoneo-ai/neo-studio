@@ -283,6 +283,13 @@ is picked; landing on the guide does not fetch the skill list.
   `/neo_studio/version` probe (that instance has not loaded the plugin yet and is still importing custom nodes) also
   only attaches — a second instance is never started on a neighbouring port, and the "Startup settings → Start
   kernel" button only attaches as well.
+- The start / stop row on top of "Settings → Startup settings" carries a third button, "Open ComfyUI": it shows up once the
+  kernel is ready and hands that kernel's address to the system default browser (a frameless window has no new tab to open, so
+  the link goes through the js_api `open_url` and the window itself never navigates). The address is the one `comfy_state`
+  reports — with the local port taken the desktop starts ComfyUI on the next free port, and the port in the startup settings is
+  not necessarily the one listening; in remote mode it opens the remote address from the startup settings. With nobody listening
+  on the port (stopped / starting) the button is not on the page: opening a ComfyUI that cannot be reached is just an error page
+  in a browser.
 
 ## Guide page (first-time setup)
 
@@ -369,6 +376,27 @@ startable once the root is filled in.
 - The reload entry does not depend on dev mode: the Studio page takes over F5 / Ctrl+F5 / Ctrl+R itself
   (`initReloadHotkey` in `studio/web/studio/studio-app.js`), so one keypress after a frontend hot-sync
   (`tools/watch_web.py`) loads the new code.
+
+## Settings page groups
+
+- The ten entries in the settings sidebar run top-down in four blocks: `Startup & Connection` (Startup Settings /
+  Startup Log / Phone Pairing), `Generate` (LLM Settings / Image Gen Settings / Video Gen Settings), `Agent` (Agent
+  Preferences / MCP Server) and `Language & About` (Interface Language / About). Between the blocks there is only a
+  text-free hairline `.ns-settings-sep`, a sibling of the tabs inside `.ns-settings-tabs` — the line carries no label, so
+  the sidebar shows exactly one row per setting. The tab `data-key`s and the `#/settings?tab=..` deep links are
+  unchanged, and when a tab is dropped the lines follow the tabs that remain: in a browser tab, where there is no
+  Startup Settings panel, only that one tab is removed and no line is left hanging at the top of the strip.
+- The long panels keep their titled sections: Startup Settings splits into `ComfyUI location` (root / interpreter),
+  `Network & port` (port / LAN listening / remote ComfyUI) and `Desktop window` (frameless window / dev mode), with the
+  start / stop buttons and the state line kept above the sections; LLM Settings splits into `Provider & model`,
+  `Connection` (API Key and custom endpoint) and `Local model` (models folder and the two auto-unload checks), where the
+  last two sections hide their heading together with the rows (`.rs-form-group`), so switching to Local GGUF leaves no
+  heading over an empty section; Image Gen Settings splits into `Model` (model / Text Encoder / VAE) and `Output`
+  (target pixels / output prefix).
+- The 🅝 settings popup in the ComfyUI top bar uses the same order: the three generate tabs (LLM Settings / Image
+  Defaults / Video Models) first, Interface Language last, with one `.neo-settings-sep` between them.
+- Block names are not UI copy — they only become the hairline; tab names and in-panel section labels are Chinese-source
+  keys in `studio/web/js/core/i18n.js`, and the shared forms (LLM / image / video) keep Chinese.
 
 ## Info notes in Startup settings
 
@@ -562,9 +590,17 @@ no views mounted and the header status slot stuck at `hidden`.
   page (the `[web]` prefix, sent through
   the js_api `log()`), keeping only the tail 200KB.
 - `data/comfy_run.log`: the full stdout / stderr of the ComfyUI the desktop launched (port conflicts and import
-  errors land here; read by Studio "Settings → Logs").
+  errors land here).
+- Studio "Settings → Startup log" stitches those two into one panel (the desktop-owned `GET /neo_studio/log`, entries
+  carry `src`): the kernel block first, the desktop block after it, and the source filter shows or hides a whole block
+  by `src`. Drag-step lines stay out of the panel — one line per drag would push the startup lines off the tail — and
+  stay in the file. A browser tab has no desktop trace, so the panel keeps the single kernel block with no headings and
+  no desktop filter.
 
 ## Related tests
 
+The settings-page grouping is covered by `studio-settings-groups.test.mjs`, the startup-log source blocks and the
+filter by `studio-log-panel.test.mjs`, the "Open ComfyUI" link on the kernel row by `studio-kernel-open.test.mjs`.
 `app/tests/test_studio_desktop.py`, `app/tests/test_studio_server.py` and `studio-app.e2e.mjs` —
+the narrow-screen and touch layout invariants by `studio-mobile-layout.e2e.mjs` (the 390×844 and 1440×900 viewports) —
 see [testing.md](testing.md).

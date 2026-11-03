@@ -1104,6 +1104,12 @@ export function createVideoModelConfigSection() {
  *  张数 / 长边尺寸 / 默认比例 / LoRA 只在每技能设置里配置，Enhance Prompt 开关在技能正文（System Prompt Content）旁。 */
 export function createImageGenSettingsForm() {
     const form = mkEl("div", "rs-gen-settings");
+    // 设置表单的分组标题（LLM / 生图设置共用一套样式 .rs-form-group-title）
+    const groupTitle = (labelText) => {
+        const el = mkEl("div", "rs-form-group-title");
+        el.textContent = t(labelText);
+        return el;
+    };
 
     // 三个模型选择行：空值 = 按名称线索自动挑选（后端 suggest_model），用户可显式指定
     const makeComboRow = (labelText) => {
@@ -1147,7 +1153,9 @@ export function createImageGenSettingsForm() {
     const saveRow = mkEl("div", "rs-config-row");
     saveRow.appendChild(saveBtn);
 
-    form.append(modelCtl.row, encoderCtl.row, vaeCtl.row, mpCtl.row, prefixRow, saveRow);
+    // 归类：三条模型行管「用哪个模型」，目标像素数与输出前缀管「产出落在哪」，平铺六行时分不出来
+    form.append(groupTitle("模型"), modelCtl.row, encoderCtl.row, vaeCtl.row,
+                groupTitle("输出"), mpCtl.row, prefixRow, saveRow);
 
     // 加载窗口标记：load() 异步回填期间（await 网络请求）不算 dirty，避免初始化误判
     let loading = false;

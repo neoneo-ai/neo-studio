@@ -196,6 +196,10 @@ ComfyUI 没就绪时点它只会得到「页面不存在」。`openSkillWorkflow
   那路）就停问。
 - 启动桌面端时「有没有 ComfyUI」只看端口有没有人监听：`/neo_studio/version` 探不到（那路插件没加载、还在导入自定义
   节点）也只附着，不在旁边端口拉第二路，启动设置的「启动内核」按钮同样只附着。
+- 「设置 → 启动设置」顶栏的启停行带第三枚「打开 ComfyUI」：内核就绪后出现，点了把这一路的地址交系统默认浏览器
+  （无边框窗口里没有新标签可开，走 js_api 的 `open_url`，窗口自己不动）。地址取 `comfy_state` 报的那一份——本机端口
+  被占用时桌面端换到下一个空闲端口，启动设置里那个端口不一定在听；远程模式开的是启动设置里那台远端地址。端口上没人
+  在听（已停止 / 启动中）时这枚不上页面：打开一台打不开的 ComfyUI 只是给浏览器一张报错页。
 
 ## 引导页（首次设置）
 
@@ -258,6 +262,22 @@ js_api（`check_setup` / `pick_root` / `pick_python` / `start_setup`），根目
   Shown 之后由 `enable_copy_keys` 补开（见「划词复制」）。
 - 刷新入口不依赖开发模式：Studio 页自己接管 F5 / Ctrl+F5 / Ctrl+R（`studio/web/studio/studio-app.js` 的
   `initReloadHotkey`），前端热同步（`tools/watch_web.py`）之后按一次就是新代码。
+
+## 设置页分组
+
+- 设置页左栏十项自上而下按 `启动与连接`（启动设置 / 启动日志 / 手机连接）· `生成`（LLM 设置 / 生图设置 / 生视频设置）·
+  `智能体`（智能体偏好 / MCP 服务）· `语言与关于`（界面语言 / 关于）四段排下来，段与段之间只有一条无文字的分割线
+  `.ns-settings-sep`（与 tab 平级挂在 `.ns-settings-tabs` 里，线里不写字，界面上的行数就等于设定项的数目）。
+  tab 的 `data-key` 与深链 `#/settings?tab=..` 全不变；摘掉一枚 tab 时线跟着剩下的内容走，浏览器标签页没有启动设置面板
+  就只摘那一枚 tab，条首不悬一条多余的线。
+- 栏内长表单的小标题分区不变：启动设置分 `ComfyUI 位置`（根目录 / 解释器）、`网络与端口`（端口 / 局域网监听 / 远程 ComfyUI）、
+  `桌面窗口`（无边框窗口 / 开发模式），启停与状态行始终在面板顶部；LLM 设置分 `服务商与模型` / `远程连接`（API Key 与
+  自定义端点）/ `本地模型`（模型目录与两个自动卸载），后两组连小标题一起随整组显隐收起，切到本地 GGUF 时不空挂在没内容的
+  组上（`.rs-form-group`）；生图设置分 `模型`（生图模型 / Text Encoder / VAE）与 `输出`（目标像素数 / 输出前缀）。
+- 顶栏 🅝 设置弹窗左栏是同一套顺序：`生成` 三项（LLM 设置 / 生图默认设置 / 生视频模型）在前，`界面语言` 在后，中间一条
+  `.neo-settings-sep`。
+- 段名不是界面文案，只落成分割线；tab 名与栏内小标题是 `studio/web/js/core/i18n.js` 的中文原文 key，
+  共享表单（LLM / 生图 / 生视频）保持中文原文。
 
 ## 启动设置的 ⓘ 说明
 
@@ -400,10 +420,15 @@ ES 模块图后，链接错误发生在 `studio-app.js` 执行之前、JS 捕获
 - `data/studio_desktop.log`：启动 / 跳转 / 关窗 / 拖动步数（`drag N steps`，0 = 按下没走出拖动阈值或左键已经不
   在），以及页面上报的
   前端未捕获错误（`[web]` 前缀，页面走 js_api 的 `log()`），只留尾部 200KB。
-- `data/comfy_run.log`：桌面端拉起 ComfyUI 的完整 stdout / stderr（端口冲突与导入报错都在里面，Studio「设置 → 日志」读它）。
+- `data/comfy_run.log`：桌面端拉起 ComfyUI 的完整 stdout / stderr（端口冲突与导入报错都在里面）。
+- Studio「设置 → 启动日志」把这两份拼在同一块面板里（桌面端自服的 `GET /neo_studio/log`，条目带 `src`）：内核那块
+  在前、桌面端那块在后，页面上的来源筛选按 `src` 整块显隐。拖动步数行不进面板——一次拖动落一行，会把启动轨迹顶出
+  尾部——文件里原样留着。浏览器标签页里没有桌面端那一路，面板只有内核那一块，块标题与「桌面端」筛选钮都不上页面。
 
 ## 相关测试
 
+设置页的分组层级在 `studio-settings-groups.test.mjs`，启动日志的来源分块与筛选在 `studio-log-panel.test.mjs`，
+启动设置顶栏的一键打开 ComfyUI 在 `studio-kernel-open.test.mjs`，
 `app/tests/test_studio_desktop.py`、`app/tests/test_studio_server.py` 与 `studio-app.e2e.mjs`，
 窄屏与触摸档的版式不变量在 `studio-mobile-layout.e2e.mjs`（390×844 与 1440×900 两个视口），
 见 [testing.md](testing.md)。

@@ -4,6 +4,35 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **Startup settings opens ComfyUI with one click.** The 设置 → 启动设置 kernel row carries a third button,
+  「打开 ComfyUI」: once the kernel is ready it sends that kernel's address to the system default browser — the
+  frameless window has no new tab to open, so the link goes through the desktop's `open_url` bridge and the window
+  stays on the page it is on. The address is the live one: with the configured port taken the desktop starts ComfyUI
+  on the next free port and the button opens that one, and in remote mode it opens the remote ComfyUI from the startup
+  settings. Stopped and starting hide the button — opening a ComfyUI nobody is listening on is only a browser error
+  page. Covered by `studio/tests/js/studio-kernel-open.test.mjs` and the remote-mode case in
+  `studio/tests/js/studio-desktop.test.mjs`.
+
+- **Startup log shows Neo Studio's own trace too.** In the desktop window, Studio 设置 → 启动日志 now carries two
+  blocks in one panel: the ComfyUI console (`data/comfy_run.log`, as before) and the desktop's own startup trace
+  (`data/studio_desktop.log` — startup state, service port, kernel ready / down, page jumps, `[web]` frontend errors),
+  each with its own heading and filtered as a whole by source (全部 / 桌面端 / 内核), so reading the
+  desktop side no longer means opening a file. Window drag-step lines stay out of the panel (one line per drag would
+  push the startup lines off the tail); the file keeps them. A browser tab has no desktop trace to show, so it keeps
+  the single kernel block with no headings and no filter. Covered by
+  `test_offline_log_merges_comfy_run_and_desktop_log` in `app/tests/test_studio_server.py`,
+  `studio/tests/js/studio-log-panel.test.mjs` and both Studio e2e log cases.
+
+- **Settings are in the same order everywhere.** The Studio settings sidebar now runs 启动与连接 (启动设置 / 启动日志 /
+  手机连接) → 生成 (LLM / 生图 / 生视频) → 智能体 (智能体偏好 / MCP 服务) → 语言与关于 (界面语言 / 关于), split by a
+  text-free hairline (`.ns-settings-sep`) instead of group headings, so the sidebar shows one row per setting. The long
+  panels are sectioned inside with their own small headings: 启动设置 into ComfyUI 位置 / 网络与端口 / 桌面窗口 (the start /
+  stop buttons stay on top), LLM 设置 into 服务商与模型 / 远程连接 / 本地模型 (the last two hide their heading together with
+  their rows, so switching to a local provider leaves no heading over an empty section), 生图设置 into 模型 / 输出. The 🅝
+  settings popup in the ComfyUI top bar keeps the same order — the three generate tabs first, 界面语言 last, one line
+  between them. Every tab, deep link (`#/settings?tab=..`), saved setting and save button works exactly as before.
+  Covered by `studio/tests/js/studio-settings-groups.test.mjs`.
+
 - **The desktop window never leaves the page you are on.** The Studio page now stays on the desktop port for the whole
   session: when ComfyUI gets ready the same page turns online in place — the capability table flips, the header queue
   entry and the VRAM readout appear, generation and the event stream reach the kernel through the desktop's own proxy —

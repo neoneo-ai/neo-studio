@@ -186,8 +186,8 @@ and Settings sit at the header's right end as icon slots. Canvas-only actions sh
   ComfyUI with Neo Studio installed; local root / interpreter / port / LAN listen settings stay disabled, and
   unreachable remote mode stays on the remote address guide for retrying without starting local ComfyUI.
 
-- ComfyUI's log is under Settings → Log; the desktop's own trace (startup, page jumps, window drags) goes to
-  `data/studio_desktop.log`.
+- Settings → Startup log carries the ComfyUI console and the desktop's own startup / navigation trace in one panel,
+  filtered by source; the full trace (drag steps included) stays in `data/studio_desktop.log`.
 
 Frameless window, window & taskbar icon, exe packaging, portable launcher and the source sync:
 [Developer_EN.md](Developer_EN.md).

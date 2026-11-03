@@ -211,7 +211,8 @@ git clone https://github.com/neoneo-ai/neo-studio.git ComfyUI/custom_nodes/comfy
 - **macOS v1 远程模式** — 只连接到已装 Neo Studio 插件且可访问的远程 ComfyUI；本机根目录 / 解释器 /
   端口 / 局域网监听保持灰掉，远程不可达时停在远程地址引导页，可重新填写地址并重连。
 
-- ComfyUI 后台日志在「设置 → 日志」里看；桌面端自己的启动 / 跳转 / 拖动过程落在 `data/studio_desktop.log`。
+- 「设置 → 启动日志」把 ComfyUI 控制台与桌面端自身的启动 / 跳转轨迹拼在同一块面板里，按来源筛选；
+  完整轨迹（含拖动步数）仍落在 `data/studio_desktop.log`。
 
 无边框窗口、窗口与任务栏图标、exe 打包、便携启动器与源码同步：见 [Developer.md](Developer.md)。
 

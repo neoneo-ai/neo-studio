@@ -431,7 +431,6 @@ test("启动设置顶部：运行中可停、停止可启动、启动中两枚�
     }
 });
 
-
 // 局域网监听做成下拉：手输 IP 容易错，可选项由桌面端给的网卡列表拼出来
 test("启动设置：局域网监听是下拉框，选项带本机网卡，保存交的是选中项", async () => {
     mountStudio();
@@ -531,6 +530,7 @@ test("启动设置：远程地址进保存载荷，本机启动项灰掉，提�
 test("远程模式：内核行报远端地址，停止内核禁用，启动内核是重连", async () => {
     const status = mountStudio();
     const stops = [];
+    const opened = [];
     const state = {
         port: 8188, pid: 0, mine: false, running: true, ready: true,
         remote: "http://192.168.0.20:8188",
@@ -543,6 +543,7 @@ test("远程模式：内核行报远端地址，停止内核禁用，启动内�
                 remote: state.remote, state: "ok", error: "",
             }),
             comfy_stop: async () => { stops.push(1); return { ...state }; },
+            open_url: async (url) => { opened.push(url); return { ok: true }; },
         },
     };
     window.location.hash = "#/settings";
@@ -562,6 +563,9 @@ test("远程模式：内核行报远端地址，停止内核禁用，启动内�
         assert.equal(status.textContent, "● 运行中");
         assert.match(status.title, /远程 ComfyUI 运行中 · http:\/\/192\.168\.0\.20:8188/);
         assert.equal(stops.length, 0);
+        click(document.querySelector(".ns-kernel-open"));
+        await flush();
+        assert.deepEqual(opened, ["http://192.168.0.20:8188"], "一键打开交的是启动设置里那台远端地址，不是本机端口");
     } finally {
         window.location.hash = "#/gallery";
     }

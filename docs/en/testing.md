@@ -89,7 +89,8 @@ never touch the real data under `Neo-Studio/data/` or the plugin directory.
   generation routes answer `409 offline`; the gallery module family carries its own `RouteTableDef` and its source no longer
   mentions `PromptServer` (there is no ComfyUI runtime in the desktop process); the startup-settings route
   `/neo_studio/launcher` GET reads the configuration and POST validates before writing (a root without `main.py`
-  is refused, an unknown action is refused).
+  is refused, an unknown action is refused); the startup-log route `/neo_studio/log` merges the kernel output and the
+  desktop's own trace into two blocks (entries carry `src`, drag-step lines stay out of the panel).
 - `studio/tests/test_node_metadata.py` — the node metadata contract: the registry key list, the `NEO_NODES` list in
   `__init__.py` matching the registry, every node having a `web/docs/<node key>.md` help document (the path the
   ComfyUI native "Info" tab fetches), `SEARCH_ALIASES` (lowercase, deduplicated, including Chinese aliases),
@@ -117,6 +118,15 @@ npm run update-goldens   # NEO_UPDATE_GOLDENS=1, writes new goldens
 - `llm-setting-advanced.test.mjs` — providers with a preset Base URL keep "custom endpoint" collapsed and an
   edited value still saves after expanding; OpenAI Compatible without a preset stays visible, and Local GGUF hides
   the whole area.
+- `studio-settings-groups.test.mjs` — the sidebar tab `data-key` order and where the block hairlines land, a dropped
+  Startup Settings tab leaves no line at the top of the strip, the launcher panel splits into location / network / window
+  sections, and switching the LLM provider hides a whole section with its heading.
+- `studio-log-panel.test.mjs` — the Settings "Startup log" panel: the kernel block first and the desktop block after
+  it with the ANSI codes stripped, a source filter that hides a whole block and stays lit on the picked one, and a
+  browser tab that keeps one block with no heading and the desktop filter hidden.
+- `studio-kernel-open.test.mjs` — the "Open ComfyUI" button on the Startup Settings kernel row: it exists only with the
+  kernel ready and goes through the js_api `open_url`; the address follows the port `comfy_state` reports (the desktop
+  moves to a free port) and the remote address in remote mode; stopped and starting hide the button.
 
 ## JS test runner (with forced exit)
 

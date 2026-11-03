@@ -171,6 +171,10 @@ test("桌面端窗口加载 Neo Studio 四视图", async () => {
         await page.click(".ns-settings-tab[data-key='log']");
         await page.waitForFunction(() => document.querySelector(".ns-log").textContent.trim().length > 0,
             null, { timeout: 15000 });
+        // 桌面端自身轨迹（data/studio_desktop.log）拼在同一块面板里：启动排查不用开文件
+        const logText = await page.locator(".ns-log").textContent();
+        assert.ok(logText.includes("—— ComfyUI 内核 ——"), "应有内核那块");
+        assert.ok(logText.includes("—— Neo Studio 桌面端 ——"), "桌面端自身那块要拼进面板");
 
         // 手动往上翻看时，2 秒轮询不应把滚动条拉回底部
         await page.evaluate(() => { document.querySelector(".ns-log").scrollTop = 0; });

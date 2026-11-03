@@ -322,17 +322,28 @@ function openSettingsModal() {
     if (_settingsModal && !_settingsModal.parentNode) _settingsModal = null;   // 浮层已被清除（外部/测试重置 body）→ 丢弃过期状态
     if (_settingsModal) return;   // 已打开：忽略，避免叠加
 
+    // 与 Neo Studio 设置页同一套顺序：生成（LLM / 生图 / 生视频）在前，界面语言在后，中间一条细线。
+    // 这个弹窗是画布侧改生成默认值的地方，四个 tab 平铺时看不出哪几个同属生成链。tab 的 key 与打开方式不变
     const forms = [
-        { key: "llm", label: t("LLM 设置"), form: createModelConfigForm() },
-        { key: "gen", label: t("生图默认设置"), form: createImageGenSettingsForm() },
-        { key: "video", label: t("生视频模型"), form: createVideoGenSettingsForm() },
-        { key: "lang", label: t("界面语言"), form: createLangSettingsForm() },
+        { key: "llm", group: "generate", label: t("LLM 设置"), form: createModelConfigForm() },
+        { key: "gen", group: "generate", label: t("生图默认设置"), form: createImageGenSettingsForm() },
+        { key: "video", group: "generate", label: t("生视频模型"), form: createVideoGenSettingsForm() },
+        { key: "lang", group: "ui", label: t("界面语言"), form: createLangSettingsForm() },
     ];
     const tabs = document.createElement("div");
     tabs.className = "neo-settings-tabs";
     const content = document.createElement("div");
     content.className = "neo-settings-content";
+    let lastGroup = null;
     for (const f of forms) {
+        if (f.group !== lastGroup) {   // 线与 tab 平级放进 .neo-settings-tabs，[data-key] 选择器不受影响
+            if (tabs.children.length) {   // 只落在两段之间，弹窗顶部不悬一条线
+                const sep = document.createElement("div");
+                sep.className = "neo-settings-sep";
+                tabs.appendChild(sep);
+            }
+            lastGroup = f.group;
+        }
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = "neo-settings-tab";

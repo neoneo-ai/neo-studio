@@ -163,6 +163,7 @@ const settingsPage = page("ns-settings-page", `
     <div class="ns-settings-tabs">
       <button class="ns-settings-tab">远程 LLM</button>
       <button class="ns-settings-tab active">启动设置</button>
+      <div class="ns-settings-sep"></div>
       <button class="ns-settings-tab">关于</button>
     </div>
     <div class="ns-settings-content">
@@ -473,11 +474,14 @@ test("手机设置页：tab 移到顶部成一条可横滚的行，启动设置�
         const tabs = document.querySelector(".ns-settings-tabs");
         const last = [...tabs.querySelectorAll(".ns-settings-tab")].pop();
         last.scrollIntoView({ inline: "center" });
+        const sep = tabs.querySelector(".ns-settings-sep").getBoundingClientRect();
         return {
             dir: getComputedStyle(document.querySelector(".ns-settings")).flexDirection,
             tabDir: getComputedStyle(tabs).flexDirection,
             tabsW: Math.round(tabs.getBoundingClientRect().width),
             tabsH: Math.round(tabs.getBoundingClientRect().height),
+            sepW: Math.round(sep.width),
+            sepH: Math.round(sep.height),
             tabVisible: Math.round(last.getBoundingClientRect().right) <= Math.round(tabs.getBoundingClientRect().right) + 1,
             labelAbove: Math.round(b(".ns-launch-input").top) >= Math.round(b(".ns-launch-label").bottom) - 1,
             aboutWrap: Math.round(b(".ns-about-value").top) > Math.round(b(".ns-about-label").bottom) - 1,
@@ -488,6 +492,8 @@ test("手机设置页：tab 移到顶部成一条可横滚的行，启动设置�
     assert.equal(m.tabDir, "row", "tab 还钉在左侧 150px 竖栏");
     assert.ok(m.tabsW > m.tabsH, `tab 行不是横的一条（${m.tabsW}×${m.tabsH}）`);
     assert.ok(m.tabVisible, "最后一个 tab 滚不进可视区");
+    assert.equal(m.sepW, 1, `段间线在横滚条里不是 1px 竖线（宽 ${m.sepW}）`);
+    assert.ok(m.sepH > 0 && m.sepH <= m.tabsH, `段间线没随 tab 等高收起（${m.sepW}×${m.sepH}，条高 ${m.tabsH}）`);
     assert.ok(m.labelAbove, "启动设置的 label 还和输入框挤在一行");
     assert.ok(m.aboutWrap, "「关于」的路径值没落到 label 下一行");
     assert.ok(m.kernelWrap, "内核状态条没换行");

@@ -135,7 +135,7 @@ Neo Studio 独立页面（`web/studio/index.html`）的后端。素材 / 生图 
 | POST | `/neo_studio/director/{task_id}/cancel` | 取消整片任务 |
 | GET | `/neo_studio/queue` | 顶栏队列面板的聚合行：六表按提交时间倒序、条数封顶；行带 `kind` `label` `status` `progress` `created` `updated` `count` `result` `page`，行缩略图按 `result` 取 `/neo_gallery/thumbnail` |
 | GET | `/neo_studio/version` | 插件 / ComfyUI 版本与导演配方列表，附「设置 → 关于」的路径行 `data_root` / `comfy_local`（`remote` 留空，远程地址只有桌面端知道） |
-| GET | `/neo_studio/log` | ComfyUI 控制台日志（`app.logger` 环形缓冲 300 条），Studio「设置 → 日志」轮询 |
+| GET | `/neo_studio/log` | ComfyUI 控制台日志（`app.logger` 环形缓冲 300 条），Studio「设置 → 启动日志」轮询；桌面端服务自己答这条时拼两块（见桌面端表） |
 | GET | `/neo_studio/mem_stats` | 驱动级显存占用（含全部进程）：顶栏队列面板展开时每 3 秒取一次读数 |
 | POST | `/neo_studio/clear_memory` | 卸载模型并清理显存缓存（顶栏队列面板的「清理」钮） |
 
@@ -400,7 +400,7 @@ LLM 模式与配置见 [llm.md](llm.md)，技能设计见 [skills.md](skills.md)
 | GET        | `/neo_studio/version`                                                                                                                                         | 能力快照：`offline: true` + `caps` + `starting` + `kernel_ready` / `kernel_port` / `kernel_origin` + `data_root` / `comfy_local` / `remote`（「设置 → 关于」的路径行），前端据此门控 |
 | GET        | `/neo_studio/kernel_version`                                                                                                                                  | 内核那份版本快照与内核侧能力表的专用入口：桌面端必须自己答 `/neo_studio/version`，内核那份由桌面端转给内核                                                                            |
 | GET        | `/neo_studio/comfy_state`                                                                                                                                     | 内核状态快照（端口 / PID / 谁启动 / 运行 / 就绪 / 启动中）：整页刷新后 pywebview 的桥晚于页面注入，顶栏状态位靠它从 HTTP 侧补上；桌面端还没装配出内核时 `409`                         |
-| GET        | `/neo_studio/log` `/view` `/ws`                                                                                                                               | 启动日志 / 图片只读 / WS 事件流隧道（内核在跑时双向接力，没在跑时接住挂着）                                                                                                           |
+| GET        | `/neo_studio/log` `/view` `/ws`                                                                                                                               | 启动日志（内核输出 + 桌面端自身轨迹两块，条目带 `src`）/ 图片只读 / WS 事件流隧道（内核在跑时双向接力，没在跑时接住挂着）                                                              |
 | ANY      | 其余 `/neo_*` `/rs_*` `/userdata/*` `/api/*`                                                                                                                 | 清单内（`studio_caps.forwardable()`）转给内核，没有内核时同样 `409`；清单外是桌面端没有这条接口，答 `404`                                                                                     |
 
 - `caps` 是功能可用性表（`studio_caps.features(kernel_ready)`）：生成面那几位随内核就绪翻面，页面据它门控，

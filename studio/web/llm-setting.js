@@ -32,6 +32,15 @@ function formatFileSize(bytes) {
 export function createModelConfigForm() {
     // Provider select - unified dropdown with all providers including Local GGUF
     const remoteForm = mkEl("div", "rs-remote-form");
+    // 设置表单的分组容器（LLM / 生图设置共用 .rs-form-group / .rs-form-group-title）
+    const formGroup = (labelText, rows) => {
+        const box = mkEl("div", "rs-form-group");
+        const title = mkEl("div", "rs-form-group-title");
+        title.textContent = t(labelText);
+        box.appendChild(title);
+        box.append(...rows);
+        return box;
+    };
     
     const remoteInfoText = mkEl("div", "rs-settings-info");
     remoteInfoText.innerHTML = `
@@ -189,10 +198,13 @@ export function createModelConfigForm() {
     advancedDetails.append(advancedSummary, advancedContent);
     advancedDetails.style.display = "none";
 
-    remoteForm.append(remoteInfoText, providerRow, apiKeyRow, localDirRow, modelRowWrapper, advancedDetails, providerSaveStatusText);
-    // 自动卸载本地/原生模型设置放在设置页最底部
-    remoteForm.appendChild(localUnloadRow);
-    remoteForm.appendChild(nativeUnloadRow);
+    // 归类：服务商与模型是一组；API Key 与自定义端点属于远程连接；本地模型目录和两个自动卸载只在 local / native 服务商下出现。
+    // 后两组连组标题一起显隐 —— 切到本地 GGUF 时「远程连接」整组空了，标题不能孤零零挂在没有内容的组上
+    const remoteGroup = formGroup("远程连接", [apiKeyRow, advancedDetails]);
+    const localGroup = formGroup("本地模型", [localDirRow, localUnloadRow, nativeUnloadRow]);
+    localGroup.style.display = "none";
+    remoteForm.append(remoteInfoText, formGroup("服务商与模型", [providerRow, modelRowWrapper]),
+                      remoteGroup, localGroup, providerSaveStatusText);
 
     // 显式保存按钮：替代防抖自动保存（单模型下拉不触发 change、blur 时序难排查，落盘时机不可靠）
     const saveBtn = mkEl("button", "rs-gen-save");
@@ -500,6 +512,9 @@ export function createModelConfigForm() {
         applyAdvancedSection(def, saved);
         applyApiKeyHint(def, saved);
         nativeUnloadRow.style.display = "none";
+        // 组标题随整组收起：这两行都藏起来的供应商（本地 GGUF / 原生）不剩空标题
+        remoteGroup.style.display = (apiKeyRow.style.display !== "none" || advancedDetails.style.display !== "none") ? "flex" : "none";
+        localGroup.style.display = "none";
         
         if (def.type === 'native') {
             // Native safetensors：复用本地模型下拉，扫描 text_encoders，隐藏 base_url / api_key / 目录
@@ -511,6 +526,7 @@ export function createModelConfigForm() {
             // 恢复/显示原生自动卸载复选框（配置顶层字段）
             nativeUnloadCheckbox.checked = !!fullConfig.auto_unload_native;
             nativeUnloadRow.style.display = "flex";
+            localGroup.style.display = "flex";
             await fetchNativeModels(saved.model);
         } else if (def.type === 'local') {
             // Local GGUF: show dir input + local model select, hide everything else
@@ -523,6 +539,7 @@ export function createModelConfigForm() {
             // 恢复/显示自动卸载复选框（配置顶层字段）
             localUnloadCheckbox.checked = !!fullConfig.auto_unload_local;
             localUnloadRow.style.display = "flex";
+            localGroup.style.display = "flex";
 
             // 拉取并回填本地模型列表；await 让 load 在列表填充完成后再结束，
             // 避免「列表晚到 → loading 已解除 → 程序化改动逃过加载窗口」的竞态

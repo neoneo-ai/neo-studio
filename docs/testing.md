@@ -63,7 +63,8 @@ python -m pytest -q app/tests      # 桌面端套件（需同级 ComfyUI 根）
 - `app/tests/test_studio_server.py` — 桌面端服务（`app/studio_server.py`，进程里没有 ComfyUI 运行时）：起真服务打真接口，断言 ComfyUI 不在跑时
   Studio 页面 / 前端静态文件 / 目录列表 / 缩略图 / 收藏文件都出得来，写操作与生成类接口回 `409 offline`；
   gallery 模块族自带 `RouteTableDef` 且源码不再出现 `PromptServer`（桌面端进程里没有 ComfyUI 运行时）；
-  启动设置路由 `/neo_studio/launcher` GET 读配置、POST 校验后落盘（根目录缺 `main.py` 拒绝、未知动作拒绝）。
+  启动设置路由 `/neo_studio/launcher` GET 读配置、POST 校验后落盘（根目录缺 `main.py` 拒绝、未知动作拒绝）；
+  启动日志 `/neo_studio/log` 把内核输出与桌面端自身轨迹拼成两块（条目带 `src`，拖动步数不进面板）。
 
 - `studio/tests/test_node_metadata.py` — 节点元数据契约：注册表键清单、`__init__.py` 的 `NEO_NODES` 清单与注册表一致、
   每个节点都有 `web/docs/<节点键>.md` 帮助文档（ComfyUI 原生「信息」页的取用路径）、`SEARCH_ALIASES`（小写、去重、含中文别名）、
@@ -87,6 +88,9 @@ npm run update-goldens   # NEO_UPDATE_GOLDENS=1，写入新 golden
   返回引导页与新建模板技能。
 - `llm-setting-advanced.test.mjs` — 有预设 Base URL 的供应商默认收起「自定义端点」，展开后改写仍能落盘；
   无预设的 OpenAI Compatible 常显，Local GGUF 整体隐藏。
+- `studio-settings-groups.test.mjs` — 设置页左栏 tab 的 data-key 顺序与段间分割线落位；摘掉启动设置 tab 后条首不落线；启动设置栏内三类分区；LLM 设置切服务商时整组连小标题一起收起。
+- `studio-log-panel.test.mjs` — 设置页「启动日志」：内核那块在前、桌面端那块在后，ANSI 色码剥掉；来源筛选整块显隐并亮在选中项上；浏览器标签页单块不挂块标题、「桌面端」筛选钮收起。
+- `studio-kernel-open.test.mjs` — 启动设置顶栏的「打开 ComfyUI」：内核就绪才有这枚并走 js_api 的 `open_url`；地址取 `comfy_state` 报的那个端口（桌面端换过端口跟过去）、远程模式取远端地址；已停止与启动中收起这枚。
 
 ## JS 测试运行器（带超时强制终止）
 

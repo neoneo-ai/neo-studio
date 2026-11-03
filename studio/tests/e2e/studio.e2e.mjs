@@ -184,6 +184,8 @@ test("Studio 页面：四视图加载、版本信息、导演生成面板", asyn
         await page.waitForFunction(() => document.querySelector(".ns-log").textContent.trim().length > 0,
             null, { timeout: 15000 });
         assert.ok(!(await page.locator(".ns-log").textContent()).includes("\x1b["), "日志不应带 ANSI 色码");
+        assert.ok(!(await page.locator(".ns-log").textContent()).includes("——"),
+            "浏览器里没有桌面端那一路，单块不该挂块标题");
 
         // 手动往上翻看时，2 秒轮询不应把滚动条拉回底部
         await page.evaluate(() => { document.querySelector(".ns-log").scrollTop = 0; });

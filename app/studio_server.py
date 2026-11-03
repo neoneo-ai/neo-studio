@@ -51,6 +51,10 @@ DESKTOP_ROUTE_MODULES = ("gallery_lora", "gallery_oss", "gallery", "bookmark", "
 
 USERDATA_PATH = "/userdata/neo_gallery_data.json"
 
+# 「设置 → 启动日志」每块取的尾部行数：两块拼一起 600 行，够看清一次启动，又不至于把页面卡住
+COMFY_LOG_TAIL = 400
+STUDIO_LOG_TAIL = 200
+
 
 def load_desktop_modules(plugin_dir: Path) -> list:
     """按目录加载插件的桌面端模块：目录名带连字符不能 import，与 tests 里同一套加载方式。
@@ -230,14 +234,34 @@ async def comfy_state(request):
 
 
 async def desktop_log(request):
-    """离线时的「设置 → 日志」：读桌面端拉起 ComfyUI 的完整输出（data/comfy_run.log）。"""
-    entries = []
-    try:
-        with open(request.app["comfy_log"], "r", encoding="utf-8", errors="replace") as f:
-            entries = [{"m": line} for line in f.readlines()[-400:]]
-    except OSError:
-        pass
+    """「设置 → 启动日志」：内核那块是桌面端拉起 ComfyUI 的完整输出（data/comfy_run.log），
+    桌面端那块是自身的启动 / 跳转 / 前端错误轨迹（data/studio_desktop.log）。
+
+    条目带 src 标来源，页面上的分块与来源筛选全认它；浏览器标签页里插件那条路由只回内核那块、
+    不带 src（插件自身的 print 本来就在 app.logger 环形缓冲里），前端按缺 comfy 处理。"""
+    entries = _log_tail(request.app.get("comfy_log"), "comfy", COMFY_LOG_TAIL)
+    entries += _log_tail(request.app.get("desktop_log"), "studio", STUDIO_LOG_TAIL)
     return web.json_response({"success": True, "entries": entries})
+
+
+def _log_tail(path, src: str, keep: int) -> list:
+    """一份日志的尾部：文件还没落盘或读不到就是空块，页面保留上一轮内容。"""
+    if not path:
+        return []
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            lines = f.readlines()[-keep:]
+    except OSError:
+        return []
+    return [{"m": line, "src": src} for line in lines if not _is_drag_step(line)]
+
+
+def _is_drag_step(line: str) -> bool:
+    """拖动步数行不进面板：一次拖动落一行，桌面端日志只留尾部 200KB，大半是它，
+    启动轨迹会被顶出去 —— 面板是排查启动用的，data/studio_desktop.log 里原样留着。
+    行首带 log_line 打的 [HH:MM:SS] 前缀，先摘掉再比。"""
+    head = line.split("] ", 1)[-1]
+    return head.startswith("drag ") and head.rstrip().endswith(" steps")
 
 
 
@@ -479,13 +503,14 @@ def mcp_config_path(plugin_dir: Path, data_root: Path = None) -> Path:
 
 
 def build_app(root: Path, plugin_dir: Path, flags: dict = None, launcher: dict = None,
-              launcher_api: dict = None, comfy_log: Path = None,
+              launcher_api: dict = None, comfy_log: Path = None, studio_log: Path = None,
               data_root: Path = None, mcp_manager=None, kernel_state=None,
               pair_ctx: dict = None, log=None) -> web.Application:
     """桌面端 app：Studio 页面 + 前端静态文件 + 能力清单里归桌面端的全部路由 + 到内核的转发。
     flags 是桌面端报进来的那份状态（与 StudioDesktop 共用同一份 dict）：kernel_base 是转发目标，
     kernel_port / kernel_origin 是画布链接的落点，starting 随版本快照下发给页面。
     launcher / launcher_api 同样与 StudioDesktop 共用：设置页在桌面端读快照、发保存。
+    comfy_log / studio_log 是「设置 → 启动日志」拼的两份文件：桌面端拉起内核的 stdout 与桌面端自身轨迹。
     data_root 是桌面端的用户数据根：插件模块 import 期按它找 gallery / recipes / configs，
     桌面端服务与桌面端拉起的内核因此读同一份数据。
     mcp_manager 与 StudioDesktop 共用同一份会话登记表：关窗收尾要回收的进程与页面连着的是
@@ -543,6 +568,7 @@ def build_app(root: Path, plugin_dir: Path, flags: dict = None, launcher: dict =
     app["studio_index"] = plugin_dir / "web" / "studio" / "index.html"
     app["userdata"] = Path(folder_paths.get_user_directory()) / "default" / "neo_gallery_data.json"
     app["comfy_log"] = Path(comfy_log) if comfy_log else plugin_dir / "tmp" / "comfy_run.log"
+    app["desktop_log"] = Path(studio_log) if studio_log else None
     app["launcher"] = launcher if launcher is not None else {}
     app["launcher_api"] = launcher_api if launcher_api is not None else {}
     # 「设置 → 关于」的路径行读这两份：ComfyUI 根由解释器启动参数决定，数据根由桌面端解析

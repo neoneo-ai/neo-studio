@@ -142,6 +142,10 @@ test("设置打开统一设置弹窗（四 tab，切 tab 显隐同步）", async
     assert.ok(overlay, "设置弹窗未打开");
     const tabs = [...overlay.querySelectorAll(".neo-settings-tab")].map((el) => el.textContent);
     assert.deepEqual(tabs, ["LLM 设置", "生图默认设置", "生视频模型", "界面语言"], "tab 顺序/文案不符");
+    // 左栏顺序与 Neo Studio 设置页同一套：生成三项在前，界面语言在后，中间一条分割线（线里不写字，[data-key] 不受影响）
+    assert.deepEqual([...overlay.querySelectorAll(".neo-settings-tabs > *")]
+        .map((el) => (el.classList.contains("neo-settings-sep") ? "|" : el.textContent.trim())),
+        ["LLM 设置", "生图默认设置", "生视频模型", "|", "界面语言"], "设置弹窗左栏分段与设置页不一致");
     const panels = [...overlay.querySelectorAll(".neo-settings-panel")];
     assert.equal(panels.length, 4, "四个设置面板缺失");
     assert.equal(panels.filter((p) => p.style.display !== "none").length, 1, "默认只显示一个面板");
