@@ -70,7 +70,7 @@ const chipPanel = () => `
     <div id="e2e-chip-panel" class="rs-runtime-menu neo-gallery-gm-chip-menu neo-gallery-gm-chip-panel neo-gallery-gm-skills-panel" style="display:none">
       <div class="neo-gallery-gm-skills-col">
         <div class="neo-gallery-gm-menu-head">技能</div>
-        <button class="neo-gallery-gm-menu-item neo-gallery-gm-skill-item"><span class="neo-gallery-gm-skill-name">Hug 控制</span><span class="neo-gallery-gm-skill-sub">Qwen Image 2.1</span></button>
+        <button class="neo-gallery-gm-menu-item neo-gallery-gm-skill-item"><span class="neo-gallery-gm-skill-name">Hug 控制</span></button>
       </div>
       <div class="neo-gallery-gm-params-col">
         <div class="neo-gallery-gm-model-box">

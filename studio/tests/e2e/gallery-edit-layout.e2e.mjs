@@ -21,11 +21,10 @@ const resultLayer = (w, h) =>
 
 // 与 gallery-gen.js 的 openImageEditDialog 同构（图片在上、操作在下）
 // 非扩图：结果层/分割线挂在图片盒内；扩图：三者都进画布（结果的坐标随画布一起缩放）
-/** 技能与自定参数面板左栏的一行：技能名 + 它钉的主模型短名（与 skillParamsChip 的 renderSkills 同构） */
-const pickItem = (name, main, on = false) =>
+/** 技能与自定参数面板左栏的一行：只有技能名（与 skillParamsChip 的 renderSkills 同构） */
+const pickItem = (name, on = false) =>
     `<button class="neo-gallery-gm-menu-item neo-gallery-gm-skill-item${on ? " neo-gallery-gm-menu-on" : ""}">`
-    + `<span class="neo-gallery-gm-skill-name">${name}</span>`
-    + (main ? `<span class="neo-gallery-gm-skill-sub">${main}</span>` : "") + `</button>`;
+    + `<span class="neo-gallery-gm-skill-name">${name}</span></button>`;
 
 const modalInner = (w, h, outpaint) => `
     <div class="neo-gallery-edit-compare">
@@ -60,19 +59,19 @@ const modalInner = (w, h, outpaint) => `
             <div id="e2e-skill-panel" class="rs-runtime-menu neo-gallery-gm-chip-menu neo-gallery-gm-chip-panel neo-gallery-gm-skills-panel" style="display:none">
               <div class="neo-gallery-gm-skills-col">
                 <div class="neo-gallery-gm-skill-group">Qwen Image</div>
-                ${pickItem("Qwen Image 2.1", "qwen_image_2.1_int8_convrot", true)}
-                ${pickItem("Qwen 换脸", "qwen_image_2.1_int8_convrot")}
-                ${pickItem("Qwen 局部重绘", "qwen_image_2.1_int8_convrot")}
-                ${pickItem("Qwen 扩图", "qwen_image_2.1_int8_convrot")}
+                ${pickItem("Qwen Image 2.1", true)}
+                ${pickItem("Qwen 换脸")}
+                ${pickItem("Qwen 局部重绘")}
+                ${pickItem("Qwen 扩图")}
                 <div class="neo-gallery-gm-skill-group">Krea2</div>
-                ${pickItem("Krea2文生图", "krea2")}
-                ${pickItem("Krea2 风格", "krea2")}
+                ${pickItem("Krea2文生图")}
+                ${pickItem("Krea2 风格")}
                 <div class="neo-gallery-gm-skill-group">MOSS</div>
-                ${pickItem("MOSS 文生图", "MOSS-TS-MOSS-Image-SFT-0715-Stage2_int8_convrot")}
-                ${pickItem("MOSS 图编辑", "MOSS-TS-MOSS-Image-SFT-0715-Stage2_int8_convrot")}
+                ${pickItem("MOSS 文生图")}
+                ${pickItem("MOSS 图编辑")}
                 <div class="neo-gallery-gm-skill-group">其他</div>
-                ${pickItem("我的自定技能", "")}
-                ${pickItem("同事给的技能包", "")}
+                ${pickItem("我的自定技能")}
+                ${pickItem("同事给的技能包")}
               </div>
               <div class="neo-gallery-gm-params-col"><div class="neo-gallery-edit-model-box"><div class="rs-gen-model-section"></div></div></div>
               <div class="neo-gallery-gm-panel-foot"><button class="neo-gallery-gm-panel-done">完成</button></div>

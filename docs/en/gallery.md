@@ -105,14 +105,14 @@ background overlay, title bar drags the window) that creates new assets from a p
   (icon + the value in effect + ▾); a click floats a panel open upward (the composer is docked at the bottom of
   the page, so panels open upward). The first chip is skill and ad-hoc parameters merged into one two-column
   panel: the left column lists the text-taking image-gen skills, grouped by main-model family (`Qwen Image` /
-  `Krea2` / `MOSS`; skills whose family the hint list does not recognize fall under 「其他」), and each row prints
-  the short name of the main model that skill pins in a small second line; the right column holds 生图模型 and
+  `Krea2` / `MOSS`; skills whose family the hint list does not recognize fall under 「其他」), and each row carries
+  the skill name alone; the right column holds 生图模型 and
   LoRA in the searchable combobox shell (a chip menu cannot scroll a long model list). The skill is Krea2
   text-to-image by default, other text-taking skills are selectable and the last choice is remembered; an empty
   main model / LoRA set follows this skill's `config.json` and the global image-gen settings (an override for
   this run only, like wiring a model onto a node - nothing is written back). A skill from a foreign family stays
   selectable: picking a skill replays that skill's own pinned main model, which replaces the override, so the
-  mismatch cannot survive the click - the row is marked with a `↻` in front of its subtitle and a hover title
+  mismatch cannot survive the click - the row carries only a hover title
   saying the selection switches to that skill's own model. The one combination that cannot work, a skill family
   against a manually picked main model of another family, is taken back on the spot: the main model falls to
   「自动」 (the backend picks it from the skill's template) and a toast says why - the same rule the MCP
@@ -320,7 +320,7 @@ pose folded into one chip's menu, each mode explained on its menu item) + the ta
   popup (skills on the left, main model + LoRA on the right, skills grouped by main-model family): an empty
   main model / LoRA set follows this skill's `config.json` and the global image-gen settings, and switching
   skills or the outpaint / masked / pose switches replays that skill's model and LoRAs. Skills from a foreign
-  family stay selectable, marked with a `↻` meaning "this picks that skill's own main model" - a manually set
+  family stay selectable, with a hover title meaning "this picks that skill's own main model" - a manually set
   model of another family is replaced by that replay, and picking it directly is taken back to 「自动」.
   Aspect ratio and max side are not exposed here - the output size follows the source
   (the size chip above).

@@ -1143,9 +1143,9 @@ export function chipButton(sel, { icon: iconName, glyph = null } = {}) {
 const SKILL_FAMILY_LABELS = { qwen: "Qwen Image", krea2: "Krea2", moss: "MOSS" };
 
 /** 技能 + 自定参数合成一枚 chip（输入条样式参考 ArtCraft 的模型菜单）：点开一个双栏浮层，
- *  左栏技能按家族分组（组头 = 家族，副标题 = 该技能钉的主模型），右栏 = 传进来的主模型 / LoRA 控件。
+ *  左栏技能按家族分组（组头 = 家族，行只写技能名），右栏 = 传进来的主模型 / LoRA 控件。
  *  技能行一律可点：点技能会走 modelCfg.load(该技能 config)，右栏主模型与 LoRA 整份被该技能自己的配置替换，
- *  家族对撞在这一发里根本留不住；跨家族行只把「会换成哪个主模型」写在副标题上（↻ 前缀）。
+ *  家族对撞在这一发里根本留不住；跨家族行只把「会换成哪个主模型」写在悬停标题上。
  *  真正必败的是「当前技能 + 手填的别家族主模型」，那条由 guardMainModelFamily 在填的那一刻拦。
  *  原生 select 收在壳里只当状态容器：点技能写 value 并派发 change；切技能重放配置是程序改 value，调用方要跟着 sync()
  *  分组规则由调用方给：视频页按生成模式分组（groupOf 取 skill 的 mode），组头名与组序都取 groupLabels 的键序。 */
@@ -1197,15 +1197,7 @@ export function skillParamsChip(sel, paramsEl, { icon: iconName = "sparkles", ge
                     type: "button",
                 });
                 item.appendChild($el("span", { className: "neo-gallery-gm-skill-name", textContent: o.textContent }));
-                const model = ((o.__skillMeta || {}).gen_config || {}).model || "";
                 const cross = !!modelFam && !!rowFam && rowFam !== modelFam;
-                if (model) {
-                    // 跨家族行的副标题带 ↻：点它是「换成这个技能钉的主模型」，不是「配不上」
-                    item.appendChild($el("span", {
-                        className: "neo-gallery-gm-skill-sub",
-                        textContent: (cross ? "↻ " : "") + shortModelName(model),
-                    }));
-                }
                 if (cross) {
                     item.title = tf("{a} 家族的技能：选中会改用该技能自带的主模型（当前主模型 / LoRA 覆盖会被替换）", {
                         a: groupLabels[rowFam] || rowFam,

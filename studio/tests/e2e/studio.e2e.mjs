@@ -334,8 +334,7 @@ test("Studio 绘画页：顶栏模式条 + 素材库弹窗，文生图输入卡�
                 .map(l => l.textContent.trim());
             const searchable = document.querySelectorAll(".ns-paint-text .neo-gallery-gm-model-box .rs-model-select-box").length;
             const skills = [...document.querySelectorAll(".ns-paint-text .neo-gallery-gm-skill-item")]
-                .map(b => [b.querySelector(".neo-gallery-gm-skill-name")?.textContent.trim(),
-                           b.querySelector(".neo-gallery-gm-skill-sub")?.textContent.trim() || ""]);
+                .map(b => b.querySelector(".neo-gallery-gm-skill-name")?.textContent.trim());
             const groups = [...document.querySelectorAll(".ns-paint-text .neo-gallery-gm-skill-group")].map(g => g.textContent.trim());
             toggle.click();
             return { d, c, p, labels, searchable, skills, groups, hiddenBefore, closedAfter: getComputedStyle(panelEl).display };
@@ -347,7 +346,7 @@ test("Studio 绘画页：顶栏模式条 + 素材库弹窗，文生图输入卡�
         assert.deepEqual(drawer.labels, ["生图模型", "LoRA"], "右栏只露生图模型与 LoRA（Text Encoder / VAE 不露出）");
         assert.ok(drawer.searchable >= 1, "模型与 LoRA 用可搜索下拉壳（模型列表长，纯菜单翻不动）");
         assert.ok(drawer.skills.length >= 1, "左栏列出本页可吃的生图技能");
-        assert.ok(drawer.skills.every(([name]) => name.length > 0), "每行技能都叫得出名字");
+        assert.ok(drawer.skills.every((name) => name.length > 0), "每行技能都叫得出名字");
         assert.ok(drawer.groups.length === 0 || drawer.groups.length >= 2,
             `技能只有一个家族时不写组头，多家族时每个家族一条：${JSON.stringify(drawer.groups)}`);
         assert.equal(drawer.closedAfter, "none", "再点一次「技能与自定参数」应收起");

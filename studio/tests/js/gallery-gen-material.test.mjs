@@ -1028,10 +1028,8 @@ test("生成素材弹窗：技能与自定参数同一枚 chip——技能按家
         ["Qwen Image", "Krea2", "MOSS", "其他"], "技能按家族分组，词表认不出的落「其他」");
     const named = (name) => [...panel.querySelectorAll(".neo-gallery-gm-skill-item")]
         .find((b) => b.querySelector(".neo-gallery-gm-skill-name").textContent === name);
-    assert.equal(named("MOSS 文生图").querySelector(".neo-gallery-gm-skill-sub").textContent,
-        "MOSS-TS-MOSS-Image-SFT-0715-Stage2_int8_convrot", "技能行副标题 = 该技能钉的主模型短名");
-    assert.ok(!named("我的自定技能").querySelector(".neo-gallery-gm-skill-sub"),
-        "没钉主模型的技能不编个空副标题");
+    assert.ok(!named("MOSS 文生图").querySelector(".neo-gallery-gm-skill-sub"),
+        "技能行只写技能名：长模型名不再把每行拉成两行");
     assert.equal(panel.querySelectorAll(".neo-gallery-gm-skill-item:disabled").length, 0,
         "主模型「自动」时没有家族可比对，一律不置灰");
 
@@ -1043,14 +1041,11 @@ test("生成素材弹窗：技能与自定参数同一枚 chip——技能按家
     await sleep(20);
     assert.match(chip.querySelector(".neo-gallery-gm-chip-label").textContent,
         /MOSS-TS-MOSS-Image-SFT-0715-Stage2_int8_convrot/, "chip 标签带上覆盖的主模型短名");
-    // 跨家族行照选（点技能会重放该技能自己的主模型），只标出「选了会换模型」
+    // 跨家族行照选（点技能会重放该技能自己的主模型），「选了会换模型」只写在悬停标题里
     assert.equal(panel.querySelectorAll(".neo-gallery-gm-skill-item:disabled").length, 0,
         "跨家族技能行不禁用：家族对撞在切技能的那一次重放里就被替换掉了");
-    assert.equal(named("Krea2文生图").querySelector(".neo-gallery-gm-skill-sub").textContent,
-        "↻ krea2", "跨家族行的副标题带 ↻，写的是这个技能自己钉的主模型");
-    assert.match(named("Krea2文生图").title, /主模型/, "说明选中会换成哪个主模型");
-    assert.equal(named("MOSS 文生图").querySelector(".neo-gallery-gm-skill-sub").textContent,
-        "MOSS-TS-MOSS-Image-SFT-0715-Stage2_int8_convrot", "同家族行不带 ↻");
+    assert.match(named("Krea2文生图").title, /主模型/, "跨家族行的悬停标题说明选中会换成哪个主模型");
+    assert.ok(!named("MOSS 文生图").title, "同家族行不写换模型的说明");
 
     // 点跨家族那行 → 切技能但面板不收；技能配置重放把 MOSS 覆盖换成该技能自己的（此例 config 为空 = 自动）
     click(named("Krea2文生图"));

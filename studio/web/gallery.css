@@ -468,15 +468,10 @@
 .neo-gallery-gm-skill-group:first-child {
     margin-top: 0;
 }
-.neo-gallery-gm-skill-name,
-.neo-gallery-gm-skill-sub {
+.neo-gallery-gm-skill-name {
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
-}
-.neo-gallery-gm-skill-sub {
-    font-size: 11px;
-    color: #8b95a5;
 }
 .neo-gallery-gm-menu-on {
     color: #FF9944;
@@ -623,12 +618,6 @@
 .neo-gallery-gm-menu-item:disabled {
     opacity: .6;
     cursor: default;
-}
-/* 技能行与 ⋯ 菜单共用 .neo-gallery-gm-menu-item，同名特异度比书写顺序：这条必须在它之后，
-   技能名与主模型短名才分两行，不然被 display:block 拉成一行连字 */
-.neo-gallery-gm-skill-item {
-    display: grid;
-    gap: 1px;
 }
 
 

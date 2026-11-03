@@ -4,6 +4,13 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **The skill list shows skill names only.** The 技能 + 自定参数 panel's left column no longer prints each skill's
+  pinned main model as a second line under its name - a long model path in 11px type made every row two lines tall, so
+  a dozen skills read as a wall of model names. Rows carry the name alone; the cross-family warning, which lived in
+  that line with a `↻` prefix, stays in the row's hover title, where it was already being read. Covered by
+  `studio/tests/js/gallery-gen-material.test.mjs`, `studio/tests/e2e/studio.e2e.mjs`, and both chip panel layout e2e
+  fixtures.
+
 - **Startup settings opens ComfyUI with one click.** The 设置 → 启动设置 kernel row carries a third button,
   「打开 ComfyUI」: once the kernel is ready it sends that kernel's address to the system default browser — the
   frameless window has no new tab to open, so the link goes through the desktop's `open_url` bridge and the window
