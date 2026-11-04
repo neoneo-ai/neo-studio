@@ -1,7 +1,7 @@
 name: Build Neo Studio App
 
 # 打 v* tag 时和 publish.yaml 并行：一条 tag 同时出 Registry 包与 GitHub Release 资产。
-# 构建逻辑全在 tools\build_studio_exe.ps1，这里只装构建期依赖并搬运产物。
+# 构建逻辑全在 tools\build_studio_exe.ps1（桌面窗口）与 tools\build_studio_update.ps1（整合包更新件），这里只装构建期依赖并搬运产物。
 # 签名与公证不进 CI（-Sign 要机器证书，-Notarize 只能在 mac 上跑），产物是未签名版。
 on:
   workflow_dispatch:
@@ -55,6 +55,12 @@ jobs:
       - name: Build the launcher
         shell: pwsh
         run: tools\build_studio_exe.ps1 -Mode ${{ inputs.mode || 'both' }}
+
+      # 整合包更新件：NeoStudio-Minimal 用户的整包更新，包内入口是 Neo-Studio\tools\update_neo_studio.ps1；
+      # 版本取 studio/pyproject.toml，产物落 dist\，跟着下面的 gh release upload dist/* 一起发
+      - name: Build the minimal-package update piece
+        shell: pwsh
+        run: tools\build_studio_update.ps1 -OutFile "dist\Neo-Studio-${{ steps.ver.outputs.version }}-package-update.zip"
 
       # 产物按版本改名：onefile 出单 exe，onedir 出整包 zip（exe 旁的 data/ 状态目录跟着走）
       - name: Stage release assets
