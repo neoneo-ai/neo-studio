@@ -2,10 +2,12 @@
 # 产物 = ComfyUI 核心 + 清单里的必需插件 + Neo Studio（App 源码 + 装好的插件）+ 便携 Python + 相对路径启动器。
 # 不随包发：模型、插件自带的 annotator/权重、.git、__pycache__、user 数据、密钥。
 # 用法（仓库根运行）：tools\build_minimal_package.ps1 [-ComfyUI <ComfyUI root>] [-Target <包根>]
-#       [-PluginMode copy|git] [-SkipPython] [-CoreOnly] [-SkipPluginDeps] [-DryRun] [-Zip]
+#       [-StudioSource <Neo-Studio 源码根>] [-PluginMode copy|git] [-SkipPython] [-CoreOnly] [-SkipPluginDeps] [-DryRun] [-Zip]
 param(
     [string]$ComfyUI = (Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) 'ComfyUI'),
     [string]$Target = (Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) 'NeoStudio-Minimal'),
+    # 按哪一份 Neo Studio 源码打包：默认当前工作树；发版口径填 tag 检出的 worktree，整包就按那份代码出
+    [string]$StudioSource = '',
     [ValidateSet('copy', 'git')][string]$PluginMode = 'copy',
     [string]$PythonVersion = '3.12.10',
     [string]$PythonSource = '',
@@ -16,7 +18,8 @@ param(
     [switch]$Zip
 )
 $ErrorActionPreference = 'Stop'
-$Studio = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$Studio = if ($StudioSource) { (Resolve-Path $StudioSource).Path } else { $RepoRoot }
 $Manifest = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'minimal_plugins.json') -Raw | ConvertFrom-Json
 $Plugins = @($Manifest.required)
 if ($CoreOnly) { $Plugins = @() }
@@ -287,11 +290,12 @@ foreach ($p in $Plugins) { New-PluginDir $p (Join-Path $comfyDest "custom_nodes\
 
 Log 'Neo Studio：App 源码 + 装好的插件'
 if ($DryRun) {
-    Log "  复制 $Studio -> $studioDest（排除 .git/.venv/data/dist/__pycache__）"
+    Log "  复制 $Studio -> $studioDest（排除 .git/.venv/data/dist/build/tmp/node_modules/__pycache__）"
     Log "  复制 $studioDest\studio -> $comfyDest\custom_nodes\comfyui-neo-studio（排除 tests）"
 }
 else {
-    Copy-Tree $Studio $studioDest @('.git', '.venv', 'data', 'dist', 'build', '__pycache__', 'tmp') @('*.pyc', 'data_root.json')
+    # node_modules 是 JS 回归测试的开发依赖（39MB），整合包跑不到它
+    Copy-Tree $Studio $studioDest @('.git', '.venv', 'data', 'dist', 'build', '__pycache__', 'tmp', 'node_modules') @('*.pyc', 'data_root.json')
     Copy-Tree (Join-Path $studioDest 'studio') (Join-Path $comfyDest 'custom_nodes\comfyui-neo-studio') @('.git', '__pycache__', 'tests') @('*.pyc', 'data_root.json')
 }
 
@@ -308,7 +312,8 @@ elseif (Test-Path -LiteralPath (Join-Path $PythonSource 'pythonw.exe')) {
     if ($link -and $link.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
         Log '  包内 python\ 已是指向外部 Python 的链接：不复制、不清它，依赖装进它'
     }
-    elseif (-not $DryRun) { Copy-Tree $PythonSource $pyDest @('__pycache__') @('*.pyc') -Mir }
+    # pip 卸载失败留下的 ~umpy / ~yarrow 这类目录不可导入也不小，重建时不带进包
+    elseif (-not $DryRun) { Copy-Tree $PythonSource $pyDest @('__pycache__', '~*') @('*.pyc') -Mir }
 }
 else {
     Log "找不到 $PythonSource\pythonw.exe：写 python.link.txt 说明"
