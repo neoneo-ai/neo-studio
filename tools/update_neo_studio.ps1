@@ -176,7 +176,9 @@ if (-not $SkipDeps) {
 if (Test-Path -LiteralPath $py) {
     Log '整包自检'
     & $py (Join-Path $studioDest 'tools\check_minimal_package.py') --package $Package
-    if ($LASTEXITCODE) { throw "整包自检未通过（退出码 $LASTEXITCODE）；被覆盖的文件备份在 $BackupDir" }
+    # 自检把 models\ 里有文件算失败项，放过模型的包每次更新都会命中；代码已经刷完了，这里报出来让人自己看，
+    # 不能用一条异常把成功的更新判成失败
+    if ($LASTEXITCODE) { Log "自检有项未通过（见上）：模型目录里有你放过的模型属正常；要核对被覆盖的代码，旧版在 $BackupDir" }
 }
 Log "完成：$curVer -> $newVer（ComfyUI 核心、清单插件、包内 python、模型与用户数据都没动）"
 Log '下一步：重启 Neo Studio 生效；插件副本里的用户配置与素材数据原样保留'

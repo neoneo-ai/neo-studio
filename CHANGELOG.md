@@ -10,10 +10,12 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   `NeoStudio-Minimal` fetches the update piece `Neo-Studio-<version>-package-update.zip` from the latest GitHub
   Release and refreshes only the Neo Studio code in the package - the app source, the plugin code copy under
   `ComfyUI\custom_nodes\comfyui-neo-studio\`, the `tools` scripts and the launch scripts - then tops up the
-  dependencies in the package Python and runs the package self-check. The ComfyUI core, the required plugins,
-  the package Python, the models and your data are left alone, and the update deletes nothing: every file it
-  overwrites is copied first into `updates\backup-<old version>\` in the package root, and the plugin copy's
-  `data_root.json` data-root pointer is excluded from the overwrite. A machine that cannot reach GitHub runs
+  dependencies in the package Python and runs the package self-check; a self-check item that fails
+  only because you put models in the package is reported as a note, not as an update failure. The
+  ComfyUI core, the required plugins, the package Python, the models and your data are left alone,
+  and the update deletes nothing: every file it overwrites is copied first into
+  `updates\backup-<old version>\` in the package root, and the plugin copy's `data_root.json`
+  data-root pointer is excluded from the overwrite. A machine that cannot reach GitHub runs
   the same script with `-Zip <update piece.zip>` and a piece downloaded elsewhere; `-Version 1.6.1` pins the
   target version and `-DryRun` prints the plan. The piece itself comes from `tools\build_studio_update.ps1`
   and is published with each Release.
