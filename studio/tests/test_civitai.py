@@ -196,6 +196,8 @@ class SystemProxyTests(unittest.TestCase):
         try:
             set_settings(civitai_proxy="socks5://127.0.0.1:1080")
             self.assertEqual(civitai.proxy(), "socks5://127.0.0.1:1080")
+            # 模型库的请求只跟系统代理，设置里那条 C 站代理不掺进来
+            self.assertEqual(civitai.system_proxy_kwargs(), {"proxy": "http://127.0.0.1:7890"})
             set_settings(civitai_proxy="")
             self.assertEqual(civitai.proxy(), "http://127.0.0.1:7890")
             self.assertEqual(civitai.proxy_kwargs(), {"proxy": "http://127.0.0.1:7890"})

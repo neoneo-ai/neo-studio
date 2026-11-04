@@ -121,6 +121,12 @@ def proxy_kwargs() -> dict:
     return {"proxy": value} if value else {}
 
 
+def system_proxy_kwargs() -> dict:
+    """系统代理的 aiohttp 参数：模型库的 ModelScope / HF 请求走这一个，设置里的 C 站代理不掺进来。"""
+    value = system_proxy()
+    return {"proxy": value} if value else {}
+
+
 def headers(key: str = None) -> dict:
     h = {"User-Agent": USER_AGENT}
     key = api_key() if key is None else str(key or "").strip()

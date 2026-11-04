@@ -4,6 +4,31 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+- **The Model Hub list loads without Hugging Face.** The Model Hub list used to fail as a whole when
+  `huggingface.co` is unreachable - the default endpoint does not resolve on mainland China networks, so
+  the ModelScope tab opened with an empty repository list and a raw `getaddrinfo` error naming a host the
+  user never picked. Now a Hugging Face list that cannot be fetched only skips Hugging Face when
+  ModelScope is the source: the repositories, files and downloads on the ModelScope side work as before,
+  and the list line reads "N repos · the Hugging Face list is unreachable". With Hugging Face as the
+  source the failure is still reported, and the message (and a stalled HF download) names the remedy -
+  set the mirror root URL as the HF endpoint in the hub's ⚙ settings. Covered by
+  `test_list_repos_modelscope_survives_unreachable_hf`,
+  `test_repos_route_modelscope_survives_unreachable_hf` and
+  `test_repos_route_hf_failure_names_endpoint_fix` in `studio/tests/test_model_hub.py`, and the
+  unreachable-source case in `studio/tests/js/model-hub.test.mjs`. The rule runs the other way too: with
+   ModelScope as the source a ModelScope list that cannot be fetched skips ModelScope, the list line names
+   every skipped source, and an existence probe that fails on the network is no longer cached as "this
+   repository is on ModelScope" - a list pinned as ModelScope that then blew up on the file-list step was
+   the failure this closes.
+
+- **The Model Hub reaches the hubs through the system proxy.** Hugging Face and ModelScope requests now go
+  through the proxy the browser uses, read from the registry, and fall back to a direct connection when that
+  proxy port is not listening. A proxy client that takes over DNS leaves a direct connection unable to
+  resolve any of these hosts, `hf-mirror.com` included; only the Civitai requests used a proxy before, so
+  such a machine could not list, search or download from the hub at all. The file-list failure row names the
+  network-and-proxy check as the way out, and it can no longer be picked as a file - picking it used to
+  splice the error text into the landing path.
+
 - **The skill list shows skill names only.** The 技能 + 自定参数 panel's left column no longer prints each skill's
   pinned main model as a second line under its name - a long model path in 11px type made every row two lines tall, so
   a dozen skills read as a wall of model names. Rows carry the name alone; the cross-family warning, which lived in

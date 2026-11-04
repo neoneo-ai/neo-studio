@@ -833,6 +833,7 @@ const EN = {
     "C 站文件清单加载失败：{e}": "Failed to load the Civitai file list: {e}",
     "仓库列表加载中…": "Loading repo list…",
     "{n} 个仓库": "{n} repos",
+    "{n} 个仓库 · {src} 列表不可达": "{n} repos · the {src} list is unreachable",
     "仓库列表加载失败": "Failed to load the repo list",
     "文件清单加载失败：{e}": "Failed to load the file list: {e}",
     "模型库设置已保存": "Model hub settings saved",

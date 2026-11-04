@@ -123,6 +123,20 @@ test("模型库：打开弹窗注入样式并拉取设置与仓库列表", async
     hub.closeModelHub();
 });
 
+test("模型库：HF 源不可达时列表照常出，列表行写明被跳过的源", async () => {
+    resetEnv();
+    clearRoutes();
+    mockHub();
+    mockRoute("/neo_model_hub/repos", () => jsonResponse({ repos: REPOS, skipped: ["huggingface"] }));
+    const overlay = await openHub();
+
+    assert.equal(overlay.querySelector(".neo-hub-info").textContent,
+        "3 个仓库 · Hugging Face 列表不可达", "被跳过的源未写明");
+    assert.equal(overlay.querySelectorAll(".neo-hub-repo option").length, REPOS.length, "仓库列表未照常出");
+    assert.equal(overlay.querySelectorAll(".neo-hub-files option").length, FILES.length, "文件清单未照常出");
+    hub.closeModelHub();
+});
+
 
 test("模型库：文件清单归类与已存在标记，选文件带出落盘目标", async () => {
     resetEnv();
@@ -154,6 +168,30 @@ test("模型库：文件清单归类与已存在标记，选文件带出落盘�
     assert.equal(repoReq.body.source, "modelscope", "仓库请求未带当前源");
     hub.closeModelHub();
 });
+
+test("模型库：文件清单失败行不可作为文件选中，落盘目标不被污染", async () => {
+    resetEnv();
+    clearRoutes();
+    mockHub();
+    mockRoute("/neo_model_hub/files", () => jsonResponse({
+        success: false, source: "modelscope", repo: "Comfy-Org/ghost_repo",
+        error: "文件清单加载失败：ModelScope 连不通，检查本机网络与代理后点 ⟳ 重试，或把源切到 Hugging Face",
+    }, 502));
+    const overlay = await openHub();
+
+    const opts = [...overlay.querySelectorAll(".neo-hub-files option")];
+    assert.equal(opts.length, 1, "应只剩失败行");
+    assert.ok(opts[0].textContent.includes("ModelScope 连不通"), "失败行未写明出路");
+    assert.ok(opts[0].dataset.hubError, "失败行未标记为不可选");
+
+    // 报错行没有 value 属性，浏览器会把文案文本当 value —— 这正是要防的污染点
+    assert.equal(opts[0].value, opts[0].textContent, "报错行的 value 就是文案本身");
+    changeValue(overlay.querySelector(".neo-hub-files"), opts[0].value);
+    await sleep(40);
+    assert.equal(overlay.querySelector(".neo-hub-dest").textContent, "", "落盘预览被错误行污染");
+    hub.closeModelHub();
+});
+
 
 test("模型库：子目录成列表且默认自动探查，可选新建子目录落盘", async () => {
     resetEnv();
@@ -307,6 +345,7 @@ test("模型库：接口失败给出可读提示且弹窗保持可用", async ()
     assert.match(overlay.querySelector(".neo-hub-files").textContent, /文件清单加载失败：仓库不存在该文件/, "清单失败未提示");
     assert.ok(appState.toasts.some((t) => t.summary === "文件清单加载失败"), "清单失败未 toast");
     assert.match(overlay.querySelector(".neo-hub-repo").nextSibling.textContent, /个仓库/, "仓库计数未显示");
+    assert.equal(overlay.querySelector(".neo-hub-dest").textContent, "", "清单报错条目被当成文件拼进了落盘路径");
 
     click(overlay.querySelector(".neo-hub-head .neo-hub-icon-btn:last-of-type"));
     assert.equal(document.querySelector(".neo-hub-overlay"), null, "关闭后弹窗未移除");

@@ -23,6 +23,10 @@ from .util import CONFIGS_DIR
 ORG = "Comfy-Org"
 MS_BASE = "https://modelscope.cn"
 DEFAULT_HF_ENDPOINT = "https://huggingface.co"
+# 国内网络默认解析不到 huggingface.co：报错要给出「换镜像端点」这条出路，光一行 gaierror 没人看得懂
+HF_UNREACHABLE_HINT = "（HF 端点连不上：在模型库 ⚙ 把「HF 端点」改成镜像站根地址，如 https://hf-mirror.com）"
+# ModelScope 是国内站点，连不通基本都是本机网络 / 代理的事，提示给的是「重试或换源」这条路
+MS_UNREACHABLE_HINT = "（ModelScope 连不通：检查本机网络与代理后点 ⟳ 重试，或改用其他源）"
 HUB_FILE = CONFIGS_DIR / "model_hub.json"
 REGISTRY_FILE = CONFIGS_DIR / "model_registry.json"
 
@@ -470,11 +474,15 @@ def merge_repo_lists(hf_items: list, ms_items: list, extra_repos: list = None) -
     return merge_entries(entries)
 
 
-async def _get_json(session, url, headers, params=None, timeout=40, json_payload=None) -> dict:
+async def _get_json(session, url, headers, params=None, timeout=40, json_payload=None,
+                     owner: str = "") -> dict:
     try:
         async with session.request("PUT" if json_payload is not None else "GET", url,
                                    params=params, json=json_payload, headers=headers,
-                                   timeout=aiohttp.ClientTimeout(total=timeout)) as resp:
+                                   timeout=aiohttp.ClientTimeout(total=timeout),
+                                   # 代理客户端接管 DNS 的机器直连必失败（连 hf-mirror.com 都解析不到），
+                                   # 而 aiohttp 只认 HTTP_PROXY 环境变量，注册表里的系统代理得自己取
+                                   **civitai.system_proxy_kwargs()) as resp:
             if resp.status == 404:
                 raise HubError("仓库在该源不存在", 404, "not_found")
             if resp.status == 401:
@@ -483,7 +491,16 @@ async def _get_json(session, url, headers, params=None, timeout=40, json_payload
                 raise HubError(f"HTTP {resp.status}", 502)
             return await resp.json(content_type=None)
     except aiohttp.ClientError as e:
-        raise HubError(f"网络请求失败: {e}", 502)
+        raise HubError(f"网络请求失败: {e}" + unreachable_hint(owner), 502)
+
+
+def unreachable_hint(source: str) -> str:
+    """源连不通时的出路：HF 换镜像端点，ModelScope 查本机网络 / 代理后重试。"""
+    if source == "huggingface":
+        return HF_UNREACHABLE_HINT
+    if source == "modelscope":
+        return MS_UNREACHABLE_HINT
+    return ""
 
 
 async def hf_org_repos(session, settings, refresh=False) -> list:
@@ -492,7 +509,7 @@ async def hf_org_repos(session, settings, refresh=False) -> list:
         return cached[1]
     body = await _get_json(session, hf_list_url(settings["hf_endpoint"]),
                            source_headers("huggingface", settings),
-                           {"author": ORG, "limit": "1000", "full": "true"})
+                           {"author": ORG, "limit": "1000", "full": "true"}, owner="huggingface")
     items = normalize_hf_repos(body)
     _repo_cache["huggingface"] = (time.time(), items)
     return items
@@ -512,13 +529,10 @@ async def ms_org_repos(session, settings, refresh=False) -> list:
     cached = _repo_cache.get("modelscope")
     if cached and not refresh and time.time() - cached[0] < REPO_CACHE_TTL:
         return cached[1]
-    try:
-        body = await _get_json(session, f"{MS_BASE}/api/v1/dolphin/models",
-                               source_headers("modelscope", settings), timeout=25,
-                               json_payload=ms_query_payload(page_size=200, criterion=[
-                                   {"category": "organizations", "predicate": "contains", "values": [ORG]}]))
-    except HubError:
-        return []
+    body = await _get_json(session, f"{MS_BASE}/api/v1/dolphin/models",
+                           source_headers("modelscope", settings), timeout=25, owner="modelscope",
+                           json_payload=ms_query_payload(page_size=200, criterion=[
+                               {"category": "organizations", "predicate": "contains", "values": [ORG]}]))
     items = normalize_ms_repos(body)
     if items:
         _repo_cache["modelscope"] = (time.time(), items)
@@ -530,19 +544,41 @@ async def ms_repo_exists(session, settings, repo: str) -> bool:
     if cached and time.time() - cached[0] < MS_PROBE_TTL:
         return cached[1]
     try:
-        await _get_json(session, ms_model_url(repo), source_headers("modelscope", settings), timeout=25)
+        await _get_json(session, ms_model_url(repo), source_headers("modelscope", settings),
+                        timeout=25, owner="modelscope")
         found = True
     except HubError as e:
-        found = e.status != 404
+        if e.status != 404:
+            # 连不通 / 要 Token 不是「这个仓库不存在」：写进缓存会把整表钉成「MS」一天，
+            # 用户挑中的仓库一到文件清单那步必然失败
+            return False
+        found = False
     _ms_exist_cache[repo] = (time.time(), found)
     return found
 
 
-async def list_repos(source: str, settings: dict, refresh=False) -> list:
-    """Comfy-Org 仓库并集。ModelScope 列表未收录的仓库并发探测存在性（缓存 1 天）。"""
+async def list_repos(source: str, settings: dict, refresh=False) -> tuple:
+    """Comfy-Org 仓库并集，返回 (仓库列表, 被跳过的源列表)。
+
+    ModelScope 列表未收录的仓库并发探测存在性（缓存 1 天）。列表接口挂掉的源记进 skipped：
+    国内网络默认解析不到 huggingface.co，而 ModelScope 整站连不通时列表只剩内置注册表——不把「哪个源
+    没拿到数据」记下来，用户看到的就是空列表 / 一堆「未探测」加一句看不懂的 DNS 报错。
+    """
     async with aiohttp.ClientSession() as session:
-        hf_items = await hf_org_repos(session, settings, refresh)
-        ms_items = await ms_org_repos(session, settings, refresh)
+        skipped = []
+        try:
+            hf_items = await hf_org_repos(session, settings, refresh)
+        except HubError:
+            if source != "modelscope":
+                raise
+            hf_items = []
+            skipped.append("huggingface")
+        try:
+            ms_items = await ms_org_repos(session, settings, refresh)
+        except HubError:
+            ms_items = []
+            if source == "modelscope":
+                skipped.append("modelscope")
         repos = merge_repo_lists(hf_items, ms_items, registry_repos(load_registry()))
         if source == "modelscope":
             sem = asyncio.Semaphore(MS_PROBE_CONCURRENCY)
@@ -553,7 +589,7 @@ async def list_repos(source: str, settings: dict, refresh=False) -> list:
                         entry["on_ms"] = await ms_repo_exists(session, settings, entry["repo"])
 
             await asyncio.gather(*(probe(e) for e in repos))
-    return repos
+    return repos, skipped
 
 
 def search_repos(repos: list, query: str) -> list:
@@ -578,7 +614,8 @@ async def global_search_repos(session, source: str, query: str, settings: dict) 
             return []
         return [dict(it, on_ms=True) for it in normalize_ms_repos(body)]
     body = await _get_json(session, hf_list_url(settings["hf_endpoint"]),
-                           source_headers(source, settings), {"search": query, "limit": "50"})
+                           source_headers(source, settings), {"search": query, "limit": "50"},
+                           owner="huggingface")
     return [dict(it, on_hf=True) for it in normalize_hf_repos(body)]
 
 
@@ -630,7 +667,8 @@ async def hf_repo_files(session, settings, repo: str, refresh=False) -> list:
     if cached and not refresh and time.time() - cached[0] < FILE_CACHE_TTL:
         return cached[1]
     body = await _get_json(session, hf_model_url(settings["hf_endpoint"], repo),
-                           source_headers("huggingface", settings), {"blobs": "true"})
+                           source_headers("huggingface", settings), {"blobs": "true"},
+                           owner="huggingface")
     files = normalize_hf_files(body)
     _file_cache[("huggingface", repo)] = (time.time(), files)
     return files
@@ -645,7 +683,8 @@ async def ms_repo_files(session, settings, repo: str, refresh=False) -> list:
     collected, dirs, requests = [], [""], 0
     while dirs and requests < 60:
         root = dirs.pop(0)
-        body = await _get_json(session, ms_files_url(repo, root), headers, timeout=30)
+        body = await _get_json(session, ms_files_url(repo, root), headers, timeout=30,
+                               owner="modelscope")
         requests += 1
         entries = ((body or {}).get("Data") or {}).get("Files") or []
         collected.extend(normalize_ms_files(entries, root))
@@ -814,14 +853,15 @@ async def _run_download(state: dict, settings: dict) -> None:
     if start:
         headers["Range"] = f"bytes={start}-"
     url = resolve_url(state["source"], state["repo"], state["path"], settings)
-    # C 站签名地址短时效：续传每次重新请求签名端点，代理只对 C 站请求生效
-    civitai_kwargs = civitai.proxy_kwargs() if state["source"] == "civitai" else {}
+    # C 站签名地址短时效：续传每次重新请求签名端点；代理按源取，C 站用设置里填的，HF / ModelScope 用系统代理
+    proxy_kwargs = (civitai.proxy_kwargs() if state["source"] == "civitai"
+                    else civitai.system_proxy_kwargs())
     state["done"] = start
     tick, tick_bytes = time.time(), 0
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(url, headers=headers, timeout=download_timeout(settings),
-                                   **civitai_kwargs) as resp:
+                                   **proxy_kwargs) as resp:
                 if resp.status == 401:
                     raise HubError(civitai.error_message(401) if state["source"] == "civitai"
                                    else "该源需要有效 Token（受限仓库）", 401, "need_token")
@@ -867,7 +907,7 @@ async def _run_download(state: dict, settings: dict) -> None:
     except HubError as e:
         _finish(state, "error", str(e))
     except (aiohttp.ClientError, asyncio.IncompleteReadError, OSError) as e:
-        _finish(state, "error", f"下载中断: {e}")
+        _finish(state, "error", f"下载中断: {e}" + unreachable_hint(state["source"]))
     except asyncio.CancelledError:
         _finish(state, "paused", "已取消（断点保留，可续传）")
 
@@ -936,7 +976,7 @@ async def rs_hub_repos(request):
     settings = load_hub_settings()
     query = str(body.get("query") or "").strip()
     try:
-        repos = await list_repos(source, settings, bool(body.get("refresh")))
+        repos, skipped = await list_repos(source, settings, bool(body.get("refresh")))
         if query:
             # 跨组织搜索：GGUF 等 LLM 仓库不在 Comfy-Org 下，需要全局结果补进列表
             async with aiohttp.ClientSession() as session:
@@ -944,7 +984,7 @@ async def rs_hub_repos(request):
             repos = merge_entries(search_repos(repos, query) + extra)
     except Exception as e:
         return _error(e, source)
-    return web.json_response({"success": True, "source": source, "repos": repos})
+    return web.json_response({"success": True, "source": source, "repos": repos, "skipped": skipped})
 
 
 @routes.post("/neo_model_hub/files")

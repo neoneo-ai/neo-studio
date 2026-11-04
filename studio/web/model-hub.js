@@ -133,7 +133,8 @@ function fillFiles(h) {
 
 function selectedFile(h) {
     const opt = h.ui.fileList.selectedOptions[0];
-    if (!opt || !opt.value) return null;
+    // 加载失败时清单里只有一条报错文案，它不是文件：按它算会把报错当文件名拼进落盘路径
+    if (!opt || !opt.value || opt.dataset.hubError) return null;
     return { path: opt.value, category: opt.dataset.category, filename: opt.dataset.filename,
              existsSub: opt.dataset.existsSub || "" };
 }
@@ -513,6 +514,7 @@ async function loadCivitaiFiles(h) {
     } catch (e) {
         const opt = document.createElement("option");
         opt.textContent = tf("C 站文件清单加载失败：{e}", { e: e.message || e });
+        opt.dataset.hubError = "1";
         h.ui.fileList.appendChild(opt);
         showToast(app, "error", t("C 站文件清单加载失败"), String(e.message || e));
     } finally {
@@ -529,7 +531,12 @@ async function loadRepos(h, refresh) {
         });
         h.repos = data.repos || [];
         fillRepos(h);
-        h.ui.repoInfo.textContent = tf("{n} 个仓库", { n: h.repos.length });
+        h.ui.repoInfo.textContent = data.skipped?.length
+            ? tf("{n} 个仓库 · {src} 列表不可达", {
+                n: h.repos.length,
+                src: data.skipped.map((s) => SOURCE_NAMES[s] || s).join(" + "),
+            })
+            : tf("{n} 个仓库", { n: h.repos.length });
         await loadFiles(h, !!refresh);
     } catch (e) {
         h.ui.repoInfo.textContent = t("仓库列表加载失败");
@@ -554,6 +561,7 @@ async function loadFiles(h, refresh) {
     } catch (e) {
         const opt = document.createElement("option");
         opt.textContent = tf("文件清单加载失败：{e}", { e: e.message || e });
+        opt.dataset.hubError = "1";
         h.ui.fileList.appendChild(opt);
         showToast(app, "error", t("文件清单加载失败"), String(e.message || e));
     } finally {

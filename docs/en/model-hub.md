@@ -69,6 +69,22 @@ access). When that endpoint is down, missing repositories are filled in from Hug
 a per-repository existence probe against the registry (probe results cached for a day). A token is only
 needed to serve gated repository files, so a wrong token does not affect listing or search.
 
+**The list loads when one side is unreachable**: with Hugging Face as the source, a Hugging Face repository
+list that cannot be fetched is reported and the message names the way out - point the HF endpoint in ⚙ at a
+mirror root URL, and a stalled HF download says the same. With ModelScope as the source the same failure only
+skips Hugging Face - the list line reads "N repos · the Hugging Face list is unreachable", and the ModelScope
+repositories and files still list, search and download (the default `huggingface.co` endpoint does not resolve
+on mainland China networks, so that path must not turn the whole page into an empty list). A ModelScope list
+that cannot be fetched skips ModelScope the same way and the line names every side that returned nothing; an
+existence probe that fails on the network is not recorded as "this repository is on ModelScope", so a list
+pinned as ModelScope cannot blow up on the file-list step.
+
+**Hugging Face and ModelScope requests use the browser's system proxy** (read from the registry, falling back
+to a direct connection when that proxy port is not listening). A proxy client that takes over DNS leaves a
+direct connection unable to resolve any of these sites; only the Civitai requests used a proxy before, so such
+a machine could not reach the hub at all. The file-list failure row names the network-and-proxy check as the
+way out and cannot be picked as a file - picking it used to splice the error text into the landing path.
+
 ## Curated registry
 
 `configs/model_registry.json` keeps the groups and recommended combinations (repository names and notes

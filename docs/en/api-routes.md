@@ -399,7 +399,7 @@ details in [model-hub.md](model-hub.md).
 |------|------|------|
 | GET | `/neo_model_hub/settings` | Settings + curated registry + drop-in categories + available sources |
 | POST | `/neo_model_hub/settings` | Save settings (source / endpoint / token / LLM subfolder / timeout, sanitized before writing) |
-| POST | `/neo_model_hub/repos` | Repository list (union of both sources + registry completion; with `query` it adds cross-organization search) |
+| POST | `/neo_model_hub/repos` | Repository list (union of both sources + registry completion; with `query` it adds cross-organization search; an unreachable HF list only skips HF, the response carries `skipped`) |
 | POST | `/neo_model_hub/files` | Repository file manifest (non-model files filtered, with category / file name / already-exists flags) |
 | POST | `/neo_model_hub/subfolders` | Existing subfolders under the category drop-in directory + automatic default subfolder probing |
 | POST | `/neo_model_hub/download` | Start a download (single task, `.part` + HTTP Range resume) |
@@ -410,6 +410,9 @@ details in [model-hub.md](model-hub.md).
   the cache.
 - ModelScope organization lists and cross-organization search use the anonymous `dolphin/models` endpoint; when that
   endpoint fails, repositories are probed for existence one by one from the registry (cached 1 day).
+- When the HF list cannot be fetched: with ModelScope as the source only HF is skipped (the response carries
+  `skipped: "huggingface"` and the list still loads); with HF as the source the error names the fix - point the HF
+  endpoint in ⚙ at a mirror root URL, which a stalled HF download says too.
 - Source-side failures return errors with a `code`: `need_token` (401), `busy` (409), `not_on_source` (404, with an
   `other_source` suggestion to switch source).
 

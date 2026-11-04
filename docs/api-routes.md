@@ -350,7 +350,7 @@ LLM 模式与配置见 [llm.md](llm.md)，技能设计见 [skills.md](skills.md)
 |------|------|------|
 | GET | `/neo_model_hub/settings` | 设置 + 策展注册表 + 落盘类别 + 可用源 |
 | POST | `/neo_model_hub/settings` | 保存设置（源 / 端点 / Token / LLM 子目录 / 超时，写入前清洗） |
-| POST | `/neo_model_hub/repos` | 仓库列表（双源并集 + 注册表补齐，带 `query` 时叠加跨组织搜索） |
+| POST | `/neo_model_hub/repos` | 仓库列表（双源并集 + 注册表补齐，带 `query` 时叠加跨组织搜索；HF 列表不可达时只跳过 HF，响应带 `skipped`） |
 | POST | `/neo_model_hub/files` | 仓库文件清单（过滤非模型文件，附类别 / 文件名 / 已存在标记） |
 | POST | `/neo_model_hub/subfolders` | 类别落盘目录下已有子目录列表 + 默认子目录自动探查 |
 | POST | `/neo_model_hub/download` | 启动下载（单任务，`.part` + HTTP Range 续传） |
@@ -359,6 +359,7 @@ LLM 模式与配置见 [llm.md](llm.md)，技能设计见 [skills.md](skills.md)
 
 - 仓库列表与文件清单走服务端缓存（15 / 10 分钟），请求带 `refresh: true` 跳过缓存。
 - ModelScope 组织列表与跨组织搜索走匿名 `dolphin/models` 接口；接口失败时按注册表逐仓库探测存在性（缓存 1 天）。
+- HF 列表拉不通时：源为 ModelScope 只跳过 HF（响应 `skipped: "huggingface"`，列表照常出）；源为 HF 时报错写明「把 ⚙ 的 HF 端点改成镜像站」，HF 下载中断同样带上这句。
 - 源侧失败返回带 `code` 的错误：`need_token`（401）、`busy`（409）、`not_on_source`（404，附 `other_source` 建议换源）。
 
 ## skill_models.py — `/neo_skill_models/*`

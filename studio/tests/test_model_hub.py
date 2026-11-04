@@ -48,6 +48,9 @@ if _PKG not in sys.modules:
 
 model_hub = importlib.import_module(f"{_PKG}.model_hub")
 
+# 系统代理探测读真实注册表，结果会随本机代理客户端状态漂；代理行为由用例自己 stub
+model_hub.civitai.system_proxy = lambda: ""
+
 CATEGORIES = ("checkpoints", "diffusion_models", "vae", "text_encoders", "clip_vision",
               "loras", "controlnet", "model_patches", "upscale_models", "audio_vae",
               "audio_encoders")
@@ -118,15 +121,15 @@ class FakeSession:
         self.handler = handler
         self.requests = []
 
-    def get(self, url, headers=None, params=None, timeout=None):
-        return self._call("GET", url, headers, params)
+    def get(self, url, headers=None, params=None, timeout=None, proxy=None):
+        return self._call("GET", url, headers, params, proxy=proxy)
 
-    def request(self, method, url, params=None, json=None, headers=None, timeout=None):
-        return self._call(method, url, headers, params, json)
+    def request(self, method, url, params=None, json=None, headers=None, timeout=None, proxy=None):
+        return self._call(method, url, headers, params, json, proxy)
 
-    def _call(self, method, url, headers, params, json_payload=None):
+    def _call(self, method, url, headers, params, json_payload=None, proxy=None):
         self.requests.append({"method": method, "url": url, "headers": dict(headers or {}),
-                              "params": dict(params or {}), "json": json_payload})
+                              "params": dict(params or {}), "json": json_payload, "proxy": proxy})
         status, body, resp_headers, chunks = self.handler(url, dict(headers or {}), dict(params or {}))
         return FakeResp(status, body, resp_headers, chunks)
 
@@ -523,15 +526,41 @@ class RepoFlowTests(unittest.TestCase):
 
         install_session(handler)
         settings = make_settings(self.root)
-        repos = asyncio.run(model_hub.list_repos("modelscope", settings, True))
+        repos, skipped = asyncio.run(model_hub.list_repos("modelscope", settings, True))
+        # ModelScope 列表接口不可用（本用例 handler 直接 404）→ 如实标列表不可达，退回逐仓库探测
+        self.assertEqual(skipped, ["modelscope"])
         by = {r["repo"]: r for r in repos}
         self.assertTrue(by["Comfy-Org/a"]["on_hf"] and by["Comfy-Org/a"]["on_ms"])
         # 注册表仓库两源都探测不到 → 双标记 False，列表仍保留供手动尝试
         self.assertFalse(by["Comfy-Org/Real-ESRGAN_repackaged"]["on_ms"])
         self.assertIn("Comfy-Org/Wan_2.2_ComfyUI_Repackaged", by)
 
+    def test_list_repos_modelscope_survives_unreachable_hf(self):
+        """国内网络默认解析不到 huggingface.co：选 ModelScope 时 HF 列表失败只跳过 HF，列表照常出。"""
+        def handler(url, headers, params):
+            if "/api/models" in url:
+                raise model_hub.aiohttp.ClientError(
+                    "Cannot connect to host huggingface.co:443 ssl:default [getaddrinfo failed]")
+            if "/api/v1/dolphin/models" in url:
+                return 200, {"Data": {"Model": {"Models": [
+                    {"Name": "x", "Path": "Comfy-Org", "Downloads": 3}]}}}, {}, None
+            return 404, {}, {}, None
+
+        install_session(handler)
+        settings = make_settings(self.root)
+        repos, skipped = asyncio.run(model_hub.list_repos("modelscope", settings, True))
+        self.assertEqual(skipped, ["huggingface"])
+        by = {r["repo"]: r for r in repos}
+        self.assertTrue(by["Comfy-Org/x"]["on_ms"])
+        self.assertFalse(by["Comfy-Org/x"]["on_hf"])
+
+        # 源是 HF 时 HF 列表失败必须报出来，且给出「换镜像端点」这条出路
+        with self.assertRaises(model_hub.HubError) as cm:
+            asyncio.run(model_hub.list_repos("huggingface", settings, True))
+        self.assertIn("hf-mirror.com", str(cm.exception))
+
     def test_ms_org_repos_composite_sort(self):
-        """组织列表走 dolphin 接口：匿名可用、综合排序，失败时退回逐仓库探测。"""
+        """组织列表走 dolphin 接口：匿名可用、综合排序；接口挂了要报出来，这一侧没数据得让上层知道。"""
         def handler(url, headers, params):
             if "/api/v1/dolphin/models" in url:
                 return 200, {"Data": {"Model": {"Models": [
@@ -548,8 +577,26 @@ class RepoFlowTests(unittest.TestCase):
         self.assertEqual(payload["SortBy"], "Default")
         self.assertEqual(payload["Criterion"][0]["values"], ["Comfy-Org"])
 
-        self.assertEqual(asyncio.run(model_hub.ms_org_repos(
-            FakeSession(lambda u, h, p: (502, {}, {}, None)), settings, True)), [])
+        with self.assertRaises(model_hub.HubError):
+            asyncio.run(model_hub.ms_org_repos(
+                FakeSession(lambda u, h, p: (502, {}, {}, None)), settings, True))
+
+    def test_list_repos_reports_unreachable_modelscope(self):
+        """ModelScope 整站连不通时列表只剩 HF + 注册表：skipped 要说明是 ModelScope 这侧没拿到数据。"""
+        def handler(url, headers, params):
+            if "/api/models" in url:
+                return 200, [{"id": "Comfy-Org/a", "downloads": 10}], {}, None
+            raise model_hub.aiohttp.ClientError(
+                "Cannot connect to host modelscope.cn:443 ssl:default [getaddrinfo failed]")
+
+        install_session(handler)
+        settings = make_settings(self.root)
+        repos, skipped = asyncio.run(model_hub.list_repos("modelscope", settings, True))
+        self.assertEqual(skipped, ["modelscope"])
+        self.assertTrue(next(r for r in repos if r["repo"] == "Comfy-Org/a")["on_hf"])
+        # 连不通不等于「仓库在 MS 上」：整表被钉成 MS，用户挑中的仓库一到文件清单那步必炸
+        self.assertFalse(any(r["on_ms"] for r in repos))
+        self.assertFalse(model_hub._ms_exist_cache)
 
     def test_global_search_repos(self):
         def handler(url, headers, params):
@@ -666,6 +713,24 @@ class DownloadTests(unittest.TestCase):
         part, meta = model_hub.part_paths(dest)
         self.assertFalse(part.exists())
         self.assertFalse(meta.exists())
+
+    def test_hub_requests_use_system_proxy(self):
+        """代理客户端接管 DNS 的机器直连必失败：HF / ModelScope 的请求必须带上注册表里的系统代理"""
+        prev_proxy = model_hub.civitai.system_proxy
+        model_hub.civitai.system_proxy = lambda: "http://127.0.0.1:7890"
+        try:
+            data = b"A" * 20
+            session = install_session(lambda url, headers, params:
+                                      (200, {}, {"Content-Length": str(len(data))}, [data]))
+            settings = make_settings(self.root)
+            asyncio.run(model_hub.list_repos("huggingface", settings, True))
+            self.assertEqual({req["proxy"] for req in session.requests}, {"http://127.0.0.1:7890"})
+            snap = asyncio.run(self._run({"source": "modelscope", "repo": "Comfy-Org/a", "path": "p.bin"}))
+            self.assertEqual(snap["state"], "done")
+            self.assertEqual(session.requests[-1]["proxy"], "http://127.0.0.1:7890")
+        finally:
+            model_hub.civitai.system_proxy = prev_proxy
+
 
     def test_cancel_keeps_part_then_resume(self):
         def handler(url, headers, params):
@@ -846,6 +911,51 @@ class RouteTests(unittest.TestCase):
             {"source": "modelscope", "query": "qwen3", "refresh": True}))))
         self.assertTrue(body["success"])
         self.assertTrue(body["repos"])
+
+    def test_repos_route_modelscope_survives_unreachable_hf(self):
+        """HF 端点不可达时，ModelScope 源的 /repos 照常出列表，并带回被跳过的源供界面说明。"""
+        def handler(url, headers, params):
+            if "/api/models" in url:
+                raise model_hub.aiohttp.ClientError(
+                    "Cannot connect to host huggingface.co:443 ssl:default [getaddrinfo failed]")
+            if "/api/v1/dolphin/models" in url:
+                return 200, {"Data": {"Model": {"Models": [
+                    {"Name": "Qwen3-8B-GGUF", "Path": "Qwen", "Downloads": 7}]}}}, {}, None
+            return 404, {}, {}, None
+
+        install_session(handler)
+        model_hub.save_hub_settings({"source": "modelscope"})
+        body = payload(asyncio.run(model_hub.rs_hub_repos(
+            FakeRequest({"source": "modelscope", "query": "qwen3", "refresh": True}))))
+        self.assertTrue(body["success"])
+        self.assertEqual(body["skipped"], ["huggingface"])
+        self.assertIn("Qwen/Qwen3-8B-GGUF", {r["repo"] for r in body["repos"]})
+
+    def test_repos_route_hf_failure_names_endpoint_fix(self):
+        """源是 HF 且端点不可达：报错要给出「在 ⚙ 改 HF 端点」这条出路，光一行 gaierror 没人看得懂。"""
+        def handler(url, headers, params):
+            if "/api/models" in url:
+                raise model_hub.aiohttp.ClientError(
+                    "Cannot connect to host huggingface.co:443 ssl:default [getaddrinfo failed]")
+            return 404, {}, {}, None
+
+        install_session(handler)
+        body = payload(asyncio.run(model_hub.rs_hub_repos(
+            FakeRequest({"source": "huggingface", "refresh": True}))))
+        self.assertFalse(body["success"])
+        self.assertIn("hf-mirror.com", body["error"])
+
+    def test_files_route_ms_failure_names_retry_path(self):
+        """ModelScope 连不通时文件清单的报错要给出去路：查本机网络 / 代理后重试，或换源。"""
+        def handler(url, headers, params):
+            raise model_hub.aiohttp.ClientError(
+                "Cannot connect to host modelscope.cn:443 ssl:default [getaddrinfo failed]")
+
+        install_session(handler)
+        resp = asyncio.run(model_hub.rs_hub_files(FakeRequest(
+            {"source": "modelscope", "repo": "Comfy-Org/z_image_turbo", "refresh": True})))
+        self.assertEqual(resp.status, 502)
+        self.assertIn("ModelScope 连不通", payload(resp)["error"])
 
     def test_files_route_rejects_bad_input(self):
         self.assertEqual(asyncio.run(model_hub.rs_hub_files(
