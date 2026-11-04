@@ -89,9 +89,6 @@ webp 缩略图与 `index.json`，`gallery_deploy_oss.py` 按 `OSS_ACCESS_KEY_ID`
 - 复制走 robocopy（`/COPY:DAT` + `/XD` `/XF`），顶层排除项给全路径（`/XD models` 会连 `comfy\ldm\models`
   一起排掉），退出码 8 以上才是失败；`git` 模式 clone 完要 checkout 到清单 commit 并核对落点。
 
-  `index.json` 由摆姿仓库的 `npm run lib` 生成、同步原样带过去。`pose/scenes`、`pose/refs`、
-  `pose/presets` 是用户写的东西，同样不在镜像范围内。
-
 ## Validation
 
 脚本从仓库根运行，相对路径才成立：
