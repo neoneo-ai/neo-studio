@@ -4,6 +4,8 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-11-04
+
 - **The Model Hub list loads without Hugging Face.** The Model Hub list used to fail as a whole when
   `huggingface.co` is unreachable - the default endpoint does not resolve on mainland China networks, so
   the ModelScope tab opened with an empty repository list and a raw `getaddrinfo` error naming a host the
