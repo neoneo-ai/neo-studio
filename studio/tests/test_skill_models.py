@@ -3,6 +3,12 @@
 # 覆盖：清单缺失/坏 JSON 的降级、extends 合并与去重、文件层就位（配置写死名精确查 / 同名落别处 /
 #       族系变体互备）、LoRA 激活口径、族系聚合、下载计划（当前源 / 该源没有 / 出处非法 / 落盘子目录）、
 #       随包 37 份 models.json 的静态口径
+from stub_env import GALLERY_STUB_PREFIXES, restore, snapshot
+
+# 本文件 import 期把 server / folder_paths 换成桩，末尾归还。不还的话排在后面的 test_skills 拿到的
+# 就是这份不带 get_input_directory 的桩，它那批参考图用例会整批红。
+_STUB_SAVED = snapshot(GALLERY_STUB_PREFIXES)
+
 import importlib
 import json
 import os
@@ -107,8 +113,12 @@ def bind_models(root: Path):
 
 
 def restore_models(saved):
-    skill_models.folder_paths = sys.modules["folder_paths"] = saved[0]
+    skill_models.folder_paths = saved[0]
     image_gen_files.folder_paths = saved[1]
+    # sys.modules 里的 folder_paths 也要交还给收集期那份桩：本文件的 FakeFolderPaths 只带
+    # get_filename_list，用例跑完把它留在 sys.modules 里，后面的 test_skills 就取不到
+    # get_input_directory，它那批参考图用例整批红。
+    restore(("folder_paths",), _STUB_SAVED)
 
 
 @contextmanager
@@ -764,4 +774,6 @@ class TestShippedManifests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+restore(GALLERY_STUB_PREFIXES, _STUB_SAVED)
 

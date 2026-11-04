@@ -1521,7 +1521,17 @@ class TestNativeBackend(unittest.TestCase):
         # 丢桩后必须重绑到真实模块；patch.object(comfy, "sd", FakeSD)
         # 也要求 sys.modules 里已有 comfy.sd。
         cls._llm_fp = llm_mod.folder_paths
-        import comfy.sd, folder_paths
+        try:
+            import comfy.sd, folder_paths
+        except (ImportError, AttributeError) as exc:
+            # 真实 comfy.cli_args 在模块顶层读 `comfy.options.args_parsing`：sys.modules 里的 comfy
+            # 还是前面文件那份普通模块桩时，子模块导入只认 sys.modules、绑不上父属性，这条 import
+            # 断在这里。桩已丢、真实 comfy 半进不出，后面文件的 `import folder_paths` 会跟着炸，
+            # 所以还原本类丢掉的桩再跳过，给后面的文件留一份干净的 sys.modules。
+            restore(_COMFY_PREFIX, cls._comfy_saved)
+            restore(_FP_PREFIX, cls._fp_saved)
+            llm_mod.folder_paths = cls._llm_fp
+            raise unittest.SkipTest(f"同级内核的 comfy 导不起来: {exc}")
         llm_mod.folder_paths = folder_paths
 
     @classmethod
