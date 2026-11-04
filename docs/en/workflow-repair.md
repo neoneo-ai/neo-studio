@@ -8,6 +8,8 @@ move or a folder rename. The backend `workflow.py` only replaces a path when it 
 back one entry per change (old path → new path, plus the candidate files for everything that did not
 match).
 
+![Stale model paths highlighted in red on the canvas after importing a community workflow](../assets/images/workflow-repair-canvas.png)
+
 ## 🅝 menu → "🔧 Repair Workflow"
 
 One click checks and repairs the **current canvas** workflow:
@@ -25,7 +27,7 @@ One click checks and repairs the **current canvas** workflow:
 - When the endpoint is unavailable a warning is shown and the canvas is left untouched; when nothing is
   stale you get a "check complete" notice.
 
-![🅝 menu "Repair Workflow" confirmation dialog](../assets/images/workflow-repair-toolbar.png)
+![🅝 menu "Repair Workflow" confirmation dialog](../assets/images/workflow-repair-dialog.png)
 
 ## Repair mappings
 
@@ -48,7 +50,5 @@ Every repair you confirmed (canvas / gallery / recipe — the three sources) is 
 (browser localStorage, up to 50 runs) and shown as a table, one row per change: time · source ·
 node / input · old path · result (unmatched rows show the candidates). One click clears it.
 Records stay on this machine and are never uploaded.
-
-![🅝 menu "Repair log" table](../assets/images/workflow-repair-records-sm.jpg)
 
 Backend implementation: [architecture.md](architecture.md) (`workflow.py`). API: [api-routes.md](api-routes.md).

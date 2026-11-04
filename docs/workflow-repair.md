@@ -4,6 +4,8 @@
 后端 `workflow.py` 只在模型目录中找到**高置信度匹配**时才替换：把工作流发给 `POST /neo_nodes/repair`，
 返回每处修改的明细（原路径 → 新路径、未匹配项的候选文件列表）。
 
+![导入社区工作流后画布上标红的失效模型路径](assets/images/workflow-repair-canvas.png)
+
 ## 🅝 菜单「🔧 修复工作流」
 
 对**当前画布**工作流一键检查并修复：
@@ -17,7 +19,7 @@
   直接跳到模型库搜索下载。
 - 接口不可用时给出警告且画布保持原样；无失效路径时提示「检查完成」。
 
-![🅝 菜单「修复工作流」确认框](assets/images/workflow-repair-toolbar.png)
+![🅝 菜单「修复工作流」确认框](assets/images/workflow-repair-dialog.png)
 
 ## 修复映射
 
@@ -36,7 +38,5 @@
 所有确认过的修复（画布 / 素材库 / 配方三个来源）都会写入本地日志（浏览器 localStorage，最多 50 次），
 以表格展示每处修改点：时间 · 来源 · 节点 / 输入 · 原路径 · 修复结果（未匹配项显示候选），可一键清空。
 记录仅存于本机，不上传。
-
-![🅝 菜单「修复记录」日志表格](assets/images/workflow-repair-records-sm.jpg)
 
 后端实现见 [architecture.md](architecture.md)（`workflow.py`），API 见 [api-routes.md](api-routes.md)。
