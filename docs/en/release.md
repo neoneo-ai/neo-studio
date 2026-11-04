@@ -152,7 +152,7 @@ installed plugin copy), a portable Python, and relative-path launchers.
 - The required plugin set follows the nodes the built-in presets use. `tools\minimal_plugins.json` pins each
   commit, the nodes the plugin provides, and the presets that use it: `comfyui_controlnet_aux`
   (AIO_Preprocessor), `ComfyUI-VDN-H3` (ApplyVDNH3Advanced) and `comfyui_fl-cosyvoice3` (FL_CosyVoice3_*).
-  `ResolutionSelector`, `TextEncodeQwenImage21`, `MiniMaxH3*` and `CreateVideo` are core nodes in ComfyUI 0.42.5,
+  `ResolutionSelector`, `TextEncodeQwenImage21`, `MiniMaxH3*` and `CreateVideo` are core nodes in ComfyUI 0.44.0,
   so nothing is installed for them.
 - Dependencies are installed into the one `python\` inside the package at build time — `torch` + CUDA,
   `ComfyUI\requirements.txt`, `studio\requirements.txt`, the desktop app dependencies from `pyproject.toml` and
@@ -172,6 +172,17 @@ installed plugin copy), a portable Python, and relative-path launchers.
   the manifest's `import_smoke` imports inside the package Python (modules named in `import_notes` are reported,
   not imported); `tools\verify_minimal_package.ps1` adds the manifest plugin set, the shipped preset set and the
   setup scripts. `studio/tests/test_minimal_package.py` pins the consistency between presets and excluded plugin nodes.
+- Which source the package is built from is `-StudioSource`: the working tree by default, and a tag worktree for a
+  release build, so the package ships exactly that code.
+- The integration-package update piece `Neo-Studio-<version>-package-update.zip` comes from
+  `tools\build_studio_update.ps1` and ships with the Release. The entry point inside the package is
+  `Neo-Studio\tools\update_neo_studio.ps1`: it takes the update piece from the GitHub Release and refreshes only the
+  `Neo-Studio\` tree (app source, the `studio` copy, the `tools` scripts, the launch scripts) and the code copy at
+  `ComfyUI\custom_nodes\comfyui-neo-studio\`, then installs dependencies and runs the package self-check. The
+  ComfyUI core, the manifest plugins, the package Python, models and user data are untouched; the update deletes
+  nothing, every file it overwrites is backed up under `updates\backup-<old version>\` in the package root, and the
+  plugin copy's `data_root.json` pointer is excluded from the overwrite. A machine that cannot reach GitHub passes
+  `-Zip <update piece.zip>` with a downloaded piece.
 
 ```powershell
 pwsh tools\build_minimal_package.ps1 -DryRun              # print the plan, write nothing
@@ -179,6 +190,9 @@ pwsh tools\build_minimal_package.ps1 -Target <package root>   # build it (-Plugi
 python tools\check_minimal_package.py --comfyui <ComfyUI root> --studio <repo root>\studio
 python tools\check_minimal_package.py --package <package root>   # whole-package check
 pwsh tools\verify_minimal_package.ps1 -Package <package root>    # self-check + manifest/preset audit
+pwsh tools\build_minimal_package.ps1 -StudioSource <worktree root>   # build from a tag worktree
+pwsh tools\build_studio_update.ps1 -DryRun   # update piece: print the plan (default build\, Release publishes dist\)
+pwsh Neo-Studio\tools\update_neo_studio.ps1 -DryRun  # run inside the package: print the update plan
 ```
 
 

@@ -1,9 +1,9 @@
 {
-  "comment": "最小整合包的插件清单。commit 锁版本、nodes 写死插件必须提供的节点、strip 写复制时要剥掉的东西。",
+  "comment": "最小整合包的插件清单。commit 锁版本、nodes 写死插件必须提供的节点、strip 写复制时要剥掉的东西。commit 取打包机上随包那份插件的落点：copy 模式发的就是它，git 模式 clone 同一个 commit 并核对落点。",
   "comfyui": {
     "repo": "https://github.com/Comfy-Org/ComfyUI",
-    "commit": "483dae4326356b81de05d27aca3f433dd323cc25",
-    "version": "0.42.5"
+    "commit": "2c75dc1b379a59e0880619d029607af5169a62ef",
+    "version": "0.44.0"
   },
   "python": {
     "version": "3.12.10",
@@ -24,8 +24,8 @@
   "required": [
     {
       "name": "comfyui_controlnet_aux",
-      "repo": "https://github.com/Fannin1106/ComfyUI-ControlNet-Aux",
-      "commit": "00c2730b36111a38d85316f751c9b94a907575d2",
+      "repo": "https://github.com/Fannovel16/comfyui_controlnet_aux",
+      "commit": "a587a4c1594524c1d2de5cd1a86cd868ff448e1c",
       "nodes": ["AIO_Preprocessor"],
       "used_by": ["qwen_image_21_controlnet"],
       "strip": ["ckpts", "anmodels"],
@@ -37,8 +37,8 @@
     },
     {
       "name": "ComfyUI-VDN-H3",
-      "repo": "https://github.com/vrgamedevgirl84/ComfyUI-VDN-H3",
-      "commit": "15cfd0214c7cf54a36fa8dbe87325e09c5915739",
+      "repo": "https://github.com/Saganaki22/ComfyUI-VDN-H3",
+      "commit": "3eb63496c24ca70faaf8a14b6c75fcb480e34bf1",
       "nodes": ["ApplyVDNH3", "ApplyVDNH3Advanced"],
       "used_by": ["minimax_h3_vdn_t2v", "minimax_h3_vdn_i2v", "minimax_h3_vdn_fl2v", "minimax_h3_vdn_multiframe", "minimax-h3-vdn-r2v"],
       "strip": [],

@@ -125,7 +125,7 @@ CI 打包固定 Python 3.12，与本地验证过的构建一致。
 - 必需插件按内置预设用到的节点定：`tools\minimal_plugins.json` 写死 commit、插件提供的节点名与用到它的预设 ——
   `comfyui_controlnet_aux`（AIO_Preprocessor）、`ComfyUI-VDN-H3`（ApplyVDNH3Advanced）、
   `comfyui_fl-cosyvoice3`（FL_CosyVoice3_*）。`ResolutionSelector`、`TextEncodeQwenImage21`、`MiniMaxH3*`、
-  `CreateVideo` 这些在 ComfyUI 0.42.5 是核心节点，不为它们装插件。
+  `CreateVideo` 这些在 ComfyUI 0.44.0 是核心节点，不为它们装插件。
 - 依赖在构建时装进包内那个 `python\`：`torch` + CUDA、`ComfyUI\requirements.txt`、`studio\requirements.txt`、
   桌面 App 的 `pyproject.toml` 依赖、每个必需插件的 `requirements.txt`，桌面 App 与内核共用它，包开箱即用。
   `setup_runtime.bat` / `setup_app.bat` 是换掉 `python\` 之后或缺依赖时的修复路径，`-SkipPluginDeps` 跳过预装。
@@ -137,6 +137,13 @@ CI 打包固定 Python 3.12，与本地验证过的构建一致。
   整包模式还核对布局、空 models 树、盘符路径、密钥文件、`comfyui-krea2edit` 痕迹，以及清单 `import_smoke`
   里的依赖在包内 python 里 import 得出（`import_notes` 点过名的模块只报说明）；`tools\verify_minimal_package.ps1`
   在它之上核对清单插件、随包预设集与安装脚本。预设与被排除插件节点的一致性由 `studio/tests/test_minimal_package.py` 钉住。
+- 打包用哪份源码由 `-StudioSource` 决定：默认当前工作树，发版口径填 tag 检出的 worktree，整包就按那份代码出。
+- 整合包更新件 `Neo-Studio-<version>-package-update.zip` 由 `tools\build_studio_update.ps1` 出，随 Release 一起发；
+  包内入口是 `Neo-Studio\tools\update_neo_studio.ps1`：从 GitHub Release 取更新件，只刷包内 `Neo-Studio\`（App 源码、
+  `studio` 副本、`tools` 脚本、启动脚本）与 `ComfyUI\custom_nodes\comfyui-neo-studio\` 的代码副本，再补一次依赖、
+  跑一遍整包自检。ComfyUI 核心、清单插件、包内 python、模型与用户数据都不动；更新不删任何文件，被覆盖的文件先进
+  包根 `updates\backup-<旧版本>\`，插件副本的 `data_root.json` 指针排除在覆盖之外。连不上 GitHub 的机器用
+  `-Zip <更新件.zip>` 指定已下好的更新件。
 
 ```powershell
 pwsh tools\build_minimal_package.ps1 -DryRun              # 只打印要做的事，不写文件
@@ -144,6 +151,9 @@ pwsh tools\build_minimal_package.ps1 -Target <包根>       # 复制整包（-Pl
 python tools\check_minimal_package.py --comfyui <ComfyUI root> --studio <repo root>\studio
 python tools\check_minimal_package.py --package <包根>    # 整包体检
 pwsh tools\verify_minimal_package.ps1 -Package <包根>     # 自检 + 清单/预设/脚本验收
+pwsh tools\build_minimal_package.ps1 -StudioSource <worktree 根>   # 按 tag 检出的那份源码打包
+pwsh tools\build_studio_update.ps1 -DryRun        # 整合包更新件：只打印计划（产物默认落 build\，Release 里指到 dist\）
+pwsh Neo-Studio\tools\update_neo_studio.ps1 -DryRun      # 在包根跑：只打印更新要做的事
 ```
 
 

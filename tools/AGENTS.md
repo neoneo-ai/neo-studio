@@ -10,7 +10,8 @@ exe 里随包的插件副本只取 `studio/` 的跟踪文件，`tools/` 不在�
 - 素材管线：`build_gallery_presets.py` → `gallery_preprocess.py` → `gallery_deploy_oss.py`，
   配套 `format_tags.py`、`profile_gallery.py`。
 - 打包与安装：`build_studio_exe.ps1`（`Neo-Studio.spec`）、`build_studio_mac.sh`
-  （macOS remote-only `.app`）、`install_plugin.ps1`、`mcp_setup.ps1`。
+  （macOS remote-only `.app`）、`build_studio_update.ps1`（整合包更新件，`update_neo_studio.ps1` 在包内消费它）、
+  `install_plugin.ps1`、`mcp_setup.ps1`。
 - 摆姿包：`build_pose_package.ps1` 生成随包最小副本 `studio/pose_dist/`，`sync_pose_dist.ps1`
   把全量产物同步进 `<数据根>/pose/dist/`，`sync_pose_lib.ps1` 把场景库同步进 `<数据根>/pose/lib/`，
   `test_pose_package.ps1` 复查随包那份（发货清单逐文件核对）。
@@ -66,6 +67,11 @@ webp 缩略图与 `index.json`，`gallery_deploy_oss.py` 按 `OSS_ACCESS_KEY_ID`
 - `minimal_plugins.json` 是插件与 commit 的唯一来源：预设用到的节点决定装哪几个插件，条目写 commit、插件提供的
   节点名与用到它的预设。预设开始用一个新插件的节点，就在同一个改动里加清单条目，并让
   `studio/tests/test_minimal_package.py` 过；被排除插件的节点出现在任何预设里，那条预设就不能发。
+- 打包用哪份源码由 `-StudioSource` 决定（默认当前工作树，发版口径填 tag 检出的 worktree）。整合包更新件由
+  `build_studio_update.ps1` 出：zip 条目 = 仓库相对路径，边界就是整包复制 `Neo-Studio\` 的那一份，
+  `docs/`、`Developer.md`、`.github/`、测试与开发目录不进更新件。`update_neo_studio.ps1` 是包内更新入口：
+  从 GitHub Release 取更新件，只刷 `Neo-Studio\` 与插件代码副本，robocopy 不带 `/MIR`（整合包不删东西）、
+  `data_root.json` 指针排除在覆盖之外、被覆盖的文件先进包根 `updates\backup-<旧版本>\`，更新完跑整包自检。
 - 依赖在构建时装进包内 `python\`（torch + CUDA、ComfyUI 与每个插件的 `requirements.txt`、App 的
   `pyproject.toml` 依赖），包开箱即用，`setup_runtime.bat` / `setup_app.bat` 只是换掉 `python\` 之后的修复路径，
   `-SkipPluginDeps` 跳过预装。pip 的约束取包内已装版本：不钉版本时 `mediapipe` 要的 `numpy<2` 会降级 numpy、
@@ -96,7 +102,9 @@ bash tools/build_studio_mac.sh                   # macOS remote-only .app；需 
 pwsh tools\build_pose_package.ps1 -Source <3d-pose-art 仓库根> -Build
 pwsh tools\test_pose_package.ps1                 # 随包摆姿包自检：清单哈希、白名单、体积上限
 pwsh tools\build_minimal_package.ps1 -DryRun     # 最小整合包：只打印要做的事
+pwsh tools\build_studio_update.ps1 -DryRun        # 整合包更新件：只打印计划（默认写 build\Neo-Studio-<version>-package-update.zip）
 pwsh tools\verify_minimal_package.ps1 -Package <包根>   # 整包自检 + 清单/预设/安装脚本验收
+pwsh tools\update_neo_studio.ps1 -Package <包根> -DryRun   # 整合包更新：只打印要做的事
 python tools\gallery_preprocess.py --output <dir> --dirs <dir1>
 node tools\e2e_ref_grid.mjs                       # 需本机 ComfyUI 在 8188
 ```
