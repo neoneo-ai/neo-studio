@@ -47,8 +47,8 @@
     },
     {
       "name": "comfyui_fl-cosyvoice3",
-      "repo": "https://github.com/flaoua/comfyui_fl-cosyvoice3",
-      "commit": "1c4295539f43a441e3a553717d06b57458922a92",
+      "repo": "https://github.com/filliptm/ComfyUI_FL-CosyVoice3",
+      "commit": "bfd1a2b50557668c5a1ad34487fc6db21d2e28d7",
       "nodes": ["FL_CosyVoice3_ModelLoader", "FL_CosyVoice3_Dialog", "FL_CosyVoice3_ZeroShot", "FL_CosyVoice3_Play"],
       "used_by": ["cosyvoice_voice"],
       "strip": ["FL_CosyVoice3"],
@@ -56,7 +56,7 @@
       "import_notes": {
         "whisper": "openai-whisper 依赖的 numba 只支持 numpy 2.3 及以下，numpy 2.5 下 import 失败；语音克隆主路径不用 whisper，要它就得 python\\python.exe -m pip install \"numpy<2.4\""
       },
-      "note": "插件启动时打印 braille ASCII banner，输出编码不是 UTF-8 时 import 直接失败；整合包启动器已置 PYTHONUTF8=1。1.4GB 权重不随包发，要用的话放回 custom_nodes/comfyui_fl-cosyvoice3/FL_CosyVoice3"
+      "note": "钉的 commit 与打包机上这份逐文件相等（84 个 blob 全等，插件目录没有自己的 .git，落点只能这么核）；插件启动时打印 braille ASCII banner，输出编码不是 UTF-8 时 import 直接失败；整合包启动器已置 PYTHONUTF8=1。1.4GB 权重不随包发，要用的话放回 custom_nodes/comfyui_fl-cosyvoice3/FL_CosyVoice3"
     }
   ],
   "excluded": [
