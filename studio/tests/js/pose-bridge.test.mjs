@@ -38,6 +38,13 @@ const META = {
     looks: [{ key: "studio", label: "摄影棚" }, { key: "dark", label: "暗色" }],
     maxExportSize: 1024,
 };
+/** 随包 CC0 摆姿包那份素体表：表首就是摆姿仓库 CHARACTERS 的标准男基座，
+    默认素体与基座筛选两条路都认它，旧包的素体表只有用户自备的那几具 */
+const META_CC0 = {
+    ...META,
+    models: [{ key: "bodyMale", label: "标准男素体" }, { key: "bodyFemale", label: "标准女素体" },
+             { key: "girl", label: "少女" }],
+};
 const PROPS = { items: [{ id: "p1", label: "椅子", attach: null }], options: META.props, bones: META.bones };
 const STATE = {
     ready: true, model: "girl", members: 2, poseMode: true, snap: false,
@@ -56,25 +63,30 @@ const STATUS = {
 };
 
 /** pose-lib 的索引 fixture：形状来自摆姿仓库 poseLibrary.js 的 buildIndex（3dpose.index/1）。
-    库里一份条目是一整场（people / props 在清单里），条目带 groups / categories / preview，
-    preview 是「档位 → 图」的对象（clay 优先、缺档往下落），库里确有四档全无的条目，
+    库里一份条目是一整场（people / props 在清单里），条目带 groups / categories / preview / charKey，
+    preview 是「档位 → 图」的对象（clay 优先、缺档往下落），charKey 是这条姿态挂的基座
+    （同步脚本按摆姿仓库 lib:bodies 的分派结果写进索引；没有分派结果的条目不带这个字段），
     缩略图优先级、无预览占位与分层口径都钉在这份上 */
 const POSE_LIB = {
     format: "3dpose.index/1",
-    count: 3,
-    groups: [{ key: "stand", label: "站立", count: 2 }, { key: "fight", label: "格斗与武器", count: 1 }],
+    count: 4,
+    groups: [{ key: "stand", label: "站立", count: 3 }, { key: "fight", label: "格斗与武器", count: 1 }],
     entries: [
         { id: "a", label: "A-Pose 标定", path: "poses/stand/a.scene.json", kind: "scene",
-          people: 1, props: 0, groups: ["stand"],
+          people: 1, props: 0, groups: ["stand"], charKey: "girl",
           categories: ["站立", "standing-poses"], tags: ["preset"], source: "preset", origin: "lib",
           preview: { skeleton: "preview/a.skeleton.png", silhouette: "preview/a.silhouette.png" } },
         { id: "calm-1", label: "双臂伸展 1", path: "poses/calm/calm-1.scene.json", kind: "scene",
-          people: 2, props: 0, groups: ["calm", "stand"],
+          people: 2, props: 0, groups: ["calm", "stand"], charKey: "girl",
           categories: ["手臂绘图参考", "arm-drawing-reference"], source: "photo3d", origin: "lab",
           preview: { clay: "preview/calm-1.clay.png", skeleton: "preview/calm-1.skeleton.png" } },
         { id: "sword", label: "双手持剑", path: "poses/fight/sword.scene.json", kind: "scene",
           people: 2, props: 1, groups: ["fight"], categories: ["格斗", "sword"], source: "preset", origin: "lib",
-          preview: {} },
+          charKey: "girl", preview: {} },
+        { id: "fem-1", label: "侧坐扶手", path: "poses/stand/fem-1.scene.json", kind: "scene",
+          people: 1, props: 1, groups: ["stand"],
+          categories: ["坐姿", "sitting"], source: "preset", origin: "lib",
+          preview: { clay: "preview/fem-1.clay.png" } },
     ],
 };
 
@@ -554,17 +566,21 @@ test("previewOf / libFilter / libGroups / libTagsOf：缩略图优先级与搜�
     assert.deepEqual(libFilter(POSE_LIB.entries, { q: "手臂绘图" }).map((e) => e.id), ["calm-1"],
         "分类名与 label 一起进搜索：库里分类名中英文各一条");
     assert.deepEqual(libFilter(POSE_LIB.entries, { group: "fight" }).map((e) => e.id), ["sword"]);
-    assert.deepEqual(libFilter(POSE_LIB.entries, { origin: "lib" }).map((e) => e.id), ["a", "sword"],
+    assert.deepEqual(libFilter(POSE_LIB.entries, { origin: "lib" }).map((e) => e.id), ["a", "sword", "fem-1"],
         "来源筛选只放过预设条目");
     assert.deepEqual(libFilter(POSE_LIB.entries, { origin: "lab" }).map((e) => e.id), ["calm-1"]);
     assert.deepEqual(libFilter([{ id: "no-origin", groups: ["stand"] }], { origin: "lab" }).map((e) => e.id),
         ["no-origin"], "旧版清单没有 origin 字段 = 本地库那一份（合并库落在本机，预设是拆库才有的）");
     assert.deepEqual(libFilter(POSE_LIB.entries, { origin: "lab", q: "双臂" }).map((e) => e.id), ["calm-1"],
         "来源与搜索是同一条过滤口径的两刀");
-    assert.deepEqual(libGroups(POSE_LIB.entries, POSE_LIB.groups).map((s) => s.count), [2, 1],
+    assert.deepEqual(libFilter(POSE_LIB.entries, { charKey: "girl" }).map((e) => e.id), ["a", "calm-1", "sword"],
+        "基座筛选只放过挂在当前基座上的条目");
+    assert.deepEqual(libFilter(POSE_LIB.entries, { charKey: "bodyFemale" }).map((e) => e.id), [],
+        "条目没有 charKey 时基座筛不掉它：旧版清单的条目只在「全部基座」那一档可见");
+    assert.deepEqual(libGroups(POSE_LIB.entries, POSE_LIB.groups).map((s) => s.count), [3, 1],
         "分组条数从过滤后的分层数出来，来源一筛下拉就跟着变");
     assert.deepEqual(libGroups(POSE_LIB.entries, POSE_LIB.groups).map((s) => [s.key, s.items.length]),
-        [["stand", 2], ["fight", 1]], "多组条目只落排最前的那个组，同 id 不许出现两张卡");
+        [["stand", 3], ["fight", 1]], "多组条目只落排最前的那个组，同 id 不许出现两张卡");
     assert.equal(libTagsOf(POSE_LIB.entries[1]), "2人 · 0道具 · 手臂绘图参考 / arm-drawing-reference · photo3d");
     assert.equal(libTagsOf(POSE_LIB.entries[0]), "1人 · 0道具 · 站立 / standing-poses", "preset 来源不上来源那一档");
 });
@@ -579,7 +595,8 @@ test("场景库弹窗：卡片按预览优先级出缩略图与人数，点卡�
     assert.ok(modal(), "弹窗要开着");
     assert.ok(fetchLog.some((c) => c.path === "/pose-lib/index.json"), "打开弹窗读一次索引清单");
     const cards = () => [...modal().querySelectorAll(".ns-pose-lib-card")];
-    assert.equal(cards().length, 3, "库里三条 = 三张卡");
+    changeValue(modal().querySelector(".ns-pose-lib-char"), "");   // 基座筛选默认停在当前素体，四条卡片要在「全部基座」那一档才全出来
+    assert.equal(cards().length, 4, "库里四条 = 四张卡");
     const card = (id) => cards().find((c) => c.dataset.libId === id);
     assert.equal(card("calm-1").querySelector(".ns-pose-lib-thumb").getAttribute("src"),
         "/pose-lib/preview/calm-1.clay.png");
@@ -592,7 +609,7 @@ test("场景库弹窗：卡片按预览优先级出缩略图与人数，点卡�
     assert.ok(!card("sword").querySelector(".ns-pose-lib-ref"), "没图的卡片不标参考图");
     assert.match(card("calm-1").textContent, /2人/,
         "多人场景要在卡片副标题上看得见，挑的时候就知道这场有几个人");
-    assert.equal(modal().querySelector(".ns-pose-lib-more").hidden, true, "库里只有三条，不出加载更多");
+    assert.equal(modal().querySelector(".ns-pose-lib-more").hidden, true, "库里只有四条，不出加载更多");
     click(cards().find((c) => c.dataset.libId === "calm-1"));
     await settle();
     const apply = env.calls("scene/apply")[0];
@@ -610,6 +627,7 @@ test("场景库弹窗：页面报整场没套上时说清原因，不收窗也�
     await env.ready();
     click(env.button("浏览场景库…", LIB));
     await settle();
+    changeValue(env.host.querySelector(".ns-pose-lib-char"), "");   // 基座筛选默认停在当前素体，卡片要在「全部基座」那一档才全出来
     const card = [...env.host.querySelectorAll(".ns-pose-lib-card")].find((c) => c.dataset.libId === "calm-1");
     click(card);
     await settle();
@@ -629,7 +647,8 @@ test("场景库弹窗：搜索与分组下拉同一条过滤口径，卡片区�
     await settle();
     const modal = () => env.host.querySelector(".ns-libmodal:not(.ns-hidden)");
     const titles = () => [...modal().querySelectorAll(".ns-pose-lib-group-title")].map((h) => h.textContent);
-    assert.deepEqual(titles(), ["站立（2）", "格斗与武器（1）"], "分层按 index.json 的 groups 顺序走");
+    changeValue(modal().querySelector(".ns-pose-lib-char"), "");   // 基座筛选默认停在当前素体，搜索与分组要在「全部基座」那一档看
+    assert.deepEqual(titles(), ["站立（3）", "格斗与武器（1）"], "分层按 index.json 的 groups 顺序走");
     inputText(modal().querySelector(".ns-pose-lib-search"), "双手持剑");
     assert.deepEqual([...modal().querySelectorAll(".ns-pose-lib-card")].map((c) => c.dataset.libId), ["sword"]);
     assert.equal(modal().querySelector(".ns-pose-lib-blank").hidden, true, "有匹配就不出空态文案");
@@ -699,20 +718,83 @@ test("场景库来源筛选：预设 / 本地角标与来源下拉同一条 orig
     const modal = () => env.host.querySelector(".ns-libmodal:not(.ns-hidden)");
     const cards = () => [...modal().querySelectorAll(".ns-pose-lib-card")];
     const originOf = (card) => card.querySelector(".ns-pose-lib-origin-badge").textContent;
+    changeValue(modal().querySelector(".ns-pose-lib-char"), "");   // 基座筛选默认停在当前素体，来源过滤要在「全部基座」那一档看
     assert.deepEqual(cards().map((c) => [c.dataset.libId, originOf(c)]),
-        [["a", "预设"], ["calm-1", "本地"], ["sword", "预设"]], "合并库每条的出处要写在卡片上");
+        [["a", "预设"], ["calm-1", "本地"], ["fem-1", "预设"], ["sword", "预设"]], "合并库每条的出处要写在卡片上");
     const originSel = modal().querySelector(".ns-pose-lib-origin");
     assert.deepEqual([...originSel.options].map((o) => o.value), ["", "lib", "lab"],
         "来源下拉：全部 / 预设 / 本地三档");
     assert.match(modal().querySelector(".ns-pose-lib-meta").textContent,
-        /3 个场景（预设 2 · 本地 1）/, "顶部一行报清预设与本地各几条");
+        /4 个场景（预设 3 · 本地 1）/, "顶部一行报清预设与本地各几条");
     changeValue(originSel, "lib");
-    assert.deepEqual(cards().map((c) => c.dataset.libId), ["a", "sword"], "预设档只列预设条目");
+    assert.deepEqual(cards().map((c) => c.dataset.libId), ["a", "fem-1", "sword"], "预设档只列预设条目");
     assert.deepEqual([...modal().querySelector(".ns-pose-lib-group").options].map((o) => o.textContent),
-        ["全部分组", "站立（1）", "格斗与武器（1）"], "分组下拉的条数跟着来源过滤走，不拿清单里预设集那份 count");
+        ["全部分组", "站立（2）", "格斗与武器（1）"], "分组下拉的条数跟着来源过滤走，不拿清单里预设集那份 count");
     changeValue(originSel, "lab");
     assert.deepEqual(cards().map((c) => c.dataset.libId), ["calm-1"]);
     changeValue(originSel, "");
-    assert.equal(cards().length, 3, "回到全部来源 = 合并库全量");
+    assert.equal(cards().length, 4, "回到全部来源 = 合并库全量");
+});
+
+test("场景库基座筛选：默认落在当前素体上，条目按 charKey 过滤，旧版清单没有这字段时全量可见", async () => {
+    resetEnv();
+    const env = await mounted();
+    await env.ready();
+    env.replyCall(env.calls("meta/list")[0], META);
+    await settle();
+    click(env.button("浏览场景库…", LIB));
+    await settle();
+    const modal = () => env.host.querySelector(".ns-libmodal:not(.ns-hidden)");
+    const cards = () => [...modal().querySelectorAll(".ns-pose-lib-card")];
+    const charSel = modal().querySelector(".ns-pose-lib-char");
+    assert.equal(charSel.value, "bodyMale", "库默认停在画布当前那具素体（页面开局的标准男基座）：默认显示的就是套得进当前素体的那一批");
+    assert.deepEqual([...charSel.options].map((o) => o.textContent),
+        ["全部基座", "bodyMale", "少女"],
+        "选项来自库条目自带的 charKey 与当前素体：没有分派结果的条目不出选项，meta/list 有这档素体就换它的中文 label");
+    assert.equal(cards().length, 0, "库里没有挂在标准男基座上的姿态时基座筛出空集，列表出占位不摆半截卡片");
+    changeValue(charSel, "girl");
+    assert.deepEqual(cards().map((c) => c.dataset.libId), ["a", "calm-1", "sword"], "基座下拉按条目的 charKey 过滤");
+    changeValue(charSel, "");
+    assert.equal(cards().length, 4, "全部基座 = 合并库全量：没有 charKey 的条目也在这档可见");
+    assert.deepEqual(libFilter(POSE_LIB.entries, { charKey: "girl" }).map((e) => e.id), ["a", "calm-1", "sword"]);
+    assert.deepEqual(libFilter([{ id: "old-1", groups: ["stand"] }], { charKey: "bodyMale" }), [],
+        "条目没有 charKey 时基座筛不掉它：旧版清单的条目只在「全部基座」那一档可见");
+});
+
+test("素体默认标准男基座：随包 CC0 清单到位后下拉落在 bodyMale，加素体与基座筛选都跟着这一档", async () => {
+    resetEnv();
+    const env = await mounted();
+    await env.ready();
+    env.replyCall(env.calls("meta/list")[0], META_CC0);
+    env.replyCall(env.calls("prop/list")[0], PROPS);
+    await settle();
+    assert.equal(env.sel(0).value, "bodyMale", "页面开局挂的就是标准男基座，下拉不能停在「选择素体…」");
+    click(env.button("加素体"));
+    await settle();
+    assert.deepEqual(env.calls("member/add")[0].msg.args, { key: "bodyMale" },
+        "「加素体」拿到的就是下拉上看得见的那具身");
+    changeValue(env.sel(0), "girl");
+    await settle();
+    assert.deepEqual(env.calls("model/set")[0].msg.args, { key: "girl" }, "素体下拉改档就换当前素体");
+    env.from({ type: "pose:state", state: { ...STATE, model: "bodyFemale" } });
+    await settle();
+    assert.equal(env.sel(0).value, "bodyFemale", "页面自己换了素体：面板下拉跟着对账");
+    click(env.button("浏览场景库…", LIB));
+    await settle();
+    assert.equal(env.host.querySelector(".ns-pose-lib-char").value, "bodyFemale",
+        "基座筛选跟着当前素体走：库不会停在套不上的那一档");
+});
+
+test("旧摆姿包没有标准基座：素体下拉停在「选择素体…」，加素体不写一个清单里没有的 key", async () => {
+    resetEnv();
+    const env = await mounted();
+    await env.ready();
+    env.replyCall(env.calls("meta/list")[0], META);
+    env.replyCall(env.calls("prop/list")[0], PROPS);
+    await settle();
+    assert.equal(env.sel(0).value, "", "清单里没有 bodyMale 就不许写一个没有的 key");
+    click(env.button("加素体"));
+    await settle();
+    assert.deepEqual(env.calls("member/add")[0].msg.args, {}, "没有 key 就交回空参数，跟着页面当前素体走");
 });
 

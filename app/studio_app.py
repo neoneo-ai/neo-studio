@@ -53,6 +53,8 @@ from typing import Optional
 from studio_server import DesktopServer, build_app
 import mcp_client
 import mobile_pair as pair
+import studio_pose
+
 
 IS_MAC = sys.platform == "darwin"
 IS_WINDOWS = sys.platform == "win32"
@@ -412,7 +414,8 @@ def save_config(root: Path, python: str, port: int, flags: dict) -> bool:
            "port": int(port), "frameless": bool(flags.get("frameless", not IS_MAC)),
            "dev_mode": bool(flags.get("dev_mode")),
            "listen": str(flags.get("listen", "")),
-           "remote": str(flags.get("remote", ""))}
+           "remote": str(flags.get("remote", "")),
+           "pose_repo": str(flags.get("pose_repo", ""))}
     for key in ("pair_token", "pair_expires_at", "pair_host"):
         if flags.get(key) not in (None, ""):
             cfg[key] = flags[key]
@@ -1593,6 +1596,25 @@ class StudioDesktop:
             self.launcher.update(state=ST_OK, error="")
         return res
 
+    def pick_pose_repo(self) -> str:
+        """原生目录选择器选摆姿仓库根：起始目录落在已存的那一份，选完还能改。"""
+        return pick_folder(str(self.launcher.get("pose_repo", "")))
+
+    def set_pose_repo(self, pose_repo: str) -> dict:
+        """保存「启动设置 → 摆姿仓库」：校验落盘的同一轮就把摆姿资产补进数据根，不用等下次启动。"""
+        repo = studio_pose.pose_repo_dir(pose_repo)
+        if repo is None:
+            return {"ok": False,
+                    "error": f"不是摆姿仓库根（要 3d-pose-art 仓库根，带 pose-lib 那份容器）：{str(pose_repo).strip()}"}
+        self.launcher["pose_repo"] = str(repo)
+        if not save_config(Path(str(self.launcher.get("root", ""))), self.python_arg,
+                           self.port, self.launcher):
+            return {"ok": False, "error": f"写入启动配置失败：{CONFIG_FILE}"}
+        log_line(f"pose repo saved {repo}")
+        threading.Thread(target=lambda: studio_pose.auto_sync(
+            STATE, repo, log_line), daemon=True).start()
+        return {"ok": True, "pose_repo": str(repo), "msg": "摆姿仓库已保存，正在后台同步摆姿资产"}
+
 
 def purge_web_cache() -> None:
     """开窗口前清掉 WebView2 的 HTTP 缓存。
@@ -1987,6 +2009,8 @@ def main() -> int:
     remote_guide = IS_MAC and not remote_only and not remote
     launcher = {"root": str(root or ""), "python": str(python or ""), "port": port,
                 "plugin_dir": str(plugin_dir), "state_dir": str(STATE),
+                # 摆姿仓库目录：桌面端每次启动拿它把 pose/dist 与 pose/lib 补进数据根（旧配置没有这字段 = 空）
+                "pose_repo": str(cfg.get("pose_repo", "")),
                 "portable": IS_FROZEN, "state": ST_REMOTE if remote_only else ST_OK, "error": "",
                 # 无边框是 Windows 新默认；macOS 第一版用原生标题栏，老配置也不能把自绘拖动带过来
                 "frameless": bool(cfg.get("frameless", not IS_MAC)),
@@ -2067,6 +2091,7 @@ def main() -> int:
                         install_plugin=desktop.install_plugin,
                         install_deps=desktop.install_deps, pick_root=desktop.pick_root,
                         set_frameless=desktop.set_frameless, set_dev_mode=desktop.set_dev_mode,
+                        set_pose_repo=desktop.set_pose_repo,
                         state=desktop.launcher_state)
     geo = load_geometry()
     # background_color 显式给页面底色：pywebview 用它同时定 Form.BackColor 与 WebView2 的
@@ -2174,6 +2199,9 @@ def main() -> int:
         start_server()
         desktop.desktop_port = server.bound
         desktop.page_url = page_url
+        # 摆姿资产跟着启动补一级：pose 数据更新后数据根不会停在旧构建上（缺仓库配置时整步不打一行日志）
+        threading.Thread(target=lambda: studio_pose.auto_sync(
+            STATE, studio_pose.find_pose_repo(launcher, root), log_line), daemon=True).start()
         # 存在性只问端口：端口上有人监听就是有一路 ComfyUI 在跑。不能拿 /neo_studio/version 这种
         # Neo 专属路由当存在性判据 —— 那路插件没加载或还在导入自定义节点时探测会失败，桌面端就在旁边
         # 8189 拉第二路，关窗只带走自己那路，用户看到「两个端口，杀掉一个还剩一个」。

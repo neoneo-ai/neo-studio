@@ -417,6 +417,8 @@ async def launcher_post(request):
         res = fn(bool(data.get("frameless")))
     elif action == "set_dev_mode":
         res = fn(bool(data.get("dev_mode")))
+    elif action == "set_pose_repo":
+        res = fn(str(data.get("pose_repo", "")))
     else:
         res = fn()
     return web.json_response(res)

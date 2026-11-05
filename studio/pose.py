@@ -83,7 +83,8 @@ BRIDGE_CAPS = {"pose": True, "timeline": True, "export": True, "scene": True,
                "lib_write": False, "hostUi": True}
 
 NOT_INSTALLED_HINT = ("未找到摆姿包：<数据根>/pose/dist 与插件目录的 pose_dist 两级都是空的。跑 "
-                      "tools\\sync_pose_dist.ps1 把全量产物同步进数据根，或用随包那份 studio/pose_dist"
+                      "tools\\sync_pose_dist.ps1 把全量产物同步进数据根，或在「启动设置 → 摆姿仓库」填上仓库目录"
+                      "（桌面端每次启动自动同步），或用随包那份 studio/pose_dist"
                       "（由 tools\\build_pose_package.ps1 生成，代码 + CC0 素体）。")
 
 SCENE_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.\-]{0,63}")   # 首字符必须是字母数字：挡掉 ".." 与隐藏名

@@ -413,6 +413,23 @@ class OfflineServiceTests(_ServerCase):
         self.assertEqual(got, [("frameless", True), ("frameless", False),
                                ("dev_mode", True), ("dev_mode", False)])
 
+    def test_launcher_pose_repo_action_carries_the_path(self):
+        # 摆姿仓库这一行随快照下发给设置页，保存走同一条 launcher 路由，路径原样交回桌面端校验
+        self.app["launcher"]["pose_repo"] = "D:/Work/projects/3d-pose-art"
+        status, body = self.get("/neo_studio/launcher")
+        self.assertEqual(json.loads(body)["pose_repo"], "D:/Work/projects/3d-pose-art")
+        got = []
+        self.app["launcher_api"]["set_pose_repo"] = \
+            lambda repo: got.append(repo) or {"ok": True, "pose_repo": repo}
+        status, body = self.post_json("/neo_studio/launcher",
+                                      {"action": "set_pose_repo", "pose_repo": "D:/other/repo"})
+        self.assertEqual(status, 200)
+        self.assertTrue(json.loads(body)["ok"])
+        self.assertEqual(got, ["D:/other/repo"])
+        # 旧载荷没有 pose_repo：交回空串 = 清空自动同步，校验由桌面端出
+        self.post_json("/neo_studio/launcher", {"action": "set_pose_repo"})
+        self.assertEqual(got[-1], "")
+
     def test_launcher_post_rejects_unknown_action(self):
         status, body = self.post_json("/neo_studio/launcher", {"action": "rm_root"})
         self.assertEqual(status, 400)

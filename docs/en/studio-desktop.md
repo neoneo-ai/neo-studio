@@ -12,7 +12,8 @@ Source runs and the packaged exe go through the same `app/studio_app.py`.
 | `app/studio_app.py`    | Window, self-check, start / stop ComfyUI, frameless window, close teardown, startup settings                                                                                                                                                |
 | `app/studio_server.py` | Desktop-side aiohttp service (ComfyUI port +3, `DESKTOP_PORT_OFFSET`); loads the plugin modules' own `RouteTableDef` handlers by directory                                                                                                  |
 | `app/studio_caps.py`   | Capability table: which routes the desktop service serves itself, which of the rest it proxies to the kernel, and everything else answers `409 offline`                                                                                     |
-| `data/`                | State directory: `studio_window.json` (geometry), `studio_profile` (Windows WebView2 profile / localStorage), `launcher_config.json` (root / python / port / frameless / dev_mode / listen / remote), `studio_desktop.log`, `comfy_run.log` |
+| `app/studio_pose.py`   | Pose asset auto-sync: with "Startup settings → Pose repo" pointing at the 3d-pose-art repo root, tops the dist pose package and the pose-lib scene library up in the data root   |
+| `data/`                | State directory: `studio_window.json` (geometry), `studio_profile` (Windows WebView2 profile / localStorage), `launcher_config.json` (root / python / port / frameless / dev_mode / listen / remote / pose_repo), `studio_desktop.log`, `comfy_run.log` |
 
 Source runs keep state in the repository's `data/`; the Windows exe prefers `data/` beside the exe and falls back to
 `%APPDATA%\Neo Studio` when the exe sits in a non-writable directory. macOS v1 uses remote mode and prefers the
@@ -403,7 +404,8 @@ startable once the root is filled in.
 - Every row in "Startup settings" carries an ⓘ next to its label; hovering it (keyboard focus works the
   same way) spells out that row's prerequisites and how it takes effect: root / interpreter / port / LAN
   listen / Remote ComfyUI go through "Save and restart ComfyUI", frameless applies immediately and is
-  stored in the config, dev mode needs the desktop window to restart. The text lives in `TIPS` in
+  stored in the config, dev mode needs the desktop window to restart, and the Pose repo saves and starts
+  one background sync round at once. The text lives in `TIPS` in
   `studio/web/studio/studio-app.js`.
 
 ## Interface language
@@ -575,6 +577,30 @@ ComfyUI page take their frontend files from `custom_nodes`, so once the sync fin
 the new UI. The exe only swaps the directory when its bundled copy's version is newer, and a git checkout is never
 touched. **Changing `app/studio_app.py` requires repackaging** — see [release.md](release.md).
 
+## Pose asset auto-sync
+
+- "Startup settings → Pose repo" is a row of its own, stored as `pose_repo` in `launcher_config.json`. The
+  validation lives in `app/studio_pose.py`: only a directory carrying the `pose-lib/` container plus
+  `package.json` counts as the pose repo root, and a save that fails the check leaves the stored value
+  untouched. A saved row starts one background sync round on the spot; saving this row does not restart
+  ComfyUI. Repo resolution takes the three candidates in order: the config's `pose_repo` → the
+  environment variable `NEO_POSE_REPO` → the `3d-pose-art` directory beside the ComfyUI root. A row left
+  empty means auto-sync stays off.
+- The startup sequence runs one sync round on a background daemon thread after the desktop service is up
+  (`auto_sync` in `app/studio_pose.py`); `studio_desktop.log` gets a `pose auto-sync` line with the dist /
+  lib / index counts, and nothing is logged when no repo resolves. The pose page reads the data root per
+  request, so the assets land without restarting the window.
+- The gate matches `tools\sync_pose_dist.ps1` and `tools\sync_pose_lib.ps1` point for point: files move
+  only when the source is newer than the data root, so relaunching an unchanged repo copies nothing, and
+  files deleted by hand come back on the next start. dist mirrors through robocopy; pose-lib mirrors the
+  local set with the preset set only filling gaps, previews land at the default tier, stale depth
+  previews get pruned, and the merged index is rebuilt through the pose repo's
+  `node scripts\poseLib.mjs merged --out` - a rebuild also fires when the index is missing, when a
+  preview the index references is not on disk, and when no entry carries a `charKey` (the base filter in
+  the scene-library modal has nothing to work on in an index without it). The GLBs the user imported into
+  `pose/dist/models/` are parked and restored around the mirror, and `pose/scenes/` stays out of the
+  mirror's scope.
+
 ## Static assets and cache
 
 Desktop-side `/extensions/` static responses carry `no-store` (matching ComfyUI's `/extensions`), and
@@ -600,7 +626,9 @@ no views mounted and the header status slot stuck at `hidden`.
 ## Related tests
 
 The settings-page grouping is covered by `studio-settings-groups.test.mjs`, the startup-log source blocks and the
-filter by `studio-log-panel.test.mjs`, the "Open ComfyUI" link on the kernel row by `studio-kernel-open.test.mjs`.
+filter by `studio-log-panel.test.mjs`, the "Open ComfyUI" link on the kernel row by `studio-kernel-open.test.mjs`,
+the pose asset auto-sync's gate and mirror rules by `app/tests/test_studio_pose.py`, and the launcher panel's rows
+and ⓘ notes by `studio-desktop.test.mjs`.
 `app/tests/test_studio_desktop.py`, `app/tests/test_studio_server.py` and `studio-app.e2e.mjs` —
 the narrow-screen and touch layout invariants by `studio-mobile-layout.e2e.mjs` (the 390×844 and 1440×900 viewports) —
 see [testing.md](testing.md).

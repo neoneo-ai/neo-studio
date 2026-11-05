@@ -48,9 +48,14 @@ const LIB_INDEX = `${LIB_PREFIX}/index.json`;
 const LIB_PAGE = 200;      // 一次渲染的卡片上限：库里 600+ 条全塞进 DOM，首屏与滚动都撑不住
 const LIB_VARIANTS = ["clay", "skeleton", "silhouette", "depth"];   // 缩略图优先级，与摆姿页 thumbOf 同一条
 const LIB_ORIGIN_ORDER = [{ key: "lib", label: "预设（只读）" }, { key: "lab", label: "本地（可写）" }];
-const LIB_SYNC_HINT = "场景库未同步：跑 tools\\sync_pose_lib.ps1 -Source <3d-pose-art 仓库根>" +
-    " 把 pose-lib 同步进 <数据根>/pose/lib。";
+const LIB_SYNC_HINT = "场景库未同步：跑 tools\\sync_pose_lib.ps1 -Source <3d-pose-art 仓库根> 把 pose-lib 同步进" +
+    " <数据根>/pose/lib，或在「启动设置 → 摆姿仓库」填上仓库目录，桌面端每次启动自动同步。";
 const LIB_ORIGIN_LABEL = { lib: "预设", lab: "本地" };   // 合并库每条的出处：预设随仓库分发只读，本地是本机自己写的
+
+/** 随包 CC0 标准素体里默认那一份（摆姿仓库 src/pose/character.js 的 CHARACTERS 表首）。
+    页面开局挂的就是这一档，面板的素体下拉与场景库的基座筛选都以它起头 ——
+    下拉停在「选择素体…」时「加素体」会跟着页面当前素体走，用户看不见自己将拿到哪具身。 */
+const DEFAULT_CHAR_KEY = "bodyMale";
 
 /** 页面开局是摄影棚灰（摆姿页 core/scene.js 的 LOOKS.studio），面板按产品口径把外观定在暗色档 */
 const DEFAULT_LOOK_KEY = "dark";
@@ -310,6 +315,10 @@ export function createPoseView({ api, $el, toast }) {
             placeholder: t("搜索场景（名字 / 分类 / 标签）"),
         });
         const libGroupSel = $el("select", { className: "ns-pose-sel ns-pose-lib-group", title: t("分组") });
+        const libCharSel = $el("select", {
+            className: "ns-pose-sel ns-pose-lib-char",
+            title: t("按基座筛选：一条姿态挂着它的基座，挂在女基座上的姿态套到男素体上身型与盆宽全歪"),
+        });
         const libOriginSel = $el("select", {
             className: "ns-pose-sel ns-pose-lib-origin", title: t("按来源筛选：预设随仓库分发只读，本地是本机自己写的"),
         });
@@ -317,12 +326,12 @@ export function createPoseView({ api, $el, toast }) {
         const libBlank = $el("p", { className: "ns-pose-lib-blank" });
         const libGrid = $el("div", { className: "ns-pose-lib-grid" });
         const libMore = $el("button", { className: "ns-pose-btn ns-pose-lib-more", type: "button" });
-        libGate.push(libMore, libSearch, libGroupSel, libOriginSel);   // 弹窗里的这一片与左栏同一把门禁：ready 之前不可点
+        libGate.push(libMore, libSearch, libGroupSel, libCharSel, libOriginSel);   // 弹窗里的这一片与左栏同一把门禁：ready 之前不可点
         const btnSceneLocal = btn("本机场景文件…", "folder", libGate);
         // 库里没有想要的场景时从本机挑一份 JSON，走的还是装载场景那条路
         const sceneFile = $el("input", { className: "ns-pose-file", type: "file", accept: ".json" });
         const libPane = $el("div", { className: "ns-pose-libpane" }, [
-            row([libSearch, libGroupSel, libOriginSel, btnSceneLocal]), libMeta, libBlank, libGrid, libMore,
+            row([libSearch, libGroupSel, libCharSel, libOriginSel, btnSceneLocal]), libMeta, libBlank, libGrid, libMore,
         ]);
         libModal.setContent(libPane);
         el.append(libModal.el, sceneFile);
@@ -351,9 +360,14 @@ export function createPoseView({ api, $el, toast }) {
             reader.readAsText(file);
         });
 
+        /** meta/list 的素体清单：基座筛选要拿它把 charKey 译成中文 label，不另存一份定义 */
+        let metaModels = [];
+
         /** meta/list 一次给全：面板每个下拉与勾选组都从这份清单来，不再逐样问页面 */
         function paintMeta(m) {
-            fill(modelSel, m.models || [], "选择素体…");
+            metaModels = m.models || [];
+            fill(modelSel, metaModels, "选择素体…");
+            applyDefaultChar();
             fill(presetSel, m.presets || [], "选择预设…");
             fill(lookSel, m.looks || [], "外观");
             propChoices = m.props || [];
@@ -374,6 +388,15 @@ export function createPoseView({ api, $el, toast }) {
             await action("look/set", { key: hit.key }).catch(() => {});
         }
 
+        /** 素体下拉落在标准男基座上：页面开局挂的就是它（摆姿页 src/pose/character.js 的 CHARACTERS 表首），
+         *  旧摆姿包没这一档就停在「选择素体…」—— 下拉里那一项就是「加素体」将拿到的那具身，不能写一个没有的 */
+        function applyDefaultChar() {
+            if (modelSel.value) return;
+            if (!metaModels.some((m) => m.key === DEFAULT_CHAR_KEY)) return;
+            modelSel.value = DEFAULT_CHAR_KEY;
+            if (!canvas.model) canvas.model = DEFAULT_CHAR_KEY;   // 首个 pose:state 之前也要让基座筛选有个落点
+        }
+
         const stateRow = (key, value) => $el("div", { className: "ns-pose-state-row" }, [
             $el("span", { className: "ns-pose-state-key", textContent: t(key) }),
             $el("span", { className: "ns-pose-state-val", textContent: value }),
@@ -382,6 +405,11 @@ export function createPoseView({ api, $el, toast }) {
         /** 画布状态镜像到状态栏：页面侧自己改了控件（点画布、按快捷键），面板跟着对账 */
         function paintState(s) {
             Object.assign(canvas, s || {});
+            if (canvas.model) {
+                // 页面自己换了素体：面板的素体下拉与库的基座筛选跟着对账，库不会停在套不上的那一档
+                if ([...modelSel.options].some((o) => o.value === canvas.model)) modelSel.value = canvas.model;
+                libCharSel.value = canvas.model;
+            }
             stateBox.replaceChildren(
                 stateRow("素体", canvas.model || "—"),
                 stateRow("素体数", String(canvas.members ?? "—")),
@@ -465,11 +493,11 @@ export function createPoseView({ api, $el, toast }) {
 
         function renderLibIndex() {
             const pickedGroup = libGroupSel.value;
-            fill(libGroupSel, libGroupRows(libFilter(libIndex?.entries, { origin: libOriginSel.value })),
-                "全部分组");
+            const byChar = { origin: libOriginSel.value, charKey: libCharSel.value };
+            fill(libGroupSel, libGroupRows(libFilter(libIndex?.entries, byChar)), "全部分组");
             libGroupSel.value = pickedGroup;   // 重建选项后落回原选择；来源一换原分组不存在就落回全部
             const rows = libFilter(libIndex?.entries,
-                { q: libSearch.value, group: libGroupSel.value, origin: libOriginSel.value });
+                { q: libSearch.value, group: libGroupSel.value, ...byChar });
             const sections = libGroups(rows.slice(0, libShown), libIndex?.groups);
             libGrid.replaceChildren(...sections.flatMap((sec) => [
                 $el("h4", { className: "ns-pose-lib-group-title", textContent: `${sec.label}（${sec.items.length}）` }),
@@ -499,7 +527,8 @@ export function createPoseView({ api, $el, toast }) {
             if (libIndex === null) {
                 try {
                     libIndex = await libJson(LIB_INDEX);
-                    fill(libGroupSel, libGroupRows(libFilter(libIndex.entries, { origin: libOriginSel.value })), "全部分组");
+                    fillLibCharSel();
+                    fill(libGroupSel, libGroupRows(libFilter(libIndex.entries, { origin: libOriginSel.value, charKey: libCharSel.value })), "全部分组");
                     fill(libOriginSel, LIB_ORIGIN_ORDER.map((o) => ({ key: o.key, label: t(o.label) })), "全部来源");
                 } catch {
                     // 读不出索引 = 库没同步：这句就是弹窗里那句同步指引要说的同一件事
@@ -510,8 +539,20 @@ export function createPoseView({ api, $el, toast }) {
             renderLibIndex();
         }
 
+        /** 基座筛选的选项来自库条目自带的 charKey（同步脚本按摆姿仓库的分派结果写进索引）：
+         *  列表跟着库里真有的基座走，默认停在画布当前那具素体 —— 库默认就是「能套到当前素体上」的那一批 */
+        function fillLibCharSel() {
+            const keys = [...new Set((libIndex?.entries || []).map((e) => String(e.charKey || "")).filter(Boolean))];
+            const current = canvas.model || DEFAULT_CHAR_KEY;
+            if (current && !keys.includes(current)) keys.unshift(current);
+            const labels = new Map(metaModels.map((m) => [m.key, m.label]));
+            fill(libCharSel, keys.map((k) => ({ key: k, label: labels.get(k) || k })), t("全部基座"));
+            libCharSel.value = current;
+        }
+
         libSearch.oninput = () => renderLibIndex();
         libGroupSel.onchange = () => renderLibIndex();
+        libCharSel.onchange = () => renderLibIndex();
         libOriginSel.onchange = () => renderLibIndex();
         libMore.onclick = () => { libShown += LIB_PAGE; renderLibIndex(); };
         btnBrowseLib.onclick = () => openLibModal();
@@ -605,6 +646,13 @@ export function createPoseView({ api, $el, toast }) {
         btnDelMember.onclick = () => run(() => action("member/remove").then(paintState));
         btnResetPose.onclick = () => run(() => action("scene/reset").then(paintState));
         lookSel.onchange = () => run(() => action("look/set", { key: lookSel.value }));
+        // 素体下拉就是「换当前素体」：换完基座筛选跟着走，库里显示的始终是套得进当前素体的那一批
+        modelSel.onchange = () => run(async () => {
+            if (!modelSel.value) return;
+            await action("model/set", { key: modelSel.value });
+            libCharSel.value = modelSel.value;
+            canvas.model = modelSel.value;
+        });
 
         btnAddProp.onclick = () => run(async () => {
             const typed = propName.value.trim();
@@ -750,12 +798,15 @@ export function previewOf(entry) {
 }
 
 /** 搜索口径与摆姿仓库 poseLibrary.js 的 filterIndex 同一份字段表：label / 分类 / 标签 / id / source；
- *  origin 是合并库每条的出处（预设 lib / 本地 lab），旧版清单没这字段 = 本地库那份 */
-export function libFilter(entries, { q = "", group = "", origin = "" } = {}) {
+ *  origin 是合并库每条的出处（预设 lib / 本地 lab），旧版清单没这字段 = 本地库那份；
+ *  charKey 是这条姿态挂的基座（同步脚本按摆姿仓库 lib:bodies 的分派结果写进索引），
+ *  旧版清单没这字段 = 没分派过基座，一筛基座就看不见它 —— 套上去多半是女姿挂男身 */
+export function libFilter(entries, { q = "", group = "", origin = "", charKey = "" } = {}) {
     const text = String(q || "").trim().toLowerCase();
     return (entries || []).filter((e) => {
         if (group && !(e.groups || []).includes(group)) return false;
         if (origin && String(e.origin || "lab") !== origin) return false;
+        if (charKey && String(e.charKey || "") !== charKey) return false;
         if (!text) return true;
         const hay = [e.label, ...(e.categories || []), ...(e.tags || []), e.id, e.source]
             .join(" ").toLowerCase();

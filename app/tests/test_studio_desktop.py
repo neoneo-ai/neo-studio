@@ -1954,7 +1954,7 @@ class LauncherConfigTests(unittest.TestCase):
                 self.assertEqual(app.load_config(),
                                  {"version": app.CONFIG_VERSION, "root": str(pathlib.Path("D:/ComfyUI")),
                                   "python": "D:/python/python.exe", "port": 8188, "frameless": True,
-                                  "dev_mode": False, "listen": "", "remote": ""})
+                                  "dev_mode": False, "listen": "", "remote": "", "pose_repo": ""})
 
     def test_config_roundtrip_with_all_toggles(self):
         # 「保存并重启」把根目录 / 解释器 / 端口连同开关与远程地址一起落盘：不能被它写没
@@ -1983,8 +1983,32 @@ class LauncherConfigTests(unittest.TestCase):
                 self.assertEqual(app.load_config(),
                                  {"version": app.CONFIG_VERSION, "root": str(pathlib.Path("D:/ComfyUI")),
                                   "python": "D:/python/python.exe", "port": 8188, "frameless": True,
-                                  "dev_mode": False, "listen": "", "remote": ""})
+                                  "dev_mode": False, "listen": "", "remote": "", "pose_repo": ""})
                 self.assertTrue(desktop.launcher["frameless"], "设置页快照要同步")
+
+    @WINDOWS_ONLY
+    def test_set_pose_repo_validates_saves_and_syncs(self):
+        # 「保存并重启」之外只有这一条单独落盘的设置项：校验不过要原样留着旧的，保存成功要立刻补一级数据根
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(app, "CONFIG_FILE", pathlib.Path(tmp) / "launcher_config.json"), \
+                 patch.object(app, "log_line", lambda text: None), \
+                 patch.object(app.studio_pose, "auto_sync", new=MagicMock(return_value={})) as synced:
+                app.save_config(pathlib.Path("D:/ComfyUI"), "D:/python/python.exe", 8188,
+                                {"pose_repo": str(pathlib.Path(tmp) / "repo")})
+                desktop = app.StudioDesktop(None, 8188, pathlib.Path("D:/ComfyUI"),
+                                            launcher={"root": "D:/ComfyUI", "port": 8188,
+                                                    "pose_repo": str(pathlib.Path(tmp) / "repo")})
+                bad = desktop.set_pose_repo(str(pathlib.Path(tmp)))
+                self.assertFalse(bad["ok"], "没有 pose-lib 容器的目录不是摆姿仓库根")
+                self.assertEqual(app.load_config()["pose_repo"], str(pathlib.Path(tmp) / "repo"),
+                                 "校验失败不许动已存的配置")
+                synced.assert_not_called()
+                (pathlib.Path(tmp) / "repo" / "pose-lib").mkdir(parents=True)
+                (pathlib.Path(tmp) / "repo" / "package.json").write_text("{}", encoding="utf-8")
+                res = desktop.set_pose_repo(str(pathlib.Path(tmp) / "repo"))
+                self.assertTrue(res["ok"])
+                self.assertEqual(app.load_config()["pose_repo"], str(pathlib.Path(tmp) / "repo"))
+                self.assertEqual(desktop.launcher["pose_repo"], str(pathlib.Path(tmp) / "repo"))
 
     def test_load_config_missing_is_empty(self):
         with tempfile.TemporaryDirectory() as tmp:

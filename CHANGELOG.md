@@ -6,6 +6,17 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ### Added
 
+- **The desktop app now keeps the 3D Pose assets in sync by itself.** "Startup settings → Pose repo" takes a
+  3d-pose-art repo root (with a folder picker, validated as a pose repo before it is saved), and every
+  desktop start tops the pose assets up in the data root from it: the full pose build (`pose/dist`, so the
+  pose page never stays on an older build) and the merged scene library (`pose/lib`, so the library modal's
+  thumbnails never stay blank), the merged index rebuilt through the pose repo when the index is missing, a
+  referenced preview is absent, or no entry carries the base-body (`charKey`) field yet. Saving the row
+  starts one sync round on the spot. The sync only acts when the pose data is newer than the data root -
+  relaunching an unchanged repo copies nothing - it refills files deleted by hand, and it never touches the
+  scenes in `pose/scenes/` or the own figures imported into `pose/dist/models/`. Leaving the row empty keeps
+  auto-sync off, and the shipped pose page hints now point at this setting beside the sync scripts.
+
 - **The 3D Pose scene library now syncs the pose repo's preset set together with the local set.** The pose
   repo split its library into a read-only preset library (`pose-lib/`) and a writable local library
   (`pose-lab/`); `tools\sync_pose_lib.ps1` merges both into the single `<data root>/pose/lib/` copy the

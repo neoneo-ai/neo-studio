@@ -509,8 +509,8 @@ test("启动设置：远程地址进保存载荷，本机启动项灰掉，提�
         assert.equal(remoteIn.disabled, false, "远程地址本身要能改");
         assert.ok(document.querySelector(".ns-launch-row .ns-launch-input").disabled,
             "远程模式下根目录输入框要灰掉");
-        assert.equal(document.querySelectorAll(".ns-launch-remote-off").length, 4,
-            "根目录 / 解释器 / 端口 / 局域网监听四行灰掉");
+        assert.equal(document.querySelectorAll(".ns-launch-remote-off").length, 5,
+            "根目录 / 解释器 / 端口 / 局域网监听 / 摆姿仓库五行灰掉");
         assert.match(hint.textContent, /远程 ComfyUI：http:\/\/192\.168\.0\.20:8188\/neo-studio/,
             "提示行报远端 Studio 地址");
 
@@ -591,11 +591,11 @@ test("启动设置：每行带 ⓘ 说明，远程前提与开发模式要重启
         await flush();
 
         const rows = [...document.querySelectorAll(".ns-launch-row")];
-        assert.equal(rows.length, 7, "根目录 / Python / 端口 / 监听 / 远程 / 无边框 / 开发模式");
+        assert.equal(rows.length, 8, "根目录 / Python / 端口 / 监听 / 远程 / 无边框 / 开发模式 / 摆姿仓库");
         const tipOf = (label) => rows.find((r) => r.textContent.includes(label))
             ?.querySelector(".ns-info")?.getAttribute("data-tip") || "";
         for (const label of ["ComfyUI 根目录", "Python", "端口", "局域网监听", "远程 ComfyUI",
-            "无边框窗口", "开发模式"]) {
+            "无边框窗口", "开发模式", "摆姿仓库"]) {
             assert.ok(tipOf(label).includes("\n"), `「${label}」这一行要有带前提的 ⓘ 说明`);
         }
         assert.match(tipOf("远程 ComfyUI"), /comfyui-neo-studio[\s\S]*局域网监听/);
@@ -605,6 +605,7 @@ test("启动设置：每行带 ⓘ 说明，远程前提与开发模式要重启
         assert.match(tipOf("端口"), /保存并重启/);
         assert.match(tipOf("无边框窗口"), /立刻生效/);
         assert.match(tipOf("开发模式"), /重启桌面端窗口/);
+        assert.match(tipOf("摆姿仓库"), /3d-pose-art[\s\S]*数据根[\s\S]*自动同步/);
 
         const css = fs.readFileSync(path.join(webDir, "studio", "style.css"), "utf8");
         assert.ok(/\.ns-info::after\s*\{[^}]*attr\(data-tip\)/.test(css), "ⓘ 的说明文字要画在 ::after 上");

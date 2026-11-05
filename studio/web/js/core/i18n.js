@@ -113,6 +113,10 @@ const EN = {
     "搜索场景（名字 / 分类 / 标签）": "Search scenes (name / category / tag)",
     "分组": "Group",
     "全部分组": "All groups",
+    // 场景库的基座筛选：默认落在画布当前素体，女基座上的姿态套到男素体上身型与盆宽全歪
+    "全部基座": "All bases",
+    "按基座筛选：一条姿态挂着它的基座，挂在女基座上的姿态套到男素体上身型与盆宽全歪":
+        "Filter by base: every pose carries its base, and a pose rigged on the female base warps on a male body",
     "无预览": "No preview",
     // 库卡片的预览图是摆姿仓库对来源参考图的渲染，参考图版式可以把同一个人画两遍
     "参考图": "reference render",
@@ -345,6 +349,7 @@ const EN = {
     "ComfyUI 位置": "ComfyUI location",
     "网络与端口": "Network & port",
     "桌面窗口": "Desktop window",
+    "摆姿资产": "Pose assets",
     // LLM 设置表单（表单里这几项原本是硬编码英文，中文界面夹英文）
     "LLM 服务商": "LLM Provider",
     "为 AI 功能选择服务商": "Choose a provider for AI features",
@@ -394,6 +399,9 @@ const EN = {
     "ComfyUI 本地目录": "Local ComfyUI folder",
     "无边框窗口": "Frameless window",
     "开发模式": "Dev mode",
+    "摆姿仓库": "Pose repo",
+    "3d-pose-art 仓库根（留空 = 不自动同步）": "3d-pose-art repo root (empty = no auto-sync)",
+    "摆姿仓库已保存，正在后台同步摆姿资产": "Pose repo saved. Pose assets are syncing in the background",
     "就绪": "Ready",
     "远程就绪": "Remote ready",
     "远程不可达": "Remote unreachable",

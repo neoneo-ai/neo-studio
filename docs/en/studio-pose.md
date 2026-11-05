@@ -11,7 +11,7 @@ the bundled copy file for file** (which is why a fresh build and a user-imported
 
 | Landing path | Contents | Where it comes from |
 |--------------|----------|---------------------|
-| `<data root>/pose/dist/` | Full build, `*.map` included, about 16 MB | `tools\sync_pose_dist.ps1` |
+| `<data root>/pose/dist/` | Full build, `*.map` included, about 16 MB | `tools\sync_pose_dist.ps1`; the 「启动设置 → 摆姿仓库」 auto-sync |
 | `studio/pose_dist/` | Minimal licensed copy, code + the two default CC0 base figures + the self-authored props, about 3.0 MB | `tools\build_pose_package.ps1`, ships with the Registry package and the exe |
 
 What goes into the bundled copy is decided by **licence**, not by size: `models/ATTRIBUTION.md` marks
@@ -46,6 +46,12 @@ mirroring, so reinstalling the pose package never silently deletes an imported f
 so an installed copy must carry its license text and attribution). Reloading the page is enough after a
 sync: the installed check runs per request, so the window does not need a restart.
 
+Once "Startup settings → Pose repo" names the 3d-pose-art repo root, every desktop start tops this level
+up in the data root with the same rules: files move only when the source is newer than the data root
+(a relaunch of an unchanged repo copies nothing), files deleted by hand come back on the next start, and
+the GLBs imported into `pose/dist/models/` are parked and restored around the mirror. The gate and the
+landing points are specified in [studio-desktop.md](studio-desktop.md), "Pose asset auto-sync".
+
 ## The scene library (pose-lib)
 
 The library is the batch of whole scenes 3d-pose-art accumulated with their previews. On the pose-repo side
@@ -56,17 +62,22 @@ bundled copy - its licence rule differs from the pose package's, so `tools\build
 package it - the sync script is what lands it. The whole directory is a cache: delete it and resync any time.
 `scenes/` under `pose/` is what the user wrote, and stays out of the mirror.
 
-| Landing path                       | Contents                                                                                | Where it comes from           |
-|----------------------------------|----------------------------------------------------------------|-----------------------------|
+| Landing path                       | Contents                                                                                | Where it comes from               |
+|----------------------------------|----------------------------------------------------------------|---------------------------------|
 | `<data root>/pose/lib/poses/`      | One `.scene.json` per entry (`3dpose.scene/1`: people + props + view), preset + local | `tools\sync_pose_lib.ps1`     |
 | `<data root>/pose/lib/preview/`    | `<id>.<tier>.png`: `clay` / `skeleton` / `silhouette` / `depth`                         | same script                   |
-| `<data root>/pose/lib/index.json`  | `id / label / groups / categories / tags / path / preview / origin`                        | `npm run lib -- merged`       |
+| `<data root>/pose/lib/index.json`  | `id / label / groups / categories / tags / path / preview / origin / charKey`             | `npm run lib -- merged`       |
 | `<data root>/pose/lib/ATTRIBUTION.md` | Per-entry author / licence / source post of the preset set                         | same script (from `pose-lib/`) |
 
 The merged index is computed in 3d-pose-art, not in the sync script: the repo merges its two indexes (a local
 entry wins over a preset one of the same id, every entry carries `origin`) and writes the result through
 `--out`. `-Source` points at the pose-repo root, and when the preset `index.json` or `poses\` is missing the
-script exits and prints the `npm run lib -- shipped` command to run. Previews sync per tier:
+script exits and prints the `npm run lib -- shipped` command to run. Merged entries carry a `charKey` - the
+result of the pose repo's `npm run lib:bodies` assignment - and the modal's base filter works on it: it
+defaults to the canvas's current figure (the pose page opens on `bodyMale`, and the base filter follows the
+model dropdown), and entries with no assignment carry no `charKey` and stay visible only under "all bases".
+With "Startup settings → Pose repo" set, this level is also auto-synced on every desktop start — see
+[studio-desktop.md](studio-desktop.md), "Pose asset auto-sync". Previews sync per tier:
 
 ```
 pwsh tools\sync_pose_lib.ps1 -Source <3d-pose-art repo root>         # default tier: clay + skeleton + silhouette
@@ -359,9 +370,16 @@ An unsynced library is a different matter, and the pose page stays usable: the w
 answers 404, `/neo_pose/status` reports `lib_installed: false` with `lib_entries: 0`, and the "Browse Scene
 Library…" modal shows that sync command with a line of explanation instead of an empty list - a missing
 file and an unsynced library are the same 404, so the modal decides by whether the index can be read.
+Both hints also name the second route: fill in "Startup settings → Pose repo" and every desktop start
+tops both levels up in the data root.
 
 ## Tests
 
+- `app/tests/test_studio_pose.py`: the pose-asset auto-sync's repo resolution (config → environment →
+  the ComfyUI root's sibling), acting only when the source is newer than the data root (a relaunch
+  copies nothing), the dist mirror's refill and the imported figures parked around it, the pose-lib
+  merge's local-wins rule, the preview default tier with its `*depth.png` leftovers cleaned, an old
+  index without `charKey` triggering one index rebuild, and a missing source level skipping its side.
 - `studio/tests/test_pose_bridge.py`: path containment, the scene-name whitelist, wasm MIME,
   hashed/unhashed caching, atomic scene writes, the scene round trip,
   exporting one image and a ControlNet set into the library,

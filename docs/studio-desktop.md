@@ -11,7 +11,8 @@
 | `app/studio_app.py`    | 窗口、自检、拉起 / 停止 ComfyUI、无边框窗口、关窗收尾、启动设置                                                                                                                                                                        |
 | `app/studio_server.py` | 桌面端 aiohttp 服务（ComfyUI 端口 +3，`DESKTOP_PORT_OFFSET`），按目录加载插件模块挂在各自 `RouteTableDef` 上的 handler                                                                                                                 |
 | `app/studio_caps.py`   | 能力表：哪些路由归桌面端自服、表外的哪一撮由桌面端转发给内核，其余一律 `409 offline`                                                                                                                                                   |
-| `data/`                | 状态目录：`studio_window.json`（几何）、`studio_profile`（Windows 的 WebView2 profile / localStorage）、`launcher_config.json`（root / python / port / frameless / dev_mode / listen / remote）、`studio_desktop.log`、`comfy_run.log` |
+| `app/studio_pose.py`   | 摆姿资产自动同步：「启动设置 → 摆姿仓库」指向 3d-pose-art 仓库根时，把 dist 摆姿包与 pose-lib 场景库按时间戳对账补进数据根                                               |
+| `data/`                | 状态目录：`studio_window.json`（几何）、`studio_profile`（Windows 的 WebView2 profile / localStorage）、`launcher_config.json`（root / python / port / frameless / dev_mode / listen / remote / pose_repo）、`studio_desktop.log`、`comfy_run.log` |
 
 源码运行的状态目录是仓库根的 `data/`；Windows exe 优先 exe 旁的 `data/`，落在不可写目录时退回
 `%APPDATA%\Neo Studio`；macOS v1 走远程模式时优先项目或用户目录旁的 `data/`，不可写时退回
@@ -283,7 +284,7 @@ js_api（`check_setup` / `pick_root` / `pick_python` / `start_setup`），根目
 
 - 「启动设置」每一行标签旁有一个 ⓘ，悬停（键盘 Tab 聚焦同样出）给出这一行的前提条件与生效方式：根目录 /
   解释器 / 端口 / 局域网监听 / 远程 ComfyUI 走「保存并重启 ComfyUI」，无边框窗口立刻生效并写进配置，
-  开发模式要重启桌面端窗口。文案在 `studio/web/studio/studio-app.js` 的 `TIPS` 里。
+  开发模式要重启桌面端窗口，摆姿仓库保存即生效并立刻在后台起一轮同步。文案在 `studio/web/studio/studio-app.js` 的 `TIPS` 里。
 
 ## 界面语言
 
@@ -408,6 +409,22 @@ js_api（`check_setup` / `pick_root` / `pick_python` / `start_setup`），根目
 `custom_nodes` 取前端文件，同步完窗口一开就是新 UI；exe 只按内置副本版本换目录，git 检出的那份不碰。
 **改完 `app/studio_app.py` 必须重新打包**，见 [release.md](release.md)。
 
+## 摆姿资产自动同步
+
+- 「启动设置 → 摆姿仓库」是单独一行，存 `launcher_config.json` 的 `pose_repo`。校验在 `app/studio_pose.py`：
+  带 `pose-lib/` 容器加 `package.json` 的目录才算摆姿仓库根，校验不过保留已存的那一份；保存这一行不等
+  「保存并重启 ComfyUI」，落盘的同一轮就在后台起一次同步。仓库解析按三档找：配置里的 `pose_repo` →
+  环境变量 `NEO_POSE_REPO` → ComfyUI 根同级的 `3d-pose-art`；留空 = 不自动同步。
+- 启动序列在桌面端服务起后由后台守护线程跑一轮同步（`app/studio_pose.py` 的 `auto_sync`），
+  `studio_desktop.log` 落一行 `pose auto-sync` 报 dist / lib / index 三项计数与耗时，解析不到仓库整步不打日志。
+  摆姿页与场景库逐请求读数据根，资产落进数据根不需要重启窗口。
+- 判据与 `tools\sync_pose_dist.ps1` / `tools\sync_pose_lib.ps1` 同口径：只在「源比数据根新」时动手
+  （重复启动、没构建过的仓库跑不出文件复制），手动删过的文件下一轮原样补回。dist 走 robocopy 镜像；
+  pose-lib 镜像本地集、预设集只补空，预览按默认档落地、清掉 `*depth.png` 残留，合并索引走摆姿仓库自己的
+  `node scripts\poseLib.mjs merged --out` —— 索引缺失、清单引用的预览文件没落地、条目全都没有 `charKey`
+  （场景库弹窗的基座筛选没有落点）任一条都重建一次。用户在 `pose/dist/models/` 导入的自备素体先存后还，
+  `pose/scenes/` 不在镜像范围内。
+
 ## 静态资源与缓存
 
 桌面端 `/extensions/` 静态响应带 `no-store`（与 ComfyUI 的 `/extensions` 一致），并在开窗口前清掉
@@ -428,7 +445,8 @@ ES 模块图后，链接错误发生在 `studio-app.js` 执行之前、JS 捕获
 ## 相关测试
 
 设置页的分组层级在 `studio-settings-groups.test.mjs`，启动日志的来源分块与筛选在 `studio-log-panel.test.mjs`，
-启动设置顶栏的一键打开 ComfyUI 在 `studio-kernel-open.test.mjs`，
+启动设置顶栏的一键打开 ComfyUI 在 `studio-kernel-open.test.mjs`，摆姿资产自动同步的同步判据与镜像口径在
+`app/tests/test_studio_pose.py`，启动设置栏内的行与 ⓘ 在 `studio-desktop.test.mjs`，
 `app/tests/test_studio_desktop.py`、`app/tests/test_studio_server.py` 与 `studio-app.e2e.mjs`，
 窄屏与触摸档的版式不变量在 `studio-mobile-layout.e2e.mjs`（390×844 与 1440×900 两个视口），
 见 [testing.md](testing.md)。

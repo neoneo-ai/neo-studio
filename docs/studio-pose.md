@@ -9,7 +9,7 @@
 
 | 落点                       | 内容                                                            | 怎么来                                                       |
 |----------------------------|-----------------------------------------------------------------|--------------------------------------------------------------|
-| `<数据根>/pose/dist/`      | 全量产物，含 `*.map`，约 16MB                                   | `tools\sync_pose_dist.ps1`                                   |
+| `<数据根>/pose/dist/`      | 全量产物，含 `*.map`，约 16MB                                   | `tools\sync_pose_dist.ps1`；「启动设置 → 摆姿仓库」自动同步 |
 | `studio/pose_dist/`        | 最小授权副本，代码 + CC0 标准素体 + 自制道具，约 3.0MB             | `tools\build_pose_package.ps1`，随 Registry 包与 exe 分发    |
 
 随包那份按**授权口径**取舍，不按体积：`models/ATTRIBUTION.md` 里页面默认基座的 `bodyMale.glb` /
@@ -37,6 +37,11 @@ pwsh tools\sync_pose_dist.ps1 -Source <3d-pose-art 仓库根>            # 全�
 `LICENSE` / `NOTICE` 一并落进产物目录（摆姿包是 MIT 作品，装机副本必须带着它的许可证与致谢）。
 装完刷新页面就生效：装没装是逐请求判断的，不必重启窗口。
 
+「启动设置 → 摆姿仓库」填上 3d-pose-art 仓库根后，桌面端每次启动都按同一口径把这一级补进数据根：
+只在「源比数据根新」时动手（重复启动跑不出文件复制），手动删过的产物下一轮原样补回，
+用户在 `pose/dist/models/` 导入的自备素体先存后还，镜像不动它们。判据与落点写在
+[studio-desktop.md](studio-desktop.md) 的「摆姿资产自动同步」。
+
 ## 场景库（pose-lib）
 
 库里是摆姿仓库攒下来的那批整场与它们的预览图。摆姿仓库那边库拆成两根 —— `pose-lib/` 预设库（只读、
@@ -45,16 +50,20 @@ pwsh tools\sync_pose_dist.ps1 -Source <3d-pose-art 仓库根>            # 全�
 `tools\build_pose_package.ps1` 不打包它 —— 只由同步脚本落地。整目录当缓存看待：随时可删可重同步。
 `pose/` 下的 `scenes/` 是用户写的东西，不在镜像范围内。
 
-| 落点                               | 内容                                                                | 怎么来                         |
-|--------------------------------|-----------------------------------------------------------------|---------------------------|
+| 落点                               | 内容                                                            | 怎么来                          |
+|------------------------------------|-----------------------------------------------------------------|-----------------------------|
 | `<数据根>/pose/lib/poses/`          | 一条一张 `.scene.json`（`3dpose.scene/1`：多人 + 道具 + 视角），预设集 + 本地集      | `tools\sync_pose_lib.ps1`   |
 | `<数据根>/pose/lib/preview/`        | `<id>.<档位>.png`：`clay` / `skeleton` / `silhouette` / `depth`      | 同上                          |
-| `<数据根>/pose/lib/index.json`      | 逐条 `id / label / groups / categories / tags / path / preview / origin` | 摆姿仓库的 `npm run lib -- merged` |
+| `<数据根>/pose/lib/index.json`      | 逐条 `id / label / groups / categories / tags / path / preview / origin / charKey` | 摆姿仓库的 `npm run lib -- merged` |
 | `<数据根>/pose/lib/ATTRIBUTION.md`  | 预设集的逐条作者 / 授权 / 原帖                                          | 同上（源在 `pose-lib/`）        |
 
 清单不在同步脚本里算：由摆姿仓库把预设与本地两份索引合并（同 id 本地胜出、每条带 `origin`）后交给
 `--out` 落进库根。`-Source` 指摆姿仓库根，缺预设库的 `index.json` 与 `poses\` 时脚本直接退出并把该跑的
-那条 `npm run lib -- shipped` 报出来。预览按档位同步：
+那条 `npm run lib -- shipped` 报出来。合并条目自带 `charKey`：摆姿仓库 `npm run lib:bodies` 的分派结果，
+弹窗的基座筛选按它过滤，默认落在画布当前那具素体（摆姿页开局是 `bodyMale`，素体下拉改档筛选跟着走），
+没有分派结果的条目不带这个字段、只在「全部基座」那一档可见。「启动设置 → 摆姿仓库」填上仓库根后
+这一级同样由桌面端每次启动自动同步，口径见 [studio-desktop.md](studio-desktop.md) 的「摆姿资产自动同步」。
+预览按档位同步：
 
 ```
 pwsh tools\sync_pose_lib.ps1 -Source <3d-pose-art 仓库根>        # 默认档：clay + skeleton + silhouette
@@ -279,9 +288,13 @@ pano 与库写入要 3d-pose-art 那套 Python sidecar（`pose_server.py`），�
 库没同步是另一件事，摆姿页本身照常用：`/pose-lib` 整条前缀回 `404`，`/neo_pose/status` 报
 `lib_installed: false` 与 `lib_entries: 0`，「浏览场景库…」弹窗显示那句同步命令与一句提示，
 而不是一个空列表 —— 库里缺一份文件与库没同步是同一个 `404`，弹窗判据是那份清单读不读得到。
+两句指引都给出第二条路：「启动设置 → 摆姿仓库」填上仓库根，桌面端每次启动自动把两级都补进数据根。
 
 ## 测试
 
+- `app/tests/test_studio_pose.py`：摆姿资产自动同步的仓库解析（配置 → 环境变量 → ComfyUI 根同级）、
+  只在新于数据根时动手（重复启动零复制）、dist 镜像的补回与自备素体先存后还、pose-lib 合并的同 id 本地胜出、
+  预览默认档与 `*depth.png` 残留清理、旧版清单（没有 `charKey`）触发一次索引重建、源缺级整级跳过。
 - `studio/tests/test_pose_bridge.py`：路径包含与场景名白名单、wasm MIME、哈希/未哈希缓存、场景
   原子写、场景往返、单张导出与 ControlNet 图组落素材库、整批拒绝
   且不留半个文件、短路径 302；两级落点（随包副本兜底、数据根压同名文件、两级都缺的提示）、道具注册表
