@@ -10,11 +10,13 @@
 | 落点                       | 内容                                                            | 怎么来                                                       |
 |----------------------------|-----------------------------------------------------------------|--------------------------------------------------------------|
 | `<数据根>/pose/dist/`      | 全量产物，含 `*.map`，约 16MB                                   | `tools\sync_pose_dist.ps1`                                   |
-| `studio/pose_dist/`        | 最小授权副本，代码 + CC0 素体 + 自制道具，约 4.2MB               | `tools\build_pose_package.ps1`，随 Registry 包与 exe 分发    |
+| `studio/pose_dist/`        | 最小授权副本，代码 + CC0 标准素体 + 自制道具，约 3.0MB             | `tools\build_pose_package.ps1`，随 Registry 包与 exe 分发    |
 
-随包那份按**授权口径**取舍，不按体积：`models/ATTRIBUTION.md` 里只有 `ybot.glb`（CC0，PixelMannen 的
-Y Bot）与自制的 `props/stick.glb` / `props/sword.glb`（`scripts/makePropGlb.mjs` 从 `propKit` 零件清单生成）
-写明可自由再分发，所以它们随包；Mixamo（`soldier` / `ch38` / `ch07`）、SMPL 派生（`body1391` 与三份缩略图）
+随包那份按**授权口径**取舍，不按体积：`models/ATTRIBUTION.md` 里页面默认基座的 `bodyMale.glb` /
+`bodyFemale.glb`（本项目生成链产的标准男 / 标准女，基网格是 MakeHuman Community 的 MPFB2，CC0）
+与自制的 `props/stick.glb` / `props/sword.glb`（`scripts/makePropGlb.mjs` 从 `propKit` 零件清单生成）
+写明可自由再分发，所以它们随包；`ybot.glb`（CC0，PixelMannen 的 Y Bot）页面已不默认它，2.8MB 不再随包；
+Mixamo（`soldier` / `ch38` / `ch07`）、SMPL 派生（`body1391` 与三份缩略图）
 与本地导入的道具（`arrow` / `sting-sword` / 枪械，来源待确认）全都不入库。道具注册表
 `models/props/index.json` 只留随包发了的那两条 —— 注册表里列一个包里没发的 GLB，等于发一条点了只会失败的
 控件，清表与清文件是同一件事，程序化道具（`builtin:*`）照旧可用。`*.map` 不进包：产物只有一条 `sourceMappingURL`，
@@ -37,7 +39,7 @@ pwsh tools\sync_pose_dist.ps1 -Source <3d-pose-art 仓库根>            # 全�
 
 ## 场景库（pose-lib）
 
-库里是摆姿仓库攒下来的那批整场与它们的预览图。摆姿仓库那边库拆成两根 —— `pose-lib/` 出厂库（只读、
+库里是摆姿仓库攒下来的那批整场与它们的预览图。摆姿仓库那边库拆成两根 —— `pose-lib/` 预设库（只读、
 随仓库分发）与 `pose-lab/` 本地库（作者自己写的姿态，可写），同步到 Neo Studio 时合并成一份，落点仍只有
 一级：`<数据根>/pose/lib/`，同 id 以本地为准。库不进随包副本 —— 授权口径与摆姿包不同，
 `tools\build_pose_package.ps1` 不打包它 —— 只由同步脚本落地。整目录当缓存看待：随时可删可重同步。
@@ -45,13 +47,13 @@ pwsh tools\sync_pose_dist.ps1 -Source <3d-pose-art 仓库根>            # 全�
 
 | 落点                               | 内容                                                                | 怎么来                         |
 |--------------------------------|-----------------------------------------------------------------|---------------------------|
-| `<数据根>/pose/lib/poses/`          | 一条一张 `.scene.json`（`3dpose.scene/1`：多人 + 道具 + 视角），出厂集 + 本地集      | `tools\sync_pose_lib.ps1`   |
+| `<数据根>/pose/lib/poses/`          | 一条一张 `.scene.json`（`3dpose.scene/1`：多人 + 道具 + 视角），预设集 + 本地集      | `tools\sync_pose_lib.ps1`   |
 | `<数据根>/pose/lib/preview/`        | `<id>.<档位>.png`：`clay` / `skeleton` / `silhouette` / `depth`      | 同上                          |
 | `<数据根>/pose/lib/index.json`      | 逐条 `id / label / groups / categories / tags / path / preview / origin` | 摆姿仓库的 `npm run lib -- merged` |
-| `<数据根>/pose/lib/ATTRIBUTION.md`  | 出厂集的逐条作者 / 授权 / 原帖                                          | 同上（源在 `pose-lib/`）        |
+| `<数据根>/pose/lib/ATTRIBUTION.md`  | 预设集的逐条作者 / 授权 / 原帖                                          | 同上（源在 `pose-lib/`）        |
 
-清单不在同步脚本里算：由摆姿仓库把出厂与本地两份索引合并（同 id 本地胜出、每条带 `origin`）后交给
-`--out` 落进库根。`-Source` 指摆姿仓库根，缺出厂库的 `index.json` 与 `poses\` 时脚本直接退出并把该跑的
+清单不在同步脚本里算：由摆姿仓库把预设与本地两份索引合并（同 id 本地胜出、每条带 `origin`）后交给
+`--out` 落进库根。`-Source` 指摆姿仓库根，缺预设库的 `index.json` 与 `poses\` 时脚本直接退出并把该跑的
 那条 `npm run lib -- shipped` 报出来。预览按档位同步：
 
 ```
@@ -64,13 +66,13 @@ pwsh tools\sync_pose_lib.ps1 -Source <3d-pose-art 仓库根> -All   # 四档全�
 不清排除项，脚本随后按 `*depth.png` / `*clay.png` 把这类残留摘掉 —— 宽档跑过一轮再跑窄档，库里留不下
 两套档位混着的样子。
 
-`poses/` 与 `preview/` 都是两遍：本地库先 `/MIR` 进目标（顺手清掉上一轮的多余文件），出厂集再补进来。
-出厂集那一遍带 `/E /XC /XN /XO`：`/E` 必给 —— 库文件全在 `poses/<分组>/` 子目录里，robocopy 默认不
-下钻子目录，少了它就是「出厂集一条都没补上」；`/XO` 让出厂集永不压过同名文件，出厂条目因此只补空、
+`poses/` 与 `preview/` 都是两遍：本地库先 `/MIR` 进目标（顺手清掉上一轮的多余文件），预设集再补进来。
+预设集那一遍带 `/E /XC /XN /XO`：`/E` 必给 —— 库文件全在 `poses/<分组>/` 子目录里，robocopy 默认不
+下钻子目录，少了它就是「预设集一条都没补上」；`/XO` 让预设集永不压过同名文件，预设条目因此只补空、
 不改本机已有那份，与合并索引的「同 id 本地胜出」是同一件事的两个面。
 
 后端读接口只有 `/pose-lib/{path}`：`index.json`、`poses/**`、`preview/*.png`、`categories.json`、
-`ATTRIBUTION.md`。分类登记两库里各一份，本地库改过就以它同步过来，出厂那份只兜底。
+`ATTRIBUTION.md`。分类登记两库里各一份，本地库改过就以它同步过来，预设那份只兜底。
 落点锁在 `<数据根>/pose/lib`，路径逐条过 `inside_dir` 的包含检查（带 `..`、盘符、绝对路径一律 `400`），
 空路径与前缀指到的目录都落到 `index.json`，文件不在回 `404` —— 库没同步与库里缺文件是同一个答案，
 弹窗按清单读不读得到判断（`index.json` 读不成就是没同步），不让用户翻进一个空库。库里每次同步都重写
@@ -106,7 +108,7 @@ pwsh tools\sync_pose_lib.ps1 -Source <3d-pose-art 仓库根> -All   # 四档全�
 
 产物里的 GLB 与注册表是 `public/` 原样拷进 `dist/models/` 的文件，页面按自己所在目录拼这些地址
 （`src/core/appBase.js`）：站点根部署算出 `/`，宿主前缀部署算出 `/pose-dist/`。vite 的 `base: './'`
-只改写构建期的模块引用，改写不到运行期字符串 —— 页面写死的 `/models/ybot.glb` 在前缀下会打到站点根，
+只改写构建期的模块引用，改写不到运行期字符串 —— 页面写死的 `/models/bodyMale.glb` 在前缀下会打到站点根，
 素体整批 404、画面上只剩程序化骨架。装机产物因此必须整目录挂在 `/pose-dist/` 下，`models/` 不能只留
 `assets/`。
 
@@ -179,9 +181,9 @@ ControlNet 导出（勾格式、导出图组）、画布状态（只读一行）
 （一个 rig 一个素体、物体清空，角色与道具子树之外的可见对象整批关掉），卡片角上标「参考图」说明它是渲染图不是照片：
 图上的人数就是场景文件里的人数，套用后报的也是页面真正套上的数量。旧库里对着画布拍的预览重画一次就是新样子 ——
 在摆姿仓库里 `npm run build` 后 `npm run lib -- preview --all`，再跑一次同步。分组下拉按所选来源过滤后的合并条目数出来并带条数
-（清单 `groups` 自带那份 `count` 是出厂集自己算的，本机 `pose-lab` 新写的姿态不在里面），重建选项后落回原选择、来源一换原分组
-不存在就回到「全部分组」；来源下拉是「全部来源 / 出厂（只读）/ 本地（可写）」，卡片左上角标「出厂」或「本地」（悬停说清是哪根库），
-条数行写「N 个场景（出厂 X · 本地 Y）· 显示 Z」—— 清单没有 `origin` 字段的旧条目记作本地；搜索按 `label / 分类 / 标签 / id / source` 过滤（口径同摆姿仓库 `poseLibrary.js`
+（清单 `groups` 自带那份 `count` 是预设集自己算的，本机 `pose-lab` 新写的姿态不在里面），重建选项后落回原选择、来源一换原分组
+不存在就回到「全部分组」；来源下拉是「全部来源 / 预设（只读）/ 本地（可写）」，卡片左上角标「预设」或「本地」（悬停说清是哪根库），
+条数行写「N 个场景（预设 X · 本地 Y）· 显示 Z」—— 清单没有 `origin` 字段的旧条目记作本地；搜索按 `label / 分类 / 标签 / id / source` 过滤（口径同摆姿仓库 `poseLibrary.js`
 的 `filterIndex`）。一场可以挂多个组，卡片只落在排最前的那个组里 —— 弹窗里出现两张同 id 的卡，点击会串。
 卡片每 200 条一屏（库里 640+ 条全塞进 DOM，首屏与滚动都撑不住），剩下的走「加载更多（还有 N 条）」。
 点卡片读它自己那份文件并下发一次 `scene/apply`，报「N 副骨架 · M 物体」，套成就收起弹窗 —— 整场那一路

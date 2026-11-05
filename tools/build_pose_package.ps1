@@ -1,13 +1,14 @@
 # 生成随包分发的最小摆姿包：studio/pose_dist/（git 已跟踪 → 随 Registry 包与 exe 分发）。
 #
-# 全量产物 16 MB 里只有一小份能随包发：授权干净的代码 + 唯一一个可再分发的内置素体。
-# 素体清单写死在构建产物里（ybot / soldier / ch38 / ch07 / body1391 + 三个程序化素体），
-# 所以「带哪个 GLB」由 models/ATTRIBUTION.md 的授权口径决定，不由体积决定：
-#   ybot.glb                              CC0（PixelMannen 的 Y Bot）—— 唯一写明可自由使用
-#   soldier / ch38 / ch07                 Mixamo 素材，条款与 three.js 的 MIT 不等价，不随包发
-#   body1391 / body-*-thumbnail(.glb)     SMPL 派生几何（Max Planck 授权，用户自备），不入库
-#   props/stick.glb · props/sword.glb     本项目自制（scripts/makePropGlb.mjs 从 propKit 零件清单生成），随包发
-#   props/arrow · sting-sword · 枪械      本地导入，来源页授权待确认 —— 不随包发
+# 全量产物 16 MB 里只有一小份能随包发：授权干净的代码 + 页面默认基座的标准素体。
+# 素体清单写死在构建产物里（bodyMale / bodyFemale / bodyMPFB / ybot / soldier / ch38 / ch07 / body1391
+# + 三个程序化素体），所以「带哪个 GLB」由 models/ATTRIBUTION.md 的授权口径决定，不由体积决定：
+#   bodyMale.glb / bodyFemale.glb          本项目生成链（Blender + MPFB2）产的默认基座，基网格 CC0 —— 随包发
+#   ybot.glb                               CC0（PixelMannen 的 Y Bot）—— 页面不再默认它，2.8MB 不随包发
+#   soldier / ch38 / ch07                  Mixamo 素材，条款与 three.js 的 MIT 不等价，不随包发
+#   body1391 / body-*-thumbnail(.glb)      SMPL 派生几何（Max Planck 授权，用户自备），不入库
+#   props/stick.glb · props/sword.glb      本项目自制（scripts/makePropGlb.mjs 从 propKit 零件清单生成），随包发
+#   props/arrow · sting-sword · 枪械        本地导入，来源页授权待确认 —— 不随包发
 # 道具注册表是页面运行期读的文件（models/props/index.json）：只留随包发了的那两条，
 # 注册表里列一个 dist 里没有的 GLB 就是发一条点了只会失败的控件，所以清单裁剪与文件拷贝是同一件事。
 #
@@ -33,14 +34,15 @@ $outDir = if ($Out) { $Out } else { Join-Path $repo "studio\pose_dist" }
 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 
 # 随包 GLB 白名单：加任何一个都要先在摆姿仓库的 ATTRIBUTION 里有可再分发的授权行
-$allowedGlb = @("ybot.glb")
+# 页面默认基座就是这两具标准素体（src/core/character.js 的 CHARACTERS 首项 = bodyMale）
+$allowedGlb = @("bodyMale.glb", "bodyFemale.glb")
 # 随包道具 GLB：只有本项目自制（scripts/makePropGlb.mjs 从 propKit 零件清单生成）的两份。
 # 本地导入的道具（arrow / sting-sword / 枪械）来源授权待确认，一律不随包 —— 注册表里也不登记。
 $allowedPropGlb = @("stick.glb", "sword.glb")
-# 包体积上限：代码 1.1 MB + Y Bot 2.8 MB + 自制道具 0.07 MB 实测 4.19 MB，留 0.3 MB 余量给产物增长
+# 包体积上限：代码 1.1 MB + 标准素体两具 1.8 MB + 自制道具 0.07 MB 实测 3.0 MB，留 1.5 MB 余量给产物增长
 $maxPackageBytes = 4.5 * 1MB
-$required = @("index.html", "LICENSE", "models/ATTRIBUTION.md", "models/ybot.glb", "models/props/index.json",
-              "models/props/stick.glb", "models/props/sword.glb")
+$required = @("index.html", "LICENSE", "models/ATTRIBUTION.md", "models/bodyMale.glb", "models/bodyFemale.glb",
+              "models/props/index.json", "models/props/stick.glb", "models/props/sword.glb")
 $assetExt = @(".js", ".css", ".wasm", ".json", ".woff", ".woff2", ".ttf", ".ktx2")
 
 function Fail([string]$msg) { Write-Host $msg -ForegroundColor Red; exit 1 }
@@ -154,7 +156,7 @@ try {
         "",
         "- three.js（渲染器，随产物分发）— MIT，https://github.com/mrdoob/three.js",
         "- Draco 网格解码（内联进产物 JS，产物里没有 .wasm 文件）— Apache-2.0，https://github.com/google/draco",
-        "- 素体 `models/ybot.glb`（上游 `Xbot.glb`，作者 PixelMannen）— CC0，随产物分发",
+        "- 标准素体 `models/bodyMale.glb` 与 `models/bodyFemale.glb`（本项目生成链产的标准男 / 标准女，" + "基网格来自 MakeHuman Community 的 MPFB2，CC0）— 随产物分发，页面默认基座",
         "",
         "GLB 与道具的逐文件来源与授权见 [models/ATTRIBUTION.md](models/ATTRIBUTION.md)。Mixamo 与 SMPL 派生的",
         "素体不随包分发（各自条款仅限个人使用），由使用者自备 GLB 从宿主面板「自备素体」导入，落点",

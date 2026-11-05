@@ -6,13 +6,19 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ### Added
 
-- **The 3D Pose scene library now syncs the pose repo's shipped set together with the local set.** The pose
-  repo split its library into a read-only shipped library (`pose-lib/`) and a writable local library
+- **The 3D Pose scene library now syncs the pose repo's preset set together with the local set.** The pose
+  repo split its library into a read-only preset library (`pose-lib/`) and a writable local library
   (`pose-lab/`); `tools\sync_pose_lib.ps1` merges both into the single `<data root>/pose/lib/` copy the
-  「浏览场景库…」modal lists - a local pose wins over a shipped one of the same id, the shipped set only
+  「浏览场景库…」modal lists - a local pose wins over a preset one of the same id, the preset set only
   fills gaps and never overwrites what the machine already has, and the merged index (with a per-entry
-  `origin` tag) is computed by the pose repo's `npm run lib -- merged`. `ATTRIBUTION.md` of the shipped set
-  lands beside the library, and a local `categories.json` replaces the shipped registry when it exists.
+  `origin` tag) is computed by the pose repo's `npm run lib -- merged`. `ATTRIBUTION.md` of the preset set
+  lands beside the library, and a local `categories.json` replaces the preset registry when it exists.
+  The modal names the two origins 「预设」/「本地」 (English "Preset" / "Local").
+
+- **The 3D Pose page now opens on the standard body.** The bundled pose package ships the project's own
+  standard male / female base bodies `bodyMale.glb` / `bodyFemale.glb` (CC0 base meshes from MakeHuman
+  Community's MPFB2) - `bodyMale` is the page's default base - and drops `ybot.glb`, so a fresh install
+  opens on the preset body with the full character list, and the bundled package goes from 4.2 MB to 3.0 MB.
 
 - **The Neo Studio integration package updates itself.** `Neo-Studio\tools\update_neo_studio.ps1` inside
   `NeoStudio-Minimal` fetches the update piece `Neo-Studio-<version>-package-update.zip` from the latest GitHub

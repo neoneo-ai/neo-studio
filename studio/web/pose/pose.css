@@ -382,7 +382,7 @@
     pointer-events: none;
 }
 
-/* 出厂 / 本地角标：出厂 pose-lib 与本地 pose-lab 并成一份后，卡片要分得出一条姿态是随仓库发的还是本机自己写的 */
+/* 预设 / 本地角标：预设 pose-lib 与本地 pose-lab 并成一份后，卡片要分得出一条姿态是随仓库发的还是本机自己写的 */
 .ns-pose-lib-origin-badge {
     position: absolute;
     top: 4px;

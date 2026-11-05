@@ -4,7 +4,7 @@ r"""Neo Studio「3D 摆姿」页后端：伺服 3d-pose-art 构建产物 + 与�
 页面与桥接口只做文件读写，桌面端离线服务同样挂这些路由（app/studio_caps.py 已登记）。
 摆姿包 = 3d-pose-art 的 vite 构建产物，落点两级：<数据根>/pose/dist/ 优先（tools\sync_pose_dist.ps1
 同步的全量产物，含开发用的 map，约 16MB），随包分发的最小授权副本在 studio/pose_dist/
-（tools\build_pose_package.ps1 生成：代码 + CC0 素体 ybot.glb，约 4MB，进 Registry 包与 exe）。
+（tools\build_pose_package.ps1 生成：代码 + CC0 标准素体 bodyMale.glb / bodyFemale.glb，约 3MB，进 Registry 包与 exe）。
 子资源逐请求按这两级找，数据根那份压住随包的同名文件，新构建与用户自备素体因此都优先。两级都没有时
 /neo_pose/status 报 installed=false，页面显示「未安装」而不是白屏。
 
@@ -43,7 +43,7 @@ PACKAGE_DIST = Path(__file__).parent / "pose_dist"
 MODELS_DIR = DIST_DIR / "models"          # 自备素体 GLB 的落点（页面按 <key>.glb 取它）
 MANIFEST_NAME = "MANIFEST.json"           # 随包发货清单：逐文件 sha256 与体积
 # 场景库（3d-pose-art 的姿势库）：另一级数据根内容，由 tools\sync_pose_lib.ps1 同步进来，本模块全程只读。
-# 摆姿仓库那边库拆成出厂 pose-lib（只读）与本地 pose-lab（可写）两根，同步时并成这一份：同 id 本地胜出，
+# 摆姿仓库那边库拆成预设 pose-lib（只读）与本地 pose-lab（可写）两根，同步时并成这一份：同 id 本地胜出，
 # 每条索引带 origin。库里一份条目是一整场场景文件（poses/<组>/<id>.scene.json，3dpose.scene/1：多人 + 道具），
 # 宿主弹窗按 entry.path 读它交回 scene/apply，不需要转换。
 LIB_DIR = POSE_DIR / "lib"

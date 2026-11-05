@@ -11,40 +11,53 @@
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎨</text></svg>" />
     <!-- 被 Neo Studio 装进 iframe 时，demo 控件从首帧起就收掉（真正隐藏的是 styles/main.css 的
          html[data-host-ui] 规则）。工具条、六个 aside 面板与底部提示都在 body 里静态写着，而页面
-         模块要等默认素体（3MB 的 ybot.glb）加载完才建桥、宿主才回 pose:theme —— 之前这段时间里
+         模块要等默认素体（0.9MB 的 bodyMale.glb）加载完才建桥、宿主才回 pose:theme —— 之前这段时间里
          宿主打开摆姿页先看到的是整套单机 demo 页面，之后才「跳」成宿主版。
          判据与 src/neoBridge.js 同一条：parent === window 是单机部署（npm run dev / Pages / 静态站），
          那个标记不落、行为逐字不变；旧宿主不带 caps.hostUi 时桥会把标记撤掉，回落成 demo 全量控件。 -->
     <script>
       if (window.parent !== window) document.documentElement.setAttribute('data-host-ui', '1');
     </script>
-    <script type="module" crossorigin src="./assets/index-COkP6ZQ7.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-pXEjtHEe.css">
+    <script type="module" crossorigin src="./assets/index-L-hUp5gt.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-DIgQr3Ne.css">
   </head>
   <body>
     <div id="canvas-host"></div>
 
     <div id="modePill">模式：选择</div>
 
-    <!-- 工具条收起开关：六行工具条 fixed 在画布上，窗口矮时盖住大半个视口。
-         收起键自己不收（放在左下角，与底部提示同一水平线），收起后工具条只留第一行 -->
-    <button id="btnChrome" title="收起 / 展开顶部工具条（T）：收起后只留第一行，鼠标点这行按钮照常生效">面板：展开</button>
+    <!-- 工具栏收起开关：工具栏是贴在画布左边的竖栏，控件一排下来在矮窗口会一路拖到底。
+         收起键自己不收（贴在竖栏左下角，与底部提示同一水平线），收起后竖栏只留常用区那一块 -->
+    <button id="btnChrome" title="收起 / 展开左侧工具栏（T）：收起后只留常用区（素体 / 摆姿 / 吸附 / 轮廓 / 外观 / 人物 / 预设），鼠标点这些按钮照常生效">面板：展开</button>
 
     <div id="toolbar">
+      <!-- 常用区：收起（T / 左下角开关）只留这一块，高度由 controls.js 现量写进 --chrome-row -->
+      <div class="tb-primary" id="tbPrimary">
+      <div class="tb-row">
       <select id="modelSel" title="切换当前角色的素体"></select>
-      <button id="btnAddMember" title="在场上再添加一个素体">＋ 添加</button>
-      <button id="btnRemoveMember" title="删除当前选中的素体">－ 删除</button>
-      <button id="btnPose" class="primary" title="摆姿模式：动画暂停写入骨骼（临时）。要让动画永远不抢这副骨架，在时间轴把该角色泳道静音或删除它（不选动画＝没有动画在写骨骼）">进入摆姿模式 (K)</button>
-      <button id="btnSnap">吸附：关 (N)</button>
-      <button id="btnOutline" title="角色黑色轮廓壳（inverted hull）显示开关，全场角色一起切换">轮廓：关</button>
-      <button id="btnLook">外观：摄影棚</button>
+      </div>
+      <div class="tb-row">
+        <button id="btnAddMember" title="在场上再添加一个素体">＋ 添加</button>
+        <button id="btnRemoveMember" title="删除当前选中的素体">－ 删除</button>
+      </div>
+      <div class="tb-row">
+        <button id="btnPose" class="primary" title="摆姿模式：动画暂停写入骨骼（临时）。要让动画永远不抢这副骨架，在时间轴把该角色泳道静音或删除它（不选动画＝没有动画在写骨骼）">进入摆姿模式 (K)</button>
+      </div>
+      <div class="tb-row">
+        <button id="btnSnap">吸附：关 (N)</button>
+        <button id="btnOutline" title="角色黑色轮廓壳（inverted hull）显示开关，全场角色一起切换">轮廓：关</button>
+      </div>
+      <div class="tb-row">
+        <button id="btnLook">外观：摄影棚</button>
       <button
         id="btnSubjects"
         title="显示 / 隐藏场上全部素人（人物本体 + 轮廓 + 选中圈一起）—— 载入全景背景时会自动关人物（灰模素体与照片级实拍背景不搭），要带人拍点这个；物体、参考图、动画与摆姿数据都不受影响，隐藏期间点不中人（先点「人物显」再摆姿）"
       >
         人物
       </button>
-      <button
+      </div>
+      <div class="tb-row">
+        <button
         id="btnHdri"
         title="HDRI 背景：选一个 .exr / .hdr 全景环境贴图（如 polyhaven 摄影棚 HDRI），JS 侧解码贴成场景背景球 —— 素人站进环境里，转视角可环视，同时喂环境光照。全景期间雾 / 网格隐去，棚地面变成透明影子承接板（只显脚下软影，全景从板面透视，素人不悬空）；往下拖绿箭头可落到全景地板（纯色档恢复实心地面与落地限制）。可点「素人：隐藏」只看全景。浏览器原生不解码 EXR，这条走 three 的 EXRLoader（未压缩 / RLE / ZIP / PIZ / PXR24 / DWA 压缩都吃，B44 / deep / multi-part 不吃）。HDRI 是渲染外观：不进场景文件、刷新即失；「背景：全景/纯色」一键切回棚灰"
       >
@@ -58,26 +71,41 @@
         style="display:none"
         title="全景视角：背景清晰度是靠视角调出来的 —— 屏幕每度像素 = 窗口高 ÷ 视角，源图每度只有 11.4 个纹素。45°（默认，等于棚机位）时背景是被放大 1.6 倍画出来的，必糊；75° 接近 1:1 采样，90° / 110° 变成缩小采样 → 真锐。代价：视角越大素人在画面里越小。只在「背景：全景」档作用，切回纯色自动还原成进档前的视角"
       ></select>
-      <select id="presetSel" title="一键套用姿态预设"></select>
-      <button id="btnSave">保存姿态</button>
-      <button id="btnLoad">恢复姿态</button>
-      <button id="btnSceneSave" title="导出场景文件 3dpose.scene/1：场上全部素体（N 副骨架）+ 全部物体 + 参考图平面 + 机位，一个文件 = 一张卡片">存场景</button>
-      <button id="btnSceneLoad" title="读取 .scene.json 套用：按人数自动补素体、按左右对号入座、物体按 id 覆盖、参考图整层重建">读场景</button>
-      <button id="btnProps" title="物体面板：添加椅子 / 桌子 / 木箱等道具，可挂到骨骼上跟着姿势走。3D 里点物体就出操作手柄（默认移动；双击换档：移动→旋转→缩放），点空白取消；Shift 拖=抬高 / Alt 拖=转朝向 / Ctrl 拖=缩放">物体</button>
+      </div>
+      <div class="tb-row">
+        <select id="presetSel" title="一键套用姿态预设"></select>
+      </div>
+      </div>
+      <div class="tb-sec">姿态 / 存档</div>
+      <div class="tb-row">
+        <button id="btnSave">保存姿态</button>
+        <button id="btnLoad">恢复姿态</button>
+      </div>
+      <div class="tb-row">
+        <button id="btnSceneSave" title="导出场景文件 3dpose.scene/1：场上全部素体（N 副骨架）+ 全部物体 + 参考图平面 + 机位，一个文件 = 一张卡片">存场景</button>
+        <button id="btnSceneLoad" title="读取 .scene.json 打开整场：覆盖当前场景（素体裁齐、道具先清后加、参考图整层重建、机位还原）">读场景</button>
+      </div>
+      <div class="tb-sec">面板</div>
+      <div class="tb-row">
+        <button id="btnProps" title="物体面板：添加椅子 / 桌子 / 木箱等道具，可挂到骨骼上跟着姿势走。3D 里点物体就出操作手柄（默认移动；双击换档：移动→旋转→缩放），点空白取消；Shift 拖=抬高 / Alt 拖=转朝向 / Ctrl 拖=缩放">物体</button>
       <button
         id="btnPropImport"
         title="导入道具：选一个 GLB / OBJ / PLY / STL / FBX，本机解码烘焙成标准 GLB 并用道具运行时真装一遍（非空 / 有网格 / 三角形 / 底面贴地 / 高度归一 1m），过了闸门才落盘 public/models/props/ 并登记进物体下拉（需 npm run dev；产物只在本机、不进仓库；来源与授权请自己记进 public/models/ATTRIBUTION.md）"
         >导入道具</button
       >
       <button id="btnRefPlanes" title="参考图面板：上传照片摆到场景里对着描（Image Planes）。参考图只作摆姿辅助，导出的 6 张参考图里不含它">参考图</button>
-      <button
+      </div>
+      <div class="tb-row">
+        <button
         id="btnLocation"
         title="场地资产：选 scripts/mogePanorama.py 的输出目录（或一次多选 meta.json + points.ply [+ depth.exr / depth_vis.png]）—— 全景产物经闸门（轴口径 / 米制锚 / 地面残差 / 垃圾点比例）后装成彩色点云（__poseSplat__）+ 包围盒线框，按地面拟合下移贴地（地面 = 素人站立的 y=0）。闸门硬伤（无锚点 = 1:1 静默落地、地面内点率/残差不达标、垃圾点 >20%）一律拒收并逐条列出。点云只可见于视口：导出的 6 张参考图里不含房间。场景文件只存标定记录 + 产物引用（点云 6–22MB 不内嵌），读回场景后标定可用、点云要重选一次目录"
       >
         场地资产
       </button>
+      </div>
 
-      <button
+      <div class="tb-row">
+        <button
         id="btnPanoCrop"
         title="全景框选 → 机位：在全景图上拖一个框 = 一台相机（视场角 / 内参 / 焦距 / 俯仰由框说了算，导出口径见 docs/pano-calib-plan.md）。底图可来自本地全景图、「场地资产」产物里的 image.jpg、或 HDRI 背景的显示轨像素；支持按 fov 建框、反查现机位吃哪块、描地平线拟合 pitch/roll（闭式最小二乘）。面板只出数字与机位，几何全在 src/core/panoMath.js"
       >
@@ -85,28 +113,41 @@
       </button>
 
       <button id="btnBodyImport" title="照片 → 可摆姿素体：选照片，本机生成 SMPL 骨架 GLB 并登记进素体下拉（需 npm run dev + Python + torch + SMPL 模型 + HMR2 权重；产物与登记都只在本机，不进仓库）">导入素体</button>
-      <button
+      </div>
+      <div class="tb-row">
+        <button
         id="btnBodyShape"
         title="身材形变：滑杆改这具身体的绑定姿态网格（身高 / 腿长 / 臂长 / 胸腰髋围 / 四肢粗细 / 肩宽 / 躯干长），旁边实时显示量出来的 cm。只改网格、骨骼与权重不动 → 摆姿 / IK / 动画照常；按素体存在本机，刷新后自动恢复"
       >
         身材
       </button>
+      </div>
 
-      <button
+      <div class="tb-row">
+        <button
         id="btnHand"
         title="手部手势：一键手势（握拳 / 张开 / 食指指点 / 剪刀手 / OK / 枪指…）、逐指屈伸与展收的滑杆、掌向（翻掌 tilt / roll 与掌心朝哪）。只写腕骨与指骨，身体姿态与走位照旧不动；程序化的无指骨架只出掌向"
       >
         手部
       </button>
+      </div>
 
 
-      <button id="btnLib" title="本地姿势库 pose-lib/（开发模式下可存盘 / 删除）">姿势库</button>
-      <button id="btnAnim" title="动画播放器：加载 3dpose.animation/1 文件播放视频驱动动画">动画</button>
-      <button id="btnTimeline" title="打开 / 收起左侧动画时间轴面板（默认收起，用的时候点开）">时间轴</button>
-      <button id="btnVideo" title="导入视频动画：上传视频 → 后端 HMR2 推理 → SMPL24 → Mixamo 重定向 → 时间轴">🎬 视频→动画</button>
-      <button id="btnImportOP">导入 OpenPose</button>
-      <button id="btnExportOP">导出 OpenPose</button>
-      <select
+      <div class="tb-row">
+        <button id="btnLib" title="本地姿势库 pose-lib/（开发模式下可存盘 / 删除）">姿势库</button>
+        <button id="btnAnim" title="动画播放器：加载 3dpose.animation/1 文件播放视频驱动动画">动画</button>
+      </div>
+      <div class="tb-row">
+        <button id="btnTimeline" title="打开 / 收起左侧动画时间轴面板（默认收起，用的时候点开）">时间轴</button>
+      </div>
+      <div class="tb-sec">照片 / 视频 → 3D</div>
+      <div class="tb-row">
+        <button id="btnVideo" title="导入视频动画：上传视频 → 后端 HMR2 推理 → SMPL24 → Mixamo 重定向 → 时间轴">🎬 视频→动画</button>
+        <button id="btnImportOP">导入 OpenPose</button>
+        <button id="btnExportOP">导出 OpenPose</button>
+      </div>
+      <div class="tb-row">
+        <select
         id="photo3dViewSel"
         title="照片方向：决定左右手怎么对（选错就是左右手位置搞反）—— 普通照片选「正面照」，前置摄像头自拍 / 镜像图选「自拍·镜像」，背影照选「背面照」"
       >
@@ -120,7 +161,9 @@
       >
         照片 → 3D
       </button>
-      <select
+      </div>
+      <div class="tb-row">
+        <select
         id="photo3dEngineSel"
         title="照片 → 3D 走哪条通路：骨架（MediaPipe 关节）/ 网格（MediaPipe 关节 → 胶囊体 → GLB）/ 网格（HMR2.0 → SMPL 网格 → GLB）"
       >
@@ -137,8 +180,13 @@
         <option value="2">最多 2 人</option>
         <option value="1">只取 1 人</option>
       </select>
-      <button id="btnMeshClear" title="清除场景里的参考网格（照片重建出来的半透明模型）">清除参考网格</button>
-      <button id="btnReset">重置</button>
+      </div>
+      <div class="tb-row">
+        <button id="btnMeshClear" title="清除场景里的参考网格（照片重建出来的半透明模型）">清除参考网格</button>
+      </div>
+      <div class="tb-sec">导出</div>
+      <div class="tb-row">
+        <button id="btnReset">重置</button>
       <select id="exportViewSel" title="导出参考图的视角">
         <option value="front">正面</option>
         <option value="back">背面</option>
@@ -147,7 +195,9 @@
         <option value="front34">3/4 视角</option>
         <option value="current">当前视角</option>
       </select>
-      <select
+      </div>
+      <div class="tb-row">
+        <select
         id="exportFmtSel"
         title="导出哪几张图：全部＝6 张一起下载（骨架/剪影/深度/法线/线稿/着色）；选单张＝只下那一张。全部是 ControlNet openpose / depth / normal / lineart 的标准输入组合"
       >
@@ -159,14 +209,21 @@
         <option value="lineart">仅线稿图</option>
         <option value="shaded">仅着色图</option>
       </select>
-      <select id="exportSizeSel" title="导出图边长（正方形像素）">
+      </div>
+      <div class="tb-row">
+        <select id="exportSizeSel" title="导出图边长（正方形像素）">
         <option value="256">256</option>
         <option value="512" selected>512</option>
         <option value="1024">1024</option>
         <option value="2048">2048</option>
       </select>
-      <button id="btnPoseImg" title="导出骨架图 + 剪影图 + 深度图 + 法线图 + 线稿图 + 着色图（同一台导出相机，互相对齐）">导出参考图</button>
-      <button id="btnSnapshot">截图</button>
+      </div>
+      <div class="tb-row">
+        <button id="btnPoseImg" title="导出骨架图 + 剪影图 + 深度图 + 法线图 + 线稿图 + 着色图（同一台导出相机，互相对齐）">导出参考图</button>
+      </div>
+      <div class="tb-row">
+        <button id="btnSnapshot">截图</button>
+      </div>
     </div>
 
     <details id="rigPanel">

@@ -47,10 +47,10 @@ const LIB_PREFIX = "/pose-lib";
 const LIB_INDEX = `${LIB_PREFIX}/index.json`;
 const LIB_PAGE = 200;      // 一次渲染的卡片上限：库里 600+ 条全塞进 DOM，首屏与滚动都撑不住
 const LIB_VARIANTS = ["clay", "skeleton", "silhouette", "depth"];   // 缩略图优先级，与摆姿页 thumbOf 同一条
-const LIB_ORIGIN_ORDER = [{ key: "lib", label: "出厂（只读）" }, { key: "lab", label: "本地（可写）" }];
+const LIB_ORIGIN_ORDER = [{ key: "lib", label: "预设（只读）" }, { key: "lab", label: "本地（可写）" }];
 const LIB_SYNC_HINT = "场景库未同步：跑 tools\\sync_pose_lib.ps1 -Source <3d-pose-art 仓库根>" +
     " 把 pose-lib 同步进 <数据根>/pose/lib。";
-const LIB_ORIGIN_LABEL = { lib: "出厂", lab: "本地" };   // 合并库每条的出处：出厂随仓库分发只读，本地是本机自己写的
+const LIB_ORIGIN_LABEL = { lib: "预设", lab: "本地" };   // 合并库每条的出处：预设随仓库分发只读，本地是本机自己写的
 
 /** 页面开局是摄影棚灰（摆姿页 core/scene.js 的 LOOKS.studio），面板按产品口径把外观定在暗色档 */
 const DEFAULT_LOOK_KEY = "dark";
@@ -311,7 +311,7 @@ export function createPoseView({ api, $el, toast }) {
         });
         const libGroupSel = $el("select", { className: "ns-pose-sel ns-pose-lib-group", title: t("分组") });
         const libOriginSel = $el("select", {
-            className: "ns-pose-sel ns-pose-lib-origin", title: t("按来源筛选：出厂随仓库分发只读，本地是本机自己写的"),
+            className: "ns-pose-sel ns-pose-lib-origin", title: t("按来源筛选：预设随仓库分发只读，本地是本机自己写的"),
         });
         const libMeta = $el("p", { className: "ns-pose-lib-meta" });
         const libBlank = $el("p", { className: "ns-pose-lib-blank" });
@@ -413,14 +413,14 @@ export function createPoseView({ api, $el, toast }) {
             fill(boneSel, (data.bones || []).map((b) => ({ key: String(b), label: String(b) })), "挂点骨…");
         }
 
-        /** 出厂 / 本地角标：合并库里一份条目落在哪根库由同步脚本定的 origin 说；
-         *  旧版清单没有这一字段 = 本地库那份（合并库落在本机，出厂是这次拆库才有的） */
+        /** 预设 / 本地角标：合并库里一份条目落在哪根库由同步脚本定的 origin 说；
+         *  旧版清单没有这一字段 = 本地库那份（合并库落在本机，预设是这次拆库才有的） */
         const originBadge = (entry) => {
             const ship = entry.origin === "lib";
             return $el("span", {
                 className: `ns-pose-lib-origin-badge ns-pose-lib-origin-${ship ? "ship" : "lab"}`,
                 textContent: LIB_ORIGIN_LABEL[ship ? "lib" : "lab"],
-                title: ship ? t("出厂库：随摆姿仓库分发，只读") : t("本地库：本机自己写的姿态"),
+                title: ship ? t("预设库：随摆姿仓库分发，只读") : t("本地库：本机自己写的姿态"),
             });
         };
 
@@ -457,7 +457,7 @@ export function createPoseView({ api, $el, toast }) {
             return card;
         };
 
-        /** 分组下拉的条数按来源过滤后的合并库数：清单 groups 自带那份 count 是出厂集自己算的，
+        /** 分组下拉的条数按来源过滤后的合并库数：清单 groups 自带那份 count 是预设集自己算的，
          *  本机 pose-lab 新写的姿态不在里面，一筛来源就对不上屏上的卡 */
         const libGroupRows = (rows) => libGroups(rows, libIndex?.groups).map((sec) => ({
             key: sec.key, label: `${sec.label}（${sec.count}）`,
@@ -481,9 +481,9 @@ export function createPoseView({ api, $el, toast }) {
             libBlank.textContent = libIndex ? t("没有匹配的场景") : t(LIB_SYNC_HINT);
             libMore.hidden = rows.length <= libShown;
             libMore.textContent = tf("加载更多（还有 {n} 条）", { n: rows.length - libShown });
-            // 条数从过滤后的分层数出来：出厂 / 本地一筛，清单 groups 里出厂集自己那份 count 就对不上屏上的卡
+            // 条数从过滤后的分层数出来：预设 / 本地一筛，清单 groups 里预设集自己那份 count 就对不上屏上的卡
             libMeta.textContent = libIndex
-                ? tf("{total} 个场景（出厂 {ship} · 本地 {lab}）· 显示 {shown}", {
+                ? tf("{total} 个场景（预设 {ship} · 本地 {lab}）· 显示 {shown}", {
                     total: libIndex.count ?? rows.length,
                     ship: (libIndex.entries || []).filter((e) => e.origin === "lib").length,
                     lab: (libIndex.entries || []).filter((e) => e.origin !== "lib").length,
@@ -750,7 +750,7 @@ export function previewOf(entry) {
 }
 
 /** 搜索口径与摆姿仓库 poseLibrary.js 的 filterIndex 同一份字段表：label / 分类 / 标签 / id / source；
- *  origin 是合并库每条的出处（出厂 lib / 本地 lab），旧版清单没这字段 = 本地库那份 */
+ *  origin 是合并库每条的出处（预设 lib / 本地 lab），旧版清单没这字段 = 本地库那份 */
 export function libFilter(entries, { q = "", group = "", origin = "" } = {}) {
     const text = String(q || "").trim().toLowerCase();
     return (entries || []).filter((e) => {

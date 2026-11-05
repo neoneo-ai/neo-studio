@@ -46,7 +46,7 @@ const STATE = {
 const STATUS = {
     success: true, installed: true,
     // 生效的那一级与随包清单：宿主左栏据此决定要不要出「跑在随包副本上」的说明
-    dist_source: "data_root", package_installed: true, models_present: ["ybot.glb"],
+    dist_source: "data_root", package_installed: true, models_present: ["bodyMale.glb"],
     manifest_version: "neo-studio-pose-package/1",
     caps: { pose: true, export: true, photo3d: false, hostUi: true, body_import: true },
     scenes: [{ name: "hero", size: 12, mtime: 1 }],
@@ -81,7 +81,7 @@ const POSE_LIB = {
 /** 库里一份场景文件（3dpose.scene/1）：两副骨架加一份视角，套用的就是这一整场 */
 const LIB_SCENE = {
     format: "3dpose.scene/1",
-    subjects: [{ kind: "rig", id: "rig-1", charKey: "ybot" }, { kind: "rig", id: "rig-2", charKey: "ybot" }],
+    subjects: [{ kind: "rig", id: "rig-1", charKey: "bodyMale" }, { kind: "rig", id: "rig-2", charKey: "bodyMale" }],
     view: { camera: [1.4, 1.4, 4.5], target: [0, 0.9, 0], fov: 45 },
 };
 
@@ -555,10 +555,10 @@ test("previewOf / libFilter / libGroups / libTagsOf：缩略图优先级与搜�
         "分类名与 label 一起进搜索：库里分类名中英文各一条");
     assert.deepEqual(libFilter(POSE_LIB.entries, { group: "fight" }).map((e) => e.id), ["sword"]);
     assert.deepEqual(libFilter(POSE_LIB.entries, { origin: "lib" }).map((e) => e.id), ["a", "sword"],
-        "来源筛选只放过出厂条目");
+        "来源筛选只放过预设条目");
     assert.deepEqual(libFilter(POSE_LIB.entries, { origin: "lab" }).map((e) => e.id), ["calm-1"]);
     assert.deepEqual(libFilter([{ id: "no-origin", groups: ["stand"] }], { origin: "lab" }).map((e) => e.id),
-        ["no-origin"], "旧版清单没有 origin 字段 = 本地库那一份（合并库落在本机，出厂是拆库才有的）");
+        ["no-origin"], "旧版清单没有 origin 字段 = 本地库那一份（合并库落在本机，预设是拆库才有的）");
     assert.deepEqual(libFilter(POSE_LIB.entries, { origin: "lab", q: "双臂" }).map((e) => e.id), ["calm-1"],
         "来源与搜索是同一条过滤口径的两刀");
     assert.deepEqual(libGroups(POSE_LIB.entries, POSE_LIB.groups).map((s) => s.count), [2, 1],
@@ -690,7 +690,7 @@ test("本机场景文件：读成场景装进页面并收窗，坏 JSON 挡在�
 });
 
 
-test("场景库来源筛选：出厂 / 本地角标与来源下拉同一条 origin，分组条数跟着过滤走", async () => {
+test("场景库来源筛选：预设 / 本地角标与来源下拉同一条 origin，分组条数跟着过滤走", async () => {
     resetEnv();
     const env = await mounted();
     await env.ready();
@@ -700,16 +700,16 @@ test("场景库来源筛选：出厂 / 本地角标与来源下拉同一条 orig
     const cards = () => [...modal().querySelectorAll(".ns-pose-lib-card")];
     const originOf = (card) => card.querySelector(".ns-pose-lib-origin-badge").textContent;
     assert.deepEqual(cards().map((c) => [c.dataset.libId, originOf(c)]),
-        [["a", "出厂"], ["calm-1", "本地"], ["sword", "出厂"]], "合并库每条的出处要写在卡片上");
+        [["a", "预设"], ["calm-1", "本地"], ["sword", "预设"]], "合并库每条的出处要写在卡片上");
     const originSel = modal().querySelector(".ns-pose-lib-origin");
     assert.deepEqual([...originSel.options].map((o) => o.value), ["", "lib", "lab"],
-        "来源下拉：全部 / 出厂 / 本地三档");
+        "来源下拉：全部 / 预设 / 本地三档");
     assert.match(modal().querySelector(".ns-pose-lib-meta").textContent,
-        /3 个场景（出厂 2 · 本地 1）/, "顶部一行报清出厂与本地各几条");
+        /3 个场景（预设 2 · 本地 1）/, "顶部一行报清预设与本地各几条");
     changeValue(originSel, "lib");
-    assert.deepEqual(cards().map((c) => c.dataset.libId), ["a", "sword"], "出厂档只列出厂条目");
+    assert.deepEqual(cards().map((c) => c.dataset.libId), ["a", "sword"], "预设档只列预设条目");
     assert.deepEqual([...modal().querySelector(".ns-pose-lib-group").options].map((o) => o.textContent),
-        ["全部分组", "站立（1）", "格斗与武器（1）"], "分组下拉的条数跟着来源过滤走，不拿清单里出厂集那份 count");
+        ["全部分组", "站立（1）", "格斗与武器（1）"], "分组下拉的条数跟着来源过滤走，不拿清单里预设集那份 count");
     changeValue(originSel, "lab");
     assert.deepEqual(cards().map((c) => c.dataset.libId), ["calm-1"]);
     changeValue(originSel, "");

@@ -415,17 +415,17 @@ class PackageDistTests(_GalleryStubCase):
         return _run(pose.pose_static, _request(match_info={"path": rel}))
 
     def test_package_only_install_serves_page_models_and_status(self):
-        """只有随包副本时页面与 GLB 都从那一层级取：最小包里只有一份素体也够用。"""
+        """只有随包副本时页面与 GLB 都从那一层级取：最小包里只带默认基座那一具标准素体也够用。"""
         self.page_of(self.pkg_dist)
-        self.glb(self.pkg_dist / "models" / "ybot.glb")
+        self.glb(self.pkg_dist / "models" / "bodyMale.glb")
         payload = pose.status_payload()
         self.assertTrue(payload["installed"])
         self.assertEqual(payload["dist_source"], "package")
         self.assertTrue(payload["package_installed"])
-        self.assertEqual(payload["models_present"], ["ybot.glb"])
+        self.assertEqual(payload["models_present"], ["bodyMale.glb"])
         self.assertEqual(payload["hint"], "")
         self.assertEqual(self.static("").status, 200)
-        glb = self.static("models/ybot.glb")
+        glb = self.static("models/bodyMale.glb")
         self.assertEqual(glb.status, 200)
         self.assertEqual(glb.headers["Content-Type"], "model/gltf-binary")
         with self.assertRaises(web.HTTPFound) as got:
@@ -440,11 +440,11 @@ class PackageDistTests(_GalleryStubCase):
         注册表读空的页面不报缺包，只会一条一条说加具失败。"""
         self.page_of(self.pkg_dist)
         self.write(self.pkg_dist / "models" / "props" / "index.json", '{"props": []}')
-        self.glb(self.pkg_dist / "models" / "ybot.glb")
+        self.glb(self.pkg_dist / "models" / "bodyMale.glb")
         registry = self.models("props/index.json")
         self.assertEqual(registry.status, 200, "随包那一级要接住页面写死的那条注册表路径")
         self.assertEqual(registry.headers["Content-Type"], "application/json")
-        self.assertEqual(self.models("ybot.glb").status, 200)
+        self.assertEqual(self.models("bodyMale.glb").status, 200)
         # 数据根那一级起来后同名文件优先，数据根没有的那份仍从随包那一级取
         self.page_of(self.data_dist)
         self.glb(self.data_dist / "models" / "wide.glb")
@@ -459,8 +459,8 @@ class PackageDistTests(_GalleryStubCase):
         self.page_of(self.data_dist)
         self.write(self.pkg_dist / "assets" / "index-abc.js", "console.log('package')")
         self.write(self.data_dist / "assets" / "index-abc.js", "console.log('data-root')")
-        self.write(self.pkg_dist / "models" / "ybot.glb", "package")
-        self.write(self.data_dist / "models" / "ybot.glb", "data-root")
+        self.write(self.pkg_dist / "models" / "bodyMale.glb", "package")
+        self.write(self.data_dist / "models" / "bodyMale.glb", "data-root")
         self.assertEqual(self.static("assets/index-abc.js").status, 200)
         self.assertEqual(pose.status_payload()["dist_source"], "data_root")
         self.assertEqual(pose.status_payload()["dist_dir"], str(self.data_dist))

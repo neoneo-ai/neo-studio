@@ -1,38 +1,48 @@
 {
   "format": "3dpose.package/1",
   "generator": "tools/build_pose_package.ps1",
-  "built_utc": "2026-11-01T02:52:31Z",
-  "total_bytes": 4203009,
+  "built_utc": "2026-11-05T08:29:26Z",
+  "total_bytes": 3176560,
   "files": [
     {
-      "path": "assets/index-COkP6ZQ7.js",
-      "bytes": 1148812,
-      "sha256": "58ed0b3345befa4c3e74ec83ae764abfc8d1ab4b513734b47a80bf6b99770271"
+      "path": "assets/index-DIgQr3Ne.css",
+      "bytes": 32257,
+      "sha256": "5987c4734352afd99bae8bfe6af039b279f6119c9505362b001382c71ab875d5"
     },
     {
-      "path": "assets/index-pXEjtHEe.css",
-      "bytes": 31043,
-      "sha256": "9c70c198d65c21b5fc30fca017631ffc4f29eebcaa45da1cf81e261d7372f29e"
+      "path": "assets/index-L-hUp5gt.js",
+      "bytes": 1182597,
+      "sha256": "090735bb612986c33b7feea56a8e8bd3a3c3ca6aaf7f2b83d27751eb25a7f94e"
     },
     {
       "path": "index.html",
-      "bytes": 15449,
-      "sha256": "80dd3403bb41573f1a2686c76c495e23d94d8450d4637369355d5b8c7e76fbf0"
+      "bytes": 16987,
+      "sha256": "4562c038cafaef2a21eeee53db58547484882eee80342d47779498d663121b12"
     },
     {
       "path": "LICENSE",
-      "bytes": 1087,
-      "sha256": "1d4a66cca236223102c5e7f001a8588b642b3540a66117c73f3c2ef01b1f049b"
+      "bytes": 1066,
+      "sha256": "0a5fac221f08cea681cb5c65123ce5259615aa43c9369a11ab0f7918ab20ec3d"
     },
     {
       "path": "models/ATTRIBUTION.md",
-      "bytes": 6918,
-      "sha256": "26be9011ca51bf5a45f240d38197cfc816e700333a641ca18758923dec568343"
+      "bytes": 19302,
+      "sha256": "0875f0e14f01420ff81853583c9628cc27527aa1625b81b8e1bd372e8e06b9e7"
+    },
+    {
+      "path": "models/bodyFemale.glb",
+      "bytes": 927016,
+      "sha256": "a0da825681b40a5c8c6a8c50ef5d6af9c504fe8550594638a8504c661235784b"
+    },
+    {
+      "path": "models/bodyMale.glb",
+      "bytes": 926992,
+      "sha256": "86f9e96b6efeb355f53e7514b993535c752bb4e9b9baead12b33241a9aefa8bb"
     },
     {
       "path": "models/props/index.json",
-      "bytes": 814,
-      "sha256": "b9d898fac1f9f9078e635596bcc8ce3f3dcf576ea8f8cf921b4a50cfceb26e4c"
+      "bytes": 1374,
+      "sha256": "31c7e2970646cbb7dda8f6bda90173937ce993792a4c4cd0c28a9597fc9f2849"
     },
     {
       "path": "models/props/stick.glb",
@@ -45,14 +55,9 @@
       "sha256": "0c852730ad27c2860eda16cdc0fd5ae989621f6416c4789eb712599480d18583"
     },
     {
-      "path": "models/ybot.glb",
-      "bytes": 2930032,
-      "sha256": "002f8d269de68e5dce3d25195caf390d1aa359bbfaae3fcf4c8dc78ec36c3ba5"
-    },
-    {
       "path": "THIRD-PARTY.md",
-      "bytes": 798,
-      "sha256": "03e1db926fcf6e14d9184b7c2d2e77f97ba1c7dc97fb59718d769ec624b1b220"
+      "bytes": 913,
+      "sha256": "310a1574cfd7285887158584eaa14fdfc50ce5fc796309563d7c4ccc6ad89e79"
     }
   ]
 }

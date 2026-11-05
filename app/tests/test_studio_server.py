@@ -772,17 +772,17 @@ class PoseBridgeTests(_ServerCase):
         try:
             self.write(self.pose_module.PACKAGE_DIST / "index.html",
                        '<!doctype html><html><body>pose-unit-pkg</body></html>')
-            self.write(self.pose_module.PACKAGE_DIST / "models" / "ybot.glb", "glb-bytes")
+            self.write(self.pose_module.PACKAGE_DIST / "models" / "bodyMale.glb", "glb-bytes")
             status, data = self.get("/neo_pose/status")
             payload = json.loads(data)
             self.assertTrue(payload["installed"])
             self.assertEqual(payload["dist_source"], "package")
             self.assertTrue(payload["package_installed"])
-            self.assertEqual(payload["models_present"], ["ybot.glb"])
+            self.assertEqual(payload["models_present"], ["bodyMale.glb"])
             status, body = self.get("/neo-pose")
             self.assertEqual(status, 200, "兜底那一级要接住短路径的跳转")
             self.assertIn(b"pose-unit-pkg", body)
-            status, _, _ = self.get_full("/pose-dist/models/ybot.glb")
+            status, _, _ = self.get_full("/pose-dist/models/bodyMale.glb")
             self.assertEqual(status, 200)
         finally:
             self.pose_module.PACKAGE_DIST = pkg

@@ -4,6 +4,8 @@
     "propKey = glb:<file>，写进场景文件（3dpose.scene/1）的 subjects[].propKey。",
     "file 必须是本目录下的文件名（不能带路径 / ..），scale 是注册表级缩放（与用户摆放时的 scale 相乘）。",
     "内置道具（builtin:chair 等）由 src/core/propKit.js 定义，不需要在这里登记 —— 空注册表也能用。",
+    "grab / handleR / standing / guardFrac 等握点元数据由 npm run prop:bk 量测后写入（武器类立起来 + 归一化占比）；propKit 的 gripSpecOf 照 scale 还原成米。hidden: true = 面板不显示这一项，条目照旧保留（老场景文件里的 propKey 要读得懂、装得起来）。",
+    "真实道具（CC0 扫描模型）用 npm run prop:cco 批量灌入：映射表在 scripts/lib/propCcoKit.mjs，产物名不带 prop- 前缀（带前缀的会被 .gitignore 的 prop-*.glb 挡在仓库外）。",
     "模型来源与授权请一并登记进 public/models/ATTRIBUTION.md（同素体的处理方式）。"
   ],
   "props": [
@@ -15,7 +17,8 @@
     {
       "file": "sword.glb",
       "label": "剑（自制）",
-      "scale": 1
+      "scale": 1,
+      "hidden": true
     }
   ]
 }

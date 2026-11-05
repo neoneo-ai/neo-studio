@@ -17,12 +17,13 @@ $repo = (Resolve-Path -LiteralPath "$PSScriptRoot\..").Path
 $root = if ($Dist) { $Dist } else { Join-Path $repo "studio\pose_dist" }
 
 # 与构建脚本同值：加任何一个 GLB 要先在摆姿仓库的 ATTRIBUTION 里有可再分发的授权行
-$allowedGlb = @("ybot.glb")
+$allowedGlb = @("bodyMale.glb", "bodyFemale.glb")
 # 自制道具 GLB（本项目 scripts/makePropGlb.mjs 生成）—— 授权口径与 prop_test_box.glb 相同
 $allowedPropGlb = @("stick.glb", "sword.glb")
 $maxPackageBytes = 4.5 * 1MB
 $required = @("index.html", "LICENSE", "THIRD-PARTY.md", "MANIFEST.json",
-              "models/ATTRIBUTION.md", "models/ybot.glb", "models/props/index.json",
+              "models/ATTRIBUTION.md", "models/bodyMale.glb", "models/bodyFemale.glb",
+              "models/props/index.json",
               "models/props/stick.glb", "models/props/sword.glb")
 
 $problems = [System.Collections.Generic.List[string]]::new()
