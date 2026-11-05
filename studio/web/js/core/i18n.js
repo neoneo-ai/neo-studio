@@ -119,6 +119,18 @@ const EN = {
     "没有匹配的场景": "No matching scenes",
     "加载更多（还有 {n} 条）": "Load more ({n} left)",
     "{total} 个场景 · 显示 {shown}": "{total} scenes · showing {shown}",
+    // 合并库（出厂 pose-lib + 本地 pose-lab 并成一份）：来源筛选与卡片角标
+    "{total} 个场景（出厂 {ship} · 本地 {lab}）· 显示 {shown}":
+        "{total} scenes (shipped {ship} · local {lab}) · showing {shown}",
+    "全部来源": "All origins",
+    "出厂（只读）": "Shipped (read-only)",
+    "本地（可写）": "Local (writable)",
+    "出厂": "Shipped",
+    "本地": "Local",
+    "按来源筛选：出厂随仓库分发只读，本地是本机自己写的":
+        "Filter by origin: shipped ships with the pose repo and is read-only, local is what this machine wrote",
+    "出厂库：随摆姿仓库分发，只读": "Shipped library: distributed with the pose repo, read-only",
+    "本地库：本机自己写的姿态": "Local library: poses this machine wrote itself",
     "读不到库文件：{path}": "Cannot read the library file: {path}",
     "场景库未同步：跑 tools\\sync_pose_lib.ps1 -Source <3d-pose-art 仓库根> 把 pose-lib 同步进 <数据根>/pose/lib。":
         "The scene library is not synced: run tools\\sync_pose_lib.ps1 -Source <3d-pose-art repo> to put pose-lib into <data root>/pose/lib.",

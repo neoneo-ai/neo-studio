@@ -47,8 +47,10 @@ const LIB_PREFIX = "/pose-lib";
 const LIB_INDEX = `${LIB_PREFIX}/index.json`;
 const LIB_PAGE = 200;      // 一次渲染的卡片上限：库里 600+ 条全塞进 DOM，首屏与滚动都撑不住
 const LIB_VARIANTS = ["clay", "skeleton", "silhouette", "depth"];   // 缩略图优先级，与摆姿页 thumbOf 同一条
+const LIB_ORIGIN_ORDER = [{ key: "lib", label: "出厂（只读）" }, { key: "lab", label: "本地（可写）" }];
 const LIB_SYNC_HINT = "场景库未同步：跑 tools\\sync_pose_lib.ps1 -Source <3d-pose-art 仓库根>" +
     " 把 pose-lib 同步进 <数据根>/pose/lib。";
+const LIB_ORIGIN_LABEL = { lib: "出厂", lab: "本地" };   // 合并库每条的出处：出厂随仓库分发只读，本地是本机自己写的
 
 /** 页面开局是摄影棚灰（摆姿页 core/scene.js 的 LOOKS.studio），面板按产品口径把外观定在暗色档 */
 const DEFAULT_LOOK_KEY = "dark";
@@ -308,16 +310,19 @@ export function createPoseView({ api, $el, toast }) {
             placeholder: t("搜索场景（名字 / 分类 / 标签）"),
         });
         const libGroupSel = $el("select", { className: "ns-pose-sel ns-pose-lib-group", title: t("分组") });
+        const libOriginSel = $el("select", {
+            className: "ns-pose-sel ns-pose-lib-origin", title: t("按来源筛选：出厂随仓库分发只读，本地是本机自己写的"),
+        });
         const libMeta = $el("p", { className: "ns-pose-lib-meta" });
         const libBlank = $el("p", { className: "ns-pose-lib-blank" });
         const libGrid = $el("div", { className: "ns-pose-lib-grid" });
         const libMore = $el("button", { className: "ns-pose-btn ns-pose-lib-more", type: "button" });
-        libGate.push(libMore, libSearch, libGroupSel);   // 弹窗里的这一片与左栏同一把门禁：ready 之前不可点
+        libGate.push(libMore, libSearch, libGroupSel, libOriginSel);   // 弹窗里的这一片与左栏同一把门禁：ready 之前不可点
         const btnSceneLocal = btn("本机场景文件…", "folder", libGate);
         // 库里没有想要的场景时从本机挑一份 JSON，走的还是装载场景那条路
         const sceneFile = $el("input", { className: "ns-pose-file", type: "file", accept: ".json" });
         const libPane = $el("div", { className: "ns-pose-libpane" }, [
-            row([libSearch, libGroupSel, btnSceneLocal]), libMeta, libBlank, libGrid, libMore,
+            row([libSearch, libGroupSel, libOriginSel, btnSceneLocal]), libMeta, libBlank, libGrid, libMore,
         ]);
         libModal.setContent(libPane);
         el.append(libModal.el, sceneFile);
@@ -408,6 +413,17 @@ export function createPoseView({ api, $el, toast }) {
             fill(boneSel, (data.bones || []).map((b) => ({ key: String(b), label: String(b) })), "挂点骨…");
         }
 
+        /** 出厂 / 本地角标：合并库里一份条目落在哪根库由同步脚本定的 origin 说；
+         *  旧版清单没有这一字段 = 本地库那份（合并库落在本机，出厂是这次拆库才有的） */
+        const originBadge = (entry) => {
+            const ship = entry.origin === "lib";
+            return $el("span", {
+                className: `ns-pose-lib-origin-badge ns-pose-lib-origin-${ship ? "ship" : "lab"}`,
+                textContent: LIB_ORIGIN_LABEL[ship ? "lib" : "lab"],
+                title: ship ? t("出厂库：随摆姿仓库分发，只读") : t("本地库：本机自己写的姿态"),
+            });
+        };
+
         const libCard = (entry) => {
             const label = entry.label || entry.id;
             const thumb = previewOf(entry);
@@ -418,8 +434,11 @@ export function createPoseView({ api, $el, toast }) {
                 ? $el("div", { className: "ns-pose-lib-thumbbox" }, [
                     $el("img", { className: "ns-pose-lib-thumb", src: `${LIB_PREFIX}/${thumb}`, alt: label, loading: "lazy" }),
                     $el("span", { className: "ns-pose-lib-ref", textContent: t("参考图") }),
+                    originBadge(entry),
                 ])
-                : $el("div", { className: "ns-pose-lib-noimg", textContent: t("无预览") });
+                : $el("div", { className: "ns-pose-lib-noimgbox" }, [
+                    $el("div", { className: "ns-pose-lib-noimg", textContent: t("无预览") }), originBadge(entry),
+                ]);
             const card = $el("button", {
                 className: "ns-pose-lib-card", type: "button", title: label,
                 dataset: { libId: String(entry.id) },
@@ -438,8 +457,19 @@ export function createPoseView({ api, $el, toast }) {
             return card;
         };
 
+        /** 分组下拉的条数按来源过滤后的合并库数：清单 groups 自带那份 count 是出厂集自己算的，
+         *  本机 pose-lab 新写的姿态不在里面，一筛来源就对不上屏上的卡 */
+        const libGroupRows = (rows) => libGroups(rows, libIndex?.groups).map((sec) => ({
+            key: sec.key, label: `${sec.label}（${sec.count}）`,
+        }));
+
         function renderLibIndex() {
-            const rows = libFilter(libIndex?.entries, { q: libSearch.value, group: libGroupSel.value });
+            const pickedGroup = libGroupSel.value;
+            fill(libGroupSel, libGroupRows(libFilter(libIndex?.entries, { origin: libOriginSel.value })),
+                "全部分组");
+            libGroupSel.value = pickedGroup;   // 重建选项后落回原选择；来源一换原分组不存在就落回全部
+            const rows = libFilter(libIndex?.entries,
+                { q: libSearch.value, group: libGroupSel.value, origin: libOriginSel.value });
             const sections = libGroups(rows.slice(0, libShown), libIndex?.groups);
             libGrid.replaceChildren(...sections.flatMap((sec) => [
                 $el("h4", { className: "ns-pose-lib-group-title", textContent: `${sec.label}（${sec.items.length}）` }),
@@ -451,8 +481,14 @@ export function createPoseView({ api, $el, toast }) {
             libBlank.textContent = libIndex ? t("没有匹配的场景") : t(LIB_SYNC_HINT);
             libMore.hidden = rows.length <= libShown;
             libMore.textContent = tf("加载更多（还有 {n} 条）", { n: rows.length - libShown });
+            // 条数从过滤后的分层数出来：出厂 / 本地一筛，清单 groups 里出厂集自己那份 count 就对不上屏上的卡
             libMeta.textContent = libIndex
-                ? tf("{total} 个场景 · 显示 {shown}", { total: libIndex.count ?? rows.length, shown: rows.length })
+                ? tf("{total} 个场景（出厂 {ship} · 本地 {lab}）· 显示 {shown}", {
+                    total: libIndex.count ?? rows.length,
+                    ship: (libIndex.entries || []).filter((e) => e.origin === "lib").length,
+                    lab: (libIndex.entries || []).filter((e) => e.origin !== "lib").length,
+                    shown: rows.length,
+                })
                 : "";
         }
 
@@ -463,9 +499,8 @@ export function createPoseView({ api, $el, toast }) {
             if (libIndex === null) {
                 try {
                     libIndex = await libJson(LIB_INDEX);
-                    fill(libGroupSel, (libIndex.groups || []).map((g) => ({
-                        key: g.key, label: `${g.label || g.key}（${g.count ?? 0}）`,
-                    })), "全部分组");
+                    fill(libGroupSel, libGroupRows(libFilter(libIndex.entries, { origin: libOriginSel.value })), "全部分组");
+                    fill(libOriginSel, LIB_ORIGIN_ORDER.map((o) => ({ key: o.key, label: t(o.label) })), "全部来源");
                 } catch {
                     // 读不出索引 = 库没同步：这句就是弹窗里那句同步指引要说的同一件事
                     toast(tf("读不到库文件：{path}", { path: LIB_INDEX }));
@@ -477,6 +512,7 @@ export function createPoseView({ api, $el, toast }) {
 
         libSearch.oninput = () => renderLibIndex();
         libGroupSel.onchange = () => renderLibIndex();
+        libOriginSel.onchange = () => renderLibIndex();
         libMore.onclick = () => { libShown += LIB_PAGE; renderLibIndex(); };
         btnBrowseLib.onclick = () => openLibModal();
         btnSceneLocal.onclick = () => { sceneFile.value = ""; sceneFile.click(); };
@@ -713,11 +749,13 @@ export function previewOf(entry) {
     return "";
 }
 
-/** 搜索口径与摆姿仓库 poseLibrary.js 的 filterIndex 同一份字段表：label / 分类 / 标签 / id / source */
-export function libFilter(entries, { q = "", group = "" } = {}) {
+/** 搜索口径与摆姿仓库 poseLibrary.js 的 filterIndex 同一份字段表：label / 分类 / 标签 / id / source；
+ *  origin 是合并库每条的出处（出厂 lib / 本地 lab），旧版清单没这字段 = 本地库那份 */
+export function libFilter(entries, { q = "", group = "", origin = "" } = {}) {
     const text = String(q || "").trim().toLowerCase();
     return (entries || []).filter((e) => {
         if (group && !(e.groups || []).includes(group)) return false;
+        if (origin && String(e.origin || "lab") !== origin) return false;
         if (!text) return true;
         const hay = [e.label, ...(e.categories || []), ...(e.tags || []), e.id, e.source]
             .join(" ").toLowerCase();
@@ -744,7 +782,7 @@ export function libGroups(entries, groups) {
     }
     return [...buckets.entries()]
         .sort((a, b) => (rank.get(a[0]) ?? 99) - (rank.get(b[0]) ?? 99))
-        .map(([key, items]) => ({ key, label: labelOf.get(key) || key, items }));
+        .map(([key, items]) => ({ key, label: labelOf.get(key) || key, items, count: items.length }));
 }
 
 /** 卡片副标题：人数与道具数写在最前 —— 多人场景要在卡片上分得出来；其后是分类头两条与来源。

@@ -219,8 +219,13 @@ before the shot, and the card corner carries a "reference render" badge marking 
 The figures in the picture are the scene file's headcount, and the toast reports what the page staged. A library
 synced from before this change re-renders with `npm run build` then `npm run lib -- preview --all` in the pose
 repo, followed by the sync.
-The group dropdown is filled from the index's `groups` with their
-`count`, "all groups" returns to the whole library, and the search filters on
+The group dropdown is filled from the merged entries of the selected origin with their counts
+(the `count` the index's `groups` carry is the shipped set's own number, so poses this machine wrote in
+`pose-lab` never show up in it), and refilling the options lands back on the picked group - "all groups"
+when the origin switch drops it. The origin dropdown offers "all origins / shipped (read-only) /
+local (writable)"; a card's top-left corner reads "shipped" or "local" (the tooltip names the library),
+and the count line reads "N scenes (shipped X · local Y) · showing Z" - an index entry with no `origin`
+field counts as local. The search filters on
 `label / categories / tags / id / source` (the field table 3d-pose-art's `filterIndex` uses in
 `poseLibrary.js`). A scene can belong to several groups and its card lands only in the highest-ranked one -
 two cards with the same id would cross wires on click. A page is 200 cards (640+ in the DOM at once breaks
@@ -228,7 +233,7 @@ both the first paint and scrolling) and the rest sit behind "load more (N left)"
 card's own file and sends one `scene/apply`, reporting "N rigs / M props"; a successful apply closes the
 modal - the same implementation the left column's Load Scene and the page's own scene load use: it tops up
 the skeleton count, lays the rigs out left to right and restores props by id. The modal's search, group
-dropdown and load-more sit behind the same `libGate` as the left column: they stay disabled until
+and origin dropdowns and load-more sit behind the same `libGate` as the left column: they stay disabled until
 `pose:ready`, and the pane locks after an apply until the result comes back, because two quick clicks send
 two apply calls and the second silently overwrites the first. When the library is not synced the modal shows
 the sync command with a line of explanation instead of an empty grid: an empty browser is not what a library
@@ -378,7 +383,7 @@ file and an unsynced library are the same 404, so the modal decides by whether t
   bridge's source and origin checks, the hostUi gating, the export / scene /
   set-export paths, the routes each message reaches, the note shown on the bundled copy, and importing
   an own figure (the base64 upload and the key checks); the scene-library modal's index rendering with
-  grouping, search and load-more, applying a library scene (the action it sends and the modal closing),
+  grouping, search, origin filtering and load-more, applying a library scene (the action it sends and the modal closing),
   the sync hint when the library is unsynced, the gate locking that pane, and the local scene file path;
   collapsing each side panel (the button outside the gates, the head left behind as the way back out, the
   icon glyph changing with the collapsed state, the

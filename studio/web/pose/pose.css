@@ -382,6 +382,24 @@
     pointer-events: none;
 }
 
+/* 出厂 / 本地角标：出厂 pose-lib 与本地 pose-lab 并成一份后，卡片要分得出一条姿态是随仓库发的还是本机自己写的 */
+.ns-pose-lib-origin-badge {
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    padding: 1px 5px;
+    border-radius: 5px;
+    font-size: 10px;
+    color: #0b1220;
+    pointer-events: none;
+}
+
+.ns-pose-lib-origin-ship { background: #6b7a90; }
+.ns-pose-lib-origin-lab { background: #7fd6a0; }
+
+/* 无预览的卡片没有缩略图那层相对定位，包一层与 thumbbox 同职责的壳，角标的绝对定位才有祖先 */
+.ns-pose-lib-noimgbox { position: relative; }
+
 .ns-pose-lib-noimg {
     display: flex;
     align-items: center;

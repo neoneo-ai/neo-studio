@@ -66,14 +66,14 @@ const POSE_LIB = {
     entries: [
         { id: "a", label: "A-Pose 标定", path: "poses/stand/a.scene.json", kind: "scene",
           people: 1, props: 0, groups: ["stand"],
-          categories: ["站立", "standing-poses"], tags: ["preset"], source: "preset",
+          categories: ["站立", "standing-poses"], tags: ["preset"], source: "preset", origin: "lib",
           preview: { skeleton: "preview/a.skeleton.png", silhouette: "preview/a.silhouette.png" } },
         { id: "calm-1", label: "双臂伸展 1", path: "poses/calm/calm-1.scene.json", kind: "scene",
           people: 2, props: 0, groups: ["calm", "stand"],
-          categories: ["手臂绘图参考", "arm-drawing-reference"], source: "photo3d",
+          categories: ["手臂绘图参考", "arm-drawing-reference"], source: "photo3d", origin: "lab",
           preview: { clay: "preview/calm-1.clay.png", skeleton: "preview/calm-1.skeleton.png" } },
         { id: "sword", label: "双手持剑", path: "poses/fight/sword.scene.json", kind: "scene",
-          people: 2, props: 1, groups: ["fight"], categories: ["格斗", "sword"], source: "preset",
+          people: 2, props: 1, groups: ["fight"], categories: ["格斗", "sword"], source: "preset", origin: "lib",
           preview: {} },
     ],
 };
@@ -554,6 +554,15 @@ test("previewOf / libFilter / libGroups / libTagsOf：缩略图优先级与搜�
     assert.deepEqual(libFilter(POSE_LIB.entries, { q: "手臂绘图" }).map((e) => e.id), ["calm-1"],
         "分类名与 label 一起进搜索：库里分类名中英文各一条");
     assert.deepEqual(libFilter(POSE_LIB.entries, { group: "fight" }).map((e) => e.id), ["sword"]);
+    assert.deepEqual(libFilter(POSE_LIB.entries, { origin: "lib" }).map((e) => e.id), ["a", "sword"],
+        "来源筛选只放过出厂条目");
+    assert.deepEqual(libFilter(POSE_LIB.entries, { origin: "lab" }).map((e) => e.id), ["calm-1"]);
+    assert.deepEqual(libFilter([{ id: "no-origin", groups: ["stand"] }], { origin: "lab" }).map((e) => e.id),
+        ["no-origin"], "旧版清单没有 origin 字段 = 本地库那一份（合并库落在本机，出厂是拆库才有的）");
+    assert.deepEqual(libFilter(POSE_LIB.entries, { origin: "lab", q: "双臂" }).map((e) => e.id), ["calm-1"],
+        "来源与搜索是同一条过滤口径的两刀");
+    assert.deepEqual(libGroups(POSE_LIB.entries, POSE_LIB.groups).map((s) => s.count), [2, 1],
+        "分组条数从过滤后的分层数出来，来源一筛下拉就跟着变");
     assert.deepEqual(libGroups(POSE_LIB.entries, POSE_LIB.groups).map((s) => [s.key, s.items.length]),
         [["stand", 2], ["fight", 1]], "多组条目只落排最前的那个组，同 id 不许出现两张卡");
     assert.equal(libTagsOf(POSE_LIB.entries[1]), "2人 · 0道具 · 手臂绘图参考 / arm-drawing-reference · photo3d");
@@ -678,5 +687,32 @@ test("本机场景文件：读成场景装进页面并收窗，坏 JSON 挡在�
     assert.deepEqual(opened[0].msg.scene, LIB_SCENE, "文件里那份场景原样交回页面");
     assert.match(env.toasts.join("|"), /mine\.scene\.json/);
     assert.equal(env.host.querySelector(".ns-libmodal").classList.contains("ns-hidden"), true, "装载完要收窗");
+});
+
+
+test("场景库来源筛选：出厂 / 本地角标与来源下拉同一条 origin，分组条数跟着过滤走", async () => {
+    resetEnv();
+    const env = await mounted();
+    await env.ready();
+    click(env.button("浏览场景库…", LIB));
+    await settle();
+    const modal = () => env.host.querySelector(".ns-libmodal:not(.ns-hidden)");
+    const cards = () => [...modal().querySelectorAll(".ns-pose-lib-card")];
+    const originOf = (card) => card.querySelector(".ns-pose-lib-origin-badge").textContent;
+    assert.deepEqual(cards().map((c) => [c.dataset.libId, originOf(c)]),
+        [["a", "出厂"], ["calm-1", "本地"], ["sword", "出厂"]], "合并库每条的出处要写在卡片上");
+    const originSel = modal().querySelector(".ns-pose-lib-origin");
+    assert.deepEqual([...originSel.options].map((o) => o.value), ["", "lib", "lab"],
+        "来源下拉：全部 / 出厂 / 本地三档");
+    assert.match(modal().querySelector(".ns-pose-lib-meta").textContent,
+        /3 个场景（出厂 2 · 本地 1）/, "顶部一行报清出厂与本地各几条");
+    changeValue(originSel, "lib");
+    assert.deepEqual(cards().map((c) => c.dataset.libId), ["a", "sword"], "出厂档只列出厂条目");
+    assert.deepEqual([...modal().querySelector(".ns-pose-lib-group").options].map((o) => o.textContent),
+        ["全部分组", "站立（1）", "格斗与武器（1）"], "分组下拉的条数跟着来源过滤走，不拿清单里出厂集那份 count");
+    changeValue(originSel, "lab");
+    assert.deepEqual(cards().map((c) => c.dataset.libId), ["calm-1"]);
+    changeValue(originSel, "");
+    assert.equal(cards().length, 3, "回到全部来源 = 合并库全量");
 });
 
