@@ -159,7 +159,7 @@ director_recipes → director_spec (read segments) → director_plan (story → 
 → fixes: segment_run (regenerate one segment) → assemble_run (stitch it back into the film)
 ```
 
-**Text-storyboard pipeline (idea or script → segments → keyframes → finished segments)**
+**Story-to-segments pipeline (idea or script → segments → keyframes → finished segments)**
 
 ```
 director_plan(mode=plan, idea|script, segment_seconds[, characters])   → segments (prompt / duration_sec / storyboard_prompt)

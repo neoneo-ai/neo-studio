@@ -95,7 +95,7 @@ container**: one segment = one H3 video generation task (its own skill / prompt 
 the `NeoH3VideoDirector` node generates them in order and concatenates them into a single `VIDEO` with audio.
 Execution details: [h3-video-gen.md](h3-video-gen.md).
 
-![Storyboard video director recipe editor](../assets/images/recipes-director-editor.png)
+![The 🎞️ Timeline page in the Studio director page: the top row with generation mode / skill / aspect ratio / megapixels / advanced parameters, the segment blocks over a seconds ruler, the current segment detail (first frame / duration / prompt) with the segment edit bar below, and Cancel / Save / Save & generate film at the bottom](../assets/images/recipes-director-editor.png)
 
 ![Opening the director editor from the recipe list and dragging segment blocks on the timeline to reorder segments (animation)](../assets/images/neo-video-director-timeline.gif)
 
@@ -209,12 +209,30 @@ Execution details: [h3-video-gen.md](h3-video-gen.md).
 - Drag a block to reorder segments (the source follows the cursor as a ghost block, the landing slot shows a
   dashed frame, the other blocks move aside live); drag a block's right edge to change its duration; the
   trailing ＋ appends a segment.
+- The hint row reads “Timeline (drag to reorder · click to locate a segment · ＋ at the end to add a
+  segment)” on the left, with the **＋ Add segment** button in the middle - the same path as the ＋ at
+  the end of the timeline.
 - The **↔ stretch** control at the right end of the hint row (button + slider 0.25–4×): scales the timeline
   width, a horizontal scrollbar appears when it exceeds the viewport, and the wheel scrolls horizontally.
 - By default each segment is about one 16:9 video frame wide, with the width inside a segment distributed by
   duration; when the default total width exceeds the viewport it scrolls horizontally.
 - The timeline component takes its data from the host and is driven by callbacks, so it can also be mounted
   inside a `NeoH3VideoDirector` node (read-only preview there, no ＋).
+
+#### Segment detail (current segment)
+
+- Below the timeline sits the detail card for the current segment: its title row reads **Segment {n}**, and on the
+  right sit the **skill (decides template & model)** dropdown (per-segment only in mixed mode), the
+  **duration (sec)** input (an integer 1–3600, 5 by default) and delete-this-segment. Changing the duration
+  re-renders the block width and the seconds ruler live.
+- The left column carries the frame slots (`f2v` first frame / `fl2v` first + last frame) or the reference media
+  area (`r2v`): its label switches between “First frame” and “Reference media” with the effective mode, and
+  an `r2v` segment hides the frame slots so the reference area takes the column over.
+- The right column is the **prompt (required)** box, holding the official H3 time-slice format (time slices /
+  voiceover / music & sound effects).
+- The bottom row is the segment edit bar: **Describe or edit the current segment (e.g. top-down city night
+  view, add rain sounds…)** + **Generate / edit** - one natural-language instruction generates or rewrites
+  the prompt for this segment, streamed token by token into the box. It only edits text and submits no run.
 
 ### Storyboard page
 

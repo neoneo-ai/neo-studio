@@ -141,7 +141,7 @@ director_recipes → director_spec(读分段) → director_plan(故事 → 分�
 → 修片：segment_run(单段重生成) → assemble_run(拼回成片)
 ```
 
-**文字故事板闭环（一句话或脚本 → 分段 → 关键帧 → 分段成片）**
+**故事规划闭环（一句话或脚本 → 分段 → 关键帧 → 分段成片）**
 
 ```
 director_plan(mode=plan, idea|script, segment_seconds[, characters])    → 分段（prompt / duration_sec / storyboard_prompt）
