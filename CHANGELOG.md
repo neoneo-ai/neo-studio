@@ -5,6 +5,7 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 ## [Unreleased]
 
 ### Added
+- 新增预设模型清单文档 [docs/preset-models.md](docs/preset-models.md)（英文 [docs/en/preset-models.md](docs/en/preset-models.md)）：把 37 个预设技能自带的 `models.json` 逐条摊开——族系与基座分组、文件名、模型类别、GB 体积、可点击即下载的 ModelScope / Hugging Face 直链与 Civitai 模型页链接；另附同样带直链的 CosyVoice3 语音合成必需文件表（该技能不读 `models.json`，权重走 `models/cosyvoice/Fun-CosyVoice3-0.5B/`）。
 
 - **The desktop app now keeps the 3D Pose assets in sync by itself.** "Startup settings → Pose repo" takes a
   3d-pose-art repo root (with a folder picker, validated as a pose repo before it is saved), and every

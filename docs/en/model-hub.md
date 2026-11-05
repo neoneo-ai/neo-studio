@@ -97,6 +97,8 @@ group follow the **relevance order** of the ModelScope organization page (the or
 `skills/presets/<id>/models.json` declares the model files a preset needs and drives the Model Hub's Preset
 readiness panel (below) and the download plan (routes: [api-routes.md](api-routes.md)). The manifest describes the
 file layer only: it does not check the ComfyUI version, VRAM, the queue, and it does not predict generation.
+The per-family file inventory - which files, how many GB, and the direct download links - is in
+[preset model inventory](preset-models.md).
 
 - Top level: `family` / `label` / `kind` (`image` / `video`) / `license` / `notes` (the notes shown in the UI).
   `extends` points at the family base preset so the preset's own manifest lists only its additions (LoRA etc.);

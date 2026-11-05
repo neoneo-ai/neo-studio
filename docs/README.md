@@ -13,6 +13,7 @@
 | [skills.md](skills.md) | 技能管理：技能文件、管理窗口、工作流区编辑、画布导入与回写 |
 | [llm.md](llm.md) | LLM 模式、云供应商、本地 GGUF 安装与模型目录规范 |
 | [image-gen.md](image-gen.md) | 生图：聊天生图、Image Gen & Edit 节点、尺寸与扩图 |
+| [preset-models.md](preset-models.md) | 预设模型清单：37 个预设技能的 `models.json` 明细（文件、类别、体积、来源） |
 | [h3-video-gen.md](h3-video-gen.md) | 生视频：导演配方执行、单段重生成、宫格拆分、模板 |
 | [recipes.md](recipes.md) | 配方：保存、发送到工作流、导演配方编辑器 |
 | [gallery.md](gallery.md) | 素材库：浏览、灯箱、文件管理、Civitai LORA、收藏 |

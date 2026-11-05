@@ -76,6 +76,7 @@ ModelScope 并写明是哪几侧没拿到数据；逐仓库存在性探测因网
 
 `skills/presets/<id>/models.json` 声明一个预设要用的模型文件，供模型库的「预设就绪」面板（见下）与下载计划使用
 （路由见 [api-routes.md](api-routes.md)）。清单只描述文件层：不检查 ComfyUI 版本、显存、队列，也不预测生成成败。
+每个族系要哪些文件、多少 GB、从哪下，见 [预设模型文件清单](preset-models.md)。
 
 - 顶层：`family` / `label` / `kind`（`image` / `video`）/ `license` / `notes`（显示用的注意事项）。
   `extends` 指向同族基座预设，预设自己的清单只写追加项（LoRA 等）；extends 只解一层，环到此为止。
