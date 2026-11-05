@@ -42,8 +42,9 @@ INDEX_HTML = DIST_DIR / "index.html"
 PACKAGE_DIST = Path(__file__).parent / "pose_dist"
 MODELS_DIR = DIST_DIR / "models"          # 自备素体 GLB 的落点（页面按 <key>.glb 取它）
 MANIFEST_NAME = "MANIFEST.json"           # 随包发货清单：逐文件 sha256 与体积
-# 场景库（3d-pose-art 的 pose-lib 库数据）：另一级数据根内容，由 tools\sync_pose_lib.ps1 同步进来，
-# 本模块全程只读。库里一份条目是一整场场景文件（poses/<组>/<id>.scene.json，3dpose.scene/1：多人 + 道具），
+# 场景库（3d-pose-art 的姿势库）：另一级数据根内容，由 tools\sync_pose_lib.ps1 同步进来，本模块全程只读。
+# 摆姿仓库那边库拆成出厂 pose-lib（只读）与本地 pose-lab（可写）两根，同步时并成这一份：同 id 本地胜出，
+# 每条索引带 origin。库里一份条目是一整场场景文件（poses/<组>/<id>.scene.json，3dpose.scene/1：多人 + 道具），
 # 宿主弹窗按 entry.path 读它交回 scene/apply，不需要转换。
 LIB_DIR = POSE_DIR / "lib"
 

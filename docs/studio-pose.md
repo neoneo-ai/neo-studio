@@ -37,19 +37,22 @@ pwsh tools\sync_pose_dist.ps1 -Source <3d-pose-art 仓库根>            # 全�
 
 ## 场景库（pose-lib）
 
-库里是摆姿仓库攒下来的那批整场与它们的预览图，落点只有一级：`<数据根>/pose/lib/`。库不进随包副本 ——
-授权口径与摆姿包不同，`tools\build_pose_package.ps1` 不打包它 —— 只由同步脚本落地。整目录当缓存看待：
-随时可删可重同步。`pose/` 下的 `scenes/` 是用户写的东西，不在镜像范围内。
+库里是摆姿仓库攒下来的那批整场与它们的预览图。摆姿仓库那边库拆成两根 —— `pose-lib/` 出厂库（只读、
+随仓库分发）与 `pose-lab/` 本地库（作者自己写的姿态，可写），同步到 Neo Studio 时合并成一份，落点仍只有
+一级：`<数据根>/pose/lib/`，同 id 以本地为准。库不进随包副本 —— 授权口径与摆姿包不同，
+`tools\build_pose_package.ps1` 不打包它 —— 只由同步脚本落地。整目录当缓存看待：随时可删可重同步。
+`pose/` 下的 `scenes/` 是用户写的东西，不在镜像范围内。
 
 | 落点                               | 内容                                                                | 怎么来                         |
 |--------------------------------|-----------------------------------------------------------------|---------------------------|
-| `<数据根>/pose/lib/poses/`          | 一条一张 `.scene.json`（`3dpose.scene/1`：多人 + 道具 + 视角）                     | `tools\sync_pose_lib.ps1`   |
+| `<数据根>/pose/lib/poses/`          | 一条一张 `.scene.json`（`3dpose.scene/1`：多人 + 道具 + 视角），出厂集 + 本地集      | `tools\sync_pose_lib.ps1`   |
 | `<数据根>/pose/lib/preview/`        | `<id>.<档位>.png`：`clay` / `skeleton` / `silhouette` / `depth`      | 同上                          |
-| `<数据根>/pose/lib/index.json`      | 逐条 `id / label / groups / categories / tags / path / preview`     | 摆姿仓库的 `npm run lib`         |
+| `<数据根>/pose/lib/index.json`      | 逐条 `id / label / groups / categories / tags / path / preview / origin` | 摆姿仓库的 `npm run lib -- merged` |
+| `<数据根>/pose/lib/ATTRIBUTION.md`  | 出厂集的逐条作者 / 授权 / 原帖                                          | 同上（源在 `pose-lib/`）        |
 
-清单由摆姿仓库生成、同步原样带过来：`-Source` 指仓库根或它的 `pose-lib` 都接，缺 `index.json` 与
-`poses\` 时脚本直接退出并把该跑的那条 `npm run lib -- reindex` 报出来。库里手改 `poses/` 不动清单，
-重跑 reindex 再同步就是新的样子。预览按档位同步：
+清单不在同步脚本里算：由摆姿仓库把出厂与本地两份索引合并（同 id 本地胜出、每条带 `origin`）后交给
+`--out` 落进库根。`-Source` 指摆姿仓库根，缺出厂库的 `index.json` 与 `poses\` 时脚本直接退出并把该跑的
+那条 `npm run lib -- shipped` 报出来。预览按档位同步：
 
 ```
 pwsh tools\sync_pose_lib.ps1 -Source <3d-pose-art 仓库根>        # 默认档：clay + skeleton + silhouette
@@ -61,7 +64,13 @@ pwsh tools\sync_pose_lib.ps1 -Source <3d-pose-art 仓库根> -All   # 四档全�
 不清排除项，脚本随后按 `*depth.png` / `*clay.png` 把这类残留摘掉 —— 宽档跑过一轮再跑窄档，库里留不下
 两套档位混着的样子。
 
-后端读接口只有 `/pose-lib/{path}`：`index.json`、`poses/**`、`preview/*.png`、`categories.json`。
+`poses/` 与 `preview/` 都是两遍：本地库先 `/MIR` 进目标（顺手清掉上一轮的多余文件），出厂集再补进来。
+出厂集那一遍带 `/E /XC /XN /XO`：`/E` 必给 —— 库文件全在 `poses/<分组>/` 子目录里，robocopy 默认不
+下钻子目录，少了它就是「出厂集一条都没补上」；`/XO` 让出厂集永不压过同名文件，出厂条目因此只补空、
+不改本机已有那份，与合并索引的「同 id 本地胜出」是同一件事的两个面。
+
+后端读接口只有 `/pose-lib/{path}`：`index.json`、`poses/**`、`preview/*.png`、`categories.json`、
+`ATTRIBUTION.md`。分类登记两库里各一份，本地库改过就以它同步过来，出厂那份只兜底。
 落点锁在 `<数据根>/pose/lib`，路径逐条过 `inside_dir` 的包含检查（带 `..`、盘符、绝对路径一律 `400`），
 空路径与前缀指到的目录都落到 `index.json`，文件不在回 `404` —— 库没同步与库里缺文件是同一个答案，
 弹窗按清单读不读得到判断（`index.json` 读不成就是没同步），不让用户翻进一个空库。库里每次同步都重写

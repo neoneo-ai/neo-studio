@@ -55,10 +55,13 @@ webp 缩略图与 `index.json`，`gallery_deploy_oss.py` 按 `OSS_ACCESS_KEY_ID`
 - `sync_pose_dist.ps1` 的 `robocopy /MIR` 只动 `dist/`：源产物里没有的文件（用户导入的素体 GLB）
   先存进临时目录、镜像完搬回，同步脚本不许成为删用户文件的那只手。场景与参考图在 `pose/` 下的
   别的目录，本来就不在镜像范围内。
-- 场景库只落 `<数据根>/pose/lib/`，不进随包副本（授权口径与摆姿包不同）：`sync_pose_lib.ps1` 按
-  `-Light`（skeleton + silhouette）/ 默认（clay + skeleton + silhouette）/ `-All`（四档）镜像预览，
-  `index.json` 由摆姿仓库的 `npm run lib` 生成、同步原样带过去。`pose/scenes`、`pose/refs`、
-  `pose/presets` 是用户写的东西，同样不在镜像范围内。
+- 场景库只落 `<数据根>/pose/lib/`，不进随包副本（授权口径与摆姿包不同）：摆姿仓库把库拆成出厂
+  `pose-lib/`（只读）与本地 `pose-lab/`（可写），`sync_pose_lib.ps1` 把两根并成一份 —— 本地先 `/MIR`
+  进目标，出厂集再带 `/E /XC /XN /XO` 补空（`/E` 不给就是零补齐，robocopy 默认不下钻 `poses/<分组>/`），
+  同 id 永不压过本机文件。`index.json` 不在这里算，由摆姿仓库 `npm run lib -- merged --out` 生成
+  （每条带 `origin`，同 id 本地胜出）；`categories.json` 有本地那份就用本地的，`ATTRIBUTION.md` 随出厂库走。
+  `-Light`（skeleton + silhouette）/ 默认（clay + skeleton + silhouette）/ `-All`（四档）镜像预览。
+  `pose/scenes`、`pose/refs`、`pose/presets` 是用户写的东西，同样不在镜像范围内。
 
 ## Minimal Package
 

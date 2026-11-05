@@ -6,6 +6,14 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ### Added
 
+- **The 3D Pose scene library now syncs the pose repo's shipped set together with the local set.** The pose
+  repo split its library into a read-only shipped library (`pose-lib/`) and a writable local library
+  (`pose-lab/`); `tools\sync_pose_lib.ps1` merges both into the single `<data root>/pose/lib/` copy the
+  「浏览场景库…」modal lists - a local pose wins over a shipped one of the same id, the shipped set only
+  fills gaps and never overwrites what the machine already has, and the merged index (with a per-entry
+  `origin` tag) is computed by the pose repo's `npm run lib -- merged`. `ATTRIBUTION.md` of the shipped set
+  lands beside the library, and a local `categories.json` replaces the shipped registry when it exists.
+
 - **The Neo Studio integration package updates itself.** `Neo-Studio\tools\update_neo_studio.ps1` inside
   `NeoStudio-Minimal` fetches the update piece `Neo-Studio-<version>-package-update.zip` from the latest GitHub
   Release and refreshes only the Neo Studio code in the package - the app source, the plugin code copy under

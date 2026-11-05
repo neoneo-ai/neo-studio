@@ -46,22 +46,25 @@ sync: the installed check runs per request, so the window does not need a restar
 
 ## The scene library (pose-lib)
 
-The library is the batch of whole scenes 3d-pose-art accumulated with their previews, and it lands on one
-path only: `<data root>/pose/lib/`. It never ships in the bundled copy - its licence rule differs from the
-pose package's, so `tools\build_pose_package.ps1` does not package it - the sync script is what lands it.
-The whole directory is a cache: delete it and resync any time. `scenes/` under `pose/`
-is what the user wrote, and stays out of the mirror.
+The library is the batch of whole scenes 3d-pose-art accumulated with their previews. On the pose-repo side
+it is split into two roots - `pose-lib/`, the shipped set (read-only, distributed with the repo), and
+`pose-lab/`, the local writable set - and the sync merges them into one copy: the landing path stays a single
+`<data root>/pose/lib/`, with a local entry winning over a shipped one of the same id. It never ships in the
+bundled copy - its licence rule differs from the pose package's, so `tools\build_pose_package.ps1` does not
+package it - the sync script is what lands it. The whole directory is a cache: delete it and resync any time.
+`scenes/` under `pose/` is what the user wrote, and stays out of the mirror.
 
 | Landing path                       | Contents                                                                                | Where it comes from           |
 |----------------------------------|----------------------------------------------------------------|-----------------------------|
-| `<data root>/pose/lib/poses/`      | One `.scene.json` per entry (`3dpose.scene/1`: people + props + view)              | `tools\sync_pose_lib.ps1`     |
+| `<data root>/pose/lib/poses/`      | One `.scene.json` per entry (`3dpose.scene/1`: people + props + view), shipped + local | `tools\sync_pose_lib.ps1`     |
 | `<data root>/pose/lib/preview/`    | `<id>.<tier>.png`: `clay` / `skeleton` / `silhouette` / `depth`                         | same script                   |
-| `<data root>/pose/lib/index.json`  | `id / label / groups / categories / tags / path / preview`                              | `npm run lib` in 3d-pose-art  |
+| `<data root>/pose/lib/index.json`  | `id / label / groups / categories / tags / path / preview / origin`                        | `npm run lib -- merged`       |
+| `<data root>/pose/lib/ATTRIBUTION.md` | Per-entry author / licence / source post of the shipped set                          | same script (from `pose-lib/`) |
 
-The index is generated in 3d-pose-art and carried over verbatim: `-Source` accepts the repo root or its
-`pose-lib`, and when `index.json` or `poses\` is missing the script exits and prints the `npm run lib --
-reindex` command to run. Editing `poses/` by hand does not touch the index: re-run reindex, then sync.
-Previews sync per tier:
+The merged index is computed in 3d-pose-art, not in the sync script: the repo merges its two indexes (a local
+entry wins over a shipped one of the same id, every entry carries `origin`) and writes the result through
+`--out`. `-Source` points at the pose-repo root, and when the shipped `index.json` or `poses\` is missing the
+script exits and prints the `npm run lib -- shipped` command to run. Previews sync per tier:
 
 ```
 pwsh tools\sync_pose_lib.ps1 -Source <3d-pose-art repo root>         # default tier: clay + skeleton + silhouette
@@ -73,8 +76,17 @@ pwsh tools\sync_pose_lib.ps1 -Source <3d-pose-art repo root> -All    # all four 
 wider run, and `/MIR` does not clear excluded files, so the script then strips those leftovers by
 `*depth.png` / `*clay.png` - a wide run followed by a narrow one leaves the library without two tiers mixed.
 
+`poses/` and `preview/` each get two passes: the local library mirrors in with `/MIR` (which also clears last
+run's leftovers), then the shipped set fills in. That second pass carries `/E /XC /XN /XO`: `/E` is mandatory -
+the library files all live under `poses/<group>/`, robocopy does not descend subdirectories by default, and
+without it the shipped set fills in nothing; `/XO` keeps the shipped set from ever replacing a same-named file,
+so shipped entries only fill gaps and never touch what this machine already has - the file-side twin of the
+merged index's "local wins on the same id".
+
 The backend read route is `/pose-lib/{path}` alone: `index.json`, `poses/**`, `preview/*.png`,
-`categories.json`. Its root is `<data root>/pose/lib`, every path goes through the `inside_dir` containment
+`categories.json`, `ATTRIBUTION.md`. Each library carries its own category registry, and a local
+`categories.json` is what gets synced when it exists - the shipped one is the fallback only.
+Its root is `<data root>/pose/lib`, every path goes through the `inside_dir` containment
 check (`..`, a drive letter and an absolute path are 400), an empty path and a path naming a directory land
 on `index.json`, and a missing file is 404 - an unsynced library and a missing file give the same answer,
 and the modal decides by whether the index can be read (`index.json` failing means not synced), so nobody
