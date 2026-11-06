@@ -57,6 +57,10 @@ const LIB_ORIGIN_LABEL = { lib: "预设", lab: "本地", cloud: "云端" };   //
 // pose:call 那两条通路，姿势页不认第二个来源。预览图是唯一直连 OSS 的一张 <img>。
 const CLOUD_INDEX = "/neo_pose/cloud_index";
 const CLOUD_FILE = "/neo_pose/cloud_file";
+// 道具预览图的地址就两条：本机那批走页面写死的 /models/props/ 那一级（pose.py 伺服），
+// 云端那批直连 OSS（与场景库封面同一口径 —— 封面只是一张 <img>，不碰姿势页契约）
+const MODELS_PREFIX = "/models";
+const CLOUD_PROPS_KEY = "props";
 const CLOUD_SYNC_HINT = "云端场景库未配置：在 <数据根>/configs/oss_presets.json 里写 pose_index_url，" +
     "云端那棵树用 tools\\pose_deploy_oss.py 上传（默认只列清单，加 --apply 才上传）。";
 
@@ -111,6 +115,7 @@ export function createPoseView({ api, $el, toast }) {
         let caps = {};
         let pickedScene = "";
         let pickedProp = "";
+        let pickedPropKey = "";   // 道具卡片选中项：添加道具吃的就是这一张卡
         let propChoices = [];   // meta/list 的道具项：自由填写的名字只在这份清单里解析，不猜定义
         const canvas = {};
 
@@ -182,8 +187,6 @@ export function createPoseView({ api, $el, toast }) {
         const modelSel = sel("素体", panelGate);
         const presetSel = sel("预设", panelGate);
         const lookSel = sel("外观", panelGate);
-        const propSel = sel("道具", panelGate);
-        const boneSel = sel("挂点骨", panelGate);
         const viewSel = sel("视角", panelGate);
         const sizeSel = sel("尺寸", panelGate);
         const exportLabel = field("标签（默认 pose）");
@@ -198,8 +201,15 @@ export function createPoseView({ api, $el, toast }) {
         const bodyFile = $el("input", { className: "ns-pose-file", type: "file", accept: ".glb" });
         btnImportBody.title = t("自备素体只支持 .glb");
         const propName = field("道具名（例：椅子）");
+        // 道具是一件件带预览图的卡片，不是一个下拉：下拉里只有名字，用户得猜哪件是长棍、哪件是手枪
+        const propSearch = $el("input", {
+            className: "ns-pose-prop-search", type: "search", spellcheck: "false",
+            placeholder: t("搜索道具（名字 / 云端）"),
+        });
+        const propGrid = $el("div", { className: "ns-pose-prop-grid" });
+        const propMeta = $el("p", { className: "ns-pose-prop-meta" });
+        panelGate.push(propSearch);
         const btnAddProp = btn("添加道具", "plus", panelGate);
-        const btnAttachProp = btn("挂到骨点", "plug", panelGate);
         const btnGroundProp = btn("落地", "target", panelGate);
         const btnDelProp = btn("删道具", "trash", panelGate);
         const btnExportSet = btn("导出图组到素材库", "send", panelGate, " ns-pose-btn-primary");
@@ -214,10 +224,11 @@ export function createPoseView({ api, $el, toast }) {
                 row([bodyKey, btnImportBody]), bodyFile]),
             group("姿势", [row([presetSel]), row([lookSel])]),
             group("道具", [
-                row([propSel, propName]),
+                row([propSearch, propName]),
+                propGrid,
+                propMeta,
                 row([btnAddProp]),
                 propList,
-                row([boneSel, btnAttachProp]),
                 row([btnGroundProp, btnDelProp]),
             ]),
             group("ControlNet 导出", [row([viewSel, sizeSel]), formatBox, row([exportLabel]),
@@ -416,8 +427,7 @@ export function createPoseView({ api, $el, toast }) {
             fill(presetSel, m.presets || [], "选择预设…");
             fill(lookSel, m.looks || [], "外观");
             propChoices = m.props || [];
-            paintPropSel();
-            fill(boneSel, (m.bones || []).map((b) => ({ key: String(b), label: String(b) })), "挂点骨…");
+            paintPropGrid();
             fill(viewSel, m.views || [], "视角");
             fill(sizeSel, (m.sizes || []).map((n) => ({ key: String(n), label: `${n}px` })), "尺寸");
             formatBox.replaceChildren(...(m.formats || []).map((f) => $el("label", {
@@ -426,18 +436,72 @@ export function createPoseView({ api, $el, toast }) {
         }
 
         /** 云端道具在页面清单里的形状：key 走注册表口径 glb:<裸文件名>，页面的 addProp 认它，
-         *  取文件由宿主这条通路负责（cloud_file 落进 <数据根>/pose/oss_cache/models/props/）。 */
+         *  取文件由宿主这条通路负责（cloud_file 落进 <数据根>/pose/oss_cache/models/props/）。
+         *  preview 是云端行里的道具注册表原行带的预览路径（pose_cloud.py 写的是云端键 props/preview/x.png）。 */
         const cloudPropChoices = () => (libCloud?.props || []).map((p) => ({
             key: `glb:${p.file}`,
             label: `${p.label}（${t("云端")}）`,
             path: p.path,
+            cloud: true,
+            preview: String(p.preview || ""),
         }));
 
-        /** 道具下拉与道具名解析吃同一份清单：本机那批在前，云端那批带「云端」后缀排在后 */
-        const allPropChoices = () => [...propChoices, ...cloudPropChoices()];
+        /** 道具卡片与道具名解析吃同一份清单：本机那批在前，云端那批带「云端」后缀排在后 */
+        const allPropChoices = () => [...propChoices.map((o) => ({
+            key: String(o.key ?? o.propKey ?? ""), label: o.label, preview: String(o.preview || ""),
+        })), ...cloudPropChoices()];
 
-        function paintPropSel() {
-            fill(propSel, allPropChoices(), "选择道具…");
+        /** 卡片的预览图地址：注册表 preview 是道具目录里的相对路径，本机那一级就是页面写死的
+         *  /models/props/，云端那棵树里道具目录叫 props/；内置道具没有注册表行，按
+         *  preview/builtin-<id>.png 这条约定名取。两处都没图就是真没图，卡片出「无预览」，不给它挂一张转圈的 <img> */
+        const propPreviewUrl = (choice) => {
+            const builtinId = String(choice.key).startsWith("builtin:")
+                ? String(choice.key).slice("builtin:".length) : "";
+            const rel = choice.preview || (builtinId ? `preview/builtin-${builtinId}.png` : "");
+            if (!rel) return "";
+            return choice.cloud
+                ? `${(libCloud?.base_url || "").replace(/\/+$/, "")}/${CLOUD_PROPS_KEY}/${rel}`
+                : `${MODELS_PREFIX}/${CLOUD_PROPS_KEY}/${rel}`;
+        };
+
+        const propCard = (choice) => {
+            const url = propPreviewUrl(choice);
+            const pic = $el("span", { className: "ns-pose-prop-pic" });
+            if (url) {
+                const img = $el("img", { className: "ns-pose-prop-thumb", src: url, alt: choice.label, loading: "lazy" });
+                // 图不在仓库里（道具没渲染过、随包只发了 GLB 没发图）就在卡片里说，不挂一张坏图
+                img.onerror = () => img.replaceWith($el("span", { className: "ns-pose-prop-noimg", textContent: t("无预览") }));
+                pic.append(img);
+            } else {
+                pic.append($el("span", { className: "ns-pose-prop-noimg", textContent: t("无预览") }));
+            }
+            const card = $el("button", {
+                className: "ns-pose-prop-card" + (choice.key === pickedPropKey ? " ns-pose-prop-on" : ""),
+                type: "button", title: choice.label, dataset: { propKey: choice.key },
+            }, [
+                pic,
+                $el("span", { className: "ns-pose-prop-label", textContent: choice.label }),
+                ...(choice.cloud ? [$el("span", { className: "ns-pose-prop-badge", textContent: t("云端") })] : []),
+            ]);
+            card.onclick = () => {
+                pickedPropKey = choice.key;
+                paintPropGrid();
+            };
+            return card;
+        };
+
+        function paintPropGrid() {
+            const q = propSearch.value.trim().toLowerCase();
+            const all = allPropChoices();
+            const rows = q ? all.filter((c) => `${c.label} ${c.key}`.toLowerCase().includes(q)) : all;
+            if (!rows.some((c) => c.key === pickedPropKey)) pickedPropKey = rows[0]?.key || "";
+            propGrid.replaceChildren(...(rows.length
+                ? rows.map(propCard)
+                : [$el("p", { className: "ns-pose-prop-blank", textContent: t("道具表里没有匹配的道具") })]));
+            propMeta.textContent = tf("{total} 件道具 · 选中 {name}", {
+                total: all.length,
+                name: rows.find((c) => c.key === pickedPropKey)?.label || t("没有"),
+            });
         }
 
 
@@ -492,14 +556,18 @@ export function createPoseView({ api, $el, toast }) {
         function paintProps(data) {
             const items = data.items || [];
             if (!items.some((it) => it.id === pickedProp)) pickedProp = items[0]?.id || "";
+            // 落点写在行上：道具自己找的空位，用户要能看见它落在哪（面板不猜坐标，页面算完报回来）
             const rows = items.map((it) => $el("div", {
                 className: "ns-pose-item" + (it.id === pickedProp ? " ns-pose-item-on" : ""),
-                textContent: `${it.label || it.id} · ${it.attach?.bone || t("未挂载")}`,
+                textContent: `${it.label || it.id} · ${it.attach?.bone
+                    ? tf("挂在 {bone}", { bone: it.attach.bone })
+                    : (Array.isArray(it.position)
+                        ? `(${Number(it.position[0]).toFixed(2)}, ${Number(it.position[2]).toFixed(2)})`
+                        : t("未挂载"))}`,
                 title: it.id, onclick: () => { pickedProp = it.id; refreshProps(); },
             }));
             propList.replaceChildren(...(rows.length ? rows
                 : [$el("div", { className: "ns-pose-blank", textContent: t("场上没有道具") })]));
-            fill(boneSel, (data.bones || []).map((b) => ({ key: String(b), label: String(b) })), "挂点骨…");
         }
 
         /** 出处角标：合并库里一条落在哪根库由同步脚本写的 origin 说，云端那批由来源开关说；
@@ -765,10 +833,10 @@ export function createPoseView({ api, $el, toast }) {
         btnAddProp.onclick = () => run(async () => {
             const choices = allPropChoices();
             const typed = propName.value.trim();
-            const key = typed ? resolvePropChoice(typed, choices) : propSel.value;
+            const key = typed ? resolvePropChoice(typed, choices) : pickedPropKey;
             propName.value = "";   // 一次性输入：写完就清，与自备素体 key 同一口径
             if (typed && !key) {
-                toast(tf("道具表里没有「{name}」：可输入 椅子 / 桌子 / 剑 这类名字（共 {n} 项），或从下拉选",
+                toast(tf("道具表里没有「{name}」：可输入 椅子 / 桌子 / 剑 这类名字（共 {n} 项），或点一张卡片",
                     { name: typed, n: choices.length }));
                 return;
             }
@@ -777,15 +845,11 @@ export function createPoseView({ api, $el, toast }) {
             // 姿势页与道具注册表都不知道这批来自云端
             const cloudProp = choices.find((c) => c.key === key && c.path);
             if (cloudProp) await cloudFile(cloudProp.path, false);
+            // 落点由页面算：prop/add 找空位（避开素体与场上已有道具），面板不猜坐标
             await action("prop/add", { key });
             await refreshProps();
         });
-
-        btnAttachProp.onclick = () => run(async () => {
-            if (!pickedProp || !boneSel.value) { toast(t("先选道具与挂点骨")); return; }
-            await action("prop/attach", { id: pickedProp, bone: boneSel.value });
-            await refreshProps();
-        });
+        propSearch.oninput = () => paintPropGrid();
         btnGroundProp.onclick = () => run(async () => {
             if (!pickedProp) { toast(t("先选一个道具")); return; }
             await action("prop/ground", { id: pickedProp });
@@ -834,7 +898,7 @@ export function createPoseView({ api, $el, toast }) {
                 setPanel(true);
                 // 配了云端就在进页时读一次清单：道具下拉先画本机那批，云端那份落到再补一次画。
                 // 这一发不吊在桥的回复链上——meta/list 的回复与 look 预设都不该拖住云端道具出现，读不到就只留本机那批
-                if (cloudStatus?.enabled === true) ensureCloudIndex().then(paintPropSel).catch(() => {});
+                if (cloudStatus?.enabled === true) ensureCloudIndex().then(paintPropGrid).catch(() => {});
                 action("meta/list").then(async (m) => {
                     paintMeta(m);
                     await applyDefaultLook(m);

@@ -21,11 +21,12 @@ const settle = async () => { await flush(); await sleep(0); await flush(); };
 const META = {
     models: [{ key: "girl", label: "少女" }],
     presets: [{ key: "run", label: "奔跑" }],
-    // 道具项的真实形状来自姿势页 src/core/propKit.js 的 listPropOptions：键名是 propKey，不是 key
+    // 道具项的真实形状来自姿势页 src/core/propKit.js 的 listPropOptions：键名是 propKey，不是 key；
+    // preview 是道具目录里的预览图相对路径（内置道具没有注册表行，这一项是空串，面板按约定名取图）
     props: [
-        { propKey: "builtin:chair", label: "椅子", source: "builtin" },
-        { propKey: "glb:arrow.glb", label: "箭", source: "glb" },
-        { propKey: "glb:sting-sword.glb", label: "细剑（Sting）", source: "glb" },
+        { propKey: "builtin:chair", label: "椅子", source: "builtin", preview: "" },
+        { propKey: "glb:arrow.glb", label: "箭", source: "glb", preview: "preview/arrow.png" },
+        { propKey: "glb:sting-sword.glb", label: "细剑（Sting）", source: "glb", preview: "preview/sting-sword.png" },
     ],
     formats: [
         { key: "skeleton", label: "骨架图", suffix: "openpose", hint: "OpenPose 输入" },
@@ -113,7 +114,7 @@ const CLOUD_INDEX = {
           categories: ["坐姿"], preview: {} },
     ],
     props: [{ id: "stick", label: "木棍", file: "stick-cloud.glb", path: "models/props/stick-cloud.glb",
-              origin: "cloud", cloud: true }],
+              preview: "preview/stick-cloud.png", origin: "cloud", cloud: true }],
 };
 const CLOUD_SCENE = {
     format: "3dpose.scene/1",
@@ -325,24 +326,56 @@ test("pose:call 往返：meta/list 渲染下拉，回复只认自己那条端口
     env.replyCall(env.calls("meta/list")[0], META);
     await settle();
     assert.deepEqual([...env.sel(0).options].map((o) => o.value), ["", "girl"], "素体下拉来自 meta");
-    assert.deepEqual([...env.sel(5).options].map((o) => o.value), ["", "front", "side"], "视角下拉来自 meta");
-    assert.deepEqual([...env.sel(6).options].map((o) => o.value), ["", "256", "512", "1024", "2048"]);
+    assert.deepEqual([...env.sel(3).options].map((o) => o.value), ["", "front", "side"], "视角下拉来自 meta");
+    assert.deepEqual([...env.sel(4).options].map((o) => o.value), ["", "256", "512", "1024", "2048"]);
     assert.equal(env.host.querySelectorAll(PANEL + " .ns-pose-format input").length, 2, "格式勾选组来自 meta");
 });
 
-test("道具添加：下拉的 value 必须是页面的 propKey，中文 label 只当显示名", async () => {
+test("道具卡片：一张卡一个 propKey 与一张预览图，点卡片选中、「添加道具」发的就是那一项", async () => {
     resetEnv();
     const env = await mounted();
     await env.ready();
     env.replyCall(env.calls("meta/list")[0], META);
     env.replyCall(env.calls("prop/list")[0], PROPS);
     await settle();
-    assert.deepEqual([...env.sel(3).options].map((o) => o.value),
-        ["", "builtin:chair", "glb:arrow.glb", "glb:sting-sword.glb"],
-        "value 落空时浏览器拿「椅子」当 value，页面收到的就是显示名");
-    changeValue(env.sel(3), "builtin:chair");
+    const cards = () => [...env.host.querySelectorAll(".ns-pose-prop-card")];
+    assert.deepEqual(cards().map((c) => c.dataset.propKey),
+        ["builtin:chair", "glb:arrow.glb", "glb:sting-sword.glb"],
+        "卡片顺序就是 meta/list 那份清单：卡片带的是页面的 propKey，label 只当显示名");
+    assert.ok(cards()[0].classList.contains("ns-pose-prop-on"),
+        "第一张卡片默认选中：「添加道具」将拿到哪件必须在面板上看得见");
+    assert.equal(cards()[1].querySelector(".ns-pose-prop-thumb").getAttribute("src"),
+        "/models/props/preview/arrow.png",
+        "预览图走页面写死的那一级 /models/props/，注册表 preview 原样拼地址");
+    assert.equal(cards()[0].querySelector(".ns-pose-prop-thumb").getAttribute("src"),
+        "/models/props/preview/builtin-chair.png",
+        "内置道具没有注册表行：按 preview/builtin-<id>.png 这条约定名取图");
+    click(cards()[2]);
+    await settle();
+    assert.ok(cards()[2].classList.contains("ns-pose-prop-on"), "点过的卡片要标出来");
+    assert.ok(!cards()[0].classList.contains("ns-pose-prop-on"), "选中项只有一个");
+    assert.match(env.host.querySelector(".ns-pose-prop-meta").textContent, /3 件道具 · 选中 细剑/);
     click(env.button("添加道具"));
     await settle();
+    assert.deepEqual(env.calls("prop/add")[0].msg.args, { key: "glb:sting-sword.glb" },
+        "页面 addProp 要的是带前缀的 propKey，卡片上看见的是中文 label");
+});
+
+test("道具面板没有挂骨点：没有「挂到骨点」按钮、没有骨点下拉，加具不发 prop/attach", async () => {
+    resetEnv();
+    const env = await mounted();
+    await env.ready();
+    env.replyCall(env.calls("meta/list")[0], META);
+    env.replyCall(env.calls("prop/list")[0], PROPS);
+    await settle();
+    assert.ok(!env.button("挂到骨点"), "挂骨点是姿势页物体面板的事，Neo Studio 的道具只落地");
+    assert.ok(env.host.querySelector(".ns-pose-prop-search"), "道具改的是带搜索框的卡片列表");
+    const panelSelects = [...env.host.querySelectorAll(PANEL + " select")].map((s) => s.title);
+    assert.ok(!panelSelects.includes("挂点骨"), "面板不再有骨点下拉：" + panelSelects.join("/"));
+    click([...env.host.querySelectorAll(".ns-pose-prop-card")][0]);
+    click(env.button("添加道具"));
+    await settle();
+    assert.equal(env.calls("prop/attach").length, 0, "加具这条路上没有挂骨那一步");
     assert.deepEqual(env.calls("prop/add")[0].msg.args, { key: "builtin:chair" });
 });
 
@@ -466,8 +499,8 @@ test("ControlNet 图组：页面交回 files，宿主 POST 进 /neo_pose/export_
     env.replyCall(env.calls("meta/list")[0], META);
     env.replyCall(env.calls("prop/list")[0], { items: [], options: [], bones: [] });
     await settle();
-    changeValue(env.sel(5), "side");
-    changeValue(env.sel(6), "512");
+    changeValue(env.sel(3), "side");
+    changeValue(env.sel(4), "512");
     inputText(env.panelField(2), "hero");   // 面板输入框依次是自备素体 key、道具名、导出标签
     click(env.button("导出图组到素材库"));
     await settle();
@@ -842,9 +875,9 @@ test("云端未配置：来源开关只有本机库那一条，道具下拉里�
     env.replyCall(env.calls("meta/list")[0], META);
     env.replyCall(env.calls("prop/list")[0], PROPS);
     await settle();
-    assert.deepEqual([...env.sel(3).options].map((o) => o.value),
-        ["", "builtin:chair", "glb:arrow.glb", "glb:sting-sword.glb"],
-        "没配云端的机器上不许出现一条选了只会失败的道具");
+    assert.deepEqual([...env.host.querySelectorAll(".ns-pose-prop-card")].map((c) => c.dataset.propKey),
+        ["builtin:chair", "glb:arrow.glb", "glb:sting-sword.glb"],
+        "没配云端的机器上不许出现一条选了只会失败的道具卡片");
     click(env.button("浏览场景库…", LIB));
     await settle();
     const source = env.host.querySelector(".ns-libmodal:not(.ns-hidden) .ns-pose-lib-source");
@@ -881,19 +914,25 @@ test("云端库：切到云端读一次清单，卡片带云端角标与直连�
         "云端那份场景文件原样交回页面，宿主不补字段");
 });
 
-test("云端道具：道具下拉出「（云端）」那几条，添加道具先把 GLB 落进本机缓存", async () => {
+test("云端道具：卡片接在本机那批后面带「云端」角标与直连预览，添加道具先把 GLB 落进本机缓存", async () => {
     resetEnv();
     const env = await mounted({ ...STATUS, cloud_status: CLOUD_ON });
     await env.ready();
     env.replyCall(env.calls("meta/list")[0], META);
     env.replyCall(env.calls("prop/list")[0], PROPS);
     await settle();
-    assert.deepEqual([...env.sel(3).options].map((o) => o.value),
-        ["", "builtin:chair", "glb:arrow.glb", "glb:sting-sword.glb", "glb:stick-cloud.glb"],
+    const cards = () => [...env.host.querySelectorAll(".ns-pose-prop-card")];
+    assert.deepEqual(cards().map((c) => c.dataset.propKey),
+        ["builtin:chair", "glb:arrow.glb", "glb:sting-sword.glb", "glb:stick-cloud.glb"],
         "云端道具接在本机那批后面，key 走页面自己的 glb: 口径");
-    assert.match([...env.sel(3).options].map((o) => o.textContent).join("|"), /木棍（云端）/,
+    const cloud = cards()[3];
+    assert.match(cloud.querySelector(".ns-pose-prop-label").textContent, /木棍/,
         "看得见的名字要说清这条来自云端");
-    changeValue(env.sel(3), "glb:stick-cloud.glb");
+    assert.ok(cloud.querySelector(".ns-pose-prop-badge"), "云端卡片要带角标");
+    assert.equal(cloud.querySelector(".ns-pose-prop-thumb").getAttribute("src"),
+        "https://oss.example/neo/pose/props/preview/stick-cloud.png",
+        "预览图与场景库封面同一口径：直连 OSS，不占后端一条代读");
+    click(cloud);
     click(env.button("添加道具"));
     await settle();
     assert.ok(fetchLog.some((c) => c.path === "/neo_pose/cloud_file"

@@ -208,7 +208,10 @@ def build_props(props_dir: Path, registry_path: Path, attribution: Path, wanted:
 
 
 def collect_files(source: Path, props_dir: Path, props: list) -> list:
-    """要上传的文件：场景 + 预览 + 授权干净的道具。道具的键前缀是 props/，读侧落点是 models/props/。"""
+    """要上传的文件：场景 + 预览 + 授权干净的道具（带注册表点名的道具预览图）。
+
+    道具的键前缀是 props/，读侧落点是 models/props/ —— 预览图跟着同一条前缀走
+    （props/preview/x.png ↔ /models/props/preview/x.png），面板的缩略图与 GLB 同一批到货。"""
     files = []
     if (source / "poses").is_dir():
         files += [(p, p.relative_to(source).as_posix()) for p in sorted((source / "poses").rglob("*.json"))]
@@ -219,6 +222,15 @@ def collect_files(source: Path, props_dir: Path, props: list) -> list:
             if cand.is_file():
                 files.append((cand, f"props/{row['file']}"))
                 break
+        preview = str((row.get("registry") or {}).get("preview") or "")
+        if not preview:
+            print(f"[SKIP] {row['file']}：注册表没有 preview 行，面板上这一件就是无预览")
+            continue
+        found = next((cand for cand in (props_dir / preview, SHIPPED_PROPS / preview) if cand.is_file()), None)
+        if found is None:
+            print(f"[SKIP] {row['file']}：注册表写了 preview {preview}，文件不在 {props_dir}")
+            continue
+        files.append((found, f"props/{preview}"))
     return files
 
 

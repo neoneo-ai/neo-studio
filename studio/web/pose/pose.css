@@ -208,6 +208,96 @@
     color: var(--ns-dim);
 }
 
+/* 道具卡片：一张预览图 + 名字，本机与云端同一套渲染（地址口径在 pose.js 的 propPreviewUrl）。
+   一格只放得下三张：图上认得出长棍与手枪，就不用猜下拉里那行字是哪件道具 */
+.ns-pose-prop-search {
+    flex: 1 1 120px;
+    min-width: 0;
+    padding: 6px 8px;
+    border: 1px solid var(--ns-border);
+    border-radius: 7px;
+    background: var(--ns-field);
+    color: var(--ns-fg);
+    font: inherit;
+    font-size: 13px;
+}
+
+.ns-pose-prop-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+    gap: 6px;
+    max-height: 306px;
+    overflow-y: auto;
+}
+
+.ns-pose-prop-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 4px;
+    border: 1px solid var(--ns-border);
+    border-radius: 8px;
+    background: var(--ns-raised);
+    font: inherit;
+    color: var(--ns-fg);
+    text-align: center;
+    cursor: pointer;
+}
+
+.ns-pose-prop-card:hover { border-color: var(--ns-accent); }
+
+.ns-pose-prop-on { border-color: var(--ns-accent); background: var(--ns-field); }
+
+.ns-pose-prop-pic {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 64px;
+    border-radius: 6px;
+    background: #000;
+    overflow: hidden;
+}
+
+/* contain 不是 cover：道具是细长件（长棍 1.6m、手枪 0.28m），裁成方图就只剩一截 */
+.ns-pose-prop-thumb {
+    display: block;
+    width: 100%;
+    height: 64px;
+    object-fit: contain;
+}
+
+.ns-pose-prop-noimg {
+    font-size: 11px;
+    color: var(--ns-dim);
+}
+
+.ns-pose-prop-label {
+    font-size: 11px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ns-pose-prop-badge {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    padding: 1px 5px;
+    border-radius: 5px;
+    font-size: 10px;
+    color: #0b1220;
+    background: #7fb3d6;
+    pointer-events: none;
+}
+
+.ns-pose-prop-meta,
+.ns-pose-prop-blank {
+    margin: 0;
+    font-size: 11px;
+    color: var(--ns-dim);
+}
+
 /* 自备素体的文件选择器：只借浏览器那套选择框，控件本身不上界面 */
 .ns-pose-file {
     display: none;

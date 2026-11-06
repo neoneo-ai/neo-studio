@@ -718,6 +718,23 @@ class CloudTests(_CloudFixture):
                               _request(query={"path": "poses/stand/c1.scene.json"})).status, 200)
         self.assertEqual(len(self.calls), 3)   # 命中缓存不再发请求
 
+    def test_cloud_prop_preview_lands_in_the_local_props_dir_the_page_reads(self):
+        """索引点名的道具预览图走同一条代读：落点 models/props/preview/ 与页面写死的那一级同形，
+        没点名的预览路径不在允许集里 = 400，这条接口不许变成任意 URL 的代理。"""
+        self.write_config({"enabled": True, "pose_index_url": "https://host/neo/pose/index.json"})
+        index = self.cloud_index()
+        index["props"][0]["registry"] = {"file": "stick-cloud.glb", "label": "木棍", "scale": 1,
+                                         "preview": "preview/stick-cloud.png"}
+        self.write_cloud_index(index)
+        self.assertIn("models/props/preview/stick-cloud.png", self.cloud.allowed_paths(index))
+        self.stub_http({"https://host/neo/pose/props/preview/stick-cloud.png": (PNG, 200)})
+        resp = _run(self.cloud.pose_cloud_file,
+                    _request(query={"path": "models/props/preview/stick-cloud.png"}))
+        self.assertEqual(resp.status, 200)
+        self.assertEqual((self.cloud.CLOUD_PROPS_DIR / "preview" / "stick-cloud.png").read_bytes(), PNG)
+        self.assertEqual(_run(self.cloud.pose_cloud_file,
+                              _request(query={"path": "models/props/preview/ghost.png"})).status, 400)
+
     def test_cloud_file_rejects_a_glb_without_magic_and_caches_nothing(self):
         self.write_config({"enabled": True, "pose_index_url": "https://host/neo/pose/index.json"})
         self.write_cloud_index(self.cloud_index())
@@ -774,7 +791,8 @@ class CloudPropRegistryTests(_CloudFixture):
              "license": "CC0（公有领域，可商用可再分发）",
              "source": "https://polyhaven.com/a/katana",
              "registry": {"file": "katana.glb", "label": "武士刀（古）", "scale": 1.003,
-                          "standing": True, "grab": 0.26, "hidden": False}},
+                          "standing": True, "grab": 0.26, "hidden": False,
+                          "preview": "preview/katana.png"}},
             {"id": "stick", "label": "棍", "file": "stick.glb", "size": 88,
              "registry": {"file": "stick.glb", "label": "棍", "scale": 1}},
         ]
@@ -798,6 +816,8 @@ class CloudPropRegistryTests(_CloudFixture):
         self.assertEqual(katana["scale"], 1.003)
         self.assertTrue(katana["standing"] and katana["grab"])
         self.assertIs(katana["hidden"], True, "姿势页自己的面板不许列没缓存的道具")
+        self.assertEqual(katana["preview"], "preview/katana.png",
+                         "预览路径随注册表那一行进注册表：面板与页面读的是同一份出处")
 
     def test_local_registry_rows_are_never_replaced(self):
         """本机登记过的道具一条不补：数据根同步过姿势仓库时，注册表与 GLB 两级都在着。"""

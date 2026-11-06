@@ -128,25 +128,30 @@ def _scene_row(entry: dict) -> dict | None:
 def _prop_row(entry: dict) -> dict | None:
     """云端道具行：file 保持裸文件名（道具注册表的口径），本机落点是 models/props/<file>，
     云端键是 props/<file> —— 页面那条 /models/props/<file>.glb 因此一字不改。
-    registry 是道具注册表的那一行原样（scale 与 grab / handleR / standing 握点），伺服注册表时补给它。"""
+    registry 是道具注册表的那一行原样（scale 与 grab / handleR / standing 握点），伺服注册表时补给它。
+    preview 也是注册表那一行的相对路径（preview/x.png）：面板的缩略图直连 OSS 的 props/preview/。"""
     if not isinstance(entry, dict):
         return None
     filename = str(entry.get("file") or "").strip()
     if not filename or "/" in filename or "\\" in filename:
         return None
     ident = str(entry.get("id") or filename.rsplit(".", 1)[0])
-    registry = entry.get("registry")
+    registry = entry.get("registry") if isinstance(entry.get("registry"), dict) else {}
+    preview = str(registry.get("preview") or "").replace("\\", "/")
+    if preview.startswith("/") or ".." in preview:
+        preview = ""      # 预览路径必须留在 props 目录里：跑出去的那一行不给面板出图
     return {
         "id": ident,
         "label": str(entry.get("label") or ident),
         "file": filename,
         "path": f"{CLOUD_PROPS_LOCAL}/{filename}",
+        "preview": preview,
         "char": str(entry.get("char") or ""),
         "gender": str(entry.get("gender") or ""),
         "license": str(entry.get("license") or ""),
         "source": str(entry.get("source") or ""),
         "size": int(entry.get("size") or 0),
-        "registry": registry if isinstance(registry, dict) else {},
+        "registry": registry,
         "cloud": True,
     }
 
@@ -167,11 +172,12 @@ def cloud_rows(index: dict | None) -> tuple:
 
 
 def allowed_paths(index: dict | None) -> set:
-    """索引点名的云端文件：场景文件 + 预览图 + 道具 GLB。取文件接口只认这份集合。"""
+    """索引点名的云端文件：场景文件 + 预览图 + 道具 GLB（含道具预览图）。取文件接口只认这份集合。"""
     scenes, props = cloud_rows(index)
     paths = {row["path"] for row in scenes} | {row["path"] for row in props}
     for row in scenes:
         paths.update(str(p) for p in (row["preview"] or {}).values() if p)
+    paths.update(f"{CLOUD_PROPS_LOCAL}/{row['preview']}" for row in props if row["preview"])
     return paths
 
 
@@ -366,8 +372,11 @@ async def pose_cloud_file(request):
         return web.json_response({"success": False, "error": f"云端索引里没有这一条：{norm}"}, status=400)
     urls = cloud_urls()
     if not target.is_file():
-        # 道具两侧的落点不同名：本机是 models/props/<file>，云端树里那一份叫 props/<file>
-        key = f"{CLOUD_PROPS_KEY}/{Path(norm).name}" if norm.startswith(f"{CLOUD_PROPS_LOCAL}/") else norm
+        # 道具两侧的落点不同名：本机是 models/props/<file>，云端树里那一份叫 props/<file>。
+        # 预览图带着子目录（models/props/preview/x.png ↔ props/preview/x.png），换前缀要整段尾巴换，
+        # 只取文件名的话预览图就永远 404。场景与场景预览本来就同名，不碰。
+        key = (f"{CLOUD_PROPS_KEY}/{norm[len(CLOUD_PROPS_LOCAL) + 1:]}"
+               if norm.startswith(f"{CLOUD_PROPS_LOCAL}/") else norm)
         body, status = await _http_get(urls["base_url"] + key)
 
         if body is None:

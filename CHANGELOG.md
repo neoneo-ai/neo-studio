@@ -23,9 +23,23 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   meshes), Mixamo personal-use files and the repo's own test bench boxes never do. Each published prop
   carries its prop-registry row (`scale` plus the grip metadata) in the cloud index, and serving
   `/models/props/index.json` adds those rows to the registry the pose page reads, marked `hidden` so the
-  pose page's own panel never lists a prop it has not fetched. The prop dropdown now offers the CC0 weapon
-  and furniture set at the sizes the pose repo measured (a 0.28 m service pistol, a 2 m quarter-staff)
-  instead of two props; the shipped plugin package still ships only the self-made pair.
+  pose page's own panel never lists a prop it has not fetched. The prop cards now offer the cloud CC0 weapon
+  and furniture set at the sizes the pose repo measured (a 0.28 m service pistol, a 2 m quarter-staff) beside
+  the two bundled props; the shipped plugin package still ships only the self-made pair.
+
+- **The 3D Pose prop picker is a grid of preview cards, and bone attach left the panel.** The pose page's
+  道具 group lists one card per prop with its preview image - read locally from
+  `/models/props/preview/<name>.png`, straight from OSS for a cloud prop, and from the pose repo's
+  conventional `preview/builtin-<id>.png` for a procedural prop; a prop with no image reads 「无预览」
+  instead of showing a broken thumbnail. A search box filters the cards by name, the count line names the
+  selected prop, and 「添加道具」 sends the selected card's prop key (a name typed by hand resolves through
+  the same lookup). The panel's 「挂到骨点」 button and 「挂点骨」 dropdown are gone: bone attach stays in the
+  pose page's own panel and the page's `prop/attach` command is untouched, a prop added from the panel lands
+  in a free spot the page picks, and each row of the on-stage list says where it landed - 「挂在 手部_右」
+  for a prop carried by a bone, X/Z coordinates for a free prop. Prop preview PNGs ship with the pose package
+  only for a prop whose registry row names them: `tools\build_pose_package.ps1` strips a `preview` the build
+  does not have, and `tools\test_pose_package.ps1` refuses a preview PNG outside the shipped prop whitelist
+  and a registry row that names a preview the package does not ship.
 
 ### Added
 - **The 3D Pose scene library gained a cloud source.** With `pose_index_url` in
@@ -34,9 +48,9 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   their thumbnails load straight from the bucket, the group and search dropdowns work on the cloud entries
   on the same rules as the local ones, and clicking a card applies the whole scene after the host reads it
   through `/neo_pose/cloud_file` and keeps it under `<data root>/pose/oss_cache/`. Cloud props named by the
-  cloud index show up in the panel's prop dropdown (grouped 「云端：OSS」): adding one fetches the GLB into
+  cloud index show up as prop cards behind the local ones (badge 「云端」): adding one fetches the GLB into
   `models/props/` first and then travels the page's existing prop path, so the pose page itself needs no
-  change. Without that config line the cloud option is not in the selector, the modal and the prop dropdown
+  change. Without that config line the cloud option is not in the selector, the modal and the prop cards
   behave exactly as they did, and the modal shows the deployment hint (`tools\pose_deploy_oss.py` uploads
   the tree and prints the index URL to paste in) instead of an empty list. The cloud cache is an ordinary
   cache - delete `<data root>/pose/oss_cache/` and it rebuilds - and opening the pose page never contacts OSS:

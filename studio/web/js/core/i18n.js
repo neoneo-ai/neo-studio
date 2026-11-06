@@ -62,7 +62,6 @@ const EN = {
     "姿势页跑在随包的最小姿势包上：随包只分发 CC0 素体，其余素体请「导入自备素体」。": "This pose page runs on the bundled minimal package: only the CC0 character ships with it, import your own characters for the rest.",
     "重置姿态": "Reset Pose",
     "添加道具": "Add Prop",
-    "挂到骨点": "Attach To Bone",
     "落地": "Ground",
     "删道具": "Delete Prop",
     "导出图组到素材库": "Export Image Set",
@@ -76,9 +75,10 @@ const EN = {
     "视角": "View",
     "选择素体…": "Choose a character…",
     "选择预设…": "Choose a preset…",
-    "选择道具…": "Choose a prop…",
-    "挂点骨…": "Bone…",
-    "挂点骨": "Bone",
+    "搜索道具（名字 / 云端）": "Search props (name / cloud)",
+    "道具表里没有匹配的道具": "No prop matches this search",
+    "{total} 件道具 · 选中 {name}": "{total} props · picked {name}",
+    "挂在 {bone}": "on {bone}",
     "还没有存档": "Nothing saved yet",
     "场上没有道具": "No props on stage",
     "未挂载": "unattached",
@@ -95,9 +95,8 @@ const EN = {
     "先选一个道具": "Pick a prop first",
     // 自由填写的道具名：定义在姿势包的道具表里，面板只在 meta/list 那份清单里找，找不到要说清能输什么
     "道具名（例：椅子）": "Prop name (e.g. 椅子)",
-    "道具表里没有「{name}」：可输入 椅子 / 桌子 / 剑 这类名字（共 {n} 项），或从下拉选":
-        "No prop \"{name}\" in the prop list: type a name like 椅子 / 桌子 / 剑 ({n} available), or pick one from the dropdown",
-    "先选道具与挂点骨": "Pick a prop and a bone first",
+    "道具表里没有「{name}」：可输入 椅子 / 桌子 / 剑 这类名字（共 {n} 项），或点一张卡片":
+        "No prop \"{name}\" in the prop list: type a name like 椅子 / 桌子 / 剑 ({n} available), or click a prop card",
     "先勾要导出的格式": "Tick the formats to export first",
     "请先写场景名": "Write a scene name first",
     "先在场景库里选一场": "Pick a scene in the library first",

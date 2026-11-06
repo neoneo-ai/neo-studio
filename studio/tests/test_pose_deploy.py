@@ -126,8 +126,9 @@ class CloudPropTests(unittest.TestCase):
         write(self.repo / "public" / "models" / "ATTRIBUTION.md", self.ATTRIBUTION)
         write(self.props / "index.json", json.dumps({"props": [
             {"file": "prop_test_box.glb", "label": "测试箱体", "scale": 1},
-            {"file": "stick.glb", "label": "棍", "scale": 1},
-            {"file": "sword.glb", "label": "剑（自制）", "scale": 1, "hidden": True},
+            {"file": "stick.glb", "label": "棍", "scale": 1, "preview": "preview/stick.png"},
+            {"file": "sword.glb", "label": "剑（自制）", "scale": 1, "hidden": True,
+             "preview": "preview/sword.png"},
             {"file": "katana.glb", "label": "武士刀（古）", "scale": 1.003,
              "standing": True, "grab": 0.26, "license": "CC0 (Poly Haven)"},
             {"file": "gone.glb", "label": "没同步过来的道具", "scale": 1},
@@ -139,6 +140,7 @@ class CloudPropTests(unittest.TestCase):
         for leaf in ("stick.glb", "sword.glb", "katana.glb", "arrow.glb", "sword_thin.glb",
                      "mixamo_spear.glb", "legacy_no_row.glb", "prop_test_box.glb"):
             write(self.props / leaf, GLB)
+        write(self.props / "preview" / "stick.png", PNG)     # 棍的预览图真在道具目录里
 
     def tearDown(self):
         self._tmp.cleanup()
@@ -158,6 +160,8 @@ class CloudPropTests(unittest.TestCase):
         katana = rows[-1]
         self.assertEqual(katana["registry"]["scale"], 1.003)
         self.assertTrue(katana["registry"]["standing"] and katana["registry"]["grab"])
+        self.assertEqual(rows[0]["registry"]["preview"], "preview/stick.png",
+                         "预览路径随注册表那一行一起上云：面板的缩略图与 GLB 是同一批到货")
         self.assertEqual(katana["size"], (self.props / "katana.glb").stat().st_size)
         self.assertEqual(katana["license"], "CC0 (Poly Haven)")
         self.assertEqual(katana["source"], "https://polyhaven.com/a/katana")
@@ -211,6 +215,23 @@ class CloudPropTests(unittest.TestCase):
         self.assertIn("poses/stand/a.scene.json", rels)
         self.assertIn("preview/a.clay.png", rels)
         self.assertIn("props/stick.glb", rels)
+
+    def test_collect_files_uploads_the_prop_preview_with_the_prop(self):
+        """注册表写了 preview 且图真在道具目录里：预览图与 GLB 同一批上云，键同前缀。"""
+        rows, _ = self.built(["stick.glb"])
+        rels = [rel for _, rel in deploy.collect_files(self.lib, self.props, rows)]
+        self.assertIn("props/preview/stick.png", rels)
+
+    def test_collect_files_says_so_when_the_preview_row_has_no_file(self):
+        """注册表承诺了预览图、文件不在道具目录里：清单里不能出现那条键，要说出来 ——
+        半个文件上云就是面板上一张永远转圈的缩略图。"""
+        rows, _ = self.built(["sword.glb"])
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            rels = [rel for _, rel in deploy.collect_files(self.lib, self.props, rows)]
+        self.assertIn("props/sword.glb", rels)
+        self.assertNotIn("props/preview/sword.png", rels)
+        self.assertIn("preview", out.getvalue())
 
     def test_collect_files_skips_a_prop_with_no_glb_on_disk(self):
         """索引里登记过的道具在上传时文件不在，上传清单里不能出现那条 —— 半个文件上云就是读侧的 502。"""
