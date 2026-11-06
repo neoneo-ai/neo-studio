@@ -135,9 +135,26 @@ const EN = {
         "Filter by origin: the preset ships with the pose repo and is read-only, local is what this machine wrote",
     "预设库：随姿势仓库分发，只读": "Preset library: distributed with the pose repo, read-only",
     "本地库：本机自己写的姿态": "Local library: poses this machine wrote itself",
+    "云端": "Cloud",
+    "云端库：OSS 上那棵树，取回的文件缓存在本机":
+        "Cloud library: the tree on OSS; fetched files are cached on this machine",
+    // 场景库的来源开关：未配置的云端不出现这一条，出现的就是读得到的那批
+    "本机库": "Local Library",
+    "云端库": "Cloud Library",
+    "库来源：本机库读数据根的 pose-lib，云端库读 OSS 上那棵树（文件先落本机缓存）":
+        "Library source: local reads pose-lib in the data root; cloud reads the tree on OSS (files are cached locally first)",
+    "没有匹配的云端场景": "No matching cloud scenes",
+    "{total} 个云端场景 · 显示 {shown}": "{total} cloud scenes · showing {shown}",
+    "读不到云端索引：{msg}": "Cannot read the cloud index: {msg}",
+    "读不到云端文件：{path}": "Cannot read the cloud file: {path}",
+    "云端场景库未配置：在 <数据根>/configs/oss_presets.json 里写 pose_index_url，云端那棵树用 tools\\pose_deploy_oss.py 上传（默认只列清单，加 --apply 才上传）。":
+        "The cloud scene library is not configured: write pose_index_url in <data root>/configs/oss_presets.json and upload the tree with tools\\pose_deploy_oss.py (without --apply nothing is uploaded).",
     "读不到库文件：{path}": "Cannot read the library file: {path}",
     "场景库未同步：跑 tools\\sync_pose_lib.ps1 -Source <3d-pose-art 仓库根> 把 pose-lib 同步进 <数据根>/pose/lib。":
         "The scene library is not synced: run tools\\sync_pose_lib.ps1 -Source <3d-pose-art repo> to put pose-lib into <data root>/pose/lib.",
+    "场景库未同步：跑 tools\\sync_pose_lib.ps1 -Source <3d-pose-art 仓库根> 把 pose-lib 同步进 <数据根>/pose/lib，或在「启动设置 → 姿势仓库」填上仓库目录，桌面端每次启动自动同步。":
+        "The scene library is not synced: run tools\\sync_pose_lib.ps1 -Source <3d-pose-art repo> to put pose-lib into <data root>/pose/lib, or fill in Startup settings → Pose repo so the desktop syncs it on every start.",
+
     // 整场卡片（多人 / 带道具）：套用走 scene/apply，卡片标签带「N人 · M道具」
     "已套用整场：{name}（{rigs} 副骨架 · {props} 个物体）":
         "Scene applied: {name} ({rigs} skeletons · {props} objects)",

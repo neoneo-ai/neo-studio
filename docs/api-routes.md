@@ -160,6 +160,9 @@ Neo Studio 独立页面（`web/studio/index.html`）的后端。素材 / 生图 
 | POST   | `/neo_pose/import_model`    | 自备素体 GLB 写进 `<数据根>/pose/dist/models/<key>.glb`，回 `{key, name, url, size, from}` |
 | POST   | `/neo_pose/export_image`    | 页面画布导出落进 `output/Pose`，回 `{filename, subfolder, size}`             |
 | POST   | `/neo_pose/export_set`      | ControlNet 图组落进 `output/Pose`（≤12 张），回 `{saved, count}`             |
+| GET    | `/neo_pose/cloud_status`    | 云端配没配、索引地址与根前缀、缓存在不在、场景数与道具数（未配置回 `enabled: false`，不拉 OSS）            |
+| GET    | `/neo_pose/cloud_index`     | 云端清单（只读缓存，回 `{index, cached}`；缓存没这份时 `enabled: false`，页面出部署指引）                |
+| GET    | `/neo_pose/cloud_file?path=`| 取一份云端文件落进 `<数据根>/pose/oss_cache/` 再伺服：整场 JSON、预览图、`models/props/<file>.glb`；出根 `400`、取回失败 `502` |
 
 前缀本身（`/pose-dist/`，空路径）落到入口页，地址栏直接敲前缀也要进页面。产物里的资源路径是构建时写死的
 两条根路径：页面与脚本走 `/pose-dist/...`，道具注册表与 GLB 走 `/models/props/index.json`、

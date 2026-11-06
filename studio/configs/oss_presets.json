@@ -2,6 +2,7 @@
   "enabled": true,
   "index_url": "https://mediai.oss-cn-hangzhou.aliyuncs.com/neo/presets/index.json",
   "base_url": "https://mediai.oss-cn-hangzhou.aliyuncs.com/neo/presets",
+  "pose_index_url": "https://mediai.oss-cn-hangzhou.aliyuncs.com/neo/pose/index.json",
   "sync_interval_hours": 24,
   "cache_dir": ""
 }

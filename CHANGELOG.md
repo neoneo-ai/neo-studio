@@ -9,8 +9,38 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   「姿势」（`摆姿模式` → `姿势模式`、`摆姿仓库` → `姿势仓库`、`进入摆姿模式` → `进入姿势模式`），动词语法保持成句
   （`摆姿势`、`可摆姿势`、`纯摆姿势`）；英文文案仍是 Pose / Pose 3D，路由、节点名与配置键不变。
   姿势仓库与随包姿势包同批改名，页面读到的文案一致。
+- **The cloud pose upload publishes only the shipped preset library.** `tools\pose_deploy_oss.py` takes the
+  pose repo's `pose-lib/` as `--source` and refuses the merged `<data root>/pose/lib` (its entries carry an
+  `origin`): `pose-lab` is the author's experimental set and never belongs on the public bucket.
+  `tools\pose_prune_oss.py` deletes every cloud key the manifest does not name. Credentials are read with
+  the key names `studio/backyard.py` uses (`bucket`, not `bucket_name`), precedence command line >
+  `OSS_*` environment > `<data root>/configs/backyard_oss.json`, so a stale `OSS_ENDPOINT` in the shell no
+  longer silently redirects the upload.
+- **Cloud props are gated by licence, not by the two-prop shipped whitelist.** `tools\pose_deploy_oss.py`
+  reads each prop's licensing row in the pose repo's `public/models/ATTRIBUTION.md` and publishes only rows
+  that grant redistribution: the CC0 props (Poly Haven, BlenderKit `cc_zero`) and the self-made `stick` /
+  `sword` publish, while Royalty Free rows, unconfirmed local imports (`arrow`, `sting-sword`, the gun
+  meshes), Mixamo personal-use files and the repo's own test bench boxes never do. Each published prop
+  carries its prop-registry row (`scale` plus the grip metadata) in the cloud index, and serving
+  `/models/props/index.json` adds those rows to the registry the pose page reads, marked `hidden` so the
+  pose page's own panel never lists a prop it has not fetched. The prop dropdown now offers the CC0 weapon
+  and furniture set at the sizes the pose repo measured (a 0.28 m service pistol, a 2 m quarter-staff)
+  instead of two props; the shipped plugin package still ships only the self-made pair.
 
 ### Added
+- **The 3D Pose scene library gained a cloud source.** With `pose_index_url` in
+  `<data root>/configs/oss_presets.json`, the 「浏览场景库…」modal grows a "source: Local Library /
+  Cloud Library" selector and lists the pose tree that lives in OSS: cloud cards carry a 「云端」 badge,
+  their thumbnails load straight from the bucket, the group and search dropdowns work on the cloud entries
+  on the same rules as the local ones, and clicking a card applies the whole scene after the host reads it
+  through `/neo_pose/cloud_file` and keeps it under `<data root>/pose/oss_cache/`. Cloud props named by the
+  cloud index show up in the panel's prop dropdown (grouped 「云端：OSS」): adding one fetches the GLB into
+  `models/props/` first and then travels the page's existing prop path, so the pose page itself needs no
+  change. Without that config line the cloud option is not in the selector, the modal and the prop dropdown
+  behave exactly as they did, and the modal shows the deployment hint (`tools\pose_deploy_oss.py` uploads
+  the tree and prints the index URL to paste in) instead of an empty list. The cloud cache is an ordinary
+  cache - delete `<data root>/pose/oss_cache/` and it rebuilds - and opening the pose page never contacts OSS:
+  only the scene and prop files a click really needs are downloaded, once.
 - 新增预设模型清单文档 [docs/preset-models.md](docs/preset-models.md)（英文 [docs/en/preset-models.md](docs/en/preset-models.md)）：把 37 个预设技能自带的 `models.json` 逐条摊开——族系与基座分组、文件名、模型类别、GB 体积、可点击即下载的 ModelScope / Hugging Face 直链与 Civitai 模型页链接；另附同样带直链的 CosyVoice3 语音合成必需文件表（该技能不读 `models.json`，权重走 `models/cosyvoice/Fun-CosyVoice3-0.5B/`）。
 
 - **The desktop app now keeps the 3D Pose assets in sync by itself.** "Startup settings → Pose repo" takes a

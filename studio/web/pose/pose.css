@@ -396,6 +396,11 @@
 
 .ns-pose-lib-origin-ship { background: #6b7a90; }
 .ns-pose-lib-origin-lab { background: #7fd6a0; }
+.ns-pose-lib-origin-cloud { background: #7fb3d6; }
+
+/* 来源开关排在筛选行最前：本机 / 云端两条词短，给它一档窄宽度，搜索框继续吃掉行宽 */
+.ns-pose-lib-source { flex: 0 0 auto; }
+
 
 /* 无预览的卡片没有缩略图那层相对定位，包一层与 thumbbox 同职责的壳，角标的绝对定位才有祖先 */
 .ns-pose-lib-noimgbox { position: relative; }

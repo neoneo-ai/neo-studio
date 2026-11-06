@@ -218,6 +218,8 @@ _AGENT = {
 # 那一条 /neo_gallery/delete 式的单条路，没有「清空场景库」；场景库（<数据根>/pose/lib）本身只读。
 # 素体导入（caps 的 body_import）走桌面端自己那条路：随包只发授权干净的 CC0 素体，其余 GLB 由用户
 # 自备，/neo_pose/import_model 把它写进 <数据根>/pose/dist/models/，登记动作留在页面本地导入区。
+# 云端场景库与云端道具（studio/pose_cloud.py）三条都在文件层 + 公开 GET：索引带 TTL 缓存，
+# 取文件落进 <数据根>/pose/oss_cache 后由本机伺服，桌面端离线服务同样答得了。
 _POSE = {
     ("GET", "/neo-pose"),
     ("GET", "/neo_pose/status"),
@@ -227,7 +229,11 @@ _POSE = {
     ("GET", "/neo_pose/scenes"),
     ("GET", "/neo_pose/scene"),
     ("POST", "/neo_pose/scene"),
+    ("GET", "/neo_pose/cloud_status"),
+    ("GET", "/neo_pose/cloud_index"),
+    ("GET", "/neo_pose/cloud_file"),
 }
+
 
 # 视频抽帧（studio/frames.py）：抽帧在浏览器里做（video seek + canvas 取帧），本机服务只回两样 ——
 # 素材库那条视频的分段响应与把抽出来的一帧 PNG 写进 output/Frames。都在文件层，桌面端没有

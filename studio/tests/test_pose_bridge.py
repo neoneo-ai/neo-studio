@@ -557,5 +557,275 @@ class PackageDistTests(_GalleryStubCase):
         self.assertEqual(list(pose.MODELS_DIR.glob("*.glb")), [])
 
 
+class _CloudFixture(_PoseCase):
+    """云端那棵的夹具：缓存整棵挪进临时树、网络层换桩、配置与缓存索引就地写。
+
+    全程不联网：_http_get 换成桩，用例钉的是「拿到字节以后怎么办」那一段。
+    """
+
+    GLB = b"glTF\x02\x00\x00\x00" + b"\x00" * 40
+
+    def setUp(self):
+        super().setUp()
+        self._tmp = tempfile.TemporaryDirectory(prefix="neo_pose_cloud_")
+        self.addCleanup(self._tmp.cleanup)
+        self.cloud = importlib.import_module("studio.pose_cloud")
+        self._http_get = self.cloud._http_get
+        self._cache_dir = self.cloud.CACHE_DIR
+        self.cloud.CACHE_DIR = Path(self._tmp.name) / "pose" / "oss_cache"
+        self.cloud.INDEX_CACHE_FILE = self.cloud.CACHE_DIR / "_index.json"
+        self.cloud.CLOUD_PROPS_DIR = self.cloud.CACHE_DIR / "models" / "props"
+        self.calls = []
+
+    def tearDown(self):
+        self.cloud._http_get = self._http_get
+        self.cloud.CACHE_DIR = self._cache_dir
+        self.cloud.INDEX_CACHE_FILE = self._cache_dir / "_index.json"
+        self.cloud.CLOUD_PROPS_DIR = self._cache_dir / "models" / "props"
+        super().tearDown()
+
+    def stub_http(self, routes: dict):
+        """桩网络层：routes 是 url → (body, status)；没列出的报 404，调用序列留在 self.calls。"""
+        async def fake(url):
+            self.calls.append(url)
+            return routes.get(url, (None, 404))
+
+        self.cloud._http_get = fake
+
+    def write_config(self, cfg: dict):
+        self.cloud.OSS_PRESETS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        self.write(self.cloud.OSS_PRESETS_FILE, json.dumps(cfg, ensure_ascii=False))
+
+    def write_cloud_index(self, index: dict):
+        self.cloud.CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        self.write(self.cloud.INDEX_CACHE_FILE, json.dumps(index, ensure_ascii=False))
+
+    def cloud_index(self):
+        return {
+            "format": "neo-pose-cloud/1",
+            "generatedAt": "2026-11-06T00:00:00Z",
+            "count": 1,
+            "groups": [{"key": "stand", "label": "站立", "count": 1}],
+            "entries": [{"id": "c1", "label": "云端站姿", "path": "poses/stand/c1.scene.json",
+                         "groups": ["stand"], "tags": ["cloud"], "charKey": "bodyMale",
+                         "preview": {"clay": "preview/c1.clay.png"}}],
+            "props": [{"id": "stick", "label": "木棍", "file": "stick-cloud.glb", "size": 48}],
+        }
+
+class CloudTests(_CloudFixture):
+    """云端场景库与云端道具：索引 TTL、路径守卫、下载校验、不可用形态。
+
+    道具那三级顺序也在这一类里钉 —— 云端缓存是第三级，数据根与随包副本永远压它。
+    """
+
+    def test_urls_derive_pose_prefix_from_the_presets_index(self):
+        """预设索引边上加 pose/ 就是默认落点；pose_index_url 写了就以它为准。"""
+        self.assertEqual(self.cloud.cloud_urls({
+            "enabled": True, "index_url": "https://host/neo/presets/index.json",
+        })["index_url"], "https://host/neo/pose/index.json")
+        self.assertEqual(self.cloud.cloud_urls({
+            "enabled": True, "index_url": "https://host/neo/presets/index.json",
+            "pose_index_url": "https://other/pose/index.json",
+        })["index_url"], "https://other/pose/index.json")
+        empty = self.cloud.cloud_urls({})
+        self.assertFalse(empty["enabled"])
+        self.assertEqual(empty["index_url"], "")
+
+    def test_status_without_config_says_unavailable_without_network(self):
+        body = json.loads(_run(self.cloud.pose_cloud_status, _request()).text)
+        self.assertFalse(body["enabled"])
+        self.assertFalse(body["available"])
+        self.assertIn("pose_index_url", body["hint"])
+        self.assertEqual(self.calls, [])   # 状态接口不许碰网络
+
+    def test_status_reports_the_cached_index_counts(self):
+        self.write_config({"enabled": True, "pose_index_url": "https://host/neo/pose/index.json"})
+        self.write_cloud_index(self.cloud_index())
+        body = json.loads(_run(self.cloud.pose_cloud_status, _request()).text)
+        self.assertTrue(body["enabled"])
+        self.assertTrue(body["available"])
+        self.assertEqual((body["scenes"], body["props"]), (1, 1))
+        self.assertEqual(body["base_url"], "https://host/neo/pose/")
+
+
+    def test_index_cache_within_ttl_is_not_refetched(self):
+        self.write_config({"enabled": True, "index_url": "https://host/neo/presets/index.json",
+                           "sync_interval_hours": 24})
+        self.write_cloud_index(self.cloud_index())
+        self.stub_http({})
+        body = json.loads(_run(self.cloud.pose_cloud_index, _request()).text)
+        self.assertEqual(body["source"], "cache")
+        self.assertEqual(body["entries"][0]["path"], "poses/stand/c1.scene.json")
+        self.assertEqual(body["entries"][0]["origin"], "cloud")
+        self.assertEqual(body["props"][0]["path"], "models/props/stick-cloud.glb")
+        self.assertEqual(self.calls, [])   # TTL 没到就不碰网络
+        asyncio.run(self.cloud.load_index(force=True))   # 强制刷新（「刷新云端清单」那一条）必须重取
+        self.assertEqual(len(self.calls), 1)
+
+
+    def test_index_fetch_failure_falls_back_to_the_cached_copy(self):
+        self.write_config({"enabled": True, "pose_index_url": "https://host/neo/pose/index.json"})
+        self.write_cloud_index(self.cloud_index())
+        self.cloud.INDEX_CACHE_FILE.write_text("{{{", encoding="utf-8")   # 坏缓存 + 断网
+        self.stub_http({})
+        resp = _run(self.cloud.pose_cloud_index, _request())
+        self.assertEqual(resp.status, 502)
+        self.assertIn("pose_index_url", json.loads(resp.text)["error"])
+
+    def test_cloud_file_rejects_traversal_and_paths_the_index_does_not_list(self):
+        self.write_config({"enabled": True, "pose_index_url": "https://host/neo/pose/index.json"})
+        self.write_cloud_index(self.cloud_index())
+        self.stub_http({})
+        for path in ("../x.json", "/etc/passwd", "C:/Windows/x.json", "poses/stand/other.json",
+                     "models/props/not-in-index.glb"):
+            self.assertEqual(_run(self.cloud.pose_cloud_file, _request(query={"path": path})).status,
+                             400, path)
+
+    def test_cloud_file_checks_the_path_before_it_asks_whether_cloud_is_on(self):
+        """云端没配置时的越界请求也是 400：路径守卫在配置检查之前，越界不会被说成「没配置」。
+
+        「没配置」与「路径越界」都是 400，混在一起用户读不出自己撞的是哪一条；这条钉的是顺序，
+        越界的请求不该走到配置那一步，更不该碰网络。
+        """
+        self.stub_http({})
+        for path in ("../x.json", "/etc/passwd", "C:/Windows/x.json"):
+            resp = _run(self.cloud.pose_cloud_file, _request(query={"path": path}))
+            self.assertEqual(resp.status, 400, path)
+            self.assertIn("相对路径", json.loads(resp.text)["error"], path)
+        self.assertEqual(self.calls, [])
+
+    def test_cloud_file_serves_the_cached_copy_and_downloads_once(self):
+        self.write_config({"enabled": True, "pose_index_url": "https://host/neo/pose/index.json"})
+        self.write_cloud_index(self.cloud_index())
+        scene = json.dumps({"format": "3dpose.scene/1", "rigs": []}, ensure_ascii=False)
+        base = "https://host/neo/pose/"
+        self.stub_http({base + "poses/stand/c1.scene.json": (scene.encode("utf-8"), 200),
+                        base + "props/stick-cloud.glb": (self.GLB, 200),
+                        base + "preview/c1.clay.png": (PNG, 200)})
+        self.assertEqual(_run(self.cloud.pose_cloud_file,
+                              _request(query={"path": "poses/stand/c1.scene.json"})).status, 200)
+        cached = self.cloud.CACHE_DIR / "poses" / "stand" / "c1.scene.json"
+        self.assertEqual(json.loads(cached.read_text(encoding="utf-8")), json.loads(scene))
+        # 云端道具的落点就是页面写死的那一级：/models/props/<file>.glb
+        self.assertEqual(_run(self.cloud.pose_cloud_file,
+                              _request(query={"path": "models/props/stick-cloud.glb"})).status, 200)
+        self.assertEqual((self.cloud.CLOUD_PROPS_DIR / "stick-cloud.glb").read_bytes(), self.GLB)
+        self.assertEqual(_run(self.cloud.pose_cloud_file,
+                              _request(query={"path": "preview/c1.clay.png"})).status, 200)
+        self.assertEqual(list(self.cloud.CACHE_DIR.rglob("*.tmp")), [])
+        self.assertEqual(len(self.calls), 3)
+        self.assertEqual(_run(self.cloud.pose_cloud_file,
+                              _request(query={"path": "poses/stand/c1.scene.json"})).status, 200)
+        self.assertEqual(len(self.calls), 3)   # 命中缓存不再发请求
+
+    def test_cloud_file_rejects_a_glb_without_magic_and_caches_nothing(self):
+        self.write_config({"enabled": True, "pose_index_url": "https://host/neo/pose/index.json"})
+        self.write_cloud_index(self.cloud_index())
+        self.stub_http({"https://host/neo/pose/props/stick-cloud.glb": (b"not-a-glb!!", 200)})
+        resp = _run(self.cloud.pose_cloud_file, _request(query={"path": "models/props/stick-cloud.glb"}))
+        self.assertEqual(resp.status, 502)
+        self.assertIn("glTF", json.loads(resp.text)["error"])
+        self.assertEqual(list(self.cloud.CLOUD_PROPS_DIR.glob("*.glb")), [])
+
+    def test_cloud_file_reports_missing_upstream_as_404(self):
+        self.write_config({"enabled": True, "pose_index_url": "https://host/neo/pose/index.json"})
+        self.write_cloud_index(self.cloud_index())
+        self.stub_http({})
+        resp = _run(self.cloud.pose_cloud_file, _request(query={"path": "poses/stand/c1.scene.json"}))
+        self.assertEqual(resp.status, 404)
+        self.assertEqual(list(self.cloud.CACHE_DIR.rglob("c1.scene.json")), [])
+
+    def test_props_fallback_serves_the_cloud_cache_as_the_third_level(self):
+        """道具的三级顺序：数据根 → 随包副本 → 云端缓存；前两级压得住的，轮不到云端。"""
+        cloud_glb = self.cloud.CLOUD_PROPS_DIR / "unit-cloud-prop.glb"
+        cloud_glb.parent.mkdir(parents=True, exist_ok=True)
+        cloud_glb.write_bytes(self.GLB)
+        self.created.append(cloud_glb)
+        self.assertEqual(pose._dist_response("models/props/unit-cloud-prop.glb").status, 200)
+        cached_root = self.cloud.CACHE_DIR
+        self.cloud.CACHE_DIR = cached_root / "not-anymore"   # 缓存整棵没了 = 这条回到 404
+        self.assertEqual(pose._dist_response("models/props/unit-cloud-prop.glb").status, 404)
+        self.cloud.CACHE_DIR = cached_root
+
+
+
+class CloudPropRegistryTests(_CloudFixture):
+    """伺服道具注册表时补云端行（pose._props_registry_response）。
+
+    页面对 GLB 先归一成「1 单位高」、再乘注册表行的 scale：注册表里没这一行的云端道具就是一把
+    1 米长的手枪。钉三件事 —— 云端行带着 scale 与握点进注册表且标 hidden（姿势页自己的面板没有
+    「先取文件再加具」那一步，不许列没缓存的道具）；本机登记过的文件一条不补；这一条是姿势页的
+    开局路径，桩网络里没有一条路由，发出请求就是失败。
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.registry = {
+            "_readme": ["GLB 道具注册表：file 是裸文件名，scale 是注册表级缩放。"],
+            "props": [{"file": "stick.glb", "label": "棍", "scale": 1}],
+        }
+        self.write(pose.DIST_DIR / "models" / "props" / "index.json",
+                   json.dumps(self.registry, ensure_ascii=False))
+
+    def cloud_index(self):
+        base = super().cloud_index()
+        base["props"] = [
+            {"id": "katana", "label": "武士刀（古）", "file": "katana.glb", "size": 257,
+             "license": "CC0（公有领域，可商用可再分发）",
+             "source": "https://polyhaven.com/a/katana",
+             "registry": {"file": "katana.glb", "label": "武士刀（古）", "scale": 1.003,
+                          "standing": True, "grab": 0.26, "hidden": False}},
+            {"id": "stick", "label": "棍", "file": "stick.glb", "size": 88,
+             "registry": {"file": "stick.glb", "label": "棍", "scale": 1}},
+        ]
+        return base
+
+    def served_registry(self) -> list:
+        self.stub_http({})
+        resp = pose._dist_response("models/props/index.json")
+        self.assertEqual(resp.status, 200)
+        self.assertEqual(self.calls, [], "伺服注册表不许发网络请求")
+        self.assertNotIsInstance(resp, web.FileResponse, "补了行就不是纯文件伺服")
+        return json.loads(resp.text)["props"]
+
+    def test_cloud_rows_join_the_registry_with_scale_and_hidden(self):
+        """云端行整条照索引给（scale 1.003、握点 standing/grab），并改写成 hidden。"""
+        self.write_config({"enabled": True, "pose_index_url": "https://host/neo/pose/index.json"})
+        self.write_cloud_index(self.cloud_index())
+        rows = self.served_registry()
+        self.assertEqual([r["file"] for r in rows], ["stick.glb", "katana.glb"])
+        katana = rows[1]
+        self.assertEqual(katana["scale"], 1.003)
+        self.assertTrue(katana["standing"] and katana["grab"])
+        self.assertIs(katana["hidden"], True, "姿势页自己的面板不许列没缓存的道具")
+
+    def test_local_registry_rows_are_never_replaced(self):
+        """本机登记过的道具一条不补：数据根同步过姿势仓库时，注册表与 GLB 两级都在着。"""
+        self.write_config({"enabled": True, "pose_index_url": "https://host/neo/pose/index.json"})
+        self.write_cloud_index(self.cloud_index())
+        rows = self.served_registry()
+        self.assertEqual(len(rows), 2, "云端那根 stick 不许压本机那根，也不许重复登记")
+        self.assertEqual(rows[0], self.registry["props"][0])
+
+    def test_registry_without_a_cloud_cache_is_served_as_the_file_it_is(self):
+        """没有云端缓存：这条回到纯文件伺服，发出去的就是本机那份字节（页面开局读它不许等 OSS）。"""
+        self.stub_http({})
+        resp = pose._dist_response("models/props/index.json")
+        self.assertIsInstance(resp, web.FileResponse)
+        self.assertEqual(self.calls, [])
+        served = (pose.DIST_DIR / "models" / "props" / "index.json").read_text(encoding="utf-8")
+        self.assertEqual(json.loads(served), self.registry)
+
+    def test_an_index_from_an_older_deploy_still_lands_as_a_row(self):
+        """旧版上传脚本的条目没有 registry 那一行：补出来是一条只有名字的行，页面按默认 scale 摆。"""
+        self.write_config({"enabled": True, "pose_index_url": "https://host/neo/pose/index.json"})
+        index = super().cloud_index()
+        self.write_cloud_index(index)
+        self.assertEqual(self.served_registry()[-1],
+                         {"file": "stick-cloud.glb", "label": "木棍", "hidden": True})
+
+
 if __name__ == "__main__":
     unittest.main()
+
+

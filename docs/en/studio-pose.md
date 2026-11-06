@@ -9,10 +9,10 @@ timeline and the export all happen in the browser - the local service only reads
 The build has two landing paths, checked per request in this order, and **the data-root copy shadows
 the bundled copy file for file** (which is why a fresh build and a user-imported figure win):
 
-| Landing path | Contents | Where it comes from |
-|--------------|----------|---------------------|
-| `<data root>/pose/dist/` | Full build, `*.map` included, about 16 MB | `tools\sync_pose_dist.ps1`; the 「启动设置 → 姿势仓库」 auto-sync |
-| `studio/pose_dist/` | Minimal licensed copy, code + the two default CC0 base figures + the self-authored props, about 3.0 MB | `tools\build_pose_package.ps1`, ships with the Registry package and the exe |
+| Landing path             | Contents                                                                                               | Where it comes from                                                         |
+|--------------------------|--------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------|
+| `<data root>/pose/dist/` | Full build, `*.map` included, about 16 MB                                                              | `tools\sync_pose_dist.ps1`; the 「启动设置 → 姿势仓库」 auto-sync           |
+| `studio/pose_dist/`      | Minimal licensed copy, code + the two default CC0 base figures + the self-authored props, about 3.0 MB | `tools\build_pose_package.ps1`, ships with the Registry package and the exe |
 
 What goes into the bundled copy is decided by **licence**, not by size: `models/ATTRIBUTION.md` marks
 the page's default base figures `bodyMale.glb` / `bodyFemale.glb` (this project's standard male / female
@@ -62,12 +62,12 @@ bundled copy - its licence rule differs from the pose package's, so `tools\build
 package it - the sync script is what lands it. The whole directory is a cache: delete it and resync any time.
 `scenes/` under `pose/` is what the user wrote, and stays out of the mirror.
 
-| Landing path                       | Contents                                                                                | Where it comes from               |
-|----------------------------------|----------------------------------------------------------------|---------------------------------|
-| `<data root>/pose/lib/poses/`      | One `.scene.json` per entry (`3dpose.scene/1`: people + props + view), preset + local | `tools\sync_pose_lib.ps1`     |
-| `<data root>/pose/lib/preview/`    | `<id>.<tier>.png`: `clay` / `skeleton` / `silhouette` / `depth`                         | same script                   |
-| `<data root>/pose/lib/index.json`  | `id / label / groups / categories / tags / path / preview / origin / charKey`             | `npm run lib -- merged`       |
-| `<data root>/pose/lib/ATTRIBUTION.md` | Per-entry author / licence / source post of the preset set                         | same script (from `pose-lib/`) |
+| Landing path                          | Contents                                                                              | Where it comes from            |
+|---------------------------------------|---------------------------------------------------------------------------------------|--------------------------------|
+| `<data root>/pose/lib/poses/`         | One `.scene.json` per entry (`3dpose.scene/1`: people + props + view), preset + local | `tools\sync_pose_lib.ps1`      |
+| `<data root>/pose/lib/preview/`       | `<id>.<tier>.png`: `clay` / `skeleton` / `silhouette` / `depth`                       | same script                    |
+| `<data root>/pose/lib/index.json`     | `id / label / groups / categories / tags / path / preview / origin / charKey`         | `npm run lib -- merged`        |
+| `<data root>/pose/lib/ATTRIBUTION.md` | Per-entry author / licence / source post of the preset set                            | same script (from `pose-lib/`) |
 
 The merged index is computed in 3d-pose-art, not in the sync script: the repo merges its two indexes (a local
 entry wins over a preset one of the same id, every entry carries `origin`) and writes the result through
@@ -113,14 +113,106 @@ capability table, answered by the offline desktop service too. `/neo_pose/status
 `lib_dir` (the landing path), `lib_installed` (the index reads and entries are not empty), `lib_entries`
 (the entry count), `lib_bytes` (the size of the whole directory).
 
+## The cloud scene library (pose-cloud)
+
+The cloud library is the same pose tree living in OSS: the scenes and preview images the preset library
+accumulated. Entries keep the `pose-lib` shape, the cloud manifest format is `neo-pose-cloud/1`, and the
+modal's cards, group dropdown, search and gate are one piece of code for both sources - switching source
+only switches where the data comes from.
+
+One config line drives it: `pose_index_url` in `<data root>/configs/oss_presets.json`, pointing at the
+cloud tree's `<prefix>/index.json`. It is the third field of the OSS preset config, independent of
+`presets` / `default_oss`. Missing means "not configured": the cloud source switches itself off and the
+local library keeps working. Cloud props are named by the manifest's `props` array, and each one is
+gate-checked against its licensing row in the pose repo's `public/models/ATTRIBUTION.md` - a row granting
+redistribution (CC0 from Poly Haven and BlenderKit `cc_zero`, plus the self-made props) publishes, a
+Royalty Free row, an unconfirmed source row, a Mixamo personal-use row and the repo's own test bench
+boxes never do. Every published prop carries its prop-registry row (`dist/models/props/index.json`)
+verbatim in the manifest.
+
+| Landing path                               | Contents                                  | How it arrives                                 |
+|--------------------------------------------|-------------------------------------------|------------------------------------------------|
+| `<data root>/configs/oss_presets.json`     | `pose_index_url` (the cloud manifest URL) | Written once, pointing at the uploaded tree    |
+| `<data root>/pose/oss_cache/_index.json`   | The cloud manifest last fetched           | Fetched by the read side                       |
+| `<data root>/pose/oss_cache/poses/**`      | Scenes fetched before                     | Fetched on demand when a cloud card is clicked |
+| `<data root>/pose/oss_cache/preview/**`    | Preview images fetched before             | Fetched per card by "refresh thumbnails"       |
+| `<data root>/pose/oss_cache/models/props/` | Cloud prop GLBs fetched before            | Fetched on demand when a cloud prop is added   |
+
+`pose/oss_cache/` mirrors the cloud tree one for one and is treated as a cache like `pose/lib`: deletable and
+rebuildable, with the cloud-relative path as the cache path. The manifest and the preview images are
+cache-only - no cache means nothing, and the read side never pulls from the network inside a request:
+opening the pose page or the library modal never contacts OSS, and an un-deployed cloud shows the
+deployment hint instead of an empty list. Scene files and prop GLBs do fetch on a cache miss, land on
+disk, and are served from there, so reopening the modal re-uploads nothing.
+
+The three read routes live in `studio/pose_cloud.py` and share one function body between the plugin host
+and the offline desktop service; each is registered in the `/neo_pose` ownership list:
+
+| Method | Route                        | Purpose                                                                             |
+|--------|------------------------------|-------------------------------------------------------------------------------------|
+| GET    | `/neo_pose/cloud_status`     | Configured or not, cloud index URL and root prefix, cache state and cache directory |
+| GET    | `/neo_pose/cloud_index`      | The cloud manifest from cache (cache-only, returns `{index, cached}`)               |
+| GET    | `/neo_pose/cloud_file?path=` | Serve one cloud file: a scene JSON, a preview image, `models/props/<file>.glb`      |
+
+Cloud files accept only the relative paths the cloud manifest lists: `poses/<group>/<id>.scene.json`,
+`preview/<...>.png` and `models/props/<file>.glb` (writing a prop as `props/<file>.glb` lands in the same
+place). Paths containing `..`, a drive letter, an absolute path, or a leading `/` or `\` are refused with
+`400` before the configuration is even consulted, and the landing path stays locked inside the cache
+directory - a bad path never answers "not configured". Not configured answers `400` on the manifest and
+the file route with the deployment hint (a `404` on a file the manifest does not list), a file the cloud
+tree does not have is `404`, and a failed fetch is `502`. A prop GLB is validated by its `glTF` magic
+before it is cached, so an error page the upstream sends as a file never lands in the props directory.
+`/neo_pose/cloud_status` answers `200` in every state and says `enabled: false` - the modal builds its
+controls from that flag.
+
+Cloud entries travel the same send paths as shipped entries: a cloud card reads `/neo_pose/cloud_file`
+and sends one `scene/apply`; a cloud prop lands in `models/props/` first and then travels the page's
+existing `models/props/<file>.glb` fetch address, the same `prop/add` a shipped prop uses - the pose page
+changes nothing for the cloud. The prop-registry route (`/models/props/index.json`) adds the props named by
+the cloud manifest as registry rows: it reads only the cached manifest and never touches the network, and
+each added row is marked `hidden` (the pose page's own prop panel has no "fetch the file first" step, so it
+must not list props that are not cached). The page normalizes every prop GLB to 1 unit tall and multiplies
+by the registry row's `scale`, restoring the grip metadata from the same row - a cloud prop without that row
+is a 1-metre pistol. Cloud thumbnails are direct absolute OSS URLs (the ossutil bucket endpoint
+is public-read), and a cloud card carries a "cloud" corner badge saying it is not in the local library.
+
+The cloud tree is uploaded by `tools\pose_deploy_oss.py`: it produces the shape the read side accepts,
+the manifest keeps only the entries whose files are actually on disk, and a prop publishes only when its
+licensing row in the pose repo's `public/models/ATTRIBUTION.md` grants redistribution - CC0 (Poly Haven,
+BlenderKit `cc_zero`) and the self-made props grant it, a Royalty Free row (commercial use only), an
+unconfirmed source, a Mixamo personal-use row and the registry's `测试` / `单测` bench labels never do.
+Each published prop carries its prop-registry row verbatim in the manifest. Credentials are read from
+`<data root>/configs/backyard_oss.json` - the
+`bucket` / `endpoint` / `access_key_id` / `access_key_secret` keys, the same names `studio/backyard.py`
+reads. Precedence is command line > `OSS_*` environment variables > the config file, so a stale
+`OSS_ENDPOINT` left in the shell overrides the endpoint in the file; pass `--endpoint` and `--bucket`
+on the command line when the bucket cannot be reached. Nothing is uploaded by default - run it once to
+see the list, add `--apply` to upload:
+
+`--source` is the 3d-pose-art repo's shipped preset library `pose-lib/` (the one `npm run lib -- shipped`
+builds). `<data root>/pose/lib/` is the merged result of `pose-lib` + `pose-lab` and its entries carry an
+`origin`: `pose-lab` holds the author's experimental poses and is never published - the script refuses a
+manifest whose entries carry `origin`, because the prop licensing gate only gates props, not the scene tree.
+Whatever extra keys are already in the cloud are cleaned by `tools\pose_prune_oss.py`: its allow-set
+reuses the upload script's file list, so every key the manifest does not name is deleted.
+
+```
+python tools\pose_deploy_oss.py --source "<pose repo>\pose-lib"                      # list + build the manifest only
+python tools\pose_deploy_oss.py --source "<pose repo>\pose-lib" --props stick.glb katana.glb --apply
+python tools\pose_prune_oss.py  --source "<pose repo>\pose-lib" --apply              # delete keys the manifest omits
+```
+
+The script prints the manifest URL to put into `pose_index_url`, which connects the read side.
+
+
 ## Page and static prefix
 
-| Method | Route               | Purpose                                                                             |
-|--------|---------------------|-------------------------------------------------------------------------------------|
-| GET    | `/neo-pose`         | Short path: 302 to the entry page when installed, 404 with the install hint when not|
-| GET    | `/pose-dist/{path}` | Package subresources (`index.html`, `assets/**`, GLB, wasm)                         |
-| GET    | `/pose-lib/{path}`  | Read-only scene library serving: the index, scene files and previews                  |
-| GET    | `/models/{path}`    | The origin-root path baked into the build: the prop registry and the GLBs           |
+| Method | Route               | Purpose                                                                              |
+|--------|---------------------|--------------------------------------------------------------------------------------|
+| GET    | `/neo-pose`         | Short path: 302 to the entry page when installed, 404 with the install hint when not |
+| GET    | `/pose-dist/{path}` | Package subresources (`index.html`, `assets/**`, GLB, wasm)                          |
+| GET    | `/pose-lib/{path}`  | Read-only scene library serving: the index, scene files and previews                 |
+| GET    | `/models/{path}`    | The origin-root path baked into the build: the prop registry and the GLBs            |
 
 The build uses `base: './'` relative imports, so the page must sit on a URL with directory depth:
 only then does `./assets/x.js` resolve to `/pose-dist/assets/x.js`. Serving the page directly at the
@@ -161,15 +253,18 @@ path-with-a-directory form - the registry and the props - reaches the pose handl
 
 ## Bridge routes
 
-| Method   | Route                      | Purpose                                                                                        |
-|----------|----------------------------|------------------------------------------------------------------------------------------------|
-| GET      | `/neo_pose/status`         | Install state, which landing path is live, the shipped manifest, the GLBs present, capability flags, saved scenes, bridge names, missing-package hint |
-| GET      | `/neo_pose/scenes`         | Scene list (`name` / `size` / `mtime`, newest first)                                           |
-| GET      | `/neo_pose/scene?name=`    | Read one scene                                                                                 |
-| POST     | `/neo_pose/scene`          | Write a scene (`{name, scene}`, `.tmp` + replace, atomic)                                      |
-| POST     | `/neo_pose/import_model`   | Write an own-figure GLB to `pose/dist/models/<key>.glb`                                        |
-| POST     | `/neo_pose/export_image`   | Store the page canvas (`{data: dataURL, name}`) into the library                               |
-| POST     | `/neo_pose/export_set`     | Store a ControlNet set (`{files: [{name, data}]}`, ≤12) into the library                       |
+| Method | Route                        | Purpose                                                                                                                                               |
+|--------|------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------|
+| GET    | `/neo_pose/status`           | Install state, which landing path is live, the shipped manifest, the GLBs present, capability flags, saved scenes, bridge names, missing-package hint |
+| GET    | `/neo_pose/scenes`           | Scene list (`name` / `size` / `mtime`, newest first)                                                                                                  |
+| GET    | `/neo_pose/scene?name=`      | Read one scene                                                                                                                                        |
+| POST   | `/neo_pose/scene`            | Write a scene (`{name, scene}`, `.tmp` + replace, atomic)                                                                                             |
+| POST   | `/neo_pose/import_model`     | Write an own-figure GLB to `pose/dist/models/<key>.glb`                                                                                               |
+| POST   | `/neo_pose/export_image`     | Store the page canvas (`{data: dataURL, name}`) into the library                                                                                      |
+| POST   | `/neo_pose/export_set`       | Store a ControlNet set (`{files: [{name, data}]}`, ≤12) into the library                                                                              |
+| GET    | `/neo_pose/cloud_status`     | Cloud configured or not, the cloud index URL, cache directory and cache state                                                                         |
+| GET    | `/neo_pose/cloud_index`      | The cloud manifest from cache (cache-only, `{index, cached}`)                                                                                         |
+| GET    | `/neo_pose/cloud_file?path=` | Serve one cloud file (a scene JSON, a preview image, a cloud prop GLB)                                                                                |
 
 What `/neo_pose/status` reports about the landing paths and the shipped copy: `installed` (an entry page
 in either level), `dist_dir` and `dist_source` (the live level - `data_root` or `package`),
@@ -286,15 +381,15 @@ is a layout preference stored in localStorage under `neo_studio_pose_sides`, so 
 reopening the window land on the same layout; it is not gated by `pose:ready` or `caps.hostUi` - with a
 missing package or an old package that disables every control, both panels still collapse.
 
-| Message             | Direction   | Payload                   | Purpose                                                |
-|---------------------|-------------|---------------------------|--------------------------------------------------------|
-| `pose:ready`        | page → host | none                      | The page finished setup; the host replies `pose:theme` |
-| `pose:theme`        | host → page | `{caps, lang}`            | Capability flags and language: greys out unavailable controls |
-| `pose:export-image` | host → page | reply port `{data, name}` | Ask for the canvas; the page answers with a dataURL    |
-| `pose:save-scene`   | host → page | reply port `{name, scene}` | Ask for the scene; the page answers with scene JSON    |
-| `pose:open-scene`   | host → page | `{scene}`                 | Put a stored scene back into the page                  |
-| `pose:call`         | host → page | `{action, args}` + reply port `{ok, data}` | A panel action runs one of the page's own commands |
-| `pose:state`        | page → host | `{state}`                 | Canvas state snapshot, shown on the state line            |
+| Message             | Direction   | Payload                                    | Purpose                                                       |
+|---------------------|-------------|--------------------------------------------|---------------------------------------------------------------|
+| `pose:ready`        | page → host | none                                       | The page finished setup; the host replies `pose:theme`        |
+| `pose:theme`        | host → page | `{caps, lang}`                             | Capability flags and language: greys out unavailable controls |
+| `pose:export-image` | host → page | reply port `{data, name}`                  | Ask for the canvas; the page answers with a dataURL           |
+| `pose:save-scene`   | host → page | reply port `{name, scene}`                 | Ask for the scene; the page answers with scene JSON           |
+| `pose:open-scene`   | host → page | `{scene}`                                  | Put a stored scene back into the page                         |
+| `pose:call`         | host → page | `{action, args}` + reply port `{ok, data}` | A panel action runs one of the page's own commands            |
+| `pose:state`        | page → host | `{state}`                                  | Canvas state snapshot, shown on the state line                |
 
 Request messages carry a `MessageChannel` reply port, so one request's reply only arrives on that
 port; inbound notifications are accepted only from this iframe (`event.source`) and from the host's
@@ -323,6 +418,34 @@ label (细剑（Sting）) resolves by the name in front of it. When the name is 
 plainly that the prop table has no such prop, reports what can be typed and how many entries there are, and
 sends no `pose:call` - the prop definitions live in one place, inside the pose package, and the host does
 not guess them.
+
+The first row of the library modal is "source: local library / cloud library", a second axis next to the
+library's own "all sources / preset (read-only) / local (writable)" filter: the local library reads
+`<data root>/pose/lib`, the cloud library reads the tree in OSS. The cloud option appears only when
+`/neo_pose/cloud_status` reports `enabled: true` - listing a source that cannot work is shipping a control
+that only fails. On the cloud option the head line says "Cloud library: the tree in OSS, fetched files are
+cached on this machine", each card carries a "cloud" corner badge (the hover text says which tree it lives
+in), the count line reads "N cloud scenes · showing Z", and the group and search dropdowns are rebuilt
+from the cloud entries on the same rules as the local library. Cloud thumbnails are direct absolute OSS
+URLs (the bucket endpoint is public-read), while local previews travel `/pose-lib/preview/`. "Refresh
+thumbnails" on the cloud option fetches preview images one card at a time into the cache - each image
+comes singly, 250 of them are 60 MB+, and nothing ever pulls the whole set. Clicking a cloud card reads
+`/neo_pose/cloud_file?path=<cloud-relative path>` and sends the same single `scene/apply`; the own-scene
+file path and the gate stay as they were. With no cloud configuration the modal shows the deployment hint
+(`pose_index_url` in `oss_presets.json` plus `tools\pose_deploy_oss.py`), and a cache with no cloud
+manifest shows that same hint with a toast carrying the `/neo_pose/cloud_index` error - never a wall of
+fake cards.
+
+Cloud props enter through the registry route the "add prop" control already uses: with the cloud configured
+the prop dropdown merges the cloud prop entries (grouped under "cloud: OSS", the same grouping that marks
+procedural props, shipped props and own figures), valued `cloud:<file>`; choosing one makes the panel fetch
+`/neo_pose/cloud_file?path=models/props/<file>.glb` into `models/props/` first, then send the page's
+existing `prop/add` with the fetch address `models/props/<file>.glb` - the page changes nothing for the
+cloud, and the prop fetch is one path. The Chinese labels, the registry `scale` and the grip metadata come
+from the prop-registry row the cloud manifest carries (its licensing text and source page travel with the
+entry, so a CC0 prop's attribution reads out); serving `/models/props/index.json` adds them to the registry
+the page reads as `hidden` rows, and the page sizes the prop by that row - a service pistol lands at 0.28 m
+and a quarter-staff at 2 m, the sizes the pose repo measured.
 
 ## What the desktop does not offer
 
@@ -390,7 +513,25 @@ tops both levels up in the data root.
   the library-source resolution, and refused requests leaving no trace; the scene-library serving of the
   index, a scene file and a preview, a directory landing on `index.json`, an out-of-root `400`, an unsynced
   `404`, `no-cache` on the whole prefix, a broken index leaving `status` standing, and the four `lib_*`
-  fields in `status`.
+  fields in `status`; the cloud read routes - the unconfigured `404` with `cloud_installed: false`, the
+  manifest cache with no OSS call while it is fresh, cloud-relative paths landing inside the cache tree,
+  a prop written as `props/<file>.glb` and `models/props/<file>.glb` landing in one place, a cache miss
+  downloading once with the second hit making no request, a leading `/` and a `..` both refused with `400`
+  (the path guard running ahead of the configuration check), a failed upstream fetch answering `502` and
+  caching nothing, a prop GLB without the `glTF` header deleted from the fetch with `502`, the two
+  `cloud_installed` / `cloud_cache_dir` fields in `/neo_pose/status`, and the prop-registry merge (cloud
+  rows joining the served registry with their `scale` and grip metadata marked `hidden`, a prop the local
+  registry already names never added a second time, no network call on that route, and a manifest from an
+  older upload still landing as a row).
+- `studio/tests/test_pose_deploy.py`: the cloud upload script's manifest build - the cloud index keeps only
+  the entries whose scene is on disk, preview tiers checked the same way, the entry fields the cards read
+  carried by name; props published only when their licensing row grants redistribution (CC0 and self-made
+  publish with the registry row verbatim - `scale`, grip metadata, size, license and source page), a Royalty
+  Free row, an unconfirmed source, a Mixamo personal-use row, a registry row with no licensing row and the
+  repo's bench boxes all refused, a licensing-clean prop whose GLB is missing not registered, `--props`
+  narrowing the publishable set without overriding it, a registry that cannot be read publishing no props,
+  prop files uploaded under the `props/` prefix, and a prop the index registered whose file is missing kept
+  out of the upload list.
 - `app/tests/test_studio_server.py::PoseBridgeTests`: the redirect, serving subresources offline and
   refusing to escape the package, the `/models` prefix answering the registry and the prop GLBs
   (including the imported figure and the data root shadowing the bundled copy), the scene round trip,
@@ -398,7 +539,9 @@ tops both levels up in the data root.
   table, one by one), the bundled-copy fallback level, importing an own figure offline with the 35 MB
   cap, and the request-body cap sitting above that route; the `/pose-lib` prefix answering the index and a
   scene file in the offline service, the four `lib_*` fields in `status`, and `/pose-lib` staying out of the
-  capability table.
+  capability table; the three cloud routes answering offline (the unconfigured state saying unavailable, and
+  `../..`, a leading `/` and a drive letter all refused with `400`), each owned by the desktop service in
+  the route ownership check.
 - `studio/tests/js/pose-bridge.test.mjs`: the host's not-installed form, the iframe attributes, the
   bridge's source and origin checks, the hostUi gating, the export / scene /
   set-export paths, the routes each message reaches, the note shown on the bundled copy, and importing

@@ -50,7 +50,16 @@ const LIB_VARIANTS = ["clay", "skeleton", "silhouette", "depth"];   // 缩略图
 const LIB_ORIGIN_ORDER = [{ key: "lib", label: "预设（只读）" }, { key: "lab", label: "本地（可写）" }];
 const LIB_SYNC_HINT = "场景库未同步：跑 tools\\sync_pose_lib.ps1 -Source <3d-pose-art 仓库根> 把 pose-lib 同步进" +
     " <数据根>/pose/lib，或在「启动设置 → 姿势仓库」填上仓库目录，桌面端每次启动自动同步。";
-const LIB_ORIGIN_LABEL = { lib: "预设", lab: "本地" };   // 合并库每条的出处：预设随仓库分发只读，本地是本机自己写的
+const LIB_ORIGIN_LABEL = { lib: "预设", lab: "本地", cloud: "云端" };   // 合并库每条的出处：预设随仓库分发只读，本地是本机自己写的，云端在 OSS
+
+// 云端场景库与云端道具（studio/pose_cloud.py）：清单吃 /neo_pose/cloud_index，场景 JSON 与道具 GLB
+// 一律经 /neo_pose/cloud_file 落到本机缓存（<数据根>/pose/oss_cache），套用与加具走的还是
+// pose:call 那两条通路，姿势页不认第二个来源。预览图是唯一直连 OSS 的一张 <img>。
+const CLOUD_INDEX = "/neo_pose/cloud_index";
+const CLOUD_FILE = "/neo_pose/cloud_file";
+const CLOUD_SYNC_HINT = "云端场景库未配置：在 <数据根>/configs/oss_presets.json 里写 pose_index_url，" +
+    "云端那棵树用 tools\\pose_deploy_oss.py 上传（默认只列清单，加 --apply 才上传）。";
+
 
 /** 随包 CC0 标准素体里默认那一份（姿势仓库 src/pose/character.js 的 CHARACTERS 表首）。
     页面开局挂的就是这一档，面板的素体下拉与场景库的基座筛选都以它起头 ——
@@ -322,17 +331,25 @@ export function createPoseView({ api, $el, toast }) {
         const libOriginSel = $el("select", {
             className: "ns-pose-sel ns-pose-lib-origin", title: t("按来源筛选：预设随仓库分发只读，本地是本机自己写的"),
         });
+        // 库来源：本机库 = 数据根的 pose/lib；云端库 = OSS 那份索引 + 本机缓存的副本
+        const libSourceSel = $el("select", {
+            className: "ns-pose-sel ns-pose-lib-source",
+            title: t("库来源：本机库读数据根的 pose-lib，云端库读 OSS 上那棵树（文件先落本机缓存）"),
+        });
+
         const libMeta = $el("p", { className: "ns-pose-lib-meta" });
         const libBlank = $el("p", { className: "ns-pose-lib-blank" });
         const libGrid = $el("div", { className: "ns-pose-lib-grid" });
         const libMore = $el("button", { className: "ns-pose-btn ns-pose-lib-more", type: "button" });
-        libGate.push(libMore, libSearch, libGroupSel, libCharSel, libOriginSel);   // 弹窗里的这一片与左栏同一把门禁：ready 之前不可点
+        libGate.push(libMore, libSearch, libGroupSel, libCharSel, libOriginSel, libSourceSel);   // 弹窗里的这一片与左栏同一把门禁：ready 之前不可点
         const btnSceneLocal = btn("本机场景文件…", "folder", libGate);
         // 库里没有想要的场景时从本机挑一份 JSON，走的还是装载场景那条路
         const sceneFile = $el("input", { className: "ns-pose-file", type: "file", accept: ".json" });
         const libPane = $el("div", { className: "ns-pose-libpane" }, [
-            row([libSearch, libGroupSel, libCharSel, libOriginSel, btnSceneLocal]), libMeta, libBlank, libGrid, libMore,
+            row([libSourceSel, libSearch, libGroupSel, libCharSel, libOriginSel, btnSceneLocal]),
+            libMeta, libBlank, libGrid, libMore,
         ]);
+
         libModal.setContent(libPane);
         el.append(libModal.el, sceneFile);
 
@@ -343,6 +360,34 @@ export function createPoseView({ api, $el, toast }) {
             if (!resp.ok || !data) throw new Error(tf("读不到库文件：{path}", { path }));
             return data;
         };
+
+        let libCloud = null;        // 云端清单：null = 没读过；未配置与读不到都出云端指引，不出一个空浏览器
+        let cloudStatus = null;     // /neo_pose/cloud_status：enabled / available / props，决定云端那一条能不能选
+
+        /** 云端的一份文件 → 本机缓存：场景 JSON 交回对象；道具只要落进缓存，页面自己按 /models/props/ 取它 */
+        const cloudFile = async (rel, asJson) => {
+            const resp = await api.fetchApi(`${CLOUD_FILE}?path=${encodeURIComponent(rel)}`);
+            if (!resp.ok) {
+                const data = await resp.json().catch(() => null);
+                throw new Error(data?.error || tf("读不到云端文件：{path}", { path: rel }));
+            }
+            return asJson ? await resp.json() : null;
+        };
+
+        /** 云端清单读一次就留住：行字段与 pose/lib 的条目同名，卡片渲染与筛选都吃同一套代码 */
+        async function ensureCloudIndex() {
+            if (libCloud) return libCloud;
+            const data = await json(CLOUD_INDEX);
+            libCloud = {
+                base_url: String(data.base_url || ""),
+                count: data.count ?? (data.entries || []).length,
+                groups: data.groups || [],
+                entries: data.entries || [],
+                props: data.props || [],
+            };
+            return libCloud;
+        }
+
 
         /** 本机的一份 JSON 文件（姿态 / 场景）：与自备素体同一条 FileReader 路，不是 JSON 对象就在这出声 */
         const readJsonFile = (file) => new Promise((resolve, reject) => {
@@ -371,7 +416,7 @@ export function createPoseView({ api, $el, toast }) {
             fill(presetSel, m.presets || [], "选择预设…");
             fill(lookSel, m.looks || [], "外观");
             propChoices = m.props || [];
-            fill(propSel, propChoices, "选择道具…");
+            paintPropSel();
             fill(boneSel, (m.bones || []).map((b) => ({ key: String(b), label: String(b) })), "挂点骨…");
             fill(viewSel, m.views || [], "视角");
             fill(sizeSel, (m.sizes || []).map((n) => ({ key: String(n), label: `${n}px` })), "尺寸");
@@ -379,6 +424,22 @@ export function createPoseView({ api, $el, toast }) {
                 className: "ns-pose-format", title: f.hint || f.label,
             }, [$el("input", { type: "checkbox", className: "ns-pose-check", value: f.key, checked: "checked" }), f.label])));
         }
+
+        /** 云端道具在页面清单里的形状：key 走注册表口径 glb:<裸文件名>，页面的 addProp 认它，
+         *  取文件由宿主这条通路负责（cloud_file 落进 <数据根>/pose/oss_cache/models/props/）。 */
+        const cloudPropChoices = () => (libCloud?.props || []).map((p) => ({
+            key: `glb:${p.file}`,
+            label: `${p.label}（${t("云端")}）`,
+            path: p.path,
+        }));
+
+        /** 道具下拉与道具名解析吃同一份清单：本机那批在前，云端那批带「云端」后缀排在后 */
+        const allPropChoices = () => [...propChoices, ...cloudPropChoices()];
+
+        function paintPropSel() {
+            fill(propSel, allPropChoices(), "选择道具…");
+        }
+
 
         /** 外观定在暗色档：姿势页的 LOOKS 只有摄影棚灰与暗色两档，旧包没有暗色档就不动 */
         async function applyDefaultLook(m) {
@@ -441,16 +502,35 @@ export function createPoseView({ api, $el, toast }) {
             fill(boneSel, (data.bones || []).map((b) => ({ key: String(b), label: String(b) })), "挂点骨…");
         }
 
-        /** 预设 / 本地角标：合并库里一份条目落在哪根库由同步脚本定的 origin 说；
+        /** 出处角标：合并库里一条落在哪根库由同步脚本写的 origin 说，云端那批由来源开关说；
          *  旧版清单没有这一字段 = 本地库那份（合并库落在本机，预设是这次拆库才有的） */
+        const LIB_ORIGIN_CLASS = { lib: "ship", lab: "lab", cloud: "cloud" };
+        const LIB_ORIGIN_TITLE = {
+            lib: "预设库：随姿势仓库分发，只读",
+            lab: "本地库：本机自己写的姿态",
+            cloud: "云端库：OSS 上那棵树，取回的文件缓存在本机",
+        };
         const originBadge = (entry) => {
-            const ship = entry.origin === "lib";
+            const key = entry.cloud ? "cloud" : (entry.origin === "lib" ? "lib" : "lab");
             return $el("span", {
-                className: `ns-pose-lib-origin-badge ns-pose-lib-origin-${ship ? "ship" : "lab"}`,
-                textContent: LIB_ORIGIN_LABEL[ship ? "lib" : "lab"],
-                title: ship ? t("预设库：随姿势仓库分发，只读") : t("本地库：本机自己写的姿态"),
+                className: `ns-pose-lib-origin-badge ns-pose-lib-origin-${LIB_ORIGIN_CLASS[key]}`,
+                textContent: t(LIB_ORIGIN_LABEL[key]),
+                title: t(LIB_ORIGIN_TITLE[key]),
             });
         };
+
+        /** 卡片预览图的地址：本机库走 /pose-lib/ 前缀，云端库直连 OSS —— 封面只是一张 <img>，
+         *  不碰姿势页的任何契约，也就无须为它开第二条伺服通路。后端给的 base_url 带尾斜杠，拼之前剥掉 */
+        const libThumbUrl = (entry, thumb) => entry.cloud
+            ? `${(libCloud?.base_url || "").replace(/\/+$/, "")}/${thumb}`
+            : `${LIB_PREFIX}/${thumb}`;
+
+
+        /** 一条库条目的场景 JSON：本机库读 /pose-lib/，云端库经 cloud_file 落进本机缓存再读回来 */
+        const libSceneJson = (entry) => entry.cloud
+            ? cloudFile(entry.path, true)
+            : libJson(`${LIB_PREFIX}/${entry.path}`);
+
 
         const libCard = (entry) => {
             const label = entry.label || entry.id;
@@ -460,7 +540,7 @@ export function createPoseView({ api, $el, toast }) {
             // 角上标住这张是参考图，人数只在副标题那一行按场景文件说。
             const pic = thumb
                 ? $el("div", { className: "ns-pose-lib-thumbbox" }, [
-                    $el("img", { className: "ns-pose-lib-thumb", src: `${LIB_PREFIX}/${thumb}`, alt: label, loading: "lazy" }),
+                    $el("img", { className: "ns-pose-lib-thumb", src: libThumbUrl(entry, thumb), alt: label, loading: "lazy" }),
                     $el("span", { className: "ns-pose-lib-ref", textContent: t("参考图") }),
                     originBadge(entry),
                 ])
@@ -473,7 +553,7 @@ export function createPoseView({ api, $el, toast }) {
             }, [pic, $el("p", { className: "ns-pose-lib-label", textContent: label }),
                 $el("p", { className: "ns-pose-lib-tags", textContent: libTagsOf(entry) })]);
             card.onclick = () => run(async () => {
-                const file = await libJson(`${LIB_PREFIX}/${entry.path}`);
+                const file = await libSceneJson(entry);
                 // 整场套用是页面自己的一条命令，走 pose:call；库文件自带视角，套完镜头对着整场
                 const r = await action("scene/apply", { file });
                 if (!r.ok) throw new Error(tf("场景没有套上：{msg}",
@@ -485,50 +565,68 @@ export function createPoseView({ api, $el, toast }) {
             return card;
         };
 
-        /** 分组下拉的条数按来源过滤后的合并库数：清单 groups 自带那份 count 是预设集自己算的，
+        /** 分组下拉的条数按来源过滤后的库数：清单 groups 自带那份 count 是预设集自己算的，
          *  本机 pose-lab 新写的姿态不在里面，一筛来源就对不上屏上的卡 */
-        const libGroupRows = (rows) => libGroups(rows, libIndex?.groups).map((sec) => ({
+        const libGroupRows = (rows, index) => libGroups(rows, index?.groups).map((sec) => ({
             key: sec.key, label: `${sec.label}（${sec.count}）`,
         }));
 
+        /** 弹窗当前吃的那份库：本机 = 数据根 pose/lib 的合并库，云端 = cloud_index 的行（字段同名） */
+        const sourceIndex = () => (libSourceSel.value === "cloud" ? libCloud : libIndex);
+
         function renderLibIndex() {
+            const cloud = libSourceSel.value === "cloud";
+            const index = sourceIndex();
+            libOriginSel.hidden = cloud;   // 云端那批没有预设 / 本地之分，来源筛选在它身上没有意义
             const pickedGroup = libGroupSel.value;
-            const byChar = { origin: libOriginSel.value, charKey: libCharSel.value };
-            fill(libGroupSel, libGroupRows(libFilter(libIndex?.entries, byChar)), "全部分组");
+            const byChar = { origin: cloud ? "" : libOriginSel.value, charKey: libCharSel.value };
+            fill(libGroupSel, libGroupRows(libFilter(index?.entries, byChar), index), "全部分组");
             libGroupSel.value = pickedGroup;   // 重建选项后落回原选择；来源一换原分组不存在就落回全部
-            const rows = libFilter(libIndex?.entries,
+            const rows = libFilter(index?.entries,
                 { q: libSearch.value, group: libGroupSel.value, ...byChar });
-            const sections = libGroups(rows.slice(0, libShown), libIndex?.groups);
+            const sections = libGroups(rows.slice(0, libShown), index?.groups);
             libGrid.replaceChildren(...sections.flatMap((sec) => [
                 $el("h4", { className: "ns-pose-lib-group-title", textContent: `${sec.label}（${sec.items.length}）` }),
                 ...sec.items.map(libCard),
             ]));
             libGrid.hidden = !rows.length;
             libBlank.hidden = rows.length > 0;
-            // 库没同步出同步指引，同步了才说「没有匹配」：一个空浏览器不是库的样子
-            libBlank.textContent = libIndex ? t("没有匹配的场景") : t(LIB_SYNC_HINT);
+            // 库没同步出同步指引，云端没配置出云端指引，都有了才说「没有匹配」：一个空浏览器不是库的样子
+            libBlank.textContent = t(cloud ? (libCloud ? "没有匹配的云端场景" : CLOUD_SYNC_HINT)
+                : (libIndex ? "没有匹配的场景" : LIB_SYNC_HINT));
             libMore.hidden = rows.length <= libShown;
             libMore.textContent = tf("加载更多（还有 {n} 条）", { n: rows.length - libShown });
             // 条数从过滤后的分层数出来：预设 / 本地一筛，清单 groups 里预设集自己那份 count 就对不上屏上的卡
-            libMeta.textContent = libIndex
-                ? tf("{total} 个场景（预设 {ship} · 本地 {lab}）· 显示 {shown}", {
-                    total: libIndex.count ?? rows.length,
-                    ship: (libIndex.entries || []).filter((e) => e.origin === "lib").length,
-                    lab: (libIndex.entries || []).filter((e) => e.origin !== "lib").length,
-                    shown: rows.length,
-                })
+            libMeta.textContent = index
+                ? (cloud
+                    ? tf("{total} 个云端场景 · 显示 {shown}", {
+                        total: index.count ?? rows.length, shown: rows.length,
+                    })
+                    : tf("{total} 个场景（预设 {ship} · 本地 {lab}）· 显示 {shown}", {
+                        total: index.count ?? rows.length,
+                        ship: (index.entries || []).filter((e) => e.origin === "lib").length,
+                        lab: (index.entries || []).filter((e) => e.origin !== "lib").length,
+                        shown: rows.length,
+                    }))
                 : "";
         }
 
-        /** 弹窗只装一件事：pose-lib 的整场库；数据根的存档与本机文件都在左栏那一条上 */
+
+        /** 弹窗只装一件事：pose-lib 的整场库（本机那份 + 云端那份）；数据根的存档与本机文件都在左栏那一条上 */
         async function openLibModal() {
             libModal.setContent(libPane);
             libModal.open(t("场景库"));
+            // 未配置的云端不是一个「点了只会失败」的来源：那一条干脆不出现（AGENTS 的产品口径）
+            const sources = [{ key: "local", label: t("本机库") }];
+            if (cloudStatus?.enabled === true) sources.push({ key: "cloud", label: t("云端库") });
+            const keep = sources.some((s) => s.key === libSourceSel.value) ? libSourceSel.value : "local";
+            libSourceSel.replaceChildren(...sources.map((s) => $el("option", { value: s.key, textContent: s.label })));
+            libSourceSel.value = keep;
             if (libIndex === null) {
                 try {
                     libIndex = await libJson(LIB_INDEX);
                     fillLibCharSel();
-                    fill(libGroupSel, libGroupRows(libFilter(libIndex.entries, { origin: libOriginSel.value, charKey: libCharSel.value })), "全部分组");
+                    fill(libGroupSel, libGroupRows(libFilter(libIndex.entries, { origin: libOriginSel.value, charKey: libCharSel.value }), libIndex), "全部分组");
                     fill(libOriginSel, LIB_ORIGIN_ORDER.map((o) => ({ key: o.key, label: t(o.label) })), "全部来源");
                 } catch {
                     // 读不出索引 = 库没同步：这句就是弹窗里那句同步指引要说的同一件事
@@ -538,6 +636,7 @@ export function createPoseView({ api, $el, toast }) {
             libShown = LIB_PAGE;
             renderLibIndex();
         }
+
 
         /** 基座筛选的选项来自库条目自带的 charKey（同步脚本按姿势仓库的分派结果写进索引）：
          *  列表跟着库里真有的基座走，默认停在画布当前那具素体 —— 库默认就是「能套到当前素体上」的那一批 */
@@ -554,6 +653,15 @@ export function createPoseView({ api, $el, toast }) {
         libGroupSel.onchange = () => renderLibIndex();
         libCharSel.onchange = () => renderLibIndex();
         libOriginSel.onchange = () => renderLibIndex();
+        // 切到云端 = 现读一次清单（几十 KB，读失败就把弹窗交给那句云端指引，不出空浏览器）
+        libSourceSel.onchange = () => run(async () => {
+            if (libSourceSel.value === "cloud" && !libCloud) {
+                try { await ensureCloudIndex(); } catch (e) { toast(tf("读不到云端索引：{msg}", { msg: e.message })); }
+                libShown = LIB_PAGE;
+            }
+            renderLibIndex();
+        });
+
         libMore.onclick = () => { libShown += LIB_PAGE; renderLibIndex(); };
         btnBrowseLib.onclick = () => openLibModal();
         btnSceneLocal.onclick = () => { sceneFile.value = ""; sceneFile.click(); };
@@ -655,18 +763,24 @@ export function createPoseView({ api, $el, toast }) {
         });
 
         btnAddProp.onclick = () => run(async () => {
+            const choices = allPropChoices();
             const typed = propName.value.trim();
-            const key = typed ? resolvePropChoice(typed, propChoices) : propSel.value;
+            const key = typed ? resolvePropChoice(typed, choices) : propSel.value;
             propName.value = "";   // 一次性输入：写完就清，与自备素体 key 同一口径
             if (typed && !key) {
                 toast(tf("道具表里没有「{name}」：可输入 椅子 / 桌子 / 剑 这类名字（共 {n} 项），或从下拉选",
-                    { name: typed, n: propChoices.length }));
+                    { name: typed, n: choices.length }));
                 return;
             }
             if (!key) { toast(t("先选一个道具")); return; }
+            // 云端道具先把 GLB 落进本机缓存：页面那条 /models/props/<file>.glb 由第三级 fallback 接住，
+            // 姿势页与道具注册表都不知道这批来自云端
+            const cloudProp = choices.find((c) => c.key === key && c.path);
+            if (cloudProp) await cloudFile(cloudProp.path, false);
             await action("prop/add", { key });
             await refreshProps();
         });
+
         btnAttachProp.onclick = () => run(async () => {
             if (!pickedProp || !boneSel.value) { toast(t("先选道具与挂点骨")); return; }
             await action("prop/attach", { id: pickedProp, bone: boneSel.value });
@@ -718,6 +832,9 @@ export function createPoseView({ api, $el, toast }) {
                 }
                 notice.hidden = true;
                 setPanel(true);
+                // 配了云端就在进页时读一次清单：道具下拉先画本机那批，云端那份落到再补一次画。
+                // 这一发不吊在桥的回复链上——meta/list 的回复与 look 预设都不该拖住云端道具出现，读不到就只留本机那批
+                if (cloudStatus?.enabled === true) ensureCloudIndex().then(paintPropSel).catch(() => {});
                 action("meta/list").then(async (m) => {
                     paintMeta(m);
                     await applyDefaultLook(m);
@@ -744,6 +861,8 @@ export function createPoseView({ api, $el, toast }) {
                 return;
             }
             caps = status.caps || {};
+            // 云端配没配置决定两件事：场景库的来源下拉有没有「云端库」那一条、道具下拉有没有云端组
+            cloudStatus = await json("/neo_pose/cloud_status").catch(() => null);
             pkgNote.hidden = status.dist_source !== "package";
             if (!status.installed) {
                 // 缺包要说清楚缺什么、怎么装：iframe 直接指向不存在的入口页只剩白屏

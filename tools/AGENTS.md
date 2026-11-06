@@ -53,6 +53,15 @@ webp 缩略图与 `index.json`，`gallery_deploy_oss.py` 按 `OSS_ACCESS_KEY_ID`
   「引号 + 盘符 + 斜杠」的字面量），清不掉就回姿势仓库改注册表，不在这里打补丁。
 - `MANIFEST.json` 逐文件 `bytes` + `sha256`，清单不含它自己（一份清单算不出自己的哈希）；
   `test_pose_package.ps1` 按同一口径核对，体积上限（4.5MB）与白名单在这两条里各钉一遍。
+- 云端上传（`pose_deploy_oss.py`）的 `--source` 只指随包预设库 `pose-lib/`：合并库带 `origin` 条目，
+  `pose-lab` 是作者实验姿态，授权与审校都没到它头上，整棵上云就是把它推到公开 bucket —— 脚本见到
+  带 `origin` 的索引直接拒传，道具的授权行只挡道具、挡不住场景树。
+- 云端道具的口径与随包道具不是一条：随包白名单管的是 4.5MB 的包里发什么，云端逐件读姿势仓库
+  `public/models/ATTRIBUTION.md` 的授权行 —— 那一行给「可再分发」才发（CC0 与本项目自制给，Royalty Free
+  只写可商用、来源授权待确认、Mixamo 仅个人使用都不给），注册表标签是「测试」「单测」的基准件不发。
+  发的每一件带着道具注册表 `dist/models/props/index.json` 的原行进索引：页面对 GLB 先归一成 1 单位高、
+  再乘注册表 `scale`，所以读侧伺服 `/models/props/index.json` 时把云端行补成 `hidden` 行（只读缓存、
+  不发网络），页面侧不为云端改一行。
 - `sync_pose_dist.ps1` 的 `robocopy /MIR` 只动 `dist/`：源产物里没有的文件（用户导入的素体 GLB）
   先存进临时目录、镜像完搬回，同步脚本不许成为删用户文件的那只手。场景与参考图在 `pose/` 下的
   别的目录，本来就不在镜像范围内。

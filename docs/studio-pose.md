@@ -7,10 +7,10 @@
 
 产物有两级落点，逐请求按这个顺序找，**数据根那份压住随包那份的同名文件**（新构建与自备素体因此优先）：
 
-| 落点                       | 内容                                                            | 怎么来                                                       |
-|----------------------------|-----------------------------------------------------------------|--------------------------------------------------------------|
-| `<数据根>/pose/dist/`      | 全量产物，含 `*.map`，约 16MB                                   | `tools\sync_pose_dist.ps1`；「启动设置 → 姿势仓库」自动同步 |
-| `studio/pose_dist/`        | 最小授权副本，代码 + CC0 标准素体 + 自制道具，约 3.0MB             | `tools\build_pose_package.ps1`，随 Registry 包与 exe 分发    |
+| 落点                  | 内容                                                   | 怎么来                                                      |
+|-----------------------|--------------------------------------------------------|-------------------------------------------------------------|
+| `<数据根>/pose/dist/` | 全量产物，含 `*.map`，约 16MB                          | `tools\sync_pose_dist.ps1`；「启动设置 → 姿势仓库」自动同步 |
+| `studio/pose_dist/`   | 最小授权副本，代码 + CC0 标准素体 + 自制道具，约 3.0MB | `tools\build_pose_package.ps1`，随 Registry 包与 exe 分发   |
 
 随包那份按**授权口径**取舍，不按体积：`models/ATTRIBUTION.md` 里页面默认基座的 `bodyMale.glb` /
 `bodyFemale.glb`（本项目生成链产的标准男 / 标准女，基网格是 MakeHuman Community 的 MPFB2，CC0）
@@ -50,12 +50,12 @@ pwsh tools\sync_pose_dist.ps1 -Source <3d-pose-art 仓库根>            # 全�
 `tools\build_pose_package.ps1` 不打包它 —— 只由同步脚本落地。整目录当缓存看待：随时可删可重同步。
 `pose/` 下的 `scenes/` 是用户写的东西，不在镜像范围内。
 
-| 落点                               | 内容                                                            | 怎么来                          |
-|------------------------------------|-----------------------------------------------------------------|-----------------------------|
-| `<数据根>/pose/lib/poses/`          | 一条一张 `.scene.json`（`3dpose.scene/1`：多人 + 道具 + 视角），预设集 + 本地集      | `tools\sync_pose_lib.ps1`   |
-| `<数据根>/pose/lib/preview/`        | `<id>.<档位>.png`：`clay` / `skeleton` / `silhouette` / `depth`      | 同上                          |
-| `<数据根>/pose/lib/index.json`      | 逐条 `id / label / groups / categories / tags / path / preview / origin / charKey` | 姿势仓库的 `npm run lib -- merged` |
-| `<数据根>/pose/lib/ATTRIBUTION.md`  | 预设集的逐条作者 / 授权 / 原帖                                          | 同上（源在 `pose-lib/`）        |
+| 落点                               | 内容                                                                               | 怎么来                             |
+|------------------------------------|------------------------------------------------------------------------------------|------------------------------------|
+| `<数据根>/pose/lib/poses/`         | 一条一张 `.scene.json`（`3dpose.scene/1`：多人 + 道具 + 视角），预设集 + 本地集    | `tools\sync_pose_lib.ps1`          |
+| `<数据根>/pose/lib/preview/`       | `<id>.<档位>.png`：`clay` / `skeleton` / `silhouette` / `depth`                    | 同上                               |
+| `<数据根>/pose/lib/index.json`     | 逐条 `id / label / groups / categories / tags / path / preview / origin / charKey` | 姿势仓库的 `npm run lib -- merged` |
+| `<数据根>/pose/lib/ATTRIBUTION.md` | 预设集的逐条作者 / 授权 / 原帖                                                     | 同上（源在 `pose-lib/`）           |
 
 清单不在同步脚本里算：由姿势仓库把预设与本地两份索引合并（同 id 本地胜出、每条带 `origin`）后交给
 `--out` 落进库根。`-Source` 指姿势仓库根，缺预设库的 `index.json` 与 `poses\` 时脚本直接退出并把该跑的
@@ -92,6 +92,77 @@ pwsh tools\sync_pose_lib.ps1 -Source <3d-pose-art 仓库根> -All   # 四档全�
 `/pose-lib` 与 `/pose-dist` 同一条路子：两端各自直接注册的静态前缀，不进能力归属表，离线桌面服务
 自己答它。`/neo_pose/status` 报库里那一级的状态：`lib_dir`（落点）、`lib_installed`（清单读得到且
 条目非空）、`lib_entries`（清单里的条目数）、`lib_bytes`（整目录体积）。
+
+## 云端场景库（pose-cloud）
+
+云端库是 OSS 上的另一棵姿势树：预设库攒出来的那批整场与它们的预览图。条目形状与 `pose-lib` 同源，
+云端清单格式是 `neo-pose-cloud/1`，弹窗的卡片、分组、搜索与门禁两条来源共用同一段代码 —— 换来源只
+换数据源，卡片的形状、副标题的人数与道具数、点卡片套整场那一路都不变。
+
+配置只有一条：`<数据根>/configs/oss_presets.json` 里的 `pose_index_url`，指向云端那棵树的
+`<前缀>/index.json`。它是 OSS 预设配置里的第三个字段，与 `presets` / `default_oss` 各管各的，缺这条
+就是「未配置」：「3D 云端姿势」整片关，本机库照常工作。云端道具由那份索引的 `props` 数组点名，授权
+口径与随包道具同一条白名单（`stick.glb` / `sword.glb`），白名单外的 GLB 整条不进索引。
+
+| 落点                                    | 内容                             | 怎么来                               |
+|-----------------------------------------|----------------------------------|--------------------------------------|
+| `<数据根>/configs/oss_presets.json`     | `pose_index_url`（云端索引地址） | 手工写一次，指向上传脚本落成的那棵树 |
+| `<数据根>/pose/oss_cache/_index.json`   | 上次取回的云端清单               | 读侧取回索引时落盘                   |
+| `<数据根>/pose/oss_cache/poses/**`      | 取回过的整场 `.scene.json`       | 点云端卡片套整场时按需取回           |
+| `<数据根>/pose/oss_cache/preview/**`    | 取回过的预览图                   | 「刷新缩略图」逐张取回               |
+| `<数据根>/pose/oss_cache/models/props/` | 取回过的云端道具 GLB             | 添加云端道具时按需取回               |
+
+`pose/oss_cache/` 整棵镜像云端目录树，与 `pose/lib` 一样当缓存看待：随时可删可重建，路径就是云端相对
+路径。索引与预览图只读缓存 —— 缓存里没有就是没有，读侧不在请求里拉远端：打开姿势页、打开弹窗都不会
+先打一次 OSS，云端没部署过时页面出的是部署指引而不是一片空列表。场景文件与道具 GLB 是缓存未命中才取
+OSS，取回落盘再伺服，重开弹窗不再重传。
+
+三条读接口都在 `studio/pose_cloud.py`，插件端与桌面离线服务共用同一份函数体，逐条登记在
+`/neo_pose` 的接口归属里：
+
+| 方法 | 路由                         | 说明                                                         |
+|------|------------------------------|--------------------------------------------------------------|
+| GET  | `/neo_pose/cloud_status`     | 配没配、云端索引地址与根前缀、缓存在不在、缓存目录           |
+| GET  | `/neo_pose/cloud_index`      | 读缓存里那份云端清单（只读缓存，回 `{index, cached}`）       |
+| GET  | `/neo_pose/cloud_file?path=` | 取一份云端文件：整场 JSON、预览图、`models/props/<file>.glb` |
+
+云端文件只认云端清单里的相对路径：`poses/<组>/<id>.scene.json`、`preview/<...>.png` 与
+`models/props/<file>.glb`（道具写成 `props/<file>.glb` 是同一条落点）。带 `..`、盘符、绝对路径与
+以 `/` 或 `\` 开头的路径在配置检查之前就被拒成 `400`，落点永远锁在缓存目录内 —— 坏路径不会答成
+「未配置」。未配置时清单与文件都回带部署指引的 `400`，云端没有那份文件回 `404`，上游取回失败回
+`502`。道具 GLB 落缓存前先验文件头是 `glTF`：上游把错误页当文件发时，那份不落进道具目录。
+`/neo_pose/cloud_status` 任何状态下都回 `200` 并说 `enabled: false`，弹窗按这个开关出控件。
+
+云端条目与随包条目在同一条下发路上：卡片套整场读 `/neo_pose/cloud_file` 再交 `scene/apply`；云端道具
+取回落进 `models/props/` 后走页面既有的取件地址（`models/props/<file>.glb`），与随包道具同一条
+`prop/add` —— 页面侧不为云端改一行。道具注册表那条伺服（`/models/props/index.json`）把云端清单点名的
+道具补成注册表行：只读缓存里那份清单，一次网络都不发，行标 `hidden`（姿势页自己的面板没有「先取文件
+再加具」那一步，不列没缓存的道具）。页面对 GLB 先归一成 1 单位高、再乘注册表行的 `scale`，握点照那一行
+还原成米，注册表里没这一行的云端道具就是一把 1 米长的手枪。云端缩略图直读 OSS 的绝对地址（ossutil 的桶端点本就公开读），
+卡片左上角标「云端」说清它不在本机库里。
+
+云端那棵树由 `tools\pose_deploy_oss.py` 上传：读侧认的形状它产，清单里只留文件真在着的那批条目；
+道具逐件读姿势仓库的授权行（`public/models/ATTRIBUTION.md`）—— 那一行给「可再分发」才发：CC0
+（Poly Haven、BlenderKit `cc_zero`）与本项目自制给，BlenderKit Royalty Free 只写可商用、来源授权待确认、
+Mixamo 仅个人使用都不给，注册表标签是「测试箱体」「单测箱体」的基准件也不发；发的每一件带着道具注册表
+（`dist/models/props/index.json`）里的原行进索引。凭据从 `<数据根>/configs/backyard_oss.json` 读（bucket / endpoint /
+access_key_id / access_key_secret 四项，键名与 `studio/backyard.py` 读的同一条）。优先级是命令行 >
+`OSS_*` 环境变量 > 配置文件：shell 里残留的一条 `OSS_ENDPOINT` 会盖掉配置文件里的 endpoint，
+连不上桶时就在命令行显式传 `--endpoint` 与 `--bucket`。默认不动云端，先跑一遍看清单，加 `--apply` 才上传：
+
+`--source` 只指姿势仓库的随包预设库 `pose-lib/`（`npm run lib -- shipped` 那一棵）。数据根的
+`<数据根>/pose/lib/` 是 `pose-lib` + `pose-lab` 的合并结果，条目带 `origin`：`pose-lab` 是作者自己
+的实验姿态，不发布 —— 脚本见到带 `origin` 的索引整棵拒传，道具的授权行只挡道具、挡不住场景树。
+云端上已经多出来的那批用 `tools\pose_prune_oss.py` 清：允许集直接复用上传脚本的清单，
+索引没点名的键整批删掉。
+
+```
+python tools\pose_deploy_oss.py --source "<pose repo>\pose-lib"                      # 只列清单 + 生成索引
+python tools\pose_deploy_oss.py --source "<pose repo>\pose-lib" --props stick.glb katana.glb --apply
+python tools\pose_prune_oss.py  --source "<pose repo>\pose-lib" --apply              # 删索引没点名的键
+```
+
+索引 URL 落点由脚本自己报出来，写进 `oss_presets.json` 的 `pose_index_url` 就接通读侧。
 
 ## 页面与静态前缀
 
@@ -133,15 +204,18 @@ ComfyUI 自己占了 `/models`（模型类型清单）与单段的 `/models/<nam
 
 ## 桥接口
 
-| 方法     | 路由                          | 说明                                                            |
-|----------|-------------------------------|-----------------------------------------------------------------|
-| GET      | `/neo_pose/status`            | 装没装、生效的那一级、随包清单、在着的 GLB、能力位、场景存档、桥消息名单 |
-| GET      | `/neo_pose/scenes`            | 场景列表（`name` / `size` / `mtime`，按修改时间倒序）           |
-| GET      | `/neo_pose/scene?name=`       | 读一份场景                                                      |
-| POST     | `/neo_pose/scene`             | 写场景（`{name, scene}`，`.tmp` + replace 原子落盘）            |
-| POST     | `/neo_pose/import_model`      | 自备素体 GLB 写进 `pose/dist/models/<key>.glb`                  |
-| POST     | `/neo_pose/export_image`      | 页面画布导出（`{data: dataURL, name}`）落进素材库               |
-| POST     | `/neo_pose/export_set`        | ControlNet 图组（`{files: [{name, data}]}`，≤12 张）落素材库    |
+| 方法 | 路由                         | 说明                                                                     |
+|------|------------------------------|--------------------------------------------------------------------------|
+| GET  | `/neo_pose/status`           | 装没装、生效的那一级、随包清单、在着的 GLB、能力位、场景存档、桥消息名单 |
+| GET  | `/neo_pose/scenes`           | 场景列表（`name` / `size` / `mtime`，按修改时间倒序）                    |
+| GET  | `/neo_pose/scene?name=`      | 读一份场景                                                               |
+| POST | `/neo_pose/scene`            | 写场景（`{name, scene}`，`.tmp` + replace 原子落盘）                     |
+| POST | `/neo_pose/import_model`     | 自备素体 GLB 写进 `pose/dist/models/<key>.glb`                           |
+| POST | `/neo_pose/export_image`     | 页面画布导出（`{data: dataURL, name}`）落进素材库                        |
+| POST | `/neo_pose/export_set`       | ControlNet 图组（`{files: [{name, data}]}`，≤12 张）落素材库             |
+| GET  | `/neo_pose/cloud_status`     | 云端配没配、云端索引地址、缓存目录与缓存在不在                           |
+| GET  | `/neo_pose/cloud_index`      | 上次取回的云端清单（只读缓存，不在请求里拉 OSS）                         |
+| GET  | `/neo_pose/cloud_file?path=` | 取一份云端文件（整场 JSON、预览图、云端道具 GLB）                        |
 
 `/neo_pose/status` 报的落点与随包信息：`installed`（两级里有没有入口页）、`dist_dir` 与
 `dist_source`（生效那一级 = `data_root` / `package`）、`package_installed` 与 `package_dir`、
@@ -202,6 +276,26 @@ ControlNet 导出（勾格式、导出图组）、画布状态（只读一行）
 空列表：一个空浏览器不是库的样子。弹窗里另有一个「本机场景文件…」入口，从本机挑一份 JSON 交
 `pose:open-scene` —— 不在库里的文件一样装得进。
 
+弹窗顶部第一条是「来源：本机库 / 云端库」，与库内那份「全部来源 / 预设（只读）/ 本地（可写）」的
+条目来源是两个维度：本机库读 `<数据根>/pose/lib`，云端库读 OSS 那棵树。云端那一档只在
+`/neo_pose/cloud_status` 报 `enabled: true` 时出现在选项里 —— 没配置的来源列进下拉就是给用户一条
+点了只会失败的控件。切到云端库时标题行提示「云端库：OSS 上那棵树，取回的文件缓存在本机」，卡片左上角
+标「云端」（悬停说清它在云端那棵树里），条数行写「N 个云端场景 · 显示 Z」，分组与搜索两条下拉按云端
+条目重建、口径与本机库同一条。云端卡片缩略图直读 OSS 的绝对地址（桶端点公开读），本机库的预览图走
+`/pose-lib/preview/` 那条伺服。「刷新缩略图」在云端档逐张取回预览图落缓存（每张一份，250 张是 60MB+，
+绝不全量拉）。点云端卡片读 `/neo_pose/cloud_file?path=<云端相对路径>` 再下发同一次 `scene/apply`，
+本机场景文件那条装载路与门禁都不变。云端没配置时弹窗显示部署指引（`oss_presets.json` 的
+`pose_index_url` + `tools\pose_deploy_oss.py`），缓存里没有云端清单时同样出这句指引并 toast 报
+`/neo_pose/cloud_index` 的错，不出假卡片。
+
+云端道具进的是「添加道具」那条注册表路：道具下拉在云端配置开着时合并一份云端道具项（分组标「云端：OSS」，
+与程序化道具的「程序化」/ 随包道具的「随包姿势包」/ 自备素体的「自备」同一条分组口径），值为
+`cloud:<file>`；选中它时面板先取 `/neo_pose/cloud_file?path=models/props/<file>.glb` 落进
+`models/props/`，再交页面既有的 `prop/add` 取件地址 `models/props/<file>.glb` —— 页面侧不为云端改一行，
+道具取件只有那一条路。云端那批的中文标签、注册表 `scale` 与握点来自云端索引里那份注册表原行（授权与来源页
+随条目一起上云，CC0 的署名口径读得出）：伺服 `/models/props/index.json` 时它们作为 `hidden` 行补进页面读的
+那份注册表，页面加具时按那一行把道具摆成姿势仓库里量出来的尺寸 —— 一把制式手枪 0.28 米、一根齐眉棍 2 米。
+
 面板不设姿势模式 / 吸附 / 轮廓线 / 主体层四个勾选：姿势靠直接点人物（页面在点中人物时自己进姿势模式，
 点空白退出），吸附与轮廓线在页面侧默认就是关，人物常显，「画布状态」因此只镜像素体、素体数与道具数三行。
 导出图组不受这条影响：线稿那一路导出自己临时开轮廓壳再关回去。外观两档来自页面（摄影棚灰 / 暗色），
@@ -225,15 +319,15 @@ ControlNet 导出（勾格式、导出图组）、画布状态（只读一行）
 `neo_studio_pose_sides`，切走再回来与重开窗口都停在上次的位置；它不吃 `pose:ready` 与 `caps.hostUi`
 门禁 —— 缺包与旧姿势包把控件整片关掉时，两栏照样收得回去。
 
-| 消息                | 方向       | 载荷                        | 说明                                       |
-|---------------------|------------|-----------------------------|--------------------------------------------|
-| `pose:ready`        | 页面 → 宿主 | 无                          | 页面装配完，宿主立刻回一份 `pose:theme`    |
-| `pose:theme`        | 宿主 → 页面 | `{caps, lang}`              | 能力位与语言，页面据此置灰不可用的控件     |
-| `pose:export-image` | 宿主 → 页面 | 回复端口 `{data, name}`     | 请求导出画布，页面从回复端口交回 dataURL   |
-| `pose:save-scene`   | 宿主 → 页面 | 回复端口 `{name, scene}`    | 请求序列化场景，页面从回复端口交回场景 JSON |
-| `pose:open-scene`   | 宿主 → 页面 | `{scene}`                   | 把已存场景装回页面                         |
-| `pose:call`         | 宿主 → 页面 | `{action, args}` + 回复端口 `{ok, data}` | 面板动作走页面自己的命令，见下节命令表 |
-| `pose:state`        | 页面 → 宿主 | `{state}`                   | 画布状态快照，只进「画布状态」一行        |
+| 消息                | 方向        | 载荷                                     | 说明                                        |
+|---------------------|-------------|------------------------------------------|---------------------------------------------|
+| `pose:ready`        | 页面 → 宿主 | 无                                       | 页面装配完，宿主立刻回一份 `pose:theme`     |
+| `pose:theme`        | 宿主 → 页面 | `{caps, lang}`                           | 能力位与语言，页面据此置灰不可用的控件      |
+| `pose:export-image` | 宿主 → 页面 | 回复端口 `{data, name}`                  | 请求导出画布，页面从回复端口交回 dataURL    |
+| `pose:save-scene`   | 宿主 → 页面 | 回复端口 `{name, scene}`                 | 请求序列化场景，页面从回复端口交回场景 JSON |
+| `pose:open-scene`   | 宿主 → 页面 | `{scene}`                                | 把已存场景装回页面                          |
+| `pose:call`         | 宿主 → 页面 | `{action, args}` + 回复端口 `{ok, data}` | 面板动作走页面自己的命令，见下节命令表      |
+| `pose:state`        | 页面 → 宿主 | `{state}`                                | 画布状态快照，只进「画布状态」一行          |
 
 请求类消息带 `MessageChannel` 回复端口，一次请求的回复只落在这条端口上；入站通知只认本页这张 iframe
 （`event.source`）与同源 `origin`，名单外的消息名一律丢弃。iframe 的 sandbox 是
@@ -301,12 +395,24 @@ pano 与库写入要 3d-pose-art 那套 Python sidecar（`pose_server.py`），�
   那条根前缀在两级都取得到、随包清单进 status、自备素体落点与五条校验（key / 来源 / 体积 / 文件头 /
   素材库体积）、素材库来源解析、挡下的请求不留痕迹；场景库的清单与场景文件与预览图伺服、目录落到
   `index.json`、出根 `400`、未同步 `404`、整条前缀 `no-cache`、清单坏 JSON 不炸 status、status 的
-  `lib_dir` / `lib_installed` / `lib_entries` / `lib_bytes` 四项。
+  `lib_dir` / `lib_installed` / `lib_entries` / `lib_bytes` 四项；云端读接口的未配置说成不可用（不拉
+  OSS）、缓存里没有清单时不拉 OSS（只读缓存）、云端相对路径落进缓存树、道具写成
+  `props/<file>.glb` 与 `models/props/<file>.glb` 同一条落点、缓存未命中取回落盘后二次命中不再请求、
+  前导 `/` 与 `..` 出根一律 `400`（云端未配置时同样先过路径检查）、上游取回失败 `502` 且不落缓存、
+  道具 GLB 文件头不是 `glTF` 时不落缓存并 `502`、`/neo_pose/cloud_status` 报的 `enabled` /
+  `available` / 场景数 / 道具数 / 缓存目录；道具注册表那条伺服的合并（云端行带 `scale` 与握点进来并标
+  `hidden`、本机注册表点名的道具不补第二条、那条路上一次网络都不发、旧版上传脚本的条目照样落成一行）。
+- `studio/tests/test_pose_deploy.py`：云端上传脚本的清单构建 —— 云端清单只收文件真在着的条目、预览档位
+  同样验文件在着、条目字段与卡片同名；道具只在授权行给「可再分发」时发，发的那条带着注册表原行（`scale`、
+  握点、体积、授权与来源页），Royalty Free、来源待确认、Mixamo 仅个人使用、注册表没有授权行的与仓库自己的
+  基准件全部拒发，授权干净但 GLB 不在的不登记，`--props` 只在授权干净的那批里再挑、越不过授权门禁，
+  读不到注册表时整批不发，上传清单里道具落 `props/` 前缀、索引登记过的道具文件不在时不进上传清单。
 - `app/tests/test_studio_server.py::PoseBridgeTests`：离线服务里的页面跳转、子资源伺服与越界拒绝、
   `/models` 前缀答出注册表与道具 GLB（含自备素体与数据根压随包那份）、场景往返、能力位与
   归属（逐条核对姿势模块注册的那张路由表）、随包副本兜底那一层、离线导入自备素体与 35MB 上限、
   请求体上限落在导入接口之上；`/pose-lib` 前缀在离线服务里答出清单与场景文件、status 的 `lib_*` 四项、
-  `/pose-lib` 不进能力归属表。
+  `/pose-lib` 不进能力归属表；云端三条接口在离线服务里答得了（未配置说不可用、`../..` 与前导 `/` 与盘符
+  一律 `400`），且在归属检查里逐条归桌面端自服。
 - `studio/tests/js/pose-bridge.test.mjs`：宿主视图的缺包形态、iframe 属性、桥的来源与同源校验、
   `hostUi` 门、导出 / 场景 / 图组三条路径落到的接口、跑在随包副本上的说明、
   自备素体导入（base64 上报与 key 校验）；场景库弹窗的清单渲染与分组 / 搜索 / 来源筛选 / 加载更多、点卡片套整场

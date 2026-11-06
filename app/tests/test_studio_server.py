@@ -782,7 +782,20 @@ class PoseBridgeTests(_ServerCase):
                     "lib_dir", "lib_installed", "lib_entries"):
             self.assertIn(key, data, f"status 要报出 {key}")
 
+    def test_cloud_routes_answer_offline_and_reject_path_escape(self):
+        """云端场景库与道具的三条接口在离线窗口上答得了：未配置说不可用，越界就是 400。"""
+        for route in ("/neo_pose/cloud_status", "/neo_pose/cloud_index", "/neo_pose/cloud_file"):
+            self.assertEqual(caps.owner("GET", route), "desktop", f"{route} 归桌面端自服")
+        status, body = self.get("/neo_pose/cloud_status")
+        self.assertEqual(status, 200)
+        self.assertIn("enabled", json.loads(body))
+        for path in ("../../windows/win.ini", "/etc/passwd", "C:/Windows/x.json"):
+            status, body = self.get(f"/neo_pose/cloud_file?path={path}")
+            self.assertEqual(status, 400, path)
+            self.assertIn("相对路径", json.loads(body)["error"])
+
     def test_package_copy_serves_the_page_when_data_root_is_empty(self):
+
         """随包副本是兜底那一级：数据根没装姿势包时，页面与 CC0 素体都从插件目录里出来。"""
         pkg = self.pose_module.PACKAGE_DIST
         self.pose_module.PACKAGE_DIST = self.pose_dir / "unit_pkg_copy"

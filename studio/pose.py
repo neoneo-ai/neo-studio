@@ -60,6 +60,8 @@ PAGE_URL = f"{STATIC_PREFIX}/index.html"
 # 打开时这些请求落回 origin 根，前缀伺服一条都接不到。注册表读空的页面不会报错，
 # 它按空注册表出控件清单 —— 道具面板空着，加具全部失败，GLB 素体一个都加载不出来。
 MODELS_PREFIX = "/models"
+# 道具注册表这一条不是纯静态文件：伺服时把云端缓存里点名的道具补成注册表行（见 _props_registry_response）
+PROPS_REGISTRY_REL = "models/props/index.json"
 # 场景库的静态前缀与姿势包同一条路子：库里 index.json、poses/**.scene.json 与 preview/*.png
 # 由宿主弹窗逐条取（缩略图与场景文件都是库自己的文件），逐条打表没有意义，不进 /neo 命名空间。
 # 前缀名与姿势仓库自己的那条 `/pose-lib/` 同名：库条目的 preview.path 与 entry.path 原样拼地址，
@@ -143,7 +145,11 @@ async def pose_models(request):
 
 
 def _dist_response(rel: str) -> web.StreamResponse:
-    """两级落点里逐段找 rel：出根 400，目录按 index.html 进，两处都没有 404。"""
+    """两级落点里逐段找 rel：出根 400，目录按 index.html 进，两处都没有 404。
+
+    道具注册表是唯一一条要合并的（PROPS_REGISTRY_REL）：那一条交给 _props_registry_response。
+    """
+    merged = rel.strip("/") == PROPS_REGISTRY_REL
     for root in dist_dirs():
         target = inside_dir(root, rel)
         if target is None:
@@ -151,8 +157,35 @@ def _dist_response(rel: str) -> web.StreamResponse:
         if target.is_dir():
             target = target / "index.html"
         if target.is_file():
-            return _file_response(target)
+            return _props_registry_response(target) if merged else _file_response(target)
     return web.Response(status=404)
+
+
+def _props_registry_response(target: Path) -> web.StreamResponse:
+    """道具注册表：本机那一级原样给，云端缓存里点名的道具补成 hidden 行。
+
+    页面对 GLB 先归一成「1 单位高」、再乘注册表行的 scale，握点（grab / handleR / standing）也照
+    那一行还原成米 —— 注册表里没这一行的云端道具就是一把 1 米长的手枪，所以发上云的每一件都带着
+    它的注册表行走（tools\\pose_deploy_oss.py），这里补进页面读的那份。补行只读 pose_cloud 的缓存
+    索引，一次网络都不发：这条是姿势页的开局路径。本机登记过的道具一条不补 —— 数据根同步过姿势
+    仓库时注册表与 GLB 都在着，轮不到云端。
+    """
+    try:
+        payload = json.loads(target.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return _file_response(target)     # 坏注册表原样给：页面自己报空，宿主不替它编一份
+    if not isinstance(payload, dict):
+        return _file_response(target)
+    rows = [r for r in (payload.get("props") or []) if isinstance(r, dict)]
+    from . import pose_cloud
+
+    local = {str(r.get("file") or "") for r in rows}
+    extra = [row for row in pose_cloud.prop_registry_rows() if str(row.get("file") or "") not in local]
+    if not extra:
+        return _file_response(target)
+    resp = web.json_response({**payload, "props": rows + extra})
+    resp.headers["Cache-Control"] = "no-cache"     # 合并结果跟着云端缓存的刷新变，不能长缓存
+    return resp
 
 
 async def pose_lib(request):
@@ -352,8 +385,14 @@ async def pose_import_model(request):
 
 
 def dist_dirs() -> tuple:
-    """姿势包的两级落点，数据根在前：随包那份是最小副本，用户同步的全量产物压它。"""
-    return (DIST_DIR, PACKAGE_DIST)
+    """姿势包的落点，数据根在前：随包那份是最小副本，用户同步的全量产物压它；
+    第三级是云端缓存（pose/oss_cache）—— 只有已经落进缓存的云端道具被这条找到，
+    道具注册表与页面的 /models/props/ 契约因此一字不改。pose_cloud 惰性导入：
+    它在 import 期要用本模块的路径守卫，谁也不在顶层等谁。"""
+    from . import pose_cloud
+
+    return (DIST_DIR, PACKAGE_DIST, pose_cloud.CACHE_DIR)
+
 
 
 def active_dist_dir() -> Path | None:

@@ -84,6 +84,7 @@ studio/
 ├── recipes.py                 # recipe backend + /rs_recipes/* routes
 ├── studio.py                  # Neo Studio backend + /neo_studio/* routes
 ├── pose.py                    # 3D Pose backend + /neo-pose and /neo_pose/* routes
+├── pose_cloud.py              # cloud scene library read side (manifest and files from the local cache) + /neo_pose/cloud_* routes
 ├── frames.py                  # Video frame extractor backend + /neo_frames/* routes
 ├── model_hub.py               # model hub + /neo_model_hub/* routes
 ├── skill_models.py            # preset model manifests models.json + /neo_skill_models/* routes
@@ -146,6 +147,7 @@ studio/
 | `recipes.py` | Recipe CRUD, one-click send, director recipes and storyboards, import/export |
 | `studio.py` | Neo Studio backend: standalone page entry and full-film generation jobs |
 | `pose.py` | 3D Pose backend: serves the pose package, scene read/write and canvas export into the library |
+| `pose_cloud.py` | Cloud scene library read side: the manifest is cache-only, scenes and props are fetched on demand into `<data root>/pose/oss_cache` |
 | `frames.py` | Video frame extractor backend: serves a library video with range support to the player, writes each extracted frame into `output/Frames` |
 | `app/studio_app.py` | Studio desktop: launches ComfyUI and hosts the WebView2 window (geometry / localStorage persistence) |
 | `workflow.py` | Workflow model-path repair, repair mappings, skill model suggestions |

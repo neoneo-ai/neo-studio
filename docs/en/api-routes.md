@@ -176,6 +176,9 @@ bridge messages and how to install the package are in [studio-pose.md](studio-po
 | POST     | `/neo_pose/import_model`    | Write an own-figure GLB to `<data root>/pose/dist/models/<key>.glb`, replies `{key, name, url, size, from}`   |
 | POST     | `/neo_pose/export_image`    | Store the page canvas into `output/Pose`, replies `{filename, subfolder, size}`                               |
 | POST     | `/neo_pose/export_set`      | Store a ControlNet image set into `output/Pose` (≤12 files), replies `{saved, count}`                         |
+| GET      | `/neo_pose/cloud_status`    | Cloud configured or not, the manifest URL and root prefix, cache state, scene and prop counts (unconfigured replies `enabled: false`, never contacts OSS) |
+| GET      | `/neo_pose/cloud_index`     | The cloud manifest, cache-only, replies `{index, cached}`; with no cached manifest `enabled: false` and the page shows the deployment hint |
+| GET      | `/neo_pose/cloud_file?path=`| Fetch one cloud file into `<data root>/pose/oss_cache/` and serve it: a scene JSON, a preview image, `models/props/<file>.glb`; out of root `400`, a failed fetch `502` |
 
 The prefix itself (`/pose-dist/`, an empty path) lands on the entry page, so typing the prefix in the
 address bar opens the page. The asset paths inside the build are fixed at build time and they are two

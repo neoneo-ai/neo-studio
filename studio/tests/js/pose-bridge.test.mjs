@@ -97,6 +97,34 @@ const LIB_SCENE = {
     view: { camera: [1.4, 1.4, 4.5], target: [0, 0.9, 0], fov: 45 },
 };
 
+/** 云端清单的 fixture（格式 neo-pose-cloud/1，studio/pose_cloud.py 的形状）：行字段与 POSE_LIB 同名，
+    多出来的只有 base_url（预览图直连的那一级）与 cloud 标记；道具的 path 是页面写死的 models/props/ */
+const CLOUD_INDEX = {
+    success: true, source: "remote", format: "neo-pose-cloud/1",
+    base_url: "https://oss.example/neo/pose/",
+    count: 2,
+    groups: [{ key: "stand", label: "站立", count: 2 }],
+    entries: [
+        { id: "c1", label: "云端站姿", path: "poses/stand/c1.scene.json", kind: "scene",
+          people: 1, props: 0, groups: ["stand"], charKey: "girl", origin: "cloud", cloud: true,
+          categories: ["站立"], preview: { clay: "preview/c1.clay.png" } },
+        { id: "c2", label: "云端坐姿", path: "poses/stand/c2.scene.json", kind: "scene",
+          people: 1, props: 0, groups: ["stand"], charKey: "girl", origin: "cloud", cloud: true,
+          categories: ["坐姿"], preview: {} },
+    ],
+    props: [{ id: "stick", label: "木棍", file: "stick-cloud.glb", path: "models/props/stick-cloud.glb",
+              origin: "cloud", cloud: true }],
+};
+const CLOUD_SCENE = {
+    format: "3dpose.scene/1",
+    subjects: [{ kind: "rig", id: "rig-9", charKey: "bodyMale" }],
+    view: { camera: [2, 2, 5], target: [0, 0.9, 0], fov: 45 },
+};
+/** 云端配好那一条：素材库云端预设同 bucket 的 neo/pose/（pose_cloud.py 的 cloud_urls） */
+const CLOUD_ON = { success: true, enabled: true, available: true, scenes: 2, props: 1,
+                   base_url: "https://oss.example/neo/pose/", groups: CLOUD_INDEX.groups };
+
+
 // jsdom 没有 MessageChannel：回复端口桩成同步直投（宿主的 port1.onmessage 立刻收到）
 class StubPort {
     constructor() { this.onmessage = null; this.peer = null; }
@@ -128,6 +156,15 @@ function mounted(status = STATUS) {
     // 场景库的两条静态读：索引清单不带 success 外壳，库里的一份场景就是场景文件原样
     mockRoute("/pose-lib/index.json", () => jsonResponse(status.lib === undefined ? POSE_LIB : status.lib));
     mockRoute("/pose-lib/poses/calm/calm-1.scene.json", () => jsonResponse(LIB_SCENE));
+    // 云端三接口（studio/pose_cloud.py）：默认「未配置」，带 cloud_status 的用例才把云端打开
+    mockRoute("/neo_pose/cloud_status",
+        () => jsonResponse(status.cloud_status || { success: true, enabled: false, available: false }));
+    mockRoute("/neo_pose/cloud_index",
+        () => jsonResponse(status.cloud_index === undefined ? CLOUD_INDEX : status.cloud_index));
+    mockRoute("/neo_pose/cloud_file", (body, call) => (call.query.get("path") || "").endsWith(".glb")
+        ? jsonResponse({})
+        : jsonResponse(status.cloud_file === undefined ? CLOUD_SCENE : status.cloud_file));
+
 
     const host = $el("div");
     document.body.appendChild(host);
@@ -797,4 +834,88 @@ test("旧姿势包没有标准基座：素体下拉停在「选择素体…」�
     await settle();
     assert.deepEqual(env.calls("member/add")[0].msg.args, {}, "没有 key 就交回空参数，跟着页面当前素体走");
 });
+
+test("云端未配置：来源开关只有本机库那一条，道具下拉里没有云端道具", async () => {
+    resetEnv();
+    const env = await mounted();
+    await env.ready();
+    env.replyCall(env.calls("meta/list")[0], META);
+    env.replyCall(env.calls("prop/list")[0], PROPS);
+    await settle();
+    assert.deepEqual([...env.sel(3).options].map((o) => o.value),
+        ["", "builtin:chair", "glb:arrow.glb", "glb:sting-sword.glb"],
+        "没配云端的机器上不许出现一条选了只会失败的道具");
+    click(env.button("浏览场景库…", LIB));
+    await settle();
+    const source = env.host.querySelector(".ns-libmodal:not(.ns-hidden) .ns-pose-lib-source");
+    assert.deepEqual([...source.options].map((o) => o.value), ["local"], "只有一台机器就不给开关");
+    assert.equal(fetchLog.filter((c) => c.path === "/neo_pose/cloud_index").length, 0,
+        "未配置的云端不是一次后台轮询：连清单都不读");
+});
+
+test("云端库：切到云端读一次清单，卡片带云端角标与直连预览，点卡片经后端代读套用整场", async () => {
+    resetEnv();
+    const env = await mounted({ ...STATUS, cloud_status: CLOUD_ON });
+    await env.ready();
+    click(env.button("浏览场景库…", LIB));
+    await settle();
+    const modal = () => env.host.querySelector(".ns-libmodal:not(.ns-hidden)");
+    const source = () => modal().querySelector(".ns-pose-lib-source");
+    assert.deepEqual([...source().options].map((o) => o.value), ["local", "cloud"], "配好云端才出第二条来源");
+    assert.ok(fetchLog.some((c) => c.path === "/neo_pose/cloud_index"), "配好云端进页读一次清单");
+    changeValue(source(), "cloud");
+    await settle();
+    changeValue(modal().querySelector(".ns-pose-lib-char"), "");   // 基座筛选跟着当前素体，卡片要在全部基座那档全出来
+    const cards = [...modal().querySelectorAll(".ns-pose-lib-card")];
+    assert.deepEqual(cards.map((c) => c.dataset.libId), ["c1", "c2"], "云端两条 = 两张卡");
+    assert.ok(cards[0].querySelector(".ns-pose-lib-origin-cloud"), "云端条目要带「云端」角标");
+    assert.equal(cards[0].querySelector(".ns-pose-lib-thumb").getAttribute("src"),
+        "https://oss.example/neo/pose/preview/c1.clay.png", "封面只是一张 <img>，直连 OSS 地址不经后端");
+    assert.equal(modal().querySelector(".ns-pose-lib-origin").hidden, true, "云端清单没有预设/本地这层，筛选跟着收起");
+    assert.match(modal().querySelector(".ns-pose-lib-meta").textContent, /2 个云端场景/);
+    click(cards[0]);
+    await settle();
+    assert.ok(fetchLog.some((c) => c.path === "/neo_pose/cloud_file"
+        && c.query.get("path") === "poses/stand/c1.scene.json"), "场景 JSON 走后端代读，不暴露 OSS 地址");
+    assert.deepEqual(env.calls("scene/apply")[0].msg.args.file, CLOUD_SCENE,
+        "云端那份场景文件原样交回页面，宿主不补字段");
+});
+
+test("云端道具：道具下拉出「（云端）」那几条，添加道具先把 GLB 落进本机缓存", async () => {
+    resetEnv();
+    const env = await mounted({ ...STATUS, cloud_status: CLOUD_ON });
+    await env.ready();
+    env.replyCall(env.calls("meta/list")[0], META);
+    env.replyCall(env.calls("prop/list")[0], PROPS);
+    await settle();
+    assert.deepEqual([...env.sel(3).options].map((o) => o.value),
+        ["", "builtin:chair", "glb:arrow.glb", "glb:sting-sword.glb", "glb:stick-cloud.glb"],
+        "云端道具接在本机那批后面，key 走页面自己的 glb: 口径");
+    assert.match([...env.sel(3).options].map((o) => o.textContent).join("|"), /木棍（云端）/,
+        "看得见的名字要说清这条来自云端");
+    changeValue(env.sel(3), "glb:stick-cloud.glb");
+    click(env.button("添加道具"));
+    await settle();
+    assert.ok(fetchLog.some((c) => c.path === "/neo_pose/cloud_file"
+        && c.query.get("path") === "models/props/stick-cloud.glb"),
+        "云端道具先经后端落进本机缓存，页面才认自己那条写死的 /models/props/ 路径");
+    assert.deepEqual(env.calls("prop/add")[0].msg.args, { key: "glb:stick-cloud.glb" });
+});
+
+test("云端清单读不到：切过去给云端指引，不渲染一个空浏览器", async () => {
+    resetEnv();
+    const env = await mounted({ ...STATUS, cloud_status: { ...CLOUD_ON, available: false, scenes: 0, props: 0 },
+        cloud_index: { success: false, error: "云端索引取不到：404 no such key" } });
+    await env.ready();
+    click(env.button("浏览场景库…", LIB));
+    await settle();
+    const modal = () => env.host.querySelector(".ns-libmodal:not(.ns-hidden)");
+    changeValue(modal().querySelector(".ns-pose-lib-source"), "cloud");
+    await settle();
+    assert.equal(modal().querySelectorAll(".ns-pose-lib-card").length, 0);
+    assert.match(modal().querySelector(".ns-pose-lib-blank").textContent, /pose_deploy_oss/,
+        "空态要说的是怎么把云端配起来，不是「没有匹配」");
+    assert.match(env.toasts.join("|"), /云端索引取不到/);
+});
+
 
