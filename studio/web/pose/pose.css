@@ -224,16 +224,26 @@
     color: #0b1220;
 }
 
-/* 左栏那一列整栏滚：本机存档攒多了吃不下，不给栏里嵌第二层滚动 */
+/* 左栏那一列整栏滚：本机存档攒多了吃不下，不给栏里嵌第二层滚动。
+   这一列吃栏里剩下的高度 —— 栏里别再有第二样控件跟着 grow，搜索框与「加载更多」都是栏的直接子行 */
 .ns-pose-pose-list {
     max-height: none;
     flex: 1 1 auto;
 }
 
+/* 搜索框是栏里的固定一行：它曾是列表那份 flex: 1 1 auto 的同栏兄弟，吃了列表的 grow 规则，
+   栏里空无一物时被拉成一整块 —— 输入框自己就在列表外面，只吃一行的高度 */
 .ns-pose-list-search {
-    flex: 1 1 120px;
+    flex: none;
+    width: 100%;
     min-width: 0;
-    width: auto;
+    padding: 6px 9px;
+    border: 1px solid var(--ns-field-bd);
+    border-radius: 8px;
+    background: var(--ns-field);
+    color: var(--ns-fg);
+    font: inherit;
+    font-size: 13px;
 }
 
 .ns-pose-list-more {
@@ -243,11 +253,15 @@
 
 .ns-pose-list-more[hidden] { display: none; }
 
+/* 搜不到时那一行就一句实话：不出行框、不可点，颜色比行淡一档 */
 .ns-pose-item-empty {
+    padding: 4px 8px;
     cursor: default;
     font-size: 12px;
     color: var(--ns-dim);
 }
+
+.ns-pose-item-empty:hover { background: none; }
 
 .ns-pose-blank {
     padding: 6px 8px;

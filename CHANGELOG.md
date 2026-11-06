@@ -13,13 +13,18 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   badges, and applies a row's own scene file in one click. There is no separate 「预设姿势」 section, no
   「套用预设」 button and no preset dropdown in the right column. The search box above the list filters the
   archives by name, 120 rows per page behind 「加载更多」, and an empty result says so. The character dropdown
-  offers only the standard bodies
-  the package reports (`bodyMale` / `bodyFemale`), so Mixamo, the SMPL-derived bodies and any user-supplied GLB
+  offers only the standard bodies the package reports (`bodyMale` / `bodyFemale`), so Mixamo, the SMPL-derived
+  bodies and any user-supplied GLB
   no longer show as options that only fail; 「导入自备素体」 is gone and the host's `/neo_pose/import_model`
   route is not registered anymore - registering those bodies stays in the pose page's own local import area.
   The ControlNet export view defaults to 「当前视角」, exporting from the camera the user already framed.
   Covered by `studio/tests/js/pose-bridge.test.mjs`, `studio/tests/test_pose_bridge.py` and
   `app/tests/test_studio_server.py::PoseBridgeTests`.
+- **The 3D Pose left column's search box is one row, not the column's height.** The column's pose list grows to
+  fill the column, and the search box sat under that list's grow rule: with nothing saved the placeholder floated
+  in the middle of the column with 「没有匹配的姿势」 on its own level. The search box is now a fixed row above the
+  list, rows and the no-match line start at the top of the column, and the no-match line reads as a plain line
+  without a row frame. Covered by `studio/tests/js/pose-bridge.test.mjs`.
 - **「摆姿」在界面上统一叫「姿势」.** 顶栏 tab、姿势页控件、姿势库弹窗、启动设置与文档里的中文文案全部改成
   「姿势」（`摆姿模式` → `姿势模式`、`摆姿仓库` → `姿势仓库`、`进入摆姿模式` → `进入姿势模式`），动词语法保持成句
   （`摆姿势`、`可摆姿势`、`纯摆姿势`）；英文文案仍是 Pose / Pose 3D，路由、节点名与配置键不变。

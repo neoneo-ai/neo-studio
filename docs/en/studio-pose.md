@@ -322,7 +322,9 @@ poses all live in the "Browse Pose Library…" modal, and this column does not l
 loads that pose - it reads `/neo_pose/scene` and sends
 `pose:open-scene` - with the Load Pose button kept for a typed-in name, the two sharing one load path. The search
 box on top of the list filters the rows by name, a page is 120 rows and the rest sit behind
-"load more (N left)". The right column has no preset dropdown and the panel has no "apply preset" step:
+"load more (N left)". The list takes the height left in the column and the search box is the column's own row
+above it, so no control is stretched by the list's grow rule and the rows start at the top of the column.
+The right column has no preset dropdown and the panel has no "apply preset" step:
 the "Browse Pose Library…" modal is a preset's only entry. The modal's base filter follows the panel's character -
 switching bodies re-filters it, so what is visible is what the current body can wear.
 
@@ -591,7 +593,8 @@ tops both levels up in the data root.
   archives listed, each row badged "local", a row and the "Load Pose" button sharing one `pose:open-scene`; presets
   not listed there, the "Browse Pose Library…" modal being their only entry with the modal grouping cards by
   `groups`, and no preset dropdown in the right column; the search box filtering by name, an honest empty state,
-  a page of 120 rows with load-more); the ControlNet export defaulting to the
+  a page of 120 rows with load-more, the search box being the column's own row beside the list (never stretched by
+  the list's grow rule)); the ControlNet export defaulting to the
   "current view"; the pose-library modal's index rendering with
   grouping, search, origin filtering and load-more, applying a library pose (the action it sends and the modal closing),
   the sync hint when the library is unsynced, the gate locking that pane, and the local pose file path;

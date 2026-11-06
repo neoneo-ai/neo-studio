@@ -462,7 +462,12 @@ test("姿势库左栏只列本机姿势存档：预设不在这一份列表里�
     assert.ok(env.button("浏览姿势库…", LIB), "一颗钮开姿势库弹窗");
     const libPanel = env.host.querySelector(LIB);
     assert.ok(libPanel.querySelector(".ns-pose-pose-list"), "左栏那一列本机存档");
-    assert.equal(libPanel.querySelectorAll(".ns-pose-head").length, 0, "左栏没有预设 / 本机那两条分组头");
+    assert.equal(env.host.querySelectorAll(LIB + " .ns-pose-head").length, 0, "左栏没有预设 / 本机那两条分组头");
+    const search = libPanel.querySelector(".ns-pose-list-search");
+    const list = libPanel.querySelector(".ns-pose-pose-list");
+    assert.equal(search.parentNode, libPanel, "搜索框是栏里的一行，不嵌进列表里");
+    assert.equal(search.parentNode, list.parentNode,
+        "列表在栏里吃剩下的高度：搜索框与它同栏兄弟，嵌进列表会跟着列表一起被拉高");
     const rows = () => [...env.host.querySelectorAll(LIB + " .ns-pose-item")];
     assert.deepEqual(rows().map((r) => r.textContent), ["hero本地"],
         "左栏只列本机存档：库里与 meta/list 的预设都不在这一份列表里重复一遍");
