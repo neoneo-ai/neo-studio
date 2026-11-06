@@ -65,6 +65,13 @@ foreach ($row in $files) {
     if ($row.path -like "models/props/*.glb" -and $allowedPropGlb -notcontains (Split-Path -Leaf $row.path)) {
         Bad "随包发了白名单外的道具 GLB：$($row.path)"
     }
+    if ($row.path -like "models/props/preview/*") {
+        $leaf = Split-Path -Leaf $row.path
+        if ($leaf -notlike "*.png") { Bad "道具预览图只许 .png：$($row.path)" }
+        if ($allowedPropGlb -notcontains ($leaf -replace '\.png$', '.glb')) {
+            Bad "随包发了白名单外道具的预览图：$($row.path)（预览图跟着随包道具走）"
+        }
+    }
     if ($row.path -like "models/*.json" -and $row.path -notlike "models/props/*") {
         Bad "models/ 根下发了散 JSON：$($row.path)"
     }
@@ -113,6 +120,13 @@ if (Test-Path -LiteralPath $regPath -PathType Leaf) {
     foreach ($glb in $allowedPropGlb) {
         if (@($rows | Where-Object { [string]$_.file -eq $glb }).Count -eq 0) {
             Bad "道具注册表缺自制道具：$glb（页面下拉里选不到它）"
+        }
+    }
+    # preview 行要有图：写了 preview 却没发那张 png，面板上就是一条永远取不到的缩略图
+    foreach ($row in $rows) {
+        $prev = ([string]$row.preview) -replace '\\', '/'
+        if ($prev -and $paths -notcontains ("models/props/" + $prev)) {
+            Bad "道具注册表写了 preview 却没发那张图：$($row.file) → $prev"
         }
     }
 }

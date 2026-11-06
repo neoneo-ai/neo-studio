@@ -9,6 +9,8 @@
 #   body1391 / body-*-thumbnail(.glb)      SMPL 派生几何（Max Planck 授权，用户自备），不入库
 #   props/stick.glb · props/sword.glb      本项目自制（scripts/makePropGlb.mjs 从 propKit 零件清单生成），随包发
 #   props/arrow · sting-sword · 枪械        本地导入，来源页授权待确认 —— 不随包发
+# 随包道具的预览图（models/props/preview/*.png，npm run prop:preview 渲染）只带注册表写了 preview
+# 且 dist 里真有那张图的：面板取不到图出「无预览」占位，发一条缺图的 preview 行就是发一条会失败的缩略图。
 # 道具注册表是页面运行期读的文件（models/props/index.json）：只留随包发了的那两条，
 # 注册表里列一个 dist 里没有的 GLB 就是发一条点了只会失败的控件，所以清单裁剪与文件拷贝是同一件事。
 #
@@ -132,6 +134,9 @@ try {
         }
         Copy-File $p $stage "models\props\$glb"
     }
+    # 随包道具的预览图只带「注册表写了 preview 且 dist 里真有这张图」的那几张：
+    # 面板上预览图取不到就出「无预览」占位，随包发一张缺图的 preview 行就是发一条会失败的缩略图
+    $shippedPropPreview = @()
     $attr = Join-Path $src "models\ATTRIBUTION.md"
     if (Test-Path -LiteralPath $attr -PathType Leaf) { Copy-File $attr $stage "models\ATTRIBUTION.md" }
     $reg = Join-Path $src "models\props\index.json"
@@ -141,6 +146,17 @@ try {
         $data = Get-Content -LiteralPath $reg -Raw -Encoding utf8 | ConvertFrom-Json
         # 只留随包发了的那两个 GLB：列表里出现一个包里没有的文件，就是发一条点了只会失败的控件
         $keep = @($data.props | Where-Object { $allowedPropGlb -contains $_.file })
+        foreach ($row in $keep) {
+            $rel = [string]$row.preview
+            $pic = if ($rel) { Join-Path $src (Join-Path "models\props" ($rel -replace '/', '\')) } else { "" }
+            if ($pic -and (Test-Path -LiteralPath $pic -PathType Leaf)) {
+                Copy-File $pic $stage "models\props\$rel"
+                $shippedPropPreview += Split-Path -Leaf $pic
+            } elseif ($rel) {
+                # 注册表写了 preview、dist 里没有这张图：这一行不带 preview 发货，面板出「无预览」而不是坏图
+                $row.PSObject.Properties.Remove("preview")
+            }
+        }
         $clean = [ordered]@{ _readme = $data._readme; props = $keep }
         Write-Text $regDest (($clean | ConvertTo-Json -Depth 6) + "`n")
     } else {
@@ -180,6 +196,7 @@ try {
         ($_.path -like "*.map") -or
         ($_.path -like "models/*.glb" -and $_.path -notlike "models/props/*" -and $allowedGlb -notcontains (Split-Path -Leaf $_.path)) -or
         ($_.path -like "models/props/*.glb" -and $allowedPropGlb -notcontains (Split-Path -Leaf $_.path)) -or
+        ($_.path -like "models/props/preview/*" -and $shippedPropPreview -notcontains (Split-Path -Leaf $_.path)) -or
         ($_.path -like "models/*.json" -and $_.path -notlike "models/props/*") -or
         ($_.path -like "*animation-demo*")
     })

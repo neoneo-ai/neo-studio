@@ -12,7 +12,8 @@
     {
       "file": "stick.glb",
       "label": "棍",
-      "scale": 1
+      "scale": 1,
+      "preview": "preview/stick.png"
     },
     {
       "file": "sword.glb",

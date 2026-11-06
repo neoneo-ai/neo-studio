@@ -1,8 +1,8 @@
 {
   "format": "3dpose.package/1",
   "generator": "tools/build_pose_package.ps1",
-  "built_utc": "2026-11-06T01:42:08Z",
-  "total_bytes": 3184191,
+  "built_utc": "2026-11-06T08:18:18Z",
+  "total_bytes": 3189184,
   "files": [
     {
       "path": "assets/index-CSOmJDA4.css",
@@ -10,14 +10,14 @@
       "sha256": "c0f5ecacc589bb4c5ebe319bf07602b8991a1bceb8350c094af929b43b130584"
     },
     {
-      "path": "assets/index-pLziDA-d.js",
-      "bytes": 1188849,
-      "sha256": "1010f61c098571eb561ca6b790992a306774f58a78b7d833e2572ea4ffd7d047"
+      "path": "assets/index-WzXS3DKr.js",
+      "bytes": 1190928,
+      "sha256": "5853ef2eda5e95e1d9300936fa775f473772b09163f862b0752ec180745eb0dd"
     },
     {
       "path": "index.html",
       "bytes": 16999,
-      "sha256": "abe475cbd77698661c849950cfa259cf4b3464653f02ead6c02f4ec1db982e8a"
+      "sha256": "8420a6d411c36c133dd150f8ed44d2eac4c6d5434b6cd6d64d2f7452d8c17672"
     },
     {
       "path": "LICENSE",
@@ -41,8 +41,13 @@
     },
     {
       "path": "models/props/index.json",
-      "bytes": 1374,
-      "sha256": "31c7e2970646cbb7dda8f6bda90173937ce993792a4c4cd0c28a9597fc9f2849"
+      "bytes": 1413,
+      "sha256": "9de9d0d99e16b336c4aa48032cbcbed58af966c2ee7746d5751cd5fc1b188ce0"
+    },
+    {
+      "path": "models/props/preview/stick.png",
+      "bytes": 2875,
+      "sha256": "b0a895ad2c5f09f728e0b4c304a1c0ca3ec14ca519e5e5a930a2930823e76edf"
     },
     {
       "path": "models/props/stick.glb",
