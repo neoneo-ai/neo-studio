@@ -11,7 +11,7 @@
 | `app/studio_app.py`    | 窗口、自检、拉起 / 停止 ComfyUI、无边框窗口、关窗收尾、启动设置                                                                                                                                                                        |
 | `app/studio_server.py` | 桌面端 aiohttp 服务（ComfyUI 端口 +3，`DESKTOP_PORT_OFFSET`），按目录加载插件模块挂在各自 `RouteTableDef` 上的 handler                                                                                                                 |
 | `app/studio_caps.py`   | 能力表：哪些路由归桌面端自服、表外的哪一撮由桌面端转发给内核，其余一律 `409 offline`                                                                                                                                                   |
-| `app/studio_pose.py`   | 摆姿资产自动同步：「启动设置 → 摆姿仓库」指向 3d-pose-art 仓库根时，把 dist 摆姿包与 pose-lib 场景库按时间戳对账补进数据根                                               |
+| `app/studio_pose.py`   | 姿势资产自动同步：「启动设置 → 姿势仓库」指向 3d-pose-art 仓库根时，把 dist 姿势包与 pose-lib 场景库按时间戳对账补进数据根                                               |
 | `data/`                | 状态目录：`studio_window.json`（几何）、`studio_profile`（Windows 的 WebView2 profile / localStorage）、`launcher_config.json`（root / python / port / frameless / dev_mode / listen / remote / pose_repo）、`studio_desktop.log`、`comfy_run.log` |
 
 源码运行的状态目录是仓库根的 `data/`；Windows exe 优先 exe 旁的 `data/`，落在不可写目录时退回
@@ -284,7 +284,7 @@ js_api（`check_setup` / `pick_root` / `pick_python` / `start_setup`），根目
 
 - 「启动设置」每一行标签旁有一个 ⓘ，悬停（键盘 Tab 聚焦同样出）给出这一行的前提条件与生效方式：根目录 /
   解释器 / 端口 / 局域网监听 / 远程 ComfyUI 走「保存并重启 ComfyUI」，无边框窗口立刻生效并写进配置，
-  开发模式要重启桌面端窗口，摆姿仓库保存即生效并立刻在后台起一轮同步。文案在 `studio/web/studio/studio-app.js` 的 `TIPS` 里。
+  开发模式要重启桌面端窗口，姿势仓库保存即生效并立刻在后台起一轮同步。文案在 `studio/web/studio/studio-app.js` 的 `TIPS` 里。
 
 ## 界面语言
 
@@ -306,8 +306,8 @@ js_api（`check_setup` / `pick_root` / `pick_python` / `start_setup`），根目
   用完清空这一项。MCP 服务不参与这条网络口（stdio + 回环，见 [mcp.md](mcp.md)）。
 - 局域网监听放开时桌面端服务把自己也绑到选中的网卡上（`lan_bind_hosts`：填 `0.0.0.0` 时只绑全监听，同一端口上
   重复绑回环会撞）——Studio 页与配对页只活在桌面端端口上，只绑 127.0.0.1 的话手机连不到那个口。非回环对端由
-  `lan_surface` 中间件按对端地址收口：私段上的设备把这台机器当另一块屏幕用，页面、素材库、摆姿页、配方、技能
-  这些数据路由照开（只放一张配对页的话，手机上的素材库是空的、摆姿页报「后端未就绪」）。`lan_path_open` 挡的是
+  `lan_surface` 中间件按对端地址收口：私段上的设备把这台机器当另一块屏幕用，页面、素材库、姿势页、配方、技能
+  这些数据路由照开（只放一张配对页的话，手机上的素材库是空的、姿势页报「后端未就绪」）。`lan_path_open` 挡的是
   桌面管理那一面——`/neo_mcp*`、`/neo_studio/launcher`、重启 / 关机 / 日志 / 显存、`/neo-studio/settings`、出码用的
   `pair/info` 与桥上的对应口——和 `/userdata/configs/`（`remote_llm_config.json` / `backyard_oss.json` /
   `model_hub.json` 都在这底下）；公网与链路本地对端全关。监听没放开时桌面端服务只绑回环。
@@ -318,7 +318,7 @@ js_api（`check_setup` / `pick_root` / `pick_python` / `start_setup`），根目
 - 顶栏右端是队列与设置两枚图标位（队列在前，徽标是图标右上角那枚计数），页签只有六枚：窄屏里这六枚是一条可横滚的页签条，
   选中那枚由 `studio-app.js` 的 `showView` 用
   `scrollIntoView` 带进可视区；刘海与圆角走 `viewport-fit=cover` + `env(safe-area-inset-*)`，
-  钉在页底的「生成」与视频页 composer 胶囊不被手势条压住。摆姿页只收外壳的三栏（场景库 / 画布 /
+  钉在页底的「生成」与视频页 composer 胶囊不被手势条压住。姿势页只收外壳的三栏（场景库 / 画布 /
   控制面板上下堆叠），iframe 内的 3D 控件不动。
 
 ## 手机配对（扫码进 Studio）
@@ -409,18 +409,18 @@ js_api（`check_setup` / `pick_root` / `pick_python` / `start_setup`），根目
 `custom_nodes` 取前端文件，同步完窗口一开就是新 UI；exe 只按内置副本版本换目录，git 检出的那份不碰。
 **改完 `app/studio_app.py` 必须重新打包**，见 [release.md](release.md)。
 
-## 摆姿资产自动同步
+## 姿势资产自动同步
 
-- 「启动设置 → 摆姿仓库」是单独一行，存 `launcher_config.json` 的 `pose_repo`。校验在 `app/studio_pose.py`：
-  带 `pose-lib/` 容器加 `package.json` 的目录才算摆姿仓库根，校验不过保留已存的那一份；保存这一行不等
+- 「启动设置 → 姿势仓库」是单独一行，存 `launcher_config.json` 的 `pose_repo`。校验在 `app/studio_pose.py`：
+  带 `pose-lib/` 容器加 `package.json` 的目录才算姿势仓库根，校验不过保留已存的那一份；保存这一行不等
   「保存并重启 ComfyUI」，落盘的同一轮就在后台起一次同步。仓库解析按三档找：配置里的 `pose_repo` →
   环境变量 `NEO_POSE_REPO` → ComfyUI 根同级的 `3d-pose-art`；留空 = 不自动同步。
 - 启动序列在桌面端服务起后由后台守护线程跑一轮同步（`app/studio_pose.py` 的 `auto_sync`），
   `studio_desktop.log` 落一行 `pose auto-sync` 报 dist / lib / index 三项计数与耗时，解析不到仓库整步不打日志。
-  摆姿页与场景库逐请求读数据根，资产落进数据根不需要重启窗口。
+  姿势页与场景库逐请求读数据根，资产落进数据根不需要重启窗口。
 - 判据与 `tools\sync_pose_dist.ps1` / `tools\sync_pose_lib.ps1` 同口径：只在「源比数据根新」时动手
   （重复启动、没构建过的仓库跑不出文件复制），手动删过的文件下一轮原样补回。dist 走 robocopy 镜像；
-  pose-lib 镜像本地集、预设集只补空，预览按默认档落地、清掉 `*depth.png` 残留，合并索引走摆姿仓库自己的
+  pose-lib 镜像本地集、预设集只补空，预览按默认档落地、清掉 `*depth.png` 残留，合并索引走姿势仓库自己的
   `node scripts\poseLib.mjs merged --out` —— 索引缺失、清单引用的预览文件没落地、条目全都没有 `charKey`
   （场景库弹窗的基座筛选没有落点）任一条都重建一次。用户在 `pose/dist/models/` 导入的自备素体先存后还，
   `pose/scenes/` 不在镜像范围内。
@@ -445,7 +445,7 @@ ES 模块图后，链接错误发生在 `studio-app.js` 执行之前、JS 捕获
 ## 相关测试
 
 设置页的分组层级在 `studio-settings-groups.test.mjs`，启动日志的来源分块与筛选在 `studio-log-panel.test.mjs`，
-启动设置顶栏的一键打开 ComfyUI 在 `studio-kernel-open.test.mjs`，摆姿资产自动同步的同步判据与镜像口径在
+启动设置顶栏的一键打开 ComfyUI 在 `studio-kernel-open.test.mjs`，姿势资产自动同步的同步判据与镜像口径在
 `app/tests/test_studio_pose.py`，启动设置栏内的行与 ⓘ 在 `studio-desktop.test.mjs`，
 `app/tests/test_studio_desktop.py`、`app/tests/test_studio_server.py` 与 `studio-app.e2e.mjs`，
 窄屏与触摸档的版式不变量在 `studio-mobile-layout.e2e.mjs`（390×844 与 1440×900 两个视口），

@@ -64,7 +64,7 @@ body {
 }
 .ns-tabs a:hover { color: #fff; }
 .ns-tabs a.active { color: #fff; border-bottom-color: #7aa2ff; }
-/* 顶栏分组：首页 | 创作（素材·绘画·视频·导演·摆姿）—— 分隔线只落在组边界那一枚页签上。
+/* 顶栏分组：首页 | 创作（素材·绘画·视频·导演·姿势）—— 分隔线只落在组边界那一枚页签上。
    技能与智能体在首页的卡上、设置与队列是右侧图标位，都不占页签位，也就没有第二条分隔线 */
 .ns-tabs a[data-tab="gallery"] { margin-left: 10px; }
 .ns-tabs a[data-tab="gallery"]::before {

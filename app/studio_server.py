@@ -97,8 +97,8 @@ async def no_store(request, handler):
 
 
 # 局域网监听把桌面端端口绑到网卡上之后，网段上的设备就是这台机器的另一块屏幕：页面、素材库、
-# 摆姿页、配方、技能这些数据路由对私段对端照开——只放一张配对页的话，手机上的素材库是空的、
-# 摆姿页报「后端未就绪」，等于把不能用的控件交出去。挡的是桌面管理那一面（MCP 子进程、启动设置、
+# 姿势页、配方、技能这些数据路由对私段对端照开——只放一张配对页的话，手机上的素材库是空的、
+# 姿势页报「后端未就绪」，等于把不能用的控件交出去。挡的是桌面管理那一面（MCP 子进程、启动设置、
 # 日志、重启 / 关机 / 显存、出码用的令牌数据与桥上的对应口）和 configs 静态目录
 # （remote_llm_config.json / backyard_oss.json / model_hub.json 都在这底下）。
 LAN_HIDDEN = (
@@ -541,7 +541,7 @@ def build_app(root: Path, plugin_dir: Path, flags: dict = None, launcher: dict =
             if caps.owner(route.method, route.path) == "desktop":
                 routes.route(route.method, route.path, **route.kwargs)(route.handler)
 
-    # 摆姿包的静态前缀：数据根里的 vite 产物，逐请求判断装没装，能力表不给静态文件逐条打表
+    # 姿势包的静态前缀：数据根里的 vite 产物，逐请求判断装没装，能力表不给静态文件逐条打表
     sys.modules[f"{DESKTOP_PKG}.pose"].register_static(routes)
 
     routes.get(USERDATA_PATH)(userdata_get)

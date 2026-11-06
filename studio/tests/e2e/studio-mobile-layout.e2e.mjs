@@ -25,7 +25,7 @@ const header = `
     <a href="#/paint" data-tab="paint">绘画</a>
     <a href="#/video" data-tab="video">视频</a>
     <a href="#/director" data-tab="director">导演</a>
-    <a href="#/pose" data-tab="pose">摆姿</a>
+    <a href="#/pose" data-tab="pose">姿势</a>
   </nav>
   <span class="ns-comfy-status"><span class="ns-comfy-dot ns-comfy-run"></span>运行中</span>
   <button class="ns-queue-toggle" id="ns-queue-toggle" type="button" title="队列"><span class="ns-queue-badge" id="ns-queue-badge">3</span></button>
@@ -258,7 +258,7 @@ const lightboxPage = `
   </div>
 </div>`;
 
-// 摆姿页收起钮的图标（几何与 pose.js 的 sideIcon 同一份）：钮面上只有这只两栏框，栏名在左侧
+// 姿势页收起钮的图标（几何与 pose.js 的 sideIcon 同一份）：钮面上只有这只两栏框，栏名在左侧
 const poseCollapseBtn = (label, rule, paneX) =>
     `<button class="ns-pose-collapse ns-pose-btn" type="button" aria-label="收起${label}">`
     + `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"`
@@ -578,7 +578,7 @@ test("手机弹窗层：素材库弹窗铺满整窗、灯箱侧栏落到画面�
     assert.equal(lb.closeW, 44, "灯箱关闭钮没给到 44px 触摸目标");
 });
 
-test("手机摆姿页：画布在上，场景库与控制面板各占一截（三栏压不进 390）", async () => {
+test("手机姿势页：画布在上，场景库与控制面板各占一截（三栏压不进 390）", async () => {
     const m = await measure(posePage, MOBILE, { touch: true }, () => {
         const b = (s) => document.querySelector(s).getBoundingClientRect();
         return {
@@ -589,11 +589,11 @@ test("手机摆姿页：画布在上，场景库与控制面板各占一截（�
             stageAbove: Math.round(b(".ns-pose-panel").top) >= Math.round(b(".ns-pose-stage").bottom) - 1,
         };
     });
-    assert.equal(m.cols, 1, "摆姿页还是多列");
+    assert.equal(m.cols, 1, "姿势页还是多列");
     assert.equal(m.stageW, m.bodyW, `3D 舞台没独占整幅：${m.stageW} / ${m.bodyW}`);
     assert.ok(m.stageAbove, "控制面板没落在画布下面");
 
-    // 收起：手机上的两栏各收成一条横条，画布吃掉腾出来的那一截（画布是 3D 摆姿的主场）
+    // 收起：手机上的两栏各收成一条横条，画布吃掉腾出来的那一截（画布是 3D 姿势的主场）
     const c = await measure(posePage, MOBILE, { touch: true }, () => {
         const b = (s) => document.querySelector(s).getBoundingClientRect();
         const body = document.querySelector(".ns-pose-body");
@@ -680,7 +680,7 @@ test("桌面 1440 宽：手机那一档一条都不吃（顶栏一行、两栏�
 });
 
 
-test("桌面 1440 宽（续）：设置页两栏、素材页悬停控件、灯箱侧栏、摆姿三栏照旧", async () => {
+test("桌面 1440 宽（续）：设置页两栏、素材页悬停控件、灯箱侧栏、姿势三栏照旧", async () => {
     const set = await measure(settingsPage, DESKTOP, {}, () => ({
         tabDir: getComputedStyle(document.querySelector(".ns-settings-tabs")).flexDirection,
         labelRow: Math.round(document.querySelector(".ns-launch-input").getBoundingClientRect().top)
@@ -738,9 +738,9 @@ test("桌面 1440 宽（续）：设置页两栏、素材页悬停控件、灯�
         out.railIconW = Math.round(b(".ns-pose-side[data-collapsed='1'] .ns-pose-collapse svg").width);
         return out;
     });
-    assert.ok(pose.cols >= 3, `桌面摆姿页被压成 ${pose.cols} 列`);
-    assert.equal(pose.libW, 232, "桌面摆姿页左栏宽被改了");
-    assert.equal(pose.panelW, 296, "桌面摆姿页右栏宽被改了");
+    assert.ok(pose.cols >= 3, `桌面姿势页被压成 ${pose.cols} 列`);
+    assert.equal(pose.libW, 232, "桌面姿势页左栏宽被改了");
+    assert.equal(pose.panelW, 296, "桌面姿势页右栏宽被改了");
     assert.equal(pose.railLibW, 34, `左栏收起后没收成一条竖栏：${pose.railLibW}px`);
     assert.equal(pose.railPanelW, 34, `右栏收起后没收成一条竖栏：${pose.railPanelW}px`);
     assert.ok(pose.stageW >= pose.bodyW - 70, `收起两侧后画布没吃满整幅：${pose.stageW} / ${pose.bodyW}`);

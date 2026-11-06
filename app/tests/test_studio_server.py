@@ -414,7 +414,7 @@ class OfflineServiceTests(_ServerCase):
                                ("dev_mode", True), ("dev_mode", False)])
 
     def test_launcher_pose_repo_action_carries_the_path(self):
-        # 摆姿仓库这一行随快照下发给设置页，保存走同一条 launcher 路由，路径原样交回桌面端校验
+        # 姿势仓库这一行随快照下发给设置页，保存走同一条 launcher 路由，路径原样交回桌面端校验
         self.app["launcher"]["pose_repo"] = "D:/Work/projects/3d-pose-art"
         status, body = self.get("/neo_studio/launcher")
         self.assertEqual(json.loads(body)["pose_repo"], "D:/Work/projects/3d-pose-art")
@@ -724,9 +724,9 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 class PoseBridgeTests(_ServerCase):
-    """3D 摆姿页在桌面端离线服务里的形态：页面、子资源前缀、场景往返与能力门控。
+    """3D 姿势页在桌面端离线服务里的形态：页面、子资源前缀、场景往返与能力门控。
 
-    摆姿包（3d-pose-art 的 vite 产物）装在数据根 <data_root>/pose/dist/，装没装逐请求判断。
+    姿势包（3d-pose-art 的 vite 产物）装在数据根 <data_root>/pose/dist/，装没装逐请求判断。
     产物文件与场景都写在这个目录下，用例只删自己创建的文件。"""
 
     def setUp(self):
@@ -767,7 +767,7 @@ class PoseBridgeTests(_ServerCase):
         data = json.loads(body)
         self.assertEqual(status, 200)
         self.assertTrue(data["success"])
-        # 摆姿、时间轴、导出全在浏览器里跑，离线服务只给文件；估点/网格/pano 要 pose-art 那套
+        # 姿势、时间轴、导出全在浏览器里跑，离线服务只给文件；估点/网格/pano 要 pose-art 那套
         # Python sidecar，桌面端进程起不动，页面按这几位置灰控件。自备素体导入是桌面端自己那条路。
         self.assertTrue(data["caps"]["pose"])
         self.assertTrue(data["caps"]["export"])
@@ -776,14 +776,14 @@ class PoseBridgeTests(_ServerCase):
             self.assertFalse(data["caps"][sidecar_only], f"{sidecar_only} 在桌面端不可用")
         self.assertEqual(data["installed"], (self.pose_dir / "dist" / "index.html").is_file())
         self.assertEqual(data["bridge"], list(self.pose_module.BRIDGE_MESSAGES),
-                         "桥消息名单由后端下发，宿主与摆姿页都按它校验")
+                         "桥消息名单由后端下发，宿主与姿势页都按它校验")
         # 两级落点与随包清单都在 status 里：装机的人一眼看到页面跑在哪一级、装到了什么
         for key in ("dist_source", "package_installed", "models_present", "manifest_version",
                     "lib_dir", "lib_installed", "lib_entries"):
             self.assertIn(key, data, f"status 要报出 {key}")
 
     def test_package_copy_serves_the_page_when_data_root_is_empty(self):
-        """随包副本是兜底那一级：数据根没装摆姿包时，页面与 CC0 素体都从插件目录里出来。"""
+        """随包副本是兜底那一级：数据根没装姿势包时，页面与 CC0 素体都从插件目录里出来。"""
         pkg = self.pose_module.PACKAGE_DIST
         self.pose_module.PACKAGE_DIST = self.pose_dir / "unit_pkg_copy"
         try:
@@ -894,7 +894,7 @@ class PoseBridgeTests(_ServerCase):
             self.assertEqual(json.loads(body)["props"][0]["file"], "wide.glb")
 
             status, _, _ = self.get_full("/models/../../launcher_config.json")
-            self.assertIn(status, (400, 404), "这条前缀不能把摆姿包 models 之外的文件发出去")
+            self.assertIn(status, (400, 404), "这条前缀不能把姿势包 models 之外的文件发出去")
         finally:
             self.pose_module.PACKAGE_DIST = pkg
 
@@ -913,7 +913,7 @@ class PoseBridgeTests(_ServerCase):
     def test_pose_routes_are_desktop_owned(self):
         """页面与桥接口归桌面端；子资源前缀是静态伺服，不进能力表。
 
-        逐条核对摆姿模块注册的那张表：能力归属表漏一条，桌面端就会把那个接口报成「要 ComfyUI 在跑」。"""
+        逐条核对姿势模块注册的那张表：能力归属表漏一条，桌面端就会把那个接口报成「要 ComfyUI 在跑」。"""
         registered = {(route.method.upper(), route.path) for route in self.pose_module.routes}
         missing = sorted(item for item in registered
                          if item[1].startswith("/neo") and item not in caps.DESKTOP_ROUTES)

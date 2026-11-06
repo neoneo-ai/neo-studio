@@ -11,7 +11,7 @@ the bundled copy file for file** (which is why a fresh build and a user-imported
 
 | Landing path | Contents | Where it comes from |
 |--------------|----------|---------------------|
-| `<data root>/pose/dist/` | Full build, `*.map` included, about 16 MB | `tools\sync_pose_dist.ps1`; the 「启动设置 → 摆姿仓库」 auto-sync |
+| `<data root>/pose/dist/` | Full build, `*.map` included, about 16 MB | `tools\sync_pose_dist.ps1`; the 「启动设置 → 姿势仓库」 auto-sync |
 | `studio/pose_dist/` | Minimal licensed copy, code + the two default CC0 base figures + the self-authored props, about 3.0 MB | `tools\build_pose_package.ps1`, ships with the Registry package and the exe |
 
 What goes into the bundled copy is decided by **licence**, not by size: `models/ATTRIBUTION.md` marks
@@ -253,7 +253,7 @@ the sync command with a line of explanation instead of an empty grid: an empty b
 looks like. The modal carries one more entry, "local scene file…", which takes a JSON file from this
 machine through `pose:open-scene` - a file outside the library loads just the same.
 
-The panel has no 摆姿模式 / 吸附 / 轮廓线 / 主体层 checkboxes: posing starts by clicking the figure, which
+The panel has no 姿势模式 / 吸附 / 轮廓线 / 主体层 checkboxes: posing starts by clicking the figure, which
 makes the page enter pose mode on its own and leave it on an empty-space click, the page starts with snap
 and outline off, and the figure stays visible - so the canvas state line mirrors only the character, its
 count and the prop count. The ControlNet set is untouched by this: the line-art pass turns the outline

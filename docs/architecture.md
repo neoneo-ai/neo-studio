@@ -80,7 +80,7 @@ studio/
 ├── backyard.py                # Backyard 预处理与 OSS 上传页
 ├── recipes.py                 # 配方后端 + /rs_recipes/* 路由
 ├── studio.py                  # 新影工坊后端 + /neo_studio/* 路由
-├── pose.py                    # 3D 摆姿页后端 + /neo-pose 与 /neo_pose/* 路由
+├── pose.py                    # 3D 姿势页后端 + /neo-pose 与 /neo_pose/* 路由
 ├── frames.py                  # 视频抽帧页后端 + /neo_frames/* 路由
 ├── model_hub.py               # 模型仓库 + /neo_model_hub/* 路由
 ├── skill_models.py            # 预设模型清单 models.json + /neo_skill_models/* 路由
@@ -142,7 +142,7 @@ studio/
 | `backyard.py` | Backyard 页面：Gallery 预处理与 OSS 上传管理 |
 | `recipes.py` | 配方 CRUD、一键发送、导演配方与故事板、导入导出 |
 | `studio.py` | 新影工坊后端：独立页面入口与整片生成任务 |
-| `pose.py` | 3D 摆姿页后端：伺服摆姿包产物、场景读写与画布导出进素材库 |
+| `pose.py` | 3D 姿势页后端：伺服姿势包产物、场景读写与画布导出进素材库 |
 | `frames.py` | 视频抽帧页后端：素材视频按分段伺服给播放器、抽出来的一帧写进 `output/Frames` |
 | `app/studio_app.py` | 桌面端：拉起 ComfyUI 并托管 WebView2 窗口（几何 / localStorage 持久化） |
 | `workflow.py` | 工作流模型路径修复、修复映射、技能模型建议 |
@@ -194,7 +194,7 @@ studio/
 | `toast.js` | 提示条 |
 | `quick-input-history.js` | 快速输入历史 |
 | `studio/` | 新影工坊独立页面（index.html + studio-app.js + shim/） |
-| `pose/pose.js` | 3D 摆姿页宿主：iframe 承载、工具条与 postMessage 桥 |
+| `pose/pose.js` | 3D 姿势页宿主：iframe 承载、工具条与 postMessage 桥 |
 | `frames/frames.js` | 视频抽帧页：播放器与起抽点、起抽参数、canvas 取帧与逐帧存进素材库 |
 | `*.css` | 各模块样式 |
 

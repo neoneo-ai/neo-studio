@@ -208,7 +208,7 @@ _AGENT = {
     ("POST", "/neo_agent/prefs"),
 }
 
-# 3D 摆姿页（studio/pose.py）：伺服 3d-pose-art 的构建产物 + 与页面之间的桥接口，全在文件层，
+# 3D 姿势页（studio/pose.py）：伺服 3d-pose-art 的构建产物 + 与页面之间的桥接口，全在文件层，
 # 桌面端进程没有 ComfyUI 运行时也能答。两条静态前缀 /pose-dist/ 与 /models/ 都不在表里：它们由
 # 两端各自直接注册（前端在 iframe 内部直接加载 JS / CSS / GLB / wasm，道具注册表与 GLB 的地址是产物
 # 按站点根写死的 /models/...，逐条给静态文件打表只会让条目数随构建产物变动），

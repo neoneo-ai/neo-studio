@@ -425,7 +425,7 @@ class MainDirDeleteTests(unittest.TestCase):
 
 
 class PoseDirLandingTests(unittest.TestCase):
-    """摆姿导出的落点 output/Pose：它是 output 下的普通子目录，列表、缩略图寻址与单条
+    """姿势导出的落点 output/Pose：它是 output 下的普通子目录，列表、缩略图寻址与单条
     删除全部复用系统目录那一条路，素材库不需要为它注册任何东西。"""
 
     _FILE = "pose_front_skeleton.png"

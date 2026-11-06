@@ -37,7 +37,7 @@ def _write(path, text):
 
 
 def _make_repo(root: pathlib.Path) -> pathlib.Path:
-    """一个最小摆姿仓库：pose-lib（预设集）+ pose-lab（本地集）+ dist（构建产物）+ 索引脚本。"""
+    """一个最小姿势仓库：pose-lib（预设集）+ pose-lab（本地集）+ dist（构建产物）+ 索引脚本。"""
     _write(root / "package.json", "{}")
     _write(root / "scripts" / "poseLib.mjs", IDX_JS)
     _write(root / "pose-lib" / "poses" / "p1.scene.json", "{}")

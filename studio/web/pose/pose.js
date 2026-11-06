@@ -1,13 +1,13 @@
 /**
- * pose.js — 桌面端「3D 摆姿」页宿主（Studio 视图）。
+ * pose.js — 桌面端「3D 姿势」页宿主（Studio 视图）。
  *
- * 摆姿包 = 3d-pose-art 的 vite 产物，后端伺服在 /pose-dist/，短路径 /neo-pose 跳到入口页
+ * 姿势包 = 3d-pose-art 的 vite 产物，后端伺服在 /pose-dist/，短路径 /neo-pose 跳到入口页
  * （产物是 base:'./' 的相对 import，页面必须有目录深度，理由见 studio/pose.py）。控件在宿主这一侧：
- * 左栏场景库，右栏摆姿控制面板，画布在中间的 iframe 里跑。宿主复刻不了那份 three.js 运行时，
- * 面板的每个动作都经 pose:call 落进页面（动作清单在摆姿页 src/ui/hostCommands.js），画布状态经
+ * 左栏场景库，右栏姿势控制面板，画布在中间的 iframe 里跑。宿主复刻不了那份 three.js 运行时，
+ * 面板的每个动作都经 pose:call 落进页面（动作清单在姿势页 src/ui/hostCommands.js），画布状态经
  * pose:state 回流。页面在 caps.hostUi 下收起自己的 demo 控件 —— 同一时刻只有一套控件在场上。
  *
- * 桥的消息名与方向 —— 名单由 /neo_pose/status 下发，宿主、摆姿页、后端测试三处同名：
+ * 桥的消息名与方向 —— 名单由 /neo_pose/status 下发，宿主、姿势页、后端测试三处同名：
  *   页面 → 宿主  pose:ready        页面装配完，宿主立刻回一份 pose:theme
  *   页面 → 宿主  pose:state        画布状态快照（素体 / 人数 / 道具数），面板镜像它
  *   宿主 → 页面  pose:theme        能力位与语言：caps.hostUi 决定页面收不收 demo 控件
@@ -46,18 +46,18 @@ const BODY_KEY_RE = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/;   // 素体 key：与�
 const LIB_PREFIX = "/pose-lib";
 const LIB_INDEX = `${LIB_PREFIX}/index.json`;
 const LIB_PAGE = 200;      // 一次渲染的卡片上限：库里 600+ 条全塞进 DOM，首屏与滚动都撑不住
-const LIB_VARIANTS = ["clay", "skeleton", "silhouette", "depth"];   // 缩略图优先级，与摆姿页 thumbOf 同一条
+const LIB_VARIANTS = ["clay", "skeleton", "silhouette", "depth"];   // 缩略图优先级，与姿势页 thumbOf 同一条
 const LIB_ORIGIN_ORDER = [{ key: "lib", label: "预设（只读）" }, { key: "lab", label: "本地（可写）" }];
 const LIB_SYNC_HINT = "场景库未同步：跑 tools\\sync_pose_lib.ps1 -Source <3d-pose-art 仓库根> 把 pose-lib 同步进" +
-    " <数据根>/pose/lib，或在「启动设置 → 摆姿仓库」填上仓库目录，桌面端每次启动自动同步。";
+    " <数据根>/pose/lib，或在「启动设置 → 姿势仓库」填上仓库目录，桌面端每次启动自动同步。";
 const LIB_ORIGIN_LABEL = { lib: "预设", lab: "本地" };   // 合并库每条的出处：预设随仓库分发只读，本地是本机自己写的
 
-/** 随包 CC0 标准素体里默认那一份（摆姿仓库 src/pose/character.js 的 CHARACTERS 表首）。
+/** 随包 CC0 标准素体里默认那一份（姿势仓库 src/pose/character.js 的 CHARACTERS 表首）。
     页面开局挂的就是这一档，面板的素体下拉与场景库的基座筛选都以它起头 ——
     下拉停在「选择素体…」时「加素体」会跟着页面当前素体走，用户看不见自己将拿到哪具身。 */
 const DEFAULT_CHAR_KEY = "bodyMale";
 
-/** 页面开局是摄影棚灰（摆姿页 core/scene.js 的 LOOKS.studio），面板按产品口径把外观定在暗色档 */
+/** 页面开局是摄影棚灰（姿势页 core/scene.js 的 LOOKS.studio），面板按产品口径把外观定在暗色档 */
 const DEFAULT_LOOK_KEY = "dark";
 
 /** 左右栏收起偏好：画布要整幅时把场景库与控制面板收成两条竖栏，重开窗口停在上次的位置 */
@@ -74,7 +74,7 @@ function propChoiceName(text) {
  * 自由填写的道具名 → 页面认的 propKey（内置 `builtin:chair`、注册表 `glb:arrow.glb`）。
  *
  * 面板上看见的是中文 label（椅子），页面 addProp 要的是带前缀的 propKey，中间这一层只能
- * 宿主做：内置道具表在摆姿包里，宿主不许复刻它的定义，只做「名字 → 清单里那一项」的查找。
+ * 宿主做：内置道具表在姿势包里，宿主不许复刻它的定义，只做「名字 → 清单里那一项」的查找。
  * 认四种写法：全 key、裸 id（chair / arrow.glb）、中文 label（椅子 / 细剑）。
  * @param {string} input 用户输入
  * @param {Array<{key?: string, propKey?: string, label?: string}>} options meta/list 的道具项
@@ -93,7 +93,7 @@ export function resolvePropChoice(input, options) {
     return hit ? keyOf(hit) : null;
 }
 
-/** 建「3D 摆姿」视图。依赖由宿主注入：api 走 shim（离线与在线同一条路） */
+/** 建「3D 姿势」视图。依赖由宿主注入：api 走 shim（离线与在线同一条路） */
 export function createPoseView({ api, $el, toast }) {
     return async function buildPose(el) {
         ensureCss();
@@ -105,7 +105,7 @@ export function createPoseView({ api, $el, toast }) {
         let propChoices = [];   // meta/list 的道具项：自由填写的名字只在这份清单里解析，不猜定义
         const canvas = {};
 
-        // 两层门控：读写本机文件只认 pose:ready；摆姿动作还要 caps.hostUi —— 旧摆姿包没有
+        // 两层门控：读写本机文件只认 pose:ready；姿势动作还要 caps.hostUi —— 旧姿势包没有
         // 宿主命令层，控件摆出来只会在页面里空转（能力不可用就不出控件）
         const libGate = [];
         const panelGate = [];
@@ -148,7 +148,7 @@ export function createPoseView({ api, $el, toast }) {
         // 不写这一句，用户只会以为素体列表坏了
         const pkgNote = $el("div", {
             className: "ns-pose-blank",
-            textContent: t("摆姿页跑在随包的最小摆姿包上：随包只分发 CC0 素体，其余素体请「导入自备素体」。"),
+            textContent: t("姿势页跑在随包的最小姿势包上：随包只分发 CC0 素体，其余素体请「导入自备素体」。"),
         });
         pkgNote.hidden = true;
         const libBar = sideBar("场景库");
@@ -157,14 +157,14 @@ export function createPoseView({ api, $el, toast }) {
             sceneList,
             row([sceneName, btnSaveScene]),
             row([btnBrowseLib, btnLoadScene]),
-            head("摆姿包"),
+            head("姿势包"),
             pkgNote,
         ]);
 
         /* 右栏：控制面板。下拉内容一次由 meta/list 给齐，面板不逐样问页面 */
         const notice = $el("div", {
             className: "ns-pose-notice",
-            textContent: t("摆姿包不含宿主命令层：运行 tools\\sync_pose_dist.ps1 同步最新构建产物。"),
+            textContent: t("姿势包不含宿主命令层：运行 tools\\sync_pose_dist.ps1 同步最新构建产物。"),
         });
         notice.hidden = true;
         const stateBox = $el("div", { className: "ns-pose-state" });
@@ -203,7 +203,7 @@ export function createPoseView({ api, $el, toast }) {
             group("画布状态", [stateBox]),
             group("素体", [row([modelSel, btnAddMember]), row([btnDelMember, btnResetPose]),
                 row([bodyKey, btnImportBody]), bodyFile]),
-            group("摆姿", [row([presetSel]), row([lookSel])]),
+            group("姿势", [row([presetSel]), row([lookSel])]),
             group("道具", [
                 row([propSel, propName]),
                 row([btnAddProp]),
@@ -227,7 +227,7 @@ export function createPoseView({ api, $el, toast }) {
         setPanel(false);
 
         /* 左右栏收起：收起后栏首那一行就是整栏全部，画布吃掉栏宽（导演页收起生成面板同一口径）。
-           收起是布局偏好，不进 libGate/panelGate —— 缺包与旧摆姿包把控件整片关掉时，栏也收得回去 */
+           收起是布局偏好，不进 libGate/panelGate —— 缺包与旧姿势包把控件整片关掉时，栏也收得回去 */
         let savedSides = { lib: false, panel: false };
         try {
             const saved = JSON.parse(localStorage.getItem(SIDE_KEY) || "null");
@@ -261,16 +261,16 @@ export function createPoseView({ api, $el, toast }) {
         // 向页面要一份回复（动作结果 / 导出图 / 场景 JSON）：页面不回就超时，面板不被一次点击锁死
         const request = (type, payload = {}) => new Promise((resolve, reject) => {
             const ch = new MessageChannel();
-            const timer = setTimeout(() => reject(new Error(t("摆姿页未响应"))), CALL_TIMEOUT_MS);
+            const timer = setTimeout(() => reject(new Error(t("姿势页未响应"))), CALL_TIMEOUT_MS);
             ch.port1.onmessage = (e) => { clearTimeout(timer); resolve(e.data); };
-            ch.port1.onmessageerror = () => { clearTimeout(timer); reject(new Error(t("摆姿页回复不可读"))); };
+            ch.port1.onmessageerror = () => { clearTimeout(timer); reject(new Error(t("姿势页回复不可读"))); };
             post(type, payload, ch.port2);
         });
 
         /** 一个面板动作 → 页面：{ok:false, error} 在这变成异常，调用处只写成功路径 */
         const action = async (name, args = {}) => {
             const reply = await request("pose:call", { action: name, args });
-            if (!reply?.ok) throw new Error(reply?.error || t("摆姿页拒绝了动作"));
+            if (!reply?.ok) throw new Error(reply?.error || t("姿势页拒绝了动作"));
             return reply.data || {};
         };
 
@@ -380,7 +380,7 @@ export function createPoseView({ api, $el, toast }) {
             }, [$el("input", { type: "checkbox", className: "ns-pose-check", value: f.key, checked: "checked" }), f.label])));
         }
 
-        /** 外观定在暗色档：摆姿页的 LOOKS 只有摄影棚灰与暗色两档，旧包没有暗色档就不动 */
+        /** 外观定在暗色档：姿势页的 LOOKS 只有摄影棚灰与暗色两档，旧包没有暗色档就不动 */
         async function applyDefaultLook(m) {
             const hit = (m.looks || []).find((l) => l.key === DEFAULT_LOOK_KEY);
             if (!hit) return;
@@ -388,8 +388,8 @@ export function createPoseView({ api, $el, toast }) {
             await action("look/set", { key: hit.key }).catch(() => {});
         }
 
-        /** 素体下拉落在标准男基座上：页面开局挂的就是它（摆姿页 src/pose/character.js 的 CHARACTERS 表首），
-         *  旧摆姿包没这一档就停在「选择素体…」—— 下拉里那一项就是「加素体」将拿到的那具身，不能写一个没有的 */
+        /** 素体下拉落在标准男基座上：页面开局挂的就是它（姿势页 src/pose/character.js 的 CHARACTERS 表首），
+         *  旧姿势包没这一档就停在「选择素体…」—— 下拉里那一项就是「加素体」将拿到的那具身，不能写一个没有的 */
         function applyDefaultChar() {
             if (modelSel.value) return;
             if (!metaModels.some((m) => m.key === DEFAULT_CHAR_KEY)) return;
@@ -448,14 +448,14 @@ export function createPoseView({ api, $el, toast }) {
             return $el("span", {
                 className: `ns-pose-lib-origin-badge ns-pose-lib-origin-${ship ? "ship" : "lab"}`,
                 textContent: LIB_ORIGIN_LABEL[ship ? "lib" : "lab"],
-                title: ship ? t("预设库：随摆姿仓库分发，只读") : t("本地库：本机自己写的姿态"),
+                title: ship ? t("预设库：随姿势仓库分发，只读") : t("本地库：本机自己写的姿态"),
             });
         };
 
         const libCard = (entry) => {
             const label = entry.label || entry.id;
             const thumb = previewOf(entry);
-            // 预览图是摆姿仓库对着来源参考图渲染的那一张：参考图版式可以把同一个人画两遍
+            // 预览图是姿势仓库对着来源参考图渲染的那一张：参考图版式可以把同一个人画两遍
             // （「手臂绘图参考」就是一张纸两个视角），图上的个数比场景文件里的人数多。
             // 角上标住这张是参考图，人数只在副标题那一行按场景文件说。
             const pic = thumb
@@ -539,7 +539,7 @@ export function createPoseView({ api, $el, toast }) {
             renderLibIndex();
         }
 
-        /** 基座筛选的选项来自库条目自带的 charKey（同步脚本按摆姿仓库的分派结果写进索引）：
+        /** 基座筛选的选项来自库条目自带的 charKey（同步脚本按姿势仓库的分派结果写进索引）：
          *  列表跟着库里真有的基座走，默认停在画布当前那具素体 —— 库默认就是「能套到当前素体上」的那一批 */
         function fillLibCharSel() {
             const keys = [...new Set((libIndex?.entries || []).map((e) => String(e.charKey || "")).filter(Boolean))];
@@ -610,7 +610,7 @@ export function createPoseView({ api, $el, toast }) {
                 const data = String(reader.result).split(",")[1] || "";
                 const saved = await json("/neo_pose/import_model", { key, data });
                 bodyKey.value = "";
-                toast(tf("自备素体已写进摆姿包：{key}（在摆姿页的本地导入区登记这个 key 后可选）",
+                toast(tf("自备素体已写进姿势包：{key}（在姿势页的本地导入区登记这个 key 后可选）",
                     { key: saved.key }));
             });
             reader.onerror = () => toast(t("读文件失败"));
@@ -712,7 +712,7 @@ export function createPoseView({ api, $el, toast }) {
                 setLib(true);
                 post("pose:theme", { caps, lang: getLang() });
                 if (caps.hostUi !== true) {
-                    // 旧摆姿包没有宿主命令层：面板说明缺什么，不摆点了只会空转的控件
+                    // 旧姿势包没有宿主命令层：面板说明缺什么，不摆点了只会空转的控件
                     notice.hidden = false;
                     return;
                 }
@@ -721,7 +721,7 @@ export function createPoseView({ api, $el, toast }) {
                 action("meta/list").then(async (m) => {
                     paintMeta(m);
                     await applyDefaultLook(m);
-                }).catch((e) => toast(tf("读取摆姿元数据失败：{msg}", { msg: e.message })));
+                }).catch((e) => toast(tf("读取姿势元数据失败：{msg}", { msg: e.message })));
                 refreshProps();
                 return;
             }
@@ -729,7 +729,7 @@ export function createPoseView({ api, $el, toast }) {
         });
 
         async function render() {
-            stage.replaceChildren($el("div", { className: "ns-pose-hint", textContent: t("读取摆姿状态…") }));
+            stage.replaceChildren($el("div", { className: "ns-pose-hint", textContent: t("读取姿势状态…") }));
             setLib(false);
             setPanel(false);
             frame = null;
@@ -738,7 +738,7 @@ export function createPoseView({ api, $el, toast }) {
             if (!status) {
                 setChrome(false);
                 stage.replaceChildren($el("div", { className: "ns-pose-empty" }, [
-                    $el("h3", { textContent: t("摆姿状态读不到") }),
+                    $el("h3", { textContent: t("姿势状态读不到") }),
                     $el("p", { textContent: t("后端未就绪：刷新页面重试。") }),
                 ]));
                 return;
@@ -751,8 +751,8 @@ export function createPoseView({ api, $el, toast }) {
                 const retry = $el("button", { className: "ns-pose-btn", type: "button", onclick: render });
                 setIconLabel(retry, "history", t("重新检查"));
                 stage.replaceChildren($el("div", { className: "ns-pose-empty" }, [
-                    $el("h3", { textContent: t("3D 摆姿未安装") }),
-                    $el("p", { textContent: status.hint || t("未找到摆姿包。") }),
+                    $el("h3", { textContent: t("3D 姿势未安装") }),
+                    $el("p", { textContent: status.hint || t("未找到姿势包。") }),
                     retry,
                 ]));
                 return;
@@ -760,10 +760,10 @@ export function createPoseView({ api, $el, toast }) {
             setChrome(true);
             frame = $el("iframe", {
                 className: "ns-pose-frame",
-                title: t("3D 摆姿"),
+                title: t("3D 姿势"),
                 src: POSE_PAGE_URL,
                 // allow-downloads 给页面自存 GLB；不给 allow-popups / allow-forms / allow-top-navigation，
-                // 摆姿页只需要脚本、同源存储与被拦截的下载
+                // 姿势页只需要脚本、同源存储与被拦截的下载
                 sandbox: "allow-scripts allow-same-origin allow-downloads",
             });
             stage.replaceChildren(frame);
@@ -790,16 +790,16 @@ function sideIcon(side, collapsed) {
 }
 
 /** 卡片缩略图优先级：clay 是写实渲染那张，一眼看得出姿势；缺 clay 的条目落到 skeleton / silhouette / depth。
-    口径与摆姿页 src/ui/libraryPanel.js 的 thumbOf 同一条（库的 inbox 源图不在同步范围内，不作候选）。 */
+    口径与姿势页 src/ui/libraryPanel.js 的 thumbOf 同一条（库的 inbox 源图不在同步范围内，不作候选）。 */
 export function previewOf(entry) {
     const p = entry?.preview || {};
     for (const key of LIB_VARIANTS) { if (p[key]) return String(p[key]); }
     return "";
 }
 
-/** 搜索口径与摆姿仓库 poseLibrary.js 的 filterIndex 同一份字段表：label / 分类 / 标签 / id / source；
+/** 搜索口径与姿势仓库 poseLibrary.js 的 filterIndex 同一份字段表：label / 分类 / 标签 / id / source；
  *  origin 是合并库每条的出处（预设 lib / 本地 lab），旧版清单没这字段 = 本地库那份；
- *  charKey 是这条姿态挂的基座（同步脚本按摆姿仓库 lib:bodies 的分派结果写进索引），
+ *  charKey 是这条姿态挂的基座（同步脚本按姿势仓库 lib:bodies 的分派结果写进索引），
  *  旧版清单没这字段 = 没分派过基座，一筛基座就看不见它 —— 套上去多半是女姿挂男身 */
 export function libFilter(entries, { q = "", group = "", origin = "", charKey = "" } = {}) {
     const text = String(q || "").trim().toLowerCase();
@@ -838,7 +838,7 @@ export function libGroups(entries, groups) {
 
 /** 卡片副标题：人数与道具数写在最前 —— 多人场景要在卡片上分得出来；其后是分类头两条与来源。
     库里 preset / manual 这两种来源满库都是，标出来没意义，
-    只有 photo3d / mixamo 这类真实来源值得用户看见（口径与摆姿页卡片副标题同一份字段表） */
+    只有 photo3d / mixamo 这类真实来源值得用户看见（口径与姿势页卡片副标题同一份字段表） */
 export function libTagsOf(entry) {
     const cats = [...new Set(entry?.categories || [])].slice(0, 2).join(" / ");
     const source = entry?.source;

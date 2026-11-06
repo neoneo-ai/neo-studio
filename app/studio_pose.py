@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
-"""摆姿资产自动同步：「启动设置 → 摆姿仓库」（launcher_config 的 pose_repo）指向 3d-pose-art 仓库根时，
-桌面端每次启动把 dist 摆姿包与 pose-lib 场景库补进数据根，摆姿页与场景库因此不会停在旧构建上。
+"""姿势资产自动同步：「启动设置 → 姿势仓库」（launcher_config 的 pose_repo）指向 3d-pose-art 仓库根时，
+桌面端每次启动把 dist 姿势包与 pose-lib 场景库补进数据根，姿势页与场景库因此不会停在旧构建上。
 
-摆姿页与场景库读的是数据根那一级，且它压住随包副本：pose 数据更新而数据根没跟着同步时，
+姿势页与场景库读的是数据根那一级，且它压住随包副本：pose 数据更新而数据根没跟着同步时，
 用户看到的就是一片空白缩略图与素体缺失。同步只在「源比数据根新」时动手——
 重复启动、没构建过的仓库都跑不出文件复制；用户在 pose/dist/models 导入的自备素体与 pose/scenes
 的存档不在源里，镜像时先存后还。口径与 tools\\sync_pose_dist.ps1、tools\\sync_pose_lib.ps1 一致：
@@ -23,7 +23,7 @@ ROBOCOPY_FLAGS = ("/MIR", "/NFL", "/NDL", "/NJH", "/NJS", "/NP",
 
 
 def pose_repo_dir(path) -> Path | None:
-    """摆姿仓库根的校验：pose-lib 容器在才算仓库；只认绝对路径。"""
+    """姿势仓库根的校验：pose-lib 容器在才算仓库；只认绝对路径。"""
     text = str(path).strip()
     if not text:
         return None
@@ -40,7 +40,7 @@ def pose_repo_dir(path) -> Path | None:
 
 
 def find_pose_repo(cfg: dict, comfy_root) -> Path | None:
-    """摆姿仓库的三档查找：启动配置 → 环境变量 → ComfyUI 根的同级目录（装机习惯：仓库与 ComfyUI 并排放）。"""
+    """姿势仓库的三档查找：启动配置 → 环境变量 → ComfyUI 根的同级目录（装机习惯：仓库与 ComfyUI 并排放）。"""
     for cand in (str(cfg.get("pose_repo", "")), os.environ.get(POSE_ENV_KEY, ""),
                  str(Path(str(comfy_root or "")).parent / "3d-pose-art")):
         repo = pose_repo_dir(cand)
@@ -114,18 +114,18 @@ def _sync_file(src_f: Path, dst_f: Path) -> bool:
 
 
 def _robocopy_mirror(src: Path, dst: Path) -> None:
-    """摆姿包全量镜像走 robocopy：`*.map` 与 assets 子目录要原样落进数据根，tools 脚本用的就是它。"""
+    """姿势包全量镜像走 robocopy：`*.map` 与 assets 子目录要原样落进数据根，tools 脚本用的就是它。"""
     proc = subprocess.run(["robocopy", str(src), str(dst), *ROBOCOPY_FLAGS],
                           capture_output=True, text=True, encoding="utf-8", errors="replace",
                           timeout=900,
                           **({"creationflags": subprocess.CREATE_NO_WINDOW} if os.name == "nt" else {}))
     # robocopy 把「复制了文件」也当非零退出（1..7 都是成功），8 起才是真失败
     if proc.returncode >= 8:
-        raise RuntimeError(f"robocopy 镜像摆姿包失败 rc={proc.returncode}: {proc.stdout[-200:]}")
+        raise RuntimeError(f"robocopy 镜像姿势包失败 rc={proc.returncode}: {proc.stdout[-200:]}")
 
 
 def sync_dist(repo: Path, data_root: Path) -> dict | None:
-    """摆姿包镜像进 <数据根>/pose/dist：源没构建过就整级跳过；用户在 models/ 导入的素体先存后还。"""
+    """姿势包镜像进 <数据根>/pose/dist：源没构建过就整级跳过；用户在 models/ 导入的素体先存后还。"""
     src = repo / "dist"
     if not src.is_dir() or not (src / "index.html").is_file():
         return None
@@ -239,7 +239,7 @@ def sync_lib(repo: Path, data_root: Path) -> dict | None:
 
 
 def rebuild_index(repo: Path, dst: Path) -> bool:
-    """合并索引走摆姿仓库自己的 CLI（node scripts/poseLib.mjs merged --out ...）：
+    """合并索引走姿势仓库自己的 CLI（node scripts/poseLib.mjs merged --out ...）：
     宿主与桌面端都不复刻第二份清单构建逻辑，charKey 由仓库的 lib:bodies 分派结果写进条目。"""
     script = repo / "scripts" / "poseLib.mjs"
     node = shutil.which("node")
@@ -259,12 +259,12 @@ def rebuild_index(repo: Path, dst: Path) -> bool:
 
 
 def auto_sync(data_root: Path, repo, log=lambda line: None) -> dict:
-    """一次启动的摆姿资产同步：仓库解析 → dist 镜像 → 场景库同步；源缺哪级跳哪级，全程幂等。"""
+    """一次启动的姿势资产同步：仓库解析 → dist 镜像 → 场景库同步；源缺哪级跳哪级，全程幂等。"""
     started = time.monotonic()
     out = {"repo": str(repo) if repo else "", "dist": 0, "lib": 0, "index": False,
            "seconds": 0.0, "skipped": ""}
     if repo is None:
-        out["skipped"] = "未配置摆姿仓库"
+        out["skipped"] = "未配置姿势仓库"
         return out
     dist = sync_dist(repo, data_root)
     if dist is None:

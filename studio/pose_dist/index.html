@@ -6,20 +6,20 @@
     <!-- 全站深色主题：声明给浏览器原生控件（select 下拉弹层 / 滚动条 / 数字输入箭头），
          否则弹层按系统白底画，配上浅色文字就是「打开下拉框看不见字」 -->
     <meta name="color-scheme" content="dark" />
-    <title>3D Pose Art — Web 角色摆姿编辑器</title>
-    <meta name="description" content="基于 three.js 的 Web 3D 角色摆姿编辑器，支持 FK 旋转与 CCD IK 末端拖拽。" />
+    <title>3D Pose Art — Web 角色姿势编辑器</title>
+    <meta name="description" content="基于 three.js 的 Web 3D 角色姿势编辑器，支持 FK 旋转与 CCD IK 末端拖拽。" />
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎨</text></svg>" />
     <!-- 被 Neo Studio 装进 iframe 时，demo 控件从首帧起就收掉（真正隐藏的是 styles/main.css 的
          html[data-host-ui] 规则）。工具条、六个 aside 面板与底部提示都在 body 里静态写着，而页面
          模块要等默认素体（0.9MB 的 bodyMale.glb）加载完才建桥、宿主才回 pose:theme —— 之前这段时间里
-         宿主打开摆姿页先看到的是整套单机 demo 页面，之后才「跳」成宿主版。
+         宿主打开姿势页先看到的是整套单机 demo 页面，之后才「跳」成宿主版。
          判据与 src/neoBridge.js 同一条：parent === window 是单机部署（npm run dev / Pages / 静态站），
          那个标记不落、行为逐字不变；旧宿主不带 caps.hostUi 时桥会把标记撤掉，回落成 demo 全量控件。 -->
     <script>
       if (window.parent !== window) document.documentElement.setAttribute('data-host-ui', '1');
     </script>
-    <script type="module" crossorigin src="./assets/index-L-hUp5gt.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-DIgQr3Ne.css">
+    <script type="module" crossorigin src="./assets/index-pLziDA-d.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-CSOmJDA4.css">
   </head>
   <body>
     <div id="canvas-host"></div>
@@ -28,7 +28,7 @@
 
     <!-- 工具栏收起开关：工具栏是贴在画布左边的竖栏，控件一排下来在矮窗口会一路拖到底。
          收起键自己不收（贴在竖栏左下角，与底部提示同一水平线），收起后竖栏只留常用区那一块 -->
-    <button id="btnChrome" title="收起 / 展开左侧工具栏（T）：收起后只留常用区（素体 / 摆姿 / 吸附 / 轮廓 / 外观 / 人物 / 预设），鼠标点这些按钮照常生效">面板：展开</button>
+    <button id="btnChrome" title="收起 / 展开左侧工具栏（T）：收起后只留常用区（素体 / 姿势 / 吸附 / 轮廓 / 外观 / 人物 / 预设），鼠标点这些按钮照常生效">面板：展开</button>
 
     <div id="toolbar">
       <!-- 常用区：收起（T / 左下角开关）只留这一块，高度由 controls.js 现量写进 --chrome-row -->
@@ -41,7 +41,7 @@
         <button id="btnRemoveMember" title="删除当前选中的素体">－ 删除</button>
       </div>
       <div class="tb-row">
-        <button id="btnPose" class="primary" title="摆姿模式：动画暂停写入骨骼（临时）。要让动画永远不抢这副骨架，在时间轴把该角色泳道静音或删除它（不选动画＝没有动画在写骨骼）">进入摆姿模式 (K)</button>
+        <button id="btnPose" class="primary" title="姿势模式：动画暂停写入骨骼（临时）。要让动画永远不抢这副骨架，在时间轴把该角色泳道静音或删除它（不选动画＝没有动画在写骨骼）">进入姿势模式 (K)</button>
       </div>
       <div class="tb-row">
         <button id="btnSnap">吸附：关 (N)</button>
@@ -51,7 +51,7 @@
         <button id="btnLook">外观：摄影棚</button>
       <button
         id="btnSubjects"
-        title="显示 / 隐藏场上全部素人（人物本体 + 轮廓 + 选中圈一起）—— 载入全景背景时会自动关人物（灰模素体与照片级实拍背景不搭），要带人拍点这个；物体、参考图、动画与摆姿数据都不受影响，隐藏期间点不中人（先点「人物显」再摆姿）"
+        title="显示 / 隐藏场上全部素人（人物本体 + 轮廓 + 选中圈一起）—— 载入全景背景时会自动关人物（灰模素体与照片级实拍背景不搭），要带人拍点这个；物体、参考图、动画与姿势数据都不受影响，隐藏期间点不中人（先点「人物显」再摆姿势）"
       >
         人物
       </button>
@@ -93,7 +93,7 @@
         title="导入道具：选一个 GLB / OBJ / PLY / STL / FBX，本机解码烘焙成标准 GLB 并用道具运行时真装一遍（非空 / 有网格 / 三角形 / 底面贴地 / 高度归一 1m），过了闸门才落盘 public/models/props/ 并登记进物体下拉（需 npm run dev；产物只在本机、不进仓库；来源与授权请自己记进 public/models/ATTRIBUTION.md）"
         >导入道具</button
       >
-      <button id="btnRefPlanes" title="参考图面板：上传照片摆到场景里对着描（Image Planes）。参考图只作摆姿辅助，导出的 6 张参考图里不含它">参考图</button>
+      <button id="btnRefPlanes" title="参考图面板：上传照片摆到场景里对着描（Image Planes）。参考图只作姿势辅助，导出的 6 张参考图里不含它">参考图</button>
       </div>
       <div class="tb-row">
         <button
@@ -112,12 +112,12 @@
         全景框选
       </button>
 
-      <button id="btnBodyImport" title="照片 → 可摆姿素体：选照片，本机生成 SMPL 骨架 GLB 并登记进素体下拉（需 npm run dev + Python + torch + SMPL 模型 + HMR2 权重；产物与登记都只在本机，不进仓库）">导入素体</button>
+      <button id="btnBodyImport" title="照片 → 可摆姿势素体：选照片，本机生成 SMPL 骨架 GLB 并登记进素体下拉（需 npm run dev + Python + torch + SMPL 模型 + HMR2 权重；产物与登记都只在本机，不进仓库）">导入素体</button>
       </div>
       <div class="tb-row">
         <button
         id="btnBodyShape"
-        title="身材形变：滑杆改这具身体的绑定姿态网格（身高 / 腿长 / 臂长 / 胸腰髋围 / 四肢粗细 / 肩宽 / 躯干长），旁边实时显示量出来的 cm。只改网格、骨骼与权重不动 → 摆姿 / IK / 动画照常；按素体存在本机，刷新后自动恢复"
+        title="身材形变：滑杆改这具身体的绑定姿态网格（身高 / 腿长 / 臂长 / 胸腰髋围 / 四肢粗细 / 肩宽 / 躯干长），旁边实时显示量出来的 cm。只改网格、骨骼与权重不动 → 姿势 / IK / 动画照常；按素体存在本机，刷新后自动恢复"
       >
         身材
       </button>
@@ -258,7 +258,7 @@
     </aside>
 
     <div id="hint">
-      点击人像=进入摆姿 · 再点人像=显示移动箭头 · 按住关节球拖动=自由转 · 抓 gizmo 环=单轴精调 · X 局部/世界 · F 聚焦 · N 吸附 · T 收起工具条 · D / Delete 删选中 · Ctrl+C / Ctrl+V 复制粘贴选中项 · Ctrl+Z · Esc
+      点击人像=进入姿势模式 · 再点人像=显示移动箭头 · 按住关节球拖动=自由转 · 抓 gizmo 环=单轴精调 · X 局部/世界 · F 聚焦 · N 吸附 · T 收起工具条 · D / Delete 删选中 · Ctrl+C / Ctrl+V 复制粘贴选中项 · Ctrl+Z · Esc
     </div>
     <input type="file" id="fileInputOP" accept=".json" style="display:none" />
     <!-- 照片 → 3D 的选图框：只收 MediaPipe 认的图片格式（扩展名与 src/ui/photo3d.js 的 MIME_EXT 对齐） -->

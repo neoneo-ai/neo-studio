@@ -1,4 +1,4 @@
-// 3D 摆姿宿主：iframe 承载、桥的门禁与收发、面板动作往返（pose:call / pose:state），
+// 3D 姿势宿主：iframe 承载、桥的门禁与收发、面板动作往返（pose:call / pose:state），
 // 以及桥接结果落到的那几个 /neo_pose 接口。
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -21,7 +21,7 @@ const settle = async () => { await flush(); await sleep(0); await flush(); };
 const META = {
     models: [{ key: "girl", label: "少女" }],
     presets: [{ key: "run", label: "奔跑" }],
-    // 道具项的真实形状来自摆姿页 src/core/propKit.js 的 listPropOptions：键名是 propKey，不是 key
+    // 道具项的真实形状来自姿势页 src/core/propKit.js 的 listPropOptions：键名是 propKey，不是 key
     props: [
         { propKey: "builtin:chair", label: "椅子", source: "builtin" },
         { propKey: "glb:arrow.glb", label: "箭", source: "glb" },
@@ -34,11 +34,11 @@ const META = {
     views: [{ key: "front", label: "正面" }, { key: "side", label: "侧面" }],
     sizes: [256, 512, 1024, 2048],
     bones: ["hips", "head"],
-    // 外观两档来自摆姿页 core/scene.js 的 LOOKS：studio 是页面开局的摄影棚灰，dark 是暗色
+    // 外观两档来自姿势页 core/scene.js 的 LOOKS：studio 是页面开局的摄影棚灰，dark 是暗色
     looks: [{ key: "studio", label: "摄影棚" }, { key: "dark", label: "暗色" }],
     maxExportSize: 1024,
 };
-/** 随包 CC0 摆姿包那份素体表：表首就是摆姿仓库 CHARACTERS 的标准男基座，
+/** 随包 CC0 姿势包那份素体表：表首就是姿势仓库 CHARACTERS 的标准男基座，
     默认素体与基座筛选两条路都认它，旧包的素体表只有用户自备的那几具 */
 const META_CC0 = {
     ...META,
@@ -62,10 +62,10 @@ const STATUS = {
     hint: "",
 };
 
-/** pose-lib 的索引 fixture：形状来自摆姿仓库 poseLibrary.js 的 buildIndex（3dpose.index/1）。
+/** pose-lib 的索引 fixture：形状来自姿势仓库 poseLibrary.js 的 buildIndex（3dpose.index/1）。
     库里一份条目是一整场（people / props 在清单里），条目带 groups / categories / preview / charKey，
     preview 是「档位 → 图」的对象（clay 优先、缺档往下落），charKey 是这条姿态挂的基座
-    （同步脚本按摆姿仓库 lib:bodies 的分派结果写进索引；没有分派结果的条目不带这个字段），
+    （同步脚本按姿势仓库 lib:bodies 的分派结果写进索引；没有分派结果的条目不带这个字段），
     缩略图优先级、无预览占位与分层口径都钉在这份上 */
 const POSE_LIB = {
     format: "3dpose.index/1",
@@ -183,7 +183,7 @@ test("装好包：iframe 指短路径并带沙箱，pose:ready 之前控件全�
     const frame = env.host.querySelector(".ns-pose-frame");
     assert.equal(frame.getAttribute("src"), POSE_PAGE_URL);
     assert.equal(frame.getAttribute("sandbox"), "allow-scripts allow-same-origin allow-downloads");
-    assert.equal(env.host.querySelector(".ns-pose-bar"), null, "顶栏那条「3D 摆姿」行整条不出");
+    assert.equal(env.host.querySelector(".ns-pose-bar"), null, "顶栏那条「3D 姿势」行整条不出");
     // 收起钮是布局入口，不在门禁里：页面没 ready 时也要能把栏收起来看画布
     const gated = () => [...env.host.querySelectorAll(".ns-pose-btn:not(.ns-pose-collapse), .ns-pose-sel, .ns-pose-checkrow input")];
     assert.ok(gated().length > 15, "面板与库的控件要在位");
@@ -207,7 +207,7 @@ test("桥只认本页 iframe 的同源消息", async () => {
     assert.ok(panelBtn().disabled, "非同源的 ready 不解锁控件");
 });
 
-test("旧摆姿包（caps.hostUi 关）：面板禁用并说明缺什么，场景读写照旧", async () => {
+test("旧姿势包（caps.hostUi 关）：面板禁用并说明缺什么，场景读写照旧", async () => {
     resetEnv();
     const env = await mounted({ ...STATUS, caps: { ...STATUS.caps, hostUi: false } });
     await env.ready();
@@ -219,7 +219,7 @@ test("旧摆姿包（caps.hostUi 关）：面板禁用并说明缺什么，场�
     assert.ok(panelBtns.every((b) => b === importBody || b.disabled),
         "没有命令层就不出点了只会空转的控件");
     assert.equal(importBody.disabled, false,
-        "自备素体导入走宿主自己的接口，不依赖摆姿页的命令层，旧包也照旧可点");
+        "自备素体导入走宿主自己的接口，不依赖姿势页的命令层，旧包也照旧可点");
     assert.equal(env.host.querySelector(PANEL + " .ns-pose-collapse").disabled, false,
         "收起栏是布局偏好，不是页面动作：控件整片禁用时栏也收得回去");
     assert.equal(env.calls().length, 0, "旧包不许发 pose:call");
@@ -354,9 +354,9 @@ test("pose:state 镜像：状态栏只镜像素体、人数与道具数", async 
     assert.ok(rows.some((r) => r.includes("girl")), "素体要落进状态栏");
     assert.ok(rows.some((r) => r.includes("素体数") && r.endsWith("2")), "人数要落进状态栏");
     assert.ok(rows.some((r) => r.includes("道具数") && r.endsWith("1")), "道具数要落进状态栏");
-    assert.equal(rows.length, 3, "模式开关不进状态栏：摆姿靠点人物，轮廓线与吸附页面默认就是关");
+    assert.equal(rows.length, 3, "模式开关不进状态栏：姿势靠点人物，轮廓线与吸附页面默认就是关");
     assert.equal(env.host.querySelectorAll(PANEL + " .ns-pose-checkrow").length, 0,
-        "面板不出摆姿模式 / 吸附 / 轮廓线 / 主体层四个勾选");
+        "面板不出姿势模式 / 吸附 / 轮廓线 / 主体层四个勾选");
 });
 
 test("外观默认暗色：meta/list 到位后面板把外观定在暗色档并下发 look/set", async () => {
@@ -374,7 +374,7 @@ test("外观默认暗色：meta/list 到位后面板把外观定在暗色档并�
     await settle();
 });
 
-test("外观默认暗色：旧摆姿包没有暗色档时不发只会失败的动作", async () => {
+test("外观默认暗色：旧姿势包没有暗色档时不发只会失败的动作", async () => {
     resetEnv();
     const env = await mounted();
     await env.ready();
@@ -605,7 +605,7 @@ test("场景库弹窗：卡片按预览优先级出缩略图与人数，点卡�
     assert.ok(!card("sword").querySelector(".ns-pose-lib-thumb"), "四档全无的条目出占位，不出图");
     assert.match(card("sword").textContent, /无预览/);
     assert.ok(card("calm-1").querySelector(".ns-pose-lib-ref") && card("a").querySelector(".ns-pose-lib-ref"),
-        "预览是摆姿仓库对参考图的渲染，卡片要标住它是参考图：参考图版式能把同一个人画两遍");
+        "预览是姿势仓库对参考图的渲染，卡片要标住它是参考图：参考图版式能把同一个人画两遍");
     assert.ok(!card("sword").querySelector(".ns-pose-lib-ref"), "没图的卡片不标参考图");
     assert.match(card("calm-1").textContent, /2人/,
         "多人场景要在卡片副标题上看得见，挑的时候就知道这场有几个人");
@@ -785,7 +785,7 @@ test("素体默认标准男基座：随包 CC0 清单到位后下拉落在 bodyM
         "基座筛选跟着当前素体走：库不会停在套不上的那一档");
 });
 
-test("旧摆姿包没有标准基座：素体下拉停在「选择素体…」，加素体不写一个清单里没有的 key", async () => {
+test("旧姿势包没有标准基座：素体下拉停在「选择素体…」，加素体不写一个清单里没有的 key", async () => {
     resetEnv();
     const env = await mounted();
     await env.ready();

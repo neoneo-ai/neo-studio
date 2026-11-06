@@ -1,13 +1,13 @@
-# 把 3d-pose-art 的姿势库同步进数据根，装成「3D 摆姿」页的场景库。
+# 把 3d-pose-art 的姿势库同步进数据根，装成「3D 姿势」页的场景库。
 #
-# 摆姿仓库那边库拆成两根（npm run lib:split）：pose-lib/ 预设库（只读、随仓库分发）与
+# 姿势仓库那边库拆成两根（npm run lib:split）：pose-lib/ 预设库（只读、随仓库分发）与
 # pose-lab/ 本地库（作者自己写的姿态，可写）。Neo Studio 只要一份合并结果：
 #   <数据根>/pose/lib/  ← 预设集 + 本地集，同 id 本地胜出
 # studio/pose.py 只读这一级（LIB_DIR），静态伺服挂在 /pose-lib/ 上；库不进 Registry 包也不进
 # exe（data/ 不随包分发），所以同步完刷新页面就生效。库数据在 Neo Studio 这边全程只读：
 # 场景写的是 pose/scenes/，不写库。
 #
-# 索引不在这里算：合并索引由摆姿仓库自己算（node scripts\poseLib.mjs merged），
+# 索引不在这里算：合并索引由姿势仓库自己算（node scripts\poseLib.mjs merged），
 # 同 id 谁赢、origin 怎么标都在那一份实现里，这里只搬文件 + 取那份索引。
 #
 # 从仓库根运行：
@@ -26,7 +26,7 @@ $ErrorActionPreference = "Stop"
 function Fail([string]$msg) { Write-Host $msg -ForegroundColor Red; exit 1 }
 
 if (-not (Test-Path -LiteralPath $Source -PathType Container)) {
-    Fail "找不到摆姿仓库目录：$Source（应指向 3d-pose-art 仓库根）"
+    Fail "找不到姿势仓库目录：$Source（应指向 3d-pose-art 仓库根）"
 }
 $repo = (Resolve-Path -LiteralPath $Source).Path
 # -Source 指到 pose-lib/ 上也接：那种写法拿不到 scripts\poseLib.mjs，往上一级找仓库根
@@ -35,19 +35,19 @@ if (-not (Test-Path -LiteralPath (Join-Path $repo "pose-lib") -PathType Containe
 }
 $cli = Join-Path $repo "scripts\poseLib.mjs"
 if (-not (Test-Path -LiteralPath $cli -PathType Leaf)) {
-    Fail "摆姿仓库根不对：$repo（看不到 scripts\poseLib.mjs）"
+    Fail "姿势仓库根不对：$repo（看不到 scripts\poseLib.mjs）"
 }
 $ship = Join-Path $repo "pose-lib"
 $lab = Join-Path $repo "pose-lab"
 if (-not (Test-Path -LiteralPath (Join-Path $ship "index.json") -PathType Leaf)) {
-    Fail "预设库里没有索引清单：$ship\index.json。在摆姿仓库里跑 npm run lib -- shipped 生成它。"
+    Fail "预设库里没有索引清单：$ship\index.json。在姿势仓库里跑 npm run lib -- shipped 生成它。"
 }
 if (-not (Test-Path -LiteralPath (Join-Path $ship "poses") -PathType Container)) {
     Fail "预设库里没有 poses\：$(Join-Path $ship 'poses')"
 }
 $hasLab = Test-Path -LiteralPath (Join-Path $lab "poses") -PathType Container
 $node = Get-Command node -ErrorAction SilentlyContinue
-if (-not $node) { Fail "找不到 node：合并索引要跑摆姿仓库的 scripts\poseLib.mjs merged" }
+if (-not $node) { Fail "找不到 node：合并索引要跑姿势仓库的 scripts\poseLib.mjs merged" }
 
 # pose/ 下的 scenes、refs 与 presets 是用户写的场景与素材，本脚本只镜像库自己那一目录，不碰它们
 $poseDir = Join-Path (Resolve-Path -LiteralPath $DataRoot).Path "pose"
@@ -68,7 +68,7 @@ $shipTier = if ($All) { "clay + skeleton + silhouette + depth" } elseif ($Light)
 # 两遍镜像：先把本地库 /MIR 进目标（顺手清掉上一轮的多余文件），再把预设集里目标没有的文件补进来。
 # 补文件必须带 /E：库文件全在 poses/<分组>/ 子目录里，robocopy 默认不下钻子目录，
 # 少了 /E 就是「预设集一条都没补上」。/XO 让预设集永不压过同名文件（/XC /XN 一起给 = 
-# 只补目标里没有的那批），这条与摆姿仓库合并索引的「同 id 本地胜出」是同一件事的两个面。
+# 只补目标里没有的那批），这条与姿势仓库合并索引的「同 id 本地胜出」是同一件事的两个面。
 function Invoke-Robocopy([array]$rob) {
     robocopy @rob /NFL /NDL /NJH /NP | Out-Null
     if ($LASTEXITCODE -ge 8) { Fail "同步失败（robocopy 退出码 $LASTEXITCODE）" }
@@ -109,11 +109,11 @@ if (Test-Path -LiteralPath $destPreview -PathType Container) {
     }
 }
 
-# 索引清单交给摆姿仓库自己算（预设 + 本地、同 id 本地胜出、条目带 origin），这里只收结果
+# 索引清单交给姿势仓库自己算（预设 + 本地、同 id 本地胜出、条目带 origin），这里只收结果
 $mergedOut = Join-Path $dest "index.json"
 & $node.Source $cli merged --out $mergedOut
 if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $mergedOut -PathType Leaf)) {
-    Fail "合并索引没生成：$mergedOut（在摆姿仓库里跑 npm run lib -- merged 看具体报错）"
+    Fail "合并索引没生成：$mergedOut（在姿势仓库里跑 npm run lib -- merged 看具体报错）"
 }
 
 # 分类登记：本地库改过用本地库；授权说明随预设库走（库数据发到哪，授权跟到哪）
@@ -133,5 +133,5 @@ $fromShip = @($index.entries | Where-Object { $_.origin -eq "lib" }).Count
 Write-Host "场景库已落进 $dest" -ForegroundColor Green
 Write-Host ("  {0} 个文件，{1:N1} MB，预览档位：{2}" -f $files.Count, ($bytes / 1MB), $shipTier)
 Write-Host ("  索引 {0} 条（预设 {1} · 本地 {2}）" -f $index.count, $fromShip, ($index.count - $fromShip))
-Write-Host "刷新 Neo Studio 窗口的「3D 摆姿」页即可生效（页面逐请求判断库在不在，不必重启）。"
+Write-Host "刷新 Neo Studio 窗口的「3D 姿势」页即可生效（页面逐请求判断库在不在，不必重启）。"
 exit 0

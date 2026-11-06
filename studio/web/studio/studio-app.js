@@ -236,7 +236,7 @@ function paintPickImage(images) {
     openImageEditDialog(app.neoGallery, { filename: img.filename }, img.subfolder);
 }
 
-// 摆姿视图的依赖在这汇聚：api 走 shim（离线/在线同一条路）
+// 姿势视图的依赖在这汇聚：api 走 shim（离线/在线同一条路）
 const buildPose = createPoseView({ api, $el, toast });
 
 /** 抽帧页取视频：点卡片取一条换进播放器（一次只看一条视频） */
@@ -247,7 +247,7 @@ function openFramesMaterial(onPick) {
     });
 }
 
-// 抽帧页与摆姿页不共享任何东西：取用同一套弹窗，抽帧自己在浏览器里做（见 studio/web/frames/frames.js）
+// 抽帧页与姿势页不共享任何东西：取用同一套弹窗，抽帧自己在浏览器里做（见 studio/web/frames/frames.js）
 const buildFrames = createFramesView({ api, $el, toast, openMaterial: openFramesMaterial });
 
 onSidebarTabChange((id) => {
@@ -817,7 +817,7 @@ function buildHome(el) {
             homeCard("pencil", "图片编辑", "拖入素材，写下要改成什么样", () => openPaintMode("edit")),
             homeCard("play", "导演视频", "多段配方，生成整片视频", () => go("director")),
             homeCard("target", "智能体", "说出目标，工具链多轮跑完", () => go("agent")),
-            homeCard("pose", "3D 摆姿", "摆姿 · 场景 · 全景", () => go("pose")),
+            homeCard("pose", "3D 姿势", "姿势 · 场景 · 全景", () => go("pose")),
         ]),
         $el("h2", { className: "ns-home-section", textContent: t("素材与配置") }),
         $el("div", { className: "ns-home-grid" }, [
@@ -1363,9 +1363,9 @@ function createLauncherPanel() {
             + "立刻生效并写进启动配置，下次开机沿用。",
         dev: "打开刷新键 / 右键菜单 / 开发者工具，排查窗口白屏与前端问题用。\n"
             + "pywebview 在建窗口时定值：勾完要重启桌面端窗口才生效。",
-        poseRepo: "3d-pose-art 仓库根（带 pose-lib 那一层目录）：填上后桌面端每次启动自动把 dist 摆姿包与 "
-            + "pose-lib 场景库补进数据根，pose 数据更新后摆姿页不会停在旧构建与空白缩略图上。\n"
-            + "保存这一行会立刻在后台同步一次；留空 = 不自动同步，摆姿页停在数据根现有那份与随包副本上。",
+        poseRepo: "3d-pose-art 仓库根（带 pose-lib 那一层目录）：填上后桌面端每次启动自动把 dist 姿势包与 "
+            + "pose-lib 场景库补进数据根，pose 数据更新后姿势页不会停在旧构建与空白缩略图上。\n"
+            + "保存这一行会立刻在后台同步一次；留空 = 不自动同步，姿势页停在数据根现有那份与随包副本上。",
     };
     const infoDot = (tip) => $el("span", { className: "ns-info", textContent: "i", tabindex: "0", "data-tip": tip });
     const row = (label, tip, ...kids) => $el("div", { className: "ns-launch-row" },
@@ -1375,7 +1375,7 @@ function createLauncherPanel() {
     const portRow = row(t("端口"), t(TIPS.port), portIn);
     const listenRow = row(t("局域网监听"), t(TIPS.listen), listenSel);
     const remoteRow = row(t("远程 ComfyUI"), t(TIPS.remote), remoteIn);
-    const poseRow = row(t("摆姿仓库"), t(TIPS.poseRepo), poseIn, poseBrowseBtn);
+    const poseRow = row(t("姿势仓库"), t(TIPS.poseRepo), poseIn, poseBrowseBtn);
     // 远程模式下这几项归远端那台机器管：灰掉，别让本机设置看起来能影响远端
     const localRows = [rootRow, pyRow, portRow, listenRow, poseRow];
     const localInputs = [rootIn, pyIn, portIn, listenSel, browseBtn, pyBrowseBtn, poseIn, poseBrowseBtn];
@@ -1569,7 +1569,7 @@ function createLauncherPanel() {
         $el("div", { className: "ns-launch-group", textContent: t("桌面窗口") }),
         framelessRow,
         devRow,
-        $el("div", { className: "ns-launch-group", textContent: t("摆姿资产") }),
+        $el("div", { className: "ns-launch-group", textContent: t("姿势资产") }),
         poseRow,
         $el("div", { className: "ns-launch-actions" }, [applyBtn, depsBtn, fixBtn]),
         lanHint,

@@ -33,10 +33,10 @@ const EN = {
     "导演视频": "Direct a Video",
     "多段配方，生成整片视频": "Chain recipe segments into a finished video",
     "说出目标，工具链多轮跑完": "State the goal, let the tool loop run it out",
-    // 3D 摆姿页（宿主面板与缺包提示；摆姿包自身的文案在摆姿页里）
-    "摆姿": "Pose 3D",
-    "3D 摆姿": "3D Pose",
-    "摆姿 · 场景 · 全景": "Pose, scenes, panorama",
+    // 3D 姿势页（宿主面板与缺包提示；姿势包自身的文案在姿势页里）
+    // 顶栏 tab 的中文名就是「姿势」，英文名走下面姿势导出那一份 "Pose"，这里不再开第二个同名 key
+    "3D 姿势": "3D Pose",
+    "姿势 · 场景 · 全景": "Pose, scenes, panorama",
     "场景库": "Scene Library",
     "控制面板": "Control Panel",
     // 左右栏收起（栏首那枚两栏框图标钮，收起后那条竖栏就是展开入口）
@@ -58,8 +58,8 @@ const EN = {
     "GLB 超过 {n}MB 上限": "The GLB is over the {n} MB limit",
     "素体 key 只允许字母数字与 _ . -（64 字符内）": "Character key allows letters, digits, _ . - (up to 64 characters)",
     "读文件失败": "Reading the file failed",
-    "自备素体已写进摆姿包：{key}（在摆姿页的本地导入区登记这个 key 后可选）": "Own character saved into the pose package: {key} — register this key in the pose page's local import area to pick it",
-    "摆姿页跑在随包的最小摆姿包上：随包只分发 CC0 素体，其余素体请「导入自备素体」。": "This pose page runs on the bundled minimal package: only the CC0 character ships with it, import your own characters for the rest.",
+    "自备素体已写进姿势包：{key}（在姿势页的本地导入区登记这个 key 后可选）": "Own character saved into the pose package: {key} — register this key in the pose page's local import area to pick it",
+    "姿势页跑在随包的最小姿势包上：随包只分发 CC0 素体，其余素体请「导入自备素体」。": "This pose page runs on the bundled minimal package: only the CC0 character ships with it, import your own characters for the rest.",
     "重置姿态": "Reset Pose",
     "添加道具": "Add Prop",
     "挂到骨点": "Attach To Bone",
@@ -82,18 +82,18 @@ const EN = {
     "还没有存档": "Nothing saved yet",
     "场上没有道具": "No props on stage",
     "未挂载": "unattached",
-    "摆姿页未响应": "The pose page did not answer",
-    "摆姿页回复不可读": "The pose page reply is unreadable",
-    "摆姿页拒绝了动作": "The pose page rejected the action",
-    "读取摆姿状态…": "Reading pose status…",
-    "摆姿状态读不到": "Pose status unavailable",
+    "姿势页未响应": "The pose page did not answer",
+    "姿势页回复不可读": "The pose page reply is unreadable",
+    "姿势页拒绝了动作": "The pose page rejected the action",
+    "读取姿势状态…": "Reading pose status…",
+    "姿势状态读不到": "Pose status unavailable",
     "后端未就绪：刷新页面重试。": "The backend is not ready: reload the page.",
-    "3D 摆姿未安装": "3D Pose is not installed",
-    "未找到摆姿包。": "The pose package was not found.",
+    "3D 姿势未安装": "3D Pose is not installed",
+    "未找到姿势包。": "The pose package was not found.",
     "重新检查": "Check again",
-    "摆姿包不含宿主命令层：运行 tools\\sync_pose_dist.ps1 同步最新构建产物。": "The pose package has no host command layer: run tools\\sync_pose_dist.ps1 to sync the latest build.",
+    "姿势包不含宿主命令层：运行 tools\\sync_pose_dist.ps1 同步最新构建产物。": "The pose package has no host command layer: run tools\\sync_pose_dist.ps1 to sync the latest build.",
     "先选一个道具": "Pick a prop first",
-    // 自由填写的道具名：定义在摆姿包的道具表里，面板只在 meta/list 那份清单里找，找不到要说清能输什么
+    // 自由填写的道具名：定义在姿势包的道具表里，面板只在 meta/list 那份清单里找，找不到要说清能输什么
     "道具名（例：椅子）": "Prop name (e.g. 椅子)",
     "道具表里没有「{name}」：可输入 椅子 / 桌子 / 剑 这类名字（共 {n} 项），或从下拉选":
         "No prop \"{name}\" in the prop list: type a name like 椅子 / 桌子 / 剑 ({n} available), or pick one from the dropdown",
@@ -103,7 +103,7 @@ const EN = {
     "先在场景库里选一场": "Pick a scene in the library first",
     "失败：{msg}": "Failed: {msg}",
     "道具列表失败：{msg}": "Fetching the prop list failed: {msg}",
-    "读取摆姿元数据失败：{msg}": "Reading pose metadata failed: {msg}",
+    "读取姿势元数据失败：{msg}": "Reading pose metadata failed: {msg}",
     "场景已保存：{name}": "Scene saved: {name}",
     "已载入场景：{name}": "Scene loaded: {name}",
     // 场景库弹窗（pose-lib 的整场库 + 本机场景文件两条路）：卡片按 clay 优先出缩略图，库未同步出同步指引
@@ -118,7 +118,7 @@ const EN = {
     "按基座筛选：一条姿态挂着它的基座，挂在女基座上的姿态套到男素体上身型与盆宽全歪":
         "Filter by base: every pose carries its base, and a pose rigged on the female base warps on a male body",
     "无预览": "No preview",
-    // 库卡片的预览图是摆姿仓库对来源参考图的渲染，参考图版式可以把同一个人画两遍
+    // 库卡片的预览图是姿势仓库对来源参考图的渲染，参考图版式可以把同一个人画两遍
     "参考图": "reference render",
     "没有匹配的场景": "No matching scenes",
     "加载更多（还有 {n} 条）": "Load more ({n} left)",
@@ -133,7 +133,7 @@ const EN = {
     "本地": "Local",
     "按来源筛选：预设随仓库分发只读，本地是本机自己写的":
         "Filter by origin: the preset ships with the pose repo and is read-only, local is what this machine wrote",
-    "预设库：随摆姿仓库分发，只读": "Preset library: distributed with the pose repo, read-only",
+    "预设库：随姿势仓库分发，只读": "Preset library: distributed with the pose repo, read-only",
     "本地库：本机自己写的姿态": "Local library: poses this machine wrote itself",
     "读不到库文件：{path}": "Cannot read the library file: {path}",
     "场景库未同步：跑 tools\\sync_pose_lib.ps1 -Source <3d-pose-art 仓库根> 把 pose-lib 同步进 <数据根>/pose/lib。":
@@ -149,7 +149,7 @@ const EN = {
     "一次最多导出 {n} 张": "At most {n} images per export",
     "已导出 {n} 张到素材库的 Pose 目录": "Exported {n} images to the library's Pose folder",
     "画布截图已进素材库的 Pose 目录：{name}": "Canvas snapshot in the library's Pose folder: {name}",
-    // 视频抽帧页（独立于摆姿页与素材库页：抽帧在浏览器里做，帧落进 output/Frames）
+    // 视频抽帧页（独立于姿势页与素材库页：抽帧在浏览器里做，帧落进 output/Frames）
     "视频抽帧": "Video Frame Extractor",
     "挑一条视频，抽帧存进素材库": "Pick a video and save its frames into the library",
     "挑一条视频，从它里面抽帧存进素材库：抽出来的帧落在素材库的 Frames 目录，浏览 output 就看得见":
@@ -349,7 +349,7 @@ const EN = {
     "ComfyUI 位置": "ComfyUI location",
     "网络与端口": "Network & port",
     "桌面窗口": "Desktop window",
-    "摆姿资产": "Pose assets",
+    "姿势资产": "Pose assets",
     // LLM 设置表单（表单里这几项原本是硬编码英文，中文界面夹英文）
     "LLM 服务商": "LLM Provider",
     "为 AI 功能选择服务商": "Choose a provider for AI features",
@@ -399,9 +399,9 @@ const EN = {
     "ComfyUI 本地目录": "Local ComfyUI folder",
     "无边框窗口": "Frameless window",
     "开发模式": "Dev mode",
-    "摆姿仓库": "Pose repo",
+    "姿势仓库": "Pose repo",
     "3d-pose-art 仓库根（留空 = 不自动同步）": "3d-pose-art repo root (empty = no auto-sync)",
-    "摆姿仓库已保存，正在后台同步摆姿资产": "Pose repo saved. Pose assets are syncing in the background",
+    "姿势仓库已保存，正在后台同步姿势资产": "Pose repo saved. Pose assets are syncing in the background",
     "就绪": "Ready",
     "远程就绪": "Remote ready",
     "远程不可达": "Remote unreachable",

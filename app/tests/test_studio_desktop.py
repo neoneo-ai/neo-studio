@@ -1999,7 +1999,7 @@ class LauncherConfigTests(unittest.TestCase):
                                             launcher={"root": "D:/ComfyUI", "port": 8188,
                                                     "pose_repo": str(pathlib.Path(tmp) / "repo")})
                 bad = desktop.set_pose_repo(str(pathlib.Path(tmp)))
-                self.assertFalse(bad["ok"], "没有 pose-lib 容器的目录不是摆姿仓库根")
+                self.assertFalse(bad["ok"], "没有 pose-lib 容器的目录不是姿势仓库根")
                 self.assertEqual(app.load_config()["pose_repo"], str(pathlib.Path(tmp) / "repo"),
                                  "校验失败不许动已存的配置")
                 synced.assert_not_called()

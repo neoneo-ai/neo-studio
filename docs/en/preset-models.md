@@ -183,7 +183,7 @@ is never blocked on them.
 |--------------------------------|------------------------------|---------------------|-------------------------------------------------------|
 | video_first_last_frames        | 首尾帧补间（WAN 2.2）        | No                  | No `workflow.json`; the skill never loads             |
 | video_reference2video          | 参考视频（WAN 2.2）          | No                  | No `workflow.json`; the skill never loads             |
-| 3d_pose                        | 3D 摆姿                      | No                  | Pose editor loads no workflow                         |
+| 3d_pose                        | 3D 姿势                      | No                  | Pose editor loads no workflow                         |
 | cosyvoice_voice                | CosyVoice 音色克隆           | Yes                 | Weights live in the plugin's own path, see below      |
 
 ### CosyVoice voice cloning (`cosyvoice_voice`)

@@ -2,7 +2,7 @@
 r"""Neo Studio「视频抽帧」后端：把素材库里的视频按分段回给播放器，把抽出来的一帧 PNG 写进素材库。
 
 抽帧本身在浏览器里跑（video seek + canvas 取帧），本机服务只做两件事，都是文件层：桌面端离线
-服务也挂这两条路由（app/studio_caps.py 已登记），页面独立于摆姿页与素材库页。
+服务也挂这两条路由（app/studio_caps.py 已登记），页面独立于姿势页与素材库页。
 
 视频不回全长响应的话抽不出正确的帧：Gallery 的 /neo_gallery/video 把整份文件一次读进内存，
 浏览器没有分段响应时只会顺序往后读，seek 落回开头 —— 抽出来的帧全是片头那一帧。
@@ -31,7 +31,7 @@ routes = web.RouteTableDef()
 
 # 帧只有 PNG：浏览器 canvas.toDataURL("image/png") 给的就是这一种，后端不收别的格式
 FRAME_EXT = ".png"
-# 与摆姿导出同一条上限：桌面端服务的请求体上限按这值装配（app/studio_server.py），
+# 与姿势导出同一条上限：桌面端服务的请求体上限按这值装配（app/studio_server.py），
 # 一帧 4K PNG 编码后仍在限内，接口先到不会让 transport 先截断
 MAX_BODY_BYTES = 48 * 1024 * 1024
 STEM_MAX = 64

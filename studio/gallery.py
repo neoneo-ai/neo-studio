@@ -51,7 +51,7 @@ WAVEFORM_DIR = GALLERY_DIR / "waveform_cache"  # decoded audio waveform peaks (J
 OUTPUT_DIR = Path(folder_paths.output_directory).resolve()
 GRID_DIR = OUTPUT_DIR / "StoryBoard"
 CHARACTER_DIR = OUTPUT_DIR / "CharacterSheet"
-# 摆姿导出的落点：output/Pose。挂在 output 下面就是素材库现成的浏览路径——首页 Output
+# 姿势导出的落点：output/Pose。挂在 output 下面就是素材库现成的浏览路径——首页 Output
 # 卡里的一个子目录卡，缩略图、大图、拖放进节点与单条删除全走系统目录那一条寻址
 # （_find_source_media 认相对 subfolder "Pose"）。导出项在列表与接口里回的都是
 # subfolder="Pose"，素材项与 ComfyUI 自己的输出项在界面上一模一样。
@@ -61,7 +61,7 @@ POSE_DIR_NAME = POSE_DIR.name   # 素材项 subfolder 上的锚定值
 # （subfolder="Frames"）；帧名带时间戳（frame-00_07_125.png），重名由抽帧页逐条存的时候防住。
 FRAMES_DIR = OUTPUT_DIR / "Frames"
 FRAMES_DIR_NAME = FRAMES_DIR.name   # 素材项 subfolder 上的锚定值
-# 插件加载时就把目录建好：摆姿导出前用户在素材库与文件管理器里都能看到它，
+# 插件加载时就把目录建好：姿势导出前用户在素材库与文件管理器里都能看到它，
 # 只读网络共享上建不出来时导入照常继续（导出时会再试一次）。
 try:
     POSE_DIR.mkdir(parents=True, exist_ok=True)
@@ -139,7 +139,7 @@ def _dir_key(path: Path) -> str:
 
     resolve() 是 realpath，一次网络往返；共享掉线时它卡在 SMB 超时上，而这段扫描跑在
     aiohttp 的事件循环里（gallery 的路由共用一个循环），配置里一条 NAS 目录就能把桌面端
-    服务整个冻住：素材库、配方列表、摆姿页的接口一起不回包。UNC 没有盘符映射与 8.3 短名
+    服务整个冻住：素材库、配方列表、姿势页的接口一起不回包。UNC 没有盘符映射与 8.3 短名
     要展开，小写字符串对隐藏目录匹配和 realpath 是同一个答案。
     """
     text = str(path)
@@ -222,7 +222,7 @@ DEFAULT_HOME_ORDER = ("Output", "Input", "local_bookmarks", "civitai_bookmarks")
 # 一张文件可以同时进多个标签（CharacterSheet 里的 png 既是图片也是角色图），
 # 判定口径与前端 gallery-utils.js 的 KIND_FILTERS 同一份，两边都要改才算改全。
 KIND_KEYS = ("image", "video", "audio", "character", "pose", "storyboard", "frames")
-KIND_POSE_PREFIX = "pose"     # 摆姿导出名 pose_<场景>_<视角>_<格式> / pose_shot
+KIND_POSE_PREFIX = "pose"     # 姿势导出名 pose_<场景>_<视角>_<格式> / pose_shot
 KIND_FRAMES_PREFIX = "frame"  # 抽帧存进素材库的帧名 frame-00_07_125
 KIND_MAX_ITEMS = 400          # 一个标签一次交回的条数上限，超出的部分带 truncated 标记
 KIND_WALK_DEPTH = 3           # 从目录根往下走几层：够到 StoryBoard/CharacterSheet 的 <日期>/ 与 Pose/、Frames/
@@ -1227,7 +1227,7 @@ async def get_gallery_list(request):
         requested_fields = set()
     
     # 配置扫描是文件系统探测：配了网络盘的机器上连 exists() 都是一次 SMB 往返。离开事件
-    # 循环，一条掉线的共享目录只慢这一个请求，顶栏、摆姿页、配方列表的接口照常回包。
+    # 循环，一条掉线的共享目录只慢这一个请求，顶栏、姿势页、配方列表的接口照常回包。
     user_custom_dirs = await asyncio.to_thread(_get_user_custom_dirs)
     hidden_entries = await asyncio.to_thread(_get_hidden_entries)
     has_dir_name = bool(dir_name_param)
@@ -1673,7 +1673,7 @@ def _kind_walk(directory: Path, rel: str, depth: int) -> list[tuple[os.DirEntry,
 def _kind_keys(filename: str, media_type: str, rel: str, marked: bool) -> list[str]:
     """一张文件属于哪些标签：类型标签按媒体类型给，用途标签按目录锚定与文件名前缀给。
 
-    角色图认的是目录标记（逐段继承）与 CharacterSheet 主目录锚定；摆姿与抽帧的落点是
+    角色图认的是目录标记（逐段继承）与 CharacterSheet 主目录锚定；姿势与抽帧的落点是
     output 下的 Pose / Frames，它们的文件名前缀覆盖导出的旧批次（那时还没有这两个目录）。
     """
     keys = [media_type]

@@ -1597,15 +1597,15 @@ class StudioDesktop:
         return res
 
     def pick_pose_repo(self) -> str:
-        """原生目录选择器选摆姿仓库根：起始目录落在已存的那一份，选完还能改。"""
+        """原生目录选择器选姿势仓库根：起始目录落在已存的那一份，选完还能改。"""
         return pick_folder(str(self.launcher.get("pose_repo", "")))
 
     def set_pose_repo(self, pose_repo: str) -> dict:
-        """保存「启动设置 → 摆姿仓库」：校验落盘的同一轮就把摆姿资产补进数据根，不用等下次启动。"""
+        """保存「启动设置 → 姿势仓库」：校验落盘的同一轮就把姿势资产补进数据根，不用等下次启动。"""
         repo = studio_pose.pose_repo_dir(pose_repo)
         if repo is None:
             return {"ok": False,
-                    "error": f"不是摆姿仓库根（要 3d-pose-art 仓库根，带 pose-lib 那份容器）：{str(pose_repo).strip()}"}
+                    "error": f"不是姿势仓库根（要 3d-pose-art 仓库根，带 pose-lib 那份容器）：{str(pose_repo).strip()}"}
         self.launcher["pose_repo"] = str(repo)
         if not save_config(Path(str(self.launcher.get("root", ""))), self.python_arg,
                            self.port, self.launcher):
@@ -1613,7 +1613,7 @@ class StudioDesktop:
         log_line(f"pose repo saved {repo}")
         threading.Thread(target=lambda: studio_pose.auto_sync(
             STATE, repo, log_line), daemon=True).start()
-        return {"ok": True, "pose_repo": str(repo), "msg": "摆姿仓库已保存，正在后台同步摆姿资产"}
+        return {"ok": True, "pose_repo": str(repo), "msg": "姿势仓库已保存，正在后台同步姿势资产"}
 
 
 def purge_web_cache() -> None:
@@ -2009,7 +2009,7 @@ def main() -> int:
     remote_guide = IS_MAC and not remote_only and not remote
     launcher = {"root": str(root or ""), "python": str(python or ""), "port": port,
                 "plugin_dir": str(plugin_dir), "state_dir": str(STATE),
-                # 摆姿仓库目录：桌面端每次启动拿它把 pose/dist 与 pose/lib 补进数据根（旧配置没有这字段 = 空）
+                # 姿势仓库目录：桌面端每次启动拿它把 pose/dist 与 pose/lib 补进数据根（旧配置没有这字段 = 空）
                 "pose_repo": str(cfg.get("pose_repo", "")),
                 "portable": IS_FROZEN, "state": ST_REMOTE if remote_only else ST_OK, "error": "",
                 # 无边框是 Windows 新默认；macOS 第一版用原生标题栏，老配置也不能把自绘拖动带过来
@@ -2199,7 +2199,7 @@ def main() -> int:
         start_server()
         desktop.desktop_port = server.bound
         desktop.page_url = page_url
-        # 摆姿资产跟着启动补一级：pose 数据更新后数据根不会停在旧构建上（缺仓库配置时整步不打一行日志）
+        # 姿势资产跟着启动补一级：pose 数据更新后数据根不会停在旧构建上（缺仓库配置时整步不打一行日志）
         threading.Thread(target=lambda: studio_pose.auto_sync(
             STATE, studio_pose.find_pose_repo(launcher, root), log_line), daemon=True).start()
         # 存在性只问端口：端口上有人监听就是有一路 ComfyUI 在跑。不能拿 /neo_studio/version 这种

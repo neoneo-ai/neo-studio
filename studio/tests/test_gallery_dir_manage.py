@@ -159,7 +159,7 @@ def _unc_io_guard():
     """UNC 路径上的 resolve() / exists() 一律判失败。
 
     共享掉线时这两步各挂一次 SMB 超时，而配置扫描跑在桌面端服务的事件循环里：谁把它们
-    放回来，素材库、配方列表、摆姿页就一起不回包。
+    放回来，素材库、配方列表、姿势页就一起不回包。
     """
     real_resolve, real_exists = Path.resolve, Path.exists
 

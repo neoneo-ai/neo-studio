@@ -33,7 +33,7 @@ if __package__ not in (None, ""):
         for _route in _mod.routes:
             PromptServer.instance.routes.route(_route.method, _route.path, **_route.kwargs)(_route.handler)
 
-    # 摆姿包的静态前缀直接注册：vite 产物在数据根，子资源由 iframe 内部相对加载，
+    # 姿势包的静态前缀直接注册：vite 产物在数据根，子资源由 iframe 内部相对加载，
     # 不走模块路由表（理由见 studio/pose.py 的 register_static）
     pose.register_static(PromptServer.instance.routes)
 

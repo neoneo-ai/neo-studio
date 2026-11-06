@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
-r"""Neo Studio「3D 摆姿」页后端：伺服 3d-pose-art 构建产物 + 与页面之间的桥接口。
+r"""Neo Studio「3D 姿势」页后端：伺服 3d-pose-art 构建产物 + 与页面之间的桥接口。
 
 页面与桥接口只做文件读写，桌面端离线服务同样挂这些路由（app/studio_caps.py 已登记）。
-摆姿包 = 3d-pose-art 的 vite 构建产物，落点两级：<数据根>/pose/dist/ 优先（tools\sync_pose_dist.ps1
+姿势包 = 3d-pose-art 的 vite 构建产物，落点两级：<数据根>/pose/dist/ 优先（tools\sync_pose_dist.ps1
 同步的全量产物，含开发用的 map，约 16MB），随包分发的最小授权副本在 studio/pose_dist/
 （tools\build_pose_package.ps1 生成：代码 + CC0 标准素体 bodyMale.glb / bodyFemale.glb，约 3MB，进 Registry 包与 exe）。
 子资源逐请求按这两级找，数据根那份压住随包的同名文件，新构建与用户自备素体因此都优先。两级都没有时
 /neo_pose/status 报 installed=false，页面显示「未安装」而不是白屏。
 
-摆姿页在宿主页面里以 iframe 承载，与宿主同源（同源的 /neo_pose/* 与 /view），靠 postMessage
+姿势页在宿主页面里以 iframe 承载，与宿主同源（同源的 /neo_pose/* 与 /view），靠 postMessage
 交换消息。子资源（dist 下的 JS/CSS/GLB）由 iframe 内部直接加载，不经 shim。
 """
 
@@ -37,20 +37,20 @@ POSE_DIR = plugin_paths.DATA_ROOT / "pose"
 DIST_DIR = POSE_DIR / "dist"
 SCENES_DIR = POSE_DIR / "scenes"
 INDEX_HTML = DIST_DIR / "index.html"
-# 随包分发的最小摆姿包：与插件代码同批进 Registry 包与 exe，用户不跑同步脚本也能开页面。
+# 随包分发的最小姿势包：与插件代码同批进 Registry 包与 exe，用户不跑同步脚本也能开页面。
 # 它是可重建的产物镜像（tools\build_pose_package.ps1 的落点），运行期只读，任何写入都不落这里。
 PACKAGE_DIST = Path(__file__).parent / "pose_dist"
 MODELS_DIR = DIST_DIR / "models"          # 自备素体 GLB 的落点（页面按 <key>.glb 取它）
 MANIFEST_NAME = "MANIFEST.json"           # 随包发货清单：逐文件 sha256 与体积
 # 场景库（3d-pose-art 的姿势库）：另一级数据根内容，由 tools\sync_pose_lib.ps1 同步进来，本模块全程只读。
-# 摆姿仓库那边库拆成预设 pose-lib（只读）与本地 pose-lab（可写）两根，同步时并成这一份：同 id 本地胜出，
+# 姿势仓库那边库拆成预设 pose-lib（只读）与本地 pose-lab（可写）两根，同步时并成这一份：同 id 本地胜出，
 # 每条索引带 origin。库里一份条目是一整场场景文件（poses/<组>/<id>.scene.json，3dpose.scene/1：多人 + 道具），
 # 宿主弹窗按 entry.path 读它交回 scene/apply，不需要转换。
 LIB_DIR = POSE_DIR / "lib"
 
-# 摆姿页与它的子资源都走这条前缀：vite 产物是 base:'./' 的相对 import，页面必须落在有目录深度的
+# 姿势页与它的子资源都走这条前缀：vite 产物是 base:'./' 的相对 import，页面必须落在有目录深度的
 # URL 上，./assets/x.js 才会解析成 <前缀>/assets/x.js。挂在根级 /neo-pose 上时子资源全解析成
-# /assets/*，摆姿页连自己的模块都取不到，所以短路径只做跳转。
+# /assets/*，姿势页连自己的模块都取不到，所以短路径只做跳转。
 # 前缀不进 /neo 命名空间：能力归属表只逐条登记 /neo 前缀下的接口，静态文件逐条打表没有意义；
 # 也不进 /extensions，桌面端那条中间件把整段按 no-store 下发，带哈希的 wasm 每次刷新重传。
 STATIC_PREFIX = "/pose-dist"
@@ -60,21 +60,21 @@ PAGE_URL = f"{STATIC_PREFIX}/index.html"
 # 打开时这些请求落回 origin 根，前缀伺服一条都接不到。注册表读空的页面不会报错，
 # 它按空注册表出控件清单 —— 道具面板空着，加具全部失败，GLB 素体一个都加载不出来。
 MODELS_PREFIX = "/models"
-# 场景库的静态前缀与摆姿包同一条路子：库里 index.json、poses/**.scene.json 与 preview/*.png
+# 场景库的静态前缀与姿势包同一条路子：库里 index.json、poses/**.scene.json 与 preview/*.png
 # 由宿主弹窗逐条取（缩略图与场景文件都是库自己的文件），逐条打表没有意义，不进 /neo 命名空间。
-# 前缀名与摆姿仓库自己的那条 `/pose-lib/` 同名：库条目的 preview.path 与 entry.path 原样拼地址，
-# 宿主与摆姿页对同一份库文件说的是同一个名字。
+# 前缀名与姿势仓库自己的那条 `/pose-lib/` 同名：库条目的 preview.path 与 entry.path 原样拼地址，
+# 宿主与姿势页对同一份库文件说的是同一个名字。
 LIB_PREFIX = "/pose-lib"
 
-# 桥的契约是接口不是代码：宿主、摆姿页、桥接用例三处同名，改动必须同批落地
+# 桥的契约是接口不是代码：宿主、姿势页、桥接用例三处同名，改动必须同批落地
 BRIDGE_MESSAGES = ("pose:ready", "pose:theme", "pose:export-image",
                    "pose:save-scene", "pose:open-scene",
                    "pose:call", "pose:state")
 
-# 摆姿、时间轴、导出全在浏览器里跑（three.js），本机服务只提供文件；照片估点、网格、pano 要
+# 姿势、时间轴、导出全在浏览器里跑（three.js），本机服务只提供文件；照片估点、网格、pano 要
 # pose-art 那套 Python sidecar（vite dev/preview 才挂载），桌面端进程起不动它们，页面按这几位置灰按钮。
-# hostUi 反过来：宿主自带控件面板（pose.js 的工具条 + 侧栏），摆姿页据此收起自己的 demo 控件，
-# 面板的动作经 pose:call 落到页面运行时上（动作清单在摆姿页 src/ui/hostCommands.js）。
+# hostUi 反过来：宿主自带控件面板（pose.js 的工具条 + 侧栏），姿势页据此收起自己的 demo 控件，
+# 面板的动作经 pose:call 落到页面运行时上（动作清单在姿势页 src/ui/hostCommands.js）。
 # body_import 是宿主自己那条路，不依赖 sidecar：随包只发授权干净的 CC0 素体，Mixamo 与 SMPL 派生的
 # 那几份由用户自备 GLB 经 /neo_pose/import_model 写进 <数据根>/pose/dist/models/，页面在自己的本地
 # 导入区按 key 登记它（登记表在页面侧，宿主不碰）。
@@ -82,8 +82,8 @@ BRIDGE_CAPS = {"pose": True, "timeline": True, "export": True, "scene": True,
                "photo3d": False, "mesh": False, "pano": False, "body_import": True,
                "lib_write": False, "hostUi": True}
 
-NOT_INSTALLED_HINT = ("未找到摆姿包：<数据根>/pose/dist 与插件目录的 pose_dist 两级都是空的。跑 "
-                      "tools\\sync_pose_dist.ps1 把全量产物同步进数据根，或在「启动设置 → 摆姿仓库」填上仓库目录"
+NOT_INSTALLED_HINT = ("未找到姿势包：<数据根>/pose/dist 与插件目录的 pose_dist 两级都是空的。跑 "
+                      "tools\\sync_pose_dist.ps1 把全量产物同步进数据根，或在「启动设置 → 姿势仓库」填上仓库目录"
                       "（桌面端每次启动自动同步），或用随包那份 studio/pose_dist"
                       "（由 tools\\build_pose_package.ps1 生成，代码 + CC0 素体）。")
 
@@ -100,7 +100,7 @@ GLB_MAGIC = b"glTF"          # glTF 2.0 二进制的文件头：挡掉改名成 
 MAX_GLB_BYTES = 35 * 1024 * 1024
 
 # Windows 的 mimetypes 读注册表：.wasm 报 application/octet-stream 时
-# WebAssembly.instantiateStreaming 直接拒收，Draco 解不出 GLB，摆姿页连人物都加载不出来。
+# WebAssembly.instantiateStreaming 直接拒收，Draco 解不出 GLB，姿势页连人物都加载不出来。
 EXTRA_TYPES = {".wasm": "application/wasm", ".glb": "model/gltf-binary",
                ".ktx2": "image/ktx2", ".mjs": "text/javascript",
                ".js": "text/javascript", ".css": "text/css", ".json": "application/json"}
@@ -108,7 +108,7 @@ EXTRA_TYPES = {".wasm": "application/wasm", ".glb": "model/gltf-binary",
 
 @routes.get("/neo-pose")
 async def pose_page(request):
-    """3D 摆姿页短路径：跳到前缀下的入口页，相对资源才有目录深度可解析。"""
+    """3D 姿势页短路径：跳到前缀下的入口页，相对资源才有目录深度可解析。"""
     if active_dist_dir() is None:
         return web.Response(text=_not_installed_html(), content_type="text/html", status=404)
     raise web.HTTPFound(PAGE_URL)
@@ -121,7 +121,7 @@ async def pose_status(request):
 
 
 async def pose_static(request):
-    """摆姿包的前缀伺服：入口页每次校验，带内容哈希的 assets 长缓存。
+    """姿势包的前缀伺服：入口页每次校验，带内容哈希的 assets 长缓存。
 
     子资源由 iframe 内部直接加载（模块 import、GLB、wasm），不经宿主页面与 shim；
     入口页缓存住的话 WebView2 会连整张模块图一起用旧的，构建一变页面就跑旧代码。
@@ -163,7 +163,7 @@ async def pose_lib(request):
     未同步时整条前缀回 404 —— 弹窗先看 `/neo_pose/status` 的 `lib_installed` 出同步指引，
     不让用户翻进一个空库。
     """
-    # 空路径 = 前缀本身：与摆姿包同一口径，地址栏直接敲前缀落到索引清单，看得见库的形态
+    # 空路径 = 前缀本身：与姿势包同一口径，地址栏直接敲前缀落到索引清单，看得见库的形态
     return _lib_response(request.match_info["path"] or "index.json")
 
 
@@ -180,7 +180,7 @@ def _lib_response(rel: str) -> web.StreamResponse:
 
 
 def register_static(routes):
-    """把摆姿包挂上前缀：ComfyUI 端与桌面端各自直接注册，与伺服前端静态同一条路。
+    """把姿势包挂上前缀：ComfyUI 端与桌面端各自直接注册，与伺服前端静态同一条路。
 
     路由不进模块的 RouteTableDef：能力归属表逐条核对 /neo 前缀下的挂载集合，
     多层静态前缀在那里没有对应形态。目录缺失由 handler 逐请求回 404，装完包不必重启。
@@ -192,7 +192,7 @@ def register_static(routes):
 
 @routes.post("/neo_pose/export_image")
 async def pose_export_image(request):
-    """摆姿页 canvas 导出 → 素材库的 Pose 目录（output/Pose）：落点就是 ComfyUI 自己的
+    """姿势页 canvas 导出 → 素材库的 Pose 目录（output/Pose）：落点就是 ComfyUI 自己的
     输出目录下的一个子目录，Gallery 列表、缩略图、送节点与单条删除都不需要第二条路径。"""
     from .gallery import POSE_DIR as EXPORT_DIR, POSE_DIR_NAME as EXPORT_SUBFOLDER
     data, err = await _json_body(request)
@@ -352,7 +352,7 @@ async def pose_import_model(request):
 
 
 def dist_dirs() -> tuple:
-    """摆姿包的两级落点，数据根在前：随包那份是最小副本，用户同步的全量产物压它。"""
+    """姿势包的两级落点，数据根在前：随包那份是最小副本，用户同步的全量产物压它。"""
     return (DIST_DIR, PACKAGE_DIST)
 
 
@@ -408,7 +408,7 @@ def status_payload() -> dict:
         "manifest_bytes": int(manifest.get("total_bytes") or 0),
         "data_root": str(plugin_paths.DATA_ROOT),
         "assets_bytes": _tree_bytes((active or DIST_DIR) / "assets"),
-        # 场景库与摆姿包各一级：库里一份条目是一整场场景文件（3dpose.scene/1），宿主弹窗按 entry.path 读它。
+        # 场景库与姿势包各一级：库里一份条目是一整场场景文件（3dpose.scene/1），宿主弹窗按 entry.path 读它。
         # 未同步时 lib_entries 是 0，弹窗出同步指引而不是一个空浏览器。
         "lib_dir": str(LIB_DIR),
         "lib_installed": lib_entries > 0,
@@ -464,7 +464,7 @@ def _lib_entries() -> int:
     """场景库的条目数：`<数据根>/pose/lib/index.json` 的 `entries` 数组长度。
 
     读不出（缺文件 / 坏 JSON / 缺 entries）报 0，status 按 0 报「未同步」：库没同步时宿主弹窗
-    出同步指引，而不是一个空浏览器 —— 与摆姿包缺包出提示是同一口径。
+    出同步指引，而不是一个空浏览器 —— 与姿势包缺包出提示是同一口径。
     """
     try:
         payload = json.loads((LIB_DIR / "index.json").read_text(encoding="utf-8"))
@@ -531,9 +531,9 @@ def _bad_request(text: str) -> web.Response:
 
 def _not_installed_html() -> str:
     return ('<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">'
-            "<title>3D 摆姿未安装</title></head>"
+            "<title>3D 姿势未安装</title></head>"
             '<body style="font:14px/1.7 system-ui;padding:24px;color:#e8e8ee;background:#14141c">'
-            '<h3 style="margin:0 0 8px">3D 摆姿未安装</h3><p>' + NOT_INSTALLED_HINT +
+            '<h3 style="margin:0 0 8px">3D 姿势未安装</h3><p>' + NOT_INSTALLED_HINT +
             "</p></body></html>")
 
 

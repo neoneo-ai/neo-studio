@@ -1,4 +1,4 @@
-# 随包摆姿包的自检：读 studio\pose_dist，按 MANIFEST.json 逐文件核对，并挡住那几条「不该发货」的形态。
+# 随包姿势包的自检：读 studio\pose_dist，按 MANIFEST.json 逐文件核对，并挡住那几条「不该发货」的形态。
 #
 # 与 tools\build_pose_package.ps1 的构建期校验同一口径，两处各一份的理由不同：构建时挡住是防止发出去，
 # 这条是装机后（以及改了包之后）能复查 —— 有人手工往 pose_dist 里塞了 GLB 或 .map，构建脚本不会知道，
@@ -16,7 +16,7 @@ $ErrorActionPreference = "Stop"
 $repo = (Resolve-Path -LiteralPath "$PSScriptRoot\..").Path
 $root = if ($Dist) { $Dist } else { Join-Path $repo "studio\pose_dist" }
 
-# 与构建脚本同值：加任何一个 GLB 要先在摆姿仓库的 ATTRIBUTION 里有可再分发的授权行
+# 与构建脚本同值：加任何一个 GLB 要先在姿势仓库的 ATTRIBUTION 里有可再分发的授权行
 $allowedGlb = @("bodyMale.glb", "bodyFemale.glb")
 # 自制道具 GLB（本项目 scripts/makePropGlb.mjs 生成）—— 授权口径与 prop_test_box.glb 相同
 $allowedPropGlb = @("stick.glb", "sword.glb")
@@ -30,7 +30,7 @@ $problems = [System.Collections.Generic.List[string]]::new()
 function Bad([string]$msg) { $problems.Add($msg) }
 
 if (-not (Test-Path -LiteralPath $root -PathType Container)) {
-    Write-Host "找不到随包摆姿包：$root（跑 pwsh tools\build_pose_package.ps1 先生成）" -ForegroundColor Red
+    Write-Host "找不到随包姿势包：$root（跑 pwsh tools\build_pose_package.ps1 先生成）" -ForegroundColor Red
     exit 1
 }
 $root = (Resolve-Path -LiteralPath $root).Path
@@ -56,7 +56,7 @@ if ($js.Count -ne 1) { Bad "assets/ 里的 index-*.js 应是一份，实测 $($j
 if ($css.Count -ne 1) { Bad "assets/ 里的 index-*.css 应是一份，实测 $($css.Count)" }
 
 # 3. 不该发货的形态：map（4.4 MB 且只给 devtools 用）、白名单外的 GLB、道具 GLB、
-#    models 根下的散 JSON（注册表只在 models/props/ 里）、摆姿仓库的动画 demo 文件
+#    models 根下的散 JSON（注册表只在 models/props/ 里）、姿势仓库的动画 demo 文件
 foreach ($row in $files) {
     if ($row.path -like "*.map") { Bad "随包发了 source map：$($row.path)" }
     if ($row.path -like "models/*.glb" -and $row.path -notlike "models/props/*" -and $allowedGlb -notcontains (Split-Path -Leaf $row.path)) {
@@ -168,13 +168,13 @@ if ((Resolve-Path -LiteralPath $root).Path -eq $repoRoot) {
 }
 
 if ($problems.Count) {
-    Write-Host "随包摆姿包自检未通过：$root" -ForegroundColor Red
+    Write-Host "随包姿势包自检未通过：$root" -ForegroundColor Red
     foreach ($p in $problems) { Write-Host "  - $p" -ForegroundColor Red }
     exit 1
 }
 
 if (-not $Quiet) {
-    Write-Host "随包摆姿包自检通过：$root" -ForegroundColor Green
+    Write-Host "随包姿势包自检通过：$root" -ForegroundColor Green
     Write-Host ("  {0} 个文件，{1:N2} MB（上限 {2:N1} MB），清单逐文件 sha256 已核对" -f `
         $files.Count, ($total / 1MB), ($maxPackageBytes / 1MB))
     Write-Host "  随包 GLB：$($allowedGlb -join ', ')；自备素体走宿主面板「导入自备素体」，落点 <数据根>/pose/dist/models/"

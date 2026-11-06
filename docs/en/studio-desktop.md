@@ -452,7 +452,7 @@ startable once the root is filled in.
   phone they are removed and the widths are pinned back by CSS. Safe areas are handled with `viewport-fit=cover` +
   `env(safe-area-inset-*)` on the header edges, the page bottom padding, the video composer and the asset-picker
   dialog bars; the input cards switch from `100vh` to `100dvh` under `@supports` so the pinned 生成 button is not
-  hidden behind the mobile browser's toolbars. The 摆姿 page is a three.js iframe: only its shell stacks (scene
+  hidden behind the mobile browser's toolbars. The Pose page is a three.js iframe: only its shell stacks (scene
   library and control panel below the canvas), the 3D controls inside keep their layout.
 
 ## Phone pairing (scan to enter Studio)

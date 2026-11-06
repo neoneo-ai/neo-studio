@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
-"""「3D 摆姿」桥接口（studio/pose.py）离线单测。
+"""「3D 姿势」桥接口（studio/pose.py）离线单测。
 
-摆姿页在 iframe 里跑，桥的契约是消息名而不是代码：宿主页面、摆姿页、这份用例三处同名，
+姿势页在 iframe 里跑，桥的契约是消息名而不是代码：宿主页面、姿势页、这份用例三处同名，
 所以先把消息名与能力位钉死。其余用例覆盖 dist 子资源的路径包含、场景落盘与场景库伺服、ControlNet
-图组导出到素材库，以及「摆姿包没装」这条用户一定会撞上的路。全程只在根 conftest.py
+图组导出到素材库，以及「姿势包没装」这条用户一定会撞上的路。全程只在根 conftest.py
 钉住的临时数据根里读写。
 """
 
@@ -62,7 +62,7 @@ def no_package_copy():
 
 
 class _PoseCase(unittest.TestCase):
-    """用例只在自己的临时摆姿目录里建文件，收尾摘掉自己创建的那几份。"""
+    """用例只在自己的临时姿势目录里建文件，收尾摘掉自己创建的那几份。"""
 
     def setUp(self):
         self.created = []
@@ -94,7 +94,7 @@ class BridgeContractTests(unittest.TestCase):
                           "pose:call", "pose:state"))
 
     def test_caps_gate_the_sidecar_only_features(self):
-        """摆姿与导出在浏览器里跑，估点/网格/pano 要 pose-art 的 Python sidecar：
+        """姿势与导出在浏览器里跑，估点/网格/pano 要 pose-art 的 Python sidecar：
         桌面端进程起不动它，能力位必须是 False，页面据此置灰按钮。"""
         self.assertTrue(pose.BRIDGE_CAPS["pose"])
         self.assertTrue(pose.BRIDGE_CAPS["export"])
@@ -118,7 +118,7 @@ class BridgeContractTests(unittest.TestCase):
                            "Mixamo 十几 MB 级的高模要落在限内，上限不许收成参考图那档")
 
     def test_caps_announce_host_ui_panel(self):
-        """宿主自带控件面板：能力位为真，摆姿页据此收起 demo 控件，动作走 pose:call。"""
+        """宿主自带控件面板：能力位为真，姿势页据此收起 demo 控件，动作走 pose:call。"""
         self.assertTrue(pose.BRIDGE_CAPS["hostUi"])
 
     def test_status_reports_missing_package(self):
@@ -173,7 +173,7 @@ class DistAssetTests(_PoseCase):
 
     def test_wasm_asset_serves_as_wasm_with_hashed_cache(self):
         """Windows 的 mimetypes 读注册表，.wasm 报 octet-stream 时 Draco 的
-        instantiateStreaming 直接拒收，摆姿页连 GLB 都解不出来。"""
+        instantiateStreaming 直接拒收，姿势页连 GLB 都解不出来。"""
         self.write(pose.DIST_DIR / "assets" / "draco_wasm_wrapper-abc.wasm", "x")
         resp = _run(pose.pose_static, _request(match_info={"path": "assets/draco_wasm_wrapper-abc.wasm"}))
         self.assertEqual(resp.status, 200)
@@ -223,7 +223,7 @@ class LibAssetTests(_PoseCase):
         self.assertEqual(got.headers["Cache-Control"], "no-cache")
 
     def test_lib_dir_read_serves_index(self):
-        """弹窗按库目录取一次清单：目录请求落到 index.json，与摆姿包前缀根同一条口径。"""
+        """弹窗按库目录取一次清单：目录请求落到 index.json，与姿势包前缀根同一条口径。"""
         self.index()
         resp = _run(pose.pose_lib, _request(match_info={"path": ""}))
         self.assertEqual(resp.status, 200)

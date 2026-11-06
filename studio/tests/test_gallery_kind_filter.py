@@ -228,7 +228,7 @@ class KindAnchorTests(unittest.TestCase):
         self.assertEqual(sheet["items"][0]["subfolder"], "Output/StoryBoard/26-09-24")
 
     def test_filename_prefix_covers_before_the_pose_dir_existed(self):
-        """摆姿与抽帧的旧批次直接落在 output 根，只有文件名前缀能认出来。"""
+        """姿势与抽帧的旧批次直接落在 output 根，只有文件名前缀能认出来。"""
         self.written.append(_write(Path(_OUTPUT) / "pose_shot.png"))
         self.written.append(_write(Path(_OUTPUT) / "frame-00_07_125.png"))
         self.written.append(_write(Path(_OUTPUT) / "shot.png"))

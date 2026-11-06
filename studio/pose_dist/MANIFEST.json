@@ -1,23 +1,23 @@
 {
   "format": "3dpose.package/1",
   "generator": "tools/build_pose_package.ps1",
-  "built_utc": "2026-11-05T08:29:26Z",
-  "total_bytes": 3176560,
+  "built_utc": "2026-11-06T01:42:08Z",
+  "total_bytes": 3184191,
   "files": [
     {
-      "path": "assets/index-DIgQr3Ne.css",
-      "bytes": 32257,
-      "sha256": "5987c4734352afd99bae8bfe6af039b279f6119c9505362b001382c71ab875d5"
+      "path": "assets/index-CSOmJDA4.css",
+      "bytes": 33592,
+      "sha256": "c0f5ecacc589bb4c5ebe319bf07602b8991a1bceb8350c094af929b43b130584"
     },
     {
-      "path": "assets/index-L-hUp5gt.js",
-      "bytes": 1182597,
-      "sha256": "090735bb612986c33b7feea56a8e8bd3a3c3ca6aaf7f2b83d27751eb25a7f94e"
+      "path": "assets/index-pLziDA-d.js",
+      "bytes": 1188849,
+      "sha256": "1010f61c098571eb561ca6b790992a306774f58a78b7d833e2572ea4ffd7d047"
     },
     {
       "path": "index.html",
-      "bytes": 16987,
-      "sha256": "4562c038cafaef2a21eeee53db58547484882eee80342d47779498d663121b12"
+      "bytes": 16999,
+      "sha256": "abe475cbd77698661c849950cfa259cf4b3464653f02ead6c02f4ec1db982e8a"
     },
     {
       "path": "LICENSE",
@@ -36,8 +36,8 @@
     },
     {
       "path": "models/bodyMale.glb",
-      "bytes": 926992,
-      "sha256": "86f9e96b6efeb355f53e7514b993535c752bb4e9b9baead12b33241a9aefa8bb"
+      "bytes": 927024,
+      "sha256": "01d27b51098f67a5a65533829ae69cf7c39210384de8f6226afc2d48985b8dcb"
     },
     {
       "path": "models/props/index.json",
@@ -57,7 +57,7 @@
     {
       "path": "THIRD-PARTY.md",
       "bytes": 913,
-      "sha256": "310a1574cfd7285887158584eaa14fdfc50ce5fc796309563d7c4ccc6ad89e79"
+      "sha256": "5d23215ce8439b93264a0cb0fea3bf6756550acfde73ece0c487fc2ec55ec8af"
     }
   ]
 }

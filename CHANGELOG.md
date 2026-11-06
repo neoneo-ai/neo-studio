@@ -4,6 +4,12 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+### Changed
+- **「摆姿」在界面上统一叫「姿势」.** 顶栏 tab、姿势页控件、场景库弹窗、启动设置与文档里的中文文案全部改成
+  「姿势」（`摆姿模式` → `姿势模式`、`摆姿仓库` → `姿势仓库`、`进入摆姿模式` → `进入姿势模式`），动词语法保持成句
+  （`摆姿势`、`可摆姿势`、`纯摆姿势`）；英文文案仍是 Pose / Pose 3D，路由、节点名与配置键不变。
+  姿势仓库与随包姿势包同批改名，页面读到的文案一致。
+
 ### Added
 - 新增预设模型清单文档 [docs/preset-models.md](docs/preset-models.md)（英文 [docs/en/preset-models.md](docs/en/preset-models.md)）：把 37 个预设技能自带的 `models.json` 逐条摊开——族系与基座分组、文件名、模型类别、GB 体积、可点击即下载的 ModelScope / Hugging Face 直链与 Civitai 模型页链接；另附同样带直链的 CosyVoice3 语音合成必需文件表（该技能不读 `models.json`，权重走 `models/cosyvoice/Fun-CosyVoice3-0.5B/`）。
 

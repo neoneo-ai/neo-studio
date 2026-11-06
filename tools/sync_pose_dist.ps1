@@ -1,6 +1,6 @@
-# 把 3d-pose-art 的 vite 产物同步进数据根，装成「3D 摆姿」页的摆姿包。
+# 把 3d-pose-art 的 vite 产物同步进数据根，装成「3D 姿势」页的姿势包。
 #
-# 摆姿包只有一份落点：<数据根>/pose/dist/。插件与桌面端都只读这里（studio/pose.py 的 DIST_DIR），
+# 姿势包只有一份落点：<数据根>/pose/dist/。插件与桌面端都只读这里（studio/pose.py 的 DIST_DIR），
 # 产物不进 Registry 包也不进 exe（data/ 不随包分发），所以装完包刷新页面就生效，不必重启。
 #
 # 从仓库根运行：
@@ -16,7 +16,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 if (-not (Test-Path -LiteralPath $Source -PathType Container)) {
-    Write-Host "找不到摆姿仓库目录：$Source（应指向 3d-pose-art 仓库根）" -ForegroundColor Red
+    Write-Host "找不到姿势仓库目录：$Source（应指向 3d-pose-art 仓库根）" -ForegroundColor Red
     exit 1
 }
 $repo = (Resolve-Path -LiteralPath $Source).Path
@@ -35,7 +35,7 @@ if ($Build) {
 }
 
 if (-not (Test-Path -LiteralPath (Join-Path $dist "index.html"))) {
-    Write-Host "没有构建产物：$dist\index.html 不存在。先加 -Build，或在摆姿仓库里跑 npm run build。" -ForegroundColor Red
+    Write-Host "没有构建产物：$dist\index.html 不存在。先加 -Build，或在姿势仓库里跑 npm run build。" -ForegroundColor Red
     exit 1
 }
 
@@ -45,7 +45,7 @@ $dest = Join-Path $poseDir "dist"
 New-Item -ItemType Directory -Force -Path $dest | Out-Null
 
 # 自备素体（宿主面板导入的 GLB）落在 dest\models 里，源产物里没有它们：robocopy /MIR 会把这些
-# 「源里没有的文件」连根清掉，用户导入的素体就随一次重装摆姿包无声消失。所以先把源产物里
+# 「源里没有的文件」连根清掉，用户导入的素体就随一次重装姿势包无声消失。所以先把源产物里
 # 没有的那几份挪进临时目录存着，镜像完再原样搬回来。
 $srcModelRoot = Join-Path $dist "models"
 $destModelRoot = Join-Path $dest "models"
@@ -91,7 +91,7 @@ if ($stash) {
     Remove-Item -LiteralPath $stash -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-# 摆姿包是 MIT 作品：随产物带上它的许可证与致谢，装出来的页面不能只剩一份没有出处的代码
+# 姿势包是 MIT 作品：随产物带上它的许可证与致谢，装出来的页面不能只剩一份没有出处的代码
 $attribution = @("LICENSE", "LICENSE.md", "NOTICE", "NOTICE.md", "THIRD-PARTY-NOTICES.md")
 $copied = 0
 foreach ($name in $attribution) {
@@ -104,7 +104,7 @@ foreach ($name in $attribution) {
 
 $files = Get-ChildItem -LiteralPath $dest -Recurse -File
 $bytes = ($files | Measure-Object -Property Length -Sum).Sum
-Write-Host "摆姿包已落进 $dest" -ForegroundColor Green
+Write-Host "姿势包已落进 $dest" -ForegroundColor Green
 Write-Host ("  {0} 个文件，{1:N1} MB，许可证文件 {2} 份" -f $files.Count, ($bytes / 1MB), $copied)
-Write-Host "刷新 Neo Studio 窗口的「3D 摆姿」页即可生效（页面逐请求判断装没装，不必重启）。"
+Write-Host "刷新 Neo Studio 窗口的「3D 姿势」页即可生效（页面逐请求判断装没装，不必重启）。"
 exit 0

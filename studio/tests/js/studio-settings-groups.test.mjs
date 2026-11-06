@@ -97,7 +97,7 @@ const panelLines = (panel) => [...panel.children].map((n) => {
     return label ? label.firstChild.textContent.trim() : null;
 }).filter(Boolean);
 
-test("启动设置栏内分区：位置、网络与端口、桌面窗口、摆姿资产四类，启停与状态行仍留在顶部", async () => {
+test("启动设置栏内分区：位置、网络与端口、桌面窗口、姿势资产四类，启停与状态行仍留在顶部", async () => {
     await openSettings("launch", true);
     click(document.querySelector('.ns-settings-tab[data-key="launch"]'));
     await flush();
@@ -106,8 +106,8 @@ test("启动设置栏内分区：位置、网络与端口、桌面窗口、摆�
         ">> ComfyUI 位置", "ComfyUI 根目录", "Python",
         ">> 网络与端口", "端口", "局域网监听", "远程 ComfyUI",
         ">> 桌面窗口", "无边框窗口", "开发模式",
-        ">> 摆姿资产", "摆姿仓库",
-    ], "启停与状态行留在面板顶部，栏内十一行按位置 / 网络与端口 / 桌面窗口 / 摆姿资产四类落位");
+        ">> 姿势资产", "姿势仓库",
+    ], "启停与状态行留在面板顶部，栏内十一行按位置 / 网络与端口 / 桌面窗口 / 姿势资产四类落位");
 });
 
 test("生图设置分区：三条模型行在模型组下，目标像素数与输出前缀在输出组下", async () => {

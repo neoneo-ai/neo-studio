@@ -12,7 +12,7 @@ exe 里随包的插件副本只取 `studio/` 的跟踪文件，`tools/` 不在�
 - 打包与安装：`build_studio_exe.ps1`（`Neo-Studio.spec`）、`build_studio_mac.sh`
   （macOS remote-only `.app`）、`build_studio_update.ps1`（整合包更新件，`update_neo_studio.ps1` 在包内消费它）、
   `install_plugin.ps1`、`mcp_setup.ps1`。
-- 摆姿包：`build_pose_package.ps1` 生成随包最小副本 `studio/pose_dist/`，`sync_pose_dist.ps1`
+- 姿势包：`build_pose_package.ps1` 生成随包最小副本 `studio/pose_dist/`，`sync_pose_dist.ps1`
   把全量产物同步进 `<数据根>/pose/dist/`，`sync_pose_lib.ps1` 把场景库同步进 `<数据根>/pose/lib/`，
   `test_pose_package.ps1` 复查随包那份（发货清单逐文件核对）。
 - 取证与性能：`e2e_ref_grid.mjs`、`bench-director-timeline.mjs`、`capture-gif.mjs`、
@@ -42,24 +42,24 @@ webp 缩略图与 `index.json`，`gallery_deploy_oss.py` 按 `OSS_ACCESS_KEY_ID`
 
 ## Pose Package
 
-摆姿页产物有两级落点，两个脚本各管一级，`test_pose_package.ps1` 复查随包那一级：
+姿势页产物有两级落点，两个脚本各管一级，`test_pose_package.ps1` 复查随包那一级：
 
-- 随包发什么由摆姿仓库 `models/ATTRIBUTION.md` 的授权口径决定，不由体积决定：GLB 白名单写死在
+- 随包发什么由姿势仓库 `models/ATTRIBUTION.md` 的授权口径决定，不由体积决定：GLB 白名单写死在
   `build_pose_package.ps1`（素体只有页面默认基座那两具 CC0 标准素体 `bodyMale.glb` / `bodyFemale.glb`，
   `ybot.glb` 已不再默认因此不再随包；道具只有自制的 `stick.glb` / `sword.glb`），
   加一份要先有可再分发的授权行；道具注册表 `models/props/index.json` 只留随包发了的那几条，
   与「本地导入的道具 GLB（arrow / sting-sword / 枪械）不随包发」是同一件事。
 - `*.map` 不进包，`studio/pose_dist` 里的 JS 要清掉开发机绝对路径（注册表的 `sourceImage` 与
-  「引号 + 盘符 + 斜杠」的字面量），清不掉就回摆姿仓库改注册表，不在这里打补丁。
+  「引号 + 盘符 + 斜杠」的字面量），清不掉就回姿势仓库改注册表，不在这里打补丁。
 - `MANIFEST.json` 逐文件 `bytes` + `sha256`，清单不含它自己（一份清单算不出自己的哈希）；
   `test_pose_package.ps1` 按同一口径核对，体积上限（4.5MB）与白名单在这两条里各钉一遍。
 - `sync_pose_dist.ps1` 的 `robocopy /MIR` 只动 `dist/`：源产物里没有的文件（用户导入的素体 GLB）
   先存进临时目录、镜像完搬回，同步脚本不许成为删用户文件的那只手。场景与参考图在 `pose/` 下的
   别的目录，本来就不在镜像范围内。
-- 场景库只落 `<数据根>/pose/lib/`，不进随包副本（授权口径与摆姿包不同）：摆姿仓库把库拆成预设
+- 场景库只落 `<数据根>/pose/lib/`，不进随包副本（授权口径与姿势包不同）：姿势仓库把库拆成预设
   `pose-lib/`（只读）与本地 `pose-lab/`（可写），`sync_pose_lib.ps1` 把两根并成一份 —— 本地先 `/MIR`
   进目标，预设集再带 `/E /XC /XN /XO` 补空（`/E` 不给就是零补齐，robocopy 默认不下钻 `poses/<分组>/`），
-  同 id 永不压过本机文件。`index.json` 不在这里算，由摆姿仓库 `npm run lib -- merged --out` 生成
+  同 id 永不压过本机文件。`index.json` 不在这里算，由姿势仓库 `npm run lib -- merged --out` 生成
   （每条带 `origin`，同 id 本地胜出）；`categories.json` 有本地那份就用本地的，`ATTRIBUTION.md` 随预设库走。
   `-Light`（skeleton + silhouette）/ 默认（clay + skeleton + silhouette）/ `-All`（四档）镜像预览。
   `pose/scenes`、`pose/refs`、`pose/presets` 是用户写的东西，同样不在镜像范围内。
@@ -101,7 +101,7 @@ webp 缩略图与 `index.json`，`gallery_deploy_oss.py` 按 `OSS_ACCESS_KEY_ID`
 pwsh tools\build_studio_exe.ps1 -DryRun          # 只验打包清单，不出 exe
 bash tools/build_studio_mac.sh                   # macOS remote-only .app；需 PyInstaller
 pwsh tools\build_pose_package.ps1 -Source <3d-pose-art 仓库根> -Build
-pwsh tools\test_pose_package.ps1                 # 随包摆姿包自检：清单哈希、白名单、体积上限
+pwsh tools\test_pose_package.ps1                 # 随包姿势包自检：清单哈希、白名单、体积上限
 pwsh tools\build_minimal_package.ps1 -DryRun     # 最小整合包：只打印要做的事
 pwsh tools\build_studio_update.ps1 -DryRun        # 整合包更新件：只打印计划（默认写 build\Neo-Studio-<version>-package-update.zip）
 pwsh tools\verify_minimal_package.ps1 -Package <包根>   # 整包自检 + 清单/预设/安装脚本验收
