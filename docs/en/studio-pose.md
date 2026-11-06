@@ -7,7 +7,7 @@ timeline and the export all happen in the browser - the local service only reads
 ## The pose package
 
 The build has two landing paths, checked per request in this order, and **the data-root copy shadows
-the bundled copy file for file** (which is why a fresh build and a user-imported figure win):
+the bundled copy file for file** (which is why a freshly synced build wins):
 
 | Landing path             | Contents                                                                                               | Where it comes from                                                         |
 |--------------------------|--------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------|
@@ -21,6 +21,10 @@ bodies, built on MakeHuman Community's MPFB2 base meshes, CC0) and the self-auth
 ship. `ybot.glb` (CC0, PixelMannen's Y Bot) is no longer the page's default, so its 2.8 MB no longer ships.
 Mixamo (`soldier` / `ch38` / `ch07`), the SMPL-derived bodies (`body1391` plus three thumbnails) and
 the locally imported props (`arrow` / `sting-sword` / the guns, licence unconfirmed) none of them ship. The
+panel's character dropdown ships only the two CC0 base figures `bodyMale` / `bodyFemale` - the whitelist in
+`studio/web/pose/pose.js`. Mixamo, the SMPL-derived bodies and anything the user supplies never appear in it:
+those licences are not this project's to ship, and a control that can only fail is not shipped. People who want
+them register the GLB in the pose page's own local import area. The
 prop registry `models/props/index.json` keeps only the two entries the package ships: listing a GLB the
 package does not ship means shipping a control that can only fail, so trimming the registry and trimming the
 files is one act, and the procedural props (`builtin:*`) stay available. A prop's preview image
@@ -42,10 +46,10 @@ pwsh tools\sync_pose_dist.ps1 -Source <3d-pose-art repo root>           # full b
 ```
 
 `robocopy /MIR` mirrors `dist/` only, so the scenes the user wrote in
-`<data root>/pose/scenes/` stay out of the mirror - and so do the GLBs the panel's
-"Import Own Character" wrote into `pose/dist/models/`, which the source build does not contain: the sync
+`<data root>/pose/scenes/` stay out of the mirror - and so do the extra GLBs that live in `pose/dist/models/`
+and are not part of the source build: the sync
 script parks those "files the source does not have" in a temporary directory and moves them back after
-mirroring, so reinstalling the pose package never silently deletes an imported figure. `LICENSE` /
+mirroring, so reinstalling the pose package never silently deletes a local file. `LICENSE` /
 `NOTICE` from the source repo root land in the package next to the build (the pose package is MIT work,
 so an installed copy must carry its license text and attribution). Reloading the page is enough after a
 sync: the installed check runs per request, so the window does not need a restart.
@@ -53,10 +57,11 @@ sync: the installed check runs per request, so the window does not need a restar
 Once "Startup settings → Pose repo" names the 3d-pose-art repo root, every desktop start tops this level
 up in the data root with the same rules: files move only when the source is newer than the data root
 (a relaunch of an unchanged repo copies nothing), files deleted by hand come back on the next start, and
-the GLBs imported into `pose/dist/models/` are parked and restored around the mirror. The gate and the
+the GLBs that live in `pose/dist/models/` beyond the source build are parked and restored around the mirror.
+The gate and the
 landing points are specified in [studio-desktop.md](studio-desktop.md), "Pose asset auto-sync".
 
-## The scene library (pose-lib)
+## The pose library (pose-lib)
 
 The library is the batch of whole scenes 3d-pose-art accumulated with their previews. On the pose-repo side
 it is split into two roots - `pose-lib/`, the preset set (read-only, distributed with the repo), and
@@ -117,7 +122,7 @@ capability table, answered by the offline desktop service too. `/neo_pose/status
 `lib_dir` (the landing path), `lib_installed` (the index reads and entries are not empty), `lib_entries`
 (the entry count), `lib_bytes` (the size of the whole directory).
 
-## The cloud scene library (pose-cloud)
+## The cloud pose library (pose-cloud)
 
 The cloud library is the same pose tree living in OSS: the scenes and preview images the preset library
 accumulated. Entries keep the `pose-lib` shape, the cloud manifest format is `neo-pose-cloud/1`, and the
@@ -219,7 +224,7 @@ The script prints the manifest URL to put into `pose_index_url`, which connects 
 |--------|---------------------|--------------------------------------------------------------------------------------|
 | GET    | `/neo-pose`         | Short path: 302 to the entry page when installed, 404 with the install hint when not |
 | GET    | `/pose-dist/{path}` | Package subresources (`index.html`, `assets/**`, GLB, wasm)                          |
-| GET    | `/pose-lib/{path}`  | Read-only scene library serving: the index, scene files and previews                 |
+| GET    | `/pose-lib/{path}`  | Read-only pose library serving: the index, scene files and previews                  |
 | GET    | `/models/{path}`    | Origin-root path baked into the build: prop registry, GLBs, prop previews            |
 
 The build uses `base: './'` relative imports, so the page must sit on a URL with directory depth:
@@ -267,7 +272,6 @@ path-with-a-directory form - the registry and the props - reaches the pose handl
 | GET    | `/neo_pose/scenes`           | Scene list (`name` / `size` / `mtime`, newest first)                                                                                                  |
 | GET    | `/neo_pose/scene?name=`      | Read one scene                                                                                                                                        |
 | POST   | `/neo_pose/scene`            | Write a scene (`{name, scene}`, `.tmp` + replace, atomic)                                                                                             |
-| POST   | `/neo_pose/import_model`     | Write an own-figure GLB to `pose/dist/models/<key>.glb`                                                                                               |
 | POST   | `/neo_pose/export_image`     | Store the page canvas (`{data: dataURL, name}`) into the library                                                                                      |
 | POST   | `/neo_pose/export_set`       | Store a ControlNet set (`{files: [{name, data}]}`, ≤12) into the library                                                                              |
 | GET    | `/neo_pose/cloud_status`     | Cloud configured or not, the cloud index URL, cache directory and cache state                                                                         |
@@ -280,20 +284,8 @@ in either level), `dist_dir` and `dist_source` (the live level - `data_root` or 
 and `manifest_version` / `manifest_built` / `manifest_files` / `manifest_bytes` (the contents of the
 shipped `MANIFEST.json`; empty and zero when there is no manifest).
 
-`/neo_pose/import_model` takes `{key, data}` (a base64 GLB) or `{key, filename, subfolder, type}` (a
-library file, resolved through Gallery's own resolver). All four checks run before anything is written:
-the `key` goes through the scene-name whitelist, exactly one source must be given, the byte count must
-stay under 35 MB (what still fits the 48 MB request-body cap once base64 is packed into JSON), and
-the file header must be `glTF`. The only landing path is
-`<data root>/pose/dist/models/<key>.glb` (written `.tmp` + replace; importing the same key replaces that
-figure and never creates a second key), and the reply is `{key, name, url, size, from}`. The panel's
-"Import Own Character" uses the local file picker - the library list only shows images, so a Mixamo
-download comes in through the picker. Registering the figure stays page-side (the pose page's own local
-import area keys it); the host only tells the user the key.
-
 Page and scene names go through a whitelist: an alphanumeric first character, at most 64 characters,
-only `A-Za-z0-9_.-`. The figure key goes through the same one (the file name is `<key>.glb`).
-Subresource paths resolve symlinks and are forced inside one of the two landing paths; a URL
+only `A-Za-z0-9_.-`. Subresource paths resolve symlinks and are forced inside one of the two landing paths; a URL
 with `..`, a drive letter or an absolute path is `400`. Exported images land in
 `output/Pose` - a subfolder of the normal output directory, the same place the library browses any other
 output. A single image is de-duplicated and replies `{filename, subfolder, size}` with `subfolder` set to
@@ -301,33 +293,42 @@ output. A single image is de-duplicated and replies `{filename, subfolder, size}
 invalid file writes nothing at all. Thumbnails, full-size previews, drag-into-node and the "⋯ → Delete"
 action all resolve through that same relative `Pose` subfolder, and the panel's export toast names it.
 
-Scenes go to `<data root>/pose/scenes/<name>.json` and imported figures to `<data root>/pose/dist/models/`;
-neither survives as part of what `tools\sync_pose_dist.ps1` mirrors (the script parks the files
-the source build does not have and moves them back), so reinstalling the package leaves them alone.
+Scenes go to `<data root>/pose/scenes/<name>.json`; they do not survive as part of what
+`tools\sync_pose_dist.ps1` mirrors (the script parks the GLB files the source build does not have and moves
+them back), so reinstalling the package leaves them alone.
 
-All seven routes only read and write files, so the offline desktop service answers every one of them
+All routes only read and write files, so the offline desktop service answers every one of them
 (`_POSE` in `app/studio_caps.py`). `/pose-dist` and `/pose-lib` are static prefixes each host registers
-directly and neither is a capability-table entry.
+directly and neither is a capability-table entry. `/neo_pose/import_model` is not registered at all: the
+panel's character dropdown has no import control, so there is nothing for a host to answer.
 
 ## Host view and message directions
 
 The desktop top bar's Pose tab and the home card "3D Pose" open `#/pose`; the host module is
-`studio/web/pose/pose.js`. The host panel has four groups: Pose (canvas snapshot),
-Scene library (write a name and save, pick a save and load it, browse the whole-scene library), ControlNet export
-(tick the formats, export the set) and Canvas state (one read-only line);
-the character row carries
-"Import Own Character" with a key field, the prop group is a grid of preview cards (the rules live in
-"Prop cards and where a prop lands"), and the bottom of the left column explains that only the CC0
-figure ships when the page runs on the bundled copy. Every control stays disabled
+`studio/web/pose/pose.js`. The host panel has two columns. The left is the pose library itself: a search box,
+one list holding the library's poses (the presets are in this list - there is no separate preset section) with
+the poses saved on this machine at its tail, the write-a-name-and-save row and the
+"Browse Pose Library…" / "Load Pose" buttons. The right is the control panel: pose (canvas snapshot), character (add / remove),
+props (preview cards), ControlNet export (formats + view + export) and canvas state (one read-only line);
+the prop group is a grid of preview cards (the rules live in
+"Prop cards and where a prop lands"). The character dropdown lists only the standard bodies — the ones
+`meta/list` reports as `bodyMale` / `bodyFemale`. Every control stays disabled
 until `pose:ready`, and the panel appears with it; the bridge is torn down with `pose:dispose`, so
 leaving the page leaves no listener behind.
 
-The preset dropdown applies in one click: changing it sends `preset/apply`, so the panel no longer has an
-"Apply Preset" step. A scene-library save clicked in the left column loads that scene - it reads
-`/neo_pose/scene` and sends `pose:open-scene` - and the Load Scene button is kept for a typed-in name,
-the two sharing one load path.
+The left list is the pose library: with the library synced it is the index's entries grouped by the index's own
+`groups`, each row carrying a "preset" / "local" origin badge at its tail, and a row reads that entry's own scene
+file and sends one `scene/apply` - the row and the modal's card are the same row on the same path. With the library
+not synced, the preset batch `meta/list` reports falls into this one list, grouped by the preset set's own `group`
+with a "preset" badge (the row's tooltip says it is a page preset), and a row sends `preset/apply`. The poses saved
+on this machine sit at the tail of the same list, and a row loads that pose - it reads `/neo_pose/scene` and sends
+`pose:open-scene` - with the Load Pose button kept for a typed-in name, the two sharing one load path. The search
+box on top of the list uses the modal's `libFilter` rule, a page is 120 rows and the rest sit behind
+"load more (N left)". The right column has no preset dropdown and the panel has no "apply preset" step: the list
+is a preset's only entry. The list's base filter follows the panel's character - switching bodies re-filters it,
+so what is visible is what the current body can wear.
 
-"Browse Scene Library…" opens one modal (the asset library's shell) holding the `pose-lib` whole-scene
+"Browse Pose Library…" opens one modal (the asset library's shell) holding the `pose-lib` whole-scene
 library. A card picks its preview by `clay → skeleton → silhouette → depth` (the rule the pose page's
 `thumbOf` uses in `src/ui/libraryPanel.js`), a card with none of the four reads "no preview", and the
 subtitle reports "N people · M props". A preview is rendered from the scene file itself: the pose repo clears
@@ -341,20 +342,20 @@ The group dropdown is filled from the merged entries of the selected origin with
 `pose-lab` never show up in it), and refilling the options lands back on the picked group - "all groups"
 when the origin switch drops it. The origin dropdown offers "all origins / preset (read-only) /
 local (writable)"; a card's top-left corner reads "preset" or "local" (the tooltip names the library),
-and the count line reads "N scenes (preset X · local Y) · showing Z" - an index entry with no `origin`
+the count line reads "N poses (preset X · local Y) · showing Z" - an index entry with no `origin`
 field counts as local. The search filters on
 `label / categories / tags / id / source` (the field table 3d-pose-art's `filterIndex` uses in
 `poseLibrary.js`). A scene can belong to several groups and its card lands only in the highest-ranked one -
 two cards with the same id would cross wires on click. A page is 200 cards (640+ in the DOM at once breaks
 both the first paint and scrolling) and the rest sit behind "load more (N left)". Clicking a card reads that
 card's own file and sends one `scene/apply`, reporting "N rigs / M props"; a successful apply closes the
-modal - the same implementation the left column's Load Scene and the page's own scene load use: it tops up
+modal - the same implementation the left column's Load Pose and the page's own pose load use: it tops up
 the skeleton count, lays the rigs out left to right and restores props by id. The modal's search, group
 and origin dropdowns and load-more sit behind the same `libGate` as the left column: they stay disabled until
 `pose:ready`, and the pane locks after an apply until the result comes back, because two quick clicks send
 two apply calls and the second silently overwrites the first. When the library is not synced the modal shows
 the sync command with a line of explanation instead of an empty grid: an empty browser is not what a library
-looks like. The modal carries one more entry, "local scene file…", which takes a JSON file from this
+looks like. The modal carries one more entry, "local pose file…", which takes a JSON file from this
 machine through `pose:open-scene` - a file outside the library loads just the same.
 
 ## Prop cards and where a prop lands
@@ -386,16 +387,25 @@ grid: its grid lines are `0x6d7786` fully opaque, because the desktop window ren
 a 1px line is anti-aliased to about half coverage, so the colour carries the contrast and both hosts show the
 same floor.
 
-"Import Own Character" does not depend on the page's command layer (it calls the host's own
-`/neo_pose/import_model`), so it stays clickable on an old package (`caps.hostUi` false, the panel
-disabled wholesale) - what it imports is a file, not a page action.
+The ControlNet export view dropdown defaults to "current view": the page's `EXPORT_VIEWS.current` is `null`,
+which means the export uses the live camera, so the panel exports from the framing the user already set. An
+older package whose `meta/list` has no `current` leaves the dropdown on "View" and lets the page fall back to
+its own default - the panel never writes a value the dropdown does not offer.
+
+The panel offers no character import at all: the shipped package carries only the two licensed CC0 base
+figures, and Mixamo / SMPL-derived bodies and user-supplied GLBs are registered in the pose page's own local
+import area. The host has no entry and no route for it, so the desktop request-body cap stays where the
+ControlNet set needs it —
+48 MB and above (aiohttp's default accepts only 1 MB, and 12 PNGs base64-packed into one JSON trips a 413 at
+the transport first), while the plugin route already runs inside ComfyUI's own 100 MB cap, keeping both sides
+on the same size rule.
 
 The page's own six-row toolbar is `fixed` over the canvas, and in a short window it covers exactly the
 viewport posing needs: the bottom-left "面板：展开" button and the `T` key collapse it down to its first
 row (the row height is measured at runtime, because wrapping makes the first row depend on the width),
 and the state is stored in the page's own localStorage - nothing to do with the host toolbar.
 
-Each host side panel (the scene library on the left, the control panel on the right) carries a collapse
+Each host side panel (the pose library on the left, the control panel on the right) carries a collapse
 button in its head, drawn as a two-pane sidebar glyph: this panel's pane is filled, and that filled pane
 shrinks to a sliver once collapsed (the left panel's pane sits on the left, the right panel's is mirrored).
 Collapsing one leaves a 34 px vertical rail - the panel name written vertically, with
@@ -452,7 +462,7 @@ library's own "all sources / preset (read-only) / local (writable)" filter: the 
 `/neo_pose/cloud_status` reports `enabled: true` - listing a source that cannot work is shipping a control
 that only fails. On the cloud option the head line says "Cloud library: the tree in OSS, fetched files are
 cached on this machine", each card carries a "cloud" corner badge (the hover text says which tree it lives
-in), the count line reads "N cloud scenes · showing Z", and the group and search dropdowns are rebuilt
+in), the count line reads "N cloud poses · showing Z", and the group and search dropdowns are rebuilt
 from the cloud entries on the same rules as the local library. Cloud thumbnails are direct absolute OSS
 URLs (the bucket endpoint is public-read), while local previews travel `/pose-lib/preview/`. "Refresh
 thumbnails" on the cloud option fetches preview images one card at a time into the cache - each image
@@ -488,14 +498,14 @@ not the estimation service" rule. `caps` is the host confirming that same state,
 `lib_write` closes only the library's write side: reading needs no sidecar, the index and the files are
 served by the host itself (`/pose-lib`), so the modal still lists the library and still applies a pose.
 
-`body_import` is `true`, and it is the host's own path: only the licence-clean CC0 figure ships, the rest
-are figures the user supplies, written into the data root through `/neo_pose/import_model` and registered
-in the page's own local import area by key - neither the write nor the registration needs the sidecar.
-The page's built-in figure registry lists six GLB figures while the package ships one, so on the bundled
-copy the other entries cannot fetch their file; that is why the left column says plainly which level the
-page is running on, instead of leaving people to think the figure list is broken.
+`body_import` is `true`, and it is a page-side capability: the package ships only the licence-clean CC0 base
+figures (the standard male and female bodies), and the Mixamo / SMPL-derived figures are registered by the user
+in the page's own local import area - neither the write nor the registration needs the sidecar. The host panel
+offers only the standard bodies `meta/list` reports, so a whitelisted-out figure never shows as an option the
+user can pick and watch fail; the page's built-in figure registry lists six GLB figures, and the entries beyond
+the shipped pair resolve page-side, not in the panel's dropdown.
 
-`hostUi` is `true`: the host ships its own panel (the scene library, ControlNet
+`hostUi` is `true`: the host ships its own panel (the pose library, ControlNet
 export, the canvas state line) and sends it down with `pose:theme`, so the page folds away the demo
 toolbar meant for standalone runs - only one set of controls is ever on screen. That chrome is hidden
 before the page's first paint as well: the entry page's inline head script sets `data-host-ui` whenever
@@ -538,8 +548,7 @@ tops both levels up in the data root.
   the set that is refused whole with nothing left on disk, the short-path redirect; both landing paths
   (the bundled copy as fallback, the data root shadowing same-named files, the hint when both are
   missing), the prop-registry prefix resolving in both levels, the shipped manifest inside `status`,
-  the imported-figure landing path with its five checks (key / source / size / header / library size),
-  the library-source resolution, and refused requests leaving no trace; the scene-library serving of the
+  the library-source resolution, and refused requests leaving no trace; the pose-library serving of the
   index, a scene file and a preview, a directory landing on `index.json`, an out-of-root `400`, an unsynced
   `404`, `no-cache` on the whole prefix, a broken index leaving `status` standing, and the four `lib_*`
   fields in `status`; the cloud read routes - the unconfigured `404` with `cloud_installed: false`, the
@@ -565,20 +574,29 @@ tops both levels up in the data root.
   file is missing kept out of the upload list.
 - `app/tests/test_studio_server.py::PoseBridgeTests`: the redirect, serving subresources offline and
   refusing to escape the package, the `/models` prefix answering the registry and the prop GLBs
-  (including the imported figure and the data root shadowing the bundled copy), the scene round trip,
+  (including the shipped CC0 body and the data root shadowing the bundled copy), the scene round trip,
   the flags and route ownership (checked against the pose module's own route
-  table, one by one), the bundled-copy fallback level, importing an own figure offline with the 35 MB
-  cap, and the request-body cap sitting above that route; the `/pose-lib` prefix answering the index and a
+  table, one by one), the bundled-copy fallback level, `/neo_pose/import_model` falling back to the plugin
+  tier once the panel's import control is gone and answering `409` in the standalone window, and the data
+  root getting no written figure; the `/pose-lib` prefix answering the index and a
   scene file in the offline service, the four `lib_*` fields in `status`, and `/pose-lib` staying out of the
   capability table; the three cloud routes answering offline (the unconfigured state saying unavailable, and
   `../..`, a leading `/` and a drive letter all refused with `400`), each owned by the desktop service in
   the route ownership check.
 - `studio/tests/js/pose-bridge.test.mjs`: the host's not-installed form, the iframe attributes, the
   bridge's source and origin checks, the hostUi gating, the export / scene /
-  set-export paths, the routes each message reaches, the note shown on the bundled copy, and importing
-  an own figure (the base64 upload and the key checks); the scene-library modal's index rendering with
-  grouping, search, origin filtering and load-more, applying a library scene (the action it sends and the modal closing),
-  the sync hint when the library is unsynced, the gate locking that pane, and the local scene file path;
+  set-export paths, and the routes each message reaches; the character whitelist (only `bodyMale` /
+  `bodyFemale` offered, labels taken from `meta/list`, whitelisted-out bodies never shown as an option, no
+  "Import Own Character" row and no call to that route), the dropdown staying on "Choose a character…" with an
+  empty add-body payload when the package reports no standard body, and the add-body row and the library base
+  filter following `bodyMale` when it is the default; the left column's pose-library list (index rows grouped by
+  `groups` with the "preset" / "local" origin badges and one `scene/apply` per row when the library is synced; the
+  page presets falling into the same list grouped by `group` with one `preset/apply` per row when it is not; no
+  "preset poses" / "local poses" section headers and no preset dropdown in the right column; the search box using
+  the `libFilter` rule, a page of 120 rows with load-more); the ControlNet export defaulting to the
+  "current view"; the pose-library modal's index rendering with
+  grouping, search, origin filtering and load-more, applying a library pose (the action it sends and the modal closing),
+  the sync hint when the library is unsynced, the gate locking that pane, and the local pose file path;
   collapsing each side panel (the button outside the gates, the head left behind as the way back out, the
   icon glyph changing with the collapsed state, the
   preference stored and replayed when the view is rebuilt); the prop grid (one card per prop with its

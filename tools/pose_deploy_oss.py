@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
-r"""把一棵姿势库上传成 Neo Studio「3D 姿势」的云端场景库与云端道具（OSS）。
+r"""把一棵姿势库上传成 Neo Studio「3D 姿势」的云端姿势库与云端道具（OSS）。
 
 读侧是 studio/pose_cloud.py：索引在 `<前缀>/index.json`，文件在 `<前缀>/<相对路径>`。
 这条脚本产的就是那棵树，形状对齐，读侧不必为上传侧改一行：

@@ -123,7 +123,7 @@ class DistSyncTests(unittest.TestCase):
         self.assertTrue((dist / "models" / "bodyMale.glb").is_file(),
                         "手动删过的产物下一轮启动原样补回")
         self.assertTrue((dist / "models" / "my_body.glb").is_file(),
-                        "用户导入的自备素体不在镜像结果里：先存后还")
+                        "源构建没有的 GLB 不在镜像结果里：先存后还")
         self.assertGreater(out["files"], 0)
 
 
@@ -157,7 +157,7 @@ class LibSyncTests(unittest.TestCase):
         self.assertTrue((lib / "LICENSE").is_file())
         self.assertEqual(sorted(e["id"] for e in self._index()["entries"]), ["p1", "p2"])
         self.assertTrue(all(e.get("charKey") for e in self._index()["entries"]),
-                        "charKey 进条目：场景库的基座筛选靠它才有落点")
+                        "charKey 进条目：姿势库的基座筛选靠它才有落点")
         self.assertTrue(out["index"])
         self.assertEqual(sp.sync_lib(self.repo, self.data)["files"], 0,
                          "源没变化时重复启动跑不出文件复制")

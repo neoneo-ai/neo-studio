@@ -271,9 +271,9 @@ const posePage = page("ns-pose", `
   <div class="ns-pose">
     <div class="ns-pose-body">
       <aside class="ns-pose-side">
-        <div class="ns-pose-side-head"><span class="ns-pose-side-head-label">场景库</span>${poseCollapseBtn("场景库", 9.5, 5.2)}</div>
+        <div class="ns-pose-side-head"><span class="ns-pose-side-head-label">姿势库</span>${poseCollapseBtn("姿势库", 9.5, 5.2)}</div>
         <div class="ns-pose-list"><div class="ns-pose-item">hero</div></div>
-        <div class="ns-pose-row"><input class="ns-pose-name" placeholder="场景名"><button class="ns-pose-btn" type="button">存为场景</button></div>
+        <div class="ns-pose-row"><input class="ns-pose-name" placeholder="姿势名"><button class="ns-pose-btn" type="button">存为姿势</button></div>
       </aside>
       <div class="ns-pose-stage"><canvas></canvas></div>
       <aside class="ns-pose-side ns-pose-panel">
@@ -578,7 +578,7 @@ test("手机弹窗层：素材库弹窗铺满整窗、灯箱侧栏落到画面�
     assert.equal(lb.closeW, 44, "灯箱关闭钮没给到 44px 触摸目标");
 });
 
-test("手机姿势页：画布在上，场景库与控制面板各占一截（三栏压不进 390）", async () => {
+test("手机姿势页：画布在上，姿势库与控制面板各占一截（三栏压不进 390）", async () => {
     const m = await measure(posePage, MOBILE, { touch: true }, () => {
         const b = (s) => document.querySelector(s).getBoundingClientRect();
         return {
@@ -612,7 +612,7 @@ test("手机姿势页：画布在上，场景库与控制面板各占一截（�
             iconW: Math.round(b(".ns-pose-panel .ns-pose-collapse svg").width),
         };
     });
-    assert.ok(c.libH >= 30 && c.libH <= 42, `收起的场景库没收成一条横条：${c.libH}px`);
+    assert.ok(c.libH >= 30 && c.libH <= 42, `收起的姿势库没收成一条横条：${c.libH}px`);
     assert.ok(c.panelH >= 30 && c.panelH <= 42, `收起的控制面板没收成一条横条：${c.panelH}px`);
     assert.ok(c.stageH > m.stageH, `只收一栏时画布没长高：${c.stageH} ≤ ${m.stageH}`);
     assert.ok(c.bothStageH > c.stageH, `两侧都收起时画布没接着长高：${c.bothStageH} ≤ ${c.stageH}`);

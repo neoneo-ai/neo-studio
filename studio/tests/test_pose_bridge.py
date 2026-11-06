@@ -2,7 +2,7 @@
 """「3D 姿势」桥接口（studio/pose.py）离线单测。
 
 姿势页在 iframe 里跑，桥的契约是消息名而不是代码：宿主页面、姿势页、这份用例三处同名，
-所以先把消息名与能力位钉死。其余用例覆盖 dist 子资源的路径包含、场景落盘与场景库伺服、ControlNet
+所以先把消息名与能力位钉死。其余用例覆盖 dist 子资源的路径包含、场景落盘与姿势库伺服、ControlNet
 图组导出到素材库，以及「姿势包没装」这条用户一定会撞上的路。全程只在根 conftest.py
 钉住的临时数据根里读写。
 """
@@ -102,20 +102,13 @@ class BridgeContractTests(unittest.TestCase):
             self.assertFalse(pose.BRIDGE_CAPS[gated], f"{gated} 要本机 sidecar，不能报可用")
 
     def test_caps_open_body_import(self):
-        """自备素体导入是宿主自己那条路（写 GLB 进数据根 + 页面本地登记），不依赖 sidecar。"""
+        """素体登记是姿势页自己那侧的能力（随包 CC0 + 页面本地导入区），不依赖 sidecar。"""
         self.assertTrue(pose.BRIDGE_CAPS["body_import"])
 
-    def test_glb_cap_is_reachable_inside_the_body_cap(self):
-        """素体上限要落在请求体上限之内：GLB 走 base64 进 JSON，编码后膨胀 4/3 再加 JSON 外壳。
-
-        两条上限取同一句话的话，面板真发一份顶格的 GLB 会先撞请求体上限，接口里那条
-        「GLB 超过 …」永远轮不到回答 —— 上限写了等于没写。
-        """
-        inflated = pose.MAX_GLB_BYTES * 4 // 3 + 4096   # 4096 给 key / filename 那层壳
-        self.assertLess(inflated, pose.MAX_BODY_BYTES,
-                        "按 MAX_GLB_BYTES 发一份 GLB，base64 后必须先撞请求体上限")
-        self.assertGreater(pose.MAX_GLB_BYTES, 8 * 1024 * 1024,
-                           "Mixamo 十几 MB 级的高模要落在限内，上限不许收成参考图那档")
+    def test_import_model_route_is_not_registered(self):
+        """宿主只发标准男 / 标准女两具基座，自备 GLB 不在面板上导入：这条写入路随控件一起删掉，
+        接口留着就是一条点了只会失败的入口。"""
+        self.assertNotIn("/neo_pose/import_model", {rule.path for rule in pose.routes})
 
     def test_caps_announce_host_ui_panel(self):
         """宿主自带控件面板：能力位为真，姿势页据此收起 demo 控件，动作走 pose:call。"""
@@ -198,7 +191,7 @@ class DistAssetTests(_PoseCase):
 
 
 class LibAssetTests(_PoseCase):
-    """场景库（pose-lib 的库数据）：`/pose-lib/` 一条前缀伺服数据根那一级，全程只读。"""
+    """姿势库（pose-lib 的库数据）：`/pose-lib/` 一条前缀伺服数据根那一级，全程只读。"""
 
     def index(self) -> Path:
         return self.write(pose.LIB_DIR / "index.json", json.dumps(
@@ -371,11 +364,11 @@ class ExportSetTests(_GalleryStubCase):
 
 GLB_STUB = b"glTF\x02\x00\x00\x00" + bytes(64)
 
-PATCHED = ("DIST_DIR", "PACKAGE_DIST", "MODELS_DIR", "INDEX_HTML", "SCENES_DIR", "MAX_GLB_BYTES")
+PATCHED = ("DIST_DIR", "PACKAGE_DIST", "MODELS_DIR", "INDEX_HTML", "SCENES_DIR")
 
 
 class PackageDistTests(_GalleryStubCase):
-    """两级落点与自备素体导入：随包那份最小副本装完就能开页面，用户同步的全量产物与自备 GLB 压它。
+    """两级落点：随包那份最小副本装完就能开页面，用户同步的全量产物压它。
 
     落点与数据根全指到临时目录 —— 随包副本是构建产物，用例不许依赖它在不在仓库里。"""
 
@@ -454,7 +447,7 @@ class PackageDistTests(_GalleryStubCase):
         self.assertEqual(self.models("../scenes/a.json").status, 400, "注册表路径不能走出 dist")
 
     def test_data_root_dist_wins_over_the_package_copy(self):
-        """两级都有同名文件时取数据根那份：新构建与自备素体压随包副本，页面跑用户装的那版。"""
+        """两级都有同名文件时取数据根那份：新构建与数据根的 GLB 压随包副本，页面跑数据根那版。"""
         self.page_of(self.pkg_dist)
         self.page_of(self.data_dist)
         self.write(self.pkg_dist / "assets" / "index-abc.js", "console.log('package')")
@@ -499,63 +492,6 @@ class PackageDistTests(_GalleryStubCase):
         self.assertEqual(payload["manifest_version"], "")
         self.assertEqual(payload["manifest_files"], 0)
         self.assertEqual(payload["manifest_bytes"], 0)
-
-    def test_import_model_writes_into_data_root_models(self):
-        """自备 GLB 落进数据根那一级，页面按 <key>.glb 取它；同名导入是替换，不出第二个 key。"""
-        body = base64.b64encode(GLB_STUB).decode()
-        data = json.loads(_run(pose.pose_import_model,
-                               _request(body={"key": "mixamo_a", "data": body})).body)
-        self.assertTrue(data["success"])
-        self.assertEqual(data["url"], "/pose-dist/models/mixamo_a.glb")
-        dest = pose.MODELS_DIR / "mixamo_a.glb"
-        self.created.append(dest)
-        self.assertEqual(dest.read_bytes(), GLB_STUB)
-        self.assertFalse((pose.MODELS_DIR / "mixamo_a.glb.tmp").exists())
-        self.assertEqual(self.static("models/mixamo_a.glb").status, 200)
-        _run(pose.pose_import_model, _request(body={"key": "mixamo_a", "data": body}))
-        self.assertEqual(sorted(p.name for p in pose.MODELS_DIR.glob("*.glb")), ["mixamo_a.glb"])
-        self.assertIn("mixamo_a.glb", pose.status_payload()["models_present"])
-
-    def test_import_model_resolves_gallery_files(self):
-        """素材库那条来源复用 Gallery 的解析器：GLB 从素材库取一份也落进同一个落点。"""
-        self.source = self.glb(Path(self._tmp.name) / "src" / "src.glb")
-        data = json.loads(_run(pose.pose_import_model,
-                               _request(body={"key": "from_lib", "filename": "src.glb"})).body)
-        self.assertTrue(data["success"])
-        dest = pose.MODELS_DIR / "from_lib.glb"
-        self.created.append(dest)
-        self.assertEqual(dest.read_bytes(), GLB_STUB)
-
-    def test_import_model_rejects_bad_payload_without_writing(self):
-        """key、来源、字节数、文件头四道校验全在写盘之前：挡下的请求不许留下半个模型的痕迹。"""
-        good = base64.b64encode(GLB_STUB).decode()
-        for body in (
-            {"key": "", "data": good},
-            {"key": "a/b", "data": good},
-            {"key": "../escape", "data": good},
-            {"key": "unit"},
-            {"key": "unit", "data": "%%%", "filename": ""},
-            {"key": "unit", "data": base64.b64encode(b"").decode()},
-            {"key": "unit", "data": base64.b64encode(b"not-a-glb").decode()},
-            {"key": "unit", "data": good, "filename": "also.glb"},
-            {"key": "unit", "filename": "../x.glb"},
-        ):
-            self.assertEqual(_run(pose.pose_import_model, _request(body=body)).status, 400, str(body))
-        self.assertEqual(list(pose.MODELS_DIR.glob("*.glb")), [])
-        pose.MAX_GLB_BYTES = 8
-        self.assertEqual(_run(pose.pose_import_model,
-                              _request(body={"key": "unit_big", "data": good})).status, 400)
-        self.assertEqual(list(pose.MODELS_DIR.glob("*.glb")), [])
-
-    def test_import_model_rejects_non_glb_gallery_file_and_missing_asset(self):
-        self.source = self.write_png(Path(self._tmp.name) / "src" / "src.png")
-        self.assertEqual(_run(pose.pose_import_model,
-                              _request(body={"key": "unit", "filename": "src.png"})).status, 400)
-        self.source = None
-        resp = _run(pose.pose_import_model, _request(body={"key": "unit", "filename": "nope.glb"}))
-        self.assertEqual(resp.status, 404)
-        self.assertEqual(list(pose.MODELS_DIR.glob("*.glb")), [])
-
 
 class _CloudFixture(_PoseCase):
     """云端那棵的夹具：缓存整棵挪进临时树、网络层换桩、配置与缓存索引就地写。
@@ -613,7 +549,7 @@ class _CloudFixture(_PoseCase):
         }
 
 class CloudTests(_CloudFixture):
-    """云端场景库与云端道具：索引 TTL、路径守卫、下载校验、不可用形态。
+    """云端姿势库与云端道具：索引 TTL、路径守卫、下载校验、不可用形态。
 
     道具那三级顺序也在这一类里钉 —— 云端缓存是第三级，数据根与随包副本永远压它。
     """

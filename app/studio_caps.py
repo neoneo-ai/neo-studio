@@ -215,15 +215,14 @@ _AGENT = {
 # 理由见 studio/pose.py 的 register_static。
 # 照片估点 / 网格 / pano 要 pose-art 那套 Python sidecar，桌面端起不动它，
 # 状态接口的 caps 里这几位是 False，页面据此置灰按钮。场景存档是数据根里的文件，删只走 UI 上选中的
-# 那一条 /neo_gallery/delete 式的单条路，没有「清空场景库」；场景库（<数据根>/pose/lib）本身只读。
-# 素体导入（caps 的 body_import）走桌面端自己那条路：随包只发授权干净的 CC0 素体，其余 GLB 由用户
-# 自备，/neo_pose/import_model 把它写进 <数据根>/pose/dist/models/，登记动作留在页面本地导入区。
-# 云端场景库与云端道具（studio/pose_cloud.py）三条都在文件层 + 公开 GET：索引带 TTL 缓存，
+# 那一条 /neo_gallery/delete 式的单条路，没有「清空姿势库」；姿势库（<数据根>/pose/lib）本身只读。
+# 素体（caps 的 body_import）归姿势页自己那侧：随包只发授权干净的 CC0 素体，Mixamo 与 SMPL 派生的那几份
+# 由用户在页面自己的本地导入区登记。宿主面板只发标准男 / 标准女两具基座，没有自备素体导入这条接口。
+# 云端姿势库与云端道具（studio/pose_cloud.py）三条都在文件层 + 公开 GET：索引带 TTL 缓存，
 # 取文件落进 <数据根>/pose/oss_cache 后由本机伺服，桌面端离线服务同样答得了。
 _POSE = {
     ("GET", "/neo-pose"),
     ("GET", "/neo_pose/status"),
-    ("POST", "/neo_pose/import_model"),
     ("POST", "/neo_pose/export_image"),
     ("POST", "/neo_pose/export_set"),
     ("GET", "/neo_pose/scenes"),

@@ -5,7 +5,7 @@ r"""Neo Studio「3D 姿势」页后端：伺服 3d-pose-art 构建产物 + 与�
 姿势包 = 3d-pose-art 的 vite 构建产物，落点两级：<数据根>/pose/dist/ 优先（tools\sync_pose_dist.ps1
 同步的全量产物，含开发用的 map，约 16MB），随包分发的最小授权副本在 studio/pose_dist/
 （tools\build_pose_package.ps1 生成：代码 + CC0 标准素体 bodyMale.glb / bodyFemale.glb，约 3MB，进 Registry 包与 exe）。
-子资源逐请求按这两级找，数据根那份压住随包的同名文件，新构建与用户自备素体因此都优先。两级都没有时
+子资源逐请求按这两级找，数据根那份压住随包的同名文件，用户同步的全量产物因此优先。两级都没有时
 /neo_pose/status 报 installed=false，页面显示「未安装」而不是白屏。
 
 姿势页在宿主页面里以 iframe 承载，与宿主同源（同源的 /neo_pose/* 与 /view），靠 postMessage
@@ -40,9 +40,9 @@ INDEX_HTML = DIST_DIR / "index.html"
 # 随包分发的最小姿势包：与插件代码同批进 Registry 包与 exe，用户不跑同步脚本也能开页面。
 # 它是可重建的产物镜像（tools\build_pose_package.ps1 的落点），运行期只读，任何写入都不落这里。
 PACKAGE_DIST = Path(__file__).parent / "pose_dist"
-MODELS_DIR = DIST_DIR / "models"          # 自备素体 GLB 的落点（页面按 <key>.glb 取它）
+MODELS_DIR = DIST_DIR / "models"          # 随包 CC0 素体 GLB 的落点（页面按 <key>.glb 取它）
 MANIFEST_NAME = "MANIFEST.json"           # 随包发货清单：逐文件 sha256 与体积
-# 场景库（3d-pose-art 的姿势库）：另一级数据根内容，由 tools\sync_pose_lib.ps1 同步进来，本模块全程只读。
+# 姿势库（3d-pose-art 的整场库）：另一级数据根内容，由 tools\sync_pose_lib.ps1 同步进来，本模块全程只读。
 # 姿势仓库那边库拆成预设 pose-lib（只读）与本地 pose-lab（可写）两根，同步时并成这一份：同 id 本地胜出，
 # 每条索引带 origin。库里一份条目是一整场场景文件（poses/<组>/<id>.scene.json，3dpose.scene/1：多人 + 道具），
 # 宿主弹窗按 entry.path 读它交回 scene/apply，不需要转换。
@@ -62,7 +62,7 @@ PAGE_URL = f"{STATIC_PREFIX}/index.html"
 MODELS_PREFIX = "/models"
 # 道具注册表这一条不是纯静态文件：伺服时把云端缓存里点名的道具补成注册表行（见 _props_registry_response）
 PROPS_REGISTRY_REL = "models/props/index.json"
-# 场景库的静态前缀与姿势包同一条路子：库里 index.json、poses/**.scene.json 与 preview/*.png
+# 姿势库的静态前缀与姿势包同一条路子：库里 index.json、poses/**.scene.json 与 preview/*.png
 # 由宿主弹窗逐条取（缩略图与场景文件都是库自己的文件），逐条打表没有意义，不进 /neo 命名空间。
 # 前缀名与姿势仓库自己的那条 `/pose-lib/` 同名：库条目的 preview.path 与 entry.path 原样拼地址，
 # 宿主与姿势页对同一份库文件说的是同一个名字。
@@ -77,9 +77,9 @@ BRIDGE_MESSAGES = ("pose:ready", "pose:theme", "pose:export-image",
 # pose-art 那套 Python sidecar（vite dev/preview 才挂载），桌面端进程起不动它们，页面按这几位置灰按钮。
 # hostUi 反过来：宿主自带控件面板（pose.js 的工具条 + 侧栏），姿势页据此收起自己的 demo 控件，
 # 面板的动作经 pose:call 落到页面运行时上（动作清单在姿势页 src/ui/hostCommands.js）。
-# body_import 是宿主自己那条路，不依赖 sidecar：随包只发授权干净的 CC0 素体，Mixamo 与 SMPL 派生的
-# 那几份由用户自备 GLB 经 /neo_pose/import_model 写进 <数据根>/pose/dist/models/，页面在自己的本地
-# 导入区按 key 登记它（登记表在页面侧，宿主不碰）。
+# body_import 是姿势页自己那侧的能力，不依赖 sidecar：随包只发授权干净的 CC0 素体，Mixamo 与 SMPL 派生的
+# 那几份由用户在页面自己的本地导入区登记。宿主面板只发标准男 / 标准女两具基座（studio/web/pose/pose.js
+# 的白名单），不发导入用的接口 —— 面板上没有那条路，也就不存在点了只会失败的控件。
 BRIDGE_CAPS = {"pose": True, "timeline": True, "export": True, "scene": True,
                "photo3d": False, "mesh": False, "pano": False, "body_import": True,
                "lib_write": False, "hostUi": True}
@@ -95,11 +95,6 @@ MAX_BODY_BYTES = 48 * 1024 * 1024
 # ControlNet 图组一次最多几张：一个视角 6 档，留两个视角的量（面板就是这两档组合）
 MAX_SET_FILES = 12
 GLB_EXT = ".glb"
-GLB_MAGIC = b"glTF"          # glTF 2.0 二进制的文件头：挡掉改名成 .glb 的任意文件
-# 一份自备素体的字节上限：GLB 走 base64 进 JSON，编码后膨胀 4/3，取 35MB 时 base64 约 46.7MB，
-# 加上 JSON 外壳仍在 48MB 请求体上限内 —— 两条上限在同一次请求里都成立，不会出现「接口说得到、
-# transport 先到」。2.9MB 的 Y Bot 远在限内，Mixamo 高模（十几 MB 级）也够。
-MAX_GLB_BYTES = 35 * 1024 * 1024
 
 # Windows 的 mimetypes 读注册表：.wasm 报 application/octet-stream 时
 # WebAssembly.instantiateStreaming 直接拒收，Draco 解不出 GLB，姿势页连人物都加载不出来。
@@ -127,8 +122,8 @@ async def pose_static(request):
 
     子资源由 iframe 内部直接加载（模块 import、GLB、wasm），不经宿主页面与 shim；
     入口页缓存住的话 WebView2 会连整张模块图一起用旧的，构建一变页面就跑旧代码。
-    逐请求走两级落点，数据根那份压住随包的同名文件：新构建与用户自备素体因此优先，
-    缺一级不影响另一级 —— 随包副本里只有一个 GLB 也照样能选到素体。
+    逐请求走两级落点，数据根那份压住随包的同名文件：用户同步的全量产物因此优先，
+    缺一级不影响另一级 —— 随包副本里 CC0 那两具基座在着，标准男 / 标准女照样可选。
     """
     # 空路径 = 前缀本身（/pose-dist/）：地址栏直接敲前缀也要进页面，与静态服务器的目录口径一致
     return _dist_response(request.match_info["path"] or "index.html")
@@ -189,7 +184,7 @@ def _props_registry_response(target: Path) -> web.StreamResponse:
 
 
 async def pose_lib(request):
-    """场景库的静态伺服：`index.json`、`poses/**.scene.json`、`preview/*.png`、`categories.json`。
+    """姿势库的静态伺服：`index.json`、`poses/**.scene.json`、`preview/*.png`、`categories.json`。
 
     库只有数据根那一级（`<数据根>/pose/lib`），由 `tools\\sync_pose_lib.ps1` 同步进来，本模块只读它：
     库里一份条目就是一整场场景文件（3dpose.scene/1），弹窗按 `entry.path` 读它再走一次 `scene/apply`。
@@ -330,60 +325,6 @@ async def pose_export_set(request):
                               "subfolder": EXPORT_SUBFOLDER})
 
 
-@routes.post("/neo_pose/import_model")
-async def pose_import_model(request):
-    """自备素体 → <数据根>/pose/dist/models/<key>.glb。
-
-    随包只发授权干净的 CC0 素体（授权口径见 models/ATTRIBUTION.md），Mixamo 与 SMPL 派生的那几份
-    条款不允许随包分发，由用户自备 GLB 从这条接口写进数据根那一级，页面再在自己的本地导入区按 key
-    登记它（登记表在页面侧）。文件名就是 key：页面按 <key>.glb 拼地址，同名替换 = 同一 key 换模型，
-    不会跑出第二个 key。只写数据根那一级，随包副本是只读的最小镜像。
-    """
-    data, err = await _json_body(request)
-    if err is not None:
-        return err
-    key = str(data.get("key") or "").strip()
-    if not SCENE_NAME_RE.fullmatch(key):
-        return _bad_request("素体 key 只允许字母数字与 _ . -（64 字符内，首字符字母数字）")
-    raw = str(data.get("data") or "")
-    filename = str(data.get("filename") or "")
-    if bool(raw) == bool(filename):
-        return _bad_request("data 与 filename 二选一：base64 一份 GLB，或素材库里的一个文件")
-    if raw:
-        if raw.startswith("data:"):
-            _, _, raw = raw.partition(",")
-        try:
-            body = base64.b64decode(raw, validate=True)
-        except (binascii.Error, ValueError):
-            return _bad_request("data 不是 base64 的 GLB")
-        origin = "data"
-    else:
-        if ".." in filename:
-            return _bad_request("filename 不合法")
-        from .gallery import _find_source_media   # 素材解析与 Gallery 同一套；惰性导入避免 import 期依赖
-        source = await asyncio.to_thread(_find_source_media, filename, str(data.get("subfolder", "")))
-        if source is None or not source.is_file():
-            return web.json_response({"success": False, "error": f"素材不存在：{filename}"}, status=404)
-        if source.suffix.lower() != GLB_EXT:
-            return _bad_request(f"自备素体只支持 .glb：{source.suffix}")
-        body = await asyncio.to_thread(source.read_bytes)
-        origin = "gallery"
-    if not body:
-        return _bad_request("GLB 内容为空")
-    if len(body) > MAX_GLB_BYTES:
-        return _bad_request(f"GLB 超过 {MAX_GLB_BYTES // (1024 * 1024)}MB 上限")
-    if body[:4] != GLB_MAGIC:
-        return _bad_request("文件头不是 glTF：只接受 .glb 二进制")
-    name = f"{key}{GLB_EXT}"
-    dest = inside_dir(MODELS_DIR, name)
-    if dest is None:
-        return _bad_request("key 不合法")
-    await asyncio.to_thread(_write_bytes_atomic, dest, body)
-    return web.json_response({"success": True, "key": key, "name": name,
-                              "url": f"{STATIC_PREFIX}/models/{name}", "size": len(body),
-                              "from": origin, "models_dir": str(MODELS_DIR)})
-
-
 def dist_dirs() -> tuple:
     """姿势包的落点，数据根在前：随包那份是最小副本，用户同步的全量产物压它；
     第三级是云端缓存（pose/oss_cache）—— 只有已经落进缓存的云端道具被这条找到，
@@ -414,7 +355,7 @@ def _package_manifest() -> dict | None:
 
 def _model_rows() -> list:
     """两级落点里在着的 GLB 素体文件名（去重排序）：页面内置注册表引用了哪几个、装机后实际在着
-    哪几个，一眼对得上 —— 随包只发 CC0 那一份，其余要靠自备导入。"""
+    哪几个，一眼对得上 —— 随包只发 CC0 那一份，注册表引用的其余那几档装机后就是缺的。"""
     names = set()
     for root in dist_dirs():
         try:
@@ -434,7 +375,7 @@ def status_payload() -> dict:
         "success": True,
         "installed": active is not None,
         "dist_dir": str(active) if active is not None else str(DIST_DIR),
-        # 生效的那一级：数据根（同步的全量产物 / 自备素体）还是随包副本（最小授权副本）
+        # 生效的那一级：数据根（同步的全量产物）还是随包副本（最小授权副本）
         "dist_source": "data_root" if active == DIST_DIR else ("package" if active else ""),
         "package_installed": (PACKAGE_DIST / "index.html").is_file(),
         "package_dir": str(PACKAGE_DIST),
@@ -447,7 +388,7 @@ def status_payload() -> dict:
         "manifest_bytes": int(manifest.get("total_bytes") or 0),
         "data_root": str(plugin_paths.DATA_ROOT),
         "assets_bytes": _tree_bytes((active or DIST_DIR) / "assets"),
-        # 场景库与姿势包各一级：库里一份条目是一整场场景文件（3dpose.scene/1），宿主弹窗按 entry.path 读它。
+        # 姿势库与姿势包各一级：库里一份条目是一整场场景文件（3dpose.scene/1），宿主弹窗按 entry.path 读它。
         # 未同步时 lib_entries 是 0，弹窗出同步指引而不是一个空浏览器。
         "lib_dir": str(LIB_DIR),
         "lib_installed": lib_entries > 0,
@@ -500,7 +441,7 @@ def _scene_rows() -> list:
 
 
 def _lib_entries() -> int:
-    """场景库的条目数：`<数据根>/pose/lib/index.json` 的 `entries` 数组长度。
+    """姿势库的条目数：`<数据根>/pose/lib/index.json` 的 `entries` 数组长度。
 
     读不出（缺文件 / 坏 JSON / 缺 entries）报 0，status 按 0 报「未同步」：库没同步时宿主弹窗
     出同步指引，而不是一个空浏览器 —— 与姿势包缺包出提示是同一口径。
@@ -518,15 +459,6 @@ def _write_json_atomic(path: Path, payload: dict) -> None:
     tmp = path.with_name(path.name + ".tmp")
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False)
-    tmp.replace(path)
-
-
-def _write_bytes_atomic(path: Path, body: bytes) -> None:
-    """GLB 落盘：先写 .tmp 再替换。一份 2.9MB 的模型写一半被窗口关掉截断，页面解 GLB 只会报坏文件。"""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + ".tmp")
-    with open(tmp, "wb") as f:
-        f.write(body)
     tmp.replace(path)
 
 

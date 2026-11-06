@@ -168,12 +168,11 @@ bridge messages and how to install the package are in [studio-pose.md](studio-po
 | GET      | `/neo-pose`                 | Short path: 302 to `/pose-dist/index.html` when an entry page exists in either landing path, 404 with the install hint when neither has one |
 | GET      | `/pose-dist/{path}`         | Package subresources the iframe loads directly; looked up per request through `<data root>/pose/dist` then `studio/pose_dist` (registered by each host directly, outside the capability table) |
 | GET      | `/models/{path}`            | The origin-root path baked into the build (prop registry `props/index.json`, body and prop `<file>.glb`); same two-level lookup and same root check as `/pose-dist/{path}` |
-| GET      | `/pose-lib/{path}`          | Read-only scene library serving (`index.json`, `poses/**` - whole-scene `3dpose.scene/1` - `preview/*.png`, `categories.json`); the only root is `<data root>/pose/lib`, every path passes the in-root check, an unsynced library answers 404 (registered by each host directly, outside the capability table) |
+| GET      | `/pose-lib/{path}`          | Read-only pose library serving (`index.json`, `poses/**` - whole-scene `3dpose.scene/1` - `preview/*.png`, `categories.json`); the only root is `<data root>/pose/lib`, every path passes the in-root check, an unsynced library answers 404 (registered by each host directly, outside the capability table) |
 | GET      | `/neo_pose/status`          | Install state, which landing path is live (`dist_source`), the shipped manifest and the GLBs present, capability flags, saved scenes, bridge names, install hint, library state (`lib_dir` / `lib_installed` / `lib_entries` / `lib_bytes`) |
 | GET      | `/neo_pose/scenes`          | Scene list (`name` / `size` / `mtime`)                                                                          |
 | GET      | `/neo_pose/scene?name=`     | Read one scene                                                                                                  |
 | POST     | `/neo_pose/scene`           | Write a scene (`.tmp` + replace, atomic)                                                                        |
-| POST     | `/neo_pose/import_model`    | Write an own-figure GLB to `<data root>/pose/dist/models/<key>.glb`, replies `{key, name, url, size, from}`   |
 | POST     | `/neo_pose/export_image`    | Store the page canvas into `output/Pose`, replies `{filename, subfolder, size}`                               |
 | POST     | `/neo_pose/export_set`      | Store a ControlNet image set into `output/Pose` (≤12 files), replies `{saved, count}`                         |
 | GET      | `/neo_pose/cloud_status`    | Cloud configured or not, the manifest URL and root prefix, cache state, scene and prop counts (unconfigured replies `enabled: false`, never contacts OSS) |
@@ -189,10 +188,10 @@ the dist and 404 for a missing file, never an empty registry that makes the page
 as the user's problem. `/pose-lib/{path}` is a third name on that arrangement: its only root is
 `<data root>/pose/lib`, the library lands through `tools\sync_pose_lib.ps1` and the backend only
 reads it, an unsynced library answers 404 for the whole prefix, and every sync rewrites the files,
-so that prefix answers `no-cache` rather than a long cache. `import_model` takes `{key, data}` (base64) or `{key, filename, subfolder,
-type}` (a library file); the key goes through the scene-name whitelist, the byte count stays under 35 MB
-(the size that still fits the 48 MB request-body cap once base64 is packed into JSON), the
-header has to be `glTF`, and all four checks run before anything is written. The page side of the bridge
+so that prefix answers `no-cache` rather than a long cache. The panel's character dropdown offers only the
+two shipped CC0 base figures, and the host has no import route at all — `/neo_pose/import_model` is not
+registered. The desktop service keeps its request-body cap at 48 MB and above, so a 12-image ControlNet set
+packed as base64 is not stopped at the transport first. The page side of the bridge
 is `src/neoBridge.js` in 3d-pose-art; the contract is in [studio-pose.md](studio-pose.md).
 
 ## frames.py — `/neo_frames/*`

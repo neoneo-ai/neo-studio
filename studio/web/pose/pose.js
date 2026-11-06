@@ -3,7 +3,8 @@
  *
  * 姿势包 = 3d-pose-art 的 vite 产物，后端伺服在 /pose-dist/，短路径 /neo-pose 跳到入口页
  * （产物是 base:'./' 的相对 import，页面必须有目录深度，理由见 studio/pose.py）。控件在宿主这一侧：
- * 左栏场景库，右栏姿势控制面板，画布在中间的 iframe 里跑。宿主复刻不了那份 three.js 运行时，
+ * 左栏姿势库（库里那一批与本机姿势合成一份列表），右栏姿势控制面板，画布在中间的 iframe 里跑。
+ * 宿主复刻不了那份 three.js 运行时，
  * 面板的每个动作都经 pose:call 落进页面（动作清单在姿势页 src/ui/hostCommands.js），画布状态经
  * pose:state 回流。页面在 caps.hostUi 下收起自己的 demo 控件 —— 同一时刻只有一套控件在场上。
  *
@@ -37,43 +38,56 @@ export const POSE_PAGE_URL = "/neo-pose";   // 后端 302 到前缀下的入口�
 
 const CALL_TIMEOUT_MS = 15000;   // 页面不回包就解锁控件：一次点击不许把面板锁死
 const MAX_SET_FILES = 12;        // /neo_pose/export_set 一次落盘的上限，与后端常量同值
-const MAX_GLB_BYTES = 48 * 1024 * 1024;   // /neo_pose/import_model 的一份自备素体上限，与后端同值
-const BODY_KEY_RE = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/;   // 素体 key：与后端 SCENE_NAME_RE 同一条
 
-// 场景库（pose-lib）：库数据由 tools\sync_pose_lib.ps1 同步进 <数据根>/pose/lib，静态伺服挂在 /pose-lib/
+// 姿势库（pose-lib）：库数据由 tools\sync_pose_lib.ps1 同步进 <数据根>/pose/lib，静态伺服挂在 /pose-lib/
 // 上一级（studio/pose.py 的 LIB_PREFIX）。库里一份条目是一整场（多人 + 道具 + 视角），套进画布走
 // pose:call 的 scene/apply —— 库只是多出来的另一批文件，不造第二条套用通路。
 const LIB_PREFIX = "/pose-lib";
 const LIB_INDEX = `${LIB_PREFIX}/index.json`;
 const LIB_PAGE = 200;      // 一次渲染的卡片上限：库里 600+ 条全塞进 DOM，首屏与滚动都撑不住
+const LIB_LIST_PAGE = 120; // 左栏那一行的分页上限：列表比卡片窄，一屏塞的行数更少
 const LIB_VARIANTS = ["clay", "skeleton", "silhouette", "depth"];   // 缩略图优先级，与姿势页 thumbOf 同一条
-const LIB_ORIGIN_ORDER = [{ key: "lib", label: "预设（只读）" }, { key: "lab", label: "本地（可写）" }];
-const LIB_SYNC_HINT = "场景库未同步：跑 tools\\sync_pose_lib.ps1 -Source <3d-pose-art 仓库根> 把 pose-lib 同步进" +
-    " <数据根>/pose/lib，或在「启动设置 → 姿势仓库」填上仓库目录，桌面端每次启动自动同步。";
+const LIB_ORIGIN_CLASS = { lib: "ship", lab: "lab", cloud: "cloud" };
 const LIB_ORIGIN_LABEL = { lib: "预设", lab: "本地", cloud: "云端" };   // 合并库每条的出处：预设随仓库分发只读，本地是本机自己写的，云端在 OSS
+const LIB_ORIGIN_TITLE = {
+    lib: ` · ${t("预设库：随姿势仓库分发，只读")}`,
+    lab: ` · ${t("本地库：本机自己写的姿态")}`,
+    cloud: ` · ${t("云端库：OSS 上那棵树，取回的文件缓存在本机")}`,
+};
+const LIB_ORIGIN_ORDER = [{ key: "lib", label: "预设（只读）" }, { key: "lab", label: "本地（可写）" }];
+const LIB_SYNC_HINT = "姿势库未同步：跑 tools\\sync_pose_lib.ps1 -Source <3d-pose-art 仓库根> 把 pose-lib 同步进" +
+    " <数据根>/pose/lib，或在「启动设置 → 姿势仓库」填上仓库目录，桌面端每次启动自动同步。";
 
-// 云端场景库与云端道具（studio/pose_cloud.py）：清单吃 /neo_pose/cloud_index，场景 JSON 与道具 GLB
+// 云端姿势库与云端道具（studio/pose_cloud.py）：清单吃 /neo_pose/cloud_index，场景 JSON 与道具 GLB
 // 一律经 /neo_pose/cloud_file 落到本机缓存（<数据根>/pose/oss_cache），套用与加具走的还是
 // pose:call 那两条通路，姿势页不认第二个来源。预览图是唯一直连 OSS 的一张 <img>。
 const CLOUD_INDEX = "/neo_pose/cloud_index";
 const CLOUD_FILE = "/neo_pose/cloud_file";
 // 道具预览图的地址就两条：本机那批走页面写死的 /models/props/ 那一级（pose.py 伺服），
-// 云端那批直连 OSS（与场景库封面同一口径 —— 封面只是一张 <img>，不碰姿势页契约）
+// 云端那批直连 OSS（与姿势库封面同一口径 —— 封面只是一张 <img>，不碰姿势页契约）
 const MODELS_PREFIX = "/models";
 const CLOUD_PROPS_KEY = "props";
-const CLOUD_SYNC_HINT = "云端场景库未配置：在 <数据根>/configs/oss_presets.json 里写 pose_index_url，" +
+const CLOUD_SYNC_HINT = "云端姿势库未配置：在 <数据根>/configs/oss_presets.json 里写 pose_index_url，" +
     "云端那棵树用 tools\\pose_deploy_oss.py 上传（默认只列清单，加 --apply 才上传）。";
 
 
-/** 随包 CC0 标准素体里默认那一份（姿势仓库 src/pose/character.js 的 CHARACTERS 表首）。
-    页面开局挂的就是这一档，面板的素体下拉与场景库的基座筛选都以它起头 ——
+/** 面板只发标准男 / 标准女两具基座（姿势仓库 src/pose/character.js 的 CHARACTERS 表首两条）：
+    Mixamo、SMPL 派生与用户自备的 GLB 一律不进面板 —— 那几份的授权条款不在我们手里，两具 CC0 基座在。
+    STANDARD_CHAR_LABELS 只是兜底名：页面 meta/list 报了这一档就用页面那份，面板不复刻定义。 */
+const STANDARD_CHAR_KEYS = ["bodyMale", "bodyFemale"];
+const STANDARD_CHAR_LABELS = ["标准男性", "标准女性"];
+/** 页面开局挂的就是标准男基座：素体下拉与姿势库的基座筛选都以它起头 ——
     下拉停在「选择素体…」时「加素体」会跟着页面当前素体走，用户看不见自己将拿到哪具身。 */
-const DEFAULT_CHAR_KEY = "bodyMale";
+const DEFAULT_CHAR_KEY = STANDARD_CHAR_KEYS[0];
 
 /** 页面开局是摄影棚灰（姿势页 core/scene.js 的 LOOKS.studio），面板按产品口径把外观定在暗色档 */
 const DEFAULT_LOOK_KEY = "dark";
 
-/** 左右栏收起偏好：画布要整幅时把场景库与控制面板收成两条竖栏，重开窗口停在上次的位置 */
+/** ControlNet 导出默认落在「当前视角」：面板不动用户调好的机位就能出图
+    （页面 EXPORT_VIEWS.current 是 null，导出口径就是沿用现场相机） */
+const DEFAULT_VIEW_KEY = "current";
+
+/** 左右栏收起偏好：画布要整幅时把姿势库与控制面板收成两条竖栏，重开窗口停在上次的位置 */
 const SIDE_KEY = "neo_studio_pose_sides";
 
 /** 道具显示名归一：页面 label 带全角括号后缀（细剑（Sting））时，括号前的名字也算同一个名字 */
@@ -106,6 +120,22 @@ export function resolvePropChoice(input, options) {
     return hit ? keyOf(hit) : null;
 }
 
+/**
+ * meta/list 的素体清单 → 面板发得出的那几档（标准男 / 标准女）。
+ *
+ * 页面注册的基座比面板发的多（Mixamo、SMPL 派生、用户自备的 GLB）：面板只按白名单出选项，
+ * 一条点了只会失败的控件不发货。label 用页面那份，面板不复刻定义；页面没报这一档就不出这一条。
+ * @param {Array<{key?: string, label?: string}>} models meta/list 的 models
+ * @returns {Array<{key: string, label: string}>} 白名单内的素体，顺序就是白名单顺序
+ */
+export function standardCharOptions(models) {
+    return STANDARD_CHAR_KEYS.reduce((acc, key, i) => {
+        const hit = (models || []).find((m) => String(m.key) === key);
+        if (hit) acc.push({ key, label: hit.label || t(STANDARD_CHAR_LABELS[i]) });
+        return acc;
+    }, []);
+}
+
 /** 建「3D 姿势」视图。依赖由宿主注入：api 走 shim（离线与在线同一条路） */
 export function createPoseView({ api, $el, toast }) {
     return async function buildPose(el) {
@@ -117,6 +147,10 @@ export function createPoseView({ api, $el, toast }) {
         let pickedProp = "";
         let pickedPropKey = "";   // 道具卡片选中项：添加道具吃的就是这一张卡
         let propChoices = [];   // meta/list 的道具项：自由填写的名字只在这份清单里解析，不猜定义
+        let presetChoices = [];   // meta/list 的预设姿势：姿势库没同步时兜进左栏那一份列表，点一条是一次 preset/apply
+        let pickedPresetKey = "";
+        let sceneNames = [];      // pose/scenes/ 的本机存档：与库里那一批同列在左栏那一份列表的尾部
+        let libListShown = LIB_LIST_PAGE;   // 左栏那份列表这一屏渲染到第几条
         const canvas = {};
 
         // 两层门控：读写本机文件只认 pose:ready；姿势动作还要 caps.hostUi —— 旧姿势包没有
@@ -151,28 +185,29 @@ export function createPoseView({ api, $el, toast }) {
             return { node, btn, label };
         };
 
-        /* 左栏：场景库 —— 存的是 pose:save-scene 的产物，浏览的是 pose-lib 同步进来的整场，
-           两处都是数据根里的文件，装载只有一条路（pose:open-scene / scene/apply） */
-        const sceneList = list();
-        const sceneName = field("场景名");
-        const btnSaveScene = btn("存为场景", "copy", libGate);
-        const btnLoadScene = btn("载入场景", "folder", libGate);
-        const btnBrowseLib = btn("浏览场景库…", "list", libGate);   // pose-lib 的整场库 + 本机场景文件
-        // 跑在随包副本上要说清楚：随包只发 CC0 那一份素体，其余 GLB 素体不在页面上。
-        // 不写这一句，用户只会以为素体列表坏了
-        const pkgNote = $el("div", {
-            className: "ns-pose-blank",
-            textContent: t("姿势页跑在随包的最小姿势包上：随包只分发 CC0 素体，其余素体请「导入自备素体」。"),
+        /* 左栏：姿势库 —— 库里那一批（pose-lib 同步进来的整场）与本机姿势（pose:save-scene 写进 pose/scenes/
+           的存档）合成一份列表，预设也在这份里：库同步好了就走清单里的预设条目（scene/apply），没同步时
+           兜进页面 meta/list 回报的那一批（preset/apply）。一份列表只有三条落点，宿主不造第二条套用通路 */
+        const libFilterSearch = $el("input", {
+            className: "ns-pose-lib-search ns-pose-list-search", type: "search", spellcheck: "false",
+            placeholder: t("搜索姿势（名字 / 分组 / 标签）"),
         });
-        pkgNote.hidden = true;
-        const libBar = sideBar("场景库");
+        const poseList = list(" ns-pose-pose-list");
+        const btnListMore = $el("button", { className: "ns-pose-btn ns-pose-list-more", type: "button" });
+        btnListMore.hidden = true;
+        libGate.push(libFilterSearch, btnListMore);
+        const poseName = field("姿势名");
+        const btnSavePose = btn("存为姿势", "copy", libGate);
+        const btnLoadPose = btn("载入姿势", "folder", libGate);
+        const btnBrowseLib = btn("浏览姿势库…", "list", libGate);   // pose-lib 的整场库 + 本机姿势文件
+        const libBar = sideBar("姿势库");
         const lib = $el("aside", { className: "ns-pose-side" }, [
             libBar.node,
-            sceneList,
-            row([sceneName, btnSaveScene]),
-            row([btnBrowseLib, btnLoadScene]),
-            head("姿势包"),
-            pkgNote,
+            libFilterSearch,
+            poseList,
+            btnListMore,
+            row([poseName, btnSavePose]),
+            row([btnBrowseLib, btnLoadPose]),
         ]);
 
         /* 右栏：控制面板。下拉内容一次由 meta/list 给齐，面板不逐样问页面 */
@@ -185,7 +220,6 @@ export function createPoseView({ api, $el, toast }) {
         const formatBox = $el("div", { className: "ns-pose-formats" });
         const propList = list();
         const modelSel = sel("素体", panelGate);
-        const presetSel = sel("预设", panelGate);
         const lookSel = sel("外观", panelGate);
         const viewSel = sel("视角", panelGate);
         const sizeSel = sel("尺寸", panelGate);
@@ -194,12 +228,6 @@ export function createPoseView({ api, $el, toast }) {
         const btnAddMember = btn("加素体", "plus", panelGate);
         const btnDelMember = btn("删当前素体", "cross", panelGate);
         const btnResetPose = btn("重置姿态", "history", panelGate);
-        // 自备素体：随包只发 CC0 那一份 GLB（授权口径），Mixamo 与 SMPL 那几份要用户自备。
-        // key 默认取文件名 —— 页面按 <key>.glb 取文件，key 与文件名对上才有得选。
-        const bodyKey = field("素体 key（默认取文件名）");
-        const btnImportBody = btn("导入自备素体", "folder", libGate);
-        const bodyFile = $el("input", { className: "ns-pose-file", type: "file", accept: ".glb" });
-        btnImportBody.title = t("自备素体只支持 .glb");
         const propName = field("道具名（例：椅子）");
         // 道具是一件件带预览图的卡片，不是一个下拉：下拉里只有名字，用户得猜哪件是长棍、哪件是手枪
         const propSearch = $el("input", {
@@ -220,9 +248,8 @@ export function createPoseView({ api, $el, toast }) {
             panelBar.node,
             notice,
             group("画布状态", [stateBox]),
-            group("素体", [row([modelSel, btnAddMember]), row([btnDelMember, btnResetPose]),
-                row([bodyKey, btnImportBody]), bodyFile]),
-            group("姿势", [row([presetSel]), row([lookSel])]),
+            group("素体", [row([modelSel, btnAddMember]), row([btnDelMember, btnResetPose])]),
+            group("外观", [row([lookSel])]),
             group("道具", [
                 row([propSearch, propName]),
                 propGrid,
@@ -324,15 +351,15 @@ export function createPoseView({ api, $el, toast }) {
             })),
         );
 
-        /* ===== 场景库弹窗：pose-lib 的整场库与本机场景文件两条路共用素材库那扇弹窗外壳 =====
+        /* ===== 姿势库弹窗：pose-lib 的整场库与本机姿势文件两条路共用素材库那扇弹窗外壳 =====
            库是数据根里另一批读得到的文件（<数据根>/pose/lib），Neo Studio 这边只读它：
-           「存为场景」写的还是 pose/scenes/，库里一份条目读回来就是一次 scene/apply。 */
+           「存为姿势」写的还是 pose/scenes/，库里一份条目读回来就是一次 scene/apply。 */
         const libModal = createLibraryModal({ storageKey: "neo_studio_pose_libmodal", scope: "pose" });
         let libIndex = null;      // index.json 读到的那份；null = 库还没同步或读不成，弹窗出同步指引
         let libShown = LIB_PAGE;
         const libSearch = $el("input", {
             className: "ns-pose-lib-search", type: "search", spellcheck: "false",
-            placeholder: t("搜索场景（名字 / 分类 / 标签）"),
+            placeholder: t("搜索姿势（名字 / 分类 / 标签）"),
         });
         const libGroupSel = $el("select", { className: "ns-pose-sel ns-pose-lib-group", title: t("分组") });
         const libCharSel = $el("select", {
@@ -353,8 +380,8 @@ export function createPoseView({ api, $el, toast }) {
         const libGrid = $el("div", { className: "ns-pose-lib-grid" });
         const libMore = $el("button", { className: "ns-pose-btn ns-pose-lib-more", type: "button" });
         libGate.push(libMore, libSearch, libGroupSel, libCharSel, libOriginSel, libSourceSel);   // 弹窗里的这一片与左栏同一把门禁：ready 之前不可点
-        const btnSceneLocal = btn("本机场景文件…", "folder", libGate);
-        // 库里没有想要的场景时从本机挑一份 JSON，走的还是装载场景那条路
+        const btnSceneLocal = btn("本机姿势文件…", "folder", libGate);
+        // 库里没有想要的姿势时从本机挑一份 JSON，走的还是装载那条路
         const sceneFile = $el("input", { className: "ns-pose-file", type: "file", accept: ".json" });
         const libPane = $el("div", { className: "ns-pose-libpane" }, [
             row([libSourceSel, libSearch, libGroupSel, libCharSel, libOriginSel, btnSceneLocal]),
@@ -400,7 +427,7 @@ export function createPoseView({ api, $el, toast }) {
         }
 
 
-        /** 本机的一份 JSON 文件（姿态 / 场景）：与自备素体同一条 FileReader 路，不是 JSON 对象就在这出声 */
+        /** 本机的一份 JSON 文件（姿态 / 姿势）：FileReader 读进来，不是 JSON 对象就在这出声 */
         const readJsonFile = (file) => new Promise((resolve, reject) => {
             const reader = new FileReader();
             reader.onload = () => {
@@ -421,14 +448,16 @@ export function createPoseView({ api, $el, toast }) {
 
         /** meta/list 一次给全：面板每个下拉与勾选组都从这份清单来，不再逐样问页面 */
         function paintMeta(m) {
-            metaModels = m.models || [];
+            metaModels = standardCharOptions(m.models);
             fill(modelSel, metaModels, "选择素体…");
             applyDefaultChar();
-            fill(presetSel, m.presets || [], "选择预设…");
+            presetChoices = m.presets || [];
+            paintPoseList();
             fill(lookSel, m.looks || [], "外观");
             propChoices = m.props || [];
             paintPropGrid();
             fill(viewSel, m.views || [], "视角");
+            applyDefaultView();
             fill(sizeSel, (m.sizes || []).map((n) => ({ key: String(n), label: `${n}px` })), "尺寸");
             formatBox.replaceChildren(...(m.formats || []).map((f) => $el("label", {
                 className: "ns-pose-format", title: f.hint || f.label,
@@ -522,6 +551,12 @@ export function createPoseView({ api, $el, toast }) {
             if (!canvas.model) canvas.model = DEFAULT_CHAR_KEY;   // 首个 pose:state 之前也要让基座筛选有个落点
         }
 
+        /** 导出视角定在「当前视角」：面板不动用户调好的机位就能出图（页面 view=current 沿用现场相机）。
+         *  旧姿势包的 views 里没有这一档就不动 —— 下拉停在「视角」上，页面自己落它那份默认 */
+        function applyDefaultView() {
+            if ([...viewSel.options].some((o) => o.value === DEFAULT_VIEW_KEY)) viewSel.value = DEFAULT_VIEW_KEY;
+        }
+
         const stateRow = (key, value) => $el("div", { className: "ns-pose-state-row" }, [
             $el("span", { className: "ns-pose-state-key", textContent: t(key) }),
             $el("span", { className: "ns-pose-state-val", textContent: value }),
@@ -531,9 +566,15 @@ export function createPoseView({ api, $el, toast }) {
         function paintState(s) {
             Object.assign(canvas, s || {});
             if (canvas.model) {
-                // 页面自己换了素体：面板的素体下拉与库的基座筛选跟着对账，库不会停在套不上的那一档
-                if ([...modelSel.options].some((o) => o.value === canvas.model)) modelSel.value = canvas.model;
-                libCharSel.value = canvas.model;
+                // 页面自己换了素体：素体下拉与库的基座筛选跟着对账。下拉里没有这一档（画布挂的是用户在
+                // 姿势页自己那侧导入的基座）就两条都不动 —— 把 select.value 写空等于丢掉用户的筛选
+                if ([...modelSel.options].some((o) => o.value === canvas.model)) {
+                    modelSel.value = canvas.model;
+                    if ([...libCharSel.options].some((o) => o.value === canvas.model)) {
+                        libCharSel.value = canvas.model;
+                        paintPoseList();   // 基座筛选换了档，左栏那份列表跟着对账
+                    }
+                }
             }
             stateBox.replaceChildren(
                 stateRow("素体", canvas.model || "—"),
@@ -542,16 +583,90 @@ export function createPoseView({ api, $el, toast }) {
             );
         }
 
-        const paintFileList = (box, rows, picked, onPick) => {
-            if (!rows.length) {
-                box.replaceChildren($el("div", { className: "ns-pose-blank", textContent: t("还没有存档") }));
-                return;
+        const applySceneRow = (entry) => run(async () => {
+            const file = await libSceneJson(entry);
+            const r = await action("scene/apply", { file });
+            if (!r.ok) throw new Error(tf("姿势没有套上：{msg}",
+                { msg: (r.errors || []).join("；") || t("页面未报告原因") }));
+            toast(tf("已套用整场：{name}（{rigs} 副骨架 · {props} 个物体）",
+                { name: entry.label || entry.id, rigs: r.rigsApplied ?? 0, props: r.propsApplied ?? 0 }));
+        });
+
+        /** 左栏就是姿势库本身：库里那一批（预设 + 本地）、页面回报的预设（库没同步时兜底）与本机
+         *  存档合成一份列表，预设没有第二个分组。库清单到位后预设走条目那一条 scene/apply 路 ——
+         *  同一条姿态在弹窗与左栏读的是同一行；基座筛选跟着右栏那具素体，套得上的那一批才在眼前 */
+        function paintPoseList() {
+            // jsdom 的 HTMLOptionsCollection 展开出来的成员与 select.value 不是同一串引用，
+            // includes 认不出命中 —— 按 value 逐条比字符串，浏览器与 jsdom 给出同一个答案
+            const charKey = [...libCharSel.options]
+                .some((o) => String(o.value) === String(libCharSel.value)) ? libCharSel.value : "";
+            const q = libFilterSearch.value.trim().toLowerCase();
+            const libRows = libFilter(libIndex?.entries, { q: libFilterSearch.value, charKey });
+            const originOf = (e) => (e.cloud ? "cloud" : (e.origin === "lib" ? "lib" : "lab"));
+            /* 库没同步：页面 meta/list 回报的预设兜进同一份列表，按预设集自己那份分组名分层 */
+            const presetOrder = [];
+            const presetBuckets = new Map();
+            if (!libIndex) {
+                for (const p of libFilter(presetChoices, { q: libFilterSearch.value })) {
+                    const g = String(p.group || "");
+                    if (!presetBuckets.has(g)) { presetBuckets.set(g, []); presetOrder.push(g); }
+                    presetBuckets.get(g).push({ id: String(p.key), label: p.label || p.key, presetKey: String(p.key) });
+                }
             }
-            box.replaceChildren(...rows.map((r) => $el("div", {
-                className: "ns-pose-item" + (r.name === picked ? " ns-pose-item-on" : ""),
-                textContent: r.name, title: r.name, onclick: () => onPick(r.name),
-            })));
-        };
+            const sceneRows = (sceneNames || []).filter((n) => !q || String(n).toLowerCase().includes(q));
+            const sections = [
+                ...libGroups(libRows, libIndex?.groups)
+                    .map((sec) => ({ label: sec.label, rows: sec.items.map((e) => ({ entry: e, label: e.label || e.id, origin: originOf(e) })) })),
+                ...presetOrder.map((g) => ({
+                    label: g ? t(g) : t("未分组"),
+                    rows: presetBuckets.get(g).map((r) => ({ ...r, origin: "lib" })),
+                })),
+            ];
+            const renderRow = (r) => $el("div", {
+                className: "ns-pose-item" + (r.presetKey
+                    ? (r.presetKey === pickedPresetKey ? " ns-pose-item-on" : "")
+                    : (r.sceneName === pickedScene ? " ns-pose-item-on" : "")),
+                title: r.sceneName || (r.entry
+                    ? `${r.label} · ${libTagsOf(r.entry)}${LIB_ORIGIN_TITLE[r.origin]}`
+                        + (r.entry.charKey && metaModels.find((m) => m.key === String(r.entry.charKey))
+                            ? ` · ${metaModels.find((m) => m.key === String(r.entry.charKey)).label}` : "")
+                    : tf("{group} · {key} · 页面预设（姿势库未同步）",
+                        { group: r.groupLabel, key: r.presetKey })),
+                onclick: () => (r.entry ? applySceneRow(r.entry)
+                    : r.presetKey ? run(async () => {
+                        paintState(await action("preset/apply", { key: r.presetKey }));
+                        pickedPresetKey = r.presetKey;
+                        paintPoseList();
+                    }) : loadScene(r.sceneName)),
+            }, [
+                $el("span", { className: "ns-pose-item-label", textContent: r.label }),
+                ...(r.origin ? [$el("span", {
+                    className: `ns-pose-row-origin ns-pose-lib-origin-${LIB_ORIGIN_CLASS[r.origin]}`,
+                    textContent: t(LIB_ORIGIN_LABEL[r.origin]),
+                })] : []),
+            ]);
+            const rows = [];
+            let used = 0;
+            for (const sec of sections) {
+                if (used >= libListShown) break;
+                rows.push($el("div", { className: "ns-pose-preset-group", textContent: sec.label }));
+                for (const r of sec.rows.slice(0, libListShown - used)) {
+                    rows.push(renderRow({ ...r, groupLabel: sec.label }));
+                    used += 1;
+                }
+            }
+            // 本机存档排在库与预设之后：它是用户自己写的那批，位置固定，不随分组排序漂
+            for (const n of sceneRows.slice(0, libListShown - used)) {
+                rows.push(renderRow({ label: String(n), sceneName: String(n) }));
+                used += 1;
+            }
+            const left = libRows.length + presetOrder.reduce((n, g) => n + presetBuckets.get(g).length, 0)
+                + sceneRows.length - used;
+            btnListMore.hidden = left <= 0;
+            btnListMore.textContent = tf("加载更多（还有 {n} 条）", { n: left });
+            poseList.replaceChildren(...(rows.length ? rows
+                : [$el("div", { className: "ns-pose-blank", textContent: t("姿势库里没有匹配的姿势") })]));
+        }
 
         function paintProps(data) {
             const items = data.items || [];
@@ -572,18 +687,12 @@ export function createPoseView({ api, $el, toast }) {
 
         /** 出处角标：合并库里一条落在哪根库由同步脚本写的 origin 说，云端那批由来源开关说；
          *  旧版清单没有这一字段 = 本地库那份（合并库落在本机，预设是这次拆库才有的） */
-        const LIB_ORIGIN_CLASS = { lib: "ship", lab: "lab", cloud: "cloud" };
-        const LIB_ORIGIN_TITLE = {
-            lib: "预设库：随姿势仓库分发，只读",
-            lab: "本地库：本机自己写的姿态",
-            cloud: "云端库：OSS 上那棵树，取回的文件缓存在本机",
-        };
         const originBadge = (entry) => {
             const key = entry.cloud ? "cloud" : (entry.origin === "lib" ? "lib" : "lab");
             return $el("span", {
                 className: `ns-pose-lib-origin-badge ns-pose-lib-origin-${LIB_ORIGIN_CLASS[key]}`,
                 textContent: t(LIB_ORIGIN_LABEL[key]),
-                title: t(LIB_ORIGIN_TITLE[key]),
+                title: LIB_ORIGIN_TITLE[key],
             });
         };
 
@@ -624,7 +733,7 @@ export function createPoseView({ api, $el, toast }) {
                 const file = await libSceneJson(entry);
                 // 整场套用是页面自己的一条命令，走 pose:call；库文件自带视角，套完镜头对着整场
                 const r = await action("scene/apply", { file });
-                if (!r.ok) throw new Error(tf("场景没有套上：{msg}",
+                if (!r.ok) throw new Error(tf("姿势没有套上：{msg}",
                     { msg: (r.errors || []).join("；") || t("页面未报告原因") }));
                 libModal.close();
                 toast(tf("已套用整场：{name}（{rigs} 副骨架 · {props} 个物体）",
@@ -660,17 +769,17 @@ export function createPoseView({ api, $el, toast }) {
             libGrid.hidden = !rows.length;
             libBlank.hidden = rows.length > 0;
             // 库没同步出同步指引，云端没配置出云端指引，都有了才说「没有匹配」：一个空浏览器不是库的样子
-            libBlank.textContent = t(cloud ? (libCloud ? "没有匹配的云端场景" : CLOUD_SYNC_HINT)
-                : (libIndex ? "没有匹配的场景" : LIB_SYNC_HINT));
+            libBlank.textContent = t(cloud ? (libCloud ? "没有匹配的云端姿势" : CLOUD_SYNC_HINT)
+                : (libIndex ? "没有匹配的姿势" : LIB_SYNC_HINT));
             libMore.hidden = rows.length <= libShown;
             libMore.textContent = tf("加载更多（还有 {n} 条）", { n: rows.length - libShown });
             // 条数从过滤后的分层数出来：预设 / 本地一筛，清单 groups 里预设集自己那份 count 就对不上屏上的卡
             libMeta.textContent = index
                 ? (cloud
-                    ? tf("{total} 个云端场景 · 显示 {shown}", {
+                    ? tf("{total} 个云端姿势 · 显示 {shown}", {
                         total: index.count ?? rows.length, shown: rows.length,
                     })
-                    : tf("{total} 个场景（预设 {ship} · 本地 {lab}）· 显示 {shown}", {
+                    : tf("{total} 个姿势（预设 {ship} · 本地 {lab}）· 显示 {shown}", {
                         total: index.count ?? rows.length,
                         ship: (index.entries || []).filter((e) => e.origin === "lib").length,
                         lab: (index.entries || []).filter((e) => e.origin !== "lib").length,
@@ -683,7 +792,7 @@ export function createPoseView({ api, $el, toast }) {
         /** 弹窗只装一件事：pose-lib 的整场库（本机那份 + 云端那份）；数据根的存档与本机文件都在左栏那一条上 */
         async function openLibModal() {
             libModal.setContent(libPane);
-            libModal.open(t("场景库"));
+            libModal.open(t("姿势库"));
             // 未配置的云端不是一个「点了只会失败」的来源：那一条干脆不出现（AGENTS 的产品口径）
             const sources = [{ key: "local", label: t("本机库") }];
             if (cloudStatus?.enabled === true) sources.push({ key: "cloud", label: t("云端库") });
@@ -702,24 +811,31 @@ export function createPoseView({ api, $el, toast }) {
                 }
             }
             libShown = LIB_PAGE;
+            libListShown = LIB_LIST_PAGE;   // 清一次分页：左栏那份列表与弹窗同一批条目，重新进窗回到第一屏
             renderLibIndex();
+            paintPoseList();
         }
 
 
-        /** 基座筛选的选项来自库条目自带的 charKey（同步脚本按姿势仓库的分派结果写进索引）：
-         *  列表跟着库里真有的基座走，默认停在画布当前那具素体 —— 库默认就是「能套到当前素体上」的那一批 */
+        /** 基座筛选跟着素体下拉同一批基座（标准男 / 标准女）：库里一条姿态挂着它的基座
+         *  （同步脚本按姿势仓库的分派结果写进 charKey），默认停在画布当前那具素体 ——
+         *  库默认就是「套得上当前素体」的那一批，挂在女基座上的姿态筛到男素体上是上半身全歪 */
         function fillLibCharSel() {
-            const keys = [...new Set((libIndex?.entries || []).map((e) => String(e.charKey || "")).filter(Boolean))];
-            const current = canvas.model || DEFAULT_CHAR_KEY;
-            if (current && !keys.includes(current)) keys.unshift(current);
+            const allowed = new Set(metaModels.map((m) => m.key));
+            const keys = [...new Set((libIndex?.entries || []).map((e) => String(e.charKey || "")))]
+                .filter((k) => allowed.has(k));
+            const current = allowed.has(canvas.model) ? canvas.model : DEFAULT_CHAR_KEY;
+            if (!keys.includes(current)) keys.unshift(current);
             const labels = new Map(metaModels.map((m) => [m.key, m.label]));
             fill(libCharSel, keys.map((k) => ({ key: k, label: labels.get(k) || k })), t("全部基座"));
             libCharSel.value = current;
+            libListShown = LIB_LIST_PAGE;
+            paintPoseList();
         }
 
         libSearch.oninput = () => renderLibIndex();
         libGroupSel.onchange = () => renderLibIndex();
-        libCharSel.onchange = () => renderLibIndex();
+        libCharSel.onchange = () => { renderLibIndex(); paintPoseList(); };
         libOriginSel.onchange = () => renderLibIndex();
         // 切到云端 = 现读一次清单（几十 KB，读失败就把弹窗交给那句云端指引，不出空浏览器）
         libSourceSel.onchange = () => run(async () => {
@@ -731,10 +847,12 @@ export function createPoseView({ api, $el, toast }) {
         });
 
         libMore.onclick = () => { libShown += LIB_PAGE; renderLibIndex(); };
+        libFilterSearch.oninput = () => { libListShown = LIB_LIST_PAGE; paintPoseList(); };
+        btnListMore.onclick = () => { libListShown += LIB_LIST_PAGE; paintPoseList(); };
         btnBrowseLib.onclick = () => openLibModal();
         btnSceneLocal.onclick = () => { sceneFile.value = ""; sceneFile.click(); };
 
-        /* 本机的一份场景文件：库里没有的那份一样装得进，走的还是 pose:open-scene 那条装载路 */
+        /* 本机的一份姿势文件：库里没有的那份一样装得进，走的还是 pose:open-scene 那条装载路 */
         sceneFile.onchange = () => {
             const pickedFile = sceneFile.files && sceneFile.files[0];
             sceneFile.value = "";
@@ -742,77 +860,43 @@ export function createPoseView({ api, $el, toast }) {
             run(async () => {
                 post("pose:open-scene", { scene: await readJsonFile(pickedFile) });
                 libModal.close();
-                toast(tf("已载入本机场景：{name}", { name: pickedFile.name }));
+                toast(tf("已载入本机姿势：{name}", { name: pickedFile.name }));
             });
         };
 
-        /* 场景库的存档 = 读那份场景装进页面：左栏点一条与「载入场景」按钮走同一条装载路 */
+        /* 姿势存档 = 读那份场景装进页面：左栏点一条与「载入姿势」按钮走同一条装载路 */
         const loadScene = (name) => run(async () => {
             pickedScene = name;
             await refreshScenes();
             const data = await json(`/neo_pose/scene?name=${encodeURIComponent(name)}`);
             post("pose:open-scene", { scene: data.scene });
-            toast(tf("已载入场景：{name}", { name }));
+            toast(tf("已载入姿势：{name}", { name }));
         });
 
-        const refreshScenes = () => json("/neo_pose/scenes").then((d) =>
-            paintFileList(sceneList, d.scenes || [], pickedScene, loadScene)
-        ).catch(() => paintFileList(sceneList, [], "", () => {}));
+        const refreshScenes = () => json("/neo_pose/scenes").then((d) => {
+            sceneNames = (d.scenes || []).map((s) => s.name);
+            paintPoseList();
+        }).catch(() => { sceneNames = []; paintPoseList(); });
 
         const refreshProps = () => action("prop/list").then(paintProps)
             .catch((e) => toast(tf("道具列表失败：{msg}", { msg: e.message })));
 
-        /* 自备素体：GLB 从本机读进内存再交后端 —— 素材库列表只列图片，用户从 Mixamo 下来的那份
-           走的是文件选择器，落点由后端定（<数据根>/pose/dist/models/<key>.glb）。
-           登记动作不在宿主这边：页面自己的本地导入区按 key 认它，宿主只把 key 报给用户。 */
-        btnImportBody.onclick = () => { bodyFile.value = ""; bodyFile.click(); };
-        bodyFile.onchange = () => {
-            const file = bodyFile.files && bodyFile.files[0];
-            bodyFile.value = "";
-            if (!file) return;
-            if (!/\.glb$/i.test(file.name)) { toast(t("自备素体只支持 .glb")); return; }
-            if (file.size > MAX_GLB_BYTES) {
-                toast(tf("GLB 超过 {n}MB 上限", { n: Math.round(MAX_GLB_BYTES / 1048576) }));
-                return;
-            }
-            const key = bodyKey.value.trim() || file.name.replace(/\.glb$/i, "");
-            if (!BODY_KEY_RE.test(key)) {
-                toast(t("素体 key 只允许字母数字与 _ . -（64 字符内）"));
-                bodyKey.focus();
-                return;
-            }
-            const reader = new FileReader();
-            reader.onload = () => run(async () => {
-                const data = String(reader.result).split(",")[1] || "";
-                const saved = await json("/neo_pose/import_model", { key, data });
-                bodyKey.value = "";
-                toast(tf("自备素体已写进姿势包：{key}（在姿势页的本地导入区登记这个 key 后可选）",
-                    { key: saved.key }));
-            });
-            reader.onerror = () => toast(t("读文件失败"));
-            reader.readAsDataURL(file);
-        };
+        /* 预设只从姿势库那一份列表进（见 paintPoseList）：右栏没有预设下拉，也不发第二条套用通路 */
 
-        /* 预设下拉一改就套：面板不再要「套用预设」第二步 —— 下拉里那一项就是用户要的结果 */
-        presetSel.onchange = () => run(async () => {
-            if (!presetSel.value) return;
-            paintState(await action("preset/apply", { key: presetSel.value }));
-        });
-
-        btnSaveScene.onclick = () => run(async () => {
-            const typed = sceneName.value.trim();
-            if (!typed) { toast(t("请先写场景名")); sceneName.focus(); return; }
+        btnSavePose.onclick = () => run(async () => {
+            const typed = poseName.value.trim();
+            if (!typed) { toast(t("请先写姿势名")); poseName.focus(); return; }
             const reply = await request("pose:save-scene");
             await json("/neo_pose/scene", { name: typed, scene: reply?.scene ?? reply });
-            sceneName.value = "";
+            poseName.value = "";
             pickedScene = typed;
             await refreshScenes();
-            toast(tf("场景已保存：{name}", { name: typed }));
+            toast(tf("姿势已保存：{name}", { name: typed }));
         });
 
-        btnLoadScene.onclick = () => {
-            const name = sceneName.value.trim() || pickedScene;
-            if (!name) { toast(t("先在场景库里选一场")); sceneName.focus(); return; }
+        btnLoadPose.onclick = () => {
+            const name = poseName.value.trim() || pickedScene;
+            if (!name) { toast(t("先在姿势库里选一个")); poseName.focus(); return; }
             loadScene(name);
         };
 
@@ -826,7 +910,11 @@ export function createPoseView({ api, $el, toast }) {
         modelSel.onchange = () => run(async () => {
             if (!modelSel.value) return;
             await action("model/set", { key: modelSel.value });
-            libCharSel.value = modelSel.value;
+            // 库里没有挂在这一具基座上的姿态时不动筛选：写一个下拉里没有的值等于把筛选清成「全部基座」
+            if ([...libCharSel.options].some((o) => o.value === modelSel.value)) {
+                libCharSel.value = modelSel.value;
+                paintPoseList();
+            }
             canvas.model = modelSel.value;
         });
 
@@ -834,7 +922,7 @@ export function createPoseView({ api, $el, toast }) {
             const choices = allPropChoices();
             const typed = propName.value.trim();
             const key = typed ? resolvePropChoice(typed, choices) : pickedPropKey;
-            propName.value = "";   // 一次性输入：写完就清，与自备素体 key 同一口径
+            propName.value = "";   // 一次性输入：写完就清，下一发不覆盖上一发
             if (typed && !key) {
                 toast(tf("道具表里没有「{name}」：可输入 椅子 / 桌子 / 剑 这类名字（共 {n} 项），或点一张卡片",
                     { name: typed, n: choices.length }));
@@ -925,9 +1013,8 @@ export function createPoseView({ api, $el, toast }) {
                 return;
             }
             caps = status.caps || {};
-            // 云端配没配置决定两件事：场景库的来源下拉有没有「云端库」那一条、道具下拉有没有云端组
+            // 云端配没配置决定两件事：姿势库的来源下拉有没有「云端库」那一条、道具下拉有没有云端组
             cloudStatus = await json("/neo_pose/cloud_status").catch(() => null);
-            pkgNote.hidden = status.dist_source !== "package";
             if (!status.installed) {
                 // 缺包要说清楚缺什么、怎么装：iframe 直接指向不存在的入口页只剩白屏
                 setChrome(false);

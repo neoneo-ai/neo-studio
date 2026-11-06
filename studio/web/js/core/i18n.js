@@ -36,30 +36,30 @@ const EN = {
     // 3D 姿势页（宿主面板与缺包提示；姿势包自身的文案在姿势页里）
     // 顶栏 tab 的中文名就是「姿势」，英文名走下面姿势导出那一份 "Pose"，这里不再开第二个同名 key
     "3D 姿势": "3D Pose",
-    "姿势 · 场景 · 全景": "Pose, scenes, panorama",
-    "场景库": "Scene Library",
+    "姿势 · 整场 · 全景": "Poses, full scenes, panorama",
+    "姿势库": "Pose Library",
     "控制面板": "Control Panel",
     // 左右栏收起（栏首那枚两栏框图标钮，收起后那条竖栏就是展开入口）
-    "收起场景库": "Collapse scene library",
-    "展开场景库": "Expand scene library",
+    "收起姿势库": "Collapse pose library",
+    "展开姿势库": "Expand pose library",
     "收起控制面板": "Collapse control panel",
     "展开控制面板": "Expand control panel",
     "画布状态": "Canvas State",
-    "场景名": "Scene name",
+    "姿势名": "Pose name",
     "标签（默认 pose）": "Label (defaults to pose)",
-    "存为场景": "Save Scene",
-    "载入场景": "Load Scene",
+    "存为姿势": "Save Pose",
+    "载入姿势": "Load Pose",
+    // 左栏就是姿势库那一份列表：库里那一批 + 本机存档 + 库没同步时兜进来的页面预设（meta/list 那份）
+    "搜索姿势（名字 / 分组 / 标签）": "Search poses (name / group / tag)",
+    "未分组": "Ungrouped",
+    "姿势库里没有匹配的姿势": "No pose matches this search",
+    "{group} · {key} · 页面预设（姿势库未同步）": "{group} · {key} · page preset (pose library not synced)",
     "加素体": "Add Character",
     "删当前素体": "Remove Character",
-    // 自备素体：随包只发授权干净的 CC0 素体，Mixamo 与 SMPL 那几份由用户自备 GLB 导入
-    "导入自备素体": "Import Own Character",
-    "素体 key（默认取文件名）": "Character key (defaults to file name)",
-    "自备素体只支持 .glb": "Own characters must be .glb files",
-    "GLB 超过 {n}MB 上限": "The GLB is over the {n} MB limit",
-    "素体 key 只允许字母数字与 _ . -（64 字符内）": "Character key allows letters, digits, _ . - (up to 64 characters)",
+    // 素体只发随包的两具 CC0 基座（标准男 / 标准女）：页面 meta/list 报了这一档就用页面那份 label
+    "标准男性": "Standard Male",
+    "标准女性": "Standard Female",
     "读文件失败": "Reading the file failed",
-    "自备素体已写进姿势包：{key}（在姿势页的本地导入区登记这个 key 后可选）": "Own character saved into the pose package: {key} — register this key in the pose page's local import area to pick it",
-    "姿势页跑在随包的最小姿势包上：随包只分发 CC0 素体，其余素体请「导入自备素体」。": "This pose page runs on the bundled minimal package: only the CC0 character ships with it, import your own characters for the rest.",
     "重置姿态": "Reset Pose",
     "添加道具": "Add Prop",
     "落地": "Ground",
@@ -74,12 +74,10 @@ const EN = {
     "外观": "Look",
     "视角": "View",
     "选择素体…": "Choose a character…",
-    "选择预设…": "Choose a preset…",
     "搜索道具（名字 / 云端）": "Search props (name / cloud)",
     "道具表里没有匹配的道具": "No prop matches this search",
     "{total} 件道具 · 选中 {name}": "{total} props · picked {name}",
     "挂在 {bone}": "on {bone}",
-    "还没有存档": "Nothing saved yet",
     "场上没有道具": "No props on stage",
     "未挂载": "unattached",
     "姿势页未响应": "The pose page did not answer",
@@ -98,33 +96,32 @@ const EN = {
     "道具表里没有「{name}」：可输入 椅子 / 桌子 / 剑 这类名字（共 {n} 项），或点一张卡片":
         "No prop \"{name}\" in the prop list: type a name like 椅子 / 桌子 / 剑 ({n} available), or click a prop card",
     "先勾要导出的格式": "Tick the formats to export first",
-    "请先写场景名": "Write a scene name first",
-    "先在场景库里选一场": "Pick a scene in the library first",
+    "请先写姿势名": "Write a pose name first",
+    "先在姿势库里选一个": "Pick a pose in the library first",
     "失败：{msg}": "Failed: {msg}",
     "道具列表失败：{msg}": "Fetching the prop list failed: {msg}",
     "读取姿势元数据失败：{msg}": "Reading pose metadata failed: {msg}",
-    "场景已保存：{name}": "Scene saved: {name}",
-    "已载入场景：{name}": "Scene loaded: {name}",
-    // 场景库弹窗（pose-lib 的整场库 + 本机场景文件两条路）：卡片按 clay 优先出缩略图，库未同步出同步指引
-    "浏览场景库…": "Browse Scene Library…",
-    "本机场景文件…": "Local Scene File…",
+    "姿势已保存：{name}": "Pose saved: {name}",
+    "已载入姿势：{name}": "Pose loaded: {name}",
+    // 姿势库弹窗（pose-lib 的整场库 + 本机姿势文件两条路）：卡片按 clay 优先出缩略图，库未同步出同步指引
+    "浏览姿势库…": "Browse Pose Library…",
+    "本机姿势文件…": "Local Pose File…",
     "本机文件不是一份 JSON 对象": "This file is not a JSON object",
-    "搜索场景（名字 / 分类 / 标签）": "Search scenes (name / category / tag)",
+    "搜索姿势（名字 / 分类 / 标签）": "Search poses (name / category / tag)",
     "分组": "Group",
     "全部分组": "All groups",
-    // 场景库的基座筛选：默认落在画布当前素体，女基座上的姿态套到男素体上身型与盆宽全歪
+    // 姿势库的基座筛选：默认落在画布当前素体，女基座上的姿态套到男素体上身型与盆宽全歪
     "全部基座": "All bases",
     "按基座筛选：一条姿态挂着它的基座，挂在女基座上的姿态套到男素体上身型与盆宽全歪":
         "Filter by base: every pose carries its base, and a pose rigged on the female base warps on a male body",
     "无预览": "No preview",
     // 库卡片的预览图是姿势仓库对来源参考图的渲染，参考图版式可以把同一个人画两遍
     "参考图": "reference render",
-    "没有匹配的场景": "No matching scenes",
+    "没有匹配的姿势": "No matching poses",
     "加载更多（还有 {n} 条）": "Load more ({n} left)",
-    "{total} 个场景 · 显示 {shown}": "{total} scenes · showing {shown}",
     // 合并库（预设 pose-lib + 本地 pose-lab 并成一份）：来源筛选与卡片角标
-    "{total} 个场景（预设 {ship} · 本地 {lab}）· 显示 {shown}":
-        "{total} scenes (preset {ship} · local {lab}) · showing {shown}",
+    "{total} 个姿势（预设 {ship} · 本地 {lab}）· 显示 {shown}":
+        "{total} poses (preset {ship} · local {lab}) · showing {shown}",
     "全部来源": "All origins",
     "预设（只读）": "Preset (read-only)",
     "本地（可写）": "Local (writable)",
@@ -137,31 +134,29 @@ const EN = {
     "云端": "Cloud",
     "云端库：OSS 上那棵树，取回的文件缓存在本机":
         "Cloud library: the tree on OSS; fetched files are cached on this machine",
-    // 场景库的来源开关：未配置的云端不出现这一条，出现的就是读得到的那批
+    // 姿势库的来源开关：未配置的云端不出现这一条，出现的就是读得到的那批
     "本机库": "Local Library",
     "云端库": "Cloud Library",
     "库来源：本机库读数据根的 pose-lib，云端库读 OSS 上那棵树（文件先落本机缓存）":
         "Library source: local reads pose-lib in the data root; cloud reads the tree on OSS (files are cached locally first)",
-    "没有匹配的云端场景": "No matching cloud scenes",
-    "{total} 个云端场景 · 显示 {shown}": "{total} cloud scenes · showing {shown}",
+    "没有匹配的云端姿势": "No matching cloud poses",
+    "{total} 个云端姿势 · 显示 {shown}": "{total} cloud poses · showing {shown}",
     "读不到云端索引：{msg}": "Cannot read the cloud index: {msg}",
     "读不到云端文件：{path}": "Cannot read the cloud file: {path}",
-    "云端场景库未配置：在 <数据根>/configs/oss_presets.json 里写 pose_index_url，云端那棵树用 tools\\pose_deploy_oss.py 上传（默认只列清单，加 --apply 才上传）。":
-        "The cloud scene library is not configured: write pose_index_url in <data root>/configs/oss_presets.json and upload the tree with tools\\pose_deploy_oss.py (without --apply nothing is uploaded).",
+    "云端姿势库未配置：在 <数据根>/configs/oss_presets.json 里写 pose_index_url，云端那棵树用 tools\\pose_deploy_oss.py 上传（默认只列清单，加 --apply 才上传）。":
+        "The cloud pose library is not configured: write pose_index_url in <data root>/configs/oss_presets.json and upload the tree with tools\\pose_deploy_oss.py (without --apply nothing is uploaded).",
     "读不到库文件：{path}": "Cannot read the library file: {path}",
-    "场景库未同步：跑 tools\\sync_pose_lib.ps1 -Source <3d-pose-art 仓库根> 把 pose-lib 同步进 <数据根>/pose/lib。":
-        "The scene library is not synced: run tools\\sync_pose_lib.ps1 -Source <3d-pose-art repo> to put pose-lib into <data root>/pose/lib.",
-    "场景库未同步：跑 tools\\sync_pose_lib.ps1 -Source <3d-pose-art 仓库根> 把 pose-lib 同步进 <数据根>/pose/lib，或在「启动设置 → 姿势仓库」填上仓库目录，桌面端每次启动自动同步。":
-        "The scene library is not synced: run tools\\sync_pose_lib.ps1 -Source <3d-pose-art repo> to put pose-lib into <data root>/pose/lib, or fill in Startup settings → Pose repo so the desktop syncs it on every start.",
+    "姿势库未同步：跑 tools\\sync_pose_lib.ps1 -Source <3d-pose-art 仓库根> 把 pose-lib 同步进 <数据根>/pose/lib，或在「启动设置 → 姿势仓库」填上仓库目录，桌面端每次启动自动同步。":
+        "The pose library is not synced: run tools\\sync_pose_lib.ps1 -Source <3d-pose-art repo> to put pose-lib into <data root>/pose/lib, or fill in Startup settings → Pose repo so the desktop syncs it on every start.",
 
     // 整场卡片（多人 / 带道具）：套用走 scene/apply，卡片标签带「N人 · M道具」
     "已套用整场：{name}（{rigs} 副骨架 · {props} 个物体）":
         "Scene applied: {name} ({rigs} skeletons · {props} objects)",
-    "场景没有套上：{msg}": "The scene did not apply: {msg}",
+    "姿势没有套上：{msg}": "The pose did not apply: {msg}",
     "页面未报告原因": "the page reported no reason",
     "{people}人": "{people} people",
     " · {props}道具": " · {props} props",
-    "已载入本机场景：{name}": "Local scene loaded: {name}",
+    "已载入本机姿势：{name}": "Local pose file loaded: {name}",
     "一次最多导出 {n} 张": "At most {n} images per export",
     "已导出 {n} 张到素材库的 Pose 目录": "Exported {n} images to the library's Pose folder",
     "画布截图已进素材库的 Pose 目录：{name}": "Canvas snapshot in the library's Pose folder: {name}",

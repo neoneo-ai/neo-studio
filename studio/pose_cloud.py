@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-r"""Neo Studio「3D 姿势」的云端场景库与云端道具：读 OSS 上的一棵姿势树，缓存进数据根，页面只吃本机地址。
+r"""Neo Studio「3D 姿势」的云端姿势库与云端道具：读 OSS 上的一棵姿势树，缓存进数据根，页面只吃本机地址。
 
 配置只有一份：`configs/oss_presets.json`（与素材库云端预设同一份，口径见 studio/AGENTS.md 的
 「pose bridge … reuses `configs/oss_presets.json`」）。云端那棵树由 `tools\pose_deploy_oss.py`
@@ -60,7 +60,7 @@ FILE_EXT = {".json", ".png", ".webp", ".glb"}
 DEFAULT_TTL_HOURS = 24
 FETCH_TIMEOUT = aiohttp.ClientTimeout(total=60, connect=10)
 
-CLOUD_HINT_NOT_CONFIGURED = ("云端场景库未配置：在 <数据根>/configs/oss_presets.json 里写 pose_index_url"
+CLOUD_HINT_NOT_CONFIGURED = ("云端姿势库未配置：在 <数据根>/configs/oss_presets.json 里写 pose_index_url"
                              "（预设索引同 bucket 的 neo/pose/index.json），上传跑 tools\\pose_deploy_oss.py。")
 
 

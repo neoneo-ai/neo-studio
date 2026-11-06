@@ -768,7 +768,8 @@ class PoseBridgeTests(_ServerCase):
         self.assertEqual(status, 200)
         self.assertTrue(data["success"])
         # 姿势、时间轴、导出全在浏览器里跑，离线服务只给文件；估点/网格/pano 要 pose-art 那套
-        # Python sidecar，桌面端进程起不动，页面按这几位置灰控件。自备素体导入是桌面端自己那条路。
+        # Python sidecar，桌面端进程起不动，页面按这几位置灰控件。素体登记在姿势页自己那侧
+        # （随包 CC0 两具基座 + 页面自己的本地导入区），宿主面板只发标准男 / 标准女。
         self.assertTrue(data["caps"]["pose"])
         self.assertTrue(data["caps"]["export"])
         self.assertTrue(data["caps"]["body_import"])
@@ -783,7 +784,7 @@ class PoseBridgeTests(_ServerCase):
             self.assertIn(key, data, f"status 要报出 {key}")
 
     def test_cloud_routes_answer_offline_and_reject_path_escape(self):
-        """云端场景库与道具的三条接口在离线窗口上答得了：未配置说不可用，越界就是 400。"""
+        """云端姿势库与道具的三条接口在离线窗口上答得了：未配置说不可用，越界就是 400。"""
         for route in ("/neo_pose/cloud_status", "/neo_pose/cloud_index", "/neo_pose/cloud_file"):
             self.assertEqual(caps.owner("GET", route), "desktop", f"{route} 归桌面端自服")
         status, body = self.get("/neo_pose/cloud_status")
@@ -850,7 +851,7 @@ class PoseBridgeTests(_ServerCase):
         self.assertIn(status, (400, 404), "前缀不能把数据根里的配置发出去")
 
     def test_pose_lib_prefix_serves_the_synced_library(self):
-        """场景库弹窗跑在离线窗口里：库文件按 `/pose-lib/` 这条前缀伺服，弹窗读的就是这些地址。"""
+        """姿势库弹窗跑在离线窗口里：库文件按 `/pose-lib/` 这条前缀伺服，弹窗读的就是这些地址。"""
         index = {"format": "3dpose.index/1",
                  "entries": [{"id": "a", "label": "A-Pose", "path": "poses/stand/a.pose.json",
                              "groups": ["stand"], "preview": {"clay": "preview/a.clay.png"}}]}
@@ -891,14 +892,11 @@ class PoseBridgeTests(_ServerCase):
             self.assertEqual(headers.get("Content-Type"), "model/gltf-binary",
                              "注册表里的 file 就按这条路径取，MIME 不对页面解不出几何")
 
-            # 自备素体落进数据根后，页面同样按 /models/<key>.glb 取它
-            import base64
-            saved = json.loads(self.post_json("/neo_pose/import_model", {
-                "key": "unit_models_body",
-                "data": base64.b64encode(b"glTF\x02" + b"unit-models-body").decode()})[1])
-            self.created.append(self.pose_dir / "dist" / "models" / "unit_models_body.glb")
-            status, _, _ = self.get_full("/models/unit_models_body.glb")
-            self.assertEqual(status, 200, f"导入回来的 {saved['key']} 要在这条前缀上取得到")
+            # 素体 GLB 同样按 /models/<key>.glb 取：随包 CC0 那两具基座由同步落点写进 pose/dist/models
+            self.write(self.pose_dir / "dist" / "models" / "bodyMale.glb", "glTF\x02unit-model")
+            self.created.append(self.pose_dir / "dist" / "models" / "bodyMale.glb")
+            status, _, _ = self.get_full("/models/bodyMale.glb")
+            self.assertEqual(status, 200, "随包 CC0 素体要在这条前缀上取得到")
 
             # 数据根那份压住随包的同名文件：道具注册表按数据根那条答
             self.write(self.pose_dir / "dist" / "models" / "props" / "index.json",
@@ -935,62 +933,25 @@ class PoseBridgeTests(_ServerCase):
         self.assertEqual(caps.owner("GET", "/neo_pose/status"), "desktop")
         self.assertEqual(caps.owner("POST", "/neo_pose/export_image"), "desktop")
         self.assertEqual(caps.owner("POST", "/neo_pose/scene"), "desktop")
-        self.assertEqual(caps.owner("POST", "/neo_pose/import_model"), "desktop",
-                         "自备素体导入是桌面端自己那条路，不依赖 ComfyUI 运行时")
+        self.assertNotIn(("POST", "/neo_pose/import_model"), caps.DESKTOP_ROUTES,
+                         "「导入自备素体」随控件一起删了：能力表里不许留一条只会被打的路")
         self.assertNotIn(("GET", "/pose-dist/{path}"), caps.DESKTOP_ROUTES,
                          "整条前缀逐条打表只会让能力表里的条目数随构建产物变动")
         self.assertNotIn(("GET", "/models/{path}"), caps.DESKTOP_ROUTES,
                          "道具注册表与素体 GLB 的根前缀也是静态伺服，与子资源同一条路")
         self.assertNotIn(("GET", "/pose-lib/{path:.*}"), caps.DESKTOP_ROUTES,
-                         "场景库的整条前缀同静态伺服，不进能力表")
+                         "姿势库的整条前缀同静态伺服，不进能力表")
 
-    def test_import_model_offline_lands_in_data_root(self):
-        """离线服务里导入一份自备 GLB：落点在数据根的 pose/dist/models，页面那条前缀取得到。"""
+    def test_import_model_is_not_served_offline(self):
+        """自备素体导入这条接口随面板控件一起删了：能力表里没有这一条，独立窗口按离线门控回 409。"""
         import base64
-        payload = base64.b64encode(b"glTF\x02\x00\x00\x00" + bytes(32)).decode()
-        status, body = self.post_json("/neo_pose/import_model", {"key": "unit_body", "data": payload})
-        self.assertEqual(status, 200)
-        data = json.loads(body)
-        self.assertTrue(data["success"])
-        self.assertEqual(data["url"], "/pose-dist/models/unit_body.glb")
-        dest = self.pose_dir / "dist" / "models" / "unit_body.glb"
-        self.created.append(dest)
-        self.assertTrue(dest.is_file())
-        status, _, raw = self.get_full("/pose-dist/models/unit_body.glb")
-        self.assertEqual(status, 200)
-        self.assertEqual(raw[:4], b"glTF")
-        status, body = self.post_json("/neo_pose/import_model", {"key": "../escape", "data": payload})
-        self.assertEqual(status, 400, "key 里不许有路径")
-
-    def test_import_model_accepts_real_glb_size(self):
-        """真实素体体积的那一份要进得来：aiohttp 默认只收 1MB 请求体，桌面端不抬高就会 413。
-
-        插件端那条走 ComfyUI 自己的 app（--max-upload-size 默认 100MB），桌面端这条是自建 app，
-        两边体积口径必须一致，否则「自备素体」在插件端能跑、在独立窗口里就是死路。
-        """
-        import base64
-        big = b"glTF\x02\x00\x00\x00" + bytes(2 * 1024 * 1024)   # 2MB，远超 transport 默认上限
-        status, body = self.post_json("/neo_pose/import_model",
-                                      {"key": "unit_big", "data": base64.b64encode(big).decode()})
-        self.assertEqual(status, 200, f"2MB 素体导入被挡：{status} {body[:200]}")
-        dest = self.pose_dir / "dist" / "models" / "unit_big.glb"
-        self.created.append(dest)
-        self.assertEqual(dest.stat().st_size, len(big))
-
-    def test_import_model_caps_are_reported_by_the_interface(self):
-        """体积上限由接口说清楚，而不是 transport 抢答：超 GLB 上限与超请求体上限都回 400。"""
-        import base64
-        over_glb = base64.b64encode(b"glTF\x02\x00\x00\x00"
-                                    + bytes(self.pose_module.MAX_GLB_BYTES + 1)).decode()
-        status, body = self.post_json("/neo_pose/import_model",
-                                      {"key": "unit_over", "data": over_glb})
-        self.assertEqual(status, 400)
-        self.assertIn("GLB 超过", json.loads(body)["error"], "要说的是素体上限，不是请求体上限")
-        (self.pose_dir / "dist" / "models" / "unit_over.glb").unlink(missing_ok=True)
-        over_body = json.dumps({"key": "unit_over2", "data": "A" * (self.pose_module.MAX_BODY_BYTES + 1)})
-        status, body = self.get("/neo_pose/import_model", data=over_body.encode())
-        self.assertEqual(status, 400)
-        self.assertIn("请求体超过", json.loads(body)["error"], "请求体上限也要由接口回 400")
+        status, _ = self.post_json("/neo_pose/import_model",
+                                   {"key": "unit_body", "data": base64.b64encode(b"glTF").decode()})
+        self.assertEqual(status, 409, "不在能力表里的 /neo_pose 写路就是 409，不留一条只会被打的入口")
+        self.assertEqual(caps.owner("POST", "/neo_pose/import_model"), "comfy",
+                         "桌面端表里摘掉这一条就落回内核那一级，而插件端也不再注册它 = 两头都没有这条路")
+        self.assertFalse(list((self.pose_dir / "dist" / "models").glob("unit_body*.glb")),
+                         "打一次就要在数据根写出素体的话，删掉的那条路等于还在")
 
 
 class MobilePairServiceTests(_RealFolderPaths):

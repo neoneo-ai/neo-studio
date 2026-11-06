@@ -559,9 +559,9 @@ def build_app(root: Path, plugin_dir: Path, flags: dict = None, launcher: dict =
     routes.get(pair.PAIR_CHECK_PATH)(pair_check)
     routes.get(pair.PAIR_INFO_PATH)(pair_info)
 
-    # aiohttp 默认只收 1MB 请求体：自备素体（35MB GLB 走 base64 约 47MB）与 ControlNet 图组会在
-    # handler 之前被 transport 挡成 413，插件端（ComfyUI 的 --max-upload-size 默认 100MB）能跑的
-    # 体积到了桌面端就白跑。这里放到接口自身上限之上，让「超过上限」由接口的 400 说清楚。
+    # aiohttp 默认只收 1MB 请求体：ControlNet 图组（一次 12 张 PNG 走 base64）会在 handler 之前被
+    # transport 挡成 413，插件端（ComfyUI 的 --max-upload-size 默认 100MB）能跑的体积到了桌面端就白跑。
+    # 这里放到接口自身上限之上，让「超过上限」由接口的 400 说清楚。
     pose_mod = sys.modules[f"{DESKTOP_PKG}.pose"]
     app = web.Application(middlewares=[no_store, lan_surface],
                           client_max_size=pose_mod.MAX_BODY_BYTES + 8 * 1024 * 1024)

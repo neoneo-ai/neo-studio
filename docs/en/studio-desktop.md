@@ -12,7 +12,7 @@ Source runs and the packaged exe go through the same `app/studio_app.py`.
 | `app/studio_app.py`    | Window, self-check, start / stop ComfyUI, frameless window, close teardown, startup settings                                                                                                                                                |
 | `app/studio_server.py` | Desktop-side aiohttp service (ComfyUI port +3, `DESKTOP_PORT_OFFSET`); loads the plugin modules' own `RouteTableDef` handlers by directory                                                                                                  |
 | `app/studio_caps.py`   | Capability table: which routes the desktop service serves itself, which of the rest it proxies to the kernel, and everything else answers `409 offline`                                                                                     |
-| `app/studio_pose.py`   | Pose asset auto-sync: with "Startup settings → Pose repo" pointing at the 3d-pose-art repo root, tops the dist pose package and the pose-lib scene library up in the data root   |
+| `app/studio_pose.py`   | Pose asset auto-sync: with "Startup settings → Pose repo" pointing at the 3d-pose-art repo root, tops the dist pose package and the pose-lib pose library up in the data root   |
 | `data/`                | State directory: `studio_window.json` (geometry), `studio_profile` (Windows WebView2 profile / localStorage), `launcher_config.json` (root / python / port / frameless / dev_mode / listen / remote / pose_repo), `studio_desktop.log`, `comfy_run.log` |
 
 Source runs keep state in the repository's `data/`; the Windows exe prefers `data/` beside the exe and falls back to
@@ -597,9 +597,9 @@ touched. **Changing `app/studio_app.py` requires repackaging** — see [release.
   previews get pruned, and the merged index is rebuilt through the pose repo's
   `node scripts\poseLib.mjs merged --out` - a rebuild also fires when the index is missing, when a
   preview the index references is not on disk, and when no entry carries a `charKey` (the base filter in
-  the scene-library modal has nothing to work on in an index without it). The GLBs the user imported into
-  `pose/dist/models/` are parked and restored around the mirror, and `pose/scenes/` stays out of the
-  mirror's scope.
+  the pose-library modal has nothing to work on in an index without it). The extra GLBs in
+  `pose/dist/models/` that the source build does not carry are parked and restored around the mirror, and
+  `pose/scenes/` stays out of the mirror's scope.
 
 ## Static assets and cache
 

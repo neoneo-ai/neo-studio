@@ -11,7 +11,7 @@
 | `app/studio_app.py`    | 窗口、自检、拉起 / 停止 ComfyUI、无边框窗口、关窗收尾、启动设置                                                                                                                                                                        |
 | `app/studio_server.py` | 桌面端 aiohttp 服务（ComfyUI 端口 +3，`DESKTOP_PORT_OFFSET`），按目录加载插件模块挂在各自 `RouteTableDef` 上的 handler                                                                                                                 |
 | `app/studio_caps.py`   | 能力表：哪些路由归桌面端自服、表外的哪一撮由桌面端转发给内核，其余一律 `409 offline`                                                                                                                                                   |
-| `app/studio_pose.py`   | 姿势资产自动同步：「启动设置 → 姿势仓库」指向 3d-pose-art 仓库根时，把 dist 姿势包与 pose-lib 场景库按时间戳对账补进数据根                                               |
+| `app/studio_pose.py`   | 姿势资产自动同步：「启动设置 → 姿势仓库」指向 3d-pose-art 仓库根时，把 dist 姿势包与 pose-lib 姿势库按时间戳对账补进数据根                                               |
 | `data/`                | 状态目录：`studio_window.json`（几何）、`studio_profile`（Windows 的 WebView2 profile / localStorage）、`launcher_config.json`（root / python / port / frameless / dev_mode / listen / remote / pose_repo）、`studio_desktop.log`、`comfy_run.log` |
 
 源码运行的状态目录是仓库根的 `data/`；Windows exe 优先 exe 旁的 `data/`，落在不可写目录时退回
@@ -318,7 +318,7 @@ js_api（`check_setup` / `pick_root` / `pick_python` / `start_setup`），根目
 - 顶栏右端是队列与设置两枚图标位（队列在前，徽标是图标右上角那枚计数），页签只有六枚：窄屏里这六枚是一条可横滚的页签条，
   选中那枚由 `studio-app.js` 的 `showView` 用
   `scrollIntoView` 带进可视区；刘海与圆角走 `viewport-fit=cover` + `env(safe-area-inset-*)`，
-  钉在页底的「生成」与视频页 composer 胶囊不被手势条压住。姿势页只收外壳的三栏（场景库 / 画布 /
+  钉在页底的「生成」与视频页 composer 胶囊不被手势条压住。姿势页只收外壳的三栏（姿势库 / 画布 /
   控制面板上下堆叠），iframe 内的 3D 控件不动。
 
 ## 手机配对（扫码进 Studio）
@@ -417,12 +417,12 @@ js_api（`check_setup` / `pick_root` / `pick_python` / `start_setup`），根目
   环境变量 `NEO_POSE_REPO` → ComfyUI 根同级的 `3d-pose-art`；留空 = 不自动同步。
 - 启动序列在桌面端服务起后由后台守护线程跑一轮同步（`app/studio_pose.py` 的 `auto_sync`），
   `studio_desktop.log` 落一行 `pose auto-sync` 报 dist / lib / index 三项计数与耗时，解析不到仓库整步不打日志。
-  姿势页与场景库逐请求读数据根，资产落进数据根不需要重启窗口。
+  姿势页与姿势库逐请求读数据根，资产落进数据根不需要重启窗口。
 - 判据与 `tools\sync_pose_dist.ps1` / `tools\sync_pose_lib.ps1` 同口径：只在「源比数据根新」时动手
   （重复启动、没构建过的仓库跑不出文件复制），手动删过的文件下一轮原样补回。dist 走 robocopy 镜像；
   pose-lib 镜像本地集、预设集只补空，预览按默认档落地、清掉 `*depth.png` 残留，合并索引走姿势仓库自己的
   `node scripts\poseLib.mjs merged --out` —— 索引缺失、清单引用的预览文件没落地、条目全都没有 `charKey`
-  （场景库弹窗的基座筛选没有落点）任一条都重建一次。用户在 `pose/dist/models/` 导入的自备素体先存后还，
+  （姿势库弹窗的基座筛选没有落点）任一条都重建一次。`pose/dist/models/` 里源构建没有的 GLB 先存后还，
   `pose/scenes/` 不在镜像范围内。
 
 ## 静态资源与缓存

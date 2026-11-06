@@ -13,7 +13,7 @@ exe 里随包的插件副本只取 `studio/` 的跟踪文件，`tools/` 不在�
   （macOS remote-only `.app`）、`build_studio_update.ps1`（整合包更新件，`update_neo_studio.ps1` 在包内消费它）、
   `install_plugin.ps1`、`mcp_setup.ps1`。
 - 姿势包：`build_pose_package.ps1` 生成随包最小副本 `studio/pose_dist/`，`sync_pose_dist.ps1`
-  把全量产物同步进 `<数据根>/pose/dist/`，`sync_pose_lib.ps1` 把场景库同步进 `<数据根>/pose/lib/`，
+  把全量产物同步进 `<数据根>/pose/dist/`，`sync_pose_lib.ps1` 把姿势库同步进 `<数据根>/pose/lib/`，
   `test_pose_package.ps1` 复查随包那份（发货清单逐文件核对）。
 - 取证与性能：`e2e_ref_grid.mjs`、`bench-director-timeline.mjs`、`capture-gif.mjs`、
   `capture-video.mjs`；`_hub_check.py`、`check_h3_context_layout.py` 是排查脚本。
@@ -62,10 +62,10 @@ webp 缩略图与 `index.json`，`gallery_deploy_oss.py` 按 `OSS_ACCESS_KEY_ID`
   发的每一件带着道具注册表 `dist/models/props/index.json` 的原行进索引：页面对 GLB 先归一成 1 单位高、
   再乘注册表 `scale`，所以读侧伺服 `/models/props/index.json` 时把云端行补成 `hidden` 行（只读缓存、
   不发网络），页面侧不为云端改一行。
-- `sync_pose_dist.ps1` 的 `robocopy /MIR` 只动 `dist/`：源产物里没有的文件（用户导入的素体 GLB）
+- `sync_pose_dist.ps1` 的 `robocopy /MIR` 只动 `dist/`：源产物里没有的文件（`pose/dist/models/` 里的额外 GLB）
   先存进临时目录、镜像完搬回，同步脚本不许成为删用户文件的那只手。场景与参考图在 `pose/` 下的
   别的目录，本来就不在镜像范围内。
-- 场景库只落 `<数据根>/pose/lib/`，不进随包副本（授权口径与姿势包不同）：姿势仓库把库拆成预设
+- 姿势库只落 `<数据根>/pose/lib/`，不进随包副本（授权口径与姿势包不同）：姿势仓库把库拆成预设
   `pose-lib/`（只读）与本地 `pose-lab/`（可写），`sync_pose_lib.ps1` 把两根并成一份 —— 本地先 `/MIR`
   进目标，预设集再带 `/E /XC /XN /XO` 补空（`/E` 不给就是零补齐，robocopy 默认不下钻 `poses/<分组>/`），
   同 id 永不压过本机文件。`index.json` 不在这里算，由姿势仓库 `npm run lib -- merged --out` 生成

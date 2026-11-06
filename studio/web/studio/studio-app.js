@@ -817,7 +817,7 @@ function buildHome(el) {
             homeCard("pencil", "图片编辑", "拖入素材，写下要改成什么样", () => openPaintMode("edit")),
             homeCard("play", "导演视频", "多段配方，生成整片视频", () => go("director")),
             homeCard("target", "智能体", "说出目标，工具链多轮跑完", () => go("agent")),
-            homeCard("pose", "3D 姿势", "姿势 · 场景 · 全景", () => go("pose")),
+            homeCard("pose", "3D 姿势", "姿势 · 整场 · 全景", () => go("pose")),
         ]),
         $el("h2", { className: "ns-home-section", textContent: t("素材与配置") }),
         $el("div", { className: "ns-home-grid" }, [
@@ -1364,7 +1364,7 @@ function createLauncherPanel() {
         dev: "打开刷新键 / 右键菜单 / 开发者工具，排查窗口白屏与前端问题用。\n"
             + "pywebview 在建窗口时定值：勾完要重启桌面端窗口才生效。",
         poseRepo: "3d-pose-art 仓库根（带 pose-lib 那一层目录）：填上后桌面端每次启动自动把 dist 姿势包与 "
-            + "pose-lib 场景库补进数据根，pose 数据更新后姿势页不会停在旧构建与空白缩略图上。\n"
+            + "pose-lib 姿势库补进数据根，pose 数据更新后姿势页不会停在旧构建与空白缩略图上。\n"
             + "保存这一行会立刻在后台同步一次；留空 = 不自动同步，姿势页停在数据根现有那份与随包副本上。",
     };
     const infoDot = (tip) => $el("span", { className: "ns-info", textContent: "i", tabindex: "0", "data-tip": tip });

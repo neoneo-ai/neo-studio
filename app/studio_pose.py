@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 """姿势资产自动同步：「启动设置 → 姿势仓库」（launcher_config 的 pose_repo）指向 3d-pose-art 仓库根时，
-桌面端每次启动把 dist 姿势包与 pose-lib 场景库补进数据根，姿势页与场景库因此不会停在旧构建上。
+桌面端每次启动把 dist 姿势包与 pose-lib 姿势库补进数据根，姿势页与姿势库因此不会停在旧构建上。
 
-姿势页与场景库读的是数据根那一级，且它压住随包副本：pose 数据更新而数据根没跟着同步时，
+姿势页与姿势库读的是数据根那一级，且它压住随包副本：pose 数据更新而数据根没跟着同步时，
 用户看到的就是一片空白缩略图与素体缺失。同步只在「源比数据根新」时动手——
-重复启动、没构建过的仓库都跑不出文件复制；用户在 pose/dist/models 导入的自备素体与 pose/scenes
+重复启动、没构建过的仓库都跑不出文件复制；pose/dist/models 里源构建没有的 GLB 与 pose/scenes
 的存档不在源里，镜像时先存后还。口径与 tools\\sync_pose_dist.ps1、tools\\sync_pose_lib.ps1 一致：
 源缺哪级跳哪级，镜像与时间戳对账走 robocopy 的同一套语义。
 """
@@ -206,7 +206,7 @@ def _lib_need(repo: Path, dst: Path) -> bool:
 
 
 def sync_lib(repo: Path, data_root: Path) -> dict | None:
-    """场景库同步进 <数据根>/pose/lib：lab 镜像、ship 补缺、预览默认档、合并索引重建，
+    """姿势库同步进 <数据根>/pose/lib：lab 镜像、ship 补缺、预览默认档、合并索引重建，
     与 tools\\sync_pose_lib.ps1 同一口径；源里两级库都没有时整级跳过。"""
     ship, lab = repo / "pose-lib", repo / "pose-lab"
     if not (ship / "poses").is_dir() and not (lab / "poses").is_dir():
@@ -259,7 +259,7 @@ def rebuild_index(repo: Path, dst: Path) -> bool:
 
 
 def auto_sync(data_root: Path, repo, log=lambda line: None) -> dict:
-    """一次启动的姿势资产同步：仓库解析 → dist 镜像 → 场景库同步；源缺哪级跳哪级，全程幂等。"""
+    """一次启动的姿势资产同步：仓库解析 → dist 镜像 → 姿势库同步；源缺哪级跳哪级，全程幂等。"""
     started = time.monotonic()
     out = {"repo": str(repo) if repo else "", "dist": 0, "lib": 0, "index": False,
            "seconds": 0.0, "skipped": ""}
