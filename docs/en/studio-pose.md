@@ -305,9 +305,10 @@ panel's character dropdown has no import control, so there is nothing for a host
 ## Host view and message directions
 
 The desktop top bar's Pose tab and the home card "3D Pose" open `#/pose`; the host module is
-`studio/web/pose/pose.js`. The host panel has two columns. The left is the pose library itself: a search box,
-one list holding the library's poses (the presets are in this list - there is no separate preset section) with
-the poses saved on this machine at its tail, the write-a-name-and-save row and the
+`studio/web/pose/pose.js`. The host panel has two columns. The left is one column of the poses saved on this
+machine: a search box,
+the list of `pose/scenes/` archives (presets are not in it - a preset lives in the "Browse Pose Library…" modal),
+the write-a-name-and-save row and the
 "Browse Pose Library…" / "Load Pose" buttons. The right is the control panel: pose (canvas snapshot), character (add / remove),
 props (preview cards), ControlNet export (formats + view + export) and canvas state (one read-only line);
 the prop group is a grid of preview cards (the rules live in
@@ -316,17 +317,14 @@ the prop group is a grid of preview cards (the rules live in
 until `pose:ready`, and the panel appears with it; the bridge is torn down with `pose:dispose`, so
 leaving the page leaves no listener behind.
 
-The left list is the pose library: with the library synced it is the index's entries grouped by the index's own
-`groups`, each row carrying a "preset" / "local" origin badge at its tail, and a row reads that entry's own scene
-file and sends one `scene/apply` - the row and the modal's card are the same row on the same path. With the library
-not synced, the preset batch `meta/list` reports falls into this one list, grouped by the preset set's own `group`
-with a "preset" badge (the row's tooltip says it is a page preset), and a row sends `preset/apply`. The poses saved
-on this machine sit at the tail of the same list, and a row loads that pose - it reads `/neo_pose/scene` and sends
+The left column lists only the poses saved on this machine (`pose/scenes/`, each row badged "local"): the preset
+poses all live in the "Browse Pose Library…" modal, and this column does not line them up a second time. A row
+loads that pose - it reads `/neo_pose/scene` and sends
 `pose:open-scene` - with the Load Pose button kept for a typed-in name, the two sharing one load path. The search
-box on top of the list uses the modal's `libFilter` rule, a page is 120 rows and the rest sit behind
-"load more (N left)". The right column has no preset dropdown and the panel has no "apply preset" step: the list
-is a preset's only entry. The list's base filter follows the panel's character - switching bodies re-filters it,
-so what is visible is what the current body can wear.
+box on top of the list filters the rows by name, a page is 120 rows and the rest sit behind
+"load more (N left)". The right column has no preset dropdown and the panel has no "apply preset" step:
+the "Browse Pose Library…" modal is a preset's only entry. The modal's base filter follows the panel's character -
+switching bodies re-filters it, so what is visible is what the current body can wear.
 
 "Browse Pose Library…" opens one modal (the asset library's shell) holding the `pose-lib` whole-scene
 library. A card picks its preview by `clay → skeleton → silhouette → depth` (the rule the pose page's
@@ -589,11 +587,11 @@ tops both levels up in the data root.
   `bodyFemale` offered, labels taken from `meta/list`, whitelisted-out bodies never shown as an option, no
   "Import Own Character" row and no call to that route), the dropdown staying on "Choose a character…" with an
   empty add-body payload when the package reports no standard body, and the add-body row and the library base
-  filter following `bodyMale` when it is the default; the left column's pose-library list (index rows grouped by
-  `groups` with the "preset" / "local" origin badges and one `scene/apply` per row when the library is synced; the
-  page presets falling into the same list grouped by `group` with one `preset/apply` per row when it is not; no
-  "preset poses" / "local poses" section headers and no preset dropdown in the right column; the search box using
-  the `libFilter` rule, a page of 120 rows with load-more); the ControlNet export defaulting to the
+  filter following `bodyMale` when it is the default; the left column's saved-pose list (only `pose/scenes/`
+  archives listed, each row badged "local", a row and the "Load Pose" button sharing one `pose:open-scene`; presets
+  not listed there, the "Browse Pose Library…" modal being their only entry with the modal grouping cards by
+  `groups`, and no preset dropdown in the right column; the search box filtering by name, an honest empty state,
+  a page of 120 rows with load-more); the ControlNet export defaulting to the
   "current view"; the pose-library modal's index rendering with
   grouping, search, origin filtering and load-more, applying a library pose (the action it sends and the modal closing),
   the sync hint when the library is unsynced, the gate locking that pane, and the local pose file path;

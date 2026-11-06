@@ -3,7 +3,7 @@
  *
  * 姿势包 = 3d-pose-art 的 vite 产物，后端伺服在 /pose-dist/，短路径 /neo-pose 跳到入口页
  * （产物是 base:'./' 的相对 import，页面必须有目录深度，理由见 studio/pose.py）。控件在宿主这一侧：
- * 左栏姿势库（库里那一批与本机姿势合成一份列表），右栏姿势控制面板，画布在中间的 iframe 里跑。
+ * 左栏列本机保存的姿势存档，右栏姿势控制面板，画布在中间的 iframe 里跑；预设姿势都在「浏览姿势库…」弹窗里。
  * 宿主复刻不了那份 three.js 运行时，
  * 面板的每个动作都经 pose:call 落进页面（动作清单在姿势页 src/ui/hostCommands.js），画布状态经
  * pose:state 回流。页面在 caps.hostUi 下收起自己的 demo 控件 —— 同一时刻只有一套控件在场上。
@@ -147,10 +147,8 @@ export function createPoseView({ api, $el, toast }) {
         let pickedProp = "";
         let pickedPropKey = "";   // 道具卡片选中项：添加道具吃的就是这一张卡
         let propChoices = [];   // meta/list 的道具项：自由填写的名字只在这份清单里解析，不猜定义
-        let presetChoices = [];   // meta/list 的预设姿势：姿势库没同步时兜进左栏那一份列表，点一条是一次 preset/apply
-        let pickedPresetKey = "";
-        let sceneNames = [];      // pose/scenes/ 的本机存档：与库里那一批同列在左栏那一份列表的尾部
-        let libListShown = LIB_LIST_PAGE;   // 左栏那份列表这一屏渲染到第几条
+        let sceneNames = [];      // pose/scenes/ 的本机存档：左栏那一列
+        let libListShown = LIB_LIST_PAGE;   // 左栏这一列这一屏渲染到第几条
         const canvas = {};
 
         // 两层门控：读写本机文件只认 pose:ready；姿势动作还要 caps.hostUi —— 旧姿势包没有
@@ -185,12 +183,11 @@ export function createPoseView({ api, $el, toast }) {
             return { node, btn, label };
         };
 
-        /* 左栏：姿势库 —— 库里那一批（pose-lib 同步进来的整场）与本机姿势（pose:save-scene 写进 pose/scenes/
-           的存档）合成一份列表，预设也在这份里：库同步好了就走清单里的预设条目（scene/apply），没同步时
-           兜进页面 meta/list 回报的那一批（preset/apply）。一份列表只有三条落点，宿主不造第二条套用通路 */
+        /* 左栏 = 本机姿势存档（pose:save-scene 写进 pose/scenes/ 的那批）：预设都在「浏览姿势库…」弹窗里，
+           这一栏不再排一份预设清单。搜索框按名字过滤，一屏 120 行走「加载更多」，与弹窗共用一条装载路 */
         const libFilterSearch = $el("input", {
             className: "ns-pose-lib-search ns-pose-list-search", type: "search", spellcheck: "false",
-            placeholder: t("搜索姿势（名字 / 分组 / 标签）"),
+            placeholder: t("搜索本机姿势（按名字）"),
         });
         const poseList = list(" ns-pose-pose-list");
         const btnListMore = $el("button", { className: "ns-pose-btn ns-pose-list-more", type: "button" });
@@ -451,8 +448,6 @@ export function createPoseView({ api, $el, toast }) {
             metaModels = standardCharOptions(m.models);
             fill(modelSel, metaModels, "选择素体…");
             applyDefaultChar();
-            presetChoices = m.presets || [];
-            paintPoseList();
             fill(lookSel, m.looks || [], "外观");
             propChoices = m.props || [];
             paintPropGrid();
@@ -571,8 +566,7 @@ export function createPoseView({ api, $el, toast }) {
                 if ([...modelSel.options].some((o) => o.value === canvas.model)) {
                     modelSel.value = canvas.model;
                     if ([...libCharSel.options].some((o) => o.value === canvas.model)) {
-                        libCharSel.value = canvas.model;
-                        paintPoseList();   // 基座筛选换了档，左栏那份列表跟着对账
+                        libCharSel.value = canvas.model;   // 弹窗的基座筛选跟着对账
                     }
                 }
             }
@@ -583,89 +577,34 @@ export function createPoseView({ api, $el, toast }) {
             );
         }
 
-        const applySceneRow = (entry) => run(async () => {
-            const file = await libSceneJson(entry);
-            const r = await action("scene/apply", { file });
-            if (!r.ok) throw new Error(tf("姿势没有套上：{msg}",
-                { msg: (r.errors || []).join("；") || t("页面未报告原因") }));
-            toast(tf("已套用整场：{name}（{rigs} 副骨架 · {props} 个物体）",
-                { name: entry.label || entry.id, rigs: r.rigsApplied ?? 0, props: r.propsApplied ?? 0 }));
-        });
-
-        /** 左栏就是姿势库本身：库里那一批（预设 + 本地）、页面回报的预设（库没同步时兜底）与本机
-         *  存档合成一份列表，预设没有第二个分组。库清单到位后预设走条目那一条 scene/apply 路 ——
-         *  同一条姿态在弹窗与左栏读的是同一行；基座筛选跟着右栏那具素体，套得上的那一批才在眼前 */
+        /** 左栏只列本机姿势存档（pose/scenes/）：预设姿势都在「浏览姿势库…」弹窗里，
+         *  这一栏不再排一份预设清单 —— 库里有的东西不在这里重复一遍。搜索框按名字过滤，
+         *  一屏 120 行走「加载更多」，点一行与「载入姿势」共用同一条装载路 */
         function paintPoseList() {
-            // jsdom 的 HTMLOptionsCollection 展开出来的成员与 select.value 不是同一串引用，
-            // includes 认不出命中 —— 按 value 逐条比字符串，浏览器与 jsdom 给出同一个答案
-            const charKey = [...libCharSel.options]
-                .some((o) => String(o.value) === String(libCharSel.value)) ? libCharSel.value : "";
             const q = libFilterSearch.value.trim().toLowerCase();
-            const libRows = libFilter(libIndex?.entries, { q: libFilterSearch.value, charKey });
-            const originOf = (e) => (e.cloud ? "cloud" : (e.origin === "lib" ? "lib" : "lab"));
-            /* 库没同步：页面 meta/list 回报的预设兜进同一份列表，按预设集自己那份分组名分层 */
-            const presetOrder = [];
-            const presetBuckets = new Map();
-            if (!libIndex) {
-                for (const p of libFilter(presetChoices, { q: libFilterSearch.value })) {
-                    const g = String(p.group || "");
-                    if (!presetBuckets.has(g)) { presetBuckets.set(g, []); presetOrder.push(g); }
-                    presetBuckets.get(g).push({ id: String(p.key), label: p.label || p.key, presetKey: String(p.key) });
-                }
-            }
-            const sceneRows = (sceneNames || []).filter((n) => !q || String(n).toLowerCase().includes(q));
-            const sections = [
-                ...libGroups(libRows, libIndex?.groups)
-                    .map((sec) => ({ label: sec.label, rows: sec.items.map((e) => ({ entry: e, label: e.label || e.id, origin: originOf(e) })) })),
-                ...presetOrder.map((g) => ({
-                    label: g ? t(g) : t("未分组"),
-                    rows: presetBuckets.get(g).map((r) => ({ ...r, origin: "lib" })),
-                })),
-            ];
-            const renderRow = (r) => $el("div", {
-                className: "ns-pose-item" + (r.presetKey
-                    ? (r.presetKey === pickedPresetKey ? " ns-pose-item-on" : "")
-                    : (r.sceneName === pickedScene ? " ns-pose-item-on" : "")),
-                title: r.sceneName || (r.entry
-                    ? `${r.label} · ${libTagsOf(r.entry)}${LIB_ORIGIN_TITLE[r.origin]}`
-                        + (r.entry.charKey && metaModels.find((m) => m.key === String(r.entry.charKey))
-                            ? ` · ${metaModels.find((m) => m.key === String(r.entry.charKey)).label}` : "")
-                    : tf("{group} · {key} · 页面预设（姿势库未同步）",
-                        { group: r.groupLabel, key: r.presetKey })),
-                onclick: () => (r.entry ? applySceneRow(r.entry)
-                    : r.presetKey ? run(async () => {
-                        paintState(await action("preset/apply", { key: r.presetKey }));
-                        pickedPresetKey = r.presetKey;
-                        paintPoseList();
-                    }) : loadScene(r.sceneName)),
+            const sceneRows = (sceneNames || [])
+                .filter((n) => !q || String(n).toLowerCase().includes(q))
+                .sort((a, b) => String(a).localeCompare(String(b), "en"));
+            const rows = sceneRows.slice(0, libListShown).map((n) => $el("div", {
+                className: "ns-pose-item" + (n === pickedScene ? " ns-pose-item-on" : ""),
+                title: String(n),
+                onclick: () => loadScene(n),
             }, [
-                $el("span", { className: "ns-pose-item-label", textContent: r.label }),
-                ...(r.origin ? [$el("span", {
-                    className: `ns-pose-row-origin ns-pose-lib-origin-${LIB_ORIGIN_CLASS[r.origin]}`,
-                    textContent: t(LIB_ORIGIN_LABEL[r.origin]),
-                })] : []),
-            ]);
-            const rows = [];
-            let used = 0;
-            for (const sec of sections) {
-                if (used >= libListShown) break;
-                rows.push($el("div", { className: "ns-pose-preset-group", textContent: sec.label }));
-                for (const r of sec.rows.slice(0, libListShown - used)) {
-                    rows.push(renderRow({ ...r, groupLabel: sec.label }));
-                    used += 1;
-                }
+                $el("span", { className: "ns-pose-item-label", textContent: String(n) }),
+                $el("span", {
+                    className: "ns-pose-row-origin ns-pose-lib-origin-lab",
+                    textContent: t(LIB_ORIGIN_LABEL.lab),
+                }),
+            ]));
+            const left = sceneRows.length - rows.length;
+            if (!rows.length) {
+                rows.push($el("div", {
+                    className: "ns-pose-item ns-pose-item-empty",
+                }, [$el("span", { className: "ns-pose-item-label", textContent: t("没有匹配的姿势") })]));
             }
-            // 本机存档排在库与预设之后：它是用户自己写的那批，位置固定，不随分组排序漂
-            for (const n of sceneRows.slice(0, libListShown - used)) {
-                rows.push(renderRow({ label: String(n), sceneName: String(n) }));
-                used += 1;
-            }
-            const left = libRows.length + presetOrder.reduce((n, g) => n + presetBuckets.get(g).length, 0)
-                + sceneRows.length - used;
             btnListMore.hidden = left <= 0;
             btnListMore.textContent = tf("加载更多（还有 {n} 条）", { n: left });
-            poseList.replaceChildren(...(rows.length ? rows
-                : [$el("div", { className: "ns-pose-blank", textContent: t("姿势库里没有匹配的姿势") })]));
+            poseList.replaceChildren(...rows);
         }
 
         function paintProps(data) {
@@ -811,7 +750,7 @@ export function createPoseView({ api, $el, toast }) {
                 }
             }
             libShown = LIB_PAGE;
-            libListShown = LIB_LIST_PAGE;   // 清一次分页：左栏那份列表与弹窗同一批条目，重新进窗回到第一屏
+            libListShown = LIB_LIST_PAGE;   // 清一次分页：重新进窗时左栏那一列回到第一屏
             renderLibIndex();
             paintPoseList();
         }
@@ -835,7 +774,7 @@ export function createPoseView({ api, $el, toast }) {
 
         libSearch.oninput = () => renderLibIndex();
         libGroupSel.onchange = () => renderLibIndex();
-        libCharSel.onchange = () => { renderLibIndex(); paintPoseList(); };
+        libCharSel.onchange = () => { renderLibIndex(); };
         libOriginSel.onchange = () => renderLibIndex();
         // 切到云端 = 现读一次清单（几十 KB，读失败就把弹窗交给那句云端指引，不出空浏览器）
         libSourceSel.onchange = () => run(async () => {
@@ -881,7 +820,7 @@ export function createPoseView({ api, $el, toast }) {
         const refreshProps = () => action("prop/list").then(paintProps)
             .catch((e) => toast(tf("道具列表失败：{msg}", { msg: e.message })));
 
-        /* 预设只从姿势库那一份列表进（见 paintPoseList）：右栏没有预设下拉，也不发第二条套用通路 */
+        /* 预设只从「浏览姿势库…」弹窗那一条路进：左栏不排预设清单，右栏没有预设下拉，也不发第二条套用通路 */
 
         btnSavePose.onclick = () => run(async () => {
             const typed = poseName.value.trim();
@@ -913,7 +852,6 @@ export function createPoseView({ api, $el, toast }) {
             // 库里没有挂在这一具基座上的姿态时不动筛选：写一个下拉里没有的值等于把筛选清成「全部基座」
             if ([...libCharSel.options].some((o) => o.value === modelSel.value)) {
                 libCharSel.value = modelSel.value;
-                paintPoseList();
             }
             canvas.model = modelSel.value;
         });

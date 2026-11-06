@@ -258,7 +258,7 @@ test("旧姿势包（caps.hostUi 关）：面板禁用并说明缺什么，姿�
     assert.equal(env.host.querySelector(PANEL + " .ns-pose-collapse").disabled, false,
         "收起栏是布局偏好，不是页面动作：控件整片禁用时栏也收得回去");
     assert.equal(env.calls().length, 0, "旧包不许发 pose:call");
-    click(env.item("hero", LIB));
+    click(env.libRow("hero", LIB));
     click(env.button("载入姿势", LIB));
     await settle();
     assert.equal(env.sent.find((s) => s.msg.type === "pose:open-scene").msg.scene.camYaw, 42,
@@ -452,7 +452,7 @@ test("外观默认暗色：旧姿势包没有暗色档时不发只会失败的�
     assert.equal(env.calls("look/set").length, 0, "清单里没有的档位不发");
 });
 
-test("姿势库左栏：一份列表装下库里那一批与本机存档，点存档与「载入姿势」共用同一次 pose:open-scene", async () => {
+test("姿势库左栏只列本机姿势存档：预设不在这一份列表里，点存档与「载入姿势」共用同一次 pose:open-scene", async () => {
     resetEnv();
     const env = await mounted();
     await env.ready();
@@ -461,9 +461,11 @@ test("姿势库左栏：一份列表装下库里那一批与本机存档，点�
     assert.ok(!env.button("浏览场景库…", LIB) && !env.button("浏览场景…", LIB), "浏览只有一颗钮");
     assert.ok(env.button("浏览姿势库…", LIB), "一颗钮开姿势库弹窗");
     const libPanel = env.host.querySelector(LIB);
-    assert.ok(libPanel.querySelector(".ns-pose-pose-list"), "左栏就是姿势库那一份列表");
-    assert.equal(libPanel.querySelectorAll(".ns-pose-head").length, 0,
-        "左栏没有「预设姿势 / 本机姿势」那两条分组头 —— 预设进的是姿势库本身");
+    assert.ok(libPanel.querySelector(".ns-pose-pose-list"), "左栏那一列本机存档");
+    assert.equal(libPanel.querySelectorAll(".ns-pose-head").length, 0, "左栏没有预设 / 本机那两条分组头");
+    const rows = () => [...env.host.querySelectorAll(LIB + " .ns-pose-item")];
+    assert.deepEqual(rows().map((r) => r.textContent), ["hero本地"],
+        "左栏只列本机存档：库里与 meta/list 的预设都不在这一份列表里重复一遍");
 
     click(env.libRow("hero", LIB));
     await settle();
@@ -480,7 +482,7 @@ test("姿势库左栏：一份列表装下库里那一批与本机存档，点�
     assert.match(env.toasts.join("|"), /已载入姿势：hero/);
 });
 
-test("预设进的是姿势库本身：与库里条目同列一份列表，行带出处角标，点一行仍是一次 preset/apply", async () => {
+test("预设只从「浏览姿势库…」弹窗那一条路进：弹窗出分组卡片，左栏不排预设清单", async () => {
     resetEnv();
     const env = await mounted();
     await env.ready();
@@ -491,81 +493,52 @@ test("预设进的是姿势库本身：与库里条目同列一份列表，行�
     assert.ok(![...env.host.querySelectorAll(PANEL + " .ns-pose-sel")]
         .some((s) => [...s.options].some((o) => o.value === "run")), "右栏不摆预设下拉");
     const rows = () => [...env.host.querySelectorAll(LIB + " .ns-pose-item")];
-    const groups = () => [...env.host.querySelectorAll(LIB + " .ns-pose-preset-group")].map((h) => h.textContent);
-    const originOf = (row) => row.querySelector(".ns-pose-row-origin")?.textContent || "";
-    /* 库没同步：页面 meta/list 那批预设兜进左栏这份列表，本机存档同列在同一份的尾部 */
-    assert.deepEqual(rows().map((r) => r.textContent),
-        ["奔跑预设", "坐下预设", "hero"], "预设与本机存档同列在一份列表里");
-    assert.deepEqual(groups(), ["运动", "坐姿"], "预设按 meta/list 那份 group 分层，分组名就是预设集自己那一份");
-    assert.deepEqual(rows().map(originOf), ["预设", "预设", ""], "库里预设的行带「预设」角标，本机存档不贴角标");
-    click(env.libRow("奔跑", LIB));
-    const applied = env.calls("preset/apply")[0];
-    assert.deepEqual(applied.msg.args, { key: "run" }, "点一行就是套用");
-    env.replyCall(applied, { model: "bodyMale", members: 1, props: 0 });
-    await settle();
-    assert.ok(env.libRow("奔跑", LIB).classList.contains("ns-pose-item-on"), "套过的那一行要标出来");
-    assert.match(env.libRow("坐下", LIB).title, /坐姿 · sit/, "行上的 title 带分组与 key，挑的时候认得清是哪一条");
-    assert.match(env.libRow("坐下", LIB).title, /页面预设（姿势库未同步）/,
-        "兜底那批要点明它是页面回报的预设，不是姿势库清单里的那一行");
-    /* 库同步好了：同一份列表换成清单里的条目，页面那批预设不再二次出现（同一条姿态只有一行） */
+    assert.equal(rows().some((r) => r.textContent.includes("预设")), false,
+        "meta/list 回报的预设不进左栏那份列表 —— 姿势库里有的东西不在这里再排一遍");
+    assert.equal(rows().filter((r) => !r.querySelector(".ns-pose-row-origin")).length, 0,
+        "左栏的行只带「本地」角标，没有「预设」行");
     click(env.button("浏览姿势库…", LIB));
     await settle();
-    assert.ok(env.host.querySelector(".ns-libmodal:not(.ns-hidden)"), "弹窗开着（列表与弹窗共用同一份清单）");
-    assert.equal(rows().some((r) => r.textContent.includes("奔跑")), false,
-        "清单到位后左栏不重复列页面那份预设");
-    assert.deepEqual(groups(), ["站立", "格斗与武器"],
-        "库里那一批按 index.json 的 groups 分层，预设的行就是清单里那几条（页面回报的同一批不再出现）");
-    assert.deepEqual(rows().map((r) => [r.textContent, originOf(r)]),
-        [["A-Pose 标定预设", "预设"], ["双臂伸展 1本地", "本地"], ["双手持剑预设", "预设"], ["hero", ""]],
-        "合并库每条的出处写在行末，本机存档同列在尾部");
-    assert.match(env.libRow("双臂伸展 1", LIB).title, /2人 · 0道具/,
-        "行上的 title 带人数与道具数，多人场景在列表里也看得见");
-    /* 左栏的搜索框吃的是弹窗同一条过滤口径：一打字就缩到那几条 */
-    inputText(libPanelSearch(env), "双手持剑");
-    assert.deepEqual(rows().map((r) => r.textContent), ["双手持剑预设"],
-        "左栏的搜索与弹窗共用 libFilter 那一条口径");
+    assert.ok(env.host.querySelector(".ns-libmodal:not(.ns-hidden)"), "弹窗开着");
+    assert.deepEqual([...env.host.querySelectorAll(".ns-pose-lib-group-title")].map((h) => h.textContent),
+        ["站立（2）", "格斗与武器（1）"],
+        "预设按 index.json 的 groups 在弹窗里分层；基座筛选停在标准男，挂少女基座的那条不在这屏");
+    assert.equal(env.host.querySelectorAll(".ns-pose-lib-card").length, 3, "弹窗里只渲染套得上当前基座的三条卡片");
 });
 
-/** 左栏搜索框（与弹窗的搜索共用 libFilter 口径，placeholder 在 i18n 里是独立那条） */
+/** 左栏搜索框（只吃本机存档的名字，placeholder 在 i18n 里是独立那条） */
 const libPanelSearch = (env) => env.host.querySelector(LIB + " .ns-pose-list-search");
 
-test("库没同步时左栏出同步口径的兜底：页面回报的预设照样进这份列表", async () => {
+test("左栏搜索按名字过滤本机存档：命中就剩那几行，搜不到说清，不给一个空列表", async () => {
     resetEnv();
-    const env = await mounted({ ...STATUS, lib: null });
+    const env = await mounted({ ...STATUS,
+        scenes: [{ name: "甲姿势", size: 1, mtime: 1 }, { name: "乙姿势", size: 1, mtime: 2 },
+                 { name: "standing 10", size: 1, mtime: 3 }] });
     await env.ready();
-    env.replyCall(env.calls("meta/list")[0], META);
-    env.replyCall(env.calls("prop/list")[0], PROPS);
-    await settle();
-    const rows = [...env.host.querySelectorAll(LIB + " .ns-pose-item")];
-    assert.deepEqual(rows.map((r) => r.textContent), ["奔跑预设", "坐下预设", "hero"],
-        "清单读不到 = 页面预设兜进同一份列表，左栏不空");
+    const rows = () => [...env.host.querySelectorAll(LIB + " .ns-pose-item-label")].map((s) => s.textContent);
+    inputText(libPanelSearch(env), "姿势");
+    assert.deepEqual(rows(), ["乙姿势", "甲姿势"], "按名字过滤，命中的那两行留下");
+    inputText(libPanelSearch(env), "standing");
+    assert.deepEqual(rows(), ["standing 10"], "英文名也吃");
+    inputText(libPanelSearch(env), "zzz");
+    assert.deepEqual(rows(), ["没有匹配的姿势"], "搜不到时列表里就一句实话，不空着");
 });
 
-test("左栏那份列表分页：一屏 120 行，「加载更多」把剩下的补齐", async () => {
+test("左栏那一列分页：一屏 120 行，「加载更多」把剩下的补齐", async () => {
     resetEnv();
-    const bigLib = {
-        ...POSE_LIB,
-        count: 150,
-        groups: [{ key: "big", label: "大批", count: 150 }],
-        entries: Array.from({ length: 150 }, (_, i) => ({
-            id: `p${i}`, label: `姿态 ${i}`, path: `poses/big/p${i}.scene.json`, kind: "scene",
-            people: 1, props: 0, groups: ["big"], charKey: "bodyMale",
-            categories: [], source: "preset", origin: "lib", preview: {},
-        })),
-    };
-    mockRoute("/pose-lib/index.json", () => jsonResponse(bigLib));
-    mockRoute("/pose-lib/poses/big/*", () => jsonResponse(LIB_SCENE));
-    const env = await mounted({ ...STATUS, lib: bigLib });
+    const many = Array.from({ length: 300 }, (_, i) => ({ name: `姿势 ${i}`, size: 1, mtime: i + 1 }));
+    const env = await mounted({ ...STATUS, scenes: many });
     await env.ready();
-    click(env.button("浏览姿势库…", LIB));
-    await settle();
     const list = env.host.querySelector(LIB + " .ns-pose-pose-list");
     const more = env.host.querySelector(".ns-pose-list-more");
-    assert.equal(list.querySelectorAll(".ns-pose-item").length, 120, "一屏只渲染 120 行（库里 150 条全塞进 DOM 撑不住）");
-    assert.match(more.textContent, /还有 31 条/, "「加载更多」报清还剩几条（库里 150 条 + 本机存档 1 条）");
+    assert.equal(list.querySelectorAll(".ns-pose-item").length, 120, "一屏只渲染 120 行（300 条存档全塞进 DOM 撑不住）");
+    assert.match(more.textContent, /还有 180 条/, "「加载更多」报清还剩几条");
     click(more);
     await settle();
-    assert.equal(list.querySelectorAll(".ns-pose-item").length, 151, "加载更多把剩下的补齐");
+    assert.equal(list.querySelectorAll(".ns-pose-item").length, 240, "一颗钮先补下一屏，不一次吞掉全部");
+    click(more);
+    await settle();
+    assert.equal(list.querySelectorAll(".ns-pose-item").length, 300, "再点一次把剩下的补齐");
     assert.equal(more.hidden, true, "补齐之后这颗钮收起");
 });
 

@@ -5,15 +5,15 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 ## [Unreleased]
 
 ### Changed
-- **The 3D Pose panel is a pose library, and the character list is the two standard bodies.** The left column
-  is now 「姿势库」as one list, not two sections: with the pose library synced its rows are the library's entries
-  grouped by the index's own groups, each row carrying a 「预设」/「本地」origin badge and applying that entry's
-  scene file in one click (the same row the modal's card is); with the library not synced the pose package's own
-  preset batch falls into that same list, grouped by the package's group names with a 「预设」badge, applied by
-  one row click (`preset/apply`); the poses saved on this machine sit at the tail of the same list - a row click
-  and a typed-in name load a pose through one path. There is no separate 「预设姿势」 section, no
-  「套用预设」 button and no preset dropdown in the right column. A search box above the list filters with the
-  modal's rule, 120 rows per page behind 「加载更多」. The character dropdown offers only the standard bodies
+- **The 3D Pose panel lists only the poses saved on this machine, and the character list is the two standard
+  bodies.** The left column is now the machine's own `pose/scenes/` archives, each row badged 「本地」- the
+  preset poses are already in the pose library, so the left column no longer lines them up a second time and a row
+  click loads a pose through the same path the 「载入姿势」 button uses. 「浏览姿势库…」 is a preset's only
+  entry: the modal keeps the library's entries grouped by the index's own groups with 「预设」/「本地」 origin
+  badges, and applies a row's own scene file in one click. There is no separate 「预设姿势」 section, no
+  「套用预设」 button and no preset dropdown in the right column. The search box above the list filters the
+  archives by name, 120 rows per page behind 「加载更多」, and an empty result says so. The character dropdown
+  offers only the standard bodies
   the package reports (`bodyMale` / `bodyFemale`), so Mixamo, the SMPL-derived bodies and any user-supplied GLB
   no longer show as options that only fail; 「导入自备素体」 is gone and the host's `/neo_pose/import_model`
   route is not registered anymore - registering those bodies stays in the pose page's own local import area.

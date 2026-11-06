@@ -49,11 +49,10 @@ const EN = {
     "标签（默认 pose）": "Label (defaults to pose)",
     "存为姿势": "Save Pose",
     "载入姿势": "Load Pose",
-    // 左栏就是姿势库那一份列表：库里那一批 + 本机存档 + 库没同步时兜进来的页面预设（meta/list 那份）
-    "搜索姿势（名字 / 分组 / 标签）": "Search poses (name / group / tag)",
-    "未分组": "Ungrouped",
+    // 左栏只列本机姿势存档（pose/scenes/）：预设都在「浏览姿势库…」弹窗里，这一栏不排预设清单
+    "搜索本机姿势（按名字）": "Search saved poses (by name)",
+    "没有匹配的姿势": "Nothing matches this search",
     "姿势库里没有匹配的姿势": "No pose matches this search",
-    "{group} · {key} · 页面预设（姿势库未同步）": "{group} · {key} · page preset (pose library not synced)",
     "加素体": "Add Character",
     "删当前素体": "Remove Character",
     // 素体只发随包的两具 CC0 基座（标准男 / 标准女）：页面 meta/list 报了这一档就用页面那份 label
