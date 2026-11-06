@@ -23,7 +23,11 @@ Mixamo (`soldier` / `ch38` / `ch07`), the SMPL-derived bodies (`body1391` plus t
 the locally imported props (`arrow` / `sting-sword` / the guns, licence unconfirmed) none of them ship. The
 prop registry `models/props/index.json` keeps only the two entries the package ships: listing a GLB the
 package does not ship means shipping a control that can only fail, so trimming the registry and trimming the
-files is one act, and the procedural props (`builtin:*`) stay available. `*.map` (4.4 MB) stays out: the build carries a single
+files is one act, and the procedural props (`builtin:*`) stay available. A prop's preview image
+(`models/props/preview/*.png`, rendered prop by prop by the pose repo's `npm run prop:preview`) ships only for a
+prop whose registry row names a `preview` and whose PNG is actually in `dist`: a row that names a preview the dist
+does not have gets its `preview` field stripped before packaging, so the panel reads "no preview" instead of a
+broken image. `*.map` (4.4 MB) stays out: the build carries a single
 `sourceMappingURL` and browsers fetch it only with devtools open, so shipping it only makes every user
 download 4.4 MB more. The package also carries `LICENSE`, `THIRD-PARTY.md` (the upstream licence banners
 terser deleted are restated there) and `MANIFEST.json` (`bytes` + `sha256` per file). Absolute
@@ -136,7 +140,7 @@ verbatim in the manifest.
 | `<data root>/pose/oss_cache/_index.json`   | The cloud manifest last fetched           | Fetched by the read side                       |
 | `<data root>/pose/oss_cache/poses/**`      | Scenes fetched before                     | Fetched on demand when a cloud card is clicked |
 | `<data root>/pose/oss_cache/preview/**`    | Preview images fetched before             | Fetched per card by "refresh thumbnails"       |
-| `<data root>/pose/oss_cache/models/props/` | Cloud prop GLBs fetched before            | Fetched on demand when a cloud prop is added   |
+| `<data root>/pose/oss_cache/models/props/` | Cloud prop GLBs and prop previews fetched | Fetched on demand when a cloud prop is added   |
 
 `pose/oss_cache/` mirrors the cloud tree one for one and is treated as a cache like `pose/lib`: deletable and
 rebuildable, with the cloud-relative path as the cache path. The manifest and the preview images are
@@ -152,11 +156,12 @@ and the offline desktop service; each is registered in the `/neo_pose` ownership
 |--------|------------------------------|-------------------------------------------------------------------------------------|
 | GET    | `/neo_pose/cloud_status`     | Configured or not, cloud index URL and root prefix, cache state and cache directory |
 | GET    | `/neo_pose/cloud_index`      | The cloud manifest from cache (cache-only, returns `{index, cached}`)               |
-| GET    | `/neo_pose/cloud_file?path=` | Serve one cloud file: a scene JSON, a preview image, `models/props/<file>.glb`      |
+| GET    | `/neo_pose/cloud_file?path=` | A scene JSON, a preview image, `models/props/**` (prop GLBs and prop previews)      |
 
 Cloud files accept only the relative paths the cloud manifest lists: `poses/<group>/<id>.scene.json`,
-`preview/<...>.png` and `models/props/<file>.glb` (writing a prop as `props/<file>.glb` lands in the same
-place). Paths containing `..`, a drive letter, an absolute path, or a leading `/` or `\` are refused with
+`preview/<...>.png` and `models/props/<file>.glb` (a prop written as `props/<file>.glb` and a prop preview as
+`props/preview/<name>.png` land in the same place, and the rewrite swaps the whole prefix). Paths containing
+`..`, a drive letter, an absolute path, or a leading `/` or `\` are refused with
 `400` before the configuration is even consulted, and the landing path stays locked inside the cache
 directory - a bad path never answers "not configured". Not configured answers `400` on the manifest and
 the file route with the deployment hint (a `404` on a file the manifest does not list), a file the cloud
@@ -174,7 +179,10 @@ each added row is marked `hidden` (the pose page's own prop panel has no "fetch 
 must not list props that are not cached). The page normalizes every prop GLB to 1 unit tall and multiplies
 by the registry row's `scale`, restoring the grip metadata from the same row - a cloud prop without that row
 is a 1-metre pistol. Cloud thumbnails are direct absolute OSS URLs (the ossutil bucket endpoint
-is public-read), and a cloud card carries a "cloud" corner badge saying it is not in the local library.
+is public-read), and a cloud card carries a "cloud" corner badge saying it is not in the local library. A cloud
+prop card's preview is the same direct rule - the row's `preview` joined onto the bucket endpoint - while the GLB
+it stands for keeps travelling `/neo_pose/cloud_file`: an OSS URL is for a thumbnail, never for the page's
+`/models/props/...` fetch path.
 
 The cloud tree is uploaded by `tools\pose_deploy_oss.py`: it produces the shape the read side accepts,
 the manifest keeps only the entries whose files are actually on disk, and a prop publishes only when its
@@ -212,7 +220,7 @@ The script prints the manifest URL to put into `pose_index_url`, which connects 
 | GET    | `/neo-pose`         | Short path: 302 to the entry page when installed, 404 with the install hint when not |
 | GET    | `/pose-dist/{path}` | Package subresources (`index.html`, `assets/**`, GLB, wasm)                          |
 | GET    | `/pose-lib/{path}`  | Read-only scene library serving: the index, scene files and previews                 |
-| GET    | `/models/{path}`    | The origin-root path baked into the build: the prop registry and the GLBs            |
+| GET    | `/models/{path}`    | Origin-root path baked into the build: prop registry, GLBs, prop previews            |
 
 The build uses `base: './'` relative imports, so the page must sit on a URL with directory depth:
 only then does `./assets/x.js` resolve to `/pose-dist/assets/x.js`. Serving the page directly at the
@@ -308,7 +316,8 @@ The desktop top bar's Pose tab and the home card "3D Pose" open `#/pose`; the ho
 Scene library (write a name and save, pick a save and load it, browse the whole-scene library), ControlNet export
 (tick the formats, export the set) and Canvas state (one read-only line);
 the character row carries
-"Import Own Character" with a key field, and the bottom of the left column explains that only the CC0
+"Import Own Character" with a key field, the prop group is a grid of preview cards (the rules live in
+"Prop cards and where a prop lands"), and the bottom of the left column explains that only the CC0
 figure ships when the page runs on the bundled copy. Every control stays disabled
 until `pose:ready`, and the panel appears with it; the bridge is torn down with `pose:dispose`, so
 leaving the page leaves no listener behind.
@@ -347,6 +356,24 @@ two apply calls and the second silently overwrites the first. When the library i
 the sync command with a line of explanation instead of an empty grid: an empty browser is not what a library
 looks like. The modal carries one more entry, "local scene file…", which takes a JSON file from this
 machine through `pose:open-scene` - a file outside the library loads just the same.
+
+## Prop cards and where a prop lands
+
+The prop group is one card per prop, filled from the prop entries of `meta/list`: shipped GLBs, procedural
+props and the props an own figure carries come first, cloud props last with their "cloud" badge. A preview
+resolves two ways: the registry row's `preview` is a path relative to the props directory, read locally as
+`/models/props/preview/<name>.png` and on the cloud as `<OSS base>/props/preview/<name>.png`; a procedural
+prop has no registry row, so it reads the repo's conventional name `preview/builtin-<id>.png`. With no image
+in either place the card says "no preview" - an `<img>` guaranteed to break is not what a missing image looks
+like. The search box filters the cards on `label / key`, the count line reads "N props · selected X", and a
+selection dropped by the filter falls back to the first card of the filtered set.
+
+"Add prop" sends the selected card's key; a prop name typed by hand travels the same "name → the entry in the
+list" lookup (a built-in `builtin:chair`, a registry prop `glb:arrow.glb`). The panel never sends
+`prop/attach`: the bone dropdown and the attach button live in the pose page's own panel, the host does not
+copy them, and the page's `prop/attach` command stays in the command table. "Ground" and "Remove prop" act on
+the selected row of the on-stage list, and each row names its own landing spot - a prop carried by a bone
+reads "on hand_right", a free prop reads its X/Z coordinates.
 
 The panel has no 姿势模式 / 吸附 / 轮廓线 / 主体层 checkboxes: posing starts by clicking the figure, which
 makes the page enter pose mode on its own and leave it on an empty-space click, the page starts with snap
@@ -437,12 +464,14 @@ manifest shows that same hint with a toast carrying the `/neo_pose/cloud_index` 
 fake cards.
 
 Cloud props enter through the registry route the "add prop" control already uses: with the cloud configured
-the prop dropdown merges the cloud prop entries (grouped under "cloud: OSS", the same grouping that marks
-procedural props, shipped props and own figures), valued `cloud:<file>`; choosing one makes the panel fetch
+the prop grid merges a cloud prop card (corner badge "cloud", the same badge rule that marks procedural props
+"procedural", shipped props "shipped pose package" and own figures "own"), keyed `glb:<bare file name>`;
+choosing one makes the panel fetch
 `/neo_pose/cloud_file?path=models/props/<file>.glb` into `models/props/` first, then send the page's
 existing `prop/add` with the fetch address `models/props/<file>.glb` - the page changes nothing for the
-cloud, and the prop fetch is one path. The Chinese labels, the registry `scale` and the grip metadata come
-from the prop-registry row the cloud manifest carries (its licensing text and source page travel with the
+cloud, and the prop fetch is one path. The Chinese labels, the registry `scale`, the grip metadata and the
+preview path come from the prop-registry row the cloud manifest carries (its licensing text and source page
+travel with the
 entry, so a CC0 prop's attribution reads out); serving `/models/props/index.json` adds them to the registry
 the page reads as `hidden` rows, and the page sizes the prop by that row - a service pistol lands at 0.28 m
 and a quarter-staff at 2 m, the sizes the pose repo measured.
@@ -515,14 +544,15 @@ tops both levels up in the data root.
   `404`, `no-cache` on the whole prefix, a broken index leaving `status` standing, and the four `lib_*`
   fields in `status`; the cloud read routes - the unconfigured `404` with `cloud_installed: false`, the
   manifest cache with no OSS call while it is fresh, cloud-relative paths landing inside the cache tree,
-  a prop written as `props/<file>.glb` and `models/props/<file>.glb` landing in one place, a cache miss
-  downloading once with the second hit making no request, a leading `/` and a `..` both refused with `400`
-  (the path guard running ahead of the configuration check), a failed upstream fetch answering `502` and
-  caching nothing, a prop GLB without the `glTF` header deleted from the fetch with `502`, the two
-  `cloud_installed` / `cloud_cache_dir` fields in `/neo_pose/status`, and the prop-registry merge (cloud
-  rows joining the served registry with their `scale` and grip metadata marked `hidden`, a prop the local
-  registry already names never added a second time, no network call on that route, and a manifest from an
-  older upload still landing as a row).
+  a prop written as `props/<file>.glb` and `models/props/<file>.glb` landing in one place, a cloud prop
+  preview landing in the local props directory the page reads (`props/preview/x.png` served as
+  `models/props/preview/x.png`), a cache miss downloading once with the second hit making no request, a
+  leading `/` and a `..` both refused with `400` (the path guard running ahead of the configuration check),
+  a failed upstream fetch answering `502` and caching nothing, a prop GLB without the `glTF` header deleted
+  from the fetch with `502`, the two `cloud_installed` / `cloud_cache_dir` fields in `/neo_pose/status`, and
+  the prop-registry merge (cloud rows joining the served registry with their `scale`, grip metadata and
+  `preview` marked `hidden`, a prop the local registry already names never added a second time, no network
+  call on that route, and a manifest from an older upload still landing as a row).
 - `studio/tests/test_pose_deploy.py`: the cloud upload script's manifest build - the cloud index keeps only
   the entries whose scene is on disk, preview tiers checked the same way, the entry fields the cards read
   carried by name; props published only when their licensing row grants redistribution (CC0 and self-made
@@ -530,8 +560,9 @@ tops both levels up in the data root.
   Free row, an unconfirmed source, a Mixamo personal-use row, a registry row with no licensing row and the
   repo's bench boxes all refused, a licensing-clean prop whose GLB is missing not registered, `--props`
   narrowing the publishable set without overriding it, a registry that cannot be read publishing no props,
-  prop files uploaded under the `props/` prefix, and a prop the index registered whose file is missing kept
-  out of the upload list.
+  prop files uploaded under the `props/` prefix with the prop preview going up under `props/preview/`, a
+  row naming a `preview` whose file is missing reported and skipped, and a prop the index registered whose
+  file is missing kept out of the upload list.
 - `app/tests/test_studio_server.py::PoseBridgeTests`: the redirect, serving subresources offline and
   refusing to escape the package, the `/models` prefix answering the registry and the prop GLBs
   (including the imported figure and the data root shadowing the bundled copy), the scene round trip,
@@ -550,10 +581,16 @@ tops both levels up in the data root.
   the sync hint when the library is unsynced, the gate locking that pane, and the local scene file path;
   collapsing each side panel (the button outside the gates, the head left behind as the way back out, the
   icon glyph changing with the collapsed state, the
-  preference stored and replayed when the view is rebuilt).
+  preference stored and replayed when the view is rebuilt); the prop grid (one card per prop with its
+  `propKey` and preview, clicking a card selects it, "add prop" sends that key), the prop panel having no
+  bone attach (no "attach to bone" button, no bone dropdown, adding never sends `prop/attach`), a typed prop
+  name resolving to a `propKey` (the full key, the bare id and the Chinese label all landing on one entry, a
+  name the list does not have sending nothing), and the cloud prop cards sitting behind the local ones with
+  their "cloud" badge and direct preview, adding one fetching the GLB into the local cache first.
 - `tools\test_pose_package.ps1`: the shipped package's own self-check - required files, build shape,
-  forbidden shapes (`*.map`, GLBs outside the whitelist, prop GLBs outside it, loose JSON), per-file sha256 and
-  byte verification, a prop registry naming only the two bundled props, development-machine absolute paths, and the size cap.
+  forbidden shapes (`*.map`, GLBs outside the whitelist, prop GLBs outside it, prop previews outside it,
+  loose JSON), per-file sha256 and byte verification, a prop registry naming only the two bundled props,
+  a registry row naming a `preview` shipping that PNG, development-machine absolute paths, and the size cap.
 - The page-side bridge in the pose repository: `tests/neoBridge.node.test.mjs` (when the bridge exists,
   the source and origin gates, the reply-port answers, and how a failure is voiced).
 - The deployment root in the pose repository: `tests/appBase.node.test.mjs` (a root deployment stays
