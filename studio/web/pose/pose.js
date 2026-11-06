@@ -184,9 +184,11 @@ export function createPoseView({ api, $el, toast }) {
         };
 
         /* 左栏 = 本机姿势存档（pose:save-scene 写进 pose/scenes/ 的那批）：预设都在「浏览姿势库…」弹窗里，
-           这一栏不再排一份预设清单。搜索框按名字过滤，一屏 120 行走「加载更多」，与弹窗共用一条装载路 */
+           这一栏不再排一份预设清单。搜索框按名字过滤，一屏 120 行走「加载更多」，与弹窗共用一条装载路。
+           搜索框只带 ns-pose-list-search：弹窗搜索框那条 flex: 1 是弹窗那一横行的样式（在 CSS 里排在
+           这一条之后），这一栏是竖排的列，共用同一份就是让输入框自己吃满栏高 */
         const libFilterSearch = $el("input", {
-            className: "ns-pose-lib-search ns-pose-list-search", type: "search", spellcheck: "false",
+            className: "ns-pose-list-search", type: "search", spellcheck: "false",
             placeholder: t("搜索本机姿势（按名字）"),
         });
         const poseList = list(" ns-pose-pose-list");

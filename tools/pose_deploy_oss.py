@@ -54,6 +54,8 @@ DISTRIBUTE_GRANT = re.compile(r"可[^|\n]{0,12}分发|随产物分发")
 DISTRIBUTE_BLOCK = re.compile(r"待确认|不随仓库分发|禁止[^|\n]{0,12}分发|仅个人|[Rr]oyalty|免版税")
 # 注册表标签以「测试」「单测」开头的是仓库自己的基准件：面板上出现「测试箱体」就是发了个用户看不懂的控件
 TEST_LABEL_RE = re.compile(r"^(测试|单测)")
+# 道具预览图的约定名：preview/<GLB 同名>.png（姿势仓库 npm run prop:preview 逐件渲的就是这一份）
+PREVIEW_DIR_NAME = "preview"
 
 
 def data_root() -> Path:
@@ -202,9 +204,24 @@ def build_props(props_dir: Path, registry_path: Path, attribution: Path, wanted:
                     "size": found.stat().st_size,
                     "license": str(row.get("license") or license_label(lines)),
                     "source": str(row.get("source") or source_home(lines) or "pose-repo"),
-                    "registry": row})
+                    "registry": with_conventional_preview(props_dir, leaf, row)})
         print(f"  PROP {leaf} · {label} · scale={row.get('scale', 1)} · {out[-1]['license'][:34]}")
     return out
+
+
+def with_conventional_preview(props_dir: Path, leaf: str, row: dict) -> dict:
+    """注册表行没写 preview 时按仓库的约定名补一条：preview/<GLB 同名>.png 真在道具目录里才算。
+
+    云端卡片只在行里写了 preview 才出图，pose_prune_oss.py 的允许集又直接吃这份清单：约定名算进来，
+    上传与清理两边永远同口径 —— 图发了不会被清掉，图没渲染也不会发一条必坏的 preview 行。
+    注册表自己写了 preview 的行原样不动，两处落点与 collect_files 的候选一致。
+    """
+    if row.get("preview"):
+        return row
+    rel = f"{PREVIEW_DIR_NAME}/{leaf.rsplit('.', 1)[0]}.png"
+    if any((root / rel).is_file() for root in (props_dir, SHIPPED_PROPS)):
+        return {**row, "preview": rel}
+    return row
 
 
 def collect_files(source: Path, props_dir: Path, props: list) -> list:

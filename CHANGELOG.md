@@ -5,6 +5,16 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 ## [Unreleased]
 
 ### Changed
+- **Cloud prop cards now carry previews.** The cloud pose manifest listed 24 props whose registry rows named
+  no `preview`, and the bucket had no `props/preview/` files at all, so every card badged 「云端」 in the 3D
+  Pose prop grid read 「无预览」. `tools\pose_prop_previews.py` fills that layer: for each prop it takes the
+  official render from the source page its own registry row names (Poly Haven's `thumbnail_url`, BlenderKit's
+  largest asset thumbnail, the shipped render for the self-made props), writes `preview/<id>.png` and adds
+  `preview` to that manifest row - `hidden` cards publish nothing, `--apply` is what touches the cloud, and
+  the pre-change manifest is kept in `<out>/index.before.json`. `tools\pose_deploy_oss.py` now matches the
+  conventional `preview/<glb stem>.png` when a registry row names no preview, so the upload list and
+  `tools\pose_prune_oss.py`'s allow-set keep publishing and keeping the same previews. Covered by
+  `studio/tests/test_pose_prop_previews.py` and `studio/tests/test_pose_deploy.py`.
 - **The 3D Pose panel lists only the poses saved on this machine, and the character list is the two standard
   bodies.** The left column is now the machine's own `pose/scenes/` archives, each row badged 「本地」- the
   preset poses are already in the pose library, so the left column no longer lines them up a second time and a row
@@ -21,10 +31,12 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   Covered by `studio/tests/js/pose-bridge.test.mjs`, `studio/tests/test_pose_bridge.py` and
   `app/tests/test_studio_server.py::PoseBridgeTests`.
 - **The 3D Pose left column's search box is one row, not the column's height.** The column's pose list grows to
-  fill the column, and the search box sat under that list's grow rule: with nothing saved the placeholder floated
-  in the middle of the column with 「没有匹配的姿势」 on its own level. The search box is now a fixed row above the
-  list, rows and the no-match line start at the top of the column, and the no-match line reads as a plain line
-  without a row frame. Covered by `studio/tests/js/pose-bridge.test.mjs`.
+  fill the column, and the search box sat under two grow rules at once - the list's own `flex: 1 1 auto` and the
+  pose-library modal's `flex: 1` search-field rule, which the box shared a class with: with nothing saved the
+  placeholder floated in the middle of the column with 「没有匹配的姿势」 on its own level. The search box is now a
+  fixed row above the list, the modal's search-field rule is scoped to `.ns-pose-libpane`, rows and the no-match
+  line start at the top of the column, and the no-match line reads as a plain line without a row frame. Covered
+  by `studio/tests/js/pose-bridge.test.mjs`.
 - **「摆姿」在界面上统一叫「姿势」.** 顶栏 tab、姿势页控件、姿势库弹窗、启动设置与文档里的中文文案全部改成
   「姿势」（`摆姿模式` → `姿势模式`、`摆姿仓库` → `姿势仓库`、`进入摆姿模式` → `进入姿势模式`），动词语法保持成句
   （`摆姿势`、`可摆姿势`、`纯摆姿势`）；英文文案仍是 Pose / Pose 3D，路由、节点名与配置键不变。

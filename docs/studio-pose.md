@@ -107,8 +107,9 @@ pwsh tools\sync_pose_lib.ps1 -Source <3d-pose-art 仓库根> -All   # 四档全�
 
 配置只有一条：`<数据根>/configs/oss_presets.json` 里的 `pose_index_url`，指向云端那棵树的
 `<前缀>/index.json`。它是 OSS 预设配置里的第三个字段，与 `presets` / `default_oss` 各管各的，缺这条
-就是「未配置」：「3D 云端姿势」整片关，本机库照常工作。云端道具由那份索引的 `props` 数组点名，授权
-口径与随包道具同一条白名单（`stick.glb` / `sword.glb`），白名单外的 GLB 整条不进索引。
+就是「未配置」：「3D 云端姿势」整片关，本机库照常工作。云端道具由那份索引的 `props` 数组点名，逐件读姿势仓库
+`public/models/ATTRIBUTION.md` 的授权行才进索引：那一行给「可再分发」的才发（CC0 与本项目自制），Royalty Free、
+来源授权待确认与 Mixamo 仅个人使用都不发。随包白名单管的是 4.5MB 的包里发哪两件 GLB，管不着云端那一棵。
 
 | 落点                                     | 内容                              | 怎么来                                 |
 |------------------------------------------|-----------------------------------|----------------------------------------|
@@ -161,12 +162,22 @@ access_key_id / access_key_secret 四项，键名与 `studio/backyard.py` 读的
 `<数据根>/pose/lib/` 是 `pose-lib` + `pose-lab` 的合并结果，条目带 `origin`：`pose-lab` 是作者自己
 的实验姿态，不发布 —— 脚本见到带 `origin` 的索引整棵拒传，道具的授权行只挡道具、挡不住场景树。
 云端上已经多出来的那批用 `tools\pose_prune_oss.py` 清：允许集直接复用上传脚本的清单，
-索引没点名的键整批删掉。
+索引没点名的键整批删掉。注册表行没写 `preview` 时，上传脚本按仓库的约定名 `preview/<GLB 同名>.png` 认
+道具目录里真在着的那张 —— 图发上云就跟着条目一起进清单，`pose_prune_oss.py` 的允许集吃同一份清单，
+下一轮清理不会把发出去的预览图摘掉；图没渲染过就不发这一行，面板出「无预览」而不是一条必坏的缩略图。
+
+云端道具的预览图由 `tools\pose_prop_previews.py` 补：逐件从注册表行自己登记的来源页取那张官方渲染
+（Poly Haven 用 `api.polyhaven.com/info/<slug>` 的 `thumbnail_url`，BlenderKit 用 `assetUrl` 那行里最大的
+thumbnail，自制件取 `studio/pose_dist/models/props/preview/` 那张），落成 `preview/<id>.png` 并把
+`preview` 写回索引行。这条只给已在索引里的件补图，不开第二条上云的门，`hidden` 行不发图；默认不动云端，
+`--apply` 才传 `props/preview/*.png` 与索引，改前的那份索引存在 `<out>/index.before.json`。
 
 ```
 python tools\pose_deploy_oss.py --source "<pose repo>\pose-lib"                      # 只列清单 + 生成索引
 python tools\pose_deploy_oss.py --source "<pose repo>\pose-lib" --props stick.glb katana.glb --apply
 python tools\pose_prune_oss.py  --source "<pose repo>\pose-lib" --apply              # 删索引没点名的键
+python tools\pose_prop_previews.py                                                   # 出预览图 + 写回索引行
+python tools\pose_prop_previews.py --apply                                           # 传预览图与索引
 ```
 
 索引 URL 落点由脚本自己报出来，写进 `oss_presets.json` 的 `pose_index_url` 就接通读侧。
@@ -262,7 +273,9 @@ ControlNet 导出（勾格式、导出图组、画布截图）、画布状态（
 左栏那一列只列本机保存的姿势存档（`pose/scenes/`，行末标「本地」）：预设姿势都在「浏览姿势库…」弹窗里，
 这一列不把它们再排一遍 —— 库里有的东西不在这里重复一份。点一行就是装载那一场（读 `/neo_pose/scene`
 再下发 `pose:open-scene`），`载入姿势` 按钮留着给手写的名字，两条走同一条装载路。这一列吃栏里剩下的高度，
-搜索框是栏里排在列表上面的那一行（不与列表同栏吃 grow 规则，栏里空着也不会被拉成一整块），按名字过滤这一列；
+搜索框是栏里排在列表上面的那一行（只带 `.ns-pose-list-search` 那一条固定行的样式；弹窗搜索框的
+`flex: 1` 与 `min-width` 收在 `.ns-pose-libpane` 那一条里，只作用在弹窗那一横行，这一栏共用它就会把
+输入框纵向拉成整块），按名字过滤这一列；
 一屏 120 行，剩下的走「加载更多（还有 N 条）」—— 存档攒多了全塞进 DOM，首屏与滚动
 都撑不住。右栏没有预设下拉，面板上也没有「套用预设」这一步：预设的入口只有「浏览姿势库…」弹窗那一个。
 
@@ -311,8 +324,9 @@ ControlNet 导出（勾格式、导出图组、画布截图）、画布状态（
 道具带「云端」角标排在后。预览图两条地址：注册表行的 `preview` 是道具目录里的相对路径，本机读
 `/models/props/preview/<name>.png`，云端直读 `<OSS 基址>/props/preview/<name>.png`；内置程序化道具没有注册表行，
 按仓库的约定名 `preview/builtin-<id>.png` 取。两处都没有图就在卡片里写「无预览」—— 挂一张必坏的 `<img>`
-不是没图的样子。搜索框按 `label / key` 过滤卡片，计数行写「N 件道具 · 选中 X」，过滤后选中项不在结果里就落到
-结果的第一张。
+不是没图的样子；云端那一行的 `preview` 不在这里生成，由 `tools\pose_prop_previews.py` 把来源页的官方渲染
+写进索引行（口径见「云端姿势库（pose-cloud）」那节）。搜索框按 `label / key` 过滤卡片，计数行写「N 件道具 · 选中 X」，
+过滤后选中项不在结果里就落到结果的第一张。
 
 「添加道具」吃的就是选中那张卡的 key；自由填写的道具名走同一条「名字 → 清单里那一项」查找（内置 `builtin:chair`、
 注册表 `glb:arrow.glb`）。面板不发 `prop/attach`：挂点骨与「挂到骨点」在姿势页自己那侧的面板上，宿主不复制一份，
@@ -449,8 +463,9 @@ Mixamo 与 SMPL 派生的那几份由用户在页面自己的本地导入区按 
   下拉停在「选择素体…」且「加素体」交回空参数、默认素体落在 `bodyMale` 时「加素体」与基座筛选跟着这一档；
   左栏那一列本机姿势存档（只列 `pose/scenes/` 的存档、行末带「本地」角标、点一行与「载入姿势」共用
   同一次 `pose:open-scene`；预设不进这一列，套用只有「浏览姿势库…」弹窗那一条路，右栏没有预设下拉；
- 搜索按名字过滤、搜不到说清、一屏 120 行走「加载更多」，搜索框与列表是栏里并排的两行（搜索框不被列表的
-  grow 规则拉高）；
+  搜索按名字过滤、搜不到说清、一屏 120 行走「加载更多」，搜索框是栏里与列表并排的固定一行
+  （弹窗搜索框那条 `flex: 1` 收在 `.ns-pose-libpane` 里，只作用在弹窗那一横行，左栏不共用它，
+  不被列表的 grow 规则拉高）；
   ControlNet 导出的视角默认「当前视角」；姿势库弹窗的清单渲染与分组 / 搜索 / 来源筛选 / 加载更多、点卡片套整场
   落到的动作与弹窗收起、库没同步的指引、门禁锁住弹窗那一片、本机姿势文件那条装载路；
   左右栏收起（收起钮不吃门禁、收起后栏首留作展开入口、钮面图标随收起状态变宽窄、偏好落盘并在重建视图时回灌）；

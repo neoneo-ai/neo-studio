@@ -199,6 +199,22 @@ class CloudPropTests(unittest.TestCase):
         rows, _ = self.built(["stick.glb", "sword_thin.glb"])
         self.assertEqual([r["file"] for r in rows], ["stick.glb"])
 
+    def test_a_row_without_a_preview_gets_the_conventional_render(self):
+        """注册表行没写 preview：道具目录里有约定名的那张图就补进那一行，上传清单跟着带上它。
+
+        pose_prune_oss.py 的允许集吃的是同一份清单 —— 约定名算进来，发上去的图不会被下一轮清理摘掉。
+        """
+        write(self.props / "preview" / "katana.png", PNG)
+        rows, _ = self.built(["katana.glb"])
+        self.assertEqual(rows[0]["registry"]["preview"], "preview/katana.png")
+        rels = [rel for _, rel in deploy.collect_files(self.lib, self.props, rows)]
+        self.assertIn("props/preview/katana.png", rels)
+
+    def test_the_convention_never_promises_a_render_that_is_not_there(self):
+        """没写 preview 又没渲过的件不补空承诺：面板出「无预览」，清单里不发一条必坏的 preview 行。"""
+        rows, _ = self.built(["katana.glb"])
+        self.assertNotIn("preview", rows[0]["registry"])
+
     def test_missing_registry_publishes_no_props(self):
         """读不到注册表就整批不发：场景照发，道具一条不登记（页面对空注册表出的是空清单）。"""
         out = io.StringIO()

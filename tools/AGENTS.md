@@ -62,6 +62,13 @@ webp 缩略图与 `index.json`，`gallery_deploy_oss.py` 按 `OSS_ACCESS_KEY_ID`
   发的每一件带着道具注册表 `dist/models/props/index.json` 的原行进索引：页面对 GLB 先归一成 1 单位高、
   再乘注册表 `scale`，所以读侧伺服 `/models/props/index.json` 时把云端行补成 `hidden` 行（只读缓存、
   不发网络），页面侧不为云端改一行。
+- 云端道具的预览图由 `pose_prop_previews.py` 补：图取注册表行自己登记的来源页（Poly Haven 的
+  `api.polyhaven.com/info/<slug>` thumbnail、BlenderKit `assetUrl` 记录里最大的 thumbnail、自制件取
+  `studio/pose_dist/models/props/preview/` 那张），落成 `preview/<id>.png` 并把 `preview` 写回索引行，
+  `hidden` 行不发图；默认只出图与副本，`--apply` 才传 `props/preview/*.png` 与索引，改前的索引留在
+  `<out>/index.before.json`。`pose_deploy_oss.py` 在注册表行没写 preview 时按约定名 `preview/<GLB 同名>.png`
+  认道具目录里真在着的那张 —— 上传清单与 `pose_prune_oss.py` 的允许集吃同一份清单，发上去的图不会被
+  下一轮清理摘掉，图没渲染过也不会发一条必坏的 preview 行。
 - `sync_pose_dist.ps1` 的 `robocopy /MIR` 只动 `dist/`：源产物里没有的文件（`pose/dist/models/` 里的额外 GLB）
   先存进临时目录、镜像完搬回，同步脚本不许成为删用户文件的那只手。场景与参考图在 `pose/` 下的
   别的目录，本来就不在镜像范围内。

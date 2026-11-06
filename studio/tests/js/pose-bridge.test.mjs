@@ -468,6 +468,10 @@ test("姿势库左栏只列本机姿势存档：预设不在这一份列表里�
     assert.equal(search.parentNode, libPanel, "搜索框是栏里的一行，不嵌进列表里");
     assert.equal(search.parentNode, list.parentNode,
         "列表在栏里吃剩下的高度：搜索框与它同栏兄弟，嵌进列表会跟着列表一起被拉高");
+    assert.ok(!search.classList.contains("ns-pose-lib-search"),
+        "左栏不共用弹窗搜索框那条 flex: 1：那一条是弹窗横行的样式，在竖栏里就是把输入框拉成整块");
+    assert.ok(env.host.querySelector(".ns-pose-libpane .ns-pose-lib-search"),
+        "弹窗搜索框的那份样式只作用在弹窗里");
     const rows = () => [...env.host.querySelectorAll(LIB + " .ns-pose-item")];
     assert.deepEqual(rows().map((r) => r.textContent), ["hero本地"],
         "左栏只列本机存档：库里与 meta/list 的预设都不在这一份列表里重复一遍");

@@ -231,8 +231,9 @@
     flex: 1 1 auto;
 }
 
-/* 搜索框是栏里的固定一行：它曾是列表那份 flex: 1 1 auto 的同栏兄弟，吃了列表的 grow 规则，
-   栏里空无一物时被拉成一整块 —— 输入框自己就在列表外面，只吃一行的高度 */
+/* 搜索框是栏里的固定一行：它是列表那份 flex: 1 1 auto 的同栏兄弟，flex: 1 在这里是纵向的 grow，
+   栏里空无一物时输入框就被拉成一整块。弹窗搜索框的 flex: 1 与 min-width 是那一横行的样式，
+   收在弹窗自己那份作用域里（下面 .ns-pose-libpane 那一条），这一栏不共用它 */
 .ns-pose-list-search {
     flex: none;
     width: 100%;
@@ -443,7 +444,9 @@
     overflow: auto;
 }
 
-.ns-pose-lib-search {
+/* flex: 1 吃的是弹窗那一横行（.ns-pose-row）的剩余宽度：这条只作用在弹窗里，
+   左栏的搜索框是竖栏的直接子行，共用这条就是纵向 grow（见上面 .ns-pose-list-search） */
+.ns-pose-libpane .ns-pose-lib-search {
     flex: 1;
     min-width: 120px;
     padding: 6px 9px;

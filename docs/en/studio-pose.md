@@ -207,12 +207,26 @@ builds). `<data root>/pose/lib/` is the merged result of `pose-lib` + `pose-lab`
 `origin`: `pose-lab` holds the author's experimental poses and is never published - the script refuses a
 manifest whose entries carry `origin`, because the prop licensing gate only gates props, not the scene tree.
 Whatever extra keys are already in the cloud are cleaned by `tools\pose_prune_oss.py`: its allow-set
-reuses the upload script's file list, so every key the manifest does not name is deleted.
+reuses the upload script's file list, so every key the manifest does not name is deleted. A registry row
+that names no `preview` is matched against the repo's conventional `preview/<glb stem>.png` in the prop
+directory: a render that is really on disk travels with the prop into that same file list, so the next
+cleanup never deletes a published preview, and a prop never published with a preview row that points at a
+missing file.
+
+Cloud prop previews are filled in by `tools\pose_prop_previews.py`: for each prop it takes the official
+render from the source page its own registry row names (Poly Haven's `thumbnail_url` from
+`api.polyhaven.com/info/<slug>`, BlenderKit's largest thumbnail in the `assetUrl` record, and the shipped
+render under `studio/pose_dist/models/props/preview/` for the self-made props), writes `preview/<id>.png`
+and adds `preview` to that manifest row. It only fills rows already in the manifest, publishes nothing for
+`hidden` rows, touches the cloud with `--apply` only, and keeps the pre-change manifest in
+`<out>/index.before.json`.
 
 ```
 python tools\pose_deploy_oss.py --source "<pose repo>\pose-lib"                      # list + build the manifest only
 python tools\pose_deploy_oss.py --source "<pose repo>\pose-lib" --props stick.glb katana.glb --apply
 python tools\pose_prune_oss.py  --source "<pose repo>\pose-lib" --apply              # delete keys the manifest omits
+python tools\pose_prop_previews.py                                                   # build previews + patch manifest rows
+python tools\pose_prop_previews.py --apply                                           # upload previews and the manifest
 ```
 
 The script prints the manifest URL to put into `pose_index_url`, which connects the read side.
@@ -323,7 +337,9 @@ loads that pose - it reads `/neo_pose/scene` and sends
 `pose:open-scene` - with the Load Pose button kept for a typed-in name, the two sharing one load path. The search
 box on top of the list filters the rows by name, a page is 120 rows and the rest sit behind
 "load more (N left)". The list takes the height left in the column and the search box is the column's own row
-above it, so no control is stretched by the list's grow rule and the rows start at the top of the column.
+above it: the modal's `flex: 1` / `min-width` search-field rule is scoped to `.ns-pose-libpane`, so the left
+column carries only its own fixed-row rule and no control is stretched by the list's grow rule - the rows start
+at the top of the column.
 The right column has no preset dropdown and the panel has no "apply preset" step:
 the "Browse Pose Library…" modal is a preset's only entry. The modal's base filter follows the panel's character -
 switching bodies re-filters it, so what is visible is what the current body can wear.
@@ -366,7 +382,9 @@ resolves two ways: the registry row's `preview` is a path relative to the props 
 `/models/props/preview/<name>.png` and on the cloud as `<OSS base>/props/preview/<name>.png`; a procedural
 prop has no registry row, so it reads the repo's conventional name `preview/builtin-<id>.png`. With no image
 in either place the card says "no preview" - an `<img>` guaranteed to break is not what a missing image looks
-like. The search box filters the cards on `label / key`, the count line reads "N props · selected X", and a
+like, and a cloud row's `preview` is not generated here: `tools\pose_prop_previews.py` writes the source
+page's official render into that manifest row (see the cloud upload section above). The search box filters
+the cards on `label / key`, the count line reads "N props · selected X", and a
 selection dropped by the filter falls back to the first card of the filtered set.
 
 "Add prop" sends the selected card's key; a prop name typed by hand travels the same "name → the entry in the
@@ -593,8 +611,8 @@ tops both levels up in the data root.
   archives listed, each row badged "local", a row and the "Load Pose" button sharing one `pose:open-scene`; presets
   not listed there, the "Browse Pose Library…" modal being their only entry with the modal grouping cards by
   `groups`, and no preset dropdown in the right column; the search box filtering by name, an honest empty state,
-  a page of 120 rows with load-more, the search box being the column's own row beside the list (never stretched by
-  the list's grow rule)); the ControlNet export defaulting to the
+  a page of 120 rows with load-more, the search box being the column's own row beside the list, never stretched by
+  the list's grow rule (the modal's `flex: 1` search-field rule is scoped to `.ns-pose-libpane`)); the ControlNet export defaulting to the
   "current view"; the pose-library modal's index rendering with
   grouping, search, origin filtering and load-more, applying a library pose (the action it sends and the modal closing),
   the sync hint when the library is unsynced, the gate locking that pane, and the local pose file path;
