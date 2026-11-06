@@ -69,6 +69,12 @@ webp 缩略图与 `index.json`，`gallery_deploy_oss.py` 按 `OSS_ACCESS_KEY_ID`
   `<out>/index.before.json`。`pose_deploy_oss.py` 在注册表行没写 preview 时按约定名 `preview/<GLB 同名>.png`
   认道具目录里真在着的那张 —— 上传清单与 `pose_prune_oss.py` 的允许集吃同一份清单，发上去的图不会被
   下一轮清理摘掉，图没渲染过也不会发一条必坏的 preview 行。
+- 本机道具卡的预览图由 `pose_prop_clay.mjs` 统一渲染：页面本身当渲染器（headless Chromium 里的
+  `window.__poseDebug` + 打包好的姿势页），逐件 `addProp`、摘贴图上白膜、按包围盒套 3/4 机位、
+  隐藏素体与地面，拍 512 方图。三家来源（Poly Haven 照片 / BlenderKit 渲染 / 自制 clay）原色混排
+  是一块彩色马赛克，卡片只认「灰底白膜」这一种读法。默认出图到 `tmp/prop_clay/`，`--apply` 才写回
+  `<dist>/models/props/preview/`；不联网、不加依赖（playwright 是仓库既有 devDependency），坏 GLB
+  逐件跳过并报出来，不拖住整批。
 - `sync_pose_dist.ps1` 的 `robocopy /MIR` 只动 `dist/`：源产物里没有的文件（`pose/dist/models/` 里的额外 GLB）
   先存进临时目录、镜像完搬回，同步脚本不许成为删用户文件的那只手。场景与参考图在 `pose/` 下的
   别的目录，本来就不在镜像范围内。

@@ -2,7 +2,7 @@
 // 以及桥接结果落到的那几个 /neo_pose 接口。
 import test from "node:test";
 import assert from "node:assert/strict";
-import { resetEnv, mockRoute, clearRoutes, jsonResponse, fetchLog, click, changeValue, inputText, flush, sleep, clearBody, window } from "./setup.mjs";
+import { resetEnv, mockRoute, clearRoutes, jsonResponse, fetchLog, click, changeValue, inputText, keydown, flush, sleep, clearBody, window } from "./setup.mjs";
 import { $el } from "../../web/studio/shim/ui.js";
 
 // pose.js 现在经 lib-modal.js 拉 scripts/ui.js 的 shim：静态导入会在 setup.mjs 装好钩子之前就解完
@@ -11,8 +11,21 @@ const { createPoseView, resolvePropChoice, POSE_PAGE_URL, previewOf, libFilter, 
     await import("../../web/pose/pose.js");
 
 const api = { fetchApi: (path, opts) => fetch(path, opts) };
-const LIB = ".ns-pose-side:not(.ns-pose-panel)";
-const PANEL = ".ns-pose-panel";
+/* 控件在浮于画布的弹层里（弹层按 data-pop 认），「姿势库」与「道具」两颗钮开的是整屏那几扇弹窗
+   （.ns-pose-libpane / .ns-pose-proppane）。PANEL 写成一条选择器而不是逗号列表 —— 测试里
+   PANEL + " .ns-pose-btn" 这种后代拼接要对每一扇都生效。弹层建序是 角色 → 保存 → 导出 → 状态，
+   下拉与输入框在那份合集里的下标就是这一份顺序 */
+const LIB = '.ns-pose-libpane';
+const PROP = '.ns-pose-proppane';
+const PANEL = '[data-pop]';
+const STATE_POP = '[data-pop="state"]';
+const PROP_PAGE_KEY = "neo_studio_pose_prop_page";
+const dockBtn = (env, label) => [...env.host.querySelectorAll(".ns-pose-dock-btn")]
+    .find((b) => b.textContent.includes(label));
+const openPop = (env, label) => click(dockBtn(env, label));
+const openPops = (env) => [...env.host.querySelectorAll(".ns-pose-pop")].filter((p) => !p.hidden);
+/** 「道具」那颗钮直接开整扇道具弹窗：一页卡片 + 页码条，和姿势库同一套弹窗外壳 */
+const openProp = async (env) => { click(dockBtn(env, "道具")); await settle(); };
 
 /** 一次面板动作要跨两次 fetch 与一次桥回复：微任务与定时器各放一遍才到终点 */
 const settle = async () => { await flush(); await sleep(0); await flush(); };
@@ -175,10 +188,10 @@ function mounted(status = STATUS) {
         button: (label, scope = PANEL) => [...host.querySelectorAll(scope + " .ns-pose-btn")]
             .find((b) => b.textContent.includes(label)),
         sel: (i) => [...host.querySelectorAll(PANEL + " .ns-pose-sel")][i],
-        libField: (i) => [...host.querySelectorAll(LIB + " .ns-pose-name")][i],
         panelField: (i = 0) => [...host.querySelectorAll(PANEL + " .ns-pose-name")][i],
+        propField: (i = 0) => [...host.querySelectorAll(PROP + " .ns-pose-name")][i],
         item: (name, scope) => [...host.querySelectorAll(scope + " .ns-pose-item")].find((r) => r.textContent === name),
-        /** 姿势库那一份列表的行：行末贴了出处角标，按行里的名字那一段找 */
+        /** 姿势库弹窗里本机存档那一列的行：行末贴了出处角标，按行里的名字那一段找 */
         libRow: (label, scope = LIB) => [...host.querySelectorAll(scope + " .ns-pose-item-label")]
             .find((s) => s.textContent === label)?.closest(".ns-pose-item"),
         calls: (action) => sent.filter((s) => s.msg.type === "pose:call" && (!action || s.msg.action === action)),
@@ -207,13 +220,15 @@ function mounted(status = STATUS) {
     }).then(() => env);
 }
 
-test("缺包：不出 iframe，两侧栏收起并给出装包提示", async () => {
+test("缺包：不出 iframe，两条透明工具条整条收起并给出装包提示", async () => {
     resetEnv();
     const env = await mounted({ ...STATUS, installed: false, hint: "跑 tools\\sync_pose_dist.ps1" });
     assert.equal(env.host.querySelector(".ns-pose-frame"), null, "没有包就不能挂 iframe");
     assert.match(env.host.querySelector(".ns-pose-empty").textContent, /sync_pose_dist/);
-    assert.equal(env.host.querySelector(LIB).hidden, true, "没有包就不出姿势库");
-    assert.equal(env.host.querySelector(PANEL).hidden, true, "没有包就不出控制面板");
+    assert.equal(env.host.querySelector(".ns-pose-dock-left").hidden, true, "没有包就不出弹层入口");
+    assert.equal(env.host.querySelector(".ns-pose-dock-right").hidden, true, "没有包就不出导出与状态");
+    assert.equal(env.host.querySelectorAll(".ns-pose-pop").length, 4, "弹层外壳在位，只是全关着");
+    assert.equal(openPops(env).length, 0, "没有包就不许开出一扇只会失败的弹层");
 });
 
 test("装好包：iframe 指短路径并带沙箱，pose:ready 之前控件全禁用", async () => {
@@ -223,13 +238,17 @@ test("装好包：iframe 指短路径并带沙箱，pose:ready 之前控件全�
     assert.equal(frame.getAttribute("src"), POSE_PAGE_URL);
     assert.equal(frame.getAttribute("sandbox"), "allow-scripts allow-same-origin allow-downloads");
     assert.equal(env.host.querySelector(".ns-pose-bar"), null, "顶栏那条「3D 姿势」行整条不出");
-    // 收起钮是布局入口，不在门禁里：页面没 ready 时也要能把栏收起来看画布
-    const gated = () => [...env.host.querySelectorAll(".ns-pose-btn:not(.ns-pose-collapse), .ns-pose-sel, .ns-pose-checkrow input")];
-    assert.ok(gated().length > 15, "面板与库的控件要在位");
+    // 弹层入口都是布局，不在门禁里：页面没 ready 时也要看得见画布与清单
+    const gated = () => [...env.host.querySelectorAll(
+        ".ns-pose-pop .ns-pose-btn, .ns-pose-sel, .ns-pose-checkrow input")]
+        .filter((n) => !n.classList.contains("ns-pose-pop-close"));
+    assert.ok(gated().length >= 14, "弹层里的控件要在位");
     assert.ok(gated().every((n) => n.disabled), "页面没 ready 时控件不能点");
-    assert.ok(env.host.querySelectorAll(".ns-pose-collapse").length === 2, "两栏各一枚收起钮");
-    assert.ok([...env.host.querySelectorAll(".ns-pose-collapse")].every((b) => !b.disabled),
-        "收起钮不吃 ready 门禁");
+    assert.equal(env.host.querySelectorAll(".ns-pose-dock-btn").length, 6,
+        "六条入口：左 姿势库 / 角色与外观 / 道具，右 保存姿势 / 导出图组 / 画布状态");
+    assert.ok([...env.host.querySelectorAll(".ns-pose-dock-btn")].every((b) => !b.disabled),
+        "工具条入口是布局入口，不吃 ready 门禁");
+    assert.ok(openPops(env).length === 0, "开局一扇弹层都不开：这一页要的是画布");
     await env.ready();
     const theme = env.sent.find((s) => s.msg.type === "pose:theme");
     assert.equal(theme.msg.caps.hostUi, true, "宿主面板能力位要随主题下发");
@@ -239,75 +258,97 @@ test("装好包：iframe 指短路径并带沙箱，pose:ready 之前控件全�
 test("桥只认本页 iframe 的同源消息", async () => {
     resetEnv();
     const env = await mounted();
-    const panelBtn = () => env.host.querySelector(PANEL + " .ns-pose-btn:not(.ns-pose-collapse)");
+    // 弹层头的关钮不吃门禁，取一条真控件来验门禁
+    const panelCtl = () => env.host.querySelector(PANEL + " .ns-pose-sel");
     env.from({ type: "pose:ready" }, { postMessage() {} });   // 别的来源冒充页面
-    assert.ok(panelBtn().disabled, "来源不是这张 iframe 就不认");
+    assert.ok(panelCtl().disabled, "来源不是这张 iframe 就不认");
     env.from({ type: "pose:ready" }, env.cw, "http://evil.local");   // 来源对、origin 不对
-    assert.ok(panelBtn().disabled, "非同源的 ready 不解锁控件");
+    assert.ok(panelCtl().disabled, "非同源的 ready 不解锁控件");
 });
 
-test("旧姿势包（caps.hostUi 关）：面板禁用并说明缺什么，姿势读写照旧", async () => {
+test("旧姿势包（caps.hostUi 关）：弹层控件禁用并说明缺什么，姿势读写照旧", async () => {
     resetEnv();
     const env = await mounted({ ...STATUS, caps: { ...STATUS.caps, hostUi: false } });
     await env.ready();
-    assert.equal(env.host.querySelector(PANEL + " .ns-pose-notice").hidden, false, "旧包要出提示");
-    assert.match(env.host.querySelector(PANEL + " .ns-pose-notice").textContent, /sync_pose_dist/);
-    const panelBtns = [...env.host.querySelectorAll(PANEL + " .ns-pose-btn")]
-        .filter((b) => !b.classList.contains("ns-pose-collapse"));
-    assert.ok(panelBtns.every((b) => b.disabled), "没有命令层就不出点了只会空转的控件");
-    assert.equal(env.host.querySelector(PANEL + " .ns-pose-collapse").disabled, false,
-        "收起栏是布局偏好，不是页面动作：控件整片禁用时栏也收得回去");
+    assert.equal(env.host.querySelector(STATE_POP + " .ns-pose-notice").hidden, false, "旧包要出提示");
+    assert.match(env.host.querySelector(STATE_POP + " .ns-pose-notice").textContent, /sync_pose_dist/);
+    const disabled = (label) => env.button(label)?.disabled;
+    assert.equal(disabled("加素体"), true, "页面动作在缺命令层时整片禁用");
+    assert.equal(disabled("导出图组到素材库"), true, "没有命令层就不出点了只会空转的控件");
+    assert.equal(disabled("画布截图"), true);
+    assert.equal(disabled("存为姿势"), false,
+        "保存姿势写的是宿主那条 /neo_pose/scene：没有命令层也能存本机一份");
+    assert.ok(dockBtn(env, "姿势库") && dockBtn(env, "道具"),
+        "读本机文件的两扇弹窗不吃 hostUi：缺命令层时清单与卡片照常浏览");
+    assert.ok([...env.host.querySelectorAll(".ns-pose-dock-btn")].every((b) => !b.disabled),
+        "弹层入口是布局入口，不是页面动作：控件整片禁用时弹层也开得了、关得回去");
     assert.equal(env.calls().length, 0, "旧包不许发 pose:call");
+    await openLib(env);
+    await settle();
     click(env.libRow("hero", LIB));
-    click(env.button("载入姿势", LIB));
     await settle();
     assert.equal(env.sent.find((s) => s.msg.type === "pose:open-scene").msg.scene.camYaw, 42,
         "读写数据根文件的通道不受 hostUi 影响");
 });
 
-test("左右栏收起：栏首的收起钮收栏，栏首留在原地当展开入口", async () => {
+test("弹层：画布吃满整页，工具条的钮开一扇浮在画布上的弹层，一次只留一扇", async () => {
     resetEnv();
     const env = await mounted();
     await env.ready();
-    const body = env.host.querySelector(".ns-pose-body");
-    const lib = env.host.querySelector(LIB);
-    const panel = env.host.querySelector(PANEL);
-    const sideBtn = (scope) => env.host.querySelector(scope + " .ns-pose-collapse");
-    const paneW = (scope) => Number(sideBtn(scope).querySelector(".ns-pose-collapse-pane").getAttribute("width"));
-    const rulePath = (scope) => sideBtn(scope).querySelector("path").getAttribute("d");
-    assert.equal(lib.getAttribute("data-collapsed"), "0", "开局两栏都展开");
-    assert.equal(body.getAttribute("data-lib"), "on");
-    assert.equal(body.getAttribute("data-panel"), "on");
-    const wide = paneW(LIB);
-    assert.equal(sideBtn(LIB).querySelector("svg").getAttribute("aria-hidden"), "true", "钮面上只有图标，图标不进读屏");
-    assert.equal(sideBtn(LIB).getAttribute("aria-label"), "收起姿势库", "图标钮要有读屏念得出的话");
-    assert.equal(rulePath(LIB), "M9.5 7v10", "左栏图标：分隔线在左，填实格是姿势库那一栏");
-    assert.equal(rulePath(PANEL), "M14.5 7v10", "右栏图标镜像：分隔线在右");
-    click(sideBtn(LIB));
-    assert.equal(lib.getAttribute("data-collapsed"), "1");
-    assert.equal(body.getAttribute("data-lib"), "off", "画布要吃到姿势库让出来的那一列");
-    assert.equal(lib.querySelector(".ns-pose-side-head").hidden, false, "收起后栏首就是整栏全部，展开入口必须在");
-    assert.equal(sideBtn(LIB).title, "展开姿势库", "钮上的话要说清收的是哪一栏");
-    assert.ok(paneW(LIB) < wide, "图标里那一格缩成一条 —— 栏现在是窄的，图标要说得出来");
-    click(sideBtn(LIB));
-    assert.equal(lib.getAttribute("data-collapsed"), "0");
-    assert.equal(body.getAttribute("data-lib"), "on");
-    assert.equal(paneW(LIB), wide, "展开回来图标那一格回到满格");
-    click(sideBtn(PANEL));
-    assert.equal(panel.getAttribute("data-collapsed"), "1");
-    assert.equal(body.getAttribute("data-panel"), "off");
-    assert.equal(JSON.parse(localStorage.getItem("neo_studio_pose_sides")).panel, true,
-        "收起偏好要落盘，重开窗口停在原处");
-    clearBody();   // 切走再回来：新视图建在干净的 body 上，只剩那份偏好
-    const again = await mounted();
-    await again.ready();
-    assert.equal(again.host.querySelector(PANEL).getAttribute("data-collapsed"), "1",
-        "新视图回灌上次的收起偏好");
-    assert.equal(again.host.querySelector(LIB).getAttribute("data-collapsed"), "0",
-        "没收过的那一栏照旧展开");
-    assert.equal(again.host.querySelector(PANEL + " .ns-pose-collapse").title, "展开控制面板",
-        "回灌的栏首钮要说得清现在收的是哪一栏");
-    localStorage.removeItem("neo_studio_pose_sides");
+    assert.equal(env.host.querySelector(".ns-pose-body"), null, "没有三栏那条 grid：画布吃满整页");
+    assert.ok(openPops(env).length === 0, "开局一扇弹层都不开");
+    openPop(env, "角色与外观");
+    assert.deepEqual(openPops(env).map((p) => p.dataset.pop), ["char"], "点一条钮只开对应那一扇");
+    assert.equal(dockBtn(env, "角色与外观").getAttribute("aria-expanded"), "true", "开着的那一条要标出来");
+    openPop(env, "保存姿势");
+    assert.deepEqual(openPops(env).map((p) => p.dataset.pop), ["save"], "一次只留一扇：画布上不许叠两层控件");
+    assert.equal(dockBtn(env, "角色与外观").getAttribute("aria-expanded"), "false", "换到另一扇时前一条回到没开的样子");
+    assert.equal(dockBtn(env, "角色与外观").classList.contains("ns-pose-dock-btn-on"), false, "关掉的钮不再亮着");
+    click(env.host.querySelector('[data-pop="save"] .ns-pose-pop-close'));
+    assert.ok(openPops(env).length === 0, "弹层头那颗 ✕ 就是关：弹层不钉在画布上");
+});
+
+test("「道具」那颗钮直接开整扇道具弹窗：卡片、页码条与场上清单都在同一扇窗里", async () => {
+    resetEnv();
+    const env = await mounted();
+    await env.ready();
+    env.replyCall(env.calls("meta/list")[0], META);
+    env.replyCall(env.calls("prop/list")[0], PROPS);
+    await settle();
+    assert.ok(!env.button("道具"), "工具条上不再给「道具」留一扇小弹层");
+    await openProp(env);
+    assert.ok(env.host.querySelector(".ns-libmodal:not(.ns-hidden) " + PROP), "点一下就是弹窗开着");
+    assert.deepEqual(openPops(env).map((p) => p.dataset.pop), [], "道具不走那条小弹层：它和姿势库一样是一扇整屏窗");
+    assert.ok(env.host.querySelector(PROP + " .ns-pose-prop-card"), "一页卡片在窗里");
+    assert.ok(env.host.querySelector(PROP + " .ns-pose-prop-pager"), "页码条在卡片下方");
+    assert.ok(env.host.querySelector(PROP + " .ns-pose-prop-added .ns-pose-list"),
+        "场上道具清单在同一扇窗底部：加完就看得见落地了哪几件");
+});
+
+test("弹层的关法：Esc、点在弹层之外、再点同一条钮都关，且 Esc 让位给姿势库那扇弹窗", async () => {
+    resetEnv();
+    const env = await mounted();
+    await env.ready();
+    openPop(env, "角色与外观");
+    keydown(document.body, "Escape");
+    assert.ok(openPops(env).length === 0, "Esc 关弹层：界面不留在画布上挡视线");
+    openPop(env, "角色与外观");
+    click(env.host.querySelector(".ns-pose-stage"));
+    assert.ok(openPops(env).length === 0, "点在弹层与工具条之外就关");
+    openPop(env, "角色与外观");
+    click(env.host.querySelector(".ns-pose-dock-left"));
+    assert.equal(dockBtn(env, "角色与外观").getAttribute("aria-expanded"), "true", "点在工具条本身上不收：那条就是控件本体");
+    openPop(env, "角色与外观");
+    assert.ok(openPops(env).length === 0, "同一条钮再点一次就是关：不多给一颗「关」");
+    // 弹窗开着时那一发 Esc 归弹窗自己（它监听 document），弹层不许抢着关
+    openPop(env, "角色与外观");
+    await openLib(env);
+
+    assert.ok(env.host.querySelector(".ns-libmodal:not(.ns-hidden)"), "姿势库弹窗开着");
+    keydown(document.body, "Escape");
+    await settle();
+    assert.ok(env.host.querySelector(".ns-libmodal.ns-hidden"), "Esc 关的是姿势库弹窗");
+    assert.deepEqual(openPops(env).map((p) => p.dataset.pop), ["char"], "弹层不抢着关：那一发归弹窗");
 });
 
 test("pose:call 往返：meta/list 渲染下拉，回复只认自己那条端口", async () => {
@@ -319,7 +360,7 @@ test("pose:call 往返：meta/list 渲染下拉，回复只认自己那条端口
     env.replyCall(env.calls("prop/list")[0], PROPS);
     await settle();
     assert.equal(env.sel(0).options.length, 0, "道具的回复不许解掉 meta/list 那条请求");
-    assert.match(env.host.querySelector(PANEL + " .ns-pose-item").textContent, /椅子 · 未挂载/);
+    assert.match(env.host.querySelector(PROP + " .ns-pose-item").textContent, /椅子 · 未挂载/);
     env.replyCall(env.calls("meta/list")[0], META);
     await settle();
     assert.deepEqual([...env.sel(0).options].map((o) => o.value), ["", "bodyMale", "bodyFemale"],
@@ -329,49 +370,111 @@ test("pose:call 往返：meta/list 渲染下拉，回复只认自己那条端口
     assert.equal(env.host.querySelectorAll(PANEL + " .ns-pose-format input").length, 2, "格式勾选组来自 meta");
 });
 
-test("道具卡片：一张卡一个 propKey 与一张预览图，点卡片选中、「添加道具」发的就是那一项", async () => {
+test("道具卡片：一张卡一个 propKey 与一张预览图，点一张卡就是加一件", async () => {
     resetEnv();
     const env = await mounted();
     await env.ready();
     env.replyCall(env.calls("meta/list")[0], META);
     env.replyCall(env.calls("prop/list")[0], PROPS);
     await settle();
-    const cards = () => [...env.host.querySelectorAll(".ns-pose-prop-card")];
+    await openProp(env);
+    const cards = () => [...env.host.querySelectorAll(PROP + " .ns-pose-prop-card")];
     assert.deepEqual(cards().map((c) => c.dataset.propKey),
         ["builtin:chair", "glb:arrow.glb", "glb:sting-sword.glb"],
         "卡片顺序就是 meta/list 那份清单：卡片带的是页面的 propKey，label 只当显示名");
-    assert.ok(cards()[0].classList.contains("ns-pose-prop-on"),
-        "第一张卡片默认选中：「添加道具」将拿到哪件必须在面板上看得见");
+    assert.ok(!env.button("添加道具", PROP), "不给「添加道具」这颗按钮：点卡片本身就是添加");
     assert.equal(cards()[1].querySelector(".ns-pose-prop-thumb").getAttribute("src"),
         "/models/props/preview/arrow.png",
         "预览图走页面写死的那一级 /models/props/，注册表 preview 原样拼地址");
     assert.equal(cards()[0].querySelector(".ns-pose-prop-thumb").getAttribute("src"),
         "/models/props/preview/builtin-chair.png",
         "内置道具没有注册表行：按 preview/builtin-<id>.png 这条约定名取图");
+    assert.match(env.host.querySelector(".ns-pose-prop-meta").textContent, /3 件道具 · 第 1\/1 页/);
     click(cards()[2]);
     await settle();
-    assert.ok(cards()[2].classList.contains("ns-pose-prop-on"), "点过的卡片要标出来");
-    assert.ok(!cards()[0].classList.contains("ns-pose-prop-on"), "选中项只有一个");
-    assert.match(env.host.querySelector(".ns-pose-prop-meta").textContent, /3 件道具 · 选中 细剑/);
-    click(env.button("添加道具"));
-    await settle();
     assert.deepEqual(env.calls("prop/add")[0].msg.args, { key: "glb:sting-sword.glb" },
-        "页面 addProp 要的是带前缀的 propKey，卡片上看见的是中文 label");
+        "点一次就是一次 prop/add：页面 addProp 收的是带前缀的 propKey，卡片上看见的是中文 label");
 });
 
-test("道具面板没有挂骨点：没有「挂到骨点」按钮、没有骨点下拉，加具不发 prop/attach", async () => {
+test("道具搜索：过滤只动卡片与页码条，回车把命中那一件加进画布", async () => {
     resetEnv();
     const env = await mounted();
     await env.ready();
     env.replyCall(env.calls("meta/list")[0], META);
     env.replyCall(env.calls("prop/list")[0], PROPS);
     await settle();
-    assert.ok(!env.button("挂到骨点"), "挂骨点是姿势页物体面板的事，Neo Studio 的道具只落地");
-    assert.ok(env.host.querySelector(".ns-pose-prop-search"), "道具改的是带搜索框的卡片列表");
+    await openProp(env);
+    const cards = () => [...env.host.querySelectorAll(PROP + " .ns-pose-prop-card")];
+    assert.equal(cards().length, 3, "三件道具一页装得下，卡片一次全出");
+    inputText(env.host.querySelector(".ns-pose-prop-search"), "剑");
+    await settle();
+    assert.deepEqual(cards().map((c) => c.dataset.propKey), ["glb:sting-sword.glb"],
+        "搜索一次就只剩命中的那一张");
+    assert.match(env.host.querySelector(".ns-pose-prop-meta").textContent, /3 件道具 · 第 1\/1 页/,
+        "数量行报整张表的件数与页码：筛选只改卡片那一片");
+    keydown(env.host.querySelector(".ns-pose-prop-search"), "Enter");
+    await settle();
+    assert.deepEqual(env.calls("prop/add").map((c) => c.msg.args), [{ key: "glb:sting-sword.glb" }],
+        "搜索框回车就是添加命中那一件：挑图与键入是同一个落点");
+    // 道具名框写名字 + 回车 = 同一条一键添加（自由名字仍走清单解析）
+    inputText(env.propField(0), "桌子");
+    keydown(env.propField(0), "Enter");
+    await settle();
+    assert.equal(env.calls("prop/add").length, 1,
+        "清单里没有「桌子」：解析不到就不发请求，同点卡片那一条路");
+    assert.match(env.toasts.join(" "), /道具表里没有「桌子」/);
+});
+
+test("道具翻页：一页 120 件，页码落盘、重开停在同一页", async () => {
+    resetEnv();
+    localStorage.removeItem(PROP_PAGE_KEY);
+    // 300 件照页面注册表那种形状造：一页 120，翻到第三页剩 60
+    const many = Array.from({ length: 300 }, (_, i) => ({ propKey: `glb:p${i}.glb`, label: `道具${i}` }));
+    const meta = { ...META, props: many };
+    const env = await mounted();
+    await env.ready();
+    env.replyCall(env.calls("meta/list")[0], meta);
+    env.replyCall(env.calls("prop/list")[0], PROPS);
+    await settle();
+    await openProp(env);
+    const cards = () => [...env.host.querySelectorAll(PROP + " .ns-pose-prop-card")];
+    const pager = () => env.host.querySelector(PROP + " .ns-pose-prop-pager");
+    assert.equal(cards().length, 120, "一页 120 件：整张表在弹窗里翻，画布不被一条长清单顶开");
+    assert.equal(pager().hidden, false, "三页就要有页码条");
+    assert.equal(pager().querySelector('[aria-current="page"]').textContent, "1", "开局第一页");
+    click(pager().querySelector('[data-page="1"]'));
+    await settle();
+    assert.equal(cards()[0].dataset.propKey, "glb:p120.glb", "第二页从第 121 件起");
+    assert.equal(localStorage.getItem(PROP_PAGE_KEY), "1", "页码是布局偏好：翻到哪页就记哪页");
+    const again = await mounted();
+    await again.ready();
+    again.replyCall(again.calls("meta/list")[0], meta);
+    again.replyCall(again.calls("prop/list")[0], PROPS);
+    await settle();
+    await openProp(again);
+    assert.equal(again.host.querySelector(PROP + ' .ns-pose-prop-pager [aria-current="page"]').textContent, "2",
+        "重开停在同一页：不把用户翻到一半的清单打回第一页");
+    click(again.host.querySelector(PROP + ' .ns-pose-prop-pager [data-page="2"]'));
+    await settle();
+    const tail = [...again.host.querySelectorAll(PROP + " .ns-pose-prop-card")];
+    assert.equal(tail.length, 60, "最后一页只剩那 60 件，不拿空卡片补位");
+    assert.equal(again.host.querySelector(PROP + " .ns-pose-prop-pager .ns-pose-prop-jump:last-child").disabled, true,
+        "末页的「下一页」按不动：按钮自己说清到头了");
+});
+
+test("道具弹窗没有挂骨点：没有「挂到骨点」按钮、没有骨点下拉，加具不发 prop/attach", async () => {
+    resetEnv();
+    const env = await mounted();
+    await env.ready();
+    env.replyCall(env.calls("meta/list")[0], META);
+    env.replyCall(env.calls("prop/list")[0], PROPS);
+    await settle();
+    await openProp(env);
+    assert.ok(!env.button("挂到骨点", PROP), "挂骨点是姿势页物体面板的事，Neo Studio 的道具只落地");
+    assert.ok(env.host.querySelector(PROP + " .ns-pose-prop-search"), "道具弹窗改的是带搜索框的卡片列表");
     const panelSelects = [...env.host.querySelectorAll(PANEL + " select")].map((s) => s.title);
     assert.ok(!panelSelects.includes("挂点骨"), "面板不再有骨点下拉：" + panelSelects.join("/"));
-    click([...env.host.querySelectorAll(".ns-pose-prop-card")][0]);
-    click(env.button("添加道具"));
+    click([...env.host.querySelectorAll(PROP + " .ns-pose-prop-card")][0]);
     await settle();
     assert.equal(env.calls("prop/attach").length, 0, "加具这条路上没有挂骨那一步");
     assert.deepEqual(env.calls("prop/add")[0].msg.args, { key: "builtin:chair" });
@@ -384,20 +487,20 @@ test("道具添加：自由填写的道具名解析成 propKey，清单里没有
     env.replyCall(env.calls("meta/list")[0], META);
     env.replyCall(env.calls("prop/list")[0], PROPS);
     await settle();
-    inputText(env.panelField(0), "椅子");
-    click(env.button("添加道具"));
-    await settle();
+    await openProp(env);
+    const addByName = async (name) => {
+        inputText(env.propField(0), name);
+        keydown(env.propField(0), "Enter");
+        await settle();
+    };
+    await addByName("椅子");
     assert.deepEqual(env.calls("prop/add")[0].msg.args, { key: "builtin:chair" },
         "面板上看见中文 label，页面 addProp 要的是带前缀的 propKey");
-    assert.equal(env.panelField(0).value, "", "名字框是一次性的：写完就清，下一发不覆盖上一发");
-    inputText(env.panelField(0), "细剑");
-    click(env.button("添加道具"));
-    await settle();
+    assert.equal(env.propField(0).value, "", "名字框是一次性的：写完就清，下一发不覆盖上一发");
+    await addByName("细剑");
     assert.deepEqual(env.calls("prop/add")[1].msg.args, { key: "glb:sting-sword.glb" },
         "label 的全角括号后缀（细剑（Sting））按括号前的名字认");
-    inputText(env.panelField(0), "沙发");
-    click(env.button("添加道具"));
-    await settle();
+    await addByName("沙发");
     assert.equal(env.calls("prop/add").length, 2, "道具表里没有的定义不许发请求");
     assert.match(env.toasts.join("|"), /道具表里没有「沙发」/);
 });
@@ -452,79 +555,76 @@ test("外观默认暗色：旧姿势包没有暗色档时不发只会失败的�
     assert.equal(env.calls("look/set").length, 0, "清单里没有的档位不发");
 });
 
-test("姿势库左栏只列本机姿势存档：预设不在这一份列表里，点存档与「载入姿势」共用同一次 pose:open-scene", async () => {
+/* 工具条上「姿势库」那颗钮直接开整屏那扇姿势库弹窗（外壳是 js/core/lib-modal.js），
+   弹窗里上半是库的卡片网格、下半是本机存档那一列 */
+const openLib = async (env) => { click(dockBtn(env, "姿势库")); await settle(); };
+
+test("「姿势库」那颗钮直接开弹窗：本机存档在弹窗下半，预设卡片在上半，点存档就是一次 pose:open-scene", async () => {
     resetEnv();
     const env = await mounted();
     await env.ready();
-    assert.ok(!env.button("存为姿态", LIB) && !env.button("载入姿态", LIB) && !env.button("删姿态", LIB),
-        "左栏不再写 pose/presets 那批姿态文件，控件就不出");
-    assert.ok(!env.button("浏览场景库…", LIB) && !env.button("浏览场景…", LIB), "浏览只有一颗钮");
-    assert.ok(env.button("浏览姿势库…", LIB), "一颗钮开姿势库弹窗");
-    const libPanel = env.host.querySelector(LIB);
-    assert.ok(libPanel.querySelector(".ns-pose-pose-list"), "左栏那一列本机存档");
-    assert.equal(env.host.querySelectorAll(LIB + " .ns-pose-head").length, 0, "左栏没有预设 / 本机那两条分组头");
-    const search = libPanel.querySelector(".ns-pose-list-search");
-    const list = libPanel.querySelector(".ns-pose-pose-list");
-    assert.equal(search.parentNode, libPanel, "搜索框是栏里的一行，不嵌进列表里");
+    assert.ok(!env.button("载入姿势"), "载入姿势那颗钮没了：弹窗里点一行就是装载");
+    assert.ok(!env.button("浏览姿势库…"), "工具条上不再嵌一颗「浏览姿势库…」，姿势库就是工具条本身");
+    assert.ok(!env.button("存为姿态") && !env.button("载入姿态") && !env.button("删姿态"),
+        "弹窗不写 pose/presets 那批姿态文件，控件就不出");
+    await openLib(env);
+    assert.ok(env.host.querySelector(".ns-libmodal:not(.ns-hidden)"), "点一下就是弹窗开着");
+    const pane = env.host.querySelector(LIB);
+    const localBox = pane.querySelector(".ns-pose-lib-local");
+    assert.ok(localBox, "弹窗下半那一列本机存档");
+    assert.ok(localBox.querySelector(".ns-pose-pose-list"), "本机存档那一列");
+    const search = localBox.querySelector(".ns-pose-list-search");
+    const list = localBox.querySelector(".ns-pose-pose-list");
+    assert.equal(search.parentNode, localBox, "搜索框是这一列的一行，不嵌进列表里");
     assert.equal(search.parentNode, list.parentNode,
-        "列表在栏里吃剩下的高度：搜索框与它同栏兄弟，嵌进列表会跟着列表一起被拉高");
+        "列表在这一列里吃剩下的高度：搜索框与它同列兄弟，嵌进列表会跟着列表一起被拉高");
     assert.ok(!search.classList.contains("ns-pose-lib-search"),
-        "左栏不共用弹窗搜索框那条 flex: 1：那一条是弹窗横行的样式，在竖栏里就是把输入框拉成整块");
-    assert.ok(env.host.querySelector(".ns-pose-libpane .ns-pose-lib-search"),
-        "弹窗搜索框的那份样式只作用在弹窗里");
-    const rows = () => [...env.host.querySelectorAll(LIB + " .ns-pose-item")];
+        "这一列不共用弹窗搜索框那条 flex: 1：那一条是弹窗顶部横行的样式，在竖着排的列里就是把输入框拉成整块");
+    assert.ok(pane.querySelector(".ns-pose-lib-search"), "弹窗上半的搜索框在弹窗自己的那一横行里");
+    const rows = () => [...localBox.querySelectorAll(".ns-pose-item")];
     assert.deepEqual(rows().map((r) => r.textContent), ["hero本地"],
-        "左栏只列本机存档：库里与 meta/list 的预设都不在这一份列表里重复一遍");
+        "下半只列本机存档：预设不在这一份列表里重复一遍");
 
     click(env.libRow("hero", LIB));
     await settle();
-    let opened = env.sent.filter((s) => s.msg.type === "pose:open-scene");
+    const opened = env.sent.filter((s) => s.msg.type === "pose:open-scene");
     assert.equal(opened.length, 1, "点一条存档 = 一次装载，不另发第二条消息");
     assert.equal(opened[0].msg.scene.camYaw, 42, "读回来的那份场景原样交回页面，宿主不改一个字段");
-
-    /* 输入框里的名字是另一条路：手写的名字也装得进，走的还是同一条装载路 */
-    inputText(env.libField(0), "hero");
-    click(env.button("载入姿势", LIB));
-    await settle();
-    opened = env.sent.filter((s) => s.msg.type === "pose:open-scene");
-    assert.equal(opened.length, 2, "载入姿势复用同一条装载路，不另写一份逻辑");
-    assert.match(env.toasts.join("|"), /已载入姿势：hero/);
 });
 
-test("预设只从「浏览姿势库…」弹窗那一条路进：弹窗出分组卡片，左栏不排预设清单", async () => {
+test("预设只从弹窗上半那一条路进：卡片按 groups 分层，下半不排预设清单", async () => {
     resetEnv();
     const env = await mounted();
     await env.ready();
     env.replyCall(env.calls("meta/list")[0], META);
     env.replyCall(env.calls("prop/list")[0], PROPS);
     await settle();
-    assert.ok(!env.button("套用预设", PANEL), "面板不出「套用预设」这颗按钮");
+    assert.ok(!env.button("套用预设", PANEL), "弹层不出「套用预设」这颗按钮");
     assert.ok(![...env.host.querySelectorAll(PANEL + " .ns-pose-sel")]
-        .some((s) => [...s.options].some((o) => o.value === "run")), "右栏不摆预设下拉");
-    const rows = () => [...env.host.querySelectorAll(LIB + " .ns-pose-item")];
+        .some((s) => [...s.options].some((o) => o.value === "run")), "弹层不摆预设下拉");
+    await openLib(env);
+    const rows = () => [...env.host.querySelectorAll(LIB + " .ns-pose-lib-local .ns-pose-item")];
     assert.equal(rows().some((r) => r.textContent.includes("预设")), false,
-        "meta/list 回报的预设不进左栏那份列表 —— 姿势库里有的东西不在这里再排一遍");
+        "meta/list 回报的预设不进下半那份列表 —— 姿势库里有的东西不在这里再排一遍");
     assert.equal(rows().filter((r) => !r.querySelector(".ns-pose-row-origin")).length, 0,
-        "左栏的行只带「本地」角标，没有「预设」行");
-    click(env.button("浏览姿势库…", LIB));
-    await settle();
-    assert.ok(env.host.querySelector(".ns-libmodal:not(.ns-hidden)"), "弹窗开着");
+        "下半的行只带「本地」角标，没有「预设」行");
     assert.deepEqual([...env.host.querySelectorAll(".ns-pose-lib-group-title")].map((h) => h.textContent),
         ["站立（2）", "格斗与武器（1）"],
-        "预设按 index.json 的 groups 在弹窗里分层；基座筛选停在标准男，挂少女基座的那条不在这屏");
+        "预设按 index.json 的 groups 在弹窗上半分层；基座筛选停在标准男，挂少女基座的那条不在这屏");
     assert.equal(env.host.querySelectorAll(".ns-pose-lib-card").length, 3, "弹窗里只渲染套得上当前基座的三条卡片");
 });
 
-/** 左栏搜索框（只吃本机存档的名字，placeholder 在 i18n 里是独立那条） */
+/** 弹窗下半那一列本机存档的搜索框（只吃本机存档的名字，placeholder 在 i18n 里是独立那条） */
 const libPanelSearch = (env) => env.host.querySelector(LIB + " .ns-pose-list-search");
 
-test("左栏搜索按名字过滤本机存档：命中就剩那几行，搜不到说清，不给一个空列表", async () => {
+test("本机存档那一列按名字过滤：命中就剩那几行，搜不到说清，不给一个空列表", async () => {
     resetEnv();
     const env = await mounted({ ...STATUS,
         scenes: [{ name: "甲姿势", size: 1, mtime: 1 }, { name: "乙姿势", size: 1, mtime: 2 },
                  { name: "standing 10", size: 1, mtime: 3 }] });
     await env.ready();
-    const rows = () => [...env.host.querySelectorAll(LIB + " .ns-pose-item-label")].map((s) => s.textContent);
+    await openLib(env);
+    const rows = () => [...env.host.querySelectorAll(LIB + " .ns-pose-lib-local .ns-pose-item-label")].map((s) => s.textContent);
     inputText(libPanelSearch(env), "姿势");
     assert.deepEqual(rows(), ["乙姿势", "甲姿势"], "按名字过滤，命中的那两行留下");
     inputText(libPanelSearch(env), "standing");
@@ -533,11 +633,12 @@ test("左栏搜索按名字过滤本机存档：命中就剩那几行，搜不�
     assert.deepEqual(rows(), ["没有匹配的姿势"], "搜不到时列表里就一句实话，不空着");
 });
 
-test("左栏那一列分页：一屏 120 行，「加载更多」把剩下的补齐", async () => {
+test("本机存档那一列分页：一屏 120 行，「加载更多」把剩下的补齐", async () => {
     resetEnv();
     const many = Array.from({ length: 300 }, (_, i) => ({ name: `姿势 ${i}`, size: 1, mtime: i + 1 }));
     const env = await mounted({ ...STATUS, scenes: many });
     await env.ready();
+    await openLib(env);
     const list = env.host.querySelector(LIB + " .ns-pose-pose-list");
     const more = env.host.querySelector(".ns-pose-list-more");
     assert.equal(list.querySelectorAll(".ns-pose-item").length, 120, "一屏只渲染 120 行（300 条存档全塞进 DOM 撑不住）");
@@ -558,11 +659,12 @@ test("ControlNet 图组：视角默认当前视角，页面交回 files，宿主
     env.replyCall(env.calls("meta/list")[0], META);
     env.replyCall(env.calls("prop/list")[0], { items: [], options: [], bones: [] });
     await settle();
+    openPop(env, "导出图组");
     assert.equal(env.sel(2).value, "current",
         "视角默认落在当前视角：面板不动用户调好的机位就能出图（页面 view=current 沿用现场相机）");
     changeValue(env.sel(2), "side");
     changeValue(env.sel(3), "512");
-    inputText(env.panelField(1), "hero");   // 面板输入框依次是道具名、导出标签
+    inputText(env.panelField(1), "hero");   // 弹层里的输入框依次是 姿势名（保存）、导出标签（导出）
     click(env.button("导出图组到素材库"));
     await settle();
     const call = env.calls("export/images")[0];
@@ -586,6 +688,7 @@ test("画布截图：snapshot 动作交回 data，写 /neo_pose/export_image 后
     resetEnv();
     const env = await mounted();
     await env.ready();
+    openPop(env, "导出图组");
     click(env.button("画布截图"));
     await settle();
     env.replyCall(env.calls("snapshot")[0], { data: "data:image/png;base64,AAE=" });
@@ -595,18 +698,19 @@ test("画布截图：snapshot 动作交回 data，写 /neo_pose/export_image 后
     assert.match(env.toasts.join("|"), /pose_shot_1\.png/, "提示报的是落进素材库的那个文件名");
 });
 
-test("保存姿势：页面回序列化结果，宿主按左栏写的名字写盘并清名字", async () => {
+test("保存姿势：页面回序列化结果，宿主按弹层里写的名字写盘并清名字", async () => {
     resetEnv();
     const env = await mounted();
     await env.ready();
-    inputText(env.libField(0), "hero scene");
-    click(env.button("存为姿势", LIB));
+    openPop(env, "保存姿势");
+    inputText(env.panelField(0), "hero scene");
+    click(env.button("存为姿势"));
     await settle();
     env.reply("pose:save-scene", { scene: { camYaw: 42 } });
     await settle();
     const post = fetchLog.find((c) => c.method === "POST" && c.path === "/neo_pose/scene");
     assert.deepEqual(post.body, { name: "hero scene", scene: { camYaw: 42 } });
-    assert.equal(env.libField(0).value, "", "名字是一次性的：写完就清，下一发不覆盖上一发");
+    assert.equal(env.panelField(0).value, "", "名字是一次性的：写完就清，下一发不覆盖上一发");
 });
 
 test("页面拒绝动作：原因进 toast，控件按能力位解锁", async () => {
@@ -652,8 +756,8 @@ test("旧姿势包的默认素体：随包 CC0 清单到位后下拉落在 bodyM
     await settle();
     assert.deepEqual(env.calls("member/add")[0].msg.args, { key: "bodyMale" },
         "「加素体」拿到的就是下拉上看得见的那具身");
-    click(env.button("浏览姿势库…", LIB));
-    await settle();
+    await openLib(env);
+
     assert.equal(env.host.querySelector(".ns-pose-lib-char").value, "bodyMale",
         "基座筛选跟着当前素体走：库不会停在套不上的那一档");
     env.from({ type: "pose:state", state: { ...STATE, model: "bodyFemale" } });
@@ -693,8 +797,8 @@ test("姿势库弹窗：卡片按预览优先级出缩略图与人数，点卡�
     resetEnv();
     const env = await mounted();
     await env.ready();
-    click(env.button("浏览姿势库…", LIB));
-    await settle();
+    await openLib(env);
+
     const modal = () => env.host.querySelector(".ns-libmodal:not(.ns-hidden)");
     assert.ok(modal(), "弹窗要开着");
     assert.ok(fetchLog.some((c) => c.path === "/pose-lib/index.json"), "打开弹窗读一次索引清单");
@@ -729,8 +833,8 @@ test("姿势库弹窗：页面报整场没套上时说清原因，不收窗也�
     resetEnv();
     const env = await mounted();
     await env.ready();
-    click(env.button("浏览姿势库…", LIB));
-    await settle();
+    await openLib(env);
+
     changeValue(env.host.querySelector(".ns-pose-lib-char"), "");   // 基座筛选默认停在当前素体，卡片要在「全部基座」那一档才全出来
     const card = [...env.host.querySelectorAll(".ns-pose-lib-card")].find((c) => c.dataset.libId === "calm-1");
     click(card);
@@ -747,8 +851,8 @@ test("姿势库弹窗：搜索与分组下拉同一条过滤口径，卡片区�
     resetEnv();
     const env = await mounted();
     await env.ready();
-    click(env.button("浏览姿势库…", LIB));
-    await settle();
+    await openLib(env);
+
     const modal = () => env.host.querySelector(".ns-libmodal:not(.ns-hidden)");
     const titles = () => [...modal().querySelectorAll(".ns-pose-lib-group-title")].map((h) => h.textContent);
     changeValue(modal().querySelector(".ns-pose-lib-char"), "");   // 基座筛选默认停在当前素体，搜索与分组要在「全部基座」那一档看
@@ -772,8 +876,8 @@ test("姿势库未同步：出同步指引，不给一个空浏览器", async ()
     resetEnv();
     const env = await mounted({ ...STATUS, lib: null });
     await env.ready();
-    click(env.button("浏览姿势库…", LIB));
-    await settle();
+    await openLib(env);
+
     const blank = env.host.querySelector(".ns-pose-lib-blank");
     assert.equal(blank.hidden, false);
     assert.match(blank.textContent, /sync_pose_lib/);
@@ -785,8 +889,8 @@ test("本机姿势文件：读成场景装进页面并收窗，坏 JSON 挡在�
     resetEnv();
     const env = await mounted({ ...STATUS, lib: null });   // 库没同步也要能从本机挑一份
     await env.ready();
-    click(env.button("浏览姿势库…", LIB));
-    await settle();
+    await openLib(env);
+
     const input = [...env.host.querySelectorAll(".ns-pose-file")].find((i) => i.accept === ".json");
     assert.ok(input, "弹窗里的本机姿势文件选择器要在界面上（CSS 里藏着，借浏览器那套选择框）");
     const pick = (text) => {
@@ -817,8 +921,8 @@ test("姿势库来源筛选：预设 / 本地角标与来源下拉同一条 orig
     resetEnv();
     const env = await mounted();
     await env.ready();
-    click(env.button("浏览姿势库…", LIB));
-    await settle();
+    await openLib(env);
+
     const modal = () => env.host.querySelector(".ns-libmodal:not(.ns-hidden)");
     const cards = () => [...modal().querySelectorAll(".ns-pose-lib-card")];
     const originOf = (card) => card.querySelector(".ns-pose-lib-origin-badge").textContent;
@@ -846,8 +950,8 @@ test("姿势库基座筛选：默认落在标准男基座上，条目按 charKey
     await env.ready();
     env.replyCall(env.calls("meta/list")[0], META);
     await settle();
-    click(env.button("浏览姿势库…", LIB));
-    await settle();
+    await openLib(env);
+
     const modal = () => env.host.querySelector(".ns-libmodal:not(.ns-hidden)");
     const cards = () => [...modal().querySelectorAll(".ns-pose-lib-card")];
     const charSel = modal().querySelector(".ns-pose-lib-char");
@@ -891,8 +995,8 @@ test("云端未配置：来源开关只有本机库那一条，道具下拉里�
     assert.deepEqual([...env.host.querySelectorAll(".ns-pose-prop-card")].map((c) => c.dataset.propKey),
         ["builtin:chair", "glb:arrow.glb", "glb:sting-sword.glb"],
         "没配云端的机器上不许出现一条选了只会失败的道具卡片");
-    click(env.button("浏览姿势库…", LIB));
-    await settle();
+    await openLib(env);
+
     const source = env.host.querySelector(".ns-libmodal:not(.ns-hidden) .ns-pose-lib-source");
     assert.deepEqual([...source.options].map((o) => o.value), ["local"], "只有一台机器就不给开关");
     assert.equal(fetchLog.filter((c) => c.path === "/neo_pose/cloud_index").length, 0,
@@ -903,8 +1007,8 @@ test("云端库：切到云端读一次清单，卡片带云端角标与直连�
     resetEnv();
     const env = await mounted({ ...STATUS, cloud_status: CLOUD_ON });
     await env.ready();
-    click(env.button("浏览姿势库…", LIB));
-    await settle();
+    await openLib(env);
+
     const modal = () => env.host.querySelector(".ns-libmodal:not(.ns-hidden)");
     const source = () => modal().querySelector(".ns-pose-lib-source");
     assert.deepEqual([...source().options].map((o) => o.value), ["local", "cloud"], "配好云端才出第二条来源");
@@ -946,12 +1050,12 @@ test("云端道具：卡片接在本机那批后面带「云端」角标与直�
         "https://oss.example/neo/pose/props/preview/stick-cloud.png",
         "预览图与姿势库封面同一口径：直连 OSS，不占后端一条代读");
     click(cloud);
-    click(env.button("添加道具"));
     await settle();
     assert.ok(fetchLog.some((c) => c.path === "/neo_pose/cloud_file"
         && c.query.get("path") === "models/props/stick-cloud.glb"),
         "云端道具先经后端落进本机缓存，页面才认自己那条写死的 /models/props/ 路径");
-    assert.deepEqual(env.calls("prop/add")[0].msg.args, { key: "glb:stick-cloud.glb" });
+    assert.deepEqual(env.calls("prop/add")[0].msg.args, { key: "glb:stick-cloud.glb" },
+        "点云端卡片一步到位：落缓存与 prop/add 同一次点击里做完");
 });
 
 test("云端清单读不到：切过去给云端指引，不渲染一个空浏览器", async () => {
@@ -959,8 +1063,8 @@ test("云端清单读不到：切过去给云端指引，不渲染一个空浏�
     const env = await mounted({ ...STATUS, cloud_status: { ...CLOUD_ON, available: false, scenes: 0, props: 0 },
         cloud_index: { success: false, error: "云端索引取不到：404 no such key" } });
     await env.ready();
-    click(env.button("浏览姿势库…", LIB));
-    await settle();
+    await openLib(env);
+
     const modal = () => env.host.querySelector(".ns-libmodal:not(.ns-hidden)");
     changeValue(modal().querySelector(".ns-pose-lib-source"), "cloud");
     await settle();

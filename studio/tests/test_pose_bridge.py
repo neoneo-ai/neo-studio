@@ -185,6 +185,25 @@ class DistAssetTests(_PoseCase):
         self.assertEqual(resp.status, 200)
         self.assertEqual(resp.headers["Content-Type"], "text/html")
 
+    def test_entry_page_carries_the_host_canvas_css(self):
+        """姿势包自己那几只原生「选择文件」在宿主里收起：产物 CSS 里没有它们的规则，样式只能随入口页发，
+        入口页不长缓存，构建与哈希缓存都不影响这一发。"""
+        self.write(pose.INDEX_HTML, '<!doctype html><html><head></head>'
+                                     '<body class="pose-unit"></body></html>')
+        resp = _run(pose.pose_static, _request(match_info={"path": "index.html"}))
+        self.assertIn('input[type="file"]', resp.text,
+                      "不收整类原生选文件器，动画/画面板那几只会露在画布左下角")
+        self.assertIn("data-host-ui", resp.text, "规则只认宿主标记，单机版逐字不变")
+        self.assertIn('class="pose-unit"', resp.text, "包自己的入口页内容不许被动")
+        self.assertEqual(resp.headers["Cache-Control"], "no-cache")
+        self.assertEqual(resp.headers["Content-Type"], "text/html")
+
+    def test_hashed_asset_keeps_the_immutable_cache(self):
+        """注入只动入口页：带哈希的产物照旧长缓存，样式改动不许把 wasm 挤出缓存。"""
+        self.write(pose.DIST_DIR / "assets" / "index-abc.css", "body{margin:0}")
+        resp = _run(pose.pose_static, _request(match_info={"path": "assets/index-abc.css"}))
+        self.assertIn("immutable", resp.headers["Cache-Control"])
+
     def test_missing_asset_is_404(self):
         resp = _run(pose.pose_static, _request(match_info={"path": "assets/nope.js"}))
         self.assertEqual(resp.status, 404)

@@ -1,7 +1,8 @@
-/* pose.css — 桌面端「3D 姿势」页：姿势库 / iframe 舞台 / 控制面板 + 缺包提示。
+/* pose.css — 桌面端「3D 姿势」页：吃满整页的 iframe 舞台 + 画布上的透明工具条与弹层 + 缺包提示。
    颜色一律取 studio/style.css 的 --ns-* 变量，页面自身不引入第二套色板。 */
 
 .ns-pose {
+    position: relative;   /* 工具条与弹层浮在画布上，靠这一条定位 */
     display: flex;
     flex-direction: column;
     height: 100%;
@@ -78,42 +79,63 @@
 
 .ns-pose-empty p { margin: 0; max-width: 560px; line-height: 1.7; }
 
-/* 三栏主体：左姿势库 / 中画布 / 右控制面板。窄窗口下侧栏各自滚，画布吃掉剩余宽度。
-   两侧栏都能收成一条竖栏（栏首的收起钮），收起的那一列让位给画布，见下面 data-lib / data-panel 那三条 */
-.ns-pose-body {
-    flex: 1;
-    min-height: 0;
-    display: grid;
-    grid-template-columns: 232px minmax(0, 1fr) 296px;
+/* 画布吃满整页：这一页没有固定侧栏，控件都从下面的透明工具条里点开 */
+/* 透明工具条：画布吃满整页，控件从这两条钮上点开弹层。底色是面板色掺透明再模糊，
+   网格与素体从底下透出来；弹层一关，画布上就只剩这两条 */
+.ns-pose-dock {
+    position: absolute;
+    top: 8px;
+    z-index: 3;
+    display: flex;
+    gap: 6px;
+    padding: 4px;
+    border: 1px solid rgb(255 255 255 / 10%);
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--ns-panel) 55%, transparent);
+    backdrop-filter: blur(8px);
 }
 
-.ns-pose-side {
+.ns-pose-dock-left { left: 8px; }
+.ns-pose-dock-right { right: 8px; }
+.ns-pose-dock[hidden] { display: none; }   /* 缺包与后端未就绪时整条不出：那时每个控件都只会失败 */
+
+.ns-pose-dock-btn { background: transparent; border-color: transparent; }
+.ns-pose-dock-btn:hover { background: rgb(255 255 255 / 10%); border-color: var(--ns-accent); }
+.ns-pose-dock-btn-on { background: var(--ns-primary-soft); border-color: var(--ns-primary); }
+
+/* 弹层：浮在画布上的一扇面板，一次只留一扇，Esc / 点弹层外 / 再点同一条钮都关。
+   左侧两扇（角色与外观、道具）贴在左上工具条下面，右侧三扇（保存姿势、导出图组、画布状态）
+   贴在右上工具条下面，弹层里自己滚。「姿势库」那条钮不开弹层，直接开整屏那扇姿势库弹窗 */
+.ns-pose-pop {
+    position: absolute;
+    top: 52px;
+    z-index: 4;
     display: flex;
     flex-direction: column;
     gap: 8px;
-    min-height: 0;
-    overflow-y: auto;
+    width: min(340px, calc(100% - 16px));
+    max-height: calc(100% - 62px);
+    overflow: auto;
     padding: 10px;
-    border-right: 1px solid var(--ns-border);
-    background: var(--ns-panel);
+    border: 1px solid rgb(255 255 255 / 12%);
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--ns-panel) 84%, transparent);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 10px 30px rgb(0 0 0 / 45%);
 }
 
-.ns-pose-panel {
-    border-right: 0;
-    border-left: 1px solid var(--ns-border);
-}
+.ns-pose-pop-left { left: 8px; }
+.ns-pose-pop-right { right: 8px; }
+.ns-pose-pop[hidden] { display: none; }
 
-.ns-pose-stage { min-width: 0; }
-
-/* 栏首：栏名与收起钮同一行。收起后这一行就是整栏全部 —— 栏宽收到一条竖栏，栏名竖排 */
-.ns-pose-side-head {
+.ns-pose-pop-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 6px;
 }
 
-.ns-pose-side-head-label {
+.ns-pose-pop-title {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -124,8 +146,7 @@
     color: var(--ns-dim);
 }
 
-/* 收起钮是纯图标钮：图标是 sideIcon 画的那只两栏框，本栏那一格填实、收起后缩成一条 */
-.ns-pose-collapse {
+.ns-pose-pop-close {
     flex: none;
     display: grid;
     place-items: center;
@@ -133,24 +154,6 @@
     height: 26px;
     padding: 0;
 }
-
-.ns-pose-side[data-collapsed="1"] {
-    padding: 8px 5px;
-    gap: 8px;
-    overflow: hidden;
-}
-.ns-pose-side[data-collapsed="1"] > :not(.ns-pose-side-head) { display: none; }
-.ns-pose-side[data-collapsed="1"] .ns-pose-side-head {
-    writing-mode: vertical-rl;
-    flex-direction: row-reverse;   /* 竖栏里收起钮在上，栏名竖排接在下面 */
-    justify-content: flex-start;
-}
-.ns-pose-side[data-collapsed="1"] .ns-pose-collapse { width: 24px; height: 24px; }
-
-/* 收起的栏把栏宽让给画布（导演页收起生成面板同一口径）；两侧都收起时中间吃满 */
-.ns-pose-body[data-lib="off"] { grid-template-columns: 34px minmax(0, 1fr) 296px; }
-.ns-pose-body[data-panel="off"] { grid-template-columns: 232px minmax(0, 1fr) 34px; }
-.ns-pose-body[data-lib="off"][data-panel="off"] { grid-template-columns: 34px minmax(0, 1fr) 34px; }
 
 .ns-pose-head {
     margin-top: 4px;
@@ -224,16 +227,18 @@
     color: #0b1220;
 }
 
-/* 左栏那一列整栏滚：本机存档攒多了吃不下，不给栏里嵌第二层滚动。
-   这一列吃栏里剩下的高度 —— 栏里别再有第二样控件跟着 grow，搜索框与「加载更多」都是栏的直接子行 */
+/* 姿势库弹窗里那一列本机存档整块滚：本机存档攒多了吃不下，不在弹窗里嵌第二层滚动。
+   这一列吃弹窗里剩下的高度 —— 这一列里别再有第二样控件跟着 grow，搜索框与「加载更多」都是它的直接子行 */
 .ns-pose-pose-list {
     max-height: none;
     flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
 }
 
-/* 搜索框是栏里的固定一行：它是列表那份 flex: 1 1 auto 的同栏兄弟，flex: 1 在这里是纵向的 grow，
-   栏里空无一物时输入框就被拉成一整块。弹窗搜索框的 flex: 1 与 min-width 是那一横行的样式，
-   收在弹窗自己那份作用域里（下面 .ns-pose-libpane 那一条），这一栏不共用它 */
+/* 搜索框是这一列的固定一行：它是列表那份 flex: 1 1 auto 的同层兄弟，flex: 1 在这里是纵向的 grow，
+   列表空无一物时输入框就被拉成一整块。弹窗搜索框的 flex: 1 与 min-width 是弹窗顶部那一横行的样式，
+   收在弹窗自己那份作用域里（下面 .ns-pose-libpane 那一条），这一层不共用它 */
 .ns-pose-list-search {
     flex: none;
     width: 100%;
@@ -270,10 +275,25 @@
     color: var(--ns-dim);
 }
 
-/* 道具卡片：一张预览图 + 名字，本机与云端同一套渲染（地址口径在 pose.js 的 propPreviewUrl）。
-   一格只放得下三张：图上认得出长棍与手枪，就不用猜下拉里那行字是哪件道具 */
+/* 道具弹窗（外壳是 js/core/lib-modal.js）：工具行、数量行、一页卡片、页码条、动作行、场上道具清单。
+   一页 PROP_PAGE_SIZE 件，卡片网格自己滚，页码条与动作行钉在网格下方不跟着滚 */
+.ns-pose-proppane {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: grid;
+    grid-template-rows: auto auto minmax(0, 1fr) auto auto auto;
+    gap: 8px;
+    padding: 10px;
+    overflow: hidden;
+}
+
+.ns-pose-prop-tools {
+    display: flex;
+    gap: 8px;
+}
+
 .ns-pose-prop-search {
-    flex: 1 1 120px;
+    flex: 2 1 180px;
     min-width: 0;
     padding: 6px 8px;
     border: 1px solid var(--ns-border);
@@ -284,11 +304,19 @@
     font-size: 13px;
 }
 
+.ns-pose-prop-tools .ns-pose-name {
+    flex: 1 1 140px;
+    min-width: 0;
+}
+
+/* 一格只放得下三张：图上认得出长棍与手枪，就不用猜下拉里那行字是哪件道具 */
 .ns-pose-prop-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
-    gap: 6px;
-    max-height: 306px;
+    grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+    grid-auto-rows: minmax(96px, auto);
+    align-content: start;
+    gap: 8px;
+    min-height: 0;
     overflow-y: auto;
 }
 
@@ -309,24 +337,28 @@
 
 .ns-pose-prop-card:hover { border-color: var(--ns-accent); }
 
-.ns-pose-prop-on { border-color: var(--ns-accent); background: var(--ns-field); }
+.ns-pose-prop-card:disabled { opacity: .45; cursor: default; }
 
 .ns-pose-prop-pic {
     display: flex;
+    flex: 1 1 auto;
     align-items: center;
     justify-content: center;
-    height: 64px;
+    min-height: 64px;
     border-radius: 6px;
     background: #000;
     overflow: hidden;
 }
 
-/* contain 不是 cover：道具是细长件（长棍 1.6m、手枪 0.28m），裁成方图就只剩一截 */
+/* contain 不是 cover：道具是细长件（长棍 1.6m、手枪 0.28m），裁成方图就只剩一截。
+   预览图由 tools\pose_prop_clay.mjs 统一渲成灰底白膜；这条滤镜留给还没重渲的那批（云端旧的来源图），
+   原色混进一页就是一块彩色马赛克，去掉颜色至少让形状读得出来 */
 .ns-pose-prop-thumb {
     display: block;
     width: 100%;
-    height: 64px;
+    height: 100%;
     object-fit: contain;
+    filter: grayscale(1);
 }
 
 .ns-pose-prop-noimg {
@@ -358,6 +390,50 @@
     margin: 0;
     font-size: 11px;
     color: var(--ns-dim);
+}
+
+/* 页码条：首末各三颗、当前页前后各一颗，空档用省略号接上；一页装得下整条不出 */
+.ns-pose-prop-pager {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+}
+
+.ns-pose-prop-pager[hidden] { display: none; }
+
+.ns-pose-prop-page {
+    min-width: 30px;
+    padding: 3px 8px;
+    font-size: 12px;
+}
+
+.ns-pose-prop-page:disabled { opacity: .45; }
+
+.ns-pose-prop-page-on {
+    border-color: var(--ns-accent);
+    background: var(--ns-primary-soft);
+    color: var(--ns-accent);
+}
+
+.ns-pose-prop-jump { padding: 3px 6px; }
+
+.ns-pose-prop-pager > .ns-pose-prop-jump:first-child svg { transform: rotate(180deg); }
+
+.ns-pose-prop-gap {
+    padding: 0 2px;
+    font-size: 12px;
+    color: var(--ns-dim);
+}
+
+.ns-pose-prop-added {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 160px;
+    padding-top: 8px;
+    border-top: 1px solid var(--ns-border);
+    overflow: auto;
 }
 
 .ns-pose-sel {
@@ -432,7 +508,12 @@
     line-height: 1.6;
 }
 
+/* 本机姿势文件的选择框：只当「本机姿势文件…」那颗钮的选文件器（按钮自己 .click()），
+   框子不排在画布上 —— 不钉这一条，画布左下角就挂着一颗原生「选择文件」 */
+.ns-pose-file { display: none; }
+
 /* 姿势库弹窗的内容（外壳是 js/core/lib-modal.js，样式取本页面自己的 --ns-* 色板）：
+   上半是库的卡片网格（预设 / 云端），下半是本机存档那一列，两边共用一条装载路。
    卡片网格里每张缩略图按库自己的路径拼地址，缺图的那一档留一个占位槽，卡片不会被撑歪 */
 .ns-pose-libpane {
     flex: 1 1 auto;
@@ -444,8 +525,28 @@
     overflow: auto;
 }
 
+/* 上半吃弹窗剩下的空间，卡片网格在里面滚；下半是本机存档，给一条下沿线与一个下限高度，
+   存档很少时它缩成一小条，多了就在自己里面滚，不跟卡片网格抢高度 */
+.ns-pose-lib-preset {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.ns-pose-lib-local {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex: 0 1 auto;
+    min-height: 140px;
+    padding-top: 8px;
+    border-top: 1px solid var(--ns-border);
+}
+
 /* flex: 1 吃的是弹窗那一横行（.ns-pose-row）的剩余宽度：这条只作用在弹窗里，
-   左栏的搜索框是竖栏的直接子行，共用这条就是纵向 grow（见上面 .ns-pose-list-search） */
+   本机存档那一列的搜索框是竖排的直接子行，共用这条就是纵向 grow（见上面 .ns-pose-list-search） */
 .ns-pose-libpane .ns-pose-lib-search {
     flex: 1;
     min-width: 120px;
@@ -581,60 +682,25 @@
 .ns-pose-lib-blank[hidden],
 .ns-pose-lib-more[hidden] { display: none; }
 
-/* ===== 移动端：232px 姿势库 │ 画布 │ 296px 控制面板 这三栏在手机上把中间的 3D 舞台挤没，
-   改成画布在上、姿势库与控制面板在下各吃一屏的一截（DOM 顺序 lib / stage / panel 不动，靠 grid 落位）。
-   两侧栏的内部分隔线原来都冲画布画，堆叠之后改冲下 ===== */
+/* ===== 移动端：画布照旧吃满整页，两条透明工具条与弹层就是这一页的全部界面。
+   窄屏上弹层铺到近整幅，工具条允许换行 —— 换行只往下长，不吃画布的宽度 ===== */
 @media (max-width: 720px) {
-    .ns-pose-body {
-        grid-template-columns: minmax(0, 1fr);
-        grid-template-areas:
-            "stage"
-            "side"
-            "panel";
-        grid-template-rows: 56% minmax(0, 1fr) minmax(0, 1fr);
+    .ns-pose-dock {
+        top: 6px;
+        flex-wrap: wrap;
+        max-width: calc(50% - 10px);
     }
-    .ns-pose-stage {
-        grid-area: stage;
-        min-height: 240px;
+    .ns-pose-pop {
+        top: 46px;
+        width: calc(100% - 12px);
+        max-height: calc(100% - 54px);
     }
-    .ns-pose-side {
-        grid-area: side;
-        border-right: 0;
-        border-bottom: 1px solid var(--ns-border);
-    }
-    .ns-pose-panel {
-        grid-area: panel;
-        border-left: 0;
-    }
+    .ns-pose-pop-left,
+    .ns-pose-pop-right { left: 6px; right: 6px; }
     .ns-pose-list {
         max-height: 116px;
     }
     .ns-pose-name {
         width: 100%;
-    }
-    /* 收起的栏在堆叠布局里是一条 34px 横条，腾出来的那一截整块给画布（姿势要的是画布大一点）；
-       两侧都收起时画布吃满整屏。栏首在堆叠布局里保持横排（竖排是桌面窄栏的写法）。
-       上面桌面那两条 34px 列规则的特异性比这里的单列规则高，媒体查询不改特异性 —— 收起态要在这一栏里
-       把列改回整幅一列，否则画布会落进 34px 那一列（画布宽 34px，手机上等于没有画布） */
-    .ns-pose-body[data-lib="off"],
-    .ns-pose-body[data-panel="off"],
-    .ns-pose-body[data-lib="off"][data-panel="off"] {
-        grid-template-columns: minmax(0, 1fr);
-    }
-    .ns-pose-body[data-lib="off"] {
-        grid-template-rows: 73% 34px minmax(0, 1fr);
-    }
-    .ns-pose-body[data-panel="off"] {
-        grid-template-rows: 73% minmax(0, 1fr) 34px;
-    }
-    .ns-pose-body[data-lib="off"][data-panel="off"] {
-        grid-template-rows: minmax(0, 1fr) 34px 34px;
-    }
-    .ns-pose-side[data-collapsed="1"] {
-        padding: 4px 10px;
-    }
-    .ns-pose-side[data-collapsed="1"] .ns-pose-side-head {
-        writing-mode: horizontal-tb;
-        flex-direction: row;
     }
 }

@@ -41,6 +41,8 @@ const PATHS = {
     clock: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
     ratio: '<rect width="18" height="14" x="3" y="5" rx="2"/><path d="M7 12h10"/>',
     pose: '<circle cx="12" cy="4.5" r="2"/><path d="m9 20 3-6 3 6"/><path d="m6 8.5 6 2 6-2"/><path d="M12 10.5V14"/>',
+    // 保存：一只软盘。姿势页那条「保存姿势」是工具条上的实心入口，缺这一个图标就只剩一行文字
+    save: '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/>',
     // 抽帧页的播放器控件：seek 到片首 / 片尾与出声与静音
     "skip-back": '<polygon points="19 20 9 12 19 8 19 20"/><polyline points="5 19 5 5"/>',
     "skip-forward": '<polygon points="5 4 15 12 5 16 5 4"/><polyline points="19 5 19 19"/>',

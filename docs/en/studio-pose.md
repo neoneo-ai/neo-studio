@@ -319,30 +319,33 @@ panel's character dropdown has no import control, so there is nothing for a host
 ## Host view and message directions
 
 The desktop top bar's Pose tab and the home card "3D Pose" open `#/pose`; the host module is
-`studio/web/pose/pose.js`. The host panel has two columns. The left is one column of the poses saved on this
-machine: a search box,
-the list of `pose/scenes/` archives (presets are not in it - a preset lives in the "Browse Pose Library…" modal),
-the write-a-name-and-save row and the
-"Browse Pose Library…" / "Load Pose" buttons. The right is the control panel: pose (canvas snapshot), character (add / remove),
-props (preview cards), ControlNet export (formats + view + export) and canvas state (one read-only line);
-the prop group is a grid of preview cards (the rules live in
-"Prop cards and where a prop lands"). The character dropdown lists only the standard bodies — the ones
-`meta/list` reports as `bodyMale` / `bodyFemale`. Every control stays disabled
-until `pose:ready`, and the panel appears with it; the bridge is torn down with `pose:dispose`, so
-leaving the page leaves no listener behind.
+`studio/web/pose/pose.js`. The canvas fills the whole page and the controls are two transparent
+toolbars floating over it: Pose Library / Character & Look / Props on the left, Save Pose / Export
+Image Set / Canvas State on the right. The first three open a full-window modal (the asset library's
+shell), the other three open a small popup; neither takes width from the canvas, only one popup is
+open at a time, and clicking the same button again, pressing Esc or clicking off the popup closes it.
+Every control stays disabled until `pose:ready`; an old package whose `caps.hostUi` is not `true`
+leaves the page-command controls greyed and explains what is missing in Canvas State. The bridge is
+torn down with `pose:dispose`, so leaving the page leaves no listener behind.
 
-The left column lists only the poses saved on this machine (`pose/scenes/`, each row badged "local"): the preset
-poses all live in the "Browse Pose Library…" modal, and this column does not line them up a second time. A row
-loads that pose - it reads `/neo_pose/scene` and sends
-`pose:open-scene` - with the Load Pose button kept for a typed-in name, the two sharing one load path. The search
-box on top of the list filters the rows by name, a page is 120 rows and the rest sit behind
-"load more (N left)". The list takes the height left in the column and the search box is the column's own row
-above it: the modal's `flex: 1` / `min-width` search-field rule is scoped to `.ns-pose-libpane`, so the left
-column carries only its own fixed-row rule and no control is stretched by the list's grow rule - the rows start
-at the top of the column.
-The right column has no preset dropdown and the panel has no "apply preset" step:
-the "Browse Pose Library…" modal is a preset's only entry. The modal's base filter follows the panel's character -
-switching bodies re-filters it, so what is visible is what the current body can wear.
+When the pose page is inside the iframe, the entry page's inline `<head>` script lands `data-host-ui`
+before the first frame (same test as `src/neoBridge.js`'s `parent !== window`), so opening the page
+never paints the whole stand-alone demo control set first and folds it afterwards; an old host whose
+`caps.hostUi` is not `true` still falls back to the full demo set. The entry page also injects
+`html[data-host-ui] input[type="file"] { display:none }`: a few file pickers inside the package do not
+carry `hidden`, and inside the iframe they would sit in the canvas's bottom-left corner. The host's
+own picker (the local pose file, `.ns-pose-file`) is kept off the canvas the same way.
+
+The Pose Library modal holds the `pose-lib` whole-scene library on top and the poses saved on this
+machine (`pose/scenes/`, each row badged "local") below: presets only live in the top half, the bottom
+half does not line them up a second time. A row loads that pose - it reads `/neo_pose/scene` and sends
+`pose:open-scene`. The search box above that list filters the rows by name and carries only its own
+fixed-row rule (the library's `flex: 1` / `min-width` search-field rule is scoped to
+`.ns-pose-libpane`, so this column is not stretched by it); a page is 120 rows and the rest sit behind
+"load more (N left)". The modal has no preset dropdown and the panel has no "apply preset" step:
+a preset's only entry is the card grid in the library half. The modal's base filter follows the
+panel's character - switching bodies re-filters it, so what is visible is what the current body can
+wear.
 
 "Browse Pose Library…" opens one modal (the asset library's shell) holding the `pose-lib` whole-scene
 library. A card picks its preview by `clay → skeleton → silhouette → depth` (the rule the pose page's
@@ -365,9 +368,9 @@ field counts as local. The search filters on
 two cards with the same id would cross wires on click. A page is 200 cards (640+ in the DOM at once breaks
 both the first paint and scrolling) and the rest sit behind "load more (N left)". Clicking a card reads that
 card's own file and sends one `scene/apply`, reporting "N rigs / M props"; a successful apply closes the
-modal - the same implementation the left column's Load Pose and the page's own pose load use: it tops up
+modal - the same implementation the modal's row click and the page's own pose load use: it tops up
 the skeleton count, lays the rigs out left to right and restores props by id. The modal's search, group
-and origin dropdowns and load-more sit behind the same `libGate` as the left column: they stay disabled until
+and origin dropdowns and load-more sit behind the same `libGate`: they stay disabled until
 `pose:ready`, and the pane locks after an apply until the result comes back, because two quick clicks send
 two apply calls and the second silently overwrites the first. When the library is not synced the modal shows
 the sync command with a line of explanation instead of an empty grid: an empty browser is not what a library
@@ -376,19 +379,31 @@ machine through `pose:open-scene` - a file outside the library loads just the sa
 
 ## Prop cards and where a prop lands
 
-The prop group is one card per prop, filled from the prop entries of `meta/list`: shipped GLBs, procedural
-props and the props an own figure carries come first, cloud props last with their "cloud" badge. A preview
-resolves two ways: the registry row's `preview` is a path relative to the props directory, read locally as
+The Props modal (the same asset-library shell) is one search box, one page of cards, a pager, one action
+row and the on-stage prop list. Each card is one prop, filled from the prop entries of `meta/list`:
+shipped GLBs and procedural props come first, cloud props last with their "cloud" badge. A page is 120
+cards; the pager shows the first three pages, one either side of the current page and the last three,
+with an ellipsis in the gaps, and the page index is stored in localStorage
+(`neo_studio_pose_prop_page`) so reopening lands on the same page. A preview resolves two ways: the
+registry row's `preview` is a path relative to the props directory, read locally as
 `/models/props/preview/<name>.png` and on the cloud as `<OSS base>/props/preview/<name>.png`; a procedural
 prop has no registry row, so it reads the repo's conventional name `preview/builtin-<id>.png`. With no image
 in either place the card says "no preview" - an `<img>` guaranteed to break is not what a missing image looks
-like, and a cloud row's `preview` is not generated here: `tools\pose_prop_previews.py` writes the source
-page's official render into that manifest row (see the cloud upload section above). The search box filters
-the cards on `label / key`, the count line reads "N props · selected X", and a
-selection dropped by the filter falls back to the first card of the filtered set.
+like. Previews are rendered by `tools\pose_prop_clay.mjs`, which uses the packaged pose page as the renderer:
+it stages each prop, strips its textures down to a white clay material, frames a 3/4 camera from the prop's
+own bounding box, hides the figures and the floor, and shoots a 512 square (output goes to `tmp/prop_clay/`
+unless `--apply` writes it back into `models/props/preview/`). Vendor renders from three sources sit side by
+side as a color mosaic; white clay on gray makes one page read as one material, and the card style keeps a
+`grayscale(1)` pass for whatever has not been re-rendered yet (the old cloud images). A cloud row's `preview`
+is not generated here: `tools\pose_prop_previews.py` uploads the image and writes `preview` into the manifest
+row (see the cloud upload section above). The search box filters
+the cards on `label / key`, and the count line reads "N props · page X/Y".
 
-"Add prop" sends the selected card's key; a prop name typed by hand travels the same "name → the entry in the
-list" lookup (a built-in `builtin:chair`, a registry prop `glb:arrow.glb`). The panel never sends
+Clicking a card adds that prop: the host sends one `prop/add` (a cloud card first pulls its GLB into the
+local cache), the stage gains the prop at once, and the card stays out of any "selected first" step -
+there is no "add prop" button in the modal. A prop name typed into the name box and confirmed with Enter
+travels the same "name → the entry in the list" lookup (a built-in `builtin:chair`, a registry prop
+`glb:arrow.glb`), and Enter in the search box adds the first card it filters. The panel never sends
 `prop/attach`: the bone dropdown and the attach button live in the pose page's own panel, the host does not
 copy them, and the page's `prop/attach` command stays in the command table. "Ground" and "Remove prop" act on
 the selected row of the on-stage list, and each row names its own landing spot - a prop carried by a bone
@@ -422,19 +437,6 @@ The page's own six-row toolbar is `fixed` over the canvas, and in a short window
 viewport posing needs: the bottom-left "面板：展开" button and the `T` key collapse it down to its first
 row (the row height is measured at runtime, because wrapping makes the first row depend on the width),
 and the state is stored in the page's own localStorage - nothing to do with the host toolbar.
-
-Each host side panel (the pose library on the left, the control panel on the right) carries a collapse
-button in its head, drawn as a two-pane sidebar glyph: this panel's pane is filled, and that filled pane
-shrinks to a sliver once collapsed (the left panel's pane sits on the left, the right panel's is mirrored).
-Collapsing one leaves a 34 px vertical rail - the panel name written vertically, with
-the button as the way back out - and the freed column width goes wholly to the canvas; collapsing both
-leaves the canvas the full width. On a phone each panel collapses to a 34 px horizontal strip that spans
-the full width, and the
-freed height goes wholly to the canvas, which keeps the full width and takes the whole screen when both are
-collapsed. Collapsing
-is a layout preference stored in localStorage under `neo_studio_pose_sides`, so returning to the page and
-reopening the window land on the same layout; it is not gated by `pose:ready` or `caps.hostUi` - with a
-missing package or an old package that disables every control, both panels still collapse.
 
 | Message             | Direction   | Payload                                    | Purpose                                                       |
 |---------------------|-------------|--------------------------------------------|---------------------------------------------------------------|
@@ -607,23 +609,24 @@ tops both levels up in the data root.
   `bodyFemale` offered, labels taken from `meta/list`, whitelisted-out bodies never shown as an option, no
   "Import Own Character" row and no call to that route), the dropdown staying on "Choose a character…" with an
   empty add-body payload when the package reports no standard body, and the add-body row and the library base
-  filter following `bodyMale` when it is the default; the left column's saved-pose list (only `pose/scenes/`
-  archives listed, each row badged "local", a row and the "Load Pose" button sharing one `pose:open-scene`; presets
-  not listed there, the "Browse Pose Library…" modal being their only entry with the modal grouping cards by
-  `groups`, and no preset dropdown in the right column; the search box filtering by name, an honest empty state,
-  a page of 120 rows with load-more, the search box being the column's own row beside the list, never stretched by
+  filter following `bodyMale` when it is the default; the two toolbars and the popups (six entries, the canvas
+  taking the whole page, one popup at a time, Esc / clicking off / the same button again closing it, an open
+  modal owning its own Esc); the saved-pose list inside the pose-library modal (only `pose/scenes/` archives
+  listed, each row badged "local", a row click being one `pose:open-scene`; presets
+  not listed there, the modal's card grid being their only entry, grouped by
+  `groups`, and no preset dropdown; the search box filtering by name, an honest empty state,
+  a page of 120 rows with load-more, the search box sitting beside the list as its own row, never stretched by
   the list's grow rule (the modal's `flex: 1` search-field rule is scoped to `.ns-pose-libpane`)); the ControlNet export defaulting to the
   "current view"; the pose-library modal's index rendering with
   grouping, search, origin filtering and load-more, applying a library pose (the action it sends and the modal closing),
   the sync hint when the library is unsynced, the gate locking that pane, and the local pose file path;
-  collapsing each side panel (the button outside the gates, the head left behind as the way back out, the
-  icon glyph changing with the collapsed state, the
-  preference stored and replayed when the view is rebuilt); the prop grid (one card per prop with its
-  `propKey` and preview, clicking a card selects it, "add prop" sends that key), the prop panel having no
+  the Props modal (one dock button opening the whole window, a page of 120 cards with its pager, the page index
+  stored and replayed on reopen, the last page's "next" disabled); the prop cards (one card per prop with its
+  `propKey` and preview, clicking a card sending that `prop/add` at once, no "add prop" button), the props modal having no
   bone attach (no "attach to bone" button, no bone dropdown, adding never sends `prop/attach`), a typed prop
   name resolving to a `propKey` (the full key, the bare id and the Chinese label all landing on one entry, a
   name the list does not have sending nothing), and the cloud prop cards sitting behind the local ones with
-  their "cloud" badge and direct preview, adding one fetching the GLB into the local cache first.
+  their "cloud" badge and direct preview, clicking one fetching the GLB into the local cache first.
 - `tools\test_pose_package.ps1`: the shipped package's own self-check - required files, build shape,
   forbidden shapes (`*.map`, GLBs outside the whitelist, prop GLBs outside it, prop previews outside it,
   loose JSON), per-file sha256 and byte verification, a prop registry naming only the two bundled props,

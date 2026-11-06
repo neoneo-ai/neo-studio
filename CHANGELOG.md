@@ -5,6 +5,24 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 ## [Unreleased]
 
 ### Changed
+- **Prop previews are white clay renders.** The prop grid mixed official render sources (Poly Haven photos,
+  BlenderKit renders, our own clay renders) with black photo backdrops and colored objects, so a page of cards
+  read as a color mosaic where the silhouette was hard to see. `tools\pose_prop_clay.mjs` now renders every
+  prop with the packaged pose page itself (headless Chromium, `window.__poseDebug`): the prop is staged alone
+  on a neutral backdrop, its textures are stripped down to a white clay material, and a 3/4 camera is fitted
+  from its own bounding box - one 512 square per prop. `--apply` writes the images back into
+  `models/props/preview/`, so every local card is now the same gray backdrop with a white model; the card style
+  keeps a `grayscale(1)` pass for images that have not been re-rendered yet (the old cloud set).
+- **The 3D Pose page is a canvas-first workspace: transparent toolbars over the canvas, popups on top of it, a
+  pager in the props window, and no stray 「选择文件」.** The fixed side panels are gone; 「姿势库」「角色与外观」
+  「道具」 sit on the left and 「保存姿势」「导出图组」「画布状态」 on the right. 「姿势库」 and 「道具」 open a
+  full-window browser (the asset-library shell), 「保存姿势」 saves into `pose/scenes/` from its own popup, and the
+  remaining three open a small popup - one at a time, closed by Esc, a click outside or the same button again. The
+  props window lists the prop registry 120 cards per page behind a pager whose page index survives a reopen, and
+  clicking a card adds that prop in one step: there is no 「添加道具」 button and no select-then-confirm step, and
+  Enter in the search box or the name box adds the same way. The host's local pose-file picker no longer renders
+  as a native 「选择文件」 widget in the canvas's bottom-left corner, and the page's own file inputs are hidden
+  inside the iframe. Covered by `studio/tests/js/pose-bridge.test.mjs` and `studio/tests/test_pose_bridge.py`.
 - **Cloud prop cards now carry previews.** The cloud pose manifest listed 24 props whose registry rows named
   no `preview`, and the bucket had no `props/preview/` files at all, so every card badged 「云端」 in the 3D
   Pose prop grid read 「无预览」. `tools\pose_prop_previews.py` fills that layer: for each prop it takes the

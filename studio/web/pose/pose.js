@@ -2,9 +2,10 @@
  * pose.js — 桌面端「3D 姿势」页宿主（Studio 视图）。
  *
  * 姿势包 = 3d-pose-art 的 vite 产物，后端伺服在 /pose-dist/，短路径 /neo-pose 跳到入口页
- * （产物是 base:'./' 的相对 import，页面必须有目录深度，理由见 studio/pose.py）。控件在宿主这一侧：
- * 左栏列本机保存的姿势存档，右栏姿势控制面板，画布在中间的 iframe 里跑；预设姿势都在「浏览姿势库…」弹窗里。
- * 宿主复刻不了那份 three.js 运行时，
+ * （产物是 base:'./' 的相对 import，页面必须有目录深度，理由见 studio/pose.py）。控件在宿主这一侧，
+ * 但不占画布的位置：iframe 画布吃满整页，控件挂在画布上的两条透明工具条（左上 姿势库 / 角色与外观 / 道具，
+ * 右上 保存姿势 / 导出图组 / 画布状态），点一条开一扇浮在画布上的弹层或整扇弹窗，Esc、点弹层外、再点同一条钮都是关；
+ * 预设姿势与整张道具表都在「姿势库 / 道具」那两扇弹窗里。宿主复刻不了那份 three.js 运行时，
  * 面板的每个动作都经 pose:call 落进页面（动作清单在姿势页 src/ui/hostCommands.js），画布状态经
  * pose:state 回流。页面在 caps.hostUi 下收起自己的 demo 控件 —— 同一时刻只有一套控件在场上。
  *
@@ -20,7 +21,7 @@
  * 冒充不了回复。入站通知另外认两件事 —— 来源必须是本页这张 iframe，origin 必须与宿主同源。
  */
 import { t, tf, getLang } from "../js/core/i18n.js";
-import { setIconLabel } from "../js/core/icons.js";
+import { setIconLabel, icon } from "../js/core/icons.js";
 import { createLibraryModal } from "../js/core/lib-modal.js";
 
 // 组件样式在第一次建视图时注入（幂等）：本模块也会被主画布页的扩展图加载，
@@ -45,7 +46,7 @@ const MAX_SET_FILES = 12;        // /neo_pose/export_set 一次落盘的上限�
 const LIB_PREFIX = "/pose-lib";
 const LIB_INDEX = `${LIB_PREFIX}/index.json`;
 const LIB_PAGE = 200;      // 一次渲染的卡片上限：库里 600+ 条全塞进 DOM，首屏与滚动都撑不住
-const LIB_LIST_PAGE = 120; // 左栏那一行的分页上限：列表比卡片窄，一屏塞的行数更少
+const LIB_LIST_PAGE = 120; // 本机存档那行的分页上限：列表比卡片窄，一屏塞的行数更少
 const LIB_VARIANTS = ["clay", "skeleton", "silhouette", "depth"];   // 缩略图优先级，与姿势页 thumbOf 同一条
 const LIB_ORIGIN_CLASS = { lib: "ship", lab: "lab", cloud: "cloud" };
 const LIB_ORIGIN_LABEL = { lib: "预设", lab: "本地", cloud: "云端" };   // 合并库每条的出处：预设随仓库分发只读，本地是本机自己写的，云端在 OSS
@@ -87,8 +88,9 @@ const DEFAULT_LOOK_KEY = "dark";
     （页面 EXPORT_VIEWS.current 是 null，导出口径就是沿用现场相机） */
 const DEFAULT_VIEW_KEY = "current";
 
-/** 左右栏收起偏好：画布要整幅时把姿势库与控制面板收成两条竖栏，重开窗口停在上次的位置 */
-const SIDE_KEY = "neo_studio_pose_sides";
+/** 道具卡片一页 120 件：整张道具表在弹窗里翻页，页码是布局偏好，重开停在同一页 */
+const PROP_PAGE_KEY = "neo_studio_pose_prop_page";
+const PROP_PAGE_SIZE = 120;
 
 /** 道具显示名归一：页面 label 带全角括号后缀（细剑（Sting））时，括号前的名字也算同一个名字 */
 function propChoiceName(text) {
@@ -144,11 +146,10 @@ export function createPoseView({ api, $el, toast }) {
         let frame = null;
         let caps = {};
         let pickedScene = "";
-        let pickedProp = "";
-        let pickedPropKey = "";   // 道具卡片选中项：添加道具吃的就是这一张卡
+        let pickedProp = "";   // 场上道具的选中项（落地 / 删道具吃的就是这一条）
         let propChoices = [];   // meta/list 的道具项：自由填写的名字只在这份清单里解析，不猜定义
-        let sceneNames = [];      // pose/scenes/ 的本机存档：左栏那一列
-        let libListShown = LIB_LIST_PAGE;   // 左栏这一列这一屏渲染到第几条
+        let sceneNames = [];      // pose/scenes/ 的本机存档：姿势库弹窗下半那一列
+        let libListShown = LIB_LIST_PAGE;   // 本机存档这一列这一屏渲染到第几条
         const canvas = {};
 
         // 两层门控：读写本机文件只认 pose:ready；姿势动作还要 caps.hostUi —— 旧姿势包没有
@@ -174,19 +175,63 @@ export function createPoseView({ api, $el, toast }) {
         const list = (extra = "") => $el("div", { className: "ns-pose-list" + extra });
         const head = (label) => $el("div", { className: "ns-pose-head", textContent: t(label) });
         const group = (label, kids) => $el("section", { className: "ns-pose-group" }, [head(label), ...kids]);
-        // 栏首：栏名与收起钮同一行。收起后这一行就是整栏的全部，栏宽由 .ns-pose-body 的 data-* 收到一条竖栏
-        const sideBar = (label) => {
-            const btn = $el("button", { className: "ns-pose-collapse ns-pose-btn", type: "button" });
-            const node = $el("div", { className: "ns-pose-side-head" }, [
-                $el("span", { className: "ns-pose-side-head-label", textContent: t(label) }), btn,
+        // 透明工具条与弹层：画布吃满整页，控件浮在画布上。弹层钮是布局入口，不进 libGate/panelGate
+        // —— 页面没 ready 时也要看得见本机存档清单与画布状态；缺包时两条工具条连弹层一起不出
+        const dockBar = (side) => $el("div", { className: `ns-pose-dock ns-pose-dock-${side}` });
+        const dockL = dockBar("left");
+        const dockR = dockBar("right");
+        const popBoxes = [];
+        let openKey = "";
+        function closePop() {
+            openKey = "";
+            for (const { box, chip } of popBoxes) {
+                box.hidden = true;
+                chip.classList.remove("ns-pose-dock-btn-on");
+                chip.setAttribute("aria-expanded", "false");
+            }
+        }
+        function openPop(key) {
+            if (openKey === key) { closePop(); return; }   // 同一条钮再点一次就是关
+            closePop();   // 一次只留一扇弹层：画布上不许叠两层控件
+            const hit = popBoxes.find((p) => p.key === key);
+            if (!hit) return;
+            openKey = key;
+            hit.box.hidden = false;
+            hit.chip.classList.add("ns-pose-dock-btn-on");
+            hit.chip.setAttribute("aria-expanded", "true");
+        }
+        function popPanel({ key, label, iconKey, side }) {
+            const chip = $el("button", { className: "ns-pose-btn ns-pose-dock-btn", type: "button", "aria-expanded": "false" });
+            setIconLabel(chip, iconKey, t(label));
+            chip.title = t(label);
+            const close = $el("button", { className: "ns-pose-btn ns-pose-pop-close", type: "button", title: t("关闭面板（Esc）") }, [icon("cross", 14)]);
+            const box = $el("div", { className: `ns-pose-pop ns-pose-pop-${side}`, dataset: { pop: key }, role: "dialog" }, [
+                $el("div", { className: "ns-pose-pop-head" }, [
+                    $el("span", { className: "ns-pose-pop-title", textContent: t(label) }), close,
+                ]),
             ]);
-            return { node, btn, label };
+            box.hidden = true;   // 开局全关：这一页要的是画布，弹层是点开才有的
+            popBoxes.push({ box, chip, key });
+            chip.onclick = () => openPop(key);
+            close.onclick = () => closePop();
+            (side === "left" ? dockL : dockR).append(chip);
+            return box;
+        }
+        /** 工具条上直接干一件事的钮（姿势库就是开那扇弹窗，没有中间那一层弹层）：不吃弹层那套开合 */
+        const dockAction = (side, { label, iconKey, action }) => {
+            const chip = $el("button", { className: "ns-pose-btn ns-pose-dock-btn", type: "button" });
+            setIconLabel(chip, iconKey, t(label));
+            chip.title = t(label);
+            chip.onclick = () => action();
+            (side === "left" ? dockL : dockR).append(chip);
+            return chip;
         };
 
-        /* 左栏 = 本机姿势存档（pose:save-scene 写进 pose/scenes/ 的那批）：预设都在「浏览姿势库…」弹窗里，
-           这一栏不再排一份预设清单。搜索框按名字过滤，一屏 120 行走「加载更多」，与弹窗共用一条装载路。
-           搜索框只带 ns-pose-list-search：弹窗搜索框那条 flex: 1 是弹窗那一横行的样式（在 CSS 里排在
-           这一条之后），这一栏是竖排的列，共用同一份就是让输入框自己吃满栏高 */
+        /* 本机姿势存档（pose:save-scene 写进 pose/scenes/ 的那批）排在「姿势库」弹窗里预设清单的下面：
+           弹窗吃满一整屏时，上面是库的卡片网格，下面是这一列存档，两边共用一条装载路。
+           搜索框按名字过滤，一屏 120 行走「加载更多」。
+           搜索框只带 ns-pose-list-search：弹窗搜索框那条 flex: 1 是弹窗顶部那一横行的样式（在 CSS 里排在
+           这一条之后），这一列是竖排的，共用同一份就是让输入框自己吃满列高 */
         const libFilterSearch = $el("input", {
             className: "ns-pose-list-search", type: "search", spellcheck: "false",
             placeholder: t("搜索本机姿势（按名字）"),
@@ -197,19 +242,8 @@ export function createPoseView({ api, $el, toast }) {
         libGate.push(libFilterSearch, btnListMore);
         const poseName = field("姿势名");
         const btnSavePose = btn("存为姿势", "copy", libGate);
-        const btnLoadPose = btn("载入姿势", "folder", libGate);
-        const btnBrowseLib = btn("浏览姿势库…", "list", libGate);   // pose-lib 的整场库 + 本机姿势文件
-        const libBar = sideBar("姿势库");
-        const lib = $el("aside", { className: "ns-pose-side" }, [
-            libBar.node,
-            libFilterSearch,
-            poseList,
-            btnListMore,
-            row([poseName, btnSavePose]),
-            row([btnBrowseLib, btnLoadPose]),
-        ]);
 
-        /* 右栏：控制面板。下拉内容一次由 meta/list 给齐，面板不逐样问页面 */
+        /* 弹层与弹窗里的控件。下拉内容一次由 meta/list 给齐，面板不逐样问页面 */
         const notice = $el("div", {
             className: "ns-pose-notice",
             textContent: t("姿势包不含宿主命令层：运行 tools\\sync_pose_dist.ps1 同步最新构建产物。"),
@@ -227,7 +261,7 @@ export function createPoseView({ api, $el, toast }) {
         const btnAddMember = btn("加素体", "plus", panelGate);
         const btnDelMember = btn("删当前素体", "cross", panelGate);
         const btnResetPose = btn("重置姿态", "history", panelGate);
-        const propName = field("道具名（例：椅子）");
+        const propName = field("道具名（例：椅子 · 回车添加）");
         // 道具是一件件带预览图的卡片，不是一个下拉：下拉里只有名字，用户得猜哪件是长棍、哪件是手枪
         const propSearch = $el("input", {
             className: "ns-pose-prop-search", type: "search", spellcheck: "false",
@@ -235,68 +269,52 @@ export function createPoseView({ api, $el, toast }) {
         });
         const propGrid = $el("div", { className: "ns-pose-prop-grid" });
         const propMeta = $el("p", { className: "ns-pose-prop-meta" });
+        const propPager = $el("div", { className: "ns-pose-prop-pager" });
         panelGate.push(propSearch);
-        const btnAddProp = btn("添加道具", "plus", panelGate);
         const btnGroundProp = btn("落地", "target", panelGate);
         const btnDelProp = btn("删道具", "trash", panelGate);
         const btnExportSet = btn("导出图组到素材库", "send", panelGate, " ns-pose-btn-primary");
         const btnShot = btn("画布截图", "image", panelGate);
 
-        const panelBar = sideBar("控制面板");
-        const panel = $el("aside", { className: "ns-pose-side ns-pose-panel" }, [
-            panelBar.node,
-            notice,
-            group("画布状态", [stateBox]),
+        // 工具条：左边是「看东西」的入口（姿势库与道具直接开整屏弹窗），右边是「出东西」的入口（保存 / 导出 / 状态）
+        dockAction("left", { label: "姿势库", iconKey: "list", action: openLibModal });
+        const popChar = popPanel({ key: "char", label: "角色与外观", iconKey: "user", side: "left" });
+        dockAction("left", { label: "道具", iconKey: "target", action: openPropModal });
+        const popSave = popPanel({ key: "save", label: "保存姿势", iconKey: "save", side: "right" });
+        const popExport = popPanel({ key: "export", label: "导出图组", iconKey: "send", side: "right" });
+        const popState = popPanel({ key: "state", label: "画布状态", iconKey: "info", side: "right" });
+        popChar.append(
             group("素体", [row([modelSel, btnAddMember]), row([btnDelMember, btnResetPose])]),
             group("外观", [row([lookSel])]),
-            group("道具", [
-                row([propSearch, propName]),
-                propGrid,
-                propMeta,
-                row([btnAddProp]),
-                propList,
-                row([btnGroundProp, btnDelProp]),
-            ]),
-            group("ControlNet 导出", [row([viewSel, sizeSel]), formatBox, row([exportLabel]),
-                row([btnExportSet, btnShot])]),
-        ]);
+        );
+        popSave.append(group("保存姿势", [row([poseName, btnSavePose])]));
+        popExport.append(group("ControlNet 导出", [row([viewSel, sizeSel]), formatBox,
+            row([exportLabel]), row([btnExportSet, btnShot])]));
+        popState.append(notice, stateBox);
 
         const stage = $el("div", { className: "ns-pose-stage" });
-        const body = $el("div", { className: "ns-pose-body" }, [lib, stage, panel]);
-        el.append(body);
+        el.append(stage, dockL, dockR, popChar, popSave, popExport, popState);
 
         const setLib = (on) => libGate.forEach((n) => { n.disabled = !on; });
         const setPanel = (on) => panelGate.forEach((n) => { n.disabled = !on; });
-        // 缺包与后端未就绪时整幅侧栏收起：那时每个控件都只会失败
-        const setChrome = (on) => { lib.hidden = !on; panel.hidden = !on; };
+        // 缺包与后端未就绪时两条工具条整条收起、弹层全关：那时每个控件都只会失败
+        const setChrome = (on) => { dockL.hidden = !on; dockR.hidden = !on; if (!on) closePop(); };
         setLib(false);
         setPanel(false);
 
-        /* 左右栏收起：收起后栏首那一行就是整栏全部，画布吃掉栏宽（导演页收起生成面板同一口径）。
-           收起是布局偏好，不进 libGate/panelGate —— 缺包与旧姿势包把控件整片关掉时，栏也收得回去 */
-        let savedSides = { lib: false, panel: false };
-        try {
-            const saved = JSON.parse(localStorage.getItem(SIDE_KEY) || "null");
-            savedSides = { lib: !!saved?.lib, panel: !!saved?.panel };
-        } catch { /* 隐私模式读不到偏好就两栏都展开 */ }
-        const setSide = (side, collapsed) => {
-            savedSides[side] = collapsed;
-            const aside = side === "lib" ? lib : panel;
-            const bar = side === "lib" ? libBar : panelBar;
-            const tip = t(collapsed ? `展开${bar.label}` : `收起${bar.label}`);
-            aside.setAttribute("data-collapsed", collapsed ? "1" : "0");
-            body.setAttribute(`data-${side}`, collapsed ? "off" : "on");
-            bar.btn.innerHTML = sideIcon(side, collapsed);
-            bar.btn.title = tip;
-            bar.btn.setAttribute("aria-expanded", String(!collapsed));
-            bar.btn.setAttribute("aria-label", tip);   // 收起钮面上只有图标，读屏要有这一句
-            try { localStorage.setItem(SIDE_KEY, JSON.stringify(savedSides)); } catch { /* 偏好写不进不影响用 */ }
-        };
-        for (const side of ["lib", "panel"]) {
-            const bar = side === "lib" ? libBar : panelBar;
-            bar.btn.onclick = () => setSide(side, !savedSides[side]);
-            setSide(side, savedSides[side]);   // 建视图时回灌上次的收起偏好
-        }
+        /* 弹层的关法三条，都不给画布添控件：Esc、点在弹层与工具条之外、再点同一条弹层钮。
+           Esc 走 document 的 capture，弹窗与灯箱开着时这一发归它们，弹层不抢着关。
+           iframe 里的点击不冒到宿主文档：在画布里拖动素体不会把弹层关掉，这一条要说明白 */
+        document.addEventListener("keydown", (e) => {
+            if (e.key !== "Escape" || !openKey) return;
+            if (document.querySelector(".ns-libmodal:not(.ns-hidden), .neo-lightbox")) return;
+            closePop();
+        }, true);
+        document.addEventListener("click", (e) => {
+            if (!openKey) return;
+            if (e.target instanceof Element && e.target.closest(".ns-pose-pop, .ns-pose-dock")) return;
+            closePop();
+        });
 
         const post = (type, payload, replyPort) => {
             const msg = { type, ...payload };
@@ -378,17 +396,50 @@ export function createPoseView({ api, $el, toast }) {
         const libBlank = $el("p", { className: "ns-pose-lib-blank" });
         const libGrid = $el("div", { className: "ns-pose-lib-grid" });
         const libMore = $el("button", { className: "ns-pose-btn ns-pose-lib-more", type: "button" });
-        libGate.push(libMore, libSearch, libGroupSel, libCharSel, libOriginSel, libSourceSel);   // 弹窗里的这一片与左栏同一把门禁：ready 之前不可点
+        libGate.push(libMore, libSearch, libGroupSel, libCharSel, libOriginSel, libSourceSel);   // 弹窗里的这一片与本机存档同一把门禁：ready 之前不可点
         const btnSceneLocal = btn("本机姿势文件…", "folder", libGate);
         // 库里没有想要的姿势时从本机挑一份 JSON，走的还是装载那条路
         const sceneFile = $el("input", { className: "ns-pose-file", type: "file", accept: ".json" });
+        // 弹窗吃满一整屏时上面是库的卡片网格，下面是本机存档那一列：两边共用一条装载路，
+        // 用户在同一个窗口里挑预设的整场与自己存的场景
         const libPane = $el("div", { className: "ns-pose-libpane" }, [
-            row([libSourceSel, libSearch, libGroupSel, libCharSel, libOriginSel, btnSceneLocal]),
-            libMeta, libBlank, libGrid, libMore,
+            $el("div", { className: "ns-pose-lib-preset" }, [
+                row([libSourceSel, libSearch, libGroupSel, libCharSel, libOriginSel, btnSceneLocal]),
+                libMeta, libBlank, libGrid, libMore,
+            ]),
+            $el("div", { className: "ns-pose-lib-local" }, [
+                head("本机存档"),
+                libFilterSearch, poseList, btnListMore,
+            ]),
         ]);
 
         libModal.setContent(libPane);
         el.append(libModal.el, sceneFile);
+
+        /* ===== 道具弹窗：和姿势库同一扇素材库外壳 =====
+           道具表是一整页卡片（一页 PROP_PAGE_SIZE 件，页码条在下方），点工具条的「道具」直接开这一扇：
+           点一张卡就是加一件，画面板上立刻多一件 —— 不用先选中再按一颗「添加道具」。
+           搜索一次重画卡片、数量行与页码条，三者同一份结果。页码是布局偏好，落在 localStorage，
+           重开停在同一页；云端索引落地后补画一次就是新的一页卡片。 */
+        const propModal = createLibraryModal({ storageKey: "neo_studio_pose_propmodal", scope: "pose" });
+        let propPage = 0;
+        try { propPage = Math.max(0, parseInt(localStorage.getItem(PROP_PAGE_KEY), 10) || 0); } catch { /* 隐私模式读不到偏好就从第一页开 */ }
+        const propPane = $el("div", { className: "ns-pose-proppane" }, [
+            $el("div", { className: "ns-pose-prop-tools" }, [propSearch, propName]),
+            propMeta,
+            propGrid,
+            propPager,
+            row([btnGroundProp, btnDelProp]),
+            $el("div", { className: "ns-pose-prop-added" }, [head("场上道具"), propList]),
+        ]);
+        propModal.setContent(propPane);
+        el.append(propModal.el);
+        /** 开道具弹窗：先按当前清单重画一页再开壳，弹窗开着时索引落地（云端）也看得见新卡片 */
+        function openPropModal() {
+            paintPropGrid();
+            propModal.open(t("道具"));
+            libModal.close();   // 两扇弹窗不叠：开这一扇就把姿势库那扇收起
+        }
 
         /** 库文件的一条 JSON：库自己的 PoseFile 不带 success 字段，json() 会把缺 success 的当失败 */
         const libJson = async (path) => {
@@ -490,6 +541,8 @@ export function createPoseView({ api, $el, toast }) {
                 : `${MODELS_PREFIX}/${CLOUD_PROPS_KEY}/${rel}`;
         };
 
+        /** 一张道具有一张预览图：点卡片就是加一件（posemy 那种口径），不先选中再按「添加道具」——
+         *  多一步只为了让用户再确认一次自己刚点的那张图 */
         const propCard = (choice) => {
             const url = propPreviewUrl(choice);
             const pic = $el("span", { className: "ns-pose-prop-pic" });
@@ -502,32 +555,82 @@ export function createPoseView({ api, $el, toast }) {
                 pic.append($el("span", { className: "ns-pose-prop-noimg", textContent: t("无预览") }));
             }
             const card = $el("button", {
-                className: "ns-pose-prop-card" + (choice.key === pickedPropKey ? " ns-pose-prop-on" : ""),
-                type: "button", title: choice.label, dataset: { propKey: choice.key },
+                className: "ns-pose-prop-card",
+                type: "button", title: tf("点到画布上：{name}", { name: choice.label }), dataset: { propKey: choice.key },
             }, [
                 pic,
                 $el("span", { className: "ns-pose-prop-label", textContent: choice.label }),
                 ...(choice.cloud ? [$el("span", { className: "ns-pose-prop-badge", textContent: t("云端") })] : []),
             ]);
-            card.onclick = () => {
-                pickedPropKey = choice.key;
-                paintPropGrid();
-            };
+            // 卡片不在 panelGate 里（每画一页就重造一批）：缺命令层时整页禁用，点了只会在页面里空转
+            card.disabled = caps.hostUi !== true;
+            card.onclick = () => run(() => addPropChoice(choice.key));
             return card;
         };
 
+        /** 道具表一页卡片：搜索过滤一次重画卡片、页码条与数量行，三者同一份筛选结果 */
         function paintPropGrid() {
+            const all = allPropChoices();
+            const rows = propRows();
+            const pages = Math.max(1, Math.ceil(rows.length / PROP_PAGE_SIZE));
+            propPage = Math.min(propPage, pages - 1);
+            const slice = rows.slice(propPage * PROP_PAGE_SIZE, (propPage + 1) * PROP_PAGE_SIZE);
+            propGrid.replaceChildren(...(slice.length
+                ? slice.map(propCard)
+                : [$el("p", { className: "ns-pose-prop-blank", textContent: t("道具表里没有匹配的道具") })]));
+            paintPropPager(pages);
+            propMeta.textContent = tf("{total} 件道具 · 第 {page}/{pages} 页", {
+                total: all.length,
+                page: propPage + 1,
+                pages,
+            });
+        }
+
+        /** 搜索框当前筛出来的那批：卡片、页码条与「搜索回车」共用这一份，不各算一遍 */
+        function propRows() {
             const q = propSearch.value.trim().toLowerCase();
             const all = allPropChoices();
-            const rows = q ? all.filter((c) => `${c.label} ${c.key}`.toLowerCase().includes(q)) : all;
-            if (!rows.some((c) => c.key === pickedPropKey)) pickedPropKey = rows[0]?.key || "";
-            propGrid.replaceChildren(...(rows.length
-                ? rows.map(propCard)
-                : [$el("p", { className: "ns-pose-prop-blank", textContent: t("道具表里没有匹配的道具") })]));
-            propMeta.textContent = tf("{total} 件道具 · 选中 {name}", {
-                total: all.length,
-                name: rows.find((c) => c.key === pickedPropKey)?.label || t("没有"),
+            return q ? all.filter((c) => `${c.label} ${c.key}`.toLowerCase().includes(q)) : all;
+        }
+
+        /** 页码条：首页三颗、当前页前后各一颗、末页三颗，中间空档用省略号接上；一页装得下就整条不出 */
+        function paintPropPager(pages) {
+            const pick = (p) => {
+                const cur = p === propPage;
+                const b = $el("button", {
+                    className: "ns-pose-btn ns-pose-prop-page" + (cur ? " ns-pose-prop-page-on" : ""),
+                    type: "button", textContent: String(p + 1), dataset: { page: String(p) },
+                });
+                if (cur) b.setAttribute("aria-current", "page");
+                b.onclick = () => { propPage = p; savePropPage(); paintPropGrid(); };
+                return b;
+            };
+            const jump = (step, label) => {
+                const b = $el("button", { className: "ns-pose-btn ns-pose-prop-page ns-pose-prop-jump", type: "button" }, [icon("chevron", 14)]);
+                b.title = t(label);
+                b.setAttribute("aria-label", t(label));
+                b.disabled = step < 0 ? propPage === 0 : propPage >= pages - 1;
+                b.onclick = () => {
+                    propPage = Math.max(0, Math.min(pages - 1, propPage + step));
+                    savePropPage();
+                    paintPropGrid();
+                };
+                return b;
+            };
+            const marks = new Set([0, 1, 2, propPage - 1, propPage, propPage + 1, pages - 3, pages - 2, pages - 1]);
+            const nums = [...marks].filter((p) => p >= 0 && p < pages).sort((a, b) => a - b);
+            const kids = [jump(-1, "上一页")];
+            nums.forEach((p, i) => {
+                if (i && p - nums[i - 1] > 1) kids.push($el("span", { className: "ns-pose-prop-gap", textContent: "…" }));
+                kids.push(pick(p));
             });
+            kids.push(jump(1, "下一页"));
+            propPager.replaceChildren(...kids);
+            propPager.hidden = pages < 2;   // 一页装得下就没有翻页这回事
+        }
+
+        function savePropPage() {
+            try { localStorage.setItem(PROP_PAGE_KEY, String(propPage)); } catch { /* 偏好写不进不影响用 */ }
         }
 
 
@@ -579,9 +682,9 @@ export function createPoseView({ api, $el, toast }) {
             );
         }
 
-        /** 左栏只列本机姿势存档（pose/scenes/）：预设姿势都在「浏览姿势库…」弹窗里，
+        /** 姿势库弹窗下半只列本机姿势存档（pose/scenes/）：预设姿势都在上半那一片卡片里，
          *  这一栏不再排一份预设清单 —— 库里有的东西不在这里重复一遍。搜索框按名字过滤，
-         *  一屏 120 行走「加载更多」，点一行与「载入姿势」共用同一条装载路 */
+         *  一屏 120 行走「加载更多」，点一行就是一次装载 */
         function paintPoseList() {
             const q = libFilterSearch.value.trim().toLowerCase();
             const sceneRows = (sceneNames || [])
@@ -730,7 +833,7 @@ export function createPoseView({ api, $el, toast }) {
         }
 
 
-        /** 弹窗只装一件事：pose-lib 的整场库（本机那份 + 云端那份）；数据根的存档与本机文件都在左栏那一条上 */
+        /** 弹窗只装一件事：pose-lib 的整场库（本机那份 + 云端那份）；数据根的本机存档与选本机文件都在下半那一列 */
         async function openLibModal() {
             libModal.setContent(libPane);
             libModal.open(t("姿势库"));
@@ -752,7 +855,7 @@ export function createPoseView({ api, $el, toast }) {
                 }
             }
             libShown = LIB_PAGE;
-            libListShown = LIB_LIST_PAGE;   // 清一次分页：重新进窗时左栏那一列回到第一屏
+            libListShown = LIB_LIST_PAGE;   // 清一次分页：重新进窗时本机存档那一列回到第一屏
             renderLibIndex();
             paintPoseList();
         }
@@ -790,7 +893,6 @@ export function createPoseView({ api, $el, toast }) {
         libMore.onclick = () => { libShown += LIB_PAGE; renderLibIndex(); };
         libFilterSearch.oninput = () => { libListShown = LIB_LIST_PAGE; paintPoseList(); };
         btnListMore.onclick = () => { libListShown += LIB_LIST_PAGE; paintPoseList(); };
-        btnBrowseLib.onclick = () => openLibModal();
         btnSceneLocal.onclick = () => { sceneFile.value = ""; sceneFile.click(); };
 
         /* 本机的一份姿势文件：库里没有的那份一样装得进，走的还是 pose:open-scene 那条装载路 */
@@ -805,7 +907,7 @@ export function createPoseView({ api, $el, toast }) {
             });
         };
 
-        /* 姿势存档 = 读那份场景装进页面：左栏点一条与「载入姿势」按钮走同一条装载路 */
+        /* 姿势存档 = 读那份场景装进页面：弹窗里点一行就是装载，预设卡片点下去也是同一条 pose:open-scene */
         const loadScene = (name) => run(async () => {
             pickedScene = name;
             await refreshScenes();
@@ -822,8 +924,7 @@ export function createPoseView({ api, $el, toast }) {
         const refreshProps = () => action("prop/list").then(paintProps)
             .catch((e) => toast(tf("道具列表失败：{msg}", { msg: e.message })));
 
-        /* 预设只从「浏览姿势库…」弹窗那一条路进：左栏不排预设清单，右栏没有预设下拉，也不发第二条套用通路 */
-
+        /* 「保存姿势」是右上角的工具条入口：名字写进 pose/scenes/，与弹窗里那一列本机存档对上 */
         btnSavePose.onclick = () => run(async () => {
             const typed = poseName.value.trim();
             if (!typed) { toast(t("请先写姿势名")); poseName.focus(); return; }
@@ -834,12 +935,6 @@ export function createPoseView({ api, $el, toast }) {
             await refreshScenes();
             toast(tf("姿势已保存：{name}", { name: typed }));
         });
-
-        btnLoadPose.onclick = () => {
-            const name = poseName.value.trim() || pickedScene;
-            if (!name) { toast(t("先在姿势库里选一个")); poseName.focus(); return; }
-            loadScene(name);
-        };
 
         /* 面板动作 → 画布：动作结果带回状态就镜像，道具变动则重问一次 prop/list */
         btnAddMember.onclick = () => run(() =>
@@ -858,26 +953,42 @@ export function createPoseView({ api, $el, toast }) {
             canvas.model = modelSel.value;
         });
 
-        btnAddProp.onclick = () => run(async () => {
+        /** 加一件道具：云端先把 GLB 落进本机缓存（页面那条 /models/props/<file>.glb 由第三级 fallback
+         *  接住，姿势页与道具注册表都不知道这批来自云端）；落点由页面算 —— prop/add 找空位（避开素体
+         *  与场上已有道具），面板不猜坐标 */
+        async function addPropChoice(key) {
+            const choices = allPropChoices();
+            const cloudProp = choices.find((c) => c.key === key && c.path);
+            if (cloudProp) await cloudFile(cloudProp.path, false);
+            await action("prop/add", { key });
+            await refreshProps();
+            toast(tf("已添加道具：{name}", { name: choices.find((c) => c.key === key)?.label || key }));
+        }
+        propSearch.oninput = () => paintPropGrid();
+        /* 回车即添加（不点任何按钮）：搜索框回车加筛出来的第一件，道具名框回车按名字解析 ——
+           名字在清单里找不到就不发请求 */
+        propSearch.onkeydown = (e) => {
+            if (e.key !== "Enter") return;
+            e.preventDefault();
+            const hit = propRows()[0];
+            if (!hit) { toast(t("道具表里没有匹配的道具")); return; }
+            run(() => addPropChoice(hit.key));
+        };
+        propName.onkeydown = (e) => {
+            if (e.key !== "Enter") return;
+            e.preventDefault();
             const choices = allPropChoices();
             const typed = propName.value.trim();
-            const key = typed ? resolvePropChoice(typed, choices) : pickedPropKey;
             propName.value = "";   // 一次性输入：写完就清，下一发不覆盖上一发
-            if (typed && !key) {
+            if (!typed) { toast(t("道具名还空着：写 椅子 / 桌子 / 剑 这类名字再回车")); return; }
+            const key = resolvePropChoice(typed, choices);
+            if (!key) {
                 toast(tf("道具表里没有「{name}」：可输入 椅子 / 桌子 / 剑 这类名字（共 {n} 项），或点一张卡片",
                     { name: typed, n: choices.length }));
                 return;
             }
-            if (!key) { toast(t("先选一个道具")); return; }
-            // 云端道具先把 GLB 落进本机缓存：页面那条 /models/props/<file>.glb 由第三级 fallback 接住，
-            // 姿势页与道具注册表都不知道这批来自云端
-            const cloudProp = choices.find((c) => c.key === key && c.path);
-            if (cloudProp) await cloudFile(cloudProp.path, false);
-            // 落点由页面算：prop/add 找空位（避开素体与场上已有道具），面板不猜坐标
-            await action("prop/add", { key });
-            await refreshProps();
-        });
-        propSearch.oninput = () => paintPropGrid();
+            run(() => addPropChoice(key));
+        };
         btnGroundProp.onclick = () => run(async () => {
             if (!pickedProp) { toast(t("先选一个道具")); return; }
             await action("prop/ground", { id: pickedProp });
@@ -981,22 +1092,6 @@ export function createPoseView({ api, $el, toast }) {
         }
         await render();
     };
-}
-
-/** 收起钮的图标：一只两栏框，本栏那一格填实 —— 左栏的格在左、右栏镜像在右，收起后那一格缩成一条，
- *  栏现在是宽是窄从图标上就能看出来（钮面上没有字，表意全靠它） */
-function sideIcon(side, collapsed) {
-    const paneW = collapsed ? 1.4 : 3.3;
-    const left = side !== "panel";
-    const rule = left ? 9.5 : 14.5;
-    const paneX = left ? 5.2 : 18.8 - paneW;
-    return `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"`
-        + ` fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"`
-        + ` stroke-linejoin="round" aria-hidden="true" style="flex:none">`
-        + `<rect x="3" y="5" width="18" height="14" rx="3.5"/>`
-        + `<path d="M${rule} 7v10"/>`
-        + `<rect class="ns-pose-collapse-pane" x="${paneX}" y="7.5" width="${paneW}" height="9" rx="1"`
-        + ` stroke="none" fill="currentColor" opacity="${collapsed ? 0.45 : 0.62}"/></svg>`;
 }
 
 /** 卡片缩略图优先级：clay 是写实渲染那张，一眼看得出姿势；缺 clay 的条目落到 skeleton / silhouette / depth。

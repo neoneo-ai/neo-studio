@@ -55,6 +55,11 @@ LIB_DIR = POSE_DIR / "lib"
 # 也不进 /extensions，桌面端那条中间件把整段按 no-store 下发，带哈希的 wasm 每次刷新重传。
 STATIC_PREFIX = "/pose-dist"
 PAGE_URL = f"{STATIC_PREFIX}/index.html"
+# 宿主页面自己不放原生「选择文件」：本机姿势文件那只框子是纯选文件器（display:none 在 pose.css），
+# 不用一排进画布。这条兜住的是姿势包自己那几只不吃 hidden 的 file input（动画/画面板），单机版
+# （npm run dev / 静态站）逐字不变 —— 规则只认入口页首帧自己打的 html[data-host-ui]。
+HOST_PAGE_CSS = ("<style>html[data-host-ui] input[type=\"file\"]"
+                 "{display:none !important}</style>")
 # 素体与道具的注册表在页面里写的是 origin 根上的绝对路径（/models/<key>.glb、
 # /models/props/index.json）：vite 把注册表里的 source 原样发出去，页面在 /pose-dist/ 下
 # 打开时这些请求落回 origin 根，前缀伺服一条都接不到。注册表读空的页面不会报错，
@@ -75,7 +80,7 @@ BRIDGE_MESSAGES = ("pose:ready", "pose:theme", "pose:export-image",
 
 # 姿势、时间轴、导出全在浏览器里跑（three.js），本机服务只提供文件；照片估点、网格、pano 要
 # pose-art 那套 Python sidecar（vite dev/preview 才挂载），桌面端进程起不动它们，页面按这几位置灰按钮。
-# hostUi 反过来：宿主自带控件面板（pose.js 的工具条 + 侧栏），姿势页据此收起自己的 demo 控件，
+# hostUi 反过来：宿主自带控件面板（pose.js 的画布 + 透明工具条上的弹层），姿势页据此收起自己的 demo 控件，
 # 面板的动作经 pose:call 落到页面运行时上（动作清单在姿势页 src/ui/hostCommands.js）。
 # body_import 是姿势页自己那侧的能力，不依赖 sidecar：随包只发授权干净的 CC0 素体，Mixamo 与 SMPL 派生的
 # 那几份由用户在页面自己的本地导入区登记。宿主面板只发标准男 / 标准女两具基座（studio/web/pose/pose.js
@@ -152,8 +157,29 @@ def _dist_response(rel: str) -> web.StreamResponse:
         if target.is_dir():
             target = target / "index.html"
         if target.is_file():
-            return _props_registry_response(target) if merged else _file_response(target)
+            if merged:
+                return _props_registry_response(target)
+            if target.name == "index.html":
+                return _page_response(target)
+            return _file_response(target)
     return web.Response(status=404)
+
+
+def _page_response(target: Path) -> web.StreamResponse:
+    """入口页：发出去之前贴一段宿主侧的样式（HOST_PAGE_CSS），包自己的内容不动。
+
+    产物 CSS 里没有收原生选文件器的规则，改哈希名的 assets 会被 WebView2 连样式一起长缓存住；
+    入口页每次校验，样式跟着这一发走。读不出就原样给：坏产物由页面自己报，宿主不替它编一份。
+    """
+    try:
+        html = target.read_text(encoding="utf-8")
+    except OSError:
+        return _file_response(target)
+    head, sep, tail = html.partition("</head>")
+    resp = web.Response(body=(head + HOST_PAGE_CSS + sep + tail).encode("utf-8"))
+    resp.headers["Content-Type"] = "text/html"
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp
 
 
 def _props_registry_response(target: Path) -> web.StreamResponse:
