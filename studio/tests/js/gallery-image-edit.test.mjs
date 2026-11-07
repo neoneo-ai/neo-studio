@@ -1513,6 +1513,18 @@ test("图片编辑弹窗：机位模式预填触发词，拖球 / 滑杆同步�
     const overlay = document.querySelector(".neo-gallery-edit-modal-overlay");
     await sleep(20);
 
+    // 常规模式先放一张额外参考图：切到机位应清掉（机位只用原图这一张）
+    const refDropZone = overlay.querySelector(".neo-gallery-edit-refdrop");
+    const dt = { getData: (m) => (m === "application/x-neo-gallery" ? '{"filename":"extra_ref.png","subfolder":""}' : "") };
+    const dropEv = new window.Event("drop", { bubbles: true, cancelable: true });
+    Object.defineProperty(dropEv, "dataTransfer", { value: dt, configurable: true });
+    refDropZone.dispatchEvent(dropEv);
+    await sleep(30);
+    assert.ok(overlay.querySelector(".neo-gallery-edit-refchip-img"), "常规模式先放一张参考图");
+
+    // 面板不重建，框里常留着上一个模式的提示词：点「机位」这一下要换成机位指令，
+    // 否则拖球只改读数，技能拿到的还是旧词
+    overlay.querySelector(".neo-gallery-story-input").value = "上一轮留在框里的指令";
     await pickEdit(overlay, "机位");
     assert.equal(overlay.querySelector(".neo-gallery-gm-skill-sel").value, "qwen_image_21_camera_angle", "开机位应切到机位技能");
     const angleBox = overlay.querySelector(".neo-gallery-edit-angle");
@@ -1522,7 +1534,10 @@ test("图片编辑弹窗：机位模式预填触发词，拖球 / 滑杆同步�
                  "默认词应把技能模板的三个方括号按当前档位填死");
     assert.equal(angleBox.querySelector(".neo-angle-readout").textContent, "正面0° · 平视0° · 中景", "球默认正面 / 平视 / 中景");
     assert.notEqual(overlay.querySelector("#img-edit-width").style.display, "none", "机位走常规画布：目标分辨率保持可见");
-    assert.ok(!overlay.querySelector(".neo-gallery-edit-refdrop-row").classList.contains("disabled"), "机位模式参考图区应可用");
+    // 机位只用原图这一张：参考图位列收起、已放的额外参考被清掉，输入卡换成降矮的一条（高度见 gallery.css）
+    assert.equal(overlay.querySelector(".neo-gallery-edit-refdrop-row").style.display, "none", "机位模式参考图区收起");
+    assert.equal(overlay.querySelector(".neo-gallery-edit-refchip-img"), null, "切机位应清掉已选的额外参考");
+    assert.ok(overlay.querySelector(".neo-gallery-gm-composer").classList.contains("neo-gallery-gm-composer--angle"), "输入卡进机位档");
 
     // 拖球 100px：右移 80° 松手吸附到 90（右侧），提示词跟着换
     const canvas = angleBox.querySelector(".neo-angle-canvas");
@@ -1575,11 +1590,14 @@ test("图片编辑弹窗：机位模式预填触发词，拖球 / 滑杆同步�
     assert.equal(genBody.skill_id, "qwen_image_21_camera_angle");
     assert.equal(genBody.prompt, "自定义机位指令", "请求带用户写下的指令");
     assert.deepEqual(genBody.angle, { rotation: 90, tilt: 60, zoom: 10 }, "生成请求带机位三档");
+    assert.equal(genBody.references.length, 1, "机位只送原图这一张，额外参考不随请求");
 
     // 关机位（模式 chip 选回「常规」）→ 控件收起，回到常规编辑技能
     await pickEdit(overlay, "常规");
     assert.equal(overlay.querySelector(".neo-gallery-gm-skill-sel").value, "qwen_image_21", "关机位应回到常规编辑技能");
     assert.equal(overlay.querySelector(".neo-gallery-edit-angle").style.display, "none", "离开机位模式控件收起");
+    assert.equal(overlay.querySelector(".neo-gallery-edit-refdrop-row").style.display, "", "离开机位模式参考图区恢复");
+    assert.ok(!overlay.querySelector(".neo-gallery-gm-composer").classList.contains("neo-gallery-gm-composer--angle"), "输入卡退出机位档");
 });
 
 

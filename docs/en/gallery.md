@@ -388,7 +388,8 @@ pose / camera angle folded into one chip's menu, each mode explained on its menu
   (rotation 8 detents / tilt -30°..60° in 4 detents / zoom wide-medium-close in 3) stay synced with the orb, and the
   keyboard arrows walk the same steps once the orb has focus. The prompt is prefilled with the camera trigger words,
   the three brackets filled from the current detents and refreshed when the angle changes (a prompt you wrote
-  yourself is never overwritten). The request carries `angle = {rotation, tilt, zoom}`, the sidecar records
+  yourself is never overwritten). This mode uses the source image only, so the reference slot folds away and the
+  prompt box shrinks to three lines. The request carries `angle = {rotation, tilt, zoom}`, the sidecar records
   `angle=rotation/tilt/zoom`, and Regenerate restores the orb with it.
 - **ControlNet structure lock** - "Qwen Image 2.1 ControlNet" in the editing skill dropdown (no dedicated
   switch, selecting the skill is enough): the source goes into `<image1>` supplying content and face, and a

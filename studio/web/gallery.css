@@ -3168,6 +3168,13 @@ Accordion Section Buttons (Clear)
 .neo-gallery-gm-composer .neo-gallery-edit-refdrop-icon {
     font-size: 20px;
 }
+/* 机位模式：参考图位列由 JS 收起，提示词框跟着降矮——词是模板生成的固定句式，两三行就够，
+   省下的高度留给预览（绘画页那条 88-150px 的框在机位下没有可填的内容）；拉高仍可用 */
+.neo-gallery-gm-composer--angle .neo-gallery-edit-refline .neo-gallery-gm-quick-input {
+    height: 72px;
+    min-height: 72px;
+    resize: vertical;
+}
 .neo-gallery-edit-refdrop-cap {
     position: absolute;
     left: 0;

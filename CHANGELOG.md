@@ -14,6 +14,7 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   the keyboard arrows walk the same steps. Selecting 机位 switches to the new 「Qwen Image 2.1 机位编辑」 preset
   (`studio/skills/presets/qwen_image_21_camera_angle/`) and prefills its default trigger words - the three square
   brackets are filled from the current detents and refresh with the angle, never overwriting a prompt you wrote.
+  The mode uses the source image only, so the reference slot folds away and the prompt box drops to three lines.
   The request carries `angle = {rotation, tilt, zoom}`, the sidecar records `angle=rotation/tilt/zoom`, and
   再来一发 restores the mode, skill, prompt and the orb together. Covered by
   `studio/tests/js/angle-orb.test.mjs`, the new cases in `studio/tests/js/gallery-image-edit.test.mjs` and the

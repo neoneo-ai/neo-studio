@@ -2188,14 +2188,17 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
                 : key === "tilt" ? `${tiltLabel(cfg.tilt)}${cfg.tilt}°` : zoomLabel(cfg.zoom);
         }
     };
-    const fillAnglePrompt = () => {
+    // 机位触发词 = 技能 default_prompt 的方括号按当前三档填死。
+    // 进模式那一下（force）直接写：模式本身就是「用机位指令重出这一张」，框里残留上一个模式的词会让技能收不到机位；
+    // 进模式之后只覆盖「空 / 仍是模板 / 仍是上一版填好的词」，用户自己改过的不碰（与 syncPosePrompt 同一条规矩）。
+    const fillAnglePrompt = (force = false) => {
         if (editMode !== "angle") return;
         const tpl = angleTemplate();
-        const want = anglePrompt(angleOrb.get(), tpl);
         const cur = promptInput.value.trim();
-        if (cur && cur !== tpl && cur !== anglePrompt(angleBeforeFill, tpl)) return;
-        angleBeforeFill = angleOrb.get();
-        if (want) promptInput.value = want;
+        if (!force && cur && cur !== tpl && cur !== anglePrompt(angleBeforeFill || DEFAULT_ANGLE, tpl)) return;
+        const cfg = angleOrb.get();
+        angleBeforeFill = cfg;
+        promptInput.value = anglePrompt(cfg, tpl);
     };
     let angleBeforeFill = null;
     /** 滑杆落点吸附到档位：range 的 step 已按档位排好，这里只兜手改 value 与拖到中间值的情况。 */
@@ -2232,7 +2235,9 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
         localRow.style.display = mode === "local" ? "" : "none";
         removeRow.style.display = mode === "remove" ? "" : "none";
         angleBox.style.display = mode === "angle" ? "" : "none";
-        if (mode === "angle") { angleOrb.setTemplate(angleTemplate()); syncAngleSliders(angleOrb.get()); }
+        // 机位只用原图这一张：参考图位列收起，提示词框跟着降矮（词是模板生成的固定句式，两三行就够）
+        refDropContainer.style.display = mode === "angle" ? "none" : "";
+        composer.classList.toggle("neo-gallery-gm-composer--angle", mode === "angle");
 
         // 尺寸片：扩图/局部/删除各自的画布定尺寸，片收起；扩图要把「目标尺寸」读数露在编辑区里
         const hideWH = (mode === "outpaint" || mode === "local" || mode === "remove");
@@ -2274,8 +2279,7 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
             syncPosePrompt();
         } else if (mode === "angle") {
             angleOrb.setTemplate(angleTemplate());
-            angleBeforeFill = null;
-            fillAnglePrompt();
+            fillAnglePrompt(true);
             syncAngleSliders(angleOrb.get());
         }
 
@@ -2612,9 +2616,9 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
         renderRefSlots();
     };
 
-    // 扩图/局部/点选模式只用首张参考，额外参考不可用（融合模式允许多张）
+    // 机位 / 扩图 / 局部 / 点选只用原图这一张，额外参考不可用（机位把整行收起，其余置灰）
     const syncRefBtn = () => {
-        const disabled = editMode === "outpaint" || editMode === "local" || editMode === "remove";
+        const disabled = editMode === "outpaint" || editMode === "local" || editMode === "remove" || editMode === "angle";
         refDropContainer.classList.toggle("disabled", disabled);
         if (disabled && extraRefs.length) { extraRefs = []; renderRefSlots(); }
     };
@@ -2654,8 +2658,8 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
             await setEditMode(mode);
             filled.push(t("编辑模式"));
         }
-        // 扩图 / 局部 / 点选的额外参考图不进 payload（start() 那三条各自只用原图），填了就是骗人
-        const refs = editMode === "outpaint" || editMode === "local" || editMode === "remove"
+        // 扩图 / 局部 / 点选 / 机位的额外参考图不进 payload（这几条只用原图），填了就是骗人
+        const refs = editMode === "outpaint" || editMode === "local" || editMode === "remove" || editMode === "angle"
             ? [] : (pf?.refs || []).filter((r) => r?.filename);
         if (refs.length) {
             await addRefImages(refs.slice(0, MAX_EXTRA_REFS));
@@ -2673,6 +2677,8 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
         if (editMode === "angle" && pf?.angle) {
             angleOrb.set(pf.angle);
             syncAngleSliders(angleOrb.get());
+            // 上一版填好的词就是这套档位写的：之后拖球还能接着改它，用户改过的不动
+            angleBeforeFill = angleOrb.get();
             filled.push(t("机位"));
         }
         const prompt = String(pf?.prompt || "").trim();
