@@ -4,7 +4,7 @@
 前端一次 POST /neo_agent/run 之后只收 {kind,text} 帧的时间线：plan / tool_call /
 tool_result / status / content / ask / paused / resumed / context / usage / plan_steps /
 focus / finish。运行一律由 LLM 规划并调工具；
-界面当前状态（当前页、当前导演配方、绘画页模式、素材库目录）随请求体进系统提示词，
+界面当前状态（当前页、当前导演配方、素材库目录）随请求体进系统提示词，
 右栏的 @ 能点名技能（生成型直接当 skill_id，正文型走 generate_prompt），没点名时由 LLM 自己查 list_skills 定；
 点名的主模型 / LoRA / 图像与视频提示词 / 配方随请求体 mentions 进系统提示词（见 _mention_block）。
 
@@ -1222,16 +1222,15 @@ def _focus_block(focus: dict) -> str:
     return out
 
 
-CONTEXT_PAGES = ("gallery", "director", "paint", "skills", "settings")
-CONTEXT_MODES = {"text": "文生图", "edit": "图片编辑"}
-CONTEXT_LIB_PAGES = ("gallery", "paint", "director")   # 素材库只在这三页上屏，其余页报目录就是串到没在看的页签上
+CONTEXT_PAGES = ("gallery", "director", "paint", "edit", "skills", "settings")
+CONTEXT_LIB_PAGES = ("gallery", "edit", "director")   # 素材库只在这三页上屏，其余页报目录就是串到没在看的页签上
 CONTEXT_CLIP = 120      # 上下文串是配方名、目录名这类 DOM 里的值，属不可信输入：逐字段裁长度
 
 
 def _context_block(raw) -> str:
     """界面当前状态压成一段事实进系统提示词：当前页，以及这一页自己那份状态
-    （导演页的配方、绘画页的模式、上屏那几页的素材库目录）。
-    右栏没有技能选择器了，这一份就是 LLM 判断「该围绕哪个配方、哪种绘画模式干活」的唯一依据，
+    （导演页的配方、上屏那几页的素材库目录）。
+    右栏没有技能选择器了，这一份就是 LLM 判断「该围绕哪个配方干活」的唯一依据，
     所以每一栏都按它所属的页收：用户在技能页时还带着「当前导演配方：X」出片，就是拿没在看的页签干扰本轮。
     值全从前端来，按页、类型与长度收净，提示词里写明这只是状态、不是指令。"""
     if not isinstance(raw, dict):
@@ -1245,9 +1244,6 @@ def _context_block(raw) -> str:
         seg = raw.get("segments")
         tail = f" · {int(seg)} 段" if isinstance(seg, (int, float)) and int(seg) > 0 else ""
         lines.append(f"当前导演配方：{recipe}{tail}")
-    mode = str(raw.get("paint_mode") or "")
-    if page == "paint" and mode in CONTEXT_MODES:
-        lines.append(f"绘画页模式：{CONTEXT_MODES[mode]}")
     gallery = _clip(str(raw.get("gallery_path") or ""), CONTEXT_CLIP).strip()
     if gallery and page in CONTEXT_LIB_PAGES:
         # 角色图目录是画廊的事实，智能体自己没有这份数据：三视图是设定图，基于这些图

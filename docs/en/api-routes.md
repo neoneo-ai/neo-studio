@@ -282,13 +282,14 @@ included), and the dock never calls a handler directly.
 - The whole turn is planned by the LLM calling tools, with a per-turn cap: 12 by default, widened to 20 when the
   `@` picker designates a body-only skill (no `workflow.json`). The dock's `@` can designate a skill (a template
   skill becomes the `skill_id`, a body-only skill runs through `generate_prompt`); when nothing is designated the
-  LLM picks the skill itself through `list_skills`, and `context` is its only evidence for which recipe and which
-  paint mode the work should revolve around. One run reads the designated skill's summary once
+  LLM picks the skill itself through `list_skills`, and `context` is its only evidence for which recipe on which
+  page the work should revolve around. One run reads the designated skill's summary once
   (`/rs_prompts/load_skill`: category / `description` / template flag / reference-file list); the skill body never
   enters the dock's context, and a skill that cannot be read (deleted mid-run) falls back to naming the id only.
 - `context` enters the system prompt as facts, never as instructions: `page` accepts only `gallery` / `director` /
-  `paint` / `skills` / `settings`, `paint_mode` counts only on the paint page and accepts only `text` / `edit`,
-  recipe names and library paths are clipped to 120 characters, `segments` is taken as an integer, and any value
+  `paint` / `edit` / `skills` / `settings` (the input page reports `paint`, the edit page reports `edit`, one line
+  per page and no paint-mode field), recipe names and library paths are clipped to 120 characters, the library path
+  is reported only on `gallery` / `edit` / `director`, `segments` is taken as an integer, and any value
   outside those tables drops its whole line.
 - `mode=plan` is plan mode: `generate_image` / `director_run` / `segment_run` / `assemble_run` /
   `director_save` / `director_copy` / `cancel_task` stay out of the LLM's tool list, and calling one anyway is

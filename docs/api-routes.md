@@ -247,12 +247,12 @@ Neo Studio 独立页面（`web/studio/index.html`）的后端。素材 / 生图 
 
 - 一轮对话全程由 LLM 规划并调工具，轮次上限按本轮点名的技能给：默认 12，`@` 点名没有模板的正文型技能
   那一轮放宽到 20；右栏的 `@` 能点名技能（带 `workflow.json` 的直接当 `skill_id`，正文型的走
-  `generate_prompt`），没点名时由 LLM 自己查 `list_skills` 定，`context` 就是它判断「围绕哪个配方、
-  哪种绘画模式干活」的唯一依据。一次运行只取一次点名技能的摘要（`/rs_prompts/load_skill`：类别 /
+  `generate_prompt`），没点名时由 LLM 自己查 `list_skills` 定，`context` 就是它判断「围绕哪个配方、在哪一页干活」
+  的唯一依据。一次运行只取一次点名技能的摘要（`/rs_prompts/load_skill`：类别 /
   `description` / 有无模板 / 引用文件清单），技能正文不进右栏的上下文，取不到时（技能被删）交回只报 id 的那一份。
-- `context` 只当事实进系统提示词，不当指令：`page` 只认 `gallery` / `director` / `paint` / `skills` /
-  `settings`，`paint_mode` 只在 `page=paint` 时生效且只认 `text` / `edit`，配方名与素材库目录按 120 字裁剪，
-  `segments` 只取整数；表外的值整行丢掉。
+- `context` 只当事实进系统提示词，不当指令：`page` 只认 `gallery` / `director` / `paint` / `edit` / `skills` /
+  `settings`（输入页报 `paint`、编辑页报 `edit`，一栏一行，没有「绘画模式」这一档），配方名与素材库目录按 120 字裁剪，
+  素材库目录只在 `gallery` / `edit` / `director` 三页上报，`segments` 只取整数；表外的值整行丢掉。
 - `mode=plan` 是计划模式：`generate_image` / `director_run` / `segment_run` / `assemble_run` /
   `director_save` / `director_copy` / `cancel_task` 不进 LLM 的工具表，硬调也拒回错误；
   查询类工具照旧可用。

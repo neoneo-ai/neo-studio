@@ -56,12 +56,14 @@ test("机位球：拖拽实时夹紧俯仰带，松手吸附档位并只回一�
     const pointer = (type, x, y) => canvas.dispatchEvent(new window.MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, pointerId: 1 }));
 
     pointer("pointerdown", 80, 80);
+    assert.ok(orb.el.classList.contains("dragging"), "拖拽中整块球进手抓取态（光标规则见 angle-orb.css）");
     pointer("pointermove", 180, 80);    // 右拖 100px × 0.8 = +80°
     assert.equal(orb.get().rotation, 80, "拖拽中允许连续角");
     assert.equal(changes.length, 0, "拖拽中不刷提示词，松手才回一次");
     pointer("pointermove", 180, -60);   // 上拖 140px = +112°，夹到高俯上限 60
     assert.equal(orb.get().tilt, 60, "拖拽中俯仰夹在 -30..60 带内");
     pointer("pointerup", 180, -60);
+    assert.ok(!orb.el.classList.contains("dragging"), "松手退出抓取态");
     assert.deepEqual(orb.get(), { rotation: 90, tilt: 60, zoom: 5 }, "松手吸附到档位");
     assert.deepEqual(changes, [{ rotation: 90, tilt: 60, zoom: 5 }], "松手只发一次变化");
 

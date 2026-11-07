@@ -259,6 +259,8 @@ export function createAngleOrb({ cfg, onChange, size = 160 } = {}) {
         dragStart = { ...angle };
         lastX = e.clientX;
         lastY = e.clientY;
+        // 光标跟着指针下的元素走（指针捕获不改它）：整块球（含读数）锁成抓取态，划过方位键 / 读数都不变样
+        el.classList.add("dragging");
         wrap.setPointerCapture?.(e.pointerId);
         paint();
         e.preventDefault();
@@ -276,6 +278,7 @@ export function createAngleOrb({ cfg, onChange, size = 160 } = {}) {
     const endDrag = (e) => {
         if (!dragging) return;
         dragging = false;
+        el.classList.remove("dragging");
         wrap.releasePointerCapture?.(e.pointerId);
         angle.rotation = snapToNearest(angle.rotation, ROTATION_VALUES);
         angle.tilt = snapToNearest(angle.tilt, TILT_VALUES);

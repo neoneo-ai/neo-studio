@@ -674,7 +674,7 @@ test("窄栏底栏的 CSS：composer 是容器、输入卡深底、焦点框只�
         "技能弹层挂 body 上，颜色吃 :root 的 --ns-*：吃 .neo-agent 的局部变量就是一路回落值");
 });
 
-test("切页与切绘画模式：上下文条跟着宿主走，请求带的是切过之后的状态", async () => {
+test("切页：上下文条跟着宿主走，请求带的是切过之后的那一页", async () => {
     mountStudio();
     await openStudio("#/gallery");
     enableCtx();
@@ -683,18 +683,19 @@ test("切页与切绘画模式：上下文条跟着宿主走，请求带的是�
     click(document.querySelector('.ns-tabs a[data-tab="paint"]'));
     await flush(40);
     assert.ok(ctxBar().textContent.includes("绘画页"), `切页后应报绘画页：${ctxBar().textContent}`);
-    assert.ok(ctxBar().textContent.includes("文生图"), `绘画页应报出当前模式：${ctxBar().textContent}`);
+    assert.ok(!ctxBar().textContent.includes("文生图") && !ctxBar().textContent.includes("图片编辑"),
+        `绘画页只有文生图，页面名本身就是这件事，不再报模式：${ctxBar().textContent}`);
 
-    click([...document.querySelectorAll(".ns-paint-mode-btn")][1]);
-    await flush(20);
-    assert.ok(ctxBar().textContent.includes("图片编辑"), `切模式后应报图片编辑：${ctxBar().textContent}`);
+    click(document.querySelector('.ns-tabs a[data-tab="edit"]'));
+    await flush(40);
+    assert.ok(ctxBar().textContent.includes("编辑页"), `切到编辑页应报编辑页：${ctxBar().textContent}`);
 
     mockAgentStream([{ kind: "content", text: "好" }]);
     inputText(dock().querySelector(".neo-agent-input"), "把这张图改成夜景");
     click(runBtn());
     await flush(40);
-    assert.equal(agentCalls()[0].body.context.page, "paint", "请求应带上切过之后的页");
-    assert.equal(agentCalls()[0].body.context.paint_mode, "edit", "请求应带上切过之后的绘画模式");
+    assert.equal(agentCalls()[0].body.context.page, "edit", "请求应带上切过之后的页");
+    assert.ok(!("paint_mode" in agentCalls()[0].body.context), "两页各出一件事：上下文不再带绘画模式");
 });
 
 test("界面上下文默认不带：点条启用后才带、条上的 ✕ 再关掉，这条选择存本机", async () => {
@@ -705,15 +706,16 @@ test("界面上下文默认不带：点条启用后才带、条上的 ✕ 再关
     assert.ok(!ctxEnabled(), "默认不该带界面上下文");
 
     enableCtx();
-    const modeLabel = ctxBar().textContent.includes("文生图") ? "文生图" : "图片编辑";
-    assert.ok(ctxBar().textContent.includes("绘画页 · " + modeLabel),
-        `启用后应报自己那一栏（模式存过就落回存过的那档）：${ctxBar().textContent}`);
+    assert.ok(ctxBar().textContent.includes("绘画页"),
+        `启用后应报自己那一栏：${ctxBar().textContent}`);
+    assert.ok(!ctxBar().textContent.includes("文生图") && !ctxBar().textContent.includes("图片编辑"),
+        `绘画页只有文生图，页面名本身就是这件事：${ctxBar().textContent}`);
 
     click(homeCardOf("技能"));   // 技能不占顶栏位：首页「素材与配置」区那张卡是它的入口
     await flush(40);
     assert.ok(ctxBar().textContent.includes("技能页"), `技能页应报技能页：${ctxBar().textContent}`);
     assert.ok(!ctxBar().textContent.includes("文生图") && !ctxBar().textContent.includes("图片编辑"),
-        `离开绘画页不该再带它的模式：${ctxBar().textContent}`);
+        `离开绘画页不该再报生成模式：${ctxBar().textContent}`);
 
     mockAgentStream([{ kind: "content", text: "好" }]);
     click(ctxOffBtn());

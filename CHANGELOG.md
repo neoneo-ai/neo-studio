@@ -5,6 +5,16 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 ## [Unreleased]
 
 ### Added
+- **The 编辑 page takes its 原图 from the preview area.** An empty 图片编辑 preview now carries a fixed-size
+  「＋ 原图」 box in its centre (220×140 on a dashed outline, no filled background, so it never reads as disabled):
+  clicking it opens the asset library, hovering it floats a two-item menu — **🖼 素材库取图** / **⬆ 本地上传**
+  (a chosen file is copied into `input/` and set as the source) — and dropping a file onto the box lands the same
+  way; the box folds away once a 原图 is in place and returns when the source is cleared. The 原图 now scales up to
+  fill the preview area (centered, `object-fit: contain`, nothing cropped) instead of sitting at its natural size in
+  a fixed box, and the 编辑 page's page padding and the input card's padding give their strips to it. The 绘画 page
+  keeps its own page padding and input card: the two pages' styles hang on their own hosts (`.ns-paint-edit` /
+  `.ns-paint-text`), so a layout change on one never restyles the other. Covered by
+  `studio/tests/js/gallery-image-edit.test.mjs` and `studio/tests/js/studio-paint.test.mjs`.
 - **Camera-angle image-edit mode with a Canvas2D angle orb.** The image-edit panel's mode chip gains
   **机位**: the edit area reveals a 160px angle orb (`studio/web/angle/angle-orb.js` + `angle-orb.css`, Canvas2D
   wireframe sphere with a perspective camera drawn solid — back faces culled, so the camera reads as a camera,
@@ -14,7 +24,9 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   the keyboard arrows walk the same steps. Selecting 机位 switches to the new 「Qwen Image 2.1 机位编辑」 preset
   (`studio/skills/presets/qwen_image_21_camera_angle/`) and prefills its default trigger words - the three square
   brackets are filled from the current detents and refresh with the angle, never overwriting a prompt you wrote.
-  The mode uses the source image only, so the reference slot folds away and the prompt box drops to three lines.
+  The mode uses the source image only, so the reference slot and the prompt box both fold away (the orb and the
+  three sliders set the words), and the 编辑 page's panel now stays inside the window: the preview shrinks with
+  the viewport instead of pushing a page scrollbar, and the idle hint line under it is gone.
   The request carries `angle = {rotation, tilt, zoom}`, the sidecar records `angle=rotation/tilt/zoom`, and
   再来一发 restores the mode, skill, prompt and the orb together. Covered by
   `studio/tests/js/angle-orb.test.mjs`, the new cases in `studio/tests/js/gallery-image-edit.test.mjs` and the
@@ -77,6 +89,12 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   [README_ZH.md](README_ZH.md) / [README.md](README.md) and from the docs index.
 
 ### Fixed
+- **The 编辑 page's 素材库取用 fills the reference slots, not the source image.** The 「＋参考」 menu hands the
+  asset-library modal the callback that appends picked cards to the 参考图 slots; the Studio host ignored it on this
+  page and always ran its own source-image pick, so a card picked from the reference menu replaced the 原图 being
+  edited while 参考图 stayed 0/9. The host now runs the callback the panel sent and consumes it when the modal opens,
+  so the floating 🖼 素材库 button keeps filling the 原图 and 「素材库取用」 keeps filling references. Covered by
+  `studio/tests/js/studio-paint.test.mjs`.
 - **The 3D Pose 「姿势库」 filter chips no longer go grey when the library source switches.** Switching source
   repainted the chips while the pane's action lock was closed, so each switch drew the whole chip row disabled -
   the lock releases only the controls registered on it, and a chip is not one of them, so they stayed grey until a
@@ -86,6 +104,31 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   `studio/tests/js/pose-bridge.test.mjs`.
 
 ### Changed
+- **The Studio window opens on the 输入 page: 绘画 is text-to-image only, 编辑 is image editing only.** The
+  former 绘画 tab held the text-to-image composer with the 图片编辑 panel hidden inside it; the tab is now two
+  pages - **输入** (the prompt composer, `#/paint`) and **编辑** (image editing, `#/edit`) - so the bar reads
+  首页 / 画廊 / 输入 / 编辑 / 视频 / 导演 / 姿势, and the window starts on 输入. What used to route into the
+  painting page now routes into 编辑: the 「编辑」 button on a gallery image card, `openImageEditor()` from the
+  global-search and asset-picker callbacks, and the 「编辑」 action in the 画廊 guide page. 编辑 carries its own
+  guide card (「拖入图片开始编辑」, 图片编辑 / 素材库 / 打开文件夹 buttons, the 拖拽编辑与对比 tip) on the same
+  `/neo-studio/edit-guide` snapshot as before. The agent's page-context line reports the page by its own name
+  (`编辑页`) instead of a 绘画 + 图片编辑 mode label. Covered by the tab list, deep-link and agent-context cases
+  in `studio/tests/js/studio-paint.test.mjs`.
+- **The 输入 page is a prompt-first composer.** The 参考图 boxes above the prompt are half the panel width and a
+  drag onto them uploads straight into the first free slot; the 生成 button sits under the prompt at full width
+  next to 随机, and the generated image appears below the prompt, centered. Under it one row carries
+  重新生成 / 随机 / 保存 / 存到画廊, so a run's follow-up actions are all on the same screen as its result.
+- **The 编辑 page keeps its input card on screen.** The preview fills the space above the card and the card is
+  pinned to the panel's bottom edge, so a tall source image shrinks the preview instead of pushing the 生成
+  button below the fold; the empty drop stage fills the preview area too. The 「原图 / 编辑结果」 label row and
+  the 看大图 zoom button are gone - a click on the source follows the curtain / divider rule in every mode, and
+  the lightbox opens from the source image, so 蒙版 / 点击 modes paint and mark instead of opening it. The 素材库
+  button floats over the top-right of the page, above the 素材库 drop zone it opens. In 机位 the prompt box
+  folds away (the orb, the arrows and the three sliders already set the words), and the 出图尺寸 width/height
+  inputs open above the chip row instead of under it, where the page edge cut them off. On this page the prompt
+  box is two lines tall - a 40px floor against the 110px composer height, with one step of card padding - because
+  an edit instruction is one sentence, and the taller box was a fifth of the window for nothing.
+
 - **The 3D Pose 「姿势库」 and 「道具」 windows search from the title bar and filter entirely by chips.** The
   search box of both windows moved out of the crowded filter row into the right side of the window's title bar (the
   asset-library shell grew a titlebar slot for it), and the pose window's remaining dropdowns are gone: the filters

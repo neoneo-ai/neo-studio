@@ -453,35 +453,24 @@ body {
 .neo-recipes-title-row .rs-btn,
 .neo-recipes-card-actions .rs-btn { flex: none; }
 
-/* 绘画页：满幅 = 文生图 / 图片编辑面板（模式切换，一次铺满整栏）；素材库走弹窗取用 */
-.ns-paint { display: flex; flex-direction: column; height: 100%; }
-/* 顶部留白：本页顶部内边距被素材页那条「sticky 工具条贴顶」规则清成 0，主栏自己补回一段，
-   模式条不贴着窗口边。主栏与两块面板都不写保底高度：.ns-view 是 overflow:hidden，
-   保底高度在矮窗口里不会出滚动条，只会把钉底的输入卡裁掉看不见 */
-.ns-paint-main { flex: 1 1 auto; display: flex; flex-direction: column; gap: 8px; padding-top: 12px; min-width: 0; }
-
-/* 模式切换：样式与导演编辑的页签（.neo-director-tab）同款——居中一排，
-   平时只出文字、选中那枚才落底出边框；文生图与图片编辑各占满主栏，一次只看一个。
-   素材库入口钉在这一行的右端，与居中模式条各行其职 */
-.ns-paint-modes { flex: none; display: flex; justify-content: center; gap: 4px; position: relative; }
-.ns-paint-lib-btn { position: absolute; right: 0; top: 50%; transform: translateY(-50%); display: inline-flex; align-items: center; gap: 6px; }
-.ns-paint-mode-btn {
-    flex: none;
-    cursor: pointer;
-    background: transparent;
-    color: #9aa4b0;
-    border: 1px solid transparent;
-    border-radius: 6px;
-    padding: 5px 12px;
-    font-size: 12px;
-}
-.ns-paint-mode-btn:hover { color: #ddd; background: rgba(255, 255, 255, 0.04); }
-/* 双类选择器压过 :hover，选中页签悬停时不落回半透明底（与 .neo-director-tab.active 同构） */
-.ns-paint-mode-btn.ns-paint-mode-on { color: #fff; background: #2a2d33; border-color: #4a4d55; }
-/* 面板宿主：铺满剩余栏高；两块面板进页就铺好，是本页的一块内容——
-   中间舞台摘掉之后这块面板就是绘画页唯一的画面，外壳（边框 / 圆角 / 内衬）由宿主承担，
-   输入卡贴的是这块壳的底边，不再悬在一条看不见的容器上；标题由上方模式条承担 */
-.ns-paint-panel { flex: 1 1 auto; min-height: 0; overflow: hidden; border: 1px solid var(--ns-border); border-radius: 8px; padding: 12px 14px; }
+/* 绘画页（文生图）与编辑页（图片编辑）：同一副骨架，一页一块面板铺满整栏；素材库走弹窗取用，只在编辑页 */
+.ns-paint { position: relative; display: flex; flex-direction: column; height: 100%; }
+/* 顶部留白：这两页顶部内边距被素材页那条「sticky 工具条贴顶」规则清成 0，主栏自己补回一段。
+   主栏与面板都写 min-height:0：不写的话 flex 的自动最小高度取子项的内容最小高度，机位行 + 输入卡会把
+   主栏顶得比窗口高，整页跟着滚出滚动条；写了它矮窗口只裁面板自己的内容 */
+.ns-paint-main { flex: 1 1 auto; display: flex; flex-direction: column; gap: 6px; padding-top: 8px; min-width: 0; min-height: 0; }
+/* 编辑页的上下空带单独收：这两页页边 16px 是给「输入卡 + 底部操作行」贴窗口底边留的余量，编辑页整页只有一块
+   预览 + 一张钉底输入卡，那两条带就是预览白白少的一截 —— 页边与主栏顶部在编辑页收成 4px / 0px，余隙全给预览。
+   绘画页照旧 16px：它的输入卡下面还有一行「保存 / 存到画廊」，收成 4px 那行就贴到窗口底边被裁掉（收高挂在共用
+   的 .ns-paint 上时坏的就是这里），两页样式从这里开始各走各的 */
+.ns-page:has(.ns-paint-edit) { padding-top: 4px; padding-bottom: max(4px, env(safe-area-inset-bottom)); }
+.ns-page:has(.ns-paint-edit) .ns-paint-main { padding-top: 0; gap: 4px; }
+/* 编辑页的素材库入口：浮在页面右上角，不为它空出一行（预览区顶部就是它的位置） */
+.ns-paint-bar { position: absolute; top: 12px; right: 14px; z-index: 3; display: flex; }
+.ns-paint-lib-btn { display: inline-flex; align-items: center; gap: 6px; }
+/* 面板宿主：铺满剩余栏高，不出自己的壳——这两页整页就是一块面板，再套一层边框圆角就是多一层没用的框；
+   输入卡贴的是这块宿主的底边，内衬由面板自己管（.neo-gallery-story-modal--embedded 的 padding 为 0） */
+.ns-paint-panel { flex: 1 1 auto; min-height: 0; overflow: hidden; }
 .ns-paint-panel .neo-gallery-gen-panel { display: flex; flex-direction: column; height: 100%; min-height: 0; }
 .ns-paint-panel .neo-gallery-story-modal--embedded {
     flex: 1 1 auto;
@@ -506,53 +495,76 @@ body {
 /* 浮层从贴底 chip 往上开，头顶到面板上沿就是它的全部空间：62vh 的壳在矮窗口里够不到顶，
    按面板上方的实际空间收，超了让左栏技能自己滚 */
 .ns-paint-panel .neo-gallery-gm-chip-panel { max-height: min(62vh, calc(100vh - 240px)); }
-/* 输入框高度跟着窗口走：600px 高的窗口里 150px 固定值会吃掉四分之一屏，预览图没地方落 */
+/* 输入框默认高度由 gallery.css 基础规则给（多行、可拉高）；机位模式整框收起（见下） */
 .ns-paint-panel .neo-gallery-gm-quick-input { min-height: clamp(88px, 16vh, 150px); }
-/* 文生图结果区吃满输入卡上方的余隙：进度与成品贴着输入卡往上长，中间不再留一大片空白
-   （余隙原来被输入卡的 margin-top:auto 吸走，结果区 flex:1 拿不到空间）。
-   空档收在首 child 的 margin-top:auto 上：内容超出容器时它自动归零，照旧从顶部铺开，不会把上方内容裁成滚不动的死角；
-   起手提示（.neo-gallery-gm-idle）自带 margin:auto，两头都吃空档，落在那片余隙正中。
+/* 文生图结果区吃满输入卡上方的余隙：内容从预览区顶部开始铺，余隙落在图片与输入卡之间
+   （空档挂在 first child 的 margin-top:auto 上会把图片整块往下推，图片上方就出现一大片黑）；
    结果区自己出纵向滚动：窗口矮到装不下「成品 + 起手提示 + 输入卡」时滚的是这一块，
    输入卡与操作区留在面板底边不动 —— 钉底的输入卡不能被内容顶出去，顶出去就点不到「生成」 */
 .ns-paint-text .neo-gallery-cs-status { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
-.ns-paint-text .neo-gallery-cs-status > :first-child { margin-top: auto; }
 .ns-paint-text .neo-gallery-gm-preview,
 .ns-paint-text .neo-gallery-cs-result { flex: none; max-height: 40vh; overflow: auto; }
 /* 起手提示不再靠 16vh 的 padding-top 吊高：那块余隙现在由 flex 算，宽栏里居中也就不吊顶不贴输入卡 */
 .ns-paint-text .neo-gallery-gm-idle { margin: auto; padding-top: 0; }
 
-/* 图片编辑：预览按栏高缩放（弹窗那套 50vh / 90vh 在页内会把表单挤到折叠线以下、底部按钮被裁掉看不见），
+/* ===== 编辑页（图片编辑）专有用样式：整块只挂 `.ns-paint-edit` 宿主，绘画页那块宿主一个字也不沾 =====
+   预览按栏高缩放（弹窗那套 50vh / 90vh 在页内会把表单挤到折叠线以下、底部按钮被裁掉看不见），
    表单固定在下方收尾。gallery.css 是运行时注入的，平局它赢 —— 这里多带一个类压过它 */
-.ns-paint-panel .neo-gallery-story-modal.neo-gallery-edit-modal {
+.ns-paint-edit .neo-gallery-story-modal.neo-gallery-edit-modal {
     max-width: 1180px;
     height: 100%;
     max-height: none;
     min-height: 0;
     overflow: hidden;
 }
-/* 预览区可收缩并裁掉溢出：原图再大也不能把输入卡顶出折叠线 */
-.ns-paint-panel .neo-gallery-edit-compare,
-.ns-paint-panel .neo-gallery-edit-compare > div,
-.ns-paint-panel .neo-gallery-edit-compare-stage { flex: 1 1 auto; min-height: 0; max-height: 100%; overflow: hidden; }
-/* 原图按视口收：顶栏 + 页签 + 标题行 + 第二参考图槽 + 输入卡合计约 420px，剩下都给预览。
-   图片盒是 fit-content，max-height:100% 在里面算不出值（父高是 auto），只能用视口算；
-   110px 是窗口压到 520 高时的保底——预览小一点，输入卡与「生成」仍要留在折叠线内 */
-.ns-paint-panel .neo-gallery-edit-compare-img { max-width: 100%; max-height: max(110px, calc(100vh - 420px)); }
-.ns-paint-panel .neo-gallery-edit-compare-imgwrap.neo-gallery-edit-outpaint { height: 100%; }
-.ns-paint-panel .neo-gallery-edit-form { flex: none; margin-top: 0; }
-/* 空面板拖入框：铺满整块预览区，随窗口高度伸缩（弹窗里仍是 320×220 的小落点） */
-.ns-paint-panel .neo-gallery-edit-compare-imgwrap.neo-gallery-edit-empty-stage { width: 100%; }
-.ns-paint-panel .neo-gallery-edit-empty { width: 100%; height: 100%; min-width: 0; min-height: 0; }
+/* 预览区吃满输入卡上方的余隙、可收缩裁掉溢出：输入卡钉在面板底边，原图再大也不能把它顶出折叠线 */
+.ns-paint-edit .neo-gallery-edit-compare,
+.ns-paint-edit .neo-gallery-edit-compare-stage { flex: 1 1 auto; min-height: 0; max-height: 100%; overflow: hidden; }
+/* 图片盒铺满这块余隙（基础规则是 fit-content 贴原图自然尺寸，512×768 的图在 1080 高的窗口里
+   只占一小块，右边和下边全是空的）：盒撑满后图片 object-fit contain 放大贴满，居中不裁切。
+   窗帘与扩图那两处几何由 JS 写行内尺寸，行内一落一个，这几条就让位 */
+.ns-paint-edit .neo-gallery-edit-compare-imgwrap {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.ns-paint-edit .neo-gallery-edit-compare-img {
+    width: 100%;
+    height: 100%;
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+}
+.ns-paint-edit .neo-gallery-edit-compare-imgwrap.neo-gallery-edit-outpaint { height: 100%; }
+.ns-paint-edit .neo-gallery-edit-form { flex: none; margin-top: 0; }
+/* 编辑页的提示词框压到两行：编辑词是一句话（机位 / 姿势 / 扩图那几条是模板填死的），
+   基础那条 110px 的框把输入卡撑到近两成栏高，预览被挤成一条。参考图方块照旧在左、框照旧整宽，
+   只收高度；行高本来是 stretch，框被 56px 的参考方块顶到一样高，收高度得先把行改成顶部对齐。
+   机位模式整框由 JS 收起（gallery-gen.js），这两条对它无作用 */
+.ns-paint-edit .neo-gallery-edit-modal .neo-gallery-edit-refline { align-items: flex-start; }
+.ns-paint-edit .neo-gallery-edit-modal .neo-gallery-edit-refline .neo-gallery-gm-quick-input {
+    min-height: 40px;
+    max-height: 22vh;
+}
+/* 输入卡的底边不留空带：composer 自带 12px 内衬与 8px 行距，卡自己又一层 10px，叠在 chip 行底下
+   就是那条谁也没用的缝 —— 两层各收一半，省下的全给预览 */
+.ns-paint-edit .neo-gallery-edit-modal .neo-gallery-gm-composer {
+    padding: 8px 10px;
+    gap: 6px;
+}
+.ns-paint-edit .neo-gallery-edit-modal .neo-gallery-edit-form {
+    padding: 6px 8px;
+}
 
-/* 手机：面板内衬收到 8px；模式条与钉在右端的素材库按钮在窄栏里叠成一坨，素材库按钮回到行内、
-   整行左对齐换行；底部生成行按钮多，一行压不下就换行。
+/* 手机：面板内衬收到 8px；素材库入口贴着右上角收一点；底部生成行按钮多，一行压不下就换行。
    输入卡底行的 chip 在窄屏永不换行（换行的 chip 会被折叠线切掉，见 gallery.css 那条 nowrap）——
    手机上这一排只能横向滚，滚不动就是「生成」按钮够不着 */
 @media (max-width: 720px) {
     .ns-paint-panel { padding: 8px; }
-    .ns-paint-main { padding-top: 6px; }
-    .ns-paint-modes { justify-content: flex-start; flex-wrap: wrap; row-gap: 2px; }
-    .ns-paint-lib-btn { position: static; transform: none; }
+    .ns-page:has(.ns-paint-edit) .ns-paint-main { padding-top: 4px; }
+    .ns-paint-bar { top: 6px; right: 8px; }
     .ns-paint-panel .neo-gallery-story-actions { flex-wrap: wrap; }
     .ns-paint-panel .neo-gallery-gm-composer-bar,
     .ns-video-card .ns-video-chips { overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain; }
@@ -567,9 +579,15 @@ body {
     @media (max-width: 720px) {
         .ns-paint-panel .neo-gallery-gm-chip-panel { max-height: min(62dvh, calc(100dvh - 220px)); }
         .ns-paint-panel .neo-gallery-gm-quick-input { min-height: clamp(88px, 16dvh, 150px); }
+        /* 手机上编辑页的提示词框回到三行高：40px 的框在触屏上只有两行，改一句话要滚着看 */
+        .ns-paint-panel .neo-gallery-edit-modal .neo-gallery-edit-refline .neo-gallery-gm-quick-input {
+            min-height: clamp(72px, 12dvh, 120px);
+        }
         .ns-paint-text .neo-gallery-gm-preview,
         .ns-paint-text .neo-gallery-cs-result { max-height: 38dvh; }
-        .ns-paint-panel .neo-gallery-edit-compare-img { max-height: max(110px, calc(100dvh - 380px)); }
+        /* 手机上机位球那一条会绕成两行（球 + 滑杆），表单比桌面高：预留从 545 提到 600，
+           免得原图按桌面口径算高、被舞台裁掉一截 */
+        .ns-paint-panel .neo-gallery-edit-compare-img { max-height: max(64px, calc(100dvh - 600px)); }
     }
 }
 
@@ -588,13 +606,10 @@ body {
     .ns-director { height: auto; min-height: 0; }
     .ns-director-main { min-height: 620px; }
 }
-/* 手机：绘画页这一档只管版式，整页高度跟着基础档的 height:100% 走。模式页签各占半行吃掉整行，
-   素材库钉在这一行的最右端，这一行两头不再留半行空白；输入卡底行一行压不进一块手机：
+/* 手机：绘画页这一档只管版式，整页高度跟着基础档的 height:100% 走。输入卡底行一行压不进一块手机：
    技能与自定参数在条内横滚，「生成」与「⋯」钉在最右端——视频页 dock 有这一条，绘画页原本只有
    composer 自己的 overflow-x auto，生成整枚会滚出可视区够不着 */
 @media (max-width: 720px) {
-    .ns-paint-mode-btn { flex: 1 1 0; min-width: 0; }
-    .ns-paint-lib-btn { margin-left: auto; }
     .ns-paint-panel .neo-gallery-gm-composer-bar { min-width: 0; }
     /* chip 里的模型名是一整串不换行的字，flex 子项的自动最小宽度 = 整串宽度，chip 就此让不了位，
        整条底行溢出到横滚内容右端，「生成」要点一下滚过去才够得着。整串让给「生成」，标签自己截断 */

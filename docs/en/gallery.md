@@ -323,10 +323,18 @@ is integrated into the card — the card outline is the single focus frame, with
 The chip row is the skill+params chip + the mode chip (regular / outpaint / masked / click-to-remove / blend /
 pose / camera angle folded into one chip's menu, each mode explained on its menu item) + the target-resolution chip + "Generate".
 
+- **Source image** - an empty preview carries a fixed-size "＋ Source" box in its centre (220×140, capped at 100% of
+  a narrow preview, drawn as a dashed outline with no filled background): clicking it opens the asset-library modal,
+  and the box folds away once the source is in place and returns when the source is cleared. Hovering the box floats a
+  two-item menu — "🖼 Pick from library" (opens the modal; the picked card becomes the source) and "⬆ Upload locally"
+  (copies a chosen local file into `input/` and sets it as the source) — and dropping a file straight onto the box
+  lands the same way. The menu opens on hover and keeps a 150 ms close grace after the cursor leaves, so both items
+  stay reachable.
 - **Reference slot** - reference images (up to 9, the Qwen Image 2.1 limit) live in a 56px "＋ Reference" slot inline at
   the top-left of the prompt box. Hovering the "＋ Reference" slot floats open a pick menu: a "Reference N/9" count
   header, "⬆ Upload" (picks several local files at once), and "🖼 Pick from library" (picks cards from the asset-library
-  modal, shared by the paint and director pages; in the ComfyUI sidebar you drag cards straight onto a slot). The menu
+  modal - the picked card appends to the reference slots and the source image stays as it is; in Studio the edit and
+  director pages share this one modal, and in the ComfyUI sidebar you drag cards straight onto a slot). The menu
   stays open while the cursor moves into it (a 250ms close grace spans the gap between the slot and the menu, so the buttons stay reachable), and closes after a pick; clicking an empty slot still fills just that slot. The `×` on a slot removes that
   reference. Outpaint / masked / click-to-remove use only the first reference, so the row is disabled and extra
   references are cleared there.
@@ -340,9 +348,8 @@ pose / camera angle folded into one chip's menu, each mode explained on its menu
   which image you get: a click right of the divider shows the edit result, one left of it shows the source
   (divider at the left edge = the whole picture is the result, at the right edge = the whole source); clicking
   the divider handle itself always shows the source. The lightbox list is source + references + edit result
-  (←/→ to page); the "🔍 view large" button to the right of the comparison labels works in every mode, and in
-  outpaint mode clicking the empty area of the drag box follows the same curtain rule. In masked / click modes
-  a click paints or marks, so only the button works there.
+  (←/→ to page); in outpaint mode clicking the empty area of the drag box follows the same curtain rule.
+  In masked / click modes a click paints or marks, so it never opens the lightbox there.
 - **Size chip** - one line reading "target resolution 1024×1024"; click it to reveal the width and height
   inputs. The source size by default, aligned to a multiple of 32, capped proportionally by the
   "model working resolution" when it exceeds it (1.5MP by default); after generation the comparison window's
@@ -388,8 +395,9 @@ pose / camera angle folded into one chip's menu, each mode explained on its menu
   (rotation 8 detents / tilt -30°..60° in 4 detents / zoom wide-medium-close in 3) stay synced with the orb, and the
   keyboard arrows walk the same steps once the orb has focus. The prompt is prefilled with the camera trigger words,
   the three brackets filled from the current detents and refreshed when the angle changes (a prompt you wrote
-  yourself is never overwritten). This mode uses the source image only, so the reference slot folds away and the
-  prompt box shrinks to three lines. The request carries `angle = {rotation, tilt, zoom}`, the sidecar records
+  yourself is never overwritten). This mode uses the source image only, so the reference slot and the prompt box
+  both fold away — the three bracket slots are filled by the orb and the sliders, so there is nothing left to read
+  in a box. The request carries `angle = {rotation, tilt, zoom}`, the sidecar records
   `angle=rotation/tilt/zoom`, and Regenerate restores the orb with it.
 - **ControlNet structure lock** - "Qwen Image 2.1 ControlNet" in the editing skill dropdown (no dedicated
   switch, selecting the skill is enough): the source goes into `<image1>` supplying content and face, and a

@@ -510,15 +510,16 @@
     border-color: rgba(76, 154, 255, 0.55);
 }
 
+/* 提示词框：默认就是能写几句的多行框，拉高只靠 resize（文生图 / 图片编辑共用这一条） */
 .neo-gallery-gm-quick-input {
     width: 100%;
     box-sizing: border-box;
-    min-height: 96px;
+    min-height: 110px;
     max-height: 42vh;
-    padding: 2px 4px;
+    padding: 12px 14px;
     font-family: inherit;
-    font-size: 13px;
-    line-height: 1.5;
+    font-size: 15px;
+    line-height: 1.6;
     color: #eee;
     background: none;
     border: none;
@@ -2870,50 +2871,13 @@ Accordion Section Buttons (Clear)
     overflow-y: auto;
 }
 
-/* 图片对比区（标签 + 居中舞台） */
+/* 图片对比区：只剩一块居中舞台（对比说明行与「看大图」按钮去掉了，点图 / 点分割线直接进灯箱） */
 .neo-gallery-edit-compare {
     display: flex;
     flex-direction: column;
-    flex: 0 0 auto;
-    gap: 6px;
-}
-
-.neo-gallery-edit-compare > div {
+    align-items: center;
     flex: 0 0 auto;
     min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-}
-
-.neo-gallery-edit-compare-label-row {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    flex-shrink: 0;
-}
-
-.neo-gallery-edit-compare-label {
-    font-size: 11px;
-    color: #b8c2ce;
-    text-align: center;
-}
-
-/* 看大图：局部/点选模式下点图是涂抹/打点，灯箱只能从这里进（扩图/纯提示词模式点图直接进） */
-.neo-gallery-edit-zoom-btn {
-    padding: 1px 6px;
-    font-size: 11px;
-    color: #b8c2ce;
-    background: rgba(0, 0, 0, 0.35);
-    border: 1px solid rgba(255, 255, 255, 0.18);
-    border-radius: 4px;
-    cursor: pointer;
-}
-
-.neo-gallery-edit-zoom-btn:hover {
-    color: #fff;
-    border-color: #4fc3f7;
 }
 
 /* 叠加舞台：把图片盒水平居中；高度随图片盒（≤50vh）自适应，不参与 55vh 限高 */
@@ -3001,6 +2965,11 @@ Accordion Section Buttons (Clear)
     flex-direction: column;
     gap: 10px;
     margin-top: 12px;
+}
+/* 状态区没话可说时整块收起（.neo-gallery-story-actions:empty 同一条规矩）：空块留着 min-height 那 20px，
+   再叠两道 gap，机位行与输入卡之间就空出一条谁也没用的缝 */
+.neo-gallery-edit-form .neo-gallery-cs-status:empty {
+    display: none;
 }
 
 /* 编辑弹窗内的输入框：取消自动右对齐 */
@@ -3168,13 +3137,8 @@ Accordion Section Buttons (Clear)
 .neo-gallery-gm-composer .neo-gallery-edit-refdrop-icon {
     font-size: 20px;
 }
-/* 机位模式：参考图位列由 JS 收起，提示词框跟着降矮——词是模板生成的固定句式，两三行就够，
-   省下的高度留给预览（绘画页那条 88-150px 的框在机位下没有可填的内容）；拉高仍可用 */
-.neo-gallery-gm-composer--angle .neo-gallery-edit-refline .neo-gallery-gm-quick-input {
-    height: 72px;
-    min-height: 72px;
-    resize: vertical;
-}
+/* 提示词框没有机位专属高度：基础那条（上方 .neo-gallery-gm-quick-input）给的就是多行框。
+   机位模式整框由 gallery-gen.js 收起，Studio 的编辑页把它压成半栏两行（studio/style.css） */
 .neo-gallery-edit-refdrop-cap {
     position: absolute;
     left: 0;
@@ -3253,19 +3217,98 @@ Accordion Section Buttons (Clear)
     border-radius: 8px;
 }
 
-/* 空面板（还没原图）：预览区本身就是拖放落点，从左栏素材库拖一张进来当原图 */
+/* 空预览（还没原图）：固定 320×220 落在预览区正中，中央一枚「＋ 原图」方块。
+   提示区不吃指针（拖放要落到这块本身），方块自己把指针吃回来 —— 点击与 hover 菜单才点得中 */
 .neo-gallery-edit-empty {
-    min-width: 320px;
-    min-height: 220px;
+    width: 320px;
+    height: 220px;
+    max-width: 100%;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 0 16px;
     text-align: center;
-    border: 1px dashed #3a3a44;
-    border-radius: 8px;
     color: #8a8a96;
     font-size: 13px;
+    pointer-events: none;
+}
+
+/* 原图方块：固定大小，点一下开素材库取图，hover 出「素材库取图 / 本地上传」两项，拖进来同样吃。
+   底不填色：一块灰板在深色页里读起来就是「这块是灰的、点不动」，只留一圈虚线框说清落点边界 */
+.neo-gallery-edit-srcbox {
+    pointer-events: auto;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: 220px;
+    height: 140px;
+    max-width: 100%;
+    padding: 12px 18px;
+    border: 1px dashed rgba(160, 175, 200, 0.5);
+    border-radius: 10px;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.neo-gallery-edit-srcbox:hover,
+.neo-gallery-edit-srcbox.drop-active {
+    border-color: #4fc3f7;
+    background: rgba(79, 195, 247, 0.09);
+}
+
+.neo-gallery-edit-srcbox-plus {
+    font-size: 26px;
+    line-height: 1;
+    opacity: 0.7;
+}
+
+.neo-gallery-edit-srcbox-cap {
+    font-size: 14px;
+}
+
+.neo-gallery-edit-srcbox-tip {
+    font-size: 11px;
+    opacity: 0.6;
+}
+
+/* 方块 hover 菜单：贴在方块上方居中，方块自己展开并留一段关闭宽限，鼠标来得及跨过间隙点中两项 */
+.neo-gallery-edit-libmenu {
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 132px;
+    padding: 4px;
+    border: 1px solid #444;
+    border-radius: 8px;
+    background: #2b2b33;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+    text-align: left;
+    z-index: 20;
+}
+
+.neo-gallery-edit-libmenu-item {
+    display: block;
+    width: 100%;
+    padding: 6px 10px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: #e0e0e6;
+    font-size: 12px;
+    text-align: left;
+    cursor: pointer;
+}
+
+.neo-gallery-edit-libmenu-item:hover {
+    background: #3a3a46;
 }
 
 /* 开扩图：图片盒改回满宽舞台（拖框/原图归位都按舞台盒量尺寸），画布居中 */

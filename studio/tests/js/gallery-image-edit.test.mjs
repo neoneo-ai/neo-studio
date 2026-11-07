@@ -592,7 +592,7 @@ test("图片编辑弹窗：第二参考图拖放选中后随请求发送，扩�
     const overlay = document.querySelector(".neo-gallery-edit-modal-overlay");
     await sleep(20);
 
-    const refDropZone = overlay.querySelector(".neo-gallery-edit-refdrop");
+    const refDropZone = overlay.querySelector(".neo-gallery-edit-refdrop-row .neo-gallery-edit-refdrop");
     assert.ok(refDropZone, "应有参考图拖放区");
 
     // 模拟从素材库拖放（application/x-neo-gallery MIME）
@@ -652,7 +652,7 @@ test("图片编辑弹窗：姿势开关切到姿势编辑技能并预填默认�
     assert.ok(!overlay.querySelector(".neo-gallery-edit-refdrop-row").classList.contains("disabled"), "姿势模式参考图区应可用");
 
     // 从素材库拖入姿势参考 → 触发词自动换成迁移姿势的默认词
-    const refDropZone = overlay.querySelector(".neo-gallery-edit-refdrop");
+    const refDropZone = overlay.querySelector(".neo-gallery-edit-refdrop-row .neo-gallery-edit-refdrop");
     const dt = { getData: (m) => (m === "application/x-neo-gallery" ? '{"filename":"pose_b.png","subfolder":""}' : "") };
     const dropEv = new window.Event("drop", { bubbles: true, cancelable: true });
     Object.defineProperty(dropEv, "dataTransfer", { value: dt, configurable: true });
@@ -681,7 +681,7 @@ test("图片编辑弹窗：姿势开关切到姿势编辑技能并预填默认�
     promptInput.value = "自定义姿势指令";
     const dropEv2 = new window.Event("drop", { bubbles: true, cancelable: true });
     Object.defineProperty(dropEv2, "dataTransfer", { value: dt, configurable: true });
-    overlay.querySelector(".neo-gallery-edit-refdrop").dispatchEvent(dropEv2);
+    overlay.querySelector(".neo-gallery-edit-refdrop-row .neo-gallery-edit-refdrop").dispatchEvent(dropEv2);
     await sleep(30);
     assert.equal(promptInput.value, "自定义姿势指令", "已有自定义提示词时不应被默认词覆盖");
 
@@ -846,8 +846,6 @@ test("图片编辑弹窗：常规编辑成功后左侧换成缩放后的原图�
     assert.equal(overlay.querySelector("#img-edit-width").value, "32");
 
     const origImg = () => overlay.querySelector(".neo-gallery-edit-compare-img:not(.neo-gallery-edit-result-img)");
-    const label = () => overlay.querySelector(".neo-gallery-edit-compare-label");
-    assert.equal(label().textContent, "原图 / 编辑结果（拖拽分割线对比）");
 
     inputText(overlay.querySelector(".neo-gallery-story-input"), "去掉头上的花");
     click([...overlay.querySelectorAll(".neo-gallery-story-btn")].find((b) => b.textContent === "生成"));
@@ -855,12 +853,10 @@ test("图片编辑弹窗：常规编辑成功后左侧换成缩放后的原图�
 
     // 后端把原图缩放到目标尺寸后才送进模型，左侧也换成同一张（两侧同尺寸，窗帘才能逐像素对齐）
     assert.match(origImg().getAttribute("src"), /^data:image\/png/, "左侧应换成缩放后的原图");
-    assert.match(label().textContent, /原图（缩放到 32×32）/, "标题应写明缩放尺寸");
 
     // 切到扩图：基准要用原图自然尺寸，左侧必须还原成原图
     await pickEdit(overlay, "扩图");
     assert.match(origImg().getAttribute("src"), /filename=portrait\.png/, "扩图模式下左侧应还原成原图");
-    assert.equal(label().textContent, "原图 / 编辑结果（拖拽分割线对比）");
 });
 
 test("图片编辑弹窗：扩图模式不替换左侧原图（扩图基准要用原图自然尺寸）", async () => {
@@ -894,8 +890,6 @@ test("图片编辑弹窗：扩图模式不替换左侧原图（扩图基准要�
 
     const origImg = overlay.querySelector(".neo-gallery-edit-compare-img:not(.neo-gallery-edit-result-img)");
     assert.match(origImg.getAttribute("src"), /filename=portrait\.png/, "扩图模式不应替换左侧原图");
-    assert.equal(overlay.querySelector(".neo-gallery-edit-compare-label").textContent,
-                 "原图 / 编辑结果（拖拽分割线对比）");
 });
 
 test("图片编辑弹窗：扩图比例预设按原图取最小覆盖框，反复切换不累积变大", async () => {
@@ -1105,7 +1099,7 @@ test("图片编辑弹窗：扩图锁定比例拖拽只等比缩放，不变形�
     assert.ok(w <= 1600 + 1e-6 && h <= 1200 + 1e-6, `封顶失效：${w}×${h}`);
 });
 
-test("图片编辑弹窗：看大图——点原图/点分割线（未拖动）进灯箱，拖过阈值才算拖窗帘；按钮各模式通用", async () => {
+test("图片编辑弹窗：看大图——点原图/点分割线（未拖动）进灯箱，拖过阈值才算拖窗帘", async () => {
     resetEnv();
     clearRoutes();
     const { openImageEditDialog } = await import("../../web/gallery-gen.js");
@@ -1135,13 +1129,6 @@ test("图片编辑弹窗：看大图——点原图/点分割线（未拖动）�
     };
     const lightbox = () => document.querySelector(".neo-lightbox");
     const closeLightbox = () => document.querySelector(".neo-lightbox-close")?.click();
-
-    // 标签行的「看大图」：局部/点选模式点图是涂抹/打点，灯箱只能从这里进
-    const zoomBtn = overlay.querySelector(".neo-gallery-edit-zoom-btn");
-    assert.ok(zoomBtn, "标签行应有「看大图」按钮");
-    click(zoomBtn);
-    assert.ok(lightbox(), "「看大图」应打开灯箱");
-    closeLightbox();
 
     // 常规模式：点原图（未拖动）看大图；在原图上拖过阈值是拖窗帘，不进灯箱
     const wrap = overlay.querySelector(".neo-gallery-edit-compare-imgwrap");
@@ -1254,9 +1241,10 @@ test("图片编辑弹窗：点图看大图按窗帘位置定——窗帘右侧�
     assert.equal(caption(), "portrait.png", "点分割线把手应看原图");
     closeLightbox();
 
-    // 结果图挂在灯箱列表末尾：从原图 → 翻页能到结果大图
-    click(overlay.querySelector(".neo-gallery-edit-zoom-btn"));
-    assert.equal(caption(), "portrait.png", "「看大图」按钮从原图进");
+    // 结果图挂在灯箱列表末尾：点原图进灯箱 → 翻页能到结果大图
+    pointer(origEl, "pointerdown", 380);
+    pointer(document, "pointerup", 380);
+    assert.equal(caption(), "portrait.png", "点原图应从原图进灯箱");
     document.querySelector(".neo-lightbox-next").click();
     assert.equal(caption(), "edit_00013_.png", "→ 翻页应能翻到结果大图");
     closeLightbox();
@@ -1346,13 +1334,54 @@ test("图片编辑输入卡：本地图片按钮走多选，onchange 上传后�
     const refInput = overlay.querySelector(".neo-gallery-edit-refdrop-row input[type=file]");
     assert.ok(refInput.multiple, "本地文件输入应支持多选");
 
-    // jsdom 弹不出系统文件框：本地按钮设成追加模式（_targetIndex=null）后，直接喂 files 走 onchange
+    // jsdom 弹不出系统文件框：「⬆ 本地上传」只开文件框，直接喂 files 走 onchange 追加参考位
     click(localBtn);
-    assert.equal(refInput._targetIndex, null, "取图按钮进来应是往后追加（不补指定空槽）");
     Object.defineProperty(refInput, "files", { value: [makeFile("a.png"), makeFile("b.png")], configurable: true });
     await refInput.onchange();
     await sleep(30);
     assert.equal(overlay.querySelectorAll(".neo-gallery-edit-refchip-img").length, 2, "本地多选应追加两张参考");
+});
+
+// 空预览正中的「＋ 原图」方块：点一下开素材库，悬停出「素材库取图 / 本地上传」两项，
+// 本地那张先传进 input/ 再落进原图；原图到位方块收起，选原图不追加参考图
+test("图片编辑空预览：「＋ 原图」方块点开素材库，菜单两项，本地上传落进原图", async () => {
+    resetEnv();
+    clearRoutes();
+    const { openImageEditDialog } = await import("../../web/gallery-gen.js");
+    mockRoute("/rs_prompts/skills", () => jsonResponse([
+        { id: "qwen_image_21", cn_name: "Qwen Image 2.1", category: "image_gen", gen_image: true, mode: "t2i_edit" },
+    ]));
+    mockRoute("/neo_image_gen/settings", () => jsonResponse({ target_megapixels: 1.5 }));
+    mockRoute("/upload/image", () => jsonResponse({ name: "local_src.png", subfolder: "", type: "input" }));
+    const picks = [];
+    window.addEventListener("neo:media-pick", (e) => picks.push(e.detail));
+    openImageEditDialog({ app: {}, maxThumbnailSize: 320, displayLabels: true }, null, "");
+    const overlay = document.querySelector(".neo-gallery-edit-modal-overlay");
+    await sleep(20);
+
+    const box = overlay.querySelector(".neo-gallery-edit-empty .neo-gallery-edit-srcbox");
+    assert.ok(box, "空预览正中应铺「＋ 原图」方块");
+    const menu = box.querySelector(".neo-gallery-edit-libmenu");
+    assert.equal(menu.style.display, "none", "没悬停时菜单收起");
+    box.dispatchEvent(new Event("mouseenter"));
+    assert.equal(menu.style.display, "block", "悬停方块浮出菜单");
+    assert.deepEqual([...menu.querySelectorAll(".neo-gallery-edit-libmenu-item")].map((b) => b.textContent.trim()),
+        ["🖼 素材库取图", "⬆ 本地上传"], "菜单两项：素材库取图 / 本地上传");
+
+    click(box);
+    await sleep(10);
+    assert.equal(picks.length, 1, "点方块派发开素材库那一发");
+    assert.equal(typeof picks[0].onPick, "function", "开窗带回落点：取到的那张设为原图");
+
+    // jsdom 弹不出系统文件框：「⬆ 本地上传」只开文件框，直接喂 files 走 onchange 落原图
+    const srcInput = overlay.querySelector(".neo-gallery-edit-compare-imgwrap input[type=file]");
+    Object.defineProperty(srcInput, "files", { value: [makeFile("src.png")], configurable: true });
+    await srcInput.onchange();
+    await sleep(30);
+    assert.match(overlay.querySelector(".neo-gallery-edit-compare-img").getAttribute("src"), /local_src\.png/,
+        "本地上传的图落进原图预览");
+    assert.equal(overlay.querySelector(".neo-gallery-edit-empty").style.display, "none", "原图到位方块收起");
+    assert.equal(overlay.querySelectorAll(".neo-gallery-edit-refchip-img").length, 0, "选原图不追加参考图");
 });
 
 test("图片编辑取图浮层：hover 桥接带关闭宽限，鼠标跨过方块与浮层的间隙点得中", async () => {
@@ -1514,7 +1543,7 @@ test("图片编辑弹窗：机位模式预填触发词，拖球 / 滑杆同步�
     await sleep(20);
 
     // 常规模式先放一张额外参考图：切到机位应清掉（机位只用原图这一张）
-    const refDropZone = overlay.querySelector(".neo-gallery-edit-refdrop");
+    const refDropZone = overlay.querySelector(".neo-gallery-edit-refdrop-row .neo-gallery-edit-refdrop");
     const dt = { getData: (m) => (m === "application/x-neo-gallery" ? '{"filename":"extra_ref.png","subfolder":""}' : "") };
     const dropEv = new window.Event("drop", { bubbles: true, cancelable: true });
     Object.defineProperty(dropEv, "dataTransfer", { value: dt, configurable: true });
@@ -1534,10 +1563,10 @@ test("图片编辑弹窗：机位模式预填触发词，拖球 / 滑杆同步�
                  "默认词应把技能模板的三个方括号按当前档位填死");
     assert.equal(angleBox.querySelector(".neo-angle-readout").textContent, "正面0° · 平视0° · 中景", "球默认正面 / 平视 / 中景");
     assert.notEqual(overlay.querySelector("#img-edit-width").style.display, "none", "机位走常规画布：目标分辨率保持可见");
-    // 机位只用原图这一张：参考图位列收起、已放的额外参考被清掉，输入卡换成降矮的一条（高度见 gallery.css）
+    // 机位只用原图这一张：参考图位列收起、已放的额外参考被清掉，提示词框整块收起（词由滑杆实时写进框里）
     assert.equal(overlay.querySelector(".neo-gallery-edit-refdrop-row").style.display, "none", "机位模式参考图区收起");
     assert.equal(overlay.querySelector(".neo-gallery-edit-refchip-img"), null, "切机位应清掉已选的额外参考");
-    assert.ok(overlay.querySelector(".neo-gallery-gm-composer").classList.contains("neo-gallery-gm-composer--angle"), "输入卡进机位档");
+    assert.equal(overlay.querySelector(".neo-gallery-story-input").style.display, "none", "机位模式提示词框整块收起（球 + 滑杆 + 框叠起来太高）");
 
     // 拖球 100px：右移 80° 松手吸附到 90（右侧），提示词跟着换
     const canvas = angleBox.querySelector(".neo-angle-canvas");
@@ -1597,7 +1626,7 @@ test("图片编辑弹窗：机位模式预填触发词，拖球 / 滑杆同步�
     assert.equal(overlay.querySelector(".neo-gallery-gm-skill-sel").value, "qwen_image_21", "关机位应回到常规编辑技能");
     assert.equal(overlay.querySelector(".neo-gallery-edit-angle").style.display, "none", "离开机位模式控件收起");
     assert.equal(overlay.querySelector(".neo-gallery-edit-refdrop-row").style.display, "", "离开机位模式参考图区恢复");
-    assert.ok(!overlay.querySelector(".neo-gallery-gm-composer").classList.contains("neo-gallery-gm-composer--angle"), "输入卡退出机位档");
+    assert.notEqual(overlay.querySelector(".neo-gallery-story-input").style.display, "none", "关机位提示词框恢复");
 });
 
 

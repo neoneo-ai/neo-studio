@@ -1,0 +1,224 @@
+(node:38192) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[Gallery] image gen settings unavailable, using default target MP: Error: no mock for /neo_image_gen/settings
+    at getJson (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:35:48)
+    at async file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/gallery-gen.js:1927:25
+[Neo Studio] 预设模型清单读取失败: Error: no mock for /neo_skill_models/check
+    at getJson (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:35:48)
+    at async skillModelCheck (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:139:22)
+    at async blockingMissingModels (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:128:19)
+    at async requestGeneration (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:84:22)
+    at async HTMLButtonElement.start (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/gallery-gen.js:1524:26)
+✔ 图片编辑弹窗：目标分辨率默认取原图尺寸（32 对齐），原图过大按设置的 MP 等比封顶 (167.1757ms)
+[Neo Studio] 预设模型清单读取失败: Error: no mock for /neo_skill_models/check
+    at getJson (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:35:48)
+    at async skillModelCheck (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:139:22)
+    at async blockingMissingModels (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:128:19)
+    at async requestGeneration (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:84:22)
+    at async HTMLButtonElement.start (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/gallery-gen.js:1524:26)
+[Gallery] image gen settings unavailable, using default target MP: Error: no mock for /neo_image_gen/settings
+    at getJson (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:35:48)
+    at async file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/gallery-gen.js:1927:25
+✔ 图片编辑弹窗：输入卡里有「生成」，成功后再点它连续重复生成 (184.7843ms)
+[Gallery] image gen settings unavailable, using default target MP: Error: no mock for /neo_image_gen/settings
+    at getJson (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:35:48)
+    at async file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/gallery-gen.js:1927:25
+✔ 图片编辑弹窗：chips 收在输入卡底行，自定参数默认不显示、点开才浮出 (97.6597ms)
+[Neo Studio] 预设模型清单读取失败: Error: no mock for /neo_skill_models/check
+    at getJson (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:35:48)
+    at async skillModelCheck (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:139:22)
+    at async blockingMissingModels (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:128:19)
+    at async requestGeneration (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:84:22)
+    at async HTMLButtonElement.start (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/gallery-gen.js:1524:26)
+[Gallery] image gen settings unavailable, using default target MP: Error: no mock for /neo_image_gen/settings
+    at getJson (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:35:48)
+    at async file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/gallery-gen.js:1927:25
+✔ 图片编辑弹窗：扩图开关切到扩图技能，拖框后请求带 outpaint 且不带 loras (198.0997ms)
+[Gallery] image gen settings unavailable, using default target MP: Error: no mock for /neo_image_gen/settings
+    at getJson (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:35:48)
+    at async file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/gallery-gen.js:1927:25
+✔ 图片编辑弹窗：扩图拖框画布边长封顶 4× 原图，超出舞台整体缩小 (62.3815ms)
+[Gallery] image gen settings unavailable, using default target MP: Error: no mock for /neo_image_gen/settings
+    at getJson (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:35:48)
+    at async file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/gallery-gen.js:1927:25
+✔ 图片编辑弹窗：扩图基准取 contain 后的可见图片尺寸，原图元素盒的留黑不算进画布 (61.1569ms)
+[Gallery] image gen settings unavailable, using default target MP: Error: no mock for /neo_image_gen/settings
+    at getJson (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:35:48)
+    at async file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/gallery-gen.js:1927:25
+✔ 图片编辑弹窗：扩图拖框体是平移留白，不会把框缩回原图 (62.5537ms)
+[Gallery] image gen settings unavailable, using default target MP: Error: no mock for /neo_image_gen/settings
+    at getJson (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:35:48)
+    at async file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/gallery-gen.js:1927:25
+✔ 图片编辑弹窗：局部开关切到局部技能、涂抹画布出现，未涂抹禁止生成 (138.744ms)
+[Neo Studio] 预设模型清单读取失败: Error: no mock for /neo_skill_models/check
+    at getJson (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:35:48)
+    at async skillModelCheck (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:139:22)
+    at async blockingMissingModels (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:128:19)
+    at async requestGeneration (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:84:22)
+    at async HTMLButtonElement.start (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/gallery-gen.js:1524:26)
+[Gallery] image gen settings unavailable, using default target MP: Error: no mock for /neo_image_gen/settings
+    at getJson (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:35:48)
+    at async file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/gallery-gen.js:1927:25
+✔ 图片编辑弹窗：点选删除——点击后 SAM3 分割出遮罩预览（预填删除提示词、可改），请求带 remove_points (3523.2574ms)
+[Neo Studio] 预设模型清单读取失败: Error: no mock for /neo_skill_models/check
+    at getJson (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:35:48)
+    at async skillModelCheck (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:139:22)
+    at async blockingMissingModels (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:128:19)
+    at async requestGeneration (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:84:22)
+    at async HTMLButtonElement.start (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/gallery-gen.js:1524:26)
+[Gallery] image gen settings unavailable, using default target MP: Error: no mock for /neo_image_gen/settings
+    at getJson (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:35:48)
+    at async file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/gallery-gen.js:1927:25
+✔ 图片编辑弹窗：第二参考图拖放选中后随请求发送，扩图/局部模式下不可用 (169.5428ms)
+[Neo Studio] 预设模型清单读取失败: Error: no mock for /neo_skill_models/check
+    at getJson (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:35:48)
+    at async skillModelCheck (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:139:22)
+    at async blockingMissingModels (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:128:19)
+    at async requestGeneration (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:84:22)
+    at async HTMLButtonElement.start (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/gallery-gen.js:1524:26)
+[Gallery] image gen settings unavailable, using default target MP: Error: no mock for /neo_image_gen/settings
+    at getJson (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:35:48)
+    at async file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/gallery-gen.js:1927:25
+✔ 图片编辑弹窗：姿势开关切到姿势编辑技能并预填默认触发词，第二参考图作姿势参考随请求发送 (246.6822ms)
+[Neo Studio] 预设模型清单读取失败: Error: no mock for /neo_skill_models/check
+    at getJson (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:35:48)
+    at async skillModelCheck (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:139:22)
+    at async blockingMissingModels (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:128:19)
+    at async requestGeneration (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:84:22)
+    at async HTMLButtonElement.start (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/gallery-gen.js:1524:26)
+[Gallery] image gen settings unavailable, using default target MP: Error: no mock for /neo_image_gen/settings
+    at getJson (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:35:48)
+    at async file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/gallery-gen.js:1927:25
+[Neo Studio] 预设模型清单读取失败: Error: no mock for /neo_skill_models/check
+    at getJson (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:35:48)
+    at async skillModelCheck (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:139:22)
+    at async blockingMissingModels (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:128:19)
+    at async requestGeneration (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:84:22)
+    at async HTMLButtonElement.start (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/gallery-gen.js:1524:26)
+✔ 图片编辑弹窗：生成失败（缺模型）弹 action toast 引导去技能详情 (108.0358ms)
+[Gallery] image gen settings unavailable, using default target MP: Error: no mock for /neo_image_gen/settings
+    at getJson (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:35:48)
+    at async file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/gallery-gen.js:1927:25
+✔ 图片编辑弹窗：窗帘对比——结果层挂在图片盒内，拖分割线只裁切结果图（不缩放/不移位原图） (97.9897ms)
+[Neo Studio] 预设模型清单读取失败: Error: no mock for /neo_skill_models/check
+    at getJson (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:35:48)
+    at async skillModelCheck (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:139:22)
+    at async blockingMissingModels (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:128:19)
+    at async requestGeneration (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:84:22)
+    at async HTMLButtonElement.start (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/gallery-gen.js:1524:26)
+[Gallery] image gen settings unavailable, using default target MP: Error: no mock for /neo_image_gen/settings
+    at getJson (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:35:48)
+    at async file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/gallery-gen.js:1927:25
+✔ 图片编辑弹窗：常规编辑成功后左侧换成缩放后的原图，两侧同尺寸才能逐像素对比 (148.688ms)
+[Neo Studio] 预设模型清单读取失败: Error: no mock for /neo_skill_models/check
+    at getJson (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:35:48)
+    at async skillModelCheck (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:139:22)
+    at async blockingMissingModels (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:128:19)
+    at async requestGeneration (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:84:22)
+    at async HTMLButtonElement.start (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/gallery-gen.js:1524:26)
+[Gallery] image gen settings unavailable, using default target MP: Error: no mock for /neo_image_gen/settings
+    at getJson (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:35:48)
+    at async file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/gallery-gen.js:1927:25
+✔ 图片编辑弹窗：扩图模式不替换左侧原图（扩图基准要用原图自然尺寸） (154.3474ms)
+[Neo Studio] 预设模型清单读取失败: Error: no mock for /neo_skill_models/check
+    at getJson (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:35:48)
+    at async skillModelCheck (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:139:22)
+[Neo Studio] 预设模型清单读取失败: Error: no mock for /neo_skill_models/check
+    at getJson (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:35:48)
+    at async skillModelCheck (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:139:22)
+✔ 图片编辑弹窗：扩图比例预设按原图取最小覆盖框，反复切换不累积变大 (63.7298ms)
+[Neo Studio] 预设模型清单读取失败: Error: no mock for /neo_skill_models/check
+    at getJson (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:35:48)
+    at async skillModelCheck (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:139:22)
+    at async blockingMissingModels (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:128:19)
+    at async requestGeneration (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:84:22)
+    at async HTMLButtonElement.start (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/gallery-gen.js:1524:26)
+[Neo Studio] 预设模型清单读取失败: Error: no mock for /neo_skill_models/check
+    at getJson (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:35:48)
+    at async skillModelCheck (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:139:22)
+    at async blockingMissingModels (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:128:19)
+    at async requestGeneration (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:84:22)
+    at async HTMLButtonElement.start (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/gallery-gen.js:1524:26)
+[Neo Studio] 预设模型清单读取失败: Error: no mock for /neo_skill_models/check
+    at getJson (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:35:48)
+    at async skillModelCheck (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:139:22)
+[Gallery] image gen settings unavailable, using default target MP: Error: no mock for /neo_image_gen/settings
+    at getJson (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:35:48)
+    at async file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/gallery-gen.js:1927:25
+✔ 图片编辑面板：自定参数——默认收起不带覆盖，选主模型 + LoRA 后请求体带上，切扩图重放该技能配置 (337.4049ms)
+[Gallery] image gen settings unavailable, using default target MP: Error: no mock for /neo_image_gen/settings
+    at getJson (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:35:48)
+    at async file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/gallery-gen.js:1927:25
+✔ 图片编辑弹窗：扩图锁定比例拖拽只等比缩放，不变形、不缩回原图内、不超封顶 (63.9322ms)
+[Gallery] image gen settings unavailable, using default target MP: Error: no mock for /neo_image_gen/settings
+    at getJson (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:35:48)
+    at async file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/gallery-gen.js:1927:25
+✔ 图片编辑弹窗：看大图——点原图/点分割线（未拖动）进灯箱，拖过阈值才算拖窗帘 (61.5233ms)
+[Neo Studio] 预设模型清单读取失败: Error: no mock for /neo_skill_models/check
+    at getJson (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:35:48)
+    at async skillModelCheck (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:139:22)
+    at async blockingMissingModels (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:128:19)
+    at async requestGeneration (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:84:22)
+    at async HTMLButtonElement.start (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/gallery-gen.js:1524:26)
+[Gallery] image gen settings unavailable, using default target MP: Error: no mock for /neo_image_gen/settings
+    at getJson (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:35:48)
+    at async file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/gallery-gen.js:1927:25
+✔ 图片编辑弹窗：点图看大图按窗帘位置定——窗帘右侧看结果图、左侧看原图 (128.6812ms)
+[Gallery] image gen settings unavailable, using default target MP: Error: no mock for /neo_image_gen/settings
+    at getJson (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:35:48)
+    at async file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/gallery-gen.js:1927:25
+✔ 图片编辑输入卡：参考图位与编辑指令框合进同一块输入卡，卡里只剩一处主焦点 (39.8325ms)
+[Neo Studio] 预设模型清单读取失败: Error: no mock for /neo_skill_models/check
+    at getJson (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:35:48)
+    at async skillModelCheck (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:139:22)
+    at async blockingMissingModels (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:128:19)
+    at async requestGeneration (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:84:22)
+    at async HTMLButtonElement.start (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/gallery-gen.js:1524:26)
+[Gallery] image gen settings unavailable, using default target MP: Error: no mock for /neo_image_gen/settings
+    at getJson (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:35:48)
+    at async file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/gallery-gen.js:1927:25
+✔ 图片编辑输入卡：素材库取图按钮派发 neo:media-pick，取用的图进参考位并随生成发送 (122.2777ms)
+[Gallery] image gen settings unavailable, using default target MP: Error: no mock for /neo_image_gen/settings
+    at getJson (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:35:48)
+    at async file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/gallery-gen.js:1927:25
+✔ 图片编辑输入卡：本地图片按钮走多选，onchange 上传后追加参考位 (77.8265ms)
+[Neo Studio] 预设模型清单读取失败: Error: no mock for /neo_skill_models/check
+    at getJson (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:35:48)
+    at async skillModelCheck (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:139:22)
+[Neo Studio] 预设模型清单读取失败: Error: no mock for /neo_skill_models/check
+    at getJson (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:35:48)
+    at async skillModelCheck (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:139:22)
+[Neo Studio] 预设模型清单读取失败: Error: no mock for /neo_skill_models/check
+    at getJson (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:35:48)
+    at async skillModelCheck (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:139:22)
+✔ 图片编辑取图浮层：hover 桥接带关闭宽限，鼠标跨过方块与浮层的间隙点得中 (646.0264ms)
+[Neo Studio] 预设模型清单读取失败: Error: no mock for /neo_skill_models/check
+    at getJson (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:35:48)
+    at async skillModelCheck (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:139:22)
+✔ 图片编辑弹窗：「再来一发」把原图 / 参考图 / 模式 / 尺寸 / 技能与自定参数填回面板 (141.3421ms)
+✔ 图片编辑内嵌面板：「再来一发」换内容不重建；局部编辑不填参考图，家族对撞的主模型丢掉 (138.1116ms)
+[Neo Studio] 预设模型清单读取失败: Error: no mock for /neo_skill_models/check
+    at getJson (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:35:48)
+    at async skillModelCheck (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:139:22)
+    at async blockingMissingModels (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:128:19)
+    at async requestGeneration (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:84:22)
+    at async HTMLButtonElement.start (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/gallery-gen.js:1524:26)
+[Neo Studio] 预设模型清单读取失败: Error: no mock for /neo_skill_models/check
+    at getJson (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:35:48)
+    at async skillModelCheck (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:139:22)
+[Neo Studio] 预设模型清单读取失败: Error: no mock for /neo_skill_models/check
+    at getJson (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:35:48)
+    at async skillModelCheck (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:139:22)
+[Neo Studio] 预设模型清单读取失败: Error: no mock for /neo_skill_models/check
+    at getJson (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:35:48)
+    at async skillModelCheck (file:///F:/comfy/Comfyui-WF-2026.8.8/Neo-Studio/studio/web/image-gen.js:139:22)
+✔ 图片编辑弹窗：机位模式预填触发词，拖球 / 滑杆同步档位，生成带 angle 三档 (277.5949ms)
+✔ 图片编辑「再来一发」：机位模式与三档从副文件回填 (140.3422ms)
+ℹ tests 28
+ℹ suites 0
+ℹ pass 28
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 8120.9667

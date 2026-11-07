@@ -533,14 +533,12 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
 
     // 界面当前状态：宿主只交当前选中页签自己那一栏（studio-app.js 的 agentContext 负责裁剪），
     // 这一条把它拼成一行给用户看，随请求体原样交后端
-    const PAGE_NAMES = { home: "首页", gallery: "素材库", director: "导演页", paint: "绘画页", skills: "技能页", settings: "设置页" };
+    const PAGE_NAMES = { home: "首页", gallery: "素材库", director: "导演页", paint: "绘画页", edit: "编辑页", skills: "技能页", settings: "设置页" };
     function currentContext() {
         const ctx = (getContext && getContext()) || {};
         const parts = [];
         if (PAGE_NAMES[ctx.page]) parts.push(t(PAGE_NAMES[ctx.page]));
         if (ctx.recipe) parts.push(ctx.recipe + (ctx.segments > 0 ? tf("{n} 段", { n: ctx.segments }) : ""));
-        if (ctx.paint_mode === "text") parts.push(t("文生图"));
-        else if (ctx.paint_mode === "edit") parts.push(t("图片编辑"));
         if (ctx.gallery_path) parts.push(ctx.character_dir ? tf("{dir}（角色图）", { dir: ctx.gallery_path }) : ctx.gallery_path);
         return parts;
     }

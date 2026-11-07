@@ -298,6 +298,7 @@ const EN = {
     "返回首页": "Back to home",
     "素材": "Assets",
     "绘画": "Paint",
+    "编辑": "Edit",
     "导演": "Director",
     "技能": "Skills",
     "最小化": "Minimize",
@@ -1748,7 +1749,6 @@ const EN = {
     "参考": "Reference",
     "从本地文件选图作参考（可多选）": "Pick reference images from local files (multiple allowed)",
     "编辑结果": "Edit result",
-    "看大图": "View full size",
     "灯箱查看原图、编辑结果与参考图": "View the original, the edit result and the references in the lightbox",
     "原图（缩放到 {cw}×{ch}）/ 编辑结果（拖拽分割线对比）": "Original (scaled to {cw}×{ch}) / edit result (drag the divider to compare)",
     "技能与自定参数：只列吃文字输入的生图技能；主模型 / LoRA 留空 = 跟随该技能配置与全局生图设置":
@@ -1904,6 +1904,7 @@ const EN = {
     "默认不带界面上下文；点此给后面的轮次带上": "Off by default - click to include it in later turns",
     "导演页": "Director",
     "绘画页": "Paint",
+    "编辑页": "Edit",
     "技能页": "Skills",
     "设置页": "Settings",
     "MCP 服务": "MCP Servers",

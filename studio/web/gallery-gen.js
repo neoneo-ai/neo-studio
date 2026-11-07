@@ -84,8 +84,6 @@ const editDefaultTargetSize = (w, h, mp) => {
     const capped = w * h > mp * 1024 * 1024 ? scaleToMp(w, h, mp) : { w, h };
     return { w: round32(capped.w), h: round32(capped.h) };
 };
-// 对比窗标题：常规编辑换成缩放图后写明尺寸，切换模式/重新生成前还原
-const COMPARE_LABEL = t("原图 / 编辑结果（拖拽分割线对比）");
 // 扩图画布边长上限（×原图显示尺寸）：拖框换算随缩放指数增长，封顶防失控与后端显存爆炸
 const OUTPAINT_MAX_EXTEND = 4;
 // 「生成素材」弹窗默认技能：Krea2 文生图（纯提示词出图，产物落 Output/NeoAgent/<日期>）
@@ -1022,10 +1020,12 @@ export function openLoraTagDialog(gallery, dirPath) {
 /** 图片编辑弹窗：以卡片原图为参考，用所选生图/编辑技能 + 用户输入的编辑指令生成新图。
  * 默认 Qwen Image 2.1，可在下拉中切换其他 image_gen 类技能。 */
 // 弹窗 → 内嵌面板双宿主（同 director.js 的 setDirectorEditorHost / opts.container）：
-// Studio 绘画页注册过宿主，面板就铺进宿主容器，不建浮层、不带标题栏拖动；
+// Studio 注册过宿主，面板就铺进宿主容器，不建浮层、不带标题栏拖动；
 // ComfyUI 插件模式（画布侧栏 gallery）没有宿主，照旧弹浮层窗，入口与类名一律不变。
-let _paintHosts = null;   // { text, edit, onOpen }：文生图宿主 / 图片编辑宿主 / 打开时切到绘画页
-export function setPaintHost(hosts) { _paintHosts = hosts; }
+// 两块宿主由两个页面各自注册（文生图 = 绘画页，图片编辑 = 编辑页），所以是合并写入：
+// 覆盖式会让后建的那一页把自己的宿主连同别人的那份一起丢掉。
+let _paintHosts = {};   // { text, edit, onOpen }：文生图宿主 / 图片编辑宿主 / 打开时切到那一页
+export function setPaintHost(hosts) { _paintHosts = { ..._paintHosts, ...hosts }; }
 
 function storyPanelRoot(host, overlayClass, kind) {
     const embedded = !!(host && host.isConnected);
@@ -1320,7 +1320,7 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
     if (reusePaintPanel(host, "edit", image, subfolder, opts?.prefill)) return;
     const panel = storyPanelRoot(host, "neo-gallery-edit-modal-overlay", "edit");
     const overlay = panel.root;
-    // 原图可以后补：绘画页进页铺的就是空面板，把素材拖进预览区即成原图
+    // 原图可以后补：绘画页进页铺的就是空面板，点预览区那枚「原图」方块或把素材拖进来即成原图
     let source = image ? { filename: image.filename || image.name, subfolder: subfolder || "" } : null;
     const pathLabel = () => (source.subfolder ? `${source.subfolder}/` : "") + source.filename;
     const origUrl = () => `/neo_gallery/image?filename=${encodeURIComponent(source.filename)}&subfolder=${encodeURIComponent(source.subfolder)}`;
@@ -1406,10 +1406,11 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
     };
 
     const renderIdle = () => {
-        const hint = !source ? t("把素材拖进预览区当原图，再写编辑指令")
-            : panel.embedded ? t("写编辑指令、拖素材进预览区换原图，生成结果与原图左右对比")
+        // 绘画页那块面板贴着预览图，纵向没有余量：有原图时不再挂那行说明（进度 / 错误仍用这块状态区）
+        const hint = !source ? t("点预览区的「原图」方块选原图，再写编辑指令")
+            : panel.embedded ? ""
             : t("填写编辑指令后点「生成」，原图将作为参考图传入所选技能。");
-        fill(statusBox, $el("div", { className: "neo-gallery-story-hint", textContent: hint }));
+        fill(statusBox, hint ? $el("div", { className: "neo-gallery-story-hint", textContent: hint }) : null);
         fill(actionsBox, panel.embedded ? null : btn(t("取消"), close));
     };
 
@@ -1461,7 +1462,7 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
 
     const start = async () => {
         if (running) return;
-        if (!source && !refName) { renderError(t("先把素材拖进预览区当原图")); return; }
+        if (!source && !refName) { renderError(t("先选一张原图：点预览区的「原图」方块，或把素材拖进来")); return; }
         if (editMode === "local" && !painted) { renderError(t("请先涂抹要编辑的区域")); return; }
         if (editMode === "remove" && !removePoints.length) { renderError(t("请先点击原图标记要删除的物体")); return; }
         restoreOrigImage();   // 上一轮换过的缩放图先还原，避免扩图/局部的基准尺寸跟着变
@@ -1659,7 +1660,6 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
         sizeChip.classList.toggle("on", open);
     });
 
-
     // 参考图区（autogrow）：拖入一张追加新空槽，最多 9 张（Qwen Image 2.1 上限）
     // 这一行挂在输入卡里（提示词框上方），与提示词框同一块描边，不再单独占一块焦点框
     const MAX_EXTRA_REFS = 9;
@@ -1679,18 +1679,12 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
         $el("button", {
             className: "neo-gallery-edit-refpick", type: "button", textContent: "⬆ " + t("本地上传"),
             title: t("从本地文件选图作参考（可多选）"),
-            onclick: () => { refFileInput._targetIndex = null; refFileInput.click(); closePicks(); },
+            onclick: () => { refFileInput.click(); closePicks(); },
         }),
         $el("button", {
             className: "neo-gallery-edit-refpick", type: "button", textContent: "🖼 " + t("素材库取用"),
             title: t("从素材库取图作参考：弹窗里点卡片取用，或从素材库拖进图位"),
-            onclick: () => {
-                // Studio 宿主听 neo:media-pick 开素材库弹窗取用；ComfyUI 里没有监听，开侧栏照旧拖拽
-                refFileInput._targetIndex = null;
-                window.dispatchEvent(new CustomEvent("neo:media-pick", { detail: { target: null, onPick: addRefImages } }));
-                toggleGallerySidebar();
-                closePicks();
-            },
+            onclick: () => { pickRefsFromLibrary(); closePicks(); },
         }),
     ]);
     refDropContainer.appendChild(refPickRow);
@@ -1744,25 +1738,50 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
     const resultClip = $el("div", { className: "neo-gallery-edit-result-clip", style: { display: "none" } }, [resultImg]);
     const divider = $el("div", { className: "neo-gallery-edit-divider", style: { display: "none" } });
     imgWrap.append(origImg, resultClip, divider);
-    // 空面板进页就在位：预览区即拖放落点，从素材库拖一张进来当原图
-    const emptyDrop = source ? null : $el("div", { className: "neo-gallery-edit-empty", textContent: t("把素材拖到这里当原图") });
-    if (emptyDrop) {
-        origImg.style.display = "none";
-        imgWrap.classList.add("neo-gallery-edit-empty-stage");
-        imgWrap.appendChild(emptyDrop);
-    }
-    const compareLabel = $el("span", { className: "neo-gallery-edit-compare-label", textContent: COMPARE_LABEL });
-    // 灯箱按钮入口：局部/点选模式点图是涂抹/打点，扩图模式点图落在拖框框体上，都只能从这里进
-    const zoomBtn = $el("button", {
-        className: "neo-gallery-edit-zoom-btn", type: "button", textContent: t("看大图"),
-        title: t("灯箱查看原图、编辑结果与参考图"),
-        onclick: () => openCompareLightbox(false)
-    });
+    // 空预览里的原图方块：点一下开素材库，hover 出「素材库取图 / 本地上传」两项，拖进来 / 粘贴同样吃。
+    // 提示区整块不吃指针（空态时预览舞台本身是拖放落点），方块自己把指针吃回来
+    const empty = $el("div", { className: "neo-gallery-edit-empty" });
+    // 方块菜单里「⬆ 本地上传」那项走的隐藏文件框：本地文件先传进 input/，再落进原图（原图只有一张，取第一张）
+    const srcFileInput = document.createElement("input");
+    srcFileInput.type = "file";
+    srcFileInput.accept = "image/*";
+    srcFileInput.style.display = "none";
+    srcFileInput.onchange = async () => {
+        const files = Array.from(srcFileInput.files || []);
+        srcFileInput.value = "";
+        if (!files.length) return;
+        const [fname] = await uploadLocalFiles(files);
+        if (fname) useSourcePicks([{ filename: fname, subfolder: "" }]);
+    };
+    imgWrap.appendChild(srcFileInput);
+    const renderSourceEmptyBox = () => {
+        const box = $el("div", { className: "neo-gallery-edit-srcbox" }, [
+            $el("span", { className: "neo-gallery-edit-srcbox-plus", textContent: "＋" }),
+            $el("span", { className: "neo-gallery-edit-srcbox-cap", textContent: t("原图") }),
+            $el("span", { className: "neo-gallery-edit-srcbox-tip", textContent: t("点击从素材库选 · 拖进来 · 悬停出菜单") }),
+            $el("div", { className: "neo-gallery-edit-libmenu", style: { display: "none" } }, [
+                $el("button", { className: "neo-gallery-edit-libmenu-item", type: "button", textContent: "🖼 " + t("素材库取图"), onclick: (e) => { e.stopPropagation(); pickSourceFromLibrary(); } }),
+                $el("button", { className: "neo-gallery-edit-libmenu-item", type: "button", textContent: "⬆ " + t("本地上传"), onclick: (e) => { e.stopPropagation(); srcFileInput.click(); } }),
+            ]),
+        ]);
+        const menu = box.querySelector(".neo-gallery-edit-libmenu");
+        box.onmouseenter = () => { clearTimeout(box._menuTimer); menu.style.display = "block"; };
+        box.onmouseleave = () => { box._menuTimer = setTimeout(() => { menu.style.display = "none"; }, 150); };
+        box.onclick = () => pickSourceFromLibrary();
+        box.addEventListener("dragover", (e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = "copy"; box.classList.add("drop-active"); });
+        box.addEventListener("dragleave", (e) => { if (!box.contains(e.relatedTarget)) box.classList.remove("drop-active"); });
+        box.addEventListener("drop", (e) => { e.preventDefault(); e.stopPropagation(); box.classList.remove("drop-active"); applyDroppedSource(e); });
+        empty.textContent = "";
+        empty.appendChild(box);
+    };
+    renderSourceEmptyBox();
+    imgWrap.appendChild(empty);
+    if (!source) origImg.style.display = "none";
     // 扩图 / 局部 / 点选删除 / 融合 / 姿势都要在原图上动手，没原图时先收起这些入口。
     // 禁用态要自己说出缺什么：一枚灰 chip 挂着一句「在原图上拖框」的 tooltip，在用户眼里就是点坏了的控件
-    const sourceBtns = [modeChip.chip, zoomBtn];
+    const sourceBtns = [modeChip.chip];
     const sourceTitles = sourceBtns.map((b) => b.title);
-    const noSourceTitle = t("先拖入原图（从素材库取一张，或把图片文件拖进来）");
+    const noSourceTitle = t("先选一张原图：点预览区的「原图」方块，或把素材拖进来");
     const setSourceModeBtns = (on) => {
         sourceBtns.forEach((b, i) => {
             b.disabled = !on;
@@ -1770,12 +1789,9 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
         });
     };
     setSourceModeBtns(!!source);
-    const compareLabelRow = $el("div", { className: "neo-gallery-edit-compare-label-row" }, [compareLabel, zoomBtn]);
-    // 舞台：只负责把图片盒水平居中
+    // 舞台：只负责把图片盒水平居中。对比说明行与「看大图」按钮去掉了——点图 / 点分割线本来就进灯箱
     const compareStage = $el("div", { className: "neo-gallery-edit-compare-stage" }, [imgWrap]);
-    const compareBox = $el("div", { className: "neo-gallery-edit-compare" }, [
-        $el("div", {}, [compareLabelRow, compareStage])
-    ]);
+    const compareBox = $el("div", { className: "neo-gallery-edit-compare" }, [compareStage]);
 
     // 窗帘拖拽逻辑：分割线左侧露出原图、右侧露出结果图（结果图层整幅不缩放，只裁掉左侧 pct%）
     // 按下后必须拖过阈值才算拖窗帘：原地按下即抬起是「点图」，交给灯箱看大图（点分割线把手同理）
@@ -1825,7 +1841,6 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
         if (!scaledInputSrc) return;
         scaledInputSrc = "";
         origImg.src = origUrl();
-        compareLabel.textContent = COMPARE_LABEL;
     };
     const showEditedCanvas = (canvas) => {
         if (!plainEdit || scaledInputSrc || !canvas) return;
@@ -1838,7 +1853,6 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
         c.getContext("2d").drawImage(dimProbe, 0, 0, cw, ch);
         scaledInputSrc = c.toDataURL("image/png");
         origImg.src = scaledInputSrc;
-        compareLabel.textContent = tf("原图（缩放到 {cw}×{ch}）/ 编辑结果（拖拽分割线对比）", { cw, ch });
     };
 
     const showResultOverlay = () => {
@@ -1853,9 +1867,11 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
     const genBtn = btn(t("生成"), start, true);
     genBtn.classList.add("neo-gallery-gm-gen-btn");
     const composerChips = [skillChip, modeChip];
-    // 参考图位与编辑指令框在同一块输入卡里：一框一事，卡里只有一处主焦点
+    // 原图方块、参考图位与编辑指令框在同一块输入卡里：一框一事，卡里只有一处主焦点
     const composer = $el("div", { className: "neo-gallery-gm-composer" }, [
         $el("div", { className: "neo-gallery-edit-refline" }, [refDropContainer, promptInput]),
+        // 宽高输入排在 chip 行上方：输入卡钉在页面底边，排在下面就会被折叠线切掉（点开了看不见）
+        sizeEditor,
         $el("div", { className: "neo-gallery-gm-composer-bar neo-gallery-gm-chips" }, [
             skillChip.el,
             modeChip.el,
@@ -1863,7 +1879,6 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
             $el("div", { className: "neo-gallery-gm-composer-gap" }),
             genBtn,
         ]),
-        sizeEditor
     ]);
 
     overlay.appendChild($el("div", { className: "neo-gallery-story-modal neo-gallery-edit-modal" + (panel.embedded ? " neo-gallery-story-modal--embedded" : "") }, [
@@ -2235,9 +2250,11 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
         localRow.style.display = mode === "local" ? "" : "none";
         removeRow.style.display = mode === "remove" ? "" : "none";
         angleBox.style.display = mode === "angle" ? "" : "none";
-        // 机位只用原图这一张：参考图位列收起，提示词框跟着降矮（词是模板生成的固定句式，两三行就够）
+        // 机位只用原图这一张：参考图位列收起。提示词框整块收起 —— 词是机位球生成的固定句式，
+        // 球 + 三条滑杆 + 一框提示词叠在一起，输入卡就顶到预览区头上；框收起来省下整块高度，
+        // 出图时 prompt 照旧由滑杆实时写进框里，用户改过的句子切回其它模式还在。
         refDropContainer.style.display = mode === "angle" ? "none" : "";
-        composer.classList.toggle("neo-gallery-gm-composer--angle", mode === "angle");
+        promptInput.style.display = mode === "angle" ? "none" : "";
 
         // 尺寸片：扩图/局部/删除各自的画布定尺寸，片收起；扩图要把「目标尺寸」读数露在编辑区里
         const hideWH = (mode === "outpaint" || mode === "local" || mode === "remove");
@@ -2549,7 +2566,7 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
 
     function makeRefSlot(index) {
         const slot = $el("div", { className: "neo-gallery-edit-refdrop" });
-        slot.title = t("拖放素材库图片或点击上传");
+        slot.title = t("点空格从素材库取图；把素材卡或本地图片文件拖进图位");
         const ref = extraRefs[index];
         if (ref) {
             slot.classList.add("has-img");
@@ -2571,8 +2588,8 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
             else { fname = await copyGalleryToInput(grabDataType(e)); }
             if (fname) { extraRefs[index] = { filename: fname, subfolder: "" }; renderRefSlots(); }
         });
-        // 点击上传（空槽才触发）
-        slot.addEventListener("click", () => { if (!extraRefs[index]) { refFileInput._targetIndex = index; refFileInput.click(); } });
+        // 空格点击 = 素材库取用（本地文件走「＋参考」浮层里的「⬆ 本地上传」，或直接把文件拖进方块）
+        slot.addEventListener("click", () => { if (!extraRefs[index]) pickRefsFromLibrary(); });
         return slot;
     }
 
@@ -2600,18 +2617,20 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
         renderRefSlots();
     }
 
+    /** 参考图位的素材库取用：Studio 宿主听 neo:media-pick 开弹窗；ComfyUI 没有监听，开侧栏照旧往方块里拖 */
+    const pickRefsFromLibrary = () => {
+        window.dispatchEvent(new CustomEvent("neo:media-pick", { detail: { target: null, onPick: addRefImages } }));
+        toggleGallerySidebar();
+    };
+
     refFileInput.onchange = async () => {
         const files = [...(refFileInput.files || [])];
         if (!files.length) return;
         const names = await uploadLocalFiles(files);
         refFileInput.value = "";
-        // 点空槽进来的是「补这一格」（空槽下标 = 现有张数），取图按钮进来的是「往后追加」
-        const at = refFileInput._targetIndex;
-        refFileInput._targetIndex = null;
         for (const fname of names) {
             if (!fname || extraRefs.length >= MAX_EXTRA_REFS) continue;
-            if (at != null && at === extraRefs.length) extraRefs[at] = { filename: fname, subfolder: "" };
-            else extraRefs.push({ filename: fname, subfolder: "" });
+            extraRefs.push({ filename: fname, subfolder: "" });
         }
         renderRefSlots();
     };
@@ -2624,18 +2643,64 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
     };
 
     // 原图区拖放替换：支持素材库拖入和本地文件上传
-    // 换原图（拖放落点与卡片菜单「图片编辑」共用一条路）：refName 归零，生成时再把新原图复制进 input/
+    // 换原图（拖放落点、卡片菜单「图片编辑」与素材库取用共用一条路）：refName 归零，生成时再把新原图复制进 input/
     const applySource = (filename, sub) => {
         if (editMode !== "normal") setEditMode("normal");
         refName = null;
         source = { filename, subfolder: sub };
-        emptyDrop?.remove();
-        imgWrap.classList.remove("neo-gallery-edit-empty-stage");
+        empty.style.display = "none";
         origImg.style.display = "";
         origImg.src = origUrl();
         setSourceModeBtns(true);
         renderIdle();
         fullUrlReady();   // 默认目标分辨率按新原图 + 全局目标像素数重算
+    };
+
+    // ---- 原图取用（预览区那枚方块）：点开素材库，取用 / 拖放 / 本地上传都落进 applySource ----
+    /** 素材库弹窗点卡片取原图：原图只有一张，多张取用时只落第一张 */
+    const useSourcePicks = async (items) => {
+        const it = (items || [])[0];
+        if (!it) return;
+        const fname = it.subfolder ? await copyGalleryToInput(JSON.stringify(it)) : it.filename;
+        if (!fname) return;
+        applySource(fname, "");
+        refName = fname;   // 取用的图已落在 input/，省掉生成时那一次复制
+    };
+    const pickSourceFromLibrary = () => {
+        // Studio 宿主听 neo:media-pick 开素材库弹窗；ComfyUI 没有监听，开侧栏照旧往方块里拖
+        window.dispatchEvent(new CustomEvent("neo:media-pick", { detail: { target: null, onPick: useSourcePicks } }));
+        toggleGallerySidebar();
+    };
+    /** ✕ 收回原图：涂抹画布 / 扩图框 / 标记点随模式一起拆，出图尺寸读数与模式 chip 回到无原图态 */
+    const clearSource = () => {
+        if (running) return;
+        setEditMode("normal");
+        source = null;
+        refName = null;
+        resultItems = [];
+        resultImg.removeAttribute("src");
+        resultClip.style.display = "none";
+        divider.style.display = "none";
+        origImg.removeAttribute("src");
+        origImg.style.display = "none";
+        empty.style.display = "flex";
+        renderSourceEmptyBox();
+        widthInput.value = "";
+        heightInput.value = "";
+        syncSizeChip();
+        setSourceModeBtns(false);
+        renderIdle();
+    };
+    /** 拖进原图方块与拖进预览区同一语义：本地文件先上传，素材库卡片先复制进 input/ */
+    const applyDroppedSource = async (e) => {
+        e.currentTarget.classList.remove("drop-active");
+        const files = Array.from(e.dataTransfer?.files || []).filter(f => f.type.startsWith("image/"));
+        let fname = null;
+        if (files.length) { [fname] = await uploadLocalFiles(files); }
+        else { fname = await copyGalleryToInput(grabDataType(e)); }
+        if (!fname) return;
+        applySource(fname, "");
+        refName = fname;   // 拖进来的图已落在 input/，省掉生成时那一次复制
     };
 
     /** 「再来一发」（编辑图）：副文件里的原图 / 编辑模式 / 参考图 / 出图尺寸 / 技能与自定参数
@@ -2702,17 +2767,7 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
     };
     imgWrap.addEventListener("dragover", (e) => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; imgWrap.classList.add("drop-active"); });
     imgWrap.addEventListener("dragleave", (e) => { if (!imgWrap.contains(e.relatedTarget)) imgWrap.classList.remove("drop-active"); });
-    imgWrap.addEventListener("drop", async (e) => {
-        e.preventDefault();
-        imgWrap.classList.remove("drop-active");
-        const files = Array.from(e.dataTransfer?.files || []).filter(f => f.type.startsWith("image/"));
-        let fname = null;
-        if (files.length) { [fname] = await uploadLocalFiles(files); }
-        else { fname = await copyGalleryToInput(grabDataType(e)); }
-        if (!fname) return;
-        applySource(fname, "");
-        refName = fname;   // 拖进来的图已落在 input/，省掉生成时那一次复制
-    });
+    imgWrap.addEventListener("drop", (e) => { e.preventDefault(); applyDroppedSource(e); });
 
     notifyPrefillFilled(opts?.prefill ? applyEditPrefill(opts.prefill) : []);
     setTimeout(() => promptInput.focus(), 0);

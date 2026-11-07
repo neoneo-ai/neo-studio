@@ -34,10 +34,10 @@ let directorPanelOpts = null;   // 导演页配方面板选项（buildDirector �
 let onDirectorShown = null;     // 进导演页时补拉的活：隐藏期间跳过的 director_spec 在进本页时补一次
 
 // ====== 智能体的界面上下文：宿主只交事实，面板画进上下文条并随请求体交后端进系统提示词 ======
-// 只交当前选中页签自己那一栏：导演页的配方、绘画页的模式、素材页的目录各留自己那页，切到技能 / 设置页
+// 只交当前选中页签自己那一栏：导演页的配方、素材页的目录各留自己那页，切到技能 / 设置页
 // 就只剩页面本身——在技能页还带着「当前配方 X」出片，就是拿没在看的页签干扰这一轮。
 // 素材库目录在取用时现读画廊：画廊导航没有对外事件，读一次现值比在 gallery.js 里插监听便宜
-const agentCtx = { page: "gallery", recipe: "", segments: 0, paint_mode: "text" };
+const agentCtx = { page: "gallery", recipe: "", segments: 0 };
 let agentCtxRefresh = null;     // 智能体页建好时挂上的重画回调，页面没建过就没有面板可通知
 
 function notifyAgentCtx() { if (agentCtxRefresh) agentCtxRefresh(); }
@@ -60,9 +60,10 @@ function agentContext() {
         const ctx = { page, recipe: agentCtx.recipe, segments: agentCtx.segments };
         return (lib && libModal?.isOpen() && libScope === "director") ? withLib(ctx) : ctx;
     }
-    if (page === "paint") {
-        const ctx = { page, paint_mode: agentCtx.paint_mode };
-        return (lib && libModal?.isOpen() && libScope === "paint") ? withLib(ctx) : ctx;
+    // 绘画页只有文生图、编辑页只有图片编辑：页面名本身就是这两件事，没有模式要报
+    if (page === "paint") return { page };
+    if (page === "edit") {
+        return (lib && libModal?.isOpen() && libScope === "edit") ? withLib({ page }) : { page };
     }
     if (page === "gallery") return withLib({ page });
     return { page };
@@ -105,7 +106,7 @@ function showView(name) {
         libModal?.close();      // 离开该页收起素材库弹窗（close 自己把画廊交还宿主）
         recipesModal?.close();  // 配方弹窗同一条路
         // 离开素材页：侧栏替身归位。素材页挂载画廊时把 activeSidebarTabId 写成 neo.gallery，
-        // 不归位的话导演页 / 绘画页的「素材库」按钮再写同一个 id 会被去重吃掉，弹窗打不开
+        // 不归位的话导演页 / 编辑页的「素材库」按钮再写同一个 id 会被去重吃掉，弹窗打不开
         const tab = app.extensionManager.sidebarTab;
         if (tab && name !== "gallery") tab.activeSidebarTabId = null;
     }
@@ -159,7 +160,7 @@ let libModal = null;            // 素材库弹窗（导演页 / 绘画页共用
 let libModalHost = null;        // 弹窗里的画廊宿主：libScope 记它此刻替哪一页上屏
 let libScope = "director";
 let recipesModal = null;        // 导演页配方弹窗
-let libPendingPick = null;      // director.js 的 neo:media-pick 交来的取用回调（弹窗打开时消费）
+let libPendingPick = null;      // 面板经 neo:media-pick 交来的取用回调（开弹窗时消费，一次一清）
 
 function mountGallery(host) {
     galleryTab = galleryTab || getSidebarTab("neo.gallery");
@@ -187,7 +188,7 @@ function buildGallery(el) {
 }
 
 // 编辑器「素材库」→ media-transfer 写 sidebarTab.activeSidebarTabId；Studio 没有 ComfyUI 侧栏，
-// 写入落到素材库弹窗（取用回调由 director.js 抢跑一步经 neo:media-pick 送来）
+// 写入落到素材库弹窗（取用回调由面板抢跑一步经 neo:media-pick 送来：导演的首帧 / 参考区、编辑页的参考图菜单）
 function ensureLibModal() {
     if (libModal) return libModal;
     libModalHost = $el("div", { className: "ns-gallery-host", dataset: { libScope: "director" } });
@@ -229,8 +230,8 @@ function openLibModal(scope, onPick) {
     else notifyAgentCtx();
 }
 
-// 绘画页取用：弹窗点卡片 = 把这张图喂进图片编辑面板当原图（openImageEditDialog 自己切到编辑模式）
-function paintPickImage(images) {
+// 悬浮「素材库」的取用：弹窗点卡片 = 把这张图喂进图片编辑面板当原图（参考图菜单自己交回调，不经这里）
+function editPickImage(images) {
     const img = images[0];
     if (!img) return;
     openImageEditDialog(app.neoGallery, { filename: img.filename }, img.subfolder);
@@ -251,11 +252,16 @@ function openFramesMaterial(onPick) {
 const buildFrames = createFramesView({ api, $el, toast, openMaterial: openFramesMaterial });
 
 onSidebarTabChange((id) => {
-    if (currentView !== "director" && currentView !== "paint") return;
-    if (id === "neo.gallery") openLibModal(currentView, currentView === "paint" ? paintPickImage : libPendingPick);
-    else libModal?.close();
+    if (currentView !== "director" && currentView !== "edit") return;
+    if (id !== "neo.gallery") { libModal?.close(); return; }
+    // 编辑页两个取用落点：参考图菜单的「素材库取用」把 addRefImages 经 neo:media-pick 交来（取的是参考图），
+    // 悬浮「素材库」按钮自己交来 editPickImage（取的是原图）。回调一次一清：留着它，下一次从悬浮按钮开的
+    // 弹窗会把该当原图的那张塞进参考位
+    const onPick = libPendingPick || (currentView === "edit" ? editPickImage : null);
+    libPendingPick = null;
+    openLibModal(currentView, onPick);
 });
-// 导演编辑器各素材库按钮把取用回调随侧栏写入一起交来；ComfyUI 模式没有这条监听
+// 参考图菜单与导演编辑器各素材库按钮把取用回调随侧栏写入一起交来；ComfyUI 模式没有这条监听
 window.addEventListener("neo:media-pick", (e) => { libPendingPick = e.detail?.onPick || null; });
 
 // ====== 导演页：整片生成面板 + 配方列表 ======
@@ -763,67 +769,60 @@ async function buildDirector(el) {
 
 
 
-// ====== 绘画页：满幅 = 文生图 / 图片编辑面板（模式切换，一次铺满整栏）；素材库走弹窗取用 ======
-const PAINT_MODE_KEY = "neo_studio_paint_mode";
-let paintModeCtl = null;    // buildPaint 建页时交出的模式切换入口：首页卡片直达文生图 / 图片编辑
+// ====== 绘画页（文生图）与编辑页（图片编辑）：一页一块面板铺满整栏；素材库走弹窗取用，只挂在编辑页 ======
+// 面板内嵌进这两页（同导演编辑器 setDirectorEditorHost 语义）：面板进页就铺好，素材库的「生成素材」与
+// 图片卡菜单「图片编辑」只负责跳到那一页（面板复用，不重建）。ComfyUI 插件模式没有宿主，照旧弹浮层窗。
+function openPaintTarget(kind) {
+    // 已在目标页时 go() 是同页空转，showView 里「离开该页收起弹窗」那段不触发：
+    // 交还给本页面板后弹窗会盖在面板上，所以入口自己收
+    go(kind === "edit" ? "edit" : "paint");
+    libModal?.close();
+}
+
+// 宿主 onOpen 是一份合并表（setPaintHost 后写覆盖前写），两页共用这一个按 kind 分流的入口。
+// 面板构造时宿主也会发一次（空画布自己种 storyboard 也发）：那一下不是用户要点素材，
+// 建完面板才放开跳页——启动时这一发就不会把页面从首页 / 设置页深链拽走
+let paintArmed = false;
+let editArmed = false;
+function paintHostOpen(kind) {
+    if (kind === "text" ? paintArmed : editArmed) openPaintTarget(kind);
+}
 
 function buildPaint(el) {
     const page = $el("div", { className: "ns-paint" });
     el.appendChild(page);
     const main = $el("div", { className: "ns-paint-main" });
-    page.appendChild(main);
-
-    // 模式切换：文生图与图片编辑各占满整栏，一次只看一个（不像导演页那样编辑 + 生成同屏抢高度）
-    const modeBtns = {
-        text: $el("button", { className: "ns-paint-mode-btn", type: "button", textContent: t("文生图"), onclick: () => setMode("text") }),
-        edit: $el("button", { className: "ns-paint-mode-btn", type: "button", textContent: t("图片编辑"), onclick: () => setMode("edit") }),
-    };
     const textHost = $el("div", { className: "ns-paint-panel ns-paint-text" });
-    const editHost = $el("div", { className: "ns-paint-panel ns-paint-edit" });
-    // 素材库按钮在模式行右端：弹窗点卡片 = 图片编辑取用该图，拖进预览区 = 投放当原图
-    const paintLibBtn = $el("button", { className: "ns-btn ns-paint-lib-btn", type: "button", title: t("打开素材库：点卡片取用进图片编辑，拖进预览区投放") });
-    setIconLabel(paintLibBtn, "folder", t("素材库"));
-    paintLibBtn.onclick = () => openLibModal("paint", paintPickImage);
-    main.appendChild($el("div", { className: "ns-paint-modes" }, [modeBtns.text, modeBtns.edit, paintLibBtn]));
+    page.appendChild(main);
     main.appendChild(textHost);
-    main.appendChild(editHost);
 
-    let mode = "text";
-    const setMode = (m) => {
-        mode = m;
-        modeBtns.text.classList.toggle("ns-paint-mode-on", mode === "text");
-        modeBtns.edit.classList.toggle("ns-paint-mode-on", mode === "edit");
-        textHost.classList.toggle("ns-hidden", mode !== "text");
-        editHost.classList.toggle("ns-hidden", mode !== "edit");
-        agentCtx.paint_mode = mode;   // 智能体上下文：知道绘画页现在是文生图还是图片编辑
-        notifyAgentCtx();
-        try { localStorage.setItem(PAINT_MODE_KEY, mode); } catch { /* 偏好写不进不影响用 */ }
-    };
-    paintModeCtl = setMode;
-    try { setMode(localStorage.getItem(PAINT_MODE_KEY) === "edit" ? "edit" : "text"); } catch { setMode("text"); }
-
-    // 绘画面板内嵌进本视图（同导演编辑器 setDirectorEditorHost 语义）：两块面板进页就铺好，
-    // 左栏素材库的「生成素材」与图片卡菜单「图片编辑」只做模式切换（面板复用，不重建）；
-    // 素材页的同类入口由 onOpen 先跳到本页再铺面板。ComfyUI 插件模式没有宿主，照旧弹浮层窗。
-    let ready = false;
-    setPaintHost({
-        text: textHost,
-        edit: editHost,
-        // 已在绘画页时 go() 是同页空转，showView 里「离开该页收起弹窗」那段不触发：
-        // 交还给本页面板后弹窗会盖在面板上，所以入口自己收
-        onOpen: (kind) => { if (!ready) return; go("paint"); setMode(kind); libModal?.close(); },
-    });
-    // 文生图直接写提示词就能生成；图片编辑铺空面板，从左栏把素材拖进预览区当原图即可
+    setPaintHost({ text: textHost, onOpen: paintHostOpen });
+    // 文生图直接写提示词就能生成
     openGenMaterialDialog(app.neoGallery, { container: textHost });
+    paintArmed = true;
+}
+
+function buildEdit(el) {
+    const page = $el("div", { className: "ns-paint" });
+    el.appendChild(page);
+    const main = $el("div", { className: "ns-paint-main" });
+    const editHost = $el("div", { className: "ns-paint-panel ns-paint-edit" });
+    page.appendChild(main);
+    main.appendChild(editHost);
+    // 素材库入口浮在页面右上角（绝对定位在 .ns-paint 上），不为它空出一行；
+    // 弹窗点卡片 = 取用该图当原图，拖进预览区 = 投放当原图
+    const libBtn = $el("button", { className: "ns-btn ns-paint-lib-btn", type: "button", title: t("打开素材库：点卡片取用进图片编辑，拖进预览区投放") });
+    setIconLabel(libBtn, "folder", t("素材库"));
+    libBtn.onclick = () => openLibModal("edit", editPickImage);
+    page.appendChild($el("div", { className: "ns-paint-bar" }, [libBtn]));
+
+    setPaintHost({ edit: editHost, onOpen: paintHostOpen });
+    // 空面板铺好，从素材库把图拖进预览区当原图即可
     openImageEditDialog(app.neoGallery, null, "", { container: editHost });
-    ready = true;
+    editArmed = true;
 }
 
 // ====== 首页：意图卡片 —— 大字标题 + 创造五卡 + 素材三卡，点卡直达对应页 ======
-function openPaintMode(mode) {
-    paintModeCtl?.(mode);   // 绘画页常驻：先把面板切到卡片承诺的模式，再跳页
-    go("paint");
-}
 
 function homeCard(iconName, title, sub, onClick) {
     return $el("button", { className: "ns-home-card", type: "button", onclick: onClick }, [
@@ -842,13 +841,13 @@ function buildHome(el) {
         $el("div", { className: "ns-home-hero" }, [
             $el("h1", {}, [t("今天想"), $el("span", { className: "ns-home-accent", textContent: t("创作") }), t("什么？")]),
             $el("p", { textContent: t("一句话到一段成片，全部在你自己的电脑上完成") }),
-            $el("button", { className: "ns-home-cta", type: "button", textContent: t("一句话出图"), onclick: () => openPaintMode("text") }),
+            $el("button", { className: "ns-home-cta", type: "button", textContent: t("一句话出图"), onclick: () => go("paint") }),
         ]),
         $el("h2", { className: "ns-home-section", textContent: t("开始创作") }),
         $el("div", { className: "ns-home-grid" }, [
-            homeCard("sparkles", "生成图片", "描述画面，直接出图", () => openPaintMode("text")),
+            homeCard("sparkles", "生成图片", "描述画面，直接出图", () => go("paint")),
             homeCard("film", "生成视频", "一句话加首帧，出一段视频", () => go("video")),
-            homeCard("pencil", "图片编辑", "拖入素材，写下要改成什么样", () => openPaintMode("edit")),
+            homeCard("pencil", "图片编辑", "拖入素材，写下要改成什么样", () => go("edit")),
             homeCard("play", "导演视频", "多段配方，生成整片视频", () => go("director")),
             homeCard("target", "智能体", "说出目标，工具链多轮跑完", () => go("agent")),
             homeCard("pose", "3D 姿势", "姿势 · 整场 · 全景", () => go("pose")),
@@ -2009,7 +2008,7 @@ const RUN_GATES = [
     [".ns-video-run", "simple_video", t("生成视频")],
     [".neo-director-regen-run", "segment", t("生成这一段")],
     [".neo-director-merge-run", "segment", t("拼回成片")],
-    [".ns-paint .neo-gallery-story-btn-primary", "image_gen", t("生成")],   // 绘画页文生图 / 图片编辑面板的生成
+    [".ns-paint .neo-gallery-story-btn-primary", "image_gen", t("生成")],   // 绘画页文生图与编辑页图片编辑面板的生成
 ];
 
 // 生成按钮改写成「需要 ComfyUI」：不发请求，点一下引导启动（须在原 handler 之前注册）
@@ -2467,16 +2466,17 @@ function buildAgentPage(el) {
         // 结果与动画都铺在面板里，要 1024 那一档才铺得开
         previewSide: () => (previewOn ? AGENT_PREVIEW_SIDE : 0),
     });
-    agentCtxRefresh = () => panel.refresh();   // 切页 / 选配方 / 切绘画模式时重画面板上的上下文条
+    agentCtxRefresh = () => panel.refresh();   // 切页 / 选配方时重画面板上的上下文条
 }
 
 function route() {
     let name = (location.hash || "#/home").replace(/^#\//, "").split("?")[0] || "home";
-    // 首页 / 导演页 / 绘画页视图常驻：首页卡片直达后两页，内嵌宿主要在第一次点
+    // 首页 / 导演页 / 绘画页 / 编辑页视图常驻：首页卡片直达后三页，内嵌宿主要在第一次点
     // 「新建导演配方 / 生成素材 / 图片编辑」之前就要注册好
     ensureView("home", buildHome);
     ensureView("director", buildDirector);
     ensureView("paint", buildPaint);
+    ensureView("edit", buildEdit);
     if (name === "skills") ensureView("skills", buildSkills);
     else if (name === "video") ensureView("video", buildVideo);
     else if (name === "agent") ensureView("agent", buildAgentPage);

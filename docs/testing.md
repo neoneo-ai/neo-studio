@@ -146,8 +146,9 @@ node --test --test-force-exit --test-timeout=180000 studio/tests/e2e/skill-manag
   插件在 `onConfigure` 补同步）。
 - `paint-panel-layout.e2e.mjs` — 绘画页文生图面板与 chip 浮层的布局不变量：结果区吃掉输入卡上方的余隙、
   进度与成品贴着输入卡往上长（空档不足时内容从容器顶部铺开、起手提示落在那片余隙正中）；浮层右栏的
-  LoRA 下拉拿到列的余宽，强度与 ✕ 不掉行。纯前端：注入 `web/studio/style.css`、`web/gallery.css`、
-  `web/prompts.css` 与真实同构 DOM，不需要 ComfyUI 在跑。
+  LoRA 下拉拿到列的余宽，强度与 ✕ 不掉行；图片编辑面板（机位模式那套最高的形态）整页不出滚动条、
+  预览按视口收不被舞台裁、输入卡与「生成」留在折叠线内。纯前端：注入 `web/studio/style.css`、
+  `web/gallery.css`、`web/prompts.css`、`web/angle/angle-orb.css` 与真实同构 DOM，不需要 ComfyUI 在跑。
 - `studio-mobile-layout.e2e.mjs` — `/neo-studio` 在 390×844 手机视口下的版式不变量：6 个页签、队列 / 设置图标位与两层弹窗
   都不出横向滚动；顶栏页签条可横滚且选中那枚滚进可视区、页签与图标位都给到 44px；导演 / 技能 / 设置 / 姿势页的
   两栏压成上下堆叠并贴整幅（压住分隔条写进内联样式的栏宽）；姿势页两侧栏各收成一条 34px 条、

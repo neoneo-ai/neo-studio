@@ -15,13 +15,19 @@
     /* 四边留 8px：方位键就贴在球缘外侧（球缘在画布内 16px），既不压球也不飘远 */
     padding: 8px;
     touch-action: none;   /* 拖拽从键上或留白处起手时都不让浏览器滚页 */
+    cursor: grab;         /* 留白处也能起手拖，光标先说清楚 */
+}
+
+/* 拖拽全程手抓取：指针捕获不改光标，光标始终跟着指针下的元素——划过方位键（cursor: pointer）、
+   wrap 留白或右边读数时都会变样，抓起球之后整块控件都得是抓着的手 */
+.neo-angle-orb.dragging,
+.neo-angle-orb.dragging * {
+    cursor: grabbing;
 }
 
 .neo-angle-canvas {
     display: block;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 10px;
-    background: rgba(0, 0, 0, 0.35);
+    border-radius: 10px;   /* 只给键盘焦点框定圆角：画布本身不再画底板，球直接落在机位行那块底上 */
     touch-action: none;
     cursor: grab;
 }
@@ -95,13 +101,59 @@
     white-space: nowrap;
 }
 
-/* 三条滑杆：标签 + 滑杆 + 档位读数，窄面板里整块换行到球下方 */
+/* 机位行内三处收口：橙色组合提示与滑杆行的读数重复，收起；滑杆值紧贴轨道右端，
+   不再右对齐到自己那 92px 的格子；滑杆自己画轨道，浏览器原生的那条白条在这块深底上太晃眼 */
+.neo-gallery-edit-angle .neo-angle-readout {
+    display: none;
+}
+
+.neo-gallery-edit-angle .neo-angle-row > output {
+    width: auto;
+    text-align: left;
+}
+
+.neo-gallery-edit-angle .neo-angle-row > input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 6px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.18);
+}
+
+.neo-gallery-edit-angle .neo-angle-row > input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border: none;
+    border-radius: 50%;
+    background: #4a9eff;
+    cursor: pointer;
+}
+
+.neo-gallery-edit-angle .neo-angle-row > input[type="range"]::-moz-range-track {
+    height: 6px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.18);
+}
+
+.neo-gallery-edit-angle .neo-angle-row > input[type="range"]::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border: none;
+    border-radius: 50%;
+    background: #4a9eff;
+    cursor: pointer;
+}
+
+/* 三条滑杆：标签 + 滑杆 + 档位读数，窄面板里整块换行到球下方；
+   右侧多留 6px：数值现在贴着轨道末端，一路顶到面板边框上就没余量了 */
 .neo-gallery-edit-angle {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     gap: 8px;
-    padding: 6px;
+    padding: 6px 12px 6px 6px;
     background: rgba(0, 0, 0, 0.22);
     border: 1px solid rgba(255, 255, 255, 0.10);
     border-radius: 8px;

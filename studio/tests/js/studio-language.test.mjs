@@ -84,7 +84,7 @@ test("英文模式：顶栏静态壳、设置页 tab、语言提示都出英文"
 
     assert.equal(document.title, "Neo Studio", "窗口标题应换英文");
     assert.deepEqual([...document.querySelectorAll(".ns-tabs a")].map((a) => a.textContent),
-        ["Home", "Assets", "Paint", "Video", "Director", "Pose"]);
+        ["Home", "Assets", "Paint", "Edit", "Video", "Director", "Pose"]);
     // 图标位没有文案，只有鼠标提示 —— 提示走同一份 i18n，图标本身不占文案
     assert.equal(document.getElementById("ns-settings-btn").title, "Settings", "设置图标位的提示应换英文");
     assert.equal(document.getElementById("ns-queue-toggle").title, "Queue", "队列图标位的提示应换英文");

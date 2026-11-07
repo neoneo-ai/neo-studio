@@ -29,7 +29,6 @@ const pickItem = (name, on = false) =>
 const modalInner = (w, h, outpaint) => `
     <div class="neo-gallery-edit-compare">
       <div>
-        <div class="neo-gallery-edit-compare-label">原图 / 编辑结果（拖拽分割线对比）</div>
         <div class="neo-gallery-edit-compare-stage">
           <div class="neo-gallery-edit-compare-imgwrap${outpaint ? " neo-gallery-edit-outpaint" : ""}">
             ${outpaint

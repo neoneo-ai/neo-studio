@@ -146,7 +146,7 @@ list and the asset library both open in modals (`js/core/lib-modal.js`), so the 
   "新建配方" reopens the editor and returns to the left/right split.
 - "**📋 Recipes**" opens the recipe modal (`.ns-libmodal[data-lib-scope="recipes"]`, director
   recipes only) and "**🖼 Asset library**" opens the asset modal (`data-lib-scope="assets"`, the same instance the
-  paint page uses). The **🖼 Asset library** button inside the director editor drives the same entry (Studio has no
+  edit page uses). The **🖼 Asset library** button inside the director editor drives the same entry (Studio has no
   ComfyUI left sidebar, so `media-transfer` writes `sidebarTab.activeSidebarTabId` and the shim forwards it to the
   modal), and the entry button lights while it is open. The library is the same Neo Gallery the gallery
   page uses (one element moved between the gallery host, the modal host and the standby host, wide styling),
@@ -194,20 +194,21 @@ list and the asset library both open in modals (`js/core/lib-modal.js`), so the 
 - The main column is a left/right split, so a narrow window scrolls sideways instead of squeezing both panes into
   unreadable strips; the recipe and asset modals cover the window with a 640px minimum width.
 
-## Paint page layout
+## Input page / Edit page layout
 
-The paint page is a **top bar** (the **text-to-image / image-edit** mode bar plus the **🖼 Asset library** entry)
-above one full-width panel. Only one panel fills the page at a time — unlike the director
+The input page is one full-width text-to-image panel; the edit page is one full-width image-edit panel with a
+**🖼 Asset library** button floating at its top right (absolutely positioned over the preview, so no toolbar
+row is reserved for it). Only one panel fills the page at a time — unlike the director
 page, no editor and generation panel split one width. The asset modal, the scrollbars and the
 narrow-window rules are shared with the director page (one modal instance, one geometry in
 `localStorage["neo_studio_libmodal_assets"]`).
 
-- The paint panels are embedded in Studio (`setPaintHost` registers the hosts): they fill the page with
+- Both panels are embedded in Studio (`setPaintHost` registers the hosts): they fill the page with
   no overlay window, so title-bar dragging and the ✕ do not appear. The main canvas (the ComfyUI page) registers
   no host, so "🖼️ Generate asset" and "🖼️ Edit image" stay overlay windows there.
-- "🖼️ Generate asset" in the gallery page header and "🖼️ Edit image" in an image card's menu both switch to the
-  paint page in Studio and open in the matching panel; "🖼️ New image recipe" opens a blank text-to-image panel.
-  The paint page no longer carries an image-recipe list.
+- "🖼️ Generate asset" and "🖼️ New image recipe" switch to the input page; "🖼️ Edit image" in an image card's
+  menu switches to the edit page. Each page owns one panel and one job — the input page generates, the edit page
+  edits — so there is no text-to-image / image-edit mode bar and no image-recipe list.
 - The text-to-image panel is a composer ("one prompt box + a bottom chip row: skill+params / ratio /
   max side … `⋯` Generate") docked at the bottom of the page (the input bar follows the
   ArtCraft promptbox): one line in the box is enough to generate, the three chips are pill buttons with panels
@@ -219,17 +220,31 @@ narrow-window rules are shared with the director page (one modal instance, one g
   Filling and docking are independent of how short the window is: Windows display scaling reports an 800px window as
   640 / 533 CSS px and the composer stays docked at the panel bottom; the result area scrolls on its own, and the
   page never scrolls vertically — the composer does not float in the middle of the window with an empty lower half.
+- The edit page docks its composer at the bottom the same way, and the image-edit area takes the gap above it: the
+  source image scales up to fill that gap (`object-fit: contain`, centred, never cropped; its delete mask and marker
+  points cap with it, so the mask never spills outside the card), and an empty preview carries the fixed-size
+  "＋ Source" box in its centre (click opens the asset library, hovering floats the upload menu — see
+  [gallery.md](gallery.md), "Image editing"). The edit page's page padding and composer padding each give up a
+  strip to the preview; the paint page keeps its own page padding and composer, because the two pages' styles hang
+  on their own hosts (`.ns-paint-edit` / `.ns-paint-text`) and one side never restyles the other. The prompt box
+  is two lines tall (40px floor; camera-angle mode folds the box away entirely), and the width / height inputs sit
+  **above** the chip row — a panel that floats open upward gets clipped by the page edge when it hangs off a
+  bottom-docked row. The "source / result" label row and the zoom button do not appear in Studio: clicking the
+  source opens the lightbox, and in paint / mark modes a click paints or marks instead.
 
-- On the paint page, "Generate asset" in the asset modal and "Edit image" in an image card's menu close the modal
-  once the panel is in place — `go()` on the same page skips the `showView()` close, so the modal would stay over
-  the panel.
-- The chosen mode lives in `localStorage["neo_studio_paint_mode"]`.
+- On the input page / edit page, "Generate asset" in the asset modal and "Edit image" in an image card's
+  menu close the modal once the panel is in place — `go()` on the same page skips the `showView()` close, so
+  the modal would stay over the panel. Page jumps are gated by the top-level `paintArmed` / `editArmed` flags,
+  set only after the panel is built, so the host's construction-time ping never drags the page away from the
+  home page or a settings deep link.
 - The gallery in the asset modal is the same element the gallery page and the director page use: a
   `media-transfer` write only opens the current page's modal, and leaving the page closes it. Leaving the gallery
   page resets `sidebarTab.activeSidebarTabId` — mounting the gallery sets it to `neo.gallery`, and without the
   reset the page's own asset-library button writes the same id, gets deduped, and never opens the modal.
-  **Clicking a card in the modal fills the image-edit source preview and closes the modal**; the footer
-  **📥 N selected** collects a batch and lays it out in one go.
+  Which slot a pick lands in is decided by who opened the modal: the floating **🖼 Asset library** button fills the
+  image-edit source preview and closes the modal, while **🖼 Pick from library** in the reference-slot menu appends the
+  card to the reference slots and leaves the source alone; the footer **📥 N selected** collects a batch and lays it
+  out on that same target.
 - The VRAM / RAM readout and the **Clear** button live in the header queue panel: polling runs only while that panel is
   open, and generation pages no longer carry their own bar.
 

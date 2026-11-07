@@ -88,7 +88,7 @@ const chipPanel = () => `
 
 const embeddedHtml = (body) => `<!doctype html><html><head>
 <meta charset="utf-8"><style>html,body{margin:0;background:#14161a;color:#cfd6e0;font:13px sans-serif}*{box-sizing:border-box}</style>
-<style>${css("studio/style.css")}</style><style>${css("gallery.css")}</style><style>${css("prompts.css")}</style>
+<style>${css("studio/style.css")}</style><style>${css("gallery.css")}</style><style>${css("prompts.css")}</style><style>${css("angle/angle-orb.css")}</style>
 </head><body><div class="ns-body"><div class="ns-view"><div class="ns-page">${body}</div></div></div></body></html>`;
 
 let browser;
@@ -231,4 +231,97 @@ for (const [name, [width, height]] of [["素材页", [1440, 900]], ["侧栏", [4
             `${name}：强度与 ✕ 落在同一行内（行底 ${r.rowBottom} / 强度底 ${r.strengthBottom} / ✕ 底 ${r.delBottom}）`);
     });
 }
+
+
+// 图片编辑面板：机位模式是这块面板最高的形态（机位球那条 190px + 输入卡），顶到折叠线就会把
+// 整页撑出滚动条、把「生成」推出去。主栏必须能跟着窗口收，预览按视口收，输入卡与「生成」留在页内。
+const TALL_IMG = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="848" height="1280"><rect width="100%" height="100%" fill="#777"/></svg>')}`;
+const ANGLE_ROWS = ["转角", "俯仰", "镜头"].map((n) =>
+    `<div class="neo-angle-row"><label>${n}</label><input type="range" min="-180" max="180" step="45"><output>正面0°</output></div>`).join("");
+// 与 gallery-gen.js 的机位行 / 输入卡同构（angle/angle-orb.js 建的那层壳 + 三条滑杆）
+const editPanel = () => `
+    <div class="ns-paint"><div class="ns-paint-main">
+      <div class="ns-paint-modes">
+        <button class="ns-paint-mode-btn">文生图</button>
+        <button class="ns-paint-mode-btn ns-paint-mode-on">图片编辑</button>
+        <button class="ns-btn ns-paint-lib-btn">素材库</button>
+      </div>
+      <div class="ns-paint-panel ns-paint-edit"><div class="neo-gallery-gen-panel">
+        <div class="neo-gallery-story-modal neo-gallery-edit-modal neo-gallery-story-modal--embedded">
+          <div class="neo-gallery-edit-compare"><div>
+            <div class="neo-gallery-edit-compare-stage"><div class="neo-gallery-edit-compare-imgwrap">
+              <img class="neo-gallery-edit-compare-img" src="${TALL_IMG}" alt="原图">
+            </div></div>
+          </div></div>
+          <div class="neo-gallery-edit-form">
+            <div class="neo-gallery-edit-angle">
+              <div class="neo-angle-orb"><div class="neo-angle-wrap">
+                <canvas class="neo-angle-canvas" width="160" height="160" style="width:160px;height:160px"></canvas>
+                <div class="neo-angle-arrows">
+                  <button data-step="tiltUp">︿</button><button data-step="tiltDown">﹀</button>
+                  <button data-step="rotCw">›</button><button data-step="rotCcw">‹</button>
+                </div>
+              </div><span class="neo-angle-readout">正面0° · 仰拍-30° · 中景</span></div>
+              <div class="neo-gallery-edit-angle-sliders">${ANGLE_ROWS}</div>
+            </div>
+            <div class="neo-gallery-gm-composer neo-gallery-gm-composer--angle">
+              <div class="neo-gallery-edit-refline">
+                <div class="neo-gallery-edit-refdrop-row" style="display:none"></div>
+                <textarea class="neo-gallery-story-input neo-gallery-gm-quick-input" rows="4">Move the camera of &lt;image1&gt; to front view, eye-level shot, medium shot</textarea>
+              </div>
+              <div class="neo-gallery-gm-composer-bar neo-gallery-gm-chips">
+                <button class="neo-gallery-gm-chip-btn"><span class="neo-gallery-gm-chip-label">机位</span></button>
+                <div class="neo-gallery-gm-composer-gap"></div>
+                <button class="neo-gallery-story-btn neo-gallery-story-btn-primary neo-gallery-gm-gen-btn">生成</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div></div>
+    </div></div>`;
+
+// 量一块图片编辑面板：整页 / 视图是否滚、舞台裁不裁预览、输入卡与「生成」在不在折叠线内
+const measureEdit = async (vw, vh) => {
+    const page = await browser.newPage({ viewport: { width: vw, height: vh } });
+    await page.setContent(embeddedHtml(editPanel()), { waitUntil: "load" });
+    await page.waitForTimeout(120);
+    const m = await page.evaluate(() => {
+        const box = (sel) => {
+            const r = document.querySelector(sel).getBoundingClientRect();
+            return { top: Math.round(r.top), bottom: Math.round(r.bottom), h: Math.round(r.height) };
+        };
+        const pageEl = document.querySelector(".ns-page");
+        const viewEl = document.querySelector(".ns-view");
+        return {
+            pageScroll: pageEl.scrollHeight - pageEl.clientHeight,
+            viewScroll: viewEl.scrollHeight - viewEl.clientHeight,
+            stage: box(".neo-gallery-edit-compare-stage"),
+            img: box(".neo-gallery-edit-compare-img"),
+            bar: box(".neo-gallery-gm-composer-bar"),
+            gen: box(".neo-gallery-gm-composer-bar .neo-gallery-gm-gen-btn"),
+            vh: window.innerHeight,
+        };
+    });
+    await page.close();
+    return m;
+};
+
+for (const [vw, vh] of [[1600, 1000], [1280, 720]]) {
+    test(`图片编辑面板 ${vw}×${vh}：整页不滚，预览按视口收，输入卡与「生成」留在折叠线内`, async () => {
+        const m = await measureEdit(vw, vh);
+
+        assert.ok(m.pageScroll <= 2, `编辑页不出现滚动条（溢出 ${m.pageScroll}px）`);
+        assert.ok(m.viewScroll <= 2, `视图不溢出（溢出 ${m.viewScroll}px）`);
+        assert.ok(m.img.h <= m.stage.h, `预览按视口收、不被舞台裁：img=${m.img.h} stage=${m.stage.h}`);
+        assert.ok(m.bar.bottom <= m.vh, `输入卡底行落在折叠线内：bar=${JSON.stringify(m.bar)} vh=${m.vh}`);
+        assert.ok(m.gen.bottom <= m.vh, `「生成」落在折叠线内：gen=${JSON.stringify(m.gen)} vh=${m.vh}`);
+    });
+}
+
+// 极矮窗口：表单本身都装不下，面板照旧裁而不是把整页顶出滚动条（主栏 min-height:0 守的就是这一格）
+test("图片编辑面板 1280×460：窗口矮到装不下表单，整页也不滚", async () => {
+    const m = await measureEdit(1280, 460);
+    assert.ok(m.pageScroll <= 2, `编辑页不出现滚动条（溢出 ${m.pageScroll}px）`);
+    assert.ok(m.viewScroll <= 2, `视图不溢出（溢出 ${m.viewScroll}px）`);
+});
 

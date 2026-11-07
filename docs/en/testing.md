@@ -196,7 +196,9 @@ node --test --test-force-exit --test-timeout=180000 studio/tests/e2e/skill-manag
 - `paint-panel-layout.e2e.mjs` — Paint text-to-image panel and chip popup layout invariants: the result area
   absorbs the free space above the prompt card and progress / finished images grow upward from the card (content
   starts from the container top when that space runs out, the start hint sits in the middle of it); the LoRA
-  dropdown in the popup's right column takes the column's remaining width with strength and ✕ staying on one row.
+  dropdown in the popup's right column takes the column's remaining width with strength and ✕ staying on one row;
+  the image-edit panel (its tallest form, camera-angle mode) never scrolls the page, the preview shrinks with the
+  viewport instead of being clipped by its stage, and the prompt card with 「生成」 stays above the fold.
   Pure frontend: injects `web/studio/style.css`, `web/gallery.css` and `web/prompts.css` into a DOM mirroring the
   real page, no running ComfyUI required.
 - `studio-mobile-layout.e2e.mjs` — Layout invariants of `/neo-studio` in a 390×844 phone viewport: none of the
