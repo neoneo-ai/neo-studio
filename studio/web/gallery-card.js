@@ -556,7 +556,7 @@ export class GalleryCard {
                 }
             }
         }, [t("导入工作流")]);
-        // 复用参数重跑：只有同名 .txt 读得到提示词才显示（读端是 /neo_gallery/media_meta 的 reuse）。
+        // 再来一发：只有同名 .txt 读得到提示词才显示（读端是 /neo_gallery/media_meta 的 reuse）。
         const metaProbe = this._fetchMediaMeta(image, subfolder);
         const reuseItem = (isImageFile(image.filename) || /\.mp4$/i.test(image.filename || "")) ? $el("div", {
             className: "neo-gallery-collect-item",
@@ -566,7 +566,7 @@ export class GalleryCard {
                 this._removeCollectMenu();
                 metaProbe.then(meta => reuseParamsFromMedia(gallery, meta && meta.reuse)).catch(() => { });
             }
-        }, [t("复用参数重跑")]) : null;
+        }, [t("再来一发")]) : null;
         metaProbe.then(meta => {
             if (meta && meta.has && (meta.workflow || meta.prompt)) wfItem.style.display = "";
             if (reuseItem && meta && meta.reuse && meta.reuse.prompt) reuseItem.style.display = "";

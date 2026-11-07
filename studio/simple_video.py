@@ -214,7 +214,7 @@ def _run_prompt(data: dict) -> dict:
     seed = int(seed_in) if explicit_seed else int(params["seed"])
     duration = int(float(duration_sec)) if duration_sec is not None and float(duration_sec) > 0 else None
     ref_images = params.get("ref_images") or []
-    # 「复用参数重跑」记的是这一发的生效值（resolve_video_params 的产物，不是面板原始态）：
+    # 「再来一发」记的是这一发的生效值（resolve_video_params 的产物，不是面板原始态）：
     # 任务成功落盘后写进视频旁的同名 .txt，读端是 gallery._read_sidecar
     return {
         "graph": graph,
@@ -235,7 +235,7 @@ def _run_prompt(data: dict) -> dict:
 
 
 def _video_sidecar_meta(params: dict, skill_id: str, duration_sec: int | None) -> str:
-    """视频旁 .txt 的摘要行：出视频页「复用参数重跑」要用的生效值，字段一律往后加。
+    """视频旁 .txt 的摘要行：出视频页「再来一发」要用的生效值，字段一律往后加。
 
     前四项与出图副文件同形（seed / WxH / model / loras），读端共用；src=首帧、last=尾帧、
     refs=其余参考图，路径 percent-encode（文件名带空格是常态，空格分隔的摘要行扛不住）。

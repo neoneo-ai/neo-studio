@@ -141,7 +141,7 @@ _FULL_REUSE = {
 
 
 class SidecarTests(unittest.TestCase):
-    """成片旁同名 .txt：出视频页「复用参数重跑」的读端（gallery._read_sidecar）吃这份。"""
+    """成片旁同名 .txt：出视频页「再来一发」的读端（gallery._read_sidecar）吃这份。"""
 
     def setUp(self):
         self.dir = tempfile.mkdtemp(prefix="neo_simple_sidecar_")

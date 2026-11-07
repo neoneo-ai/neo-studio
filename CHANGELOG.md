@@ -5,8 +5,8 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 ## [Unreleased]
 
 ### Added
-- **Gallery cards can be reused for a rerun, edited images included.** The image card's 「⋯」 menu gains
-  **复用参数重跑**: it reads the image's same-named `.txt` sidecar (`image_gen` writes the prompt on line 1 and the
+- **Gallery cards carry a Regenerate action, edited images included.** The image card's 「⋯」 menu gains
+  **再来一发**: it reads the image's same-named `.txt` sidecar (`image_gen` writes the prompt on line 1 and the
   parameter summary on line 2) through `GET /neo_gallery/media_meta` - served offline too - and prefills the panel
   that fits. A plain generated image fills the 生成素材 composer: the prompt, the 宽高比 (only when the size lands
   within 2 % of a chip ratio), the 最长边 (only when that pixel value is a chip option), the skill it was made with,
@@ -23,7 +23,7 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   cards never carry it. Covered by `studio/tests/test_gallery_media_types.py`,
   `studio/tests/test_image_gen.py`, `studio/tests/js/gallery-card-reuse.test.mjs`,
   `studio/tests/js/gallery-image-edit.test.mjs` and the new cases in `studio/tests/js/gallery-gen-material.test.mjs`.
-- **Video cards carry 复用参数重跑 too - the whole run lands back on the video page.** A finished simple video now
+- **Video cards carry 再来一发 (Regenerate) too - the whole run lands back on the video page.** A finished simple video now
   gets its own sidecar: `simple_video` writes the same-named `.txt` beside the saved `.mp4` (the existing
   「already written, leave it alone」 rule applies), recording the run's effective values - seed, size, model, LoRA,
   skill, first / last frame, reference images, steps, text encoder, video VAE, audio VAE, frame count and the

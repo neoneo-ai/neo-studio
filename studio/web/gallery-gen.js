@@ -1279,7 +1279,7 @@ function reuseModelFits(skillMeta, model) {
     return !fam || !pickedFam || fam === pickedFam;
 }
 
-/** 「复用参数重跑」带回来的自定参数（主模型 / LoRA）→ 能填进面板的那部分。
+/** 「再来一发」带回来的自定参数（主模型 / LoRA）→ 能填进面板的那部分。
  *  副文件记的是那一发的生效值，文件挪走或改名之后还把它填成覆盖值，等于给用户埋一次必败：
  *  只留模型清单里还在盘上的那些，剩下的落回该技能 config 里钉的那个（= 面板的「自动」） */
 export function reuseModelOverlay(pf, models, skillMeta) {
@@ -1297,7 +1297,7 @@ export function reuseModelOverlay(pf, models, skillMeta) {
 // 提示词清空，所以宿主里已有面板时直接复用，不再走一遍构建。图片编辑入口带着图来，
 // 就把这张图换进现成面板当原图（卡片菜单「图片编辑」与拖进预览区同一条路）
 /** 面板宿主为绘画页时复用已铺好的面板：同种面板在位就只换内容（拖进来的原图 /
- *  「复用参数重跑」带进来的预填），不重建 */
+ *  「再来一发」带进来的预填），不重建 */
 function reusePaintPanel(host, kind, image, subfolder, prefill = null) {
 
     if (!host?.__neoPanelRoot?.isConnected) return false;
@@ -1359,7 +1359,7 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
     editModelBox.addEventListener("change", syncEditParamsChip);
     guardMainModelFamily(editModelCfg, skillSel);
     let _genSkills = [];
-    // 技能列表是异步填进下拉的：「复用参数重跑」要等它落位才认得出副文件里那个技能 id
+    // 技能列表是异步填进下拉的：「再来一发」要等它落位才认得出副文件里那个技能 id
     const skillsReady = (async () => {
         try {
             const res = await fetch("/rs_prompts/skills");
@@ -1383,7 +1383,7 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
     const applyEditModelCfg = async (skillId, overlay = {}) => {
         if (!editGenModels || !skillId) return;
         const cfg = await getSkillGenConfig(skillId);
-        // 「复用参数重跑」的主模型 / LoRA 叠在技能配置之上：重放的是那一发的生效值
+        // 「再来一发」的主模型 / LoRA 叠在技能配置之上：重放的是那一发的生效值
         editModelCfg.load({ ...cfg, ...overlay }, editGenModels);
     };
     const modelsReady = (async () => {
@@ -1871,7 +1871,7 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
         panel.host.appendChild(overlay);
         panel.host.__neoPanelClose = () => { close(); panel.host.__neoPanelRoot = null; panel.host.__neoSetSource = null; panel.host.__neoPrefillEdit = null; };
         panel.host.__neoSetSource = (img, sub) => applySource(img.filename || img.name, sub || "");
-        panel.host.__neoPrefillEdit = (pf) => applyEditPrefill(pf);   // 复用参数重跑：原图 / 参考图 / 模式 / 技能全换进这块现成面板
+        panel.host.__neoPrefillEdit = (pf) => applyEditPrefill(pf);   // 再来一发：原图 / 参考图 / 模式 / 技能全换进这块现成面板
     } else {
         document.body.appendChild(overlay);
         // 标题栏拖动 + 双击最大化/还原（同导演编辑器 / 生成素材窗模式）
@@ -2561,7 +2561,7 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
         fullUrlReady();   // 默认目标分辨率按新原图 + 全局目标像素数重算
     };
 
-    /** 「复用参数重跑」（编辑图）：副文件里的原图 / 编辑模式 / 参考图 / 出图尺寸 / 技能与自定参数
+    /** 「再来一发」（编辑图）：副文件里的原图 / 编辑模式 / 参考图 / 出图尺寸 / 技能与自定参数
      *  逐项填进这块现成面板，面板不重建。
      *
      *  顺序是原图 → 模式 → 参考图：换原图会把模式收回「常规」，切模式又会清掉额外参考图（扩图 /
@@ -3100,7 +3100,7 @@ export function openGenMaterialDialog(gallery, opts = null) {
     const edgeChip = chipButton(edgeSel, { icon: "maximize" });
     sizeRow.append(ratioChip.el, edgeChip.el);
 
-    // 「复用参数重跑」预填：提示词 / 技能与自定参数 / 宽高比 / 最长边。技能不在本页下拉里
+    // 「再来一发」预填：提示词 / 技能与自定参数 / 宽高比 / 最长边。技能不在本页下拉里
     // （本页只列吃文字输入的技能）就整项不填；尺寸填在最后，压过切技能时按该技能配置写回的跟随值
     const applyGmPrefill = async (pf) => {
         const filled = [];
@@ -3180,7 +3180,7 @@ export function openGenMaterialDialog(gallery, opts = null) {
         // 且会把刚渲染的「自动」覆盖成一份空配置。fillSkillOptions 填完选项会重放这一次。
         if (!genModels || !skillId) return;
         const cfg = await getSkillGenConfig(skillId);
-        modelCfg.load({ ...cfg, ...overlay }, genModels);   // 「复用参数重跑」的主模型 / LoRA 叠在技能配置之上
+        modelCfg.load({ ...cfg, ...overlay }, genModels);   // 「再来一发」的主模型 / LoRA 叠在技能配置之上
         ratioSel.value = GM_RATIOS.includes(cfg.default_ratio) ? cfg.default_ratio : "";
         edgeSel.value = GM_EDGES.includes(String(cfg.base_resolution)) ? String(cfg.base_resolution) : "";
         setGmAutoLabel(ratioSel, cfg.default_ratio ? (GM_RATIO_AUTO_TEXT[cfg.default_ratio] || cfg.default_ratio) : "");
@@ -3562,7 +3562,7 @@ export function openGenMaterialDialog(gallery, opts = null) {
     if (panel.embedded) {
         panel.host.appendChild(overlay);
         panel.host.__neoPanelClose = () => { close(); panel.host.__neoPanelRoot = null; panel.host.__neoSetPrompt = null; };
-        panel.host.__neoSetPrompt = applyGmPrefill;   // 绘画页里面板已铺好：复用参数重跑只换内容（同图片编辑的 __neoSetSource）
+        panel.host.__neoSetPrompt = applyGmPrefill;   // 绘画页里面板已铺好：再来一发只换内容（同图片编辑的 __neoSetSource）
     } else {
         document.body.appendChild(overlay);
     }
@@ -3570,14 +3570,14 @@ export function openGenMaterialDialog(gallery, opts = null) {
     setTimeout(() => quickInput.focus(), 0);
 }
 
-/** 素材卡菜单「复用参数重跑」的视频入口：出视频页挂载时注册，把这一发交回视频页铺好面板。
+/** 素材卡菜单「再来一发」的视频入口：出视频页挂载时注册，把这一发交回视频页铺好面板。
  *  注册方在桌面端视频页（studio-app.js 的 buildVideo）；页面没挂载过的兜底走 info。
  *  预填是异步的（要等技能与模型列表落位），填完的清单以 promise 交回。 */
 let _videoReuseOpen = null;
 export function setVideoReuseOpen(open) { _videoReuseOpen = open || null; }
 export function openVideoReuse(reuse) {
     if (!_videoReuseOpen) {
-        actionToast({ severity: "info", summary: t("出视频页尚未就绪"), detail: t("打开「视频」页后再点「复用参数重跑」") });
+        actionToast({ severity: "info", summary: t("出视频页尚未就绪"), detail: t("打开「视频」页后再点「再来一发」") });
         return Promise.resolve([]);
     }
     const filled = _videoReuseOpen(reuse);
@@ -3585,7 +3585,7 @@ export function openVideoReuse(reuse) {
     return filled;
 }
 
-/** 卡片「⋯」菜单「复用参数重跑」：把素材旁 .txt 读出的摘要交给对口的输入卡。
+/** 卡片「⋯」菜单「再来一发」：把素材旁 .txt 读出的摘要交给对口的输入卡。
  *  视频 → 出视频页 composer；带原图或参考图的是编辑那一发 → 图片编辑面板（原图 / 参考图 / 模式一并填回）；
  *  只有提示词与尺寸的（含旧版 .txt）→ 「生成素材」输入卡。没有提示词可复用就是这条菜单项不该出现，
  *  兜底提示走 info 而不是报错。 */
@@ -3617,7 +3617,7 @@ function notifyPrefillFilled(filled) {
     });
 }
 
-// 「复用参数重跑」的比例容差：出图按最长边定尺寸时按 32 对齐，1024×416 已不是整比值 21:9，
+// 「再来一发」的比例容差：出图按最长边定尺寸时按 32 对齐，1024×416 已不是整比值 21:9，
 // 超出容差就只填最长边，不在 chip 上写一个没人用的比例。
 const GM_RATIO_TOLERANCE = 0.02;
 

@@ -1434,7 +1434,7 @@ class SidecarTests(unittest.TestCase):
             self.assertEqual(f.read(), "kept\n")
 
     def test_sidecar_meta_records_skill_mode_source_and_refs(self):
-        """参数摘要行带技能 / 模式 / 原图 / 其余参考图：「复用参数重跑」读的就是这一行。
+        """参数摘要行带技能 / 模式 / 原图 / 其余参考图：「再来一发」读的就是这一行。
 
         路径一律 percent-encode——文件名带空格是常态，空格分隔的摘要行扛不住。"""
         params = {"seed": 9, "width": 1024, "height": 1024, "model": "qwen.safetensors",

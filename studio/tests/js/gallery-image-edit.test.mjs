@@ -1387,7 +1387,7 @@ test("图片编辑取图浮层：hover 桥接带关闭宽限，鼠标跨过方�
     assert.ok(!row.classList.contains("picks-open"), "移开浮层且宽限过后应收起");
 });
 
-test("图片编辑弹窗：「复用参数重跑」把原图 / 参考图 / 模式 / 尺寸 / 技能与自定参数填回面板", async () => {
+test("图片编辑弹窗：「再来一发」把原图 / 参考图 / 模式 / 尺寸 / 技能与自定参数填回面板", async () => {
     resetEnv();
     clearRoutes();
     const { openImageEditDialog } = await import("../../web/gallery-gen.js");
@@ -1434,7 +1434,7 @@ test("图片编辑弹窗：「复用参数重跑」把原图 / 参考图 / 模�
     overlay.remove();
 });
 
-test("图片编辑内嵌面板：「复用参数重跑」换内容不重建；局部编辑不填参考图，家族对撞的主模型丢掉", async () => {
+test("图片编辑内嵌面板：「再来一发」换内容不重建；局部编辑不填参考图，家族对撞的主模型丢掉", async () => {
     resetEnv();
     clearRoutes();
     const { openImageEditDialog, setPaintHost } = await import("../../web/gallery-gen.js");

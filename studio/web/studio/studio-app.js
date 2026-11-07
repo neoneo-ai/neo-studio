@@ -963,7 +963,7 @@ function buildVideo(el) {
             el: slot,
             get: () => items.map((it) => ({ value: it.value })),
             first: () => items[0] || null,
-            // 「复用参数重跑」整槽换内容：面板已铺好，重建会把用户写了一半的提示词清掉
+            // 「再来一发」整槽换内容：面板已铺好，重建会把用户写了一半的提示词清掉
             fill: (vals) => {
                 items.length = 0;
                 for (const v of vals || []) {
@@ -1015,7 +1015,7 @@ function buildVideo(el) {
     };
 
     // 换技能 = 把自定参数整块换成该技能 config 里钉的那一套（与绘画页同一语义）；
-    // 「复用参数重跑」带 reuseOverlay = 在技能配置上盖那一发的生效值，面板显示的就是重放要用的那一套
+    // 「再来一发」带 reuseOverlay = 在技能配置上盖那一发的生效值，面板显示的就是重放要用的那一套
     const applySkillConfig = async (skillId, reuseOverlay = null) => {
         if (!skillId || !videoModels) return;
         const cfg = await getSkillGenConfig(skillId);
@@ -1245,7 +1245,7 @@ function buildVideo(el) {
         cancelBtn.disabled = false;
     });
 
-    // 素材卡「复用参数重跑」：这一发的生效参数（副文件记的）填回本页 composer。面板常驻不重建，
+    // 素材卡「再来一发」：这一发的生效参数（副文件记的）填回本页 composer。面板常驻不重建，
     // 只换内容；逐项校验，面板认不出的（技能不在下拉、模型不在清单与家族判定内、时长不在档位、
     // 随机种子）整项不填，填完的清单交给复用提示。
     const prefillVideo = async (reuse) => {

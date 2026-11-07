@@ -1153,7 +1153,7 @@ def _sidecar_path(image_path: str) -> str:
     return os.path.splitext(image_path)[0] + ".txt"
 
 
-# 复用参数重跑要用的参考图上限（与编辑面板的参考位同宽）：写端裁到这里，读端照单全收
+# 再来一发要用的参考图上限（与编辑面板的参考位同宽）：写端裁到这里，读端照单全收
 _SIDECAR_MAX_REFS = 9
 
 
@@ -1199,7 +1199,7 @@ def _sidecar_meta(params: dict, skill_id: str = "") -> str:
 def write_sidecar(image_path: str, params: dict, skill_id: str = "") -> None:
     """图片旁写同名 .txt：首行提示词、次行参数摘要（Gallery 直接读前两行）。
 
-    读端是 gallery._read_sidecar（「复用参数重跑」），两行的格式要一起改。
+    读端是 gallery._read_sidecar（「再来一发」），两行的格式要一起改。
     """
     write_sidecar_line(image_path, f"{params['prompt']}\n{_sidecar_meta(params, skill_id)}")
 

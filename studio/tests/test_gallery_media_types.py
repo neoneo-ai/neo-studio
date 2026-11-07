@@ -237,7 +237,7 @@ class MediaContentTypeTests(unittest.TestCase):
 
 
 class SidecarReuseTests(unittest.TestCase):
-    """素材旁同名 .txt 的摘要 → 卡片菜单「复用参数重跑」的填单数据。
+    """素材旁同名 .txt 的摘要 → 卡片菜单「再来一发」的填单数据。
 
     写端是 image_gen.write_sidecar（首行提示词、次行参数摘要），这里的输入按那份格式逐字给。
     """

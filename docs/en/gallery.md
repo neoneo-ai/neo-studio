@@ -250,9 +250,9 @@ embedded ComfyUI workflow).
 
 ## Image card "⋯" menu actions
 
-### Reuse parameters for a rerun
+### Regenerate (再来一发)
 
-- **Reuse parameters for a rerun** (「复用参数重跑」) - fills this run's parameters back into the panel that fits
+- **Regenerate** (「再来一发」) - fills this run's parameters back into the panel that fits
   them, so you edit them and click "Generate". It reads the same-named `.txt` beside the image or video (written
   at generation time: the prompt on line 1, the parameter summary `seed=… WxH model=… loras=… skill=… mode=… src=…
   refs=…` on line 2, paths percent-encoded); the summary records what that run actually used, so editing a skill's
@@ -271,12 +271,12 @@ embedded ComfyUI workflow).
     references degrades to the generate-material composer. The toast names exactly what was reused.
   - A video card goes to the video page composer: behind the image fields the sidecar carries
     `steps=… text_encoder=… audio_vae=… vae=… frames=… duration=…` (written by `simple_video`, `vae` recorded
-    after `audio_vae`). Reuse switches to the Video page and swaps the panel to that run - the skill, the
+    after `audio_vae`). 「再来一发」 switches to the Video page and swaps the panel to that run - the skill, the
     first / last frame or the reference images, the seed, the output size, the duration, the prompt, and that
     run's effective 自定参数 merged over the skill config. The duration is derived from the frame count at the
     fixed 24 fps; a value that is not one of the panel's choices (3 / 5 / 8 / 10 / 15 s) and a size outside the
     panel's choices are not filled, and reference videos / audios are not recorded at all (the panel has no slot
-    for them). While the video page has never been opened, the reuse only reports 「出视频页尚未就绪」.
+    for them). While the video page has never been opened, 「再来一发」 only reports 「出视频页尚未就绪」.
   - Reference paths are resolved through the same library addressing as the gallery, file by file: a path
     containing `..` or an absolute path is dropped whole (the sidecar is a plain text file the user can edit).
   - When the sidecar is the workflow JSON ComfyUI's `SaveImage` wrote first, it stays on the "Import workflow"

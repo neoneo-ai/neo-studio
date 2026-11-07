@@ -209,7 +209,7 @@ const EN = {
     "种子": "Seed",
     "技能与自定参数": "Skill & custom parameters",
     "出视频页尚未就绪": "The video page is not ready yet",
-    "打开「视频」页后再点「复用参数重跑」": "Open the Video page first, then use Reuse run parameters",
+    "打开「视频」页后再点「再来一发」": "Open the Video page first, then use Regenerate",
     "随机": "Random",
     "换一个随机种子": "Roll a new random seed",
     "在浏览器中打开": "Open in browser",

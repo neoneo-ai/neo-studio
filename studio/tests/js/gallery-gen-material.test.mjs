@@ -1211,7 +1211,7 @@ test("自定参数面板里的点击不许冒泡到 document（宿主的外点�
     overlay.remove();
 });
 
-test("生成素材弹窗：「复用参数重跑」预填提示词与出图尺寸，值写进请求体", async () => {
+test("生成素材弹窗：「再来一发」预填提示词与出图尺寸，值写进请求体", async () => {
     resetEnv();
     clearRoutes();
     const { openGenMaterialDialog } = await import("../../web/gallery-gen.js");
@@ -1252,7 +1252,7 @@ test("生成素材弹窗：「复用参数重跑」预填提示词与出图尺�
     overlay.remove();
 });
 
-test("生成素材弹窗：「复用参数重跑」只填面板认得的项，认不出的尺寸不编值", async () => {
+test("生成素材弹窗：「再来一发」只填面板认得的项，认不出的尺寸不编值", async () => {
     resetEnv();
     clearRoutes();
     const { openGenMaterialDialog } = await import("../../web/gallery-gen.js");
@@ -1278,7 +1278,7 @@ test("生成素材弹窗：「复用参数重跑」只填面板认得的项，�
     overlay.remove();
 });
 
-test("生成素材弹窗：读不到提示词时「复用参数重跑」只提示，不开面板", async () => {
+test("生成素材弹窗：读不到提示词时「再来一发」只提示，不开面板", async () => {
     resetEnv();
     clearRoutes();
     const { reuseParamsFromMedia } = await import("../../web/gallery-gen.js");
@@ -1288,7 +1288,7 @@ test("生成素材弹窗：读不到提示词时「复用参数重跑」只提�
     assert.match(document.querySelector(".neo-at-summary")?.textContent || "", /该素材没有可复用的提示词/);
 });
 
-test("生成素材内嵌面板：「复用参数重跑」换内容不重建（绘画页宿主）", async () => {
+test("生成素材内嵌面板：「再来一发」换内容不重建（绘画页宿主）", async () => {
     resetEnv();
     clearRoutes();
     const { openGenMaterialDialog, setPaintHost } = await import("../../web/gallery-gen.js");
@@ -1304,11 +1304,11 @@ test("生成素材内嵌面板：「复用参数重跑」换内容不重建（�
         const input = panel.querySelector(".neo-gallery-gm-quick-input");
         input.value = "写到一半的提示词";
 
-        openGenMaterialDialog({}, { prefill: { prompt: "复用参数重跑的提示词", skill: "image_gen", width: 1024, height: 1024 } });
+        openGenMaterialDialog({}, { prefill: { prompt: "再来一发的提示词", skill: "image_gen", width: 1024, height: 1024 } });
         assert.equal(host.querySelectorAll(".neo-gallery-gen-panel").length, 1, "复用现成面板，不重建");
         assert.equal(panel.querySelector(".neo-gallery-gm-quick-input"), input, "同一个输入框：重建会把写了一半的提示词清掉");
         await sleep(60);   // 技能与自定参数要等两份列表落位，尺寸填在其后（切技能会按该技能配置写回跟随值）
-        assert.equal(input.value, "复用参数重跑的提示词", "预填写进现成面板");
+        assert.equal(input.value, "再来一发的提示词", "预填写进现成面板");
         const [ratioSel, edgeSel] = panel.querySelector(".neo-gallery-gm-size-row").querySelectorAll("select");
         assert.equal(ratioSel.value, "1:1", "现成面板里比例也按副文件选中");
         assert.equal(edgeSel.value, "1024", "现成面板里最长边按副文件选中");
@@ -1316,7 +1316,7 @@ test("生成素材内嵌面板：「复用参数重跑」换内容不重建（�
         setPaintHost(null);
     }
 });
-test("生成素材弹窗：「复用参数重跑」填回技能与那一发的自定参数，清单里没落的整项丢掉", async () => {
+test("生成素材弹窗：「再来一发」填回技能与那一发的自定参数，清单里没落的整项丢掉", async () => {
     resetEnv();
     clearRoutes();
     const { openGenMaterialDialog } = await import("../../web/gallery-gen.js");
@@ -1360,7 +1360,7 @@ test("生成素材弹窗：「复用参数重跑」填回技能与那一发的�
     overlay.remove();
 });
 
-test("生成素材弹窗：「复用参数重跑」的主模型与技能家族对撞就留「自动」，下拉里没有的技能整项不填", async () => {
+test("生成素材弹窗：「再来一发」的主模型与技能家族对撞就留「自动」，下拉里没有的技能整项不填", async () => {
     resetEnv();
     clearRoutes();
     const { openGenMaterialDialog } = await import("../../web/gallery-gen.js");

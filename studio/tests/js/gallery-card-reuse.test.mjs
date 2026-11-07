@@ -1,4 +1,4 @@
-// 图片卡「⋯」菜单「复用参数重跑」：素材旁同名 .txt 读得到提示词才上线，点开把提示词与
+// 图片卡「⋯」菜单「再来一发」：素材旁同名 .txt 读得到提示词才上线，点开把提示词与
 // 出图尺寸填进「生成素材」输入卡。探测走 /neo_gallery/media_meta 的 reuse，一次探测与
 // 「导入工作流」共用（同一张卡片不该为菜单发两次请求）。
 import test from "node:test";
@@ -21,7 +21,7 @@ async function loadModules() {
 const itemOf = (label) => [...document.querySelectorAll(".neo-gallery-collect-item")]
     .find((el) => el.textContent.includes(label));
 
-test("卡片菜单「复用参数重跑」：.txt 有提示词才显示，点开填进生成素材输入卡", async () => {
+test("卡片菜单「再来一发」：.txt 有提示词才显示，点开填进生成素材输入卡", async () => {
     resetEnv();
     clearRoutes();
     const { GalleryCard, NeoGallery } = await loadModules();
@@ -38,8 +38,8 @@ test("卡片菜单「复用参数重跑」：.txt 有提示词才显示，点开
     card._showCollectMenu(gallery, { name: "cat", filename: "cat.png" }, "NeoAgent/2026-10-01", "local", anchor);
     await sleep(40);
 
-    const item = itemOf("复用参数重跑");
-    assert.ok(item, "图片卡应挂出「复用参数重跑」");
+    const item = itemOf("再来一发");
+    assert.ok(item, "图片卡应挂出「再来一发」");
     assert.equal(item.style.display, "", "探测到提示词后才放开这一项");
     click(item);
     await sleep(60);
@@ -53,7 +53,7 @@ test("卡片菜单「复用参数重跑」：.txt 有提示词才显示，点开
     assert.equal(fetchLog.filter(c => c.path === "/neo_gallery/media_meta").length, 1, "一次探测两处共用（按文件缓存）");
 });
 
-test("卡片菜单「复用参数重跑」：.txt 读不到提示词就不出这一项，「导入工作流」照旧", async () => {
+test("卡片菜单「再来一发」：.txt 读不到提示词就不出这一项，「导入工作流」照旧", async () => {
     resetEnv();
     clearRoutes();
     const { GalleryCard, NeoGallery } = await loadModules();
@@ -70,10 +70,10 @@ test("卡片菜单「复用参数重跑」：.txt 读不到提示词就不出这
     await sleep(40);
 
     assert.equal(itemOf("导入工作流")?.style.display, "", "内嵌工作流照旧放开「导入工作流」");
-    assert.equal(itemOf("复用参数重跑")?.style.display, "none", "没有可复用提示词就不放开这一项");
+    assert.equal(itemOf("再来一发")?.style.display, "none", "没有可复用提示词就不放开这一项");
 });
 
-test("卡片菜单「复用参数重跑」：视频卡挂出这一项，点开交给出视频页（页没就绪就 info 说清）", async () => {
+test("卡片菜单「再来一发」：视频卡挂出这一项，点开交给出视频页（页没就绪就 info 说清）", async () => {
     resetEnv();
     clearRoutes();
     const { GalleryCard, NeoGallery } = await loadModules();
@@ -89,8 +89,8 @@ test("卡片菜单「复用参数重跑」：视频卡挂出这一项，点开�
     card._showCollectMenu(gallery, { name: "clip", filename: "clip.mp4" }, "NeoAgent/2026-10-01", "local", anchor);
     await sleep(40);
 
-    const item = itemOf("复用参数重跑");
-    assert.ok(item, "视频卡也挂得出「复用参数重跑」");
+    const item = itemOf("再来一发");
+    assert.ok(item, "视频卡也挂得出「再来一发」");
     assert.equal(item.style.display, "", "探测到可复用参数才放开这一项");
     click(item);
     await sleep(40);
@@ -99,7 +99,7 @@ test("卡片菜单「复用参数重跑」：视频卡挂出这一项，点开�
     assert.ok(notice.some((s) => s.includes("出视频页尚未就绪")), "视频页没就绪时 info 说清");
     assert.equal(document.querySelector(".neo-gallery-gm-modal-overlay"), null, "视频复用不开「生成素材」面板");
 });
-test("卡片菜单「复用参数重跑」：副文件带原图与参考图的编辑图，点开交给图片编辑面板", async () => {
+test("卡片菜单「再来一发」：副文件带原图与参考图的编辑图，点开交给图片编辑面板", async () => {
     resetEnv();
     clearRoutes();
     const { GalleryCard, NeoGallery } = await loadModules();
@@ -122,7 +122,7 @@ test("卡片菜单「复用参数重跑」：副文件带原图与参考图的�
     card._showCollectMenu(gallery, { name: "edit", filename: "edit.png" }, "NeoAgent/2026-10-01", "local", anchor);
     await sleep(40);
 
-    const item = itemOf("复用参数重跑");
+    const item = itemOf("再来一发");
     assert.ok(item && item.style.display === "", "编辑图同样挂出这一项");
     click(item);
     await sleep(80);
@@ -134,7 +134,7 @@ test("卡片菜单「复用参数重跑」：副文件带原图与参考图的�
     assert.match(overlay.querySelector(".neo-gallery-edit-compare-img")?.getAttribute("src") || "", /filename=src\.png/);
 });
 
-test("卡片菜单「复用参数重跑」：只有提示词与尺寸的旧版副文件照走「生成素材」面板", async () => {
+test("卡片菜单「再来一发」：只有提示词与尺寸的旧版副文件照走「生成素材」面板", async () => {
     resetEnv();
     clearRoutes();
     const { GalleryCard, NeoGallery } = await loadModules();
@@ -150,7 +150,7 @@ test("卡片菜单「复用参数重跑」：只有提示词与尺寸的旧版�
     card._showCollectMenu(gallery, { name: "old", filename: "old.png" }, "NeoAgent/2026-10-01", "local", anchor);
     await sleep(40);
 
-    click(itemOf("复用参数重跑"));
+    click(itemOf("再来一发"));
     await sleep(60);
 
     assert.ok(document.querySelector(".neo-gallery-gm-modal-overlay"), "旧版副文件降级回「生成素材」面板");

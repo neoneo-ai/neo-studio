@@ -2817,7 +2817,7 @@ async def media_meta(request):
         return web.json_response({"has": False})
 
     raw = await asyncio.to_thread(_extract_media_metadata, path)
-    # 同名 .txt 里的生成摘要：卡片菜单「复用参数重跑」的填单数据，与内嵌元数据各走各的路
+    # 同名 .txt 里的生成摘要：卡片菜单「再来一发」的填单数据，与内嵌元数据各走各的路
     reuse = await asyncio.to_thread(_read_sidecar, path)
     if not raw:
         return web.json_response(_json_safe({"has": False, "reuse": reuse}))
@@ -2921,7 +2921,7 @@ def _parse_video_sidecar(out: dict, meta_line: str) -> None:
 
 
 def _read_sidecar(media_path: Path) -> dict | None:
-    """读素材旁的同名 .txt，回「复用参数重跑」要用的提示词与出图尺寸。
+    """读素材旁的同名 .txt，回「再来一发」要用的提示词与出图尺寸。
 
     副文件不只有 image_gen 那一种来源：ComfyUI 的 SaveImage 会抢先把工作流 JSON 写进
     同名 .txt（那条路是「导入工作流」），C 站示例图是纯提示词。认不出参数行就只回
