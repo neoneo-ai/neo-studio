@@ -1387,3 +1387,110 @@ test("图片编辑取图浮层：hover 桥接带关闭宽限，鼠标跨过方�
     assert.ok(!row.classList.contains("picks-open"), "移开浮层且宽限过后应收起");
 });
 
+test("图片编辑弹窗：「复用参数重跑」把原图 / 参考图 / 模式 / 尺寸 / 技能与自定参数填回面板", async () => {
+    resetEnv();
+    clearRoutes();
+    const { openImageEditDialog } = await import("../../web/gallery-gen.js");
+
+    mockRoute("/rs_prompts/skills", () => jsonResponse([
+        { id: "qwen_image_21", cn_name: "Qwen Image 2.1", category: "image_gen", gen_image: true, mode: "t2i_edit" },
+        { id: "qwen_face_swap", cn_name: "Qwen 换脸", category: "image_gen", gen_image: true, mode: "edit", requires_ref: true },
+    ]));
+    mockRoute("/neo_image_gen/models", () => jsonResponse({
+        diffusion_models: ["qwen/qwen21.safetensors"], loras: ["face_a.safetensors"],
+    }));
+    mockRoute("/neo_image_gen/skill_config", () => jsonResponse({ model: "qwen/qwen21.safetensors", loras: [] }));
+    mockRoute("/neo_gallery/copy_to_input", () => jsonResponse({ success: true, filename: "copied.png" }));
+    mockRoute("/neo_image_gen/settings", () => jsonResponse({ target_megapixels: 1.5 }));
+
+    openImageEditDialog({ app: {}, maxThumbnailSize: 320, displayLabels: true }, null, "", {
+        prefill: {
+            prompt: "把背景换成海边日落", width: 1200, height: 820,
+            skill: "qwen_face_swap", model: "qwen/qwen21.safetensors",
+            loras: [{ name: "face_a.safetensors", strength: 0.9 }],
+            mode: "blend",
+            src: { filename: "src.png", subfolder: "NeoAgent/2026-10-01" },
+            refs: [{ filename: "face.png", subfolder: "NeoAgent/2026-10-01" }],
+        },
+    });
+    const overlay = document.querySelector(".neo-gallery-edit-modal-overlay");
+    assert.ok(overlay, "带原图的副文件应把这一发交给图片编辑面板");
+    await sleep(120);   // 技能与模型列表落位 → 参考图复制进 input/ → 尺寸与自定参数逐项填
+
+    assert.match(overlay.querySelector(".neo-gallery-edit-compare-img")?.getAttribute("src") || "",
+                 /filename=src\.png/, "原图填回预览区");
+    assert.equal(overlay.querySelector(".neo-gallery-edit-mode-select").value, "blend", "编辑模式落回那一发");
+    assert.equal(overlay.querySelectorAll(".neo-gallery-edit-refchip-img").length, 1, "参考图落进参考位");
+    assert.equal(overlay.querySelector("#img-edit-width").value, "1216", "出图尺寸按副文件填回（32 对齐）");
+    assert.equal(overlay.querySelector("#img-edit-height").value, "832");
+    assert.equal(overlay.querySelector(".neo-gallery-gm-skill-sel").value, "qwen_face_swap", "技能落回副文件里那一个");
+    assert.equal(overlay.querySelector(".rs-gen-model-section select").value, "qwen/qwen21.safetensors", "主模型按那一发的生效值填回");
+    assert.deepEqual([...overlay.querySelectorAll(".rs-gen-lora-row select")].map((s) => s.value),
+                     ["face_a.safetensors"], "LoRA 填回自定参数");
+    assert.equal(overlay.querySelector(".neo-gallery-story-input").value, "把背景换成海边日落",
+                 "提示词填在最后，压过切技能时写进来的默认触发词");
+    assert.match(document.querySelector(".neo-at-summary")?.textContent || "",
+                 /已复用 原图、编辑模式、参考图、出图尺寸、技能与自定参数、提示词/);
+    overlay.remove();
+});
+
+test("图片编辑内嵌面板：「复用参数重跑」换内容不重建；局部编辑不填参考图，家族对撞的主模型丢掉", async () => {
+    resetEnv();
+    clearRoutes();
+    const { openImageEditDialog, setPaintHost } = await import("../../web/gallery-gen.js");
+
+    mockRoute("/rs_prompts/skills", () => jsonResponse([
+        { id: "qwen_image_21", cn_name: "Qwen Image 2.1", category: "image_gen", gen_image: true, mode: "t2i_edit" },
+    ]));
+    mockRoute("/neo_image_gen/models", () => jsonResponse({
+        diffusion_models: ["qwen/qwen21.safetensors", "krea2/k2.safetensors"], loras: ["face_a.safetensors"],
+    }));
+    mockRoute("/neo_image_gen/skill_config", () => jsonResponse({ model: "qwen/qwen21.safetensors", loras: [] }));
+    mockRoute("/neo_gallery/copy_to_input", () => jsonResponse({ success: true, filename: "copied.png" }));
+    mockRoute("/neo_image_gen/settings", () => jsonResponse({ target_megapixels: 1.5 }));
+
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    setPaintHost({ edit: host, onOpen: () => { } });
+    try {
+        openImageEditDialog({ app: {}, maxThumbnailSize: 320, displayLabels: true });
+        const panel = host.querySelector(".neo-gallery-gen-panel");
+        assert.ok(panel, "空的图片编辑面板铺进绘画页宿主");
+        // jsdom 无布局也不解码图片：局部编辑要在原图上铺涂抹画布，先把原图尺寸喂给它
+        const origImg = panel.querySelector(".neo-gallery-edit-compare-imgwrap img");
+        for (const [key, value] of [["clientWidth", 400], ["clientHeight", 300],
+                                    ["naturalWidth", 800], ["naturalHeight", 600]]) {
+            Object.defineProperty(origImg, key, { value, configurable: true });
+        }
+        const input = panel.querySelector(".neo-gallery-story-input");
+        input.value = "写到一半的编辑指令";
+
+        openImageEditDialog({ app: {}, maxThumbnailSize: 320, displayLabels: true }, "", "", {
+            prefill: {
+                prompt: "抹掉背景里的那个人", mode: "local", width: 1024, height: 1024,
+                skill: "qwen_image_21", model: "krea2/k2.safetensors",
+                loras: [{ name: "face_a.safetensors", strength: 1 }],
+                src: { filename: "src.png", subfolder: "" },
+                refs: [{ filename: "face.png", subfolder: "" }],
+            },
+        });
+        assert.equal(host.querySelectorAll(".neo-gallery-gen-panel").length, 1, "复用现成面板，不重建");
+        assert.equal(panel.querySelector(".neo-gallery-story-input"), input,
+                     "同一个指令框：重建会把写了一半的指令清掉");
+        await sleep(120);
+
+        assert.equal(input.value, "抹掉背景里的那个人", "预填的指令写进现成面板");
+        assert.equal(panel.querySelector(".neo-gallery-edit-mode-select").value, "local", "模式落回局部编辑");
+        assert.equal(panel.querySelectorAll(".neo-gallery-edit-refchip-img").length, 0,
+                     "局部编辑只用原图那一张，参考图不填（填了就是骗人）");
+        assert.equal(panel.querySelector(".rs-gen-model-section select").value, "qwen/qwen21.safetensors",
+                     "qwen 家族的技能 + krea2 家族的主模型 = 必败的一发，丢掉后落回该技能钉的那个");
+        assert.deepEqual([...panel.querySelectorAll(".rs-gen-lora-row select")].map((s) => s.value),
+                         ["face_a.safetensors"], "LoRA 照填（清单里有落）");
+        assert.match(document.querySelector(".neo-at-summary")?.textContent || "", /已复用 原图、编辑模式/);
+    } finally {
+        setPaintHost(null);
+    }
+});
+
+

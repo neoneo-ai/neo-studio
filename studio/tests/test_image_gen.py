@@ -1433,6 +1433,33 @@ class SidecarTests(unittest.TestCase):
         with open(txt, encoding="utf-8") as f:
             self.assertEqual(f.read(), "kept\n")
 
+    def test_sidecar_meta_records_skill_mode_source_and_refs(self):
+        """参数摘要行带技能 / 模式 / 原图 / 其余参考图：「复用参数重跑」读的就是这一行。
+
+        路径一律 percent-encode——文件名带空格是常态，空格分隔的摘要行扛不住。"""
+        params = {"seed": 9, "width": 1024, "height": 1024, "model": "qwen.safetensors",
+                  "loras": [{"name": "a.safetensors", "strength": 0.8}],
+                  "ref_name": "src.png", "ref_images": ["src.png", "neo_studio/face b.png"]}
+        self.assertEqual(
+            image_gen._sidecar_meta(params, "qwen_image_21"),
+            "seed=9 1024x1024 model=qwen.safetensors loras=a.safetensors@0.8 "
+            "skill=qwen_image_21 mode=blend src=src.png refs=neo_studio%2Fface%20b.png")
+
+    def test_sidecar_meta_skips_edit_fields_for_plain_t2i(self):
+        """文生图那一发没有原图：模式与参考图整段省略，摘要行逐字就是旧版那一份。"""
+        params = {"seed": 5, "width": 1536, "height": 864, "model": "krea2.safetensors", "loras": []}
+        self.assertEqual(image_gen._sidecar_meta(params, "image_gen"),
+                         "seed=5 1536x864 model=krea2.safetensors skill=image_gen")
+
+    def test_sidecar_mode_uses_the_edit_panel_vocabulary(self):
+        """模式取编辑面板 setEditMode 那套词；点选删除与局部编辑同形，归到 local。"""
+        base = {"ref_name": "a.png", "ref_images": ["a.png"]}
+        self.assertEqual(image_gen._sidecar_mode(base), "normal")
+        self.assertEqual(image_gen._sidecar_mode({**base, "ref_images": ["a.png", "b.png"]}), "blend")
+        self.assertEqual(image_gen._sidecar_mode({**base, "local_edit": {"w2": 512}}), "local")
+        self.assertEqual(image_gen._sidecar_mode({**base, "outpaint": {"left": 10}}), "outpaint")
+        self.assertEqual(image_gen._sidecar_mode({**base, "control_image": "pose.png"}), "pose")
+
 
 class SkillWorkflowRouteTests(unittest.TestCase):
     """画布导出 / 技能生图设置 / 文件复制路由（假 request + 真实 skill 模块）。"""

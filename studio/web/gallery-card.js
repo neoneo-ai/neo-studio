@@ -6,7 +6,7 @@ import { api } from "../../../../scripts/api.js";
 import { app } from "../../../../scripts/app.js";
 import { getReservedSpace, getImageHeight, isImageFile, isVideoFile, isAudioFile, getThumbnailSrc, getAudioSrc, showToast, showInlineFeedback, renderCoverTiles, coverMaxTiles, buildPlaceholderTile, decorativeHeights, renderWaveform, applyMediaCardRatio, registerLazyThumbnail } from './gallery-utils.js';
 import { Lightbox } from "./lightbox.js";
-import { buildGenerationMenuItems, openReversePromptDialog, openLoraTagDialog } from "./gallery-gen.js";
+import { buildGenerationMenuItems, openReversePromptDialog, openLoraTagDialog, reuseParamsFromMedia } from "./gallery-gen.js";
 import { copyGalleryToInput } from "./media-transfer.js";
 import { openDirectorEditor } from "./director.js";
 import { t, tf } from "./js/core/i18n.js";
@@ -556,9 +556,21 @@ export class GalleryCard {
                 }
             }
         }, [t("导入工作流")]);
-        this._fetchMediaMeta(image, subfolder).then(meta => {
+        // 复用参数重跑：只有同名 .txt 读得到提示词才显示（读端是 /neo_gallery/media_meta 的 reuse）。
+        const metaProbe = this._fetchMediaMeta(image, subfolder);
+        const reuseItem = isImageFile(image.filename) ? $el("div", {
+            className: "neo-gallery-collect-item",
+            style: { display: "none" },
+            title: t("把这一发的提示词、出图尺寸与技能填回面板；编辑图还带回原图与参考图（涂抹遮罩与扩图边距要重画）"),
+            onclick: () => {
+                this._removeCollectMenu();
+                metaProbe.then(meta => reuseParamsFromMedia(gallery, meta && meta.reuse)).catch(() => { });
+            }
+        }, [t("复用参数重跑")]) : null;
+        metaProbe.then(meta => {
             if (meta && meta.has && (meta.workflow || meta.prompt)) wfItem.style.display = "";
-        }).catch(() => {});
+            if (reuseItem && meta && meta.reuse && meta.reuse.prompt) reuseItem.style.display = "";
+        }).catch(() => { });
 
         const menu = $el("div", { className: "neo-gallery-collect-menu" }, [
             $el("div", { className: "neo-gallery-collect-title" }, [
@@ -626,6 +638,7 @@ export class GalleryCard {
                 onclick: async () => { const full = await this._fetchFullPrompt(image, subfolder); this.copyToClipboard(image.name, full || image.txt_content); this._removeCollectMenu(); }
             }, [t("复制提示词")]) : null,
             wfItem,
+            reuseItem,
             canDelete ? $el("div", {
                 className: "neo-gallery-collect-item neo-gallery-collect-item-danger",
                 title: selectedCount > 0 ? tf("删除已勾选的 {n} 个素材，不影响未选中文件", { n: selectedCount }) : t("仅删除当前素材"),

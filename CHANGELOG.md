@@ -5,6 +5,24 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 ## [Unreleased]
 
 ### Added
+- **Gallery cards can be reused for a rerun, edited images included.** The image card's 「⋯」 menu gains
+  **复用参数重跑**: it reads the image's same-named `.txt` sidecar (`image_gen` writes the prompt on line 1 and the
+  parameter summary on line 2) through `GET /neo_gallery/media_meta` - served offline too - and prefills the panel
+  that fits. A plain generated image fills the 生成素材 composer: the prompt, the 宽高比 (only when the size lands
+  within 2 % of a chip ratio), the 最长边 (only when that pixel value is a chip option), the skill it was made with,
+  and that run's main model + LoRA. An edited image opens the 图片编辑 panel with its source image, its extra
+  reference images copied into `input/`, the edit mode, the output size, the skill and its pinned model + LoRA; the
+  paint mask and the outpaint margins are drawn on the source image, so they stay yours to redraw. The summary
+  records what that run actually used - `skill=`, `mode=`, `src=`, `refs=` added behind the existing
+  `seed=… WxH model=… loras=…`, with paths percent-encoded - so editing a skill's config afterwards does not move
+  the rerun. Only what the panel can still run with gets filled: a model or LoRA no longer in the model list, a main
+  model from another skill family (it falls back to the one that skill pins), a skill missing from that panel's list
+  and a reference file the user deleted are dropped item by item, and the toast names exactly what was reused. A
+  sidecar that is the workflow JSON ComfyUI's `SaveImage` wrote first stays on the 「导入工作流」 path, a Civitai
+  sample sidecar fills the prompt only, and a card with no readable prompt in its sidecar shows no such item - video
+  and audio cards never carry it. Covered by `studio/tests/test_gallery_media_types.py`,
+  `studio/tests/test_image_gen.py`, `studio/tests/js/gallery-card-reuse.test.mjs`,
+  `studio/tests/js/gallery-image-edit.test.mjs` and the new cases in `studio/tests/js/gallery-gen-material.test.mjs`.
 - **The header queue panel keeps its history across restarts, offline included.** The six generation task kinds
   (image, voice, single-shot video, whole film, single segment, merge) now land in
   `<data root>/configs/studio_tasks.sqlite` as they start and as they finish, and the panel reads them back through

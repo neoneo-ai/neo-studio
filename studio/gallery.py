@@ -13,6 +13,7 @@ import subprocess
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from urllib.parse import unquote
 import aiohttp
 from aiohttp import web
 routes = web.RouteTableDef()
@@ -2816,8 +2817,10 @@ async def media_meta(request):
         return web.json_response({"has": False})
 
     raw = await asyncio.to_thread(_extract_media_metadata, path)
+    # 同名 .txt 里的生成摘要：卡片菜单「复用参数重跑」的填单数据，与内嵌元数据各走各的路
+    reuse = await asyncio.to_thread(_read_sidecar, path)
     if not raw:
-        return web.json_response({"has": False})
+        return web.json_response(_json_safe({"has": False, "reuse": reuse}))
 
     prompt = raw.get("prompt")
     workflow = raw.get("workflow")
@@ -2836,10 +2839,93 @@ async def media_meta(request):
         "has": bool(prompt or workflow),
         "workflow": workflow if isinstance(workflow, dict) else None,
         "prompt": prompt if isinstance(prompt, dict) else None,
+        "reuse": reuse,
     }
     if isinstance(prompt, dict):
         result["texts"] = _collect_prompt_texts(prompt)
     return web.json_response(_json_safe(result))
+
+
+# 同名 .txt 副文件的读端。写端是 image_gen.write_sidecar：首行提示词、次行
+# seed=… WxH model=… loras=a@0.8,b@0.5。
+_SIDECAR_SIZE_RE = re.compile(r"(\d+)\s*[xX*]\s*(\d+)")
+
+
+def _parse_sidecar_params(meta_line: str) -> dict:
+    """参数摘要行 → 字段。缺哪项就少给哪项，解析不出值的不编值。"""
+    out = {}
+    seed = re.search(r"seed=(-?\d+)", meta_line)
+    if seed:
+        out["seed"] = int(seed.group(1))
+    size = _SIDECAR_SIZE_RE.search(meta_line)
+    if size:
+        out["width"], out["height"] = int(size.group(1)), int(size.group(2))
+    model = re.search(r"model=(\S+)", meta_line)
+    if model:
+        out["model"] = model.group(1)
+    loras = re.search(r"loras=(\S+)", meta_line)
+    if loras:
+        pairs = []
+        for item in loras.group(1).split(","):
+            name, _, strength = item.rpartition("@")
+            try:
+                pairs.append({"name": name, "strength": float(strength)})
+            except ValueError:
+                pairs.append({"name": name or item, "strength": None})
+        if pairs:
+            out["loras"] = pairs
+    # 编辑那一发多出来的四项（skill / mode / src / refs）：图片路径写端 percent-encode 过，
+    # 文件名带空格是常态，空格分隔的摘要行扛不住
+    for key in ("skill", "mode", "src"):
+        hit = re.search(rf"{key}=(\S+)", meta_line)
+        if hit:
+            out[key] = unquote(hit.group(1))
+    refs = re.search(r"refs=(\S+)", meta_line)
+    if refs:
+        out["refs"] = [unquote(r) for r in refs.group(1).split(",") if r]
+    return out
+
+
+def _read_sidecar(media_path: Path) -> dict | None:
+    """读素材旁的同名 .txt，回「复用参数重跑」要用的提示词与出图尺寸。
+
+    副文件不只有 image_gen 那一种来源：ComfyUI 的 SaveImage 会抢先把工作流 JSON 写进
+    同名 .txt（那条路是「导入工作流」），C 站示例图是纯提示词。认不出参数行就只回
+    提示词——复用少填一项也比空手好，编不出值就一项都不填。
+    """
+    txt = media_path.with_suffix(".txt")
+    try:
+        lines = txt.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return None
+    first = (lines[0] if lines else "").strip()
+    if first.startswith("{"):
+        return None
+    out = {"prompt": first} if first else {}
+    out.update(_parse_sidecar_params(lines[1] if len(lines) > 1 else ""))
+    _resolve_sidecar_refs(out)
+    return out or None
+
+
+def _resolve_sidecar_refs(out: dict) -> None:
+    """参数行里的原图与参考图逐个落到盘上，换成素材面板认的 {subfolder, filename}。
+
+    写端记的是相对 input/ 与 output/ 根的路径（sub/a.png 或 b.png）。副文件是明文、用户能改，
+    带 .. 的与绝对路径在这里直接丢，落点只走 _find_source_media 那套合法寻址；丢掉的项整项
+    消失，面板因此降级回只填提示词与尺寸。"""
+    def one(name: str) -> dict | None:
+        parts = [p for p in str(name or "").replace("\\", "/").split("/") if p]
+        if not parts or ".." in parts or re.match(r"^[A-Za-z]:", parts[0]):
+            return None
+        subfolder, filename = "/".join(parts[:-1]), parts[-1]
+        return {"subfolder": subfolder, "filename": filename} if _find_source_media(filename, subfolder) else None
+
+    src = one(out.pop("src", ""))
+    if src:
+        out["src"] = src
+    refs = [r for r in (one(n) for n in out.pop("refs", None) or []) if r]
+    if refs:
+        out["refs"] = refs
 
 
 @routes.get("/neo_gallery/txt")

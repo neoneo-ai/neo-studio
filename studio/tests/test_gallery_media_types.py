@@ -236,6 +236,97 @@ class MediaContentTypeTests(unittest.TestCase):
         self.assertEqual(resp.status, 404)
 
 
+class SidecarReuseTests(unittest.TestCase):
+    """素材旁同名 .txt 的摘要 → 卡片菜单「复用参数重跑」的填单数据。
+
+    写端是 image_gen.write_sidecar（首行提示词、次行参数摘要），这里的输入按那份格式逐字给。
+    """
+
+    def _reuse(self, name):
+        resp = _run(gallery.media_meta(_Request({"filename": name, "subfolder": "NeoAgent/reuse"})))
+        return json.loads(resp.text)
+
+    def test_generated_sidecar_gives_prompt_and_size(self):
+        _write("NeoAgent/reuse/cat.png", b"\x89PNG\r\n\x1a\nfake")
+        _write("NeoAgent/reuse/cat.txt", ("一只橘猫的白底图\nseed=7 1536x864 model=krea2.safetensors "
+                                          "loras=style_a.safetensors@0.8\n").encode("utf-8"))
+        reuse = self._reuse("cat.png")["reuse"]
+        self.assertEqual(reuse["prompt"], "一只橘猫的白底图")
+        self.assertEqual((reuse["seed"], reuse["width"], reuse["height"]), (7, 1536, 864))
+        self.assertEqual(reuse["model"], "krea2.safetensors")
+        self.assertEqual(reuse["loras"], [{"name": "style_a.safetensors", "strength": 0.8}])
+
+    def test_plain_prompt_sidecar_carries_no_params(self):
+        # C 站示例图的副文件只有提示词原文：复用只填提示词，不编出尺寸
+        _write("NeoAgent/reuse/sample.jpg", b"\xff\xd8\xff\xd9")
+        _write("NeoAgent/reuse/sample.txt", "masterpiece, best quality, a red cup\n".encode("utf-8"))
+        reuse = self._reuse("sample.jpg")["reuse"]
+        self.assertEqual(reuse, {"prompt": "masterpiece, best quality, a red cup"})
+
+    def test_workflow_json_sidecar_is_not_a_prompt(self):
+        # ComfyUI SaveImage 抢先把工作流 JSON 写进同名 .txt：那条路是「导入工作流」
+        _write("NeoAgent/reuse/wf.png", b"\x89PNG\r\n\x1a\nfake")
+        _write("NeoAgent/reuse/wf.txt", b'{ "3": {"class_type": "KSampler"} }')
+        data = self._reuse("wf.png")
+        self.assertIsNone(data["reuse"])
+        self.assertFalse(data["has"])
+
+    def test_half_parsed_param_line_only_gives_what_parses(self):
+        _write("NeoAgent/reuse/odd.png", b"\x89PNG\r\n\x1a\nfake")
+        _write("NeoAgent/reuse/odd.txt", "一行提示词\nseed=3 1024x model= loras=a.safetensors@x\n".encode("utf-8"))
+        reuse = self._reuse("odd.png")["reuse"]
+        self.assertEqual(reuse["prompt"], "一行提示词")
+        self.assertEqual(reuse["seed"], 3)
+        self.assertNotIn("width", reuse)
+        self.assertNotIn("model", reuse)
+        self.assertEqual(reuse["loras"], [{"name": "a.safetensors", "strength": None}])
+
+    def test_missing_sidecar_has_nothing_to_reuse(self):
+        _write("NeoAgent/reuse/bare.png", b"\x89PNG\r\n\x1a\nfake")
+        data = self._reuse("bare.png")
+        self.assertIsNone(data["reuse"])
+        # 「导入工作流」的门禁字段不因副文件而变亮
+        self.assertFalse(data["has"])
+
+    def test_edit_sidecar_gives_skill_mode_source_and_refs(self):
+        # 编辑那一发的副文件：技能 / 模式 / 原图 / 其余参考图逐项落到盘上，
+        # 交回的路径就是素材面板寻址认的 {subfolder, filename}
+        _write("NeoAgent/reuse/src.png", b"\x89PNG\r\n\x1a\nfake")
+        _write("NeoAgent/reuse/a.png", b"\x89PNG\r\n\x1a\nfake")
+        _write("NeoAgent/reuse/b c.png", b"\x89PNG\r\n\x1a\nfake")
+        _write("NeoAgent/reuse/edit.png", b"\x89PNG\r\n\x1a\nfake")
+        _write("NeoAgent/reuse/edit.txt", ("换成海边日落\nseed=9 1024x1024 model=qwen.safetensors "
+                                           "skill=qwen_image_21 mode=blend src=NeoAgent%2Freuse%2Fsrc.png "
+                                           "refs=NeoAgent%2Freuse%2Fa.png,NeoAgent%2Freuse%2Fb%20c.png\n").encode("utf-8"))
+        reuse = self._reuse("edit.png")["reuse"]
+        self.assertEqual((reuse["skill"], reuse["mode"]), ("qwen_image_21", "blend"))
+        self.assertEqual(reuse["src"], {"subfolder": "NeoAgent/reuse", "filename": "src.png"})
+        self.assertEqual(reuse["refs"], [{"subfolder": "NeoAgent/reuse", "filename": "a.png"},
+                                         {"subfolder": "NeoAgent/reuse", "filename": "b c.png"}])
+
+    def test_sidecar_refs_not_on_disk_are_dropped_one_by_one(self):
+        # 用户删过素材：丢的那项整项消失，剩下的照填，这一发降级回填得出的那部分
+        _write("NeoAgent/reuse/a.png", b"\x89PNG\r\n\x1a\nfake")
+        _write("NeoAgent/reuse/lost.png", b"\x89PNG\r\n\x1a\nfake")
+        _write("NeoAgent/reuse/lost.txt", ("提示词\nseed=1 1024x1024 skill=qwen_image_21 "
+                                           "src=NeoAgent%2Freuse%2Fgone.png "
+                                           "refs=NeoAgent%2Freuse%2Fa.png,NeoAgent%2Freuse%2Fgone2.png\n").encode("utf-8"))
+        reuse = self._reuse("lost.png")["reuse"]
+        self.assertNotIn("src", reuse)
+        self.assertEqual([r["filename"] for r in reuse["refs"]], ["a.png"])
+
+    def test_sidecar_paths_outside_the_library_are_dropped(self):
+        # 副文件是明文、用户能改：带 .. 的与绝对路径一律不认，落点只走合法寻址
+        _write("NeoAgent/reuse/src.png", b"\x89PNG\r\n\x1a\nfake")
+        _write("NeoAgent/reuse/tricky.png", b"\x89PNG\r\n\x1a\nfake")
+        _write("NeoAgent/reuse/tricky.txt", ("提示词\nseed=1 1024x1024 "
+                                             "src=..%2F..%2Fsecret.png "
+                                             "refs=C%3A%2FWindows%2Fa.png,NeoAgent%2Freuse%2Fsrc.png\n").encode("utf-8"))
+        reuse = self._reuse("tricky.png")["reuse"]
+        self.assertNotIn("src", reuse)
+        self.assertEqual([r["filename"] for r in reuse["refs"]], ["src.png"])
+
+
 class DimCacheTests(unittest.TestCase):
     """尺寸缓存持久化：重启后重开同一目录不再读图片头（NAS 上每张卡一次往返）。"""
 

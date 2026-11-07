@@ -1153,14 +1153,58 @@ def _sidecar_path(image_path: str) -> str:
     return os.path.splitext(image_path)[0] + ".txt"
 
 
-def write_sidecar(image_path: str, params: dict) -> None:
-    """图片旁写同名 .txt：首行提示词、次行参数摘要（Gallery 直接读前两行）。"""
+# 复用参数重跑要用的参考图上限（与编辑面板的参考位同宽）：写端裁到这里，读端照单全收
+_SIDECAR_MAX_REFS = 9
+
+
+def _sidecar_mode(params: dict) -> str:
+    """这一发的编辑模式，取编辑面板 setEditMode 那套词，读端直接喂给模式 chip。
+
+    点选删除在请求里就是「涂抹遮罩 + 局部编辑」，params 里与局部编辑同形，只能归到 local：
+    两条路的遮罩都是用户在原图上画的，复现不了，不编一个填不回去的 remove。"""
+    if params.get("local_edit"):
+        return "local"
+    if params.get("outpaint"):
+        return "outpaint"
+    if params.get("control_image"):
+        return "pose"
+    if len(params.get("ref_images") or []) > 1:
+        return "blend"
+    return "normal"
+
+
+def _sidecar_meta(params: dict, skill_id: str = "") -> str:
+    """参数摘要行：这一发的生效值，加上复用要用的技能 / 模式 / 原图 / 其余参考图。
+
+    主模型与 LoRA 记的是生效值——重放复现的是那一发，技能配置之后被改也不跟着漂移。
+    取不到的项整项省略，字段一律往后加：老读端只认前四项。"""
+    parts = [f"seed={params.get('seed')}",
+             f"{params.get('width')}x{params.get('height')}",
+             f"model={params.get('model')}"]
+    loras = ",".join(f"{l['name']}@{l['strength']}" for l in params.get("loras") or [])
+    if loras:
+        parts.append(f"loras={loras}")
+    if skill_id:
+        parts.append(f"skill={skill_id}")
+    src = params.get("ref_name")
+    if src:
+        parts.append(f"mode={_sidecar_mode(params)}")
+        parts.append(f"src={quote(src, safe='')}")
+        refs = [quote(r, safe="") for r in (params.get("ref_images") or [])[1:_SIDECAR_MAX_REFS + 1]]
+        if refs:
+            parts.append("refs=" + ",".join(refs))
+    return " ".join(parts)
+
+
+def write_sidecar(image_path: str, params: dict, skill_id: str = "") -> None:
+    """图片旁写同名 .txt：首行提示词、次行参数摘要（Gallery 直接读前两行）。
+
+    读端是 gallery._read_sidecar（「复用参数重跑」），两行的格式要一起改。
+    """
     path = _sidecar_path(image_path)
     if os.path.exists(path):
         return
-    loras = ",".join(f"{l['name']}@{l['strength']}" for l in params.get("loras") or [])
-    meta = (f"seed={params['seed']} {params['width']}x{params['height']} "
-            f"model={params['model']}" + (f" loras={loras}" if loras else ""))
+    meta = _sidecar_meta(params, skill_id)
     try:
         with open(path, "w", encoding="utf-8") as f:
             f.write(f"{params['prompt']}\n{meta}\n")
@@ -1329,7 +1373,7 @@ async def _watch(task_id: str) -> None:
             error, cancelled = _error_from_history(item)
             images = _collect_images(item)
             for entry in images:
-                write_sidecar(entry["path"], task["params"])
+                write_sidecar(entry["path"], task["params"], task.get("skill_id") or "")
             status = "cancelled" if cancelled else ("failed" if error else "succeeded")
             _finish(task, status, images, error)
             return

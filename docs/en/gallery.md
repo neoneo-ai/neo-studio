@@ -250,6 +250,31 @@ embedded ComfyUI workflow).
 
 ## Image card "⋯" menu actions
 
+### Reuse parameters for a rerun
+
+- **Reuse parameters for a rerun** (「复用参数重跑」) - fills this run's parameters back into the panel that fits
+  them, so you edit them and click "Generate". It reads the same-named `.txt` beside the image (written at
+  generation time: the prompt on line 1, the parameter summary `seed=… WxH model=… loras=… skill=… mode=… src=…
+  refs=…` on line 2, paths percent-encoded); the summary records what that run actually used, so editing a skill's
+  config afterwards does not move the rerun.
+  - A plain generated image goes to the generate-material composer: the prompt, the aspect ratio (only when the
+    size lands within a 2 % tolerance of a chip ratio), the longest side (only when that pixel value is one of the
+    chip's options), the skill it was made with, and that run's main model and LoRA.
+  - An edited image opens the image-edit panel with its source image, its extra reference images (each copied into
+    `input/` into a reference slot), the edit mode, the output size, the skill and its pinned model and LoRA. The
+    paint mask and the outpaint margins are drawn by the user on the source image, so they are there to redraw
+    (a point-pick removal is a paint mask plus a local edit in the request, so the sidecar records it as `local`).
+    Outpaint, local and point-pick modes use the source image only, so no reference images are filled for them.
+  - Only what the panel can still run with gets filled: a main model or LoRA no longer in the model list, a main
+    model from another skill family (it falls back to the one that skill pins), a skill missing from that panel's
+    list, and a reference file the user deleted are dropped item by item; an older sidecar with no source and no
+    references degrades to the generate-material composer. The toast names exactly what was reused.
+  - Reference paths are resolved through the same library addressing as the gallery, file by file: a path
+    containing `..` or an absolute path is dropped whole (the sidecar is a plain text file the user can edit).
+  - When the sidecar is the workflow JSON ComfyUI's `SaveImage` wrote first, it stays on the "Import workflow"
+    path instead; a Civitai sample sidecar carries only the prompt text, so only the prompt is filled. A card
+    whose sidecar yields no readable prompt shows no such item, and video and audio cards never carry it.
+
 ### Character sheets & storyboards
 
 - **Generate character sheet (multi-view)** - opens a small window (the same dialog as the nine-cell storyboard,

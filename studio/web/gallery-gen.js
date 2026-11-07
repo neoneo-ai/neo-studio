@@ -1272,21 +1272,49 @@ function guardMainModelFamily(modelCfg, skillSel) {
     });
 }
 
+/** 主模型与技能家族对撞的判定（guardMainModelFamily 同一条线）：家族不同的 conditioning 维度对不上，
+ *  这一发必败。复用的是程序写值、不触发 change，那条 guard 不会自己跑，填之前先过同一道判定 */
+function reuseModelFits(skillMeta, model) {
+    const fam = skillFamily(skillMeta), pickedFam = modelFamily(model);
+    return !fam || !pickedFam || fam === pickedFam;
+}
+
+/** 「复用参数重跑」带回来的自定参数（主模型 / LoRA）→ 能填进面板的那部分。
+ *  副文件记的是那一发的生效值，文件挪走或改名之后还把它填成覆盖值，等于给用户埋一次必败：
+ *  只留模型清单里还在盘上的那些，剩下的落回该技能 config 里钉的那个（= 面板的「自动」） */
+function reuseModelOverlay(pf, models, skillMeta) {
+    const list = models || {};
+    const overlay = {};
+    if (pf?.model && (list.diffusion_models || []).includes(pf.model) && reuseModelFits(skillMeta, pf.model)) {
+        overlay.model = pf.model;
+    }
+    const loras = (pf?.loras || []).filter((l) => l?.name && (list.loras || []).includes(l.name));
+    if (loras.length) overlay.loras = loras;
+    return overlay;
+}
+
 // 绘画页进页就把两块面板铺好（常驻），入口再点只做模式切换：重建面板会把用户写了一半的
 // 提示词清空，所以宿主里已有面板时直接复用，不再走一遍构建。图片编辑入口带着图来，
 // 就把这张图换进现成面板当原图（卡片菜单「图片编辑」与拖进预览区同一条路）
-/** 面板宿主为绘画页时复用已铺好的面板：同种面板在位就只换内容（拖进来的原图），不重建 */
-function reusePaintPanel(host, kind, image, subfolder) {
+/** 面板宿主为绘画页时复用已铺好的面板：同种面板在位就只换内容（拖进来的原图 /
+ *  「复用参数重跑」带进来的预填），不重建 */
+function reusePaintPanel(host, kind, image, subfolder, prefill = null) {
 
     if (!host?.__neoPanelRoot?.isConnected) return false;
-    if (image) host.__neoSetSource?.(image, subfolder);
+    if (prefill) {
+        // 编辑面板那块的复用要动原图 / 参考图 / 模式，走它自己那套预填；绘画页的只填提示词与尺寸
+        const filled = kind === "edit" ? host.__neoPrefillEdit?.(prefill) : host.__neoSetPrompt?.(prefill);
+        notifyPrefillFilled(filled);
+    } else if (image) {
+        host.__neoSetSource?.(image, subfolder);
+    }
     _paintHosts?.onOpen?.(kind);
     return true;
 }
 
 export function openImageEditDialog(gallery, image = null, subfolder = "", opts = null) {
     const host = opts?.container || _paintHosts?.edit;
-    if (reusePaintPanel(host, "edit", image, subfolder)) return;
+    if (reusePaintPanel(host, "edit", image, subfolder, opts?.prefill)) return;
     const panel = storyPanelRoot(host, "neo-gallery-edit-modal-overlay", "edit");
     const overlay = panel.root;
     // 原图可以后补：绘画页进页铺的就是空面板，把素材拖进预览区即成原图
@@ -1331,7 +1359,8 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
     editModelBox.addEventListener("change", syncEditParamsChip);
     guardMainModelFamily(editModelCfg, skillSel);
     let _genSkills = [];
-    (async () => {
+    // 技能列表是异步填进下拉的：「复用参数重跑」要等它落位才认得出副文件里那个技能 id
+    const skillsReady = (async () => {
         try {
             const res = await fetch("/rs_prompts/skills");
             const skills = await res.json();
@@ -1351,11 +1380,13 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
         skillChip.sync();   // 下拉整份重建过：chip 标签跟着新选中项
     })();
     let editGenModels = null;   // 开窗拉一次模型列表，切技能重放配置时复用
-    const applyEditModelCfg = async (skillId) => {
+    const applyEditModelCfg = async (skillId, overlay = {}) => {
         if (!editGenModels || !skillId) return;
-        editModelCfg.load(await getSkillGenConfig(skillId), editGenModels);
+        const cfg = await getSkillGenConfig(skillId);
+        // 「复用参数重跑」的主模型 / LoRA 叠在技能配置之上：重放的是那一发的生效值
+        editModelCfg.load({ ...cfg, ...overlay }, editGenModels);
     };
-    (async () => {
+    const modelsReady = (async () => {
         try {
             editGenModels = await listGenModels();
             editModelCfg.load({}, editGenModels);   // 先按「自动」渲染，避免下拉为空
@@ -1838,8 +1869,9 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
     };
     if (panel.embedded) {
         panel.host.appendChild(overlay);
-        panel.host.__neoPanelClose = () => { close(); panel.host.__neoPanelRoot = null; panel.host.__neoSetSource = null; };
+        panel.host.__neoPanelClose = () => { close(); panel.host.__neoPanelRoot = null; panel.host.__neoSetSource = null; panel.host.__neoPrefillEdit = null; };
         panel.host.__neoSetSource = (img, sub) => applySource(img.filename || img.name, sub || "");
+        panel.host.__neoPrefillEdit = (pf) => applyEditPrefill(pf);   // 复用参数重跑：原图 / 参考图 / 模式 / 技能全换进这块现成面板
     } else {
         document.body.appendChild(overlay);
         // 标题栏拖动 + 双击最大化/还原（同导演编辑器 / 生成素材窗模式）
@@ -2528,6 +2560,61 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
         renderIdle();
         fullUrlReady();   // 默认目标分辨率按新原图 + 全局目标像素数重算
     };
+
+    /** 「复用参数重跑」（编辑图）：副文件里的原图 / 编辑模式 / 参考图 / 出图尺寸 / 技能与自定参数
+     *  逐项填进这块现成面板，面板不重建。
+     *
+     *  顺序是原图 → 模式 → 参考图：换原图会把模式收回「常规」，切模式又会清掉额外参考图（扩图 /
+     *  局部 / 点选只用原图那一张），反过来填只剩一地残留。涂抹遮罩与扩图边距是用户在原图上画出来
+     *  的，这两样复现不了；技能不在本页下拉里（本页只列吃参考图的技能）就整项不填。 */
+    const applyEditPrefill = async (pf) => {
+        await skillsReady;
+        const filled = [];
+        const src = pf?.src;
+        if (src?.filename) {
+            await setEditMode("normal");   // 先把模式收回常规：applySource 里那一次就不再多跑一轮
+            applySource(src.filename, src.subfolder || "");
+            filled.push(t("原图"));
+        }
+        const mode = String(pf?.mode || "");
+        if (mode && mode !== "normal" && Array.from(modeSel.options).some((o) => o.value === mode)) {
+            await setEditMode(mode);
+            filled.push(t("编辑模式"));
+        }
+        // 扩图 / 局部 / 点选的额外参考图不进 payload（start() 那三条各自只用原图），填了就是骗人
+        const refs = editMode === "outpaint" || editMode === "local" || editMode === "remove"
+            ? [] : (pf?.refs || []).filter((r) => r?.filename);
+        if (refs.length) {
+            await addRefImages(refs.slice(0, MAX_EXTRA_REFS));
+            if (extraRefs.length) filled.push(t("参考图"));
+        }
+        const w = Number(pf?.width) || 0, h = Number(pf?.height) || 0;
+        if (w >= 256 && h >= 256 && w <= 8192 && h <= 8192) {
+            widthInput.value = String(round32(w));
+            heightInput.value = String(round32(h));
+            syncSizeChip();
+            filled.push(t("出图尺寸"));
+        }
+        filled.push(...await applyEditReuseSkill(pf));
+        const prompt = String(pf?.prompt || "").trim();
+        if (prompt) {
+            promptInput.value = prompt;
+            filled.push(t("提示词"));   // 最后填：切技能那一步写的是该技能的默认触发词
+        }
+        return filled;
+    };
+
+    /** 副文件里的技能与自定参数落进面板：自定参数只填清单里还在盘上、家族与技能对得上的那部分 */
+    const applyEditReuseSkill = async (pf) => {
+        const meta = _genSkills.find((s) => s.id === String(pf?.skill || ""));
+        if (!meta) return [];
+        skillSel.value = meta.id;
+        skillChip.sync();
+        await modelsReady;
+        await applyEditModelCfg(meta.id, reuseModelOverlay(pf, editGenModels, meta));
+        syncEditParamsChip();
+        return [t("技能与自定参数")];
+    };
     imgWrap.addEventListener("dragover", (e) => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; imgWrap.classList.add("drop-active"); });
     imgWrap.addEventListener("dragleave", (e) => { if (!imgWrap.contains(e.relatedTarget)) imgWrap.classList.remove("drop-active"); });
     imgWrap.addEventListener("drop", async (e) => {
@@ -2542,6 +2629,7 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
         refName = fname;   // 拖进来的图已落在 input/，省掉生成时那一次复制
     });
 
+    notifyPrefillFilled(opts?.prefill ? applyEditPrefill(opts.prefill) : []);
     setTimeout(() => promptInput.focus(), 0);
 }
 
@@ -2754,7 +2842,7 @@ export function buildGenerationMenuItems({ card, gallery, image, subfolder }) {
 /** 画廊搜索行「生成素材」：纯提示词一键生成新素材（默认 Krea2 文生图），产物落 Output/NeoAgent/<日期>，素材面板可直接浏览。 */
 export function openGenMaterialDialog(gallery, opts = null) {
     const host = opts?.container || _paintHosts?.text;
-    if (reusePaintPanel(host, "text")) return;
+    if (reusePaintPanel(host, "text", null, "", opts?.prefill)) return;
     const panel = storyPanelRoot(host, "neo-gallery-gm-modal-overlay", "text");
     const overlay = panel.root;
 
@@ -2942,9 +3030,9 @@ export function openGenMaterialDialog(gallery, opts = null) {
             skillSel.value = KREA2_T2I_SKILL_ID;
         }
         skillChip.sync();   // 下拉整份重建过：chip 标签跟着新选中项
-        applySkillModelConfig(skillSel.value); // 自定参数同步为该技能配置（模型列表未就绪时为空操作）
+        await applySkillModelConfig(skillSel.value); // 自定参数同步为该技能配置（模型列表未就绪时为空操作）
     };
-    fillSkillOptions();
+    const skillsReady = fillSkillOptions();
     // 选中变化即写入 localStorage：下次打开沿用该技能（关窗不清除）；自定参数同步切到新技能
     skillSel.addEventListener("change", () => {
         try { localStorage.setItem(GM_LAST_SKILL_KEY, skillSel.value); } catch {}
@@ -3012,6 +3100,35 @@ export function openGenMaterialDialog(gallery, opts = null) {
     const edgeChip = chipButton(edgeSel, { icon: "maximize" });
     sizeRow.append(ratioChip.el, edgeChip.el);
 
+    // 「复用参数重跑」预填：提示词 / 技能与自定参数 / 宽高比 / 最长边。技能不在本页下拉里
+    // （本页只列吃文字输入的技能）就整项不填；尺寸填在最后，压过切技能时按该技能配置写回的跟随值
+    const applyGmPrefill = async (pf) => {
+        const filled = [];
+        const prompt = String(pf?.prompt || "").trim();
+        if (prompt) { quickInput.value = prompt; filled.push(t("提示词")); }
+        filled.push(...await applyGmReuseSkill(pf));
+        const w = Number(pf?.width) || 0, h = Number(pf?.height) || 0;
+        if (!w || !h) return filled;
+        const ratio = matchGmRatio(w, h);
+        if (ratio) { ratioSel.value = ratio; ratioChip.sync(); filled.push(t("宽高比")); }
+        const edge = GM_EDGES.find((v) => Number(v) === Math.max(w, h));
+        if (edge) { edgeSel.value = edge; edgeChip.sync(); filled.push(t("最长边")); }
+        return filled;
+    };
+
+    /** 副文件里的技能与自定参数落进面板：主模型 / LoRA 叠在该技能配置之上，重放那一发的生效值 */
+    const applyGmReuseSkill = async (pf) => {
+        await skillsReady;   // 技能是异步填进下拉的：等它落位才认得出副文件里那个技能 id
+        const opt = Array.from(skillSel.options).find((o) => o.value === String(pf?.skill || ""));
+        if (!opt) return [];
+        skillSel.value = opt.value;
+        skillChip.sync();
+        try { localStorage.setItem(GM_LAST_SKILL_KEY, opt.value); } catch {}
+        await modelsReady;
+        await applySkillModelConfig(opt.value, reuseModelOverlay(pf, genModels, opt.__skillMeta));
+        return [t("技能与自定参数")];
+    };
+
     // 保存为新技能：把当前选的「主模型 + LoRA + 宽高比 + 最长边」存成新技能（名称自动生成 = 主模型名+LoRA 名，其余设置沿用当前技能）
     const saveSkillBtn = $el("button", {
         className: "neo-gallery-gm-save-skill",
@@ -3058,12 +3175,12 @@ export function openGenMaterialDialog(gallery, opts = null) {
     // 模型列表拉取失败时覆盖区保持空下拉（等效跟随设置），不挡生成
     let genModels = null; // 打开时拉取的模型列表，切换技能重放配置时复用
     // 切换生成技能后把自定参数同步为该技能配置的主模型 / LoRA / 比例 / 最长边（无配置 = 自动跟随全局设置）
-    async function applySkillModelConfig(skillId) {
+    async function applySkillModelConfig(skillId, overlay = {}) {
         // 模型列表未就绪，或技能列表还没回填（下拉为空串）：后者问后端必回 400（后端只在带 skill_id 时答配置），
         // 且会把刚渲染的「自动」覆盖成一份空配置。fillSkillOptions 填完选项会重放这一次。
         if (!genModels || !skillId) return;
         const cfg = await getSkillGenConfig(skillId);
-        modelCfg.load(cfg, genModels);
+        modelCfg.load({ ...cfg, ...overlay }, genModels);   // 「复用参数重跑」的主模型 / LoRA 叠在技能配置之上
         ratioSel.value = GM_RATIOS.includes(cfg.default_ratio) ? cfg.default_ratio : "";
         edgeSel.value = GM_EDGES.includes(String(cfg.base_resolution)) ? String(cfg.base_resolution) : "";
         setGmAutoLabel(ratioSel, cfg.default_ratio ? (GM_RATIO_AUTO_TEXT[cfg.default_ratio] || cfg.default_ratio) : "");
@@ -3072,7 +3189,7 @@ export function openGenMaterialDialog(gallery, opts = null) {
         edgeChip.sync();
         syncParamsChip();
     }
-    (async () => {
+    const modelsReady = (async () => {
         try {
             genModels = await listGenModels();
             modelCfg.load({}, genModels); // 先按「自动」渲染，避免下拉为空
@@ -3438,15 +3555,61 @@ export function openGenMaterialDialog(gallery, opts = null) {
     }
 
     renderIdle();
+    notifyPrefillFilled(opts?.prefill ? applyGmPrefill(opts.prefill) : []);
     document.addEventListener("keydown", onKey);
     const origRemove = overlay.remove.bind(overlay);
     overlay.remove = () => { stopQuickTips(); document.removeEventListener("keydown", onKey); document.removeEventListener("pointerdown", onDocPress, true); origRemove(); };
     if (panel.embedded) {
         panel.host.appendChild(overlay);
-        panel.host.__neoPanelClose = () => { close(); panel.host.__neoPanelRoot = null; };
+        panel.host.__neoPanelClose = () => { close(); panel.host.__neoPanelRoot = null; panel.host.__neoSetPrompt = null; };
+        panel.host.__neoSetPrompt = applyGmPrefill;   // 绘画页里面板已铺好：复用参数重跑只换内容（同图片编辑的 __neoSetSource）
     } else {
         document.body.appendChild(overlay);
     }
 
     setTimeout(() => quickInput.focus(), 0);
+}
+
+/** 卡片「⋯」菜单「复用参数重跑」：把素材旁 .txt 读出的摘要交给对口的输入卡。
+ *  带原图或参考图的是编辑那一发 → 图片编辑面板（原图 / 参考图 / 模式一并填回）；只有提示词与
+ *  尺寸的（含旧版 .txt）→ 「生成素材」输入卡。没有提示词可复用就是这条菜单项不该出现，
+ *  兜底提示走 info 而不是报错。 */
+export function reuseParamsFromMedia(gallery, reuse) {
+    if (!String(reuse?.prompt || "").trim()) {
+        actionToast({ severity: "info", summary: t("该素材没有可复用的提示词"), detail: t("素材旁的 .txt 由生成时写入，示例图只有提示词原文") });
+        return;
+    }
+    if (reuse?.src?.filename || reuse?.refs?.length) {
+        openImageEditDialog(gallery, null, "", { prefill: reuse });
+        return;
+    }
+    openGenMaterialDialog(gallery, { prefill: reuse });
+}
+
+/** 预填结果告诉用户复用了哪几项——填进去的必须是面板认得的，少填一项也要说得出原因。
+ *  两块输入卡的预填都要等技能 / 模型列表落位，填完的清单是 promise。 */
+function notifyPrefillFilled(filled) {
+    if (filled && typeof filled.then === "function") { filled.then(notifyPrefillFilled).catch((e) => console.error("[Gallery] reuse prefill failed:", e)); return; }
+    if (!filled?.length) return;
+    actionToast({
+        severity: "info",
+        summary: tf("已复用 {items}", { items: filled.join("、") }),
+        detail: t("只填了面板认得、且这一发还能跑的那部分；改完直接点「生成」"),
+    });
+}
+
+// 「复用参数重跑」的比例容差：出图按最长边定尺寸时按 32 对齐，1024×416 已不是整比值 21:9，
+// 超出容差就只填最长边，不在 chip 上写一个没人用的比例。
+const GM_RATIO_TOLERANCE = 0.02;
+
+function matchGmRatio(w, h) {
+    const r = w / h;
+    let best = null, bestDev = Infinity;
+    // 比例表与宽高比 chip 同源（DIRECTOR_ASPECTS）。比值在调用时算：director.js 与本模块
+    // 互为导入，模块求值时那份 const 还没初始化
+    for (const [label, a, b] of DIRECTOR_ASPECTS) {
+        const dev = Math.abs(a / b - r) / (a / b);
+        if (dev < bestDev) { bestDev = dev; best = label.split(" ")[0]; }
+    }
+    return bestDev <= GM_RATIO_TOLERANCE ? best : null;
 }

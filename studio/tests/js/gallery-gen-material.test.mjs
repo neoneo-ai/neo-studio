@@ -1211,3 +1211,192 @@ test("自定参数面板里的点击不许冒泡到 document（宿主的外点�
     overlay.remove();
 });
 
+test("生成素材弹窗：「复用参数重跑」预填提示词与出图尺寸，值写进请求体", async () => {
+    resetEnv();
+    clearRoutes();
+    const { openGenMaterialDialog } = await import("../../web/gallery-gen.js");
+
+    mockRoute("/rs_prompts/skills", () => jsonResponse([{ id: "image_gen", cn_name: "Krea2文生图", category: "image_gen", gen_image: true }]));
+    mockRoute("/neo_image_gen/generate", () => jsonResponse({ task_id: "gm_reuse", status: "queued", images: [] }));
+    mockRoute("/neo_image_gen/status/gm_reuse", () => jsonResponse({
+        task_id: "gm_reuse", status: "succeeded", width: 1536, height: 864,
+        images: [{ filename: "reuse.png", subfolder: "NeoAgent/2026-10-01", url: "/g.png" }],
+    }));
+
+    openGenMaterialDialog({ showDirectoryStructure: () => { } }, {
+        prefill: {
+            prompt: "一只橘猫的白底图", seed: 7, width: 1536, height: 864,
+            model: "krea2.safetensors", loras: [{ name: "style_a.safetensors", strength: 0.8 }],
+        },
+    });
+    const overlay = document.querySelector(".neo-gallery-gm-modal-overlay");
+    assert.ok(overlay, "复用参数应打开「生成素材」面板");
+    await sleep(50);
+
+    assert.equal(overlay.querySelector(".neo-gallery-gm-quick-input").value, "一只橘猫的白底图", "提示词填进输入框");
+    const [ratioSel, edgeSel] = overlay.querySelector(".neo-gallery-gm-size-row").querySelectorAll("select");
+    assert.equal(ratioSel.value, "16:9", "宽高比按副文件里的尺寸选中");
+    assert.equal(edgeSel.value, "1536", "最长边按副文件里的尺寸选中");
+    const chipLabels = [...overlay.querySelectorAll(".neo-gallery-gm-composer .neo-gallery-gm-chip-label")].map(e => e.textContent);
+    assert.ok(chipLabels.some(v => v.includes("16:9")), "chip 标签跟上预填值（程序改 value 后要 sync）");
+    assert.match(document.querySelector(".neo-at-summary")?.textContent || "", /已复用 提示词、宽高比、最长边/, "复用了哪几项要说出口");
+    assert.equal(overlay.querySelector(".rs-gen-model-section select").value, "", "主模型留在「自动」：副文件里的模型名不填成覆盖值");
+
+    click([...overlay.querySelectorAll(".neo-gallery-story-btn")].find(b => b.textContent === "生成"));
+    await sleep(80);
+    const req = fetchLog.filter(c => c.path === "/neo_image_gen/generate").at(-1);
+    assert.equal(req.body.default_ratio, "16:9", "预填的比例进请求体");
+    assert.equal(req.body.base_resolution, 1536, "预填的最长边进请求体");
+    assert.ok(!("model" in (req.body || {})), "预填不带主模型覆盖");
+    assert.ok(!("loras" in (req.body || {})), "预填不带 LoRA 覆盖");
+    overlay.remove();
+});
+
+test("生成素材弹窗：「复用参数重跑」只填面板认得的项，认不出的尺寸不编值", async () => {
+    resetEnv();
+    clearRoutes();
+    const { openGenMaterialDialog } = await import("../../web/gallery-gen.js");
+    mockRoute("/rs_prompts/skills", () => jsonResponse([{ id: "image_gen", cn_name: "Krea2文生图", category: "image_gen", gen_image: true }]));
+
+    // 1024×416 是 21:9 按最长边出图再 32 对齐的结果（比值 2.46），比例表认不出就不填比例
+    openGenMaterialDialog({ showDirectoryStructure: () => { } }, { prefill: { prompt: "超宽桌面壁纸", width: 1024, height: 416 } });
+    let overlay = document.querySelector(".neo-gallery-gm-modal-overlay");
+    await sleep(50);
+    let [ratioSel, edgeSel] = overlay.querySelector(".neo-gallery-gm-size-row").querySelectorAll("select");
+    assert.equal(ratioSel.value, "", "比例超出容差就不填");
+    assert.equal(edgeSel.value, "1024", "最长边是面板现成的选项，填");
+    assert.match(document.querySelector(".neo-at-summary")?.textContent || "", /已复用 提示词、最长边$/, "少填一项也要说得出填了什么");
+    overlay.remove();
+
+    // 1200×800 是 3:2，但 1200 不在最长边选项里：填比例、不填最长边
+    openGenMaterialDialog({ showDirectoryStructure: () => { } }, { prefill: { prompt: "竖版照片", width: 1200, height: 800 } });
+    overlay = document.querySelector(".neo-gallery-gm-modal-overlay");
+    await sleep(50);
+    [ratioSel, edgeSel] = overlay.querySelector(".neo-gallery-gm-size-row").querySelectorAll("select");
+    assert.equal(ratioSel.value, "3:2", "比例对得上就填");
+    assert.equal(edgeSel.value, "", "最长边不在选项里就不填");
+    overlay.remove();
+});
+
+test("生成素材弹窗：读不到提示词时「复用参数重跑」只提示，不开面板", async () => {
+    resetEnv();
+    clearRoutes();
+    const { reuseParamsFromMedia } = await import("../../web/gallery-gen.js");
+
+    reuseParamsFromMedia({ showDirectoryStructure: () => { } }, null);
+    assert.equal(document.querySelector(".neo-gallery-gm-modal-overlay"), null, "没有可复用的提示词就不开面板");
+    assert.match(document.querySelector(".neo-at-summary")?.textContent || "", /该素材没有可复用的提示词/);
+});
+
+test("生成素材内嵌面板：「复用参数重跑」换内容不重建（绘画页宿主）", async () => {
+    resetEnv();
+    clearRoutes();
+    const { openGenMaterialDialog, setPaintHost } = await import("../../web/gallery-gen.js");
+    mockRoute("/rs_prompts/skills", () => jsonResponse([{ id: "image_gen", cn_name: "Krea2文生图", category: "image_gen", gen_image: true }]));
+
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    setPaintHost({ text: host, onOpen: () => { } });
+    try {
+        openGenMaterialDialog({});
+        const panel = host.querySelector(".neo-gallery-gen-panel");
+        assert.ok(panel, "面板铺进绘画页宿主");
+        const input = panel.querySelector(".neo-gallery-gm-quick-input");
+        input.value = "写到一半的提示词";
+
+        openGenMaterialDialog({}, { prefill: { prompt: "复用参数重跑的提示词", skill: "image_gen", width: 1024, height: 1024 } });
+        assert.equal(host.querySelectorAll(".neo-gallery-gen-panel").length, 1, "复用现成面板，不重建");
+        assert.equal(panel.querySelector(".neo-gallery-gm-quick-input"), input, "同一个输入框：重建会把写了一半的提示词清掉");
+        await sleep(60);   // 技能与自定参数要等两份列表落位，尺寸填在其后（切技能会按该技能配置写回跟随值）
+        assert.equal(input.value, "复用参数重跑的提示词", "预填写进现成面板");
+        const [ratioSel, edgeSel] = panel.querySelector(".neo-gallery-gm-size-row").querySelectorAll("select");
+        assert.equal(ratioSel.value, "1:1", "现成面板里比例也按副文件选中");
+        assert.equal(edgeSel.value, "1024", "现成面板里最长边按副文件选中");
+    } finally {
+        setPaintHost(null);
+    }
+});
+test("生成素材弹窗：「复用参数重跑」填回技能与那一发的自定参数，清单里没落的整项丢掉", async () => {
+    resetEnv();
+    clearRoutes();
+    const { openGenMaterialDialog } = await import("../../web/gallery-gen.js");
+
+    mockRoute("/rs_prompts/skills", () => jsonResponse([
+        { id: "image_gen", cn_name: "Krea2文生图", category: "image_gen", gen_image: true },
+        { id: "qwen_image_21", cn_name: "Qwen Image 2.1", category: "image_gen", gen_image: true, mode: "t2i_edit" },
+    ]));
+    mockRoute("/neo_image_gen/models", () => jsonResponse({
+        diffusion_models: ["qwen/qwen21.safetensors"], loras: ["style_a.safetensors"],
+    }));
+    mockRoute("/neo_image_gen/skill_config", () => jsonResponse({ model: "qwen/qwen21.safetensors", loras: [] }));
+    mockRoute("/neo_image_gen/generate", () => jsonResponse({ task_id: "gm_reuse2", status: "queued", images: [] }));
+    mockRoute("/neo_image_gen/status/gm_reuse2", () => jsonResponse({
+        task_id: "gm_reuse2", status: "succeeded",
+        images: [{ filename: "reuse2.png", subfolder: "NeoAgent/2026-10-01", url: "/g.png" }],
+    }));
+
+    openGenMaterialDialog({ showDirectoryStructure: () => { } }, {
+        prefill: {
+            prompt: "一只橘猫的白底图", seed: 9, width: 1536, height: 864, skill: "qwen_image_21",
+            model: "qwen/qwen21.safetensors",
+            loras: [{ name: "style_a.safetensors", strength: 0.8 }, { name: "gone.safetensors", strength: 1 }],
+        },
+    });
+    const overlay = document.querySelector(".neo-gallery-gm-modal-overlay");
+    await sleep(80);
+
+    assert.equal(overlay.querySelector(".neo-gallery-gm-skill-sel").value, "qwen_image_21", "技能落回副文件里那一个");
+    assert.equal(overlay.querySelector(".rs-gen-model-section select").value, "qwen/qwen21.safetensors", "主模型按那一发的生效值填回");
+    assert.deepEqual([...overlay.querySelectorAll(".rs-gen-lora-row select")].map((s) => s.value),
+                     ["style_a.safetensors"], "模型清单里没落的那个 LoRA 整项丢掉");
+    assert.match(document.querySelector(".neo-at-summary")?.textContent || "", /已复用 提示词、技能与自定参数、宽高比、最长边/);
+
+    click([...overlay.querySelectorAll(".neo-gallery-story-btn")].find((b) => b.textContent === "生成"));
+    await sleep(80);
+    const req = fetchLog.filter((c) => c.path === "/neo_image_gen/generate").at(-1);
+    assert.equal(req.body.skill_id, "qwen_image_21", "请求带复用的技能");
+    assert.equal(req.body.model, "qwen/qwen21.safetensors", "请求带那一发的主模型");
+    assert.deepEqual(req.body.loras, [{ name: "style_a.safetensors", strength: 0.8 }], "请求只带还在盘上的 LoRA");
+    overlay.remove();
+});
+
+test("生成素材弹窗：「复用参数重跑」的主模型与技能家族对撞就留「自动」，下拉里没有的技能整项不填", async () => {
+    resetEnv();
+    clearRoutes();
+    const { openGenMaterialDialog } = await import("../../web/gallery-gen.js");
+    mockRoute("/rs_prompts/skills", () => jsonResponse([
+        { id: "image_gen", cn_name: "Krea2文生图", category: "image_gen", gen_image: true },
+        { id: "qwen_image_21", cn_name: "Qwen Image 2.1", category: "image_gen", gen_image: true, mode: "t2i_edit" },
+    ]));
+    mockRoute("/neo_image_gen/models", () => jsonResponse({
+        diffusion_models: ["qwen/qwen21.safetensors", "krea2/k2.safetensors"], loras: [],
+    }));
+    mockRoute("/neo_image_gen/skill_config", () => jsonResponse({ model: "qwen/qwen21.safetensors", loras: [] }));
+
+    // 家族对撞：qwen 家族的技能 + krea2 家族的主模型 = conditioning 维度对不上的一发（guardMainModelFamily 同一口径）
+    openGenMaterialDialog({ showDirectoryStructure: () => { } }, {
+        prefill: { prompt: "提示词 A", width: 1024, height: 1024, skill: "qwen_image_21", model: "krea2/k2.safetensors" },
+    });
+    let overlay = document.querySelector(".neo-gallery-gm-modal-overlay");
+    await sleep(80);
+    assert.equal(overlay.querySelector(".neo-gallery-gm-skill-sel").value, "qwen_image_21", "技能照填");
+    assert.equal(overlay.querySelector(".rs-gen-model-section select").value, "qwen/qwen21.safetensors",
+                 "家族对不上的主模型丢掉，落回该技能 config 里钉的那个");
+    overlay.remove();
+
+    // 技能不在本页下拉里（本页只列吃文字输入的技能）：技能与自定参数整项不填，提示词与尺寸照填
+    openGenMaterialDialog({ showDirectoryStructure: () => { } }, {
+        prefill: { prompt: "提示词 B", width: 1024, height: 1024, skill: "qwen_face_swap", model: "qwen/qwen21.safetensors" },
+    });
+    overlay = document.querySelector(".neo-gallery-gm-modal-overlay");
+    await sleep(80);
+    assert.notEqual(overlay.querySelector(".neo-gallery-gm-skill-sel").value, "qwen_face_swap", "下拉里没有的技能不塞进来");
+    assert.equal(overlay.querySelector(".rs-gen-model-section select").value, "qwen/qwen21.safetensors",
+                 "技能填不进来就不叠自定参数：面板显示的是该技能 config 钉的那个");
+    assert.equal(overlay.querySelector(".neo-gallery-gm-quick-input").value, "提示词 B", "提示词照填");
+    overlay.remove();
+});
+
+
+
+
