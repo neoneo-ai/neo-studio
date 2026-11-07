@@ -83,6 +83,18 @@ const EN = {
     "姿势页未响应": "The pose page did not answer",
     "姿势页回复不可读": "The pose page reply is unreadable",
     "姿势页拒绝了动作": "The pose page rejected the action",
+    // 图片编辑面板「机位」模式（机位球与三条滑杆，angle/angle-orb.js）：档位名与球读数留中文，
+    // 触发词短语本来就是英文，不再开第二套 key
+    "机位": "Camera angle",
+    "正面": "Front", "右前": "Front-right", "右侧": "Right", "右后": "Back-right",
+    "背面": "Back", "左后": "Back-left", "左侧": "Left", "左前": "Front-left",
+    "仰拍": "Low angle", "平视": "Eye level", "俯拍": "High angle", "高俯": "Top down",
+    "远景": "Wide", "中景": "Medium", "特写": "Close-up",
+    "转角": "Rotation", "俯仰": "Tilt", "镜头": "Zoom",
+    "抬高俯仰：向上换一档": "Tilt up: one step up",
+    "压低俯仰：向下换一档": "Tilt down: one step down",
+    "顺时针：向右绕主体转一档": "Rotate right: one step around the subject",
+    "逆时针：向左绕主体转一档": "Rotate left: one step around the subject",
     "读取姿势状态…": "Reading pose status…",
     "姿势状态读不到": "Pose status unavailable",
     "后端未就绪：刷新页面重试。": "The backend is not ready: reload the page.",

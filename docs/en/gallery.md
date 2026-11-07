@@ -255,7 +255,7 @@ embedded ComfyUI workflow).
 - **Regenerate** (「再来一发」) - fills this run's parameters back into the panel that fits
   them, so you edit them and click "Generate". It reads the same-named `.txt` beside the image or video (written
   at generation time: the prompt on line 1, the parameter summary `seed=… WxH model=… loras=… skill=… mode=… src=…
-  refs=…` on line 2, paths percent-encoded); the summary records what that run actually used, so editing a skill's
+  refs=… angle=…` on line 2, paths percent-encoded); the summary records what that run actually used, so editing a skill's
   config afterwards does not move the rerun.
   - A plain generated image goes to the generate-material composer: the prompt, the aspect ratio (only when the
     size lands within a 2 % tolerance of a chip ratio), the longest side (only when that pixel value is one of the
@@ -321,7 +321,7 @@ top row pairs a 56px "＋ Reference" slot with the prompt box on its right, plus
 slot sits at the top-left corner of the prompt box, and the pick controls are revealed on hover. The prompt textarea
 is integrated into the card — the card outline is the single focus frame, with no inner border drawn around the text.
 The chip row is the skill+params chip + the mode chip (regular / outpaint / masked / click-to-remove / blend /
-pose folded into one chip's menu, each mode explained on its menu item) + the target-resolution chip + "Generate".
+pose / camera angle folded into one chip's menu, each mode explained on its menu item) + the target-resolution chip + "Generate".
 
 - **Reference slot** - reference images (up to 9, the Qwen Image 2.1 limit) live in a 56px "＋ Reference" slot inline at
   the top-left of the prompt box. Hovering the "＋ Reference" slot floats open a pick menu: a "Reference N/9" count
@@ -380,6 +380,16 @@ pose folded into one chip's menu, each mode explained on its menu item) + the ta
   swaps back; a prompt you wrote yourself is never overwritten). Both usages keep the source's face, hair,
   clothing, lighting and background, and the output size follows regular editing (target resolution from the
   source size).
+- **Camera angle** - the 「机位」 entry of the mode chip, which selects the "Qwen Image 2.1 camera angle" skill and
+  reveals the angle orb in the edit area (a Canvas2D wireframe sphere with a perspective camera in
+  `web/angle/angle-orb.js`, no third-party dependency). Drag the sphere to move the camera around the subject; the
+  release snaps to the discrete detents, the four arrows at the midpoints of the sides step through detents (up/down
+  tilt, left/right rotation), the three sliders on the right
+  (rotation 8 detents / tilt -30°..60° in 4 detents / zoom wide-medium-close in 3) stay synced with the orb, and the
+  keyboard arrows walk the same steps once the orb has focus. The prompt is prefilled with the camera trigger words,
+  the three brackets filled from the current detents and refreshed when the angle changes (a prompt you wrote
+  yourself is never overwritten). The request carries `angle = {rotation, tilt, zoom}`, the sidecar records
+  `angle=rotation/tilt/zoom`, and Regenerate restores the orb with it.
 - **ControlNet structure lock** - "Qwen Image 2.1 ControlNet" in the editing skill dropdown (no dedicated
   switch, selecting the skill is enough): the source goes into `<image1>` supplying content and face, and a
   second image dropped into the reference area (a person photo or a skeleton image) goes only into the

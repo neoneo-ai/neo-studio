@@ -1,0 +1,10 @@
+{
+  "model": "QwenImage2.1/qwen_image_2.1_int8_convrot.safetensors",
+  "text_encoder": "qwen3vl_8b_int8_convrot.safetensors",
+  "vae": "qwen_image_2.1_vae_bf16.safetensors",
+  "base_resolution": 1024,
+  "default_ratio": "16:9",
+  "steps": 30,
+  "max_refs": 10,
+  "default_prompt": "Move the camera of <image1> to [front view], [eye-level shot], [medium shot] relative to the main subject, keeping the face, hair, clothing, lighting, background, framing size and image identity of <image1> unchanged, high quality, sharp details, 4k"
+}

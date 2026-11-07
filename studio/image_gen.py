@@ -1161,13 +1161,16 @@ def _sidecar_mode(params: dict) -> str:
     """这一发的编辑模式，取编辑面板 setEditMode 那套词，读端直接喂给模式 chip。
 
     点选删除在请求里就是「涂抹遮罩 + 局部编辑」，params 里与局部编辑同形，只能归到 local：
-    两条路的遮罩都是用户在原图上画的，复现不了，不编一个填不回去的 remove。"""
+    两条路的遮罩都是用户在原图上画的，复现不了，不编一个填不回去的 remove。
+    机位那一发带 angle 三档（编辑面板 payload.angle），照它判定；老请求没这个键，照常往下走。"""
     if params.get("local_edit"):
         return "local"
     if params.get("outpaint"):
         return "outpaint"
     if params.get("control_image"):
         return "pose"
+    if params.get("angle"):
+        return "angle"
     if len(params.get("ref_images") or []) > 1:
         return "blend"
     return "normal"
@@ -1193,6 +1196,9 @@ def _sidecar_meta(params: dict, skill_id: str = "") -> str:
         refs = [quote(r, safe="") for r in (params.get("ref_images") or [])[1:_SIDECAR_MAX_REFS + 1]]
         if refs:
             parts.append("refs=" + ",".join(refs))
+    angle = params.get("angle")
+    if angle:
+        parts.append("angle=%d/%d/%d" % (int(angle.get("rotation") or 0), int(angle.get("tilt") or 0), int(angle.get("zoom") or 0)))
     return " ".join(parts)
 
 

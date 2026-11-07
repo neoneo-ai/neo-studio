@@ -20,6 +20,7 @@ import { openGallerySidebar, toggleGallerySidebar, grabDataType, copyGalleryToIn
 import { ttlCache } from "./js/core/cache.js";
 import { t, tf } from "./js/core/i18n.js";
 import { icon, setIcon, setIconLabel } from "./js/core/icons.js";
+import { createAngleOrb, angleLabel, anglePrompt, rotationLabel, rotationToDisplay, displayToRotation, tiltLabel, zoomLabel, snapToNearest, ROTATION_VALUES, TILT_VALUES, ZOOM_VALUES, DEFAULT_ANGLE } from "./angle/angle-orb.js";
 
 // 一键角色图 / 九宫格分镜图都固定走 Qwen Image 2.1 预设（多路参考槽位、不走 Krea2 编辑链）。
 const QWEN_IMAGE_SKILL_ID = "qwen_image_21";
@@ -29,6 +30,8 @@ const QWEN_OUTPAINT_SKILL_ID = "qwen_image_21_outpaint";
 const QWEN_LOCAL_EDIT_SKILL_ID = "qwen_image_21_local_edit";
 // 姿势编辑技能：只挂原图时按提示词改姿势，拖入第 2 张参考时把它的姿势搬到原图人物上
 const QWEN_POSE_EDIT_SKILL_ID = "qwen_image_21_pose_edit";
+// 机位技能：按「转角 / 俯仰 / 镜头」三档改写相机机位重出这一张（档位与短语在 angle/angle-orb.js）
+const QWEN_CAMERA_ANGLE_SKILL_ID = "qwen_image_21_camera_angle";
 
 // 扩图目标比例预设（free=自由拖框；其余按 w:h 锁定拖框长宽比）
 const OUTPAINT_RATIOS = [
@@ -1467,6 +1470,7 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
         if (editMode === "remove" && !prompt) prompt = REMOVE_DEFAULT_PROMPT;
         if (editMode === "blend" && !prompt) prompt = BLEND_DEFAULT_PROMPT;
         if (editMode === "pose" && !prompt) prompt = extraRefs.length ? POSE_REF_DEFAULT_PROMPT : poseBasePrompt();
+        if (editMode === "angle" && !prompt) prompt = angleOrb.prompt();
         if (!prompt) { promptInput.focus(); return; }
         running = true;
         cancelRequested = false;
@@ -1479,7 +1483,7 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
             let metaHeight = parseInt(heightInput.value, 10) || undefined;
             // 常规编辑的目标尺寸：模板会据此把原图缩放后送进编码器，对比窗左侧同步换成缩放图；
             // 扩图/局部编辑走各自的画布（基准要用原图自然尺寸），这里必须清掉，免得沿用上一轮
-            plainEdit = (editMode === "normal" || editMode === "pose") && !!metaWidth && !!metaHeight;
+            plainEdit = (editMode === "normal" || editMode === "pose" || editMode === "angle") && !!metaWidth && !!metaHeight;
             if (editMode === "outpaint" && box) {
                 const p = paddings();
                 if (p.left || p.top || p.right || p.bottom) {
@@ -1515,6 +1519,7 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
             }
             if (editMode === "local") payload.local_edit = true;
             if (editMode === "remove") payload.remove_points = removePoints;
+            if (editMode === "angle") payload.angle = angleOrb.get();   // 三档进副文件：再来一发按同一机位重放
             const snap = await requestGeneration(payload);
             cancelId = snap.task_id;
             renderRunning(t("排队中…"));
@@ -1544,7 +1549,7 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
 
     // 编辑模式 chip（与技能 chip 同一枚控件）：一枚胶囊 + 向上菜单，选模式即切 setEditMode；
     // 图标跟着模式换（扩图=补边框、局部=画笔、删除=叉、融合=叠图、姿势=人形），模式说明挂在菜单项上
-    const MODE_ICONS = { normal: "wand", outpaint: "maximize", local: "pencil", remove: "cross", blend: "copy", pose: "user" };
+    const MODE_ICONS = { normal: "wand", outpaint: "maximize", local: "pencil", remove: "cross", blend: "copy", pose: "user", angle: "camera" };
     const modeSel = $el("select", { className: "neo-recipes-sort neo-gallery-gm-chip-select neo-gallery-edit-mode-select", title: t("编辑模式：决定在原图上怎么动手") });
     for (const [mode, name, tip] of [
         ["normal", t("常规"), t("常规编辑：按编辑指令整图重绘，原图作参考")],
@@ -1553,6 +1558,7 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
         ["remove", t("删除"), t("点选删除：在原图上点击要删除的物体，SAM3 自动分割并叠加红色遮罩预览，确认后移除（已预填默认删除指令，可修改）")],
         ["blend", t("融合"), t("多图融合：添加多张参考图，由模型自动融合为一张连贯画面")],
         ["pose", t("姿势"), t("姿势编辑：按提示词改原图人物的姿势；在参考图区拖入第 2 张图（人物图或骨架图）则把它的姿势搬到原图人物上，触发词自动切换")],
+        ["angle", t("机位"), t("机位：拖动机位球（或用球角四个箭头、三条滑杆、键盘方向键）定相机位置，按转角 / 俯仰 / 镜头三档重出这一张，长相服装光线背景不变")],
     ]) {
         modeSel.appendChild($el("option", { value: mode, textContent: name, title: tip }));
     }
@@ -1603,6 +1609,30 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
         removeClearBtn
     ]);
     removeRow.style.display = "none";
+
+    // 机位控件：机位球 + 三条滑杆（转角 / 俯仰 / 镜头），只在「机位」模式出现，控件本体在 angle/angle-orb.js
+    const angleSliders = {};
+    const angleRowsBox = $el("div", { className: "neo-gallery-edit-angle-sliders" });
+    for (const [key, labelText, values, tip] of [
+        ["rotation", t("转角"), ROTATION_VALUES, t("相机绕主体转一圈的八个机位（正面 → 右侧 → 背面 → 左侧）")],
+        ["tilt", t("俯仰"), TILT_VALUES, t("相机的高低：负值从下往上仰拍，正值从上往下俯拍")],
+        ["zoom", t("镜头"), ZOOM_VALUES, t("镜头远近：远景定场、中景带环境、特写贴脸")],
+    ]) {
+        const out = $el("output");
+        // 转角滑杆走界面刻度 -180..180（左端、右端都是背面，中点正面），滑块位置与读数同一套数字；
+        // 直接用后端的 0..315 时滑杆右端停在左前 315，绕不到背面
+        const lo = key === "rotation" ? -180 : values[0];
+        const hi = key === "rotation" ? 180 : values[values.length - 1];
+        const input = $el("input", { type: "range", min: String(lo), max: String(hi), step: String(values[1] - values[0]), value: "0", title: tip });
+        angleSliders[key] = { input, out, values };
+        angleRowsBox.appendChild($el("div", { className: "neo-angle-row" }, [$el("label", { textContent: labelText }), input, out]));
+    }
+    const angleOrb = createAngleOrb({
+        cfg: { rotation: 0, tilt: 0, zoom: 5 },
+        onChange: (cfg) => { syncAngleSliders(cfg); fillAnglePrompt(); },
+    });
+    const angleBox = $el("div", { className: "neo-gallery-edit-angle" }, [angleOrb.el, angleRowsBox]);
+    angleBox.style.display = "none";
 
     // 出图尺寸 chip：默认跟原图走（原图探测完按目标像素数填 32 对齐的默认值），点开才露出宽高输入
     const widthInput = $el("input", { type: "number", className: "neo-recipes-sort", id: "img-edit-width", min: 256, max: 8192, step: 32, placeholder: t("宽") });
@@ -1847,6 +1877,7 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
             outpaintRow,
             localRow,
             removeRow,
+            angleBox,
             statusBox,
             composer,
             actionsBox
@@ -2144,6 +2175,41 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
         const want = extraRefs.length ? POSE_REF_DEFAULT_PROMPT : base;
         if (want) promptInput.value = want;
     };
+    // 机位触发词 = 技能 default_prompt 的方括号按当前三档填死；只覆盖「空 / 仍是模板 / 仍是上一版填好词」，
+    // 用户自己写过的句子不碰（与 syncPosePrompt 同一条规矩）
+    const angleTemplate = () => String(_genSkills.find(s => s.id === QWEN_CAMERA_ANGLE_SKILL_ID)?.gen_config?.default_prompt || "").trim();
+    const syncAngleSliders = (cfg) => {
+        for (const [key, box] of Object.entries(angleSliders)) {
+            // 转角滑块读界面刻度（-180..180）：背面同时是两端，已经停在左端时别被同步弹到右端
+            const shown = key === "rotation" ? rotationToDisplay(cfg.rotation) : cfg[key];
+            const keepLeft = key === "rotation" && shown === 180 && Number(box.input.value) === -180;
+            box.input.value = String(keepLeft ? -180 : shown);
+            box.out.textContent = key === "rotation" ? `${rotationLabel(cfg.rotation)}${box.input.value}°`
+                : key === "tilt" ? `${tiltLabel(cfg.tilt)}${cfg.tilt}°` : zoomLabel(cfg.zoom);
+        }
+    };
+    const fillAnglePrompt = () => {
+        if (editMode !== "angle") return;
+        const tpl = angleTemplate();
+        const want = anglePrompt(angleOrb.get(), tpl);
+        const cur = promptInput.value.trim();
+        if (cur && cur !== tpl && cur !== anglePrompt(angleBeforeFill, tpl)) return;
+        angleBeforeFill = angleOrb.get();
+        if (want) promptInput.value = want;
+    };
+    let angleBeforeFill = null;
+    /** 滑杆落点吸附到档位：range 的 step 已按档位排好，这里只兜手改 value 与拖到中间值的情况。 */
+    const snapAngleValue = (key, raw) => snapToNearest(Number(raw) || 0,
+        { rotation: ROTATION_VALUES, tilt: TILT_VALUES, zoom: ZOOM_VALUES }[key]);
+    for (const [key, box] of Object.entries(angleSliders)) {
+        box.input.addEventListener("change", () => {
+            // 转角滑杆读的是界面刻度，转到后端的 0-315 顺带吸附；俯仰 / 镜头直接吸档
+            const next = key === "rotation" ? displayToRotation(box.input.value) : snapAngleValue(key, box.input.value);
+            angleOrb.set({ ...angleOrb.get(), [key]: next });
+            syncAngleSliders(angleOrb.get());
+            fillAnglePrompt();
+        });
+    }
     const setEditMode = async (mode) => {
         if (mode === editMode) return;
         const prev = editMode;
@@ -2165,6 +2231,8 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
         outpaintRow.style.display = mode === "outpaint" ? "" : "none";
         localRow.style.display = mode === "local" ? "" : "none";
         removeRow.style.display = mode === "remove" ? "" : "none";
+        angleBox.style.display = mode === "angle" ? "" : "none";
+        if (mode === "angle") { angleOrb.setTemplate(angleTemplate()); syncAngleSliders(angleOrb.get()); }
 
         // 尺寸片：扩图/局部/删除各自的画布定尺寸，片收起；扩图要把「目标尺寸」读数露在编辑区里
         const hideWH = (mode === "outpaint" || mode === "local" || mode === "remove");
@@ -2179,7 +2247,7 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
 
 
         // 技能选择（程序改 value 不触发 onchange，自定参数要自己重放到新技能的配置）
-        skillSel.value = { outpaint: QWEN_OUTPAINT_SKILL_ID, local: QWEN_LOCAL_EDIT_SKILL_ID, pose: QWEN_POSE_EDIT_SKILL_ID }[mode] || QWEN_IMAGE_SKILL_ID;
+        skillSel.value = { outpaint: QWEN_OUTPAINT_SKILL_ID, local: QWEN_LOCAL_EDIT_SKILL_ID, pose: QWEN_POSE_EDIT_SKILL_ID, angle: QWEN_CAMERA_ANGLE_SKILL_ID }[mode] || QWEN_IMAGE_SKILL_ID;
         skillChip.sync();
         await applyEditModelCfg(skillSel.value);
         syncEditParamsChip();
@@ -2204,6 +2272,11 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
             if (!promptInput.value.trim()) promptInput.value = BLEND_DEFAULT_PROMPT;
         } else if (mode === "pose") {
             syncPosePrompt();
+        } else if (mode === "angle") {
+            angleOrb.setTemplate(angleTemplate());
+            angleBeforeFill = null;
+            fillAnglePrompt();
+            syncAngleSliders(angleOrb.get());
         }
 
         syncRefBtn();
@@ -2596,6 +2669,12 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
             filled.push(t("出图尺寸"));
         }
         filled.push(...await applyEditReuseSkill(pf));
+        // 机位三档：模式与技能都填好后回填，球、滑杆、读数一起跟上（提示词在下一步照副文件填）
+        if (editMode === "angle" && pf?.angle) {
+            angleOrb.set(pf.angle);
+            syncAngleSliders(angleOrb.get());
+            filled.push(t("机位"));
+        }
         const prompt = String(pf?.prompt || "").trim();
         if (prompt) {
             promptInput.value = prompt;

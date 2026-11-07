@@ -40,6 +40,7 @@ const PATHS = {
     "arrow-up": '<path d="M12 19V5"/><path d="m5 12 7-7 7 7"/>',
     clock: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
     ratio: '<rect width="18" height="14" x="3" y="5" rx="2"/><path d="M7 12h10"/>',
+    camera: '<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx=\"12\" cy=\"13\" r=\"3\"/>',
     pose: '<circle cx="12" cy="4.5" r="2"/><path d="m9 20 3-6 3 6"/><path d="m6 8.5 6 2 6-2"/><path d="M12 10.5V14"/>',
     // 保存：一只软盘。姿势页那条「保存姿势」是工具条上的实心入口，缺这一个图标就只剩一行文字
     save: '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/>',

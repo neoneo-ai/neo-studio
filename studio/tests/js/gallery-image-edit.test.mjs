@@ -132,11 +132,11 @@ test("图片编辑弹窗：chips 收在输入卡底行，自定参数默认不�
     await sleep(20);
     assert.equal(skillChip.querySelector(".neo-gallery-gm-chip-label").textContent, "Qwen Image 2.1 扩图", "切技能后 chip 标签跟着变");
 
-    // 模式 chip：菜单列全六种模式，说明挂在菜单项上（原来五枚开关各一句 title）
+    // 模式 chip：菜单列全七种模式，说明挂在菜单项上（原来五枚开关各一句 title）
     const modeWrap = overlay.querySelector(".neo-gallery-edit-mode-select").parentElement;
     press(modeWrap.querySelector(".neo-gallery-gm-chip-btn"));   // 按下这一发先收起技能面板，松手才开模式菜单
     const modeItems = [...modeWrap.querySelectorAll(".neo-gallery-gm-menu-item")];
-    assert.deepEqual(modeItems.map((b) => b.textContent), ["常规", "扩图", "局部", "删除", "融合", "姿势"], "模式 chip 应列全六种模式");
+    assert.deepEqual(modeItems.map((b) => b.textContent), ["常规", "扩图", "局部", "删除", "融合", "姿势", "机位"], "模式 chip 应列全七种模式");
     assert.ok(modeItems.every((b) => b.title.length > 4), "模式说明应挂在菜单项上");
 
     // 宽高输入收在底行下方，点尺寸 chip 才露出（出图尺寸跟原图走，很少要改）
@@ -1494,3 +1494,129 @@ test("图片编辑内嵌面板：「再来一发」换内容不重建；局部�
 });
 
 
+test("图片编辑弹窗：机位模式预填触发词，拖球 / 滑杆同步档位，生成带 angle 三档", async () => {
+    resetEnv();
+    clearRoutes();
+    const { openImageEditDialog } = await import("../../web/gallery-gen.js");
+
+    const angleTpl = "Move the camera of <image1> to [front view], [eye-level shot], [medium shot] relative to the main subject, keeping unchanged";
+    mockRoute("/rs_prompts/skills", () => jsonResponse([
+        { id: "qwen_image_21", cn_name: "Qwen Image 2.1", category: "image_gen", gen_image: true, mode: "t2i_edit" },
+        { id: "qwen_image_21_camera_angle", cn_name: "Qwen Image 2.1 机位编辑", category: "image_gen", gen_image: true, mode: "edit", requires_ref: true,
+          gen_config: { default_prompt: angleTpl } },
+    ]));
+    mockRoute("/neo_gallery/copy_to_input", () => jsonResponse({ success: true, filename: "portrait.png" }));
+    mockRoute("/neo_image_gen/settings", () => jsonResponse({ target_megapixels: 1.5 }));
+
+    const gallery = { app: {}, maxThumbnailSize: 320, displayLabels: true };
+    openImageEditDialog(gallery, { name: "portrait", filename: "portrait.png" }, "");
+    const overlay = document.querySelector(".neo-gallery-edit-modal-overlay");
+    await sleep(20);
+
+    await pickEdit(overlay, "机位");
+    assert.equal(overlay.querySelector(".neo-gallery-gm-skill-sel").value, "qwen_image_21_camera_angle", "开机位应切到机位技能");
+    const angleBox = overlay.querySelector(".neo-gallery-edit-angle");
+    assert.ok(angleBox && angleBox.style.display !== "none", "机位控件行应露出来");
+    assert.ok(angleBox.querySelector(".neo-angle-canvas"), "机位球进面板");
+    assert.match(overlay.querySelector(".neo-gallery-story-input").value, /Move the camera of <image1> to front view, eye-level shot, medium shot/,
+                 "默认词应把技能模板的三个方括号按当前档位填死");
+    assert.equal(angleBox.querySelector(".neo-angle-readout").textContent, "正面0° · 平视0° · 中景", "球默认正面 / 平视 / 中景");
+    assert.notEqual(overlay.querySelector("#img-edit-width").style.display, "none", "机位走常规画布：目标分辨率保持可见");
+    assert.ok(!overlay.querySelector(".neo-gallery-edit-refdrop-row").classList.contains("disabled"), "机位模式参考图区应可用");
+
+    // 拖球 100px：右移 80° 松手吸附到 90（右侧），提示词跟着换
+    const canvas = angleBox.querySelector(".neo-angle-canvas");
+    const pointer = (type, x, y) => canvas.dispatchEvent(new window.MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, pointerId: 1 }));
+    pointer("pointerdown", 80, 80);
+    pointer("pointermove", 180, 80);
+    pointer("pointerup", 180, 80);
+    await sleep(10);
+    assert.equal(angleBox.querySelector(".neo-angle-readout").textContent, "右侧90° · 平视0° · 中景");
+    assert.match(overlay.querySelector(".neo-gallery-story-input").value, /right side view/, "拖球后触发词跟着档位走");
+    assert.equal([...angleBox.querySelectorAll("output")][0].textContent, "右侧90°", "滑杆读数与球同步");
+
+    // 俯仰滑杆拖到高俯 60：提示词换成 top-down
+    const tiltIn = [...angleBox.querySelectorAll("input[type='range']")][1];
+    tiltIn.value = "60";
+    fire(tiltIn, "change");
+    await sleep(10);
+    assert.match(overlay.querySelector(".neo-gallery-story-input").value, /top-down view/);
+
+    // 转角滑杆覆盖整圈：左端 / 右端都是背面，中点正面，读数与滑块位置同一套数字
+    const rotIn = [...angleBox.querySelectorAll("input[type='range']")][0];
+    rotIn.value = "-180";
+    fire(rotIn, "change");
+    await sleep(10);
+    assert.equal([...angleBox.querySelectorAll("output")][0].textContent, "背面-180°", "转角滑杆左端就是背面");
+    assert.match(overlay.querySelector(".neo-gallery-story-input").value, /back view/, "背面触发词跟着滑杆走");
+    rotIn.value = "180";
+    fire(rotIn, "change");
+    await sleep(10);
+    assert.equal([...angleBox.querySelectorAll("output")][0].textContent, "背面180°", "转角滑杆右端也是背面");
+    rotIn.value = "90";
+    fire(rotIn, "change");
+    await sleep(10);
+    assert.equal(angleBox.querySelector(".neo-angle-readout").textContent, "右侧90° · 高俯60° · 中景", "滑杆与球同步");
+
+    // 用户自己写过的提示词不被档位刷新覆盖
+    overlay.querySelector(".neo-gallery-story-input").value = "自定义机位指令";
+    const zoomIn = [...angleBox.querySelectorAll("input[type='range']")][2];
+    zoomIn.value = "10";
+    fire(zoomIn, "change");
+    await sleep(10);
+    assert.equal(overlay.querySelector(".neo-gallery-story-input").value, "自定义机位指令", "已有自定义提示词时不应被默认词覆盖");
+
+    let genBody = null;
+    mockRoute("/neo_image_gen/generate", (body) => { genBody = body; return jsonResponse({ task_id: "ie9", status: "queued", images: [] }); });
+    mockRoute("/neo_image_gen/status/ie9", () => jsonResponse({ task_id: "ie9", status: "succeeded", width: 1024, height: 1024, images: [] }));
+    click([...overlay.querySelectorAll(".neo-gallery-story-btn")].find((b) => b.textContent === "生成"));
+    await sleep(60);
+    assert.ok(genBody, "应发出生成请求");
+    assert.equal(genBody.skill_id, "qwen_image_21_camera_angle");
+    assert.equal(genBody.prompt, "自定义机位指令", "请求带用户写下的指令");
+    assert.deepEqual(genBody.angle, { rotation: 90, tilt: 60, zoom: 10 }, "生成请求带机位三档");
+
+    // 关机位（模式 chip 选回「常规」）→ 控件收起，回到常规编辑技能
+    await pickEdit(overlay, "常规");
+    assert.equal(overlay.querySelector(".neo-gallery-gm-skill-sel").value, "qwen_image_21", "关机位应回到常规编辑技能");
+    assert.equal(overlay.querySelector(".neo-gallery-edit-angle").style.display, "none", "离开机位模式控件收起");
+});
+
+
+
+
+test("图片编辑「再来一发」：机位模式与三档从副文件回填", async () => {
+    resetEnv();
+    clearRoutes();
+    const { openImageEditDialog } = await import("../../web/gallery-gen.js");
+
+    mockRoute("/rs_prompts/skills", () => jsonResponse([
+        { id: "qwen_image_21", cn_name: "Qwen Image 2.1", category: "image_gen", gen_image: true, mode: "t2i_edit" },
+        { id: "qwen_image_21_camera_angle", cn_name: "Qwen Image 2.1 机位编辑", category: "image_gen", gen_image: true, mode: "edit", requires_ref: true,
+          gen_config: { default_prompt: "Move the camera of <image1> to [front view], [eye-level shot], [medium shot] relative to the main subject, keeping unchanged" } },
+    ]));
+    mockRoute("/neo_image_gen/models", () => jsonResponse({ diffusion_models: ["QwenImage2.1/qwen_image_2.1_int8_convrot.safetensors"], loras: [] }));
+    mockRoute("/neo_image_gen/skill_config", () => jsonResponse({ model: "QwenImage2.1/qwen_image_2.1_int8_convrot.safetensors", loras: [] }));
+    mockRoute("/neo_image_gen/settings", () => jsonResponse({ target_megapixels: 1.5 }));
+
+    openImageEditDialog({ app: {}, maxThumbnailSize: 320, displayLabels: true }, "", "", {
+        prefill: {
+            prompt: "机位重出这一张", mode: "angle", width: 1024, height: 1024,
+            skill: "qwen_image_21_camera_angle",
+            src: { filename: "src.png", subfolder: "" },
+            angle: { rotation: 135, tilt: 30, zoom: 0 },
+        },
+    });
+    const overlay = document.querySelector(".neo-gallery-edit-modal-overlay");
+    await sleep(120);
+
+    assert.equal(overlay.querySelector(".neo-gallery-edit-mode-select").value, "angle", "模式落开机位");
+    assert.equal(overlay.querySelector(".neo-gallery-gm-skill-sel").value, "qwen_image_21_camera_angle", "技能落回那一发");
+    const angleBox = overlay.querySelector(".neo-gallery-edit-angle");
+    assert.equal(angleBox.style.display, "", "机位控件随行露出");
+    assert.equal(angleBox.querySelector(".neo-angle-readout").textContent, "右后135° · 俯拍30° · 远景", "球与读数落回那一发的机位");
+    assert.deepEqual([...angleBox.querySelectorAll("input[type='range']")].map((i) => i.value), ["135", "30", "0"], "三条滑杆同步");
+    assert.equal(overlay.querySelector(".neo-gallery-story-input").value, "机位重出这一张", "提示词填在最后，压过切档位时填的默认词");
+    assert.match(document.querySelector(".neo-at-summary")?.textContent || "", /已复用 原图、编辑模式、出图尺寸、技能与自定参数、机位、提示词/);
+    overlay.remove();
+});

@@ -1459,6 +1459,18 @@ class SidecarTests(unittest.TestCase):
         self.assertEqual(image_gen._sidecar_mode({**base, "local_edit": {"w2": 512}}), "local")
         self.assertEqual(image_gen._sidecar_mode({**base, "outpaint": {"left": 10}}), "outpaint")
         self.assertEqual(image_gen._sidecar_mode({**base, "control_image": "pose.png"}), "pose")
+        self.assertEqual(image_gen._sidecar_mode({**base, "angle": {"rotation": 90, "tilt": 30, "zoom": 5}}), "angle")
+
+    def test_sidecar_meta_appends_angle_and_skips_empty(self):
+        """机位那一发的三档往后追加：angle=转角/俯仰/镜头；空档位整项省略，字段一律往后加。"""
+        base = {"seed": 9, "width": 1024, "height": 1024, "model": "qwen.safetensors",
+                "ref_name": "src.png", "ref_images": ["src.png"]}
+        meta = image_gen._sidecar_meta({**base, "angle": {"rotation": 135, "tilt": 30, "zoom": 0}},
+                                       "qwen_image_21_camera_angle")
+        self.assertEqual(meta, "seed=9 1024x1024 model=qwen.safetensors "
+                               "skill=qwen_image_21_camera_angle mode=angle src=src.png angle=135/30/0")
+        self.assertNotIn("angle=", image_gen._sidecar_meta(base, "qwen_image_21_camera_angle"))
+        self.assertNotIn("angle=", image_gen._sidecar_meta({**base, "angle": {}}, "qwen_image_21"))
 
 
 class SkillWorkflowRouteTests(unittest.TestCase):

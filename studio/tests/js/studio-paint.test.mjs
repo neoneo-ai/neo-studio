@@ -223,7 +223,7 @@ test("绘画页：图片卡菜单「图片编辑」把这张图换进现成面�
     assert.ok(!ep.querySelector(".neo-gallery-edit-empty"), "原图到位后拖放落点应收起");
     assert.match(ep.querySelector(".neo-gallery-edit-compare-img").getAttribute("src"), /portrait\.png/, "预览区应换成这张原图");
     assert.ok(!modeChipBtn(ep).disabled, "原图到位应解锁编辑模式 chip");
-    assert.equal(modeChip(ep).querySelectorAll("option").length, 6, "模式 chip 列全六种模式");
+    assert.equal(modeChip(ep).querySelectorAll("option").length, 7, "模式 chip 列全七种模式");
     assert.match(hintOf(ep), /生成结果与原图左右对比/, "有原图后说明换回编辑说明");
     assert.ok(!document.querySelector(".neo-gallery-edit-modal-overlay"), "内嵌模式不应建图片编辑浮层遮罩");
     assert.ok(!paintEdit().classList.contains("ns-hidden"), "编辑宿主应切到可见");

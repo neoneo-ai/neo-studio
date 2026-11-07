@@ -5,6 +5,19 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 ## [Unreleased]
 
 ### Added
+- **Camera-angle image-edit mode with a Canvas2D angle orb.** The image-edit panel's mode chip gains
+  **机位**: the edit area reveals a 160px angle orb (`studio/web/angle/angle-orb.js` + `angle-orb.css`, Canvas2D
+  wireframe sphere with a perspective camera drawn solid — back faces culled, so the camera reads as a camera,
+  no new dependency). Drag the sphere to move the camera around the
+  subject and the release snaps to the discrete detents; the four arrows at the midpoints of the sides step through detents (up/down tilt, left/right rotation), the three
+  sliders (rotation 8 detents / tilt -30°..60° in 4 detents / zoom wide-medium-close) stay synced with the orb, and
+  the keyboard arrows walk the same steps. Selecting 机位 switches to the new 「Qwen Image 2.1 机位编辑」 preset
+  (`studio/skills/presets/qwen_image_21_camera_angle/`) and prefills its default trigger words - the three square
+  brackets are filled from the current detents and refresh with the angle, never overwriting a prompt you wrote.
+  The request carries `angle = {rotation, tilt, zoom}`, the sidecar records `angle=rotation/tilt/zoom`, and
+  再来一发 restores the mode, skill, prompt and the orb together. Covered by
+  `studio/tests/js/angle-orb.test.mjs`, the new cases in `studio/tests/js/gallery-image-edit.test.mjs` and the
+  sidecar cases in `studio/tests/test_image_gen.py` / `studio/tests/test_gallery_copy_to_input.py`.
 - **Gallery cards carry a Regenerate action, edited images included.** The image card's 「⋯」 menu gains
   **再来一发**: it reads the image's same-named `.txt` sidecar (`image_gen` writes the prompt on line 1 and the
   parameter summary on line 2) through `GET /neo_gallery/media_meta` - served offline too - and prefills the panel

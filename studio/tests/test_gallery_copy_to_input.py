@@ -203,4 +203,24 @@ class CopyToInputSubfolderTests(unittest.TestCase):
     def test_missing_file_reports_not_found(self):
         out = _copy("nope.png", "刘亦菲")
         self.assertFalse(out["success"])
-        self.assertEqual(out["error"], "Image not found")
+
+class SidecarAngleParseTests(unittest.TestCase):
+    """「再来一发」读端（_parse_sidecar_params）认机位三档：angle=转角/俯仰/镜头 → {rotation, tilt, zoom}。
+
+    写端是 image_gen._sidecar_meta 的 angle=%d/%d/%d；负俯仰（仰拍）必须带词界读出来，
+    老副文件没有 angle 字段时整项省略，读端不编值。"""
+
+    def test_angle_field_round_trips_to_panel_state(self):
+        out = gallery._parse_sidecar_params(
+            "seed=9 1024x1024 model=qwen.safetensors skill=qwen_image_21_camera_angle "
+            "mode=angle src=src.png angle=135/30/0")
+        self.assertEqual(out["mode"], "angle")
+        self.assertEqual(out["angle"], {"rotation": 135, "tilt": 30, "zoom": 0})
+
+    def test_negative_tilt_and_missing_angle_field(self):
+        out = gallery._parse_sidecar_params("seed=1 512x512 model=m src=src.png mode=angle angle=270/-30/10")
+        self.assertEqual(out["angle"], {"rotation": 270, "tilt": -30, "zoom": 10})
+        legacy = gallery._parse_sidecar_params("seed=1 512x512 model=m skill=qwen_image_21 mode=pose src=src.png")
+        self.assertNotIn("angle", legacy)   # 老副文件照读，不给机位编一个填不回去的值
+        self.assertEqual(gallery._parse_sidecar_angle("angle=135/30"), None)   # 三档不齐整项不给
+

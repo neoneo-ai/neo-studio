@@ -1,0 +1,146 @@
+/* angle-orb.css — 机位球与三条机位滑杆（angle/angle-orb.js 首次建控件时注入，幂等）。
+   颜色与面板的 chip 同一套（橙色强调 + 低透明描边）；这里不开 backdrop-filter，
+   也不挂大发光投影——图片编辑面板的浮层风格在 gallery.css 的 *-modal-overlay 规则里定过。 */
+
+.neo-angle-orb {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.neo-angle-wrap {
+    position: relative;
+    flex: none;
+    /* 四边留 8px：方位键就贴在球缘外侧（球缘在画布内 16px），既不压球也不飘远 */
+    padding: 8px;
+    touch-action: none;   /* 拖拽从键上或留白处起手时都不让浏览器滚页 */
+}
+
+.neo-angle-canvas {
+    display: block;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    background: rgba(0, 0, 0, 0.35);
+    touch-action: none;
+    cursor: grab;
+}
+
+.neo-angle-canvas:active {
+    cursor: grabbing;
+}
+
+.neo-angle-canvas:focus-visible {
+    outline: 1px solid rgba(255, 153, 0, 0.6);
+}
+
+/* 四个方位键挂在球外面的四条边中点上：俯仰=上下、转角=左右，键序与键盘方向键一致。
+   无框 chevrons；按键与球面都能起手拖拽，位移不到 3px 才算点按。 */
+.neo-angle-arrows {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+.neo-angle-arrows button {
+    position: absolute;
+    pointer-events: auto;
+    touch-action: none;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    font-size: 15px;
+    line-height: 22px;
+    text-align: center;
+    color: #b8c2ce;
+    background: transparent;
+    border: 0;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.neo-angle-arrows button:hover {
+    color: #FF9944;
+    background: rgba(255, 153, 0, 0.12);
+}
+
+.neo-angle-arrows button[data-step="tiltUp"] {
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.neo-angle-arrows button[data-step="tiltDown"] {
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.neo-angle-arrows button[data-step="rotCw"] {
+    top: 50%;
+    right: 0;
+    transform: translateY(-50%);
+}
+
+.neo-angle-arrows button[data-step="rotCcw"] {
+    top: 50%;
+    left: 0;
+    transform: translateY(-50%);
+}
+
+.neo-angle-readout {
+    flex: none;
+    font-size: 11px;
+    color: #FF9944;
+    white-space: nowrap;
+}
+
+/* 三条滑杆：标签 + 滑杆 + 档位读数，窄面板里整块换行到球下方 */
+.neo-gallery-edit-angle {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 6px;
+    background: rgba(0, 0, 0, 0.22);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 8px;
+}
+
+.neo-gallery-edit-angle-sliders {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1 1 170px;
+    min-width: 0;
+}
+
+.neo-angle-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.neo-angle-row > label {
+    flex: none;
+    width: 28px;
+    font-size: 11px;
+    color: #b8c2ce;
+}
+
+.neo-angle-row > input[type="range"] {
+    flex: 1 1 auto;
+    min-width: 60px;
+}
+
+.neo-angle-row > output {
+    flex: none;
+    width: 92px;
+    font-size: 11px;
+    color: #e8e8e8;
+    text-align: right;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}

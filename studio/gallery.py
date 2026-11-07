@@ -2849,6 +2849,18 @@ async def media_meta(request):
 # 同名 .txt 副文件的读端。写端是 image_gen.write_sidecar（出图）与 simple_video.write_video_sidecar
 # （出视频）：首行提示词、次行 seed=… WxH model=… loras=a@0.8,b@0.5，视频再加生效的 H3 参数。
 _SIDECAR_SIZE_RE = re.compile(r"(\d+)\s*[xX*]\s*(\d+)")
+_SIDECAR_ANGLE_RE = re.compile(r"\bangle=(-?\d+)/(-?\d+)/(-?\d+)")
+
+
+def _parse_sidecar_angle(meta_line: str) -> dict | None:
+    """机位那一发的三档 angle=转角/俯仰/镜头（编辑面板的机位球）：三个数齐全才给。
+
+    读端是「再来一发」的机位回填，面板按档位吸附取值，这里只负责把数捞出来，不判档位合法性。"""
+    hit = _SIDECAR_ANGLE_RE.search(meta_line)
+    if not hit:
+        return None
+    rotation, tilt, zoom = (int(g) for g in hit.groups())
+    return {"rotation": rotation, "tilt": tilt, "zoom": zoom}
 
 
 def _parse_sidecar_params(meta_line: str) -> dict:
@@ -2886,6 +2898,9 @@ def _parse_sidecar_params(meta_line: str) -> dict:
     refs = re.search(r"\brefs=(\S+)", meta_line)
     if refs:
         out["refs"] = [unquote(r) for r in refs.group(1).split(",") if r]
+    angle = _parse_sidecar_angle(meta_line)
+    if angle:
+        out["angle"] = angle
     return out
 
 
