@@ -321,9 +321,14 @@ panel's character dropdown has no import control, so there is nothing for a host
 The desktop top bar's Pose tab and the home card "3D Pose" open `#/pose`; the host module is
 `studio/web/pose/pose.js`. The canvas fills the whole page and the controls are two transparent
 toolbars floating over it: Pose Library / Character & Look / Props on the left, Save Pose / Export
-Image Set / Canvas State on the right. The first three open a full-window modal (the asset library's
-shell), the other three open a small popup; neither takes width from the canvas, only one popup is
-open at a time, and clicking the same button again, pressing Esc or clicking off the popup closes it.
+Image Set / Canvas State on the right. Pose Library and Props open a full-window modal (the asset
+library's shell), the other four open a small popup; neither takes width from the canvas, only one
+popup is open at a time, and the same toolbar button closes what it opened: a popup closes on Esc, on a
+click off it or on the same button, a modal on Esc, the backdrop, the title-bar ✕ or the same button -
+that second click used to repaint the same page of cards and left the window covering the screen. The
+button is lit while its own window is open, and every close path (Esc, the backdrop, the ✕, the window
+yielding to the other modal, the close after applying) returns it to the unlit state through one
+`setOnClose` callback.
 Every control stays disabled until `pose:ready`; an old package whose `caps.hostUi` is not `true`
 leaves the page-command controls greyed and explains what is missing in Canvas State. The bridge is
 torn down with `pose:dispose`, so leaving the page leaves no listener behind.
@@ -611,7 +616,9 @@ tops both levels up in the data root.
   empty add-body payload when the package reports no standard body, and the add-body row and the library base
   filter following `bodyMale` when it is the default; the two toolbars and the popups (six entries, the canvas
   taking the whole page, one popup at a time, Esc / clicking off / the same button again closing it, an open
-  modal owning its own Esc); the saved-pose list inside the pose-library modal (only `pose/scenes/` archives
+  modal owning its own Esc), the two full-window modals closing on the second click of their own
+  dock button - the button lit while its window is open and unlit by every close path (Esc, the
+  backdrop, the ✕, the window yielding to the other modal); the saved-pose list inside the pose-library modal (only `pose/scenes/` archives
   listed, each row badged "local", a row click being one `pose:open-scene`; presets
   not listed there, the modal's card grid being their only entry, grouped by
   `groups`, and no preset dropdown; the search box filtering by name, an honest empty state,

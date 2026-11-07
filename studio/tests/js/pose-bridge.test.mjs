@@ -325,6 +325,38 @@ test("「道具」那颗钮直接开整扇道具弹窗：卡片、页码条与�
         "场上道具清单在同一扇窗底部：加完就看得见落地了哪几件");
 });
 
+test("姿势库与道具那两扇弹窗：同一颗钮再点一次就是关，钮的亮起态跟着每一条收窗路走", async () => {
+    resetEnv();
+    const env = await mounted();
+    await env.ready();
+    env.replyCall(env.calls("meta/list")[0], META);
+    env.replyCall(env.calls("prop/list")[0], PROPS);
+    await settle();
+    const win = () => env.host.querySelector(".ns-libmodal:not(.ns-hidden)");
+    const lit = (label) => dockBtn(env, label).classList.contains("ns-pose-dock-btn-on");
+    await openLib(env);
+    assert.ok(win(), "第一下开窗");
+    assert.ok(lit("姿势库"), "开着的那颗钮亮着：第二下是关这件事要在钮上看得见");
+    assert.equal(dockBtn(env, "姿势库").getAttribute("aria-expanded"), "true");
+    await openLib(env);
+    assert.equal(win(), null, "同一颗「姿势库」再点一次就是关：整屏弹窗不只 Esc / 遮罩 / ✕ 那三条关法");
+    assert.ok(!lit("姿势库"), "关掉的钮回到没开的样子");
+    assert.equal(dockBtn(env, "姿势库").getAttribute("aria-expanded"), "false");
+    await openProp(env);
+    assert.ok(env.host.querySelector(".ns-libmodal:not(.ns-hidden) " + PROP), "「道具」开自己那扇窗");
+    await openProp(env);
+    assert.equal(win(), null, "同一颗「道具」再点一次就是关");
+    assert.ok(!lit("道具"), "道具那颗钮同样收回");
+    await openLib(env);
+    await openProp(env);
+    assert.ok(env.host.querySelector(".ns-libmodal:not(.ns-hidden) " + PROP), "两扇弹窗不叠：姿势库让位给道具");
+    assert.ok(!lit("姿势库"), "让位收掉的那扇窗，钮一起收回没开的样子");
+    keydown(document.body, "Escape");
+    await settle();
+    assert.equal(win(), null, "Esc 照旧关窗");
+    assert.ok(!lit("道具"), "Esc 那条路关的窗同样把钮收回：四条收窗路共用同一份回调");
+});
+
 test("弹层的关法：Esc、点在弹层之外、再点同一条钮都关，且 Esc 让位给姿势库那扇弹窗", async () => {
     resetEnv();
     const env = await mounted();

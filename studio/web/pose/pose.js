@@ -217,14 +217,21 @@ export function createPoseView({ api, $el, toast }) {
             (side === "left" ? dockL : dockR).append(chip);
             return box;
         }
-        /** 工具条上直接干一件事的钮（姿势库就是开那扇弹窗，没有中间那一层弹层）：不吃弹层那套开合 */
+        /** 工具条上直接干一件事的钮（姿势库与道具就是开那扇弹窗，没有中间那一层弹层）：
+         *  不吃弹层那套开合，亮起态由 paintDockModal 跟着弹窗自己的开合走 */
         const dockAction = (side, { label, iconKey, action }) => {
-            const chip = $el("button", { className: "ns-pose-btn ns-pose-dock-btn", type: "button" });
+            const chip = $el("button", { className: "ns-pose-btn ns-pose-dock-btn", type: "button", "aria-expanded": "false" });
             setIconLabel(chip, iconKey, t(label));
             chip.title = t(label);
             chip.onclick = () => action();
             (side === "left" ? dockL : dockR).append(chip);
             return chip;
+        };
+        /** 弹窗开着时那颗工具条钮亮着：「再点一次就是关」这件事要在钮上看得见，否则第二下看着像重载内容。
+         *  收窗的路有 Esc / 遮罩 / 标题栏 ✕ / 套用后收窗四条，都从外壳的 onClose 回调过这一条 */
+        const paintDockModal = (chip, modal) => {
+            chip.classList.toggle("ns-pose-dock-btn-on", modal.isOpen());
+            chip.setAttribute("aria-expanded", String(modal.isOpen()));
         };
 
         /* 本机姿势存档（pose:save-scene 写进 pose/scenes/ 的那批）排在「姿势库」弹窗里预设清单的下面：
@@ -277,9 +284,9 @@ export function createPoseView({ api, $el, toast }) {
         const btnShot = btn("画布截图", "image", panelGate);
 
         // 工具条：左边是「看东西」的入口（姿势库与道具直接开整屏弹窗），右边是「出东西」的入口（保存 / 导出 / 状态）
-        dockAction("left", { label: "姿势库", iconKey: "list", action: openLibModal });
+        const btnLib = dockAction("left", { label: "姿势库", iconKey: "list", action: openLibModal });
         const popChar = popPanel({ key: "char", label: "角色与外观", iconKey: "user", side: "left" });
-        dockAction("left", { label: "道具", iconKey: "target", action: openPropModal });
+        const btnProp = dockAction("left", { label: "道具", iconKey: "target", action: openPropModal });
         const popSave = popPanel({ key: "save", label: "保存姿势", iconKey: "save", side: "right" });
         const popExport = popPanel({ key: "export", label: "导出图组", iconKey: "send", side: "right" });
         const popState = popPanel({ key: "state", label: "画布状态", iconKey: "info", side: "right" });
@@ -414,6 +421,7 @@ export function createPoseView({ api, $el, toast }) {
         ]);
 
         libModal.setContent(libPane);
+        libModal.setOnClose(() => paintDockModal(btnLib, libModal));
         el.append(libModal.el, sceneFile);
 
         /* ===== 道具弹窗：和姿势库同一扇素材库外壳 =====
@@ -433,11 +441,16 @@ export function createPoseView({ api, $el, toast }) {
             $el("div", { className: "ns-pose-prop-added" }, [head("场上道具"), propList]),
         ]);
         propModal.setContent(propPane);
+        propModal.setOnClose(() => paintDockModal(btnProp, propModal));
         el.append(propModal.el);
-        /** 开道具弹窗：先按当前清单重画一页再开壳，弹窗开着时索引落地（云端）也看得见新卡片 */
+        /** 开道具弹窗：先按当前清单重画一页再开壳，弹窗开着时索引落地（云端）也看得见新卡片；
+         *  同一条钮再点一次就是关 —— 弹窗的关法只有 Esc / 遮罩 / 标题栏 ✕，用户在这颗钮上点第二下
+         *  原本只是把同一页卡片重刷一遍，收不掉这扇盖住整屏的窗 */
         function openPropModal() {
+            if (propModal.isOpen()) { propModal.close(); return; }
             paintPropGrid();
             propModal.open(t("道具"));
+            paintDockModal(btnProp, propModal);
             libModal.close();   // 两扇弹窗不叠：开这一扇就把姿势库那扇收起
         }
 
@@ -833,10 +846,13 @@ export function createPoseView({ api, $el, toast }) {
         }
 
 
-        /** 弹窗只装一件事：pose-lib 的整场库（本机那份 + 云端那份）；数据根的本机存档与选本机文件都在下半那一列 */
+        /** 弹窗只装一件事：pose-lib 的整场库（本机那份 + 云端那份）；数据根的本机存档与选本机文件都在下半那一列。
+         *  同一条钮再点一次就是关，与道具那扇窗同一口径 */
         async function openLibModal() {
+            if (libModal.isOpen()) { libModal.close(); return; }
             libModal.setContent(libPane);
             libModal.open(t("姿势库"));
+            paintDockModal(btnLib, libModal);
             // 未配置的云端不是一个「点了只会失败」的来源：那一条干脆不出现（AGENTS 的产品口径）
             const sources = [{ key: "local", label: t("本机库") }];
             if (cloudStatus?.enabled === true) sources.push({ key: "cloud", label: t("云端库") });

@@ -5,6 +5,12 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 ## [Unreleased]
 
 ### Changed
+- **The 3D Pose 「姿势库」 and 「道具」 windows close on the second click of their own toolbar button.**
+  Both buttons opened a full-window browser, and every later click only repainted the same page of
+  cards, so getting rid of that window meant Esc, the backdrop or the title-bar ✕. The same button now
+  closes its own window - the rule the four small popups already had - and it stays lit while that
+  window is open: Esc, the backdrop, the ✕, the window yielding to the other modal and the close after
+  applying a pose all return it to the unlit state. Covered by `studio/tests/js/pose-bridge.test.mjs`.
 - **Prop previews are white clay renders.** The prop grid mixed official render sources (Poly Haven photos,
   BlenderKit renders, our own clay renders) with black photo backdrops and colored objects, so a page of cards
   read as a color mosaic where the silhouette was hard to see. `tools\pose_prop_clay.mjs` now renders every
