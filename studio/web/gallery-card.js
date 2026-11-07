@@ -558,10 +558,10 @@ export class GalleryCard {
         }, [t("导入工作流")]);
         // 复用参数重跑：只有同名 .txt 读得到提示词才显示（读端是 /neo_gallery/media_meta 的 reuse）。
         const metaProbe = this._fetchMediaMeta(image, subfolder);
-        const reuseItem = isImageFile(image.filename) ? $el("div", {
+        const reuseItem = (isImageFile(image.filename) || /\.mp4$/i.test(image.filename || "")) ? $el("div", {
             className: "neo-gallery-collect-item",
             style: { display: "none" },
-            title: t("把这一发的提示词、出图尺寸与技能填回面板；编辑图还带回原图与参考图（涂抹遮罩与扩图边距要重画）"),
+            title: t("把这一发的提示词、出图尺寸与技能填回面板；编辑图还带回原图与参考图，视频带回首帧 / 尾帧 / 参考图与自定参数（涂抹遮罩与扩图边距要重画）"),
             onclick: () => {
                 this._removeCollectMenu();
                 metaProbe.then(meta => reuseParamsFromMedia(gallery, meta && meta.reuse)).catch(() => { });

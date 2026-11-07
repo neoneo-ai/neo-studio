@@ -1282,7 +1282,7 @@ function reuseModelFits(skillMeta, model) {
 /** 「复用参数重跑」带回来的自定参数（主模型 / LoRA）→ 能填进面板的那部分。
  *  副文件记的是那一发的生效值，文件挪走或改名之后还把它填成覆盖值，等于给用户埋一次必败：
  *  只留模型清单里还在盘上的那些，剩下的落回该技能 config 里钉的那个（= 面板的「自动」） */
-function reuseModelOverlay(pf, models, skillMeta) {
+export function reuseModelOverlay(pf, models, skillMeta) {
     const list = models || {};
     const overlay = {};
     if (pf?.model && (list.diffusion_models || []).includes(pf.model) && reuseModelFits(skillMeta, pf.model)) {
@@ -3570,13 +3570,32 @@ export function openGenMaterialDialog(gallery, opts = null) {
     setTimeout(() => quickInput.focus(), 0);
 }
 
+/** 素材卡菜单「复用参数重跑」的视频入口：出视频页挂载时注册，把这一发交回视频页铺好面板。
+ *  注册方在桌面端视频页（studio-app.js 的 buildVideo）；页面没挂载过的兜底走 info。
+ *  预填是异步的（要等技能与模型列表落位），填完的清单以 promise 交回。 */
+let _videoReuseOpen = null;
+export function setVideoReuseOpen(open) { _videoReuseOpen = open || null; }
+export function openVideoReuse(reuse) {
+    if (!_videoReuseOpen) {
+        actionToast({ severity: "info", summary: t("出视频页尚未就绪"), detail: t("打开「视频」页后再点「复用参数重跑」") });
+        return Promise.resolve([]);
+    }
+    const filled = _videoReuseOpen(reuse);
+    notifyPrefillFilled(filled);   // 预填是异步的：填完的清单落回同一条复用提示，与两块输入卡一个口径
+    return filled;
+}
+
 /** 卡片「⋯」菜单「复用参数重跑」：把素材旁 .txt 读出的摘要交给对口的输入卡。
- *  带原图或参考图的是编辑那一发 → 图片编辑面板（原图 / 参考图 / 模式一并填回）；只有提示词与
- *  尺寸的（含旧版 .txt）→ 「生成素材」输入卡。没有提示词可复用就是这条菜单项不该出现，
+ *  视频 → 出视频页 composer；带原图或参考图的是编辑那一发 → 图片编辑面板（原图 / 参考图 / 模式一并填回）；
+ *  只有提示词与尺寸的（含旧版 .txt）→ 「生成素材」输入卡。没有提示词可复用就是这条菜单项不该出现，
  *  兜底提示走 info 而不是报错。 */
 export function reuseParamsFromMedia(gallery, reuse) {
     if (!String(reuse?.prompt || "").trim()) {
         actionToast({ severity: "info", summary: t("该素材没有可复用的提示词"), detail: t("素材旁的 .txt 由生成时写入，示例图只有提示词原文") });
+        return;
+    }
+    if (reuse?.video) {
+        openVideoReuse(reuse);
         return;
     }
     if (reuse?.src?.filename || reuse?.refs?.length) {

@@ -326,6 +326,54 @@ class SidecarReuseTests(unittest.TestCase):
         self.assertNotIn("src", reuse)
         self.assertEqual([r["filename"] for r in reuse["refs"]], ["src.png"])
 
+    def test_video_sidecar_gives_video_fields_for_the_video_panel(self):
+        # 写端是 simple_video.write_video_sidecar：生效值逐项记，读端交回出视频页要填的那份
+        _write("NeoAgent/reuse/first.png", b"\x89PNG\r\n\x1a\nfake")
+        _write("NeoAgent/reuse/last.png", b"\x89PNG\r\n\x1a\nfake")
+        _write("NeoAgent/reuse/r.png", b"\x89PNG\r\n\x1a\nfake")
+        _write("NeoAgent/reuse/clip.mp4", b"\x00\x00\x00\x18ftypmp42fake")
+        _write("NeoAgent/reuse/clip.txt", (
+            "镜头推进，雪夜城市\nseed=777 1024x576 model=diffusion_video%2Fh3.safetensors "
+            "loras=loras%2Fid.safetensors@0.8 skill=sv2v_multi_shot "
+            "src=NeoAgent%2Freuse%2Ffirst.png last=NeoAgent%2Freuse%2Flast.png "
+            "refs=NeoAgent%2Freuse%2Fr.png steps=21 "
+            "text_encoder=text_encoders%2Fqae.safetensors audio_vae=vae%2Fh3_audio.safetensors "
+            "vae=vae%2Fh3_vae.safetensors frames=192 duration=8\n").encode("utf-8"))
+        reuse = self._reuse("clip.mp4")["reuse"]
+        self.assertTrue(reuse["video"])
+        self.assertEqual((reuse["seed"], reuse["width"], reuse["height"]), (777, 1024, 576))
+        self.assertEqual((reuse["skill"], reuse["steps"]), ("sv2v_multi_shot", 21))
+        self.assertEqual((reuse["model"], reuse["text_encoder"], reuse["vae"], reuse["audio_vae"]),
+                         ("diffusion_video/h3.safetensors", "text_encoders/qae.safetensors",
+                          "vae/h3_vae.safetensors", "vae/h3_audio.safetensors"))
+        self.assertEqual((reuse["duration"], reuse["frames"]), (8, 192))
+        self.assertEqual(reuse["src"], {"subfolder": "NeoAgent/reuse", "filename": "first.png"})
+        self.assertEqual(reuse["last"], {"subfolder": "NeoAgent/reuse", "filename": "last.png"})
+        self.assertEqual(reuse["refs"], [{"subfolder": "NeoAgent/reuse", "filename": "r.png"}])
+
+    def test_video_sidecar_without_duration_field_still_gives_seconds(self):
+        # 只记帧数也够用：按 H3 固定帧率折算；对不上面板时长档位的（>15s）整项不给
+        _write("NeoAgent/reuse/len.mp4", b"\x00\x00\x00\x18ftypmp42fake")
+        _write("NeoAgent/reuse/len.txt", "走一步\nseed=1 624x352 frames=120\n".encode("utf-8"))
+        reuse = self._reuse("len.mp4")["reuse"]
+        self.assertEqual((reuse["frames"], reuse["duration"]), (120, 5))
+        _write("NeoAgent/reuse/long.mp4", b"\x00\x00\x00\x18ftypmp42fake")
+        _write("NeoAgent/reuse/long.txt", "长镜头\nseed=1 624x352 frames=400\n".encode("utf-8"))
+        reuse = self._reuse("long.mp4")["reuse"]
+        self.assertEqual(reuse["frames"], 400)
+        self.assertNotIn("duration", reuse)
+
+    def test_video_sidecar_media_off_disk_is_dropped_prompt_survives(self):
+        # 首帧被删：素材整项消失，提示词与参数照填——复用少填一项也比空手好
+        _write("NeoAgent/reuse/gone.mp4", b"\x00\x00\x00\x18ftypmp42fake")
+        _write("NeoAgent/reuse/gone.txt", ("雪夜\nseed=2 624x352 steps=20 frames=77 "
+                                           "src=NeoAgent%2Freuse%2Fnope.png\n").encode("utf-8"))
+        reuse = self._reuse("gone.mp4")["reuse"]
+        self.assertTrue(reuse["video"])
+        self.assertNotIn("src", reuse)
+        self.assertEqual(reuse["prompt"], "雪夜")
+        self.assertEqual(reuse["duration"], 3)
+
 
 class DimCacheTests(unittest.TestCase):
     """尺寸缓存持久化：重启后重开同一目录不再读图片头（NAS 上每张卡一次往返）。"""

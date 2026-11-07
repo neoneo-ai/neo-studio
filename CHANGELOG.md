@@ -19,10 +19,25 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   model from another skill family (it falls back to the one that skill pins), a skill missing from that panel's list
   and a reference file the user deleted are dropped item by item, and the toast names exactly what was reused. A
   sidecar that is the workflow JSON ComfyUI's `SaveImage` wrote first stays on the 「导入工作流」 path, a Civitai
-  sample sidecar fills the prompt only, and a card with no readable prompt in its sidecar shows no such item - video
-  and audio cards never carry it. Covered by `studio/tests/test_gallery_media_types.py`,
+  sample sidecar fills the prompt only, and a card with no readable prompt in its sidecar shows no such item - audio
+  cards never carry it. Covered by `studio/tests/test_gallery_media_types.py`,
   `studio/tests/test_image_gen.py`, `studio/tests/js/gallery-card-reuse.test.mjs`,
   `studio/tests/js/gallery-image-edit.test.mjs` and the new cases in `studio/tests/js/gallery-gen-material.test.mjs`.
+- **Video cards carry 复用参数重跑 too - the whole run lands back on the video page.** A finished simple video now
+  gets its own sidecar: `simple_video` writes the same-named `.txt` beside the saved `.mp4` (the existing
+  「already written, leave it alone」 rule applies), recording the run's effective values - seed, size, model, LoRA,
+  skill, first / last frame, reference images, steps, text encoder, video VAE, audio VAE, frame count and the
+  requested duration, paths percent-encoded, reference videos / audios left out (the panel has no slot for them).
+  Clicking the item on an `.mp4` card switches to the Video page and swaps the composer to that run in place - the
+  panel is not rebuilt, so the dock keeps its state; the skill, the first / last frame or the reference images, the
+  seed, the output size, the duration, the prompt and the 自定参数 (that run's values merged over the skill config)
+  are filled item by item. What the panel cannot run with is dropped: a skill outside the video list, a model / LoRA
+  / encoder / VAE no longer in the model list (the main model falls back to the one the skill pins), a duration that
+  is not 3 / 5 / 8 / 10 / 15 s (derived from the frame count at the fixed 24 fps), a size outside the panel's
+  choices, and a random seed. The 「已复用 …」 toast names exactly what was filled; with the video page never opened
+  the reuse says 「出视频页尚未就绪」 instead of failing. Covered by `studio/tests/test_simple_video.py`,
+  `studio/tests/test_gallery_media_types.py`, `studio/tests/js/video-reuse.test.mjs` and
+  `studio/tests/js/gallery-card-reuse.test.mjs`.
 - **The header queue panel keeps its history across restarts, offline included.** The six generation task kinds
   (image, voice, single-shot video, whole film, single segment, merge) now land in
   `<data root>/configs/studio_tasks.sqlite` as they start and as they finish, and the panel reads them back through

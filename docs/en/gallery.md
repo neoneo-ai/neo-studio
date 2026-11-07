@@ -253,8 +253,8 @@ embedded ComfyUI workflow).
 ### Reuse parameters for a rerun
 
 - **Reuse parameters for a rerun** (「复用参数重跑」) - fills this run's parameters back into the panel that fits
-  them, so you edit them and click "Generate". It reads the same-named `.txt` beside the image (written at
-  generation time: the prompt on line 1, the parameter summary `seed=… WxH model=… loras=… skill=… mode=… src=…
+  them, so you edit them and click "Generate". It reads the same-named `.txt` beside the image or video (written
+  at generation time: the prompt on line 1, the parameter summary `seed=… WxH model=… loras=… skill=… mode=… src=…
   refs=…` on line 2, paths percent-encoded); the summary records what that run actually used, so editing a skill's
   config afterwards does not move the rerun.
   - A plain generated image goes to the generate-material composer: the prompt, the aspect ratio (only when the
@@ -269,11 +269,19 @@ embedded ComfyUI workflow).
     model from another skill family (it falls back to the one that skill pins), a skill missing from that panel's
     list, and a reference file the user deleted are dropped item by item; an older sidecar with no source and no
     references degrades to the generate-material composer. The toast names exactly what was reused.
+  - A video card goes to the video page composer: behind the image fields the sidecar carries
+    `steps=… text_encoder=… audio_vae=… vae=… frames=… duration=…` (written by `simple_video`, `vae` recorded
+    after `audio_vae`). Reuse switches to the Video page and swaps the panel to that run - the skill, the
+    first / last frame or the reference images, the seed, the output size, the duration, the prompt, and that
+    run's effective 自定参数 merged over the skill config. The duration is derived from the frame count at the
+    fixed 24 fps; a value that is not one of the panel's choices (3 / 5 / 8 / 10 / 15 s) and a size outside the
+    panel's choices are not filled, and reference videos / audios are not recorded at all (the panel has no slot
+    for them). While the video page has never been opened, the reuse only reports 「出视频页尚未就绪」.
   - Reference paths are resolved through the same library addressing as the gallery, file by file: a path
     containing `..` or an absolute path is dropped whole (the sidecar is a plain text file the user can edit).
   - When the sidecar is the workflow JSON ComfyUI's `SaveImage` wrote first, it stays on the "Import workflow"
     path instead; a Civitai sample sidecar carries only the prompt text, so only the prompt is filled. A card
-    whose sidecar yields no readable prompt shows no such item, and video and audio cards never carry it.
+    whose sidecar yields no readable prompt shows no such item, and audio cards never carry it.
 
 ### Character sheets & storyboards
 

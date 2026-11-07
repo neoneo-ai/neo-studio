@@ -73,12 +73,12 @@ test("卡片菜单「复用参数重跑」：.txt 读不到提示词就不出这
     assert.equal(itemOf("复用参数重跑")?.style.display, "none", "没有可复用提示词就不放开这一项");
 });
 
-test("卡片菜单「复用参数重跑」：视频卡不出这一项（生成素材面板只吃文字提示词）", async () => {
+test("卡片菜单「复用参数重跑」：视频卡挂出这一项，点开交给出视频页（页没就绪就 info 说清）", async () => {
     resetEnv();
     clearRoutes();
     const { GalleryCard, NeoGallery } = await loadModules();
     mockRoute("/neo_gallery/media_meta", () => jsonResponse({
-        has: false, reuse: { prompt: "一段视频的提示词", width: 1280, height: 720 },
+        has: false, reuse: { video: true, prompt: "一段视频的提示词", width: 1280, height: 720, seed: 9 },
     }));
 
     const card = new GalleryCard({});
@@ -89,7 +89,15 @@ test("卡片菜单「复用参数重跑」：视频卡不出这一项（生成�
     card._showCollectMenu(gallery, { name: "clip", filename: "clip.mp4" }, "NeoAgent/2026-10-01", "local", anchor);
     await sleep(40);
 
-    assert.equal(itemOf("复用参数重跑"), undefined, "视频卡不挂这一项");
+    const item = itemOf("复用参数重跑");
+    assert.ok(item, "视频卡也挂得出「复用参数重跑」");
+    assert.equal(item.style.display, "", "探测到可复用参数才放开这一项");
+    click(item);
+    await sleep(40);
+    // 这条 jsdom 环境没挂载出视频页：复用交不出去的兜底是一句 info，不是报错，也不开任何面板
+    const notice = [...document.querySelectorAll("#neo-action-toast-stack .neo-at")].map((el) => el.textContent);
+    assert.ok(notice.some((s) => s.includes("出视频页尚未就绪")), "视频页没就绪时 info 说清");
+    assert.equal(document.querySelector(".neo-gallery-gm-modal-overlay"), null, "视频复用不开「生成素材」面板");
 });
 test("卡片菜单「复用参数重跑」：副文件带原图与参考图的编辑图，点开交给图片编辑面板", async () => {
     resetEnv();

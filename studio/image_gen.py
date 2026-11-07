@@ -1201,15 +1201,22 @@ def write_sidecar(image_path: str, params: dict, skill_id: str = "") -> None:
 
     读端是 gallery._read_sidecar（「复用参数重跑」），两行的格式要一起改。
     """
-    path = _sidecar_path(image_path)
+    write_sidecar_line(image_path, f"{params['prompt']}\n{_sidecar_meta(params, skill_id)}")
+
+
+def write_sidecar_line(media_path: str, text: str) -> None:
+    """素材旁同名 .txt 的统一落笔：出图与出视频共用「已存在就不写」这一条。
+
+    ComfyUI 的 SaveImage / SaveVideo 会先把工作流 JSON 抢注到同名 .txt——那条路归「导入工作流」，
+    副文件就不该覆盖；写失败只记日志，出图出视频不该为它失败。"""
+    path = _sidecar_path(media_path)
     if os.path.exists(path):
         return
-    meta = _sidecar_meta(params, skill_id)
     try:
         with open(path, "w", encoding="utf-8") as f:
-            f.write(f"{params['prompt']}\n{meta}\n")
+            f.write(text)
     except OSError as e:
-        logger.warning(f"image_gen: sidecar write failed: {e}")
+        logger.warning(f"sidecar write failed: {e}")
 
 
 # ===========================================================================

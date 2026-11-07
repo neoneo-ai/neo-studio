@@ -10,7 +10,10 @@ NeoSimple/ 子目录并归一 seed、generate/cancel 路由与任务表流转。
 import asyncio
 import contextlib
 import json
+import os
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from test_h3_video_director import _load, _server   # noqa: E402  —— 复用同一套桩
@@ -111,6 +114,102 @@ class RunPromptTests(unittest.TestCase):
         with _skill_chain(simple_video, graph, lambda b, c: self._params(777)):
             out = simple_video._run_prompt({"skill_id": "sk-a", "prompt": "x", "seed": -1})
         self.assertEqual(out["seed"], 777, "seed<0 走随机解析值")
+
+
+# resolve_video_params 生效值的形状（写副文件要逐项取自这份，不取面板原始态）
+_FULL_PARAMS = {
+    "prompt": "雪夜城市", "model": "diffusion_video/h3.safetensors",
+    "text_encoder": "text_encoders/qae.safetensors", "vae": "vae/h3_vae.safetensors",
+    "audio_vae": "vae/h3_audio.safetensors",
+    "loras": [{"name": "loras/id.safetensors", "strength": 0.8}],
+    "width": 1024, "height": 576, "length": 192, "steps": 21, "seed": 777,
+    "ref_name": "neo/first.png", "ref_last": "neo/last.png",
+    "ref_images": ["neo/first.png", "neo/a.png", "neo/b c.png"],
+    "ref_videos": [], "ref_audios": [],
+}
+
+# _run_prompt 落进任务表的 reuse 载荷（副文件摘要行的直接输入）
+_FULL_REUSE = {
+    "seed": 777, "width": 1024, "height": 576, "frames": 192, "steps": 21,
+    "model": "diffusion_video/h3.safetensors",
+    "text_encoder": "text_encoders/qae.safetensors", "vae": "vae/h3_vae.safetensors",
+    "audio_vae": "vae/h3_audio.safetensors",
+    "loras": [{"name": "loras/id.safetensors", "strength": 0.8}],
+    "src": "neo/first.png", "last": "neo/last.png", "refs": ["neo/a.png", "neo/b c.png"],
+    "duration_sec": 8,
+}
+
+
+class SidecarTests(unittest.TestCase):
+    """成片旁同名 .txt：出视频页「复用参数重跑」的读端（gallery._read_sidecar）吃这份。"""
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp(prefix="neo_simple_sidecar_")
+
+    def test_run_prompt_records_effective_params_for_sidecar(self):
+        graph = {"5": {"class_type": "FakeVideo", "inputs": {}}}
+        with _skill_chain(simple_video, graph, lambda b, c: dict(_FULL_PARAMS)):
+            out = simple_video._run_prompt({"skill_id": "sk-a", "prompt": "x", "duration_sec": 8})
+        reuse = out["reuse"]
+        self.assertEqual((reuse["seed"], reuse["width"], reuse["height"], reuse["frames"]),
+                         (777, 1024, 576, 192))
+        self.assertEqual(reuse["steps"], 21)
+        self.assertEqual(reuse["model"], "diffusion_video/h3.safetensors")
+        self.assertEqual(reuse["text_encoder"], "text_encoders/qae.safetensors")
+        self.assertEqual(reuse["audio_vae"], "vae/h3_audio.safetensors")
+        self.assertEqual((reuse["src"], reuse["last"]), ("neo/first.png", "neo/last.png"))
+        self.assertEqual(reuse["refs"], ["neo/a.png", "neo/b c.png"])
+        self.assertEqual(reuse["duration_sec"], 8)
+
+    def test_sidecar_written_beside_video_when_task_succeeds(self):
+        # 副文件只在成片成功落盘后补写，且记的是生效值：路径按 output 根拼，值按 reuse 取
+        item = {"outputs": {"9000": {"videos": [{"filename": "v.mp4", "subfolder": ""}]}},
+                "status": {"status_str": "success", "completed": True}}
+        task = {"task_id": "t-1", "prompt_id": "p-1", "status": "queued",
+                "prompt": "雪夜城市", "skill_id": "sk-a", "seed": 777,
+                "width": 1024, "height": 576, "length": 192,
+                "reuse": dict(_FULL_REUSE),
+                "filename": None, "subfolder": "", "progress": None, "error": "",
+                "created": 0.0, "updated": 0.0}
+        simple_video._TASKS["t-1"] = task
+        self.addCleanup(simple_video._TASKS.pop, "t-1", None)
+        with patch.object(simple_video.folder_paths, "get_output_directory", lambda: self.dir), \
+             patch.object(simple_video, "_lookup", lambda pid: ("done", item)), \
+             patch.object(simple_video, "POLL_INTERVAL", 0.01):
+            asyncio.new_event_loop().run_until_complete(simple_video._watch("t-1"))
+        text = Path(self.dir, "v.txt").read_text(encoding="utf-8")
+        meta = text.splitlines()[1]
+        self.assertEqual(text.splitlines()[0], "雪夜城市")
+        for frag in ("seed=777", "1024x576", "model=diffusion_video/h3.safetensors",
+                     "loras=loras/id.safetensors@0.8", "skill=sk-a",
+                     "src=neo%2Ffirst.png", "last=neo%2Flast.png",
+                     "refs=neo%2Fa.png,neo%2Fb%20c.png", "steps=21",
+                     "text_encoder=text_encoders%2Fqae.safetensors",
+                     "audio_vae=vae%2Fh3_audio.safetensors",
+                     "vae=vae%2Fh3_vae.safetensors", "frames=192", "duration=8"):
+            self.assertIn(frag, meta)
+
+    def test_sidecar_not_overwritten_and_not_written_on_failure(self):
+        # SaveVideo 已把工作流 JSON 抢注到同名 .txt（那条路归「导入工作流」）：副文件不覆盖
+        Path(self.dir, "v.txt").write_text('{"3": {"class_type": "KSampler"}}', encoding="utf-8")
+        simple_video.write_video_sidecar(os.path.join(self.dir, "v.mp4"), "p", {}, "sk-a")
+        self.assertEqual(Path(self.dir, "v.txt").read_text(encoding="utf-8"),
+                         '{"3": {"class_type": "KSampler"}}')
+        item = {"outputs": {"9000": {"videos": [{"filename": "f.mp4", "subfolder": ""}]}},
+                "status": {"status_str": "error", "completed": False,
+                           "messages": [["execution_error",
+                                         {"exception_message": "显存不足", "node_id": "9000", "node_type": "SaveVideo"}]]}}
+        task = {"task_id": "t-2", "prompt_id": "p-2", "status": "queued",
+                "prompt": "p", "skill_id": "sk-a", "seed": 1, "width": 1, "height": 1, "length": 1,
+                "reuse": {}, "filename": None, "subfolder": "", "progress": None, "error": "",
+                "created": 0.0, "updated": 0.0}
+        simple_video._TASKS["t-2"] = task
+        self.addCleanup(simple_video._TASKS.pop, "t-2", None)
+        with patch.object(simple_video.folder_paths, "get_output_directory", lambda: self.dir), \
+             patch.object(simple_video, "_lookup", lambda pid: ("done", item)), \
+             patch.object(simple_video, "POLL_INTERVAL", 0.01):
+            asyncio.new_event_loop().run_until_complete(simple_video._watch("t-2"))
+        self.assertFalse(os.path.exists(os.path.join(self.dir, "f.txt")))
 
 
 class RouteTests(unittest.TestCase):

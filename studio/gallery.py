@@ -2846,44 +2846,78 @@ async def media_meta(request):
     return web.json_response(_json_safe(result))
 
 
-# 同名 .txt 副文件的读端。写端是 image_gen.write_sidecar：首行提示词、次行
-# seed=… WxH model=… loras=a@0.8,b@0.5。
+# 同名 .txt 副文件的读端。写端是 image_gen.write_sidecar（出图）与 simple_video.write_video_sidecar
+# （出视频）：首行提示词、次行 seed=… WxH model=… loras=a@0.8,b@0.5，视频再加生效的 H3 参数。
 _SIDECAR_SIZE_RE = re.compile(r"(\d+)\s*[xX*]\s*(\d+)")
 
 
 def _parse_sidecar_params(meta_line: str) -> dict:
-    """参数摘要行 → 字段。缺哪项就少给哪项，解析不出值的不编值。"""
+    """参数摘要行 → 字段。缺哪项就少给哪项，解析不出值的不编值。
+
+    键一律带词界：vae= 无词界会落进 audio_vae= 里，model= 会落进别人尾部的子串上——
+    摘要行是空格分隔的明文、用户能改，正则必须只认键位上的那一个。"""
     out = {}
-    seed = re.search(r"seed=(-?\d+)", meta_line)
+    seed = re.search(r"\bseed=(-?\d+)", meta_line)
     if seed:
         out["seed"] = int(seed.group(1))
     size = _SIDECAR_SIZE_RE.search(meta_line)
     if size:
         out["width"], out["height"] = int(size.group(1)), int(size.group(2))
-    model = re.search(r"model=(\S+)", meta_line)
+    model = re.search(r"\bmodel=(\S+)", meta_line)
     if model:
-        out["model"] = model.group(1)
-    loras = re.search(r"loras=(\S+)", meta_line)
+        out["model"] = unquote(model.group(1))
+    loras = re.search(r"\bloras=(\S+)", meta_line)
     if loras:
         pairs = []
         for item in loras.group(1).split(","):
             name, _, strength = item.rpartition("@")
             try:
-                pairs.append({"name": name, "strength": float(strength)})
+                pairs.append({"name": unquote(name), "strength": float(strength)})
             except ValueError:
-                pairs.append({"name": name or item, "strength": None})
+                pairs.append({"name": unquote(name or item), "strength": None})
         if pairs:
             out["loras"] = pairs
     # 编辑那一发多出来的四项（skill / mode / src / refs）：图片路径写端 percent-encode 过，
     # 文件名带空格是常态，空格分隔的摘要行扛不住
-    for key in ("skill", "mode", "src"):
-        hit = re.search(rf"{key}=(\S+)", meta_line)
+    for key in ("skill", "mode", "src", "last"):
+        hit = re.search(rf"\b{key}=(\S+)", meta_line)
         if hit:
             out[key] = unquote(hit.group(1))
-    refs = re.search(r"refs=(\S+)", meta_line)
+    refs = re.search(r"\brefs=(\S+)", meta_line)
     if refs:
         out["refs"] = [unquote(r) for r in refs.group(1).split(",") if r]
     return out
+
+
+# 视频那一发的生效参数（simple_video.write_video_sidecar 往后追加的字段）与 H3 的固定帧率。
+# 键序把 audio_vae 排在 vae 之前：词界只挡住 _vae 的键位起点，两组各归各位
+_SIDECAR_VIDEO_KEYS = ("steps", "text_encoder", "audio_vae", "vae")
+_SIDECAR_FRAMES_RE = re.compile(r"frames=(\d+)")
+_SIDECAR_SEC_RE = re.compile(r"duration=(\d+)")
+_H3_FPS = 24
+
+
+def _parse_video_sidecar(out: dict, meta_line: str) -> None:
+    """视频摘要行往后读出的生效参数：出视频面板要按技能重放，填的是这一发真正跑的值。
+
+    steps 与三个模型走通用词尾，text_encoder / audio_vae 的键名里嵌着 encoder / vae，\\b 会把它们
+    分开。帧数按 H3 的固定帧率折算成秒，对不上面板时长档位就不给。"""
+    for key in _SIDECAR_VIDEO_KEYS:
+        hit = re.search(rf"\b{key}=(\S+)", meta_line)
+        if hit:
+            out[key] = unquote(hit.group(1))
+    steps = re.search(r"\bsteps=(\d+)", meta_line)
+    if steps:
+        out["steps"] = int(steps.group(1))
+    frames = _SIDECAR_FRAMES_RE.search(meta_line)
+    if frames:
+        out["frames"] = int(frames.group(1))
+        seconds = round(int(frames.group(1)) / _H3_FPS)
+        if 1 <= seconds <= 15:
+            out["duration"] = seconds
+    seconds = _SIDECAR_SEC_RE.search(meta_line)
+    if seconds:
+        out["duration"] = int(seconds.group(1))
 
 
 def _read_sidecar(media_path: Path) -> dict | None:
@@ -2902,7 +2936,11 @@ def _read_sidecar(media_path: Path) -> dict | None:
     if first.startswith("{"):
         return None
     out = {"prompt": first} if first else {}
-    out.update(_parse_sidecar_params(lines[1] if len(lines) > 1 else ""))
+    meta_line = lines[1] if len(lines) > 1 else ""
+    out.update(_parse_sidecar_params(meta_line))
+    if media_path.suffix.lower() == ".mp4":
+        out["video"] = True
+        _parse_video_sidecar(out, meta_line)
     _resolve_sidecar_refs(out)
     return out or None
 
@@ -2912,7 +2950,7 @@ def _resolve_sidecar_refs(out: dict) -> None:
 
     写端记的是相对 input/ 与 output/ 根的路径（sub/a.png 或 b.png）。副文件是明文、用户能改，
     带 .. 的与绝对路径在这里直接丢，落点只走 _find_source_media 那套合法寻址；丢掉的项整项
-    消失，面板因此降级回只填提示词与尺寸。"""
+    消失，面板因此降级回只填提示词与尺寸。视频多出的一项「末帧图」走同一扇门。"""
     def one(name: str) -> dict | None:
         parts = [p for p in str(name or "").replace("\\", "/").split("/") if p]
         if not parts or ".." in parts or re.match(r"^[A-Za-z]:", parts[0]):
@@ -2920,9 +2958,10 @@ def _resolve_sidecar_refs(out: dict) -> None:
         subfolder, filename = "/".join(parts[:-1]), parts[-1]
         return {"subfolder": subfolder, "filename": filename} if _find_source_media(filename, subfolder) else None
 
-    src = one(out.pop("src", ""))
-    if src:
-        out["src"] = src
+    for key in ("src", "last"):
+        hit = one(out.pop(key, "")) if key in out else None
+        if hit:
+            out[key] = hit
     refs = [r for r in (one(n) for n in out.pop("refs", None) or []) if r]
     if refs:
         out["refs"] = refs

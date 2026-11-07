@@ -11,7 +11,7 @@ import { configureCanvasOrigin } from "../js/core/canvas-origin.js";
 
 import "../gallery.js";   // 注册 comfy.neo.gallery 扩展（NeoGallery + 侧栏 tab 定义）
 import { setDirectorEditorHost, openDirectorEditor, DIRECTOR_RECIPE_SAVED_EVENT, SEG_MODES, MODE_LABELS, LEGACY_MODE_MAP } from "../director.js";
-import { setPaintHost, openGenMaterialDialog, openImageEditDialog, chipButton, skillParamsChip } from "../gallery-gen.js";
+import { setPaintHost, openGenMaterialDialog, openImageEditDialog, setVideoReuseOpen, reuseModelOverlay, chipButton, skillParamsChip } from "../gallery-gen.js";
 import { createFramePlayer, DOCK_PREVIEW_SIDE, AGENT_PREVIEW_SIDE } from "../live-preview.js";
 import { createRecipesPanel, listRecipes } from "../recipes.js";
 import { listVideoSkills } from "../recipes.js";
@@ -959,7 +959,20 @@ function buildVideo(el) {
             if (!multiple) libModal?.close();   // 首帧 / 尾帧取一张即收窗；参考图留着弹窗好连选
         });
         render();
-        return { el: slot, get: () => items.map((it) => ({ value: it.value })), first: () => items[0] || null };
+        return {
+            el: slot,
+            get: () => items.map((it) => ({ value: it.value })),
+            first: () => items[0] || null,
+            // 「复用参数重跑」整槽换内容：面板已铺好，重建会把用户写了一半的提示词清掉
+            fill: (vals) => {
+                items.length = 0;
+                for (const v of vals || []) {
+                    const value = typeof v === "string" ? v : [v?.subfolder, v?.filename].filter(Boolean).join("/");
+                    if (value) items.push({ value });
+                }
+                render();
+            },
+        };
     }
 
     const firstSlot = mediaSlot("首帧", false, 1);
@@ -1001,11 +1014,12 @@ function buildVideo(el) {
         refSlot.el.classList.toggle("ns-hidden", f2v);
     };
 
-    // 换技能 = 把自定参数整块换成该技能 config 里钉的那一套（与绘画页同一语义）
-    const applySkillConfig = async (skillId) => {
+    // 换技能 = 把自定参数整块换成该技能 config 里钉的那一套（与绘画页同一语义）；
+    // 「复用参数重跑」带 reuseOverlay = 在技能配置上盖那一发的生效值，面板显示的就是重放要用的那一套
+    const applySkillConfig = async (skillId, reuseOverlay = null) => {
         if (!skillId || !videoModels) return;
         const cfg = await getSkillGenConfig(skillId);
-        videoCfg.load(cfg || {}, videoModels);
+        videoCfg.load({ ...(cfg || {}), ...(reuseOverlay || {}) }, videoModels);
         skillChip.sync();   // 程序改 value 不触发 change：chip 标签自己跟上
     };
 
@@ -1016,7 +1030,7 @@ function buildVideo(el) {
     });
     applyVideoSlots();
 
-    listVideoSkills().then((list) => {
+    const skillsReady = listVideoSkills().then((list) => {
         skillSel.textContent = "";
         for (const s of list) {
             const opt = $el("option", { value: s.id, textContent: skillDisplayName(s) });
@@ -1034,10 +1048,10 @@ function buildVideo(el) {
         skillSel.textContent = "";
         skillSel.appendChild($el("option", { value: "", textContent: t("（无可用视频技能）") }));
         skillChip.sync();
-    });
+    }).then(() => { });   // 预填要等技能落进下拉才动技能行：与绘画页的 skillsReady 同一约定
 
     // 模型列表拉一次：先按「自动」渲染覆盖区，再覆盖成当前技能配置；拉不到保持空下拉（等效跟随设置，不挡生成）
-    listVideoGenModels().then((models) => {
+    const modelsReady = listVideoGenModels().then((models) => {
         videoModels = models || {};
         videoCfg.load({}, videoModels);
         applySkillConfig(skillSel.value);
@@ -1229,6 +1243,77 @@ function buildVideo(el) {
             statusEl.textContent = tf("取消失败：{msg}", { msg: e.message });
         }
         cancelBtn.disabled = false;
+    });
+
+    // 素材卡「复用参数重跑」：这一发的生效参数（副文件记的）填回本页 composer。面板常驻不重建，
+    // 只换内容；逐项校验，面板认不出的（技能不在下拉、模型不在清单与家族判定内、时长不在档位、
+    // 随机种子）整项不填，填完的清单交给复用提示。
+    const prefillVideo = async (reuse) => {
+        await skillsReady;
+        const filled = [];
+        const skillId = String(reuse?.skill || "");
+        const hasSkill = skillId && [...skillSel.options].some((o) => o.value === skillId);
+        if (hasSkill) {
+            skillSel.value = skillId;
+            skillChip.sync();
+            applyVideoSlots();
+            try { localStorage.setItem(VIDEO_LAST_SKILL_KEY, skillId); } catch { /* 隐私模式记不住就算了 */ }
+            filled.push(t("技能与自定参数"));
+        }
+        const f2v = hasSkill && videoModeGroup(selectedMeta()) === "f2v";
+        const src = reuse?.src?.filename ? reuse.src : null;
+        const last = reuse?.last?.filename ? reuse.last : null;
+        const refs = (reuse?.refs || []).filter((r) => r?.filename);
+        firstSlot.fill(f2v && src ? [src] : []);
+        lastSlot.fill(f2v && last ? [last] : []);
+        refSlot.fill(f2v ? [] : [src, ...refs].filter(Boolean));
+        const mediaNames = [];
+        if (f2v) {
+            if (src) mediaNames.push(t("首帧"));
+            if (last) mediaNames.push(t("尾帧"));
+        } else if (src || refs.length) {
+            mediaNames.push(t("参考图"));
+        }
+        if (mediaNames.length) filled.push(mediaNames.join("、"));
+        const seed = Number(reuse?.seed);
+        if (Number.isFinite(seed) && seed >= 0) {
+            seedIn.value = String(seed);
+            filled.push(t("种子"));
+        }
+        if (reuse?.width && reuse?.height) {
+            const value = `${reuse.width},${reuse.height}`;
+            if ([...sizeSel.options].some((o) => o.value === value)) {
+                sizeSel.value = value;
+                filled.push(t("出片尺寸"));
+            }
+        }
+        if (reuse?.duration && VIDEO_DUR_CHOICES.includes(Number(reuse.duration))) {
+            durSel.value = String(Number(reuse.duration));
+            filled.push(t("时长"));
+        }
+        if (String(reuse?.prompt || "").trim()) {
+            promptIn.value = String(reuse.prompt).trim();
+            promptCount.textContent = `${promptIn.value.length} / ∞`;
+            filled.push(t("提示词"));
+        }
+        // 自定参数整块 = 那一发的生效值盖在技能配置上；主模型与 LoRA 只留清单里还在盘上的
+        await modelsReady;
+        if (hasSkill && videoModels) {
+            const ov = reuseModelOverlay(reuse, videoModels, selectedMeta());
+            const cfgOv = { ...ov };
+            for (const key of ["text_encoder", "vae", "audio_vae"]) {
+                const name = reuse?.[key];
+                const pool = key === "text_encoder" ? videoModels.text_encoders : videoModels.vae;
+                if (name && (pool || []).includes(name)) cfgOv[key] = name;
+            }
+            if (Number(reuse?.steps) >= 1) cfgOv.steps = Number(reuse.steps);
+            await applySkillConfig(skillId, cfgOv);
+        }
+        return filled;
+    };
+    setVideoReuseOpen((reuse) => {
+        go("video");   // 走 hash 换页（与绘画页入口同一约定），本页在位时只显隐
+        return prefillVideo(reuse);
     });
 }
 

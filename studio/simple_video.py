@@ -11,16 +11,19 @@ output/NeoSimple/，产物只播放，不进任何配方「结果」区。任务
 
 import asyncio
 import logging
+import os
 import re
 import time
 import uuid
+from urllib.parse import quote
 
+import folder_paths
 from aiohttp import web
 import nodes as comfy_nodes
 from server import PromptServer
 
 from .h3_video_gen import _resolve_skill_id, _seconds_to_frames, ensure_reference_tags, resolve_video_params
-from .image_gen import _error_from_history, _lookup, _progress_for, render_template, submit_graph
+from .image_gen import _error_from_history, _lookup, _progress_for, render_template, submit_graph, write_sidecar_line
 from .skill import get_skill_gen_config, load_skill_workflow
 from . import task_center
 from .util import PrefixFilter
@@ -33,6 +36,9 @@ POLL_INTERVAL = 1.0   # 轮询队列状态的间隔（秒）
 OUT_SUBDIR = "NeoSimple"   # 简单视频落盘子目录（SaveVideo 的 filename_prefix 前缀）
 STATUS_EVENT = "rs.simple_video.status"   # 任务快照事件：顶栏队列面板靠它实时推进，不轮询
 _VIDEO_EXT = (".mp4", ".webm", ".mov", ".mkv", ".gif")
+# 副文件记的参考图上限（与出视频页参考槽、image_gen._SIDECAR_MAX_REFS 同宽）：
+# 首帧走 src，其余从这里裁，读端照单全收
+_SIDECAR_MAX_REFS = 9
 # 找末端 VIDEO 输出时跳过的落盘节点：它们对 VIDEO 的引用不算「消费」，且自身不作为产物端点
 _SKIP_OUTPUT_NODES = {"SaveImage", "PreviewImage", "SaveVideo"}
 
@@ -152,6 +158,8 @@ async def _watch(task_id: str) -> None:
             task["updated"] = time.time()
             _WATCHERS.pop(task_id, None)
             _notify(task)
+            if task["status"] == "succeeded" and filename:
+                _write_sidecar_for(task)
             if error and not cancelled:
                 logger.warning(f"simple video task {task_id} failed: {error}")
             return
@@ -165,6 +173,13 @@ async def _watch(task_id: str) -> None:
             task["updated"] = time.time()
             if changed:
                 _notify(task)
+
+
+def _write_sidecar_for(task: dict) -> None:
+    """成片落盘成功后补写副文件：出片是主角，写不写得动 .txt 不该影响任务落终态。"""
+    media = os.path.join(folder_paths.get_output_directory(), *(p for p in (task["subfolder"], task["filename"]) if p))
+    reuse = task.get("reuse") or {}
+    write_video_sidecar(media, task["prompt"], reuse, task.get("skill_id") or "", reuse.get("duration_sec"))
 
 
 def _run_prompt(data: dict) -> dict:
@@ -196,13 +211,68 @@ def _run_prompt(data: dict) -> dict:
         "format": "auto",   # 新版核心 SaveVideo 必填（无默认值）
     }}
     explicit_seed = seed_in is not None and int(seed_in) >= 0
+    seed = int(seed_in) if explicit_seed else int(params["seed"])
+    duration = int(float(duration_sec)) if duration_sec is not None and float(duration_sec) > 0 else None
+    ref_images = params.get("ref_images") or []
+    # 「复用参数重跑」记的是这一发的生效值（resolve_video_params 的产物，不是面板原始态）：
+    # 任务成功落盘后写进视频旁的同名 .txt，读端是 gallery._read_sidecar
     return {
         "graph": graph,
-        "seed": int(seed_in) if explicit_seed else int(params["seed"]),
+        "seed": seed,
         "skill_id": skill_id,
         "prompt": params["prompt"],
         "width": int(params["width"]), "height": int(params["height"]), "length": int(params["length"]),
+        "reuse": {
+            "seed": seed, "width": int(params["width"]), "height": int(params["height"]),
+            "frames": int(params["length"]), "steps": int(params.get("steps") or 0),
+            "model": params.get("model"), "loras": params.get("loras") or [],
+            "text_encoder": params.get("text_encoder"), "vae": params.get("vae"),
+            "audio_vae": params.get("audio_vae"),
+            "src": ref_images[0] if ref_images else None, "last": params.get("ref_last"),
+            "refs": ref_images[1:_SIDECAR_MAX_REFS + 1], "duration_sec": duration,
+        },
     }
+
+
+def _video_sidecar_meta(params: dict, skill_id: str, duration_sec: int | None) -> str:
+    """视频旁 .txt 的摘要行：出视频页「复用参数重跑」要用的生效值，字段一律往后加。
+
+    前四项与出图副文件同形（seed / WxH / model / loras），读端共用；src=首帧、last=尾帧、
+    refs=其余参考图，路径 percent-encode（文件名带空格是常态，空格分隔的摘要行扛不住）。
+    参考视频 / 参考音频不进：出视频面板只有图片槽，填不回去的就记下来只会长出假承诺。"""
+    parts = [f"seed={params.get('seed')}",
+             f"{params.get('width')}x{params.get('height')}",
+             f"model={params.get('model')}"]
+    loras = ",".join(f"{l['name']}@{l['strength']}" for l in params.get("loras") or [])
+    if loras:
+        parts.append(f"loras={loras}")
+    if skill_id:
+        parts.append(f"skill={skill_id}")
+    for key in ("src", "last"):
+        name = params.get(key)
+        if name:
+            parts.append(f"{key}={quote(str(name), safe='')}")
+    refs = [quote(r, safe="") for r in (params.get("refs") or [])[:_SIDECAR_MAX_REFS]]
+    if refs:
+        parts.append("refs=" + ",".join(refs))
+    parts.append(f"steps={params.get('steps')}")
+    # 读端 _SIDECAR_VIDEO_KEYS 的键序是 audio_vae 在 vae 之前：vae= 在 audio_vae= 里也先被
+    # 命中，真 vae 的值最后盖上才不串——写端保持 vae 殿后，与出图副文件的读端共用这一约定
+    for key in ("text_encoder", "audio_vae", "vae"):
+        name = params.get(key)
+        if name:
+            parts.append(f"{key}={quote(str(name), safe='')}")
+    parts.append(f"frames={params.get('frames')}")
+    if duration_sec:
+        parts.append(f"duration={duration_sec}")
+    return " ".join(parts)
+
+
+def write_video_sidecar(media_path: str, prompt: str, params: dict, skill_id: str, duration_sec=None) -> None:
+    """视频旁写同名 .txt：首行提示词、次行生效参数摘要（出图那条「已存在就不写」同样生效）。
+
+    读端是 gallery._read_sidecar / _parse_video_sidecar，两行的格式要一起改。"""
+    write_sidecar_line(media_path, f"{prompt}\n{_video_sidecar_meta(params, skill_id, duration_sec)}")
 
 
 @PromptServer.instance.routes.post("/neo_video_gen/simple")
@@ -227,6 +297,7 @@ async def simple_generate_route(request):
         "task_id": task_id, "prompt_id": prompt_id, "status": "queued",
         "seed": payload["seed"], "skill_id": payload["skill_id"], "prompt": payload["prompt"],
         "width": payload["width"], "height": payload["height"], "length": payload["length"],
+        "reuse": payload.get("reuse") or {},
         "filename": None, "subfolder": OUT_SUBDIR, "progress": None, "error": "",
         "created": now, "updated": now,
     }
