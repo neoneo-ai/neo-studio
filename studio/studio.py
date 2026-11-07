@@ -25,7 +25,7 @@ import folder_paths
 from aiohttp import web
 from server import PromptServer
 
-from . import h3_assemble, h3_segment, image_gen, simple_video, voice_gen
+from . import h3_assemble, h3_segment, image_gen, simple_video, task_center, voice_gen
 from .h3_preview import clear_latest_preview, get_latest_preview
 from .h3_video_director import parse_segment_selection
 from .plugin_paths import DATA_ROOT
@@ -106,7 +106,9 @@ def _prune_tasks() -> None:
 
 def _notify(task: dict) -> None:
     """任务快照有变化时经 WebSocket 推给所有客户端（前端按 task_id 过滤）。"""
-    PromptServer.instance.send_sync(STATUS_EVENT, _snapshot(task))
+    snap = _snapshot(task)
+    PromptServer.instance.send_sync(STATUS_EVENT, snap)
+    task_center.record_snapshot("film", snap)
 
 
 async def _watch(task_id: str) -> None:
@@ -229,7 +231,9 @@ async def director_generate_route(request):
     }
     _WATCHERS[task_id] = asyncio.create_task(_watch(task_id))
     _prune_tasks()
-    return web.json_response({"success": True, **_snapshot(_TASKS[task_id])})
+    snap = _snapshot(_TASKS[task_id])
+    task_center.record_snapshot("film", snap, page="director")
+    return web.json_response({"success": True, **snap})
 
 
 @PromptServer.instance.routes.get("/neo_studio/director/{task_id}")

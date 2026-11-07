@@ -24,8 +24,9 @@ project/user-directory `data/` when writable, falling back to `~/Library/Applica
 The test is "file read/write / local lookup / remote download / the 8080 LLM service only"; anything needing the
 execution queue, VRAM, or node definitions belongs to ComfyUI. The feature-flag table ships with
 `/neo_studio/version`, and Studio gates only the run-type buttons (generate / run segment / assemble); recipe
-editing, skill editing, settings and LLM configuration never need the ComfyUI runtime. Route list:
-[api-routes.md](api-routes.md).
+editing, skill editing, settings and LLM configuration never need the ComfyUI runtime. The header queue panel lists
+the task-center history offline (`GET /neo_studio/tasks`, `<data root>/configs/studio_tasks.sqlite`), with generation
+and cancel disabled and no VRAM readout. Route list: [api-routes.md](api-routes.md).
 
 When the desktop service reads model directories it loads the kernel's `extra_model_paths.yaml` itself
 (`build_app()` calls ComfyUI's `utils.extra_config.load_extra_path_config`): only ComfyUI's `main.py` reads
@@ -88,7 +89,9 @@ the unsaved content of the director editor and the settings forms, and a cross-o
   that DNS-rebinds to loopback — reads nothing.
 - The flip happens as one step and nothing flips until ComfyUI answers: the capability table becomes the ready one,
   gated buttons drop their blocking listener and restore their labels, the `body.ns-offline` mark is dropped, the
-  header queue entry shows up and reseeds from the six task tables (the VRAM / RAM readout is built with it), and
+  header queue entry shows up and reseeds from the six task tables (the panel merges the task-center history, the live
+  tables take over the progress of rows still running and a finished row never regresses, and the VRAM / RAM readout is
+  built with it), and
   `/ws` moves from the desktop stub to the real kernel event stream. Enabling the buttons without moving the event
   stream is the half-online state where a task is accepted and no progress ever comes back.
 - The flip is driven by `ready`, not by who launched the kernel: the desktop clears `starting` in the very snapshot
@@ -99,7 +102,8 @@ the unsaved content of the director editor and the settings forms, and a cross-o
   "Settings → Startup settings", generation entries are dimmed by the capability gate, and `body.ns-offline` is the
   mark the shared modules read to tell the offline form apart.
 - Stopping the kernel flips the page back to the offline form: the proxy target is cleared, the generation buttons
-  are gated again, the event stream goes back to the stub, and the window navigation never moves.
+  are gated again, the event stream goes back to the stub, the window navigation never moves, and the queue panel
+  falls back to the task-center history with generation and cancel disabled.
 
 ## Director page layout
 

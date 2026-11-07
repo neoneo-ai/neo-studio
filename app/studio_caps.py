@@ -243,6 +243,12 @@ _FRAMES = {
     ("POST", "/neo_frames/save"),
 }
 
+# 任务历史（studio/task_center.py）：顶栏队列面板的持久历史，只读写数据根 SQLite。
+# 它不吃 ComfyUI 执行队列；离线窗口打开时靠它把「上一次跑到哪了」铺出来，实时进度仍走内核 WS。
+_TASKS = {
+    ("GET", "/neo_studio/tasks"),
+}
+
 # 手机扫码连接（局域网）：配对页、令牌校验与设置页轮询的二维码数据。只有桌面端服务有这条
 # 链路（app/mobile_pair.py + app/studio_server.py），ComfyUI 端口上没有配对页
 _PAIR = {
@@ -252,7 +258,7 @@ _PAIR = {
 }
 
 DESKTOP_ROUTES = (_GALLERY | _BOOKMARK | _SKILL | _PROMPTS | _RECIPES | _SETTINGS | _LLM | _MODEL_HUB
-                  | _SKILL_MODELS | _BACKYARD | _MCP | _AGENT | _POSE | _FRAMES | _PAIR)
+                  | _SKILL_MODELS | _BACKYARD | _MCP | _AGENT | _POSE | _FRAMES | _PAIR | _TASKS)
 
 # 前端门控用的功能开关：功能 → 代表路由。桌面端服务时该功能可用，否则按钮指向「启动 ComfyUI」。
 FEATURE_ROUTES = {
@@ -264,6 +270,7 @@ FEATURE_ROUTES = {
     "simple_video": ("POST", "/neo_video_gen/simple"),
     "grid_split": ("POST", "/rs_recipes/grid_split"),
     "queue": ("GET", "/neo_studio/queue"),
+    "task_history": ("GET", "/neo_studio/tasks"),
     "memory": ("GET", "/neo_studio/mem_stats"),
     "repair": ("POST", "/neo_nodes/repair"),
     "mcp": ("GET", "/neo_mcp/servers"),

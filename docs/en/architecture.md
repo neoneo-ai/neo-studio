@@ -146,6 +146,7 @@ studio/
 | `backyard.py` | Backyard page: Gallery preprocessing and OSS upload management |
 | `recipes.py` | Recipe CRUD, one-click send, director recipes and storyboards, import/export |
 | `studio.py` | Neo Studio backend: standalone page entry and full-film generation jobs |
+| `task_center.py` | Task center: the six generation-task kinds persisted into `<data root>/configs/studio_tasks.sqlite`, the history the header queue panel and MCP read |
 | `pose.py` | 3D Pose backend: serves the pose package, scene read/write and canvas export into the library |
 | `pose_cloud.py` | Cloud pose library read side: the manifest is cache-only, scenes and props are fetched on demand into `<data root>/pose/oss_cache` |
 | `frames.py` | Video frame extractor backend: serves a library video with range support to the player, writes each extracted frame into `output/Frames` |
@@ -297,5 +298,6 @@ uses the `data/` next to the exe.
 | `configs/backyard_oss.json` | Backyard's OSS configuration |
 | `configs/laya_config.json` | Laya classifier configuration |
 | `configs/studio_window.json` | Studio desktop window geometry (written by `app/studio_app.py` on window close) |
+| `configs/studio_tasks.sqlite` | Task-center history: parameters, progress, output and failure reason of the six generation-task kinds (200 rows / 7 days, deletable and rebuilt) |
 | `user/neo_repair_mappings.json` | Manual workflow-repair mappings |
 | `locals/zh_CN.json` | Localization resources |

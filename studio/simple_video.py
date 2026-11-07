@@ -22,6 +22,7 @@ from server import PromptServer
 from .h3_video_gen import _resolve_skill_id, _seconds_to_frames, ensure_reference_tags, resolve_video_params
 from .image_gen import _error_from_history, _lookup, _progress_for, render_template, submit_graph
 from .skill import get_skill_gen_config, load_skill_workflow
+from . import task_center
 from .util import PrefixFilter
 
 logger = logging.getLogger(__name__)
@@ -95,7 +96,9 @@ def _snapshot(task: dict) -> dict:
 
 def _notify(task: dict) -> None:
     """任务快照有变化时经 WebSocket 推给所有客户端（前端按 task_id 过滤）。"""
-    PromptServer.instance.send_sync(STATUS_EVENT, _snapshot(task))
+    snap = _snapshot(task)
+    PromptServer.instance.send_sync(STATUS_EVENT, snap)
+    task_center.record_snapshot("simple", snap)
 
 
 def queue_rows() -> list:
@@ -229,7 +232,9 @@ async def simple_generate_route(request):
     }
     _WATCHERS[task_id] = asyncio.create_task(_watch(task_id))
     _prune_tasks()
-    return web.json_response({"success": True, **_snapshot(_TASKS[task_id])})
+    snap = _snapshot(_TASKS[task_id])
+    task_center.record_snapshot("simple", snap, page="video")
+    return web.json_response({"success": True, **snap})
 
 
 @PromptServer.instance.routes.get("/neo_video_gen/simple/{task_id}")

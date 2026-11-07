@@ -148,6 +148,7 @@ version information:
 | GET | `/neo_studio/director/{task_id}` | Full-film task snapshot |
 | POST | `/neo_studio/director/{task_id}/cancel` | Cancel a full-film task |
 | GET | `/neo_studio/queue` | Header queue panel rows: the six task tables newest-submit first, row count capped; rows carry `kind` `label` `status` `progress` `created` `updated` `count` `result` `page`, and the row thumbnail is fetched for `result` via `/neo_gallery/thumbnail` |
+| GET | `/neo_studio/tasks` | Header queue-panel history: the six task kinds persisted by the task center, newest-submit first with active rows on top (params `limit` / `kind?`); the desktop answers it offline |
 | GET | `/neo_studio/version` | Plugin / ComfyUI versions and the director recipe list, plus the Settings → About path fields `data_root` / `comfy_local` (`remote` is empty here — only the desktop knows the remote address) |
 | GET | `/neo_studio/log` | ComfyUI console log (a 300-entry `app.logger` ring buffer), polled by Studio "Settings → Startup log"; the desktop service answers it with both blocks (see the desktop table) |
 | GET | `/neo_studio/mem_stats` | Driver-level VRAM in use (all processes): the header queue panel fetches it every 3s while the panel is open |
@@ -156,6 +157,15 @@ version information:
 - `only_segments` is the text of segment numbers checked on the read-only timeline (1-based, comma-separated, empty =
   the whole film); checking is transient runtime state and is never written into the recipe.
 - Task tracking follows the same approach as `run_segment`: enqueue + poll snapshots + WS events pushed on change.
+- The task center (`task_center.py`) keeps a SQLite table beside the six in-memory tables: every submit and every
+  status change writes a row into `<data root>/configs/studio_tasks.sqlite`, capped at 200 rows with a 7-day TTL.
+  `/neo_studio/tasks` returns the latest 48 with the same row contract as `/neo_studio/queue` (the in-memory snapshot
+  wins for a row present in both). Its `result` is normalized to `{filename, subfolder, url, count}`: image and voice
+  rows take the first output for the thumbnail, video and film rows get a "🎞 filename" link (a `/view` address the
+  desktop also answers offline). The label of a film row is the recipe name, a segment row reads
+  "recipe 第 N 段" and an assemble row "recipe 拼接 N 段". On desktop startup the rows left `queued` / `running` from
+  the previous session move to `failed` with "服务重启，任务状态已中断" — a restart never reconnects to the ComfyUI
+  queue, so no progress will come back.
 
 ## pose.py — `/neo-pose` and the pose package static prefixes
 
@@ -451,6 +461,7 @@ the table answers 409. Startup sequence, close teardown and cache conventions: [
 | GET        | `/neo-pose` `/neo_pose/*` `/pose-dist/*` `/models/*` `/pose-lib/*`                                                                                            | Pose page redirect and bridge routes; the three static prefixes sit outside the capability table                                                                                                                                                                      |
 | GET/POST   | `/neo_frames/video` `/neo_frames/save`                                                                                                                        | Frame extraction: the video the player reads, frames written into Frames                                                                                                                                                                                              |
 | GET/POST   | `/neo_gallery/*` `/neo_bookmark/*`                                                                                                                            | Asset library and bookmarks (including delete / upload / tagging / OSS sync)                                                                                                                                                                                          |
+| GET        | `/neo_studio/tasks`                                                                                                                                           | Header queue-panel history: the six persisted task kinds from the task center (params `limit` / `kind?`); answered offline                                                                                                                                            |
 | GET/POST   | `/rs_prompts/skills` `load_skill` `save_skill` `delete_skill` `*_*_skill_file`                                                                                | Skill editing                                                                                                                                                                                                                                                         |
 | POST       | `/rs_prompts/list_prompt_names`                                                                                                                               | Prompt candidates for the @ picker (names and tags from the data-root `prompts/` scan)                                                                                                                                                                                |
 | GET/POST   | `/rs_recipes/*`                                                                                                                                               | Recipe read/write, LLM rewrite / per-panel description / segmentation / grid split                                                                                                                                                                                    |

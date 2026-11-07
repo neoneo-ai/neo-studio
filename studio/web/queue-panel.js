@@ -2,9 +2,10 @@
  * 顶栏「队列」面板：Studio 各页提交进 ComfyUI 执行队列的生成任务，一处看进度、取消与产物。
  *
  * 六张任务表（生图 / 语音 / 整片 / 简单视频 / 单段 / 拼接）各有一条 rs.*.status 事件，面板吃这六条
- * 事件实时推进；打开面板与 WS 重连时补一次 GET /neo_studio/queue 播种，除此之外不轮询。
+ * 事件实时推进；打开面板与 WS 重连时先补一次 GET /neo_studio/tasks 持久历史，在线时再取
+ * GET /neo_studio/queue 合并实时行，除此之外不轮询。
  * 页面提交成功后调 queueTrack 登记这一发并把编辑区交回用户，进度落在这里。
- * 队列是 ComfyUI 运行时功能：桌面端离线时 initQueuePanel 把顶栏入口整块收掉。
+ * 实时队列是 ComfyUI 运行时功能：桌面端离线时只剩持久历史，取消与显存清理随 queue / memory 能力一起收起。
  */
 import { $el } from "../../../../scripts/ui.js";
 import { api } from "../../../../scripts/api.js";
@@ -40,7 +41,9 @@ const rows = new Map();   // task_id -> 行：面板与各页共用这一份
 let renderPanel = null;   // createQueuePanel 挂上的重画回调
 let toast = null;         // 宿主提示（Studio 顶栏的 toast）
 let goPage = null;        // 宿主换页（面板「到该页」）
+let seedPromise = Promise.resolve();
 let canQueue = () => false;
+let canHistory = () => false;
 let canMem = () => false;
 let toggleEl = null;
 let panelEl = null;
@@ -101,6 +104,15 @@ export function queueTrack(kind, snap, opts = {}) {
     return row;
 }
 
+/** 清空面板行集（供宿主与测试复位跨页共享状态）；不删后端历史，也不动显存轮询。 */
+export function clearQueueRows() {
+    rows.clear();
+    publish();
+}
+
+/** 最近一次播种：宿主与测试用它等到面板已补齐持久历史和实时队列，再断言面板内容。 */
+export function queueSeed() { return seedPromise; }
+
 function merge(kind, snap) {
     if (!snap?.task_id) return;
     const row = rows.get(snap.task_id);
@@ -116,19 +128,40 @@ function merge(kind, snap) {
     publish();
 }
 
-// 播种：进面板与 WS 重连各补一次，把断档期间结束的与别的窗口提交的任务补齐
+// 播种：先取持久历史，再在在线时取实时队列；面板打开与 WS 重连各补一次，补上断档期间结束的与别的窗口提交的任务
 async function seed() {
-    if (!canQueue()) return;
+    try {
+        const r = await api.fetchApi("/neo_studio/tasks");
+        const data = await r.json();
+        if (data?.success) {
+            for (const row of data.rows || []) {
+                const kept = rows.get(row.task_id);
+                rows.set(row.task_id, { ...row, label: row.label || kept?.label || "" });
+            }
+        }
+    } catch { /* 历史读不到：面板停在已知的那几行 */ }
+    if (!canQueue()) {
+        publish();
+        return;
+    }
     try {
         const r = await api.fetchApi("/neo_studio/queue");
         const data = await r.json();
-        if (!data?.success) return;
+        if (!data?.success) {
+            publish();
+            return;
+        }
         for (const row of data.rows || []) {
             const kept = rows.get(row.task_id);
             rows.set(row.task_id, { ...row, label: row.label || kept?.label || "" });
         }
-        publish();
     } catch { /* 播种失败就停在已知的那几行：六条状态事件照样能建行 */ }
+    publish();
+}
+
+function runSeed() {
+    seedPromise = seed();
+    return seedPromise;
 }
 
 function renderBadge() {
@@ -250,7 +283,7 @@ function rowEl(row) {
         }));
     }
     const actions = $el("span", { className: "ns-queue-actions" });
-    if (ACTIVE.includes(row.status)) {
+    if (ACTIVE.includes(row.status) && canQueue()) {
         actions.appendChild($el("button", {
             className: "ns-queue-act", type: "button", textContent: t("取消"), onclick: () => cancelRow(row),
         }));
@@ -424,33 +457,35 @@ export function initQueuePanel(opts = {}) {
     goPage = opts.go || null;
     const can = opts.can || (() => true);
     canQueue = () => can("queue");
+    canHistory = () => can("task_history");
     canMem = () => can("memory");
     panelEl = createQueuePanel();
     document.querySelector(".ns-header")?.appendChild(panelEl);
     toggleEl.onclick = () => {
         panelEl.hidden = !panelEl.hidden;
         if (panelEl.hidden) { setMemPolling(false); return; }
-        seed();
+        runSeed();
         setMemPolling(true);
     };
     for (const [kind, event] of Object.entries(STATUS_EVENTS)) {
         api.addEventListener(event, ({ detail }) => merge(kind, detail));
     }
-    api.addEventListener("reconnected", () => seed());
+    api.addEventListener("reconnected", () => runSeed());
     renderBadge();
     setQueueOnline(canQueue());
-    return { refresh: seed, setOnline: setQueueOnline };
+    return { refresh: runSeed, setOnline: setQueueOnline };
 }
 
-/** 能力翻面：离线收掉顶栏入口（队列要吃执行队列），就绪后补种一次。 */
-export function setQueueOnline(on) {
+/** 能力翻面：在线时入口浮出并补种实时队列；离线时只要持久历史可用就留入口，只读历史。 */
+export function setQueueOnline(on, history = canHistory()) {
     if (!toggleEl) return;
-    toggleEl.hidden = !on;
-    if (!on) {
+    const show = Boolean(on) || Boolean(history);
+    toggleEl.hidden = !show;
+    if (!show) {
         panelEl.hidden = true;
         setMemPolling(false);   // 内核停了就读不到数：停表，别每 3s 撞 409
         return;
     }
-    ensureMemStrip();   // 离线形态起的面板没有读数这块，接上内核后补建
-    seed();
+    if (on) ensureMemStrip();   // 离线形态起的面板没有读数这块，接上内核后补建
+    runSeed();
 }

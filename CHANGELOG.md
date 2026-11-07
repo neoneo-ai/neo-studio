@@ -5,6 +5,19 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 ## [Unreleased]
 
 ### Added
+- **The header queue panel keeps its history across restarts, offline included.** The six generation task kinds
+  (image, voice, single-shot video, whole film, single segment, merge) now land in
+  `<data root>/configs/studio_tasks.sqlite` as they start and as they finish, and the panel reads them back through
+  the new `GET /neo_studio/tasks`: 200 rows kept with a 7-day TTL, the latest 48 listed, the ones still running on
+  top. A row is named for what it was - the prompt text for image / voice / single-shot, 「配方名 第 N 段」for a single
+  segment, 「配方名 拼接 N 段」for a merge, the recipe name for a whole film - and a finished row names its output
+  (「图片 1 张 · 已输出 output/xxx.png」, 「音频 …」, 「视频 · 已输出 …」), where a video row carries a
+  「🎞 成片名.mp4」 link that opens the file on the desktop port, so it works with ComfyUI stopped. Offline the panel no
+  longer reports 「当前离线 · 没有可展示的队列条目」: it lists that history with generation, cancel and the memory
+  readout disabled. Online the six live tables take over and a task keeps its progress bar through the merge, and a
+  row never drops back from 已完成 / 已失败. On desktop startup the rows left queued / running from the previous
+  session move to 「已失败 · 服务重启，任务状态已中断」, since the ComfyUI queue they belonged to is gone. Covered by
+  `studio/tests/test_task_center.py` and `studio/tests/js/studio-queue.test.mjs`.
 - **The Studio director guide page opens a recipe from under its buttons.** With the editor closed the whole column is
   the guide page (the idle card plus **📋 Recipes** / **📝 New recipe**). The three most recent director recipes now sit
   below those buttons, one per row - source tag (「预设」/「我的」), segment count, recipe name - taken in the backend's

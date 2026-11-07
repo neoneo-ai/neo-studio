@@ -2107,7 +2107,7 @@ async function flipOnline() {
         setOfflineMark(false);
         ungateRunButtons();
         reconnectSocket();
-        setQueueOnline(true);   // 事件流刚换到内核隧道：顶栏入口浮出、面板照六张表的现值重播、读数条补建
+        setQueueOnline(true, true);   // 事件流刚换到内核隧道：顶栏入口浮出、面板照持久历史 + 六张表的现值重播、读数条补建
         desktopLog("FLIP online in-place");
     } catch {
         flipStarted = false;
@@ -2124,7 +2124,7 @@ async function flipOffline() {
     configureCanvasOrigin({});   // 画布链接随能力表一起收：「主画布编辑」的离线闸门认它
     reGateRunButtons();
     reconnectSocket();     // 事件流切回桌面端的桩，别对着死端口重连
-    setQueueOnline(false);   // 队列要吃执行队列：离线形态收掉顶栏入口
+    setQueueOnline(false, can("task_history"));   // 队列要吃执行队列：离线形态只留持久历史入口
 }
 
 function reGateRunButtons() {

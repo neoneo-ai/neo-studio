@@ -134,6 +134,7 @@ Neo Studio 独立页面（`web/studio/index.html`）的后端。素材 / 生图 
 | GET | `/neo_studio/director/{task_id}` | 整片任务快照 |
 | POST | `/neo_studio/director/{task_id}/cancel` | 取消整片任务 |
 | GET | `/neo_studio/queue` | 顶栏队列面板的聚合行：六表按提交时间倒序、条数封顶；行带 `kind` `label` `status` `progress` `created` `updated` `count` `result` `page`，行缩略图按 `result` 取 `/neo_gallery/thumbnail` |
+| GET | `/neo_studio/tasks` | 顶栏队列面板的历史行：任务中心落盘的六类任务，按提交时间倒序、进行中在前（参数 `limit` / `kind?`）；桌面端离线自答 |
 | GET | `/neo_studio/version` | 插件 / ComfyUI 版本与导演配方列表，附「设置 → 关于」的路径行 `data_root` / `comfy_local`（`remote` 留空，远程地址只有桌面端知道） |
 | GET | `/neo_studio/log` | ComfyUI 控制台日志（`app.logger` 环形缓冲 300 条），Studio「设置 → 启动日志」轮询；桌面端服务自己答这条时拼两块（见桌面端表） |
 | GET | `/neo_studio/mem_stats` | 驱动级显存占用（含全部进程）：顶栏队列面板展开时每 3 秒取一次读数 |
@@ -141,6 +142,7 @@ Neo Studio 独立页面（`web/studio/index.html`）的后端。素材 / 生图 
 
 - `only_segments` 为只读时间轴上勾选的段号文本（1 基、逗号分隔，空 = 整片）；勾选是运行期临时状态，不写进配方。
 - 任务跟踪与 `run_segment` 同一套做法：入队 + 轮询快照 + WS 事件按变化推送。
+- 任务中心（`task_center.py`）在六张内存表之外落一份 SQLite：六类任务提交与状态变化时写 `<数据根>/configs/studio_tasks.sqlite`，上限 200 条、7 天 TTL；`/neo_studio/tasks` 回近 48 条，行字段与 `/neo_studio/queue` 同一套契约（同一行以内存快照为准）。`result` 归一成 `{filename, subfolder, url, count}`：图片 / 音频行取第一份产物出缩略图，视频与整片行出「🎞 文件名」链接（`/view` 地址，桌面端离线也答）。整片行 `label` 是配方名，单段是「配方 第 N 段」，拼接是「配方 拼接 N 段」。桌面端开机把上次留下的 queued / running 行收成 failed，原因写「服务重启，任务状态已中断」——重启接不回 ComfyUI 队列，进度不会再回来。
 
 ## pose.py — `/neo-pose` 与姿势包静态前缀
 
@@ -403,6 +405,7 @@ LLM 模式与配置见 [llm.md](llm.md)，技能设计见 [skills.md](skills.md)
 | GET        | `/neo_studio/kernel_version`                                                                                                                                  | 内核那份版本快照与内核侧能力表的专用入口：桌面端必须自己答 `/neo_studio/version`，内核那份由桌面端转给内核                                                                            |
 | GET        | `/neo_studio/comfy_state`                                                                                                                                     | 内核状态快照（端口 / PID / 谁启动 / 运行 / 就绪 / 启动中）：整页刷新后 pywebview 的桥晚于页面注入，顶栏状态位靠它从 HTTP 侧补上；桌面端还没装配出内核时 `409`                         |
 | GET        | `/neo_studio/log` `/view` `/ws`                                                                                                                               | 启动日志（内核输出 + 桌面端自身轨迹两块，条目带 `src`）/ 图片只读 / WS 事件流隧道（内核在跑时双向接力，没在跑时接住挂着）                                                              |
+| GET        | `/neo_studio/tasks`                                                                                                                                           | 顶栏队列面板的历史：任务中心落盘的六类生成任务（参数 `limit` / `kind?`）；桌面端离线自答                                                                                              |
 | ANY      | 其余 `/neo_*` `/rs_*` `/userdata/*` `/api/*`                                                                                                                 | 清单内（`studio_caps.forwardable()`）转给内核，没有内核时同样 `409`；清单外是桌面端没有这条接口，答 `404`                                                                                     |
 
 - `caps` 是功能可用性表（`studio_caps.features(kernel_ready)`）：生成面那几位随内核就绪翻面，页面据它门控，

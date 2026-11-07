@@ -143,6 +143,7 @@ studio/
 | `backyard.py` | Backyard 页面：Gallery 预处理与 OSS 上传管理 |
 | `recipes.py` | 配方 CRUD、一键发送、导演配方与故事板、导入导出 |
 | `studio.py` | 新影工坊后端：独立页面入口与整片生成任务 |
+| `task_center.py` | 任务中心：六类生成任务落 `<数据根>/configs/studio_tasks.sqlite`，顶栏队列面板与 MCP 的历史来源 |
 | `pose.py` | 3D 姿势页后端：伺服姿势包产物、场景读写与画布导出进素材库 |
 | `pose_cloud.py` | 云端姿势库读侧：云端清单只读缓存，整场与道具按需取回并落进 `<数据根>/pose/oss_cache` |
 | `frames.py` | 视频抽帧页后端：素材视频按分段伺服给播放器、抽出来的一帧写进 `output/Frames` |
@@ -281,5 +282,6 @@ V3 节点（`NeoImageGenEdit`）走 `io.Schema(description=..., search_aliases=[
 | `configs/backyard_oss.json` | Backyard 的 OSS 配置 |
 | `configs/laya_config.json` | Laya 分类器配置 |
 | `configs/studio_window.json` | 桌面端窗口几何（`app/studio_app.py` 关窗时写入） |
+| `configs/studio_tasks.sqlite` | 任务中心历史：六类生成任务的参数、进度、产物与失败原因（上限 200 条 / 7 天，可删除重建） |
 | `user/neo_repair_mappings.json` | 工作流修复的手动映射 |
 | `locals/zh_CN.json` | 本地化资源 |

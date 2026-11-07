@@ -28,6 +28,7 @@ from .h3_segment import _film_entry, _safe_name, _video_frame_count, film_layout
 from .h3_video_director import SEAM_BLEND_FRAMES, _blend_seam, _concat_segment_audio, _resize_frames
 from .h3_video_gen import H3_FPS
 from .recipes import add_recipe_results, is_preset_recipe, list_recipe_results, load_director_spec
+from . import task_center
 from .util import PrefixFilter
 
 logger = logging.getLogger(__name__)
@@ -212,7 +213,9 @@ def _snapshot(task: dict) -> dict:
 
 def _notify(task: dict) -> None:
     """拼接跑在后台线程：send_sync 内部是 call_soon_threadsafe，从线程里推是安全的。"""
-    PromptServer.instance.send_sync(STATUS_EVENT, _snapshot(task))
+    snap = _snapshot(task)
+    PromptServer.instance.send_sync(STATUS_EVENT, snap)
+    task_center.record_snapshot("assemble", snap)
 
 
 def queue_rows() -> list:
@@ -306,7 +309,9 @@ async def assemble_segments_route(request):
     }
     threading.Thread(target=_run_task, args=(task_id,), name=f"neo-assemble-{task_id[:8]}", daemon=True).start()
     _prune_tasks()
-    return web.json_response({"success": True, **_snapshot(_TASKS[task_id])})
+    snap = _snapshot(_TASKS[task_id])
+    task_center.record_snapshot("assemble", snap, page="director")
+    return web.json_response({"success": True, **snap})
 
 
 @PromptServer.instance.routes.get("/neo_video_gen/assemble_segments/{task_id}")

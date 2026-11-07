@@ -41,13 +41,13 @@ HOP_BY_HOP = frozenset({"transfer-encoding", "connection", "keep-alive", "upgrad
 PROXY_TIMEOUT = aiohttp.ClientTimeout(total=None, connect=10, sock_read=3600)
 
 # 桌面端进程加载的插件模块，按依赖顺序：handler 只依赖 folder_paths、文件系统与 8080 LLM 服务。
-DESKTOP_MODULES = ("util", "civitai", "bookmark", "gallery_lora", "gallery_oss", "gallery",
+DESKTOP_MODULES = ("util", "task_center", "civitai", "bookmark", "gallery_lora", "gallery_oss", "gallery",
                  "minimax_h3", "skill", "laya_router", "prompt_names", "prompt_lines", "llm", "lora_tag",
                  "recipes", "video_gen", "image_gen_files", "model_hub", "skill_models",
                  "backyard", "agent", "pose", "pose_cloud", "frames")
 DESKTOP_ROUTE_MODULES = ("gallery_lora", "gallery_oss", "gallery", "bookmark", "lora_tag",
                        "skill", "prompt_names", "llm", "recipes", "video_gen", "image_gen_files", "model_hub",
-                       "skill_models", "backyard", "agent", "pose", "pose_cloud", "frames")
+                       "skill_models", "backyard", "agent", "pose", "pose_cloud", "frames", "task_center")
 
 USERDATA_PATH = "/userdata/neo_gallery_data.json"
 
@@ -540,6 +540,9 @@ def build_app(root: Path, plugin_dir: Path, flags: dict = None, launcher: dict =
         for route in table:
             if caps.owner(route.method, route.path) == "desktop":
                 routes.route(route.method, route.path, **route.kwargs)(route.handler)
+    # 桌面端这轮服务起来时，SQLite 里上次进程留下的进行中行已经接不回内核队列了。
+    # 先把它们收成失败，页面播种才不会把「重启前的 queued/running」继续画成活任务。
+    sys.modules[f"{DESKTOP_PKG}.task_center"].mark_stale_active("桌面端服务重启，任务状态已中断")
 
     # 姿势包的静态前缀：数据根里的 vite 产物，逐请求判断装没装，能力表不给静态文件逐条打表
     sys.modules[f"{DESKTOP_PKG}.pose"].register_static(routes)

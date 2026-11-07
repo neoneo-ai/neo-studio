@@ -21,6 +21,7 @@ from server import PromptServer
 
 from . import image_gen as _ig
 from . import skill as _skill
+from . import task_center
 from .util import PrefixFilter
 
 logger = logging.getLogger(__name__)
@@ -79,7 +80,9 @@ def _snapshot(task: dict) -> dict:
 
 
 def _notify(task: dict) -> None:
-    PromptServer.instance.send_sync(STATUS_EVENT, _snapshot(task))
+    snap = _snapshot(task)
+    PromptServer.instance.send_sync(STATUS_EVENT, snap)
+    task_center.record_snapshot("voice", snap)
 
 
 def _finish(task: dict, status: str, audios: list, error: str) -> None:
@@ -223,12 +226,14 @@ async def generate_route(request):
     except Exception:
         return web.json_response({"error": "请求体不是 JSON"}, status=400)
     try:
-        return web.json_response(await start_voice_generation(body))
+        result = await start_voice_generation(body)
     except ValueError as e:
         return web.json_response({"error": str(e)}, status=400)
     except Exception as e:
         logger.error(f"voice_gen generate failed: {e}")
         return web.json_response({"error": str(e)}, status=500)
+    task_center.record_snapshot("voice", result, page="gallery")
+    return web.json_response(result)
 
 
 @routes.get("/neo_voice/status/{task_id}")

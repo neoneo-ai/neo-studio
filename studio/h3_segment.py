@@ -45,6 +45,7 @@ from .image_gen import _error_from_history, _lookup, _progress_for, submit_graph
 from .recipes import (add_recipe_results, is_preset_recipe, list_director_recipes, list_recipe_results,
                       load_director_spec)
 from .skill import get_skill_gen_config, load_skill_workflow
+from . import task_center
 from .util import PrefixFilter
 
 logger = logging.getLogger(__name__)
@@ -426,7 +427,9 @@ def _snapshot(task: dict) -> dict:
 
 def _notify(task: dict) -> None:
     """单段任务快照有变化时经 WebSocket 推给所有客户端（前端按 task_id 过滤）。"""
-    PromptServer.instance.send_sync(STATUS_EVENT, _snapshot(task))
+    snap = _snapshot(task)
+    PromptServer.instance.send_sync(STATUS_EVENT, snap)
+    task_center.record_snapshot("segment", snap)
 
 
 def queue_rows() -> list:
@@ -578,7 +581,9 @@ async def run_segment_route(request):
     }
     _SEGMENT_WATCHERS[task_id] = asyncio.create_task(_watch(task_id))
     _prune_tasks()
-    return web.json_response({"success": True, **_snapshot(_SEGMENT_TASKS[task_id])})
+    snap = _snapshot(_SEGMENT_TASKS[task_id])
+    task_center.record_snapshot("segment", snap, page="director")
+    return web.json_response({"success": True, **snap})
 
 
 @PromptServer.instance.routes.get("/neo_video_gen/run_segment/{task_id}")

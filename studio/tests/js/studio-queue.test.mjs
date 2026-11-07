@@ -1,15 +1,18 @@
-// 顶栏「队列」面板：入口显隐、GET /neo_studio/queue 播种、六条 rs.*.status 按 task_id 合并、
+// 顶栏「队列」面板：入口显隐、GET /neo_studio/tasks 持久历史播种、在线 GET /neo_studio/queue 合并实时行、六条 rs.*.status 按 task_id 合并、
 // 徽标只数活跃行、取消打各自类别的取消路由、图像行开 Lightbox、非图像行给 /view 链接、
-// 「到该页」跳页、终态行移除；能力表关掉 queue 时收起入口。显存 / 内存读数与清理也在这块面板里，
+// 「到该页」跳页、终态行移除；能力表关掉 queue 与 task_history 时收起入口，只关 queue 时留历史入口。显存 / 内存读数与清理也在这块面板里，
 // 面板展开时才轮询。页面提交这一发由 queueTrack 即时登记，不等播种。
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { mockRoute, jsonResponse, click, inputText, fetchLog, resetEnv, clearRoutes, sleep, flush } from "./setup.mjs";
+import { mockRoute, jsonResponse, click, inputText, fetchLog, resetFetchLog, resetEnv, clearRoutes, sleep, flush } from "./setup.mjs";
 import { dispatchApiEvent, resetApiState } from "./mocks/comfy-api.mjs";
 import { appState } from "./mocks/comfy-app.mjs";
 import { t, tf, setLang } from "../../web/js/core/i18n.js";
+
+// 队列面板模块的测试复位入口：静态导入会在 setup 装 hooks 前解析其 scripts shim，模块级动态导入才走桩。
+const { clearQueueRows, queueSeed } = await import("../../web/queue-panel.js");
 
 // studio-app.js 顶层会取 #ns-view 并连 WebSocket，导入前必须先备好 DOM 与 WS 桩
 const wsInstances = [];
@@ -42,6 +45,12 @@ const SEED_ROWS = [
       created: 98, updated: 98, result: null, page: "director" },
 ];
 
+const HISTORY_ROWS = [
+    { task_id: "img-hist", kind: "image", status: "succeeded", label: "持久历史图", progress: null,
+      created: 100, updated: 101, result: { filename: "neo_paint_hist.png", subfolder: "Neo/Paint" },
+      count: 1, page: "paint" },
+];
+
 // 显存 / 内存读数 fixture：mem_stats 与 system_stats 的回包，用例里换值就是换占用率
 const GB = 1024 ** 3;
 let memStats = { success: true, vram_used: 12 * GB, vram_total: 16 * GB };
@@ -55,10 +64,11 @@ async function until(fn, what) {
     assert.fail(`等待超时：${what}`);
 }
 
-async function boot({ caps = null, rows = SEED_ROWS } = {}) {
+async function boot({ caps = null, rows = SEED_ROWS, historyRows = [] } = {}) {
     resetEnv();
     resetApiState();
     clearRoutes();
+    clearQueueRows();
     delete window.pywebview;
     mockRoute("/neo_studio/version", jsonResponse({
         success: true, plugin_version: "9.9.9", comfyui_version: "0.1", recipes: ["R1"], caps,
@@ -79,6 +89,7 @@ async function boot({ caps = null, rows = SEED_ROWS } = {}) {
     }));
     mockRoute("/neo_video_gen/models", jsonResponse({ success: true, models: ["ltx-video-2v-2b.safetensors"] }));
     mockRoute("/neo_image_gen/settings", jsonResponse({ success: true }));
+    mockRoute("/neo_studio/tasks", () => jsonResponse({ success: true, rows: historyRows }));
     mockRoute("/neo_studio/queue", () => jsonResponse({ success: true, rows }));
     mockRoute("/neo_video_gen/simple/vid-1/cancel", () => jsonResponse({ success: true, dequeued: true }));
     mockRoute("/neo_studio/mem_stats", () => jsonResponse(memStats));
@@ -87,8 +98,10 @@ async function boot({ caps = null, rows = SEED_ROWS } = {}) {
     document.body.innerHTML = bodyMarkup;
     window.location.hash = "#/home";
     await importApp();
-    // 面板挂在启动链尾、播种是 init 里的异步 GET：两样都落地再进断言
+    // 面板挂在启动链尾；播种在 init 末尾异步发起，先让它补完历史与实时队列再进断言
     await until(() => document.querySelector(".ns-queue"), "队列面板挂载");
+    await queueSeed();
+    await flush();
     await until(() => document.querySelectorAll(".ns-queue-row").length >= rows.length, "聚合行落地");
 }
 
@@ -114,6 +127,7 @@ test("队列：导演页提交整片即时登记，终态事件给成片链接�
         error: "", status: "queued", progress: null, filename: null, created: 120, updated: 120,
     }));
     window.location.hash = "#/director";
+    await until(() => document.querySelector('.ns-tabs a[data-tab="director"].active'), "导演页签激活");
     await until(() => document.querySelector(".ns-director-recipes .neo-recipes-card-selected"), "首个导演配方自动选中");
     click(document.querySelector(".ns-director-recipes .neo-recipes-card-selected"));
     await until(() => document.querySelectorAll(".ns-director-editor .neo-director-seg").length === 2,
@@ -140,14 +154,19 @@ const rowBy = (label) => rows().find((r) => r.querySelector(".ns-queue-label")?.
 const rowsExcept = (label) => rows().filter((r) => r.querySelector(".ns-queue-label")?.textContent !== label);
 const act = (row, text) => [...row.querySelectorAll(".ns-queue-act")].find((b) => b.textContent === text);
 const badge = () => document.querySelector(".ns-queue-badge");
-const openPanel = () => click(toggle());
+async function openPanel() {
+    click(toggle());
+    await queueSeed();
+    await flush();
+}
 
 
-test("队列：能力表关掉 queue 时收起顶栏入口（首跑必须是最早的 boot：面板挂在模块导入时）", async () => {
-    await boot({ caps: { queue: false }, rows: [] });
-    assert.equal(toggle().hidden, true, "能力表关 queue 时顶栏入口收起");
+test("队列：能力表关掉 queue 与 task_history 时收起顶栏入口（首跑必须是最早的 boot：面板挂在模块导入时）", async () => {
+    await boot({ caps: { queue: false, task_history: false }, rows: [] });
+    assert.equal(toggle().hidden, true, "能力表关 queue 与 task_history 时顶栏入口收起");
     assert.equal(panel().hidden, true, "入口收起时面板不浮出");
-    assert.equal(fetchLog.filter((c) => c.path === "/neo_studio/queue").length, 0, "收起后不发播种请求");
+    assert.equal(fetchLog.filter((c) => c.path === "/neo_studio/queue").length, 0, "收起后不发实时队列请求");
+    assert.equal(fetchLog.filter((c) => c.path === "/neo_studio/tasks").length, 0, "收起后不发持久历史请求");
 });
 
 test("队列：在线形态顶栏出现入口，面板打开时播种后端聚合行", async () => {
@@ -156,7 +175,7 @@ test("队列：在线形态顶栏出现入口，面板打开时播种后端聚�
     assert.equal(badge().hidden, false, "有活跃行时徽标可见");
     assert.equal(badge().textContent, "2", "徽标只数排队中 + 生成中");
     assert.equal(panel().hidden, true, "面板默认收起");
-    openPanel();
+    await openPanel();
     assert.equal(panel().hidden, false, "点击展开面板");
     assert.ok(fetchLog.some((c) => c.path === "/neo_studio/queue"), "应拉取 /neo_studio/queue");
     assert.equal(rowsExcept("全片A").length, 3);
@@ -172,9 +191,26 @@ test("队列：在线形态顶栏出现入口，面板打开时播种后端聚�
         ["开场镜头", "R1", "猫娘立绘"]);
 });
 
+test("队列：离线形态留持久历史入口，只取 /neo_studio/tasks 且不出实时取消", async () => {
+    const history = [...HISTORY_ROWS, {
+        task_id: "vid-hist", kind: "simple", status: "running", label: "持久历史视频",
+        progress: { value: 1, max: 10 }, created: 100, updated: 100, result: null, page: "video",
+    }];
+    await boot({ caps: { queue: false }, rows: [], historyRows: history });
+    assert.equal(toggle().hidden, false, "持久历史可用时顶栏入口保留");
+    assert.equal(panel().hidden, true, "面板默认收起");
+    resetFetchLog();
+    await openPanel();
+    assert.equal(panel().hidden, false, "点击展开持久历史面板");
+    assert.ok(fetchLog.some((c) => c.path === "/neo_studio/tasks"), "应拉取 /neo_studio/tasks");
+    assert.equal(fetchLog.filter((c) => c.path === "/neo_studio/queue").length, 0, "离线形态不发实时队列请求");
+    await until(() => rowBy("持久历史图"), "持久历史行落地");
+    assert.equal(act(rowBy("持久历史视频"), "取消"), undefined, "没有实时队列能力时不摆会失败的取消钮");
+});
+
 test("队列：图像结果开 Lightbox，视频结果给链接，进行中无结果", async () => {
     await boot();
-    openPanel();
+    await openPanel();
     const view = act(rowBy("猫娘立绘"), "看图");
     click(view);
     const lb = document.querySelector(".neo-lightbox");
@@ -196,7 +232,7 @@ test("队列：图像结果开 Lightbox，视频结果给链接，进行中无�
 
 test("队列：状态事件按 task_id 合并到同一行，新任务追加到最前", async () => {
     await boot();
-    openPanel();
+    await openPanel();
     dispatchApiEvent("rs.simple_video.status", {
         task_id: "vid-1", kind: "simple", status: "running",
         progress: { value: 11, max: 20 }, created: 99, updated: 105,
@@ -227,7 +263,7 @@ test("队列：取消打到该类别的取消路由，行先落到已取消再�
 
 test("队列：到该页跳到对应页面，终态行可移除", async () => {
     await boot();
-    openPanel();
+    await openPanel();
     click(act(rowBy("猫娘立绘"), "到该页"));
     assert.equal(window.location.hash, "#/paint");
     assert.equal(rowBy("开场镜头").querySelector(".ns-queue-drop"), null, "进行中的行不给移除钮");
@@ -253,7 +289,7 @@ test("队列：提交这一发即时登记，视频页生成钮交回用户", as
     click(run);
     await until(() => badge().textContent === String(before + 1), "徽标登记这一发");
     assert.equal(run.disabled, false, "提交成功后生成钮交回用户：进度在顶栏队列里跟");
-    openPanel();
+    await openPanel();
     const row = rowBy("镜头提示");
     assert.ok(row, "提交即登记行，不等播种");
     assert.equal(row.querySelector(".ns-queue-kind").textContent, "视频");
@@ -291,7 +327,7 @@ test("队列：行内缩略图走素材库缓存路由，配提交时刻 / 时�
               created: nowSec, updated: nowSec, result: null, page: "director" },
         ],
     });
-    openPanel();
+    await openPanel();
     // 缩略图：图片与视频都吃 /neo_gallery/thumbnail（音频后端不出图，格子留空）
     const img = rowBy("三张图").querySelector(".ns-queue-thumb img");
     assert.ok(img, "图像行铺缩略格");
@@ -333,7 +369,7 @@ test("队列：显存 / 内存读数与清理在面板里，收起面板即停�
     assert.equal(strip.querySelector(".ns-queue-mem-vram").textContent, `${t("显存")} --`);
     const memFetches = () => fetchLog.filter((c) => c.path === "/neo_studio/mem_stats").length;
     assert.equal(memFetches(), 0, "面板收起时不轮询显存");
-    openPanel();
+    await openPanel();
     await until(() => strip.querySelector(".ns-queue-mem-vram").textContent.includes("12.0G"), "显存读数刷新");
     assert.equal(strip.querySelector(".ns-queue-mem-vram").textContent, "显存 12.0G/16.0G");
     assert.equal(strip.querySelector(".ns-queue-mem-ram").textContent, "内存 20.0G/32.0G");
@@ -360,7 +396,7 @@ test("队列：显存读数按占用比例变色", async () => {
     memStats = { success: true, vram_used: 15 * GB, vram_total: 16 * GB };
     try {
         await boot();
-        openPanel();
+        await openPanel();
         await until(() => document.querySelector(".ns-queue-mem-vram").textContent.includes("15.0G"), "高占用读数刷新");
         assert.ok(document.querySelector(".ns-queue-mem-vram").classList.contains("crit"), "94% 占用落 crit");
     } finally {
@@ -371,7 +407,7 @@ test("队列：显存读数按占用比例变色", async () => {
 test("队列：能力表关掉 memory 时面板不出读数条，不发 mem_stats 请求", async () => {
     await boot({ caps: { memory: false } });
     assert.equal(document.querySelector(".ns-queue-mem"), null, "无 memory 能力时不铺读数条");
-    openPanel();
+    await openPanel();
     assert.ok(rows().length >= 3, "队列行照常铺出");
     assert.equal(fetchLog.filter((c) => c.path === "/neo_studio/mem_stats").length, 0,
                  "面板展开也不发显存读数请求");
@@ -400,6 +436,8 @@ test("队列静态完整性：顶栏入口、面板类名、Lightbox 图标与�
     // 缩略图必须走素材库那条带缓存的缩略路由，不能整图拉 /view
     assert.match(panelSrc, /\/neo_gallery\/thumbnail\?/, "缩略图走 /neo_gallery/thumbnail");
     assert.match(panelSrc, /size=\$\{THUMB_SIZE\}/, "缩略图按固定尺寸取缓存");
+    assert.match(panelSrc, /\/neo_studio\/tasks/, "播种取持久历史 /neo_studio/tasks");
+    assert.match(panelSrc, /\/neo_studio\/queue/, "在线播种取实时队列 /neo_studio/queue");
     // 显存 / 内存读数与清理统一在面板里：读 mem_stats、打 clear_memory
     assert.match(panelSrc, /\/neo_studio\/mem_stats/, "读数打 /neo_studio/mem_stats");
     assert.match(panelSrc, /\/neo_studio\/clear_memory/, "清理打 /neo_studio/clear_memory");

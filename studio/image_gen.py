@@ -35,6 +35,7 @@ from .util import PrefixFilter, ASPECT_LABELS, ratio_pair
 from .image_gen_files import (CONFIGS_DIR, SETTINGS_FILE, DEFAULT_SETTINGS, _IMAGE_SUFFIXES,
                               _MODEL_HINTS, _SKILL_SETTING_KEYS, _display_sort, _folder_files,
                               get_settings, save_settings, scan_models, resolve_model, suggest_model)
+from . import task_center
 
 logger = logging.getLogger(__name__)
 logger.addFilter(PrefixFilter())
@@ -1295,7 +1296,9 @@ def queue_rows() -> list:
 
 def _notify(task: dict) -> None:
     """任务快照有变化时经 WebSocket 推给所有客户端（前端按 task_id 过滤）。"""
-    PromptServer.instance.send_sync(STATUS_EVENT, _snapshot(task))
+    snap = _snapshot(task)
+    PromptServer.instance.send_sync(STATUS_EVENT, snap)
+    task_center.record_snapshot("image", snap)
 
 
 def _finish(task: dict, status: str, images: list, error: str) -> None:
@@ -1533,12 +1536,18 @@ async def generate_route(request):
     except Exception:
         return web.json_response({"error": "请求体不是 JSON"}, status=400)
     try:
-        return web.json_response(await start_generation(body))
+        result = await start_generation(body)
     except ValueError as e:
         return web.json_response({"error": str(e)}, status=400)
     except Exception as e:
         logger.error(f"image_gen generate failed: {e}")
         return web.json_response({"error": str(e)}, status=500)
+    _record_task(result)
+    return web.json_response(result)
+
+
+def _record_task(result: dict) -> None:
+    task_center.record_snapshot("image", result, page="paint")
 
 
 @routes.post("/neo_image_gen/segment_points")
