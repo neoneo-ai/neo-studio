@@ -5,6 +5,8 @@
 本目录按大模块拆分插件文档。总入口仍是根目录的 [README.md](../README.md)（终端用户）
 与 [Developer.md](../Developer.md)（开发者）。英文文档镜像见 [en/README.md](en/README.md)。
 
+**国内下载**：整合包与模型放在夸克网盘 → [https://pan.quark.cn/s/4028d4e655e3](https://pan.quark.cn/s/4028d4e655e3)。
+
 ## 功能模块（终端用户）
 
 | 文档 | 内容 |

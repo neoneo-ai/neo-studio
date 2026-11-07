@@ -55,7 +55,7 @@ const LIB_ORIGIN_TITLE = {
     lab: ` · ${t("本地库：本机自己写的姿态")}`,
     cloud: ` · ${t("云端库：OSS 上那棵树，取回的文件缓存在本机")}`,
 };
-const LIB_ORIGIN_ORDER = [{ key: "lib", label: "预设（只读）" }, { key: "lab", label: "本地（可写）" }];
+const LIB_ORIGIN_ORDER = [{ key: "lib", label: "预设" }, { key: "lab", label: "本地" }];
 const LIB_SYNC_HINT = "姿势库未同步：跑 tools\\sync_pose_lib.ps1 -Source <3d-pose-art 仓库根> 把 pose-lib 同步进" +
     " <数据根>/pose/lib，或在「启动设置 → 姿势仓库」填上仓库目录，桌面端每次启动自动同步。";
 
@@ -68,6 +68,9 @@ const CLOUD_FILE = "/neo_pose/cloud_file";
 // 云端那批直连 OSS（与姿势库封面同一口径 —— 封面只是一张 <img>，不碰姿势页契约）
 const MODELS_PREFIX = "/models";
 const CLOUD_PROPS_KEY = "props";
+// 道具分类 chip 的档位：meta/list 每条道具项的 source 就是前两档（程序化 / 注册表 GLB），云端那批
+// 由宿主自己拼（cloudPropChoices）。条数从整张道具表数出来，见 propSourceRows
+const PROP_SOURCE_ROWS = [{ key: "builtin", label: "程序化" }, { key: "glb", label: "注册表" }, { key: "cloud", label: "云端" }];
 const CLOUD_SYNC_HINT = "云端姿势库未配置：在 <数据根>/configs/oss_presets.json 里写 pose_index_url，" +
     "云端那棵树用 tools\\pose_deploy_oss.py 上传（默认只列清单，加 --apply 才上传）。";
 
@@ -87,6 +90,13 @@ const DEFAULT_LOOK_KEY = "dark";
 /** ControlNet 导出默认落在「当前视角」：面板不动用户调好的机位就能出图
     （页面 EXPORT_VIEWS.current 是 null，导出口径就是沿用现场相机） */
 const DEFAULT_VIEW_KEY = "current";
+
+/** 照片 → 3D 的引擎偏好键（姿势页 src/core/photo3d.js 写进 localStorage 的那条）默认停在网格档：
+    页面开局就拿它去探本机估点服务，而那服务只在姿势仓库 dev/preview 挂载，随包与整合包都没有 ——
+    探针必失败，页面于是弹一条「网格引擎不可用 → 已回落到骨架·MediaPipe」的蓝底提示，每次进页冒一次。
+    宿主模式收起了页面自己的工具条，照片 → 3D 在画布里没有入口，挂帧之前把这条偏好钉在骨架档 */
+const PHOTO3D_ENGINE_KEY = "poseDemo.photo3dEngine.v2";
+const PHOTO3D_ENGINE_STATIC = "skeleton";
 
 /** 道具卡片一页 120 件：整张道具表在弹窗里翻页，页码是布局偏好，重开停在同一页 */
 const PROP_PAGE_KEY = "neo_studio_pose_prop_page";
@@ -236,9 +246,9 @@ export function createPoseView({ api, $el, toast }) {
 
         /* 本机姿势存档（pose:save-scene 写进 pose/scenes/ 的那批）排在「姿势库」弹窗里预设清单的下面：
            弹窗吃满一整屏时，上面是库的卡片网格，下面是这一列存档，两边共用一条装载路。
-           搜索框按名字过滤，一屏 120 行走「加载更多」。
-           搜索框只带 ns-pose-list-search：弹窗搜索框那条 flex: 1 是弹窗顶部那一横行的样式（在 CSS 里排在
-           这一条之后），这一列是竖排的，共用同一份就是让输入框自己吃满列高 */
+           这一列自己的搜索框按名字过滤，一屏 120 行走「加载更多」。
+           它只带 ns-pose-list-search：弹窗那两扇的搜索框钉在标题栏右侧（样式是 .ns-libmodal-titlebar
+           那一条），这一列是竖排的，共用同一份就是让输入框自己吃满列高 */
         const libFilterSearch = $el("input", {
             className: "ns-pose-list-search", type: "search", spellcheck: "false",
             placeholder: t("搜索本机姿势（按名字）"),
@@ -269,11 +279,14 @@ export function createPoseView({ api, $el, toast }) {
         const btnDelMember = btn("删当前素体", "cross", panelGate);
         const btnResetPose = btn("重置姿态", "history", panelGate);
         const propName = field("道具名（例：椅子 · 回车添加）");
-        // 道具是一件件带预览图的卡片，不是一个下拉：下拉里只有名字，用户得猜哪件是长棍、哪件是手枪
+        // 道具是一件件带预览图的卡片，不是一个下拉：下拉里只有名字，用户得猜哪件是长棍、哪件是手枪。
+        // 搜索框钉在这扇弹窗的标题栏右侧，分类 chip 排在卡片上面（见 propPane 与 paintPropGrid）
         const propSearch = $el("input", {
             className: "ns-pose-prop-search", type: "search", spellcheck: "false",
             placeholder: t("搜索道具（名字 / 云端）"),
         });
+        const propChips = $el("div", { className: "ns-pose-row ns-pose-prop-chips" });
+        let propSourceKey = "";   // 当前分类 chip；空串 = 全部分类
         const propGrid = $el("div", { className: "ns-pose-prop-grid" });
         const propMeta = $el("p", { className: "ns-pose-prop-meta" });
         const propPager = $el("div", { className: "ns-pose-prop-pager" });
@@ -302,7 +315,17 @@ export function createPoseView({ api, $el, toast }) {
         const stage = $el("div", { className: "ns-pose-stage" });
         el.append(stage, dockL, dockR, popChar, popSave, popExport, popState);
 
-        const setLib = (on) => libGate.forEach((n) => { n.disabled = !on; });
+        // libOn 是这把门禁现在的状态：分组 chip 每筛一遍就重造一颗，造出来要按这一份落 disabled。
+        // chip 不在 libGate 里（登记进去的那一颗早被下一次重画换掉了），门禁翻了要主动补一遍，
+        // 否则「弹窗开着时才 ready」这条常见顺序会把 chip 一直留在灰态 —— 灰掉的 chip 自己点不动，
+        // 用户只能靠搜索框或切来源把它救回来。弹窗那一片建好之前这一遍是空的
+        let libOn = false;
+        let repaintLibChips = () => {};
+        const setLib = (on) => {
+            libOn = on;
+            libGate.forEach((n) => { n.disabled = !on; });
+            repaintLibChips();
+        };
         const setPanel = (on) => panelGate.forEach((n) => { n.disabled = !on; });
         // 缺包与后端未就绪时两条工具条整条收起、弹层全关：那时每个控件都只会失败
         const setChrome = (on) => { dockL.hidden = !on; dockR.hidden = !on; if (!on) closePop(); };
@@ -375,6 +398,20 @@ export function createPoseView({ api, $el, toast }) {
             })),
         );
 
+        /** 一列分类 chip：整屏弹窗里的筛选要点着走 —— 下拉得先点开再挑一项，chip 让这一下点击
+         *  落在分类名本身上。空串 key 就是「全部」那一颗；chip 每筛一遍重造一批，
+         *  造出来按传进来的门禁落 disabled（ready 之前不许点） */
+        const chipRow = (rows, active, onPick, gated) => rows.map(({ key, label }) => {
+            const on = key === active;
+            const b = $el("button", {
+                className: "ns-pose-chip" + (on ? " ns-pose-chip-on" : ""),
+                type: "button", textContent: label, title: label, "aria-pressed": String(on),
+            });
+            b.disabled = gated === false;
+            b.onclick = () => onPick(key);
+            return b;
+        });
+
         /* ===== 姿势库弹窗：pose-lib 的整场库与本机姿势文件两条路共用素材库那扇弹窗外壳 =====
            库是数据根里另一批读得到的文件（<数据根>/pose/lib），Neo Studio 这边只读它：
            「存为姿势」写的还是 pose/scenes/，库里一份条目读回来就是一次 scene/apply。 */
@@ -385,25 +422,23 @@ export function createPoseView({ api, $el, toast }) {
             className: "ns-pose-lib-search", type: "search", spellcheck: "false",
             placeholder: t("搜索姿势（名字 / 分类 / 标签）"),
         });
-        const libGroupSel = $el("select", { className: "ns-pose-sel ns-pose-lib-group", title: t("分组") });
-        const libCharSel = $el("select", {
-            className: "ns-pose-sel ns-pose-lib-char",
-            title: t("按基座筛选：一条姿态挂着它的基座，挂在女基座上的姿态套到男素体上身型与盆宽全歪"),
-        });
-        const libOriginSel = $el("select", {
-            className: "ns-pose-sel ns-pose-lib-origin", title: t("按来源筛选：预设随仓库分发只读，本地是本机自己写的"),
-        });
-        // 库来源：本机库 = 数据根的 pose/lib；云端库 = OSS 那份索引 + 本机缓存的副本
-        const libSourceSel = $el("select", {
-            className: "ns-pose-sel ns-pose-lib-source",
-            title: t("库来源：本机库读数据根的 pose-lib，云端库读 OSS 上那棵树（文件先落本机缓存）"),
-        });
+        // 筛选全是 chip，全在一块里：来源 / 基座 / 来源 三组排在一行，分组 chip 多，自己续行，组间一条竖线分开。
+        // 整屏弹窗里「点开下拉再挑一项」太绕，chip 让这一下点击直接落在档位名上；每一颗的条数按上一档过滤后的行数出来
+        const libChipGroup = (name) => $el("span", { className: `ns-pose-lib-chipgroup ns-pose-lib-chips-${name}` });
+        const libSourceChips = libChipGroup("source");
+        const libCharChips = libChipGroup("char");
+        const libOriginChips = libChipGroup("origin");
+        const libGroupChips = libChipGroup("group");
+        const libFilters = $el("div", { className: "ns-pose-lib-filters" });
+        let libSourceKey = "local";   // 本机库 = 数据根的 pose/lib；云端库 = OSS 那份索引 + 本机缓存的副本
+        let libCharKey = "";          // 空串 = 全部基座
+        let libOriginKey = "";        // 空串 = 全部来源（云端那批没有这一层）
+        let libGroupKey = "";         // 空串 = 全部分组
 
-        const libMeta = $el("p", { className: "ns-pose-lib-meta" });
         const libBlank = $el("p", { className: "ns-pose-lib-blank" });
         const libGrid = $el("div", { className: "ns-pose-lib-grid" });
         const libMore = $el("button", { className: "ns-pose-btn ns-pose-lib-more", type: "button" });
-        libGate.push(libMore, libSearch, libGroupSel, libCharSel, libOriginSel, libSourceSel);   // 弹窗里的这一片与本机存档同一把门禁：ready 之前不可点
+        libGate.push(libMore, libSearch);   // 弹窗里的这一片与本机存档同一把门禁：ready 之前不可点（「本机姿势文件…」由 btn() 自己登记，筛选 chip 每遍重画按 libOn 落 disabled）
         const btnSceneLocal = btn("本机姿势文件…", "folder", libGate);
         // 库里没有想要的姿势时从本机挑一份 JSON，走的还是装载那条路
         const sceneFile = $el("input", { className: "ns-pose-file", type: "file", accept: ".json" });
@@ -411,8 +446,8 @@ export function createPoseView({ api, $el, toast }) {
         // 用户在同一个窗口里挑预设的整场与自己存的场景
         const libPane = $el("div", { className: "ns-pose-libpane" }, [
             $el("div", { className: "ns-pose-lib-preset" }, [
-                row([libSourceSel, libSearch, libGroupSel, libCharSel, libOriginSel, btnSceneLocal]),
-                libMeta, libBlank, libGrid, libMore,
+                libFilters,
+                libBlank, libGrid, libMore,
             ]),
             $el("div", { className: "ns-pose-lib-local" }, [
                 head("本机存档"),
@@ -421,19 +456,22 @@ export function createPoseView({ api, $el, toast }) {
         ]);
 
         libModal.setContent(libPane);
+        libModal.setTitlebarExtra(libSearch, btnSceneLocal);   // 搜索框与「本机姿势文件…」钉在标题栏右侧：用得少的那颗也钉上去，内容区只剩筛选 chip 与卡片网格
         libModal.setOnClose(() => paintDockModal(btnLib, libModal));
         el.append(libModal.el, sceneFile);
 
         /* ===== 道具弹窗：和姿势库同一扇素材库外壳 =====
-           道具表是一整页卡片（一页 PROP_PAGE_SIZE 件，页码条在下方），点工具条的「道具」直接开这一扇：
-           点一张卡就是加一件，画面板上立刻多一件 —— 不用先选中再按一颗「添加道具」。
+           道具表是一整页卡片（一页 PROP_PAGE_SIZE 件，分类 chip 在卡片上面，页码条在下方），
+           点工具条的「道具」直接开这一扇：点一张卡就是加一件，画面板上立刻多一件 ——
+           不用先选中再按一颗「添加道具」。搜索框住标题栏右侧。
            搜索一次重画卡片、数量行与页码条，三者同一份结果。页码是布局偏好，落在 localStorage，
            重开停在同一页；云端索引落地后补画一次就是新的一页卡片。 */
         const propModal = createLibraryModal({ storageKey: "neo_studio_pose_propmodal", scope: "pose" });
         let propPage = 0;
         try { propPage = Math.max(0, parseInt(localStorage.getItem(PROP_PAGE_KEY), 10) || 0); } catch { /* 隐私模式读不到偏好就从第一页开 */ }
         const propPane = $el("div", { className: "ns-pose-proppane" }, [
-            $el("div", { className: "ns-pose-prop-tools" }, [propSearch, propName]),
+            $el("div", { className: "ns-pose-prop-tools" }, [propName]),
+            propChips,
             propMeta,
             propGrid,
             propPager,
@@ -441,6 +479,7 @@ export function createPoseView({ api, $el, toast }) {
             $el("div", { className: "ns-pose-prop-added" }, [head("场上道具"), propList]),
         ]);
         propModal.setContent(propPane);
+        propModal.setTitlebarExtra(propSearch);
         propModal.setOnClose(() => paintDockModal(btnProp, propModal));
         el.append(propModal.el);
         /** 开道具弹窗：先按当前清单重画一页再开壳，弹窗开着时索引落地（云端）也看得见新卡片；
@@ -538,7 +577,8 @@ export function createPoseView({ api, $el, toast }) {
 
         /** 道具卡片与道具名解析吃同一份清单：本机那批在前，云端那批带「云端」后缀排在后 */
         const allPropChoices = () => [...propChoices.map((o) => ({
-            key: String(o.key ?? o.propKey ?? ""), label: o.label, preview: String(o.preview || ""),
+            key: String(o.key ?? o.propKey ?? ""), label: o.label, source: String(o.source || ""),
+            preview: String(o.preview || ""),
         })), ...cloudPropChoices()];
 
         /** 卡片的预览图地址：注册表 preview 是道具目录里的相对路径，本机那一级就是页面写死的
@@ -581,13 +621,20 @@ export function createPoseView({ api, $el, toast }) {
             return card;
         };
 
-        /** 道具表一页卡片：搜索过滤一次重画卡片、页码条与数量行，三者同一份筛选结果 */
+        /** 道具表一页卡片：搜索与分类 chip 一次重画卡片、chip、页码条与数量行，四者同一份筛选结果 */
         function paintPropGrid() {
             const all = allPropChoices();
             const rows = propRows();
             const pages = Math.max(1, Math.ceil(rows.length / PROP_PAGE_SIZE));
             propPage = Math.min(propPage, pages - 1);
             const slice = rows.slice(propPage * PROP_PAGE_SIZE, (propPage + 1) * PROP_PAGE_SIZE);
+            // chip 的条数吃整张表（点 chip 前用户要看的是「这一档共几件」），卡片吃搜索 + 分类那份
+            propChips.replaceChildren(...chipRow(propSourceRows(all), propSourceKey, (key) => {
+                propSourceKey = key;
+                propPage = 0;   // 换分类就是换了一批东西：带着上一页的偏移进新列表会落在空档上
+                savePropPage();
+                paintPropGrid();
+            }, true));
             propGrid.replaceChildren(...(slice.length
                 ? slice.map(propCard)
                 : [$el("p", { className: "ns-pose-prop-blank", textContent: t("道具表里没有匹配的道具") })]));
@@ -599,10 +646,12 @@ export function createPoseView({ api, $el, toast }) {
             });
         }
 
-        /** 搜索框当前筛出来的那批：卡片、页码条与「搜索回车」共用这一份，不各算一遍 */
+        /** 搜索框与分类 chip 当前筛出来的那批：卡片、页码条与「搜索回车」共用这一份，不各算一遍 */
         function propRows() {
             const q = propSearch.value.trim().toLowerCase();
-            const all = allPropChoices();
+            const all = propSourceKey
+                ? allPropChoices().filter((c) => propSourceOf(c) === propSourceKey)
+                : allPropChoices();
             return q ? all.filter((c) => `${c.label} ${c.key}`.toLowerCase().includes(q)) : all;
         }
 
@@ -683,8 +732,9 @@ export function createPoseView({ api, $el, toast }) {
                 // 姿势页自己那侧导入的基座）就两条都不动 —— 把 select.value 写空等于丢掉用户的筛选
                 if ([...modelSel.options].some((o) => o.value === canvas.model)) {
                     modelSel.value = canvas.model;
-                    if ([...libCharSel.options].some((o) => o.value === canvas.model)) {
-                        libCharSel.value = canvas.model;   // 弹窗的基座筛选跟着对账
+                    if (libCharRows().some((r) => r.key === canvas.model)) {
+                        libCharKey = canvas.model;   // 弹窗的基座筛选跟着对账
+                        renderLibChips();
                     }
                 }
             }
@@ -799,25 +849,82 @@ export function createPoseView({ api, $el, toast }) {
             return card;
         };
 
-        /** 分组下拉的条数按来源过滤后的库数：清单 groups 自带那份 count 是预设集自己算的，
+        /** 分组 chip 的条数按来源过滤后的库数：清单 groups 自带那份 count 是预设集自己算的，
          *  本机 pose-lab 新写的姿态不在里面，一筛来源就对不上屏上的卡 */
         const libGroupRows = (rows, index) => libGroups(rows, index?.groups).map((sec) => ({
             key: sec.key, label: `${sec.label}（${sec.count}）`,
         }));
 
         /** 弹窗当前吃的那份库：本机 = 数据根 pose/lib 的合并库，云端 = cloud_index 的行（字段同名） */
-        const sourceIndex = () => (libSourceSel.value === "cloud" ? libCloud : libIndex);
+        const sourceIndex = () => (libSourceKey === "cloud" ? libCloud : libIndex);
+
+        /** 基座 chip 的档位 = 面板那两具基座（meta/list 那份 label）∩ 这份清单里真出现的 charKey，
+         *  再加上画布当前那具 —— 库默认就是「套得上当前素体」的那一批，这一档没有条目也要停在那儿，
+         *  比把筛选清成「全部基座」诚实（挂在女基座上的姿态筛到男素体上，上半身全歪）。
+         *  云端那批的 charKey 是 "standard"，落不进面板白名单 —— 只剩「全部基座」那一档 */
+        function libCharRows() {
+            const labels = new Map(metaModels.map((m) => [m.key, m.label]));
+            const keys = [...new Set((sourceIndex()?.entries || []).map((e) => String(e.charKey || "")))]
+                .filter((k) => labels.has(k));
+            const current = labels.has(canvas.model) ? canvas.model : DEFAULT_CHAR_KEY;
+            if (labels.has(current) && !keys.includes(current)) keys.unshift(current);
+            return keys.map((k) => ({ key: k, label: labels.get(k) }));
+        }
+
+        /** 四行 chip 一次画完：库来源 / 基座 / 来源 / 分组。chip 每筛一遍重造一颗，libGate 管不到它们，
+         *  门禁翻了也走这一遍（repaintLibChips）；条数按上一档过滤后的行数出来，不拿清单自带那份 count */
+        function renderLibChips() {
+            const cloud = libSourceKey === "cloud";
+            const index = sourceIndex();
+            const entries = index?.entries || [];
+            // 未配置的云端不是一档「点了只会失败」的来源：那颗 chip 干脆不出现（AGENTS 的产品口径）
+            const sources = [{ key: "local", label: t("本机库") }];
+            if (cloudStatus?.enabled === true) sources.push({ key: "cloud", label: t("云端库") });
+            if (!sources.some((s) => s.key === libSourceKey)) libSourceKey = "local";
+            libSourceChips.replaceChildren(...chipRow(sources, libSourceKey, pickSource, libOn));
+
+            const charRows = libCharRows();
+            if (!charRows.some((r) => r.key === libCharKey)) libCharKey = "";
+            libCharChips.replaceChildren(...chipRow(
+                [{ key: "", label: t("全部基座") }, ...charRows], libCharKey,
+                (key) => { libCharKey = key; renderLibIndex(); }, libOn));
+
+            // 云端那批没有预设 / 本地之分，来源筛选在它身上没有意义
+            libOriginChips.hidden = cloud;
+            if (cloud) libOriginKey = "";
+            const byChar = libFilter(entries, { charKey: libCharKey });
+            libOriginChips.replaceChildren(...chipRow(
+                [{ key: "", label: t("全部来源") }, ...LIB_ORIGIN_ORDER.map((o) => ({
+                    key: o.key,
+                    label: `${o.label}（${byChar.filter((e) => (o.key === "lib") === (e.origin === "lib")).length}）`,
+                }))], libOriginKey,
+                (key) => { libOriginKey = key; renderLibIndex(); }, libOn));
+
+            const rows = libGroupRows(
+                libFilter(entries, { origin: cloud ? "" : libOriginKey, charKey: libCharKey }), index);
+            if (!rows.some((r) => r.key === libGroupKey)) libGroupKey = "";
+            libGroupChips.replaceChildren(...chipRow(
+                [{ key: "", label: t("全部分组") }, ...rows], libGroupKey,
+                (key) => { libGroupKey = key; renderLibIndex(); }, libOn));
+
+            // 四组 chip 拼在一块里排：组间一条竖线分开。藏掉的那组（云端的来源行）留在块里靠 hidden 收起，
+            // 竖线不给它——两块之间没有可见的分隔，竖线也就不画
+            const parts = [];
+            for (const group of [libSourceChips, libCharChips, libOriginChips, libGroupChips]) {
+                if (parts.length && !group.hidden) parts.push($el("span", { className: "ns-pose-lib-sep" }));
+                parts.push(group);
+            }
+            libFilters.replaceChildren(...parts);
+        }
+        repaintLibChips = renderLibChips;
 
         function renderLibIndex() {
-            const cloud = libSourceSel.value === "cloud";
+            const cloud = libSourceKey === "cloud";
             const index = sourceIndex();
-            libOriginSel.hidden = cloud;   // 云端那批没有预设 / 本地之分，来源筛选在它身上没有意义
-            const pickedGroup = libGroupSel.value;
-            const byChar = { origin: cloud ? "" : libOriginSel.value, charKey: libCharSel.value };
-            fill(libGroupSel, libGroupRows(libFilter(index?.entries, byChar), index), "全部分组");
-            libGroupSel.value = pickedGroup;   // 重建选项后落回原选择；来源一换原分组不存在就落回全部
+            const byChar = { origin: cloud ? "" : libOriginKey, charKey: libCharKey };
+            renderLibChips();
             const rows = libFilter(index?.entries,
-                { q: libSearch.value, group: libGroupSel.value, ...byChar });
+                { q: libSearch.value, group: libGroupKey, ...byChar });
             const sections = libGroups(rows.slice(0, libShown), index?.groups);
             libGrid.replaceChildren(...sections.flatMap((sec) => [
                 $el("h4", { className: "ns-pose-lib-group-title", textContent: `${sec.label}（${sec.items.length}）` }),
@@ -830,45 +937,33 @@ export function createPoseView({ api, $el, toast }) {
                 : (libIndex ? "没有匹配的姿势" : LIB_SYNC_HINT));
             libMore.hidden = rows.length <= libShown;
             libMore.textContent = tf("加载更多（还有 {n} 条）", { n: rows.length - libShown });
-            // 条数从过滤后的分层数出来：预设 / 本地一筛，清单 groups 里预设集自己那份 count 就对不上屏上的卡
-            libMeta.textContent = index
-                ? (cloud
-                    ? tf("{total} 个云端姿势 · 显示 {shown}", {
-                        total: index.count ?? rows.length, shown: rows.length,
-                    })
-                    : tf("{total} 个姿势（预设 {ship} · 本地 {lab}）· 显示 {shown}", {
-                        total: index.count ?? rows.length,
-                        ship: (index.entries || []).filter((e) => e.origin === "lib").length,
-                        lab: (index.entries || []).filter((e) => e.origin !== "lib").length,
-                        shown: rows.length,
-                    }))
-                : "";
+            // 这里不写条数行：预设 / 本地的条数写在来源那组 chip 上，「显示多少」写在「加载更多」那颗钮上，
+            // 一行「N 个姿势（预设 X · 本地 Y）· 显示 Z」把两处已经说过的数字再抄一遍，只把网格往下挤
         }
 
 
-        /** 弹窗只装一件事：pose-lib 的整场库（本机那份 + 云端那份）；数据根的本机存档与选本机文件都在下半那一列。
+        /** 弹窗只装一件事：pose-lib 的整场库（本机那份 + 云端那份）；数据根的本机存档在下半那一列，
+         *  选本机文件那颗钮在标题栏右侧。
          *  同一条钮再点一次就是关，与道具那扇窗同一口径 */
         async function openLibModal() {
             if (libModal.isOpen()) { libModal.close(); return; }
             libModal.setContent(libPane);
             libModal.open(t("姿势库"));
             paintDockModal(btnLib, libModal);
-            // 未配置的云端不是一个「点了只会失败」的来源：那一条干脆不出现（AGENTS 的产品口径）
-            const sources = [{ key: "local", label: t("本机库") }];
-            if (cloudStatus?.enabled === true) sources.push({ key: "cloud", label: t("云端库") });
-            const keep = sources.some((s) => s.key === libSourceSel.value) ? libSourceSel.value : "local";
-            libSourceSel.replaceChildren(...sources.map((s) => $el("option", { value: s.key, textContent: s.label })));
-            libSourceSel.value = keep;
             if (libIndex === null) {
                 try {
                     libIndex = await libJson(LIB_INDEX);
-                    fillLibCharSel();
-                    fill(libGroupSel, libGroupRows(libFilter(libIndex.entries, { origin: libOriginSel.value, charKey: libCharSel.value }), libIndex), "全部分组");
-                    fill(libOriginSel, LIB_ORIGIN_ORDER.map((o) => ({ key: o.key, label: t(o.label) })), "全部来源");
                 } catch {
                     // 读不出索引 = 库没同步：这句就是弹窗里那句同步指引要说的同一件事
                     toast(tf("读不到库文件：{path}", { path: LIB_INDEX }));
                 }
+            }
+            // 基座筛选每次进窗跟着画布那具素体：库默认显示的就是套得进当前素体的那一批；
+            // 用户在弹窗里自己挑过的档位（在档位行里）就留着不动
+            const pinned = metaModels.some((m) => m.key === canvas.model) ? canvas.model : DEFAULT_CHAR_KEY;
+            const charRows = libCharRows();
+            if (!charRows.some((r) => r.key === libCharKey)) {
+                libCharKey = charRows.some((r) => r.key === pinned) ? pinned : "";
             }
             libShown = LIB_PAGE;
             libListShown = LIB_LIST_PAGE;   // 清一次分页：重新进窗时本机存档那一列回到第一屏
@@ -876,35 +971,20 @@ export function createPoseView({ api, $el, toast }) {
             paintPoseList();
         }
 
-
-        /** 基座筛选跟着素体下拉同一批基座（标准男 / 标准女）：库里一条姿态挂着它的基座
-         *  （同步脚本按姿势仓库的分派结果写进 charKey），默认停在画布当前那具素体 ——
-         *  库默认就是「套得上当前素体」的那一批，挂在女基座上的姿态筛到男素体上是上半身全歪 */
-        function fillLibCharSel() {
-            const allowed = new Set(metaModels.map((m) => m.key));
-            const keys = [...new Set((libIndex?.entries || []).map((e) => String(e.charKey || "")))]
-                .filter((k) => allowed.has(k));
-            const current = allowed.has(canvas.model) ? canvas.model : DEFAULT_CHAR_KEY;
-            if (!keys.includes(current)) keys.unshift(current);
-            const labels = new Map(metaModels.map((m) => [m.key, m.label]));
-            fill(libCharSel, keys.map((k) => ({ key: k, label: labels.get(k) || k })), t("全部基座"));
-            libCharSel.value = current;
-            libListShown = LIB_LIST_PAGE;
-            paintPoseList();
-        }
-
         libSearch.oninput = () => renderLibIndex();
-        libGroupSel.onchange = () => renderLibIndex();
-        libCharSel.onchange = () => { renderLibIndex(); };
-        libOriginSel.onchange = () => renderLibIndex();
-        // 切到云端 = 现读一次清单（几十 KB，读失败就把弹窗交给那句云端指引，不出空浏览器）
-        libSourceSel.onchange = () => run(async () => {
-            if (libSourceSel.value === "cloud" && !libCloud) {
+
+        // 切来源不是桥上的动作：本机那份是静态读，云端那份是宿主自己的 REST 读（几十 KB）。
+        // 套上 run 的桥锁就等于每切一次来源把整行 chip 画灰一遍 —— run 进门就 setLib(false)，
+        // chip 正是在这一瞬间重画出来的，跑完解禁的只有 libGate 里登记的那几颗控件
+        const pickSource = async (key) => {
+            if (key === libSourceKey) return;
+            libSourceKey = key;
+            libShown = LIB_PAGE;   // 换库回到第一屏：两批的条数差得远
+            if (key === "cloud" && !libCloud) {
                 try { await ensureCloudIndex(); } catch (e) { toast(tf("读不到云端索引：{msg}", { msg: e.message })); }
-                libShown = LIB_PAGE;
             }
             renderLibIndex();
-        });
+        };
 
         libMore.onclick = () => { libShown += LIB_PAGE; renderLibIndex(); };
         libFilterSearch.oninput = () => { libListShown = LIB_LIST_PAGE; paintPoseList(); };
@@ -962,11 +1042,10 @@ export function createPoseView({ api, $el, toast }) {
         modelSel.onchange = () => run(async () => {
             if (!modelSel.value) return;
             await action("model/set", { key: modelSel.value });
-            // 库里没有挂在这一具基座上的姿态时不动筛选：写一个下拉里没有的值等于把筛选清成「全部基座」
-            if ([...libCharSel.options].some((o) => o.value === modelSel.value)) {
-                libCharSel.value = modelSel.value;
-            }
+            // 库里没有挂在这一具基座上的姿态时不动筛选：挑一个 chip 行里没有的 key 等于把筛选清成「全部基座」
+            if (libCharRows().some((r) => r.key === modelSel.value)) libCharKey = modelSel.value;
             canvas.model = modelSel.value;
+            renderLibChips();
         });
 
         /** 加一件道具：云端先把 GLB 落进本机缓存（页面那条 /models/props/<file>.glb 由第三级 fallback
@@ -1095,6 +1174,8 @@ export function createPoseView({ api, $el, toast }) {
                 return;
             }
             setChrome(true);
+            // 挂帧之前钉引擎偏好：页面 iframe 与宿主页同源，这条偏好就是它开局要读的那一条
+            try { localStorage.setItem(PHOTO3D_ENGINE_KEY, PHOTO3D_ENGINE_STATIC); } catch { /* 隐私模式写不进，页面按自己的默认档开局 */ }
             frame = $el("iframe", {
                 className: "ns-pose-frame",
                 title: t("3D 姿势"),
@@ -1155,6 +1236,29 @@ export function libGroups(entries, groups) {
     return [...buckets.entries()]
         .sort((a, b) => (rank.get(a[0]) ?? 99) - (rank.get(b[0]) ?? 99))
         .map(([key, items]) => ({ key, label: labelOf.get(key) || key, items, count: items.length }));
+}
+
+/** 道具分类 chip 的条数从整张道具表数出来：点一颗 chip 之前，用户要看的是「这一档共几件」，
+ *  不是搜索筛完剩几件。一件没有的档不出这一颗（点了只会筛出一页空卡片的 chip 不发货）；
+ *  整列只剩「全部」时连这颗也不出 —— 旧姿势包的道具项没有 source 字段，那台机器上没有可筛的分类 */
+export function propSourceRows(choices) {
+    const counts = new Map();
+    for (const c of choices || []) {
+        const key = propSourceOf(c);
+        if (key) counts.set(key, (counts.get(key) || 0) + 1);
+    }
+    const hits = PROP_SOURCE_ROWS.filter((r) => counts.get(r.key));
+    if (!hits.length) return [];
+    return [{ key: "", label: tf("全部分类（{n}）", { n: (choices || []).length }) },
+        ...hits.map((r) => ({ key: r.key, label: `${t(r.label)}（${counts.get(r.key)}）` }))];
+}
+
+/** 一件道具落在哪一档：云端那批由宿主拼出来（cloud: true），本机那批看 meta/list 每条的 source。
+ *  没有这字段的旧条目不落任何一档 —— 它从不在弹窗里消失，只在「全部分类」里出现 */
+export function propSourceOf(choice) {
+    if (choice?.cloud) return "cloud";
+    const source = String(choice?.source || "");
+    return PROP_SOURCE_ROWS.some((r) => r.key === source) ? source : "";
 }
 
 /** 卡片副标题：人数与道具数写在最前 —— 多人场景要在卡片上分得出来；其后是分类头两条与来源。

@@ -4,7 +4,58 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+### Added
+- **The Studio director guide page opens a recipe from under its buttons.** With the editor closed the whole column is
+  the guide page (the idle card plus **📋 Recipes** / **📝 New recipe**). The three most recent director recipes now sit
+  below those buttons, one per row - source tag (「预设」/「我的」), segment count, recipe name - taken in the backend's
+  modification-time order, and the block is absent when there is no director recipe. Clicking a row takes the same path
+  as clicking that recipe's card: the recipe opens embedded in the left pane and the film pane switches to it, with no
+  recipe modal in between. The block refetches when the editor closes, so the recipe just saved is back on top. Covered
+  by `studio/tests/js/studio-director.test.mjs`.
+- **Downloads in mainland China.** The 整合包 (the ComfyUI integration pack) and the model files are shared on
+  Quark Pan, [https://pan.quark.cn/s/4028d4e655e3](https://pan.quark.cn/s/4028d4e655e3), linked from the top of
+  [README_ZH.md](README_ZH.md) / [README.md](README.md) and from the docs index.
+
+### Fixed
+- **The 3D Pose 「姿势库」 filter chips no longer go grey when the library source switches.** Switching source
+  repainted the chips while the pane's action lock was closed, so each switch drew the whole chip row disabled -
+  the lock releases only the controls registered on it, and a chip is not one of them, so they stayed grey until a
+  search or base filter click repainted them. Flipping the gate now repaints all four filter chip rows (a modal
+  opened before the page reported ready kept them grey for the same reason), and switching source is no longer
+  wrapped in the lock: the local index is a static read and the cloud index the host's own REST read. Covered by
+  `studio/tests/js/pose-bridge.test.mjs`.
+
 ### Changed
+- **The 3D Pose 「姿势库」 and 「道具」 windows search from the title bar and filter entirely by chips.** The
+  search box of both windows moved out of the crowded filter row into the right side of the window's title bar (the
+  asset-library shell grew a titlebar slot for it), and the pose window's remaining dropdowns are gone: the filters
+  are one block of chips - the library source (「本机库」, plus 「云端库」 only when the cloud is configured),
+  the base (「全部基座」plus the panel's two CC0 bases, defaulting
+  to the figure on the canvas), the origin (「全部来源 / 预设（N）/ 本地（N）」, the group hidden for the cloud, whose
+  `charKey` is outside the panel's base whitelist so switching to it falls back to 「全部基座」) and the groups
+  (「全部分组」plus one chip per group with its count). Source, base and origin share one line with a hairline
+  between them and the group chips wrap onto the next - four full-width rows stacked the header five deep and left
+  the card grid two rows. One click filters the card grid; counts come from the rows
+  the filter above each group leaves. The props window gained the same shape - 「全部分类（N）」/「程序化」/「注册表」/
+  「云端」 chips above the cards, counted from the whole prop table, a chip filtering the cards and returning to
+  page 1. A bucket with no prop shows no chip, and a pose package whose prop entries carry no source field shows no
+  chip row at all. Covered by `studio/tests/js/pose-bridge.test.mjs`.
+- **The 3D Pose 「姿势库」 header stops repeating its own counts.** The line above the card grid read
+  「746 个姿势（预设 100 · 本地 646）· 显示 18」 while the origin chips already carry the preset / local counts and
+  「加载更多（还有 N 条）」 says what is left, so the line is gone and the card grid gets the row back. The
+  「本机姿势文件…」 button - the path you take when the library has nothing you want - is now pinned to the modal
+  titlebar next to the search box instead of taking a slot at the right end of the filter block, where it also
+  scrolled away with the cards. Covered by `studio/tests/js/pose-bridge.test.mjs`.
+
+- **The 3D Pose page opens clean: no more blue 「网格引擎不可用 → 已回落到骨架·MediaPipe」 toast.** The packaged
+  pose page ships with its 照片 → 3D engine set to a mesh engine and probes the local point-estimation service at
+  page boot; that endpoint only exists in the pose repo's dev/preview server, so on the plugin and in the desktop
+  window the probe always failed and the page toasted its fallback on every single entry. The host now pins that
+  page preference to 「骨架·MediaPipe」 before mounting the frame - the only photo→3D path that works without the
+  sidecar, and with the page's own toolbar folded away the mesh engines have no entry point on the canvas. The
+  page's own toasts for what the user does (shortcuts, undo, scene validation) are untouched. Covered by
+  `studio/tests/js/pose-bridge.test.mjs`, and `tools\test_pose_package.ps1` now checks the shipped bundle still
+  carries that preference key so the pin cannot go silently stale.
 - **The 3D Pose 「姿势库」 and 「道具」 windows close on the second click of their own toolbar button.**
   Both buttons opened a full-window browser, and every later click only repainted the same page of
   cards, so getting rid of that window meant Esc, the backdrop or the title-bar ✕. The same button now

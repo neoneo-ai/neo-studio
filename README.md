@@ -12,6 +12,8 @@ https://github.com/user-attachments/assets/6b69cc54-ab74-4201-9b54-6a3e3ae0f394
 
 **Install**: search `Neo Studio` in ComfyUI Manager (published to the ComfyUI Registry), see [Installation](#installation).
 
+**Downloads in China**: the integration pack and the models are on Quark Pan → [https://pan.quark.cn/s/4028d4e655e3](https://pan.quark.cn/s/4028d4e655e3)
+
 ## Why Neo Studio
 
 | Capability | Usual approach | Neo Studio |
@@ -82,6 +84,8 @@ Python interpreter; it does not bundle ComfyUI.
   SmartScreen prompt on first run). It derives the ComfyUI root and the interpreter from its
   own location, opens a first-setup page when it cannot find them, and installs or updates the
   plugin from its bundled copy — user data dirs are carried over, a git checkout is never touched.
+- **Downloads in China** — the integration pack and the models are on Quark Pan:
+  [https://pan.quark.cn/s/4028d4e655e3](https://pan.quark.cn/s/4028d4e655e3).
 - **From source** — clone the repo and run `tools/neo-studio-app.vbs` (no console window;
   `tools/neo-studio-app.bat` is the debug entry, `--debug` opens DevTools). Every launch syncs
   `studio/` into `custom_nodes` (same-name files only, nothing in the target is deleted).

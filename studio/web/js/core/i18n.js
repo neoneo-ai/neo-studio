@@ -47,7 +47,7 @@ const EN = {
     "标签（默认 pose）": "Label (defaults to pose)",
     "存为姿势": "Save Pose",
     "载入姿势": "Load Pose",
-    // 左栏只列本机姿势存档（pose/scenes/）：预设都在「浏览姿势库…」弹窗里，这一栏不排预设清单
+    // 左栏只列本机姿势存档（pose/scenes/）：预设都在工具条「姿势库」那扇弹窗里，这一栏不排预设清单
     "搜索本机姿势（按名字）": "Search saved poses (by name)",
     "没有匹配的姿势": "Nothing matches this search",
     "姿势库里没有匹配的姿势": "No pose matches this search",
@@ -106,43 +106,35 @@ const EN = {
     "姿势已保存：{name}": "Pose saved: {name}",
     "已载入姿势：{name}": "Pose loaded: {name}",
     // 姿势库弹窗（pose-lib 的整场库 + 本机姿势文件两条路）：卡片按 clay 优先出缩略图，库未同步出同步指引
-    "浏览姿势库…": "Browse Pose Library…",
     "本机姿势文件…": "Local Pose File…",
     "本机文件不是一份 JSON 对象": "This file is not a JSON object",
     "搜索姿势（名字 / 分类 / 标签）": "Search poses (name / category / tag)",
     "分组": "Group",
     "全部分组": "All groups",
+    // 道具弹窗的分类 chip：程序化 = 姿势包代码画出来的道具，注册表 = props/index.json 里那批 GLB
+    "全部分类（{n}）": "All categories ({n})",
+    "程序化": "Generated",
+    "注册表": "Registry",
     // 姿势库的基座筛选：默认落在画布当前素体，女基座上的姿态套到男素体上身型与盆宽全歪
     "全部基座": "All bases",
-    "按基座筛选：一条姿态挂着它的基座，挂在女基座上的姿态套到男素体上身型与盆宽全歪":
-        "Filter by base: every pose carries its base, and a pose rigged on the female base warps on a male body",
     "无预览": "No preview",
     // 库卡片的预览图是姿势仓库对来源参考图的渲染，参考图版式可以把同一个人画两遍
     "参考图": "reference render",
     "没有匹配的姿势": "No matching poses",
     "加载更多（还有 {n} 条）": "Load more ({n} left)",
     // 合并库（预设 pose-lib + 本地 pose-lab 并成一份）：来源筛选与卡片角标
-    "{total} 个姿势（预设 {ship} · 本地 {lab}）· 显示 {shown}":
-        "{total} poses (preset {ship} · local {lab}) · showing {shown}",
     "全部来源": "All origins",
-    "预设（只读）": "Preset (read-only)",
-    "本地（可写）": "Local (writable)",
     "预设": "Preset",
     "本地": "Local",
-    "按来源筛选：预设随仓库分发只读，本地是本机自己写的":
-        "Filter by origin: the preset ships with the pose repo and is read-only, local is what this machine wrote",
     "预设库：随姿势仓库分发，只读": "Preset library: distributed with the pose repo, read-only",
     "本地库：本机自己写的姿态": "Local library: poses this machine wrote itself",
     "云端": "Cloud",
     "云端库：OSS 上那棵树，取回的文件缓存在本机":
         "Cloud library: the tree on OSS; fetched files are cached on this machine",
-    // 姿势库的来源开关：未配置的云端不出现这一条，出现的就是读得到的那批
+    // 姿势库的来源 chip：未配置的云端不出那颗 chip，出得了的就是读得到的那批
     "本机库": "Local Library",
     "云端库": "Cloud Library",
-    "库来源：本机库读数据根的 pose-lib，云端库读 OSS 上那棵树（文件先落本机缓存）":
-        "Library source: local reads pose-lib in the data root; cloud reads the tree on OSS (files are cached locally first)",
     "没有匹配的云端姿势": "No matching cloud poses",
-    "{total} 个云端姿势 · 显示 {shown}": "{total} cloud poses · showing {shown}",
     "读不到云端索引：{msg}": "Cannot read the cloud index: {msg}",
     "读不到云端文件：{path}": "Cannot read the cloud file: {path}",
     "云端姿势库未配置：在 <数据根>/configs/oss_presets.json 里写 pose_index_url，云端那棵树用 tools\\pose_deploy_oss.py 上传（默认只列清单，加 --apply 才上传）。":
@@ -332,6 +324,7 @@ const EN = {
     "打开素材库：点卡片取用并关窗，素材卡片直接拖进右侧编辑器": "Open the asset library; click a card to pick it and close the dialog, or drag cards into the editor",
     "打开素材库：点卡片取用进图片编辑，拖进预览区投放": "Open the asset library; click a card to load it into image editing, or drag it onto the preview",
     "导演配方": "Director recipes",
+    "直接打开该配方，进编辑器（不用开配方列表）": "Open this recipe and edit it here, without the recipe list",
     "取消": "Cancel",
     "仅运行勾选的 {n} 段：[{list}]": "Running only the {n} checked segments: [{list}]",
     "未勾选 = 生成整片": "Nothing checked = generate the whole film",

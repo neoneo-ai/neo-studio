@@ -25,9 +25,11 @@ export function createLibraryModal({ storageKey = "neo_studio_libmodal", scope =
 
     const overlay = $el("div", { className: "ns-libmodal ns-hidden", role: "dialog", "aria-modal": "true", dataset: { libScope: scope } });
     const titleEl = $el("span", { className: "ns-libmodal-title" });
+    // 标题栏右侧的插槽（最大化钮之前）：宿主把自己的搜索框塞进来，空着就不占标题栏的宽度
+    const titleSlot = $el("div", { className: "ns-libmodal-titlebar-slot" });
     const maxBtn = $el("button", { className: "ns-libmodal-btn ns-libmodal-max", type: "button" }, [icon("maximize", 14)]);
     const closeBtn = $el("button", { className: "ns-libmodal-btn ns-libmodal-close", type: "button", title: t("关闭（Esc）") }, [icon("cross", 14)]);
-    const head = $el("div", { className: "ns-libmodal-titlebar", title: t("拖动标题栏移动弹窗 · Esc 关闭") }, [titleEl, maxBtn, closeBtn]);
+    const head = $el("div", { className: "ns-libmodal-titlebar", title: t("拖动标题栏移动弹窗 · Esc 关闭") }, [titleEl, titleSlot, maxBtn, closeBtn]);
     const content = $el("div", { className: "ns-libmodal-content" });
     const pickCount = $el("span", { className: "ns-libmodal-pick-count" });
     const pickClear = $el("button", { className: "ns-btn ns-libmodal-pick-clear", type: "button", textContent: t("清空") });
@@ -91,10 +93,11 @@ export function createLibraryModal({ storageKey = "neo_studio_libmodal", scope =
         endGesture = end;
     };
 
-    // 挪窗：标题栏空白处按下接管指针，按钮上的按下不抢，交给按钮自己。
+    // 挪窗：标题栏空白处按下接管指针，按钮与插槽里的控件上的按下不抢，交给它们自己
+    // （标题栏搜索框里按下就是打字，抢走指针等于一点输入框就把窗拖走）。
     // 最大化下拖一下就是浮窗（max 偏好留着，下次开仍铺满整窗）
     head.addEventListener("pointerdown", (e) => {
-        if (e.button !== 0 || e.target.closest("button")) return;
+        if (e.button !== 0 || e.target.closest("button, .ns-libmodal-titlebar-slot")) return;
         e.preventDefault();
         const r = box.getBoundingClientRect();
         geo.w = Math.round(r.width);
@@ -206,6 +209,8 @@ export function createLibraryModal({ storageKey = "neo_studio_libmodal", scope =
         close,
         isOpen: () => opened,
         setContent: (el) => content.replaceChildren(el),
+        /** 标题栏右侧插槽的内容（一颗搜索框、宿主用得少的那几颗钮）：插槽是外壳的，塞什么由宿主定，外壳不认它 */
+        setTitlebarExtra: (...els) => titleSlot.replaceChildren(...els.filter(Boolean)),
         setPickMode,
         setPickCount,
         setOnClose: (fn) => { onCloseCb = fn; },

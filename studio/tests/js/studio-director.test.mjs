@@ -21,6 +21,7 @@ mockRoute("/neo_studio/version", jsonResponse({
 const SPEC_BY_RECIPE = {
     R1: { segments: [{ prompt: "段一", duration_sec: 3, ref_input: "" }, { prompt: "段二", duration_sec: 4, ref_input: "" }], defaults: { width: 640, height: 384, steps: 20 } },
     R2: { segments: [{ prompt: "甲", duration_sec: 2, ref_input: "" }, { prompt: "乙", duration_sec: 2, ref_input: "" }, { prompt: "丙", duration_sec: 2, ref_input: "" }], defaults: { width: 1344, height: 768, steps: 8 } },
+    预设片子: { segments: [{ prompt: "预设段", duration_sec: 4, ref_input: "" }], defaults: { width: 512, height: 896, steps: 8 } },
 };
 mockRoute("/rs_recipes/director_spec", (b, call) => jsonResponse({
     success: true,
@@ -51,6 +52,9 @@ mockRoute("/rs_recipes/list", jsonResponse([
         { skill_id: "sk-a", prompt: "甲", duration_sec: 2 },
         { skill_id: "sk-a", prompt: "乙", duration_sec: 2 },
         { skill_id: "sk-a", prompt: "丙", duration_sec: 2 },
+    ]},
+    { name: "预设片子", type: "video_director", source: "preset", shared: { mode: "f2v" }, segments: [
+        { skill_id: "sk-a", prompt: "预设段", duration_sec: 4 },
     ]},
 ])); // listRecipes 直接返回数组
 mockRoute("/rs_prompts/skills", jsonResponse([{ id: "sk-a", name: "技能 A", gen_video: true }]));
@@ -588,6 +592,44 @@ test("Studio 导演页：编辑器关闭 → 生成面板同栏退场，整栏�
     assert.deepEqual(titleBtns(), ["配方", "素材库"], "入口回到标题行");
 });
 
+test("Studio 导演页：引导页按钮下面三条最近配方，点一行直接进编辑器（不开配方弹窗）", async () => {
+    localStorage.setItem("neo_studio_director_closed", "1");   // 有「关过」偏好：进页不自动铺编辑器
+    await import("../../web/studio/studio-app.js");
+    appState.graph = { _nodes: [] };
+    location.hash = "#/director";
+    const closeBtn = document.querySelector(".neo-director-close");
+    if (closeBtn) click(closeBtn);   // 上一条用例结尾编辑器是开着的：关掉它，从引导页起头
+    const page = () => document.querySelector(".ns-director");
+    const rows = () => [...document.querySelectorAll(".ns-director-empty-recipes .ns-director-empty-recipe")];
+    const box = () => document.querySelector(".ns-libmodal[data-lib-scope='recipes']");
+    const isOpen = () => !!box() && !box().classList.contains("ns-hidden");
+
+    await until(() => page().classList.contains("ns-director-editorless"), "整栏停在引导页");
+    await until(() => rows().length === 3, "按钮下面铺出三条最近配方");
+    assert.deepEqual([...document.querySelector(".ns-director-empty").children].map((c) => c.className),
+        ["ns-director-empty-card neo-gallery-gm-idle", "ns-director-empty-actions", "ns-director-empty-recipes"],
+        "版式：起手说明 → 两个入口 → 三条快捷入口");
+    assert.deepEqual(rows().map((r) => [...r.querySelectorAll("span")].map((s) => s.textContent)),
+        [["我的", "2 段", "R1"], ["我的", "3 段", "R2"], ["预设", "1 段", "预设片子"]],
+        "一条一行：来源标签 + 段数 + 标题（后端按修改时间排，这里只取三条）");
+
+    // 点第二行 = 直接进该配方的内嵌编辑器：不开配方弹窗，上方整片区跟着换成这一份
+    const before = fetchLog.length;
+    click(rows()[1]);
+    await until(() => document.querySelectorAll(".ns-director-editor .neo-director-seg").length === 3, "点行铺出 R2 的三段编辑器");
+    assert.equal(document.querySelector(".neo-director-overlay"), null, "编辑器仍是内嵌，不建浮层");
+    assert.ok(!isOpen(), "快捷入口不打开配方弹窗");
+    assert.equal(document.querySelectorAll(".ns-gen-seg-chip").length, 3, "分段勾选条跟着换成三段");
+    assert.equal(document.querySelector(".ns-gen-spec").textContent, "1344×768 · 8 步", "尺寸/步数回显换成 R2");
+
+    // 关掉编辑器回到引导页：快捷入口重拉一次 list，刚编辑的那份回到首位
+    click(document.querySelector(".neo-director-close"));
+    await until(() => page().classList.contains("ns-director-editorless"), "关掉编辑器回引导页");
+    await until(() => fetchLog.slice(before).some((c) => c.path === "/rs_recipes/list"), "回引导页刷新快捷入口");
+    await until(() => rows().length === 3, "快捷入口重新铺出三条");
+    localStorage.removeItem("neo_studio_director_closed");
+});
+
 test("Studio 导演页：关掉配方后不再自动打开上次的配方（关闭记进偏好）", async () => {
     localStorage.removeItem("neo_studio_director_closed");
     await import("../../web/studio/studio-app.js");
@@ -600,6 +642,7 @@ test("Studio 导演页：关掉配方后不再自动打开上次的配方（关�
     const card = (name) => [...document.querySelectorAll(".ns-director-recipes .neo-recipes-card")]
         .find((c) => c.querySelector(".neo-recipes-card-name span")?.textContent === name);
 
+    click(card("R1"));   // 起点自己造：显式打开一份配方，不靠上一条用例留下的编辑器
     await until(editor, "编辑器内嵌出现");
     assert.equal(localStorage.getItem("neo_studio_director_closed"), null, "开着编辑器没有关闭偏好");
     click(document.querySelector(".neo-director-close"));

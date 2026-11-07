@@ -11,6 +11,8 @@ https://github.com/user-attachments/assets/6b69cc54-ab74-4201-9b54-6a3e3ae0f394
 
 **安装**：ComfyUI Manager 搜 `Neo Studio` 一键安装（已发布至 ComfyUI Registry），详见 [安装](#安装)。
 
+**国内下载**：整合包与模型放在夸克网盘 → [https://pan.quark.cn/s/4028d4e655e3](https://pan.quark.cn/s/4028d4e655e3)
+
 ## 为什么选 Neo Studio
 
 | 能力 | 常见做法 | Neo Studio |
@@ -117,6 +119,7 @@ ComfyUI 及其 Python 解释器，不自带 ComfyUI。
   挂在 [GitHub Releases](https://github.com/neoneo-ai/neo-studio/releases)（`tools\build_studio_exe.ps1`
   构建，未签名，首次运行会有 SmartScreen 提示）。exe 从自身位置推导 ComfyUI 根目录与解释器，
   找不到时打开首次设置页，并用自带的插件副本安装 / 更新插件——用户数据目录沿用，git 检出目录永不改写。
+- **国内下载** — 整合包与模型放在夸克网盘：[https://pan.quark.cn/s/4028d4e655e3](https://pan.quark.cn/s/4028d4e655e3)。
 - **源码版** — 克隆仓库后运行 `tools\neo-studio-app.vbs`（无控制台黑窗；`tools\neo-studio-app.bat`
   是带控制台的调试入口，`--debug` 开 DevTools）。源码运行时每次启动都把 `studio/` 同步进
   `custom_nodes`（只同步同名文件，目标目录不删除任何东西）。

@@ -9,6 +9,7 @@ build/
 dist/
 tmp/
 .tiktoken_cache/
+.clinerules
 
 # 应用状态（启动配置 / 窗口几何 / WebView2 profile / 内核与桌面端日志）
 /data/

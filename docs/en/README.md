@@ -5,6 +5,9 @@
 This directory splits the plugin documentation by major module. The entry points remain the root
 [README.md](../../README.md) (end users) and [Developer_EN.md](../../Developer_EN.md) (developers).
 
+**Downloads in China**: the integration pack and the models are on Quark Pan →
+[https://pan.quark.cn/s/4028d4e655e3](https://pan.quark.cn/s/4028d4e655e3).
+
 ## Feature modules (end users)
 
 | Document | Contents |

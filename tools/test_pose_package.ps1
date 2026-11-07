@@ -55,6 +55,16 @@ $css = @($files | Where-Object { $_.path -like "assets/index-*.css" })
 if ($js.Count -ne 1) { Bad "assets/ 里的 index-*.js 应是一份，实测 $($js.Count)" }
 if ($css.Count -ne 1) { Bad "assets/ 里的 index-*.css 应是一份，实测 $($css.Count)" }
 
+# 宿主挂帧之前要把页面那条照片 → 3D 引擎偏好钉在骨架档（studio/web/pose/pose.js 的 PHOTO3D_ENGINE_KEY）：
+# 钉的是产物里那条 localStorage 键名，仓库哪天改了名，钉子就悄悄失效，表现是每次进页弹一条蓝底回落提示。
+# 前端测试看不到这一条（它不读产物），只有这条看得见
+$engineKey = "poseDemo.photo3dEngine.v2"
+if ($js.Count -eq 1) {
+    if ((Get-Content -LiteralPath $js[0].full -Raw -Encoding utf8) -notlike "*$engineKey*") {
+        Bad "随包产物里没有宿主要钉的引擎偏好键：$engineKey（pose.js 挂帧前那条钉子会失效）"
+    }
+}
+
 # 3. 不该发货的形态：map（4.4 MB 且只给 devtools 用）、白名单外的 GLB、道具 GLB、
 #    models 根下的散 JSON（注册表只在 models/props/ 里）、姿势仓库的动画 demo 文件
 foreach ($row in $files) {

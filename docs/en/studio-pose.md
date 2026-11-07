@@ -85,6 +85,9 @@ script exits and prints the `npm run lib -- shipped` command to run. Merged entr
 result of the pose repo's `npm run lib:bodies` assignment - and the modal's base filter works on it: it
 defaults to the canvas's current figure (the pose page opens on `bodyMale`, and the base filter follows the
 model dropdown), and entries with no assignment carry no `charKey` and stay visible only under "all bases".
+The cloud set's `charKey` is always `standard`, which is outside the panel's base whitelist: switching to the
+cloud leaves only "all bases" in the base row and the filter falls back to it, because parking the filter on a
+chip that matches no card is shipping an empty browser.
 With "Startup settings → Pose repo" set, this level is also auto-synced on every desktop start — see
 [studio-desktop.md](studio-desktop.md), "Pose asset auto-sync". Previews sync per tier:
 
@@ -126,7 +129,7 @@ capability table, answered by the offline desktop service too. `/neo_pose/status
 
 The cloud library is the same pose tree living in OSS: the scenes and preview images the preset library
 accumulated. Entries keep the `pose-lib` shape, the cloud manifest format is `neo-pose-cloud/1`, and the
-modal's cards, group dropdown, search and gate are one piece of code for both sources - switching source
+modal's cards, group chips, search and gate are one piece of code for both sources - switching source
 only switches where the data comes from.
 
 One config line drives it: `pose_index_url` in `<data root>/configs/oss_presets.json`, pointing at the
@@ -345,8 +348,8 @@ The Pose Library modal holds the `pose-lib` whole-scene library on top and the p
 machine (`pose/scenes/`, each row badged "local") below: presets only live in the top half, the bottom
 half does not line them up a second time. A row loads that pose - it reads `/neo_pose/scene` and sends
 `pose:open-scene`. The search box above that list filters the rows by name and carries only its own
-fixed-row rule (the library's `flex: 1` / `min-width` search-field rule is scoped to
-`.ns-pose-libpane`, so this column is not stretched by it); a page is 120 rows and the rest sit behind
+fixed-row rule (the two modals' own search boxes are pinned to the modal titlebar, where the `flex` rule is
+scoped to `.ns-libmodal-titlebar`, so this column is not stretched by it); a page is 120 rows and the rest sit behind
 "load more (N left)". The modal has no preset dropdown and the panel has no "apply preset" step:
 a preset's only entry is the card grid in the library half. The modal's base filter follows the
 panel's character - switching bodies re-filters it, so what is visible is what the current body can
@@ -361,31 +364,52 @@ before the shot, and the card corner carries a "reference render" badge marking 
 The figures in the picture are the scene file's headcount, and the toast reports what the page staged. A library
 synced from before this change re-renders with `npm run build` then `npm run lib -- preview --all` in the pose
 repo, followed by the sync.
-The group dropdown is filled from the merged entries of the selected origin with their counts
-(the `count` the index's `groups` carry is the preset set's own number, so poses this machine wrote in
-`pose-lab` never show up in it), and refilling the options lands back on the picked group - "all groups"
-when the origin switch drops it. The origin dropdown offers "all origins / preset (read-only) /
-local (writable)"; a card's top-left corner reads "preset" or "local" (the tooltip names the library),
-the count line reads "N poses (preset X · local Y) · showing Z" - an index entry with no `origin`
-field counts as local. The search filters on
+Groups, the library source, the base and the origin are all chips in one block - "all groups" plus one chip per
+merged group with its count: inside a full-window modal, opening a dropdown and picking one item is a detour,
+and a chip puts that click on the option name itself. The chip counts come from the rows the filter above it
+leaves (the `count` the index's `groups` carry is the preset set's own number, so poses this machine wrote in
+`pose-lab` never show up in it), and an origin switch that drops the picked group lands back on "all groups".
+The search box and "local pose file…" are pinned together to the right of the modal titlebar
+(`setTitlebarExtra`, the titlebar slot of the `js/core/lib-modal.js` shell - the same place in the pose
+library and the props modal): the button you use rarely has no business taking a slot in the filter block,
+and it should not scroll away with the cards. The modal ships no
+dropdown at all: four chip groups in one block - the library source ("local library", plus a "cloud library"
+chip only when the cloud is configured), the base
+("all bases" plus the panel's two CC0 bases), the origin ("all origins / preset (N) / local (N)", the whole
+group hidden for the cloud, which has no preset/local split) and the groups. Source, base and origin share one
+line with a hairline between them and the group chips wrap onto the next, because four full-width rows would
+stack the header five deep and leave the card grid two rows of space.
+A card's top-left corner reads "preset" or "local" (the tooltip names the library); an index entry with no
+`origin` field counts as local. The header has no count line: the preset / local counts are written on the
+origin chips and "how many are shown" on the load-more button, so a line reading
+"N poses (preset X · local Y) · showing Z" would copy numbers the screen already says and push the grid down.
+The search filters on
 `label / categories / tags / id / source` (the field table 3d-pose-art's `filterIndex` uses in
 `poseLibrary.js`). A scene can belong to several groups and its card lands only in the highest-ranked one -
 two cards with the same id would cross wires on click. A page is 200 cards (640+ in the DOM at once breaks
 both the first paint and scrolling) and the rest sit behind "load more (N left)". Clicking a card reads that
 card's own file and sends one `scene/apply`, reporting "N rigs / M props"; a successful apply closes the
 modal - the same implementation the modal's row click and the page's own pose load use: it tops up
-the skeleton count, lays the rigs out left to right and restores props by id. The modal's search, group
-and origin dropdowns and load-more sit behind the same `libGate`: they stay disabled until
+the skeleton count, lays the rigs out left to right and restores props by id. The modal's search and
+load-more sit behind the same `libGate` (the "local pose file…" button registers itself through the button
+factory): they stay disabled until
 `pose:ready`, and the pane locks after an apply until the result comes back, because two quick clicks send
-two apply calls and the second silently overwrites the first. When the library is not synced the modal shows
+two apply calls and the second silently overwrites the first. The four filter chip groups are repainted on every
+filter pass, so they carry the gate state (`libOn`) into each new chip instead of being registered one by one -
+before `pose:ready` they draw, and none of them press. Flipping the gate repaints all four groups
+(`renderLibChips` draws them and the separators in one pass): a modal opened
+before the page is ready would otherwise leave the chips greyed, and a greyed chip cannot press itself back
+to life. Switching the library source takes no action lock either - the local index is a static read and the
+cloud index the host's own REST read - so locking it would grey every chip on each switch, since only the
+registered controls get re-enabled when the lock releases. When the library is not synced the modal shows
 the sync command with a line of explanation instead of an empty grid: an empty browser is not what a library
-looks like. The modal carries one more entry, "local pose file…", which takes a JSON file from this
+looks like. The titlebar's "local pose file…" takes a JSON file from this
 machine through `pose:open-scene` - a file outside the library loads just the same.
 
 ## Prop cards and where a prop lands
 
-The Props modal (the same asset-library shell) is one search box, one page of cards, a pager, one action
-row and the on-stage prop list. Each card is one prop, filled from the prop entries of `meta/list`:
+The Props modal (the same asset-library shell) has its search box pinned to the titlebar; inside it are a row
+of category chips, one page of cards, a pager, one action row and the on-stage prop list. Each card is one prop, filled from the prop entries of `meta/list`:
 shipped GLBs and procedural props come first, cloud props last with their "cloud" badge. A page is 120
 cards; the pager shows the first three pages, one either side of the current page and the last three,
 with an ellipsis in the gaps, and the page index is stored in localStorage
@@ -402,7 +426,12 @@ side as a color mosaic; white clay on gray makes one page read as one material, 
 `grayscale(1)` pass for whatever has not been re-rendered yet (the old cloud images). A cloud row's `preview`
 is not generated here: `tools\pose_prop_previews.py` uploads the image and writes `preview` into the manifest
 row (see the cloud upload section above). The search box filters
-the cards on `label / key`, and the count line reads "N props · page X/Y".
+the cards on `label / key`. The chip row above the cards is "all categories (N)" plus a chip for the
+procedural, registry and cloud buckets, counted from the whole prop table - before clicking a chip the
+number the user needs is "how many in this bucket", not "how many survive the search". Clicking a chip
+filters the cards and returns to page one. A bucket with no prop gets no chip, and a `meta/list` from an
+older package - prop entries with no `source` field - gets no chip row at all: with no category to filter
+by there is nothing to offer. The count line reads "N props · page X/Y".
 
 Clicking a card adds that prop: the host sends one `prop/add` (a cloud card first pulls its GLB into the
 local cache), the stage gains the prop at once, and the card stays out of any "selected first" step -
@@ -481,13 +510,14 @@ plainly that the prop table has no such prop, reports what can be typed and how 
 sends no `pose:call` - the prop definitions live in one place, inside the pose package, and the host does
 not guess them.
 
-The first row of the library modal is "source: local library / cloud library", a second axis next to the
+The first chip group of the library filter block is "local library / cloud library" (the search box sits in
+the titlebar, not on this line), a second axis next to the
 library's own "all sources / preset (read-only) / local (writable)" filter: the local library reads
 `<data root>/pose/lib`, the cloud library reads the tree in OSS. The cloud option appears only when
 `/neo_pose/cloud_status` reports `enabled: true` - listing a source that cannot work is shipping a control
 that only fails. On the cloud option the head line says "Cloud library: the tree in OSS, fetched files are
 cached on this machine", each card carries a "cloud" corner badge (the hover text says which tree it lives
-in), the count line reads "N cloud poses · showing Z", and the group and search dropdowns are rebuilt
+in), and the group chips and search are rebuilt
 from the cloud entries on the same rules as the local library. Cloud thumbnails are direct absolute OSS
 URLs (the bucket endpoint is public-read), while local previews travel `/pose-lib/preview/`. "Refresh
 thumbnails" on the cloud option fetches preview images one card at a time into the cache - each image
@@ -522,6 +552,15 @@ served host the probes fail and the panels disable themselves with the project's
 not the estimation service" rule. `caps` is the host confirming that same state, not a second switch.
 `lib_write` closes only the library's write side: reading needs no sidecar, the index and the files are
 served by the host itself (`/pose-lib`), so the modal still lists the library and still applies a pose.
+
+The page's own boot probe is the host's business too: once `/neo_pose/status` reports an installed package, the
+host pins the page's photo→3D engine preference (`poseDemo.photo3dEngine.v2`) to the skeleton path before it
+mounts the iframe, so the page never takes its default mesh engine to probe a service a statically served host
+cannot have - one probe, one blue "mesh engine unavailable → fell back to skeleton · MediaPipe" pill, on every
+single entry. Hosted mode folds the page's own toolbar away, so the mesh engines have no entry point on the
+canvas in the first place; the page's own `#toast` still answers user actions and the host does not suppress it.
+The pin is keyed to that literal name, and `tools\test_pose_package.ps1` checks the shipped bundle still contains
+it - a renamed key means the pin silently stops working, and only that self-check reads the artifact.
 
 `body_import` is `true`, and it is a page-side capability: the package ships only the licence-clean CC0 base
 figures (the standard male and female bodies), and the Mixamo / SMPL-derived figures are registered by the user
@@ -618,17 +657,25 @@ tops both levels up in the data root.
   taking the whole page, one popup at a time, Esc / clicking off / the same button again closing it, an open
   modal owning its own Esc), the two full-window modals closing on the second click of their own
   dock button - the button lit while its window is open and unlit by every close path (Esc, the
-  backdrop, the ✕, the window yielding to the other modal); the saved-pose list inside the pose-library modal (only `pose/scenes/` archives
+  backdrop, the ✕, the window yielding to the other modal); the photo→3D engine preference pinned to the
+  skeleton path before the frame mounts (pinned only for an installed package - a missing one leaves the stored
+  preference alone); the saved-pose list inside the pose-library modal (only `pose/scenes/` archives
   listed, each row badged "local", a row click being one `pose:open-scene`; presets
   not listed there, the modal's card grid being their only entry, grouped by
   `groups`, and no preset dropdown; the search box filtering by name, an honest empty state,
   a page of 120 rows with load-more, the search box sitting beside the list as its own row, never stretched by
-  the list's grow rule (the modal's `flex: 1` search-field rule is scoped to `.ns-pose-libpane`)); the ControlNet export defaulting to the
-  "current view"; the pose-library modal's index rendering with
-  grouping, search, origin filtering and load-more, applying a library pose (the action it sends and the modal closing),
-  the sync hint when the library is unsynced, the gate locking that pane, and the local pose file path;
-  the Props modal (one dock button opening the whole window, a page of 120 cards with its pager, the page index
-  stored and replayed on reopen, the last page's "next" disabled); the prop cards (one card per prop with its
+  the list's grow rule (the two modals' own search boxes are pinned to the titlebar slot, their rule scoped to
+  `.ns-libmodal-titlebar`)); the ControlNet export defaulting to the
+  "current view"; the pose-library modal's index rendering with its one block of filter chips (source, base,
+  origin, group in four groups - the modal ships no dropdown) and its search and
+  load-more, applying a library pose (the action it sends and the modal closing),
+  the sync hint when the library is unsynced, the gate locking that pane (the chip groups carrying the gate
+  state into every repaint, flipping the gate repainting all four, and switching source taking no action lock),
+  and the local pose file path;
+  the Props modal (one dock button opening the whole window, the search box in the titlebar, a page of 120 cards
+  with its pager, the page index stored and replayed on reopen, the last page's "next" disabled);
+  the prop category chips (counts from the whole prop table, a chip filtering the cards and resetting to page
+  one, no chip row at all when `meta/list` carries no `source`); the prop cards (one card per prop with its
   `propKey` and preview, clicking a card sending that `prop/add` at once, no "add prop" button), the props modal having no
   bone attach (no "attach to bone" button, no bone dropdown, adding never sends `prop/attach`), a typed prop
   name resolving to a `propKey` (the full key, the bare id and the Chinese label all landing on one entry, a

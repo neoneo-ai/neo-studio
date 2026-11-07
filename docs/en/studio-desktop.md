@@ -133,7 +133,12 @@ list and the asset library both open in modals (`js/core/lib-modal.js`), so the 
   guide page — the opening line in the same idle style as the paint and video pages (title + fine note + four corner
   marks), worded as the home entry card is (**Direct a Video** / chain recipe segments into a finished video), and two
   entries **📋 Recipes** / **📝 New recipe** (the Recipes button instance moves here from the title row, so there is
-  only one on screen, and the asset library is not on the guide page); clicking a recipe card or
+  only one on screen, and the asset library is not on the guide page). Under those buttons sits the three most recent
+  director recipes, one per row — **source tag + segment count + recipe name**, the top three in the backend's
+  modification-time order, and the block is absent when there is no director recipe. Clicking a row takes the same path
+  as clicking that recipe's card: the recipe fills the left pane embedded, the film pane switches to it, and no recipe
+  modal comes in between; the block refetches when the editor closes, so the recipe just saved is back at the top.
+  Clicking a recipe card or
   "新建配方" reopens the editor and returns to the left/right split.
 - "**📋 Recipes**" opens the recipe modal (`.ns-libmodal[data-lib-scope="recipes"]`, director
   recipes only) and "**🖼 Asset library**" opens the asset modal (`data-lib-scope="assets"`, the same instance the

@@ -237,8 +237,8 @@
 }
 
 /* 搜索框是这一列的固定一行：它是列表那份 flex: 1 1 auto 的同层兄弟，flex: 1 在这里是纵向的 grow，
-   列表空无一物时输入框就被拉成一整块。弹窗搜索框的 flex: 1 与 min-width 是弹窗顶部那一横行的样式，
-   收在弹窗自己那份作用域里（下面 .ns-pose-libpane 那一条），这一层不共用它 */
+   列表空无一物时输入框就被拉成一整块。弹窗的搜索框钉在标题栏右侧（见下面 .ns-libmodal-titlebar 那一条），
+   这一列的输入框与它不共用样式 */
 .ns-pose-list-search {
     flex: none;
     width: 100%;
@@ -275,13 +275,53 @@
     color: var(--ns-dim);
 }
 
-/* 道具弹窗（外壳是 js/core/lib-modal.js）：工具行、数量行、一页卡片、页码条、动作行、场上道具清单。
-   一页 PROP_PAGE_SIZE 件，卡片网格自己滚，页码条与动作行钉在网格下方不跟着滚 */
+/* 筛选 chip（库来源 / 基座 / 来源 / 分组 / 道具分类）：整屏弹窗里的筛选点着走 —— 下拉要点开再挑一项，
+   chip 让这一下点击直接落在档位名上。chip 是按钮，与卡片同一把门禁（每遍重画时按当前 ready 态落 disabled） */
+.ns-pose-chip {
+    padding: 4px 11px;
+    border: 1px solid var(--ns-border);
+    border-radius: 999px;
+    background: var(--ns-raised);
+    color: var(--ns-fg);
+    font: inherit;
+    font-size: 12px;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.ns-pose-chip:hover { background: var(--ns-field-hover); border-color: var(--ns-accent); }
+
+.ns-pose-chip-on {
+    border-color: var(--ns-primary);
+    background: var(--ns-primary-soft);
+    color: var(--ns-primary-fg);
+}
+
+.ns-pose-chip:disabled { opacity: .45; cursor: default; }
+
+/* 库筛选 chip 全挤在一块里：来源 / 基座 / 来源 三组排同一行，分组 chip 多、自己续行。
+   四组各占一整行会把弹窗头部堆成五行，卡片网格只剩两行能看 */
+.ns-pose-lib-filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 7px;
+}
+.ns-pose-lib-chipgroup { display: flex; flex-wrap: wrap; gap: 5px; }
+/* 上面那条 display 压过 UA 的 [hidden]：云端那组来源 chip 收起要显式收 */
+.ns-pose-lib-chipgroup[hidden] { display: none; }
+/* 组间那一条竖线只做视觉分组，不是一档筛选；藏掉的组（云端的来源行）连它一起不占位 */
+.ns-pose-lib-sep { width: 1px; align-self: stretch; background: rgba(255, 255, 255, .12); }
+.ns-pose-prop-chips { row-gap: 6px; }
+
+/* 道具弹窗（外壳是 js/core/lib-modal.js）：名字行、分类 chip 行、数量行、一页卡片、页码条、动作行、场上道具清单。
+   一页 PROP_PAGE_SIZE 件，卡片网格自己滚，页码条与动作行钉在网格下方不跟着滚。
+   搜索框不在这一页里 —— 它钉在弹窗标题栏右侧（见下面 .ns-libmodal-titlebar 那一条） */
 .ns-pose-proppane {
     flex: 1 1 auto;
     min-height: 0;
     display: grid;
-    grid-template-rows: auto auto minmax(0, 1fr) auto auto auto;
+    grid-template-rows: auto auto auto minmax(0, 1fr) auto auto auto;
     gap: 8px;
     padding: 10px;
     overflow: hidden;
@@ -290,18 +330,6 @@
 .ns-pose-prop-tools {
     display: flex;
     gap: 8px;
-}
-
-.ns-pose-prop-search {
-    flex: 2 1 180px;
-    min-width: 0;
-    padding: 6px 8px;
-    border: 1px solid var(--ns-border);
-    border-radius: 7px;
-    background: var(--ns-field);
-    color: var(--ns-fg);
-    font: inherit;
-    font-size: 13px;
 }
 
 .ns-pose-prop-tools .ns-pose-name {
@@ -526,11 +554,12 @@
 }
 
 /* 上半吃弹窗剩下的空间，卡片网格在里面滚；下半是本机存档，给一条下沿线与一个下限高度，
-   存档很少时它缩成一小条，多了就在自己里面滚，不跟卡片网格抢高度 */
+   存档很少时它缩成一小条，多了就在自己里面滚，不跟卡片网格抢高度。
+   行距 6px：筛选块、条数行、卡片网格三层各占一行的话，头部就把网格挤成两行 */
 .ns-pose-lib-preset {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
     flex: 1 1 auto;
     min-height: 0;
 }
@@ -545,24 +574,19 @@
     border-top: 1px solid var(--ns-border);
 }
 
-/* flex: 1 吃的是弹窗那一横行（.ns-pose-row）的剩余宽度：这条只作用在弹窗里，
-   本机存档那一列的搜索框是竖排的直接子行，共用这条就是纵向 grow（见上面 .ns-pose-list-search） */
-.ns-pose-libpane .ns-pose-lib-search {
-    flex: 1;
-    min-width: 120px;
-    padding: 6px 9px;
+/* 两扇弹窗的搜索框钉在标题栏右侧（插槽见 studio/style.css 的 .ns-libmodal-titlebar-slot）：
+   内容区不再为它留一行，工具行只剩筛选与名字框 */
+.ns-libmodal-titlebar .ns-pose-lib-search,
+.ns-libmodal-titlebar .ns-pose-prop-search {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 5px 9px;
     border: 1px solid var(--ns-field-bd);
     border-radius: 8px;
     background: var(--ns-field);
     color: var(--ns-fg);
     font: inherit;
     font-size: 13px;
-}
-
-.ns-pose-lib-meta {
-    margin: 0;
-    font-size: 12px;
-    color: var(--ns-dim);
 }
 
 .ns-pose-lib-blank {

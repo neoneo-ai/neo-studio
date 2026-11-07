@@ -13,7 +13,7 @@ import "../gallery.js";   // 注册 comfy.neo.gallery 扩展（NeoGallery + 侧�
 import { setDirectorEditorHost, openDirectorEditor, DIRECTOR_RECIPE_SAVED_EVENT, SEG_MODES, MODE_LABELS, LEGACY_MODE_MAP } from "../director.js";
 import { setPaintHost, openGenMaterialDialog, openImageEditDialog, chipButton, skillParamsChip } from "../gallery-gen.js";
 import { createFramePlayer, DOCK_PREVIEW_SIDE, AGENT_PREVIEW_SIDE } from "../live-preview.js";
-import { createRecipesPanel } from "../recipes.js";
+import { createRecipesPanel, listRecipes } from "../recipes.js";
 import { listVideoSkills } from "../recipes.js";
 import { skillDisplayName, importWorkflowSkill } from "../skill.js";
 import { createImageGenSettingsForm, createVideoGenSettingsForm, createVideoModelConfigSection, listVideoGenModels, getSkillGenConfig, modelFamily } from "../image-gen.js";
@@ -328,6 +328,7 @@ const CLOSED_KEY = "neo_studio_director_closed";   // 关过编辑器就停在�
 const SPLIT_PANEL_MIN = 200;   // 生成面板下限：竖屏配方只要窄窄一条，控制行在这里换行
 const SPLIT_EDITOR_MIN = 360;  // 编辑器下限：编辑器内部自带滚动，再窄就没法编辑了
 const SPLIT_CLOSE_SLOP = 90;   // 拖过下限再多拖这么多就当作关闭：拖到底继续拖 = 收起面板
+const GUIDE_RECIPE_MAX = 3;    // 引导页快捷入口的条数：三条最近导演配方，多了就把入口按钮挤走
 
 let dragged = false;   // 一条拖动走过之后，落点那一下点击不再被当成「展开」
 
@@ -442,6 +443,8 @@ async function buildDirector(el) {
     // 标题行的家只装「素材库」；「配方」在两块之间搬：编辑器开着在标题行，收起时在引导页
     const titleActions = $el("div", { className: "ns-director-libbtns" }, [libBtn]);
     const guideActions = $el("div", { className: "ns-director-empty-actions" }, [recipesBtn, newBtn]);
+    // 引导页快捷入口：最近三条导演配方（标签 + 段数 + 标题），点一行直接进编辑器，不开配方弹窗
+    const guideRecipes = $el("div", { className: "ns-director-empty-recipes", hidden: true });
     const main = $el("div", { className: "ns-director-main" });
     const editorHost = $el("div", { className: "ns-director-editor" });
     // 收起编辑器 = 生成面板同栏退场：整栏只剩这块引导页，从「配方」选卡或「新建配方」起头（生成面板与编辑器共生）
@@ -456,6 +459,7 @@ async function buildDirector(el) {
             $el("i", { className: "ns-video-corner c-br" }),
         ]),
         guideActions,
+        guideRecipes,
     ]));
     page.appendChild(main);
     main.appendChild(editorHost);
@@ -476,6 +480,7 @@ async function buildDirector(el) {
             titleActions.prepend(recipesBtn);
             editorHost.querySelector(".neo-director-title-left")?.prepend(titleActions);
         } else guideActions.prepend(recipesBtn);
+        if (!open) refreshGuideRecipes();   // 回到引导页：刚保存 / 刚编辑的那份配方要出现在快捷入口首位
     }).observe(editorHost, { childList: true });
     // 导演编辑器内嵌进本视图（含素材页「新建导演配方」入口 → 切到导演页）；
     // 编辑器底部的「保存并生成整片」保存成功后直接提交整片生成
@@ -494,7 +499,36 @@ async function buildDirector(el) {
     // 经宿主的「打开时切到本页」回调把窗口从首页拽到导演页
     const panelOpts = () => ({ directorOnly: true, autoSelectFirst: !closedBefore(), initialSelection: currentRecipeName, openEditorOnSelect: () => currentView === "director", onSelect, onNewRecipe: () => { recipesModal?.close(); openNewDirector(); } });
     directorPanelOpts = panelOpts;
-    onDirectorShown = () => { if (currentRecipeName) applyRecipe(currentRecipeName); };
+    onDirectorShown = () => {
+        refreshGuideRecipes();   // 进本页才拉快捷入口：开机停在首页时不给首页添一枪 list
+        if (currentRecipeName) applyRecipe(currentRecipeName);
+    };
+
+    // 引导页快捷入口：后端已按修改时间排好，这里取前三条导演配方，一行一条（标签 + 段数 + 标题）；
+    // 没有导演配方就整块不占位，引导页只剩「配方」「新建配方」两个入口。
+    // 行点击与配方卡走同一条路：编辑器 adopt 才回传 onSelect，脏态确认条挡下时选中态不动。
+    async function refreshGuideRecipes() {
+        let items = [];
+        try {
+            items = (await listRecipes()).filter((r) => r.type === "video_director").slice(0, GUIDE_RECIPE_MAX);
+        } catch { /* 离线模式 / ComfyUI 未就绪：列表拿不到就不出这一排入口 */ }
+        guideRecipes.textContent = "";
+        guideRecipes.hidden = !items.length;
+        for (const r of items) {
+            const segs = (r.segments || []).length;
+            const row = $el("button", {
+                className: "ns-director-empty-recipe", type: "button",
+                title: t("直接打开该配方，进编辑器（不用开配方列表）"),
+                "aria-label": tf("{name}（{n} 段）", { name: r.name, n: segs }),
+            }, [
+                $el("span", { className: "ns-director-empty-recipe-tag", textContent: r.source === "preset" ? t("预设") : t("我的") }),
+                ...(segs ? [$el("span", { className: "ns-director-empty-recipe-seg", textContent: tf("{n} 段", { n: segs }) })] : []),
+                $el("span", { className: "ns-director-empty-recipe-name", textContent: r.name }),
+            ]);
+            row.onclick = () => openDirectorEditor(r, refreshRecipesPanel, -1, { onAdopt: () => onSelect(r) });
+            guideRecipes.appendChild(row);
+        }
+    }
 
     // --- 整片生成面板 ---
     // 生成参数（分辨率 / 步数 / 种子 / 连续性 / 上下文帧）全部在左侧导演编辑器里保存进配方，

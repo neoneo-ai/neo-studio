@@ -7,7 +7,8 @@ import { $el } from "../../web/studio/shim/ui.js";
 
 // pose.js 现在经 lib-modal.js 拉 scripts/ui.js 的 shim：静态导入会在 setup.mjs 装好钩子之前就解完
 // 整张模块图，所以按 lib-modal-geometry.test.mjs 那条路动态取
-const { createPoseView, resolvePropChoice, POSE_PAGE_URL, previewOf, libFilter, libGroups, libTagsOf } =
+const { createPoseView, resolvePropChoice, POSE_PAGE_URL, previewOf, libFilter, libGroups, libTagsOf,
+    propSourceOf, propSourceRows } =
     await import("../../web/pose/pose.js");
 
 const api = { fetchApi: (path, opts) => fetch(path, opts) };
@@ -20,12 +21,24 @@ const PROP = '.ns-pose-proppane';
 const PANEL = '[data-pop]';
 const STATE_POP = '[data-pop="state"]';
 const PROP_PAGE_KEY = "neo_studio_pose_prop_page";
+/** 页面自己存照片 → 3D 引擎偏好的那条键（宿主挂帧前钉它，口径见 pose.js 的 PHOTO3D_ENGINE_KEY） */
+const PHOTO3D_ENGINE_KEY = "poseDemo.photo3dEngine.v2";
 const dockBtn = (env, label) => [...env.host.querySelectorAll(".ns-pose-dock-btn")]
     .find((b) => b.textContent.includes(label));
 const openPop = (env, label) => click(dockBtn(env, label));
 const openPops = (env) => [...env.host.querySelectorAll(".ns-pose-pop")].filter((p) => !p.hidden);
-/** 「道具」那颗钮直接开整扇道具弹窗：一页卡片 + 页码条，和姿势库同一套弹窗外壳 */
+/** 「道具」那颗钮直接开整扇道具弹窗：一页卡片 + 分类 chip + 页码条，和姿势库同一套弹窗外壳 */
 const openProp = async (env) => { click(dockBtn(env, "道具")); await settle(); };
+/** 当前开着的那扇弹窗（姿势库与道具共用同一套外壳，同一时刻只开一扇） */
+const openModal = (env) => env.host.querySelector(".ns-libmodal:not(.ns-hidden)");
+/** 弹窗标题栏右侧插槽里的那颗搜索框：搜索从内容区搬到这儿，工具行腾出来给分类 chip */
+const titleSearch = (env, cls) => openModal(env).querySelector(`.ns-libmodal-titlebar-slot ${cls}`);
+const chips = (env, scope) => [...env.host.querySelectorAll(scope + " .ns-pose-chip")];
+const chipByLabel = (env, scope, label) => chips(env, scope).find((c) => c.textContent.startsWith(label));
+/** 姿势库弹窗的四行筛选 chip 各按行类名取：source = 库来源，char = 基座，origin = 预设/本地，group = 分组 */
+const libChips = (env, row) => chips(env, `${LIB} .ns-pose-lib-chips-${row}`);
+const libChip = (env, row, label) => libChips(env, row).find((c) => c.textContent.startsWith(label));
+const pager = (env) => env.host.querySelector(PROP + " .ns-pose-prop-pager");
 
 /** 一次面板动作要跨两次 fetch 与一次桥回复：微任务与定时器各放一遍才到终点 */
 const settle = async () => { await flush(); await sleep(0); await flush(); };
@@ -242,7 +255,7 @@ test("装好包：iframe 指短路径并带沙箱，pose:ready 之前控件全�
     const gated = () => [...env.host.querySelectorAll(
         ".ns-pose-pop .ns-pose-btn, .ns-pose-sel, .ns-pose-checkrow input")]
         .filter((n) => !n.classList.contains("ns-pose-pop-close"));
-    assert.ok(gated().length >= 14, "弹层里的控件要在位");
+    assert.ok(gated().length >= 10, "弹层里的控件要在位（4 条下拉 + 6 颗弹层钮；弹窗的筛选全是 chip，不吃这份门禁登记）");
     assert.ok(gated().every((n) => n.disabled), "页面没 ready 时控件不能点");
     assert.equal(env.host.querySelectorAll(".ns-pose-dock-btn").length, 6,
         "六条入口：左 姿势库 / 角色与外观 / 道具，右 保存姿势 / 导出图组 / 画布状态");
@@ -253,6 +266,19 @@ test("装好包：iframe 指短路径并带沙箱，pose:ready 之前控件全�
     const theme = env.sent.find((s) => s.msg.type === "pose:theme");
     assert.equal(theme.msg.caps.hostUi, true, "宿主面板能力位要随主题下发");
     assert.equal(theme.msg.caps.photo3d, false, "要 sidecar 的能力位一并下发");
+});
+
+test("挂帧之前把照片 → 3D 引擎钉在骨架档：静态宿主没有估点服务，页面开局的网格探针只会弹一条回落提示", async () => {
+    resetEnv();
+    localStorage.setItem(PHOTO3D_ENGINE_KEY, "hmr2-joints");
+    const env = await mounted();
+    assert.ok(env.host.querySelector(".ns-pose-frame"), "有 iframe 才有要开局的页面");
+    assert.equal(localStorage.getItem(PHOTO3D_ENGINE_KEY), "skeleton",
+        "页面开局读到的就是骨架档：那个静态宿主上不存在的服务不探，那条提示不弹");
+    localStorage.setItem(PHOTO3D_ENGINE_KEY, "hmr2-joints");
+    const bare = await mounted({ ...STATUS, installed: false });
+    assert.equal(bare.host.querySelector(".ns-pose-frame"), null, "没装包不挂帧");
+    assert.equal(localStorage.getItem(PHOTO3D_ENGINE_KEY), "hmr2-joints", "没有页面要开局，就不动用户存的那份偏好");
 });
 
 test("桥只认本页 iframe 的同源消息", async () => {
@@ -438,10 +464,13 @@ test("道具搜索：过滤只动卡片与页码条，回车把命中那一件�
     await openProp(env);
     const cards = () => [...env.host.querySelectorAll(PROP + " .ns-pose-prop-card")];
     assert.equal(cards().length, 3, "三件道具一页装得下，卡片一次全出");
+    assert.equal(titleSearch(env, ".ns-pose-prop-search"), env.host.querySelector(".ns-pose-prop-search"),
+        "搜索框钉在标题栏右侧那条插槽里：卡片上面那一行腾出来给分类 chip");
     inputText(env.host.querySelector(".ns-pose-prop-search"), "剑");
     await settle();
     assert.deepEqual(cards().map((c) => c.dataset.propKey), ["glb:sting-sword.glb"],
         "搜索一次就只剩命中的那一张");
+    assert.ok(!env.host.querySelector(PROP + " .ns-pose-prop-search"), "道具弹窗的内容区不再排搜索框");
     assert.match(env.host.querySelector(".ns-pose-prop-meta").textContent, /3 件道具 · 第 1\/1 页/,
         "数量行报整张表的件数与页码：筛选只改卡片那一片");
     keydown(env.host.querySelector(".ns-pose-prop-search"), "Enter");
@@ -455,6 +484,52 @@ test("道具搜索：过滤只动卡片与页码条，回车把命中那一件�
     assert.equal(env.calls("prop/add").length, 1,
         "清单里没有「桌子」：解析不到就不发请求，同点卡片那一条路");
     assert.match(env.toasts.join(" "), /道具表里没有「桌子」/);
+});
+
+test("道具分类 chip：条数吃整张表，点一颗只筛卡片，换档回到第一页", async () => {
+    resetEnv();
+    localStorage.removeItem(PROP_PAGE_KEY);
+    // 150 件注册表 + 1 件程序化 + 1 件云端：一页 120 件，全部那档两页，程序化那档一页都装得下
+    const many = Array.from({ length: 150 }, (_, i) => ({ propKey: `glb:p${i}.glb`, label: `道具${i}`, source: "glb" }));
+    const env = await mounted({ ...STATUS, cloud_status: CLOUD_ON });
+    await env.ready();
+    env.replyCall(env.calls("meta/list")[0], { ...META, props: [{ propKey: "builtin:chair", label: "椅子", source: "builtin" }, ...many] });
+    env.replyCall(env.calls("prop/list")[0], PROPS);
+    await settle();
+    await openProp(env);
+    const cards = () => [...env.host.querySelectorAll(PROP + " .ns-pose-prop-card")];
+    assert.deepEqual(chips(env, PROP).map((c) => c.textContent),
+        ["全部分类（152）", "程序化（1）", "注册表（150）", "云端（1）"],
+        "chip 的条数是整张表的件数：点之前要看的是这一档共几件，不是搜索筛完剩几件");
+    assert.equal(chips(env, PROP)[0].getAttribute("aria-pressed"), "true", "开局停在「全部分类」那颗上");
+    click(pager(env).querySelector('[data-page="1"]'));
+    await settle();
+    assert.equal(cards()[0].dataset.propKey, "glb:p119.glb", "全部那档第二页从第 121 件起");
+    click(chipByLabel(env, PROP, "程序化"));
+    await settle();
+    assert.deepEqual(cards().map((c) => c.dataset.propKey), ["builtin:chair"],
+        "点「程序化」只剩那一件：卡片吃分类 chip，chip 自己的条数不动");
+    assert.equal(pager(env).hidden, true, "一档一页装得下就没有页码条");
+    assert.equal(localStorage.getItem(PROP_PAGE_KEY), "0", "换分类回到第一页：不带着上一页的偏移进新列表");
+    click(chipByLabel(env, PROP, "云端"));
+    await settle();
+    assert.deepEqual(cards().map((c) => c.dataset.propKey), ["glb:stick-cloud.glb"],
+        "云端那档就是云端那批：加具这条路（落缓存 → prop/add）不受筛选影响");
+    assert.equal(env.calls("prop/add").length, 0, "点 chip 只是筛卡片，不发任何页面动作");
+});
+
+test("道具分类 chip 不发货没有分类的包：meta/list 没有 source 字段时整行不出", async () => {
+    resetEnv();
+    const env = await mounted();
+    await env.ready();
+    env.replyCall(env.calls("meta/list")[0], { ...META, props: META.props.map(({ source, ...rest }) => rest) });
+    env.replyCall(env.calls("prop/list")[0], PROPS);
+    await settle();
+    await openProp(env);
+    assert.equal(chips(env, PROP).length, 0,
+        "没有 source 字段就没有可筛的分类：整行不出，不摆一颗点了只会筛出空卡片的 chip");
+    assert.equal([...env.host.querySelectorAll(PROP + " .ns-pose-prop-card")].length, 3,
+        "卡片照旧全出：没有分类可筛不等于没有道具可挑");
 });
 
 test("道具翻页：一页 120 件，页码落盘、重开停在同一页", async () => {
@@ -503,7 +578,7 @@ test("道具弹窗没有挂骨点：没有「挂到骨点」按钮、没有骨�
     await settle();
     await openProp(env);
     assert.ok(!env.button("挂到骨点", PROP), "挂骨点是姿势页物体面板的事，Neo Studio 的道具只落地");
-    assert.ok(env.host.querySelector(PROP + " .ns-pose-prop-search"), "道具弹窗改的是带搜索框的卡片列表");
+    assert.ok(titleSearch(env, ".ns-pose-prop-search"), "道具弹窗改的是带搜索框的卡片列表：搜索框在标题栏右侧");
     const panelSelects = [...env.host.querySelectorAll(PANEL + " select")].map((s) => s.title);
     assert.ok(!panelSelects.includes("挂点骨"), "面板不再有骨点下拉：" + panelSelects.join("/"));
     click([...env.host.querySelectorAll(PROP + " .ns-pose-prop-card")][0]);
@@ -611,8 +686,12 @@ test("「姿势库」那颗钮直接开弹窗：本机存档在弹窗下半，�
     assert.equal(search.parentNode, list.parentNode,
         "列表在这一列里吃剩下的高度：搜索框与它同列兄弟，嵌进列表会跟着列表一起被拉高");
     assert.ok(!search.classList.contains("ns-pose-lib-search"),
-        "这一列不共用弹窗搜索框那条 flex: 1：那一条是弹窗顶部横行的样式，在竖着排的列里就是把输入框拉成整块");
-    assert.ok(pane.querySelector(".ns-pose-lib-search"), "弹窗上半的搜索框在弹窗自己的那一横行里");
+        "这一列不共用弹窗那两扇的搜索框：弹窗的搜索框钉在标题栏右侧，样式在 .ns-libmodal-titlebar 那一条里，"
+        + "在竖着排的列里就是把输入框拉成整块");
+    assert.ok(pane.querySelector(".ns-pose-lib-preset .ns-pose-lib-search") === null,
+        "弹窗内容区不再排搜索框：那一行腾出来给分组 chip");
+    assert.equal(titleSearch(env, ".ns-pose-lib-search"), env.host.querySelector(".ns-pose-lib-search"),
+        "姿势库的搜索框钉在弹窗标题栏右侧那条插槽里");
     const rows = () => [...localBox.querySelectorAll(".ns-pose-item")];
     assert.deepEqual(rows().map((r) => r.textContent), ["hero本地"],
         "下半只列本机存档：预设不在这一份列表里重复一遍");
@@ -790,7 +869,7 @@ test("旧姿势包的默认素体：随包 CC0 清单到位后下拉落在 bodyM
         "「加素体」拿到的就是下拉上看得见的那具身");
     await openLib(env);
 
-    assert.equal(env.host.querySelector(".ns-pose-lib-char").value, "bodyMale",
+    assert.ok(libChip(env, "char", "标准男素体")?.getAttribute("aria-pressed") === "true",
         "基座筛选跟着当前素体走：库不会停在套不上的那一档");
     env.from({ type: "pose:state", state: { ...STATE, model: "bodyFemale" } });
     await settle();
@@ -818,11 +897,49 @@ test("previewOf / libFilter / libGroups / libTagsOf：缩略图优先级与搜�
     assert.deepEqual(libFilter(POSE_LIB.entries, { charKey: "girl" }).map((e) => e.id), [],
         "库条目挂的基座就是面板发得出的那两具：Mixamo / SMPL / 自备那一档在库里筛不到条目");
     assert.deepEqual(libGroups(POSE_LIB.entries, POSE_LIB.groups).map((s) => s.count), [3, 1],
-        "分组条数从过滤后的分层数出来，来源一筛下拉就跟着变");
+        "分组条数从过滤后的分层数出来，来源一筛 chip 就跟着变");
     assert.deepEqual(libGroups(POSE_LIB.entries, POSE_LIB.groups).map((s) => [s.key, s.items.length]),
         [["stand", 3], ["fight", 1]], "多组条目只落排最前的那个组，同 id 不许出现两张卡");
     assert.equal(libTagsOf(POSE_LIB.entries[1]), "2人 · 0道具 · 手臂绘图参考 / arm-drawing-reference · photo3d");
     assert.equal(libTagsOf(POSE_LIB.entries[0]), "1人 · 0道具 · 站立 / standing-poses", "preset 来源不上来源那一档");
+});
+
+test("姿势库弹窗的筛选全是 chip：四行档位，一条下拉都没有", async () => {
+    resetEnv();
+    const env = await mounted({ ...STATUS, cloud_status: CLOUD_ON });
+    await env.ready();
+    await openLib(env);
+
+    assert.equal(env.host.querySelectorAll(LIB + " .ns-pose-sel").length, 0,
+        "库来源 / 基座 / 来源三条下拉全下线：整屏弹窗里点着走的是 chip，不用点开再挑一项");
+    assert.deepEqual(["source", "char", "origin", "group"].map((row) => libChips(env, row).length > 0),
+        [true, true, true, true], "四行 chip 都在位：库来源 / 基座 / 预设·本地 / 分组");
+    assert.deepEqual(libChips(env, "source").map((c) => c.textContent), ["本机库", "云端库"]);
+    assert.deepEqual(libChips(env, "source").map((c) => c.getAttribute("aria-pressed")), ["true", "false"],
+        "当前吃的是哪一份库要写在 chip 上：切库就是点一颗 chip");
+    const filters = env.host.querySelector(`${LIB} .ns-pose-lib-filters`);
+    assert.equal(filters.querySelectorAll(".ns-pose-lib-chipgroup").length, 4,
+        "四组筛选 chip 排进同一块里：来源 / 基座 / 来源 挤在一行，分组 chip 自己续行，头部不堆成四行");
+    assert.equal(filters.querySelectorAll(".ns-pose-btn").length, 0,
+        "「本机姿势文件…」不占筛选块：用得少的那颗钉在标题栏右侧，筛选块里只有 chip");
+    assert.ok(titleSearch(env, ".ns-pose-btn")?.textContent.includes("本机姿势文件"),
+        "标题栏右侧那条插槽里，搜索框旁边就是「本机姿势文件…」");
+});
+
+test("propSourceOf / propSourceRows：道具分类 chip 的档位与条数", () => {
+    assert.equal(propSourceOf({ key: "builtin:chair", source: "builtin" }), "builtin");
+    assert.equal(propSourceOf({ key: "glb:arrow.glb", source: "glb" }), "glb");
+    assert.equal(propSourceOf({ key: "glb:stick-cloud.glb", cloud: true }), "cloud",
+        "云端那批是宿主拼出来的：认 cloud 标记，不靠注册表那两档");
+    assert.equal(propSourceOf({ key: "glb:x.glb" }), "",
+        "旧包没有 source 字段：不落任何一档，只在「全部分类」里出现，不从弹窗里消失");
+    assert.deepEqual(propSourceRows([{ source: "builtin" }, { source: "glb" }, { cloud: true }]).map((r) => r.key),
+        ["", "builtin", "glb", "cloud"], "档位顺序就是发货顺序：全部 → 程序化 → 注册表 → 云端");
+    assert.deepEqual(propSourceRows([{ source: "glb" }, { source: "glb" }]).map((r) => r.label),
+        ["全部分类（2）", "注册表（2）"], "条数写在 chip 上，一件没有的档不出那颗");
+    assert.deepEqual(propSourceRows([{ key: "x" }, { key: "y" }]), [],
+        "整张表没有一项落得上档位就不出整行：旧包上没有可筛的分类");
+    assert.deepEqual(propSourceRows([]), [], "空表不出整行");
 });
 
 test("姿势库弹窗：卡片按预览优先级出缩略图与人数，点卡片读库文件走一次 scene/apply 并收窗", async () => {
@@ -835,7 +952,7 @@ test("姿势库弹窗：卡片按预览优先级出缩略图与人数，点卡�
     assert.ok(modal(), "弹窗要开着");
     assert.ok(fetchLog.some((c) => c.path === "/pose-lib/index.json"), "打开弹窗读一次索引清单");
     const cards = () => [...modal().querySelectorAll(".ns-pose-lib-card")];
-    changeValue(modal().querySelector(".ns-pose-lib-char"), "");   // 基座筛选默认停在当前素体，四条卡片要在「全部基座」那一档才全出来
+    click(libChip(env, "char", "全部基座")); await settle();   // 基座筛选默认停在当前素体，四条卡片要在「全部基座」那一档才全出来
     assert.equal(cards().length, 4, "库里四条 = 四张卡");
     const card = (id) => cards().find((c) => c.dataset.libId === id);
     assert.equal(card("calm-1").querySelector(".ns-pose-lib-thumb").getAttribute("src"),
@@ -867,7 +984,7 @@ test("姿势库弹窗：页面报整场没套上时说清原因，不收窗也�
     await env.ready();
     await openLib(env);
 
-    changeValue(env.host.querySelector(".ns-pose-lib-char"), "");   // 基座筛选默认停在当前素体，卡片要在「全部基座」那一档才全出来
+    click(libChip(env, "char", "全部基座")); await settle();   // 基座筛选默认停在当前素体，卡片要在「全部基座」那一档才全出来
     const card = [...env.host.querySelectorAll(".ns-pose-lib-card")].find((c) => c.dataset.libId === "calm-1");
     click(card);
     await settle();
@@ -879,7 +996,7 @@ test("姿势库弹窗：页面报整场没套上时说清原因，不收窗也�
         "没套成就不收窗，用户可以接着挑一条");
 });
 
-test("姿势库弹窗：搜索与分组下拉同一条过滤口径，卡片区按归并组分层", async () => {
+test("姿势库弹窗：搜索与分组 chip 同一条过滤口径，卡片区按归并组分层", async () => {
     resetEnv();
     const env = await mounted();
     await env.ready();
@@ -887,8 +1004,13 @@ test("姿势库弹窗：搜索与分组下拉同一条过滤口径，卡片区�
 
     const modal = () => env.host.querySelector(".ns-libmodal:not(.ns-hidden)");
     const titles = () => [...modal().querySelectorAll(".ns-pose-lib-group-title")].map((h) => h.textContent);
-    changeValue(modal().querySelector(".ns-pose-lib-char"), "");   // 基座筛选默认停在当前素体，搜索与分组要在「全部基座」那一档看
+    click(libChip(env, "char", "全部基座")); await settle();   // 基座筛选默认停在当前素体，搜索与分组要在「全部基座」那一档看
     assert.deepEqual(titles(), ["站立（3）", "格斗与武器（1）"], "分层按 index.json 的 groups 顺序走");
+    assert.deepEqual(libChips(env, "group").map((c) => c.textContent),
+        ["全部分组", "站立（3）", "格斗与武器（1）"],
+        "分组 chip 来自索引的 groups，label 带中文归并组名与条数 —— 分组不再是点开下拉才看得见的一行");
+    assert.deepEqual(libChips(env, "group").map((c) => c.getAttribute("aria-pressed")), ["true", "false", "false"],
+        "当前停在哪一颗 chip 要写在 chip 自己身上");
     inputText(modal().querySelector(".ns-pose-lib-search"), "双手持剑");
     assert.deepEqual([...modal().querySelectorAll(".ns-pose-lib-card")].map((c) => c.dataset.libId), ["sword"]);
     assert.equal(modal().querySelector(".ns-pose-lib-blank").hidden, true, "有匹配就不出空态文案");
@@ -897,11 +1019,37 @@ test("姿势库弹窗：搜索与分组下拉同一条过滤口径，卡片区�
     assert.equal(modal().querySelector(".ns-pose-lib-blank").hidden, false);
     assert.match(modal().querySelector(".ns-pose-lib-blank").textContent, /没有匹配/);
     inputText(modal().querySelector(".ns-pose-lib-search"), "");
-    changeValue(modal().querySelector(".ns-pose-lib-group"), "fight");
+    click(libChip(env, "group", "格斗与武器"));
+    await settle();
     assert.deepEqual([...modal().querySelectorAll(".ns-pose-lib-card")].map((c) => c.dataset.libId), ["sword"],
-        "分组下拉按 index.json 的 groups key 过滤");
-    assert.deepEqual([...modal().querySelector(".ns-pose-lib-group").options].map((o) => o.value),
-        ["", "stand", "fight"], "分组下拉来自索引的 groups，label 带中文归并组名与条数");
+        "点一颗分组 chip 就是按 index.json 的 groups key 过滤");
+    assert.equal(libChip(env, "group", "格斗与武器").classList.contains("ns-pose-chip-on"), true,
+        "点下去的那颗 chip 亮起：筛选落点要在 chip 上看得见");
+    assert.deepEqual(titles(), ["格斗与武器（1）"], "卡片区跟着 chip 这一刀分层");
+});
+
+test("分组 chip 吃 ready 门禁：弹窗在页面 ready 之前重画出来的 chip 不能点", async () => {
+    resetEnv();
+    const env = await mounted();
+    await openLib(env);   // 不喂 pose:ready：这一屏只有卡片与 chip 的骨架，点了只会空转
+    assert.ok(chips(env, LIB).length >= 3, "库读得到就出分组 chip（门禁只锁交互，不锁画面）");
+    assert.ok(chips(env, LIB).every((c) => c.disabled), "ready 之前每一颗 chip 都按下去不动");
+});
+
+test("门禁翻一遍分组 chip 跟着落状态：ready 一到就解禁，切来源不画灰一片", async () => {
+    resetEnv();
+    const env = await mounted();
+    await openLib(env);
+    assert.ok(chips(env, LIB).every((c) => c.disabled), "ready 之前 chip 全灰");
+    await env.ready();
+    await settle();
+    // chip 每筛一遍重造一颗，不在门禁登记表里；灰掉的 chip 自己点不动，没人补这一遍就永远回不来
+    assert.ok(chips(env, LIB).every((c) => !c.disabled),
+        "ready 落下来，弹窗里的 chip 跟着解禁，不用用户去搜索框或切来源救");
+    click(libChip(env, "origin", "全部来源"));
+    await settle();
+    assert.ok(chips(env, LIB).every((c) => !c.disabled),
+        "切一次筛选不该把 chip 画灰一遍：本机那份是静态读、云端那份是宿主自己的读，都不走桥锁");
 });
 
 test("姿势库未同步：出同步指引，不给一个空浏览器", async () => {
@@ -958,21 +1106,19 @@ test("姿势库来源筛选：预设 / 本地角标与来源下拉同一条 orig
     const modal = () => env.host.querySelector(".ns-libmodal:not(.ns-hidden)");
     const cards = () => [...modal().querySelectorAll(".ns-pose-lib-card")];
     const originOf = (card) => card.querySelector(".ns-pose-lib-origin-badge").textContent;
-    changeValue(modal().querySelector(".ns-pose-lib-char"), "");   // 基座筛选默认停在当前素体，来源过滤要在「全部基座」那一档看
+    click(libChip(env, "char", "全部基座")); await settle();   // 基座筛选默认停在当前素体，来源过滤要在「全部基座」那一档看
     assert.deepEqual(cards().map((c) => [c.dataset.libId, originOf(c)]),
         [["a", "预设"], ["calm-1", "本地"], ["fem-1", "预设"], ["sword", "预设"]], "合并库每条的出处要写在卡片上");
-    const originSel = modal().querySelector(".ns-pose-lib-origin");
-    assert.deepEqual([...originSel.options].map((o) => o.value), ["", "lib", "lab"],
-        "来源下拉：全部 / 预设 / 本地三档");
-    assert.match(modal().querySelector(".ns-pose-lib-meta").textContent,
-        /4 个姿势（预设 3 · 本地 1）/, "顶部一行报清预设与本地各几条");
-    changeValue(originSel, "lib");
+    assert.deepEqual(libChips(env, "origin").map((c) => c.textContent),
+        ["全部来源", "预设（3）", "本地（1）"],
+        "来源 chip 三档：全部 / 预设 / 本地，条数按基座过滤后的行数出来");
+    click(libChip(env, "origin", "预设")); await settle();
     assert.deepEqual(cards().map((c) => c.dataset.libId), ["a", "fem-1", "sword"], "预设档只列预设条目");
-    assert.deepEqual([...modal().querySelector(".ns-pose-lib-group").options].map((o) => o.textContent),
-        ["全部分组", "站立（2）", "格斗与武器（1）"], "分组下拉的条数跟着来源过滤走，不拿清单里预设集那份 count");
-    changeValue(originSel, "lab");
+    assert.deepEqual(libChips(env, "group").map((c) => c.textContent),
+        ["全部分组", "站立（2）", "格斗与武器（1）"], "分组 chip 的条数跟着来源过滤走，不拿清单里预设集那份 count");
+    click(libChip(env, "origin", "本地")); await settle();
     assert.deepEqual(cards().map((c) => c.dataset.libId), ["calm-1"]);
-    changeValue(originSel, "");
+    click(libChip(env, "origin", "全部来源")); await settle();
     assert.equal(cards().length, 4, "回到全部来源 = 合并库全量");
 });
 
@@ -986,16 +1132,17 @@ test("姿势库基座筛选：默认落在标准男基座上，条目按 charKey
 
     const modal = () => env.host.querySelector(".ns-libmodal:not(.ns-hidden)");
     const cards = () => [...modal().querySelectorAll(".ns-pose-lib-card")];
-    const charSel = modal().querySelector(".ns-pose-lib-char");
-    assert.equal(charSel.value, "bodyMale", "库默认停在画布当前那具素体（页面开局的标准男基座）：默认显示的就是套得进当前素体的那一批");
-    assert.deepEqual([...charSel.options].map((o) => o.textContent),
+    const charChips = () => libChips(env, "char");
+    assert.deepEqual(charChips().map((c) => c.textContent),
         ["全部基座", "标准男素体", "标准女素体"],
-        "基座选项跟着面板那两具基座走：label 用 meta/list 那份，页面注册表里的其余那几档不出选项");
+        "基座档位跟着面板那两具基座走：label 用 meta/list 那份，页面注册表里的其余那几档不出 chip");
+    assert.ok(charChips().find((c) => c.textContent === "标准男素体").getAttribute("aria-pressed") === "true",
+        "库默认停在画布当前那具素体（页面开局的标准男基座）：默认显示的就是套得进当前素体的那一批");
     assert.deepEqual(cards().map((c) => c.dataset.libId), ["a", "calm-1", "sword"],
         "挂在女基座上的姿态默认不出现：套到男素体上是上半身全歪");
-    changeValue(charSel, "bodyFemale");
-    assert.deepEqual(cards().map((c) => c.dataset.libId), ["fem-1"], "基座下拉按条目的 charKey 过滤");
-    changeValue(charSel, "");
+    click(libChip(env, "char", "标准女素体")); await settle();
+    assert.deepEqual(cards().map((c) => c.dataset.libId), ["fem-1"], "基座档位按条目的 charKey 过滤");
+    click(libChip(env, "char", "全部基座")); await settle();
     assert.equal(cards().length, 4, "全部基座 = 合并库全量：没有 charKey 的条目也在这档可见");
     assert.deepEqual(libFilter(POSE_LIB.entries, { charKey: "bodyFemale" }).map((e) => e.id), ["fem-1"]);
     assert.deepEqual(libFilter([{ id: "old-1", groups: ["stand"] }], { charKey: "bodyMale" }), [],
@@ -1029,8 +1176,7 @@ test("云端未配置：来源开关只有本机库那一条，道具下拉里�
         "没配云端的机器上不许出现一条选了只会失败的道具卡片");
     await openLib(env);
 
-    const source = env.host.querySelector(".ns-libmodal:not(.ns-hidden) .ns-pose-lib-source");
-    assert.deepEqual([...source.options].map((o) => o.value), ["local"], "只有一台机器就不给开关");
+    assert.deepEqual(libChips(env, "source").map((c) => c.textContent), ["本机库"], "只有一台机器就不出第二颗来源 chip");
     assert.equal(fetchLog.filter((c) => c.path === "/neo_pose/cloud_index").length, 0,
         "未配置的云端不是一次后台轮询：连清单都不读");
 });
@@ -1042,19 +1188,18 @@ test("云端库：切到云端读一次清单，卡片带云端角标与直连�
     await openLib(env);
 
     const modal = () => env.host.querySelector(".ns-libmodal:not(.ns-hidden)");
-    const source = () => modal().querySelector(".ns-pose-lib-source");
-    assert.deepEqual([...source().options].map((o) => o.value), ["local", "cloud"], "配好云端才出第二条来源");
+    assert.deepEqual(libChips(env, "source").map((c) => c.textContent), ["本机库", "云端库"], "配好云端才出第二颗来源 chip");
     assert.ok(fetchLog.some((c) => c.path === "/neo_pose/cloud_index"), "配好云端进页读一次清单");
-    changeValue(source(), "cloud");
+    click(libChip(env, "source", "云端库"));
     await settle();
-    changeValue(modal().querySelector(".ns-pose-lib-char"), "");   // 基座筛选跟着当前素体，卡片要在全部基座那档全出来
+    assert.deepEqual(libChips(env, "char").map((c) => c.textContent), ["全部基座"],
+        "云端那批的 charKey 是 standard，落不进面板的基座白名单：基座行只剩「全部基座」，筛选自己落回这一档");
     const cards = [...modal().querySelectorAll(".ns-pose-lib-card")];
     assert.deepEqual(cards.map((c) => c.dataset.libId), ["c1", "c2"], "云端两条 = 两张卡");
     assert.ok(cards[0].querySelector(".ns-pose-lib-origin-cloud"), "云端条目要带「云端」角标");
     assert.equal(cards[0].querySelector(".ns-pose-lib-thumb").getAttribute("src"),
         "https://oss.example/neo/pose/preview/c1.clay.png", "封面只是一张 <img>，直连 OSS 地址不经后端");
-    assert.equal(modal().querySelector(".ns-pose-lib-origin").hidden, true, "云端清单没有预设/本地这层，筛选跟着收起");
-    assert.match(modal().querySelector(".ns-pose-lib-meta").textContent, /2 个云端姿势/);
+    assert.equal(modal().querySelector(".ns-pose-lib-chips-origin").hidden, true, "云端清单没有预设/本地这层，来源行跟着收起");
     click(cards[0]);
     await settle();
     assert.ok(fetchLog.some((c) => c.path === "/neo_pose/cloud_file"
@@ -1098,7 +1243,7 @@ test("云端清单读不到：切过去给云端指引，不渲染一个空浏�
     await openLib(env);
 
     const modal = () => env.host.querySelector(".ns-libmodal:not(.ns-hidden)");
-    changeValue(modal().querySelector(".ns-pose-lib-source"), "cloud");
+    click(libChip(env, "source", "云端库"));
     await settle();
     assert.equal(modal().querySelectorAll(".ns-pose-lib-card").length, 0);
     assert.match(modal().querySelector(".ns-pose-lib-blank").textContent, /pose_deploy_oss/,

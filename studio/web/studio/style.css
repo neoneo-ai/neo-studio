@@ -215,7 +215,13 @@ body {
 .ns-libmodal-resize::after { content: ""; position: absolute; top: 45%; right: 2px; width: 2px; height: 10%; border-radius: 2px; background: rgba(255, 255, 255, 0.18); }
 .ns-libmodal-resize:hover::after { background: rgba(255, 255, 255, 0.38); }
 .ns-libmodal-titlebar { flex: none; display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: #202024; border-bottom: 1px solid #333; cursor: move; user-select: none; touch-action: none; }
-.ns-libmodal-title { flex: 1; min-width: 0; font-size: 13px; color: #ddd; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ns-libmodal-title { flex: 1 1 96px; min-width: 0; font-size: 13px; color: #ddd; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* 标题栏右侧插槽（js/core/lib-modal.js 的 setTitlebarExtra）：搜索框钉在这里，内容区就不必为它留一行。
+   上限 460px：整屏弹窗里搜索框拉到整条标题栏那么长，眼睛找不到自己的输入落在哪 */
+.ns-libmodal-titlebar-slot { flex: 1 1 auto; min-width: 0; max-width: 460px; display: flex; align-items: center; gap: 8px; }
+.ns-libmodal-titlebar-slot:empty { display: none; }
+/* 标题栏整条是 cursor:move + 禁选（拖窗用的），插槽里的输入框要把「这是打字的地方」说回去 */
+.ns-libmodal-titlebar-slot input { user-select: text; cursor: text; }
 .ns-libmodal-btn { flex: none; cursor: pointer; background: transparent; border: 1px solid transparent; border-radius: 4px; color: #9aa4b0; padding: 4px; line-height: 0; }
 .ns-libmodal-btn:hover { color: #fff; background: rgba(255, 255, 255, 0.06); }
 .ns-libmodal-close:hover { color: #ff8a9a; }
@@ -275,6 +281,29 @@ body {
 .ns-director-empty-card.neo-gallery-gm-idle { padding-top: 40px; }
 .ns-director-empty-actions { display: flex; align-items: center; gap: 10px; }
 .ns-director-empty-actions .ns-btn { display: inline-flex; align-items: center; gap: 6px; }
+/* 按钮下方三条最近导演配方（标签 + 段数 + 标题）：点一行直接进该配方的编辑器，不开配方弹窗。
+   宽度贴着最长那一行收（fit-content），不铺一条固定长栏；配方名多是「主题-描述」长句，
+   超出上限才截断，标签与段数不跟着被挤掉 */
+.ns-director-empty-recipes {
+    display: flex; flex-direction: column; gap: 6px;
+    width: fit-content; max-width: min(420px, 88vw);
+}
+.ns-director-empty-recipes[hidden] { display: none; }
+.ns-director-empty-recipe {
+    display: flex; align-items: center; gap: 8px; padding: 7px 10px; text-align: left;
+    background: #1b1b20; border: 1px solid #35353d; border-radius: 7px;
+    color: #e6e6e6; font: inherit; cursor: pointer;
+}
+.ns-director-empty-recipe:hover { background: #202027; border-color: #4a7bd0; }
+.ns-director-empty-recipe-tag {
+    flex: none; padding: 1px 5px; font-size: 10px; border-radius: 4px;
+    background: rgba(255, 255, 255, 0.08); color: #9ea0aa;
+}
+.ns-director-empty-recipe-seg { flex: none; font-size: 11px; color: #8b8d96; }
+.ns-director-empty-recipe-name {
+    flex: 1 1 auto; min-width: 0; font-size: 13px; font-weight: 600;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 /* 分隔条：18px 宽热区里一条竖线，悬停 / 键盘聚焦 / 拖动时加宽变蓝（照 VSCode 的 sash）；
    拖动调生成面板宽度，拖过下限一截 = 关闭面板，收起后向外拖出重新展开，键盘 ←→ 调宽、Enter 收起 */
 .ns-director-split {
