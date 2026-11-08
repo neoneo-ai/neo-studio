@@ -4,6 +4,8 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+## [1.6.1] - 2026-11-08
+
 ### Added
 - **The 3D 姿势 export panel gains a separate 送进图片编辑 button: pose sets go to the library, and one click
   sends the control image to the editor.** Exporting stays what it always was - the set lands in the library's
