@@ -20,7 +20,7 @@ import { openGallerySidebar, toggleGallerySidebar, grabDataType, copyGalleryToIn
 import { ttlCache } from "./js/core/cache.js";
 import { t, tf } from "./js/core/i18n.js";
 import { icon, setIcon, setIconLabel } from "./js/core/icons.js";
-import { createAngleOrb, angleLabel, anglePrompt, rotationLabel, rotationToDisplay, displayToRotation, tiltLabel, zoomLabel, snapToNearest, ROTATION_VALUES, TILT_VALUES, ZOOM_VALUES, DEFAULT_ANGLE } from "./angle/angle-orb.js";
+import { createAngleOrb, anglePrompt, rotationLabel, rotationToDisplay, displayToRotation, tiltLabel, zoomLabel, snapToNearest, ROTATION_VALUES, TILT_VALUES, ZOOM_VALUES } from "./angle/angle-orb.js";
 
 // 一键角色图 / 九宫格分镜图都固定走 Qwen Image 2.1 预设（多路参考槽位、不走 Krea2 编辑链）。
 const QWEN_IMAGE_SKILL_ID = "qwen_image_21";
@@ -1096,6 +1096,8 @@ export function chipButton(sel, { icon: iconName, glyph = null } = {}) {
         const v = sel.value || sel.dataset.follow || "";
         label.textContent = v ? (sel.value ? (sel.options[sel.selectedIndex]?.textContent || v) : v) : t("默认");
         const optTitle = sel.options[sel.selectedIndex]?.title;
+        // 选中项没有自己的提示时落回 select 那句（「编辑模式：…」）：程序换 value 只调 sync，
+        // 不写回这行 chip.title 的话，提示会一直挂着上一次选中项那句（用户看到的是上一个模式的说明）
         chip.title = optTitle || sel.title;
         if (glyph) glyph.sync(v);
     };
@@ -1315,6 +1317,14 @@ function reusePaintPanel(host, kind, image, subfolder, prefill = null) {
     return true;
 }
 
+/** 首页「编辑」板块的直达卡：跳到编辑页，并把这一发要用的模式切进那块现成面板。
+ *  编辑页进页就把面板铺好了（buildEdit 注册的宿主），这里只换模式、不重建——重建会把用户写了一半
+ *  的提示词清掉。模式当场切过去，没有原图也切，之后换原图也不动它（模式以用户选的为准）。 */
+export function openImageEditMode(mode) {
+    _paintHosts.edit.__neoSetMode(mode);
+    _paintHosts.onOpen("edit");
+}
+
 export function openImageEditDialog(gallery, image = null, subfolder = "", opts = null) {
     const host = opts?.container || _paintHosts?.edit;
     if (reusePaintPanel(host, "edit", image, subfolder, opts?.prefill)) return;
@@ -1332,6 +1342,12 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
         rows: 4,
         placeholder: t("描述你想对这张图做的修改，例如：把背景换成海边日落、给角色加一顶帽子……")
     });
+    // 提示词框里「代码写进去的那句」记在 autoPrompt（模式切换、技能切换、姿势参考切换写进去的都算）。
+    // 切模式时只有「空框 / 就是这句」会被换成本模式的触发词——上一模式的自动句留着，技能收到的就是
+    // 不相干的指令（扩图收了机位指令出不了补边）。用户自己写的句子在这条线上认不出来，永远不动。
+    let autoPrompt = "";
+    const fillAutoPrompt = (text) => { autoPrompt = String(text || "").trim(); promptInput.value = autoPrompt; };
+    const isAutoPrompt = () => { const cur = promptInput.value.trim(); return !cur || cur === autoPrompt; };
 
     let running = false;
     let cancelId = null;
@@ -1401,13 +1417,23 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
     skillSel.onchange = () => {
         const sk = _genSkills.find(s => s.id === skillSel.value);
         const dp = sk?.gen_config?.default_prompt;
-        if (dp) promptInput.value = dp;
+        if (dp) fillAutoPrompt(dp);
         applyEditModelCfg(skillSel.value).then(syncEditParamsChip);
     };
 
+    // 模式码 → chip 上那个名字（空面板的提示句要报名字，名字跟着 i18n 走；chip 与 modeSel 在下方构造）
+    const modeLabel = (mode) => Array.from(modeSel.options).find((o) => o.value === mode)?.textContent || mode;
+
+    let editMode = "normal";   // 声明在 renderIdle 之前：空面板初始渲染就要读它（模式只由用户切，代码不改）
+
+    // 空面板的提示句跟着面板落定的模式走：直达卡与模式 chip 都能在没有原图时把模式定下来，
+    // 提示要点名这一发要干什么，否则用户只知道面板在等他、不知道在等什么
     const renderIdle = () => {
         // 绘画页那块面板贴着预览图，纵向没有余量：有原图时不再挂那行说明（进度 / 错误仍用这块状态区）
-        const hint = !source ? t("点预览区的「原图」方块选原图，再写编辑指令")
+        // 空面板 + 首页带来的模式：提示句要点名这一发要干什么，否则用户只知道面板在等他、不知道在等什么
+        const hint = !source ? (editMode !== "normal"
+            ? tf("已选「{mode}」：点预览区的「原图」方块选原图", { mode: modeLabel(editMode) })
+            : t("点预览区的「原图」方块选原图，再写编辑指令"))
             : panel.embedded ? ""
             : t("填写编辑指令后点「生成」，原图将作为参考图传入所选技能。");
         fill(statusBox, hint ? $el("div", { className: "neo-gallery-story-hint", textContent: hint }) : null);
@@ -1702,9 +1728,10 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
 
     // 图片对比区（前后叠加 + 拖拽窗帘）
     const refFullUrl = (it) => `/neo_gallery/image?filename=${encodeURIComponent(it.filename)}&subfolder=${encodeURIComponent(it.subfolder ? `input/${it.subfolder}` : "input")}`;
-    // Lightbox 统一列表：原图 + 所有参考图，支持 ←/→ 切换
+    // Lightbox 统一列表：原图 + 所有参考图，支持 ←/→ 切换。直达卡会把模式带到空面板上，
+    // 那时 source 还是 null，origUrl()/pathLabel() 读的就是 source.filename —— 没有原图就不放这一项
     const buildLightboxItems = () => [
-        { kind: "image", url: origUrl(), title: pathLabel() },
+        ...(source ? [{ kind: "image", url: origUrl(), title: pathLabel() }] : []),
         ...extraRefs.map((r) => ({ kind: "image", url: refFullUrl(r), title: r.filename }))
     ];
     // 本次生成的结果图（全尺寸地址），未生成时为空
@@ -1717,6 +1744,7 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
     };
     const openCompareLightbox = (showResult) => {
         const items = buildLightboxItems();
+        if (!items.length && !resultItems.length) return;   // 空面板点预览区：没有任何可放大的图
         if (!resultItems.length) return Lightbox.open({ items, index: 0 });
         const firstResult = items.length;
         items.push(...resultItems);
@@ -1777,18 +1805,8 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
     renderSourceEmptyBox();
     imgWrap.appendChild(empty);
     if (!source) origImg.style.display = "none";
-    // 扩图 / 局部 / 点选删除 / 融合 / 姿势都要在原图上动手，没原图时先收起这些入口。
-    // 禁用态要自己说出缺什么：一枚灰 chip 挂着一句「在原图上拖框」的 tooltip，在用户眼里就是点坏了的控件
-    const sourceBtns = [modeChip.chip];
-    const sourceTitles = sourceBtns.map((b) => b.title);
-    const noSourceTitle = t("先选一张原图：点预览区的「原图」方块，或把素材拖进来");
-    const setSourceModeBtns = (on) => {
-        sourceBtns.forEach((b, i) => {
-            b.disabled = !on;
-            b.title = on ? sourceTitles[i] : noSourceTitle;
-        });
-    };
-    setSourceModeBtns(!!source);
+    // 模式 chip 永远可点：模式是用户的选择，代码不替用户改它（收回原图、换原图都不动），
+    // 禁用等于把模式锁死在无原图面板上。缺原图由提示句与「生成」那句话说清
     // 舞台：只负责把图片盒水平居中。对比说明行与「看大图」按钮去掉了——点图 / 点分割线本来就进灯箱
     const compareStage = $el("div", { className: "neo-gallery-edit-compare-stage" }, [imgWrap]);
     const compareBox = $el("div", { className: "neo-gallery-edit-compare" }, [compareStage]);
@@ -1915,9 +1933,11 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
     };
     if (panel.embedded) {
         panel.host.appendChild(overlay);
-        panel.host.__neoPanelClose = () => { close(); panel.host.__neoPanelRoot = null; panel.host.__neoSetSource = null; panel.host.__neoPrefillEdit = null; };
+        panel.host.__neoPanelClose = () => { close(); panel.host.__neoPanelRoot = null; panel.host.__neoSetSource = null; panel.host.__neoPrefillEdit = null; panel.host.__neoSetMode = null; panel.host.__neoClearSource = null; };
         panel.host.__neoSetSource = (img, sub) => applySource(img.filename || img.name, sub || "");
         panel.host.__neoPrefillEdit = (pf) => applyEditPrefill(pf);   // 再来一发：原图 / 参考图 / 模式 / 技能全换进这块现成面板
+        panel.host.__neoSetMode = (m) => setPanelMode(m);   // 首页直达卡：把这一发的模式切进这块面板
+        panel.host.__neoClearSource = () => clearSource();   // 收回原图走面板内那条路（宿主侧入口与 ✕ 同一函数）
     } else {
         document.body.appendChild(overlay);
         // 标题栏拖动 + 双击最大化/还原（同导演编辑器 / 生成素材窗模式）
@@ -1945,6 +1965,13 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
             widthInput.value = t.w;
             heightInput.value = t.h;
             syncSizeChip();
+            // 原图是在扩图模式里落进来的话，画布基准是按「还没解码的原图」量的（fitSize 量到 0）。
+            // 解码完成这一刻按真实显示尺寸重铺一次——此时用户还没开始拖框，重铺没有代价
+            if (editMode === "outpaint" && canvasEl && !base?.dw) {
+                setupOutpaintBox();
+                snapBoxToRatio();
+                updateSizeLabel();
+            }
         }
 
     };
@@ -1965,9 +1992,7 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
         fullUrlReady();
     })();
 
-    // ---- 编辑模式统一管理（normal / outpaint / local / remove / blend / pose） ----
-    let editMode = "normal";
-
+    // ---- 编辑模式统一管理（normal / outpaint / local / remove / blend / pose）：editMode 在 renderIdle 上方声明 ----
     // ---- 扩图：原图上拖框定四边留白量（只向外扩；比例模式锁长宽比） ----
     let box = null;        // {x, y, w, h} 画布坐标（基准像素），原点为原图左上角
     let base = null;       // 基准尺寸：原图 contain 进舞台后的可见图片尺寸；开扩图时定一次后冻结
@@ -2180,17 +2205,14 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
     };
     // ---- 统一编辑模式切换（新增模式只需在此加一个 case） ----
     // 姿势模式触发词随参考图切换：没参考图 = 按提示词改姿势（技能 config 的 default_prompt），
-    // 拖入姿势参考 = 换成迁移触发词。只替换「空 / 仍是默认词」的提示词，用户写过的不动。
+    // 拖入姿势参考 = 换成迁移触发词。只替换「空 / 代码写进去的那句」，用户写过的不动。
     const poseBasePrompt = () => String(_genSkills.find(s => s.id === QWEN_POSE_EDIT_SKILL_ID)?.gen_config?.default_prompt || "").trim();
     const syncPosePrompt = () => {
-        if (editMode !== "pose") return;
-        const base = poseBasePrompt();
-        const cur = promptInput.value.trim();
-        if (cur && cur !== base && cur !== POSE_REF_DEFAULT_PROMPT) return;
-        const want = extraRefs.length ? POSE_REF_DEFAULT_PROMPT : base;
-        if (want) promptInput.value = want;
+        if (editMode !== "pose" || !isAutoPrompt()) return;
+        const want = extraRefs.length ? POSE_REF_DEFAULT_PROMPT : poseBasePrompt();
+        if (want) fillAutoPrompt(want);
     };
-    // 机位触发词 = 技能 default_prompt 的方括号按当前三档填死；只覆盖「空 / 仍是模板 / 仍是上一版填好词」，
+    // 机位触发词 = 技能 default_prompt 的方括号按当前三档填死；只覆盖「空 / 代码写进去的那句」，
     // 用户自己写过的句子不碰（与 syncPosePrompt 同一条规矩）
     const angleTemplate = () => String(_genSkills.find(s => s.id === QWEN_CAMERA_ANGLE_SKILL_ID)?.gen_config?.default_prompt || "").trim();
     const syncAngleSliders = (cfg) => {
@@ -2205,17 +2227,12 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
     };
     // 机位触发词 = 技能 default_prompt 的方括号按当前三档填死。
     // 进模式那一下（force）直接写：模式本身就是「用机位指令重出这一张」，框里残留上一个模式的词会让技能收不到机位；
-    // 进模式之后只覆盖「空 / 仍是模板 / 仍是上一版填好的词」，用户自己改过的不碰（与 syncPosePrompt 同一条规矩）。
+    // 进模式之后只覆盖「空 / 代码写进去的那句」，用户自己改过的不碰（与 syncPosePrompt 同一条规矩）。
     const fillAnglePrompt = (force = false) => {
         if (editMode !== "angle") return;
-        const tpl = angleTemplate();
-        const cur = promptInput.value.trim();
-        if (!force && cur && cur !== tpl && cur !== anglePrompt(angleBeforeFill || DEFAULT_ANGLE, tpl)) return;
-        const cfg = angleOrb.get();
-        angleBeforeFill = cfg;
-        promptInput.value = anglePrompt(cfg, tpl);
+        if (!force && !isAutoPrompt()) return;
+        fillAutoPrompt(anglePrompt(angleOrb.get(), angleTemplate()));
     };
-    let angleBeforeFill = null;
     /** 滑杆落点吸附到档位：range 的 step 已按档位排好，这里只兜手改 value 与拖到中间值的情况。 */
     const snapAngleValue = (key, raw) => snapToNearest(Number(raw) || 0,
         { rotation: ROTATION_VALUES, tilt: TILT_VALUES, zoom: ZOOM_VALUES }[key]);
@@ -2228,6 +2245,69 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
             fillAnglePrompt();
         });
     }
+    // 模式专属行与尺寸片的显隐：扩图框 / 涂抹行 / 点选行 / 机位球都是「在原图上动手」的控件，
+    // 没有原图时整块收着（那枚模式 chip 此时也是禁用的）。首页直达卡会把模式带到空面板上，
+    // 空面板只剩预览区那枚「＋ 原图」方块与提示词框，applySource 把原图落定之后这里才亮起来。
+    const syncModeRows = () => {
+        const on = !!source;
+        const m = editMode;
+        outpaintRow.style.display = on && m === "outpaint" ? "" : "none";
+        localRow.style.display = on && m === "local" ? "" : "none";
+        removeRow.style.display = on && m === "remove" ? "" : "none";
+        // 机位只用原图这一张：参考位与提示词框整块收起，这两件事跟着模式走，跟有没有原图无关
+        // —— 直达卡把机位带到空面板时，那框固定句式的触发词更不该露在初始界面上。机位球要贴着
+        // 原图摆才有意义，没有原图时收着；球 + 三条滑杆 + 一框提示词叠在一起，输入卡就顶到预览区
+        // 头上，框收起来省下整块高度，出图时 prompt 照旧由滑杆实时写进框里，用户改过的句子切回
+        // 其它模式还在。
+        const isAngle = m === "angle";
+        angleBox.style.display = on && isAngle ? "" : "none";
+        refDropContainer.style.display = isAngle ? "none" : "";
+        promptInput.style.display = isAngle ? "none" : "";
+        // 尺寸片：扩图/局部/删除各自的画布定尺寸，片收起；扩图要把「目标尺寸」读数露在编辑区里
+        const hideWH = on && (m === "outpaint" || m === "local" || m === "remove");
+        widthInput.style.display = hideWH ? "none" : "";
+        heightInput.style.display = hideWH ? "none" : "";
+        resLabelEl.textContent = (on && { outpaint: t("目标尺寸"), local: t("编辑区（自动）"), remove: t("同原图") }[m]) || t("目标分辨率");
+        sizeLabel.style.display = on && m === "outpaint" ? "" : "none";
+        sizeChip.style.display = hideWH && m !== "outpaint" ? "none" : "";
+        const openEditor = on && m === "outpaint";
+        sizeEditor.style.display = openEditor ? "" : "none";
+        sizeChip.classList.toggle("on", openEditor);
+    };
+
+    // 要在原图上动手的模式层：扩图把原图移进补边画布、局部铺涂抹层、点选删除铺标记层。
+    // 空面板没有原图可动手，这三层都不铺：扩图在无原图的 imgWrap 上铺画布，量出来的基准是 0，
+    // 画布塌成一格，还把 src 为空的 <img> 搬进画布（浏览器画出一枚坏图），分割线也挂进画布变可点。
+    const setupModeLayer = async () => {
+        if (!source) return;
+        if (editMode === "outpaint") {
+            setupOutpaintBox();
+            snapBoxToRatio();
+            if (!promptInput.value.trim()) fillAutoPrompt(OUTPAINT_DEFAULT_PROMPT);
+        } else if (editMode === "local") {
+            await setupPaint();
+        } else if (editMode === "remove") {
+            widthInput.value = origImg.naturalWidth || "";
+            heightInput.value = origImg.naturalHeight || "";
+            await setupRemoveClicks();
+            if (!promptInput.value.trim()) fillAutoPrompt(REMOVE_DEFAULT_PROMPT);
+            if (!refName) {
+                try { refName = await copyImageToInput(source, source.subfolder); }
+                catch (e) { removeHint.textContent = tf("原图读取失败：{msg}", { msg: e.message }); }
+            }
+        }
+    };
+
+
+    /** 切进一个模式写进提示词框的那句默认触发词。常规 / 局部要用户自己写，不在表里；
+     *  机位那句照球当前档位现写（fillAnglePrompt），也不在这张表里 */
+    const MODE_DEFAULT_PROMPT = {
+        outpaint: () => OUTPAINT_DEFAULT_PROMPT,
+        remove: () => REMOVE_DEFAULT_PROMPT,
+        blend: () => BLEND_DEFAULT_PROMPT,
+        pose: () => (extraRefs.length ? POSE_REF_DEFAULT_PROMPT : poseBasePrompt()),
+    };
+
     const setEditMode = async (mode) => {
         if (mode === editMode) return;
         const prev = editMode;
@@ -2245,28 +2325,8 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
         modeChip.sync();
         modeChip.setIcon(MODE_ICONS[mode]);
 
-        // 模式专属行
-        outpaintRow.style.display = mode === "outpaint" ? "" : "none";
-        localRow.style.display = mode === "local" ? "" : "none";
-        removeRow.style.display = mode === "remove" ? "" : "none";
-        angleBox.style.display = mode === "angle" ? "" : "none";
-        // 机位只用原图这一张：参考图位列收起。提示词框整块收起 —— 词是机位球生成的固定句式，
-        // 球 + 三条滑杆 + 一框提示词叠在一起，输入卡就顶到预览区头上；框收起来省下整块高度，
-        // 出图时 prompt 照旧由滑杆实时写进框里，用户改过的句子切回其它模式还在。
-        refDropContainer.style.display = mode === "angle" ? "none" : "";
-        promptInput.style.display = mode === "angle" ? "none" : "";
-
-        // 尺寸片：扩图/局部/删除各自的画布定尺寸，片收起；扩图要把「目标尺寸」读数露在编辑区里
-        const hideWH = (mode === "outpaint" || mode === "local" || mode === "remove");
-        widthInput.style.display = hideWH ? "none" : "";
-        heightInput.style.display = hideWH ? "none" : "";
-        resLabelEl.textContent = { outpaint: t("目标尺寸"), local: t("编辑区（自动）"), remove: t("同原图") }[mode] || t("目标分辨率");
-        sizeLabel.style.display = mode === "outpaint" ? "" : "none";
-        sizeChip.style.display = hideWH && mode !== "outpaint" ? "none" : "";
-        const openEditor = mode === "outpaint";
-        sizeEditor.style.display = openEditor ? "" : "none";
-        sizeChip.classList.toggle("on", openEditor);
-
+        // 模式专属行与尺寸片：一次同步（空面板上这些行全部收着，见 syncModeRows）
+        syncModeRows();
 
         // 技能选择（程序改 value 不触发 onchange，自定参数要自己重放到新技能的配置）
         skillSel.value = { outpaint: QWEN_OUTPAINT_SKILL_ID, local: QWEN_LOCAL_EDIT_SKILL_ID, pose: QWEN_POSE_EDIT_SKILL_ID, angle: QWEN_CAMERA_ANGLE_SKILL_ID }[mode] || QWEN_IMAGE_SKILL_ID;
@@ -2274,32 +2334,19 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
         await applyEditModelCfg(skillSel.value);
         syncEditParamsChip();
 
-        // 模式专属 setup
-        if (mode === "outpaint") {
-            setupOutpaintBox();
-            snapBoxToRatio();
-            if (!promptInput.value.trim()) promptInput.value = OUTPAINT_DEFAULT_PROMPT;
-        } else if (mode === "local") {
-            await setupPaint();
-        } else if (mode === "remove") {
-            widthInput.value = origImg.naturalWidth || "";
-            heightInput.value = origImg.naturalHeight || "";
-            await setupRemoveClicks();
-            if (!promptInput.value.trim()) promptInput.value = REMOVE_DEFAULT_PROMPT;
-            if (!refName) {
-                try { refName = await copyImageToInput(image, subfolder); }
-                catch (e) { removeHint.textContent = tf("原图读取失败：{msg}", { msg: e.message }); }
-            }
-        } else if (mode === "blend") {
-            if (!promptInput.value.trim()) promptInput.value = BLEND_DEFAULT_PROMPT;
-        } else if (mode === "pose") {
-            syncPosePrompt();
-        } else if (mode === "angle") {
+        // 模式专属 setup：提示词默认值是纯文本，空面板也填（直达卡进模式就该看到该模式那句话）；
+        // 要在原图上动手的层由 setupModeLayer 自己判空，applySource 落定原图之后再补铺
+        if (mode === "angle") {
             angleOrb.setTemplate(angleTemplate());
             fillAnglePrompt(true);
             syncAngleSliders(angleOrb.get());
+        } else if (isAutoPrompt()) {
+            // 上一个模式自动写的那句留着，这个模式的技能收到的就是不相干的指令——机位那句
+            // 「Move the camera…」进扩图，扩图就出不了补边。空框与这句一起换成本模式那句；
+            // 常规 / 局部没有固定句式，清空等用户重写
+            fillAutoPrompt(MODE_DEFAULT_PROMPT[mode]?.() || "");
         }
-
+        await setupModeLayer();   // 先铺层（扩图要在铺好的画布上量目标尺寸），再同步 chip 与尺寸读数
         syncRefBtn();
         updateSizeLabel();
         syncSizeChip();
@@ -2570,7 +2617,8 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
         const ref = extraRefs[index];
         if (ref) {
             slot.classList.add("has-img");
-            slot.appendChild($el("img", { className: "neo-gallery-edit-refchip-img", src: refThumbUrl(ref, 128), alt: ref.filename, title: t("点击放大查看"), onclick: () => Lightbox.open({ items: buildLightboxItems(), index: index + 1 }) }));
+            // 列表第 0 项是原图；直达卡把模式带进空面板时没有原图，参考图下标不再往后挪一位
+            slot.appendChild($el("img", { className: "neo-gallery-edit-refchip-img", src: refThumbUrl(ref, 128), alt: ref.filename, title: t("点击放大查看"), onclick: () => Lightbox.open({ items: buildLightboxItems(), index: index + (source ? 1 : 0) }) }));
             slot.appendChild($el("span", { className: "neo-gallery-edit-refchip-x", textContent: "×", onclick: (e) => { e.stopPropagation(); extraRefs.splice(index, 1); renderRefSlots(); } }));
         } else {
             slot.appendChild($el("span", { className: "neo-gallery-edit-refdrop-icon", textContent: "＋" }));
@@ -2645,15 +2693,29 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
     // 原图区拖放替换：支持素材库拖入和本地文件上传
     // 换原图（拖放落点、卡片菜单「图片编辑」与素材库取用共用一条路）：refName 归零，生成时再把新原图复制进 input/
     const applySource = (filename, sub) => {
-        if (editMode !== "normal") setEditMode("normal");
+        // 模式只由用户切，换原图不动它——原图换了，扩图框 / 涂抹层 / 标记点由
+        // setupModeLayer 在新原图上重铺（三层的 setup 开头各自拆旧层）
         refName = null;
         source = { filename, subfolder: sub };
         empty.style.display = "none";
         origImg.style.display = "";
         origImg.src = origUrl();
-        setSourceModeBtns(true);
         renderIdle();
         fullUrlReady();   // 默认目标分辨率按新原图 + 全局目标像素数重算
+        // 直达卡把模式带进空面板时，模式自己的控件是收着铺不了层的（没有原图可动手）；
+        // 原图落定这一刻补上：扩图铺补边画布、局部铺涂抹层、点选删除铺标记层。
+        // 不 await：涂抹/标记层要等原图解码，选原图这一步不能压着不返回
+        syncModeRows();
+        setupModeLayer().then(() => { updateSizeLabel(); syncSizeChip(); });
+    };
+
+    /** 首页「编辑」板块的直达卡把模式带进这块面板：当场切过去，没有原图也切（模式 chip 一直可点，
+     *  用户一进面板就看到这一发要干什么）。之后选原图、换原图、收回原图都不动它——模式只由用户切 */
+    const setPanelMode = (mode) => {
+        const m = String(mode || "");
+        if (!Array.from(modeSel.options).some((o) => o.value === m)) return;
+        setEditMode(m);
+        renderIdle();   // 状态区那行提示要点名这一发的模式，setEditMode 不碰状态区
     };
 
     // ---- 原图取用（预览区那枚方块）：点开素材库，取用 / 拖放 / 本地上传都落进 applySource ----
@@ -2671,10 +2733,15 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
         window.dispatchEvent(new CustomEvent("neo:media-pick", { detail: { target: null, onPick: useSourcePicks } }));
         toggleGallerySidebar();
     };
-    /** ✕ 收回原图：涂抹画布 / 扩图框 / 标记点随模式一起拆，出图尺寸读数与模式 chip 回到无原图态 */
+    /** ✕ 收回原图：只收原图。模式跟着用户，代码不切它（切走会把用户选的扩图 / 机位丢掉，切回来又得重选）；
+     *  铺在原图上的那一层（扩图框 / 涂抹画布 / 标记点）随原图一起拆，模式专属控件由 syncModeRows 收起，
+     *  出图尺寸读数回到无原图态 */
     const clearSource = () => {
         if (running) return;
-        setEditMode("normal");
+        teardownOutpaintBox();
+        teardownPaint();
+        teardownRemove();
+        restoreOrigImage();   // 扩图把 <img> 搬进补边画布、局部换过缩放图，这里搬回预览区等着下一张
         source = null;
         refName = null;
         resultItems = [];
@@ -2687,8 +2754,9 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
         renderSourceEmptyBox();
         widthInput.value = "";
         heightInput.value = "";
+        syncModeRows();
+        updateSizeLabel();
         syncSizeChip();
-        setSourceModeBtns(false);
         renderIdle();
     };
     /** 拖进原图方块与拖进预览区同一语义：本地文件先上传，素材库卡片先复制进 input/ */
@@ -2706,8 +2774,8 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
     /** 「再来一发」（编辑图）：副文件里的原图 / 编辑模式 / 参考图 / 出图尺寸 / 技能与自定参数
      *  逐项填进这块现成面板，面板不重建。
      *
-     *  顺序是原图 → 模式 → 参考图：换原图会把模式收回「常规」，切模式又会清掉额外参考图（扩图 /
-     *  局部 / 点选只用原图那一张），反过来填只剩一地残留。涂抹遮罩与扩图边距是用户在原图上画出来
+     *  顺序是原图 → 模式 → 参考图：切模式会清掉额外参考图（扩图 / 局部 / 点选只用原图那一张），
+     *  反过来填只剩一地残留。涂抹遮罩与扩图边距是用户在原图上画出来
      *  的，这两样复现不了；技能不在本页下拉里（本页只列吃参考图的技能）就整项不填。 */
     const applyEditPrefill = async (pf) => {
         await skillsReady;
@@ -2742,13 +2810,14 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
         if (editMode === "angle" && pf?.angle) {
             angleOrb.set(pf.angle);
             syncAngleSliders(angleOrb.get());
-            // 上一版填好的词就是这套档位写的：之后拖球还能接着改它，用户改过的不动
-            angleBeforeFill = angleOrb.get();
             filled.push(t("机位"));
         }
         const prompt = String(pf?.prompt || "").trim();
         if (prompt) {
             promptInput.value = prompt;
+            // 机位那一发框里那句就是球当前档位写的：拖球还要接着改它，这句按「代码写进去的」记；
+            // 别的模式带回来的句子是用户写的，切模式时不给他换掉
+            autoPrompt = editMode === "angle" ? prompt : "";
             filled.push(t("提示词"));   // 最后填：切技能那一步写的是该技能的默认触发词
         }
         return filled;

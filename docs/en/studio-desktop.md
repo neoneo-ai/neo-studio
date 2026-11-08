@@ -209,6 +209,16 @@ narrow-window rules are shared with the director page (one modal instance, one g
 - "🖼️ Generate asset" and "🖼️ New image recipe" switch to the input page; "🖼️ Edit image" in an image card's
   menu switches to the edit page. Each page owns one panel and one job — the input page generates, the edit page
   edits — so there is no text-to-image / image-edit mode bar and no image-recipe list.
+- The direct cards of the home **Edit** section (Image Edit / Outpaint / Camera angle / Blend / Pose) carry their mode into
+  the panel the edit page already built (`openImageEditMode` through the host's `__neoSetMode`): a card switches the mode
+  instead of rebuilding the panel, because a rebuild clears a half-written prompt. The mode switches the moment you land,
+  source image or not, and the empty-state hint names it. The mode chip stays clickable at all times and **only the user
+  switches the mode** - neither `applySource` (a new source) nor `clearSource` (the source removed) touches it; clearing
+  the source only tears down the layer that sat on it (the outpaint box, the paint layer, the remove markers). The controls
+  a mode drives on the source (the outpaint box, the paint row, the click-to-remove row, the camera-angle ball with its
+  three sliders) stay folded away with no source - the camera-angle card folds its reference slot and prompt box away on
+  the spot, as that mode always does - and `setupModeLayer` lays them once `applySource` puts the source in; clicking an
+  empty preview no longer opens a compare lightbox that has no source to show.
 - The text-to-image panel is a composer ("one prompt box + a bottom chip row: skill+params / ratio /
   max side … `⋯` Generate") docked at the bottom of the page (the input bar follows the
   ArtCraft promptbox): one line in the box is enough to generate, the three chips are pill buttons with panels

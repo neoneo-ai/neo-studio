@@ -2,7 +2,7 @@
 
 > 🇨🇳 中文: [../studio-frames.md](../studio-frames.md)
 
-The "视频抽帧" card on the Studio home opens `#/frames` (`studio/web/frames/frames.js`). It stands on its own,
+The "视频抽帧" card in the **Edit** section of the Studio home opens `#/frames` (`studio/web/frames/frames.js`). It stands on its own,
 separate from the Pose page and the library: extraction happens in the browser — the player seeks to each
 timestamp, the canvas draws that frame, and the PNG is handed to the local service one at a time. The local
 service only does the two file-layer jobs (`studio/frames.py`), and the desktop service answers them offline too.

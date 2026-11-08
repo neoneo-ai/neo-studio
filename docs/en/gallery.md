@@ -322,6 +322,21 @@ slot sits at the top-left corner of the prompt box, and the pick controls are re
 is integrated into the card — the card outline is the single focus frame, with no inner border drawn around the text.
 The chip row is the skill+params chip + the mode chip (regular / outpaint / masked / click-to-remove / blend /
 pose / camera angle folded into one chip's menu, each mode explained on its menu item) + the target-resolution chip + "Generate".
+The **Edit** section of the Studio home lays the modes this panel uses most out as direct cards
+(**Image Edit / Outpaint / Camera angle / Blend / Pose**): a card jumps to the edit page and switches the panel to that mode
+the moment you land - even with no source image (the mode chip stays clickable, so an empty panel already shows what this
+shot will do), and the empty-state hint names it ("Outpaint picked - pick a source image from the source box in the
+preview"). **Only the user switches the mode**: picking a source, swapping the source and clearing it all leave it as
+picked. The controls a mode drives on the source - the outpaint box, the paint row, the click-to-remove row, the
+camera-angle ball with its three sliders - stay folded away with no source (the camera-angle card folds the reference slot
+and the prompt box away on the spot, as that mode always does) and lay themselves on it the moment the source lands (the
+outpaint box lays itself on the source, and a swapped source gets a fresh box). Masked and click-to-remove need you to
+paint / click on the source, so they keep no home card and stay in this mode chip's menu.
+Switching a mode swaps the prompt box with it: an empty box and the default trigger line a mode wrote in by code
+(outpaint / remove / blend / pose / camera angle) both become this mode's own line, so the camera sentence never sits
+in the outpaint box for the outpaint skill to misread, and regular / masked, which have no fixed sentence, clear the
+box for you to write one. A sentence you typed yourself survives every mode switch (the camera-angle slider refresh
+keeps the same rule - it only overwrites what the code wrote in).
 
 - **Source image** - an empty preview carries a fixed-size "＋ Source" box in its centre (220×140, capped at 100% of
   a narrow preview, drawn as a dashed outline with no filled background): clicking it opens the asset-library modal,
@@ -329,7 +344,8 @@ pose / camera angle folded into one chip's menu, each mode explained on its menu
   two-item menu — "🖼 Pick from library" (opens the modal; the picked card becomes the source) and "⬆ Upload locally"
   (copies a chosen local file into `input/` and sets it as the source) — and dropping a file straight onto the box
   lands the same way. The menu opens on hover and keeps a 150 ms close grace after the cursor leaves, so both items
-  stay reachable.
+  stay reachable. Swapping the source and clearing it never change the edit mode (only the user switches it); clearing
+  the source only tears down the layer that sat on it (the outpaint box, the paint layer, the remove markers).
 - **Reference slot** - reference images (up to 9, the Qwen Image 2.1 limit) live in a 56px "＋ Reference" slot inline at
   the top-left of the prompt box. Hovering the "＋ Reference" slot floats open a pick menu: a "Reference N/9" count
   header, "⬆ Upload" (picks several local files at once), and "🖼 Pick from library" (picks cards from the asset-library

@@ -53,6 +53,20 @@ const emptyShown = (panel) => {
 // hashchange 由 jsdom 作为宏任务派发：微任务 flush 不够，等一轮事件循环
 const settle = async () => { await sleep(0); await flush(); };
 
+/** 从素材库把一张图拖进预览区换原图：卡片菜单与「再来一发」都走 applySource，编辑页那块面板在位时
+ *  入口只会复用面板，这里照素材库拖放那一发（application/x-neo-gallery）直接落进原图方块 */
+async function dropSourceInto(ep, filename = "lib_b.png") {
+    mockRoute("/neo_gallery/copy_to_input", () => jsonResponse({ success: true, filename }));
+    const dropEv = new window.Event("drop", { bubbles: true, cancelable: true });
+    Object.defineProperty(dropEv, "dataTransfer", {
+        value: { getData: (m) => (m === "application/x-neo-gallery" ? JSON.stringify({ filename, subfolder: "" }) : "") },
+        configurable: true,
+    });
+    ep.querySelector(".neo-gallery-edit-srcbox").dispatchEvent(dropEv);
+    await settle();
+    await sleep(20);   // applySource 里原图探针 → 默认尺寸 → 层重铺那条链走完再断言
+}
+
 async function boot() {
     resetEnv();
     clearRoutes();
@@ -160,9 +174,9 @@ test("编辑页：进页铺好空图片编辑面板，顶部右侧是素材库�
     assert.ok(!editPage().querySelector(".ns-gallery-host"), "编辑页不应有常驻左栏素材库");
     assert.ok(ep.querySelector(".neo-gallery-story-modal--embedded"), "内嵌面板应带内嵌标记");
     assert.ok(ep.querySelector(".neo-gallery-edit-empty .neo-gallery-edit-srcbox"), "无原图时预览区应铺好「＋ 原图」方块");
-    assert.ok(modeChipBtn(ep).disabled, "无原图时编辑模式 chip 先禁用");
+    assert.ok(!modeChipBtn(ep).disabled, "模式 chip 永远可点：模式只由用户切，无原图时也要能切走");
     assert.ok(modeChip(ep).querySelector(".neo-gallery-gm-chip-label").textContent.trim(), "模式 chip 显示当前模式名");
-    assert.match(modeChipBtn(ep).title, /先选一张原图/, "禁用态的提示说明缺的是原图");
+    assert.ok(modeChipBtn(ep).title.trim(), "chip 的提示跟着当前模式说清它在干什么");
     assert.ok(btnTexts(ep).includes("生成"), "idle 应有「生成」");
     assert.ok(!btnTexts(ep).includes("取消"), "页内面板不应有「取消」");
     assert.match(hintOf(ep), /「原图」方块选原图/, "空面板说明先点方块选原图");
@@ -277,12 +291,49 @@ test("素材页入口：图片卡菜单「图片编辑」跳到编辑页并复�
     assert.equal(editPanel(), ep, "卡片菜单入口应复用现成面板，不重建");
     assert.ok(!emptyShown(ep), "原图到位后原图方块应收起");
     assert.match(ep.querySelector(".neo-gallery-edit-compare-img").getAttribute("src"), /portrait\.png/, "预览区应换成这张原图");
-    assert.ok(!modeChipBtn(ep).disabled, "原图到位应解锁编辑模式 chip");
+    assert.ok(!modeChipBtn(ep).disabled, "模式 chip 永远可点：模式只由用户切，无原图时也要能切走");
     assert.equal(modeChip(ep).querySelectorAll("option").length, 7, "模式 chip 列全七种模式");
     assert.equal(ep.querySelector(".neo-gallery-story-hint"), null, "有原图后不挂说明行（面板贴着预览，纵向没有余量）");
     assert.ok(!document.querySelector(".neo-gallery-edit-modal-overlay"), "内嵌模式不应建图片编辑浮层遮罩");
     assert.equal(location.hash, "#/edit", "图片编辑入口应跳到编辑页");
     assert.ok(tabsLink("edit").classList.contains("active"), "顶栏选中的应是「编辑」");
+});
+
+// 首页「编辑」板块的直达卡：把这一发要用的模式带进编辑页那块现成面板，一进面板就切成那个模式
+// （没有原图也切：模式 chip 一直可点，模式只由用户切），空态提示点名它；
+// 之后选原图、换原图都不改模式，扩图框照新原图重铺
+test("首页直达卡：扩图卡跳到编辑页当场切成扩图，选原图与换原图都保持扩图", async () => {
+    await boot();
+    const ep = editPanel();
+
+    const editCard = [...document.querySelectorAll(".ns-home-card")]
+        .find((c) => c.querySelector(".ns-home-card-title")?.textContent === "扩图");
+    assert.ok(editCard, "首页应有「扩图」这张直达卡");
+    click(editCard);
+    await settle();
+
+    assert.equal(location.hash, "#/edit", "直达卡应跳到编辑页");
+    assert.equal(editPanel(), ep, "直达卡要复用现成面板，不重建");
+    assert.equal(ep.querySelector(".neo-gallery-edit-mode-select").value, "outpaint", "一进面板就切成扩图");
+    assert.match(hintOf(ep), /已选「扩图」/, "空态提示要点名这一发要用的模式");
+    assert.ok(!modeChipBtn(ep).disabled, "模式 chip 一直可点：用户随时能切走这枚模式");
+    const outpaintRow = ep.querySelector(".neo-gallery-edit-outpaint-row");
+    assert.equal(outpaintRow.style.display, "none", "没有原图时扩图那行控件收着");
+    assert.equal(ep.querySelectorAll(".neo-gallery-outpaint-box").length, 0, "没有原图时扩图框不铺在预览区");
+
+    click(libBtn());
+    await settle();
+    click(galleryCard());
+    await settle();
+    assert.ok(!emptyShown(ep), "取用的图应落进原图位");
+    assert.equal(ep.querySelector(".neo-gallery-edit-mode-select").value, "outpaint", "选原图那一步不改模式");
+    assert.match(modeChip(ep).querySelector(".neo-gallery-gm-chip-label").textContent, /扩图/, "chip 标签应显示落在的模式");
+    assert.equal(outpaintRow.style.display, "", "原图落定，扩图那行控件亮出来");
+
+    // 素材库里再取一张把原图换掉：模式仍以用户选的为准，扩图控件跟着新原图留着
+    await dropSourceInto(ep);
+    assert.equal(ep.querySelector(".neo-gallery-edit-mode-select").value, "outpaint", "换原图不改模式（模式只由用户切）");
+    assert.equal(outpaintRow.style.display, "", "换了原图，扩图控件跟着新原图留着");
 });
 
 

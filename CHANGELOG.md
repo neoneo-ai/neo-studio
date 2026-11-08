@@ -5,6 +5,23 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 ## [Unreleased]
 
 ### Added
+- **The Studio home splits into create and edit sections, and the edit modes become direct cards.** The home page now
+  reads **开始创作** (生成图片 / 生成视频 / 导演视频 / 3D 姿势 / 智能体), **编辑** (图片编辑 / 扩图 / 机位 / 融合 / 姿势 /
+  视频抽帧) and **素材与配置** (素材库 / 技能 / 设置). An edit card jumps to the 编辑 page and switches the panel it lands in
+  to that mode on arrival - the panel is the one the 编辑 page builds when you enter it, so the card switches the mode
+  (`openImageEditMode` → the host's `__neoSetMode`) instead of rebuilding it, which would clear a half-written prompt.
+  The mode is set even with no 原图 in the panel and the mode chip stays clickable, so an empty panel already shows what
+  this shot will do and the empty-state hint names it (「已选「扩图」：点预览区的「原图」方块选原图」). **Only the user
+  switches the mode** - picking the 原图, swapping it for another and clearing it all leave the picked mode as it is;
+  clearing the source only tears down the layer that sat on it. What a mode drives on the 原图 (the outpaint box, the paint
+  layer, the click-to-remove markers, the 机位 ball with its three sliders) stays folded away until the 原图 is in and lays
+  itself on it at that moment (a swapped source gets a fresh outpaint box), so an empty panel shows only the 「＋ 原图」 box
+  - the 机位 card on an empty 原图 leaves the input card as just the bottom chip row, since 机位 folds the 参考 slot and
+    the prompt box away by design - and clicking an empty preview no longer opens a compare lightbox that has no
+    原图 to show (the click used to crash with `Cannot read properties of null (reading 'filename')`).
+  **局部** and **删除** stay in the panel's mode menu: they need you to paint / click on the source, so a home card for
+  them is an entry that can only fail. Covered by the new case in `studio/tests/js/studio-paint.test.mjs`, the direct-card
+  cases in `studio/tests/js/gallery-image-edit.test.mjs` and the home-layout case in `studio/tests/js/studio-desktop.test.mjs`.
 - **The 编辑 page takes its 原图 from the preview area.** An empty 图片编辑 preview now carries a fixed-size
   「＋ 原图」 box in its centre (220×140 on a dashed outline, no filled background, so it never reads as disabled):
   clicking it opens the asset library, hovering it floats a two-item menu — **🖼 素材库取图** / **⬆ 本地上传**
@@ -89,6 +106,13 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   [README_ZH.md](README_ZH.md) / [README.md](README.md) and from the docs index.
 
 ### Fixed
+- **Switching an 编辑 mode swaps the prompt box with it.** 机位 folds its prompt box away by design, so its prefilled
+  camera line sat in the box unseen; coming out of 机位 onto 扩图 (a home direct card, a mode-chip pick) left that
+  sentence in the 扩图 box, and the shot sent 「Move the camera of <image1> …」 to the outpaint skill instead of the
+  outpaint trigger - no added border. The box now follows every mode switch: an empty box and the line a mode filled
+  by code both become the picked mode's own default (扩图 / 删除 / 融合 / 姿势 get theirs, 常规 / 局部 clear the box
+  for you to write), and a sentence you typed yourself survives every switch (the 机位 slider refresh keeps the same
+  rule). Covered by the new case in `studio/tests/js/gallery-image-edit.test.mjs`.
 - **The 编辑 page's 素材库取用 fills the reference slots, not the source image.** The 「＋参考」 menu hands the
   asset-library modal the callback that appends picked cards to the 参考图 slots; the Studio host ignored it on this
   page and always ran its own source-image pick, so a card picked from the reference menu replaced the 原图 being

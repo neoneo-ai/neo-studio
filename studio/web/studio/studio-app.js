@@ -11,7 +11,7 @@ import { configureCanvasOrigin } from "../js/core/canvas-origin.js";
 
 import "../gallery.js";   // 注册 comfy.neo.gallery 扩展（NeoGallery + 侧栏 tab 定义）
 import { setDirectorEditorHost, openDirectorEditor, DIRECTOR_RECIPE_SAVED_EVENT, SEG_MODES, MODE_LABELS, LEGACY_MODE_MAP } from "../director.js";
-import { setPaintHost, openGenMaterialDialog, openImageEditDialog, setVideoReuseOpen, reuseModelOverlay, chipButton, skillParamsChip } from "../gallery-gen.js";
+import { setPaintHost, openGenMaterialDialog, openImageEditDialog, openImageEditMode, setVideoReuseOpen, reuseModelOverlay, chipButton, skillParamsChip } from "../gallery-gen.js";
 import { createFramePlayer, DOCK_PREVIEW_SIDE, AGENT_PREVIEW_SIDE } from "../live-preview.js";
 import { createRecipesPanel, listRecipes } from "../recipes.js";
 import { listVideoSkills } from "../recipes.js";
@@ -822,7 +822,7 @@ function buildEdit(el) {
     editArmed = true;
 }
 
-// ====== 首页：意图卡片 —— 大字标题 + 创造五卡 + 素材三卡，点卡直达对应页 ======
+// ====== 首页：意图卡片 —— 大字标题 + 创作五卡 + 编辑六卡 + 素材三卡，点卡直达对应页 ======
 
 function homeCard(iconName, title, sub, onClick) {
     return $el("button", { className: "ns-home-card", type: "button", onclick: onClick }, [
@@ -833,6 +833,12 @@ function homeCard(iconName, title, sub, onClick) {
         ]),
         icon("chevron", 16),
     ]);
+}
+
+// 「编辑」板块的直达卡：先确保编辑页那块面板已铺好（go 走 route，视图没建就建），再把这一发的模式带进去
+function goEditMode(mode) {
+    go("edit");
+    openImageEditMode(mode);
 }
 
 function buildHome(el) {
@@ -847,15 +853,24 @@ function buildHome(el) {
         $el("div", { className: "ns-home-grid" }, [
             homeCard("sparkles", "生成图片", "描述画面，直接出图", () => go("paint")),
             homeCard("film", "生成视频", "一句话加首帧，出一段视频", () => go("video")),
-            homeCard("pencil", "图片编辑", "拖入素材，写下要改成什么样", () => go("edit")),
             homeCard("play", "导演视频", "多段配方，生成整片视频", () => go("director")),
-            homeCard("target", "智能体", "说出目标，工具链多轮跑完", () => go("agent")),
             homeCard("pose", "3D 姿势", "姿势 · 整场 · 全景", () => go("pose")),
+            homeCard("target", "智能体", "说出目标，工具链多轮跑完", () => go("agent")),
+        ]),
+        // 图片编辑面板里的模式各是一张卡：点卡就把模式带进编辑页那块面板，选原图那一刻落地
+        // （涂抹局部与点选删除收在面板的模式 chip 里，要在原图上动手，首页不铺空入口）
+        $el("h2", { className: "ns-home-section", textContent: t("编辑") }),
+        $el("div", { className: "ns-home-grid" }, [
+            homeCard("pencil", "图片编辑", "写下要改成什么样，整图重绘", () => goEditMode("normal")),
+            homeCard("maximize", "扩图", "拖框定四边留白，补全周边场景", () => goEditMode("outpaint")),
+            homeCard("camera", "机位", "拖机位球换角度重出这张", () => goEditMode("angle")),
+            homeCard("copy", "融合", "多张参考图融成一张连贯画面", () => goEditMode("blend")),
+            homeCard("user", "姿势", "按提示词改姿势，或搬一张图的姿势", () => goEditMode("pose")),
+            homeCard("film", "视频抽帧", "挑一条视频，抽帧存进素材库", () => go("frames")),
         ]),
         $el("h2", { className: "ns-home-section", textContent: t("素材与配置") }),
         $el("div", { className: "ns-home-grid" }, [
             homeCard("folder", "素材库", "浏览与管理全部生成素材", () => go("gallery")),
-            homeCard("film", "视频抽帧", "挑一条视频，抽帧存进素材库", () => go("frames")),
             homeCard("wand", "技能", "管理预设与技能包", () => go("skills")),
             homeCard("gear", "设置", "生成默认值与界面语言", () => go("settings")),
         ]),

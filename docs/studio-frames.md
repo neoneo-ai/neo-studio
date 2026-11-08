@@ -1,6 +1,6 @@
 # 视频抽帧
 
-Studio 首页的卡片「视频抽帧」进 `#/frames`（`studio/web/frames/frames.js`）。它和姿势页、素材库页各自独立：
+Studio 首页「编辑」板块的卡片「视频抽帧」进 `#/frames`（`studio/web/frames/frames.js`）。它和姿势页、素材库页各自独立：
 抽帧在浏览器里做——播放器 seek 到每个时间戳，canvas 画那一帧转 PNG，逐条交本机服务写盘。本机服务只做文件层
 的两件事（`studio/frames.py`），桌面端离线服务也答这两条路由。
 

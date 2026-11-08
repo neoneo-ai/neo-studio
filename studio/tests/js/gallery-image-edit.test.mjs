@@ -4,6 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { resetEnv, mockRoute, clearRoutes, jsonResponse, fetchLog, sleep, click, fire, inputText, makeFile, window } from "./setup.mjs";
 import { dispatchApiEvent } from "./mocks/comfy-api.mjs";
+import { createAngleOrb, DEFAULT_ANGLE, anglePrompt } from "../../web/angle/angle-orb.js";
 
 /** 真实的一次点击 = 按下 + 松手：chip 的外关读按下那一发（document pointerdown 捕获），只发 click 的话上一块开着的面板不收 */
 const press = (el) => { fire(el, "pointerdown"); click(el); };
@@ -1522,6 +1523,209 @@ test("图片编辑内嵌面板：「再来一发」换内容不重建；局部�
     }
 });
 
+// 首页「编辑」板块的直达卡走 openImageEditMode → 宿主的 __neoSetMode：一进面板就把模式切过去，
+// 没有原图也切；模式只由用户切，选原图、换原图都不动它（见 applySource）
+test("图片编辑内嵌面板：首页直达卡带模式——一进面板就切过去，选原图保持该模式", async () => {
+    resetEnv();
+    clearRoutes();
+    const { openImageEditDialog, setPaintHost, openImageEditMode } = await import("../../web/gallery-gen.js");
+
+    mockRoute("/rs_prompts/skills", () => jsonResponse([
+        { id: "qwen_image_21", cn_name: "Qwen Image 2.1", category: "image_gen", gen_image: true, mode: "t2i_edit" },
+    ]));
+    mockRoute("/neo_image_gen/models", () => jsonResponse({ diffusion_models: ["qwen/qwen21.safetensors"], loras: [] }));
+    mockRoute("/neo_image_gen/skill_config", () => jsonResponse({ model: "qwen/qwen21.safetensors", loras: [] }));
+    mockRoute("/neo_image_gen/settings", () => jsonResponse({ target_megapixels: 1.5 }));
+
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    setPaintHost({ edit: host, onOpen: () => { } });
+    try {
+        openImageEditDialog({ app: {}, maxThumbnailSize: 320, displayLabels: true });
+        const panel = host.querySelector(".neo-gallery-gen-panel");
+        await sleep(20);
+        const modeSel = panel.querySelector(".neo-gallery-edit-mode-select");
+        const chipLabel = () => modeSel.parentElement.querySelector(".neo-gallery-gm-chip-label").textContent;
+
+        openImageEditMode("blend");
+        await sleep(20);
+        assert.equal(modeSel.value, "blend", "空面板上直达卡也当场把模式切过去");
+        assert.match(panel.querySelector(".neo-gallery-story-hint").textContent, /已选「融合」/, "空态提示要点名这一发要用的模式");
+
+        openImageEditDialog({ app: {}, maxThumbnailSize: 320, displayLabels: true }, { name: "src", filename: "src.png" }, "");
+        await sleep(120);
+        assert.equal(host.querySelectorAll(".neo-gallery-gen-panel").length, 1, "入口复用现成面板，不重建");
+        assert.equal(modeSel.value, "blend", "选原图那一步不把融合收回常规");
+        assert.equal(chipLabel(), "融合", "模式 chip 的标签跟着落地");
+        assert.match(panel.querySelector(".neo-gallery-story-input").value, /base scene/, "融合模式预填默认触发词");
+
+        openImageEditMode("pose");
+        await sleep(120);
+        assert.equal(modeSel.value, "pose", "已有原图时直达卡照旧当场切模式");
+    } finally {
+        setPaintHost(null);
+    }
+});
+
+// 直达卡把模式带进空面板后，机位那一路报过「Cannot read properties of null (reading 'filename')」：
+// 空面板没有原图，分割线按下即抬起算「点图」→ 开对比灯箱 → 列表读原图地址。空面板同时也不该铺
+// 要在原图上动手的层（扩图把 src 为空的 <img> 搬进画布，浏览器画出一枚坏图）
+test("直达机位卡：空面板只定模式不铺原图层，点空预览区不读空原图抛错", async () => {
+    resetEnv();
+    clearRoutes();
+    const { openImageEditDialog, setPaintHost, openImageEditMode } = await import("../../web/gallery-gen.js");
+
+    mockRoute("/rs_prompts/skills", () => jsonResponse([
+        { id: "qwen_image_21", cn_name: "Qwen Image 2.1", category: "image_gen", gen_image: true, mode: "t2i_edit" },
+        { id: "qwen_image_21_camera_angle", cn_name: "Qwen Image 2.1 机位编辑", category: "image_gen", gen_image: true, mode: "edit", requires_ref: true,
+          gen_config: { default_prompt: "Move the camera of <image1> to [front view], [eye-level shot], [medium shot] relative to the main subject, keeping unchanged" } },
+    ]));
+    mockRoute("/neo_image_gen/models", () => jsonResponse({ diffusion_models: ["qwen/qwen21.safetensors"], loras: [] }));
+    mockRoute("/neo_image_gen/skill_config", () => jsonResponse({ model: "qwen/qwen21.safetensors", loras: [] }));
+    mockRoute("/neo_image_gen/settings", () => jsonResponse({ target_megapixels: 1.5 }));
+
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    setPaintHost({ edit: host, onOpen: () => { } });
+    try {
+        openImageEditDialog({ app: {}, maxThumbnailSize: 320, displayLabels: true });
+        const panel = host.querySelector(".neo-gallery-gen-panel");
+        await sleep(20);
+        const modeSel = panel.querySelector(".neo-gallery-edit-mode-select");
+
+        openImageEditMode("angle");
+        await sleep(40);
+        assert.equal(modeSel.value, "angle", "空面板上直达卡也当场把模式切到机位");
+        assert.match(panel.querySelector(".neo-gallery-story-hint").textContent, /已选「机位」/, "空态提示要点名这一发要用的模式");
+        assert.equal(panel.querySelector(".neo-gallery-edit-angle").style.display, "none",
+            "没有原图可动手，机位球与三条滑杆收着");
+        assert.equal(panel.querySelector(".neo-gallery-edit-outpaint-canvas"), null, "空面板上不起扩图补边画布");
+        assert.match(panel.querySelector(".neo-gallery-story-input").value, /Move the camera/, "机位触发词照旧预填进提示词框");
+        assert.equal(panel.querySelector(".neo-gallery-story-input").style.display, "none", "机位的词框跟着模式收起，空面板不露那框固定句式的词");
+        assert.equal(panel.querySelector(".neo-gallery-edit-refdrop-row").style.display, "none", "机位只用原图这一张：参考位跟着模式收起");
+
+        const uncaught = [];
+        window.addEventListener("error", (ev) => uncaught.push(String(ev.message || ev.error?.message || "")));
+        // 自证探针：这条 error 通道要抓得到「读 null.filename」这类未捕获抛错，下面那条断言才算数
+        const probe = () => { window.removeEventListener("neo-probe-throw", probe); null.filename; };
+        window.addEventListener("neo-probe-throw", probe);
+        fire(document, "neo-probe-throw");
+        await sleep(10);
+        const probeCount = uncaught.filter((m) => m.includes("filename")).length;
+        assert.equal(probeCount, 1, "探针：未捕获的读空原图抛错要抓得到");
+
+        // 真实那一发：按下分割线即抬起 = 「点图」，走的是开对比灯箱那条路
+        const pressAt = (target, type) => target.dispatchEvent(
+            new window.MouseEvent(type, { bubbles: true, button: 0, clientX: 8, clientY: 8 }));
+        pressAt(panel.querySelector(".neo-gallery-edit-divider"), "pointerdown");
+        pressAt(document, "pointerup");
+        await sleep(20);
+        assert.equal(document.querySelector(".neo-lightbox"), null, "空面板没有可放大的图，灯箱不开");
+        assert.equal(uncaught.filter((m) => m.includes("filename")).length, probeCount,
+            "点空预览区不得再抛一枚「读空原图的 filename」");
+
+        // 原图落定：模式留在机位，机位球这才亮出来
+        openImageEditDialog({ app: {}, maxThumbnailSize: 320, displayLabels: true }, { name: "src", filename: "src.png" }, "");
+        await sleep(120);
+        assert.equal(modeSel.value, "angle", "带着机位选完原图，模式仍是机位");
+        assert.equal(panel.querySelector(".neo-gallery-edit-angle").style.display, "", "原图落定，机位球与三条滑杆亮出来");
+
+        // 从素材库另选一张原图走 applySource：模式以用户选的为准，不跟着选图换
+        mockRoute("/neo_gallery/copy_to_input", () => jsonResponse({ success: true, filename: "lib_b.png" }));
+        const dropEv = new window.Event("drop", { bubbles: true, cancelable: true });
+        Object.defineProperty(dropEv, "dataTransfer", {
+            value: { getData: (m) => (m === "application/x-neo-gallery" ? '{"filename":"lib_b.png","subfolder":""}' : "") },
+            configurable: true,
+        });
+        panel.querySelector(".neo-gallery-edit-srcbox").dispatchEvent(dropEv);
+        await sleep(120);
+        assert.equal(modeSel.value, "angle", "从素材库另选原图，模式仍是机位（模式不自己变）");
+        assert.equal(panel.querySelector(".neo-gallery-edit-angle").style.display, "", "换了原图，机位控件跟着新原图留着");
+
+        // 收回原图：只收原图。模式留在机位（代码不替用户切，模式只由用户切），
+        // 机位球与三条滑杆跟着「没有原图」收起，提示句仍点名用户选的机位
+        host.__neoClearSource();
+        assert.equal(modeSel.value, "angle", "收回原图不改模式（模式只由用户切）");
+        assert.equal(panel.querySelector(".neo-gallery-edit-angle").style.display, "none", "没有原图了，机位球与三条滑杆收起");
+        assert.match(panel.querySelector(".neo-gallery-story-hint").textContent, /已选「机位」/, "空面板提示仍点名用户选的机位");
+        assert.ok(panel.querySelector(".neo-gallery-edit-srcbox"), "收回原图后预览区回到「＋ 原图」方块");
+        assert.equal(panel.querySelector(".neo-gallery-edit-compare-imgwrap img").style.display, "none",
+            "收回原图后预览区不再显示原图");
+    } finally {
+        setPaintHost(null);
+    }
+});
+
+// 切模式换提示词：框在机位模式是收起来的，切到扩图才露出来——里面常留着机位那句自动词，
+// 扩图技能收到的就是机位指令、出不了补边。空框与「代码写进去的那句」一起换成本模式那句，
+// 用户自己写过的句子切模式不换（用户写的词只有他自己能动）
+test("图片编辑内嵌面板：切模式换提示词——机位那句不留给扩图，写过的句子不换", async () => {
+    resetEnv();
+    clearRoutes();
+    const { openImageEditDialog, setPaintHost, openImageEditMode } = await import("../../web/gallery-gen.js");
+
+    const angleTpl = "Move the camera of <image1> to [front view], [eye-level shot], [medium shot] relative to the main subject, keeping unchanged";
+    mockRoute("/rs_prompts/skills", () => jsonResponse([
+        { id: "qwen_image_21", cn_name: "Qwen Image 2.1", category: "image_gen", gen_image: true, mode: "t2i_edit" },
+        { id: "qwen_image_21_camera_angle", cn_name: "Qwen Image 2.1 机位编辑", category: "image_gen", gen_image: true, mode: "edit", requires_ref: true,
+          gen_config: { default_prompt: angleTpl } },
+    ]));
+    mockRoute("/neo_image_gen/models", () => jsonResponse({ diffusion_models: ["qwen/qwen21.safetensors"], loras: [] }));
+    mockRoute("/neo_image_gen/skill_config", () => jsonResponse({ model: "qwen/qwen21.safetensors", loras: [] }));
+    mockRoute("/neo_image_gen/settings", () => jsonResponse({ target_megapixels: 1.5 }));
+    mockRoute("/neo_gallery/copy_to_input", () => jsonResponse({ success: true, filename: "lib_b.png" }));
+
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    setPaintHost({ edit: host, onOpen: () => { } });
+    try {
+        openImageEditDialog({ app: {}, maxThumbnailSize: 320, displayLabels: true });
+        const panel = host.querySelector(".neo-gallery-gen-panel");
+        await sleep(20);
+        const input = panel.querySelector(".neo-gallery-story-input");
+        const modeSel = panel.querySelector(".neo-gallery-edit-mode-select");
+
+        openImageEditMode("angle");
+        await sleep(40);
+        assert.match(input.value, /Move the camera/, "机位先预填它那句机位触发词");
+
+        // 首页「扩图」直达卡：模式切过去，框里那句也跟着换成本模式的触发词
+        openImageEditMode("outpaint");
+        await sleep(40);
+        assert.equal(modeSel.value, "outpaint", "直达卡当场切到扩图");
+        assert.match(input.value, /^Outpaint the image/, "扩图收的是扩图触发词");
+        assert.ok(!input.value.includes("Move the camera"), "机位那句不留在扩图的框里");
+        assert.equal(input.style.display, "", "机位收起的那框提示词跟着模式回来");
+
+        // 原图落定：扩图框亮出来，框里那句触发词不跟着换
+        const dropEv = new window.Event("drop", { bubbles: true, cancelable: true });
+        Object.defineProperty(dropEv, "dataTransfer", {
+            value: { getData: (m) => (m === "application/x-neo-gallery" ? '{"filename":"lib_b.png","subfolder":""}' : "") },
+            configurable: true,
+        });
+        panel.querySelector(".neo-gallery-edit-srcbox").dispatchEvent(dropEv);
+        await sleep(120);
+        assert.equal(panel.querySelector(".neo-gallery-edit-outpaint-row").style.display, "",
+                     "原图落定，扩图那行控件亮出来");
+        assert.match(input.value, /^Outpaint the image/, "铺扩图框不换框里的触发词");
+
+        // 扩图 → 融合：自动句换成融合那句
+        await pickEdit(panel, "融合");
+        assert.match(input.value, /base scene/, "切融合换成融合默认触发词");
+
+        // 融合 → 常规：常规没有固定句式，空框等用户写
+        await pickEdit(panel, "常规");
+        assert.equal(input.value, "", "切回常规把自动触发词清掉");
+
+        // 用户写过的句子：切去扩图照旧留着
+        inputText(input, "把天空改成黄昏");
+        await pickEdit(panel, "扩图");
+        assert.equal(input.value, "把天空改成黄昏", "用户写的指令切模式不换");
+        assert.equal(modeSel.value, "outpaint", "扩图框里带着用户这句出图");
+    } finally {
+        setPaintHost(null);
+    }
+});
 
 test("图片编辑弹窗：机位模式预填触发词，拖球 / 滑杆同步档位，生成带 angle 三档", async () => {
     resetEnv();

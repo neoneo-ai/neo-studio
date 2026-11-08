@@ -29,7 +29,11 @@ const EN = {
     "素材与配置": "Assets & Setup",
     "生成图片": "Generate Images",
     "描述画面，直接出图": "Describe a picture, get the picture",
-    "拖入素材，写下要改成什么样": "Drop in an asset and describe the edit",
+    "写下要改成什么样，整图重绘": "Describe the edit, repaint the whole picture",
+    "拖框定四边留白，补全周边场景": "Drag the frame to pad the edges, fill in the scene around",
+    "拖机位球换角度重出这张": "Drag the angle orb, re-render this shot from a new camera",
+    "多张参考图融成一张连贯画面": "Blend several reference images into one coherent picture",
+    "按提示词改姿势，或搬一张图的姿势": "Change the pose by prompt, or borrow one from another image",
     "导演视频": "Direct a Video",
     "多段配方，生成整片视频": "Chain recipe segments into a finished video",
     "说出目标，工具链多轮跑完": "State the goal, let the tool loop run it out",
@@ -240,6 +244,10 @@ const EN = {
     "图片编辑": "Image Edit",
     "把素材拖进预览区当原图，再写编辑指令":
         "Drag media into the preview to set the source, then write an edit instruction.",
+    "点预览区的「原图」方块选原图，再写编辑指令":
+        "Pick a source image from the source box in the preview, then write an edit instruction",
+    "已选「{mode}」：点预览区的「原图」方块选原图":
+        "{mode} picked - pick a source image from the source box in the preview",
     "把素材拖到这里当原图": "Drag media here to use it as the source",
     "先把素材拖进预览区当原图": "Drag media into the preview first",
     "生成素材": "Generate Assets",
