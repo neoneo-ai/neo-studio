@@ -95,8 +95,8 @@ outpaint LoRAs.
 
 A LoRA row counts as a gap only while that LoRA is in the preset's or the global LoRA list: a LoRA the
 configuration does not carry never reaches the workflow, so it never blocks a generation.
-`qwen_image_21_controlnet`, `qwen_image_21_identity_swap`, `qwen_image_21_outpaint` and
-`qwen_image_21_pose_edit` ship no `extends` - their own manifests carry the base trio (with the
+`qwen_image_21_controlnet`, `qwen_image_21_identity_swap` and `qwen_image_21_outpaint` ship no `extends` -
+their own manifests carry the base trio (with the
 `QwenImage2.1/` subfolder in the configured name), and the overview deduplicates them onto the base set.
 
 | Field            | File name                                                        | Category             | GB       | Download links                                                        | Alt     | Owner                        |
@@ -167,7 +167,6 @@ the extra it adds.
 | qwen_image_21_identity_swap             | Qwen Image 2.1 换脸（LLM 改写·无 LoRA）          | qwen_image_21          | full set, no extends                        |
 | qwen_image_21_local_edit                | Qwen Image 2.1 高分局部编辑                      | qwen_image_21          | extras only (base qwen_image_21)            |
 | qwen_image_21_outpaint                  | Qwen Image 2.1 扩图                              | qwen_image_21          | base trio + 1 extra                         |
-| qwen_image_21_pose_edit                 | Qwen Image 2.1 姿势编辑                          | qwen_image_21          | full set, no extends                        |
 | qwen_image_21_watermark_remove          | Qwen Image 2.1 去水印                            | qwen_image_21          | extras only (base qwen_image_21)            |
 | realistic_photo                         | 写实摄影                                         | krea2_image            | extras only (base image_gen)                |
 | text_to_video                           | WAN文生视频                                      | minimax_h3             | extras only (base minimax_h3_base)          |

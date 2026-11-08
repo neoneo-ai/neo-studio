@@ -107,7 +107,7 @@ ControlNet 预设的 `model_patches` 文件，以及换身、换头、扩图三�
 
 LoRA 行只在预设的 LoRA 列表或全局 LoRA 列表带着它时才算缺口：配置里没带的 LoRA 进不了工作流，
 也就卡不住生成。`qwen_image_21_controlnet` 与 `qwen_image_21_outpaint` 不带 `extends`，自己的清单
-带基座三项加那一个追加项；`qwen_image_21_identity_swap` 与 `qwen_image_21_pose_edit` 不带 `extends`
+带基座三项加那一个追加项；`qwen_image_21_identity_swap` 不带 `extends`
 且只带基座三项——总览按「类别 + 文件名末段」把它们并回基座一套。
 
 `text_encoder` 一项在 Qwen 基座与 MiniMax H3 族系里是两个不同的文件（`qwen3vl_8b` 与
@@ -153,7 +153,6 @@ LoRA 行只在预设的 LoRA 列表或全局 LoRA 列表带着它时才算缺口
 | qwen_image_21_identity_swap         | Qwen Image 2.1 换脸（LLM 改写·无 LoRA）          | qwen_image_21      | 自带全套（无 extends）                  |
 | qwen_image_21_local_edit            | Qwen Image 2.1 高分局部编辑                      | qwen_image_21      | 只写追加项（基座 qwen_image_21）        |
 | qwen_image_21_outpaint              | Qwen Image 2.1 扩图                              | qwen_image_21      | 自带基座三项 + 追加 1 项                |
-| qwen_image_21_pose_edit             | Qwen Image 2.1 姿势编辑                          | qwen_image_21      | 自带全套（无 extends）                  |
 | qwen_image_21_watermark_remove      | Qwen Image 2.1 去水印                            | qwen_image_21      | 只写追加项（基座 qwen_image_21）        |
 | realistic_photo                     | 写实摄影                                         | krea2_image        | 只写追加项（基座 image_gen）            |
 | text_to_video                       | WAN文生视频                                      | minimax_h3         | 只写追加项（基座 minimax_h3_base）      |

@@ -144,51 +144,55 @@ Empty latent: EmptyLatentImage(target width/height)
 - The gallery's comparison window swaps its left side for this scaled image (the backend returns it as
   `canvas` with the job): both sides must be the same size for pixel-by-pixel alignment.
 
-## Pose editing (Qwen Image 2.1)
+## Pose lock (Qwen Image 2.1 ControlNet)
 
-Preset skill `qwen_image_21_pose_edit`: with one reference it changes `<image1>`'s pose following the
-prompt; with a second reference it moves `<image2>`'s pose onto `<image1>`'s person, keeping the face,
-clothing and background. The default trigger words come from that skill's `config.json` `default_prompt`
-and are prefilled as soon as the skill is picked. No extra LoRA is required; drop a pose-transfer LoRA
-into `models/loras` and add it to that skill's `config.json` `loras`.
+The gallery's "Image edit" 「姿势」 mode runs the chain in this section (see [gallery.md](gallery.md)): the
+source in the preview goes into `<image1>` scaled to the canvas size, the image in the first reference slot
+goes into the model patch to lock the shape, and the references after it fill the encoder's later slots.
 
-The gallery's "Image edit" dialog has a "🕺 Pose" switch (see [gallery.md](gallery.md)) that runs this
-skill: the source goes into `<image1>` scaled to the canvas size, and the images dropped into the
-reference area fill `<image2>` and the slots after it in order; dropping a pose reference swaps the prompt
-to the transfer trigger words (swapping back when it is removed, and never overwriting a prompt you wrote
-yourself); target resolution, curtain comparison and the rest match regular editing.
+Preset skill `qwen_image_21_pose_edit` has been removed: that path moved poses through text and never locked
+the shape. ControlNet is the only lock path.
 
 ## ControlNet structure lock (Qwen Image 2.1)
 
 Preset skill `qwen_image_21_controlnet`: `<image1>` goes through the encoder and supplies content and
-face; the second reference is preprocessed by Openpose into a skeleton and goes only into the Fun
-ControlNet model patch, locking pose and composition. Default trigger words come from that skill's
-`config.json` `default_prompt`.
+face; the second reference goes only into the Fun ControlNet model patch, locking pose and composition.
+Default trigger words come from that skill's `config.json` `default_prompt`.
 
 ```
-LoadImage(pose image) → AIO_Preprocessor(OpenposePreprocessor, canvas height) → ZImageFunControlnet(strength=0.8, 0→1) → KSampler
+LoadImage(control image) → AIO_Preprocessor(OpenposePreprocessor, canvas height) → ZImageFunControlnet(strength=0.8, 0→1) → KSampler
+LoadImage(control image) ── direct (control_direct, the preprocessor section removed) ──↗
 LoadImage(<image1>) → TextEncodeQwenImage21(images.image_1)
 ModelPatchLoader(qwen_image_2.1_fun_controlnet_union_int8_convrot.safetensors) ↗
 ```
 
 - `<image1>` = the content subject (the image whose face / clothing / background must be kept); the second
-  = the pose source (a person photo, or a skeleton image directly); `<image3>` onwards = extra content
-  references, 4 images in total.
-- The pose image goes only into the model patch: `control_ref: 2` in config.json reaches `resolve_request`
+  = the control image; `<image3>` onwards = extra content references, 4 images in total.
+- The control image goes only into the model patch: `control_ref: 2` in config.json reaches `resolve_request`
   through `_SKILL_SETTING_KEYS` and pulls the second image out of the encoder references (the template's
   control chain takes it via `{{CONTROL_IMAGE}}`). If it also occupies an encoder slot, the encoder treats
   that photo as a content reference and reproduces it directly, so the output is the reference itself.
-- At least 2 references (`min_refs` in config.json): with the pose slot empty the control chain would
+- At least 2 references (`min_refs` in config.json): with the control slot empty the control chain would
   render a preprocessor node missing its `image` input, so `resolve_request` reports "this skill needs at
   least 2 reference images" first.
-- To change a pose in place, copy `<image1>` into the second slot and describe the action in the prompt.
+- A request with `control_direct: true` = the control image is already a control image (the skeleton / depth
+  / normal / lineart / silhouette the 3D pose page exports): `_apply_control_direct` in `render_template`
+  removes the preprocessor node and wires the model patch straight to that `LoadImage`. Running a skeleton
+  through Openpose detects it a second time, and depth / normal / lineart go into a body detector that finds
+  no body, producing an empty control map - the lock turns into a random render. Without the field the
+  control image is a photo of a person and keeps going through Openpose. `resolve_request` only records it as
+  true when a control image was actually pulled out; the sidecar appends `direct=1` and Regenerate restores
+  that detent with the rest.
 - Preprocessing resolution takes `{{CANVAS_HEIGHT}}` (the canvas is set by the first reference; with no
-  reference it counts as unfilled → the whole control chain is pruned together with its `LoadImage`).
+  reference it counts as unfilled → the whole control chain is pruned together with its `LoadImage`). In the
+  direct path that section disappears with the parameter, and the model patch stretches the control image to
+  the canvas itself.
 - Encoder slots map one-to-one to the content reference order (`images.image_k` ↔ the k-th image after the
   control image is pulled out); when there are more images than template slots, the slot chain is extended
   by cloning up to `max_refs`.
 - The model patch goes in `models/model_patches`; the Openpose preprocessor model ships with
-  `comfyui_controlnet_aux`; when a file is missing the skill validity bar reports "models missing".
+  `comfyui_controlnet_aux`; when a file is missing the skill validity bar reports "models missing". The
+  direct path never touches the Openpose file.
 
 ## Outpaint (Qwen Image 2.1)
 

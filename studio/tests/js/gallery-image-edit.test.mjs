@@ -623,17 +623,22 @@ test("图片编辑弹窗：第二参考图拖放选中后随请求发送，扩�
     assert.equal(overlay.querySelector(".neo-gallery-edit-refchip-img"), null, "扩图模式应清除已选第二参考");
 });
 
-test("图片编辑弹窗：姿势开关切到姿势编辑技能并预填默认触发词，第二参考图作姿势参考随请求发送", async () => {
+test("图片编辑弹窗：姿势锁形切到 ControlNet 技能，控制图进第 2 项参考并带免检测直连", async () => {
     resetEnv();
     clearRoutes();
     const { openImageEditDialog } = await import("../../web/gallery-gen.js");
 
     mockRoute("/rs_prompts/skills", () => jsonResponse([
         { id: "qwen_image_21", cn_name: "Qwen Image 2.1", category: "image_gen", gen_image: true, mode: "t2i_edit" },
-        { id: "qwen_image_21_pose_edit", cn_name: "Qwen Image 2.1 姿势编辑", category: "image_gen", gen_image: true, mode: "edit", requires_ref: true,
-          gen_config: { default_prompt: "Change the pose of the person in <image1> to [describe the new pose], keeping the face unchanged" } },
+        { id: "qwen_image_21_controlnet", cn_name: "Qwen Image 2.1 ControlNet", category: "image_gen", gen_image: true, mode: "edit", requires_ref: true,
+          gen_config: { default_prompt: "Adopt the pose and composition of the ControlNet pose reference, keeping the face, hair, clothing, lighting and background of <image1>" } },
     ]));
-    mockRoute("/neo_gallery/copy_to_input", () => jsonResponse({ success: true, filename: "pose_b.png" }));
+    // 原图与控制图各归各位：这一发两张都要，断言要看清第 1 项是原图、第 2 项是控制图
+    // （copy_to_input 的坐标在 query 上，落盘名照它回）
+    mockRoute("/neo_gallery/copy_to_input", (body, call) => jsonResponse({
+        success: true,
+        filename: String(call.query.get("filename") || "").startsWith("skel") ? "skel.png" : "portrait.png",
+    }));
 
     const gallery = { app: {}, maxThumbnailSize: 320, displayLabels: true };
     openImageEditDialog(gallery, { name: "portrait", filename: "portrait.png" }, "");
@@ -642,54 +647,116 @@ test("图片编辑弹窗：姿势开关切到姿势编辑技能并预填默认�
 
     await pickEdit(overlay, "姿势");
 
+    assert.equal(overlay.querySelector(".neo-gallery-edit-refcount-num").textContent, "0/1",
+        "切进姿势计数就跟着这一发的上限走：只吃一张控制图");
     const skillSel = overlay.querySelector(".neo-gallery-gm-chip-select");
-    assert.equal(skillSel.value, "qwen_image_21_pose_edit", "开姿势应切到姿势编辑技能");
+    assert.equal(skillSel.value, "qwen_image_21_controlnet", "开姿势应切到 ControlNet 技能");
     assert.equal(overlay.querySelector(".neo-gallery-edit-mode-select").value, "pose", "模式 chip 应停在姿势");
     const promptInput = overlay.querySelector(".neo-gallery-story-input");
-    assert.match(promptInput.value, /Change the pose of the person in <image1>/,
-        "无参考图时应预填技能 config.json 的默认姿势触发词");
-    // 姿势编辑走常规画布：目标分辨率保持可见，参考图区可用（第 2 张 = 姿势参考）
+    assert.match(promptInput.value, /Adopt the pose and composition of the ControlNet pose reference/,
+        "应预填技能 config.json 的锁形触发词（前端不另写一份）");
+    // 锁形走常规画布：目标分辨率保持可见，参考图区可用（第 1 格 = 控制图）
     assert.notEqual(overlay.querySelector("#img-edit-width").style.display, "none", "姿势模式应保留目标分辨率输入");
     assert.ok(!overlay.querySelector(".neo-gallery-edit-refdrop-row").classList.contains("disabled"), "姿势模式参考图区应可用");
 
-    // 从素材库拖入姿势参考 → 触发词自动换成迁移姿势的默认词
-    const refDropZone = overlay.querySelector(".neo-gallery-edit-refdrop-row .neo-gallery-edit-refdrop");
-    const dt = { getData: (m) => (m === "application/x-neo-gallery" ? '{"filename":"pose_b.png","subfolder":""}' : "") };
-    const dropEv = new window.Event("drop", { bubbles: true, cancelable: true });
-    Object.defineProperty(dropEv, "dataTransfer", { value: dt, configurable: true });
-    refDropZone.dispatchEvent(dropEv);
-    await sleep(30);
-    assert.match(promptInput.value, /Adopt the pose of the person in <image2>/,
-        "拖入姿势参考后应自动换成迁移姿势的默认触发词");
+    // 图位约束与直连开关露在模式行上：这一发要原图 + 控制图两张，缺一张就是白跑
+    const poseRow = [...overlay.querySelectorAll(".neo-gallery-edit-outpaint-row")]
+        .find((r) => r.textContent.includes("控制图放参考图区第 1 格"));
+    assert.ok(poseRow && poseRow.style.display !== "none", "应出现姿势锁形控制行（图位约束 + 直连开关）");
+    const directChk = poseRow.querySelector("input[type=checkbox]");
+    assert.equal(directChk.checked, true, "直连默认勾上：姿势页导出的就是成品控制图");
+
+    // 拖入控制图：锁形只有一句触发词，不跟着参考图换
+    const dt = { getData: (m) => (m === "application/x-neo-gallery" ? '{"filename":"skel.png","subfolder":"Pose"}' : "") };
+    const dropControl = async () => {
+        const ev = new window.Event("drop", { bubbles: true, cancelable: true });
+        Object.defineProperty(ev, "dataTransfer", { value: dt, configurable: true });
+        overlay.querySelector(".neo-gallery-edit-refdrop-row .neo-gallery-edit-refdrop").dispatchEvent(ev);
+        await sleep(30);
+    };
+    await dropControl();
+    assert.match(promptInput.value, /Adopt the pose and composition/, "拖入控制图不该换掉锁形触发词");
+    assert.equal(overlay.querySelectorAll(".neo-gallery-edit-refdrop-row .neo-gallery-edit-refdrop").length, 1,
+        "这一发只吃一张控制图：图位只有控制图那一格，不自动长出一格「＋参考」");
+    assert.equal(overlay.querySelector(".neo-gallery-edit-refcount-num").textContent, "1/1",
+        "计数要说这一发的上限就是这一张");
 
     let genBody = null;
     mockRoute("/neo_image_gen/generate", (body) => { genBody = body; return jsonResponse({ task_id: "ie5", status: "queued", images: [] }); });
-    click([...overlay.querySelectorAll(".neo-gallery-story-btn")].find((b) => b.textContent === "生成"));
+    mockRoute("/neo_image_gen/status/ie5", () => jsonResponse({
+        task_id: "ie5", status: "succeeded", width: 512, height: 512,
+        images: [{ filename: "cn_00001_.png", subfolder: "Output/2026-10-03", url: "/o.png" }],
+    }));
+    const genBtn = () => click([...overlay.querySelectorAll(".neo-gallery-story-btn")].find((b) => b.textContent === "生成"));
+    genBtn();
     await sleep(60);
     assert.ok(genBody, "应发出生成请求");
-    assert.equal(genBody.skill_id, "qwen_image_21_pose_edit");
-    assert.equal(genBody.references.length, 2);
-    assert.deepEqual(genBody.references[1], { kind: "input", value: "pose_b.png" }, "姿势参考应进第 2 槽");
-    assert.match(genBody.prompt, /Adopt the pose of the person in <image2>/, "请求应带迁移触发词");
+    assert.equal(genBody.skill_id, "qwen_image_21_controlnet");
+    assert.deepEqual(genBody.references.map((r) => r.value), ["portrait.png", "skel.png"],
+        "第 1 项是原图、第 2 项是控制图（技能 control_ref=2 摘第 2 项进模型补丁）");
+    assert.equal(genBody.control_direct, true, "直连勾着时请求要带 control_direct");
 
-    // 删掉姿势参考 → 触发词换回按提示词改姿势的默认词
-    click(overlay.querySelector(".neo-gallery-edit-refchip-x"));
-    await sleep(10);
-    assert.match(promptInput.value, /Change the pose of the person in <image1>/,
-        "移除姿势参考后应换回技能默认触发词");
+    // 关掉直连（控制图是人物照片）：请求不带这一项，后端落回 Openpose 检测那条路
+    click(directChk);
+    genBody = null;
+    genBtn();
+    await sleep(60);
+    assert.ok(genBody, "第二发也应发出");
+    assert.equal(genBody.control_direct, undefined, "直连关掉就不该发 control_direct");
 
     // 用户自己写过的提示词不被自动替换
-    promptInput.value = "自定义姿势指令";
-    const dropEv2 = new window.Event("drop", { bubbles: true, cancelable: true });
-    Object.defineProperty(dropEv2, "dataTransfer", { value: dt, configurable: true });
-    overlay.querySelector(".neo-gallery-edit-refdrop-row .neo-gallery-edit-refdrop").dispatchEvent(dropEv2);
-    await sleep(30);
-    assert.equal(promptInput.value, "自定义姿势指令", "已有自定义提示词时不应被默认词覆盖");
+    promptInput.value = "自定义锁形指令";
+    await dropControl();
+    assert.equal(promptInput.value, "自定义锁形指令", "已有自定义提示词时不应被默认词覆盖");
 
-    // 关姿势（模式 chip 选回「常规」）→ 回常规编辑技能，已选姿势参考保留
+    // 收回姿势（模式 chip 选回「常规」）→ 回常规编辑技能，已选控制图保留
     await pickEdit(overlay, "常规");
     assert.equal(skillSel.value, "qwen_image_21", "关姿势应回到常规编辑技能");
     assert.ok(overlay.querySelector(".neo-gallery-edit-refchip-img"), "关姿势后已选参考图应保留");
+});
+
+test("图片编辑弹窗：姿势锁形的参考图区只有一格，预填多张控制图只留第 1 张", async () => {
+    resetEnv();
+    clearRoutes();
+    const { openImageEditDialog } = await import("../../web/gallery-gen.js");
+
+    mockRoute("/rs_prompts/skills", () => jsonResponse([
+        { id: "qwen_image_21", cn_name: "Qwen Image 2.1", category: "image_gen", gen_image: true, mode: "t2i_edit" },
+        { id: "qwen_image_21_controlnet", cn_name: "Qwen Image 2.1 ControlNet", category: "image_gen", gen_image: true, mode: "edit", requires_ref: true,
+          gen_config: { default_prompt: "Adopt the pose and composition of the ControlNet pose reference, keeping the face, hair, clothing, lighting and background of <image1>" } },
+    ]));
+    mockRoute("/neo_image_gen/models", () => jsonResponse({ diffusion_models: ["qwen/qwen21.safetensors"], loras: [] }));
+    mockRoute("/neo_image_gen/skill_config", () => jsonResponse({ model: "qwen/qwen21.safetensors", loras: [] }));
+    mockRoute("/neo_gallery/copy_to_input", (body, call) => jsonResponse({ success: true, filename: call.query.get("filename") }));
+    mockRoute("/neo_image_gen/settings", () => jsonResponse({ target_megapixels: 1.5 }));
+
+    // 素材库「复制到参考图区」与姿势页送编辑都走这条预填：一批里多张控制图时只认第 1 张
+    openImageEditDialog({ app: {}, maxThumbnailSize: 320, displayLabels: true },
+        { name: "portrait", filename: "portrait.png" }, "", {
+            prefill: {
+                mode: "pose", skill: "qwen_image_21_controlnet",
+                refs: [{ subfolder: "Pose", filename: "skel.png" }, { subfolder: "Pose", filename: "depth.png" }],
+                width: 512, height: 512, control_direct: true, prompt: "",
+            },
+        });
+    const overlay = document.querySelector(".neo-gallery-edit-modal-overlay");
+    await sleep(120);   // 技能落位 → 控制图复制进 input/ → 尺寸填回
+
+    assert.equal(overlay.querySelectorAll(".neo-gallery-edit-refdrop-row .neo-gallery-edit-refdrop").length, 1,
+        "图位只有控制图那一格：不留一格点了只会白加的「＋参考」");
+    assert.equal(overlay.querySelectorAll(".neo-gallery-edit-refchip-img").length, 1, "只留第 1 张控制图");
+    assert.match(overlay.querySelector(".neo-gallery-edit-refchip-img").getAttribute("src"), /filename=skel\.png/);
+    assert.equal(overlay.querySelector(".neo-gallery-edit-refcount-num").textContent, "1/1",
+        "计数要说这一发的上限就是这一张");
+
+    let genBody = null;
+    mockRoute("/neo_image_gen/generate", (body) => { genBody = body; return jsonResponse({ task_id: "ie7", status: "queued", images: [] }); });
+    click([...overlay.querySelectorAll(".neo-gallery-story-btn")].find((b) => b.textContent === "生成"));
+    await sleep(60);
+    assert.ok(genBody, "应发出生成请求");
+    assert.deepEqual(genBody.references.map((r) => r.value), ["portrait.png", "skel.png"],
+        "第二张控制图不送：这一发就是原图 + 一张控制图");
+    overlay.remove();
 });
 
 test("图片编辑弹窗：生成失败（缺模型）弹 action toast 引导去技能详情", async () => {
@@ -1626,6 +1693,55 @@ test("直达机位卡：空面板只定模式不铺原图层，点空预览区�
 
         // 原图落定：模式留在机位，机位球这才亮出来
         openImageEditDialog({ app: {}, maxThumbnailSize: 320, displayLabels: true }, { name: "src", filename: "src.png" }, "");
+
+// 原图与参考位是 <img>：素材库那一片同时列着视频与音频（抽帧与出片要吃），把它们落进这两个落点就是破图
+test("图片编辑：原图与参考位只收图片，素材库视频卡片挡在落点；input/ 根目录的原图寻址带前缀", async () => {
+    resetEnv();
+    clearRoutes();
+    mockRoute("/rs_prompts/skills", () => jsonResponse([
+        { id: "qwen_image_21", cn_name: "Qwen Image 2.1", category: "image_gen", gen_image: true, mode: "t2i_edit" },
+    ]));
+    const { openImageEditDialog } = await import("../../web/gallery-gen.js");
+    openImageEditDialog({ app: {}, maxThumbnailSize: 320, displayLabels: true }, "", "", {});
+    const overlay = document.querySelector(".neo-gallery-edit-modal-overlay");
+    await sleep(50);
+    const orig = overlay.querySelector(".neo-gallery-edit-compare-img");
+    assert.equal(orig.getAttribute("src"), "", "空面板没有原图");
+
+    // 面板开素材库弹窗时把自己收得动的那一类交出去（宿主照它过滤卡片），并把取用回调交出来
+    const recordPick = (e) => { detail = e.detail; };
+    let detail = null;
+    window.addEventListener("neo:media-pick", recordPick);
+    click(overlay.querySelector(".neo-gallery-edit-srcbox"));
+    assert.equal(detail.accept, "image", "原图落点声明只收图片");
+    assert.equal(typeof detail.onPick, "function", "取用回调交到了宿主手里");
+
+    // 弹窗过滤没兜住的那一条（勾选集合批量取用）在落点挡住：原图不动，话说清走法
+    await detail.onPick([{ filename: "发现更多精彩视频 - 抖音搜索_4.mp4", subfolder: "Output/2026-01-01" }]);
+    await sleep(20);
+    assert.equal(orig.getAttribute("src"), "", `视频没落进原图：${orig.getAttribute("src")}`);
+
+    // 本地上传与素材库取用都落在 input/ 根目录：寻址带 input/ 前缀，空 subfolder 会被后端当 presets/ 解出破图
+    await detail.onPick([{ filename: "scene.png", subfolder: "" }]);
+    await sleep(20);
+    assert.match(orig.getAttribute("src"), /filename=scene\.png&subfolder=input/, "input/ 根目录的原图带前缀寻址");
+
+    // 参考位同款：一次批量取用里混进来的视频逐张跳过，一次批量只说一句，不逐张刷屏
+    click(overlay.querySelector(".neo-gallery-edit-refdrop"));
+    assert.equal(detail.accept, "image", "参考位同样只收图片");
+    await detail.onPick([{ filename: "clip.mp4", subfolder: "" }, { filename: "ref.png", subfolder: "" }]);
+    await sleep(40);
+    const chips = [...overlay.querySelectorAll(".neo-gallery-edit-refchip-img")];
+    assert.equal(chips.length, 1, "一次批量只落那一张图");
+    assert.match(chips[0].getAttribute("src"), /filename=ref\.png&subfolder=input/);
+    window.removeEventListener("neo:media-pick", recordPick);
+
+    const needImage = [...document.querySelectorAll("#neo-action-toast-stack .neo-at")]
+        .filter((el) => el.textContent.includes("这里要一张图片"));
+    assert.equal(needImage.length, 2, `挡下来要说清走法，一次落点一句：${needImage.length}`);
+    overlay.remove();
+});
+
         await sleep(120);
         assert.equal(modeSel.value, "angle", "带着机位选完原图，模式仍是机位");
         assert.equal(panel.querySelector(".neo-gallery-edit-angle").style.display, "", "原图落定，机位球与三条滑杆亮出来");

@@ -5,7 +5,7 @@
 
 import { $el } from "../../../../scripts/ui.js";
 import { api } from "../../../../scripts/api.js";
-import { getImageHeight, getThumbnailSrc, isImageFile, isAudioFile, getAudioSrc, renderWaveform, decorativeHeights } from "./gallery-utils.js";
+import { getImageHeight, getThumbnailSrc, isImageFile, isAudioFile, isPickableImage, getAudioSrc, renderWaveform, decorativeHeights } from "./gallery-utils.js";
 import { DIRECTOR_ASPECTS } from "./director.js";
 import { openLLMSettingsModal } from "./llm-setting.js";
 import { actionToast } from "./toast.js";
@@ -28,8 +28,9 @@ const QWEN_IMAGE_SKILL_ID = "qwen_image_21";
 const QWEN_OUTPAINT_SKILL_ID = "qwen_image_21_outpaint";
 // 高分局部编辑技能：涂抹区域自动裁剪-高分重绘-羽化合并（无额外 LoRA）
 const QWEN_LOCAL_EDIT_SKILL_ID = "qwen_image_21_local_edit";
-// 姿势编辑技能：只挂原图时按提示词改姿势，拖入第 2 张参考时把它的姿势搬到原图人物上
-const QWEN_POSE_EDIT_SKILL_ID = "qwen_image_21_pose_edit";
+// 姿势锁形技能（ControlNet）：第 1 张额外参考位放控制图，锁住它的姿势与构图重出原图
+const QWEN_CONTROLNET_SKILL_ID = "qwen_image_21_controlnet";
+const POSE_MAX_REFS = 1;   // 姿势锁形一发只吃这一张控制图：这个模式下参考图区只给一格
 // 机位技能：按「转角 / 俯仰 / 镜头」三档改写相机机位重出这一张（档位与短语在 angle/angle-orb.js）
 const QWEN_CAMERA_ANGLE_SKILL_ID = "qwen_image_21_camera_angle";
 
@@ -55,9 +56,6 @@ const REMOVE_DEFAULT_PROMPT = ("Remove the object in the red highlighted area an
 const BLEND_DEFAULT_PROMPT = ("Using the first image as the base scene, naturally insert the subjects from the additional reference images into the scene. " +
     "Match their scale, lighting direction, color temperature, and perspective to the environment. " +
     "The result reads as a single photograph where all subjects belong to the same moment.");
-// 姿势迁移默认触发词（姿势模式拖入姿势参考图时自动换上，与技能 skill.md 的「姿势迁移」用法一致）
-const POSE_REF_DEFAULT_PROMPT = ("Adopt the pose of the person in <image2>, keeping the face, hair, clothing, " +
-    "lighting, background and camera framing of <image1> unchanged, high quality, sharp details, 4k");
 // 扩图链两次缩放的目标（与后端 OUTPAINT_REF_MP + 设置项 target_megapixels、参考工作流
 // ▶▷Qwen-image21-功能流 的「图像扩展」一致）：原图先归一化到 1MP，补灰边后画布再归一化到目标 MP
 const OUTPAINT_REF_MP = 1.0;
@@ -1333,7 +1331,9 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
     // 原图可以后补：绘画页进页铺的就是空面板，点预览区那枚「原图」方块或把素材拖进来即成原图
     let source = image ? { filename: image.filename || image.name, subfolder: subfolder || "" } : null;
     const pathLabel = () => (source.subfolder ? `${source.subfolder}/` : "") + source.filename;
-    const origUrl = () => `/neo_gallery/image?filename=${encodeURIComponent(source.filename)}&subfolder=${encodeURIComponent(source.subfolder)}`;
+    // 空 subfolder 在这一头就是 input/ 根目录（本地上传与素材库取用都落在那儿）：不带 input/ 前缀的话，
+    // /neo_gallery/image 把空 subfolder 当 presets/ 解，原图与尺寸探针一起 404 成破图（参考位同一套寻址，一直带前缀）
+    const origUrl = () => `/neo_gallery/image?filename=${encodeURIComponent(source.filename)}&subfolder=${encodeURIComponent(source.subfolder || "input")}`;
 
     const statusBox = $el("div", { className: "neo-gallery-cs-status" });
     const actionsBox = $el("div", { className: "neo-gallery-story-actions" });
@@ -1342,7 +1342,7 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
         rows: 4,
         placeholder: t("描述你想对这张图做的修改，例如：把背景换成海边日落、给角色加一顶帽子……")
     });
-    // 提示词框里「代码写进去的那句」记在 autoPrompt（模式切换、技能切换、姿势参考切换写进去的都算）。
+    // 提示词框里「代码写进去的那句」记在 autoPrompt（模式切换、技能切换写进去的都算）。
     // 切模式时只有「空框 / 就是这句」会被换成本模式的触发词——上一模式的自动句留着，技能收到的就是
     // 不相干的指令（扩图收了机位指令出不了补边）。用户自己写的句子在这条线上认不出来，永远不动。
     let autoPrompt = "";
@@ -1496,7 +1496,7 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
         if (editMode === "outpaint" && !prompt) prompt = OUTPAINT_DEFAULT_PROMPT;
         if (editMode === "remove" && !prompt) prompt = REMOVE_DEFAULT_PROMPT;
         if (editMode === "blend" && !prompt) prompt = BLEND_DEFAULT_PROMPT;
-        if (editMode === "pose" && !prompt) prompt = extraRefs.length ? POSE_REF_DEFAULT_PROMPT : poseBasePrompt();
+        if (editMode === "pose" && !prompt) prompt = poseBasePrompt();
         if (editMode === "angle" && !prompt) prompt = angleOrb.prompt();
         if (!prompt) { promptInput.focus(); return; }
         running = true;
@@ -1547,6 +1547,9 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
             if (editMode === "local") payload.local_edit = true;
             if (editMode === "remove") payload.remove_points = removePoints;
             if (editMode === "angle") payload.angle = angleOrb.get();   // 三档进副文件：再来一发按同一机位重放
+            // 姿势锁形：控制图已是控制图（骨架 / 深度 / 法线 / 线稿 / 剪影）时直连模型补丁，
+            // 模板里那道 Openpose 预处理只对「拿人物照片当控制图」有用
+            if (editMode === "pose" && controlDirectChk.checked) payload.control_direct = true;
             const snap = await requestGeneration(payload);
             cancelId = snap.task_id;
             renderRunning(t("排队中…"));
@@ -1584,7 +1587,7 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
         ["local", t("局部"), t("高分局部编辑：涂抹要修改的区域，自动裁剪放大重绘后合并回原图")],
         ["remove", t("删除"), t("点选删除：在原图上点击要删除的物体，SAM3 自动分割并叠加红色遮罩预览，确认后移除（已预填默认删除指令，可修改）")],
         ["blend", t("融合"), t("多图融合：添加多张参考图，由模型自动融合为一张连贯画面")],
-        ["pose", t("姿势"), t("姿势编辑：按提示词改原图人物的姿势；在参考图区拖入第 2 张图（人物图或骨架图）则把它的姿势搬到原图人物上，触发词自动切换")],
+        ["pose", t("姿势"), t("姿势锁形（ControlNet）：预览区放原图，参考图区第 1 格放控制图（骨架 / 深度 / 法线 / 线稿 / 剪影），锁住控制图的姿势与构图重出原图")],
         ["angle", t("机位"), t("机位：拖动机位球（或用球角四个箭头、三条滑杆、键盘方向键）定相机位置，按转角 / 俯仰 / 镜头三档重出这一张，长相服装光线背景不变")],
     ]) {
         modeSel.appendChild($el("option", { value: mode, textContent: name, title: tip }));
@@ -1636,6 +1639,18 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
         removeClearBtn
     ]);
     removeRow.style.display = "none";
+
+    // 姿势锁形（ControlNet）控件：免检测直连开关 + 图位约束提示。控制图吃的是参考图区第 1 格
+    // （技能 control_ref=2 只摘那一张进模型补丁），原图还是预览区那一张，这一发两张缺一不可。
+    const controlDirectChk = $el("input", { type: "checkbox", checked: "checked" });
+    controlDirectChk.title = t("勾上 = 控制图已是控制图（骨架 / 深度 / 法线 / 线稿 / 剪影），直连模型补丁；关掉 = 控制图是人物照片，先由 Openpose 检测出骨架");
+    const poseHint = $el("span", { className: "neo-gallery-edit-size-label", textContent: t("控制图放参考图区第 1 格，原图放预览区：这一发两张都要") });
+    const poseRow = $el("div", { className: "neo-gallery-edit-outpaint-row" }, [
+        $el("label", { className: "neo-director-field-label", textContent: t("控制图免检测直连") }),
+        controlDirectChk,
+        poseHint
+    ]);
+    poseRow.style.display = "none";
 
     // 机位控件：机位球 + 三条滑杆（转角 / 俯仰 / 镜头），只在「机位」模式出现，控件本体在 angle/angle-orb.js
     const angleSliders = {};
@@ -1689,6 +1704,8 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
     // 参考图区（autogrow）：拖入一张追加新空槽，最多 9 张（Qwen Image 2.1 上限）
     // 这一行挂在输入卡里（提示词框上方），与提示词框同一块描边，不再单独占一块焦点框
     const MAX_EXTRA_REFS = 9;
+    // 图位上限按模式走：姿势锁形只吃第 1 格那张控制图，多出来的图位在这一发没有去处
+    const refSlotCap = () => (editMode === "pose" ? POSE_MAX_REFS : MAX_EXTRA_REFS);
     const refDropContainer = $el("div", { className: "neo-gallery-edit-refdrop-row" });
     const refFileInput = document.createElement("input");
     refFileInput.type = "file";
@@ -1715,7 +1732,7 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
     ]);
     refDropContainer.appendChild(refPickRow);
     const refCountNum = refPickRow.querySelector(".neo-gallery-edit-refcount-num");
-    const syncRefCount = () => { refCountNum.textContent = `${extraRefs.length}/${MAX_EXTRA_REFS}`; };
+    const syncRefCount = () => { refCountNum.textContent = `${extraRefs.length}/${refSlotCap()}`; };
     // 浮层带 6px 间隙开在方块上方，纯 :hover 跨不过间隙（鼠标一离开方块行就失 hover、浮层变不可点，点不中）：
     // JS 开关 + 关闭宽限，离开后留一段定时器，期间移入浮层取消关闭，鼠标来得及跨过间隙点中两项
     let pickCloseTimer = 0;
@@ -1910,6 +1927,7 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
             outpaintRow,
             localRow,
             removeRow,
+            poseRow,
             angleBox,
             statusBox,
             composer,
@@ -2204,16 +2222,10 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
         updateSizeLabel();
     };
     // ---- 统一编辑模式切换（新增模式只需在此加一个 case） ----
-    // 姿势模式触发词随参考图切换：没参考图 = 按提示词改姿势（技能 config 的 default_prompt），
-    // 拖入姿势参考 = 换成迁移触发词。只替换「空 / 代码写进去的那句」，用户写过的不动。
-    const poseBasePrompt = () => String(_genSkills.find(s => s.id === QWEN_POSE_EDIT_SKILL_ID)?.gen_config?.default_prompt || "").trim();
-    const syncPosePrompt = () => {
-        if (editMode !== "pose" || !isAutoPrompt()) return;
-        const want = extraRefs.length ? POSE_REF_DEFAULT_PROMPT : poseBasePrompt();
-        if (want) fillAutoPrompt(want);
-    };
+    // 姿势锁形的触发词就是 ControlNet 技能 config 的 default_prompt，模式不在前端另写一份
+    const poseBasePrompt = () => String(_genSkills.find(s => s.id === QWEN_CONTROLNET_SKILL_ID)?.gen_config?.default_prompt || "").trim();
     // 机位触发词 = 技能 default_prompt 的方括号按当前三档填死；只覆盖「空 / 代码写进去的那句」，
-    // 用户自己写过的句子不碰（与 syncPosePrompt 同一条规矩）
+    // 用户自己写过的句子不碰
     const angleTemplate = () => String(_genSkills.find(s => s.id === QWEN_CAMERA_ANGLE_SKILL_ID)?.gen_config?.default_prompt || "").trim();
     const syncAngleSliders = (cfg) => {
         for (const [key, box] of Object.entries(angleSliders)) {
@@ -2227,7 +2239,7 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
     };
     // 机位触发词 = 技能 default_prompt 的方括号按当前三档填死。
     // 进模式那一下（force）直接写：模式本身就是「用机位指令重出这一张」，框里残留上一个模式的词会让技能收不到机位；
-    // 进模式之后只覆盖「空 / 代码写进去的那句」，用户自己改过的不碰（与 syncPosePrompt 同一条规矩）。
+    // 进模式之后只覆盖「空 / 代码写进去的那句」，用户自己改过的不碰。
     const fillAnglePrompt = (force = false) => {
         if (editMode !== "angle") return;
         if (!force && !isAutoPrompt()) return;
@@ -2254,6 +2266,9 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
         outpaintRow.style.display = on && m === "outpaint" ? "" : "none";
         localRow.style.display = on && m === "local" ? "" : "none";
         removeRow.style.display = on && m === "remove" ? "" : "none";
+        // 姿势锁形这一行不是「在原图上动手」的控件，没有原图也要露着：那一条图位约束
+        // 正是用户选原图之前要知道的事
+        poseRow.style.display = m === "pose" ? "" : "none";
         // 机位只用原图这一张：参考位与提示词框整块收起，这两件事跟着模式走，跟有没有原图无关
         // —— 直达卡把机位带到空面板时，那框固定句式的触发词更不该露在初始界面上。机位球要贴着
         // 原图摆才有意义，没有原图时收着；球 + 三条滑杆 + 一框提示词叠在一起，输入卡就顶到预览区
@@ -2305,7 +2320,7 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
         outpaint: () => OUTPAINT_DEFAULT_PROMPT,
         remove: () => REMOVE_DEFAULT_PROMPT,
         blend: () => BLEND_DEFAULT_PROMPT,
-        pose: () => (extraRefs.length ? POSE_REF_DEFAULT_PROMPT : poseBasePrompt()),
+        pose: () => poseBasePrompt(),
     };
 
     const setEditMode = async (mode) => {
@@ -2329,7 +2344,7 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
         syncModeRows();
 
         // 技能选择（程序改 value 不触发 onchange，自定参数要自己重放到新技能的配置）
-        skillSel.value = { outpaint: QWEN_OUTPAINT_SKILL_ID, local: QWEN_LOCAL_EDIT_SKILL_ID, pose: QWEN_POSE_EDIT_SKILL_ID, angle: QWEN_CAMERA_ANGLE_SKILL_ID }[mode] || QWEN_IMAGE_SKILL_ID;
+        skillSel.value = { outpaint: QWEN_OUTPAINT_SKILL_ID, local: QWEN_LOCAL_EDIT_SKILL_ID, pose: QWEN_CONTROLNET_SKILL_ID, angle: QWEN_CAMERA_ANGLE_SKILL_ID }[mode] || QWEN_IMAGE_SKILL_ID;
         skillChip.sync();
         await applyEditModelCfg(skillSel.value);
         syncEditParamsChip();
@@ -2611,6 +2626,20 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
     const refThumbUrl = (it, size) =>
         `/neo_gallery/thumbnail?filename=${encodeURIComponent(it.filename)}&subfolder=${encodeURIComponent(it.subfolder ? `input/${it.subfolder}` : "input")}&size=${size}`;
 
+    /** 原图与参考位是 <img>，只吃图片：素材库那一片同时列着视频与音频（抽帧与出片要吃），
+     *  把它们落进 <img> 就是破图。弹窗侧按 accept 过滤，拖放与批量取用这条路在落点挡，
+     *  话点名走得通的那条路（视频先去「视频抽帧」取帧，帧图才是图） */
+    const toastNeedImage = () => actionToast({ severity: "warning", summary: t("这里要一张图片"), detail: t("视频先到「视频抽帧」取帧，用帧图当原图与参考图；音频不能当图") });
+    const refuseNonImage = (filename) => {
+        if (isPickableImage(String(filename || ""))) return false;
+        toastNeedImage();
+        return true;
+    };
+    /** 拖进来的素材卡在复制进 input/ 之前先看一眼：视频复制过来只是白占一份磁盘 */
+    const refuseDroppedCard = (raw) => {
+        try { return refuseNonImage(JSON.parse(raw)?.filename); } catch { return false; }
+    };
+
     function makeRefSlot(index) {
         const slot = $el("div", { className: "neo-gallery-edit-refdrop" });
         slot.title = t("点空格从素材库取图；把素材卡或本地图片文件拖进图位");
@@ -2633,7 +2662,11 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
             const files = Array.from(e.dataTransfer?.files || []).filter(f => f.type.startsWith("image/"));
             let fname = null;
             if (files.length) { [fname] = await uploadLocalFiles(files); }
-            else { fname = await copyGalleryToInput(grabDataType(e)); }
+            else {
+                const raw = grabDataType(e);
+                if (refuseDroppedCard(raw)) return;
+                fname = await copyGalleryToInput(raw);
+            }
             if (fname) { extraRefs[index] = { filename: fname, subfolder: "" }; renderRefSlots(); }
         });
         // 空格点击 = 素材库取用（本地文件走「＋参考」浮层里的「⬆ 本地上传」，或直接把文件拖进方块）
@@ -2646,28 +2679,30 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
         for (const node of [...refDropContainer.children]) {
             if (node.classList.contains("neo-gallery-edit-refdrop")) node.remove();
         }
-        const count = Math.max(1, extraRefs.length + (extraRefs.length < MAX_EXTRA_REFS ? 1 : 0));
+        const count = Math.min(Math.max(1, extraRefs.length + (extraRefs.length < refSlotCap() ? 1 : 0)), refSlotCap());
         for (let i = 0; i < count; i++) {
             refDropContainer.insertBefore(makeRefSlot(i), refPickRow);
         }
         syncRefCount();
-        syncPosePrompt();
     }
     renderRefSlots();
 
     /** 取用一批参考图（素材库弹窗回调 / 本地多选共用）：画廊素材先复制进 input/ 根目录，落不下的跳过 */
     async function addRefImages(items) {
+        let refused = 0;   // 勾选集合这条路没被 accept 过滤过，混进来的视频与音频逐张挡，一次批量只说一句
         for (const it of items || []) {
-            if (extraRefs.length >= MAX_EXTRA_REFS) break;
+            if (extraRefs.length >= refSlotCap()) break;
+            if (!isPickableImage(String(it?.filename || ""))) { refused++; continue; }
             const fname = it.subfolder ? await copyGalleryToInput(JSON.stringify(it)) : it.filename;
             if (fname) extraRefs.push({ filename: fname, subfolder: "" });
         }
+        if (refused) toastNeedImage();
         renderRefSlots();
     }
 
     /** 参考图位的素材库取用：Studio 宿主听 neo:media-pick 开弹窗；ComfyUI 没有监听，开侧栏照旧往方块里拖 */
     const pickRefsFromLibrary = () => {
-        window.dispatchEvent(new CustomEvent("neo:media-pick", { detail: { target: null, onPick: addRefImages } }));
+        window.dispatchEvent(new CustomEvent("neo:media-pick", { detail: { target: null, onPick: addRefImages, accept: "image" } }));
         toggleGallerySidebar();
     };
 
@@ -2677,7 +2712,7 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
         const names = await uploadLocalFiles(files);
         refFileInput.value = "";
         for (const fname of names) {
-            if (!fname || extraRefs.length >= MAX_EXTRA_REFS) continue;
+            if (!fname || extraRefs.length >= refSlotCap()) continue;
             extraRefs.push({ filename: fname, subfolder: "" });
         }
         renderRefSlots();
@@ -2688,6 +2723,10 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
         const disabled = editMode === "outpaint" || editMode === "local" || editMode === "remove" || editMode === "angle";
         refDropContainer.classList.toggle("disabled", disabled);
         if (disabled && extraRefs.length) { extraRefs = []; renderRefSlots(); }
+        // 从多图模式带着参考图切进姿势：多出来的那些在这发没有去处，收着，图位只剩控制图那一格
+        else if (editMode === "pose" && extraRefs.length > POSE_MAX_REFS) { extraRefs.length = POSE_MAX_REFS; renderRefSlots(); }
+        // 图位不增不减也要重建一次：取图浮层上的「参考图 N/9」计数跟着模式的上限走，切模式就得改写
+        else renderRefSlots();
     };
 
     // 原图区拖放替换：支持素材库拖入和本地文件上传
@@ -2722,7 +2761,7 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
     /** 素材库弹窗点卡片取原图：原图只有一张，多张取用时只落第一张 */
     const useSourcePicks = async (items) => {
         const it = (items || [])[0];
-        if (!it) return;
+        if (!it || refuseNonImage(it.filename)) return;
         const fname = it.subfolder ? await copyGalleryToInput(JSON.stringify(it)) : it.filename;
         if (!fname) return;
         applySource(fname, "");
@@ -2730,7 +2769,7 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
     };
     const pickSourceFromLibrary = () => {
         // Studio 宿主听 neo:media-pick 开素材库弹窗；ComfyUI 没有监听，开侧栏照旧往方块里拖
-        window.dispatchEvent(new CustomEvent("neo:media-pick", { detail: { target: null, onPick: useSourcePicks } }));
+        window.dispatchEvent(new CustomEvent("neo:media-pick", { detail: { target: null, onPick: useSourcePicks, accept: "image" } }));
         toggleGallerySidebar();
     };
     /** ✕ 收回原图：只收原图。模式跟着用户，代码不切它（切走会把用户选的扩图 / 机位丢掉，切回来又得重选）；
@@ -2765,14 +2804,18 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
         const files = Array.from(e.dataTransfer?.files || []).filter(f => f.type.startsWith("image/"));
         let fname = null;
         if (files.length) { [fname] = await uploadLocalFiles(files); }
-        else { fname = await copyGalleryToInput(grabDataType(e)); }
+        else {
+            const raw = grabDataType(e);
+            if (refuseDroppedCard(raw)) return;
+            fname = await copyGalleryToInput(raw);
+        }
         if (!fname) return;
         applySource(fname, "");
         refName = fname;   // 拖进来的图已落在 input/，省掉生成时那一次复制
     };
 
     /** 「再来一发」（编辑图）：副文件里的原图 / 编辑模式 / 参考图 / 出图尺寸 / 技能与自定参数
-     *  逐项填进这块现成面板，面板不重建。
+     *  逐项填进这块现成面板，面板不重建。姿势锁形那一发还带回免检测直连那一档。
      *
      *  顺序是原图 → 模式 → 参考图：切模式会清掉额外参考图（扩图 / 局部 / 点选只用原图那一张），
      *  反过来填只剩一地残留。涂抹遮罩与扩图边距是用户在原图上画出来
@@ -2781,7 +2824,7 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
         await skillsReady;
         const filled = [];
         const src = pf?.src;
-        if (src?.filename) {
+        if (src?.filename && !refuseNonImage(src.filename)) {
             await setEditMode("normal");   // 先把模式收回常规：applySource 里那一次就不再多跑一轮
             applySource(src.filename, src.subfolder || "");
             filled.push(t("原图"));
@@ -2795,9 +2838,11 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
         const refs = editMode === "outpaint" || editMode === "local" || editMode === "remove" || editMode === "angle"
             ? [] : (pf?.refs || []).filter((r) => r?.filename);
         if (refs.length) {
-            await addRefImages(refs.slice(0, MAX_EXTRA_REFS));
+            await addRefImages(refs);
             if (extraRefs.length) filled.push(t("参考图"));
         }
+        // 免检测直连跟着副文件走：那一发出的是骨架直连，重放就不许落到人物照片那条检测路
+        if (editMode === "pose" && pf?.control_direct !== undefined) controlDirectChk.checked = !!pf.control_direct;
         const w = Number(pf?.width) || 0, h = Number(pf?.height) || 0;
         if (w >= 256 && h >= 256 && w <= 8192 && h <= 8192) {
             widthInput.value = String(round32(w));

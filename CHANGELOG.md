@@ -5,6 +5,16 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 ## [Unreleased]
 
 ### Added
+- **The 3D 姿势 export panel gains a separate 送进图片编辑 button: pose sets go to the library, and one click
+  sends the control image to the editor.** Exporting stays what it always was - the set lands in the library's
+  `Pose` folder, the toast names only that, and the page is not switched. The new button does the whole handoff in
+  one click: with nothing exported yet it exports this set first, then carries its first usable control image
+  (skeleton → depth → normal → lineart → silhouette, in that order) into 图片编辑's **姿势** mode - the output size is
+  the exported edge length, the direct detent is on, and the prompt is the lock sentence for that format (skeleton
+  keeps the skill's own default sentence); a batch already exported goes through without rendering again. It is grey
+  for one case only, a batch of `shaded` renders - a lit render is not a control image - and the greyed tooltip names
+  the reason. Add the 原图 in the editor and the shot locks that pose onto it. Covered by the export / send cases in
+  `studio/tests/js/pose-bridge.test.mjs`.
 - **The Studio home splits into create and edit sections, and the edit modes become direct cards.** The home page now
   reads **开始创作** (生成图片 / 生成视频 / 导演视频 / 3D 姿势 / 智能体), **编辑** (图片编辑 / 扩图 / 机位 / 融合 / 姿势 /
   视频抽帧) and **素材与配置** (素材库 / 技能 / 设置). An edit card jumps to the 编辑 page and switches the panel it lands in
@@ -106,6 +116,18 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   [README_ZH.md](README_ZH.md) / [README.md](README.md) and from the docs index.
 
 ### Fixed
+- **The 图片编辑 原图 stops arriving broken, and the 素材库 pick dialog stops offering what the panel cannot use.**
+  素材库 lists videos and audio next to the images (the 视频抽帧 page and the 出片 reference grid eat them), and the
+  编辑 page opened that same dialog for its 原图 and 参考 slots: picking a video card dropped an `.mp4` into the
+  `<img>` and the preview showed a broken image, while dragging a card onto a slot copied a video into `input/` for
+  nothing. The dialog now filters by what the caller can take - 编辑 picks images only (clicking a video card there
+  just opens the lightbox), 视频抽帧 picks videos only, 出片 keeps every media kind - and the 原图 / 参考 landing
+  points refuse a non-image arriving by drag or by the 「取用已选」 batch, naming the way that works (take a frame out
+  of the video first and use that frame as the image). A source copied into `input/` renders at last too: the 原图
+  preview, its size probe and the lightbox now address it as `input/`, where the empty subfolder used to resolve as
+  `presets/` and 404. Covered by `studio/tests/js/lib-modal-pick-accept.test.mjs` and the pick / addressing case in
+  `studio/tests/js/gallery-image-edit.test.mjs`.
+
 - **Switching an 编辑 mode swaps the prompt box with it.** 机位 folds its prompt box away by design, so its prefilled
   camera line sat in the box unseen; coming out of 机位 onto 扩图 (a home direct card, a mode-chip pick) left that
   sentence in the 扩图 box, and the shot sent 「Move the camera of <image1> …」 to the outpaint skill instead of the
@@ -128,6 +150,22 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   `studio/tests/js/pose-bridge.test.mjs`.
 
 ### Changed
+- **Pose lock keeps a single control image: the 参考图区 shows one slot in 姿势 mode.** That mode eats exactly one
+  control image, so the slot row now offers just that slot (its count reads 「参考图 N/1」) and no auto-grown empty
+  「＋ 参考」 box. References carried over from a multi-reference mode are trimmed to the first when the shot switches
+  into 姿势, and a prefilled batch - the asset library's 复制到参考图区, the 姿势 page's 送进图片编辑 - keeps only its
+  first control image, so the request sends 原图 plus one control image. Covered by
+  `studio/tests/js/gallery-image-edit.test.mjs`.
+- **The 姿势 edit mode is a ControlNet shot now, and the `qwen_image_21_pose_edit` preset is gone.** Picking 姿势 in
+  the image-edit panel selects **Qwen Image 2.1 ControlNet**: the 原图 supplies content and face, and the image in the
+  first reference slot locks pose and composition through the model patch. Two images are required, and the mode row
+  says so. The new **控制图免检测直连** detent is on by default - a skeleton / depth / normal / lineart / silhouette
+  image goes straight to the patch, because running a skeleton through Openpose detects it twice and a depth map
+  reaches a body detector that finds no body; uncheck it when the control image is a photo of a person, which keeps the
+  Openpose path. The detent travels in the request (`control_direct`) and in the sidecar (`direct=1`), so 再来一发
+  replays the same path. The old text pose-transfer preset is removed - it never locked the shape - and the home card
+  reads 「骨架图锁姿势，重出这一张」. Covered by the pose-mode case in `studio/tests/js/gallery-image-edit.test.mjs`,
+  the direct-chain cases in `studio/tests/test_image_gen.py` and the sidecar case in `studio/tests/test_gallery_copy_to_input.py`.
 - **The 绘画 and 视频 prompt boxes shrink to the 编辑 page's scale.** The 绘画 page's composer box no longer opens
   110–150px tall: it floors at two lines (64px, `max-height: 26vh`) and grows by dragging its bottom edge, so the freed
   strip goes to the result area above it. The 视频 page's composer capsule docks at 980px centred (was 1120px) with the

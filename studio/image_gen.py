@@ -519,6 +519,9 @@ def resolve_request(body: dict, settings: dict | None = None, max_refs: int = 1)
     if control_ref and len(names) >= control_ref:
         control_image = names[control_ref - 1]
         names = names[:control_ref - 1] + names[control_ref:]
+    # 免检测直连（编辑面板的「控制图已是控制图」）：控制图本身就是骨架 / 深度 / 法线 / 线稿这类图，
+    # 模板里那道预处理对它多余（见 _apply_control_direct）。没有控制图时这项无意义，恒为 False。
+    control_direct = bool(control_image and body.get("control_direct"))
     ref_name = names[0] if names else None
 
     # 扩图：四边留白像素 + 目标总像素（MP）；None = 未开扩图模式
@@ -584,6 +587,7 @@ def resolve_request(body: dict, settings: dict | None = None, max_refs: int = 1)
         "ref_name": ref_name,
         "ref_images": names,
         "control_image": control_image,
+        "control_direct": control_direct,
         "ref_scale": ref_scale if ref_name else None,
         "canvas": canvas,
         "outpaint": outpaint,
@@ -993,6 +997,34 @@ def _apply_local_edit(graph: dict, local: dict) -> None:
     _drop_unused_empty_latent(graph)
 
 
+# 吃控制图的模型补丁节点（comfy_extras/nodes_model_patch.py）：补丁自带 VAE 编码这张图，
+# 控制类型由补丁按图像内容自己判，节点上没有控制类型可选
+_CONTROL_NET_NODES = ("ZImageFunControlnet", "QwenImageDiffsynthControlnet")
+
+
+def _apply_control_direct(graph: dict) -> None:
+    """控制图绕开 AIO_Preprocessor，直连 ControlNet 补丁的 image 输入。
+
+    模板把控制图先过一道 Openpose 预处理，那是给「人物照片当控制图」准备的。骨架图过它是
+    二次检测（检测把细骨架糊成一团），深度 / 法线 / 线稿 / 剪影过它是直接喂进人体检测器——
+    图上没有人体，出来的是一张空白控制图，锁形变成随机出图。直连就是摘掉这一节：
+    预处理节点删掉，补丁的 image 改接它上游那张 LoadImage（画布尺寸归补丁自己拉伸）。"""
+    for nid, node in list(graph.items()):
+        if not isinstance(node, dict) or node.get("class_type") not in _CONTROL_NET_NODES:
+            continue
+        link = (node.get("inputs") or {}).get("image")
+        if not (isinstance(link, list) and len(link) == 2 and isinstance(link[0], str)):
+            continue
+        pre = graph.get(link[0])
+        if not isinstance(pre, dict) or pre.get("class_type") != "AIO_Preprocessor":
+            continue
+        src = (pre.get("inputs") or {}).get("image")
+        if not (isinstance(src, list) and len(src) == 2 and str(src[0]) in graph):
+            continue
+        node["inputs"]["image"] = [str(src[0]), int(src[1])]
+        del graph[link[0]]
+
+
 def render_template(template: dict, params: dict) -> tuple[dict, list]:
     """把 workflow.json 模板渲染成可提交队列的 API prompt。返回 (graph, warnings)。
 
@@ -1023,6 +1055,8 @@ def render_template(template: dict, params: dict) -> tuple[dict, list]:
     _apply_loras(graph, params.get("loras") or [], warnings)
     if params.get("local_edit"):
         _apply_local_edit(graph, params["local_edit"])
+    if params.get("control_direct"):
+        _apply_control_direct(graph)
     _reject_unknown_tokens(graph)
     return graph, warnings
 
@@ -1199,6 +1233,8 @@ def _sidecar_meta(params: dict, skill_id: str = "") -> str:
     angle = params.get("angle")
     if angle:
         parts.append("angle=%d/%d/%d" % (int(angle.get("rotation") or 0), int(angle.get("tilt") or 0), int(angle.get("zoom") or 0)))
+    if params.get("control_direct"):
+        parts.append("direct=1")
     return " ".join(parts)
 
 

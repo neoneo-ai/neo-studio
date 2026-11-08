@@ -224,3 +224,20 @@ class SidecarAngleParseTests(unittest.TestCase):
         self.assertNotIn("angle", legacy)   # 老副文件照读，不给机位编一个填不回去的值
         self.assertEqual(gallery._parse_sidecar_angle("angle=135/30"), None)   # 三档不齐整项不给
 
+
+class SidecarControlDirectParseTests(unittest.TestCase):
+    """免检测直连那一发在摘要行里是 direct=1：读端给 True，面板才会把控制图直连模型补丁。
+
+    老副文件没这一项时整项不给 —— 不给就落回人物检测那条路，与写端默认一致。"""
+
+    def test_direct_field_round_trips(self):
+        out = gallery._parse_sidecar_params(
+            "seed=1 512x512 model=m skill=qwen_image_21_controlnet mode=pose src=src.png "
+            "refs=skel.png direct=1")
+        self.assertIs(out["control_direct"], True)
+
+    def test_missing_direct_field_is_absent(self):
+        out = gallery._parse_sidecar_params(
+            "seed=1 512x512 model=m skill=qwen_image_21_controlnet mode=pose src=src.png refs=skel.png")
+        self.assertNotIn("control_direct", out)
+

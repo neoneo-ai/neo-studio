@@ -459,6 +459,19 @@ which means the export uses the live camera, so the panel exports from the frami
 older package whose `meta/list` has no `current` leaves the dropdown on "View" and lets the page fall back to
 its own default - the panel never writes a value the dropdown does not offer.
 
+Writing the set to disk stops there: the export writes the library's `Pose` folder, the toast names only that, and
+the page is not switched. The export panel carries a separate **"Send to Image Editor"** button that does the whole
+handoff in one click: with nothing exported yet it exports this set into the `Pose` folder first, then carries one of
+its control images into the image editor's pose-lock mode - the first usable export in the
+order skeleton → depth → normal → lineart → silhouette (the editor's reference row keeps exactly that one slot for
+this shot, and a batch with several control images keeps its first), with the output size set to the exported edge
+(the exports are square, and a square canvas is what keeps the control image from being stretched), the direct
+detent kept on, and the lock sentence for that format written into the prompt (the skeleton row stays empty - the
+editor reads the ControlNet skill's `config.json` default itself, so the pose page keeps no second copy). A batch
+already on disk goes straight through, so nothing renders twice. The button is grey for one case only - a batch of
+`shaded` renders, because a lit render is not a control image - and the tooltip says why. Where the host has no
+image-editor entry, the toast names the library's Pose folder so the user knows where this shot stopped.
+
 The panel offers no character import at all: the shipped package carries only the two licensed CC0 base
 figures, and Mixamo / SMPL-derived bodies and user-supplied GLBs are registered in the pose page's own local
 import area. The host has no entry and no route for it, so the desktop request-body cap stays where the

@@ -1596,7 +1596,6 @@ class TestGenImageSkill(unittest.TestCase):
         "qwen_image_21_identity_swap": "edit",
         "qwen_image_21_local_edit": "edit",
         "qwen_image_21_outpaint": "edit",
-        "qwen_image_21_pose_edit": "edit",
         "qwen_image_21_watermark_remove": "edit",
     }
 

@@ -9,14 +9,22 @@
 import { $el } from "../../../../scripts/ui.js";
 import { t, tf } from "./i18n.js";
 import { icon } from "./icons.js";
+import { isPickableImage } from "../../gallery-utils.js";
 
 // 单点取用只认媒体文件：卡片网格里有 Lora / txt / 工作流这类文件，点它们开灯箱才对
 const PICKABLE_RE = /\.(png|jpe?g|webp|gif|bmp|tiff?|heic|avif|mp4|mov|webm|mkv|avi|mp3|wav|m4a|flac)$/i;
+// 取用方收哪一类：图片编辑的原图与参考位只吃图，视频落进 <img> 就是破图；出片参考区与抽帧页吃的正是视频。
+// 不传 accept 就是媒体全收——导演页一直靠这条路透视频，把默认值收紧会连出片的素材一起挡掉
+const PICK_ACCEPT = {
+    image: isPickableImage,
+    video: (f) => /\.(mp4|mov|webm|mkv|avi)$/i.test(f),
+};
 
 /** 建一枚弹窗外壳；宿主自己挂进 document.body。storageKey 存浮窗摆位与最大化偏好，scope 写进 data-lib-scope 供页面定位这扇窗。 */
 export function createLibraryModal({ storageKey = "neo_studio_libmodal", scope = "assets" } = {}) {
     let opened = false;
     let pickHandler = null;   // 单点取用：(images: [{filename, subfolder}]) => void
+    let pickAccept = null;    // 这一扇弹窗放行哪一类素材（(filename) => bool），close 时归零
     let bulkHandler = null;   // 底部「取用已选」：自己从宿主的多选集合取值
     let clearHandler = null;  // 取用条「清空」：交给宿主清它自己的多选集合
     let onCloseCb = null;
@@ -144,7 +152,8 @@ export function createLibraryModal({ storageKey = "neo_studio_libmodal", scope =
         if (!card || !card.dataset.filename) return;
         // 勾选框 / ⋯ 菜单 / 发送钮这类控件由卡片自己的监听处理，capture 不截它们
         if (e.target.closest(".neo-gallery-select-check, .neo-gallery-thumb-bookmark-btn, .neo-gallery-thumb-img-send-btn, .neo-gallery-card-lora-send-btn, .neo-gallery-card-dir-menu-btn, .neo-gallery-audio-play-btn")) return;
-        if (!PICKABLE_RE.test(card.dataset.filename)) return;
+        // 只放行取用方收得动的素材：图片编辑开的那扇不认视频与音频，点上去落回卡片自己的灯箱浏览
+        if (!(pickAccept || ((f) => PICKABLE_RE.test(f)))(card.dataset.filename)) return;
         e.preventDefault();
         e.stopPropagation();
         const picked = { filename: card.dataset.filename, subfolder: card.dataset.subfolder || "" };
@@ -171,6 +180,7 @@ export function createLibraryModal({ storageKey = "neo_studio_libmodal", scope =
         document.removeEventListener("keydown", onKey);
         if (endGesture) endGesture();   // 拖到一半按 Esc / 点遮罩关窗：手势与 window 上的 move 一起收掉，窗体不再跟鼠标
         pickHandler = null;
+        pickAccept = null;
         bulkHandler = null;
         setPickCount(0);
         if (onCloseCb) onCloseCb();
@@ -188,11 +198,13 @@ export function createLibraryModal({ storageKey = "neo_studio_libmodal", scope =
         fn();
     };
 
-    /** 取用模式：onPick 单点卡片取用（关窗后调用）；onBulk 底部取用条；onClear 清宿主多选。 */
-    function setPickMode({ onPick, onBulk, onClear } = {}) {
+    /** 取用模式：onPick 单点卡片取用（关窗后调用）；onBulk 底部取用条；onClear 清宿主多选。
+     *  accept 声明这一扇收哪一类（"image" / "video"，不传 = 媒体全收）：类别对不上的卡片点下去不取用。 */
+    function setPickMode({ onPick, onBulk, onClear, accept } = {}) {
         pickHandler = onPick || null;
         bulkHandler = onBulk || null;
         clearHandler = onClear || null;
+        pickAccept = (accept && PICK_ACCEPT[accept]) || null;
         setPickCount(0);
     }
 

@@ -2901,6 +2901,8 @@ def _parse_sidecar_params(meta_line: str) -> dict:
     angle = _parse_sidecar_angle(meta_line)
     if angle:
         out["angle"] = angle
+    if re.search(r"\bdirect=1\b", meta_line):
+        out["control_direct"] = True
     return out
 
 

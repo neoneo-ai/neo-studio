@@ -40,6 +40,18 @@ export const POSE_PAGE_URL = "/neo-pose";   // 后端 302 到前缀下的入口�
 const CALL_TIMEOUT_MS = 15000;   // 页面不回包就解锁控件：一次点击不许把面板锁死
 const MAX_SET_FILES = 12;        // /neo_pose/export_set 一次落盘的上限，与后端常量同值
 
+/** ControlNet 锁形吃得下的导出口档（页面 6 档里的 5 档，shaded 是带光影的渲染图，不是控制图）。
+ *  排在前面的优先当这一发的控制图：骨架锁姿势、深度锁空间、法线锁表面、线稿锁轮廓、剪影锁外形 */
+const CONTROL_FORMAT_ORDER = ["skeleton", "depth", "normal", "lineart", "silhouette"];
+/** 各口档的锁形句：骨架那档不写在这里，它是 ControlNet 技能 config 的 default_prompt，
+ *  编辑面板进姿势模式自己读，面板与姿势页不各存一份 */
+const CONTROL_LOCK_PROMPT = {
+    depth: "Adopt the spatial layout and depth structure of the ControlNet depth reference, keeping the subject, clothing, lighting and style of <image1>, high quality, sharp details, 4k",
+    normal: "Adopt the surface orientation and geometry of the ControlNet normal reference, keeping the subject, clothing, lighting and style of <image1>, high quality, sharp details, 4k",
+    lineart: "Adopt the contour lines and outline structure of the ControlNet lineart reference, keeping the subject, clothing, lighting and style of <image1>, high quality, sharp details, 4k",
+    silhouette: "Adopt the outer shape and silhouette of the ControlNet silhouette reference, keeping the subject, clothing, lighting and style of <image1>, high quality, sharp details, 4k",
+};
+
 // 姿势库（pose-lib）：库数据由 tools\sync_pose_lib.ps1 同步进 <数据根>/pose/lib，静态伺服挂在 /pose-lib/
 // 上一级（studio/pose.py 的 LIB_PREFIX）。库里一份条目是一整场（多人 + 道具 + 视角），套进画布走
 // pose:call 的 scene/apply —— 库只是多出来的另一批文件，不造第二条套用通路。
@@ -149,7 +161,7 @@ export function standardCharOptions(models) {
 }
 
 /** 建「3D 姿势」视图。依赖由宿主注入：api 走 shim（离线与在线同一条路） */
-export function createPoseView({ api, $el, toast }) {
+export function createPoseView({ api, $el, toast, openEdit = null }) {
     return async function buildPose(el) {
         ensureCss();
         el.classList.add("ns-pose");
@@ -157,6 +169,7 @@ export function createPoseView({ api, $el, toast }) {
         let caps = {};
         let pickedScene = "";
         let pickedProp = "";   // 场上道具的选中项（落地 / 删道具吃的就是这一条）
+        let lastExport = null;   // 这一批导出落盘的结果（{formats, saved, size}）：「送进图片编辑」吃的就是它
         let propChoices = [];   // meta/list 的道具项：自由填写的名字只在这份清单里解析，不猜定义
         let sceneNames = [];      // pose/scenes/ 的本机存档：姿势库弹窗下半那一列
         let libListShown = LIB_LIST_PAGE;   // 本机存档这一列这一屏渲染到第几条
@@ -295,6 +308,7 @@ export function createPoseView({ api, $el, toast }) {
         const btnDelProp = btn("删道具", "trash", panelGate);
         const btnExportSet = btn("导出图组到素材库", "send", panelGate, " ns-pose-btn-primary");
         const btnShot = btn("画布截图", "image", panelGate);
+        const btnSendEdit = btn("送进图片编辑", "sparkles", panelGate);
 
         // 工具条：左边是「看东西」的入口（姿势库与道具直接开整屏弹窗），右边是「出东西」的入口（保存 / 导出 / 状态）
         const btnLib = dockAction("left", { label: "姿势库", iconKey: "list", action: openLibModal });
@@ -309,7 +323,7 @@ export function createPoseView({ api, $el, toast }) {
         );
         popSave.append(group("保存姿势", [row([poseName, btnSavePose])]));
         popExport.append(group("ControlNet 导出", [row([viewSel, sizeSel]), formatBox,
-            row([exportLabel]), row([btnExportSet, btnShot])]));
+            row([exportLabel]), row([btnExportSet, btnShot]), row([btnSendEdit])]));
         popState.append(notice, stateBox);
 
         const stage = $el("div", { className: "ns-pose-stage" });
@@ -326,7 +340,20 @@ export function createPoseView({ api, $el, toast }) {
             libGate.forEach((n) => { n.disabled = !on; });
             repaintLibChips();
         };
-        const setPanel = (on) => panelGate.forEach((n) => { n.disabled = !on; });
+        let panelOn = false;
+        const setPanel = (on) => { panelOn = on; panelGate.forEach((n) => { n.disabled = !on; }); paintSendEdit(); };
+        /* 「送进图片编辑」这一颗自己导、自己送，所以它只在「这批只有带光影的渲染图」时灰着 —— 渲染图不是
+           控制图，送过去那一发必败。灰态的 title 点名缺的是哪一步。「导出图组到素材库」仍只落盘，
+           不把页面切走、也不提编辑面板 */
+        function paintSendEdit() {
+            const shadedOnly = !!lastExport && !CONTROL_FORMAT_ORDER.some((f) => lastExport.formats.includes(f));
+            btnSendEdit.disabled = !panelOn || shadedOnly;
+            btnSendEdit.title = shadedOnly
+                ? t("这批只有带光影的渲染图，不是控制图：勾骨架 / 深度 / 法线 / 线稿 / 剪影再导出")
+                : (lastExport
+                    ? t("把这批导出的控制图带进图片编辑面板，原图在编辑页补")
+                    : t("先把这一批导进素材库的 Pose 目录，再把控制图带进图片编辑：这一颗自己导、自己送"));
+        }
         // 缺包与后端未就绪时两条工具条整条收起、弹层全关：那时每个控件都只会失败
         const setChrome = (on) => { dockL.hidden = !on; dockR.hidden = !on; if (!on) closePop(); };
         setLib(false);
@@ -1095,11 +1122,12 @@ export function createPoseView({ api, $el, toast }) {
             await refreshProps();
         });
 
-        /* ControlNet 图组：页面交回 {name, data} 列表，后端落进素材库的 Pose 目录（output/Pose） */
-        btnExportSet.onclick = () => run(async () => {
+        /* ControlNet 图组：页面交回 {name, data} 列表，后端落进素材库的 Pose 目录（output/Pose）。
+           返回值 = 这一批有没有落盘成功：「送进图片编辑」也吃这一条路，不另写一份导出 */
+        async function exportSet() {
             const formats = [...formatBox.querySelectorAll("input:checked")].map((b) => b.value);
-            if (!formats.length) { toast(t("先勾要导出的格式")); return; }
-            if (formats.length > MAX_SET_FILES) { toast(tf("一次最多导出 {n} 张", { n: MAX_SET_FILES })); return; }
+            if (!formats.length) { toast(t("先勾要导出的格式")); return false; }
+            if (formats.length > MAX_SET_FILES) { toast(tf("一次最多导出 {n} 张", { n: MAX_SET_FILES })); return false; }
             const r = await action("export/images", {
                 view: viewSel.value,
                 size: Number(sizeSel.value) || 512,
@@ -1108,6 +1136,38 @@ export function createPoseView({ api, $el, toast }) {
             });
             const saved = await json("/neo_pose/export_set", { files: r.files });
             toast(tf("已导出 {n} 张到素材库的 Pose 目录", { n: saved.count ?? (saved.saved || []).length }));
+            lastExport = { formats, saved, size: Number(sizeSel.value) || 512 };
+            paintSendEdit();
+            return true;
+        }
+        btnExportSet.onclick = () => run(exportSet);
+
+        /** 「送进图片编辑」干的那件事（宿主注入 openEdit 才有这条路）：把这批导出里的一张控制图
+         *  带进图片编辑的姿势锁形模式，按 CONTROL_FORMAT_ORDER 的优先级挑第一张能用的。
+         *  落盘名与导出请求同序（后端逐张写，重名才追加序号），控制图就取 saved 的同下标。
+         *  出图尺寸照导出的边长：模板把控制图拉伸到画布，方形控制图配长方形出图最稳，长方形出图会把控制图拉变形。
+         *  技能写死成 ControlNet 那一档 —— 面板进姿势模式也会切到它，这里填的是同一条约定。 */
+        const handoffControl = (formats, saved, size) => {
+            if (!openEdit) { toast(t("图片编辑面板不可用：控制图已存进素材库的 Pose 目录")); return; }
+            const fmt = CONTROL_FORMAT_ORDER.find((f) => formats.includes(f));
+            const filename = fmt ? ((saved.saved || [])[formats.indexOf(fmt)] || "") : "";
+            if (!filename) { toast(t("这批落盘没回报那张控制图：重新导出一次再送")); return; }
+            openEdit({
+                mode: "pose",
+                skill: "qwen_image_21_controlnet",
+                refs: [{ subfolder: saved.subfolder || "Pose", filename }],
+                width: size,
+                height: size,
+                control_direct: true,
+                prompt: CONTROL_LOCK_PROMPT[fmt] || "",
+            });
+            toast(t("控制图已进图片编辑面板：补一张原图就能锁形出图"));
+        };
+        /* 「送进图片编辑」点一次干完整件事：盘上还没有这一批就自己导一次再送，不把人卡在「先点导出」那一步；
+           已导出过且能用的那一批直接送，不吃一次多余的渲染。灰态只剩「这批只有渲染图」那一种（见 paintSendEdit） */
+        btnSendEdit.onclick = () => run(async () => {
+            if (!lastExport && !await exportSet()) return;
+            handoffControl(lastExport.formats, lastExport.saved, lastExport.size);
         });
 
         btnShot.onclick = () => run(async () => {

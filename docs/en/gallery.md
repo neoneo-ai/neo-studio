@@ -346,14 +346,21 @@ keeps the same rule - it only overwrites what the code wrote in).
   lands the same way. The menu opens on hover and keeps a 150 ms close grace after the cursor leaves, so both items
   stay reachable. Swapping the source and clearing it never change the edit mode (only the user switches it); clearing
   the source only tears down the layer that sat on it (the outpaint box, the paint layer, the remove markers).
+  The source takes images only: the library also lists videos and audio (what the frame-extract page and the
+  director reference grid eat), so the modal the edit page opens keeps them out of the pick - clicking one just
+  opens the lightbox; dropping a card and picking from the selection are blocked at the landing point too, and
+  the toast names the way that works (extract frames from the video first and use a frame as the source).
 - **Reference slot** - reference images (up to 9, the Qwen Image 2.1 limit) live in a 56px "＋ Reference" slot inline at
   the top-left of the prompt box. Hovering the "＋ Reference" slot floats open a pick menu: a "Reference N/9" count
   header, "⬆ Upload" (picks several local files at once), and "🖼 Pick from library" (picks cards from the asset-library
   modal - the picked card appends to the reference slots and the source image stays as it is; in Studio the edit and
   director pages share this one modal, and in the ComfyUI sidebar you drag cards straight onto a slot). The menu
   stays open while the cursor moves into it (a 250ms close grace spans the gap between the slot and the menu, so the buttons stay reachable), and closes after a pick; clicking an empty slot still fills just that slot. The `×` on a slot removes that
-  reference. Outpaint / masked / click-to-remove use only the first reference, so the row is disabled and extra
-  references are cleared there.
+  reference. A reference slot takes images only, same as the source: videos and audio are blocked at the landing
+  point the same way. Outpaint / masked / click-to-remove use only the first reference, so the row is disabled and extra
+  references are cleared there. Pose lock eats a single control image: in that mode the slot row keeps exactly one
+  slot (the count reads "Reference N/1") with no extra empty "＋ Reference" box, and references carried over from a
+  multi-reference mode are trimmed to the first, since the rest have nowhere to go in that shot.
 
 
 - **Curtain comparison** - the result appears in place as a "source | result" curtain comparison (the divider
@@ -395,14 +402,21 @@ keeps the same rule - it only overwrites what the code wrote in).
   the source for preview; on confirmation the high-resolution local-edit pipeline removes it, output at the
   source size. The prompt box is prefilled with the default removal instruction (visible and editable; when left
   empty the backend supplies the same default).
-- **Pose editing** - a switch in the window that automatically selects the "Qwen Image 2.1 pose editing" skill,
-  with the prompt prefilled by the default pose trigger words (replace the pose description inside the brackets
-  with the action you want). With only the source attached it changes that person's pose following the prompt;
-  dropping a second image into the reference area (a person photo or a skeleton image) transfers its pose onto
-  the source's person, and the prompt then swaps to the pose-transfer trigger words (removing that reference
-  swaps back; a prompt you wrote yourself is never overwritten). Both usages keep the source's face, hair,
-  clothing, lighting and background, and the output size follows regular editing (target resolution from the
-  source size).
+- **Pose lock** - the 「姿势」 entry of the mode chip, which selects the "Qwen Image 2.1 ControlNet" skill:
+  the source sits in the preview (it goes into `<image1>`, supplying content and face) and the control image
+  goes into the first reference slot — that one only reaches the ControlNet model patch, locking pose and
+  composition (it never reaches the encoder, so it is not reproduced as a content reference). This shot needs
+  both images, and the slot row keeps exactly one slot for it (the count reads "1/1", with no extra "＋ Reference"
+  box): a prefilled batch of control images keeps only its first. With no control image the backend reports
+  "this skill needs at least 2 reference images".
+  The mode row states that slot rule, and the prompt is prefilled with the skill's `config.json` lock trigger words.
+  - "Send the control image direct" is checked by default = the control image is already a control image
+    (skeleton / depth / normal / lineart / silhouette), so it goes straight to the model patch; uncheck it when
+    the control image is a photo of a person and Openpose extracts the skeleton. The request carries
+    `control_direct`, the sidecar records `direct=1`, and Regenerate restores that detent too.
+  - The output size follows regular editing (target resolution from the source size). The control image is
+    stretched to the canvas, so a square control image works best with a square output — the 3D pose page
+    exports square images, and that shot renders at the exported edge length.
 - **Camera angle** - the 「机位」 entry of the mode chip, which selects the "Qwen Image 2.1 camera angle" skill and
   reveals the angle orb in the edit area (a Canvas2D wireframe sphere with a perspective camera in
   `web/angle/angle-orb.js`, no third-party dependency). Drag the sphere to move the camera around the subject; the
@@ -415,13 +429,10 @@ keeps the same rule - it only overwrites what the code wrote in).
   both fold away — the three bracket slots are filled by the orb and the sliders, so there is nothing left to read
   in a box. The request carries `angle = {rotation, tilt, zoom}`, the sidecar records
   `angle=rotation/tilt/zoom`, and Regenerate restores the orb with it.
-- **ControlNet structure lock** - "Qwen Image 2.1 ControlNet" in the editing skill dropdown (no dedicated
-  switch, selecting the skill is enough): the source goes into `<image1>` supplying content and face, and a
-  second image dropped into the reference area (a person photo or a skeleton image) goes only into the
-  ControlNet model patch to produce an Openpose skeleton, locking pose and composition (it never reaches the
-  encoder, so it is not reproduced as a content reference); `<image3>` onwards serve as extra content references
-  such as clothing or style. With fewer than 2 references the backend reports "this skill needs at least 2
-  reference images". Details: [image-gen.md](image-gen.md).
+- **ControlNet structure lock** - "Qwen Image 2.1 ControlNet" in the editing skill dropdown, the same skill the
+  「姿势」 mode picks: the direct detent is the switch on that mode row, so selecting the skill straight from the
+  dropdown takes the Openpose detection path; `<image3>` onwards serve as extra content references
+  such as clothing or style. Details: [image-gen.md](image-gen.md).
 
 ### LoRA card metadata
 

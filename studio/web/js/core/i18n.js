@@ -33,7 +33,7 @@ const EN = {
     "拖框定四边留白，补全周边场景": "Drag the frame to pad the edges, fill in the scene around",
     "拖机位球换角度重出这张": "Drag the angle orb, re-render this shot from a new camera",
     "多张参考图融成一张连贯画面": "Blend several reference images into one coherent picture",
-    "按提示词改姿势，或搬一张图的姿势": "Change the pose by prompt, or borrow one from another image",
+    "骨架图锁姿势，重出这一张": "Lock the pose with a skeleton image, re-render this shot",
     "导演视频": "Direct a Video",
     "多段配方，生成整片视频": "Chain recipe segments into a finished video",
     "说出目标，工具链多轮跑完": "State the goal, let the tool loop run it out",
@@ -65,6 +65,15 @@ const EN = {
     "落地": "Ground",
     "删道具": "Delete Prop",
     "导出图组到素材库": "Export Image Set",
+    "送进图片编辑": "Send to Image Editor",
+    "先把这一批导进素材库的 Pose 目录，再把控制图带进图片编辑：这一颗自己导、自己送":
+        "This button does both at once: exports the set into the library's Pose folder, then sends its control image to the image editor",
+    "把这批导出的控制图带进图片编辑面板，原图在编辑页补":
+        "Send this batch's control image to the image editor; add the original image there",
+    "这批只有带光影的渲染图，不是控制图：勾骨架 / 深度 / 法线 / 线稿 / 剪影再导出":
+        "This batch is lit renders only - not a control image: tick skeleton / depth / normal / lineart / silhouette and export again",
+    "这批落盘没回报那张控制图：重新导出一次再送":
+        "This batch reported no control image on disk: export once more, then send it",
     "ControlNet 导出": "ControlNet Export",
     "画布截图": "Canvas Snapshot",
     "素体": "Character",
@@ -170,6 +179,8 @@ const EN = {
     "一次最多导出 {n} 张": "At most {n} images per export",
     "已导出 {n} 张到素材库的 Pose 目录": "Exported {n} images to the library's Pose folder",
     "画布截图已进素材库的 Pose 目录：{name}": "Canvas snapshot in the library's Pose folder: {name}",
+    "控制图已进图片编辑面板：补一张原图就能锁形出图": "Control image loaded into the image editor: add the original image to lock the pose",
+    "图片编辑面板不可用：控制图已存进素材库的 Pose 目录": "Image editor unavailable: the control image is saved in the library's Pose folder",
     // 视频抽帧页（独立于姿势页与素材库页：抽帧在浏览器里做，帧落进 output/Frames）
     "视频抽帧": "Video Frame Extractor",
     "挑一条视频，抽帧存进素材库": "Pick a video and save its frames into the library",
@@ -1750,8 +1761,17 @@ const EN = {
     "点击原图上的物体标记（最多 5 点，点标记可取消）": "Click objects on the original image to mark them (up to 5 points; click a mark to cancel it)",
     "多图融合：添加多张参考图，由模型自动融合为一张连贯画面": "Multi-image blend: add several reference images and the model merges them into one coherent scene",
     "增强方式：用哪个图像增强技能扩写描述（默认 = 后端自动路由）": "Enhance skill: which image-enhance skill expands your description (default = routed by the backend)",
-    "姿势编辑：按提示词改原图人物的姿势；在参考图区拖入第 2 张图（人物图或骨架图）则把它的姿势搬到原图人物上，触发词自动切换": "Pose edit: change the pose of the person in the original with a prompt; drag a second image (a person or a skeleton) into the reference area to transfer its pose, and the trigger word switches automatically",
+    "姿势锁形（ControlNet）：预览区放原图，参考图区第 1 格放控制图（骨架 / 深度 / 法线 / 线稿 / 剪影），锁住控制图的姿势与构图重出原图":
+        "Pose lock (ControlNet): the original in the preview, a control image (skeleton / depth / normal / lineart / silhouette) in the first reference slot; the pose and composition are locked, the rest of the original is kept",
+    "控制图免检测直连": "Send the control image direct",
+    "勾上 = 控制图已是控制图（骨架 / 深度 / 法线 / 线稿 / 剪影），直连模型补丁；关掉 = 控制图是人物照片，先由 Openpose 检测出骨架":
+        "On = the control image is already a control image (skeleton / depth / normal / lineart / silhouette) and goes straight to the model patch; off = it is a photo of a person, so Openpose extracts the skeleton first",
+    "控制图放参考图区第 1 格，原图放预览区：这一发两张都要":
+        "Control image in the first reference slot, original in the preview - this shot needs both",
     "从素材库取图作参考：弹窗里点卡片取用，或从素材库拖进图位": "Pick reference images from the library: click a card in the dialog to add it, or drag cards onto the slots",
+    "这里要一张图片": "An image is needed here",
+    "视频先到「视频抽帧」取帧，用帧图当原图与参考图；音频不能当图":
+        "Take a frame out of the video first (the frame-extract page) and use that frame as the source or reference; audio can't be an image",
     "素材库取用": "Pick from library",
     "本地上传": "Upload",
     "参考": "Reference",

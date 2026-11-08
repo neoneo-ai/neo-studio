@@ -25,10 +25,9 @@ never touch the real data under `Neo-Studio/data/` or the plugin directory.
   multi-result parsing, the skill agent (language-exclusive main-file selection, reference lists, out-of-bounds
   reads refused, on-demand reference reads in the tool loop, local-mode fallback), `gen_image` / `requires_ref`
   metadata pass-through and preservation on edit-save.
-- `studio/tests/test_skill_pose_edit.py` / `studio/tests/test_skill_controlnet.py` — the pose-editing and ControlNet preset
-  skills: scanning and dedup, `default_prompt` exposure, template placeholders, control chain
-  (preprocessor → model patch → sampler) wiring, the control image not occupying an encoder reference slot
-  (`control_ref`).
+- `studio/tests/test_skill_controlnet.py` — the ControlNet preset skill: scanning and dedup, `default_prompt`
+  exposure, template placeholders, control chain (preprocessor → model patch → sampler) wiring, the control
+  image not occupying an encoder reference slot (`control_ref`).
 - `studio/tests/test_workflow_repair.py` — the model-path repair matching algorithm: exact / normalized matching,
   quantized-variant replacement, ambiguity rejection, extension constraints.
 - `studio/tests/test_image_gen.py` — built-in generation parameter resolution: ratio and size rounding, output-prefix

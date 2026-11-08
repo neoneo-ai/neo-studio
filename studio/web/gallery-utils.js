@@ -100,6 +100,15 @@ export function isAudioFile(filename) {
 }
 
 /**
+ * Check if filename is an image the asset-library pick flow may hand to the
+ * image editor. heic / avif are in (the library lists them and the editor's <img>
+ * decodes them); isImageFile stays on the ComfyUI thumbnail set for card logic.
+ */
+export function isPickableImage(filename) {
+    return /\.(png|jpe?g|webp|gif|bmp|tiff?|heic|avif)$/i.test(filename);
+}
+
+/**
  * Get video source URL
  */
 export function getVideoSrc(video, subfolder) {

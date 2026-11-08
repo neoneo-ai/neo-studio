@@ -671,7 +671,7 @@ class TestShippedManifests(unittest.TestCase):
         """预设目录要么带清单，要么在"没有本地模型文件要检查"的白名单里（翻译 / TTS 预设）。"""
         shipped = sorted(d.name for d in _PRESETS.iterdir() if d.is_dir())
         self.assertEqual(self.manifests(), sorted(set(shipped) - NO_MANIFEST_PRESETS))
-        self.assertEqual(len(self.manifests()), 38)
+        self.assertEqual(len(self.manifests()), 37)
         self.assertTrue(set(NO_MANIFEST_PRESETS) <= set(shipped))
 
     def test_required_fields_positive_size_and_known_source(self):

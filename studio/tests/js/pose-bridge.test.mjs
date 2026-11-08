@@ -164,8 +164,9 @@ globalThis.MessageChannel = class {
     }
 };
 
-/** 建宿主视图：消息桩记录宿主发给页面的每一条，回复端口从该条的 ports[0] 取 */
-function mounted(status = STATUS) {
+/** 建宿主视图：消息桩记录宿主发给页面的每一条，回复端口从该条的 ports[0] 取。
+ *  withEdit = 宿主注入图片编辑面板的入口（桌面端那条桥）；关掉它测的就是没有桥的那一侧 */
+function mounted(status = STATUS, withEdit = true) {
     clearRoutes();
     mockRoute("/neo_pose/status", () => jsonResponse(status));
     mockRoute("/neo_pose/scenes", () => jsonResponse({ success: true, scenes: status.scenes || [] }));
@@ -195,9 +196,10 @@ function mounted(status = STATUS) {
     document.body.appendChild(host);
     const sent = [];
     const toasts = [];
+    const prefills = [];   // 导出后递给图片编辑面板的预填（宿主注入 openEdit 才会收到）
     const cw = { postMessage: (msg, origin, ports = []) => sent.push({ msg, origin, ports }) };
     const env = {
-        host, sent, toasts, cw,
+        host, sent, toasts, prefills, cw,
         button: (label, scope = PANEL) => [...host.querySelectorAll(scope + " .ns-pose-btn")]
             .find((b) => b.textContent.includes(label)),
         sel: (i) => [...host.querySelectorAll(PANEL + " .ns-pose-sel")][i],
@@ -221,7 +223,10 @@ function mounted(status = STATUS) {
         reply: (type, payload) => sent.find((s) => s.msg.type === type).ports[0].postMessage(payload),
         ready: async () => { env.from({ type: "pose:ready" }); await settle(); },
     };
-    const build = createPoseView({ api, $el, toast: (m) => toasts.push(m) });
+    const build = createPoseView({
+        api, $el, toast: (m) => toasts.push(m),
+        openEdit: withEdit ? (pf) => prefills.push(pf) : null,
+    });
     return build(host).then(() => {
         // 视图建完才有 iframe：contentWindow 在 jsdom 里是 null，桩成消息记录器挂上去
         if (env.host.querySelector(".ns-pose-frame")) {
@@ -255,7 +260,7 @@ test("装好包：iframe 指短路径并带沙箱，pose:ready 之前控件全�
     const gated = () => [...env.host.querySelectorAll(
         ".ns-pose-pop .ns-pose-btn, .ns-pose-sel, .ns-pose-checkrow input")]
         .filter((n) => !n.classList.contains("ns-pose-pop-close"));
-    assert.ok(gated().length >= 10, "弹层里的控件要在位（4 条下拉 + 6 颗弹层钮；弹窗的筛选全是 chip，不吃这份门禁登记）");
+    assert.ok(gated().length >= 10, "弹层里的控件要在位（4 条下拉 + 7 颗弹层钮；弹窗的筛选全是 chip，不吃这份门禁登记）");
     assert.ok(gated().every((n) => n.disabled), "页面没 ready 时控件不能点");
     assert.equal(env.host.querySelectorAll(".ns-pose-dock-btn").length, 6,
         "六条入口：左 姿势库 / 角色与外观 / 道具，右 保存姿势 / 导出图组 / 画布状态");
@@ -793,6 +798,103 @@ test("ControlNet 图组：视角默认当前视角，页面交回 files，宿主
     assert.deepEqual(post.body.files.map((f) => f.name),
         ["pose_hero_side_openpose.png", "pose_hero_side_depth.png"]);
     assert.match(env.toasts.join("|"), /已导出 2 张/);
+    assert.equal(env.prefills.length, 0, "导出只做落盘：不把页面切走，提示里也不提编辑面板");
+    const send = env.button("送进图片编辑");
+    assert.equal(send.disabled, false, "这批里有骨架图：送编辑这颗跟着解锁");
+    assert.match(send.title, /原图在编辑页补/);
+    click(send);
+    assert.deepEqual(env.prefills, [{
+        mode: "pose",
+        skill: "qwen_image_21_controlnet",
+        refs: [{ subfolder: "Pose", filename: "pose_hero_side_openpose.png" }],
+        width: 512,
+        height: 512,
+        control_direct: true,
+        prompt: "",
+    }], "点「送进图片编辑」才递骨架图：方形出图（控制图是方的），锁形句留空 = 面板读技能 config 的默认句");
+    assert.match(env.toasts.join("|"), /补一张原图/, "提示只在这一步点名还缺原图这一张");
+});
+
+test("ControlNet 图组：没导过时点「送进图片编辑」，一颗钮自己导完再送", async () => {
+    resetEnv();
+    const env = await mounted();
+    await env.ready();
+    env.replyCall(env.calls("meta/list")[0], META);
+    env.replyCall(env.calls("prop/list")[0], { items: [], options: [], bones: [] });
+    await settle();
+    openPop(env, "导出图组");
+    changeValue(env.sel(2), "side");
+    changeValue(env.sel(3), "512");
+    const send = env.button("送进图片编辑");
+    assert.equal(send.disabled, false, "盘上还没有这一批也要点得动：这一颗自己导、自己送");
+    assert.match(send.title, /自己导、自己送/, "标题要说清这一颗连导出一起干");
+    click(send);
+    await settle();
+    const call = env.calls("export/images")[0];
+    assert.ok(call, "点一次就发导出请求：不把用户卡在先点「导出图组到素材库」那一步");
+    assert.deepEqual(call.msg.args, { view: "side", size: 512, formats: ["skeleton", "depth"], label: null });
+    env.replyCall(call, {
+        view: "side", size: 512,
+        files: [
+            { key: "skeleton", name: "pose_hero_side_openpose.png", data: "data:image/png;base64,AAE=" },
+            { key: "depth", name: "pose_hero_side_depth.png", data: "data:image/png;base64,BBQ=" },
+        ],
+    });
+    await settle();
+    assert.match(env.toasts.join("|"), /已导出 2 张/, "落盘那一句照说：素材库里的 Pose 目录仍是落点");
+    assert.deepEqual(env.prefills, [{
+        mode: "pose",
+        skill: "qwen_image_21_controlnet",
+        refs: [{ subfolder: "Pose", filename: "pose_hero_side_openpose.png" }],
+        width: 512,
+        height: 512,
+        control_direct: true,
+        prompt: "",
+    }], "导完立刻递骨架图：一次点击走完「导出 + 送编辑」");
+    assert.equal(env.calls("export/images").length, 1, "只导这一遍：不在同一发里重复渲染");
+});
+
+test("ControlNet 图组：只导渲染图（shaded）时送编辑这颗灰着，灰态说清这批送不出去", async () => {
+    resetEnv();
+    const env = await mounted();
+    await env.ready();
+    env.replyCall(env.calls("meta/list")[0], { ...META, formats: [{ key: "shaded", label: "渲染图" }] });
+    env.replyCall(env.calls("prop/list")[0], { items: [], options: [], bones: [] });
+    await settle();
+    openPop(env, "导出图组");
+    click(env.button("导出图组到素材库"));
+    await settle();
+    const call = env.calls("export/images")[0];
+    assert.deepEqual(call.msg.args.formats, ["shaded"]);
+    env.replyCall(call, { view: "current", size: 512, files: [{ key: "shaded", name: "pose_hero_shaded.png", data: "data:image/png;base64,AAE=" }] });
+    await settle();
+    assert.match(env.toasts.join("|"), /已导出 1 张/);
+    assert.equal(env.prefills.length, 0, "导出这一步谁都不递");
+    const send = env.button("送进图片编辑");
+    assert.equal(send.disabled, true, "带光影的着色图不是控制图：不留一颗只会空转的钮");
+    assert.match(send.title, /渲染图/, "灰态要说清这批为什么送不出去");
+    click(send);
+    assert.equal(env.prefills.length, 0, "灰态被程序化点到也不递");
+    assert.match(env.toasts.join("|"), /落盘没回报/);
+});
+
+test("ControlNet 图组：宿主没有编辑面板入口时把话说明白，不静默丢掉这一发", async () => {
+    resetEnv();
+    const env = await mounted(STATUS, false);
+    await env.ready();
+    env.replyCall(env.calls("meta/list")[0], META);
+    env.replyCall(env.calls("prop/list")[0], { items: [], options: [], bones: [] });
+    await settle();
+    openPop(env, "导出图组");
+    click(env.button("导出图组到素材库"));
+    await settle();
+    env.replyCall(env.calls("export/images")[0], {
+        view: "current", size: 512,
+        files: [{ key: "skeleton", name: "pose_hero_side_openpose.png", data: "data:image/png;base64,AAE=" }],
+    });
+    await settle();
+    click(env.button("送进图片编辑"));
+    assert.match(env.toasts.join("|"), /图片编辑面板不可用/, "要说清这条交接路在这侧不存在");
 });
 
 test("画布截图：snapshot 动作交回 data，写 /neo_pose/export_image 后报落盘文件名", async () => {

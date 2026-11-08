@@ -104,34 +104,32 @@ LoadImage → ImageScale(画布宽高) → TextEncodeQwenImage21(resolution=0) �
   无参考图（文生图）时该节点连同 `LoadImage` 一起被裁掉，latent 走模板里的 `EmptyLatentImage`。
 - 画廊对比窗左侧会换成这张缩放图（后端随任务返回 `canvas`），两侧同尺寸才能逐像素对齐。
 
-## 姿势编辑（Qwen Image 2.1）
+## 姿势锁形（Qwen Image 2.1 ControlNet）
 
-预设技能 `qwen_image_21_pose_edit`：挂 1 张参考图时按提示词改 `<image1>` 的姿势；挂第 2 张时把 `<image2>` 的姿势
-搬到 `<image1>` 的人物上，长相、服装与背景保留。默认触发词取该技能 `config.json` 的 `default_prompt`，选到技能即预填。
-无额外 LoRA；姿势迁移 LoRA 放入 `models/loras` 后可在该技能 `config.json` 的 `loras` 里补上。
+画廊「图片编辑」的「姿势」模式走本节这条链（见 [gallery.md](gallery.md)）：预览区的原图进 `<image1>`
+并按画布尺寸缩放，参考图区第 1 格那张进模型补丁锁形，`<image3>` 起的参考按顺序进编码器后续槽位。
 
-画廊「图片编辑」弹窗的「🕺 姿势」开关（见 [gallery.md](gallery.md)）走本技能：原图进 `<image1>` 并按画布尺寸缩放，
-参考图区拖入的图按顺序进 `<image2>` 及之后的槽位；拖入姿势参考后提示词自动换成迁移触发词（移除后换回，用户自写的提示词不覆盖）；
-目标分辨率、窗帘对比与常规编辑一致。
+预设技能 `qwen_image_21_pose_edit` 已移除：那条路靠文本迁移姿势，出图不锁形；锁形只有 ControlNet 这一条。
 
 ## ControlNet 结构锁定（Qwen Image 2.1）
 
-预设技能 `qwen_image_21_controlnet`：`<image1>` 进编码器出内容与长相，第 2 张参考图经 Openpose 预处理出骨架、
-只进 Fun ControlNet 模型补丁锁住姿势与构图。默认触发词取该技能 `config.json` 的 `default_prompt`。
+预设技能 `qwen_image_21_controlnet`：`<image1>` 进编码器出内容与长相，第 2 张参考图只进 Fun ControlNet
+模型补丁锁住姿势与构图。默认触发词取该技能 `config.json` 的 `default_prompt`。
 
 ```
-LoadImage(姿势图) → AIO_Preprocessor(OpenposePreprocessor, 画布高) → ZImageFunControlnet(strength=0.8, 0→1) → KSampler
+LoadImage(控制图) → AIO_Preprocessor(OpenposePreprocessor, 画布高) → ZImageFunControlnet(strength=0.8, 0→1) → KSampler
+LoadImage(控制图) ── 直连（control_direct，摘掉预处理那一节）──↗
 LoadImage(<image1>) → TextEncodeQwenImage21(images.image_1)
 ModelPatchLoader(qwen_image_2.1_fun_controlnet_union_int8_convrot.safetensors) ↗
 ```
 
-- `<image1>` = 内容主体（要保留长相 / 服装 / 背景的那张），第 2 张 = 姿势来源（人物照片，或直接给骨架图），`<image3>` 起 = 附加内容参考，共最多 4 张。
-- 姿势图只进模型补丁：config.json 的 `control_ref: 2` 经 `_SKILL_SETTING_KEYS` 进 `resolve_request`，把第 2 张从编码器参考里摘出来（模板控制链用 `{{CONTROL_IMAGE}}` 取它）。它同时占编码器槽时，编码器把这张照片当内容参考直接复刻，出图就是参考图本身。
-- 至少 2 张参考图（config.json 的 `min_refs`）：姿势槽空时控制链会渲染成缺 `image` 输入的预处理节点，`resolve_request` 先报「该技能需要至少 2 张参考图」。
-- 原地改姿势：把 `<image1>` 复制一份放第 2 张，提示词写要做的动作。
-- 预处理分辨率取 `{{CANVAS_HEIGHT}}`（画布由第 1 张参考图定，无参考时判未填 → 整条控制链连 `LoadImage` 一起裁净）。
+- `<image1>` = 内容主体（要保留长相 / 服装 / 背景的那张），第 2 张 = 控制图，`<image3>` 起 = 附加内容参考，共最多 4 张。
+- 控制图只进模型补丁：config.json 的 `control_ref: 2` 经 `_SKILL_SETTING_KEYS` 进 `resolve_request`，把第 2 张从编码器参考里摘出来（模板控制链用 `{{CONTROL_IMAGE}}` 取它）。它同时占编码器槽时，编码器把这张照片当内容参考直接复刻，出图就是参考图本身。
+- 至少 2 张参考图（config.json 的 `min_refs`）：控制槽空时控制链会渲染成缺 `image` 输入的预处理节点，`resolve_request` 先报「该技能需要至少 2 张参考图」。
+- 请求带 `control_direct: true` = 控制图已是控制图（3D 姿势页导出的骨架 / 深度 / 法线 / 线稿 / 剪影）：`render_template` 里的 `_apply_control_direct` 把预处理节点整节摘掉，模型补丁直连那张 `LoadImage`。骨架过 Openpose 是二次检测，深度 / 法线 / 线稿过它是喂错检测器（图上没有人体，出来的是一张空白控制图，锁形变成随机出图）。不带这一项就是控制图为人物照片，照旧经 Openpose 检测。`resolve_request` 只在真摘出了控制图时把它记为真；副文件往后追加 `direct=1`，「再来一发」连这一档一起回填。
+- 预处理分辨率取 `{{CANVAS_HEIGHT}}`（画布由第 1 张参考图定，无参考时判未填 → 整条控制链连 `LoadImage` 一起裁净）；直连时这一节连同该参数一起消失，控制图由模型补丁自己拉伸到画布。
 - 编码器槽位与内容参考序号一一对应（`images.image_k` ↔ 摘掉控制图后的第 k 张），张数超出模板槽位时按 `max_refs` 克隆槽链补齐。
-- 模型补丁放 `models/model_patches`，Openpose 预处理模型由 `comfyui_controlnet_aux` 自带；缺文件时技能有效性状态条报「模型缺失」。
+- 模型补丁放 `models/model_patches`，Openpose 预处理模型由 `comfyui_controlnet_aux` 自带；缺文件时技能有效性状态条报「模型缺失」。只走直连时不碰 Openpose 那一份。
 
 ## 扩图（Qwen Image 2.1）
 

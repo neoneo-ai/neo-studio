@@ -699,12 +699,13 @@ class ControlNetPresetRenderTests(unittest.TestCase):
         for i in range(1, 5):
             write_png(os.path.join(_INPUT_DIR, f"cn_ref_{i}.png"), 512, 512)
 
-    def params(self, n, min_refs=None):
+    def params(self, n, min_refs=None, direct=False):
         refs = [{"kind": "input", "value": f"cn_ref_{i}.png"} for i in range(1, n + 1)]
         settings = base_settings()
         settings["min_refs"] = self.CFG.get("min_refs", 0) if min_refs is None else min_refs
         settings["control_ref"] = self.CFG.get("control_ref", 0)
-        return image_gen.resolve_request({"prompt": "a dancer", "seed": 1, "references": refs},
+        return image_gen.resolve_request({"prompt": "a dancer", "seed": 1, "references": refs,
+                                          "control_direct": direct},
                                          settings, max_refs=4)
 
     def encoder_images(self, graph):
@@ -738,6 +739,37 @@ class ControlNetPresetRenderTests(unittest.TestCase):
         p = self.params(3)
         self.assertEqual(p["control_image"], "cn_ref_2.png")
         self.assertEqual(p["ref_images"], ["cn_ref_1.png", "cn_ref_3.png"])
+
+    def test_control_direct_bypasses_the_preprocessor(self):
+        """控制图已是控制图（姿势页导出的骨架图）：预处理整节摘掉，模型补丁直连那张 LoadImage。
+
+        骨架过 Openpose 是二次检测，深度 / 法线 / 线稿过它是喂错检测器（图上没有人体，
+        出来一张空白控制图）—— 直连就是不许这一节留在链上。"""
+        graph, _ = image_gen.render_template(self.TEMPLATE, self.params(2, direct=True))
+        cnet_id = next(k for k, n in graph.items() if n["class_type"] == "ZImageFunControlnet")
+        self.assertEqual(graph[cnet_id]["inputs"]["image"], ["12", 0])
+        self.assertEqual(graph["12"]["inputs"]["image"], "cn_ref_2.png")
+        self.assertNotIn("11", graph)
+        self.assertNotIn("AIO_Preprocessor", [n["class_type"] for n in graph.values()])
+        self.assertEqual(self.encoder_images(graph), ["cn_ref_1.png"])
+        sampler = next(n for n in graph.values() if n["class_type"] == "KSampler")
+        self.assertEqual(sampler["inputs"]["model"][0], cnet_id)
+
+    def test_control_direct_off_keeps_the_detector(self):
+        """不带这一项 = 旧那条检测路（控制图是人物照片）：预处理留在链上。"""
+        p = self.params(2)
+        self.assertFalse(p["control_direct"])
+        graph, _ = image_gen.render_template(self.TEMPLATE, p)
+        self.assertEqual(self.cnet_node(graph)["inputs"]["image"], ["11", 0])
+        self.assertEqual(graph["11"]["inputs"]["preprocessor"], "OpenposePreprocessor")
+
+    def test_control_direct_without_a_control_image_is_dropped(self):
+        """只有一张参考图时没有控制图，这一项无意义：恒 False，链照旧走检测路。"""
+        p = self.params(1, min_refs=0, direct=True)
+        self.assertIsNone(p["control_image"])
+        self.assertFalse(p["control_direct"])
+        graph, _ = image_gen.render_template(self.TEMPLATE, p)
+        self.assertEqual(self.cnet_node(graph)["inputs"]["image"], ["11", 0])
 
     def test_extra_refs_expand_encoder_slots_in_order(self):
         """附加内容参考顺位补进编码器槽，控制图不占槽。"""
@@ -1152,34 +1184,6 @@ class StartGenerationTemplateRouteTests(unittest.TestCase):
                  "local_edit": True,
                  "references": [{"kind": "input", "value": "portrait.png"}]})
 
-    def test_pose_edit_single_ref_fills_first_slot(self):
-        """姿势编辑（1 张）：编辑目标走画布缩放链，第 2 槽随空参考一并裁掉。"""
-        snap, captured = self._run(
-            load_preset_template("qwen_image_21_pose_edit"),
-            {"skill_id": "qwen_image_21_pose_edit",
-             "prompt": "Change the pose of the person in <image1> to standing by the window",
-             "references": [{"kind": "input", "value": "portrait.png"}]})
-        self.assertEqual(snap["status"], "queued")
-        graph = captured["graph"]
-        self.assertEqual(graph["4"]["inputs"]["images.image_1"], ["30", 0])
-        self.assertNotIn("12", graph)
-        self.assertNotIn("images.image_2", graph["4"]["inputs"])
-
-    def test_pose_edit_second_ref_is_pose_reference(self):
-        """姿势迁移（2 张）：第 2 张参考图直连编码器第 2 槽，不进画布缩放链。"""
-        write_png(os.path.join(_INPUT_DIR, "pose_ref.png"), 640, 960)
-        _, captured = self._run(
-            load_preset_template("qwen_image_21_pose_edit"),
-            {"skill_id": "qwen_image_21_pose_edit",
-             "prompt": "Adopt the pose of the person in <image2>, keep the face of <image1>",
-             "references": [{"kind": "input", "value": "portrait.png"},
-                            {"kind": "input", "value": "pose_ref.png"}]})
-        graph = captured["graph"]
-        self.assertEqual(graph["12"]["inputs"]["image"], "pose_ref.png")
-        self.assertEqual(graph["4"]["inputs"]["images.image_2"], ["12", 0])
-        self.assertEqual(graph["4"]["inputs"]["images.image_1"], ["30", 0])
-
-
 class OutpaintParseTests(unittest.TestCase):
     """扩图参数解析：四边留白钳制、目标像素（MP）范围、非法值报错。"""
 
@@ -1471,6 +1475,16 @@ class SidecarTests(unittest.TestCase):
                                "skill=qwen_image_21_camera_angle mode=angle src=src.png angle=135/30/0")
         self.assertNotIn("angle=", image_gen._sidecar_meta(base, "qwen_image_21_camera_angle"))
         self.assertNotIn("angle=", image_gen._sidecar_meta({**base, "angle": {}}, "qwen_image_21"))
+
+    def test_sidecar_meta_appends_control_direct(self):
+        """免检测直连那一发往后追加 direct=1：重放要落回直连，不许悄悄回到人物检测那条路。"""
+        base = {"seed": 1, "width": 512, "height": 512, "model": "qwen.safetensors",
+                "ref_name": "cn_ref_1.png", "ref_images": ["cn_ref_1.png", "cn_ref_2.png"],
+                "control_image": "cn_ref_2.png"}
+        meta = image_gen._sidecar_meta({**base, "control_direct": True}, "qwen_image_21_controlnet")
+        self.assertIn("mode=pose", meta)
+        self.assertIn("direct=1", meta)
+        self.assertNotIn("direct=", image_gen._sidecar_meta(base, "qwen_image_21_controlnet"))
 
 
 class SkillWorkflowRouteTests(unittest.TestCase):

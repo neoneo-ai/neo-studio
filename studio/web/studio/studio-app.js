@@ -161,6 +161,7 @@ let libModalHost = null;        // 弹窗里的画廊宿主：libScope 记它此
 let libScope = "director";
 let recipesModal = null;        // 导演页配方弹窗
 let libPendingPick = null;      // 面板经 neo:media-pick 交来的取用回调（开弹窗时消费，一次一清）
+let libPendingAccept = null;    // 该回调收哪一类素材（"image" / "video"，null = 媒体全收）
 
 function mountGallery(host) {
     galleryTab = galleryTab || getSidebarTab("neo.gallery");
@@ -205,8 +206,9 @@ function ensureLibModal() {
     return modal;
 }
 
-/** 打开素材库弹窗。onPick = 点卡片 / 批量取用回调（null = 纯浏览：卡片照旧开灯箱）. */
-function openLibModal(scope, onPick) {
+/** 打开素材库弹窗。onPick = 点卡片 / 批量取用回调（null = 纯浏览：卡片照旧开灯箱）.
+ *  accept 声明这一扇收哪一类素材（"image" / "video"，不传 = 媒体全收）：类别对不上的卡片点下去不取用。 */
+function openLibModal(scope, onPick, accept) {
     const modal = ensureLibModal();
     const g = app.neoGallery;
     libScope = scope;
@@ -224,6 +226,7 @@ function openLibModal(scope, onPick) {
             }));
         } : null,
         onClear: () => g?.clearSelection(),
+        accept: accept || null,
     });
     modal.open(t("素材库"));
     if (galleryMountHost !== libModalHost) mountGallery(libModalHost).then(notifyAgentCtx);
@@ -237,15 +240,18 @@ function editPickImage(images) {
     openImageEditDialog(app.neoGallery, { filename: img.filename }, img.subfolder);
 }
 
-// 姿势视图的依赖在这汇聚：api 走 shim（离线/在线同一条路）
-const buildPose = createPoseView({ api, $el, toast });
+// 姿势视图的依赖在这汇聚：api 走 shim（离线/在线同一条路）；导出图组的控制图交图片编辑面板预填
+const buildPose = createPoseView({
+    api, $el, toast,
+    openEdit: (prefill) => openImageEditDialog(app.neoGallery, null, "", { prefill }),
+});
 
 /** 抽帧页取视频：点卡片取一条换进播放器（一次只看一条视频） */
 function openFramesMaterial(onPick) {
     openLibModal("frames", (picked) => {
         onPick(picked);
         libModal?.close();
-    });
+    }, "video");
 }
 
 // 抽帧页与姿势页不共享任何东西：取用同一套弹窗，抽帧自己在浏览器里做（见 studio/web/frames/frames.js）
@@ -258,11 +264,17 @@ onSidebarTabChange((id) => {
     // 悬浮「素材库」按钮自己交来 editPickImage（取的是原图）。回调一次一清：留着它，下一次从悬浮按钮开的
     // 弹窗会把该当原图的那张塞进参考位
     const onPick = libPendingPick || (currentView === "edit" ? editPickImage : null);
+    // 编辑页两个落点都是 <img>，视频与音频落进去就是破图；导演页照旧媒体全收（出片的参考区吃的正是视频）
+    const accept = libPendingAccept || (currentView === "edit" ? "image" : null);
     libPendingPick = null;
-    openLibModal(currentView, onPick);
+    libPendingAccept = null;
+    openLibModal(currentView, onPick, accept);
 });
 // 参考图菜单与导演编辑器各素材库按钮把取用回调随侧栏写入一起交来；ComfyUI 模式没有这条监听
-window.addEventListener("neo:media-pick", (e) => { libPendingPick = e.detail?.onPick || null; });
+window.addEventListener("neo:media-pick", (e) => {
+    libPendingPick = e.detail?.onPick || null;
+    libPendingAccept = e.detail?.accept || null;
+});
 
 // ====== 导演页：整片生成面板 + 配方列表 ======
 let genState = null;   // 当前整片任务 {task_id, statusEl, barEl, runBtn, cancelBtn}
@@ -813,7 +825,7 @@ function buildEdit(el) {
     // 弹窗点卡片 = 取用该图当原图，拖进预览区 = 投放当原图
     const libBtn = $el("button", { className: "ns-btn ns-paint-lib-btn", type: "button", title: t("打开素材库：点卡片取用进图片编辑，拖进预览区投放") });
     setIconLabel(libBtn, "folder", t("素材库"));
-    libBtn.onclick = () => openLibModal("edit", editPickImage);
+    libBtn.onclick = () => openLibModal("edit", editPickImage, "image");
     page.appendChild($el("div", { className: "ns-paint-bar" }, [libBtn]));
 
     setPaintHost({ edit: editHost, onOpen: paintHostOpen });
@@ -865,7 +877,7 @@ function buildHome(el) {
             homeCard("maximize", "扩图", "拖框定四边留白，补全周边场景", () => goEditMode("outpaint")),
             homeCard("camera", "机位", "拖机位球换角度重出这张", () => goEditMode("angle")),
             homeCard("copy", "融合", "多张参考图融成一张连贯画面", () => goEditMode("blend")),
-            homeCard("user", "姿势", "按提示词改姿势，或搬一张图的姿势", () => goEditMode("pose")),
+            homeCard("user", "姿势", "骨架图锁姿势，重出这一张", () => goEditMode("pose")),
             homeCard("film", "视频抽帧", "挑一条视频，抽帧存进素材库", () => go("frames")),
         ]),
         $el("h2", { className: "ns-home-section", textContent: t("素材与配置") }),
