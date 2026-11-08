@@ -113,6 +113,9 @@ Log '  刷 Neo-Studio\（App 源码 + studio 副本 + tools 脚本 + 启动脚�
 Log '  刷 ComfyUI\custom_nodes\comfyui-neo-studio（代码副本，configs\data_root.json 指针不动）'
 if (-not $SkipDeps) { Log '  包内 python 补装 studio\requirements.txt 与桌面 App 依赖' }
 
+# DryRun 在这里收口：下面的解包、备份与 robocopy 是真在刷包，跑完再说"未写文件"就是骗人的
+if ($DryRun) { Log '[DRY] 未写文件：包内代码未改动'; exit 0 }
+
 New-Item -ItemType Directory -Force -Path $updatesDir | Out-Null
 if (-not $Zip) {
     $zipPath = Join-Path $updatesDir $asset.name
@@ -183,4 +186,3 @@ if (Test-Path -LiteralPath $py) {
 Log "完成：$curVer -> $newVer（ComfyUI 核心、清单插件、包内 python、模型与用户数据都没动）"
 Log '下一步：重启 Neo Studio 生效；插件副本里的用户配置与素材数据原样保留'
 Log '  跑 Neo-Studio\tools\check_minimal_package.py --package 自检'
-if ($DryRun) { Log '[DRY] 未写文件'; exit 0 }

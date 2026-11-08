@@ -118,6 +118,12 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   [README_ZH.md](README_ZH.md) / [README.md](README.md) and from the docs index.
 
 ### Fixed
+- **The 整合包 updater's `-DryRun` no longer updates the package.** `Neo-Studio\tools\update_neo_studio.ps1 -DryRun`
+  printed the plan, then extracted the update piece, backed up the files it names and overwrote `Neo-Studio\` and
+  `ComfyUI\custom_nodes\comfyui-neo-studio\` anyway, printing 「未写文件」 as the last line. The guard now sits where
+  the plan print ends, so a dry run touches nothing - no `updates\` folder, no backup, no overwritten code. A real run
+  (no `-DryRun`) behaves exactly as before: 1.6.0 → 1.6.1, the plugin copy's `configs\data_root.json` pointer kept,
+  every overwritten file first copied into `updates\backup-1.6.0\`.
 - **The 图片编辑 原图 stops arriving broken, and the 素材库 pick dialog stops offering what the panel cannot use.**
   素材库 lists videos and audio next to the images (the 视频抽帧 page and the 出片 reference grid eat them), and the
   编辑 page opened that same dialog for its 原图 and 参考 slots: picking a video card dropped an `.mp4` into the
