@@ -10,6 +10,22 @@ import sys
 import types
 
 
+def _stub_module(name: str) -> None:
+    """在 sys.modules 里补一个空壳模块，连带补齐它的父包链。"""
+    parts = name.split(".")
+    for cut in range(1, len(parts)):
+        parent = ".".join(parts[:cut])
+        if parent not in sys.modules:
+            pkg = types.ModuleType(parent)
+            pkg.__path__ = []
+            sys.modules[parent] = pkg
+    if name in sys.modules:
+        return
+    mod = types.ModuleType(name)
+    setattr(sys.modules[".".join(parts[:-1])], parts[-1], mod)
+    sys.modules[name] = mod
+
+
 def _drop_stub(root: str) -> None:
     """删掉别的测试模块留下的假 comfy_api（无 __file__ 的替身），让真实包可导入。"""
     mod = sys.modules.get(root)
@@ -44,6 +60,16 @@ def bootstrap(plugin_dir: str) -> None:
     if root not in sys.path:
         sys.path.insert(0, root)
     _drop_stub("comfy_api")
+    comfy = sys.modules.get("comfy")
+    if comfy is not None and getattr(comfy, "__file__", None) is None:
+        # 2026-11 起内核的 comfy_api/latest/_input_impl/video_types.py 在模块作用域
+        # import comfy.memory_management，而离线桩的 comfy 是无 __path__ 的 ModuleType：子模块
+        # 连磁盘查找都到不了，收集期直接 ImportError，CI 的 Kernel plugin tests 整步 exit 2
+        # 就是这么来的（本机钉的内核还没有那行 import，所以本地绿、CI 恒红）。
+        # 只桩这一个新导入点，别把内核内存模块拉起来：它经 comfy.quant_ops 会带出真
+        # comfy.model_management，顶掉测试自己注册的桩位，clear_memory_route 那类走
+        # `comfy.model_management.xxx()` 的用例 patch 就落空了。
+        _stub_module("comfy.memory_management")
     if "comfy_execution.utils" not in sys.modules:
         mod = types.ModuleType("comfy_execution.utils")
         mod.get_executing_context = lambda: None
