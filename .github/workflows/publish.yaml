@@ -18,13 +18,15 @@ concurrency:
 jobs:
   publish-node:
     name: Publish Node to Registry
-    runs-on: ubuntu-latest
+    # 与 tests.yml 的 plugin 作业同一个理由：ubuntu-latest 已是 Ubuntu 26，
+    # setup-python@v5 在这条镜像上装 Python 以 exit 2 收场，v1.6.1 的 Registry 发布就是这么挂的。
+    runs-on: ubuntu-24.04
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.10'
 

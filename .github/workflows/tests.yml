@@ -11,11 +11,14 @@ on:
 jobs:
   plugin:
     name: Kernel plugin tests
-    runs-on: ubuntu-latest
+    # ubuntu-latest 自 2026-10-19 迁到 Ubuntu 26：setup-python@v5 是 Node 20 时代的 action，
+    # 被强推到 Node 24 上执行，在 26 的镜像里装 Python 直接以 exit 2 收场（v1.6.1 的 tag
+    # 就是挂在这一步）。钉 24.04 并把 action 升到 Node 24 原生的版本，这条作业才跑得起来。
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # studio/tests/_comfy_api_bootstrap.py 把同级 ComfyUI 根插进 sys.path 导入真实 comfy_api
       # （_comfy_root 找 <repo 父目录>/ComfyUI/comfy_api/latest），V3 节点用例离了它必炸。
@@ -24,7 +27,7 @@ jobs:
         run: git clone --depth 1 https://github.com/comfyanonymous/ComfyUI ../ComfyUI
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.10'
 
