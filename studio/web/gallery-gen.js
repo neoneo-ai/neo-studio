@@ -3058,9 +3058,10 @@ export function openGenMaterialDialog(gallery, opts = null) {
     const statusBox = $el("div", { className: "neo-gallery-cs-status" });
     const actionsBox = $el("div", { className: "neo-gallery-story-actions" });
     // 一个输入框就是生成用的提示词：写一句直接生成，「增强」（可选）把扩写结果写回同一个框
+    // rows 给的是 intrinsic 高，绘画页那条 64px 的 min-height 只有在这里才够矮（3 行的 intrinsic 顶到 84px）
     const quickInput = $el("textarea", {
         className: "neo-gallery-gm-quick-input",
-        rows: 3,
+        rows: 2,
         placeholder: t("描述要生成的素材，例如：红色陶瓷杯的白底产品图……或输入修改指令（↑/↓ 调出历史）")
     });
 

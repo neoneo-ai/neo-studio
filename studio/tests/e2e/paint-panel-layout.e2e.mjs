@@ -26,7 +26,7 @@ const paintPanel = (statusInner) => `
               <div class="neo-gallery-story-titlebar"><span class="neo-gallery-story-title">文生图</span></div>
               <div class="neo-gallery-cs-status">${statusInner}</div>
               <div class="neo-gallery-gm-composer">
-                <textarea class="neo-gallery-gm-quick-input" rows="4"></textarea>
+                <textarea class="neo-gallery-gm-quick-input" rows="2"></textarea>
                 <div class="neo-gallery-gm-composer-bar neo-gallery-gm-chips">
                   ${chipWrap("e2e-skill-chip", "Qwen Image 2.1", chipPanel())}
                   <div class="neo-gallery-gm-composer-gap"></div>
@@ -323,5 +323,34 @@ test("图片编辑面板 1280×460：窗口矮到装不下表单，整页也不�
     const m = await measureEdit(1280, 460);
     assert.ok(m.pageScroll <= 2, `编辑页不出现滚动条（溢出 ${m.pageScroll}px）`);
     assert.ok(m.viewScroll <= 2, `视图不溢出（溢出 ${m.viewScroll}px）`);
+});
+
+// 输入卡的宽与高：绘画页收在 980px 居中、提示词框两行 64px 起（上限 26vh），余隙全给结果区。
+// 编辑页吃自己那条 1180px —— 共用那条栏宽上限收半档时，不许把编辑页一起拖窄
+test("绘画页输入卡 980px 居中、提示词框两行高；编辑页照旧吃 1180px", async () => {
+    const read = async (html) => {
+        const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+        await page.setContent(embeddedHtml(html), { waitUntil: "load" });
+        await page.waitForTimeout(150);
+        const out = await page.evaluate(() => {
+            const b = (s) => document.querySelector(s).getBoundingClientRect();
+            const host = b(".ns-paint-panel"), card = b(".neo-gallery-gm-composer"), ta = b(".neo-gallery-gm-quick-input");
+            return {
+                cardW: Math.round(card.width), taH: Math.round(ta.height),
+                leftGap: Math.round(card.left - host.left), rightGap: Math.round(host.right - card.right),
+            };
+        });
+        await page.close();
+        return out;
+    };
+    const paint = await read(paintPanel(IDLE));
+    assert.ok(paint.cardW === 980, `绘画页输入卡没收窄到 980px（${paint.cardW}px）`);
+    assert.ok(Math.abs(paint.leftGap - paint.rightGap) <= 2, `输入卡没在栏里居中（左 ${paint.leftGap} / 右 ${paint.rightGap}）`);
+    assert.ok(paint.taH >= 64 && paint.taH <= 80, `提示词框没收矮到两行那一档（高 ${paint.taH}px）`);
+    // 编辑页的卡宽由 gallery.css 那条 width:min(92vw,980px) 加表单内衬给（932px 这一档），
+    // 两页样式各挂各的宿主类：绘画页这一档收窄动不到它
+    const edit = await read(editPanel());
+    assert.ok(edit.cardW >= 900 && edit.cardW <= 945,
+        `编辑页输入卡被绘画页那档栏宽带跑了（${edit.cardW}px，编辑页照旧 932px 上下）`);
 });
 

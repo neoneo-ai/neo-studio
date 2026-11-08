@@ -750,3 +750,27 @@ test("桌面 1440 宽（续）：设置页两栏、素材页悬停控件、灯�
     assert.equal(pose.railIconW, 16, `收起后的展开入口没有图标（${pose.railIconW}px）`);
 });
 
+// 桌面视频页 composer 胶囊：宽度与绘画页输入卡同一档（980px 居中），提示词框两行 64px 起，
+// 芯片行在收窄后的胶囊里不溢出（「生成」钉在最右端，溢出就够不着）
+test("桌面视频页：composer 胶囊 980px 居中、提示词框两行高、芯片行不溢出", async () => {
+    const m = await measure(videoPage, DESKTOP, {}, () => {
+        const b = (s) => document.querySelector(s).getBoundingClientRect();
+        const chips = document.querySelector(".ns-video-chips");
+        return {
+            dockW: Math.round(b(".ns-video-dock").width),
+            pageW: Math.round(b(".ns-video-page").width),
+            taH: Math.round(b(".ns-video-prompt").height),
+            deckBottom: Math.round(b(".ns-video-deck").bottom),
+            taBottom: Math.round(b(".ns-video-prompt").bottom),
+            chipsOverflow: Math.round(chips.scrollWidth - chips.clientWidth),
+            genW: Math.round(b(".ns-video-run").width),
+        };
+    });
+    assert.ok(m.dockW <= 982 && m.dockW >= 900, `composer 胶囊没收窄到 980px（${m.dockW}px）`);
+    assert.ok(m.dockW <= m.pageW - 100, `胶囊没跟着栏宽收：胶囊 ${m.dockW} / 页面 ${m.pageW}`);
+    assert.ok(m.taH >= 64 && m.taH <= 80, `提示词框没收矮到两行那一档（高 ${m.taH}px）`);
+    assert.ok(m.taBottom >= m.deckBottom - 1, `提示词框顶不过素材方块底边（框底 ${m.taBottom} / 方块底 ${m.deckBottom}）`);
+    assert.ok(m.chipsOverflow <= 1, `芯片行在 980px 胶囊里溢出 ${m.chipsOverflow}px，「生成」滚不出去`);
+    assert.ok(m.genW > 40, `「生成」钮被挤扁（宽 ${m.genW}px）`);
+});
+

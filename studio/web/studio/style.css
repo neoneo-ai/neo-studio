@@ -472,10 +472,13 @@ body {
    输入卡贴的是这块宿主的底边，内衬由面板自己管（.neo-gallery-story-modal--embedded 的 padding 为 0） */
 .ns-paint-panel { flex: 1 1 auto; min-height: 0; overflow: hidden; }
 .ns-paint-panel .neo-gallery-gen-panel { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+/* 绘画页输入卡的栏宽上限：gallery.css 给内嵌弹窗的 width:min(92vw,980px) 在宽窗口里就顶到这一档，
+   窗口窄下来跟着 92vw 收；编辑页在下方自带 1180px 那条 max-width（多带一个类，赢这里），
+   它的卡宽同样吃 gallery.css 的 980 宽与表单内衬 —— 两页各挂各的宿主类，收一边不动另一边 */
 .ns-paint-panel .neo-gallery-story-modal--embedded {
     flex: 1 1 auto;
     width: 100%;
-    max-width: 1080px;
+    max-width: 980px;
     height: 100%;
     min-height: 0;
     margin: 0 auto;
@@ -495,8 +498,9 @@ body {
 /* 浮层从贴底 chip 往上开，头顶到面板上沿就是它的全部空间：62vh 的壳在矮窗口里够不到顶，
    按面板上方的实际空间收，超了让左栏技能自己滚 */
 .ns-paint-panel .neo-gallery-gm-chip-panel { max-height: min(62vh, calc(100vh - 240px)); }
-/* 输入框默认高度由 gallery.css 基础规则给（多行、可拉高）；机位模式整框收起（见下） */
-.ns-paint-panel .neo-gallery-gm-quick-input { min-height: clamp(88px, 16vh, 150px); }
+/* 绘画页的提示词框照编辑页那一档压矮（64px 起、上限 26vh，内衬收到一行半的量），余隙全给结果区；
+   框要写更多时用 gallery.css 的 resize: vertical 自己往下拉；机位模式整框收起（见下） */
+.ns-paint-panel .neo-gallery-gm-quick-input { min-height: 64px; max-height: 26vh; padding: 6px 12px; }
 /* 文生图结果区吃满输入卡上方的余隙：内容从预览区顶部开始铺，余隙落在图片与输入卡之间
    （空档挂在 first child 的 margin-top:auto 上会把图片整块往下推，图片上方就出现一大片黑）；
    结果区自己出纵向滚动：窗口矮到装不下「成品 + 起手提示 + 输入卡」时滚的是这一块，
@@ -1026,10 +1030,10 @@ body {
 .ns-video-corner.c-bl { bottom: 0; left: 0; border-right: none; border-top: none; }
 .ns-video-corner.c-br { bottom: 0; right: 0; border-left: none; border-top: none; }
 
-/* 底部浮动胶囊：一张卡贴页底居中，宽度上限照参考版的一行输入区 */
+/* 底部浮动胶囊：一张卡贴页底居中，宽度与绘画页输入卡同一档（980px） */
 .ns-video-dock {
     position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%);
-    z-index: 5; width: min(1120px, calc(100% - 32px));
+    z-index: 5; width: min(980px, calc(100% - 32px));
 }
 /* 卡片外观（壳 / 边框 / 焦点框）由会话页的 .neo-gallery-gm-composer 提供，这里只加浮动投影 */
 .ns-video-card { display: flex; flex-direction: column; gap: 10px; box-shadow: 0 14px 38px rgba(0, 0, 0, .5); }
@@ -1038,8 +1042,10 @@ body {
 .ns-video-progress { flex: none; width: 220px; margin-top: 0; }
 
 /* 第一行：素材方块 + 提示词。方块壳、虚线、填满转实心、角标都走 .neo-gallery-edit-refdrop；
-   style.css 排在 gallery.css 之前，凡是要改写会话页壳的地方一律带 .ns-video-card 前缀压过它 */
-.ns-video-top { display: flex; gap: 12px; align-items: stretch; }
+   style.css 排在 gallery.css 之前，凡是要改写会话页壳的地方一律带 .ns-video-card 前缀压过它。
+   行顶对齐：方块 56px，行高本来 stretch 会把提示词框顶到一样高（还跟着填满的 118px 方块长高），
+   框的高度由自己那条规则给，不再吃方块 */
+.ns-video-top { display: flex; gap: 12px; align-items: flex-start; }
 .ns-video-deck { flex: none; display: flex; gap: 8px; }
 /* 填满的方块长一点，缩略图才有地方摊开（会话页单槽不换长） */
 .ns-video-card .ns-video-slot:has(.ns-video-thumbs:not(:empty)) { flex: 0 1 118px; }
@@ -1061,7 +1067,8 @@ body {
 .ns-video-thumb .neo-gallery-edit-refchip-x { top: 1px; right: 1px; width: 14px; height: 14px; font-size: 10px; border-radius: 4px; pointer-events: auto; }
 
 .ns-video-input { position: relative; flex: 1 1 auto; min-width: 0; display: flex; }
-.ns-video-card .ns-video-prompt { flex: 1 1 auto; min-width: 0; resize: none; padding: 2px 48px 22px 2px; }
+/* 提示词框与绘画页同一档：两行 64px 起、上限 26vh（右下 22px 内衬留给字数计数那枚） */
+.ns-video-card .ns-video-prompt { flex: 1 1 auto; min-width: 0; min-height: 64px; max-height: 26vh; resize: none; padding: 2px 48px 22px 2px; }
 .ns-video-input .ns-video-count { position: absolute; right: 6px; bottom: 6px; font-size: 11px; color: var(--ns-dim); pointer-events: none; }
 
 /* 第二行：芯片外观（胶囊 / hover / 菜单）全走会话页的 .neo-gallery-gm-chip-*，这里只排行距 */

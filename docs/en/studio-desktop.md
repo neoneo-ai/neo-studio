@@ -230,6 +230,11 @@ narrow-window rules are shared with the director page (one modal instance, one g
   Filling and docking are independent of how short the window is: Windows display scaling reports an 800px window as
   640 / 533 CSS px and the composer stays docked at the panel bottom; the result area scrolls on its own, and the
   page never scrolls vertically — the composer does not float in the middle of the window with an empty lower half.
+  In a wide window the composer is 980px centred (gallery.css sizes the embedded panel with `width: min(92vw,980px)`,
+  which caps out at this width on wide windows and follows 92vw once the window narrows); the prompt box floors at two
+  lines (64px, `max-height: 26vh`) and grows by dragging its bottom edge. The video page's composer capsule takes the
+  same 980px centred width and the same two-line box, and it no longer stretches to the height of the 首帧 / 尾帧 /
+  参考图 squares beside it.
 - The edit page docks its composer at the bottom the same way, and the image-edit area takes the gap above it: the
   source image scales up to fill that gap (`object-fit: contain`, centred, never cropped; its delete mask and marker
   points cap with it, so the mask never spills outside the card), and an empty preview carries the fixed-size

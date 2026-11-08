@@ -128,6 +128,12 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   `studio/tests/js/pose-bridge.test.mjs`.
 
 ### Changed
+- **The 绘画 and 视频 prompt boxes shrink to the 编辑 page's scale.** The 绘画 page's composer box no longer opens
+  110–150px tall: it floors at two lines (64px, `max-height: 26vh`) and grows by dragging its bottom edge, so the freed
+  strip goes to the result area above it. The 视频 page's composer capsule docks at 980px centred (was 1120px) with the
+  same two-line box, and the box no longer stretches to the height of the 首帧 / 尾帧 / 参考图 squares next to it. Phones
+  keep the taller three-line box (88px floor) for touch. Covered by the new composer width/height cases in
+  `studio/tests/e2e/paint-panel-layout.e2e.mjs` and `studio/tests/e2e/studio-mobile-layout.e2e.mjs`.
 - **The Studio window opens on the 输入 page: 绘画 is text-to-image only, 编辑 is image editing only.** The
   former 绘画 tab held the text-to-image composer with the 图片编辑 panel hidden inside it; the tab is now two
   pages - **输入** (the prompt composer, `#/paint`) and **编辑** (image editing, `#/edit`) - so the bar reads
