@@ -157,52 +157,56 @@ studio/
 ## Frontend assets
 
 | File | Responsibility |
-|------|------|
-| `gallery.js` | Asset sidebar main logic (state, persistence, API, view switching) |
-| `gallery-list.js` | List browsing: toolbar, breadcrumbs, paging, lazy cover loading |
-| `gallery-card.js` | A single card: directory cover, thumbnail, send and bookmark menus |
-| `gallery-gen.js` | One-click generation (character sheet / nine-cell storyboard) and its setup dialogs |
-| `gallery-setting.js` | Directory-management configuration dialog |
-| `gallery-masonry.js` | Card masonry layout |
-| `gallery-utils.js` | Asset utility functions |
-| `gallery-node-drop.js` | Dragging assets onto canvas nodes |
-| `lightbox.js` | Lightbox viewer |
-| `media-transfer.js` | Asset upload and transfer |
-| `prompts.js` | Prompt node frontend interaction |
-| `prompt-manager.js` | Prompt manager (preset list / collection views / save & delete) |
-| `prompt-service.js` | Prompt API wrapper |
-| `llm-chat.js` | LLM chat domain (input, output preview, skill dropdown, streaming generation) |
-| `llm-setting.js` | LLM configuration form |
-| `at-picker.js` | `@` image picker |
-| `slash-picker.js` | `/` skill quick menu |
-| `skill.js` | Skill module facade: assembles the sub-modules below and exports one interface |
-| `skill/skill-core.js` | Skill API, Markdown rendering, category tabs, workflow template pre-rendering, writeback change records |
-| `skill/skill-writeback.js` | Workflow writeback confirmation, change-record dialog, canvas import & pending-writeback dot |
+|-----------------------------|------|
+| `gallery.js`                  | Asset sidebar main logic (state, persistence, API, view switching) |
+| `gallery-list.js`             | List browsing: toolbar, breadcrumbs, paging, lazy cover loading |
+| `gallery-card.js`             | A single card: directory cover, thumbnail, send and bookmark menus |
+| `gallery-gen.js`              | Generation-family facade: card menu entries, reuse dispatch, one export surface |
+| `gen-utils.js`                | Paint-panel base: host placement and reuse, chip family, skill-family guard, window drag |
+| `t2i-panel.js`                | "生成素材" panel: prompt-only generation into Output/NeoAgent/<date> |
+| `image-edit-panel.js`         | Image-edit panel: outpaint / local repaint / remove / blend / pose lock / camera angle |
+| `gallery-card-tools.js`       | Gallery dialogs: character sheet, storyboard grid, reverse prompt, LoRA tagging, voice clone |
+| `gallery-setting.js`          | Directory-management configuration dialog |
+| `gallery-masonry.js`          | Card masonry layout |
+| `gallery-utils.js`            | Asset utility functions |
+| `gallery-node-drop.js`        | Dragging assets onto canvas nodes |
+| `lightbox.js`                 | Lightbox viewer |
+| `media-transfer.js`           | Asset upload and transfer |
+| `prompts.js`                  | Prompt node frontend interaction |
+| `prompt-manager.js`           | Prompt manager (preset list / collection views / save & delete) |
+| `prompt-service.js`           | Prompt API wrapper |
+| `llm-chat.js`                 | LLM chat domain (input, output preview, skill dropdown, streaming generation) |
+| `llm-setting.js`              | LLM configuration form |
+| `at-picker.js`                | `@` image picker |
+| `slash-picker.js`             | `/` skill quick menu |
+| `skill.js`                    | Skill module facade: assembles the sub-modules below and exports one interface |
+| `skill/skill-core.js`         | Skill API, Markdown rendering, category tabs, workflow template pre-rendering, writeback change records |
+| `skill/skill-writeback.js`    | Workflow writeback confirmation, change-record dialog, canvas import & pending-writeback dot |
 | `skill/skill-detail-popup.js` | Single-skill detail popup and its cross-node singleton |
-| `image-gen.js` | Image generation client and generation settings form |
-| `image-gen-edit-node.js` | Image generation/editing node frontend |
-| `live-preview.js` | Live preview panel during sampling (shared by the director node, the Studio director page and the agent dock's tool card) |
-| `director.js` | Director recipe editor |
-| `director-node.js` | Director node's embedded timeline and preview |
-| `director-timeline.js` | Reusable timeline component |
-| `recipes.js` | Recipe panel logic |
-| `bundle-expand.js` | BUNDLE expand node frontend |
-| `bundle-lock.js` | Bundle locking and auto-enhancement |
-| `ref-grid.js` | Reference grid frontend |
-| `workflow.js` | Workflow repair interaction |
-| `workflow-graph.js` | Read-only skill workflow flowchart (autogrow slots merged into a synthetic node, internal ids hidden in the graph and tooltips; columns width-aligned, model-loading nodes widened to show the model name; fields filled from settings carry their `{{TOKEN}}` source and the summary lists variable chips); `canvasLayout` re-lays canvas nodes after "import to canvas" with the same layering and in-layer ordering, and returns the shared column width for setSize |
-| `workflow-context.js` | Workflow context collection |
-| `top-menu.js` | Top-bar 🅝 menu |
-| `canvas-lock.js` | Main-canvas offline gate: locks the canvas with the frontend's own `read_only` canvas lock when ComfyUI is gone and shows a banner; unlocks when it returns |
-| `node-behavior.js` | Node drag, paste and similar interaction behavior |
-| `combo-box.js` | Generic dropdown component |
-| `dom-utils.js` | Shared DOM factories |
-| `toast.js` | Notification bars |
-| `quick-input-history.js` | Quick-input history |
-| `studio/` | Neo Studio standalone page (index.html + studio-app.js + shim/) |
-| `pose/pose.js` | 3D Pose host view: iframe host, toolbar and the postMessage bridge |
-| `frames/frames.js` | Video frame extractor view: player with the start marker, extraction settings, canvas capture and saving frames into the library |
-| `*.css` | Styles per module |
+| `image-gen.js`                | Image generation client and generation settings form |
+| `image-gen-edit-node.js`      | Image generation/editing node frontend |
+| `live-preview.js`             | Live preview panel during sampling (shared by the director node, the Studio director page and the agent dock's tool card) |
+| `director.js`                 | Director recipe editor |
+| `director-node.js`            | Director node's embedded timeline and preview |
+| `director-timeline.js`        | Reusable timeline component |
+| `recipes.js`                  | Recipe panel logic |
+| `bundle-expand.js`            | BUNDLE expand node frontend |
+| `bundle-lock.js`              | Bundle locking and auto-enhancement |
+| `ref-grid.js`                 | Reference grid frontend |
+| `workflow.js`                 | Workflow repair interaction |
+| `workflow-graph.js`           | Read-only skill workflow flowchart (autogrow slots merged into a synthetic node, internal ids hidden in the graph and tooltips; columns width-aligned, model-loading nodes widened to show the model name; fields filled from settings carry their `{{TOKEN}}` source and the summary lists variable chips); `canvasLayout` re-lays canvas nodes after "import to canvas" with the same layering and in-layer ordering, and returns the shared column width for setSize |
+| `workflow-context.js`         | Workflow context collection |
+| `top-menu.js`                 | Top-bar 🅝 menu |
+| `canvas-lock.js`              | Main-canvas offline gate: locks the canvas with the frontend's own `read_only` canvas lock when ComfyUI is gone and shows a banner; unlocks when it returns |
+| `node-behavior.js`            | Node drag, paste and similar interaction behavior |
+| `combo-box.js`                | Generic dropdown component |
+| `dom-utils.js`                | Shared DOM factories |
+| `toast.js`                    | Notification bars |
+| `quick-input-history.js`      | Quick-input history |
+| `studio/`                     | Neo Studio standalone page (index.html + studio-app.js + shim/) |
+| `pose/pose.js`                | 3D Pose host view: iframe host, toolbar and the postMessage bridge |
+| `frames/frames.js`            | Video frame extractor view: player with the start marker, extraction settings, canvas capture and saving frames into the library |
+| `*.css`                       | Styles per module |
 
 ## Node registration
 

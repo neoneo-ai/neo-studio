@@ -1688,7 +1688,7 @@ const EN = {
     "16:9 (宽屏)": "16:9 (widescreen)",
     "21:9 (超宽)": "21:9 (ultrawide)",
 
-    // ===== 画廊生成（gallery-gen.js） =====
+    // ===== 画廊生成（t2i-panel.js / image-edit-panel.js / gallery-card-tools.js） =====
     "自由": "Free",
     "原图 / 编辑结果（拖拽分割线对比）": "Original / edit result (drag the divider to compare)",
     "将基于这张人像生成头特写 / 正面 / 侧面 / 背面四视图，输出到 Output/CharacterSheet。": "Generates head close-up / front / side / back views from this portrait, saved to Output/CharacterSheet.",

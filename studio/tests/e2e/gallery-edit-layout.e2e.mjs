@@ -19,7 +19,7 @@ const svg = (w, h) => `data:image/svg+xml,${encodeURIComponent(
 const resultLayer = (w, h) =>
     `<div class="neo-gallery-edit-result-clip"><img class="neo-gallery-edit-compare-img neo-gallery-edit-result-img" src="${svg(w, h)}" alt="编辑结果"></div>`;
 
-// 与 gallery-gen.js 的 openImageEditDialog 同构（图片在上、操作在下）
+// 与 image-edit-panel.js 的 openImageEditDialog 同构（图片在上、操作在下）
 // 非扩图：结果层/分割线挂在图片盒内；扩图：三者都进画布（结果的坐标随画布一起缩放）
 /** 技能与自定参数面板左栏的一行：只有技能名（与 skillParamsChip 的 renderSkills 同构） */
 const pickItem = (name, on = false) =>
@@ -148,7 +148,7 @@ const measure = () => {
     };
 };
 
-// 模拟 gallery-gen.js 的窗帘：取 50% 中间态，方便一次检查左右两侧各露出哪张图
+// 模拟 image-edit-panel.js 的窗帘：取 50% 中间态，方便一次检查左右两侧各露出哪张图
 const revealHalf = () => {
     const clip = document.querySelector(".neo-gallery-edit-result-clip");
     const divider = document.querySelector(".neo-gallery-edit-divider");
@@ -226,7 +226,7 @@ test("图片编辑对比区：分割线默认贴左边界（整幅结果图）�
         const divider = document.querySelector(".neo-gallery-edit-divider");
         clip.style.display = "";
         divider.style.display = "";
-        // 与 gallery-gen.js showResultOverlay 的默认位置一致：贴左边界
+        // 与 image-edit-panel.js showResultOverlay 的默认位置一致：贴左边界
         clip.style.clipPath = "inset(0 0 0 0%)";
         divider.style.left = "0%";
         const d = divider.getBoundingClientRect();
@@ -290,8 +290,8 @@ test("图片编辑输入卡：短窗口里底行 chips 与「生成」都在视�
 const openPanel = () => {
     const chip = document.querySelector("#e2e-skill-chip");
     const panel = document.querySelector("#e2e-skill-panel");
-    panel.style.display = "grid";   // 与 gallery-gen.js 开面板时写死的值一致（双栏不吃样式表顺序）
-    // 与 gallery-gen.js 开面板同一套定位：钉在 chip 上方，右缘不出屏
+    panel.style.display = "grid";   // 与 gen-utils.js 开面板时写死的值一致（双栏不吃样式表顺序）
+    // 与 gen-utils.js 开面板同一套定位：钉在 chip 上方，右缘不出屏
     const r = chip.getBoundingClientRect();
     panel.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - panel.offsetWidth - 8))}px`;
     const above = r.top - panel.offsetHeight - 6;

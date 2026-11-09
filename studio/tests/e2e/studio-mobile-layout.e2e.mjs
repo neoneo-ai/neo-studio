@@ -76,7 +76,7 @@ const directorPage = page("ns-director", `
   </div>`);
 
 
-// 绘画页（文生图）：与 gallery-gen.js 嵌进 .ns-paint-panel 的那块同构
+// 绘画页（文生图）：与 t2i-panel.js 嵌进 .ns-paint-panel 的那块同构
 const paintPage = page("ns-paint", `
   <div class="ns-paint-main">
     <div class="ns-paint-modes">

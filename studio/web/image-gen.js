@@ -914,7 +914,7 @@ export function createModelConfigSection(opts = {}) {
         };
     }
 
-    // modelSelect 供调用方拦「主模型家族与技能家族对撞」（gallery-gen.js 的 guardMainModelFamily）
+    // modelSelect 供调用方拦「主模型家族与技能家族对撞」（gen-utils.js 的 guardMainModelFamily）
     return { el: section, load, collect, modelSelect: modelCtl.select };
 }
 

@@ -40,7 +40,7 @@ const paintPanel = (statusInner) => `
       </div>
     </div>`;
 
-// 与 gallery-gen.js 的 skillParamsChip 浮层同构：chip 按钮 + 朝上开的双栏面板 + 藏在壳里的状态 select
+// 与 gen-utils.js 的 skillParamsChip 浮层同构：chip 按钮 + 朝上开的双栏面板 + 藏在壳里的状态 select
 const chipWrap = (id, label, panel) => `
     <span class="neo-gallery-gm-chip-wrap">
       <button id="${id}" class="neo-gallery-gm-chip-btn"><span class="neo-gallery-gm-chip-label">${label}</span><span class="neo-gallery-gm-chip-caret">▾</span></button>
@@ -99,7 +99,7 @@ test.after(async () => { await browser.close(); });
 // 开浮层量一圈宽度：栏宽、LoRA 下拉、强度与 ✕ 的行内落位
 const openChip = () => {
     const panel = document.querySelector("#e2e-chip-panel");
-    panel.style.display = "grid";   // 与 gallery-gen.js 开面板时写死的值一致（双栏不吃样式表顺序）
+    panel.style.display = "grid";   // 与 gen-utils.js 开面板时写死的值一致（双栏不吃样式表顺序）
     const box = (el) => { const b = el.getBoundingClientRect(); return { w: Math.round(b.width), right: Math.round(b.right) }; };
     const row = panel.querySelector(".rs-gen-lora-row");
     const combo = row.querySelector(".rs-model-select-box");
@@ -238,7 +238,7 @@ for (const [name, [width, height]] of [["素材页", [1440, 900]], ["侧栏", [4
 const TALL_IMG = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="848" height="1280"><rect width="100%" height="100%" fill="#777"/></svg>')}`;
 const ANGLE_ROWS = ["转角", "俯仰", "镜头"].map((n) =>
     `<div class="neo-angle-row"><label>${n}</label><input type="range" min="-180" max="180" step="45"><output>正面0°</output></div>`).join("");
-// 与 gallery-gen.js 的机位行 / 输入卡同构（angle/angle-orb.js 建的那层壳 + 三条滑杆）
+// 与 image-edit-panel.js 的机位行 / 输入卡同构（angle/angle-orb.js 建的那层壳 + 三条滑杆）
 const editPanel = () => `
     <div class="ns-paint"><div class="ns-paint-main">
       <div class="ns-paint-modes">

@@ -153,53 +153,57 @@ studio/
 
 ## 前端资源
 
-| 文件 | 职责 |
-|------|------|
-| `gallery.js` | 素材侧栏主逻辑（状态、持久化、API、视图切换） |
-| `gallery-list.js` | 列表浏览：工具条、面包屑、分页、封面懒加载 |
-| `gallery-card.js` | 单卡片：目录封面、缩略图、发送与收藏菜单 |
-| `gallery-gen.js` | 一键生图（角色图 / 九宫格分镜图）与前置小窗 |
-| `gallery-setting.js` | 目录管理配置弹窗 |
-| `gallery-masonry.js` | 卡片瀑布流布局 |
-| `gallery-utils.js` | 素材工具函数 |
-| `gallery-node-drop.js` | 素材拖放到画布节点 |
-| `lightbox.js` | 灯箱查看器 |
-| `media-transfer.js` | 素材上传与传输 |
-| `prompts.js` | 提示词节点前端交互 |
-| `prompt-manager.js` | 提示词管理器（预设列表 / 集合视图 / 保存删除） |
-| `prompt-service.js` | 提示词 API 封装 |
-| `llm-chat.js` | LLM 聊天域（输入、输出预览、技能下拉、流式生成） |
-| `llm-setting.js` | LLM 配置表单 |
-| `at-picker.js` | `@` 图片选择器 |
-| `slash-picker.js` | `/` 技能快捷菜单 |
-| `skill.js` | 技能模块门面：组装下列子模块并统一对外导出 |
-| `skill/skill-core.js` | 技能 API、Markdown 渲染、分类标签、工作流模板预渲染、回写变更记录 |
-| `skill/skill-writeback.js` | 工作流回写确认、变更记录弹窗、画布导入与待回写绿点 |
+| 文件                          | 职责 |
+|-----------------------------|------|
+| `gallery.js`                  | 素材侧栏主逻辑（状态、持久化、API、视图切换） |
+| `gallery-list.js`             | 列表浏览：工具条、面包屑、分页、封面懒加载 |
+| `gallery-card.js`             | 单卡片：目录封面、缩略图、发送与收藏菜单 |
+| `gallery-gen.js`              | 生图家族门面：卡片「⋯」生成入口、「再来一发」分发与统一导出 |
+| `gen-utils.js`                | 生成面板底座：宿主落位与复用、chip 家族、技能家族守卫、小窗标题栏拖动 |
+| `t2i-panel.js`                | 「生成素材」面板：纯提示词出图，产物落 Output/NeoAgent/<日期> |
+| `image-edit-panel.js`         | 图片编辑面板：扩图 / 局部重绘 / 点选删除 / 多图融合 / 姿势锁形 / 机位改写 |
+| `gallery-card-tools.js`       | 素材库小窗：角色图、九宫格分镜图、反推提示词、LoRA 打标、语音克隆 |
+| `gallery-setting.js`          | 目录管理配置弹窗 |
+| `gallery-masonry.js`          | 卡片瀑布流布局 |
+| `gallery-utils.js`            | 素材工具函数 |
+| `gallery-node-drop.js`        | 素材拖放到画布节点 |
+| `lightbox.js`                 | 灯箱查看器 |
+| `media-transfer.js`           | 素材上传与传输 |
+| `prompts.js`                  | 提示词节点前端交互 |
+| `prompt-manager.js`           | 提示词管理器（预设列表 / 集合视图 / 保存删除） |
+| `prompt-service.js`           | 提示词 API 封装 |
+| `llm-chat.js`                 | LLM 聊天域（输入、输出预览、技能下拉、流式生成） |
+| `llm-setting.js`              | LLM 配置表单 |
+| `at-picker.js`                | `@` 图片选择器 |
+| `slash-picker.js`             | `/` 技能快捷菜单 |
+| `skill.js`                    | 技能模块门面：组装下列子模块并统一对外导出 |
+| `skill/skill-core.js`         | 技能 API、Markdown 渲染、分类标签、工作流模板预渲染、回写变更记录 |
+| `skill/skill-writeback.js`    | 工作流回写确认、变更记录弹窗、画布导入与待回写绿点 |
 | `skill/skill-detail-popup.js` | 单技能详情弹窗与跨节点单例 |
-| `image-gen.js` | 生图客户端与生图设置表单 |
-| `image-gen-edit-node.js` | 生图/编辑节点前端 |
-| `live-preview.js` | 采样实时预览面板（导演节点 / Studio 导演页 / 右栏智能体工具卡共用） |
-| `director.js` | 导演配方编辑器 |
-| `director-node.js` | 导演节点内嵌时间轴与预览 |
-| `director-timeline.js` | 可复用时间轴组件 |
-| `recipes.js` | 配方面板逻辑 |
-| `bundle-expand.js` | BUNDLE 展开节点前端 |
-| `bundle-lock.js` | bundle 锁定与自动增强 |
-| `ref-grid.js` | 参考图宫格前端 |
-| `workflow.js` | 工作流修复交互 |
-| `workflow-graph.js` | 技能工作流只读流程图（autogrow 槽位合并为合成节点，图上与 tooltip 不显示内部 id；同列宽度拉齐，模型加载节点放宽以显示模型名；被设置填走值的字段带 `{{TOKEN}}` 来源，摘要给出变量芯片）；`canvasLayout` 按同一套分层与同层排序重排「导入到画布」后的画布节点，并返回同列统一宽度供 setSize |
-| `workflow-context.js` | 工作流上下文采集 |
-| `top-menu.js` | 顶栏 🅝 菜单 |
-| `canvas-lock.js` | 主画布离线闸门：ComfyUI 掉线时锁画布（前端自带的 `read_only` 画布锁）并出横幅，恢复后解锁 |
-| `node-behavior.js` | 节点拖拽、粘贴等交互行为 |
-| `combo-box.js` | 通用下拉组件 |
-| `dom-utils.js` | 共享 DOM 工厂 |
-| `toast.js` | 提示条 |
-| `quick-input-history.js` | 快速输入历史 |
-| `studio/` | 新影工坊独立页面（index.html + studio-app.js + shim/） |
-| `pose/pose.js` | 3D 姿势页宿主：iframe 承载、工具条与 postMessage 桥 |
-| `frames/frames.js` | 视频抽帧页：播放器与起抽点、起抽参数、canvas 取帧与逐帧存进素材库 |
-| `*.css` | 各模块样式 |
+| `image-gen.js`                | 生图客户端与生图设置表单 |
+| `image-gen-edit-node.js`      | 生图/编辑节点前端 |
+| `live-preview.js`             | 采样实时预览面板（导演节点 / Studio 导演页 / 右栏智能体工具卡共用） |
+| `director.js`                 | 导演配方编辑器 |
+| `director-node.js`            | 导演节点内嵌时间轴与预览 |
+| `director-timeline.js`        | 可复用时间轴组件 |
+| `recipes.js`                  | 配方面板逻辑 |
+| `bundle-expand.js`            | BUNDLE 展开节点前端 |
+| `bundle-lock.js`              | bundle 锁定与自动增强 |
+| `ref-grid.js`                 | 参考图宫格前端 |
+| `workflow.js`                 | 工作流修复交互 |
+| `workflow-graph.js`           | 技能工作流只读流程图（autogrow 槽位合并为合成节点，图上与 tooltip 不显示内部 id；同列宽度拉齐，模型加载节点放宽以显示模型名；被设置填走值的字段带 `{{TOKEN}}` 来源，摘要给出变量芯片）；`canvasLayout` 按同一套分层与同层排序重排「导入到画布」后的画布节点，并返回同列统一宽度供 setSize |
+| `workflow-context.js`         | 工作流上下文采集 |
+| `top-menu.js`                 | 顶栏 🅝 菜单 |
+| `canvas-lock.js`              | 主画布离线闸门：ComfyUI 掉线时锁画布（前端自带的 `read_only` 画布锁）并出横幅，恢复后解锁 |
+| `node-behavior.js`            | 节点拖拽、粘贴等交互行为 |
+| `combo-box.js`                | 通用下拉组件 |
+| `dom-utils.js`                | 共享 DOM 工厂 |
+| `toast.js`                    | 提示条 |
+| `quick-input-history.js`      | 快速输入历史 |
+| `studio/`                     | 新影工坊独立页面（index.html + studio-app.js + shim/） |
+| `pose/pose.js`                | 3D 姿势页宿主：iframe 承载、工具条与 postMessage 桥 |
+| `frames/frames.js`            | 视频抽帧页：播放器与起抽点、起抽参数、canvas 取帧与逐帧存进素材库 |
+| `*.css`                       | 各模块样式 |
 
 ## 节点注册
 

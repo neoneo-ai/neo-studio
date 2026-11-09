@@ -393,7 +393,7 @@
     font-size: 9px;
     color: #9aa4b2;
 }
-/* 比例 glyph：描边小方框按选中比例定形，长宽由 gallery-gen.js 写行内样式 */
+/* 比例 glyph：描边小方框按选中比例定形，长宽由 gen-utils.js 写行内样式 */
 .neo-gallery-gm-chip-glyph {
     flex: none;
     box-sizing: border-box;
@@ -3138,7 +3138,7 @@ Accordion Section Buttons (Clear)
     font-size: 20px;
 }
 /* 提示词框没有机位专属高度：基础那条（上方 .neo-gallery-gm-quick-input）给的就是多行框。
-   机位模式整框由 gallery-gen.js 收起，Studio 的编辑页把它压成半栏两行（studio/style.css） */
+   机位模式整框由 image-edit-panel.js 收起，Studio 的编辑页把它压成半栏两行（studio/style.css） */
 .neo-gallery-edit-refdrop-cap {
     position: absolute;
     left: 0;
@@ -3168,7 +3168,7 @@ Accordion Section Buttons (Clear)
     pointer-events: none;
     z-index: 6;
 }
-/* hover / focus 即时基态；.picks-open 由 JS 开关驱动，带关闭宽限让鼠标跨得过方块与浮层之间的间隙（见 gallery-gen.js） */
+/* hover / focus 即时基态；.picks-open 由 JS 开关驱动，带关闭宽限让鼠标跨得过方块与浮层之间的间隙（见 image-edit-panel.js） */
 .neo-gallery-edit-refdrop-row:hover .neo-gallery-edit-refpicks,
 .neo-gallery-edit-refdrop-row:focus-within .neo-gallery-edit-refpicks,
 .neo-gallery-edit-refdrop-row.picks-open .neo-gallery-edit-refpicks {

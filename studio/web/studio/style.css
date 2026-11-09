@@ -546,7 +546,7 @@ body {
 /* 编辑页的提示词框压到两行：编辑词是一句话（机位 / 姿势 / 扩图那几条是模板填死的），
    基础那条 110px 的框把输入卡撑到近两成栏高，预览被挤成一条。参考图方块照旧在左、框照旧整宽，
    只收高度；行高本来是 stretch，框被 56px 的参考方块顶到一样高，收高度得先把行改成顶部对齐。
-   机位模式整框由 JS 收起（gallery-gen.js），这两条对它无作用 */
+   机位模式整框由 JS 收起（image-edit-panel.js），这两条对它无作用 */
 .ns-paint-edit .neo-gallery-edit-modal .neo-gallery-edit-refline { align-items: flex-start; }
 .ns-paint-edit .neo-gallery-edit-modal .neo-gallery-edit-refline .neo-gallery-gm-quick-input {
     min-height: 40px;

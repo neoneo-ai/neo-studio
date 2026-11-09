@@ -16,6 +16,15 @@ const EXPECTED_EXPORTS = {
     "combo-box.js": ["attachComboBox"],
     "workflow-context.js": ["collectWorkflowContext"],
     "top-menu.js": ["resetTopMenu"],
+    // 生图家族的门面：调用方与测试只认这 17 个名字，实现在 gen-utils.js / t2i-panel.js /
+    // image-edit-panel.js / gallery-card-tools.js（拆分时逐字搬迁，导出面不能少一个）
+    "gallery-gen.js": [
+        "buildGenerationMenuItems", "buildCharacterSheetRequest", "buildStoryboardGridPrompt",
+        "buildStoryboardGridRequest", "openStoryboardDialog", "openReversePromptDialog",
+        "openLoraTagDialog", "openImageEditDialog", "openGenMaterialDialog", "openImageEditMode",
+        "setPaintHost", "chipButton", "skillParamsChip", "reuseModelOverlay",
+        "setVideoReuseOpen", "openVideoReuse", "reuseParamsFromMedia",
+    ],
 };
 
 const modules = {};
