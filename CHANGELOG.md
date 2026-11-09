@@ -4,6 +4,17 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+### Added
+- **The Studio home scales with the window.** The content column grows from 1020px up to 1560px as the window
+  widens instead of staying pinned at 1020px in a sea of empty side margins, and the hero title and card type
+  scale up with it. In windows 1400px and wider, the section labels (开始创作 / 编辑 / 素材与配置) move from
+  the top-left of the centered column - where they floated half a screen away from the cards - into a left
+  rail that sits level with the first card row, each joined to its grid by a short rule. Covered by the home
+  layout cases in `studio/tests/js/studio-desktop.test.mjs`.
+- **The Studio home compacts in shorter windows.** In windows under ~1150px tall (widths above 720px) the
+  hero, section gaps and cards shrink together, so the full card grid fits the viewport and no scrollbar
+  shows by default; wide-window windows keep the roomier layout.
+
 ## [1.6.1] - 2026-11-08
 
 ### Added

@@ -947,7 +947,9 @@ body {
 
 /* ====== 首页：意图卡片（大字标题 + 生成三卡 + 素材三卡） ====== */
 .ns-home { padding: 30px 28px 56px; }
-.ns-home > * { max-width: 1020px; margin-left: auto; margin-right: auto; }
+/* 内容列宽随窗口放缩：窄窗口保住 1020px 老档，大窗口一路放宽到 1560px，
+   不再把整页钉死在 1020px 居中、两边各空出一屏 */
+.ns-home-hero, .ns-home-inner { max-width: clamp(1020px, calc(64vw + 248px), 1560px); margin-inline: auto; }
 .ns-home-hero { text-align: center; padding: 16px 0 8px; }
 .ns-home-hero h1 { margin: 0 0 8px; font-size: 27px; font-weight: 700; color: #fff; }
 .ns-home-accent { color: var(--ns-accent); }
@@ -984,15 +986,61 @@ body {
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .ns-home-card > svg:last-child { flex: none; margin-left: auto; color: var(--ns-dim); }
+/* 大窗档（≥1400px）：板块标题从网格上方移到左栏，与首行卡片中线并排——标题钉在居中列的
+   左缘时，宽窗口里它游离到画面最左，和卡片群隔出半屏空地。左栏定宽，网格吃剩下的列宽；
+   首节的 96px 上边距把标题落到首行卡片的横中线（hero 块高 185px + 卡片半高 37px - hero 底距 12px -
+   节间距 14px），hero 同步放大字号、多给顶部留白。
+   排在 900 / 720 两条之前：窄档的后落规则压过这一档的并排版式 */
+@media (min-width: 1400px) {
+    .ns-home-inner { display: flex; flex-direction: column; gap: 34px; }
+    .ns-home-section {
+        display: flex; align-items: center; gap: 28px; margin: 0;
+        font-size: 13px;
+    }
+    .ns-home-section .ns-home-grid { flex: 1 1 auto; min-width: 0; }
+    .ns-home-section::before {
+        content: ""; flex: none; width: 20px;
+        border-top: 1px solid var(--ns-border-soft);
+    }
+    .ns-home-section:nth-of-type(1) { margin-top: 96px; }
+    .ns-home-hero { padding: 44px 0 12px; }
+    .ns-home-hero h1 { font-size: 34px; }
+    .ns-home-hero p { font-size: 15px; }
+    .ns-home-cta { font-size: 15px; padding: 9px 26px; }
+    .ns-home-card { padding: 18px 22px; gap: 16px; }
+    .ns-home-card-title { font-size: 17px; }
+    .ns-home-card-sub { font-size: 13px; }
+}
 @media (max-width: 900px) { .ns-home-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
 /* 手机：首页是「一句话说清 + 卡片列表」，两列 / 三列在手机上都把标题挤成一截，一律单列；
    两侧 28px 与页底 56px 的留白在手机上吃掉整屏的滚动距离，收一档 */
 @media (max-width: 720px) {
     .ns-home { padding: 16px 10px 32px; }
+    .ns-home-hero, .ns-home-inner { max-width: none; margin-left: 0; margin-right: 0; }
     .ns-home-hero { padding: 8px 0 4px; }
     .ns-home-hero h1 { font-size: 21px; }
     .ns-home-grid { grid-template-columns: minmax(0, 1fr); gap: 10px; }
     .ns-home-card { padding: 12px 14px; }
+}
+/* 高度紧凑档（≤1150px 高、宽窗口）：桌面窗口高度普遍不足——1440p 窗口去掉标题栏与任务栏
+   就剩 1300px 上下，标准档的首页（约 860px 起）在小一点的窗口里必出一根系统滚动条。
+   这一档把 hero、节距、卡片一起收小，整页 ~710px 收进视口，默认不出滚动条；
+   1400px 以上的大窗档落在同一块里同步左栏尺寸（标题上边距 96→64 贴着收小后的首行中线）。
+   手机（≤720px 宽）不套这一档：触屏列表靠滚动，宽度档自己管，排在它之后让它赢 */
+@media (max-height: 1150px) and (min-width: 721px) {
+    .ns-home { padding: 18px 28px 20px; }
+    .ns-home-hero { padding: 8px 0 4px; }
+    .ns-home-hero h1 { font-size: 24px; }
+    .ns-home-hero p { margin-bottom: 10px; }
+    .ns-home-cta { padding: 6px 20px; }
+    .ns-home-section { margin: 14px 0 8px; }
+    .ns-home-section:nth-of-type(1) { margin-top: 0; }
+    .ns-home-grid { gap: 12px; }
+    .ns-home-card { padding: 10px 14px; }
+}
+@media (max-height: 1150px) and (min-width: 1400px) {
+    .ns-home-section:nth-of-type(1) { margin-top: 64px; }
+    .ns-home-hero { padding: 34px 0 10px; }
 }
 
 /* ===== 视频页：整页舞台 + 底部浮动胶囊 composer（照 ArtCraft Create Video 的单编辑器版面） ===== */

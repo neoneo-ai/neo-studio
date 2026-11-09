@@ -120,6 +120,12 @@ test("默认落地首页：意图卡片挂满主区，素材卡直达素材页",
     assert.ok(home.classList.contains("ns-hidden"), "跳素材页后首页应收起");
     const shown = [...document.querySelectorAll("#ns-view .ns-page")].find((p) => !p.classList.contains("ns-hidden"));
     assert.ok(shown?.querySelector(".ns-gallery-host"), "素材卡应直达挂着素材库宿主的素材页");
+    const homeCss = fs.readFileSync(path.join(webDir, "studio", "style.css"), "utf8");
+    assert.match(homeCss, /\.ns-home-inner\s*\{[^}]*max-width:\s*clamp/, "首页内容列宽应随窗口放缩，不钉死一档");
+    assert.match(homeCss, /@media \(min-width: 1400px\)[\s\S]*?\.ns-home-section\s*\{[^}]*display:\s*flex/,
+                 "大窗档板块标题应与网格并排，不再钉在居中列左缘");
+    assert.match(homeCss, /@media \(max-height: 1150px\)[^{]*\{\s*\.ns-home\s*\{[^}]*padding/,
+                 "中窗口高度档应压小首页纵向尺寸，默认不露滚动条");
 });
 
 test("启动页样式随文档一并带上：智能体页与素材页不靠运行时注入", () => {

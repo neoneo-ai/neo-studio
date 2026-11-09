@@ -861,30 +861,33 @@ function buildHome(el) {
             $el("p", { textContent: t("一句话到一段成片，全部在你自己的电脑上完成") }),
             $el("button", { className: "ns-home-cta", type: "button", textContent: t("一句话出图"), onclick: () => go("paint") }),
         ]),
-        $el("h2", { className: "ns-home-section", textContent: t("开始创作") }),
-        $el("div", { className: "ns-home-grid" }, [
-            homeCard("sparkles", "生成图片", "描述画面，直接出图", () => go("paint")),
-            homeCard("film", "生成视频", "一句话加首帧，出一段视频", () => go("video")),
-            homeCard("play", "导演视频", "多段配方，生成整片视频", () => go("director")),
-            homeCard("pose", "3D 姿势", "姿势 · 整场 · 全景", () => go("pose")),
-            homeCard("target", "智能体", "说出目标，工具链多轮跑完", () => go("agent")),
-        ]),
-        // 图片编辑面板里的模式各是一张卡：点卡就把模式带进编辑页那块面板，选原图那一刻落地
-        // （涂抹局部与点选删除收在面板的模式 chip 里，要在原图上动手，首页不铺空入口）
-        $el("h2", { className: "ns-home-section", textContent: t("编辑") }),
-        $el("div", { className: "ns-home-grid" }, [
-            homeCard("pencil", "图片编辑", "写下要改成什么样，整图重绘", () => goEditMode("normal")),
-            homeCard("maximize", "扩图", "拖框定四边留白，补全周边场景", () => goEditMode("outpaint")),
-            homeCard("camera", "机位", "拖机位球换角度重出这张", () => goEditMode("angle")),
-            homeCard("copy", "融合", "多张参考图融成一张连贯画面", () => goEditMode("blend")),
-            homeCard("user", "姿势", "骨架图锁姿势，重出这一张", () => goEditMode("pose")),
-            homeCard("film", "视频抽帧", "挑一条视频，抽帧存进素材库", () => go("frames")),
-        ]),
-        $el("h2", { className: "ns-home-section", textContent: t("素材与配置") }),
-        $el("div", { className: "ns-home-grid" }, [
-            homeCard("folder", "素材库", "浏览与管理全部生成素材", () => go("gallery")),
-            homeCard("wand", "技能", "管理预设与技能包", () => go("skills")),
-            homeCard("gear", "设置", "生成默认值与界面语言", () => go("settings")),
+        // 三个板块包成一列：列宽随窗口放缩归 style.css 管，大窗档里板块标题落左栏与网格并排
+        $el("div", { className: "ns-home-inner" }, [
+            $el("h2", { className: "ns-home-section", textContent: t("开始创作") }),
+            $el("div", { className: "ns-home-grid" }, [
+                homeCard("sparkles", "生成图片", "描述画面，直接出图", () => go("paint")),
+                homeCard("film", "生成视频", "一句话加首帧，出一段视频", () => go("video")),
+                homeCard("play", "导演视频", "多段配方，生成整片视频", () => go("director")),
+                homeCard("pose", "3D 姿势", "姿势 · 整场 · 全景", () => go("pose")),
+                homeCard("target", "智能体", "说出目标，工具链多轮跑完", () => go("agent")),
+            ]),
+            // 图片编辑面板里的模式各是一张卡：点卡就把模式带进编辑页那块面板，选原图那一刻落地
+            // （涂抹局部与点选删除收在面板的模式 chip 里，要在原图上动手，首页不铺空入口）
+            $el("h2", { className: "ns-home-section", textContent: t("编辑") }),
+            $el("div", { className: "ns-home-grid" }, [
+                homeCard("pencil", "图片编辑", "写下要改成什么样，整图重绘", () => goEditMode("normal")),
+                homeCard("maximize", "扩图", "拖框定四边留白，补全周边场景", () => goEditMode("outpaint")),
+                homeCard("camera", "机位", "拖机位球换角度重出这张", () => goEditMode("angle")),
+                homeCard("copy", "融合", "多张参考图融成一张连贯画面", () => goEditMode("blend")),
+                homeCard("user", "姿势", "骨架图锁姿势，重出这一张", () => goEditMode("pose")),
+                homeCard("film", "视频抽帧", "挑一条视频，抽帧存进素材库", () => go("frames")),
+            ]),
+            $el("h2", { className: "ns-home-section", textContent: t("素材与配置") }),
+            $el("div", { className: "ns-home-grid" }, [
+                homeCard("folder", "素材库", "浏览与管理全部生成素材", () => go("gallery")),
+                homeCard("wand", "技能", "管理预设与技能包", () => go("skills")),
+                homeCard("gear", "设置", "生成默认值与界面语言", () => go("settings")),
+            ]),
         ]),
     );
 }
