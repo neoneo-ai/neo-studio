@@ -33,6 +33,8 @@ SSE_TIMEOUT = 600         # LLM 流式端点读超时（整段提示词生成可
 STORYBOARD_POLL_SEC = 2.0
 STORYBOARD_WAIT_SEC = 900.0   # 分镜逐段串行跑图：每段数十秒起，超时就回 task_id 让智能体用 task_status 续查
 KEYFRAME_REF_MAX = 9          # 段参考图上限（与 H3 参考生视频的 autogrow 槽位一致）
+VOICE_SKILL_ID = "cosyvoice_voice"   # 与 voice_gen.py / voice-gen.js 的语音技能同源
+REVERSE_LANGS = ("zh", "en")         # 反推的语言档：后端只认这两个，其余按 zh 跑
 
 
 def log(msg) -> None:
@@ -224,14 +226,15 @@ def image_items(comfy: Comfy, images, limit: int = MAX_B64_IMAGES) -> list:
     return out
 
 
-# 五套任务表（生图 / 整片 / 单段 / 拼接 / 图片分镜）的 task_id 都是裸 uuid，没有前缀可判；
+# 六套任务表（生图 / 整片 / 单段 / 拼接 / 图片分镜 / 语音）的 task_id 都是裸 uuid，没有前缀可判；
 # 按顺序探测状态端点，命中即返回。
-# 生图任务只有整表列表（无单任务路由），其余四套各有单任务快照路由。
+# 生图任务只有整表列表（无单任务路由），其余五套各有单任务快照路由。
 TASK_STATUS_ROUTES = (
     ("director", "/neo_studio/director/{tid}"),
     ("segment", "/neo_video_gen/run_segment/{tid}"),
     ("assemble", "/neo_video_gen/assemble_segments/{tid}"),
     ("storyboard", "/neo_video_gen/storyboard_status/{tid}"),
+    ("voice", "/neo_voice/status/{tid}"),
 )
 TASK_CANCEL_ROUTES = (
     ("image", "/neo_image_gen/cancel/{tid}"),
@@ -239,6 +242,7 @@ TASK_CANCEL_ROUTES = (
     ("segment", "/neo_video_gen/run_segment/{tid}/cancel"),
     ("assemble", "/neo_video_gen/assemble_segments/{tid}/cancel"),
     ("storyboard", "/neo_video_gen/storyboard_cancel/{tid}"),
+    ("voice", "/neo_voice/cancel/{tid}"),
 )
 
 
@@ -289,6 +293,18 @@ def tool_generate_prompt(ctx, args):
     if args.get("skill_id"):
         body["skillId"] = str(args["skill_id"]).strip()
     return clip(ctx.comfy.sse_text("/rs_prompts/stream_generate_prompt", body))
+
+
+def tool_reverse_prompt(ctx, args):
+    """图片反推：把一张图写成文生图提示词（SSE 收正文）；后端把结果写进图片同目录的同名 .txt。"""
+    language = str(args.get("language") or "zh").strip().lower()
+    if language not in REVERSE_LANGS:
+        raise ToolError(f"language 只认 zh / en，收到的是 '{language}'；要英文提示词传 language=en")
+    body = {"filename": need(args, "filename"), "language": language}
+    subfolder = str(args.get("subfolder") or "").strip()
+    if subfolder:
+        body["subfolder"] = subfolder
+    return clip(ctx.comfy.sse_text("/rs_prompts/reverse_prompt", body))
 
 
 # 模型扫描的两套口径：生图（suggested_* 给自动挑选值）与出片 H3（扫描表里没有 suggested_*）。
@@ -531,6 +547,38 @@ def tool_generate_image(ctx, args):
                  "images": image_items(ctx.comfy, snap.get("images"))})
 
 
+def tool_voice_clone(ctx, args):
+    """声音克隆（CosyVoice 零样本）：参考音频 + 要说的文字；入队即返回 task_id。"""
+    name = need(args, "ref_audio")
+    if "/" in name or "\\" in name:
+        raise ToolError(f"ref_audio 只要文件名，目录写进 subfolder：收到的是 '{name}'")
+    if os.path.splitext(name)[1].lower() not in AUDIO_EXT:
+        raise ToolError(f"ref_audio 要的是音频（{'、'.join(sorted(AUDIO_EXT))}）：收到的是 '{name}'")
+    ref = name
+    subfolder = str(args.get("subfolder") or "").strip()
+    if subfolder:
+        # 素材库卡片只带相对子路径，语音模板的参考槽位只吃 input/ 里的名字：与克隆页同一条搬运通道
+        copied = ctx.comfy.get("/neo_gallery/copy_to_input", {"filename": name, "subfolder": subfolder}) or {}
+        ref = str(copied.get("filename") or "").strip()
+        if not ref:
+            raise ToolError(f"素材库的 '{subfolder}/{name}' 没有落进 input/：按 list_gallery 认得到的目录名再发一次")
+    body = {"skill_id": str(args.get("skill_id") or "").strip() or VOICE_SKILL_ID,
+            "prompt": need(args, "prompt"),
+            "references": [{"kind": "input", "value": ref}]}
+    for key in ("seed", "output_prefix"):
+        if args.get(key) is not None:
+            body[key] = args[key]
+    try:
+        snap = ctx.comfy.post("/neo_voice/generate", body) or {}
+    except ToolError as e:
+        # 后端那句报错指的是 Studio 的音频卡片，MCP 调用方没有卡片：点名它没有的这条通道
+        raise ToolError(f"{e}（ref_audio 是 input/ 里已有的音频名；素材库的音频把目录写进 subfolder，"
+                        f"这一层先经 copy_to_input 拷一份）")
+    return dump({"task_id": snap.get("task_id"), "status": snap.get("status"),
+                 "skill_id": body["skill_id"], "ref_audio": ref,
+                 "warnings": snap.get("warnings") or []})
+
+
 def tool_task_status(ctx, args):
     tid = need(args, "task_id")
     for t in (ctx.comfy.get_soft("/neo_image_gen/tasks") or []):
@@ -561,6 +609,11 @@ def tool_task_status(ctx, args):
                                   "total": prog.get("total_segments"),
                                   "step": prog.get("step"),
                                   "total_steps": prog.get("total_steps")}
+        if kind == "voice":
+            # 语音快照里的 url 是相对地址：与图片 / 视频同一口径，链接由这一层拼
+            out["audios"] = [{"filename": a.get("filename"), "subfolder": a.get("subfolder") or "",
+                              "url": view_url(ctx.comfy, a.get("filename"), a.get("subfolder") or "")}
+                             for a in (data.get("audios") or []) if a.get("filename")]
         return dump(out)
     raise ToolError(f"任务不存在（结束后被清理也会这样）：{tid}")
 
@@ -865,7 +918,7 @@ def tool(name, desc, props, required=(), example=None) -> dict:
     return item
 
 
-TASK_ID = s("string", "generate_image / director_run / segment_run / assemble_run 返回的 task_id")
+TASK_ID = s("string", "generate_image / director_run / segment_run / assemble_run / voice_clone 返回的 task_id")
 RECIPE = s("string", "video_director 配方名（director_recipes 可查）")
 SEGMENT = s("integer", "段序号，1 起（第 1 段 = 时间轴第一段）")
 
@@ -878,6 +931,11 @@ TOOLS = [
          {"text": s("string", "简短想法或草稿提示词"),
           "skill_id": s("string", "可选：按该技能的模板上下文扩写")}, ("text",),
          {"text": "一只在窗台打盹的橘猫，暖色阳光，写实"}),
+    tool("reverse_prompt", "图片反推：把一张图写成文生图提示词（LLM 同步返回文本，需已配置 LLM）；图由 filename + subfolder 指认，subfolder 留空是 presets 目录，素材库目录与 output 子目录写它；结果同时写进图片同目录的同名 .txt，同语言的第二次调用直接回那份缓存；language=zh（默认，带中文质量词）/ en；产物是一段提示词文本，不是图",
+         {"filename": s("string", "图片文件名（list_gallery 目录里的那个名字，不带路径）"),
+          "subfolder": s("string", "图片所在目录的相对子路径（素材库目录 / output 子目录）；留空是 presets"),
+          "language": s("string", "zh（默认）/ en")}, ("filename",),
+         {"filename": "<list_gallery 目录里的图片名>", "subfolder": "<图片所在目录>", "language": "zh"}),
     tool("list_models", "列出 Neo Studio 扫到的模型与 LoRA（scope=image 生图扫描，scope=video 出片 H3 扫描）。q 按 目录/文件名 子串过滤，group 只看一组，near 给当前主模型名时同目录条目排最前、同家族关键词次之；每项带 dir，看某个 LoRA 与主模型是否同一目录就看它。描述里带人物 / 画风 / 作品名这类专名时就带 q=<关键词> 搜一轮 loras；group=diffusion_models 的每一项带 skills（家族对得上的技能 id 列表，空 = 词表（只有 qwen / krea2）认不出这一家，问用户要哪个技能，别在这里猜家族）",
          {"scope": s("string", "image（默认，生图扫描，带 suggested_* 自动挑选值）/ video（出片 H3 扫描）"),
           "group": s("string", "只看一组：diffusion_models / text_encoders / vae / loras"),
@@ -903,7 +961,17 @@ TOOLS = [
          {"skill_id": "<list_skills 里 has_workflow=true 的技能 id>",
           "prompt": "一只橘猫坐在窗台，暖色阳光，写实", "width": 1024, "height": 1024}),
 
-    tool("task_status", "查任务快照（生图 / 整片 / 单段 / 拼接共用 task_id）；生图 succeeded 后 images 带取图 URL，导演类 succeeded 后 filename 是 mp4 产物、url 是可直接转给用户的播放/下载链接，别自己拼",
+    tool("voice_clone", "声音克隆（CosyVoice 零样本克隆）：一段参考音频 + 要说的文字，出同一个人音色的音频；立即返回 task_id（用 task_status 轮询，succeeded 后 audios 带产物与播放链接，get_media 取音频）。ref_audio 是 input/ 里已有的音频文件名；素材库的音频把目录写进 subfolder，这一层先经 copy_to_input 拷一份进 input/。产物落 output/Voice/<日期>/；这台机器没装 CosyVoice 节点或语音模型没就绪时任务会失败，把任务里的报错讲给用户",
+         {"prompt": s("string", "要说的文字（用参考音频的音色朗读）"),
+          "ref_audio": s("string", "参考音频文件名（.mp3 / .wav / .m4a / .flac / .ogg / .aac / .opus），不带路径；素材库里的音频把目录写进 subfolder"),
+          "subfolder": s("string", "参考音频在素材库的相对子路径；留空表示 ref_audio 就是 input/ 里的名字"),
+          "skill_id": s("string", f"语音技能 id，默认 {VOICE_SKILL_ID}（技能要带 workflow.json 模板）"),
+          "seed": s("integer", "种子，留空随机"),
+          "output_prefix": s("string", "输出子目录前缀，默认 Voice")}, ("prompt", "ref_audio"),
+         {"prompt": "大家好，欢迎进入今天的直播间。", "ref_audio": "ref_voice.wav",
+          "subfolder": "<素材库目录>"}),
+
+    tool("task_status", "查任务快照（生图 / 整片 / 单段 / 拼接 / 图片分镜 / 语音共用 task_id）；生图 succeeded 后 images 带取图 URL，导演类 succeeded 后 filename 是 mp4 产物、url 是可直接转给用户的播放/下载链接，别自己拼；语音 succeeded 后 audios 每一项带音频 filename 与 url",
          {"task_id": TASK_ID}, ("task_id",), {"task_id": "<generate_image / director_run 返回的 task_id>"}),
     tool("list_tasks", "列出最近的生图任务（每行带 skill_id：出这一发用的技能）", {}),
     tool("cancel_task", "取消任务（未执行出队，执行中中断）", {"task_id": TASK_ID}, ("task_id",),
@@ -988,8 +1056,10 @@ HANDLERS = {
     "neo_status": tool_neo_status,
     "list_skills": tool_list_skills,
     "generate_prompt": tool_generate_prompt,
+    "reverse_prompt": tool_reverse_prompt,
     "list_models": tool_list_models,
     "generate_image": tool_generate_image,
+    "voice_clone": tool_voice_clone,
     "task_status": tool_task_status,
     "list_tasks": tool_list_tasks,
     "cancel_task": tool_cancel_task,
@@ -1049,13 +1119,16 @@ def serve(ctx, tools, stdin, stdout) -> int:
                 "capabilities": {"tools": {"listChanged": False}},
                 "serverInfo": {"name": "neo-studio", "version": plugin_version()},
                 "instructions": "生图与整片都是异步任务：generate_image / director_run / segment_run / "
-                                "assemble_run 只返回 task_id，用 task_status 轮询到 succeeded 再取产物。"
-                                "生图产物是图片，导演 / 单段 / 拼接产物是 mp4 视频，都用 get_media 取（视频只给 URL）。"
+                                "assemble_run / voice_clone 只返回 task_id，用 task_status 轮询到 succeeded 再取产物。"
+                                "生图产物是图片，导演 / 单段 / 拼接产物是 mp4 视频，语音克隆产物是音频，"
+                                "都用 get_media 取（视频与音频只给 URL）。"
                                 "段序号一律 1 起。generate_image 的 skill_id 必须是 list_skills 里 has_workflow=true 的技能。"
                                 "出片默认口径是一段 5 秒、VDN 技能（minimax_h3_vdn_*，8 步）走 segment_run；"
                                 "多段整片要用户点名才跑，别拿现成多段配方直接 director_run。"
                                 "要每段有图可依就用 director_keyframes 出关键帧，再把返回的 segments / shared / story "
-                                "原样传给 director_save 才生效；没跑过关键帧不要说已经设了首帧。"}})
+                                "原样传给 director_save 才生效；没跑过关键帧不要说已经设了首帧。"
+                                "generate_prompt 与 reverse_prompt 是同步返回的文本（要 Neo Studio 设置里已配置 LLM），"
+                                "reverse_prompt 的图由 filename + subfolder 指认，结果同时写进图片同目录的 .txt。"}})
         elif method == "notifications/initialized":
             continue
         elif method == "ping":

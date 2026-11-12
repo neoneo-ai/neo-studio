@@ -33,3 +33,11 @@ page's players; the task itself finishes inside the execution queue.
 Voice generation needs the ComfyUI execution queue, so in the desktop window with ComfyUI not running the 生成 button
 reads "需要 ComfyUI"; clicking it hands the desktop app the job of starting the kernel instead of sending a request
 that can only answer 409 (`app/studio_caps.py`, the `voice` flag).
+
+## Agent and MCP
+
+The same chain is exposed on the MCP tool surface as `voice_clone` (`studio/mcp_server.py`): `prompt` is the text to
+speak and `ref_audio` is the reference audio name — a library audio with a `subfolder` is copied into `input/` through
+`/neo_gallery/copy_to_input` first, the same channel this page uses when picking audio. It returns a `task_id` as soon
+as it is queued; the agent dock polls `task_status` to the terminal state and the output lands in the snapshot's
+`audios`.

@@ -186,7 +186,7 @@ class TestToolSurface(unittest.TestCase):
 
     def test_task_tools_are_the_asyncones(self):
         self.assertEqual(agent.TASK_TOOLS,
-                         ("generate_image", "director_run", "segment_run", "assemble_run"))
+                         ("generate_image", "director_run", "segment_run", "assemble_run", "voice_clone"))
 
     def test_system_prompt_missing_raises_actionable_error(self):
         """提示词文件缺失要在第一帧之前报出文件路径，不能让 LLM 裸跑。"""

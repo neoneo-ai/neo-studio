@@ -420,6 +420,16 @@ startable once the root is filled in.
 
 ## Home layout (inline editing on the home page)
 
+- The shell pages scroll on one thin ghost slot defined on the page container: `.ns-page` sets
+  `scrollbar-width: thin` with `scrollbar-color: transparent transparent`, the thumb lands on `#555` only on
+  `:hover` (`::-webkit-scrollbar` keeps the same 8px width) - the same treatment as the asset library and recipe
+  modals. Home / Assets / Director all scroll on this layer (the gallery host is `height: 100%` and does not
+  scroll; in short and narrow windows the director's `min-height` / `min-width` overflow on it too).
+  `scrollbar-width` and `scrollbar-color` are inherited, so the gallery's Civitai column, the skill and
+  custom-parameter panels and the director editor panels thin down with the page instead of each container
+  carrying a rule; the zoomed director timeline keeps its own visible horizontal bar - that bar is the drag
+  handle. The home additionally pins `scrollbar-gutter: stable`, so the centered content column does not shift
+  when the edit bar appears or a card toggle changes the page height.
 - "Edit home" standing in the top-right corner of the home page in view mode (`.ns-home-edit-entry`, `position: absolute`
   inside `.ns-home`, so it scrolls away with the content instead of staying pinned on the window) switches that page into
   edit mode, and the page itself is the editor: the whole

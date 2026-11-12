@@ -128,6 +128,19 @@ test("默认落地首页：意图卡片挂满主区，素材卡直达素材页",
                  "大窗档板块标题应与网格并排，不再钉在居中列左缘");
     assert.match(homeCss, /@media \(max-height: 1150px\)[^{]*\{\s*\.ns-home\s*\{[^}]*padding/,
                  "中窗口高度档应压小首页纵向尺寸，默认不露滚动条");
+    assert.match(homeCss, /\.ns-page\s*\{[^}]*scrollbar-width:\s*thin/,
+                 "页容器滚动条收细一档，不出默认那根系统条（首页 / 素材 / 导演共用这一层）");
+    assert.match(homeCss, /\.ns-page\s*\{[^}]*scrollbar-color:\s*transparent transparent/,
+                 "页容器滚动条平时隐形");
+    assert.match(homeCss, /\.ns-page:hover\s*\{[^}]*scrollbar-color:\s*#555/,
+                 "指针进页滚动条才落色");
+    assert.match(homeCss, /\.ns-page::-webkit-scrollbar\s*\{\s*width:\s*8px/,
+                 "webkit 档同宽 8px");
+    assert.match(homeCss, /\.ns-home\s*\{[^}]*scrollbar-gutter:\s*stable/,
+                 "首页槽位照留：溢出起落不引起居中内容列跳动");
+    const dtlCss = fs.readFileSync(path.join(webDir, "director-timeline.css"), "utf8");
+    assert.match(dtlCss, /\.neo-dtl-scroll\.neo-dtl-zoomed\s*\{[^}]*scrollbar-color:\s*#555/,
+                 "时间轴放大态那条可见横条不被页容器的隐形档吃掉");
 });
 
 test("启动页样式随文档一并带上：智能体页与素材页不靠运行时注入", () => {

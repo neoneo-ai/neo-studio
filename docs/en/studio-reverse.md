@@ -30,3 +30,10 @@ own reason — the result box never passes a half-finished run off as success.
 Reverse prompting needs the kernel-side LLM chain and image reading, so in the desktop window with ComfyUI not running
 the 反推 button reads "需要 ComfyUI"; clicking it hands the desktop app the job of starting the kernel instead of
 sending a request that can only answer 409 (`app/studio_caps.py`, the `prompt_reverse` flag).
+
+## Agent and MCP
+
+The same endpoint is exposed on the MCP tool surface as `reverse_prompt` (`studio/mcp_server.py`) — the agent dock and
+an external MCP client call exactly this tool: the picture is named by `filename` + `subfolder` (an empty `subfolder`
+is `presets`), the language goes through `language=zh` / `en`, and the returned text is the prompt itself, with the same
+landing spot as this page: the same-named `.txt` next to the image.

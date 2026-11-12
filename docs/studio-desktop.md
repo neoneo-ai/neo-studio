@@ -290,6 +290,13 @@ js_api（`check_setup` / `pick_root` / `pick_python` / `start_setup`），根目
 
 ## 首页版式（首页原地编辑）
 
+- 外壳页的滚动条收在页容器一处：`.ns-page` 定 `scrollbar-width: thin` + `scrollbar-color: transparent transparent`，
+  `:hover` 才落 `#555`（`::-webkit-scrollbar` 同宽 8px、槽透明），与素材库 / 配方弹窗滚动条同一套——首页 / 素材页 /
+  导演页可见的那根条都是这一层（画廊宿主 `height: 100%` 不滚，导演页 `.ns-director` 的 `min-height` / `min-width`
+  在矮窗窄窗也是这一层出滚）。`scrollbar-width` 与 `scrollbar-color` 是继承属性，画廊的 Civitai 栏、技能与自定参数
+  面板、归类列表与导演编辑器面板这些自滚容器跟着收，不逐容器补规则；时间轴放大态 `.neo-dtl-scroll.neo-dtl-zoomed`
+  那条可见横条是刻意的拖动把手，自身声明压过继承。首页另定 `scrollbar-gutter: stable` 钉住槽位——进编辑态多出那条
+  细栏、卡片显隐改掉页高时溢出开关随之起落，居中内容列不左右跳。
 - 浏览态的首页右上角「编辑首页」（`.ns-home-edit-entry`，`position: absolute` 站在 `.ns-home` 自己的右上角，跟着页面一起滚，滚出首屏就不见，不常驻在窗口上压住卡片）把这一页切进编辑态，这一页自己就是编辑器：整张卡就是拖动手势
   （不设手柄与 ↑↓ 箭头），卡片右上角的控件条只一枚显隐眼睛（自建卡多一枚「编辑这张卡」的铅笔与一枚删除），标题区五行文案点字直接改（`contenteditable`，失焦落进草稿），顶端一条细栏
   （`.ns-home-edit-bar`，`position: sticky` + `width: fit-content` + `margin: 0 0 14px auto`）整块收成一条小组、贴在首页右上角，管网格列数、标题区与出图按钮开关、恢复默认；那一枚「完成」就是入口本身，坐在栏里这一行的末尾，栏钉在哪一屏它就跟着钉在哪一屏，滚到哪一屏都点得着。板块不给控件：板块顺序与整块收起是旧版式里读到的状态，这一版不在首页上排它们。

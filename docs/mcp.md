@@ -1,7 +1,8 @@
 # MCP 服务（外部智能体接入）
 
 `studio/mcp_server.py` 是一个独立的 MCP 服务器（stdio 传输）。MCP 客户端（Claude Desktop / Cursor /
-自建客户端）把它作为子进程启动，外部智能体由此调用 Neo Studio 的生图与导演（整片 / 单段 / 拼接）能力。
+自建客户端）把它作为子进程启动，外部智能体由此调用 Neo Studio 的生图、图片反推、声音克隆与导演
+（整片 / 单段 / 拼接）能力。
 
 它不随 ComfyUI 启动，也不参与节点注册：零相对导入、只用标准库，一切能力经本机 ComfyUI 的 HTTP 接口完成。
 `stdout` 只跑 JSON-RPC，日志一律走 `stderr`。
@@ -11,7 +12,7 @@
 1. ComfyUI 正在运行且已装 Neo Studio 插件（MCP 用的就是插件的 HTTP 接口，需 v1.2.0 及以上）。桌面端启动的
    ComfyUI 默认 `http://127.0.0.1:8188`（桌面端自身的服务在 8191，与 MCP 无关）。
 2. Python 3.10+，用跑 ComfyUI 的那个 Python 即可，无额外依赖。
-3. 用到 `generate_prompt` / `director_plan` 时，Neo Studio 设置里需已配置 LLM。
+3. 用到 `generate_prompt` / `reverse_prompt` / `director_plan` 时，Neo Studio 设置里需已配置 LLM。
 
 ## 接入步骤
 
@@ -19,7 +20,7 @@
 
 ```powershell
 python studio\mcp_server.py --selftest
-# Neo Studio MCP Server v1.3.0 · 21 工具：neo_status, list_skills, ...
+# Neo Studio MCP Server v1.3.0 · 23 工具：neo_status, list_skills, ...
 ```
 
 ### 2. 写进 MCP 客户端
@@ -47,7 +48,7 @@ Cursor（项目根 `.cursor/mcp.json`，内容同上）。已有其他 MCP 服�
 
 ### 3. 在客户端里确认
 
-对智能体说「列出 Neo Studio 的 MCP 工具」，能看到 `neo_status` 等 21 个工具说明接入成功；再让它调
+对智能体说「列出 Neo Studio 的 MCP 工具」，能看到 `neo_status` 等 23 个工具说明接入成功；再让它调
 `neo_status`，返回版本号与队列长度说明 ComfyUI 连上了。
 
 ## Studio 设置页的 MCP 服务（内置 MCP 客户端）
@@ -93,8 +94,10 @@ id 就能跑通。
 | `list_skills` | 技能 id（含 `mode` / `requires_ref`，判参考图就看这两项；`has_workflow=false` 的技能没有出图模板，只能当 `generate_prompt` 的 `skill_id`；行里带 `category` 与 `description`（截到 300 字符），`q` 连 `mode` / `category` / `description` 一起匹配，`q=t2i` 列出 `mode=t2i` 与 `t2i_edit`） |
 | `list_models` | 生图 / 出片扫到的模型与 LoRA：`q` 按 目录/文件名 过滤，`group` 只看一组，`scope=video` 走 H3 扫描，`near=<主模型名>` 把同目录条目排最前（每项带 `dir`），`group=diffusion_models` 的每一项带 `skills`（家族对得上的技能 id，空 = 词表认不出这一家），另带回 `suggested_*` 自动挑选值 |
 | `generate_prompt` | 简短想法 → 成品提示词（走 LLM，需已配置模型）；带 `skill_id` 时该技能正文就是服务端这一趟的系统提示词，正文写的流程（连它的 `references/` 由服务端按需读取）在这一趟跑完，返回的就是它产出的成品文本——`has_workflow=false` 的正文型技能就靠这条工具跑 |
+| `reverse_prompt` | 图片反推：把一张图写成文生图提示词（走 LLM，同步返回文本）；图由 `filename` + `subfolder` 指认（`subfolder` 留空是 `presets`），结果同时写进图片同目录的同名 `.txt`，同语言的第二次调用直接回那份缓存；`language=zh`（默认）/ `en` |
 | `generate_image` | 提交生图，立即返回 `task_id` 与 `skill_id`（这一发用的技能）；`model` / `loras` 是这一次的覆盖，技能里的自定参数不动 |
-| `task_status` `list_tasks` `cancel_task` | 任务快照 / 列表 / 取消（五套任务表共用 `task_id`：生图 / 整片 / 单段 / 拼接 / 图片分镜）；生图快照与列表行带 `skill_id` |
+| `voice_clone` | 声音克隆（CosyVoice 零样本）：参考音频 + 要说的文字，立即返回 `task_id`；`ref_audio` 是 `input/` 里的音频名，素材库的音频带 `subfolder` 时这一层先经 `/neo_gallery/copy_to_input` 拷一份，产物落 `output/Voice/<日期>/` |
+| `task_status` `list_tasks` `cancel_task` | 任务快照 / 列表 / 取消（六套任务表共用 `task_id`：生图 / 整片 / 单段 / 拼接 / 图片分镜 / 语音）；生图快照与列表行带 `skill_id`，语音快照 succeeded 后 `audios` 带产物音频与播放链接 |
 | `get_media` | 取产物文件：图片（png）与视频（mp4）都给 `/view` 地址；图片可 `base64=true` 回字节，视频与音频只给 URL |
 | `list_gallery` `list_recipes` `load_recipe` | 素材库目录、配方清单、单配方元数据（`results` 是历史产物，含成片 mp4） |
 | `director_recipes` `director_spec` | 导演配方清单、`shared` + 分段清单 |
@@ -110,6 +113,20 @@ id 就能跑通。
 ```
 neo_status → list_skills(取 skill_id) → generate_image → task_status 轮询到 succeeded
 → get_media(取 png：给 URL，需要字节时 base64=true)
+```
+
+**图片反推（产物是一段提示词文本）**
+
+```
+list_gallery(认图所在目录) → reverse_prompt(filename, subfolder[, language])
+→ 提示词以文本回来，同时写进图片同目录的同名 .txt；同语言的第二次调用直接回那份缓存
+```
+
+**声音克隆（产物是音频）**
+
+```
+list_gallery(认参考音频所在目录) → voice_clone(prompt=要说的文字, ref_audio=音频名, subfolder=目录)
+→ task_status 轮询到 succeeded → audios 每一项带 filename 与播放 url，get_media 取音频文件
 ```
 
 **自定参数：换主模型与加 LoRA（只影响一次请求）**
@@ -165,12 +182,14 @@ director_plan(mode=plan, idea|script, segment_seconds[, characters])    → 分�
 生图那句要跑得通，前提是本机存在带 `workflow.json` 的生图技能（`list_skills` 里 `has_workflow=true`）。
 
 - 「用 Neo Studio 生成一张 1024×1024 的橘猫图，生成好把图给我」
+- 「把素材库《Neo/Montage》里那张 001.png 反推成中文提示词给我」
+- 「用参考音频 input/ref_voice.wav 的音色说这段文字，出完把音频地址给我」
 - 「列出导演配方，读《红毯》的分段，把第 3 段重生成后拼回成片，给我成片地址」
 - 「按这个故事脚本分 6 段做短片，跑完把成片文件名给我」
 
 ## 用法约定
 
-- **异步任务**：`generate_image` `director_run` `segment_run` `assemble_run` 只返回 `task_id`，
+- **异步任务**：`generate_image` `director_run` `segment_run` `assemble_run` `voice_clone` 只返回 `task_id`，
   用 `task_status` 轮询到 `succeeded` 再取产物；整片是多段长任务，不要同步等待。
 - **出片默认口径是一段 5 秒**：智能体出片默认只规划一段、5 秒、VDN 技能（`minimax_h3_vdn_*`，技能
   config 里 8 步）走 `segment_run`；多段整片要用户点名才跑。`director_plan` 的 `segment_seconds` 缺省 5，
@@ -204,7 +223,7 @@ director_plan(mode=plan, idea|script, segment_seconds[, characters])    → 分�
   ComfyUI 的 `/view`，MCP 层不碰本地路径。内置预设配方只读，先 `director_copy` 再 `director_save`。
   `director_keyframes` 生成的关键帧按导演页同一条路径落进配方 `assets/`（只增不删），段级引用仍由
   `director_save` 写回。
-- **LLM 依赖**：`generate_prompt` 与 `director_plan` 需要 Neo Studio 设置里已配置 LLM；未配置时返回
+- **LLM 依赖**：`generate_prompt`、`reverse_prompt` 与 `director_plan` 需要 Neo Studio 设置里已配置 LLM；未配置时返回
   指向设置的短错误，不返回假成功。
 
 ## 故障排查
@@ -214,7 +233,9 @@ director_plan(mode=plan, idea|script, segment_seconds[, characters])    → 分�
 | 客户端里看不到工具 | 检查 `command` 指向的 Python 与脚本路径；看客户端的 MCP 日志（服务器日志走 stderr） |
 | 启动即退出 | ComfyUI 地址不是本机回环会被拒绝，改 `--comfy-url` |
 | `neo_status` 报连不上 | ComfyUI 未启动或端口不对 |
-| `generate_prompt` / `director_plan` 报错 | LLM 未配置或远程通道不健康，按返回的错误去 Neo Studio 设置里处理 |
+| `generate_prompt` / `reverse_prompt` / `director_plan` 报错 | LLM 未配置或远程通道不健康，按返回的错误去 Neo Studio 设置里处理 |
+| `reverse_prompt` 说 Image not found | 图不在 `presets` 目录而 `subfolder` 留空了：按 `list_gallery` 的目录名把 `subfolder` 补上 |
+| `voice_clone` 任务失败 | 这台机器没装 CosyVoice 节点（`FL_CosyVoice3_*`）或语音模型未就绪：把 `task_status` 快照里的 `error` 原样讲给用户，不要拿生图技能顶替这一发 |
 | `task_status` 说任务不存在 | 任务结束后快照会被清理，产物名请在 `succeeded` 时立刻取走 |
 | 分镜某段是 `skipped` | 该段没有分镜提示词（`storyboard_prompt`），后端回退视频提示词生图；补上分镜描述或重新 `director_plan` 拆分 |
 | `director_keyframes` 很久才返回 | 关键帧逐段串行跑图，耗时随段数与分辨率走；超时会带着 `running` 与 `task_id` 返回，用 `task_status` 续查，别重复提交 |

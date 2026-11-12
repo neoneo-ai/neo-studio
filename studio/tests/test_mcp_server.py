@@ -684,6 +684,90 @@ class GenerationSkillFactTests(unittest.TestCase):
 
 
 # ===========================================================================
+# 图片反推与声音克隆（反推是同步文本；语音是第六套任务表）
+# ===========================================================================
+
+class ReverseVoiceTests(unittest.TestCase):
+    def test_reverse_prompt_sends_the_image_and_the_language(self):
+        routes = {("POST", "/rs_prompts/reverse_prompt"): sse(
+            {"text": "一位少女站在窗前", "kind": "content"},
+            {"meta": {"status": "success", "txt_file": "001.txt", "language": "en"}})}
+        resp, fake = call_tool("reverse_prompt", {"filename": "001.png", "subfolder": "Neo/Montage",
+                                                 "language": "en"}, routes)
+        self.assertEqual(fake.body("POST", "/rs_prompts/reverse_prompt"),
+                         {"filename": "001.png", "language": "en", "subfolder": "Neo/Montage"})
+        self.assertEqual(text_of(resp), "一位少女站在窗前")
+
+    def test_reverse_prompt_defaults_to_chinese_without_a_subfolder(self):
+        routes = {("POST", "/rs_prompts/reverse_prompt"): sse({"text": "杰作，高分辨率", "kind": "content"})}
+        resp, fake = call_tool("reverse_prompt", {"filename": "a.png"}, routes)
+        body = fake.body("POST", "/rs_prompts/reverse_prompt")
+        self.assertEqual(body["language"], "zh")
+        self.assertNotIn("subfolder", body, "留空是后端自己的 presets 档，不发一个空串过去")
+        self.assertEqual(text_of(resp), "杰作，高分辨率")
+
+    def test_reverse_prompt_refuses_a_language_the_backend_would_fold_to_zh(self):
+        resp = call_tool("reverse_prompt", {"filename": "a.png", "language": "ja"})[0]
+        self.assertTrue(resp["result"]["isError"])
+        self.assertIn("zh / en", text_of(resp))
+
+    def test_voice_clone_copies_the_library_audio_into_input_first(self):
+        routes = {("GET", "/neo_gallery/copy_to_input"): {"success": True, "filename": "voice_20261112.mp3"},
+                  ("POST", "/neo_voice/generate"): {"task_id": "V1", "status": "queued", "warnings": []}}
+        resp, fake = call_tool("voice_clone", {"prompt": "大家好", "ref_audio": "ref.mp3",
+                                               "subfolder": "Neo/Audio"}, routes)
+        self.assertIn(("GET", "/neo_gallery/copy_to_input"), fake.paths())
+        body = fake.body("POST", "/neo_voice/generate")
+        self.assertEqual(body["references"], [{"kind": "input", "value": "voice_20261112.mp3"}])
+        self.assertEqual(body["skill_id"], mcp.VOICE_SKILL_ID)
+        self.assertEqual(json.loads(text_of(resp))["task_id"], "V1")
+
+    def test_voice_clone_uses_an_input_audio_without_copying(self):
+        routes = {("POST", "/neo_voice/generate"): {"task_id": "V2", "status": "queued"}}
+        resp, fake = call_tool("voice_clone", {"prompt": "你好", "ref_audio": "a.wav", "seed": 5}, routes)
+        self.assertNotIn(("GET", "/neo_gallery/copy_to_input"), fake.paths())
+        body = fake.body("POST", "/neo_voice/generate")
+        self.assertEqual(body["references"], [{"kind": "input", "value": "a.wav"}])
+        self.assertEqual(body["seed"], 5)
+        self.assertNotIn("output_prefix", body)
+
+    def test_voice_clone_refuses_a_reference_that_is_not_audio(self):
+        for bad in ("girl.png", "film.mp4"):
+            resp = call_tool("voice_clone", {"prompt": "你好", "ref_audio": bad})[0]
+            self.assertIn("音频", text_of(resp))
+        self.assertEqual(call_tool("voice_clone", {"prompt": "", "ref_audio": "a.wav"})[0][
+            "result"]["isError"], True)
+
+    def test_voice_clone_refuses_a_path_in_ref_audio(self):
+        resp = call_tool("voice_clone", {"prompt": "你好", "ref_audio": "Neo/Audio/a.wav"})[0]
+        self.assertIn("subfolder", text_of(resp))
+
+    def test_voice_clone_backend_error_names_the_channel_the_caller_has(self):
+        # 后端那句报错指的是 Studio 的音频卡片，MCP 调用方没有卡片：报错要给出它能用的那条通道
+        routes = {("POST", "/neo_voice/generate"): http_error(400, "需要参考音频（请先在音频卡片上选择参考音源）")}
+        text = text_of(call_tool("voice_clone", {"prompt": "你好", "ref_audio": "missing.wav"}, routes)[0])
+        self.assertIn("需要参考音频", text)
+        self.assertIn("copy_to_input", text)
+
+    def test_task_status_hits_the_voice_table_with_audio_urls(self):
+        # 语音快照里的 url 是相对地址：链接由这一层拼，与图片 / 视频同一口径
+        routes = {("GET", "/neo_voice/status/V1"): {
+            "status": "succeeded", "prompt": "你好", "seed": 7,
+            "audios": [{"filename": "voice_20261112.mp3", "subfolder": "Voice/2026-11-12",
+                        "url": "/view?filename=voice_20261112.mp3&subfolder=&type=output"}]}}
+        data = json.loads(text_of(call_tool("task_status", {"task_id": "V1"}, routes)[0]))
+        self.assertEqual(data["kind"], "voice")
+        self.assertEqual(data["audios"][0]["url"],
+                         "http://127.0.0.1:8188/view?filename=voice_20261112.mp3"
+                         "&subfolder=Voice%2F2026-11-12&type=output")
+
+    def test_cancel_task_covers_the_voice_task(self):
+        routes = {("POST", "/neo_voice/cancel/V1"): {"task_id": "V1", "status": "cancelled"}}
+        data = json.loads(text_of(call_tool("cancel_task", {"task_id": "V1"}, routes)[0]))
+        self.assertEqual(data["kind"], "voice")
+
+
+# ===========================================================================
 # 导演工具（段序号 1 起 ↔ 端点 0 基）
 # ===========================================================================
 

@@ -3,8 +3,8 @@
 > 🇨🇳 中文: [../mcp.md](../mcp.md)
 
 `studio/mcp_server.py` is a standalone MCP server (stdio transport). An MCP client (Claude Desktop /
-Cursor / your own client) launches it as a subprocess, so an external agent can call Neo Studio's image and
-director capabilities (full film / single segment / assembly).
+Cursor / your own client) launches it as a subprocess, so an external agent can call Neo Studio's image,
+image reverse-prompt, voice-clone and director capabilities (full film / single segment / assembly).
 
 It does not start with ComfyUI and takes no part in node registration: zero relative imports, standard library
 only, and every capability is reached through the local ComfyUI HTTP interface. `stdout` carries JSON-RPC only;
@@ -16,7 +16,7 @@ logs always go to `stderr`.
    plugin v1.2.0 or newer. The Studio desktop runs ComfyUI at `http://127.0.0.1:8188` by default (the desktop's
    own service on 8191 is unrelated to MCP).
 2. Python 3.10+ — the same Python that runs ComfyUI. No extra dependencies.
-3. `generate_prompt` / `director_plan` need an LLM configured in Neo Studio settings.
+3. `generate_prompt` / `reverse_prompt` / `director_plan` need an LLM configured in Neo Studio settings.
 
 ## Setup
 
@@ -24,7 +24,7 @@ logs always go to `stderr`.
 
 ```powershell
 python studio\mcp_server.py --selftest
-# Neo Studio MCP Server v1.3.0 · 21 tools: neo_status, list_skills, ...
+# Neo Studio MCP Server v1.3.0 · 23 tools: neo_status, list_skills, ...
 ```
 
 ### 2. Add it to the MCP client
@@ -54,7 +54,7 @@ the `neo-studio` entry instead of overwriting the file.
 
 ### 3. Confirm in the client
 
-Ask the agent to "list the Neo Studio MCP tools" — 21 tools such as `neo_status` means the wiring works. Asking
+Ask the agent to "list the Neo Studio MCP tools" — 23 tools such as `neo_status` means the wiring works. Asking
 it to call `neo_status` proves ComfyUI is reachable.
 
 ## The Studio MCP servers settings (built-in MCP client)
@@ -107,8 +107,10 @@ Example — expose only the image pipeline:
 | `list_skills` | Skill ids (with `mode` / `requires_ref`, the two fields the reference check reads; a row with `has_workflow=false` has no image template and can only be `generate_prompt`'s `skill_id`; rows carry `category` and `description` clipped to 300 characters, and `q` also matches the `mode` / `category` / `description` values, so `q=t2i` lists `mode=t2i` and `t2i_edit`) |
 | `list_models` | Models and LoRAs scanned for image / video: `q` filters by directory+filename, `group` lists one group, `scope=video` uses the H3 scan, `near=<main model name>` puts the same-directory entries first (every item carries its `dir`), every item of `group=diffusion_models` carries `skills` (the skill ids that family can run, empty when the family word list does not recognize it), plus the `suggested_*` auto-picks |
 | `generate_prompt` | Short idea → finished prompt (uses the LLM, requires a configured model); with `skill_id` the skill's body is this call's system prompt, so the flow written in the body (its `references/` included, read by the server on demand) runs inside the call and the response is what it produces — that is how a body-only skill (`has_workflow=false`) runs |
+| `reverse_prompt` | Image reverse-prompt: write one picture into a text-to-image prompt (uses the LLM, returns text synchronously); the picture is named by `filename` + `subfolder` (an empty `subfolder` is `presets`), and the result is also saved as a same-named `.txt` next to the image — a second call in the same language returns that cache; `language=zh` (default) / `en` |
 | `generate_image` | Submits an image job and returns a `task_id` plus the `skill_id` that run used; `model` / `loras` override that one request only |
-| `task_status` `list_tasks` `cancel_task` | Task snapshot / list / cancel (all five task tables share `task_id`: image / full film / segment / assembly / image storyboard); image snapshots and list rows carry `skill_id` |
+| `voice_clone` | Voice clone (CosyVoice zero-shot): reference audio plus the text to speak, returns a `task_id` immediately; `ref_audio` is an audio name inside `input/`, and a library audio with a `subfolder` is copied there through `/neo_gallery/copy_to_input` first. Output lands in `output/Voice/<date>/` |
+| `task_status` `list_tasks` `cancel_task` | Task snapshot / list / cancel (all six task tables share `task_id`: image / full film / segment / assembly / image storyboard / voice); image snapshots and list rows carry `skill_id`, a succeeded voice snapshot carries `audios` with the output file and its playable URL |
 | `get_media` | Fetch an output file: images (png) and videos (mp4) both return a `/view` URL; base64 bytes only for images with `base64=true` |
 | `list_gallery` `list_recipes` `load_recipe` | Asset library tree, recipe list, single recipe metadata (`results` lists past outputs, including finished films) |
 | `director_recipes` `director_spec` | Director recipe list, `shared` + segment list |
@@ -124,6 +126,21 @@ Example — expose only the image pipeline:
 ```
 neo_status → list_skills (pick skill_id) → generate_image → poll task_status until succeeded
 → get_media (png: URL, add base64=true when bytes are needed)
+```
+
+**Image reverse-prompt (the output is prompt text)**
+
+```
+list_gallery (find the folder holding the picture) → reverse_prompt(filename, subfolder[, language])
+→ the prompt comes back as text and lands in a same-named .txt next to the picture;
+  a second call in the same language returns that cached text
+```
+
+**Voice clone (the output is audio)**
+
+```
+list_gallery (find the folder holding the reference audio) → voice_clone(prompt=<text to speak>, ref_audio=<audio name>, subfolder=<folder>)
+→ poll task_status until succeeded → every audios entry carries filename and a playable url; get_media fetches the audio file
 ```
 
 **Per-run model and LoRA (one request only)**
@@ -188,13 +205,16 @@ The image sentence only runs when the machine has an image skill with a `workflo
 (`has_workflow=true` in `list_skills`).
 
 - "Generate a 1024×1024 image of an orange cat with Neo Studio and give me the picture when it's done."
+- "Reverse the 001.png in the 素材库 folder Neo/Montage into a Chinese prompt and give me the text."
+- "Read this text in the voice of input/ref_voice.wav and give me the audio URL when it's done."
 - "List the director recipes, read the segments of the Red Carpet recipe, regenerate segment 3, stitch the
   film back together and give me the finished film URL."
 - "Turn this script into a 6-segment short film and give me the output filename when it finishes."
 
 ## Conventions
 
-- **Async tasks**: `generate_image`, `director_run`, `segment_run`, `assemble_run` only return a `task_id`.
+- **Async tasks**: `generate_image`, `director_run`, `segment_run`, `assemble_run` and `voice_clone` only return
+  a `task_id`.
   Poll with `task_status` until `succeeded`, then fetch the output; a full film is a multi-segment long job,
   so never wait on it synchronously.
 - **The default film is one 5-second segment**: an agent asked to make a video plans a single segment of
@@ -242,7 +262,7 @@ The image sentence only runs when the machine has an image skill with a `workflo
   paths. Built-in preset recipes are read-only — `director_copy` first, then `director_save`. The keyframes that
   `director_keyframes` renders land in the recipe's `assets/` along the same path the director page uses (add-only),
   and the segment-level references still go through `director_save`.
-- **LLM dependency**: `generate_prompt` and `director_plan` need an LLM configured in Neo Studio settings.
+- **LLM dependency**: `generate_prompt`, `reverse_prompt` and `director_plan` need an LLM configured in Neo Studio settings.
   Without one they return a short error pointing at the settings instead of a fake success.
 
 ## Troubleshooting
@@ -252,7 +272,9 @@ The image sentence only runs when the machine has an image skill with a `workflo
 | No tools in the client | Check the `command` Python path and the script path; read the client's MCP logs (server logs go to `stderr`) |
 | Server exits immediately | A non-loopback ComfyUI URL is refused — set `--comfy-url` |
 | `neo_status` cannot connect | ComfyUI is not running, or the port is wrong |
-| `generate_prompt` / `director_plan` fail | No LLM configured, or the remote channel is unhealthy — follow the returned error in Neo Studio settings |
+| `generate_prompt` / `reverse_prompt` / `director_plan` fail | No LLM configured, or the remote channel is unhealthy — follow the returned error in Neo Studio settings |
+| `reverse_prompt` says Image not found | The picture is not in `presets` and `subfolder` was left empty — fill `subfolder` with the folder name from `list_gallery` |
+| `voice_clone` task fails | This machine has no CosyVoice nodes (`FL_CosyVoice3_*`) or the voice model is not ready — report the snapshot's `error` verbatim instead of substituting an image skill |
 | `task_status` says task not found | Snapshots are pruned after a task finishes; collect output names as soon as it is `succeeded` |
 | A storyboard segment is `skipped` | That segment has no `storyboard_prompt`, so the backend fell back to the video prompt; add a storyboard line or split again with `director_plan` |
 | `director_keyframes` takes very long | Keyframes render one segment at a time; on timeout it returns `running` with a `task_id` — continue with `task_status`, do not resubmit |

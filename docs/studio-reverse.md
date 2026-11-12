@@ -22,3 +22,10 @@ Studio 首页「编辑」板块的卡片「图片反推」进 `#/reverse`（`stu
 
 反推要吃内核那侧的 LLM 链与图片读取路径，桌面端窗口在 ComfyUI 未就绪时把「反推」写成「需要 ComfyUI」，
 点它交桌面端拉起内核，不发一条注定 409 的请求（`app/studio_caps.py` 的 `prompt_reverse` 一位）。
+
+## 智能体与 MCP
+
+同一条接口开在 MCP 工具面上：`reverse_prompt`（`studio/mcp_server.py`）。右栏「智能体」与外部 MCP 客户端
+用的就是这一条工具——图由 `filename` + `subfolder` 指认（`subfolder` 留空是 `presets`），语言走
+`language=zh` / `en`，返回的是提示词正文，落点同样是图片同目录的同名 `.txt`。
+

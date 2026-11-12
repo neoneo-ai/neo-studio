@@ -237,7 +237,7 @@ Neo Studio 独立页面（`web/studio/index.html`）的后端。素材 / 生图 
 |------|------|------|
 | POST | `/neo_agent/run` | 智能体一轮对话，SSE 时间线；body `{text, mode, images, context, preview_side, resume, skill_id}`（`mode` 只认 `plan` / `act`，缺省 `act`；`skill_id` 是输入框 `@` 点名的技能，只认 `^[A-Za-z0-9_.\-]{1,64}$` 的形态，进系统提示词排在焦点链与用户偏好之后，认不认得到由循环里那次 `list_skills` 定；`images` 是输入框附件图，按图片源口径给，最多 6 张；`context` 是界面当前状态，非 dict 整块丢掉；`preview_side` 是这一轮要的采样预览最长边（像素），非数按右栏卡片那档 384，绘画页中间舞台挂着时要 1024，0 与负数是关掉采样预览（后端不读预览表，SSE 不带 `preview` 载荷）；`resume` 带旧会话的 `run_id` 时这一轮接在那条会话后面跑，那条还在跑与查不到都在首帧前 `[ERROR]` 收场），首帧 `run`（带 `run_id`，取消 / 暂停 / 继续整条循环与回答问句都要用），帧 `plan` / `tool_call` / `status` / `tool_result` / `ask` / `paused` / `resumed` / `content`，收尾 `[ERROR]` / `[DONE]` |
 | POST | `/neo_agent/answer` | 回答 `ask` 帧：body `{run_id, ask_id, text}`，把用户选的方向交回正等在 `ask_user` 上的循环；`run_id` / `ask_id` 只收 `run` / `ask` 帧发过的形态，运行收场 404、问句已收场 404 |
-| POST | `/neo_agent/cancel` | 取消：带 `run_id` 停整条智能体循环并掐掉在跑的任务（`run_id` 只收 `run` 帧发过的形态，查不到 404）；带 `task_id` 只掐那一个任务（走 MCP `cancel_task`，图片 / 整片 / 单段 / 拼接四类由协议自己找路由），`task_id` 只收 UUID 形态 |
+| POST | `/neo_agent/cancel` | 取消：带 `run_id` 停整条智能体循环并掐掉在跑的任务（`run_id` 只收 `run` 帧发过的形态，查不到 404）；带 `task_id` 只掐那一个任务（走 MCP `cancel_task`，图片 / 整片 / 单段 / 拼接 / 图片分镜 / 语音六类由协议自己找路由），`task_id` 只收 UUID 形态 |
 | POST | `/neo_agent/pause` | 暂停：body `{run_id}`（校验同 cancel），让循环停在下一个轮次 / 轮询边界，SSE 开着不收尾；在飞的 ComfyUI 任务没有暂停态，边界上掐掉它并交回 `cancelled`，恢复后不自动重发 |
 | POST | `/neo_agent/resume` | 继续：body `{run_id}`（校验同 cancel），放开正等在暂停检查点上的循环；没在暂停时是空操作，重复点「继续」不会把运行推过检查点 |
 | GET | `/neo_agent/sessions` | 「🗂 历史」列表：新的在前，只回摘要（时间 / 模式 / 终态 / 首句 / 工具数 / 产物数 / `reason` 收场原因 / `focus_skill`）；读时顺带收掉落盘超 7 天的会话 |
@@ -253,7 +253,7 @@ Neo Studio 独立页面（`web/studio/index.html`）的后端。素材 / 生图 
 - `context` 只当事实进系统提示词，不当指令：`page` 只认 `gallery` / `director` / `paint` / `edit` / `skills` /
   `settings`（输入页报 `paint`、编辑页报 `edit`，一栏一行，没有「绘画模式」这一档），配方名与素材库目录按 120 字裁剪，
   素材库目录只在 `gallery` / `edit` / `director` 三页上报，`segments` 只取整数；表外的值整行丢掉。
-- `mode=plan` 是计划模式：`generate_image` / `director_run` / `segment_run` / `assemble_run` /
+- `mode=plan` 是计划模式：`generate_image` / `director_run` / `segment_run` / `assemble_run` / `voice_clone` /
   `director_save` / `director_copy` / `cancel_task` 不进 LLM 的工具表，硬调也拒回错误；
   查询类工具照旧可用。
 - `ask_user` 是右栏伪工具，不在 MCP 注册表里：循环发 `ask` 帧（带 `ask_id`、问题与 2-5 个选项）
@@ -265,8 +265,8 @@ Neo Studio 独立页面（`web/studio/index.html`）的后端。素材 / 生图 
 - 附件图只进首个 user 消息（多模态）。粘贴与点选的图按 `kind:"data"`
   的 data URI 给；从素材库卡片拖入的图先经 `/neo_gallery/copy_to_input` 落进 `input/`，再按
   `kind:"input"` 的文件名给。右栏只收后端解得动的图片后缀，素材库里的视频 / 音频卡片在拖入这一步就挡掉。
-- `generate_image` / `director_run` / `segment_run` / `assemble_run` 只回 `task_id`，循环里轮询 `task_status` 到终态，
-  采样步数与整片段号经 `status` 帧发出去；等待上限单图 600 秒、整片 2400 秒。
+- `generate_image` / `director_run` / `segment_run` / `assemble_run` / `voice_clone` 只回 `task_id`，循环里轮询 `task_status` 到终态，
+  采样步数与整片段号经 `status` 帧发出去；等待上限单图与语音 600 秒、整片 2400 秒。
 - 生成中的 `status` 帧可带 `preview`（`{frames:[dataURL…], fps, w, h, step}`）：出片按请求体里的 `preview_side`
   选档（右栏卡片 384、中间舞台 1024），生图是进度预览捕获的那一张，只在载荷推进时挂一次，右栏工具卡与中间舞台
   用它播该步动画。这一份只进界面——会话落盘与 `tool_result` 文本都不带它，LLM 永远看不到帧字节。
@@ -435,10 +435,11 @@ LLM 模式与配置见 [llm.md](llm.md)，技能设计见 [skills.md](skills.md)
 | 工具 | 打到的路由 |
 |------|-----------|
 | `neo_status` | `GET /neo_studio/version` + `GET /queue` |
-| `list_skills` `generate_prompt` | `GET /rs_prompts/skills` + `POST /rs_prompts/stream_generate_prompt`（SSE） |
+| `list_skills` `generate_prompt` `reverse_prompt` | `GET /rs_prompts/skills` + `POST /rs_prompts/stream_generate_prompt`（SSE）+ `POST /rs_prompts/reverse_prompt`（SSE，图片反推，结果写进图片同目录的 `.txt`） |
 | `list_models` `generate_image` `list_tasks` | `GET /neo_image_gen/models` + `POST /neo_image_gen/generate` + `GET /neo_image_gen/tasks`（`list_models` 的 `scope=video` 读 `GET /neo_video_gen/models`，`group=diffusion_models` 时另读 `GET /rs_prompts/skills` 取主模型 ↔ 技能映射；`generate_image` 与 `list_tasks` 的响应带 `skill_id`，就是这一发用的技能） |
-| `task_status` | 生图在 `GET /neo_image_gen/tasks` 整表里按 `task_id` 命中，快照字段原样透传（含 `skill_id`）；整片 / 单段 / 拼接依次探测 `GET /neo_studio/director/{id}` `GET /neo_video_gen/run_segment/{id}` `GET /neo_video_gen/assemble_segments/{id}`，整片附带 `GET /neo_video_gen/director_progress` |
-| `cancel_task` | 依次探测上述四张表的 `…/cancel` |
+| `voice_clone` | `POST /neo_voice/generate`（参考音频在 `input/` 里；带 `subfolder` 时先 `GET /neo_gallery/copy_to_input` 拷一份） |
+| `task_status` | 生图在 `GET /neo_image_gen/tasks` 整表里按 `task_id` 命中，快照字段原样透传（含 `skill_id`）；整片 / 单段 / 拼接 / 图片分镜 / 语音依次探测 `GET /neo_studio/director/{id}` `GET /neo_video_gen/run_segment/{id}` `GET /neo_video_gen/assemble_segments/{id}` `GET /neo_video_gen/storyboard_status/{id}` `GET /neo_voice/status/{id}`，整片附带 `GET /neo_video_gen/director_progress`，语音的 `audios` 附带拼好的 `/view` 链接 |
+| `cancel_task` | 依次探测上述六张表的 `…/cancel` |
 | `get_media` | `GET /view`（产物只经 ComfyUI 读；图片 png 与成片 mp4 同一地址，视频不回传字节） |
 | `list_gallery` | `GET /neo_gallery/list` |
 | `list_recipes` `load_recipe` | `POST /rs_recipes/list` `POST /rs_recipes/load` |

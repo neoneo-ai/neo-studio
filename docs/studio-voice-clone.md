@@ -25,3 +25,11 @@ Studio 首页「开始创作」板块的卡片「声音克隆」进 `#/voice`（
 
 语音生成要吃 ComfyUI 的执行队列，桌面端窗口在 ComfyUI 未就绪时把「生成」写成「需要 ComfyUI」，
 点它交桌面端拉起内核，不发一条注定 409 的请求（`app/studio_caps.py` 的 `voice` 一位）。
+
+## 智能体与 MCP
+
+同一条链开在 MCP 工具面上：`voice_clone`（`studio/mcp_server.py`）。`prompt` 写要说的文字，`ref_audio` 写
+参考音频名——素材库的音频带 `subfolder` 时这一层先经 `/neo_gallery/copy_to_input` 拷进 `input/`，与这页
+选音频那一步同一条通道。它入队即返回 `task_id`，右栏智能体按 `task_status` 轮询到终态，产物在快照的
+`audios` 里。
+

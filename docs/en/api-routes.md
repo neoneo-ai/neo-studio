@@ -271,7 +271,7 @@ included), and the dock never calls a handler directly.
 |--------|-------|-------------|
 | POST | `/neo_agent/run` | One agent turn, SSE timeline; body `{text, mode, images, context, preview_side, resume, skill_id}` (`mode` accepts `plan` / `act`, default `act`; `skill_id` is the skill named with `@` in the composer — accepted only in the form `^[A-Za-z0-9_.\-]{1,64}$`, placed in the system prompt after the focus chain and the user prefs, and whether it exists is settled by the loop's own `list_skills` call; `images` are composer attachments in the image-source shape, up to 6; `context` is the current UI state, dropped whole when it is not an object; `preview_side` is the preview longest side (px) this turn wants — non-numeric values fall back to the 384 dock tier, the painting page's center stage asks for 1024, and 0 or a negative switches the sampling preview off (the backend does not read the preview tables, the SSE carries no `preview` payload); `resume` carries the `run_id` of a saved session and this turn continues after it — that run still going, or an unknown session, ends with `[ERROR]` before the first frame), first frame `run` (carries the `run_id` the cancel / pause / resume / answer routes need), frames `plan` / `tool_call` / `status` / `tool_result` / `ask` / `paused` / `resumed` / `content`, ending with `[ERROR]` / `[DONE]` |
 | POST | `/neo_agent/answer` | Answer an `ask` frame: body `{run_id, ask_id, text}` hands the user's choice back to the loop parked on `ask_user`; `run_id` / `ask_id` accept only the shapes the `run` / `ask` frames issued — finished run is 404, finished question is 404 |
-| POST | `/neo_agent/cancel` | Cancel: with `run_id` it stops the whole agent loop and kills the in-flight task (`run_id` accepts only the shape the `run` frame issued; unknown id is 404); with `task_id` it kills just that task (through MCP `cancel_task`, which resolves the image / film / segment / assemble route itself), `task_id` accepts UUID shapes only |
+| POST | `/neo_agent/cancel` | Cancel: with `run_id` it stops the whole agent loop and kills the in-flight task (`run_id` accepts only the shape the `run` frame issued; unknown id is 404); with `task_id` it kills just that task (through MCP `cancel_task`, which resolves the image / film / segment / assembly / storyboard / voice route itself), `task_id` accepts UUID shapes only |
 | POST | `/neo_agent/pause` | Pause: body `{run_id}` (validated like cancel) parks the loop at the next turn / poll boundary and leaves the SSE stream open; an in-flight ComfyUI task has no paused state, so the boundary kills it and returns `cancelled`, and the resumed loop does not resend it |
 | POST | `/neo_agent/resume` | Resume: body `{run_id}` (validated like cancel) releases the loop parked on the pause checkpoint; a no-op when nothing is paused, so clicking Resume repeatedly never pushes a run past the checkpoint |
 | GET | `/neo_agent/sessions` | The **🗂 History** list: newest first, compact summaries only (time / mode / status / first line / tool count / produced-media count / closing `reason` / `focus_skill`); reading it also drops sessions older than 7 days |
@@ -291,7 +291,7 @@ included), and the dock never calls a handler directly.
   per page and no paint-mode field), recipe names and library paths are clipped to 120 characters, the library path
   is reported only on `gallery` / `edit` / `director`, `segments` is taken as an integer, and any value
   outside those tables drops its whole line.
-- `mode=plan` is plan mode: `generate_image` / `director_run` / `segment_run` / `assemble_run` /
+- `mode=plan` is plan mode: `generate_image` / `director_run` / `segment_run` / `assemble_run` / `voice_clone` /
   `director_save` / `director_copy` / `cancel_task` stay out of the LLM's tool list, and calling one anyway is
   refused with an error; the query tools stay available.
 - `ask_user` is a dock-only pseudo tool, absent from the MCP registry: the loop emits an `ask` frame (with
@@ -306,9 +306,9 @@ included), and the dock never calls a handler directly.
   Pasted and picked files arrive as `kind: "data"` data URIs; a card dragged in from the library is copied into
   `input/` through `/neo_gallery/copy_to_input` first and arrives as `kind: "input"` with that filename. The dock
   takes only the image suffixes the backend decodes — video and audio cards are refused at the drop.
-- `generate_image` / `director_run` / `segment_run` / `assemble_run` return a `task_id` only; the loop polls
+- `generate_image` / `director_run` / `segment_run` / `assemble_run` / `voice_clone` return a `task_id` only; the loop polls
   `task_status` to a terminal state and emits sampling steps and film segment numbers through `status` frames.
-  The wait cap is 600s for a single image and 2400s for a whole film.
+  The wait cap is 600s for a single image and a voice job, 2400s for a whole film.
 - A running `status` frame can carry `preview` (`{frames:[dataURL…], fps, w, h, step}`): a film takes the `h3_preview`
   tier picked by the request's `preview_side` (384 for the dock card, 1024 for the center stage), an image task takes
   the captured progress image, attached once per payload advance, which is what the dock's tool card and the center
@@ -508,10 +508,11 @@ loopback). Tool list, parameters, and usage conventions: [mcp.md](mcp.md).
 | Tool | Routes it hits |
 |------|----------------|
 | `neo_status` | `GET /neo_studio/version` + `GET /queue` |
-| `list_skills` `generate_prompt` | `GET /rs_prompts/skills` + `POST /rs_prompts/stream_generate_prompt` (SSE) |
+| `list_skills` `generate_prompt` `reverse_prompt` | `GET /rs_prompts/skills` + `POST /rs_prompts/stream_generate_prompt` (SSE) + `POST /rs_prompts/reverse_prompt` (SSE; image reverse-prompt, the result is written into the `.txt` next to the image) |
 | `list_models` `generate_image` `list_tasks` | `GET /neo_image_gen/models` + `POST /neo_image_gen/generate` + `GET /neo_image_gen/tasks` (`list_models` with `scope=video` reads `GET /neo_video_gen/models`, and with `group=diffusion_models` it also reads `GET /rs_prompts/skills` for the main-model ↔ skill mapping; the `generate_image` and `list_tasks` responses carry `skill_id`, the skill that run used) |
-| `task_status` | Image generation is matched by `task_id` inside `GET /neo_image_gen/tasks`, with the snapshot fields passed through unchanged (including `skill_id`); film / segment / assemble probe `GET /neo_studio/director/{id}`, `GET /neo_video_gen/run_segment/{id}`, `GET /neo_video_gen/assemble_segments/{id}` in order, with `GET /neo_video_gen/director_progress` attached for the film |
-| `cancel_task` | Probes the `…/cancel` route of those four tables in order |
+| `voice_clone` | `POST /neo_voice/generate` (the reference audio lives in `input/`; with a `subfolder` it is copied there by `GET /neo_gallery/copy_to_input` first) |
+| `task_status` | Image generation is matched by `task_id` inside `GET /neo_image_gen/tasks`, with the snapshot fields passed through unchanged (including `skill_id`); film / segment / assembly / storyboard / voice probe `GET /neo_studio/director/{id}`, `GET /neo_video_gen/run_segment/{id}`, `GET /neo_video_gen/assemble_segments/{id}`, `GET /neo_video_gen/storyboard_status/{id}`, `GET /neo_voice/status/{id}` in order, with `GET /neo_video_gen/director_progress` attached for the film and the voice `audios` given a built `/view` link |
+| `cancel_task` | Probes the `…/cancel` route of those six tables in order |
 | `get_media` | `GET /view` (output is read through ComfyUI only; png images and mp4 films share one address, video bytes are not returned) |
 | `list_gallery` | `GET /neo_gallery/list` |
 | `list_recipes` `load_recipe` | `POST /rs_recipes/list` `POST /rs_recipes/load` |

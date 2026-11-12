@@ -59,7 +59,8 @@ logger = logging.getLogger("NeoStudio")
 routes = web.RouteTableDef()
 
 # 入队即返回 task_id 的异步工具：循环里要轮询到终态，不能把一次 tools/call 当同步结果用
-TASK_TOOLS = ("generate_image", "director_run", "segment_run", "assemble_run")
+# 语音克隆也在这条链上：它的产物是音频，轮询上限按生图那一档（合成一段话是分钟级，不是整片那一级）
+TASK_TOOLS = ("generate_image", "director_run", "segment_run", "assemble_run", "voice_clone")
 # 本轮附件图要注入参考的工具：出图直接进 references，出片的参考集归配方拥有（segment_run /
 # director_run 没有参考入参），所以出片侧只写本轮新建配方的 characters 与段 refs
 REF_TOOLS = ("generate_image", "director_plan", "director_save")
@@ -130,7 +131,8 @@ MENTION_NAME_CLIP = 200
 MENTION_TEXT_CLIP = 1200    # 点名图像 / 视频提示词时随点名带回来的正文上限
 # 计划模式不许执行的工具：生成入队、配方写、取消在跑的任务，全是改状态的动作
 PLAN_BLOCKED_TOOLS = frozenset(("generate_image", "director_run", "segment_run", "assemble_run",
-                                "director_save", "director_copy", "director_keyframes", "cancel_task"))
+                                "voice_clone", "director_save", "director_copy", "director_keyframes",
+                                "cancel_task"))
 # 出片三类的产物是 mp4，快照 succeeded 后带 filename + 产物子目录，取图按它拼 /view
 FILM_KINDS = ("director", "segment", "assemble")
 CANCELLED_TEXT = "已取消：智能体循环与在跑的任务已停止"
@@ -292,7 +294,7 @@ PLAN_TOOL = {"type": "function", "function": {
 PLAN_MODE_NOTE = """
 
 本轮是计划模式（Plan）：只查不跑。
-- generate_image / director_run / segment_run / assemble_run / director_save / director_copy /
+- generate_image / director_run / segment_run / assemble_run / voice_clone / director_save / director_copy /
   director_keyframes / cancel_task 这一类改状态的工具本轮调不到，调用会被后端拒回错误。
 - 要看现状就用查询类工具查清：neo_status、list_skills、list_models、list_recipes、
   director_recipes、director_spec、list_gallery。
@@ -1559,7 +1561,7 @@ async def _task_and_wait(client, tool: str, args: dict, emit, run) -> str:
     if not task_id:
         return snap                      # 同步出图的后端快照里已带 images
     run.task_id = task_id
-    cap = TASK_WAIT_SEC if tool == "generate_image" else FILM_WAIT_SEC
+    cap = TASK_WAIT_SEC if tool in ("generate_image", "voice_clone") else FILM_WAIT_SEC
     waited = 0.0
     last_preview = None
     while True:

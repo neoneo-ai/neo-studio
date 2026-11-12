@@ -5,6 +5,15 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 ## [Unreleased]
 
 ### Added
+- **The agent's MCP surface reaches 图片反推 and 声音克隆.** Two tools join the MCP registry (now 23):
+  `reverse_prompt` writes one library image into a prompt — the picture is named by `filename` + `subfolder`
+  (empty `subfolder` is `presets`), `language=zh` / `en`, and the text lands in the same-named `.txt` next to the
+  image — and `voice_clone` takes a reference audio plus the text to speak and returns a `task_id`: a library audio
+  is copied into `input/` through the channel the 声音克隆 page uses, the voice task joins the shared
+  `task_status` / `cancel_task` probe chain, and `get_media` hands back the finished audio URL. The right-dock
+  智能体 gets both from the same registry — 语音 runs as an async task the loop polls to the terminal state and is
+  blocked in 计划模式 — and an external MCP client gets them through the `--tools` allowlist like any other.
+  Covered by `studio/tests/test_mcp_server.py` and `studio/tests/test_agent.py`.
 - **Two more apps on the home page: 图片反推 and 声音克隆.** The home page gains two entry cards — 图片反推 in
   the Edit section and 声音克隆 in Create — and each opens its own full page: pick an image in the library and
   reverse it into a prompt (streamed token by token, saved as a `.txt` next to the image, one click to copy,
@@ -55,6 +64,15 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   the layout cases in `app/tests/test_studio_server.py`.
 
 ### Changed
+- **The shell pages scroll on a thin ghost slot.** 首页 / 素材 / 导演 (and every other Studio page) no longer
+  carry the default system scrollbar: the page container `.ns-page` is 8px (`scrollbar-width: thin`), its thumb
+  is transparent at rest and lands on `#555` only while the pointer is on the page - the same treatment the asset
+  library and recipe modals already use. `scrollbar-width` and `scrollbar-color` are inherited, so the gallery's
+  Civitai column, the skill / custom-parameter panels and the director editor panels thin down with the page
+  instead of each container carrying its own rule; the zoomed director timeline keeps its visible horizontal bar
+  (it is the drag handle). The home keeps `scrollbar-gutter: stable`, so its centered card column does not shift
+  left and right when 编辑首页 adds its bar or a card toggle changes the page height. Covered by the home layout
+  cases in `studio/tests/js/studio-desktop.test.mjs`.
 - **A new home card picks its icon from the icons themselves.** In the custom-card dialog the icon is a grid of icons
   (`.ns-home-f-icons` with one `.ns-home-icon-swatch` per candidate, 24 of them) instead of a dropdown of English icon
   names: the picked swatch lights up its border, the icon name stays in the tooltip, and the row spans both dialog

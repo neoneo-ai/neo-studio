@@ -171,6 +171,18 @@ body {
 .ns-body { flex: 1; display: flex; min-height: 0; }
 .ns-view { flex: 1; min-width: 0; overflow: hidden; position: relative; }
 .ns-page { height: 100%; overflow: auto; padding: 16px; }
+/* 外壳页滚动条（首页 / 素材 / 导演 / 绘画 / 视频 / 设置…）：细槽 8px、平时隐形，指针进页才落 #555，
+   与素材库 / 配方弹窗滚动条同一套。素材页与导演页可见的那根条就是这一层的（画廊宿主 height:100% 不滚，
+   导演页 .ns-director 的 min-height / min-width 在矮窗窄窗也是这一层出滚）。scrollbar-width 与
+   scrollbar-color 是继承属性：画廊的 Civitai 栏 / 技能与自定参数面板 / 归类列表、导演编辑器面板这些
+   自滚容器跟着收细隐形，不用逐容器补规则。时间轴放大态 .neo-dtl-scroll.neo-dtl-zoomed 那条可见横条
+   是刻意的（它是拖动把手），元素自身声明压过继承，不在这条规则的作用里 */
+.ns-page { scrollbar-width: thin; scrollbar-color: transparent transparent; }
+.ns-page:hover { scrollbar-color: #555 transparent; }
+.ns-page::-webkit-scrollbar { width: 8px; }
+.ns-page::-webkit-scrollbar-track { background: transparent; }
+.ns-page::-webkit-scrollbar-thumb { background: transparent; border-radius: 4px; }
+.ns-page:hover::-webkit-scrollbar-thumb { background: #555; }
 /* 素材页顶部不留内边距：sticky 停在容器 padding 内侧，上方会露出一条滚动的缩略图；顶部间距由工具条自己的 padding 提供 */
 .ns-page:has(.ns-gallery-host) { padding-top: 0; }
 .ns-hidden { display: none !important; }
@@ -947,6 +959,9 @@ body {
 
 /* ====== 首页：意图卡片（大字标题 + 生成三卡 + 素材三卡） ====== */
 .ns-home { padding: 30px 28px 56px; position: relative; }
+/* 首页槽位钉住（滚动条本身收在上面的 .ns-page 档）：进编辑态多出那条 sticky 细栏、卡片显隐改掉页高时
+   溢出开关随之起落，居中内容列（margin-inline: auto）不被槽宽顶得左右跳 */
+.ns-home { scrollbar-gutter: stable; }
 /* 内容列宽随窗口放缩：窄窗口保住 1020px 老档，大窗口一路放宽到 1560px，
    不再把整页钉死在 1020px 居中、两边各空出一屏 */
 .ns-home-hero, .ns-home-inner { max-width: clamp(1020px, calc(64vw + 248px), 1560px); margin-inline: auto; }
