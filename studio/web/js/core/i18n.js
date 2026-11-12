@@ -302,6 +302,8 @@ const EN = {
     "{n} 秒": "{n} s",
     "352p 横屏": "352p landscape", "432p 横屏": "432p landscape", "576p 横屏": "576p landscape",
     "720p 横屏": "720p landscape", "768p 横屏": "768p landscape", "1080p 横屏": "1080p landscape",
+    "352p 竖屏": "352p portrait", "432p 竖屏": "432p portrait", "576p 竖屏": "576p portrait",
+    "720p 竖屏": "720p portrait", "768p 竖屏": "768p portrait", "1080p 竖屏": "1080p portrait",
     "浏览与管理全部生成素材": "Browse and manage every generated asset",
     "管理预设与技能包": "Manage presets and skill packs",
     "生成默认值与界面语言": "Generation defaults and UI language",

@@ -119,6 +119,22 @@ test("视频复用：出视频页没建过也照跳——建页那一刻这一�
     assert.ok(!toastTexts().some((s) => s.includes("出视频页尚未就绪")), "交得出去就不说「未就绪」");
 });
 
+// 竖屏那一发存在副文件里就是 "768,1344"：面板下拉认得它才进清单、才填回，「再拍一遍」照原样发出去
+test("视频复用：竖屏尺寸照副文件那一发填回面板，原样进 payload", async () => {
+    await boot();
+    await gotoVideo();
+    const filled = await reuse({
+        video: true, skill: "minimax_h3_t2v", prompt: "竖屏的那一发",
+        seed: 9, width: 768, height: 1344, duration: 5,
+    });
+    assert.equal(sizeSel().value, "768,1344", "竖屏尺寸在面板下拉里认得出");
+    assert.ok(filled.includes("出片尺寸"), "竖屏尺寸进「已复用」清单");
+    click(runBtn());
+    await settle();
+    assert.deepEqual([videoPosts().at(-1).body.width, videoPosts().at(-1).body.height], [768, 1344],
+        "payload 带竖屏宽高");
+});
+
 test("视频复用：首尾帧技能整发填回面板，值原样进 payload，提示列出填了的项", async () => {
     await boot();
     await gotoVideo();

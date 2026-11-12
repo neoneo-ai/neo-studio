@@ -11,7 +11,7 @@ import { configureCanvasOrigin } from "../js/core/canvas-origin.js";
 
 import "../gallery.js";   // 注册 comfy.neo.gallery 扩展（NeoGallery + 侧栏 tab 定义）
 import { setDirectorEditorHost, openDirectorEditor, DIRECTOR_RECIPE_SAVED_EVENT, SEG_MODES, MODE_LABELS, LEGACY_MODE_MAP } from "../director.js";
-import { setPaintHost, openGenMaterialDialog, openImageEditDialog, openImageEditMode, setVideoReuseOpen, setVideoPageJump, openVideoReuse, reuseModelOverlay, chipButton, skillParamsChip } from "../gallery-gen.js";
+import { setPaintHost, openGenMaterialDialog, openImageEditDialog, openImageEditMode, setVideoReuseOpen, setVideoPageJump, openVideoReuse, reuseModelOverlay, chipButton, ratioGlyph, skillParamsChip } from "../gallery-gen.js";
 import { createFramePlayer, DOCK_PREVIEW_SIDE, AGENT_PREVIEW_SIDE } from "../live-preview.js";
 import { createRecipesPanel, listRecipes } from "../recipes.js";
 import { listVideoSkills } from "../recipes.js";
@@ -1069,9 +1069,15 @@ function initHomeLayout() {
 // 独立于导演多段流程：不建配方、不读配方，参数在本页 composer 里现填，提交后端简单视频接口。
 // 版面照 ArtCraft 的 Create Video：整页是舞台，空着时正中盖一句起手提示（版式同绘画页 idle），
 // 底部浮一张胶囊 composer（素材方块 + 提示词 + 芯片行 + 生成钮）；出片后提示淡出，成片卡片进舞台滚动。
+// 分辨率档就是 MiniMax H3 的画布档（短边 768、面积上限 768×1344，官方节点按轴 32 对齐）：每一档横竖
+// 成对排在一起，竖屏就是同一档宽高对调——像素量与对齐要求同档同值，模型侧不需要第二条解析路
 const VIDEO_SIZE_CHOICES = [
-    [624, 352, "352p 横屏"], [768, 432, "432p 横屏"], [1024, 576, "576p 横屏"],
-    [1280, 720, "720p 横屏"], [1344, 768, "768p 横屏"], [1920, 1080, "1080p 横屏"],
+    [624, 352, "352p 横屏"], [352, 624, "352p 竖屏"],
+    [768, 432, "432p 横屏"], [432, 768, "432p 竖屏"],
+    [1024, 576, "576p 横屏"], [576, 1024, "576p 竖屏"],
+    [1280, 720, "720p 横屏"], [720, 1280, "720p 竖屏"],
+    [1344, 768, "768p 横屏"], [768, 1344, "768p 竖屏"],
+    [1920, 1080, "1080p 横屏"], [1080, 1920, "1080p 竖屏"],
 ];
 const VIDEO_DUR_CHOICES = [3, 5, 8, 10, 15];
 const VIDEO_MAX_REF = 9;   // 参考图上限（与 H3 参考节点 image 槽一致）
@@ -1275,7 +1281,8 @@ function buildVideo(el) {
     seedRoll.onclick = () => { seedIn.value = String(Math.floor(Math.random() * 1e15)); };
 
     // 芯片行就是会话页那枚工厂的产物：胶囊 chip + 从上方浮出的选项菜单，原生 select 收在壳里当状态容器
-    const sizeChip = chipButton(sizeSel, { icon: "ratio" });
+    // 分辨率 chip 用比例 glyph（与绘画页比例 chip 同一枚）：选中竖屏档时方框立起来，不看字也知道是竖屏
+    const sizeChip = chipButton(sizeSel, { glyph: ratioGlyph() });
     const durChip = chipButton(durSel, { icon: "clock" });
     const chips = [skillChip, sizeChip, durChip];
     for (const c of chips) c.el.classList.add("ns-video-chip");

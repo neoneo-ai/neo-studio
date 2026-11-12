@@ -182,6 +182,11 @@ bottom the panel opens upward, so main model / steps / "Done" never end up below
 - Skills with `requires_ref: true` are blocked in the frontend when material is missing: a storyboard skill
   without a first / last frame, or a full-reference skill without a reference image, sends nothing and the
   status line names what is missing.
+- Every tier in the resolution chip has a landscape and a portrait entry: `352p / 432p / 576p / 720p /
+  768p / 1080p`, one entry per MiniMax H3 canvas step (short edge 768, area cap 768×1344); portrait is the
+  same tier with width and height swapped, so `768p` portrait is `768×1344`. The chip carries the drawing
+  page's ratio glyph, which stands tall on a portrait tier. The picked size goes out in the body as
+  `width` / `height`, and Regenerate fills a portrait size stored in the side file back into the panel.
 
 ### Template variables
 

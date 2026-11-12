@@ -12,7 +12,7 @@ import { actionToast } from "./toast.js";
 import { t } from "./js/core/i18n.js";
 import {
     setPaintHost, chipButton, skillParamsChip, reuseModelOverlay, openImageEditMode,
-    notifyPrefillFilled,
+    notifyPrefillFilled, ratioGlyph,
 } from "./gen-utils.js";
 import {
     buildCharacterSheetRequest, buildStoryboardGridPrompt, buildStoryboardGridRequest,
@@ -94,5 +94,5 @@ export {
     setPaintHost, chipButton, skillParamsChip, reuseModelOverlay, openImageEditMode,
     buildCharacterSheetRequest, buildStoryboardGridPrompt, buildStoryboardGridRequest,
     openStoryboardDialog, openReversePromptDialog, openLoraTagDialog, openImageEditDialog,
-    openGenMaterialDialog,
+    openGenMaterialDialog, ratioGlyph,
 };

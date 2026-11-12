@@ -5,6 +5,12 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 ## [Unreleased]
 
 ### Added
+- **The Video page shoots vertical.** The 分辨率 chip on the video page lists a portrait entry for every tier:
+  352p / 432p / 576p / 720p / 768p / 1080p, each portrait tier the same tier with width and height swapped
+  (768p portrait is 768×1344). The chip shows the drawing page's ratio rectangle, so a portrait tier reads
+  tall without reading the label, and the finished clip is height-capped in the stage instead of stretching
+  the card to twice the window. The picked size goes into the run, and 再来一发 fills a saved portrait size
+  back into the panel. Covered by `studio/tests/js/studio-video.test.mjs` and `studio/tests/js/video-reuse.test.mjs`.
 - **The Studio home scales with the window.** The content column grows from 1020px up to 1560px as the window
   widens instead of staying pinned at 1020px in a sea of empty side margins, and the hero title and card type
   scale up with it. In windows 1400px and wider, the section labels (开始创作 / 编辑 / 素材与配置) move from

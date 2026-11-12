@@ -120,11 +120,12 @@ export function storyPanelRoot(host, overlayClass, kind) {
     return { root, embedded: true, host };
 }
 
-/** 宽高比 glyph：描边小方框按选中比例定形（16:9 出扁长框、9:16 出瘦高框），chip 上少写字也知道是哪一项 */
+/** 宽高比 glyph：描边小方框按选中比例定形（16:9 出扁长框、9:16 出瘦高框），chip 上少写字也知道是哪一项。
+ *  值两种写法都认：生图比例 chip 是 "16:9"，出视频页的分辨率 chip 是那一项的像素值 "1344,768" */
 export function ratioGlyph() {
     const el = $el("span", { className: "neo-gallery-gm-chip-glyph" });
     const sync = (v) => {
-        const [a, b] = String(v || "1:1").split(":").map(Number);
+        const [a, b] = String(v || "1:1").split(/[:,]/).map(Number);
         if (!a || !b) return;
         el.style.width = `${a >= b ? 15 : Math.max(6, Math.round(15 * a / b))}px`;
         el.style.height = `${a >= b ? Math.max(6, Math.round(15 * b / a)) : 15}px`;

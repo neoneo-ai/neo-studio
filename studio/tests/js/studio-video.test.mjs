@@ -171,6 +171,12 @@ test("视频页：进页铺好舞台 + 起手提示 + 底部胶囊（三方块 /
     assert.equal(document.querySelector(".ns-video .ns-video-count").textContent, "0 / ∞", "字数计数应从 0 起");
     assert.equal(document.querySelectorAll(".ns-video .ns-video-chip").length, 4, "芯片行应有技能 / 分辨率 / 时长 / 种子四颗");
     assert.ok(sizeSel() && durSel(), "应有分辨率与时长下拉");
+    // 分辨率档横竖成对：同一档对调宽高就是竖屏那一枚；默认仍是 768p 横屏
+    const sizeOpts = [...sizeSel().options].map((o) => o.value);
+    assert.deepEqual(sizeOpts, ["624,352", "352,624", "768,432", "432,768", "1024,576", "576,1024",
+        "1280,720", "720,1280", "1344,768", "768,1344", "1920,1080", "1080,1920"],
+        "每一档横屏都要有宽高对调的竖屏那一枚");
+    assert.equal(sizeSel().value, "1344,768", "默认出片尺寸仍是 768p 横屏");
     assert.ok(seedBox(), "应有种子输入");
     assert.ok(runBtn(), "应有生成钮");
     assert.ok(statusEl(), "应有状态行");
@@ -429,6 +435,29 @@ test("视频页：换技能重放该技能自定参数，填进面板的覆盖�
     await settle();
     assert.equal(videoPosts().at(-1).body.model, "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
         "手填的主模型跟着进 payload");
+});
+
+// 竖屏档的落点：菜单里要点得着、写回下拉、随 payload 发出（分辨率 chip 与绘画页比例 chip 共用同一枚 glyph，
+// 竖屏值 "352,624" 也要把方框立起来，chip 上不读字也知道是竖屏）
+test("视频页：分辨率菜单列出竖屏档，选中的竖屏档随 payload 发出、chip 比例框立起来", async () => {
+    await boot();
+    await clickTab("video");
+    await settle();
+    const sizeChip = sizeSel().parentElement.querySelector(".neo-gallery-gm-chip-btn");
+    promptBox().value = "一只陶瓷杯在木桌上慢慢转起来";
+    pickSkill("minimax_h3_t2v");
+    click(sizeChip);
+    const portrait = [...sizeMenu().querySelectorAll(".neo-gallery-gm-menu-item")]
+        .find((i) => i.textContent.includes("竖屏"));
+    assert.ok(portrait, "分辨率菜单应列出竖屏那一枚");
+    click(portrait);
+    assert.equal(sizeSel().value, "352,624", "点竖屏项写回下拉");
+    const glyph = sizeChip.querySelector(".neo-gallery-gm-chip-glyph");
+    assert.ok(parseFloat(glyph.style.height) > parseFloat(glyph.style.width), "竖屏档的比例框应是瘦高的");
+    click(runBtn());
+    await settle();
+    const body = videoPosts().at(-1).body;
+    assert.deepEqual([body.width, body.height], [352, 624], "payload 带竖屏宽高");
 });
 
 test("视频页：技能要参考素材时缺素材不发请求，状态行说清缺哪一样", async () => {

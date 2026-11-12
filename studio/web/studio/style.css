@@ -1161,7 +1161,8 @@ body {
     gap: 16px; align-content: start;
 }
 .ns-video-clip { min-width: 0; background: var(--ns-panel); border: 1px solid var(--ns-border); border-radius: 10px; overflow: hidden; }
-.ns-video-player { display: block; width: 100%; background: #000; }
+/* 竖屏成片（768×1344 那档）满宽铺满会长成两屏高，整页舞台一路滚到底：限高让画面居中、两侧留黑，卡片与横屏同高 */
+.ns-video-player { display: block; width: 100%; max-height: min(62vh, 620px); background: #000; }
 .ns-video-clip-meta { display: flex; align-items: center; gap: 10px; padding: 6px 10px; font-size: 12px; color: var(--ns-dim); }
 .ns-video-clip-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ns-video-open { margin-left: auto; flex: none; color: var(--ns-accent); font-size: 12px; }
