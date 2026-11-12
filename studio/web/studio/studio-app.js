@@ -27,6 +27,8 @@ import { createPairPanel } from "../js/core/pair-access.js";
 import { initQueuePanel, setQueueOnline, queueTrack } from "../queue-panel.js";
 import { createPoseView } from "../pose/pose.js";
 import { createFramesView } from "../frames/frames.js";
+import { createReverseView } from "../reverse-prompt/reverse-prompt.js";
+import { createVoiceCloneView } from "../voice-clone/voice-clone.js";
 import { HOME_SECTIONS, createHomeInlineEditor, heroText, layoutSections, loadHomeLayout, normalizeLayout, sectionCards, sectionOrder, visibleCards } from "./home-layout.js";
 
 const view = document.getElementById("ns-view");
@@ -258,6 +260,26 @@ function openFramesMaterial(onPick) {
 
 // 抽帧页与姿势页不共享任何东西：取用同一套弹窗，抽帧自己在浏览器里做（见 studio/web/frames/frames.js）
 const buildFrames = createFramesView({ api, $el, toast, openMaterial: openFramesMaterial });
+
+/** 素材库取用一次就收窗：反推页要的是图，声音克隆页要的是音频，各自认各自那一类 */
+function openMaterialOnce(scope, accept, onPick) {
+    openLibModal(scope, (picked) => {
+        onPick(picked);
+        libModal?.close();
+    }, accept);
+}
+
+// 两页都只从首页的卡进（顶栏没有这两枚页签）：运行按钮交 gateRunButton，能力缺时点它引导启动内核
+const buildReverse = createReverseView({
+    api, $el, toast,
+    openMaterial: (onPick) => openMaterialOnce("reverse", "image", onPick),
+    gateRun: gateRunButton,
+});
+const buildVoiceClone = createVoiceCloneView({
+    $el,
+    openMaterial: (onPick) => openMaterialOnce("voice", "audio", onPick),
+    gateRun: gateRunButton,
+});
 
 onSidebarTabChange((id) => {
     if (currentView !== "director" && currentView !== "edit") return;
@@ -2226,6 +2248,8 @@ const RUN_GATES = [
     [".neo-director-regen-run", "segment", t("生成这一段")],
     [".neo-director-merge-run", "segment", t("拼回成片")],
     [".ns-paint .neo-gallery-story-btn-primary", "image_gen", t("生成")],   // 绘画页文生图与编辑页图片编辑面板的生成
+    [".ns-reverse-run", "prompt_reverse", t("反推")],
+    [".ns-voice-run", "voice", t("生成")],
 ];
 
 // 生成按钮改写成「需要 ComfyUI」：不发请求，点一下引导启动（须在原 handler 之前注册）
@@ -2700,6 +2724,8 @@ function route() {
     else if (name === "agent") ensureView("agent", buildAgentPage);
     else if (name === "pose") ensureView("pose", buildPose);
     else if (name === "frames") ensureView("frames", buildFrames);
+    else if (name === "reverse") ensureView("reverse", buildReverse);
+    else if (name === "voice") ensureView("voice", buildVoiceClone);
     else if (name === "settings") {
         ensureView("settings", buildSettings);
         // 深链 #/settings?tab=mcp：智能体页「MCP」入口跳来这，视图常驻时也要落到那一栏

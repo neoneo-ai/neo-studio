@@ -110,12 +110,13 @@ test("默认落地首页：意图卡片挂满主区，素材卡直达素材页",
         ["开始创作", "编辑", "素材与配置"],
         "首页分创作与编辑两板块，素材与配置收最后一节");
     assert.deepEqual([...home.querySelectorAll(".ns-home-card-title")].map((e) => e.textContent),
-        ["生成图片", "生成视频", "导演视频", "3D 姿势", "智能体",
-            "图片编辑", "扩图", "局部", "删除", "机位", "融合", "姿势", "视频抽帧",
+        ["生成图片", "生成视频", "导演视频", "3D 姿势", "智能体", "声音克隆",
+            "图片编辑", "扩图", "局部", "删除", "机位", "融合", "姿势", "视频抽帧", "图片反推",
             "素材库", "技能", "设置"],
-        "编辑板块的直达卡与图片编辑面板那一发模式一一对齐");
+        "编辑板块的直达卡与图片编辑面板那一发模式一一对齐；声音克隆与图片反推两张卡在这，顶栏没有它们的页签");
 
-    const libCard = [...home.querySelectorAll(".ns-home-card")][13];
+    const libCard = [...home.querySelectorAll(".ns-home-card")]
+        .find((c) => c.querySelector(".ns-home-card-title")?.textContent === "素材库");
     libCard.click();
     await flush();
     assert.ok(home.classList.contains("ns-hidden"), "跳素材页后首页应收起");
@@ -746,5 +747,9 @@ test("顶栏结构：七枚页签，队列与设置是图标位，技能与智�
                  "队列入口钮面只有徽标：图标由 queue-panel.js 注入，徽标是那枚计数");
     assert.ok(!html.includes("ns-agent-toggle"), "智能体入口不在顶栏：首页创造区的卡是它唯一的入口");
     assert.ok(!css.includes(".ns-agent-toggle"), "顶栏不再有智能体按钮的样式");
+    assert.ok(!html.includes('data-tab="voice"') && !html.includes('data-tab="reverse"'),
+              "声音克隆与图片反推不占页签位：首页那两张卡是这两页唯一的入口");
 });
+
+
 

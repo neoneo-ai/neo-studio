@@ -15,7 +15,7 @@ const studioBody = `<div class="ns-header"></div><div id="ns-view"></div><span c
 
 const OFFLINE_CAPS = {
     image_gen: false, storyboard: false, voice: false, segment: false,
-    director: false, grid_split: true, memory: false, repair: false,
+    director: false, grid_split: true, memory: false, repair: false, prompt_reverse: false,
 };
 
 function mockOfflineDesktop() {
@@ -394,4 +394,6 @@ test("ComfyUI 页里「⤒ 主画布编辑」照常交接：开 /?neo_wf_edit=<i
     assert.deepEqual(opened, ["/?neo_wf_edit=image_gen"]);
     assert.equal(appState.toasts.length, 0, "就绪页不该出「需要 ComfyUI」提示");
 });
+
+
 

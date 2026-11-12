@@ -1,0 +1,192 @@
+/* reverse.css — 「图片反推」页：工具条 / 参考图预览 / 结果框与语言 chip / 起手卡片。
+   颜色一律取 studio/style.css 的 --ns-* 变量，页面自身不引入第二套色板。 */
+
+.ns-reverse {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    padding: 0;
+}
+
+.ns-reverse-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: none;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--ns-border);
+    background: var(--ns-panel);
+}
+
+.ns-reverse-bar-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    margin-right: 8px;
+    font-weight: 600;
+    color: var(--ns-fg);
+}
+
+.ns-reverse-sep {
+    flex: 1;
+}
+
+.ns-reverse-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 11px;
+    border: 1px solid var(--ns-border-soft);
+    border-radius: 8px;
+    background: var(--ns-raised);
+    color: var(--ns-fg);
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.ns-reverse-btn:hover { background: var(--ns-field-hover); border-color: var(--ns-accent); }
+
+.ns-reverse-btn:disabled { opacity: .45; cursor: default; }
+
+.ns-reverse-btn-primary {
+    border-color: var(--ns-primary);
+    background: var(--ns-primary-soft);
+    color: var(--ns-primary-fg);
+}
+
+.ns-reverse-btn-primary:hover { background: var(--ns-primary); color: #fff; }
+
+.ns-reverse-pill {
+    padding: 3px 9px;
+    border: 1px solid var(--ns-border-soft);
+    border-radius: 999px;
+    font-size: 12px;
+    color: var(--ns-dim);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 320px;
+}
+
+.ns-reverse-main {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    overflow-y: auto;
+    padding: 14px 16px 20px;
+}
+
+.ns-reverse-main[hidden] { display: none; }
+
+.ns-reverse-preview {
+    align-self: center;
+    max-width: min(420px, 100%);
+    max-height: 34vh;
+    object-fit: contain;
+    border: 1px solid var(--ns-border);
+    border-radius: 10px;
+    background: var(--ns-field);
+}
+
+.ns-reverse-preview[hidden] { display: none; }
+
+.ns-reverse-out-box {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    border: 1px solid var(--ns-border);
+    border-radius: 10px;
+    background: var(--ns-panel);
+}
+
+.ns-reverse-out-box[hidden] { display: none; }
+
+.ns-reverse-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: .04em;
+    color: var(--ns-dim);
+}
+
+.ns-reverse-head .ns-reverse-btn {
+    font-weight: 400;
+    letter-spacing: normal;
+}
+
+/* 语言 chip 挤在结果框标题里：反推中途换语言重跑就是这一位，不给它单独一行面板 */
+.ns-reverse-lang {
+    display: inline-flex;
+    gap: 4px;
+    margin-left: auto;
+}
+
+.ns-reverse-chip {
+    padding: 3px 10px;
+    border: 1px solid var(--ns-field-bd);
+    border-radius: 999px;
+    background: var(--ns-field);
+    color: var(--ns-dim);
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.ns-reverse-chip.is-on {
+    border-color: var(--ns-primary);
+    background: var(--ns-primary-soft);
+    color: var(--ns-primary-fg);
+}
+
+.ns-reverse-out {
+    min-height: 160px;
+    margin: 0;
+    padding: 10px 12px;
+    border: 1px solid var(--ns-field-bd);
+    border-radius: 8px;
+    background: var(--ns-field);
+    color: var(--ns-fg);
+    font-size: 13px;
+    line-height: 1.7;
+    white-space: pre-wrap;
+    word-break: break-word;
+    user-select: text;
+}
+
+.ns-reverse-status {
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--ns-dim);
+}
+
+.ns-reverse-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    min-height: 60%;
+    padding: 28px;
+    text-align: center;
+    color: var(--ns-dim);
+}
+
+.ns-reverse-empty[hidden] { display: none; }
+
+.ns-reverse-empty h3 { margin: 0; font-size: 16px; color: var(--ns-fg); }
+
+.ns-reverse-empty p { margin: 0; max-width: 560px; line-height: 1.7; }
+
+.ns-reverse-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}

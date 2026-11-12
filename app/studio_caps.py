@@ -269,6 +269,8 @@ FEATURE_ROUTES = {
     "image_gen": ("POST", "/neo_image_gen/generate"),
     "agent": ("POST", "/neo_agent/run"),
     "voice": ("POST", "/neo_voice/generate"),
+    # 图片反推要吃内核那侧的 LLM 链与图片读取路径（studio 的 /rs_prompts/reverse_prompt），桌面端自服不了
+    "prompt_reverse": ("POST", "/rs_prompts/reverse_prompt"),
     "segment": ("POST", "/neo_video_gen/run_segment"),
     "director": ("POST", "/neo_studio/director/generate"),
     "simple_video": ("POST", "/neo_video_gen/simple"),

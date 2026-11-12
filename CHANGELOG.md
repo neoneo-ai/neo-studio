@@ -5,6 +5,15 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 ## [Unreleased]
 
 ### Added
+- **Two more apps on the home page: 图片反推 and 声音克隆.** The home page gains two entry cards — 图片反推 in
+  the Edit section and 声音克隆 in Create — and each opens its own full page: pick an image in the library and
+  reverse it into a prompt (streamed token by token, saved as a `.txt` next to the image, one click to copy,
+  中文/英文), or pick a reference audio, write the text and get it read in that voice (queue and synthesis
+  progress, cancel the task, a result waveform to audition, 打开输出目录). The top bar keeps its seven tabs —
+  these two pages are reached from the home cards only, and the home editor hides or shows each card like any
+  other card. In the offline desktop window both run buttons read 需要 ComfyUI and start the kernel on click
+  instead of sending a request that cannot succeed. Covered by `studio/tests/js/reverse-prompt.test.mjs`,
+  `studio/tests/js/voice-clone.test.mjs` and `studio/tests/js/studio-home-pages.test.mjs`.
 - **The Video page shoots vertical.** The 分辨率 chip on the video page lists a portrait entry for every tier:
   352p / 432p / 576p / 720p / 768p / 1080p, each portrait tier the same tier with width and height swapped
   (768p portrait is 768×1344). The chip shows the drawing page's ratio rectangle, so a portrait tier reads

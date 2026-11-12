@@ -26,6 +26,7 @@ export const HOME_CARDS = [
     { id: "director", section: "create", icon: "play", title: "导演视频", sub: "多段配方，生成整片视频", target: "page", value: "director" },
     { id: "pose", section: "create", icon: "pose", title: "3D 姿势", sub: "姿势 · 整场 · 全景", target: "page", value: "pose" },
     { id: "agent", section: "create", icon: "target", title: "智能体", sub: "说出目标，工具链多轮跑完", target: "page", value: "agent" },
+    { id: "voice", section: "create", icon: "volume", title: "声音克隆", sub: "用一段参考音频的音色朗读文字", target: "page", value: "voice" },
     { id: "edit-normal", section: "edit", icon: "pencil", title: "图片编辑", sub: "写下要改成什么样，整图重绘", target: "edit", value: "normal" },
     { id: "edit-outpaint", section: "edit", icon: "maximize", title: "扩图", sub: "拖框定四边留白，补全周边场景", target: "edit", value: "outpaint" },
     { id: "edit-local", section: "edit", icon: "pencil", title: "局部", sub: "涂抹要改的区域，高分重绘并合回原图", target: "edit", value: "local" },
@@ -34,6 +35,7 @@ export const HOME_CARDS = [
     { id: "edit-blend", section: "edit", icon: "copy", title: "融合", sub: "多张参考图融成一张连贯画面", target: "edit", value: "blend" },
     { id: "edit-pose", section: "edit", icon: "user", title: "姿势", sub: "骨架图锁姿势，重出这一张", target: "edit", value: "pose" },
     { id: "frames", section: "edit", icon: "film", title: "视频抽帧", sub: "挑一条视频，抽帧存进素材库", target: "page", value: "frames" },
+    { id: "reverse", section: "edit", icon: "eye", title: "图片反推", sub: "挑一张图，反推出提示词", target: "page", value: "reverse" },
     { id: "gallery", section: "material", icon: "folder", title: "素材库", sub: "浏览与管理全部生成素材", target: "page", value: "gallery" },
     { id: "skills", section: "material", icon: "wand", title: "技能", sub: "管理预设与技能包", target: "page", value: "skills" },
     { id: "settings", section: "material", icon: "gear", title: "设置", sub: "生成默认值与界面语言", target: "page", value: "settings" },
@@ -45,7 +47,7 @@ export const HOME_HERO = {
 };
 
 export const HOME_PAGES = ["home", "gallery", "paint", "edit", "video", "director",
-                           "pose", "agent", "frames", "skills", "settings"];
+                           "pose", "agent", "frames", "voice", "reverse", "skills", "settings"];
 // 编辑页那一发模式的清单与 image-edit-panel.js 的模式 chip 同源同序：少一个就是首页少一张直达卡
 export const HOME_EDIT_MODES = ["normal", "outpaint", "local", "remove", "blend", "pose", "angle"];
 export const HOME_TARGETS = ["edit", "recipe", "skill", "url"];   // 自建卡能配的四种跳转
@@ -57,7 +59,7 @@ export const HOME_COLS = [0, 2, 3, 4, 5];   // 0 = 跟随窗口档位；窄档�
 export const CARD_ICONS = [
     "sparkles", "wand", "image", "pencil", "film", "play", "camera", "pose",
     "target", "copy", "user", "folder", "gear", "plug", "maximize", "cross",
-    "list", "clock", "send", "history", "eye", "plus", "ratio", "trash",
+    "list", "clock", "send", "history", "eye", "volume", "plus", "ratio", "trash",
 ];
 
 const LAYOUT_PATH = "/neo_home/layout";
@@ -65,7 +67,8 @@ const ID_OK = /^[A-Za-z0-9_][A-Za-z0-9_-]{0,39}$/;
 const MAX_CUSTOM = 20;
 const PAGE_LABELS = {
     home: "首页", gallery: "素材库", paint: "绘画", edit: "图片编辑", video: "视频",
-    director: "导演", pose: "3D 姿势", agent: "智能体", frames: "视频抽帧", skills: "技能", settings: "设置",
+    director: "导演", pose: "3D 姿势", agent: "智能体", frames: "视频抽帧",
+    voice: "声音克隆", reverse: "图片反推", skills: "技能", settings: "设置",
 };
 const TARGET_LABELS = { page: "页面（旧版直连）", edit: "编辑模式", url: "外部链接", recipe: "导演配方", skill: "技能" };
 const EDIT_MODE_LABELS = {

@@ -885,8 +885,9 @@ async function decodeAudioPeaks(url) {
 }
 
 /** 波形 + 播放控件（参考音频 / 结果音频共用）：装饰波形起步，首次播放解码真实峰值重绘，
- *  播放时按进度填充；自带独立 Audio 播放器，不干扰画廊卡片的共享播放器。 */
-function voiceAudioWidget(url, seedStr) {
+ *  播放时按进度填充；自带独立 Audio 播放器，不干扰画廊卡片的共享播放器。
+ *  导出给「声音克隆」页（voice-clone/voice-clone.js）复用，波形控件只此一份实现。 */
+export function voiceAudioWidget(url, seedStr) {
     const wrap = $el("div", { className: "neo-gallery-voice-audio" });
     const playBtn = $el("div", { className: "neo-gallery-audio-play-btn", title: t("播放 / 暂停") }, ["\u25B6"]);
     const canvas = $el("canvas", { className: "neo-gallery-audio-waveform" });

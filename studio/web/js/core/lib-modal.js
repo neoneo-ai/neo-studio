@@ -13,11 +13,13 @@ import { isPickableImage } from "../../gallery-utils.js";
 
 // 单点取用只认媒体文件：卡片网格里有 Lora / txt / 工作流这类文件，点它们开灯箱才对
 const PICKABLE_RE = /\.(png|jpe?g|webp|gif|bmp|tiff?|heic|avif|mp4|mov|webm|mkv|avi|mp3|wav|m4a|flac)$/i;
-// 取用方收哪一类：图片编辑的原图与参考位只吃图，视频落进 <img> 就是破图；出片参考区与抽帧页吃的正是视频。
+// 取用方收哪一类：图片编辑的原图与参考位只吃图，视频落进 <img> 就是破图；出片参考区与抽帧页吃的正是视频；
+// 声音克隆页要的是音频，图片塞进波形控件就是解不出声的静音条。
 // 不传 accept 就是媒体全收——导演页一直靠这条路透视频，把默认值收紧会连出片的素材一起挡掉
 const PICK_ACCEPT = {
     image: isPickableImage,
     video: (f) => /\.(mp4|mov|webm|mkv|avi)$/i.test(f),
+    audio: (f) => /\.(mp3|wav|m4a|flac|ogg|aac)$/i.test(f),
 };
 
 /** 建一枚弹窗外壳；宿主自己挂进 document.body。storageKey 存浮窗摆位与最大化偏好，scope 写进 data-lib-scope 供页面定位这扇窗。 */

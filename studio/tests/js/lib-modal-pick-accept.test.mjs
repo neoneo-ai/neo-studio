@@ -58,6 +58,16 @@ test("取用过滤：抽帧页开的那扇只放行视频，图片卡片点下�
     assert.deepEqual(m.picked, ["v.mp4"], "视频卡片取用一条");
 });
 
+test("取用过滤：声音克隆页开的那扇只放行音频，图片与视频点下去不取用", () => {
+    resetEnv();
+    const m = pickModal("audio", ["a.png", "v.mp4", "s.mp3", "t.wav"]);
+    click(m.card("a.png"));
+    click(m.card("v.mp4"));
+    assert.deepEqual(m.picked, [], "图片塞进波形控件是解不出声的静音条，视频同理");
+    click(m.card("s.mp3"));
+    assert.deepEqual(m.picked, ["s.mp3"], "音频卡片取用一条");
+});
+
 test("取用过滤：不声明类别就是媒体全收（出片参考区一直靠这条路透视频），非媒体文件照旧不取用", () => {
     resetEnv();
     const m = pickModal(undefined, ["v.mp4", "a.png", "w.txt"]);

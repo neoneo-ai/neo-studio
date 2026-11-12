@@ -1,0 +1,200 @@
+/* voice-clone.css — 「声音克隆」页：工具条 / 参考音频波形 / 文字框与进度条 / 结果波形 / 起手卡片。
+   波形控件本身（neo-gallery-voice-audio）与它那份 canvas 样式在 gallery.css，这里只铺页面骨架。
+   颜色一律取 studio/style.css 的 --ns-* 变量，页面自身不引入第二套色板。 */
+
+.ns-voice {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    padding: 0;
+}
+
+.ns-voice-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: none;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--ns-border);
+    background: var(--ns-panel);
+}
+
+.ns-voice-bar-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    margin-right: 8px;
+    font-weight: 600;
+    color: var(--ns-fg);
+}
+
+.ns-voice-sep {
+    flex: 1;
+}
+
+.ns-voice-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 11px;
+    border: 1px solid var(--ns-border-soft);
+    border-radius: 8px;
+    background: var(--ns-raised);
+    color: var(--ns-fg);
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.ns-voice-btn:hover { background: var(--ns-field-hover); border-color: var(--ns-accent); }
+
+.ns-voice-btn:disabled { opacity: .45; cursor: default; }
+
+.ns-voice-btn-primary {
+    border-color: var(--ns-primary);
+    background: var(--ns-primary-soft);
+    color: var(--ns-primary-fg);
+}
+
+.ns-voice-btn-primary:hover { background: var(--ns-primary); color: #fff; }
+
+.ns-voice-pill {
+    padding: 3px 9px;
+    border: 1px solid var(--ns-border-soft);
+    border-radius: 999px;
+    font-size: 12px;
+    color: var(--ns-dim);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 320px;
+}
+
+.ns-voice-main {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    overflow-y: auto;
+    padding: 14px 16px 20px;
+}
+
+.ns-voice-main[hidden] { display: none; }
+
+.ns-voice-composer {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px;
+    border: 1px solid var(--ns-border);
+    border-radius: 10px;
+    background: var(--ns-panel);
+}
+
+.ns-voice-composer[hidden] { display: none; }
+
+.ns-voice-head {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: .04em;
+    color: var(--ns-dim);
+}
+
+.ns-voice-ref canvas,
+.ns-voice-result canvas {
+    width: 100%;
+    height: 72px;
+    border: 1px solid var(--ns-field-bd);
+    border-radius: 8px;
+    background: var(--ns-field);
+    cursor: pointer;
+}
+
+.ns-voice-text {
+    min-height: 92px;
+    padding: 10px 12px;
+    border: 1px solid var(--ns-field-bd);
+    border-radius: 8px;
+    background: var(--ns-field);
+    color: var(--ns-fg);
+    font: inherit;
+    font-size: 13px;
+    line-height: 1.7;
+    resize: vertical;
+}
+
+/* 进度条：有步数就按步数填，排队与模型加载那一段没有步数，条自己走（见 voice-clone.js 的 is-loose） */
+.ns-voice-track {
+    position: relative;
+    height: 8px;
+    border-radius: 4px;
+    background: var(--ns-field);
+    overflow: hidden;
+}
+
+.ns-voice-track[hidden] { display: none; }
+
+.ns-voice-fill {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 0;
+    border-radius: 4px;
+    background: var(--ns-primary);
+}
+
+.ns-voice-fill.is-loose {
+    width: 40%;
+    animation: ns-voice-loose 1.6s linear infinite;
+}
+
+@keyframes ns-voice-loose {
+    from { transform: translateX(-100%); }
+    to { transform: translateX(250%); }
+}
+
+.ns-voice-status {
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--ns-dim);
+}
+
+.ns-voice-result {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.ns-voice-result:empty { display: none; }
+
+.ns-voice-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.ns-voice-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    min-height: 60%;
+    padding: 28px;
+    text-align: center;
+    color: var(--ns-dim);
+}
+
+.ns-voice-empty[hidden] { display: none; }
+
+.ns-voice-empty h3 { margin: 0; font-size: 16px; color: var(--ns-fg); }
+
+.ns-voice-empty p { margin: 0; max-width: 560px; line-height: 1.7; }
+
+.ns-voice-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}

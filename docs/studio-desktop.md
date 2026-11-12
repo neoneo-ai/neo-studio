@@ -312,6 +312,13 @@ js_api（`check_setup` / `pick_root` / `pick_python` / `start_setup`），根目
 - 卡表、版式形状与编辑器的装饰钩子（`decorateHero` / `decorateCard` / `decorateGrid` / `addTile`）只在 `studio/web/studio/home-layout.js` 一份，`studio-app.js`
   只管建 DOM 并把建好的 hero 与卡片交给钩子、把细栏右端那枚「完成」接到编辑器的 `save()` 上；「跳到哪一屏」是卡上的 target / value 这份数据，由 `studio-app.js` 的 `openHomeCard` 落地。设置页不再单列「首页」栏。
   用例：`studio/tests/js/home-layout.test.mjs`、`studio/tests/test_home_layout.py`、`app/tests/test_studio_server.py` 的版式用例。
+- 「开始创作」的「声音克隆」与「编辑」的「图片反推」是两张 `target: "page"` 的直连卡（`value: "voice"` / `"reverse"`），
+  落进 `route()` 的两条分支，挂出 `#/voice` 与 `#/reverse` 两页（`studio/web/voice-clone/voice-clone.js`、
+  `studio/web/reverse-prompt/reverse-prompt.js`）：顶栏那七枚页签不给它们位置，首页把卡收起，这一页就进不去；
+  两页与其余页同一条「视图常驻、切页显隐」的路由。两页的运行钮交 `RUN_GATES`（`voice` / `prompt_reverse`），
+  离线形态点它是拉起内核，不是发一条注定 409 的请求。
+  用例：`studio/tests/js/studio-home-pages.test.mjs`、`studio/tests/js/reverse-prompt.test.mjs`、
+  `studio/tests/js/voice-clone.test.mjs`。
 
 ## 设置页分组
 

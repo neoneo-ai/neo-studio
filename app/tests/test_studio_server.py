@@ -55,6 +55,7 @@ COMFY_ONLY_ROUTES = (
     "/neo_video_gen/assemble_segments",
     "/neo_video_gen/simple",
     "/neo_voice/generate",
+    "/rs_prompts/reverse_prompt",   # 图片反推页的运行接口：归内核，桌面端只有 409
     "/neo_studio/director/generate",
     "/neo_studio/queue",
     "/neo_studio/mem_stats",

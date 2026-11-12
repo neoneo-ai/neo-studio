@@ -507,6 +507,14 @@ startable once the root is filled in.
   by `openHomeCard` in `studio-app.js`. The settings sidebar no longer has a 首页 entry. Cases:
   `studio/tests/js/home-layout.test.mjs`, `studio/tests/test_home_layout.py` and the layout cases in
   `app/tests/test_studio_server.py`.
+- The 声音克隆 card in Create and the 图片反推 card in Edit are two `target: "page"` cards (`value: "voice"` /
+  `"reverse"`) that land in two branches of `route()`, mounting the `#/voice` and `#/reverse` pages
+  (`studio/web/voice-clone/voice-clone.js`, `studio/web/reverse-prompt/reverse-prompt.js`). The seven top-bar tabs
+  give them no place: hide the card on the home page and the page has no way in. Both pages ride the same
+  "views stay mounted, pages show and hide" route as every other page, and their run buttons go through
+  `RUN_GATES` (`voice` / `prompt_reverse`) — offline, clicking one starts the kernel instead of sending a request
+  that can only answer 409. Cases: `studio/tests/js/studio-home-pages.test.mjs`,
+  `studio/tests/js/reverse-prompt.test.mjs`, `studio/tests/js/voice-clone.test.mjs`.
 
 ## Settings page groups
 

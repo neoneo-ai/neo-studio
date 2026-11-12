@@ -1861,6 +1861,29 @@ const EN = {
     "要说的文字": "Text to speak",
     "用这段音频的音色（CosyVoice 零样本克隆）朗读你输入的文字，弹窗内试听结果波形": "Reads your text with this audio's voice (CosyVoice zero-shot clone); preview the resulting waveform in the dialog",
     "生成语音": "Generate voice",
+    // Studio「图片反推」页与「声音克隆」页（首页卡直达的两页，顶栏没有这两枚页签）
+    "挑一张图，反推出提示词": "Pick an image and reverse it into a prompt",
+    "从素材库选图": "Pick Image From Library",
+    "没有图片": "No image",
+    "点「反推」生成提示词，结果自动写进图片同目录的 .txt":
+        "Click Reverse-prompt to build the prompt; the result is saved as a .txt next to the image",
+    "反推出的提示词": "Reversed prompt",
+    "挑一张图，把画面写成一段提示词：结果同时写进图片同目录的 .txt，浏览素材库就看得见":
+        "Pick an image and write it out as a prompt: the result is also saved as a .txt next to the image, so the library shows it",
+    "反推中…": "Reversing…",
+    "已生成，结果同时写进图片同目录的 .txt": "Done — the result is saved as a .txt next to the image",
+    "反推失败": "Reverse prompt failed",
+    "还没有可复制的提示词": "There is no prompt to copy yet",
+    "复制失败，选中结果框自己复制": "Copy failed — select the text in the result box and copy it yourself",
+    "声音克隆": "Voice Clone",
+    "用一段参考音频的音色朗读文字": "Read text with the voice of a reference audio",
+    "从素材库选音频": "Pick Audio From Library",
+    "没有音频": "No audio",
+    "写下要说的文字，点「生成」": "Write the text to speak, then click Generate",
+    "挑一段参考音频，写下要说的文字：用那段声音的音色读出来，产物落在素材库的 Voice 目录":
+        "Pick a reference audio and write the text to speak: it is read with that voice, and the result lands in the library's Voice folder",
+    "已生成语音，点波形播放试听；产物在 Output/Voice":
+        "Voice generated — click the waveform to listen; output is in Output/Voice",
     "用 Qwen Image 2.1 基于这张人像生成头特写+正/侧/背四视图角色设定图；窗口内可看进度与结果预览，完成后拖入配方的 角色参考图": "Uses Qwen Image 2.1 to build a character sheet with a head close-up plus front/side/back views from this portrait; track progress and preview the result in the window, then drag it into the recipe's character reference",
     "以这张图为参考、按所选宫格技能与故事生成分镜图（每格一镜，可直接进导演编辑器「宫格分镜图拆分」切成视频关键帧）": "Generates a storyboard using this image as reference, with the selected grid skill and story (one shot per panel; feed it straight into the director editor's “Split grid storyboard” to cut video keyframes)",
     "以这张图为参考进行 AI 编辑（默认 Qwen Image 2.1，可在弹窗内切换其他生图/编辑技能）": "AI-edit using this image as reference (Qwen Image 2.1 by default; switch to other generation/edit skills in the dialog)",
