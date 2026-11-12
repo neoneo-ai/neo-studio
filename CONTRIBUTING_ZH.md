@@ -77,7 +77,8 @@ Registry 包 = git 跟踪的文件减去 `studio/.comfyignore`。新文件属于
 
 ## 代码风格
 
-前端是无构建步骤的纯 ES 模块；`marked.min.js`、`purify.min.js` 保持 vendored；共享的 DOM 工具在两个以上
+前端是无构建步骤的纯 ES 模块；`marked.min.js`、`purify.min.js`、`sortable.min.js` 保持 vendored，三个都放在
+`studio/web/vendor/` 一个目录里；共享的 DOM 工具在两个以上
 模块用到时进 `studio/web/js/core/`。Python 模块以 `# SPDX-License-Identifier: Apache-2.0` 和
 `from __future__ import annotations` 开头，import 留在模块作用域，用户配置文件原子写（先 `<name>.json.tmp`
 再 replace），从下拉框、请求体、已存配置里拿到的路径要在读写边界上重新校验。注释解释「为什么」并写明它守的是

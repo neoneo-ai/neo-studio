@@ -16,8 +16,9 @@
 - No build step. `studio/web/` ships plain ES modules that ComfyUI loads
   directly; do not add a bundler, a transpiler, a package-managed runtime
   dependency, or a source tree that has to be compiled before it works.
-- Vendored third-party files (`marked.min.js`, `purify.min.js`)
-  stay vendored. Do not replace them with npm dependencies,
+- Vendored third-party files (`marked.min.js`, `purify.min.js`, `sortable.min.js`)
+  stay vendored in `studio/web/vendor/`, one directory for all of them.
+  Do not replace them with npm dependencies,
   and do not render untrusted text without sanitization.
 - Shared tools go in `studio/web/js/core/` once more than one
   module needs them. Module-private helpers stay in the module.

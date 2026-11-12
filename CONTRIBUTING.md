@@ -87,7 +87,8 @@ reads it.
 
 ## Style
 
-Plain ES modules with no build step; `marked.min.js` and `purify.min.js` stay vendored; a shared frontend
+Plain ES modules with no build step; `marked.min.js`, `purify.min.js` and `sortable.min.js` stay vendored in
+`studio/web/vendor/`; a shared frontend
 helper goes in `studio/web/js/core/` once more than one module needs it. Python modules start with
 `# SPDX-License-Identifier: Apache-2.0` and `from __future__ import annotations`, keep imports at module
 scope, write user config files atomically (`<name>.json.tmp` then replace), and re-validate path values that

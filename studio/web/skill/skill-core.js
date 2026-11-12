@@ -7,8 +7,8 @@
  */
 
 // Markdown 渲染复用 ComfyUI 内置同款库（marked + DOMPurify），breaks:true 保留单行换行
-import "../marked.min.js";
-import "../purify.min.js";
+import "../vendor/marked.min.js";
+import "../vendor/purify.min.js";
 import { app } from "../../../scripts/app.js";
 import { mkEl } from "../dom-utils.js";
 import { applyWorkflowParams, injectRuntimeLoras, canvasLayout } from "../workflow-graph.js";
