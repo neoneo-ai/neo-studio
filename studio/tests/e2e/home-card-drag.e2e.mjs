@@ -53,6 +53,13 @@ test("首页编辑态：鼠标把第一张卡拖到第三张那一格，卡片�
         await page.waitForSelector(".ns-home .ns-home-card", { timeout: 15000 });
         await page.click(".ns-home-edit-entry");
         await page.waitForSelector(".ns-home-editing", { timeout: 15000 });
+        // 进编辑态后应用还会异步重画一次首页（设置与版式那几发拉完才铺定）：等这一轮落定、网格上的
+        // Sortable 实例就位再落手。落在被换掉的实例上只认得「拖起来」，认不出落点——拖得起、落不下。
+        await page.waitForFunction(() => {
+            const g = document.querySelector(".ns-home-grid");
+            return !!(window.Sortable && window.Sortable.get && window.Sortable.get(g));
+        }, null, { timeout: 10000 });
+        await page.waitForTimeout(600);
 
         const before = await orderOf(page);
         assert.deepEqual(before.slice(0, 3), ["生成图片", "生成视频", "导演视频"], "默认版式「开始创作」前三张");
@@ -67,9 +74,13 @@ test("首页编辑态：鼠标把第一张卡拖到第三张那一格，卡片�
         }
         assert.equal(await page.locator(".ns-home-card.is-dragging").count(), 1,
             "拖动中指针上那张卡带着 dragClass");
-        const live = await page.evaluate(() => [...document.querySelectorAll(".ns-home-grid")[0].querySelectorAll(".ns-home-card")]
-            .map((el) => el.dataset.cardId));
-        assert.ok(live.indexOf("paint") > 0, "拖起期间网格当场排成落位后的样子：拖起的卡已让开自己那一格");
+        const mid = await page.evaluate(() => {
+            const fb = document.querySelector(".sortable-fallback");
+            const r = fb?.getBoundingClientRect();
+            return { clone: !!fb, w: r ? Math.round(r.width) : 0, h: r ? Math.round(r.height) : 0 };
+        });
+        assert.ok(mid.clone && mid.w > 0 && mid.h > 0,
+            "forceFallback 的影子克隆挂在页上：让位动画与跟指针的那张卡都由 Sortable 排");
 
         await page.mouse.up();
         await page.waitForTimeout(240);

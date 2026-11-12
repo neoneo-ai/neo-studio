@@ -8,7 +8,7 @@ import { $el } from "./shim/ui.js";
 import { api } from "./shim/api.js";
 import { t, tf } from "../js/core/i18n.js";
 import { icon, ICON_NAMES } from "../js/core/icons.js";
-import "../sortable.min.js";   // 落位手势：vendored 的 Sortable（与 marked/purify 同一份引进来），运行时不联网
+import "../vendor/sortable.min.js";   // 落位手势：vendored 的 Sortable（与 marked/purify 同一份引进来），运行时不联网
 
 export const HOME_SECTIONS = [
     { id: "create", label: "开始创作" },
@@ -207,6 +207,14 @@ export function createHomeInlineEditor(host = {}) {
 
     function render() {
         gridEpoch++;   // 宿主接着要按这份草稿重画首页：新的网格元素落在这一轮里，上一轮那批 Sortable 实例就该收了
+        // 清扫排在换 DOM 之前：这一刻旧网格还挂在文档里。Sortable 的 destroy 要写 el.parentNode，
+        // 等 replaceChildren 把旧网格摘掉再收就只剩「放手」——实例绑在 document 上的那批事件
+        // （dragover / drop / keydown / visibilitychange）不跟着网格走，会一直留在页上。
+        for (const [el, grid] of grids) {
+            if (grid.epoch >= gridEpoch) continue;
+            grids.delete(el);
+            if (el.isConnected) grid.sortable.destroy();
+        }
         bar.replaceChildren(...barControls(), status, ...(entry ? [entry] : []));
         host.onDraft?.(draft);   // 首页跟着草稿重画：卡上的控件改的就是这一点下去要落盘的排法
     }
@@ -321,18 +329,8 @@ export function createHomeInlineEditor(host = {}) {
 
     /** 网格的落位手势交给 Sortable：让位动画、跨板块迁移、触摸端拖动都是它的内建。自己写 HTML5 拖放时
      *  「预览挪卡 → 落点跟着变 → 预览重放」这条自追循环就是它替我们消掉的——落点判定不再读我们的预览。
-     *  整张卡就是手势，卡上的按钮不算拖起点（ignore）。
-     *  重画一次首页就换一批网格元素：按渲染轮次清掉上一轮那批实例。判定不能用 isConnected——
-     *  homeGrid 在网格挂上文档之前就来调这里，看连接状态会把同一轮里前一条网格当成旧的销毁掉。 */
+     *  整张卡就是手势，卡上的按钮不算拖起点（ignore）。上一轮实例的清扫在 render() 里，这里只管这一条网格。 */
     function decorateGrid(gridEl, sectionId) {
-        for (const [el, grid] of grids) {
-            if (grid.epoch >= gridEpoch) continue;
-            grids.delete(el);
-            // 只销毁还在文档里的：Sortable 的 destroy() 要写 el.parentNode[expando]，
-            // 对脱离文档的旧网格调它当场抛「Cannot read properties of null (reading 'removeEventListener')」，
-            // 整次重画被打断，这一轮的落位手势就没了。离屏网格的事件跟着元素一起消失，放手就行。
-            if (el.isConnected) grid.sortable.destroy();
-        }
         grids.get(gridEl)?.sortable.destroy();   // 同一条网格被重复装饰（同一轮重画两次）：旧实例先收掉，不留两套手势
         // 调用方（renderHome）在网格挂上文档之后才交到这里：实例建在脱离文档的元素上只认得「拖起来」，认不出落点
         // （真浏览器实测：dragStarted / emulateDragOver / onDragOver 都跑，就是不换行）。这一轮没挂载就不建，下一轮装饰补上。
@@ -352,8 +350,7 @@ export function createHomeInlineEditor(host = {}) {
             forceFallback: true,
             fallbackOnBody: true,   // 卡面带着 transform / scale：影子钉在 body 上才不跟着祖先的变换跑
             fallbackTolerance: 3,   // 按下先走出 3px 才算拖起来：点一下卡不误入拖动
-            ghostClass: "is-drag-ghost",
-            dragClass: "is-dragging",
+            dragClass: "is-dragging",   // forceFallback 下 Sortable 不应用 ghostClass：跟指针的克隆吃这一条，原位的卡吃它自己的 .sortable-chosen
             swapThreshold: 0.65,
             onStart: (e) => {
                 status.textContent = isCustomCard(draft, e.item?.dataset?.cardId)

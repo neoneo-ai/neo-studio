@@ -79,7 +79,7 @@ const dlgBtn = (cls) => dlg().querySelector(`.ns-home-card-dialog-${cls}`);
 const cardTitles = (root) =>
     [...root.querySelectorAll(".ns-home-card:not(.is-hidden-card) .ns-home-card-title")].map((e) => e.textContent);
 
-/** 落位手势是 vendored 的 Sortable（web/sortable.min.js）：jsdom 没有 layout，手势本身归 npm run e2e。
+/** 落位手势是 vendored 的 Sortable（web/vendor/sortable.min.js）：jsdom 没有 layout，手势本身归 npm run e2e。
  *  用例替它记下每条网格收到的参数与回调——落位 → 草稿这一段是我们的代码，照测。 */
 const sortables = [];
 function mockSortable() {
@@ -745,27 +745,23 @@ test("落位搬运：同板块按格子落位，自建卡能落进别的板块�
     assert.equal(bar(home).querySelector(".ns-home-edit-status").textContent, "", "自建卡不用提示");
 
     dropAt(cardOf(home, "生成图片"), 1);
-    await flush(30);   // 网格挂载后那一帧才建实例：下一手的落位要落在新实例上
     const after = gridOf(home, "开始创作");   // 落位后首页按草稿重画：断言落在新画出来的那条网格上
     assert.deepEqual(titlesIn(after).slice(0, 3), ["生成视频", "生成图片", "导演视频"],
         "落在哪一格就插进那一格，其余卡往后挪一格");
     assert.equal(sortableFor(create).destroys, 1,
         "上一轮的网格在重画那一刻还挂在文档里：它的实例要收掉（离屏的就不收——Sortable 的 destroy 要写 el.parentNode，离屏元素上直接抛）");
-    assert.ok(sortableFor(after), "这一轮的网格接上了新实例");
+    assert.ok(sortableFor(after), "落位重画出的新网格当场接上新实例");
 
     const keep = titlesIn(gridOf(home, "开始创作"));
     const back = dropAt(cardOf(home, "生成视频"), 0, gridOf(home, "编辑"));
-    await flush(30);   // 网格挂载后那一帧才建实例：下一手的落位要落在新实例上
     assert.equal(back.cancels, 1, "内置卡落进别的板块：Sortable 退回原位");
     assert.deepEqual(titlesIn(gridOf(home, "开始创作")), keep, "草稿没动：板块里的卡还在板块里");
 
     dropAt(cardOf(home, "搬运卡"), 0, gridOf(home, "编辑"));
-    await flush(30);   // 网格挂载后那一帧才建实例：下一手的落位要落在新实例上
     assert.ok(titlesIn(gridOf(home, "编辑")).includes("搬运卡"), "自建卡落进「编辑」板块落位");
     assert.ok(!titlesIn(gridOf(home, "开始创作")).includes("搬运卡"));
 
     dropAt(cardOf(home, "生成图片"), 4);   // 落在这一版最后一格
-    await flush(30);   // 网格挂载后那一帧才建实例：下一手的落位要落在新实例上
     assert.deepEqual(titlesIn(gridOf(home, "开始创作")).slice(-1), ["生成图片"], "落在最后一格就是排到最后");
 
     click(home.querySelector(".ns-home-edit-entry"));
@@ -897,6 +893,7 @@ test("首页原地编辑的文案在英文界面也有话可说", () => {
 
 test("首页版式的 CSS 挂点：列数走自定义属性，卡上的控件与细栏各有自己的样式", () => {
     const css = fs.readFileSync(path.join(webDir, "studio", "style.css"), "utf8");
+    const src = fs.readFileSync(path.join(webDir, "studio", "home-layout.js"), "utf8");
     assert.match(css, /--ns-home-cols/, "网格列数由版式写进自定义属性");
     assert.match(css, /\.ns-home-edit-entry\s*\{/, "首页右上角的编辑入口应有自己的样式");
     assert.ok(/\.ns-home-edit-entry\s*\{[^}]*position:\s*absolute/.test(css)
@@ -927,9 +924,9 @@ test("首页版式的 CSS 挂点：列数走自定义属性，卡上的控件与
     assert.match(css, /\.ns-home-card-dialog-foot\s*\{/, "弹窗脚一行管状态与保存取消");
     assert.match(css, /\.ns-home-hero \[contenteditable\]/, "标题区就地改字应有可见的描边");
     assert.match(css, /\.ns-home-editing \.ns-home-card\s*\{/, "编辑态的卡面应打断点击，跳屏不会把草稿带走");
-    assert.ok(/\.ns-home-card\.is-dragging\s*\{[^}]*transform/.test(css), "指针上那张卡是斜着的半透明影子");
-    assert.ok(/\.ns-home-card\.is-drag-ghost\s*\{[^}]*opacity/.test(css),
-        "留在原位的影子有样式：Sortable 的 ghostClass 落在这一条上");
+    assert.ok(/\.ns-home-card\.is-dragging\s*\{[^}]*transform/.test(css), "指针上那张克隆卡是斜着的半透明影子");
+    assert.ok(!css.includes("is-drag-ghost") && !src.includes("is-drag-ghost"),
+        "forceFallback 下 Sortable 不应用 ghostClass：那条影子样式与那个 option 都是不生效的死代码，不留");
     assert.ok(/@media \(prefers-reduced-motion: reduce\)[\s\S]{0,120}\.ns-home-editing \.ns-home-grid \.ns-home-card\s*\{[^}]*transition:\s*none\s*!important/,
         "系统偏好减少动画：让位的 transform 是 Sortable 写在行内的，要 !important 才压得住");
     assert.ok(!css.includes(".ns-home-drop-gap") && !css.includes("is-drop-target") && !css.includes("ns-no-anim"),
@@ -942,10 +939,10 @@ test("首页版式的 CSS 挂点：列数走自定义属性，卡上的控件与
 });
 
 test("落位手势是 vendored 的 Sortable：文件在位、版本钉住、运行时不联网", () => {
-    const lib = fs.readFileSync(path.join(webDir, "sortable.min.js"), "utf8");
+    const lib = fs.readFileSync(path.join(webDir, "vendor", "sortable.min.js"), "utf8");
     assert.match(lib, /^\/\*! Sortable 1\.15\.7 - MIT/, "vendored 文件带着版本与 MIT 头，升级要看得见");
     const src = fs.readFileSync(path.join(webDir, "studio", "home-layout.js"), "utf8");
-    assert.match(src, /import "\.\.\/sortable\.min\.js";/, "以 vendored 文件引入：与 marked/purify 同一份引进来");
+    assert.match(src, /import "\.\.\/vendor\/sortable\.min\.js";/, "以 vendored 文件引入：与 marked/purify 同一份引进来");
     assert.ok(!/jsdelivr|unpkg|cdnjs|googleapis/i.test(src), "运行时不联网取库：桌面窗口离线也要拖得动");
     assert.match(src, /window\.Sortable\.create/, "网格的手势由 Sortable 接住，落位只写 onEnd 那一段");
     assert.ok(!/addEventListener\("drag/.test(src),

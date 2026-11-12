@@ -41,13 +41,15 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ### Changed
 - **Dragging a home card now feels like carrying a card.** The home page's reorder gesture is a vendored SortableJS
-  (MIT 1.15.7, `studio/web/sortable.min.js`, pulled in with `import "../sortable.min.js"` the way marked/purify are,
-  nothing fetched at runtime): the card you carry rides under the pointer, the slot it left keeps a ghost
-  (`.is-drag-ghost`), and every card that changes slot slides there in 150 ms. The landing slot is the slot the pointer
-  is over — dropping past the last card puts the card at the end — and the sliding preview can no longer move the drop
-  point out from under the pointer, which is what made the hand-written HTML5 drag bounce back and forth. Custom cards
-  still move between sections; a built-in card dropped into another section returns to its slot with the hint in the bar.
-  Dragging on a phone works now: the old gesture did not. Covered by the drop cases in `studio/tests/js/home-layout.test.mjs`.
+  (MIT 1.15.7, `studio/web/vendor/sortable.min.js`, pulled in with `import "../vendor/sortable.min.js"` the way marked/purify are,
+  nothing fetched at runtime): the card you carry rides under the pointer as Sortable's clone (`.sortable-fallback`
+  carrying `.is-dragging`), the card in the slot it left stays marked (`.sortable-chosen`), and every card that changes
+  slot slides there in 150 ms. The landing slot is the slot the pointer is over — dropping past the last card puts the
+  card at the end — and the sliding preview can no longer move the drop point out from under the pointer, which is what
+  made the hand-written HTML5 drag bounce back and forth. Custom cards still move between sections; a built-in card
+  dropped into another section returns to its slot with the hint in the bar. Dragging on a phone works now: the old
+  gesture did not. Covered by the drop cases in `studio/tests/js/home-layout.test.mjs` and the real-browser gesture in
+  `studio/tests/e2e/home-card-drag.e2e.mjs`.
 - **A 再来一发 is never blocked by "the video page is not ready".** A video card's 再来一发 and a home-page video skill
   card stopped with 「出视频页尚未就绪」 whenever the Video page had never been opened in that window, so the run you asked
   for never reached the composer. The desktop shell now hands the gallery a page-jump hook (`setVideoPageJump`): the

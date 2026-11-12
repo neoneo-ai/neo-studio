@@ -460,22 +460,32 @@ startable once the root is filled in.
   image-generation skill opens the paint page and `paintTextHost.__neoSetPrompt({ skill })` selects it. A skill with no
   slot in either page's skill list (enhancement / template skills) says on screen that it has no page to land on and
   opens the skills page.
-- The drop gesture is vendored SortableJS (`studio/web/sortable.min.js`, 1.15.7, MIT, pulled in by
-  `import "../sortable.min.js"` in `home-layout.js`, the same route marked/purify take, nothing fetched at runtime):
+- The drop gesture is vendored SortableJS (`studio/web/vendor/sortable.min.js`, 1.15.7, MIT, pulled in by
+  `import "../vendor/sortable.min.js"` in `home-layout.js`, the same route marked/purify take — the three third-party
+  libs all live in `studio/web/vendor/` — nothing fetched at runtime):
   `decorateGrid` builds one instance per grid in edit mode — `group: "ns-home"` lets the three grids accept each other's
   cards, `draggable: ".ns-home-card"` keeps the 添加卡片 placeholder and the section headers out of it, `ignore` keeps the
-  buttons on a card from starting a drag, `animation: 150` is the slide of the card that changes slot,
-  `ghostClass: "is-drag-ghost"` is the shadow left in the original slot and `dragClass: "is-dragging"` is the card riding
-  the pointer. The whole card is the gesture and the card no longer carries a native `draggable` (the two gestures cannot
+  buttons on a card from starting a drag, `animation: 150` is the slide of the cards making room, and
+  `forceFallback: true` with `fallbackOnBody: true` means the card riding the pointer is Sortable's clone pinned to
+  `body` (`.sortable-fallback`, styled by `.ns-home-card.is-dragging`) while the card in the original slot keeps
+  `.sortable-chosen` — with forceFallback Sortable never applies `ghostClass`, so passing it would be a dead option and
+  only `dragClass` is passed. The whole card is the gesture and the card no longer carries a native `draggable` (the two gestures cannot
   run side by side); dragging on touch devices is taken by the same instance.
   The drop reads only what `onEnd` hands over — `oldDraggableIndex` / `newDraggableIndex` (which slot the card lands in;
   the last one is "move to the end"): inside one section it goes through `moveCard`, a custom card crossing a section
   writes `custom[].section` and lands in that slot, a built-in card dropped into another section is sent back with
   `cancel()` and the bar writes "Built-in cards reorder inside their own section; custom cards can be dragged into
   another section" instead of letting the user try.
-  Redrawing the home page swaps the whole set of grid elements: `decorateGrid` destroys the previous round's instances by
-  render round (`gridEpoch`, bumped by `render()`) — `isConnected` cannot decide this, `homeGrid` calls here before the
-  grid reaches the document, so a connection test would destroy the earlier grid of the same round as stale.
+  Redrawing the home page swaps the whole set of grid elements: `renderHome` hands the grids to `decorateGrid` only after
+  they are in the document — an instance built on a detached grid knows how to start a drag and nothing else (measured in
+  a real browser: `dragStarted` / `emulateDragOver` / `onDragOver` all fire, no card ever changes slot); a grid that is
+  not in the document this round gets no instance and is decorated by the next round. `render()` destroys the previous
+  round's instances when it bumps the round (`gridEpoch`), while the old grids are still in the document (the home page
+  only calls `replaceChildren` after `onDraft`): the instance's `document`-level listeners (`dragover` / `drop` /
+  `keydown` / `visibilitychange`) do not leave with the grid, so destroying them after `replaceChildren` would leave them
+  on the page. A detached grid's instance is dropped without calling `destroy()` (`Sortable.destroy()` writes
+  `el.parentNode`, which throws on a detached element). Re-decorating the same grid inside one round drops its old
+  instance first, so one grid never carries two gestures.
 - In edit mode the entry button *is* Done: it sends one `POST /neo_home/layout`, broadcasts `neo:home-layout`, the home page
   redraws from the shape that comes back, edit mode ends and a saved toast says it on screen. That POST writes
   `hidden_sections` as an empty list, so a section an older layout collapsed comes back expanded on this save.

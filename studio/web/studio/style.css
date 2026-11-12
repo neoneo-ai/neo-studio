@@ -1036,11 +1036,11 @@ body {
     min-width: 26px; height: 24px; padding: 0 6px; font-size: 12px;
 }
 .ns-home-card.is-custom { border-color: var(--ns-accent); }
-/* 卡片落位的手势在 vendored 的 Sortable 里（web/studio/home-layout.js 的 decorateGrid）：is-drag-ghost 是
-   留在原位的影子，is-dragging 是指针上那张卡；让位动画由 Sortable 的 animation 写成卡自己的 transform
-   transition。系统偏好减少动画时把这条顶掉——它写在行内样式上，要 !important 才压得住。 */
+/* 卡片落位的手势在 vendored 的 Sortable 里（web/studio/home-layout.js 的 decorateGrid）：走 forceFallback，
+   指针上那张卡是 Sortable 克隆出来的影子卡（带 .ns-home-card.is-dragging），原位的卡带着 .sortable-chosen
+   留在格子里；让位动画由 Sortable 的 animation 写成卡自己的 transform transition。
+   系统偏好减少动画时把这条顶掉——它写在行内样式上，要 !important 才压得住。 */
 .ns-home-card.is-dragging { opacity: .4; transform: rotate(-1.5deg) scale(.97); cursor: grabbing; }
-.ns-home-card.is-drag-ghost { opacity: .35; border-style: dashed; }
 @media (prefers-reduced-motion: reduce) {
     .ns-home-editing .ns-home-grid .ns-home-card { transition: none !important; }
 }
