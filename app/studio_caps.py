@@ -136,6 +136,10 @@ _SETTINGS = {
     ("GET", "/neo_video_gen/models"),
     ("GET", "/neo_video_gen/settings"),
     ("POST", "/neo_video_gen/settings"),
+    # 首页版式：一份 configs/home_layout.json 的读写，手机页与桌面窗口共用同一份
+    ("GET", "/neo_home/layout"),
+    ("POST", "/neo_home/layout"),
+    ("POST", "/neo_home/layout/reset"),
 }
 
 # LLM 配置与标题提取：读写 configs 里的 LLM 配置、扫模型目录、打 8080 与远程服务

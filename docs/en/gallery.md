@@ -276,7 +276,10 @@ embedded ComfyUI workflow).
     run's effective 自定参数 merged over the skill config. The duration is derived from the frame count at the
     fixed 24 fps; a value that is not one of the panel's choices (3 / 5 / 8 / 10 / 15 s) and a size outside the
     panel's choices are not filled, and reference videos / audios are not recorded at all (the panel has no slot
-    for them). While the video page has never been opened, 「再来一发」 only reports 「出视频页尚未就绪」.
+    for them). When the video page has never been built, 「再来一发」 builds it first (the page-jump hook the desktop
+    shell registers at startup) and hands the run over, so nothing says 「出视频页尚未就绪」; only the canvas page,
+    which has no shell layer to build a page, reports that. A skill with no slot in that page's dropdown (deleted or
+    switched category) is named in a notice - fix it on the Skills page - and the rest of the run fills as usual.
   - Reference paths are resolved through the same library addressing as the gallery, file by file: a path
     containing `..` or an absolute path is dropped whole (the sidecar is a plain text file the user can edit).
   - When the sidecar is the workflow JSON ComfyUI's `SaveImage` wrote first, it stays on the "Import workflow"

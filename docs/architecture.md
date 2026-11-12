@@ -80,6 +80,7 @@ studio/
 ├── backyard.py                # Backyard 预处理与 OSS 上传页
 ├── recipes.py                 # 配方后端 + /rs_recipes/* 路由
 ├── studio.py                  # 新影工坊后端 + /neo_studio/* 路由
+├── home_layout.py             # 首页版式读写 + /neo_home/* 路由
 ├── pose.py                    # 3D 姿势页后端 + /neo-pose 与 /neo_pose/* 路由
 ├── pose_cloud.py              # 云端姿势库读侧（清单与文件走本机缓存）+ /neo_pose/cloud_* 路由
 ├── frames.py                  # 视频抽帧页后端 + /neo_frames/* 路由

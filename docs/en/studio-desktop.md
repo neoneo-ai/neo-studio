@@ -209,9 +209,10 @@ narrow-window rules are shared with the director page (one modal instance, one g
 - "🖼️ Generate asset" and "🖼️ New image recipe" switch to the input page; "🖼️ Edit image" in an image card's
   menu switches to the edit page. Each page owns one panel and one job — the input page generates, the edit page
   edits — so there is no text-to-image / image-edit mode bar and no image-recipe list.
-- The direct cards of the home **Edit** section (Image Edit / Outpaint / Camera angle / Blend / Pose) carry their mode into
-  the panel the edit page already built (`openImageEditMode` through the host's `__neoSetMode`): a card switches the mode
-  instead of rebuilding the panel, because a rebuild clears a half-written prompt. The mode switches the moment you land,
+- The direct cards of the home **Edit** section (Image Edit / Outpaint / Local / Remove / Camera angle / Blend / Pose)
+  carry their mode into the panel the edit page already built (`openImageEditMode` through the host's `__neoSetMode`): a
+  card switches the mode instead of rebuilding the panel, because a rebuild clears a half-written prompt. The mode
+  switches the moment you land,
   source image or not, and the empty-state hint names it. The mode chip stays clickable at all times and **only the user
   switches the mode** - neither `applySource` (a new source) nor `clearSource` (the source removed) touches it; clearing
   the source only tears down the layer that sat on it (the outpaint box, the paint layer, the remove markers). The controls
@@ -417,6 +418,82 @@ startable once the root is filled in.
   (`initReloadHotkey` in `studio/web/studio/studio-app.js`), so one keypress after a frontend hot-sync
   (`tools/watch_web.py`) loads the new code.
 
+## Home layout (inline editing on the home page)
+
+- "Edit home" standing in the top-right corner of the home page in view mode (`.ns-home-edit-entry`, `position: absolute`
+  inside `.ns-home`, so it scrolls away with the content instead of staying pinned on the window) switches that page into
+  edit mode, and the page itself is the editor: the whole
+  card is the drag gesture (no handle and no ↑ ↓ arrows), the tool row in its top-right corner carries a single hide/show
+  eye (a custom card also gets a pencil that opens its edit dialog and a delete button), the five
+  hero text lines are edited by clicking the text itself (`contenteditable`, committed on blur), and a slim bar at
+  the top of the page (`.ns-home-edit-bar`, `position: sticky` + `width: fit-content` +
+  `margin: 0 0 14px auto`) is shrunk into one compact group pinned to the page's top-right corner: it owns the grid
+  column count, the hero and hero-button switches and restore defaults, and the Done button - that same entry -
+  sits at the end of its row, pinned together with the bar while you edit. Sections get no controls at
+  all: their order and collapsed state are read from a layout an older build saved, and this build does not let you move
+  them from the home page.
+- Editing works on a local draft: every change goes back through `host.onDraft` into `renderHome()`, so this page redraws
+  live and no request is sent. In edit mode the card face is not clickable (`.ns-home-editing .ns-home-card` sets
+  `cursor: default` and the inner layers get `pointer-events: none`, and the `homeCard` / hero CTA onclick checks the same
+  flag), so jumping pages cannot carry an unsaved draft away.
+- Edit mode lays the whole page out: a hidden card stays in its grid slot as a ghost tile (`.ns-home-card.is-hidden-card`)
+  and the eye brings it back right there; a section a collapsed layout hid comes back with its cards, dimmed
+  (`.ns-home-section.is-off` with a Collapsed tag); the grid ends with an "Add a card" placeholder tile
+  (`.ns-home-add-tile`) that opens the custom-card
+  edit dialog (`.ns-home-card-dialog`, on the library modal's overlay and box) in three rows — jump type + jump target,
+  title + subtitle, icon + section. Changing the jump type or target refills every cell you have not touched with that
+  destination's title / subtitle / icon / section (the matching built-in card row, the recipe or skill name, the link's
+  host); text you typed stays. The pencil of an existing custom card opens the same dialog prefilled with its current
+  values. Only the dialog's Save writes the card into the draft; Cancel and Esc drop that edit. Nothing
+  on the page has its switch living somewhere else.
+- A custom card's jump type is one of four: edit mode / director recipe / skill / external link. The edit-mode list is the
+  image-edit panel's own seven modes, same source and same order as its mode chips; a recipe or skill target left as "None"
+  just opens the director page / the skills page. A `target: "page"` card saved by an older layout still reads and jumps,
+  and the pencil offers that type only when the card already uses it - a new card cannot get it, and the backend keeps
+  `page` in `CUSTOM_TARGETS` for exactly those cards.
+- A skill card lands on the page that applies the skill: `openHomeCard` checks the id against `listVideoSkills()`, and a
+  video skill goes through `openVideoReuse({ skill })` so the video page opens with that skill selected (when that page
+  was never built in this window, the `setVideoPageJump` hook the app registers at startup builds it first and the run is
+  handed over in the same gesture; only the canvas page, which has no app layer, says "The video page is not ready yet").
+  A skill that is no longer in that page's dropdown names the skill and points to the Skills page, and fills everything
+  else as before. An
+  image-generation skill opens the paint page and `paintTextHost.__neoSetPrompt({ skill })` selects it. A skill with no
+  slot in either page's skill list (enhancement / template skills) says on screen that it has no page to land on and
+  opens the skills page.
+- The drop gesture is vendored SortableJS (`studio/web/sortable.min.js`, 1.15.7, MIT, pulled in by
+  `import "../sortable.min.js"` in `home-layout.js`, the same route marked/purify take, nothing fetched at runtime):
+  `decorateGrid` builds one instance per grid in edit mode — `group: "ns-home"` lets the three grids accept each other's
+  cards, `draggable: ".ns-home-card"` keeps the 添加卡片 placeholder and the section headers out of it, `ignore` keeps the
+  buttons on a card from starting a drag, `animation: 150` is the slide of the card that changes slot,
+  `ghostClass: "is-drag-ghost"` is the shadow left in the original slot and `dragClass: "is-dragging"` is the card riding
+  the pointer. The whole card is the gesture and the card no longer carries a native `draggable` (the two gestures cannot
+  run side by side); dragging on touch devices is taken by the same instance.
+  The drop reads only what `onEnd` hands over — `oldDraggableIndex` / `newDraggableIndex` (which slot the card lands in;
+  the last one is "move to the end"): inside one section it goes through `moveCard`, a custom card crossing a section
+  writes `custom[].section` and lands in that slot, a built-in card dropped into another section is sent back with
+  `cancel()` and the bar writes "Built-in cards reorder inside their own section; custom cards can be dragged into
+  another section" instead of letting the user try.
+  Redrawing the home page swaps the whole set of grid elements: `decorateGrid` destroys the previous round's instances by
+  render round (`gridEpoch`, bumped by `render()`) — `isConnected` cannot decide this, `homeGrid` calls here before the
+  grid reaches the document, so a connection test would destroy the earlier grid of the same round as stale.
+- In edit mode the entry button *is* Done: it sends one `POST /neo_home/layout`, broadcasts `neo:home-layout`, the home page
+  redraws from the shape that comes back, edit mode ends and a saved toast says it on screen. That POST writes
+  `hidden_sections` as an empty list, so a section an older layout collapsed comes back expanded on this save.
+  "Restore defaults" sends `POST /neo_home/layout/reset`, deletes the layout file, and broadcasts exactly once with its own
+  toast.
+- Esc and navigating to another page (`route()` calls `stopHomeEdit()` when the target is not home) discard the draft: the
+  home page falls back to the layout that is on disk, with no request and no file write. When the POST behind Done fails the
+  page stays in edit mode with the draft intact and the button is clickable again; the in-flight save disables the button
+  (`homeSaving`) so one click cannot become two requests. The layout never lives in localStorage - the plugin page, the
+  desktop window and the paired phone page share `configs/home_layout.json` in the data root.
+- The card table, the layout shape and the editor's decorate hooks (`decorateHero` / `decorateCard` /
+  `decorateGrid` / `addTile`) exist once, in `studio/web/studio/home-layout.js`; `studio-app.js` only builds the DOM, hands the built
+  hero and card to those hooks and wires the Done button at the bar's right end to the editor's `save()`. "Which page this
+  card lands on" is the card's target / value data, applied
+  by `openHomeCard` in `studio-app.js`. The settings sidebar no longer has a 首页 entry. Cases:
+  `studio/tests/js/home-layout.test.mjs`, `studio/tests/test_home_layout.py` and the layout cases in
+  `app/tests/test_studio_server.py`.
+
 ## Settings page groups
 
 - The ten entries in the settings sidebar run top-down in four blocks: `Startup & Connection` (Startup Settings /
@@ -425,7 +502,9 @@ startable once the root is filled in.
   text-free hairline `.ns-settings-sep`, a sibling of the tabs inside `.ns-settings-tabs` — the line carries no label, so
   the sidebar shows exactly one row per setting. The tab `data-key`s and the `#/settings?tab=..` deep links are
   unchanged, and when a tab is dropped the lines follow the tabs that remain: in a browser tab, where there is no
-  Startup Settings panel, only that one tab is removed and no line is left hanging at the top of the strip.
+  Startup Settings panel, only that one tab is removed and no line is left hanging at the top of the strip. With the
+  首页 tab gone together with the home page's own inline editing, an old `?tab=home` bookmark falls back to the default
+  panel (`showSection`), so the settings page never opens blank.
 - The long panels keep their titled sections: Startup Settings splits into `ComfyUI location` (root / interpreter),
   `Network & port` (port / LAN listening / remote ComfyUI) and `Desktop window` (frameless window / dev mode), with the
   start / stop buttons and the state line kept above the sections; LLM Settings splits into `Provider & model`,

@@ -111,10 +111,11 @@ test("默认落地首页：意图卡片挂满主区，素材卡直达素材页",
         "首页分创作与编辑两板块，素材与配置收最后一节");
     assert.deepEqual([...home.querySelectorAll(".ns-home-card-title")].map((e) => e.textContent),
         ["生成图片", "生成视频", "导演视频", "3D 姿势", "智能体",
-            "图片编辑", "扩图", "机位", "融合", "姿势", "视频抽帧",
-            "素材库", "技能", "设置"]);
+            "图片编辑", "扩图", "局部", "删除", "机位", "融合", "姿势", "视频抽帧",
+            "素材库", "技能", "设置"],
+        "编辑板块的直达卡与图片编辑面板那一发模式一一对齐");
 
-    const libCard = [...home.querySelectorAll(".ns-home-card")][11];
+    const libCard = [...home.querySelectorAll(".ns-home-card")][13];
     libCard.click();
     await flush();
     assert.ok(home.classList.contains("ns-hidden"), "跳素材页后首页应收起");

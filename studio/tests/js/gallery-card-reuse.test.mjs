@@ -99,6 +99,40 @@ test("卡片菜单「再来一发」：视频卡挂出这一项，点开交给�
     assert.ok(notice.some((s) => s.includes("出视频页尚未就绪")), "视频页没就绪时 info 说清");
     assert.equal(document.querySelector(".neo-gallery-gm-modal-overlay"), null, "视频复用不开「生成素材」面板");
 });
+
+test("卡片菜单「再来一发」：出视频页没建过时先建页再交，不被「未就绪」卡住", async () => {
+    resetEnv();
+    clearRoutes();
+    const { GalleryCard, NeoGallery } = await loadModules();
+    const gen = await import("../../web/gallery-gen.js");
+    const jumps = [];
+    let handed = null;
+    // 应用层的建页入口（桌面端启动时注册的那一枚）：建页同步把复用钩子交回门面
+    gen.setVideoPageJump(() => {
+        jumps.push("video");
+        gen.setVideoReuseOpen((reuse) => { handed = reuse; return Promise.resolve(["技能与自定参数"]); });
+    });
+    mockRoute("/neo_gallery/media_meta", () => jsonResponse({
+        has: false, reuse: { video: true, prompt: "一段视频的提示词", skill: "minimax_h3_i2v", seed: 9 },
+    }));
+
+    const card = new GalleryCard({});
+    const gallery = new NeoGallery(toastApp());
+    document.body.appendChild(gallery.element);
+    const anchor = document.createElement("div");
+    document.body.appendChild(anchor);
+    card._showCollectMenu(gallery, { name: "clip", filename: "clip.mp4" }, "NeoAgent/2026-10-01", "local", anchor);
+    await sleep(40);
+
+    click(itemOf("再来一发"));
+    await sleep(40);
+    assert.deepEqual(jumps, ["video"], "页没建过时先走应用层建页");
+    assert.equal(handed?.prompt, "一段视频的提示词", "建完页这一发就交进了出视频页");
+    assert.ok(![...document.querySelectorAll("#neo-action-toast-stack .neo-at")]
+        .some((el) => el.textContent.includes("出视频页尚未就绪")), "交得出去就不说「未就绪」");
+    gen.setVideoPageJump(null);      // 这条环境里的替身不留进后面的用例
+    gen.setVideoReuseOpen(null);
+});
 test("卡片菜单「再来一发」：副文件带原图与参考图的编辑图，点开交给图片编辑面板", async () => {
     resetEnv();
     clearRoutes();

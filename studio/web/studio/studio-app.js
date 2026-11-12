@@ -11,11 +11,11 @@ import { configureCanvasOrigin } from "../js/core/canvas-origin.js";
 
 import "../gallery.js";   // 注册 comfy.neo.gallery 扩展（NeoGallery + 侧栏 tab 定义）
 import { setDirectorEditorHost, openDirectorEditor, DIRECTOR_RECIPE_SAVED_EVENT, SEG_MODES, MODE_LABELS, LEGACY_MODE_MAP } from "../director.js";
-import { setPaintHost, openGenMaterialDialog, openImageEditDialog, openImageEditMode, setVideoReuseOpen, reuseModelOverlay, chipButton, skillParamsChip } from "../gallery-gen.js";
+import { setPaintHost, openGenMaterialDialog, openImageEditDialog, openImageEditMode, setVideoReuseOpen, setVideoPageJump, openVideoReuse, reuseModelOverlay, chipButton, skillParamsChip } from "../gallery-gen.js";
 import { createFramePlayer, DOCK_PREVIEW_SIDE, AGENT_PREVIEW_SIDE } from "../live-preview.js";
 import { createRecipesPanel, listRecipes } from "../recipes.js";
 import { listVideoSkills } from "../recipes.js";
-import { skillDisplayName, importWorkflowSkill } from "../skill.js";
+import { skillDisplayName, importWorkflowSkill, listSkills } from "../skill.js";
 import { createImageGenSettingsForm, createVideoGenSettingsForm, createVideoModelConfigSection, listVideoGenModels, getSkillGenConfig, modelFamily } from "../image-gen.js";
 import { createModelConfigForm } from "../llm-setting.js";
 import { createSkillManager } from "../skill.js";
@@ -27,11 +27,13 @@ import { createPairPanel } from "../js/core/pair-access.js";
 import { initQueuePanel, setQueueOnline, queueTrack } from "../queue-panel.js";
 import { createPoseView } from "../pose/pose.js";
 import { createFramesView } from "../frames/frames.js";
+import { HOME_SECTIONS, createHomeInlineEditor, heroText, layoutSections, loadHomeLayout, normalizeLayout, sectionCards, sectionOrder, visibleCards } from "./home-layout.js";
 
 const view = document.getElementById("ns-view");
 const REPO_URL = "https://github.com/neoneo-ai/neo-studio";   // 设置「关于」里的仓库行，与顶栏「关于插件」同一地址
 let directorPanelOpts = null;   // 导演页配方面板选项（buildDirector 设置；含 onSelect 回传选中配方）
 let onDirectorShown = null;     // 进导演页时补拉的活：隐藏期间跳过的 director_spec 在进本页时补一次
+let directorOpenRecipe = null;  // 导演页建好时挂上的「按名字开编辑器」：首页配方卡的 ?recipe= 深链走这条路
 
 // ====== 智能体的界面上下文：宿主只交事实，面板画进上下文条并随请求体交后端进系统提示词 ======
 // 只交当前选中页签自己那一栏：导演页的配方、素材页的目录各留自己那页，切到技能 / 设置页
@@ -521,6 +523,12 @@ async function buildDirector(el) {
         refreshGuideRecipes();   // 进本页才拉快捷入口：开机停在首页时不给首页添一枪 list
         if (currentRecipeName) applyRecipe(currentRecipeName);
     };
+    // 首页的配方卡带 ?recipe= 深链进来：按名字找那一份导演配方，走引导页快捷行同一条路
+    directorOpenRecipe = async (name) => {
+        const items = await listRecipes().catch(() => []);
+        const r = items.find((x) => x.name === name);
+        if (r) openDirectorEditor(r, refreshRecipesPanel, -1, { onAdopt: () => onSelect(r) });
+    };
 
     // 引导页快捷入口：后端已按修改时间排好，这里取前三条导演配方，一行一条（标签 + 段数 + 标题）；
     // 没有导演配方就整块不占位，引导页只剩「配方」「新建配方」两个入口。
@@ -795,6 +803,7 @@ function openPaintTarget(kind) {
 // 面板构造时宿主也会发一次（空画布自己种 storyboard 也发）：那一下不是用户要点素材，
 // 建完面板才放开跳页——启动时这一发就不会把页面从首页 / 设置页深链拽走
 let paintArmed = false;
+let paintTextHost = null;   // 输入页那块生图面板的宿主：技能卡直达时按它的 __neoSetPrompt 选中这张技能
 let editArmed = false;
 function paintHostOpen(kind) {
     if (kind === "text" ? paintArmed : editArmed) openPaintTarget(kind);
@@ -809,6 +818,7 @@ function buildPaint(el) {
     main.appendChild(textHost);
 
     setPaintHost({ text: textHost, onOpen: paintHostOpen });
+    paintTextHost = textHost;
     // 文生图直接写提示词就能生成
     openGenMaterialDialog(app.neoGallery, { container: textHost });
     paintArmed = true;
@@ -834,17 +844,175 @@ function buildEdit(el) {
     editArmed = true;
 }
 
-// ====== 首页：意图卡片 —— 大字标题 + 创作五卡 + 编辑六卡 + 素材三卡，点卡直达对应页 ======
+// ====== 首页：意图卡片 —— 大字标题 + 板块卡片，点卡直达对应页；右上角入口把这一页切进原地编辑 ======
+// 卡表、板块表与版式形状在 web/studio/home-layout.js；这一块只管 DOM 与「这张卡跳到哪一屏」，
+// 编辑态长在这份 DOM 上：卡片自己长出控件，标题区直接点字改，细栏只管列数与开关；落盘在细栏右端那枚「完成」。
+// 版式是数据根里的一份文件（configs/home_layout.json）：插件页、桌面窗口、手机页打开同一份首页。
+let homeViewEl = null;                    // 首页视图元素；版式到达后重画这一块
+let homeLayout = normalizeLayout({});     // 首页按这一份画：编辑期间是草稿，平时是已落盘的版式
+let homeStored = homeLayout;              // 已落盘的版式：退出编辑落回它，页面上未保存的草稿不留
+let homeEditing = false;
+let homeSaving = false;               // 「完成」在飞的这一发：不让人连点成两次 POST
+let homeEditor = null;
 
-function homeCard(iconName, title, sub, onClick) {
-    return $el("button", { className: "ns-home-card", type: "button", onclick: onClick }, [
-        $el("span", { className: "ns-home-card-icon" }, [icon(iconName, 22)]),
+function buildHome(el) {
+    el.classList.add("ns-home");
+    homeViewEl = el;
+    homeEditor = createHomeInlineEditor({
+        listRecipes, listSkills, skillLabel: skillDisplayName, toast,
+        onDraft: (draft) => { if (!homeEditing) return; homeLayout = draft; renderHome(); },
+    });
+    renderHome();
+    document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && homeEditing) stopHomeEdit();   // Esc 弃草稿退出：落盘只有「完成」这一条路，切页也一样丢草稿
+    });
+}
+
+function startHomeEdit() {
+    homeStored = homeLayout;
+    homeEditing = true;
+    renderHome();
+    homeEditor.load().catch(e => console.error("[Neo Studio] home layout load failed:", e));
+}
+
+function stopHomeEdit() {
+    if (!homeEditing) return;
+    homeEditing = false;
+    homeLayout = homeStored;
+    renderHome();
+}
+
+/** 「完成」= 保存版式并退出：保存收口在这枚入口上，细栏不再管落盘。
+ *  保存没成就留在编辑态——页面上这份草稿不能随着一次失败的 POST 消失 */
+async function finishHomeEdit() {
+    if (homeSaving) return;
+    homeSaving = true;
+    renderHome();
+    try {
+        await homeEditor.save();
+        toast(t("已保存：插件页、桌面窗口与手机页的首页同步生效"));
+    } catch (e) {
+        toast(tf("保存失败：{msg}", { msg: String(e?.message || e) }));
+    } finally {
+        homeSaving = false;
+        renderHome();
+    }
+}
+
+function renderHome() {
+    if (!homeViewEl) return;   // 首页还没建：buildHome 建的时候直接按当前版式铺
+    const kids = [];
+    if (homeEditing) kids.push(homeEditor.bar);
+    if (homeEditing || !homeLayout.hero.off) {
+        const hero = homeHeroEl();
+        if (homeEditing) homeEditor.decorateHero(hero);   // 编辑态连收起的标题区一起出：不出就点不回来
+        kids.push(hero);
+    }
+    const blocks = [];
+    for (const section of homeSections()) {
+        const part = homeSectionBlock(section);
+        if (part) blocks.push(...part);
+    }
+    kids.push($el("div", { className: "ns-home-inner" }, blocks.length ? blocks : [
+        $el("p", { className: "ns-home-empty", textContent: t("首页卡片已全部隐藏，用右上角「编辑首页」排回来。") }),
+    ]));
+    // disabled 走属性：$el 认不出的键一律 setAttribute，disabled:false 写出来就是 disabled="false"，
+    // 属性一在就是禁用 —— 这颗钮在窗口里点了没反应就是这么来的
+    const entry = $el("button", {
+        className: "ns-btn ns-home-edit-entry", type: "button",
+        title: homeEditing ? t("完成首页编辑：保存版式并退出")
+            : t("编辑首页：卡片顺序与显隐、自建卡片、标题区文案、网格列数"),
+        onclick: () => (homeEditing ? finishHomeEdit() : startHomeEdit()),
+    }, homeEditing
+        ? [icon("save", 14), " " + t("完成")]
+        : [icon("gear", 14), " " + t("编辑首页")]);
+    entry.disabled = homeSaving;
+    // 编辑态的「完成」交进细栏右端：细栏钉在首页顶缘，滚到哪一屏都点得着完成；
+    // 浏览态入口自己站在首页右上角，跟着页面滚
+    if (homeEditing) homeEditor.setEntry(entry);
+    else kids.push(entry);
+    homeViewEl.replaceChildren(...kids);
+    homeViewEl.classList.toggle("ns-home-editing", homeEditing);
+    // 落位手势要交在已挂载的网格上：Sortable 的实例建在脱离文档的元素上只认得「拖起来」，认不出落点
+    // （真浏览器实测：拖起、emulateDragOver、onDragOver 都跑，就是不换行）。replaceChildren 之后才在文档里。
+    if (homeEditing) {
+        for (const grid of homeViewEl.querySelectorAll(".ns-home-grid")) {
+            homeEditor.decorateGrid(grid, grid.dataset.section || "");
+        }
+    }
+}
+
+// 旧版式里收起的板块在编辑态连卡一起铺回来：这一版不给收起开关，收起状态在「完成」落盘时被清成展开
+function homeSections() {
+    const ids = homeEditing ? sectionOrder(homeLayout) : layoutSections(homeLayout).map((s) => s.id);
+    return ids.map((id) => HOME_SECTIONS.find((s) => s.id === id)).filter(Boolean);
+}
+
+function homeSectionBlock(section) {
+    const off = homeLayout.hidden_sections.includes(section.id);
+    const cards = homeEditing ? sectionCards(section.id, homeLayout) : visibleCards(section.id, homeLayout);
+    if (!homeEditing && (off || !cards.length)) return null;   // 收起的板块与全隐藏的板块整块不出，不留空标题
+    const title = $el("h2", { className: "ns-home-section" + (off ? " is-off" : "") }, [t(section.label)]);
+    if (off) title.appendChild($el("span", { className: "ns-home-off-tag", textContent: t("已收起") }));
+    return [title, homeGrid(cards, section.id)];
+}
+
+function homeHeroEl() {
+    const hero = heroText(homeLayout);
+    const off = homeLayout.hero.off;
+    const kids = [
+        $el("h1", {}, [
+            $el("span", { dataset: { heroKey: "title" } }, [t(hero.title)]),
+            $el("span", { className: "ns-home-accent", dataset: { heroKey: "accent" } }, [t(hero.accent)]),
+            $el("span", { dataset: { heroKey: "suffix" } }, [t(hero.suffix)]),
+        ]),
+        $el("p", { dataset: { heroKey: "sub" } }, [t(hero.sub)]),
+    ];
+    if (homeEditing || !homeLayout.hero.cta_off) {
+        kids.push($el("button", {
+            className: "ns-home-cta", type: "button", dataset: { heroKey: "cta" }, textContent: t(hero.cta),
+            onclick: () => { if (!homeEditing) go("paint"); },
+        }));
+    }
+    return $el("div", { className: "ns-home-hero" + (off ? " is-off" : "") }, kids);
+}
+
+function homeGrid(cards, sectionId) {
+    const grid = $el("div", { className: "ns-home-grid", dataset: { section: sectionId } });
+    cards.forEach((card, index) => {
+        const el = homeCard(card);
+        grid.appendChild(el);
+        if (homeEditing) homeEditor.decorateCard(el, { section: sectionId, card, index });
+    });
+    if (homeEditing) grid.appendChild(homeEditor.addTile(sectionId));
+    // 落位手势不在这里交：这一会儿网格还没挂上文档，renderHome 挂载完再交（见 renderHome 末尾）
+    if (homeLayout.cols) grid.style.setProperty("--ns-home-cols", String(homeLayout.cols));
+    return grid;
+}
+
+function homeCard(card) {
+    // 编辑期间这张卡上的控件改的是草稿：卡面本身不跳屏——跳到别的页，页面上这份未保存的草稿就没了
+    // data-card-id 是给拖拽落位认卡用的：预览与落位都按这张卡的 id 找位置
+    return $el("button", {
+        className: "ns-home-card", type: "button", dataset: { cardId: card.id },
+        onclick: () => { if (!homeEditing) openHomeCard(card); },
+    }, [
+        $el("span", { className: "ns-home-card-icon" }, [icon(card.icon || "sparkles", 22)]),
         $el("span", { className: "ns-home-card-text" }, [
-            $el("span", { className: "ns-home-card-title", textContent: t(title) }),
-            $el("span", { className: "ns-home-card-sub", textContent: t(sub) }),
+            $el("span", { className: "ns-home-card-title", textContent: t(card.title) }),
+            $el("span", { className: "ns-home-card-sub", textContent: t(card.sub) }),
         ]),
         icon("chevron", 16),
     ]);
+}
+
+// 一张卡的落地：内置卡与自建卡同一条路，跳转全按卡上的 target / value 这份数据走
+function openHomeCard(card) {
+    if (card.target === "url") { if (card.url) openExternalUrl(card.url); return; }
+    if (card.target === "edit") { goEditMode(card.value || "normal"); return; }
+    if (card.target === "recipe") { goDirectorRecipe(card.value); return; }
+    if (card.target === "skill") { goSkillApply(card.value); return; }
+    go(card.value || "home");
 }
 
 // 「编辑」板块的直达卡：先确保编辑页那块面板已铺好（go 走 route，视图没建就建），再把这一发的模式带进去
@@ -853,44 +1021,49 @@ function goEditMode(mode) {
     openImageEditMode(mode);
 }
 
-function buildHome(el) {
-    el.classList.add("ns-home");
-    el.append(
-        $el("div", { className: "ns-home-hero" }, [
-            $el("h1", {}, [t("今天想"), $el("span", { className: "ns-home-accent", textContent: t("创作") }), t("什么？")]),
-            $el("p", { textContent: t("一句话到一段成片，全部在你自己的电脑上完成") }),
-            $el("button", { className: "ns-home-cta", type: "button", textContent: t("一句话出图"), onclick: () => go("paint") }),
-        ]),
-        // 三个板块包成一列：列宽随窗口放缩归 style.css 管，大窗档里板块标题落左栏与网格并排
-        $el("div", { className: "ns-home-inner" }, [
-            $el("h2", { className: "ns-home-section", textContent: t("开始创作") }),
-            $el("div", { className: "ns-home-grid" }, [
-                homeCard("sparkles", "生成图片", "描述画面，直接出图", () => go("paint")),
-                homeCard("film", "生成视频", "一句话加首帧，出一段视频", () => go("video")),
-                homeCard("play", "导演视频", "多段配方，生成整片视频", () => go("director")),
-                homeCard("pose", "3D 姿势", "姿势 · 整场 · 全景", () => go("pose")),
-                homeCard("target", "智能体", "说出目标，工具链多轮跑完", () => go("agent")),
-            ]),
-            // 图片编辑面板里的模式各是一张卡：点卡就把模式带进编辑页那块面板，选原图那一刻落地
-            // （涂抹局部与点选删除收在面板的模式 chip 里，要在原图上动手，首页不铺空入口）
-            $el("h2", { className: "ns-home-section", textContent: t("编辑") }),
-            $el("div", { className: "ns-home-grid" }, [
-                homeCard("pencil", "图片编辑", "写下要改成什么样，整图重绘", () => goEditMode("normal")),
-                homeCard("maximize", "扩图", "拖框定四边留白，补全周边场景", () => goEditMode("outpaint")),
-                homeCard("camera", "机位", "拖机位球换角度重出这张", () => goEditMode("angle")),
-                homeCard("copy", "融合", "多张参考图融成一张连贯画面", () => goEditMode("blend")),
-                homeCard("user", "姿势", "骨架图锁姿势，重出这一张", () => goEditMode("pose")),
-                homeCard("film", "视频抽帧", "挑一条视频，抽帧存进素材库", () => go("frames")),
-            ]),
-            $el("h2", { className: "ns-home-section", textContent: t("素材与配置") }),
-            $el("div", { className: "ns-home-grid" }, [
-                homeCard("folder", "素材库", "浏览与管理全部生成素材", () => go("gallery")),
-                homeCard("wand", "技能", "管理预设与技能包", () => go("skills")),
-                homeCard("gear", "设置", "生成默认值与界面语言", () => go("settings")),
-            ]),
-        ]),
-    );
+// 配方卡与技能卡靠深链进那一页：导演页与技能页各自把「按名字打开」那一条路交给这里
+function goDirectorRecipe(name) {
+    if (!name) { go("director"); return; }
+    history.pushState(null, "", `#/director?recipe=${encodeURIComponent(name)}`);
+    route();
 }
+
+// 技能卡的落点是这张技能的应用页：视频技能进视频页选中它，生图技能进输入页选中它。
+// 增强类、模板类技能在这两页的技能下拉里都没有位置：没有可直达的应用页就说清楚再落技能页，不装能跳。
+async function goSkillApply(id) {
+    if (!id) { go("skills"); return; }
+    const [videoSkills, skills] = await Promise.all([
+        listVideoSkills().catch(() => []),
+        listSkills().catch(() => []),
+    ]);
+    if (videoSkills.some((s) => s.id === id)) { openVideoReuse({ skill: id }); return; }
+    const meta = skills.find((s) => s.id === id);
+    if (meta?.gen_image) {
+        go("paint");
+        paintTextHost?.__neoSetPrompt?.({ skill: id });   // 技能不在本页候选里时面板自己就不填
+        return;
+    }
+    toast(t("这张技能没有可直达的应用页（不是生图 / 生视频技能），先进技能页"));
+    go("skills");
+}
+
+// 启动读一次版式（不挡启动链：先出默认版式，版式到了再重画）；编辑控件落盘后同一条事件重画并退出编辑
+function initHomeLayout() {
+    loadHomeLayout().then((stored) => {
+        if (!stored) return;   // 比这版插件老的构建没有这条接口：首页停在注册表默认版式
+        homeStored = stored;
+        if (homeEditing) return;   // 编辑期间晚到的这一份读回不能盖掉页面上那份草稿
+        homeLayout = stored;
+        renderHome();
+    });
+    window.addEventListener("neo:home-layout", (e) => {
+        homeLayout = normalizeLayout(e.detail);
+        homeStored = homeLayout;   // 保存与恢复默认交回来的就是已落盘的版式：编辑态到此结束
+        homeEditing = false;
+        renderHome();
+    });
+}
+
 
 // ====== 视频页：一句话 + 首帧（可选尾帧 / 参考图）直接出一段视频 ======
 // 独立于导演多段流程：不建配方、不读配方，参数在本页 composer 里现填，提交后端简单视频接口。
@@ -1288,6 +1461,9 @@ function buildVideo(el) {
             applyVideoSlots();
             try { localStorage.setItem(VIDEO_LAST_SKILL_KEY, skillId); } catch { /* 隐私模式记不住就算了 */ }
             filled.push(t("技能与自定参数"));
+        } else if (skillId) {
+            // 技能被删了或换了类：下拉里没有这一项就填不进去，说清是哪一张、去哪改，其余项照填
+            toast(tf("技能「{skill}」在这页没有位置：技能项没填，到技能页改这张技能再回来", { skill: skillId }));
         }
         const f2v = hasSkill && videoModeGroup(selectedMeta()) === "f2v";
         const src = reuse?.src?.filename ? reuse.src : null;
@@ -1740,7 +1916,7 @@ function createLangPanel() {
         [...rows, $el("div", { className: "ns-lang-hint", textContent: t("选择后立即落盘并整页刷新，界面文案按新语言重建。") })]);
 }
 
-// ====== 设置页：左侧 tab 切换（LLM / 生图 / 生视频 / 智能体偏好 / MCP 服务 / 界面语言 / 日志 / 启动设置 / 关于），默认 LLM ======
+// ====== 设置页：左侧 tab 切换（LLM / 生图 / 生视频 / 智能体偏好 / MCP 服务 / 首页 / 界面语言 / 日志 / 启动设置 / 关于），默认 LLM ======
 let settingsShow = null;   // 设置页的 tab 切换函数：深链 #/settings?tab=mcp 要用它落到那一栏
 
 let agentPrefs = null;   // 设置页那张偏好表单：深链 #/settings?tab=agent&skill=.. 的预填要走它
@@ -1871,6 +2047,7 @@ function buildSettings(el) {
     // 左栏自上而下四段：启动与连接（启动设置 / 启动日志 / 手机连接）· 生成（LLM / 生图 / 生视频）·
     // 智能体（偏好 / MCP）· 语言与关于（界面语言 / 关于）。十项平铺时找「生图默认值」要逐条扫，
     // 段之间只落一条无文字的细线，界面上的行数就等于设定项的数目；tab 的 key 与深链 #/settings?tab=.. 全不变
+    // （首页版式不在这里排——它由首页右上角「编辑首页」原地改，见 web/studio/home-layout.js）
     const sections = [
         { key: "launch", group: "startup", label: t("启动设置"), body: launcher.el },
         { key: "log", group: "startup", label: t("启动日志"), body: $el("div", { className: "ns-settings-section ns-log-section" }, [$el("div", { className: "ns-log-head" }, [section("启动日志"), logSrcBar, copyLogBtn]), logBody]) },
@@ -1887,6 +2064,9 @@ function buildSettings(el) {
     const tabs = $el("div", { className: "ns-settings-tabs" });
     const content = $el("div", { className: "ns-settings-content" });
     const showSection = (key) => {
+        // 认不出的 tab 名落回默认栏：旧书签里的 #/settings?tab=home（首页版式已并到首页原地编辑）
+        // 走进原来那套循环会让每一块 body 都 display:none，设置页开成一片空白
+        if (!sections.some((s) => s.key === key)) key = "llm";
         for (const s of sections) s.body.style.display = s.key === key ? "" : "none";
         for (const btn of tabs.children) btn.classList.toggle("active", btn.dataset.key === key);
         if (key === "log") {
@@ -2501,6 +2681,7 @@ function buildAgentPage(el) {
 
 function route() {
     let name = (location.hash || "#/home").replace(/^#\//, "").split("?")[0] || "home";
+    if (name !== "home") stopHomeEdit();   // 离开首页即弃草稿：首页视图是常驻显隐的，编辑态不能跟着页签留到下一页回来
     // 首页 / 导演页 / 绘画页 / 编辑页视图常驻：首页卡片直达后三页，内嵌宿主要在第一次点
     // 「新建导演配方 / 生成素材 / 图片编辑」之前就要注册好
     ensureView("home", buildHome);
@@ -2526,6 +2707,9 @@ function route() {
     // 认不出的 tab 名（深链、别的构建里已删掉的页）没有视图可显：showView 会把全部视图一起隐掉，
     // 窗口停在只剩顶栏的空白页
     if (!views.has(name)) name = "home";
+    // 深链带的那一个目标要落到刚建好的页上：#/?recipe= 开那一份导演配方
+    const deep = new URLSearchParams(location.hash.split("?")[1] || "");
+    if (name === "director" && deep.get("recipe")) directorOpenRecipe?.(deep.get("recipe"));
     showView(name);
 }
 
@@ -2533,6 +2717,8 @@ function route() {
 if (view) {
     localizeShell();
     bindHeaderNav();
+    // 出视频页没建过时，素材卡的「再来一发」与技能卡要把这一发交出去，得先把页建起来（route 同步建视图）
+    setVideoPageJump(() => go("video"));
     // 顶栏控件与拖动只吃 index.html 的静态顶栏，不等扩展 setup 与版本快照：那两次请求都打在刚装配、
     // 正拉起 ComfyUI 的桌面端服务上，排在它们后面就是「窗口开出来要过一会才能拖动」
     initWindowChrome();
@@ -2546,6 +2732,7 @@ if (view) {
         await loadVersion();   // 先拿到离线标记与能力表，再建视图（生成按钮要按能力门控）
         initOfflineGate();
         route();   // 视图先挂上：桌面端附件（顶栏状态位）失败不能连坐，窗口不至于停在只出顶栏的空白页
+        initHomeLayout();   // 首页版式读回来再重画：不排在启动链上，默认版式先站着
         initComfyStatus();
         initClipboardKeys();
         initReloadHotkey();

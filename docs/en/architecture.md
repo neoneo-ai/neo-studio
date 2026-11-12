@@ -83,6 +83,7 @@ studio/
 ├── backyard.py                # Backyard preprocessing & OSS upload page
 ├── recipes.py                 # recipe backend + /rs_recipes/* routes
 ├── studio.py                  # Neo Studio backend + /neo_studio/* routes
+├── home_layout.py             # home layout read/write + /neo_home/* routes
 ├── pose.py                    # 3D Pose backend + /neo-pose and /neo_pose/* routes
 ├── pose_cloud.py              # cloud pose library read side (manifest and files from the local cache) + /neo_pose/cloud_* routes
 ├── frames.py                  # Video frame extractor backend + /neo_frames/* routes

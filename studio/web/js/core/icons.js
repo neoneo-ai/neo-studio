@@ -52,6 +52,9 @@ const PATHS = {
 
 };
 
+/** 可用的图标名：给「选一枚图标」这类界面当候选表（首页自建卡的图标选择走这里） */
+export const ICON_NAMES = Object.keys(PATHS);
+
 /** 建一枚图标（每次新建节点，同一枚图标要出现在多个按钮里） */
 export function icon(name, size = 14) {
     const box = document.createElement("span");

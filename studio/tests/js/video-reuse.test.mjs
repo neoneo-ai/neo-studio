@@ -104,6 +104,21 @@ async function reuse(reusePayload) {
     return filled;
 }
 
+test("视频复用：出视频页没建过也照跳——建页那一刻这一发就铺进面板", async () => {
+    await boot();                      // 停在首页：用户从没开过视频页，复用钩子还没注册
+    assert.equal(videoPage(), null, "视频页此刻还没建");
+    const filled = await reuse({
+        video: true, skill: "minimax_h3_t2v", prompt: "没开过视频页的那一发",
+        seed: 12, duration: 5,
+    });
+    assert.ok(videoPage(), "点了「再来一发」就落到出视频页：跳转不被「页未就绪」卡住");
+    assert.equal(window.location.hash, "#/video", "页面真的换过去了");
+    assert.equal(skillSel().value, "minimax_h3_t2v", "建页那一刻技能就选中在面板里");
+    assert.equal(promptBox().value, "没开过视频页的那一发", "提示词填进新建的面板");
+    assert.deepEqual(filled, ["技能与自定参数", "种子", "时长", "提示词"], "交出去的就是那一发的清单");
+    assert.ok(!toastTexts().some((s) => s.includes("出视频页尚未就绪")), "交得出去就不说「未就绪」");
+});
+
 test("视频复用：首尾帧技能整发填回面板，值原样进 payload，提示列出填了的项", async () => {
     await boot();
     await gotoVideo();
@@ -211,4 +226,7 @@ test("视频复用：技能不在下拉——技能不动，素材按面板现�
     assert.deepEqual(filled, ["参考图", "种子", "提示词"], "认不出的只有技能：素材与种子照填进面板现家族");
     assert.deepEqual(thumbPaths(2), ["NeoSimple/frame.png"],
         "面板停在参考家族：src 落进参考槽，首帧 / 尾帧方块不动");
+    assert.match(document.getElementById("ns-toast")?.textContent || "",
+        /技能「gone_skill」在这页没有位置/,
+        "认不出的技能要说清是哪一张、去哪改，不能让用户以为技能填上了");
 });

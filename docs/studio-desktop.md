@@ -145,7 +145,7 @@ ComfyUI 没就绪时点它只会得到「页面不存在」。`openSkillWorkflow
 - 素材页顶栏的「🖼️ 生成素材」与「🖼️ 新增图片配方」切到输入页，图片卡菜单的「🖼️ 图片编辑」切到编辑页。
   两页各自一块面板、各只管一件事：输入页出文生图，编辑页改图；没有一条「文生图 / 图片编辑」模式条，
   也没有图片配方列表。
-- 首页「编辑」板块的直达卡（图片编辑 / 扩图 / 机位 / 融合 / 姿势）把这一发的模式带进编辑页那块现成面板（`openImageEditMode`
+- 首页「编辑」板块的直达卡（图片编辑 / 扩图 / 局部 / 删除 / 机位 / 融合 / 姿势）把这一发的模式带进编辑页那块现成面板（`openImageEditMode`
   经宿主的 `__neoSetMode`）：面板由编辑页进页铺好，点卡只换模式、不重建（重建会把用户写了一半的提示词清掉）。模式一进面板就切过去，
   没有原图也切，空态提示点名它；模式 chip 一直可点，**模式只由用户切**——`applySource` 换原图、`clearSource` 删原图都不碰它，
   删原图只拆铺在原图上的那一层（扩图框 / 涂抹层 / 标记点）。要在原图上动手的控件（扩图框 / 涂抹行 / 点选行 / 机位球与三条滑杆）没有原图时整块收着，
@@ -288,13 +288,38 @@ js_api（`check_setup` / `pick_root` / `pick_python` / `start_setup`），根目
 - 刷新入口不依赖开发模式：Studio 页自己接管 F5 / Ctrl+F5 / Ctrl+R（`studio/web/studio/studio-app.js` 的
   `initReloadHotkey`），前端热同步（`tools/watch_web.py`）之后按一次就是新代码。
 
+## 首页版式（首页原地编辑）
+
+- 浏览态的首页右上角「编辑首页」（`.ns-home-edit-entry`，`position: absolute` 站在 `.ns-home` 自己的右上角，跟着页面一起滚，滚出首屏就不见，不常驻在窗口上压住卡片）把这一页切进编辑态，这一页自己就是编辑器：整张卡就是拖动手势
+  （不设手柄与 ↑↓ 箭头），卡片右上角的控件条只一枚显隐眼睛（自建卡多一枚「编辑这张卡」的铅笔与一枚删除），标题区五行文案点字直接改（`contenteditable`，失焦落进草稿），顶端一条细栏
+  （`.ns-home-edit-bar`，`position: sticky` + `width: fit-content` + `margin: 0 0 14px auto`）整块收成一条小组、贴在首页右上角，管网格列数、标题区与出图按钮开关、恢复默认；那一枚「完成」就是入口本身，坐在栏里这一行的末尾，栏钉在哪一屏它就跟着钉在哪一屏，滚到哪一屏都点得着。板块不给控件：板块顺序与整块收起是旧版式里读到的状态，这一版不在首页上排它们。
+- 编辑吃的是本地草稿：每一次改动经 `host.onDraft` 交回 `renderHome()` 实时重画这一页，全程不发请求。编辑态的卡面打断点击（`.ns-home-editing .ns-home-card` 定 `cursor: default`、
+  内层 `pointer-events: none`，`homeCard` / hero CTA 的 onclick 也认这个态），跳屏带不走未保存的草稿。
+- 编辑态这一页铺全：隐藏的卡以幽灵位（`.ns-home-card.is-hidden-card`）留在网格原位，眼睛一点就排回来；旧版式里收起的板块连卡一起铺回来并标暗（`.ns-home-section.is-off` 加「已收起」角标）；
+  网格末尾一张「添加卡片」占位卡（`.ns-home-add-tile`）开一张自建卡的编辑弹窗（`.ns-home-card-dialog`，借素材库弹窗那套遮罩与盒子），字段排三行：跳转类型 + 跳转目标、标题 + 副标题、图标 + 板块，
+  换了跳转类型或目标，没动过的格子就按那一发填好（内置卡表同一条目的标题 / 副标题 / 图标 / 板块，配方与技能用名字，外部链接用域名），打过字的那一格不覆盖；
+  已有自建卡的铅笔开同一个弹窗并带着现值进来——弹窗的「保存」才把这张卡写进草稿，「取消」与 Esc 丢掉这一次，页面上不存在「这一块的开关不在这页上」。
+- 自建卡的跳转类型只有编辑模式 / 导演配方 / 技能 / 外部链接四种：编辑模式给全编辑页那一发的 7 个模式（与面板的模式 chip 同源同序），配方与技能的目标留「不指定」就是只进导演页 / 只进技能页。旧版式里存的直连卡（`target: "page"`）照读照跳，铅笔开弹窗时这一项只在这张卡已经用它时出现，新卡配不出这一项；后端 `CUSTOM_TARGETS` 里留着 `page` 只为这一张旧卡读得回来。
+- 技能卡的落点是技能应用的那一页：`openHomeCard` 拿 `listVideoSkills()` 认这张技能，生视频技能走 `openVideoReuse({ skill })` 进出视频页并把技能选中（视频页还没建过时由应用层启动时注册的 `setVideoPageJump` 先把页建起来再交这一发；画布页没有这层应用层，才说一句「出视频页尚未就绪」）；生图技能进输入页，由 `paintTextHost.__neoSetPrompt({ skill })` 选中它；两页的技能下拉都没有位置的技能（增强类 / 模板类）在界面上说清楚没有可直达的应用页，再落技能页。
+- 落位手势是 vendored 的 SortableJS（`studio/web/sortable.min.js`，1.15.7，MIT，`home-layout.js` 里 `import "../sortable.min.js"` 引进来，与 marked/purify 同一份路子，运行时不联网）：`decorateGrid` 给编辑态每条网格建一个实例——`group: "ns-home"` 让三条网格互相接得住卡，`draggable: ".ns-home-card"` 只认卡（「添加卡片」占位与板块不参与），`ignore` 让卡上的按钮不算拖起点，`animation: 150` 就是换位那张卡的滑行，`ghostClass: "is-drag-ghost"` 是留在原位的影子、`dragClass: "is-dragging"` 是指针上那张卡。整张卡就是手势，卡本身不再挂原生 `draggable`（两套手势不能同时开），触摸端的拖动同样由它接住。
+  落位只读 `onEnd` 交出来的 `oldDraggableIndex` / `newDraggableIndex`（落下去自己是第几格，末尾就是排到最后）：同板块走 `moveCard`，自建卡跨板块把 `custom[].section` 改过去并插进那一格，内置卡落进别的板块就 `cancel()` 退回原位、细栏写一句「内置卡只能在本板块内排序，自建卡能搬去别的板块」，不让人试。
+  重画一次首页就换一批网格元素：`decorateGrid` 按渲染轮次（`gridEpoch`，`render()` 一递增）销毁上一轮那批实例——判定不能用 `isConnected`，`homeGrid` 在网格挂上文档之前就来调这里，看连接状态会把同一轮里前一条网格当成旧的销毁掉。
+- 编辑态的入口就是「完成」，它坐在收成右上角小组的那条细栏末尾：它发一次 `POST /neo_home/layout` 并广播 `neo:home-layout`，首页按落盘回来的形状重画、退出编辑态，界面上给一句已保存的提示；保存落回来时把 `hidden_sections`
+  写成空表——旧版式里的整块收起随这一次落盘展开。「恢复默认」发 `POST /neo_home/layout/reset` 删掉版式文件，同样只广播一次并给出提示。
+- Esc 与切到别的页（`route()` 里落点不是 home 时 `stopHomeEdit()`）是弃草稿退出：首页落回已落盘的版式，不发请求、不写文件。「完成」的 POST 没成时留在编辑态，页面上这份草稿原样留着，
+  入口回到可点的。「完成」在飞的这一次入口禁用（`homeSaving`），连点不成两次请求。版式不落 localStorage——插件页、桌面窗口与手机页共用数据根里那一份 `configs/home_layout.json`。
+- 卡表、版式形状与编辑器的装饰钩子（`decorateHero` / `decorateCard` / `decorateGrid` / `addTile`）只在 `studio/web/studio/home-layout.js` 一份，`studio-app.js`
+  只管建 DOM 并把建好的 hero 与卡片交给钩子、把细栏右端那枚「完成」接到编辑器的 `save()` 上；「跳到哪一屏」是卡上的 target / value 这份数据，由 `studio-app.js` 的 `openHomeCard` 落地。设置页不再单列「首页」栏。
+  用例：`studio/tests/js/home-layout.test.mjs`、`studio/tests/test_home_layout.py`、`app/tests/test_studio_server.py` 的版式用例。
+
 ## 设置页分组
 
 - 设置页左栏十项自上而下按 `启动与连接`（启动设置 / 启动日志 / 手机连接）· `生成`（LLM 设置 / 生图设置 / 生视频设置）·
   `智能体`（智能体偏好 / MCP 服务）· `语言与关于`（界面语言 / 关于）四段排下来，段与段之间只有一条无文字的分割线
   `.ns-settings-sep`（与 tab 平级挂在 `.ns-settings-tabs` 里，线里不写字，界面上的行数就等于设定项的数目）。
   tab 的 `data-key` 与深链 `#/settings?tab=..` 全不变；摘掉一枚 tab 时线跟着剩下的内容走，浏览器标签页没有启动设置面板
-  就只摘那一枚 tab，条首不悬一条多余的线。
+  就只摘那一枚 tab，条首不悬一条多余的线。「首页」栏随首页原地编辑一起摘掉之后，旧书签里的 `?tab=home` 由
+  `showSection` 落回默认栏（LLM 设置），设置页不会因为认不出的 tab 名开成一片空白。
 - 栏内长表单的小标题分区不变：启动设置分 `ComfyUI 位置`（根目录 / 解释器）、`网络与端口`（端口 / 局域网监听 / 远程 ComfyUI）、
   `桌面窗口`（无边框窗口 / 开发模式），启停与状态行始终在面板顶部；LLM 设置分 `服务商与模型` / `远程连接`（API Key 与
   自定义端点）/ `本地模型`（模型目录与两个自动卸载），后两组连小标题一起随整组显隐收起，切到本地 GGUF 时不空挂在没内容的

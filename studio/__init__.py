@@ -26,12 +26,12 @@ if __package__ not in (None, ""):
     # 桌面端离线服务复用同一批 handler，不经过 PromptServer。
     from . import (gallery, gallery_lora, gallery_oss, bookmark, lora_tag, skill, llm, recipes,
                    video_gen, image_gen_files, model_hub, skill_models, backyard, prompt_names, pose,
-                   pose_cloud, frames, task_center)
+                   pose_cloud, frames, task_center, home_layout)
 
     from server import PromptServer
     for _mod in (gallery_lora, gallery_oss, gallery, bookmark, lora_tag, skill, llm, recipes,
                  video_gen, image_gen_files, model_hub, skill_models, backyard, prompt_names, pose,
-                 pose_cloud, frames, task_center):
+                 pose_cloud, frames, task_center, home_layout):
 
         for _route in _mod.routes:
             PromptServer.instance.routes.route(_route.method, _route.path, **_route.kwargs)(_route.handler)

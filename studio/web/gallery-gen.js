@@ -49,14 +49,21 @@ export function buildGenerationMenuItems({ card, gallery, image, subfolder }) {
 }
 
 /** 素材卡菜单「再来一发」的视频入口：出视频页挂载时注册，把这一发交回视频页铺好面板。
- *  注册方在桌面端视频页（studio-app.js 的 buildVideo）；页面没挂载过的兜底走 info。
+ *  注册方在桌面端视频页（studio-app.js 的 buildVideo）；页面还没建过时先交应用层建页
+ *  （setVideoPageJump 在应用层启动时注册），建完页注册方就落位了，这一发照样交得出去。
+ *  画布页（#ns-view=canvas）没有这一层应用层：建不了页就明说，不假装跳过去。
  *  预填是异步的（要等技能与模型列表落位），填完的清单以 promise 交回。 */
 let _videoReuseOpen = null;
+let _videoPageJump = null;
 export function setVideoReuseOpen(open) { _videoReuseOpen = open || null; }
+export function setVideoPageJump(jump) { _videoPageJump = jump || null; }
 export function openVideoReuse(reuse) {
     if (!_videoReuseOpen) {
-        actionToast({ severity: "info", summary: t("出视频页尚未就绪"), detail: t("打开「视频」页后再点「再来一发」") });
-        return Promise.resolve([]);
+        if (!_videoPageJump) {
+            actionToast({ severity: "info", summary: t("出视频页尚未就绪"), detail: t("打开「视频」页后再点「再来一发」") });
+            return Promise.resolve([]);
+        }
+        _videoPageJump();   // route 同步建视图：回来的那一刻注册方已在 buildVideo 里落位
     }
     const filled = _videoReuseOpen(reuse);
     notifyPrefillFilled(filled);   // 预填是异步的：填完的清单落回同一条复用提示，与两块输入卡一个口径

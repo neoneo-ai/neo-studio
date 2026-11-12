@@ -14,6 +14,67 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 - **The Studio home compacts in shorter windows.** In windows under ~1150px tall (widths above 720px) the
   hero, section gaps and cards shrink together, so the full card grid fits the viewport and no scrollbar
   shows by default; wide-window windows keep the roomier layout.
+- **You lay out the home page on the home page itself.** 编辑首页 standing in the top-right corner of the home page -
+  it scrolls away with the page instead of staying pinned on the window - switches that page into
+  edit mode, and that page is now the editor: the whole card is the drag gesture, so its corner tool row is just the
+  hide/show eye (custom cards also get a pencil and delete), the hero title lines are edited by clicking the text,
+  hidden cards stay in the grid as ghost
+  tiles so you can bring each one back where it sits, and the grid ends with an "添加卡片" placeholder tile that opens the
+  card's edit dialog — fields in three rows (jump type + jump target, title + subtitle, icon + section), the cells you
+  have not touched auto-filled from that jump type and target, and the same dialog the pencil opens with the card's
+  current values; only its 保存 puts the card
+  into the draft. Sections carry no controls of their own: their order and collapsed state are only read from a layout an
+  older build saved, a section left collapsed is laid back out with its cards while you edit, and that save writes it back
+  expanded. The 编辑 bar is one compact group pinned to the home page's top-right corner (`width: fit-content` +
+  `margin-left: auto`) that owns the grid column count, the hero switches, 恢复默认 and the 完成 button at the end of
+  its row, so it stays pinned with the bar while the page scrolls without stretching across the page.
+  Custom cards can be dragged into another section; built-in cards
+  reorder inside their own section and say so. Every change redraws the page at once without sending a request;
+  while editing the entry button is 完成, so one click saves the layout, says it on screen and leaves edit mode - and a
+  save that fails keeps the draft on the page with the button clickable again. 恢复默认 hands back the registry layout,
+  and Esc / leaving the
+  home page discards the draft so the home falls back to what is on disk. The layout stays one file in the data root
+  (`configs/home_layout.json`), so the plugin page, the desktop window and the paired phone page open the same home.
+  The 首页 tab is gone from the settings sidebar, and an old `#/settings?tab=home` bookmark lands on the default panel
+  instead of a blank page. Covered by `studio/tests/js/home-layout.test.mjs`, `studio/tests/test_home_layout.py` and
+  the layout cases in `app/tests/test_studio_server.py`.
+
+### Changed
+- **Dragging a home card now feels like carrying a card.** The home page's reorder gesture is a vendored SortableJS
+  (MIT 1.15.7, `studio/web/sortable.min.js`, pulled in with `import "../sortable.min.js"` the way marked/purify are,
+  nothing fetched at runtime): the card you carry rides under the pointer, the slot it left keeps a ghost
+  (`.is-drag-ghost`), and every card that changes slot slides there in 150 ms. The landing slot is the slot the pointer
+  is over — dropping past the last card puts the card at the end — and the sliding preview can no longer move the drop
+  point out from under the pointer, which is what made the hand-written HTML5 drag bounce back and forth. Custom cards
+  still move between sections; a built-in card dropped into another section returns to its slot with the hint in the bar.
+  Dragging on a phone works now: the old gesture did not. Covered by the drop cases in `studio/tests/js/home-layout.test.mjs`.
+- **A 再来一发 is never blocked by "the video page is not ready".** A video card's 再来一发 and a home-page video skill
+  card stopped with 「出视频页尚未就绪」 whenever the Video page had never been opened in that window, so the run you asked
+  for never reached the composer. The desktop shell now hands the gallery a page-jump hook (`setVideoPageJump`): the
+  first click builds the Video page and prefills that run in the same gesture. The canvas page (no shell layer) keeps
+  the honest "not ready" notice. A run whose skill is no longer in that page's dropdown names the skill and points to
+  the Skills page, and fills everything else as before.
+
+- **Every 编辑 mode has its own home card, and a card you create no longer offers 页面直连.** The home 编辑 section carries
+  **局部** and **删除** next to 图片编辑 / 扩图 / 机位 / 融合 / 姿势, so all seven modes of the 图片编辑 panel have a card that
+  lands on the 编辑 page already in that mode. A custom card picks between 编辑模式 / 导演配方 / 技能 / 外部链接; jumping
+  straight to a page is off that list — a layout saved earlier keeps its 页面直连 card readable and jumping, and the pencil
+  shows that type only for a card that already uses it. A 配方 card with no recipe chosen opens the 导演页, a 技能 card with
+  no skill chosen opens the 技能页. A 技能 card opens the page that applies that skill: a 生视频 skill opens 出视频页 with it
+  selected, a 生图 skill opens 输入页 with it selected, and a skill with no slot in either page's skill list (enhancement /
+  template skills) says it has no page to land on and opens the 技能页. Covered by the new cases in
+  `studio/tests/js/home-layout.test.mjs`, `studio/tests/js/studio-desktop.test.mjs` and `studio/tests/test_home_layout.py`.
+
+### Fixed
+- **The 编辑首页 entry answers the click.** The entry was handed to the page builder with `disabled: false`, and a false
+  there is written as the attribute `disabled="false"`; HTML takes the mere presence of that attribute as disabled, so the
+  entry showed, hovered, took focus, and stayed inert - neither 编辑首页 nor 完成 did anything when clicked. The flag is
+  now set as the button's own property, so the entry is disabled only while a save is in flight, and in edit mode the
+  entry lays itself into the slim sticky bar's row at its right end instead of sitting behind that bar, so 完成 is the
+  whole control and stays pinned where you can reach it. Covered by a case in `studio/tests/js/home-layout.test.mjs`.
+
+
+
 
 ## [1.6.1] - 2026-11-08
 
