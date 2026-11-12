@@ -75,6 +75,8 @@ const gridOf = (home, label) => sectionTitle(home, label).nextElementSibling;
 /** 自建卡的编辑弹窗：新建与编辑同一条路，填在弹窗里，保存才进草稿 */
 const dlg = () => document.querySelector(".ns-home-card-dialog");
 const dlgBtn = (cls) => dlg().querySelector(`.ns-home-card-dialog-${cls}`);
+/** 图标格子里现在选着的那一枚：图标格铺的是图标本身，图标名只是这枚的标识 */
+const iconPick = () => dlg().querySelector('.ns-home-f-icons [aria-pressed="true"]')?.dataset.icon;
 /** 首页上真出现的那一叠卡名：幽灵位（隐藏的卡）不算出现 */
 const cardTitles = (root) =>
     [...root.querySelectorAll(".ns-home-card:not(.is-hidden-card) .ns-home-card-title")].map((e) => e.textContent);
@@ -627,13 +629,15 @@ test("添加卡片的弹窗排三行：跳转类型与目标在前，格子按�
     const boxIn = (label) => fieldIn(dlg(), label).querySelector("input, select");
     assert.equal(boxIn("标题").value, "图片编辑", "新建开局按这一发落点（编辑模式 · 图片编辑）填好标题");
     assert.equal(boxIn("副标题").value, "写下要改成什么样，整图重绘");
-    assert.equal(boxIn("图标").value, "pencil");
+    assert.equal(iconPick(), "pencil", "新建开局图标格子点着这一发的那一枚");
+    assert.ok(!fieldIn(dlg(), "图标").querySelector("select"),
+        "图标不在下拉里选：那里面只有 pencil / maximize 这类英文标识");
 
     pick(fieldIn(dlg(), "跳转目标").querySelector("select"), "angle");
     await flush();
     assert.equal(boxIn("标题").value, "机位", "换了跳转目标：标题跟着这一发走");
     assert.equal(boxIn("副标题").value, "拖机位球换角度重出这张");
-    assert.equal(boxIn("图标").value, "camera");
+    assert.equal(iconPick(), "camera", "换了跳转目标：图标格子跟着这一发点着那一枚");
     assert.equal(boxIn("板块").value, "edit", "板块由点开的那张占位卡定：自动填不把卡搬去别的板块");
 
     const typed = boxIn("标题");
@@ -642,13 +646,71 @@ test("添加卡片的弹窗排三行：跳转类型与目标在前，格子按�
     pick(fieldIn(dlg(), "跳转类型").querySelector("select"), "recipe");
     await flush();
     assert.equal(boxIn("标题").value, "我的格子", "打过字的格子自动填不覆盖");
-    assert.equal(boxIn("图标").value, "play", "没碰过的图标换成这一发的");
+    assert.equal(iconPick(), "play", "没碰过的图标换成这一发的");
     assert.equal(boxIn("板块").value, "edit", "板块算碰过：换跳转类型也不搬卡");
 
     click(dlgBtn("cancel"));
     await flush();
     assert.ok(!dlg(), "取消关掉弹窗，自动填的那些没进草稿");
     assert.equal(home.querySelectorAll(".ns-home-card.is-custom").length, 0, "没保存就不落卡");
+});
+
+test("图标格子铺的是图标本身：点一下就是它，点过的自动填不覆盖", async () => {
+    mountStudio();
+    mockLayout({});
+    await importApp();
+    await settle();
+    const home = homeOf();
+    await enterEdit(home);
+    click(gridOf(home, "编辑").querySelector(".ns-home-add-tile"));
+    await flush();
+
+    const swatches = [...dlg().querySelectorAll(".ns-home-f-icons .ns-home-icon-swatch")];
+    assert.ok(swatches.length >= 20, "候选铺成一格一格，不是一行文字");
+    assert.ok(swatches.every((b) => b.querySelector("svg")), "格子里是图标本身：图标名只在 tooltip 上");
+    click(swatches.find((b) => b.dataset.icon === "wand"));
+    assert.equal(iconPick(), "wand", "点一下就把这一枚选上");
+    assert.equal(dlg().querySelectorAll('.ns-home-f-icons [aria-pressed="true"]').length, 1,
+        "图标格子里只有一枚是选中的");
+
+    pick(fieldIn(dlg(), "跳转类型").querySelector("select"), "recipe");
+    await flush();
+    assert.equal(iconPick(), "wand", "点过的图标自动填不覆盖");
+    click(dlgBtn("cancel"));   // 用例收尾把弹窗关掉：弹窗的 Esc 绑在 document 上，带着开着弹窗的实例会吃掉下一个用例的 Esc
+    await flush();
+});
+
+test("自动填落下的图标都在图标格子那把候选里：落点填的那一枚必定点得着", () => {
+    for (const card of hl.HOME_CARDS) {
+        assert.ok(hl.CARD_ICONS.includes(card.icon), `内置卡的图标不在候选里：${card.icon}`);
+    }
+    for (const shape of [hl.cardShapeForTarget("recipe", "我的配方", "我的配方"),
+        hl.cardShapeForTarget("skill", "s_a", "画一张"),
+        hl.cardShapeForTarget("url", "https://ex.com/a")]) {
+        assert.ok(hl.CARD_ICONS.includes(shape.icon), `自动填落下的图标不在候选里：${shape.icon}`);
+    }
+});
+
+test("旧版式里存的图标不在候选里时铺在格子最前照旧选着，点一下就落到候选里", async () => {
+    mountStudio();
+    mockLayout({ custom: [{ id: "custom_icon", section: "create", title: "旧图标卡", target: "page", value: "gallery", icon: "minimize" }] });
+    await importApp();
+    await settle();
+    const home = homeOf();
+    await enterEdit(home);
+    click(chip(cardOf(home, "旧图标卡"), "编辑这张卡"));
+    await flush();
+
+    const swatches = [...dlg().querySelectorAll(".ns-home-f-icons .ns-home-icon-swatch")];
+    assert.equal(swatches[0].dataset.icon, "minimize", "存着的图标铺在格子最前：弹窗不假装它是空选项");
+    assert.equal(iconPick(), "minimize", "这张卡的图标照旧选着");
+    click(swatches.find((b) => b.dataset.icon === "folder"));
+    click(dlgBtn("save"));
+    await flush();
+    click(home.querySelector(".ns-home-edit-entry"));
+    await flush(40);
+    assert.equal(lastCall("/neo_home/layout", "POST").body.custom[0].icon, "folder",
+        "点一下就换进候选里的那一枚，落盘的是它");
 });
 
 test("旧版式里的直连卡：照读照跳，铅笔开弹窗留着这一项，不静默换掉跳转类型", async () => {
@@ -922,6 +984,13 @@ test("首页版式的 CSS 挂点：列数走自定义属性，卡上的控件与
     assert.ok(!/\.ns-home-f-field:nth-child\(4n/.test(css),
         "三行由弹窗结构排出来：字段不再靠 nth-child 跨列");
     assert.match(css, /\.ns-home-card-dialog-foot\s*\{/, "弹窗脚一行管状态与保存取消");
+    assert.ok(/\.ns-home-f-icons-field\s*\{[^}]*grid-column:\s*1 \/ -1/.test(css),
+        "图标格横跨弹窗两列：一格一格的图标成排铺开才点得准");
+    assert.ok(/\.ns-home-icon-swatch\s*\{[^}]*width:\s*34px/.test(css)
+        && /\.ns-home-f-icons\s*\{[^}]*flex-wrap:\s*wrap/.test(css),
+        "一格 34px、排满就换行：24 枚图标在 560px 宽的弹窗里落两行");
+    assert.ok(/\.ns-home-icon-swatch\.is-on\s*\{[^}]*border-color:\s*var\(--ns-accent\)/.test(css),
+        "选中的那一枚描边点亮：一眼看得出选的是哪枚");
     assert.match(css, /\.ns-home-hero \[contenteditable\]/, "标题区就地改字应有可见的描边");
     assert.match(css, /\.ns-home-editing \.ns-home-card\s*\{/, "编辑态的卡面应打断点击，跳屏不会把草稿带走");
     assert.ok(/\.ns-home-card\.is-dragging\s*\{[^}]*transform/.test(css), "指针上那张克隆卡是斜着的半透明影子");

@@ -40,6 +40,12 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   the layout cases in `app/tests/test_studio_server.py`.
 
 ### Changed
+- **A new home card picks its icon from the icons themselves.** In the custom-card dialog the icon is a grid of icons
+  (`.ns-home-f-icons` with one `.ns-home-icon-swatch` per candidate, 24 of them) instead of a dropdown of English icon
+  names: the picked swatch lights up its border, the icon name stays in the tooltip, and the row spans both dialog
+  columns so the icons line up. An icon a saved layout carries that is outside that grid shows as the first swatch and
+  stays picked — the dialog never pretends the card has no icon. Covered by the icon cases in
+  `studio/tests/js/home-layout.test.mjs`.
 - **Dragging a home card now feels like carrying a card.** The home page's reorder gesture is a vendored SortableJS
   (MIT 1.15.7, `studio/web/vendor/sortable.min.js`, pulled in with `import "../vendor/sortable.min.js"` the way marked/purify are,
   nothing fetched at runtime): the card you carry rides under the pointer as Sortable's clone (`.sortable-fallback`

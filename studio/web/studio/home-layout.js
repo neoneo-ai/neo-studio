@@ -52,6 +52,14 @@ export const HOME_TARGETS = ["edit", "recipe", "skill", "url"];   // 自建卡�
 export const LEGACY_TARGET = "page";   // 旧版式里存的直连卡：读得回来跳得动，弹窗只给已经在用它的人看
 export const HOME_COLS = [0, 2, 3, 4, 5];   // 0 = 跟随窗口档位；窄档与手机自己收到 2 / 1 列
 
+// 自建卡挑图标的候选：弹窗里铺出来的是图标本身，图标名只当这枚的标识（tooltip 上看得见）。
+// 内置卡表与 cardShapeForTarget 用到的每一枚都在这一把里——自动填落下的图标必定点得着。
+export const CARD_ICONS = [
+    "sparkles", "wand", "image", "pencil", "film", "play", "camera", "pose",
+    "target", "copy", "user", "folder", "gear", "plug", "maximize", "cross",
+    "list", "clock", "send", "history", "eye", "plus", "ratio", "trash",
+];
+
 const LAYOUT_PATH = "/neo_home/layout";
 const ID_OK = /^[A-Za-z0-9_][A-Za-z0-9_-]{0,39}$/;
 const MAX_CUSTOM = 20;
@@ -422,7 +430,7 @@ export function createHomeInlineEditor(host = {}) {
             return $el("div", { className: "ns-home-card-dialog-shape" }, [
                 inlineField(t("标题"), work.title, mark("title")),
                 inlineField(t("副标题"), work.sub, mark("sub")),
-                inlineSelect(t("图标"), ICON_NAMES.map((n) => [n, n]), work.icon || "sparkles", mark("icon")),
+                inlineIconPicker(t("图标"), CARD_ICONS, work.icon, mark("icon")),
                 inlineSelect(t("板块"), HOME_SECTIONS.map((s) => [s.id, t(s.label)]), work.section || "create",
                     mark("section")),
             ]);
@@ -600,6 +608,30 @@ function inlineSelect(label, options, value, onChange) {
     sel.addEventListener("change", () => onChange(sel.value));
     return $el("label", { className: "ns-home-f-field" },
         [$el("span", { className: "ns-home-f-label", textContent: label }), sel]);
+}
+
+/** 图标挑一枚：候选直接铺成图标格，点一下就是它。图标名是给写版式的人看的标识，
+ *  拿它当选择面等于让用户在「pencil / maximize」里自己认图形 */
+function inlineIconPicker(label, names, value, onChange) {
+    // 旧版式里存着的图标不在这把候选里时照旧铺一枚：界面不假装它是空选项，点一下就正了
+    const icons = value && !names.includes(value) ? [value, ...names] : names;
+    const box = $el("div", { className: "ns-home-f-icons" });
+    const paint = () => {
+        for (const b of box.children) {
+            const on = b.dataset.icon === value;
+            b.classList.toggle("is-on", on);
+            b.setAttribute("aria-pressed", on ? "true" : "false");
+        }
+    };
+    for (const name of icons) {
+        box.appendChild($el("button", {
+            className: "ns-home-icon-swatch", type: "button", title: name, dataset: { icon: name },
+            onclick: () => { value = name; paint(); onChange(name); },
+        }, [icon(name, 18)]));
+    }
+    paint();
+    return $el("div", { className: "ns-home-f-field ns-home-f-icons-field" },
+        [$el("span", { className: "ns-home-f-label", textContent: label }), box]);
 }
 
 function newCard(custom) {

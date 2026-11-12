@@ -1069,6 +1069,16 @@ body {
     border-radius: 6px; color: var(--ns-fg); padding: 4px 7px; font: inherit; font-size: 12px;
 }
 .ns-home-f-input:focus, .ns-home-f-select:focus { border-color: var(--ns-accent); }
+/* 图标挑一枚：候选铺成图标格独占一行——34px 一格也要两行才排得下 24 枚，格子窄到一行就点不准 */
+.ns-home-f-icons-field { grid-column: 1 / -1; align-items: flex-start; }
+.ns-home-f-icons { display: flex; flex-wrap: wrap; gap: 4px; }
+.ns-home-icon-swatch {
+    flex: none; display: flex; align-items: center; justify-content: center;
+    width: 34px; height: 34px; border: 1px solid var(--ns-field-bd); border-radius: 6px;
+    background: var(--ns-field); color: var(--ns-dim); cursor: pointer;
+}
+.ns-home-icon-swatch:hover { color: var(--ns-fg); border-color: var(--ns-accent); }
+.ns-home-icon-swatch.is-on { color: var(--ns-accent); border-color: var(--ns-accent); background: var(--ns-raised); }
 /* 标题区就地改字：可点的行虚线描边，失焦落进草稿 */
 .ns-home-hero.is-off { opacity: .5; }
 .ns-home-hero [contenteditable] { cursor: text; border-radius: 4px; outline: 1px dashed transparent; }

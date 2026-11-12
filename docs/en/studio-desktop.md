@@ -441,7 +441,11 @@ startable once the root is filled in.
   (`.ns-home-section.is-off` with a Collapsed tag); the grid ends with an "Add a card" placeholder tile
   (`.ns-home-add-tile`) that opens the custom-card
   edit dialog (`.ns-home-card-dialog`, on the library modal's overlay and box) in three rows — jump type + jump target,
-  title + subtitle, icon + section. Changing the jump type or target refills every cell you have not touched with that
+  title + subtitle, icon + section. The icon cell spans both columns and shows the icons themselves
+  (`.ns-home-f-icons` with one `.ns-home-icon-swatch` per candidate, 34px each, wrapping; the picked one lights up its
+  border and the icon name stays in the tooltip — a dropdown of identifiers like `pencil` / `maximize` nobody reads),
+  and an icon a saved layout carries outside that grid is laid down as the first swatch still picked. Changing the jump
+  type or target refills every cell you have not touched with that
   destination's title / subtitle / icon / section (the matching built-in card row, the recipe or skill name, the link's
   host); text you typed stays. The pencil of an existing custom card opens the same dialog prefilled with its current
   values. Only the dialog's Save writes the card into the draft; Cancel and Esc drop that edit. Nothing
