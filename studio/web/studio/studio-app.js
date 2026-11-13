@@ -16,7 +16,7 @@ import { createFramePlayer, DOCK_PREVIEW_SIDE, AGENT_PREVIEW_SIDE } from "../liv
 import { createRecipesPanel, listRecipes } from "../recipes.js";
 import { listVideoSkills } from "../recipes.js";
 import { skillDisplayName, importWorkflowSkill, listSkills } from "../skill.js";
-import { createImageGenSettingsForm, createVideoGenSettingsForm, createVideoModelConfigSection, listVideoGenModels, getSkillGenConfig, modelFamily } from "../image-gen.js";
+import { createImageGenSettingsForm, createVideoGenSettingsForm, createVideoModelConfigSection, listVideoGenModels, getSkillGenConfig, blockingMissingModels, modelFamily } from "../image-gen.js";
 import { createModelConfigForm } from "../llm-setting.js";
 import { createSkillManager } from "../skill.js";
 import { createAgentPanel, createMcpPanel, createAgentPrefsForm } from "../agent-panel.js";
@@ -1257,6 +1257,7 @@ function buildVideo(el) {
 
     skillSel.addEventListener("change", () => {
         applyVideoSlots();
+        applyEffectOptions();
         applySkillConfig(skillSel.value);
         try { localStorage.setItem(VIDEO_LAST_SKILL_KEY, skillSel.value); } catch { /* 隐私模式下记不住就算了，不挡生成 */ }
     });
@@ -1265,7 +1266,8 @@ function buildVideo(el) {
     const skillsReady = listVideoSkills().then((list) => {
         skillSel.textContent = "";
         for (const s of list) {
-            const opt = $el("option", { value: s.id, textContent: skillDisplayName(s) });
+            // 特效技能缺 LoRA 时后端把 available 判成 false（skill._video_skill_available），下拉里要说出来
+            const opt = $el("option", { value: s.id, textContent: skillDisplayName(s) + (s.available === false ? t("（不可用）") : "") });
             opt.__skillMeta = s;   // 分组与主模型副标题取这份元数据（会话页技能面板同一约定）
             skillSel.appendChild(opt);
         }
@@ -1275,6 +1277,7 @@ function buildVideo(el) {
         skillSel.value = list.some((s) => s.id === last) ? last : defaultVideoSkill(list);
         skillChip.sync();   // 技能是异步填进 select 的，chip 显示的生效值得跟着重读
         applyVideoSlots();
+        applyEffectOptions();
         applySkillConfig(skillSel.value);
     }).catch(() => {
         skillSel.textContent = "";
@@ -1299,6 +1302,31 @@ function buildVideo(el) {
         durSel.appendChild($el("option", { value: String(sec), textContent: tf("{n} 秒", { n: sec }) }));
     durSel.value = "5";
 
+    // 特效表技能（config.json 的 effects，后端 skill._attach_video_effects 发的那一份）才有这一枚；
+    // 技能没有特效表时整枚收起——页面不摆一个只会跑默认特效的下拉
+    const effectSel = $el("select", { className: "ns-video-effect", title: t("特效本体是技能钉着的嵌入文件：缺文件的特效标不可用，选了也进不了队列") });
+    const effectChip = chipButton(effectSel, { icon: "sparkles" });
+    const skillEffects = () => selectedMeta()?.effects || [];
+    const effectEntry = (id) => skillEffects().find((e) => e.id === id) || null;
+    const applyEffectPrompt = () => {
+        // 示例提示词进占位符：这一发该写什么样的画面，技能比页面懂
+        promptIn.placeholder = effectEntry(effectSel.value)?.prompt_default || t("描述这段视频要拍成什么样…");
+    };
+    const applyEffectOptions = () => {
+        const list = skillEffects();
+        effectSel.textContent = "";
+        for (const e of list) {
+            // 缺本体的特效照样列出来：说清它现在跑不了，去模型库补完回来就能选
+            effectSel.appendChild($el("option", { value: e.id, textContent: e.label + (e.ready === false ? t("（不可用）") : "") }));
+        }
+        effectChip.el.style.display = list.length ? "" : "none";
+        const def = effectEntry((selectedMeta() || {}).effect) || list.find((e) => e.ready !== false) || list[0];
+        effectSel.value = def ? def.id : "";
+        applyEffectPrompt();
+        effectChip.sync();
+    };
+    effectSel.addEventListener("change", applyEffectPrompt);
+
     const seedIn = $el("input", { className: "ns-video-seed neo-gallery-gm-chip-btn", type: "number", min: "-1", placeholder: t("随机") });
     const seedRoll = $el("button", { className: "ns-video-seed-roll", type: "button", title: t("换一个随机种子") });
     setIcon(seedRoll, "sparkles", 13);
@@ -1308,7 +1336,7 @@ function buildVideo(el) {
     // 分辨率 chip 用比例 glyph（与绘画页比例 chip 同一枚）：选中竖屏档时方框立起来，不看字也知道是竖屏
     const sizeChip = chipButton(sizeSel, { glyph: ratioGlyph() });
     const durChip = chipButton(durSel, { icon: "clock" });
-    const chips = [skillChip, sizeChip, durChip];
+    const chips = [skillChip, sizeChip, effectChip, durChip];
     for (const c of chips) c.el.classList.add("ns-video-chip");
     const seedChip = $el("label", { className: "ns-video-chip neo-gallery-gm-chip-group", title: t("种子") }, [icon("sparkles", 12), seedIn, seedRoll]);
     // 菜单开着的 chip 要点外面才收；换页会重建这一页，页面离场时把监听摘掉，别一次次堆在 document 上。
@@ -1339,6 +1367,7 @@ function buildVideo(el) {
             $el("div", { className: "ns-video-chips neo-gallery-gm-composer-bar neo-gallery-gm-chips" }, [
                 skillChip.el,
                 sizeChip.el,
+                effectChip.el,
                 durChip.el,
                 seedChip,
                 $el("div", { className: "neo-gallery-gm-composer-gap" }),
@@ -1423,6 +1452,14 @@ function buildVideo(el) {
                 : t("该技能需要参考素材：至少选一张参考图");
             return;
         }
+        // 特效技能缺本体的文件就不进队列：缺嵌入的那一发跑完也只是「没有特效的片」（ComfyUI 读不到
+        // embedding: 段只 warning 后忽略），预检自带「去模型库」直达，与生图的生成前预检同一条
+        const effect = skillEffects().length ? effectSel.value : "";
+        const blocked = await blockingMissingModels(skillSel.value, effect);
+        if (blocked) {
+            statusEl.textContent = blocked;
+            return;
+        }
         const [w, h] = (sizeSel.value || "1344,768").split(",").map(Number);
         const body = {
             prompt: promptIn.value.trim(),
@@ -1433,6 +1470,7 @@ function buildVideo(el) {
             duration_sec: Number(durSel.value),
             seed: seedIn.value === "" ? -1 : Number(seedIn.value),
         };
+        if (effect) body.effect = effect;   // 特效表技能交特效 id；后端认这个 id 拼嵌入段与特效契约
         // 自定参数只带非空项：空 = 这一发跟着技能配置与全局生视频设置走（与生图覆盖同一口径）
         if (videoModels) {
             const ov = videoCfg.collect();
@@ -1490,11 +1528,20 @@ function buildVideo(el) {
             skillSel.value = skillId;
             skillChip.sync();
             applyVideoSlots();
+            applyEffectOptions();
             try { localStorage.setItem(VIDEO_LAST_SKILL_KEY, skillId); } catch { /* 隐私模式记不住就算了 */ }
             filled.push(t("技能与自定参数"));
         } else if (skillId) {
             // 技能被删了或换了类：下拉里没有这一项就填不进去，说清是哪一张、去哪改，其余项照填
             toast(tf("技能「{skill}」在这页没有位置：技能项没填，到技能页改这张技能再回来", { skill: skillId }));
+        }
+        // 特效项认这一发记的那个特效 id：认得才填，认不出就停在技能默认那一个（不写假承诺）
+        const effectId = String(reuse?.effect || "");
+        if (effectId && [...effectSel.options].some((o) => o.value === effectId)) {
+            effectSel.value = effectId;
+            applyEffectPrompt();
+            effectChip.sync();
+            filled.push(t("特效"));
         }
         const f2v = hasSkill && videoModeGroup(selectedMeta()) === "f2v";
         const src = reuse?.src?.filename ? reuse.src : null;

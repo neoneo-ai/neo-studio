@@ -586,7 +586,8 @@ test("模型库 · 预设就绪：点预设出计划，条目按当前源给下�
     await sleep(60);
 
     assert.deepEqual(fetchLog.filter((c) => c.path === "/neo_skill_models/plan").at(-1).body,
-        { skill_id: "qwen_image_21_body_swap", source: "modelscope", include_optional: false }, "计划请求体不符");
+        { skill_id: "qwen_image_21_body_swap", source: "modelscope", include_optional: false, effect: "" },
+        "计划请求体不符");   // effect 空串 = 这份清单没有特效表，按技能默认口径出计划
     const rows = [...overlay.querySelectorAll(".neo-hub-ready-item")];
     assert.equal(rows.length, 3, "计划行数不符");
     assert.equal(rows[0].querySelector(".neo-hub-ready-name").textContent,

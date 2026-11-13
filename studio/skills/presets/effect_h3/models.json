@@ -1,0 +1,129 @@
+{
+  "family": "minimax_h3",
+  "label": "MiniMax H3 生视频族",
+  "kind": "video",
+  "extends": "minimax_h3_base",
+  "license": "特效嵌入是社区作者 silveroxides 做的非官方作品，经 Comfy-Org/MiniMax-H3 分发（HF discussion #50）；基座权重许可随 MiniMax 原仓库",
+  "files": [
+    {
+      "field": "effect",
+      "effect": "bullet_time",
+      "label": "特效-子弹时间",
+      "filename": "minimaxh3_bullet_time.safetensors",
+      "category": "embeddings",
+      "gb": 0.96,
+      "sources": [
+        {"source": "modelscope", "repo": "Comfy-Org/MiniMax-H3", "path": "embeddings/minimaxh3_bullet_time.safetensors"},
+        {"source": "huggingface", "repo": "Comfy-Org/MiniMax-H3", "path": "embeddings/minimaxh3_bullet_time.safetensors"}
+      ]
+    },
+    {
+      "field": "effect",
+      "effect": "art_is_explosion",
+      "label": "特效-画面炸开",
+      "filename": "minimaxh3_art_is_explosion.safetensors",
+      "category": "embeddings",
+      "gb": 0.51,
+      "sources": [
+        {"source": "modelscope", "repo": "Comfy-Org/MiniMax-H3", "path": "embeddings/minimaxh3_art_is_explosion.safetensors"},
+        {"source": "huggingface", "repo": "Comfy-Org/MiniMax-H3", "path": "embeddings/minimaxh3_art_is_explosion.safetensors"}
+      ]
+    },
+    {
+      "field": "effect",
+      "effect": "blooming_flowers",
+      "label": "特效-繁花盛开",
+      "filename": "minimaxh3_blooming_flowers.safetensors",
+      "category": "embeddings",
+      "gb": 1.26,
+      "sources": [
+        {"source": "modelscope", "repo": "Comfy-Org/MiniMax-H3", "path": "embeddings/minimaxh3_blooming_flowers.safetensors"},
+        {"source": "huggingface", "repo": "Comfy-Org/MiniMax-H3", "path": "embeddings/minimaxh3_blooming_flowers.safetensors"}
+      ]
+    },
+    {
+      "field": "effect",
+      "effect": "dark_magic",
+      "label": "特效-黑暗魔法",
+      "filename": "minimaxh3_dark_magic.safetensors",
+      "category": "embeddings",
+      "gb": 0.6,
+      "sources": [
+        {"source": "modelscope", "repo": "Comfy-Org/MiniMax-H3", "path": "embeddings/minimaxh3_dark_magic.safetensors"},
+        {"source": "huggingface", "repo": "Comfy-Org/MiniMax-H3", "path": "embeddings/minimaxh3_dark_magic.safetensors"}
+      ]
+    },
+    {
+      "field": "effect",
+      "effect": "fire_breath",
+      "label": "特效-火焰吐息",
+      "filename": "minimaxh3_fire_breath.safetensors",
+      "category": "embeddings",
+      "gb": 1.21,
+      "sources": [
+        {"source": "modelscope", "repo": "Comfy-Org/MiniMax-H3", "path": "embeddings/minimaxh3_fire_breath.safetensors"},
+        {"source": "huggingface", "repo": "Comfy-Org/MiniMax-H3", "path": "embeddings/minimaxh3_fire_breath.safetensors"}
+      ]
+    },
+    {
+      "field": "effect",
+      "effect": "four_seasons",
+      "label": "特效-四季流转",
+      "filename": "minimaxh3_four_seasons.safetensors",
+      "category": "embeddings",
+      "gb": 1.45,
+      "sources": [
+        {"source": "modelscope", "repo": "Comfy-Org/MiniMax-H3", "path": "embeddings/minimaxh3_four_seasons.safetensors"},
+        {"source": "huggingface", "repo": "Comfy-Org/MiniMax-H3", "path": "embeddings/minimaxh3_four_seasons.safetensors"}
+      ]
+    },
+    {
+      "field": "effect",
+      "effect": "kiss_camera",
+      "label": "特效-亲吻镜头",
+      "filename": "minimaxh3_kiss_camera.safetensors",
+      "category": "embeddings",
+      "gb": 0.99,
+      "sources": [
+        {"source": "modelscope", "repo": "Comfy-Org/MiniMax-H3", "path": "embeddings/minimaxh3_kiss_camera.safetensors"},
+        {"source": "huggingface", "repo": "Comfy-Org/MiniMax-H3", "path": "embeddings/minimaxh3_kiss_camera.safetensors"}
+      ]
+    },
+    {
+      "field": "effect",
+      "effect": "spiral_ascent",
+      "label": "特效-螺旋升腾",
+      "filename": "minimaxh3_spiral_ascent.safetensors",
+      "category": "embeddings",
+      "gb": 1.34,
+      "sources": [
+        {"source": "modelscope", "repo": "Comfy-Org/MiniMax-H3", "path": "embeddings/minimaxh3_spiral_ascent.safetensors"},
+        {"source": "huggingface", "repo": "Comfy-Org/MiniMax-H3", "path": "embeddings/minimaxh3_spiral_ascent.safetensors"}
+      ]
+    },
+    {
+      "field": "effect",
+      "effect": "storm_magic",
+      "label": "特效-风暴魔法",
+      "filename": "minimaxh3_storm_magic.safetensors",
+      "category": "embeddings",
+      "gb": 1.4,
+      "sources": [
+        {"source": "modelscope", "repo": "Comfy-Org/MiniMax-H3", "path": "embeddings/minimaxh3_storm_magic.safetensors"},
+        {"source": "huggingface", "repo": "Comfy-Org/MiniMax-H3", "path": "embeddings/minimaxh3_storm_magic.safetensors"}
+      ]
+    },
+    {
+      "field": "effect",
+      "effect": "truman_show",
+      "label": "特效-楚门式片场",
+      "filename": "minimaxh3_truman_show.safetensors",
+      "category": "embeddings",
+      "gb": 0.92,
+      "sources": [
+        {"source": "modelscope", "repo": "Comfy-Org/MiniMax-H3", "path": "embeddings/minimaxh3_truman_show.safetensors"},
+        {"source": "huggingface", "repo": "Comfy-Org/MiniMax-H3", "path": "embeddings/minimaxh3_truman_show.safetensors"}
+      ]
+    }
+  ]
+}

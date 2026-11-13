@@ -27,6 +27,11 @@ const videoPage = () => document.querySelector(".ns-video");
 const promptBox = () => document.querySelector(".ns-video .ns-video-prompt");
 const skillSel = () => document.querySelector(".ns-video .ns-video-skill");
 const sizeSel = () => document.querySelector(".ns-video .ns-video-size");
+const effectSel = () => document.querySelector(".ns-video .ns-video-effect");
+const pickEffect = (id) => {
+    effectSel().value = id;
+    effectSel().dispatchEvent(new Event("change", { bubbles: true }));
+};
 const sizeMenu = () => sizeSel().parentElement.querySelector(".neo-gallery-gm-chip-menu");
 const durSel = () => document.querySelector(".ns-video .ns-video-dur");
 const seedBox = () => document.querySelector(".ns-video .ns-video-seed");
@@ -104,8 +109,23 @@ async function boot() {
         { id: "minimax_h3_i2v", cn_name: "H3 图生视频", category: "gen_video", gen_video: true, mode: "i2v", requires_ref: true },
         { id: "minimax_h3_t2v", cn_name: "H3 文生视频", category: "gen_video", gen_video: true, mode: "t2v", gen_config: { steps: 8 } },
         { id: "minimax_h3_r2v", cn_name: "H3 全参考", category: "gen_video", gen_video: true, mode: "r2v", requires_ref: true },
+        {
+            id: "effect_h3", cn_name: "特效-特效镜头", category: "gen_video", gen_video: true, mode: "i2v",
+            requires_ref: true, available: true, effect: "bullet_time",
+            effects: [
+                { id: "bullet_time", label: "子弹时间", prompt_default: "a sprinter leaps into a long jump", ready: true },
+                { id: "frozen_moment", label: "定格瞬间", prompt_default: "", ready: true },
+                { id: "fire_breath", label: "火焰吐息", prompt_default: "a drake on a charred ledge", ready: false },
+            ],
+        },
         { id: "image_gen", cn_name: "Krea2 文生图", category: "image_gen", gen_image: true },
     ]));
+    // 生成前预检：就位检查按「本次那个特效」问模型库，用例里全绿——特效芯片的行为由下面两条用例单独钉
+    mockRoute("/neo_skill_models/check", (body, call) => jsonResponse({
+        success: true,
+        check: { has_manifest: true, blocked: false, missing: [], missing_count: 0, missing_gb: 0,
+                 skill_id: call.query.get("skill_id"), effect: call.query.get("effect") || "" },
+    }));
     // 生视频模型列表 + 技能自定参数：面板只有这两样都到位才发覆盖值
     mockRoute("/neo_video_gen/models", jsonResponse({
         diffusion_models: ["minimax_h3_fl2va_pruned_int8_convrot.safetensors", "minimax_h3/model_b.safetensors"],
@@ -169,7 +189,11 @@ test("视频页：进页铺好舞台 + 起手提示 + 底部胶囊（三方块 /
     assert.ok(document.querySelector(".ns-video .ns-video-dock"), "应有底部浮动胶囊");
     assert.ok(promptBox(), "应有提示词框");
     assert.equal(document.querySelector(".ns-video .ns-video-count").textContent, "0 / ∞", "字数计数应从 0 起");
-    assert.equal(document.querySelectorAll(".ns-video .ns-video-chip").length, 4, "芯片行应有技能 / 分辨率 / 时长 / 种子四颗");
+    assert.equal(document.querySelectorAll(".ns-video .ns-video-chip").length, 5,
+        "芯片行应有技能 / 分辨率 / 特效 / 时长 / 种子五颗");
+    assert.ok(document.querySelector(".ns-video .ns-video-effect"), "应有特效下拉");
+    assert.equal(document.querySelector(".ns-video .ns-video-effect").parentElement.style.display, "none",
+        "普通技能不该露出特效芯片");
     assert.ok(sizeSel() && durSel(), "应有分辨率与时长下拉");
     // 分辨率档横竖成对：同一档对调宽高就是竖屏那一枚；默认仍是 768p 横屏
     const sizeOpts = [...sizeSel().options].map((o) => o.value);
@@ -202,7 +226,8 @@ test("视频页：技能 chip 就是会话页那枚「技能 + 自定参数」�
     const items = [...panel.querySelectorAll(".neo-gallery-gm-skill-item")];
     assert.equal(items.length, opts.length, "左栏技能行取自 select 的 options");
     const last = opts[opts.length - 1];
-    click(items[items.length - 1]);
+    // 左栏按生成模式分组，行序与 select 的原始顺序不同：认文本，不认位置
+    click(items.find((i) => i.textContent === last.textContent));
     assert.equal(skillSel().value, last.value, "点技能行写回 select.value（生成 payload 读的就是它）");
     assert.equal(panel.style.display, "grid", "点技能行不关面板——右栏还要看该技能钉的主模型");
     click(panel.querySelector(".neo-gallery-gm-panel-done"));
@@ -458,6 +483,54 @@ test("视频页：分辨率菜单列出竖屏档，选中的竖屏档随 payload
     await settle();
     const body = videoPosts().at(-1).body;
     assert.deepEqual([body.width, body.height], [352, 624], "payload 带竖屏宽高");
+});
+
+test("视频页：特效芯片只对带特效表的技能出现，选项带默认特效与「不可用」标记", async () => {
+    await boot();
+    await clickTab("video");
+    await settle();
+    const wrap = effectSel().parentElement;
+    assert.equal(wrap.style.display, "none", "普通技能不该露出特效芯片");
+    pickSkill("effect_h3");
+    await settle();
+    assert.notEqual(wrap.style.display, "none", "特效技能应露出特效芯片");
+    const opts = [...effectSel().options];
+    assert.deepEqual(opts.map((o) => o.value), ["bullet_time", "frozen_moment", "fire_breath"],
+        "特效项按技能特效表的顺序列出");
+    assert.ok(opts.map((o) => o.textContent).some((t) => t.includes("火焰吐息") && t.includes("不可用")),
+        "缺本体的特效要说出现在跑不了，而不是从列表里消失");
+    assert.equal(effectSel().value, "bullet_time", "默认特效取技能自己钉的那一个");
+    assert.match(promptBox().placeholder, /a sprinter leaps/, "占位符换成这一发特效的示例提示词");
+    pickEffect("frozen_moment");
+    assert.match(promptBox().placeholder, /描述这段视频要拍成什么样/, "没有示例的特效回到通用占位符");
+    pickSkill("minimax_h3_t2v");
+    await settle();
+    assert.equal(wrap.style.display, "none", "换回普通技能，特效芯片收起");
+});
+
+test("视频页：特效技能把选中的特效 id 发进 payload，预检按同一个特效问模型库", async () => {
+    await boot();
+    await clickTab("video");
+    await settle();
+    promptBox().value = "雨里收伞的女孩，只有她的眼睛在动";
+    pickSkill("effect_h3");
+    await settle();
+    await pickIntoSlot(0, "frame.png");
+    pickEffect("frozen_moment");
+    click(runBtn());
+    await settle();
+    const body = videoPosts().at(-1).body;
+    assert.equal(body.effect, "frozen_moment", "payload 带本次选中的特效 id");
+    const check = fetchLog.find((c) => c.path === "/neo_skill_models/check");
+    assert.ok(check, "提交前先问一次模型库就位检查");
+    assert.equal(check.query.get("skill_id"), "effect_h3", "预检问的是这一发的技能");
+    assert.equal(check.query.get("effect"), "frozen_moment", "预检按本次那个特效问——别的特效缺文件不该挡这一发");
+    pickSkill("minimax_h3_t2v");
+    await settle();
+    promptBox().value = "一只陶瓷杯在木桌上慢慢转起来";
+    click(runBtn());
+    await settle();
+    assert.ok(!("effect" in videoPosts().at(-1).body), "普通技能的请求体不带 effect 键");
 });
 
 test("视频页：技能要参考素材时缺素材不发请求，状态行说清缺哪一样", async () => {

@@ -5,6 +5,30 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 ## [Unreleased]
 
 ### Added
+- **A 特效视频 preset card on the Studio home.** The 开始创作 section's 添加卡片 face gains a preset card
+  **特效视频** (副标题 选一枚镜头特效，出一段片). It is deliberately absent from the default home page: open
+  编辑首页 → 添加卡片 → 特效视频 and it lands at the end of 开始创作, opening the Video page with
+  特效-MiniMax H3 selected so the 特效 chip is one click away. Removing the card sends it back to that face.
+  The choice is stored in the layout file of the data root, so the plugin page, the desktop window and the
+  phone page all show the same home. Covered by the home layout cases in `studio/tests/js/home-layout.test.mjs`.
+- **One H3 effect skill with 11 effects on the Video page: 特效-MiniMax H3 (`effect_h3`).** The skill's
+  `config.json` carries an `effects` table — 子弹时间 · 定格瞬间 · 画面炸开 · 繁花盛开 · 黑暗魔法 · 火焰吐息 ·
+  四季流转 · 亲吻镜头 · 螺旋升腾 · 风暴魔法 · 楚门式片场 — and each entry pins its effect file, its step
+  count, its frame cap and its 提示词参考. The bodies are the community text embeddings of
+  `Comfy-Org/MiniMax-H3/embeddings` (author silveroxides, 0.51-1.45 GB each, on both ModelScope and Hugging
+  Face), triggered through the official ComfyUI segment `embedding:<filename>` written into the prompt, so the
+  trigger segment ships from the preset and a rewritten prompt simply runs without the effect; 定格瞬间 needs
+  no file at all — it locks the camera,
+  takes the first frame as the last frame, and caps the shot at 124 frames so the finished clip loops. The
+  Video page gains a 特效 chip that lists that table for this skill only, marks an effect whose file is not
+  installed （不可用）, and replaces the prompt placeholder with the selected effect's 提示词参考. The file,
+  the steps and the frame cap come from the preset, never from the request: a shot whose selected effect has
+  no embedding on disk is refused before the queue with the missing file named, the precheck asks only about
+  the selected effect, the effect's steps outrank the page's custom step count, and Model Hub counts these 10
+  embedding files in the readiness row of this skill. The two presets this
+  replaces (特效-子弹时间, 特效-定格瞬间) and the Civitai `[MMH3] Bullet Time` LoRA are out of the shipped
+  preset set — a data root seeded by an older build keeps its copies until they are deleted by hand. Covered by
+  `studio/tests/test_h3_video_gen.py` and `studio/tests/js/studio-video.test.mjs`.
 - **The agent's MCP surface reaches 图片反推 and 声音克隆.** Two tools join the MCP registry (now 23):
   `reverse_prompt` writes one library image into a prompt — the picture is named by `filename` + `subfolder`
   (empty `subfolder` is `presets`), `language=zh` / `en`, and the text lands in the same-named `.txt` next to the

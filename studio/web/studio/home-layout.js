@@ -18,9 +18,10 @@ export const HOME_SECTIONS = [
 
 // 每张卡是一段数据：target = page（切到 value 那一页）/ edit（进编辑页带上 value 那一发模式）
 // / url（开外部链接）/ recipe、skill（进导演页与技能页，带上选中的那一份）。板块只有三个，自建卡落进其一。
-// 内置预设卡直连本页（page）与编辑模式（edit）：添加卡片弹窗只配 FORM_TARGETS 那三种。
+// 内置预设卡直连本页（page）与编辑模式（edit），特效那一张走技能落点（skill）：添加卡片弹窗只配 FORM_TARGETS 那三种。
 // page 与 edit 只出现在旧版式里存着的卡上：读得回来、跳得动，界面上不再产出这两类
 // （HOME_TARGETS 是读门，FORM_TARGETS 是能配的那三种，LEGACY_TARGET 单列就是为这个）。
+// defaultHidden = 这张内置卡默认不上首页，只在「添加卡片」的预设里等着加：首页版式排过它才出。
 export const HOME_CARDS = [
     { id: "paint", section: "create", icon: "sparkles", title: "生成图片", sub: "描述画面，直接出图", target: "page", value: "paint" },
     { id: "video", section: "create", icon: "film", title: "生成视频", sub: "一句话加首帧，出一段视频", target: "page", value: "video" },
@@ -28,6 +29,9 @@ export const HOME_CARDS = [
     { id: "pose", section: "create", icon: "pose", title: "3D 姿势", sub: "姿势 · 整场 · 全景", target: "page", value: "pose" },
     { id: "agent", section: "create", icon: "target", title: "智能体", sub: "说出目标，工具链多轮跑完", target: "page", value: "agent" },
     { id: "voice", section: "create", icon: "volume", title: "声音克隆", sub: "用一段参考音频的音色朗读文字", target: "page", value: "voice" },
+    // 特效是这张技能的全部能力，不是一页自己的功能：卡片走技能落点，进视频页就把 effect_h3 选中，
+    // 特效芯片由那张技能自己铺出来——技能页删了这张技能，这张卡跟着落技能页（goSkillApply 那条门）。
+    { id: "effect", section: "create", icon: "sparkles", title: "特效视频", sub: "选一枚镜头特效，出一段片", target: "skill", value: "effect_h3", defaultHidden: true },
     { id: "edit-normal", section: "edit", icon: "pencil", title: "图片编辑", sub: "写下要改成什么样，整图重绘", target: "edit", value: "normal" },
     { id: "edit-outpaint", section: "edit", icon: "maximize", title: "扩图", sub: "拖框定四边留白，补全周边场景", target: "edit", value: "outpaint" },
     { id: "edit-local", section: "edit", icon: "pencil", title: "局部", sub: "涂抹要改的区域，高分重绘并合回原图", target: "edit", value: "local" },
@@ -106,6 +110,20 @@ export function layoutSections(layout) {
         .map((id) => HOME_SECTIONS.find((s) => s.id === id));
 }
 
+/** 这张卡在这份版式里在不在首页上：hidden 里的（移出首页的内置卡）永远不在；带 defaultHidden 的
+ *  内置卡只有版式的 order 显式排过它才在——新能力默认不上首页，用户在「添加卡片」里点过一次就算排过。 */
+function homePlaced(card, layout) {
+    if ((layout.hidden || []).includes(card.id)) return false;
+    if (!card.defaultHidden) return true;
+    return (layout.order[card.section] || []).includes(card.id);
+}
+
+/** 卡在这份版式里占不占一格：移出首页的内置卡留着原来那一格（加回来才落回原位），
+ *  默认不上首页又没排过的卡不占格——补末尾与排格那两步不能把它推上首页 */
+function homeSlot(card, layout) {
+    return (layout.hidden || []).includes(card.id) || homePlaced(card, layout);
+}
+
 /** 一个板块的全部卡片（含移出首页的：order 里那张卡的位要保住）；认不出的 id 丢掉，新卡补在末尾 */
 export function sectionCards(sectionId, layout) {
     const pool = [...HOME_CARDS.filter((c) => c.section === sectionId),
@@ -117,18 +135,19 @@ export function sectionCards(sectionId, layout) {
         const card = byId.get(String(raw));
         if (card && !taken.has(card)) { saved.push(card); taken.add(card); }   // 按卡片对象去重：uniq() 认的是 id，喂对象会全丢
     }
-    return [...saved, ...pool.filter((c) => !taken.has(c))];
+    return [...saved, ...pool.filter((c) => !taken.has(c) && homeSlot(c, layout))];
 }
 
 /** 首页上真出现的那一叠卡：编辑态铺的也是这一叠——移出首页的卡不在网格上留位置，它在添加卡片弹窗里 */
 export function visibleCards(sectionId, layout) {
-    return sectionCards(sectionId, layout).filter((c) => !layout.hidden.includes(c.id));
+    return sectionCards(sectionId, layout).filter((c) => homePlaced(c, layout));
 }
 
-/** 添加卡片弹窗里的预设：这一板块被移出首页的内置卡。已在首页的一张不出——预设不跟首页上的卡重复。
+/** 添加卡片弹窗里的预设：这一板块没在首页上的内置卡（被移出首页的、与默认就不上首页的）。
+ *  已在首页的一张不出——预设不跟首页上的卡重复。
  *  自建卡不在其上：导演配方 / 技能 / 外部链接是表单建的卡，没有预设可挑 */
 export function presetCards(sectionId, layout) {
-    return HOME_CARDS.filter((c) => c.section === sectionId && layout.hidden.includes(c.id));
+    return HOME_CARDS.filter((c) => c.section === sectionId && !homePlaced(c, layout));
 }
 
 /** 标题区的文案：版式给几行换几行，没给的行落默认文案 */
@@ -436,9 +455,13 @@ export function createHomeInlineEditor(host = {}) {
             ]);
         }
 
-        /** 预设加进首页：摘掉 hidden 这一项，卡回到 order 里它原来那一格 */
+        /** 预设加进首页：摘掉 hidden 这一项，卡回到 order 里它原来那一格；
+         *  默认不上首页的那一张（特效）本来没有格子，排进板块末尾就是「排过」，这一次保存才把它带上首页 */
         function addPreset(card) {
             draft.hidden = draft.hidden.filter((id) => id !== card.id);
+            if (card.defaultHidden) {
+                draft.order[card.section] = uniq([...(draft.order[card.section] || []), card.id]);
+            }
             render();
         }
 
@@ -486,8 +509,9 @@ export function createHomeInlineEditor(host = {}) {
             }
             // 配方与技能都给了「不指定」这一行：取消选中的那一份，这张卡就只进导演页 / 技能页
             const blank = work.target === "recipe" ? t("不指定（只进导演页）") : t("不指定（只进技能页）");
-            // 已经建过卡的配方与技能从候选里摘掉：同一条落点不在首页上摆两张卡
-            const taken = new Set(draft.custom.filter((c) => c.target === work.target).map((c) => c.value));
+            // 已经建过卡的配方与技能从候选里摘掉：同一条落点不在首页上摆两张卡（内置卡占的那一条也算）
+            const taken = new Set([...draft.custom, ...HOME_CARDS]
+                .filter((c) => c.target === work.target).map((c) => c.value));
             const choices = work.target === "recipe"
                 ? [["", blank], ...pickLists.recipes.filter((r) => r.type === "video_director" && !taken.has(r.name)).map((r) => [r.name, r.name])]
                 : [["", blank], ...pickLists.skills.filter((s) => !taken.has(s.id)).map((s) => [s.id, host.skillLabel ? host.skillLabel(s) : s.id])];

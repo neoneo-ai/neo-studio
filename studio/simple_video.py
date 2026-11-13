@@ -225,6 +225,7 @@ def _run_prompt(data: dict) -> dict:
         "reuse": {
             "seed": seed, "width": int(params["width"]), "height": int(params["height"]),
             "frames": int(params["length"]), "steps": int(params.get("steps") or 0),
+            "effect": params.get("effect") or "",
             "model": params.get("model"), "loras": params.get("loras") or [],
             "text_encoder": params.get("text_encoder"), "vae": params.get("vae"),
             "audio_vae": params.get("audio_vae"),
@@ -248,6 +249,8 @@ def _video_sidecar_meta(params: dict, skill_id: str, duration_sec: int | None) -
         parts.append(f"loras={loras}")
     if skill_id:
         parts.append(f"skill={skill_id}")
+    if params.get("effect"):
+        parts.append(f"effect={params['effect']}")   # 特效技能记的是这一发实际跑的特效，重放不能回到技能默认那一个
     for key in ("src", "last"):
         name = params.get(key)
         if name:

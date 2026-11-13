@@ -169,6 +169,10 @@ test("首页注册表：板块与卡一一对齐，卡表只此一份", () => {
     assert.deepEqual(hl.HOME_EDIT_MODES.filter((m) => !editModes.includes(m)), [],
         "编辑页那一发模式都要有预设直达卡");
     assert.equal(new Set(editModes).size, editModes.length, "编辑模式卡不发重复");
+    const effect = hl.HOME_CARDS.find((c) => c.id === "effect");
+    assert.equal(effect?.target, "skill", "特效卡走技能落点：特效是 effect_h3 这张技能的能力，不是一页自己的功能");
+    assert.equal(effect?.value, "effect_h3", "特效卡钉在 effect_h3 技能上：技能改名要跟着改这张卡");
+    assert.equal(effect?.defaultHidden, true, "特效卡默认不上首页：新能力不进默认首页，在添加卡片里等着加");
 });
 
 
@@ -405,7 +409,7 @@ test("卡片全移除与板块全收起：首页给出编辑入口的提示，�
     click(gridOf(home, "开始创作").querySelector(".ns-home-add-tile"));
     await flush();
     assert.deepEqual(presetTitles(dlg()),
-        ["生成图片", "生成视频", "导演视频", "3D 姿势", "智能体", "声音克隆"],
+        ["生成图片", "生成视频", "导演视频", "3D 姿势", "智能体", "声音克隆", "特效视频"],
         "这一板块的预设一张不缺：卡全移出时添加卡片就是唯一的来路");
     click(presetIn(dlg(), "生成图片"));
     await flush();
@@ -515,8 +519,9 @@ test("自建卡走添加卡片这一面：表单保存才落卡，取消不动�
     click(home.querySelector(".ns-home-add-tile"));
     await flush();
     assert.ok(dlg(), "占位卡开的是这一面弹窗");
-    assert.equal(presetTitles(dlg()).length, 0, "默认版式每张内置卡都在首页：预设一张不出");
-    assert.ok(dlg().querySelector(".ns-home-preset-empty"), "预设都已在首页这件事在界面上说出来，不空着一块");
+    assert.deepEqual(presetTitles(dlg()), ["特效视频"],
+        "默认版式里默认不上首页的那一张就在这一面等着加：其余内置卡都在首页上");
+    assert.ok(!dlg().querySelector(".ns-home-preset-empty"), "有预设可加时不给那一句空态");
     assert.equal(home.querySelectorAll(".ns-home-card.is-custom").length, 0, "没保存就不落卡");
     assert.ok(fieldIn(dlg(), "标题") && fieldIn(dlg(), "跳转类型"), "下半是自建卡的全套字段");
 
@@ -1023,10 +1028,11 @@ test("首页版式的 CSS 挂点：列数走自定义属性，卡上的控件与
 
 test("预设表只收被移出首页的内置卡：已在首页的一张不出，板块各管各的", () => {
     const base = hl.normalizeLayout({});
-    assert.deepEqual(hl.presetCards("create", base), [], "默认版式每张内置卡都在首页：预设一张不出");
+    assert.deepEqual(hl.presetCards("create", base).map((c) => c.id), ["effect"],
+        "默认不上首页的那一张是默认版式唯一的预设：其余内置卡都在首页上");
     const layout = hl.normalizeLayout({ hidden: ["paint", "gallery"] });
-    assert.deepEqual(hl.presetCards("create", layout).map((c) => c.id), ["paint"],
-        "预设只收本板块被移出首页的那一张");
+    assert.deepEqual(hl.presetCards("create", layout).map((c) => c.id), ["paint", "effect"],
+        "预设收本板块没在首页上的内置卡：移出首页的那一张与默认就不上的那一张");
     assert.deepEqual(hl.presetCards("material", layout).map((c) => c.id), ["gallery"]);
     assert.deepEqual(hl.presetCards("edit", layout), [], "别的板块移出首页的卡不落进这一板块的预设里");
     const withCustom = hl.normalizeLayout({
@@ -1052,13 +1058,14 @@ test("内置卡删掉再加回来：落回它原来那一格，全程只改草�
     assert.ok(!dlg(), "连删两张卡不弹窗：这一面只由「添加卡片」自己开");
     click(home.querySelector(".ns-home-add-tile"));
     await flush();
-    assert.deepEqual(presetTitles(dlg()), ["生成视频", "智能体"],
-        "移出首页的两张都在这面等着加回来，按卡表顺序排");
+    assert.deepEqual(presetTitles(dlg()), ["生成视频", "智能体", "特效视频"],
+        "移出首页的两张都在这面等着加回来，按卡表顺序排；默认不上首页的那一张也在");
     click(presetIn(dlg(), "生成视频"));
     click(presetIn(dlg(), "智能体"));
     await flush();
     assert.ok(cardOf(home, "生成视频") && cardOf(home, "智能体"), "预设点一下就回到首页上");
-    assert.ok(!dlg().querySelector(".ns-home-preset-card"), "两张都加回去了：这一面的预设空出来");
+    assert.deepEqual(presetTitles(dlg()), ["特效视频"],
+        "两张加回去了：这一面只剩默认不上首页的那一张，它不因为别的卡加回来而上首页");
     assert.equal(POSTS(), 0, "删掉与加回来这一段都不落盘");
     click(home.querySelector(".ns-home-edit-entry"));
     await flush(40);
@@ -1067,6 +1074,36 @@ test("内置卡删掉再加回来：落回它原来那一格，全程只改草�
     assert.deepEqual(sent.order.create.slice(0, 6),
         ["paint", "video", "director", "pose", "agent", "voice"],
         "加回来的卡落回 order 里它原来那一格：排好的顺序不动");
+});
+
+test("默认不上首页的预设卡：默认首页没有这一张，点了才排进板块末尾，删掉回到预设区", async () => {
+    mountStudio();
+    mockLayout({});
+    await importApp();
+    await settle();
+    const home = homeOf();
+    assert.ok(!cardOf(home, "特效视频"), "默认首页没有这张卡：首页那一叠不因为新能力多出一张");
+    await enterEdit(home);
+    click(home.querySelector(".ns-home-add-tile"));
+    await flush();
+    click(presetIn(dlg(), "特效视频"));
+    await flush();
+    const titles = titlesIn(gridOf(home, "开始创作"));
+    assert.equal(titles[titles.length - 1], "特效视频", "点一下就是排进这一板块末尾，不插进用户排好的那几格中间");
+    click(home.querySelector(".ns-home-edit-entry"));
+    await flush(40);
+    const sent = lastCall("/neo_home/layout", "POST").body;
+    assert.ok(sent.order.create.includes("effect"), "带上首页靠的是 order 里排过的这一格");
+    assert.ok(!sent.hidden.includes("effect"), "这张卡不靠 hidden 出门：加过之后 hidden 里没有它");
+    await enterEdit(home);
+    click(chip(cardOf(home, "特效视频"), "从首页移除这张卡"));
+    await flush();
+    assert.ok(!cardOf(home, "特效视频"), "删掉的这一张离开首页");
+    click(home.querySelector(".ns-home-add-tile"));
+    await flush();
+    assert.ok(presetIn(dlg(), "特效视频"), "删掉的这一张回到预设区等着再点一次");
+    click(dlgClose());
+    await flush();
 });
 
 test("落位手势是 vendored 的 Sortable：文件在位、版本钉住、运行时不联网", () => {

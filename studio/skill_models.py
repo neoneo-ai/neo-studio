@@ -26,6 +26,8 @@ VIDEO_SETTING_KEYS = {"model": "video_model", "text_encoder": "video_text_encode
                       "vae": "video_vae", "audio_vae": "video_audio_vae"}
 IMAGE_FIELDS = ("model", "text_encoder", "vae")
 LORA_FIELD = "loras"
+# 特效技能的清单项带 field=effect + effect=<特效 id>：只有本次要跑的那个特效算在用
+EFFECT_FIELD = "effect"
 SOURCE_LABELS = {"modelscope": "MS", "huggingface": "HF", "civitai": "C 站"}
 EXTENDS_MAX_DEPTH = 1
 
@@ -174,6 +176,7 @@ def settings_wanted(skill_id: str, kind: str) -> dict:
     raw = cfg.get(LORA_FIELD) if isinstance(cfg.get(LORA_FIELD), list) else (default.get("loras") or [])
     out[LORA_FIELD] = [str(e.get("name") if isinstance(e, dict) else e).strip()
                        for e in raw if str(e.get("name") if isinstance(e, dict) else e).strip()]
+    out[EFFECT_FIELD] = str(cfg.get(EFFECT_FIELD) or "").strip()
     return out
 
 
@@ -250,13 +253,14 @@ def _missing_text(f: dict) -> str:
     return f"{f['label'] or f['filename']}（{f['category']} · {f['gb']} GB）"
 
 
-def check_skill(skill_id: str) -> dict | None:
+def check_skill(skill_id: str, effect: str = "") -> dict | None:
     """预设的模型就位情况；技能目录不存在返回 None，无清单返回 has_manifest=False。
 
     判定口径跟生成侧对齐：配置写死了模型名就按那个相对名精确查；写死的名字不在盘上、
     族系基础模型在盘上时不阻塞 —— 生成侧 resolve_model(allow_fallback=True) 会回退到基础模型，
     这条 preset 跑得起来，就不该被判成缺模型（回退写在文件项的 fallback_of / notes 上）。
     名留空才按清单推荐名 + 族系变体名在类别树里认。LoRA 只有配置里真的有才计入阻塞。
+    effect 是本次要跑的特效 id（特效技能）：只有它的文件计入阻塞，其余特效的文件留作可下载项。
     """
     from .skill import _skill_dir
 
@@ -269,10 +273,12 @@ def check_skill(skill_id: str) -> dict | None:
                 "kind": "image", "files": [], "notes": [], "missing": [],
                 "missing_count": 0, "missing_gb": 0.0, "blocked": False}
     wanted = settings_wanted(sid, manifest["kind"])
+    wanted[EFFECT_FIELD] = str(effect or "").strip() or wanted[EFFECT_FIELD]
     files = [_file_state(entry, wanted) for entry in manifest["files"]]
     blocking = [f for f in files if f["active"] and not f["ready"] and not f["optional"]]
     return {"skill_id": sid, "has_manifest": True, "family": manifest["family"],
             "label": manifest["label"], "kind": manifest["kind"], "files": files,
+            "effect": wanted[EFFECT_FIELD],
             "notes": [str(n) for n in (manifest.get("notes") or []) if str(n).strip()],
             "missing": [_missing_text(f) for f in blocking],
             "missing_count": len(blocking),
@@ -293,7 +299,12 @@ def _file_state(entry: dict, wanted: dict) -> dict:
     field = str(entry.get("field") or "").strip()
     notes = []
     fallback_of = ""
-    if field == LORA_FIELD:
+    if field == EFFECT_FIELD:
+        # 特效嵌入是本次那一发特效的本体：技能一次只跑一个特效，其余特效的文件留作可下载项，不挡这一发
+        cfg_name = ""
+        active = str(entry.get(EFFECT_FIELD) or "").strip() == str(wanted.get(EFFECT_FIELD) or "").strip()
+        pinned, found = True, locate_by_names(category, [filename])
+    elif field == LORA_FIELD:
         cfg_name = _lora_config_name(wanted.get(LORA_FIELD) or [], filename)
         active, pinned = bool(cfg_name), bool(cfg_name)
         found = locate_exact(category, cfg_name)
@@ -320,6 +331,7 @@ def _file_state(entry: dict, wanted: dict) -> dict:
             notes.append(f"配置写死的 {cfg_name} 不在模型根里")
     return {"field": field, "category": category, "filename": filename,
             "label": str(entry.get("label") or "").strip(),
+            "effect": str(entry.get(EFFECT_FIELD) or "").strip(),
             "gb": round(float(entry.get("gb") or 0), 2),
             "sources": source_entries(entry), "alt": [str(a) for a in (entry.get("alt") or [])],
             "pinned": pinned, "wanted": cfg_name, "found": found, "fallback_of": fallback_of,
@@ -383,7 +395,7 @@ def check_all() -> dict:
 # 下载计划（只产出模型库现成 payload，不新造下载器）
 # ---------------------------------------------------------------------------
 
-def download_plan(skill_id: str, source: str = "", include_optional: bool = False) -> dict:
+def download_plan(skill_id: str, source: str = "", include_optional: bool = False, effect: str = "") -> dict:
     """技能缺失文件的下载计划：条目 = 模型库 /neo_model_hub/download 的现成 payload。
 
     按当前选定源出计划；该源没有这条文件就报 not_on_source 并给出另一源，跨源续传是模型库
@@ -404,7 +416,7 @@ def download_plan(skill_id: str, source: str = "", include_optional: bool = Fals
                 "files": [], "missing": [], "missing_gb": 0.0, "total_gb": 0.0}
     state = {(f["category"].lower(), f["filename"].lower()):
              (bool(locate_by_names(f["category"], [f["filename"]] + f["alt"])), f["active"])
-             for f in check_skill(skill_id)["files"]}
+             for f in check_skill(skill_id, effect)["files"]}
     items = [item for item in (_plan_item(e, picked, state, include_optional, manifest["family"])
                                for e in manifest["files"]) if item]
     downloadable = [i for i in items if i.get("payload")]
@@ -485,13 +497,13 @@ def _plan_item(entry: dict, picked: str, state: dict, include_optional: bool,
 async def get_skill_models_check(request):
     """预设的模型就位情况。
 
-    查询参数：skill_id（必填）。
+    查询参数：skill_id（必填）、effect（特效技能本次要跑的特效 id，缺省用技能默认特效）。
     返回：{success, check}；技能不存在 success=False。
     """
     skill_id = str(request.query.get("skill_id") or "").strip()
     if not skill_id:
         return web.json_response({"success": False, "error": "skill_id required"})
-    check = check_skill(skill_id)
+    check = check_skill(skill_id, str(request.query.get("effect") or "").strip())
     if check is None:
         return web.json_response({"success": False, "error": f"技能不存在: {skill_id}"})
     return web.json_response({"success": True, "check": check})
@@ -510,7 +522,7 @@ async def get_skill_models_all(request):
 async def post_skill_models_plan(request):
     """技能缺失文件的下载计划（条目可直接喂 /neo_model_hub/download）。
 
-    请求体：{skill_id, source?: modelscope|huggingface|civitai, include_optional?: bool}。
+    请求体：{skill_id, source?: modelscope|huggingface|civitai, include_optional?: bool, effect?: 特效 id}。
     返回：{success, plan}；无清单时 plan.has_manifest=False。
     """
     try:
@@ -521,6 +533,7 @@ async def post_skill_models_plan(request):
     if not skill_id:
         return web.json_response({"success": False, "error": "skill_id required"})
     optional = bool(body.get("include_optional")) if isinstance(body, dict) else False
-    plan = download_plan(skill_id, body.get("source", "") if isinstance(body, dict) else "", optional)
+    effect = str(body.get("effect") or "").strip() if isinstance(body, dict) else ""
+    plan = download_plan(skill_id, body.get("source", "") if isinstance(body, dict) else "", optional, effect)
     return web.json_response({"success": True, "plan": plan})
 

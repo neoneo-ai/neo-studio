@@ -466,10 +466,17 @@ startable once the root is filled in.
   edit mode, and leaving edit mode (Esc / switching pages) closes it with the draft.
 - A custom card's jump type is one of three: director recipe / skill / external link (`FORM_TARGETS`); a recipe or skill
   target left as "None" just opens the director page / the skills page. Edit mode and direct page (`target: "edit"` /
-  `"page"`) come from the built-in preset cards and the UI no longer creates them; cards an older layout saved with those
+  `"page"`) come from the built-in preset cards and the UI no longer creates them (the built-in 特效视频 card is the one
+  built-in card on the skill destination); cards an older layout saved with those
   types still read, jump and delete, and both the frontend read gate (`HOME_TARGETS` + `LEGACY_TARGET`) and the backend
   `CUSTOM_TARGETS` keep them so one save cannot silently drop a card the user owns. `hidden` holds built-in cards only: a
   custom card an older layout hid shows on the home again, keeping its slot of `order`.
+- A built-in card carrying `defaultHidden` stays off the default home page: the home grid does not grow because of it,
+  and it waits in the Add a card face. 特效视频 in 开始创作 (`target: "skill"`, `value: "effect_h3"`) is that card —
+  the home layout puts it on the page only when `order` names it explicitly (`homePlaced` reads that one slot): clicking
+  the preset appends it to the end of that section, `normalizeLayout` never appends it on its own, and removing the card
+  sends it back to the preset face. When the Skills page has no such skill, the card goes through the same skill-card
+  gate that says the skill has no page to land on.
 - A skill card lands on the page that applies the skill: `openHomeCard` checks the id against `listVideoSkills()`, and a
   video skill goes through `openVideoReuse({ skill })` so the video page opens with that skill selected (when that page
   was never built in this window, the `setVideoPageJump` hook the app registers at startup builds it first and the run is

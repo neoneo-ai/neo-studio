@@ -1,0 +1,99 @@
+{
+  "width": 960,
+  "height": 544,
+  "length": 124,
+  "effect": "bullet_time",
+  "effects": [
+    {
+      "id": "bullet_time",
+      "label": "子弹时间",
+      "embedding": "minimaxh3_bullet_time.safetensors",
+      "steps": 28,
+      "max_length": 124,
+      "prompt_default": "a sprinting athlete launches into a long jump, the leading foot stamps down on a shallow puddle and the splash bursts upward at the instant of impact",
+      "prompt_template": "embedding:minimaxh3_bullet_time {text} The action builds at normal speed, then the decisive impact lands and the whole scene drops into bullet-time: time slows almost to a stop, the subject hangs suspended mid-motion, and the camera keeps moving smoothly in a wide arc around the frozen action while droplets and dust hang in the air. At the end time snaps back to normal speed and the consequence plays out. bullet-time, single continuous shot, physically consistent, no morphing, no duplicated limbs."
+    },
+    {
+      "id": "frozen_moment",
+      "label": "定格瞬间",
+      "steps": 24,
+      "max_length": 124,
+      "same_first_last": true,
+      "prompt_default": "a girl under a black umbrella in heavy rain, only her eyes and the hand on the umbrella handle move, slowly",
+      "prompt_template": "{text} The camera is locked on a tripod and the whole scene is frozen mid-instant: raindrops hang motionless in the air, fabric stops mid-flutter, and every background element keeps the exact opening composition. Only the named subject keeps moving, slowly and continuously. The last frame returns to the exact first frame. Time-stop, single continuous locked shot, seamless loop, no camera cuts."
+    },
+    {
+      "id": "art_is_explosion",
+      "label": "画面炸开",
+      "embedding": "minimaxh3_art_is_explosion.safetensors",
+      "steps": 24,
+      "prompt_default": "an oil portrait of a woman in a green dress hanging on a gallery wall, camera pushing in slowly",
+      "prompt_template": "embedding:minimaxh3_art_is_explosion {text} The painted surface ruptures outward: brushstrokes and pigment peel off the frame as volumetric paint clouds, shattering into flying ribbons of colour that build the scene in mid-air while the camera keeps one slow, continuous move. Painterly explosion, single continuous shot, faces stay anatomically consistent, no duplicated limbs."
+    },
+    {
+      "id": "blooming_flowers",
+      "label": "繁花盛开",
+      "embedding": "minimaxh3_blooming_flowers.safetensors",
+      "steps": 24,
+      "prompt_default": "a stone courtyard with a wooden bench at dawn, wet flagstones and a few potted plants",
+      "prompt_template": "embedding:minimaxh3_blooming_flowers {text} Flowers bloom outward across the frame in real time: petals unfurl, stems grow and new blossoms open in one continuous wave that spreads from the subject outward, dew glistening on the wet petals while the camera drifts slowly forward. Continuous growth, no popping-in cut, no camera cuts."
+    },
+    {
+      "id": "dark_magic",
+      "label": "黑暗魔法",
+      "embedding": "minimaxh3_dark_magic.safetensors",
+      "steps": 24,
+      "prompt_default": "a hooded figure standing in a ruined stone hall lit by a single cold shaft of light",
+      "prompt_template": "embedding:minimaxh3_dark_magic {text} Dark magic gathers around the subject: black smoke and violet embers spiral inwards, runes ignite one by one on the stone floor, and the light drains out of the scene as the shadows thicken toward the subject's hands. Single continuous shot, no duplicated limbs, faces stay anatomically consistent."
+    },
+    {
+      "id": "fire_breath",
+      "label": "火焰吐息",
+      "embedding": "minimaxh3_fire_breath.safetensors",
+      "steps": 24,
+      "prompt_default": "a scaled drake crouched on a charred rock ledge above a dark canyon",
+      "prompt_template": "embedding:minimaxh3_fire_breath {text} The subject breathes fire: a sustained stream of flame pours from its mouth in one continuous flow, embers and heat haze rolling ahead of it, and the surrounding rock lights up orange with each pulse. Single continuous shot, anatomically consistent jaws, no duplicated limbs."
+    },
+    {
+      "id": "four_seasons",
+      "label": "四季流转",
+      "embedding": "minimaxh3_four_seasons.safetensors",
+      "steps": 24,
+      "prompt_default": "a lone tree on a grassy hill beside a small lake, seen from one fixed distance",
+      "prompt_template": "embedding:minimaxh3_four_seasons {text} The same framed scene cycles through the four seasons in one continuous camera move: snow melts into spring blossom, summer heat brings green growth, autumn colour falls, and winter closes the circle. Locked composition, seamless seasonal transition, no camera cuts."
+    },
+    {
+      "id": "kiss_camera",
+      "label": "亲吻镜头",
+      "embedding": "minimaxh3_kiss_camera.safetensors",
+      "steps": 24,
+      "prompt_default": "a young woman in a red coat sitting at a cafe table on a rainy street, looking up at the camera",
+      "prompt_template": "embedding:minimaxh3_kiss_camera {text} The subject leans toward the camera and kisses it: the lens fills with the approaching lips, a soft out-of-focus blur washes over the frame on contact, then the camera pulls back to the opening composition. Single continuous shot, anatomically consistent, no duplicated limbs."
+    },
+    {
+      "id": "spiral_ascent",
+      "label": "螺旋升腾",
+      "embedding": "minimaxh3_spiral_ascent.safetensors",
+      "steps": 24,
+      "max_length": 124,
+      "prompt_default": "a dancer standing at the centre of an empty circular plaza with a spiral staircase at its edge",
+      "prompt_template": "embedding:minimaxh3_spiral_ascent {text} The camera spirals upward around the subject in one continuous ascending orbit, rising past the subject toward the sky as the ground drops away below, the rotation smooth and unbroken from start to finish. Single continuous shot, physically consistent, no camera cuts."
+    },
+    {
+      "id": "storm_magic",
+      "label": "风暴魔法",
+      "embedding": "minimaxh3_storm_magic.safetensors",
+      "steps": 24,
+      "prompt_default": "a figure in a long coat standing on a wet rooftop under a black sky",
+      "prompt_template": "embedding:minimaxh3_storm_magic {text} Storm magic erupts around the subject: clouds stack into a dark vortex overhead, lightning arcs out of the subject's hands into the rain, and the wind drives the rain sideways in one continuous gust. Single continuous shot, no duplicated limbs, faces stay anatomically consistent."
+    },
+    {
+      "id": "truman_show",
+      "label": "楚门式片场",
+      "embedding": "minimaxh3_truman_show.safetensors",
+      "steps": 24,
+      "prompt_default": "a man in a grey suit walking out of a small bakery onto a bright pastel street",
+      "prompt_template": "embedding:minimaxh3_truman_show {text} The scene plays as a staged studio set filmed for a live show: the camera glides through a bright pastel town, extras go about rehearsed routines, and the seam of the artificial set - studio lights, a painted sky, a doorway into the backstage - shows itself as the camera keeps moving. Single continuous shot, no duplicated limbs."
+    }
+  ]
+}

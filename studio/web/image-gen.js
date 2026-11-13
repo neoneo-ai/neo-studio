@@ -116,16 +116,18 @@ function missingModelsNotice(check) {
         summary: tf("{label} 缺 {n} 项模型文件", { label, n: check.missing_count }),
         detail: tf("约 {gb} GB：{detail}", { gb: check.missing_gb, detail }),
         actionLabel: t("去模型库"),
-        onAction: () => openModelHub({ readySkill: check.skill_id }),
+        // 特效技能把「本次那个特效」一起带过去：就绪面板出的就是补得上这一发的计划
+        onAction: () => openModelHub({ readySkill: check.skill_id, readyEffect: check.effect || "" }),
     });
     return tf("{label} 缺 {n} 项模型文件（约 {gb} GB）：{detail}。到模型库补齐后即可生成。",
         { label, n: check.missing_count, gb: check.missing_gb, detail });
 }
 
 /** 生成前预检：清单里有「要下又没落盘」的文件就拦下，返回给用户的那句话；
- *  无清单 / 已就位 / 清单接口不可用时回空串，生成照常提交。 */
-async function blockingMissingModels(skillId) {
-    const check = await skillModelCheck(skillId);
+ *  无清单 / 已就位 / 清单接口不可用时回空串，生成照常提交。
+ *  effect 是特效技能本次要跑的特效 id：只有它的文件计入阻塞，其余特效的文件不挡这一发。 */
+export async function blockingMissingModels(skillId, effect = "") {
+    const check = await skillModelCheck(skillId, effect);
     if (!check?.blocked) return "";
     return missingModelsNotice(check);
 }
@@ -133,10 +135,11 @@ async function blockingMissingModels(skillId) {
 /** 预设清单的就位检查（每次调用读一遍，不跨请求缓存：config.json 与模型根在请求之外也会变）。
  *  路由回的是 {success, check} 信封，就位数据只在 check 里。
  *  无清单 / 技能不存在 / 路由不可用 → null：缺失模型的 UI 与生成前预检整条降级。 */
-export async function skillModelCheck(skillId) {
+export async function skillModelCheck(skillId, effect = "") {
     if (!skillId) return null;
     try {
-        const data = await getJson(`${SKILL_MODELS_API}/check?skill_id=${encodeURIComponent(skillId)}`);
+        const data = await getJson(`${SKILL_MODELS_API}/check?skill_id=${encodeURIComponent(skillId)}`
+            + (effect ? `&effect=${encodeURIComponent(effect)}` : ""));
         const check = data?.check;
         return check?.has_manifest ? check : null;
     } catch (e) {

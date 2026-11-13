@@ -781,13 +781,60 @@ def _vdn_plugin_installed() -> bool:
 
 
 def _video_skill_available(d: str) -> bool:
-    """视频技能当前可用性：workflow 引用 VDN 加速节点时依赖可选插件 ComfyUI-VDN-H3，未装则不可用。"""
+    """视频技能当前可用性：workflow 引用 VDN 加速节点时依赖可选插件 ComfyUI-VDN-H3，未装则不可用；
+    特效技能钉着的 LoRA / 特效嵌入没落盘时同理——缺的那件就是特效本体，出厂这一发跑不出特效。"""
     wf = os.path.join(d, "workflow.json")
     if not os.path.isfile(wf):
         return True
     with open(wf, encoding="utf-8") as f:
         needs_vdn = "ApplyVDNH3" in f.read()
-    return (not needs_vdn) or _vdn_plugin_installed()
+    if needs_vdn and not _vdn_plugin_installed():
+        return False
+    return not _preset_bodies_missing(os.path.basename(d))
+
+
+def _preset_bodies_missing(skill_id: str) -> bool:
+    """预设清单里「配置在用、文件没落盘」的 LoRA 与特效嵌入；判定口径就是 skill_models 就位检查的那一份。
+
+    只读本地模型根，不发网络请求；清单层跑不起来时按可用降级（离线窗口没有 comfy 的模型根，
+    不能因此把整批视频技能判死）。特效技能一次只跑一个特效：只要还有一个特效的本体在盘上，
+    这条技能就值得留在下拉里，缺本体的那几个特效在特效清单里各自标不可用。
+    """
+    files = _skill_model_files(skill_id)
+    effects = [f for f in files if f.get("field") == "effect"]
+    if effects:
+        return all(not f.get("ready") for f in effects)
+    return any(f.get("field") == "loras" and f.get("active") and not f.get("ready") for f in files)
+
+
+def _skill_model_files(skill_id: str) -> list:
+    """预设的文件层就位清单（skill_models.check_skill 的 files）；清单层跑不起来时空表。"""
+    try:
+        from .skill_models import check_skill
+        check = check_skill(skill_id)
+    except Exception:
+        return []
+    return (check or {}).get("files") or []
+
+
+def _attach_video_effects(skill: dict, skill_id: str) -> None:
+    """特效技能附带特效清单（特效 id / 显示名 / 示例提示词 / 本体是否就位）+ 默认特效，供视频页特效选择器。
+
+    没有特效表的技能什么都不带——选择器只在特效技能上出现。就位判定复用 skill_models 那一份口径；
+    没有嵌入文件的特效（定格瞬间这类基座近似镜头）本体就是提示词契约，天然就位。
+    """
+    cfg = get_skill_gen_config(skill_id)
+    table = [e for e in (cfg.get("effects") or []) if isinstance(e, dict) and str(e.get("id") or "").strip()]
+    if not table:
+        return
+    files = {str(f.get("effect") or "").strip(): bool(f.get("ready"))
+             for f in _skill_model_files(skill_id) if f.get("field") == "effect"}
+    skill["effect"] = str(cfg.get("effect") or "").strip() or str(table[0].get("id")).strip()
+    skill["effects"] = [{"id": str(e.get("id")).strip(),
+                         "label": str(e.get("label") or e.get("id")).strip(),
+                         "prompt_default": str(e.get("prompt_default") or "").strip(),
+                         "ready": not str(e.get("embedding") or "").strip()
+                         or files.get(str(e.get("id")).strip(), False)} for e in table]
 
 
 def scan_skills() -> list:
@@ -828,6 +875,7 @@ def scan_skills() -> list:
             }
             _attach_gen_config(skill, skill_id)
             if skill["gen_video"]:
+                _attach_video_effects(skill, skill_id)
                 skill["available"] = _video_skill_available(d)
             skills.append(skill)
 
@@ -863,6 +911,7 @@ def scan_skills() -> list:
                 }
                 _attach_gen_config(skill, skill_id)
                 if skill["gen_video"]:
+                    _attach_video_effects(skill, skill_id)
                     skill["available"] = _video_skill_available(d)
                 skills.append(skill)
 

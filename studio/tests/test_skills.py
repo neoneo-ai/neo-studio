@@ -410,6 +410,21 @@ class TestVideoSkillAvailable(unittest.TestCase):
         self.assertIsNotNone(s)
         self.assertNotIn("available", s)
 
+    def test_effect_skill_ships_its_effect_table(self):
+        """特效技能把特效表发给视频页（特效 id / 显示名 / 示例提示词 / 本体就位）+ 默认特效；普通视频技能不带。
+
+        就位标记读的是本机模型根，测试环境里没有特效嵌入文件，断言只钉形状与「不吃文件的特效天然就位」。
+        """
+        row = self._by_id().get("effect_h3")
+        self.assertIsNotNone(row, "effect_h3 预设应被扫描到")
+        self.assertEqual(row.get("effect"), "bullet_time")
+        effects = row.get("effects") or []
+        self.assertEqual(len(effects), 11, "11 个特效：10 个社区嵌入 + 定格瞬间")
+        by_id = {e["id"]: e for e in effects}
+        self.assertTrue(by_id["frozen_moment"]["ready"], "定格瞬间不吃文件，本体天然就位")
+        self.assertTrue(all(e["label"] and isinstance(e["ready"], bool) for e in effects))
+        self.assertNotIn("effects", self._by_id()["minimax_h3_i2v"])
+
     def test_load_skill_route_returns_available(self):
         # 详情弹窗顶部「不可用」说明靠 load_skill 响应的 available 字段
         self._make_video_skill("zz-test-vdn-route", {

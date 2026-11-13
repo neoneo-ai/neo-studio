@@ -36,6 +36,12 @@ _MODELS = {
     "vae": ["krea2/diffusion_pytorch_model.safetensors", "minimax_h3_video_vae_fp16.safetensors",
             "minimax_h3_audio_vae_fp32.safetensors"],
     "loras": ["h3/style_lora.safetensors"],
+    # 特效嵌入 = Comfy-Org/MiniMax-H3 那 10 个社区嵌入文件；桩环境按这台机器的现状少 fire_breath 一个
+    "embeddings": ["minimaxh3_art_is_explosion.safetensors", "minimaxh3_blooming_flowers.safetensors",
+                   "minimaxh3_bullet_time.safetensors", "minimaxh3_dark_magic.safetensors",
+                   "minimaxh3_four_seasons.safetensors", "minimaxh3_kiss_camera.safetensors",
+                   "minimaxh3_spiral_ascent.safetensors", "minimaxh3_storm_magic.safetensors",
+                   "minimaxh3_truman_show.safetensors"],
 }
 
 _server = types.ModuleType("server")
@@ -125,6 +131,7 @@ def _load(name, fname):
 
 
 _load("skill", "skill.py")
+_load("skill_models", "skill_models.py")   # h3_video_gen 在 import 期就要把它的 folder_paths 绑到本文件的桩上
 _load("image_gen", "image_gen.py")
 image_gen_edit = _load("image_gen_edit", "image_gen_edit.py")
 h3_video_gen = _load("h3_video_gen", "h3_video_gen.py")
@@ -506,6 +513,225 @@ class ResolveVideoParamsTests(unittest.TestCase):
         finally:
             h3_video_gen.suggest_audio_vae = orig
 
+    def _effect_cfg(self):
+        """特效表技能的最小契约：每个特效自带嵌入文件 / 模板 / 步数 / 时长上限 / 首尾同帧。"""
+        cfg = self._cfg()
+        cfg["effect"] = "bullet_time"
+        cfg["effects"] = [
+            {"id": "bullet_time", "label": "子弹时间", "embedding": "minimaxh3_bullet_time.safetensors",
+             "steps": 28, "max_length": 124, "prompt_default": "a sprinter leaps",
+             "prompt_template": "embedding:minimaxh3_bullet_time {text} bullet-time, single shot"},
+            {"id": "frozen_moment", "label": "定格瞬间", "steps": 24, "max_length": 124,
+             "same_first_last": True, "prompt_template": "{text} locked camera seamless loop"},
+            {"id": "dark_magic", "label": "黑暗魔法", "embedding": "minimaxh3_dark_magic.safetensors",
+             "steps": 24, "prompt_template": "embedding:minimaxh3_dark_magic {text} dark magic gathers"},
+            {"id": "fire_breath", "label": "火焰吐息", "embedding": "minimaxh3_fire_breath.safetensors",
+             "steps": 24, "prompt_template": "embedding:minimaxh3_fire_breath {text} fire breath"},
+        ]
+        return cfg
+
+    def test_effect_selection_injects_the_embedding_segment(self):
+        # 官方语法 embedding:<文件名> 逐字进提示词：触发词就是文件名去后缀，改写过的文本特效认不出来
+        p = h3_video_gen.resolve_video_params({"prompt": "a hooded figure", "effect": "dark_magic"}, self._effect_cfg())
+        self.assertEqual(p["prompt"], "embedding:minimaxh3_dark_magic a hooded figure dark magic gathers")
+        self.assertEqual((p["effect"], p["steps"]), ("dark_magic", 24))
+
+    def test_effect_defaults_to_the_skills_own_effect(self):
+        p = h3_video_gen.resolve_video_params({"prompt": "a sprinter"}, self._effect_cfg())
+        self.assertEqual((p["effect"], p["steps"]), ("bullet_time", 28))
+        self.assertIn("embedding:minimaxh3_bullet_time", p["prompt"])
+
+    def test_effect_empty_text_uses_that_effects_default(self):
+        p = h3_video_gen.resolve_video_params({"prompt": "  ", "effect": "bullet_time"}, self._effect_cfg())
+        self.assertEqual(p["prompt"], "embedding:minimaxh3_bullet_time a sprinter leaps bullet-time, single shot")
+
+    def test_unknown_effect_id_lists_the_effects_that_exist(self):
+        with self.assertRaises(ValueError) as ctx:
+            h3_video_gen.resolve_video_params({"prompt": "x", "effect": "no_such"}, self._effect_cfg())
+        msg = str(ctx.exception)
+        self.assertTrue(all(e["id"] in msg for e in self._effect_cfg()["effects"]), msg)
+
+    def test_missing_effect_file_names_the_file_before_queueing(self):
+        # ComfyUI 读不到 embedding: 段只 warning 后整段忽略、整发照跑完 → 静默出一发没有特效的片，必须挡在排队列之前
+        with self.assertRaises(ValueError) as ctx:
+            h3_video_gen.resolve_video_params({"prompt": "x", "effect": "fire_breath"}, self._effect_cfg())
+        self.assertIn("minimaxh3_fire_breath.safetensors", str(ctx.exception))
+
+    def test_missing_file_of_another_effect_does_not_block(self):
+        # 特效技能一次只跑一个特效：别的特效缺文件不该把这一发挡死
+        p = h3_video_gen.resolve_video_params({"prompt": "x", "effect": "bullet_time"}, self._effect_cfg())
+        self.assertEqual(p["effect"], "bullet_time")
+
+    def test_effect_contract_clamps_length_and_pins_the_loop_frame(self):
+        for name in ("loop_frame.png", "end_frame.png"):
+            with open(os.path.join(_INPUT_DIR, name), "wb") as f:
+                f.write(b"media")
+        p = h3_video_gen.resolve_video_params(
+            {"prompt": "x", "effect": "frozen_moment", "length": 243,
+             "references": [{"kind": "input", "value": "loop_frame.png"}]}, self._effect_cfg())
+        self.assertEqual((p["length"], p["ref_last"]), (124, "loop_frame.png"))
+        explicit = h3_video_gen.resolve_video_params(
+            {"prompt": "x", "effect": "frozen_moment", "length": 124,
+             "references": [{"kind": "input", "value": "loop_frame.png"}],
+             "last_frame": {"kind": "input", "value": "end_frame.png"}}, self._effect_cfg())
+        self.assertEqual(explicit["ref_last"], "end_frame.png")   # 用户点了尾帧就按用户的那张
+
+    def test_effect_steps_beat_the_pages_own_steps_override(self):
+        # 自定参数面板这一发改的步数是覆盖技能配置的；特效钉着的步数是这一发的契约，特效优先
+        p = h3_video_gen.resolve_video_params(
+            {"prompt": "x", "effect": "bullet_time", "steps": 4}, self._effect_cfg())
+        self.assertEqual(p["steps"], 28)
+
+    def test_effect_prompt_template_fills_text(self):
+        # 特效技能钉提示词：用户那句话只填进 {text}，触发词由模板写死，被改写过的文本认不出镜头
+        cfg = self._cfg()
+        cfg["prompt_template"] = "locked camera {text} seamless loop"
+        p = h3_video_gen.resolve_video_params({"prompt": " a girl in rain "}, cfg)
+        self.assertEqual(p["prompt"], "locked camera a girl in rain seamless loop")
+
+    def test_effect_prompt_template_empty_text_uses_default(self):
+        cfg = self._cfg()
+        cfg["prompt_template"] = "{text} bullet-time"
+        cfg["prompt_default"] = "a sprinter leaps"
+        self.assertEqual(
+            h3_video_gen.resolve_video_params({"prompt": "   "}, cfg)["prompt"],
+            "a sprinter leaps bullet-time")
+
+    def test_effect_prompt_template_without_token_replaces_text(self):
+        cfg = self._cfg()
+        cfg["prompt_template"] = "frozen scene, locked camera"
+        self.assertEqual(
+            h3_video_gen.resolve_video_params({"prompt": "用户写的那句话"}, cfg)["prompt"],
+            "frozen scene, locked camera")
+
+    def test_require_loras_refuses_missing_file(self):
+        # 特效本体没落盘就不出片：静默跑一发「没有特效的片」比当场说清缺哪个文件更坏
+        cfg = self._cfg()
+        cfg["loras"] = [{"name": "h3/effect_style_lora.safetensors", "strength": 1.0}]
+        cfg["require_loras"] = True
+        with self.assertRaises(ValueError) as ctx:
+            h3_video_gen.resolve_video_params({"prompt": "x"}, cfg)
+        self.assertIn("effect_style_lora.safetensors", str(ctx.exception))
+
+    def test_require_loras_passes_when_installed(self):
+        cfg = self._cfg()
+        cfg["loras"] = [{"name": "h3/style_lora.safetensors", "strength": 1.0}]
+        cfg["require_loras"] = True
+        p = h3_video_gen.resolve_video_params({"prompt": "x"}, cfg)
+        self.assertEqual(p["loras"], [{"name": "h3/style_lora.safetensors", "strength": 1.0}])
+
+    def test_loras_stay_optional_without_require_flag(self):
+        # 没标 require_loras 的既有技能口径不变：缺文件仍按原样跳过
+        cfg = self._cfg()
+        cfg["loras"] = [{"name": "h3/not_installed.safetensors", "strength": 1.0}]
+        self.assertEqual(h3_video_gen.resolve_video_params({"prompt": "x"}, cfg)["loras"], [])
+
+    def test_same_first_last_defaults_last_frame_to_first(self):
+        with open(os.path.join(_INPUT_DIR, "loop_frame.png"), "wb") as f:
+            f.write(b"media")
+        cfg = self._cfg()
+        cfg["same_first_last"] = True
+        p = h3_video_gen.resolve_video_params(
+            {"prompt": "x", "references": [{"kind": "input", "value": "loop_frame.png"}]}, cfg)
+        self.assertEqual(p["ref_last"], p["ref_name"])
+
+    def test_same_first_last_keeps_an_explicit_last_frame(self):
+        for name in ("loop_frame.png", "end_frame.png"):
+            with open(os.path.join(_INPUT_DIR, name), "wb") as f:
+                f.write(b"media")
+        cfg = self._cfg()
+        cfg["same_first_last"] = True
+        p = h3_video_gen.resolve_video_params(
+            {"prompt": "x", "references": [{"kind": "input", "value": "loop_frame.png"}],
+             "last_frame": {"kind": "input", "value": "end_frame.png"}}, cfg)
+        self.assertEqual(p["ref_last"], "end_frame.png")
+
+    def test_max_length_clamps_a_longer_request(self):
+        cfg = self._cfg()
+        cfg["length"] = 124
+        cfg["max_length"] = 124
+        self.assertEqual(h3_video_gen.resolve_video_params({"prompt": "x", "length": 243}, cfg)["length"], 124)
+
+    def test_effect_skill_available_while_one_effect_is_ready(self):
+        # 特效技能有一个特效的本体在盘上就可用；缺本体的那一个在特效清单里各自标不可用
+        scanned = {s["id"]: s for s in h3_video_gen.scan_skills()}
+        row = scanned["effect_h3"]
+        self.assertIs(row["available"], True)
+        self.assertIs(scanned["minimax_h3_i2v"]["available"], True)
+        self.assertEqual(row["effect"], "bullet_time")
+        by_id = {e["id"]: e for e in row["effects"]}
+        self.assertTrue(by_id["bullet_time"]["ready"])
+        self.assertTrue(by_id["frozen_moment"]["ready"], "定格瞬间不吃文件，本体天然就位")
+        self.assertIs(by_id["fire_breath"]["ready"], False)   # 桩环境的模型根里就是少这一个
+
+    def test_skills_without_effect_table_expose_no_effects(self):
+        scanned = {s["id"]: s for s in h3_video_gen.scan_skills()}
+        self.assertNotIn("effects", scanned["minimax_h3_i2v"])
+
+
+class EffectSkillContractTests(unittest.TestCase):
+    """出厂特效技能（effect_h3）：特效本体钉在技能 config 的特效表里——嵌入文件、逐字触发段、步数、
+    帧网格、首尾同帧全在特效项上，前端只交一个特效 id。"""
+
+    def _config(self):
+        with open(os.path.join(PLUGIN_DIR, "skills", "presets", "effect_h3", "config.json"),
+                  encoding="utf-8") as f:
+            return json.load(f)
+
+    def _manifest(self):
+        with open(os.path.join(PLUGIN_DIR, "skills", "presets", "effect_h3", "models.json"),
+                  encoding="utf-8") as f:
+            return json.load(f)
+
+    def test_effect_table_lists_every_effect_once(self):
+        cfg = self._config()
+        ids = [e["id"] for e in cfg["effects"]]
+        self.assertEqual(len(ids), 11, "11 个特效：10 个社区嵌入 + 不吃文件的定格瞬间")
+        self.assertEqual(len(set(ids)), len(ids))
+        self.assertIn(cfg["effect"], ids)
+
+    def test_embedding_effects_pin_their_embedding_segment(self):
+        for e in self._config()["effects"]:
+            stem = str(e.get("embedding") or "").replace(".safetensors", "")
+            if not stem:
+                continue
+            with self.subTest(effect=e["id"]):
+                # 触发词 = 文件名去后缀，逐字匹配；模板段被改写过的文本特效认不出来
+                self.assertTrue(e["prompt_template"].startswith(f"embedding:{stem} "), e["prompt_template"][:40])
+                self.assertIn("{text}", e["prompt_template"])
+                self.assertTrue(e["prompt_default"])
+                self.assertGreater(int(e["steps"]), 20, "环绕与画面试效在 20 步上会糊")
+
+    def test_frozen_moment_needs_no_file_and_loops(self):
+        e = next(x for x in self._config()["effects"] if x["id"] == "frozen_moment")
+        self.assertIs(e.get("same_first_last"), True)
+        self.assertNotIn("embedding", e)
+        self.assertEqual(e["max_length"] % 17, 5, "时长上限要在 H3 的 17k+5 帧网格上")
+        self.assertIn("{text}", e["prompt_template"])
+
+    def test_frame_caps_sit_on_the_h3_grid(self):
+        for e in self._config()["effects"]:
+            cap = e.get("max_length")
+            with self.subTest(effect=e["id"]):
+                self.assertEqual((cap or 0) % 17, 5 if cap else 0)
+
+    def test_manifest_covers_every_embedding_effect(self):
+        cfg = self._config()
+        files = self._manifest()["files"]
+        self.assertEqual({f["filename"] for f in files},
+                         {e["embedding"] for e in cfg["effects"] if e.get("embedding")})
+        self.assertEqual({f["effect"] for f in files},
+                         {e["id"] for e in cfg["effects"] if e.get("embedding")})
+        self.assertTrue(all(f["category"] == "embeddings" for f in files))
+
+    def test_skill_carries_no_lora_dependency(self):
+        # 特效本体是官方口径的文本嵌入（embedding: 段），这一发不挂 LoRA，旧社区 LoRA 契约整条不存在
+        cfg = self._config()
+        self.assertNotIn("loras", cfg)
+        self.assertNotIn("require_loras", cfg)
+        self.assertTrue(all("loras" not in e for e in cfg["effects"]))
+        self.assertTrue(all(f["field"] == "effect" for f in self._manifest()["files"]))
+
 
 class GenVideoSkillsTests(unittest.TestCase):
     def test_new_presets_are_video_skills(self):
@@ -514,6 +740,7 @@ class GenVideoSkillsTests(unittest.TestCase):
         self.assertIn("minimax_h3_i2v", ids)
         self.assertIn("minimax-h3-r2v", ids)
         self.assertIn("minimax_h3_fl2v", ids)
+        self.assertIn("effect_h3", ids)
 
     def test_image_presets_not_video_skills(self):
         ids = {s["id"] for s in h3_video_gen._gen_video_skills()}

@@ -8,11 +8,13 @@
 """
 
 import random
+import re
 
 import nodes as comfy_nodes
 
 from .h3_prompt_audit import reference_tags
 from .image_gen import _reference_name, _resolve_loras, render_template, resolve_model
+from .skill_models import locate_by_names
 from .video_gen import get_video_settings, suggest_audio_vae, suggest_video_model
 from .skill import load_skill_workflow, scan_skills
 
@@ -95,16 +97,17 @@ def resolve_video_params(body: dict, cfg: dict, skip_model: bool = False) -> dic
     请求体里 _VIDEO_OVERRIDE_KEYS 的非空值先并入 cfg（视频页自定参数面板本发临时换的模型 / LoRA / 步数）。
     skip_model=True 时跳过主模型解析/校验（外部 MODEL 注入模式，内部 UNETLoader 会被剪掉）。
     """
-    prompt_text = str(body.get("prompt") or "").strip()
-    if not prompt_text:
-        raise ValueError("提示词为空")
-
     # 会话页自定参数面板本发填的覆盖值先并进技能配置：空值跳过 = 这一发跟着技能配置与全局生视频设置走，
     # 下面每条解析只看合并后的 cfg，回退链一律不变
     cfg = dict(cfg)
     for key in _VIDEO_OVERRIDE_KEYS:
         if body.get(key):
             cfg[key] = body[key]
+
+    effect = _effect_entry(cfg, body.get("effect"))
+    prompt_text = _effect_prompt(effect, str(body.get("prompt") or "").strip())
+    if not prompt_text:
+        raise ValueError("提示词为空")
 
     # H3 模型/文本编码器/VAE：skill config.json 优先，回落到独立「生视频模型」设置（video_gen.json），
     # 仍空则按 H3 名称线索自动挑选（与生图 suggest_model 一致）；都拿不到才报错
@@ -137,8 +140,19 @@ def resolve_video_params(body: dict, cfg: dict, skip_model: bool = False) -> dic
     audio_vae, err = resolve_model("vae", audio_vae)
     if err:
         raise ValueError(err)
-    # LoRA：复用生图解析（校验存在性 + 强度裁剪）；视频无「依赖参考图」概念，配置的全部无条件加载
-    loras, _lora_warns = _resolve_loras(cfg)
+    # LoRA：复用生图解析（校验存在性 + 强度裁剪）；视频无「依赖参考图」概念，配置的全部无条件加载。
+    # 特效项自带 LoRA 与「缺了就挡」标记时整套跟着特效走：特效 LoRA 就是那一发特效的本体，
+    # 技能级 LoRA 是加速/风格用的，特效自带的那一套才是这一发必须挂上的
+    lora_cfg = {**cfg, **{k: v for k, v in effect.items() if k in ("loras", "require_loras")}}
+    loras, _lora_warns = _resolve_loras(lora_cfg)
+    if lora_cfg.get("require_loras"):
+        missing = _missing_loras(lora_cfg, loras)
+        if missing:
+            # 特效的 LoRA 就是特效本体：缺文件时静默出一发没有特效的片，比当场说清缺哪个更坏
+            raise ValueError("特效缺 LoRA：" + "、".join(missing) + "。到模型库补齐后再生成。")
+    missing_embedding = _missing_embedding(effect)
+    if missing_embedding:
+        raise ValueError(f"特效「{effect.get('label') or effect.get('id')}」缺特效嵌入文件 {missing_embedding}。到模型库补齐后再生成。")
 
     # 参考媒体：按 media（缺省 image）分成参考图 / 参考视频 / 参考音频三组，
     # 各自按 H3 参考节点上限裁剪；第一张参考图同时作为单路 {{REF_IMAGE}} 首帧。
@@ -158,17 +172,23 @@ def resolve_video_params(body: dict, cfg: dict, skip_model: bool = False) -> dic
     # 尾帧（首尾帧技能）：单项可选，未给或解析失败时为 None（模板里对应 LoadImage 会被裁掉）
     last_src = body.get("last_frame")
     ref_last = _reference_name(last_src, "image") if isinstance(last_src, dict) else None
+    if effect.get("same_first_last") and not ref_last and ref_images:
+        ref_last = ref_images[0]   # 定格/闭环特效：尾帧缺省取首帧，成片首尾同图才能无缝循环
 
     width = int(body.get("width") or cfg.get("width") or 1344)
     height = int(body.get("height") or cfg.get("height") or 768)
-    length = int(body.get("length") or cfg.get("length") or 124)
-    steps = int(cfg.get("steps") or 20)   # 采样步数：skill config.json 可配，默认 20
+    length = int(body.get("length") or effect.get("length") or cfg.get("length") or 124)
+    max_length = effect.get("max_length") or cfg.get("max_length")
+    if isinstance(max_length, int) and max_length > 0:
+        length = min(length, max_length)   # 特效自带的时长上限：选更长也只会跑到这一发特效能稳住的长度
+    steps = int(effect.get("steps") or cfg.get("steps") or 20)   # 采样步数：特效/技能 config.json 可配，默认 20
 
     seed = body.get("seed")
     seed = random.randint(0, 2**63 - 1) if seed is None else max(0, int(seed))
 
     return {
         "prompt": prompt_text,
+        "effect": str(effect.get("id") or "").strip(),
         "model": model,
         "text_encoder": encoder,
         "vae": vae,
@@ -185,6 +205,61 @@ def resolve_video_params(body: dict, cfg: dict, skip_model: bool = False) -> dic
         "ref_videos": ref_videos,
         "ref_audios": ref_audios,
     }
+
+
+def _effect_entry(cfg: dict, raw) -> dict:
+    """config.json 特效表（effects）里本次要跑的那一项；技能没有特效表时返回 cfg 本身。
+
+    模板 / 嵌入文件 / 步数 / 时长上限 / 首尾同帧 / 特效 LoRA 全钉在特效项上，前端只交一个 id。
+    请求没带 id 就用技能默认特效（config.json 的 effect）；带了表里没有的 id 直接报错——
+    静默回默认特效会出一发用户没点的片。
+    """
+    table = [e for e in (cfg.get("effects") or []) if isinstance(e, dict) and str(e.get("id") or "").strip()]
+    if not table:
+        return cfg
+    wanted = _first_nonempty(raw, cfg.get("effect"))
+    for entry in table:
+        if str(entry.get("id")).strip() == wanted:
+            return entry
+    raise ValueError(f"未知特效：{wanted or '（未指定）'}，该技能可用特效："
+                     + "、".join(str(e.get("id")).strip() for e in table))
+
+
+def _effect_prompt(effect: dict, text: str) -> str:
+    """特效项的提示词模板（prompt_template）：{text} 填用户那句话，空话回 prompt_default。
+
+    社区特效认的是逐字触发短语与 embedding 段（bullet-time 就认这个词），被改写过的文本会让镜头跑不出来，
+    所以最终文本钉在技能里，前端只交那句话。模板里没有 {text} 时整句替换用户文本（与 OpenField 特效模板同语义）。
+    """
+    tpl = str(effect.get("prompt_template") or "").strip()
+    if not tpl:
+        return text
+    filled = text or str(effect.get("prompt_default") or "").strip()
+    out = tpl.replace("{text}", filled) if "{text}" in tpl else tpl
+    return re.sub(r"\s+", " ", out).strip()
+
+
+def _missing_embedding(effect: dict) -> str:
+    """特效嵌入文件没落盘时给出文件名，就位则空串。
+
+    ComfyUI 读不到 embedding: 那一段只 warning 后整段忽略（comfy/sd1_clip.py 的 embedding 分支），
+    整发照跑完、出来的是一发没挂特效的片——所以必须在排进队列之前挡下来。
+    """
+    name = str(effect.get("embedding") or "").strip()
+    if not name:
+        return ""
+    return "" if locate_by_names("embeddings", [name]) else name
+
+
+def _missing_loras(cfg: dict, loras: list) -> list:
+    """config 声明的 LoRA 里没解析出文件的那几个（按文件名末段比，斜杠方向与大小写不敏感）。"""
+    got = {str(e.get("name") or "").replace("\\", "/").split("/")[-1].lower() for e in loras}
+    out = []
+    for entry in cfg.get("loras") or []:
+        name = str((entry.get("name") if isinstance(entry, dict) else entry) or "").strip()
+        if name and name.replace("\\", "/").split("/")[-1].lower() not in got:
+            out.append(name)
+    return out
 
 
 # MiniMaxH3ReferenceToVideo 的参考槽（autogrow 点号键 ref_images.ref_image_N）有值就进条件；

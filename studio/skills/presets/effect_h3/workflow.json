@@ -1,0 +1,105 @@
+{
+  "1": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "{{MODEL}}",
+      "weight_dtype": "default"
+    }
+  },
+  "2": {
+    "class_type": "CLIPLoader",
+    "inputs": {
+      "clip_name": "{{TEXT_ENCODER}}",
+      "type": "minimax",
+      "device": "default"
+    }
+  },
+  "3": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "{{VAE}}"
+    }
+  },
+  "9": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "{{REF_IMAGE}}"
+    }
+  },
+  "13": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "{{REF_IMAGE_LAST}}"
+    }
+  },
+  "4": {
+    "class_type": "MiniMaxH3ImageToVideo",
+    "inputs": {
+      "clip": ["2", 0],
+      "vae": ["3", 0],
+      "prompt": "{{PROMPT}}",
+      "width": "{{WIDTH}}",
+      "height": "{{HEIGHT}}",
+      "length": "{{LENGTH}}",
+      "first_frame": ["9", 0],
+      "last_frame": ["13", 0]
+    }
+  },
+  "5": {
+    "class_type": "MiniMaxH3SigmaShift",
+    "inputs": {
+      "model": ["1", 0],
+      "shift_video": 12.0,
+      "shift_audio": 3.0
+    }
+  },
+  "6": {
+    "class_type": "KSampler",
+    "inputs": {
+      "model": ["5", 0],
+      "seed": "{{SEED}}",
+      "steps": "{{STEPS}}",
+      "cfg": 1.0,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "positive": ["4", 0],
+      "negative": ["4", 0],
+      "latent_image": ["4", 1],
+      "denoise": 1.0
+    }
+  },
+  "7": {
+    "class_type": "LTXVSeparateAVLatent",
+    "inputs": {
+      "av_latent": ["6", 0]
+    }
+  },
+  "8": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": ["7", 0],
+      "vae": ["3", 0]
+    }
+  },
+  "10": {
+    "class_type": "VAEDecodeAudio",
+    "inputs": {
+      "samples": ["7", 1],
+      "vae": ["12", 0]
+    }
+  },
+  "11": {
+    "class_type": "CreateVideo",
+    "inputs": {
+      "images": ["8", 0],
+      "fps": 24,
+      "audio": ["10", 0]
+    }
+  },
+  "12": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "{{AUDIO_VAE}}"
+    }
+  }
+}

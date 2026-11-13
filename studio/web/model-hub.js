@@ -247,7 +247,7 @@ function buildUI(h) {
             h.source = key;
             syncSource(h);
             loadRepos(h, false);
-            if (h.readySkill) loadReadyPlan(h, h.readySkill);   // 已出计划时换源重出：计划跟着当前源走
+            if (h.readySkill) loadReadyPlan(h, h.readySkill, h.readyEffect);   // 已出计划时换源重出：计划跟着当前源走
         });
         srcBtns[key] = b;
         srcWrap.appendChild(b);
@@ -679,12 +679,14 @@ function renderReadyPlan(h) {
     h.ui.readyBody.appendChild(block);
 }
 
-async function loadReadyPlan(h, skillId) {
+async function loadReadyPlan(h, skillId, effect = "") {
     h.readySkill = skillId;
+    h.readyEffect = effect || "";   // 特效技能：计划只把「本次那个特效」缺的本体算要下的项，其余特效留作可选项
     h.ui.readySummary.textContent = t("下载计划生成中…");
     try {
         const data = await skillReq("/plan", {
             skill_id: skillId, source: h.source, include_optional: !!h.ui.readyOptionalInput.checked,
+            effect: h.readyEffect,
         });
         h.readyPlan = data.plan;
         renderReadyOverview(h);
@@ -726,7 +728,7 @@ async function pumpPlanQueue(h) {
 /** 一轮计划下完就重读就位：文件落盘后缺项变少，闭环在这一步合上。 */
 async function refreshReady(h) {
     await loadReadyOverview(h);
-    if (h.readySkill) await loadReadyPlan(h, h.readySkill);
+    if (h.readySkill) await loadReadyPlan(h, h.readySkill, h.readyEffect);
 }
 
 async function toggleReady(h) {
@@ -847,7 +849,7 @@ function bindActions(h) {
     h.ui.subNew.addEventListener("input", () => updateTarget(h));
     h.ui.readyRefresh.addEventListener("click", () => loadReadyOverview(h));
     h.ui.readyOptionalInput.addEventListener("change", () => {
-        if (h.readySkill) loadReadyPlan(h, h.readySkill);   // 可选文件勾选只影响出计划的口径
+        if (h.readySkill) loadReadyPlan(h, h.readySkill, h.readyEffect);   // 可选文件勾选只影响出计划的口径
     });
     h.ui.settingsBtn.addEventListener("click", () => {
         h.ui.panel.style.display = h.ui.panel.style.display === "none" ? "block" : "none";
@@ -874,9 +876,10 @@ async function loadSettings(h) {
 
 /**
  * 打开模型库弹窗。
- * @param {{query?: string, category?: string, source?: string, repo?: string, readySkill?: string}} opts
+ * @param {{query?: string, category?: string, source?: string, repo?: string, readySkill?: string, readyEffect?: string}} opts
  *   query 预填搜索框；category 预选落盘类别；source 覆盖本次下载源；repo 预选仓库；
- *   readySkill 直接展开「预设就绪」并出该预设的下载计划（生成前预检的「去模型库」走这条）。
+ *   readySkill 直接展开「预设就绪」并出该预设的下载计划（生成前预检的「去模型库」走这条）；
+ *   readyEffect 是特效技能本次要跑的特效 id，计划按这一个特效出。
  */
 export function openModelHub(opts = {}) {
     closeModelHub();
@@ -885,7 +888,7 @@ export function openModelHub(opts = {}) {
         models: [], civiPage: 1, civiCursors: [""], timer: null, ui: {}, wantCategory: opts.category || "",
         wantRepo: opts.repo || "", wantSource: opts.source || "",
         readyFamilies: [], readyTotals: { family_count: 0, preset_count: 0, blocking_count: 0 },
-        readySkill: "", readyPlan: null, planQueue: [], planRunning: false,
+        readySkill: "", readyEffect: "", readyPlan: null, planQueue: [], planRunning: false,
     };
     const overlay = buildUI(h);
     h.overlay = overlay;
@@ -899,7 +902,7 @@ export function openModelHub(opts = {}) {
         if (!opts.readySkill) return loadRepos(h, false);
         h.ui.readyWrap.style.display = "";
         await loadReadyOverview(h);
-        await loadReadyPlan(h, opts.readySkill);
+        await loadReadyPlan(h, opts.readySkill, opts.readyEffect || "");
         return loadRepos(h, false);
     });
     return overlay;

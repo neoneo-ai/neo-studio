@@ -39,6 +39,8 @@ const EN = {
     "导演视频": "Direct a Video",
     "多段配方，生成整片视频": "Chain recipe segments into a finished video",
     "说出目标，工具链多轮跑完": "State the goal, let the tool loop run it out",
+    "特效视频": "Video Effects",
+    "选一枚镜头特效，出一段片": "Pick one camera effect, get the clip",
     // 3D 姿势页（宿主面板与缺包提示；姿势包自身的文案在姿势页里）
     // ===== 首页版式（首页右上角「编辑首页」原地编辑，「完成」落盘）=====
     "编辑首页": "Edit home",
@@ -289,6 +291,9 @@ const EN = {
     "时长": "Duration",
     "种子": "Seed",
     "技能与自定参数": "Skill & custom parameters",
+    "特效": "Effect",
+    "特效本体是技能钉着的嵌入文件：缺文件的特效标不可用，选了也进不了队列":
+        "Each effect is the embedding file the skill pins; an effect whose file is missing is marked unavailable and cannot be queued",
     "出视频页尚未就绪": "The video page is not ready yet",
     "打开「视频」页后再点「再来一发」": "Open the Video page first, then use Regenerate",
     "技能「{skill}」在这页没有位置：技能项没填，到技能页改这张技能再回来":

@@ -22,11 +22,11 @@ rules. What your machine is missing is the Model Hub's **Preset readiness** pane
 | Family                 | Kind           | Presets          | Files          | Total GB          | Base preset              |
 |------------------------|----------------|------------------|----------------|-------------------|--------------------------|
 | krea2_image            | image          |               12 |              3 |             18.60 | image_gen                |
-| minimax_h3             | video          |               15 |              4 |             53.15 | minimax_h3_base          |
+| minimax_h3             | video          |               16 |             14 |             63.79 | minimax_h3_base          |
 | qwen_image_21          | image          |               10 |              7 |             21.65 | qwen_image_21            |
-| Total                  |                |               37 |             14 |             93.40 |                          |
+| Total                  |                |               38 |             24 |            104.04 |                          |
 
-37 presets ship a manifest across 3 families; presets inside a family share the base weights, so the
+38 presets ship a manifest across 3 families; presets inside a family share the base weights, so the
 totals deduplicate by (category + file name) and a file the family shares counts once. Four presets
 ship no manifest (see the last section).
 
@@ -59,16 +59,30 @@ page is where the version gets picked.
 
 ## MiniMax H3 video family (`minimax_h3`, base `minimax_h3_base`)
 
-License: Comfy-Org repackaged weights, the license follows the MiniMax source repository. All 15
-presets of the family run on this set. `audio_vae` is only needed by the segments that carry audio
-(multi-segment synthesis, reference-to-video) and drops into the `vae` category as well.
+License: Comfy-Org repackaged weights, the license follows the MiniMax source repository; the 10 effect
+text embeddings are community repackaged files of the same Comfy-Org repository (author silveroxides) and
+carry the same license, with credit kept as the repository states it. All 16 presets of the family run on
+this base set, and the only preset-owned extras in the family are the 10 embeddings declared by the effect
+preset `effect_h3`; the Frozen Moment effect downloads nothing and runs on first/last-frame interpolation.
+`audio_vae` is only needed by the segments that carry audio (multi-segment synthesis, reference-to-video)
+and drops into the `vae` category as well.
 
-| Field            | File name                                         | Category             | GB        | Download links                                                    | Alt     | Owner     |
-|------------------|---------------------------------------------------|----------------------|-----------|-------------------------------------------------------------------|---------|-----------|
-| model            | minimax_h3_fl2va_int8_convrot.safetensors         | diffusion_models     |     34.04 | [MS][h3-0-0] · [HF][h3-0-1]                                       |       7 | base      |
-| text_encoder     | qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors      | text_encoders        |     15.69 | [MS1][h3-1-0] · [HF1][h3-1-1] · [MS2][h3-1-2] · [HF2][h3-1-3]     |       2 | base      |
-| vae              | minimax_h3_video_vae_int8_convrot.safetensors     | vae                  |      2.81 | [MS1][h3-2-0] · [HF1][h3-2-1] · [MS2][h3-2-2] · [HF2][h3-2-3]     |       1 | base      |
-| audio_vae        | minimax_h3_audio_vae_fp32.safetensors             | vae                  |      0.61 | [MS1][h3-3-0] · [HF1][h3-3-1] · [MS2][h3-3-2] · [HF2][h3-3-3]     |       0 | base      |
+| Field            | File name                                         | Category             | GB        | Download links                                                    | Alt     | Owner              |
+|------------------|---------------------------------------------------|----------------------|-----------|-------------------------------------------------------------------|---------|--------------------|
+| model            | minimax_h3_fl2va_int8_convrot.safetensors         | diffusion_models     |     34.04 | [MS][h3-0-0] · [HF][h3-0-1]                                       |       7 | base               |
+| text_encoder     | qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors      | text_encoders        |     15.69 | [MS1][h3-1-0] · [HF1][h3-1-1] · [MS2][h3-1-2] · [HF2][h3-1-3]     |       2 | base               |
+| vae              | minimax_h3_video_vae_int8_convrot.safetensors     | vae                  |      2.81 | [MS1][h3-2-0] · [HF1][h3-2-1] · [MS2][h3-2-2] · [HF2][h3-2-3]     |       1 | base               |
+| audio_vae        | minimax_h3_audio_vae_fp32.safetensors             | vae                  |      0.61 | [MS1][h3-3-0] · [HF1][h3-3-1] · [MS2][h3-3-2] · [HF2][h3-3-3]     |       0 | base               |
+| effect           | minimaxh3_bullet_time.safetensors                 | embeddings           |      0.96 | [MS][h3-4-0] · [HF][h3-4-1]                                       |       0 | effect_h3          |
+| effect           | minimaxh3_art_is_explosion.safetensors            | embeddings           |      0.51 | [MS][h3-5-0] · [HF][h3-5-1]                                       |       0 | effect_h3          |
+| effect           | minimaxh3_blooming_flowers.safetensors            | embeddings           |      1.26 | [MS][h3-6-0] · [HF][h3-6-1]                                       |       0 | effect_h3          |
+| effect           | minimaxh3_dark_magic.safetensors                  | embeddings           |      0.60 | [MS][h3-7-0] · [HF][h3-7-1]                                       |       0 | effect_h3          |
+| effect           | minimaxh3_fire_breath.safetensors                 | embeddings           |      1.21 | [MS][h3-8-0] · [HF][h3-8-1]                                       |       0 | effect_h3          |
+| effect           | minimaxh3_four_seasons.safetensors                | embeddings           |      1.45 | [MS][h3-9-0] · [HF][h3-9-1]                                       |       0 | effect_h3          |
+| effect           | minimaxh3_kiss_camera.safetensors                 | embeddings           |      0.99 | [MS][h3-10-0] · [HF][h3-10-1]                                     |       0 | effect_h3          |
+| effect           | minimaxh3_spiral_ascent.safetensors               | embeddings           |      1.34 | [MS][h3-11-0] · [HF][h3-11-1]                                     |       0 | effect_h3          |
+| effect           | minimaxh3_storm_magic.safetensors                 | embeddings           |      1.40 | [MS][h3-12-0] · [HF][h3-12-1]                                     |       0 | effect_h3          |
+| effect           | minimaxh3_truman_show.safetensors                 | embeddings           |      0.92 | [MS][h3-13-0] · [HF][h3-13-1]                                     |       0 | effect_h3          |
 
 [h3-0-0]: https://modelscope.cn/models/Comfy-Org/MiniMax-H3/resolve/master/diffusion_models/minimax_h3_fl2va_int8_convrot.safetensors
 [h3-0-1]: https://huggingface.co/models/Comfy-Org/MiniMax-H3/resolve/main/diffusion_models/minimax_h3_fl2va_int8_convrot.safetensors
@@ -84,6 +98,26 @@ presets of the family run on this set. `audio_vae` is only needed by the segment
 [h3-3-1]: https://huggingface.co/models/Comfy-Org/MiniMax-H3/resolve/main/vae/minimax_h3_audio_vae_fp32.safetensors
 [h3-3-2]: https://modelscope.cn/models/Comfy-Org/FastVideo-FastH3/resolve/master/vae/minimax_h3_audio_vae_fp32.safetensors
 [h3-3-3]: https://huggingface.co/models/Comfy-Org/FastVideo-FastH3/resolve/main/vae/minimax_h3_audio_vae_fp32.safetensors
+[h3-4-0]: https://modelscope.cn/models/Comfy-Org/MiniMax-H3/resolve/master/embeddings/minimaxh3_bullet_time.safetensors
+[h3-4-1]: https://huggingface.co/models/Comfy-Org/MiniMax-H3/resolve/main/embeddings/minimaxh3_bullet_time.safetensors
+[h3-5-0]: https://modelscope.cn/models/Comfy-Org/MiniMax-H3/resolve/master/embeddings/minimaxh3_art_is_explosion.safetensors
+[h3-5-1]: https://huggingface.co/models/Comfy-Org/MiniMax-H3/resolve/main/embeddings/minimaxh3_art_is_explosion.safetensors
+[h3-6-0]: https://modelscope.cn/models/Comfy-Org/MiniMax-H3/resolve/master/embeddings/minimaxh3_blooming_flowers.safetensors
+[h3-6-1]: https://huggingface.co/models/Comfy-Org/MiniMax-H3/resolve/main/embeddings/minimaxh3_blooming_flowers.safetensors
+[h3-7-0]: https://modelscope.cn/models/Comfy-Org/MiniMax-H3/resolve/master/embeddings/minimaxh3_dark_magic.safetensors
+[h3-7-1]: https://huggingface.co/models/Comfy-Org/MiniMax-H3/resolve/main/embeddings/minimaxh3_dark_magic.safetensors
+[h3-8-0]: https://modelscope.cn/models/Comfy-Org/MiniMax-H3/resolve/master/embeddings/minimaxh3_fire_breath.safetensors
+[h3-8-1]: https://huggingface.co/models/Comfy-Org/MiniMax-H3/resolve/main/embeddings/minimaxh3_fire_breath.safetensors
+[h3-9-0]: https://modelscope.cn/models/Comfy-Org/MiniMax-H3/resolve/master/embeddings/minimaxh3_four_seasons.safetensors
+[h3-9-1]: https://huggingface.co/models/Comfy-Org/MiniMax-H3/resolve/main/embeddings/minimaxh3_four_seasons.safetensors
+[h3-10-0]: https://modelscope.cn/models/Comfy-Org/MiniMax-H3/resolve/master/embeddings/minimaxh3_kiss_camera.safetensors
+[h3-10-1]: https://huggingface.co/models/Comfy-Org/MiniMax-H3/resolve/main/embeddings/minimaxh3_kiss_camera.safetensors
+[h3-11-0]: https://modelscope.cn/models/Comfy-Org/MiniMax-H3/resolve/master/embeddings/minimaxh3_spiral_ascent.safetensors
+[h3-11-1]: https://huggingface.co/models/Comfy-Org/MiniMax-H3/resolve/main/embeddings/minimaxh3_spiral_ascent.safetensors
+[h3-12-0]: https://modelscope.cn/models/Comfy-Org/MiniMax-H3/resolve/master/embeddings/minimaxh3_storm_magic.safetensors
+[h3-12-1]: https://huggingface.co/models/Comfy-Org/MiniMax-H3/resolve/main/embeddings/minimaxh3_storm_magic.safetensors
+[h3-13-0]: https://modelscope.cn/models/Comfy-Org/MiniMax-H3/resolve/master/embeddings/minimaxh3_truman_show.safetensors
+[h3-13-1]: https://huggingface.co/models/Comfy-Org/MiniMax-H3/resolve/main/embeddings/minimaxh3_truman_show.safetensors
 
 ## Qwen Image 2.1 image family (`qwen_image_21`, base `qwen_image_21`)
 

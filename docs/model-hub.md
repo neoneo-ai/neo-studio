@@ -83,7 +83,8 @@ ModelScope 并写明是哪几侧没拿到数据；逐仓库存在性探测因网
 - `files[]`：`field`（生图 / 生视频配置里的键，`loras` 表示 LoRA 项）、`filename`（预设口径的相对名，含子目录）、
   `category`（落盘类别）、`gb`、`label`、`optional`（可选项，不计入缺失）、`alt`（同族变体名，本机落到别的名字时靠它认）、
   `sources[]`（`source` = `modelscope` / `huggingface` / `civitai` + `repo` + `path`，`gated` 标 HF 上要先申请授权的条目；
-  `sources[0]` 为推荐源）。
+  `sources[0]` 为推荐源）。`field` = `effect` 的条目靠 `effect` 键记下所属特效：就绪与计划只把本次要跑的特效的文件计入缺失，
+  其余特效的文件留作可下载项（`effect` 走 `GET /neo_skill_models/check` 的查询参数与计划请求体，缺省用技能默认特效）。
 - 就位判定跟生成侧一致：配置写死了模型名就按那个相对名精确查；名留空才按推荐名 + `alt` 在类别整棵树里认
   （大小写与斜杠方向不敏感）。写死的名字不在盘上、类别里挑得出默认模型时这项算就位，`fallback_of` 记下写死的
   名字、note 写明「已回退默认模型」，生成侧 `resolve_model(allow_fallback=True)` 挑的就是同一个模型；

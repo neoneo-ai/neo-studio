@@ -238,6 +238,71 @@ Runtime injection (when the template has no matching slot):
 - In a hand-built graph, chain `NeoH3AddContext` (or `NeoH3AddKeyframe` for a single-frame anchor) between
   `MiniMaxH3*ToVideo` and the sampler.
 
+### Effect skill presets (H3 effects)
+
+An effect skill carries a table of effects: `config.json`'s `effects` pins, per effect, the prompt template,
+the example prompt, the effect body file, the sampling steps, the duration cap and the first/last-frame rule.
+The Effects dropdown on the Video page is that table, and the frontend sends nothing but an effect id.
+`workflow.json` reuses the existing H3 image-to-video template, and `resolve_video_params` resolves the shot
+from the selected entry - the single-segment, simple-video and director paths all run through that one
+resolution chain:
+
+| Key               | Meaning                                                                        |
+|-------------------|--------------------------------------------------------------------------------|
+| `effect`          | The skill's default effect id; used when the request body carries no `effect`  |
+| `effects[]`       | The effect table; each entry carries the contract in the rows below            |
+| `prompt_template` | Prompt template; `{text}` takes the user's line, and a template without `{text}` replaces it entirely |
+| `prompt_default`  | What fills `{text}` when the line is empty; also the Video page placeholder for that effect |
+| `embedding`       | Effect body filename under `models/embeddings/`; missing for the selected effect, the run is refused and the file is named |
+| `same_first_last` | The last frame defaults to the first frame (a closed shot, so the clip loops); an explicit last frame wins |
+| `max_length`      | Frame cap; a longer duration on the page is clamped back to it                 |
+| `steps`           | The effect's own sampling steps, which outrank the skill config and the page's steps override |
+
+The effect body is a community text embedding: the backend appends the official trigger segment
+`embedding:<filename>` to the final prompt (ComfyUI 0.30+ supports `embedding:name` in H3 prompts; the trigger
+is the filename without extension, matched verbatim). The files ship from
+[Comfy-Org/MiniMax-H3/embeddings](https://huggingface.co/Comfy-Org/MiniMax-H3/tree/main/embeddings), made by
+[silveroxides](https://huggingface.co/silveroxides) ([discussion #50](https://huggingface.co/Comfy-Org/MiniMax-H3/discussions/50));
+they are not MiniMax official work. The shipped effect skill `effect_h3` (特效-特效镜头, first frame plus one
+line, 11 effects):
+
+| Effect id          | Label        | Effect body (`models/embeddings/`)                       | Shipped defaults    |
+|--------------------|--------------|----------------------------------------------------------|---------------------|
+| `bullet_time`      | 子弹时间     | `minimaxh3_bullet_time.safetensors`                      | 124-frame cap · 28 steps |
+| `frozen_moment`    | 定格瞬间     | No file (base-model approximation plus identical first and last frames, loops) | 124-frame cap · 24 steps |
+| `art_is_explosion` | 画面炸开     | `minimaxh3_art_is_explosion.safetensors`                 | 24 steps            |
+| `blooming_flowers` | 繁花盛开     | `minimaxh3_blooming_flowers.safetensors`                 | 24 steps            |
+| `dark_magic`       | 黑暗魔法     | `minimaxh3_dark_magic.safetensors`                       | 24 steps            |
+| `fire_breath`      | 火焰吐息     | `minimaxh3_fire_breath.safetensors`                      | 24 steps            |
+| `four_seasons`     | 四季流转     | `minimaxh3_four_seasons.safetensors`                     | 24 steps            |
+| `kiss_camera`      | 亲吻镜头     | `minimaxh3_kiss_camera.safetensors`                      | 24 steps            |
+| `spiral_ascent`    | 螺旋升腾     | `minimaxh3_spiral_ascent.safetensors`                    | 124-frame cap · 24 steps |
+| `storm_magic`      | 风暴魔法     | `minimaxh3_storm_magic.safetensors`                      | 24 steps            |
+| `truman_show`      | 楚门式片场   | `minimaxh3_truman_show.safetensors`                      | 24 steps            |
+
+- The skill stays available in the skill dropdown as long as one effect body is installed; the effect whose
+  body is missing is marked （不可用） in the Effects dropdown instead of disappearing from the list.
+- The 特效视频 preset card of the home page's 开始创作 section (off the default home - add it back through
+  编辑首页 → 添加卡片) takes the skill-card route straight to the Video page with this skill selected, and the
+  Effects dropdown lands on the shipped default effect.
+- Submitting on the Video page first asks the readiness check against the `models.json` manifest for the
+  selected effect, and the notice jumps straight to the Model Hub; a missing body of any other effect does not
+  block this shot. A request that skips the frontend is refused in `resolve_video_params` with
+  "effect 子弹时间 is missing its embedding file: <file>". This hard refusal is required: when ComfyUI cannot
+  resolve an `embedding:` segment it only warns, ignores the segment and finishes the run, which yields a clip
+  with no effect at all.
+- The source and license of the embedding files live in the preset's `models.json` `license` field and in the
+  body of `skill.md`; commercial use of locally generated output needs a MiniMax commercial license. The effect
+  skill mounts no LoRA, and every other video skill keeps the existing behaviour of generating without a
+  missing LoRA plus a warning.
+- The `skills/presets/effect_bullet_time` and `skills/presets/effect_frozen_moment` folders an older build
+  seeded into the data root are not removed on their own and stay in the skill dropdown (presets are read-only,
+  the UI deletes no preset): delete those two folders under `<data root>/skills/presets/` to drop them.
+- Effect entries sample at more steps than the general presets, so the Video page's default skill (the
+  available skill with the fewest steps) stays a general preset.
+- H3 is guidance-distilled and its template pins `cfg` at 1.0: effects ship no negative prompt, and the look
+  comes from the positive template plus the embedding segment.
+
 ## Per-skill settings & export from canvas
 
 - The "🎬 Video generation settings" area of the skill detail dialog sets the video model / steps / Text

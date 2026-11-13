@@ -2908,7 +2908,7 @@ def _parse_sidecar_params(meta_line: str) -> dict:
 
 # 视频那一发的生效参数（simple_video.write_video_sidecar 往后追加的字段）与 H3 的固定帧率。
 # 键序把 audio_vae 排在 vae 之前：词界只挡住 _vae 的键位起点，两组各归各位
-_SIDECAR_VIDEO_KEYS = ("steps", "text_encoder", "audio_vae", "vae")
+_SIDECAR_VIDEO_KEYS = ("steps", "text_encoder", "audio_vae", "vae", "effect")
 _SIDECAR_FRAMES_RE = re.compile(r"frames=(\d+)")
 _SIDECAR_SEC_RE = re.compile(r"duration=(\d+)")
 _H3_FPS = 24

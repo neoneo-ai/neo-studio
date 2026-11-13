@@ -108,6 +108,10 @@ The per-family file inventory - which files, how many GB, and the direct downloa
   `optional` (an optional entry, never counted as missing), `alt` (family variant names, so a file that landed
   under a different name is still recognized), `sources[]` (`source` = `modelscope` / `huggingface` / `civitai`
   + `repo` + `path`, `gated` marks entries that need authorization on HF first; `sources[0]` is the recommended one).
+  An entry whose `field` is `effect` carries the `effect` key naming the effect it belongs to: readiness and the
+  download plan count only the file of the effect being run, the files of the other effects stay downloadable
+  (`effect` travels as the query parameter of `GET /neo_skill_models/check` and in the plan request body,
+  defaulting to the effect the skill pins).
 - Readiness follows the generation side: a config with a pinned model name is looked up by that exact relative
   name; an empty name matches the recommended name plus `alt` anywhere in the category tree (case and slash
   insensitive). A pinned name that is not on disk while the category has a default model to pick counts as ready:

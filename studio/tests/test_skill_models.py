@@ -2,7 +2,7 @@
 # Neo Studio - 预设技能模型清单（studio/skill_models.py）单元测试
 # 覆盖：清单缺失/坏 JSON 的降级、extends 合并与去重、文件层就位（配置写死名精确查 / 同名落别处 /
 #       族系变体互备）、LoRA 激活口径、族系聚合、下载计划（当前源 / 该源没有 / 出处非法 / 落盘子目录）、
-#       随包 37 份 models.json 的静态口径
+#       随包 38 份 models.json 的静态口径
 from stub_env import GALLERY_STUB_PREFIXES, restore, snapshot
 
 # 本文件 import 期把 server / folder_paths 换成桩，末尾归还。不还的话排在后面的 test_skills 拿到的
@@ -199,13 +199,13 @@ class _FixtureCase(unittest.TestCase):
                 "hub_settings": lambda: {**self.hub_cfg, "hf_token": "tok" if self.hf_ok else ""},
                 "civitai_key": lambda: "key" if self.civitai_ok else ""}
 
-    def check(self, skill_id):
+    def check(self, skill_id, effect=""):
         with patched(**self._env()):
-            return skill_models.check_skill(skill_id)
+            return skill_models.check_skill(skill_id, effect)
 
-    def plan(self, skill_id, source="", include_optional=False):
+    def plan(self, skill_id, source="", include_optional=False, effect=""):
         with patched(**self._env()):
-            return skill_models.download_plan(skill_id, source, include_optional)
+            return skill_models.download_plan(skill_id, source, include_optional, effect)
 
     def all_overview(self, presets):
         """presets = [(skill_id, cn_name)]，全部按 presets 来源参与聚合。"""
@@ -393,6 +393,37 @@ class TestCheckSkill(_FixtureCase):
         chk = self.check("kid")
         self.assertEqual((chk["files"][0]["active"], chk["files"][0]["ready"]), (True, True))
         self.assertFalse(chk["blocked"])
+
+    def test_effect_entry_blocks_only_the_selected_effect(self):
+        # 特效嵌入是「本次那一发特效的本体」：技能一次只跑一个特效，选中的那个缺了就挡
+        self.skill("fx", {"family": "f", "label": "L", "files": [
+            entry("effect", "minimaxh3_bullet_time.safetensors", "embeddings", 0.96, effect="bullet_time"),
+            entry("effect", "minimaxh3_fire_breath.safetensors", "embeddings", 1.21, effect="fire_breath")]},
+                   cfg={"effect": "bullet_time"})
+        chk = self.check("fx", "fire_breath")
+        by_id = {f["effect"]: f for f in chk["files"]}
+        self.assertEqual((by_id["fire_breath"]["active"], by_id["fire_breath"]["ready"]), (True, False))
+        self.assertEqual((chk["blocked"], chk["missing_count"], chk["missing_gb"]), (True, 1, 1.21))
+
+    def test_effect_entry_of_another_effect_does_not_block(self):
+        # 没选中的特效留作可下载项，不该把能跑的这一发挡在队列外
+        self.skill("fx", {"family": "f", "label": "L", "files": [
+            entry("effect", "minimaxh3_bullet_time.safetensors", "embeddings", 0.96, effect="bullet_time"),
+            entry("effect", "minimaxh3_fire_breath.safetensors", "embeddings", 1.21, effect="fire_breath")]},
+                   cfg={"effect": "bullet_time"})
+        self.place("embeddings", "minimaxh3_bullet_time.safetensors")
+        chk = self.check("fx")
+        self.assertEqual((chk["blocked"], chk["missing_count"]), (False, 0))
+        self.assertEqual([f["effect"] for f in chk["files"] if f["active"]], ["bullet_time"])
+
+    def test_effect_plan_covers_the_selected_effect(self):
+        self.skill("fx", {"family": "f", "label": "L", "files": [
+            entry("effect", "minimaxh3_bullet_time.safetensors", "embeddings", 0.96, effect="bullet_time"),
+            entry("effect", "minimaxh3_fire_breath.safetensors", "embeddings", 1.21, effect="fire_breath")]},
+                   cfg={"effect": "bullet_time"})
+        plan = self.plan("fx", effect="fire_breath")
+        self.assertEqual([i["filename"] for i in plan["files"]], ["minimaxh3_fire_breath.safetensors"])
+        self.assertEqual(plan["total_gb"], 1.21)
 
     def test_optional_files_never_block(self):
         self.skill("opt", {"family": "f", "label": "L", "files": [
@@ -659,7 +690,7 @@ class TestCheckAll(_FixtureCase):
 
 
 class TestShippedManifests(unittest.TestCase):
-    """随包 37 份 models.json 的静态口径：字段齐、出处合法、落盘子目录与模型 hub 一致。"""
+    """随包 38 份 models.json 的静态口径：字段齐、出处合法、落盘子目录与模型 hub 一致。"""
 
     def manifests(self):
         return sorted(d.name for d in _PRESETS.iterdir() if (d / "models.json").is_file())
@@ -671,7 +702,7 @@ class TestShippedManifests(unittest.TestCase):
         """预设目录要么带清单，要么在"没有本地模型文件要检查"的白名单里（翻译 / TTS 预设）。"""
         shipped = sorted(d.name for d in _PRESETS.iterdir() if d.is_dir())
         self.assertEqual(self.manifests(), sorted(set(shipped) - NO_MANIFEST_PRESETS))
-        self.assertEqual(len(self.manifests()), 37)
+        self.assertEqual(len(self.manifests()), 38)
         self.assertTrue(set(NO_MANIFEST_PRESETS) <= set(shipped))
 
     def test_required_fields_positive_size_and_known_source(self):
@@ -694,6 +725,15 @@ class TestShippedManifests(unittest.TestCase):
                         if src["source"] == "civitai":
                             self.assertTrue(src["path"].startswith("/api/download/models/"),
                                             f"{pid} C 站出处不是下载端点")
+
+    def test_effect_entries_name_their_effect_and_land_in_embeddings(self):
+        """特效清单项就是「本次那一发特效的本体」：没有 effect 归属，就位检查没法按「选中哪个特效」判阻塞。"""
+        for pid in self.manifests():
+            for item in self.manifest(pid).get("files") or []:
+                if str(item.get("field", "")).strip() != "effect":
+                    continue
+                self.assertTrue(str(item.get("effect", "")).strip(), f"{pid} 的特效项没有 effect 归属")
+                self.assertEqual(item.get("category"), "embeddings", f"{pid} 的特效项不落 embeddings 目录")
 
     def test_manifest_source_payloads_pass_hub_validators(self):
         """清单出处要能直接喂给 /neo_model_hub/download：repo/path 过它自己的校验器（非法即抛 HubError）。"""

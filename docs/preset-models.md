@@ -15,11 +15,11 @@
 | 族系                       | 类型        | 预设数        | 文件数        | 合计 GB        | 基座预设             |
 |----------------------------|-------------|---------------|---------------|----------------|----------------------|
 | Krea2 生图族               | image       |            12 |             3 |          18.60 | image_gen            |
-| MiniMax H3 生视频族        | video       |            15 |             4 |          53.15 | minimax_h3_base      |
+| MiniMax H3 生视频族        | video       |            16 |            14 |          63.79 | minimax_h3_base      |
 | Qwen Image 2.1 生图族      | image       |            10 |             7 |          21.65 | qwen_image_21        |
-| 合计                       |             |            37 |            14 |          93.40 |                      |
+| 合计                       |             |            38 |            24 |         104.04 |                      |
 
-37 个预设带清单，分 3 个族系；族系内共用基座权重，体积按「类别 + 文件名末段」去重后只算一次。
+38 个预设带清单，分 3 个族系；族系内共用基座权重，体积按「类别 + 文件名末段」去重后只算一次。
 另有 4 个预设不带清单（见文末）。
 
 ## Krea2 生图族（`krea2_image`，基座 `image_gen`）
@@ -46,12 +46,22 @@
 点开即下载；同一文件在同一个源上有多个仓库时编号 `MS1` / `MS2`。`C 站` 指向 Civitai 模型页——
 C 站的下载接口要登录与 API Token，进页面按版本取文件。
 
-| 字段             | 文件名                                            | 落盘类别             | GB        | 下载来源（点开即下载）                                            | 变体名     | 归属     |
-|------------------|---------------------------------------------------|----------------------|-----------|-------------------------------------------------------------------|------------|----------|
-| model            | minimax_h3_fl2va_int8_convrot.safetensors         | diffusion_models     |     34.04 | [MS][h3-0-0] · [HF][h3-0-1]                                       |          7 | 基座     |
-| text_encoder     | qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors      | text_encoders        |     15.69 | [MS1][h3-1-0] · [HF1][h3-1-1] · [MS2][h3-1-2] · [HF2][h3-1-3]     |          2 | 基座     |
-| vae              | minimax_h3_video_vae_int8_convrot.safetensors     | vae                  |      2.81 | [MS1][h3-2-0] · [HF1][h3-2-1] · [MS2][h3-2-2] · [HF2][h3-2-3]     |          1 | 基座     |
-| audio_vae        | minimax_h3_audio_vae_fp32.safetensors             | vae                  |      0.61 | [MS1][h3-3-0] · [HF1][h3-3-1] · [MS2][h3-3-2] · [HF2][h3-3-3]     |          0 | 基座     |
+| 字段             | 文件名                                            | 落盘类别             | GB        | 下载来源（点开即下载）                                            | 变体名     | 归属               |
+|------------------|---------------------------------------------------|----------------------|-----------|-------------------------------------------------------------------|------------|--------------------|
+| model            | minimax_h3_fl2va_int8_convrot.safetensors         | diffusion_models     |     34.04 | [MS][h3-0-0] · [HF][h3-0-1]                                       |          7 | 基座               |
+| text_encoder     | qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors      | text_encoders        |     15.69 | [MS1][h3-1-0] · [HF1][h3-1-1] · [MS2][h3-1-2] · [HF2][h3-1-3]     |          2 | 基座               |
+| vae              | minimax_h3_video_vae_int8_convrot.safetensors     | vae                  |      2.81 | [MS1][h3-2-0] · [HF1][h3-2-1] · [MS2][h3-2-2] · [HF2][h3-2-3]     |          1 | 基座               |
+| audio_vae        | minimax_h3_audio_vae_fp32.safetensors             | vae                  |      0.61 | [MS1][h3-3-0] · [HF1][h3-3-1] · [MS2][h3-3-2] · [HF2][h3-3-3]     |          0 | 基座               |
+| effect           | minimaxh3_bullet_time.safetensors                 | embeddings           |      0.96 | [MS][h3-4-0] · [HF][h3-4-1]                                       |          0 | effect_h3          |
+| effect           | minimaxh3_art_is_explosion.safetensors            | embeddings           |      0.51 | [MS][h3-5-0] · [HF][h3-5-1]                                       |          0 | effect_h3          |
+| effect           | minimaxh3_blooming_flowers.safetensors            | embeddings           |      1.26 | [MS][h3-6-0] · [HF][h3-6-1]                                       |          0 | effect_h3          |
+| effect           | minimaxh3_dark_magic.safetensors                  | embeddings           |      0.60 | [MS][h3-7-0] · [HF][h3-7-1]                                       |          0 | effect_h3          |
+| effect           | minimaxh3_fire_breath.safetensors                 | embeddings           |      1.21 | [MS][h3-8-0] · [HF][h3-8-1]                                       |          0 | effect_h3          |
+| effect           | minimaxh3_four_seasons.safetensors                | embeddings           |      1.45 | [MS][h3-9-0] · [HF][h3-9-1]                                       |          0 | effect_h3          |
+| effect           | minimaxh3_kiss_camera.safetensors                 | embeddings           |      0.99 | [MS][h3-10-0] · [HF][h3-10-1]                                     |          0 | effect_h3          |
+| effect           | minimaxh3_spiral_ascent.safetensors               | embeddings           |      1.34 | [MS][h3-11-0] · [HF][h3-11-1]                                     |          0 | effect_h3          |
+| effect           | minimaxh3_storm_magic.safetensors                 | embeddings           |      1.40 | [MS][h3-12-0] · [HF][h3-12-1]                                     |          0 | effect_h3          |
+| effect           | minimaxh3_truman_show.safetensors                 | embeddings           |      0.92 | [MS][h3-13-0] · [HF][h3-13-1]                                     |          0 | effect_h3          |
 
 [h3-0-0]: https://modelscope.cn/models/Comfy-Org/MiniMax-H3/resolve/master/diffusion_models/minimax_h3_fl2va_int8_convrot.safetensors
 [h3-0-1]: https://huggingface.co/models/Comfy-Org/MiniMax-H3/resolve/main/diffusion_models/minimax_h3_fl2va_int8_convrot.safetensors
@@ -67,10 +77,30 @@ C 站的下载接口要登录与 API Token，进页面按版本取文件。
 [h3-3-1]: https://huggingface.co/models/Comfy-Org/MiniMax-H3/resolve/main/vae/minimax_h3_audio_vae_fp32.safetensors
 [h3-3-2]: https://modelscope.cn/models/Comfy-Org/FastVideo-FastH3/resolve/master/vae/minimax_h3_audio_vae_fp32.safetensors
 [h3-3-3]: https://huggingface.co/models/Comfy-Org/FastVideo-FastH3/resolve/main/vae/minimax_h3_audio_vae_fp32.safetensors
+[h3-4-0]: https://modelscope.cn/models/Comfy-Org/MiniMax-H3/resolve/master/embeddings/minimaxh3_bullet_time.safetensors
+[h3-4-1]: https://huggingface.co/models/Comfy-Org/MiniMax-H3/resolve/main/embeddings/minimaxh3_bullet_time.safetensors
+[h3-5-0]: https://modelscope.cn/models/Comfy-Org/MiniMax-H3/resolve/master/embeddings/minimaxh3_art_is_explosion.safetensors
+[h3-5-1]: https://huggingface.co/models/Comfy-Org/MiniMax-H3/resolve/main/embeddings/minimaxh3_art_is_explosion.safetensors
+[h3-6-0]: https://modelscope.cn/models/Comfy-Org/MiniMax-H3/resolve/master/embeddings/minimaxh3_blooming_flowers.safetensors
+[h3-6-1]: https://huggingface.co/models/Comfy-Org/MiniMax-H3/resolve/main/embeddings/minimaxh3_blooming_flowers.safetensors
+[h3-7-0]: https://modelscope.cn/models/Comfy-Org/MiniMax-H3/resolve/master/embeddings/minimaxh3_dark_magic.safetensors
+[h3-7-1]: https://huggingface.co/models/Comfy-Org/MiniMax-H3/resolve/main/embeddings/minimaxh3_dark_magic.safetensors
+[h3-8-0]: https://modelscope.cn/models/Comfy-Org/MiniMax-H3/resolve/master/embeddings/minimaxh3_fire_breath.safetensors
+[h3-8-1]: https://huggingface.co/models/Comfy-Org/MiniMax-H3/resolve/main/embeddings/minimaxh3_fire_breath.safetensors
+[h3-9-0]: https://modelscope.cn/models/Comfy-Org/MiniMax-H3/resolve/master/embeddings/minimaxh3_four_seasons.safetensors
+[h3-9-1]: https://huggingface.co/models/Comfy-Org/MiniMax-H3/resolve/main/embeddings/minimaxh3_four_seasons.safetensors
+[h3-10-0]: https://modelscope.cn/models/Comfy-Org/MiniMax-H3/resolve/master/embeddings/minimaxh3_kiss_camera.safetensors
+[h3-10-1]: https://huggingface.co/models/Comfy-Org/MiniMax-H3/resolve/main/embeddings/minimaxh3_kiss_camera.safetensors
+[h3-11-0]: https://modelscope.cn/models/Comfy-Org/MiniMax-H3/resolve/master/embeddings/minimaxh3_spiral_ascent.safetensors
+[h3-11-1]: https://huggingface.co/models/Comfy-Org/MiniMax-H3/resolve/main/embeddings/minimaxh3_spiral_ascent.safetensors
+[h3-12-0]: https://modelscope.cn/models/Comfy-Org/MiniMax-H3/resolve/master/embeddings/minimaxh3_storm_magic.safetensors
+[h3-12-1]: https://huggingface.co/models/Comfy-Org/MiniMax-H3/resolve/main/embeddings/minimaxh3_storm_magic.safetensors
+[h3-13-0]: https://modelscope.cn/models/Comfy-Org/MiniMax-H3/resolve/master/embeddings/minimaxh3_truman_show.safetensors
+[h3-13-1]: https://huggingface.co/models/Comfy-Org/MiniMax-H3/resolve/main/embeddings/minimaxh3_truman_show.safetensors
 
 ## MiniMax H3 生视频族（`minimax_h3`，基座 `minimax_h3_base`）
 
-许可：Comfy-Org 重打包权重，许可随 MiniMax 原仓库。15 个预设共用这一套，预设侧没有追加项。
+许可：Comfy-Org 重打包权重，许可随 MiniMax 原仓库；10 颗特效文本嵌入也是 Comfy-Org 仓库里的社区重打包产物（作者 silveroxides），署名随仓库。16 个预设共用这一套基座，追加项只有特效预设 `effect_h3` 声明的这 10 颗嵌入；「定格瞬间」不下载任何文件，走首尾帧插值。
 `audio_vae` 只有带音频的段（连续多段合成、参考生视频）会读，落盘类别同样是 `vae`。
 
 | 字段             | 文件名                                                           | 落盘类别             | GB       | 下载来源（点开即下载）                                                | 变体名     | 归属                         |
