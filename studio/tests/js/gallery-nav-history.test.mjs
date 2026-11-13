@@ -209,3 +209,46 @@ test("素材库弹窗开合（收留宿主=画廊页宿主）不丢弹窗里的�
     assert.deepEqual(gallery.currentView.categoryPath, ["x"], "重开弹窗回到弹窗里那个目录");
 });
 
+test("键盘返回手势不抢可写控件里的按键：标题区 Backspace 照删", async () => {
+    resetEnv();
+    clearRoutes();
+    history.replaceState(null, "", "/");   // 上一个用例的 showDirectoryStructure 会把 ?gallery_... 留在 URL 里，init 会走深链分支早退
+    await loadNeoGallery();
+    const gallery = makeGallery();
+    document.body.appendChild(gallery.element);
+    gallery.currentView = { mode: "directory", source: "Output", categoryPath: ["a"] };
+    gallery.isVisible = true;   // 素材库渲染过一次后这条手势一直挂在 window 上
+    const navs = [];
+    gallery.navigateHistory = async () => { navs.push("stack"); return true; };
+    gallery.showDirectoryStructure = async () => { navs.push("dir"); };
+    gallery.showCategoryCards = async () => { navs.push("cards"); };
+    await gallery.init();   // 返回/全选按键手势挂在 init 里
+
+    const press = (key, init = {}) => {
+        const ev = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...init });
+        (document.activeElement || document.body).dispatchEvent(ev);
+        return ev;
+    };
+
+    const hero = document.createElement("span");
+    hero.setAttribute("contenteditable", "plaintext-only");
+    hero.tabIndex = 0;
+    hero.textContent = "一句话生成";
+    document.body.appendChild(hero);
+    hero.focus();
+    assert.equal(document.activeElement, hero, "标题区的可写文字要拿得到焦点");
+    assert.equal(press("Backspace").defaultPrevented, false, "标题区里 Backspace 交回浏览器删字");
+    assert.equal(press("a", { ctrlKey: true }).defaultPrevented, false, "标题区里 Ctrl+A 不被素材多选抢走");
+
+    const input = document.createElement("input");
+    document.body.appendChild(input);
+    input.focus();
+    assert.equal(press("Backspace").defaultPrevented, false, "输入框里 Backspace 同样不被抢");
+
+    input.blur();
+    hero.blur();
+    assert.equal(press("Backspace").defaultPrevented, true, "没有焦点时 Backspace 仍是返回手势");
+    await flush();
+    assert.deepEqual(navs, ["dir"], "返回手势落回上一级目录");
+});
+

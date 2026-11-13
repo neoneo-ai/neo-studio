@@ -19,8 +19,9 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   reverse it into a prompt (streamed token by token, saved as a `.txt` next to the image, one click to copy,
   中文/英文), or pick a reference audio, write the text and get it read in that voice (queue and synthesis
   progress, cancel the task, a result waveform to audition, 打开输出目录). The top bar keeps its seven tabs —
-  these two pages are reached from the home cards only, and the home editor hides or shows each card like any
-  other card. In the offline desktop window both run buttons read 需要 ComfyUI and start the kernel on click
+  these two pages are reached from the home cards only, and removing one of these cards on the home page
+  closes its page off until the card is added back. In the offline desktop window both run buttons read
+  需要 ComfyUI and start the kernel on click
   instead of sending a request that cannot succeed. Covered by `studio/tests/js/reverse-prompt.test.mjs`,
   `studio/tests/js/voice-clone.test.mjs` and `studio/tests/js/studio-home-pages.test.mjs`.
 - **The Video page shoots vertical.** The 分辨率 chip on the video page lists a portrait entry for every tier:
@@ -41,12 +42,15 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 - **You lay out the home page on the home page itself.** 编辑首页 standing in the top-right corner of the home page -
   it scrolls away with the page instead of staying pinned on the window - switches that page into
   edit mode, and that page is now the editor: the whole card is the drag gesture, so its corner tool row is just the
-  hide/show eye (custom cards also get a pencil and delete), the hero title lines are edited by clicking the text,
-  hidden cards stay in the grid as ghost
-  tiles so you can bring each one back where it sits, and the grid ends with an "添加卡片" placeholder tile that opens the
-  card's edit dialog — fields in three rows (jump type + jump target, title + subtitle, icon + section), the cells you
-  have not touched auto-filled from that jump type and target, and the same dialog the pencil opens with the card's
-  current values; only its 保存 puts the card
+  single Remove button (a built-in card leaves the home page - a toast says it is waiting in 添加卡片, no dialog pops open
+  per removal - and a custom card is deleted for good), the hero title lines are edited by clicking the text,
+  a card you removed keeps no grid slot and no ghost tile - it waits in the 添加卡片 face, and clicking it there puts the
+  card back in the very slot it left, and the grid ends with an "添加卡片" placeholder tile that opens that face: the
+  section's preset cards on top (only the built-in cards currently off the home page - a card already on the home is never
+  listed twice, and when every preset of the section is on the home the face says so) and the custom-card form below it,
+  fields in three rows (jump type + jump target, title + subtitle, icon + section), the jump type limited to
+  导演配方 / 技能 / 外部链接 with the recipes and skills that already have a card dropped from the candidates, the cells you
+  have not touched auto-filled from that jump type, and the 20-custom-card limit said on the 保存 button; only its 保存 puts the card
   into the draft. Sections carry no controls of their own: their order and collapsed state are only read from a layout an
   older build saved, a section left collapsed is laid back out with its cards while you edit, and that save writes it back
   expanded. The 编辑 bar is one compact group pinned to the home page's top-right corner (`width: fit-content` +
@@ -107,6 +111,12 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   `studio/tests/js/home-layout.test.mjs`, `studio/tests/js/studio-desktop.test.mjs` and `studio/tests/test_home_layout.py`.
 
 ### Fixed
+- **The 标题区 text deletes again.** In edit mode the hero title, subtitle and 出图按钮 label are edited right on the home
+  page, and typing landed while Backspace did nothing - the 素材库 keeps a window-level keyboard gesture that turns
+  Backspace into 返回上级 and Ctrl+A into 全选素材, and it only stepped aside for `<input>` and `<textarea>`, not for the
+  `contenteditable` text on the home page. The gesture now steps aside for any editable target, so 删字 and 全选 stay with
+  the text you are editing and Backspace still walks the 素材库 trail when nothing is focused. Covered by a case in
+  `studio/tests/js/gallery-nav-history.test.mjs`.
 - **The 编辑首页 entry answers the click.** The entry was handed to the page builder with `disabled: false`, and a false
   there is written as the attribute `disabled="false"`; HTML takes the mere presence of that attribute as disabled, so the
   entry showed, hovered, took focus, and stayed inert - neither 编辑首页 nor 完成 did anything when clicked. The flag is

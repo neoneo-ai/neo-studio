@@ -44,8 +44,8 @@ _ID_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_-]{0,39}$")
 _URL_SCHEME = re.compile(r"https?://", re.I)
 
 # 自建卡的跳转类型；前端 openHomeCard 按同一份清单落地，多给一种就是前端接不住的一条死路。
-# 卡片弹窗能配的只有前四种（与前端 HOME_TARGETS 同步）：直连本页是内置预设卡的事，弹窗不再给这一项；
-# page 留在这一份里只为旧版式里存着的直连卡 —— 照读照跳，不让一次保存静默丢掉用户已有的卡。
+# 添加卡片弹窗能配的只有 recipe / skill / url 三种（前端 FORM_TARGETS）：编辑模式与直连本页是内置预设卡的事。
+# edit 与 page 留在这一份里只为旧版式里存着的卡 —— 照读照跳照删，不让一次保存静默丢掉用户已有的卡。
 CUSTOM_TARGETS = ("edit", "url", "recipe", "skill", "page")
 
 _HERO_KEYS = ("title", "accent", "suffix", "sub", "cta")

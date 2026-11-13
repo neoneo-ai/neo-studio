@@ -12,7 +12,9 @@ library plus several user-defined directories.
 - **Sidebar integration** - opens as a right-sidebar tab, no need to leave the canvas.
 - **Breadcrumb navigation** - clear hierarchy across nested subdirectories, one click back to the parent.
 - **Forward / back** - next to the header title, move forward and back along your browsing trail (the browser
-  Back follows the same trail; Alt+Left / Backspace go to the parent directory).
+  Back follows the same trail; Alt+Left / Backspace go to the parent directory). With the caret inside editable
+  text - the home hero title, any input - Backspace and Ctrl+A stay with that text as delete and select-all, and
+  the gesture does not fire.
 - **Rescan** - the toolbar's ⟳ re-reads what is on disk: the current folder re-opens in place, the home and
   bookmark views redraw from the fresh directory tree, and that click does not count as a navigation step, so
   back still returns to where you stood before it.

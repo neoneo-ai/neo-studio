@@ -429,12 +429,13 @@ startable once the root is filled in.
   custom-parameter panels and the director editor panels thin down with the page instead of each container
   carrying a rule; the zoomed director timeline keeps its own visible horizontal bar - that bar is the drag
   handle. The home additionally pins `scrollbar-gutter: stable`, so the centered content column does not shift
-  when the edit bar appears or a card toggle changes the page height.
+  when the edit bar appears or removing and adding a card changes the page height.
 - "Edit home" standing in the top-right corner of the home page in view mode (`.ns-home-edit-entry`, `position: absolute`
   inside `.ns-home`, so it scrolls away with the content instead of staying pinned on the window) switches that page into
   edit mode, and the page itself is the editor: the whole
-  card is the drag gesture (no handle and no ↑ ↓ arrows), the tool row in its top-right corner carries a single hide/show
-  eye (a custom card also gets a pencil that opens its edit dialog and a delete button), the five
+  card is the drag gesture (no handle and no ↑ ↓ arrows), the tool row in its top-right corner carries a single Remove
+  button (a built-in card leaves the home page and comes back through Add a card, a custom card is deleted for good; leaving
+  the home page only says so in a toast - it does not open that face by itself), the five
   hero text lines are edited by clicking the text itself (`contenteditable`, committed on blur), and a slim bar at
   the top of the page (`.ns-home-edit-bar`, `position: sticky` + `width: fit-content` +
   `margin: 0 0 14px auto`) is shrunk into one compact group pinned to the page's top-right corner: it owns the grid
@@ -446,25 +447,29 @@ startable once the root is filled in.
   live and no request is sent. In edit mode the card face is not clickable (`.ns-home-editing .ns-home-card` sets
   `cursor: default` and the inner layers get `pointer-events: none`, and the `homeCard` / hero CTA onclick checks the same
   flag), so jumping pages cannot carry an unsaved draft away.
-- Edit mode lays the whole page out: a hidden card stays in its grid slot as a ghost tile (`.ns-home-card.is-hidden-card`)
-  and the eye brings it back right there; a section a collapsed layout hid comes back with its cards, dimmed
-  (`.ns-home-section.is-off` with a Collapsed tag); the grid ends with an "Add a card" placeholder tile
-  (`.ns-home-add-tile`) that opens the custom-card
-  edit dialog (`.ns-home-card-dialog`, on the library modal's overlay and box) in three rows — jump type + jump target,
-  title + subtitle, icon + section. The icon cell spans both columns and shows the icons themselves
-  (`.ns-home-f-icons` with one `.ns-home-icon-swatch` per candidate, 34px each, wrapping; the picked one lights up its
-  border and the icon name stays in the tooltip — a dropdown of identifiers like `pencil` / `maximize` nobody reads),
-  and an icon a saved layout carries outside that grid is laid down as the first swatch still picked. Changing the jump
-  type or target refills every cell you have not touched with that
-  destination's title / subtitle / icon / section (the matching built-in card row, the recipe or skill name, the link's
-  host); text you typed stays. The pencil of an existing custom card opens the same dialog prefilled with its current
-  values. Only the dialog's Save writes the card into the draft; Cancel and Esc drop that edit. Nothing
-  on the page has its switch living somewhere else.
-- A custom card's jump type is one of four: edit mode / director recipe / skill / external link. The edit-mode list is the
-  image-edit panel's own seven modes, same source and same order as its mode chips; a recipe or skill target left as "None"
-  just opens the director page / the skills page. A `target: "page"` card saved by an older layout still reads and jumps,
-  and the pencil offers that type only when the card already uses it - a new card cannot get it, and the backend keeps
-  `page` in `CUSTOM_TARGETS` for exactly those cards.
+- Edit mode lays out the cards that are really on the home page: a built-in card you removed keeps no grid slot and no ghost
+  tile - it waits in the "Add a card" face; a section a collapsed layout hid comes back with its cards, dimmed
+  (`.ns-home-section.is-off` with a Collapsed tag). The grid ends with an "Add a card" placeholder tile
+  (`.ns-home-add-tile`) that opens that face (`.ns-home-card-dialog`, on the library modal's overlay and box,
+  `.ns-home-card-dialog-body` scrolls on its own). Its top half is this section's preset cards (one `.ns-home-preset-card`
+  per cell inside `.ns-home-preset-grid`: icon + title + subtitle + a `+`). The preset list holds only the built-in cards
+  currently off the home page (`presetCards()` reads `hidden`) - a card already on the home is never listed twice, and when
+  every preset of the section is on the home the face says so. Clicking a preset puts that card on the home page, back in
+  its own slot of `order`, and the face stays open for the next click. The bottom half is the custom-card form in three
+  rows — jump type + jump target, title + subtitle, icon + section. The icon cell spans both columns and shows the icons
+  themselves (`.ns-home-f-icons` with one `.ns-home-icon-swatch` per candidate, 34px each, wrapping; the picked one lights
+  up its border and the icon name stays in the tooltip — a dropdown of identifiers like `pencil` / `maximize` nobody
+  reads). Changing the jump type refills every cell you have not touched with that destination's title / subtitle / icon /
+  section (the recipe or skill name, the link's host); text you typed stays. Recipes and skills that already have a card
+  are dropped from the candidates, so one destination never shows two cards. Only Save writes the card into the draft (the
+  20-custom-card cap is said on that button), Cancel and Esc drop this one. × and Esc close this face only, never the page's
+  edit mode, and leaving edit mode (Esc / switching pages) closes it with the draft.
+- A custom card's jump type is one of three: director recipe / skill / external link (`FORM_TARGETS`); a recipe or skill
+  target left as "None" just opens the director page / the skills page. Edit mode and direct page (`target: "edit"` /
+  `"page"`) come from the built-in preset cards and the UI no longer creates them; cards an older layout saved with those
+  types still read, jump and delete, and both the frontend read gate (`HOME_TARGETS` + `LEGACY_TARGET`) and the backend
+  `CUSTOM_TARGETS` keep them so one save cannot silently drop a card the user owns. `hidden` holds built-in cards only: a
+  custom card an older layout hid shows on the home again, keeping its slot of `order`.
 - A skill card lands on the page that applies the skill: `openHomeCard` checks the id against `listVideoSkills()`, and a
   video skill goes through `openVideoReuse({ skill })` so the video page opens with that skill selected (when that page
   was never built in this window, the `setVideoPageJump` hook the app registers at startup builds it first and the run is

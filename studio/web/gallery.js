@@ -1819,7 +1819,10 @@ export class NeoGallery {
         // Intercept keyboard back navigation (Alt+Left, Backspace) - use capture to beat ComfyUI
         window.addEventListener('keydown', (e) => {
             if (!this.isVisible) return;
-            if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') return;
+            // 光标落在可写控件里就不算「返回」手势：这条手势抢 Backspace 与 Ctrl+A，首页标题区的
+            // contenteditable 里按 Backspace 被抢走就是删不动字，Ctrl+A 被抢走就是选不动这一行
+            const active = document.activeElement;
+            if (active?.tagName === 'INPUT' || active?.tagName === 'TEXTAREA' || active?.closest?.('[contenteditable]')) return;
             
             if ((e.altKey && e.key === 'ArrowLeft') || (e.ctrlKey && e.key === 'ArrowLeft')) {
                 e.preventDefault();

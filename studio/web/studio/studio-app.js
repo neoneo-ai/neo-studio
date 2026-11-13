@@ -29,7 +29,7 @@ import { createPoseView } from "../pose/pose.js";
 import { createFramesView } from "../frames/frames.js";
 import { createReverseView } from "../reverse-prompt/reverse-prompt.js";
 import { createVoiceCloneView } from "../voice-clone/voice-clone.js";
-import { HOME_SECTIONS, createHomeInlineEditor, heroText, layoutSections, loadHomeLayout, normalizeLayout, sectionCards, sectionOrder, visibleCards } from "./home-layout.js";
+import { HOME_SECTIONS, createHomeInlineEditor, heroText, layoutSections, loadHomeLayout, normalizeLayout, sectionOrder, visibleCards } from "./home-layout.js";
 
 const view = document.getElementById("ns-view");
 const REPO_URL = "https://github.com/neoneo-ai/neo-studio";   // 设置「关于」里的仓库行，与顶栏「关于插件」同一地址
@@ -868,7 +868,8 @@ function buildEdit(el) {
 
 // ====== 首页：意图卡片 —— 大字标题 + 板块卡片，点卡直达对应页；右上角入口把这一页切进原地编辑 ======
 // 卡表、板块表与版式形状在 web/studio/home-layout.js；这一块只管 DOM 与「这张卡跳到哪一屏」，
-// 编辑态长在这份 DOM 上：卡片自己长出控件，标题区直接点字改，细栏只管列数与开关；落盘在细栏右端那枚「完成」。
+// 编辑态长在这份 DOM 上：每张卡长出一枚删除，板块末尾一枚「添加卡片」开预设卡与自建卡表单，
+// 标题区直接点字改，细栏只管列数与开关；落盘在细栏右端那枚「完成」。
 // 版式是数据根里的一份文件（configs/home_layout.json）：插件页、桌面窗口、手机页打开同一份首页。
 let homeViewEl = null;                    // 首页视图元素；版式到达后重画这一块
 let homeLayout = normalizeLayout({});     // 首页按这一份画：编辑期间是草稿，平时是已落盘的版式
@@ -900,6 +901,7 @@ function startHomeEdit() {
 function stopHomeEdit() {
     if (!homeEditing) return;
     homeEditing = false;
+    homeEditor?.closeDialog();   // 添加卡片这一面浮在页上：退出编辑态不能留一块遮罩
     homeLayout = homeStored;
     renderHome();
 }
@@ -936,14 +938,14 @@ function renderHome() {
         if (part) blocks.push(...part);
     }
     kids.push($el("div", { className: "ns-home-inner" }, blocks.length ? blocks : [
-        $el("p", { className: "ns-home-empty", textContent: t("首页卡片已全部隐藏，用右上角「编辑首页」排回来。") }),
+        $el("p", { className: "ns-home-empty", textContent: t("首页卡片已全部移除，在「编辑首页」的添加卡片里加回来。") }),
     ]));
     // disabled 走属性：$el 认不出的键一律 setAttribute，disabled:false 写出来就是 disabled="false"，
     // 属性一在就是禁用 —— 这颗钮在窗口里点了没反应就是这么来的
     const entry = $el("button", {
         className: "ns-btn ns-home-edit-entry", type: "button",
         title: homeEditing ? t("完成首页编辑：保存版式并退出")
-            : t("编辑首页：卡片顺序与显隐、自建卡片、标题区文案、网格列数"),
+            : t("编辑首页：卡片顺序、删除与添加卡片、标题区文案、网格列数"),
         onclick: () => (homeEditing ? finishHomeEdit() : startHomeEdit()),
     }, homeEditing
         ? [icon("save", 14), " " + t("完成")]
@@ -972,8 +974,8 @@ function homeSections() {
 
 function homeSectionBlock(section) {
     const off = homeLayout.hidden_sections.includes(section.id);
-    const cards = homeEditing ? sectionCards(section.id, homeLayout) : visibleCards(section.id, homeLayout);
-    if (!homeEditing && (off || !cards.length)) return null;   // 收起的板块与全隐藏的板块整块不出，不留空标题
+    const cards = visibleCards(section.id, homeLayout);   // 编辑态铺的也是这一叠：移出首页的卡在添加卡片弹窗里等着
+    if (!homeEditing && (off || !cards.length)) return null;   // 收起的板块与没有卡的板块整块不出，不留空标题
     const title = $el("h2", { className: "ns-home-section" + (off ? " is-off" : "") }, [t(section.label)]);
     if (off) title.appendChild($el("span", { className: "ns-home-off-tag", textContent: t("已收起") }));
     return [title, homeGrid(cards, section.id)];

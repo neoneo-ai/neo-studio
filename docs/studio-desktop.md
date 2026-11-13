@@ -296,18 +296,19 @@ js_api（`check_setup` / `pick_root` / `pick_python` / `start_setup`），根目
   在矮窗窄窗也是这一层出滚）。`scrollbar-width` 与 `scrollbar-color` 是继承属性，画廊的 Civitai 栏、技能与自定参数
   面板、归类列表与导演编辑器面板这些自滚容器跟着收，不逐容器补规则；时间轴放大态 `.neo-dtl-scroll.neo-dtl-zoomed`
   那条可见横条是刻意的拖动把手，自身声明压过继承。首页另定 `scrollbar-gutter: stable` 钉住槽位——进编辑态多出那条
-  细栏、卡片显隐改掉页高时溢出开关随之起落，居中内容列不左右跳。
+  细栏、卡片删掉与加回来改掉页高时溢出开关随之起落，居中内容列不左右跳。
 - 浏览态的首页右上角「编辑首页」（`.ns-home-edit-entry`，`position: absolute` 站在 `.ns-home` 自己的右上角，跟着页面一起滚，滚出首屏就不见，不常驻在窗口上压住卡片）把这一页切进编辑态，这一页自己就是编辑器：整张卡就是拖动手势
-  （不设手柄与 ↑↓ 箭头），卡片右上角的控件条只一枚显隐眼睛（自建卡多一枚「编辑这张卡」的铅笔与一枚删除），标题区五行文案点字直接改（`contenteditable`，失焦落进草稿），顶端一条细栏
+  （不设手柄与 ↑↓ 箭头），卡片右上角的控件条只一枚删除（内置卡删掉是移出首页，自建卡删掉是真删；移出首页只给一句 toast 说它在「添加卡片」里等着加回来，不自动弹窗），标题区五行文案点字直接改（`contenteditable`，失焦落进草稿），顶端一条细栏
   （`.ns-home-edit-bar`，`position: sticky` + `width: fit-content` + `margin: 0 0 14px auto`）整块收成一条小组、贴在首页右上角，管网格列数、标题区与出图按钮开关、恢复默认；那一枚「完成」就是入口本身，坐在栏里这一行的末尾，栏钉在哪一屏它就跟着钉在哪一屏，滚到哪一屏都点得着。板块不给控件：板块顺序与整块收起是旧版式里读到的状态，这一版不在首页上排它们。
 - 编辑吃的是本地草稿：每一次改动经 `host.onDraft` 交回 `renderHome()` 实时重画这一页，全程不发请求。编辑态的卡面打断点击（`.ns-home-editing .ns-home-card` 定 `cursor: default`、
   内层 `pointer-events: none`，`homeCard` / hero CTA 的 onclick 也认这个态），跳屏带不走未保存的草稿。
-- 编辑态这一页铺全：隐藏的卡以幽灵位（`.ns-home-card.is-hidden-card`）留在网格原位，眼睛一点就排回来；旧版式里收起的板块连卡一起铺回来并标暗（`.ns-home-section.is-off` 加「已收起」角标）；
-  网格末尾一张「添加卡片」占位卡（`.ns-home-add-tile`）开一张自建卡的编辑弹窗（`.ns-home-card-dialog`，借素材库弹窗那套遮罩与盒子），字段排三行：跳转类型 + 跳转目标、标题 + 副标题、图标 + 板块，
-  图标那一格横跨两列，铺的是图标本身（`.ns-home-f-icons` 里一格一枚 `.ns-home-icon-swatch`，34px 一格排满换行，选中的那枚描边点亮，图标名只在 tooltip 上——下拉里排 `pencil` / `maximize` 这类标识没人认得出来），旧版式里存的图标不在候选里时铺在格子最前并照旧选着；
-  换了跳转类型或目标，没动过的格子就按那一发填好（内置卡表同一条目的标题 / 副标题 / 图标 / 板块，配方与技能用名字，外部链接用域名），打过字的那一格不覆盖；
-  已有自建卡的铅笔开同一个弹窗并带着现值进来——弹窗的「保存」才把这张卡写进草稿，「取消」与 Esc 丢掉这一次，页面上不存在「这一块的开关不在这页上」。
-- 自建卡的跳转类型只有编辑模式 / 导演配方 / 技能 / 外部链接四种：编辑模式给全编辑页那一发的 7 个模式（与面板的模式 chip 同源同序），配方与技能的目标留「不指定」就是只进导演页 / 只进技能页。旧版式里存的直连卡（`target: "page"`）照读照跳，铅笔开弹窗时这一项只在这张卡已经用它时出现，新卡配不出这一项；后端 `CUSTOM_TARGETS` 里留着 `page` 只为这一张旧卡读得回来。
+- 编辑态这一页铺的是首页上真出现的那一叠卡：移出首页的内置卡不留网格格子，也不在页上留幽灵位——它在「添加卡片」这一面等着加回来；旧版式里收起的板块连卡一起铺回来并标暗（`.ns-home-section.is-off` 加「已收起」角标）。
+  网格末尾一枚「添加卡片」占位卡（`.ns-home-add-tile`）开这一面（`.ns-home-card-dialog`，借素材库弹窗那套遮罩与盒子，`.ns-home-card-dialog-body` 自己滚）：上半是这一板块的预设卡片（`.ns-home-preset-grid` 里一枚 `.ns-home-preset-card`，图标 + 标题 + 副标题 + 一枚 ＋），
+  预设表只收被移出首页的内置卡（`presetCards()` 读 `hidden`），已在首页的一张不出，这一板块的预设都在首页时给一句空态；点一下就是把这张加回首页，落回 `order` 里它原来那一格，这一面不收——接着点下一张；
+  下半是自建卡的表单，字段排三行：跳转类型 + 跳转目标、标题 + 副标题、图标 + 板块，图标那一格横跨两列，铺的是图标本身（`.ns-home-f-icons` 里一格一枚 `.ns-home-icon-swatch`，34px 一格排满换行，选中的那枚描边点亮，图标名只在 tooltip 上——下拉里排 `pencil` / `maximize` 这类标识没人认得出来）；
+  换了跳转类型，没动过的格子就按那一发填好（配方与技能用名字，外部链接用域名），打过字的那一格不覆盖；配方与技能的候选把已经建过卡的摘掉，同一条落点不在首页上摆两张卡；
+  「保存」才把这张卡写进草稿（自建卡到 20 张上限时在这颗钮上说出来），「取消」与 Esc 丢掉这一次。× 与 Esc 只关这一面，不顺手退出整页编辑；退出编辑态（Esc / 切页）连这一面一起收掉。
+- 自建卡的跳转类型只有导演配方 / 技能 / 外部链接三种（`FORM_TARGETS`）：配方与技能的目标留「不指定」就是只进导演页 / 只进技能页。编辑模式与直连本页（`target: "edit"` / `"page"`）由内置预设卡给，界面上不再产出这两类；旧版式里存着的这两种卡照读照跳照删，前端读门（`HOME_TARGETS` + `LEGACY_TARGET`）与后端 `CUSTOM_TARGETS` 都留着它们，一次保存不会静默丢掉用户已有的卡。`hidden` 只装内置卡：旧版式里藏着的自建卡在首页照出，位置由 `order` 保住。
 - 技能卡的落点是技能应用的那一页：`openHomeCard` 拿 `listVideoSkills()` 认这张技能，生视频技能走 `openVideoReuse({ skill })` 进出视频页并把技能选中（视频页还没建过时由应用层启动时注册的 `setVideoPageJump` 先把页建起来再交这一发；画布页没有这层应用层，才说一句「出视频页尚未就绪」）；生图技能进输入页，由 `paintTextHost.__neoSetPrompt({ skill })` 选中它；两页的技能下拉都没有位置的技能（增强类 / 模板类）在界面上说清楚没有可直达的应用页，再落技能页。
 - 落位手势是 vendored 的 SortableJS（`studio/web/vendor/sortable.min.js`，1.15.7，MIT，`home-layout.js` 里 `import "../vendor/sortable.min.js"` 引进来，与 marked/purify 同一份路子（三个第三方库都在 `studio/web/vendor/`），运行时不联网）：`decorateGrid` 给编辑态每条网格建一个实例——`group: "ns-home"` 让三条网格互相接得住卡，`draggable: ".ns-home-card"` 只认卡（「添加卡片」占位与板块不参与），`ignore` 让卡上的按钮不算拖起点，`animation: 150` 就是其余卡让位的滑行；`forceFallback: true` 加 `fallbackOnBody: true` 意味着指针上那张卡是 Sortable 克隆出来钉在 `body` 上的影子卡（`.sortable-fallback`，吃 `.ns-home-card.is-dragging` 这一条），原位的卡带着 `.sortable-chosen` 留在格子里——forceFallback 下 Sortable 不应用 `ghostClass`，传它就是不生效的选项，这里只传 `dragClass`。整张卡就是手势，卡本身不再挂原生 `draggable`（两套手势不能同时开），触摸端的拖动同样由它接住。
   落位只读 `onEnd` 交出来的 `oldDraggableIndex` / `newDraggableIndex`（落下去自己是第几格，末尾就是排到最后）：同板块走 `moveCard`，自建卡跨板块把 `custom[].section` 改过去并插进那一格，内置卡落进别的板块就 `cancel()` 退回原位、细栏写一句「内置卡只能在本板块内排序，自建卡能搬去别的板块」，不让人试。
@@ -321,7 +322,7 @@ js_api（`check_setup` / `pick_root` / `pick_python` / `start_setup`），根目
   用例：`studio/tests/js/home-layout.test.mjs`、`studio/tests/test_home_layout.py`、`app/tests/test_studio_server.py` 的版式用例。
 - 「开始创作」的「声音克隆」与「编辑」的「图片反推」是两张 `target: "page"` 的直连卡（`value: "voice"` / `"reverse"`），
   落进 `route()` 的两条分支，挂出 `#/voice` 与 `#/reverse` 两页（`studio/web/voice-clone/voice-clone.js`、
-  `studio/web/reverse-prompt/reverse-prompt.js`）：顶栏那七枚页签不给它们位置，首页把卡收起，这一页就进不去；
+  `studio/web/reverse-prompt/reverse-prompt.js`）：顶栏那七枚页签不给它们位置，首页把这两张卡删掉（在「添加卡片」里加回来），这一页就进不去；
   两页与其余页同一条「视图常驻、切页显隐」的路由。两页的运行钮交 `RUN_GATES`（`voice` / `prompt_reverse`），
   离线形态点它是拉起内核，不是发一条注定 409 的请求。
   用例：`studio/tests/js/studio-home-pages.test.mjs`、`studio/tests/js/reverse-prompt.test.mjs`、

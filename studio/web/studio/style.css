@@ -1034,7 +1034,6 @@ body {
     min-width: 30px; padding: 5px 9px; font-size: 12px;
 }
 .ns-home-edit-col.is-on { border-color: var(--ns-primary); color: var(--ns-accent); }
-.ns-home-edit-chip.is-on { border-color: var(--ns-primary); color: var(--ns-accent); background: var(--ns-raised); }
 .ns-home-edit-status { color: var(--ns-dim); font-size: 12px; }
 /* 旧版式里收起的板块：标暗并留一行「已收起」。本版没有板块收起开关，这个状态在落盘时被清成展开 */
 .ns-home-section { display: flex; align-items: center; gap: 8px; }
@@ -1059,21 +1058,30 @@ body {
 @media (prefers-reduced-motion: reduce) {
     .ns-home-editing .ns-home-grid .ns-home-card { transition: none !important; }
 }
-.ns-home-editing .ns-home-card.is-hidden-card.is-dragging { opacity: .7; }   /* 幽灵位卡拖起来要看得见 */
-/* 隐藏的卡留在网格原位上当幽灵位：眼睛一点就排回来，不让用户去找「这张卡跑哪去了」 */
-.ns-home-card.is-hidden-card { opacity: .45; border-style: dashed; }
-.ns-home-card.is-hidden-card .ns-home-card-title { text-decoration: line-through; }
-/* 网格末尾的占位卡与自建卡的卡内表单：填在哪张卡上就长在那张卡下面 */
+/* 网格末尾的添加卡片占位卡与自建卡的表单：点开的是这一板块的添加卡片这一面 */
 .ns-home-add-tile {
     display: flex; align-items: center; justify-content: center; gap: 8px;
     min-height: 74px; border: 1px dashed var(--ns-border); border-radius: 10px;
     background: transparent; color: var(--ns-dim); font-size: 13px; cursor: pointer;
 }
 .ns-home-add-tile:hover { border-color: var(--ns-accent); color: var(--ns-accent); }
-/* 自建卡的编辑弹窗：借素材库弹窗那套遮罩与盒子，只把表单排成两列，脚一行放状态与两颗按钮 */
+/* 添加卡片这一面：借素材库弹窗那套遮罩与盒子，上半铺这一板块的预设卡，下半是自建卡的表单，脚一行放状态与两颗按钮 */
 .ns-home-card-dialog { z-index: 9800; }
-.ns-home-card-dialog .ns-libmodal-box { width: min(560px, 92vw); height: auto; max-height: 88vh; }
-.ns-home-card-dialog-fields { flex: 1 1 auto; min-height: 0; overflow: auto; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 12px 10px; }
+.ns-home-card-dialog .ns-libmodal-box { width: min(620px, 92vw); height: auto; max-height: 88vh; }
+.ns-home-card-dialog-body { flex: 1 1 auto; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 8px; padding: 12px 10px; }
+.ns-home-preset-head, .ns-home-form-head { flex: none; font-size: 12px; color: var(--ns-dim); letter-spacing: .04em; }
+.ns-home-preset-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.ns-home-preset-empty { font-size: 12px; color: var(--ns-dim); }
+/* 预设卡与首页上的卡同一副形状，右下角那一枚是 ＋ 不是 chevron：点这里是要把它加进首页，不是跳去那一页 */
+.ns-home-preset-card {
+    display: flex; align-items: center; gap: 12px; min-height: 62px; padding: 10px 12px; text-align: left;
+    background: var(--ns-field); border: 1px solid var(--ns-field-bd); border-radius: 8px;
+    color: var(--ns-fg); font: inherit; cursor: pointer;
+}
+.ns-home-preset-card:hover { border-color: var(--ns-accent); }
+.ns-home-preset-card .ns-home-card-title { font-size: 14px; }
+.ns-home-preset-card .ns-home-card-sub { font-size: 12px; }
+.ns-home-card-dialog-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .ns-home-card-dialog-foot { flex: none; display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-top: 1px solid var(--ns-border); }
 .ns-home-card-dialog-status { flex: 1 1 auto; min-width: 0; color: var(--ns-dim); font-size: 12px; }
 .ns-home-f-field { display: flex; align-items: center; gap: 6px; }
@@ -1105,7 +1113,8 @@ body {
     .ns-home-edit-bar { padding: 6px; gap: 4px; }
     .ns-home-card-tools .ns-btn { min-width: 30px; height: 30px; }
     .ns-home-card-dialog-fields { grid-template-columns: minmax(0, 1fr); }
-  .ns-home-card-dialog-shape { grid-template-columns: minmax(0, 1fr); }
+    .ns-home-card-dialog-shape { grid-template-columns: minmax(0, 1fr); }
+    .ns-home-preset-grid { grid-template-columns: minmax(0, 1fr); }
     .ns-home-f-label { min-width: 46px; }
 }
 /* 大窗档（≥1400px）：板块标题从网格上方移到左栏，与首行卡片中线并排——标题钉在居中列的

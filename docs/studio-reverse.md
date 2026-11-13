@@ -1,7 +1,7 @@
 # 图片反推
 
 Studio 首页「编辑」板块的卡片「图片反推」进 `#/reverse`（`studio/web/reverse-prompt/reverse-prompt.js`）。
-顶栏没有这一枚页签：首页那张卡是这页唯一的来路，首页版式把这张卡收起，这一页也就进不去。
+顶栏没有这一枚页签：首页那张卡是这页唯一的来路，首页版式把这张卡删掉（在「添加卡片」里加回来），这一页也就进不去。
 反推用的是素材卡 ⋯ 菜单那一条接口（`POST /rs_prompts/reverse_prompt`，`studio/llm.py`），页面上只做
 取图、上屏、复制三件事。
 

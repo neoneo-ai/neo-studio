@@ -43,10 +43,10 @@ const EN = {
     // ===== 首页版式（首页右上角「编辑首页」原地编辑，「完成」落盘）=====
     "编辑首页": "Edit home",
     "完成首页编辑：保存版式并退出": "Save the layout and finish editing the home page",
-    "编辑首页：卡片顺序与显隐、自建卡片、标题区文案、网格列数":
-        "Edit home: card order and visibility, custom cards, hero text and grid columns",
-    "首页卡片已全部隐藏，用右上角「编辑首页」排回来。":
-        "Every home card is hidden - use 'Edit home' in the top-right corner to bring them back.",
+    "编辑首页：卡片顺序、删除与添加卡片、标题区文案、网格列数":
+        "Edit home: card order, remove and add cards, hero text and grid columns",
+    "首页卡片已全部移除，在「编辑首页」的添加卡片里加回来。":
+        "Every home card is removed - open 'Edit home' and add them back from Add a card.",
     "显示标题区": "Show the hero block",
     "隐藏标题区": "Hide the hero block",
     "显示出图按钮": "Show the hero button",
@@ -55,24 +55,25 @@ const EN = {
     "{n} 列": "{n} columns",
     "跟随窗口": "Follow the window",
     "添加卡片": "Add a card",
+    "预设卡片": "Preset cards",
+    "自建卡片": "Custom card",
+    "加到首页：{title}": "Add {title} to the home page",
+    "这一板块的预设卡片都已在首页：先在首页删掉一张，再回到这里加回来":
+        "Every preset card of this section is already on the home page - remove one there, then come back to add it",
+    "从首页移除这张卡": "Remove this card from the home",
+    "这张卡已移出首页：在「添加卡片」里加回来":
+        "This card is off the home page - add it back from the Add a card tile",
+    "删除这张卡": "Delete this card",
+    "自建卡最多 {n} 张，先删一张": "Up to {n} custom cards - delete one first",
     "打开这一发技能的应用页": "Opens the page that applies this skill",
     "打开外部链接": "Opens an external link",
-    "编辑卡片": "Edit card",
     "先填标题": "Fill in the title first",
-    "跳转类型要一个目标": "This jump type needs a target",
     "链接要 http:// 或 https:// 开头": "The link must start with http:// or https://",
-    "选一个编辑模式": "Pick an edit mode",
     "不指定（只进导演页）": "No recipe (just open the director page)",
     "不指定（只进技能页）": "No skill (just open the skills page)",
-    "页面（旧版直连）": "Page (legacy direct link)",
     "这张技能没有可直达的应用页（不是生图 / 生视频技能），先进技能页":
         "This skill has no page that applies it (it is not an image / video skill) - opening the skills page",
-    "新卡片": "New card",
-    "在这板块末尾加一张自建卡": "Add a custom card at the end of this section",
-    "显示这张卡": "Show this card",
-    "隐藏这张卡": "Hide this card",
-    "编辑这张卡": "Edit this card",
-    "删除这张卡": "Delete this card",
+    "这板块末尾的添加卡片：预设卡片与自建卡": "Add a card at the end of this section: presets and a custom card",
     "内置卡只能在本板块内排序，自建卡能搬去别的板块":
         "Built-in cards reorder inside their own section; custom cards can be dragged into another section",
     "已收起": "Collapsed",

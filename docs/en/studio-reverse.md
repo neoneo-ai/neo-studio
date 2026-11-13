@@ -4,7 +4,8 @@
 
 The "图片反推" card in the **Edit** section of the Studio home opens `#/reverse`
 (`studio/web/reverse-prompt/reverse-prompt.js`). The top bar has no tab for it: that home card is the only way in, and
-hiding the card in the home editor closes the page off. Reverse prompting runs through the same endpoint the asset
+removing the card on the home page closes the page off (add it back from Add a card). Reverse prompting runs through the
+same endpoint the asset
 card's ⋯ menu uses (`POST /rs_prompts/reverse_prompt`, `studio/llm.py`); the page only picks an image, puts the text
 on screen, and copies it.
 

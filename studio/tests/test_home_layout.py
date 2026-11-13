@@ -168,6 +168,23 @@ class HomeLayoutTests(unittest.TestCase):
                                                        "custom": "no", "hero": 5}), encoding="utf-8")
         self.assertEqual(home_layout.get_layout(), home_layout.DEFAULT_LAYOUT)
 
+    def test_builtin_card_moves_out_of_home_and_back(self):
+        """内置卡删掉再加回来：后端只动 hidden，order 里那一格一直留着，加回来就落回原位。"""
+        full = ["paint", "video", "director", "pose", "agent", "voice"]
+        layout = _payload(asyncio.run(home_layout.save_layout_route(
+            _request(body={"order": {"create": full}, "hidden": ["video"]}))))["layout"]
+        self.assertEqual(layout["hidden"], ["video"], "移出首页记进 hidden")
+        self.assertEqual(layout["order"]["create"], full,
+                         "order 里那一格留着：加回来落回原来的位置，不排到末尾")
+        back = _payload(asyncio.run(home_layout.save_layout_route(_request(body={
+            "order": {"create": full + ["custom_9"]}, "hidden": [],
+            "custom": [{"id": "custom_9", "section": "create", "title": "外链卡",
+                        "target": "url", "url": "https://ex.com/a"}]}))))["layout"]
+        self.assertEqual(back["hidden"], [], "加回来就是摘掉 hidden 这一项")
+        self.assertEqual(back["order"]["create"], full + ["custom_9"],
+                         "表单建的自建卡排在板块末尾")
+        self.assertEqual([c["id"] for c in back["custom"]], ["custom_9"])
+
     def test_reset_deletes_the_file(self):
         asyncio.run(home_layout.save_layout_route(
             _request(body={"cols": 5, "hero": {"title": "改过的标题"}})))

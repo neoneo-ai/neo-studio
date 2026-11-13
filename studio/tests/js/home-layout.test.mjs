@@ -72,14 +72,19 @@ const fieldIn = (card, label) => [...card.querySelectorAll(".ns-home-f-field")]
 const moveChip = (host, title) => [...host.querySelectorAll(".ns-btn")].find((b) => b.title === title);
 const titlesIn = (host) => [...host.querySelectorAll(".ns-home-card-title")].map((e) => e.textContent);
 const gridOf = (home, label) => sectionTitle(home, label).nextElementSibling;
-/** 自建卡的编辑弹窗：新建与编辑同一条路，填在弹窗里，保存才进草稿 */
+/** 添加卡片这一面：上半铺这一板块的预设卡，下半是自建卡表单，两条都只改草稿 */
 const dlg = () => document.querySelector(".ns-home-card-dialog");
 const dlgBtn = (cls) => dlg().querySelector(`.ns-home-card-dialog-${cls}`);
+const dlgClose = () => document.querySelector(".ns-home-card-dialog .ns-libmodal-close");
+const presetIn = (host, title) => [...host.querySelectorAll(".ns-home-preset-card")]
+    .find((c) => c.querySelector(".ns-home-card-title")?.textContent === title);
+const presetTitles = (host) => [...host.querySelectorAll(".ns-home-preset-card .ns-home-card-title")]
+    .map((e) => e.textContent);
 /** 图标格子里现在选着的那一枚：图标格铺的是图标本身，图标名只是这枚的标识 */
 const iconPick = () => dlg().querySelector('.ns-home-f-icons [aria-pressed="true"]')?.dataset.icon;
-/** 首页上真出现的那一叠卡名：幽灵位（隐藏的卡）不算出现 */
+/** 首页上真出现的那一叠卡名：移出首页的卡不在网格上，这一叠就是页面上看得见的卡 */
 const cardTitles = (root) =>
-    [...root.querySelectorAll(".ns-home-card:not(.is-hidden-card) .ns-home-card-title")].map((e) => e.textContent);
+    [...root.querySelectorAll(".ns-home-card .ns-home-card-title")].map((e) => e.textContent);
 
 /** 落位手势是 vendored 的 Sortable（web/vendor/sortable.min.js）：jsdom 没有 layout，手势本身归 npm run e2e。
  *  用例替它记下每条网格收到的参数与回调——落位 → 草稿这一段是我们的代码，照测。 */
@@ -317,11 +322,19 @@ test("首页按版式出卡：板块序、隐藏卡、自建卡与列数全生�
     await flush();
     assert.equal(home.querySelector(".ns-home-grid").style.getPropertyValue("--ns-home-cols"), "5",
         "列数改动实时落在这页上");
-    click(chip(cardOf(home, "生成视频"), "隐藏这张卡"));
+    assert.ok(!cardOf(home, "智能体"), "移出首页的内置卡连编辑态也不铺进网格：它在添加卡片这一面等着");
+    click(chip(cardOf(home, "生成视频"), "从首页移除这张卡"));
     await flush();
-    assert.ok(cardOf(home, "生成视频").classList.contains("is-hidden-card"),
-        "藏掉的卡留在网格原位当幽灵位，眼睛一点就排回来");
-    assert.ok(!cardTitles(home).includes("生成视频"), "幽灵位不算出现在首页上的卡");
+    assert.ok(!dlg(), "删一张内置卡不自动弹「添加卡片」这一面：连删几张卡不是一弹一弹");
+    assert.ok(document.getElementById("ns-toast")?.textContent.includes("已移出首页"),
+        "移出首页在界面上说一句，指明去哪儿加回来");
+    assert.ok(!cardOf(home, "生成视频"), "移出首页的卡不留格子，也不在网格上排回来");
+    assert.ok(!cardTitles(home).includes("生成视频"), "首页上不再有这张卡");
+    click(gridOf(home, "开始创作").querySelector(".ns-home-add-tile"));
+    await flush();
+    assert.ok(presetIn(dlg(), "生成视频"), "自己点开所在板块的「添加卡片」：删掉的那一张就在这面等着加回来");
+    click(dlgClose());
+    await flush();
     assert.equal(POSTS(), 0, "在页面上排版的这一路不落盘");
 
     click(cardOf(home, "图片编辑"));
@@ -374,7 +387,7 @@ test("入口全程可点：浏览态、编辑态与保存失败之后都不带 d
     assert.ok(!home.classList.contains("ns-home-editing"), "失败之后照旧保存得下来并退出编辑");
 });
 
-test("卡片全隐藏与板块全收起：首页给出编辑入口的提示，编辑态把卡与板块全铺回来", async () => {
+test("卡片全移除与板块全收起：首页给出编辑入口的提示，编辑态铺出板块，预设全在添加卡片这一面", async () => {
     mountStudio();
     mockLayout({ hidden: hl.HOME_CARDS.map((c) => c.id), hidden_sections: ["edit"] });
     await importApp();
@@ -382,18 +395,25 @@ test("卡片全隐藏与板块全收起：首页给出编辑入口的提示，�
     const home = homeOf();
     assert.equal(home.querySelectorAll(".ns-home-section").length, 0, "没有卡的板块不留标题");
     assert.ok(home.querySelector(".ns-home-empty")?.textContent.includes("编辑首页"));
-    assert.ok(home.querySelector(".ns-home-hero"), "卡片全隐藏时标题区照出");
+    assert.ok(home.querySelector(".ns-home-hero"), "卡片全移除时标题区照出");
 
     await enterEdit(home);
     assert.equal(home.querySelectorAll(".ns-home-section").length, 3,
-        "编辑态铺出全部板块：收起的板块也得在这页上能开关");
+        "编辑态铺出全部板块：卡全移出了也要在这页上加回来");
     assert.ok(sectionTitle(home, "编辑").classList.contains("is-off"), "收起的板块标暗留在原位");
-    assert.equal(home.querySelectorAll(".ns-home-card.is-hidden-card").length, hl.HOME_CARDS.length,
-        "全隐藏的卡在编辑态一张不少：排回来的入口就在这页上");
-    click(chip(cardOf(home, "生成图片"), "显示这张卡"));
+    assert.equal(home.querySelectorAll(".ns-home-card").length, 0, "移出首页的卡一张不铺进网格");
+    click(gridOf(home, "开始创作").querySelector(".ns-home-add-tile"));
     await flush();
-    assert.ok(!cardOf(home, "生成图片").classList.contains("is-hidden-card"), "眼睛一点这张卡就回来了");
-    assert.equal(POSTS(), 0, "把卡排回来这一段也不落盘");
+    assert.deepEqual(presetTitles(dlg()),
+        ["生成图片", "生成视频", "导演视频", "3D 姿势", "智能体", "声音克隆"],
+        "这一板块的预设一张不缺：卡全移出时添加卡片就是唯一的来路");
+    click(presetIn(dlg(), "生成图片"));
+    await flush();
+    assert.ok(cardOf(home, "生成图片"), "预设点一下就进首页");
+    assert.ok(!presetIn(dlg(), "生成图片"), "加进首页的预设当场从这一面消失：预设不与首页上的卡重复");
+    assert.equal(POSTS(), 0, "把卡加回来这一段也不落盘");
+    click(dlgClose());
+    await flush();
 });
 
 test("弃草稿的两条路（Esc / 切页）：首页落回已保存的版式，全程不落盘", async () => {
@@ -468,11 +488,7 @@ test("就地排版：整张卡拖着排；板块不给控件，旧版式收起�
     assert.ok(!home.querySelector(".ns-home-off-tag"), "落回首页：板块不再标「已收起」");
 });
 
-test("自动填的形状跟着跳转类型与目标：内置条目抄卡表，配方技能用名字，链接用域名", () => {
-    assert.deepEqual(hl.cardShapeForTarget("edit", "angle"),
-        { title: "机位", sub: "拖机位球换角度重出这张", icon: "camera", section: "edit" });
-    assert.deepEqual(hl.cardShapeForTarget("page", "gallery"),
-        { title: "素材库", sub: "浏览与管理全部生成素材", icon: "folder", section: "material" });
+test("自动填的形状跟着跳转类型与目标：配方用名字，技能用显示名，链接用域名", () => {
     assert.deepEqual(hl.cardShapeForTarget("recipe", "我的配方", "我的配方"),
         { title: "我的配方", sub: "多段配方，生成整片视频", icon: "play", section: "create" });
     assert.deepEqual(hl.cardShapeForTarget("recipe", ""),
@@ -486,7 +502,7 @@ test("自动填的形状跟着跳转类型与目标：内置条目抄卡表，�
         "地址没填就不编一个标题：空标题由保存门去说");
 });
 
-test("自建卡走弹窗：占位卡开弹窗，保存才落卡，取消不动草稿，删卡清干净", async () => {
+test("自建卡走添加卡片这一面：表单保存才落卡，取消不动草稿，删卡清干净", async () => {
     mountStudio();
     mockLayout({});
     await importApp();
@@ -498,9 +514,11 @@ test("自建卡走弹窗：占位卡开弹窗，保存才落卡，取消不动�
 
     click(home.querySelector(".ns-home-add-tile"));
     await flush();
-    assert.ok(dlg(), "占位卡开的是弹窗");
+    assert.ok(dlg(), "占位卡开的是这一面弹窗");
+    assert.equal(presetTitles(dlg()).length, 0, "默认版式每张内置卡都在首页：预设一张不出");
+    assert.ok(dlg().querySelector(".ns-home-preset-empty"), "预设都已在首页这件事在界面上说出来，不空着一块");
     assert.equal(home.querySelectorAll(".ns-home-card.is-custom").length, 0, "没保存就不落卡");
-    assert.ok(fieldIn(dlg(), "标题") && fieldIn(dlg(), "跳转类型"), "弹窗里给全套字段");
+    assert.ok(fieldIn(dlg(), "标题") && fieldIn(dlg(), "跳转类型"), "下半是自建卡的全套字段");
 
     const url = "https://example.com/neo";
     const titleInput = fieldIn(dlg(), "标题").querySelector("input");
@@ -532,25 +550,14 @@ test("自建卡走弹窗：占位卡开弹窗，保存才落卡，取消不动�
     assert.ok(!cardOf(home, "不要这张"), "取消的这一次不进草稿");
     assert.equal(home.querySelectorAll(".ns-home-card.is-custom").length, 1, "弹窗之前保存的那一张还在");
 
-    click(chip(cardOf(home, "我的入口"), "编辑这张卡"));
-    await flush();
-    assert.ok(dlg(), "铅笔开同一个弹窗");
-    assert.equal(fieldIn(dlg(), "标题").querySelector("input").value, "我的入口", "弹窗带着这张卡的现值进来");
-    const subInput = fieldIn(dlg(), "副标题").querySelector("input");
-    subInput.value = "自建入口的副标题";
-    subInput.dispatchEvent(new Event("change"));
-    const saveBtn = dlgBtn("save");
-    saveBtn.click();
-    await flush();
-    assert.equal(cardOf(home, "我的入口").querySelector(".ns-home-card-sub").textContent,
-        "自建入口的副标题", "改完的字段落回卡面");
-    assert.equal(POSTS(), 0, "弹窗里的保存只改草稿：没按「完成」就不落盘");
+    assert.equal(cardOf(home, "我的入口").querySelectorAll(".ns-home-card-tools .ns-btn").length, 1,
+        "卡上的控件就一枚删除：这张卡没有第二个入口");
 
     click(home.querySelector(".ns-home-edit-entry"));
     await flush(40);
     const sent = lastCall("/neo_home/layout", "POST").body;
-    assert.deepEqual(sent.custom.map((c) => [c.title, c.sub, c.target, c.url]),
-        [["我的入口", "自建入口的副标题", "url", url]], "POST 交的是草稿当前的形状");
+    assert.deepEqual(sent.custom.map((c) => [c.title, c.target, c.url]),
+        [["我的入口", "url", url]], "POST 交的是草稿当前的形状");
     assert.equal(events.length, 1, "落盘后广播一次，首页据此重画");
     assert.ok(!home.querySelector(".ns-home-card.is-custom"), "落盘之后编辑态结束，卡面按已保存的版式出");
     assert.ok(cardOf(home, "我的入口"), "已保存的自建卡留在首页上");
@@ -558,10 +565,15 @@ test("自建卡走弹窗：占位卡开弹窗，保存才落卡，取消不动�
     await enterEdit(home);
     click(chip(cardOf(home, "我的入口"), "删除这张卡"));
     await flush();
-    assert.equal(home.querySelectorAll(".ns-home-card.is-custom").length, 0, "删卡之后卡与草稿一起清干净");
+    assert.equal(home.querySelectorAll(".ns-home-card.is-custom").length, 0, "删自建卡之后卡与草稿一起清干净");
+    assert.ok(!dlg(), "删自建卡不开添加卡片这一面：自建卡没有预设可加回来");
+    click(home.querySelector(".ns-home-edit-entry"));
+    await flush(40);
+    assert.deepEqual(lastCall("/neo_home/layout", "POST").body.custom, [],
+        "删掉的自建卡从 custom 与 order 里一起清干净");
 });
 
-test("弹窗的跳转类型只有四种：编辑目标给全那一发模式，配方与技能可留不指定", async () => {
+test("弹窗的跳转类型只有三种：编辑模式与页面直连归预设卡，配方与技能可留不指定", async () => {
     mountStudio();
     mockLayout({});
     mockRoute("/rs_prompts/skills", () => jsonResponse([
@@ -575,23 +587,21 @@ test("弹窗的跳转类型只有四种：编辑目标给全那一发模式，�
     click(home.querySelector(".ns-home-add-tile"));
     await flush();
     const typeSel = fieldIn(dlg(), "跳转类型").querySelector("select");
-    assert.deepEqual([...typeSel.options].map((o) => o.value), ["edit", "recipe", "skill", "url"],
-        "自建卡能配的跳转类型只有这四种：页面直连不在其上");
+    assert.deepEqual([...typeSel.options].map((o) => o.value), ["recipe", "skill", "url"],
+        "自建卡能配的跳转类型只有这三种：编辑模式与页面直连不在其上——那一发由预设卡给");
     const targetSel = () => fieldIn(dlg(), "跳转目标").querySelector("select");
-    assert.deepEqual([...targetSel().options].map((o) => o.value), hl.HOME_EDIT_MODES,
-        "编辑目标给全编辑页那一发模式：局部与删除都在其上");
-    assert.ok([...targetSel().options].map((o) => o.textContent).includes("局部"),
-        "模式名用编辑页上的那一套，不自造第二套叫法");
-
-    pick(typeSel, "recipe");
-    await flush();
-    assert.equal(targetSel().options[0].value, "", "配方给得出「不指定」：取消选中的那一份就是只进导演页");
+    assert.equal(targetSel().options[0].value, "", "开局就是配方：给得出「不指定」，只进导演页的那一张卡");
     assert.equal(targetSel().options[0].textContent, "不指定（只进导演页）");
+    assert.ok(![...targetSel().options].some((o) => o.value === "skill_a"),
+        "配方态的候选里排不出技能项：候选跟着跳转类型走");
 
     pick(typeSel, "skill");
     await flush();
-    assert.equal(targetSel().options[0].value, "", "技能给得出「不指定」：只进技能页的那一张卡");
+    assert.equal(targetSel().options[0].textContent, "不指定（只进技能页）",
+        "技能给得出「不指定」：只进技能页的那一张卡");
     assert.ok([...targetSel().options].map((o) => o.value).includes("skill_a"), "技能候选来自技能清单");
+    assert.ok([...targetSel().options].map((o) => o.textContent).includes("画一张"),
+        "技能名用技能页上的那一份，不自造第二套叫法");
 
     const titleInput = fieldIn(dlg(), "标题").querySelector("input");
     titleInput.value = "技能入口";
@@ -618,7 +628,9 @@ test("添加卡片的弹窗排三行：跳转类型与目标在前，格子按�
 
     click(gridOf(home, "编辑").querySelector(".ns-home-add-tile"));
     await flush();
-    assert.ok(dlg(), "「添加卡片」占位卡开的是弹窗");
+    assert.ok(dlg(), "「添加卡片」占位卡开的是这一面弹窗");
+    assert.ok(dlg().querySelector(".ns-home-preset-empty"),
+        "这一板块的预设都已在首页：空态说出来，这一面不空着一块");
     assert.deepEqual([...dlg().querySelectorAll(".ns-home-card-dialog-fields > .ns-home-f-field")]
         .map((f) => f.querySelector(".ns-home-f-label")?.textContent), ["跳转类型", "跳转目标"],
         "第一行只有跳转类型与跳转目标这两格");
@@ -627,31 +639,30 @@ test("添加卡片的弹窗排三行：跳转类型与目标在前，格子按�
         "第二行是标题与副标题，第三行是图标与板块");
 
     const boxIn = (label) => fieldIn(dlg(), label).querySelector("input, select");
-    assert.equal(boxIn("标题").value, "图片编辑", "新建开局按这一发落点（编辑模式 · 图片编辑）填好标题");
-    assert.equal(boxIn("副标题").value, "写下要改成什么样，整图重绘");
-    assert.equal(iconPick(), "pencil", "新建开局图标格子点着这一发的那一枚");
+    assert.equal(boxIn("标题").value, "导演配方", "新建开局按这一发落点（导演配方 · 不指定）填好标题");
+    assert.equal(boxIn("副标题").value, "多段配方，生成整片视频");
+    assert.equal(iconPick(), "play", "新建开局图标格子点着这一发的那一枚");
     assert.ok(!fieldIn(dlg(), "图标").querySelector("select"),
         "图标不在下拉里选：那里面只有 pencil / maximize 这类英文标识");
 
-    pick(fieldIn(dlg(), "跳转目标").querySelector("select"), "angle");
+    pick(fieldIn(dlg(), "跳转类型").querySelector("select"), "url");
     await flush();
-    assert.equal(boxIn("标题").value, "机位", "换了跳转目标：标题跟着这一发走");
-    assert.equal(boxIn("副标题").value, "拖机位球换角度重出这张");
-    assert.equal(iconPick(), "camera", "换了跳转目标：图标格子跟着这一发点着那一枚");
+    assert.equal(boxIn("标题").value, "", "换了跳转类型：地址没填就不编一个标题，空标题由保存门去说");
+    assert.equal(iconPick(), "plug", "换了跳转类型：图标格子跟着这一发点着那一枚");
     assert.equal(boxIn("板块").value, "edit", "板块由点开的那张占位卡定：自动填不把卡搬去别的板块");
 
-    const typed = boxIn("标题");
-    typed.value = "我的格子";
+    const typed = boxIn("副标题");
+    typed.value = "我的格子副标题";
     typed.dispatchEvent(new Event("change"));
-    pick(fieldIn(dlg(), "跳转类型").querySelector("select"), "recipe");
+    pick(fieldIn(dlg(), "跳转类型").querySelector("select"), "skill");
     await flush();
-    assert.equal(boxIn("标题").value, "我的格子", "打过字的格子自动填不覆盖");
-    assert.equal(iconPick(), "play", "没碰过的图标换成这一发的");
+    assert.equal(boxIn("副标题").value, "我的格子副标题", "打过字的格子自动填不覆盖");
+    assert.equal(iconPick(), "wand", "没碰过的图标换成这一发的");
     assert.equal(boxIn("板块").value, "edit", "板块算碰过：换跳转类型也不搬卡");
 
     click(dlgBtn("cancel"));
     await flush();
-    assert.ok(!dlg(), "取消关掉弹窗，自动填的那些没进草稿");
+    assert.ok(!dlg(), "取消关掉这一面，自动填的那些没进草稿");
     assert.equal(home.querySelectorAll(".ns-home-card.is-custom").length, 0, "没保存就不落卡");
 });
 
@@ -691,52 +702,35 @@ test("自动填落下的图标都在图标格子那把候选里：落点填的�
     }
 });
 
-test("旧版式里存的图标不在候选里时铺在格子最前照旧选着，点一下就落到候选里", async () => {
+test("旧版式里的直连卡与编辑模式卡：照读照跳照删，弹窗不再产出这一类", async () => {
     mountStudio();
-    mockLayout({ custom: [{ id: "custom_icon", section: "create", title: "旧图标卡", target: "page", value: "gallery", icon: "minimize" }] });
+    mockLayout({ custom: [
+        { id: "custom_legacy", section: "create", title: "旧直连卡", target: "page", value: "settings" },
+        { id: "custom_edit", section: "create", title: "旧编辑卡", target: "edit", value: "angle" },
+    ] });
     await importApp();
     await settle();
     const home = homeOf();
-    await enterEdit(home);
-    click(chip(cardOf(home, "旧图标卡"), "编辑这张卡"));
-    await flush();
+    assert.ok(cardOf(home, "旧直连卡") && cardOf(home, "旧编辑卡"),
+        "旧版式里 target=page / target=edit 的自建卡照旧出在首页上：一次保存不能静默丢掉它们");
 
-    const swatches = [...dlg().querySelectorAll(".ns-home-f-icons .ns-home-icon-swatch")];
-    assert.equal(swatches[0].dataset.icon, "minimize", "存着的图标铺在格子最前：弹窗不假装它是空选项");
-    assert.equal(iconPick(), "minimize", "这张卡的图标照旧选着");
-    click(swatches.find((b) => b.dataset.icon === "folder"));
-    click(dlgBtn("save"));
-    await flush();
-    click(home.querySelector(".ns-home-edit-entry"));
-    await flush(40);
-    assert.equal(lastCall("/neo_home/layout", "POST").body.custom[0].icon, "folder",
-        "点一下就换进候选里的那一枚，落盘的是它");
-});
-
-test("旧版式里的直连卡：照读照跳，铅笔开弹窗留着这一项，不静默换掉跳转类型", async () => {
-    mountStudio();
-    mockLayout({ custom: [{ id: "custom_legacy", section: "create", title: "旧直连卡", target: "page", value: "settings" }] });
-    await importApp();
-    await settle();
-    const home = homeOf();
-    assert.ok(cardOf(home, "旧直连卡"), "旧版式里 target=page 的自建卡照旧出在首页上");
-
-    await enterEdit(home);
-    click(chip(cardOf(home, "旧直连卡"), "编辑这张卡"));
-    await flush();
-    const typeSel = fieldIn(dlg(), "跳转类型").querySelector("select");
-    assert.equal(typeSel.value, "page", "弹窗带着这张卡现有的跳转类型进来，铅笔不改它");
-    assert.deepEqual([...typeSel.options].map((o) => o.value),
-        ["edit", "recipe", "skill", "url", "page"], "这一项只在这张卡已经在用它时出现");
-    assert.equal(fieldIn(dlg(), "跳转目标").querySelector("select").value, "settings",
-        "直连目标读回现值：改副标题不会把落点清空");
-    click(dlgBtn("cancel"));
-    await flush();
-    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-    await flush();   // Esc 弃草稿退出：这张卡照已保存的版式跳
     click(cardOf(home, "旧直连卡"));
     await settle();
     assert.equal(window.location.hash, "#/settings", "直连卡照旧跳到那一页");
+    click(document.querySelector('.ns-tabs a[href="#/home"]'));
+    await settle();
+
+    await enterEdit(home);
+    click(chip(cardOf(home, "旧直连卡"), "删除这张卡"));
+    await flush();
+    click(chip(cardOf(home, "旧编辑卡"), "删除这张卡"));
+    await flush();
+    assert.equal(home.querySelectorAll(".ns-home-card.is-custom").length, 0,
+        "旧卡照样删得掉：删一张就是清掉 custom 与 order 里那一条");
+    assert.ok(!dlg(), "删自建卡不开添加卡片这一面：自建卡没有预设可加回来");
+    click(home.querySelector(".ns-home-edit-entry"));
+    await flush(40);
+    assert.deepEqual(lastCall("/neo_home/layout", "POST").body.custom, [], "落盘的形状里没有这两张旧卡");
 });
 
 test("技能卡的落点是应用页：生图技能进输入页，视频技能进出视频页那一发，没有应用页的落技能页", async () => {
@@ -940,7 +934,7 @@ test("首页原地编辑的文案在英文界面也有话可说", () => {
     assert.deepEqual(literals.filter((s) => !en.includes(`"${s}"`)), [], "英文字典缺项会在英文界面落回中文");
     const app = fs.readFileSync(path.join(webDir, "studio", "studio-app.js"), "utf8");
     for (const s of ["编辑首页", "完成", "完成首页编辑：保存版式并退出", "已收起",
-        "首页卡片已全部隐藏，用右上角「编辑首页」排回来。",
+        "首页卡片已全部移除，在「编辑首页」的添加卡片里加回来。",
         "已保存：插件页、桌面窗口与手机页的首页同步生效", "保存失败：{msg}",
         "这张技能没有可直达的应用页（不是生图 / 生视频技能），先进技能页"]) {
         assert.ok(app.includes(`"${s}"`) && en.includes(`"${s}"`), `首页编辑文案缺英文项：${s}`);
@@ -948,6 +942,17 @@ test("首页原地编辑的文案在英文界面也有话可说", () => {
     for (const s of ["保存版式", "完成首页编辑（Esc）", "右下角「编辑首页」", "收起板块", "下移板块"]) {
         assert.ok(!app.includes(`"${s}"`) && !src.includes(`"${s}"`),
             `细栏保存与板块开关的文案应跟着控件一起删掉：${s}`);
+    }
+    for (const s of ["隐藏这张卡", "显示这张卡", "编辑这张卡", "编辑卡片", "新卡片",
+        "在这板块末尾加一张自建卡", "选一个编辑模式", "跳转类型要一个目标", "页面（旧版直连）"]) {
+        assert.ok(!src.includes(`"${s}"`) && !en.includes(`"${s}"`),
+            `显隐眼睛与铅笔编辑这条路的文案应跟着控件一起删掉：${s}`);
+    }
+    for (const s of ["预设卡片", "自建卡片", "从首页移除这张卡", "加到首页：{title}",
+        "这张卡已移出首页：在「添加卡片」里加回来",
+        "这一板块的预设卡片都已在首页：先在首页删掉一张，再回到这里加回来",
+        "自建卡最多 {n} 张，先删一张"]) {
+        assert.ok(src.includes(`"${s}"`) && en.includes(`"${s}"`), `添加卡片这一面的文案缺英文项：${s}`);
     }
     assert.ok(!app.includes('"自定义首页"'), "「设置 → 首页」深链入口的文案应跟着那条 tab 一起清掉");
     assert.ok(!app.includes("?skill="), "技能卡落应用页，不再走技能页的深链参数");
@@ -975,9 +980,18 @@ test("首页版式的 CSS 挂点：列数走自定义属性，卡上的控件与
         && /\.ns-home-edit-bar\s*\{[^}]*flex-wrap:\s*wrap/.test(css),
         "窄窗口里细栏自己换行：收成小组也不溢出窗口，不把整页顶走");
     assert.match(css, /\.ns-home-card-tools\s*\{/, "卡上的控件条应有自己的样式");
-    assert.match(css, /\.ns-home-card\.is-hidden-card/, "隐藏的卡以幽灵位留在网格原位");
-    assert.match(css, /\.ns-home-add-tile\s*\{/, "网格末尾的占位卡应有自己的样式");
-    assert.match(css, /\.ns-home-card-dialog\s*\{/, "自建卡的编辑弹窗应有自己的层级与遮罩");
+    assert.ok(!css.includes("is-hidden-card"), "幽灵位与显隐眼睛的样式应跟着那枚控件一起删掉");
+    assert.match(css, /\.ns-home-add-tile\s*\{/, "网格末尾的添加卡片占位卡应有自己的样式");
+    assert.match(css, /\.ns-home-card-dialog\s*\{/, "添加卡片这一面应有自己的层级与遮罩");
+    assert.ok(/\.ns-home-card-dialog-body\s*\{[^}]*overflow:\s*auto/.test(css),
+        "这一面自己滚动：预设与表单叠在一处，窗口矮了不溢出盒子");
+    assert.ok(/\.ns-home-preset-grid\s*\{[^}]*grid-template-columns/.test(css)
+        && /@media \(max-width: 720px\)[\s\S]{0,600}\.ns-home-preset-grid\s*\{[^}]*minmax\(0, 1fr\)/.test(css),
+        "预设排两格一行，窄窗口里收成一行一格");
+    assert.ok(/\.ns-home-preset-card\s*\{[^}]*border:\s*1px solid/.test(css)
+        && /\.ns-home-preset-card:hover\s*\{[^}]*border-color:\s*var\(--ns-accent\)/.test(css),
+        "预设卡是一枚点得着的卡：描边在 hover 上点亮");
+    assert.match(css, /\.ns-home-preset-empty\s*\{/, "预设都已在首页时的空态应有自己的样式");
     assert.match(css, /\.ns-home-card-dialog-fields\s*\{/, "弹窗里的表单排成两列");
     assert.match(css, /\.ns-home-card-dialog-shape\s*\{[^}]*grid-column:\s*1 \/ -1/,
         "弹窗第二三行（标题 / 副标题 / 图标 / 板块）是横跨两列的一块格子");
@@ -1005,6 +1019,54 @@ test("首页版式的 CSS 挂点：列数走自定义属性，卡上的控件与
     assert.ok(!css.includes(".ns-home-grip") && !css.includes(".ns-home-edit-section")
         && !css.includes(".ns-home-edit-save"),
         "板块手柄、板块开关与细栏保存钮的样式应跟着控件一起删掉");
+});
+
+test("预设表只收被移出首页的内置卡：已在首页的一张不出，板块各管各的", () => {
+    const base = hl.normalizeLayout({});
+    assert.deepEqual(hl.presetCards("create", base), [], "默认版式每张内置卡都在首页：预设一张不出");
+    const layout = hl.normalizeLayout({ hidden: ["paint", "gallery"] });
+    assert.deepEqual(hl.presetCards("create", layout).map((c) => c.id), ["paint"],
+        "预设只收本板块被移出首页的那一张");
+    assert.deepEqual(hl.presetCards("material", layout).map((c) => c.id), ["gallery"]);
+    assert.deepEqual(hl.presetCards("edit", layout), [], "别的板块移出首页的卡不落进这一板块的预设里");
+    const withCustom = hl.normalizeLayout({
+        custom: [{ id: "custom_1", section: "create", title: "旧藏卡", target: "url", url: "https://ex.com/a" }],
+        hidden: ["custom_1", "paint"],
+    });
+    assert.deepEqual(withCustom.hidden, ["paint"],
+        "hidden 只装内置卡：旧版式里藏着的自建卡在首页照出，界面上删得掉");
+    assert.ok(withCustom.order.create.includes("custom_1"), "那张自建卡还在原来的板块与顺序里");
+});
+
+test("内置卡删掉再加回来：落回它原来那一格，全程只改草稿", async () => {
+    mountStudio();
+    mockLayout({});
+    await importApp();
+    await settle();
+    const home = homeOf();
+    await enterEdit(home);
+    click(chip(cardOf(home, "生成视频"), "从首页移除这张卡"));
+    await flush();
+    click(chip(cardOf(home, "智能体"), "从首页移除这张卡"));
+    await flush();
+    assert.ok(!dlg(), "连删两张卡不弹窗：这一面只由「添加卡片」自己开");
+    click(home.querySelector(".ns-home-add-tile"));
+    await flush();
+    assert.deepEqual(presetTitles(dlg()), ["生成视频", "智能体"],
+        "移出首页的两张都在这面等着加回来，按卡表顺序排");
+    click(presetIn(dlg(), "生成视频"));
+    click(presetIn(dlg(), "智能体"));
+    await flush();
+    assert.ok(cardOf(home, "生成视频") && cardOf(home, "智能体"), "预设点一下就回到首页上");
+    assert.ok(!dlg().querySelector(".ns-home-preset-card"), "两张都加回去了：这一面的预设空出来");
+    assert.equal(POSTS(), 0, "删掉与加回来这一段都不落盘");
+    click(home.querySelector(".ns-home-edit-entry"));
+    await flush(40);
+    const sent = lastCall("/neo_home/layout", "POST").body;
+    assert.deepEqual(sent.hidden, [], "删掉又加回来的卡不留 hidden：加回来就是摘掉这一项");
+    assert.deepEqual(sent.order.create.slice(0, 6),
+        ["paint", "video", "director", "pose", "agent", "voice"],
+        "加回来的卡落回 order 里它原来那一格：排好的顺序不动");
 });
 
 test("落位手势是 vendored 的 Sortable：文件在位、版本钉住、运行时不联网", () => {
