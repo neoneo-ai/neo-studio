@@ -748,6 +748,84 @@ class EffectSkillContractTests(unittest.TestCase):
         self.assertTrue(all(f["field"] == "effect" for f in self._manifest()["files"]))
 
 
+class ReferenceEffectTableTests(unittest.TestCase):
+    """全参考预设（minimax-h3-r2v / minimax-h3-vdn-r2v）带同一份特效表：默认钉「无特效」，
+    特效项与特效技能逐字同源，前端只交一个特效 id；定格瞬间不在表里——它靠首尾同帧闭环，
+    全参考没有尾帧槽，那一发契约无处落。"""
+
+    _R2V = ("minimax-h3-r2v", "minimax-h3-vdn-r2v")
+
+    def _config(self, preset):
+        with open(os.path.join(PLUGIN_DIR, "skills", "presets", preset, "config.json"),
+                  encoding="utf-8") as f:
+            return json.load(f)
+
+    def _manifest(self, preset):
+        with open(os.path.join(PLUGIN_DIR, "skills", "presets", preset, "models.json"),
+                  encoding="utf-8") as f:
+            return json.load(f)
+
+    def _effect_skill_entries(self):
+        with open(os.path.join(PLUGIN_DIR, "skills", "presets", "effect_h3", "config.json"),
+                  encoding="utf-8") as f:
+            return [e for e in json.load(f)["effects"] if e.get("embedding")]
+
+    def test_reference_presets_default_to_no_effect(self):
+        for preset in self._R2V:
+            cfg = self._config(preset)
+            ids = [e["id"] for e in cfg["effects"]]
+            self.assertEqual(cfg["effect"], "none", preset)
+            self.assertEqual(ids[0], "none", preset)
+            self.assertNotIn("frozen_moment", ids, "定格瞬间要首尾同帧，全参考没有尾帧槽")
+
+    def test_reference_effect_table_is_the_effect_skills_one(self):
+        shared = {e["id"]: e for e in self._effect_skill_entries()}
+        for preset in self._R2V:
+            by_id = {e["id"]: e for e in self._config(preset)["effects"]}
+            self.assertEqual(set(by_id) - {"none"}, set(shared), preset)
+            for eid, src in shared.items():
+                # 触发段逐字匹配：两处模板差一个词，全参考那一发就跑不出同一个特效
+                self.assertEqual(by_id[eid]["prompt_template"], src["prompt_template"], preset + " " + eid)
+                self.assertEqual(by_id[eid]["embedding"], src["embedding"], preset + " " + eid)
+                self.assertEqual(by_id[eid].get("max_length"), src.get("max_length"), preset + " " + eid)
+
+    def test_reference_manifests_declare_the_same_embedding_files(self):
+        wanted = {e["embedding"] for e in self._effect_skill_entries()}
+        for preset in self._R2V:
+            files = self._manifest(preset)["files"]
+            self.assertEqual({f["filename"] for f in files}, wanted, preset)
+            self.assertEqual(self._manifest(preset)["extends"], "minimax_h3_base", preset)
+
+    def test_no_effect_passes_the_reference_prompt_through(self):
+        cfg = self._config("minimax-h3-r2v")
+        p = h3_video_gen.resolve_video_params({"prompt": "<Picture 1> 的女孩回头", "effect": "none"}, cfg)
+        self.assertEqual(p["prompt"], "<Picture 1> 的女孩回头")
+        self.assertEqual(p["effect"], "none")
+        self.assertEqual(p["steps"], 20, "无特效那一发照这条预设自己钉的 20 步跑")
+
+    def test_reference_shot_with_an_effect_pins_the_embedding(self):
+        cfg = self._config("minimax-h3-r2v")
+        p = h3_video_gen.resolve_video_params(
+            {"prompt": "a sprinter", "effect": "bullet_time", "length": 243}, cfg)
+        self.assertTrue(p["prompt"].startswith("embedding:minimaxh3_bullet_time "), p["prompt"][:40])
+        self.assertEqual((p["effect"], p["length"]), ("bullet_time", 124))
+
+    def test_missing_embedding_blocks_a_reference_effect_shot(self):
+        cfg = self._config("minimax-h3-r2v")
+        with self.assertRaises(ValueError) as ctx:
+            h3_video_gen.resolve_video_params({"prompt": "x", "effect": "fire_breath"}, cfg)
+        self.assertIn("minimaxh3_fire_breath.safetensors", str(ctx.exception))
+
+    def test_reference_skill_stays_available_without_any_embedding(self):
+        # 默认是无特效：整批嵌入都不在盘上也只挡「选了特效的那一发」，普通全参考镜头照跑
+        scanned = {s["id"]: s for s in h3_video_gen.scan_skills()}
+        row = scanned["minimax-h3-r2v"]
+        self.assertIs(row["available"], True)
+        self.assertEqual(row["effect"], "none")
+        self.assertEqual(len(row["effects"]), 11, "无特效 + 10 个社区嵌入特效")
+        self.assertIs(row["effects"][0]["ready"], True, "无特效没有本体，天然就位")
+
+
 class GenVideoSkillsTests(unittest.TestCase):
     def test_new_presets_are_video_skills(self):
         ids = {s["id"] for s in h3_video_gen._gen_video_skills()}

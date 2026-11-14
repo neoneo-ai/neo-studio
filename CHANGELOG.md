@@ -30,6 +30,20 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   replaces (特效-子弹时间, 特效-定格瞬间) and the Civitai `[MMH3] Bullet Time` LoRA are out of the shipped
   preset set — a data root seeded by an older build keeps its copies until they are deleted by hand. Covered by
   `studio/tests/test_h3_video_gen.py` and `studio/tests/js/studio-video.test.mjs`.
+- **Effects on 全参考生视频, with 无特效 as the shipped default.** The two reference presets `minimax-h3-r2v`
+  and `minimax-h3-vdn-r2v` carry the same effect table as 特效-MiniMax H3 — entry for entry identical (子弹时间 ·
+  画面炸开 · 繁花盛开 · 黑暗魔法 · 火焰吐息 · 四季流转 · 亲吻镜头 · 螺旋升腾 · 风暴魔法 · 楚门式片场) — so the
+  特效 chip now appears in the 全参考生视频 family as well. Their `config.json` pins 无特效 as the default effect:
+  leaving the 特效 field on 无特效 sends `effect: "none"`, the prompt enters the conditioning exactly as written,
+  and a plain reference shot samples at the preset's own 20 / 8 steps exactly as before. Picking an effect appends
+  the official `embedding:<filename>` trigger segment and clamps the shot to that entry's frame cap; a reference
+  shot whose effect body is missing is refused before the queue with the file named, while the skill stays
+  available in the dropdown when none of the embeddings are installed — only the shot with a selected effect is
+  gated. 定格瞬间 stays out of the reference table: it closes the shot by repeating the first frame, and
+  reference-to-video has no last-frame slot. A data root seeded by an older build keeps its copies of these two
+  presets; delete `<data root>/skills/presets/minimax-h3-r2v/` (and the VDN folder) to re-seed them with the
+  table. Covered by `studio/tests/test_h3_video_gen.py`, `studio/tests/test_skills.py` and
+  `studio/tests/js/studio-video.test.mjs`.
 - **The agent's MCP surface reaches 图片反推 and 声音克隆.** Two tools join the MCP registry (now 23):
   `reverse_prompt` writes one library image into a prompt — the picture is named by `filename` + `subfolder`
   (empty `subfolder` is `presets`), `language=zh` / `en`, and the text lands in the same-named `.txt` next to the

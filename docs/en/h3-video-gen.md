@@ -248,14 +248,17 @@ An effect skill carries a table of effects: `config.json`'s `effects` pins, per 
 the example prompt, the effect body file, the duration cap and the first/last-frame rule. The skill's own
 `steps` is the shot default the Video page prefills - the effect entries carry no step count.
 The Effects dropdown on the Video page is that table, and the frontend sends nothing but an effect id.
-`workflow.json` reuses the existing H3 image-to-video template, and `resolve_video_params` resolves the shot
-from the selected entry - the single-segment, simple-video and director paths all run through that one
-resolution chain:
+Three shipped skills carry one: 关键帧家族's `effect_h3` (first frame plus one line, defaulting to 子弹时间)
+and 全参考家族's `minimax-h3-r2v` / `minimax-h3-vdn-r2v` (entry-for-entry the same table, defaulting to
+无特效). `workflow.json` is each skill's own H3 template (image-to-video or reference-to-video), and
+`resolve_video_params` resolves the shot from the selected entry - the single-segment, simple-video and
+director paths all run through that one resolution chain:
 
 | Key               | Meaning                                                                        |
 |-------------------|--------------------------------------------------------------------------------|
 | `effect`          | The skill's default effect id; used when the request body carries no `effect`  |
 | `effects[]`       | The effect table; each entry carries the contract in the rows below            |
+| `id: "none"`      | The fixed id of the 无特效 entry: the prompt goes in as written, with no embedding segment and no frame cap |
 | `prompt_template` | Prompt template; `{text}` takes the user's line, and a template without `{text}` replaces it entirely |
 | `prompt_default`  | What fills `{text}` when the line is empty; also the Video page placeholder for that effect |
 | `embedding`       | Effect body filename under `models/embeddings/`; missing for the selected effect, the run is refused and the file is named |
@@ -284,6 +287,14 @@ line, 11 effects):
 | `storm_magic`      | 风暴魔法     | `minimaxh3_storm_magic.safetensors`                      | none               |
 | `truman_show`      | 楚门式片场   | `minimaxh3_truman_show.safetensors`                      | none               |
 
+- The embedding is a text condition - the `embedding:` segment is resolved in the CLIP text encoder, independent
+  of the conditioning node type ([discussion #50](https://huggingface.co/Comfy-Org/MiniMax-H3/discussions/50)) -
+  so the 全参考家族 presets `minimax-h3-r2v` / `minimax-h3-vdn-r2v` carry the same table's 10 embedding effects
+  plus 无特效, and no 定格瞬间 (that one closes the shot by repeating the first frame, and
+  reference-to-video has no last-frame slot). Their shipped default is 无特效: with it selected the prompt goes
+  in as written, a plain reference shot sends no effect, and the skill stays available even when none of the
+  embeddings are on disk; picking an effect runs that entry's contract (frame cap and the hard
+  missing-file refusal included), sampled at the 20 / 8 steps the preset pins.
 - The skill stays available in the skill dropdown as long as one effect body is installed; the effect whose
   body is missing is marked （不可用） in the Effects dropdown instead of disappearing from the list.
 - The effect table carries no step count: 24 / 28 is MiniMax's reference for the un-accelerated official
@@ -306,7 +317,7 @@ line, 11 effects):
 - The `skills/presets/effect_bullet_time` and `skills/presets/effect_frozen_moment` folders an older build
   seeded into the data root are not removed on their own and stay in the skill dropdown (presets are read-only,
   the UI deletes no preset): delete those two folders under `<data root>/skills/presets/` to drop them.
-- Effect entries sample at more steps than the general presets, so the Video page's default skill (the
+- The effect skill pins more steps than the general presets, so the Video page's default skill (the
   available skill with the fewest steps) stays a general preset.
 - H3 is guidance-distilled and its template pins `cfg` at 1.0: effects ship no negative prompt, and the look
   comes from the positive template plus the embedding segment.
@@ -366,9 +377,10 @@ line, 11 effects):
 - Sampling steps resolve in this order: a positive value in this request (the Video page's panel / the node's
   `steps`) > the skill's `config.json` `steps` > default 20; the effect table carries no steps. cfg /
   sampler / scheduler are written in each skill's `workflow.json`.
-- The shipped 24-step default lands only in a freshly seeded data root: an existing `effect_h3` preset is
-  never overwritten, so delete `<data root>/skills/presets/effect_h3/` to re-seed it, or change the steps of
-  this skill in 技能管理.
+- The shipped 24-step default and the effect tables of the two reference presets land only in a freshly seeded
+  data root: an existing `effect_h3`, `minimax-h3-r2v` or `minimax-h3-vdn-r2v` preset is never overwritten, so
+  delete the matching folder under `<data root>/skills/presets/` to re-seed it, or change the steps of this
+  skill in 技能管理.
 - The model dropdown under "output settings → video generation model" puts the H3-related entries first, which
   makes local models easy to find.
 - Video has no "depends on reference images" concept: every configured LoRA is loaded unconditionally.

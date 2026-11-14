@@ -62,8 +62,10 @@ page is where the version gets picked.
 License: Comfy-Org repackaged weights, the license follows the MiniMax source repository; the 10 effect
 text embeddings are community repackaged files of the same Comfy-Org repository (author silveroxides) and
 carry the same license, with credit kept as the repository states it. All 16 presets of the family run on
-this base set, and the only preset-owned extras in the family are the 10 embeddings declared by the effect
-preset `effect_h3`; the Frozen Moment effect downloads nothing and runs on first/last-frame interpolation.
+this base set, and the only preset-owned extras in the family are those 10 embeddings, declared by the effect
+preset `effect_h3` and by the two reference presets `minimax-h3-r2v` / `minimax-h3-vdn-r2v` - the same files,
+counted once per family after dedup. The Frozen Moment effect downloads nothing, runs on first/last-frame
+interpolation and lives only in the 关键帧家族 effect table.
 `audio_vae` is only needed by the segments that carry audio (multi-segment synthesis, reference-to-video)
 and drops into the `vae` category as well.
 
@@ -73,16 +75,16 @@ and drops into the `vae` category as well.
 | text_encoder     | qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors      | text_encoders        |     15.69 | [MS1][h3-1-0] · [HF1][h3-1-1] · [MS2][h3-1-2] · [HF2][h3-1-3]     |       2 | base               |
 | vae              | minimax_h3_video_vae_int8_convrot.safetensors     | vae                  |      2.81 | [MS1][h3-2-0] · [HF1][h3-2-1] · [MS2][h3-2-2] · [HF2][h3-2-3]     |       1 | base               |
 | audio_vae        | minimax_h3_audio_vae_fp32.safetensors             | vae                  |      0.61 | [MS1][h3-3-0] · [HF1][h3-3-1] · [MS2][h3-3-2] · [HF2][h3-3-3]     |       0 | base               |
-| effect           | minimaxh3_bullet_time.safetensors                 | embeddings           |      0.96 | [MS][h3-4-0] · [HF][h3-4-1]                                       |       0 | effect_h3          |
-| effect           | minimaxh3_art_is_explosion.safetensors            | embeddings           |      0.51 | [MS][h3-5-0] · [HF][h3-5-1]                                       |       0 | effect_h3          |
-| effect           | minimaxh3_blooming_flowers.safetensors            | embeddings           |      1.26 | [MS][h3-6-0] · [HF][h3-6-1]                                       |       0 | effect_h3          |
-| effect           | minimaxh3_dark_magic.safetensors                  | embeddings           |      0.60 | [MS][h3-7-0] · [HF][h3-7-1]                                       |       0 | effect_h3          |
-| effect           | minimaxh3_fire_breath.safetensors                 | embeddings           |      1.21 | [MS][h3-8-0] · [HF][h3-8-1]                                       |       0 | effect_h3          |
-| effect           | minimaxh3_four_seasons.safetensors                | embeddings           |      1.45 | [MS][h3-9-0] · [HF][h3-9-1]                                       |       0 | effect_h3          |
-| effect           | minimaxh3_kiss_camera.safetensors                 | embeddings           |      0.99 | [MS][h3-10-0] · [HF][h3-10-1]                                     |       0 | effect_h3          |
-| effect           | minimaxh3_spiral_ascent.safetensors               | embeddings           |      1.34 | [MS][h3-11-0] · [HF][h3-11-1]                                     |       0 | effect_h3          |
-| effect           | minimaxh3_storm_magic.safetensors                 | embeddings           |      1.40 | [MS][h3-12-0] · [HF][h3-12-1]                                     |       0 | effect_h3          |
-| effect           | minimaxh3_truman_show.safetensors                 | embeddings           |      0.92 | [MS][h3-13-0] · [HF][h3-13-1]                                     |       0 | effect_h3          |
+| effect           | minimaxh3_bullet_time.safetensors                 | embeddings           |      0.96 | [MS][h3-4-0] · [HF][h3-4-1]                                       |       0 | effect_h3 · 2×r2v  |
+| effect           | minimaxh3_art_is_explosion.safetensors            | embeddings           |      0.51 | [MS][h3-5-0] · [HF][h3-5-1]                                       |       0 | effect_h3 · 2×r2v  |
+| effect           | minimaxh3_blooming_flowers.safetensors            | embeddings           |      1.26 | [MS][h3-6-0] · [HF][h3-6-1]                                       |       0 | effect_h3 · 2×r2v  |
+| effect           | minimaxh3_dark_magic.safetensors                  | embeddings           |      0.60 | [MS][h3-7-0] · [HF][h3-7-1]                                       |       0 | effect_h3 · 2×r2v  |
+| effect           | minimaxh3_fire_breath.safetensors                 | embeddings           |      1.21 | [MS][h3-8-0] · [HF][h3-8-1]                                       |       0 | effect_h3 · 2×r2v  |
+| effect           | minimaxh3_four_seasons.safetensors                | embeddings           |      1.45 | [MS][h3-9-0] · [HF][h3-9-1]                                       |       0 | effect_h3 · 2×r2v  |
+| effect           | minimaxh3_kiss_camera.safetensors                 | embeddings           |      0.99 | [MS][h3-10-0] · [HF][h3-10-1]                                     |       0 | effect_h3 · 2×r2v  |
+| effect           | minimaxh3_spiral_ascent.safetensors               | embeddings           |      1.34 | [MS][h3-11-0] · [HF][h3-11-1]                                     |       0 | effect_h3 · 2×r2v  |
+| effect           | minimaxh3_storm_magic.safetensors                 | embeddings           |      1.40 | [MS][h3-12-0] · [HF][h3-12-1]                                     |       0 | effect_h3 · 2×r2v  |
+| effect           | minimaxh3_truman_show.safetensors                 | embeddings           |      0.92 | [MS][h3-13-0] · [HF][h3-13-1]                                     |       0 | effect_h3 · 2×r2v  |
 
 [h3-0-0]: https://modelscope.cn/models/Comfy-Org/MiniMax-H3/resolve/master/diffusion_models/minimax_h3_fl2va_int8_convrot.safetensors
 [h3-0-1]: https://huggingface.co/models/Comfy-Org/MiniMax-H3/resolve/main/diffusion_models/minimax_h3_fl2va_int8_convrot.safetensors

@@ -63,6 +63,7 @@ SKILL_CUSTOM_DIR = os.path.join(SKILLS_DIR, "custom")
 TASKS_DIR = os.path.join(SKILLS_DIR, "tasks")
 # 预设技能本地配置覆盖（用户本机模型路径等；运行期并入有效 config，不进 git）
 SKILL_OVERRIDES_DIR = str(plugin_paths.CONFIGS_DIR / "skill_overrides")
+EFFECT_NONE = "none"   # 特效表里「无特效」那一项的固定 id：通用预设也带特效表时钉的默认特效
 
 for _d in (SKILLS_DIR, SKILL_PRESETS_DIR, SKILL_CUSTOM_DIR, TASKS_DIR, SKILL_OVERRIDES_DIR):
     if not os.path.exists(_d):
@@ -790,10 +791,25 @@ def _video_skill_available(d: str) -> bool:
         needs_vdn = "ApplyVDNH3" in f.read()
     if needs_vdn and not _vdn_plugin_installed():
         return False
-    return not _preset_bodies_missing(os.path.basename(d))
+    return not _preset_bodies_missing(os.path.basename(d), _effect_bodies_gate(d))
 
 
-def _preset_bodies_missing(skill_id: str) -> bool:
+def _effect_bodies_gate(d: str) -> bool:
+    """特效本体算不算这条技能的本体：技能默认就跑特效才算。
+
+    参考生视频这类通用预设也带特效表，默认钉的是「无特效」——缺嵌入只影响选了特效的那一发，
+    普通全参考镜头没有特效照跑，不能把整条技能判成不可用。
+    """
+    try:
+        with open(os.path.join(d, "config.json"), encoding="utf-8") as f:
+            cfg = json.load(f)
+    except (OSError, ValueError):
+        return True   # 读不到 config 就按特效技能的老口径判（缺本体就不可用）
+    default = str(cfg.get("effect") or "").strip()
+    return bool(default) and default != EFFECT_NONE
+
+
+def _preset_bodies_missing(skill_id: str, gate_effects: bool = True) -> bool:
     """预设清单里「配置在用、文件没落盘」的 LoRA 与特效嵌入；判定口径就是 skill_models 就位检查的那一份。
 
     只读本地模型根，不发网络请求；清单层跑不起来时按可用降级（离线窗口没有 comfy 的模型根，
@@ -802,7 +818,7 @@ def _preset_bodies_missing(skill_id: str) -> bool:
     """
     files = _skill_model_files(skill_id)
     effects = [f for f in files if f.get("field") == "effect"]
-    if effects:
+    if effects and gate_effects:
         return all(not f.get("ready") for f in effects)
     return any(f.get("field") == "loras" and f.get("active") and not f.get("ready") for f in files)
 

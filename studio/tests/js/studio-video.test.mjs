@@ -109,7 +109,14 @@ async function boot() {
     mockRoute("/rs_prompts/skills", jsonResponse([
         { id: "minimax_h3_i2v", cn_name: "H3 图生视频", category: "gen_video", gen_video: true, mode: "i2v", requires_ref: true },
         { id: "minimax_h3_t2v", cn_name: "H3 文生视频", category: "gen_video", gen_video: true, mode: "t2v", gen_config: { steps: 8 } },
-        { id: "minimax_h3_r2v", cn_name: "H3 全参考", category: "gen_video", gen_video: true, mode: "r2v", requires_ref: true },
+        {
+            id: "minimax_h3_r2v", cn_name: "H3 全参考", category: "gen_video", gen_video: true, mode: "r2v",
+            requires_ref: true, effect: "none",
+            effects: [
+                { id: "none", label: "无特效", prompt_default: "", ready: true },
+                { id: "bullet_time", label: "子弹时间", prompt_default: "a sprinter leaps into a long jump", ready: true },
+            ],
+        },
         {
             id: "effect_h3", cn_name: "特效-特效镜头", category: "gen_video", gen_video: true, mode: "i2v",
             requires_ref: true, available: true, effect: "bullet_time",
@@ -542,6 +549,30 @@ test("视频页：特效技能把选中的特效 id 发进 payload，预检按�
     click(runBtn());
     await settle();
     assert.ok(!("effect" in videoPosts().at(-1).body), "普通技能的请求体不带 effect 键");
+});
+
+test("视频页：全参考技能带特效表，默认落在无特效，选了特效才发特效 id", async () => {
+    await boot();
+    await clickTab("video");
+    await settle();
+    promptBox().value = "把这几张角色图连成一段";
+    pickSkill("minimax_h3_r2v");
+    await settle();
+    assert.notEqual(effectSel().parentElement.style.display, "none", "全参考家族的技能带特效表就要露出特效芯片");
+    assert.equal(effectSel().value, "none", "默认落在无特效：普通全参考镜头不该被特效钉住");
+    await pickIntoSlot(2, "a.png");
+    click(runBtn());
+    await settle();
+    assert.equal(videoPosts().at(-1).body.effect, "none", "无特效照实发这一项，后端按技能配置出片");
+    const check = fetchLog.filter((c) => c.path === "/neo_skill_models/check").at(-1);
+    assert.equal(check.query.get("effect"), "none", "预检按无特效问——缺嵌入文件不该挡普通全参考镜头");
+    pickEffect("bullet_time");
+    assert.match(promptBox().placeholder, /a sprinter leaps/, "占位符换成这一发特效的示例提示词");
+    click(runBtn());
+    await settle();
+    const picked = videoPosts().at(-1).body;
+    assert.equal(picked.effect, "bullet_time", "选了特效才把特效 id 发进 payload");
+    assert.ok(!("steps" in picked), "全参考这一发的步数仍由技能 config 钉（面板没改过）");
 });
 
 test("视频页：技能要参考素材时缺素材不发请求，状态行说清缺哪一样", async () => {

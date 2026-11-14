@@ -424,6 +424,31 @@ class TestVideoSkillAvailable(unittest.TestCase):
         self.assertTrue(by_id["frozen_moment"]["ready"], "定格瞬间不吃文件，本体天然就位")
         self.assertTrue(all(e["label"] and isinstance(e["ready"], bool) for e in effects))
         self.assertNotIn("effects", self._by_id()["minimax_h3_i2v"])
+        # 全参考预设带同一份表，默认是「无特效」——表在，普通镜头不被特效钉住
+        r2v = self._by_id().get("minimax-h3-r2v")
+        self.assertEqual(r2v.get("effect"), "none")
+        self.assertEqual(len(r2v.get("effects") or []), 11)
+
+    def test_effect_body_gate_only_applies_to_a_skill_that_defaults_to_one(self):
+        """缺特效本体判不可用只针对「默认就跑特效」的技能；默认无特效的通用预设不受这批文件影响。"""
+        orig = self.skill_mod._skill_model_files
+        self.skill_mod._skill_model_files = lambda sid: [
+            {"field": "effect", "effect": "bullet_time", "ready": False}]
+        try:
+            plain = self._make_video_skill("zz-vid-none", {"1": {"class_type": "UNETLoader", "inputs": {}}})
+            with open(os.path.join(plain, "config.json"), "w", encoding="utf-8") as f:
+                json.dump({"effect": "none", "effects": [{"id": "none", "label": "无特效"},
+                         {"id": "bullet_time", "label": "子弹时间",
+                          "embedding": "minimaxh3_bullet_time.safetensors"}]}, f)
+            pinned = self._make_video_skill("zz-vid-pinned", {"1": {"class_type": "UNETLoader", "inputs": {}}})
+            with open(os.path.join(pinned, "config.json"), "w", encoding="utf-8") as f:
+                json.dump({"effect": "bullet_time", "effects": [{"id": "bullet_time", "label": "子弹时间",
+                          "embedding": "minimaxh3_bullet_time.safetensors"}]}, f)
+            rows = self._by_id()
+            self.assertIs(rows["zz-vid-none"]["available"], True, "缺的只是特效文件：默认无特效那一发照跑")
+            self.assertIs(rows["zz-vid-pinned"]["available"], False, "默认特效的本体没落盘：出厂这一发跑不出特效")
+        finally:
+            self.skill_mod._skill_model_files = orig
 
     def test_load_skill_route_returns_available(self):
         # 详情弹窗顶部「不可用」说明靠 load_skill 响应的 available 字段
