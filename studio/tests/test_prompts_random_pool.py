@@ -54,10 +54,10 @@ sys.modules["server"] = _fake_server
 
 _import_error = ""
 try:
-    prompts_mod = importlib.import_module(f"{_PKG_NAME}.prompts")
+    names_mod = importlib.import_module(f"{_PKG_NAME}.prompt_names")
     PROMPTS_AVAILABLE = True
 except Exception as _e:
-    prompts_mod = None
+    names_mod = None
     PROMPTS_AVAILABLE = False
     _import_error = str(_e)
 finally:
@@ -67,7 +67,7 @@ finally:
         sys.modules["server"] = _prev_server
 
 
-@unittest.skipUnless(PROMPTS_AVAILABLE, f"prompts module unavailable: {_import_error}")
+@unittest.skipUnless(PROMPTS_AVAILABLE, f"prompt pool module unavailable: {_import_error}")
 class RandomPoolScopeTests(unittest.TestCase):
     """kind 筛池：image 排除 video 目录，video 只取 video 目录，空值不筛（旧调用方照旧）"""
 
@@ -80,7 +80,7 @@ class RandomPoolScopeTests(unittest.TestCase):
 
     def setUp(self):
         self._bases = []
-        for source, base in (("presets", prompts_mod.PRESETS_DIR), ("custom", prompts_mod.CUSTOM_DIR)):
+        for source, base in (("presets", names_mod.PRESETS_DIR), ("custom", names_mod.CUSTOM_DIR)):
             self._bases.append(base)
             os.makedirs(base, exist_ok=True)
             files = self.FILES if source == "presets" else {"我的红杯": "一只红杯"}
@@ -96,7 +96,7 @@ class RandomPoolScopeTests(unittest.TestCase):
             shutil.rmtree(base, ignore_errors=True)
 
     def pool(self, kind):
-        return prompts_mod._iter_random_candidates(kind)
+        return names_mod.iter_random_candidates(kind)
 
     def test_empty_kind_keeps_the_mixed_pool(self):
         """不传 kind = 混池：图像与视频条目都在（Prompt Agent 节点与旧调用方要的就是这一份）"""
@@ -124,21 +124,21 @@ class RandomPoolScopeTests(unittest.TestCase):
     def test_sample_respects_the_scope_and_dedupes(self):
         """抽 count 条不重复；要得比这一档池子还多就全量返回，且不越出池子"""
         image_pool = self.pool("image")
-        picked = prompts_mod._sample_runtime_prompts(len(image_pool) + 5, "image")
+        picked = names_mod.sample_runtime_prompts(len(image_pool) + 5, "image")
         self.assertEqual(len(set(picked)), len(picked), "整池抽完也不出重复")
         self.assertEqual(set(picked), set(image_pool), "要得比池子多就是全量")
         for video_text in ("镜头缓缓推进，画面亮起", "雨夜窗边，玻璃上的水珠"):
             self.assertNotIn(video_text, picked)
-        one = prompts_mod._sample_runtime_prompts(1, "video")
+        one = names_mod.sample_runtime_prompts(1, "video")
         self.assertEqual(len(one), 1)
         self.assertIn(one[0], self.pool("video"))
 
     def test_video_flag_is_the_first_path_segment(self):
         """归属看扫描名首段：video 目录算视频，collections 前缀落图像一侧"""
-        self.assertTrue(prompts_mod._is_video_prompt("video/镜头推进"))
-        self.assertTrue(prompts_mod._is_video_prompt("video/子目录/雨夜窗边"))
-        self.assertFalse(prompts_mod._is_video_prompt("红杯"))
-        self.assertFalse(prompts_mod._is_video_prompt("collections/一批镜头"))
+        self.assertTrue(names_mod.is_video_prompt("video/镜头推进"))
+        self.assertTrue(names_mod.is_video_prompt("video/子目录/雨夜窗边"))
+        self.assertFalse(names_mod.is_video_prompt("红杯"))
+        self.assertFalse(names_mod.is_video_prompt("collections/一批镜头"))
 
 
 if __name__ == "__main__":

@@ -1,10 +1,10 @@
-// 预设提示词选择浮层（js/core/preset-picker.js）：作用域过滤（图像 / 视频）、点一条填框、
+// 提示词选择浮层（js/core/preset-picker.js）：作用域过滤（图像 / 视频）、点一条填框、
 // Esc 只关浮层不关面板、「随机」按作用域发请求 —— 全在 jsdom 里验，接口走 fetch mock。
 import test from "node:test";
 import assert from "node:assert/strict";
 import { resetEnv, click, mockRoute, jsonResponse, fetchLog, keydown, flush } from "./setup.mjs";
 
-const { openPresetPicker, closePresetPicker, isVideoPromptName, randomPromptText } =
+const { openPresetPicker, closePresetPicker, isVideoPromptName, randomPromptText, savePromptTo } =
     await import("../../web/js/core/preset-picker.js");
 
 const ITEMS = [
@@ -24,14 +24,14 @@ function mockPromptRoutes() {
 const rows = () => [...document.querySelectorAll(".neo-preset-picker .rs-preset-item .rs-preset-content")].map((e) => e.textContent);
 const picker = () => document.querySelector(".neo-preset-picker");
 
-test("预设归属：扫描名首段是 video 才归视频", () => {
+test("提示词归属：扫描名首段是 video 才归视频", () => {
     assert.equal(isVideoPromptName("video/镜头推进"), true);
     assert.equal(isVideoPromptName("video/子目录/雨夜窗边"), true);
     assert.equal(isVideoPromptName("红杯"), false);
     assert.equal(isVideoPromptName("collections/video/一批镜头"), false, "collections 前缀落在图像一侧，与后端口径同一份");
 });
 
-test("预设浮层：kind=image 只列图像条目，配方不入池，点一条把全文交回调用方", async () => {
+test("提示词浮层：kind=image 只列图像条目，配方不入池，点一条把全文交回调用方", async () => {
     resetEnv();
     mockPromptRoutes();
     const picked = [];
@@ -44,7 +44,7 @@ test("预设浮层：kind=image 只列图像条目，配方不入池，点一条
     assert.equal(picker(), null, "选完就收摊，浮层不留在页面上");
 });
 
-test("预设浮层：kind=video 只列 video/ 条目", async () => {
+test("提示词浮层：kind=video 只列 video/ 条目", async () => {
     resetEnv();
     mockPromptRoutes();
     openPresetPicker({ kind: "video", onPick: () => {} });
@@ -54,7 +54,7 @@ test("预设浮层：kind=video 只列 video/ 条目", async () => {
     assert.equal(picker(), null, "closePresetPicker 拆掉浮层");
 });
 
-test("预设浮层：搜索框按名字过滤，空结果显示空态", async () => {
+test("提示词浮层：搜索框按名字过滤，空结果显示空态", async () => {
     resetEnv();
     mockPromptRoutes();
     openPresetPicker({ kind: "image", onPick: () => {} });
@@ -65,12 +65,12 @@ test("预设浮层：搜索框按名字过滤，空结果显示空态", async ()
     assert.deepEqual(rows(), ["精美图像提示词/古风女孩"]);
     search.value = "没有这个词";
     search.dispatchEvent(new window.Event("input", { bubbles: true }));
-    assert.equal(picker().querySelector(".neo-preset-picker-empty").textContent, "无匹配预设");
+    assert.equal(picker().querySelector(".neo-preset-picker-empty").textContent, "无匹配提示词");
     closePresetPicker();
 });
 
 // 面板自己的「Esc 关窗」监听也在 document 上：浮层开着时这一发只该关浮层
-test("预设浮层：Esc 只关浮层，调用方面板不被一起关掉", async () => {
+test("提示词浮层：Esc 只关浮层，调用方面板不被一起关掉", async () => {
     resetEnv();
     mockPromptRoutes();
     let panelEsc = 0;
@@ -85,7 +85,7 @@ test("预设浮层：Esc 只关浮层，调用方面板不被一起关掉", asyn
     document.removeEventListener("keydown", onPanelEsc);
 });
 
-test("预设浮层：遮罩空白与 × 都关窗", async () => {
+test("提示词浮层：遮罩空白与 × 都关窗", async () => {
     resetEnv();
     mockPromptRoutes();
     openPresetPicker({ kind: "image", onPick: () => {} });
@@ -99,16 +99,16 @@ test("预设浮层：遮罩空白与 × 都关窗", async () => {
 });
 
 // 桌面端离线时 list_prompts 归内核，回来的是 409 的 {offline:true}：空态要点明是要 ComfyUI 在跑
-test("预设浮层：桌面端离线说清楚是要 ComfyUI 在跑，不报词库为空", async () => {
+test("提示词浮层：桌面端离线说清楚是要 ComfyUI 在跑，不报词库为空", async () => {
     resetEnv();
     mockRoute("/rs_prompts/list_prompts", () => jsonResponse({ success: false, offline: true, error: "需要 ComfyUI" }, 409));
     openPresetPicker({ kind: "image", onPick: () => {} });
     await flush();
-    assert.equal(picker().querySelector(".neo-preset-picker-empty").textContent, "预设列表需要 ComfyUI 运行");
+    assert.equal(picker().querySelector(".neo-preset-picker-empty").textContent, "提示词列表需要 ComfyUI 运行");
     closePresetPicker();
 });
 
-test("预设浮层：词库真空与读取失败分开讲，不留一扇空窗", async () => {
+test("提示词浮层：词库真空与读取失败分开讲，不留一扇空窗", async () => {
     resetEnv();
     mockRoute("/rs_prompts/list_prompts", () => jsonResponse([]));
     openPresetPicker({ kind: "video", onPick: () => {} });
@@ -118,7 +118,7 @@ test("预设浮层：词库真空与读取失败分开讲，不留一扇空窗",
     mockRoute("/rs_prompts/list_prompts", () => jsonResponse({ status: "error", error: "数据根不可用" }));
     openPresetPicker({ kind: "video", onPick: () => {} });
     await flush();
-    assert.equal(picker().querySelector(".neo-preset-picker-empty").textContent, "预设列表读取失败", "后端报错不能被一句「暂无可用提示词」盖过去");
+    assert.equal(picker().querySelector(".neo-preset-picker-empty").textContent, "提示词列表读取失败", "后端报错不能被一句「暂无可用提示词」盖过去");
     closePresetPicker();
 });
 
@@ -140,10 +140,10 @@ test("随机一条：池子为空交回空串，由调用方把「词库为空�
 test("随机一条：桌面端离线抛「需要 ComfyUI 运行」，调用方不会报词库为空", async () => {
     resetEnv();
     mockRoute("/rs_prompts/random_prompts", () => jsonResponse({ success: false, offline: true, error: "需要 ComfyUI" }, 409));
-    await assert.rejects(() => randomPromptText("video"), (e) => e.message === "预设与随机需要 ComfyUI 运行");
+    await assert.rejects(() => randomPromptText("video"), (e) => e.message === "提示词与随机需要 ComfyUI 运行");
 });
 
-test("预设浮层挂在 body 上、展开，层位压得住生成素材窗", async () => {
+test("提示词浮层挂在 body 上、展开，层位压得住生成素材窗", async () => {
     resetEnv();
     mockPromptRoutes();
     openPresetPicker({ kind: "image", onPick: () => {} });
@@ -166,3 +166,45 @@ test("运行时随机不传 kind：请求体里 kind 是空串，混池语义留
     assert.deepEqual(res.texts, ["混池一条"]);
     assert.equal(fetchLog.find((c) => c.path === "/rs_prompts/random_prompts").body.kind, "");
 });
+
+// 存当前提示词：池子由 kind 定，返回的名字就是提示词管理页与读侧那条扫描名
+test("存当前提示词：图像池发裸名字，视频池发 video/ 前缀", async () => {
+    resetEnv();
+    mockRoute("/rs_prompts/save_prompt", (body) => jsonResponse({ status: "success", name: body.name }));
+    assert.equal(await savePromptTo("image", "红杯 特写", "一张红杯"), "红杯 特写");
+    assert.equal(await savePromptTo("video", "镜头推进", "镜头缓缓推进"), "video/镜头推进");
+    assert.deepEqual(
+        fetchLog.filter((c) => c.path === "/rs_prompts/save_prompt").map((c) => c.body.name),
+        ["红杯 特写", "video/镜头推进"],
+        "视频那一发的名字带前缀，后端才落得进 custom/video/");
+});
+
+test("存当前提示词：用户打头的前缀先剥掉，池子只由 kind 定", async () => {
+    resetEnv();
+    mockRoute("/rs_prompts/save_prompt", (body) => jsonResponse({ status: "success", name: body.name }));
+    assert.equal(await savePromptTo("image", "video/镜头推进", "x"), "镜头推进", "在图像面板存就落图像池");
+    assert.equal(await savePromptTo("video", "presets/旧名", "x"), "video/旧名", "视频面板不往出厂预设里写");
+});
+
+test("存当前提示词：名字按后端同一套清洗，清洗完为空就不发请求", async () => {
+    resetEnv();
+    mockRoute("/rs_prompts/save_prompt", (body) => jsonResponse({ status: "success", name: body.name }));
+    assert.equal(await savePromptTo("image", "  带非法字符<>/\\ 的名字  ", "x"), "带非法字符 的名字",
+        "空格与下划线留着可用，尖括号与斜杠这类会被后端拒的字符先清掉");
+    await assert.rejects(() => savePromptTo("video", "///", "x"), (e) => e.message === "要先给这条提示词起个名字");
+    assert.equal(fetchLog.filter((c) => c.path === "/rs_prompts/save_prompt" && c.body.name === "video/").length, 0,
+        "名字不合法不该把空名字发出去");
+});
+
+test("存当前提示词：桌面端离线那一发说清楚是要 ComfyUI 在跑", async () => {
+    resetEnv();
+    mockRoute("/rs_prompts/save_prompt", () => jsonResponse({ success: false, offline: true, error: "需要 ComfyUI" }, 409));
+    await assert.rejects(() => savePromptTo("image", "红杯", "x"), (e) => e.message === "保存提示词需要 ComfyUI 运行");
+});
+
+test("存当前提示词：后端报错不算保存成功", async () => {
+    resetEnv();
+    mockRoute("/rs_prompts/save_prompt", () => jsonResponse({ status: "error", error: "数据根不可用" }, 500));
+    await assert.rejects(() => savePromptTo("video", "镜头", "x"), (e) => e.message === "提示词保存失败");
+});
+

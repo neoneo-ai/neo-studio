@@ -595,14 +595,14 @@ test("视频页：技能要参考素材时缺素材不发请求，状态行说�
 });
 
 
-// 右上角那一排「视频预设」「随机」：预设浮层只列 video/ 条目，点一条填进提示词框并跟上字数
-test("视频页右上角：「视频预设」只列 video/ 条目，点一条填进提示词框；「随机」走视频池", async () => {
+// 右上角那一排「提示词」「随机」：提示词浮层只列 video/ 条目，点一条填进提示词框并跟上字数
+test("视频页右上角：「提示词」只列 video/ 条目，点一条填进提示词框；「随机」走视频池", async () => {
     await boot();
     await clickTab("video");
     const bar = videoPage().querySelector(".ns-video-bar");
     assert.ok(bar, "视频页右上角应有提示词入口那一排");
     assert.equal([...bar.querySelectorAll(".ns-btn")].map((b) => b.textContent.trim()).join(" "),
-        "视频预设 随机", "那一排就两枚：视频预设、随机");
+        "提示词 随机", "那一排就两枚：提示词、随机");
 
     mockRoute("/rs_prompts/list_prompts", () => jsonResponse([
         { name: "红杯", source: "presets" },

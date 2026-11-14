@@ -338,14 +338,14 @@ test("首页直达卡：扩图卡跳到编辑页当场切成扩图，选原图�
 
 
 
-// 绘画页右上角的「图像预设」「随机」：预设浮层只列图像条目，两条都落进页内那块面板的提示词框
-test("绘画页右上角：「图像预设」只列图像提示词，点一条填进输入框；「随机」走图像池", async () => {
+// 绘画页右上角的「提示词」「随机」：提示词浮层只列图像条目，两条都落进页内那块面板的提示词框
+test("绘画页右上角：「提示词」只列图像提示词，点一条填进输入框；「随机」走图像池", async () => {
     await boot();
     await clickTab("paint");
     const page = paintPage();
     const bar = page.querySelector(".ns-paint-bar");
     assert.equal([...bar.querySelectorAll(".ns-btn")].map((b) => b.textContent.trim()).join(" "),
-        "图像预设 随机", "绘画页那一排是提示词入口，素材库只属于编辑页");
+        "提示词 随机", "绘画页那一排是提示词入口，素材库只属于编辑页");
 
     mockRoute("/rs_prompts/list_prompts", () => jsonResponse([
         { name: "红杯", source: "presets" },
@@ -363,7 +363,7 @@ test("绘画页右上角：「图像预设」只列图像提示词，点一条�
     click(picker.querySelector(".rs-preset-item"));
     await sleep(80);
     const quick = textPanel().querySelector(".neo-gallery-gm-quick-input");
-    assert.equal(quick.value, "全文:红杯", "预设全文填进绘画页那块现成面板（不重建它）");
+    assert.equal(quick.value, "全文:红杯", "提示词全文填进绘画页那块现成面板（不重建它）");
 
     click(bar.querySelector(".ns-paint-random-btn"));
     await sleep(80);
@@ -371,7 +371,7 @@ test("绘画页右上角：「图像预设」只列图像提示词，点一条�
     assert.equal(fetchLog.filter((c) => c.path === "/rs_prompts/random_prompts").at(-1).body.kind, "image");
 });
 
-// 桌面端顶栏「启动中」那段时间：/rs_prompts/* 归内核，随机要说出需要 ComfyUI，不能报「词库为空」
+// 随机那一发回 409 offline 时（写侧与内核路由才回它）要说清楚需要 ComfyUI，不能报「词库为空」
 test("绘画页随机：桌面端离线那一发报「需要 ComfyUI 运行」，不报词库为空", async () => {
     await boot();
     await clickTab("paint");
@@ -379,15 +379,15 @@ test("绘画页随机：桌面端离线那一发报「需要 ComfyUI 运行」�
     mockRoute("/rs_prompts/random_prompts", () => jsonResponse({ success: false, offline: true, error: "需要 ComfyUI" }, 409));
     click(bar.querySelector(".ns-paint-random-btn"));
     await sleep(80);
-    assert.equal(document.getElementById("ns-toast")?.textContent, "预设与随机需要 ComfyUI 运行");
+    assert.equal(document.getElementById("ns-toast")?.textContent, "提示词与随机需要 ComfyUI 运行");
 });
 
-test("编辑页右上角一排：素材库右端接上「图像预设」「随机」，预设填进任务区提示词框", async () => {
+test("编辑页右上角一排：素材库右端接上「提示词」「随机」，提示词填进任务区提示词框", async () => {
     await boot();
     await clickTab("edit");
     const bar = editPage().querySelector(".ns-paint-bar");
     assert.equal([...bar.querySelectorAll(".ns-btn")].map((b) => b.textContent.trim()).join(" "),
-        "素材库 图像预设 随机", "编辑页那一排三枚：挑图 + 挑词 + 随机");
+        "素材库 提示词 随机", "编辑页那一排三枚：挑图 + 挑词 + 随机");
 
     mockRoute("/rs_prompts/list_prompts", () => jsonResponse([{ name: "红杯", source: "presets" }]));
     mockRoute("/rs_prompts/load_prompt", () => jsonResponse({ text: "红杯全文" }));

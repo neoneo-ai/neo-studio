@@ -49,8 +49,8 @@ Neo-Studio/                            桌面端仓库；根 pyproject 只声明
 
 ```
 studio/
-├── prompts.py                 # 提示词节点 + /rs_prompts/* 路由
-├── prompt_names.py            # 提示词名字与标签扫描 + /rs_prompts/list_prompt_names
+├── prompts.py                 # 提示词节点 + 写侧 /rs_prompts/* 路由
+├── prompt_names.py            # 提示词读侧扫描 + /rs_prompts/*（列表 / 正文 / 行级 / 随机）
 ├── prompt_lines.py            # 多行提示词集合解析
 ├── skill.py                   # 技能系统 + 技能路由
 ├── llm.py                     # LLM 推理：远程 API / 原生 safetensors / 本地 GGUF
@@ -98,8 +98,8 @@ studio/
 
 | 模块 | 职责 |
 |------|------|
-| `prompts.py` | 提示词节点 + 预设 CRUD + 图片解析 |
-| `prompt_names.py` | 提示词名字与标签扫描（@ 点名弹层的候选）；不碰 PromptServer，桌面端离线共用 |
+| `prompts.py`       | 提示词节点 + 预设 CRUD（写侧）+ 图片解析 + LLM 生成链                                    |
+| `prompt_names.py`  | 提示词读侧扫描：列表、正文、行级集合、随机池、名字与标签；不碰 PromptServer，桌面端离线共用 |
 | `prompt_lines.py` | `collections/` 多行提示词集合的解析与随机选取 |
 | `skill.py` | 技能扫描加载、多结果契约、引用文件工具循环、技能路由 |
 | `llm.py` | 远程 OpenAI 兼容调用、国产云供应商、原生 safetensors 文本生成、本地 GGUF 推理 |

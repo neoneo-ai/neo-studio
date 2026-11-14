@@ -258,11 +258,16 @@ class OfflineServiceTests(_ServerCase):
         self.assertEqual(caps.owner("GET", "/neo_gallery/txt"), "desktop")
         self.assertEqual(self.get("/neo_gallery/txt?filename=&subfolder=")[0], 400)
 
-    def test_prompt_names_served_offline(self):
-        """@ 点名弹层的图像/视频提示词候选要离线出得来：只读 prompts/ 目录的名字与标签，
-        生成侧那条 list_prompts 带 mtime 与正文解析，不在桌面端的能力表里。"""
-        self.assertEqual(caps.owner("POST", "/rs_prompts/list_prompt_names"), "desktop")
-        self.assertEqual(caps.owner("POST", "/rs_prompts/list_prompts"), "comfy")
+    def test_prompt_reads_served_offline(self):
+        """提示词读侧离线全部答得来：整份条目、正文、行级集合、运行时随机都只扫 prompts/ 目录。
+        生图 / 生视频与 LLM 生成那条链（reverse_prompt / enhance_prompt）留在 ComfyUI 端口。"""
+        for route in ("/rs_prompts/list_prompt_names", "/rs_prompts/list_prompts",
+                      "/rs_prompts/load_prompt", "/rs_prompts/list_prompt_lines",
+                      "/rs_prompts/random_prompts"):
+            self.assertEqual(caps.owner("POST", route), "desktop", route)
+        for route in ("/rs_prompts/reverse_prompt", "/rs_prompts/enhance_prompt"):
+            self.assertEqual(caps.owner("POST", route), "comfy", route)
+
         status, body = self.post_json("/rs_prompts/list_prompt_names", {})
         self.assertEqual(status, 200)
         rows = json.loads(body)
@@ -273,6 +278,25 @@ class OfflineServiceTests(_ServerCase):
         for row in rows:
             self.assertFalse(row["name"].endswith(".txt"), "名字去掉 .txt 后缀")
             self.assertIsInstance(row["tags"], list)
+
+        status, body = self.post_json("/rs_prompts/list_prompts", {})
+        self.assertEqual(status, 200, "整份提示词条目不该等 ComfyUI 起来才铺得出来")
+        entries = json.loads(body)
+        self.assertTrue(entries)
+        self.assertIn("_mtime", entries[0], "条目带文件时间供列表缓存")
+        self.assertEqual({e["source"] for e in entries} - {"custom", "presets"}, set())
+
+        status, body = self.post_json("/rs_prompts/load_prompt",
+                                      {"name": entries[0]["name"], "source": entries[0]["source"]})
+        self.assertEqual(status, 200)
+        self.assertIn("text", json.loads(body), "正文只在点名这一发才读")
+
+        status, _ = self.post_json("/rs_prompts/list_prompt_lines", {"name": "*"})
+        self.assertEqual(status, 200, "行级集合聚合在离线端口也答 200")
+
+        status, body = self.post_json("/rs_prompts/random_prompts", {"kind": "image", "count": 2})
+        self.assertEqual(status, 200)
+        self.assertEqual(len(json.loads(body)["texts"]), 2, "随机按钮离线抽得出来")
 
     def test_agent_session_history_served_offline(self):
         """历史会话是数据根 agent_sessions/ 里的文件：列 / 读 / 删在桌面端就能做完，

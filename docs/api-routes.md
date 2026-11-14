@@ -293,9 +293,6 @@ Neo Studio 独立页面（`web/studio/index.html`）的后端。素材 / 生图 
 | 方法 | 路由 | 说明 |
 |------|------|------|
 | POST | `/rs_prompts/save_prompt` | 保存提示词预设 |
-| POST | `/rs_prompts/list_prompts` | 提示词列表（含配方条目） |
-| POST | `/rs_prompts/load_prompt` | 读取提示词 |
-| POST | `/rs_prompts/list_prompt_lines` | 提示词行级列表 |
 | POST | `/rs_prompts/delete_prompt` | 删除提示词 |
 | GET | `/rs_prompts/get_models` | 可用 LLM 模型列表（远程 + 本地） |
 | GET | `/rs_prompts/native_models` | 原生文本生成模型列表（扫描 `models/text_encoders/` 下 `.safetensors`） |
@@ -311,8 +308,6 @@ Neo Studio 独立页面（`web/studio/index.html`）的后端。素材 / 生图 
 | POST | `/rs_prompts/reverse_prompt` | 图片反推（SSE + 同名 .txt 缓存） |
 | POST | `/rs_prompts/stream_{task_name}` | 按任务名注册的流式生成端点 |
 | POST | `/rs_prompts/stream_generate_prompt` | 流式生成 |
-| POST | `/rs_prompts/random_prompt` | 随机提示词（`kind`: image / video，空 = 混池）   |
-| POST | `/rs_prompts/random_prompts` | 运行时随机批量抽条（1–16，`kind` 同上） |
 | POST | `/rs_prompts/fetch_remote_models` | 拉取远程服务端模型列表 |
 | GET | `/rs_prompts/skills` | 技能列表（预设 / 任务 / 自定义分组） |
 | POST | `/rs_prompts/load_skill` | 读取单个技能 |
@@ -334,16 +329,25 @@ Neo Studio 独立页面（`web/studio/index.html`）的后端。素材 / 生图 
 
 LLM 模式与配置见 [llm.md](llm.md)，技能设计见 [skills.md](skills.md)。
 
-## prompt_names.py — `/rs_prompts/list_prompt_names`
+## prompt_names.py — `/rs_prompts/*`（读侧）
 
-| 方法 | 路由 | 说明 |
-|------|------|------|
-| POST | `/rs_prompts/list_prompt_names` | 提示词名字与标签（@ 点名弹层的候选） |
+只扫数据根 `prompts/` 目录：名字、标签、整篇正文、行级集合条目与运行时随机池都出自这里，
+全程不碰 PromptServer。桌面端离线端口与 ComfyUI 内注册的是同一份 handler——读侧不依赖 ComfyUI 运行时。
 
-- 只从目录列表取名字：一次请求 = `presets/` 与 `custom/` 各一次目录列表、各开一份 `_tags_index.json`，
-  全程不逐个 stat `.txt`，也不打开任何正文；正文是选中那一发才读。custom 在前、presets 在后，与 `list_prompts` 同序。
-- 写侧（`save_prompt` / `delete_prompt` 更新标签索引）留在 `prompts.py`；这条读侧在 `prompt_names.py`，
-  模块不碰 PromptServer，桌面端离线同样服务。
+| 方法   | 路由                              | 说明                                                     |
+|--------|---------------------------------|----------------------------------------------------------|
+| POST   | `/rs_prompts/list_prompts`      | 全部提示词条目（`custom` + `presets`，带标签与文件时间） |
+| POST   | `/rs_prompts/list_prompt_names` | 提示词名字与标签（@ 点名弹层的候选）                     |
+| POST   | `/rs_prompts/load_prompt`       | 提示词正文（`name`、可选 `source` 精确定位）             |
+| POST   | `/rs_prompts/list_prompt_lines` | 多行集合按页列表（行级条目，`name="*"` 跨全部集合搜索）  |
+| POST   | `/rs_prompts/random_prompts`    | 运行时随机抽条（1–16，`kind`: image / video，空 = 混池） |
+
+- 名字只从目录列表取：一次请求 = `presets/` 与 `custom/` 各一次目录列表、各开一份 `_tags_index.json`，
+  全程不逐个 stat `.txt`，也不打开任何正文；正文是选中那一发才读。custom 在前、presets 在后，两表同序。
+- 写侧（`save_prompt` / `delete_prompt` 更新标签索引）与 LLM 生成链留在 `prompts.py`，走 ComfyUI 端口。
+- 保存按名字的首段落目录：`video/名字` 落 `custom/video/`，`presets/名字` 落出厂预设源目录，其余落 `custom/` 根层；
+  删除与标签索引认同一份扫描名。旧版平铺文件的判类搬家在插件启动时跑一次，判过的记在 `custom/_kind_split.json`，
+  删掉它是「从没跑过」。
 
 ## model_hub.py — `/neo_model_hub/*`
 
@@ -395,7 +399,7 @@ LLM 模式与配置见 [llm.md](llm.md)，技能设计见 [skills.md](skills.md)
 | GET/POST   | `/neo_frames/video` `/neo_frames/save`                                                                                                                        | 抽帧页的视频伺服与帧落盘                                                                                                                                                              |
 | GET/POST   | `/neo_gallery/*` `/neo_bookmark/*`                                                                                                                            | 素材库与收藏（含删除 / 上传 / 打标 / OSS 同步）                                                                                                                                       |
 | GET/POST   | `/rs_prompts/skills` `load_skill` `save_skill` `delete_skill` `*_*_skill_file`                                                                                | 技能编辑                                                                                                                                                                              |
-| POST       | `/rs_prompts/list_prompt_names`                                                                                                                               | @ 点名弹层的提示词候选（只扫数据根 `prompts/` 的名字与标签）                                                                                                                          |
+| POST      | `/rs_prompts/list_prompts` `list_prompt_names` `load_prompt` `list_prompt_lines` `random_prompts`                                                            | 提示词读侧：名字、标签、正文、行级集合与随机池，只扫数据根 `prompts/` 目录                                                                                                                                          |
 | GET/POST   | `/rs_recipes/*`                                                                                                                                               | 配方读写、LLM 重写 / 逐格描述 / 分段 / 宫格切分                                                                                                                                       |
 | GET/POST   | `/neo_image_gen/settings` `models` `input_images` `skill_config` `skill_workflow` `*workflow_skill*` `copy_skill_files`、`/neo_video_gen/settings` `models`   | 生图 / 生视频设置                                                                                                                                                                     |
 | GET/POST   | `/rs_prompts/get_models` `native_models` `set_model` `remote_llm_config` `llm_connection_test` `llm_mode` `extract_title` `fetch_remote_models`               | LLM 配置与标题提取（只读 `configs/` 与 8080 服务）                                                                                                                                    |

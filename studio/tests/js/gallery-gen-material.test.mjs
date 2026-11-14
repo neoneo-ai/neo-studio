@@ -783,7 +783,7 @@ test("随机填入：标题栏那颗「随机」从图像池抽一条填进提�
     await sleep(50);
 
     const titleBtns = [...overlay.querySelectorAll(".neo-gallery-story-titlebar-btn")];
-    assert.deepEqual(titleBtns.map(b => b.textContent.trim()), ["图像预设", "随机"], "标题栏右端应有「图像预设」「随机」");
+    assert.deepEqual(titleBtns.map(b => b.textContent.trim()), ["提示词", "随机"], "标题栏右端应有「提示词」「随机」");
     click(titleBtns.find(b => b.textContent.trim() === "随机"));
     await sleep(80);
 
@@ -899,7 +899,7 @@ test("运行时随机批量：取消保留已生成的图", async () => {
     document.querySelector(".neo-gallery-gm-modal-overlay")?.remove();
 });
 
-test("标题栏「图像预设」：搜索 + 点击填入提示词框（视频提示词与配方都不入池）", async () => {
+test("标题栏「提示词」：搜索 + 点击填入提示词框（视频提示词与配方都不入池）", async () => {
     resetEnv();
     clearRoutes();
     const { openGenMaterialDialog } = await import("../../web/gallery-gen.js");
@@ -920,11 +920,11 @@ test("标题栏「图像预设」：搜索 + 点击填入提示词框（视频�
     const overlay = document.querySelector(".neo-gallery-gm-modal-overlay");
     await sleep(50);
 
-    click([...overlay.querySelectorAll(".neo-gallery-story-titlebar-btn")].find(b => b.textContent.trim() === "图像预设"));
+    click([...overlay.querySelectorAll(".neo-gallery-story-titlebar-btn")].find(b => b.textContent.trim() === "提示词"));
     await sleep(80);
 
     const picker = document.querySelector(".neo-preset-picker");
-    assert.ok(picker, "标题栏那颗应打开共用预设浮层");
+    assert.ok(picker, "标题栏那颗应打开共用提示词浮层");
     assert.deepEqual([...picker.querySelectorAll(".rs-preset-content")].map(e => e.textContent),
         ["红色陶瓷杯", "白底产品图"], "视频提示词与配方都不进图像浮层");
 
@@ -985,11 +985,11 @@ test("⋯ 菜单与预设浮层：Esc 一级一级关，浮层那一级不连带
     keydown(document, "Escape");
     assert.equal(menu.style.display, "none", "Esc 应先关 ⋯ 菜单，不关窗");
 
-    click([...overlay.querySelectorAll(".neo-gallery-story-titlebar-btn")].find(b => b.textContent.trim() === "图像预设"));
+    click([...overlay.querySelectorAll(".neo-gallery-story-titlebar-btn")].find(b => b.textContent.trim() === "提示词"));
     await sleep(80);
-    assert.ok(document.querySelector(".neo-preset-picker"), "标题栏那颗打开预设浮层");
+    assert.ok(document.querySelector(".neo-preset-picker"), "标题栏那颗打开提示词浮层");
     keydown(document, "Escape");
-    assert.equal(document.querySelector(".neo-preset-picker"), null, "Esc 关预设浮层");
+    assert.equal(document.querySelector(".neo-preset-picker"), null, "Esc 关提示词浮层");
     assert.ok(document.querySelector(".neo-gallery-gm-modal-overlay"), "浮层那一级收的 Esc 不连带关窗");
     overlay.remove();
 });

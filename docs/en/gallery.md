@@ -135,10 +135,11 @@ background overlay, title bar drags the window) that creates new assets from a p
   setting follows the current skill.
 - **Generate** - the primary button at the right end of the composer row: it fires as soon as the box has
   content, and turns into "Cancel task" while a generation runs.
-- **⋯ More** - one `⋯` menu at the right end of that row holds the two tools: prompt enhance (optional) /
-  runtime random prompts (batch count). The `⋯` stays highlighted
+- **⋯ More** - one `⋯` menu at the right end of that row holds the three tools: prompt enhance (optional) /
+  runtime random prompts (batch count) / save this prompt (the name is typed in, and an existing name gets a
+  `-1` suffix instead of being overwritten; it lands in the image pool, the `custom/` root layer). The `⋯` stays highlighted
   while runtime random is on, and the switch and count persist in localStorage. Filling the prompt lives
-  elsewhere - the title bar's right end carries **Image presets** and **Random**.
+  elsewhere - the title bar's right end carries **Prompt** and **Random**.
 
 #### Enhance (optional)
 
@@ -155,11 +156,13 @@ background overlay, title bar drags the window) that creates new assets from a p
 - **Generate** - the box content is the final prompt (`skip_enhance` is always sent); products land in
   `Output/NeoAgent/<date>/`, and after success you can jump straight to the landed directory, or delete the
   result images in one click when you do not like them.
-- **Helper tools** - the two inside the `⋯` menu:
+- **Helper tools** - the three inside the `⋯` menu:
   runtime random settings (when enabled, "Generate" becomes a batch that samples N entries and generates
-  them one by one, cancelling keeps what was already generated, and recipes are not part of the pool), and
-  prompt enhance. The two prompt fillers sit at the right end of the title bar: **Image presets** opens the
-  preset picker (search, click to fill the box - image prompts only, `video/` prompts and recipes never
+  them one by one, cancelling keeps what was already generated, and recipes are not part of the pool),
+  prompt enhance, and save this prompt (an empty box says there is nothing to save, a name that cleans down to
+  nothing says "give this prompt a name first", and on the desktop window with ComfyUI not up it says "saving a
+  prompt needs ComfyUI running"). The two prompt fillers sit at the right end of the title bar: **Prompt** opens the
+  prompt picker (search, click to fill the box - image prompts only, `video/` prompts and recipes never
   enter it), and **Random** draws one from the image pool (the request carries `kind="image"`, the backend
   filters the pool).
 

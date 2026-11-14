@@ -11,7 +11,6 @@ import torch
 from aiohttp import web
 import threading
 import logging
-import random
 import time
 import base64
 from typing import Optional
@@ -22,13 +21,12 @@ from .util import PrefixFilter
 logger = logging.getLogger(__name__)
 logger.addFilter(PrefixFilter())
 
-from . import prompt_lines
 from . import skill
 from .llm import strip_inline_thinking
 from .bundles import create_bundle
 
-from .prompt_names import (PROMPTS_DIR, PRESETS_DIR, CUSTOM_DIR,
-                           tags_file_path, load_tags_index)
+from .prompt_names import (PRESETS_DIR, CUSTOM_DIR,
+                           tags_file_path, load_tags_index, sample_runtime_prompts)
 
 PENDING_PROMPTS = {}
 
@@ -269,140 +267,6 @@ def _update_tags_index(prompt_name: str, tags: list[str] | None = None, source: 
         _save_tags_index(index, tags_file)
 
 
-def _scan_prompts_recursive(base_dir: str, source: str, tags_index: dict, prefix: str = "") -> list:
-    """递归扫描目录，返回 prompt 列表，支持多级子目录
-
-    标签索引由调用方读一次交下来：每个 .txt 各读一遍同一份 json，一次列表就是上百次文件打开。
-    """
-    prompts = []
-    if not os.path.exists(base_dir):
-        return prompts
-
-    for entry in sorted(os.listdir(base_dir)):
-        full_path = os.path.join(base_dir, entry)
-        if os.path.isdir(full_path):
-            # 递归处理子目录
-            sub_prefix = f"{prefix}{entry}/" if prefix else f"{entry}/"
-            prompts.extend(_scan_prompts_recursive(full_path, source, tags_index, sub_prefix))
-        elif entry.endswith('.txt') and not entry.startswith('_'):
-            name = entry[:-4]  # 去掉 .txt 后缀
-            display_name = f"{prefix}{name}" if prefix else name
-            mtime = os.path.getmtime(full_path)
-            prompts.append({
-                "name": display_name,
-                "tags": tags_index.get(display_name, []),
-                "source": source,
-                "_mtime": mtime
-            })
-    return prompts
-
-
-def _scan_prompts(source: str) -> list:
-    """一个来源（presets / custom）的全部提示词条目"""
-    base_dir = PRESETS_DIR if source == "presets" else CUSTOM_DIR
-    return _scan_prompts_recursive(base_dir, source, load_tags_index(tags_file_path(source)))
-
-
-def _resolve_collection_file(name: str, source: str = "custom") -> str | None:
-    """把 collections/<路径> 名称解析到对应来源目录下的真实文件，拒绝目录穿越。"""
-    if name.startswith("collections/"):
-        name = name[len("collections/"):]
-    rel = os.path.normpath(name)
-    if not rel or rel.startswith(".") or os.path.isabs(rel) or ".." in rel.split(os.sep):
-        return None
-
-    search_dirs = [PRESETS_DIR, CUSTOM_DIR] if source == "presets" else [CUSTOM_DIR, PRESETS_DIR]
-    for base_dir in search_dirs:
-        root = os.path.realpath(os.path.join(base_dir, "collections"))
-        candidate = os.path.realpath(os.path.join(root, f"{rel}.txt"))
-        try:
-            inside = os.path.commonpath([candidate, root]) == root
-        except ValueError:  # 跨盘符等异常情形，跳过该目录
-            continue
-        if inside and os.path.isfile(candidate):
-            return candidate
-    return None
-
-
-def _iter_collection_files() -> list[tuple[str, str, str]]:
-    """列出全部多行集合：返回 [(显示名, source, 文件路径)]，custom 同名优先于 presets。"""
-    found = []
-    seen = set()
-    for source, base_dir in (("custom", CUSTOM_DIR), ("presets", PRESETS_DIR)):
-        root = os.path.realpath(os.path.join(base_dir, "collections"))
-        if not os.path.isdir(root):
-            continue
-        for dirpath, dirnames, filenames in os.walk(root):
-            dirnames.sort()
-            for fn in sorted(filenames):
-                if not fn.endswith('.txt') or fn.startswith('_'):
-                    continue
-                rel = os.path.relpath(os.path.join(dirpath, fn), root).replace(os.sep, "/")
-                display = f"collections/{rel[:-4]}"
-                if display in seen:
-                    continue
-                seen.add(display)
-                found.append((display, source, os.path.join(dirpath, fn)))
-    return found
-
-
-def _is_video_prompt(name: str) -> bool:
-    """视频提示词 = 扫描名首段是 video（presets / custom 下的 video 目录，含其子目录）。
-
-    扫描名带目录前缀（`video/foo`），collections 的名字前缀是 `collections/`，落在图像一侧。
-    前端提示词管理页与预设选择浮层读的是同一条规则（js/core/preset-picker.js 的 isVideoPromptName）。
-    """
-    return (name or "").split("/")[0] == "video"
-
-
-def _iter_random_candidates(kind: str = "") -> list[str]:
-    """运行时随机候选池：collections 文件按行拆成多条（复用解析缓存），普通预设文件整篇一条。
-
-    kind="image" 只留图像提示词、kind="video" 只留视频提示词、空值不筛 —— 绘画页 / 视频页的「随机」各自
-    只要自己那一池，Prompt Agent 节点的运行时随机要的是混池，走空值这条。
-    """
-    kind = (kind or "").strip().lower()
-    pool: list[str] = []
-    for source, base_dir in (("custom", CUSTOM_DIR), ("presets", PRESETS_DIR)):
-        for dirpath, dirnames, filenames in os.walk(base_dir):
-            # collections 子树交给下方按行展开，这里跳过避免整篇重复入池
-            if os.path.relpath(dirpath, base_dir).split(os.sep)[0] == "collections":
-                dirnames[:] = []
-                continue
-            for fn in sorted(filenames):
-                if fn.endswith(".txt") and not fn.startswith("_"):
-                    rel = os.path.relpath(os.path.join(dirpath, fn), base_dir).replace(os.sep, "/")
-                    if kind and _is_video_prompt(rel) != (kind == "video"):
-                        continue
-                    try:
-                        with open(os.path.join(dirpath, fn), "r", encoding="utf-8", errors="ignore") as f:
-                            content = f.read().strip()
-                    except OSError:
-                        continue
-                    if content:
-                        pool.append(content)
-    for display, _, filepath in _iter_collection_files():
-        if kind and _is_video_prompt(display) != (kind == "video"):
-            continue
-        try:
-            pool.extend(text for _, text in prompt_lines.load_entries(filepath))
-        except OSError:
-            pass
-    # 去重（同一段提示词可能存于多个文件）：保序，保证批量抽样不重复
-    return list(dict.fromkeys(p for p in pool if p.strip()))
-
-
-def _sample_runtime_prompts(count: int, kind: str = "") -> list[str]:
-    """从混合池中不重复抽取 count 条；池子不足时全量乱序返回。kind 筛池子，空值不筛。"""
-    pool = _iter_random_candidates(kind)
-    if not pool:
-        return []
-    if len(pool) <= count:
-        random.shuffle(pool)
-        return pool
-    return random.sample(pool, count)
-
-
 # ==========================================
 # Prompt Node Class
 # ==========================================
@@ -468,7 +332,7 @@ class NeoPrompts:
         # 运行时随机：每次执行从混合池抽 1 条替换当前文本（编码器单输出，数量固定 1）。
         # 清空 quick_input 使后续自动增强/指令拼装不会覆盖随机结果。
         if random_enabled and text_input is None:
-            picked = _sample_runtime_prompts(1)
+            picked = sample_runtime_prompts(1)
             if picked:
                 text = picked[0]
                 quick_input = ""
@@ -616,29 +480,25 @@ class NeoPrompts:
 async def rs_prompts_save_prompt(request):
     try:
         data = await request.json()
-        name = data.get("name", "").strip()
-        if not name: 
+        name = str(data.get("name", "") or "")
+        if not name.strip():
             return web.Response(status=400, text="Name required")
-        name = "".join(c for c in name if c.isalnum() or c in " _-").strip()
-        if not name: 
+        resolved = _prompt_rel_name(name)
+        if resolved is None:
             return web.Response(status=400, text="Invalid name")
-        
-        # 默认保存到 custom 目录
-        base_dir = CUSTOM_DIR
-        # 如果名称中包含 "presets/" 前缀，则保存到 presets
-        if name.startswith("presets/"):
-            base_dir = PRESETS_DIR
-            name = name[len("presets/"):]
-        
-        # 构建文件路径（支持子目录）
-        filepath = os.path.join(base_dir, f"{name}.txt")
+        base_dir, rel = resolved
+
+        # 构建文件路径：首段 video 落进 custom/video/（视频池），首段 presets 落进预设来源
+        folder = os.path.join(base_dir, *rel.split("/")[:-1])
+        stem = rel.split("/")[-1]
+        filepath = os.path.join(folder, f"{stem}.txt")
         counter = 1
         while os.path.exists(filepath):
-            filepath = os.path.join(base_dir, f"{name}-{counter}.txt")
+            filepath = os.path.join(folder, f"{stem}-{counter}.txt")
             counter += 1
-        
+
         # 确保目录存在
-        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+        os.makedirs(folder, exist_ok=True)
         
         # 保存前清洗：去掉思考模型可能内联泄漏的 < think>/< /think> 标签及重复正文，
         # 避免把推理过程写进自定义提示词文件。
@@ -646,159 +506,73 @@ async def rs_prompts_save_prompt(request):
         with open(filepath, 'w', encoding='utf-8') as f:
             f.write(text)
         
-        # 确定来源
+        # 确定来源：标签索引的键就是相对扫描名（视频条是 video/名字），与读侧 iter_prompt_names 同一命名
         source = "presets" if base_dir == PRESETS_DIR else "custom"
-        _update_tags_index(name, data.get("tags", []), source=source)
+        _update_tags_index(rel, data.get("tags", []), source=source)
         
         return web.Response(status=200, text="OK")
     except Exception as e:
         logger.error(f"Error saving prompt: {e}")
         return web.Response(status=500, text=str(e))
 
-@server.PromptServer.instance.routes.post("/rs_prompts/list_prompts")
-async def rs_prompts_list_prompts(request):
-    try:
-        # 递归扫描 presets 和 custom 目录
-        presets_prompts = _scan_prompts("presets")
-        custom_prompts = _scan_prompts("custom")
-        
-        # 按 mtime 倒序排序（每组内最新的在前）
-        def sort_key(x):
-            return -x.get("_mtime", 0)
-        
-        custom_prompts.sort(key=sort_key)
-        presets_prompts.sort(key=sort_key)
-        
-        # custom 在前，presets 在后
-        prompts = custom_prompts + presets_prompts
-        
-        return web.json_response(prompts)
-    except Exception as e:
-        logger.error(f"Error listing prompts: {e}")
-        return web.Response(status=500, text=str(e))
-
-@server.PromptServer.instance.routes.post("/rs_prompts/load_prompt")
-async def rs_prompts_load_prompt(request):
-    try:
-        data = await request.json()
-        name = data.get("name")
-        if not name:
-            return web.Response(status=400, text="Name required")
-        
-        # 根据名称中的路径判断来源目录
-        if name.startswith("presets/"):
-            base_dir = PRESETS_DIR
-            name = name[len("presets/"):]
-        else:
-            base_dir = CUSTOM_DIR
-        
-        # 构建文件路径（支持子目录）
-        filepath = os.path.join(base_dir, f"{name}.txt")
-        if os.path.exists(filepath):
-            with open(filepath, 'r', encoding='utf-8') as f:
-                text_content = f.read()
-                return web.json_response({"text": text_content})
-        
-        # 尝试在两个目录中查找
-        for search_dir in [CUSTOM_DIR, PRESETS_DIR]:
-            filepath = os.path.join(search_dir, f"{name}.txt")
-            if os.path.exists(filepath):
-                with open(filepath, 'r', encoding='utf-8') as f:
-                    text_content = f.read()
-                    return web.json_response({"text": text_content})
-        
-        return web.Response(status=404, text="Prompt not found")
-    except Exception as e:
-        logger.error(f"Error loading prompt: {e}")
-        return web.Response(status=500, text=str(e))
-
-@server.PromptServer.instance.routes.post("/rs_prompts/list_prompt_lines")
-async def rs_prompts_list_prompt_lines(request):
-    """按页列出多行集合（collections/ 目录约定）里的提示词：一行一条。"""
-    try:
-        data = await request.json()
-        name = str(data.get("name", "")).strip()
-        if not name:
-            return web.Response(status=400, text="Name required")
-        offset = max(int(data.get("offset", 0)), 0)
-        limit = min(max(int(data.get("limit", 200)), 1), 1000)
-        query = str(data.get("query", "")).strip().lower()
-
-        # name="*"：跨全部集合聚合搜索，行附带来源集合供前端路由点击
-        if name == "*":
-            hits = []
-            for display, source, filepath in _iter_collection_files():
-                try:
-                    entries = prompt_lines.load_entries(filepath)
-                except OSError:
-                    continue
-                hits.extend(
-                    (display, source, t, s) for t, s in entries
-                    if not query or query in t.lower()
-                )
-            page = hits[offset:offset + limit]
-            return web.json_response({
-                "total": len(hits),
-                "titles": [t for _, _, t, _ in page],
-                "texts": [s for _, _, _, s in page],
-                "names": [n for n, _, _, _ in page],
-                "sources": [src for _, src, _, _ in page],
-            })
-
-        filepath = _resolve_collection_file(name, str(data.get("source", "custom")))
-        if filepath is None:
-            return web.Response(status=404, text="Collection not found")
-
-        entries = prompt_lines.load_entries(filepath)
-        if query:
-            entries = [(t, s) for t, s in entries if query in t.lower()]
-        page = entries[offset:offset + limit]
-        return web.json_response({
-            "total": len(entries),
-            "titles": [t for t, _ in page],
-            "texts": [s for _, s in page],
-        })
-    except Exception as e:
-        logger.error(f"Error listing prompt lines: {e}")
-        return web.Response(status=500, text=str(e))
 
 @server.PromptServer.instance.routes.post("/rs_prompts/delete_prompt")
 async def rs_prompts_delete_prompt(request):
     try:
         data = await request.json()
-        name = data.get("name")
-        if not name: 
+        name = str(data.get("name") or "")
+        if not name.strip():
             return web.Response(status=400, text="Name required")
         
-        # 确定来源和基础目录
-        if name.startswith("presets/"):
-            base_dir = PRESETS_DIR
-            name = name[len("presets/"):]
-            source = "presets"
-        else:
-            base_dir = CUSTOM_DIR
-            source = "custom"
+        # 确定来源和基础目录：与保存同一套名字解析，首段 video 认视频池
+        resolved = _prompt_rel_name(name)
+        if resolved is None:
+            return web.Response(status=400, text="Invalid name")
+        base_dir, rel = resolved
+        source = "presets" if base_dir == PRESETS_DIR else "custom"
         
         # 构建文件路径
-        filepath = os.path.join(base_dir, f"{name}.txt")
+        filepath = os.path.join(base_dir, *rel.split("/")) + ".txt"
         if os.path.exists(filepath):
             os.remove(filepath)
-            _update_tags_index(name, tags=None, source=source)
+            _update_tags_index(rel, tags=None, source=source)
             return web.Response(status=200, text="OK")
         
         # 尝试在两个目录中查找
         for search_dir in [CUSTOM_DIR, PRESETS_DIR]:
-            filepath = os.path.join(search_dir, f"{name}.txt")
+            filepath = os.path.join(search_dir, *rel.split("/")) + ".txt"
             if os.path.exists(filepath):
                 os.remove(filepath)
                 s = "custom" if search_dir == CUSTOM_DIR else "presets"
-                _update_tags_index(name, tags=None, source=s)
+                _update_tags_index(rel, tags=None, source=s)
                 return web.Response(status=200, text="OK")
         
         return web.Response(status=404, text="Prompt not found")
     except Exception as e:
         logger.error(f"Error deleting prompt: {e}")
         return web.Response(status=500, text=str(e))
+
+
+def _prompt_rel_name(name: str):
+    """把请求里的名字收成 (来源目录, 相对扫描名)，清洗不出可用段时给 None
+
+    斜杠只当目录分隔，每段只留字母数字与空格 / 下划线 / 连字符，清洗后为空的段（含 `..`）丢掉，
+    名字因此永远落在来源目录内。相对扫描名与读侧 iter_prompt_names 的显示名同一命名：
+    首段 video 那条就是视频池（is_video_prompt 同一判法），首段 presets 认预设来源。
+    """
+    segments = []
+    for raw in (name or "").replace("\\", "/").split("/"):
+        seg = "".join(c for c in raw.strip() if c.isalnum() or c in " _-").strip()
+        if seg:
+            segments.append(seg)
+    if segments and segments[0] == "presets":
+        segments = segments[1:]
+        base_dir = PRESETS_DIR
+    else:
+        base_dir = CUSTOM_DIR
+    if not segments:
+        return None
+    return base_dir, "/".join(segments)
 
 
 # ==========================================
@@ -1198,57 +972,6 @@ async def rs_prompts_stream_generate_prompt(request):
     return await handle_llm_api_stream("smart_prompt", request)
 
 
-@server.PromptServer.instance.routes.post("/rs_prompts/random_prompt")
-async def rs_prompts_random_prompt(request):
-    """Random prompt - pick a random preset from the list."""
-    try:
-        # 获取 preset list
-        presets_prompts = _scan_prompts("presets")
-        custom_prompts = _scan_prompts("custom")
-        all_prompts = custom_prompts + presets_prompts
-        
-        if not all_prompts:
-            return web.json_response({"status": "error", "prompt": "", "error": "No presets available"})
-        
-        # 随机选择一个
-        selected = random.choice(all_prompts)
-        name = selected["name"]
-        
-        # 直接读取文件
-        if name.startswith("presets/"):
-            base_dir = PRESETS_DIR
-            name = name[len("presets/"):]
-        else:
-            base_dir = CUSTOM_DIR
-        
-        filepath = os.path.join(base_dir, f"{name}.txt")
-        if os.path.exists(filepath):
-            with open(filepath, 'r', encoding='utf-8') as f:
-                text_content = f.read()
-            return web.json_response({"status": "success", "prompt": text_content})
-        
-        return web.json_response({"status": "error", "prompt": "", "error": "Prompt not found"})
-    except Exception as e:
-        logger.error(f"Error in random prompt: {e}")
-        return web.json_response({"status": "error", "prompt": "", "error": str(e)})
-
-
-@server.PromptServer.instance.routes.post("/rs_prompts/random_prompts")
-async def rs_prompts_random_prompts(request):
-    """运行时随机：从混合池不重复抽取 count 条（与 NeoPromptAgent 同池，供批量生成使用）
-
-    kind 选池子："image" 排除 video 目录的提示词，"video" 只取它们，空 / 不传 = 混池（节点与旧调用方）。
-    """
-    try:
-        data = await request.json()
-        count = max(1, min(int(data.get("count", 1) or 1), 16))
-        kind = str(data.get("kind", "") or "")
-        return web.json_response({"texts": _sample_runtime_prompts(count, kind)})
-    except Exception as e:
-        logger.error(f"Error sampling random prompts: {e}")
-        return web.Response(status=500, text=str(e))
-
-
 # ==========================================
 # NeoPromptAgent Node Class
 # A simple prompt generator node with settings button only
@@ -1325,7 +1048,7 @@ class NeoPromptAgent:
         random_picked = []
         if random_enabled and text_input is None:
             count = max(1, min(int(random_count or 1), 16))
-            random_picked = _sample_runtime_prompts(count)
+            random_picked = sample_runtime_prompts(count)
             if random_picked:
                 prompt = random_picked[0]
                 quick_input = ""

@@ -143,6 +143,15 @@ Both nodes share the same layout (the Agent shows no status bar):
   everything except `presets/video/`, video is the prompts under `presets/video/`, recipe is the plain
   recipes. Image is selected by default, and the choice is stored in frontend local storage for the next
   opening.
+- **Image pool / video pool** - custom prompts land in two pools: the `custom/` root layer is the image pool,
+  `custom/video/` is the video pool, and `video/<name>` is that scan name — the list, the `@` picker, the random
+  pool and delete all use it, with one rule on both sides (`is_video_prompt` in `prompt_names.py`,
+  `isVideoPromptName` in `js/core/preset-picker.js`). Saving routes by the name's first segment: `video/<name>`
+  goes to the video pool, `presets/<name>` writes back to the shipped preset tree, everything else to the image
+  pool. Legacy flat custom files are classified from their text once at plugin start: only the ones scoring 10 on
+  shot-script markers (镜头 / 运镜 / 首尾帧 / 时长 / 转场 / 配乐) move into `custom/video/`, and the tag index
+  renames its keys along with them. What has been judged is recorded in `custom/_kind_split.json`; deleting that
+  file reads as "never ran" = a fresh pass, and a moved file never walks back to the root layer.
 - **Skill picker** - pick the skill for this generation: image / reverse, task, style template, custom;
   hovering a row shows a floating preview card (generation skills = configuration summary, the rest = an
   excerpt of the skill.md body), clicking the card opens the detail window; + New Skill / ⬆ ZIP /

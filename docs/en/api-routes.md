@@ -346,9 +346,6 @@ included), and the dock never calls a handler directly.
 | Method | Route | Description |
 |------|------|------|
 | POST | `/rs_prompts/save_prompt` | Save a prompt preset |
-| POST | `/rs_prompts/list_prompts` | Prompt list (including recipe entries) |
-| POST | `/rs_prompts/load_prompt` | Read a prompt |
-| POST | `/rs_prompts/list_prompt_lines` | Line-level prompt list |
 | POST | `/rs_prompts/delete_prompt` | Delete a prompt |
 | GET | `/rs_prompts/get_models` | Available LLM model list (remote + local) |
 | GET | `/rs_prompts/native_models` | Native text-generation model list (scans `.safetensors` under `models/text_encoders/`) |
@@ -364,8 +361,6 @@ included), and the dock never calls a handler directly.
 | POST | `/rs_prompts/reverse_prompt` | Image reverse-prompting (SSE + same-name .txt cache) |
 | POST | `/rs_prompts/stream_{task_name}` | Streaming generation endpoint registered by task name |
 | POST | `/rs_prompts/stream_generate_prompt` | Streaming generation |
-| POST | `/rs_prompts/random_prompt` | Random prompt (`kind`: image / video, empty = mixed pool)   |
-| POST | `/rs_prompts/random_prompts` | Runtime random batch draw (1–16, `kind` as above) |
 | POST | `/rs_prompts/fetch_remote_models` | Fetch the remote server's model list |
 | GET | `/rs_prompts/skills` | Skill list (grouped presets / tasks / custom) |
 | POST | `/rs_prompts/load_skill` | Read a single skill |
@@ -391,17 +386,29 @@ included), and the dock never calls a handler directly.
 
 LLM modes and configuration: [llm.md](llm.md). Skill design: [skills.md](skills.md).
 
-## prompt_names.py — `/rs_prompts/list_prompt_names`
+## prompt_names.py — `/rs_prompts/*` (read side)
 
-| Method | Route | Description |
-|------|------|------|
-| POST | `/rs_prompts/list_prompt_names` | Prompt names and tags — the @ picker's candidates |
+Everything in this module scans the data-root `prompts/` directory: names, tags, prompt text, line-level
+collections and the runtime random pool. The Studio desktop offline port and the ComfyUI registration share the
+same handlers, and the module touches no `PromptServer` — the read side never needs the ComfyUI runtime.
+
+| Method | Route                           | Description                                                               |
+|--------|---------------------------------|---------------------------------------------------------------------------|
+| POST   | `/rs_prompts/list_prompts`      | All prompt entries (`custom` + `presets`, with tags and file mtime)       |
+| POST   | `/rs_prompts/list_prompt_names` | Prompt names and tags — the @ picker's candidates                         |
+| POST   | `/rs_prompts/load_prompt`       | Prompt text (`name`, optional `source` for the exact copy)                |
+| POST   | `/rs_prompts/list_prompt_lines` | Paged line-level collections (`name="*"` searches every collection)       |
+| POST   | `/rs_prompts/random_prompts`    | Runtime random draw (1–16; `kind`: image / video, empty = the mixed pool) |
 
 - Names come from the directory listing only: one request = one directory listing for `presets/` and one for
   `custom/`, each opening its own `_tags_index.json` once. No per-file `stat`, no prompt text is opened; the text
-  is fetched when one entry gets picked. `custom` first, `presets` after — the same order as `list_prompts`.
-- The write side (`save_prompt` / `delete_prompt` updating the tag index) stays in `prompts.py`; this read side
-  lives in `prompt_names.py`, which touches no `PromptServer` and serves identically in the Studio desktop offline.
+  is fetched when one entry gets picked. `custom` first, `presets` after — the same order in both tables.
+- The write side (`save_prompt` / `delete_prompt` updating the tag index) and the LLM generation chain stay in
+  `prompts.py`, on the ComfyUI port.
+- Saving routes by the name's first segment: `video/<name>` lands in `custom/video/`, `presets/<name>` lands in the
+  shipped preset tree, everything else in the `custom/` root layer; delete and the tag index use the same scan name.
+  The one-time classified move of the legacy flat files runs at plugin start, what was judged is remembered in
+  `custom/_kind_split.json`, and deleting that marker reads as "never ran".
 
 ## model_hub.py — `/neo_model_hub/*`
 
@@ -464,7 +471,7 @@ the table answers 409. Startup sequence, close teardown and cache conventions: [
 | GET/POST   | `/neo_gallery/*` `/neo_bookmark/*`                                                                                                                            | Asset library and bookmarks (including delete / upload / tagging / OSS sync)                                                                                                                                                                                          |
 | GET        | `/neo_studio/tasks`                                                                                                                                           | Header queue-panel history: the six persisted task kinds from the task center (params `limit` / `kind?`); answered offline                                                                                                                                            |
 | GET/POST   | `/rs_prompts/skills` `load_skill` `save_skill` `delete_skill` `*_*_skill_file`                                                                                | Skill editing                                                                                                                                                                                                                                                         |
-| POST       | `/rs_prompts/list_prompt_names`                                                                                                                               | Prompt candidates for the @ picker (names and tags from the data-root `prompts/` scan)                                                                                                                                                                                |
+| POST      | `/rs_prompts/list_prompts` `list_prompt_names` `load_prompt` `list_prompt_lines` `random_prompts`                                                            | Prompt read side: names, tags, prompt text, line-level collections and the random pool — a data-root `prompts/` scan only                                                                                                                                            |
 | GET/POST   | `/rs_recipes/*`                                                                                                                                               | Recipe read/write, LLM rewrite / per-panel description / segmentation / grid split                                                                                                                                                                                    |
 | GET/POST   | `/neo_image_gen/settings` `models` `input_images` `skill_config` `skill_workflow` `*workflow_skill*` `copy_skill_files`, `/neo_video_gen/settings` `models`   | Image / video generation settings                                                                                                                                                                                                                                     |
 | GET/POST   | `/rs_prompts/get_models` `native_models` `set_model` `remote_llm_config` `llm_connection_test` `llm_mode` `extract_title` `fetch_remote_models`               | LLM configuration and title extraction (reads only `configs/` and the 8080 service)                                                                                                                                                                                   |

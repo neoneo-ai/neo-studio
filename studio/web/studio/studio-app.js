@@ -23,7 +23,7 @@ import { createAgentPanel, createMcpPanel, createAgentPrefsForm } from "../agent
 import { t, tf, getLang, applyLang, LANGS } from "../js/core/i18n.js";
 import { icon, setIcon, setIconLabel } from "../js/core/icons.js";
 import { createLibraryModal } from "../js/core/lib-modal.js";
-import { openPresetPicker, randomPromptText } from "../js/core/preset-picker.js";
+import { openPresetPicker, randomPromptText, savePromptTo } from "../js/core/preset-picker.js";
 import { reusePaintPanel } from "../gen-utils.js";
 import { createPairPanel } from "../js/core/pair-access.js";
 import { initQueuePanel, setQueueOnline, queueTrack } from "../queue-panel.js";
@@ -850,7 +850,7 @@ function buildPaint(el) {
     paintArmed = true;
 }
 
-/** 绘画页 / 编辑页右上角那排提示词入口：「图像预设」开预设浮层、「随机」抽一条图像提示词，
+/** 绘画页 / 编辑页右上角那排提示词入口：「提示词」开提示词浮层、「随机」抽一条图像提示词，
  *  两条都落进这一页现成面板的提示词框（面板不在了就重建一块带预填的）。
  *  extra 是这一页原本就有的入口（编辑页的「素材库」），排在最前 */
 function paintPromptBar(host, kind, extra = []) {
@@ -859,7 +859,7 @@ function paintPromptBar(host, kind, extra = []) {
         if (kind === "edit") openImageEditDialog(app.neoGallery, null, "", { container: host, prefill: { prompt: text } });
         else openGenMaterialDialog(app.neoGallery, { container: host, prefill: { prompt: text } });
     };
-    const presetBtn = $el("button", { className: "ns-btn ns-paint-preset-btn", type: "button", textContent: t("图像预设"), title: t("从图像提示词列表里挑一条填进提示词") });
+    const presetBtn = $el("button", { className: "ns-btn ns-paint-preset-btn", type: "button", textContent: t("提示词"), title: t("从图像提示词列表里挑一条填进提示词") });
     const randomBtn = $el("button", { className: "ns-btn ns-paint-random-btn", type: "button", textContent: t("随机"), title: t("随机填入一条图像提示词") });
     presetBtn.onclick = () => openPresetPicker({ kind: "image", onPick: fill });
     randomBtn.onclick = async () => {
@@ -1375,8 +1375,47 @@ function buildVideo(el) {
     const onDocPress = (e) => {
         if (!document.body.contains(page)) { document.removeEventListener("pointerdown", onDocPress, true); return; }
         for (const c of chips) c.closeOnOutside(e.target);
+        if (videoMoreOpen && !videoMoreMenu.contains(e.target)) closeVideoMore();
     };
     document.addEventListener("pointerdown", onDocPress, true);
+
+    // ⋯ 菜单（复用生成素材面板那枚 ⋯ 与运行时菜单样式）：保存当前提示词落视频池
+    // （custom/video/，名字带 video/ 前缀，与本页「提示词」「随机」同一池）
+    let videoMoreOpen = false;
+    const videoMoreBtn = $el("button", { className: "neo-gallery-gm-tool-btn ns-video-more", type: "button", textContent: "⋯", title: t("更多：保存当前提示词") });
+    const videoMoreMenu = $el("div", { className: "rs-runtime-menu ns-video-more-menu" });
+    const videoSaveName = $el("input", { className: "neo-gallery-gm-menu-input", type: "text", placeholder: t("起个名字") });
+    const videoSaveBtn = $el("button", { className: "neo-gallery-story-btn", type: "button", textContent: t("保存") });
+    const closeVideoMore = () => { videoMoreOpen = false; videoMoreMenu.style.display = "none"; };
+    videoMoreMenu.append($el("div", { className: "neo-gallery-gm-enhance-group" }, [
+        $el("div", { className: "neo-director-field-label", textContent: t("保存当前提示词（视频池）") }),
+        $el("div", { className: "rs-runtime-row" }, [videoSaveName, videoSaveBtn]),
+    ]));
+    videoMoreBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (videoMoreOpen) { closeVideoMore(); return; }
+        videoMoreMenu.style.display = "block";
+        videoMoreOpen = true;
+        const r = videoMoreBtn.getBoundingClientRect();
+        videoMoreMenu.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - videoMoreMenu.offsetWidth - 8))}px`;
+        const above = r.top - videoMoreMenu.offsetHeight - 6;
+        videoMoreMenu.style.top = `${above > 8 ? above : r.bottom + 6}px`;
+    });
+    videoSaveBtn.addEventListener("click", async () => {
+        const text = promptIn.value.trim();
+        if (!text) { toast(t("提示词是空的，没有可保存的提示词")); promptIn.focus(); return; }
+        videoSaveBtn.disabled = true;
+        try {
+            const saved = await savePromptTo("video", videoSaveName.value, text);
+            toast(tf("已存入视频提示词库：{name}", { name: saved }));
+            videoSaveName.value = "";
+            closeVideoMore();
+        } catch (e) {
+            toast(String(e?.message || e));   // 离线那一发是「保存提示词需要 ComfyUI 运行」，由 savePromptTo 说清楚
+        } finally {
+            videoSaveBtn.disabled = false;
+        }
+    });
 
     const runBtn = $el("button", { className: "ns-video-run neo-gallery-story-btn neo-gallery-story-btn-primary neo-gallery-gm-gen-btn", type: "button", textContent: t("生成") });
     gateRunButton(runBtn, "simple_video", t("生成视频"));
@@ -1399,6 +1438,7 @@ function buildVideo(el) {
                 durChip.el,
                 seedChip,
                 $el("div", { className: "neo-gallery-gm-composer-gap" }),
+                videoMoreBtn,
                 cancelBtn,
                 runBtn,
             ]),
@@ -1408,14 +1448,14 @@ function buildVideo(el) {
     page.appendChild(hero);
     page.appendChild(dock);
 
-    // 右上浮一枚入口列（绝对定位同绘画页那一列，不为它们空出一行）：视频预设挑一条词、随机抽一条视频提示词
+    // 右上浮一枚入口列（绝对定位同绘画页那一列，不为它们空出一行）：提示词挑一条词、随机抽一条视频提示词
     const fillVideoPrompt = (text) => {
         promptIn.value = text;
         promptCount.textContent = `${promptIn.value.length} / ∞`;
         promptIn.focus();
     };
     const videoBar = $el("div", { className: "ns-video-bar ns-paint-bar" }, [
-        $el("button", { type: "button", className: "ns-btn ns-video-preset-btn", textContent: t("视频预设"), title: t("从视频提示词列表里挑一条填进提示词") }),
+        $el("button", { type: "button", className: "ns-btn ns-video-preset-btn", textContent: t("提示词"), title: t("从视频提示词列表里挑一条填进提示词") }),
         $el("button", { type: "button", className: "ns-btn ns-video-random-btn", textContent: t("随机"), title: t("随机填入一条视频提示词") }),
     ]);
     videoBar.querySelector(".ns-video-preset-btn").addEventListener("click", () => openPresetPicker({ kind: "video", onPick: fillVideoPrompt }));
@@ -1427,6 +1467,8 @@ function buildVideo(el) {
         } catch (e) { toast(String(e?.message || e)); }   // 同上：离线那一发的原因由 randomPromptText 说清楚
     });
     page.appendChild(videoBar);
+    // ⋯ 菜单挂在页面上（.rs-runtime-menu 是 fixed 定位，随页面离场由 onDocPress 摘监听）
+    page.appendChild(videoMoreMenu);
 
 
     // --- 生成 + 轮询 + 取消（无画布、无采样实时预览：只有排队 / 进度条 / 成片） ---

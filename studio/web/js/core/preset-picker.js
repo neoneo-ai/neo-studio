@@ -1,5 +1,5 @@
 /**
- * preset-picker.js — 预设提示词选择浮层（绘画页 / 视频页 / 生成素材面板共用）
+ * preset-picker.js — 提示词选择浮层（绘画页 / 视频页 / 生成素材面板共用）
  * 只列提示词：预设、用户自存与 collections 条目，配方不入池（配方有各自的入口）。
  * kind 决定看哪一池："image" 图像提示词，"video" 视频提示词 —— 归属看扫描名首段（video/ 目录下的都归视频），
  * 与提示词管理页的「图像 / 视频」便签同一条规则，本模块是这条规则在前端的唯一出处。
@@ -7,7 +7,7 @@
  */
 import { $el } from "../../../../scripts/ui.js";
 import { t } from "./i18n.js";
-import { listPrompts, loadPrompt, randomPrompts } from "../../prompt-service.js";
+import { listPrompts, loadPrompt, randomPrompts, savePrompt } from "../../prompt-service.js";
 
 /** 视频提示词判定：扫描名带目录前缀，首段是 video（含其子目录）归视频，其余归图像。后端 prompts.py 的 _is_video_prompt 同口径。 */
 export function isVideoPromptName(name) {
@@ -19,7 +19,7 @@ const itemName = (item) => (typeof item === "string" ? item : item?.name || "");
 // 同时只开一扇：从别的页面再点一次是换作用域，先拆旧的那扇（含它的 Esc 监听）
 let opened = null;
 
-/** 关掉预设浮层；没开着就是空操作。 */
+/** 关掉提示词浮层；没开着就是空操作。 */
 export function closePresetPicker() {
     if (!opened) return;
     document.removeEventListener("keydown", opened.onKey, true);
@@ -28,13 +28,13 @@ export function closePresetPicker() {
 }
 
 /**
- * 打开预设选择浮层。kind: "image" | "video"；onPick(text) 在点中一条并读到全文后调用。
+ * 打开提示词选择浮层。kind: "image" | "video"；onPick(text) 在点中一条并读到全文后调用。
  * 浮层自挂在 document.body 上，不依赖任何页面结构。
  */
 export async function openPresetPicker({ kind = "image", onPick } = {}) {
     closePresetPicker();
     const body = $el("div", { className: "rs-preset-list-body" });
-    const search = $el("input", { className: "rs-preset-search-input", type: "text", placeholder: t("搜索预设…") });
+    const search = $el("input", { className: "rs-preset-search-input", type: "text", placeholder: t("搜索提示词…") });
     const overlay = $el("div", {
         // prompts.css 的骨架自带 display:none（提示词管理页自己管显隐），不显式展开就是「点了没窗口」；
         // 层位要盖得住生成素材 / 图片编辑那两层浮窗（9845），这一发由 JS 定，不依赖各页面各自的 CSS
@@ -63,7 +63,7 @@ export async function openPresetPicker({ kind = "image", onPick } = {}) {
         const shown = items.filter((it) => !q || itemName(it).toLowerCase().includes(q));
         if (!shown.length) {
             // 读取失败与词库真空是两件事：离线那一发必须点明「要 ComfyUI 在跑」，不能被一句「暂无可用提示词」盖过去
-            body.appendChild($el("div", { className: "neo-preset-picker-empty", textContent: note || (q ? t("无匹配预设") : t("暂无可用提示词")) }));
+            body.appendChild($el("div", { className: "neo-preset-picker-empty", textContent: note || (q ? t("无匹配提示词") : t("暂无可用提示词")) }));
             return;
         }
         for (const it of shown) {
@@ -94,13 +94,13 @@ export async function openPresetPicker({ kind = "image", onPick } = {}) {
         const list = await listPrompts();
         if (!Array.isArray(list)) {
             // 桌面端离线时这条接口回来的是 409 的 {offline:true}，不是数组：说清楚这一发要 ComfyUI 在跑
-            note = list?.offline ? t("预设列表需要 ComfyUI 运行") : t("预设列表读取失败");
+            note = list?.offline ? t("提示词列表需要 ComfyUI 运行") : t("提示词列表读取失败");
         } else {
             items = list.filter((it) => !it?.isRecipe && isVideoPromptName(itemName(it)) === (kind === "video"));
         }
     } catch (e) {
-        console.error("[Neo Studio] 预设列表读取失败:", e);
-        note = t("预设列表读取失败");
+        console.error("[Neo Studio] 提示词列表读取失败:", e);
+        note = t("提示词列表读取失败");
     }
     render(items, "", note);
     search.focus();
@@ -114,6 +114,28 @@ export async function openPresetPicker({ kind = "image", onPick } = {}) {
 export async function randomPromptText(kind = "image") {
     const res = await randomPrompts(1, kind);
     // 桌面端离线那一发不是词库空：409 的 {offline:true} 要直说，不能让调用方报「提示词库为空」
-    if (!Array.isArray(res?.texts) && res?.offline) throw new Error(t("预设与随机需要 ComfyUI 运行"));
+    if (!Array.isArray(res?.texts) && res?.offline) throw new Error(t("提示词与随机需要 ComfyUI 运行"));
     return (res?.texts || [])[0] || "";
+}
+
+/**
+ * 把面板里那句提示词存进指定池子：kind="video" 走 `video/` 前缀（custom/video/，与本页「提示词」「随机」
+ * 同一池），其余落图像池（custom/ 根层）。用户打头的 video/ 段先剥掉，池子只由 kind 定；
+ * 名字按后端同一套清洗（字母数字与空格 / 下划线 / 连字符）。同名不覆盖，后端自动加 -1 序号。
+ * 返回存下去的名字（就是提示词管理页与这条规则的扫描名）。
+ */
+export async function savePromptTo(kind, name, text) {
+    const clean = String(name || "").replace(/^presets\//, "").replace(/^video\//, "")
+        .replace(/[^\p{L}\p{N} _-]/gu, "").trim();
+    if (!clean) throw new Error(t("要先给这条提示词起个名字"));
+    const saved = kind === "video" ? `video/${clean}` : clean;
+    const res = await savePrompt(saved, text);
+    const body = await res.text();
+    let payload = null;
+    try { payload = JSON.parse(body); } catch { /* 成功那一发后端回的是纯文本 OK */ }
+    if (!res.ok) {
+        // 保存是写侧，不在桌面端自服的提示词读侧表里：离线那一发就是没有这条接口
+        throw new Error(payload?.offline || res.status === 409 ? t("保存提示词需要 ComfyUI 运行") : t("提示词保存失败"));
+    }
+    return saved;
 }

@@ -101,7 +101,7 @@ const paintPage = page("ns-paint", `
       </div>
     </div>
   </div>
-  <div class="ns-paint-bar"><button class="ns-btn ns-paint-preset-btn" type="button">图像预设</button><button class="ns-btn ns-paint-random-btn" type="button">随机</button></div>`);
+  <div class="ns-paint-bar"><button class="ns-btn ns-paint-preset-btn" type="button">提示词</button><button class="ns-btn ns-paint-random-btn" type="button">随机</button></div>`);
 
 const videoPage = page("ns-video", `
   <div class="ns-video-page">
@@ -133,7 +133,7 @@ const videoPage = page("ns-video", `
         </div>
       </div>
     </div>
-    <div class="ns-video-bar"><button class="ns-btn ns-video-preset-btn" type="button">视频预设</button><button class="ns-btn ns-video-random-btn" type="button">随机</button></div>
+    <div class="ns-video-bar"><button class="ns-btn ns-video-preset-btn" type="button">提示词</button><button class="ns-btn ns-video-random-btn" type="button">随机</button></div>
   </div>`);
 
 // 技能 + 自定参数双栏面板（chip 浮出层）：与 image-gen.js 的 createVideoModelConfigSection 同构，
@@ -862,7 +862,7 @@ test("900px 与桌面宽：自定参数右栏标签一行写完、起点齐平�
 });
 
 
-// 绘画页 / 视频页右上角那排提示词入口（图像预设 / 随机、视频预设 / 随机）：手机上钉在右上角，
+// 绘画页 / 视频页右上角那排提示词入口（提示词 / 随机 两枚同排）：手机上钉在右上角，
 // 出视口就是手指够不着，压住提示词框就是写字写字看不见
 const barProbe = (barSel, inputSel) => `
     const rect = (s) => { const r = document.querySelector(s).getBoundingClientRect(); return { x: Math.round(r.x), y: Math.round(r.y), right: Math.round(r.right), bottom: Math.round(r.bottom) }; };

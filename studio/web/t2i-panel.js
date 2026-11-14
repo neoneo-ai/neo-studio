@@ -14,7 +14,7 @@ import { openSkillDetailById, listSkills, populateSkillOptions, skillDisplayName
 import { Lightbox } from "./lightbox.js";
 import { requestGeneration, watchTask, cancelTask, createModelConfigSection, listGenModels, getSkillGenConfig } from "./image-gen.js";
 import { invokePromptStream, createStreamOutputHandlers, randomPrompts } from "./prompt-service.js";
-import { openPresetPicker, randomPromptText } from "./js/core/preset-picker.js";
+import { openPresetPicker, randomPromptText, savePromptTo } from "./js/core/preset-picker.js";
 import { createQuickInputHistory } from "./quick-input-history.js";
 import { openGallerySidebar } from "./media-transfer.js";
 import { t, tf } from "./js/core/i18n.js";
@@ -57,7 +57,7 @@ export function openGenMaterialDialog(gallery, opts = null) {
         t("✏输入修改指令，例如：去掉动漫风格，改成写实"),
         t("加风格要求，例如：改成赛博朋克风格"),
         t("在 ⋯ 菜单点「增强」，LLM 把描述扩写成详细提示词"),
-        t("标题栏「图像预设」挑一条，「随机」抽一条（配方不入池）"),
+        t("标题栏「提示词」挑一条，「随机」抽一条（配方不入池）"),
         t("按 ↑/↓ 召回之前生成用过的提示词")
     ];
     let tipTimer = null;
@@ -78,7 +78,7 @@ export function openGenMaterialDialog(gallery, opts = null) {
     } catch {}
     const saveGmRandom = () => { try { localStorage.setItem(GM_RANDOM_KEY, JSON.stringify(gmRandom)); } catch {} };
 
-    const moreBtn = $el("button", { className: "neo-gallery-gm-tool-btn neo-gallery-gm-more-btn", type: "button", textContent: "⋯", title: t("更多：运行时随机批量 / 提示词增强") });
+    const moreBtn = $el("button", { className: "neo-gallery-gm-tool-btn neo-gallery-gm-more-btn", type: "button", textContent: "⋯", title: t("更多：运行时随机批量 / 提示词增强 / 保存当前提示词") });
 
     // ⋯ 菜单（复用 Prompt Agent 节点运行时菜单样式；运行时随机状态 localStorage 持久化）
     const moreMenu = $el("div", { className: "rs-runtime-menu neo-gallery-gm-more-menu" });
@@ -379,6 +379,35 @@ export function openGenMaterialDialog(gallery, opts = null) {
         }
     });
 
+    // 保存当前提示词：这条落图像池（custom 根层，名字不带 video/ 前缀），
+    // 与标题栏「提示词」那颗挑词浮层同一池；同名不覆盖，后端自动加 -1 序号
+    const gmSaveName = $el("input", { className: "neo-gallery-gm-menu-input", type: "text", placeholder: t("起个名字") });
+    const gmSaveBtn = $el("button", { className: "neo-gallery-story-btn", type: "button", textContent: t("保存") });
+    moreMenu.append($el("div", { className: "neo-gallery-gm-enhance-group" }, [
+        $el("div", { className: "neo-director-field-label", textContent: t("保存当前提示词（图像池）") }),
+        $el("div", { className: "rs-runtime-row" }, [gmSaveName, gmSaveBtn]),
+    ]));
+    gmSaveBtn.addEventListener("click", async () => {
+        const text = quickInput.value.trim();
+        if (!text) {
+            actionToast({ severity: "warning", summary: t("输入框是空的，没有可保存的提示词") });
+            quickInput.focus();
+            return;
+        }
+        gmSaveBtn.disabled = true;
+        try {
+            const saved = await savePromptTo("image", gmSaveName.value, text);
+            actionToast({ summary: tf("已存入图像提示词库：{name}", { name: saved }) });
+            gmSaveName.value = "";
+            closeMoreMenu();
+        } catch (e) {
+            console.error("[Gallery] save image prompt failed:", e);
+            actionToast({ severity: "error", summary: t("提示词保存失败"), detail: String(e?.message || e) });
+        } finally {
+            gmSaveBtn.disabled = false;
+        }
+    });
+
     const renderIdle = () => {
         // 页内 idle 不在中间铺一整块空画布：那块没有内容的框把输入区顶到屏幕正中，
         // 用户先看到的是框不是控件。弹窗空间小，仍走一句短 hint
@@ -590,7 +619,7 @@ export function openGenMaterialDialog(gallery, opts = null) {
     };
     document.addEventListener("pointerdown", onDocPress, true);
 
-    // 预设列表（标题栏那颗「图像预设」）：共用浮层只列图像提示词，配方不入池
+    // 提示词列表（标题栏那颗「提示词」）：共用浮层只列图像提示词，配方不入池
     const openImagePresets = () => openPresetPicker({
         kind: "image",
         onPick: (text) => { quickInput.value = text; quickInput.focus(); },
@@ -670,8 +699,8 @@ export function openGenMaterialDialog(gallery, opts = null) {
         ]),
     ]);
 
-    // 标题栏右侧的提示词入口（右端 ✕ 之前）：预设浮层与随机各填一次输入框
-    const gmPresetBtn = $el("button", { className: "neo-gallery-story-titlebar-btn", type: "button", textContent: t("图像预设"), title: t("从图像提示词列表里挑一条填进提示词") });
+    // 标题栏右侧的提示词入口（右端 ✕ 之前）：提示词浮层与随机各填一次输入框
+    const gmPresetBtn = $el("button", { className: "neo-gallery-story-titlebar-btn", type: "button", textContent: t("提示词"), title: t("从图像提示词列表里挑一条填进提示词") });
     const gmRandomBtn = $el("button", { className: "neo-gallery-story-titlebar-btn", type: "button", textContent: t("随机"), title: t("随机填入一条图像提示词") });
     gmPresetBtn.onclick = openImagePresets;
     gmRandomBtn.onclick = pickOneRandom;

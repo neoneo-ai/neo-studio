@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
-"""提示词列表的两条扫描口径（离线单测）。
+"""提示词扫描的两条口径（离线单测，全程不依赖 ComfyUI）。
 
-list_prompts 扫整棵 presets + custom 树：标签索引按来源读一次交进扫描，不再每个 .txt 各读一遍
-同一份 _tags_index.json。@ 点名弹层那份在 prompt_names.py 的 list_prompt_names：只从目录列表
+scan_prompts 扫整棵 presets + custom 树：标签索引按来源读一次交进扫描，不再每个 .txt 各读一遍
+同一份 _tags_index.json。@ 点名弹层那份 iter_prompt_names 只从目录列表
 取名字、不逐个 stat，正文是选中那一发才读，桌面端离线服务与 ComfyUI 内注册共用它。
 名字与子目录前缀口径两条保持一致。
 """
@@ -56,11 +56,9 @@ sys.modules["server"] = _fake_server
 
 _import_error = ""
 try:
-    prompts_mod = importlib.import_module(f"{_PKG_NAME}.prompts")
     prompt_names_mod = importlib.import_module(f"{_PKG_NAME}.prompt_names")
     PROMPTS_AVAILABLE = True
 except Exception as _e:
-    prompts_mod = None
     prompt_names_mod = None
     PROMPTS_AVAILABLE = False
     _import_error = str(_e)
@@ -73,7 +71,7 @@ finally:
 
 def _seed(source: str, files: dict, tags: list) -> None:
     """按来源写提示词文件与标签索引：files 的键是相对来源根的名字，值只用作内容"""
-    base = prompts_mod.PRESETS_DIR if source == "presets" else prompts_mod.CUSTOM_DIR
+    base = prompt_names_mod.PRESETS_DIR if source == "presets" else prompt_names_mod.CUSTOM_DIR
     tags_dir = os.path.dirname(prompt_names_mod.tags_file_path(source))
     index = {}
     for name, text in files.items():
@@ -87,7 +85,7 @@ def _seed(source: str, files: dict, tags: list) -> None:
         json.dump(index, f, ensure_ascii=False)
 
 
-@unittest.skipUnless(PROMPTS_AVAILABLE, f"prompts module unavailable: {_import_error}")
+@unittest.skipUnless(PROMPTS_AVAILABLE, f"prompt_names module unavailable: {_import_error}")
 class TagsScanTests(unittest.TestCase):
     """标签索引按来源读一次；子目录前缀与 tags 口径不变"""
 
@@ -97,7 +95,8 @@ class TagsScanTests(unittest.TestCase):
     def tearDown(self):
         # 用例写进的是 conftest 钉住的临时数据根，逐条清掉，下一条扫不到上一份的提示词
         for source in self.touched:
-            base = prompts_mod.PRESETS_DIR if source == "presets" else prompts_mod.CUSTOM_DIR
+            base = (prompt_names_mod.PRESETS_DIR if source == "presets"
+                    else prompt_names_mod.CUSTOM_DIR)
             shutil.rmtree(base, ignore_errors=True)
 
     def seed(self, source, files, tags):
@@ -106,18 +105,18 @@ class TagsScanTests(unittest.TestCase):
 
     def _count_index_reads(self, source):
         """包住索引读取数它被调用了几次，返回 (调用路径列表, 扫描结果)"""
-        real = prompts_mod.load_tags_index
+        real = prompt_names_mod.load_tags_index
         calls = []
 
         def spy(path):
             calls.append(path)
             return real(path)
 
-        prompts_mod.load_tags_index = spy
+        prompt_names_mod.load_tags_index = spy
         try:
-            rows = prompts_mod._scan_prompts(source)
+            rows = prompt_names_mod.scan_prompts(source)
         finally:
-            prompts_mod.load_tags_index = real
+            prompt_names_mod.load_tags_index = real
         return calls, rows
 
     def test_tags_index_read_once_for_whole_source(self):

@@ -5,6 +5,26 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 ## [Unreleased]
 
 ### Added
+- **Custom prompts are split into an image pool and a video pool.** The 生成素材 / 图片编辑 input card and the
+  video page's composer each carry 保存当前提示词 in their `⋯` menu: the name is typed in, an existing name gets a
+  `-1` suffix instead of being overwritten, and the pool follows the page — 绘画 / 编辑 writes
+  `data/prompts/custom/<name>.txt`, 视频 writes `custom/video/<name>.txt`. That prefixed scan name is what the
+  prompt list, the pickers, the `@` picker, the 随机 pool and delete all use, frontend and backend alike
+  (`is_video_prompt` / `isVideoPromptName`). Legacy flat files under `custom/` are classified from their text
+  once: only the shot scripts (镜头 / 运镜 / 首尾帧 / 时长 / 转场 / 配乐 scoring 10) move into `custom/video/`,
+  the tag index renames its keys along, and what was judged is remembered in `custom/_kind_split.json` so no
+  start-up re-reads the old files — deleting that marker means "never ran" and runs the pass again. Covered by
+  `studio/tests/test_prompts_kind_split.py` and the 存当前提示词 cases in `studio/tests/js/preset-picker.test.mjs`.
+
+- **The prompt read side answers on the desktop port without ComfyUI.** `/rs_prompts/list_prompts`,
+  `/rs_prompts/load_prompt`, `/rs_prompts/list_prompt_lines`, `/rs_prompts/random_prompts` and
+  `/rs_prompts/list_prompt_names` now live in `studio/prompt_names.py` — a data-root `prompts/` scan with no
+  ComfyUI runtime — so the 提示词编辑页, the preset pickers and both 随机 buttons keep answering while ComfyUI
+  is not up: `app/studio_caps.py` carries them in the offline table, and ComfyUI registers the same handlers.
+  `studio/prompts.py` keeps the write side (`save_prompt` / `delete_prompt` with the tag index) and the LLM /
+  reverse-prompt chain, and its single-pick `/rs_prompts/random_prompt` route is gone — the 随机 button asks
+  `/rs_prompts/random_prompts`. Covered by `OfflineServiceTests` in `app/tests/test_studio_server.py`,
+  `studio/tests/test_prompts_tags_scan.py` and `studio/tests/test_prompts_random_pool.py`.
 - **The painting and video pages fill prompts from their own pool.** Each of those pages now carries a
   top-right row: 绘画页 **图像预设 + 随机**, 视频页 **视频预设 + 随机**, 编辑页 **素材库 + 图像预设 + 随机**.
   The preset button opens the shared picker (`studio/web/js/core/preset-picker.js`) scoped to that page - image
@@ -150,6 +170,13 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   The 首页 tab is gone from the settings sidebar, and an old `#/settings?tab=home` bookmark lands on the default panel
   instead of a blank page. Covered by `studio/tests/js/home-layout.test.mjs`, `studio/tests/test_home_layout.py` and
   the layout cases in `app/tests/test_studio_server.py`.
+- **The prompt fillers are all named 提示词.** The 绘画 / 编辑 / 视频 pages' top-right row and the 生成素材 title bar label
+  the picker button 提示词 on every page - it lists image prompts on 绘画 / 编辑 and the `video/` prompts on 视频 - and the
+  picker's own copy follows the same word: 搜索提示词…, 无匹配提示词, 提示词列表读取失败, 提示词列表需要 ComfyUI 运行,
+  提示词与随机需要 ComfyUI 运行. Covered by `studio/tests/js/preset-picker.test.mjs`, the 绘画页 / 编辑页 / 视频页 cases in
+  `studio/tests/js/`, the 生成素材 cases in `studio/tests/js/gallery-gen-material.test.mjs` and the phone-width bar case in
+  `studio/tests/e2e/studio-mobile-layout.e2e.mjs`. No backend, route, node, desktop-process change.
+
 
 ### Changed
 - **The asset library modal opens small and stays inside the window.** It opened at 1180×860 and the stored position

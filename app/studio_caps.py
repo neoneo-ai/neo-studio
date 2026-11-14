@@ -82,9 +82,13 @@ _SKILL = {
     ("POST", "/rs_prompts/delete_skill_file"),
 }
 
-# 提示词点名候选：只扫数据根 prompts/ 目录的名字与标签，正文与生成侧那条 list_prompts 不在这里
+# 提示词读侧：只扫数据根 prompts/ 目录 —— 点名候选、整份条目、正文、行级集合、运行时随机
 _PROMPTS = {
     ("POST", "/rs_prompts/list_prompt_names"),
+    ("POST", "/rs_prompts/list_prompts"),
+    ("POST", "/rs_prompts/load_prompt"),
+    ("POST", "/rs_prompts/list_prompt_lines"),
+    ("POST", "/rs_prompts/random_prompts"),
 }
 
 # 配方：文件与素材读写；生成 / 拆分 / 送工作流不在这里

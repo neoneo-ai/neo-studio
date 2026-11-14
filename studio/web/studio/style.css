@@ -491,7 +491,7 @@ body {
 /* 编辑页的素材库入口：浮在页面右上角，不为它空出一行（预览区顶部就是它的位置） */
 .ns-paint-bar { position: absolute; top: 12px; right: 14px; z-index: 3; display: flex; gap: 8px; }
 .ns-paint-lib-btn, .ns-paint-preset-btn, .ns-paint-random-btn { display: inline-flex; align-items: center; gap: 6px; }
-/* 视频页右上角同一排的「视频预设」「随机」（同绘画页那一列的落位规则，绝对定位不占页面行） */
+/* 视频页右上角同一排的「提示词」「随机」（同绘画页那一列的落位规则，绝对定位不占页面行） */
 .ns-video-bar { position: absolute; top: 12px; right: 14px; z-index: 3; display: flex; gap: 8px; }
 .ns-video-preset-btn, .ns-video-random-btn { display: inline-flex; align-items: center; gap: 6px; }
 /* 面板宿主：铺满剩余栏高，不出自己的壳——这两页整页就是一块面板，再套一层边框圆角就是多一层没用的框；
@@ -1308,5 +1308,5 @@ body {
         scrollbar-width: none;
     }
     .ns-video-card .ns-video-chips::-webkit-scrollbar { display: none; }
-    .ns-video-card :is(.ns-video-run, .ns-video-cancel) { flex: none; }
+    .ns-video-card :is(.ns-video-run, .ns-video-cancel, .ns-video-more) { flex: none; }
 }
