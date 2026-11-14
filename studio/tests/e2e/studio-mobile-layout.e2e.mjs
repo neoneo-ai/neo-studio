@@ -134,6 +134,29 @@ const videoPage = page("ns-video", `
     </div>
   </div>`);
 
+// 技能 + 自定参数双栏面板（chip 浮出层）：与 image-gen.js 的 createVideoModelConfigSection 同构，
+// 右栏那列标签（生视频模型 / 步数 / Text Encoder / VAE（视频）/ VAE（音频）/ LoRA）是这组的主体
+const videoParamsPanel = page("neo-gallery-page", `
+  <div class="neo-gallery-gm-chip-panel">
+    <div class="neo-gallery-gm-skills-panel">
+      <div class="neo-gallery-gm-skills-col">
+        <div class="neo-gallery-gm-skill-item"><span class="neo-gallery-gm-skill-name">H3参考生视频 (VDN)</span></div>
+      </div>
+      <div class="neo-gallery-gm-params-col">
+        <div class="neo-gallery-gm-model-box">
+          <div class="rs-gen-model-section">
+            <div class="rs-config-row"><label class="rs-form-label">生视频模型</label><div class="rs-model-select-box"><select></select></div></div>
+            <div class="rs-config-row"><label class="rs-form-label">步数</label><input type="number" class="rs-form-input rs-gen-steps" value="8"></div>
+            <div class="rs-config-row rs-gen-adv-row"><label class="rs-form-label">Text Encoder</label><div class="rs-model-select-box"><select></select></div></div>
+            <div class="rs-config-row rs-gen-adv-row"><label class="rs-form-label">VAE（视频）</label><div class="rs-model-select-box"><select></select></div></div>
+            <div class="rs-config-row rs-gen-adv-row"><label class="rs-form-label">VAE（音频）</label><div class="rs-model-select-box"><select></select></div></div>
+            <div class="rs-config-row"><label class="rs-form-label">LoRA</label><div class="rs-gen-lora-list"></div><button class="rs-gen-lora-add" type="button">+ 添加 LoRA</button></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>`);
+
 // 技能页（技能管理装配后）：与 skill.js 的 createSkillManagerPage 同构。
 // 左栏宽度是拖过分隔条之后写进内联样式并落 localStorage 的，这里照写一条验窄屏压得住它
 const skillsPage = page("ns-skills ns-skills-editing", `
@@ -794,5 +817,45 @@ test("900px 宽窗口：视频页第一行不换行，方块在左、提示词�
     assert.ok(m.taLeft >= m.deckRight, `提示词框没排在方块之后（框左 ${m.taLeft} / 方块右 ${m.deckRight}）`);
     assert.ok(m.taW >= 260, `提示词框被方块挤到 ${m.taW}px，写不了几个字`);
     assert.ok(m.pageOverflow <= 1, `第一行吃不下整幅，页面横向溢出 ${m.pageOverflow}px`);
+});
+
+// 自定参数面板右栏那列标签：标签折行把每行控件的起点顶开，整列参差（「生视频模/型」「VAE（视/频）」）
+test("900px 与桌面宽：自定参数右栏标签一行写完、起点齐平，下拉照旧宽", async () => {
+    for (const vp of [{ width: 900, height: 900 }, DESKTOP]) {
+        const m = await measure(videoParamsPanel, vp, {}, () => {
+            const labels = [...document.querySelectorAll(".rs-form-label")].map((l) => ({
+                text: l.textContent,
+                h: Math.round(l.getBoundingClientRect().height),
+                clipped: Math.round(l.scrollWidth - l.clientWidth),
+                left: Math.round(l.getBoundingClientRect().left),
+            }));
+            const panel = document.querySelector(".neo-gallery-gm-skills-panel");
+            const stepsRow = document.querySelector(".rs-gen-steps").closest(".rs-config-row");
+            const stepsLab = stepsRow.querySelector(".rs-form-label").getBoundingClientRect();
+            const stepsInp = stepsRow.querySelector(".rs-gen-steps").getBoundingClientRect();
+            return {
+                labels,
+                selW: Math.round(document.querySelector(".rs-model-select-box").getBoundingClientRect().width),
+                overflow: Math.round(panel.scrollWidth - panel.clientWidth),
+                steps: {
+                    labelRight: Math.round(stepsLab.right),
+                    inputLeft: Math.round(stepsInp.left),
+                    inputW: Math.round(stepsInp.width),
+                    rowH: Math.round(stepsRow.getBoundingClientRect().height),
+                },
+            };
+        });
+        const twoLine = m.labels.filter((l) => l.h > 20).map((l) => l.text);
+        assert.deepEqual(twoLine, [], `${vp.width}px 宽下这些标签折成两行：${twoLine.join(" / ")}`);
+        const cut = m.labels.filter((l) => l.clipped > 1).map((l) => l.text);
+        assert.deepEqual(cut, [], `${vp.width}px 宽下这些标签被截断：${cut.join(" / ")}`);
+        const lefts = [...new Set(m.labels.map((l) => l.left))];
+        assert.equal(lefts.length, 1, `同一列标签起点参差：${lefts.join(" / ")}`);
+        assert.ok(m.selW >= 200, `模型下拉只剩 ${m.selW}px，长模型名没处显示`);
+        assert.ok(m.overflow <= 1, `面板横向溢出 ${m.overflow}px`);
+        assert.ok(m.steps.inputLeft >= m.steps.labelRight, `步数框掉到标签下面（框左 ${m.steps.inputLeft} / 标签右 ${m.steps.labelRight}）`);
+        assert.ok(m.steps.rowH <= 40, `步数这一行占了两行高（${m.steps.rowH}px）`);
+        assert.ok(m.steps.inputW >= 120, `步数框只剩 ${m.steps.inputW}px`);
+    }
 });
 

@@ -300,7 +300,10 @@
 .neo-gallery-gm-model-box .rs-config-row > .rs-form-label,
 .neo-gallery-edit-model-box .rs-config-row > .rs-form-label {
     flex: none;
-    width: 58px;
+    /* 58px 装不下「生视频模型」/「Text Encoder」/「VAE（视频）」（12px 字号下最长 78px），
+       右栏里这些标签折成两行，行与行参差；一列标签宽度对齐到能躺下最长那条 */
+    width: 84px;
+    white-space: nowrap;
     margin-bottom: 0;
     font-size: 12px;
     color: #9aa4b2;
@@ -309,6 +312,14 @@
 .neo-gallery-edit-model-box .rs-config-row .rs-model-select-box {
     flex: 1;
     min-width: 0;
+}
+/* 步数 / 生图张数这类数字行：prompts.css 给 .rs-form-input 的 width:100% 在 wrap 行里
+   自己占满一行，标签独占一行、控件掉到下面；跟下拉一样吃掉标签右侧的余宽 */
+.neo-gallery-gm-model-box .rs-config-row > input.rs-form-input,
+.neo-gallery-edit-model-box .rs-config-row > input.rs-form-input {
+    flex: 1;
+    min-width: 0;
+    width: auto;
 }
 .neo-gallery-gm-model-box .rs-gen-lora-list,
 .neo-gallery-edit-model-box .rs-gen-lora-list {

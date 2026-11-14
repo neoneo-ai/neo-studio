@@ -5,6 +5,12 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 ## [Unreleased]
 
 ### Added
+- **The 自定参数 panel lays every row on one line.** The label column was 58 px wide, so 生视频模型, Text Encoder
+  and VAE（视频）/ VAE（音频）wrapped onto two lines and pushed each row's control to a ragged start, and the 步数
+  box took its own line under its label because `.rs-form-input` is 100% wide inside the wrapping row. Labels now
+  size to the longest one (84 px) with wrapping off, and the 步数 / 生图张数 number box takes the width left of
+  its label, so the panel reads as one aligned column of rows. Covered by the 900px / desktop-width case in
+  `studio/tests/e2e/studio-mobile-layout.e2e.mjs`.
 - **The 出视频页 composer keeps 素材方块 and the prompt in one row at every window width.** The row used to
   wrap when the window reported 900 CSS px or less, which is what a desktop window at 200% Windows scaling
   reports (a 1776-px-wide window is 888 CSS px): the reference squares sat on their own line with the prompt
