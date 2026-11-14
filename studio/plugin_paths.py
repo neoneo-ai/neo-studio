@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -20,8 +21,18 @@ PLUGIN_DIR = Path(__file__).parent.resolve()
 DATA_ROOT_ENV = "NEO_STUDIO_DATA"
 POINTER_FILE = PLUGIN_DIR / "configs" / "data_root.json"
 
-# 随代码走的内置预设：数据根为空时从插件目录补进去，只补缺失文件，用户改过的不覆盖
+# 随代码走的内置预设：数据根缺文件时从插件目录补进去
 SEED_DIRS = ("configs", "prompts/presets", "skills/presets", "skills/tasks", "recipes/presets")
+# 出厂文件落进数据根时的字节指纹，数据根 configs/ 下的缓存：删了重建，删后最坏是存量副本不再自动前进
+SEED_STAMP_REL = "configs/preset_seed.json"
+# 一次性搬运：这两条全参考预设在 2026-11-14 才带特效表与特效本体清单，播种指纹又是这轮才引入的，
+# 老数据根没有指纹可判，只能把缺的那几个键补进去——已有键与键值一字不动，用户钉过的 steps 照留。
+SEED_ADD_KEYS = frozenset((
+    "skills/presets/minimax-h3-r2v/config.json",
+    "skills/presets/minimax-h3-r2v/models.json",
+    "skills/presets/minimax-h3-vdn-r2v/config.json",
+    "skills/presets/minimax-h3-vdn-r2v/models.json",
+))
 
 
 def _resolve_data_root() -> Path:
@@ -61,25 +72,90 @@ AGENT_SESSIONS_DIR = DATA_ROOT / "agent_sessions"   # 智能体一次运行的�
 TASKS_DB = CONFIGS_DIR / "studio_tasks.sqlite"      # 顶栏任务中心：跨重启留下的生成状态历史
 
 
-def seed_presets() -> None:
-    """数据根第一次用时，把插件目录里的内置预设补进去。"""
-    if DATA_ROOT == PLUGIN_DIR:
+def seed_presets(plugin_dir: Path | None = None, data_root: Path | None = None) -> None:
+    """内置预设走进数据根：缺的补进去，没人动过的出厂版随代码换新，用户改过的永不覆盖。"""
+    src_dir = Path(plugin_dir) if plugin_dir else PLUGIN_DIR
+    root = Path(data_root) if data_root else DATA_ROOT
+    if root == src_dir:
         return
     try:
-        for rel in SEED_DIRS:
-            src = PLUGIN_DIR / rel
-            if not src.is_dir():
-                continue
-            for f in src.rglob("*"):
-                if not f.is_file():
-                    continue
-                dst = DATA_ROOT / f.relative_to(PLUGIN_DIR)
-                if dst.exists():
-                    continue
-                dst.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(f, dst)
+        stamp_file = root / SEED_STAMP_REL
+        stamps = _seed_stamps(stamp_file)
+        touched = False
+        for rel, shipped in _shipped_seed_files(src_dir):
+            target = root / rel
+            if not target.exists():
+                _place_seed(shipped, target)
+                stamps[rel] = _sha256(shipped)
+                touched = True
+            elif stamps.get(rel) == _sha256(target):
+                _place_seed(shipped, target)
+                stamps[rel] = _sha256(shipped)
+                touched = True
+            elif rel in SEED_ADD_KEYS and _fill_missing_keys(shipped, target):
+                # 补过键的副本不记指纹：往后每次seed都只走补键这条路，出厂再变也不会吃掉用户的键值
+                touched = True
+        if touched:
+            _write_seed_stamps(stamp_file, stamps)
     except OSError as exc:
-        logging.getLogger(__name__).warning(f"[Neo Studio] 预设补进 {DATA_ROOT} 失败：{exc}")
+        logging.getLogger(__name__).warning(f"[Neo Studio] 预设补进 {root} 失败：{exc}")
+
+
+def _shipped_seed_files(src_dir: Path):
+    """出厂预设的 (相对路径, 插件目录里的文件)，路径固定用正斜杠，指纹跨平台一个样。"""
+    for rel in SEED_DIRS:
+        src = src_dir / rel
+        if not src.is_dir():
+            continue
+        for f in src.rglob("*"):
+            if f.is_file():
+                yield f.relative_to(src_dir).as_posix(), f
+
+
+def _place_seed(shipped: Path, target: Path) -> None:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(shipped, target)
+
+
+def _sha256(path: Path) -> str:
+    with open(path, "rb") as fh:
+        return hashlib.sha256(fh.read()).hexdigest()
+
+
+def _fill_missing_keys(shipped: Path, target: Path) -> bool:
+    """出厂文件新增的键补进数据根副本，已有键与键值一字不动；两边都是 JSON 对象才动手。"""
+    try:
+        new = json.loads(shipped.read_text(encoding="utf-8-sig"))
+        current = json.loads(target.read_text(encoding="utf-8-sig"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return False
+    if not isinstance(new, dict) or not isinstance(current, dict):
+        return False
+    missing = {k: v for k, v in new.items() if k not in current}
+    if not missing:
+        return False
+    current.update(missing)
+    tmp = target.with_name(target.name + ".tmp")
+    tmp.write_text(json.dumps(current, indent=2, ensure_ascii=False), encoding="utf-8")
+    os.replace(tmp, target)
+    return True
+
+
+def _seed_stamps(stamp_file: Path) -> dict:
+    # 指纹是缓存：被删、写坏、被旧版本写过都只退化成"存量副本不再自动前进"，读侧一律不抛
+    try:
+        cfg = json.loads(stamp_file.read_text(encoding="utf-8-sig"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return {}
+    files = cfg.get("files") if isinstance(cfg, dict) else None
+    return dict(files) if isinstance(files, dict) else {}
+
+
+def _write_seed_stamps(stamp_file: Path, stamps: dict) -> None:
+    stamp_file.parent.mkdir(parents=True, exist_ok=True)
+    tmp = stamp_file.with_name(stamp_file.name + ".tmp")
+    tmp.write_text(json.dumps({"version": 1, "files": stamps}, indent=2), encoding="utf-8")
+    os.replace(tmp, stamp_file)
 
 
 seed_presets()

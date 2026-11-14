@@ -40,10 +40,16 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   shot whose effect body is missing is refused before the queue with the file named, while the skill stays
   available in the dropdown when none of the embeddings are installed — only the shot with a selected effect is
   gated. 定格瞬间 stays out of the reference table: it closes the shot by repeating the first frame, and
-  reference-to-video has no last-frame slot. A data root seeded by an older build keeps its copies of these two
-  presets; delete `<data root>/skills/presets/minimax-h3-r2v/` (and the VDN folder) to re-seed them with the
-  table. Covered by `studio/tests/test_h3_video_gen.py`, `studio/tests/test_skills.py` and
-  `studio/tests/js/studio-video.test.mjs`.
+  reference-to-video has no last-frame slot. Covered by `studio/tests/test_h3_video_gen.py`,
+  `studio/tests/test_skills.py` and `studio/tests/js/studio-video.test.mjs`.
+- **Shipped preset updates now reach an installed data root on their own.** A preset shipped by the code used to
+  land only where the data root had no copy, so editing a shipped preset changed nothing for an existing
+  installation. `seed_presets()` now keeps a byte stamp of every shipped file it placed (`configs/preset_seed.json`,
+  a deletable cache): on the next start, a data-root copy still matching its stamp is refreshed from the code,
+  and a copy the user edited is left untouched. The two reference presets of this change arrive in an older data
+  root through a one-time key fill that adds the keys they were missing (`effect`, `effects`, `files`) and never
+  touches an existing key, so a preset with the user's own 步数 keeps it. Covered by
+  `studio/tests/test_seed_presets.py`.
 - **The agent's MCP surface reaches 图片反推 and 声音克隆.** Two tools join the MCP registry (now 23):
   `reverse_prompt` writes one library image into a prompt — the picture is named by `filename` + `subfolder`
   (empty `subfolder` is `presets`), `language=zh` / `en`, and the text lands in the same-named `.txt` next to the

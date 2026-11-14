@@ -259,8 +259,10 @@ V3 节点（`NeoImageGenEdit`）走 `io.Schema(description=..., search_aliases=[
 下表目录都相对**用户数据根**，不是插件目录。数据根由 `plugin_paths.py` 解析：环境变量
 `NEO_STUDIO_DATA`（桌面端拉起 ComfyUI 时注入）→ 插件目录的 `configs/data_root.json` 指针
 （桌面端写入，用户自己起 ComfyUI 时认得）→ 都落空才回退插件目录。插件目录只留代码与内置预设
-（`configs/`、`prompts/presets/`、`skills/presets/`、`skills/tasks/`、`recipes/presets/`，
-数据根缺文件时由 `seed_presets()` 补齐），装进 `custom_nodes` 的副本同样是代码与预设。
+（`configs/`、`prompts/presets/`、`skills/presets/`、`skills/tasks/`、`recipes/presets/`：
+由 `seed_presets()` 补进数据根——缺的文件补上，没人动过的出厂副本随代码换新，用户改过的永不覆盖，
+出厂副本的字节指纹存在 `configs/preset_seed.json`，删了只退化成存量副本不再自动前进），装进
+`custom_nodes` 的副本同样是代码与预设。
 源码运行的数据根是 `Neo-Studio/data/`，exe 运行是 exe 旁的 `data/`。
 
 | 目录/文件 | 说明 |

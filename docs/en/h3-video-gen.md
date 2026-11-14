@@ -377,10 +377,11 @@ line, 11 effects):
 - Sampling steps resolve in this order: a positive value in this request (the Video page's panel / the node's
   `steps`) > the skill's `config.json` `steps` > default 20; the effect table carries no steps. cfg /
   sampler / scheduler are written in each skill's `workflow.json`.
-- The shipped 24-step default and the effect tables of the two reference presets land only in a freshly seeded
-  data root: an existing `effect_h3`, `minimax-h3-r2v` or `minimax-h3-vdn-r2v` preset is never overwritten, so
-  delete the matching folder under `<data root>/skills/presets/` to re-seed it, or change the steps of this
-  skill in 技能管理.
+- The shipped 24-step default and the effect tables of the two reference presets travel into the data root with
+  the code: `seed_presets()` refreshes a shipped copy nobody touched and leaves a file the user changed alone.
+  A preset whose steps the user edited keeps that value — change the steps in 技能管理 to get the shipped
+  default. A preset's `skill.md` in the data root is the document copy seeded at the time and is never
+  rewritten; delete that one file to get the new document on the next start.
 - The model dropdown under "output settings → video generation model" puts the H3-related entries first, which
   makes local models easy to find.
 - Video has no "depends on reference images" concept: every configured LoRA is loaded unconditionally.

@@ -133,7 +133,8 @@ Read a file top-down as "what it defines, then where execution starts, then the 
   fallback. User data never lives in the plugin directory; it keeps code and built-in presets only.
 - Built-in presets ship with the code in `studio/configs/`, `studio/prompts/presets/`,
   `studio/skills/presets/`, `studio/skills/tasks/`, and `studio/recipes/presets/`. `seed_presets()`
-  copies missing files into a fresh data root and never overwrites a file the user changed; do not
+  copies missing files in, moves a shipped copy the user never touched forward with the code, and never
+  overwrites a file the user changed; a copy a one-time key fill touched stays fill-only forever. Do not
   add a second seeding path.
 - Missing config files fall back to the `DEFAULT_SETTINGS` in code. Do not ship default copies of
   user config.
@@ -143,7 +144,8 @@ Read a file top-down as "what it defines, then where execution starts, then the 
   anywhere but its provider endpoint.
 - Cache directories stay deletable and rebuildable: `gallery/thumbnails/`, `gallery/lora_cache/`,
   `gallery/oss_cache/`, `gallery/waveform_cache/`, `configs/gallery_dim_cache.json`, whose key
-  stays path + mtime + size.
+  stays path + mtime + size, and the `configs/preset_seed.json` shipped-preset stamps, whose key stays the
+  relative path + the shipped file's sha256.
 - Never delete user data, and never delete a directory, without the user's explicit confirmation
   in this conversation. This covers the commands the agent itself runs: `git clean -fdx`,
   `Remove-Item -Recurse`, `rm -rf`. The data root and every subtree under it, ComfyUI's

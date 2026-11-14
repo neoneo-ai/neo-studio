@@ -275,9 +275,11 @@ resolved by `plugin_paths.py`: the `NEO_STUDIO_DATA` environment variable (injec
 ComfyUI) → the plugin's `configs/data_root.json` pointer (written by the desktop, also honored when you start
 ComfyUI yourself) → only when both are missing does it fall back to the plugin directory. The plugin directory
 keeps code and built-in presets only (`configs/`, `prompts/presets/`, `skills/presets/`, `skills/tasks/`,
-`recipes/presets/`, filled in by `seed_presets()` when the data root lacks them), and the copy installed into
-`custom_nodes` is code and presets as well. Running from source uses `Neo-Studio/data/` as the data root; the exe
-uses the `data/` next to the exe.
+`recipes/presets/`, carried into the data root by `seed_presets()` — missing files land, a shipped copy nobody
+touched moves forward with the code, a file the user changed is never overwritten, and the byte stamps live in
+`configs/preset_seed.json`, so deleting that file only stops existing copies from moving forward), and the copy
+installed into `custom_nodes` is code and presets as well. Running from source uses `Neo-Studio/data/` as the
+data root; the exe uses the `data/` next to the exe.
 
 | Directory / file | Description |
 |------|------|
