@@ -525,8 +525,14 @@ body {
    按面板上方的实际空间收，超了让左栏技能自己滚 */
 .ns-paint-panel .neo-gallery-gm-chip-panel { max-height: min(62vh, calc(100vh - 240px)); }
 /* 绘画页的提示词框照编辑页那一档压矮（64px 起、上限 26vh，内衬收到一行半的量），余隙全给结果区；
-   框要写更多时用 gallery.css 的 resize: vertical 自己往下拉；机位模式整框收起（见下） */
-.ns-paint-panel .neo-gallery-gm-quick-input { min-height: 64px; max-height: 26vh; padding: 6px 12px; }
+   框要写更多时用 gallery.css 的 resize: vertical 自己往下拉；机位模式整框收起（见下）。
+   字号也在这条里钉死 12px / 1.5：gallery.css 基础那条是 15px / 1.6，而编辑页那格多带一个
+   .neo-gallery-story-input（gallery.css:2874，12px / 1.5，排在基础那条之后）才显得比绘画页小一号。
+   字号写在带宿主的这条上（两类特异），运行时注入的 gallery.css 顶不掉它 */
+.ns-paint-panel .neo-gallery-gm-quick-input {
+    min-height: 64px; max-height: 26vh; padding: 6px 12px;
+    font-size: 12px; line-height: 1.5;
+}
 /* 文生图结果区吃满输入卡上方的余隙：内容从预览区顶部开始铺，余隙落在图片与输入卡之间
    （空档挂在 first child 的 margin-top:auto 上会把图片整块往下推，图片上方就出现一大片黑）；
    结果区自己出纵向滚动：窗口矮到装不下「成品 + 起手提示 + 输入卡」时滚的是这一块，
@@ -1262,8 +1268,13 @@ body {
 .ns-video-thumb .neo-gallery-edit-refchip-x { top: 1px; right: 1px; width: 14px; height: 14px; font-size: 10px; border-radius: 4px; pointer-events: auto; }
 
 .ns-video-input { position: relative; flex: 1 1 auto; min-width: 0; display: flex; }
-/* 提示词框与绘画页同一档：两行 64px 起、上限 26vh（右下 22px 内衬留给字数计数那枚） */
-.ns-video-card .ns-video-prompt { flex: 1 1 auto; min-width: 0; min-height: 64px; max-height: 26vh; resize: none; padding: 2px 48px 22px 2px; }
+/* 提示词框与绘画页同一档：两行 64px 起、上限 26vh、字号 12px / 1.5（与绘画页那条同一理由，
+   压过 gallery.css 基础的 15px / 1.6；右下 22px 内衬留给字数计数那枚）。
+   加高走 resize: vertical 拖框底边 —— 胶囊贴页底锚着，长的只有上沿，字数计数钉在框右下角不跟着跑 */
+.ns-video-card .ns-video-prompt {
+    flex: 1 1 auto; min-width: 0; min-height: 64px; max-height: 26vh; resize: vertical;
+    padding: 2px 48px 22px 2px; font-size: 12px; line-height: 1.5;
+}
 .ns-video-input .ns-video-count { position: absolute; right: 6px; bottom: 6px; font-size: 11px; color: var(--ns-dim); pointer-events: none; }
 
 /* 第二行：芯片外观（胶囊 / hover / 菜单）全走会话页的 .neo-gallery-gm-chip-*，这里只排行距 */

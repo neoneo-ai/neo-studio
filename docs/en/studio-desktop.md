@@ -241,9 +241,11 @@ narrow-window rules are shared with the director page (one modal instance, one g
   page never scrolls vertically — the composer does not float in the middle of the window with an empty lower half.
   In a wide window the composer is 980px centred (gallery.css sizes the embedded panel with `width: min(92vw,980px)`,
   which caps out at this width on wide windows and follows 92vw once the window narrows); the prompt box floors at two
-  lines (64px, `max-height: 26vh`) and grows by dragging its bottom edge. The video page's composer capsule takes the
-  same 980px centred width and the same two-line box, and it no longer stretches to the height of the 首帧 / 尾帧 /
-  参考图 squares beside it. That first row never wraps: the squares sit at the left with the prompt box to their
+  lines (64px, `max-height: 26vh`), writes at 12px with 1.5 line-height — the edit page's size, while the 生成素材
+  dialog's composer keeps the 15px base — and grows by dragging its bottom edge. The video page's composer
+  capsule takes the same 980px centred width and the same box that grows by dragging its bottom edge, and it no
+  longer stretches to the height of the 首帧 / 尾帧 / 参考图 squares beside it. That first row never wraps: the
+  squares sit at the left with the prompt box to their
   right, the same shape as the edit page's composer, and a window at 200% Windows scaling (1776 px = 888 CSS px)
   keeps that row too; on a real phone the filled square shrinks from 118 px to 72 px to give the prompt room,
   instead of dropping the prompt box under the squares.
@@ -280,7 +282,9 @@ narrow-window rules are shared with the director page (one modal instance, one g
   enter either. Clicking an entry reads its text into the page's own prompt box (the composer box on the input page,
   the capsule box on the video page) and the picker closes itself. **Random** asks `/rs_prompts/random_prompts` for
   one entry with a `kind`, and the backend filters the pool with the same rule (a scan name whose first segment is
-  `video` belongs to video, everything else to image). The picker's Escape handler calls `stopPropagation`, so the
+  `video` belongs to video, everything else to image). Row labels carry no `video/` pool prefix
+  (`promptDisplayName`), subdirectory segments included; the key and the read request keep the full scan name.
+  The picker's Escape handler calls `stopPropagation`, so the
   page's own "Escape closes the panel" does not fire along with it; on phones the row sits in the corner without
   overlapping the prompt box (`studio/style.css`, `.ns-paint-bar` / `.ns-video-bar`).
   The picker's empty state names which case it is: only an empty library says "No prompts available"; the prompt

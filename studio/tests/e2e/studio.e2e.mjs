@@ -693,6 +693,10 @@ test("Studio 提示词入口：绘画页填图像池，视频页填视频池", a
             }, p.bar);
             assert.ok(bar.inside, `${p.tab} 页右上角那排出视口，鼠标点不到：${JSON.stringify(bar)}`);
             assert.equal(bar.labels.length, 2, `${p.tab} 页那一排应是「提示词」「随机」两枚：${JSON.stringify(bar.labels)}`);
+            const boxStyle = await page.evaluate((s) => [getComputedStyle(document.querySelector(s)).fontSize,
+                getComputedStyle(document.querySelector(s)).resize], p.input);
+            assert.equal(boxStyle[0], "12px", `${p.tab} 页提示词框字号应与编辑页同一档：${boxStyle[0]}`);
+            assert.equal(boxStyle[1], "vertical", `${p.tab} 页提示词框要能拖底边加高：${boxStyle[1]}`);
 
             await page.click(p.preset);
             await page.waitForSelector(".neo-preset-picker .rs-preset-item, .neo-preset-picker .neo-preset-picker-empty", { timeout: 10000 });
@@ -705,7 +709,8 @@ test("Studio 提示词入口：绘画页填图像池，视频页填视频池", a
     if (!pickerBox || pickerBox.width < 120 || pickerBox.height < 60 || pickerBox.top < 0) {
       throw new Error(`提示词浮层没展开在视口里: ${JSON.stringify(pickerBox)}`);
     }
-            const listed = await page.evaluate(() => [...document.querySelectorAll(".neo-preset-picker .rs-preset-content")].map((e) => e.textContent));
+            const listed = await page.evaluate(() => [...document.querySelectorAll(".neo-preset-picker .rs-preset-item")]
+                .map((e) => e.dataset.name));
             const wantVideo = p.kind === "video";
             assert.ok(listed.every((n) => n.startsWith("video/") === wantVideo),
                 `${p.tab} 页的提示词浮层混进了另一池：${JSON.stringify(listed.slice(0, 6))}`);

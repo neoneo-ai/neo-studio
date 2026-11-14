@@ -10,7 +10,10 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   `-1` suffix instead of being overwritten, and the pool follows the page — 绘画 / 编辑 writes
   `data/prompts/custom/<name>.txt`, 视频 writes `custom/video/<name>.txt`. That prefixed scan name is what the
   prompt list, the pickers, the `@` picker, the 随机 pool and delete all use, frontend and backend alike
-  (`is_video_prompt` / `isVideoPromptName`). Legacy flat files under `custom/` are classified from their text
+  (`is_video_prompt` / `isVideoPromptName`). The pool segment is a key, not a label: the pickers, the 提示词管理
+  list and the `@` rows print the bare name (`promptDisplayName` drops the `video/` segment, the subdirectory
+  segment stays), while every read, delete and tag-index request keeps carrying the full scan name.
+  Legacy flat files under `custom/` are classified from their text
   once: only the shot scripts (镜头 / 运镜 / 首尾帧 / 时长 / 转场 / 配乐 scoring 10) move into `custom/video/`,
   the tag index renames its keys along, and what was judged is remembered in `custom/_kind_split.json` so no
   start-up re-reads the old files — deleting that marker means "never ran" and runs the pass again. Covered by
@@ -179,6 +182,14 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 
 ### Changed
+- **The 绘画页 and 视频页 prompt boxes write as small as the 编辑页 box does, and both grow by dragging.**
+  Those two boxes took the shared 15px prompt-box size from `gallery.css`, while the 编辑页 box carries
+  `.neo-gallery-story-input` as well and lands on 12px / 1.5, so the same card read two sizes in one window. The two
+  page hosts now pin their box at 12px / 1.5 (`studio/web/studio/style.css`), the 视频页 box is dragged taller from
+  its bottom edge like the 绘画页 one (capped at the same `26vh`, the capsule keeps its page-bottom edge so only the
+  top edge moves), and the 素材页's 生成素材 dialog keeps the 15px base. Covered by the 提示词框字号 cases in
+  `studio/tests/js/studio-paint.test.mjs` and `studio/tests/js/studio-video.test.mjs`.
+
 - **The asset library modal opens small and stays inside the window.** It opened at 1180×860 and the stored position
   was applied as-is, so a layout saved from a bigger window came back wider than the screen with its left edge
   off-screen: the maximize / **✕** row was out of reach and the window could not be closed. The asset modal now opens

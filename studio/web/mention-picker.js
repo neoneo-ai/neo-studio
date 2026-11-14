@@ -6,13 +6,16 @@
  * app/studio_caps.py）就当这一类是空的，弹层里少一类，铺不出假候选。
  * 每项归一成 {category, id, name, label, source, tags}：slash-picker 按 name / id / tags
  * 过滤，面板按 category + name 往输入框写 @category:name 这个可见记号，随请求体交后端的是
- * {category, id, name, source}（提示词那两类多带 text，正文在选中那一发取回）。
+ * {category, id, name, source}（提示词那两类多带 text，正文在选中那一发按 id 取回）。
+ * 提示词两类的 name 是去池子前缀的显示名（`video/x` 在记号与行上都是 `x`，类别段已经说了是视频），
+ * id 留扫描名全名 —— 读正文、对回本机文件认的都是它。
  * 模型与提示词那两条是同步目录扫描，每按一次 @ 全扫一遍会拖住弹层：走 cache.js 的 TTL 兜住，
  * 保存配方那一发显式清掉（agent-panel.js 接 DIRECTOR_RECIPE_SAVED_EVENT 调 clear）。
  * items(onBatch) 把每一类到手的那一批交回调用方：弹层不必等最慢的一条（模型目录扫描）。
  * warm() 是给输入框聚焦用的预热，@ 那一下落在缓存上。
  */
 import { ttlCache } from "./js/core/cache.js";
+import { isVideoPromptName, promptDisplayName } from "./js/core/preset-picker.js";
 
 const MENTION_TTL_MS = 30000;
 const MENTION_CATEGORIES = ["skill", "model", "lora", "image_prompt", "video_prompt", "recipe"];
@@ -36,10 +39,8 @@ function modelLabel(path) {
     return base.replace(/\.(safetensors|ckpt|pt|pth|bin|gguf)$/i, "") || base;
 }
 
-// presets/video/ 下那一批是出片用的提示词，其余（含 collections/ 多行集合）算图像提示词
-function isVideoPrompt(name) {
-    return String(name || "").replace(/\\/g, "/").split("/")[0].toLowerCase() === "video";
-}
+// presets/video/ 下那一批是出片用的提示词，其余（含 collections/ 多行集合）算图像提示词：
+// 归属口径只在 js/core/preset-picker.js 写一次，与后端 is_video_prompt 同一份
 
 function createMentionSource({ getJson, postJson, listSkills }) {
     const cache = ttlCache(MENTION_TTL_MS);
@@ -94,8 +95,8 @@ function createMentionSource({ getJson, postJson, listSkills }) {
             return (res && !res.offline && Array.isArray(res)) ? res : [];
         });
         return rows.map((p) => {
-            const cat = isVideoPrompt(p.name) ? "video_prompt" : "image_prompt";
-            return { category: cat, id: String(p.name || ""), name: p.name,
+            const cat = isVideoPromptName(p.name) ? "video_prompt" : "image_prompt";
+            return { category: cat, id: String(p.name || ""), name: promptDisplayName(p.name),
                      label: MENTION_LABELS[cat], source: p.source || "", tags: p.tags || [] };
         });
     }

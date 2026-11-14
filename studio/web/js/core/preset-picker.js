@@ -14,6 +14,14 @@ export function isVideoPromptName(name) {
     return String(name || "").split("/")[0] === "video";
 }
 
+/** 行上的名字只去 `video/` 这一段池子标记：浮层与列表已经按池子分了，行上再写一遍是噪音。
+ *  子目录那一段留着（`couple/地铁通勤` 标的是这条词在池子里的位置）；键与请求照旧吃扫描名全名，
+ *  `load_prompt` / 删除 / 标签索引认的都是 `video/名字`。 */
+export function promptDisplayName(name) {
+    const raw = String(name || "");
+    return (isVideoPromptName(raw) ? raw.split("/").slice(1).join("/") : raw) || raw;
+}
+
 const itemName = (item) => (typeof item === "string" ? item : item?.name || "");
 
 // 同时只开一扇：从别的页面再点一次是换作用域，先拆旧的那扇（含它的 Esc 监听）
@@ -60,15 +68,16 @@ export async function openPresetPicker({ kind = "image", onPick } = {}) {
     const render = (items, query, note) => {
         body.textContent = "";
         const q = (query || "").trim().toLowerCase();
-        const shown = items.filter((it) => !q || itemName(it).toLowerCase().includes(q));
+        const shown = items.filter((it) => !q || promptDisplayName(itemName(it)).toLowerCase().includes(q));
         if (!shown.length) {
             // 读取失败与词库真空是两件事：离线那一发必须点明「要 ComfyUI 在跑」，不能被一句「暂无可用提示词」盖过去
             body.appendChild($el("div", { className: "neo-preset-picker-empty", textContent: note || (q ? t("无匹配提示词") : t("暂无可用提示词")) }));
             return;
         }
         for (const it of shown) {
-            body.appendChild($el("div", { className: "rs-preset-item", onclick: () => choose(itemName(it)) }, [
-                $el("span", { className: "rs-preset-content", textContent: itemName(it) }),
+            const key = itemName(it);   // 扫描名是键：读正文、删除、标签索引都认它
+            body.appendChild($el("div", { className: "rs-preset-item", dataset: { name: key }, onclick: () => choose(key) }, [
+                $el("span", { className: "rs-preset-content", textContent: promptDisplayName(key) }),
                 $el("span", { className: "rs-source-badge", textContent: it.source === "presets" ? t("预设") : t("自定义") }),
             ]));
         }

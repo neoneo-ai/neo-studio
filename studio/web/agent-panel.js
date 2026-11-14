@@ -402,7 +402,8 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
     // 两份共用同一条口径——正文里删掉记号，交后端的那一项跟着掉（syncMentions 逐次对齐文本）
     const PROMPT_MENTION_CLIP = 1200;   // 点名提示词的正文上限：这一段整段进系统提示词，长预设吃掉整轮预算
     const MENTION_RANK = { skill: 0, model: 1, lora: 2, image_prompt: 3, video_prompt: 4, recipe: 5 };
-    // 记号吃洗过的名字（空格与冒号进候选名就断词），交后端的那一份吃原名：两口径分在两处写死
+    // 记号与交后端的名字都吃候选的显示名（提示词那两类的 `video/` 池子前缀在 mention-picker 里就剥掉了，
+    // 类别段已经说了是视频）；id 留扫描名全名，正文按它取。洗过的名字（空格与冒号进名字就断词）只进记号
     const mentionNameOf = (m) => String(m.name || m.id || "");
     const mentionTokenOf = (m) => mentionToken(m.category, mentionNameOf(m));
     const mentionIcon = (m) => (m.category === "skill"
@@ -458,7 +459,8 @@ function buildChat(onOpenMcp, getContext, onOpenPrefs, onFrame, previewSide) {
     function addKnownMention(cat, nm) {
         // 记号里的名字是洗过的（Krea2 出图 → Krea2_出图），对候选要按同一条口径洗一遍
         const hit = knownMentions.find((m) => mentionTokenOf(m) === mentionToken(cat, nm));
-        addMention(hit || { category: cat, id: nm, name: nm });
+        // 对不回候选的手打记号：id 补回视频池前缀，load_prompt 才认得 custom/video/ 里的那份正文
+        addMention(hit || { category: cat, id: cat === "video_prompt" ? `video/${nm}` : nm, name: nm });
     }
     const MENTION_TOKEN_RE = /@(skill|model|lora|image_prompt|video_prompt|recipe):([^\s@:]+)/g;
     // 正文里的记号是唯一的真源：弹层选中、手打、从旧会话粘进来都走这一条对齐，

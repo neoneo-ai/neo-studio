@@ -124,7 +124,9 @@ LLM 模式与本地安装见 [llm.md](llm.md)。
   视频为 `presets/video/` 下的提示词，配方为普通配方。默认选中图像，选择记在前端本地存储，下次打开沿用。
 - **图像池 / 视频池** - 自定义提示词分两池落盘：`custom/` 根层是图像池，`custom/video/` 是视频池，`video/名字`
   就是这条扫描名——列表、@ 点名、随机池、删除都认它，前后端同一口径（`prompt_names.py` 的 `is_video_prompt` 与
-  `js/core/preset-picker.js` 的 `isVideoPromptName`）。保存时名字的首段决定落点：`video/名字` 进视频池、
+  `js/core/preset-picker.js` 的 `isVideoPromptName`）。扫描名是键、不是行上的标签：浮层、列表与 @ 点名的行只写
+  名字本身（`promptDisplayName` 去掉 `video/` 那一段池子标记，类别已经由便签与浮层标题说了），子目录段与
+  `collections/` 段留着；读正文、删除、标签索引发的仍是 `video/名字`。保存时名字的首段决定落点：`video/名字` 进视频池、
   `presets/名字` 写回出厂预设源目录、其余进图像池。旧版平铺的自定义文件在插件启动时按正文判类一次：镜头脚本特征
   （镜头 / 运镜 / 首尾帧 / 时长 / 转场 / 配乐）够 10 分才搬进 `custom/video/`，标签索引的键跟着改名；判过的记在
   `custom/_kind_split.json`，删掉它是「从没跑过」= 重跑一遍，搬走的不会回到根层。

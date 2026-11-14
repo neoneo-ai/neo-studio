@@ -220,6 +220,17 @@ test("视频页：进页铺好舞台 + 起手提示 + 底部胶囊（三方块 /
     assert.ok(!opts.includes("image_gen"), "生图技能不应进视频技能下拉");
 });
 
+// 提示词框字号与绘画页同一档：会话页基础的 15px 在这两页的输入卡里偏大（编辑页那格是 12px），
+// 写在带 .ns-video-card 宿主的这条上才压得过运行时注入的 gallery.css；加高走拖框底边，不自动长高
+test("视频页提示词框与绘画页同一档字号（12px / 1.5），框底边可拖高", () => {
+    const css = fs.readFileSync(path.join(webDir, "studio", "style.css"), "utf8");
+    const box = css.match(/\.ns-video-card \.ns-video-prompt\s*\{([^}]*)\}/)[1];
+    assert.match(box, /font-size: 12px/, "字号与绘画页同档");
+    assert.match(box, /line-height: 1\.5/, "行高与编辑页那条同档");
+    assert.match(box, /resize: vertical/, "拖框底边加高，和绘画页一样");
+    assert.match(box, /max-height: 26vh/, "加高有上限，胶囊长不出画布");
+});
+
 test("视频页：技能 chip 就是会话页那枚「技能 + 自定参数」面板——select 藏壳里，点开双栏、点技能行写回生效值", async () => {
     await boot();
     await clickTab("video");
@@ -595,8 +606,8 @@ test("视频页：技能要参考素材时缺素材不发请求，状态行说�
 });
 
 
-// 右上角那一排「提示词」「随机」：提示词浮层只列 video/ 条目，点一条填进提示词框并跟上字数
-test("视频页右上角：「提示词」只列 video/ 条目，点一条填进提示词框；「随机」走视频池", async () => {
+// 右上角那一排「提示词」「随机」：提示词浮层只列视频池条目（行上不带 video/ 前缀），点一条填进提示词框并跟上字数
+test("视频页右上角：「提示词」只列视频池条目，点一条填进提示词框；「随机」走视频池", async () => {
     await boot();
     await clickTab("video");
     const bar = videoPage().querySelector(".ns-video-bar");
@@ -616,7 +627,9 @@ test("视频页右上角：「提示词」只列 video/ 条目，点一条填进
     await sleep(80);
     const picker = document.querySelector(".neo-preset-picker");
     assert.deepEqual([...picker.querySelectorAll(".rs-preset-content")].map((e) => e.textContent),
-        ["video/镜头推进"], "图像提示词与配方都不进视频浮层");
+        ["镜头推进"], "图像提示词与配方都不进视频浮层，行上也不写 video/ 池子前缀");
+    assert.deepEqual([...picker.querySelectorAll(".rs-preset-item")].map((e) => e.dataset.name),
+        ["video/镜头推进"], "行上的键留扫描名全名");
     click(picker.querySelector(".rs-preset-item"));
     await sleep(80);
     assert.equal(promptBox().value, "全文:video/镜头推进", "预设全文填进提示词框");

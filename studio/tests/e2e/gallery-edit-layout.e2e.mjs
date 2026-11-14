@@ -131,6 +131,7 @@ const measure = () => {
         stage: box(".neo-gallery-edit-compare-stage"),
         compare: box(".neo-gallery-edit-compare"),
         prompt: box(".neo-gallery-story-input"),
+        promptFont: getComputedStyle(document.querySelector(".neo-gallery-story-input")).fontSize,
         composer: box(".neo-gallery-gm-composer"),
         bar: box(".neo-gallery-gm-composer-bar"),
         genBtn: box(".neo-gallery-gm-composer-bar .neo-gallery-gm-gen-btn"),
@@ -283,6 +284,8 @@ test("图片编辑输入卡：短窗口里底行 chips 与「生成」都在视�
     assert.ok(Math.abs(m.modeChip.y - m.genBtn.y) < m.genBtn.h,
         `短窗口底行不换行（换行的 chip 会被折叠线切掉）：mode=${JSON.stringify(m.modeChip)} gen=${JSON.stringify(m.genBtn)}`);
     assert.ok(m.prompt.h <= Math.round(620 * 0.42) + 1, `指令框高度应被视口压住：prompt=${JSON.stringify(m.prompt)}`);
+    // 编辑页那格的字号（12px / 1.5）就是绘画页与视频页提示词框对齐的那一档
+    assert.equal(m.promptFont, "12px", `指令框字号应是 12px：${m.promptFont}`);
 });
 
 // 技能与自定参数并成双栏面板后，宽度与高度都是新的溢出风险：贴底 chip 向上开，

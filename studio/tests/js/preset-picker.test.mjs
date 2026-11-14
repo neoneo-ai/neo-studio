@@ -4,7 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { resetEnv, click, mockRoute, jsonResponse, fetchLog, keydown, flush } from "./setup.mjs";
 
-const { openPresetPicker, closePresetPicker, isVideoPromptName, randomPromptText, savePromptTo } =
+const { openPresetPicker, closePresetPicker, isVideoPromptName, promptDisplayName, randomPromptText, savePromptTo } =
     await import("../../web/js/core/preset-picker.js");
 
 const ITEMS = [
@@ -22,6 +22,7 @@ function mockPromptRoutes() {
 }
 
 const rows = () => [...document.querySelectorAll(".neo-preset-picker .rs-preset-item .rs-preset-content")].map((e) => e.textContent);
+const rowKeys = () => [...document.querySelectorAll(".neo-preset-picker .rs-preset-item")].map((e) => e.dataset.name);
 const picker = () => document.querySelector(".neo-preset-picker");
 
 test("提示词归属：扫描名首段是 video 才归视频", () => {
@@ -29,6 +30,15 @@ test("提示词归属：扫描名首段是 video 才归视频", () => {
     assert.equal(isVideoPromptName("video/子目录/雨夜窗边"), true);
     assert.equal(isVideoPromptName("红杯"), false);
     assert.equal(isVideoPromptName("collections/video/一批镜头"), false, "collections 前缀落在图像一侧，与后端口径同一份");
+});
+
+// 浮层与列表已经按池子分了，行上的名字不需要再写一遍池子前缀
+test("显示名：只去 video/ 池子段，子目录与 collections 段留着", () => {
+    assert.equal(promptDisplayName("video/镜头推进"), "镜头推进");
+    assert.equal(promptDisplayName("video/子目录/雨夜窗边"), "子目录/雨夜窗边");
+    assert.equal(promptDisplayName("红杯"), "红杯");
+    assert.equal(promptDisplayName("精美图像提示词/古风女孩"), "精美图像提示词/古风女孩", "图像池的子目录段是位置，不是池子标记");
+    assert.equal(promptDisplayName("collections/portraits-1"), "collections/portraits-1", "集合前缀标的是多行集合，留着");
 });
 
 test("提示词浮层：kind=image 只列图像条目，配方不入池，点一条把全文交回调用方", async () => {
@@ -44,12 +54,21 @@ test("提示词浮层：kind=image 只列图像条目，配方不入池，点一
     assert.equal(picker(), null, "选完就收摊，浮层不留在页面上");
 });
 
-test("提示词浮层：kind=video 只列 video/ 条目", async () => {
+test("提示词浮层：kind=video 只列视频池条目，行上不带 video/ 前缀，点一条按扫描名全名读正文", async () => {
     resetEnv();
     mockPromptRoutes();
-    openPresetPicker({ kind: "video", onPick: () => {} });
+    const picked = [];
+    openPresetPicker({ kind: "video", onPick: (text) => picked.push(text) });
     await flush();
-    assert.deepEqual(rows(), ["video/镜头推进", "video/子目录/雨夜窗边"]);
+    assert.deepEqual(rows(), ["镜头推进", "子目录/雨夜窗边"], "行上只去池子前缀，子目录段留着");
+    assert.deepEqual(rowKeys(), ["video/镜头推进", "video/子目录/雨夜窗边"], "键留扫描名全名，池子与标签索引认的是它");
+    const search = picker().querySelector(".rs-preset-search-input");
+    search.value = "雨夜";
+    search.dispatchEvent(new window.Event("input", { bubbles: true }));
+    assert.deepEqual(rows(), ["子目录/雨夜窗边"], "搜索框打的就是行上那串名字");
+    click(document.querySelectorAll(".neo-preset-picker .rs-preset-item")[0]);
+    await flush();
+    assert.deepEqual(picked, ["全文:video/子目录/雨夜窗边"], "行上打的是裸名字，读正文发出去的是扫描名全名");
     closePresetPicker();
     assert.equal(picker(), null, "closePresetPicker 拆掉浮层");
 });

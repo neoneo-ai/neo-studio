@@ -17,7 +17,7 @@ import {
     extractClassify
 } from "./prompt-service.js";
 import { mkEl } from "./dom-utils.js";
-import { isVideoPromptName } from "./js/core/preset-picker.js";
+import { isVideoPromptName, promptDisplayName } from "./js/core/preset-picker.js";
 import { createStatusBars, createPromptOutputArea, triggerTextChange } from "./llm-chat.js";
 import { openLLMSettingsModal } from "./llm-setting.js";
 import { actionToast } from "./toast.js";
@@ -615,7 +615,7 @@ function createPromptManagerUI() {
                     const name = typeof item === 'string' ? item : item.name;
                     const tags = typeof item === 'string' ? [] : (item.tags || []);
                     const source = typeof item === 'object' ? item.source : "custom";
-                    const shown = name;
+                    const shown = promptDisplayName(name);   // 行上不写 `video/` 池子前缀，键在 row.dataset.name 上留全名
 
                     const row = document.createElement("div");
                     row.className = "rs-preset-item";
@@ -623,7 +623,6 @@ function createPromptManagerUI() {
 
                     const leftDiv = mkEl("div", "rs-preset-left");
                     const contentSpan = mkEl("span", "rs-preset-content");
-                    const displayText = shown;
 
                     if (tags && tags.length > 0) {
                         contentSpan.textContent = shown;
@@ -657,8 +656,6 @@ function createPromptManagerUI() {
                     sourceBadge.title = source === "presets" ? "System preset (cannot delete)" : "User preset";
                     contentSpan.appendChild(sourceBadge);
 
-                    contentSpan.dataset.original = displayText;
-                    row.dataset.original = displayText;
                     leftDiv.appendChild(contentSpan);
                     row.appendChild(leftDiv);
 
@@ -705,7 +702,8 @@ function createPromptManagerUI() {
                             e.stopPropagation();
                             pendingDeleteName = name;
                             pendingDeleteIsRecipe = !!item.isRecipe;
-                            deleteText.textContent = item.isRecipe ? `Delete recipe "${name}"?` : `Delete "${name}"?`;
+                            deleteText.textContent = item.isRecipe
+                                ? `Delete recipe "${shown}"?` : `Delete "${shown}"?`;
                             deleteConfirmOverlay.style.display = "block";
                         };
                         row.appendChild(deleteBtn);

@@ -133,10 +133,12 @@ for (const [name, inner] of [["running", RUNNING], ["result", RESULT]]) {
                 composerBottom: Math.round(b(".neo-gallery-gm-composer").bottom),
                 panelBottom: Math.round(b(".ns-paint-panel").bottom),
                 composerMargin: cs(".neo-gallery-gm-composer").marginTop,
+                promptFont: cs(".neo-gallery-gm-quick-input").fontSize,
                 viewScroll: view.scrollHeight - view.clientHeight,
             };
         });
         await page.close();
+        assert.equal(g.promptFont, "12px", "绘画页提示词框字号与编辑页同一档（页内那条压过 gallery.css 的 15px）");
         assert.ok(g.statusBottom - g.statusTop > 60, `结果区吃到输入卡上方的余隙：${g.statusTop} → ${g.statusBottom}`);
         assert.ok(g.gap <= 12, `${name} 内容贴住输入卡，中间不留空白（留白 ${g.gap}px）`);
         assert.ok(g.composerBottom <= g.panelBottom && g.panelBottom - g.composerBottom <= 52,

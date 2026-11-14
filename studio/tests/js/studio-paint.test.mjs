@@ -206,6 +206,24 @@ test("两页样式独立：编辑页的收高只挂 .ns-paint-edit，绘画页�
     assert.ok(!editBlock.includes(".ns-paint-panel"), "编辑页专用样式不挂两页共用的面板宿主");
 });
 
+// 提示词框的字号在页面宿主那条里钉死：gallery.css 基础那条是 15px，编辑页那格多带一条 12px 的
+// .neo-gallery-story-input（排在基础那条之后）才显得比绘画页小一号 —— 两页要同档就得自己写死
+test("绘画页提示词框与编辑页同一档字号（12px / 1.5）", () => {
+    const css = fs.readFileSync(path.join(webDir, "studio", "style.css"), "utf8");
+    const galleryCss = fs.readFileSync(path.join(webDir, "gallery.css"), "utf8");
+    const box = css.match(/\.ns-paint-panel \.neo-gallery-gm-quick-input\s*\{([^}]*)\}/)[1];
+    assert.match(box, /font-size: 12px/, "绘画页的提示词框字号要压过会话页基础那档");
+    assert.match(box, /line-height: 1\.5/, "行高与编辑页那条同档");
+    assert.match(box, /min-height: 64px/, "压矮后的框高不变");
+    assert.match(box, /max-height: 26vh/, "拖框底边的加高上限不变");
+    assert.match(galleryCss, /\.neo-gallery-gm-quick-input\s*\{[^}]*font-size: 15px;/,
+        "素材页「生成素材」弹窗的输入卡照旧 15px，页内那条压过它");
+    assert.match(galleryCss, /\.neo-gallery-gm-quick-input\s*\{[^}]*resize: vertical;/,
+        "加高的手柄来自会话页基础那条，绘画页照它拖底边");
+    assert.match(galleryCss, /\.neo-gallery-story-input,[\s\S]{0,220}?font-size: 12px;/,
+        "编辑页那格 12px 的来源还在");
+});
+
 // 素材库弹窗：画廊单例挂进弹窗宿主；「生成素材」入口复用现成文生图面板，提示词不被清掉
 test("编辑页素材库：点卡片取用进图片编辑；弹窗里的「生成素材」跳到绘画页", async () => {
     await boot();

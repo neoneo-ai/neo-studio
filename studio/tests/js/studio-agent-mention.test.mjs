@@ -111,8 +111,8 @@ test("@ 点名按钮在底栏最左：点一下把 @ 写进光标处，弹层汇
     assert.equal(inputBox().value, "@", "点一下只写一个 @，弹层接着收 query");
     assert.deepEqual(rowNames(), [
         "Krea2 出图", "柴犬技能", "krea2_turbo_fp8", "qwen_img_edit",
-        "mood_lora", "精美图像提示词/红杯", "video/片头三段", "cat_walk",
-    ], "技能在前，主模型、LoRA、图像与视频提示词、配方按类排后面");
+        "mood_lora", "精美图像提示词/红杯", "片头三段", "cat_walk",
+    ], "技能在前，主模型、LoRA、图像与视频提示词、配方按类排后面；提示词行上不写池子前缀");
     keydown(inputBox(), "Escape");
     await flush(2);
 });
@@ -160,6 +160,24 @@ test("选中图像提示词：选中那一发取回正文，随那一项交后�
     assert.equal(item.category, "image_prompt");
     assert.equal(item.source, "presets");
     assert.equal(item.text, "正文:精美图像提示词/红杯", "正文随点名交后端");
+});
+
+// 视频池那一条：行上与记号只写名字，读正文与交后端的那一项认的是扫描名全名
+test("选中视频提示词：记号不带 video/ 前缀，正文按扫描名全名取回", async () => {
+    mountStudio();
+    await openStudio("#/gallery");
+    mockAgentStream([{ kind: "content", text: "已出片" }]);
+    await openPicker("@片头");
+    keydown(inputBox(), "Enter");
+    await flush(10);   // 取正文那条 fetch 在选中之后发
+    assert.equal(inputBox().value, "@video_prompt:片头三段", "类别段已经说了是视频，名字段就不再写 video/");
+    assert.deepEqual(loadPromptCalls().map((c) => c.body.name), ["video/片头三段"], "读正文发的是扫描名全名");
+    click(runBtn());
+    await sleep(20); await flush(40);
+    assert.deepEqual(agentCalls()[0].body.mentions[0], {
+        category: "video_prompt", id: "video/片头三段", name: "片头三段",
+        source: "presets", text: "正文:video/片头三段",
+    }, "交后端的那一项：id 留扫描名，name 就是行上那串");
 });
 
 test("手打图像提示词记号不经过弹层：发送前也要把正文取回来随 mentions 交后端", async () => {
