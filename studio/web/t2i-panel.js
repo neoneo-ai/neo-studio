@@ -13,7 +13,8 @@ import { actionToast } from "./toast.js";
 import { openSkillDetailById, listSkills, populateSkillOptions, skillDisplayName, skillAcceptsText } from "./skill.js";
 import { Lightbox } from "./lightbox.js";
 import { requestGeneration, watchTask, cancelTask, createModelConfigSection, listGenModels, getSkillGenConfig } from "./image-gen.js";
-import { invokePromptStream, createStreamOutputHandlers, randomPrompts, listPrompts, loadPrompt } from "./prompt-service.js";
+import { invokePromptStream, createStreamOutputHandlers, randomPrompts } from "./prompt-service.js";
+import { openPresetPicker, randomPromptText } from "./js/core/preset-picker.js";
 import { createQuickInputHistory } from "./quick-input-history.js";
 import { openGallerySidebar } from "./media-transfer.js";
 import { t, tf } from "./js/core/i18n.js";
@@ -56,7 +57,7 @@ export function openGenMaterialDialog(gallery, opts = null) {
         t("✏输入修改指令，例如：去掉动漫风格，改成写实"),
         t("加风格要求，例如：改成赛博朋克风格"),
         t("在 ⋯ 菜单点「增强」，LLM 把描述扩写成详细提示词"),
-        t("在 ⋯ 菜单随机填入一条提示词（配方不入池）"),
+        t("标题栏「图像预设」挑一条，「随机」抽一条（配方不入池）"),
         t("按 ↑/↓ 召回之前生成用过的提示词")
     ];
     let tipTimer = null;
@@ -66,7 +67,7 @@ export function openGenMaterialDialog(gallery, opts = null) {
     quickInput.addEventListener("blur", () => { stopQuickTips(); setQuickTip(); });
 
     // ── 输入卡：一个提示词框 + 底部一行（技能 / 宽高比 / 最长边 / 自定参数 … ⋯ 生成）；
-    // ⋯ 菜单收 随机填入 / 运行时随机批量 / 预设列表 / 提示词增强 ──
+    // ⋯ 菜单收 运行时随机批量 / 提示词增强（预设与随机填词住在标题栏）──
     const GM_RANDOM_KEY = "neo.gallery.gen_material.runtime_random";
     let gmRandom = { enabled: false, count: 1 };
     try {
@@ -77,12 +78,10 @@ export function openGenMaterialDialog(gallery, opts = null) {
     } catch {}
     const saveGmRandom = () => { try { localStorage.setItem(GM_RANDOM_KEY, JSON.stringify(gmRandom)); } catch {} };
 
-    const moreBtn = $el("button", { className: "neo-gallery-gm-tool-btn neo-gallery-gm-more-btn", type: "button", textContent: "⋯", title: t("更多：随机填入 / 提示词增强 / 运行时随机批量 / 预设列表") });
+    const moreBtn = $el("button", { className: "neo-gallery-gm-tool-btn neo-gallery-gm-more-btn", type: "button", textContent: "⋯", title: t("更多：运行时随机批量 / 提示词增强") });
 
     // ⋯ 菜单（复用 Prompt Agent 节点运行时菜单样式；运行时随机状态 localStorage 持久化）
     const moreMenu = $el("div", { className: "rs-runtime-menu neo-gallery-gm-more-menu" });
-    const randomItem = $el("button", { className: "neo-gallery-gm-menu-item", type: "button", textContent: t("随机填入一条提示词") });
-    const presetItem = $el("button", { className: "neo-gallery-gm-menu-item", type: "button", textContent: t("预设列表") });
     const runtimeCheck = $el("input", { type: "checkbox" });
 
     runtimeCheck.checked = gmRandom.enabled;
@@ -98,7 +97,6 @@ export function openGenMaterialDialog(gallery, opts = null) {
         return b;
     };
     moreMenu.append(
-        randomItem,
         $el("label", { className: "rs-runtime-row rs-runtime-toggle" }, [
             runtimeCheck,
             $el("span", { className: "rs-runtime-row-text", textContent: t("运行时随机抽取提示词") })
@@ -106,8 +104,7 @@ export function openGenMaterialDialog(gallery, opts = null) {
         $el("div", { className: "rs-runtime-row" }, [
             mkCountBtn(-1), countValEl, mkCountBtn(1),
             $el("span", { className: "rs-runtime-row-text", textContent: t("张（批量生成）") })
-        ]),
-        presetItem
+        ])
     );
     const syncRandomState = () => {
         moreBtn.classList.toggle("neo-gallery-gm-tool-on", gmRandom.enabled);
@@ -119,57 +116,6 @@ export function openGenMaterialDialog(gallery, opts = null) {
         syncRandomState();
     });
     syncRandomState();
-
-    // 预设列表浮层（复用预设列表样式；配方不入池，点击填入提示词框）
-    const presetOverlay = $el("div", { className: "rs-preset-list-overlay" });
-    const presetHeader = $el("div", { className: "rs-preset-header" }, [
-        $el("input", { className: "rs-preset-search-input", type: "text", placeholder: t("搜索预设…") }),
-        $el("button", { className: "rs-preset-close", type: "button", textContent: "×" })
-    ]);
-    const presetSearch = presetHeader.querySelector("input");
-    presetHeader.querySelector("button").addEventListener("click", () => { presetOverlay.style.display = "none"; quickInput.focus(); });
-    const presetBody = $el("div", { className: "rs-preset-list-body" });
-    presetOverlay.append(presetHeader, presetBody);
-
-    let presetItems = null; // 本次弹窗会话缓存
-    const renderPresetList = (query) => {
-        presetBody.textContent = "";
-        const q = (query || "").trim().toLowerCase();
-        const items = (presetItems || []).filter(it => !q || it.name.toLowerCase().includes(q));
-        if (!items.length) {
-            presetBody.appendChild($el("div", { className: "neo-gallery-story-hint", textContent: q ? t("无匹配预设") : t("暂无预设") }));
-            return;
-        }
-        items.forEach(it => {
-            const row = $el("div", { className: "rs-preset-item" }, [
-                $el("span", { className: "rs-preset-content", textContent: it.name }),
-                $el("span", { className: "rs-source-badge", textContent: it.source === "presets" ? t("预设") : t("自定义") })
-            ]);
-            row.addEventListener("click", async () => {
-                try {
-                    const data = await loadPrompt(it.name);
-                    quickInput.value = data.text || "";
-                    presetOverlay.style.display = "none";
-                    quickInput.focus();
-                } catch (e) {
-                    console.error("[Gallery] load preset failed:", e);
-                    actionToast({ severity: "error", summary: t("加载预设失败"), detail: String(e?.message || e) });
-                }
-            });
-            presetBody.appendChild(row);
-        });
-    };
-    const openPresetList = async () => {
-        presetOverlay.style.display = "flex";
-        presetSearch.value = "";
-        if (!presetItems) {
-            presetBody.textContent = t("加载中…");
-            try { presetItems = await listPrompts(); } catch (e) { console.error("[Gallery] list prompts failed:", e); presetItems = []; }
-        }
-        renderPresetList("");
-        presetSearch.focus();
-    };
-    presetSearch.addEventListener("input", () => renderPresetList(presetSearch.value));
 
 
     let running = false;
@@ -399,7 +345,7 @@ export function openGenMaterialDialog(gallery, opts = null) {
         $el("div", { className: "neo-director-field-label", textContent: t("提示词增强（可选）") }),
         $el("div", { className: "rs-runtime-row" }, [enhanceSel, enhanceBtn]),
     ]);
-    moreMenu.insertBefore(enhanceGroup, presetItem);
+    moreMenu.append(enhanceGroup);
     let enhancing = false;
     enhanceBtn.addEventListener("click", async () => {
         if (enhancing || running) return;
@@ -601,18 +547,16 @@ export function openGenMaterialDialog(gallery, opts = null) {
         actionToast({ severity: "error", summary: t("素材生成失败"), detail: message, actionLabel: t("打开技能详情"), onAction: () => openSkillDetailById(skillSel.value || KREA2_T2I_SKILL_ID) });
     };
 
-    // 随机填入（与批量同池抽一条，配方不入池）
-    randomItem.addEventListener("click", async () => {
+    // 随机填入（标题栏那颗「随机」）：从图像池抽一条填进输入框，配方不入池
+    const pickOneRandom = async () => {
         if (randomPicking || running) return;
         randomPicking = true;
-        randomItem.disabled = true;
+        gmRandomBtn.disabled = true;
         try {
-            const data = await randomPrompts(1);
-            const text = (data.texts || [])[0] || "";
+            const text = await randomPromptText("image");
             if (text.trim()) {
                 quickInput.value = text;
                 quickInput.focus();
-                closeMoreMenu();
             } else {
                 actionToast({ severity: "error", summary: t("随机提示词失败"), detail: t("提示词库为空") });
             }
@@ -621,9 +565,9 @@ export function openGenMaterialDialog(gallery, opts = null) {
             actionToast({ severity: "error", summary: t("随机提示词失败"), detail: String(e?.message || e) });
         } finally {
             randomPicking = false;
-            randomItem.disabled = false;
+            gmRandomBtn.disabled = false;
         }
-    });
+    };
 
     // ⋯ 菜单（挂在弹窗 overlay 上，随窗移除）：output 框在面板下沿，默认朝按钮上方展开
     let moreMenuOpen = false;
@@ -646,10 +590,10 @@ export function openGenMaterialDialog(gallery, opts = null) {
     };
     document.addEventListener("pointerdown", onDocPress, true);
 
-    // 预设列表（无配方条目，点击填入提示词框）
-    presetItem.addEventListener("click", () => {
-        closeMoreMenu();
-        openPresetList();
+    // 预设列表（标题栏那颗「图像预设」）：共用浮层只列图像提示词，配方不入池
+    const openImagePresets = () => openPresetPicker({
+        kind: "image",
+        onPick: (text) => { quickInput.value = text; quickInput.focus(); },
     });
 
 
@@ -663,7 +607,7 @@ export function openGenMaterialDialog(gallery, opts = null) {
             renderRunning(tf("抽取 {n} 条随机提示词…", { n }));
             let res;
             try {
-                res = await randomPrompts(n);
+                res = await randomPrompts(n, "image");
             } catch (e) {
                 console.error("[Gallery] random prompts failed:", e);
                 failGen(String(e?.message || e));
@@ -705,8 +649,6 @@ export function openGenMaterialDialog(gallery, opts = null) {
             // 有浮层先关浮层，无浮层才关窗
             if (composerChips.some(c => c.isOpen())) { for (const c of composerChips) c.close(); }
             else if (moreMenuOpen) closeMoreMenu();
-
-            else if (presetOverlay.style.display === "flex") presetOverlay.style.display = "none";
             else if (!panel.embedded) close();   // 内嵌面板由绘画页自己管生命周期，Esc 不销毁
         }
         else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) start();
@@ -728,9 +670,16 @@ export function openGenMaterialDialog(gallery, opts = null) {
         ]),
     ]);
 
+    // 标题栏右侧的提示词入口（右端 ✕ 之前）：预设浮层与随机各填一次输入框
+    const gmPresetBtn = $el("button", { className: "neo-gallery-story-titlebar-btn", type: "button", textContent: t("图像预设"), title: t("从图像提示词列表里挑一条填进提示词") });
+    const gmRandomBtn = $el("button", { className: "neo-gallery-story-titlebar-btn", type: "button", textContent: t("随机"), title: t("随机填入一条图像提示词") });
+    gmPresetBtn.onclick = openImagePresets;
+    gmRandomBtn.onclick = pickOneRandom;
+
     const modal = $el("div", { className: "neo-gallery-story-modal" + (panel.embedded ? " neo-gallery-story-modal--embedded" : "") }, [
         $el("div", { className: "neo-gallery-story-titlebar" }, [
             $el("span", { className: "neo-gallery-story-title", textContent: t("生成素材") }),
+            $el("div", { className: "neo-gallery-story-titlebar-tools" }, [gmPresetBtn, gmRandomBtn]),
             $el("span", { className: "neo-gallery-story-close", textContent: "\u00D7", onclick: close })
         ]),
         statusBox,
@@ -739,7 +688,7 @@ export function openGenMaterialDialog(gallery, opts = null) {
     ]);
     overlay.appendChild(modal);
     // 浮层挂在 overlay 上（z-index 高于弹窗，随窗移除）
-    overlay.append(moreMenu, presetOverlay);
+    overlay.append(moreMenu);
 
 
     if (!panel.embedded) {

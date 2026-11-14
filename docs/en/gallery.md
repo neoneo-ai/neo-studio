@@ -135,10 +135,10 @@ background overlay, title bar drags the window) that creates new assets from a p
   setting follows the current skill.
 - **Generate** - the primary button at the right end of the composer row: it fires as soon as the box has
   content, and turns into "Cancel task" while a generation runs.
-- **⋯ More** - one `⋯` menu at the right end of that row holds the four tools: fill in a random prompt /
-  prompt enhance (optional) / runtime random prompts (batch count) / preset list. The `⋯` stays highlighted
-  while runtime random is on, and the switch and count persist in localStorage. Esc closes the chip menus and
-  this menu first, then the preset overlay.
+- **⋯ More** - one `⋯` menu at the right end of that row holds the two tools: prompt enhance (optional) /
+  runtime random prompts (batch count). The `⋯` stays highlighted
+  while runtime random is on, and the switch and count persist in localStorage. Filling the prompt lives
+  elsewhere - the title bar's right end carries **Image presets** and **Random**.
 
 #### Enhance (optional)
 
@@ -155,10 +155,13 @@ background overlay, title bar drags the window) that creates new assets from a p
 - **Generate** - the box content is the final prompt (`skip_enhance` is always sent); products land in
   `Output/NeoAgent/<date>/`, and after success you can jump straight to the landed directory, or delete the
   result images in one click when you do not like them.
-- **Helper tools** - the three inside the `⋯` menu: fill in a random entry (sampled from the mixed pool);
+- **Helper tools** - the two inside the `⋯` menu:
   runtime random settings (when enabled, "Generate" becomes a batch that samples N entries and generates
-  them one by one, cancelling keeps what was already generated, and recipes are not part of the pool); the
-  preset list (search, click to fill the box, with no recipe entries).
+  them one by one, cancelling keeps what was already generated, and recipes are not part of the pool), and
+  prompt enhance. The two prompt fillers sit at the right end of the title bar: **Image presets** opens the
+  preset picker (search, click to fill the box - image prompts only, `video/` prompts and recipes never
+  enter it), and **Random** draws one from the image pool (the request carries `kind="image"`, the backend
+  filters the pool).
 
 ## Lightbox viewer
 

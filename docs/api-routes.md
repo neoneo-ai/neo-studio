@@ -311,8 +311,8 @@ Neo Studio 独立页面（`web/studio/index.html`）的后端。素材 / 生图 
 | POST | `/rs_prompts/reverse_prompt` | 图片反推（SSE + 同名 .txt 缓存） |
 | POST | `/rs_prompts/stream_{task_name}` | 按任务名注册的流式生成端点 |
 | POST | `/rs_prompts/stream_generate_prompt` | 流式生成 |
-| POST | `/rs_prompts/random_prompt` | 随机提示词 |
-| POST | `/rs_prompts/random_prompts` | 运行时随机批量抽条（1–16） |
+| POST | `/rs_prompts/random_prompt` | 随机提示词（`kind`: image / video，空 = 混池）   |
+| POST | `/rs_prompts/random_prompts` | 运行时随机批量抽条（1–16，`kind` 同上） |
 | POST | `/rs_prompts/fetch_remote_models` | 拉取远程服务端模型列表 |
 | GET | `/rs_prompts/skills` | 技能列表（预设 / 任务 / 自定义分组） |
 | POST | `/rs_prompts/load_skill` | 读取单个技能 |

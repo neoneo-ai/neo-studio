@@ -346,8 +346,22 @@ def _iter_collection_files() -> list[tuple[str, str, str]]:
     return found
 
 
-def _iter_random_candidates() -> list[str]:
-    """运行时随机候选池：collections 文件按行拆成多条（复用解析缓存），普通预设文件整篇一条。"""
+def _is_video_prompt(name: str) -> bool:
+    """视频提示词 = 扫描名首段是 video（presets / custom 下的 video 目录，含其子目录）。
+
+    扫描名带目录前缀（`video/foo`），collections 的名字前缀是 `collections/`，落在图像一侧。
+    前端提示词管理页与预设选择浮层读的是同一条规则（js/core/preset-picker.js 的 isVideoPromptName）。
+    """
+    return (name or "").split("/")[0] == "video"
+
+
+def _iter_random_candidates(kind: str = "") -> list[str]:
+    """运行时随机候选池：collections 文件按行拆成多条（复用解析缓存），普通预设文件整篇一条。
+
+    kind="image" 只留图像提示词、kind="video" 只留视频提示词、空值不筛 —— 绘画页 / 视频页的「随机」各自
+    只要自己那一池，Prompt Agent 节点的运行时随机要的是混池，走空值这条。
+    """
+    kind = (kind or "").strip().lower()
     pool: list[str] = []
     for source, base_dir in (("custom", CUSTOM_DIR), ("presets", PRESETS_DIR)):
         for dirpath, dirnames, filenames in os.walk(base_dir):
@@ -357,6 +371,9 @@ def _iter_random_candidates() -> list[str]:
                 continue
             for fn in sorted(filenames):
                 if fn.endswith(".txt") and not fn.startswith("_"):
+                    rel = os.path.relpath(os.path.join(dirpath, fn), base_dir).replace(os.sep, "/")
+                    if kind and _is_video_prompt(rel) != (kind == "video"):
+                        continue
                     try:
                         with open(os.path.join(dirpath, fn), "r", encoding="utf-8", errors="ignore") as f:
                             content = f.read().strip()
@@ -364,7 +381,9 @@ def _iter_random_candidates() -> list[str]:
                         continue
                     if content:
                         pool.append(content)
-    for _, _, filepath in _iter_collection_files():
+    for display, _, filepath in _iter_collection_files():
+        if kind and _is_video_prompt(display) != (kind == "video"):
+            continue
         try:
             pool.extend(text for _, text in prompt_lines.load_entries(filepath))
         except OSError:
@@ -373,9 +392,9 @@ def _iter_random_candidates() -> list[str]:
     return list(dict.fromkeys(p for p in pool if p.strip()))
 
 
-def _sample_runtime_prompts(count: int) -> list[str]:
-    """从混合池中不重复抽取 count 条；池子不足时全量乱序返回。"""
-    pool = _iter_random_candidates()
+def _sample_runtime_prompts(count: int, kind: str = "") -> list[str]:
+    """从混合池中不重复抽取 count 条；池子不足时全量乱序返回。kind 筛池子，空值不筛。"""
+    pool = _iter_random_candidates(kind)
     if not pool:
         return []
     if len(pool) <= count:
@@ -1216,11 +1235,15 @@ async def rs_prompts_random_prompt(request):
 
 @server.PromptServer.instance.routes.post("/rs_prompts/random_prompts")
 async def rs_prompts_random_prompts(request):
-    """运行时随机：从混合池不重复抽取 count 条（与 NeoPromptAgent 同池，供批量生成使用）"""
+    """运行时随机：从混合池不重复抽取 count 条（与 NeoPromptAgent 同池，供批量生成使用）
+
+    kind 选池子："image" 排除 video 目录的提示词，"video" 只取它们，空 / 不传 = 混池（节点与旧调用方）。
+    """
     try:
         data = await request.json()
         count = max(1, min(int(data.get("count", 1) or 1), 16))
-        return web.json_response({"texts": _sample_runtime_prompts(count)})
+        kind = str(data.get("kind", "") or "")
+        return web.json_response({"texts": _sample_runtime_prompts(count, kind)})
     except Exception as e:
         logger.error(f"Error sampling random prompts: {e}")
         return web.Response(status=500, text=str(e))

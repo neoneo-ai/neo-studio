@@ -668,3 +668,48 @@ test("Studio 绘画页：图片编辑面板进页就绪，拖放落点与「生�
         await page.close();
     }
 });
+
+// 绘画页 / 视频页右上角那排提示词入口：浮层只列本页那一池（图像 / 视频），点一条填进本页的提示词框
+test("Studio 预设提示词入口：绘画页填图像池，视频页填视频池", async (t) => {
+    if (!guard(t)) return;
+    const page = await browser.newPage();
+    await pinZh(page);
+    try {
+        await page.setViewportSize({ width: 1280, height: 900 });
+        await page.goto(STUDIO_URL, { waitUntil: "networkidle", timeout: 30000 });
+        const pages = [
+            { tab: "paint", bar: ".ns-paint-bar", preset: ".ns-paint-preset-btn", input: ".ns-paint-text .neo-gallery-gm-quick-input", kind: "image" },
+            { tab: "video", bar: ".ns-video-bar", preset: ".ns-video-preset-btn", input: ".ns-video .ns-video-prompt", kind: "video" },
+        ];
+        for (const p of pages) {
+            await page.evaluate((t) => { location.hash = `#/${t}`; }, p.tab);
+            await page.waitForSelector(p.bar, { timeout: 15000 });
+            const bar = await page.evaluate((s) => {
+                const r = document.querySelector(s).getBoundingClientRect();
+                return {
+                    inside: r.x >= 0 && r.y >= 0 && r.right <= window.innerWidth && r.bottom <= window.innerHeight,
+                    labels: [...document.querySelectorAll(`${s} .ns-btn`)].map((b) => b.textContent.trim()),
+                };
+            }, p.bar);
+            assert.ok(bar.inside, `${p.tab} 页右上角那排出视口，鼠标点不到：${JSON.stringify(bar)}`);
+            assert.equal(bar.labels.length, 2, `${p.tab} 页那一排应是「预设」「随机」两枚：${JSON.stringify(bar.labels)}`);
+
+            await page.click(p.preset);
+            await page.waitForSelector(".neo-preset-picker .rs-preset-item, .neo-preset-picker .neo-preset-picker-empty", { timeout: 10000 });
+            const listed = await page.evaluate(() => [...document.querySelectorAll(".neo-preset-picker .rs-preset-content")].map((e) => e.textContent));
+            const wantVideo = p.kind === "video";
+            assert.ok(listed.every((n) => n.startsWith("video/") === wantVideo),
+                `${p.tab} 页的预设浮层混进了另一池：${JSON.stringify(listed.slice(0, 6))}`);
+            const row = await page.$(".neo-preset-picker .rs-preset-item");
+            if (!row) continue;   // 空库就到此为止：空态已经由选择器等到
+            await row.click();
+            await page.waitForSelector(".neo-preset-picker", { state: "detached", timeout: 10000 });
+            const filled = await page.evaluate((s) => document.querySelector(s).value, p.input);
+            assert.ok(filled.trim().length > 0, `${p.tab} 页点完预设，提示词框是空的`);
+        }
+    } finally {
+        await page.screenshot({ path: "artifacts/e2e-studio-preset-bar.png", fullPage: true }).catch(() => {});
+        await page.close();
+    }
+});
+

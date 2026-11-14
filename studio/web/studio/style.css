@@ -248,6 +248,11 @@ body {
 /* Size 滑杆管的是素材页的缩略图密度（写进画廊全局设置），弹窗里这扇窗只管「挑哪张、塞进哪个位」：
    滑杆在窗里拉一下会连素材页一起改了，而窗体大小归最大化 / 拖右缘管，两头都不搭 —— 弹窗内收掉 */
 .ns-libmodal .neo-gallery-slider-row { display: none; }
+/* 预设提示词浮层（js/core/preset-picker.js）：骨架借 prompts.css 的 .rs-preset-list-overlay，这里补 Studio 侧
+   要的两件事 —— 层位要盖得住生成素材 / 图片编辑那两层浮窗（9845），空列表也要留一块读得清的空态 */
+.neo-preset-picker { z-index: 9900; width: min(520px, 92vw); max-width: none; }
+.neo-preset-picker-scope { flex: none; font-size: 11px; color: #8fa3b8; }
+.neo-preset-picker-empty { padding: 16px 10px; font-size: 12px; color: #8a8a95; text-align: center; }
 .ns-libmodal-content .ns-director-recipes { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 10px; }
 /* 弹窗滚动条：平时隐形，鼠标进入才显形（槽位照留，显隐不引起内容跳动） */
 .ns-libmodal-content .ns-gallery-host, .ns-director-recipes { scrollbar-width: thin; scrollbar-color: transparent transparent; }
@@ -486,8 +491,11 @@ body {
 .ns-page:has(.ns-paint-edit) { padding-top: 4px; padding-bottom: max(4px, env(safe-area-inset-bottom)); }
 .ns-page:has(.ns-paint-edit) .ns-paint-main { padding-top: 0; gap: 4px; }
 /* 编辑页的素材库入口：浮在页面右上角，不为它空出一行（预览区顶部就是它的位置） */
-.ns-paint-bar { position: absolute; top: 12px; right: 14px; z-index: 3; display: flex; }
-.ns-paint-lib-btn { display: inline-flex; align-items: center; gap: 6px; }
+.ns-paint-bar { position: absolute; top: 12px; right: 14px; z-index: 3; display: flex; gap: 8px; }
+.ns-paint-lib-btn, .ns-paint-preset-btn, .ns-paint-random-btn { display: inline-flex; align-items: center; gap: 6px; }
+/* 视频页右上角同一排的「视频预设」「随机」（同绘画页那一列的落位规则，绝对定位不占页面行） */
+.ns-video-bar { position: absolute; top: 12px; right: 14px; z-index: 3; display: flex; gap: 8px; }
+.ns-video-preset-btn, .ns-video-random-btn { display: inline-flex; align-items: center; gap: 6px; }
 /* 面板宿主：铺满剩余栏高，不出自己的壳——这两页整页就是一块面板，再套一层边框圆角就是多一层没用的框；
    输入卡贴的是这块宿主的底边，内衬由面板自己管（.neo-gallery-story-modal--embedded 的 padding 为 0） */
 .ns-paint-panel { flex: 1 1 auto; min-height: 0; overflow: hidden; }
@@ -589,6 +597,7 @@ body {
     .ns-paint-panel { padding: 8px; }
     .ns-page:has(.ns-paint-edit) .ns-paint-main { padding-top: 4px; }
     .ns-paint-bar { top: 6px; right: 8px; }
+.ns-video-bar { top: 6px; right: 8px; }
     .ns-paint-panel .neo-gallery-story-actions { flex-wrap: wrap; }
     .ns-paint-panel .neo-gallery-gm-composer-bar,
     .ns-video-card .ns-video-chips { overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain; }

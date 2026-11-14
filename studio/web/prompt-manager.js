@@ -17,6 +17,7 @@ import {
     extractClassify
 } from "./prompt-service.js";
 import { mkEl } from "./dom-utils.js";
+import { isVideoPromptName } from "./js/core/preset-picker.js";
 import { createStatusBars, createPromptOutputArea, triggerTextChange } from "./llm-chat.js";
 import { openLLMSettingsModal } from "./llm-setting.js";
 import { actionToast } from "./toast.js";
@@ -66,9 +67,8 @@ function matchFilterTab(item, tab) {
     const name = typeof item === "string" ? item : item.name;
     if (item.isRecipe) return tab === "recipe";
     if (tab === "recipe") return false;
-    // 提示词扫描带目录前缀，presets 下 video/ 及其子目录算视频提示词，其余归图像
-    const isVideo = name.startsWith("video/");
-    return tab === "video" ? isVideo : !isVideo;
+    // 归属口径与预设选择浮层共用一条规则（js/core/preset-picker.js）
+    return tab === "video" ? isVideoPromptName(name) : !isVideoPromptName(name);
 }
 
 // ==========================================

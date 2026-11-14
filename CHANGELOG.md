@@ -5,6 +5,18 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 ## [Unreleased]
 
 ### Added
+- **The painting and video pages fill prompts from their own pool.** Each of those pages now carries a
+  top-right row: 绘画页 **图像预设 + 随机**, 视频页 **视频预设 + 随机**, 编辑页 **素材库 + 图像预设 + 随机**.
+  The preset button opens the shared picker (`studio/web/js/core/preset-picker.js`) scoped to that page - image
+  prompts for painting/edit, `video/` prompts for video, recipes never listed - and a click reads the entry's text
+  into the page's existing prompt box; the random button asks `/rs_prompts/random_prompts` with a `kind`, and the
+  backend filters the runtime pool by the same rule (a scan name whose first segment is `video` belongs to video,
+  everything else to image; an empty `kind` keeps the mixed pool the Prompt Agent node draws from). The picker's
+  Escape closes only the picker. In the 生成素材 dialog the two entries moved from the `⋯` menu into the title bar
+  (图像预设 / 随机), so `⋯` keeps 提示词增强 and 运行时随机. Covered by `studio/tests/js/preset-picker.test.mjs`,
+  `studio/tests/test_prompts_random_pool.py`, the 绘画页 / 编辑页 / 视频页 cases in `studio/tests/js/`,
+  the 生成素材 cases in `studio/tests/js/gallery-gen-material.test.mjs`, the phone-width case in
+  `studio/tests/e2e/studio-mobile-layout.e2e.mjs` and the 预设提示词入口 case in `studio/tests/e2e/studio.e2e.mjs`.
 - **The image model pickers follow the selected skill's family.** The 生图模型 row lists that family's weights only
   (a Qwen skill lists the Qwen Image 2.1 set, a Krea2 skill the Krea2 set), the Text Encoder / VAE rows drop the video /
   audio / 3D weights (`MiniMaxH3\`, `wan*` / `umt5`, `music*` / `acestep*`, `tripo*`, `ltx*`) so a painting panel no

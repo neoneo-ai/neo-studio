@@ -23,6 +23,8 @@ import { createAgentPanel, createMcpPanel, createAgentPrefsForm } from "../agent
 import { t, tf, getLang, applyLang, LANGS } from "../js/core/i18n.js";
 import { icon, setIcon, setIconLabel } from "../js/core/icons.js";
 import { createLibraryModal } from "../js/core/lib-modal.js";
+import { openPresetPicker, randomPromptText } from "../js/core/preset-picker.js";
+import { reusePaintPanel } from "../gen-utils.js";
 import { createPairPanel } from "../js/core/pair-access.js";
 import { initQueuePanel, setQueueOnline, queueTrack } from "../queue-panel.js";
 import { createPoseView } from "../pose/pose.js";
@@ -843,7 +845,29 @@ function buildPaint(el) {
     paintTextHost = textHost;
     // 文生图直接写提示词就能生成
     openGenMaterialDialog(app.neoGallery, { container: textHost });
+    // 右上角浮一枚提示词入口（绝对定位在预览区上，不为它们空出一行）
+    page.appendChild(paintPromptBar(textHost, "text"));
     paintArmed = true;
+}
+
+/** 绘画页 / 编辑页右上角那排提示词入口：「图像预设」开预设浮层、「随机」抽一条图像提示词，
+ *  两条都落进这一页现成面板的提示词框（面板不在了就重建一块带预填的）。
+ *  extra 是这一页原本就有的入口（编辑页的「素材库」），排在最前 */
+function paintPromptBar(host, kind, extra = []) {
+    const fill = (text) => {
+        if (reusePaintPanel(host, kind, null, null, { prompt: text })) return;
+        if (kind === "edit") openImageEditDialog(app.neoGallery, null, "", { container: host, prefill: { prompt: text } });
+        else openGenMaterialDialog(app.neoGallery, { container: host, prefill: { prompt: text } });
+    };
+    const presetBtn = $el("button", { className: "ns-btn ns-paint-preset-btn", type: "button", textContent: t("图像预设"), title: t("从图像提示词列表里挑一条填进提示词") });
+    const randomBtn = $el("button", { className: "ns-btn ns-paint-random-btn", type: "button", textContent: t("随机"), title: t("随机填入一条图像提示词") });
+    presetBtn.onclick = () => openPresetPicker({ kind: "image", onPick: fill });
+    randomBtn.onclick = async () => {
+        const text = await randomPromptText("image").catch(() => "");
+        if (!text.trim()) { toast(t("提示词库为空，抽不到图像提示词")); return; }
+        fill(text);
+    };
+    return $el("div", { className: "ns-paint-bar" }, [...extra, presetBtn, randomBtn]);
 }
 
 function buildEdit(el) {
@@ -858,7 +882,7 @@ function buildEdit(el) {
     const libBtn = $el("button", { className: "ns-btn ns-paint-lib-btn", type: "button", title: t("打开素材库：点卡片取用进图片编辑，拖进预览区投放") });
     setIconLabel(libBtn, "folder", t("素材库"));
     libBtn.onclick = () => openLibModal("edit", editPickImage, "image");
-    page.appendChild($el("div", { className: "ns-paint-bar" }, [libBtn]));
+    page.appendChild(paintPromptBar(editHost, "edit", [libBtn]));
 
     setPaintHost({ edit: editHost, onOpen: paintHostOpen });
     // 空面板铺好，从素材库把图拖进预览区当原图即可
@@ -1381,6 +1405,24 @@ function buildVideo(el) {
     page.appendChild(stage);
     page.appendChild(hero);
     page.appendChild(dock);
+
+    // 右上浮一枚入口列（绝对定位同绘画页那一列，不为它们空出一行）：视频预设挑一条词、随机抽一条视频提示词
+    const fillVideoPrompt = (text) => {
+        promptIn.value = text;
+        promptCount.textContent = `${promptIn.value.length} / ∞`;
+        promptIn.focus();
+    };
+    const videoBar = $el("div", { className: "ns-video-bar ns-paint-bar" }, [
+        $el("button", { type: "button", className: "ns-btn ns-video-preset-btn", textContent: t("视频预设"), title: t("从视频提示词列表里挑一条填进提示词") }),
+        $el("button", { type: "button", className: "ns-btn ns-video-random-btn", textContent: t("随机"), title: t("随机填入一条视频提示词") }),
+    ]);
+    videoBar.querySelector(".ns-video-preset-btn").addEventListener("click", () => openPresetPicker({ kind: "video", onPick: fillVideoPrompt }));
+    videoBar.querySelector(".ns-video-random-btn").addEventListener("click", async () => {
+        const text = await randomPromptText("video").catch(() => "");
+        if (!text.trim()) { toast(t("提示词库为空，抽不到视频提示词")); return; }
+        fillVideoPrompt(text);
+    });
+    page.appendChild(videoBar);
 
 
     // --- 生成 + 轮询 + 取消（无画布、无采样实时预览：只有排队 / 进度条 / 成片） ---

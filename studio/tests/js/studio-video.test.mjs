@@ -594,3 +594,40 @@ test("视频页：技能要参考素材时缺素材不发请求，状态行说�
     assert.match(statusEl().textContent, /至少选一张参考图/);
 });
 
+
+// 右上角那一排「视频预设」「随机」：预设浮层只列 video/ 条目，点一条填进提示词框并跟上字数
+test("视频页右上角：「视频预设」只列 video/ 条目，点一条填进提示词框；「随机」走视频池", async () => {
+    await boot();
+    await clickTab("video");
+    const bar = videoPage().querySelector(".ns-video-bar");
+    assert.ok(bar, "视频页右上角应有提示词入口那一排");
+    assert.equal([...bar.querySelectorAll(".ns-btn")].map((b) => b.textContent.trim()).join(" "),
+        "视频预设 随机", "那一排就两枚：视频预设、随机");
+
+    mockRoute("/rs_prompts/list_prompts", () => jsonResponse([
+        { name: "红杯", source: "presets" },
+        { name: "video/镜头推进", source: "presets" },
+        { name: "整片配方", source: "presets", isRecipe: true },
+    ]));
+    mockRoute("/rs_prompts/load_prompt", (b) => jsonResponse({ text: `全文:${b.name}` }));
+    mockRoute("/rs_prompts/random_prompts", () => jsonResponse({ texts: ["视频池里的一条"] }));
+
+    click(bar.querySelector(".ns-video-preset-btn"));
+    await sleep(80);
+    const picker = document.querySelector(".neo-preset-picker");
+    assert.deepEqual([...picker.querySelectorAll(".rs-preset-content")].map((e) => e.textContent),
+        ["video/镜头推进"], "图像提示词与配方都不进视频浮层");
+    click(picker.querySelector(".rs-preset-item"));
+    await sleep(80);
+    assert.equal(promptBox().value, "全文:video/镜头推进", "预设全文填进提示词框");
+    assert.equal(promptBox().parentElement.querySelector(".ns-video-count").textContent,
+        `${promptBox().value.length} / ∞`, "字数计数跟着填进去的句子走");
+    assert.equal(document.querySelector(".neo-preset-picker"), null, "选完收摊");
+
+    click(bar.querySelector(".ns-video-random-btn"));
+    await sleep(80);
+    assert.equal(promptBox().value, "视频池里的一条", "随机抽到的视频提示词填进同一格");
+    assert.equal(fetchLog.filter((c) => c.path === "/rs_prompts/random_prompts").at(-1).body.kind,
+        "video", "随机只向视频池要");
+});
+

@@ -2782,6 +2782,13 @@ Accordion Section Buttons (Clear)
     color: #eee;
 }
 
+/* 生成素材窗标题栏右侧的提示词入口（图像预设 / 随机）：贴右成一撮，✕ 在最右；
+   标题栏本身是拖窗口的手势，按钮上的按下由 makeStoryWindowDraggable 让出来 */
+.neo-gallery-story-titlebar-tools { margin-left: auto; display: flex; align-items: center; gap: 6px; padding-right: 6px; }
+.neo-gallery-story-titlebar-btn { padding: 3px 8px; font-size: 12px; color: #b9c4d0; background: rgba(255, 255, 255, 0.06); border: 1px solid #3a3a3a; border-radius: 5px; cursor: pointer; }
+.neo-gallery-story-titlebar-btn:hover { color: #fff; background: rgba(255, 255, 255, 0.12); }
+.neo-gallery-story-titlebar-btn:disabled { opacity: 0.5; cursor: default; }
+
 .neo-gallery-story-close {
     padding: 2px 6px;
     font-size: 18px;

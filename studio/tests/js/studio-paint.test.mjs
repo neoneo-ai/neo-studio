@@ -13,7 +13,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { resetEnv, flush, mockRoute, clearRoutes, jsonResponse, sleep, click } from "./setup.mjs";
+import { resetEnv, flush, mockRoute, clearRoutes, jsonResponse, sleep, click, fetchLog } from "./setup.mjs";
 
 const webDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../web");
 const studioBody = fs.readFileSync(path.join(webDir, "studio", "index.html"), "utf8").match(/<body>([\s\S]*?)<\/body>/)[1];
@@ -336,4 +336,56 @@ test("首页直达卡：扩图卡跳到编辑页当场切成扩图，选原图�
     assert.equal(outpaintRow.style.display, "", "换了原图，扩图控件跟着新原图留着");
 });
 
+
+
+// 绘画页右上角的「图像预设」「随机」：预设浮层只列图像条目，两条都落进页内那块面板的提示词框
+test("绘画页右上角：「图像预设」只列图像提示词，点一条填进输入框；「随机」走图像池", async () => {
+    await boot();
+    await clickTab("paint");
+    const page = paintPage();
+    const bar = page.querySelector(".ns-paint-bar");
+    assert.equal([...bar.querySelectorAll(".ns-btn")].map((b) => b.textContent.trim()).join(" "),
+        "图像预设 随机", "绘画页那一排是提示词入口，素材库只属于编辑页");
+
+    mockRoute("/rs_prompts/list_prompts", () => jsonResponse([
+        { name: "红杯", source: "presets" },
+        { name: "video/镜头推进", source: "presets" },
+        { name: "整片配方", source: "presets", isRecipe: true },
+    ]));
+    mockRoute("/rs_prompts/load_prompt", (b) => jsonResponse({ text: `全文:${b.name}` }));
+    mockRoute("/rs_prompts/random_prompts", () => jsonResponse({ texts: ["图像池里的一条"] }));
+
+    click(bar.querySelector(".ns-paint-preset-btn"));
+    await sleep(80);
+    const picker = document.querySelector(".neo-preset-picker");
+    assert.deepEqual([...picker.querySelectorAll(".rs-preset-content")].map((e) => e.textContent),
+        ["红杯"], "视频提示词与配方都不进图像浮层");
+    click(picker.querySelector(".rs-preset-item"));
+    await sleep(80);
+    const quick = textPanel().querySelector(".neo-gallery-gm-quick-input");
+    assert.equal(quick.value, "全文:红杯", "预设全文填进绘画页那块现成面板（不重建它）");
+
+    click(bar.querySelector(".ns-paint-random-btn"));
+    await sleep(80);
+    assert.equal(quick.value, "图像池里的一条", "随机抽到的图像提示词填进同一格");
+    assert.equal(fetchLog.filter((c) => c.path === "/rs_prompts/random_prompts").at(-1).body.kind, "image");
+});
+
+test("编辑页右上角一排：素材库右端接上「图像预设」「随机」，预设填进任务区提示词框", async () => {
+    await boot();
+    await clickTab("edit");
+    const bar = editPage().querySelector(".ns-paint-bar");
+    assert.equal([...bar.querySelectorAll(".ns-btn")].map((b) => b.textContent.trim()).join(" "),
+        "素材库 图像预设 随机", "编辑页那一排三枚：挑图 + 挑词 + 随机");
+
+    mockRoute("/rs_prompts/list_prompts", () => jsonResponse([{ name: "红杯", source: "presets" }]));
+    mockRoute("/rs_prompts/load_prompt", () => jsonResponse({ text: "红杯全文" }));
+    click(bar.querySelector(".ns-paint-preset-btn"));
+    await sleep(80);
+    click(document.querySelector(".neo-preset-picker .rs-preset-item"));
+    await sleep(80);
+    const filled = [...editPanel().querySelectorAll("textarea, input[type=text]")]
+        .filter((el) => el.value === "红杯全文");
+    assert.equal(filled.length, 1, "预设全文只落进编辑页那块面板的提示词框这一格");
+});
 

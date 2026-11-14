@@ -203,9 +203,10 @@ the window (maximize is what covers it).
 
 ## Input page / Edit page layout
 
-The input page is one full-width text-to-image panel; the edit page is one full-width image-edit panel with a
-**🖼 Asset library** button floating at its top right (absolutely positioned over the preview, so no toolbar
-row is reserved for it). Only one panel fills the page at a time — unlike the director
+The input page is one full-width text-to-image panel; the edit page is one full-width image-edit panel. A row of
+entry buttons floats at the top right of each page (absolutely positioned over the preview, so no toolbar row is
+reserved for them): the edit page carries **🖼 Asset library + Image presets + Random**, the input page
+**Image presets + Random**. Only one panel fills the page at a time — unlike the director
 page, no editor and generation panel split one width. The asset modal, the scrollbars and the
 narrow-window rules are shared with the director page (one modal instance, one geometry in
 `localStorage["neo_studio_libmodal_assets"]`).
@@ -231,8 +232,8 @@ narrow-window rules are shared with the director page (one modal instance, one g
   max side … `⋯` Generate") docked at the bottom of the page (the input bar follows the
   ArtCraft promptbox): one line in the box is enough to generate, the three chips are pill buttons with panels
   that float open upward (the native selects stay inside as state containers and never show; the skill list and
-  the main model / LoRA controls share the one two-column panel of the first chip), fill-random /
-  prompt enhance / runtime random / preset list live in the `⋯` menu. The panel fills the column height: progress and finished images stack from the top above
+  the main model / LoRA controls share the one two-column panel of the first chip), runtime random /
+  prompt enhance live in the `⋯` menu, while the prompt fillers (Image presets, Random) sit in the top-right row. The panel fills the column height: progress and finished images stack from the top above
   the composer, and idle leaves one start hint in the result area ("Write a prompt, then hit Generate") with no
   empty canvas (control list: [gallery.md](gallery.md), "Generate assets" and "Image editing").
   Filling and docking are independent of how short the window is: Windows display scaling reports an 800px window as
@@ -273,6 +274,14 @@ narrow-window rules are shared with the director page (one modal instance, one g
   out on that same target.
 - The VRAM / RAM readout and the **Clear** button live in the header queue panel: polling runs only while that panel is
   open, and generation pages no longer carry their own bar.
+- The prompt-filling buttons in that top-right row share one picker (`studio/web/js/core/preset-picker.js`):
+  **Image presets** lists image prompts only, **Video presets** lists the prompts under `video/`, and recipes never
+  enter either. Clicking an entry reads its text into the page's own prompt box (the composer box on the input page,
+  the capsule box on the video page) and the picker closes itself. **Random** asks `/rs_prompts/random_prompts` for
+  one entry with a `kind`, and the backend filters the pool with the same rule (a scan name whose first segment is
+  `video` belongs to video, everything else to image). The picker's Escape handler calls `stopPropagation`, so the
+  page's own "Escape closes the panel" does not fire along with it; on phones the row sits in the corner without
+  overlapping the prompt box (`studio/style.css`, `.ns-paint-bar` / `.ns-video-bar`).
 
 ## Skills page layout
 

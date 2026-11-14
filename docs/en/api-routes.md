@@ -364,8 +364,8 @@ included), and the dock never calls a handler directly.
 | POST | `/rs_prompts/reverse_prompt` | Image reverse-prompting (SSE + same-name .txt cache) |
 | POST | `/rs_prompts/stream_{task_name}` | Streaming generation endpoint registered by task name |
 | POST | `/rs_prompts/stream_generate_prompt` | Streaming generation |
-| POST | `/rs_prompts/random_prompt` | Random prompt |
-| POST | `/rs_prompts/random_prompts` | Runtime random batch draw (1–16) |
+| POST | `/rs_prompts/random_prompt` | Random prompt (`kind`: image / video, empty = mixed pool)   |
+| POST | `/rs_prompts/random_prompts` | Runtime random batch draw (1–16, `kind` as above) |
 | POST | `/rs_prompts/fetch_remote_models` | Fetch the remote server's model list |
 | GET | `/rs_prompts/skills` | Skill list (grouped presets / tasks / custom) |
 | POST | `/rs_prompts/load_skill` | Read a single skill |
