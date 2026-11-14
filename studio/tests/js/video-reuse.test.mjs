@@ -220,7 +220,7 @@ test("视频复用：认不出的整项丢掉——技能 / 模型 / 时长 / �
     assert.deepEqual(body.loras, [{ name: "h3/style_lora.safetensors", strength: 0.5 }],
         "清单外的 LoRA 丢掉 = 落回技能 config 的 LoRA");
     assert.ok(!("text_encoder" in body) && !("vae" in body) && !("audio_vae" in body), "副文件没记的编码器 / VAE 不发覆盖");
-    assert.equal(body.steps, 12, "步数跟着技能 config");
+    assert.ok(!("steps" in body), "面板没改步数不发这一项——技能 config 钉的 12 步才是这一发");
     assert.equal(body.seed, -1, "随机种子进 payload");
     assert.deepEqual([body.width, body.height], [1344, 768], "尺寸落回面板默认");
     assert.equal(body.duration_sec, 5, "时长落回面板默认");

@@ -179,6 +179,10 @@ bottom the panel opens upward, so main model / steps / "Done" never end up below
   `audio_vae` / `loras` / `steps`); the backend merges them into the skill config and runs the same
   resolution chain. Empty means keep following the skill's `config.json` and the global "video generation
   model" setting.
+- The panel prefills the steps field with the value the skill's `config.json` pins (the shipped effect skill
+  pins 24). **Leaving that field untouched sends no `steps`**, so the skill's steps are what run; a positive
+  value becomes this request's override, and `-1` / `0` mean "follow" (the same sentinel as the Director
+  node's `steps`).
 - Skills with `requires_ref: true` are blocked in the frontend when material is missing: a storyboard skill
   without a first / last frame, or a full-reference skill without a reference image, sends nothing and the
   status line names what is missing.
@@ -241,7 +245,8 @@ Runtime injection (when the template has no matching slot):
 ### Effect skill presets (H3 effects)
 
 An effect skill carries a table of effects: `config.json`'s `effects` pins, per effect, the prompt template,
-the example prompt, the effect body file, the sampling steps, the duration cap and the first/last-frame rule.
+the example prompt, the effect body file, the duration cap and the first/last-frame rule. The skill's own
+`steps` is the shot default the Video page prefills - the effect entries carry no step count.
 The Effects dropdown on the Video page is that table, and the frontend sends nothing but an effect id.
 `workflow.json` reuses the existing H3 image-to-video template, and `resolve_video_params` resolves the shot
 from the selected entry - the single-segment, simple-video and director paths all run through that one
@@ -256,7 +261,6 @@ resolution chain:
 | `embedding`       | Effect body filename under `models/embeddings/`; missing for the selected effect, the run is refused and the file is named |
 | `same_first_last` | The last frame defaults to the first frame (a closed shot, so the clip loops); an explicit last frame wins |
 | `max_length`      | Frame cap; a longer duration on the page is clamped back to it                 |
-| `steps`           | The effect's own sampling steps, which outrank the skill config and the page's steps override |
 
 The effect body is a community text embedding: the backend appends the official trigger segment
 `embedding:<filename>` to the final prompt (ComfyUI 0.30+ supports `embedding:name` in H3 prompts; the trigger
@@ -266,22 +270,26 @@ is the filename without extension, matched verbatim). The files ship from
 they are not MiniMax official work. The shipped effect skill `effect_h3` (特效-特效镜头, first frame plus one
 line, 11 effects):
 
-| Effect id          | Label        | Effect body (`models/embeddings/`)                       | Shipped defaults    |
-|--------------------|--------------|----------------------------------------------------------|---------------------|
-| `bullet_time`      | 子弹时间     | `minimaxh3_bullet_time.safetensors`                      | 124-frame cap · 28 steps |
-| `frozen_moment`    | 定格瞬间     | No file (base-model approximation plus identical first and last frames, loops) | 124-frame cap · 24 steps |
-| `art_is_explosion` | 画面炸开     | `minimaxh3_art_is_explosion.safetensors`                 | 24 steps            |
-| `blooming_flowers` | 繁花盛开     | `minimaxh3_blooming_flowers.safetensors`                 | 24 steps            |
-| `dark_magic`       | 黑暗魔法     | `minimaxh3_dark_magic.safetensors`                       | 24 steps            |
-| `fire_breath`      | 火焰吐息     | `minimaxh3_fire_breath.safetensors`                      | 24 steps            |
-| `four_seasons`     | 四季流转     | `minimaxh3_four_seasons.safetensors`                     | 24 steps            |
-| `kiss_camera`      | 亲吻镜头     | `minimaxh3_kiss_camera.safetensors`                      | 24 steps            |
-| `spiral_ascent`    | 螺旋升腾     | `minimaxh3_spiral_ascent.safetensors`                    | 124-frame cap · 24 steps |
-| `storm_magic`      | 风暴魔法     | `minimaxh3_storm_magic.safetensors`                      | 24 steps            |
-| `truman_show`      | 楚门式片场   | `minimaxh3_truman_show.safetensors`                      | 24 steps            |
+| Effect id          | Label        | Effect body (`models/embeddings/`)                       | Frame cap          |
+|--------------------|--------------|----------------------------------------------------------|--------------------|
+| `bullet_time`      | 子弹时间     | `minimaxh3_bullet_time.safetensors`                      | 124 frames         |
+| `frozen_moment`    | 定格瞬间     | No file (base-model approximation plus identical first and last frames, loops) | 124 frames         |
+| `art_is_explosion` | 画面炸开     | `minimaxh3_art_is_explosion.safetensors`                 | none               |
+| `blooming_flowers` | 繁花盛开     | `minimaxh3_blooming_flowers.safetensors`                 | none               |
+| `dark_magic`       | 黑暗魔法     | `minimaxh3_dark_magic.safetensors`                       | none               |
+| `fire_breath`      | 火焰吐息     | `minimaxh3_fire_breath.safetensors`                      | none               |
+| `four_seasons`     | 四季流转     | `minimaxh3_four_seasons.safetensors`                     | none               |
+| `kiss_camera`      | 亲吻镜头     | `minimaxh3_kiss_camera.safetensors`                      | none               |
+| `spiral_ascent`    | 螺旋升腾     | `minimaxh3_spiral_ascent.safetensors`                    | 124 frames         |
+| `storm_magic`      | 风暴魔法     | `minimaxh3_storm_magic.safetensors`                      | none               |
+| `truman_show`      | 楚门式片场   | `minimaxh3_truman_show.safetensors`                      | none               |
 
 - The skill stays available in the skill dropdown as long as one effect body is installed; the effect whose
   body is missing is marked （不可用） in the Effects dropdown instead of disappearing from the list.
+- The effect table carries no step count: 24 / 28 is MiniMax's reference for the un-accelerated official
+  model, and the shots people actually run are a distilled checkpoint plus a speed-up LoRA, where those
+  numbers only slow the shot down. Typing 8 into the panel's steps field really runs 8 steps; leaving that
+  field untouched runs the skill's own 24.
 - The 特效视频 preset card of the home page's 开始创作 section (off the default home - add it back through
   编辑首页 → 添加卡片) takes the skill-card route straight to the Video page with this skill selected, and the
   Effects dropdown lands on the shipped default effect.
@@ -355,8 +363,12 @@ line, 11 effects):
 
 - The terminal `CreateVideo` packs video frames + audio into a native `VIDEO` (fps=24) and does not write to
   disk itself; add a SaveVideo to export a video with sound.
-- Sampling steps come from the skill's `config.json` `steps`, default 20; cfg / sampler / scheduler are written
-  in each skill's `workflow.json`.
+- Sampling steps resolve in this order: a positive value in this request (the Video page's panel / the node's
+  `steps`) > the skill's `config.json` `steps` > default 20; the effect table carries no steps. cfg /
+  sampler / scheduler are written in each skill's `workflow.json`.
+- The shipped 24-step default lands only in a freshly seeded data root: an existing `effect_h3` preset is
+  never overwritten, so delete `<data root>/skills/presets/effect_h3/` to re-seed it, or change the steps of
+  this skill in 技能管理.
 - The model dropdown under "output settings → video generation model" puts the H3-related entries first, which
   makes local models easy to find.
 - Video has no "depends on reference images" concept: every configured LoRA is loaded unconditionally.

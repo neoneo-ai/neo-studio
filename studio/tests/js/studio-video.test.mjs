@@ -47,6 +47,7 @@ const skillChipBtn = () => document.querySelector(".ns-video .ns-video-chip .neo
 const skillChipLabel = () => document.querySelector(".ns-video .ns-video-chip .neo-gallery-gm-chip-label");
 const skillPanel = () => document.querySelector(".ns-video .neo-gallery-gm-chip-panel");
 const videoCfgSel = () => document.querySelector(".ns-video .rs-gen-model-section select");
+const videoStepsInp = () => document.querySelector(".ns-video .rs-gen-model-section input.rs-gen-steps");
 const videoPosts = () => fetchLog.filter((c) => c.method === "POST" && c.path === "/neo_video_gen/simple");
 const pickSkill = (id) => {
     skillSel().value = id;
@@ -435,7 +436,7 @@ test("视频页：自定参数全空时请求体不带覆盖项（跟随技能�
     assert.ok(!("model" in body), "主模型留空 = 不发 model 覆盖");
     assert.ok(!("loras" in body), "无 LoRA 行 = 不发 loras 覆盖");
     assert.ok(!("text_encoder" in body) && !("vae" in body) && !("audio_vae" in body), "编码器 / VAE 留空同样不发");
-    assert.equal(body.steps, 8, "步数跟着该技能 config 走");
+    assert.ok(!("steps" in body), "面板没改步数 = 不发 steps 覆盖，该技能 config 钉的 8 步在后端跑");
 });
 
 test("视频页：换技能重放该技能自定参数，填进面板的覆盖跟着进 payload", async () => {
@@ -448,18 +449,21 @@ test("视频页：换技能重放该技能自定参数，填进面板的覆盖�
     await settle();
     await pickIntoSlot(2, "a.png");
     assert.equal(videoCfgSel().value, "minimax_h3/model_b.safetensors", "面板主模型换成该技能钉的那一颗");
+    assert.equal(videoStepsInp().value, "12", "面板步数铺该技能钉的那一发");
     click(runBtn());
     await settle();
     const body = videoPosts().at(-1).body;
     assert.equal(body.model, "minimax_h3/model_b.safetensors", "payload 带该技能钉的主模型");
-    assert.equal(body.steps, 12, "payload 带该技能钉的步数");
+    assert.ok(!("steps" in body), "面板没改步数就不发这一项——技能 config 钉的 12 步才是这一发");
     assert.deepEqual(body.loras, [{ name: "h3/style_lora.safetensors", strength: 0.5 }], "payload 带该技能钉的 LoRA 与强度");
     videoCfgSel().value = "minimax_h3_fl2va_pruned_int8_convrot.safetensors";
     videoCfgSel().dispatchEvent(new Event("change", { bubbles: true }));
+    videoStepsInp().value = "40";
     click(runBtn());
     await settle();
     assert.equal(videoPosts().at(-1).body.model, "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
         "手填的主模型跟着进 payload");
+    assert.equal(videoPosts().at(-1).body.steps, 40, "手改的步数跟着进 payload");
 });
 
 // 竖屏档的落点：菜单里要点得着、写回下拉、随 payload 发出（分辨率 chip 与绘画页比例 chip 共用同一枚 glyph，
@@ -499,6 +503,8 @@ test("视频页：特效芯片只对带特效表的技能出现，选项带默�
         "特效项按技能特效表的顺序列出");
     assert.ok(opts.map((o) => o.textContent).some((t) => t.includes("火焰吐息") && t.includes("不可用")),
         "缺本体的特效要说出现在跑不了，而不是从列表里消失");
+    assert.ok(opts.map((o) => o.textContent).every((t) => !t.includes("步")),
+        "特效下拉只写特效名：跑几步看主模型与加速 LoRA，把数字钉在特效名下没有意义");
     assert.equal(effectSel().value, "bullet_time", "默认特效取技能自己钉的那一个");
     assert.match(promptBox().placeholder, /a sprinter leaps/, "占位符换成这一发特效的示例提示词");
     pickEffect("frozen_moment");
@@ -521,6 +527,11 @@ test("视频页：特效技能把选中的特效 id 发进 payload，预检按�
     await settle();
     const body = videoPosts().at(-1).body;
     assert.equal(body.effect, "frozen_moment", "payload 带本次选中的特效 id");
+    assert.ok(!("steps" in body), "面板没改步数就不发这一项——技能 config 钉的默认才是这一发");
+    videoStepsInp().value = "8";   // 换上 8 步蒸馏 checkpoint 时要真的跑 8 步
+    click(runBtn());
+    await settle();
+    assert.equal(videoPosts().at(-1).body.steps, 8, "面板改过的步数盖过特效钉的步数进 payload");
     const check = fetchLog.find((c) => c.path === "/neo_skill_models/check");
     assert.ok(check, "提交前先问一次模型库就位检查");
     assert.equal(check.query.get("skill_id"), "effect_h3", "预检问的是这一发的技能");

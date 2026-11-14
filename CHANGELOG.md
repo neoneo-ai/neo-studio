@@ -13,8 +13,8 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   phone page all show the same home. Covered by the home layout cases in `studio/tests/js/home-layout.test.mjs`.
 - **One H3 effect skill with 11 effects on the Video page: 特效-MiniMax H3 (`effect_h3`).** The skill's
   `config.json` carries an `effects` table — 子弹时间 · 定格瞬间 · 画面炸开 · 繁花盛开 · 黑暗魔法 · 火焰吐息 ·
-  四季流转 · 亲吻镜头 · 螺旋升腾 · 风暴魔法 · 楚门式片场 — and each entry pins its effect file, its step
-  count, its frame cap and its 提示词参考. The bodies are the community text embeddings of
+  四季流转 · 亲吻镜头 · 螺旋升腾 · 风暴魔法 · 楚门式片场 — and each entry pins its effect file, its frame
+  cap and its 提示词参考. The bodies are the community text embeddings of
   `Comfy-Org/MiniMax-H3/embeddings` (author silveroxides, 0.51-1.45 GB each, on both ModelScope and Hugging
   Face), triggered through the official ComfyUI segment `embedding:<filename>` written into the prompt, so the
   trigger segment ships from the preset and a rewritten prompt simply runs without the effect; 定格瞬间 needs
@@ -22,9 +22,10 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   takes the first frame as the last frame, and caps the shot at 124 frames so the finished clip loops. The
   Video page gains a 特效 chip that lists that table for this skill only, marks an effect whose file is not
   installed （不可用）, and replaces the prompt placeholder with the selected effect's 提示词参考. The file,
-  the steps and the frame cap come from the preset, never from the request: a shot whose selected effect has
+  the frame cap come from the preset, never from the request: a shot whose selected effect has
   no embedding on disk is refused before the queue with the missing file named, the precheck asks only about
-  the selected effect, the effect's steps outrank the page's custom step count, and Model Hub counts these 10
+  the selected effect, the shot samples at the skill's own steps whenever the page's 步数 field is untouched,
+  and Model Hub counts these 10
   embedding files in the readiness row of this skill. The two presets this
   replaces (特效-子弹时间, 特效-定格瞬间) and the Civitai `[MMH3] Bullet Time` LoRA are out of the shipped
   preset set — a data root seeded by an older build keeps its copies until they are deleted by hand. Covered by
@@ -92,6 +93,15 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   the layout cases in `app/tests/test_studio_server.py`.
 
 ### Changed
+- **The Video page's 步数 field wins.** An H3 effect skill used to pin a step count per effect (子弹时间 28,
+  定格瞬间 24, the rest 24) and that number outranked the 自定参数面板's 步数 — on an 8-step distilled checkpoint
+  the shot still ran 24 steps, about three times the time. Those numbers are MiniMax's reference on the
+  un-accelerated official model, and the community runs distilled checkpoints and speed-up LoRAs, so effect
+  entries carry no steps at all now: typing a positive number (8 on the 8-step distill checkpoint) runs
+  exactly that many steps, and leaving the field untouched sends nothing so the shot samples at the steps the
+  skill's `config.json` pins. The panel prefills the steps that will really run, 再来一发 resubmits the steps
+  that shot recorded, and the Effects dropdown lists effect names with no numbers. Covered by
+  `studio/tests/test_h3_video_gen.py` and `studio/tests/js/studio-video.test.mjs`.
 - **The shell pages scroll on a thin ghost slot.** 首页 / 素材 / 导演 (and every other Studio page) no longer
   carry the default system scrollbar: the page container `.ns-page` is 8px (`scrollbar-width: thin`), its thumb
   is transparent at rest and lands on `#555` only while the pointer is on the page - the same treatment the asset

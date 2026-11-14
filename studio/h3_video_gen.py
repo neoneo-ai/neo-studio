@@ -94,15 +94,21 @@ def resolve_video_params(body: dict, cfg: dict, skip_model: bool = False) -> dic
 
     cfg 为 skill 的 config.json：model/text_encoder/vae 优先取 cfg，缺省回落到独立「生视频模型」
     设置（video_gen.json / get_video_settings），仍空则按 H3 名称线索自动挑选；width/height/length 缺省用 H3 默认。
-    请求体里 _VIDEO_OVERRIDE_KEYS 的非空值先并入 cfg（视频页自定参数面板本发临时换的模型 / LoRA / 步数）。
+    请求体里 _VIDEO_OVERRIDE_KEYS 的非空值先并入 cfg（视频页自定参数面板本发临时换的模型 / LoRA / 步数）；
+    步数只认正数，-1 与 0 是「跟随技能配置」的哨兵，不进 cfg。
     skip_model=True 时跳过主模型解析/校验（外部 MODEL 注入模式，内部 UNETLoader 会被剪掉）。
     """
     # 会话页自定参数面板本发填的覆盖值先并进技能配置：空值跳过 = 这一发跟着技能配置与全局生视频设置走，
     # 下面每条解析只看合并后的 cfg，回退链一律不变
     cfg = dict(cfg)
     for key in _VIDEO_OVERRIDE_KEYS:
-        if body.get(key):
-            cfg[key] = body[key]
+        value = body.get(key)
+        if not value:
+            continue
+        if key == "steps" and _positive_steps(value) <= 0:
+            # -1 / 0 是「跟随技能与特效」的哨兵（导演节点同一口径）：盖进 cfg 就把技能钉的步数清了
+            continue
+        cfg[key] = value
 
     effect = _effect_entry(cfg, body.get("effect"))
     prompt_text = _effect_prompt(effect, str(body.get("prompt") or "").strip())
@@ -181,7 +187,9 @@ def resolve_video_params(body: dict, cfg: dict, skip_model: bool = False) -> dic
     max_length = effect.get("max_length") or cfg.get("max_length")
     if isinstance(max_length, int) and max_length > 0:
         length = min(length, max_length)   # 特效自带的时长上限：选更长也只会跑到这一发特效能稳住的长度
-    steps = int(effect.get("steps") or cfg.get("steps") or 20)   # 采样步数：特效/技能 config.json 可配，默认 20
+    # 采样步数：本次请求填的正数 > 技能 config > 默认 20。特效不钉步数——官方那组 24 / 28 是未加速官方
+    # 模型上的参考值，社区换蒸馏 checkpoint 或加速 LoRA 后不适用，钉在特效上只会把这一发拖慢
+    steps = _positive_steps(body.get("steps")) or _positive_steps(cfg.get("steps")) or 20
 
     seed = body.get("seed")
     seed = random.randint(0, 2**63 - 1) if seed is None else max(0, int(seed))
@@ -205,6 +213,15 @@ def resolve_video_params(body: dict, cfg: dict, skip_model: bool = False) -> dic
         "ref_videos": ref_videos,
         "ref_audios": ref_audios,
     }
+
+
+def _positive_steps(value) -> int:
+    """步数只有正数才算这一发的覆盖值：-1 / 0 / 非数字都是「跟着技能配置钉的那一发走」。"""
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        return 0
+    return n if n > 0 else 0
 
 
 def _effect_entry(cfg: dict, raw) -> dict:

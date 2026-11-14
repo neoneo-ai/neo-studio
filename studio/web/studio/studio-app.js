@@ -1251,7 +1251,9 @@ function buildVideo(el) {
     const applySkillConfig = async (skillId, reuseOverlay = null) => {
         if (!skillId || !videoModels) return;
         const cfg = await getSkillGenConfig(skillId);
-        videoCfg.load({ ...(cfg || {}), ...(reuseOverlay || {}) }, videoModels);
+        // 「再来一发」带进来的步数是那一发的显式值（重放要照发）；技能配置铺的不算这一发的覆盖
+        videoCfg.load({ ...(cfg || {}), ...(reuseOverlay || {}) }, videoModels,
+            { stepsFromRun: Number(reuseOverlay?.steps) >= 1 });
         skillChip.sync();   // 程序改 value 不触发 change：chip 标签自己跟上
     };
 
@@ -1478,7 +1480,8 @@ function buildVideo(el) {
             if (ov.text_encoder) body.text_encoder = ov.text_encoder;
             if (ov.vae) body.vae = ov.vae;
             if (ov.audio_vae) body.audio_vae = ov.audio_vae;
-            if (ov.steps) body.steps = ov.steps;
+            // 步数只在用户改过面板时才发：特效技能把步数钉在特效项上，发了就把那一发契约改了
+            if (ov.steps && !videoCfg.stepsFollowSkill()) body.steps = ov.steps;
             if (ov.loras.length) body.loras = ov.loras;
         }
         runBtn.disabled = true;

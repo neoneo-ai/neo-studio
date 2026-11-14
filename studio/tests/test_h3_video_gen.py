@@ -514,19 +514,21 @@ class ResolveVideoParamsTests(unittest.TestCase):
             h3_video_gen.suggest_audio_vae = orig
 
     def _effect_cfg(self):
-        """特效表技能的最小契约：每个特效自带嵌入文件 / 模板 / 步数 / 时长上限 / 首尾同帧。"""
+        """特效表技能的最小契约：每个特效自带嵌入文件 / 模板 / 时长上限 / 首尾同帧。"""
         cfg = self._cfg()
+        cfg["steps"] = 24   # 特效技能自己钉的默认：面板铺的就是它，用户改过才作为本发覆盖
+
         cfg["effect"] = "bullet_time"
         cfg["effects"] = [
             {"id": "bullet_time", "label": "子弹时间", "embedding": "minimaxh3_bullet_time.safetensors",
-             "steps": 28, "max_length": 124, "prompt_default": "a sprinter leaps",
+             "max_length": 124, "prompt_default": "a sprinter leaps",
              "prompt_template": "embedding:minimaxh3_bullet_time {text} bullet-time, single shot"},
-            {"id": "frozen_moment", "label": "定格瞬间", "steps": 24, "max_length": 124,
+            {"id": "frozen_moment", "label": "定格瞬间", "max_length": 124,
              "same_first_last": True, "prompt_template": "{text} locked camera seamless loop"},
             {"id": "dark_magic", "label": "黑暗魔法", "embedding": "minimaxh3_dark_magic.safetensors",
-             "steps": 24, "prompt_template": "embedding:minimaxh3_dark_magic {text} dark magic gathers"},
+             "prompt_template": "embedding:minimaxh3_dark_magic {text} dark magic gathers"},
             {"id": "fire_breath", "label": "火焰吐息", "embedding": "minimaxh3_fire_breath.safetensors",
-             "steps": 24, "prompt_template": "embedding:minimaxh3_fire_breath {text} fire breath"},
+             "prompt_template": "embedding:minimaxh3_fire_breath {text} fire breath"},
         ]
         return cfg
 
@@ -534,11 +536,11 @@ class ResolveVideoParamsTests(unittest.TestCase):
         # 官方语法 embedding:<文件名> 逐字进提示词：触发词就是文件名去后缀，改写过的文本特效认不出来
         p = h3_video_gen.resolve_video_params({"prompt": "a hooded figure", "effect": "dark_magic"}, self._effect_cfg())
         self.assertEqual(p["prompt"], "embedding:minimaxh3_dark_magic a hooded figure dark magic gathers")
-        self.assertEqual((p["effect"], p["steps"]), ("dark_magic", 24))
+        self.assertEqual(p["effect"], "dark_magic")
 
     def test_effect_defaults_to_the_skills_own_effect(self):
         p = h3_video_gen.resolve_video_params({"prompt": "a sprinter"}, self._effect_cfg())
-        self.assertEqual((p["effect"], p["steps"]), ("bullet_time", 28))
+        self.assertEqual(p["effect"], "bullet_time")
         self.assertIn("embedding:minimaxh3_bullet_time", p["prompt"])
 
     def test_effect_empty_text_uses_that_effects_default(self):
@@ -576,11 +578,24 @@ class ResolveVideoParamsTests(unittest.TestCase):
              "last_frame": {"kind": "input", "value": "end_frame.png"}}, self._effect_cfg())
         self.assertEqual(explicit["ref_last"], "end_frame.png")   # 用户点了尾帧就按用户的那张
 
-    def test_effect_steps_beat_the_pages_own_steps_override(self):
-        # 自定参数面板这一发改的步数是覆盖技能配置的；特效钉着的步数是这一发的契约，特效优先
+    def test_page_steps_override_the_skills_config_steps(self):
+        # 面板改过的步数就是这一发要跑的：技能 config 钉 24 步时换 8 步蒸馏 checkpoint 只要三分之一时间
         p = h3_video_gen.resolve_video_params(
-            {"prompt": "x", "effect": "bullet_time", "steps": 4}, self._effect_cfg())
-        self.assertEqual(p["steps"], 28)
+            {"prompt": "x", "effect": "bullet_time", "steps": 8}, self._effect_cfg())
+        self.assertEqual(p["steps"], 8)
+
+    def test_unset_page_steps_keeps_the_skills_config_steps(self):
+        # 面板没改过 = 发 -1（导演节点同一哨兵）；0 / 空 / 非数字同理：技能 config 钉的 24 步才是这一发
+        for sent in (-1, 0, None, "abc"):
+            p = h3_video_gen.resolve_video_params(
+                {"prompt": "x", "effect": "bullet_time", "steps": sent}, self._effect_cfg())
+            self.assertEqual(p["steps"], 24, f"steps={sent!r} 应落回技能 config 钉的那一发")
+
+    def test_unset_page_steps_falls_back_to_the_skill_config_steps(self):
+        # 没有特效表的技能：-1 不能把 cfg 里合并进来的哨兵当步数用出去
+        cfg = self._cfg()
+        cfg["steps"] = 30
+        self.assertEqual(h3_video_gen.resolve_video_params({"prompt": "x", "steps": -1}, cfg)["steps"], 30)
 
     def test_effect_prompt_template_fills_text(self):
         # 特效技能钉提示词：用户那句话只填进 {text}，触发词由模板写死，被改写过的文本认不出镜头
@@ -689,6 +704,7 @@ class EffectSkillContractTests(unittest.TestCase):
         self.assertEqual(len(ids), 11, "11 个特效：10 个社区嵌入 + 不吃文件的定格瞬间")
         self.assertEqual(len(set(ids)), len(ids))
         self.assertIn(cfg["effect"], ids)
+        self.assertGreater(int(cfg.get("steps") or 0), 20, "特效技能自己钉一发默认步数：环绕与画面试效在 20 步上会糊")
 
     def test_embedding_effects_pin_their_embedding_segment(self):
         for e in self._config()["effects"]:
@@ -700,7 +716,6 @@ class EffectSkillContractTests(unittest.TestCase):
                 self.assertTrue(e["prompt_template"].startswith(f"embedding:{stem} "), e["prompt_template"][:40])
                 self.assertIn("{text}", e["prompt_template"])
                 self.assertTrue(e["prompt_default"])
-                self.assertGreater(int(e["steps"]), 20, "环绕与画面试效在 20 步上会糊")
 
     def test_frozen_moment_needs_no_file_and_loops(self):
         e = next(x for x in self._config()["effects"] if x["id"] == "frozen_moment")

@@ -120,6 +120,9 @@ MiniMax H3 视频生成：单段 BUNDLE 与多段导演配方。配方编辑见 
 - 面板的自定参数是**这一发的请求级覆盖**：主模型 / Text Encoder / 视频 VAE / 音频 VAE / LoRA / 步数，
   非空才随请求体发出（`model` / `text_encoder` / `vae` / `audio_vae` / `loras` / `steps`），后端把它们
   并进技能配置后走同一条解析链；留空 = 继续跟随技能 `config.json` 与全局「生视频模型」设置。
+- 面板铺进步数时铺的就是这一发要跑的那一发（技能 `config.json` 钉的值，出厂特效技能钉 24）：
+  **用户没改动这一格就不发 `steps`**，技能与特效钉的步数才是真跑的步数；改成正数（`>0`）才作为本发覆盖
+  生效，`-1` / `0` 按「跟随」处理（与导演节点的 `steps` 同一哨兵）。
 - `requires_ref: true` 的技能由前端拦截素材缺失：分镜家族缺首帧 / 尾帧、全参考家族缺参考图时不发请求，
   状态行直接说明缺哪一样。
 - 分辨率 chip 的每一档都有横竖两枚：`352p / 432p / 576p / 720p / 768p / 1080p` 各是一档 MiniMax H3 画布
@@ -174,7 +177,7 @@ MiniMax H3 视频生成：单段 BUNDLE 与多段导演配方。配方编辑见 
 ### 特效技能预设（H3 特效）
 
 特效技能是一份特效表：`config.json` 的 `effects` 逐条钉着每个特效的提示词模板、示例提示词、特效本体文件、
-采样步数、时长上限与首尾同帧，视频页的「特效」下拉就是这一份表，前端只交一个特效 id。`workflow.json`
+时长上限与首尾同帧，视频页的「特效」下拉就是这一份表，前端只交一个特效 id。`workflow.json`
 复用现有 H3 图生视频模板，`resolve_video_params` 按选中的那一项解析这一发，单段 / 简单视频 / 导演逐段
 共用同一条解析链：
 
@@ -187,7 +190,6 @@ MiniMax H3 视频生成：单段 BUNDLE 与多段导演配方。配方编辑见 
 | `embedding`       | 特效本体的文件名（`models/embeddings/` 下），本次特效缺文件就拒绝生成并报出文件名 |
 | `same_first_last` | 尾帧缺省取首帧（闭环特效，成片首尾同图可无缝循环）；用户点了尾帧按用户那张    |
 | `max_length`      | 帧数上限，页面选更长也夹回这一档                                              |
-| `steps`           | 特效项自己的采样步数，优先于技能配置与页面自定参数面板的步数                  |
 
 特效本体是社区文本嵌入：最终提示词里由后端拼上官方语法的触发段 `embedding:<文件名>`（ComfyUI 0.30+ 在
 H3 提示词里支持 `embedding:name`，触发词 = 文件名去后缀，逐字匹配）。文件由
@@ -195,22 +197,25 @@ H3 提示词里支持 `embedding:name`，触发词 = 文件名去后缀，逐字
 作者是 [silveroxides](https://huggingface.co/silveroxides)（[discussion #50](https://huggingface.co/Comfy-Org/MiniMax-H3/discussions/50)，
 非 MiniMax 官方作品）。出厂特效技能 `effect_h3`（特效-特效镜头，首帧 + 一句话，11 个特效）：
 
-| 特效 id            | 显示名     | 特效本体（`models/embeddings/`）                     | 出厂默认           |
+| 特效 id            | 显示名     | 特效本体（`models/embeddings/`）                     | 帧上限              |
 |--------------------|------------|------------------------------------------------------|--------------------|
-| `bullet_time`      | 子弹时间   | `minimaxh3_bullet_time.safetensors`                  | 124 帧上限 · 28 步 |
-| `frozen_moment`    | 定格瞬间   | 无文件（基座近似 + 首尾同帧，成片可无缝循环）         | 124 帧上限 · 24 步 |
-| `art_is_explosion` | 画面炸开   | `minimaxh3_art_is_explosion.safetensors`             | 24 步              |
-| `blooming_flowers` | 繁花盛开   | `minimaxh3_blooming_flowers.safetensors`             | 24 步              |
-| `dark_magic`       | 黑暗魔法   | `minimaxh3_dark_magic.safetensors`                   | 24 步              |
-| `fire_breath`      | 火焰吐息   | `minimaxh3_fire_breath.safetensors`                  | 24 步              |
-| `four_seasons`     | 四季流转   | `minimaxh3_four_seasons.safetensors`                 | 24 步              |
-| `kiss_camera`      | 亲吻镜头   | `minimaxh3_kiss_camera.safetensors`                  | 24 步              |
-| `spiral_ascent`    | 螺旋升腾   | `minimaxh3_spiral_ascent.safetensors`                | 124 帧上限 · 24 步 |
-| `storm_magic`      | 风暴魔法   | `minimaxh3_storm_magic.safetensors`                  | 24 步              |
-| `truman_show`      | 楚门式片场 | `minimaxh3_truman_show.safetensors`                  | 24 步              |
+| `bullet_time`      | 子弹时间   | `minimaxh3_bullet_time.safetensors`                  | 124 帧             |
+| `frozen_moment`    | 定格瞬间   | 无文件（基座近似 + 首尾同帧，成片可无缝循环）         | 124 帧             |
+| `art_is_explosion` | 画面炸开   | `minimaxh3_art_is_explosion.safetensors`             | 无                 |
+| `blooming_flowers` | 繁花盛开   | `minimaxh3_blooming_flowers.safetensors`             | 无                 |
+| `dark_magic`       | 黑暗魔法   | `minimaxh3_dark_magic.safetensors`                   | 无                 |
+| `fire_breath`      | 火焰吐息   | `minimaxh3_fire_breath.safetensors`                  | 无                 |
+| `four_seasons`     | 四季流转   | `minimaxh3_four_seasons.safetensors`                 | 无                 |
+| `kiss_camera`      | 亲吻镜头   | `minimaxh3_kiss_camera.safetensors`                  | 无                 |
+| `spiral_ascent`    | 螺旋升腾   | `minimaxh3_spiral_ascent.safetensors`                | 124 帧             |
+| `storm_magic`      | 风暴魔法   | `minimaxh3_storm_magic.safetensors`                  | 无                 |
+| `truman_show`      | 楚门式片场 | `minimaxh3_truman_show.safetensors`                  | 无                 |
 
 - 特效技能只要还有一个特效的本体在盘上就在技能下拉里可用；缺本体的那一个在特效下拉里标「（不可用）」，
   不从列表里消失。
+- 特效表不写步数：官方那组 24 / 28 是未加速官方模型上的参考值，社区跑的多是蒸馏 checkpoint 与加速 LoRA，钉
+  在特效上只会拖慢这一发。换 8 步蒸馏 checkpoint 时把自定参数面板的步数改成 8 就真跑 8 步；那格没动过就照
+  技能 `config.json` 钉的 24 步跑，特效下拉只写特效名、不写数字。
 - 首页「开始创作」的「特效视频」预设卡（默认不在首页上：编辑首页 → 添加卡片 里加回来）走技能卡的落点直接
   进视频页并选中这张技能，特效下拉落在出厂默认那一条。
 - 视频页提交前按 `models.json` 清单问一次就位检查，问的就是本次选中的那个特效，通知带「去模型库」直达；
@@ -260,6 +265,9 @@ H3 提示词里支持 `embedding:name`，触发词 = 文件名去后缀，逐字
 ## 说明
 
 - 末端 `CreateVideo` 把视频帧 + 音频打包成原生 `VIDEO`（fps=24），不直接落盘；接 SaveVideo 即可导出带声音的视频。
-- 采样步数由技能 `config.json` 的 `steps` 决定，缺省 20；cfg / sampler / scheduler 写在各技能的 `workflow.json`。
+- 采样步数依次取：本次请求填的正数（视频页自定参数面板 / 节点 `steps`）> 技能 `config.json` 的 `steps`
+  > 缺省 20；特效表不钉步数。cfg / sampler / scheduler 写在各技能的 `workflow.json`。
+- 出厂特效技能钉的 24 步只落进新播种的数据根：已存在的 `effect_h3` 预设不会被覆盖，想要这一发默认就删掉
+  `<data root>/skills/presets/effect_h3/` 让它重新播种，或在技能管理里把这张技能的步数改掉。
 - 「出图设置 → 生视频模型」的模型下拉把 H3 相关排前面，方便定位本地模型。
 - 视频没有「依赖参考图」概念，配置的 LoRA 全部无条件加载。

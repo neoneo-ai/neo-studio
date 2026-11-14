@@ -1022,6 +1022,7 @@ export function createVideoModelConfigSection() {
     const audioVaeCtl = makeComboRow(t("VAE（音频）"), "rs-gen-adv-row");
     // 采样步数：写 skill config.json 的 steps（模板 {{STEPS}}），缺省 20；放可见区，不收进高级折叠
     const stepsCtl = numberRow(t("步数"), { min: 1, max: 100, step: 1, value: 20 });
+    stepsCtl.input.classList.add("rs-gen-steps");   // 视频页用例与技能弹窗认这枚控件取步数
 
     // LoRA 行：动态增删，每行 = 模型选择 + 强度
     const loraRow = mkEl("div", "rs-config-row");
@@ -1037,6 +1038,10 @@ export function createVideoModelConfigSection() {
 
     let loraFiles = [];
     let loraMtimes = {};   // LoRA 文件修改时间（模型名 → epoch 秒）
+    // 面板铺进去的那一发步数：技能 config 钉的值，或「再来一发」那一发的生效值。
+    // 面板与它一致 = 用户没改 = 这一发不发覆盖值，特效/技能钉的那一发才是真跑的步数
+    let pinnedSteps = 20;
+    let stepsFromRun = false;   // 「再来一发」的值是那一发的显式设置，重放要照发
 
     function addLoraRow(name = "", strength = 1.0) {
         const line = mkEl("div", "rs-gen-lora-row");
@@ -1060,7 +1065,7 @@ export function createVideoModelConfigSection() {
 
     loraAddBtn.addEventListener("click", () => addLoraRow());
 
-    function load(settings, models) {
+    function load(settings, models, opts = {}) {
         loraFiles = models.loras || [];
         loraMtimes = models.mtimes_loras || {};
         fillComboSelect(modelCtl.select, models.diffusion_models || [],
@@ -1071,7 +1076,9 @@ export function createVideoModelConfigSection() {
             videoVideoVaeSuggestion(models.vae), settings.vae || "", models.mtimes_vae);
         fillComboSelect(audioVaeCtl.select, models.vae || [],
             videoAudioVaeSuggestion(models.vae), settings.audio_vae || "", models.mtimes_vae);
-        stepsCtl.input.value = settings.steps ?? 20;
+        pinnedSteps = Number(settings.steps) > 0 ? Number(settings.steps) : 20;
+        stepsFromRun = !!opts.stepsFromRun;
+        stepsCtl.input.value = pinnedSteps;
         loraList.innerHTML = "";
         for (const entry of settings.loras || []) {
             if (typeof entry === "string") addLoraRow(entry, 1.0);
@@ -1099,7 +1106,11 @@ export function createVideoModelConfigSection() {
         };
     }
 
-    return { el: section, load, collect };
+    /** 面板当前的步数是否就是铺进去的那一发：是 = 用户没改过 = 这一发不该把步数当覆盖值发出去。
+     *  「再来一发」铺的是那一发的生效值，那一步就是要照发的显式覆盖。 */
+    const stepsFollowSkill = () => !stepsFromRun && parseInt(stepsCtl.input.value, 10) === pinnedSteps;
+
+    return { el: section, load, collect, stepsFollowSkill };
 }
 
 /** 全局生图默认设置表单（「自动增强」菜单内）：核心模型 / Text Encoder / VAE / 目标像素数（MP）/ 输出前缀 + 保存按钮。
