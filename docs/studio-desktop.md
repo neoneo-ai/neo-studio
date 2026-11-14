@@ -189,6 +189,9 @@ ComfyUI 没就绪时点它只会得到「页面不存在」。`openSkillWorkflow
   视频页是 composer 那格），选完浮层自己收掉。**随机** 向 `/rs_prompts/random_prompts` 带 `kind` 要一条，
   池子由后端按同一口径筛（扫描名首段是 `video` 归视频，其余归图像）。浮层收 Esc 时 `stopPropagation`，
   页面自己的「Esc 关窗」不被带着跑；手机上这一排贴着右上角、不与提示词框重叠（`studio/style.css` 的 `.ns-paint-bar` / `.ns-video-bar`）。
+  浮层空态分三种讲法：词库真空才是「暂无可用提示词」；桌面端顶栏「启动中」那段时间 `/rs_prompts/*` 归内核、回
+  409 offline，空态说「预设列表需要 ComfyUI 运行」；后端报错说「预设列表读取失败」。「随机」在离线时同样
+  报「预设与随机需要 ComfyUI 运行」，不把离线说成词库为空。
 
 ## 技能页布局
 

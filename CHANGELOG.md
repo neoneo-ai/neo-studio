@@ -213,6 +213,13 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   `studio/tests/js/home-layout.test.mjs`, `studio/tests/js/studio-desktop.test.mjs` and `studio/tests/test_home_layout.py`.
 
 ### Fixed
+- **The preset picker says which empty it is.** While the desktop window is starting ComfyUI, the 绘画 / 视频 / 编辑 pages
+  opened 图像预设 / 视频预设 into 「暂无可用提示词」 and 随机 answered 「提示词库为空」 with a library that was fine -
+  those routes belong to the kernel and answer `409 offline` in that window. The picker now mounts before it asks for
+  the list, and each empty case names itself: an empty library says 暂无可用提示词, no kernel says 预设列表需要
+  ComfyUI 运行, a read failure says 预设列表读取失败, and 随机 reports 预设与随机需要 ComfyUI 运行. Covered by the
+  预设浮层 / 随机一条 cases in `studio/tests/js/preset-picker.test.mjs` and the 绘画页随机 case in
+  `studio/tests/js/studio-paint.test.mjs`.
 - **The 标题区 text deletes again.** In edit mode the hero title, subtitle and 出图按钮 label are edited right on the home
   page, and typing landed while Backspace did nothing - the 素材库 keeps a window-level keyboard gesture that turns
   Backspace into 返回上级 and Ctrl+A into 全选素材, and it only stepped aside for `<input>` and `<textarea>`, not for the

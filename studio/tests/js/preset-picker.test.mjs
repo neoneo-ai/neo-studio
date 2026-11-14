@@ -98,12 +98,27 @@ test("预设浮层：遮罩空白与 × 都关窗", async () => {
     assert.equal(picker(), null, "× 关窗");
 });
 
-test("预设浮层：列表读不到就说清楚，不留一扇空窗", async () => {
+// 桌面端离线时 list_prompts 归内核，回来的是 409 的 {offline:true}：空态要点明是要 ComfyUI 在跑
+test("预设浮层：桌面端离线说清楚是要 ComfyUI 在跑，不报词库为空", async () => {
     resetEnv();
+    mockRoute("/rs_prompts/list_prompts", () => jsonResponse({ success: false, offline: true, error: "需要 ComfyUI" }, 409));
+    openPresetPicker({ kind: "image", onPick: () => {} });
+    await flush();
+    assert.equal(picker().querySelector(".neo-preset-picker-empty").textContent, "预设列表需要 ComfyUI 运行");
+    closePresetPicker();
+});
+
+test("预设浮层：词库真空与读取失败分开讲，不留一扇空窗", async () => {
+    resetEnv();
+    mockRoute("/rs_prompts/list_prompts", () => jsonResponse([]));
+    openPresetPicker({ kind: "video", onPick: () => {} });
+    await flush();
+    assert.equal(picker().querySelector(".neo-preset-picker-empty").textContent, "暂无可用提示词", "词库真空才说没有提示词");
+    closePresetPicker();
     mockRoute("/rs_prompts/list_prompts", () => jsonResponse({ status: "error", error: "数据根不可用" }));
     openPresetPicker({ kind: "video", onPick: () => {} });
     await flush();
-    assert.equal(picker().querySelector(".neo-preset-picker-empty").textContent, "暂无可用提示词");
+    assert.equal(picker().querySelector(".neo-preset-picker-empty").textContent, "预设列表读取失败", "后端报错不能被一句「暂无可用提示词」盖过去");
     closePresetPicker();
 });
 
@@ -120,6 +135,12 @@ test("随机一条：池子为空交回空串，由调用方把「词库为空�
     resetEnv();
     mockRoute("/rs_prompts/random_prompts", () => jsonResponse({ texts: [] }));
     assert.equal(await randomPromptText("image"), "");
+});
+
+test("随机一条：桌面端离线抛「需要 ComfyUI 运行」，调用方不会报词库为空", async () => {
+    resetEnv();
+    mockRoute("/rs_prompts/random_prompts", () => jsonResponse({ success: false, offline: true, error: "需要 ComfyUI" }, 409));
+    await assert.rejects(() => randomPromptText("video"), (e) => e.message === "预设与随机需要 ComfyUI 运行");
 });
 
 test("预设浮层挂在 body 上、展开，层位压得住生成素材窗", async () => {

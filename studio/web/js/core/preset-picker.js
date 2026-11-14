@@ -57,12 +57,13 @@ export async function openPresetPicker({ kind = "image", onPick } = {}) {
             console.error("[Neo Studio] 预设读取失败:", e);
         }
     };
-    const render = (items, query) => {
+    const render = (items, query, note) => {
         body.textContent = "";
         const q = (query || "").trim().toLowerCase();
         const shown = items.filter((it) => !q || itemName(it).toLowerCase().includes(q));
         if (!shown.length) {
-            body.appendChild($el("div", { className: "neo-preset-picker-empty", textContent: q ? t("无匹配预设") : t("暂无可用提示词") }));
+            // 读取失败与词库真空是两件事：离线那一发必须点明「要 ComfyUI 在跑」，不能被一句「暂无可用提示词」盖过去
+            body.appendChild($el("div", { className: "neo-preset-picker-empty", textContent: note || (q ? t("无匹配预设") : t("暂无可用提示词")) }));
             return;
         }
         for (const it of shown) {
@@ -73,6 +74,7 @@ export async function openPresetPicker({ kind = "image", onPick } = {}) {
         }
     };
     let items = [];
+    let note = "";
     overlay.append(
         $el("div", { className: "rs-preset-header" }, [
             search,
@@ -82,26 +84,36 @@ export async function openPresetPicker({ kind = "image", onPick } = {}) {
         body,
     );
     overlay.querySelector(".rs-preset-close").addEventListener("click", closePresetPicker);
-    search.addEventListener("input", () => render(items, search.value));
+    search.addEventListener("input", () => render(items, search.value, note));
     overlay.addEventListener("click", (e) => { if (e.target === overlay) closePresetPicker(); });
     document.body.appendChild(overlay);
     opened = { overlay, onKey };
     document.addEventListener("keydown", onKey, true);
     body.textContent = t("加载中…");
     try {
-        items = (await listPrompts()).filter((it) => !it?.isRecipe && isVideoPromptName(itemName(it)) === (kind === "video"));
+        const list = await listPrompts();
+        if (!Array.isArray(list)) {
+            // 桌面端离线时这条接口回来的是 409 的 {offline:true}，不是数组：说清楚这一发要 ComfyUI 在跑
+            note = list?.offline ? t("预设列表需要 ComfyUI 运行") : t("预设列表读取失败");
+        } else {
+            items = list.filter((it) => !it?.isRecipe && isVideoPromptName(itemName(it)) === (kind === "video"));
+        }
     } catch (e) {
         console.error("[Neo Studio] 预设列表读取失败:", e);
+        note = t("预设列表读取失败");
     }
-    render(items, "");
+    render(items, "", note);
     search.focus();
 }
 
 /**
  * 随机取一条提示词：kind 选池子（"image" 排除 video 目录、"video" 只取它们，与后端同口径）。
- * 返回文本；抽不到（池子为空）返回空串，由调用方把「词库为空」说给用户。
+ * 返回文本；抽不到（池子为空）返回空串，由调用方把「词库为空」说给用户；桌面端离线那一发直接抛错，
+ * 让调用方把「需要 ComfyUI 在跑」说给用户。
  */
 export async function randomPromptText(kind = "image") {
     const res = await randomPrompts(1, kind);
+    // 桌面端离线那一发不是词库空：409 的 {offline:true} 要直说，不能让调用方报「提示词库为空」
+    if (!Array.isArray(res?.texts) && res?.offline) throw new Error(t("预设与随机需要 ComfyUI 运行"));
     return (res?.texts || [])[0] || "";
 }

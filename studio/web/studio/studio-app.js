@@ -863,9 +863,11 @@ function paintPromptBar(host, kind, extra = []) {
     const randomBtn = $el("button", { className: "ns-btn ns-paint-random-btn", type: "button", textContent: t("随机"), title: t("随机填入一条图像提示词") });
     presetBtn.onclick = () => openPresetPicker({ kind: "image", onPick: fill });
     randomBtn.onclick = async () => {
-        const text = await randomPromptText("image").catch(() => "");
-        if (!text.trim()) { toast(t("提示词库为空，抽不到图像提示词")); return; }
-        fill(text);
+        try {
+            const text = await randomPromptText("image");
+            if (!text.trim()) { toast(t("提示词库为空，抽不到图像提示词")); return; }
+            fill(text);
+        } catch (e) { toast(String(e?.message || e)); }   // 桌面端离线那一发要说出需要 ComfyUI，不能报词库为空
     };
     return $el("div", { className: "ns-paint-bar" }, [...extra, presetBtn, randomBtn]);
 }
@@ -1418,9 +1420,11 @@ function buildVideo(el) {
     ]);
     videoBar.querySelector(".ns-video-preset-btn").addEventListener("click", () => openPresetPicker({ kind: "video", onPick: fillVideoPrompt }));
     videoBar.querySelector(".ns-video-random-btn").addEventListener("click", async () => {
-        const text = await randomPromptText("video").catch(() => "");
-        if (!text.trim()) { toast(t("提示词库为空，抽不到视频提示词")); return; }
-        fillVideoPrompt(text);
+        try {
+            const text = await randomPromptText("video");
+            if (!text.trim()) { toast(t("提示词库为空，抽不到视频提示词")); return; }
+            fillVideoPrompt(text);
+        } catch (e) { toast(String(e?.message || e)); }   // 同上：离线那一发的原因由 randomPromptText 说清楚
     });
     page.appendChild(videoBar);
 

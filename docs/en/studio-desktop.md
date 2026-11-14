@@ -282,6 +282,10 @@ narrow-window rules are shared with the director page (one modal instance, one g
   `video` belongs to video, everything else to image). The picker's Escape handler calls `stopPropagation`, so the
   page's own "Escape closes the panel" does not fire along with it; on phones the row sits in the corner without
   overlapping the prompt box (`studio/style.css`, `.ns-paint-bar` / `.ns-video-bar`).
+  The picker's empty state names which case it is: only an empty library says "No prompts available"; while the desktop
+  window is starting ComfyUI the `/rs_prompts/*` routes answer `409 offline` and the picker says "The preset list needs
+  ComfyUI running"; a backend read error says "Failed to load the prompt list". **Random** reports "Presets and random
+  prompts need ComfyUI running" in that window instead of claiming the library is empty.
 
 ## Skills page layout
 

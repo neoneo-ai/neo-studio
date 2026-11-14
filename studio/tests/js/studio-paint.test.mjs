@@ -371,6 +371,17 @@ test("绘画页右上角：「图像预设」只列图像提示词，点一条�
     assert.equal(fetchLog.filter((c) => c.path === "/rs_prompts/random_prompts").at(-1).body.kind, "image");
 });
 
+// 桌面端顶栏「启动中」那段时间：/rs_prompts/* 归内核，随机要说出需要 ComfyUI，不能报「词库为空」
+test("绘画页随机：桌面端离线那一发报「需要 ComfyUI 运行」，不报词库为空", async () => {
+    await boot();
+    await clickTab("paint");
+    const bar = paintPage().querySelector(".ns-paint-bar");
+    mockRoute("/rs_prompts/random_prompts", () => jsonResponse({ success: false, offline: true, error: "需要 ComfyUI" }, 409));
+    click(bar.querySelector(".ns-paint-random-btn"));
+    await sleep(80);
+    assert.equal(document.getElementById("ns-toast")?.textContent, "预设与随机需要 ComfyUI 运行");
+});
+
 test("编辑页右上角一排：素材库右端接上「图像预设」「随机」，预设填进任务区提示词框", async () => {
     await boot();
     await clickTab("edit");
