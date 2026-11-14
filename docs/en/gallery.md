@@ -454,7 +454,7 @@ ComfyUI settings panel:
 
 | Setting | Type | Default | Description |
 |------|------|--------|------|
-| Neo Gallery Max Thumbnail Size | slider (150-500) | 320 | Maximum thumbnail size (pixels) |
+| Neo Gallery Max Thumbnail Size | slider (150-500) | 320 | Maximum thumbnail size (pixels); the Size slider lives on the gallery page only, not in the asset modal |
 | Neo Gallery Display Image Labels | toggle | true | Show image name labels |
 
 ## Civitai LORA example cache (fetched automatically on visit)

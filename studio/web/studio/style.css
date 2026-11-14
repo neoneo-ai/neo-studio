@@ -218,6 +218,10 @@ body {
 .ns-libmodal { position: fixed; inset: 0; z-index: 9700; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.55); }
 .ns-libmodal-box { position: relative; display: flex; flex-direction: column; width: min(1180px, 94vw); height: min(860px, 90vh); min-width: 640px; background: #17171b; border: 1px solid #35353d; border-radius: 8px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6); overflow: hidden; }
 .ns-libmodal-maximized .ns-libmodal-box { position: fixed; inset: 0; width: auto; height: auto; border: none; border-radius: 0; }
+/* 素材库默认开在最小档 = 浮窗地板 640×400（js/core/lib-modal.js 的 MIN_W / MIN_H 同一口径）：
+   这扇窗是「挑一张塞进编辑位」的取景窗，一屏铺满缩略图不是它要干的事；要看多几行用最大化（铺满整窗）
+   或拖右缘加宽，摆位与最大化偏好照旧落盘。配方面板是表单，860px 高起步，跟上面那档走 */
+.ns-libmodal[data-lib-scope="assets"] .ns-libmodal-box { width: min(640px, 94vw); height: min(400px, 90vh); min-width: 0; }
 /* 拖过标题栏 = 浮窗：按落盘的 left/top/width/height 摆；遮罩让开，页面其余部分照旧能点（关窗走 Esc / ✕） */
 .ns-libmodal-floated { background: transparent; pointer-events: none; }
 .ns-libmodal-floated .ns-libmodal-box { position: fixed; pointer-events: auto; }
@@ -241,6 +245,9 @@ body {
 /* 弹窗里的画廊宿主：不留上内边距，粘性工具条用画廊侧栏的负边距贴齐宿主边 */
 .ns-libmodal-content .ns-gallery-host { flex: 1 1 auto; min-height: 0; height: auto; overflow: auto; padding: 0 10px 12px; }
 .ns-libmodal-content .ns-gallery-host .neo-gallery-topbar { margin: -10px -10px 8px; padding: 8px 10px; }
+/* Size 滑杆管的是素材页的缩略图密度（写进画廊全局设置），弹窗里这扇窗只管「挑哪张、塞进哪个位」：
+   滑杆在窗里拉一下会连素材页一起改了，而窗体大小归最大化 / 拖右缘管，两头都不搭 —— 弹窗内收掉 */
+.ns-libmodal .neo-gallery-slider-row { display: none; }
 .ns-libmodal-content .ns-director-recipes { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 10px; }
 /* 弹窗滚动条：平时隐形，鼠标进入才显形（槽位照留，显隐不引起内容跳动） */
 .ns-libmodal-content .ns-gallery-host, .ns-director-recipes { scrollbar-width: thin; scrollbar-color: transparent transparent; }
@@ -257,7 +264,8 @@ body {
 /* 手机：素材库 / 配方弹窗铺满整窗 —— 640px 地板 + 94vw 的居中卡在一块手机上就是横向溢出；
    右缘调宽条与浮窗摆位是鼠标手势，触摸上拖不动，收掉（标题栏 ✕ 与 Esc 照旧在） */
 @media (max-width: 720px) {
-    .ns-libmodal-box {
+    .ns-libmodal-box,
+    .ns-libmodal[data-lib-scope="assets"] .ns-libmodal-box {
         width: 100%; height: 100%; min-width: 0; max-width: none; max-height: none;
         border: none; border-radius: 0;
     }

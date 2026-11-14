@@ -377,13 +377,25 @@ test("Studio 绘画页：顶栏模式条 + 素材库弹窗，文生图输入卡�
         await page.waitForSelector(".ns-libmodal:not(.ns-hidden) .ns-gallery-host .neo-gallery-topbar", { timeout: 15000 });
         const inModal = await page.evaluate(() => {
             const modal = document.querySelector(".ns-libmodal:not(.ns-hidden)");
+            const box = modal.querySelector(".ns-libmodal-box").getBoundingClientRect();
+            const close = modal.querySelector(".ns-libmodal-close").getBoundingClientRect();
+            const row = modal.querySelector(".neo-gallery-slider-row");
             return {
                 inHost: !!modal.querySelector(".ns-gallery-host .neo-gallery-panel"),
                 pick: !!modal.querySelector(".ns-libmodal-pick"),
+                sliderShown: !!row && getComputedStyle(row).display !== "none",
+                boxW: Math.round(box.width), boxH: Math.round(box.height),
+                vw: window.innerWidth, vh: window.innerHeight,
+                closeRight: Math.round(close.right), closeTop: Math.round(close.top),
             };
         });
         assert.ok(inModal.inHost, "画廊挂进素材库弹窗宿主");
         assert.ok(inModal.pick, "弹窗底部有多选收集条");
+        assert.equal(inModal.sliderShown, false, "Size 滑杆只属于素材页：素材库弹窗里不出现这一行");
+        assert.ok(inModal.boxW <= inModal.vw && inModal.boxH <= inModal.vh,
+            `弹窗开在视口内（${inModal.boxW}×${inModal.boxH} 对 ${inModal.vw}×${inModal.vh}）`);
+        assert.ok(inModal.closeRight <= inModal.vw && inModal.closeTop >= 0,
+            `标题栏右端的 ✕ 够得着（right=${inModal.closeRight}, top=${inModal.closeTop}）`);
         await page.click('.ns-libmodal[data-lib-scope="assets"]:not(.ns-hidden) .ns-libmodal-close');
         await page.waitForFunction(() => !document.querySelector(".ns-libmodal:not(.ns-hidden)"), null, { timeout: 5000 });
         assert.equal(await page.evaluate(() => document.querySelectorAll(".ns-paint .ns-gallery-host").length), 0,
@@ -422,7 +434,7 @@ test("Studio 绘画页：顶栏模式条 + 素材库弹窗，文生图输入卡�
         assert.ok(after.on.includes("图片编辑"), "模式条高亮切到的一边");
         assert.ok(Math.abs(after.w - after.main) <= 1, "图片编辑同样铺满整幅");
 
-        // 弹窗默认铺满 → 最大化落盘 → 拖标题栏转浮窗 → Esc 关闭
+        // 弹窗开在最小档 → 最大化落盘 → 拖标题栏转浮窗（铺满时拖窗先还原成上一次浮窗摆位）→ Esc 关闭
         await page.click(".ns-paint-lib-btn");
 
         await page.waitForSelector('.ns-libmodal[data-lib-scope="assets"]:not(.ns-hidden)', { timeout: 5000 });
@@ -443,6 +455,10 @@ test("Studio 绘画页：顶栏模式条 + 素材库弹窗，文生图输入卡�
         assert.ok(moved.floated, "拖过标题栏后变浮窗");
         assert.ok(moved.geo.x > geo.x, `拖标题栏挪窗后 left 应离开 0：${JSON.stringify(moved.geo)}`);
         assert.equal(moved.geo.max, true, "最大化状态落盘");
+        assert.ok(moved.geo.w <= 1600 && moved.geo.h <= 950, `铺满时拖窗交还浮窗尺寸，不越出视口：${JSON.stringify(moved.geo)}`);
+        const movedClose = await page.locator('.ns-libmodal[data-lib-scope="assets"]:not(.ns-hidden) .ns-libmodal-close').boundingBox();
+        assert.ok(movedClose.x >= 0 && movedClose.y >= 0 && movedClose.x + movedClose.width <= 1600 && movedClose.y + movedClose.height <= 950,
+            `拖完窗 ✕ 仍在视口里，关得掉：${JSON.stringify(movedClose)}`);
         await page.keyboard.press("Escape");
         await page.waitForFunction(() => !document.querySelector('.ns-libmodal[data-lib-scope="assets"]:not(.ns-hidden)'),
             null, { timeout: 5000 });

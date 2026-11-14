@@ -152,14 +152,20 @@ list and the asset library both open in modals (`js/core/lib-modal.js`), so the 
   page uses (one element moved between the gallery host, the modal host and the standby host, wide styling),
   breadcrumbs and directory navigation work there, every host you leave behind stays on **the directory you were
   browsing** (never the home root), and cards drag straight into the editor's first-frame / reference slots.
+  The top bar's **Size** slider belongs to the gallery page only — it sets the thumbnail density there (the shared
+  gallery setting), so the modal hides that row and the window size stays with maximize / the right-edge handle.
   **Clicking a card in the modal fills the slot that was clicked and closes the modal**; multi-select goes
   through the footer **📥 N selected**, which lays the batch out from the slot the editor announced.
-- Modal geometry: it covers the whole window by default, dragging the title bar turns it into a floating window
+- Modal geometry: the asset modal opens at the **minimum 640×400** (the same floor as the floating window) and the
+  recipe panel opens at 1180×860; dragging the title bar turns it into a floating window
   (its own position and size, shared across pages), and the maximize button, the right-edge resize handle
   (640px floor), `Esc`, the backdrop and **✕** all work like the other Studio windows. Width, position and the
   maximized flag live in `localStorage["neo_studio_libmodal_recipes"]` and
-  `localStorage["neo_studio_libmodal_assets"]`. Switching pages closes the modal of the page you left, and the
-  gallery goes back to the standby host.
+  `localStorage["neo_studio_libmodal_assets"]`. The geometry is clamped to the window: width and height never
+  exceed it and the whole box stays inside, so a stored layout from a larger window is clamped back on open and
+  saved; dragging a maximized modal restores the last floating size before it moves. The **✕** at the right end of
+  the title bar is therefore always reachable — a modal can never be dragged where it cannot be closed.
+  Switching pages closes the modal of the page you left, and the gallery goes back to the standby host.
 - Splitter: a vertical line between the two panes that is also the drag zone — drag to resize the generation panel
   (editor floor 360px, panel floor 200px, and dragging 90px past that floor is treated as dragging the panel shut;
   like the VS Code sash, collapsing and expanding are both done by dragging). Once collapsed the strip carries a
@@ -192,7 +198,8 @@ list and the asset library both open in modals (`js/core/lib-modal.js`), so the 
   before the terminal event and landing after it is dropped, so the progress bar and **⏹ Cancel** never come
   back (cancelling a finished task only answers "任务已结束，无法取消").
 - The main column is a left/right split, so a narrow window scrolls sideways instead of squeezing both panes into
-  unreadable strips; the recipe and asset modals cover the window with a 640px minimum width.
+  unreadable strips; the asset modal opens at the 640×400 minimum and the recipe modal at 1180×860, both clamped to
+the window (maximize is what covers it).
 
 ## Input page / Edit page layout
 

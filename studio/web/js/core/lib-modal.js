@@ -55,6 +55,16 @@ export function createLibraryModal({ storageKey = "neo_studio_libmodal", scope =
     };
     // 浮窗下限：再窄也留得下画廊顶栏与右侧表单，拖出的摆位不能把窗口弄没
     const MIN_W = 640, MIN_H = 400;
+    let lastFloated = null;   // 上一次浮窗摆位：最大化时拖窗要还原成它（见标题栏 pointerdown）
+    // 视口夹紧：落盘的摆位来自上一扇更大的窗（换过分辨率、之前在带外框的桌面窗里拖宽过）时，盒子
+    // 比视口还宽、左缘为负，标题栏右端那排钮（含 ✕）整块落在屏幕外，这扇窗就再也关不掉了。
+    // 整盒钳进视口 —— 标题栏在盒子顶边、✕ 在标题栏右端，盒子不出界 ✕ 就一定够得着。
+    const fitGeo = () => {
+        geo.w = Math.min(Math.max(MIN_W, geo.w || MIN_W), Math.max(MIN_W, window.innerWidth));
+        geo.h = Math.min(Math.max(MIN_H, geo.h || MIN_H), Math.max(MIN_H, window.innerHeight));
+        geo.x = Math.min(Math.max(0, geo.x), Math.max(0, window.innerWidth - geo.w));
+        geo.y = Math.min(Math.max(0, geo.y), Math.max(0, window.innerHeight - geo.h));
+    };
     const readGeo = () => {
         try {
             const raw = JSON.parse(localStorage.getItem(storageKey) || "null");
@@ -65,16 +75,18 @@ export function createLibraryModal({ storageKey = "neo_studio_libmodal", scope =
     };
     const saveGeo = () => {
         try { localStorage.setItem(storageKey, JSON.stringify(geo)); } catch { /* 偏好写不进不影响用 */ }
+        if (geo.float && !maxed) lastFloated = { x: geo.x, y: geo.y, w: geo.w, h: geo.h };
     };
     const applyGeo = () => {
         const floated = geo.float && !maxed;
         overlay.classList.toggle("ns-libmodal-maximized", maxed);
         overlay.classList.toggle("ns-libmodal-floated", floated);
         if (floated) {
+            fitGeo();   // 拖与调宽每条路都从这里出窗，钳位落在写内联样式这一处，摆位才不会跑到屏外
             box.style.left = geo.x + "px";
             box.style.top = geo.y + "px";
-            box.style.width = Math.max(MIN_W, geo.w || MIN_W) + "px";
-            box.style.height = Math.max(MIN_H, geo.h || MIN_H) + "px";
+            box.style.width = geo.w + "px";
+            box.style.height = geo.h + "px";
         } else {
             box.style.left = box.style.top = box.style.width = box.style.height = "";
         }
@@ -110,9 +122,15 @@ export function createLibraryModal({ storageKey = "neo_studio_libmodal", scope =
         if (e.button !== 0 || e.target.closest("button, .ns-libmodal-titlebar-slot")) return;
         e.preventDefault();
         const r = box.getBoundingClientRect();
-        geo.w = Math.round(r.width);
-        geo.h = Math.round(r.height);
-        const sx = e.clientX, sy = e.clientY, ox = r.left, oy = r.top;
+        // 铺满整窗时拖窗 = 先还原成上一次浮窗的摆位再跟着鼠标走（Windows 同款手势）：
+        // 铺满那一档正好等于视口，钳位会把它钉在 0,0，拖了等于拖不动。没有历史摆位就用最小档
+        const back = maxed ? (lastFloated || { x: 0, y: 0, w: MIN_W, h: MIN_H }) : null;
+        if (back) { geo.x = back.x; geo.y = back.y; geo.w = back.w; geo.h = back.h; }
+        else {
+            geo.w = Math.round(r.width);
+            geo.h = Math.round(r.height);
+        }
+        const sx = e.clientX, sy = e.clientY, ox = back ? back.x : r.left, oy = back ? back.y : r.top;
         beginGesture(head, e, (ev) => {
             maxed = false;   // 铺满的窗拖一下就是浮窗，max 偏好不动
             geo.float = true;
@@ -169,6 +187,7 @@ export function createLibraryModal({ storageKey = "neo_studio_libmodal", scope =
         opened = true;
         geo = readGeo() || geo;
         maxed = geo.max;
+        fitGeo();   // 越界存档在开窗这一发就夹回来，紧跟着的 saveGeo 把它落盘，下次开就是干净摆位
         overlay.classList.remove("ns-hidden");
         applyGeo();
         saveGeo();   // 首开落一份默认摆位，之后拖窗与最大化才有基线可比

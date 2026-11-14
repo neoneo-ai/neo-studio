@@ -140,6 +140,15 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   the layout cases in `app/tests/test_studio_server.py`.
 
 ### Changed
+- **The asset library modal opens small and stays inside the window.** It opened at 1180×860 and the stored position
+  was applied as-is, so a layout saved from a bigger window came back wider than the screen with its left edge
+  off-screen: the maximize / **✕** row was out of reach and the window could not be closed. The asset modal now opens
+  at the 640×400 floor (the recipe panel keeps 1180×860), every stored width, height and position is clamped into the
+  window on open and saved back, dragging a maximized modal restores the last floating size before it moves, and the
+  title bar's **✕** is always reachable. The top bar's **Size** slider (thumbnail density, a gallery-wide setting) is
+  out of the modal and stays on the gallery page; the window size is maximize / right-edge dragging only. Covered by
+  `studio/tests/js/lib-modal-geometry.test.mjs` and the 素材库弹窗 cases in `studio/tests/e2e/studio.e2e.mjs`.
+
 - **The Video page's 步数 field wins.** An H3 effect skill used to pin a step count per effect (子弹时间 28,
   定格瞬间 24, the rest 24) and that number outranked the 自定参数面板's 步数 — on an 8-step distilled checkpoint
   the shot still ran 24 steps, about three times the time. Those numbers are MiniMax's reference on the

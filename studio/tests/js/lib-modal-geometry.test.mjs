@@ -2,7 +2,7 @@
 // 摆位与最大化状态都要落盘（js/core/lib-modal.js）。
 import test from "node:test";
 import assert from "node:assert/strict";
-import { resetEnv, click } from "./setup.mjs";
+import { resetEnv, click, window } from "./setup.mjs";
 
 // lib-modal.js 顶层导入 scripts/ui.js，必须等 setup.mjs 装好 shim 钩子再动态取
 const { createLibraryModal } = await import("../../web/js/core/lib-modal.js");
@@ -11,11 +11,17 @@ const KEY = "neo_test_libmodal_geo";
 const geo = () => JSON.parse(localStorage.getItem(KEY) || "{}");
 const pt = (type, x, y) => new window.MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y });
 
+// 本文件通篇是窗体几何：视口钉在 1920×1200（jsdom 默认的 1024×768 装不下用例里那口 1180×860 的盒子，
+// 夹紧要按视口算，视口就得是真实桌面窗口的量级）
+Object.defineProperty(window, "innerWidth", { value: 1920, configurable: true });
+Object.defineProperty(window, "innerHeight", { value: 1200, configurable: true });
+
 function makeModal() {
     const m = createLibraryModal({ storageKey: KEY, scope: "assets" });
     document.body.appendChild(m.el);
     return m;
 }
+
 
 test("弹窗窗体：默认开 → 最大化铺满并落盘 → 重开照旧铺满", () => {
     resetEnv();
@@ -141,3 +147,64 @@ test("弹窗窗体：拖到一半按 Esc 关窗，重开不带着鼠标跑", () 
     window.dispatchEvent(pt("pointermove", 900, 700));
     assert.equal(box.style.left, left, "重开后鼠标移动不带着窗跑");
 });
+
+// 视口夹紧（fitGeo）：落盘的摆位来自上一扇更大的窗（换过分辨率、之前在带外框的桌面窗里拖宽过）时，
+// 盒子比视口还宽、顶边掉到视口外，标题栏右端那排 ✕ 就在屏幕上够不着 —— 开窗这一发就得夹回来
+test("弹窗窗体：越界摆位开窗即夹进视口，✕ 那排钮回到窗内", () => {
+    resetEnv();
+    localStorage.setItem(KEY, JSON.stringify({ x: 0, y: 60, w: 1780, h: 1420, max: false, float: true }));
+    const m = makeModal();
+    m.open("素材库");
+    const box = m.el.querySelector(".ns-libmodal-box");
+    assert.ok(m.el.classList.contains("ns-libmodal-floated"), "存档是浮窗摆位就按浮窗开");
+    assert.equal(box.style.width, "1780px", "宽度在视口里合法就不动");
+    assert.equal(box.style.height, "1200px", `高度收进视口：${box.style.height}`);
+    assert.equal(box.style.top, "0px", "底边要出界就把顶边钳回 0");
+    const g = geo();
+    assert.equal(g.h, 1200, "夹过的值落盘，下次开就是干净摆位");
+    assert.ok(g.x + g.w <= 1920 && g.y + g.h <= 1200, `整盒不出界，标题栏右端的 ✕ 就在窗内：${JSON.stringify(g)}`);
+});
+
+test("弹窗窗体：拖出屏幕外被钳回，摆位停在视口内", () => {
+    resetEnv();
+    localStorage.removeItem(KEY);
+    const m = makeModal();
+    m.open("素材库");
+    const box = m.el.querySelector(".ns-libmodal-box");
+    box.__rect = { x: 40, y: 20, left: 40, top: 20, right: 1220, bottom: 880, width: 1180, height: 860 };
+    const head = m.el.querySelector(".ns-libmodal-titlebar");
+    head.dispatchEvent(pt("pointerdown", 100, 30));
+    head.dispatchEvent(pt("pointermove", 1400, 1000));
+    head.dispatchEvent(pt("pointerup", 1400, 1000));
+    assert.equal(box.style.left, "740px", `右缘顶到视口边上就停：${box.style.left}`);
+    assert.equal(box.style.top, "340px", `底边顶到视口边上就停：${box.style.top}`);
+    assert.equal(geo().x, 740, "钳过的 left 落盘");
+});
+
+test("弹窗窗体：铺满整窗时拖窗，先还原成上一次的浮窗摆位再挪", () => {
+    resetEnv();
+    localStorage.removeItem(KEY);
+    const m = makeModal();
+    m.open("素材库");
+    const box = m.el.querySelector(".ns-libmodal-box");
+    const head = m.el.querySelector(".ns-libmodal-titlebar");
+    // 先拖出一段浮窗摆位（1180×860 落在 130,100），它是「上一次浮窗」的基线
+    box.__rect = { x: 40, y: 20, left: 40, top: 20, right: 1220, bottom: 880, width: 1180, height: 860 };
+    head.dispatchEvent(pt("pointerdown", 100, 30));
+    head.dispatchEvent(pt("pointermove", 190, 110));
+    head.dispatchEvent(pt("pointerup", 190, 110));
+    assert.equal(geo().x, 130, "基线摆位落盘");
+    // 铺满整窗后拖窗：这一档正好等于视口，钳位会把它钉在 0,0 —— 不还原的话「拖一下变浮窗」就成「拖了拖不动」
+    click(m.el.querySelector(".ns-libmodal-max"));
+    assert.ok(m.el.classList.contains("ns-libmodal-maximized"), "铺满整窗");
+    box.__rect = { x: 0, y: 0, left: 0, top: 0, right: 1920, bottom: 1200, width: 1920, height: 1200 };
+    head.dispatchEvent(pt("pointerdown", 100, 30));
+    head.dispatchEvent(pt("pointermove", 180, 90));
+    head.dispatchEvent(pt("pointerup", 180, 90));
+    assert.ok(m.el.classList.contains("ns-libmodal-floated"), "铺满的窗拖一下就是浮窗");
+    assert.equal(box.style.width, "1180px", `交还上一次浮窗宽度而不是整屏宽：${box.style.width}`);
+    assert.equal(geo().x, 210, "从上一次浮窗摆位起算位移");
+    assert.equal(geo().y, 160, "顶边同样从上一次摆位起算");
+    assert.equal(geo().max, true, "max 偏好不动，下次开照旧铺满");
+});
+
