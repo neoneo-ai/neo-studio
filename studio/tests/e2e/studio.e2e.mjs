@@ -696,6 +696,15 @@ test("Studio 预设提示词入口：绘画页填图像池，视频页填视频�
 
             await page.click(p.preset);
             await page.waitForSelector(".neo-preset-picker .rs-preset-item, .neo-preset-picker .neo-preset-picker-empty", { timeout: 10000 });
+    // 骨架 prompts.css 的 .rs-preset-list-overlay 自带 display:none，浮层不自己展开就是「点了没窗口」
+    const pickerBox = await page.evaluate(() => {
+      const el = document.querySelector(".neo-preset-picker");
+      const r = el?.getBoundingClientRect();
+      return r ? { width: Math.round(r.width), height: Math.round(r.height), top: Math.round(r.top) } : null;
+    });
+    if (!pickerBox || pickerBox.width < 120 || pickerBox.height < 60 || pickerBox.top < 0) {
+      throw new Error(`预设浮层没展开在视口里: ${JSON.stringify(pickerBox)}`);
+    }
             const listed = await page.evaluate(() => [...document.querySelectorAll(".neo-preset-picker .rs-preset-content")].map((e) => e.textContent));
             const wantVideo = p.kind === "video";
             assert.ok(listed.every((n) => n.startsWith("video/") === wantVideo),

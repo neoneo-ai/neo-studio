@@ -173,6 +173,11 @@
 .rs-preset-list-body::-webkit-scrollbar-track { background: #1a1a1a; }
 .rs-preset-list-body::-webkit-scrollbar-thumb { background: #5090cc; border-radius: 4px; }
 
+/* 预设选择浮层（js/core/preset-picker.js，绘画页 / 视频页 / 生成素材共用）的空态：
+   列表空时 .rs-preset-list-body 里只有一句读得清的话，不留一块看不出所以然的空白 */
+.neo-preset-picker-scope { flex: none; font-size: 11px; color: #8fa3b8; }
+.neo-preset-picker-empty { padding: 16px 10px; font-size: 12px; color: #8a8a95; text-align: center; }
+
 /* Close button */
 .rs-close-btn {
     background: #2a3a3a;

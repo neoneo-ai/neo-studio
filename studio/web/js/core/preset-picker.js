@@ -35,7 +35,12 @@ export async function openPresetPicker({ kind = "image", onPick } = {}) {
     closePresetPicker();
     const body = $el("div", { className: "rs-preset-list-body" });
     const search = $el("input", { className: "rs-preset-search-input", type: "text", placeholder: t("搜索预设…") });
-    const overlay = $el("div", { className: "rs-preset-list-overlay neo-preset-picker" });
+    const overlay = $el("div", {
+        // prompts.css 的骨架自带 display:none（提示词管理页自己管显隐），不显式展开就是「点了没窗口」；
+        // 层位要盖得住生成素材 / 图片编辑那两层浮窗（9845），这一发由 JS 定，不依赖各页面各自的 CSS
+        className: "rs-preset-list-overlay neo-preset-picker",
+        style: { display: "flex", zIndex: 9900 },
+    });
     const onKey = (e) => {
         if (e.key !== "Escape") return;
         // capture + 掐断传播：面板自己的「Esc 关窗」不能跟着这一发把窗口一起关掉

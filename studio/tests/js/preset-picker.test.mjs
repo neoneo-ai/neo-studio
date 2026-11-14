@@ -121,3 +121,27 @@ test("随机一条：池子为空交回空串，由调用方把「词库为空�
     mockRoute("/rs_prompts/random_prompts", () => jsonResponse({ texts: [] }));
     assert.equal(await randomPromptText("image"), "");
 });
+
+test("预设浮层挂在 body 上、展开，层位压得住生成素材窗", async () => {
+    resetEnv();
+    mockPromptRoutes();
+    openPresetPicker({ kind: "image", onPick: () => {} });
+    await flush();
+    const overlay = picker();
+    assert.equal(overlay.parentElement, document.body, "浮层自挂在 body 上，不依赖页面结构");
+    // prompts.css 的 .rs-preset-list-overlay 骨架自带 display:none（提示词管理页自己管显隐）：
+    // 浮层不自己展开就是「点了没窗口」；层位要压得住生成素材 / 图片编辑那两层浮窗（9845）
+    assert.equal(overlay.style.display, "flex", "骨架的 display:none 由浮层自己展开");
+    assert.equal(Number(overlay.style.zIndex) > 9845, true, "浮层层位高于生成类浮窗");
+    closePresetPicker();
+});
+
+// 旧版调用方与 NeoPromptAgent 节点不传作用域：空 kind = 混池语义由后端守着，这里验请求形状
+test("运行时随机不传 kind：请求体里 kind 是空串，混池语义留给后端", async () => {
+    resetEnv();
+    const { randomPrompts } = await import("../../web/prompt-service.js");
+    mockRoute("/rs_prompts/random_prompts", () => jsonResponse({ texts: ["混池一条"] }));
+    const res = await randomPrompts(1);
+    assert.deepEqual(res.texts, ["混池一条"]);
+    assert.equal(fetchLog.find((c) => c.path === "/rs_prompts/random_prompts").body.kind, "");
+});

@@ -248,11 +248,9 @@ body {
 /* Size 滑杆管的是素材页的缩略图密度（写进画廊全局设置），弹窗里这扇窗只管「挑哪张、塞进哪个位」：
    滑杆在窗里拉一下会连素材页一起改了，而窗体大小归最大化 / 拖右缘管，两头都不搭 —— 弹窗内收掉 */
 .ns-libmodal .neo-gallery-slider-row { display: none; }
-/* 预设提示词浮层（js/core/preset-picker.js）：骨架借 prompts.css 的 .rs-preset-list-overlay，这里补 Studio 侧
-   要的两件事 —— 层位要盖得住生成素材 / 图片编辑那两层浮窗（9845），空列表也要留一块读得清的空态 */
-.neo-preset-picker { z-index: 9900; width: min(520px, 92vw); max-width: none; }
-.neo-preset-picker-scope { flex: none; font-size: 11px; color: #8fa3b8; }
-.neo-preset-picker-empty { padding: 16px 10px; font-size: 12px; color: #8a8a95; text-align: center; }
+/* 预设提示词浮层（js/core/preset-picker.js）：骨架与显隐由 prompts.css + JS 管，Studio 侧只管这块浮层的宽度
+   （92vw 收窄到 520px 封顶，生成素材 / 图片编辑那两层浮窗的层位由 JS 定） */
+.neo-preset-picker { width: min(520px, 92vw); max-width: none; }
 .ns-libmodal-content .ns-director-recipes { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 10px; }
 /* 弹窗滚动条：平时隐形，鼠标进入才显形（槽位照留，显隐不引起内容跳动） */
 .ns-libmodal-content .ns-gallery-host, .ns-director-recipes { scrollbar-width: thin; scrollbar-color: transparent transparent; }
