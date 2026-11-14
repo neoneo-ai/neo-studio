@@ -1258,10 +1258,11 @@ body {
 .ns-video-seed-roll:hover { color: var(--ns-fg); }
 .ns-video-run { padding: 5px 20px; }
 .ns-video-cancel { padding: 5px 16px; }
+/* 第一行永不换行：这一档 900px 的媒体查询在 Windows 200% 缩放的桌面窗口里就会命中
+   （1776 物理像素 = 888 CSS px），换行会把提示词甩到方块下面，桌面窗口就此永远是手机版式。
+   窄屏的让位全交给方块自己缩（下方 720px 那档），提示词吃剩下的宽度 */
 @media (max-width: 900px) {
     .ns-video-dock { bottom: 10px; }
-    .ns-video-top { flex-wrap: wrap; }
-    .ns-video-input { flex: 1 1 100%; }
     .ns-video-stage { padding-bottom: 320px; }
 }
 
@@ -1279,7 +1280,9 @@ body {
     .ns-video-hero .ns-video-hero-card { padding: 24px 18px; }
     .ns-video-card { gap: 8px; }
     .ns-video-progress { width: 120px; }
-    .ns-video-deck { flex: 1 1 100%; justify-content: center; }
+    /* 方块在第一行左边自己收：填满的方块 118px 那一档在手机上缩回 72px，
+       提示词永远剩得下写字的宽度（方块是 3 列缩略图网格，min-content 会把 118px 钉死） */
+    .ns-video-card .ns-video-slot:has(.ns-video-thumbs:not(:empty)) { flex: 0 1 72px; min-width: 0; }
     /* chip 排（技能 / 尺寸 / 时长 / 种子 + 取消 / 生成）基态是一行不换行、不滚动的 flex：
        整页 .ns-video-page 是 overflow:hidden，chip 排超宽时被裁掉，「生成」在手指下永远够不着
        —— 窄屏给它横向滚动，两枚按钮钉死不跟着 chip 一起被压扁 */

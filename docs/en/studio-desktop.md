@@ -235,7 +235,10 @@ narrow-window rules are shared with the director page (one modal instance, one g
   which caps out at this width on wide windows and follows 92vw once the window narrows); the prompt box floors at two
   lines (64px, `max-height: 26vh`) and grows by dragging its bottom edge. The video page's composer capsule takes the
   same 980px centred width and the same two-line box, and it no longer stretches to the height of the 首帧 / 尾帧 /
-  参考图 squares beside it.
+  参考图 squares beside it. That first row never wraps: the squares sit at the left with the prompt box to their
+  right, the same shape as the edit page's composer, and a window at 200% Windows scaling (1776 px = 888 CSS px)
+  keeps that row too; on a real phone the filled square shrinks from 118 px to 72 px to give the prompt room,
+  instead of dropping the prompt box under the squares.
 - The edit page docks its composer at the bottom the same way, and the image-edit area takes the gap above it: the
   source image scales up to fill that gap (`object-fit: contain`, centred, never cropped; its delete mask and marker
   points cap with it, so the mask never spills outside the card), and an empty preview carries the fixed-size

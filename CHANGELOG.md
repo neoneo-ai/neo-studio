@@ -5,6 +5,13 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 ## [Unreleased]
 
 ### Added
+- **The 出视频页 composer keeps 素材方块 and the prompt in one row at every window width.** The row used to
+  wrap when the window reported 900 CSS px or less, which is what a desktop window at 200% Windows scaling
+  reports (a 1776-px-wide window is 888 CSS px): the reference squares sat on their own line with the prompt
+  box under them, so the desktop window always showed the phone arrangement. The 参考图 / 首帧 / 尾帧 squares
+  now stay at the left with the prompt box to their right — the same shape the 图片编辑 composer has — and on
+  a real phone the filled square shrinks from 118 px to 72 px so the prompt keeps room to write in. Covered by
+  the 900px-wide video-page case in `studio/tests/e2e/studio-mobile-layout.e2e.mjs`.
 - **A 特效视频 preset card on the Studio home.** The 开始创作 section's 添加卡片 face gains a preset card
   **特效视频** (副标题 选一枚镜头特效，出一段片). It is deliberately absent from the default home page: open
   编辑首页 → 添加卡片 → 特效视频 and it lands at the end of 开始创作, opening the Video page with

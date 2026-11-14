@@ -117,7 +117,7 @@ const videoPage = page("ns-video", `
           <div class="ns-gen-progress ns-video-progress"><div style="width:40%"></div></div>
         </div>
         <div class="ns-video-top">
-          <div class="ns-video-deck"><span class="ns-video-refdrop">首帧</span><span class="ns-video-refdrop">尾帧</span><span class="ns-video-refdrop">参考图</span></div>
+          <div class="ns-video-deck"><div class="ns-video-slot neo-gallery-edit-refdrop"><span>首帧</span></div><div class="ns-video-slot neo-gallery-edit-refdrop"><span>尾帧</span></div><div class="ns-video-slot neo-gallery-edit-refdrop"><span>参考图</span></div></div>
           <div class="ns-video-input">
             <textarea class="ns-video-prompt" rows="2"></textarea>
             <span class="ns-video-count">12</span>
@@ -772,5 +772,27 @@ test("桌面视频页：composer 胶囊 980px 居中、提示词框两行高、�
     assert.ok(m.taBottom >= m.deckBottom - 1, `提示词框顶不过素材方块底边（框底 ${m.taBottom} / 方块底 ${m.deckBottom}）`);
     assert.ok(m.chipsOverflow <= 1, `芯片行在 980px 胶囊里溢出 ${m.chipsOverflow}px，「生成」滚不出去`);
     assert.ok(m.genW > 40, `「生成」钮被挤扁（宽 ${m.genW}px）`);
+});
+
+// Windows 200% 缩放的桌面窗口（1776 物理像素 = 888 CSS px）就落在那条 900px 媒体查询里：
+// 第一行照旧一行不换行，方块在左、提示词在右——换行等于把桌面窗口排成手机版式
+test("900px 宽窗口：视频页第一行不换行，方块在左、提示词框在右", async () => {
+    const m = await measure(videoPage, { width: 900, height: 1000 }, {}, () => {
+        const b = (s) => document.querySelector(s).getBoundingClientRect();
+        const deck = b(".ns-video-deck");
+        const ta = b(".ns-video-prompt");
+        const page = document.querySelector(".ns-video-page");
+        return {
+            wrap: getComputedStyle(document.querySelector(".ns-video-top")).flexWrap,
+            taLeft: Math.round(ta.left),
+            deckRight: Math.round(deck.right),
+            taW: Math.round(ta.width),
+            pageOverflow: Math.round(page.scrollWidth - page.clientWidth),
+        };
+    });
+    assert.equal(m.wrap, "nowrap", "第一行被排成上下两行，提示词跑到方块下面");
+    assert.ok(m.taLeft >= m.deckRight, `提示词框没排在方块之后（框左 ${m.taLeft} / 方块右 ${m.deckRight}）`);
+    assert.ok(m.taW >= 260, `提示词框被方块挤到 ${m.taW}px，写不了几个字`);
+    assert.ok(m.pageOverflow <= 1, `第一行吃不下整幅，页面横向溢出 ${m.pageOverflow}px`);
 });
 
