@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 
 import folder_paths
 from aiohttp import web
@@ -69,11 +70,7 @@ _VIDEO_MODEL_HINTS = {
 
 def suggest_video_model(folder: str) -> str:
     """按 H3 名称线索挑默认视频模型（turbo 优先、短名优先）；无命中返回空串。与 image_gen.suggest_model 同构。"""
-    try:
-        files = sorted(folder_paths.get_filename_list(folder) or [])
-    except Exception as e:
-        logger.warning(f"video_gen: scan {folder} failed: {e}")
-        return ""
+    files = _video_folder_files(folder)
     if not files:
         return ""
     for hint in _VIDEO_MODEL_HINTS.get(folder, ()):
@@ -86,16 +83,20 @@ def suggest_video_model(folder: str) -> str:
 
 def suggest_audio_vae() -> str:
     """按名称线索挑 H3 音频 VAE（文件名同时含 h3 与 audio），无命中返回空串。"""
-    try:
-        files = sorted(folder_paths.get_filename_list("vae") or [])
-    except Exception as e:
-        logger.warning(f"video_gen: scan vae failed: {e}")
-        return ""
-    for f in files:
+    for f in _video_folder_files("vae"):
         low = f.lower()
         if "h3" in low and "audio" in low:
             return f
     return ""
+
+
+def _video_folder_files(folder: str) -> list:
+    """类别里的模型相对名（排序）；目录扫不到（模型根断开）回空表，调用方按「没有候选」处理。"""
+    try:
+        return sorted(folder_paths.get_filename_list(folder) or [])
+    except Exception as e:
+        logger.warning(f"video_gen: scan {folder} failed: {e}")
+        return []
 
 
 def _video_display_sort(files: list) -> list:
@@ -103,17 +104,95 @@ def _video_display_sort(files: list) -> list:
     return sorted(files, key=lambda f: ("h3" not in f.lower(), f.lower()))
 
 
+# 预设清单的 field → 模型类别：技能钉的就是清单里这些落点，社区命名（MiniMaxH3\h3.safetensors）
+# 名称线索抓不到，靠清单进下拉。vae 类别按 field 分视频 / 音频两行
+_VIDEO_MANIFEST_FIELDS = {"diffusion_models": ("model",), "text_encoders": ("text_encoder",),
+                          "vae": ("vae",), "loras": ("loras",)}
+
+
+def _family_tokens(rel_path: str) -> list:
+    return [t for t in re.split(r"[^a-z0-9]+", str(rel_path or "").replace("\\", "/").lower()) if t]
+
+
+def _is_h3_family(rel_path: str) -> bool:
+    """MiniMax H3 家族：目录段或文件名命中 minimax / h3。清单没枚举的同家族权重
+    （MiniMaxH3\\Fast\\fasth3_omniref_8step_pruned_int8）就靠目录段命中收进来。"""
+    return any(t.startswith("minimax") or t == "h3" for t in _family_tokens(rel_path))
+
+
+def _is_music_family(rel_path: str) -> bool:
+    """minimax Music3 / acestep 音频家族（Music 权重树）：出视频三行不收，音频 VAE 行收。
+
+    整串子串匹配，不按分段：minimax_music3 被下划线拆成 minimax 与 music3 两段，
+    分段判定认不出它是音频家族，会被 minimax 前缀当成 H3 收进主模型行。
+    """
+    low = str(rel_path or "").replace("\\", "/").lower()
+    return "minimax_music" in low or "acestep" in low
+
+
+def _video_family_match(rel_path: str, audio: bool) -> bool:
+    """一行 H3 下拉的家族判定：audio=False 收 H3 主模型 / 文本编码器 / 视频 VAE，
+    audio=True 收 H3 音频 VAE 与 Music 家族。带 audio 段的 H3 文件（minimax_h3_audio_vae、
+    diffusion_models 里的 minimax_h3_audio_v1_5）不进非音频行，反之亦然。"""
+    if _is_music_family(rel_path):
+        return audio
+    if not _is_h3_family(rel_path):
+        return False
+    return ("audio" in _family_tokens(rel_path)) == audio
+
+
+def _manifest_paths(folder: str, audio: bool = False) -> list:
+    """视频族预设清单在该类别的落点名（filename 与 alt 都算，盘上没落也算——前端按「缺失」列出，
+    钉住的值与模型库下载入口都靠它）。清单读不到（技能模块不可用、无 models.json）回空表。"""
+    try:
+        from . import skill_models
+        from .skill import scan_skills
+    except Exception as e:
+        logger.warning(f"video_gen: skill manifest unavailable: {e}")
+        return []
+    fields = ("audio_vae",) if (folder == "vae" and audio) else _VIDEO_MANIFEST_FIELDS.get(folder, ())
+    out = []
+    for item in scan_skills():
+        if item.get("source") != "presets":
+            continue
+        resolved = skill_models.resolve_skill_models(item.get("id", ""))
+        if resolved.get("kind") != "video":
+            continue
+        for entry in resolved.get("files", []):
+            if not isinstance(entry, dict) or entry.get("field") not in fields:
+                continue
+            for name in (entry.get("filename"), entry.get("alt")):
+                name = str(name or "").strip().replace("\\", "/")
+                if name and name not in out:
+                    out.append(name)
+    return out
+
+
+def _video_scoped(files: list, folder: str, audio: bool = False) -> list:
+    """H3 家族的下拉列表：预设清单钉的落点 ∪ 家族命中，统一走 _video_display_sort 的 H3 优先排序。
+    清单里盘上没有的名字保留（前端标「缺失」），这样「自动」钉值不会因过滤被当成不存在。"""
+    merged = []
+    for name in _manifest_paths(folder, audio) + [f for f in files if _video_family_match(f, audio)]:
+        if name not in merged:
+            merged.append(name)
+    return _video_display_sort(merged)
+
+
 def scan_video_models() -> dict:
-    """列出 H3 生视频可选模型（H3 相关靠前）与 LoRA，供前端设置面板展示。"""
+    """列出 H3 生视频可选模型（H3 相关靠前）与 LoRA，供前端设置面板展示。
+
+    video_* 是 H3 家族 + 预设清单那一份，给「生视频模型 / Text Encoder / VAE（视频）/ VAE（音频）」
+    四行用；原键始终是类别全表，「显示全部模型」与 LoRA 行读它（LoRA 跨家族混用是常态，不给 video_ 键）。
+    """
     out = {}
     for folder in ("diffusion_models", "text_encoders", "vae", "loras"):
-        try:
-            files = sorted(folder_paths.get_filename_list(folder) or [])
-        except Exception as e:
-            logger.warning(f"video_gen: scan {folder} failed: {e}")
-            files = []
+        files = _video_folder_files(folder)
         out[folder] = _video_display_sort(files)
         out["mtimes_" + folder] = folder_mtimes(folder)
+        if folder == "loras":
+            continue
+        out["video_" + folder] = _video_scoped(files, folder)
+    out["video_audio_vae"] = _video_scoped(_video_folder_files("vae"), "vae", audio=True)
     return out
 
 

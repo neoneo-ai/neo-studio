@@ -258,6 +258,13 @@ class SuggestTests(unittest.TestCase):
         self.assertEqual(image_gen.suggest_model("diffusion_models"),
                          "Krea2/krea2_turbo_int8_convrot.safetensors")
 
+    def test_diffusion_skips_video_weight_inside_image_dir(self):
+        # H3 权重被放进 Krea2 目录：名称线索 "krea2" 命中目录段，文件名命中家族词 → 不参与挑选
+        self._with_files(["Krea2/minimax_h3_video_turbo_v3.safetensors",
+                          "Krea2/krea2_turbo_int8_convrot.safetensors"])
+        self.assertEqual(image_gen.suggest_model("diffusion_models"),
+                         "Krea2/krea2_turbo_int8_convrot.safetensors")
+
 
 class ResolveFallbackTests(unittest.TestCase):
     """生图的模型名回退：自定义模型名不在盘上、类别里挑得出默认模型就用默认模型跑并给出这句话；
@@ -326,6 +333,66 @@ class ScanModelsTests(unittest.TestCase):
         files = ["zeta.safetensors", "Krea2/base.safetensors", "alpha.safetensors"]
         self.assertEqual(image_gen._display_sort(files),
                          ["Krea2/base.safetensors", "alpha.safetensors", "zeta.safetensors"])
+
+
+class ImageScopeTests(unittest.TestCase):
+    """image_* 下拉口径：视频 / 音频 / 3D 家族不进生图列表；全表键给出「显示全部模型」要的那份。
+
+    桩数据取本机模型根的真实形状：视频权重散在根目录、Wan 的 umt5 TE 躲在 NSFW_APIs 下、
+    Krea2 混种按社区习惯命名（ACE_of_a_new_dawn）、Wanderlust 这类名字不能被 "wan" 子串误杀。
+    """
+
+    FILES = [
+        "Krea2/krea2_raw_int8_convrot.safetensors",
+        "Krea2/ACE_of_a_new_dawn_13SDP_adamG_bigCO2_12k_early.sdxl_fp8_e4m3fn.safetensors",
+        "QwenImage2.1/qwen_image_2.1_int8_convrot.safetensors",
+        "zimage/moodyRealMix_zitV5DPO_q8_0.gguf",
+        "MOSS/moss_image_27b_int8_convrot_kv.safetensors",
+        "Wanderlust/Wanderlust_fp8.safetensors",
+        "MiniMaxH3/minimax_h3_video_turbo_v3.safetensors",
+        "minimax_h3_video_v1_5.safetensors",
+        "WAN2.2/Wan2_2-Fun-HighNoiseFP8.safetensors",
+        "NSFW_APIs\\nsfw_wan_umt5-12b.safetensors",
+        "Music/acestep_v2.5_turbo_dance.safetensors",
+        "Music/minimax_music3_dav.safetensors",
+        "tripo/tripo_p1_0.safetensors",
+        "ltx-2.3/ltx-2.3_text_projection_bf16.safetensors",
+    ]
+    NON_IMAGE = FILES[6:]
+
+    def setUp(self):
+        self._orig = image_gen_files._folder_files
+        image_gen_files._folder_files = lambda folder: list(self.FILES)
+
+    def tearDown(self):
+        image_gen_files._folder_files = self._orig
+
+    def test_scope_drops_video_audio_3d_families(self):
+        scoped = image_gen.scan_models()["image_diffusion_models"]
+        for kept in self.FILES[:6]:
+            self.assertIn(kept, scoped)
+        for gone in self.NON_IMAGE:
+            self.assertNotIn(gone, scoped, "视频 / 音频 / 3D 家族不该出现在生图下拉里")
+
+    def test_scope_splits_te_and_vae(self):
+        """TE 与 VAE 同一条家族判定：H3 的 32b TE、Wan 的 umt5、LTX 投影、两个 H3 VAE 都退出。"""
+        image_gen_files._folder_files = lambda folder: [
+            "qwen3vl_4b_fp8_scaled.safetensors", "qwen3vl_32b_v1_5_minimax_h3_fp8_mixed.safetensors",
+            "nsfw_wan_umt5-12b.safetensors", "ltx-2.3_text_projection_bf16.safetensors",
+        ]
+        out = image_gen.scan_models()
+        self.assertEqual(out["image_text_encoders"], ["qwen3vl_4b_fp8_scaled.safetensors"])
+        self.assertEqual(len(out["text_encoders"]), 4, "全表照常给出「显示全部模型」要的那份")
+
+    def test_scope_empty_when_category_has_only_video_weights(self):
+        """模型根里只有视频权重：生图列表为空（面板回落全表由前端负责），自动挑选也挑不出基座。"""
+        image_gen_files._folder_files = lambda folder: [self.NON_IMAGE[0]]
+        out = image_gen.scan_models()
+        self.assertEqual(out["image_diffusion_models"], [])
+        self.assertEqual(out["suggested_diffusion_models"], "")
+
+    def test_no_image_scope_for_loras(self):
+        self.assertNotIn("image_loras", image_gen.scan_models(), "LoRA 跨家族混用是常态，不给过滤后的键")
 
 
 class ResolveTests(unittest.TestCase):

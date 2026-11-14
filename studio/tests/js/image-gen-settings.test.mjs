@@ -3,7 +3,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { beforeEach } from "node:test";
-import { resetEnv, mockRoute, clearRoutes, jsonResponse } from "./setup.mjs";
+import { resetEnv, mockRoute, clearRoutes, jsonResponse, sleep } from "./setup.mjs";
 
 beforeEach(() => {
     resetEnv();
@@ -368,3 +368,185 @@ test("createModelConfigSection：同名文件在多个子目录时仍如实标�
     );
     assert.equal(section.collect().model, "C/model.safetensors", "失效路径应如实保留原值（标缺失），不回落自动");
 });
+
+// ============ 模型下拉家族作用域：主模型行只列当前技能家族，TE / VAE 剔视频 / 音频 / 3D，LoRA 行不作用域 ============
+
+const SCOPE_DIFFUSION = [
+    "krea2/krea2_mix_t2i.safetensors",
+    "QwenImage2.1/qwen_image_2.1_int8_convrot.safetensors",
+    "MiniMaxH3/Speed/h3.safetensors",
+    "Wanderlust/Wanderlust.safetensors",
+    "MOSS/moss_image_base_bf16.safetensors",
+    "Music/minimax_music3_base.safetensors",
+];
+const SCOPE_LORAS = ["krea2/Edit/SomeStyle.safetensors", "MiniMaxH3/Lora/h3_style.safetensors"];
+// 后端一次扫描的响应形状：类别全表 + image_* 作用域表 + LoRA 全表
+const SCOPE_MODELS = {
+    diffusion_models: SCOPE_DIFFUSION,
+    image_diffusion_models: SCOPE_DIFFUSION.filter((f) => !f.startsWith("MiniMaxH3/") && !f.startsWith("Music/")),
+    text_encoders: ["krea2/Qwen-Image-2.0_text_encoder.safetensors", "nsfw_wan_umt5.safetensors", "Music/minimax_music_te.safetensors"],
+    image_text_encoders: ["krea2/Qwen-Image-2.0_text_encoder.safetensors"],
+    vae: ["krea2/flux1-krea2-related-vae.safetensors", "MiniMaxH3/minimax_h3_video_vae.safetensors", "MiniMaxH3/minimax_h3_audio_vae.safetensors"],
+    image_vae: ["krea2/flux1-krea2-related-vae.safetensors"],
+    loras: SCOPE_LORAS,
+};
+const optionValues = (select) => [...select.options].map((o) => o.value);   // 首项是「自动」（空值）
+
+/** 该技能的就位清单一发：family 就是主模型行的家族口径；has_manifest=false = 自建技能没有家族 */
+function mockSkillCheck(family) {
+    mockRoute("/neo_skill_models/check", () => jsonResponse({
+        success: true,
+        check: { skill_id: "sk", has_manifest: true, family, label: "", kind: "image", files: [],
+                 notes: [], missing: [], missing_count: 0, missing_gb: 0, blocked: false },
+    }));
+}
+
+async function scopeSection(family, settings = {}) {
+    mockSkillCheck(family);
+    const { createModelConfigSection } = await import("../../web/image-gen.js");
+    const section = createModelConfigSection({ getSkillId: () => "sk" });
+    document.body.appendChild(section.el);
+    section.load(settings, SCOPE_MODELS);
+    await sleep(0);   // 就位检查是异步的：家族落到主模型行上要等它落地
+    return section;
+}
+
+test("生图主模型行按技能家族过滤：Qwen 技能只列 Qwen 家族的权重", async () => {
+    const section = await scopeSection("qwen_image_21");
+    assert.deepEqual(optionValues(section.modelSelect),
+        ["", "QwenImage2.1/qwen_image_2.1_int8_convrot.safetensors"]);
+
+// ============ 生视频四行默认 MiniMax H3 家族，「显示全部模型」回到类别全表 ============
+
+const VIDEO_FULL = {
+    diffusion_models: ["MiniMaxH3/h3.safetensors", "MiniMaxH3/Speed/fasth3_omniref_8step.safetensors",
+                       "krea2/krea2_mix_t2i.safetensors", "Music/minimax_music3_base.safetensors"],
+    video_diffusion_models: ["MiniMaxH3/h3.safetensors", "MiniMaxH3/Speed/fasth3_omniref_8step.safetensors"],
+    text_encoders: ["MiniMaxH3/minimax_h3_te.safetensors", "krea2/Qwen-Image-2.0_text_encoder.safetensors",
+                    "Music/minimax_music_te.safetensors"],
+    video_text_encoders: ["MiniMaxH3/minimax_h3_te.safetensors"],
+    vae: ["MiniMaxH3/minimax_h3_video_vae.safetensors", "MiniMaxH3/minimax_h3_audio_vae.safetensors",
+          "krea2/flux1-krea2-related-vae.safetensors"],
+    video_vae: ["MiniMaxH3/minimax_h3_video_vae.safetensors"],
+    video_audio_vae: ["MiniMaxH3/minimax_h3_audio_vae.safetensors", "Music/minimax_music_vae.safetensors"],
+    loras: ["MiniMaxH3/Lora/h3_style.safetensors", "krea2/Edit/SomeStyle.safetensors"],
+};
+
+test("生视频四行默认只列 MiniMax H3 家族，音频行带 Music 家族，LoRA 行全表", async () => {
+    const { createVideoModelConfigSection } = await import("../../web/image-gen.js");
+    const section = createVideoModelConfigSection();
+    document.body.appendChild(section.el);
+    section.load({}, VIDEO_FULL);
+    const selects = [...section.el.querySelectorAll("select")];
+    assert.deepEqual(optionValues(selects[0]), ["", ...VIDEO_FULL.video_diffusion_models], "视频模型行");
+    assert.deepEqual(optionValues(selects[1]), ["", ...VIDEO_FULL.video_text_encoders], "Text Encoder 行");
+    assert.deepEqual(optionValues(selects[2]), ["", ...VIDEO_FULL.video_vae], "视频 VAE 行");
+    assert.deepEqual(optionValues(selects[3]), ["", ...VIDEO_FULL.video_audio_vae], "音频 VAE 行");
+    section.el.querySelector(".rs-gen-lora-add").click();
+    assert.deepEqual(optionValues(section.el.querySelector(".rs-gen-lora-row select")),
+        ["", ...VIDEO_FULL.loras], "LoRA 行不作用域");
+});
+
+test("生视频「显示全部模型」：四行回到类别全表（LoRA 行本来就是全表）", async () => {
+    const { createVideoModelConfigSection } = await import("../../web/image-gen.js");
+    const section = createVideoModelConfigSection();
+    document.body.appendChild(section.el);
+    section.load({}, VIDEO_FULL);
+    section.el.querySelector(".rs-model-scope-toggle").click();
+    const selects = [...section.el.querySelectorAll("select")];
+    assert.deepEqual(optionValues(selects[0]), ["", ...VIDEO_FULL.diffusion_models]);
+    assert.deepEqual(optionValues(selects[1]), ["", ...VIDEO_FULL.text_encoders]);
+    assert.deepEqual(optionValues(selects[2]), ["", ...VIDEO_FULL.vae]);
+    assert.deepEqual(optionValues(selects[3]), ["", ...VIDEO_FULL.vae]);
+});
+
+test("生视频钉住的跨家族值（技能 config 存的 Krea2 权重）仍可选、不标缺失", async () => {
+    const { createVideoModelConfigSection } = await import("../../web/image-gen.js");
+    const section = createVideoModelConfigSection();
+    document.body.appendChild(section.el);
+    section.load({ model: "krea2/krea2_mix_t2i.safetensors" }, VIDEO_FULL);
+    const modelSelect = section.el.querySelector("select");
+    assert.ok(optionValues(modelSelect).includes("krea2/krea2_mix_t2i.safetensors"));
+    assert.equal(section.collect().model, "krea2/krea2_mix_t2i.safetensors");
+    assert.equal(section.el.querySelector(".rs-model-select-box.rs-model-missing"), null);
+});
+
+// ============ 全局默认设置表单（没有技能家族上下文）：走 image_* / video_* 作用域表 ============
+
+test("全局生图默认设置：三条模型行走 image_* 作用域表，开关回到类别全表", async () => {
+    mockRoute("/neo_image_gen/settings", () => jsonResponse({ model: "", text_encoder: "", vae: "" }));
+    mockRoute("/neo_image_gen/models", () => jsonResponse(SCOPE_MODELS));
+    const { createImageGenSettingsForm } = await import("../../web/image-gen.js");
+    const form = createImageGenSettingsForm();
+    document.body.appendChild(form.el);
+    await form.load();
+    const selects = [...form.el.querySelectorAll("select")];
+    assert.deepEqual(optionValues(selects[0]), ["", ...SCOPE_MODELS.image_diffusion_models]);
+    assert.deepEqual(optionValues(selects[1]), ["", ...SCOPE_MODELS.image_text_encoders]);
+    assert.deepEqual(optionValues(selects[2]), ["", ...SCOPE_MODELS.image_vae]);
+    form.el.querySelector(".rs-model-scope-toggle").click();
+    assert.deepEqual(optionValues(form.el.querySelectorAll("select")[0]), ["", ...SCOPE_DIFFUSION]);
+});
+
+test("全局生视频默认设置：四行走 video_* 作用域表，开关回到类别全表", async () => {
+    mockRoute("/neo_video_gen/settings", () => jsonResponse({}));
+    mockRoute("/neo_video_gen/models", () => jsonResponse(VIDEO_FULL));
+    const { createVideoGenSettingsForm } = await import("../../web/image-gen.js");
+    const form = createVideoGenSettingsForm();
+    document.body.appendChild(form.el);
+    await form.load();
+    const selects = [...form.el.querySelectorAll("select")];
+    assert.deepEqual(optionValues(selects[0]), ["", ...VIDEO_FULL.video_diffusion_models]);
+    assert.deepEqual(optionValues(selects[1]), ["", ...VIDEO_FULL.video_text_encoders]);
+    assert.deepEqual(optionValues(selects[2]), ["", ...VIDEO_FULL.video_vae]);
+    assert.deepEqual(optionValues(selects[3]), ["", ...VIDEO_FULL.video_audio_vae]);
+    form.el.querySelector(".rs-model-scope-toggle").click();
+    assert.deepEqual(optionValues(form.el.querySelectorAll("select")[0]), ["", ...VIDEO_FULL.diffusion_models]);
+});
+
+});
+
+test("技能没有家族（自建技能）：主模型行退回生图作用域表，视频 / 音乐家族不进下拉", async () => {
+    const section = await scopeSection("");
+    assert.deepEqual(optionValues(section.modelSelect), ["", ...SCOPE_MODELS.image_diffusion_models]);
+});
+
+test("「显示全部模型」开关：主模型行回到类别全表，再点一次回到家族表", async () => {
+    const section = await scopeSection("qwen_image_21");
+    const btn = section.el.querySelector(".rs-model-scope-toggle");
+    btn.click();
+    assert.deepEqual(optionValues(section.modelSelect), ["", ...SCOPE_DIFFUSION], "打开后列出该目录全部模型");
+    assert.equal(btn.textContent, "只看本家族");
+    btn.click();
+    assert.deepEqual(optionValues(section.modelSelect),
+        ["", "QwenImage2.1/qwen_image_2.1_int8_convrot.safetensors"], "再点一次回到家族表");
+    assert.equal(btn.textContent, "显示全部模型");
+});
+
+test("钉住的跨家族值仍可选：家族过滤把它挡在表外时不标缺失（文件在盘上）", async () => {
+    const pinned = "MiniMaxH3/Speed/h3.safetensors";
+    const section = await scopeSection("qwen_image_21", { model: pinned });
+    assert.ok(optionValues(section.modelSelect).includes(pinned), "钉住的值要出现在下拉里");
+    assert.equal(section.collect().model, pinned, "collect 保持原值");
+    assert.equal(section.el.querySelector(".rs-model-select-box.rs-model-missing"), null, "盘上有的值不是缺失");
+});
+
+test("config 钉的值在盘上真没了：不并入候选，照旧如实标缺失", async () => {
+    const section = await scopeSection("qwen_image_21", { model: "Gone/qwen_gone.safetensors" });
+    const opt = [...section.modelSelect.options].find((o) => o.value === "Gone/qwen_gone.safetensors");
+    assert.ok(opt.textContent.includes("(缺失)"), "失效路径要写明缺失");
+});
+
+test("Text Encoder / VAE 行走 image_* 作用域表：视频与音频家族的 TE / VAE 不进生图下拉", async () => {
+    const section = await scopeSection("krea2_image");
+    const selects = [...section.el.querySelectorAll("select")];
+    assert.deepEqual(optionValues(selects[1]), ["", "krea2/Qwen-Image-2.0_text_encoder.safetensors"]);
+    assert.deepEqual(optionValues(selects[2]), ["", "krea2/flux1-krea2-related-vae.safetensors"]);
+});
+
+test("LoRA 行不作用域：跨家族 LoRA 照旧全表列出", async () => {
+    const section = await scopeSection("qwen_image_21");
+    section.el.querySelector(".rs-gen-lora-add").click();
+    assert.deepEqual(optionValues(section.el.querySelector(".rs-gen-lora-row select")), ["", ...SCOPE_LORAS]);
+});
+

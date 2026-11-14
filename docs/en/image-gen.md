@@ -24,6 +24,13 @@ selected skill, e.g. Krea2 / Qwen Image 2.1).
   (`qwen_image_2.1_int8_convrot · 2026-09-12`), so a file that was just dropped into the model directory is
   easy to spot; entries whose file time cannot be read (a dropped network share, a file moved right after the
   listing) carry no date and the list itself is unaffected.
+- The model dropdowns follow the selected skill's family: the main model row lists that family's weights only
+  (a Qwen skill lists the Qwen Image 2.1 set, a Krea2 skill the Krea2 set), the Text Encoder / VAE rows drop the
+  video / audio / 3D families, and the LoRA row stays unscoped - cross-family LoRA use is normal. A skill with no
+  family (self-made skills, community naming), or a family with no file on this machine, falls back to the scoped
+  image table; the "Show all models" link at the end of the row lists every model in the folder. A cross-family
+  value pinned by `config.json` always stays selectable and is never marked missing (the file is on disk) - the
+  generation-time family guard is what blocks it.
 
 ## Preflight before generating (a missing model never reaches the queue)
 

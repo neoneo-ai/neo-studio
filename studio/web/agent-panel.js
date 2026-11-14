@@ -1867,7 +1867,8 @@ export function createAgentPrefsForm(opts = {}) {
         ]);
         if (data.offline) { note.textContent = t("桌面端服务未就绪"); return; }
         skills = Array.isArray(skillRes) ? skillRes : [];
-        modelFiles = modelRes?.diffusion_models || [];
+        // 主模型偏好只列生图家族（后端 image_* 作用域表：MiniMax H3 / 音乐 / 3D 权重不能当智能体的生图主模型）
+        modelFiles = modelRes?.image_diffusion_models?.length ? modelRes.image_diffusion_models : (modelRes?.diffusion_models || []);
         fill(data.prefs || {});
         if (opts.previewMode) previewBox.checked = !!opts.previewMode();   // 界面开关以宿主那份为准，后端读回来的只有六个字段
         applyPending();

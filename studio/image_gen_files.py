@@ -10,6 +10,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 
 import folder_paths
 from aiohttp import web
@@ -51,9 +52,14 @@ _MODEL_HINTS = {
     "vae": ("qwen_image", "krea2"),
 }
 
-# 自动挑选要排除的目录段：H3 视频权重树。Krea2 混种（moodyKrea2Mix 这类）常被用户存放在
-# MiniMaxH3\ 下，名称线索 "krea2" 命中它，生图就会挑到视频目录里的权重，执行期报 conditioning 维度错
-_IMAGE_SUGGEST_EXCLUDE_DIRS = ("minimax",)
+# 跑不了生图模板的家族（视频 / 音频 / 3D）：自动挑选与「只看生图家族」的下拉都不列，挑到它们
+# 等于一次必败的生成（conditioning 维度对不上）。词表按本机模型根与预设清单取证：MiniMaxH3 视频
+# 与它的 TE、Wan 权重与 umt5 TE（NSFW_APIs\nsfw_wan_umt5-12b 这种散在根目录的）、LTX 文本投影、
+# minimax_music3 与 acestep 音频、tripo 3D 网格。判定按路径分段：长词前缀命中（minimaxh3 / wan2 /
+# music3），短词整段相等（h3）——整串子串匹配会把 Wanderlust 这类混种按 "wan" 误杀；
+# ACE_of_a_new_dawn 是 Krea2 混种，所以不收 "ace"，acestep 音频由 "acestep" 自己命中。
+# moss 不在表内：MOSS\moss_image_* 是生图线。
+_NON_IMAGE_FAMILY_WORDS = ("minimax", "h3", "wan2", "umt5", "ltx", "music", "acestep", "tripo")
 
 
 # ===========================================================================
@@ -104,17 +110,27 @@ def suggest_model(folder: str) -> str:
     if not files:
         return ""
     for hint in _MODEL_HINTS.get(folder, ()):
-        matches = [f for f in files if hint in f.lower() and not _in_excluded_tree(f)]
+        matches = [f for f in files if hint in f.lower() and not _is_non_image_family(f)]
         if matches:
             matches.sort(key=lambda f: (("turbo" not in f.lower()), len(f)))
             return matches[0]
     return ""
 
 
-def _in_excluded_tree(rel_path: str) -> bool:
-    """模型相对路径的目录段里出现视频家族词 → 生图自动挑选不参与挑选。"""
-    dirs = rel_path.replace("\\", "/").lower().split("/")[:-1]
-    return any(word in seg for seg in dirs for word in _IMAGE_SUGGEST_EXCLUDE_DIRS)
+def _is_non_image_family(rel_path: str) -> bool:
+    """模型相对路径属视频 / 音频 / 3D 家族：路径分段命中 _NON_IMAGE_FAMILY_WORDS 即算。
+
+    目录段与文件名同一条判定：Krea2 混种常放在 MiniMaxH3\\ 下（目录命中），
+    视频权重也常散在根目录里（minimax_h3_video_v1_5、nsfw_wan_umt5-12b，文件名命中）。
+    """
+    tokens = [t for t in re.split(r"[^a-z0-9]+", str(rel_path or "").replace("\\", "/").lower()) if t]
+    for word in _NON_IMAGE_FAMILY_WORDS:
+        for token in tokens:
+            if len(word) > 3 and token.startswith(word):
+                return True
+            if len(word) <= 3 and token == word:
+                return True
+    return False
 
 
 def resolve_model(folder: str, wanted: str, allow_fallback: bool = False) -> tuple:
@@ -176,13 +192,20 @@ def folder_mtimes(folder: str) -> dict:
 
 
 def scan_models() -> dict:
-    """列出可选模型、自动挑选结果与文件修改时间，供前端设置面板展示。"""
+    """列出可选模型、自动挑选结果与文件修改时间，供前端设置面板展示。
+
+    image_* 是去掉视频 / 音频 / 3D 家族的那份，给没有技能家族上下文的下拉用（全局生图设置、
+    提及选择器、Text Encoder / VAE 行）；原键始终是类别全表，技能清单校验与「显示全部模型」读它。
+    LoRA 不给 image_ 键：跨家族混用 LoRA 是常态。
+    """
     out = {}
     for folder in ("diffusion_models", "text_encoders", "vae", "loras"):
         files = _folder_files(folder)
         out[folder] = _display_sort(files)
         out["suggested_" + folder] = suggest_model(folder)
         out["mtimes_" + folder] = folder_mtimes(folder)
+        if folder != "loras":
+            out["image_" + folder] = _display_sort([f for f in files if not _is_non_image_family(f)])
     return out
 
 

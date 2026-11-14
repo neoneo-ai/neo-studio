@@ -574,10 +574,51 @@ function sortByModelFamily(files, model) {
     const tier = (f) => {
         const p = String(f).replace(/\\/g, "/").toLowerCase();
         if (dir && p.startsWith(dir)) return 0;
+
         return family && p.includes(family) ? 1 : 2;
     };
     return [...files].sort((a, b) => tier(a) - tier(b));
 }
+/** 作用域表为空（这台机器扫不到这个家族、老后端没有这个键）时用类别全表兜底：下拉不许铺成空表。 */
+export function scopedFiles(scoped, full) {
+    return (scoped && scoped.length) ? scoped : (full || []);
+}
+
+/** config 已存的值并入候选：家族作用域把盘上有的跨家族值挡在表外时，它要被看见、要可选，
+ *  不能标成「缺失」（文件在盘上，只是家族与技能对不上，生成时由 guardMainModelFamily 拦）。
+ *  全表 all 里也没有 = 文件真没了 → 不并入，交给 fillComboSelect 如实标缺失。 */
+function withCurrent(files, current, all) {
+    if (!current) return files;
+    const norm = String(current).replace(/\\/g, "/");
+    const hit = (list) => (list || []).some((f) => String(f).replace(/\\/g, "/") === norm);
+    return !hit(files) && hit(all) ? [...files, current] : files;
+}
+
+/** 生图主模型行的候选：技能家族命中——家族词来自该技能清单的 family（qwen_image_21 → qwen），
+ *  与左侧技能分组、生成前 guardMainModelFamily 同一口径。技能没有家族（自建技能、社区命名）、
+ *  家族内本机一个文件都没有 → 生图作用域表（后端剔掉视频 / 音频 / 3D 家族）；
+ *  「显示全部模型」→ 类别全表（跨家族模型与社区命名全回来）。 */
+export function imageModelFiles(models, family, showAll, current) {
+    const all = models.diffusion_models || [];
+    if (showAll) return withCurrent(all, current, all);
+    const kin = family ? all.filter((f) => modelFamily(f) === family) : [];
+    return withCurrent(kin.length ? kin : scopedFiles(models.image_diffusion_models, all), current, all);
+}
+
+/** 生视频主模型行的候选：默认 MiniMax H3 家族（后端 video_* 作用域表，含预设清单钉死的落点与 alt）；
+ *  「显示全部模型」→ 类别全表。 */
+export function videoModelFiles(models, showAll, current) {
+    const all = models.diffusion_models || [];
+    return withCurrent(showAll ? all : scopedFiles(models.video_diffusion_models, all), current, all);
+}
+
+/** Text Encoder / VAE 行的候选：只剔视频 / 音频 / 3D 家族（后端 image_* / video_* 作用域表）——
+ *  家族约束只落在主模型行上（LoRA 行不作用域：跨家族挂 LoRA 是常规操作）。 */
+export function scopedAuxFiles(models, showAll, scopedKey, fullKey, current) {
+    const all = models[fullKey] || [];
+    return withCurrent(showAll ? all : scopedFiles(models[scopedKey], all), current, all);
+}
+
 
 /** 下拉项后缀：模型文件修改日期。后端 mtimes_* 给 epoch 秒，取不到（网络盘断开）就没有这一项。 */
 function modelDateSuffix(name, mtimes) {
@@ -712,6 +753,18 @@ export function createModelConfigSection(opts = {}) {
     loraRow.append(loraLabel, loraList, loraAddBtn);
     section.append(gapBar, modelCtl.row, encoderCtl.row, vaeCtl.row, loraRow);
 
+    // 主模型行尾的文字开关：家族作用域把跨家族模型挡在表外时，一键回到类别全表（面板本地状态，不落盘）
+    const scopeBtn = mkEl("button", "rs-model-gap-alt rs-model-scope-toggle");
+    scopeBtn.type = "button";
+    scopeBtn.textContent = t("显示全部模型");
+    scopeBtn.title = t("下拉只列这个家族的模型；打开后列出该目录的全部模型");
+    scopeBtn.addEventListener("click", () => {
+        showAllModels = !showAllModels;
+        scopeBtn.textContent = showAllModels ? t("只看本家族") : t("显示全部模型");
+        fillModelSelects(modelCtl.select.value);
+    });
+    modelCtl.row.appendChild(scopeBtn);
+
     // 面板内的一次点击不许冒泡到 document：prompt 节点预设浮层（prompts.js 的 popupCloser）读 document 上的
     // click，一次点提示条、点 LoRA 行会被判成「点在浮层外」，把浮层连这块面板一起收掉（技能行当年就是靠各自的
     // stopPropagation 躲这件事）。只拦 click：combo 的下拉靠 document 上的 mousedown 收起（combo-box.js），
@@ -721,6 +774,8 @@ export function createModelConfigSection(opts = {}) {
     let loraFiles = [];
     let loraMtimes = {};   // LoRA 文件修改时间（模型名 → epoch 秒），随 loraFiles 一起刷新
     let loadedModels = {};   // 最近一次 load 的 models（切换主模型后按新家族重排四个下拉）
+    let skillFamily = "";   // 该技能清单的家族词（qwen / krea2 / moss）：技能没写家族（自建、社区命名）就空
+    let showAllModels = false;   // 「显示全部模型」：面板本地状态，不落盘
     const loraHubs = new Map();   // LoRA 行 → 行内下载入口：行随增删走，清单只认当前行的选名
 
     // LoRA 行：动态增删，每行 = 模型选择 + 强度
@@ -764,13 +819,13 @@ export function createModelConfigSection(opts = {}) {
      *  cfg 提供首次 load 的目标值（空 = 自动）；不传 cfg 表示切换主模型后重排 → 各下拉保留当前选中值。 */
     function fillModelSelects(anchor, cfg) {
         const models = loadedModels;
-        fillComboSelect(modelCtl.select, sortByModelFamily(models.diffusion_models || [], anchor),
+        fillComboSelect(modelCtl.select, sortByModelFamily(imageModelFiles(models, skillFamily, showAllModels, cfg ? cfg.model : modelCtl.select.value), anchor),
             models.suggested_diffusion_models || "", cfg ? cfg.model || "" : modelCtl.select.value,
             models.mtimes_diffusion_models);
-        fillComboSelect(encoderCtl.select, sortByModelFamily(models.text_encoders || [], anchor),
+        fillComboSelect(encoderCtl.select, sortByModelFamily(scopedAuxFiles(models, showAllModels, "image_text_encoders", "text_encoders", cfg ? cfg.text_encoder : encoderCtl.select.value), anchor),
             models.suggested_text_encoders || "", cfg ? cfg.text_encoder || "" : encoderCtl.select.value,
             models.mtimes_text_encoders);
-        fillComboSelect(vaeCtl.select, sortByModelFamily(models.vae || [], anchor),
+        fillComboSelect(vaeCtl.select, sortByModelFamily(scopedAuxFiles(models, showAllModels, "image_vae", "vae", cfg ? cfg.vae : vaeCtl.select.value), anchor),
             models.suggested_vae || "", cfg ? cfg.vae || "" : vaeCtl.select.value,
             models.mtimes_vae);
         loraFiles = sortByModelFamily(models.loras || [], anchor);
@@ -877,6 +932,11 @@ export function createModelConfigSection(opts = {}) {
         skillModelCheck(sid).then(async (check) => {
             if (getSkillId() !== sid) return;   // 期间换了技能，这一轮清单不属于当前面板
             applyManifestTargets(check);
+            const family = modelFamily(String(check?.family || ""));
+            if (family !== skillFamily) {
+                skillFamily = family;   // 家族变了 → 主模型下拉按新家族重铺（config 钉的跨家族值仍可选）
+                fillModelSelects(modelCtl.select.value);
+            }
             gapPlanCount = -1;
             if (check?.blocked) {
                 const plan = await skillModelPlan(sid).catch(() => null);
@@ -1036,8 +1096,23 @@ export function createVideoModelConfigSection() {
 
     section.append(modelCtl.row, stepsCtl.row, encoderCtl.row, videoVaeCtl.row, audioVaeCtl.row, loraRow);
 
+    // 视频模型行尾的文字开关：默认只列 MiniMax H3 家族，一键回到类别全表（面板本地状态，不落盘）
+    const scopeBtn = mkEl("button", "rs-model-gap-alt rs-model-scope-toggle");
+    scopeBtn.type = "button";
+    scopeBtn.textContent = t("显示全部模型");
+    scopeBtn.title = t("下拉只列 MiniMax H3 家族的模型；打开后列出该目录的全部模型");
+    scopeBtn.addEventListener("click", () => {
+        showAllModels = !showAllModels;
+        scopeBtn.textContent = showAllModels ? t("只看本家族") : t("显示全部模型");
+        fillVideoSelects();
+    });
+    modelCtl.row.appendChild(scopeBtn);
+
     let loraFiles = [];
     let loraMtimes = {};   // LoRA 文件修改时间（模型名 → epoch 秒）
+    let loadedModels = {};   // 最近一次 load 的 models（「显示全部模型」开关要按新作用域重铺四行）
+    let loadedSettings = {};
+    let showAllModels = false;   // 「显示全部模型」：面板本地状态，不落盘
     // 面板铺进去的那一发步数：技能 config 钉的值，或「再来一发」那一发的生效值。
     // 面板与它一致 = 用户没改 = 这一发不发覆盖值，特效/技能钉的那一发才是真跑的步数
     let pinnedSteps = 20;
@@ -1065,17 +1140,31 @@ export function createVideoModelConfigSection() {
 
     loraAddBtn.addEventListener("click", () => addLoraRow());
 
+    /** 四行视频下拉按当前作用域铺一遍：默认 MiniMax H3 家族（后端 video_* 表），「显示全部模型」回到类别全表。
+     *  「自动」项的建议名按作用域内的表算，铺出来的默认值就是这一行真要用的那一发。 */
+    function fillVideoSelects() {
+        const models = loadedModels;
+        const settings = loadedSettings;
+        const mainFiles = videoModelFiles(models, showAllModels, settings.model);
+        fillComboSelect(modelCtl.select, mainFiles, videoSuggestion(mainFiles),
+            settings.model || "", models.mtimes_diffusion_models);
+        const teFiles = scopedAuxFiles(models, showAllModels, "video_text_encoders", "text_encoders", settings.text_encoder);
+        fillComboSelect(encoderCtl.select, teFiles, videoSuggestion(teFiles),
+            settings.text_encoder || "", models.mtimes_text_encoders);
+        const vaeFiles = scopedAuxFiles(models, showAllModels, "video_vae", "vae", settings.vae);
+        fillComboSelect(videoVaeCtl.select, vaeFiles, videoVideoVaeSuggestion(vaeFiles),
+            settings.vae || "", models.mtimes_vae);
+        const audioFiles = scopedAuxFiles(models, showAllModels, "video_audio_vae", "vae", settings.audio_vae);
+        fillComboSelect(audioVaeCtl.select, audioFiles, videoAudioVaeSuggestion(audioFiles),
+            settings.audio_vae || "", models.mtimes_vae);
+    }
+
     function load(settings, models, opts = {}) {
         loraFiles = models.loras || [];
         loraMtimes = models.mtimes_loras || {};
-        fillComboSelect(modelCtl.select, models.diffusion_models || [],
-            videoSuggestion(models.diffusion_models), settings.model || "", models.mtimes_diffusion_models);
-        fillComboSelect(encoderCtl.select, models.text_encoders || [],
-            videoSuggestion(models.text_encoders), settings.text_encoder || "", models.mtimes_text_encoders);
-        fillComboSelect(videoVaeCtl.select, models.vae || [],
-            videoVideoVaeSuggestion(models.vae), settings.vae || "", models.mtimes_vae);
-        fillComboSelect(audioVaeCtl.select, models.vae || [],
-            videoAudioVaeSuggestion(models.vae), settings.audio_vae || "", models.mtimes_vae);
+        loadedModels = models || {};
+        loadedSettings = settings || {};
+        fillVideoSelects();
         pinnedSteps = Number(settings.steps) > 0 ? Number(settings.steps) : 20;
         stepsFromRun = !!opts.stepsFromRun;
         stepsCtl.input.value = pinnedSteps;
@@ -1170,6 +1259,36 @@ export function createImageGenSettingsForm() {
     // 归类：三条模型行管「用哪个模型」，目标像素数与输出前缀管「产出落在哪」，平铺六行时分不出来
     form.append(groupTitle("模型"), modelCtl.row, encoderCtl.row, vaeCtl.row,
                 groupTitle("输出"), mpCtl.row, prefixRow, saveRow);
+    let loadedModels = {};
+    let loadedSettings = {};
+    let showAllModels = false;   // 「显示全部模型」：表单本地状态，不落盘
+
+    /** 三行模型下拉按当前作用域铺一遍：全局默认没有技能家族 → 生图作用域表（剔视频 / 音频 / 3D），
+     *  「显示全部模型」回到类别全表。 */
+    function fillImageRows() {
+        const models = loadedModels, settings = loadedSettings;
+        fillComboSelect(modelCtl.select,
+            imageModelFiles(models, "", showAllModels, settings.model),
+            models.suggested_diffusion_models || "", settings.model || "", models.mtimes_diffusion_models);
+        fillComboSelect(encoderCtl.select,
+            scopedAuxFiles(models, showAllModels, "image_text_encoders", "text_encoders", settings.text_encoder),
+            models.suggested_text_encoders || "", settings.text_encoder || "", models.mtimes_text_encoders);
+        fillComboSelect(vaeCtl.select,
+            scopedAuxFiles(models, showAllModels, "image_vae", "vae", settings.vae),
+            models.suggested_vae || "", settings.vae || "", models.mtimes_vae);
+    }
+
+    const scopeBtn = mkEl("button", "rs-model-gap-alt rs-model-scope-toggle");
+    scopeBtn.type = "button";
+    scopeBtn.textContent = t("显示全部模型");
+    scopeBtn.title = t("下拉只列生图家族；打开后列出该目录的全部模型");
+    scopeBtn.addEventListener("click", () => {
+        showAllModels = !showAllModels;
+        scopeBtn.textContent = showAllModels ? t("只看本家族") : t("显示全部模型");
+        fillImageRows();
+    });
+    modelCtl.row.appendChild(scopeBtn);
+
 
     // 加载窗口标记：load() 异步回填期间（await 网络请求）不算 dirty，避免初始化误判
     let loading = false;
@@ -1178,12 +1297,9 @@ export function createImageGenSettingsForm() {
         loading = true;
         try {
             const [settings, models] = await Promise.all([getGenSettings(), listGenModels()]);
-            fillComboSelect(modelCtl.select, models.diffusion_models || [],
-                models.suggested_diffusion_models || "", settings.model || "", models.mtimes_diffusion_models);
-            fillComboSelect(encoderCtl.select, models.text_encoders || [],
-                models.suggested_text_encoders || "", settings.text_encoder || "", models.mtimes_text_encoders);
-            fillComboSelect(vaeCtl.select, models.vae || [],
-                models.suggested_vae || "", settings.vae || "", models.mtimes_vae);
+            loadedModels = models || {};
+            loadedSettings = settings || {};
+            fillImageRows();
             prefixInput.value = settings.output_prefix ?? "";
             mpCtl.input.value = settings.target_megapixels ?? 1.5;
             snapshot = collect();
@@ -1269,6 +1385,38 @@ export function createVideoGenSettingsForm() {
     saveRow.appendChild(saveBtn);
 
     form.append(videoHeading, videoModelCtl.row, videoEncoderCtl.row, videoVaeCtl.row, videoAudioVaeCtl.row, saveRow);
+    let loadedModels = {};
+    let loadedSettings = {};
+    let showAllModels = false;   // 「显示全部模型」：表单本地状态，不落盘
+
+    /** 四行视频下拉按当前作用域铺一遍：默认 MiniMax H3 家族（后端 video_* 表），「显示全部模型」回到类别全表。 */
+    function fillVideoRows() {
+        const models = loadedModels, settings = loadedSettings;
+        const mainFiles = videoModelFiles(models, showAllModels, settings.video_model);
+        fillComboSelect(videoModelCtl.select, mainFiles, videoSuggestion(mainFiles),
+            settings.video_model || "", models.mtimes_diffusion_models);
+        const teFiles = scopedAuxFiles(models, showAllModels, "video_text_encoders", "text_encoders", settings.video_text_encoder);
+        fillComboSelect(videoEncoderCtl.select, teFiles, videoSuggestion(teFiles),
+            settings.video_text_encoder || "", models.mtimes_text_encoders);
+        const vaeFiles = scopedAuxFiles(models, showAllModels, "video_vae", "vae", settings.video_vae);
+        fillComboSelect(videoVaeCtl.select, vaeFiles, videoVideoVaeSuggestion(vaeFiles),
+            settings.video_vae || "", models.mtimes_vae);
+        const audioFiles = scopedAuxFiles(models, showAllModels, "video_audio_vae", "vae", settings.video_audio_vae);
+        fillComboSelect(videoAudioVaeCtl.select, audioFiles, videoAudioVaeSuggestion(audioFiles),
+            settings.video_audio_vae || "", models.mtimes_vae);
+    }
+
+    const scopeBtn = mkEl("button", "rs-model-gap-alt rs-model-scope-toggle");
+    scopeBtn.type = "button";
+    scopeBtn.textContent = t("显示全部模型");
+    scopeBtn.title = t("下拉只列 MiniMax H3 家族的模型；打开后列出该目录的全部模型");
+    scopeBtn.addEventListener("click", () => {
+        showAllModels = !showAllModels;
+        scopeBtn.textContent = showAllModels ? t("只看本家族") : t("显示全部模型");
+        fillVideoRows();
+    });
+    videoModelCtl.row.appendChild(scopeBtn);
+
 
     // 加载窗口标记：load() 异步回填期间（await 网络请求）不算 dirty，避免初始化误判
     let loading = false;
@@ -1277,14 +1425,9 @@ export function createVideoGenSettingsForm() {
         loading = true;
         try {
             const [settings, models] = await Promise.all([getVideoGenSettings(), listVideoGenModels()]);
-            fillComboSelect(videoModelCtl.select, models.diffusion_models || [],
-                videoSuggestion(models.diffusion_models), settings.video_model || "", models.mtimes_diffusion_models);
-            fillComboSelect(videoEncoderCtl.select, models.text_encoders || [],
-                videoSuggestion(models.text_encoders), settings.video_text_encoder || "", models.mtimes_text_encoders);
-            fillComboSelect(videoVaeCtl.select, models.vae || [],
-                videoVideoVaeSuggestion(models.vae), settings.video_vae || "", models.mtimes_vae);
-            fillComboSelect(videoAudioVaeCtl.select, models.vae || [],
-                videoAudioVaeSuggestion(models.vae), settings.video_audio_vae || "", models.mtimes_vae);
+            loadedModels = models || {};
+            loadedSettings = settings || {};
+            fillVideoRows();
             snapshot = collect();
         } catch (e) {
             console.warn("Failed to load video gen settings:", e);

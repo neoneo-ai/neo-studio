@@ -145,7 +145,7 @@ const videoParamsPanel = page("neo-gallery-page", `
       <div class="neo-gallery-gm-params-col">
         <div class="neo-gallery-gm-model-box">
           <div class="rs-gen-model-section">
-            <div class="rs-config-row"><label class="rs-form-label">生视频模型</label><div class="rs-model-select-box"><select></select></div></div>
+            <div class="rs-config-row"><label class="rs-form-label">生视频模型</label><div class="rs-model-select-box"><select></select></div><button class="rs-model-gap-alt rs-model-scope-toggle" type="button">显示全部模型</button></div>
             <div class="rs-config-row"><label class="rs-form-label">步数</label><input type="number" class="rs-form-input rs-gen-steps" value="8"></div>
             <div class="rs-config-row rs-gen-adv-row"><label class="rs-form-label">Text Encoder</label><div class="rs-model-select-box"><select></select></div></div>
             <div class="rs-config-row rs-gen-adv-row"><label class="rs-form-label">VAE（视频）</label><div class="rs-model-select-box"><select></select></div></div>

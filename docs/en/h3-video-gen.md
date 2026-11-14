@@ -162,6 +162,12 @@ Model resolution priority: skill `config.json` → the global "video generation 
 by name clues → error. The audio VAE is resolved separately and must stay separate from the video VAE.
 `width` / `height` / `length` are defaults and can be overridden by node inputs.
 
+The model pickers default to the MiniMax H3 family: the main model / Text Encoder / video VAE / audio VAE rows read the
+H3 weight tree (a directory segment or file name hitting `minimax` / `h3`), the audio row also takes the minimax Music
+family, and the Krea2 / Qwen / WAN weights stay out of the table. Paths pinned by the preset manifest and their `alt`
+names are merged in - a pinned file that is not on disk is still marked missing and keeps its model-hub entry. The
+"Show all models" link at the end of the row lists every model in the folder (the LoRA row is always the full table).
+
 ### Single-shot generation on the Video page
 
 The Video page (one line of text plus material, one finished clip, via `/neo_video_gen/simple`) shares the

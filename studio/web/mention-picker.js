@@ -77,7 +77,8 @@ function createMentionSource({ getJson, postJson, listSkills }) {
             return (res && !res.offline) ? res : {};
         });
         const rows = [];
-        for (const f of scan.diffusion_models || []) {
+        // @模型 只 @ 生图家族：MiniMax H3 / 音乐 / 3D 权重不是写提示词时要点名的对象（后端 image_* 作用域表）
+        for (const f of (scan.image_diffusion_models?.length ? scan.image_diffusion_models : scan.diffusion_models || [])) {
             rows.push({ category: "model", id: f, name: modelLabel(f), label: MENTION_LABELS.model, tags: [] });
         }
         for (const f of scan.loras || []) {

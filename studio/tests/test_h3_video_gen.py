@@ -1292,6 +1292,83 @@ class VideoModelsSortTests(unittest.TestCase):
                          ["Minimax_H3/base.safetensors", "alpha.safetensors", "zeta.safetensors"])
 
 
+class VideoFamilyScopeTests(unittest.TestCase):
+    """video_* 下拉口径：H3 家族命中进四行，Music 音频树只进音频 VAE 行，清单钉的落点没落盘也保留。
+
+    桩数据取本机模型根的真实形状：清单没枚举的 MiniMaxH3\\Fast\\fasth3_* 与社区改名
+    MiniMaxH3\\h3.safetensors 靠目录段命中；H3 的音频基座（minimax_h3_audio_v1_5）不进主模型行。
+    """
+
+    FILES = {
+        "diffusion_models": [
+            "MiniMaxH3/minimax_h3_t2v_v1_5_fp8_mixed.safetensors",
+            "MiniMaxH3/Fast/fasth3_omniref_8step_pruned_int8.safetensors",
+            "MiniMaxH3/h3.safetensors",
+            "MiniMaxH3/minimax_h3_audio_v1_5.safetensors",
+            "Krea2/krea2_raw_int8_convrot.safetensors",
+            "QwenImage2.1/qwen_image_2.1_int8_convrot.safetensors",
+            "WAN2.2/Wan2_2-Fun-HighNoiseFP8.safetensors",
+            "Music/minimax_music3_dav.safetensors",
+        ],
+        "text_encoders": [
+            "MiniMaxH3/qwen3vl_32b_v1_5_minimax_h3_fp8_mixed.safetensors",
+            "MiniMaxH3/qwen3vl_8b_fp8_scaled.safetensors",
+            "NSFW_APIs\\nsfw_wan_umt5-12b.safetensors",
+            "Qwen3-4b-Z-Image-Engineer-V2.safetensors",
+        ],
+        "vae": [
+            "minimax_h3_video_v1_5.safetensors",
+            "minimax_h3_audio_vae.safetensors",
+            "Music/minimax_music_vae.safetensors",
+            "qwen_image/qwen_image_vae.safetensors",
+            "Wan22/wan2.2.safetensors",
+        ],
+        "loras": ["MiniMaxH3/h3_style.safetensors", "krea2_quadview.safetensors"],
+    }
+
+    def setUp(self):
+        self._orig_files = video_gen._video_folder_files
+        self._orig_manifest = video_gen._manifest_paths
+        video_gen._video_folder_files = lambda folder: list(self.FILES.get(folder, []))
+        video_gen._manifest_paths = lambda folder, audio=False: []
+
+    def tearDown(self):
+        video_gen._video_folder_files = self._orig_files
+        video_gen._manifest_paths = self._orig_manifest
+
+    def test_video_model_list_is_h3_only(self):
+        out = video_gen.scan_video_models()
+        self.assertEqual(set(out["video_diffusion_models"]), set(self.FILES["diffusion_models"][:3]),
+                         "H3 家族三发基座进列表，音频基座与 krea2 / qwen / WAN / Music 都不进")
+        self.assertEqual(set(out["video_text_encoders"]), set(self.FILES["text_encoders"][:2]))
+        self.assertEqual(out["video_diffusion_models"][0],
+                         "MiniMaxH3/Fast/fasth3_omniref_8step_pruned_int8.safetensors",
+                         "H3 相关靠前（fasth3 最短名）")
+        self.assertIn("WAN2.2/Wan2_2-Fun-HighNoiseFP8.safetensors", out["diffusion_models"],
+                      "全表照常给「显示全部模型」")
+
+    def test_video_vae_splits_video_and_audio_rows(self):
+        out = video_gen.scan_video_models()
+        self.assertEqual(out["video_vae"], ["minimax_h3_video_v1_5.safetensors"])
+        self.assertEqual(set(out["video_audio_vae"]),
+                         {"minimax_h3_audio_vae.safetensors", "Music/minimax_music_vae.safetensors"},
+                         "H3 音频 VAE 与 Music 家族同属音频行")
+
+    def test_lora_row_has_no_scoped_key(self):
+        out = video_gen.scan_video_models()
+        self.assertNotIn("video_loras", out, "LoRA 跨家族混用是常态，不给过滤后的键")
+        self.assertEqual(len(out["loras"]), 2)
+
+    def test_manifest_pin_survives_the_filter(self):
+        """清单钉的落点即使盘上没有也留在列表里：技能 config 的「自动」值不能因过滤被当成不存在，
+        前端的「缺失」标记与模型库下载入口都靠这一项。"""
+        video_gen._manifest_paths = lambda folder, audio=False: ["MiniMaxH3/Speed/h3_pruned.safetensors"]
+        out = video_gen.scan_video_models()
+        self.assertIn("MiniMaxH3/Speed/h3_pruned.safetensors", out["video_diffusion_models"])
+        self.assertIn("MiniMaxH3/Speed/h3_pruned.safetensors", out["video_text_encoders"])
+        self.assertNotIn("MiniMaxH3/Speed/h3_pruned.safetensors", out["diffusion_models"])
+
+
 class VdnSkillTests(unittest.TestCase):
     """VDN 加速 skill：未装 ComfyUI-VDN-H3 时的明确报错 + 4 个 VDN preset 的结构校验。"""
 

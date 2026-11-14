@@ -5,6 +5,20 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 ## [Unreleased]
 
 ### Added
+- **The image model pickers follow the selected skill's family.** The 生图模型 row lists that family's weights only
+  (a Qwen skill lists the Qwen Image 2.1 set, a Krea2 skill the Krea2 set), the Text Encoder / VAE rows drop the video /
+  audio / 3D weights (`MiniMaxH3\`, `wan*` / `umt5`, `music*` / `acestep*`, `tripo*`, `ltx*`) so a painting panel no
+  longer offers a video weight, and LoRA rows stay the full table. Skills with no family (self-made, community naming)
+  fall back to the scoped image table; a "显示全部模型 / 只看本家族" text link on the model row flips between the family
+  table and the full category table, per panel and never saved. A cross-family value already in `config.json` stays
+  selectable and is not marked missing - the generation-time family guard still blocks it. Covered by
+  `studio/tests/test_image_gen.py` and the 生图作用域 cases in `studio/tests/js/image-gen-settings.test.mjs`.
+- **The video model pickers default to the MiniMax H3 family.** 视频模型 / Text Encoder / VAE（视频）/ VAE（音频）now list
+  the H3 weight tree (`minimax*` / `h3*` directories and file names, plus every path the preset manifest pins with its
+  `alt` names, so the model-library download entry keeps working), the audio row also takes the minimax Music family, and
+  the Krea2 / Qwen / WAN weights are out of those four rows. The same "显示全部模型" text link restores the full category
+  tables; LoRA stays full. Covered by `VideoFamilyScopeTests` in `studio/tests/test_h3_video_gen.py` and the 生视频作用域
+  cases in `studio/tests/js/image-gen-settings.test.mjs`.
 - **The 自定参数 panel lays every row on one line.** The label column was 58 px wide, so 生视频模型, Text Encoder
   and VAE（视频）/ VAE（音频）wrapped onto two lines and pushed each row's control to a ragged start, and the 步数
   box took its own line under its label because `.rs-form-input` is 100% wide inside the wrapping row. Labels now

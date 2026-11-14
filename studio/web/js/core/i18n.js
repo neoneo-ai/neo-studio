@@ -333,6 +333,11 @@ const EN = {
     "变更记录": "Change Log",
     "设置": "Settings",
     "模型库": "Model Hub",
+    "显示全部模型": "Show all models",
+    "只看本家族": "This family only",
+    "下拉只列这个家族的模型；打开后列出该目录的全部模型": "Pickers list this skill's model family only; turn on to list every model in the folder",
+    "下拉只列 MiniMax H3 家族的模型；打开后列出该目录的全部模型": "Pickers list the MiniMax H3 family only; turn on to list every model in the folder",
+    "下拉只列生图家族；打开后列出该目录的全部模型": "Pickers list image-model families only; turn on to list every model in the folder",
     "技能管理": "Skill Manager",
     "关于插件": "About Plugin",
     // 创建节点子菜单（英文里括号注释是多余的）

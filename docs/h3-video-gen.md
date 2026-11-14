@@ -108,6 +108,10 @@ MiniMax H3 视频生成：单段 BUNDLE 与多段导演配方。配方编辑见 
 模型解析优先级：技能 `config.json` → 全局「生视频模型」设置 → 按名称线索自动挑选 → 报错。
 音频 VAE 单独解析，必须与视频 VAE 分开。`width` / `height` / `length` 为默认值，可被节点入参覆盖。
 
+模型下拉默认只列 MiniMax H3 家族：主模型 / Text Encoder / 视频 VAE / 音频 VAE 四行收 H3 权重树（目录段或文件名命中
+`minimax` / `h3`），音频行另带 minimax Music 家族，Krea2 / Qwen / WAN 那批不进表；预设清单钉死的落点与 alt 名一并进表，
+盘上没有的照旧标「缺失」并留模型库入口。行尾「显示全部模型」打开后列出该目录全部模型（LoRA 行本来就是全表）。
+
 ### 视频页单段生成
 
 视频页（一句话 + 素材出一段成片，走 `/neo_video_gen/simple`）的技能 chip 与绘画页共用同一枚
