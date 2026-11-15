@@ -215,17 +215,23 @@ test("导演页不设高度下限：矮窗口里生成坞下沿不被裁", () =>
 });
 
 // 自定参数面板（与视频页共用那块表单）与整片参数面板共用这一套紧凑版式：整幅档是标签在上、控件整行在下，
-// 六行 500px 高，从胶囊往上弹出就把时间轴与该段行整个盖住
+// 六行 500px 高，从胶囊往上弹出就把时间轴与该段行整个盖住。
+// 规则带 .ns-director 宿主是这条用例的重点：gallery.css 运行时注入、排在 style.css 之后，
+// 它那条 .neo-gallery-gm-chip-panel（720px / 62vh）同特异就把不带宿主的宽度顶掉，面板弹成半屏宽
 test("导演页弹层表单是胶囊旁的一栏紧凑面板，不是整幅表单", () => {
     const css = fs.readFileSync(path.join(webDir, "studio", "style.css"), "utf8");
-    const panel = css.match(/\.ns-director-compact-form \{[^}]*\}/);
-    assert.ok(panel, "紧凑表单要有页内版式规则");
+    const panel = css.match(/\.ns-director \.ns-director-compact-form \{[^}]*\}/);
+    assert.ok(panel, "紧凑表单要有带导演宿主的页内版式规则");
     assert.match(panel[0], /width:\s*min\(/, "面板宽度钉在胶囊这一列，不铺整幅");
-    assert.match(panel[0], /max-height:\s*min\(/, "面板高度留上限，超出走面板内滚动");
-    assert.ok(/\.ns-director-compact-form \.rs-config-row[^{]*\{[^}]*flex-direction: row/.test(css), "行是标签与控件一排");
-    assert.ok(/\.ns-director-compact-form[^{]*\.rs-form-label[^{]*\{[^}]*width: 84px/.test(css), "标签列宽与素材库弹窗同一档");
-    // 两块弹层（自定参数 / 整片参数）共用这一套：只留一处密度定义，改一处两边都改
-    assert.ok(/ns-director-compact-form ns-director-cfg-panel/.test(fs.readFileSync(path.join(webDir, "studio", "studio-app.js"), "utf8")), "自定参数面板挂紧凑版式");
+    assert.match(panel[0], /max-height:\s*min\(\s*\d+vh,\s*(4[6-9]\d|5\d\d)px\s*\)/,
+        "净高按技能面板右栏那条模型链给足（≥460px）：生视频模型到 LoRA 一眼到底，右栏不靠自己滚");
+    assert.equal((css.match(/\.ns-director \.ns-director-compact-form \{/g) || []).length, 1, "紧凑密度只留一处定义");
+    assert.ok(/\.ns-director \.ns-director-compact-form\.ns-director-skill-panel \{[^}]*width:\s*min\(/.test(css),
+        "技能面板那一栏的双栏宽度同样收在导演宿主下");
+    assert.ok(/\.ns-director \.ns-director-compact-form \.rs-config-row[^{]*\{[^}]*flex-direction: row/.test(css), "行是标签与控件一排");
+    assert.ok(/\.ns-director \.ns-director-compact-form[^{]*\.rs-form-label[^{]*\{[^}]*width: 84px/.test(css), "标签列宽与素材库弹窗同一档");
+    // 两块弹层（技能 / 整片参数）共用这一套：只留一处密度定义，改一处两边都改
+    assert.ok(/ns-director-compact-form ns-director-skill-panel/.test(fs.readFileSync(path.join(webDir, "studio", "studio-app.js"), "utf8")), "技能面板挂紧凑版式");
     assert.ok(/ns-director-compact-form ns-director-size-panel/.test(fs.readFileSync(path.join(webDir, "studio", "studio-app.js"), "utf8")), "整片参数面板挂同一套紧凑版式");
 });
 

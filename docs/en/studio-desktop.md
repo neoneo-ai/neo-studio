@@ -150,26 +150,35 @@ is the quick switch on it, and the recipe list and the asset library both open i
   saved; dragging a maximized modal restores the last floating size before it moves. The **✕** at the right end of
   the title bar is therefore always reachable — a modal can never be dragged where it cannot be closed.
   Switching pages closes the modal of the page you left, and the gallery goes back to the standby host.
-- The film parameters (generation mode / unified skill / aspect ratio / megapixels / custom width-height / seed / steps /
-  continuity / context frames / character identity reference) are edited in the form the **resolution** capsule pops, and
-  **保存整片参数** goes down the same save chain as **保存该段** (`createSegmentOps().save` → `/rs_recipes/save`): the
-  generation mode and chunk seconds land in the recipe's `shared`, while the unified skill does not — it is written into
-  each segment's `skill_id` through `createSegmentOps().applySkill()` (the same segment-write path as everything else).
-  The blank-value conventions match on both sides: empty seed = -1 (a new random seed every run), empty steps = -1 (the
-  steps each segment's skill config pins), empty context frames = 22; **character identity reference** writes nothing while
-  it is checked and lands `identity_refs=false` only when it is off (that recipe stops injecting the character reference
-  images — the before/after comparison switch).
-- The three generation modes carry the same meaning as in the Advanced-mode editor (keyframe → video / full-reference video /
+- **Skill** is the same `skillParamsChip` the video page uses: the left column lists the skills grouped by generation mode
+  (keyframe → video / full-reference video / mixed) and the right column carries the same shared form the video page uses
+  (`.rs-gen-model-section`: the per-segment model-chain override for this run — main model / Text Encoder / VAE / audio VAE /
+  LoRA / steps, left empty = the segment follows its own skill config). The picked skill is the one the whole film unifies on,
+  and its group is the generation mode; the last row, "each segment keeps its own skill (mixed)", unifies nothing. The chip
+  starts on the skill the recipe's first segment pins, and lands on that row when the segments pin different skills.
+- The generation modes carry the same meaning as in the Advanced-mode editor (keyframe → video / full-reference video /
   mixed; a legacy recipe's t2v / i2v / fl2v / v2v / rv2v is remapped silently on load). Full-reference means every segment runs
   as reference-to-video, and the page flips each segment's media row to the reference row to match (the same rule the backend's
-  `director_spec` applies: film mode is full-reference, or that segment pins full-reference itself). Mixed mode hides the unified-skill
-  row — each segment keeps its own skill — and saving writes no segments. The skill dropdown is filled from this page's video-skill
-  list, filtered by the generation mode and ordered by steps.
-- **Chunk seconds** appears only with several segments plus a multi-frame unified skill (a single segment has nothing to merge, and a
-  plain skill never chunks); while it is hidden, saving still writes the default 15 — hidden is not inactive, the same convention as the
-  editor's collapsed **Advanced parameters**. The resolution capsule names the film mode (`全参考生视频 · 1024×576 · 12 步`).
+  `director_spec` applies: film mode is full-reference, or that segment pins full-reference itself).
+- The film parameters (aspect ratio / megapixels / custom width-height / seed / continuity / context frames /
+  character identity reference / chunk seconds) are edited in the form the **resolution** capsule pops, and
+  **保存整片参数** goes down the same save chain as **保存该段** (`createSegmentOps().save` → `/rs_recipes/save`). Once the
+  skill has been touched the save carries two more things: the generation mode lands in the recipe's `shared.mode`, and the
+  unified skill is written into each segment's `skill_id` through `createSegmentOps().applySkill()` (the same segment-write
+  path as everything else) — leave the skill alone and no segment is written, `shared.mode` included. The blank-value
+  conventions match on both sides: empty seed = -1 (a new random seed every run), empty context frames = 22. The
+  film-parameter form is the **only** seed control on the page — the dock has no second seed input, and the run carries the
+  seed the recipe records. **Steps are not in this form**: each segment runs the steps its own skill pins, the per-run
+  override lives in the right column of the skill capsule, the Advanced-mode editor keeps its film-level steps field, and the
+  capsule's own label reads just `width×height` — no steps in it.
+  **Character identity reference** writes nothing while it is checked and lands
+  `identity_refs=false` only when it is off (that recipe stops injecting the character reference images — the before/after
+  comparison switch).
+- **Chunk seconds** appears only with several segments plus a multi-frame effective skill (a single segment has nothing to
+  merge, and a plain skill never chunks); while it is hidden, saving still writes the default 15 — hidden is not inactive, the
+  same convention as the editor's collapsed **Advanced parameters**.
 - **🎬 Save & Generate Film** in the Advanced-mode footer hands the submit to this page after a successful save: the
-  parameters just landed in the recipe, the segments and seed stay as this page has them.
+  parameters and the seed are the ones that just landed in the recipe, the segments stay as this page has them.
 - The generation status freezes on the first terminal status (succeeded / failed / cancelled): a payload issued
   before the terminal event and landing after it is dropped, so the progress bar and **⏹ Cancel** never come
   back (cancelling a finished task only answers "任务已结束，无法取消").
@@ -184,14 +193,14 @@ is the quick switch on it, and the recipe list and the asset library both open i
   straight on the page background — and an empty status row collapses itself together with its gap. The page has no height
   floor (`min-height: 0`): in a window shorter than the layout (Windows display scaling reports fewer CSS pixels) the stage
   absorbs the difference, so the dock keeps its 12px clearance from the window's bottom edge.
-- The **自定参数** and **resolution** capsules pop the same compact panel density, `.ns-director-compact-form` (one
-  density definition shared by both panels): `min(380px, 100vw − 16px)` wide, capped at `min(46vh, 340px)` with the
-  scrolling inside the panel, rows of "84px label + control taking the rest" at 12px / 24px (the asset-modal density),
-  popping above the capsule when it fits — the shared forms' full-width layout is six rows about 500px tall and would
-  cover the timeline and the segment row. 自定参数 carries the same shared form the video page uses
-  (`.rs-gen-model-section`: the per-segment model-chain override for this run — main model / Text Encoder / VAE /
-  audio VAE / LoRA / steps, left empty = the segment follows its own skill config); resolution carries the whole-film
-  parameter form (the bullet above).
+- The director page's popups share one compact panel density, `.ns-director-compact-form` (one density definition for all of
+  them): capped at `min(78vh, 480px)` with the scrolling inside the panel, rows of "84px label + control taking the rest" at
+  12px / 24px (the asset-modal density), popping above the capsule when it fits — the shared forms' full-width layout is six
+  rows about 500px tall and would cover the timeline and the segment row. The height is sized for the model chain in the
+  skill panel's right column (video model / all models / steps / Text Encoder / both VAEs / the LoRA list all visible, so that
+  column needs no scrollbar of its own, while the skill list on the left scrolls on its own). The **resolution** capsule's
+  film-parameter form is one column (`min(380px, 100vw − 16px)`); the **skill** capsule's panel keeps the two columns the
+  video page has at `min(660px, 100vw − 16px)`, at the same density.
 - The director timeline is a 56px strip: a 16px second ruler plus a 30px segment block. A block carries the always-visible
   checkbox at its top-left (click = this run includes that segment), one top line of "index · duration · (start–end seconds
   while hovering)", and one ellipsised prompt line at its bottom. The hint line ends with the **Fit / − / ＋** control that

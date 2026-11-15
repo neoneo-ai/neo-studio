@@ -394,11 +394,19 @@ async function buildDirector(el) {
     let selected = 0;
     let tlProgress = { active: false, segment_index: -1, total_segments: 0 };
     let checkedSegments = [];
-    let directorSkills = [];   // 视频技能列表：每段「模板收哪几类参考素材」读它
+    let directorSkills = [];   // 视频技能列表：每段「模板收哪几类参考素材」与技能胶囊那一列都读它
+    let skillPick = null;      // 本次动过的统一技能：没动过就一段都不写、shared.mode 也不动
     const segs = () => recipe?.segments || [];
     const isPreset = () => recipe?.source === "preset";
-    // 整片生成模式（shared.mode，旧值静默重映射）：该段素材槽显哪一组与分辨率胶囊上的模式名都读它
-    const sharedGenMode = () => { const m = recipe?.shared?.mode; return LEGACY_MODE_MAP.get(m) || m || ""; };
+    const skillMetaOf = (id) => (id === DIRECTOR_MIXED_SKILL ? { mode: "mixed" } : directorSkills.find((s) => s.id === id) || null);
+    // 整片生成模式：本次选过技能就以它所属那一组为准（「每段用自己的技能」那一行 = mixed），
+    // 没选就回落到配方里钉的 shared.mode（旧值静默重映射）。该段素材槽显哪一组、分块秒数露不露、
+    // 分辨率胶囊上的模式名都读它。
+    const sharedGenMode = () => {
+        if (skillPick !== null) return videoModeGroup(skillMetaOf(skillPick));
+        const m = recipe?.shared?.mode;
+        return LEGACY_MODE_MAP.get(m) || m || "";
+    };
     const skillMeta = (id) => directorSkills.find((s) => s.id === id) || null;
     // 段落的增删改与「保存该段」走 director.js 那份共享实现（出片视图后面要嵌进画布，同一套语义）：
     // 脏标记记在 ops 里，页面上「未保存」只有保存钮这一处要亮
@@ -460,19 +468,51 @@ async function buildDirector(el) {
     const lastSlot = createMediaSlot({ label: "尾帧", thumbSrc: inputThumbSrc, toast, pick: slotPick, refKinds: () => segRefKinds(selected), onChange: slotChanged });
     const refSlot = createMediaSlot({ label: "参考素材", multiple: true, maxN: DIRECTOR_REF_TOTAL, kindMax: DIRECTOR_REF_MAX, thumbSrc: inputThumbSrc, toast, pick: slotPick, refKinds: () => segRefKinds(selected), onChange: slotChanged });
 
-    // 本次整片每段临时换的模型链（与视频页自定参数同一份面板、同一口径）：留空 = 该段跟随自己的技能配置。
-    // 导演页没有「一整片一个技能」这件事——每段自带技能与钉着的模型，这里只发覆盖值。
+    // 「技能」胶囊就是视频页那一枚 skillParamsChip：左栏技能按生成模式分组（关键帧生视频 / 全参考生视频 / 混合模式），
+    // 右栏是本次整片的模型链覆盖（主模型 / Text Encoder / VAE / 音频 VAE / LoRA / 步数，留空 = 该段跟随自己的技能配置）。
+    // 选中的技能是整片要统一成的那一个，它所属那一组就是生成模式；「每段用自己的技能（混合）」这一行不落统一技能。
+    // 配方里每段本就自带技能，本页选的是要把它们统一成哪一个——所以改动只记在页面上，落盘走「保存该段」那一条链。
+    const skillSel = $el("select", { className: "ns-director-skill", title: t("技能与自定参数：左栏选整片统一的技能（它所属那一组就是生成模式）；右栏主模型 / LoRA 留空 = 各段跟随自己的技能配置") });
+    skillSel.appendChild($el("option", { value: "", textContent: t("（加载视频技能…）") }));
     const videoCfg = createVideoModelConfigSection();
     let videoModels = null;   // 模型清单：没拉到就整块不发覆盖值，各段技能配置照常生效
-    const cfgLabel = $el("span", { className: "neo-gallery-gm-chip-label" });
-    const cfgBtn = $el("button", { className: "neo-gallery-gm-chip-btn ns-director-cfg", type: "button", title: t("本次整片每段临时换的模型链（主模型 / Text Encoder / VAE / 音频 VAE / LoRA / 步数）：留空 = 该段跟随自己的技能配置") }, [
-        $el("span", { className: "neo-gallery-gm-chip-icon" }, [icon("film", 12)]),
-        cfgLabel,
-        $el("span", { className: "neo-gallery-gm-chip-caret", textContent: "▾" }),
-    ]);
-    const cfgPanel = $el("div", { className: "rs-runtime-menu neo-gallery-gm-chip-menu neo-gallery-gm-chip-panel ns-director-compact-form ns-director-cfg-panel" }, [videoCfg.el]);
-    page.appendChild(cfgPanel);   // 挂页面上：.rs-runtime-menu 是 fixed 定位，页面离场时由 onDocPress 摘监听
-    let cfgOpen = false;
+    const videoParamsBox = $el("div", { className: "neo-gallery-gm-model-box" }, [videoCfg.el]);
+    const skillChip = skillParamsChip(skillSel, videoParamsBox, {
+        icon: "film",
+        groupOf: videoModeGroup,
+        groupLabels: DIRECTOR_GROUP_LABELS,
+        getOverride: () => videoModels ? videoCfg.collect() : {},
+        panelClass: "ns-director-compact-form ns-director-skill-panel",
+    });
+    videoParamsBox.addEventListener("change", () => skillChip.sync());
+    skillSel.addEventListener("change", () => {
+        if (skillSel.value === skillPick) return;
+        skillPick = skillSel.value;
+        markDirty();
+        renderSegment();   // 生成模式跟着换：该段素材槽那一行与分辨率胶囊上的模式名都要翻面
+    });
+
+    // 技能那一列 = 本页的视频技能清单 + 一行「每段用自己的技能」；选中值回落到配方首段钉的技能，
+    // 各段钉的不是同一个就是混合（这一行是这一页的写法，后端没有这个值，落盘只写 mixed）
+    function syncSkillChip() {
+        const list = directorSkills;
+        const first = segs()[0]?.skill_id || "";
+        const mixed = segs().length > 1 && !segs().every((s) => s.skill_id === first);
+        skillSel.textContent = "";
+        for (const s of list) {
+            // 特效技能缺 LoRA 时后端把 available 判成 false（skill._video_skill_available），列里要说出来
+            const opt = $el("option", { value: s.id, textContent: skillDisplayName(s) + (s.available === false ? t("（不可用）") : "") });
+            opt.__skillMeta = s;   // 分组与 chip 标签取这份元数据（视频页技能面板同一约定）
+            skillSel.appendChild(opt);
+        }
+        const mixedOpt = $el("option", { value: DIRECTOR_MIXED_SKILL, textContent: t("每段用自己的技能（混合）") });
+        mixedOpt.__skillMeta = { mode: "mixed" };
+        skillSel.appendChild(mixedOpt);
+        skillPick = null;
+        skillSel.value = mixed ? DIRECTOR_MIXED_SKILL
+            : (list.some((s) => s.id === first) ? first : (list[0]?.id || ""));
+        skillChip.sync();   // 技能与选中态都是程序改的，chip 显示的生效值要跟着重读
+    }
 
     // 该段「⋯」菜单：复制 / 前移 / 后移 / 删除。增删改本身在 director.js 那份共享实现里，页面只出这一条入口
     const segMenuItem = (label, tip, fn) => $el("button", { className: "ns-btn", type: "button", textContent: t(label), title: t(tip), onclick: () => { segMenuClose(); fn(); } });
@@ -521,9 +561,10 @@ async function buildDirector(el) {
         segMenuPanel.style.top = `${above > 8 ? above : r.bottom + 6}px`;
     };
 
-    // 「分辨率」胶囊弹的是共享的整片参数表单（createSharedConfigSection）：页内改完整片参数（生成模式 / 统一技能 /
-    // 分辨率 / 运行参数），保存走「保存该段」同一条 ops 链；技能池读本页那份 directorSkills，表单不自己拉清单
-    const sharedCfg = createSharedConfigSection(() => directorSkills);
+    // 「分辨率」胶囊弹的是共享的整片参数表单（createSharedConfigSection）：页内改分辨率与运行参数 + 分块秒数，
+    // 保存走「保存该段」同一条 ops 链。生成模式不在表单里（它是技能胶囊那一列的事）；分块秒数要看当前生效技能
+    // 支不支持多帧，技能由本页交进来——表单不自己拉技能清单
+    const sharedCfg = createSharedConfigSection(() => (sharedGenMode() === "mixed" ? null : skillMetaOf(skillPick ?? segs()[0]?.skill_id)));
     const sizeSaveBtn = $el("button", { className: "rs-btn ns-director-size-save", type: "button", textContent: t("保存整片参数") });
     const sizePanel = $el("div", { className: "rs-runtime-menu neo-gallery-gm-chip-menu neo-gallery-gm-chip-panel ns-director-compact-form ns-director-size-panel" }, [sharedCfg.el, sizeSaveBtn]);
     page.appendChild(sizePanel);
@@ -538,44 +579,15 @@ async function buildDirector(el) {
     sizeSaveBtn.onclick = async () => {
         if (!currentName || isPreset()) { statusEl.textContent = t("内置预设配方只读：先「复制配方」才能改"); return; }
         recipe.shared = { ...(recipe.shared || {}), ...sharedCfg.collect() };
-        ops.applySkill(sharedCfg.skillId());   // 混合模式交空串：每段留着各自的技能，这段不写
         markDirty();
         sizeClose();
         await saveRecipeNow();
     };
 
 
-    const cfgBits = () => {
-        const ov = videoModels ? videoCfg.collect() : {};
-        const bits = [];
-        for (const key of ["model", "text_encoder", "vae", "audio_vae"]) {
-            if (ov[key]) bits.push(String(ov[key]).split("/").pop());
-        }
-        if (ov.loras?.length) bits.push(tf("{n} 个 LoRA", { n: ov.loras.length }));
-        if (ov.steps && !videoCfg.stepsFollowSkill()) bits.push(tf("{n} 步", { n: ov.steps }));
-        return bits;
-    };
-    const cfgSync = () => { cfgLabel.textContent = cfgBits().join(" · ") || t("跟随技能配置"); };
-    const cfgClose = () => { cfgOpen = false; cfgPanel.style.display = "none"; };
-    cfgBtn.onclick = () => {
-        cfgOpen = !cfgOpen;
-        cfgPanel.style.display = cfgOpen ? "block" : "none";
-        if (!cfgOpen) return;
-        const r = cfgBtn.getBoundingClientRect();
-        cfgPanel.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - cfgPanel.offsetWidth - 8))}px`;
-        const above = r.top - cfgPanel.offsetHeight - 6;
-        cfgPanel.style.top = `${above > 8 ? above : r.bottom + 6}px`;
-    };
-    videoCfg.el.addEventListener("change", cfgSync);
-
-    const seedIn = $el("input", { className: "ns-director-seed neo-gallery-gm-chip-btn", type: "number", min: "-1", placeholder: t("随机"), title: t("种子：同一段提示词 + 同一素材 + 同一种子 = 同一张首帧；留空 = 跟随配方（配方里写 -1 = 每次运行随机换种子）") });
-    const seedRoll = $el("button", { className: "ns-director-seed-roll", type: "button", title: t("换一个随机种子") });
-    setIcon(seedRoll, "sparkles", 13);
-    seedRoll.onclick = () => { seedIn.value = String(Math.floor(Math.random() * 1e15)); };
-    const seedChip = $el("label", { className: "ns-director-seed-chip neo-gallery-gm-chip-group", title: t("种子") }, [icon("sparkles", 12), seedIn, seedRoll]);
     const sizeGlyph = ratioGlyph();
     const sizeLabel = $el("span", { className: "neo-gallery-gm-chip-label" });
-    const sizeBtn = $el("button", { className: "neo-gallery-gm-chip-btn ns-director-size", type: "button", title: t("整片参数（生成模式 / 统一技能 / 宽高比 / 百万像素 / 种子 / 步数 / 连续性 / 上下文帧）：页内改，保存写回配方") }, [sizeGlyph.el, sizeLabel]);
+    const sizeBtn = $el("button", { className: "neo-gallery-gm-chip-btn ns-director-size", type: "button", title: t("整片参数（宽高比 / 百万像素 / 种子 / 连续性 / 上下文帧 / 角色身份参考 / 分块秒数）：页内改，保存写回配方") }, [sizeGlyph.el, sizeLabel]);
     sizeBtn.onclick = () => {
         if (!currentName) { toast(t("先选一份导演配方")); return; }
         sizeOpen = !sizeOpen;
@@ -616,7 +628,7 @@ async function buildDirector(el) {
                 promptIn,
             ]),
             $el("div", { className: "ns-director-controls neo-gallery-gm-composer-bar neo-gallery-gm-chips" }, [
-                cfgBtn, sizeBtn, seedChip, saveBtn,
+                skillChip.el, sizeBtn, saveBtn,
                 $el("div", { className: "neo-gallery-gm-composer-gap" }),
                 cancelBtn, runBtn,
             ]),
@@ -662,7 +674,7 @@ async function buildDirector(el) {
     const onDocPress = (e) => {
         if (!document.body.contains(page)) { document.removeEventListener("pointerdown", onDocPress, true); return; }
         recipeChip.closeOnOutside(e.target);
-        if (cfgOpen && !cfgPanel.contains(e.target) && !cfgBtn.contains(e.target)) cfgClose();
+        skillChip.closeOnOutside(e.target);
         if (segMenuOpen && !segMenuPanel.contains(e.target) && !segMenuBtn.contains(e.target)) segMenuClose();
         if (sizeOpen && !sizePanel.contains(e.target) && !sizeBtn.contains(e.target)) sizeClose();
     };
@@ -687,6 +699,7 @@ async function buildDirector(el) {
     function renderSegment() {
         const s = segs()[selected];
         const fam = segFamily(s, sharedGenMode());
+        skillChip.chip.disabled = !s || isPreset();   // 预设只读与没有配方：统一技能这枚胶囊不给动
         segLabel.textContent = s ? tf("第 {n} 段", { n: selected + 1 }) : t("没有段");
         segLabel.title = tf("{mode}：{hint}", {
             mode: MODE_LABELS.get(fam === "ref" ? "r2v" : "f2v"),
@@ -793,7 +806,7 @@ async function buildDirector(el) {
     }
     async function afterEditorSaved() {
         await refreshRecipeItems();
-        await openRecipe(currentName, { keepSeed: true });
+        await openRecipe(currentName);
     }
 
     // 每段的有效模式与素材名要 director_spec 那份（配方 assets/ 里的文件已复制进 input/）。
@@ -812,9 +825,7 @@ async function buildDirector(el) {
     }
     function applySpec() {
         const d = spec?.defaults;
-        sizeLabel.textContent = d ? tf("{mode} · {w}×{h} · {steps} 步", {
-            mode: MODE_LABELS.get(sharedGenMode()) || MODE_LABELS.get("mixed"), w: d.width, h: d.height, steps: d.steps,
-        }) : "";
+        sizeLabel.textContent = d ? `${d.width}×${d.height}` : "";
         if (d) sizeGlyph.sync(`${d.width}:${d.height}`);
         media.style.setProperty("--ns-gen-ratio", d ? `${d.width} / ${d.height}` : "");
         media.style.setProperty("--ns-gen-ar", d ? String(d.width / d.height) : "");
@@ -843,7 +854,6 @@ async function buildDirector(el) {
         timeline.clearChecked();
         renderCheckHint();
         clearDirty();
-        if (!opts.keepSeed) seedIn.value = "";
         timeline.opts.readOnly = isPreset();   // 预设配方：时间轴不能加段 / 拖时长 / 重排
         saveBtn.disabled = isPreset();
         segMenuBtn.style.display = isPreset() ? "none" : "";   // 预设只读：段菜单没有能用的项，不出现
@@ -853,6 +863,7 @@ async function buildDirector(el) {
         // 「保存该段」后的重读要留着那句「已保存」：重读是把刚落盘的结果刷回界面，不是开一份新配方
         const presetNote = isPreset() ? t("内置预设配方只读：想改这一片就先「复制配方」") : "";
         statusEl.textContent = presetNote || (opts.keepStatus ? statusEl.textContent : "");
+        syncSkillChip();   // 技能胶囊回到这份配方钉的技能：各段不一样就是「每段用自己的技能」
         await loadSpec();
         selectSegment(0);
         agentCtx.recipe = currentName;      // 智能体上下文：默认围绕这一份配方出片
@@ -865,6 +876,13 @@ async function buildDirector(el) {
     async function saveRecipeNow() {
         if (!currentName) { statusEl.textContent = t("请先选一份导演配方"); return false; }
         if (isPreset()) { statusEl.textContent = t("内置预设配方只读：先「复制配方」再改"); return false; }
+        // 技能胶囊动了才写段：整片生成模式落 shared.mode，统一技能写进每一段 skill_id；
+        // 「每段用自己的技能」那一行只落 mixed，段表原样交
+        if (skillPick !== null) {
+            const group = videoModeGroup(skillMetaOf(skillPick));
+            recipe.shared = { ...(recipe.shared || {}), mode: group };
+            if (group !== "mixed") ops.applySkill(skillPick);
+        }
         saveBtn.disabled = true;
         try {
             const res = await ops.save(currentName);
@@ -873,7 +891,7 @@ async function buildDirector(el) {
             statusEl.textContent = tf("已保存：{name}（{n} 段）", { name: currentName, n: segs().length });
             await refreshRecipeItems();
             // 落盘后素材名可能被后端改名（重名让位）：重读配方与 spec，槽位与时间轴缩略图跟着换
-            await openRecipe(currentName, { keepSeed: true, keepStatus: true });
+            await openRecipe(currentName, { keepStatus: true });
             return true;
         } catch (e) {
             statusEl.textContent = tf("保存失败：{msg}", { msg: e.message });
@@ -945,7 +963,7 @@ async function buildDirector(el) {
     }
     activeLive = null;
 
-    // 提交整片生成：配方名 + 勾选的段 + 本发的种子 + 技能面板那套模型链覆盖。
+    // 提交整片生成：配方名 + 勾选的段 + 配方记着的种子 + 技能面板那套模型链覆盖。
     // 后端按配方名从盘上读整片（分辨率 / 连续性 / 上下文帧 / 每段的技能与素材都在配方里）——本页不发这些，
     // 页面上改过的段必须先「保存该段」写回配方，这一发才带得走。
     async function submitGenerate() {
@@ -955,7 +973,9 @@ async function buildDirector(el) {
         const body = { recipe: currentName };
         // 勾选按 1 起的段号发（后端 parse_segment_selection 认段号，越界与坏号整发 400 拒收）：不发 = 跑全部段
         if (checkedSegments.length) body.only_segments = checkedSegments.map((i) => i + 1).join(",");
-        if (seedIn.value !== "") body.seed = Number(seedIn.value);
+        // 种子只在整片参数表单里（生成坞不留第二枚种子输入）：这一发带的就是配方落过盘的那一个，-1 = 随机换
+        const filmSeed = Math.trunc(Number(recipe?.shared?.seed));
+        body.seed = Number.isFinite(filmSeed) ? filmSeed : -1;
         const ovBits = [];
         if (videoModels) {
             const c = videoCfg.collect();
@@ -1046,7 +1066,7 @@ async function buildDirector(el) {
         directorOnly: true,
         autoSelectFirst: true,      // 进页就选中首份导演配方：整片生成区与时间轴不用先点一次卡片
         initialSelection: currentName,
-        onSelect: (r) => { recipesModal?.close(); openRecipe(r.name, { keepSeed: true }); },
+        onSelect: (r) => { recipesModal?.close(); openRecipe(r.name); },
         onNewRecipe: () => { recipesModal?.close(); openDirectorEditor(null, afterEditorSaved); },
     });
     // 编辑器保存 / 新建保存后：重建配方面板（新配方立刻长出一张卡）并把那份配方选中，时间轴与该段控件跟着换
@@ -1054,13 +1074,13 @@ async function buildDirector(el) {
         await refreshRecipeItems();
         await refreshRecipesPanel();
         const name = e?.detail?.name;
-        if (name) await openRecipe(name, { keepSeed: true });
+        if (name) await openRecipe(name);
     });
-    listVideoSkills().then((list) => { directorSkills = list || []; }).catch(() => {});
+    listVideoSkills().then((list) => { directorSkills = list || []; syncSkillChip(); }).catch(() => {});
     listVideoGenModels().then((models) => {
         videoModels = models || {};
         videoCfg.load({}, videoModels);
-        cfgSync();
+        skillChip.sync();   // 技能与覆盖值都是程序填的：chip 上那行生效值要跟着重读
     }).catch(() => { /* 清单拿不到：覆盖面板整块不发值，各段技能配置照常生效 */ });
     recipesPanelEl = await createRecipesPanel(directorPanelOpts());
     recipesHost.appendChild(recipesPanelEl);
@@ -1068,7 +1088,7 @@ async function buildDirector(el) {
     // 首页的配方卡带 ?recipe= 深链进来：按名字选中那一份导演配方
     directorOpenRecipe = async (name) => {
         await refreshRecipeItems();
-        if (findItem(name)) await openRecipe(name, { keepSeed: true });
+        if (findItem(name)) await openRecipe(name);
     };
     await refreshRecipeItems();
 }
@@ -1402,6 +1422,10 @@ const VIDEO_TERMINAL = ["succeeded", "failed", "cancelled"];
 // 技能的 mode 经 LEGACY_MODE_MAP 归并（t2v / i2v / fl2v → 关键帧生视频，r2v 留全参考生视频），
 // 没标 mode 的旧视频技能落关键帧生视频——首帧留空就是文生视频，本来就是这一家族里的一发
 const VIDEO_GROUP_LABELS = Object.fromEntries(SEG_MODES.map(([key]) => [key, MODE_LABELS.get(key)]));
+// 导演页技能胶囊：组就是生成模式，多出来的一行是本页的写法——整片不统一技能，每段留着各自的技能。
+// 它不落进段表，落盘只把 shared.mode 写成 mixed（后端认的就是 mixed）
+const DIRECTOR_MIXED_SKILL = "__mixed__";
+const DIRECTOR_GROUP_LABELS = { ...VIDEO_GROUP_LABELS, mixed: MODE_LABELS.get("mixed") };
 const VIDEO_LAST_SKILL_KEY = "neo.video.skill";
 const videoModeGroup = (meta) => LEGACY_MODE_MAP.get(meta?.mode) || meta?.mode || "f2v";
 const videoSkillSteps = (s) => Number((s.gen_config || {}).steps) || 20;

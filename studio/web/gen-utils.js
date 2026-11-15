@@ -233,8 +233,9 @@ const SKILL_FAMILY_LABELS = { qwen: "Qwen Image", krea2: "Krea2", moss: "MOSS" }
  *  家族对撞在这一发里根本留不住；跨家族行只把「会换成哪个主模型」写在悬停标题上。
  *  真正必败的是「当前技能 + 手填的别家族主模型」，那条由 guardMainModelFamily 在填的那一刻拦。
  *  原生 select 收在壳里只当状态容器：点技能写 value 并派发 change；切技能重放配置是程序改 value，调用方要跟着 sync()
- *  分组规则由调用方给：视频页按生成模式分组（groupOf 取 skill 的 mode），组头名与组序都取 groupLabels 的键序。 */
-export function skillParamsChip(sel, paramsEl, { icon: iconName = "sparkles", getOverride, groupOf = skillFamily, groupLabels = SKILL_FAMILY_LABELS } = {}) {
+ *  分组规则由调用方给：视频页按生成模式分组（groupOf 取 skill 的 mode），组头名与组序都取 groupLabels 的键序。
+ *  panelClass 是宿主给面板加的密度/版式类（导演页把这一份双栏面板收进自己的紧凑档，不在两处各写一套密度规则）。 */
+export function skillParamsChip(sel, paramsEl, { icon: iconName = "sparkles", getOverride, groupOf = skillFamily, groupLabels = SKILL_FAMILY_LABELS, panelClass = "" } = {}) {
     sel.hidden = true;
     const icoSlot = $el("span", { className: "neo-gallery-gm-chip-icon" }, [icon(iconName, 12)]);
     const label = $el("span", { className: "neo-gallery-gm-chip-label" });
@@ -252,7 +253,7 @@ export function skillParamsChip(sel, paramsEl, { icon: iconName = "sparkles", ge
         }),
     ]);
     const panel = $el("div", {
-        className: "rs-runtime-menu neo-gallery-gm-chip-menu neo-gallery-gm-chip-panel neo-gallery-gm-skills-panel",
+        className: "rs-runtime-menu neo-gallery-gm-chip-menu neo-gallery-gm-chip-panel neo-gallery-gm-skills-panel" + (panelClass ? ` ${panelClass}` : ""),
     }, [skillsCol, $el("div", { className: "neo-gallery-gm-params-col" }, [paramsEl]), foot]);
     // 双栏样式自带 display:grid，盖过 .rs-runtime-menu 基座的 display:none：收起态由这里钉住
     panel.style.display = "none";

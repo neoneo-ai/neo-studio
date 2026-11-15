@@ -1,5 +1,5 @@
 // Neo Studio 导演页：配方条（下拉快切 / 配方管理弹窗 / 新建 / 素材库 / 高级模式）+ 出片区（实时预览舞台 + 状态行）
-// + 生成坞（紧凑时间轴 + 该段行 + 首帧 / 尾帧 / 参考三块素材槽 + 模型链覆盖 + 种子 + 保存该段 + 生成整片）。
+// + 生成坞（紧凑时间轴 + 该段行 + 首帧 / 尾帧 / 参考三块素材槽 + 模型链覆盖 + 保存该段 + 生成整片）。
 // 页内写路径只有一条：段写 director.js 的 createSegmentOps，落盘走同一条 ops.save；整片参数在「分辨率」胶囊弹的表单里改。
 // studio-app.js 顶层会取 #ns-view 并连 WebSocket，导入前必须先备好 DOM 与 WS 桩。
 import test from "node:test";
@@ -43,10 +43,12 @@ const sizeBtn = () => document.querySelector(".ns-director-size");
 const sizePanel = () => document.querySelector(".ns-director-size-panel");
 const sizeSaveBtn = () => document.querySelector(".ns-director-size-save");
 const sharedField = (cls) => sizePanel().querySelector(cls);
-const seedIn = () => document.querySelector(".ns-director-seed");
 const slots = () => [...document.querySelectorAll(".ns-director-slots .ns-slot")];
 const slotAdd = () => [...document.querySelectorAll(".ns-director-slots .ns-slot-add")];
-const cfgBtn = () => document.querySelector(".ns-director-cfg");
+const skillBtn = () => document.querySelector(".ns-director-skill").closest(".neo-gallery-gm-chip-wrap").querySelector(".neo-gallery-gm-chip-btn");
+const skillPanel = () => document.querySelector(".ns-director .neo-gallery-gm-skills-panel");
+const skillItem = (name) => [...skillPanel().querySelectorAll(".neo-gallery-gm-skill-item")].find((b) => b.textContent.includes(name));
+const skillGroups = () => [...skillPanel().querySelectorAll(".neo-gallery-gm-skill-group")].map((g) => g.textContent.trim());
 const segMenuBtn = () => document.querySelector(".ns-director-seg-menu");
 const segMenu = () => document.querySelector(".ns-director-segmenu");
 const segMenuItem = (label) => [...segMenu().querySelectorAll(".ns-btn")].find((b) => b.textContent.includes(label));
@@ -125,7 +127,7 @@ const SKILL = { id: "sk-a", name: "技能 A", cn_name: "技能 A", gen_video: tr
 const SKILL_R2V = { id: "sk-r", name: "技能 R", cn_name: "技能 R", gen_video: true, mode: "r2v", gen_config: { ref_kinds: ["image", "video", "audio"] } };
 const SKILL_MF = { id: "sk-mf", name: "多帧技能", cn_name: "多帧技能", gen_video: true, mode: "t2v", multi_frame: true, gen_config: { ref_kinds: ["image"] } };
 const RECIPE_BY_NAME = {
-    R1: { name: "R1", type: "video_director", source: "user", shared: { mode: "f2v" }, assets: [], loras: [],
+    R1: { name: "R1", type: "video_director", source: "user", shared: { mode: "f2v", seed: 4242 }, assets: [], loras: [],
         segments: [{ skill_id: "sk-a", prompt: "段一", duration_sec: 3, first_frame: "seed1.png" },
             { skill_id: "sk-a", prompt: "段二", duration_sec: 4 }] },
     R2: { name: "R2", type: "video_director", source: "user", shared: { mode: "f2v" }, assets: [], loras: [],
@@ -240,20 +242,18 @@ async function startRun() {
     await settle();
 }
 
-test("导演页：生成整片 payload = 配方名 + 种子 + 模型链覆盖（顶层键）；起手卡先占位", async () => {
+test("导演页：生成整片 payload = 配方名 + 配方记的种子 + 模型链覆盖（顶层键）；起手卡先占位", async () => {
     await boot();
     await openDirector();
-    click(cfgBtn());
+    click(skillBtn());
     await settle();
-    const modelSel = document.querySelector(".ns-director-cfg-panel select");
+    const modelSel = document.querySelector(".ns-director-skill-panel select");
     modelSel.value = "h3/model_b.safetensors";
     fire(modelSel, "change");
-    seedIn().value = "8888";
-    fire(seedIn(), "change");
     await startRun();
     assert.equal(posts("/neo_studio/director/generate").length, 1, `生成整片提交一次（状态：${statusEl()?.textContent}；命中 ${posts("/neo_studio/director/generate").length}；POST 路径 ${fetchLog.filter((c) => c.method === "POST").map((c) => c.path).join("|")}）`);
     assert.equal(genBody().recipe, "R1", "整片 = 当前配方名（后端按名从盘上读）");
-    assert.equal(genBody().seed, 8888, "种子随本发走");
+    assert.equal(genBody().seed, 4242, "生成整片带的种子就是配方记的那一个：种子只在整片参数表单里，生成坞没有第二枚");
     assert.equal(genBody().model, "h3/model_b.safetensors", "模型覆盖是顶层键");
     assert.ok(!("only_segments" in genBody()), "未勾选就不发这个键");
     assert.ok(statusEl().textContent.includes("排队中"), `排队中要说清去顶栏队列看：${statusEl().textContent}`);
@@ -303,7 +303,7 @@ test("导演页：进页铺好配方条 + 自动选中配方 + 时间轴 + 三�
     assert.ok(!slots()[0].classList.contains("ns-hidden") && !slots()[1].classList.contains("ns-hidden"), "f2v 段显首帧 / 尾帧");
     assert.ok(slots()[2].classList.contains("ns-hidden"), "f2v 段藏参考那一行");
     assert.ok(slots()[0].querySelector("img").src.includes("seed1.png"), "首帧画面用 spec 解析进 input/ 的那张");
-    assert.equal(sizeLabel().textContent, "关键帧生视频 · 640×384 · 20 步", "尺寸回显 = 整片模式 + spec defaults");
+    assert.equal(sizeLabel().textContent, "640×384", "尺寸回显 = spec defaults 的宽×高（步数与生成模式都在技能那一列，不进尺寸名）");
     assert.ok(mediaEl().classList.contains("ns-director-idle") && mediaEl().querySelector(".ns-director-idle-card"), "没跑着时起手卡占位");
     assert.equal(getComputedStyle(liveBox()).display, "none", "预览容器起手隐藏");
     assert.ok((runBtn().textContent || "").includes("生成整片"), "生成钮文案");
@@ -317,7 +317,7 @@ test("导演页：顶栏切配方 → 段数 / 该段行 / 尺寸回显跟着换
     assert.equal(tl().opts.getSegments().length, 3, "R2 三段换到时间轴");
     assert.equal(segLabel().textContent, "第 1 段", "切配方回到第 1 段");
     assert.equal(promptIn().value, "甲", "该段行换成新配方的第 1 段");
-    assert.equal(sizeLabel().textContent, "关键帧生视频 · 1344×768 · 8 步", "尺寸回显新配方 defaults");
+    assert.equal(sizeLabel().textContent, "1344×768", "尺寸回显新配方 defaults");
 });
 
 test("导演页：时间轴点第 2 段 → 该段行与素材槽家族跟着换", async () => {
@@ -490,17 +490,14 @@ test("导演页整片参数面板：分辨率胶囊弹出回显配方值，保�
     click(sizeBtn());
     await settle();
     assert.notEqual(sizePanel().style.display, "none", "点分辨率胶囊弹整片参数表单");
-    assert.equal(sharedField(".ns-director-shared-seed").value, "", "配方没写种子：表单留空 = 跟随配方");
-    assert.equal(sharedField(".ns-director-shared-steps").value, "", "配方没写步数：留空 = 该段技能钉的步数");
+    assert.equal(sharedField(".ns-director-shared-seed").value, "4242", "配方记的种子回显在表单里：本页只有这一处种子");
+    assert.equal(sharedField(".ns-director-shared-steps"), null, "表单里没有步数：整片每一段跑自己技能钉的那一套");
     assert.equal(sharedField(".ns-director-shared-ctx").value, "", "上下文帧留空 = 22 那一档");
     assert.ok(sharedField(".ns-director-shared-cont").checked, "连续性起手勾着");
     assert.ok(sharedField(".ns-director-shared-ident").checked, "配方没写身份参考 = 角色参考图照常注入每一段");
     assert.match(sharedField(".ns-director-shared-res").textContent, /×/, "非自定义档直接把算好的宽高写在表单里");
-    assert.equal(sharedField(".ns-director-shared-mode").value, "f2v", "配方写的生成模式回显进表单");
-    assert.equal(sharedField(".ns-director-shared-skill").value, "sk-a", "统一技能起手选中首段钉着的那一个");
     assert.equal(sharedField(".ns-director-shared-chunk-row").style.display, "none", "首段钉的是普通技能：分块秒数不出现");
     sharedField(".ns-director-shared-seed").value = "777";
-    sharedField(".ns-director-shared-steps").value = "30";
     sharedField(".ns-director-shared-mp").value = "1";
     fire(sharedField(".ns-director-shared-mp"), "input");
     sharedField(".ns-director-shared-ident").checked = false;
@@ -509,8 +506,8 @@ test("导演页整片参数面板：分辨率胶囊弹出回显配方值，保�
     await settle(); await settle();
     const body = saveBodies.at(-1);
     assert.equal(posts("/rs_recipes/save").length, 1, "保存整片参数走「保存该段」同一条 /rs_recipes/save");
-    assert.equal(body.shared.seed, 777, "种子写进 shared");
-    assert.equal(body.shared.steps, 30, "步数写进 shared");
+    assert.equal(body.shared.seed, 777, "种子写进 shared：本页只有这一处种子");
+    assert.ok(!("steps" in body.shared), "保存整片参数不写步数：配方里本来没有就留无");
     assert.equal(body.shared.megapixels, 1, "百万像素写进 shared");
     assert.equal(body.shared.identity_refs, false, "关掉身份参考落进 shared：这份配方不再注入角色参考图");
     assert.equal(body.shared.width % 32, 0, "宽高比 + 百万像素算出的宽按 32 对齐落盘");
@@ -521,18 +518,56 @@ test("导演页整片参数面板：分辨率胶囊弹出回显配方值，保�
     assert.equal(sizePanel().style.display, "none", "保存后收起表单");
     await until(() => loads("R1") > loadsBefore, "落盘后本页重读该配方");
     assert.ok(!saveBtn().classList.contains("ns-director-dirty"), "写回后清脏标记");
+    await startRun();
+    assert.equal(genBody().seed, 4242, "生成整片只带本页读到的那份配方种子：整片参数表单是唯一一处种子");
 });
 
-test("导演页整片参数：统一技能换池并写满每一段，分块秒数只在多帧技能时出现并落盘", async () => {
+test("导演页技能胶囊：技能按生成模式分组，选全参考就统一每一段并把该段翻成参考素材那一行", async () => {
+    await boot();
+    await openDirector();
+    assert.ok(skillBtn().textContent.includes("技能 A"), "胶囊标签说出首段钉着的那一个技能");
+    click(skillBtn());
+    await settle();
+    assert.deepEqual(skillGroups(), ["关键帧生视频", "全参考生视频", "混合模式"], "左栏按生成模式分组，最后一档是混合");
+    click(skillItem("技能 R"));
+    await settle();
+    assert.ok(saveBtn().classList.contains("ns-director-dirty"), "换统一技能算未保存的改动");
+    assert.ok(!isHidden(slots()[2]), "全参考：该段素材槽翻成参考素材那一行");
+    assert.ok(isHidden(slots()[0]) && isHidden(slots()[1]), "全参考：首帧 / 尾帧方块收起来");
+    click(saveBtn());
+    await settle(); await settle();
+    const body = saveBodies.at(-1);
+    assert.equal(body.shared.mode, "r2v", "生成模式跟着所选技能那一组落盘");
+    assert.deepEqual(body.segments.map((s) => s.skill_id), ["sk-r", "sk-r"], "统一技能写进每一段（走的还是段写那一条）");
+});
+
+test("导演页技能胶囊：「每段用自己的技能」只落 mixed，段表一个都不改", async () => {
+    await boot();
+    await openDirector();
+    click(skillBtn());
+    await settle();
+    click(skillItem("每段用自己的技能"));
+    await settle();
+    click(saveBtn());
+    await settle(); await settle();
+    const body = saveBodies.at(-1);
+    assert.equal(body.shared.mode, "mixed", "混合落进 shared.mode");
+    assert.deepEqual(body.segments.map((s) => s.skill_id), ["sk-a", "sk-a"], "每段留着各自的技能，一段都不写");
+});
+
+test("导演页技能胶囊：选多帧技能后整片参数表单里露出分块秒数，保存一起落盘", async () => {
     await boot();
     await openDirector();
     click(sizeBtn());
     await settle();
     assert.equal(sharedField(".ns-director-shared-chunk-row").style.display, "none", "首段钉的是普通技能：分块秒数不出现");
-    const skill = sharedField(".ns-director-shared-skill");
-    assert.deepEqual(Array.from(skill.options).map((o) => o.value), ["sk-a", "sk-mf"], "关键帧档的池只收帧模式技能，按步数排");
-    skill.value = "sk-mf";
-    fire(skill, "change");
+    click(skillBtn());
+    await settle();
+    click(skillItem("多帧技能"));
+    await settle();
+    click(sizeBtn());   // 收起再弹：整片参数表单在弹开那一刻按「当前生效技能」重算分块秒数的显隐
+    await settle();
+    click(sizeBtn());
     await settle();
     assert.notEqual(sharedField(".ns-director-shared-chunk-row").style.display, "none", "多段 + 多帧技能：分块秒数露出来");
     sharedField(".ns-director-shared-chunk").value = "20";
@@ -540,38 +575,20 @@ test("导演页整片参数：统一技能换池并写满每一段，分块秒�
     await settle(); await settle();
     const body = saveBodies.at(-1);
     assert.equal(body.shared.chunk_sec, 20, "分块秒数进 shared");
-    assert.deepEqual(body.segments.map((s) => s.skill_id), ["sk-mf", "sk-mf"], "统一技能写进每一段（走的还是段写那一条）");
+    assert.equal(body.shared.mode, "f2v", "关键帧那一组落 shared.mode");
+    assert.deepEqual(body.segments.map((s) => s.skill_id), ["sk-mf", "sk-mf"], "统一技能写进每一段");
 });
 
-test("导演页整片参数：混合模式收起统一技能，保存不写段", async () => {
-    await boot();
-    await openDirector();
-    click(sizeBtn());
-    await settle();
-    const mode = sharedField(".ns-director-shared-mode");
-    mode.value = "mixed";
-    fire(mode, "change");
-    await settle();
-    assert.equal(sharedField(".ns-director-shared-skill-row").style.display, "none", "混合模式没有统一对象：技能行收起");
-    click(sizeSaveBtn());
-    await settle(); await settle();
-    const body = saveBodies.at(-1);
-    assert.equal(body.shared.mode, "mixed", "混合落进 shared");
-    assert.deepEqual(body.segments.map((s) => s.skill_id), ["sk-a", "sk-a"], "混合模式每段留着各自的技能");
-});
-
-test("导演页整片全参考配方：每一段都走参考素材那一行，分辨率胶囊带出模式名", async () => {
+test("导演页整片全参考配方：胶囊回显全参考技能，每一段都走参考素材那一行", async () => {
     await boot();
     await openDirector();
     await pickRecipe("R3");
+    assert.ok(skillBtn().textContent.includes("技能 R"), "胶囊标签 = 首段钉的全参考技能");
     assert.ok(isHidden(slots()[0]) && isHidden(slots()[1]), "整片全参考：首帧 / 尾帧方块不露");
     assert.ok(!isHidden(slots()[2]), "参考素材那一行在");
-    assert.match(sizeLabel().textContent, /全参考生视频/, "分辨率胶囊把整片模式写在名字里");
     click(sizeBtn());
     await settle();
-    assert.equal(sharedField(".ns-director-shared-mode").value, "r2v", "整片全参考回显进表单");
     assert.equal(sharedField(".ns-director-shared-chunk").value, "0", "配方落过 0：纯逐段生成回显 0");
-    assert.deepEqual(Array.from(sharedField(".ns-director-shared-skill").options).map((o) => o.value), ["sk-r"], "全参考档的池只收全参考技能");
 });
 
 test("导演页高级模式：整片编辑器以浮层打开，保存后本页重读并选中它", async () => {
@@ -675,7 +692,7 @@ test("共享整片参数表单（director.js createSharedConfigSection）：回�
     cfg.load({ width: 1344, height: 768, seed: 12345, steps: 20, context_frames: 17, continuity: false });
     const kept = cfg.collect();
     assert.equal(kept.seed, 12345, "种子原样收回");
-    assert.equal(kept.steps, 20, "步数原样收回");
+    assert.ok(!("steps" in kept), "表单不产 steps 键：宿主并进现有 shared 时配方里的片级步数原样留着，本表单改不到它");
     assert.equal(kept.context_frames, 17, "上下文帧原样收回");
     assert.equal(kept.continuity, false, "连续性取消勾选收回 false");
     assert.equal(kept.aspect_ratio, "16:9 (宽屏)", "1344×768 认回 16:9，不落到自定义");
@@ -688,17 +705,14 @@ test("共享整片参数表单（director.js createSharedConfigSection）：回�
     cfg.load({});
     const blank = cfg.collect();
     assert.equal(blank.seed, -1, "种子留空 = 每次运行随机换种子");
-    assert.equal(blank.steps, -1, "步数留空 = 各段技能 config 钉的步数");
     assert.equal(blank.context_frames, 22, "上下文帧留空 = 22 那一档");
     assert.equal(blank.aspect_ratio, "16:9 (宽屏)", "配方没写过宽高时落默认宽高比");
     assert.equal(blank.width % 32, 0, "宽按 MiniMax H3 画布步长 32 对齐");
     assert.equal(blank.height % 32, 0, "高按 32 对齐");
     cfg.load({ width: 1344, height: 768 });
-    cfg.el.querySelector(".ns-director-shared-steps").value = "999";
     cfg.el.querySelector(".ns-director-shared-ctx").value = "999";
     cfg.el.querySelector(".ns-director-shared-mp").value = "9";
     const clamped = cfg.collect();
-    assert.equal(clamped.steps, 100, "步数收在 100 以内");
     assert.equal(clamped.context_frames, 362, "上下文帧收在 362 以内");
     assert.equal(clamped.megapixels, 2, "百万像素收在上限，超限的宽高不落盘");
     cfg.el.querySelector(".ns-director-shared-aspect").value = DIRECTOR_CUSTOM;
@@ -707,16 +721,20 @@ test("共享整片参数表单（director.js createSharedConfigSection）：回�
     assert.equal(custom.width, 1344, "自定义宽高是手输的那两个数");
     assert.equal(custom.height, 768, "高同上");
     assert.ok(!("megapixels" in custom), "自定义档不发百万像素：后端只认手输宽高");
-    cfg.load({ mode: "v2v" });
-    assert.equal(cfg.el.querySelector(".ns-director-shared-mode").value, "r2v", "旧 v2v 静默重映射成全参考：表单里不出现旧值");
-    cfg.load({}, [{ skill_id: "s1", refs: { images: ["x.png"] } }]);
-    assert.equal(cfg.el.querySelector(".ns-director-shared-mode").value, "r2v", "配方没写过模式：带参考素材的段推断成全参考（与编辑器起手同一判据）");
-    cfg.load({}, [{ skill_id: "s1" }]);
-    assert.equal(cfg.el.querySelector(".ns-director-shared-mode").value, "f2v", "没有参考素材的老配方落回关键帧");
+    cfg.load({});
     assert.equal(cfg.collect().chunk_sec, 15, "配方没写过分块秒数：默认 15 那一档");
     cfg.load({ chunk_sec: 0 });
     assert.equal(cfg.el.querySelector(".ns-director-shared-chunk").value, "0", "落过 0 的配方回显 0 = 纯逐段生成");
     assert.equal(cfg.collect().chunk_sec, 0, "0 原样收回，不被默认档顶回去");
+    // 分块秒数的显隐读宿主交来的「当前生效技能」：单段没有可合并的对象，普通技能永远不会分块
+    const mf = createSharedConfigSection(() => ({ multi_frame: true }));
+    mf.load({}, [{}, {}]);
+    assert.notEqual(mf.el.querySelector(".ns-director-shared-chunk-row").style.display, "none", "多段 + 多帧技能：分块秒数露出来");
+    mf.load({}, [{}]);
+    assert.equal(mf.el.querySelector(".ns-director-shared-chunk-row").style.display, "none", "单段：没有可合并的对象就不出现");
+    const plain = createSharedConfigSection();
+    plain.load({}, [{}, {}]);
+    assert.equal(plain.el.querySelector(".ns-director-shared-chunk-row").style.display, "none", "普通技能永不分块：不出现");
 });
 
 test.afterEach(() => {

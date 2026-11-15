@@ -5,15 +5,17 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 ## [Unreleased]
 
 ### Added
-- **Generation mode, unified skill and chunk seconds are on the 导演页 as well.** The 整片参数 form the 分辨率 capsule pops
-  now starts with 生成模式 (关键帧生视频 / 全参考生视频 / 混合模式), 技能 (the one skill every segment runs) and 分块秒数.
-  生成模式 and 分块秒数 land in the recipe's `shared`; the unified skill is written into every segment's `skill_id` through
-  `createSegmentOps().applySkill()`, and in 混合模式 the 技能 row collapses so a save writes no segments. The skill list
-  follows the mode (frame skills for 关键帧, reference skills for 全参考, ordered by steps). 全参考生视频 flips every
-  segment's media row to 参考素材 — the same rule the backend applies when it resolves a segment's effective mode — and the
-  分辨率 capsule now names the film mode (`全参考生视频 · 1024×576 · 12 步`). 分块秒数 shows up only with several segments
-  on a multi-frame skill, and keeps writing the default 15 while it is hidden. Covered by the 导演页整片参数：统一技能换池、
-  混合模式收起统一技能、整片全参考配方 and 共享整片参数表单 cases in `studio/tests/js/studio-director.test.mjs`.
+- **Generation mode and skill are one 技能 capsule on the 导演页, the same control the 视频页 has.** The 自定参数 capsule is
+  now the shared `skillParamsChip`: its left column lists the video skills grouped by generation mode (关键帧生视频 /
+  全参考生视频 / 混合模式) with the model-chain override (main model / Text Encoder / VAE / audio VAE / LoRA / steps) beside
+  it, and the row 每段用自己的技能（混合） is there for a recipe whose segments pin different skills. The picked skill is the
+  one the whole film unifies on and its group is the generation mode, so 全参考生视频 flips every segment's media row to
+  参考素材 — the same rule the backend applies when it resolves a segment's effective mode. Touching the skill marks
+  the page dirty; saving writes `shared.mode` plus the
+  skill into every segment's `skill_id` through `createSegmentOps().applySkill()`, and leaving it alone writes neither. The
+  整片参数 form keeps 分块秒数, now shown by the effective skill (multi-frame + several segments) instead of by a mode row in
+  the form. Covered by the 导演页技能胶囊 cases and the 整片全参考配方 / 共享整片参数表单 cases in
+  `studio/tests/js/studio-director.test.mjs`.
 - **The 角色身份参考 switch now lives on the 导演页.** The 整片参数 form carries it: checked (the default) writes
   nothing, turning it off lands `shared.identity_refs=false` so that recipe stops injecting the 角色参考图 as every
   segment's identity anchor — the before/after comparison switch, reachable without opening 高级模式. Covered by the
@@ -23,14 +25,19 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   request after you confirm — the same `confirm` convention as 删除该段; declining leaves the run running with the
   button where it was. Covered by the 导演页取消先过确认 case in `studio/tests/js/studio-director.test.mjs`.
 - **The 导演页 edits the whole film without leaving the page.** The 分辨率 capsule now pops a 整片参数 form right in the
-  dock — 宽高比 + 百万像素 (plus a 自定义 width/height pair), 种子, 步数, 连续性 and 上下文帧 — on the same conventions as
-  the full-film editor (empty seed = −1 = a fresh seed each run, empty steps = −1 = each segment's own skill steps, empty
-  context frames = 22). **保存整片参数** goes down the same save chain as **保存该段** and writes into the recipe's
-  `shared`. The 整片编辑器
+  dock — 宽高比 + 百万像素 (plus a 自定义 width/height pair), 种子, 连续性, 上下文帧, 角色身份参考 and 分块秒数 — on the same
+  conventions as the full-film editor (empty seed = −1 = a fresh seed each run, empty context frames = 22). **保存整片参数**
+  goes down the same save chain as **保存该段** and writes into the recipe's `shared`. The 整片编辑器
   button on the bar is now **高级模式**: it opens that editor as an overlay for feature comparison, and the page reloads
   the recipe and re-selects it once the overlay saves. Covered by the 导演页整片参数面板,
   导演页高级模式 and 共享整片参数表单 cases in `studio/tests/js/studio-director.test.mjs`, and the
   导演页弹层表单是胶囊旁的一栏紧凑面板 case in `studio/tests/js/studio-desktop.test.mjs`.
+- **One seed on the 导演页, and 步数 where it belongs.** The 随机 seed input left the 生成坞: the 整片参数 form is the page's
+  only seed control, and 生成整片 carries the seed the recipe records (−1 = a fresh seed every run). The 步数 row is out of
+  that form too — each segment runs the steps its own skill pins, the per-run override stays in the right column of the 技能
+  capsule, and 高级模式 keeps the film-level field; saving 整片参数 no longer writes a `steps` key, so a recipe's existing
+  value survives untouched, and the 分辨率 capsule now reads just `1280×720` instead of `1280×720 · 20 步`. Covered by the
+  生成整片 payload, 整片参数面板 and 进页铺好配方条 cases in `studio/tests/js/studio-director.test.mjs`.
 - **The 导演页 has a per-segment ⋯ menu, and segment editing is one shared implementation.** The 该段 row ends with a
   `⋯` menu — 复制该段 / 前移一段 / 后移一段 / 删除该段 (delete confirms and keeps the segment's asset files; the last
   segment cannot be deleted; a built-in preset shows no `⋯`). Segment add / duplicate / move / delete / reorder and
@@ -42,6 +49,13 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   panel — `min(380px, 100vw − 16px)` wide, capped at `min(46vh, 340px)` with the scrolling inside it, 12px text on 24px controls,
   label and control sharing one line — so the 时间轴 and the 该段 row stay visible when it pops above the capsule. Covered by the
   导演页弹层表单是胶囊旁的一栏紧凑面板 case in `studio/tests/js/studio-desktop.test.mjs`.
+- **The 技能 popup on the 导演页 now shows the whole model chain without a scrollbar.** The shared compact density block
+  raised its height cap from `min(46vh, 340px)` to `min(78vh, 480px)`: at the old cap the panel's right column — 生视频模型 /
+  显示全部模型 / 步数 / Text Encoder / 两枚 VAE / LoRA 列表 — scrolled before the LoRA row appeared. The chain now reads top
+  to bottom in one look, the skill list on the left keeps scrolling on its own, and the panel stays inside the window (the
+  `min(380px, 100vw − 16px)` single column and `min(660px, 100vw − 16px)` two-column widths are host-scoped, so the shared
+  chip-panel rule that the desktop shell injects after the page CSS cannot override them). Covered by the
+  导演页弹层表单是胶囊旁的一栏紧凑面板 case in `studio/tests/js/studio-desktop.test.mjs`.
 - **The 导演页 dock is no longer clipped in short windows.** The page dropped its 520px height floor: in a window shorter
   than the layout (Windows display scaling reports fewer CSS pixels than the physical height) the 舞台 absorbs the
   difference, so the floating dock keeps its 12px clearance from the window's bottom edge instead of losing its lower
@@ -50,9 +64,9 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   strip under the 首帧 / 尾帧 / 参考素材 squares instead of riding above the prompt box; the prompt text is now the page's
   own 12px (the 素材库 modal's 15px prompt size no longer drives it), and the 导演视频 idle stage paints no grey panel
   behind those two lines. Covered by the 进页铺好配方条 case in `studio/tests/js/studio-director.test.mjs`.
-- **The director page copy and docs describe the compacted page.** The seed box tooltip now states what a seed does —
-  same prompt + same assets + same seed = the same first frame, empty follows the recipe and −1 rerolls every run — the
-  check hint names the box at the timeline block's top-left, and the 适应 / − / ＋ labels are registered in
+- **The director page copy and docs describe the compacted page.** The 种子 tooltip in the 整片参数 form now states what a
+  seed does — same prompt + same assets + same seed = the same first frame, empty follows the recipe and −1 rerolls every
+  run — the check hint names the box at the timeline block's top-left, and the 适应 / − / ＋ labels are registered in
   `js/core/i18n.js`. `docs/studio-desktop.md` and `docs/en/studio-desktop.md` gained the standalone Studio director page:
   the full-height stage with dock clearance, the floating capsule dock, the 56px timeline anatomy, the one-line segment
   row and the 900px / 720px fallbacks.

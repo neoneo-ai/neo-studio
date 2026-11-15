@@ -52,13 +52,20 @@
 - `director.js` 的整片编辑器浮层（`openDirectorEditor`）现在是顶栏的**高级模式**，处于冻结期：不新增能力、不改交互、
   不修样式，只用来与导演页做功能对比。功能补齐后由「全站入口跳 `/neo-studio#/director?recipe=…` + 删掉浮层」收口，
   届时本节作废。
-- 页内写路径只有一条：段写 `createSegmentOps()`（统一技能落各段走它的 `applySkill`），落盘 `ops.save()` 配 `directorAssetRefs()`，
-  整片参数经 `createSharedConfigSection().collect()` 并进现有 `shared`（表单没有的键原样留着；技能候选池由宿主交进来，表单不自己拉清单）。
-  页面自己不再写第二套保存形状。
+- 页内写路径只有一条：段写 `createSegmentOps()`（技能胶囊选出的统一技能落各段走它的 `applySkill`，生成模式落 `shared.mode`），
+  落盘 `ops.save()` 配 `directorAssetRefs()`，整片参数经 `createSharedConfigSection().collect()` 并进现有 `shared`（表单没有的键原样留着；
+  分块秒数的显隐要技能，由宿主交进来，表单不自己拉清单；步数不在这一列——整片每一段跑自己技能钉的那一套，本发覆盖在技能胶囊
+  右栏，种子是本页唯一一处，生成坞没有第二枚）。页面自己不再写第二套保存形状。
+- 技能与自定参数在导演页是同一枚胶囊：走 `js/core` 侧的 `skillParamsChip`（视频页同一枚，左栏按生成模式分组），宿主只交
+  分组规则与 `panelClass` 密度类，不在页内重写第二枚技能选择器，也不在两处各留一套密度规则。
 - 高级模式的脏状态不干预本页：本页靠 `DIRECTOR_RECIPE_SAVED_EVENT` 重读该配方并选中它。
-- `director.js` 只维护共享层（常量与分辨率算法、事件、`createSegmentOps`、`directorAssetRefs`、
-  `createSharedConfigSection`、按生成模式过滤的视频技能候选池）。共享层要挪去中立层（`js/core/`）时整层一起挪，不在两处各留一份。
-- 导演页两块弹层（自定参数 / 整片参数）共用 `.ns-director-compact-form` 这一处密度定义，新弹层挂同一套，不再开一档。
+- `director.js` 只维护共享层（常量与分辨率算法、事件、`createSegmentOps`、`directorAssetRefs`、`createSharedConfigSection`）。
+  共享层要挪去中立层（`js/core/`）时整层一起挪，不在两处各留一份。
+- 导演页两块弹层（技能 / 整片参数）共用 `.ns-director-compact-form` 这一处密度定义，新弹层挂同一套，不再开一档。宽度按窗口夹
+  （单栏 `min(380px, 100vw − 16px)`，技能面板双栏 `min(660px, 100vw − 16px)`），净高按技能面板右栏那条模型链给足
+  （`min(78vh, 480px)`：右栏不许自己滚，左栏技能清单自滚），行是「标签 84px + 控件吃余宽」的素材库弹窗档。规则写在
+  `.ns-director` 这一层里：桌面端 `gallery.css` 比 `style.css` 后注入，它那条共享 chip-panel（720px / 62vh）同特异会盖过
+  不带宿主的这条，弹层就宽过窗口了。
 
 ## Testing
 
