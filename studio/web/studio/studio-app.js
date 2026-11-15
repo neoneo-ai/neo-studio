@@ -10,11 +10,11 @@ import { $el } from "./shim/ui.js";
 import { configureCanvasOrigin } from "../js/core/canvas-origin.js";
 
 import "../gallery.js";   // 注册 comfy.neo.gallery 扩展（NeoGallery + 侧栏 tab 定义）
-import { openDirectorEditor, DIRECTOR_RECIPE_SAVED_EVENT, SEG_MODES, MODE_LABELS, LEGACY_MODE_MAP } from "../director.js";
+import { openDirectorEditor, createSegmentOps, DIRECTOR_RECIPE_SAVED_EVENT, SEG_MODES, MODE_LABELS, LEGACY_MODE_MAP } from "../director.js";
 import { setPaintHost, openGenMaterialDialog, openImageEditDialog, openImageEditMode, setVideoReuseOpen, setVideoPageJump, openVideoReuse, reuseModelOverlay, chipButton, ratioGlyph, skillParamsChip } from "../gallery-gen.js";
 import { createFramePlayer, DOCK_PREVIEW_SIDE, AGENT_PREVIEW_SIDE } from "../live-preview.js";
 import { createRecipesPanel, listRecipes } from "../recipes.js";
-import { listVideoSkills, saveRecipe } from "../recipes.js";
+import { listVideoSkills } from "../recipes.js";
 import { DirectorTimeline } from "../director-timeline.js";
 import { skillDisplayName, importWorkflowSkill, listSkills } from "../skill.js";
 import { createImageGenSettingsForm, createVideoGenSettingsForm, createVideoModelConfigSection, listVideoGenModels, getSkillGenConfig, blockingMissingModels, modelFamily } from "../image-gen.js";
@@ -389,13 +389,18 @@ async function buildDirector(el) {
     let spec = null;         // director_spec：每段有效模式，与解析进 input/ 的首帧 / 尾帧 / 参考素材名
     let currentName = "";
     let selected = 0;
-    let dirty = false;
     let tlProgress = { active: false, segment_index: -1, total_segments: 0 };
     let checkedSegments = [];
     let directorSkills = [];   // 视频技能列表：每段「模板收哪几类参考素材」读它
     const segs = () => recipe?.segments || [];
     const isPreset = () => recipe?.source === "preset";
     const skillMeta = (id) => directorSkills.find((s) => s.id === id) || null;
+    // 段落的增删改与「保存该段」走 director.js 那份共享实现（出片视图后面要嵌进画布，同一套语义）：
+    // 脏标记记在 ops 里，页面上「未保存」只有保存钮这一处要亮
+    const ops = createSegmentOps(() => recipe, {
+        onChange: () => saveBtn.classList.add("ns-director-dirty"),
+        readOnly: isPreset,
+    });
 
     // --- 顶部条：配方（下拉快切 + 卡片弹窗管理）· 新建配方 · 素材库 · 整片编辑器 ---
     recipesHost = $el("div", { className: "ns-director-recipes" });
@@ -464,6 +469,51 @@ async function buildDirector(el) {
     page.appendChild(cfgPanel);   // 挂页面上：.rs-runtime-menu 是 fixed 定位，页面离场时由 onDocPress 摘监听
     let cfgOpen = false;
 
+    // 该段「⋯」菜单：复制 / 前移 / 后移 / 删除。增删改本身在 director.js 那份共享实现里，页面只出这一条入口
+    const segMenuItem = (label, tip, fn) => $el("button", { className: "ns-btn", type: "button", textContent: t(label), title: t(tip), onclick: () => { segMenuClose(); fn(); } });
+    const segMenuPanel = $el("div", { className: "neo-gallery-gm-chip-menu neo-gallery-gm-chip-panel ns-director-segmenu" }, [
+        segMenuItem("复制该段", "把该段的提示词 / 时长 / 素材整份复制到下面一段", () => {
+            const at = ops.duplicate(selected);
+            if (at < 0) return;
+            timeline.refresh();
+            selectSegment(at);
+        }),
+        segMenuItem("前移一段", "该段往前挪一位", () => {
+            if (!ops.move(selected, -1)) return;
+            timeline.refresh();
+            selectSegment(selected - 1);
+        }),
+        segMenuItem("后移一段", "该段往后挪一位", () => {
+            if (!ops.move(selected, 1)) return;
+            timeline.refresh();
+            selectSegment(selected + 1);
+        }),
+        segMenuItem("删除该段", "删除该段（素材文件留在配方里，不删文件）", () => {
+            const n = segs().length;
+            if (n <= 1) { toast(t("最后一段不能删：整片至少留一段")); return; }
+            if (!confirm(tf("删除第 {n} 段？该段的素材文件留在配方里，不删文件。", { n: selected + 1 }))) return;
+            ops.remove(selected);
+            checkedSegments = [];
+            timeline.clearChecked();
+            renderCheckHint();
+            timeline.refresh();
+            selectSegment(Math.min(selected, n - 2));
+        }),
+    ]);
+    page.appendChild(segMenuPanel);
+    const segMenuBtn = $el("button", { className: "ns-director-seg-menu neo-gallery-gm-chip-btn", type: "button", textContent: "⋯", title: t("该段：复制 / 前移 / 后移 / 删除") });
+    let segMenuOpen = false;
+    const segMenuClose = () => { segMenuOpen = false; segMenuPanel.style.display = "none"; };
+    segMenuBtn.onclick = () => {
+        segMenuOpen = !segMenuOpen;
+        segMenuPanel.style.display = segMenuOpen ? "block" : "none";
+        if (!segMenuOpen) return;
+        const r = segMenuBtn.getBoundingClientRect();
+        segMenuPanel.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - segMenuPanel.offsetWidth - 8))}px`;
+        const above = r.top - segMenuPanel.offsetHeight - 6;
+        segMenuPanel.style.top = `${above > 8 ? above : r.bottom + 6}px`;
+    };
+
 
     const cfgBits = () => {
         const ov = videoModels ? videoCfg.collect() : {};
@@ -524,7 +574,7 @@ async function buildDirector(el) {
             $el("div", { className: "ns-director-main" }, [
                 $el("div", { className: "ns-director-segrow" }, [
                     $el("div", { className: "ns-director-slots" }, [firstSlot.el, lastSlot.el, refSlot.el]),
-                    $el("div", { className: "ns-director-segtop" }, [segLabel, durIn]),
+                    $el("div", { className: "ns-director-segtop" }, [segLabel, durIn, segMenuBtn]),
                 ]),
                 promptIn,
             ]),
@@ -576,6 +626,7 @@ async function buildDirector(el) {
         if (!document.body.contains(page)) { document.removeEventListener("pointerdown", onDocPress, true); return; }
         recipeChip.closeOnOutside(e.target);
         if (cfgOpen && !cfgPanel.contains(e.target) && !cfgBtn.contains(e.target)) cfgClose();
+        if (segMenuOpen && !segMenuPanel.contains(e.target) && !segMenuBtn.contains(e.target)) segMenuClose();
     };
     document.addEventListener("pointerdown", onDocPress, true);
 
@@ -590,8 +641,8 @@ async function buildDirector(el) {
             ? tf("仅运行勾选的 {n} 段：[{list}]", { n: checkedSegments.length, list: checkedSegments.map((i) => i + 1).join(",") })
             : t("未勾选 = 生成整片 · 点时间轴块左上角勾选");
     };
-    function markDirty() { dirty = true; saveBtn.classList.add("ns-director-dirty"); }
-    function clearDirty() { dirty = false; saveBtn.classList.remove("ns-director-dirty"); }
+    function markDirty() { ops.markDirty(); }
+    function clearDirty() { ops.clearDirty(); saveBtn.classList.remove("ns-director-dirty"); }
     function selectSegment(i) { timeline.select(i); }   // 走画布：落选中态后由 onSelect 刷该段面板
 
     // 该段控件：模式决定素材槽显哪一组，隐藏的槽位不写进配方（后端按资产推模式，留旧素材就是推错）
@@ -665,26 +716,19 @@ async function buildDirector(el) {
     function segRefKinds(i) { return skillMeta(segs()[i]?.skill_id)?.gen_config?.ref_kinds || null; }
 
     function addSeg() {
-        const last = segs()[segs().length - 1] || {};
-        const seg = { skill_id: last.skill_id || "", prompt: "", duration_sec: 5 };
-        if (last.mode) seg.mode = last.mode;   // 混配方的段级模式跟着上一段：新段不会突然换家族
-        segs().push(seg);
-        markDirty();
+        const at = ops.add();
+        if (at < 0) return;
         timeline.refresh();
-        selectSegment(segs().length - 1);
+        selectSegment(at);
     }
 
     function reorderSegs(order) {
-        const arr = segs();
-        const next = order.map((i) => arr[i]).filter(Boolean);
-        if (next.length !== arr.length) return;   // 顺序表不完整就不动配方：宁可丢掉这一次拖拽，也不留下少一段的配方
-        recipe.segments = next;
+        if (!ops.reorder(order)) return;   // 顺序表不完整时 ops 不动配方：这次拖拽丢掉，不留少一段的配方
         checkedSegments = [];
         timeline.clearChecked();
         renderCheckHint();
-        markDirty();
         timeline.refresh();
-        selectSegment(Math.min(selected, Math.max(0, next.length - 1)));
+        selectSegment(Math.min(selected, Math.max(0, segs().length - 1)));
     }
 
 
@@ -762,6 +806,7 @@ async function buildDirector(el) {
         if (!opts.keepSeed) seedIn.value = "";
         timeline.opts.readOnly = isPreset();   // 预设配方：时间轴不能加段 / 拖时长 / 重排
         saveBtn.disabled = isPreset();
+        segMenuBtn.style.display = isPreset() ? "none" : "";   // 预设只读：段菜单没有能用的项，不出现
         saveBtn.title = isPreset() ? t("内置预设配方只读：先「复制配方」才能改") : t("把该段的提示词 / 时长 / 素材槽改动写回配方（不新增段，也不动故事板与分辨率）");
         renderRecipeSelect();
         recipesPanelEl?.__neoRecipesPanel?.select(currentName);   // 卡片高亮跟着本页的选中配方挪（下拉快切 / 保存后重读）
@@ -776,30 +821,12 @@ async function buildDirector(el) {
     }
 
     // 保存只发本次新取用的素材与改动后的段：既有资产与结果历史由后端按盘上现状保留
-    function newAssetRefs() {
-        const known = new Set((recipe?.assets || []).map((a) => a.file));
-        const out = [];
-        const addOne = (name, kind) => {
-            if (name && !known.has(name)) out.push({ filename: name, subfolder: "", type: "input", kind });
-        };
-        for (const s of segs()) {
-            addOne(s.first_frame, "image");
-            addOne(s.last_frame, "image");
-            const rf = s.refs || {};
-            for (const [key, kind] of [["images", "image"], ["videos", "video"], ["audios", "audio"]]) {
-                for (const v of (rf[key] || [])) addOne(v, kind);
-            }
-        }
-        return out;
-    }
     saveBtn.addEventListener("click", async () => {
         if (!currentName) { statusEl.textContent = t("请先选一份导演配方"); return; }
         if (isPreset()) { statusEl.textContent = t("内置预设配方只读：先「复制配方」再改"); return; }
         saveBtn.disabled = true;
         try {
-            const res = await saveRecipe(currentName, recipe.prompt || "", newAssetRefs(), [], recipe.loras || [], {
-                shared: recipe.shared || {}, segments: segs(), story: recipe.story || null, setup: recipe.setup || null,
-            }, "video");
+            const res = await ops.save(currentName);
             if (!res?.success) { statusEl.textContent = tf("保存失败：{msg}", { msg: res?.error || t("未知错误") }); return; }
             clearDirty();
             statusEl.textContent = tf("已保存：{name}（{n} 段）", { name: currentName, n: segs().length });
@@ -880,7 +907,7 @@ async function buildDirector(el) {
     async function submitGenerate() {
         if (!currentName) { statusEl.textContent = t("请先选一份导演配方"); return; }
         if (isPreset()) { statusEl.textContent = t("内置预设配方只读：先「复制配方」再生成整片"); return; }
-        if (dirty) { statusEl.textContent = t("该段有未保存的改动：先点「保存该段」，改动进配方后再生成"); return; }
+        if (ops.isDirty()) { statusEl.textContent = t("该段有未保存的改动：先点「保存该段」，改动进配方后再生成"); return; }
         const body = { recipe: currentName };
         // 勾选按 1 起的段号发（后端 parse_segment_selection 认段号，越界与坏号整发 400 拒收）：不发 = 跑全部段
         if (checkedSegments.length) body.only_segments = checkedSegments.map((i) => i + 1).join(",");

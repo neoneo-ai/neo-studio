@@ -333,6 +333,10 @@ body {
 .ns-director-cfg-panel .rs-gen-lora-row { flex-wrap: wrap; }
 /* 「+ 添加 LoRA」与「显示全部模型」整行占位：与下拉同排时白吃掉一列宽度，长模型名只剩一条窄缝 */
 .ns-director-cfg-panel :is(.rs-gen-lora-add, .rs-model-scope-toggle) { flex: 0 0 100%; width: fit-content; height: 24px; font-size: 12px; }
+/* 该段「⋯」：⋯ 只占一枚 chip 的宽，菜单是它旁边 190px 的一列面板（与自定参数面板同一档密度） */
+.ns-director .ns-director-seg-menu { flex: none; width: 26px; padding: 0; }
+.ns-director-segmenu { box-sizing: border-box; width: 190px; }
+.ns-director-segmenu .ns-btn { display: block; width: 100%; height: 26px; padding: 0 10px; font-size: 12px; text-align: left; }
 
 /* .rs-btn 基础样式 flex:1（窄弹窗底部按钮行用）；满幅主区里不拉伸成长条。
    浮层（配方详情/导演编辑器）挂在 body 上，不受此规则影响 */

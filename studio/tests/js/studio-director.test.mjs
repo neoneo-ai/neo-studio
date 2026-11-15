@@ -43,6 +43,9 @@ const seedIn = () => document.querySelector(".ns-director-seed");
 const slots = () => [...document.querySelectorAll(".ns-director-slots .ns-slot")];
 const slotAdd = () => [...document.querySelectorAll(".ns-director-slots .ns-slot-add")];
 const cfgBtn = () => document.querySelector(".ns-director-cfg");
+const segMenuBtn = () => document.querySelector(".ns-director-seg-menu");
+const segMenu = () => document.querySelector(".ns-director-segmenu");
+const segMenuItem = (label) => [...segMenu().querySelectorAll(".ns-btn")].find((b) => b.textContent.includes(label));
 const tlHost = () => document.querySelector(".ns-director-timeline");
 const tl = () => tlHost().__neoDirectorTimeline;
 const recipesModal = () => document.querySelector('.ns-libmodal[data-lib-scope="recipes"]');
@@ -476,6 +479,77 @@ test("导演页：整片编辑器保存后重读该配方并选中它", async ()
     await until(() => loads("R1") > loadsBefore, "保存后本页重读该配方");
     assert.equal(recipeSel().value, "R1", "保存后顶栏下拉选中这一份");
     assert.ok(!document.querySelector(".neo-director-overlay"), "保存后关掉编辑器");
+});
+
+test("导演页该段 ⋯：复制到下面一段、前移改顺序、删除走确认（写回同一条保存链）", async () => {
+    await boot();
+    await openDirector();                                   // R1 = 段一 / 段二
+    window.confirm = () => true;
+    click(segMenuBtn());
+    await settle();
+    assert.notEqual(segMenu().style.display, "none", "点 ⋯ 出菜单");
+    click(segMenuItem("复制该段"));
+    await settle();
+    assert.equal(tl().opts.getSegments().length, 3, "复制多出段三");
+    assert.equal(segLabel().textContent, "第 2 段", "选中跟着落在复制出来的那一段");
+    assert.equal(promptIn().value, "段一", "复制带走该段的提示词");
+    assert.ok(saveBtn().classList.contains("ns-director-dirty"), "增段算未保存的改动");
+    click(saveBtn());
+    await settle(); await settle();
+    assert.equal(saveBodies.at(-1).segments.length, 3, "保存交三段（同一条 /rs_recipes/save 链）");
+    assert.ok(!saveBtn().classList.contains("ns-director-dirty"), "写回后清脏标记");
+    click(segMenuBtn()); await settle();
+    click(segMenuItem("前移一段")); await settle();
+    assert.equal(segLabel().textContent, "第 1 段", "前移后选中跟着挪");
+    click(saveBtn()); await settle(); await settle();
+    const order = saveBodies.at(-1).segments.map((s) => s.prompt);
+    assert.equal(order[0], "段一", "顺序写回配方");
+    assert.equal(new Set(order).size, 2, "复制段与段二都在，没有丢段");
+});
+
+test("导演页该段 ⋯：最后一段删不掉；预设配方不出 ⋯", async () => {
+    await boot();
+    await openDirector();
+    window.confirm = () => true;
+    click(segMenuBtn()); await settle();
+    click(segMenuItem("删除该段")); await settle(); await settle();
+    assert.equal(tl().opts.getSegments().length, 1, "确认删除后少一段");
+    click(segMenuBtn()); await settle();
+    click(segMenuItem("删除该段")); await settle();
+    assert.equal(tl().opts.getSegments().length, 1, "最后一段删不掉");
+    assert.ok((document.getElementById("ns-toast")?.textContent || "").includes("最后一段"), "挡下时说得出来");
+    await pickRecipe("预设片");
+    assert.equal(segMenuBtn().style.display, "none", "内置预设只读：段菜单不出现");
+});
+
+test("共享段操作（director.js createSegmentOps）：新段跟上一段、重排只认全长顺序表、只读挡写", async () => {
+    const { createSegmentOps, directorAssetRefs } = await import(`../../web/director.js?ops=${seq++}`);
+    const recipe = { name: "X", source: "user", assets: [{ file: "seed1.png" }], loras: [],
+        segments: [{ skill_id: "sk-a", mode: "r2v", prompt: "甲", duration_sec: 2, refs: { images: ["seed1.png"] } }] };
+    let changed = 0;
+    const ops = createSegmentOps(() => recipe, { onChange: () => { changed++; } });
+    assert.equal(ops.add(), 1, "追加一段返回新段下标");
+    assert.equal(recipe.segments[1].mode, "r2v", "新段跟上一段的模式：混配方不突然换家族");
+    assert.equal(ops.duplicate(0), 1, "复制落在该段下面");
+    assert.deepEqual(recipe.segments[1].refs.images, ["seed1.png"], "复制带走参考素材");
+    recipe.segments[1].refs.images.push("copied_b.png");
+    assert.deepEqual(recipe.segments[0].refs.images, ["seed1.png"], "两段各一份素材表，互不影响");
+    assert.ok(ops.move(1, -1), "前移一位");
+    assert.ok(!ops.move(0, -1), "越界的前移不动配方");
+    assert.equal(ops.remove(0)?.prompt, "甲", "删除返回删掉的那段");
+    assert.ok(!ops.reorder([2, 0]), "缺号的顺序表不动配方");
+    assert.ok(ops.reorder([1, 0]), "覆盖全部段的顺序表生效");
+    assert.ok(ops.isDirty(), "每一步改动都算未保存");
+    assert.equal(changed, 5, "改动逐条报给宿主重画");
+    ops.clearDirty();
+    assert.ok(!ops.isDirty(), "宿主清脏后干净");
+    const preset = createSegmentOps(() => recipe, { readOnly: () => true });
+    assert.equal(preset.add(), -1, "只读配方加不了段");
+    assert.equal(preset.remove(0), null, "只读配方删不了段");
+    assert.ok(!preset.reorder([0]), "只读配方重排不动配方");
+    recipe.segments[0].refs = { images: ["seed1.png", "new_b.png"] };
+    assert.deepEqual(directorAssetRefs(recipe).map((a) => a.filename), ["new_b.png"], "配方记过的名不重发，只报新增");
+    assert.deepEqual(directorAssetRefs(recipe)[0], { filename: "new_b.png", subfolder: "", type: "input", kind: "image" }, "新增引用是后端认的形状");
 });
 
 test.afterEach(() => {

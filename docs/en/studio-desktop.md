@@ -231,6 +231,11 @@ the window (maximize is what covers it).
   control in the bar below is 28px tall with **生成整片** pinned at the right. Two narrow-screen
   fallbacks: at ≤900px the dock returns to normal flow (no floating overlay, no reserved clearance), and at ≤720px the
   squares stack above the prompt and the control bar scrolls sideways.
+- The right end of the segment row carries a `⋯` segment menu: 复制该段 / 前移一段 / 后移一段 / 删除该段. Deleting asks
+  for confirmation and leaves the segment's asset files in the recipe, the last remaining segment cannot be deleted, and
+  the `⋯` never appears on a built-in preset recipe. Segment add/duplicate/move/delete and 保存该段 are one shared
+  implementation, `createSegmentOps()` in `director.js`, so the director page and the full-film editor run the same
+  semantics; the unsaved flag lives there too, and the save button is the only place the page marks it.
 
 ## Input page / Edit page layout
 

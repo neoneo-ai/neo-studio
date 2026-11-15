@@ -48,6 +48,119 @@ export const LEGACY_MODE_MAP = new Map([['t2v', 'f2v'], ['i2v', 'f2v'], ['fl2v',
 // 参考素材类型（按扩展名，mediaKindOf 在 gallery-utils.js）：拖入 / 本地上传的内容类型须与所在组一致（图片不能进参考视频 / 音频组）
 const REF_KIND_NAMES = { image: t('图片'), video: t('视频'), audio: t('音频') };
 
+/** 段落增删改与「保存该段」的单一份实现：Studio 导演页、整片编辑器与要嵌进画布的出片视图共用同一套语义。
+ *  新段跟上一段的 skill_id / mode（混配方不突然换家族）；重排只认覆盖全部段的顺序表，缺号就不动配方——
+ *  宁可丢掉这一次拖拽，也不留少一段的配方。脏标记记在本层，宿主只有一处「未保存」要亮。
+ *  getRecipe 是宿主当前那份配方（切配方时宿主换对象，本层每次调用现读，不持引用）；readOnly 由宿主定
+ *  （内置预设只读），写路径自己挡。本层不持 UI：改动经 onChange 交宿主重画。 */
+export function createSegmentOps(getRecipe, { onChange = null, readOnly = () => false } = {}) {
+    let dirty = false;
+    const segs = () => {
+        const r = getRecipe();
+        return r && Array.isArray(r.segments) ? r.segments : null;
+    };
+    const markDirty = () => {
+        dirty = true;
+        if (onChange) onChange();
+    };
+    // 段的本份复制：提示词 / 时长 / 素材名整份带走。素材文件本就在配方 assets 里，复制不产生新引用
+    const segCopy = (s) => {
+        const c = { skill_id: s.skill_id || '', prompt: s.prompt || '', duration_sec: Number(s.duration_sec) || 5 };
+        if (s.mode) c.mode = s.mode;
+        if (s.first_frame) c.first_frame = s.first_frame;
+        if (s.last_frame) c.last_frame = s.last_frame;
+        if (s.refs) c.refs = Object.fromEntries(Object.entries(s.refs).map(([k, v]) => [k, [...(v || [])]]));
+        return c;
+    };
+    return {
+        isDirty: () => dirty,
+        /** 宿主自己改了段字段（时长框 / 提示词框 / 素材槽）之后报脏 */
+        markDirty,
+        clearDirty: () => { dirty = false; },
+        /** 追加一段（时间轴尾部「＋」与页内新增共用）：返回新段下标；只读或无配方返回 -1 */
+        add() {
+            const arr = segs();
+            if (!arr || readOnly()) return -1;
+            const last = arr[arr.length - 1] || {};
+            const seg = { skill_id: last.skill_id || '', prompt: '', duration_sec: 5 };
+            if (last.mode) seg.mode = last.mode;
+            arr.push(seg);
+            markDirty();
+            return arr.length - 1;
+        },
+        /** 复制该段到它下面：返回新段下标 */
+        duplicate(i) {
+            const arr = segs();
+            if (!arr || !arr[i] || readOnly()) return -1;
+            arr.splice(i + 1, 0, segCopy(arr[i]));
+            markDirty();
+            return i + 1;
+        },
+        /** 该段前移 / 后移一位（delta = -1 / +1）：越界与无改动返回 false */
+        move(i, delta) {
+            const arr = segs();
+            const j = i + delta;
+            if (!arr || !arr[i] || readOnly() || j < 0 || j >= arr.length) return false;
+            arr.splice(j, 0, arr.splice(i, 1)[0]);
+            markDirty();
+            return true;
+        },
+        /** 删除该段并返回它：确认由宿主出（删段是单件破坏性动作，只有 UI 上那一条入口） */
+        remove(i) {
+            const arr = segs();
+            if (!arr || !arr[i] || readOnly()) return null;
+            const [seg] = arr.splice(i, 1);
+            markDirty();
+            return seg;
+        },
+        /** 时间轴拖拽重排：顺序表必须覆盖全部段，缺号不动配方 */
+        reorder(order) {
+            const r = getRecipe();
+            const arr = segs();
+            if (!arr || readOnly()) return false;
+            const next = (order || []).map((k) => arr[k]).filter(Boolean);
+            if (next.length !== arr.length) return false;
+            r.segments = next;
+            markDirty();
+            return true;
+        },
+        /** 保存该段：走 recipes.js 的 /rs_recipes/save 同一条链，只发本次新取用的素材与改动后的段，
+         *  没动的 shared / story / setup 原样带回去。落盘成功清脏；重读与广播由宿主的 onSaved 决定（页与编辑器刷新方式不同） */
+        async save(name, opts = {}) {
+            const r = getRecipe();
+            if (!r || !name) return { success: false, error: t('先选一份导演配方') };
+            if (readOnly()) return { success: false, error: t('内置预设配方只读：先「复制配方」才能改') };
+            const res = await saveRecipe(name, r.prompt || '', directorAssetRefs(r), [], r.loras || [], {
+                shared: r.shared || {}, segments: segs(), story: r.story || null, setup: r.setup || null,
+            }, 'video');
+            if (res?.success) {
+                dirty = false;
+                if (opts.onSaved) opts.onSaved(res);
+            }
+            return res;
+        },
+    };
+}
+
+/** 配方里本次新出现的素材引用（不在 recipe.assets 名单里的）：保存时随段交后端落进 assets/。
+ *  既有的名字不重发——后端按盘上现状保留历史与结果，前端只报新增 */
+export function directorAssetRefs(recipe) {
+    const known = new Set((recipe?.assets || []).map((a) => a.file));
+    const out = [];
+    const addOne = (name, kind) => {
+        if (name && !known.has(name)) out.push({ filename: name, subfolder: '', type: 'input', kind });
+    };
+    for (const s of recipe?.segments || []) {
+        addOne(s.first_frame, 'image');
+        addOne(s.last_frame, 'image');
+        const rf = s.refs || {};
+        for (const [key, kind] of [['images', 'image'], ['videos', 'video'], ['audios', 'audio']]) {
+            for (const v of (rf[key] || [])) addOne(v, kind);
+        }
+    }
+    return out;
+}
+
 /** 画廊拖拽载荷（grabDataType 取回的 JSON）里的文件名；解析失败 / 非画廊拖拽返回 '' */
 function refPayloadName(raw) {
     try { return String((JSON.parse(raw) || {}).filename || ''); } catch (e) { return ''; }

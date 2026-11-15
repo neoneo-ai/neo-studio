@@ -5,6 +5,12 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 ## [Unreleased]
 
 ### Added
+- **The 导演页 has a per-segment ⋯ menu, and segment editing is one shared implementation.** The 该段 row ends with a
+  `⋯` menu — 复制该段 / 前移一段 / 后移一段 / 删除该段 (delete confirms and keeps the segment's asset files; the last
+  segment cannot be deleted; a built-in preset shows no `⋯`). Segment add / duplicate / move / delete / reorder and
+  保存该段 now live in `createSegmentOps()` in `director.js`, the same semantics the full-film editor uses, and the
+  unsaved flag lives on that object, so the save button is the page's only dirty marker. Covered by the 导演页该段 ⋯
+  and 共享段操作 cases in `studio/tests/js/studio-director.test.mjs`.
 - **The 导演页 self-defined-parameter panel no longer covers the dock.** The 自定参数 capsule opens the same shared model-chain
   form as the 视频页 (main model / Text Encoder / VAE / audio VAE / LoRA / steps); on the director page it is now a one-column
   panel — `min(380px, 100vw − 16px)` wide, capped at `min(46vh, 340px)` with the scrolling inside it, 12px text on 24px controls,
