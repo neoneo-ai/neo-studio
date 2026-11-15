@@ -488,7 +488,7 @@ async function buildDirector(el) {
     };
     videoCfg.el.addEventListener("change", cfgSync);
 
-    const seedIn = $el("input", { className: "ns-director-seed neo-gallery-gm-chip-btn", type: "number", min: "-1", placeholder: t("随机"), title: t("种子：留空 = 跟随配方（配方里写 -1 = 每次运行随机换种子）") });
+    const seedIn = $el("input", { className: "ns-director-seed neo-gallery-gm-chip-btn", type: "number", min: "-1", placeholder: t("随机"), title: t("种子：同一段提示词 + 同一素材 + 同一种子 = 同一张首帧；留空 = 跟随配方（配方里写 -1 = 每次运行随机换种子）") });
     const seedRoll = $el("button", { className: "ns-director-seed-roll", type: "button", title: t("换一个随机种子") });
     setIcon(seedRoll, "sparkles", 13);
     seedRoll.onclick = () => { seedIn.value = String(Math.floor(Math.random() * 1e15)); };

@@ -5,6 +5,12 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 ## [Unreleased]
 
 ### Added
+- **The director page copy and docs describe the compacted page.** The seed box tooltip now states what a seed does —
+  same prompt + same assets + same seed = the same first frame, empty follows the recipe and −1 rerolls every run — the
+  check hint names the box at the timeline block's top-left, and the 适应 / − / ＋ labels are registered in
+  `js/core/i18n.js`. `docs/studio-desktop.md` and `docs/en/studio-desktop.md` gained the standalone Studio director page:
+  the full-height stage with dock clearance, the floating capsule dock, the 56px timeline anatomy, the one-line segment
+  row and the 900px / 720px fallbacks.
 - **The segment row and its control bar are one compact line.** The three 素材 squares (首帧 / 尾帧 / 参考素材) sit on the
   left of the row and the segment prompt takes the remaining width beside them: 第N段 label and the duration input share
   one 28px line above the prompt, the prompt box starts at a single row and grows with what you type up to 20vh, and
