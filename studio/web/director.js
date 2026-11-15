@@ -45,6 +45,45 @@ export const MODE_LABELS = new Map([...SEG_MODES, ['mixed', t('混合模式')]])
 // 旧模式值 → 合并模式（载入时静默重映射）
 export const LEGACY_MODE_MAP = new Map([['t2v', 'f2v'], ['i2v', 'f2v'], ['fl2v', 'f2v'], ['v2v', 'r2v'], ['rv2v', 'r2v']]);
 
+// 视频技能候选池（统一技能框、各段技能下拉、整片参数表单共用这一份规则）：f2v 收全部帧模式技能（含多帧单次），
+// 其余模式按 skill.mode 精确匹配；无匹配回退全量，不留空下拉。池内按步数从少到多排（skill config 未写 steps 的
+// 按后端缺省 20 计），同分偏好 H3 连续多段合成 (VDN)——新建配方的默认技能与逐段下拉都是池里第一个可用的。
+const FRAME_SKILL_MODES = ['t2v', 'i2v', 'l2v', 'fl2v'];
+const SKILL_PREF = ['minimax_h3_vdn_multiframe', 'minimax_h3_multiframe'];
+const skillSteps = (s) => {
+    const n = Number(s.gen_config && s.gen_config.steps);
+    return Number.isFinite(n) && n > 0 ? n : 20;
+};
+const skillPrefRank = (s) => {
+    const i = SKILL_PREF.indexOf(s.id);
+    return i < 0 ? SKILL_PREF.length : i;
+};
+function directorSkillPool(skills, eff) {
+    const list = skills || [];
+    const pool = eff === 'f2v'
+        ? list.filter(s => FRAME_SKILL_MODES.includes(s.mode))
+        : list.filter(s => s.mode === eff);
+    return (pool.length ? pool : list).slice()
+        .sort((a, b) => skillSteps(a) - skillSteps(b) || skillPrefRank(a) - skillPrefRank(b));
+}
+/** 把某个生成模式的技能池填进下拉；keep 仍在新池里时保持选中，否则落回第一个选项。
+ *  opt 上挂的 source / __skillMeta 是技能选择窗的浮动预览卡要读的，整片参数表单用不到也无害。 */
+function fillDirectorSkillOptions(skills, sel, eff, keep) {
+    sel.innerHTML = '';
+    const pool = directorSkillPool(skills, eff);
+    if (!pool.length) {
+        sel.appendChild($el('option', { value: '', textContent: t('（无可用视频技能）') }));
+        return;
+    }
+    for (const s of pool) {
+        const opt = $el('option', { value: s.id, textContent: skillDisplayName(s) });
+        opt.dataset.source = s.source || 'custom';
+        opt.__skillMeta = s;
+        sel.appendChild(opt);
+    }
+    if (keep && Array.from(sel.options).some(o => o.value === keep)) sel.value = keep;
+}
+
 // 参考素材类型（按扩展名，mediaKindOf 在 gallery-utils.js）：拖入 / 本地上传的内容类型须与所在组一致（图片不能进参考视频 / 音频组）
 const REF_KIND_NAMES = { image: t('图片'), video: t('视频'), audio: t('音频') };
 
@@ -113,6 +152,17 @@ export function createSegmentOps(getRecipe, { onChange = null, readOnly = () => 
             markDirty();
             return seg;
         },
+        /** 统一技能落进每一段（整片参数表单改了「技能」时宿主调用）：只写 skill_id，不动段序、素材与提示词；
+         *  返回真被改掉的段数（宿主据此决定要不要重画时间轴） */
+        applySkill(skillId) {
+            const arr = segs();
+            const id = String(skillId || '').trim();
+            if (!arr || !id || readOnly()) return 0;
+            let n = 0;
+            for (const s of arr) { if (s.skill_id !== id) { s.skill_id = id; n++; } }
+            if (n) markDirty();
+            return n;
+        },
         /** 时间轴拖拽重排：顺序表必须覆盖全部段，缺号不动配方 */
         reorder(order) {
             const r = getRecipe();
@@ -161,13 +211,15 @@ export function directorAssetRefs(recipe) {
     return out;
 }
 
-/** 整片参数（分辨率 / 种子 / 步数 / 连续性 / 上下文帧 / 角色身份参考）的紧凑表单：落盘键与口径都跟整片编辑器同一套——
- *  shared.width / height / aspect_ratio / megapixels（宽高比 + 百万像素 → 32 对齐的 W/H，「自定义」手输）、
- *  seed 留空 = -1（每次运行随机换种子）、steps 留空 = -1（各段技能 config 钉的步数）、context_frames 留空 = 22、
- *  identity_refs 只在关掉时落盘（后端 normalize 只认 False）。
- *  导演页「分辨率」胶囊弹的就是它：页内改完整片参数，不必进整片编辑器。mode / chunk_sec
- *  这些本表单没有的键不动——宿主把 collect() 并进现有 shared，编辑器钉着的值原样留着。密度归宿主容器。 */
-export function createSharedConfigSection() {
+/** 整片参数（生成模式 / 统一技能 / 分辨率 / 种子 / 步数 / 连续性 / 上下文帧 / 角色身份参考）的紧凑表单：
+ *  落盘键与口径都跟整片编辑器同一套——shared.width / height / aspect_ratio / megapixels（宽高比 + 百万像素 →
+ *  32 对齐的 W/H，「自定义」手输）、shared.mode（关键帧 / 全参考 / 混合）、shared.chunk_sec（多帧单次分块预算，
+ *  0 = 关闭）、seed 留空 = -1（每次运行随机换种子）、steps 留空 = -1（各段技能 config 钉的步数）、
+ *  context_frames 留空 = 22、identity_refs 只在关掉时落盘（后端 normalize 只认 False）。
+ *  导演页「分辨率」胶囊弹的就是它：页内改完整片参数，不必进整片编辑器。技能池读宿主交来的 getSkills()，
+ *  本表单不自己拉清单；统一技能不落 shared，由宿主经 createSegmentOps().applySkill 写进每段 skill_id。
+ *  密度归宿主容器。 */
+export function createSharedConfigSection(getSkills = () => []) {
     const section = $el('div', { className: 'rs-gen-model-section ns-director-shared-form' });
     const formLabel = (text) => $el('label', { className: 'rs-form-label', textContent: t(text) });
     const aspectSel = $el('select', { className: 'ns-director-shared-aspect' });
@@ -183,8 +235,22 @@ export function createSharedConfigSection() {
     const continuityChk = $el('input', { className: 'ns-director-shared-cont', type: 'checkbox', checked: true });
     const identChk = $el('input', { className: 'ns-director-shared-ident', type: 'checkbox', checked: true });
     identChk.title = t('把「角色参考图」作为各段身份参考（关键帧是背影 / 局部特写、看不到脸时靠它保住角色身份）；需「连续性」开启。关掉便于做前后对比测试');
+    // 生成模式与统一技能：值与整片编辑器同一条口径（modeSel 的选项就是 MODE_LABELS 那三项）
+    const modeSel = $el('select', { className: 'ns-director-shared-mode', title: t('整片按哪一档生成：关键帧 = 每段由首帧 / 尾帧决定行为，全参考 = 每段都走参考生视频，混合 = 每段用自己的模式与技能') });
+    for (const [val, label] of MODE_LABELS) modeSel.appendChild($el('option', { value: val, textContent: label }));
+    const skillSel = $el('select', { className: 'ns-director-shared-skill', title: t('统一决定各段模板与模型；混合模式下改为逐段选择') });
+    const chunkInp = $el('input', {
+        className: 'rs-form-input ns-director-shared-chunk', type: 'number', min: 0, max: 30, step: 1,
+        title: t('多帧单次分块：连续兼容段（文生/图生/首尾帧、无自带参考素材）总时长 ≤ 该值时合并成一次 ref2va 运行，各段分镜关键帧钉在起点；0 = 关闭（纯逐段生成）。建议 ≤15'),
+    });
+    const modeRow = $el('div', { className: 'rs-config-row ns-director-shared-mode-row' }, [formLabel('生成模式'), modeSel]);
+    const skillRow = $el('div', { className: 'rs-config-row ns-director-shared-skill-row' }, [formLabel('技能'), skillSel]);
+    const chunkRow = $el('div', { className: 'rs-config-row ns-director-shared-chunk-row' }, [formLabel('分块秒数'), chunkInp]);
     const customRow = $el('div', { className: 'rs-config-row' }, [formLabel('宽'), cwInp, formLabel('高'), chInp]);
     section.append(
+        modeRow,
+        skillRow,
+        chunkRow,
         $el('div', { className: 'rs-config-row' }, [formLabel('宽高比'), aspectSel, resOut]),
         $el('div', { className: 'rs-config-row' }, [formLabel('百万像素'), mpInp]),
         customRow,
@@ -194,6 +260,20 @@ export function createSharedConfigSection() {
         $el('div', { className: 'rs-config-row' }, [formLabel('连续性'), continuityChk]),
         $el('div', { className: 'rs-config-row' }, [formLabel('角色身份参考'), identChk]),
     );
+    // 「技能」在混合模式下没有对象（那一档每段自己选），「分块秒数」只在多段 + 统一技能支持多帧时出现：
+    // 单段没有可合并的对象，普通技能永远不会分块，把 0 摆给用户只会误设。收起不等于不生效——保存照读值，
+    // 与整片编辑器收起「高级参数」时同一条口径。
+    let segCount = 1;
+    const refreshModeRows = () => {
+        skillRow.style.display = modeSel.value === 'mixed' ? 'none' : '';
+        const multiFrame = (getSkills() || []).some((s) => s.id === skillSel.value && s.multi_frame);
+        chunkRow.style.display = (segCount > 1 && multiFrame) ? '' : 'none';
+    };
+    modeSel.addEventListener('change', () => {
+        fillDirectorSkillOptions(getSkills(), skillSel, modeSel.value, skillSel.value);
+        refreshModeRows();
+    });
+    skillSel.addEventListener('change', refreshModeRows);
     const updateRes = () => {
         const custom = aspectSel.value === DIRECTOR_CUSTOM;
         customRow.style.display = custom ? '' : 'none';
@@ -206,8 +286,8 @@ export function createSharedConfigSection() {
     mpInp.addEventListener('input', updateRes);
     return {
         el: section,
-        /** 铺一份 shared 进表单（切配方 / 保存后重读）：没有的键落回默认口径 */
-        load(shared = {}) {
+        /** 铺一份 shared（加当前段表）进表单（切配方 / 保存后重读）：没有的键落回默认口径 */
+        load(shared = {}, segArr = []) {
             const w = Number(shared.width) || 0, h = Number(shared.height) || 0;
             const init = shared.aspect_ratio && DIRECTOR_ASPECTS.some(([l]) => l === shared.aspect_ratio)
                 ? { label: shared.aspect_ratio, mp: directorClampMp(shared.megapixels != null ? shared.megapixels : MP_DEFAULT) }
@@ -221,6 +301,15 @@ export function createSharedConfigSection() {
             ctxInp.value = shared.context_frames != null ? String(shared.context_frames) : '';
             continuityChk.checked = shared.continuity !== false;
             identChk.checked = shared.identity_refs !== false;
+            // 生成模式：旧值静默重映射；配方没写过模式的老配方按各段内容推断（有参考素材 = 全参考，其余 = 关键帧），
+            // 与整片编辑器起手那一条判据同一份
+            segCount = Array.isArray(segArr) ? segArr.length : 1;
+            const m = LEGACY_MODE_MAP.get(shared.mode) || shared.mode;
+            modeSel.value = MODE_LABELS.has(m) ? m
+                : (segArr.some((s) => s && s.refs && Object.keys(s.refs).length) ? 'r2v' : 'f2v');
+            fillDirectorSkillOptions(getSkills(), skillSel, modeSel.value, (segArr[0] && segArr[0].skill_id) || '');
+            chunkInp.value = String(shared.chunk_sec != null ? Math.max(0, Math.round(Number(shared.chunk_sec) || 0)) : 15);
+            refreshModeRows();
             updateRes();
         },
         /** 收表单成 shared 的那几个键：口径与整片编辑器落盘那份一致 */
@@ -234,6 +323,9 @@ export function createSharedConfigSection() {
                 })();
             return {
                 ...res,
+                mode: modeSel.value,
+                // 分块秒数：0 = 关闭（纯逐段生成）。显式落盘，重开回显——与整片编辑器同一条口径
+                chunk_sec: Math.max(0, Math.round(Number(chunkInp.value) || 0)),
                 seed: seedInp.value === '' ? -1 : Math.max(-1, Number(seedInp.value)),
                 steps: stepsInp.value === '' ? -1 : Math.min(100, Math.max(-1, Number(stepsInp.value))),
                 continuity: continuityChk.checked,
@@ -243,6 +335,8 @@ export function createSharedConfigSection() {
                 identity_refs: identChk.checked,
             };
         },
+        /** 本次要统一的技能 id：混合模式没有统一对象（每段自己选），交空串让宿主跳过写段 */
+        skillId: () => (modeSel.value === 'mixed' ? '' : skillSel.value),
     };
 }
 
@@ -1201,43 +1295,9 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
     for (const s of (normSegs.length ? normSegs : [{}])) segsWrap.appendChild(buildSeg(s));
     renumberSegs();
 
-    // 按有效模式过滤视频技能（skill.mode 由后端 frontmatter 提供）；无匹配时回退全量，避免空下拉。
-    const FRAME_SKILL_MODES = ['t2v', 'i2v', 'l2v', 'fl2v'];   // 关键帧生视频（f2v）技能的模式值（全部进同一池，含多帧单次）
-    // 池内按步数从少到多排（skill config 未写 steps 的按后端缺省 20 计），同分偏好 H3 连续多段合成 (VDN)；
-    // 原生下拉与居中技能选择窗都按这个顺序显示，新建配方的默认技能就是池里第一个可用的（见 newDefaultSkill）。
-    const SKILL_PREF = ['minimax_h3_vdn_multiframe', 'minimax_h3_multiframe'];
-    const skillSteps = (s) => {
-        const n = Number(s.gen_config && s.gen_config.steps);
-        return Number.isFinite(n) && n > 0 ? n : 20;
-    };
-    const skillPrefRank = (s) => {
-        const i = SKILL_PREF.indexOf(s.id);
-        return i < 0 ? SKILL_PREF.length : i;
-    };
-    function skillOptionPool(eff) {
-        const pool = eff === 'f2v'
-            ? skills.filter(s => FRAME_SKILL_MODES.includes(s.mode))
-            : skills.filter(s => s.mode === eff);
-        return (pool.length ? pool : skills).slice()
-            .sort((a, b) => skillSteps(a) - skillSteps(b) || skillPrefRank(a) - skillPrefRank(b));
-    }
-
-    /** 填充技能下拉（统一技能框与各段技能框共用）；keep 仍在新池里时保持选中，否则落回第一个选项。 */
-    function fillSkillOptions(sel, eff, keep) {
-        sel.innerHTML = '';
-        const pool = skillOptionPool(eff);
-        if (!pool.length) {
-            sel.appendChild($el('option', { value: '', textContent: t('（无可用视频技能）') }));
-            return;
-        }
-        for (const s of pool) {
-            const opt = $el('option', { value: s.id, textContent: skillDisplayName(s) });
-            opt.dataset.source = s.source || 'custom'; // 详情弹窗按 source 区分预设只读/自定义可编辑
-            opt.__skillMeta = s; // 选择窗浮动预览卡取 gen_config / 分类等元数据
-            sel.appendChild(opt);
-        }
-        if (keep && Array.from(sel.options).some(o => o.value === keep)) sel.value = keep;
-    }
+    // 技能池与填充的规则在模块级那一份（整片参数表单与画布出片视图共用）：这里只闭着本份 skills 薄薄包一层
+    const skillOptionPool = (eff) => directorSkillPool(skills, eff);
+    const fillSkillOptions = (sel, eff, keep) => fillDirectorSkillOptions(skills, sel, eff, keep);
 
     function refreshSegSkillOptions(skillSel, eff) {
         if (skillSel) fillSkillOptions(skillSel, eff, skillSel.value);

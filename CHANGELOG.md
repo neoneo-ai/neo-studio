@@ -5,6 +5,15 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 ## [Unreleased]
 
 ### Added
+- **Generation mode, unified skill and chunk seconds are on the 导演页 as well.** The 整片参数 form the 分辨率 capsule pops
+  now starts with 生成模式 (关键帧生视频 / 全参考生视频 / 混合模式), 技能 (the one skill every segment runs) and 分块秒数.
+  生成模式 and 分块秒数 land in the recipe's `shared`; the unified skill is written into every segment's `skill_id` through
+  `createSegmentOps().applySkill()`, and in 混合模式 the 技能 row collapses so a save writes no segments. The skill list
+  follows the mode (frame skills for 关键帧, reference skills for 全参考, ordered by steps). 全参考生视频 flips every
+  segment's media row to 参考素材 — the same rule the backend applies when it resolves a segment's effective mode — and the
+  分辨率 capsule now names the film mode (`全参考生视频 · 1024×576 · 12 步`). 分块秒数 shows up only with several segments
+  on a multi-frame skill, and keeps writing the default 15 while it is hidden. Covered by the 导演页整片参数：统一技能换池、
+  混合模式收起统一技能、整片全参考配方 and 共享整片参数表单 cases in `studio/tests/js/studio-director.test.mjs`.
 - **The 角色身份参考 switch now lives on the 导演页.** The 整片参数 form carries it: checked (the default) writes
   nothing, turning it off lands `shared.identity_refs=false` so that recipe stops injecting the 角色参考图 as every
   segment's identity anchor — the before/after comparison switch, reachable without opening 高级模式. Covered by the
@@ -17,7 +26,7 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   dock — 宽高比 + 百万像素 (plus a 自定义 width/height pair), 种子, 步数, 连续性 and 上下文帧 — on the same conventions as
   the full-film editor (empty seed = −1 = a fresh seed each run, empty steps = −1 = each segment's own skill steps, empty
   context frames = 22). **保存整片参数** goes down the same save chain as **保存该段** and writes into the recipe's
-  `shared`, carrying the keys this form does not have (generation mode / chunk seconds) back untouched. The 整片编辑器
+  `shared`. The 整片编辑器
   button on the bar is now **高级模式**: it opens that editor as an overlay for feature comparison, and the page reloads
   the recipe and re-selects it once the overlay saves. Covered by the 导演页整片参数面板,
   导演页高级模式 and 共享整片参数表单 cases in `studio/tests/js/studio-director.test.mjs`, and the

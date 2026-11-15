@@ -316,9 +316,12 @@ const DIRECTOR_ZOOM_KEY = "neo_studio.director_zoom";   // 时间轴缩放档位
 const DIRECTOR_REF_MAX = { images: 9, videos: 3, audios: 3 };   // 与后端 _DIRECTOR_REF_CAPS 同一份
 const DIRECTOR_REF_TOTAL = DIRECTOR_REF_MAX.images + DIRECTOR_REF_MAX.videos + DIRECTOR_REF_MAX.audios;
 // 全参考家族（含旧 v2v / rv2v）用参考素材那一行，帧模式（t2v / i2v / l2v / fl2v）用首帧 / 尾帧两枚：
-// 混配方按这一段自己的模式逐段切，隐藏的槽位不写进配方——留着上一家族的素材就是让它替模式说话
+// 判据与后端 director_spec 那条优先序同一份——整片生成模式（shared.mode）是全参考时每一段都走 ref2va，
+// 其余档按这一段自己的显式模式逐段切。混配方逐段切时，隐藏的槽位不写进配方——留着上一家族的素材就是让它替模式说话
 const DIRECTOR_REF_MODES = new Set(["r2v", "v2v", "rv2v"]);
-const segFamily = (seg) => (DIRECTOR_REF_MODES.has(String(seg?.mode || "").trim()) ? "ref" : "frame");
+const segFamily = (seg, sharedMode) => (
+    DIRECTOR_REF_MODES.has(sharedMode) || DIRECTOR_REF_MODES.has(String(seg?.mode || "").trim()) ? "ref" : "frame"
+);
 
 // 实时预览落点：顶栏队列放开并发后，切配方 / 再提交都不许把正在跑那一发的预览帧掐掉，
 // 所以整页只挂一条订阅，按 task_id 分发给当前这一发的播放器（node_id 就是提交时的 task_id）。
@@ -394,6 +397,8 @@ async function buildDirector(el) {
     let directorSkills = [];   // 视频技能列表：每段「模板收哪几类参考素材」读它
     const segs = () => recipe?.segments || [];
     const isPreset = () => recipe?.source === "preset";
+    // 整片生成模式（shared.mode，旧值静默重映射）：该段素材槽显哪一组与分辨率胶囊上的模式名都读它
+    const sharedGenMode = () => { const m = recipe?.shared?.mode; return LEGACY_MODE_MAP.get(m) || m || ""; };
     const skillMeta = (id) => directorSkills.find((s) => s.id === id) || null;
     // 段落的增删改与「保存该段」走 director.js 那份共享实现（出片视图后面要嵌进画布，同一套语义）：
     // 脏标记记在 ops 里，页面上「未保存」只有保存钮这一处要亮
@@ -516,9 +521,9 @@ async function buildDirector(el) {
         segMenuPanel.style.top = `${above > 8 ? above : r.bottom + 6}px`;
     };
 
-    // 「分辨率」胶囊弹的是共享的整片参数表单（createSharedConfigSection）：页内改完整片参数，
-    // 保存走「保存该段」同一条 ops 链；编辑器钉着的 mode / 分块秒数 / 身份参考这些键不在表单里，原样留着
-    const sharedCfg = createSharedConfigSection();
+    // 「分辨率」胶囊弹的是共享的整片参数表单（createSharedConfigSection）：页内改完整片参数（生成模式 / 统一技能 /
+    // 分辨率 / 运行参数），保存走「保存该段」同一条 ops 链；技能池读本页那份 directorSkills，表单不自己拉清单
+    const sharedCfg = createSharedConfigSection(() => directorSkills);
     const sizeSaveBtn = $el("button", { className: "rs-btn ns-director-size-save", type: "button", textContent: t("保存整片参数") });
     const sizePanel = $el("div", { className: "rs-runtime-menu neo-gallery-gm-chip-menu neo-gallery-gm-chip-panel ns-director-compact-form ns-director-size-panel" }, [sharedCfg.el, sizeSaveBtn]);
     page.appendChild(sizePanel);
@@ -533,6 +538,7 @@ async function buildDirector(el) {
     sizeSaveBtn.onclick = async () => {
         if (!currentName || isPreset()) { statusEl.textContent = t("内置预设配方只读：先「复制配方」才能改"); return; }
         recipe.shared = { ...(recipe.shared || {}), ...sharedCfg.collect() };
+        ops.applySkill(sharedCfg.skillId());   // 混合模式交空串：每段留着各自的技能，这段不写
         markDirty();
         sizeClose();
         await saveRecipeNow();
@@ -569,13 +575,13 @@ async function buildDirector(el) {
     const seedChip = $el("label", { className: "ns-director-seed-chip neo-gallery-gm-chip-group", title: t("种子") }, [icon("sparkles", 12), seedIn, seedRoll]);
     const sizeGlyph = ratioGlyph();
     const sizeLabel = $el("span", { className: "neo-gallery-gm-chip-label" });
-    const sizeBtn = $el("button", { className: "neo-gallery-gm-chip-btn ns-director-size", type: "button", title: t("整片参数（宽高比 / 百万像素 / 种子 / 步数 / 连续性 / 上下文帧）：页内改，保存写回配方") }, [sizeGlyph.el, sizeLabel]);
+    const sizeBtn = $el("button", { className: "neo-gallery-gm-chip-btn ns-director-size", type: "button", title: t("整片参数（生成模式 / 统一技能 / 宽高比 / 百万像素 / 种子 / 步数 / 连续性 / 上下文帧）：页内改，保存写回配方") }, [sizeGlyph.el, sizeLabel]);
     sizeBtn.onclick = () => {
         if (!currentName) { toast(t("先选一份导演配方")); return; }
         sizeOpen = !sizeOpen;
         sizePanel.style.display = sizeOpen ? "block" : "none";
         if (!sizeOpen) return;
-        sharedCfg.load(recipe.shared || {});
+        sharedCfg.load(recipe.shared || {}, segs());   // 段数决定「分块秒数」露不露，首段的技能是统一技能的起手选中
         sizePos();
     };
     const saveBtn = $el("button", { className: "ns-btn ns-director-save", type: "button", textContent: t("保存该段"), title: t("把该段的提示词 / 时长 / 素材槽改动写回配方（不新增段，也不动故事板与分辨率）") });
@@ -680,7 +686,7 @@ async function buildDirector(el) {
     // 该段控件：模式决定素材槽显哪一组，隐藏的槽位不写进配方（后端按资产推模式，留旧素材就是推错）
     function renderSegment() {
         const s = segs()[selected];
-        const fam = segFamily(s);
+        const fam = segFamily(s, sharedGenMode());
         segLabel.textContent = s ? tf("第 {n} 段", { n: selected + 1 }) : t("没有段");
         segLabel.title = tf("{mode}：{hint}", {
             mode: MODE_LABELS.get(fam === "ref" ? "r2v" : "f2v"),
@@ -712,7 +718,7 @@ async function buildDirector(el) {
     function slotChanged() {
         const s = segs()[selected];
         if (!s) return;
-        if (segFamily(s) === "frame") {
+        if (segFamily(s, sharedGenMode()) === "frame") {
             const f = firstSlot.first()?.value;
             const l = lastSlot.first()?.value;
             if (f) s.first_frame = f; else delete s.first_frame;
@@ -806,7 +812,9 @@ async function buildDirector(el) {
     }
     function applySpec() {
         const d = spec?.defaults;
-        sizeLabel.textContent = d ? tf("{w}×{h} · {steps} 步", { w: d.width, h: d.height, steps: d.steps }) : "";
+        sizeLabel.textContent = d ? tf("{mode} · {w}×{h} · {steps} 步", {
+            mode: MODE_LABELS.get(sharedGenMode()) || MODE_LABELS.get("mixed"), w: d.width, h: d.height, steps: d.steps,
+        }) : "";
         if (d) sizeGlyph.sync(`${d.width}:${d.height}`);
         media.style.setProperty("--ns-gen-ratio", d ? `${d.width} / ${d.height}` : "");
         media.style.setProperty("--ns-gen-ar", d ? String(d.width / d.height) : "");

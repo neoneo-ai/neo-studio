@@ -150,15 +150,24 @@ is the quick switch on it, and the recipe list and the asset library both open i
   saved; dragging a maximized modal restores the last floating size before it moves. The **✕** at the right end of
   the title bar is therefore always reachable — a modal can never be dragged where it cannot be closed.
   Switching pages closes the modal of the page you left, and the gallery goes back to the standby host.
-- The run parameters for the film (aspect ratio / megapixels / custom width-height / seed / steps / continuity /
-  context frames / character identity reference) are edited in the form the **resolution** capsule pops, and
-  **保存整片参数** goes down the same save chain as **保存该段** (`createSegmentOps().save` → `/rs_recipes/save`),
-  landing in the recipe's `shared`. Keys the form does not carry (generation mode / chunk seconds) are pinned by the
-  Advanced-mode editor and this page's save carries them back untouched. The blank-value conventions match on both
-  sides: empty seed = -1 (a new random seed every run), empty steps = -1 (the steps each segment's skill config pins),
-  empty context frames = 22; **character identity reference** writes nothing while it is checked and lands
-  `identity_refs=false` only when it is off (that recipe stops injecting the character reference images — the
-  before/after comparison switch).
+- The film parameters (generation mode / unified skill / aspect ratio / megapixels / custom width-height / seed / steps /
+  continuity / context frames / character identity reference) are edited in the form the **resolution** capsule pops, and
+  **保存整片参数** goes down the same save chain as **保存该段** (`createSegmentOps().save` → `/rs_recipes/save`): the
+  generation mode and chunk seconds land in the recipe's `shared`, while the unified skill does not — it is written into
+  each segment's `skill_id` through `createSegmentOps().applySkill()` (the same segment-write path as everything else).
+  The blank-value conventions match on both sides: empty seed = -1 (a new random seed every run), empty steps = -1 (the
+  steps each segment's skill config pins), empty context frames = 22; **character identity reference** writes nothing while
+  it is checked and lands `identity_refs=false` only when it is off (that recipe stops injecting the character reference
+  images — the before/after comparison switch).
+- The three generation modes carry the same meaning as in the Advanced-mode editor (keyframe → video / full-reference video /
+  mixed; a legacy recipe's t2v / i2v / fl2v / v2v / rv2v is remapped silently on load). Full-reference means every segment runs
+  as reference-to-video, and the page flips each segment's media row to the reference row to match (the same rule the backend's
+  `director_spec` applies: film mode is full-reference, or that segment pins full-reference itself). Mixed mode hides the unified-skill
+  row — each segment keeps its own skill — and saving writes no segments. The skill dropdown is filled from this page's video-skill
+  list, filtered by the generation mode and ordered by steps.
+- **Chunk seconds** appears only with several segments plus a multi-frame unified skill (a single segment has nothing to merge, and a
+  plain skill never chunks); while it is hidden, saving still writes the default 15 — hidden is not inactive, the same convention as the
+  editor's collapsed **Advanced parameters**. The resolution capsule names the film mode (`全参考生视频 · 1024×576 · 12 步`).
 - **🎬 Save & Generate Film** in the Advanced-mode footer hands the submit to this page after a successful save: the
   parameters just landed in the recipe, the segments and seed stay as this page has them.
 - The generation status freezes on the first terminal status (succeeded / failed / cancelled): a payload issued

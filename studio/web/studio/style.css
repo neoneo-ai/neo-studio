@@ -331,6 +331,8 @@ body {
 .ns-director-compact-form .rs-config-row > input.rs-form-input { flex: 1; min-width: 0; width: auto; }
 .ns-director-compact-form :is(.rs-model-select-box select, .rs-model-select-box input, .rs-gen-lora-strength, .rs-config-row > input.rs-form-input, .ns-director-shared-form select) { height: 24px; font-size: 12px; }
 .ns-director-compact-form .rs-gen-lora-list { flex: 1; min-width: 0; }
+/* 生成模式与统一技能：长技能名不吃满一列，宽度不够由 select 自己截断（面板 380px 钉死，不能撑宽） */
+.ns-director-compact-form .ns-director-shared-form :is(.ns-director-shared-mode, .ns-director-shared-skill) { flex: 1; min-width: 0; }
 .ns-director-compact-form .rs-gen-lora-row { flex-wrap: wrap; }
 /* 「+ 添加 LoRA」「显示全部模型」「保存整片参数」整行占位：与控件同排时白吃掉一列宽度，长模型名只剩一条窄缝 */
 .ns-director-compact-form :is(.rs-gen-lora-add, .rs-model-scope-toggle, .ns-director-size-save) { flex: 0 0 100%; width: fit-content; height: 24px; font-size: 12px; }

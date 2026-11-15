@@ -52,11 +52,12 @@
 - `director.js` 的整片编辑器浮层（`openDirectorEditor`）现在是顶栏的**高级模式**，处于冻结期：不新增能力、不改交互、
   不修样式，只用来与导演页做功能对比。功能补齐后由「全站入口跳 `/neo-studio#/director?recipe=…` + 删掉浮层」收口，
   届时本节作废。
-- 页内写路径只有一条：段写 `createSegmentOps()`，落盘 `ops.save()` 配 `directorAssetRefs()`，整片参数经
-  `createSharedConfigSection().collect()` 并进现有 `shared`（表单没有的键原样留着）。页面自己不再写第二套保存形状。
+- 页内写路径只有一条：段写 `createSegmentOps()`（统一技能落各段走它的 `applySkill`），落盘 `ops.save()` 配 `directorAssetRefs()`，
+  整片参数经 `createSharedConfigSection().collect()` 并进现有 `shared`（表单没有的键原样留着；技能候选池由宿主交进来，表单不自己拉清单）。
+  页面自己不再写第二套保存形状。
 - 高级模式的脏状态不干预本页：本页靠 `DIRECTOR_RECIPE_SAVED_EVENT` 重读该配方并选中它。
 - `director.js` 只维护共享层（常量与分辨率算法、事件、`createSegmentOps`、`directorAssetRefs`、
-  `createSharedConfigSection`）。共享层要挪去中立层（`js/core/`）时整层一起挪，不在两处各留一份。
+  `createSharedConfigSection`、按生成模式过滤的视频技能候选池）。共享层要挪去中立层（`js/core/`）时整层一起挪，不在两处各留一份。
 - 导演页两块弹层（自定参数 / 整片参数）共用 `.ns-director-compact-form` 这一处密度定义，新弹层挂同一套，不再开一档。
 
 ## Testing
