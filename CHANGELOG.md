@@ -5,6 +5,11 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 ## [Unreleased]
 
 ### Added
+- **The 导演页 self-defined-parameter panel no longer covers the dock.** The 自定参数 capsule opens the same shared model-chain
+  form as the 视频页 (main model / Text Encoder / VAE / audio VAE / LoRA / steps); on the director page it is now a one-column
+  panel — `min(380px, 100vw − 16px)` wide, capped at `min(46vh, 340px)` with the scrolling inside it, 12px text on 24px controls,
+  label and control sharing one line — so the 时间轴 and the 该段 row stay visible when it pops above the capsule. Covered by the
+  自定参数面板是胶囊旁的一栏面板 case in `studio/tests/js/studio-desktop.test.mjs`.
 - **The 导演页 dock is no longer clipped in short windows.** The page dropped its 520px height floor: in a window shorter
   than the layout (Windows display scaling reports fewer CSS pixels than the physical height) the 舞台 absorbs the
   difference, so the floating dock keeps its 12px clearance from the window's bottom edge instead of losing its lower

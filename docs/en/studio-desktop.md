@@ -214,6 +214,12 @@ the window (maximize is what covers it).
   straight on the page background — and an empty status row collapses itself together with its gap. The page has no height
   floor (`min-height: 0`): in a window shorter than the layout (Windows display scaling reports fewer CSS pixels) the stage
   absorbs the difference, so the dock keeps its 12px clearance from the window's bottom edge.
+- The 自定参数 capsule (the per-segment model-chain override for this run: main model / Text Encoder / VAE / audio VAE /
+  LoRA / steps, left empty = the segment follows its own skill config) opens the same shared form the video page uses
+  (`.rs-gen-model-section`), laid out in the one-column density on the director page: `min(380px, 100vw − 16px)` wide,
+  capped at `min(46vh, 340px)` with the scrolling inside the panel, rows of "84px label + control taking the rest" at
+  12px / 24px (the asset-modal density), popping above the capsule when it fits — the full-width form is six rows about
+  500px tall and would cover the timeline and the segment row.
 - The director timeline is a 56px strip: a 16px second ruler plus a 30px segment block. A block carries the always-visible
   checkbox at its top-left (click = this run includes that segment), one top line of "index · duration · (start–end seconds
   while hovering)", and one ellipsised prompt line at its bottom. The hint line ends with the **Fit / − / ＋** control that
