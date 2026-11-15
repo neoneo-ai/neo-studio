@@ -5,6 +5,11 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 ## [Unreleased]
 
 ### Added
+- **The segment row and its control bar are one compact line.** The three 素材 squares (首帧 / 尾帧 / 参考素材) sit on the
+  left of the row and the segment prompt takes the remaining width beside them: 第N段 label and the duration input share
+  one 28px line above the prompt, the prompt box starts at a single row and grows with what you type up to 20vh, and
+  every control in the bottom row is 28px tall with 生成整片 pinned at the right. Below 720px the squares and the prompt
+  stack vertically.
 - **The director timeline is a 56px strip with always-visible checkboxes and a zoom control.** Every block is one
   30px row: the 勾选 box sits at the block's top-left on every block (it used to appear only while hovering that
   block), the segment index, its duration and — while hovering it — its start–end seconds share one label line, and

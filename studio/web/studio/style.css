@@ -274,17 +274,20 @@ body {
 .ns-director-zoomrow { flex: none; margin-left: auto; display: flex; align-items: center; gap: 4px; }
 .ns-director-zoom { height: 20px; min-width: 22px; padding: 0 6px; border: 1px solid var(--ns-border); border-radius: 5px; background: var(--ns-raised); color: var(--ns-dim); font-size: 11px; line-height: 1; cursor: pointer; }
 .ns-director-zoom:hover { border-color: var(--ns-accent); color: var(--ns-fg); }
-.ns-director-segrow { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
-.ns-director-seg-label { flex: none; font-size: 12px; color: var(--ns-fg); padding-top: 6px; }
-.ns-director-duration { flex: none; width: 64px; min-width: 52px; text-align: center; }
-.ns-director-prompt { flex: 1 1 auto; min-width: 0; min-height: 54px; max-height: 22vh; resize: vertical; padding: 4px 6px; font-size: 12px; line-height: 1.5; }
-.ns-director-slots { display: flex; align-items: flex-start; gap: 8px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+/* 该段行：方块列 + 「段名/时长 + 提示词」两行并排，提示词吃剩下的宽度（窄屏换行见下面 720px） */
+.ns-director-main { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
+.ns-director-segrow { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.ns-director-segtop { flex: none; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ns-director-seg-label { flex: none; font-size: 12px; color: var(--ns-fg); }
+.ns-director-duration { flex: none; width: 58px; min-width: 44px; height: 28px; text-align: center; }
+.ns-director-prompt { flex: 1 1 auto; min-width: 0; min-height: 40px; max-height: 20vh; resize: vertical; padding: 3px 6px; font-size: 12px; line-height: 1.45; }
+.ns-director-slots { flex: none; display: flex; align-items: flex-start; gap: 8px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
 .ns-director-slots::-webkit-scrollbar { display: none; }
-.ns-director-controls { gap: 8px; }
-.ns-director-seed { width: 104px; min-width: 60px; }
+.ns-director-controls { gap: 6px; }
+.ns-director-seed { width: 88px; min-width: 60px; height: 28px; }
 .ns-director-seed-roll { display: inline-flex; align-items: center; background: transparent; border: none; color: var(--ns-dim); padding: 0; cursor: pointer; }
 .ns-director-seed-roll:hover { color: var(--ns-fg); }
-.ns-director-card .rs-btn { flex: none; font-size: 12px; }
+.ns-director-card .rs-btn { flex: none; height: 28px; padding: 0 12px; font-size: 12px; }
 .ns-director-card .ns-director-save { background: #2a2a2e; border-color: #444; color: #ddd; }
 .ns-director-card .ns-director-save:hover { background: #333338; border-color: #555; color: #fff; }
 /* 未保存的改动：保存钮自己亮起来，别让用户带着没进配方的改动去生成 */
@@ -292,7 +295,7 @@ body {
 .ns-director-save[disabled] { opacity: .5; cursor: not-allowed; }
 /* 主行动按钮：走壳内半透明蓝（同技能页 Save / 设置页「保存并重启 ComfyUI」）。实心 #2f6fed 在满幅
    #17171b 灰底上是一块高饱和蓝板，把整行观感全压住；描边留饱和蓝 + 亮字，主行动仍是最显眼的控件 */
-.ns-director-card .ns-director-run { background: rgba(47, 111, 237, 0.18); border-color: #2f6fed; color: #cfe0ff; font-weight: 600; padding: 6px 18px; flex: none; }
+.ns-director-card .ns-director-run { background: rgba(47, 111, 237, 0.18); border-color: #2f6fed; color: #cfe0ff; font-weight: 600; padding: 0 18px; flex: none; }
 .ns-director-card .ns-director-run:hover:not([disabled]) { background: rgba(47, 111, 237, 0.3); border-color: #3f7ffe; color: #fff; }
 .ns-director-card .ns-gen-cancel { flex: none; border-color: #9a3a3a; background: #5a1a1a; color: #f87171; }
 .ns-director-card .ns-gen-cancel:hover { background: #6a2a2a; color: #fff; }
@@ -488,8 +491,8 @@ body {
    Windows 显示缩放把物理像素报成视口高，125% / 150% 缩放下 800px 高的窗口只有 640 / 533 CSS px，
    原先挂在 max-height:620 的收档在正常窗口上照样触发，面板退成内容高，输入卡飘在窗口中间、
    下半截全是空白。收档摘掉后窗口再矮也铺满：矮出来的空间由结果区自己滚（上面那条 overflow-y:auto） */
-/* 手机：顶部条换行；生成坞的 chip 排横向滚、「生成整片」钉死不跟着压扁；素材槽行行内滚；
-   提示词框收成一行半高；idle 卡是覆盖层，窄屏只收字号（四角括号在窄屏顶出幅外） */
+/* 手机：顶部条换行；生成坞的 chip 排横向滚、「生成整片」钉死不跟着压扁；方块与提示词上下堆叠、方块行行内滚；
+   提示词框收成一行高；idle 卡是覆盖层，窄屏只收字号（四角括号在窄屏顶出幅外） */
 @media (max-width: 720px) {
     .ns-director { gap: 6px; min-width: 0; }
     .ns-director-bar { flex-wrap: wrap; }
@@ -500,8 +503,10 @@ body {
     .ns-director-idle .ns-director-idle-card .neo-gallery-gm-idle-sub { font-size: 11px; }
     .ns-director-progress { width: 120px; }
     .ns-director-dock .ns-director-card { padding: 8px; }
-    .ns-director-duration { width: 56px; }
-    .ns-director-prompt { min-height: 46px; }
+    .ns-director-main { flex-wrap: wrap; }
+    .ns-director-slots { flex: 1 1 100%; }
+    .ns-director-duration { width: 52px; }
+    .ns-director-prompt { min-height: 36px; }
     .ns-director-controls { flex-wrap: nowrap; overflow-x: auto; min-width: 0; scrollbar-width: none; }
     .ns-director-controls::-webkit-scrollbar { display: none; }
     .ns-director-card :is(.ns-director-run, .ns-director-save, .ns-gen-cancel) { flex: none; }

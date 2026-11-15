@@ -445,7 +445,7 @@ async function buildDirector(el) {
     const checkHint = $el("span", { className: "ns-director-checkhint" });
     const segLabel = $el("span", { className: "ns-director-seg-label" });
     const durIn = $el("input", { className: "ns-director-duration neo-gallery-gm-chip-btn", type: "number", min: "1", max: "150", step: "0.5", title: t("这一段时长（秒）· 也可拖时间轴块的右缘调") });
-    const promptIn = $el("textarea", { className: "ns-director-prompt neo-gallery-gm-quick-input", rows: "2", spellcheck: "false", placeholder: t("这一段要拍成什么样…") });
+    const promptIn = $el("textarea", { className: "ns-director-prompt neo-gallery-gm-quick-input", rows: "1", spellcheck: "false", placeholder: t("这一段要拍成什么样…") });
     const firstSlot = createMediaSlot({ label: "首帧", thumbSrc: inputThumbSrc, toast, pick: slotPick, refKinds: () => segRefKinds(selected), onChange: slotChanged });
     const lastSlot = createMediaSlot({ label: "尾帧", thumbSrc: inputThumbSrc, toast, pick: slotPick, refKinds: () => segRefKinds(selected), onChange: slotChanged });
     const refSlot = createMediaSlot({ label: "参考素材", multiple: true, maxN: DIRECTOR_REF_TOTAL, kindMax: DIRECTOR_REF_MAX, thumbSrc: inputThumbSrc, toast, pick: slotPick, refKinds: () => segRefKinds(selected), onChange: slotChanged });
@@ -519,8 +519,14 @@ async function buildDirector(el) {
             statusRow,
             timelineHost,
             hintRow,
-            $el("div", { className: "ns-director-segrow" }, [segLabel, durIn, promptIn]),
-            $el("div", { className: "ns-director-slots" }, [firstSlot.el, lastSlot.el, refSlot.el]),
+            // 素材槽与提示词并排一行：方块在左、该段的提示词吃剩下的宽度（上下两行时方块正好顶着行高）
+            $el("div", { className: "ns-director-main" }, [
+                $el("div", { className: "ns-director-slots" }, [firstSlot.el, lastSlot.el, refSlot.el]),
+                $el("div", { className: "ns-director-segrow" }, [
+                    $el("div", { className: "ns-director-segtop" }, [segLabel, durIn]),
+                    promptIn,
+                ]),
+            ]),
             $el("div", { className: "ns-director-controls neo-gallery-gm-composer-bar neo-gallery-gm-chips" }, [
                 cfgBtn, sizeBtn, seedChip, saveBtn,
                 $el("div", { className: "neo-gallery-gm-composer-gap" }),
@@ -557,6 +563,14 @@ async function buildDirector(el) {
         timeline.setZoom(v);
     }
     timeline.setZoom(Number(localStorage.getItem(DIRECTOR_ZOOM_KEY)) || 1);
+    // 提示词框一行起步、随内容长到 20vh 上限（与 CSS 的 max-height 同一档）。
+    // 无布局引擎的环境（jsdom）里 scrollHeight 恒为 0，这时不写内联高度，留给 CSS 的 min-height
+    function growPrompt() {
+        promptIn.style.height = "auto";
+        if (promptIn.scrollHeight > 0) {
+            promptIn.style.height = Math.min(promptIn.scrollHeight + 2, Math.round(window.innerHeight * 0.2)) + "px";
+        }
+    }
     const onDocPress = (e) => {
         if (!document.body.contains(page)) { document.removeEventListener("pointerdown", onDocPress, true); return; }
         recipeChip.closeOnOutside(e.target);
@@ -592,6 +606,7 @@ async function buildDirector(el) {
         durIn.disabled = !s || isPreset();
         promptIn.value = s?.prompt || "";
         promptIn.disabled = !s || isPreset();
+        growPrompt();
         firstSlot.el.classList.toggle("ns-hidden", fam !== "frame");
         lastSlot.el.classList.toggle("ns-hidden", fam !== "frame");
         refSlot.el.classList.toggle("ns-hidden", fam === "frame");
@@ -945,6 +960,7 @@ async function buildDirector(el) {
         if (!s) return;
         s.prompt = promptIn.value;
         markDirty();
+        growPrompt();
         timeline.refresh();
     });
 
