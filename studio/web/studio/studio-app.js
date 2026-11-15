@@ -471,7 +471,9 @@ async function buildDirector(el) {
 
     // 该段「⋯」菜单：复制 / 前移 / 后移 / 删除。增删改本身在 director.js 那份共享实现里，页面只出这一条入口
     const segMenuItem = (label, tip, fn) => $el("button", { className: "ns-btn", type: "button", textContent: t(label), title: t(tip), onclick: () => { segMenuClose(); fn(); } });
-    const segMenuPanel = $el("div", { className: "neo-gallery-gm-chip-menu neo-gallery-gm-chip-panel ns-director-segmenu" }, [
+    // 基座 .rs-runtime-menu 给 fixed 定位：.neo-gallery-gm-chip-menu / -panel 只出宽度与滚动，
+    // 少了基座这块就是页面流里的一块，下面按 ⋯ 的 rect 算出的 left/top 全部无效（菜单落在页面最左、压住首帧方块）
+    const segMenuPanel = $el("div", { className: "rs-runtime-menu neo-gallery-gm-chip-menu neo-gallery-gm-chip-panel ns-director-segmenu" }, [
         segMenuItem("复制该段", "把该段的提示词 / 时长 / 素材整份复制到下面一段", () => {
             const at = ops.duplicate(selected);
             if (at < 0) return;

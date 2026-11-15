@@ -535,6 +535,8 @@ test("导演页该段 ⋯：复制到下面一段、前移改顺序、删除走�
     click(segMenuBtn());
     await settle();
     assert.notEqual(segMenu().style.display, "none", "点 ⋯ 出菜单");
+    // fixed 基座由 prompts.css 的 .rs-runtime-menu 给：缺了它 left/top 不生效，菜单变成页面流里的一块、落在页面最左
+    assert.ok(segMenu().classList.contains("rs-runtime-menu"), "⋯ 菜单是 fixed 浮层，位置跟着 ⋯ 那枚钮");
     click(segMenuItem("复制该段"));
     await settle();
     assert.equal(tl().opts.getSegments().length, 3, "复制多出段三");

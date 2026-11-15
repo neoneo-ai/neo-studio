@@ -335,9 +335,10 @@ body {
 /* 「+ 添加 LoRA」「显示全部模型」「保存整片参数」整行占位：与控件同排时白吃掉一列宽度，长模型名只剩一条窄缝 */
 .ns-director-compact-form :is(.rs-gen-lora-add, .rs-model-scope-toggle, .ns-director-size-save) { flex: 0 0 100%; width: fit-content; height: 24px; font-size: 12px; }
 .ns-director-shared-res { flex: none; font-size: 12px; color: #9aa4b2; }
-/* 该段「⋯」：⋯ 只占一枚 chip 的宽，菜单是它旁边 190px 的一列面板（与自定参数面板同一档密度） */
+/* 该段「⋯」：⋯ 只占一枚 chip 的宽，菜单是它旁边 190px 的一列面板（与自定参数面板同一档密度）。
+   .rs-runtime-menu 基座 min-width 210px 会把这列撑宽，这里收死成 190px */
 .ns-director .ns-director-seg-menu { flex: none; width: 26px; padding: 0; }
-.ns-director-segmenu { box-sizing: border-box; width: 190px; }
+.ns-director-segmenu { box-sizing: border-box; width: 190px; min-width: 0; }
 .ns-director-segmenu .ns-btn { display: block; width: 100%; height: 26px; padding: 0 10px; font-size: 12px; text-align: left; }
 
 /* .rs-btn 基础样式 flex:1（窄弹窗底部按钮行用）；满幅主区里不拉伸成长条。
