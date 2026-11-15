@@ -5,6 +5,12 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 ## [Unreleased]
 
 ### Added
+- **The director page is compacted into the video page's capsule layout.** The result stage fills the column and the
+  生成坞 is now a centered floating capsule (980px cap, the same padding and shadow as the video page's dock), so the
+  segment editor no longer stretches across a wide window; the 导演视频 idle card is an overlay on the stage instead of
+  a box that eats the column's height, and the status line moved into the dock head and collapses entirely while it is
+  empty. Windows ≤900px put the capsule back in the flow. Covered by the 导演页 cases in
+  `studio/tests/js/studio-director.test.mjs`.
 - **Every material slot in the director editor opens the asset library on click.** The first-/last-frame slots, the
   three reference grids, the 角色参考图 grid, the grid-image drop area, the per-segment storyboard thumbs and the
   trailing empty-segment row used to pop the OS file picker. Clicking one now opens the 素材库 (the Studio modal's

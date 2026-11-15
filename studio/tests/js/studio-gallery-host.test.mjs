@@ -90,12 +90,9 @@ let gallery;
 const barBtn = (label) => [...document.querySelectorAll(".ns-director-libbtns button")]
     .find((b) => b.textContent.includes(label));
 const libModal = () => document.querySelector(".ns-libmodal:not(.ns-hidden)");
-const guideBtn = (label) => [...document.querySelectorAll(".ns-director-empty-actions button")]
-    .find((b) => b.textContent.includes(label));
-// 素材库入口只在编辑器标题行（引导页只有配方 / 新建配方）：弹窗流程要先起一份空白配方把编辑器挂起来
+// 素材库入口就在本页配方条右端：进页铺好配方条就能开弹窗，不再要先起一份配方挂编辑器
 async function openEditorForLib() {
-    click(guideBtn("新建配方"));
-    await until(() => document.querySelector(".ns-director-editor .neo-director-panel"), "空白配方挂进导演页");
+    await until(() => document.querySelector(".ns-director-libbtns"), "配方条就位");
 }
 
 test("素材页进入目录 → 导演页素材库弹窗：目录跟着进弹窗，反复开合不落首页", async () => {

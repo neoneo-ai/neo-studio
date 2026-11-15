@@ -874,6 +874,10 @@ def tool_director_run(ctx, args):
             body[key] = args[key]
     if args.get("only_segments") is not None:
         body["only_segments"] = ",".join(str(i + 1) for i in seg_list(args["only_segments"]))
+    # 本次整片临时换的模型链：整片每一段都盖这一份覆盖值（留空的键 = 该段跟随自己的技能配置）
+    for key in ("model", "text_encoder", "vae", "audio_vae", "loras"):
+        if args.get(key):
+            body[key] = args[key]
     snap = ctx.comfy.post("/neo_studio/director/generate", body) or {}
     return dump({"task_id": snap.get("task_id"), "status": snap.get("status"),
                  "recipe": snap.get("recipe"), "prompt_id": snap.get("prompt_id")})
@@ -1033,7 +1037,12 @@ TOOLS = [
           "height": s("integer", "高，-1 用配方默认"),
           "continuity": s("boolean", "段间连续性"),
           "context_frames": s("integer", "连续性上下文帧数"),
-          "steps": s("integer", "采样步数，-1 用各段技能默认（VDN 技能 8 步，非 VDN 20 步）")}, ("recipe",),
+          "steps": s("integer", "采样步数，-1 用各段技能默认（VDN 技能 8 步，非 VDN 20 步）"),
+          "model": s("string", "本次整片每段临时换的主模型（list_models 的 checkpoints 名）；留空跟随各段技能配置"),
+          "text_encoder": s("string", "本次临时换的文本编码器（list_models 的 text_encoders 名）；留空跟随各段技能配置"),
+          "vae": s("string", "本次临时换的 VAE（list_models 的 vae 名）；留空跟随各段技能配置"),
+          "audio_vae": s("string", "本次临时换的音频 VAE（list_models 的 audio_vae 名）；留空跟随各段技能配置"),
+          "loras": s("array", "本次临时叠加的 LoRA：[{name, strength}]，name 取 list_models 的 loras；整片每一段都叠这一份")}, ("recipe",),
          {"recipe": "<director_recipes 里的配方名>"}),
     tool("segment_run", "单段生成 / 重生成（修片主手段），立即返回 task_id（succeeded 后 filename 是该段 mp4）",
          {"recipe": RECIPE, "segment": SEGMENT,

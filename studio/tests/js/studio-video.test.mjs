@@ -40,8 +40,8 @@ const cancelBtn = () => document.querySelector(".ns-video .ns-video-cancel");
 const statusEl = () => document.querySelector(".ns-video .ns-video-status");
 const barEl = () => document.querySelector(".ns-video .ns-video-progress");
 const player = () => document.querySelector(".ns-video .ns-video-player");
-const slotAdd = () => [...document.querySelectorAll(".ns-video .ns-video-slot-add")];
-const deckSlots = () => [...document.querySelectorAll(".ns-video .ns-video-deck .ns-video-slot")];
+const slotAdd = () => [...document.querySelectorAll(".ns-video .ns-slot-add")];
+const deckSlots = () => [...document.querySelectorAll(".ns-video .ns-video-deck .ns-slot")];
 const isHidden = (el) => el.classList.contains("ns-hidden");
 const skillChipBtn = () => document.querySelector(".ns-video .ns-video-chip .neo-gallery-gm-chip-btn");
 const skillChipLabel = () => document.querySelector(".ns-video .ns-video-chip .neo-gallery-gm-chip-label");
@@ -79,8 +79,8 @@ function withBox(el, w, h, fn) {
 const modalCard = (name) => [...document.querySelectorAll(".ns-libmodal .neo-gallery-thumb-container")]
     .find((c) => c.dataset.filename === name);
 // 参考图那一排的方块：填了的方块带 .has-img，添图那一枚没有，收了几张写在它的角标上
-const refTiles = () => [...document.querySelectorAll(".ns-video .ns-video-slot-row .ns-video-slot-tile.has-img")];
-const refAddTile = () => [...document.querySelectorAll(".ns-video .ns-video-slot-row .ns-video-slot-tile:not(.has-img)")];
+const refTiles = () => [...document.querySelectorAll(".ns-video .ns-slot-row .ns-slot-tile.has-img")];
+const refAddTile = () => [...document.querySelectorAll(".ns-video .ns-slot-row .ns-slot-tile:not(.has-img)")];
 // 素材方块取用：点取用钮开素材库弹窗，点卡片 = copy_to_input 落盘进方块（首帧 / 尾帧取一张即收窗）
 async function pickIntoSlot(slotIdx, name) {
     click(slotAdd()[slotIdx]);
@@ -201,7 +201,7 @@ test("视频页：进页铺好舞台 + 起手提示 + 底部胶囊（三方块 /
     assert.ok(videoPage(), "进页应铺好视频页");
     assert.equal(location.hash === "#/video", true, "应切到视频页");
     assert.ok(document.querySelector(".ns-video .ns-video-stage"), "应有整页舞台");
-    assert.equal(document.querySelectorAll(".ns-video .ns-video-slot").length, 3, "应有首帧 / 尾帧 / 参考三方块");
+    assert.equal(document.querySelectorAll(".ns-video .ns-slot").length, 3, "应有首帧 / 尾帧 / 参考三方块");
     assert.equal(slotAdd().length, 3, "每方块各带一枚取用钮");
     assert.match(document.querySelector(".ns-video-hero-card .neo-gallery-gm-idle-title").textContent, /创建视频/, "空舞台应盖起手提示主行");
     assert.match(document.querySelector(".ns-video-hero-card .neo-gallery-gm-idle-sub").textContent, /选一张图/, "提示应带副行");
@@ -482,7 +482,7 @@ test("视频页：参考素材连点三张排成三枚方块——缩略图就�
     assert.equal(refAddTile().length, 1, "没到上限就还有添图那一枚");
     assert.equal(refAddTile()[0].querySelector(".neo-gallery-edit-refdrop-cap").textContent, "3/15",
         "角标写收了这几枚 / 三类合计上限");
-    assert.match(refAddTile()[0].querySelector(".ns-video-slot-add").title, /参考图 3\/9 · 参考视频 0\/3 · 参考音频 0\/3/,
+    assert.match(refAddTile()[0].querySelector(".ns-slot-add").title, /参考图 3\/9 · 参考视频 0\/3 · 参考音频 0\/3/,
         "各类各收到第几张写在添图那一枚的 title 里，角标只占一个数");
     click(runBtn());
     await settle();
@@ -511,12 +511,12 @@ test("视频页：一行混收图 / 视频 / 音频——方块按类型铺面�
     await pickIntoSlot(2, "a.png");
     const tiles = refTiles();
     assert.equal(tiles.length, 3, "三类素材进同一行，各一枚方块");
-    const movie = tiles[0].querySelector("video.ns-video-slot-media");
+    const movie = tiles[0].querySelector("video.ns-slot-media");
     assert.ok(movie, "视频那一枚铺的是 <video> 封面，不给 controls——这枚方块是换素材的入口不是播放器");
     assert.equal(movie.getAttribute("preload"), "metadata", "只拉首帧画面，不预载整条片");
     assert.equal(movie.muted, true, "封面静音——浏览器不给有声缩略图上屏");
-    assert.ok(tiles[0].querySelector(".ns-video-slot-kind"), "视频方块带播放角标：缩略图上它和一张静图长得一样");
-    const audio = tiles[1].querySelector("span.ns-video-slot-audio");
+    assert.ok(tiles[0].querySelector(".ns-slot-kind"), "视频方块带播放角标：缩略图上它和一张静图长得一样");
+    const audio = tiles[1].querySelector("span.ns-slot-audio");
     assert.ok(audio?.querySelector("svg"), "音频那一枚是类型图标，不画解不出声的破封面");
     assert.match(tiles[1].getAttribute("title"), /参考音频 · copied_voice\.wav/, "方块 title 写类型 + 文件名");
     assert.equal(tiles[2].querySelector("img").alt, "copied_a.png", "图像那一枚照旧是缩略图");
@@ -604,12 +604,12 @@ test("视频页：首帧 / 尾帧仍只收图像——素材库里的视频与�
     click(modalCard("clip.mp4"));
     await settle();
     await settle();
-    assert.equal(document.querySelectorAll(".ns-video .ns-video-thumb").length, 0,
+    assert.equal(document.querySelectorAll(".ns-video .ns-slot-thumb").length, 0,
         "首帧是一帧画面：视频卡点下去不填方块");
     click(modalCard("frame.png"));
     await settle();
     await settle();
-    assert.ok(document.querySelector(".ns-video .ns-video-thumb img"), "图像照旧填进首帧");
+    assert.ok(document.querySelector(".ns-video .ns-slot-thumb img"), "图像照旧填进首帧");
 });
 
 

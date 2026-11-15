@@ -10,11 +10,12 @@ import { $el } from "./shim/ui.js";
 import { configureCanvasOrigin } from "../js/core/canvas-origin.js";
 
 import "../gallery.js";   // 注册 comfy.neo.gallery 扩展（NeoGallery + 侧栏 tab 定义）
-import { setDirectorEditorHost, openDirectorEditor, DIRECTOR_RECIPE_SAVED_EVENT, SEG_MODES, MODE_LABELS, LEGACY_MODE_MAP } from "../director.js";
+import { openDirectorEditor, DIRECTOR_RECIPE_SAVED_EVENT, SEG_MODES, MODE_LABELS, LEGACY_MODE_MAP } from "../director.js";
 import { setPaintHost, openGenMaterialDialog, openImageEditDialog, openImageEditMode, setVideoReuseOpen, setVideoPageJump, openVideoReuse, reuseModelOverlay, chipButton, ratioGlyph, skillParamsChip } from "../gallery-gen.js";
 import { createFramePlayer, DOCK_PREVIEW_SIDE, AGENT_PREVIEW_SIDE } from "../live-preview.js";
 import { createRecipesPanel, listRecipes } from "../recipes.js";
-import { listVideoSkills } from "../recipes.js";
+import { listVideoSkills, saveRecipe } from "../recipes.js";
+import { DirectorTimeline } from "../director-timeline.js";
 import { skillDisplayName, importWorkflowSkill, listSkills } from "../skill.js";
 import { createImageGenSettingsForm, createVideoGenSettingsForm, createVideoModelConfigSection, listVideoGenModels, getSkillGenConfig, blockingMissingModels, modelFamily } from "../image-gen.js";
 import { createModelConfigForm } from "../llm-setting.js";
@@ -27,6 +28,7 @@ import { mediaKindOf } from "../gallery-utils.js";
 import { openPresetPicker, randomPromptText, savePromptTo } from "../js/core/preset-picker.js";
 import { reusePaintPanel } from "../gen-utils.js";
 import { createPairPanel } from "../js/core/pair-access.js";
+import { createMediaSlot } from "../js/core/media-slot.js";
 import { initQueuePanel, setQueueOnline, queueTrack } from "../queue-panel.js";
 import { createPoseView } from "../pose/pose.js";
 import { createFramesView } from "../frames/frames.js";
@@ -306,9 +308,17 @@ window.addEventListener("neo:media-pick", (e) => {
     libPendingAccept = e.detail?.accept || null;
 });
 
-// ====== 导演页：整片生成面板 + 配方列表 ======
-let genState = null;   // 当前整片任务 {task_id, statusEl, barEl, runBtn, cancelBtn}
+// ====== 导演页：顶部条 + 上结果舞台 + 下生成坞（时间轴 / 该段 / 素材槽 / 参数行） ======
+let genState = null;   // 当前整片任务 {task_id, statusEl, barEl, fillEl, runBtn, cancelBtn, media, livePlayer}
 const GEN_TERMINAL = ["succeeded", "failed", "cancelled"];
+const DIRECTOR_TIMELINE_H = 64;   // 时间轴净高：秒刻度尺 + 段块 + 段进度条紧凑一档（勾选框悬停在块上）
+const DIRECTOR_REF_MAX = { images: 9, videos: 3, audios: 3 };   // 与后端 _DIRECTOR_REF_CAPS 同一份
+const DIRECTOR_REF_TOTAL = DIRECTOR_REF_MAX.images + DIRECTOR_REF_MAX.videos + DIRECTOR_REF_MAX.audios;
+// 全参考家族（含旧 v2v / rv2v）用参考素材那一行，帧模式（t2v / i2v / l2v / fl2v）用首帧 / 尾帧两枚：
+// 混配方按这一段自己的模式逐段切，隐藏的槽位不写进配方——留着上一家族的素材就是让它替模式说话
+const DIRECTOR_REF_MODES = new Set(["r2v", "v2v", "rv2v"]);
+const segFamily = (seg) => (DIRECTOR_REF_MODES.has(String(seg?.mode || "").trim()) ? "ref" : "frame");
+
 // 实时预览落点：顶栏队列放开并发后，切配方 / 再提交都不许把正在跑那一发的预览帧掐掉，
 // 所以整页只挂一条订阅，按 task_id 分发给当前这一发的播放器（node_id 就是提交时的 task_id）。
 let activeLive = null;   // { task_id, apply(payload) }
@@ -344,7 +354,7 @@ function updateGenStatus(task) {
         const url = `/view?filename=${encodeURIComponent(task.filename)}`
             + `&subfolder=${encodeURIComponent(task.subfolder || "")}&type=output`;
         // 成片就地替换实时预览（定格帧一并清掉）；也可在浏览器单独打开
-        genState.mediaRight.replaceChildren(
+        genState.media.replaceChildren(
             $el("video", { className: "ns-gen-preview ns-gen-final", controls: true, src: url }),
             $el("a", { className: "ns-gen-final", href: url, textContent: tf("{filename}（在浏览器中打开）", { filename: task.filename }) })
         );
@@ -362,332 +372,459 @@ async function refreshRecipesPanel() {
     if (!recipesPanelEl || !directorPanelOpts) return;
     const parent = recipesPanelEl.parentNode;
     // 先建好再换：先摘掉旧面板的话，弹窗打开那一下列表是空的（异步取数期间整块空白闪一下）
-    const next = await createRecipesPanel(directorPanelOpts());   // 导演页只列多段导演配方；点选回传 onSelect
+    const next = await createRecipesPanel(directorPanelOpts());   // 导演页只列多段导演配方；点卡片 = 选中
     parent?.replaceChild(next, recipesPanelEl);
     recipesPanelEl = next;
 }
 
-
 let recipesHost = null;   // 配方弹窗里的配方面板宿主（buildDirector 建）
 
-// ====== 导演页：左导演编辑器 + 竖向分隔条 + 右整片生成面板（配方与素材库走弹窗） ======
-const SPLIT_KEY = "neo_studio_director_split";
-const CLOSED_KEY = "neo_studio_director_closed";   // 关过编辑器就停在引导页：列表默认按修改时间排，刚编辑的那份总在首位，不记这一笔的话下次进页又把它铺回来
-const SPLIT_PANEL_MIN = 200;   // 生成面板下限：竖屏配方只要窄窄一条，控制行在这里换行
-const SPLIT_EDITOR_MIN = 360;  // 编辑器下限：编辑器内部自带滚动，再窄就没法编辑了
-const SPLIT_CLOSE_SLOP = 90;   // 拖过下限再多拖这么多就当作关闭：拖到底继续拖 = 收起面板
-const GUIDE_RECIPE_MAX = 3;    // 引导页快捷入口的条数：三条最近导演配方，多了就把入口按钮挤走
-
-let dragged = false;   // 一条拖动走过之后，落点那一下点击不再被当成「展开」
-
-function buildDirectorSplit(main, genPanel) {
-    const label = $el("span", { className: "ns-director-split-label" });
-    const split = $el("div", {
-        className: "ns-director-split", role: "separator", "aria-orientation": "vertical", tabindex: "0",
-        title: t("拖动调整宽度 · 拖过下限关闭 · 收起后向外拖出展开"),
-    }, [label]);
-    let saved = null;
-    try { saved = JSON.parse(localStorage.getItem(SPLIT_KEY) || "null"); } catch { /* 偏好读不到就用默认 */ }
-    let collapsed = !!saved?.collapsed;
-
-    const clamp = (w) => {
-        const max = Math.max(SPLIT_PANEL_MIN, main.clientWidth - split.offsetWidth - SPLIT_EDITOR_MIN);
-        return Math.max(SPLIT_PANEL_MIN, Math.min(w, max));
-    };
-    const setWidth = (w) => {
-        genPanel.style.width = Math.round(clamp(w)) + "px";
-    };
-    const persist = () => localStorage.setItem(SPLIT_KEY, JSON.stringify({ width: genPanel.offsetWidth, collapsed }));
-    const apply = () => {
-        main.classList.toggle("ns-director-collapsed", collapsed);
-        genPanel.style.display = collapsed ? "none" : "";
-        label.textContent = collapsed ? t("◂ 生成面板") : "";
-    };
-    const restore = () => {
-        if (collapsed || !saved || !(Number(saved.width) > 0) || main.clientWidth <= 0) return;
-        setWidth(saved.width);
-        saved = null;   // 只在首次布局量得到宽度时回灌一次
-    };
-    apply();
-    restore();
-    requestAnimationFrame(restore);
-
-    split.addEventListener("mousedown", (e) => {
-        if (e.button !== 0) return;
-        e.preventDefault();
-        dragged = false;
-        const startX = e.clientX, startW = collapsed ? 0 : genPanel.offsetWidth;
-        const opened = !collapsed;   // 关闭只发生在「从展开态拖出去」的那一条拖动上
-        const finish = () => {
-            window.removeEventListener("mousemove", move);
-            window.removeEventListener("mouseup", up);
-            split.classList.remove("ns-split-drag");
-            main.classList.remove("ns-split-drag");
-        };
-        const move = (ev) => {
-            const dx = startX - ev.clientX;   // 向左拖 = 生成面板变宽
-            if (collapsed) {
-                if (dx < 8) return;           // 收起态只认向外拖：向内已经无可收
-                dragged = true;
-                collapsed = false; apply();   // 向外拖出一点就把面板放回来，接着按拖出来的宽度走
-            }
-            const w = startW + dx;
-            if (opened && w < SPLIT_PANEL_MIN - SPLIT_CLOSE_SLOP) {
-                dragged = true;
-                finish();                     // 拖过下限一截就到此为止：这一下就是把面板拖到关闭
-                collapsed = true; apply(); persist();
-                return;
-            }
-            if (Math.abs(dx) >= 4) dragged = true;
-            setWidth(w);
-        };
-        const up = () => { finish(); persist(); };
-        split.classList.add("ns-split-drag");
-        main.classList.add("ns-split-drag");
-        window.addEventListener("mousemove", move);
-        window.addEventListener("mouseup", up);
-    });
-    // 收起后条上那行字就是「向外拖出」的入口；拖不动它的人点一下也认。
-    // 拖动松手会跟着来一次 click，那一下只吃掉 dragged 守卫，不展开面板。
-    split.addEventListener("click", () => {
-        if (!collapsed) return;
-        if (dragged) { dragged = false; return; }
-        collapsed = false; apply(); persist();
-    });
-    split.addEventListener("keydown", (e) => {
-        if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
-            if (collapsed) return;
-            e.preventDefault();
-            setWidth(genPanel.offsetWidth + (e.key === "ArrowLeft" ? 24 : -24));
-            persist();
-        } else if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            collapsed = !collapsed; apply(); persist();
-        }
-    });
-    return split;
-}
-
-// ====== 导演页左栏已移除：配方面板与素材库改为弹窗（js/core/lib-modal.js） ======
 async function buildDirector(el) {
     const page = $el("div", { className: "ns-director" });
     el.appendChild(page);
-    // 配方 / 素材库入口：同一组按钮，编辑器开着挂进编辑器标题行左端，收起时住在引导页里（只有一处入口）
+
+    let recipeItems = [];    // 导演配方列表（listRecipes 条目：含 segments / shared / story / setup / assets / source）
+    let recipe = null;       // 当前配方的整份数据：保存时把没动的字段原样带回去
+    let spec = null;         // director_spec：每段有效模式，与解析进 input/ 的首帧 / 尾帧 / 参考素材名
+    let currentName = "";
+    let selected = 0;
+    let dirty = false;
+    let tlProgress = { active: false, segment_index: -1, total_segments: 0 };
+    let checkedSegments = [];
+    let directorSkills = [];   // 视频技能列表：每段「模板收哪几类参考素材」读它
+    const segs = () => recipe?.segments || [];
+    const isPreset = () => recipe?.source === "preset";
+    const skillMeta = (id) => directorSkills.find((s) => s.id === id) || null;
+
+    // --- 顶部条：配方（下拉快切 + 卡片弹窗管理）· 新建配方 · 素材库 · 整片编辑器 ---
     recipesHost = $el("div", { className: "ns-director-recipes" });
     recipesModal = createLibraryModal({ storageKey: "neo_studio_libmodal_recipes", scope: "recipes" });
     recipesModal.setContent(recipesHost);
     document.body.appendChild(recipesModal.el);
-    const recipesBtn = $el("button", { className: "ns-btn", type: "button", title: t("打开配方列表，点卡片选中并进编辑器") });
+    const recipeSel = $el("select", { className: "ns-director-recipe", title: t("选一份导演配方：时间轴与该段控件跟着换") });
+    const recipeChip = chipButton(recipeSel, { icon: "list" });
+    const recipesBtn = $el("button", { className: "ns-btn", type: "button", title: t("打开配方列表：点卡片选中，含复制 / 删除 / 新增") });
     setIconLabel(recipesBtn, "list", t("配方"));
     recipesBtn.onclick = () => { recipesModal.open(t("导演配方")); refreshRecipesPanel(); };
-    const libBtn = $el("button", { className: "ns-btn", type: "button", title: t("打开素材库：点卡片取用并关窗，素材卡片直接拖进右侧编辑器") });
+    const newBtn = $el("button", { className: "ns-btn", type: "button", title: t("新建一份分镜视频导演配方，进整片编辑器") });
+    setIconLabel(newBtn, "film", t("新建配方"));
+    newBtn.onclick = () => openDirectorEditor(null, afterEditorSaved);
+    const libBtn = $el("button", { className: "ns-btn", type: "button", title: t("打开素材库：看大图与取用") });
     setIconLabel(libBtn, "folder", t("素材库"));
     libBtn.onclick = () => openLibModal("director");
-    // 新建配方：空白导演配方直接内嵌进本视图（保存后刷新配方列表，同配方弹窗里「新增导演配方」那条路）
-    const openNewDirector = () => openDirectorEditor(null, refreshRecipesPanel);
-    const newBtn = $el("button", { className: "ns-btn", type: "button", title: t("新建一份分镜视频导演配方，直接进编辑器") });
-    setIconLabel(newBtn, "film", t("新建配方"));
-    newBtn.onclick = () => openNewDirector();
-    // 标题行的家只装「素材库」；「配方」在两块之间搬：编辑器开着在标题行，收起时在引导页
-    const titleActions = $el("div", { className: "ns-director-libbtns" }, [libBtn]);
-    const guideActions = $el("div", { className: "ns-director-empty-actions" }, [recipesBtn, newBtn]);
-    // 引导页快捷入口：最近三条导演配方（标签 + 段数 + 标题），点一行直接进编辑器，不开配方弹窗
-    const guideRecipes = $el("div", { className: "ns-director-empty-recipes", hidden: true });
-    const main = $el("div", { className: "ns-director-main" });
-    const editorHost = $el("div", { className: "ns-director-editor" });
-    // 收起编辑器 = 生成面板同栏退场：整栏只剩这块引导页，从「配方」选卡或「新建配方」起头（生成面板与编辑器共生）
-    // 起手说明照绘画页 / 视频页的 idle 版式（主行 + 细注行 + 四角括号），三页空白态长一个样
-    page.appendChild($el("div", { className: "ns-director-empty" }, [
-        $el("div", { className: "ns-director-empty-card neo-gallery-gm-idle" }, [
-            $el("div", { className: "neo-gallery-gm-idle-title", textContent: t("导演视频") }),
-            $el("div", { className: "neo-gallery-gm-idle-sub", textContent: t("多段配方，生成整片视频") }),
-            $el("i", { className: "ns-video-corner c-tl" }),
-            $el("i", { className: "ns-video-corner c-tr" }),
-            $el("i", { className: "ns-video-corner c-bl" }),
-            $el("i", { className: "ns-video-corner c-br" }),
-        ]),
-        guideActions,
-        guideRecipes,
-    ]));
-    page.appendChild(main);
-    main.appendChild(editorHost);
-    page.classList.add("ns-director-editorless");   // 开局没有编辑器，引导页先站着
-    // 编辑器挂进宿主 / 卸载：整栏在「编辑器 + 生成面板」与引导页之间切换，「配方」入口跟着搬进标题行或搬回引导页
-    // （标题行那组随面板卸载一起离开文档，下次挂载搬回新面板的标题行；素材库只属于标题行）
-    const rememberClose = (closed) => {
-        try { closed ? localStorage.setItem(CLOSED_KEY, "1") : localStorage.removeItem(CLOSED_KEY); }
-        catch { /* 隐私模式记不住就算了，不挡界面 */ }
-    };
-    const closedBefore = () => { try { return localStorage.getItem(CLOSED_KEY) === "1"; } catch { return false; } };
-    new MutationObserver(() => {
-        const open = !!editorHost.querySelector(".neo-director-panel");
-        rememberClose(!open);
-        editorHost.classList.toggle("ns-editor-open", open);
-        page.classList.toggle("ns-director-editorless", !open);
-        if (open) {
-            titleActions.prepend(recipesBtn);
-            editorHost.querySelector(".neo-director-title-left")?.prepend(titleActions);
-        } else guideActions.prepend(recipesBtn);
-        if (!open) refreshGuideRecipes();   // 回到引导页：刚保存 / 刚编辑的那份配方要出现在快捷入口首位
-    }).observe(editorHost, { childList: true });
-    // 导演编辑器内嵌进本视图（含素材页「新建导演配方」入口 → 切到导演页）；
-    // 编辑器底部的「保存并生成整片」保存成功后直接提交整片生成
-    setDirectorEditorHost(editorHost, () => go("director"), () => submitGenerate());
-    let currentRecipeName = null;   // 当前选中的导演配方（由配方弹窗点选回传，直接喂给整片生成区）
+    const editorBtn = $el("button", { className: "ns-btn", type: "button", title: t("整片导演编辑器：分段增删、生成模式与分辨率、故事板与提示词工具") });
+    setIconLabel(editorBtn, "film", t("整片编辑器"));
+    editorBtn.onclick = () => openEditor();
+    recipeSel.addEventListener("change", () => openRecipe(recipeSel.value));
+    page.appendChild($el("div", { className: "ns-director-bar" }, [recipeChip.el, recipesBtn, newBtn, libBtn, editorBtn]));
 
-    const onSelect = (r) => {
-        recipesModal?.close();       // 点卡片 = 选中并进编辑器，弹窗让位
-        currentRecipeName = r.name;
-        agentCtx.recipe = r.name;      // 智能体上下文：默认围绕这一份配方出片
-        notifyAgentCtx();
-        applyRecipe(r.name);   // 刷新分段格子 + 尺寸/步数回显
-    };
-    // 弹窗里「新增导演配方」照点卡那条路：关窗让位，空白配方直接内嵌进本视图
-    // 自动选中照旧，「铺编辑器」只在本页站着时做：开机这份面板是随首页一起建好的，那一下铺编辑器会
-    // 经宿主的「打开时切到本页」回调把窗口从首页拽到导演页
-    const panelOpts = () => ({ directorOnly: true, autoSelectFirst: !closedBefore(), initialSelection: currentRecipeName, openEditorOnSelect: () => currentView === "director", onSelect, onNewRecipe: () => { recipesModal?.close(); openNewDirector(); } });
-    directorPanelOpts = panelOpts;
-    onDirectorShown = () => {
-        refreshGuideRecipes();   // 进本页才拉快捷入口：开机停在首页时不给首页添一枪 list
-        if (currentRecipeName) applyRecipe(currentRecipeName);
-    };
-    // 首页的配方卡带 ?recipe= 深链进来：按名字找那一份导演配方，走引导页快捷行同一条路
-    directorOpenRecipe = async (name) => {
-        const items = await listRecipes().catch(() => []);
-        const r = items.find((x) => x.name === name);
-        if (r) openDirectorEditor(r, refreshRecipesPanel, -1, { onAdopt: () => onSelect(r) });
-    };
+    // --- 结果舞台：idle 起手卡 / 实时预览 / 成片，下面一条状态行 + 进度 ---
+    const idleCard = $el("div", { className: "ns-director-idle-card neo-gallery-gm-idle" }, [
+        $el("div", { className: "neo-gallery-gm-idle-title", textContent: t("导演视频") }),
+        $el("div", { className: "neo-gallery-gm-idle-sub", textContent: t("选一份配方，勾要跑的段，然后生成整片") }),
+        $el("i", { className: "ns-video-corner c-tl" }),
+        $el("i", { className: "ns-video-corner c-tr" }),
+        $el("i", { className: "ns-video-corner c-bl" }),
+        $el("i", { className: "ns-video-corner c-br" }),
+    ]);
+    const liveBox = $el("div", { className: "ns-director-live neo-dtl-live" });
+    const media = $el("div", { className: "ns-director-media ns-director-idle" }, [idleCard, liveBox]);
+    const livePlayer = createFramePlayer(liveBox, () => {
+        liveBox.style.height = "";                       // 高度交给 CSS：结果区按配方的画面比例贴
+        media.classList.remove("ns-director-idle");      // 预览一有画面就占住结果区，idle 卡让位
+    });
+    const statusEl = $el("div", { className: "ns-director-status" });
+    const barEl = $el("div", { className: "ns-gen-progress ns-director-progress" }, [$el("div")]);
+    const statusRow = $el("div", { className: "ns-director-statusrow" }, [statusEl, barEl]);
+    // 舞台只剩画面一块：状态行搬进生成坞卡顶，起手的空带不再由它顶出来
+    page.appendChild($el("div", { className: "ns-director-stage" }, [media]));
 
-    // 引导页快捷入口：后端已按修改时间排好，这里取前三条导演配方，一行一条（标签 + 段数 + 标题）；
-    // 没有导演配方就整块不占位，引导页只剩「配方」「新建配方」两个入口。
-    // 行点击与配方卡走同一条路：编辑器 adopt 才回传 onSelect，脏态确认条挡下时选中态不动。
-    async function refreshGuideRecipes() {
-        let items = [];
-        try {
-            items = (await listRecipes()).filter((r) => r.type === "video_director").slice(0, GUIDE_RECIPE_MAX);
-        } catch { /* 离线模式 / ComfyUI 未就绪：列表拿不到就不出这一排入口 */ }
-        guideRecipes.textContent = "";
-        guideRecipes.hidden = !items.length;
-        for (const r of items) {
-            const segs = (r.segments || []).length;
-            const row = $el("button", {
-                className: "ns-director-empty-recipe", type: "button",
-                title: t("直接打开该配方，进编辑器（不用开配方列表）"),
-                "aria-label": tf("{name}（{n} 段）", { name: r.name, n: segs }),
-            }, [
-                $el("span", { className: "ns-director-empty-recipe-tag", textContent: r.source === "preset" ? t("预设") : t("我的") }),
-                ...(segs ? [$el("span", { className: "ns-director-empty-recipe-seg", textContent: tf("{n} 段", { n: segs }) })] : []),
-                $el("span", { className: "ns-director-empty-recipe-name", textContent: r.name }),
-            ]);
-            row.onclick = () => openDirectorEditor(r, refreshRecipesPanel, -1, { onAdopt: () => onSelect(r) });
-            guideRecipes.appendChild(row);
+    // --- 生成坞：紧凑时间轴（勾选 = 本次跑哪几段）+ 该段（时长 / 提示词）+ 素材槽 + 参数行 ---
+    const timelineHost = $el("div", { className: "ns-director-timeline" });
+    const checkHint = $el("span", { className: "ns-director-checkhint" });
+    const segLabel = $el("span", { className: "ns-director-seg-label" });
+    const durIn = $el("input", { className: "ns-director-duration neo-gallery-gm-chip-btn", type: "number", min: "1", max: "150", step: "0.5", title: t("这一段时长（秒）· 也可拖时间轴块的右缘调") });
+    const promptIn = $el("textarea", { className: "ns-director-prompt neo-gallery-gm-quick-input", rows: "2", spellcheck: "false", placeholder: t("这一段要拍成什么样…") });
+    const firstSlot = createMediaSlot({ label: "首帧", thumbSrc: inputThumbSrc, toast, pick: slotPick, refKinds: () => segRefKinds(selected), onChange: slotChanged });
+    const lastSlot = createMediaSlot({ label: "尾帧", thumbSrc: inputThumbSrc, toast, pick: slotPick, refKinds: () => segRefKinds(selected), onChange: slotChanged });
+    const refSlot = createMediaSlot({ label: "参考素材", multiple: true, maxN: DIRECTOR_REF_TOTAL, kindMax: DIRECTOR_REF_MAX, thumbSrc: inputThumbSrc, toast, pick: slotPick, refKinds: () => segRefKinds(selected), onChange: slotChanged });
+
+    // 本次整片每段临时换的模型链（与视频页自定参数同一份面板、同一口径）：留空 = 该段跟随自己的技能配置。
+    // 导演页没有「一整片一个技能」这件事——每段自带技能与钉着的模型，这里只发覆盖值。
+    const videoCfg = createVideoModelConfigSection();
+    let videoModels = null;   // 模型清单：没拉到就整块不发覆盖值，各段技能配置照常生效
+    const cfgLabel = $el("span", { className: "neo-gallery-gm-chip-label" });
+    const cfgBtn = $el("button", { className: "neo-gallery-gm-chip-btn ns-director-cfg", type: "button", title: t("本次整片每段临时换的模型链（主模型 / Text Encoder / VAE / 音频 VAE / LoRA / 步数）：留空 = 该段跟随自己的技能配置") }, [
+        $el("span", { className: "neo-gallery-gm-chip-icon" }, [icon("film", 12)]),
+        cfgLabel,
+        $el("span", { className: "neo-gallery-gm-chip-caret", textContent: "▾" }),
+    ]);
+    const cfgPanel = $el("div", { className: "rs-runtime-menu neo-gallery-gm-chip-menu neo-gallery-gm-chip-panel ns-director-cfg-panel" }, [videoCfg.el]);
+    page.appendChild(cfgPanel);   // 挂页面上：.rs-runtime-menu 是 fixed 定位，页面离场时由 onDocPress 摘监听
+    let cfgOpen = false;
+
+
+    const cfgBits = () => {
+        const ov = videoModels ? videoCfg.collect() : {};
+        const bits = [];
+        for (const key of ["model", "text_encoder", "vae", "audio_vae"]) {
+            if (ov[key]) bits.push(String(ov[key]).split("/").pop());
         }
+        if (ov.loras?.length) bits.push(tf("{n} 个 LoRA", { n: ov.loras.length }));
+        if (ov.steps && !videoCfg.stepsFollowSkill()) bits.push(tf("{n} 步", { n: ov.steps }));
+        return bits;
+    };
+    const cfgSync = () => { cfgLabel.textContent = cfgBits().join(" · ") || t("跟随技能配置"); };
+    const cfgClose = () => { cfgOpen = false; cfgPanel.style.display = "none"; };
+    cfgBtn.onclick = () => {
+        cfgOpen = !cfgOpen;
+        cfgPanel.style.display = cfgOpen ? "block" : "none";
+        if (!cfgOpen) return;
+        const r = cfgBtn.getBoundingClientRect();
+        cfgPanel.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - cfgPanel.offsetWidth - 8))}px`;
+        const above = r.top - cfgPanel.offsetHeight - 6;
+        cfgPanel.style.top = `${above > 8 ? above : r.bottom + 6}px`;
+    };
+    videoCfg.el.addEventListener("change", cfgSync);
+
+    const seedIn = $el("input", { className: "ns-director-seed neo-gallery-gm-chip-btn", type: "number", min: "-1", placeholder: t("随机"), title: t("种子：留空 = 跟随配方（配方里写 -1 = 每次运行随机换种子）") });
+    const seedRoll = $el("button", { className: "ns-director-seed-roll", type: "button", title: t("换一个随机种子") });
+    setIcon(seedRoll, "sparkles", 13);
+    seedRoll.onclick = () => { seedIn.value = String(Math.floor(Math.random() * 1e15)); };
+    const seedChip = $el("label", { className: "ns-director-seed-chip neo-gallery-gm-chip-group", title: t("种子") }, [icon("sparkles", 12), seedIn, seedRoll]);
+    const sizeGlyph = ratioGlyph();
+    const sizeLabel = $el("span", { className: "neo-gallery-gm-chip-label" });
+    const sizeBtn = $el("button", { className: "neo-gallery-gm-chip-btn ns-director-size", type: "button", title: t("本次整片的尺寸与步数来自配方：要改到整片编辑器") }, [sizeGlyph.el, sizeLabel]);
+    sizeBtn.onclick = () => openEditor();
+    const saveBtn = $el("button", { className: "ns-btn ns-director-save", type: "button", textContent: t("保存该段"), title: t("把该段的提示词 / 时长 / 素材槽改动写回配方（不新增段，也不动故事板与分辨率）") });
+    const runBtn = $el("button", { className: "rs-btn ns-gen-run ns-director-run", type: "button", textContent: t("生成整片") });
+    gateRunButton(runBtn, "director", t("生成整片"));
+    const cancelBtn = $el("button", { className: "rs-btn ns-gen-cancel", type: "button", textContent: t("取消"), style: { display: "none" } });
+    const hintRow = $el("div", { className: "ns-director-hintrow" }, [checkHint]);
+    page.appendChild($el("div", { className: "ns-director-dock" }, [
+        $el("div", { className: "ns-director-card neo-gallery-gm-composer" }, [
+            statusRow,
+            timelineHost,
+            hintRow,
+            $el("div", { className: "ns-director-segrow" }, [segLabel, durIn, promptIn]),
+            $el("div", { className: "ns-director-slots" }, [firstSlot.el, lastSlot.el, refSlot.el]),
+            $el("div", { className: "ns-director-controls neo-gallery-gm-composer-bar neo-gallery-gm-chips" }, [
+                cfgBtn, sizeBtn, seedChip, saveBtn,
+                $el("div", { className: "neo-gallery-gm-composer-gap" }),
+                cancelBtn, runBtn,
+            ]),
+        ]),
+    ]));
+
+    const timeline = new DirectorTimeline(timelineHost, {
+        height: DIRECTOR_TIMELINE_H,
+        checkable: true,
+        getSegments: () => segs().map((s, i) => ({
+            duration: Number(s.duration_sec) || 5,
+            prompt: s.prompt || "",
+            thumbUrl: specThumb(i),
+        })),
+        onSelect: (i) => { selected = i; renderSegment(); },   // 画布点块：画布自己已落选中态，这里只刷该段面板（不得回调 select，会成环）
+        onCheckChange: (list) => { checkedSegments = list; renderCheckHint(); },
+        onReorder: (order) => reorderSegs(order),
+        onResize: (i, sec) => {
+            const s = segs()[i];
+            if (!s) return;
+            s.duration_sec = sec;
+            markDirty();
+            timeline.refresh();
+            renderSegment();
+        },
+        onAdd: () => addSeg(),
+        getProgress: () => tlProgress,
+    });
+    const onDocPress = (e) => {
+        if (!document.body.contains(page)) { document.removeEventListener("pointerdown", onDocPress, true); return; }
+        recipeChip.closeOnOutside(e.target);
+        if (cfgOpen && !cfgPanel.contains(e.target) && !cfgBtn.contains(e.target)) cfgClose();
+    };
+    document.addEventListener("pointerdown", onDocPress, true);
+
+
+    function specThumb(i) {
+        const s = spec?.segments?.[i];
+        const name = s?.keyframe || s?.ref_input || (s?.refs?.images || [])[0] || "";
+        return name ? inputThumbSrc(name) : "";
+    }
+    const renderCheckHint = () => {
+        checkHint.textContent = checkedSegments.length
+            ? tf("仅运行勾选的 {n} 段：[{list}]", { n: checkedSegments.length, list: checkedSegments.map((i) => i + 1).join(",") })
+            : t("未勾选 = 生成整片 · 点时间轴块左上角勾选");
+    };
+    function markDirty() { dirty = true; saveBtn.classList.add("ns-director-dirty"); }
+    function clearDirty() { dirty = false; saveBtn.classList.remove("ns-director-dirty"); }
+    function selectSegment(i) { timeline.select(i); }   // 走画布：落选中态后由 onSelect 刷该段面板
+
+    // 该段控件：模式决定素材槽显哪一组，隐藏的槽位不写进配方（后端按资产推模式，留旧素材就是推错）
+    function renderSegment() {
+        const s = segs()[selected];
+        const fam = segFamily(s);
+        segLabel.textContent = s ? tf("第 {n} 段", { n: selected + 1 }) : t("没有段");
+        segLabel.title = tf("{mode}：{hint}", {
+            mode: MODE_LABELS.get(fam === "ref" ? "r2v" : "f2v"),
+            hint: fam === "ref" ? t("这一段用参考素材那一行") : t("这一段用首帧 / 尾帧"),
+        });
+        durIn.value = s ? (Number(s.duration_sec) || 5) : "";
+        durIn.disabled = !s || isPreset();
+        promptIn.value = s?.prompt || "";
+        promptIn.disabled = !s || isPreset();
+        firstSlot.el.classList.toggle("ns-hidden", fam !== "frame");
+        lastSlot.el.classList.toggle("ns-hidden", fam !== "frame");
+        refSlot.el.classList.toggle("ns-hidden", fam === "frame");
+        firstSlot.setReadOnly(isPreset());
+        lastSlot.setReadOnly(isPreset());
+        refSlot.setReadOnly(isPreset());
+        fillSlots(s);
     }
 
-    // --- 整片生成面板 ---
-    // 生成参数（分辨率 / 步数 / 种子 / 连续性 / 上下文帧）全部在左侧导演编辑器里保存进配方，
-    // 本面板只做「跑哪几段 + 看结果」，不再重复一套控件。
-    const runBtn = $el("button", { className: "rs-btn ns-gen-run", type: "button", textContent: t("生成整片") });
-    gateRunButton(runBtn, "director", t("生成整片"));
+    // 槽位里的画面用 director_spec 那份（素材已从配方 assets/ 解析进 input/）；spec 没到就退回配方里记的名
+    function fillSlots(s) {
+        const sp = spec?.segments?.[segs().indexOf(s)];
+        firstSlot.fill(sp ? [sp.ref_input] : [s?.first_frame]);
+        lastSlot.fill(sp ? [sp.last_input] : [s?.last_frame]);
+        const rf = sp?.refs || s?.refs || {};
+        refSlot.fill([...(rf.images || []), ...(rf.videos || []), ...(rf.audios || [])]);
+    }
 
-    const cancelBtn = $el("button", { className: "rs-btn ns-gen-cancel", type: "button", textContent: t("取消"), style: { display: "none" } });
-    const statusEl = $el("div", { className: "ns-gen-status" });
-    const barEl = $el("div", { className: "ns-gen-progress" }, [$el("div")]);
-
-    // --- 分段勾选条：一格一段，格内只有段号。点格子 = 勾选要跑的段（未勾选 = 整片），悬停看该段画面描述；
-    // 运行中由 director_progress 高亮当前段。勾选是运行期临时状态：换配方即清空，不写进配方。
-    let tlSegments = [];
-    let tlProgress = { active: false, segment_index: -1, total_segments: 0 };
-    let checkedSegments = [];
-    const segsBox = $el("div", { className: "ns-gen-segs" });
-    const segsAllBtn = $el("button", { className: "rs-btn ns-gen-segs-all", type: "button", textContent: t("全选") });
-    const segsClearBtn = $el("button", { className: "rs-btn ns-gen-segs-clear", type: "button", textContent: t("清空") });
-    const segsHint = $el("span", { className: "ns-gen-segs-hint" });
-    const specEl = $el("span", { className: "ns-gen-spec" });   // 只读回显：本次整片的尺寸 / 步数（值来自配方，要改去编辑器）
-
-    const renderSegs = () => {
-        segsBox.textContent = "";
-        tlSegments.forEach((s, i) => {
-            const chip = $el("button", {
-                className: "ns-gen-seg-chip", type: "button", title: s.prompt || "",
-                "aria-pressed": checkedSegments.includes(i) ? "true" : "false",
-                textContent: String(i + 1),
-            });
-            chip.onclick = () => setChecked(checkedSegments.includes(i)
-                ? checkedSegments.filter((x) => x !== i)
-                : [...checkedSegments, i].sort((a, b) => a - b));
-            segsBox.appendChild(chip);
-        });
-        // 运行中高亮当前段：segment_index 是 0 基原始段序号，与勾选段号同源
-        if (tlProgress.active && tlProgress.segment_index >= 0) {
-            segsBox.children[tlProgress.segment_index]?.classList.add("ns-gen-seg-running");
+    function slotChanged() {
+        const s = segs()[selected];
+        if (!s) return;
+        if (segFamily(s) === "frame") {
+            const f = firstSlot.first()?.value;
+            const l = lastSlot.first()?.value;
+            if (f) s.first_frame = f; else delete s.first_frame;
+            if (l) s.last_frame = l; else delete s.last_frame;
+        } else {
+            const picked = refSlot.get();
+            const refs = {};
+            for (const [media, key] of [["image", "images"], ["video", "videos"], ["audio", "audios"]]) {
+                const vals = picked.filter((x) => x.media === media).map((x) => x.value);
+                if (vals.length) refs[key] = vals;
+            }
+            if (Object.keys(refs).length) s.refs = refs; else delete s.refs;
         }
-        const hasSegs = tlSegments.length > 0;
-        segsAllBtn.style.display = segsClearBtn.style.display = hasSegs ? "" : "none";
-    };
-    const setChecked = (list) => {
-        checkedSegments = list || [];
-        segsHint.textContent = checkedSegments.length
-            ? tf("仅运行勾选的 {n} 段：[{list}]", { n: checkedSegments.length, list: checkedSegments.map((i) => i + 1).join(",") })
-            : t("未勾选 = 生成整片");
-        segsHint.title = t("点分段格子勾选要跑的段；未勾选 = 生成整片");
-        renderSegs();
-    };
-    segsAllBtn.onclick = () => setChecked(tlSegments.map((_, i) => i));
-    segsClearBtn.onclick = () => setChecked([]);
-    setChecked([]);
+        markDirty();
+        timeline.refresh();
+    }
 
-    // --- 实时预览：与节点内同款帧播放器；载荷按 task_id（后端 unique_id）过滤，尺寸由结果区按面板宽度定 ---
-    const mediaRight = $el("div", { className: "ns-gen-media-right" });
-    const liveBox = $el("div", { className: "ns-gen-live neo-dtl-live" });
-    const livePlayer = createFramePlayer(liveBox, () => {
-        liveBox.style.height = "";                       // 高度交给 CSS：结果区按面板宽度贴 16:9
-        genBody.classList.remove("ns-gen-empty");   // 预览一有画面就占住结果区
-    });
-    mediaRight.appendChild(liveBox);
+    // 素材方块取用与视频页同一条路：素材库弹窗点卡片 → copy_to_input 落进 input 根目录，
+    // 返回加载节点可用的文件名；保存时这份名字进配方 assets/，重开时 spec 又把它解析回 input/
+    function slotPick({ accept, multiple: keepOpen, gate, add }) {
+        openLibModal("director", async (picked) => {
+            const ok = gate(picked);   // 先过闸：挡下的不 copy_to_input，input 目录不留用不上的文件
+            const filled = [];
+            for (const a of ok) {
+                try { filled.push({ ...a, value: await copyPickedToInput(a.src) }); }
+                catch (e) { toast(tf("取用素材失败：{msg}", { msg: e.message })); }
+            }
+            add(filled);
+            if (!keepOpen) libModal?.close();   // 首帧 / 尾帧取一张即收窗；参考素材留着弹窗好连选
+        }, accept);
+    }
 
-    // 选中配方：拉 director_spec 刷新分段格子，并把配方的尺寸 / 步数只读回显出来（参数本体在编辑器里改）
-    const specCache = new Map();
-    async function applyRecipe(name) {
+    function segRefKinds(i) { return skillMeta(segs()[i]?.skill_id)?.gen_config?.ref_kinds || null; }
+
+    function addSeg() {
+        const last = segs()[segs().length - 1] || {};
+        const seg = { skill_id: last.skill_id || "", prompt: "", duration_sec: 5 };
+        if (last.mode) seg.mode = last.mode;   // 混配方的段级模式跟着上一段：新段不会突然换家族
+        segs().push(seg);
+        markDirty();
+        timeline.refresh();
+        selectSegment(segs().length - 1);
+    }
+
+    function reorderSegs(order) {
+        const arr = segs();
+        const next = order.map((i) => arr[i]).filter(Boolean);
+        if (next.length !== arr.length) return;   // 顺序表不完整就不动配方：宁可丢掉这一次拖拽，也不留下少一段的配方
+        recipe.segments = next;
+        checkedSegments = [];
+        timeline.clearChecked();
+        renderCheckHint();
+        markDirty();
+        timeline.refresh();
+        selectSegment(Math.min(selected, Math.max(0, next.length - 1)));
+    }
+
+
+    const findItem = (name) => recipeItems.find((r) => r.name === name) || null;
+    const renderRecipeSelect = () => {
+        recipeSel.textContent = "";
+        for (const r of recipeItems) {
+            recipeSel.appendChild($el("option", { value: r.name, textContent: r.source === "preset" ? tf("{name}（预设）", { name: r.name }) : r.name }));
+        }
+        if (!recipeItems.length) recipeSel.appendChild($el("option", { value: "", textContent: t("（没有导演配方）") }));
+        recipeSel.value = currentName;
+        recipeChip.sync();
+    };
+    async function refreshRecipeItems() {
+        try { recipeItems = (await listRecipes()).filter((r) => r.type === "video_director"); }
+        catch { recipeItems = []; }   // 离线模式 / ComfyUI 未就绪：列表拿不到就留着现有那一份
+        renderRecipeSelect();
+    }
+
+    function openEditor() {
+        if (!currentName) { toast(t("先选一份导演配方")); return; }
+        // 编辑器是浮层（桌面端不再内嵌宿主）：底部「保存并生成整片」保存成功后交本页直接提交
+        openDirectorEditor(findItem(currentName) || { name: currentName }, afterEditorSaved, selected, { onSaveAndRun: () => submitGenerate() });
+    }
+    async function afterEditorSaved() {
+        await refreshRecipeItems();
+        await openRecipe(currentName, { keepSeed: true });
+    }
+
+    // 每段的有效模式与素材名要 director_spec 那份（配方 assets/ 里的文件已复制进 input/）。
+    // 启动时导演页是隐藏的：spec 逐文件同步复制，桌面端一个事件循环上会把首页 list 挤到几秒后，
+    // 所以隐藏期间不拉，进本页由 onDirectorShown 补一次
+    async function loadSpec() {
+        spec = null;
+        if (currentName && currentView === "director") {
+            try {
+                const r = await api.fetchApi(`/rs_recipes/director_spec?name=${encodeURIComponent(currentName)}`);
+                const d = r.ok ? await r.json() : null;
+                if (d?.success) spec = d;
+            } catch { /* ComfyUI 未就绪时保持空白：槽位退回配方里记的名 */ }
+        }
+        applySpec();
+    }
+    function applySpec() {
+        const d = spec?.defaults;
+        sizeLabel.textContent = d ? tf("{w}×{h} · {steps} 步", { w: d.width, h: d.height, steps: d.steps }) : "";
+        if (d) sizeGlyph.sync(`${d.width}:${d.height}`);
+        media.style.setProperty("--ns-gen-ratio", d ? `${d.width} / ${d.height}` : "");
+        media.style.setProperty("--ns-gen-ar", d ? String(d.width / d.height) : "");
+        timeline.refresh();
+        renderSegment();
+    }
+
+    async function openRecipe(name, opts = {}) {
         name = String(name || "").trim();
         if (!name) return;
-        let spec = specCache.get(name);
-        if (!spec) {
-            // 启动时导演页是隐藏的，配方面板的自动选中也会走到这里。director_spec
-            // 会把配方素材复制进 input/，在桌面端那一个事件循环上把首页 list 挤到几秒后，
-            // 所以隐藏期间只记名字，进本页由 onDirectorShown 补拉。
-            if (currentView !== "director") return;
-            try {
-                const r = await api.fetchApi(`/rs_recipes/director_spec?name=${encodeURIComponent(name)}`);
-                const data = r.ok ? await r.json() : null;
-                if (data?.success) spec = data;
-            } catch { /* ComfyUI 未就绪时保持默认 */ }
-            if (spec) specCache.set(name, spec);
+        let d = null;
+        try {
+            const r = await api.fetchApi("/rs_recipes/load", {
+                method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }),
+            });
+            d = await r.json().catch(() => null);
+            if (!r.ok || !d?.success) throw new Error(String(d?.error || r.status));
+        } catch (e) {
+            statusEl.textContent = tf("配方读取失败：{msg}", { msg: e.message });
+            return;
         }
-        tlSegments = spec?.segments || [];
-        if (genState && !genState.terminal) tlProgress = { active: false, segment_index: -1, total_segments: 0 };   // 生成中切配方：进度高亮属于正在跑的那份配方，不许打到新配方的格子上
-        agentCtx.segments = tlSegments.length;   // 智能体上下文要报得出这份配方有几段
+        recipe = d.recipe || null;
+        currentName = recipe?.name || name;
+        selected = 0;
+        checkedSegments = [];
+        timeline.clearChecked();
+        renderCheckHint();
+        clearDirty();
+        if (!opts.keepSeed) seedIn.value = "";
+        timeline.opts.readOnly = isPreset();   // 预设配方：时间轴不能加段 / 拖时长 / 重排
+        saveBtn.disabled = isPreset();
+        saveBtn.title = isPreset() ? t("内置预设配方只读：先「复制配方」才能改") : t("把该段的提示词 / 时长 / 素材槽改动写回配方（不新增段，也不动故事板与分辨率）");
+        renderRecipeSelect();
+        statusEl.textContent = isPreset() ? t("内置预设配方只读：想改这一片就先「复制配方」") : "";
+        await loadSpec();
+        selectSegment(0);
+        agentCtx.recipe = currentName;      // 智能体上下文：默认围绕这一份配方出片
+        agentCtx.segments = segs().length;  // 要报得出这份配方有几段
         notifyAgentCtx();
-        setChecked([]);   // 分段已换（切配方 / 配方内容变更）→ 勾选作废
-        const d = spec?.defaults;
-        specEl.textContent = d ? tf("{w}×{h} · {steps} 步", { w: d.width, h: d.height, steps: d.steps }) : "";
-        // 结果区按这份配方的画面比例占位：竖屏配方就是竖的一条，横屏是横的一条，面板不必跟着宽
-        mediaRight.style.setProperty("--ns-gen-ratio", d ? `${d.width} / ${d.height}` : "");
-        mediaRight.style.setProperty("--ns-gen-ar", d ? String(d.width / d.height) : "");
     }
+
+    // 保存只发本次新取用的素材与改动后的段：既有资产与结果历史由后端按盘上现状保留
+    function newAssetRefs() {
+        const known = new Set((recipe?.assets || []).map((a) => a.file));
+        const out = [];
+        const addOne = (name, kind) => {
+            if (name && !known.has(name)) out.push({ filename: name, subfolder: "", type: "input", kind });
+        };
+        for (const s of segs()) {
+            addOne(s.first_frame, "image");
+            addOne(s.last_frame, "image");
+            const rf = s.refs || {};
+            for (const [key, kind] of [["images", "image"], ["videos", "video"], ["audios", "audio"]]) {
+                for (const v of (rf[key] || [])) addOne(v, kind);
+            }
+        }
+        return out;
+    }
+    saveBtn.addEventListener("click", async () => {
+        if (!currentName) { statusEl.textContent = t("请先选一份导演配方"); return; }
+        if (isPreset()) { statusEl.textContent = t("内置预设配方只读：先「复制配方」再改"); return; }
+        saveBtn.disabled = true;
+        try {
+            const res = await saveRecipe(currentName, recipe.prompt || "", newAssetRefs(), [], recipe.loras || [], {
+                shared: recipe.shared || {}, segments: segs(), story: recipe.story || null, setup: recipe.setup || null,
+            }, "video");
+            if (!res?.success) { statusEl.textContent = tf("保存失败：{msg}", { msg: res?.error || t("未知错误") }); return; }
+            clearDirty();
+            statusEl.textContent = tf("已保存：{name}（{n} 段）", { name: currentName, n: segs().length });
+            await refreshRecipeItems();
+            // 落盘后素材名可能被后端改名（重名让位）：重读配方与 spec，槽位与时间轴缩略图跟着换
+            await openRecipe(currentName, { keepSeed: true });
+        } catch (e) {
+            statusEl.textContent = tf("保存失败：{msg}", { msg: e.message });
+        } finally {
+            saveBtn.disabled = isPreset();
+        }
+    });
+
+
+    // setGen 只在「提交成功」之后调用：WS 事件为主、轮询兜底。提交失败不挂订阅也不起轮询——
+    // 那会在每次重开本页时按盘上的旧 task_id 白白发请求
+    function setGen(task) {
+        genState = {
+            task_id: task.task_id, statusEl, barEl, fillEl: barEl.firstElementChild,
+            runBtn, cancelBtn, media, pollTimer: null,
+            done: false, terminal: false, lastPreviewStep: 0,   // done：成片只替换一次；terminal：终态已落地，旧载荷一律作废；lastPreviewStep：预览帧按步号单调推进（WS / 轮询同源）
+            livePlayer,   // 终态时定格在最后一帧
+            onTerminal: () => { tlProgress = { active: false, segment_index: -1, total_segments: 0 }; timeline.refresh(); },
+        };
+        api.addEventListener("rs.director.status", onStatusEvent);
+        activeLive = { task_id: task.task_id, apply: applyPreview };   // 这一发的预览帧从此刻起进这个播放器
+        // WS 事件为主，轮询兜底（页面晚于任务打开 / 断线重连窗口）
+        const poll = async () => {
+            try {
+                const r = await api.fetchApi(`/neo_studio/director/${task.task_id}`);
+                const st = await r.json();
+                // 终态由 WS 先到时，这次在途轮询的旧载荷不得把界面拉回生成中（进度条 / 取消按钮 / 段高亮会复活）
+                if (!genState || genState.terminal) return;
+                if (st?.success) {
+                    updateGenStatus(st);
+                    if (GEN_TERMINAL.includes(st.status)) stopPolling();
+                    applyPreview(st.latest_preview);   // 轮询兜底：WS 断档期间没有帧，取后端最新一帧
+                }
+                // 分段进度：与画布节点同源，时间轴据此高亮正在跑的段并跟到那一格
+                const p = await api.fetchApi("/neo_video_gen/director_progress");
+                const d = await p.json();
+                if (d && typeof d.active === "boolean") {
+                    tlProgress = d;
+                    timeline.refresh();
+                    timeline.revealSeg(d.segment_index);
+                }
+            } catch { /* 网络抖动忽略，下一轮再试 */ }
+        };
+        genState.pollTimer = setInterval(poll, 2000);
+        updateGenStatus(task);
+    }
+
 
     function stopPolling() {
         if (genState && genState.pollTimer) clearInterval(genState.pollTimer);
         api.removeEventListener("rs.director.status", onStatusEvent);
     }
-
     function onStatusEvent({ detail }) {
         if (!detail || !detail.task_id) return;
         updateGenStatus(detail);
         // 终态即停轮询（WS 与下方轮询兜底两条路都覆盖，否则轮询拿到终态后会永远跑下去）
         if (GEN_TERMINAL.includes(detail.status)) stopPolling();
     }
-
     // 实时预览按 task_id 订阅：顶栏队列放开并发后，切配方 / 再提交都不许把正在跑那一发的
     // 预览订阅摘掉，所以整页只挂一条订阅，由 activeLive 决定当前这一发的帧落在哪个播放器上。
     function applyPreview(p) {
@@ -699,119 +836,132 @@ async function buildDirector(el) {
     }
     activeLive = null;
 
-    // 提交整片生成：「生成整片」按钮与编辑器底部「保存并生成整片」共用同一份参数组装。
-    // 参数本体（分辨率/步数/种子/连续性/上下文帧）都在配方里，这里只发配方名 + 勾选的段。
+    // 提交整片生成：配方名 + 勾选的段 + 本发的种子 + 技能面板那套模型链覆盖。
+    // 后端按配方名从盘上读整片（分辨率 / 连续性 / 上下文帧 / 每段的技能与素材都在配方里）——本页不发这些，
+    // 页面上改过的段必须先「保存该段」写回配方，这一发才带得走。
     async function submitGenerate() {
-        const recipe = currentRecipeName;
-        if (!recipe) { statusEl.textContent = t("请先在配方弹窗里选择一份配方"); return; }
-        const body = {
-            recipe,
-            only_segments: checkedSegments.map((i) => i + 1).join(","),   // 勾选的段（空 = 整片）
-        };
+        if (!currentName) { statusEl.textContent = t("请先选一份导演配方"); return; }
+        if (isPreset()) { statusEl.textContent = t("内置预设配方只读：先「复制配方」再生成整片"); return; }
+        if (dirty) { statusEl.textContent = t("该段有未保存的改动：先点「保存该段」，改动进配方后再生成"); return; }
+        const body = { recipe: currentName };
+        // 勾选按 1 起的段号发（后端 parse_segment_selection 认段号，越界与坏号整发 400 拒收）：不发 = 跑全部段
+        if (checkedSegments.length) body.only_segments = checkedSegments.map((i) => i + 1).join(",");
+        if (seedIn.value !== "") body.seed = Number(seedIn.value);
+        const ovBits = [];
+        if (videoModels) {
+            const c = videoCfg.collect();
+            const push = (key, label) => {
+                if (!c[key]) return;
+                body[key] = c[key];   // 与视频页自定参数同一批顶层键：空值不进覆盖，该段跟随自己的 skill config
+                ovBits.push(tf("{label} {name}", { label, name: String(c[key]).split("/").pop() }));
+            };
+            push("model", t("模型"));
+            push("text_encoder", t("编码器"));
+            push("vae", t("VAE"));
+            push("audio_vae", t("音频 VAE"));
+            if (c.loras?.length) { body.loras = c.loras; ovBits.push(tf("{n} 个 LoRA", { n: c.loras.length })); }
+            // 步数只在用户改过面板时才发：各段技能钉着的步数不该被整片覆盖掉
+            if (c.steps && !videoCfg.stepsFollowSkill()) { body.steps = c.steps; ovBits.push(tf("{n} 步", { n: c.steps })); }
+        }
 
         stopPolling();
-        runBtn.disabled = true;
         statusEl.textContent = t("提交中…");
         barEl.style.display = "none";
-        mediaRight.querySelectorAll(".ns-gen-final").forEach(el => el.remove()); // 清掉上次的成片
-        mediaRight.appendChild(liveBox);   // 恢复实时预览面板（成功后被成片替换掉了）
+        media.classList.add("ns-director-idle");   // 这一发的画面没来之前起手卡先站着
+        media.replaceChildren(idleCard, liveBox);   // 上一发的成片与定格帧让位：这一发从起手卡开始
         livePlayer.reset();
-        let resp;
+        let data = null;
         try {
-            resp = await api.fetchApi("/neo_studio/director/generate", {
+            const r = await api.fetchApi("/neo_studio/director/generate", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(body),
             });
+            data = await r.json().catch(() => null);
+            if (!r.ok || !data?.success) throw new Error(String(data?.error || r.status));
         } catch (e) {
-            runBtn.disabled = false;
             statusEl.textContent = tf("提交失败：{msg}", { msg: e.message });
             return;
         }
-        const data = await resp.json().catch(() => null);
-        if (!resp.ok || !data?.success) {
-            runBtn.disabled = false;
-            statusEl.textContent = tf("提交失败：{msg}", { msg: data?.error || resp.status });
-            return;
-        }
-        genState = {
-            task_id: data.task_id, statusEl, barEl, fillEl: barEl.firstElementChild,
-            runBtn, cancelBtn, mediaRight, pollTimer: null,
-            done: false, terminal: false, lastPreviewStep: 0,   // done：成片只替换一次；terminal：终态已落地，旧载荷一律作废；lastPreviewStep：预览帧按步号单调推进（WS / 轮询同源）
-            livePlayer,   // 终态时定格在最后一帧
-            onTerminal: () => { tlProgress = { active: false, segment_index: -1, total_segments: 0 }; renderSegs(); },
-        };
-        api.addEventListener("rs.director.status", onStatusEvent);
-        activeLive = { task_id: data.task_id, apply: applyPreview };   // 这一发的预览帧从此刻起进这个播放器
-        queueTrack("film", data, { label: recipe });
-        toast(tf("已加入队列：{label} · 顶栏「队列」看进度", { label: recipe }));
-        updateGenStatus(data);
-        runBtn.disabled = false;   // 提交成功就把按钮交回：这一发在顶栏队列里跑，用户能接着排下一发
-        // WS 事件为主，轮询兜底（页面晚于任务打开 / 断线重连窗口）
-        const poll = async () => {
-            try {
-                const r = await api.fetchApi(`/neo_studio/director/${data.task_id}`);
-                const t = await r.json();
-                // 终态由 WS 先到时，这次在途轮询的旧载荷不得把界面拉回生成中（进度条 / 取消按钮 / 段高亮会复活）
-                if (!genState || genState.terminal) return;
-                if (t?.success) {
-                    updateGenStatus(t);
-                    if (GEN_TERMINAL.includes(t.status)) stopPolling();
-                    applyPreview(t.latest_preview);   // 轮询兜底：WS 断档期间没有帧，取后端最新一帧
-                }
-                // 分段进度：与画布节点同源，高亮分段勾选条上正在跑的段
-                const p = await api.fetchApi("/neo_video_gen/director_progress");
-                const d = await p.json();
-                if (d && typeof d.active === "boolean") { tlProgress = d; renderSegs(); }
-            } catch { /* 网络抖动忽略，下一轮再试 */ }
-        };
-        genState.pollTimer = setInterval(poll, 2000);
+        // 提交成功才把界面交给这一发：WS 事件与轮询兜底都在 setGen 里挂。
+        // 按钮不锁——这一发在顶栏队列里跑，用户能接着排下一发
+        setGen(data);
+        queueTrack("film", data, { label: currentName });
+        // 覆盖值要在队列提示里说出来：整片每一段都被这一份模型链盖着，跑完才发现「和配方里钉的不一样」就晚了
+        toast(tf("已加入队列：{label}{ov} · 顶栏「队列」看进度", {
+            label: currentName,
+            ov: ovBits.length ? tf(" · 本次每段临时换：{list}", { list: ovBits.join(" · ") }) : "",
+        }));
     }
     runBtn.addEventListener("click", () => submitGenerate());
 
     cancelBtn.addEventListener("click", async () => {
         if (!genState) return;
+        // 乐观先落「已取消」并收起取消钮：入队前的取消连 prompt_id 都没有，队列项的 cancel 会直接吃灰
+        statusEl.textContent = t("已取消");
+        cancelBtn.style.display = "none";
         cancelBtn.disabled = true;
         try {
             const r = await api.fetchApi(`/neo_studio/director/${genState.task_id}/cancel`, { method: "POST" });
             const data = await r.json().catch(() => null);
-            if (!r.ok) statusEl.textContent = tf("取消失败：{msg}", { msg: data?.error || r.status });
+            if (!r.ok) throw new Error(String(data?.error || r.status));
         } catch (e) {
-            statusEl.textContent = tf("取消失败：{msg}", { msg: e.message });
+            statusEl.textContent = tf("取消任务失败：{msg}", { msg: e.message });
+            cancelBtn.style.display = "";
         }
         cancelBtn.disabled = false;
     });
 
-    // 面板布局压成一行：全选 / 清空 / 分段格子 / 勾选提示 / 尺寸回显 + 生成 / 取消 同占一行，
-    // 段数多时格子条自己横向滚，竖向空间整块留给结果区。
-    const runGroup = $el("div", { className: "ns-gen-run-group" }, [cancelBtn, runBtn]);
-    const ctrlRow = $el("div", { className: "ns-gen-row" }, [segsAllBtn, segsClearBtn, segsBox, segsHint, specEl, runGroup]);
-    const emptyHint = $el("div", { className: "ns-gen-empty-hint", textContent: t("生成后在此显示实时预览") });
-    const genLeft = $el("div", { className: "ns-gen-left" }, [ctrlRow, emptyHint]);
-    // 结果区没有画面时整块收起，控制行与预览占位上下排满面板
-    const genBody = $el("div", { className: "ns-gen-body ns-gen-empty" }, [genLeft, mediaRight]);
-    // 面板底部一行：状态文字（显存 / 内存读数与清理在顶栏队列面板里，不跟着生成页走）
-    const foot = $el("div", { className: "ns-gen-foot" }, [statusEl]);
-    const genPanel = $el("div", { className: "ns-gen-panel" }, [
-        genBody,
-        barEl, foot,
-    ]);
-    main.appendChild(buildDirectorSplit(main, genPanel));
-    main.appendChild(genPanel);
-
-    // --- 配方面板（配方弹窗里：点卡片 = 选中喂给右侧生成区 + 直接进左侧编辑器；只列多段导演配方） ---
-    recipesPanelEl = await createRecipesPanel(panelOpts());
-    recipesHost.appendChild(recipesPanelEl);
-    // 编辑器保存后：刷新配方列表、清 spec 缓存、同步默认值与时间轴分段（新建配方直接选中，其余保持当前选中）
-    window.addEventListener(DIRECTOR_RECIPE_SAVED_EVENT, async (e) => {
-        specCache.clear();
-        if (e?.detail?.created) currentRecipeName = e.detail.name;
-        agentCtx.recipe = currentRecipeName || "";   // 保存会换配方名，智能体上下文跟着走
-        notifyAgentCtx();
-        await refreshRecipesPanel();
-        // 刷新只恢复卡片高亮（不重放 onSelect），分段格子与尺寸/步数回显在这里跟着新配方重取
-        if (currentRecipeName) applyRecipe(currentRecipeName);
+    durIn.addEventListener("change", () => {
+        const s = segs()[selected];
+        if (!s) return;
+        const v = Math.min(150, Math.max(1, Number(durIn.value) || 5));   // 与后端段时长口径一致：1–150 秒
+        s.duration_sec = v;
+        durIn.value = v;
+        markDirty();
+        timeline.refresh();
     });
+    promptIn.addEventListener("input", () => {
+        const s = segs()[selected];
+        if (!s) return;
+        s.prompt = promptIn.value;
+        markDirty();
+        timeline.refresh();
+    });
+
+    // 配方面板（弹窗里：点卡片 = 选中喂给本页，含复制 / 删除 / 新增；只列多段导演配方）
+    directorPanelOpts = () => ({
+        directorOnly: true,
+        autoSelectFirst: false,
+        initialSelection: currentName,
+        onSelect: (r) => { recipesModal?.close(); openRecipe(r.name, { keepSeed: true }); },
+        onNewRecipe: () => { recipesModal?.close(); openDirectorEditor(null, afterEditorSaved); },
+    });
+    // 编辑器保存 / 新建保存后：刷新列表并把那份配方选中，时间轴与该段控件跟着换
+    window.addEventListener(DIRECTOR_RECIPE_SAVED_EVENT, async (e) => {
+        await refreshRecipeItems();
+        const name = e?.detail?.name;
+        if (name) await openRecipe(name, { keepSeed: true });
+    });
+    listVideoSkills().then((list) => { directorSkills = list || []; }).catch(() => {});
+    listVideoGenModels().then((models) => {
+        videoModels = models || {};
+        videoCfg.load({}, videoModels);
+        cfgSync();
+    }).catch(() => { /* 清单拿不到：覆盖面板整块不发值，各段技能配置照常生效 */ });
+    recipesPanelEl = await createRecipesPanel(directorPanelOpts());
+    recipesHost.appendChild(recipesPanelEl);
+    onDirectorShown = () => { refreshRecipeItems(); if (currentName) loadSpec(); };
+    // 首页的配方卡带 ?recipe= 深链进来：按名字选中那一份导演配方
+    directorOpenRecipe = async (name) => {
+        await refreshRecipeItems();
+        if (findItem(name)) await openRecipe(name, { keepSeed: true });
+    };
+    await refreshRecipeItems();
+    if (!currentName) {
+        const first = recipeItems.find((r) => r.source !== "preset") || recipeItems[0];
+        if (first) await openRecipe(first.name, {});
+    }
 }
 
 
@@ -1138,7 +1288,6 @@ const VIDEO_DUR_CHOICES = [3, 5, 8, 10, 15];
 // 参考素材那一行的三类上限（与后端 _MAX_REF 同档）：一行混收，各类各收各的，总数 = 三者之和
 const VIDEO_REF_MAX = { image: 9, video: 3, audio: 3 };
 const VIDEO_REF_TOTAL = Object.values(VIDEO_REF_MAX).reduce((a, b) => a + b, 0);
-const VIDEO_REF_NAMES = { image: "参考图", video: "参考视频", audio: "参考音频" };   // 取用时过 t()，随语言现读
 const VIDEO_TERMINAL = ["succeeded", "failed", "cancelled"];
 // 技能分组 = 导演页那套生成模式：组头名与组序直接取 director 的 SEG_MODES，两处模式词永远一致。
 // 技能的 mode 经 LEGACY_MODE_MAP 归并（t2v / i2v / fl2v → 关键帧生视频，r2v 留全参考生视频），
@@ -1156,6 +1305,9 @@ function defaultVideoSkill(list) {
     if (!by.length) return "";
     return by.reduce((a, b) => (videoSkillSteps(b) < videoSkillSteps(a) ? b : a)).id;
 }
+
+// 素材方块的缩略图：input/ 里的文件（视频页与导演页的素材方块共用这一份 URL）
+const inputThumbSrc = (value) => `/view?filename=${encodeURIComponent(value)}&subfolder=&type=input`;
 
 // 素材库弹窗点卡片 → copy_to_input 落进 input 根目录，返回加载节点可用的文件名
 async function copyPickedToInput(img) {
@@ -1185,118 +1337,26 @@ function buildVideo(el) {
         ]),
     ]);
 
-    // 素材方块工厂：方块壳直接借会话页的参考位 .neo-gallery-edit-refdrop（虚线方块 + 底部角标 +
-    // 填满转实心），点它开素材库弹窗；填上后铺缩略图 + ✕。multiple=true 收多张：一枚方块一张，
-    // 横排自动增加，到上限就没有 ＋ 那一格，行宽钉住后行内滚（style.css 的 ns-video-slot-row）。
-    // kindMax 给了就是混收那一行：素材库媒体全收，取用的按扩展名归入图 / 视频 / 音频，各类按各自上限收。
+    // 素材方块走共用组件 js/core/media-slot.js：这一页的落点是「取用即 copy_to_input 落进 input 根目录」，
+    // 缩略图就是 input 的 /view。kindMax 给了就是混收那一行：素材库媒体全收，取用的按扩展名归入
+    // 图 / 视频 / 音频，各类按各自上限收——上限、类型归类与技能槽位门控都写在组件里。
     function mediaSlot(label, multiple, maxN, kindMax = null) {
-        const items = [];   // {value, kind}：input 目录里的相对文件名 + 参考类型（kindMax 缺省时恒 image）
-        const add = $el("button", { className: "ns-video-slot-add", type: "button" });
-        setIcon(add, "plus", 18);
-        const cap = $el("span", { className: "neo-gallery-edit-refdrop-cap" });
-        const thumbs = $el("div", { className: "ns-video-thumbs" });
-        const slot = multiple
-            ? $el("div", { className: "ns-video-slot ns-video-slot-row" })
-            : $el("div", { className: "ns-video-slot neo-gallery-edit-refdrop" }, [thumbs, add, cap]);
-        const thumbSrc = (value) => `/view?filename=${encodeURIComponent(value)}&subfolder=&type=input`;
-        const countOf = (kind) => items.reduce((n, it) => n + (it.kind === kind ? 1 : 0), 0);
-        // 方块上的画面：图是封面，视频是首帧画面（不给 controls——这枚方块点了是换素材不是播片），
-        // 音频没有可画的画面，只有类型图标，文件名写在方块 title 里
-        const face = (it) => {
-            if (it.kind === "video") {
-                // muted 是媒体元素的属性开关：$el 只会 setAttribute，静音要在建好元素后写上去
-                const movie = $el("video", { className: "ns-video-slot-media", src: thumbSrc(it.value), preload: "metadata", playsInline: true, draggable: false });
-                movie.muted = true;
-                return movie;
-            }
-            if (it.kind === "audio") return $el("span", { className: "ns-video-slot-audio" }, [icon("volume", 20)]);
-            return $el("img", { className: "neo-gallery-edit-refchip-img", alt: it.value, src: thumbSrc(it.value), draggable: false });
-        };
-        const tile = (it) => {
-            const del = $el("button", { className: "neo-gallery-edit-refchip-x", type: "button", title: t("移除"), textContent: "✕" });
-            del.onclick = () => { items.splice(items.indexOf(it), 1); render(); };
-            return $el("div", { className: "neo-gallery-edit-refdrop ns-video-slot-tile has-img", title: `${t(VIDEO_REF_NAMES[it.kind])} · ${it.value}` }, [
-                face(it),
-                // 视频那一枚补一枚播放角标：缩略图上它和一张静图长得一样；音频方块的图标已经把类型说满
-                ...(it.kind === "video" ? [$el("i", { className: "ns-video-slot-kind" }, [icon("play", 12)])] : []),
-                del,
-            ]);
-        };
-        const render = () => {
-            if (multiple) {
-                const tiles = items.map(tile);
-                if (items.length < maxN) {
-                    cap.textContent = items.length ? `${items.length}/${maxN}` : t(label);
-                    // 角标写总数，各类各收到第几张写在添图那一枚的 title 里——三类计数铺开就是三行字
-                    add.title = kindMax
-                        ? Object.entries(kindMax).map(([k, n]) => `${t(VIDEO_REF_NAMES[k])} ${countOf(k)}/${n}`).join(" · ")
-                        : t("从素材库取用");
-                    tiles.push($el("div", { className: "neo-gallery-edit-refdrop ns-video-slot-tile" }, [add, cap]));
+        return createMediaSlot({
+            label, multiple, maxN, kindMax,
+            thumbSrc: inputThumbSrc,
+            toast,
+            refKinds: () => (kindMax ? (selectedMeta()?.gen_config?.ref_kinds || null) : null),
+            pick: ({ accept, multiple: keepOpen, gate, add }) => openLibModal("video", async (picked) => {
+                const ok = gate(picked);   // 先过闸：挡下的不 copy_to_input，input 目录不留用不上的文件
+                const filled = [];
+                for (const a of ok) {
+                    try { filled.push({ ...a, value: await copyPickedToInput(a.src) }); }
+                    catch (e) { toast(tf("取用素材失败：{msg}", { msg: e.message })); }
                 }
-                slot.replaceChildren(...tiles);
-                slot.scrollLeft = slot.scrollWidth;   // 连选时把刚添的那枚滚进视线
-                return;
-            }
-            thumbs.textContent = "";
-            for (const it of items.slice()) {
-                const wrap = $el("span", { className: "ns-video-thumb" }, [
-                    $el("img", {
-                        alt: it.value,
-                        src: thumbSrc(it.value),
-                    }),
-                ]);
-                const del = $el("button", { className: "neo-gallery-edit-refchip-x", type: "button", title: t("移除"), textContent: "✕" });
-                del.onclick = () => { items.splice(items.indexOf(it), 1); render(); };
-                wrap.appendChild(del);
-                thumbs.appendChild(wrap);
-            }
-            cap.textContent = items.length ? t("换图") : t(label);
-            slot.classList.toggle("has-img", items.length > 0);
-        };
-        // 这一发的出片模板收哪几类参考素材（技能列表的 gen_config.ref_kinds）：模板没声明那一类，
-        // 那条 LoadVideo / LoadAudio 加载链会被后端整条裁掉，素材只是发出去被静默丢掉。所以在落盘前
-        // 就挡住——copy_to_input 会往 input 目录写一份，先挡就不留用不上的文件。
-        // 老后端与老技能没这字段 = 不门控（照收，与改动前一致）
-        const refKinds = () => (kindMax ? (selectedMeta()?.gen_config?.ref_kinds || null) : null);
-        add.onclick = () => openLibModal("video", async (picked) => {
-            const allowed = refKinds();
-            const full = new Set(), blocked = new Set(), unusable = new Set();
-            for (const p of picked) {
-                const kind = kindMax ? mediaKindOf(p?.filename) : "image";
-                if (!kind) { unusable.add(String(p?.filename || "")); continue; }
-                if (allowed && !allowed.includes(kind)) { blocked.add(kind); continue; }
-                if ((multiple && items.length >= maxN) || (kindMax && countOf(kind) >= kindMax[kind])) { full.add(kind); continue; }
-                try {
-                    const value = await copyPickedToInput(p);
-                    if (multiple) items.push({ value, kind });
-                    else { items.length = 0; items.push({ value, kind }); }
-                } catch (e) { toast(tf("取用素材失败：{msg}", { msg: e.message })); }
-            }
-            for (const kind of full) toast(tf("{label}最多 {n} 个，多出来的没进", { label: t(VIDEO_REF_NAMES[kind]), n: kindMax[kind] }));
-            for (const kind of blocked) toast(tf("该技能模板没有{label}槽位，取用的没进", { label: t(VIDEO_REF_NAMES[kind]) }));
-            for (const name of unusable) toast(tf("参考节点不吃这类素材：{name}", { name }));
-            render();
-            if (!multiple) libModal?.close();   // 首帧 / 尾帧取一张即收窗；参考素材留着弹窗好连选
-        }, kindMax ? null : "image");   // 参考那一行媒体全收，取进来的按类型归槽；首帧 / 尾帧两枚收的仍是图像
-        render();
-        return {
-            el: slot,
-            get: () => items.map((it) => ({ value: it.value, media: it.kind })),
-            first: () => items[0] || null,
-            // 「再来一发」整槽换内容：面板已铺好，重建会把用户写了一半的提示词清掉。
-            // 混收那一行按扩展名归类，认不出的整项不填（副文件里没记视频与音频）
-            fill: (vals) => {
-                items.length = 0;
-                for (const v of vals || []) {
-                    const value = typeof v === "string" ? v : [v?.subfolder, v?.filename].filter(Boolean).join("/");
-                    if (!value) continue;
-                    const kind = kindMax ? mediaKindOf(value) : "image";
-                    if (!kind || (kindMax && countOf(kind) >= kindMax[kind])) continue;
-                    items.push({ value, kind });
-                }
-                render();
-            },
-        };
+                add(filled);
+                if (!keepOpen) libModal?.close();   // 首帧 / 尾帧取一张即收窗；参考素材留着弹窗好连选
+            }, accept),
+        });
     }
 
     const firstSlot = mediaSlot("首帧", false, 1);
@@ -2451,7 +2511,7 @@ window.addEventListener("neo-offline-request", () => {
 const RUN_GATES = [
     [".neo-gallery-gm-btn", "image_gen", t("生成素材")],
     [".neo-agent-run", "agent", t("生成")],
-    [".ns-gen-run", "director", t("生成整片")],
+    [".ns-director-run", "director", t("生成整片")],
     [".ns-video-run", "simple_video", t("生成视频")],
     [".neo-director-regen-run", "segment", t("生成这一段")],
     [".neo-director-merge-run", "segment", t("拼回成片")],

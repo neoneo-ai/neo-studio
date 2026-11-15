@@ -15,6 +15,7 @@ Studio 页面（web/studio/index.html）由 /neo-studio 短路径提供（同 /e
 """
 
 import asyncio
+import json
 import logging
 import re
 import time
@@ -28,6 +29,7 @@ from server import PromptServer
 from . import h3_assemble, h3_segment, image_gen, simple_video, task_center, voice_gen
 from .h3_preview import clear_latest_preview, get_latest_preview
 from .h3_video_director import parse_segment_selection
+from .h3_video_gen import _VIDEO_OVERRIDE_KEYS
 from .plugin_paths import DATA_ROOT
 from .image_gen import _error_from_history, _lookup, _progress_for, submit_graph
 from .recipes import add_recipe_results, is_preset_recipe, list_director_recipes, load_director_spec
@@ -39,6 +41,9 @@ logger.addFilter(PrefixFilter())
 TASK_TTL = 3600.0     # 任务记录保留时长（秒）
 POLL_INTERVAL = 1.0   # 轮询队列状态的间隔（秒）
 STATUS_EVENT = "rs.director.status"
+# 生成请求里可透传给 NeoH3VideoDirector 的模型链覆盖键：与视频页自定参数同一份键表，
+# steps 除外——它有自己的入参与优先级链（节点 > 配方 shared > skill config）
+_GEN_OVERRIDE_KEYS = tuple(k for k in _VIDEO_OVERRIDE_KEYS if k != "steps")
 
 # 顶栏队列面板：类别 →「跳到该页」要打开的 Studio 页面，与一次列表的行数上限
 QUEUE_PAGES = {"image": "paint", "voice": "gallery", "simple": "video",
@@ -179,6 +184,9 @@ def _run_prompt(data: dict, unique_id: str) -> dict:
     context_frames = int(shared.get("context_frames", 22)) if frames is None else int(frames)
     steps_in = data.get("steps")
     steps = int(shared.get("steps") or -1) if steps_in is None else int(steps_in)
+    # 技能面板本发临时换的模型链：整片每一段都盖同一份覆盖值（与视频页自定参数同一口径——空值不进覆盖，
+    # 该段跟随自己的 skill config 与配方 shared）。步数不在这里，它走上面那条节点入参的优先级链。
+    gen_overrides = {k: data[k] for k in _GEN_OVERRIDE_KEYS if data.get(k)}
     return {
         "recipe": recipe,
         "seed": int(data.get("seed", -1)),
@@ -195,6 +203,7 @@ def _run_prompt(data: dict, unique_id: str) -> dict:
                 "steps": steps,
                 "preview": True,
                 "only_segments": only_segments,
+                "gen_overrides": json.dumps(gen_overrides, ensure_ascii=False) if gen_overrides else "",
             }},
             "2": {"class_type": "SaveVideo", "inputs": {
                 "video": [unique_id, 0],

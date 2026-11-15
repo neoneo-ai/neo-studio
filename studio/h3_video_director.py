@@ -21,6 +21,7 @@
 单独放在 h3_segment.py（NeoH3SegmentRun 节点 + /neo_video_gen/run_segment* 路由）。
 """
 
+import json
 import math
 import random
 import re
@@ -38,7 +39,7 @@ from server import PromptServer
 from .bundles import get_bundle
 from .image_gen import render_template
 from .image_gen_edit import _image_to_data_uri, _model_injection_node, execute_graph_inprocess
-from .h3_video_gen import H3_FPS, _default_video_skill, _gen_video_skills, _resolve_skill_id, _require_vdn_plugin, _seconds_to_frames, _skill_label, ensure_reference_tags, is_multiframe_skill, resolve_video_params
+from .h3_video_gen import H3_FPS, _VIDEO_OVERRIDE_KEYS, _default_video_skill, _gen_video_skills, _resolve_skill_id, _require_vdn_plugin, _seconds_to_frames, _skill_label, ensure_reference_tags, is_multiframe_skill, resolve_video_params
 from .h3_preview import load_h3_tiny_vae, preview_override
 from .skill import get_skill_gen_config, load_skill_workflow
 from .recipes import list_director_recipes, load_director_spec
@@ -948,6 +949,11 @@ class NeoH3VideoDirector:
                 # 不写进配方；工作流加载时前端会重置为空，避免旧选择在下次运行里生效。
                 "only_segments": ("STRING", {"default": "",
                                              "tooltip": "只运行勾选的段：填段号（1 基，逗号分隔，如 1,3,5）；空 = 全部段（由时间轴上的勾选自动写入）"}),
+                # 本次整片每段临时换的模型链（Studio 导演页技能面板写入，MCP director_run 同一条通道）：
+                # JSON 串，只认 model / text_encoder / vae / audio_vae / loras，空 = 跟随配方与各段 skill config。
+                # 步数不在这里——它走上面的 steps 入参那条既有优先级链（节点 > 配方 shared > skill config）。
+                "gen_overrides": ("STRING", {"default": "",
+                                             "tooltip": "本次整片每段临时换的模型链（JSON：model / text_encoder / vae / audio_vae / loras）；空 = 跟随配方与各段 skill config。"}),
             },
             "hidden": {
                 "unique_id": "UNIQUE_ID",   # 预览事件按节点 id 路由回节点内的动画面板
@@ -969,7 +975,7 @@ class NeoH3VideoDirector:
     )
 
     def _run_bundle_segment(self, payload, skill, seed, width, height, model, steps, vae=None, preview=True, node_id=None,
-                           duration_sec=5):
+                           duration_sec=5, overrides=None):
         """BUNDLE 单段生成：提示词/参考来自 NeoPromptAgent 的 BUNDLE（data URI），视频 skill / 时长（秒）用节点入参，忽略 recipe。"""
         sid = _resolve_skill_id(skill)
         if not any(s["id"] == sid for s in _gen_video_skills()):
@@ -979,6 +985,8 @@ class NeoH3VideoDirector:
         if not prompt:
             raise ValueError("BUNDLE 缺少提示词，无法生成视频")
         body = {"prompt": prompt}
+        if overrides:
+            body.update(overrides)
         if int(seed) >= 0:
             body["seed"] = int(seed)
         in_w = int(width) if int(width) > 0 else 0
@@ -997,12 +1005,13 @@ class NeoH3VideoDirector:
             Types.VideoComponents(images=comp.images, audio=comp.audio, frame_rate=Fraction(H3_FPS))
         ),)
 
-    def generate(self, recipe, skill="", seed=-1, width=-1, height=-1, continuity=True, context_frames=22, model=None, steps=-1, duration_sec=5, bundle="", preview=True, unique_id=None, only_segments=""):
+    def generate(self, recipe, skill="", seed=-1, width=-1, height=-1, continuity=True, context_frames=22, model=None, steps=-1, duration_sec=5, bundle="", preview=True, unique_id=None, only_segments="", gen_overrides=""):
         payload = get_bundle(bundle) if bundle else None
+        overrides = _gen_overrides(gen_overrides)
         if payload:
             vae = load_h3_tiny_vae() if preview else None   # 预览解码器：一次生成内复用；关闭时不加载
             return self._run_bundle_segment(payload, skill, seed, width, height, model, steps, vae, preview, unique_id,
-                                            duration_sec=duration_sec)
+                                            duration_sec=duration_sec, overrides=overrides)
         spec = load_director_spec(recipe)
         segments = spec.get("segments") or []
         if not segments:
@@ -1010,16 +1019,18 @@ class NeoH3VideoDirector:
         # 只跑勾选的段（空 = 全部）；段号非法/越界在这里报错，消息可直接回前端
         keep = parse_segment_selection(only_segments, len(segments))
         return self._run_spec(spec, seed, width, height, continuity, context_frames, model, steps, preview, unique_id,
-                              keep=keep)
+                              keep=keep, overrides=overrides)
 
     def _run_spec(self, spec, seed, width, height, continuity, context_frames, model, steps, preview, unique_id,
-                  progress_index=0, progress_total=None, keep=None):
+                  progress_index=0, progress_total=None, keep=None, overrides=None):
         """按 spec 逐段生成并拼接成单个含音频 VIDEO；配方多段运行与「单段重生成」共用同一条执行链。
 
         progress_index / progress_total：单段重生成时把进度映射回配方里的真实段序号与总段数
         （默认从 0 开始，即整条配方从头跑）。
         keep：只跑这些段（0 基原始段序号；None = 全部段）。跳过段不生成也不进成片，但 seed / 进度 /
         报错文案仍按原始段序号，同一段在整片运行与部分运行里结果一致。
+        overrides：本次整片临时换的模型链（_VIDEO_OVERRIDE_KEYS 的非空子集），逐段并入 body 后由
+        resolve_video_params 盖在该段 skill config 上；None / {} = 每段跟随自己的 skill config 与配方 shared。
         首帧锚点：i2v/fl2v 段自带首帧图（分镜格）时用它，上段尾部只作为「目标之前」的参考视频；
         没自带首帧图时才由连续性接手（窗口第 0 帧 / Tier A 上段尾帧）。
         """
@@ -1080,6 +1091,8 @@ class NeoH3VideoDirector:
                         print(f"[Neo Studio] 多帧单次块（{label}）：{n_skipped} 个关键帧锚点超出帧预算，已跳过")
                     prompt = _merge_chunk_prompt(m_segs)
                     body = {"prompt": prompt, "seed": (base_seed + orig[pos]) % (2**63), "length": total_frames}
+                    if overrides:
+                        body.update(overrides)   # 技能面板那一发的模型链：块内每一段共用同一份覆盖
                     if in_w > 0:
                         body["width"] = in_w
                     if in_h > 0:
@@ -1109,6 +1122,8 @@ class NeoH3VideoDirector:
                     "prompt": prompt,
                     "seed": (base_seed + i) % (2**63),
                 }
+                if overrides:
+                    body.update(overrides)   # 同上：本次整片每一段都盖这份覆盖值
                 if in_w > 0:
                     body["width"] = in_w
                 if in_h > 0:
@@ -1210,6 +1225,23 @@ class NeoH3VideoDirector:
 # ===========================================================================
 # 图片分镜（storyboard）逻辑已迁至 storyboard.py（独立于节点运行时）。
 # ===========================================================================
+
+
+def _gen_overrides(text) -> dict:
+    """节点入参 gen_overrides（JSON 字符串）→ 只留 _VIDEO_OVERRIDE_KEYS 里的非空值（steps 除外的同一份键）。
+
+    空串 / 非 JSON / 非对象都回 {}：整片跟随配方与各段 skill config——旧工作流与旧 Studio 请求
+    加载进来就是这一态，行为与加这个入参之前逐字一致。
+    steps 不在这里：它是节点入参，优先级链「节点 > 配方 shared > skill config」已存在，
+    两处都能改同一步数就会互相覆盖（Studio 只在用户改过面板时发 steps）。
+    """
+    try:
+        data = json.loads(str(text or "").strip() or "{}")
+    except (TypeError, ValueError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {k: v for k in _VIDEO_OVERRIDE_KEYS if k != "steps" and (v := data.get(k))}
 
 
 NODE_CLASS_MAPPINGS = {"NeoH3VideoDirector": NeoH3VideoDirector, "NeoH3AddKeyframe": NeoH3AddKeyframe,

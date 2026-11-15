@@ -74,6 +74,7 @@ export class DirectorTimeline {
     this._ro = new ResizeObserver(() => this.refresh());
     this._ro.observe(container);
     this.refresh();
+    container.__neoDirectorTimeline = this;   // 宿主与用例都按挂在容器上的实例取用（同 gallery 的 __neoGallery）
   }
 
   _ensureCss() {

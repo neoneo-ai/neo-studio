@@ -191,11 +191,11 @@ test("技能页：技能管理换外壳配色，标题条只在列表态出现",
 test("导演页按钮走外壳配色：生成按钮半透明蓝，同排按钮灰底", () => {
     const css = fs.readFileSync(path.join(webDir, "studio", "style.css"), "utf8");
     const recipes = fs.readFileSync(path.join(webDir, "recipes.css"), "utf8");
-    const run = css.match(/\.ns-gen-panel \.ns-gen-run \{[^}]*\}/);
+    const run = css.match(/\.ns-director-card \.ns-director-run \{[^}]*\}/);
     assert.ok(run, "生成整片按钮要有配色规则");
     assert.match(run[0], /background:\s*rgba\(47, 111, 237/, "「生成整片」走壳内半透明蓝底");
     assert.match(run[0], /border-color:\s*#2f6fed/, "描边留饱和蓝：压淡底色后主行动仍是这一行最显眼的控件");
-    assert.ok(!/\.ns-gen-run[^}]*background:\s*#2f6fed/.test(css), "主按钮不该再是实心 #2f6fed 蓝板");
+    assert.ok(!/\.ns-director-run[^}]*background:\s*#2f6fed/.test(css), "主按钮不该再是实心 #2f6fed 蓝板");
     const saveRun = recipes.match(/\.neo-director-foot \.neo-director-save-run \{[^}]*\}/);
     assert.ok(saveRun, "编辑器底部「保存并生成整片」要有配色规则");
     assert.match(saveRun[0], /background:\s*rgba\(47, 111, 237/, "「保存并生成整片」与生成面板同款半透明蓝");

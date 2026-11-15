@@ -1357,7 +1357,7 @@ test("导演页在用时存配方：配方弹窗立刻长出新配方并选中�
     savedEvents.length = 0;
     await openStudio("#/director");
     await until(() => dirCards().length === 1 && dirSelected() === "R1", "进页时配方宿主里只有 R1 且自动选中");
-    assert.ok(document.querySelector(".ns-gen-panel"), "下方生成面板已铺好");
+    assert.ok(document.querySelector(".ns-director-card"), "配方条卡片已铺好");
 
     mockAgentStream([{ kind: "tool_call", tool: "director_save", text: '{"name":"我的片子"}' }, RECIPE_SAVED,
                      { kind: "content", text: "配方已保存" }]);

@@ -128,11 +128,8 @@ test("队列：导演页提交整片即时登记，终态事件给成片链接�
     }));
     window.location.hash = "#/director";
     await until(() => document.querySelector('.ns-tabs a[data-tab="director"].active'), "导演页签激活");
-    await until(() => document.querySelector(".ns-director-recipes .neo-recipes-card-selected"), "首个导演配方自动选中");
-    click(document.querySelector(".ns-director-recipes .neo-recipes-card-selected"));
-    await until(() => document.querySelectorAll(".ns-director-editor .neo-director-seg").length === 2,
-        "点卡打开编辑器");
-    click(document.querySelector(".ns-gen-run"));
+    await until(() => document.querySelector(".ns-director-recipe")?.value === "全片A", "进页自动选中首份配方");
+    click(document.querySelector(".ns-director-run"));
     await until(() => rowBy("全片A"), "整片行登记");
     assert.equal(rowBy("全片A").querySelector(".ns-queue-kind").textContent, "整片");
     const post = fetchLog.find((c) => c.method === "POST" && c.path === "/neo_studio/director/generate");

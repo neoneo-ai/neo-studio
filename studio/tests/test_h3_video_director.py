@@ -2110,7 +2110,7 @@ class DirectorModelStepsTests(unittest.TestCase):
     SR = 48000
     FPS = 24
 
-    def _run(self, model=None, steps=-1, sink_present=True, width=-1, height=-1, shared=None):
+    def _run(self, model=None, steps=-1, sink_present=True, width=-1, height=-1, shared=None, gen_overrides=""):
         h3d = h3_video_director
         orig = (h3d.load_director_spec, h3d._resolve_skill_id, h3d.load_skill_workflow,
                 h3d.get_skill_gen_config, h3d.resolve_video_params, h3d.render_template,
@@ -2159,7 +2159,8 @@ class DirectorModelStepsTests(unittest.TestCase):
         err = None
         try:
             h3_video_director.NeoH3VideoDirector().generate("r", model=model, steps=steps, width=width,
-                                                            height=height, context_frames=0)
+                                                            height=height, context_frames=0,
+                                                            gen_overrides=gen_overrides)
         except Exception as e:
             err = str(e)
         finally:
@@ -2215,6 +2216,55 @@ class DirectorModelStepsTests(unittest.TestCase):
         self.assertIsNone(err)
         self.assertTrue(all(p.get("width") == 512 and p.get("height") == 288 for p in render_params))
 
+    def test_gen_overrides_reaches_every_segment(self):
+        # 技能面板本发临时换的模型链：整片每一段都盖同一份覆盖值（混配方 / 混合技能同一口径）
+        ov = json.dumps({"model": "ov.safetensors", "vae": "v.safetensors",
+                         "loras": [{"name": "l", "strength": 0.7}]}, ensure_ascii=False)
+        _, _, render_params, _, err = self._run(gen_overrides=ov)
+        self.assertIsNone(err)
+        self.assertEqual(len(render_params), 2)
+        for p in render_params:
+            self.assertEqual(p.get("model"), "ov.safetensors")
+            self.assertEqual(p.get("vae"), "v.safetensors")
+            self.assertEqual(p.get("loras"), [{"name": "l", "strength": 0.7}])
+
+    def test_gen_overrides_empty_keeps_body_clean(self):
+        # 空 = 旧行为：body 不带任何模型链键，各段跟随自己的 skill config 与配方 shared
+        _, _, render_params, _, err = self._run()
+        self.assertIsNone(err)
+        for p in render_params:
+            for key in ("model", "vae", "audio_vae", "text_encoder", "loras"):
+                self.assertNotIn(key, p)
+
+    def test_gen_overrides_drops_steps_and_unknown_keys(self):
+        # 覆盖值只认 model / text_encoder / vae / audio_vae / loras：steps 走 steps 入参那条链，
+        # prompt / seed 等执行键不许从覆盖值进来（会把每段的画面与种子换掉）
+        ov = json.dumps({"steps": 9, "prompt": "hack", "seed": 3, "length": 999,
+                         "audio_vae": "a.safetensors"})
+        _, _, render_params, _, err = self._run(gen_overrides=ov)
+        self.assertIsNone(err)
+        for i, p in enumerate(render_params):
+            self.assertNotIn("steps", p)          # steps=-1（节点默认）→ 不发步数
+            self.assertEqual(p["prompt"], f"p{i}")   # 段自己的提示词，不被覆盖值改
+            self.assertNotEqual(p.get("seed"), 3)    # seed 由配方 shared.seed + 段序号派生
+            self.assertEqual(p["length"], h3_video_director._seconds_to_frames(5))   # 帧数按段时长算在覆盖之后
+            self.assertEqual(p["audio_vae"], "a.safetensors")
+
+    def test_gen_overrides_bad_json_follows_recipe(self):
+        # 半截 / 非 JSON 的入参（旧工作流里手填、旧 Studio 请求）不得炸整片：整段跟随配方
+        _, _, render_params, _, err = self._run(gen_overrides="{not json")
+        self.assertIsNone(err)
+        self.assertEqual(len(render_params), 2)
+        for p in render_params:
+            self.assertNotIn("model", p)
+
+    def test_gen_overrides_widget_is_string_default_empty(self):
+        opt = h3_video_director.NeoH3VideoDirector.INPUT_TYPES()["optional"]
+        self.assertIn("gen_overrides", opt)
+        self.assertEqual(opt["gen_overrides"][0], "STRING")
+        self.assertEqual(opt["gen_overrides"][1]["default"], "")
+        self.assertNotIn("forceInput", opt["gen_overrides"][1])   # Studio 页与 MCP 都要能直接写值
+
 
 
 class DirectorBundleTests(unittest.TestCase):
@@ -2224,7 +2274,7 @@ class DirectorBundleTests(unittest.TestCase):
     FPS = 24
 
     def _run(self, payload, seed=-1, width=-1, height=-1, model=None, steps=-1, duration_sec=5,
-             skill_id="minimax_h3_t2v", valid_skills=("minimax_h3_t2v",)):
+             skill_id="minimax_h3_t2v", valid_skills=("minimax_h3_t2v",), gen_overrides=""):
         h3d = h3_video_director
         orig = (h3d.get_bundle, h3d._gen_video_skills, h3d.load_director_spec,
                 h3d._resolve_skill_id, h3d.load_skill_workflow, h3d.get_skill_gen_config,
@@ -2255,7 +2305,7 @@ class DirectorBundleTests(unittest.TestCase):
         try:
             (out,) = h3_video_director.NeoH3VideoDirector().generate(
                 "ignored_recipe", skill=skill_id, seed=seed, width=width, height=height, model=model, steps=steps,
-                duration_sec=duration_sec, bundle="B1")
+                duration_sec=duration_sec, bundle="B1", gen_overrides=gen_overrides)
         except Exception as e:
             err = str(e)
         finally:
@@ -2328,6 +2378,15 @@ class DirectorBundleTests(unittest.TestCase):
         _, bodies, _, err = self._run(payload, skill_id="not_a_video_skill")
         self.assertIn("视频 skill", err or "")
         self.assertEqual(bodies, [])                  # 未进入执行链
+
+    def test_bundle_gen_overrides_applies_to_single_segment(self):
+        # BUNDLE 单段同样吃这份模型链覆盖：技能面板那一发不分配方与 BUNDLE
+        payload = {"prompts": ["p"]}
+        ov = json.dumps({"text_encoder": "te.safetensors", "loras": [{"name": "l", "strength": 1.0}]})
+        _, bodies, _, err = self._run(payload, gen_overrides=ov)
+        self.assertIsNone(err)
+        self.assertEqual(bodies[0].get("text_encoder"), "te.safetensors")
+        self.assertEqual(bodies[0].get("loras"), [{"name": "l", "strength": 1.0}])
 
     def test_bundle_missing_prompt_raises(self):
         payload = {"prompts": []}                     # bundle 有效但无提示词

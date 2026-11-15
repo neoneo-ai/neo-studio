@@ -138,6 +138,32 @@ class RunPromptTests(_RecipeCase):
         self.assertIs(inputs["continuity"], True)
         self.assertEqual(inputs["context_frames"], 5)
 
+    def test_gen_overrides_serialized_into_node(self):
+        # 技能面板本发临时换的模型链：非空键序列化进节点入参，整片每一段共用这一份
+        self.write_recipe("R")
+        body = {"recipe": "R", "model": "m.safetensors",
+                "loras": [{"name": "l", "strength": 0.8}]}
+        inputs = studio._run_prompt(body, "task-1")["graph"]["task-1"]["inputs"]
+        self.assertEqual(json.loads(inputs["gen_overrides"]),
+                         {"model": "m.safetensors", "loras": [{"name": "l", "strength": 0.8}]})
+
+    def test_gen_overrides_empty_keeps_old_request_shape(self):
+        # 旧请求体（没有这些键）与「面板什么都没选」都是空串：节点据此跟随配方与各段技能配置
+        self.write_recipe("R")
+        inputs = studio._run_prompt({"recipe": "R"}, "task-1")["graph"]["task-1"]["inputs"]
+        self.assertEqual(inputs["gen_overrides"], "")
+        self.assertEqual(json.loads(inputs["gen_overrides"] or "{}"), {})
+
+    def test_steps_override_only_when_request_carries_it(self):
+        # 步数走 steps 入参那条既有优先级链，不进覆盖串：面板没改过步数时配方 shared.steps 保持生效
+        self._shared("R", steps=12)
+        plain = studio._run_prompt({"recipe": "R"}, "task-1")["graph"]["task-1"]["inputs"]
+        self.assertEqual(plain["steps"], 12)
+        self.assertEqual(plain["gen_overrides"], "")
+        changed = studio._run_prompt({"recipe": "R", "steps": 8}, "task-1")["graph"]["task-1"]["inputs"]
+        self.assertEqual(changed["steps"], 8)
+        self.assertNotIn("steps", json.loads(changed["gen_overrides"] or "{}"))
+
     def test_recipe_without_run_params_keeps_defaults(self):
         # 旧配方没有这些键 → 缺省 continuity=True、context_frames=22、steps=-1（各段技能 config）
         self.write_recipe("R")

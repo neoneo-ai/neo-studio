@@ -31,7 +31,7 @@ const sizeSel = () => document.querySelector(".ns-video .ns-video-size");
 const durSel = () => document.querySelector(".ns-video .ns-video-dur");
 const seedBox = () => document.querySelector(".ns-video .ns-video-seed");
 const runBtn = () => document.querySelector(".ns-video .ns-video-run");
-const deckSlots = () => [...document.querySelectorAll(".ns-video .ns-video-deck .ns-video-slot")];
+const deckSlots = () => [...document.querySelectorAll(".ns-video .ns-video-deck .ns-slot")];
 // 方块上的缩略图 src 就是槽位值（/view?filename=<编码值>&…），解码回来与 payload 的 value 同形
 const thumbPaths = (idx) => [...(deckSlots()[idx]?.querySelectorAll("img") || [])]
     .map((i) => decodeURIComponent(new URL(i.getAttribute("src"), "http://test.local").searchParams.get("filename") || ""));
@@ -211,9 +211,9 @@ test("视频复用：认不出的整项丢掉——技能 / 模型 / 时长 / �
     assert.deepEqual(filled, ["技能与自定参数", "参考素材", "提示词"], "丢掉的不进清单");
     assert.deepEqual(thumbPaths(2), ["NeoSimple/frame.png", "NeoSimple/a.png"],
         "全参考技能把首帧记的 src 并进参考素材");
-    assert.ok(deckSlots()[2].querySelector("video.ns-video-slot-media"),
+    assert.ok(deckSlots()[2].querySelector("video.ns-slot-media"),
         "副文件里的视频按视频归槽，不当图铺一张解不开的封面");
-    assert.equal(deckSlots()[2].querySelectorAll(".ns-video-slot-tile.has-img").length, 3,
+    assert.equal(deckSlots()[2].querySelectorAll(".ns-slot-tile.has-img").length, 3,
         "参考节点读不进的条目（notes.txt）整项不填");
     assert.equal(seedBox().value, "", "随机种子不填");
     assert.equal(sizeSel().value, "1344,768", "面板没有的尺寸整项不填");
