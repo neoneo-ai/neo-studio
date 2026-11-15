@@ -87,12 +87,12 @@ const widthsOf = (cards) => cards.map((c) => c.style.width).join(",");
 const atOutput = () => assert.ok(galleryState().crumb.includes("Output"), `应停在 Output：${galleryState().crumb}`);
 
 let gallery;
-const barBtn = (label) => [...document.querySelectorAll(".ns-director-libbtns button")]
+const barBtn = (label) => [...document.querySelectorAll(".ns-director-bar button")]
     .find((b) => b.textContent.includes(label));
 const libModal = () => document.querySelector(".ns-libmodal:not(.ns-hidden)");
 // 素材库入口就在本页配方条右端：进页铺好配方条就能开弹窗，不再要先起一份配方挂编辑器
 async function openEditorForLib() {
-    await until(() => document.querySelector(".ns-director-libbtns"), "配方条就位");
+    await until(() => document.querySelector(".ns-director-bar"), "配方条就位");
 }
 
 test("素材页进入目录 → 导演页素材库弹窗：目录跟着进弹窗，反复开合不落首页", async () => {
@@ -114,7 +114,9 @@ test("素材页进入目录 → 导演页素材库弹窗：目录跟着进弹窗
 
     // 切到导演页开弹窗：弹窗里就是刚浏览的那个目录，不是首页
     location.hash = "#/director";
-    await until(() => document.querySelector(".ns-director-empty-actions"), "导演页就位");
+    // 路由落定才算就位：导演的页子建得早（常驻），顶栏那枚 active 是 showView 落完才点亮的，
+    // 用它等就不抢在 hashchange 之前开弹窗——弹窗会被那次切页关掉，卡片永远铺不出来
+    await until(() => document.querySelector('a[data-tab="director"].active'), "导演页路由落定");
     await openEditorForLib();
     click(barBtn("素材库"));
     await until(() => galleryState().host === "director", "画廊挂进素材库弹窗");
@@ -163,7 +165,7 @@ test("素材页进入目录 → 导演页素材库弹窗：目录跟着进弹窗
 
     // 切导演页再切回：路由接管后 URL 参数原样保留，画廊仍停在目录
     click(document.querySelector('a[data-tab="director"]'));
-    await until(() => document.querySelector(".ns-director-empty-actions"), "导演页");
+    await until(() => document.querySelector('a[data-tab="director"].active'), "导演页路由落定");
     assert.equal(location.hash, "#/director");
     assert.match(location.search, /gallery=/, "切页不该清掉 gallery 参数");
     click(navTab);

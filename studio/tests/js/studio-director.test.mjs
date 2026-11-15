@@ -50,9 +50,11 @@ const libModal = () => document.querySelector('.ns-libmodal[data-lib-scope="dire
 const modalCard = (name) => [...document.querySelectorAll(".ns-libmodal .neo-gallery-thumb-container")].find((c) => c.dataset.filename === name);
 const isHidden = (el) => el.classList.contains("ns-hidden");
 const posts = (p) => fetchLog.filter((c) => c.method === "POST" && c.path === p);
+// copy_to_input 是 GET 路由（后端 @routes.get）：素材取用落盘只认这条路径，不看方法
+const copies = () => fetchLog.filter((c) => c.path === "/neo_gallery/copy_to_input");
 const genBody = () => (posts("/neo_studio/director/generate").at(-1) || { body: {} }).body;
-// load 的查询串里带着配方名：重读次数就是它被重新取回的次数
-const loads = (name) => fetchLog.filter((c) => c.path.includes("/rs_recipes/load") && String(c.query || "").includes(encodeURIComponent(name))).length;
+// load 是 POST，配方名在 body 里：重读次数就是它被重新取回的次数
+const loads = (name) => fetchLog.filter((c) => c.path === "/rs_recipes/load" && c.body?.name === name).length;
 
 function wsSend(type, data) {
     const ws = wsInstances[wsInstances.length - 1];
@@ -349,12 +351,12 @@ test("导演页：方块取用先过闸 —— 技能不收的类型不落盘，
     await pickRecipe("R2");
     await clickSeg(1);
     await pickIntoSlot(2, "clip.mp4");
-    assert.equal(posts("/neo_gallery/copy_to_input").length, 0, "被挡下的不 copy_to_input，input 目录不留用不上的文件");
-    assert.ok(appState.toasts.some((m) => String(m?.text || m).includes("该技能模板没有参考视频槽位")), `挡下要说清楚：${appState.toasts.map((m) => m?.text || m).join(" | ")}`);
-    assert.equal(slots()[2].querySelectorAll(".ns-slot-tile").length, 0, "被挡下的不进槽");
+    assert.equal(copies().length, 0, "被挡下的不 copy_to_input，input 目录不留用不上的文件");
+    assert.ok((document.getElementById("ns-toast")?.textContent || "").includes("该技能模板没有参考视频槽位"), `挡下要说清楚：${document.getElementById("ns-toast")?.textContent}`);
+    assert.equal(slots()[2].querySelectorAll(".ns-slot-tile.has-img").length, 0, "被挡下的不进槽（行里那枚添图方块不算内容）");
     await pickIntoSlot(2, "a.png");
-    assert.equal(posts("/neo_gallery/copy_to_input").length, 1, "参考图过闸才落盘");
-    assert.ok(posts("/neo_gallery/copy_to_input")[0].query.includes("a.png"), "copy_to_input 带原文件名");
+    await until(() => copies().length === 1, "参考图过闸才落盘");
+    assert.ok(String(copies()[0].query).includes("a.png"), "copy_to_input 带原文件名");
     assert.ok(slots()[2].querySelector(".ns-slot-tile img").src.includes("copied_a.png"), "槽里显示 copy 后的文件名");
     assert.ok(saveBtn().classList.contains("ns-director-dirty"), "槽位改动标脏，由用户决定写回配方");
 });
@@ -374,7 +376,7 @@ test("导演页：保存该段写回配方 —— refs 进段、新素材进 ass
     assert.equal(body.type, "video_director", "保存声明这一份是导演配方");
     assert.equal(body.segments.length, 3, "保存该段不新增段");
     assert.deepEqual(body.segments[1].refs?.images, ["copied_a.png"], "该段 refs 写的是解析进 input/ 的名");
-    assert.ok(body.assets.includes("copied_a.png"), "新素材进配方 assets/");
+    assert.ok(["copied_a.png", { filename: "copied_a.png", subfolder: "", type: "input", kind: "image" }].some((a) => JSON.stringify(body.assets).includes(JSON.stringify(a))), "新素材进配方 assets/");
     assert.equal(body.segments[0].prompt, "甲", "没动的段原样带回去");
     assert.ok(statusEl().textContent.includes("已保存"), "状态行确认已保存");
     assert.ok(!saveBtn().classList.contains("ns-director-dirty"), "写回后清脏标记");
@@ -452,7 +454,7 @@ test("导演页：配方管理弹窗（卡片铺好 / 列表刷新不自动关 /
     assert.notEqual(getComputedStyle(recipesModal()).display, "none", "列表刷新后弹窗不得自己关掉");
     click(recipesModal().querySelector(".ns-libmodal-close"));
     await settle();
-    assert.equal(getComputedStyle(recipesModal()).display, "none", "✕ 收起弹窗");
+    assert.ok(recipesModal().classList.contains("ns-hidden"), "✕ 收起弹窗（关窗是 ns-hidden，jsdom 里没有样式表可比 display）");
 });
 
 test("导演页：整片编辑器保存后重读该配方并选中它", async () => {
@@ -462,15 +464,15 @@ test("导演页：整片编辑器保存后重读该配方并选中它", async ()
     click(barBtn("整片编辑器"));
     await settle();
     await settle();
-    assert.ok(document.querySelector(".ns-director-editor"), "编辑器以浮层打开（页面顶栏不再有整片按钮）");
-    assert.ok(typeof window.__neoDirectorEditor?.save === "function", "编辑器实例挂在窗口上供宿主保存");
-    await window.__neoDirectorEditor.save();
+    assert.ok(document.querySelector(".neo-director-overlay"), "编辑器以浮层打开（页面顶栏不再有整片按钮）");
+    await until(() => document.querySelector(".neo-director-overlay .neo-director-save"), "编辑器铺好底部保存钮");
+    click(document.querySelector(".neo-director-overlay .neo-director-save"));
     await settle();
     await settle();
     assert.equal(posts("/rs_recipes/save").length, 1, "编辑器底部保存走 /rs_recipes/save");
-    assert.ok(loads("R1") > loadsBefore, "保存后本页重读该配方");
+    await until(() => loads("R1") > loadsBefore, "保存后本页重读该配方");
     assert.equal(recipeSel().value, "R1", "保存后顶栏下拉选中这一份");
-    assert.ok(!document.querySelector(".ns-director-editor"), "保存后关掉编辑器");
+    assert.ok(!document.querySelector(".neo-director-overlay"), "保存后关掉编辑器");
 });
 
 test.afterEach(() => {

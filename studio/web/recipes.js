@@ -1376,6 +1376,8 @@ export async function createRecipesPanel(options = {}) {
     }
 
     refreshFn = renderList;
+    // 宿主选中态同步（Studio 导演页：下拉快切 / 保存后重读都要把卡片高亮挪过去），只改高亮不重放 onSelect
+    root.__neoRecipesPanel = { select: (name) => { selectedName = String(name || ""); applySelectionHighlight(selectedName); } };
     loadPrefs().then(() => { syncChips(); searchInput.value = prefs.query; sortSel.value = prefs.sort; paint(); });
     await renderList();
     return root;

@@ -106,7 +106,8 @@ export function createMediaSlot({ label, multiple = false, maxN = 1, kindMax = n
             accepted.push({ value, kind, src: v });
         }
         for (const kind of full) toast(tf("{label}最多 {n} 个，多出来的没进", {
-            label: kindMax ? t(REF_KIND_NAMES[kind]) : t(label), n: maxN,
+            label: kindMax ? t(REF_KIND_NAMES[kind]) : t(label),
+            n: kindMax ? kindMax[kind] : maxN,   // 按类别满位就报那一类的上限：报总数 15 等于没说哪一类满
         }));
         for (const kind of blocked) toast(tf("该技能模板没有{label}槽位，取用的没进", { label: t(REF_KIND_NAMES[kind]) }));
         for (const name of unusable) toast(tf("参考节点不吃这类素材：{name}", { name }));

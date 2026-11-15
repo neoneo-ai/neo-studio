@@ -1334,6 +1334,11 @@ const DIR_NEW = { name: "我的片子", type: "video_director", shared: { mode: 
 function mockDirectorRoutes() {
     mockRoute("/rs_prompts/skills", jsonResponse([{ id: "sk-a", name: "技能 A", gen_video: true }]));
     mockRoute("/rs_recipes/list", () => jsonResponse(savedEvents.length ? [DIR_R1, DIR_NEW] : [DIR_R1]));
+    // 进页选中首份配方 / 保存后选中新一份：load 桩按名给列表里的那一份
+    mockRoute("/rs_recipes/load", (body) => jsonResponse({
+        success: true,
+        recipe: (savedEvents.length ? [DIR_R1, DIR_NEW] : [DIR_R1]).find((r) => r.name === body?.name) || null,
+    }));
     mockRoute("/rs_recipes/director_spec", jsonResponse({
         success: true,
         segments: [

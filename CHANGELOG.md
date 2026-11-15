@@ -28,6 +28,13 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   a box that eats the column's height, and the status line moved into the dock head and collapses entirely while it is
   empty. Windows ≤900px put the capsule back in the flow. Covered by the 导演页 cases in
   `studio/tests/js/studio-director.test.mjs`.
+- **The director page opens on a recipe, and its own save keeps what you typed.** Entering the page selects the first
+  导演配方 by itself — the stage, the timeline and the three 素材 squares are live without picking a recipe first, and a
+  preset-only list opens read-only the same way. 保存该段 re-reads that recipe and keeps the seed box, the segment
+  checks and the 「已保存」 line, so saving never wipes the prompt you are on; the 配方 card panel moves its highlight to
+  the recipe the page is on, and the 参考素材 add tile names the kind that is full (参考图 / 参考视频 / 参考音频) instead
+  of the 15 total. Covered by the 进页铺好配方条 / 勾选 / 取用先过闸 / 保存该段 / 整片编辑器 cases in
+  `studio/tests/js/studio-director.test.mjs`.
 - **Every material slot in the director editor opens the asset library on click.** The first-/last-frame slots, the
   three reference grids, the 角色参考图 grid, the grid-image drop area, the per-segment storyboard thumbs and the
   trailing empty-segment row used to pop the OS file picker. Clicking one now opens the 素材库 (the Studio modal's

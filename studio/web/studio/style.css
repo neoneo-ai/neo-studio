@@ -287,6 +287,9 @@ body {
 .ns-director-seed { width: 88px; min-width: 60px; height: 28px; }
 .ns-director-seed-roll { display: inline-flex; align-items: center; background: transparent; border: none; color: var(--ns-dim); padding: 0; cursor: pointer; }
 .ns-director-seed-roll:hover { color: var(--ns-fg); }
+/* 编辑器浮层里的次要按钮走外壳灰底（同排一排蓝底会把主行动压平）；
+   主行动「保存并生成整片」保持半透明蓝，未保存确认条的蓝-红-灰语义色不在这一排里 */
+.neo-director-overlay :is(.neo-director-save, .neo-director-cancel, .neo-director-regen-run) { background: #2a2a2e; border-color: #444; color: #ddd; }
 .ns-director-card .rs-btn { flex: none; height: 28px; padding: 0 12px; font-size: 12px; }
 .ns-director-card .ns-director-save { background: #2a2a2e; border-color: #444; color: #ddd; }
 .ns-director-card .ns-director-save:hover { background: #333338; border-color: #555; color: #fff; }

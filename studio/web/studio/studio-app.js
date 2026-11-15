@@ -763,7 +763,10 @@ async function buildDirector(el) {
         saveBtn.disabled = isPreset();
         saveBtn.title = isPreset() ? t("内置预设配方只读：先「复制配方」才能改") : t("把该段的提示词 / 时长 / 素材槽改动写回配方（不新增段，也不动故事板与分辨率）");
         renderRecipeSelect();
-        statusEl.textContent = isPreset() ? t("内置预设配方只读：想改这一片就先「复制配方」") : "";
+        recipesPanelEl?.__neoRecipesPanel?.select(currentName);   // 卡片高亮跟着本页的选中配方挪（下拉快切 / 保存后重读）
+        // 「保存该段」后的重读要留着那句「已保存」：重读是把刚落盘的结果刷回界面，不是开一份新配方
+        const presetNote = isPreset() ? t("内置预设配方只读：想改这一片就先「复制配方」") : "";
+        statusEl.textContent = presetNote || (opts.keepStatus ? statusEl.textContent : "");
         await loadSpec();
         selectSegment(0);
         agentCtx.recipe = currentName;      // 智能体上下文：默认围绕这一份配方出片
@@ -801,7 +804,7 @@ async function buildDirector(el) {
             statusEl.textContent = tf("已保存：{name}（{n} 段）", { name: currentName, n: segs().length });
             await refreshRecipeItems();
             // 落盘后素材名可能被后端改名（重名让位）：重读配方与 spec，槽位与时间轴缩略图跟着换
-            await openRecipe(currentName, { keepSeed: true });
+            await openRecipe(currentName, { keepSeed: true, keepStatus: true });
         } catch (e) {
             statusEl.textContent = tf("保存失败：{msg}", { msg: e.message });
         } finally {
@@ -967,14 +970,15 @@ async function buildDirector(el) {
     // 配方面板（弹窗里：点卡片 = 选中喂给本页，含复制 / 删除 / 新增；只列多段导演配方）
     directorPanelOpts = () => ({
         directorOnly: true,
-        autoSelectFirst: false,
+        autoSelectFirst: true,      // 进页就选中首份导演配方：整片生成区与时间轴不用先点一次卡片
         initialSelection: currentName,
         onSelect: (r) => { recipesModal?.close(); openRecipe(r.name, { keepSeed: true }); },
         onNewRecipe: () => { recipesModal?.close(); openDirectorEditor(null, afterEditorSaved); },
     });
-    // 编辑器保存 / 新建保存后：刷新列表并把那份配方选中，时间轴与该段控件跟着换
+    // 编辑器保存 / 新建保存后：重建配方面板（新配方立刻长出一张卡）并把那份配方选中，时间轴与该段控件跟着换
     window.addEventListener(DIRECTOR_RECIPE_SAVED_EVENT, async (e) => {
         await refreshRecipeItems();
+        await refreshRecipesPanel();
         const name = e?.detail?.name;
         if (name) await openRecipe(name, { keepSeed: true });
     });
@@ -993,10 +997,6 @@ async function buildDirector(el) {
         if (findItem(name)) await openRecipe(name, { keepSeed: true });
     };
     await refreshRecipeItems();
-    if (!currentName) {
-        const first = recipeItems.find((r) => r.source !== "preset") || recipeItems[0];
-        if (first) await openRecipe(first.name, {});
-    }
 }
 
 

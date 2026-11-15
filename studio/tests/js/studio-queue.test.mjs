@@ -80,6 +80,14 @@ async function boot({ caps = null, rows = SEED_ROWS, historyRows = [] } = {}) {
             { skill_id: "sk-a", prompt: "段二", duration_sec: 4 },
         ] },
     ]));
+    // 导演页进页就选中首份配方 → 立刻按名读一份：load 桩给的就是列表里那一份
+    mockRoute("/rs_recipes/load", (body) => jsonResponse({
+        success: true,
+        recipe: body?.name === "全片A" ? {
+            name: "全片A", type: "video_director", source: "user", shared: { mode: "f2v" }, assets: [], loras: [],
+            segments: [{ skill_id: "sk-a", prompt: "段一", duration_sec: 3 }, { skill_id: "sk-a", prompt: "段二", duration_sec: 4 }],
+        } : null,
+    }));
     mockRoute("/rs_prompts/skills", jsonResponse([
         { id: "sk-a", cn_name: "技能 A", category: "gen_video", gen_video: true, mode: "t2v" },
     ]));

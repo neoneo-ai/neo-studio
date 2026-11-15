@@ -199,7 +199,7 @@ test("导演页按钮走外壳配色：生成按钮半透明蓝，同排按钮�
     const saveRun = recipes.match(/\.neo-director-foot \.neo-director-save-run \{[^}]*\}/);
     assert.ok(saveRun, "编辑器底部「保存并生成整片」要有配色规则");
     assert.match(saveRun[0], /background:\s*rgba\(47, 111, 237/, "「保存并生成整片」与生成面板同款半透明蓝");
-    assert.ok(/\.ns-director \.neo-director-panel :is\(\.neo-director-save[^{]*\{[^}]*background:\s*#2a2a2e/.test(css),
+    assert.ok(/\.neo-director-overlay :is\(\.neo-director-save[^{]*\{[^}]*background:\s*#2a2a2e/.test(css),
               "编辑器里的 取消 / 保存 / 生成修改 走外壳灰底；白名单写法，未保存确认条的蓝-红-灰语义色不在其内");
     assert.ok(/\.neo-director-dirty-discard\s*\{[^}]*background:\s*#3a2a2a/.test(recipes),
               "未保存确认条的「放弃修改」保持红底语义色，灰底排不覆盖它");
