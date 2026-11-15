@@ -996,6 +996,8 @@ async function buildDirector(el) {
 
     cancelBtn.addEventListener("click", async () => {
         if (!genState) return;
+        // 中断不可逆：这一发出不了成片，先把「这一发要丢什么」说清楚再动手（与删段同一套 confirm 口径）
+        if (!confirm(t("取消这一发生成？排队中的这一发直接出队，已经在跑的立即中断，这一发不出成片。"))) return;
         // 乐观先落「已取消」并收起取消钮：入队前的取消连 prompt_id 都没有，队列项的 cancel 会直接吃灰
         statusEl.textContent = t("已取消");
         cancelBtn.style.display = "none";

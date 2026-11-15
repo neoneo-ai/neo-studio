@@ -459,6 +459,7 @@ const EN = {
     "高级模式：整片编辑器浮层（分段增删、生成模式与分辨率、故事板与提示词工具）": "Advanced mode: the full-film editor overlay (segment editing, generation mode and resolution, storyboard and prompt tools)",
     "保存整片参数": "Save film parameters",
     "整片参数（宽高比 / 百万像素 / 种子 / 步数 / 连续性 / 上下文帧）：页内改，保存写回配方": "Film parameters (aspect ratio / megapixels / seed / steps / continuity / context frames): edit them here, saving writes them back into the recipe",
+    "取消这一发生成？排队中的这一发直接出队，已经在跑的立即中断，这一发不出成片。": "Cancel this run? A queued job is dequeued, a running one is interrupted immediately, and this run produces no final film.",
     "宽": "Width",
     "高": "Height",
     "跟随技能": "Follow the skill",

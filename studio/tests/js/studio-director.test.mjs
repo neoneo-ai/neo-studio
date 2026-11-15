@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { resetEnv, flush, mockRoute, clearRoutes, jsonResponse, sleep, click, fire, fetchLog } from "./setup.mjs";
+import { resetEnv, flush, mockRoute, clearRoutes, jsonResponse, sleep, click, fire, fetchLog, setConfirmAnswer } from "./setup.mjs";
 import { appState } from "./mocks/comfy-app.mjs";
 
 const webDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../web");
@@ -441,11 +441,18 @@ test("导演页：轮询拿到终态 → 停轮询；终态落地后在途轮询
     assert.equal(cancelBtn().style.display, "none", "取消按钮不得复活（点下去只会拿到「任务已结束」）");
 });
 
-test("导演页：取消 = POST 取消路由 + 乐观落「已取消」", async () => {
+test("导演页：取消先过确认 —— 挡下不动队列，确认后 POST 取消路由 + 乐观落「已取消」", async () => {
     await boot();
     await openDirector();
     await startRun();
     assert.equal(cancelBtn().style.display, "", "排队中取消按钮可见");
+    setConfirmAnswer(false);
+    click(cancelBtn());
+    await settle();
+    assert.equal(posts("/neo_studio/director/task-1/cancel").length, 0, "确认前不打取消路由");
+    assert.equal(cancelBtn().style.display, "", "挡下时取消钮留在原位，用户接着能真取消");
+    assert.ok(!statusEl().textContent.includes("已取消"), "挡下时不落「已取消」");
+    setConfirmAnswer(true);
     click(cancelBtn());
     await settle();
     assert.equal(posts("/neo_studio/director/task-1/cancel").length, 1, "取消打本页的取消路由");
@@ -479,11 +486,13 @@ test("导演页整片参数面板：分辨率胶囊弹出回显配方值，保�
     assert.equal(sharedField(".ns-director-shared-steps").value, "", "配方没写步数：留空 = 该段技能钉的步数");
     assert.equal(sharedField(".ns-director-shared-ctx").value, "", "上下文帧留空 = 22 那一档");
     assert.ok(sharedField(".ns-director-shared-cont").checked, "连续性起手勾着");
+    assert.ok(sharedField(".ns-director-shared-ident").checked, "配方没写身份参考 = 角色参考图照常注入每一段");
     assert.match(sharedField(".ns-director-shared-res").textContent, /×/, "非自定义档直接把算好的宽高写在表单里");
     sharedField(".ns-director-shared-seed").value = "777";
     sharedField(".ns-director-shared-steps").value = "30";
     sharedField(".ns-director-shared-mp").value = "1";
     fire(sharedField(".ns-director-shared-mp"), "input");
+    sharedField(".ns-director-shared-ident").checked = false;
     await settle();
     click(sizeSaveBtn());
     await settle(); await settle();
@@ -492,6 +501,7 @@ test("导演页整片参数面板：分辨率胶囊弹出回显配方值，保�
     assert.equal(body.shared.seed, 777, "种子写进 shared");
     assert.equal(body.shared.steps, 30, "步数写进 shared");
     assert.equal(body.shared.megapixels, 1, "百万像素写进 shared");
+    assert.equal(body.shared.identity_refs, false, "关掉身份参考落进 shared：这份配方不再注入角色参考图");
     assert.equal(body.shared.width % 32, 0, "宽高比 + 百万像素算出的宽按 32 对齐落盘");
     assert.equal(body.shared.height % 32, 0, "高按 32 对齐落盘");
     assert.equal(body.shared.mode, "f2v", "表单没有的键原样留着：生成模式不被这次保存覆盖");
@@ -522,7 +532,6 @@ test("导演页高级模式：整片编辑器以浮层打开，保存后本页�
 test("导演页该段 ⋯：复制到下面一段、前移改顺序、删除走确认（写回同一条保存链）", async () => {
     await boot();
     await openDirector();                                   // R1 = 段一 / 段二
-    window.confirm = () => true;
     click(segMenuBtn());
     await settle();
     assert.notEqual(segMenu().style.display, "none", "点 ⋯ 出菜单");
@@ -548,7 +557,6 @@ test("导演页该段 ⋯：复制到下面一段、前移改顺序、删除走�
 test("导演页该段 ⋯：最后一段删不掉；预设配方不出 ⋯", async () => {
     await boot();
     await openDirector();
-    window.confirm = () => true;
     click(segMenuBtn()); await settle();
     click(segMenuItem("删除该段")); await settle(); await settle();
     assert.equal(tl().opts.getSegments().length, 1, "确认删除后少一段");
@@ -601,6 +609,11 @@ test("共享整片参数表单（director.js createSharedConfigSection）：回�
     assert.equal(kept.continuity, false, "连续性取消勾选收回 false");
     assert.equal(kept.aspect_ratio, "16:9 (宽屏)", "1344×768 认回 16:9，不落到自定义");
     assert.equal(kept.megapixels, 1, "百万像素按画面面积回填");
+    assert.equal(kept.identity_refs, true, "配方没写身份参考：表单默认注入");
+    cfg.load({ identity_refs: false });
+    assert.ok(!cfg.el.querySelector(".ns-director-shared-ident").checked, "落过盘的身份参考关着要回显成关着");
+    cfg.el.querySelector(".ns-director-shared-ident").checked = true;
+    assert.equal(cfg.collect().identity_refs, true, "再勾上要把 true 交出去：宿主并进现有 shared，省掉这个键会让上次的 false 留下");
     cfg.load({});
     const blank = cfg.collect();
     assert.equal(blank.seed, -1, "种子留空 = 每次运行随机换种子");

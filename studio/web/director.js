@@ -161,10 +161,11 @@ export function directorAssetRefs(recipe) {
     return out;
 }
 
-/** 整片参数（分辨率 / 种子 / 步数 / 连续性 / 上下文帧）的紧凑表单：落盘键与口径都跟整片编辑器同一套——
+/** 整片参数（分辨率 / 种子 / 步数 / 连续性 / 上下文帧 / 角色身份参考）的紧凑表单：落盘键与口径都跟整片编辑器同一套——
  *  shared.width / height / aspect_ratio / megapixels（宽高比 + 百万像素 → 32 对齐的 W/H，「自定义」手输）、
- *  seed 留空 = -1（每次运行随机换种子）、steps 留空 = -1（各段技能 config 钉的步数）、context_frames 留空 = 22。
- *  导演页「分辨率」胶囊弹的就是它：页内改完整片参数，不必进整片编辑器。mode / chunk_sec / identity_refs
+ *  seed 留空 = -1（每次运行随机换种子）、steps 留空 = -1（各段技能 config 钉的步数）、context_frames 留空 = 22、
+ *  identity_refs 只在关掉时落盘（后端 normalize 只认 False）。
+ *  导演页「分辨率」胶囊弹的就是它：页内改完整片参数，不必进整片编辑器。mode / chunk_sec
  *  这些本表单没有的键不动——宿主把 collect() 并进现有 shared，编辑器钉着的值原样留着。密度归宿主容器。 */
 export function createSharedConfigSection() {
     const section = $el('div', { className: 'rs-gen-model-section ns-director-shared-form' });
@@ -180,6 +181,8 @@ export function createSharedConfigSection() {
     const stepsInp = $el('input', { className: 'rs-form-input ns-director-shared-steps', type: 'number', min: 1, max: 100, placeholder: t('跟随技能') });
     const ctxInp = $el('input', { className: 'rs-form-input ns-director-shared-ctx', type: 'number', min: 0, max: 362, placeholder: '22' });
     const continuityChk = $el('input', { className: 'ns-director-shared-cont', type: 'checkbox', checked: true });
+    const identChk = $el('input', { className: 'ns-director-shared-ident', type: 'checkbox', checked: true });
+    identChk.title = t('把「角色参考图」作为各段身份参考（关键帧是背影 / 局部特写、看不到脸时靠它保住角色身份）；需「连续性」开启。关掉便于做前后对比测试');
     const customRow = $el('div', { className: 'rs-config-row' }, [formLabel('宽'), cwInp, formLabel('高'), chInp]);
     section.append(
         $el('div', { className: 'rs-config-row' }, [formLabel('宽高比'), aspectSel, resOut]),
@@ -189,6 +192,7 @@ export function createSharedConfigSection() {
         $el('div', { className: 'rs-config-row' }, [formLabel('步数'), stepsInp]),
         $el('div', { className: 'rs-config-row' }, [formLabel('上下文帧'), ctxInp]),
         $el('div', { className: 'rs-config-row' }, [formLabel('连续性'), continuityChk]),
+        $el('div', { className: 'rs-config-row' }, [formLabel('角色身份参考'), identChk]),
     );
     const updateRes = () => {
         const custom = aspectSel.value === DIRECTOR_CUSTOM;
@@ -216,6 +220,7 @@ export function createSharedConfigSection() {
             stepsInp.value = Number(shared.steps) > 0 ? String(shared.steps) : '';
             ctxInp.value = shared.context_frames != null ? String(shared.context_frames) : '';
             continuityChk.checked = shared.continuity !== false;
+            identChk.checked = shared.identity_refs !== false;
             updateRes();
         },
         /** 收表单成 shared 的那几个键：口径与整片编辑器落盘那份一致 */
@@ -233,6 +238,9 @@ export function createSharedConfigSection() {
                 steps: stepsInp.value === '' ? -1 : Math.min(100, Math.max(-1, Number(stepsInp.value))),
                 continuity: continuityChk.checked,
                 context_frames: ctxInp.value === '' ? 22 : Math.min(362, Math.max(0, Number(ctxInp.value))),
+                // 勾着也要显式写 true：宿主把 collect() 并进现有 shared，省掉这个键会让上一次落盘的
+                // identity_refs:false 留在表里，用户重开开关就关不回去（后端 normalize 会把 true 丢掉，配方不落这个键）
+                identity_refs: identChk.checked,
             };
         },
     };

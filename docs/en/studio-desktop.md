@@ -113,7 +113,7 @@ generation dock floating at the bottom of that stage** — segments and whole-fi
 is the quick switch on it, and the recipe list and the asset library both open in modals (`js/core/lib-modal.js`).
 
 - **Advanced mode** opens the full-film editor as an overlay (`openDirectorEditor`): segment add/delete, generation
-  mode and chunk seconds, the storyboard and prompt tools, and identity references all live there — the same overlay
+  mode and chunk seconds, and the storyboard and prompt tools all live there — the same overlay
   in Studio and on the main canvas (Studio registers no embedded host). After that overlay saves, the page reloads
   the recipe and selects it, so the segments and parameters on screen follow what just landed.
 - **Startup always lands on home**: when the recipe list lands the first director recipe is auto-selected (the dock
@@ -151,17 +151,22 @@ is the quick switch on it, and the recipe list and the asset library both open i
   the title bar is therefore always reachable — a modal can never be dragged where it cannot be closed.
   Switching pages closes the modal of the page you left, and the gallery goes back to the standby host.
 - The run parameters for the film (aspect ratio / megapixels / custom width-height / seed / steps / continuity /
-  context frames) are edited in the form the **resolution** capsule pops, and **保存整片参数** goes down the same
-  save chain as **保存该段** (`createSegmentOps().save` → `/rs_recipes/save`), landing in the recipe's `shared`.
-  Keys the form does not carry (generation mode / chunk seconds / identity references) are pinned by the Advanced-mode
-  editor and this page's save carries them back untouched. The blank-value conventions match on both sides: empty seed
-  = -1 (a new random seed every run), empty steps = -1 (the steps each segment's skill config pins), empty context
-  frames = 22.
+  context frames / character identity reference) are edited in the form the **resolution** capsule pops, and
+  **保存整片参数** goes down the same save chain as **保存该段** (`createSegmentOps().save` → `/rs_recipes/save`),
+  landing in the recipe's `shared`. Keys the form does not carry (generation mode / chunk seconds) are pinned by the
+  Advanced-mode editor and this page's save carries them back untouched. The blank-value conventions match on both
+  sides: empty seed = -1 (a new random seed every run), empty steps = -1 (the steps each segment's skill config pins),
+  empty context frames = 22; **character identity reference** writes nothing while it is checked and lands
+  `identity_refs=false` only when it is off (that recipe stops injecting the character reference images — the
+  before/after comparison switch).
 - **🎬 Save & Generate Film** in the Advanced-mode footer hands the submit to this page after a successful save: the
   parameters just landed in the recipe, the segments and seed stay as this page has them.
 - The generation status freezes on the first terminal status (succeeded / failed / cancelled): a payload issued
   before the terminal event and landing after it is dropped, so the progress bar and **⏹ Cancel** never come
   back (cancelling a finished task only answers "任务已结束，无法取消").
+- **⏹ Cancel** asks for confirmation first, naming what the run is about to lose (a queued job is dequeued, a running
+  one is interrupted immediately, this run produces no final film) before the cancel request goes out — the same
+  `confirm` convention the delete-segment entry uses. Declining leaves the cancel button in place and the run running.
 - Layout sizes: the stage takes the whole column (recipe row, progress row and preview, with
   `padding-bottom: 250px` reserved as dock clearance and the preview centred at the recipe's `width×height` ratio); the
   dock is a centred floating capsule (`min(980px, 100% − 24px)` wide, 12px from the bottom) stacking the status row, the
