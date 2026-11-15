@@ -103,7 +103,16 @@ const paintPage = page("ns-paint", `
   </div>
   <div class="ns-paint-bar"><button class="ns-btn ns-paint-preset-btn" type="button">提示词</button><button class="ns-btn ns-paint-random-btn" type="button">随机</button></div>`);
 
-const videoPage = page("ns-video", `
+// 状态行两种写法：空闲（一个字都没有，整条该撤走）与在跑（写字 + 进度条，该占一行）
+const videoHeadIdle = `<div class="ns-video-head">
+          <span class="ns-video-status"></span>
+          <div class="ns-gen-progress ns-video-progress" style="display:none"><div></div></div>
+        </div>`;
+const videoHeadBusy = `<div class="ns-video-head">
+          <span class="ns-video-status">队列中 · 3/8 段</span>
+          <div class="ns-gen-progress ns-video-progress"><div style="width:40%"></div></div>
+        </div>`;
+const videoPageBody = (head) => `
   <div class="ns-video-page">
     <div class="ns-video-stage">
       <div class="ns-video-clip">
@@ -113,10 +122,7 @@ const videoPage = page("ns-video", `
     </div>
     <div class="ns-video-dock">
       <div class="ns-video-card neo-gallery-gm-composer">
-        <div class="ns-video-head">
-          <span class="ns-video-status">队列中 · 3/8 段</span>
-          <div class="ns-gen-progress ns-video-progress"><div style="width:40%"></div></div>
-        </div>
+        ${head}
         <div class="ns-video-top">
           <div class="ns-video-deck"><div class="ns-video-slot neo-gallery-edit-refdrop"><span>首帧</span></div><div class="ns-video-slot neo-gallery-edit-refdrop"><span>尾帧</span></div><div class="ns-video-slot neo-gallery-edit-refdrop"><span>参考图</span></div></div>
           <div class="ns-video-input">
@@ -134,7 +140,9 @@ const videoPage = page("ns-video", `
       </div>
     </div>
     <div class="ns-video-bar"><button class="ns-btn ns-video-preset-btn" type="button">提示词</button><button class="ns-btn ns-video-random-btn" type="button">随机</button></div>
-  </div>`);
+  </div>`;
+const videoPage = page("ns-video", videoPageBody(videoHeadBusy));
+const videoPageIdle = page("ns-video", videoPageBody(videoHeadIdle));
 
 // 技能 + 自定参数双栏面板（chip 浮出层）：与 image-gen.js 的 createVideoModelConfigSection 同构，
 // 右栏那列标签（生视频模型 / 步数 / Text Encoder / VAE（视频）/ VAE（音频）/ LoRA）是这组的主体
@@ -789,6 +797,8 @@ test("桌面视频页：composer 胶囊 980px 居中、提示词框两行高、�
             taBottom: Math.round(b(".ns-video-prompt").bottom),
             chipsOverflow: Math.round(chips.scrollWidth - chips.clientWidth),
             genW: Math.round(b(".ns-video-run").width),
+            headH: Math.round(b(".ns-video-head").height),
+            bandAboveSlot: Math.round(b(".ns-video-slot").top - b(".ns-video-card").top),
         };
     });
     assert.ok(m.dockW <= 982 && m.dockW >= 900, `composer 胶囊没收窄到 980px（${m.dockW}px）`);
@@ -797,6 +807,27 @@ test("桌面视频页：composer 胶囊 980px 居中、提示词框两行高、�
     assert.ok(m.taBottom >= m.deckBottom - 1, `提示词框顶不过素材方块底边（框底 ${m.taBottom} / 方块底 ${m.deckBottom}）`);
     assert.ok(m.chipsOverflow <= 1, `芯片行在 980px 胶囊里溢出 ${m.chipsOverflow}px，「生成」滚不出去`);
     assert.ok(m.genW > 40, `「生成」钮被挤扁（宽 ${m.genW}px）`);
+    // 状态行写字时照占一行，方块上方只余内衬 + 一行字 + 行距
+    assert.ok(m.headH >= 14 && m.headH <= 20, `状态行写字时该有一行高：${m.headH}px`);
+    assert.ok(m.bandAboveSlot <= 36, `状态行把方块顶下去 ${m.bandAboveSlot}px`);
+});
+
+// 空闲时状态行一个字都没有：整条连行距一起撤走，方块上方只剩输入卡那层内衬（顶部空带 26px 的来处）
+test("视频页空闲：空状态行整条撤走，方块上方只剩输入卡内衬", async () => {
+    const m = await measure(videoPageIdle, DESKTOP, {}, () => {
+        const b = (s) => document.querySelector(s).getBoundingClientRect();
+        return {
+            headH: Math.round(b(".ns-video-head").height),
+            bandAboveSlot: Math.round(b(".ns-video-slot").top - b(".ns-video-card").top),
+            cardH: Math.round(b(".ns-video-card").height),
+            genBottom: Math.round(b(".ns-video-run").bottom),
+            pageBottom: Math.round(b(".ns-video-page").bottom),
+        };
+    });
+    assert.equal(m.headH, 0, `空状态行还占着 ${m.headH}px 一行`);
+    assert.ok(m.bandAboveSlot <= 12, `方块上方空带没收紧：${m.bandAboveSlot}px`);
+    assert.ok(m.cardH <= 122, `空闲胶囊比两行那一档高 ${m.cardH}px`);
+    assert.ok(m.genBottom <= m.pageBottom, `胶囊底边伸出页面 ${m.genBottom - m.pageBottom}px，「生成」够不着`);
 });
 
 // Windows 200% 缩放的桌面窗口（1776 物理像素 = 888 CSS px）就落在那条 900px 媒体查询里：

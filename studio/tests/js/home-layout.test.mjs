@@ -82,6 +82,17 @@ const presetTitles = (host) => [...host.querySelectorAll(".ns-home-preset-card .
     .map((e) => e.textContent);
 /** 图标格子里现在选着的那一枚：图标格铺的是图标本身，图标名只是这枚的标识 */
 const iconPick = () => dlg().querySelector('.ns-home-f-icons [aria-pressed="true"]')?.dataset.icon;
+/** 跳转类型那一排 radio 里的某一颗：三种跳转铺成一排，点一颗就换整张卡的去向 */
+const radioIn = (label) => [...dlg().querySelectorAll(".ns-home-f-radio")].find((b) => b.textContent === label);
+/** 自建卡那一张预览：铺的就是这张卡在首页上的样子，标题与副标题点字直接改，图标点一下才展开候选 */
+const formCard = () => dlg().querySelector(".ns-home-form-card");
+const lineIn = (cls) => dlg().querySelector(`.ns-home-form-card .${cls}`);
+const iconTile = () => dlg().querySelector(".ns-home-form-icon");
+/** 就地改一行字：写进这一行再喊失焦——首页标题区那五行用的就是这一套走法 */
+function typeLine(node, text) {
+    node.textContent = text;
+    node.dispatchEvent(new Event("blur"));
+}
 /** 首页上真出现的那一叠卡名：移出首页的卡不在网格上，这一叠就是页面上看得见的卡 */
 const cardTitles = (root) =>
     [...root.querySelectorAll(".ns-home-card .ns-home-card-title")].map((e) => e.textContent);
@@ -492,17 +503,20 @@ test("就地排版：整张卡拖着排；板块不给控件，旧版式收起�
     assert.ok(!home.querySelector(".ns-home-off-tag"), "落回首页：板块不再标「已收起」");
 });
 
-test("自动填的形状跟着跳转类型与目标：配方用名字，技能用显示名，链接用域名", () => {
-    assert.deepEqual(hl.cardShapeForTarget("recipe", "我的配方", "我的配方"),
-        { title: "我的配方", sub: "多段配方，生成整片视频", icon: "play", section: "create" });
-    assert.deepEqual(hl.cardShapeForTarget("recipe", ""),
-        { title: "导演配方", sub: "多段配方，生成整片视频", icon: "play", section: "create" });
+test("自动填的形状跟着跳转类型与目标：技能用显示名，配方用名字，链接用域名", () => {
     assert.deepEqual(hl.cardShapeForTarget("skill", "skill_a", "画一张"),
-        { title: "画一张", sub: "打开这一发技能的应用页", icon: "wand", section: "material" });
+        { title: "画一张", sub: "打开这一发技能的应用页", icon: "wand" });
+    assert.deepEqual(hl.cardShapeForTarget("skill", ""),
+        { title: "技能", sub: "打开这一发技能的应用页", icon: "wand" },
+        "技能是弹窗开局的落点：没选技能时给一张只进技能页的卡");
+    assert.deepEqual(hl.cardShapeForTarget("recipe", "我的配方", "我的配方"),
+        { title: "我的配方", sub: "多段配方，生成整片视频", icon: "play" });
+    assert.deepEqual(hl.cardShapeForTarget("recipe", ""),
+        { title: "导演配方", sub: "多段配方，生成整片视频", icon: "play" });
     assert.deepEqual(hl.cardShapeForTarget("url", "https://www.example.com/neo"),
-        { title: "example.com", sub: "打开外部链接", icon: "plug", section: "create" });
+        { title: "example.com", sub: "打开外部链接", icon: "plug" });
     assert.deepEqual(hl.cardShapeForTarget("url", ""),
-        { title: "", sub: "打开外部链接", icon: "plug", section: "create" },
+        { title: "", sub: "打开外部链接", icon: "plug" },
         "地址没填就不编一个标题：空标题由保存门去说");
 });
 
@@ -523,13 +537,12 @@ test("自建卡走添加卡片这一面：表单保存才落卡，取消不动�
         "默认版式里默认不上首页的那一张就在这一面等着加：其余内置卡都在首页上");
     assert.ok(!dlg().querySelector(".ns-home-preset-empty"), "有预设可加时不给那一句空态");
     assert.equal(home.querySelectorAll(".ns-home-card.is-custom").length, 0, "没保存就不落卡");
-    assert.ok(fieldIn(dlg(), "标题") && fieldIn(dlg(), "跳转类型"), "下半是自建卡的全套字段");
+    assert.ok(formCard() && fieldIn(dlg(), "跳转类型") && fieldIn(dlg(), "跳转目标"),
+        "下半就是这张卡的样子加两行跳转配置：标题与副标题在卡上点字改");
 
     const url = "https://example.com/neo";
-    const titleInput = fieldIn(dlg(), "标题").querySelector("input");
-    titleInput.value = "我的入口";
-    titleInput.dispatchEvent(new Event("change"));
-    pick(fieldIn(dlg(), "跳转类型").querySelector("select"), "url");
+    typeLine(lineIn("ns-home-card-title"), "我的入口");
+    click(radioIn("外部链接"));
     await flush();
     const urlInput = fieldIn(dlg(), "链接地址").querySelector("input");
     assert.ok(urlInput, "跳转类型是链接时给地址输入框");
@@ -546,9 +559,7 @@ test("自建卡走添加卡片这一面：表单保存才落卡，取消不动�
 
     click(home.querySelector(".ns-home-add-tile"));
     await flush();
-    const cancelInput = fieldIn(dlg(), "标题").querySelector("input");
-    cancelInput.value = "不要这张";
-    cancelInput.dispatchEvent(new Event("change"));
+    typeLine(lineIn("ns-home-card-title"), "不要这张");
     click(dlgBtn("cancel"));
     await flush();
     assert.ok(!dlg(), "取消关掉弹窗");
@@ -578,7 +589,7 @@ test("自建卡走添加卡片这一面：表单保存才落卡，取消不动�
         "删掉的自建卡从 custom 与 order 里一起清干净");
 });
 
-test("弹窗的跳转类型只有三种：编辑模式与页面直连归预设卡，配方与技能可留不指定", async () => {
+test("跳转类型铺成三颗 radio：开局落在技能，编辑模式与页面直连归预设卡，目标可留不指定", async () => {
     mountStudio();
     mockLayout({});
     mockRoute("/rs_prompts/skills", () => jsonResponse([
@@ -591,26 +602,32 @@ test("弹窗的跳转类型只有三种：编辑模式与页面直连归预设�
 
     click(home.querySelector(".ns-home-add-tile"));
     await flush();
-    const typeSel = fieldIn(dlg(), "跳转类型").querySelector("select");
-    assert.deepEqual([...typeSel.options].map((o) => o.value), ["recipe", "skill", "url"],
-        "自建卡能配的跳转类型只有这三种：编辑模式与页面直连不在其上——那一发由预设卡给");
+    const radios = [...fieldIn(dlg(), "跳转类型").querySelectorAll(".ns-home-f-radio")];
+    assert.deepEqual(radios.map((b) => b.textContent), ["技能", "导演配方", "外部链接"],
+        "自建卡能配的跳转类型铺成三颗：编辑模式与页面直连不在其上——那一发由预设卡给");
+    assert.deepEqual(radios.map((b) => b.dataset.value), ["skill", "recipe", "url"]);
+    assert.equal(dlg().querySelector(".ns-home-f-radios")?.getAttribute("role"), "radiogroup",
+        "三颗是一组 radio：换跳转类型点一下就成，不用先点开下拉再看");
+    assert.equal(fieldIn(dlg(), "跳转类型").querySelector('[aria-checked="true"]')?.dataset.value, "skill",
+        "开局落在技能：这张页上最常加的就是技能卡，一排里第一颗就是它");
     const targetSel = () => fieldIn(dlg(), "跳转目标").querySelector("select");
-    assert.equal(targetSel().options[0].value, "", "开局就是配方：给得出「不指定」，只进导演页的那一张卡");
-    assert.equal(targetSel().options[0].textContent, "不指定（只进导演页）");
+    assert.equal(targetSel().options[0].value, "", "开局就是技能：给得出「不指定」，只进技能页的那一张卡");
+    assert.equal(targetSel().options[0].textContent, "不指定（只进技能页）");
+    assert.ok([...targetSel().options].map((o) => o.textContent).includes("画一张"),
+        "技能候选来自技能清单，名字用技能页上的那一份，不自造第二套叫法");
+
+    click(radioIn("导演配方"));
+    await flush();
+    assert.equal(targetSel().options[0].textContent, "不指定（只进导演页）",
+        "配方也给得出「不指定」：只进导演页的那一张卡");
     assert.ok(![...targetSel().options].some((o) => o.value === "skill_a"),
         "配方态的候选里排不出技能项：候选跟着跳转类型走");
-
-    pick(typeSel, "skill");
+    assert.equal(fieldIn(dlg(), "跳转类型").querySelector('[aria-checked="true"]')?.dataset.value, "recipe",
+        "一组里只有一颗点实：点过的这颗才是选中的");
+    click(radioIn("技能"));
     await flush();
-    assert.equal(targetSel().options[0].textContent, "不指定（只进技能页）",
-        "技能给得出「不指定」：只进技能页的那一张卡");
-    assert.ok([...targetSel().options].map((o) => o.value).includes("skill_a"), "技能候选来自技能清单");
-    assert.ok([...targetSel().options].map((o) => o.textContent).includes("画一张"),
-        "技能名用技能页上的那一份，不自造第二套叫法");
 
-    const titleInput = fieldIn(dlg(), "标题").querySelector("input");
-    titleInput.value = "技能入口";
-    titleInput.dispatchEvent(new Event("change"));
+    typeLine(lineIn("ns-home-card-title"), "技能入口");
     pick(targetSel(), "");
     click(dlgBtn("save"));
     await flush();
@@ -623,7 +640,7 @@ test("弹窗的跳转类型只有三种：编辑模式与页面直连归预设�
         "卡上存的就是「技能 · 不指定」");
 });
 
-test("添加卡片的弹窗排三行：跳转类型与目标在前，格子按这一发跳转自动填，打过字的不覆盖", async () => {
+test("添加卡片这一面铺成一张卡：跳转类型是一排 radio，标题与副标题在卡上点字改", async () => {
     mountStudio();
     mockLayout({});
     await importApp();
@@ -638,32 +655,33 @@ test("添加卡片的弹窗排三行：跳转类型与目标在前，格子按�
         "这一板块的预设都已在首页：空态说出来，这一面不空着一块");
     assert.deepEqual([...dlg().querySelectorAll(".ns-home-card-dialog-fields > .ns-home-f-field")]
         .map((f) => f.querySelector(".ns-home-f-label")?.textContent), ["跳转类型", "跳转目标"],
-        "第一行只有跳转类型与跳转目标这两格");
-    assert.deepEqual([...dlg().querySelectorAll(".ns-home-card-dialog-shape .ns-home-f-field")]
-        .map((f) => f.querySelector(".ns-home-f-label")?.textContent), ["标题", "副标题", "图标", "板块"],
-        "第二行是标题与副标题，第三行是图标与板块");
+        "字段只剩跳转类型与跳转目标这两行：标题、副标题与图标都在卡上改");
+    assert.ok(!fieldIn(dlg(), "板块"),
+        "板块不给下拉：卡落在点开的那张占位卡的板块，要换板块就在这页上把卡拖过去");
 
-    const boxIn = (label) => fieldIn(dlg(), label).querySelector("input, select");
-    assert.equal(boxIn("标题").value, "导演配方", "新建开局按这一发落点（导演配方 · 不指定）填好标题");
-    assert.equal(boxIn("副标题").value, "多段配方，生成整片视频");
-    assert.equal(iconPick(), "play", "新建开局图标格子点着这一发的那一枚");
-    assert.ok(!fieldIn(dlg(), "图标").querySelector("select"),
-        "图标不在下拉里选：那里面只有 pencil / maximize 这类英文标识");
+    const title = lineIn("ns-home-card-title");
+    const sub = lineIn("ns-home-card-sub");
+    assert.equal(title.getAttribute("contenteditable"), "plaintext-only",
+        "标题与副标题就长在卡上点字直接改：与首页标题区那一套同一走法");
+    assert.equal(sub.getAttribute("contenteditable"), "plaintext-only");
+    assert.equal(title.textContent, "技能", "新建开局按这一发落点（技能 · 不指定）填好标题");
+    assert.equal(sub.textContent, "打开这一发技能的应用页");
+    assert.equal(iconPick(), "wand", "新建开局挑着的就是这一发的那一枚图标");
+    assert.equal(iconTile().dataset.icon, "wand", "卡上那枚图标就是当前挑着的这一枚");
+    assert.ok(!dlg().querySelector(".ns-home-form-preview.is-open"),
+        "图标候选默认收起：这一面开局不铺一整排图标格");
 
-    pick(fieldIn(dlg(), "跳转类型").querySelector("select"), "url");
+    click(radioIn("外部链接"));
     await flush();
-    assert.equal(boxIn("标题").value, "", "换了跳转类型：地址没填就不编一个标题，空标题由保存门去说");
-    assert.equal(iconPick(), "plug", "换了跳转类型：图标格子跟着这一发点着那一枚");
-    assert.equal(boxIn("板块").value, "edit", "板块由点开的那张占位卡定：自动填不把卡搬去别的板块");
+    assert.equal(lineIn("ns-home-card-title").textContent, "",
+        "换了跳转类型：地址没填就不编一个标题，空标题由保存门去说");
+    assert.equal(iconTile().dataset.icon, "plug", "换了跳转类型：卡上那枚图标跟着这一发换");
 
-    const typed = boxIn("副标题");
-    typed.value = "我的格子副标题";
-    typed.dispatchEvent(new Event("change"));
-    pick(fieldIn(dlg(), "跳转类型").querySelector("select"), "skill");
+    typeLine(lineIn("ns-home-card-sub"), "我的格子副标题");
+    click(radioIn("导演配方"));
     await flush();
-    assert.equal(boxIn("副标题").value, "我的格子副标题", "打过字的格子自动填不覆盖");
-    assert.equal(iconPick(), "wand", "没碰过的图标换成这一发的");
-    assert.equal(boxIn("板块").value, "edit", "板块算碰过：换跳转类型也不搬卡");
+    assert.equal(lineIn("ns-home-card-sub").textContent, "我的格子副标题", "点字改过的副标题自动填不覆盖");
+    assert.equal(iconPick(), "play", "没碰过的图标换成这一发的");
 
     click(dlgBtn("cancel"));
     await flush();
@@ -671,7 +689,7 @@ test("添加卡片的弹窗排三行：跳转类型与目标在前，格子按�
     assert.equal(home.querySelectorAll(".ns-home-card.is-custom").length, 0, "没保存就不落卡");
 });
 
-test("图标格子铺的是图标本身：点一下就是它，点过的自动填不覆盖", async () => {
+test("图标候选收在卡上那枚图标后面：点一下才展开，挑完收起且不覆盖点过的", async () => {
     mountStudio();
     mockLayout({});
     await importApp();
@@ -682,16 +700,24 @@ test("图标格子铺的是图标本身：点一下就是它，点过的自动�
     await flush();
 
     const swatches = [...dlg().querySelectorAll(".ns-home-f-icons .ns-home-icon-swatch")];
-    assert.ok(swatches.length >= 20, "候选铺成一格一格，不是一行文字");
+    assert.ok(swatches.length >= 20, "候选是一格一格的图标，不是一行文字");
     assert.ok(swatches.every((b) => b.querySelector("svg")), "格子里是图标本身：图标名只在 tooltip 上");
-    click(swatches.find((b) => b.dataset.icon === "wand"));
-    assert.equal(iconPick(), "wand", "点一下就把这一枚选上");
+    assert.ok(!dlg().querySelector(".ns-home-form-preview.is-open"), "默认收起：这一面不常驻一整排图标格");
+
+    click(iconTile());
+    await flush();
+    assert.ok(dlg().querySelector(".ns-home-form-preview.is-open"), "点卡上那枚图标才展开候选");
+    click(swatches.find((b) => b.dataset.icon === "camera"));
+    await flush();
+    assert.equal(iconPick(), "camera", "点一下就把这一枚选上");
     assert.equal(dlg().querySelectorAll('.ns-home-f-icons [aria-pressed="true"]').length, 1,
         "图标格子里只有一枚是选中的");
+    assert.equal(iconTile().dataset.icon, "camera", "收起之后卡上那枚就是挑中的这一枚");
+    assert.ok(!dlg().querySelector(".ns-home-form-preview.is-open"), "挑完自动收起：这一面回到一张卡的样子");
 
-    pick(fieldIn(dlg(), "跳转类型").querySelector("select"), "recipe");
+    click(radioIn("导演配方"));
     await flush();
-    assert.equal(iconPick(), "wand", "点过的图标自动填不覆盖");
+    assert.equal(iconPick(), "camera", "点过的图标自动填不覆盖");
     click(dlgBtn("cancel"));   // 用例收尾把弹窗关掉：弹窗的 Esc 绑在 document 上，带着开着弹窗的实例会吃掉下一个用例的 Esc
     await flush();
 });
@@ -956,9 +982,17 @@ test("首页原地编辑的文案在英文界面也有话可说", () => {
     for (const s of ["预设卡片", "自建卡片", "从首页移除这张卡", "加到首页：{title}",
         "这张卡已移出首页：在「添加卡片」里加回来",
         "这一板块的预设卡片都已在首页：先在首页删掉一张，再回到这里加回来",
-        "自建卡最多 {n} 张，先删一张"]) {
+        "自建卡最多 {n} 张，先删一张", "换图标", "写一个名字", "写一句副标题"]) {
         assert.ok(src.includes(`"${s}"`) && en.includes(`"${s}"`), `添加卡片这一面的文案缺英文项：${s}`);
     }
+    for (const s of ["技能", "导演配方", "外部链接"]) {
+        assert.ok(en.includes(`"${s}"`), `跳转类型那一排 radio 的文案缺英文项：${s}`);
+    }
+    assert.ok(!src.includes('t("板块")') && !en.includes('"板块"'),
+        "板块选择的文案应跟着那枚下拉一起删掉：界面上不再有那枚下拉");
+    assert.ok(!src.includes('t("图标")') && !src.includes('t("标题")') && !src.includes('t("副标题")')
+        && !en.includes('"图标"') && !en.includes('"标题"') && !en.includes('"副标题"'),
+        "标题 / 副标题 / 图标的字段标签应跟着那三行输入框一起删掉：这三样在卡上点字改");
     assert.ok(!app.includes('"自定义首页"'), "「设置 → 首页」深链入口的文案应跟着那条 tab 一起清掉");
     assert.ok(!app.includes("?skill="), "技能卡落应用页，不再走技能页的深链参数");
 });
@@ -997,20 +1031,36 @@ test("首页版式的 CSS 挂点：列数走自定义属性，卡上的控件与
         && /\.ns-home-preset-card:hover\s*\{[^}]*border-color:\s*var\(--ns-accent\)/.test(css),
         "预设卡是一枚点得着的卡：描边在 hover 上点亮");
     assert.match(css, /\.ns-home-preset-empty\s*\{/, "预设都已在首页时的空态应有自己的样式");
-    assert.match(css, /\.ns-home-card-dialog-fields\s*\{/, "弹窗里的表单排成两列");
-    assert.match(css, /\.ns-home-card-dialog-shape\s*\{[^}]*grid-column:\s*1 \/ -1/,
-        "弹窗第二三行（标题 / 副标题 / 图标 / 板块）是横跨两列的一块格子");
+    assert.match(css, /\.ns-home-card-dialog-body\s*\{[^}]*gap:\s*14px/,
+        "预设区与自建卡区之间空一档：两块的标题与内容不挤在一起");
+    assert.match(css, /\.ns-home-card-dialog-fields\s*\{[^}]*flex-direction:\s*column/,
+        "弹窗下半一行一行排下来：预览卡、跳转类型、跳转目标各占一行");
+    assert.ok(/\.ns-home-form-card\s*\{[^}]*width:\s*fit-content/.test(css)
+        && /\.ns-home-preset-card\s*\{[^}]*width:\s*fit-content/.test(css),
+        "预览卡与预设卡都按内容收成宽：卡面不拖出整条弹窗宽的那两行空白");
+    assert.ok(/\.ns-home-f-select\s*\{[^}]*flex:\s*none[^}]*max-width:\s*100%/.test(css)
+        && /\.ns-home-f-input\s*\{[^}]*flex:\s*1 1 auto/.test(css),
+        "跳转目标收成最长的一项那么宽：铺满整行时这一行只有「跳转目标」四个字，拖出一条长条；地址框留长，粘贴一条长 URL 要放得下");
     assert.ok(!/\.ns-home-f-field:nth-child\(4n/.test(css),
-        "三行由弹窗结构排出来：字段不再靠 nth-child 跨列");
+        "字段行由弹窗结构排出来：字段不再靠 nth-child 跨列");
     assert.match(css, /\.ns-home-card-dialog-foot\s*\{/, "弹窗脚一行管状态与保存取消");
-    assert.ok(/\.ns-home-f-icons-field\s*\{[^}]*grid-column:\s*1 \/ -1/.test(css),
-        "图标格横跨弹窗两列：一格一格的图标成排铺开才点得准");
+    assert.ok(/\.ns-home-form-icons\s*\{[^}]*display:\s*none/.test(css)
+        && /\.ns-home-form-preview\.is-open \.ns-home-form-icons\s*\{[^}]*display:\s*flex/.test(css),
+        "图标候选默认收起：点卡上那枚图标才展开这一把格子");
+    assert.ok(!css.includes(".ns-home-f-icons-field") && !src.includes("inlineIconPicker"),
+        "常驻展开的图标格选择面应跟着那四行表单一起收掉");
     assert.ok(/\.ns-home-icon-swatch\s*\{[^}]*width:\s*34px/.test(css)
         && /\.ns-home-f-icons\s*\{[^}]*flex-wrap:\s*wrap/.test(css),
-        "一格 34px、排满就换行：24 枚图标在 560px 宽的弹窗里落两行");
+        "一格 34px、排满就换行：展开的那 25 枚图标落几行才点得准");
     assert.ok(/\.ns-home-icon-swatch\.is-on\s*\{[^}]*border-color:\s*var\(--ns-accent\)/.test(css),
         "选中的那一枚描边点亮：一眼看得出选的是哪枚");
+    assert.ok(/\.ns-home-f-radios-field\s*\{[^}]*grid-column:\s*1 \/ -1/.test(css),
+        "跳转类型那一行横跨弹窗两列：三颗 radio 铺开才点得准");
+    assert.ok(/\.ns-home-f-radio\.is-on\s*\{[^}]*border-color:\s*var\(--ns-accent\)/.test(css)
+        && /\.ns-home-f-radio\.is-on \.ns-home-f-radio-dot\s*\{[^}]*background:\s*currentColor/.test(css),
+        "选中的那颗 radio 描边点亮、圆点点实：一眼看得出选的是哪种跳转");
     assert.match(css, /\.ns-home-hero \[contenteditable\]/, "标题区就地改字应有可见的描边");
+    assert.match(css, /\.ns-home-form-card \[contenteditable\]/, "预览卡上的标题与副标题就地改字有同一套描边");
     assert.match(css, /\.ns-home-editing \.ns-home-card\s*\{/, "编辑态的卡面应打断点击，跳屏不会把草稿带走");
     assert.ok(/\.ns-home-card\.is-dragging\s*\{[^}]*transform/.test(css), "指针上那张克隆卡是斜着的半透明影子");
     assert.ok(!css.includes("is-drag-ghost") && !src.includes("is-drag-ghost"),

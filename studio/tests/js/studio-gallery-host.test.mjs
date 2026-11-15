@@ -37,9 +37,10 @@ mockRoute("/neo_gallery/list", (body, call) => {
         success: true, total: 1,
         directories: [{
             name: dir, path, root_count: 1,
-            subdirs: { "子目录": { name: "子目录", path: "子目录", image_count: 1 } },
+            subdirs: {},
+            items: [{ filename: `i-${dir}-${path}.png`, name: `i-${dir}-${path}.png`, subfolder: path, basename: `i-${dir}-${path}.png` }],
         }],
-        items: [{ filename: `i-${dir}-${path}.png`, subfolder: path, basename: `i-${dir}-${path}.png` }],
+        items: [{ filename: `i-${dir}-${path}.png`, name: `i-${dir}-${path}.png`, subfolder: path, basename: `i-${dir}-${path}.png` }],
     });
 });
 mockRoute("/neo_gallery/*", () => jsonResponse({}));
@@ -76,6 +77,12 @@ function galleryState() {
 const homeCard = (name) => [...document.querySelectorAll(".neo-gallery-category-card")]
     .find((c) => c.querySelector(".neo-gallery-card-name")?.textContent === name);
 
+// 卡片边长看宿主：素材库弹窗钉最小档（滑杆在弹窗里收掉了），素材页照旧跟 Size 滑杆
+let minCardSize = 0;   // 最小档常量在 gallery-utils 里，桩钩子装好才认得它（见 setup.mjs 第一行）
+const modalCards = () => [...document.querySelectorAll(".ns-libmodal .neo-gallery-thumb-container")];
+const pageCards = () => [...document.querySelectorAll(".ns-gallery-host[data-lib-scope='page'] .neo-gallery-thumb-container")];
+const widthsOf = (cards) => cards.map((c) => c.style.width).join(",");
+
 // 面包屑形如「>Output↩」，判目录只看它是否指向 Output
 const atOutput = () => assert.ok(galleryState().crumb.includes("Output"), `应停在 Output：${galleryState().crumb}`);
 
@@ -94,6 +101,7 @@ async function openEditorForLib() {
 test("素材页进入目录 → 导演页素材库弹窗：目录跟着进弹窗，反复开合不落首页", async () => {
     document.body.innerHTML = `<div class="ns-header"><nav class="ns-tabs"><a href="#/gallery" data-tab="gallery">素材</a><a href="#/director" data-tab="director">导演</a></nav><a class="ns-head-btn" id="ns-settings-btn" href="#/settings" title="设置"></a></div><div id="ns-view"></div>`;
     await import("../../web/gallery.js");
+    minCardSize = (await import("../../web/gallery-utils.js")).THUMBNAIL_SIZE_MIN;
     // 跑 gallery 扩展的 setup：真 NeoGallery 实例与真 tab 定义都在里面，交给替身侧栏
     for (const ext of mockAppState.extensions) await ext.setup?.();
     for (const tab of mockAppState.sidebarTabs) shimApp.extensionManager.registerSidebarTab(tab);
@@ -117,6 +125,11 @@ test("素材页进入目录 → 导演页素材库弹窗：目录跟着进弹窗
     assert.equal(galleryState().home, false, "开弹窗不落首页");
     atOutput();
 
+    // 弹窗里的卡片不吃 Size 滑杆：滑杆管素材页密度，弹窗只挑图，卡片固定最小档
+    await until(() => modalCards().length > 0, "弹窗里铺出卡片");
+    assert.ok(modalCards().every((c) => c.style.width === `${minCardSize}px`),
+        `弹窗卡片应是最小档 ${minCardSize}px：${widthsOf(modalCards())}`);
+
     // 关弹窗再开：还是那个目录（旧实现这里一次首页、一次目录）
     click(libModal().querySelector(".ns-libmodal-close"));
     await flush(3);
@@ -138,6 +151,9 @@ test("素材页进入目录 → 导演页素材库弹窗：目录跟着进弹窗
     //   于是一次首页一次目录地交替）
     location.hash = "#/gallery";
     await until(() => galleryState().host === "page", "回到素材页");
+    await until(() => pageCards().length > 0, "素材页铺出卡片");
+    assert.ok(pageCards().every((c) => c.style.width === `${gallery.maxThumbnailSize}px`),
+        `素材页卡片跟 Size 滑杆（${gallery.maxThumbnailSize}px）：${widthsOf(pageCards())}`);
     assert.match(location.search, /gallery=/, "进过目录，URL 里带着 gallery 参数");
     const navTab = document.querySelector('a[data-tab="gallery"]');
     const ev = new MouseEvent("click", { bubbles: true, cancelable: true });

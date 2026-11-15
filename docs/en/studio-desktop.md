@@ -153,7 +153,8 @@ list and the asset library both open in modals (`js/core/lib-modal.js`), so the 
   breadcrumbs and directory navigation work there, every host you leave behind stays on **the directory you were
   browsing** (never the home root), and cards drag straight into the editor's first-frame / reference slots.
   The top bar's **Size** slider belongs to the gallery page only — it sets the thumbnail density there (the shared
-  gallery setting), so the modal hides that row and the window size stays with maximize / the right-edge handle.
+  gallery setting), so the modal hides that row, its cards stay at the 150px floor (never the slider's size), and the
+  window size stays with maximize / the right-edge handle.
   **Clicking a card in the modal fills the slot that was clicked and closes the modal**; multi-select goes
   through the footer **📥 N selected**, which lays the batch out from the slot the editor announced.
 - Modal geometry: the asset modal opens at the **minimum 640×400** (the same floor as the floating window) and the
@@ -248,7 +249,10 @@ narrow-window rules are shared with the director page (one modal instance, one g
   squares sit at the left with the prompt box to their
   right, the same shape as the edit page's composer, and a window at 200% Windows scaling (1776 px = 888 CSS px)
   keeps that row too; on a real phone the filled square shrinks from 118 px to 72 px to give the prompt room,
-  instead of dropping the prompt box under the squares.
+  instead of dropping the prompt box under the squares. The capsule pads and gaps at 8 px — the edit page's input-card
+  measure, pinned on the `.ns-video-dock` host so it beats the session composer's 12 px — and the top status row
+  (queued / progress / finished) drops out, row and gap together, while it holds nothing: the first-frame square sits
+  9 px under the capsule edge, and a line written into that row (a validation message included) takes the line back.
 - The edit page docks its composer at the bottom the same way, and the image-edit area takes the gap above it: the
   source image scales up to fill that gap (`object-fit: contain`, centred, never cropped; its delete mask and marker
   points cap with it, so the mask never spills outside the card), and an empty preview carries the fixed-size
@@ -494,17 +498,28 @@ startable once the root is filled in.
   per cell inside `.ns-home-preset-grid`: icon + title + subtitle + a `+`). The preset list holds only the built-in cards
   currently off the home page (`presetCards()` reads `hidden`) - a card already on the home is never listed twice, and when
   every preset of the section is on the home the face says so. Clicking a preset puts that card on the home page, back in
-  its own slot of `order`, and the face stays open for the next click. The bottom half is the custom-card form in three
-  rows — jump type + jump target, title + subtitle, icon + section. The icon cell spans both columns and shows the icons
-  themselves (`.ns-home-f-icons` with one `.ns-home-icon-swatch` per candidate, 34px each, wrapping; the picked one lights
-  up its border and the icon name stays in the tooltip — a dropdown of identifiers like `pencil` / `maximize` nobody
-  reads). Changing the jump type refills every cell you have not touched with that destination's title / subtitle / icon /
-  section (the recipe or skill name, the link's host); text you typed stays. Recipes and skills that already have a card
-  are dropped from the candidates, so one destination never shows two cards. Only Save writes the card into the draft (the
+  its own slot of `order`, and the face stays open for the next click. The bottom half opens with this card's own shape -
+  the home card rebuilt live (`.ns-home-form-card` reuses the home card's markup and hugs its content): the title and the
+  subtitle are typed in place on the card (`editableLine` + `contenteditable`, the hero's exact mechanics - blur commits to
+  the draft, Enter drops the caret, an empty line reads "Write a name" / "Write a subtitle"), and the icon is just the one
+  tile on the card until you press it - the candidate swatches open below the card (`.ns-home-form-icons` behind
+  `.ns-home-form-preview.is-open`, 34px each, wrapping, closing themselves once you pick; keeping all 25 swatches on screen
+  would crush this face into a wall of cells). Below the card are two rows: jump type as one row of three radios
+  (`.ns-home-f-radios` with one `.ns-home-f-radio` each; the picked one lights up its border and fills its dot) and jump
+  target as a dropdown no wider than its longest option - a URL box when the type is external link, kept long so a pasted
+  URL fits. The rows stack one per line and the spacing runs on
+  three steps: 14px between the preset block and the custom block, 8px between the rows inside a block, 6px inside a row.
+  Section is not in the form: the card lands in the section whose "Add a card" tile
+  was clicked, and moving it later means dragging the card in edit mode. Changing the jump type refills every part you
+  have not touched with that destination's title / subtitle / icon (the skill or recipe name, the link's host); the two
+  lines you typed on the card and the icon you picked stay. Recipes and skills that already have a card are dropped from
+  the candidates, so one destination never shows
+  two cards. Only Save writes the card into the draft (the
   20-custom-card cap is said on that button), Cancel and Esc drop this one. × and Esc close this face only, never the page's
   edit mode, and leaving edit mode (Esc / switching pages) closes it with the draft.
-- A custom card's jump type is one of three: director recipe / skill / external link (`FORM_TARGETS`); a recipe or skill
-  target left as "None" just opens the director page / the skills page. Edit mode and direct page (`target: "edit"` /
+- A custom card's jump type is one of three: skill / director recipe / external link (`FORM_TARGETS`, the order of that
+  radio row); the form opens on the first radio, and a skill left unchosen is the "skill · None" card that just opens the
+  skills page. A recipe target left as "None" just opens the director page. Edit mode and direct page (`target: "edit"` /
   `"page"`) come from the built-in preset cards and the UI no longer creates them (the built-in 特效视频 card is the one
   built-in card on the skill destination); cards an older layout saved with those
   types still read, jump and delete, and both the frontend read gate (`HOME_TARGETS` + `LEGACY_TARGET`) and the backend

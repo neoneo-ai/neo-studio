@@ -54,7 +54,7 @@ export const HOME_HERO = {
 // 编辑页那一发模式的清单与 image-edit-panel.js 的模式 chip 同源同序：少一个就是首页少一张直达卡
 export const HOME_EDIT_MODES = ["normal", "outpaint", "local", "remove", "blend", "pose", "angle"];
 export const HOME_TARGETS = ["edit", "recipe", "skill", "url"];   // 读门：旧版式里的卡照读照跳，一条都不丢
-export const FORM_TARGETS = ["recipe", "skill", "url"];           // 添加卡片弹窗能配的三种跳转
+export const FORM_TARGETS = ["skill", "recipe", "url"];   // 添加卡片弹窗能配的三种跳转：开局落在第一颗（技能）
 export const LEGACY_TARGET = "page";   // 旧版式里存的直连卡：读得回来跳得动，界面上不再产出这一类
 export const HOME_COLS = [0, 2, 3, 4, 5];   // 0 = 跟随窗口档位；窄档与手机自己收到 2 / 1 列
 
@@ -72,19 +72,16 @@ const MAX_CUSTOM = 20;
 const TARGET_LABELS = { recipe: "导演配方", skill: "技能", url: "外部链接" };
 const HERO_KEYS = ["title", "accent", "suffix", "sub", "cta"];
 
-/** 跳转类型 + 跳转目标定了这张卡要去哪，形状就按那一发填：配方 / 技能 / 外部链接落一份对应落点的默认形状。
- *  label 是配方名或技能显示名 */
+/** 跳转类型 + 跳转目标定了这张卡要去哪，形状就按那一发填：技能 / 配方 / 外部链接落一份对应落点的默认形状。
+ *  label 是配方名或技能显示名。板块不在这一份里——卡落在点开的那张占位卡的板块，自动填不搬卡 */
 export function cardShapeForTarget(target, value, label = "") {
     if (target === "recipe") {
-        return { title: label || TARGET_LABELS.recipe, sub: "多段配方，生成整片视频", icon: "play", section: "create" };
-    }
-    if (target === "skill") {
-        return { title: label || TARGET_LABELS.skill, sub: "打开这一发技能的应用页", icon: "wand", section: "material" };
+        return { title: label || TARGET_LABELS.recipe, sub: "多段配方，生成整片视频", icon: "play" };
     }
     if (target === "url") {
-        return { title: urlHost(value), sub: "打开外部链接", icon: "plug", section: "create" };
+        return { title: urlHost(value), sub: "打开外部链接", icon: "plug" };
     }
-    return { title: "", sub: "", icon: "image", section: "create" };
+    return { title: label || TARGET_LABELS.skill, sub: "打开这一发技能的应用页", icon: "wand" };
 }
 
 /** 链接的主机名：自动填标题时给这一发外部链接起的名，认不出的地址留空让保存门去说 */
@@ -310,11 +307,15 @@ export function createHomeInlineEditor(host = {}) {
         const stored = await loadHomeLayout();
         if (stored) draft = stored;
         // 配方与技能候选只服务卡内表单那两个下拉：宿主没给回调或拉崩了就留空下拉，排版照样能存
+        // listRecipes / listSkills 对非 2xx 把后端的错误体当结果返回，那一发不是数组，下拉要按空清单铺
         const [recipes, skills] = await Promise.all([
             (host.listRecipes?.() || Promise.resolve([])).catch(() => []),
             (host.listSkills?.() || Promise.resolve([])).catch(() => []),
         ]);
-        pickLists = { recipes: recipes || [], skills: skills || [] };
+        pickLists = {
+            recipes: Array.isArray(recipes) ? recipes : [],
+            skills: Array.isArray(skills) ? skills : [],
+        };
         render();
     }
 
@@ -413,20 +414,21 @@ export function createHomeInlineEditor(host = {}) {
         render();
     }
 
-    /** 添加卡片这一面：上半铺这一板块还没在首页上的预设卡（点一下就进首页），下半是自建卡的表单
-     *  （导演配方 / 技能 / 外部链接——内置卡与编辑模式由预设给，表单不重复配）。
-     *  两条都只改草稿：预设点一下当场生效，表单要「保存」才落卡，落盘收口在细栏右端那枚「完成」。
-     *  表单字段排三行：跳转类型 + 跳转目标、标题 + 副标题、图标 + 板块 */
+    /** 添加卡片这一面：上半铺这一板块还没在首页上的预设卡（点一下就进首页），下半是自建卡——
+     *  铺的就是这张卡在首页上的样子（图标 + 标题 + 副标题），标题与副标题点字直接改，图标点一下才展开候选。
+     *  跳转只有技能 / 导演配方 / 外部链接三种：内置卡与编辑模式由预设给，这一面不重复配。
+     *  两条都只改草稿：预设点一下当场生效，自建卡要「保存」才落卡，落盘收口在细栏右端那枚「完成」。
+     *  板块不在这一面里——卡落在点开的那张占位卡的板块，要换板块就在这页上把卡拖过去 */
     function addCardDialog(sectionId) {
         closeCardDialog?.();   // 连删两张卡时只留最新那一面：旧的那一面带着过时的预设清单
         const work = newCard(draft.custom, sectionId);
-        // 自动填只动没人碰过的格子：打过字的那一格不覆盖。板块算碰过——点开的是那个板块的占位卡
-        const touched = { title: false, sub: false, icon: false, section: true };
+        // 自动填只动没人碰过的部分：点字改过的标题与副标题、挑过的图标都不覆盖
+        const touched = { title: false, sub: false, icon: false };
         const fields = $el("div", { className: "ns-home-card-dialog-fields" });
         const statusEl = $el("span", { className: "ns-home-card-dialog-status" });
         const presetBox = $el("div", { className: "ns-home-preset-box" });
         let targetField = null;   // 当前那张「跳转目标」字段：跳转类型一变就换掉它
-        let shapeBox = null;      // 第二、三行（标题 / 副标题 / 图标 / 板块）：自动填完重画这一块
+        let previewBox = null;    // 卡片预览那一块：自动填完重画它
 
         /** 预设区重画一次：加进首页的那一张当场从这一面消失，剩下的还在等着点 */
         function paintPresets() {
@@ -478,27 +480,46 @@ export function createHomeInlineEditor(host = {}) {
             return "";
         }
 
-        /** 按这一发跳转填形状：跳转类型或目标一变，没碰过的格子就换成那一发的标题 / 副标题 / 图标 / 板块 */
+        /** 按这一发跳转填形状：跳转类型或目标一变，没碰过的部分就换成那一发的标题 / 副标题 / 图标 */
         function autoFillShape() {
             const shape = cardShapeForTarget(work.target,
                 work.target === "url" ? work.url : work.value, pickLabel());
-            for (const key of ["title", "sub", "icon", "section"]) {
+            for (const key of ["title", "sub", "icon"]) {
                 if (!touched[key]) work[key] = shape[key];
             }
-            const next = shapeBoxFields();
-            fields.replaceChild(next, shapeBox);
-            shapeBox = next;
+            const next = cardPreview();
+            fields.replaceChild(next, previewBox);
+            previewBox = next;
         }
 
-        function shapeBoxFields() {
-            const mark = (key) => (v) => { touched[key] = true; work[key] = v; };
-            return $el("div", { className: "ns-home-card-dialog-shape" }, [
-                inlineField(t("标题"), work.title, mark("title")),
-                inlineField(t("副标题"), work.sub, mark("sub")),
-                inlineIconPicker(t("图标"), CARD_ICONS, work.icon, mark("icon")),
-                inlineSelect(t("板块"), HOME_SECTIONS.map((s) => [s.id, t(s.label)]), work.section || "create",
-                    mark("section")),
-            ]);
+        /** 自建卡铺的就是它在首页上那张卡的样子：标题与副标题点字直接改（与标题区那一套同一走法），
+         *  图标这一枚点一下才展开候选——24 枚图标常驻在这一面里，整面就压成一堆格子了 */
+        function cardPreview() {
+            const wrap = $el("div", { className: "ns-home-form-preview" });
+            const iconTile = $el("button", {
+                className: "ns-home-form-icon", type: "button", title: t("换图标"),
+                dataset: { icon: work.icon || "wand" },
+                onclick: () => wrap.classList.toggle("is-open"),
+            }, [icon(work.icon || "wand", 20)]);
+            const line = (cls, placeholder, value, limit, key) =>
+                editableLine(cls, placeholder, value, limit, (text) => { touched[key] = true; work[key] = text; });
+            wrap.append(
+                $el("div", { className: "ns-home-card ns-home-form-card" }, [
+                    iconTile,
+                    $el("div", { className: "ns-home-card-text" }, [
+                        line("ns-home-card-title", t("写一个名字"), work.title, 40, "title"),
+                        line("ns-home-card-sub", t("写一句副标题"), work.sub, 60, "sub"),
+                    ]),
+                ]),
+                iconGrid(CARD_ICONS, work.icon, (name) => {
+                    touched.icon = true;
+                    work.icon = name;
+                    iconTile.dataset.icon = name;
+                    iconTile.replaceChildren(icon(name, 20));
+                    wrap.classList.remove("is-open");   // 挑完就收起：这一面回到一张卡的样子
+                }),
+            );
+            return wrap;
         }
 
         function targetValueField() {
@@ -518,20 +539,20 @@ export function createHomeInlineEditor(host = {}) {
             return inlineSelect(t("跳转目标"), choices, work.value, pickTarget);
         }
 
-        const targetChoices = FORM_TARGETS.map((k) => [k, t(TARGET_LABELS[k])]);
-        const targetSelect = inlineSelect(t("跳转类型"), targetChoices, work.target, (v) => {
-            work.target = v;
-            work.value = "";
-            work.url = "";
-            const next = targetValueField();
-            fields.replaceChild(next, targetField);
-            targetField = next;
-            autoFillShape();
-        });
+        const typeRadios = inlineRadio(t("跳转类型"), FORM_TARGETS.map((k) => [k, t(TARGET_LABELS[k])]),
+            work.target, (v) => {
+                work.target = v;
+                work.value = "";
+                work.url = "";
+                const next = targetValueField();
+                fields.replaceChild(next, targetField);
+                targetField = next;
+                autoFillShape();
+            });
         targetField = targetValueField();
-        shapeBox = shapeBoxFields();
-        fields.append(targetSelect, targetField, shapeBox);
-        autoFillShape();   // 开局按这一发的落点（导演配方 · 不指定）填好格子，省掉九成空格
+        previewBox = cardPreview();
+        fields.append(previewBox, typeRadios, targetField);
+        autoFillShape();   // 开局按这一发的落点（技能 · 不指定）填好这一张卡，省掉九成空格
         paintPresets();
 
         function close() {
@@ -664,10 +685,32 @@ function inlineSelect(label, options, value, onChange) {
         [$el("span", { className: "ns-home-f-label", textContent: label }), sel]);
 }
 
-/** 图标挑一枚：候选直接铺成图标格，点一下就是它。图标名是给写版式的人看的标识，
- *  拿它当选择面等于让用户在「pencil / maximize」里自己认图形 */
-function inlineIconPicker(label, names, value, onChange) {
-    const box = $el("div", { className: "ns-home-f-icons" });
+/** 跳转类型铺成一排 radio：三种跳转一眼看全，选中的那颗圆点点实。排进下拉时换一次类型要点两下，
+ *  另外两种落点会长成什么样还得先选上才看得见 */
+function inlineRadio(label, options, value, onChange) {
+    const box = $el("div", { className: "ns-home-f-radios", role: "radiogroup" });
+    const paint = () => {
+        for (const b of box.children) {
+            const on = b.dataset.value === value;
+            b.classList.toggle("is-on", on);
+            b.setAttribute("aria-checked", on ? "true" : "false");
+        }
+    };
+    for (const [v, text] of options) {
+        box.appendChild($el("button", {
+            className: "ns-home-f-radio", type: "button", role: "radio", dataset: { value: v },
+            onclick: () => { value = v; paint(); onChange(v); },
+        }, [$el("span", { className: "ns-home-f-radio-dot" }), text]));
+    }
+    paint();
+    return $el("div", { className: "ns-home-f-field ns-home-f-radios-field" },
+        [$el("span", { className: "ns-home-f-label", textContent: label }), box]);
+}
+
+/** 图标候选铺成一块板，收在卡片预览手里：默认不露，点卡上那枚图标才展开。
+ *  图标名是给写版式的人看的标识，拿它当选择面等于让用户在「pencil / maximize」里自己认图形 */
+function iconGrid(names, value, onPick) {
+    const box = $el("div", { className: "ns-home-f-icons ns-home-form-icons" });
     const paint = () => {
         for (const b of box.children) {
             const on = b.dataset.icon === value;
@@ -678,22 +721,40 @@ function inlineIconPicker(label, names, value, onChange) {
     for (const name of names) {
         box.appendChild($el("button", {
             className: "ns-home-icon-swatch", type: "button", title: name, dataset: { icon: name },
-            onclick: () => { value = name; paint(); onChange(name); },
+            onclick: () => { value = name; paint(); onPick(name); },
         }, [icon(name, 18)]));
     }
     paint();
-    return $el("div", { className: "ns-home-f-field ns-home-f-icons-field" },
-        [$el("span", { className: "ns-home-f-label", textContent: label }), box]);
+    return box;
 }
 
-/** 自建卡开局的形状：id 取第一个空号，跳转类型落弹窗能配的第一种，板块由点开的是哪一板块的添加卡片定。
- *  标题 / 副标题 / 图标留空给 autoFillShape 填——自动填只动没人碰过的格子 */
+/** 就地改一行字：点字直接改，失焦落进这张卡——首页标题区那五行就是这一套。
+ *  落回来的永远是清洗后的那一行：越界的字当场收掉，不让人打完 60 个字才发现只留 40 个 */
+function editableLine(className, placeholder, value, limit, onCommit) {
+    const node = $el("span", {
+        className, textContent: value == null ? "" : value, dataset: { placeholder },
+    });
+    node.setAttribute("contenteditable", "plaintext-only");
+    node.setAttribute("spellcheck", "false");
+    node.addEventListener("blur", () => {
+        const text = oneLine(node.textContent, limit);
+        node.textContent = text;
+        onCommit(text);
+    });
+    node.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); node.blur(); }   // 一行就是一句话，回车就是「改完了」
+    });
+    return node;
+}
+
+/** 自建卡开局的形状：id 取第一个空号，跳转类型落弹窗能配的第一种（技能），板块由点开的是哪一板块的添加卡片定。
+ *  标题 / 副标题 / 图标留空给 autoFillShape 填——自动填只动没人碰过的部分 */
 function newCard(custom, sectionId) {
     let n = custom.length + 1;
     while (custom.some((c) => c.id === `custom_${n}`)) n++;
     return {
         id: `custom_${n}`, section: sectionId, title: "", sub: "",
-        icon: "play", target: FORM_TARGETS[0], value: "", url: "",
+        icon: "wand", target: FORM_TARGETS[0], value: "", url: "",
     };
 }
 

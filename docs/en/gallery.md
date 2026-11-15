@@ -458,10 +458,10 @@ cache").
 The "Settings" button at the top of the sidebar manages custom directories; these display settings live in the
 ComfyUI settings panel:
 
-| Setting | Type | Default | Description |
-|------|------|--------|------|
-| Neo Gallery Max Thumbnail Size | slider (150-500) | 320 | Maximum thumbnail size (pixels); the Size slider lives on the gallery page only, not in the asset modal |
-| Neo Gallery Display Image Labels | toggle | true | Show image name labels |
+| Setting                          | Type             | Default | Description                                                                                                                                      |
+|----------------------------------|------------------|---------|--------------------------------------------------------------------------------------------------------------------------------------------------|
+| Neo Gallery Max Thumbnail Size   | slider (150-500) | 320     | Maximum thumbnail size (pixels); the Size slider lives on the gallery page only, not in the asset modal, and modal cards stay at the 150px floor |
+| Neo Gallery Display Image Labels | toggle           | true    | Show image name labels                                                                                                                           |
 
 ## Civitai LORA example cache (fetched automatically on visit)
 

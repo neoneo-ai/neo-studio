@@ -4,7 +4,7 @@
 import { $el } from "../../../../scripts/ui.js";
 import { api } from "../../../../scripts/api.js";
 import { app } from "../../../../scripts/app.js";
-import { getReservedSpace, getImageHeight, isImageFile, isVideoFile, isAudioFile, getThumbnailSrc, getAudioSrc, showToast, showInlineFeedback, renderCoverTiles, coverMaxTiles, buildPlaceholderTile, decorativeHeights, renderWaveform, applyMediaCardRatio, registerLazyThumbnail } from './gallery-utils.js';
+import { getReservedSpace, getImageHeight, isImageFile, isVideoFile, isAudioFile, getThumbnailSrc, getAudioSrc, showToast, showInlineFeedback, renderCoverTiles, coverMaxTiles, buildPlaceholderTile, decorativeHeights, renderWaveform, applyMediaCardRatio, registerLazyThumbnail, galleryCardSize } from './gallery-utils.js';
 import { Lightbox } from "./lightbox.js";
 import { buildGenerationMenuItems, openReversePromptDialog, openLoraTagDialog, reuseParamsFromMedia } from "./gallery-gen.js";
 import { copyGalleryToInput } from "./media-transfer.js";
@@ -775,7 +775,8 @@ export class GalleryCard {
         const isAudioFileResult = isAudioFile(image.filename);
         const isDraggableMedia = (isImageFileResult || isVideoFileResult || isAudioFileResult) && !image.lora_path;
         const reservedSpace = getReservedSpace(gallery.displayLabels);
-        const imageHeight = getImageHeight(gallery.maxThumbnailSize, gallery.displayLabels);
+        const cardSize = galleryCardSize(gallery);
+        const imageHeight = getImageHeight(cardSize, gallery.displayLabels);
         // 素材库弹窗取用模式：点卡片由弹窗的 capture 监听做“选中并关窗”，不开灯箱；非弹窗照旧点开大图。
         const pickMode = !!gallery.isPickMode;
 
@@ -784,8 +785,8 @@ export class GalleryCard {
                 ? "neo-gallery-thumb-container neo-gallery-thumb-container-audio"
                 : "neo-gallery-thumb-container",
             style: {
-                height: `${gallery.maxThumbnailSize}px`,
-                width: `${gallery.maxThumbnailSize}px`
+                height: `${cardSize}px`,
+                width: `${cardSize}px`
             },
             // 音频卡片不需要灯箱；取用模式下点卡片即选中（交给弹窗 capture 处理），不开灯箱。
             onclick: pickMode || isAudioFileResult ? undefined : () => {

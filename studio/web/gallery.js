@@ -18,6 +18,7 @@ import {
     THUMBNAIL_SIZE_STEP,
     getCardHeight,
     cardColumnWidth,
+    galleryCardSize,
     renderCoverTiles,
     buildPlaceholderTile,
     showNoFilesMessage,
@@ -75,7 +76,8 @@ export class NeoGallery {
         this.isFocused = false;
         this.isVisible = false;
         this.isPickMode = false;    // 素材库弹窗取用模式：点卡片即选中，不开灯箱，不出 ⋯ 菜单
-        
+        this.inLibraryModal = false;   // 卡片挂在素材库弹窗里：边长钉最小档，不跟素材页的 Size 滑杆
+
         // UI components
         this.list = new GalleryList(this);
         this.card = new GalleryCard(this);
@@ -534,6 +536,8 @@ export class NeoGallery {
         // 宽宿主标记：桌面端素材页的专属样式全部挂在 .neo-gallery-panel--wide 下，
         // 侧栏标签页把同一个元素搬进侧栏容器时没有这个祖先，侧栏外观不变。
         this.element.classList.toggle("neo-gallery-panel--wide", !!hostEl.closest(".ns-gallery-host"));
+        // 弹窗宿主：边长走最小档（下面紧跟着重画当前视图，卡片按新边长落地），回素材页照旧跟滑杆
+        this.inLibraryModal = !!hostEl.closest(".ns-libmodal");
 
         if (!this._loaded) {
             await this.loadAndDisplay();
@@ -1208,7 +1212,7 @@ export class NeoGallery {
         this.stopLoraRefresh();
         releaseLazyThumbnails(this.accordion);
         this.accordion.innerHTML = "";
-        const loadingEl = showLoadingOverlay(this.accordion, this.maxThumbnailSize);
+        const loadingEl = showLoadingOverlay(this.accordion, galleryCardSize(this));
         const stateKey = `gallery_kind:${kindKey}`;
         try {
             const resp = await api.fetchApi(`/neo_gallery/kind_items?kind=${encodeURIComponent(kindKey)}`);
@@ -1858,7 +1862,7 @@ export class NeoGallery {
     async loadAndDisplay() {
         releaseLazyThumbnails(this.accordion);
         this.accordion.innerHTML = '';
-        const loadingEl = showLoadingOverlay(this.accordion, this.maxThumbnailSize);
+        const loadingEl = showLoadingOverlay(this.accordion, galleryCardSize(this));
         
         // 直接加载（不额外增加延迟）
         // 宿主自己记的视图（applyView 已写进 currentView）优先于上次退出时的全局视图

@@ -182,6 +182,30 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 
 ### Changed
+- **The 素材库 modal cards are no longer the 素材页 slider's size — they are the minimum size.** The modal never had the
+  顶栏 **Size** row (that row sets the 素材页 density in the shared gallery setting), yet its cards kept reading the same
+  setting, so pulling the slider on the gallery page grew the cards inside every 素材库 modal (导演页 / 绘画页 / 反推页 /
+  声音克隆). The card edge length now belongs to the host the panel is mounted in: `gallery.mountTo` marks the modal host
+  (`inLibraryModal`) and `galleryCardSize()` answers the minimum 150px there, so the masonry column width
+  (`cardColumnWidth`), the card cover height (`getImageHeight`), the card box and the loading skeletons all land on 150
+  while the 素材页 keeps following the slider. Covered by the 弹窗 / 素材页 card-width cases in
+  `studio/tests/js/studio-gallery-host.test.mjs`.
+- **The 添加卡片 face is the card itself: the name is typed on the card, and the icons open only when you want one.**
+  The custom-card half was a grid of labeled fields — 标题 / 副标题 / 图标 rows, with 图标 as a wall of 25 swatches that
+  lived on screen — so the card being built was the one thing that form never showed. It now opens with the card in its
+  home-page shape (`.ns-home-form-card`, as wide as its content): 标题 and 副标题 are typed in place on the card
+  (`contenteditable`, the hero lines' own mechanics — blur commits to the draft, Enter drops the caret, an empty line
+  reads 写一个名字 / 写一句副标题), and the icon is the single tile on the card; pressing it opens the swatch grid under
+  the card, and that grid closes itself after the pick. 跳转类型 stays the row of three radios (技能 · 导演配方 ·
+  外部链接, `.ns-home-f-radio`, opening on 技能) and 跳转目标 the one dropdown, no wider than its longest option (the URL
+  box for 外部链接 stays long so a pasted URL fits); the 板块
+  dropdown is gone — the card lands in the section whose 添加卡片 tile was clicked, and moving it later is dragging the
+  card in edit mode. The rows stack one per line on one spacing step (14px between the preset block and the card block,
+  8px between rows, 6px inside a row) and preset / preview cards hug their content instead of filling the row, so the
+  ＋ and the icon no longer float at the far edge of an empty card. Changing 跳转类型 refills only the parts nobody
+  touched. The 技能 / 配方 candidate lists now normalize a non-2xx answer to an empty list, so the face opens with the
+  pickers empty instead of throwing. Covered by the 添加卡片 cases in `studio/tests/js/home-layout.test.mjs`.
+
 - **The 绘画页 and 视频页 prompt boxes write as small as the 编辑页 box does, and both grow by dragging.**
   Those two boxes took the shared 15px prompt-box size from `gallery.css`, while the 编辑页 box carries
   `.neo-gallery-story-input` as well and lands on 12px / 1.5, so the same card read two sizes in one window. The two
@@ -189,6 +213,14 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   its bottom edge like the 绘画页 one (capped at the same `26vh`, the capsule keeps its page-bottom edge so only the
   top edge moves), and the 素材页's 生成素材 dialog keeps the 15px base. Covered by the 提示词框字号 cases in
   `studio/tests/js/studio-paint.test.mjs` and `studio/tests/js/studio-video.test.mjs`.
+
+- **The 视频页 composer capsule is compact while idle.** Its padding and row gap now match the 编辑页 input card
+  (8px / 8px, pinned on the `.ns-video-dock` host so it beats the 12px / 8px the session page's composer carries),
+  and the top status row (queued / progress / finished) drops out — row and gap together — while it holds nothing, so
+  the 首帧 square sits 9px under the capsule edge instead of 38px. Writing a line into that row, a
+  "首帧 / 尾帧至少选一张" validation message included, takes the line straight back. Covered by the 视频页胶囊 CSS
+  case in `studio/tests/js/studio-video.test.mjs` and the idle / in-progress measures in
+  `studio/tests/e2e/studio-mobile-layout.e2e.mjs`.
 
 - **The asset library modal opens small and stays inside the window.** It opened at 1180×860 and the stored position
   was applied as-is, so a layout saved from a bigger window came back wider than the screen with its left edge

@@ -1079,22 +1079,26 @@ body {
 @media (prefers-reduced-motion: reduce) {
     .ns-home-editing .ns-home-grid .ns-home-card { transition: none !important; }
 }
-/* 网格末尾的添加卡片占位卡与自建卡的表单：点开的是这一板块的添加卡片这一面 */
+/* 网格末尾的添加卡片占位卡：点开的是这一板块的添加卡片这一面 */
 .ns-home-add-tile {
     display: flex; align-items: center; justify-content: center; gap: 8px;
     min-height: 74px; border: 1px dashed var(--ns-border); border-radius: 10px;
     background: transparent; color: var(--ns-dim); font-size: 13px; cursor: pointer;
 }
 .ns-home-add-tile:hover { border-color: var(--ns-accent); color: var(--ns-accent); }
-/* 添加卡片这一面：借素材库弹窗那套遮罩与盒子，上半铺这一板块的预设卡，下半是自建卡的表单，脚一行放状态与两颗按钮 */
+/* 添加卡片这一面：借素材库弹窗那套遮罩与盒子，上半是这一板块的预设卡，下半是自建卡那张预览卡加
+   两行跳转配置，脚一行放状态与两颗按钮。间距分三档：两块之间 14px，块内 8px，字段行内 6px */
 .ns-home-card-dialog { z-index: 9800; }
 .ns-home-card-dialog .ns-libmodal-box { width: min(620px, 92vw); height: auto; max-height: 88vh; }
-.ns-home-card-dialog-body { flex: 1 1 auto; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 8px; padding: 12px 10px; }
-.ns-home-preset-head, .ns-home-form-head { flex: none; font-size: 12px; color: var(--ns-dim); letter-spacing: .04em; }
+.ns-home-card-dialog-body { flex: 1 1 auto; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 14px; padding: 12px 10px; }
+.ns-home-preset-box, .ns-home-card-dialog-fields { display: flex; flex-direction: column; gap: 8px; }
+.ns-home-preset-head, .ns-home-form-head { font-size: 12px; color: var(--ns-dim); letter-spacing: .04em; }
 .ns-home-preset-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .ns-home-preset-empty { font-size: 12px; color: var(--ns-dim); }
-/* 预设卡与首页上的卡同一副形状，右下角那一枚是 ＋ 不是 chevron：点这里是要把它加进首页，不是跳去那一页 */
+/* 预设卡与首页上的卡同一副形状，右下角那一枚是 ＋ 不是 chevron：点这里是要把它加进首页，不是跳去那一页。
+   卡面按内容收成宽：铺满整格时 ＋ 与副标题之间拖出一大片空白 */
 .ns-home-preset-card {
+    width: fit-content; min-width: 200px; max-width: 100%;
     display: flex; align-items: center; gap: 12px; min-height: 62px; padding: 10px 12px; text-align: left;
     background: var(--ns-field); border: 1px solid var(--ns-field-bd); border-radius: 8px;
     color: var(--ns-fg); font: inherit; cursor: pointer;
@@ -1102,20 +1106,55 @@ body {
 .ns-home-preset-card:hover { border-color: var(--ns-accent); }
 .ns-home-preset-card .ns-home-card-title { font-size: 14px; }
 .ns-home-preset-card .ns-home-card-sub { font-size: 12px; }
-.ns-home-card-dialog-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .ns-home-card-dialog-foot { flex: none; display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-top: 1px solid var(--ns-border); }
 .ns-home-card-dialog-status { flex: 1 1 auto; min-width: 0; color: var(--ns-dim); font-size: 12px; }
 .ns-home-f-field { display: flex; align-items: center; gap: 6px; }
-.ns-home-card-dialog-shape { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .ns-home-f-label { flex: none; min-width: 56px; font-size: 12px; color: var(--ns-dim); }
 .ns-home-f-input, .ns-home-f-select {
-    flex: 1 1 auto; min-width: 0; background: var(--ns-field); border: 1px solid var(--ns-field-bd);
+    min-width: 0; background: var(--ns-field); border: 1px solid var(--ns-field-bd);
     border-radius: 6px; color: var(--ns-fg); padding: 4px 7px; font: inherit; font-size: 12px;
 }
 .ns-home-f-input:focus, .ns-home-f-select:focus { border-color: var(--ns-accent); }
-/* 图标挑一枚：候选铺成图标格独占一行——34px 一格也要两行才排得下 24 枚，格子窄到一行就点不准 */
-.ns-home-f-icons-field { grid-column: 1 / -1; align-items: flex-start; }
-.ns-home-f-icons { display: flex; flex-wrap: wrap; gap: 4px; }
+/* 跳转目标收成最长的一项那么宽：铺满整行时这一行只有「跳转目标」四个字，拖出一条长条。
+   地址框留长——粘贴一条长 URL 要放得下 */
+.ns-home-f-select { flex: none; width: auto; max-width: 100%; }
+.ns-home-f-input { flex: 1 1 auto; }
+/* 自建卡就铺成首页上那张卡的样子：标题与副标题点字直接改（与标题区同一套描边），
+   图标这一枚点一下才展开候选——25 枚图标常驻在这一面里会把整面压成一堆格子。
+   卡面按内容收成宽：弹窗有 620px 宽，铺满的话一张小卡拖着两行空白最碍眼 */
+.ns-home-form-preview { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.ns-home-form-card { min-width: 220px; max-width: 100%; width: fit-content; cursor: default; }
+.ns-home-form-icon {
+    flex: none; display: flex; align-items: center; justify-content: center;
+    width: 40px; height: 40px; border: 1px dashed transparent; border-radius: 8px;
+    background: var(--ns-primary-soft); color: var(--ns-accent); font: inherit; cursor: pointer;
+}
+.ns-home-form-icon:hover { border-color: var(--ns-accent); }
+.ns-home-form-card [contenteditable] { cursor: text; border-radius: 4px; outline: 1px dashed transparent; }
+.ns-home-form-card [contenteditable]:hover, .ns-home-form-card [contenteditable]:focus {
+    outline-color: var(--ns-accent); background: var(--ns-raised);
+}
+.ns-home-form-card .ns-home-card-title:empty::before,
+.ns-home-form-card .ns-home-card-sub:empty::before { content: attr(data-placeholder); opacity: .45; }
+/* 图标候选铺在卡下面这一块自己的面板里：宽度跟弹窗对齐，格子才按这一发宽度换行，
+   不收在面板里的话 25 枚格子会撑出一条不换行的长队 */
+.ns-home-form-icons { display: none; width: 100%; padding: 8px;
+    border: 1px solid var(--ns-border); border-radius: var(--ns-r-lg); background: var(--ns-bg-3); }
+.ns-home-form-preview.is-open .ns-home-form-icons { display: flex; }
+/* 跳转类型那一行横跨弹窗两列：三颗 radio 铺开才点得准；label 与圆点同高一行居中 */
+.ns-home-f-radios-field { grid-column: 1 / -1; }
+.ns-home-f-radios { flex: 1 1 auto; min-width: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.ns-home-f-radio {
+    flex: none; display: flex; align-items: center; gap: 7px;
+    padding: 4px 11px 4px 9px; border: 1px solid var(--ns-field-bd); border-radius: 999px;
+    background: var(--ns-field); color: var(--ns-dim); font: inherit; font-size: 12px; cursor: pointer;
+}
+.ns-home-f-radio:hover { color: var(--ns-fg); border-color: var(--ns-accent); }
+.ns-home-f-radio.is-on { color: var(--ns-accent); border-color: var(--ns-accent); background: var(--ns-raised); }
+.ns-home-f-radio-dot { flex: none; width: 10px; height: 10px; border: 1px solid currentColor; border-radius: 50%; }
+.ns-home-f-radio.is-on .ns-home-f-radio-dot { background: currentColor; }
+/* 图标候选那一块板：一格 34px、排满就换行，展开在预览卡下方才点得准 */
+.ns-home-f-icons { flex-wrap: wrap; gap: 4px; }
 .ns-home-icon-swatch {
     flex: none; display: flex; align-items: center; justify-content: center;
     width: 34px; height: 34px; border: 1px solid var(--ns-field-bd); border-radius: 6px;
@@ -1133,8 +1172,6 @@ body {
     .ns-home-edit-entry { top: 8px; right: 8px; }
     .ns-home-edit-bar { padding: 6px; gap: 4px; }
     .ns-home-card-tools .ns-btn { min-width: 30px; height: 30px; }
-    .ns-home-card-dialog-fields { grid-template-columns: minmax(0, 1fr); }
-    .ns-home-card-dialog-shape { grid-template-columns: minmax(0, 1fr); }
     .ns-home-preset-grid { grid-template-columns: minmax(0, 1fr); }
     .ns-home-f-label { min-width: 46px; }
 }
@@ -1236,11 +1273,20 @@ body {
     position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%);
     z-index: 5; width: min(980px, calc(100% - 32px));
 }
-/* 卡片外观（壳 / 边框 / 焦点框）由会话页的 .neo-gallery-gm-composer 提供，这里只加浮动投影 */
-.ns-video-card { display: flex; flex-direction: column; gap: 10px; box-shadow: 0 14px 38px rgba(0, 0, 0, .5); }
-.ns-video-head { display: flex; align-items: center; gap: 12px; min-height: 16px; }
+/* 卡片外观（壳 / 边框 / 焦点框）由会话页的 .neo-gallery-gm-composer 提供，这里只加浮动投影，
+   并把内衬与行距收到编辑页那一档（gallery.css 的 12px 内衬 / 8px 行距在运行时后注入，
+   这条带 .ns-video-dock 两层特异才压得过它） */
+.ns-video-dock .ns-video-card {
+    display: flex; flex-direction: column; gap: 8px; padding: 8px 10px;
+    box-shadow: 0 14px 38px rgba(0, 0, 0, .5);
+}
+.ns-video-head { display: flex; align-items: center; gap: 12px; }
 .ns-video-status { flex: 1 1 auto; min-width: 0; font-size: 12px; color: var(--ns-dim); overflow: hidden; text-overflow: ellipsis; white-space: pre; }
 .ns-video-progress { flex: none; width: 220px; margin-top: 0; }
+/* 状态行空闲时一个字都没有：连行带间距整条撤走，方块上方那 26px 空带就是它顶出来的。
+   走 :has 而不是在 JS 里翻 display —— 校验消息（「首帧 / 尾帧至少选一张」）也写这同一行，
+   JS 里翻过的隐藏不会跟着写回，隐藏状态下那条消息就永远看不见 */
+.ns-video-card:has(.ns-video-status:empty) .ns-video-head { display: none; }
 
 /* 第一行：素材方块 + 提示词。方块壳、虚线、填满转实心、角标都走 .neo-gallery-edit-refdrop；
    style.css 排在 gallery.css 之前，凡是要改写会话页壳的地方一律带 .ns-video-card 前缀压过它。

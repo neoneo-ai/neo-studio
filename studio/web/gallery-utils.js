@@ -52,11 +52,19 @@ export function getImageHeight(maxThumbnailSize, displayLabels) {
 }
 
 /**
+ * 卡片边长：素材库弹窗里固定最小档。Size 滑杆管的是素材页的缩略图密度（弹窗里那一行收掉了），
+ * 弹窗只负责「挑哪张、塞进哪个位」，卡片不能跟着素材页的滑杆一起放大。
+ */
+export function galleryCardSize(gallery) {
+    return gallery.inLibraryModal ? THUMBNAIL_SIZE_MIN : gallery.maxThumbnailSize;
+}
+
+/**
  * 宽宿主（桌面端素材页）下的卡片列宽：滑杆拉到 500 也压在 WIDE_CARD_MAX 以内，
  * 避免宽窗口只排出 3 列巨型卡。侧栏宿主没有宽宿主标记，滑杆照旧全量生效。
  */
 export function cardColumnWidth(gallery) {
-    const size = gallery.maxThumbnailSize;
+    const size = galleryCardSize(gallery);
     return gallery.element && gallery.element.classList.contains("neo-gallery-panel--wide")
         ? Math.min(size, WIDE_CARD_MAX)
         : size;

@@ -231,6 +231,18 @@ test("视频页提示词框与绘画页同一档字号（12px / 1.5），框底�
     assert.match(box, /max-height: 26vh/, "加高有上限，胶囊长不出画布");
 });
 
+// 方块上方那段空带的来处：空闲状态行（一个字都没有）连行带间距整条撤走，加上胶囊内衬收到编辑页那一档
+test("视频页胶囊 CSS：空状态行整条撤走，内衬与行距收到编辑页那一档", () => {
+    const css = fs.readFileSync(path.join(webDir, "studio", "style.css"), "utf8");
+    const card = css.match(/\.ns-video-dock \.ns-video-card\s*\{([^}]*)\}/)[1];
+    assert.match(card, /gap: *8px/, "行距 8px（gallery.css 那档由这条带宿主压过）");
+    assert.match(card, /padding: *8px 10px/, "内衬 8px / 10px");
+    const head = css.match(/\.ns-video-head\s*\{([^}]*)\}/)[1];
+    assert.ok(!/min-height/.test(head), "状态行不吃 min-height：空的该整条撤走，写字才吃一行");
+    assert.match(css, /\.ns-video-card:has\(\.ns-video-status:empty\) \.ns-video-head\s*\{\s*display: none;/,
+        "空状态行连行距撤走；校验消息写进状态行就自动回来");
+});
+
 test("视频页：技能 chip 就是会话页那枚「技能 + 自定参数」面板——select 藏壳里，点开双栏、点技能行写回生效值", async () => {
     await boot();
     await clickTab("video");

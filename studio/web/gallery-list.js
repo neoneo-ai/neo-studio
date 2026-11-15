@@ -3,7 +3,7 @@
  */
 import { $el } from "../../../../scripts/ui.js";
 import { api } from "../../../../scripts/api.js";
-import { THUMBNAIL_SIZE_MIN, THUMBNAIL_SIZE_MAX, THUMBNAIL_SIZE_STEP, getCardHeight, cardColumnWidth, createBreadcrumbItem, createBreadcrumbSeparator, PAGE_SIZE, sortByMtime, isImageFile, showNoFilesMessage, showToast, releaseLazyThumbnails, KIND_FILTERS, kindLabel } from './gallery-utils.js';
+import { THUMBNAIL_SIZE_MIN, THUMBNAIL_SIZE_MAX, THUMBNAIL_SIZE_STEP, getCardHeight, cardColumnWidth, galleryCardSize, createBreadcrumbItem, createBreadcrumbSeparator, PAGE_SIZE, sortByMtime, isImageFile, showNoFilesMessage, showToast, releaseLazyThumbnails, KIND_FILTERS, kindLabel } from './gallery-utils.js';
 import { attachMasonry } from './gallery-masonry.js';
 import { t, tf } from "./js/core/i18n.js";
 
@@ -688,7 +688,7 @@ export class GalleryList {
                 const itemWithSubfolder = {...item, subfolder: itemSubfolder};
                 const el = this.gallery.card.createImageElement(this.gallery, itemWithSubfolder, itemSubfolder, (dir && dir.source) || "");
                 if (!isImageFile(item.filename)) {
-                    el.style.width = `${this.gallery.maxThumbnailSize}px`;
+                    el.style.width = `${galleryCardSize(this.gallery)}px`;
                 }
                 imageGrid.appendChild(el);
             }
@@ -750,7 +750,7 @@ export class GalleryList {
                 const itemWithSubfolder = {...item, subfolder: subfolder};
                 const el = this.gallery.card.createImageElement(this.gallery, itemWithSubfolder, subfolder, dir.source || "");
                 if (!isImageFile(item.filename)) {
-                    el.style.width = `${this.gallery.maxThumbnailSize}px`;
+                    el.style.width = `${galleryCardSize(this.gallery)}px`;
                 }
                 imageGrid.appendChild(el);
             }
