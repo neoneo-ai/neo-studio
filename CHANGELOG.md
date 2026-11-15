@@ -5,6 +5,12 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 ## [Unreleased]
 
 ### Added
+- **The director timeline is a 56px strip with always-visible checkboxes and a zoom control.** Every block is one
+  30px row: the 勾选 box sits at the block's top-left on every block (it used to appear only while hovering that
+  block), the segment index, its duration and — while hovering it — its start–end seconds share one label line, and
+  the prompt summary is a single ellipsised line at the block's bottom. A 适应 / − / ＋ control on the hint line drives
+  the timeline's existing `setZoom()`, and the level is remembered per browser in `localStorage`. Covered by the
+  勾选框常显 and 默认总宽 cases in `studio/tests/js/director-timeline.test.mjs`.
 - **The director page is compacted into the video page's capsule layout.** The result stage fills the column and the
   生成坞 is now a centered floating capsule (980px cap, the same padding and shadow as the video page's dock), so the
   segment editor no longer stretches across a wide window; the 导演视频 idle card is an overlay on the stage instead of

@@ -103,17 +103,17 @@ test("时间轴说明行最右侧「拉伸」控制条：点按钮/拖滑块驱�
     Object.defineProperty(canvas, "clientWidth", { value: 320, configurable: true });
     canvas.__rect = { x: 0, y: 0, top: 0, left: 0, right: 320, bottom: 92, width: 320, height: 92 };
 
-    // 点「↔ 拉伸」→ zoom 1→2：滑块同步、canvas 按像素宽（自然宽 = max(可视宽, 默认总宽) = 326，×2）
+    // 点「↔ 拉伸」→ zoom 1→2：滑块同步、canvas 按像素宽（自然宽 = max(可视宽, 默认总宽) = 329，×2）
     toggle.click();
     await sleep(60);
     assert.equal(slider.value, "2", "点按钮后滑块同步到 2");
-    assert.equal(canvas.style.width, "652px", "zoom=2 canvas 按像素宽（自然宽 326×2）");
+    assert.equal(canvas.style.width, "658px", "zoom=2 canvas 按像素宽（自然宽 329×2）");
 
-    // 拖滑块到 4 → zoom 跟随：canvas 自然宽 326×4
+    // 拖滑块到 4 → zoom 跟随：canvas 自然宽 329×4
     slider.value = "4";
     slider.dispatchEvent(new window.Event("input", { bubbles: true }));
     await sleep(60);
-    assert.equal(canvas.style.width, "1304px", "拖滑块到 4 → canvas 自然宽 326×4");
+    assert.equal(canvas.style.width, "1316px", "拖滑块到 4 → canvas 自然宽 329×4");
 
     const closeBtn = document.querySelector(".neo-director-close");
     if (closeBtn) closeBtn.click();
@@ -1124,8 +1124,8 @@ test("导演编辑器：切换当前段时编辑器时间轴自动把该段滚�
         assert.ok(scroll, "编辑器时间轴存在");
         assert.equal(currentIdx(), 10, "定位到第 11 段");
 
-        // 12 段 × 5s、面板时间轴高 184 → 块净高 156 → 每块 16:9 ≈277.3px（内容远超 600px 可视区）
-        const blockW = (184 - 18 - 4 - 6) * 16 / 9;
+        // 12 段 × 5s、面板时间轴高 184 → 块净高 158 → 每块 16:9 ≈280.9px（内容远超 600px 可视区）
+        const blockW = (184 - 16 - 4 - 6) * 16 / 9;
         const contentW = Math.ceil(12 * blockW + 8 * 2 + 32); // padX*2 + 尾部「＋」
         const want = Math.min(contentW - CANVAS_VW, 8 + 10 * blockW + blockW - CANVAS_VW + 12);
         assert.ok(Math.abs(scroll.scrollLeft - want) < 3, `滚动到第 11 块（期望≈${Math.round(want)}，实际 ${Math.round(scroll.scrollLeft)}）`);

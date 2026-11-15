@@ -447,12 +447,12 @@ test("拉伸时滚轮驱动横向滚动 + 显示可见滚动条类；未拉伸�
 
 test("默认总宽 = 段数×(块净高×16/9)：超可视区横滚、窄则铺满；段内按时长比例分配", async () => {
     resetEnv();
-    // 用编辑器同款高度 184（块净高=184-28=156）→ 每段默认宽 ≈277px；10 段总宽 = 10×277 + padding(16) ≈ 2790 > 可视宽(320) → 横滚
+    // 用编辑器同款高度 184（块净高=184-26=158）→ 每段默认宽 ≈281px；10 段总宽 = 10×281 + padding(16) ≈ 2825 > 可视宽(320) → 横滚
     const segs = Array.from({ length: 10 }, () => ({ duration: 1 }));
     const { tl } = makeTimeline(segs, { height: 184 });
     await sleep(40);
 
-    const frameW = (tl.opts.height - 28) * 16 / 9; // 每段默认宽 = 块净高 × 16/9（height=184 → ≈277px）
+    const frameW = (tl.opts.height - 26) * 16 / 9; // 每段默认宽 = 块净高 × 16/9（height=184 → ≈281px）
     assert.ok(tl._width() > 320, "内容宽度超出可视区");
     assert.equal(tl._width(), Math.ceil(10 * frameW + 16), "默认总宽 = 段数×默认宽 + padding");
     const blocks = tl._layout().blocks;
@@ -528,8 +528,8 @@ function recordingCtx() {
     return rec;
 }
 
-const BLOCK_TOP = 18 + 4; // DT_RULER_H + DT_TOP_GAP，与 _draw 一致
-const RULER_H = 18;       // DT_RULER_H
+const BLOCK_TOP = 16 + 4; // DT_RULER_H + DT_TOP_GAP，与 _draw 一致
+const RULER_H = 16;       // DT_RULER_H
 
 // _rr 走圆角路径：moveTo 从 x+r 起步，arcTo[0] 是右缘 x+w，半径在 arcTo[4] → 反推填充宽度
 const rrWidth = (p) => p.arcs[0][0] - (p.moveTo[0] - p.arcs[0][4]);
@@ -670,26 +670,25 @@ test("checkable：非 checkable 时间轴不画勾选框（点块只选中）", 
     tl.destroy();
 });
 
-test("checkable：勾选框只在悬停 / 已勾选时出现，命中区比视觉框大一圈", async () => {
+test("checkable：勾选框常显，命中区比视觉框大一圈", async () => {
     resetEnv();
     const { tl, calls } = makeTimeline([{ duration: 5 }], { checkable: true });
     await sleep(40);
-    assert.equal(tl._checkVisible(0, false), false, "未悬停不画勾选框");
+    assert.equal(tl._checkVisible(), true, "鼠标不在时间轴上也画勾选框（一眼看到会跑哪些段）");
     tl._hover = 0;
-    assert.equal(tl._checkVisible(0, false), true, "悬停该块时才出现");
+    assert.equal(tl._checkVisible(), true, "悬停该块同样画");
     tl._hover = null;
-    assert.equal(tl._checkVisible(0, true), true, "已勾选的常显（一眼看到会跑哪些段）");
 
     const tap = (x, y) => {
         tl.canvas.dispatchEvent(mouseAt("mousedown", x, y));
         tl.canvas.dispatchEvent(mouseAt("mouseup", x, y));
     };
-    // 视觉框 = (13..26, 26..39)：点框左侧 5px（命中区外扩 7px 内）→ 仍按勾选处理，不落到「点块选中」
-    tap(13 - 5, 28);
+    // 视觉框 = (12..23, 23..34)：点框左缘外 3px（命中区外扩 6px 内）→ 仍按勾选处理，不落到「点块选中」
+    tap(12 - 3, 26);
     assert.deepEqual(tl.getChecked(), [0]);
     assert.deepEqual(calls.select, [], "命中区内不触发选中");
     // 块中部（远离勾选框命中区）→ 仍是选中
-    tap(120, 60);
+    tap(120, 40);
     assert.deepEqual(calls.select, [0]);
     tl.destroy();
 });

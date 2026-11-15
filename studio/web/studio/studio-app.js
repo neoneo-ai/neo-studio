@@ -311,7 +311,8 @@ window.addEventListener("neo:media-pick", (e) => {
 // ====== 导演页：顶部条 + 上结果舞台 + 下生成坞（时间轴 / 该段 / 素材槽 / 参数行） ======
 let genState = null;   // 当前整片任务 {task_id, statusEl, barEl, fillEl, runBtn, cancelBtn, media, livePlayer}
 const GEN_TERMINAL = ["succeeded", "failed", "cancelled"];
-const DIRECTOR_TIMELINE_H = 64;   // 时间轴净高：秒刻度尺 + 段块 + 段进度条紧凑一档（勾选框悬停在块上）
+const DIRECTOR_TIMELINE_H = 56;   // 时间轴净高：16px 秒刻度尺 + 30px 段块（勾选框 + 序号时长一行 + 提示词一行）+ 底部留白
+const DIRECTOR_ZOOM_KEY = "neo_studio.director_zoom";   // 时间轴缩放档位：跨页面重开记住（同一浏览器档位是常态）
 const DIRECTOR_REF_MAX = { images: 9, videos: 3, audios: 3 };   // 与后端 _DIRECTOR_REF_CAPS 同一份
 const DIRECTOR_REF_TOTAL = DIRECTOR_REF_MAX.images + DIRECTOR_REF_MAX.videos + DIRECTOR_REF_MAX.audios;
 // 全参考家族（含旧 v2v / rv2v）用参考素材那一行，帧模式（t2v / i2v / l2v / fl2v）用首帧 / 尾帧两枚：
@@ -500,7 +501,19 @@ async function buildDirector(el) {
     const runBtn = $el("button", { className: "rs-btn ns-gen-run ns-director-run", type: "button", textContent: t("生成整片") });
     gateRunButton(runBtn, "director", t("生成整片"));
     const cancelBtn = $el("button", { className: "rs-btn ns-gen-cancel", type: "button", textContent: t("取消"), style: { display: "none" } });
-    const hintRow = $el("div", { className: "ns-director-hintrow" }, [checkHint]);
+    // 时间轴缩放：一屏放不下多段时的唯一压缩手段（块宽按时长分配，缩一档就能多看几段）。
+    // 档位存在 localStorage——每次进导演页都回到上次那一档
+    const zoomBtn = (label, tip, fn) => {
+        const b = $el("button", { className: "ns-director-zoom", type: "button", textContent: label, title: t(tip) });
+        b.onclick = fn;
+        return b;
+    };
+    const zoomRow = $el("div", { className: "ns-director-zoomrow" }, [
+        zoomBtn(t("适应"), "时间轴铺满一屏，缩放回到 1 倍", () => directorZoom(1)),
+        zoomBtn("−", "缩小时间轴：一屏看更多段", () => directorZoom(timeline.getZoom() - 0.25)),
+        zoomBtn("＋", "放大时间轴：横向滚动看细节", () => directorZoom(timeline.getZoom() + 0.25)),
+    ]);
+    const hintRow = $el("div", { className: "ns-director-hintrow" }, [checkHint, zoomRow]);
     page.appendChild($el("div", { className: "ns-director-dock" }, [
         $el("div", { className: "ns-director-card neo-gallery-gm-composer" }, [
             statusRow,
@@ -538,6 +551,12 @@ async function buildDirector(el) {
         onAdd: () => addSeg(),
         getProgress: () => tlProgress,
     });
+    function directorZoom(z) {
+        const v = Math.max(0.25, Math.min(4, Math.round(z * 100) / 100));
+        localStorage.setItem(DIRECTOR_ZOOM_KEY, String(v));
+        timeline.setZoom(v);
+    }
+    timeline.setZoom(Number(localStorage.getItem(DIRECTOR_ZOOM_KEY)) || 1);
     const onDocPress = (e) => {
         if (!document.body.contains(page)) { document.removeEventListener("pointerdown", onDocPress, true); return; }
         recipeChip.closeOnOutside(e.target);

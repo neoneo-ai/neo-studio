@@ -270,6 +270,10 @@ body {
 .ns-director-hintrow { flex: none; display: flex; align-items: center; gap: 8px; min-width: 0; }
 .ns-director-timeline { min-width: 0; }
 .ns-director-checkhint { flex: 1 1 auto; min-width: 0; font-size: 11px; color: var(--ns-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 时间轴缩放档：贴提示行右端，20px 高一档，不抢提示文字的位置 */
+.ns-director-zoomrow { flex: none; margin-left: auto; display: flex; align-items: center; gap: 4px; }
+.ns-director-zoom { height: 20px; min-width: 22px; padding: 0 6px; border: 1px solid var(--ns-border); border-radius: 5px; background: var(--ns-raised); color: var(--ns-dim); font-size: 11px; line-height: 1; cursor: pointer; }
+.ns-director-zoom:hover { border-color: var(--ns-accent); color: var(--ns-fg); }
 .ns-director-segrow { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
 .ns-director-seg-label { flex: none; font-size: 12px; color: var(--ns-fg); padding-top: 6px; }
 .ns-director-duration { flex: none; width: 64px; min-width: 52px; text-align: center; }

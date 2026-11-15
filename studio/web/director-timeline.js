@@ -18,11 +18,11 @@ import { t } from "./js/core/i18n.js";
 const DT_CSS_HREF = "/extensions/comfyui-neo-studio/director-timeline.css";
 const DT_MIN_ZOOM = 0.25;    // 时间轴最小缩放（缩小看更多段）
 const DT_MAX_ZOOM = 4;       // 时间轴最大缩放倍数
-const DT_RULER_H = 18;       // 顶部秒刻度尺高度
+const DT_RULER_H = 16;       // 顶部秒刻度尺高度（9px 刻度字 + 5px 生成进度条共一条带）
 const DT_TOP_GAP = 4;        // 刻度尺与块之间的间距
-const DT_BOTTOM_PAD = 6;     // 块底部留白（横向滚动条与悬停时间提示占这一带）
-const DT_CHECK_S = 13;       // 「仅运行勾选的段」勾选框边长（checkable 时间轴）
-const DT_CHECK_PAD = 7;      // 勾选框命中区外扩（点得更稳，避免误触成「点块打开编辑器」）
+const DT_BOTTOM_PAD = 6;     // 块底部留白（横向滚动条占这一带）
+const DT_CHECK_S = 11;       // 「仅运行勾选的段」勾选框边长（checkable 时间轴）
+const DT_CHECK_PAD = 6;      // 勾选框命中区外扩（点得更稳，避免误触成「点块选中」）
 
 export class DirectorTimeline {
   constructor(container, options) {
@@ -141,12 +141,13 @@ export class DirectorTimeline {
 
   // 勾选框（仅 checkable）：块左上角，序号徽标随之右移
   _checkRect(x, top) {
-    return { x: x + 5, y: top + 4, s: DT_CHECK_S };
+    return { x: x + 4, y: top + 3, s: DT_CHECK_S };
   }
 
-  // 勾选框是否显示：已勾选的常显（一眼看到哪些段会跑），未勾选只在悬停该块时出现
-  _checkVisible(idx, checked) {
-    return !!this.opts.checkable && (!!checked || this._hover === idx);
+  // 勾选框常显：只在悬停时才出现的勾选框等于没做——「这次哪几段会跑」是一眼要看的事，
+  // 而悬停态在触屏与鼠标不在时间轴上的场景里根本不存在
+  _checkVisible() {
+    return !!this.opts.checkable;
   }
 
   // 勾选框命中区：视觉框外扩一圈，点得更稳
@@ -471,6 +472,17 @@ export class DirectorTimeline {
     return out;
   }
 
+  // 块顶部一行的可用文字：序号 · 时长（悬停那块再跟上起止秒）。块窄到放不下就从后往前丢，序号永远留住
+  _fitHead(ctx, parts, maxW) {
+    ctx.font = "bold 10px sans-serif";
+    let out = parts.join(" · ");
+    while (parts.length > 1 && ctx.measureText(out).width > maxW) {
+      parts.pop();
+      out = parts.join(" · ");
+    }
+    return out;
+  }
+
   // 时间轴块摘要：优化后的 H3 提示词带 integrated_multimodal_description / overall_soundscape 等固定字段标签，
   // 两行小字放不下也没必要显示——只取画面描述段（integrated_multimodal_description，Ref2VA 为 detailed_description）
   // 正文、去掉字段标签并压成单行供 _fitLines 折行；非结构化提示词原样压缩空白返回。
@@ -555,12 +567,14 @@ export class DirectorTimeline {
       for (let k = 0; k < this._hover; k++) st += durs[k];
       hoverRange = [st, st + durs[this._hover]];
     }
+    // 悬停块的起止秒就写在那块顶部一行（"1 · 5s · 0–5s"），不再另起一枚压在块上的徽标
+    const rangeText = hoverRange ? `${Math.round(hoverRange[0])}–${Math.round(hoverRange[1])}s` : "";
     for (const b of L.blocks) {
       const seg = b.seg || this._segs[b.i];
       // 重排拖动：按新顺序定位，色相/序号随落位槽变化；源块本身改成跟随光标的幽灵（见下方落位框），此处只留槽
       const posIdx = reorderDrag ? reorderDrag.order.indexOf(b.i) : b.i;
       if (reorderDrag && reorderDrag.src === b.i) continue;
-      this._paintSeg(ctx, b.x, b.w, top, bh, seg, String(posIdx + 1), this._segHue(posIdx), false, b.i === this._selected || b.i === this._hover, this._dropOver === b.i, b.i);
+      this._paintSeg(ctx, b.x, b.w, top, bh, seg, String(posIdx + 1), this._segHue(posIdx), false, b.i === this._selected || b.i === this._hover, this._dropOver === b.i, b.i, b.i === this._hover ? rangeText : "");
     }
 
     // 重排拖动中：非源块整体压暗，让被"拿起"的幽灵块一眼突出（源块不遮）
@@ -606,24 +620,6 @@ export class DirectorTimeline {
       ctx.textBaseline = "middle";
       ctx.fillText("+", chip.x + chip.w / 2, chip.y + chip.h / 2 + 1);
       ctx.textAlign = "left";
-    }
-
-    // 悬停提示：块内左下角显示该段时间范围（如 "5–10s"）
-    if (hoverRange) {
-      const hb = L.blocks[this._hover];
-      if (hb) {
-        const txt = `${Math.round(hoverRange[0])}–${Math.round(hoverRange[1])}s`;
-        ctx.font = "9px sans-serif";
-        const tw = ctx.measureText(txt).width + 8;
-        let tx = Math.max(hb.x + 4, hb.x + hb.w - tw - 26);
-        const ty = top + bh - 15;
-        this._rr(ctx, tx, ty, tw, 13, 3);
-        ctx.fillStyle = "rgba(0,0,0,0.7)";
-        ctx.fill();
-        ctx.fillStyle = "#eee";
-        ctx.textBaseline = "top";
-        ctx.fillText(txt, tx + 4, ty + 2);
-      }
     }
 
     // 拖拽：源块在落位槽留虚框占位、本体作为幽灵块跟随光标浮动（其余块已让位，落位框不与他人重叠）
@@ -730,8 +726,8 @@ export class DirectorTimeline {
   }
 
   // 绘制单个分段块（普通/幽灵共用）：浅色身份底（重排不变色）；有首帧图则平铺满块宽，文字白字描边，否则浅底深字
-  // idx 用于 checkable 时间轴：未勾选的块压暗、勾选框悬停时出现（已勾选常显）；幽灵块传 -1
-  _paintSeg(ctx, x, w, top, bh, seg, numLabel, hue, ghost, sel, drop, idx) {
+  // idx 用于 checkable 时间轴：未勾选的块压暗、勾选框常显；幽灵块传 -1；rangeText = 悬停块的起止秒（写在顶部一行）
+  _paintSeg(ctx, x, w, top, bh, seg, numLabel, hue, ghost, sel, drop, idx, rangeText = "") {
     const iw = Math.max(2, w - 2);
     const checked = this._checked.has(idx);
     const dim = this.opts.checkable && !checked;
@@ -786,8 +782,8 @@ export class DirectorTimeline {
     // 参考素材展示（r2v）：参考图平铺满块 + 视频/音频数量徽标（先画图片，文字再覆盖其上保证可读）
     this._paintMat(ctx, x, w, top, bh, seg);
 
-    // 勾选框（仅 checkable，悬停 / 已勾选才画）：勾选 = 本次运行包含该段；未勾选的块底色已压暗
-    if (this._checkVisible(idx, checked)) {
+    // 勾选框（仅 checkable，常显）：勾选 = 本次运行包含该段；未勾选的块底色已压暗
+    if (this._checkVisible()) {
       const c = this._checkRect(x, top);
       this._rr(ctx, c.x, c.y, c.s, c.s, 3);
       ctx.fillStyle = checked ? "rgba(140,204,255,0.92)" : "rgba(0,0,0,0.42)";
@@ -806,37 +802,27 @@ export class DirectorTimeline {
       }
     }
 
-    // 序号（左上）+ 时长（右上）：块顶部一行；半透明背景 + 白字深色描边，画在图片之上
-    const numX = this.opts.checkable ? x + 6 + DT_CHECK_S + 4 : x + 6;
+    // 顶部一行：序号 · 时长（悬停那块再跟上起止秒）；半透明背景 + 白字深色描边，画在图片之上。
+    // 时长不再钉块右上：右上是缩略图与提示词的公共地带，钉在那里就是一枚压在字上的徽标
+    const numX = this.opts.checkable ? x + 4 + DT_CHECK_S + 4 : x + 6;
+    const head = this._fitHead(ctx, [numLabel, seg.duration ? String(seg.duration) + "s" : "", rangeText].filter(Boolean), Math.max(16, w - 12));
     ctx.textBaseline = "top";
-    textBg(numLabel, numX, top + 4, "bold 10px sans-serif");
-    put(numLabel, numX, top + 4, "bold 10px sans-serif", "#fff");
-    if (seg.duration) {
-      const d = String(seg.duration) + "s";
-      ctx.font = "9px sans-serif";
-      const dx = x + w - ctx.measureText(d).width - 5;
-      textBg(d, dx, top + 4, "9px sans-serif");
-      put(d, dx, top + 4, "9px sans-serif", "#fff");
-    }
+    textBg(head, numX, top + 3, "bold 10px sans-serif");
+    put(head, numX, top + 3, "bold 10px sans-serif", "#fff");
 
-    // 提示词片段：块底部（Y轴底部，末行贴下沿留 5px），最多两行（超出截断加省略号），画在图片之上。
-    // 用 _promptSummary 去掉 H3 固定字段标签，只留画面描述正文，避免摘要被标签占满。
+    // 提示词片段：块底一行，超出截断加省略号，画在图片之上。用 _promptSummary 去掉 H3 固定字段标签，
+    // 只留画面描述正文——块高只放得下两行字，第二行给了提示词就没有勾选框与时长那一行的位置
     if (seg.prompt) {
       ctx.font = "11px sans-serif";
-      const lines = this._fitLines(ctx, this._promptSummary(seg.prompt), Math.max(20, w - 14), 2);
-      if (lines.length) {
-        const fs = 11, lineH = 13;
-        const bottomY = top + bh - 5;
-        // 半透明背景块：覆盖全部行（末行底在 bottomY，首行顶在 bottomY-(n-1)*lineH-fs）
-        let maxW = 0;
-        for (const ln of lines) maxW = Math.max(maxW, ctx.measureText(ln).width);
-        this._rr(ctx, x + 3, bottomY - (lines.length - 1) * lineH - fs - 2, maxW + 6, (lines.length - 1) * lineH + fs + 4, 3);
+      const line = this._fitLines(ctx, this._promptSummary(seg.prompt), Math.max(16, w - 12), 1)[0];
+      if (line) {
+        const fs = 11, py = top + bh - 4;
+        ctx.font = "11px sans-serif";
+        this._rr(ctx, x + 3, py - fs - 2, ctx.measureText(line).width + 6, fs + 4, 3);
         ctx.fillStyle = "rgba(0,0,0,0.45)";
         ctx.fill();
         ctx.textBaseline = "bottom";
-        for (let li = 0; li < lines.length; li++) {
-          put(lines[li], x + 6, bottomY - (lines.length - 1 - li) * lineH, "11px sans-serif", "#fff");
-        }
+        put(line, x + 6, py, "11px sans-serif", "#fff");
       }
     }
 
