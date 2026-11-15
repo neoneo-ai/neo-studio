@@ -210,15 +210,17 @@ the window (maximize is what covers it).
   `padding-bottom: 250px` reserved as dock clearance and the preview centred at the recipe's `width×height` ratio); the
   dock is a centred floating capsule (`min(980px, 100% − 24px)` wide, 12px from the bottom) stacking the status row, the
   timeline, the check hint with its zoom control, the segment row and the control bar. The empty-state card is an overlay
-  on the stage and consumes no layout height, and an empty status row collapses itself together with its gap.
+  on the stage and consumes no layout height — with no frame yet the stage paints no grey panel, so the two idle lines sit
+  straight on the page background — and an empty status row collapses itself together with its gap.
 - The director timeline is a 56px strip: a 16px second ruler plus a 30px segment block. A block carries the always-visible
   checkbox at its top-left (click = this run includes that segment), one top line of "index · duration · (start–end seconds
   while hovering)", and one ellipsised prompt line at its bottom. The hint line ends with the **Fit / − / ＋** control that
   drives `DirectorTimeline.setZoom()`; the level lives in `localStorage["neo_studio.director_zoom"]`, so re-entering the
   page lands on the same zoom.
 - The segment row is a single line: the 首帧 / 尾帧 / 参考素材 squares on the left (56px each, the same size as on the
-  video page) and, on the right, a "segment N + duration" line above the prompt box (one row tall, growing to a 20vh cap
-  as you type). Every control in the bar below is 28px tall with **生成整片** pinned at the right. Two narrow-screen
+  video page), the "segment N + duration" line sitting in the empty strip under those squares, and the prompt box taking
+  the whole width left over at the page's own 12px text size (one row tall, growing to a 20vh cap as you type). Every
+  control in the bar below is 28px tall with **生成整片** pinned at the right. Two narrow-screen
   fallbacks: at ≤900px the dock returns to normal flow (no floating overlay, no reserved clearance), and at ≤720px the
   squares stack above the prompt and the control bar scrolls sideways.
 

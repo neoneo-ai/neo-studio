@@ -5,6 +5,10 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 ## [Unreleased]
 
 ### Added
+- **The director page's segment row hands the whole width to the prompt.** The 「第N段 + 时长」 line moved into the empty
+  strip under the 首帧 / 尾帧 / 参考素材 squares instead of riding above the prompt box; the prompt text is now the page's
+  own 12px (the 素材库 modal's 15px prompt size no longer drives it), and the 导演视频 idle stage paints no grey panel
+  behind those two lines. Covered by the 进页铺好配方条 case in `studio/tests/js/studio-director.test.mjs`.
 - **The director page copy and docs describe the compacted page.** The seed box tooltip now states what a seed does —
   same prompt + same assets + same seed = the same first frame, empty follows the recipe and −1 rerolls every run — the
   check hint names the box at the timeline block's top-left, and the 适应 / − / ＋ labels are registered in

@@ -281,6 +281,9 @@ test("导演页：进页铺好配方条 + 自动选中配方 + 时间轴 + 三�
     assert.equal(durIn().value, "3", "时长回显该段配方值");
     assert.equal(promptIn().value, "段一", "提示词回显该段配方值");
     assert.equal(slots().length, 3, "首帧 / 尾帧 / 参考三方块");
+    const mainKids = [...document.querySelector(".ns-director-main").children];
+    assert.ok(mainKids[1] === promptIn(), "提示词直接吃方块列剩下的宽度");
+    assert.ok(mainKids[0].children[1].classList.contains("ns-director-segtop"), "第N段与时长落在方块底下的空带里");
     assert.ok(!slots()[0].classList.contains("ns-hidden") && !slots()[1].classList.contains("ns-hidden"), "f2v 段显首帧 / 尾帧");
     assert.ok(slots()[2].classList.contains("ns-hidden"), "f2v 段藏参考那一行");
     assert.ok(slots()[0].querySelector("img").src.includes("seed1.png"), "首帧画面用 spec 解析进 input/ 的那张");

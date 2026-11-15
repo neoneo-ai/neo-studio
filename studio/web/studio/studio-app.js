@@ -519,13 +519,14 @@ async function buildDirector(el) {
             statusRow,
             timelineHost,
             hintRow,
-            // 素材槽与提示词并排一行：方块在左、该段的提示词吃剩下的宽度（上下两行时方块正好顶着行高）
+            // 方块在左、该段的提示词吃剩下的宽度；「第N段 + 时长」落在方块底下的空带里——
+            // 那一行在方块列内，不吃提示词的宽度（上下堆叠见下面 720px 那档）
             $el("div", { className: "ns-director-main" }, [
-                $el("div", { className: "ns-director-slots" }, [firstSlot.el, lastSlot.el, refSlot.el]),
                 $el("div", { className: "ns-director-segrow" }, [
+                    $el("div", { className: "ns-director-slots" }, [firstSlot.el, lastSlot.el, refSlot.el]),
                     $el("div", { className: "ns-director-segtop" }, [segLabel, durIn]),
-                    promptIn,
                 ]),
+                promptIn,
             ]),
             $el("div", { className: "ns-director-controls neo-gallery-gm-composer-bar neo-gallery-gm-chips" }, [
                 cfgBtn, sizeBtn, seedChip, saveBtn,

@@ -223,6 +223,8 @@ body {
     container-type: size; padding: 10px; overflow: hidden;
     background: var(--ns-panel); border: 1px solid var(--ns-border); border-radius: 10px;
 }
+/* 起手态这块没有画面，不铺灰板：「导演视频」那两行字直接站在页面底色上，舞台读起来就是一块空画幅 */
+.ns-director-media.ns-director-idle { background: transparent; border-color: transparent; }
 .ns-director-media .ns-director-live,
 .ns-director-media .ns-gen-preview {
     flex: 0 1 auto;
@@ -274,13 +276,19 @@ body {
 .ns-director-zoomrow { flex: none; margin-left: auto; display: flex; align-items: center; gap: 4px; }
 .ns-director-zoom { height: 20px; min-width: 22px; padding: 0 6px; border: 1px solid var(--ns-border); border-radius: 5px; background: var(--ns-raised); color: var(--ns-dim); font-size: 11px; line-height: 1; cursor: pointer; }
 .ns-director-zoom:hover { border-color: var(--ns-accent); color: var(--ns-fg); }
-/* 该段行：方块列 + 「段名/时长 + 提示词」两行并排，提示词吃剩下的宽度（窄屏换行见下面 720px） */
+/* 该段行：方块列在左（方块 + 底下那条「第N段 · 时长」空带），提示词吃剩下的宽度（窄屏上下堆叠见下面 720px） */
 .ns-director-main { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
-.ns-director-segrow { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+/* 方块列只占方块那一列的宽，可收缩（参考素材铺满时方块行在自己列里横滚，不把提示词挤没） */
+.ns-director-segrow { flex: 0 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .ns-director-segtop { flex: none; display: flex; align-items: center; gap: 8px; min-width: 0; }
 .ns-director-seg-label { flex: none; font-size: 12px; color: var(--ns-fg); }
 .ns-director-duration { flex: none; width: 58px; min-width: 44px; height: 28px; text-align: center; }
-.ns-director-prompt { flex: 1 1 auto; min-width: 0; min-height: 40px; max-height: 20vh; resize: vertical; padding: 3px 6px; font-size: 12px; line-height: 1.45; }
+.ns-director-prompt { flex: 1 1 auto; min-width: 0; }
+/* 提示词的字与行距归页面这一档：gallery.css 的 .neo-gallery-gm-quick-input（15px / 110px 起高 / 12px 内衬）
+   是运行时后注入的，同特异它排在后面就赢，压住它要两层选择器 */
+.ns-director-dock .ns-director-prompt {
+    min-height: 40px; max-height: 20vh; padding: 3px 6px; font-size: 12px; line-height: 1.45; resize: vertical;
+}
 .ns-director-slots { flex: none; display: flex; align-items: flex-start; gap: 8px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
 .ns-director-slots::-webkit-scrollbar { display: none; }
 .ns-director-controls { gap: 6px; }
@@ -507,9 +515,9 @@ body {
     .ns-director-progress { width: 120px; }
     .ns-director-dock .ns-director-card { padding: 8px; }
     .ns-director-main { flex-wrap: wrap; }
-    .ns-director-slots { flex: 1 1 100%; }
+    .ns-director-segrow { flex: 1 1 100%; }
     .ns-director-duration { width: 52px; }
-    .ns-director-prompt { min-height: 36px; }
+    .ns-director-dock .ns-director-prompt { min-height: 36px; }
     .ns-director-controls { flex-wrap: nowrap; overflow-x: auto; min-width: 0; scrollbar-width: none; }
     .ns-director-controls::-webkit-scrollbar { display: none; }
     .ns-director-card :is(.ns-director-run, .ns-director-save, .ns-gen-cancel) { flex: none; }
