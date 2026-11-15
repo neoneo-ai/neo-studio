@@ -1510,7 +1510,7 @@
     color: #9aa4b0;
 }
 
-/* 图片输入区：拖放框——点击本地上传 / 素材库·本地文件拖入；宫格图缩略够大才看得清每格构图 */
+/* 图片输入区：拖放框——点击开素材库取用 / 素材库·本地文件拖入；宫格图缩略够大才看得清每格构图 */
 .neo-director-grid-src {
     position: relative;
     display: flex;
@@ -1575,7 +1575,7 @@
     border-color: #8a8a8a;
 }
 
-/* 输入区右下角操作条：「宫格素材库」+「+」（基于角色图生成九宫格），横向排列靠右下；
+/* 输入区右下角操作条：「宫格素材库」+「本地」+「+」（基于角色图生成九宫格），横向排列靠右下；
    无图时常显，有图时默认隐藏、hover 输入区才显示 */
 .neo-director-grid-src-actions {
     position: absolute;
@@ -1810,19 +1810,19 @@
     background: #1a1a1a;
     border: 1px dashed #3a3a3a;   /* 空态/拖放提示框；有素材时移除（见 .has-items） */
     border-radius: 6px;
-    cursor: pointer;   /* 黑色空区可点击 = 本地上传 */
+    cursor: pointer;   /* 空区可点击 = 素材库取用 */
 }
 
-/* 空态：黑色背景居中显示「点击上传 / 拖入」提示，整块可点击弹出文件选择器 */
+/* 空态：黑色背景居中显示「点击取用 / 拖入」提示，整块可点击开素材库 */
 .neo-director-refpick-grid:not(.has-items) {
     align-items: center;
     justify-content: center;
 }
 .neo-director-refpick-grid:not(.has-items)::before {
-    content: '点击上传 / 拖入素材';
+    content: '点击取用 / 拖入素材';
     color: #6b7280;
     font-size: 11px;
-    pointer-events: none;   /* 提示文字不拦截，点击落到网格触发上传 */
+    pointer-events: none;   /* 提示文字不拦截，点击落到网格触发素材库取用 */
 }
 
 .neo-director-refpick-grid.has-items {
@@ -2125,7 +2125,7 @@
     color: #6b7280;
 }
 
-/* 分镜图缩略位空态：可直接拖入 / 点击上传（跳过宫格拆分）；固定高度不随行拉伸，避免长文本行出现巨大虚线盒 */
+/* 分镜图缩略位空态：可直接拖入 / 点击开素材库取用（跳过宫格拆分）；固定高度不随行拉伸，避免长文本行出现巨大虚线盒 */
 .neo-director-setup-seg-thumb-empty {
     height: 112px;
     cursor: pointer;
@@ -2138,7 +2138,44 @@
     background: #1e2a36;
 }
 .neo-director-setup-seg-thumb-hint {
-    pointer-events: none;   /* 点击穿透到缩略位的 onclick（本地上传） */
+    pointer-events: none;   /* 点击穿透到缩略位的 onclick（素材库取用） */
+}
+
+/* 素材落点上的「本地」角标：点击默认是素材库取用，本地上传收在这颗小按钮上 */
+.neo-director-slot-local {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    height: 18px;
+    padding: 0 5px;
+    font-size: 10px;
+    line-height: 1;
+    white-space: nowrap;
+    color: #b9c2cc;
+    background: rgba(20, 20, 20, 0.78);
+    border: 1px dashed #4a4d55;
+    border-radius: 4px;
+    cursor: pointer;
+}
+.neo-director-slot-local:hover {
+    color: #fff;
+    border-color: #4d8cba;
+}
+/* 缩略位上的角标钉在右下角：空态常显，别让「只能拖」成为错觉 */
+.neo-director-setup-seg-thumb .neo-director-slot-local {
+    position: absolute;
+    right: 4px;
+    bottom: 4px;
+    z-index: 2;
+}
+/* 参考网格里的「本地」排在瓷砖末尾：贴着最后一张、随行高拉伸，空态居中时就是自己那一颗 */
+.neo-director-refpick-grid .neo-director-slot-local {
+    align-self: stretch;
+    width: auto;
+    min-width: 44px;
+    height: auto;
+    border-radius: 6px;
 }
 
 /* 统一设置页：无素材模式（文生 / 混合）的说明行 */
@@ -2277,27 +2314,6 @@
 }
 
 .neo-director-ff-lib:hover {
-    border-color: #5a5a5a;
-    color: #fff;
-}
-
-/* 「从本地添加」按钮：与素材库按钮同排 */
-.neo-director-local-add {
-    flex: 0 0 auto;
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 1px 6px;
-    font-size: 10px;
-    white-space: nowrap;
-    cursor: pointer;
-    background: #1e1e1e;
-    color: #ddd;
-    border: 1px solid #3a3a3a;
-    border-radius: 5px;
-}
-
-.neo-director-local-add:hover {
     border-color: #5a5a5a;
     color: #fff;
 }

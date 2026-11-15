@@ -22,7 +22,8 @@ import { createSkillManager } from "../skill.js";
 import { createAgentPanel, createMcpPanel, createAgentPrefsForm } from "../agent-panel.js";
 import { t, tf, getLang, applyLang, LANGS } from "../js/core/i18n.js";
 import { icon, setIcon, setIconLabel } from "../js/core/icons.js";
-import { createLibraryModal } from "../js/core/lib-modal.js";
+import { createLibraryModal, acceptsPick } from "../js/core/lib-modal.js";
+import { mediaKindOf } from "../gallery-utils.js";
 import { openPresetPicker, randomPromptText, savePromptTo } from "../js/core/preset-picker.js";
 import { reusePaintPanel } from "../gen-utils.js";
 import { createPairPanel } from "../js/core/pair-access.js";
@@ -226,10 +227,13 @@ function openLibModal(scope, onPick, accept) {
         onBulk: onPick && g ? () => {
             const keys = [...g._selectedItems];
             g.clearSelection();
-            onPick(keys.map((key) => {
+            const picked = keys.map((key) => {
                 const at = key.indexOf("\u0000");
                 return { subfolder: key.slice(0, at), filename: key.slice(at + 1) };
-            }));
+            });
+            // accept 那道闸只挡单点卡片这一条路，「取用已选」直连宿主自己的多选集合：批量照同一口径筛，
+            // 只吃图像的槽位不会被批量塞进视频与音频
+            onPick(picked.filter((p) => acceptsPick(accept || null, p.filename)));
         } : null,
         onClear: () => g?.clearSelection(),
         accept: accept || null,
@@ -1131,7 +1135,10 @@ const VIDEO_SIZE_CHOICES = [
     [1920, 1080, "1080p 横屏"], [1080, 1920, "1080p 竖屏"],
 ];
 const VIDEO_DUR_CHOICES = [3, 5, 8, 10, 15];
-const VIDEO_MAX_REF = 9;   // 参考图上限（与 H3 参考节点 image 槽一致）
+// 参考素材那一行的三类上限（与后端 _MAX_REF 同档）：一行混收，各类各收各的，总数 = 三者之和
+const VIDEO_REF_MAX = { image: 9, video: 3, audio: 3 };
+const VIDEO_REF_TOTAL = Object.values(VIDEO_REF_MAX).reduce((a, b) => a + b, 0);
+const VIDEO_REF_NAMES = { image: "参考图", video: "参考视频", audio: "参考音频" };   // 取用时过 t()，随语言现读
 const VIDEO_TERMINAL = ["succeeded", "failed", "cancelled"];
 // 技能分组 = 导演页那套生成模式：组头名与组序直接取 director 的 SEG_MODES，两处模式词永远一致。
 // 技能的 mode 经 LEGACY_MODE_MAP 归并（t2v / i2v / fl2v → 关键帧生视频，r2v 留全参考生视频），
@@ -1179,21 +1186,63 @@ function buildVideo(el) {
     ]);
 
     // 素材方块工厂：方块壳直接借会话页的参考位 .neo-gallery-edit-refdrop（虚线方块 + 底部角标 +
-    // 填满转实心），点它开素材库弹窗；填上后铺缩略图 + ✕。multiple=true 收多张（参考图），单槽一张。
-    function mediaSlot(label, multiple, maxN) {
-        const items = [];   // {value}：input 目录里的相对文件名
-        const thumbs = $el("div", { className: "ns-video-thumbs" + (multiple ? " ns-video-thumbs-multi" : "") });
+    // 填满转实心），点它开素材库弹窗；填上后铺缩略图 + ✕。multiple=true 收多张：一枚方块一张，
+    // 横排自动增加，到上限就没有 ＋ 那一格，行宽钉住后行内滚（style.css 的 ns-video-slot-row）。
+    // kindMax 给了就是混收那一行：素材库媒体全收，取用的按扩展名归入图 / 视频 / 音频，各类按各自上限收。
+    function mediaSlot(label, multiple, maxN, kindMax = null) {
+        const items = [];   // {value, kind}：input 目录里的相对文件名 + 参考类型（kindMax 缺省时恒 image）
         const add = $el("button", { className: "ns-video-slot-add", type: "button" });
         setIcon(add, "plus", 18);
         const cap = $el("span", { className: "neo-gallery-edit-refdrop-cap" });
-        const slot = $el("div", { className: "ns-video-slot neo-gallery-edit-refdrop" }, [thumbs, add, cap]);
+        const thumbs = $el("div", { className: "ns-video-thumbs" });
+        const slot = multiple
+            ? $el("div", { className: "ns-video-slot ns-video-slot-row" })
+            : $el("div", { className: "ns-video-slot neo-gallery-edit-refdrop" }, [thumbs, add, cap]);
+        const thumbSrc = (value) => `/view?filename=${encodeURIComponent(value)}&subfolder=&type=input`;
+        const countOf = (kind) => items.reduce((n, it) => n + (it.kind === kind ? 1 : 0), 0);
+        // 方块上的画面：图是封面，视频是首帧画面（不给 controls——这枚方块点了是换素材不是播片），
+        // 音频没有可画的画面，只有类型图标，文件名写在方块 title 里
+        const face = (it) => {
+            if (it.kind === "video") {
+                // muted 是媒体元素的属性开关：$el 只会 setAttribute，静音要在建好元素后写上去
+                const movie = $el("video", { className: "ns-video-slot-media", src: thumbSrc(it.value), preload: "metadata", playsInline: true, draggable: false });
+                movie.muted = true;
+                return movie;
+            }
+            if (it.kind === "audio") return $el("span", { className: "ns-video-slot-audio" }, [icon("volume", 20)]);
+            return $el("img", { className: "neo-gallery-edit-refchip-img", alt: it.value, src: thumbSrc(it.value), draggable: false });
+        };
+        const tile = (it) => {
+            const del = $el("button", { className: "neo-gallery-edit-refchip-x", type: "button", title: t("移除"), textContent: "✕" });
+            del.onclick = () => { items.splice(items.indexOf(it), 1); render(); };
+            return $el("div", { className: "neo-gallery-edit-refdrop ns-video-slot-tile has-img", title: `${t(VIDEO_REF_NAMES[it.kind])} · ${it.value}` }, [
+                face(it),
+                // 视频那一枚补一枚播放角标：缩略图上它和一张静图长得一样；音频方块的图标已经把类型说满
+                ...(it.kind === "video" ? [$el("i", { className: "ns-video-slot-kind" }, [icon("play", 12)])] : []),
+                del,
+            ]);
+        };
         const render = () => {
+            if (multiple) {
+                const tiles = items.map(tile);
+                if (items.length < maxN) {
+                    cap.textContent = items.length ? `${items.length}/${maxN}` : t(label);
+                    // 角标写总数，各类各收到第几张写在添图那一枚的 title 里——三类计数铺开就是三行字
+                    add.title = kindMax
+                        ? Object.entries(kindMax).map(([k, n]) => `${t(VIDEO_REF_NAMES[k])} ${countOf(k)}/${n}`).join(" · ")
+                        : t("从素材库取用");
+                    tiles.push($el("div", { className: "neo-gallery-edit-refdrop ns-video-slot-tile" }, [add, cap]));
+                }
+                slot.replaceChildren(...tiles);
+                slot.scrollLeft = slot.scrollWidth;   // 连选时把刚添的那枚滚进视线
+                return;
+            }
             thumbs.textContent = "";
             for (const it of items.slice()) {
                 const wrap = $el("span", { className: "ns-video-thumb" }, [
                     $el("img", {
                         alt: it.value,
-                        src: `/view?filename=${encodeURIComponent(it.value)}&subfolder=&type=input`,
+                        src: thumbSrc(it.value),
                     }),
                 ]);
                 const del = $el("button", { className: "neo-gallery-edit-refchip-x", type: "button", title: t("移除"), textContent: "✕" });
@@ -1201,33 +1250,49 @@ function buildVideo(el) {
                 wrap.appendChild(del);
                 thumbs.appendChild(wrap);
             }
-            add.style.display = (multiple && items.length >= maxN) ? "none" : "";
-            cap.textContent = items.length && !multiple ? t("换图") : t(label);
+            cap.textContent = items.length ? t("换图") : t(label);
             slot.classList.toggle("has-img", items.length > 0);
         };
+        // 这一发的出片模板收哪几类参考素材（技能列表的 gen_config.ref_kinds）：模板没声明那一类，
+        // 那条 LoadVideo / LoadAudio 加载链会被后端整条裁掉，素材只是发出去被静默丢掉。所以在落盘前
+        // 就挡住——copy_to_input 会往 input 目录写一份，先挡就不留用不上的文件。
+        // 老后端与老技能没这字段 = 不门控（照收，与改动前一致）
+        const refKinds = () => (kindMax ? (selectedMeta()?.gen_config?.ref_kinds || null) : null);
         add.onclick = () => openLibModal("video", async (picked) => {
+            const allowed = refKinds();
+            const full = new Set(), blocked = new Set(), unusable = new Set();
             for (const p of picked) {
-                if (multiple && items.length >= maxN) break;
+                const kind = kindMax ? mediaKindOf(p?.filename) : "image";
+                if (!kind) { unusable.add(String(p?.filename || "")); continue; }
+                if (allowed && !allowed.includes(kind)) { blocked.add(kind); continue; }
+                if ((multiple && items.length >= maxN) || (kindMax && countOf(kind) >= kindMax[kind])) { full.add(kind); continue; }
                 try {
                     const value = await copyPickedToInput(p);
-                    if (multiple) items.push({ value });
-                    else { items.length = 0; items.push({ value }); }
+                    if (multiple) items.push({ value, kind });
+                    else { items.length = 0; items.push({ value, kind }); }
                 } catch (e) { toast(tf("取用素材失败：{msg}", { msg: e.message })); }
             }
+            for (const kind of full) toast(tf("{label}最多 {n} 个，多出来的没进", { label: t(VIDEO_REF_NAMES[kind]), n: kindMax[kind] }));
+            for (const kind of blocked) toast(tf("该技能模板没有{label}槽位，取用的没进", { label: t(VIDEO_REF_NAMES[kind]) }));
+            for (const name of unusable) toast(tf("参考节点不吃这类素材：{name}", { name }));
             render();
-            if (!multiple) libModal?.close();   // 首帧 / 尾帧取一张即收窗；参考图留着弹窗好连选
-        });
+            if (!multiple) libModal?.close();   // 首帧 / 尾帧取一张即收窗；参考素材留着弹窗好连选
+        }, kindMax ? null : "image");   // 参考那一行媒体全收，取进来的按类型归槽；首帧 / 尾帧两枚收的仍是图像
         render();
         return {
             el: slot,
-            get: () => items.map((it) => ({ value: it.value })),
+            get: () => items.map((it) => ({ value: it.value, media: it.kind })),
             first: () => items[0] || null,
-            // 「再来一发」整槽换内容：面板已铺好，重建会把用户写了一半的提示词清掉
+            // 「再来一发」整槽换内容：面板已铺好，重建会把用户写了一半的提示词清掉。
+            // 混收那一行按扩展名归类，认不出的整项不填（副文件里没记视频与音频）
             fill: (vals) => {
                 items.length = 0;
                 for (const v of vals || []) {
                     const value = typeof v === "string" ? v : [v?.subfolder, v?.filename].filter(Boolean).join("/");
-                    if (value) items.push({ value });
+                    if (!value) continue;
+                    const kind = kindMax ? mediaKindOf(value) : "image";
+                    if (!kind || (kindMax && countOf(kind) >= kindMax[kind])) continue;
+                    items.push({ value, kind });
                 }
                 render();
             },
@@ -1236,7 +1301,7 @@ function buildVideo(el) {
 
     const firstSlot = mediaSlot("首帧", false, 1);
     const lastSlot = mediaSlot("尾帧", false, 1);
-    const refSlot = mediaSlot("参考图", true, VIDEO_MAX_REF);
+    const refSlot = mediaSlot("参考素材", true, VIDEO_REF_TOTAL, VIDEO_REF_MAX);
 
     const promptIn = $el("textarea", {
         className: "ns-video-prompt neo-gallery-gm-quick-input", rows: "2", spellcheck: "false",
@@ -1264,7 +1329,7 @@ function buildVideo(el) {
     const selectedGroup = () => videoModeGroup(selectedMeta());
     let videoModels = null;   // 自定参数面板的模型列表：没拉到就整块不发覆盖值，技能配置照常生效
 
-    // 素材槽位随技能家族显隐：关键帧生视频给首帧 / 尾帧，全参考生视频给参考图。
+    // 素材槽位随技能家族显隐：关键帧生视频给首帧 / 尾帧，全参考生视频给参考素材那一行。
     // 隐藏的槽位不进 payload——留着上一家族的首帧去跑 r2v，后端按资产推模式就会推错
     const applyVideoSlots = () => {
         const f2v = selectedGroup() === "f2v";
@@ -1542,7 +1607,7 @@ function buildVideo(el) {
             // 后端对这批技能是硬要求（无帧的 fl2v / 无参考的 r2v 必败），在这里说清楚比跑完再报错省一整发
             statusEl.textContent = f2v
                 ? t("该技能需要参考素材：首帧 / 尾帧至少选一张")
-                : t("该技能需要参考素材：至少选一张参考图");
+                : t("该技能需要参考素材：至少选一张图 / 视频 / 音频");
             return;
         }
         // 特效技能缺本体的文件就不进队列：缺嵌入的那一发跑完也只是「没有特效的片」（ComfyUI 读不到
@@ -1649,7 +1714,7 @@ function buildVideo(el) {
             if (src) mediaNames.push(t("首帧"));
             if (last) mediaNames.push(t("尾帧"));
         } else if (src || refs.length) {
-            mediaNames.push(t("参考图"));
+            mediaNames.push(t("参考素材"));
         }
         if (mediaNames.length) filled.push(mediaNames.join("、"));
         const seed = Number(reuse?.seed);

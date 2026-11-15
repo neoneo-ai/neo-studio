@@ -174,8 +174,19 @@ The Video page (one line of text plus material, one finished clip, via `/neo_vid
 same two-pane "skill + custom parameters" chip as the drawing pages. Skills are grouped by generation mode,
 and the group headers are the director page's two words: **Keyframe → video** (t2v / i2v / fl2v) and
 **Full-reference video** (r2v). The media slots follow the family: the keyframe family shows the first /
-last frame slots, the full-reference family shows the reference image / video / audio slots. Slots hidden by
-the family are excluded from the request, and they are intact again when you switch back.
+last frame slots, the full-reference family shows the 参考素材 row; slots hidden by the family are excluded
+from the request, and they are intact again when you switch back.
+The 参考素材 row is one square per item: tiles join the row as you pick, sorted by extension into 参考图 /
+参考视频 / 参考音频, and the pick order is the slot numbering — image ≤9, video ≤3, audio ≤3. The add tile's
+caption reads 已收 / 合计 15 and its hover title lists how far each kind has gone; a pick past one kind's
+ceiling is refused with that kind named, and the add tile is gone only when all 15 are in. A video tile
+shows its first frame with a play badge and no controls (that square swaps the material, it is not a player);
+an audio tile carries the kind icon, with the file name in its title. The 素材库 this row opens takes all
+media (image / video / audio cards pick), while the 首帧 / 尾帧 squares still open an image-only one. When
+the skill's template declares no slot for a kind — `gen_config.ref_kinds`, shipped with the skill list —
+the pick is refused there with 「该技能模板没有参考视频槽位」 and nothing is copied into `input`; a skill
+list without that field gates nothing.
+
 The panel and the chip option menus open 6px above the chip whenever they fit there (below only when
 the space above is too small) and stay clamped inside the window: with the dock pinned to the window
 bottom the panel opens upward, so main model / steps / "Done" never end up below the fold.

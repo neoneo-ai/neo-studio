@@ -1406,7 +1406,7 @@ test("导演编辑器：预填首/尾帧（图库多选新建路径）保存时�
 });
 
 
-test("导演编辑器：首帧槽位点 ✕ 只清除、不弹本地上传选择窗", async () => {
+test("导演编辑器：首帧槽位点 ✕ 只清除、不弹本地上传选择窗也不开素材库", async () => {
     const { openDirectorEditor } = await import("../../web/director.js");
     appState.graph = { _nodes: [] };
     mockRoute("/rs_prompts/skills", () => jsonResponse([{ id: "sk-a", name: "技能 A", gen_video: true }]));
@@ -1421,15 +1421,20 @@ test("导演编辑器：首帧槽位点 ✕ 只清除、不弹本地上传选择
     const ffSlot = row.querySelector(".neo-director-frames-cols .neo-director-setup-seg-thumb");
     assert.ok(ffSlot.querySelector("img"), "首帧槽位回显 a.png");
 
-    // 监控槽位内隐藏 file input：picker.open() 即 input.click()，✕ 不应触发
+    // 监控槽位内隐藏 file input：picker.open() 即 input.click()，✕ 不应触发；✕ 也不该把素材库开起来
     const fileInp = ffSlot.querySelector("input[type=file]");
     let pickerOpened = 0;
     fileInp.click = () => { pickerOpened++; };
+    let libOpens = 0;
+    const onPick = () => { libOpens++; };
+    window.addEventListener("neo:media-pick", onPick);
 
     ffSlot.querySelector(".neo-director-setup-seg-sb-clear").click();
     await sleep(10);
+    window.removeEventListener("neo:media-pick", onPick);
 
-    assert.equal(pickerOpened, 0, "点 ✕ 未弹本地上传选择窗（事件不再冒泡到槽位点击上传）");
+    assert.equal(pickerOpened, 0, "点 ✕ 未弹本地上传选择窗（事件不再冒泡到槽位点击取用）");
+    assert.equal(libOpens, 0, "点 ✕ 未开素材库");
     assert.ok(ffSlot.classList.contains("neo-director-setup-seg-thumb-empty"), "首帧槽位回到空态");
     document.querySelector(".neo-director-close").click();
     await sleep(20);
@@ -1550,7 +1555,7 @@ test("导演编辑器：混合模式下每段可选 f2v/r2v，切换后即时刷
     await sleep(20);
 });
 
-test("导演编辑器：首/尾帧槽位点击上传（隐藏 file input），参考组网格点击上传（无按钮）", async () => {
+test("导演编辑器：首/尾帧槽位与参考组网格点击开素材库，本地上传收在「本地」角标", async () => {
     const { openDirectorEditor } = await import("../../web/director.js");
     appState.graph = { _nodes: [] };
     mockRoute("/rs_prompts/skills", () => jsonResponse([{ id: "sk-a", name: "技能 A", gen_video: true }]));
@@ -1561,30 +1566,54 @@ test("导演编辑器：首/尾帧槽位点击上传（隐藏 file input），�
     }, null);
     await sleep(60);
 
-    // 首帧槽位、尾帧槽位各含隐藏 file input（点击空态上传）
+    const tab = app.extensionManager.sidebarTab;
+    const picks = [];
+    const onPick = (e) => picks.push(e.detail);
+    window.addEventListener("neo:media-pick", onPick);
+
+    // 首帧 / 尾帧槽位：隐藏 file input 常驻 + 空态挂一颗「本地」角标
     const ffSlot = document.querySelector(".neo-director-frames-cols .neo-director-setup-seg-thumb");
     assert.ok(ffSlot.querySelector("input[type=file]"), "首帧槽位含隐藏 file input");
+    assert.ok(ffSlot.querySelector(".neo-director-slot-local"), "首帧槽位含「本地」角标");
     const lfSlot = document.querySelector(".neo-director-lf-slot-wrap .neo-director-setup-seg-thumb");
     assert.ok(lfSlot.querySelector("input[type=file]"), "尾帧槽位含隐藏 file input");
+    assert.ok(lfSlot.querySelector(".neo-director-slot-local"), "尾帧槽位含「本地」角标");
 
-    // 参考素材区三组网格：无「本地」按钮，点击黑色空区上传（行内含隐藏 file input）
+    // 空态点击 = 开素材库，并交来一颗只收图像的取用回调
+    ffSlot.click();
+    assert.equal(tab.activeSidebarTabId, "neo.gallery", "点击空态开素材库");
+    assert.equal(picks.length, 1, "点击空态交来一次取用");
+    assert.equal(picks[0].accept, "image", "首帧落点声明只收图像");
+    assert.equal(typeof picks[0].onPick, "function", "取用回调随事件交来");
+
+    // 参考素材区三组：网格末尾一枚「本地」瓷砖；点击空区开素材库并按本组类型声明 accept
     const refRows = Array.from(document.querySelectorAll(".neo-director-seg .neo-director-segref-row"));
     assert.equal(refRows.length, 3, "参考图/视频/音频三组");
+    const kinds = [];
     for (const row of refRows) {
         const label = row.querySelector(".neo-director-field-label").textContent;
-        assert.ok(!row.querySelector(".neo-director-local-add"), `参考组无「本地」按钮: ${label}`);
-        assert.ok(row.querySelector("input[type=file]"), `参考组含隐藏 file input（点击网格上传）: ${label}`);
+        assert.ok(row.querySelector("input[type=file]"), `参考组含隐藏 file input（「本地」角标触发）: ${label}`);
+        assert.equal(row.querySelectorAll(".neo-director-refpick-grid .neo-director-slot-local").length, 1, `参考组末尾一枚「本地」瓷砖: ${label}`);
+        assert.equal(row.querySelector(".neo-director-local-add"), null, `参考组不出现旧版整行「本地」按钮: ${label}`);
+        picks.length = 0;
+        row.querySelector(".neo-director-refpick-grid").click();
+        assert.equal(picks.length, 1, `点击空区开素材库: ${label}`);
+        kinds.push(picks[0].accept);
     }
+    assert.deepEqual(kinds, ["image", "video", "audio"], "三组各自声明本组类型");
 
+    window.removeEventListener("neo:media-pick", onPick);
     document.querySelector(".neo-director-close").click();
     await sleep(20);
 });
 
-test("导演编辑器：参考组网格点击黑色空区触发本地上传并加入该组", async () => {
+test("导演编辑器：参考组网格点击空区开素材库，取用的图入组；「本地」瓷砖弹文件选择器", async () => {
     const { openDirectorEditor } = await import("../../web/director.js");
     appState.graph = { _nodes: [] };
     mockRoute("/rs_prompts/skills", () => jsonResponse([{ id: "sk-a", name: "技能 A", gen_video: true }]));
     mockRoute("/upload/image", () => jsonResponse({ name: "ref_up.png", subfolder: "", type: "input" }));
+    mockRoute("/neo_gallery/copy_to_input", (body, call) =>
+        jsonResponse({ success: true, filename: `copied_${call.query.get("filename")}` }));
 
     await openDirectorEditor({
         name: "REFUP", shared: { mode: "r2v" },
@@ -1597,12 +1626,25 @@ test("导演编辑器：参考组网格点击黑色空区触发本地上传并�
     const grid = imgRow.querySelector(".neo-director-refpick-grid");
     assert.ok(grid, "参考图网格存在");
 
-    // 点击黑色空区（非瓷砖）→ 触发隐藏 file input.click()
+    // 点击空区 → 开素材库（不弹文件选择器）；取用的卡片经 copy_to_input 落进该组
     const fileInput = imgRow.querySelector("input[type=file]");
     let openCalls = 0;
     fileInput.click = () => { openCalls++; };   // 拦截：jsdom 无文件选择器
+    let picked = null;
+    const onPick = (e) => { picked = e.detail?.onPick; };
+    window.addEventListener("neo:media-pick", onPick);
     grid.click();
-    assert.equal(openCalls, 1, "点击空区触发 file input.click()");
+    assert.equal(openCalls, 0, "点击空区不弹本地文件选择器");
+    assert.equal(typeof picked, "function", "点击空区交来素材库取用回调");
+    await picked([{ filename: "lib_ref.png", subfolder: "people" }]);
+    await sleep(50);
+    assert.ok(fetchLog.some((c) => c.path === "/neo_gallery/copy_to_input"), "带 subfolder 的素材库卡片复制进 input/");
+    assert.ok(Array.from(grid.querySelectorAll(".neo-director-refpick-item")).find((it) => it.dataset.file === "copied_lib_ref.png"),
+        "取用的素材库图加入参考图组");
+
+    // 「本地」瓷砖 → 文件选择器，选择后上传并加入该组
+    grid.querySelector(".neo-director-slot-local").click();
+    assert.equal(openCalls, 1, "点「本地」瓷砖触发 file input.click()");
 
     // 模拟选择文件 → 上传并加入参考图组
     const fakeFile = new File(["fake"], "ref.png", { type: "image/png" });
@@ -1615,16 +1657,20 @@ test("导演编辑器：参考组网格点击黑色空区触发本地上传并�
     const tile = Array.from(grid.querySelectorAll(".neo-director-refpick-item")).find((it) => it.dataset.file === "ref_up.png");
     assert.ok(tile, "上传文件加入参考图组");
 
-    // 点瓷砖不额外触发上传
-    const before = openCalls;
+    // 点瓷砖不触发素材库、也不弹文件选择器
+    const beforeClicks = openCalls;
+    let libOpens = 0;
+    window.addEventListener("neo:media-pick", () => { libOpens++; });
     grid.querySelector(".neo-director-refpick-item").click();
-    assert.equal(openCalls, before, "点瓷砖不触发上传");
+    assert.equal(openCalls, beforeClicks, "点瓷砖不弹文件选择器");
+    assert.equal(libOpens, 0, "点瓷砖不开素材库");
 
+    window.removeEventListener("neo:media-pick", onPick);
     document.querySelector(".neo-director-close").click();
     await sleep(20);
 });
 
-test("导演编辑器：首帧槽位点击上传文件后设为首帧", async () => {
+test("导演编辑器：首帧槽位「本地」角标上传文件后设为首帧", async () => {
     const { openDirectorEditor } = await import("../../web/director.js");
     appState.graph = { _nodes: [] };
     mockRoute("/rs_prompts/skills", () => jsonResponse([{ id: "sk-a", name: "技能 A", gen_video: true }]));
@@ -1633,17 +1679,20 @@ test("导演编辑器：首帧槽位点击上传文件后设为首帧", async ()
     await openDirectorEditor(null);
     await sleep(60);
 
-    // 首帧槽位内的隐藏 file input
+    // 首帧槽位内的隐藏 file input 与「本地」角标
     const ffSlot = document.querySelector(".neo-director-frames-cols .neo-director-setup-seg-thumb");
     const fileInput = ffSlot.querySelector("input[type=file]");
     assert.ok(fileInput, "首帧槽位含隐藏 file input");
     assert.equal(fileInput.accept, "image/*", "file input accept=image/*");
 
-    // 点击空态 → 触发 file input.click()
+    // 点击空态 = 开素材库；「本地」角标才弹文件选择器
     let openCalls = 0;
     fileInput.click = () => { openCalls++; };   // 拦截：jsdom 无文件选择器
     ffSlot.click();
-    assert.equal(openCalls, 1, "点击空态触发 file input.click()");
+    assert.equal(openCalls, 0, "点击空态不弹文件选择器");
+    assert.equal(app.extensionManager.sidebarTab.activeSidebarTabId, "neo.gallery", "点击空态开素材库");
+    ffSlot.querySelector(".neo-director-slot-local").click();
+    assert.equal(openCalls, 1, "点「本地」角标触发 file input.click()");
 
     // 模拟选择文件 → 上传并设为首帧
     const fakeFile = new File(["fake"], "local.png", { type: "image/png" });
@@ -1660,7 +1709,7 @@ test("导演编辑器：首帧槽位点击上传文件后设为首帧", async ()
     await sleep(20);
 });
 
-test("导演编辑器：参考视频/音频的「本地」按钮 accept 正确过滤", async () => {
+test("导演编辑器：参考视频/音频的「本地」角标 accept 正确过滤", async () => {
     const { openDirectorEditor } = await import("../../web/director.js");
     appState.graph = { _nodes: [] };
     mockRoute("/rs_prompts/skills", () => jsonResponse([{ id: "sk-a", name: "技能 A", gen_video: true }]));
@@ -1687,7 +1736,44 @@ test("导演编辑器：参考视频/音频的「本地」按钮 accept 正确�
     await sleep(20);
 });
 
-test("导演编辑器：参考素材组只收本组类型（拖入与本地上传都校验，图片不能进视频/音频组）", async () => {
+test("导演编辑器：「本地」角标只弹文件选择器，不连带开素材库（角标是文字，桌面端无图标字体）", async () => {
+    const { openDirectorEditor } = await import("../../web/director.js");
+    appState.graph = { _nodes: [] };
+    mockRoute("/rs_prompts/skills", () => jsonResponse([{ id: "sk-a", name: "技能 A", gen_video: true }]));
+
+    await openDirectorEditor({
+        name: "LOCALONLY", shared: { mode: "f2v" },
+        segments: [{ skill_id: "sk-a", prompt: "p", duration_sec: 5, mode: "f2v" }],
+    }, null);
+    await sleep(60);
+
+    let picked = 0;
+    const onPick = () => { picked++; };
+    window.addEventListener("neo:media-pick", onPick);
+    const ffSlot = document.querySelector(".neo-director-frames-cols .neo-director-setup-seg-thumb");
+    const ffBadge = ffSlot.querySelector(".neo-director-slot-local");
+    // 桌面端页面没有 PrimeIcons：角标只有图标时渲染成一颗空白方块，看不出是按钮
+    assert.ok(ffBadge.textContent.includes("本地"), "角标带「本地」文字");
+    assert.equal(ffBadge.querySelector("i"), null, "角标不靠图标字体");
+
+    let fileClicks = 0;
+    ffSlot.querySelector("input[type=file]").click = () => { fileClicks++; };   // jsdom 无文件选择器
+    ffBadge.click();
+    assert.equal(fileClicks, 1, "点「本地」角标弹文件选择器");
+    assert.equal(picked, 0, "点「本地」角标不连带开素材库");
+
+    // 隐藏 input 就挂在落点里，浏览器在它身上合成的那颗 click 会冒泡到落点，
+    // 而落点的 click 就是「开素材库」——曾经文件窗 + 素材库一起弹
+    ffSlot.querySelector("input[type=file]")
+        .dispatchEvent(new window.MouseEvent("click", { bubbles: true, cancelable: true }));
+    assert.equal(picked, 0, "file input 的 click 不冒泡成素材库取用");
+
+    window.removeEventListener("neo:media-pick", onPick);
+    document.querySelector(".neo-director-close").click();
+    await sleep(20);
+});
+
+test("导演编辑器：参考素材组只收本组类型（拖入 / 本地上传 / 素材库取用都校验，图片不能进视频/音频组）", async () => {
     const { openDirectorEditor } = await import("../../web/director.js");
     appState.graph = { _nodes: [] };
     mockRoute("/rs_prompts/skills", () => jsonResponse([{ id: "sk-a", name: "技能 A", gen_video: true }]));
@@ -1750,6 +1836,17 @@ test("导演编辑器：参考素材组只收本组类型（拖入与本地上�
     mockRoute("/upload/image", () => jsonResponse({ name: "picked.png", subfolder: "", type: "input" }));
     await pickInto(vidRow, makeFile("os.png", "image/png"));
     assert.deepEqual(filesOf(vidRow), ["v.mp4", "copied_new.mp4"], "本地上传图片进视频组被拒");
+
+    // 素材库取用同一条闸：类别对不上的卡片（弹窗没拦住时）照样拒绝、不入格
+    let libPick = null;
+    const grabPick = (e) => { libPick = e.detail?.onPick; };
+    window.addEventListener("neo:media-pick", grabPick);
+    gridOf(vidRow).click();
+    await libPick([{ filename: "lib_pic.png", subfolder: "" }]);
+    await sleep(30);
+    window.removeEventListener("neo:media-pick", grabPick);
+    assert.deepEqual(filesOf(vidRow), ["v.mp4", "copied_new.mp4"], "素材库取用的图片进视频组被拒");
+    assert.ok(warned("参考视频"), "素材库取用同样提示只接受视频素材");
 
     // OS 文件拖入（非画廊载荷）：不入格、不报错
     dropFiles(gridOf(vidRow), [makeFile("os2.png", "image/png")]);

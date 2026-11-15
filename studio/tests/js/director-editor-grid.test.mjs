@@ -272,7 +272,7 @@ test("导演编辑器：band-2 末尾常驻空段（纯 UI、不保存），拖�
     // 点击上传（本地文件选择器）同样真实建段：对刷新后新出现的空段缩略位模拟 file input 上传
     const ghost2 = container.querySelector(".neo-director-story-seg-ghost");
     const ghostFileInput = ghost2.querySelector("input[type=file]");
-    assert.ok(ghostFileInput, "空段缩略位含隐藏 file input（点击本地上传）");
+    assert.ok(ghostFileInput, "空段缩略位含隐藏 file input（「本地」角标触发）");
     Object.defineProperty(ghostFileInput, "files", { value: [new File(["b"], "b.png", { type: "image/png" })], configurable: true });
     ghostFileInput.dispatchEvent(new Event("change"));
     await sleep(60);
@@ -299,19 +299,22 @@ test("宫格分镜图拆分：图片输入区支持本地上传 + 素材库/本�
     const card = document.querySelector(".neo-director-src-card-grid");
     const drop = card.querySelector(".neo-director-grid-src");
     assert.ok(drop, "宫格图片输入区存在");
-    assert.ok(drop.querySelector(".neo-director-grid-src-hint"), "空区显示上传提示");
-    assert.ok(drop.querySelector("input[type=file]"), "输入区内含隐藏 file input（点击本地上传）");
-    assert.equal(card.querySelector(".neo-director-local-add"), null, "宫格卡片不再单列「本地」按钮");
+    assert.ok(drop.querySelector(".neo-director-grid-src-hint"), "空区显示取用提示");
+    assert.ok(drop.querySelector("input[type=file]"), "输入区内含隐藏 file input（「本地」按钮触发）");
+    assert.equal(card.querySelector(".neo-director-local-add"), null, "宫格卡片不再单列旧版整行「本地」按钮");
     assert.ok(!drop.classList.contains("has-src"), "无图时输入区无 has-src（操作条常显）");
 
-    // 右下角操作条：「宫格素材库」在前、「+」在后；点素材库只切换侧栏、不触发输入区「本地上传」
+    // 右下角操作条：「宫格素材库」在前、「本地」居中、「+」在后；点素材库只切换侧栏、不触发文件选择器
     const actions = card.querySelector(".neo-director-grid-src-actions");
     assert.ok(actions, "输入区右下角有操作条");
     const kids = Array.from(actions.children);
     const libBtn = actions.querySelector(".neo-director-ff-lib");
+    const localBtn = actions.querySelector(".neo-director-slot-local");
     const plusBtn = actions.querySelector(".neo-director-storyboard-btn");
+    assert.ok(localBtn, "操作条含「本地」按钮");
     assert.equal(kids[0], libBtn, "操作条第一个是「宫格素材库」");
-    assert.equal(kids[1], plusBtn, "操作条第二个是「+」");
+    assert.equal(kids[1], localBtn, "操作条第二枚是「本地」");
+    assert.equal(kids[2], plusBtn, "操作条第三枚是「+」");
 
     // 「+」随角色参考图可用性联动：无图禁用，拖入角色图后启用
     assert.equal(plusBtn.disabled, true, "无角色参考图时「+」禁用");
@@ -331,6 +334,13 @@ test("宫格分镜图拆分：图片输入区支持本地上传 + 素材库/本�
     libBtn.click();
     assert.equal(fileClicks, 0, "点「宫格素材库」不触发本地上传");
     assert.equal(tab.activeSidebarTabId, "neo.gallery", "点「宫格素材库」打开侧栏");
+    // 点击输入区空区 = 开素材库；操作条里那枚「本地」才弹文件选择器
+    tab.activeSidebarTabId = null;
+    drop.click();
+    assert.equal(fileClicks, 0, "点击空区不弹本地文件选择器");
+    assert.equal(tab.activeSidebarTabId, "neo.gallery", "点击空区开素材库");
+    localBtn.click();
+    assert.equal(fileClicks, 1, "点「本地」触发 file input.click()");
     fileInput.click = origClick;
 
     // 源图（左列）与提示词 textarea（右列）是卡 grid 的同一行，与上方标题行共享两列

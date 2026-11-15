@@ -76,13 +76,16 @@ function withBox(el, w, h, fn) {
     Object.defineProperty(el, "offsetHeight", { value: h, configurable: true });
     try { return fn(); } finally { delete el.offsetWidth; delete el.offsetHeight; }
 }
+const modalCard = (name) => [...document.querySelectorAll(".ns-libmodal .neo-gallery-thumb-container")]
+    .find((c) => c.dataset.filename === name);
+// 参考图那一排的方块：填了的方块带 .has-img，添图那一枚没有，收了几张写在它的角标上
+const refTiles = () => [...document.querySelectorAll(".ns-video .ns-video-slot-row .ns-video-slot-tile.has-img")];
+const refAddTile = () => [...document.querySelectorAll(".ns-video .ns-video-slot-row .ns-video-slot-tile:not(.has-img)")];
 // 素材方块取用：点取用钮开素材库弹窗，点卡片 = copy_to_input 落盘进方块（首帧 / 尾帧取一张即收窗）
 async function pickIntoSlot(slotIdx, name) {
     click(slotAdd()[slotIdx]);
     await settle();
-    const card = [...document.querySelectorAll(".ns-libmodal .neo-gallery-thumb-container")]
-        .find((c) => c.dataset.filename === name);
-    click(card);
+    click(modalCard(name));
     await settle();
     await settle();
 }
@@ -112,10 +115,17 @@ async function boot() {
         {
             id: "minimax_h3_r2v", cn_name: "H3 全参考", category: "gen_video", gen_video: true, mode: "r2v",
             requires_ref: true, effect: "none",
+            // 参考节点声明了图 / 视频 / 音频三类槽位（后端 gen_config.ref_kinds 透出，参考方块靠它挡素材）
+            gen_config: { ref_kinds: ["image", "video", "audio"] },
             effects: [
                 { id: "none", label: "无特效", prompt_default: "", ready: true },
                 { id: "bullet_time", label: "子弹时间", prompt_default: "a sprinter leaps into a long jump", ready: true },
             ],
+        },
+        {
+            // 画布导入的全参考技能：模板只给参考图加载链，没有 LoadVideo / LoadAudio
+            id: "custom_r2v_img", cn_name: "全参考-只收图", category: "gen_video", gen_video: true,
+            mode: "r2v", requires_ref: true, gen_config: { ref_kinds: ["image"] },
         },
         {
             id: "effect_h3", cn_name: "特效-特效镜头", category: "gen_video", gen_video: true, mode: "i2v",
@@ -169,7 +179,9 @@ async function boot() {
         id: "neo.gallery",
         render: async (el) => {
             el.innerHTML = "";
-            for (const name of ["frame.png", "a.png", "b.png"]) {
+            for (const name of ["frame.png", "a.png", "b.png", "c.png", "d.png", "e.png",
+                "f.png", "g.png", "h.png", "i.png", "j.png", "voice.wav",
+                "clip.mp4", "clip2.mp4", "clip3.mp4", "clip4.mp4", "shot.gif"]) {
                 const card = document.createElement("div");
                 card.className = "neo-gallery-thumb-container";
                 card.dataset.filename = name;
@@ -424,16 +436,16 @@ test("视频页：素材方块随技能家族换——首尾帧 ↔ 参考图，
     await settle();
     pickSkill("minimax_h3_t2v");
     await settle();
-    assert.deepEqual(deckSlots().map(isHidden), [false, false, true], "首尾帧家族给首帧 / 尾帧，收起参考图方块");
+    assert.deepEqual(deckSlots().map(isHidden), [false, false, true], "首尾帧家族给首帧 / 尾帧，收起参考素材那一行");
     pickSkill("minimax_h3_r2v");
     await settle();
-    assert.deepEqual(deckSlots().map(isHidden), [true, true, false], "全参考家族收起首帧 / 尾帧，露出参考图");
+    assert.deepEqual(deckSlots().map(isHidden), [true, true, false], "全参考家族收起首帧 / 尾帧，露出参考素材那一行");
     pickSkill("minimax_h3_t2v");
     await settle();
     assert.deepEqual(deckSlots().map(isHidden), [false, false, true], "换回首尾帧家族，方块复原");
 });
 
-test("视频页：隐藏的方块不进 payload——首帧带着走全参考技能，参考里只剩参考图", async () => {
+test("视频页：隐藏的方块不进 payload——首帧带着走全参考技能，参考里只剩参考素材", async () => {
     await boot();
     await clickTab("video");
     await settle();
@@ -449,9 +461,157 @@ test("视频页：隐藏的方块不进 payload——首帧带着走全参考技
     await settle();
     const body = videoPosts().at(-1).body;
     assert.deepEqual(body.references.map((r) => r.value), ["copied_a.png", "copied_b.png"],
-        "payload 只带参考图——收着的首帧不替模式说话");
+        "payload 只带参考素材——收着的首帧不替模式说话");
     assert.equal(body.last_frame, null, "全参考这一发不发 last_frame");
 });
+
+// 参考素材那一排：一枚方块一张，横排随取用自动增加，图 9 / 视频 3 / 音频 3 各收各的（与后端 _MAX_REF 同档）
+test("视频页：参考素材连点三张排成三枚方块——缩略图就是刚取用那张，✕ 移除一枚 payload 少一张", async () => {
+    await boot();
+    await clickTab("video");
+    await settle();
+    pickSkill("minimax_h3_r2v");
+    await settle();
+    promptBox().value = "把这几张角色图连成一段";
+    await pickIntoSlot(2, "a.png");
+    await pickIntoSlot(2, "b.png");
+    await pickIntoSlot(2, "c.png");
+    assert.equal(refTiles().length, 3, "三张参考素材应排成三枚方块");
+    assert.match(refTiles()[1].querySelector("img").getAttribute("src"), /filename=copied_b\.png/,
+        "方块里的缩略图就是刚取用的那一张");
+    assert.equal(refAddTile().length, 1, "没到上限就还有添图那一枚");
+    assert.equal(refAddTile()[0].querySelector(".neo-gallery-edit-refdrop-cap").textContent, "3/15",
+        "角标写收了这几枚 / 三类合计上限");
+    assert.match(refAddTile()[0].querySelector(".ns-video-slot-add").title, /参考图 3\/9 · 参考视频 0\/3 · 参考音频 0\/3/,
+        "各类各收到第几张写在添图那一枚的 title 里，角标只占一个数");
+    click(runBtn());
+    await settle();
+    const picked = videoPosts().at(-1).body.references;
+    assert.deepEqual(picked.map((r) => r.value), ["copied_a.png", "copied_b.png", "copied_c.png"], "payload 带三张参考素材");
+    assert.deepEqual(picked.map((r) => r.media), ["image", "image", "image"], "参考项带 media——后端按类型进各自那组槽位");
+    click(refTiles()[1].querySelector(".neo-gallery-edit-refchip-x"));
+    await settle();
+    assert.equal(refTiles().length, 2, "✕ 收掉那一枚方块");
+    assert.equal(refAddTile()[0].querySelector(".neo-gallery-edit-refdrop-cap").textContent, "2/15", "计数随移除回落");
+    click(runBtn());
+    await settle();
+    assert.deepEqual(videoPosts().at(-1).body.references.map((r) => r.value), ["copied_a.png", "copied_c.png"],
+        "payload 随移除同步少一张");
+});
+
+test("视频页：一行混收图 / 视频 / 音频——方块按类型铺面，payload 按取用顺序带 media", async () => {
+    await boot();
+    await clickTab("video");
+    await settle();
+    pickSkill("minimax_h3_r2v");   // 该模板声明了图 / 视频 / 音频三类参考槽
+    await settle();
+    promptBox().value = "按这几条素材重剪一段";
+    await pickIntoSlot(2, "clip.mp4");
+    await pickIntoSlot(2, "voice.wav");
+    await pickIntoSlot(2, "a.png");
+    const tiles = refTiles();
+    assert.equal(tiles.length, 3, "三类素材进同一行，各一枚方块");
+    const movie = tiles[0].querySelector("video.ns-video-slot-media");
+    assert.ok(movie, "视频那一枚铺的是 <video> 封面，不给 controls——这枚方块是换素材的入口不是播放器");
+    assert.equal(movie.getAttribute("preload"), "metadata", "只拉首帧画面，不预载整条片");
+    assert.equal(movie.muted, true, "封面静音——浏览器不给有声缩略图上屏");
+    assert.ok(tiles[0].querySelector(".ns-video-slot-kind"), "视频方块带播放角标：缩略图上它和一张静图长得一样");
+    const audio = tiles[1].querySelector("span.ns-video-slot-audio");
+    assert.ok(audio?.querySelector("svg"), "音频那一枚是类型图标，不画解不出声的破封面");
+    assert.match(tiles[1].getAttribute("title"), /参考音频 · copied_voice\.wav/, "方块 title 写类型 + 文件名");
+    assert.equal(tiles[2].querySelector("img").alt, "copied_a.png", "图像那一枚照旧是缩略图");
+    click(runBtn());
+    await settle();
+    assert.deepEqual(videoPosts().at(-1).body.references.map((r) => [r.value, r.media]),
+        [["copied_clip.mp4", "video"], ["copied_voice.wav", "audio"], ["copied_a.png", "image"]],
+        "同一行的取用顺序即槽位编号顺序，media 决定进哪一组");
+});
+
+test("视频页：参考视频收满 3 条就没有第 4 条——提示点名哪一类满了，图像照旧收", async () => {
+    await boot();
+    await clickTab("video");
+    await settle();
+    pickSkill("minimax_h3_r2v");
+    await settle();
+    promptBox().value = "按这几条片子剪一段";
+    for (const name of ["clip.mp4", "clip2.mp4", "clip3.mp4"]) await pickIntoSlot(2, name);
+    await pickIntoSlot(2, "clip4.mp4");
+    assert.equal(refTiles().length, 3, "参考视频上限 3 条，第 4 条不进");
+    assert.equal(document.getElementById("ns-toast")?.textContent, "参考视频最多 3 个，多出来的没进",
+        "满位提示点名是哪一类满了、上限几条");
+    const copied = fetchLog.filter((c) => c.path === "/neo_gallery/copy_to_input"
+        && (c.query.get("filename") || "").includes("clip4"));
+    assert.equal(copied.length, 0, "收不进的素材不落盘——copy_to_input 会往 input 目录写一份");
+    await pickIntoSlot(2, "a.png");
+    assert.equal(refTiles().length, 4, "视频那一类满了不挡图像那一类");
+    assert.equal(refAddTile()[0].querySelector(".neo-gallery-edit-refdrop-cap").textContent, "4/15",
+        "推荐计数写总数，行宽照旧钉在 10 枚以内");
+});
+
+test("视频页：参考图收满 9 张就没有第 10 张——添图那一枚还在，payload 最多带 9 张", async () => {
+    await boot();
+    await clickTab("video");
+    await settle();
+    pickSkill("minimax_h3_r2v");
+    await settle();
+    promptBox().value = "把这几张角色图连成一段";
+    for (const name of ["a.png", "b.png", "c.png", "d.png", "e.png", "f.png", "g.png", "h.png", "i.png"]) {
+        await pickIntoSlot(2, name);
+    }
+    assert.equal(refTiles().length, 9, "九张参考图排九枚方块");
+    await pickIntoSlot(2, "j.png");
+    assert.equal(refTiles().length, 9, "参考图上限 9 张（与参考节点 image 槽同一档），第 10 张不进");
+    assert.equal(refAddTile().length, 1, "那一类满了、整行没收满，添图那一枚还在");
+    assert.equal(slotAdd().length, 3, "添图钮不随单类满位收掉（首帧 / 尾帧那两枚这一家族收起，行里那枚留着）");
+    click(runBtn());
+    await settle();
+    assert.equal(videoPosts().at(-1).body.references.length, 9, "payload 带满 9 张参考图");
+});
+
+test("视频页：模板没有那一类槽位就挡在取用那一步——说清该换技能，素材不落盘", async () => {
+    await boot();
+    await clickTab("video");
+    await settle();
+    pickSkill("custom_r2v_img");   // 画布导入的全参考技能：模板只给参考图加载链
+    await settle();
+    promptBox().value = "按这条片子重剪一段";
+    await pickIntoSlot(2, "clip.mp4");
+    assert.equal(refTiles().length, 0, "参考视频进不了一枚方块");
+    assert.match(document.getElementById("ns-toast")?.textContent, /该技能模板没有参考视频槽位/,
+        "挡在取用那一步就说清是模板没有这一类，不是「取用失败」");
+    await pickIntoSlot(2, "voice.wav");
+    assert.match(document.getElementById("ns-toast")?.textContent, /该技能模板没有参考音频槽位/, "音频同理");
+    await pickIntoSlot(2, "shot.gif");
+    assert.match(document.getElementById("ns-toast")?.textContent, /参考节点不吃这类素材/,
+        "素材库列得出、参考节点读不进的那类要说清，不是静默吞掉");
+    assert.equal(refTiles().length, 0, "三发都挡在落盘前：input 目录不留用不上的文件");
+    await pickIntoSlot(2, "a.png");
+    assert.equal(refTiles().length, 1, "参考图照旧收");
+    click(runBtn());
+    await settle();
+    assert.deepEqual(videoPosts().at(-1).body.references.map((r) => r.media), ["image"],
+        "payload 只带这一发的模板收得下的那一类");
+});
+
+test("视频页：首帧 / 尾帧仍只收图像——素材库里的视频与音频点下去不进方块", async () => {
+    await boot();
+    await clickTab("video");
+    await settle();
+    pickSkill("minimax_h3_i2v");
+    await settle();
+    click(slotAdd()[0]);
+    await settle();
+    click(modalCard("clip.mp4"));
+    await settle();
+    await settle();
+    assert.equal(document.querySelectorAll(".ns-video .ns-video-thumb").length, 0,
+        "首帧是一帧画面：视频卡点下去不填方块");
+    click(modalCard("frame.png"));
+    await settle();
+    await settle();
+    assert.ok(document.querySelector(".ns-video .ns-video-thumb img"), "图像照旧填进首帧");
+});
+
 
 test("视频页：自定参数全空时请求体不带覆盖项（跟随技能配置与全局生视频设置）", async () => {
     await boot();
@@ -613,8 +773,8 @@ test("视频页：技能要参考素材时缺素材不发请求，状态行说�
     await settle();
     click(runBtn());
     await settle();
-    assert.equal(videoPosts().length, 0, "缺参考图不发请求");
-    assert.match(statusEl().textContent, /至少选一张参考图/);
+    assert.equal(videoPosts().length, 0, "缺参考素材不发请求");
+    assert.match(statusEl().textContent, /至少选一张图 \/ 视频 \/ 音频/);
 });
 
 

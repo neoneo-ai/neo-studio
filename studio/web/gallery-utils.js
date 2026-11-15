@@ -108,6 +108,27 @@ export function isAudioFile(filename) {
 }
 
 /**
+ * Reference-slot media kind of a picked file: "image" / "video" / "audio", "" for
+ * anything a reference slot cannot take.
+ * The suffixes mirror the backend's _REF_MEDIA_SUFFIXES: the generation side drops
+ * a reference outside that set without a word, so the slots reject it here where a
+ * message can be shown. gif / heic / avif are out (LoadImage does not read them)
+ * even though the gallery lists them.
+ * Shared by the director's reference groups and the video page's mixed reference
+ * row: both number a slot by this kind, so a second copy drifts the numbering.
+ */
+const REF_KIND_SUFFIXES = [
+    ["image", /\.(png|jpe?g|webp|bmp|tiff?)$/i],
+    ["video", /\.(mp4|mov|mkv|webm|m4v)$/i],
+    ["audio", /\.(wav|mp3|flac|ogg|opus|m4a|aac)$/i],
+];
+
+export function mediaKindOf(filename) {
+    const hit = REF_KIND_SUFFIXES.find(([, re]) => re.test(String(filename || "")));
+    return hit ? hit[0] : "";
+}
+
+/**
  * Check if filename is an image the asset-library pick flow may hand to the
  * image editor. heic / avif are in (the library lists them and the editor's <img>
  * decodes them); isImageFile stays on the ComfyUI thumbnail set for card logic.

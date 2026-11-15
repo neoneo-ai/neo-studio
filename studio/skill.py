@@ -766,8 +766,38 @@ def _attach_gen_config(skill: dict, skill_id: str) -> None:
     if not (skill.get("gen_image") or skill.get("gen_video")):
         return
     summary = _gen_config_summary(get_skill_gen_config(skill_id))
+    if skill.get("gen_video"):
+        # 出片模板收哪几类参考素材：视频页的参考方块靠它挡素材——模板没有那一类，
+        # 收进方块也只是发出去被静默丢掉，在取用时说清比跑完一发报生成失败省一整发
+        kinds = template_ref_kinds(load_skill_workflow(skill_id))
+        if kinds:
+            summary = {**(summary or {}), "ref_kinds": kinds}
     if summary:
         skill["gen_config"] = summary
+
+
+# MiniMaxH3ReferenceToVideo 的参考槽分组：autogrow 的点号键（ref_images.ref_image_N）取头部比对。
+# h3_video_gen.ensure_reference_tags 的「模板没声明就不补标签」用的就是这一份判据。
+_REFERENCE_NODE = "MiniMaxH3ReferenceToVideo"
+_REF_SLOT_HEADS = ("ref_images", "ref_videos", "ref_audios")   # 顺序即槽位编号顺序；media 名 = 去 ref_ 前缀与复数 s
+
+
+def template_ref_slots(workflow) -> set:
+    """模板声明的参考槽分组（ref_images / ref_videos / ref_audios 的子集）；无参考节点返回空集。"""
+    heads = set()
+    for node in (workflow or {}).values():
+        if isinstance(node, dict) and node.get("class_type") == _REFERENCE_NODE:
+            for key in (node.get("inputs") or {}):
+                head = str(key).split(".", 1)[0]
+                if head in _REF_SLOT_HEADS:
+                    heads.add(head)
+    return heads
+
+
+def template_ref_kinds(workflow) -> list:
+    """该出片模板收哪几类参考素材（["image", "video", "audio"] 的子集）；没有参考节点返回 []。"""
+    heads = template_ref_slots(workflow)
+    return [head[4:-1] for head in _REF_SLOT_HEADS if head in heads]
 
 
 def _vdn_plugin_installed() -> bool:

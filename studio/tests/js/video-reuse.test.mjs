@@ -151,7 +151,7 @@ test("视频复用：首尾帧技能整发填回面板，值原样进 payload，
     });
     assert.equal(skillSel().value, "minimax_h3_i2v", "技能按副文件选中");
     assert.deepEqual(deckSlots().map((s) => s.classList.contains("ns-hidden")), [false, false, true],
-        "首尾帧家族铺首帧 / 尾帧方块，收起参考图方块");
+        "首尾帧家族铺首帧 / 尾帧方块，收起参考素材那一行");
     assert.deepEqual(thumbPaths(0), ["NeoSimple/first.png"], "首帧槽填上副文件记的首帧");
     assert.deepEqual(thumbPaths(1), ["NeoSimple/last.png"], "尾帧槽填上副文件记的尾帧");
     assert.equal(seedBox().value, "777", "种子填回生效值");
@@ -204,11 +204,17 @@ test("视频复用：认不出的整项丢掉——技能 / 模型 / 时长 / �
         model: "not_on_disk/model_x.safetensors",
         loras: [{ name: "gone/style_x.safetensors", strength: 0.9 }],
         src: { subfolder: "NeoSimple", filename: "frame.png" },
-        refs: [{ subfolder: "NeoSimple", filename: "a.png" }],
+        refs: [{ subfolder: "NeoSimple", filename: "a.png" },
+            { subfolder: "NeoSimple", filename: "clip.mp4" },
+            { subfolder: "NeoSimple", filename: "notes.txt" }],
     });
-    assert.deepEqual(filled, ["技能与自定参数", "参考图", "提示词"], "丢掉的不进清单");
+    assert.deepEqual(filled, ["技能与自定参数", "参考素材", "提示词"], "丢掉的不进清单");
     assert.deepEqual(thumbPaths(2), ["NeoSimple/frame.png", "NeoSimple/a.png"],
-        "全参考技能把首帧记的 src 并进参考图");
+        "全参考技能把首帧记的 src 并进参考素材");
+    assert.ok(deckSlots()[2].querySelector("video.ns-video-slot-media"),
+        "副文件里的视频按视频归槽，不当图铺一张解不开的封面");
+    assert.equal(deckSlots()[2].querySelectorAll(".ns-video-slot-tile.has-img").length, 3,
+        "参考节点读不进的条目（notes.txt）整项不填");
     assert.equal(seedBox().value, "", "随机种子不填");
     assert.equal(sizeSel().value, "1344,768", "面板没有的尺寸整项不填");
     assert.equal(durSel().value, "5", "对不上档位的时长整项不填");
@@ -224,9 +230,11 @@ test("视频复用：认不出的整项丢掉——技能 / 模型 / 时长 / �
     assert.equal(body.seed, -1, "随机种子进 payload");
     assert.deepEqual([body.width, body.height], [1344, 768], "尺寸落回面板默认");
     assert.equal(body.duration_sec, 5, "时长落回面板默认");
-    assert.deepEqual(body.references.map((r) => r.value), ["NeoSimple/frame.png", "NeoSimple/a.png"]);
+    assert.deepEqual(body.references.map((r) => [r.value, r.media]),
+        [["NeoSimple/frame.png", "image"], ["NeoSimple/a.png", "image"], ["NeoSimple/clip.mp4", "video"]],
+        "填回面板的素材原样进 payload，media 跟着归槽类型");
     const notice = toastTexts().find((s) => s.includes("已复用"));
-    assert.match(notice, /已复用 技能与自定参数、参考图、提示词/);
+    assert.match(notice, /已复用 技能与自定参数、参考素材、提示词/);
 });
 
 test("视频复用：技能不在下拉——技能不动，素材按面板现家族填、种子照填", async () => {
@@ -239,9 +247,9 @@ test("视频复用：技能不在下拉——技能不动，素材按面板现�
     });
     assert.ok(videoPage(), "页面停在视频页");
     assert.equal(skillSel().value, before, "认不出的技能不改面板选中");
-    assert.deepEqual(filled, ["参考图", "种子", "提示词"], "认不出的只有技能：素材与种子照填进面板现家族");
+    assert.deepEqual(filled, ["参考素材", "种子", "提示词"], "认不出的只有技能：素材与种子照填进面板现家族");
     assert.deepEqual(thumbPaths(2), ["NeoSimple/frame.png"],
-        "面板停在参考家族：src 落进参考槽，首帧 / 尾帧方块不动");
+        "面板停在参考家族：src 落进参考素材那一行，首帧 / 尾帧方块不动");
     assert.match(document.getElementById("ns-toast")?.textContent || "",
         /技能「gone_skill」在这页没有位置/,
         "认不出的技能要说清是哪一张、去哪改，不能让用户以为技能填上了");

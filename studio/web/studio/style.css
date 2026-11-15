@@ -1307,7 +1307,33 @@ body {
     gap: 3px; padding: 3px; overflow: hidden; border-radius: 7px; pointer-events: none;
 }
 .ns-video-card .ns-video-thumbs:not(:empty) { display: grid; }
-.ns-video-card .ns-video-thumbs-multi { grid-template-columns: repeat(3, 1fr); }
+/* 参考素材那一排：一枚方块一张，横排自动增加，三类合计 15 枚（图 9 / 视频 3 / 音频 3）收满就没有 ＋
+   那一格（添图钮在 JS 里随计数收）。方块壳 / 填满转实心 / ✕ 全走会话页参考位那一套，与首帧 / 尾帧同一形
+   ——把十几枚塞进一枚 118px 的方块里只剩 37px 的碎图，第三行被 overflow: hidden 裁掉，那几枚的 ✕ 也点不到。
+   行宽钉在 10 枚以内（10×56px + 9×6px），收得多的那一排行内横向滚，第一行永不换行的规矩照旧，
+   多出来的宽度全给提示词框 */
+.ns-video-card .ns-video-slot-row {
+    display: flex; gap: 6px; align-items: flex-start;
+    min-width: 0; max-width: 614px; overflow-x: auto; scrollbar-width: none;
+}
+.ns-video-card .ns-video-slot-row::-webkit-scrollbar { display: none; }
+.ns-video-card .ns-video-slot-tile { flex: none; width: 56px; height: 56px; }
+.ns-video-card .ns-video-slot-tile .neo-gallery-edit-refchip-x { top: 1px; right: 1px; width: 14px; height: 14px; font-size: 10px; border-radius: 4px; }
+/* 视频与音频那两类的方块面：<video> 铺满当封面，不给 controls——这枚方块是「换素材」的入口不是播放器，
+   首帧画面靠 preload="metadata" 拉，没拉到就是黑底；音频没有画面，只有居中的类型图标 + 方块 title 里的文件名 */
+.ns-video-card .ns-video-slot-media {
+    position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
+    border-radius: 5px; background: #000; pointer-events: none;
+}
+.ns-video-card .ns-video-slot-audio {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    border-radius: 5px; color: var(--ns-text-3, #9a9184); background: var(--ns-sunken, rgba(232, 226, 212, 0.07));
+}
+/* 视频那一枚的类型角标：缩略图上它和一张静图长得一样；白图标压不住任意封面，给它一层黑描影 */
+.ns-video-card .ns-video-slot-kind {
+    position: absolute; left: 4px; bottom: 3px; display: flex; color: #fff;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.85)); pointer-events: none;
+}
 .ns-video-thumb { position: relative; min-width: 0; aspect-ratio: 1; overflow: hidden; border-radius: 4px; }
 .ns-video-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 /* ✕ 挪进方块内：会话页那枚贴在方块外沿，这里的方块被缩略层吃满，外沿会被裁掉 */
@@ -1353,8 +1379,11 @@ body {
     .ns-video-card { gap: 8px; }
     .ns-video-progress { width: 120px; }
     /* 方块在第一行左边自己收：填满的方块 118px 那一档在手机上缩回 72px，
-       提示词永远剩得下写字的宽度（方块是 3 列缩略图网格，min-content 会把 118px 钉死） */
+       提示词永远剩得下写字的宽度（缩略层吃满方块，min-content 会把 118px 钉死） */
     .ns-video-card .ns-video-slot:has(.ns-video-thumbs:not(:empty)) { flex: 0 1 72px; min-width: 0; }
+    /* 参考素材那一排在窄屏滚着看：方块行让出宽度（基态的 614px 在手机上顶穿第一行），行内横向滚 */
+    .ns-video-deck { flex: 0 1 auto; min-width: 0; }
+    .ns-video-card .ns-video-slot-row { max-width: 100%; }
     /* chip 排（技能 / 尺寸 / 时长 / 种子 + 取消 / 生成）基态是一行不换行、不滚动的 flex：
        整页 .ns-video-page 是 overflow:hidden，chip 排超宽时被裁掉，「生成」在手指下永远够不着
        —— 窄屏给它横向滚动，两枚按钮钉死不跟着 chip 一起被压扁 */

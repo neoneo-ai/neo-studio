@@ -5,6 +5,28 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 ## [Unreleased]
 
 ### Added
+- **Every material slot in the director editor opens the asset library on click.** The first-/last-frame slots, the
+  three reference grids, the 角色参考图 grid, the grid-image drop area, the per-segment storyboard thumbs and the
+  trailing empty-segment row used to pop the OS file picker. Clicking one now opens the 素材库 (the Studio modal's
+  card click picks and closes; ComfyUI opens the left Neo Gallery panel for dragging), each slot declaring the kind
+  it takes (`image` / `video` / `audio`) so a card of another kind is never picked, and a picked card lands through
+  the same copy-into-`input/`, dedup and per-group cap path a dropped card takes. Local upload is not gone — it
+  sits on a 「本地」 corner button on every slot, and the old whole-row 本地 button is deleted with it. Covered by
+  the click / 取用 / 类型 cases in `studio/tests/js/director-editor-segment.test.mjs` and
+  `studio/tests/js/director-editor-grid.test.mjs`.
+- **The video page's 参考素材 row takes images, video and audio in one row.** The full-reference family's
+  reference squares are one mixed row with a single 添图 control: picked material is sorted by extension into
+  参考图 / 参考视频 / 参考音频, the pick order is the slot numbering, and each kind caps on its own ceiling
+  (9 / 3 / 3, 15 together) — the add tile's caption reads 已收 / 合计 15, its hover title breaks the three
+  counts down, and a pick past one kind's ceiling is refused with that kind named. A video square shows its
+  first frame with a play badge (no controls — that square swaps material, it is not a player), an audio
+  square shows the kind icon and keeps the file name in its title. The 素材库 this row opens takes all media;
+  首帧 / 尾帧 stay image-only. A skill whose output template declares no slot for a kind refuses that kind at
+  the pick, before any file is copied into `input`: `ref_kinds` ships in the skill list's `gen_config`
+  (`skill.template_ref_kinds` reads the MiniMaxH3ReferenceToVideo slots, the same judgement
+  `h3_video_gen.ensure_reference_tags` uses), and a skill list without that field gates nothing. Covered by
+  the 参考素材 cases in `studio/tests/js/studio-video.test.mjs`, the 视频复用 reference case in
+  `studio/tests/js/video-reuse.test.mjs` and `TestScanSkillsGenConfig` in `studio/tests/test_skills.py`.
 - **Custom prompts are split into an image pool and a video pool.** The 生成素材 / 图片编辑 input card and the
   video page's composer each carry 保存当前提示词 in their `⋯` menu: the name is typed in, an existing name gets a
   `-1` suffix instead of being overwritten, and the pool follows the page — 绘画 / 编辑 writes
@@ -291,6 +313,16 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   `studio/tests/js/home-layout.test.mjs`, `studio/tests/js/studio-desktop.test.mjs` and `studio/tests/test_home_layout.py`.
 
 ### Fixed
+- **The video page's 参考图 box grows one tile per reference, up to 9.** 参考生视频 used to cram every picked
+  reference into one square as a 3-column thumbnail grid: inside the 118px box each tile is ~37px, the third row
+  falls under `overflow: hidden`, and those references' ✕ cannot be reached. 参考图 now renders like 首帧 / 尾帧 -
+  one square per image, added to the row as you pick, with the count (3/9) on the add tile, which disappears at
+  the 9-image ceiling (the same ceiling the H3 reference node takes). The row scrolls sideways on a narrow window,
+  and the 素材库 the three video boxes open only accepts images: a 视频 / 音频 card used to land in the box as a
+  broken thumbnail and was dropped by the backend on the same rule. The bulk 取用已选 path filters by the same
+  `acceptsPick` judgment as a single card click. Covered by the 参考图 cases in `studio/tests/js/studio-video.test.mjs`
+  and the 批量判定 case in `studio/tests/js/lib-modal-pick-accept.test.mjs`.
+
 - **The preset picker says which empty it is.** While the desktop window is starting ComfyUI, the 绘画 / 视频 / 编辑 pages
   opened 图像预设 / 视频预设 into 「暂无可用提示词」 and 随机 answered 「提示词库为空」 with a library that was fine -
   those routes belong to the kernel and answer `409 offline` in that window. The picker now mounts before it asks for

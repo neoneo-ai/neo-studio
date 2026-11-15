@@ -337,6 +337,42 @@ class TestScanSkillsGenConfig(unittest.TestCase):
         self.assertIsNotNone(s)
         self.assertNotIn("gen_config", s)
 
+    def test_video_skill_gen_config_carries_template_ref_kinds(self):
+        # 出片模板声明的参考槽类型：视频页的参考方块靠它挡素材（模板没有那一类，素材发出去只是被裁掉）
+        sid = "zz-test-ref-kinds"
+        self.assertTrue(self.skill_mod.save_skill_main(
+            sid, "ZZ Test Ref Kinds", "body", None, "custom", False,
+            category="video_gen", gen_video=True))
+        d = os.path.join(self._tmp.name, "custom", sid)
+        self._write_config(d, {"steps": 12})
+        with open(os.path.join(d, "workflow.json"), "w", encoding="utf-8") as f:
+            json.dump({"1": {"class_type": "MiniMaxH3ReferenceToVideo",
+                             "inputs": {"ref_images.ref_image_1": ["9", 0],
+                                        "ref_videos.ref_video_0": ["10", 0]}}}, f)
+        s = self._by_id().get(sid)
+        self.assertEqual((s.get("gen_config") or {}).get("ref_kinds"), ["image", "video"])
+        self.assertEqual(s["gen_config"]["steps"], 12, "参考类型进摘要不挤掉主模型 / 步数那几项")
+
+    def test_template_ref_kinds_reads_only_the_reference_node_slots(self):
+        kinds = self.skill_mod.template_ref_kinds
+        self.assertEqual(kinds(None), [])
+        self.assertEqual(kinds({}), [])
+        # 关键帧家族：首帧走 first_frame 锚点，模板里没有参考槽
+        self.assertEqual(kinds({"1": {"class_type": "MiniMaxH3ImageToVideo",
+                                      "inputs": {"start_image": ["9", 0]}}}), [])
+        # 类型按 ref_* 前缀认（autogrow 只声明用到的那几路），返回顺序固定 = 槽位编号顺序
+        self.assertEqual(kinds({"1": {"class_type": "MiniMaxH3ReferenceToVideo",
+                                      "inputs": {"ref_audios.ref_audio_0": ["11", 0],
+                                                 "ref_images.ref_image_9": ["9", 0]}}}),
+                         ["image", "audio"])
+
+    def test_shipped_video_presets_declare_their_reference_kinds(self):
+        # 预设是发布物：全参考那发三类都收，关键帧那一发一类都不收（视频页据此挡素材）
+        self.assertEqual(self.skill_mod.template_ref_kinds(
+            self.skill_mod.load_skill_workflow("minimax-h3-r2v")), ["image", "video", "audio"])
+        self.assertEqual(self.skill_mod.template_ref_kinds(
+            self.skill_mod.load_skill_workflow("minimax_h3_i2v")), [])
+
 
 @unittest.skipUnless(PROMPTS_AVAILABLE, _reason)
 class TestVideoSkillAvailable(unittest.TestCase):

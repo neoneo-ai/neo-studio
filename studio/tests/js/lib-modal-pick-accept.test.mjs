@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { resetEnv, click } from "./setup.mjs";
 
 // lib-modal.js 顶层导入 scripts/ui.js 与 gallery-utils.js，必须等 setup.mjs 装好 shim 钩子再动态取
-const { createLibraryModal } = await import("../../web/js/core/lib-modal.js");
+const { createLibraryModal, acceptsPick } = await import("../../web/js/core/lib-modal.js");
 
 const KEY = "neo_test_libmodal_accept";
 
@@ -77,3 +77,16 @@ test("取用过滤：不声明类别就是媒体全收（出片参考区一直�
     click(m2.card("w.txt"));
     assert.deepEqual(m2.picked, [], "Lora / txt / 工作流这类文件点它是开灯箱，不是取用");
 });
+
+// 「取用已选」不经单点卡片那道闸（onBulk 直连调用方自己的取值），调用方拿同一个判定筛：
+// 单点与批量必须同一口径，不然只吃图像的槽位会因批量混进视频与音频
+test("取用过滤：批量那条路共用的判定 acceptsPick 与单点同一口径", () => {
+    resetEnv();
+    assert.deepEqual(["a.png", "v.mp4", "s.mp3", "w.txt"].filter((f) => acceptsPick("image", f)), ["a.png"],
+        "只吃图像的落点批量同样只收图像");
+    assert.deepEqual(["v.mp4", "a.png"].filter((f) => acceptsPick("video", f)), ["v.mp4"], "抽帧页那扇批量同样只收视频");
+    assert.deepEqual(["s.mp3", "a.png"].filter((f) => acceptsPick("audio", f)), ["s.mp3"], "声音克隆那扇批量同样只收音频");
+    assert.deepEqual(["v.mp4", "a.png", "w.txt"].filter((f) => acceptsPick(null, f)), ["v.mp4", "a.png"],
+        "不声明类别 = 媒体全收，Lora / txt 这类文件照旧筛掉");
+});
+

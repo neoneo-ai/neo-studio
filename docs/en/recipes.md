@@ -151,11 +151,15 @@ Execution details: [h3-video-gen.md](h3-video-gen.md).
   - Last-frame area (`f2v`): an identical independent grid; under `fl2v` the first- and last-frame areas sit
     side by side in one row.
   - Reference media area (`r2v`): three used-lists (reference images ≤9 / reference videos ≤3 / reference
-    audios ≤3); drag in, or click an empty area to upload, and it inserts — only its own media type is
-    accepted, order is drag-adjustable, and the limit is refused with a message. The title row's
-    "📋 Sync to all segments" overwrites every other segment's media with the current segment's.
-  - The first-/last-frame area title rows have a "📤 Local" button (file picker filtered by type, uploaded to
-    `input/` and selected automatically).
+    audios ≤3); clicking an empty area opens the asset library, dragging media onto the grid inserts it —
+    only its own media type is accepted, order is drag-adjustable, and the limit is refused with a message.
+    The title row's "📋 Sync to all segments" overwrites every other segment's media with the current segment's.
+  - Every material slot defaults to picking from the asset library: the first-/last-frame slots, the three
+    reference grids, the grid-image drop area, the per-segment storyboard thumbs and the trailing empty-segment
+    row all open the library on click (the Studio modal's card click picks, ComfyUI opens the left Neo Gallery
+    panel for dragging), each slot declaring which media kind it takes so a card of another kind is not picked;
+    local upload stays on the slot's "📤 Local" corner button (file picker filtered by type, uploaded to
+    `input/` and added automatically).
 - **Save validation**: image-to-video and first-last-frame segments need a first frame, last-frame generation
   needs a last frame, full-reference segments need reference media; when something is missing a warning shows
   and the content is saved anyway (a draft can be finished later), and execution reports it clearly. Older
@@ -261,7 +265,8 @@ cards); the editor has no text-storyboard input box.
   segment; the **character identity reference** switch sits inside its title row (on by default; unchecking
   writes `shared.identity_refs=false` on save).
 - **🧩 Grid storyboard image (the only storyboard source on this page)**: pick an existing storyboard grid image
-  (produced externally, uploaded locally or dragged from the asset library), choose the split method
+  (produced externally — click the drop area to pick it from the asset library, use its "Local" button, or drop
+  a local file), choose the split method
   (auto-detect / manual rows×columns) and click ✂️ Split into segments. Each cell becomes that segment's first
   frame and storyboard image and replaces the existing segments. Below the image is the "global story reference
   (the source grid's prompt by default)", extracted from the ComfyUI metadata embedded in the source image,
@@ -275,7 +280,7 @@ cards); the editor has no text-storyboard input box.
   handle in the row header reorders rows and writes the order back to the timeline. The storyboard column reads
   that segment's keyframe record and, in `f2v` mode with no record, falls back to the first frame picked on the
   timeline (clearing that frame with ✕ stops the fallback). A permanent empty-segment placeholder row sits at the
-  end: only dropping a storyboard image into that row, or uploading there, actually creates a segment.
+  end: only dropping a storyboard image into that row, or opening the asset library there, actually creates a segment.
 - **"✨ Generate prompts for all segments"**: calls the LLM per segment and rewrites each into a finished prompt
   following the MiniMax H3 audit specification; SSE streams it token by token back into that segment and
   refreshes the table live, a failing segment does not stop the rest and its textarea is restored from the

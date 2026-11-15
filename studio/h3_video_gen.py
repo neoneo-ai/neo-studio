@@ -16,7 +16,7 @@ from .h3_prompt_audit import reference_tags
 from .image_gen import _reference_name, _resolve_loras, render_template, resolve_model
 from .skill_models import locate_by_names
 from .video_gen import get_video_settings, suggest_audio_vae, suggest_video_model
-from .skill import load_skill_workflow, scan_skills
+from .skill import load_skill_workflow, scan_skills, template_ref_slots
 
 
 def _gen_video_skills():
@@ -282,11 +282,10 @@ def _missing_loras(cfg: dict, loras: list) -> list:
 # MiniMaxH3ReferenceToVideo 的参考槽（autogrow 点号键 ref_images.ref_image_N）有值就进条件；
 # <Picture N>/<Video N>/<Audio N> 只说明这一路参考用来干什么，缺标签不影响条件化。补一行是为了给
 # 参考一个明确的语义角色：同 seed 下补与不补的画面构图一致，差别只在参考挂没挂上。
-_REFERENCE_NODE = "MiniMaxH3ReferenceToVideo"
-# (params 里的参考分组, 标签类型, 该类型在提示词里承担的作用)
-_REF_TAG_KINDS = (("ref_images", "Picture", "外观与空间结构"),
-                  ("ref_videos", "Video", "运镜与时间结构"),
-                  ("ref_audios", "Audio", "音色"))
+# 参考分组名 = f"ref_{kind}s"（与 skill._REF_SLOT_HEADS 同一份口径）
+_REF_TAG_KINDS = (("image", "Picture", "外观与空间结构"),
+                  ("video", "Video", "运镜与时间结构"),
+                  ("audio", "Audio", "音色"))
 
 
 def ensure_reference_tags(template: dict, params: dict) -> None:
@@ -297,18 +296,13 @@ def ensure_reference_tags(template: dict, params: dict) -> None:
     模板没声明某类型的槽位时也不加——那条加载链会被 render_template 整条裁掉，加了就是悬空标签。
     编号与 h3_prompt_audit.context_media_tags 一致：同类型第 N 个参考（1 基）。
     """
-    slotted = set()
-    for node in template.values():
-        if isinstance(node, dict) and node.get("class_type") == _REFERENCE_NODE:
-            for key in (node.get("inputs") or {}):
-                head = key.split(".", 1)[0]
-                if head in ("ref_images", "ref_videos", "ref_audios"):
-                    slotted.add(head)
+    slotted = template_ref_slots(template)
     if not slotted:
         return
     tags = reference_tags(params["prompt"])
     clauses = []
-    for key, label, role in _REF_TAG_KINDS:
+    for kind, label, role in _REF_TAG_KINDS:
+        key = f"ref_{kind}s"
         names = params.get(key) or []
         if not names or key not in slotted or any(t.startswith(f"<{label} ") for t in tags):
             continue

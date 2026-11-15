@@ -393,7 +393,7 @@ test("导演编辑器：打开带分镜图的旧配方 → 不报 TDZ，段行�
     const sThumb0 = setupItems[0].querySelector(".neo-director-setup-seg-thumb img");
     assert.ok(sThumb0, "对照表第 1 段回显分镜图");
     assert.match(String(sThumb0.src), /sb_0_ab12cd\.png/, "分镜图列指向已存分镜图文件");
-    assert.equal(setupItems[1].querySelector(".neo-director-setup-seg-thumb").textContent, "＋ 拖入 / 上传分镜图", "第 2 段无分镜图显示上传占位");
+    assert.ok(setupItems[1].querySelector(".neo-director-setup-seg-thumb").textContent.includes("＋ 点击取用 / 拖入分镜图"), "第 2 段无分镜图显示取用占位");
 
     // 对照表第一列缩略图悬停 ✕：清除该段分镜图记录（第 2 段无记录 → 不给 ✕）
     const sbClear = setupItems[0].querySelector(".neo-director-setup-seg-sb-clear");
@@ -406,7 +406,7 @@ test("导演编辑器：打开带分镜图的旧配方 → 不报 TDZ，段行�
     const ffImg = rows[0].querySelector(".neo-director-frames-cols .neo-director-setup-seg-thumb img");
     assert.ok(!ffImg, "首帧正是该分镜图 → ✕ 一并清除首帧");
     const afterItems = Array.from(document.querySelectorAll(".neo-director-setup-segs .neo-director-story-seg-item"));
-    assert.equal(afterItems[0].querySelector(".neo-director-setup-seg-thumb").textContent, "＋ 拖入 / 上传分镜图", "清除后第一列回到上传占位");
+    assert.ok(afterItems[0].querySelector(".neo-director-setup-seg-thumb").textContent.includes("＋ 点击取用 / 拖入分镜图"), "清除后第一列回到取用占位");
 
     document.querySelector(".neo-director-close")?.click();
     await sleep(20);

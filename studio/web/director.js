@@ -14,7 +14,7 @@ import { openLLMSettingsModal } from "./llm-setting.js";
 import { actionToast } from "./toast.js";
 import { sseStream } from "./prompt-service.js";
 import { openStoryboardDialog } from "./gallery-gen.js";
-import { isImageFile, isVideoFile, isAudioFile } from "./gallery-utils.js";
+import { mediaKindOf } from "./gallery-utils.js";
 import { t, tf } from "./js/core/i18n.js";
 import { icon } from "./js/core/icons.js";
 import { queueTrack } from "./queue-panel.js";
@@ -45,15 +45,8 @@ export const MODE_LABELS = new Map([...SEG_MODES, ['mixed', t('混合模式')]])
 // 旧模式值 → 合并模式（载入时静默重映射）
 export const LEGACY_MODE_MAP = new Map([['t2v', 'f2v'], ['i2v', 'f2v'], ['fl2v', 'f2v'], ['v2v', 'r2v'], ['rv2v', 'r2v']]);
 
-// 参考素材类型（按扩展名）：拖入 / 本地上传的内容类型须与所在组一致（图片不能进参考视频 / 音频组）
+// 参考素材类型（按扩展名，mediaKindOf 在 gallery-utils.js）：拖入 / 本地上传的内容类型须与所在组一致（图片不能进参考视频 / 音频组）
 const REF_KIND_NAMES = { image: t('图片'), video: t('视频'), audio: t('音频') };
-
-function mediaKindOf(name) {
-    if (isImageFile(name)) return 'image';
-    if (isVideoFile(name)) return 'video';
-    if (isAudioFile(name)) return 'audio';
-    return '';
-}
 
 /** 画廊拖拽载荷（grabDataType 取回的 JSON）里的文件名；解析失败 / 非画廊拖拽返回 '' */
 function refPayloadName(raw) {
@@ -82,6 +75,9 @@ function buildLocalFilePicker(accept, onUploaded) {
     fileInput.type = 'file';
     fileInput.accept = accept;
     fileInput.style.display = 'none';
+    // open() 合成的这颗 click 从 input 往上冒泡，而落点自身的 click 就是「开素材库」：
+    // 不吃回去就是文件选择窗和素材库一起弹。
+    fileInput.addEventListener('click', (e) => e.stopPropagation());
     fileInput.onchange = async () => {
         const file = fileInput.files && fileInput.files[0];
         if (!file) return;
@@ -92,19 +88,25 @@ function buildLocalFilePicker(accept, onUploaded) {
     return { input: fileInput, open: () => fileInput.click() };
 }
 
-/** 创建「从本地添加」按钮：点击弹出文件选择器，选择后上传并回调 onUploaded(fname)。 */
-function buildLocalAddButton(accept, onUploaded) {
-    const picker = buildLocalFilePicker(accept, onUploaded);
-    const btn = $el('button', {
-        className: 'neo-director-local-add',
+/** 素材落点共用的「点击 = 素材库取用」：抢在侧栏写入之前把取用回调交给宿主——Studio 的侧栏替身据此开
+ *  素材库弹窗（accept 声明这一扇收图 / 视频 / 音频，类别对不上的卡片点下去不取用）；ComfyUI 没有这条
+ *  监听，照旧开左侧 Neo Gallery 面板，卡片往落点里拖。target 传主目录名时顺带导航（CharacterSheet / StoryBoard）。 */
+function openAssetLibrary({ target = null, onPick = null, accept = null } = {}) {
+    window.dispatchEvent(new CustomEvent('neo:media-pick', { detail: { target, onPick, accept } }));
+    toggleGallerySidebar(target, []);
+}
+
+/** 素材落点上的「本地」小角标：点击默认走素材库之后，本地上传留下的显式入口。
+ *  这颗自己吃掉这次点击——落点自身的 click 就是开素材库。文字而非 pi 图标：
+ *  桌面端页面没有 PrimeIcons，图标角标会渲染成一颗空白方块。 */
+function buildSlotLocalButton(picker) {
+    return $el('button', {
+        className: 'neo-director-slot-local',
+        type: 'button',
         title: t('从本地添加素材'),
-        onclick: picker.open,
-    }, [
-        $el('i', { className: 'pi pi-upload' }),
-        $el('span', { textContent: t('本地') }),
-    ]);
-    btn.appendChild(picker.input);
-    return btn;
+        textContent: '⬆ ' + t('本地'),
+        onclick: (e) => { e.stopPropagation(); picker.open(); },
+    });
 }
 
 // ==========================================
@@ -373,6 +375,17 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
         const sizeTile = (tile, w, h) => { if (w && h) tile.style.width = Math.max(36, thumbH * (w / h)) + 'px'; };   // 瓷砖高度固定 thumbH；宽度按画面比例自适应、紧密平铺不留空白
         const warn = (detail) => app.extensionManager.toast.add({ severity: 'warning', summary: t('多段导演'), detail, life: 4000 });
         let dragIdx = null;   // 正在拖放的瓷砖序号（内部重排用，区别于外部素材拖入）
+        // 类型校验：只收本组类型（图片不能落进参考视频 / 参考音频组）——拖入 / 本地上传 / 素材库取用共用一道
+        const acceptMime = { image: 'image/*', video: 'video/*', audio: 'audio/*' }[group.kind] || '*/*';
+        const kindName = REF_KIND_NAMES[group.kind] || t('素材');
+        const kindReject = (name) => warn(tf("{label}只接受{kind}素材，已忽略：{name}", { label: group.label, kind: kindName, name }));
+        const insertTyped = (name) => {
+            if (!name) return;
+            if (mediaKindOf(name) !== group.kind) { kindReject(name); return; }
+            insert(name);
+        };
+        const picker = buildLocalFilePicker(acceptMime, (fname) => insertTyped(fname));
+        const localBtn = buildSlotLocalButton(picker);   // 网格末尾的「本地」瓷砖，随 render() 重建
         // 每次改动都整体重建瓷砖（列表 ≤9，开销可忽略），保证顺序始终对应当前排列
         const render = () => {
             grid.innerHTML = '';
@@ -401,6 +414,7 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
                 });
                 grid.appendChild(tile);
             });
+            grid.appendChild(localBtn);   // 「本地」永远排在瓷砖末尾：空态居中、有素材时接在最后一张之后
             grid.classList.toggle('has-items', list.length > 0);   // 有素材时去掉空态虚线框、瓷砖顶格紧密平铺
             count.textContent = `${list.length}/${group.max}`;
         };
@@ -445,16 +459,6 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
             markDirty();
             if (onChange) onChange();
         };
-        // 类型校验：只收本组类型（图片不能落进参考视频 / 参考音频组）——拖入与本地上传共用一道校验
-        const acceptMap = { image: 'image/*', video: 'video/*', audio: 'audio/*' };
-        const acceptMime = acceptMap[group.kind] || '*/*';
-        const kindName = REF_KIND_NAMES[group.kind] || t('素材');
-        const kindReject = (name) => warn(tf("{label}只接受{kind}素材，已忽略：{name}", { label: group.label, kind: kindName, name }));
-        const insertTyped = (name) => {
-            if (!name) return;
-            if (mediaKindOf(name) !== group.kind) { kindReject(name); return; }
-            insert(name);
-        };
         // OS 文件拖入：dragover 阶段就能读到 MIME，类型不符直接禁止落放（光标变禁、不亮高亮）
         const osFilesMatchKind = (dt) => Array.from((dt && dt.files) || [])
             .every((f) => String(f.type || '').startsWith(acceptMime.replace('*', '')));
@@ -476,11 +480,18 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
             const fname = await copyGalleryToInput(raw);
             if (fname) insert(fname);
         });
-        // 本地上传：去掉「本地」按钮，改为点击网格黑色空区弹出文件选择器（隐藏 input 挂在行上，避免被 render() 清空）
-        const picker = buildLocalFilePicker(acceptMime, (fname) => insertTyped(fname));
+        // 网格空区点击 = 素材库取用（Studio 开弹窗点卡片、ComfyUI 开左侧面板拖入）；本地上传收在末尾那枚「本地」瓷砖
         grid.addEventListener('click', (e) => {
-            if (e.target.closest('.neo-director-refpick-item')) return;   // 点瓷砖（移除/拖拽）不触发上传
-            picker.open();
+            if (e.target.closest('.neo-director-refpick-item') || e.target.closest('.neo-director-slot-local')) return;
+            openAssetLibrary({
+                accept: group.kind,
+                onPick: async (imgs) => {
+                    for (const im of (imgs || [])) {
+                        const fname = await galleryPickFname(im);
+                        if (fname) insertTyped(fname);
+                    }
+                },
+            });
         });
         const head = $el('div', { className: 'neo-director-segref-head' }, [
             $el('span', { className: 'neo-director-field-label', textContent: tf("{label}（最多 {max}）", { label: group.label, max: group.max }) }),
@@ -499,27 +510,32 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
     const galleryPickFname = async (im) =>
         im.subfolder ? await copyGalleryToInput(JSON.stringify(im)) : im.filename;
 
-    /** 「素材库」按钮：打开 ComfyUI 左侧 Neo Gallery 面板（首帧行 / 参考区共用）。
+    /** 「素材库」按钮：走 openAssetLibrary（Studio 开素材库弹窗点卡片、ComfyUI 开左侧 Neo Gallery 面板拖入）。
      *  target 传主目录名（"CharacterSheet" / "StoryBoard"，就是 /neo_gallery/list 的 dir_name）时顺带导航到该目录，按钮文案随之具体化（角色素材库 / 宫格图素材库），便于直接取角色图 / 分镜图。
-     *  onPick 传取用回调（Studio 弹窗点卡片 / 批量取用时调用，参数 [{filename, subfolder}]）：
-     *  经 neo:media-pick 事件交给 Studio 宿主；ComfyUI 模式没有监听，照旧只是开侧栏拖拽。 */
-    const buildAssetLibButton = (target, onPick) => {
+     *  onPick 传取用回调（弹窗点卡片 / 批量取用时调用，参数 [{filename, subfolder}]）；accept 声明这一扇收图 / 视频 / 音频。 */
+    const buildAssetLibButton = (target, onPick, accept) => {
         const label = target === 'CharacterSheet' ? t('角色素材库') : target === 'StoryBoard' ? t('宫格图素材库') : t('素材库');
         return $el('button', {
             className: 'neo-director-ff-lib',
             title: target ? tf("打开素材库（{target}）", { target }) : t('打开素材库'),
-            onclick: () => {
-                window.dispatchEvent(new CustomEvent('neo:media-pick', { detail: { target, onPick } }));
-                toggleGallerySidebar(target, []);
-            },
+            onclick: () => openAssetLibrary({ target, onPick, accept }),
         }, [
             $el('i', { className: 'pi pi-images' }),
             $el('span', { textContent: label }),
         ]);
     };
 
-    /** 首/尾帧槽位上传（与故事板分镜对照表缩略位同款体验）：拖入替换 / 点击空态本地上传。 */
+    /** 首/尾帧槽位取图（与故事板分镜对照表缩略位同款体验）：拖入替换 / 点击空态开素材库取用，
+     *  本地上传收在角标上。返回造「本地」角标的工厂——槽位每次重绘都要重新挂一颗。 */
     function attachFrameSlotUpload(thumb, setFn) {
+        const useImage = (fname) => {
+            if (!fname) return;
+            // 登记进保存资产清单（配方 assets/ 里已有的只作缩略图来源，不重复落盘）
+            if (!recipeAssetFiles.has(fname) && !imageRefs.some(r => r.filename === fname)) {
+                imageRefs.push({ filename: fname, subfolder: '', type: 'input', kind: 'image' });
+            }
+            setFn(fname);
+        };
         thumb.addEventListener('dragover', (e) => { if (segReordering) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; thumb.classList.add('neo-director-drop'); });
         thumb.addEventListener('dragleave', (e) => { if (!thumb.contains(e.relatedTarget)) thumb.classList.remove('neo-director-drop'); });
         thumb.addEventListener('drop', async (e) => {
@@ -528,23 +544,22 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
             thumb.classList.remove('neo-director-drop');
             const fnames = await extractDroppedImageFnames(e);
             if (!fnames.length) return;
-            // 登记进保存资产清单（配方 assets/ 里已有的只作缩略图来源，不重复落盘）
-            for (const f of fnames) {
-                if (!recipeAssetFiles.has(f) && !imageRefs.some(r => r.filename === f)) {
-                    imageRefs.push({ filename: f, subfolder: '', type: 'input', kind: 'image' });
-                }
-            }
-            setFn(fnames[0]);
+            useImage(fnames[0]);
         });
-        // 空态点击本地上传（已填图时点缩略图看大图，由 fillSegThumb 处理）
-        const picker = buildLocalFilePicker('image/*', (fname) => {
-            if (!recipeAssetFiles.has(fname) && !imageRefs.some(r => r.filename === fname)) {
-                imageRefs.push({ filename: fname, subfolder: '', type: 'input', kind: 'image' });
-            }
-            setFn(fname);
+        const picker = buildLocalFilePicker('image/*', useImage);
+        thumb.appendChild(picker.input);   // 隐藏 input 挂在槽位上：重绘只清展示内容，它跟着留下
+        // 空态点击 = 素材库取用（已填图时点缩略图看大图，由 fillSegThumb 处理）
+        thumb.addEventListener('click', () => {
+            if (thumb.querySelector('a')) return;
+            openAssetLibrary({
+                accept: 'image',
+                onPick: async (imgs) => {
+                    const im = (imgs || [])[0];
+                    if (im) useImage(await galleryPickFname(im));
+                },
+            });
         });
-        thumb.appendChild(picker.input);
-        thumb.addEventListener('click', () => { if (!thumb.querySelector('a')) picker.open(); });
+        return () => buildSlotLocalButton(picker);
     }
 
     function buildSeg(seg = {}) {
@@ -564,7 +579,7 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
         const durInp = $el('input', { className: 'neo-director-dur', type: 'number', min: 1, max: 3600, value: (seg.duration_sec != null ? seg.duration_sec : 5) });
 
         // 关键帧生视频（f2v）：与故事板分镜对照表同构的两栏——左栏首帧槽位 / 右栏提示词；
-        // 尾帧用得少（默认衔接下一段首帧），收在扩展按钮里。槽位体验同分镜缩略位：拖入 / 点击上传 / 悬停 ✕ / Lightbox。
+        // 尾帧用得少（默认衔接下一段首帧），收在扩展按钮里。槽位体验同分镜缩略位：拖入 / 点击取用 / 悬停 ✕ / Lightbox。
         let ffVal = seg.first_frame || '';
         let lfVal = seg.last_frame || '';
         const ffSlot = $el('div', { className: 'neo-director-setup-seg-thumb' });
@@ -577,7 +592,8 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
                     () => Lightbox.open({ items: [{ kind: 'image', url: thumbSrc(ffVal), title: tf("首帧 · {name}", { name: ffVal }) }] }), t('清除该段首帧'));
             } else {
                 ffSlot.classList.add('neo-director-setup-seg-thumb-empty');
-                ffSlot.appendChild($el('span', { className: 'neo-director-setup-seg-thumb-hint', textContent: t('＋ 拖入 / 上传首帧') }));
+                ffSlot.appendChild($el('span', { className: 'neo-director-setup-seg-thumb-hint', textContent: t('＋ 点击取用 / 拖入首帧') }));
+                ffSlot.appendChild(ffLocalBtn());
             }
         };
         const lfToggleBtn = $el('button', { className: 'neo-director-lf-toggle', type: 'button', title: t('尾帧（锁住该段收尾画面；默认衔接下一段首帧，少用）') });
@@ -592,7 +608,8 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
                     () => Lightbox.open({ items: [{ kind: 'image', url: thumbSrc(lfVal), title: tf("尾帧 · {name}", { name: lfVal }) }] }), t('清除该段尾帧'));
             } else {
                 lfSlot.classList.add('neo-director-setup-seg-thumb-empty');
-                lfSlot.appendChild($el('span', { className: 'neo-director-setup-seg-thumb-hint', textContent: t('＋ 拖入 / 上传尾帧') }));
+                lfSlot.appendChild($el('span', { className: 'neo-director-setup-seg-thumb-hint', textContent: t('＋ 点击取用 / 拖入尾帧') }));
+                lfSlot.appendChild(lfLocalBtn());
             }
             lfToggleBtn.innerHTML = '';
             if (lfVal) {
@@ -607,8 +624,8 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
             first: (v) => { ffVal = v || ''; renderFfSlot(); markDirty(); },
             last: (v) => { lfVal = v || ''; renderLfState(); markDirty(); },
         };
-        attachFrameSlotUpload(ffSlot, frameSetters.first);
-        attachFrameSlotUpload(lfSlot, frameSetters.last);
+        const ffLocalBtn = attachFrameSlotUpload(ffSlot, frameSetters.first);
+        const lfLocalBtn = attachFrameSlotUpload(lfSlot, frameSetters.last);
         lfToggleBtn.onclick = () => { lfExpanded = !lfExpanded; renderLfState(); };
         renderFfSlot();
         renderLfState();
@@ -654,7 +671,7 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
                         const fname = await galleryPickFname(im);
                         if (fname) segRefRows[0].insert(fname);
                     }
-                }),
+                }, 'image'),
             ]),
             segRefRows[0].row,  // 参考图独占一行（最多 9 个，需要更多空间）
             $el('div', { className: 'neo-director-ref-row-pair' }, [
@@ -1538,7 +1555,7 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
             const fname = await galleryPickFname(im);
             if (fname) charRefRow.insert(fname);
         }
-    });
+    }, 'image');
     charLibBtn.addEventListener('click', () => setCharOpen(true));   // 素材库的图要拖进网格：先展开
     charCard = $el('div', { className: 'neo-director-setup-char' }, [
         $el('div', { className: 'neo-director-refs-head' }, [charTitle, identityRefsRow, charLibBtn]),
@@ -1599,14 +1616,14 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
             gridSrcBody.appendChild(img);
             gridSrcBody.appendChild(clearBtn);
         } else {
-            gridSrcBody.appendChild($el('span', { className: 'neo-director-grid-src-hint', textContent: t('点击上传 / 拖入宫格图') }));
+            gridSrcBody.appendChild($el('span', { className: 'neo-director-grid-src-hint', textContent: t('点击取用 / 拖入宫格图') }));
         }
         refreshStepState();   // 换图 / 清除 → ①/② 徽标与「拆分到各段」可用性
     }
     setGridSrc('');
     // 全局故事参考回显：编辑旧配方时恢复上次保存的文本（setGridSrc('') 已清空 textarea）
     if (exStory.grid_prompts) gridPromptsTa.value = exStory.grid_prompts;
-    // 本地上传：隐藏 file input 挂在输入区（不随 innerHTML 重绘清除）；空区点击弹出文件选择器
+    // 本地上传：隐藏 file input 挂在输入区（不随 innerHTML 重绘清除），入口收在右下角「本地」那一颗
     const gridSrcPicker = buildLocalFilePicker('image/*', (fname) => { setGridSrc(fname); markDirty(); });
     gridSrcDrop.appendChild(gridSrcPicker.input);
     const gridSbBtn = $el('button', { className: 'neo-director-storyboard-btn', title: t('基于角色图生成九宫格分镜图'), textContent: '+' });
@@ -1616,19 +1633,32 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
         const c = charRefRow.getSelected();
         openStoryboardDialog(app.neoGallery, { filename: c[0], name: c[0] }, '');
     });
-    // 输入区右下角操作条：「宫格素材库」在前、「+」（基于角色图生成九宫格）在后
+    // 输入区右下角操作条：「宫格素材库」在前、「本地」居中、「+」（基于角色图生成九宫格）在后
     const gridSrcActions = $el('div', { className: 'neo-director-grid-src-actions' }, [
         buildAssetLibButton('StoryBoard', async (imgs) => {
             const im = imgs[0];
             if (!im) return;
             const fname = await galleryPickFname(im);
             if (fname) { setGridSrc(fname); markDirty(); }
-        }),
+        }, 'image'),
+        buildSlotLocalButton(gridSrcPicker),
         gridSbBtn,
     ]);
-    gridSrcActions.addEventListener('click', (e) => e.stopPropagation());   // 操作条内点击不触发输入区「本地上传」
+    gridSrcActions.addEventListener('click', (e) => e.stopPropagation());   // 操作条内点击不触发输入区的素材库取用
     gridSrcDrop.appendChild(gridSrcActions);
-    gridSrcDrop.onclick = (e) => { if (!gridSrcFile && e.target !== gridSrcPicker.input) gridSrcPicker.open(); };   // 已选图时点缩略图看大图、✕ 清除
+    // 空区点击 = 素材库取用（已选图时点缩略图看大图、✕ 清除）
+    gridSrcDrop.onclick = (e) => {
+        if (gridSrcFile) return;
+        openAssetLibrary({
+            accept: 'image',
+            onPick: async (imgs) => {
+                const im = (imgs || [])[0];
+                if (!im) return;
+                const fname = await galleryPickFname(im);
+                if (fname) { setGridSrc(fname); markDirty(); }
+            },
+        });
+    };
     // 拖入：OS 本地图片 / 素材库（Neo Gallery）
     gridSrcDrop.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; gridSrcDrop.classList.add('neo-director-drop'); });
     gridSrcDrop.addEventListener('dragleave', (e) => { if (!gridSrcDrop.contains(e.relatedTarget)) gridSrcDrop.classList.remove('neo-director-drop'); });
@@ -1713,7 +1743,7 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
             stepGridBadge,   // ② 分段：宫格来源由「拆分到各段」完成
             $el('span', {
                 className: 'neo-director-src-desc',
-                title: t('上传一张带分隔条 / 留白的分镜宫格图（在外部生成），自动检测行列并切分；各格按阅读顺序替换现有分段，并作为该段首帧与分镜图。点击输入区本地上传，或从左侧素材库 / 本地文件拖入'),
+                title: t('上传一张带分隔条 / 留白的分镜宫格图（在外部生成），自动检测行列并切分；各格按阅读顺序替换现有分段，并作为该段首帧与分镜图。点击输入区从素材库取用，或用「本地」按钮 / 拖入本地文件'),
                 textContent: t('拆成分镜，分镜作首帧'),
             }),
         ]),
@@ -2097,7 +2127,7 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
     }
 
 
-    // 分镜图缩略位支持直接拖入 / 上传（跳过宫格拆分）：把已拆好的分镜图落到该段并同步为首帧；多张拖入自动补空段承接
+    // 分镜图缩略位支持直接拖入 / 素材库取用（跳过宫格拆分）：把已拆好的分镜图落到该段并同步为首帧；多张拖入自动补空段承接
     function setSegStoryboard(row, fname) {
         if (!imageRefs.some(r => r.filename === fname)) imageRefs.push({ filename: fname, subfolder: '', type: 'input', kind: 'image' });
         row.dataset.storyboard = fname;
@@ -2131,13 +2161,23 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
             renumberSegs();
             renderSetupSegs();
         });
-        if (thumb.classList.contains('neo-director-setup-seg-thumb-empty')) {   // 空位：点击本地上传（已填图时点缩略图看大图）
+        if (thumb.classList.contains('neo-director-setup-seg-thumb-empty')) {   // 空位：点击开素材库取用，本地上传收在角标（已填图时点缩略图看大图）
             const picker = buildLocalFilePicker('image/*', (fname) => { setSegStoryboard(row, fname); renderSetupSegs(); });
             thumb.appendChild(picker.input);
-            thumb.onclick = () => picker.open();
+            thumb.onclick = () => openAssetLibrary({
+                accept: 'image',
+                onPick: async (imgs) => {
+                    const im = (imgs || [])[0];
+                    if (!im) return;
+                    const fname = await galleryPickFname(im);
+                    if (fname) { setSegStoryboard(row, fname); renderSetupSegs(); }
+                },
+            });
+            return buildSlotLocalButton(picker);
         }
+        return null;
     }
-    // band-2 末尾常驻空段的缩略位：拖入 / 点击上传分镜图才真实建段（每张图新建一段并设为其分镜图）
+    // band-2 末尾常驻空段的缩略位：拖入 / 素材库取用分镜图才真实建段（每张图新建一段并设为其分镜图）
     function attachGhostThumbUpload(thumb) {
         const createWith = (fname) => {   // 新建一段并设为其分镜图
             const defaultSkill = currentSkillId() || (skills.length ? skills[0].id : '');
@@ -2157,9 +2197,20 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
             renumberSegs();
             renderSetupSegs();
         });
-        const picker = buildLocalFilePicker('image/*', (fname) => { createWith(fname); renumberSegs(); renderSetupSegs(); });   // 点击本地上传（上传后真实建段）
+        const picker = buildLocalFilePicker('image/*', (fname) => { createWith(fname); renumberSegs(); renderSetupSegs(); });   // 「本地」角标：上传后真实建段
         thumb.appendChild(picker.input);
-        thumb.onclick = () => picker.open();
+        thumb.onclick = () => openAssetLibrary({   // 点击 = 素材库取用：每张取用的图新建一段
+            accept: 'image',
+            onPick: async (imgs) => {
+                for (const im of (imgs || [])) {
+                    const fname = await galleryPickFname(im);
+                    if (fname) createWith(fname);
+                }
+                renumberSegs();
+                renderSetupSegs();
+            },
+        });
+        return buildSlotLocalButton(picker);
     }
     // band-2 对照表项拖拽排序：拖动头部手柄在预览项间实时换位，松手后把新顺序回写到 segsWrap（唯一事实来源）并刷新。
     function attachSegReorder(item) {
@@ -2205,12 +2256,13 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
         renderSetupSegs();
     }
 
-    // band-2 末尾常驻空段（纯 UI，不进 segsWrap、不保存、不参与拖拽排序）：缩略图位看起来可拖入 / 上传分镜图，触发才真实新建一段
+    // band-2 末尾常驻空段（纯 UI，不进 segsWrap、不保存、不参与拖拽排序）：缩略图位看起来可拖入 / 取用分镜图，触发才真实新建一段
     function buildGhostSeg() {
         const thumb = $el('div', { className: 'neo-director-setup-seg-thumb neo-director-setup-seg-thumb-empty neo-director-story-seg-ghost-thumb' }, [
-            $el('span', { className: 'neo-director-setup-seg-thumb-hint', textContent: t('＋ 拖入 / 上传分镜图新增一段') }),
+            $el('span', { className: 'neo-director-setup-seg-thumb-hint', textContent: t('＋ 点击取用 / 拖入分镜图新增一段') }),
         ]);
-        attachGhostThumbUpload(thumb);
+        const ghostLocalBtn = attachGhostThumbUpload(thumb);
+        if (ghostLocalBtn) thumb.appendChild(ghostLocalBtn);
         const promptCells = [$el('div', { className: 'neo-director-story-seg-prompt' })];
         return $el('div', { className: 'neo-director-story-seg-ghost' }, [
             $el('div', { className: 'neo-director-story-seg-head' }, [$el('span', { textContent: t('＋ 新增分镜段') })]),
@@ -2286,9 +2338,10 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
                     hasSb ? undefined : t('清除该段首帧'));
             } else {
                 thumb.classList.add('neo-director-setup-seg-thumb-empty');
-                thumb.appendChild($el('span', { className: 'neo-director-setup-seg-thumb-hint', textContent: t('＋ 拖入 / 上传分镜图') }));
+                thumb.appendChild($el('span', { className: 'neo-director-setup-seg-thumb-hint', textContent: t('＋ 点击取用 / 拖入分镜图') }));
             }
-            attachSegThumbUpload(thumb, row);   // 分镜图位支持直接拖入 / 上传（跳过宫格拆分）
+            const sbLocalBtn = attachSegThumbUpload(thumb, row);   // 分镜图位：拖入 / 素材库取用 / 本地角标（跳过宫格拆分）
+            if (sbLocalBtn) thumb.appendChild(sbLocalBtn);
             const promptCells = [$el('div', { className: 'neo-director-story-seg-prompt', textContent: row.querySelector('.neo-director-prompt').value || t('（未生成）') })];
             const item = $el('div', { className: 'neo-director-story-seg-item' }, [
                 $el('div', { className: 'neo-director-story-seg-head' }, [

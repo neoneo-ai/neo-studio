@@ -22,6 +22,12 @@ const PICK_ACCEPT = {
     audio: (f) => /\.(mp3|wav|m4a|flac|ogg|aac)$/i.test(f),
 };
 
+/** 这一扇弹窗收不收得下这个文件：accept 为 null 时媒体全收，否则只放行该类。
+    单点卡片由上面那排 capture 点击挡；「取用已选」是宿主从自己的多选集合直接取值，不经那道闸，
+    要拿同一个判定自己筛——不筛的话勾进集合的视频与 lora 卡会一路落进只吃图像的槽位。 */
+export const acceptsPick = (accept, filename) =>
+    (accept ? PICK_ACCEPT[accept] : (f) => PICKABLE_RE.test(f))(filename);
+
 /** 建一枚弹窗外壳；宿主自己挂进 document.body。storageKey 存浮窗摆位与最大化偏好，scope 写进 data-lib-scope 供页面定位这扇窗。 */
 export function createLibraryModal({ storageKey = "neo_studio_libmodal", scope = "assets" } = {}) {
     let opened = false;
@@ -220,7 +226,8 @@ export function createLibraryModal({ storageKey = "neo_studio_libmodal", scope =
     };
 
     /** 取用模式：onPick 单点卡片取用（关窗后调用）；onBulk 底部取用条；onClear 清宿主多选。
-     *  accept 声明这一扇收哪一类（"image" / "video"，不传 = 媒体全收）：类别对不上的卡片点下去不取用。 */
+     *  accept 声明这一扇收哪一类（"image" / "video" / "audio"，不传 = 媒体全收）：类别对不上的卡片
+     *  点下去不取用；批量那条路（onBulk 直连宿主的取值）由宿主拿 acceptsPick 筛同一口径。 */
     function setPickMode({ onPick, onBulk, onClear, accept } = {}) {
         pickHandler = onPick || null;
         bulkHandler = onBulk || null;

@@ -152,6 +152,10 @@ list and the asset library both open in modals (`js/core/lib-modal.js`), so the 
   page uses (one element moved between the gallery host, the modal host and the standby host, wide styling),
   breadcrumbs and directory navigation work there, every host you leave behind stays on **the directory you were
   browsing** (never the home root), and cards drag straight into the editor's first-frame / reference slots.
+  Clicking a material slot — the first-/last-frame slots, the three reference grids, the grid-image drop area, the
+  per-segment storyboard thumbs and the trailing empty-segment row — **opens this same modal** (each slot declares
+  the kind it takes, so a card of another kind is not picked), and local upload sits on the slot's 「本地」 corner
+  button.
   The top bar's **Size** slider belongs to the gallery page only — it sets the thumbnail density there (the shared
   gallery setting), so the modal hides that row, its cards stay at the 150px floor (never the slider's size), and the
   window size stays with maximize / the right-edge handle.
@@ -245,7 +249,7 @@ narrow-window rules are shared with the director page (one modal instance, one g
   lines (64px, `max-height: 26vh`), writes at 12px with 1.5 line-height — the edit page's size, while the 生成素材
   dialog's composer keeps the 15px base — and grows by dragging its bottom edge. The video page's composer
   capsule takes the same 980px centred width and the same box that grows by dragging its bottom edge, and it no
-  longer stretches to the height of the 首帧 / 尾帧 / 参考图 squares beside it. That first row never wraps: the
+  longer stretches to the height of the 首帧 / 尾帧 / 参考素材 squares beside it. That first row never wraps: the
   squares sit at the left with the prompt box to their
   right, the same shape as the edit page's composer, and a window at 200% Windows scaling (1776 px = 888 CSS px)
   keeps that row too; on a real phone the filled square shrinks from 118 px to 72 px to give the prompt room,
@@ -253,6 +257,11 @@ narrow-window rules are shared with the director page (one modal instance, one g
   measure, pinned on the `.ns-video-dock` host so it beats the session composer's 12 px — and the top status row
   (queued / progress / finished) drops out, row and gap together, while it holds nothing: the first-frame square sits
   9 px under the capsule edge, and a line written into that row (a validation message included) takes the line back.
+  The 参考素材 row carries one 56 px square per item, caps per kind at 9 / 3 / 3 (15 together), keeps the row
+  width pinned at 10 squares across and scrolls sideways inside its own row when more are in — that first row
+  still never wraps. Video and audio tiles sit in the same row (a first-frame image with a play badge, an
+  icon for audio); the row width and its scroll do not change by kind.
+
 - The edit page docks its composer at the bottom the same way, and the image-edit area takes the gap above it: the
   source image scales up to fill that gap (`object-fit: contain`, centred, never cropped; its delete mask and marker
   points cap with it, so the mask never spills outside the card), and an empty preview carries the fixed-size
