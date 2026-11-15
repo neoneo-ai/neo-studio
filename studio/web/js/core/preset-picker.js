@@ -3,7 +3,8 @@
  * 只列提示词：预设、用户自存与 collections 条目，配方不入池（配方有各自的入口）。
  * kind 决定看哪一池："image" 图像提示词，"video" 视频提示词 —— 归属看扫描名首段（video/ 目录下的都归视频），
  * 与提示词管理页的「图像 / 视频」便签同一条规则，本模块是这条规则在前端的唯一出处。
- * 点一行 = 读该条全文交回调用方填框；× / 点遮罩 / Esc 三条退路都收口到 closePresetPicker。
+ * 点一行 = 读该条全文交回调用方填框；× / 点浮层外 / Esc 三条退路都收口到 closePresetPicker。
+ * 浮层是挂在按钮下方的下拉（placeUnder），不是居中弹窗。
  */
 import { $el } from "../../../../scripts/ui.js";
 import { t } from "./i18n.js";
@@ -24,36 +25,59 @@ export function promptDisplayName(name) {
 
 const itemName = (item) => (typeof item === "string" ? item : item?.name || "");
 
-// 同时只开一扇：从别的页面再点一次是换作用域，先拆旧的那扇（含它的 Esc 监听）
+// 同时只开一扇：从别的页面再点一次是换作用域，先拆旧的那扇（含它的 Esc 与外关监听）
 let opened = null;
 
 /** 关掉提示词浮层；没开着就是空操作。 */
 export function closePresetPicker() {
     if (!opened) return;
     document.removeEventListener("keydown", opened.onKey, true);
+    document.removeEventListener("pointerdown", opened.onPress, true);
     opened.overlay.remove();
     opened = null;
 }
 
+/** 挂在按钮下方那一发：右端对齐按钮右端、上沿贴按钮下沿；下面放不下整块就翻到按钮上方，
+ *  两侧各留 8px 不出屏（绘画页 / 视频页那两排都住在页面右上角，右对齐才不会溢出窗口右边）。
+ *  列表读完之后才量得到真实高度，所以渲染完还要再量一次。 */
+function placeUnder(overlay, anchor) {
+    const r = anchor.getBoundingClientRect();
+    const w = overlay.offsetWidth;
+    const h = overlay.offsetHeight;
+    overlay.style.left = `${Math.max(8, Math.min(r.right - w, window.innerWidth - 8 - w))}px`;
+    let top = r.bottom + 6;
+    if (top + h > window.innerHeight - 8) top = Math.max(8, r.top - h - 6);
+    overlay.style.top = `${top}px`;
+}
+
 /**
- * 打开提示词选择浮层。kind: "image" | "video"；onPick(text) 在点中一条并读到全文后调用。
- * 浮层自挂在 document.body 上，不依赖任何页面结构。
+ * 打开提示词选择浮层。kind: "image" | "video"；anchor 是打开它的那颗按钮，浮层挂在它正下方；
+ * onPick(text) 在点中一条并读到全文后调用。浮层自挂在 document.body 上，不依赖任何页面结构。
  */
-export async function openPresetPicker({ kind = "image", onPick } = {}) {
+export async function openPresetPicker({ kind = "image", onPick, anchor } = {}) {
+    // 再点同一颗按钮 = 收窗：按下那一发不在按钮上收（见 onPress），交到这里由 click 收口
+    if (opened && opened.anchor === anchor) { closePresetPicker(); return; }
     closePresetPicker();
     const body = $el("div", { className: "rs-preset-list-body" });
     const search = $el("input", { className: "rs-preset-search-input", type: "text", placeholder: t("搜索提示词…") });
     const overlay = $el("div", {
         // prompts.css 的骨架自带 display:none（提示词管理页自己管显隐），不显式展开就是「点了没窗口」；
-        // 层位要盖得住生成素材 / 图片编辑那两层浮窗（9845），这一发由 JS 定，不依赖各页面各自的 CSS
+        // 层位要盖得住生成素材 / 图片编辑那两层浮窗（9845），这一发由 JS 定，不依赖各页面各自的 CSS；
+        // 骨架的居中 transform 在这里抹掉——浮层吃 placeUnder 写的 left/top，住在按钮下方
         className: "rs-preset-list-overlay neo-preset-picker",
-        style: { display: "flex", zIndex: 9900 },
+        style: { display: "flex", zIndex: 9900, transform: "none" },
     });
     const onKey = (e) => {
         if (e.key !== "Escape") return;
         // capture + 掐断传播：面板自己的「Esc 关窗」不能跟着这一发把窗口一起关掉
         e.stopPropagation();
         e.preventDefault();
+        closePresetPicker();
+    };
+    // 下拉挂在按钮下方，没有遮罩可点：浮层外任何按下都收窗（按下那一发收，比 click 早，
+    // 不会把「点开素材库」这类同一次点击带着浮层一起跑）。按钮本身让开，那一发由 click 走收窗
+    const onPress = (e) => {
+        if (!opened || opened.overlay.contains(e.target) || anchor.contains(e.target)) return;
         closePresetPicker();
     };
     const choose = async (name) => {
@@ -94,10 +118,11 @@ export async function openPresetPicker({ kind = "image", onPick } = {}) {
     );
     overlay.querySelector(".rs-preset-close").addEventListener("click", closePresetPicker);
     search.addEventListener("input", () => render(items, search.value, note));
-    overlay.addEventListener("click", (e) => { if (e.target === overlay) closePresetPicker(); });
     document.body.appendChild(overlay);
-    opened = { overlay, onKey };
+    opened = { overlay, onKey, onPress, anchor };
     document.addEventListener("keydown", onKey, true);
+    document.addEventListener("pointerdown", onPress, true);
+    placeUnder(overlay, anchor);
     body.textContent = t("加载中…");
     try {
         const list = await listPrompts();
@@ -112,6 +137,7 @@ export async function openPresetPicker({ kind = "image", onPick } = {}) {
         note = t("提示词列表读取失败");
     }
     render(items, "", note);
+    placeUnder(overlay, anchor);   // 列表落定才量得到真实高度：下面放得下就不动，放不下这一发翻到按钮上方
     search.focus();
 }
 

@@ -49,6 +49,8 @@ const PATHS = {
     "skip-forward": '<polygon points="5 4 15 12 5 16 5 4"/><polyline points="19 5 19 19"/>',
     volume: '<path d="M11 5 6 9H2v6h4l5 4V5"/><path d="M15.5 8.5a10 10 0 0 1 0 7"/><path d="M19 5.5a15 15 0 0 1 0 13"/>',
     "volume-mute": '<path d="M11 5 6 9H2v6h4l5 4V5"/><path d="m22 9-6 6"/><path d="m16 9 6 6"/>',
+    // 「提示词」组合钮右半那枚骰子（抽一条随机提示词）：五点骰面，点用 h.01 的圆头短线，随按钮 currentColor 描边
+    dice: '<rect width="18" height="18" x="3" y="3" rx="3"/><path d="M8.5 8.5h.01"/><path d="M15.5 8.5h.01"/><path d="M12 12h.01"/><path d="M8.5 15.5h.01"/><path d="M15.5 15.5h.01"/>',
 
 };
 

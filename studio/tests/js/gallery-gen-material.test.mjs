@@ -767,7 +767,7 @@ test("生成历史：增强后再生成，↑ 召回生成用过的最终提示�
     document.querySelector(".neo-gallery-gm-modal-overlay")?.remove();
 });
 
-test("随机填入：标题栏那颗「随机」从图像池抽一条填进提示词框", async () => {
+test("随机填入：标题栏组合钮那枚骰子从图像池抽一条填进提示词框", async () => {
     resetEnv();
     clearRoutes();
     const { openGenMaterialDialog } = await import("../../web/gallery-gen.js");
@@ -783,8 +783,9 @@ test("随机填入：标题栏那颗「随机」从图像池抽一条填进提�
     await sleep(50);
 
     const titleBtns = [...overlay.querySelectorAll(".neo-gallery-story-titlebar-btn")];
-    assert.deepEqual(titleBtns.map(b => b.textContent.trim()), ["提示词", "随机"], "标题栏右端应有「提示词」「随机」");
-    click(titleBtns.find(b => b.textContent.trim() === "随机"));
+    assert.deepEqual(titleBtns.map(b => b.textContent.trim()), ["提示词", ""], "标题栏右端是组合钮：左「提示词」右骰子图标");
+    assert.ok(overlay.querySelector(".neo-gallery-story-titlebar-tools .neo-split-btn"), "两颗拼成一枚控件");
+    click(titleBtns[1]);
     await sleep(80);
 
     assert.equal(overlay.querySelector(".neo-gallery-gm-quick-input").value, "混合池里的一条随机提示词", "随机抽到的提示词应填入提示词框");

@@ -59,7 +59,8 @@
     text-align: center;
 }
 
-/* Preset list - centered panel (not dropdown) */
+/* Preset list panel - the centered modal 提示词管理页 opens; js/core/preset-picker.js keeps this skeleton
+   (显隐 + 列表样式) but writes its own left/top to hang the list under the button that opened it */
 .rs-preset-list-overlay {
     position: fixed;
     display: none;

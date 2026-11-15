@@ -161,10 +161,10 @@ background overlay, title bar drags the window) that creates new assets from a p
   them one by one, cancelling keeps what was already generated, and recipes are not part of the pool),
   prompt enhance, and save this prompt (an empty box says there is nothing to save, a name that cleans down to
   nothing says "give this prompt a name first", and on the desktop window with ComfyUI not up it says "saving a
-  prompt needs ComfyUI running"). The two prompt fillers sit at the right end of the title bar: **Prompt** opens the
-  prompt picker (search, click to fill the box - image prompts only, `video/` prompts and recipes never
-  enter it), and **Random** draws one from the image pool (the request carries `kind="image"`, the backend
-  filters the pool).
+  prompt needs ComfyUI running"). The prompt filler sits at the right end of the title bar as one split button:
+  **Prompt** on the left drops the prompt list open under the button (search, click to fill the box - image prompts
+  only, `video/` prompts and recipes never enter it), and the dice on the right draws one from the image pool
+  (the request carries `kind="image"`, the backend filters the pool).
 
 ## Lightbox viewer
 

@@ -25,6 +25,15 @@ const rows = () => [...document.querySelectorAll(".neo-preset-picker .rs-preset-
 const rowKeys = () => [...document.querySelectorAll(".neo-preset-picker .rs-preset-item")].map((e) => e.dataset.name);
 const picker = () => document.querySelector(".neo-preset-picker");
 
+/** 打开浮层的那颗按钮：jsdom 无布局，__rect（helpers/env.mjs 的桩）给出可预测的矩形供定位断言 */
+function anchorBtn() {
+    const btn = document.createElement("button");
+    btn.textContent = "提示词";
+    btn.__rect = { x: 600, y: 40, top: 40, left: 600, right: 700, bottom: 64, width: 100, height: 24 };
+    document.body.appendChild(btn);
+    return btn;
+}
+
 test("提示词归属：扫描名首段是 video 才归视频", () => {
     assert.equal(isVideoPromptName("video/镜头推进"), true);
     assert.equal(isVideoPromptName("video/子目录/雨夜窗边"), true);
@@ -45,7 +54,7 @@ test("提示词浮层：kind=image 只列图像条目，配方不入池，点一
     resetEnv();
     mockPromptRoutes();
     const picked = [];
-    openPresetPicker({ kind: "image", onPick: (text) => picked.push(text) });
+    openPresetPicker({ kind: "image", onPick: (text) => picked.push(text), anchor: anchorBtn() });
     await flush();
     assert.deepEqual(rows(), ["红杯", "精美图像提示词/古风女孩"], "视频条目与配方都不在图像浮层里");
     click(document.querySelectorAll(".neo-preset-picker .rs-preset-item")[1]);
@@ -58,7 +67,7 @@ test("提示词浮层：kind=video 只列视频池条目，行上不带 video/ �
     resetEnv();
     mockPromptRoutes();
     const picked = [];
-    openPresetPicker({ kind: "video", onPick: (text) => picked.push(text) });
+    openPresetPicker({ kind: "video", onPick: (text) => picked.push(text), anchor: anchorBtn() });
     await flush();
     assert.deepEqual(rows(), ["镜头推进", "子目录/雨夜窗边"], "行上只去池子前缀，子目录段留着");
     assert.deepEqual(rowKeys(), ["video/镜头推进", "video/子目录/雨夜窗边"], "键留扫描名全名，池子与标签索引认的是它");
@@ -76,7 +85,7 @@ test("提示词浮层：kind=video 只列视频池条目，行上不带 video/ �
 test("提示词浮层：搜索框按名字过滤，空结果显示空态", async () => {
     resetEnv();
     mockPromptRoutes();
-    openPresetPicker({ kind: "image", onPick: () => {} });
+    openPresetPicker({ kind: "image", onPick: () => {}, anchor: anchorBtn() });
     await flush();
     const search = picker().querySelector(".rs-preset-search-input");
     search.value = "古风";
@@ -95,7 +104,7 @@ test("提示词浮层：Esc 只关浮层，调用方面板不被一起关掉", a
     let panelEsc = 0;
     const onPanelEsc = (e) => { if (e.key === "Escape") panelEsc++; };
     document.addEventListener("keydown", onPanelEsc);
-    openPresetPicker({ kind: "image", onPick: () => {} });
+    openPresetPicker({ kind: "image", onPick: () => {}, anchor: anchorBtn() });
     await flush();
     keydown(document, "Escape");
     await flush();
@@ -104,24 +113,61 @@ test("提示词浮层：Esc 只关浮层，调用方面板不被一起关掉", a
     document.removeEventListener("keydown", onPanelEsc);
 });
 
-test("提示词浮层：遮罩空白与 × 都关窗", async () => {
+// 下拉没有遮罩可点：收窗靠「浮层外的按下」，几何靠按钮的矩形
+test("提示词浮层：× 与浮层外的按下都收窗；浮层内与按钮上的按下不收", async () => {
     resetEnv();
     mockPromptRoutes();
-    openPresetPicker({ kind: "image", onPick: () => {} });
+    const anchor = anchorBtn();
+    openPresetPicker({ kind: "image", onPick: () => {}, anchor });
     await flush();
-    picker().dispatchEvent(new window.MouseEvent("click", { bubbles: true, cancelable: true }));
-    assert.equal(picker(), null, "点遮罩空白关窗");
-    openPresetPicker({ kind: "image", onPick: () => {} });
+    const overlay = picker();
+    overlay.querySelector(".rs-preset-search-input").dispatchEvent(new window.MouseEvent("pointerdown", { bubbles: true, cancelable: true }));
+    anchor.dispatchEvent(new window.MouseEvent("pointerdown", { bubbles: true, cancelable: true }));
+    assert.equal(picker(), overlay, "浮层里的按下与打开它那颗按钮上的按下都不收窗（按钮那发交 click 收窗）");
+    document.body.dispatchEvent(new window.MouseEvent("pointerdown", { bubbles: true, cancelable: true }));
+    assert.equal(picker(), null, "浮层外的按下收窗");
+    openPresetPicker({ kind: "image", onPick: () => {}, anchor });
     await flush();
     click(picker().querySelector(".rs-preset-close"));
     assert.equal(picker(), null, "× 关窗");
+});
+
+test("提示词浮层：再点打开它的那颗按钮 = 收窗，不是重开", async () => {
+    resetEnv();
+    mockPromptRoutes();
+    const anchor = anchorBtn();
+    anchor.onclick = () => openPresetPicker({ kind: "image", onPick: () => {}, anchor });
+    click(anchor);
+    await flush();
+    assert.ok(picker(), "第一下开窗");
+    click(anchor);
+    assert.equal(picker(), null, "同一颗按钮的第二下收窗");
+});
+
+test("提示词浮层挂在按钮下方：右端对齐按钮右端，下面放不下翻到按钮上方", async () => {
+    resetEnv();
+    mockPromptRoutes();
+    const anchor = anchorBtn();
+    openPresetPicker({ kind: "image", onPick: () => {}, anchor });
+    await flush();
+    // 骨架（prompts.css 的 .rs-preset-list-overlay）居中靠 transform；下拉把它抹掉，位置全吃 left/top
+    assert.equal(picker().style.transform, "none", "居中 transform 由浮层自己抹掉");
+    assert.equal(picker().style.left, "700px", "浮层右端对齐按钮右端（jsdom 量不到宽度，右端即 left）");
+    assert.equal(picker().style.top, "70px", "上沿贴按钮下沿，留 6px");
+    closePresetPicker();
+    // 按钮贴在窗口下沿：下面放不下整块 → 翻到按钮上方
+    anchor.__rect = { x: 600, y: 736, top: 736, left: 600, right: 700, bottom: 760, width: 100, height: 24 };
+    openPresetPicker({ kind: "image", onPick: () => {}, anchor });
+    await flush();
+    assert.equal(picker().style.top, "730px", "整块翻到按钮上方，同样留 6px");
+    closePresetPicker();
 });
 
 // 桌面端离线时 list_prompts 归内核，回来的是 409 的 {offline:true}：空态要点明是要 ComfyUI 在跑
 test("提示词浮层：桌面端离线说清楚是要 ComfyUI 在跑，不报词库为空", async () => {
     resetEnv();
     mockRoute("/rs_prompts/list_prompts", () => jsonResponse({ success: false, offline: true, error: "需要 ComfyUI" }, 409));
-    openPresetPicker({ kind: "image", onPick: () => {} });
+    openPresetPicker({ kind: "image", onPick: () => {}, anchor: anchorBtn() });
     await flush();
     assert.equal(picker().querySelector(".neo-preset-picker-empty").textContent, "提示词列表需要 ComfyUI 运行");
     closePresetPicker();
@@ -130,12 +176,12 @@ test("提示词浮层：桌面端离线说清楚是要 ComfyUI 在跑，不报�
 test("提示词浮层：词库真空与读取失败分开讲，不留一扇空窗", async () => {
     resetEnv();
     mockRoute("/rs_prompts/list_prompts", () => jsonResponse([]));
-    openPresetPicker({ kind: "video", onPick: () => {} });
+    openPresetPicker({ kind: "video", onPick: () => {}, anchor: anchorBtn() });
     await flush();
     assert.equal(picker().querySelector(".neo-preset-picker-empty").textContent, "暂无可用提示词", "词库真空才说没有提示词");
     closePresetPicker();
     mockRoute("/rs_prompts/list_prompts", () => jsonResponse({ status: "error", error: "数据根不可用" }));
-    openPresetPicker({ kind: "video", onPick: () => {} });
+    openPresetPicker({ kind: "video", onPick: () => {}, anchor: anchorBtn() });
     await flush();
     assert.equal(picker().querySelector(".neo-preset-picker-empty").textContent, "提示词列表读取失败", "后端报错不能被一句「暂无可用提示词」盖过去");
     closePresetPicker();
@@ -165,7 +211,7 @@ test("随机一条：桌面端离线抛「需要 ComfyUI 运行」，调用方�
 test("提示词浮层挂在 body 上、展开，层位压得住生成素材窗", async () => {
     resetEnv();
     mockPromptRoutes();
-    openPresetPicker({ kind: "image", onPick: () => {} });
+    openPresetPicker({ kind: "image", onPick: () => {}, anchor: anchorBtn() });
     await flush();
     const overlay = picker();
     assert.equal(overlay.parentElement, document.body, "浮层自挂在 body 上，不依赖页面结构");

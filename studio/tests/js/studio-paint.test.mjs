@@ -362,8 +362,11 @@ test("绘画页右上角：「提示词」只列图像提示词，点一条填�
     await clickTab("paint");
     const page = paintPage();
     const bar = page.querySelector(".ns-paint-bar");
-    assert.equal([...bar.querySelectorAll(".ns-btn")].map((b) => b.textContent.trim()).join(" "),
-        "提示词 随机", "绘画页那一排是提示词入口，素材库只属于编辑页");
+    const btns = [...bar.querySelectorAll(".ns-btn")];
+    assert.deepEqual(btns.map((b) => b.textContent.trim()), ["提示词", ""],
+        "绘画页那一排是组合钮：左半「提示词」右半骰子，素材库只属于编辑页");
+    assert.ok(bar.querySelector(".neo-split-btn"), "两颗拼成一枚控件");
+    assert.ok(bar.querySelector(".ns-paint-random-btn svg"), "右半是骰子图标，不留文字");
 
     mockRoute("/rs_prompts/list_prompts", () => jsonResponse([
         { name: "红杯", source: "presets" },
@@ -400,12 +403,12 @@ test("绘画页随机：桌面端离线那一发报「需要 ComfyUI 运行」�
     assert.equal(document.getElementById("ns-toast")?.textContent, "提示词与随机需要 ComfyUI 运行");
 });
 
-test("编辑页右上角一排：素材库右端接上「提示词」「随机」，提示词填进任务区提示词框", async () => {
+test("编辑页右上角一排：素材库右端接上「提示词｜骰子」组合钮，提示词填进任务区提示词框", async () => {
     await boot();
     await clickTab("edit");
     const bar = editPage().querySelector(".ns-paint-bar");
-    assert.equal([...bar.querySelectorAll(".ns-btn")].map((b) => b.textContent.trim()).join(" "),
-        "素材库 提示词 随机", "编辑页那一排三枚：挑图 + 挑词 + 随机");
+    assert.deepEqual([...bar.querySelectorAll(".ns-btn")].map((b) => b.textContent.trim()),
+        ["素材库", "提示词", ""], "编辑页那一排两枚：挑图 + 组合钮（左提示词右骰子）");
 
     mockRoute("/rs_prompts/list_prompts", () => jsonResponse([{ name: "红杯", source: "presets" }]));
     mockRoute("/rs_prompts/load_prompt", () => jsonResponse({ text: "红杯全文" }));

@@ -182,6 +182,14 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 
 ### Changed
+- **One 提示词 split button, and its list drops under the button.** The 绘画页 / 编辑页 / 视频页 top-right row and the
+  生成素材 title bar used to carry two buttons, 提示词 + 随机; they are one split button now — 提示词 on the left, a dice
+  icon (`js/core/icons.js` → `dice`) on the right, with the same tooltips and the same two actions. The shared 提示词
+  picker (`studio/web/js/core/preset-picker.js`) no longer centers a modal on the screen: it hangs under the button that
+  opened it, right edge aligned with the button's, flipping above the button when there is no room below, and it closes
+  on the ×, on Escape, on any press outside it, and on a second press of the same button. Covered by the 挂在按钮下方 /
+  浮层外按下 / 组合钮 cases in `studio/tests/js/preset-picker.test.mjs`, `studio-paint.test.mjs`, `studio-video.test.mjs`
+  and `gallery-gen-material.test.mjs`.
 - **The 素材库 modal cards are no longer the 素材页 slider's size — they are the minimum size.** The modal never had the
   顶栏 **Size** row (that row sets the 素材页 density in the shared gallery setting), yet its cards kept reading the same
   setting, so pulling the slider on the gallery page grew the cards inside every 素材库 modal (导演页 / 绘画页 / 反推页 /

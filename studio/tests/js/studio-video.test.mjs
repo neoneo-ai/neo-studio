@@ -618,14 +618,15 @@ test("视频页：技能要参考素材时缺素材不发请求，状态行说�
 });
 
 
-// 右上角那一排「提示词」「随机」：提示词浮层只列视频池条目（行上不带 video/ 前缀），点一条填进提示词框并跟上字数
-test("视频页右上角：「提示词」只列视频池条目，点一条填进提示词框；「随机」走视频池", async () => {
+// 右上角那一排组合钮「提示词｜骰子」：提示词浮层只列视频池条目（行上不带 video/ 前缀），点一条填进提示词框并跟上字数
+test("视频页右上角：「提示词」只列视频池条目，点一条填进提示词框；骰子那半走视频池", async () => {
     await boot();
     await clickTab("video");
     const bar = videoPage().querySelector(".ns-video-bar");
     assert.ok(bar, "视频页右上角应有提示词入口那一排");
-    assert.equal([...bar.querySelectorAll(".ns-btn")].map((b) => b.textContent.trim()).join(" "),
-        "提示词 随机", "那一排就两枚：提示词、随机");
+    assert.deepEqual([...bar.querySelectorAll(".ns-btn")].map((b) => b.textContent.trim()),
+        ["提示词", ""], "那一排就一枚组合钮：左提示词、右骰子");
+    assert.ok(bar.querySelector(".ns-video-random-btn svg"), "右半是骰子图标，不留文字");
 
     mockRoute("/rs_prompts/list_prompts", () => jsonResponse([
         { name: "红杯", source: "presets" },

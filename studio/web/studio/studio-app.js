@@ -850,8 +850,8 @@ function buildPaint(el) {
     paintArmed = true;
 }
 
-/** 绘画页 / 编辑页右上角那排提示词入口：「提示词」开提示词浮层、「随机」抽一条图像提示词，
- *  两条都落进这一页现成面板的提示词框（面板不在了就重建一块带预填的）。
+/** 绘画页 / 编辑页右上角那排提示词入口：一颗组合钮——左半「提示词」在按钮下方开提示词浮层，
+ *  右半骰子抽一条图像提示词，两条都落进这一页现成面板的提示词框（面板不在了就重建一块带预填的）。
  *  extra 是这一页原本就有的入口（编辑页的「素材库」），排在最前 */
 function paintPromptBar(host, kind, extra = []) {
     const fill = (text) => {
@@ -860,8 +860,9 @@ function paintPromptBar(host, kind, extra = []) {
         else openGenMaterialDialog(app.neoGallery, { container: host, prefill: { prompt: text } });
     };
     const presetBtn = $el("button", { className: "ns-btn ns-paint-preset-btn", type: "button", textContent: t("提示词"), title: t("从图像提示词列表里挑一条填进提示词") });
-    const randomBtn = $el("button", { className: "ns-btn ns-paint-random-btn", type: "button", textContent: t("随机"), title: t("随机填入一条图像提示词") });
-    presetBtn.onclick = () => openPresetPicker({ kind: "image", onPick: fill });
+    const randomBtn = $el("button", { className: "ns-btn ns-paint-random-btn", type: "button", title: t("随机填入一条图像提示词") });
+    setIcon(randomBtn, "dice");
+    presetBtn.onclick = () => openPresetPicker({ kind: "image", onPick: fill, anchor: presetBtn });
     randomBtn.onclick = async () => {
         try {
             const text = await randomPromptText("image");
@@ -869,7 +870,7 @@ function paintPromptBar(host, kind, extra = []) {
             fill(text);
         } catch (e) { toast(String(e?.message || e)); }   // 桌面端离线那一发要说出需要 ComfyUI，不能报词库为空
     };
-    return $el("div", { className: "ns-paint-bar" }, [...extra, presetBtn, randomBtn]);
+    return $el("div", { className: "ns-paint-bar" }, [...extra, $el("div", { className: "neo-split-btn" }, [presetBtn, randomBtn])]);
 }
 
 function buildEdit(el) {
@@ -1448,18 +1449,20 @@ function buildVideo(el) {
     page.appendChild(hero);
     page.appendChild(dock);
 
-    // 右上浮一枚入口列（绝对定位同绘画页那一列，不为它们空出一行）：提示词挑一条词、随机抽一条视频提示词
+    // 右上浮一枚入口列（绝对定位同绘画页那一列，不为它们空出一行）：组合钮左半挑一条词、右半骰子抽一条视频提示词
     const fillVideoPrompt = (text) => {
         promptIn.value = text;
         promptCount.textContent = `${promptIn.value.length} / ∞`;
         promptIn.focus();
     };
+    const videoPresetBtn = $el("button", { type: "button", className: "ns-btn ns-video-preset-btn", textContent: t("提示词"), title: t("从视频提示词列表里挑一条填进提示词") });
+    const videoRandomBtn = $el("button", { type: "button", className: "ns-btn ns-video-random-btn", title: t("随机填入一条视频提示词") });
+    setIcon(videoRandomBtn, "dice");
     const videoBar = $el("div", { className: "ns-video-bar ns-paint-bar" }, [
-        $el("button", { type: "button", className: "ns-btn ns-video-preset-btn", textContent: t("提示词"), title: t("从视频提示词列表里挑一条填进提示词") }),
-        $el("button", { type: "button", className: "ns-btn ns-video-random-btn", textContent: t("随机"), title: t("随机填入一条视频提示词") }),
+        $el("div", { className: "neo-split-btn" }, [videoPresetBtn, videoRandomBtn]),
     ]);
-    videoBar.querySelector(".ns-video-preset-btn").addEventListener("click", () => openPresetPicker({ kind: "video", onPick: fillVideoPrompt }));
-    videoBar.querySelector(".ns-video-random-btn").addEventListener("click", async () => {
+    videoPresetBtn.addEventListener("click", () => openPresetPicker({ kind: "video", onPick: fillVideoPrompt, anchor: videoPresetBtn }));
+    videoRandomBtn.addEventListener("click", async () => {
         try {
             const text = await randomPromptText("video");
             if (!text.trim()) { toast(t("提示词库为空，抽不到视频提示词")); return; }

@@ -18,7 +18,7 @@ import { openPresetPicker, randomPromptText, savePromptTo } from "./js/core/pres
 import { createQuickInputHistory } from "./quick-input-history.js";
 import { openGallerySidebar } from "./media-transfer.js";
 import { t, tf } from "./js/core/i18n.js";
-import { icon } from "./js/core/icons.js";
+import { icon, setIcon } from "./js/core/icons.js";
 import {
     makeStoryWindowDraggable, _paintHosts, storyPanelRoot, ratioGlyph, chipButton,
     skillParamsChip, guardMainModelFamily, reuseModelOverlay, reusePaintPanel,
@@ -619,9 +619,10 @@ export function openGenMaterialDialog(gallery, opts = null) {
     };
     document.addEventListener("pointerdown", onDocPress, true);
 
-    // 提示词列表（标题栏那颗「提示词」）：共用浮层只列图像提示词，配方不入池
+    // 提示词列表（标题栏那颗「提示词」）：共用浮层只列图像提示词，挂在按钮下方，配方不入池
     const openImagePresets = () => openPresetPicker({
         kind: "image",
+        anchor: gmPresetBtn,
         onPick: (text) => { quickInput.value = text; quickInput.focus(); },
     });
 
@@ -699,16 +700,17 @@ export function openGenMaterialDialog(gallery, opts = null) {
         ]),
     ]);
 
-    // 标题栏右侧的提示词入口（右端 ✕ 之前）：提示词浮层与随机各填一次输入框
+    // 标题栏右侧的提示词入口（右端 ✕ 之前）：一颗组合钮——左半「提示词」在按钮下方开浮层填框，右半骰子抽一条填框
     const gmPresetBtn = $el("button", { className: "neo-gallery-story-titlebar-btn", type: "button", textContent: t("提示词"), title: t("从图像提示词列表里挑一条填进提示词") });
-    const gmRandomBtn = $el("button", { className: "neo-gallery-story-titlebar-btn", type: "button", textContent: t("随机"), title: t("随机填入一条图像提示词") });
+    const gmRandomBtn = $el("button", { className: "neo-gallery-story-titlebar-btn", type: "button", title: t("随机填入一条图像提示词") });
+    setIcon(gmRandomBtn, "dice");
     gmPresetBtn.onclick = openImagePresets;
     gmRandomBtn.onclick = pickOneRandom;
 
     const modal = $el("div", { className: "neo-gallery-story-modal" + (panel.embedded ? " neo-gallery-story-modal--embedded" : "") }, [
         $el("div", { className: "neo-gallery-story-titlebar" }, [
             $el("span", { className: "neo-gallery-story-title", textContent: t("生成素材") }),
-            $el("div", { className: "neo-gallery-story-titlebar-tools" }, [gmPresetBtn, gmRandomBtn]),
+            $el("div", { className: "neo-gallery-story-titlebar-tools" }, [$el("div", { className: "neo-split-btn" }, [gmPresetBtn, gmRandomBtn])]),
             $el("span", { className: "neo-gallery-story-close", textContent: "\u00D7", onclick: close })
         ]),
         statusBox,

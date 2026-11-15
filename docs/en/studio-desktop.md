@@ -206,8 +206,8 @@ the window (maximize is what covers it).
 
 The input page is one full-width text-to-image panel; the edit page is one full-width image-edit panel. A row of
 entry buttons floats at the top right of each page (absolutely positioned over the preview, so no toolbar row is
-reserved for them): the edit page carries **🖼 Asset library + Prompt + Random**, the input page
-**Prompt + Random**. Only one panel fills the page at a time — unlike the director
+reserved for them): the prompt filler is one split button - **Prompt** on the left, a **dice** on the right (draw one
+random prompt) - and the edit page carries **🖼 Asset library** to its left. Only one panel fills the page at a time — unlike the director
 page, no editor and generation panel split one width. The asset modal, the scrollbars and the
 narrow-window rules are shared with the director page (one modal instance, one geometry in
 `localStorage["neo_studio_libmodal_assets"]`).
@@ -234,7 +234,7 @@ narrow-window rules are shared with the director page (one modal instance, one g
   ArtCraft promptbox): one line in the box is enough to generate, the three chips are pill buttons with panels
   that float open upward (the native selects stay inside as state containers and never show; the skill list and
   the main model / LoRA controls share the one two-column panel of the first chip), runtime random /
-  prompt enhance live in the `⋯` menu, while the prompt fillers (Prompt, Random) sit in the top-right row. The panel fills the column height: progress and finished images stack from the top above
+  prompt enhance live in the `⋯` menu, while the prompt split button (Prompt | dice) sits in the top-right row. The panel fills the column height: progress and finished images stack from the top above
   the composer, and idle leaves one start hint in the result area ("Write a prompt, then hit Generate") with no
   empty canvas (control list: [gallery.md](gallery.md), "Generate assets" and "Image editing").
   Filling and docking are independent of how short the window is: Windows display scaling reports an 800px window as
@@ -280,22 +280,25 @@ narrow-window rules are shared with the director page (one modal instance, one g
   out on that same target.
 - The VRAM / RAM readout and the **Clear** button live in the header queue panel: polling runs only while that panel is
   open, and generation pages no longer carry their own bar.
-- The prompt-filling buttons in that top-right row share one picker (`studio/web/js/core/preset-picker.js`):
-  the **Prompt** button lists image prompts only on the painting and edit pages and the prompts under `video/`
-  on the video page, and recipes never
+- The prompt filler in that top-right row is one split button (`studio/web/js/core/preset-picker.js`) - **Prompt** on
+  the left, a dice icon on the right. The left half drops a prompt list open under the button: image prompts only on
+  the painting and edit pages, the prompts under `video/` on the video page, and recipes never
   enter either. Clicking an entry reads its text into the page's own prompt box (the composer box on the input page,
-  the capsule box on the video page) and the picker closes itself. **Random** asks `/rs_prompts/random_prompts` for
+  the capsule box on the video page) and the picker closes itself. The dice half asks `/rs_prompts/random_prompts` for
   one entry with a `kind`, and the backend filters the pool with the same rule (a scan name whose first segment is
   `video` belongs to video, everything else to image). Row labels carry no `video/` pool prefix
   (`promptDisplayName`), subdirectory segments included; the key and the read request keep the full scan name.
+  The list hangs under the button instead of centering on the screen: its right edge lines up with the button's right
+  edge, and the whole panel flips above the button when there is no room below it. It closes on the ×, on Escape, and
+  on any press outside it - pressing the same button again closes it rather than reopening it.
   The picker's Escape handler calls `stopPropagation`, so the
   page's own "Escape closes the panel" does not fire along with it; on phones the row sits in the corner without
   overlapping the prompt box (`studio/style.css`, `.ns-paint-bar` / `.ns-video-bar`).
   The picker's empty state names which case it is: only an empty library says "No prompts available"; the prompt
-  list and **Random** are prompt read-side routes (`prompt_names.py`), so they answer even while the desktop
+  list and the dice half are prompt read-side routes (`prompt_names.py`), so they answer even while the desktop
   window is starting ComfyUI; a backend read error says "Failed to load the prompt list". When a route answers
   `409 offline` — the save/delete write side and prompt enhance stay with the kernel — the picker says "The
-  prompt list needs ComfyUI running" and **Random** says "The prompt list and Random need ComfyUI running"
+  prompt list needs ComfyUI running" and the dice half says "The prompt list and Random need ComfyUI running"
   instead of claiming the library is empty.
 - "Save this prompt" sits in the `⋯` menu of the generate-asset / image-edit input card and in the video page's
   composer `⋯` menu: the name is typed in, and the pool follows the page — the paint / edit one lands in the image

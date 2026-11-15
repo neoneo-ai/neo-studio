@@ -2809,6 +2809,13 @@ Accordion Section Buttons (Clear)
 .neo-gallery-story-titlebar-btn:hover { color: #fff; background: rgba(255, 255, 255, 0.12); }
 .neo-gallery-story-titlebar-btn:disabled { opacity: 0.5; cursor: default; }
 
+/* 组合钮（左文字 + 右骰子）：两颗钮拼成一枚控件——左件收右角、右件收左角并压掉重复的那条边框。
+   按钮外观仍归各自的 .ns-btn / 标题栏钮，这里只管拼在一起与图标那半的宽度 */
+.neo-split-btn { display: inline-flex; align-items: stretch; }
+.neo-split-btn > button { border-radius: 0; }
+.neo-split-btn > button:first-child { border-radius: 4px 0 0 4px; }
+.neo-split-btn > button:last-child { border-radius: 0 4px 4px 0; margin-left: -1px; display: inline-flex; align-items: center; justify-content: center; padding-left: 8px; padding-right: 8px; }
+
 .neo-gallery-story-close {
     padding: 2px 6px;
     font-size: 18px;
