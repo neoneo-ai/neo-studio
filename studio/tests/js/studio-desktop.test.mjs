@@ -205,6 +205,15 @@ test("导演页按钮走外壳配色：生成按钮半透明蓝，同排按钮�
               "未保存确认条的「放弃修改」保持红底语义色，灰底排不覆盖它");
 });
 
+// 矮窗口（Windows 显示缩放把物理像素报成更小的视口高）：页面原先的 520px 高度下限把整页顶出可视区，
+// 钉在页底的生成坞下沿被窗口边缘裁掉一截
+test("导演页不设高度下限：矮窗口里生成坞下沿不被裁", () => {
+    const css = fs.readFileSync(path.join(webDir, "studio", "style.css"), "utf8");
+    const page = css.match(/\.ns-director \{[^}]*\}/);
+    assert.ok(page, "导演页版式规则要在");
+    assert.match(page[0], /min-height:\s*0/, "页面不设高度下限，矮出来的空间由舞台收");
+});
+
 // 顶栏 ComfyUI 胶囊：桌面端窗口（有 pywebview api）里才出现，浏览器标签页里不显示。
 // studio-app.js 的启动体只在导入时跑一次，两个用例用不同 query 取同一模块的两份实例。
 const studioBody = fs.readFileSync(path.join(webDir, "studio", "index.html"), "utf8").match(/<body>([\s\S]*?)<\/body>/)[1];

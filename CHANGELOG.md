@@ -5,6 +5,10 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 ## [Unreleased]
 
 ### Added
+- **The 导演页 dock is no longer clipped in short windows.** The page dropped its 520px height floor: in a window shorter
+  than the layout (Windows display scaling reports fewer CSS pixels than the physical height) the 舞台 absorbs the
+  difference, so the floating dock keeps its 12px clearance from the window's bottom edge instead of losing its lower
+  border and sitting flush against the window edge.
 - **The director page's segment row hands the whole width to the prompt.** The 「第N段 + 时长」 line moved into the empty
   strip under the 首帧 / 尾帧 / 参考素材 squares instead of riding above the prompt box; the prompt text is now the page's
   own 12px (the 素材库 modal's 15px prompt size no longer drives it), and the 导演视频 idle stage paints no grey panel

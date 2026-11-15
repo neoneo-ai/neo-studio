@@ -209,7 +209,10 @@ body {
 /* 导演页：顶部条 + 上结果舞台 + 下生成坞（紧凑时间轴 + 该段 + 素材槽 + 参数行）。
    配方与整片编辑器都不住在页面里：配方走顶部条（下拉快切 + 卡片弹窗），整片编辑器是浮层。
    结果舞台吃满剩余高度，生成坞钉在页底（与视频页 composer 同一档观感） */
-.ns-director { position: relative; display: flex; flex-direction: column; gap: 8px; height: 100%; min-height: 520px; min-width: 620px; overflow: hidden; }
+/* 页面不设高度下限：原先的 520px 在矮窗口里把整页顶出可视区（Windows 显示缩放把物理像素报成更小的
+   视口高，150% 缩放下 900px 窗口只有 600 CSS px），钉在页底的生成坞下沿就被窗口边缘切掉一截。
+   矮出来的空间由舞台自己收：它带躲胶囊的 padding-bottom，flex 下限 0 允许收到内衬以下 */
+.ns-director { position: relative; display: flex; flex-direction: column; gap: 8px; height: 100%; min-height: 0; min-width: 620px; overflow: hidden; }
 .ns-director-bar { flex: none; display: flex; align-items: center; gap: 8px; min-width: 0; }
 .ns-director-bar .ns-btn { display: inline-flex; align-items: center; gap: 6px; }
 

@@ -211,7 +211,9 @@ the window (maximize is what covers it).
   dock is a centred floating capsule (`min(980px, 100% − 24px)` wide, 12px from the bottom) stacking the status row, the
   timeline, the check hint with its zoom control, the segment row and the control bar. The empty-state card is an overlay
   on the stage and consumes no layout height — with no frame yet the stage paints no grey panel, so the two idle lines sit
-  straight on the page background — and an empty status row collapses itself together with its gap.
+  straight on the page background — and an empty status row collapses itself together with its gap. The page has no height
+  floor (`min-height: 0`): in a window shorter than the layout (Windows display scaling reports fewer CSS pixels) the stage
+  absorbs the difference, so the dock keeps its 12px clearance from the window's bottom edge.
 - The director timeline is a 56px strip: a 16px second ruler plus a 30px segment block. A block carries the always-visible
   checkbox at its top-left (click = this run includes that segment), one top line of "index · duration · (start–end seconds
   while hovering)", and one ellipsised prompt line at its bottom. The hint line ends with the **Fit / − / ＋** control that
