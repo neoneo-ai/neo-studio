@@ -10,7 +10,7 @@ import { $el } from "./shim/ui.js";
 import { configureCanvasOrigin } from "../js/core/canvas-origin.js";
 
 import "../gallery.js";   // 注册 comfy.neo.gallery 扩展（NeoGallery + 侧栏 tab 定义）
-import { openDirectorEditor, createSegmentOps, DIRECTOR_RECIPE_SAVED_EVENT, SEG_MODES, MODE_LABELS, LEGACY_MODE_MAP } from "../director.js";
+import { openDirectorEditor, createSegmentOps, createSharedConfigSection, DIRECTOR_RECIPE_SAVED_EVENT, SEG_MODES, MODE_LABELS, LEGACY_MODE_MAP } from "../director.js";
 import { setPaintHost, openGenMaterialDialog, openImageEditDialog, openImageEditMode, setVideoReuseOpen, setVideoPageJump, openVideoReuse, reuseModelOverlay, chipButton, ratioGlyph, skillParamsChip } from "../gallery-gen.js";
 import { createFramePlayer, DOCK_PREVIEW_SIDE, AGENT_PREVIEW_SIDE } from "../live-preview.js";
 import { createRecipesPanel, listRecipes } from "../recipes.js";
@@ -402,7 +402,7 @@ async function buildDirector(el) {
         readOnly: isPreset,
     });
 
-    // --- 顶部条：配方（下拉快切 + 卡片弹窗管理）· 新建配方 · 素材库 · 整片编辑器 ---
+    // --- 顶部条：配方（下拉快切 + 卡片弹窗管理）· 新建配方 · 素材库 · 高级模式（整片编辑器浮层） ---
     recipesHost = $el("div", { className: "ns-director-recipes" });
     recipesModal = createLibraryModal({ storageKey: "neo_studio_libmodal_recipes", scope: "recipes" });
     recipesModal.setContent(recipesHost);
@@ -418,8 +418,8 @@ async function buildDirector(el) {
     const libBtn = $el("button", { className: "ns-btn", type: "button", title: t("打开素材库：看大图与取用") });
     setIconLabel(libBtn, "folder", t("素材库"));
     libBtn.onclick = () => openLibModal("director");
-    const editorBtn = $el("button", { className: "ns-btn", type: "button", title: t("整片导演编辑器：分段增删、生成模式与分辨率、故事板与提示词工具") });
-    setIconLabel(editorBtn, "film", t("整片编辑器"));
+    const editorBtn = $el("button", { className: "ns-btn", type: "button", title: t("高级模式：整片编辑器浮层（分段增删、生成模式与分辨率、故事板与提示词工具）") });
+    setIconLabel(editorBtn, "film", t("高级模式"));
     editorBtn.onclick = () => openEditor();
     recipeSel.addEventListener("change", () => openRecipe(recipeSel.value));
     page.appendChild($el("div", { className: "ns-director-bar" }, [recipeChip.el, recipesBtn, newBtn, libBtn, editorBtn]));
@@ -465,7 +465,7 @@ async function buildDirector(el) {
         cfgLabel,
         $el("span", { className: "neo-gallery-gm-chip-caret", textContent: "▾" }),
     ]);
-    const cfgPanel = $el("div", { className: "rs-runtime-menu neo-gallery-gm-chip-menu neo-gallery-gm-chip-panel ns-director-cfg-panel" }, [videoCfg.el]);
+    const cfgPanel = $el("div", { className: "rs-runtime-menu neo-gallery-gm-chip-menu neo-gallery-gm-chip-panel ns-director-compact-form ns-director-cfg-panel" }, [videoCfg.el]);
     page.appendChild(cfgPanel);   // 挂页面上：.rs-runtime-menu 是 fixed 定位，页面离场时由 onDocPress 摘监听
     let cfgOpen = false;
 
@@ -514,6 +514,28 @@ async function buildDirector(el) {
         segMenuPanel.style.top = `${above > 8 ? above : r.bottom + 6}px`;
     };
 
+    // 「分辨率」胶囊弹的是共享的整片参数表单（createSharedConfigSection）：页内改完整片参数，
+    // 保存走「保存该段」同一条 ops 链；编辑器钉着的 mode / 分块秒数 / 身份参考这些键不在表单里，原样留着
+    const sharedCfg = createSharedConfigSection();
+    const sizeSaveBtn = $el("button", { className: "rs-btn ns-director-size-save", type: "button", textContent: t("保存整片参数") });
+    const sizePanel = $el("div", { className: "rs-runtime-menu neo-gallery-gm-chip-menu neo-gallery-gm-chip-panel ns-director-compact-form ns-director-size-panel" }, [sharedCfg.el, sizeSaveBtn]);
+    page.appendChild(sizePanel);
+    let sizeOpen = false;
+    const sizeClose = () => { sizeOpen = false; sizePanel.style.display = "none"; };
+    const sizePos = () => {
+        const r = sizeBtn.getBoundingClientRect();
+        sizePanel.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - sizePanel.offsetWidth - 8))}px`;
+        const above = r.top - sizePanel.offsetHeight - 6;
+        sizePanel.style.top = `${above > 8 ? above : r.bottom + 6}px`;
+    };
+    sizeSaveBtn.onclick = async () => {
+        if (!currentName || isPreset()) { statusEl.textContent = t("内置预设配方只读：先「复制配方」才能改"); return; }
+        recipe.shared = { ...(recipe.shared || {}), ...sharedCfg.collect() };
+        markDirty();
+        sizeClose();
+        await saveRecipeNow();
+    };
+
 
     const cfgBits = () => {
         const ov = videoModels ? videoCfg.collect() : {};
@@ -545,8 +567,15 @@ async function buildDirector(el) {
     const seedChip = $el("label", { className: "ns-director-seed-chip neo-gallery-gm-chip-group", title: t("种子") }, [icon("sparkles", 12), seedIn, seedRoll]);
     const sizeGlyph = ratioGlyph();
     const sizeLabel = $el("span", { className: "neo-gallery-gm-chip-label" });
-    const sizeBtn = $el("button", { className: "neo-gallery-gm-chip-btn ns-director-size", type: "button", title: t("本次整片的尺寸与步数来自配方：要改到整片编辑器") }, [sizeGlyph.el, sizeLabel]);
-    sizeBtn.onclick = () => openEditor();
+    const sizeBtn = $el("button", { className: "neo-gallery-gm-chip-btn ns-director-size", type: "button", title: t("整片参数（宽高比 / 百万像素 / 种子 / 步数 / 连续性 / 上下文帧）：页内改，保存写回配方") }, [sizeGlyph.el, sizeLabel]);
+    sizeBtn.onclick = () => {
+        if (!currentName) { toast(t("先选一份导演配方")); return; }
+        sizeOpen = !sizeOpen;
+        sizePanel.style.display = sizeOpen ? "block" : "none";
+        if (!sizeOpen) return;
+        sharedCfg.load(recipe.shared || {});
+        sizePos();
+    };
     const saveBtn = $el("button", { className: "ns-btn ns-director-save", type: "button", textContent: t("保存该段"), title: t("把该段的提示词 / 时长 / 素材槽改动写回配方（不新增段，也不动故事板与分辨率）") });
     const runBtn = $el("button", { className: "rs-btn ns-gen-run ns-director-run", type: "button", textContent: t("生成整片") });
     gateRunButton(runBtn, "director", t("生成整片"));
@@ -627,6 +656,7 @@ async function buildDirector(el) {
         recipeChip.closeOnOutside(e.target);
         if (cfgOpen && !cfgPanel.contains(e.target) && !cfgBtn.contains(e.target)) cfgClose();
         if (segMenuOpen && !segMenuPanel.contains(e.target) && !segMenuBtn.contains(e.target)) segMenuClose();
+        if (sizeOpen && !sizePanel.contains(e.target) && !sizeBtn.contains(e.target)) sizeClose();
     };
     document.addEventListener("pointerdown", onDocPress, true);
 
@@ -821,24 +851,28 @@ async function buildDirector(el) {
     }
 
     // 保存只发本次新取用的素材与改动后的段：既有资产与结果历史由后端按盘上现状保留
-    saveBtn.addEventListener("click", async () => {
-        if (!currentName) { statusEl.textContent = t("请先选一份导演配方"); return; }
-        if (isPreset()) { statusEl.textContent = t("内置预设配方只读：先「复制配方」再改"); return; }
+    // 「保存该段」与「保存整片参数」共用这一条链：ops.save 落盘，重读把刚落盘的结果刷回界面
+    async function saveRecipeNow() {
+        if (!currentName) { statusEl.textContent = t("请先选一份导演配方"); return false; }
+        if (isPreset()) { statusEl.textContent = t("内置预设配方只读：先「复制配方」再改"); return false; }
         saveBtn.disabled = true;
         try {
             const res = await ops.save(currentName);
-            if (!res?.success) { statusEl.textContent = tf("保存失败：{msg}", { msg: res?.error || t("未知错误") }); return; }
+            if (!res?.success) { statusEl.textContent = tf("保存失败：{msg}", { msg: res?.error || t("未知错误") }); return false; }
             clearDirty();
             statusEl.textContent = tf("已保存：{name}（{n} 段）", { name: currentName, n: segs().length });
             await refreshRecipeItems();
             // 落盘后素材名可能被后端改名（重名让位）：重读配方与 spec，槽位与时间轴缩略图跟着换
             await openRecipe(currentName, { keepSeed: true, keepStatus: true });
+            return true;
         } catch (e) {
             statusEl.textContent = tf("保存失败：{msg}", { msg: e.message });
+            return false;
         } finally {
             saveBtn.disabled = isPreset();
         }
-    });
+    }
+    saveBtn.addEventListener("click", () => saveRecipeNow());
 
 
     // setGen 只在「提交成功」之后调用：WS 事件为主、轮询兜底。提交失败不挂订阅也不起轮询——

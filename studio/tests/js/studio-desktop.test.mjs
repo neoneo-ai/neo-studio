@@ -214,16 +214,19 @@ test("导演页不设高度下限：矮窗口里生成坞下沿不被裁", () =>
     assert.match(page[0], /min-height:\s*0/, "页面不设高度下限，矮出来的空间由舞台收");
 });
 
-// 自定参数面板（与视频页共用那块表单）整幅档是标签在上、控件整行在下，六行 500px 高，
-// 从胶囊往上弹出就把时间轴与该段行整个盖住
-test("导演页自定参数面板是胶囊旁的一栏面板，不是整幅表单", () => {
+// 自定参数面板（与视频页共用那块表单）与整片参数面板共用这一套紧凑版式：整幅档是标签在上、控件整行在下，
+// 六行 500px 高，从胶囊往上弹出就把时间轴与该段行整个盖住
+test("导演页弹层表单是胶囊旁的一栏紧凑面板，不是整幅表单", () => {
     const css = fs.readFileSync(path.join(webDir, "studio", "style.css"), "utf8");
-    const panel = css.match(/\.ns-director-cfg-panel \{[^}]*\}/);
-    assert.ok(panel, "自定参数面板要有页内版式规则");
+    const panel = css.match(/\.ns-director-compact-form \{[^}]*\}/);
+    assert.ok(panel, "紧凑表单要有页内版式规则");
     assert.match(panel[0], /width:\s*min\(/, "面板宽度钉在胶囊这一列，不铺整幅");
     assert.match(panel[0], /max-height:\s*min\(/, "面板高度留上限，超出走面板内滚动");
-    assert.ok(/\.ns-director-cfg-panel \.rs-config-row[^{]*\{[^}]*flex-direction: row/.test(css), "行是标签与控件一排");
-    assert.ok(/\.ns-director-cfg-panel[^{]*\.rs-form-label[^{]*\{[^}]*width: 84px/.test(css), "标签列宽与素材库弹窗同一档");
+    assert.ok(/\.ns-director-compact-form \.rs-config-row[^{]*\{[^}]*flex-direction: row/.test(css), "行是标签与控件一排");
+    assert.ok(/\.ns-director-compact-form[^{]*\.rs-form-label[^{]*\{[^}]*width: 84px/.test(css), "标签列宽与素材库弹窗同一档");
+    // 两块弹层（自定参数 / 整片参数）共用这一套：只留一处密度定义，改一处两边都改
+    assert.ok(/ns-director-compact-form ns-director-cfg-panel/.test(fs.readFileSync(path.join(webDir, "studio", "studio-app.js"), "utf8")), "自定参数面板挂紧凑版式");
+    assert.ok(/ns-director-compact-form ns-director-size-panel/.test(fs.readFileSync(path.join(webDir, "studio", "studio-app.js"), "utf8")), "整片参数面板挂同一套紧凑版式");
 });
 
 // 顶栏 ComfyUI 胶囊：桌面端窗口（有 pywebview api）里才出现，浏览器标签页里不显示。

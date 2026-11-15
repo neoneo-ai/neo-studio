@@ -161,6 +161,83 @@ export function directorAssetRefs(recipe) {
     return out;
 }
 
+/** 整片参数（分辨率 / 种子 / 步数 / 连续性 / 上下文帧）的紧凑表单：落盘键与口径都跟整片编辑器同一套——
+ *  shared.width / height / aspect_ratio / megapixels（宽高比 + 百万像素 → 32 对齐的 W/H，「自定义」手输）、
+ *  seed 留空 = -1（每次运行随机换种子）、steps 留空 = -1（各段技能 config 钉的步数）、context_frames 留空 = 22。
+ *  导演页「分辨率」胶囊弹的就是它：页内改完整片参数，不必进整片编辑器。mode / chunk_sec / identity_refs
+ *  这些本表单没有的键不动——宿主把 collect() 并进现有 shared，编辑器钉着的值原样留着。密度归宿主容器。 */
+export function createSharedConfigSection() {
+    const section = $el('div', { className: 'rs-gen-model-section ns-director-shared-form' });
+    const formLabel = (text) => $el('label', { className: 'rs-form-label', textContent: t(text) });
+    const aspectSel = $el('select', { className: 'ns-director-shared-aspect' });
+    for (const [label] of DIRECTOR_ASPECTS) aspectSel.appendChild($el('option', { value: label, textContent: t(label) }));
+    aspectSel.appendChild($el('option', { value: DIRECTOR_CUSTOM, textContent: t(DIRECTOR_CUSTOM) }));
+    const resOut = $el('span', { className: 'ns-director-shared-res' });
+    const mpInp = $el('input', { className: 'rs-form-input ns-director-shared-mp', type: 'number', min: MP_MIN, max: MP_MAX, step: 0.1 });
+    const cwInp = $el('input', { className: 'rs-form-input ns-director-shared-w', type: 'number', min: 16, placeholder: t('宽') });
+    const chInp = $el('input', { className: 'rs-form-input ns-director-shared-h', type: 'number', min: 16, placeholder: t('高') });
+    const seedInp = $el('input', { className: 'rs-form-input ns-director-shared-seed', type: 'number', min: -1, placeholder: t('随机') });
+    const stepsInp = $el('input', { className: 'rs-form-input ns-director-shared-steps', type: 'number', min: 1, max: 100, placeholder: t('跟随技能') });
+    const ctxInp = $el('input', { className: 'rs-form-input ns-director-shared-ctx', type: 'number', min: 0, max: 362, placeholder: '22' });
+    const continuityChk = $el('input', { className: 'ns-director-shared-cont', type: 'checkbox', checked: true });
+    const customRow = $el('div', { className: 'rs-config-row' }, [formLabel('宽'), cwInp, formLabel('高'), chInp]);
+    section.append(
+        $el('div', { className: 'rs-config-row' }, [formLabel('宽高比'), aspectSel, resOut]),
+        $el('div', { className: 'rs-config-row' }, [formLabel('百万像素'), mpInp]),
+        customRow,
+        $el('div', { className: 'rs-config-row' }, [formLabel('种子'), seedInp]),
+        $el('div', { className: 'rs-config-row' }, [formLabel('步数'), stepsInp]),
+        $el('div', { className: 'rs-config-row' }, [formLabel('上下文帧'), ctxInp]),
+        $el('div', { className: 'rs-config-row' }, [formLabel('连续性'), continuityChk]),
+    );
+    const updateRes = () => {
+        const custom = aspectSel.value === DIRECTOR_CUSTOM;
+        customRow.style.display = custom ? '' : 'none';
+        resOut.textContent = custom ? '' : (() => {
+            const r = directorResolution(aspectSel.value, mpInp.value);
+            return r ? `${r.width}×${r.height}` : '';
+        })();
+    };
+    aspectSel.addEventListener('change', updateRes);
+    mpInp.addEventListener('input', updateRes);
+    return {
+        el: section,
+        /** 铺一份 shared 进表单（切配方 / 保存后重读）：没有的键落回默认口径 */
+        load(shared = {}) {
+            const w = Number(shared.width) || 0, h = Number(shared.height) || 0;
+            const init = shared.aspect_ratio && DIRECTOR_ASPECTS.some(([l]) => l === shared.aspect_ratio)
+                ? { label: shared.aspect_ratio, mp: directorClampMp(shared.megapixels != null ? shared.megapixels : MP_DEFAULT) }
+                : (w && h ? directorInferAspect(w, h) : { label: '16:9 (宽屏)', mp: MP_DEFAULT });
+            aspectSel.value = init.label;
+            mpInp.value = init.mp;
+            cwInp.value = w ? String(w) : '';
+            chInp.value = h ? String(h) : '';
+            seedInp.value = Number(shared.seed) >= 0 ? String(shared.seed) : '';
+            stepsInp.value = Number(shared.steps) > 0 ? String(shared.steps) : '';
+            ctxInp.value = shared.context_frames != null ? String(shared.context_frames) : '';
+            continuityChk.checked = shared.continuity !== false;
+            updateRes();
+        },
+        /** 收表单成 shared 的那几个键：口径与整片编辑器落盘那份一致 */
+        collect() {
+            const custom = aspectSel.value === DIRECTOR_CUSTOM;
+            const res = custom
+                ? { width: Number(cwInp.value) || 1344, height: Number(chInp.value) || 768, aspect_ratio: DIRECTOR_CUSTOM }
+                : (() => {
+                    const r = directorResolution(aspectSel.value, mpInp.value);
+                    return { width: r.width, height: r.height, aspect_ratio: aspectSel.value, megapixels: directorClampMp(mpInp.value) };
+                })();
+            return {
+                ...res,
+                seed: seedInp.value === '' ? -1 : Math.max(-1, Number(seedInp.value)),
+                steps: stepsInp.value === '' ? -1 : Math.min(100, Math.max(-1, Number(stepsInp.value))),
+                continuity: continuityChk.checked,
+                context_frames: ctxInp.value === '' ? 22 : Math.min(362, Math.max(0, Number(ctxInp.value))),
+            };
+        },
+    };
+}
+
 /** 画廊拖拽载荷（grabDataType 取回的 JSON）里的文件名；解析失败 / 非画廊拖拽返回 '' */
 function refPayloadName(raw) {
     try { return String((JSON.parse(raw) || {}).filename || ''); } catch (e) { return ''; }

@@ -313,26 +313,28 @@ body {
 .ns-director-card .ns-director-run:hover:not([disabled]) { background: rgba(47, 111, 237, 0.3); border-color: #3f7ffe; color: #fff; }
 .ns-director-card .ns-gen-cancel { flex: none; border-color: #9a3a3a; background: #5a1a1a; color: #f87171; }
 .ns-director-card .ns-gen-cancel:hover { background: #6a2a2a; color: #fff; }
-/* 自定参数面板（与视频页共用那块表单 .rs-gen-model-section）：导演页里它是坞上唯一的面板。整幅档的
-   .rs-config-row 是标签在上、控件整行在下，六行铺出来 500px 高，从胶囊往上弹出就把时间轴与该段行整个盖住；
-   这里照 gallery.css 给素材库弹窗那套做法（标签定宽 + 控件吃余宽），宽度钉在胶囊这一列，超高走面板内滚动 */
-.ns-director-cfg-panel {
+/* 坞上两枚胶囊（自定参数 / 分辨率）弹的是同一批共享表单（行版式是 .rs-gen-model-section 那套）：
+   整幅档是标签在上、控件整行在下，六行约 500px 高，从胶囊弹出就把时间轴与该段行整个盖住。
+   照 gallery.css 给素材库弹窗那套「宿主容器限定密度」的做法出一档共享版式：行是「标签定宽 84px +
+   控件吃余宽」的 12px / 24px，宽度钉在胶囊这一列，超高走面板内滚动；设置页与素材库弹窗的整幅档不受影响 */
+.ns-director-compact-form {
     box-sizing: border-box;
     width: min(380px, calc(100vw - 16px));
     max-height: min(46vh, 340px);
     overflow: auto;
 }
-.ns-director-cfg-panel .rs-gen-model-section { display: flex; flex-direction: column; gap: 4px; }
-.ns-director-cfg-panel .rs-config-row { display: flex; flex-direction: row; align-items: center; flex-wrap: wrap; gap: 6px; min-width: 0; }
-.ns-director-cfg-panel .rs-config-row > .rs-form-label { flex: none; width: 84px; white-space: nowrap; margin-bottom: 0; font-size: 12px; color: #9aa4b2; }
-.ns-director-cfg-panel .rs-config-row .rs-model-select-box { flex: 1; min-width: 0; }
+.ns-director-compact-form .rs-gen-model-section { display: flex; flex-direction: column; gap: 4px; }
+.ns-director-compact-form .rs-config-row { display: flex; flex-direction: row; align-items: center; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.ns-director-compact-form .rs-config-row > .rs-form-label { flex: none; width: 84px; white-space: nowrap; margin-bottom: 0; font-size: 12px; color: #9aa4b2; }
+.ns-director-compact-form .rs-config-row .rs-model-select-box { flex: 1; min-width: 0; }
 /* 步数行与 LoRA 强度输入：prompts.css 的 .rs-form-input 是 width:100%，在 wrap 行里自己占满一整行 */
-.ns-director-cfg-panel .rs-config-row > input.rs-form-input { flex: 1; min-width: 0; width: auto; }
-.ns-director-cfg-panel :is(.rs-model-select-box select, .rs-model-select-box input, .rs-gen-lora-strength, .rs-config-row > input.rs-form-input) { height: 24px; font-size: 12px; }
-.ns-director-cfg-panel .rs-gen-lora-list { flex: 1; min-width: 0; }
-.ns-director-cfg-panel .rs-gen-lora-row { flex-wrap: wrap; }
-/* 「+ 添加 LoRA」与「显示全部模型」整行占位：与下拉同排时白吃掉一列宽度，长模型名只剩一条窄缝 */
-.ns-director-cfg-panel :is(.rs-gen-lora-add, .rs-model-scope-toggle) { flex: 0 0 100%; width: fit-content; height: 24px; font-size: 12px; }
+.ns-director-compact-form .rs-config-row > input.rs-form-input { flex: 1; min-width: 0; width: auto; }
+.ns-director-compact-form :is(.rs-model-select-box select, .rs-model-select-box input, .rs-gen-lora-strength, .rs-config-row > input.rs-form-input, .ns-director-shared-form select) { height: 24px; font-size: 12px; }
+.ns-director-compact-form .rs-gen-lora-list { flex: 1; min-width: 0; }
+.ns-director-compact-form .rs-gen-lora-row { flex-wrap: wrap; }
+/* 「+ 添加 LoRA」「显示全部模型」「保存整片参数」整行占位：与控件同排时白吃掉一列宽度，长模型名只剩一条窄缝 */
+.ns-director-compact-form :is(.rs-gen-lora-add, .rs-model-scope-toggle, .ns-director-size-save) { flex: 0 0 100%; width: fit-content; height: 24px; font-size: 12px; }
+.ns-director-shared-res { flex: none; font-size: 12px; color: #9aa4b2; }
 /* 该段「⋯」：⋯ 只占一枚 chip 的宽，菜单是它旁边 190px 的一列面板（与自定参数面板同一档密度） */
 .ns-director .ns-director-seg-menu { flex: none; width: 26px; padding: 0; }
 .ns-director-segmenu { box-sizing: border-box; width: 190px; }

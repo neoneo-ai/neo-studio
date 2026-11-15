@@ -1,6 +1,6 @@
-// Neo Studio 导演页：配方条（下拉快切 / 配方管理弹窗 / 新建 / 素材库 / 整片编辑器）+ 出片区（实时预览舞台 + 状态行）
+// Neo Studio 导演页：配方条（下拉快切 / 配方管理弹窗 / 新建 / 素材库 / 高级模式）+ 出片区（实时预览舞台 + 状态行）
 // + 生成坞（紧凑时间轴 + 该段行 + 首帧 / 尾帧 / 参考三块素材槽 + 模型链覆盖 + 种子 + 保存该段 + 生成整片）。
-// 本页只发「配方名 + 勾选段 + 种子 + 模型链覆盖」：分辨率 / 每段技能与素材都在配方里，由整片编辑器与后端 owns。
+// 页内写路径只有一条：段写 director.js 的 createSegmentOps，落盘走同一条 ops.save；整片参数在「分辨率」胶囊弹的表单里改。
 // studio-app.js 顶层会取 #ns-view 并连 WebSocket，导入前必须先备好 DOM 与 WS 桩。
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -39,6 +39,10 @@ const durIn = () => document.querySelector(".ns-director-duration");
 const segLabel = () => document.querySelector(".ns-director-seg-label");
 const checkHint = () => document.querySelector(".ns-director-checkhint");
 const sizeLabel = () => document.querySelector(".ns-director-size .neo-gallery-gm-chip-label");
+const sizeBtn = () => document.querySelector(".ns-director-size");
+const sizePanel = () => document.querySelector(".ns-director-size-panel");
+const sizeSaveBtn = () => document.querySelector(".ns-director-size-save");
+const sharedField = (cls) => sizePanel().querySelector(cls);
 const seedIn = () => document.querySelector(".ns-director-seed");
 const slots = () => [...document.querySelectorAll(".ns-director-slots .ns-slot")];
 const slotAdd = () => [...document.querySelectorAll(".ns-director-slots .ns-slot-add")];
@@ -278,7 +282,8 @@ test("导演页：进页铺好配方条 + 自动选中配方 + 时间轴 + 三�
     await boot();
     await openDirector();
     assert.ok(pageEl(), "应切到导演页");
-    assert.ok(barBtn("配方") && barBtn("新建配方") && barBtn("素材库") && barBtn("整片编辑器"), "配方条四枚按钮齐");
+    assert.ok(barBtn("配方") && barBtn("新建配方") && barBtn("素材库") && barBtn("高级模式"), "配方条四枚按钮齐");
+    assert.ok(!document.querySelector(".neo-director-overlay"), "进页不出整片编辑器浮层：高级模式要用户自己点");
     assert.equal(tl().opts.getSegments().length, 2, "R1 两段画在时间轴上");
     assert.equal(segLabel().textContent, "第 1 段", "该段行落在第 1 段");
     assert.equal(durIn().value, "3", "时长回显该段配方值");
@@ -463,19 +468,52 @@ test("导演页：配方管理弹窗（卡片铺好 / 列表刷新不自动关 /
     assert.ok(recipesModal().classList.contains("ns-hidden"), "✕ 收起弹窗（关窗是 ns-hidden，jsdom 里没有样式表可比 display）");
 });
 
-test("导演页：整片编辑器保存后重读该配方并选中它", async () => {
+test("导演页整片参数面板：分辨率胶囊弹出回显配方值，保存走同一条写回链并重读", async () => {
     await boot();
     await openDirector();
     const loadsBefore = loads("R1");
-    click(barBtn("整片编辑器"));
+    click(sizeBtn());
+    await settle();
+    assert.notEqual(sizePanel().style.display, "none", "点分辨率胶囊弹整片参数表单");
+    assert.equal(sharedField(".ns-director-shared-seed").value, "", "配方没写种子：表单留空 = 跟随配方");
+    assert.equal(sharedField(".ns-director-shared-steps").value, "", "配方没写步数：留空 = 该段技能钉的步数");
+    assert.equal(sharedField(".ns-director-shared-ctx").value, "", "上下文帧留空 = 22 那一档");
+    assert.ok(sharedField(".ns-director-shared-cont").checked, "连续性起手勾着");
+    assert.match(sharedField(".ns-director-shared-res").textContent, /×/, "非自定义档直接把算好的宽高写在表单里");
+    sharedField(".ns-director-shared-seed").value = "777";
+    sharedField(".ns-director-shared-steps").value = "30";
+    sharedField(".ns-director-shared-mp").value = "1";
+    fire(sharedField(".ns-director-shared-mp"), "input");
+    await settle();
+    click(sizeSaveBtn());
+    await settle(); await settle();
+    const body = saveBodies.at(-1);
+    assert.equal(posts("/rs_recipes/save").length, 1, "保存整片参数走「保存该段」同一条 /rs_recipes/save");
+    assert.equal(body.shared.seed, 777, "种子写进 shared");
+    assert.equal(body.shared.steps, 30, "步数写进 shared");
+    assert.equal(body.shared.megapixels, 1, "百万像素写进 shared");
+    assert.equal(body.shared.width % 32, 0, "宽高比 + 百万像素算出的宽按 32 对齐落盘");
+    assert.equal(body.shared.height % 32, 0, "高按 32 对齐落盘");
+    assert.equal(body.shared.mode, "f2v", "表单没有的键原样留着：生成模式不被这次保存覆盖");
+    assert.equal(body.segments.length, 2, "段表一起交，落盘不留少一段的配方");
+    assert.equal(sizePanel().style.display, "none", "保存后收起表单");
+    await until(() => loads("R1") > loadsBefore, "落盘后本页重读该配方");
+    assert.ok(!saveBtn().classList.contains("ns-director-dirty"), "写回后清脏标记");
+});
+
+test("导演页高级模式：整片编辑器以浮层打开，保存后本页重读并选中它", async () => {
+    await boot();
+    await openDirector();
+    const loadsBefore = loads("R1");
+    click(barBtn("高级模式"));
     await settle();
     await settle();
-    assert.ok(document.querySelector(".neo-director-overlay"), "编辑器以浮层打开（页面顶栏不再有整片按钮）");
+    assert.ok(document.querySelector(".neo-director-overlay"), "高级模式开的是整片编辑器浮层");
     await until(() => document.querySelector(".neo-director-overlay .neo-director-save"), "编辑器铺好底部保存钮");
     click(document.querySelector(".neo-director-overlay .neo-director-save"));
     await settle();
     await settle();
-    assert.equal(posts("/rs_recipes/save").length, 1, "编辑器底部保存走 /rs_recipes/save");
+    assert.equal(posts("/rs_recipes/save").length, 1, "编辑器底部保存走同一条 /rs_recipes/save");
     await until(() => loads("R1") > loadsBefore, "保存后本页重读该配方");
     assert.equal(recipeSel().value, "R1", "保存后顶栏下拉选中这一份");
     assert.ok(!document.querySelector(".neo-director-overlay"), "保存后关掉编辑器");
@@ -550,6 +588,41 @@ test("共享段操作（director.js createSegmentOps）：新段跟上一段、�
     recipe.segments[0].refs = { images: ["seed1.png", "new_b.png"] };
     assert.deepEqual(directorAssetRefs(recipe).map((a) => a.filename), ["new_b.png"], "配方记过的名不重发，只报新增");
     assert.deepEqual(directorAssetRefs(recipe)[0], { filename: "new_b.png", subfolder: "", type: "input", kind: "image" }, "新增引用是后端认的形状");
+});
+
+test("共享整片参数表单（director.js createSharedConfigSection）：回显、留空口径、越界收口", async () => {
+    const { createSharedConfigSection, DIRECTOR_CUSTOM } = await import(`../../web/director.js?sharedcfg=${seq++}`);
+    const cfg = createSharedConfigSection();
+    cfg.load({ width: 1344, height: 768, seed: 12345, steps: 20, context_frames: 17, continuity: false });
+    const kept = cfg.collect();
+    assert.equal(kept.seed, 12345, "种子原样收回");
+    assert.equal(kept.steps, 20, "步数原样收回");
+    assert.equal(kept.context_frames, 17, "上下文帧原样收回");
+    assert.equal(kept.continuity, false, "连续性取消勾选收回 false");
+    assert.equal(kept.aspect_ratio, "16:9 (宽屏)", "1344×768 认回 16:9，不落到自定义");
+    assert.equal(kept.megapixels, 1, "百万像素按画面面积回填");
+    cfg.load({});
+    const blank = cfg.collect();
+    assert.equal(blank.seed, -1, "种子留空 = 每次运行随机换种子");
+    assert.equal(blank.steps, -1, "步数留空 = 各段技能 config 钉的步数");
+    assert.equal(blank.context_frames, 22, "上下文帧留空 = 22 那一档");
+    assert.equal(blank.aspect_ratio, "16:9 (宽屏)", "配方没写过宽高时落默认宽高比");
+    assert.equal(blank.width % 32, 0, "宽按 MiniMax H3 画布步长 32 对齐");
+    assert.equal(blank.height % 32, 0, "高按 32 对齐");
+    cfg.load({ width: 1344, height: 768 });
+    cfg.el.querySelector(".ns-director-shared-steps").value = "999";
+    cfg.el.querySelector(".ns-director-shared-ctx").value = "999";
+    cfg.el.querySelector(".ns-director-shared-mp").value = "9";
+    const clamped = cfg.collect();
+    assert.equal(clamped.steps, 100, "步数收在 100 以内");
+    assert.equal(clamped.context_frames, 362, "上下文帧收在 362 以内");
+    assert.equal(clamped.megapixels, 2, "百万像素收在上限，超限的宽高不落盘");
+    cfg.el.querySelector(".ns-director-shared-aspect").value = DIRECTOR_CUSTOM;
+    const custom = cfg.collect();
+    assert.equal(custom.aspect_ratio, DIRECTOR_CUSTOM, "自定义档原样落盘");
+    assert.equal(custom.width, 1344, "自定义宽高是手输的那两个数");
+    assert.equal(custom.height, 768, "高同上");
+    assert.ok(!("megapixels" in custom), "自定义档不发百万像素：后端只认手输宽高");
 });
 
 test.afterEach(() => {
