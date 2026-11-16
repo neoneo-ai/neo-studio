@@ -311,10 +311,11 @@ window.addEventListener("neo:media-pick", (e) => {
 // ====== 导演页：顶部条 + 上结果舞台 + 下生成坞（时间轴 / 该段 / 素材槽 / 参数行） ======
 let genState = null;   // 当前整片任务 {task_id, statusEl, barEl, fillEl, runBtn, cancelBtn, media, livePlayer}
 const GEN_TERMINAL = ["succeeded", "failed", "cancelled"];
-const DIRECTOR_TIMELINE_H = 56;   // 时间轴净高：16px 秒刻度尺 + 30px 段块（勾选框 + 序号时长一行 + 提示词一行）+ 底部留白
+const DIRECTOR_TIMELINE_H = 68;   // 时间轴净高：16px 秒刻度尺 + 4px 间距 + 42px 段块（勾选框 + 序号时长一行 + 提示词一行，两行之间露出缩略图层）+ 6px 底部留白
 const DIRECTOR_ZOOM_KEY = "neo_studio.director_zoom";   // 时间轴缩放档位：跨页面重开记住（同一浏览器档位是常态）
 const DIRECTOR_REF_MAX = { images: 9, videos: 3, audios: 3 };   // 与后端 _DIRECTOR_REF_CAPS 同一份
 const DIRECTOR_REF_TOTAL = DIRECTOR_REF_MAX.images + DIRECTOR_REF_MAX.videos + DIRECTOR_REF_MAX.audios;
+const NEW_RECIPE_BASE = "未命名配方";   // 顶栏「新建配方」的起手名：盘上同名配方（含预设）就往后排数字，不盖它的卡
 // 全参考家族（含旧 v2v / rv2v）用参考素材那一行，帧模式（t2v / i2v / l2v / fl2v）用首帧 / 尾帧两枚：
 // 判据与后端 director_spec 那条优先序同一份——整片生成模式（shared.mode）是全参考时每一段都走 ref2va，
 // 其余档按这一段自己的显式模式逐段切。混配方逐段切时，隐藏的槽位不写进配方——留着上一家族的素材就是让它替模式说话
@@ -424,9 +425,9 @@ async function buildDirector(el) {
     const recipesBtn = $el("button", { className: "ns-btn", type: "button", title: t("打开配方管理：点卡片选中，含复制 / 删除 / 新增") });
     setIconLabel(recipesBtn, "list", t("配方管理"));
     recipesBtn.onclick = () => { recipesModal.open(t("导演配方")); refreshRecipesPanel(); };
-    const newBtn = $el("button", { className: "ns-btn", type: "button", title: t("新建一份分镜视频导演配方，进整片编辑器") });
+    const newBtn = $el("button", { className: "ns-btn", type: "button", title: t("新建一份分镜视频导演配方：就在本页落一段，写完「保存该段」写回") });
     setIconLabel(newBtn, "film", t("新建配方"));
-    newBtn.onclick = () => openDirectorEditor(null, afterEditorSaved);
+    newBtn.onclick = () => startNewRecipe();
     const libBtn = $el("button", { className: "ns-btn", type: "button", title: t("打开素材库：看大图与取用") });
     setIconLabel(libBtn, "folder", t("素材库"));
     libBtn.onclick = () => openLibModal("director");
@@ -848,6 +849,50 @@ async function buildDirector(el) {
         await openRecipe(currentName);
     }
 
+    // 顶栏「新建配方」与配方管理里的「新增导演配方」都在本页落：一段空段起手，整片参数取本页那张表单的
+    // 默认口径，一次 ops.save 落盘——生成整片、素材槽取用、director_spec 回显从这一刻起全部可用，
+    // 页上也因此只有「已落盘的配方」这一种状态，不给未落盘的草稿开第二条写路径。
+    // 不想要就在配方管理里用那张卡自己的「删除」删掉（单件入口，页上不铺清空动作）。
+    async function startNewRecipe() {
+        const name = newRecipeName();
+        recipe = {
+            name, type: "video_director", source: "user", prompt: "", assets: [], loras: [],
+            // 首段钉默认技能（关键帧家族里步数最少的可用技能，与后端 _default_video_skill 同口径）；
+            // 技能清单还没到就是空串——后端认段级 skill_id，起手不靠整片生成模式替它说话
+            segments: [{ skill_id: defaultVideoSkill(directorSkills), prompt: "", duration_sec: 5 }],
+        };
+        sharedCfg.load({}, segs());   // 整片参数从表单默认起，不带上一份配方刚落盘的那一份
+        recipe.shared = sharedCfg.collect();
+        currentName = name;
+        selected = 0;
+        checkedSegments = [];
+        timeline.clearChecked();
+        renderCheckHint();
+        syncSkillChip();   // 胶囊回显首段钉的那一枚：清单没到就整块不动，listVideoSkills 那一路到了会补一次
+        markDirty();
+        if (!await saveRecipeNow()) {
+            // 落盘失败（离线 409 / 后端报错）：页上不许钉着一份盘上不存在的配方，退回「没有配方」那一面
+            recipe = null;
+            currentName = "";
+            checkedSegments = [];
+            clearDirty();
+            renderRecipeSelect();
+            await loadSpec();   // 尺寸胶囊 / 时间轴 / 该段槽位一起回空白
+            return;
+        }
+        statusEl.textContent = tf("已新建配方 {name}：写提示词、取首帧，「保存该段」写回", { name });
+        await refreshRecipesPanel();   // 保存链只刷下拉与本页，管理弹窗里那份面板得单独长出新卡
+        promptIn.focus();
+    }
+
+    // 起手名往后排数字，不盖盘上的同名配方：配方管理里那张同名卡不该被一次新建悄悄改掉（预设同名后端 409 挡）
+    function newRecipeName() {
+        const taken = new Set(recipeItems.map((r) => r.name));
+        let name = NEW_RECIPE_BASE;
+        for (let i = 2; taken.has(name); i++) name = `${NEW_RECIPE_BASE}${i}`;
+        return name;
+    }
+
     // 每段的有效模式与素材名要 director_spec 那份（配方 assets/ 里的文件已复制进 input/）。
     // 启动时导演页是隐藏的：spec 逐文件同步复制，桌面端一个事件循环上会把首页 list 挤到几秒后，
     // 所以隐藏期间不拉，进本页由 onDirectorShown 补一次
@@ -1096,7 +1141,7 @@ async function buildDirector(el) {
         autoSelectFirst: true,      // 进页就选中首份导演配方：整片生成区与时间轴不用先点一次卡片
         initialSelection: currentName,
         onSelect: (r) => { recipesModal?.close(); openRecipe(r.name); },
-        onNewRecipe: () => { recipesModal?.close(); openDirectorEditor(null, afterEditorSaved); },
+        onNewRecipe: () => { recipesModal?.close(); startNewRecipe(); },
     });
     // 编辑器保存 / 新建保存后：重建配方面板（新配方立刻长出一张卡）并把那份配方选中，时间轴与该段控件跟着换
     window.addEventListener(DIRECTOR_RECIPE_SAVED_EVENT, async (e) => {

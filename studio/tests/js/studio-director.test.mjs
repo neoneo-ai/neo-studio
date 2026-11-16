@@ -167,6 +167,8 @@ const SPEC_BY_RECIPE = {
     RM: { segments: [{ ref_input: "seed1.png", last_input: "" }, { refs: { images: ["a.png"] } }], defaults: { width: 1024, height: 576, steps: 12 } },
     尾帧片: { segments: [{ ref_input: "seed1.png", last_input: "tail_a.png" }, { ref_input: "seed2.png", last_input: "tail_b.png" }], defaults: { width: 1024, height: 576, steps: 12 } },
 };
+const RECIPE_FIXTURE = structuredClone(RECIPE_BY_NAME);
+const SPEC_FIXTURE = structuredClone(SPEC_BY_RECIPE);
 const GALLERY_FILES = ["a.png", "b.png", "c.png", "d.png", "e.png", "clip.mp4", "voice.wav"];
 
 let statusState = null;   // 快照路由按请求时刻取这份状态：在途轮询拿到的就是那一刻的载荷
@@ -179,11 +181,30 @@ function bootMocks() {
     saveBodies = [];
     cancelHits = 0;
     appState.toasts.length = 0;
+    // 新建用例会在桩里的配方表长出真配方（save 桩认新名字 = 后端在 CUSTOM_DIR 建一份）：逐用例复位回 fixture，
+    // 不落进后面的用例（「六张导演配方卡」那类断言认的就是 fixture 的份数）
+    for (const k of Object.keys(RECIPE_BY_NAME)) delete RECIPE_BY_NAME[k];
+    Object.assign(RECIPE_BY_NAME, structuredClone(RECIPE_FIXTURE));
+    for (const k of Object.keys(SPEC_BY_RECIPE)) delete SPEC_BY_RECIPE[k];
+    Object.assign(SPEC_BY_RECIPE, structuredClone(SPEC_FIXTURE));
     mockRoute("/neo_studio/version", jsonResponse({ success: true, plugin_version: "9.9.9", comfyui_version: "0.1", recipes: [] }));
-    mockRoute("/rs_recipes/list", jsonResponse(Object.values(RECIPE_BY_NAME)));
+    mockRoute("/rs_recipes/list", () => jsonResponse(Object.values(RECIPE_BY_NAME)));
     mockRoute("/rs_recipes/load", (body) => jsonResponse({ success: true, recipe: RECIPE_BY_NAME[body.name] || null }));
     mockRoute("/rs_recipes/director_spec", (b, call) => jsonResponse({ success: true, ...(SPEC_BY_RECIPE[call.query.get("name")] || SPEC_BY_RECIPE.R1) }));
-    mockRoute("/rs_recipes/save", (body) => { saveBodies.push(body); return jsonResponse({ success: true, name: body.name }); });
+    mockRoute("/rs_recipes/save", (body) => {
+        saveBodies.push(body);
+        // 新名字 = 后端在 CUSTOM_DIR 里建一份：桩里的配方表跟着长，本页新建后 openRecipe / 列表才读得回刚落盘的那一份。
+        // 已有名字只记请求体——种子数据不动，后面的用例照旧从 fixture 起
+        if (body.type === "video_director" && !RECIPE_BY_NAME[body.name]) {
+            RECIPE_BY_NAME[body.name] = {
+                name: body.name, type: "video_director", source: "user", assets: [], loras: [],
+                shared: { seed: 0, ...(body.shared || {}) },
+                segments: (body.segments || []).map((s) => ({ ...s })),
+            };
+            SPEC_BY_RECIPE[body.name] = { segments: (body.segments || []).map(() => ({})), defaults: { width: 960, height: 544, steps: 20 } };
+        }
+        return jsonResponse({ success: true, name: body.name });
+    });
     mockRoute("/rs_prompts/skills", jsonResponse([SKILL, SKILL_R2V, SKILL_MF]));
     mockRoute("/neo_video_gen/director_progress", jsonResponse({ active: false, segment_index: -1, total_segments: 0, step: 0, total_steps: 0 }));
     mockRoute("/neo_video_gen/models", jsonResponse({
@@ -332,6 +353,47 @@ test("导演页：进页铺好配方条 + 自动选中配方 + 时间轴 + 三�
     assert.equal(runBtn().textContent.trim(), "生成", "生成钮文案：跑哪几段写在提示行上，按钮不重复那句长文案");
     assert.equal(cancelBtn().style.display, "none", "取消按钮起手隐藏");
 });
+test("导演页新建配方：顶栏「新建配方」在本页落一份一段配方，不开整片编辑器浮层", async () => {
+    await boot();
+    await openDirector();
+    click(barBtn("新建配方"));
+    await until(() => recipeSel().value === "未命名配方", "新配方落在本页的配方下拉上");
+    assert.ok(!document.querySelector(".neo-director-overlay"), "不开整片编辑器浮层：配方就在本页长出来");
+    const saves = posts("/rs_recipes/save");
+    assert.equal(saves.length, 1, "新建就落盘一次：页内写路径就是 ops.save 那一条");
+    const body = saves[0].body;
+    assert.equal(body.type, "video_director", "落盘声明这一份是导演配方");
+    assert.equal(body.segments.length, 1, "新建起一段，不铺一张空段落表");
+    assert.equal(body.segments[0].skill_id, "sk-a", "首段钉默认技能（关键帧家族里步数最少的可用技能，同后端 _default_video_skill）");
+    assert.equal(body.seed, undefined, "页上不带种子：整片参数表单里那一格才是这一发的种子");
+    assert.equal(body.shared.seed, -1, "起手种子是随机（-1），不是上一份配方里那个 4242");
+    assert.equal(body.shared.width, 960, "整片参数取本页默认口径（16:9 @ 0.5 百万像素）的宽");
+    assert.equal(body.shared.height, 544, "...那一份的高");
+    assert.ok(loads("未命名配方") >= 1, "落盘后本页重读这份：生成整片与素材槽从这一刻起可用");
+    assert.equal(tl().opts.getSegments().length, 1, "时间轴上就是刚落盘那一段");
+    assert.equal(selSeg(), 0, "该段面板落在第 1 段");
+    assert.equal(promptIn().disabled, false, "该段提示词框可写");
+    assert.equal(document.activeElement, promptIn(), "焦点交给提示词框：新建完就是接着写");
+    assert.equal(saveBtn().disabled, false, "「保存该段」可点");
+    assert.equal(sizeLabel().textContent, "960×544", "尺寸胶囊回显这份新配方的 defaults");
+    assert.ok(statusEl().textContent.includes("已新建配方"), `状态行说出新建的是哪一份：${statusEl().textContent}`);
+});
+
+test("导演页新建配方：顶栏与配方管理里的新增连着点，名字往后排数字、不盖盘上那份", async () => {
+    await boot();
+    await openDirector();
+    click(barBtn("新建配方"));
+    await until(() => recipeSel().value === "未命名配方", "顶栏新建落在本页");
+    click(barBtn("配方管理"));
+    await until(() => recipesModal() && recipesModal().querySelector(".neo-recipes-director"), "弹窗里铺好配方卡与「新增导演配方」");
+    click(recipesModal().querySelector(".neo-recipes-director"));
+    await until(() => recipeSel().value === "未命名配方2", "弹窗里的「新增导演配方」同样落在本页，名字让开刚落盘的那一份");
+    assert.ok(!document.querySelector(".neo-director-overlay"), "两处新增都不开整片编辑器");
+    assert.ok(recipesModal().classList.contains("ns-hidden"), "新增先收弹窗：配方就在本页编辑，不在弹窗里");
+    assert.deepEqual(posts("/rs_recipes/save").map((c) => c.body.name), ["未命名配方", "未命名配方2"], "两次新增各落盘一次，名字不撞");
+});
+
+
 
 test("导演页：顶栏切配方 → 段数 / 该段行 / 尺寸回显跟着换", async () => {
     await boot();

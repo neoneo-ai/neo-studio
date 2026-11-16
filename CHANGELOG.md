@@ -4,6 +4,13 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+### Changed
+- **The 导演页 "新建配方" creates the recipe on the page now, not in 高级模式.** The top-bar **📝 新建配方** button and
+  the recipe-management modal's **新增导演配方** both save a one-segment **未命名配方** right on the 导演页 — the film
+  parameters take the page defaults (16:9 at 0.5 megapixels, random seed), the new recipe is selected and readable at once,
+  and 生成 / 素材取用 / 保存该段 work immediately; drop it with the card's own delete in Recipe Management. Advanced mode
+  stays where it was: the **高级模式** button and the 重生成该段 entry in the 该段 ⋯ menu.
+
 ### Fixed
 - **The 尾帧 square no longer sits on the prompt box on the 导演页.** The 该段 row let its children shrink
   (`min-width: 0`), so the tile column squeezed below its own tiles — a 120px column measured 105 — and the tail-frame
@@ -330,6 +337,11 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 
 ### Changed
+- **The 导演页 timeline strip is taller.** The strip measured 56px with a 30px segment block, so the 「序号 · 时长」 line
+  at the block's top and the prompt line at its bottom sat 2px apart and the first-frame thumbnail behind them was a 22px
+  sliver. The strip is now 68px with a 42px block — both text lines keep their own band and the thumbnail reads as a frame
+  (`DIRECTOR_TIMELINE_H` in `studio/web/studio/studio-app.js`; the block width keeps following the block height at 16:9, so a
+  segment is still about one frame wide). The stage's dock clearance grows with the capsule (`padding-bottom: 262px`).
 - **The 导演页 run button reads 生成.** It carried the whole phrase 生成整片 while the line under the timeline already
   states what an unchecked segment means (未勾选 = 生成整片 · 点时间轴块左上角勾选), so the control repeated that
   sentence. The 需要 ComfyUI gate and its restore-on-ready label follow the same short label; 保存并生成整片 in the

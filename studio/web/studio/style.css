@@ -220,7 +220,7 @@ body {
    （100cqh × 宽高比）后居中，不在画面两侧留一片黑。
    生成坞是钉在页底的浮动胶囊，舞台下沿的内衬就是躲它的那一段——胶囊长高只改这一处 padding，
    给舞台加 flex 上下限只会让画面与胶囊抢高度，谁都不肯让 */
-.ns-director-stage { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; padding-bottom: 250px; overflow: hidden; }
+.ns-director-stage { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; padding-bottom: 262px; overflow: hidden; }
 .ns-director-media {
     flex: 1 1 auto; min-height: 0; position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px;
     container-type: size; padding: 10px; overflow: hidden;

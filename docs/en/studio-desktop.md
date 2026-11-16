@@ -120,8 +120,10 @@ drop-down is the quick switch on it, and the recipe-management modal and the ass
 - **Startup always lands on home**: when the recipe panel lands the first director recipe is auto-selected (the dock
   and the agent context read it) and the director page never opens itself.
 - **Clicking a recipe card closes the recipe-management modal and selects that recipe** (clicking the same card again just
-  switches the recipe, the page is not rebuilt); "新增导演配方" in that modal and "📝 New recipe" on the bar both
-  open a blank recipe in Advanced mode, and the page selects it once it is saved. With no frame yet the stage carries
+  switches the recipe, the page is not rebuilt); "新增导演配方" in that modal and "📝 New recipe" on the bar both create a
+  one-segment blank recipe on this page — the film parameters take the page defaults (16:9 at 0.5 megapixels, random seed
+  `-1`), one `ops.save` writes it to disk, the page selects it, and generating the film / picking media / 保存该段 all work
+  from that moment on; to drop it, delete the card in Recipe Management. With no frame yet the stage carries
   the idle card (**Direct a Video** / pick a recipe, tick the segments, generate the film) as an overlay that
   consumes no layout height.
 - "**📋 Recipe Management**" opens the recipe-management modal (`.ns-libmodal[data-lib-scope="recipes"]`, director
@@ -196,7 +198,7 @@ drop-down is the quick switch on it, and the recipe-management modal and the ass
   one is interrupted immediately, this run produces no final film) before the cancel request goes out — the same
   `confirm` convention the delete-segment entry uses. Declining leaves the cancel button in place and the run running.
 - Layout sizes: the stage takes the whole column (recipe row, progress row and preview, with
-  `padding-bottom: 250px` reserved as dock clearance and the preview centred at the recipe's `width×height` ratio); the
+  `padding-bottom: 262px` reserved as dock clearance and the preview centred at the recipe's `width×height` ratio); the
   dock is a centred floating capsule (`min(980px, 100% − 24px)` wide, 12px from the bottom) stacking the status row, the
   timeline, the check hint with its zoom control, the segment row and the control bar. The empty-state card is an overlay
   on the stage and consumes no layout height — with no frame yet the stage paints no grey panel, so the two idle lines sit
@@ -211,7 +213,8 @@ drop-down is the quick switch on it, and the recipe-management modal and the ass
   column needs no scrollbar of its own, while the skill list on the left scrolls on its own). The **resolution** capsule's
   film-parameter form is one column (`min(380px, 100vw − 16px)`); the **skill** capsule's panel keeps the two columns the
   video page has at `min(660px, 100vw − 16px)`, at the same density.
-- The director timeline is a 56px strip: a 16px second ruler plus a 30px segment block. A block carries the always-visible
+- The director timeline is a 68px strip: a 16px second ruler plus a 42px segment block (the top line and the prompt line
+  at the block's bottom each get their own band, with the thumbnail layer showing between them). A block carries the always-visible
   checkbox at its top-left (click = this run includes that segment), the always-visible **⋯** at its top-right (click opens
   that segment's operations; a built-in preset recipe paints no `⋯` at all), one top line of "index · duration ·
   (start–end seconds while hovering)", and one ellipsised prompt line at its bottom. The top line's right edge stops short
