@@ -27,7 +27,7 @@ test("导演编辑器：角色参考图缩略点击打开 Lightbox（←/→ 切
     await openDirectorEditor(existing);
     await sleep(60);
 
-    const tabStory = Array.from(document.querySelectorAll(".neo-director-tab")).find((t) => t.textContent.includes("故事板分镜"));
+    const tabStory = Array.from(document.querySelectorAll(".neo-director-tab")).find((t) => t.textContent.includes("宫格图分镜"));
     tabStory.click();
     await sleep(20);
     const charCard = document.querySelector(".neo-director-setup-char");
@@ -89,11 +89,11 @@ test("导演编辑器：宫格分镜图拆分卡片——自动/手动行列，�
         segments: [{ skill_id: "sk-a", prompt: "旧段", duration_sec: 5 }],
     });
     await sleep(60);
-    Array.from(document.querySelectorAll(".neo-director-tab")).find((t) => t.textContent.includes("故事板分镜")).click();
+    Array.from(document.querySelectorAll(".neo-director-tab")).find((t) => t.textContent.includes("宫格图分镜")).click();
     await sleep(20);
 
     const card = document.querySelector(".neo-director-src-card-grid");
-    assert.ok(card, "宫格拆分卡片在「故事板分镜」页");
+    assert.ok(card, "宫格拆分卡片在「宫格图分镜」页");
 
     // 宫格图是唯一分镜来源：卡片常驻；来源二选一 radio 行与逐段图片分镜卡都已移除
     assert.equal(card.style.display, "", "宫格卡片常驻显示（唯一来源）");
@@ -187,7 +187,7 @@ test("导演编辑器：宫格分镜图可直接拖入/上传到各段（跳过�
 
     await openDirectorEditor(null); // 新建：1 个空段
     await sleep(60);
-    Array.from(document.querySelectorAll(".neo-director-tab")).find((t) => t.textContent.includes("故事板分镜")).click();
+    Array.from(document.querySelectorAll(".neo-director-tab")).find((t) => t.textContent.includes("宫格图分镜")).click();
     await sleep(20);
 
     // 新建配方默认宫格来源：对照表两栏（分镜图 / 提示词）
@@ -238,7 +238,7 @@ test("导演编辑器：band-2 末尾常驻空段（纯 UI、不保存），拖�
 
     await openDirectorEditor(null); // 新建：1 个空段
     await sleep(60);
-    Array.from(document.querySelectorAll(".neo-director-tab")).find((t) => t.textContent.includes("故事板分镜")).click();
+    Array.from(document.querySelectorAll(".neo-director-tab")).find((t) => t.textContent.includes("宫格图分镜")).click();
     await sleep(20);
 
     const container = document.querySelector(".neo-director-setup-segs");
@@ -293,7 +293,7 @@ test("宫格分镜图拆分：图片输入区支持本地上传 + 素材库/本�
 
     await openDirectorEditor({ name: "GRID2", shared: { mode: "t2v" }, segments: [{ skill_id: "sk-a", prompt: "旧段", duration_sec: 5 }] });
     await sleep(60);
-    Array.from(document.querySelectorAll(".neo-director-tab")).find((t) => t.textContent.includes("故事板分镜")).click();
+    Array.from(document.querySelectorAll(".neo-director-tab")).find((t) => t.textContent.includes("宫格图分镜")).click();
     await sleep(20);
 
     const card = document.querySelector(".neo-director-src-card-grid");
@@ -499,7 +499,7 @@ test("导演编辑器：宫格拆分后共享比例吸附到首帧最近预设�
 
     await openDirectorEditor({ name: "GRID-AR", shared: { mode: "t2v" }, segments: [{ skill_id: "sk-a", prompt: "旧段", duration_sec: 5 }] });
     await sleep(60);
-    Array.from(document.querySelectorAll(".neo-director-tab")).find((t) => t.textContent.includes("故事板分镜")).click();
+    Array.from(document.querySelectorAll(".neo-director-tab")).find((t) => t.textContent.includes("宫格图分镜")).click();
     await sleep(20);
 
     const card = document.querySelector(".neo-director-src-card-grid");
@@ -649,4 +649,75 @@ test("导演编辑器：r2v 多帧技能不泄漏进 f2v 候选池，切 r2v 模
 
     document.querySelector(".neo-director-close")?.click();
     await sleep(20);
+});
+
+
+test("导演编辑器：opts.startTab='story' 把编辑器开在宫格图分镜页，重复调用只切页签不叠窗", async () => {
+    const { openDirectorEditor } = await import("../../web/director.js");
+    appState.graph = { _nodes: [] };
+    mockRoute("/rs_prompts/skills", () => jsonResponse([{ id: "sk-a", name: "技能 A", gen_video: true, mode: "t2v" }]));
+    const existing = {
+        name: "T-StartTab",
+        shared: { mode: "t2v", width: 1344, height: 768 },
+        segments: [{ skill_id: "sk-a", prompt: "第一段", duration_sec: 5 },
+            { skill_id: "sk-a", prompt: "第二段", duration_sec: 5 }],
+    };
+    const tabs = () => [...document.querySelectorAll(".neo-director-tab")];
+    const activeTab = () => tabs().find((b) => b.classList.contains("active"));
+    const tabNamed = (label) => tabs().find((b) => b.textContent.includes(label));
+
+    await openDirectorEditor(existing);
+    await sleep(60);
+    assert.ok(activeTab().textContent.includes("分镜时间线"), "不带 startTab：照旧落默认的时间线页，入口不改这条默认口径");
+    document.querySelector(".neo-director-close").click();
+    await sleep(20);
+
+    await openDirectorEditor(existing, null, -1, { startTab: "story" });
+    await sleep(60);
+    assert.ok(activeTab().textContent.includes("宫格图分镜"),
+        "带 startTab：压过「这份配方上次停在时间线」的记忆，直接落在宫格图分镜页");
+    assert.equal(document.querySelector(".neo-director-pane-story").style.display, "", "故事板那一面是展开的");
+    assert.equal(document.querySelector(".neo-director-pane-timeline").style.display, "none", "时间线那一面收起");
+    assert.ok(document.querySelector(".neo-director-grid-split"), "这一页上就是现成的宫格拆分那一块：入口不新建第二套拆分");
+
+    tabNamed("分镜时间线").click();
+    await sleep(20);
+    await openDirectorEditor(existing, null, -1, { startTab: "story" });   // 编辑器已开着这份配方：第二下只把页签切回去
+    await sleep(60);
+    assert.equal(document.querySelectorAll(".neo-director-overlay").length, 1, "同一份配方连点两次只有一座编辑器浮层");
+    assert.ok(activeTab().textContent.includes("宫格图分镜"), "已开着的编辑器被切到宫格图分镜页：第二下不空转");
+    document.querySelector(".neo-director-close").click();
+    await sleep(20);
+});
+
+test("导演编辑器：opts.storyOnly 只铺故事板那一面——无页签栏、时间线永久收起、底部只留保存", async () => {
+    const { openDirectorEditor } = await import("../../web/director.js");
+    appState.graph = { _nodes: [] };
+    mockRoute("/rs_prompts/skills", () => jsonResponse([{ id: "sk-a", name: "技能 A", gen_video: true, mode: "t2v" }]));
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const existing = {
+        name: "T-StoryOnly",
+        shared: { mode: "t2v", width: 1344, height: 768 },
+        segments: [{ skill_id: "sk-a", prompt: "第一段", duration_sec: 5 },
+            { skill_id: "sk-a", prompt: "第二段", duration_sec: 5 }],
+    };
+    await openDirectorEditor(existing, null, -1, { container: host, storyOnly: true });
+    await sleep(60);
+    const panel = host.querySelector(".neo-director-embedded");
+    assert.ok(panel, "storyOnly 走的是内嵌那条路：面板铺在宿主里");
+    assert.ok(!document.querySelector(".neo-director-overlay"), "不建浮层：这一面不靠弹窗摆内容");
+    assert.ok(!panel.querySelector(".neo-director-tabs"), "无页签栏：这一面只有故事板");
+    assert.equal(panel.querySelector(".neo-director-pane-story").style.display, "", "故事板那一面铺满整栏");
+    assert.equal(panel.querySelector(".neo-director-pane-timeline").style.display, "none", "时间线那一面收起");
+    // 段行的 DOM 留在收起的那一面：宫格拆分与逐格提示词写的就是这些段，收起不等于把段落丢掉
+    assert.equal(panel.querySelectorAll(".neo-director-pane-timeline .neo-director-seg").length, 2,
+        "两段段行都在这块面板里：宫格拆分写段的落点不丢");
+    assert.ok(panel.querySelector(".neo-director-name"), "标题行留着配方名：这一面写的就是这份配方");
+    assert.equal(panel.querySelectorAll(".neo-director-foot .neo-director-save").length, 1, "底部只留「保存」这一发");
+    assert.ok(!panel.querySelector(".neo-director-cancel"), "不给「取消」：这一页没有要取消的窗口");
+
+    panel.querySelector(".neo-director-close").click();
+    await sleep(20);
+    assert.equal(host.querySelector(".neo-director-embedded"), null, "标题栏 ✕ 关掉这一面：宿主留占位由装配层管");
 });

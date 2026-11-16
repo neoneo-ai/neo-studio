@@ -424,7 +424,7 @@ export function firstFrameAspectWarning(segments, sizes) {
 let _directorEditor = null;
 let _directorOpening = false;   // 打开构建中（异步扫描未完成）：期间的重复点击忽略
 let _pendingDirectorSwitch = null;   // 脏态挡下的那次切换 { existing, onSaved, focusSeg, opts }：旧编辑器一关就落地
-function currentDirectorEditor() {
+export function currentDirectorEditor() {
     if (_directorEditor && _directorEditor.overlay && _directorEditor.overlay.parentNode) return _directorEditor;
     _directorEditor = null; // 浮层已不在（外部清除 / 测试重置 body）→ 丢弃过期状态
     return null;
@@ -497,6 +497,9 @@ function runSegmentTask(body, handlers = {}) {
  *  opts.onAdopt：编辑器认下这份配方（本次真打开/已开着同一份）时回传，调用方据此落选中——卡片高亮与生成区永远同指一份配方。
  *  focusSeg：打开时定位到该段（0 基；<0 表示不指定，保持默认第 1 段）。
  *  opts.openRegen：配合 focusSeg，打开即展开该段的重生成面板（Studio 导演页段菜单「重生成该段」用）。
+ *  opts.startTab = 'story'：打开即停在宫格图分镜页（首页「宫格图分镜」卡用）；不带就照旧落上次停的页签。
+ *  opts.storyOnly = true：只铺故事板那一面（首页「宫格图分镜」那一页用它）——不建页签栏，时间线那一面
+ *  永久收起（段行留在隐藏的面板里，宫格拆分照旧写它），底部只留「保存」，取消与「保存并生成整片」都不给。
  *  内嵌：Studio 注册过宿主（setDirectorEditorHost）或 opts.container 指定容器时，编辑器直接铺进容器，
  *  不建浮层窗口，也不带 ⛶ 放大 / 右下角缩放 / 标题栏拖动；宿主带 onSaveAndRun 时底部多出「保存并生成整片」。
  *  内嵌保存成功后编辑器留在原地（桌面端导演页上半栏就是它，保存即关等于把刚编辑的界面抽走）：
@@ -507,13 +510,14 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
     // 内嵌宿主（Studio 注册 / opts.container 显式指定）：编辑器铺满容器，无浮层 / 无窗口控件
     const host = opts?.container || _editorHost;
     const embedded = !!(host && host.isConnected);
+    const storyOnly = opts?.storyOnly === true;   // 首页「宫格图分镜」那一页：无页签栏，时间线那一面永久收起
     const saveAndRun = opts?.onSaveAndRun || _editorHostSaveAndRun;
     if (embedded) _editorHostOnOpen?.();   // 宿主侧同步（切到导演页 / 收起占位）
     const cur = currentDirectorEditor();
     if (cur) {
         // 「重复点击=切段」只对已命名配方成立；新建（name=''）每次携带的内容都不同，
         // 命中同名校验会被静默吞掉（图库多选「新建导演配方」点不动的根因），一律走重载路径
-        if (requestedName && cur.name === requestedName) { _pendingDirectorSwitch = null; opts?.onAdopt?.(); cur.focusSeg?.(focusSeg); if (opts?.openRegen) cur.openSegRegen?.(focusSeg); return; }
+        if (requestedName && cur.name === requestedName) { _pendingDirectorSwitch = null; opts?.onAdopt?.(); cur.focusSeg?.(focusSeg); if (opts?.openRegen) cur.openSegRegen?.(focusSeg); if (opts?.startTab === 'story') cur.setTab?.('story'); return; }   // 首页宫格图分镜卡连点两次：编辑器已开着就把页签切过去，别让第二下空转
         if (cur.isDirty()) {
             // 有未保存修改：出确认条并记下要点的那份配方，「保存并关闭」/「放弃修改」关掉旧编辑器即打开它
             _pendingDirectorSwitch = { existing, onSaved, focusSeg, opts };
@@ -754,7 +758,7 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
         ]);
     };
 
-    /** 首/尾帧槽位取图（与故事板分镜对照表缩略位同款体验）：拖入替换 / 点击空态开素材库取用，
+    /** 首/尾帧槽位取图（与宫格图分镜对照表缩略位同款体验）：拖入替换 / 点击空态开素材库取用，
      *  本地上传收在角标上。返回造「本地」角标的工厂——槽位每次重绘都要重新挂一颗。 */
     function attachFrameSlotUpload(thumb, setFn) {
         const useImage = (fname) => {
@@ -807,7 +811,7 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
         const promptTa = $el('textarea', { className: 'neo-director-prompt', placeholder: t('该段画面 / 运动描述（必填）'), value: seg.prompt || '' });
         const durInp = $el('input', { className: 'neo-director-dur', type: 'number', min: 1, max: 3600, value: (seg.duration_sec != null ? seg.duration_sec : 5) });
 
-        // 关键帧生视频（f2v）：与故事板分镜对照表同构的两栏——左栏首帧槽位 / 右栏提示词；
+        // 关键帧生视频（f2v）：与宫格图分镜对照表同构的两栏——左栏首帧槽位 / 右栏提示词；
         // 尾帧用得少（默认衔接下一段首帧），收在扩展按钮里。槽位体验同分镜缩略位：拖入 / 点击取用 / 悬停 ✕ / Lightbox。
         let ffVal = seg.first_frame || '';
         let lfVal = seg.last_frame || '';
@@ -909,7 +913,7 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
             ]),
         ]);
 
-        // 两栏行（与故事板分镜对照表同构）：左栏首帧槽位 + 尾帧扩展 / 右栏提示词；
+        // 两栏行（与宫格图分镜对照表同构）：左栏首帧槽位 + 尾帧扩展 / 右栏提示词；
         // 非 f2v 模式隐藏帧槽位，参考素材区移入左栏——所有资源输入在左、提示词在右，各模式输入体验统一
         const framesLabels = $el('div', { className: 'neo-director-frames-cols neo-director-frames-labels' }, [
             $el('span', { textContent: t('首帧') }),
@@ -1703,7 +1707,7 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
     };
 
     // ==========================================
-    // 故事板分镜：宫格图拆分到各段（按主题 / 脚本生成分段的文字故事板由右栏智能体承接）
+    // 宫格图分镜：宫格图拆分到各段（按主题 / 脚本生成分段的文字故事板由右栏智能体承接）
     // ==========================================
 
     // 本页两步（体现先后关系）：① 宫格图拆分到各段 → ② 逐格生成提示词。
@@ -2044,7 +2048,7 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
         modeSel.appendChild($el('option', { value: val, textContent: label }));
     }
     modeSel.value = initMode;
-    // 生成模式只在「分镜时间线」页首行这一处选择（故事板分镜与生成模式无关）：切换时刷新各段显隐，并联动故事板分镜页的模式提示
+    // 生成模式只在「分镜时间线」页首行这一处选择（宫格图分镜与生成模式无关）：切换时刷新各段显隐，并联动宫格图分镜页的模式提示
     modeSel.addEventListener('change', () => { applyGlobalMode(); refreshSetupRefs(); refreshChunkSecVisibility(); });
 
     // 分块秒数（shared.chunk_sec）：连续兼容段合并成一次多帧单次 ref2va 运行的总时长预算；0 = 关闭（纯逐段生成）
@@ -2204,7 +2208,7 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
     applyGlobalMode();   // 初始化各段首帧/尾帧/参考素材区、统一技能框显隐，并把统一技能同步到各段
 
     // ==========================================
-    // 故事板分镜 band 2：各段分镜图 → 逐格按 H3 官方格式生成提示词，再到时间轴逐段微调
+    // 宫格图分镜 band 2：各段分镜图 → 逐格按 H3 官方格式生成提示词，再到时间轴逐段微调
     // 生成模式 / 统一技能只在「分镜时间线」页选择，本页只跟随刷新；
     // 参考素材没有「统一」入口：到时间轴页各段的参考素材区逐段设置（含「同步到所有分段」按钮）
     // ==========================================
@@ -2213,7 +2217,7 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
     const uniMixedHint = $el('div', { className: 'neo-director-setup-hint', textContent: t('混合模式：技能与首帧/尾帧 / 参考素材请到「分镜时间线」页逐段设置') });
 
     // 按全局生成模式刷新两条模式提示（与各段有效模式的显隐规则一致）。
-    // 生成模式的选择在「分镜时间线」页首行（故事板分镜与生成模式无关），这里只跟随刷新。
+    // 生成模式的选择在「分镜时间线」页首行（宫格图分镜与生成模式无关），这里只跟随刷新。
     function refreshSetupRefs() {
         const m = modeSel.value;
         uniR2vHint.style.display = (m === 'r2v') ? '' : 'none';   // 参考素材到时间轴页逐段设置（本页无统一入口）
@@ -2226,7 +2230,7 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
     // 逐段循环调用单段端点：一次只让 LLM 处理一段（降低单次负担），每生成完一段立即写回并刷新对照表，让用户看到进展。
     optBtn.onclick = async () => {
         const rows = Array.from(segsWrap.querySelectorAll('.neo-director-seg'));
-        if (!rows.length) { app.extensionManager.toast.add({ severity: 'error', summary: t('多段导演'), detail: t('还没有分段，请先在故事板页拆分'), life: 3000 }); return; }
+        if (!rows.length) { app.extensionManager.toast.add({ severity: 'error', summary: t('多段导演'), detail: t('还没有分段，请先在宫格图分镜页拆分'), life: 3000 }); return; }
         // 首次优化前快照各段原文；之后重新点优化始终基于该原文再试（不叠加上一轮结果）
         if (!origPrompts) origPrompts = rows.map((row) => row.querySelector('.neo-director-prompt').value);
         const segs = rows.map((row, i) => {
@@ -2311,7 +2315,7 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
         }
     };
 
-    // 「故事板分镜」页 band 3：各段两栏对照（类似表格）——左 = 分镜图（宫格各格 / 拖入的分镜图），右 = 该段提示词。
+    // 「宫格图分镜」页 band 3：各段两栏对照（类似表格）——左 = 分镜图（宫格各格 / 拖入的分镜图），右 = 该段提示词。
     // 分镜图列取该段关键帧记录，无且 f2v 模式时回退到时间轴选的首帧；两者皆无显示「无」。
     // 首次点逐格生成前快照原文（origPrompts），之后重新点始终基于该原文再试、不叠加上一轮结果；
     // 快照随 setup 落盘，打开旧配方时回显。数据读时间轴各段行（唯一事实来源）。
@@ -2598,7 +2602,7 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
         syncGhostSeg();   // 常驻空段：无分段或第一段已有输入时才显示；拖入分镜图才真实建段
     }
 
-    // 故事板分镜页：band 0 角色参考图盒 → band 1 宫格图卡 + 模式提示 → band 2 各段对照
+    // 宫格图分镜页：band 0 角色参考图盒 → band 1 宫格图卡 + 模式提示 → band 2 各段对照
     // 「各段对照」标题行单独持有：单段配方整块收起（换成 setupSingleHint），段数一变就切
     const setupOptRow = $el('div', { className: 'neo-director-setup-opt' }, [
         stepOptBadge,   // ② 提示词：拆分到各段之后的最后一步
@@ -2686,7 +2690,7 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
     const singleSegGuide = $el('div', { className: 'neo-director-single-guide' }, [
         $el('span', { textContent: t('只有一段：提示词写在下面的段落里即可。要从宫格图一次拆成多段？按故事主题生成分段，用右栏智能体。') }),
         $el('button', {
-            className: 'neo-director-single-guide-btn', type: 'button', textContent: t('故事板分镜'),
+            className: 'neo-director-single-guide-btn', type: 'button', textContent: t('宫格图分镜'),
             onclick: () => switchTab('story'),
         }),
     ]);
@@ -2720,26 +2724,27 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
         setupSegPreview.style.display = single ? 'none' : '';
     };
 
-    const tabStory = $el('button', { className: 'neo-director-tab', type: 'button', textContent: t('故事板分镜') });
+    const tabStory = $el('button', { className: 'neo-director-tab', type: 'button', textContent: t('宫格图分镜') });
     const tabTimeline = $el('button', { className: 'neo-director-tab', type: 'button', textContent: t('分镜时间线') });
     function switchTab(which) {
+        if (storyOnly) which = 'story';   // 这一面只有故事板：时间线那一面永远切不出去（宫格拆分写的段行就在这块隐藏面板里）
         tabStory.classList.toggle('active', which === 'story');
         tabTimeline.classList.toggle('active', which === 'timeline');
         genPane.style.display = (which === 'story') ? '' : 'none';
         timelinePane.style.display = (which === 'timeline') ? '' : 'none';
         const n = (nameInp.value || '').trim() || requestedName;
         if (n) lastTabByName.set(n, which);   // 记住当前页签：下次打开该配方落回此页
-        if (which === 'story') renderSetupSegs();   // 切到故事板分镜页时刷新各段当前内容（含时间轴页的改动）
+        if (which === 'story') renderSetupSegs();   // 切到宫格图分镜页时刷新各段当前内容（含时间轴页的改动）
         else if (timeline) timeline.refresh();      // 切回时间轴时按真实宽度重绘 canvas
         refreshSegScale();   // 页签也影响块级显隐（单段引导 / 各段对照只在本页有意义）
     }
     tabStory.onclick = () => switchTab('story');
     tabTimeline.onclick = () => switchTab('timeline');
-    const tabBar = $el('div', { className: 'neo-director-tabs' }, [tabStory, tabTimeline]);
+    const tabBar = storyOnly ? null : $el('div', { className: 'neo-director-tabs' }, [tabStory, tabTimeline]);
 
     const body = $el('div', { className: 'neo-director-body' }, [genPane, timelinePane]);
-    switchTab(lastTabByName.get(requestedName) || 'timeline'); // 优先落回上次打开时停的页签；新建默认时间线页——单段最简单的那条路，故事板分镜留给多段规划
-    const foot = $el('div', { className: 'neo-director-foot' }, [cancelBtn, saveBtn]);
+    switchTab(storyOnly ? 'story' : (opts?.startTab === 'story' ? 'story' : (lastTabByName.get(requestedName) || 'timeline'))); // 优先落回上次打开时停的页签；新建默认时间线页——单段最简单的那条路，宫格图分镜留给多段规划
+    const foot = $el('div', { className: 'neo-director-foot' }, storyOnly ? [saveBtn] : [cancelBtn, saveBtn]);
     // 桌面端内嵌：底部直接给一枚「保存并生成整片」，走完整保存路径后由宿主提交生成
     if (saveAndRun) foot.appendChild($el('button', { className: 'rs-btn neo-director-save-run', type: 'button', textContent: t('保存并生成整片'), onclick: () => { runAfterSave = true; saveBtn.onclick(); } }));
     // 「放大到最大」：标题栏 ⛶ 按钮 / 双击标题栏均可切换。放大=铺满视口（留 8px
@@ -2777,7 +2782,7 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
             $el('span', { textContent: t('分镜视频导演') }),
             nameWrap,
         ]),
-        tabBar,
+        ...(tabBar ? [tabBar] : []),
         $el('div', { className: 'neo-director-title-btns' }, [
             $el('button', { className: 'neo-director-llm-config', type: 'button', title: t('LLM 配置'), textContent: '', onclick: openLLMSettingsModal }),
             ...(maxBtn ? [maxBtn] : []),
@@ -2875,7 +2880,7 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
         overlay = $el('div', { className: 'neo-director-overlay' }, [panel]);
         document.body.appendChild(overlay);
     }
-    _directorEditor = { name: requestedName, close, requestClose, isDirty: () => dirty, overlay, focusSeg: focusSegAt, openSegRegen };
+    _directorEditor = { name: requestedName, close, requestClose, isDirty: () => dirty, overlay, focusSeg: focusSegAt, openSegRegen, setTab: switchTab };
     // 段菜单的「重生成该段」要在整份编辑器建完之后才展开面板：面板本体读整片名、结果区与时间线控件，
     // 建到一半去点就是撞还没初始化完的那一串
     if (opts?.openRegen) openSegRegen(focusSeg);

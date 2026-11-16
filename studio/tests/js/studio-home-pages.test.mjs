@@ -59,6 +59,36 @@ test("深链 #/reverse 与 #/voice 挂出两页：起手卡片在页上，顶栏
     assert.ok(!html.includes('data-tab="voice"') && !html.includes('data-tab="reverse"'),
               "顶栏不给这两页页签：首页那两张卡是唯一的入口");
 });
+// 宫格图分镜在装配层就是首页那张卡的落点：内嵌的一页，无顶栏页签、无弹窗。
+test("首页「宫格图分镜」卡：落自己那一页——页上是内嵌的宿主，顶栏不给它页签", async () => {
+    mockShell({ director: true, grid_split: true, queue: true, task_history: true }, false);
+    mockRoute("/neo_home/layout", jsonResponse({ order: { create: ["storyboard"] } }));
+    window.location.hash = "#/home";
+    await import("../../web/studio/studio-app.js?homePages3=1");
+    await settle();
+    const card = document.querySelector('.ns-home-card[data-card-id="storyboard"]');
+    assert.ok(card, "版式排过这张卡，首页就出这一发");
+    click(card);
+    await settle(); await settle(); await settle();
+    assert.equal(location.hash, "#/storyboard", "点卡落自己那一页：入口不再是一发弹窗");
+    const page = document.querySelector(".ns-storyboard");
+    assert.ok(page && !page.classList.contains("ns-hidden"), "显示的是故事板页视图");
+    assert.ok(page.querySelector(".ns-storyboard-host"), "页上给内嵌的故事板留出整栏宿主");
+    assert.ok(page.querySelector(".ns-storyboard-placeholder"), "编辑器被关掉后给的是那一行「打开宫格图分镜」占位");
+    assert.ok(!document.querySelector(".neo-director-overlay"), "没有弹窗：这一页不靠浮层摆内容");
+    const html = fs.readFileSync(path.join(webDir, "studio", "index.html"), "utf8");
+    assert.ok(!html.includes('data-tab="storyboard"'), "顶栏不给宫格图分镜页签：入口只有首页那一发");
+});
+
+test("故事板页标题行的列数：没有页签栏时 ✕ 落在行尾，不落在整行中间", () => {
+    const css = fs.readFileSync(path.join(webDir, "studio", "style.css"), "utf8");
+    const row = css.match(/\.ns-storyboard-host \.neo-director-embedded \.neo-director-title\s*\{[^}]*\}/);
+    assert.ok(row && /grid-template-columns:\s*1fr auto;/.test(row[0]),
+        "这一页的标题行只排左右两块：按钮组不被网格排进中间那列，✕ 回到行尾");
+    const editor = fs.readFileSync(path.join(webDir, "recipes.css"), "utf8");
+    assert.match(editor, /\.neo-director-title\s*\{[^}]*grid-template-columns:\s*1fr auto 1fr/,
+        "导演页的标题行照旧三列：页签严格居中不跟着这一页改");
+});
 
 test("离线形态：两页的运行钮写成「需要 ComfyUI」，点一下拉起内核，不发请求", async () => {
     mockShell({ prompt_reverse: false, voice: false, image_gen: false, director: false,

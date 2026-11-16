@@ -1274,7 +1274,7 @@
     width: 120px;
 }
 
-/* 两栏帧行（与故事板分镜对照表同构）：左栏首帧槽位 / 右栏提示词；非 f2v 模式隐藏帧槽位，参考素材区接管左栏 */
+/* 两栏帧行（与宫格图分镜对照表同构）：左栏首帧槽位 / 右栏提示词；非 f2v 模式隐藏帧槽位，参考素材区接管左栏 */
 .neo-director-frames-cols {
     display: grid;
     grid-template-columns: 200px 1fr;   /* 左栏首帧槽位留足宽度（约 16:9） */
@@ -1439,7 +1439,7 @@
     flex: none;
 }
 
-/* 步骤徽标（故事板分镜页四步）：序号表达先后关系——= 已完成、序号高亮 = 轮到这一步、序号变淡 = 前置未满足 */
+/* 步骤徽标（宫格图分镜页四步）：序号表达先后关系——= 已完成、序号高亮 = 轮到这一步、序号变淡 = 前置未满足 */
 .neo-director-step-badge {
     flex: none;
     display: inline-flex;
@@ -1474,7 +1474,7 @@
 /* 各步唯一动作：前置没满足时置灰（缺什么见按钮 title），不用点了才知道。
    所有动作按钮都挂 rs-btn，由 prompts.css 的 .rs-btn:disabled 统一置灰 */
 
-/* 故事板分镜页 band 0：「角色参考图」紧凑盒（标题 / 身份参考 / 素材库 + 网格都集成在盒内，独占顶部一行） */
+/* 宫格图分镜页 band 0：「角色参考图」紧凑盒（标题 / 身份参考 / 素材库 + 网格都集成在盒内，独占顶部一行） */
 .neo-director-setup-char {
     display: flex;
     flex-direction: column;
@@ -1510,7 +1510,7 @@
     display: none;
 }
 
-/* 故事板分镜页 band 1：宫格图故事板卡（拆分唯一分段来源，文字故事板由右栏智能体承接） */
+/* 宫格图分镜页 band 1：宫格图故事板卡（拆分唯一分段来源，文字故事板由右栏智能体承接） */
 .neo-director-src-card {
     display: flex;
     flex-direction: column;
@@ -1960,14 +1960,14 @@
     opacity: 1;
 }
 
-/* 页签栏：故事板分镜 / 分镜时间线（位于标题栏内） */
+/* 页签栏：宫格图分镜 / 分镜时间线（位于标题栏内） */
 .neo-director-tabs {
     display: flex;
     gap: 4px;
     flex: none;
 }
 
-/* 单段引导：新建配方落在时间线页时指路到故事板分镜（多段规划），有内容 / 多段后自动收起 */
+/* 单段引导：新建配方落在时间线页时指路到宫格图分镜（多段规划），有内容 / 多段后自动收起 */
 .neo-director-single-guide {
     display: flex;
     align-items: center;
@@ -2018,7 +2018,7 @@
     border-color: #4a4d55;
 }
 
-/* 页签内容面板（故事板分镜 / 分镜时间线） */
+/* 页签内容面板（宫格图分镜 / 分镜时间线） */
 .neo-director-pane {
     display: flex;
     flex-direction: column;
@@ -2031,7 +2031,7 @@
     padding-top: 4px;
 }
 
-/* 故事板分镜页：band（第一行来源+角色参考 / 来源卡 / 各段对照） */
+/* 宫格图分镜页：band（第一行来源+角色参考 / 来源卡 / 各段对照） */
 .neo-director-band {
     display: flex;
     flex-direction: column;
@@ -2066,7 +2066,7 @@
     min-width: 0;
 }
 
-/* 「故事板分镜」页各段两栏对照（左 = 分镜图 / 右 = 提示词） */
+/* 「宫格图分镜」页各段两栏对照（左 = 分镜图 / 右 = 提示词） */
 .neo-director-setup-segs {
     display: flex;
     flex-direction: column;

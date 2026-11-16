@@ -1352,3 +1352,17 @@ body {
     .ns-video-card .ns-video-chips::-webkit-scrollbar { display: none; }
     .ns-video-card :is(.ns-video-run, .ns-video-cancel, .ns-video-more) { flex: none; }
 }
+
+/* ====== 故事板页（首页「宫格图分镜」卡的落点）：无顶栏页签的一页，整栏都给内嵌的故事板那一面 ======
+   编辑器关掉后页上只剩那一行「打开宫格图分镜」占位——显隐纯 CSS（:has 认宿主要不要占位），JS 不养第二套状态 */
+.ns-page.ns-storyboard { margin: 0; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; height: 100%; overflow: hidden; }
+.ns-storyboard-head { flex: none; display: flex; align-items: center; gap: 12px; }
+.ns-storyboard-title { font-size: 14px; font-weight: 700; color: var(--ns-fg); }
+.ns-storyboard-hint { flex: 1; min-width: 0; font-size: 11px; color: var(--ns-dim); }
+.ns-storyboard-host { flex: 1; min-height: 0; display: flex; }
+.ns-storyboard-host .neo-director-embedded { flex: 1; }
+/* 这一页的编辑器没有页签栏：recipes.css 的标题行是 `1fr auto 1fr`（中间那列让页签严格居中），
+   少掉页签这一块，按钮组被网格自动排进中间那列，✕ 就落在整行中间——这一页收回成左右两列 */
+.ns-storyboard-host .neo-director-embedded .neo-director-title { grid-template-columns: 1fr auto; }
+.ns-storyboard-placeholder { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; font-size: 12px; color: var(--ns-dim); }
+.ns-storyboard-host:has(.neo-director-embedded) ~ .ns-storyboard-placeholder { display: none; }

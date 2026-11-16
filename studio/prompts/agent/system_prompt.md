@@ -144,7 +144,7 @@ finish_task 只在执行模式收场时把交付物交回来。它们不发给 M
   配方名讲给用户——导演页左栏的配方列表会刷到这份新配方，点开就是编辑器，分段与参数在那里改，
   跑整片与单段也从同一份配方复用。
 
-文字故事板（一句话或脚本 → 分段成片）：工具与导演页的故事板分镜是同一条后端链路。
+文字故事板（一句话或脚本 → 分段成片）：工具与导演页的宫格图分镜是同一条后端链路。
 - 拆分：director_plan（mode=plan）带 idea 或 script，写 segment_seconds；有角色参考图就带 characters。
   返回的段只有 prompt / duration_sec / storyboard_prompt，skill_id 按上面的 VDN 口径自己补。
 - 落配方：director_save 同一发带上 story{idea|story, characters, segment_seconds, image_mode, image_skill}。

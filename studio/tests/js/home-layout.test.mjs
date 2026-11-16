@@ -184,6 +184,11 @@ test("首页注册表：板块与卡一一对齐，卡表只此一份", () => {
     assert.equal(effect?.target, "skill", "特效卡走技能落点：特效是 effect_h3 这张技能的能力，不是一页自己的功能");
     assert.equal(effect?.value, "effect_h3", "特效卡钉在 effect_h3 技能上：技能改名要跟着改这张卡");
     assert.equal(effect?.defaultHidden, true, "特效卡默认不上首页：新能力不进默认首页，在添加卡片里等着加");
+    const board = hl.HOME_CARDS.find((c) => c.id === "storyboard");
+    assert.equal(board?.value, "storyboard", "宫格图分镜卡按 value 落自己那一页 #/storyboard");
+    assert.equal(board?.defaultHidden, true, "宫格图分镜卡默认不上首页：版式排过它才上首页，不在默认首页上多占一格");
+    assert.ok(!hl.HOME_TARGETS.includes("page") && board?.target === hl.LEGACY_TARGET,
+        "直连落点走旧版式那一类：新加的发不挤进自建卡能配的跳转类型里");
 });
 
 
@@ -420,7 +425,7 @@ test("卡片全移除与板块全收起：首页给出编辑入口的提示，�
     click(gridOf(home, "开始创作").querySelector(".ns-home-add-tile"));
     await flush();
     assert.deepEqual(presetTitles(dlg()),
-        ["生成图片", "生成视频", "导演视频", "3D 姿势", "智能体", "声音克隆", "特效视频"],
+        ["生成图片", "生成视频", "导演视频", "3D 姿势", "智能体", "声音克隆", "特效视频", "宫格图分镜"],
         "这一板块的预设一张不缺：卡全移出时添加卡片就是唯一的来路");
     click(presetIn(dlg(), "生成图片"));
     await flush();
@@ -533,8 +538,8 @@ test("自建卡走添加卡片这一面：表单保存才落卡，取消不动�
     click(home.querySelector(".ns-home-add-tile"));
     await flush();
     assert.ok(dlg(), "占位卡开的是这一面弹窗");
-    assert.deepEqual(presetTitles(dlg()), ["特效视频"],
-        "默认版式里默认不上首页的那一张就在这一面等着加：其余内置卡都在首页上");
+    assert.deepEqual(presetTitles(dlg()), ["特效视频", "宫格图分镜"],
+        "默认版式里默认不上首页的那两张就在这一面等着加：其余内置卡都在首页上");
     assert.ok(!dlg().querySelector(".ns-home-preset-empty"), "有预设可加时不给那一句空态");
     assert.equal(home.querySelectorAll(".ns-home-card.is-custom").length, 0, "没保存就不落卡");
     assert.ok(formCard() && fieldIn(dlg(), "跳转类型") && fieldIn(dlg(), "跳转目标"),
@@ -1078,11 +1083,11 @@ test("首页版式的 CSS 挂点：列数走自定义属性，卡上的控件与
 
 test("预设表只收被移出首页的内置卡：已在首页的一张不出，板块各管各的", () => {
     const base = hl.normalizeLayout({});
-    assert.deepEqual(hl.presetCards("create", base).map((c) => c.id), ["effect"],
-        "默认不上首页的那一张是默认版式唯一的预设：其余内置卡都在首页上");
+    assert.deepEqual(hl.presetCards("create", base).map((c) => c.id), ["effect", "storyboard"],
+        "默认不上首页的那两张是默认版式唯一的预设：其余内置卡都在首页上");
     const layout = hl.normalizeLayout({ hidden: ["paint", "gallery"] });
-    assert.deepEqual(hl.presetCards("create", layout).map((c) => c.id), ["paint", "effect"],
-        "预设收本板块没在首页上的内置卡：移出首页的那一张与默认就不上的那一张");
+    assert.deepEqual(hl.presetCards("create", layout).map((c) => c.id), ["paint", "effect", "storyboard"],
+        "预设收本板块没在首页上的内置卡：移出首页的那一张与默认就不上的那两张");
     assert.deepEqual(hl.presetCards("material", layout).map((c) => c.id), ["gallery"]);
     assert.deepEqual(hl.presetCards("edit", layout), [], "别的板块移出首页的卡不落进这一板块的预设里");
     const withCustom = hl.normalizeLayout({
@@ -1108,14 +1113,14 @@ test("内置卡删掉再加回来：落回它原来那一格，全程只改草�
     assert.ok(!dlg(), "连删两张卡不弹窗：这一面只由「添加卡片」自己开");
     click(home.querySelector(".ns-home-add-tile"));
     await flush();
-    assert.deepEqual(presetTitles(dlg()), ["生成视频", "智能体", "特效视频"],
-        "移出首页的两张都在这面等着加回来，按卡表顺序排；默认不上首页的那一张也在");
+    assert.deepEqual(presetTitles(dlg()), ["生成视频", "智能体", "特效视频", "宫格图分镜"],
+        "移出首页的两张都在这面等着加回来，按卡表顺序排；默认不上首页的那两张也在");
     click(presetIn(dlg(), "生成视频"));
     click(presetIn(dlg(), "智能体"));
     await flush();
     assert.ok(cardOf(home, "生成视频") && cardOf(home, "智能体"), "预设点一下就回到首页上");
-    assert.deepEqual(presetTitles(dlg()), ["特效视频"],
-        "两张加回去了：这一面只剩默认不上首页的那一张，它不因为别的卡加回来而上首页");
+    assert.deepEqual(presetTitles(dlg()), ["特效视频", "宫格图分镜"],
+        "两张加回去了：这一面只剩默认不上首页的那两张，它们不因为别的卡加回来而上首页");
     assert.equal(POSTS(), 0, "删掉与加回来这一段都不落盘");
     click(home.querySelector(".ns-home-edit-entry"));
     await flush(40);

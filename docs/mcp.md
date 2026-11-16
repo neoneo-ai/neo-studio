@@ -168,7 +168,7 @@ director_plan(mode=plan, idea|script, segment_seconds[, characters])    → 分�
 → segment_run / director_run → task_status 轮询 → get_media
 ```
 
-这条链与导演页 📖 故事板分镜页是同一套后端。`director_keyframes` 返回的 `segments` / `shared` / `story`
+这条链与导演页 📖 宫格图分镜页是同一套后端。`director_keyframes` 返回的 `segments` / `shared` / `story`
 必须原样喂回 `director_save` 才生效——保存是整份覆盖，漏带 `story` 会把主题与角色参考一起清掉。
 非全参考段的关键帧直接设成首帧（i2v / fl2v 吃这张图），全参考（r2v）段进参考图池；只写 `storyboard`
 时后端只把它当多帧分块锚点，段还是纯文生视频。

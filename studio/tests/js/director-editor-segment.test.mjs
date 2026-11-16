@@ -724,14 +724,14 @@ test("导演编辑器单例：新建（未命名）编辑器开着时再开新�
     assert.equal(document.querySelectorAll(".neo-director-segs .neo-director-seg").length, 1, "重载为刚点的 1 段配方");
 });
 
-test("导演编辑器：故事板分镜页两步徽标（① 宫格拆分 → ② 提示词）与动作按前置置灰", async () => {
+test("导演编辑器：宫格图分镜页两步徽标（① 宫格拆分 → ② 提示词）与动作按前置置灰", async () => {
     const { openDirectorEditor } = await import("../../web/director.js");
     appState.graph = { _nodes: [] };
     mockRoute("/rs_prompts/skills", () => jsonResponse([{ id: "sk-a", name: "技能 A", gen_video: true }]));
 
     await openDirectorEditor(null);   // 新建：1 个空段、无宫格图
     await sleep(60);
-    Array.from(document.querySelectorAll(".neo-director-tab")).find((t) => t.textContent.includes("故事板分镜")).click();
+    Array.from(document.querySelectorAll(".neo-director-tab")).find((t) => t.textContent.includes("宫格图分镜")).click();
     await sleep(20);
     const story = document.querySelector(".neo-director-pane-story");
 
@@ -912,7 +912,7 @@ test("导演编辑器：打开旧配方只回显宫格拆分字段，文字故�
     await openDirectorEditor(existing, null);
     await sleep(60);
 
-    Array.from(document.querySelectorAll(".neo-director-tab")).find((t) => t.textContent.includes("故事板分镜")).click();
+    Array.from(document.querySelectorAll(".neo-director-tab")).find((t) => t.textContent.includes("宫格图分镜")).click();
     await sleep(20);
 
     // 宫格拆分字段回显：全局故事参考 + 角色参考图；切分方式回到默认自动
@@ -1045,8 +1045,8 @@ test("导演编辑器：记住上次打开时停的页签（未保存直接关�
     await sleep(60);
 
     const tabStory = Array.from(document.querySelectorAll(".neo-director-tab"))
-        .find((t) => t.textContent.includes("故事板分镜"));
-    tabStory.click();   // 编辑到一半切到故事板分镜页，不保存直接关
+        .find((t) => t.textContent.includes("宫格图分镜"));
+    tabStory.click();   // 编辑到一半切到宫格图分镜页，不保存直接关
     await sleep(20);
     document.querySelector(".neo-director-close").click();
     await sleep(20);
@@ -1054,9 +1054,9 @@ test("导演编辑器：记住上次打开时停的页签（未保存直接关�
     await openDirectorEditor(existing, null);
     await sleep(60);
     const tabs = Array.from(document.querySelectorAll(".neo-director-tab"));
-    const story2 = tabs.find((t) => t.textContent.includes("故事板分镜"));
+    const story2 = tabs.find((t) => t.textContent.includes("宫格图分镜"));
     const timeline2 = tabs.find((t) => t.textContent.includes("分镜时间线"));
-    assert.ok(story2.classList.contains("active"), "重开落回上次停的故事板分镜页");
+    assert.ok(story2.classList.contains("active"), "重开落回上次停的宫格图分镜页");
     assert.equal(timeline2.classList.contains("active"), false, "分镜时间线页不激活");
 });
 

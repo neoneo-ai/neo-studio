@@ -375,7 +375,7 @@ test("导演编辑器：打开带分镜图的旧配方 → 不报 TDZ，段行�
     await openDirectorEditor(existing);   // 修复前：seg.storyboard 触发 row TDZ，此处会 reject
     await sleep(60);
 
-    // 时间轴段行：不再有「分镜图」缩略行（分镜图只在「故事板分镜」页对照表第一列展示），
+    // 时间轴段行：不再有「分镜图」缩略行（分镜图只在「宫格图分镜」页对照表第一列展示），
     // 但 dataset 仍记录已存分镜图与提示词快照（保存时随 storyboard 落盘）
     const rows = Array.from(document.querySelectorAll(".neo-director-seg"));
     assert.equal(rows.length, 2);
@@ -384,8 +384,8 @@ test("导演编辑器：打开带分镜图的旧配方 → 不报 TDZ，段行�
     assert.equal(rows[0].dataset.storyboard, "sb_0_ab12cd.png", "dataset 记录已存分镜图（保存时随 storyboard 落盘）");
     assert.equal(rows[0].dataset.storyboardPrompt, "一只机器猫", "dataset 记录分镜提示词快照");
 
-    // 「故事板分镜」页对照表：第一列 = 分镜图（逐段图片分镜方式 → 该段关键帧）
-    const tabSetup = Array.from(document.querySelectorAll(".neo-director-tab")).find((t) => t.textContent.includes("故事板分镜"));
+    // 「宫格图分镜」页对照表：第一列 = 分镜图（逐段图片分镜方式 → 该段关键帧）
+    const tabSetup = Array.from(document.querySelectorAll(".neo-director-tab")).find((t) => t.textContent.includes("宫格图分镜"));
     tabSetup.click();
     await sleep(20);
     const setupItems = Array.from(document.querySelectorAll(".neo-director-setup-segs .neo-director-story-seg-item"));
@@ -412,7 +412,7 @@ test("导演编辑器：打开带分镜图的旧配方 → 不报 TDZ，段行�
     await sleep(20);
 });
 
-test("导演编辑器：故事板分镜对照表拖拽手柄重排各段（回写 segsWrap 并刷新）", async () => {
+test("导演编辑器：宫格图分镜对照表拖拽手柄重排各段（回写 segsWrap 并刷新）", async () => {
     const { openDirectorEditor } = await import("../../web/director.js");
     appState.graph = { _nodes: [] };
     mockRoute("/rs_prompts/skills", () => jsonResponse([{ id: "sk-a", name: "技能 A", gen_video: true }]));
@@ -429,7 +429,7 @@ test("导演编辑器：故事板分镜对照表拖拽手柄重排各段（回�
     await openDirectorEditor(existing);
     await sleep(60);
 
-    const tabSetup = Array.from(document.querySelectorAll(".neo-director-tab")).find((t) => t.textContent.includes("故事板分镜"));
+    const tabSetup = Array.from(document.querySelectorAll(".neo-director-tab")).find((t) => t.textContent.includes("宫格图分镜"));
     tabSetup.click();
     await sleep(20);
 
@@ -481,7 +481,7 @@ test("导演编辑器：对照表分镜图缩略点击打开 Lightbox（←/→ 
     await openDirectorEditor(existing);
     await sleep(60);
 
-    const tabSetup = Array.from(document.querySelectorAll(".neo-director-tab")).find((t) => t.textContent.includes("故事板分镜"));
+    const tabSetup = Array.from(document.querySelectorAll(".neo-director-tab")).find((t) => t.textContent.includes("宫格图分镜"));
     tabSetup.click();
     await sleep(20);
     const setupItems = Array.from(document.querySelectorAll(".neo-director-setup-segs .neo-director-story-seg-item"));

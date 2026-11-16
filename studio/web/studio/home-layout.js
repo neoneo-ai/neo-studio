@@ -32,6 +32,9 @@ export const HOME_CARDS = [
     // 特效是这张技能的全部能力，不是一页自己的功能：卡片走技能落点，进视频页就把 effect_h3 选中，
     // 特效芯片由那张技能自己铺出来——技能页删了这张技能，这张卡跟着落技能页（goSkillApply 那条门）。
     { id: "effect", section: "create", icon: "sparkles", title: "特效视频", sub: "选一枚镜头特效，出一段片", target: "skill", value: "effect_h3", defaultHidden: true },
+    // 宫格图分镜是装配层的一页（`#/storyboard`，顶栏不给它页签）：页上只铺高级模式的故事板那一面。
+    // 宫格图拆分 → 逐格出提示词 → 生成配方全在那一页里走现成的链，整片参数与出片留在导演页。
+    { id: "storyboard", section: "create", icon: "image", title: "宫格图分镜", sub: "宫格图拆成多段，逐格出提示词", target: "page", value: "storyboard", defaultHidden: true },
     { id: "edit-normal", section: "edit", icon: "pencil", title: "图片编辑", sub: "写下要改成什么样，整图重绘", target: "edit", value: "normal" },
     { id: "edit-outpaint", section: "edit", icon: "maximize", title: "扩图", sub: "拖框定四边留白，补全周边场景", target: "edit", value: "outpaint" },
     { id: "edit-local", section: "edit", icon: "pencil", title: "局部", sub: "涂抹要改的区域，高分重绘并合回原图", target: "edit", value: "local" },

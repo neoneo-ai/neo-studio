@@ -140,7 +140,7 @@ MiniMax H3 video generation: single-segment BUNDLE and multi-segment director re
   with the prompts embedded in the original. Rows × columns can be set by hand; when detection fails it falls
   back to a single cell or an even split. Grid images are produced externally, and an image card in the asset
   panel can be dragged straight onto the node.
-- **Editor entry**: the "🧩 Grid storyboard" card on the "📖 Storyboard" page, see [recipes.md](recipes.md).
+- **Editor entry**: the "🧩 Grid storyboard" card on the "📖 Grid-image storyboard" page, see [recipes.md](recipes.md).
   Splitting replaces the existing segments: each cell becomes that segment's first frame and storyboard image
   (`i2v`), and the shared aspect ratio follows the panel ratio automatically.
 

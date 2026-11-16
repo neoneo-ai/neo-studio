@@ -186,7 +186,7 @@ director_plan(mode=plan, idea|script, segment_seconds[, characters])   → segme
 → segment_run / director_run → poll task_status → get_media
 ```
 
-This is the same backend the director page's 📖 Storyboard tab uses. The `segments` / `shared` / `story` that
+This is the same backend the director page's 📖 Grid-image storyboard tab uses. The `segments` / `shared` / `story` that
 `director_keyframes` returns have to go back to `director_save` unchanged — a save replaces the whole recipe, and
 dropping `story` wipes the idea and the character references with it. A non-r2v segment gets its keyframe as the
 first frame (i2v / fl2v use it), an r2v segment gets it in its reference pool; writing only `storyboard` leaves the

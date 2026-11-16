@@ -10,7 +10,7 @@ import { $el } from "./shim/ui.js";
 import { configureCanvasOrigin } from "../js/core/canvas-origin.js";
 
 import "../gallery.js";   // 注册 comfy.neo.gallery 扩展（NeoGallery + 侧栏 tab 定义）
-import { openDirectorEditor, createSegmentOps, createSharedConfigSection, DIRECTOR_RECIPE_SAVED_EVENT, SEG_MODES, MODE_LABELS, LEGACY_MODE_MAP } from "../director.js";
+import { openDirectorEditor, currentDirectorEditor, createSegmentOps, createSharedConfigSection, DIRECTOR_RECIPE_SAVED_EVENT, SEG_MODES, MODE_LABELS, LEGACY_MODE_MAP } from "../director.js";
 import { setPaintHost, openGenMaterialDialog, openImageEditDialog, openImageEditMode, setVideoReuseOpen, setVideoPageJump, openVideoReuse, reuseModelOverlay, chipButton, ratioGlyph, skillParamsChip } from "../gallery-gen.js";
 import { createFramePlayer, DOCK_PREVIEW_SIDE, AGENT_PREVIEW_SIDE } from "../live-preview.js";
 import { createRecipesPanel, listRecipes } from "../recipes.js";
@@ -41,6 +41,8 @@ const REPO_URL = "https://github.com/neoneo-ai/neo-studio";   // 设置「关于
 let directorPanelOpts = null;   // 导演页配方面板选项（buildDirector 设置；含 onSelect 回传选中配方）
 let onDirectorShown = null;     // 进导演页时补拉的活：隐藏期间跳过的 director_spec 在进本页时补一次
 let directorOpenRecipe = null;  // 导演页建好时挂上的「按名字开编辑器」：首页配方卡的 ?recipe= 深链走这条路
+let storyboardReleaseEditor = null;   // 故事板页建好时挂上的「让位」：导演页开全量编辑器前先收回内嵌在故事板页那一份
+let onStoryboardShown = null;    // 进故事板页时补拉的活：视图常驻显隐，回到本页要把内嵌编辑器补铺好
 
 // ====== 智能体的界面上下文：宿主只交事实，面板画进上下文条并随请求体交后端进系统提示词 ======
 // 只交当前选中页签自己那一栏：导演页的配方、素材页的目录各留自己那页，切到技能 / 设置页
@@ -124,6 +126,7 @@ function showView(name) {
     notifyAgentCtx();
     document.getElementById("ns-settings-btn")?.classList.toggle("ns-head-btn-on", name === "settings");
     if (name === "director" && onDirectorShown) onDirectorShown();
+    if (name === "storyboard" && onStoryboardShown) onStoryboardShown();   // 内嵌编辑器在隐藏期间被单例重载路径关过：回本页补铺一次
     // 画廊单例的宿主跟着视图走：素材页 = 整片宿主；弹窗开着 = 弹窗宿主；其余页 = 交还素材页 / 收留宿主
     // 一次只挂一处：切页时不会两次 render 抢同一个元素（后落的那次会把画廊拽回上一页）
     if (name === "gallery") {
@@ -290,7 +293,10 @@ const buildVoiceClone = createVoiceCloneView({
 });
 
 onSidebarTabChange((id) => {
-    if (currentView !== "director" && currentView !== "edit") return;
+    // 把「侧栏写入」当开素材库弹窗用的就这三页：导演页、图片编辑页，还有故事板页——它铺的正是导演编辑器
+    // 那一面，角色素材库 / 宫格图素材库走的是同一条写入，门里少了这一页，那两颗钮就是点下去没反应。
+    // 生成素材页的内嵌面板自己接 neo:media-pick，不经这一条。
+    if (currentView !== "director" && currentView !== "edit" && currentView !== "storyboard") return;
     if (id !== "neo.gallery") { libModal?.close(); return; }
     // 编辑页两个取用落点：参考图菜单的「素材库取用」把 addRefImages 经 neo:media-pick 交来（取的是参考图），
     // 悬浮「素材库」按钮自己交来 editPickImage（取的是原图）。回调一次一清：留着它，下一次从悬浮按钮开的
@@ -839,10 +845,13 @@ async function buildDirector(el) {
         renderRecipeSelect();
     }
 
-    function openEditor() {
+    function openEditor(opts = null) {
         if (!currentName) { toast(t("先选一份导演配方")); return; }
+        // 编辑器全窗口只有一份：故事板页把同一份配方内嵌在自己那一页时，先让它让位再开浮层。
+        // 那一面有未保存修改时让位失败（确认条长在隐藏的视图里点不到，静默关窗就是丢改动），这一发就此收住。
+        if (storyboardReleaseEditor?.() === false) return;
         // 编辑器是浮层（桌面端不再内嵌宿主）：底部「保存并生成整片」保存成功后交本页直接提交
-        openDirectorEditor(findItem(currentName) || { name: currentName }, afterEditorSaved, selected, { onSaveAndRun: () => submitGenerate() });
+        openDirectorEditor(findItem(currentName) || { name: currentName }, afterEditorSaved, selected, { onSaveAndRun: () => submitGenerate(), ...opts });
     }
     async function afterEditorSaved() {
         await refreshRecipeItems();
@@ -1165,6 +1174,58 @@ async function buildDirector(el) {
         if (findItem(name)) await openRecipe(name);
     };
     await refreshRecipeItems();
+}
+
+
+// ====== 故事板页（首页「宫格图分镜」卡的落点）：只铺故事板那一面，无顶栏页签、无弹窗 ======
+// 内容全在导演编辑器里（角色参考图 / 宫格图拆分 / 各段对照），这一页只做三件事：从空白配方起手、
+// 把编辑器内嵌进本页（storyOnly = 无页签、时间线那一面收起）、把整页参数与出片那一面留给导演页。
+async function buildStoryboard(el) {
+    el.classList.add("ns-storyboard");
+    const head = $el("div", { className: "ns-storyboard-head" }, [
+        $el("span", { className: "ns-storyboard-title", textContent: t("宫格图分镜") }),
+        $el("span", { className: "ns-storyboard-hint", textContent: t("空白配方起手，点「保存」才落盘；整片参数与逐段时长、出片都在导演页") }),
+        $el("button", { className: "ns-btn", type: "button", textContent: t("去导演页"), onclick: () => go("director") }),
+    ]);
+    const host = $el("div", { className: "ns-storyboard-host" });
+    // 编辑器关掉（标题栏 ✕）后这一页不能是空白：留一行「打开宫格图分镜」占位（同生成素材页内嵌关闭那条口径）
+    const placeholder = $el("div", { className: "ns-storyboard-placeholder" }, [
+        $el("span", { textContent: t("宫格图分镜已关闭") }),
+        $el("button", { className: "ns-btn", type: "button", textContent: t("打开宫格图分镜"), onclick: () => ensureBoard() }),
+    ]);
+    el.append(head, host, placeholder);
+
+    /** 收回「不属于这一页」的那份编辑器：干净就关掉；有未保存修改就停在原地请用户自己处理。
+     *  true = 这一页可以铺自己的那一面。编辑器全窗口只有一份，两处不能同时钉着同一份配方。 */
+    function releaseCur() {
+        const cur = currentDirectorEditor();
+        if (!cur) return true;
+        if (host.contains(cur.overlay)) return true;   // 本页钉着的就是它：不重建
+        if (!cur.isDirty()) { cur.close(); return true; }
+        toast(t("编辑器有未保存的修改，先保存或放弃"));
+        return false;
+    }
+
+    async function ensureBoard() {
+        if (!releaseCur()) return;
+        if (host.querySelector(".neo-director-embedded")) return;   // 已铺好：切页回来不重建（含这一页刚起手、还没落盘的那一份）
+        // 这一页从空白配方起手，不认导演页那份选中态：上一次的分镜铺在面前，新建就没有位置了。
+        // existing 传 null 走的是编辑器自己的新建那一路（一段空段、配方名空着）：底部「保存」按名字写盘，
+        // 写成功广播「配方已保存」，导演页据此选中它——这一页不提前落盘，也不养第二条写路径
+        await openDirectorEditor(null, null, -1, { container: host, storyOnly: true });
+    }
+
+    onStoryboardShown = () => { ensureBoard().catch(e => console.error("[Neo Studio] storyboard open failed:", e)); };
+    // 导演页「高级模式」要开的是全量编辑器（含时间线那一面）：本页钉着同一份配方时先收回内嵌那一份
+    storyboardReleaseEditor = () => {
+        const cur = currentDirectorEditor();
+        if (!cur || !host.contains(cur.overlay)) return true;   // 本页没钉编辑器：导演页照旧
+        if (!cur.isDirty()) { cur.close(); return true; }
+        toast(t("故事板有未保存的修改，先保存或放弃"));
+        go("storyboard");   // 确认条就在这页里：把人带去能点到的那一面
+        return false;
+    };
+    await ensureBoard();
 }
 
 
@@ -3198,6 +3259,7 @@ function route() {
     else if (name === "frames") ensureView("frames", buildFrames);
     else if (name === "reverse") ensureView("reverse", buildReverse);
     else if (name === "voice") ensureView("voice", buildVoiceClone);
+    else if (name === "storyboard") ensureView("storyboard", buildStoryboard);   // 首页卡落的那一页：顶栏没有它的页签
     else if (name === "settings") {
         ensureView("settings", buildSettings);
         // 深链 #/settings?tab=mcp：智能体页「MCP」入口跳来这，视图常驻时也要落到那一栏

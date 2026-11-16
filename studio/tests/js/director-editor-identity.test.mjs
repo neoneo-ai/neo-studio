@@ -26,12 +26,12 @@ test("导演编辑器：身份参考开关默认开，关掉后随 shared 落盘
         segments: [{ skill_id: "sk-a", prompt: "p0", duration_sec: 5 }],
     });
     await sleep(60);
-    const tabSetup = Array.from(document.querySelectorAll(".neo-director-tab")).find((t) => t.textContent.includes("故事板分镜"));
+    const tabSetup = Array.from(document.querySelectorAll(".neo-director-tab")).find((t) => t.textContent.includes("宫格图分镜"));
     tabSetup.click();
     await sleep(30);
     const setupPane = document.querySelector(".neo-director-pane-story");
     const chk = setupPane.querySelector(".neo-director-identity-refs");
-    assert.ok(chk, "故事板分镜页有身份参考开关");
+    assert.ok(chk, "宫格图分镜页有身份参考开关");
     assert.equal(chk.checked, true, "默认启用");
     assert.ok(setupPane.querySelector(".neo-director-setup-char .neo-director-identity-refs"),
         "开关集成在「角色参考图」盒标题行内");
@@ -54,7 +54,7 @@ test("导演编辑器：身份参考开关关掉 → shared.identity_refs=false�
         segments: [{ skill_id: "sk-a", prompt: "p0", duration_sec: 5 }],
     });
     await sleep(60);
-    const tabSetup = Array.from(document.querySelectorAll(".neo-director-tab")).find((t) => t.textContent.includes("故事板分镜"));
+    const tabSetup = Array.from(document.querySelectorAll(".neo-director-tab")).find((t) => t.textContent.includes("宫格图分镜"));
     tabSetup.click();
     await sleep(30);
     const chk = document.querySelector(".neo-director-pane-story .neo-director-identity-refs");
@@ -76,7 +76,7 @@ test("导演编辑器：身份参考开关关掉 → shared.identity_refs=false�
         segments: [{ skill_id: "sk-a", prompt: "p0", duration_sec: 5 }],
     });
     await sleep(60);
-    Array.from(document.querySelectorAll(".neo-director-tab")).find((t) => t.textContent.includes("故事板分镜")).click();
+    Array.from(document.querySelectorAll(".neo-director-tab")).find((t) => t.textContent.includes("宫格图分镜")).click();
     await sleep(30);
     const chk2 = document.querySelector(".neo-director-pane-story .neo-director-identity-refs");
     chk2.checked = false;

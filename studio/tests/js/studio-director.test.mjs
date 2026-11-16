@@ -231,10 +231,17 @@ function bootMocks() {
     mockRoute("/userdata/neo_recipes_data.json", jsonResponse({}));
 }
 
-async function boot() {
+async function boot(layout = null, noRecipes = false) {
     resetEnv();
     clearRoutes();
     bootMocks();
+    // 首页版式桩：传了就让「添加卡片」里那张预设卡排上首页（宫格图分镜卡的直达用例要它出格）
+    if (layout) mockRoute("/neo_home/layout", jsonResponse(layout));
+    // 盘上一份导演配方都没有：清空桩里的配方表再建页（save 桩认新名字，新建之后列表与 load 才读得回落盘的那一份）
+    if (noRecipes) {
+        for (const k of Object.keys(RECIPE_BY_NAME)) delete RECIPE_BY_NAME[k];
+        for (const k of Object.keys(SPEC_BY_RECIPE)) delete SPEC_BY_RECIPE[k];
+    }
     document.body.innerHTML = studioBody;
     window.location.hash = "#/home";
     const shim = await import("../../web/studio/shim/app.js");
@@ -747,6 +754,82 @@ test("导演页高级模式：整片编辑器以浮层打开，保存后本页�
     await until(() => loads("R1") > loadsBefore, "保存后本页重读该配方");
     assert.equal(recipeSel().value, "R1", "保存后顶栏下拉选中这一份");
     assert.ok(!document.querySelector(".neo-director-overlay"), "保存后关掉编辑器");
+});
+
+// 首页「宫格图分镜」卡的落点：装配层给它自己那一页（无顶栏页签），页上只铺编辑器现成的那一面
+// （角色参考图 → 宫格拆分 → 逐格提示词 → 各段对照），不新建页面内容、不新建第二套拆分链
+test("首页「宫格图分镜」卡：落自己那一页，编辑器内嵌铺好——无浮层、无页签、时间线那一面收起", async () => {
+    await boot({ order: { create: ["storyboard"] } });
+    const card = document.querySelector('.ns-home-card[data-card-id="storyboard"]');
+    assert.ok(card, "版式排过这张卡，首页才出这一发：默认首页上不给它占格");
+    click(card);
+    await settle(); await settle();
+    assert.equal(location.hash, "#/storyboard", "卡片落自己那一页：不是一发弹窗");
+    const page = document.querySelector(".ns-storyboard");
+    assert.ok(page && !isHidden(page), "显示的就是故事板页视图");
+    assert.ok(!document.querySelector('nav .ns-tab[data-tab="storyboard"]'), "顶栏不给这一页页签：入口只有首页那一发");
+    assert.ok(!document.querySelector(".neo-director-overlay"), "没有弹窗");
+    await until(() => document.querySelector(".ns-storyboard-host .neo-director-embedded"), "编辑器铺进故事板页的宿主");
+    const panel = document.querySelector(".ns-storyboard-host .neo-director-embedded");
+    assert.equal(panel.querySelector(".neo-director-name").value, "", "铺的是空白新配方：不认导演页下拉里显示的那一份");
+    assert.ok(panel.querySelector(".neo-director-name-empty"), "标题行落「未命名配方」占位：这一页起手就是没名字的新配方");
+    assert.equal(recipeSel().value, "R1", "导演页的选中态不动：进这一页不替用户换配方");
+    assert.equal(posts("/rs_recipes/save").length, 0, "点卡这一发不落盘：没写完的草稿不预先长出一张卡");
+    assert.ok(!panel.querySelector(".neo-director-tabs"), "没有页签栏：这一页只有故事板那一面");
+    assert.equal(panel.querySelector(".neo-director-pane-story").style.display, "", "故事板那一面铺满整栏");
+    assert.equal(panel.querySelector(".neo-director-pane-timeline").style.display, "none", "时间线那一面收起：这一页不出时间线");
+    assert.ok(panel.querySelector(".neo-director-grid-split"), "页上就是现成的宫格拆分那一块：入口不新建第二套拆分");
+    assert.ok(panel.querySelector(".neo-director-setup-segs"), "宫格拆分写出来的各段对照块在页上");
+    assert.ok(panel.querySelector(".neo-director-name"), "标题行留着配方名：这一页编辑的就是这份配方");
+    assert.equal(panel.querySelectorAll(".neo-director-foot .neo-director-save").length, 1, "底部只留「保存」这一发");
+    assert.ok(!panel.querySelector(".neo-director-cancel"), "不给「取消」：这一页没有要取消的窗口");
+});
+
+test("故事板页：空盘进页铺的也是空白编辑器，一发不落盘；第二下点卡不重建", async () => {
+    await boot({ order: { create: ["storyboard"] } }, true);   // 盘上一份导演配方都没有
+    const card = document.querySelector('.ns-home-card[data-card-id="storyboard"]');
+    click(card);
+    await until(() => document.querySelector(".ns-storyboard-host .neo-director-embedded"), "空盘进故事板页也铺好那一面");
+    assert.equal(posts("/rs_recipes/save").length, 0,
+        `空盘进页一发不落盘：写完点「保存」才建卡（状态：${statusEl()?.textContent}）`);
+    assert.equal(recipeSel().value, "", "导演页没有配方时也不替它新建一份：这一页不动那一页的选中态");
+    clickTab("home");
+    click(card);
+    await settle(); await settle();
+    assert.equal(document.querySelectorAll(".ns-storyboard-host .neo-director-embedded").length, 1,
+        "连点两次只有一套内嵌：回到本页不重建");
+});
+
+test("故事板页的素材库按钮：侧栏写入开本页那扇弹窗，不是点下去没反应", async () => {
+    await boot({ order: { create: ["storyboard"] } });
+    click(document.querySelector('.ns-home-card[data-card-id="storyboard"]'));
+    await until(() => document.querySelector(".ns-storyboard-host .neo-director-embedded"), "故事板页铺好内嵌的那一套");
+    const panel = document.querySelector(".ns-storyboard-host .neo-director-embedded");
+    const opened = () => document.querySelector(".ns-libmodal:not(.ns-hidden)");
+    click(panel.querySelector(".neo-director-grid-src-actions .neo-director-ff-lib"));   // 抢跑一步：取用回调经 neo:media-pick 交来
+    const shim = await import("../../web/studio/shim/app.js");
+    shim.app.extensionManager.sidebarTab.activeSidebarTabId = "neo.gallery";   // media-transfer 那条写入（单测里 scripts/app.js 是通用替身，转交落在 shim 这一层）
+    await settle(); await settle();
+    assert.ok(opened(), "宫格图素材库开的是现成那扇素材库弹窗：这一页在侧栏写入的门里");
+    assert.ok(document.querySelector('.ns-gallery-host[data-lib-scope="storyboard"]'),
+        "画廊替这一页上屏，目录浏览记录记在本页那一格：不与导演页串一份");
+    click(opened().querySelector(".ns-libmodal-close"));
+    await settle();
+    assert.ok(!opened(), "✕ 收窗：不留第二套状态");
+});
+
+
+test("故事板页那份空白内嵌是干净的：导演页开全量编辑器时这一页让位", async () => {
+    await boot({ order: { create: ["storyboard"] } });
+    click(document.querySelector('.ns-home-card[data-card-id="storyboard"]'));
+    await until(() => document.querySelector(".ns-storyboard-host .neo-director-embedded"), "故事板页铺好内嵌的那一套");
+    await openDirector();   // 进导演页并等首份配方自动选中（R1）
+    // 导演页「高级模式」要的是全量编辑器（含时间线那一面）：全窗口只有一份编辑器，这一页那份干净就收回让位
+    click(barBtn("高级模式"));
+    await settle(); await settle();
+    await until(() => document.querySelector(".neo-director-overlay"), "浮层编辑器开在导演页");
+    assert.ok(!document.querySelector(".ns-storyboard-host .neo-director-embedded"),
+        "故事板页那份内嵌让位：同一份配方不在两处同时钉着");
 });
 
 test("导演页该段 ⋯：入口在段块右上角，复制到下面一段、前移改顺序（写回同一条保存链）", async () => {

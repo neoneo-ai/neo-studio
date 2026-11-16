@@ -244,18 +244,29 @@ Execution details: [h3-video-gen.md](h3-video-gen.md).
   view, add rain sounds…)** + **Generate / edit** - one natural-language instruction generates or rewrites
   the prompt for this segment, streamed token by token into the box. It only edits text and submits no run.
 
-### Storyboard page
+### Grid-image storyboard page
 
-The editor's title bar carries two tabs: **📖 Storyboard** (character references / grid-image split /
+The editor's title bar carries two tabs: **📖 Grid-image storyboard** (character references / grid-image split /
 per-segment comparison) and **🎞️ Storyboard timeline** (generation mode / unified skill / chunk seconds +
 shared resolution + timeline + per-segment cards). On open it returns to the tab this recipe was last on; with
 no memory it opens on the timeline page — a single-segment recipe (one image-to-video or full-reference clip) is
 just a timeline plus one prompt box. A blank new recipe shows a one-line guide at the top of the timeline page
-("split a grid sheet into several segments? → 📖 Storyboard") that switches tabs and disappears once a second
+("split a grid sheet into several segments? → 📖 Grid-image storyboard") that switches tabs and disappears once a second
 segment exists.
 
+**The home page's 宫格图分镜 preset card** (absent from the default home - add it back through 编辑首页 → 添加卡片)
+lands on its own page `#/storyboard`: the page lays the editor's storyboard side straight into itself (character
+references / grid-image split / per-segment comparison) — no popup, no tab bar, the timeline side stays folded away,
+and the recipe name plus the footer 保存 are the editor's own. The entry always lays the editor's own new-recipe path -
+a blank recipe with an empty name box (the title reads 未命名配方): it never adopts the recipe the director page's
+dropdown shows and never saves one for it, and the grid split with the per-cell prompts reaches the disk only when the
+footer 保存 writes it, after which the director page selects it. When this page holds the embedded copy, the director
+stays where it is — nothing is closed silently). The top bar gives it no tab — the grid split, the per-cell prompts
+and the recipe save all stay on the chain that already exists; film settings, per-segment durations and rendering
+stay on the director page.
+
 **A single-segment recipe only shows what one segment needs**: with one segment, "chunk seconds" is hidden (there
-is no second segment to merge) and the Storyboard page replaces the per-segment comparison table and its prompt
+is no second segment to merge) and the grid-image storyboard page replaces the per-segment comparison table and its prompt
 generation button with a one-line hint (write the prompt at the bottom of the timeline page). Both come back as
 soon as a second segment exists.
 

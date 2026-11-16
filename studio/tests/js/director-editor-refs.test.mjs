@@ -62,7 +62,7 @@ test("导演编辑器：非混合模式统一选择技能（紧邻生成模式�
     });
     await sleep(60);
 
-    // 位置：分镜时间线页首行「生成模式」之后（生成设置归时间线页，故事板分镜与生成模式无关）
+    // 位置：分镜时间线页首行「生成模式」之后（生成设置归时间线页，宫格图分镜与生成模式无关）
     const stRow = document.querySelector(".neo-director-pane-timeline .neo-director-shared");
     const kids = Array.from(stRow.children);
     const gSkillSel = stRow.querySelector(".neo-director-global-skill");
@@ -70,7 +70,7 @@ test("导演编辑器：非混合模式统一选择技能（紧邻生成模式�
     const gSkillLabel = stRow.querySelector(".neo-director-global-skill-label");
     assert.equal(kids.indexOf(gSkillLabel), kids.indexOf(stRow.querySelector(".neo-director-mode")) + 1, "技能标签紧邻生成模式之后");
     assert.equal(kids.indexOf(gSkillSel), kids.indexOf(gSkillLabel) + 1, "技能下拉紧随其标签");
-    assert.equal(document.querySelector(".neo-director-pane-story .neo-director-global-skill"), null, "故事板分镜页没有统一技能框（生成设置只在时间轴页）");
+    assert.equal(document.querySelector(".neo-director-pane-story .neo-director-global-skill"), null, "宫格图分镜页没有统一技能框（生成设置只在时间轴页）");
     assert.equal(gSkillSel.value, "sk-t2v", "初始取首段技能");
     assert.equal(gSkillLabel.style.display, "", "标签可见");
 
@@ -82,10 +82,10 @@ test("导演编辑器：非混合模式统一选择技能（紧邻生成模式�
     assert.deepEqual(Array.from(document.querySelectorAll(".neo-director-seg .neo-director-skill")).map((s) => s.value),
         ["sk-t2v", "sk-t2v"], "打开即按统一技能归一各段");
 
-    // 时间轴页统一技能改选 → 各段跟随（故事板分镜页没有重复的技能框）
+    // 时间轴页统一技能改选 → 各段跟随（宫格图分镜页没有重复的技能框）
     gSkillSel.value = "sk-t2v2";
     gSkillSel.dispatchEvent(new window.Event("change"));
-    assert.equal(document.querySelector(".neo-director-pane-story .neo-director-global-skill"), null, "故事板分镜页不重复统一技能框");
+    assert.equal(document.querySelector(".neo-director-pane-story .neo-director-global-skill"), null, "宫格图分镜页不重复统一技能框");
     assert.deepEqual(Array.from(document.querySelectorAll(".neo-director-seg .neo-director-skill")).map((s) => s.value),
         ["sk-t2v2", "sk-t2v2"], "统一技能同步到各段");
 
@@ -214,7 +214,7 @@ test("导演编辑器：参考素材区标题行「素材库」按钮打开/收�
 });
 
 
-test("导演编辑器：「故事板分镜」页签——时间轴页生成模式联动本页素材区", async () => {
+test("导演编辑器：「宫格图分镜」页签——时间轴页生成模式联动本页素材区", async () => {
     const { openDirectorEditor } = await import("../../web/director.js");
     appState.graph = { _nodes: [] };
     mockRoute("/rs_prompts/skills", () => jsonResponse([{ id: "sk-a", name: "技能 A", gen_video: true }]));
@@ -228,26 +228,26 @@ test("导演编辑器：「故事板分镜」页签——时间轴页生成模�
     });
     await sleep(60);
 
-    // 标题栏：分镜视频导演 + 两个页签：故事板分镜 / 分镜时间线
+    // 标题栏：分镜视频导演 + 两个页签：宫格图分镜 / 分镜时间线
     assert.equal(document.querySelector(".neo-director-title-left > span").textContent, "分镜视频导演", "弹窗标题 = 分镜视频导演");
     const tabs = Array.from(document.querySelectorAll(".neo-director-tab"));
     assert.equal(tabs.length, 2, "标题栏共两个页签");
-    const tabStory = tabs.find((t) => t.textContent.includes("故事板分镜"));
-    assert.ok(tabStory, "含「故事板分镜」页签");
+    const tabStory = tabs.find((t) => t.textContent.includes("宫格图分镜"));
+    assert.ok(tabStory, "含「宫格图分镜」页签");
     assert.ok(tabs.find((t) => t.textContent.includes("分镜时间线")), "含「分镜时间线」页签");
 
-    // 切到故事板分镜页：story 面板显示，时间轴隐藏
+    // 切到宫格图分镜页：story 面板显示，时间轴隐藏
     tabStory.click();
     await sleep(20);
-    assert.ok(tabStory.classList.contains("active"), "故事板分镜页签激活");
+    assert.ok(tabStory.classList.contains("active"), "宫格图分镜页签激活");
     assert.equal(document.querySelector(".neo-director-pane-story").style.display, "");
     assert.equal(document.querySelector(".neo-director-pane-timeline").style.display, "none");
 
-    // 生成模式 / 统一技能在「分镜时间线」页首行（故事板分镜与生成模式无关，本页不重复）
+    // 生成模式 / 统一技能在「分镜时间线」页首行（宫格图分镜与生成模式无关，本页不重复）
     const setupPane = document.querySelector(".neo-director-pane-story");
     const tlRow = document.querySelector(".neo-director-pane-timeline .neo-director-shared");
     assert.ok(tlRow.querySelector(".neo-director-mode"), "生成模式下拉在时间轴页");
-    assert.equal(setupPane.querySelector(".neo-director-mode"), null, "故事板分镜页没有生成模式下拉（生成设置只在时间轴页）");
+    assert.equal(setupPane.querySelector(".neo-director-mode"), null, "宫格图分镜页没有生成模式下拉（生成设置只在时间轴页）");
     assert.equal(setupPane.querySelector(".neo-director-setup-refs"), null, "统一参考素材区已移除（参考素材到时间轴页逐段设置）");
     assert.ok(setupPane.querySelector(".neo-director-optimize"), "提示词优化按钮");
 
@@ -295,7 +295,7 @@ test("导演编辑器：「生成所有分段的提示词」逐段循环生成�
     });
     await sleep(60);
 
-    Array.from(document.querySelectorAll(".neo-director-tab")).find((t) => t.textContent.includes("故事板分镜")).click();
+    Array.from(document.querySelectorAll(".neo-director-tab")).find((t) => t.textContent.includes("宫格图分镜")).click();
     await sleep(20);
 
     // 失败路径：两段都失败 → 逐段两次请求、原文写回该段、状态显示失败段号、action toast 给处理入口（不自动弹弹窗）
@@ -325,7 +325,7 @@ test("导演编辑器：「生成所有分段的提示词」逐段循环生成�
     assert.equal(tas2[1].value, "integrated_multimodal_description: [Shot 1] 段一…", "第 2 段写回（同一 mock）");
     assert.ok(document.querySelector(".neo-director-opt-status").textContent.includes("已生成 2 段"), "状态显示完成段数");
 
-    // 「故事板分镜」页两栏对照：左 = 该段分镜图（宫格各格），右 = 该段提示词
+    // 「宫格图分镜」页两栏对照：左 = 该段分镜图（宫格各格），右 = 该段提示词
     const setupItems = Array.from(document.querySelectorAll(".neo-director-setup-segs .neo-director-story-seg-item"));
     assert.equal(setupItems.length, 2, "本页显示 2 段");
     let cells = setupItems[0].querySelectorAll(".neo-director-setup-seg-cols > div");
@@ -391,8 +391,8 @@ test("导演编辑器：打开旧配方回显各段对照（分镜图 / 提示�
     });
     await sleep(60);
 
-    // 「故事板分镜」页两栏对照：左 = 该段落盘的分镜图，右 = 该段当前提示词
-    Array.from(document.querySelectorAll(".neo-director-tab")).find((t) => t.textContent.includes("故事板分镜")).click();
+    // 「宫格图分镜」页两栏对照：左 = 该段落盘的分镜图，右 = 该段当前提示词
+    Array.from(document.querySelectorAll(".neo-director-tab")).find((t) => t.textContent.includes("宫格图分镜")).click();
     await sleep(20);
     const setupItems = Array.from(document.querySelectorAll(".neo-director-setup-segs .neo-director-story-seg-item"));
     assert.equal(setupItems.length, 2, "本页回显 2 段");
@@ -423,7 +423,7 @@ test("导演编辑器：对照表分镜图列回退显示时间轴选的首帧�
     });
     await sleep(60);
 
-    const tabStory = Array.from(document.querySelectorAll(".neo-director-tab")).find((t) => t.textContent.includes("故事板分镜"));
+    const tabStory = Array.from(document.querySelectorAll(".neo-director-tab")).find((t) => t.textContent.includes("宫格图分镜"));
     tabStory.click();
     await sleep(20);
 

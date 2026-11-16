@@ -574,11 +574,25 @@ startable once the root is filled in.
   `CUSTOM_TARGETS` keep them so one save cannot silently drop a card the user owns. `hidden` holds built-in cards only: a
   custom card an older layout hid shows on the home again, keeping its slot of `order`.
 - A built-in card carrying `defaultHidden` stays off the default home page: the home grid does not grow because of it,
-  and it waits in the Add a card face. 特效视频 in 开始创作 (`target: "skill"`, `value: "effect_h3"`) is that card —
-  the home layout puts it on the page only when `order` names it explicitly (`homePlaced` reads that one slot): clicking
-  the preset appends it to the end of that section, `normalizeLayout` never appends it on its own, and removing the card
-  sends it back to the preset face. When the Skills page has no such skill, the card goes through the same skill-card
-  gate that says the skill has no page to land on.
+  and it waits in the Add a card face. 开始创作 has two such cards — 特效视频 (`target: "skill"`, `value: "effect_h3"`)
+  and 宫格图分镜 (`target: "page"`, `value: "storyboard"`) — and the home layout puts either on the page only when
+  `order` names it explicitly (`homePlaced` reads that one slot): clicking the preset appends it to the end of that
+  section, `normalizeLayout` never appends it on its own, and removing the card sends it back to the preset face. When
+  the Skills page has no such skill, the effect card goes through the same skill-card gate that says the skill has no
+  page to land on. The storyboard has its own page `#/storyboard` (`buildStoryboard`, on the same "views stay
+  mounted, pages flip visibility" route as `#/voice` and `#/reverse`): the page lays the director editor's storyboard
+  side into itself — `openDirectorEditor(..., { container: host, storyOnly: true })`, embedded, with no overlay, no tab
+  bar and the timeline side folded away, keeping the editor's own recipe name and footer 保存, and the title row drops
+  the tab column on this page so the ✕ sits at its right end. The entry always lays the
+  editor's own blank new recipe (`existing = null` - empty name box, one empty segment, the page header says the page
+  starts from a blank recipe and 保存 writes it); it never adopts the recipe the director page's dropdown shows and
+  never saves one for it, and the grid split with the per-cell prompts reach the disk through the footer 保存, after
+  which the director page selects that recipe. The page's 角色素材库 / 宫格图素材库 buttons ride the same sidebar write
+the director page uses, and Studio lands that write on the asset modal with the gallery host marked
+`data-lib-scope="storyboard"`, so this page keeps its own directory browsing; a gate that omits the page leaves both
+buttons clicking into nothing. Only one editor exists in the window:
+  while this page holds a clean copy the director page's 高级模式 reclaims it before opening the full editor, and an
+  unsaved copy stays where it is instead of closing silently. The top bar gives it no tab.
 - A skill card lands on the page that applies the skill: `openHomeCard` checks the id against `listVideoSkills()`, and a
   video skill goes through `openVideoReuse({ skill })` so the video page opens with that skill selected (when that page
   was never built in this window, the `setVideoPageJump` hook the app registers at startup builds it first and the run is

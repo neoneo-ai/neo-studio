@@ -10,8 +10,21 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   parameters take the page defaults (16:9 at 0.5 megapixels, random seed), the new recipe is selected and readable at once,
   and 生成 / 素材取用 / 保存该段 work immediately; drop it with the card's own delete in Recipe Management. Advanced mode
   stays where it was: the **高级模式** button and the 重生成该段 entry in the 该段 ⋯ menu.
+- **The multi-segment planning surface is named 宫格图分镜 wherever it shows.** The name 故事板分镜 read as a text
+  storyboard, while the surface takes a grid image and cuts it into segments. One rename covers the editor tab, the
+  Studio page title, the home preset card title, the timeline page's guide button and the page's closed-editor placeholder,
+  with the i18n twin renamed in the same change (EN: Grid-image storyboard) and the shipped 九宫格 skill text, the agent
+  system prompt and the docs (zh + en) following. The identifiers stay — `story`, `storyOnly`, `startTab: 'story'`,
+  `neo-director-pane-story`, the `#/storyboard` route and the card id `storyboard` — so saved home layouts, saved
+  recipes and existing 配方 assets are untouched.
 
 ### Fixed
+- **The 宫格图分镜 page's 素材库 buttons open the asset modal.** Every 素材库 button in the director editor ends with a
+  `sidebarTab.activeSidebarTabId` write, and the Studio host answers that write by opening the asset-library modal — the
+  gate only admitted the 导演页 and 图片编辑页, so 角色素材库 and 宫格图素材库 on the 宫格图分镜 page clicked into nothing.
+  The page now rides that same entry, and the gallery host in the modal carries `data-lib-scope="storyboard"`, so this
+  page keeps its own directory browsing instead of sharing the 导演页's. Covered by the 故事板页的素材库按钮 case in
+  `studio/tests/js/studio-director.test.mjs`.
 - **The 尾帧 square no longer sits on the prompt box on the 导演页.** The 该段 row let its children shrink
   (`min-width: 0`), so the tile column squeezed below its own tiles — a 120px column measured 105 — and the tail-frame
   tile painted past the column edge into the 16px gap: the measured clear space between that tile and the prompt box
@@ -28,6 +41,25 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   配方详情浮层叠在管理弹窗之上、灯箱之下 case in `studio/tests/js/studio-desktop.test.mjs`.
 
 ### Added
+- **The Studio home offers a 宫格图分镜 preset card that opens a storyboard page of its own.** The 开始创作
+  section's 添加卡片 face gains a preset card **宫格图分镜** (副标题 宫格图拆成多段，逐格出提示词). It stays off the
+  default home by design: 编辑首页 → 添加卡片 → 宫格图分镜 appends it to the end of 开始创作. The card carries
+  `target: "page"`, `value: "storyboard"` and lands on `#/storyboard`, a page with no top-bar tab (like 图片反推 and
+  声音克隆): the page lays the director editor's storyboard side into itself through
+  `openDirectorEditor(..., { container: host, storyOnly: true })` — 角色参考图 / 宫格图拆分 / 各段对照 fill the column,
+  there is no popup and no tab bar, the 分镜时间线 side stays folded away, the footer keeps just 保存 with the
+  editor's own recipe-name box, and the title row drops the tab column on this page so the ✕ sits at the row's
+  right end. The card always opens the editor's own **blank new recipe** — `existing = null`, an empty name box
+  reading 未命名配方 — it never adopts the recipe the 导演页 dropdown shows and it saves nothing on entry: 宫格拆分
+  and the per-cell prompts reach the disk only when the footer 保存 writes them, after which the 导演页 selects
+  the saved recipe, and the page header states this in one line. Coming back to the page does not build a second
+  editor. The window holds one editor, so
+  高级模式 reclaims the page's clean embedded copy before opening the full editor, and an unsaved copy is never closed
+  silently. 整片参数, per-segment durations and rendering stay on the 导演页, reached by the 去导演页 button in the page
+  header. The grid split, the per-cell prompts, the timeline, the recipe save chain and the generation chain are
+  untouched. Covered by the 首页「宫格图分镜」卡 cases in `studio/tests/js/studio-director.test.mjs`, the 装配层 and
+  标题行列数 cases in `studio/tests/js/studio-home-pages.test.mjs` and the `opts.storyOnly` case in
+  `studio/tests/js/director-editor-grid.test.mjs`.
 - **尾帧 shows up only on the last segment.** A tail frame on a middle segment is wired to the start of the next
   segment, so the segments never join up and the square looked out of place. The 该段 row on the 导演页 now reveals the
   尾帧 square only when the selected segment is the last one — the same rule 高级模式 already applies to its segment

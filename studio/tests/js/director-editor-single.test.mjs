@@ -24,7 +24,7 @@ const storyOptRow = () => document.querySelector(".neo-director-pane-story .neo-
 const storyPreview = () => document.querySelector(".neo-director-pane-story .neo-director-setup-segs");
 const tab = (label) => [...document.querySelectorAll(".neo-director-tab")].find((t) => t.textContent.includes(label));
 
-test("新建配方落时间线页 + 单段引导；点引导切到故事板分镜页，那里只留一行单段提示", async () => {
+test("新建配方落时间线页 + 单段引导；点引导切到宫格图分镜页，那里只留一行单段提示", async () => {
     const { openDirectorEditor } = await import("../../web/director.js");
     appState.graph = { _nodes: [] };
     skills();
@@ -37,10 +37,10 @@ test("新建配方落时间线页 + 单段引导；点引导切到故事板分�
     assert.equal(document.querySelectorAll(".neo-director-segs .neo-director-seg").length, 1, "空白新建只有一个段");
     assert.equal(guide().style.display, "", "单段新建时显示「要拆多段去哪」的引导");
 
-    // ② 点引导里的按钮 → 故事板分镜页
+    // ② 点引导里的按钮 → 宫格图分镜页
     guide().querySelector(".neo-director-single-guide-btn").click();
     await sleep(20);
-    assert.ok(tab("故事板分镜").classList.contains("active"), "引导按钮把用户带到故事板分镜页");
+    assert.ok(tab("宫格图分镜").classList.contains("active"), "引导按钮把用户带到宫格图分镜页");
 
     // ③ 故事板页：单段不收「各段对照 + 批量优化」，换成一行提示
     assert.equal(storyOptRow().style.display, "none", "单段隐藏各段对照标题行（含批量优化按钮）");
@@ -56,7 +56,7 @@ test("新建配方落时间线页 + 单段引导；点引导切到故事板分�
     assert.equal(document.querySelectorAll(".neo-director-segs .neo-director-seg").length, 2, "加段成功");
     assert.equal(guide().style.display, "none", "多段后收起引导");
 
-    tab("故事板分镜").click();
+    tab("宫格图分镜").click();
     await sleep(20);
     assert.equal(storyOptRow().style.display, "", "多段恢复各段对照标题行");
     assert.equal(storyPreview().style.display, "", "多段恢复对照表");
