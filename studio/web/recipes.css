@@ -185,8 +185,41 @@
     border-radius: 4px;
 }
 
-.neo-recipes-card-media.single .neo-recipes-card-no-cover {
-    min-height: 130px;
+/* 无封面配方：封面位改放提示词与概览文字，卡片不再被一块 120px 灰色空块撑高 */
+.neo-recipes-card-media.cover-text {
+    grid-template-columns: 1fr;
+    grid-auto-rows: auto;
+    max-height: none;
+}
+
+.neo-recipes-card-cover-text {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 8px 10px;
+    background: #1b1b1b;
+    border: 1px dashed #3a3a3a;
+    border-radius: 4px;
+}
+
+/* 封面位没有图时这块是文字：提示词是主角，段数/模式/尺寸那行落在下面当脚注 */
+.neo-recipes-card-cover-prompt {
+    font-size: 12px;
+    color: #c8c8d2;
+    line-height: 1.5;
+    word-break: break-all;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 4;
+    line-clamp: 4;
+    overflow: hidden;
+}
+
+.neo-recipes-card-cover-meta {
+    flex: none;
+    font-size: 10.5px;
+    color: #8a94a0;
+    line-height: 1.4;
 }
 
 .neo-recipes-card-badge {
@@ -351,10 +384,13 @@
     color: #e6a23c;
 }
 
+/* 详情浮层与素材库 / 配方管理弹窗（.ns-libmodal z-index 9700）都是 document.body 上的 fixed 全屏遮罩，
+   谁盖谁只比数值：9000 那档只和 ComfyUI 侧栏面板比过，Studio 里从配方管理弹窗点「查看」就是把浮层开到弹窗背后，
+   看着像按钮没反应。抬到弹窗之上、灯箱（.neo-lightbox 9847）之下，浮层里点开的资源大图仍盖得住浮层。 */
 .neo-recipes-detail {
     position: fixed;
     inset: 0;
-    z-index: 9000;
+    z-index: 9750;
     background: rgba(0, 0, 0, 0.55);
     display: flex;
     align-items: center;

@@ -496,6 +496,7 @@ function runSegmentTask(body, handlers = {}) {
  *  那份编辑器有未保存修改 → 出确认条并记下要点的那份配方，确认条里「保存并关闭」/「放弃修改」关掉旧编辑器后自动打开它。
  *  opts.onAdopt：编辑器认下这份配方（本次真打开/已开着同一份）时回传，调用方据此落选中——卡片高亮与生成区永远同指一份配方。
  *  focusSeg：打开时定位到该段（0 基；<0 表示不指定，保持默认第 1 段）。
+ *  opts.openRegen：配合 focusSeg，打开即展开该段的重生成面板（Studio 导演页段菜单「重生成该段」用）。
  *  内嵌：Studio 注册过宿主（setDirectorEditorHost）或 opts.container 指定容器时，编辑器直接铺进容器，
  *  不建浮层窗口，也不带 ⛶ 放大 / 右下角缩放 / 标题栏拖动；宿主带 onSaveAndRun 时底部多出「保存并生成整片」。
  *  内嵌保存成功后编辑器留在原地（桌面端导演页上半栏就是它，保存即关等于把刚编辑的界面抽走）：
@@ -512,7 +513,7 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
     if (cur) {
         // 「重复点击=切段」只对已命名配方成立；新建（name=''）每次携带的内容都不同，
         // 命中同名校验会被静默吞掉（图库多选「新建导演配方」点不动的根因），一律走重载路径
-        if (requestedName && cur.name === requestedName) { _pendingDirectorSwitch = null; opts?.onAdopt?.(); cur.focusSeg?.(focusSeg); return; }
+        if (requestedName && cur.name === requestedName) { _pendingDirectorSwitch = null; opts?.onAdopt?.(); cur.focusSeg?.(focusSeg); if (opts?.openRegen) cur.openSegRegen?.(focusSeg); return; }
         if (cur.isDirty()) {
             // 有未保存修改：出确认条并记下要点的那份配方，「保存并关闭」/「放弃修改」关掉旧编辑器即打开它
             _pendingDirectorSwitch = { existing, onSaved, focusSeg, opts };
@@ -953,6 +954,7 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
             recipeAssetFiles.add(seg.storyboard);
         }
         if (seg.storyboard_prompt) row.dataset.storyboardPrompt = seg.storyboard_prompt;   // 分镜图提示词快照（拆分 LLM 产出，可缺省）
+        row.__openRegen = () => openRegenPanel(row, regenBtn);   // 程序入口：Studio 导演页段菜单不点这枚 ♻ glyph，直接展开同一块面板
         return row;
     }
 
@@ -1324,6 +1326,16 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
     }
     // 定位到指定段（节点时间轴上被点击的那一段）；未指定时仍默认显示第 1 段
     const focusSegAt = (i) => { const n = Number(i); if (Number.isFinite(n) && n >= 0) showSeg(n); };
+    // 展开指定段的重生成面板：Studio 导演页时间轴块右上角那枚「⋯」里的「重生成该段」走的就是这一条，
+    // 面板本体只有 openRegenPanel 这一份实现
+    const openSegRegen = (i) => {
+        const n = Number(i);
+        if (!Number.isFinite(n) || n < 0) return;
+        const row = segsWrap.querySelectorAll('.neo-director-seg')[n];
+        if (!row) return;
+        row.__openRegen?.();
+        row.scrollIntoView?.({ block: 'nearest' });   // 无布局引擎（jsdom）里没有这个方法
+    };
     focusSegAt(focusSeg >= 0 ? focusSeg : 0);
     // 新增一段：追加后立即按当前全局模式初始化首帧区 / 本段模式显隐
     const appendNewSeg = () => {
@@ -2863,6 +2875,9 @@ export async function openDirectorEditor(existing = null, onSaved = null, focusS
         overlay = $el('div', { className: 'neo-director-overlay' }, [panel]);
         document.body.appendChild(overlay);
     }
-    _directorEditor = { name: requestedName, close, requestClose, isDirty: () => dirty, overlay, focusSeg: focusSegAt };
+    _directorEditor = { name: requestedName, close, requestClose, isDirty: () => dirty, overlay, focusSeg: focusSegAt, openSegRegen };
+    // 段菜单的「重生成该段」要在整份编辑器建完之后才展开面板：面板本体读整片名、结果区与时间线控件，
+    // 建到一半去点就是撞还没初始化完的那一串
+    if (opts?.openRegen) openSegRegen(focusSeg);
     opts?.onAdopt?.();   // 编辑器认下这份配方才回传选中：卡片高亮与上方生成区从此和编辑器同指一份配方
 }

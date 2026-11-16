@@ -109,22 +109,27 @@ the unsaved content of the director editor and the settings forms, and a cross-o
 
 The director page is one full-width column, and the page is the editor: **the recipe bar on top, a stage, and a
 generation dock floating at the bottom of that stage** — segments and whole-film parameters are both written here.
-**📋 Recipes** / **📝 New recipe** / **🖼 Asset library** / **Advanced mode** sit on that bar, the recipe drop-down
-is the quick switch on it, and the recipe list and the asset library both open in modals (`js/core/lib-modal.js`).
+**📋 Recipe Management** / **📝 New recipe** / **🖼 Asset library** / **Advanced mode** sit on that bar, the recipe
+drop-down is the quick switch on it, and the recipe-management modal and the asset library both open as modals
+(`js/core/lib-modal.js`).
 
 - **Advanced mode** opens the full-film editor as an overlay (`openDirectorEditor`): segment add/delete, generation
   mode and chunk seconds, and the storyboard and prompt tools all live there — the same overlay
   in Studio and on the main canvas (Studio registers no embedded host). After that overlay saves, the page reloads
   the recipe and selects it, so the segments and parameters on screen follow what just landed.
-- **Startup always lands on home**: when the recipe list lands the first director recipe is auto-selected (the dock
+- **Startup always lands on home**: when the recipe panel lands the first director recipe is auto-selected (the dock
   and the agent context read it) and the director page never opens itself.
-- **Clicking a recipe card closes the recipe modal and selects that recipe** (clicking the same card again just
-  switches the recipe, the page is not rebuilt); "新增导演配方" in the recipe modal and "📝 New recipe" on the bar both
+- **Clicking a recipe card closes the recipe-management modal and selects that recipe** (clicking the same card again just
+  switches the recipe, the page is not rebuilt); "新增导演配方" in that modal and "📝 New recipe" on the bar both
   open a blank recipe in Advanced mode, and the page selects it once it is saved. With no frame yet the stage carries
   the idle card (**Direct a Video** / pick a recipe, tick the segments, generate the film) as an overlay that
   consumes no layout height.
-- "**📋 Recipes**" opens the recipe modal (`.ns-libmodal[data-lib-scope="recipes"]`, director
-  recipes only) and "**🖼 Asset library**" opens the asset modal (`data-lib-scope="assets"`, the same instance the
+- "**📋 Recipe Management**" opens the recipe-management modal (`.ns-libmodal[data-lib-scope="recipes"]`, director
+  recipes only; the modal title bar is the only title, so the panel drops its own "📦 Recipes" row) and
+  the 查看 overlay a recipe card opens (`.neo-recipes-detail`) stacks above that modal: both are `fixed` full-window
+  overlays appended to `document.body`, so the higher z-index wins (overlay 9750 over the modal's 9700, under the
+  lightbox `.neo-lightbox` 9847) — 查看 never opens behind the modal it was clicked from.
+  "**🖼 Asset library**" opens the asset modal (`data-lib-scope="assets"`, the same instance the
   edit page uses). The **🖼 Asset library** button inside the director editor drives the same entry (Studio has no
   ComfyUI left sidebar, so `media-transfer` writes `sidebarTab.activeSidebarTabId` and the shim forwards it to the
   modal), and the entry button lights while it is open. The library is the same Neo Gallery the gallery
@@ -151,15 +156,20 @@ is the quick switch on it, and the recipe list and the asset library both open i
   the title bar is therefore always reachable — a modal can never be dragged where it cannot be closed.
   Switching pages closes the modal of the page you left, and the gallery goes back to the standby host.
 - **Skill** is the same `skillParamsChip` the video page uses: the left column lists the skills grouped by generation mode
-  (keyframe → video / full-reference video / mixed) and the right column carries the same shared form the video page uses
+  (keyframe → video / full-reference video) and the right column carries the same shared form the video page uses
   (`.rs-gen-model-section`: the per-segment model-chain override for this run — main model / Text Encoder / VAE / audio VAE /
   LoRA / steps, left empty = the segment follows its own skill config). The picked skill is the one the whole film unifies on,
-  and its group is the generation mode; the last row, "each segment keeps its own skill (mixed)", unifies nothing. The chip
-  starts on the skill the recipe's first segment pins, and lands on that row when the segments pin different skills.
-- The generation modes carry the same meaning as in the Advanced-mode editor (keyframe → video / full-reference video /
-  mixed; a legacy recipe's t2v / i2v / fl2v / v2v / rv2v is remapped silently on load). Full-reference means every segment runs
-  as reference-to-video, and the page flips each segment's media row to the reference row to match (the same rule the backend's
-  `director_spec` applies: film mode is full-reference, or that segment pins full-reference itself).
+  and its group is the generation mode; picking a row also fills the right column with the chain that skill's
+  `config.json` pins, so what the panel shows is what this run actually uses, and a skill that pins nothing clears that
+  column back to **Auto**. The chip starts on the skill the recipe's first segment pins, and a recipe whose segments pin
+  different skills lands on that same one — this page unifies the film on the one skill in this column, and per-segment
+  skills are edited segment by segment in **Advanced mode**.
+- The generation modes are the two groups in that column (a legacy recipe's t2v / i2v / fl2v / v2v / rv2v is remapped
+  silently on load). Full-reference means every segment runs as reference-to-video, and the page flips each segment's media
+  row to the reference row to match (the same rule the backend's `director_spec` applies: film mode is full-reference, or
+  that segment pins full-reference itself). A legacy recipe that saved `shared.mode = mixed` keeps running segment by
+  segment: the page lands on the first segment's skill, never writes `mixed`, and each segment still runs the skill it
+  pins, with its media row following the mode that segment pins.
 - The film parameters (aspect ratio / megapixels / custom width-height / seed / continuity / context frames /
   character identity reference / chunk seconds) are edited in the form the **resolution** capsule pops, and
   **保存整片参数** goes down the same save chain as **保存该段** (`createSegmentOps().save` → `/rs_recipes/save`). Once the
@@ -202,21 +212,32 @@ is the quick switch on it, and the recipe list and the asset library both open i
   film-parameter form is one column (`min(380px, 100vw − 16px)`); the **skill** capsule's panel keeps the two columns the
   video page has at `min(660px, 100vw − 16px)`, at the same density.
 - The director timeline is a 56px strip: a 16px second ruler plus a 30px segment block. A block carries the always-visible
-  checkbox at its top-left (click = this run includes that segment), one top line of "index · duration · (start–end seconds
-  while hovering)", and one ellipsised prompt line at its bottom. The hint line ends with the **Fit / − / ＋** control that
-  drives `DirectorTimeline.setZoom()`; the level lives in `localStorage["neo_studio.director_zoom"]`, so re-entering the
-  page lands on the same zoom.
+  checkbox at its top-left (click = this run includes that segment), the always-visible **⋯** at its top-right (click opens
+  that segment's operations; a built-in preset recipe paints no `⋯` at all), one top line of "index · duration ·
+  (start–end seconds while hovering)", and one ellipsised prompt line at its bottom. The top line's right edge stops short
+  of the `⋯` — both are permanent, so block copy never runs under it. The hint line ends with the **Fit / − / ＋** control
+  that drives `DirectorTimeline.setZoom()`; the level lives in `localStorage["neo_studio.director_zoom"]`, so re-entering
+  the page lands on the same zoom.
 - The segment row is a single line: the 首帧 / 尾帧 / 参考素材 squares on the left (56px each, the same size as on the
-  video page), the "segment N + duration" line sitting in the empty strip under those squares, and the prompt box taking
-  the whole width left over at the page's own 12px text size (one row tall, growing to a 20vh cap as you type). Every
-  control in the bar below is 28px tall with **生成整片** pinned at the right. Two narrow-screen
-  fallbacks: at ≤900px the dock returns to normal flow (no floating overlay, no reserved clearance), and at ≤720px the
-  squares stack above the prompt and the control bar scrolls sideways.
-- The right end of the segment row carries a `⋯` segment menu: 复制该段 / 前移一段 / 后移一段 / 删除该段. Deleting asks
-  for confirmation and leaves the segment's asset files in the recipe, the last remaining segment cannot be deleted, and
-  the `⋯` never appears on a built-in preset recipe. Segment add/duplicate/move/delete and 保存该段 are one shared
-  implementation, `createSegmentOps()` in `director.js`, so the director page and the full-film editor run the same
-  semantics; the unsaved flag lives there too, and the save button is the only place the page marks it.
+  video page) and the prompt box taking the whole width left over at the page's own 12px text size (one row tall, growing
+  to a 20vh cap as you type; the box uses the director editor's input-well tone — `#0d0d0d` behind a `#3c3c3c` border,
+  since the shell's `#2a2a2e` field tone is lighter than this card face and reads as a grey slab — with 16px between it and
+  the squares, so the two columns read as separate areas on the card). The segment number and its seconds are not repeated on this line: the
+  timeline block already reads "Segment N · Xs" and dragging its right edge changes the duration. Every control in the bar
+  below is 28px tall with **生成** pinned at the right (which segments run is stated on the hint line under the timeline).
+  Two narrow-screen fallbacks: at ≤900px the dock returns to normal flow (no
+  floating overlay, no reserved clearance), and at ≤720px the squares stack above the prompt and the control bar scrolls
+  sideways.
+- The only segment operations entry is that `⋯` at the block's top-right: 重生成该段 / 复制该段 / 前移一段 / 后移一段 / 删除该段, in a
+  190px menu anchored next to the `⋯`. The panel sits inside the `.ns-director` host, and both of its width rules carry
+  that host: `gallery.css`'s `.neo-gallery-gm-chip-panel` (`min(720px, 94vw)`) is injected after `style.css` on the
+  desktop at the same specificity, and unscoped it stretches the menu across the window. 重生成该段 is the same regenerate
+  panel the advanced editor's segment row carries: it opens that editor on that segment with the panel expanded, so the
+  page keeps no second regeneration implementation. Deleting asks for confirmation
+  and leaves the segment's asset files in the recipe, the last remaining segment cannot be deleted, and a built-in preset
+  recipe paints no `⋯` (none of the five items would work there). Segment add/duplicate/move/delete and 保存该段 are one
+  shared implementation, `createSegmentOps()` in `director.js`, so the director page and the full-film editor run the
+  same semantics; the unsaved flag lives there too, and the save button is the only place the page marks it.
 
 ## Input page / Edit page layout
 

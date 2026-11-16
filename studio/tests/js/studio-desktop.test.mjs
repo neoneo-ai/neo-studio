@@ -205,6 +205,29 @@ test("导演页按钮走外壳配色：生成按钮半透明蓝，同排按钮�
               "未保存确认条的「放弃修改」保持红底语义色，灰底排不覆盖它");
 });
 
+// 该段行两栏的边界：方块列右缘几乎贴住描边框的左缘，而提示词框在 gallery.css 基础那条是
+// background:none / border:none（会话页的卡壳自带边界），本页卡面是平的——两栏看着像叠在一起
+test("导演页该段行：方块列与提示词之间有间距，提示词框自带边界", () => {
+    const css = fs.readFileSync(path.join(webDir, "studio", "style.css"), "utf8");
+    const main = css.match(/\.ns-director-main \{[^}]*\}/);
+    assert.ok(main, "该段行版式规则要在");
+    assert.match(main[0], /gap:\s*16px/, "方块列与提示词之间 16px：12px 时方块右缘几乎贴住框的左缘");
+    const prompt = css.match(/\.ns-director-dock \.ns-director-prompt \{[^}]*\}/);
+    assert.ok(prompt, "提示词框要有页面这一档的版式");
+    assert.match(prompt[0], /border:\s*1px solid #3c3c3c/,
+              "提示词框有描边：基础那条 border:none 在这张平卡面上画不出边界");
+    assert.match(prompt[0], /background:\s*#0d0d0d/,
+              "提示词框走输入井那口深底：场底 #2a2a2e 比卡面 #17171b 还浅，框读成一块灰板、与方块糊在一起");
+    // 净距 16px 只有列不被压扁才成立：行允许收缩时行会缩到比方块本体还窄（120 内容缩成 105），
+    // 方块越过行沿吃进余隙，实测净距掉到 1~4px，读起来就是方块压住提示词框左缘
+    const segrow = css.match(/\.ns-director-segrow \{[^}]*\}/);
+    assert.ok(segrow, "方块列那一行的版式规则要在");
+    assert.match(segrow[0], /min-width:\s*max-content/, "方块列宽度下限钉在自己内容上：不许缩到比方块还窄");
+    assert.match(segrow[0], /flex:\s*0 0 auto/, "方块列不参与收缩");
+    assert.match(css, /\.ns-director-segrow > \.ns-director-slots \{[^}]*min-width:\s*max-content/,
+              "方块列本身同样钉在内容上（列带 overflow-x，缩了就裁方块）");
+});
+
 // 矮窗口（Windows 显示缩放把物理像素报成更小的视口高）：页面原先的 520px 高度下限把整页顶出可视区，
 // 钉在页底的生成坞下沿被窗口边缘裁掉一截
 test("导演页不设高度下限：矮窗口里生成坞下沿不被裁", () => {
@@ -212,6 +235,38 @@ test("导演页不设高度下限：矮窗口里生成坞下沿不被裁", () =>
     const page = css.match(/\.ns-director \{[^}]*\}/);
     assert.ok(page, "导演页版式规则要在");
     assert.match(page[0], /min-height:\s*0/, "页面不设高度下限，矮出来的空间由舞台收");
+});
+
+// 弹窗外壳样式与 js/core/lib-modal.js 建的 DOM 是一对：配方弹窗、素材库弹窗、首页「添加卡片」全靠这几条撑着。
+// 删掉它不报错、不白屏，只让标题栏的「标题 / 最大化 / ✕」竖着堆成三行、弹窗连壳带遮罩一起没了 —— 静默失效要在这一层拦成红灯
+test("弹窗外壳样式齐备：标题栏横排一行，盒子有壳，内容区内滚", () => {
+    const css = fs.readFileSync(path.join(webDir, "studio", "style.css"), "utf8");
+    const head = css.match(/\.ns-libmodal-titlebar \{[^}]*\}/);
+    assert.ok(head, "标题栏要有版式规则");
+    assert.match(head[0], /display:\s*flex/, "标题栏是一行：标题、插槽、最大化、✕ 横排（没样式时这四个竖着堆）");
+    assert.match(head[0], /cursor:\s*move/, "标题栏空白处拖窗");
+    assert.ok(/\.ns-libmodal-titlebar-slot \{/.test(css), "标题栏右侧插槽有版式（搜索框钉在这里）");
+    assert.ok(/\.ns-libmodal-box \{[^}]*background:\s*#17171b/.test(css), "弹窗盒子有壳：底色、描边、圆角");
+    assert.ok(/\.ns-libmodal \{[^}]*position:\s*fixed/.test(css), "遮罩铺满整窗");
+    assert.ok(/\.ns-libmodal-maximized \.ns-libmodal-box \{[^}]*inset:\s*0/.test(css), "最大化铺满整窗");
+    assert.ok(/\.ns-libmodal-content \{[^}]*flex:\s*1 1 auto/.test(css), "内容区吃掉标题栏以下的高度并内滚");
+    assert.ok(/\.ns-libmodal-pickbar \{/.test(css), "底部取用条有版式");
+});
+
+// 配方卡「查看」浮层（recipes.js 的 openDetail）与素材库 / 配方管理弹窗都 append 在 document.body 上，
+// 同是 fixed 全屏遮罩，谁盖谁只比 z-index：详情浮层原先 9000 落在 libmodal 9700 之下，
+// 弹窗里点「查看」就是开到弹窗背后，看着像按钮没反应。
+test("配方详情浮层叠在管理弹窗之上、灯箱之下", () => {
+    const z = (file, re) => {
+        const m = re.exec(fs.readFileSync(path.join(webDir, file), "utf8"));
+        assert.ok(m, `${file} 里缺这条 z-index 规则`);
+        return Number(m[1]);
+    };
+    const modal = z(path.join("studio", "style.css"), /\.ns-libmodal \{[^}]*z-index:\s*(\d+)/);
+    const detail = z("recipes.css", /\.neo-recipes-detail \{[^}]*z-index:\s*(\d+)/);
+    const lightbox = z("lightbox.css", /\.neo-lightbox \{[^}]*z-index:\s*(\d+)/);
+    assert.ok(detail > modal, `详情浮层 ${detail} 要盖住弹窗 ${modal}：弹窗里点「查看」不能开到背后`);
+    assert.ok(lightbox > detail, `灯箱 ${lightbox} 要盖住详情浮层 ${detail}：浮层里点开的资源大图要在最上层`);
 });
 
 // 自定参数面板（与视频页共用那块表单）与整片参数面板共用这一套紧凑版式：整幅档是标签在上、控件整行在下，
@@ -230,6 +285,9 @@ test("导演页弹层表单是胶囊旁的一栏紧凑面板，不是整幅表�
         "技能面板那一栏的双栏宽度同样收在导演宿主下");
     assert.ok(/\.ns-director \.ns-director-compact-form \.rs-config-row[^{]*\{[^}]*flex-direction: row/.test(css), "行是标签与控件一排");
     assert.ok(/\.ns-director \.ns-director-compact-form[^{]*\.rs-form-label[^{]*\{[^}]*width: 84px/.test(css), "标签列宽与素材库弹窗同一档");
+    // 该段 ⋯ 菜单的 190px 也要带宿主：gallery.css 那条 .neo-gallery-gm-chip-panel（min(720px, 94vw)）后注入、
+    // 同特异，不带宿主就把这列顶成整窗宽，菜单横着盖住时间轴
+    assert.ok(/\.ns-director \.ns-director-segmenu \{[^}]*width:\s*190px/.test(css), "段菜单那列的 190px 带导演宿主");
     // 两块弹层（技能 / 整片参数）共用这一套：只留一处密度定义，改一处两边都改
     assert.ok(/ns-director-compact-form ns-director-skill-panel/.test(fs.readFileSync(path.join(webDir, "studio", "studio-app.js"), "utf8")), "技能面板挂紧凑版式");
     assert.ok(/ns-director-compact-form ns-director-size-panel/.test(fs.readFileSync(path.join(webDir, "studio", "studio-app.js"), "utf8")), "整片参数面板挂同一套紧凑版式");

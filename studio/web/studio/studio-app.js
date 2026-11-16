@@ -398,16 +398,14 @@ async function buildDirector(el) {
     let skillPick = null;      // 本次动过的统一技能：没动过就一段都不写、shared.mode 也不动
     const segs = () => recipe?.segments || [];
     const isPreset = () => recipe?.source === "preset";
-    const skillMetaOf = (id) => (id === DIRECTOR_MIXED_SKILL ? { mode: "mixed" } : directorSkills.find((s) => s.id === id) || null);
-    // 整片生成模式：本次选过技能就以它所属那一组为准（「每段用自己的技能」那一行 = mixed），
-    // 没选就回落到配方里钉的 shared.mode（旧值静默重映射）。该段素材槽显哪一组、分块秒数露不露、
-    // 分辨率胶囊上的模式名都读它。
+    const skillMeta = (id) => directorSkills.find((s) => s.id === id) || null;
+    // 整片生成模式：本次选过技能就以它所属那一组为准，没选就回落到配方里钉的 shared.mode（旧值静默重映射）。
+    // 旧混配方留在这页的 mixed 落在这一步：素材槽与分块秒数照旧逐段按该段自己钉的模式切。
     const sharedGenMode = () => {
-        if (skillPick !== null) return videoModeGroup(skillMetaOf(skillPick));
+        if (skillPick !== null) return videoModeGroup(skillMeta(skillPick));
         const m = recipe?.shared?.mode;
         return LEGACY_MODE_MAP.get(m) || m || "";
     };
-    const skillMeta = (id) => directorSkills.find((s) => s.id === id) || null;
     // 段落的增删改与「保存该段」走 director.js 那份共享实现（出片视图后面要嵌进画布，同一套语义）：
     // 脏标记记在 ops 里，页面上「未保存」只有保存钮这一处要亮
     const ops = createSegmentOps(() => recipe, {
@@ -415,15 +413,16 @@ async function buildDirector(el) {
         readOnly: isPreset,
     });
 
-    // --- 顶部条：配方（下拉快切 + 卡片弹窗管理）· 新建配方 · 素材库 · 高级模式（整片编辑器浮层） ---
+    // --- 顶部条：配方（下拉快切）· 配方管理（卡片弹窗）· 新建配方 · 素材库 · 高级模式（整片编辑器浮层） ---
     recipesHost = $el("div", { className: "ns-director-recipes" });
     recipesModal = createLibraryModal({ storageKey: "neo_studio_libmodal_recipes", scope: "recipes" });
     recipesModal.setContent(recipesHost);
     document.body.appendChild(recipesModal.el);
     const recipeSel = $el("select", { className: "ns-director-recipe", title: t("选一份导演配方：时间轴与该段控件跟着换") });
     const recipeChip = chipButton(recipeSel, { icon: "list" });
-    const recipesBtn = $el("button", { className: "ns-btn", type: "button", title: t("打开配方列表：点卡片选中，含复制 / 删除 / 新增") });
-    setIconLabel(recipesBtn, "list", t("配方"));
+    // 顶栏这颗只管管理（弹窗里点卡片选中 / 复制 / 删除 / 新增）；快速换配方就是上方那名下拉，两边不再同名
+    const recipesBtn = $el("button", { className: "ns-btn", type: "button", title: t("打开配方管理：点卡片选中，含复制 / 删除 / 新增") });
+    setIconLabel(recipesBtn, "list", t("配方管理"));
     recipesBtn.onclick = () => { recipesModal.open(t("导演配方")); refreshRecipesPanel(); };
     const newBtn = $el("button", { className: "ns-btn", type: "button", title: t("新建一份分镜视频导演配方，进整片编辑器") });
     setIconLabel(newBtn, "film", t("新建配方"));
@@ -461,18 +460,16 @@ async function buildDirector(el) {
     // --- 生成坞：紧凑时间轴（勾选 = 本次跑哪几段）+ 该段（时长 / 提示词）+ 素材槽 + 参数行 ---
     const timelineHost = $el("div", { className: "ns-director-timeline" });
     const checkHint = $el("span", { className: "ns-director-checkhint" });
-    const segLabel = $el("span", { className: "ns-director-seg-label" });
-    const durIn = $el("input", { className: "ns-director-duration neo-gallery-gm-chip-btn", type: "number", min: "1", max: "150", step: "0.5", title: t("这一段时长（秒）· 也可拖时间轴块的右缘调") });
     const promptIn = $el("textarea", { className: "ns-director-prompt neo-gallery-gm-quick-input", rows: "1", spellcheck: "false", placeholder: t("这一段要拍成什么样…") });
     const firstSlot = createMediaSlot({ label: "首帧", thumbSrc: inputThumbSrc, toast, pick: slotPick, refKinds: () => segRefKinds(selected), onChange: slotChanged });
     const lastSlot = createMediaSlot({ label: "尾帧", thumbSrc: inputThumbSrc, toast, pick: slotPick, refKinds: () => segRefKinds(selected), onChange: slotChanged });
     const refSlot = createMediaSlot({ label: "参考素材", multiple: true, maxN: DIRECTOR_REF_TOTAL, kindMax: DIRECTOR_REF_MAX, thumbSrc: inputThumbSrc, toast, pick: slotPick, refKinds: () => segRefKinds(selected), onChange: slotChanged });
 
-    // 「技能」胶囊就是视频页那一枚 skillParamsChip：左栏技能按生成模式分组（关键帧生视频 / 全参考生视频 / 混合模式），
+    // 「技能」胶囊就是视频页那一枚 skillParamsChip：左栏技能按生成模式分组（关键帧生视频 / 全参考生视频），
     // 右栏是本次整片的模型链覆盖（主模型 / Text Encoder / VAE / 音频 VAE / LoRA / 步数，留空 = 该段跟随自己的技能配置）。
-    // 选中的技能是整片要统一成的那一个，它所属那一组就是生成模式；「每段用自己的技能（混合）」这一行不落统一技能。
+    // 选中的技能是整片要统一成的那一个，它所属那一组就是生成模式。
     // 配方里每段本就自带技能，本页选的是要把它们统一成哪一个——所以改动只记在页面上，落盘走「保存该段」那一条链。
-    const skillSel = $el("select", { className: "ns-director-skill", title: t("技能与自定参数：左栏选整片统一的技能（它所属那一组就是生成模式）；右栏主模型 / LoRA 留空 = 各段跟随自己的技能配置") });
+    const skillSel = $el("select", { className: "ns-director-skill", title: t("技能与自定参数：左栏选整片统一的技能（它所属那一组就是生成模式），点它就把右栏铺成该技能钉的模型链；右栏主模型 / LoRA 留空 = 各段跟随自己的技能配置") });
     skillSel.appendChild($el("option", { value: "", textContent: t("（加载视频技能…）") }));
     const videoCfg = createVideoModelConfigSection();
     let videoModels = null;   // 模型清单：没拉到就整块不发覆盖值，各段技能配置照常生效
@@ -480,24 +477,36 @@ async function buildDirector(el) {
     const skillChip = skillParamsChip(skillSel, videoParamsBox, {
         icon: "film",
         groupOf: videoModeGroup,
-        groupLabels: DIRECTOR_GROUP_LABELS,
+        groupLabels: VIDEO_GROUP_LABELS,
         getOverride: () => videoModels ? videoCfg.collect() : {},
         panelClass: "ns-director-compact-form ns-director-skill-panel",
     });
     videoParamsBox.addEventListener("change", () => skillChip.sync());
+    // 换技能 = 右栏整份换成该技能 config 钉的那一套（与视频页、绘画页同一语义）：面板里看到的就是这一发真要跑的模型链。
+    // 技能没钉配置（config 是空的）就是清空回「自动」：这一发跟着各段自己的技能配置跑。
+    async function applySkillParams(skillId) {
+        if (!videoModels) return;
+        if (!skillId) {
+            videoCfg.load({}, videoModels);
+            skillChip.sync();
+            return;
+        }
+        videoCfg.load(await getSkillGenConfig(skillId), videoModels);
+        skillChip.sync();   // 程序改 value 不触发 change：chip 上那行生效值要跟着重读
+    }
     skillSel.addEventListener("change", () => {
+        applySkillParams(skillSel.value);
         if (skillSel.value === skillPick) return;
         skillPick = skillSel.value;
         markDirty();
         renderSegment();   // 生成模式跟着换：该段素材槽那一行与分辨率胶囊上的模式名都要翻面
     });
 
-    // 技能那一列 = 本页的视频技能清单 + 一行「每段用自己的技能」；选中值回落到配方首段钉的技能，
-    // 各段钉的不是同一个就是混合（这一行是这一页的写法，后端没有这个值，落盘只写 mixed）
+    // 技能那一列 = 本页的视频技能清单；选中值回落到配方首段钉的技能，各段钉的不是同一个也落首段那一枚。
+    // 本页只有一条统一口径：不动这一列就一直不写段，各段照跑自己钉的技能；要点一行技能再「保存该段」才铺满每一段
     function syncSkillChip() {
         const list = directorSkills;
         const first = segs()[0]?.skill_id || "";
-        const mixed = segs().length > 1 && !segs().every((s) => s.skill_id === first);
         skillSel.textContent = "";
         for (const s of list) {
             // 特效技能缺 LoRA 时后端把 available 判成 false（skill._video_skill_available），列里要说出来
@@ -505,33 +514,43 @@ async function buildDirector(el) {
             opt.__skillMeta = s;   // 分组与 chip 标签取这份元数据（视频页技能面板同一约定）
             skillSel.appendChild(opt);
         }
-        const mixedOpt = $el("option", { value: DIRECTOR_MIXED_SKILL, textContent: t("每段用自己的技能（混合）") });
-        mixedOpt.__skillMeta = { mode: "mixed" };
-        skillSel.appendChild(mixedOpt);
         skillPick = null;
-        skillSel.value = mixed ? DIRECTOR_MIXED_SKILL
-            : (list.some((s) => s.id === first) ? first : (list[0]?.id || ""));
+        skillSel.value = list.some((s) => s.id === first) ? first : (list[0]?.id || "");
         skillChip.sync();   // 技能与选中态都是程序改的，chip 显示的生效值要跟着重读
+        applySkillParams(skillSel.value);   // 程序铺的选中值同样铺该技能钉的模型链：清单没到就整块不动，下面 modelsReady 那一路补
     }
 
-    // 该段「⋯」菜单：复制 / 前移 / 后移 / 删除。增删改本身在 director.js 那份共享实现里，页面只出这一条入口
+    // 该段「⋯」菜单：重生成 / 复制 / 前移 / 后移 / 删除。增删改本身在 director.js 那份共享实现里，页面只出这一条入口
     const segMenuItem = (label, tip, fn) => $el("button", { className: "ns-btn", type: "button", textContent: t(label), title: t(tip), onclick: () => { segMenuClose(); fn(); } });
+    // 重生成该段：段菜单直接进编辑器展开该段的重生成面板。那枚 ♻ 画在高级模式的段行里，
+    // 时间轴上看到哪段想重跑，不该让用户先点高级模式、再在整片编辑器里找那一行
+    const regenItem = segMenuItem("重生成该段", "打开高级模式编辑器并展开该段的重生成面板：锚点取成片里该段前后的真实帧，换种子单跑这一段", () => {
+        if (!currentName) { toast(t("先选一份导演配方")); return; }
+        openDirectorEditor(findItem(currentName) || { name: currentName }, afterEditorSaved, selected,
+            { onSaveAndRun: () => submitGenerate(), openRegen: true });
+    });
+    regenItem.classList.add("ns-director-segmenu-regen");   // RUN_GATES 认这个类：窗口翻回离线形态时这一项跟着收口
+    gateRunButton(regenItem, "segment", t("重生成该段"));
     // 基座 .rs-runtime-menu 给 fixed 定位：.neo-gallery-gm-chip-menu / -panel 只出宽度与滚动，
     // 少了基座这块就是页面流里的一块，下面按 ⋯ 的 rect 算出的 left/top 全部无效（菜单落在页面最左、压住首帧方块）
     const segMenuPanel = $el("div", { className: "rs-runtime-menu neo-gallery-gm-chip-menu neo-gallery-gm-chip-panel ns-director-segmenu" }, [
+        regenItem,
         segMenuItem("复制该段", "把该段的提示词 / 时长 / 素材整份复制到下面一段", () => {
             const at = ops.duplicate(selected);
             if (at < 0) return;
+            dropStaleTails();
             timeline.refresh();
             selectSegment(at);
         }),
         segMenuItem("前移一段", "该段往前挪一位", () => {
             if (!ops.move(selected, -1)) return;
+            dropStaleTails();
             timeline.refresh();
             selectSegment(selected - 1);
         }),
         segMenuItem("后移一段", "该段往后挪一位", () => {
             if (!ops.move(selected, 1)) return;
+            dropStaleTails();
             timeline.refresh();
             selectSegment(selected + 1);
         }),
@@ -540,6 +559,7 @@ async function buildDirector(el) {
             if (n <= 1) { toast(t("最后一段不能删：整片至少留一段")); return; }
             if (!confirm(tf("删除第 {n} 段？该段的素材文件留在配方里，不删文件。", { n: selected + 1 }))) return;
             ops.remove(selected);
+            dropStaleTails();
             checkedSegments = [];
             timeline.clearChecked();
             renderCheckHint();
@@ -548,23 +568,26 @@ async function buildDirector(el) {
         }),
     ]);
     page.appendChild(segMenuPanel);
-    const segMenuBtn = $el("button", { className: "ns-director-seg-menu neo-gallery-gm-chip-btn", type: "button", textContent: "⋯", title: t("该段：复制 / 前移 / 后移 / 删除") });
     let segMenuOpen = false;
     const segMenuClose = () => { segMenuOpen = false; segMenuPanel.style.display = "none"; };
-    segMenuBtn.onclick = () => {
-        segMenuOpen = !segMenuOpen;
-        segMenuPanel.style.display = segMenuOpen ? "block" : "none";
-        if (!segMenuOpen) return;
-        const r = segMenuBtn.getBoundingClientRect();
-        segMenuPanel.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - segMenuPanel.offsetWidth - 8))}px`;
-        const above = r.top - segMenuPanel.offsetHeight - 6;
-        segMenuPanel.style.top = `${above > 8 ? above : r.bottom + 6}px`;
-    };
+    // 时间轴段块右上角那枚「⋯」点出来的菜单：弹在那枚 glyph 旁边（上方放得下就朝上，否则朝下，右边夹进窗口）。
+    // 菜单五项都作用在「选中那段」上，所以先把点的那块选中——这一页只有段块右上角这一条段操作入口
+    function openSegMenu(i, rect) {
+        if (!rect) return;
+        selectSegment(i);
+        segMenuOpen = true;
+        segMenuPanel.style.display = "block";
+        const pw = segMenuPanel.offsetWidth || 190;
+        const ph = segMenuPanel.offsetHeight || 130;
+        segMenuPanel.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - pw - 8))}px`;
+        const above = rect.top - ph - 6;
+        segMenuPanel.style.top = `${above > 8 ? above : rect.bottom + 6}px`;
+    }
 
     // 「分辨率」胶囊弹的是共享的整片参数表单（createSharedConfigSection）：页内改分辨率与运行参数 + 分块秒数，
     // 保存走「保存该段」同一条 ops 链。生成模式不在表单里（它是技能胶囊那一列的事）；分块秒数要看当前生效技能
     // 支不支持多帧，技能由本页交进来——表单不自己拉技能清单
-    const sharedCfg = createSharedConfigSection(() => (sharedGenMode() === "mixed" ? null : skillMetaOf(skillPick ?? segs()[0]?.skill_id)));
+    const sharedCfg = createSharedConfigSection(() => (sharedGenMode() === "mixed" ? null : skillMeta(skillPick ?? segs()[0]?.skill_id)));
     const sizeSaveBtn = $el("button", { className: "rs-btn ns-director-size-save", type: "button", textContent: t("保存整片参数") });
     const sizePanel = $el("div", { className: "rs-runtime-menu neo-gallery-gm-chip-menu neo-gallery-gm-chip-panel ns-director-compact-form ns-director-size-panel" }, [sharedCfg.el, sizeSaveBtn]);
     page.appendChild(sizePanel);
@@ -597,8 +620,9 @@ async function buildDirector(el) {
         sizePos();
     };
     const saveBtn = $el("button", { className: "ns-btn ns-director-save", type: "button", textContent: t("保存该段"), title: t("把该段的提示词 / 时长 / 素材槽改动写回配方（不新增段，也不动故事板与分辨率）") });
-    const runBtn = $el("button", { className: "rs-btn ns-gen-run ns-director-run", type: "button", textContent: t("生成整片") });
-    gateRunButton(runBtn, "director", t("生成整片"));
+    // 主行动就写「生成」：跑哪几段是时间轴勾选取与下面那条提示行的事，按钮上不替它说那句长文案
+    const runBtn = $el("button", { className: "rs-btn ns-gen-run ns-director-run", type: "button", textContent: t("生成") });
+    gateRunButton(runBtn, "director", t("生成"));
     const cancelBtn = $el("button", { className: "rs-btn ns-gen-cancel", type: "button", textContent: t("取消"), style: { display: "none" } });
     // 时间轴缩放：一屏放不下多段时的唯一压缩手段（块宽按时长分配，缩一档就能多看几段）。
     // 档位存在 localStorage——每次进导演页都回到上次那一档
@@ -618,12 +642,10 @@ async function buildDirector(el) {
             statusRow,
             timelineHost,
             hintRow,
-            // 方块在左、该段的提示词吃剩下的宽度；「第N段 + 时长」落在方块底下的空带里——
-            // 那一行在方块列内，不吃提示词的宽度（上下堆叠见下面 720px 那档）
+            // 方块在左、该段的提示词吃剩下的宽度：段号与秒数不再在这块重复一遍，时间轴块左上就是「第 N 段 · Xs」
             $el("div", { className: "ns-director-main" }, [
                 $el("div", { className: "ns-director-segrow" }, [
                     $el("div", { className: "ns-director-slots" }, [firstSlot.el, lastSlot.el, refSlot.el]),
-                    $el("div", { className: "ns-director-segtop" }, [segLabel, durIn, segMenuBtn]),
                 ]),
                 promptIn,
             ]),
@@ -645,6 +667,7 @@ async function buildDirector(el) {
         })),
         onSelect: (i) => { selected = i; renderSegment(); },   // 画布点块：画布自己已落选中态，这里只刷该段面板（不得回调 select，会成环）
         onCheckChange: (list) => { checkedSegments = list; renderCheckHint(); },
+        onSegMenu: (i, rect) => openSegMenu(i, rect),   // 块右上角「⋯」→ 该段操作菜单弹在那枚 glyph 旁边
         onReorder: (order) => reorderSegs(order),
         onResize: (i, sec) => {
             const s = segs()[i];
@@ -660,22 +683,27 @@ async function buildDirector(el) {
     function directorZoom(z) {
         const v = Math.max(0.25, Math.min(4, Math.round(z * 100) / 100));
         localStorage.setItem(DIRECTOR_ZOOM_KEY, String(v));
+        segMenuClose();
         timeline.setZoom(v);
     }
     timeline.setZoom(Number(localStorage.getItem(DIRECTOR_ZOOM_KEY)) || 1);
+    // 横向滚动与换档位都会把段块连同那枚 ⋯ 挪走：菜单弹在 glyph 旁边，跟着一起收，不许脱离它
+    timeline.scroll.addEventListener("scroll", segMenuClose);
     // 提示词框一行起步、随内容长到 20vh 上限（与 CSS 的 max-height 同一档）。
-    // 无布局引擎的环境（jsdom）里 scrollHeight 恒为 0，这时不写内联高度，留给 CSS 的 min-height
+    // 无布局引擎的环境（jsdom）里 scrollHeight 恒为 0，这时不写内联高度，留给 CSS 的 min-height。
+    // 框是 border-box 且带 1px 描边：scrollHeight 只量到内容加内衬，边框那 2px 要在这一发补给框高，
+    // 否则最后一行的下沿被描边裁进框内自滚的竖线里
     function growPrompt() {
         promptIn.style.height = "auto";
         if (promptIn.scrollHeight > 0) {
-            promptIn.style.height = Math.min(promptIn.scrollHeight + 2, Math.round(window.innerHeight * 0.2)) + "px";
+            promptIn.style.height = Math.min(promptIn.scrollHeight + 4, Math.round(window.innerHeight * 0.2)) + "px";
         }
     }
     const onDocPress = (e) => {
         if (!document.body.contains(page)) { document.removeEventListener("pointerdown", onDocPress, true); return; }
         recipeChip.closeOnOutside(e.target);
         skillChip.closeOnOutside(e.target);
-        if (segMenuOpen && !segMenuPanel.contains(e.target) && !segMenuBtn.contains(e.target)) segMenuClose();
+        if (segMenuOpen && !segMenuPanel.contains(e.target)) segMenuClose();
         if (sizeOpen && !sizePanel.contains(e.target) && !sizeBtn.contains(e.target)) sizeClose();
     };
     document.addEventListener("pointerdown", onDocPress, true);
@@ -700,23 +728,31 @@ async function buildDirector(el) {
         const s = segs()[selected];
         const fam = segFamily(s, sharedGenMode());
         skillChip.chip.disabled = !s || isPreset();   // 预设只读与没有配方：统一技能这枚胶囊不给动
-        segLabel.textContent = s ? tf("第 {n} 段", { n: selected + 1 }) : t("没有段");
-        segLabel.title = tf("{mode}：{hint}", {
-            mode: MODE_LABELS.get(fam === "ref" ? "r2v" : "f2v"),
-            hint: fam === "ref" ? t("这一段用参考素材那一行") : t("这一段用首帧 / 尾帧"),
-        });
-        durIn.value = s ? (Number(s.duration_sec) || 5) : "";
-        durIn.disabled = !s || isPreset();
+        // 段号与秒数不在这里重复：时间轴块左上就是「第 N 段 · Xs」，右缘一拖就改时长
         promptIn.value = s?.prompt || "";
         promptIn.disabled = !s || isPreset();
         growPrompt();
         firstSlot.el.classList.toggle("ns-hidden", fam !== "frame");
-        lastSlot.el.classList.toggle("ns-hidden", fam !== "frame");
+        // 尾帧只给最后一段：中间段钉一张尾帧，接的是下一段的开头，接不上（整片模式 renumberSegs 同一条规矩）
+        lastSlot.el.classList.toggle("ns-hidden", fam !== "frame" || !isLastSeg());
         refSlot.el.classList.toggle("ns-hidden", fam === "frame");
         firstSlot.setReadOnly(isPreset());
         lastSlot.setReadOnly(isPreset());
         refSlot.setReadOnly(isPreset());
         fillSlots(s);
+    }
+
+    // 「最后一段」这一身份会随增删与重排移动，所以它是个问句不是一份状态
+    const isLastSeg = () => selected >= segs().length - 1;
+
+    // 段从最后位置下来，它那份尾帧必须跟着清：后端是按素材推生成模式的，留着就推成首尾帧，
+    // 跑的却是一个界面上再也改不到的框。增删改顺序五个入口共用这一发
+    function dropStaleTails() {
+        let stale = false;
+        for (const s of segs().slice(0, -1)) {
+            if (s && s.last_frame) { delete s.last_frame; stale = true; }
+        }
+        if (stale) markDirty();
     }
 
     // 槽位里的画面用 director_spec 那份（素材已从配方 assets/ 解析进 input/）；spec 没到就退回配方里记的名
@@ -733,7 +769,8 @@ async function buildDirector(el) {
         if (!s) return;
         if (segFamily(s, sharedGenMode()) === "frame") {
             const f = firstSlot.first()?.value;
-            const l = lastSlot.first()?.value;
+            // 非最后一段不认尾帧：那一格是藏着的，旧值也不许从槽里写回配方（藏着的槽不许写进配方）
+            const l = isLastSeg() ? lastSlot.first()?.value : null;
             if (f) s.first_frame = f; else delete s.first_frame;
             if (l) s.last_frame = l; else delete s.last_frame;
         } else {
@@ -769,12 +806,14 @@ async function buildDirector(el) {
     function addSeg() {
         const at = ops.add();
         if (at < 0) return;
+        dropStaleTails();   // 新段成了最后一段：原来那段不再是最后，它的尾帧要跟着清
         timeline.refresh();
         selectSegment(at);
     }
 
     function reorderSegs(order) {
         if (!ops.reorder(order)) return;   // 顺序表不完整时 ops 不动配方：这次拖拽丢掉，不留少一段的配方
+        dropStaleTails();
         checkedSegments = [];
         timeline.clearChecked();
         renderCheckHint();
@@ -856,14 +895,14 @@ async function buildDirector(el) {
         clearDirty();
         timeline.opts.readOnly = isPreset();   // 预设配方：时间轴不能加段 / 拖时长 / 重排
         saveBtn.disabled = isPreset();
-        segMenuBtn.style.display = isPreset() ? "none" : "";   // 预设只读：段菜单没有能用的项，不出现
+        timeline.setSegMenuOps(isPreset() ? null : openSegMenu);   // 预设只读：段菜单四项没有一项能用，块右上角不出 ⋯
         saveBtn.title = isPreset() ? t("内置预设配方只读：先「复制配方」才能改") : t("把该段的提示词 / 时长 / 素材槽改动写回配方（不新增段，也不动故事板与分辨率）");
         renderRecipeSelect();
         recipesPanelEl?.__neoRecipesPanel?.select(currentName);   // 卡片高亮跟着本页的选中配方挪（下拉快切 / 保存后重读）
         // 「保存该段」后的重读要留着那句「已保存」：重读是把刚落盘的结果刷回界面，不是开一份新配方
         const presetNote = isPreset() ? t("内置预设配方只读：想改这一片就先「复制配方」") : "";
         statusEl.textContent = presetNote || (opts.keepStatus ? statusEl.textContent : "");
-        syncSkillChip();   // 技能胶囊回到这份配方钉的技能：各段不一样就是「每段用自己的技能」
+        syncSkillChip();   // 技能胶囊回到这份配方钉的技能：各段钉的不是同一个就落首段那一枚
         await loadSpec();
         selectSegment(0);
         agentCtx.recipe = currentName;      // 智能体上下文：默认围绕这一份配方出片
@@ -876,12 +915,10 @@ async function buildDirector(el) {
     async function saveRecipeNow() {
         if (!currentName) { statusEl.textContent = t("请先选一份导演配方"); return false; }
         if (isPreset()) { statusEl.textContent = t("内置预设配方只读：先「复制配方」再改"); return false; }
-        // 技能胶囊动了才写段：整片生成模式落 shared.mode，统一技能写进每一段 skill_id；
-        // 「每段用自己的技能」那一行只落 mixed，段表原样交
+        // 技能胶囊动了才写段：整片生成模式落 shared.mode，选中的技能经 applySkill 写进每一段 skill_id
         if (skillPick !== null) {
-            const group = videoModeGroup(skillMetaOf(skillPick));
-            recipe.shared = { ...(recipe.shared || {}), mode: group };
-            if (group !== "mixed") ops.applySkill(skillPick);
+            recipe.shared = { ...(recipe.shared || {}), mode: videoModeGroup(skillMeta(skillPick)) };
+            ops.applySkill(skillPick);
         }
         saveBtn.disabled = true;
         try {
@@ -1043,15 +1080,6 @@ async function buildDirector(el) {
         cancelBtn.disabled = false;
     });
 
-    durIn.addEventListener("change", () => {
-        const s = segs()[selected];
-        if (!s) return;
-        const v = Math.min(150, Math.max(1, Number(durIn.value) || 5));   // 与后端段时长口径一致：1–150 秒
-        s.duration_sec = v;
-        durIn.value = v;
-        markDirty();
-        timeline.refresh();
-    });
     promptIn.addEventListener("input", () => {
         const s = segs()[selected];
         if (!s) return;
@@ -1064,6 +1092,7 @@ async function buildDirector(el) {
     // 配方面板（弹窗里：点卡片 = 选中喂给本页，含复制 / 删除 / 新增；只列多段导演配方）
     directorPanelOpts = () => ({
         directorOnly: true,
+        hideTitle: true,            // 弹窗顶栏就是标题（导演配方），面板不再重复一行「📦 配方」
         autoSelectFirst: true,      // 进页就选中首份导演配方：整片生成区与时间轴不用先点一次卡片
         initialSelection: currentName,
         onSelect: (r) => { recipesModal?.close(); openRecipe(r.name); },
@@ -1079,8 +1108,8 @@ async function buildDirector(el) {
     listVideoSkills().then((list) => { directorSkills = list || []; syncSkillChip(); }).catch(() => {});
     listVideoGenModels().then((models) => {
         videoModels = models || {};
-        videoCfg.load({}, videoModels);
-        skillChip.sync();   // 技能与覆盖值都是程序填的：chip 上那行生效值要跟着重读
+        videoCfg.load({}, videoModels);   // 先按「自动」铺一遍：右栏四行要有清单可挑
+        applySkillParams(skillSel.value);   // 再铺当前技能钉的那一套（清单拿不到就整块不发覆盖值，各段技能配置照常生效）
     }).catch(() => { /* 清单拿不到：覆盖面板整块不发值，各段技能配置照常生效 */ });
     recipesPanelEl = await createRecipesPanel(directorPanelOpts());
     recipesHost.appendChild(recipesPanelEl);
@@ -1422,10 +1451,6 @@ const VIDEO_TERMINAL = ["succeeded", "failed", "cancelled"];
 // 技能的 mode 经 LEGACY_MODE_MAP 归并（t2v / i2v / fl2v → 关键帧生视频，r2v 留全参考生视频），
 // 没标 mode 的旧视频技能落关键帧生视频——首帧留空就是文生视频，本来就是这一家族里的一发
 const VIDEO_GROUP_LABELS = Object.fromEntries(SEG_MODES.map(([key]) => [key, MODE_LABELS.get(key)]));
-// 导演页技能胶囊：组就是生成模式，多出来的一行是本页的写法——整片不统一技能，每段留着各自的技能。
-// 它不落进段表，落盘只把 shared.mode 写成 mixed（后端认的就是 mixed）
-const DIRECTOR_MIXED_SKILL = "__mixed__";
-const DIRECTOR_GROUP_LABELS = { ...VIDEO_GROUP_LABELS, mixed: MODE_LABELS.get("mixed") };
 const VIDEO_LAST_SKILL_KEY = "neo.video.skill";
 const videoModeGroup = (meta) => LEGACY_MODE_MAP.get(meta?.mode) || meta?.mode || "f2v";
 const videoSkillSteps = (s) => Number((s.gen_config || {}).steps) || 20;
@@ -2644,10 +2669,11 @@ window.addEventListener("neo-offline-request", () => {
 const RUN_GATES = [
     [".neo-gallery-gm-btn", "image_gen", t("生成素材")],
     [".neo-agent-run", "agent", t("生成")],
-    [".ns-director-run", "director", t("生成整片")],
+    [".ns-director-run", "director", t("生成")],
     [".ns-video-run", "simple_video", t("生成视频")],
     [".neo-director-regen-run", "segment", t("生成这一段")],
     [".neo-director-merge-run", "segment", t("拼回成片")],
+    [".ns-director-segmenu-regen", "segment", t("重生成该段")],   // 段菜单那一项目前只做一件事：进编辑器展开上面那块面板
     [".ns-paint .neo-gallery-story-btn-primary", "image_gen", t("生成")],   // 绘画页文生图与编辑页图片编辑面板的生成
     [".ns-reverse-run", "prompt_reverse", t("反推")],
     [".ns-voice-run", "voice", t("生成")],

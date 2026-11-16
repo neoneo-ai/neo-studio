@@ -47,6 +47,11 @@ audios play), the sample results, and direct send-to-workflow.
 · total duration).
 - Card covers and the detail grid use thumbnails (lazy-loaded, falling back to the original when generation
 fails).
+- When a card has no cover to show (director recipes usually keep only prompts and results, with no first frame
+copied into `assets/`), the cover slot carries the first segment's prompt — a director recipe keeps its prompts in
+`segments[].prompt`, and that is where the card summary comes from — with the summary line
+(segment count · mode · width×height · total duration) as a footnote under it; the same text is not repeated in the
+card body, and the card no longer grows around an empty grey block.
 - The preset list on a node merges recipe entries as well; clicking refills the prompt and restores the
 resources into the surrounding sub-graph.
 
@@ -106,8 +111,9 @@ Execution details: [h3-video-gen.md](h3-video-gen.md).
   / the ✎ in the top-right of a `NeoH3VideoDirector` node (entering through a block positions the editor on
   that segment; when the window is already open, clicking another block only switches the current segment).
 - Desktop Studio director page: entering the page selects the first (or the last-selected) director recipe and opens it
-  embedded in the left pane; clicking a recipe card in the **📋 Recipes** modal selects it and opens it there too (the card's ✎
-  works as well).
+  embedded in the left pane; clicking a recipe card in the **📋 Recipe Management** modal selects it and opens it there
+  too (the card's ✎ works as well). The quick recipe switch stays the drop-down on that bar, so the two entries are
+  not named the same.
 - The **＋** in the bottom-right outside the node's timeline display opens the create editor directly (after
   saving, the recipe is added to the `recipe` dropdown and selected).
 - **Run only the checked segments**: hovering a timeline segment block reveals a checkbox, and checking some
@@ -172,7 +178,7 @@ Execution details: [h3-video-gen.md](h3-video-gen.md).
   double-clicking the title bar restores. When the window is tall, the story topic / script input area and the
   current segment's prompt area fill the available height.
 - **Embedded in desktop Studio**: the Studio director page lays the editor out directly inside the left
-  pane (the recipe list opens from the top bar's **📋 Recipes** modal, the generation panel on the right), with
+  pane (the recipe list opens from the top bar's **📋 Recipe Management** modal, the generation panel on the right), with
   no overlay window — no title-bar dragging, no **⛶** maximize, no resize handle; close with the title-bar **✕**.
   The footer gains
   **🎬 Save & Generate Film**: it runs the full save path and, on success, submits the film with the parameters

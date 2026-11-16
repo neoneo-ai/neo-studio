@@ -89,6 +89,12 @@ MiniMax H3 video generation: single-segment BUNDLE and multi-segment director re
     injected twice.
 - **Reference limits**: one first frame and one last frame per segment, reference images ≤9 / reference videos
   ≤3 / reference audios ≤3; the order in the media list is the reference slot number.
+- **The last frame belongs to the last segment only**: on the Studio director page and in the film editor's segment
+  rows the last-frame square shows up only on the last segment — a middle segment pinned to a last frame is wired to
+  the start of the next segment, so the segments never join up. When a segment leaves the last position (add, duplicate,
+  move up / down, delete, drag reorder) its last frame is dropped from the recipe as well: the backend infers the
+  generation mode from the media in the segment, so keeping it turns that segment into first-last-frame and it runs on
+  a box the UI no longer exposes.
 - **Audio alignment**: the segment audios are concatenated in order, each seam discards the samples of the
   dropped frames, and the total audio length equals the duration of the concatenated frame count.
 
@@ -96,6 +102,8 @@ MiniMax H3 video generation: single-segment BUNDLE and multi-segment director re
 
 - **Single-segment regeneration (♻)**: ♻ at the right of a segment title row in the director editor → pick a
   seed (🎲 new seed / reuse the node seed) and an anchor (both ends / first frame only / none).
+  The Studio director page reaches the same panel without opening the editor first: 重生成该段, the first item of
+  the `⋯` menu at a timeline block's top-right, opens that editor on that segment with the panel expanded.
   - The backend takes the real frames around the segment's frame range from the finished film: the first
     anchor = the previous segment's last frame (the first segment uses its own first frame), the last anchor =
     the next segment's first frame.

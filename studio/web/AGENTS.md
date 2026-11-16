@@ -66,6 +66,11 @@
   （`min(78vh, 480px)`：右栏不许自己滚，左栏技能清单自滚），行是「标签 84px + 控件吃余宽」的素材库弹窗档。规则写在
   `.ns-director` 这一层里：桌面端 `gallery.css` 比 `style.css` 后注入，它那条共享 chip-panel（720px / 62vh）同特异会盖过
   不带宿主的这条，弹层就宽过窗口了。
+- 段操作入口只有时间轴块右上角那枚 ⋯（画在画布上的 glyph，不是 DOM 钮）：`director-timeline.js` 出 `onSegMenu(index, viewportRect)`
+  回调与 `setSegMenuOps(fn)`（预设只读传 `null` 就不画 glyph），画布 hit 测试把它排在选中与拖拽之前——点 ⋯ 不选中该段、不拖块，
+  块上头部文案让开它。菜单弹在组件交来的视口矩形旁，宿主 clamp 进窗口；面板就在 `.ns-director` 这块宿主里，宽度两条都带
+  `.ns-director` 前缀（`.rs-runtime-menu` 基座 `min-width: 210px`、`gallery.css` 那条 94vw 同特异后注入，不带前缀就顶成整窗宽）。段号与秒数不在
+  该段行重复一遍：块上就是「第 N 段 · Xs」，拖块右缘改时长。
 
 ## Testing
 

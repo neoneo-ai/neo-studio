@@ -4,17 +4,54 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ## [Unreleased]
 
+### Fixed
+- **The 尾帧 square no longer sits on the prompt box on the 导演页.** The 该段 row let its children shrink
+  (`min-width: 0`), so the tile column squeezed below its own tiles — a 120px column measured 105 — and the tail-frame
+  tile painted past the column edge into the 16px gap: the measured clear space between that tile and the prompt box
+  fell to 1–4px at every width, which reads as the tile touching the box. The row and the tile column now floor their
+  width at their own content (`min-width: max-content`, `flex: 0 0 auto`), an empty 参考素材 row no longer contributes
+  its gap, and the ≤720px stacked layout keeps the column shrinkable with the tiles scrolling inside it. Verified with
+  `tmp/dir-prompt-layout-probe.mjs` (16px clear, nothing clipped at 1718 / 1024 / 900 / 760) and pinned by the
+  导演页该段行 case in `studio/tests/js/studio-desktop.test.mjs`.
+- **查看资源 opens above the recipe-management modal.** A recipe card's 查看 overlay (`openDetail` in `recipes.js`) and
+  the 配方管理 / 素材库 modal are both `fixed` full-window overlays appended to `document.body`, so only the z-index
+  decides which one covers the other: the detail overlay carried 9000, below the modal's 9700, which made 查看 click
+  from inside the modal paint behind it — the card looked like it did nothing. It now sits at 9750, above the modal and
+  under the lightbox (9847), so the asset thumbnails inside the detail view still open above it. Covered by the
+  配方详情浮层叠在管理弹窗之上、灯箱之下 case in `studio/tests/js/studio-desktop.test.mjs`.
+
 ### Added
+- **尾帧 shows up only on the last segment.** A tail frame on a middle segment is wired to the start of the next
+  segment, so the segments never join up and the square looked out of place. The 该段 row on the 导演页 now reveals the
+  尾帧 square only when the selected segment is the last one — the same rule 高级模式 already applies to its segment
+  rows. The write path follows it: a tail frame is stored only on the last segment, and when a segment leaves the last
+  position (新增 / 复制 / 前移 · 后移 / 删除 / 拖拽重排) the tail frame it carried is dropped from the recipe, because the
+  backend infers a segment's generation mode from the media inside it and a leftover tail turns that segment into
+  first-last-frame on a box the UI no longer shows. Covered by the 导演页尾帧只给最后一段 case in
+  `studio/tests/js/studio-director.test.mjs`.
+- **重生成该段 is one click on the 导演页 timeline.** The `⋯` menu at a timeline block's top-right now leads with
+  重生成该段: it opens 高级模式 on that segment with that row's regenerate panel expanded — the seed and 锚点 choices,
+  生成这一段 and 拼回成片 all live in that one panel, so the page adds no second regeneration path and the ♻ glyph in
+  高级模式 keeps working as it did. An offline window gates the item the same way it gates 生成这一段. Covered by the
+  导演页该段 ⋯ cases in `studio/tests/js/studio-director.test.mjs`.
+- **A recipe card with no cover shows its prompt as text.** Director recipes usually store prompts and result paths
+  only, with no first frame copied into `assets/`, so their card carried a 120px empty grey cover. That slot now prints
+  the first segment's prompt (a director recipe stores it as `segments[].prompt`; the card reads it from there), with
+  the summary line (段数 · 模式 · 技能 ×N · 宽×高 · 总时长) as a footnote under it, and the card body repeats neither.
+  Cards that do have a cover are unchanged. Covered by the 卡片无封面 and 多段导演配方摘要只排一遍 cases in
+  `studio/tests/js/recipes-panel.test.mjs`.
+
 - **Generation mode and skill are one 技能 capsule on the 导演页, the same control the 视频页 has.** The 自定参数 capsule is
   now the shared `skillParamsChip`: its left column lists the video skills grouped by generation mode (关键帧生视频 /
-  全参考生视频 / 混合模式) with the model-chain override (main model / Text Encoder / VAE / audio VAE / LoRA / steps) beside
-  it, and the row 每段用自己的技能（混合） is there for a recipe whose segments pin different skills. The picked skill is the
-  one the whole film unifies on and its group is the generation mode, so 全参考生视频 flips every segment's media row to
-  参考素材 — the same rule the backend applies when it resolves a segment's effective mode. Touching the skill marks
-  the page dirty; saving writes `shared.mode` plus the
-  skill into every segment's `skill_id` through `createSegmentOps().applySkill()`, and leaving it alone writes neither. The
+  全参考生视频) with the model-chain override (main model / Text Encoder / VAE / audio VAE / LoRA / steps) beside it. The
+  picked skill is the one the whole film unifies on and its group is the generation mode, so 全参考生视频 flips every
+  segment's media row to 参考素材 — the same rule the backend applies when it resolves a segment's effective mode. The
+  capsule opens on the skill the recipe's first segment pins, and a recipe whose segments pin different skills lands there
+  too: touching the skill marks the page dirty, and saving writes `shared.mode` plus that skill into every segment's
+  `skill_id` through `createSegmentOps().applySkill()`, while leaving it alone writes neither — every segment keeps running
+  the skill it pins, and per-segment skills are picked in 高级模式. The
   整片参数 form keeps 分块秒数, now shown by the effective skill (multi-frame + several segments) instead of by a mode row in
-  the form. Covered by the 导演页技能胶囊 cases and the 整片全参考配方 / 共享整片参数表单 cases in
+  the form. Covered by the 导演页技能胶囊, 导演页混配方, 整片全参考配方 and 共享整片参数表单 cases in
   `studio/tests/js/studio-director.test.mjs`.
 - **The 角色身份参考 switch now lives on the 导演页.** The 整片参数 form carries it: checked (the default) writes
   nothing, turning it off lands `shared.identity_refs=false` so that recipe stops injecting the 角色参考图 as every
@@ -293,6 +330,25 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 
 ### Changed
+- **The 导演页 run button reads 生成.** It carried the whole phrase 生成整片 while the line under the timeline already
+  states what an unchecked segment means (未勾选 = 生成整片 · 点时间轴块左上角勾选), so the control repeated that
+  sentence. The 需要 ComfyUI gate and its restore-on-ready label follow the same short label; 保存并生成整片 in the
+  高级模式 editor foot is unchanged.
+- **The 导演页 top-bar entry is 配方管理, and the recipe drop-down stays the quick switch.** That button was labelled
+  配方 — the same name as the recipe drop-down above it — and the modal it opened repeated a 「📦 配方」 title row under
+  its own 导演配方 title. The button now reads **配方管理** / **Recipe Management** (the copy / delete / new actions live
+  there) and the panel embedded in that modal drops its own title row, so one screen has one recipe title. Covered by the
+  导演页进页铺好配方条 and 配方管理弹窗 cases in `studio/tests/js/studio-director.test.mjs` and the hideTitle case in
+  `studio/tests/js/recipes-panel.test.mjs`.
+
+- **Segment operations now open from the timeline block itself.** Each 导演页 segment block paints a `⋯` at its top-right
+  (a built-in preset recipe paints none, since not one of the four items works there): it opens that segment's
+  复制该段 / 前移一段 / 后移一段 / 删除该段 menu beside the block, replacing the button in the 该段 row. The menu is a 190px
+  column anchored to that glyph — its width rules carry the `.ns-director` host, so they survive the asset-modal
+  chip-panel rule that used to stretch this menu across the window. The 该段 row also stops repeating the
+  segment number and its seconds: the block already reads 第 N 段 · Xs, and dragging its right edge adjusts the duration.
+  Covered by the 导演页该段 ⋯ cases in `studio/tests/js/studio-director.test.mjs` and the 导演页紧凑弹层密度 case in
+  `studio/tests/js/studio-desktop.test.mjs`.
 - **One 提示词 split button, and its list drops under the button.** The 绘画页 / 编辑页 / 视频页 top-right row and the
   生成素材 title bar used to carry two buttons, 提示词 + 随机; they are one split button now — 提示词 on the left, a dice
   icon (`js/core/icons.js` → `dice`) on the right, with the same tooltips and the same two actions. The shared 提示词
@@ -402,6 +458,31 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   `studio/tests/js/home-layout.test.mjs`, `studio/tests/js/studio-desktop.test.mjs` and `studio/tests/test_home_layout.py`.
 
 ### Fixed
+- **The 导演页 prompt box no longer sits on the 首帧 / 尾帧 squares.** That row gave its two columns an 8px gap, and
+  the prompt kept gallery.css's `background: none; border: none` input — a box drawn against the session page's card
+  shell. On the dock's flat card the prompt was bare text beginning right beside the 尾帧 square, so the prompt and
+  the asset squares read as overlapping. The row now separates the two columns by 16px, and the box carries the director
+  editor's input-well tone (`#0d0d0d` behind a `#3c3c3c` border): the shell's `#2a2a2e` field tone is lighter than the
+  dock face, so a box painted with it read as a grey slab fused with the squares. Covered by the 导演页该段行 case in
+  `studio/tests/js/studio-desktop.test.mjs`.
+- **The library / recipe modal has its shell back.** The director-page compaction commit deleted the whole
+  `.ns-libmodal*` block from `studio/web/studio/style.css` while the shell DOM in `js/core/lib-modal.js` stayed, and
+  CSS failures are silent: the 导演配方 modal opened with its 标题 / 最大化 / ✕ stacked on separate lines, no box
+  border, no scrim and no 取用条 — the 素材库 modal and the home page 添加卡片 dialog lost the same rules. The block is
+  restored (遮罩、盒子、标题栏横排、右缘调宽条、内容区内滚与滚动条、取用条、720px 手机档、`.neo-preset-picker` 宽度).
+  Covered by the 弹窗外壳样式齐备 case in `studio/tests/js/studio-desktop.test.mjs`.
+- **The 查看资源 button on a director recipe card is no longer a blank box.** The first action on a selectable card
+  passed an empty icon, so the 导演配方管理弹窗 showed an empty blue button with no glyph at all. It now carries the
+  eye icon, and the 追加 / 导出 rows in a card's **⋯** menu gained the plus / save icons their labels describe.
+  Covered by the 卡片按钮 case in `studio/tests/js/recipes-panel.test.mjs`.
+
+- **Picking a skill on the 导演页 now fills the right column of the 技能 popup.** The left column listed the skills and
+  the right column — 生视频模型 / 步数 / Text Encoder / 两枚 VAE / LoRA — stayed on 自动 no matter which row you picked, so
+  the panel never showed what the run was about to use. Picking a row now loads that skill's own `config.json` chain into
+  the right column and names it on the capsule, exactly like the 视频页, and that chain goes out as the same per-run
+  override the 视频页 sends (steps only when you change them, so each skill's pinned steps still win). A skill whose
+  `config.json` pins nothing clears the panel back to 自动, so it never shows a chain this run is not going to use.
+  Covered by the 导演页技能胶囊 and 打开配方铺模型链 cases in `studio/tests/js/studio-director.test.mjs`.
 - **The video page's 参考图 box grows one tile per reference, up to 9.** 参考生视频 used to cram every picked
   reference into one square as a 3-column thumbnail grid: inside the 118px box each tile is ~37px, the third row
   falls under `overflow: hidden`, and those references' ✕ cannot be reached. 参考图 now renders like 首帧 / 尾帧 -

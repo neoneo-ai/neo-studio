@@ -1,5 +1,5 @@
 // Neo Studio 导演页：配方条（下拉快切 / 配方管理弹窗 / 新建 / 素材库 / 高级模式）+ 出片区（实时预览舞台 + 状态行）
-// + 生成坞（紧凑时间轴 + 该段行 + 首帧 / 尾帧 / 参考三块素材槽 + 模型链覆盖 + 保存该段 + 生成整片）。
+// + 生成坞（紧凑时间轴 + 该段行 + 首帧 / 尾帧 / 参考三块素材槽 + 模型链覆盖 + 保存该段 + 生成）。
 // 页内写路径只有一条：段写 director.js 的 createSegmentOps，落盘走同一条 ops.save；整片参数在「分辨率」胶囊弹的表单里改。
 // studio-app.js 顶层会取 #ns-view 并连 WebSocket，导入前必须先备好 DOM 与 WS 桩。
 import test from "node:test";
@@ -35,8 +35,7 @@ const barEl = () => document.querySelector(".ns-director-progress");
 const mediaEl = () => document.querySelector(".ns-director-media");
 const liveBox = () => document.querySelector(".ns-director-live");
 const promptIn = () => document.querySelector(".ns-director-prompt");
-const durIn = () => document.querySelector(".ns-director-duration");
-const segLabel = () => document.querySelector(".ns-director-seg-label");
+const selSeg = () => tl()._selected;   // 该段面板落在哪一段：时间轴组件的选中态就是这一页的 selected
 const checkHint = () => document.querySelector(".ns-director-checkhint");
 const sizeLabel = () => document.querySelector(".ns-director-size .neo-gallery-gm-chip-label");
 const sizeBtn = () => document.querySelector(".ns-director-size");
@@ -45,15 +44,21 @@ const sizeSaveBtn = () => document.querySelector(".ns-director-size-save");
 const sharedField = (cls) => sizePanel().querySelector(cls);
 const slots = () => [...document.querySelectorAll(".ns-director-slots .ns-slot")];
 const slotAdd = () => [...document.querySelectorAll(".ns-director-slots .ns-slot-add")];
+const skillSel = () => document.querySelector(".ns-director-skill");
 const skillBtn = () => document.querySelector(".ns-director-skill").closest(".neo-gallery-gm-chip-wrap").querySelector(".neo-gallery-gm-chip-btn");
 const skillPanel = () => document.querySelector(".ns-director .neo-gallery-gm-skills-panel");
 const skillItem = (name) => [...skillPanel().querySelectorAll(".neo-gallery-gm-skill-item")].find((b) => b.textContent.includes(name));
 const skillGroups = () => [...skillPanel().querySelectorAll(".neo-gallery-gm-skill-group")].map((g) => g.textContent.trim());
-const segMenuBtn = () => document.querySelector(".ns-director-seg-menu");
+const skillModelSel = () => skillPanel().querySelector(".rs-gen-model-section select");   // 右栏第一行 = 生视频模型
+const skillStepsIn = () => skillPanel().querySelector("input.rs-gen-steps");
+const skillLoraRows = () => [...skillPanel().querySelectorAll(".rs-gen-lora-row")];
 const segMenu = () => document.querySelector(".ns-director-segmenu");
 const segMenuItem = (label) => [...segMenu().querySelectorAll(".ns-btn")].find((b) => b.textContent.includes(label));
 const tlHost = () => document.querySelector(".ns-director-timeline");
 const tl = () => tlHost().__neoDirectorTimeline;
+// 段操作的入口是时间轴段块右上角画在画布上的那枚 ⋯：用例走组件交给宿主的回调（无布局引擎里点不出画布上的点），
+// rect 就是组件算好的 glyph 视口矩形，菜单要弹在它旁边
+const openSegMenu = async (i) => { tl().opts.onSegMenu(i, { left: 120, top: 60, right: 138, bottom: 71 }); await settle(); };
 const recipesModal = () => document.querySelector('.ns-libmodal[data-lib-scope="recipes"]');
 const libModal = () => document.querySelector('.ns-libmodal[data-lib-scope="director"]');
 const modalCard = (name) => [...document.querySelectorAll(".ns-libmodal .neo-gallery-thumb-container")].find((c) => c.dataset.filename === name);
@@ -126,6 +131,11 @@ async function pickIntoSlot(idx, name) {
 const SKILL = { id: "sk-a", name: "技能 A", cn_name: "技能 A", gen_video: true, mode: "t2v", gen_config: { ref_kinds: ["image"] } };
 const SKILL_R2V = { id: "sk-r", name: "技能 R", cn_name: "技能 R", gen_video: true, mode: "r2v", gen_config: { ref_kinds: ["image", "video", "audio"] } };
 const SKILL_MF = { id: "sk-mf", name: "多帧技能", cn_name: "多帧技能", gen_video: true, mode: "t2v", multi_frame: true, gen_config: { ref_kinds: ["image"] } };
+// 技能 config 钉的模型链：导演页点一列里的技能就把右栏整份铺成这一套（与视频页同一语义）
+const SKILL_CFG = {
+    "sk-r": { model: "h3/model_b.safetensors", steps: 12, loras: [{ name: "h3/style_lora.safetensors", strength: 0.5 }] },
+    "sk-mf": { steps: 8 },
+};
 const RECIPE_BY_NAME = {
     R1: { name: "R1", type: "video_director", source: "user", shared: { mode: "f2v", seed: 4242 }, assets: [], loras: [],
         segments: [{ skill_id: "sk-a", prompt: "段一", duration_sec: 3, first_frame: "seed1.png" },
@@ -140,12 +150,22 @@ const RECIPE_BY_NAME = {
             { skill_id: "sk-r", prompt: "参考乙", duration_sec: 3, refs: { videos: ["clip.mp4"] } }] },
     预设片: { name: "预设片", type: "video_director", source: "preset", shared: { mode: "r2v" }, assets: [], loras: [],
         segments: [{ skill_id: "sk-a", prompt: "预设段", duration_sec: 4, refs: { images: ["p1.png"] } }] },
+    // 混配方（旧版整片编辑器的写法：整片钉 mixed，各段钉各自的技能）：本页落首段那一枚，逐段槽位跟着该段模式切
+    RM: { name: "RM", type: "video_director", source: "user", shared: { mode: "mixed" }, assets: [], loras: [],
+        segments: [{ skill_id: "sk-a", prompt: "混甲", duration_sec: 2, first_frame: "seed1.png" },
+            { skill_id: "sk-r", prompt: "混乙", duration_sec: 2, mode: "r2v", refs: { images: ["a.png"] } }] },
+    // 旧版整片编辑器留下的写法：每段都记了一张尾帧（含中间段）。本页只认最后一段那张
+    尾帧片: { name: "尾帧片", type: "video_director", source: "user", shared: { mode: "f2v" }, assets: [], loras: [],
+        segments: [{ skill_id: "sk-a", prompt: "甲段", duration_sec: 2, first_frame: "seed1.png", last_frame: "tail_a.png" },
+            { skill_id: "sk-a", prompt: "乙段", duration_sec: 2, first_frame: "seed2.png", last_frame: "tail_b.png" }] },
 };
 const SPEC_BY_RECIPE = {
     R1: { segments: [{ ref_input: "seed1.png", last_input: "" }], defaults: { width: 640, height: 384, steps: 20 } },
     R2: { segments: [{}, {}, {}], defaults: { width: 1344, height: 768, steps: 8 } },
     R3: { segments: [{ refs: { images: ["a.png"] } }, { refs: { videos: ["clip.mp4"] } }], defaults: { width: 1024, height: 576, steps: 12 } },
     预设片: { segments: [{ refs: { images: ["p1.png"] } }], defaults: { width: 512, height: 896, steps: 8 } },
+    RM: { segments: [{ ref_input: "seed1.png", last_input: "" }, { refs: { images: ["a.png"] } }], defaults: { width: 1024, height: 576, steps: 12 } },
+    尾帧片: { segments: [{ ref_input: "seed1.png", last_input: "tail_a.png" }, { ref_input: "seed2.png", last_input: "tail_b.png" }], defaults: { width: 1024, height: 576, steps: 12 } },
 };
 const GALLERY_FILES = ["a.png", "b.png", "c.png", "d.png", "e.png", "clip.mp4", "voice.wav"];
 
@@ -170,7 +190,7 @@ function bootMocks() {
         diffusion_models: ["h3/model_a.safetensors", "h3/model_b.safetensors"],
         text_encoders: ["qwen3vl.safetensors"], vae: ["vae.safetensors"], loras: ["h3/style_lora.safetensors"],
     }));
-    mockRoute("/neo_image_gen/skill_config", () => jsonResponse({}));
+    mockRoute("/neo_image_gen/skill_config", (b, call) => jsonResponse(SKILL_CFG[call.query.get("skill_id")] || {}));
     mockRoute("/neo_image_gen/settings", jsonResponse({ success: true, target_mp: 8 }));
     mockRoute("/neo_video_gen/settings", jsonResponse({ success: true, models: {} }));
     mockRoute("/neo_studio/queue", jsonResponse({ success: true, online: true, image: 0, segment: 0, film: 0, simple: 0, voice: 0, total: 0, rows: [] }));
@@ -290,23 +310,26 @@ test("导演页：进页铺好配方条 + 自动选中配方 + 时间轴 + 三�
     await boot();
     await openDirector();
     assert.ok(pageEl(), "应切到导演页");
-    assert.ok(barBtn("配方") && barBtn("新建配方") && barBtn("素材库") && barBtn("高级模式"), "配方条四枚按钮齐");
+    assert.ok(barBtn("配方管理") && barBtn("新建配方") && barBtn("素材库") && barBtn("高级模式"), "配方条四枚按钮齐");
+    assert.equal(barBtn("配方管理").textContent.trim(), "配方管理",
+        "顶栏那枚叫「配方管理」：快速换配方是上方那名下拉，两枚不同名");
     assert.ok(!document.querySelector(".neo-director-overlay"), "进页不出整片编辑器浮层：高级模式要用户自己点");
     assert.equal(tl().opts.getSegments().length, 2, "R1 两段画在时间轴上");
-    assert.equal(segLabel().textContent, "第 1 段", "该段行落在第 1 段");
-    assert.equal(durIn().value, "3", "时长回显该段配方值");
+    assert.equal(selSeg(), 0, "该段面板落在第 1 段");
     assert.equal(promptIn().value, "段一", "提示词回显该段配方值");
     assert.equal(slots().length, 3, "首帧 / 尾帧 / 参考三方块");
     const mainKids = [...document.querySelector(".ns-director-main").children];
     assert.ok(mainKids[1] === promptIn(), "提示词直接吃方块列剩下的宽度");
-    assert.ok(mainKids[0].children[1].classList.contains("ns-director-segtop"), "第N段与时长落在方块底下的空带里");
-    assert.ok(!slots()[0].classList.contains("ns-hidden") && !slots()[1].classList.contains("ns-hidden"), "f2v 段显首帧 / 尾帧");
+    assert.ok(!document.querySelector(".ns-director-seg-label") && !document.querySelector(".ns-director-duration"),
+        "段号与秒数不在该段行重复一遍：只在时间轴块上显示、拖右缘调");
+    assert.ok(!slots()[0].classList.contains("ns-hidden"), "f2v 段显首帧");
+    assert.ok(slots()[1].classList.contains("ns-hidden"), "尾帧只给最后一段：共 2 段时该段行落在第 1 段，尾帧方块不露");
     assert.ok(slots()[2].classList.contains("ns-hidden"), "f2v 段藏参考那一行");
     assert.ok(slots()[0].querySelector("img").src.includes("seed1.png"), "首帧画面用 spec 解析进 input/ 的那张");
     assert.equal(sizeLabel().textContent, "640×384", "尺寸回显 = spec defaults 的宽×高（步数与生成模式都在技能那一列，不进尺寸名）");
     assert.ok(mediaEl().classList.contains("ns-director-idle") && mediaEl().querySelector(".ns-director-idle-card"), "没跑着时起手卡占位");
     assert.equal(getComputedStyle(liveBox()).display, "none", "预览容器起手隐藏");
-    assert.ok((runBtn().textContent || "").includes("生成整片"), "生成钮文案");
+    assert.equal(runBtn().textContent.trim(), "生成", "生成钮文案：跑哪几段写在提示行上，按钮不重复那句长文案");
     assert.equal(cancelBtn().style.display, "none", "取消按钮起手隐藏");
 });
 
@@ -315,7 +338,7 @@ test("导演页：顶栏切配方 → 段数 / 该段行 / 尺寸回显跟着换
     await openDirector();
     await pickRecipe("R2");
     assert.equal(tl().opts.getSegments().length, 3, "R2 三段换到时间轴");
-    assert.equal(segLabel().textContent, "第 1 段", "切配方回到第 1 段");
+    assert.equal(selSeg(), 0, "切配方回到第 1 段");
     assert.equal(promptIn().value, "甲", "该段行换成新配方的第 1 段");
     assert.equal(sizeLabel().textContent, "1344×768", "尺寸回显新配方 defaults");
 });
@@ -325,7 +348,7 @@ test("导演页：时间轴点第 2 段 → 该段行与素材槽家族跟着换
     await openDirector();
     await pickRecipe("R2");
     await clickSeg(1);
-    assert.equal(segLabel().textContent, "第 2 段", "选中落到第 2 段");
+    assert.equal(selSeg(), 1, "选中落到第 2 段");
     assert.equal(promptIn().value, "乙", "提示词换成第 2 段");
     assert.ok(slots()[2].classList.contains("ns-hidden") === false, "r2v 段显参考那一行");
     assert.ok(slots()[0].classList.contains("ns-hidden"), "r2v 段藏首帧方块");
@@ -333,12 +356,31 @@ test("导演页：时间轴点第 2 段 → 该段行与素材槽家族跟着换
     assert.equal(tl()._selected, 1, "时间轴选中同一块");
 });
 
+test("导演页：尾帧只给最后一段 —— 方块只露在最后一段，配方里非最后一段的尾帧起手就清掉", async () => {
+    await boot();
+    await openDirector();
+    await pickRecipe("尾帧片");   // 旧版整片编辑器留下的写法：两段各记了一张尾帧
+    assert.ok(slots()[1].classList.contains("ns-hidden"), "该段行落在第 1 段（共 2 段）：尾帧方块不露");
+    await clickSeg(1);
+    assert.ok(!slots()[1].classList.contains("ns-hidden"), "该段行落在最后一段：尾帧方块露出来");
+    await clickSeg(0);
+    assert.ok(slots()[1].classList.contains("ns-hidden"), "回到第 1 段：尾帧方块又收起来");
+    // 后端是按素材推生成模式的：中间段留一张尾帧就推成首尾帧，跑的却是一个界面上改不到的框
+    assert.equal(tl().opts.getSegments()[0].last_frame, undefined, "第 1 段那张旧尾帧不在配方里了");
+    assert.equal(tl().opts.getSegments()[1].last_frame, undefined, "末段那张也清掉了：段列一落地就把非最后一段的尾帧收干净");
+    tl().opts.onAdd();   // 新增一段：原末段挪到中间
+    await settle();
+    await settle();
+    assert.equal(tl().opts.getSegments().length, 3, "新增一段进配方");
+    assert.ok(!slots()[1].classList.contains("ns-hidden"), "该段行落在新增的末段：尾帧方块露出来");
+});
+
 test("导演页：预设配方只读 —— 该段控件停用、方块不画取用钮、生成整片点了不发", async () => {
     await boot();
     await openDirector();
     await pickRecipe("预设片");
     assert.ok(saveBtn().disabled, "预设配方禁用保存该段");
-    assert.ok(durIn().disabled && promptIn().disabled, "预设配方停用时长与提示词");
+    assert.ok(promptIn().disabled, "预设配方停用提示词");
     assert.equal(slots()[2].querySelector(".ns-slot-add"), null, "预设配方不画取用钮");
     assert.ok(statusEl().textContent.includes("只读"), "状态行给出只读说法");
     click(runBtn());
@@ -472,10 +514,12 @@ test("导演页：取消先过确认 —— 挡下不动队列，确认后 POST 
 test("导演页：配方管理弹窗（卡片铺好 / 列表刷新不自动关 / ✕ 收起）", async () => {
     await boot();
     await openDirector();
-    click(barBtn("配方"));
+    click(barBtn("配方管理"));
     await until(() => recipesModal() && recipesModal().querySelector(".neo-recipes-card"), "弹窗里铺好配方卡片");
     assert.notEqual(getComputedStyle(recipesModal()).display, "none", "弹窗打开");
-    assert.equal(recipesModal().querySelectorAll(".neo-recipes-card").length, 4, "四张导演配方卡（含预设）");
+    assert.ok(recipesModal().querySelector(".ns-libmodal-title")?.textContent.includes("导演配方"), "弹窗顶栏就是那一个标题");
+    assert.equal(recipesModal().querySelector(".neo-recipes-title"), null, "面板里不再重复一行「配方」标题");
+    assert.equal(recipesModal().querySelectorAll(".neo-recipes-card").length, 6, "六张导演配方卡（含预设、混配方与带尾帧那份）");
     await sleep(60);
     assert.notEqual(getComputedStyle(recipesModal()).display, "none", "列表刷新后弹窗不得自己关掉");
     click(recipesModal().querySelector(".ns-libmodal-close"));
@@ -528,7 +572,8 @@ test("导演页技能胶囊：技能按生成模式分组，选全参考就统�
     assert.ok(skillBtn().textContent.includes("技能 A"), "胶囊标签说出首段钉着的那一个技能");
     click(skillBtn());
     await settle();
-    assert.deepEqual(skillGroups(), ["关键帧生视频", "全参考生视频", "混合模式"], "左栏按生成模式分组，最后一档是混合");
+    assert.deepEqual(skillGroups(), ["关键帧生视频", "全参考生视频"], "左栏按生成模式分组，分组就是那两档生成模式");
+    assert.equal(skillItem("每段用自己的技能"), undefined, "左栏没有「每段用自己的技能」那一行，也没有混合那一组");
     click(skillItem("技能 R"));
     await settle();
     assert.ok(saveBtn().classList.contains("ns-director-dirty"), "换统一技能算未保存的改动");
@@ -541,18 +586,20 @@ test("导演页技能胶囊：技能按生成模式分组，选全参考就统�
     assert.deepEqual(body.segments.map((s) => s.skill_id), ["sk-r", "sk-r"], "统一技能写进每一段（走的还是段写那一条）");
 });
 
-test("导演页技能胶囊：「每段用自己的技能」只落 mixed，段表一个都不改", async () => {
+test("导演页混配方：技能胶囊落首段那一枚，不动它保存就一段都不写", async () => {
     await boot();
     await openDirector();
-    click(skillBtn());
-    await settle();
-    click(skillItem("每段用自己的技能"));
-    await settle();
+    await pickRecipe("RM");   // 首段钉 sk-a、第二段钉 sk-r，整片钉的是旧版的 mixed
+    assert.ok(skillBtn().textContent.includes("技能 A"), "各段钉的不是同一个：胶囊落首段那一枚技能");
+    assert.equal(skillSel().value, "sk-a", "选中值同样落首段那一枚：没有「每段用自己的技能」可落");
     click(saveBtn());
     await settle(); await settle();
     const body = saveBodies.at(-1);
-    assert.equal(body.shared.mode, "mixed", "混合落进 shared.mode");
-    assert.deepEqual(body.segments.map((s) => s.skill_id), ["sk-a", "sk-a"], "每段留着各自的技能，一段都不写");
+    assert.deepEqual(body.segments.map((s) => s.skill_id), ["sk-a", "sk-r"], "没动技能胶囊就一段都不写：各段照跑自己钉的技能");
+    assert.equal(body.shared.mode, "mixed", "旧混配方的 mixed 原样留在 shared：本页不写这一档也不动它");
+    await clickSeg(1);
+    assert.ok(!isHidden(slots()[2]) && isHidden(slots()[0]) && isHidden(slots()[1]),
+        "该段素材槽逐段跟着该段自己钉的模式切：第二段是全参考那一行");
 });
 
 test("导演页技能胶囊：选多帧技能后整片参数表单里露出分块秒数，保存一起落盘", async () => {
@@ -577,6 +624,37 @@ test("导演页技能胶囊：选多帧技能后整片参数表单里露出分�
     assert.equal(body.shared.chunk_sec, 20, "分块秒数进 shared");
     assert.equal(body.shared.mode, "f2v", "关键帧那一组落 shared.mode");
     assert.deepEqual(body.segments.map((s) => s.skill_id), ["sk-mf", "sk-mf"], "统一技能写进每一段");
+});
+
+test("导演页技能胶囊：右栏铺该技能钉的模型链，切到没钉配置的技能清空回自动", async () => {
+    await boot();
+    await openDirector();
+    click(skillBtn());
+    await settle();
+    click(skillItem("技能 R"));
+    await settle(); await settle();   // 该技能 config 要过一次 skill_config 才铺进右栏
+    assert.equal(skillModelSel().value, "h3/model_b.safetensors", "主模型铺成该技能钉的那一颗");
+    assert.equal(skillStepsIn().value, "12", "步数铺该技能钉的那一发");
+    assert.equal(skillLoraRows().length, 1, "LoRA 行铺该技能钉的那一条");
+    assert.ok(skillBtn().textContent.includes("model_b"), "胶囊标签说出这一发生效的主模型");
+    click(skillItem("技能 A"));
+    await settle(); await settle();   // 技能 A 的 config 是空的：右栏要跟着换成这一发真正要跑的那一套
+    assert.equal(skillModelSel().value, "", "没钉主模型的技能：右栏清空回自动，这一发跟着各段自己的技能配置跑");
+    assert.equal(skillStepsIn().value, "20", "步数回到默认，不留上一枚技能钉的 12");
+    assert.equal(skillLoraRows().length, 0, "上一枚技能钉的 LoRA 行不留");
+    assert.ok(!skillBtn().textContent.includes("model_b"), "胶囊标签收回这一发不生效的主模型");
+});
+
+test("导演页打开配方就把右栏铺成首段钉技能的模型链，这一套走同一条覆盖链进 payload", async () => {
+    await boot();
+    await openDirector();
+    await pickRecipe("R3");   // 两段都钉 sk-r：该技能 config 钉了主模型 / 步数 / LoRA
+    await until(() => skillModelSel().value === "h3/model_b.safetensors", "打开配方后右栏铺首段钉技能的主模型");
+    assert.equal(skillStepsIn().value, "12", "步数铺该技能钉的那一发");
+    await startRun();
+    assert.equal(genBody().model, "h3/model_b.safetensors", "铺出来的主模型进 payload（与视频页同一批顶层键）");
+    assert.ok(!("steps" in genBody()), "面板没改步数就不发这一项——该技能钉的 12 步在后端跑");
+    assert.deepEqual(genBody().loras, [{ name: "h3/style_lora.safetensors", strength: 0.5 }], "铺出来的 LoRA 与强度进 payload");
 });
 
 test("导演页整片全参考配方：胶囊回显全参考技能，每一段都走参考素材那一行", async () => {
@@ -609,45 +687,68 @@ test("导演页高级模式：整片编辑器以浮层打开，保存后本页�
     assert.ok(!document.querySelector(".neo-director-overlay"), "保存后关掉编辑器");
 });
 
-test("导演页该段 ⋯：复制到下面一段、前移改顺序、删除走确认（写回同一条保存链）", async () => {
+test("导演页该段 ⋯：入口在段块右上角，复制到下面一段、前移改顺序（写回同一条保存链）", async () => {
     await boot();
     await openDirector();                                   // R1 = 段一 / 段二
-    click(segMenuBtn());
-    await settle();
-    assert.notEqual(segMenu().style.display, "none", "点 ⋯ 出菜单");
-    // fixed 基座由 prompts.css 的 .rs-runtime-menu 给：缺了它 left/top 不生效，菜单变成页面流里的一块、落在页面最左
-    assert.ok(segMenu().classList.contains("rs-runtime-menu"), "⋯ 菜单是 fixed 浮层，位置跟着 ⋯ 那枚钮");
+    assert.ok(!document.querySelector(".ns-director-seg-menu"), "该段行里没有 ⋯ 那枚钮：段操作入口只有时间轴块右上角那一枚");
+    await openSegMenu(0);
+    assert.notEqual(segMenu().style.display, "none", "点块右上角的 ⋯ 出菜单");
+    // fixed 基座由 prompts.css 的 .rs-runtime-menu 给：缺了它 left/top 不生效，菜单变成页面流里的一块、落在页面最左。
+    // left/top 取的是组件交来的 glyph 视口矩形（下沿 71 + 6 落在下面），不是鼠标点
+    assert.ok(segMenu().classList.contains("rs-runtime-menu"), "⋯ 菜单是 fixed 浮层，位置跟着那枚 glyph");
+    assert.equal(parseFloat(segMenu().style.top), 77, "菜单弹在 glyph 矩形下沿");
     click(segMenuItem("复制该段"));
     await settle();
     assert.equal(tl().opts.getSegments().length, 3, "复制多出段三");
-    assert.equal(segLabel().textContent, "第 2 段", "选中跟着落在复制出来的那一段");
+    assert.equal(selSeg(), 1, "选中跟着落在复制出来的那一段");
     assert.equal(promptIn().value, "段一", "复制带走该段的提示词");
     assert.ok(saveBtn().classList.contains("ns-director-dirty"), "增段算未保存的改动");
     click(saveBtn());
     await settle(); await settle();
     assert.equal(saveBodies.at(-1).segments.length, 3, "保存交三段（同一条 /rs_recipes/save 链）");
     assert.ok(!saveBtn().classList.contains("ns-director-dirty"), "写回后清脏标记");
-    click(segMenuBtn()); await settle();
+    await openSegMenu(1);
     click(segMenuItem("前移一段")); await settle();
-    assert.equal(segLabel().textContent, "第 1 段", "前移后选中跟着挪");
+    assert.equal(selSeg(), 0, "前移后选中跟着挪");
     click(saveBtn()); await settle(); await settle();
     const order = saveBodies.at(-1).segments.map((s) => s.prompt);
-    assert.equal(order[0], "段一", "顺序写回配方");
-    assert.equal(new Set(order).size, 2, "复制段与段二都在，没有丢段");
+    assert.equal(order.join(" → "), "段二 → 段一", "前移把该段挪到最前，写回同一条保存载荷");
+    assert.equal(new Set(order).size, 2, "两段都在，没有丢段");
 });
 
-test("导演页该段 ⋯：最后一段删不掉；预设配方不出 ⋯", async () => {
+test("导演页该段 ⋯：最后一段删不掉；预设配方撤掉块右上角那枚 ⋯", async () => {
     await boot();
     await openDirector();
-    click(segMenuBtn()); await settle();
+    await openSegMenu(0);
     click(segMenuItem("删除该段")); await settle(); await settle();
     assert.equal(tl().opts.getSegments().length, 1, "确认删除后少一段");
-    click(segMenuBtn()); await settle();
+    await openSegMenu(0);
     click(segMenuItem("删除该段")); await settle();
     assert.equal(tl().opts.getSegments().length, 1, "最后一段删不掉");
     assert.ok((document.getElementById("ns-toast")?.textContent || "").includes("最后一段"), "挡下时说得出来");
     await pickRecipe("预设片");
-    assert.equal(segMenuBtn().style.display, "none", "内置预设只读：段菜单不出现");
+    assert.equal(tl().opts.onSegMenu, null, "内置预设只读：菜单五项没有一项能用，段块右上角那枚 ⋯ 跟着撤掉");
+});
+
+test("导演页该段 ⋯：重生成该段排第一项，点它进整片编辑器并展开该段那一行的重生成面板", async () => {
+    await boot();
+    await openDirector();
+    await openSegMenu(1);   // 在第 2 段的块右上角点的 ⋯
+    const labels = [...segMenu().querySelectorAll(".ns-btn")].map((b) => b.textContent.trim());
+    assert.equal(labels.join(" / "), "重生成该段 / 复制该段 / 前移一段 / 后移一段 / 删除该段", "段菜单五项与顺序");
+    click(segMenuItem("重生成该段"));
+    await settle(); await settle();
+    assert.equal(segMenu().style.display, "none", "点完菜单自己收起");
+    await until(() => document.querySelector(".neo-director-overlay .neo-director-seg-regen-panel"), "编辑器展开该段的重生成面板");
+    const rows = [...document.querySelectorAll(".neo-director-overlay .neo-director-seg")];
+    const panel = document.querySelector(".neo-director-overlay .neo-director-seg-regen-panel");
+    assert.equal(rows.length, 2, "打开的是本页当前那份配方，没有多开一份编辑器");
+    assert.ok(rows[1].contains(panel), "面板落在第 2 段那一行：从第 2 段的块上点的 ⋯，重生成就是那一段");
+    assert.ok(rows[1].classList.contains("neo-director-seg-current"), "编辑器同时定位到该段（不是默认第 1 段）");
+    assert.ok(panel.querySelector(".neo-director-regen-run"), "展开的是高级模式那一行的同一块重生成面板，页里没有第二份实现");
+    click(document.querySelector(".neo-director-overlay .neo-director-close"));
+    await settle();
+    assert.ok(!document.querySelector(".neo-director-overlay"), "用例收尾关掉浮层：director.js 的编辑器单例不留活窗口");
 });
 
 test("共享段操作（director.js createSegmentOps）：新段跟上一段、重排只认全长顺序表、只读挡写", async () => {
@@ -673,7 +774,7 @@ test("共享段操作（director.js createSegmentOps）：新段跟上一段、�
     assert.ok(!ops.isDirty(), "宿主清脏后干净");
     assert.equal(ops.applySkill("sk-b"), 2, "统一技能写满每一段");
     assert.equal(recipe.segments[1].skill_id, "sk-b", "每段换的是 skill_id，提示词与素材不动");
-    assert.equal(ops.applySkill(""), 0, "混合模式交空串：一段都不写");
+    assert.equal(ops.applySkill(""), 0, "空技能 id 一段都不写");
     assert.ok(ops.isDirty(), "统一技能算未保存");
     ops.clearDirty();
     const preset = createSegmentOps(() => recipe, { readOnly: () => true });

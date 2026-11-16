@@ -13,6 +13,9 @@
 //            勾选框常显（「这次哪几段会跑」是一眼要看的事，悬停态在触屏上根本不存在），命中区比视觉框大一圈，
 //            避免误触成「点块打开编辑器」。
 // 回调：onCheckChange(checkedIndices)
+//       onSegMenu(index, viewportRect)：点块右上角的「⋯」，宿主把该段的操作菜单弹在这块矩形旁边
+//            （viewportRect 是「⋯」的视口坐标）。没有这个回调就不画「⋯」：内置预设配方只读，
+//            菜单四项没有一项能用，控件不该出现（宿主经 setSegMenuOps(null) 撤掉）。
 
 import { t } from "./js/core/i18n.js";
 
@@ -24,6 +27,9 @@ const DT_TOP_GAP = 4;        // 刻度尺与块之间的间距
 const DT_BOTTOM_PAD = 6;     // 块底部留白（横向滚动条占这一带）
 const DT_CHECK_S = 11;       // 「仅运行勾选的段」勾选框边长（checkable 时间轴）
 const DT_CHECK_PAD = 6;      // 勾选框命中区外扩（点得更稳，避免误触成「点块选中」）
+const DT_MENU_W = 18;        // 段块右上角「⋯」视觉宽（该段操作菜单的入口）
+const DT_MENU_H = 11;        // 「⋯」高：与勾选框同一行，块顶那一行只放得下一行字
+const DT_MENU_PAD = 5;       // 「⋯」命中区外扩（点在glyph上只弹菜单，不触发选中与拖拽）
 
 export class DirectorTimeline {
   constructor(container, options) {
@@ -140,6 +146,12 @@ export class DirectorTimeline {
     if (this.opts.onCheckChange) this.opts.onCheckChange(this.getChecked());
   }
 
+  /** 段操作菜单入口：宿主换配方时按只读与否给回调或撤掉（null），块右上角的「⋯」跟着出现/消失。 */
+  setSegMenuOps(fn) {
+    this.opts.onSegMenu = typeof fn === "function" ? fn : null;
+    this.refresh();
+  }
+
   // 勾选框（仅 checkable）：块左上角，序号徽标随之右移
   _checkRect(x, top) {
     return { x: x + 4, y: top + 3, s: DT_CHECK_S };
@@ -179,6 +191,43 @@ export class DirectorTimeline {
     else this._checked.add(i);
     this.refresh();
     if (this.opts.onCheckChange) this.opts.onCheckChange(this.getChecked());
+  }
+
+  // 段操作「⋯」（块右上角，常显）：入口就是宿主的 onSegMenu，画不画只按它有没有给
+  _menuVisible() {
+    return typeof this.opts.onSegMenu === "function" && !this.opts.readOnly;
+  }
+
+  _menuRect(x, top, w) {
+    return { x: x + w - DT_MENU_W - 4, y: top + 3, w: DT_MENU_W, h: DT_MENU_H };
+  }
+
+  // 命中区外扩一圈：视觉框只有 18×11，按视觉框点在触屏与 150% 缩放下要点偏成「点块选中」
+  _menuHitRect(x, top, w) {
+    const m = this._menuRect(x, top, w);
+    return { x: m.x - DT_MENU_PAD, y: m.y - DT_MENU_PAD, w: m.w + DT_MENU_PAD * 2, h: m.h + DT_MENU_PAD * 2 };
+  }
+
+  _hitsMenu(x, y, i) {
+    const b = this._layout().blocks.find((bb) => bb.i === i);
+    if (!b) return false;
+    const m = this._menuHitRect(b.x, DT_RULER_H + DT_TOP_GAP, b.w);
+    return x >= m.x && x <= m.x + m.w && y >= m.y && y <= m.y + m.h;
+  }
+
+  // 「⋯」的视口矩形：宿主据此把菜单弹在它旁边。画布本地坐标 → 视口坐标是 _localPoint 的逆运算，
+  // 节点里的时间轴被 zoom 缩过（k≠1），直接拿画布坐标定位会把菜单弹偏
+  _menuViewportRect(i) {
+    const b = this._layout().blocks.find((bb) => bb.i === i);
+    if (!b) return null;
+    const rect = this.canvas.getBoundingClientRect();
+    const layoutW = this.canvas.clientWidth || rect.width || 1;
+    const k = layoutW > 0 ? rect.width / layoutW : 1;
+    const m = this._menuRect(b.x, DT_RULER_H + DT_TOP_GAP, b.w);
+    return {
+      left: rect.left + m.x * k, top: rect.top + m.y * k,
+      right: rect.left + (m.x + m.w) * k, bottom: rect.top + (m.y + m.h) * k,
+    };
   }
 
   destroy() {
@@ -365,6 +414,8 @@ export class DirectorTimeline {
     if (i < 0) return;
     e.preventDefault();
     if (this.opts.checkable && this._hitsCheck(x, y, i)) { this._toggleChecked(i); return; }
+    // 「⋯」排在选中与拖拽之前：它是该段的操作入口，点它不该顺带把块拖走或改掉时长
+    if (this._menuVisible() && this._hitsMenu(x, y, i)) { this.opts.onSegMenu(i, this._menuViewportRect(i)); return; }
     if (this.opts.readOnly) { this.select(i); return; }
     if (this._resizeZoneAt(x, i)) {
       this._drag = { src: i, resize: true, moved: false, startX: x };
@@ -803,10 +854,29 @@ export class DirectorTimeline {
       }
     }
 
+    // 段操作「⋯」（块右上角，常显）：入口是宿主的 onSegMenu，点它弹该段的 复制/前移/后移/删除
+    if (this._menuVisible()) {
+      const m = this._menuRect(x, top, w);
+      this._rr(ctx, m.x, m.y, m.w, m.h, 3);
+      ctx.fillStyle = "rgba(0,0,0,0.42)";
+      ctx.fill();
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = "rgba(255,255,255,0.55)";
+      ctx.stroke();
+      ctx.fillStyle = "#fff";
+      for (let d = 0; d < 3; d++) {
+        ctx.beginPath();
+        ctx.arc(m.x + 5 + d * 4, m.y + m.h / 2, 1.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
     // 顶部一行：序号 · 时长（悬停那块再跟上起止秒）；半透明背景 + 白字深色描边，画在图片之上。
     // 时长不再钉块右上：右上是缩略图与提示词的公共地带，钉在那里就是一枚压在字上的徽标
     const numX = this.opts.checkable ? x + 4 + DT_CHECK_S + 4 : x + 6;
-    const head = this._fitHead(ctx, [numLabel, seg.duration ? String(seg.duration) + "s" : "", rangeText].filter(Boolean), Math.max(16, w - 12));
+    // 头部一行的右界让开右上角那枚 ⋯：让不开的话时长与起止秒直接伸到 glyph 底下，点 ⋯ 要点在字上
+    const headW = Math.max(16, w - 12 - (this._menuVisible() ? DT_MENU_W + 3 : 0));
+    const head = this._fitHead(ctx, [numLabel, seg.duration ? String(seg.duration) + "s" : "", rangeText].filter(Boolean), headW);
     ctx.textBaseline = "top";
     textBg(head, numX, top + 3, "bold 10px sans-serif");
     put(head, numX, top + 3, "bold 10px sans-serif", "#fff");

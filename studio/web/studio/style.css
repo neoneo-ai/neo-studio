@@ -279,20 +279,32 @@ body {
 .ns-director-zoomrow { flex: none; margin-left: auto; display: flex; align-items: center; gap: 4px; }
 .ns-director-zoom { height: 20px; min-width: 22px; padding: 0 6px; border: 1px solid var(--ns-border); border-radius: 5px; background: var(--ns-raised); color: var(--ns-dim); font-size: 11px; line-height: 1; cursor: pointer; }
 .ns-director-zoom:hover { border-color: var(--ns-accent); color: var(--ns-fg); }
-/* 该段行：方块列在左（方块 + 底下那条「第N段 · 时长」空带），提示词吃剩下的宽度（窄屏上下堆叠见下面 720px） */
-.ns-director-main { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
-/* 方块列只占方块那一列的宽，可收缩（参考素材铺满时方块行在自己列里横滚，不把提示词挤没） */
-.ns-director-segrow { flex: 0 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
-.ns-director-segtop { flex: none; display: flex; align-items: center; gap: 8px; min-width: 0; }
-.ns-director-seg-label { flex: none; font-size: 12px; color: var(--ns-fg); }
-.ns-director-duration { flex: none; width: 58px; min-width: 44px; height: 28px; text-align: center; }
+/* 该段行：方块列在左，提示词吃剩下的宽度（窄屏上下堆叠见下面 720px）。段号与秒数不在这一行重复——
+   时间轴块左上就是「第 N 段 · Xs」，右缘一拖就改时长。两栏之间 16px：与视频页同档的 12px 只到「文字不贴住」，
+   框描边立起来之后，12px 就是方块右缘几乎贴住框的左缘，方块与框在卡面上读成同一块 */
+.ns-director-main { display: flex; align-items: flex-start; gap: 16px; min-width: 0; }
+/* 方块列那一列占多宽就占多宽，不许被压扁（参考素材铺满时方块行在自己列里横滚，不把提示词挤没） */
+.ns-director-segrow { flex: 0 0 auto; min-width: max-content; display: flex; flex-direction: column; gap: 4px; }
 .ns-director-prompt { flex: 1 1 auto; min-width: 0; }
 /* 提示词的字与行距归页面这一档：gallery.css 的 .neo-gallery-gm-quick-input（15px / 110px 起高 / 12px 内衬）
-   是运行时后注入的，同特异它排在后面就赢，压住它要两层选择器 */
+   是运行时后注入的，同特异它排在后面就赢，压住它要两层选择器。
+   框的边界也在这一条里：基础那条是 background:none / border:none（会话页的卡壳自带边界），
+   本页卡面是平的，不给一层底与描边，提示词就是浮在卡面上的裸文字，与左边的方块分不出界。
+   底色走高级模式那口输入井（recipes.css 的 textarea 是 #0d0d0d + #3c3c3c）：场底 --ns-field 是 #2a2a2e，
+   比 #17171b 这块卡面还浅，框在卡面上读成一块灰板、与方块糊在一起 */
 .ns-director-dock .ns-director-prompt {
     min-height: 40px; max-height: 20vh; padding: 3px 6px; font-size: 12px; line-height: 1.45; resize: vertical;
+    background: #0d0d0d; border: 1px solid #3c3c3c; border-radius: 6px;
 }
-.ns-director-slots { flex: none; display: flex; align-items: flex-start; gap: 8px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+/* 方块列的宽度下限钉在内容（min-width: max-content）：auto 的下限是方块内那两个字宽度，
+   列会缩到比方块本体还窄（120 内容缩成 111），尾帧右缘越过列沿吃进 16px 余隙，
+   与提示词框的实测净距就掉到 2~7px，读起来是贴住甚至压住框沿。
+   overflow-x: auto 会把配对的 overflow-y 从 visible 变成 auto（visible 不与非 visible 混用），
+   列因此会裁方块，裁下的右半边正落在提示词框左上角上。窄屏叠列那条放开成可缩可滚 */
+.ns-director-segrow > .ns-director-slots { min-width: max-content; }
+/* 空参考槽不占位：它宽 0，前面那 8px gap 照算进内容，列被撑出 8px 空白就是白吃的余隙 */
+.ns-director-slots > .ns-slot-row:not(:has(.ns-slot-tile)) { display: none; }
+.ns-director-slots { flex: none; display: flex; align-items: flex-start; gap: 8px; overflow-x: auto; scrollbar-width: none; }
 .ns-director-slots::-webkit-scrollbar { display: none; }
 .ns-director-controls { gap: 6px; }
 /* 编辑器浮层里的次要按钮走外壳灰底（同排一排蓝底会把主行动压平）；
@@ -339,11 +351,11 @@ body {
 /* 「+ 添加 LoRA」「显示全部模型」「保存整片参数」整行占位：与控件同排时白吃掉一列宽度，长模型名只剩一条窄缝 */
 .ns-director .ns-director-compact-form :is(.rs-gen-lora-add, .rs-model-scope-toggle, .ns-director-size-save) { flex: 0 0 100%; width: fit-content; height: 24px; font-size: 12px; }
 .ns-director-shared-res { flex: none; font-size: 12px; color: #9aa4b2; }
-/* 该段「⋯」：⋯ 只占一枚 chip 的宽，菜单是它旁边 190px 的一列面板（与自定参数面板同一档密度）。
-   .rs-runtime-menu 基座 min-width 210px 会把这列撑宽，这里收死成 190px */
-.ns-director .ns-director-seg-menu { flex: none; width: 26px; padding: 0; }
-.ns-director-segmenu { box-sizing: border-box; width: 190px; min-width: 0; }
-.ns-director-segmenu .ns-btn { display: block; width: 100%; height: 26px; padding: 0 10px; font-size: 12px; text-align: left; }
+/* 段块右上角那枚「⋯」弹的菜单：190px 的一列面板（与自定参数面板同一档密度）。两条都带 .ns-director 宿主才压得住：
+   .rs-runtime-menu 基座 min-width 210px 会把这列撑宽，而 gallery.css 那条 .neo-gallery-gm-chip-panel
+   （min(720px, 94vw)）在桌面端比 style.css 后注入、同特异，不带宿主就被它顶成整窗宽（菜单横着盖住时间轴） */
+.ns-director .ns-director-segmenu { box-sizing: border-box; width: 190px; min-width: 0; }
+.ns-director .ns-director-segmenu .ns-btn { display: block; width: 100%; height: 26px; padding: 0 10px; font-size: 12px; text-align: left; }
 
 /* .rs-btn 基础样式 flex:1（窄弹窗底部按钮行用）；满幅主区里不拉伸成长条。
    浮层（配方详情/导演编辑器）挂在 body 上，不受此规则影响 */
@@ -504,6 +516,69 @@ body {
 }
 
 
+/* ===== 素材库 / 配方弹窗：深色遮罩 + 居中卡片，最大化铺满窗口（js/core/lib-modal.js 建 DOM）
+   z-index 在故事面板浮层（9845）与灯箱（9999）之下：弹窗里点开的大图要盖得住弹窗 ===== */
+.ns-libmodal { position: fixed; inset: 0; z-index: 9700; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.55); }
+.ns-libmodal-box { position: relative; display: flex; flex-direction: column; width: min(1180px, 94vw); height: min(860px, 90vh); min-width: 640px; background: #17171b; border: 1px solid #35353d; border-radius: 8px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6); overflow: hidden; }
+.ns-libmodal-maximized .ns-libmodal-box { position: fixed; inset: 0; width: auto; height: auto; border: none; border-radius: 0; }
+/* 素材库默认开在最小档 = 浮窗地板 640×400（js/core/lib-modal.js 的 MIN_W / MIN_H 同一口径）：
+   这扇窗是「挑一张塞进编辑位」的取景窗，一屏铺满缩略图不是它要干的事；要看多几行用最大化（铺满整窗）
+   或拖右缘加宽，摆位与最大化偏好照旧落盘。配方面板是表单，860px 高起步，跟上面那档走 */
+.ns-libmodal[data-lib-scope="assets"] .ns-libmodal-box { width: min(640px, 94vw); height: min(400px, 90vh); min-width: 0; }
+/* 拖过标题栏 = 浮窗：按落盘的 left/top/width/height 摆；遮罩让开，页面其余部分照旧能点（关窗走 Esc / ✕） */
+.ns-libmodal-floated { background: transparent; pointer-events: none; }
+.ns-libmodal-floated .ns-libmodal-box { position: fixed; pointer-events: auto; }
+/* 右缘调整条：只在浮窗时出现，改宽度（下限 640px，画廊顶栏与右侧表单都还在） */
+.ns-libmodal-resize { display: none; position: absolute; top: 0; bottom: 0; right: 0; width: 8px; cursor: ew-resize; touch-action: none; }
+.ns-libmodal-floated .ns-libmodal-resize { display: block; }
+.ns-libmodal-resize::after { content: ""; position: absolute; top: 45%; right: 2px; width: 2px; height: 10%; border-radius: 2px; background: rgba(255, 255, 255, 0.18); }
+.ns-libmodal-resize:hover::after { background: rgba(255, 255, 255, 0.38); }
+.ns-libmodal-titlebar { flex: none; display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: #202024; border-bottom: 1px solid #333; cursor: move; user-select: none; touch-action: none; }
+.ns-libmodal-title { flex: 1 1 96px; min-width: 0; font-size: 13px; color: #ddd; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* 标题栏右侧插槽（js/core/lib-modal.js 的 setTitlebarExtra）：搜索框钉在这里，内容区就不必为它留一行。
+   上限 460px：整屏弹窗里搜索框拉到整条标题栏那么长，眼睛找不到自己的输入落在哪 */
+.ns-libmodal-titlebar-slot { flex: 1 1 auto; min-width: 0; max-width: 460px; display: flex; align-items: center; gap: 8px; }
+.ns-libmodal-titlebar-slot:empty { display: none; }
+/* 标题栏整条是 cursor:move + 禁选（拖窗用的），插槽里的输入框要把「这是打字的地方」说回去 */
+.ns-libmodal-titlebar-slot input { user-select: text; cursor: text; }
+.ns-libmodal-btn { flex: none; cursor: pointer; background: transparent; border: 1px solid transparent; border-radius: 4px; color: #9aa4b0; padding: 4px; line-height: 0; }
+.ns-libmodal-btn:hover { color: #fff; background: rgba(255, 255, 255, 0.06); }
+.ns-libmodal-close:hover { color: #ff8a9a; }
+.ns-libmodal-content { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+/* 弹窗里的画廊宿主：不留上内边距，粘性工具条用画廊侧栏的负边距贴齐宿主边 */
+.ns-libmodal-content .ns-gallery-host { flex: 1 1 auto; min-height: 0; height: auto; overflow: auto; padding: 0 10px 12px; }
+.ns-libmodal-content .ns-gallery-host .neo-gallery-topbar { margin: -10px -10px 8px; padding: 8px 10px; }
+/* Size 滑杆管的是素材页的缩略图密度（写进画廊全局设置），弹窗里这扇窗只管「挑哪张、塞进哪个位」：
+   滑杆在窗里拉一下会连素材页一起改了，而窗体大小归最大化 / 拖右缘管，两头都不搭 —— 弹窗内收掉 */
+.ns-libmodal .neo-gallery-slider-row { display: none; }
+/* 提示词下拉（js/core/preset-picker.js）：骨架与显隐由 prompts.css + JS 管，挂在打开它的那颗按钮下方
+   （left/top 由 JS 写），Studio 侧只管这块下拉的宽度（420px 封顶，生成素材 / 图片编辑那两层浮窗的层位由 JS 定） */
+.neo-preset-picker { width: min(420px, 92vw); max-width: none; }
+.ns-libmodal-content .ns-director-recipes { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 10px; }
+/* 弹窗滚动条：平时隐形，鼠标进入才显形（槽位照留，显隐不引起内容跳动） */
+.ns-libmodal-content .ns-gallery-host, .ns-director-recipes { scrollbar-width: thin; scrollbar-color: transparent transparent; }
+.ns-libmodal-content .ns-gallery-host:hover, .ns-director-recipes:hover { scrollbar-color: #555 transparent; }
+.ns-libmodal-content .ns-gallery-host::-webkit-scrollbar, .ns-director-recipes::-webkit-scrollbar { width: 8px; }
+.ns-libmodal-content .ns-gallery-host::-webkit-scrollbar-track, .ns-director-recipes::-webkit-scrollbar-track { background: transparent; }
+.ns-libmodal-content .ns-gallery-host::-webkit-scrollbar-thumb, .ns-director-recipes::-webkit-scrollbar-thumb { background: transparent; border-radius: 4px; }
+.ns-libmodal-content .ns-gallery-host:hover::-webkit-scrollbar-thumb, .ns-director-recipes:hover::-webkit-scrollbar-thumb { background: #555; }
+/* 底部取用条：卡片左上角勾选出现后落出，「取用」执行当前页签的取用目标 */
+.ns-libmodal-pickbar { flex: none; display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-top: 1px solid #333; background: #1b1b1f; }
+.ns-libmodal-pick-count { flex: 1; font-size: 12px; color: #9a9aa8; }
+.ns-libmodal-pick-use { background: rgba(47, 111, 237, 0.18); border-color: #2f6fed; color: #cfe0ff; }
+.ns-libmodal-pick-use:hover { background: rgba(47, 111, 237, 0.3); }
+/* 手机：素材库 / 配方弹窗铺满整窗 —— 640px 地板 + 94vw 的居中卡在一块手机上就是横向溢出；
+   右缘调宽条与浮窗摆位是鼠标手势，触摸上拖不动，收掉（标题栏 ✕ 与 Esc 照旧在） */
+@media (max-width: 720px) {
+    .ns-libmodal-box,
+    .ns-libmodal[data-lib-scope="assets"] .ns-libmodal-box {
+        width: 100%; height: 100%; min-width: 0; max-width: none; max-height: none;
+        border: none; border-radius: 0;
+    }
+    .ns-libmodal-resize { display: none; }
+    .ns-libmodal-titlebar { padding-top: max(8px, env(safe-area-inset-top)); }
+    .ns-libmodal-pickbar { padding-bottom: max(8px, env(safe-area-inset-bottom)); }
+}
 /* 配方弹窗：宽弹窗里配方式网格排布；分组标题/空状态跨整行 */
 .ns-director-recipes .neo-recipes-list {
     display: grid;
@@ -547,8 +622,9 @@ body {
     .ns-director-progress { width: 120px; }
     .ns-director-dock .ns-director-card { padding: 8px; }
     .ns-director-main { flex-wrap: wrap; }
-    .ns-director-segrow { flex: 1 1 100%; }
-    .ns-director-duration { width: 52px; }
+    .ns-director-segrow { flex: 1 1 100%; min-width: 0; }
+    /* 叠成一列时列宽由卡面给，放开成可缩，方块在列内横滚（max-content 的下限在窄屏会把卡顶宽） */
+    .ns-director-segrow > .ns-director-slots { min-width: 0; }
     .ns-director-dock .ns-director-prompt { min-height: 36px; }
     .ns-director-controls { flex-wrap: nowrap; overflow-x: auto; min-width: 0; scrollbar-width: none; }
     .ns-director-controls::-webkit-scrollbar { display: none; }

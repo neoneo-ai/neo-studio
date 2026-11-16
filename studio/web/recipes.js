@@ -847,6 +847,8 @@ export async function createRecipesPanel(options = {}) {
     }
 
     // 标题行：图标标题 + 操作按钮（窄栏自动换行，按钮带 title 提示）
+    // hideTitle（Studio 导演配方管理弹窗）：弹窗顶栏已有「导演配方」标题，面板不再重复一行
+    const titleEl = options.hideTitle ? null : $el('h3', { className: 'neo-recipes-title', innerHTML: `${RECIPE_ICON_SVG}<span>${options.title || t('配方')}</span>` });
     const fileInput = $el('input', {
         type: 'file', accept: '.zip,application/zip', style: { display: 'none' }, id: 'neo-recipes-import-file',
         onchange: async (e) => {
@@ -910,7 +912,7 @@ export async function createRecipesPanel(options = {}) {
 
     const header = $el('div', { className: 'neo-recipes-header' }, [
         $el('div', { className: 'neo-recipes-title-row' }, [
-            $el('h3', { className: 'neo-recipes-title', innerHTML: `${RECIPE_ICON_SVG}<span>${options.title || t('配方')}</span>` }),
+            ...(titleEl ? [titleEl] : []),
             refreshBtn, importBtn, directorBtn,
         ]),
         searchInput,
@@ -1169,6 +1171,7 @@ export async function createRecipesPanel(options = {}) {
         }
 
         // 媒体区：通栏。普通配方=封面/示例缩略图（单张横幅，多张网格）；导演配方=各段首帧网格
+        // 两边都没图时（导演配方常只存提示词与产物）封面位放摘要文字，不留一块白占行高的灰色空块
         const isDirector = r.type === 'video_director';
         const media = $el('div', {
             className: 'neo-recipes-card-media',
@@ -1176,6 +1179,23 @@ export async function createRecipesPanel(options = {}) {
         });
         if (!selectable) media.onclick = (e) => { e.stopPropagation(); if (isDirector) openDirectorEditor(r, renderList); else openDetail(r, card); };
         const mediaTiles = [];
+        // 摘要就是提示词本身：导演配方逐段存 seg.prompt（早期配方只有 prompts[0]），第一句非空就是这张卡要说的那句话
+        const coverPrompt = () => {
+            if (!isDirector) return String(r.prompt || '').trim();
+            for (const s of (r.segments || [])) {
+                const one = String(s.prompt || '').trim()
+                    || (s.prompts || []).map(p => String(p || '').trim()).find(Boolean) || '';
+                if (one) return one;
+            }
+            return '';
+        };
+        const coverTextTile = () => {
+            const prompt = coverPrompt();
+            return $el('div', { className: 'neo-recipes-card-cover-text' }, [
+                ...(prompt ? [$el('div', { className: 'neo-recipes-card-cover-prompt', textContent: prompt })] : []),
+                $el('div', { className: 'neo-recipes-card-cover-meta', textContent: isDirector ? directorMetaText(r, skills) : t('无封面') }),
+            ]);
+        };
         const addTile = (file, dir) => {
             const img = $el('img', { src: thumbUrl(r.name, file, dir, isDirector ? 192 : 256), alt: r.name, loading: 'lazy' });
             let fb = false;
@@ -1185,7 +1205,7 @@ export async function createRecipesPanel(options = {}) {
         if (isDirector) {
             const frames = (r.segments || []).map(s => s.first_frame).filter(Boolean);
             for (const f of frames.slice(0, 9)) addTile(f, '');
-            if (!frames.length) mediaTiles.push($el('div', { className: 'neo-recipes-card-no-cover', textContent: '' }));
+            if (!frames.length) mediaTiles.push(coverTextTile());
         } else {
             const files = [];
             if (r.cover) files.push([r.cover, '']);
@@ -1195,10 +1215,11 @@ export async function createRecipesPanel(options = {}) {
                 if (a) files.push([a.file, '']);
             }
             for (const [f, dir] of files.slice(0, 4)) addTile(f, dir);
-            if (!files.length) mediaTiles.push($el('div', { className: 'neo-recipes-card-no-cover', textContent: r.assets?.length ? '' : '' }));
+            if (!files.length) mediaTiles.push(coverTextTile());
         }
         media.append(...mediaTiles);
         if (mediaTiles.length === 1 && mediaTiles[0].tagName === 'IMG') media.classList.add('single');
+        if (mediaTiles.length === 1 && mediaTiles[0].classList.contains('neo-recipes-card-cover-text')) media.classList.add('cover-text');
 
         // 标题在图片上方，导演配方带「导演」标签
         const nameEl = $el('div', { className: 'neo-recipes-card-name' }, [
@@ -1208,23 +1229,25 @@ export async function createRecipesPanel(options = {}) {
         nameEl.title = t('查看资源');
         if (!selectable) nameEl.onclick = (e) => { e.stopPropagation(); openDetail(r, card); };
 
-        // 正文：信息 chips（预设/资源/示例/结果）+ 摘要折叠（导演）或提示词预览
+        // 正文：信息 chips（预设 / 示例 / 结果）。封面位是文字时正文不再补文字行——摘要与提示词都写在封面上
         const chips = [];
         if (r.source === 'preset') chips.push(t('预设'));
         if (r.sample_count) chips.push(tf("{n} 个示例", { n: r.sample_count }));
         if (r.result_count) chips.push(tf("{n} 个结果", { n: r.result_count }));
+        // 封面位是文字时，那一行摘要已经写在封面上：正文只留 chips，不再补一行提示词预览
+        const coverIsText = media.classList.contains('cover-text');
         let summaryWrap = null;
-        if (isDirector && (r.segments || []).length) {
+        if (isDirector && (r.segments || []).length && !coverIsText) {
             summaryWrap = $el('div', { className: 'neo-recipes-card-summary', textContent: directorMetaText(r, skills) });
         }
         const body = $el('div', { className: 'neo-recipes-card-body' }, [
             ...(chips.length ? [$el('div', { className: 'neo-recipes-card-chips' }, chips.map(c => $el('span', { className: 'neo-recipes-chip', textContent: c })))] : []),
-            summaryWrap || $el('div', { className: 'neo-recipes-card-meta', textContent: (r.prompt || '').slice(0, 120) || t('无提示词') })
+            ...(coverIsText ? [] : [summaryWrap || $el('div', { className: 'neo-recipes-card-meta', textContent: (r.prompt || '').slice(0, 120) || t('无提示词') })])
         ]);
         // 操作：主操作（发送/编辑 + 复制）直接展示，其余收进 ⋯ 更多菜单
         const direct = [];
         const more = [];
-        if (selectable) direct.push({ cls: 'neo-recipes-detail-open', icon: '', title: t('查看资源'), run: (b) => openDetail(r, b) });
+        if (selectable) direct.push({ cls: 'neo-recipes-detail-open', icon: icon('eye'), title: t('查看资源'), run: (b) => openDetail(r, b) });
         if (r.type !== 'video_director') {
             direct.push({ cls: 'neo-recipes-send', icon: '✈', title: t('一键发送到工作流'), run: (b) => { b.disabled = true; applyRecipeToWorkflow(r).then(ok => { b.disabled = false; if (ok) renderList(); }); } });
         } else {
@@ -1232,9 +1255,9 @@ export async function createRecipesPanel(options = {}) {
         }
         direct.push({ cls: 'neo-recipes-copy', icon: icon('copy'), title: t('复制配方（生成副本）'), run: (b) => { b.disabled = true; copyRecipe(r.name).then(res => { b.disabled = false; if (res?.success) { app.extensionManager.toast.add({ severity: 'success', summary: t('配方已复制'), detail: tf("已创建副本「{name}」", { name: res.name }), life: 4000 }); renderList(); } else app.extensionManager.toast.add({ severity: 'error', summary: t('复制失败'), detail: res?.error || 'Unknown error', life: 4000 }); }); } });
         if (r.type !== 'video_director') {
-            more.push({ cls: 'neo-recipes-append', icon: '', title: t('追加当前输出为示例结果'), run: (b) => { b.disabled = true; const results = collectWorkflowResults(); appendResultsToRecipe(r.name, results).then(res => { b.disabled = false; if (res?.success) { app.extensionManager.toast.add({ severity: res.added ? 'success' : 'info', summary: t('示例结果追加'), detail: tf("{name}：新增 {added}，跳过重复 {skipped}", { name: r.name, added: res.added, skipped: res.skipped }), life: 4000 }); renderList(); } else app.extensionManager.toast.add({ severity: 'error', summary: t('追加失败'), detail: res?.error || 'Unknown error', life: 4000 }); }); } });
+            more.push({ cls: 'neo-recipes-append', icon: icon('plus'), title: t('追加当前输出为示例结果'), run: (b) => { b.disabled = true; const results = collectWorkflowResults(); appendResultsToRecipe(r.name, results).then(res => { b.disabled = false; if (res?.success) { app.extensionManager.toast.add({ severity: res.added ? 'success' : 'info', summary: t('示例结果追加'), detail: tf("{name}：新增 {added}，跳过重复 {skipped}", { name: r.name, added: res.added, skipped: res.skipped }), life: 4000 }); renderList(); } else app.extensionManager.toast.add({ severity: 'error', summary: t('追加失败'), detail: res?.error || 'Unknown error', life: 4000 }); }); } });
         }
-        more.push({ cls: 'neo-recipes-export', icon: '', title: t('导出为 zip 包（含 Readme.txt）'), run: () => { fetch(`/rs_recipes/export?name=${encodeURIComponent(r.name)}`).then(res => { if (!res.ok) throw new Error(`HTTP ${res.status}`); return res.blob(); }).then(blob => { const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `${r.name}.zip`; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }).catch(err => app.extensionManager.toast.add({ severity: 'error', summary: t('导出失败'), detail: String(err), life: 4000 })); } });
+        more.push({ cls: 'neo-recipes-export', icon: icon('save'), title: t('导出为 zip 包（含 Readme.txt）'), run: () => { fetch(`/rs_recipes/export?name=${encodeURIComponent(r.name)}`).then(res => { if (!res.ok) throw new Error(`HTTP ${res.status}`); return res.blob(); }).then(blob => { const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `${r.name}.zip`; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }).catch(err => app.extensionManager.toast.add({ severity: 'error', summary: t('导出失败'), detail: String(err), life: 4000 })); } });
         if (r.source !== 'preset') {
             more.push({ cls: 'neo-recipes-delete', icon: icon('trash'), title: t('删除配方'), run: (b) => { if (!confirm(tf("删除配方「{name}」？", { name: r.name }))) return; b.disabled = true; deleteRecipe(r.name).then(res => { b.disabled = false; if (res?.success) renderList(); else app.extensionManager.toast.add({ severity: 'error', summary: t('删除失败'), detail: res?.error || 'Unknown error', life: 4000 }); }); } });
         }

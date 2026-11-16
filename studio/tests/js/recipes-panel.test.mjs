@@ -70,6 +70,24 @@ test("配方面板：directorOnly 只列多段导演配方并隐藏筛选 chips"
     assert.equal(panel.querySelectorAll(".neo-recipes-chip").length, 0, "筛选 chips 隐藏");
 });
 
+test("配方面板：hideTitle 只去掉面板那行标题，操作钮与工具条留着", async () => {
+    const { createRecipesPanel } = await import("../../web/recipes.js");
+    appState.graph = { _nodes: [] };
+    mockRoute("/rs_prompts/skills", () => jsonResponse([]));
+    mockRoute("/rs_recipes/list", () => jsonResponse([]));
+
+    // 导演配方管理弹窗里的面板：标题是弹窗顶栏那句「导演配方」，面板自己那行「📦 配方」是重复标题
+    const modalPanel = await createRecipesPanel({ directorOnly: true, hideTitle: true });
+    document.body.appendChild(modalPanel);
+    assert.equal(modalPanel.querySelector(".neo-recipes-title"), null, "弹窗里的面板不再出一行标题");
+    assert.ok(modalPanel.querySelector(".neo-recipes-refresh") && modalPanel.querySelector(".neo-recipes-director"), "刷新 / 新增导演配方钮留着");
+    assert.ok(modalPanel.querySelector(".neo-recipes-search") && modalPanel.querySelector(".neo-recipes-sort"), "搜索框与排序下拉留着");
+
+    const sidePanel = await createRecipesPanel();
+    document.body.appendChild(sidePanel);
+    assert.ok(sidePanel.querySelector(".neo-recipes-title"), "画布侧栏面板照旧带着自己的标题");
+});
+
 test("配方卡片：每个配方都有复制按钮，点击调用 /rs_recipes/copy 传源名", async () => {
     const { createRecipesPanel } = await import("../../web/recipes.js");
     appState.graph = { _nodes: [] };
@@ -145,7 +163,7 @@ test("配方详情：导演配方显示段数/模式/技能/宽×高/总时长�
     assert.equal(meta.textContent, "2 段 · 混合模式 · 技能 A、技能 B · 768×1344 · 总时长 8.5s", "混合模式概览行内容");
 });
 
-test("配方卡片：多段导演配方正文显示摘要行（代替无提示词）", async () => {
+test("配方卡片：多段导演配方摘要只排一遍 —— 有封面在正文，无封面在封面位", async () => {
     const { createRecipesPanel } = await import("../../web/recipes.js");
     appState.graph = { _nodes: [] };
     mockRoute("/rs_prompts/skills", () => jsonResponse([
@@ -154,6 +172,14 @@ test("配方卡片：多段导演配方正文显示摘要行（代替无提示�
     mockRoute("/rs_recipes/list", () => jsonResponse([
         {
             name: "dir-card", type: "video_director", source: "custom", prompt: "", assets: [], samples: [],
+            shared: { width: 960, height: 544, mode: "i2v" },
+            segments: [
+                { skill_id: "sk-a", first_frame: "f1.png", prompt: "p1", duration_sec: 5 },
+                { skill_id: "sk-a", first_frame: "f2.png", prompt: "p2", duration_sec: 5 },
+            ],
+        },
+        {
+            name: "dir-bare", type: "video_director", source: "custom", prompt: "", assets: [], samples: [],
             shared: { width: 960, height: 544, mode: "i2v" },
             segments: [
                 { skill_id: "sk-a", prompt: "p1", duration_sec: 5 },
@@ -166,6 +192,14 @@ test("配方卡片：多段导演配方正文显示摘要行（代替无提示�
     document.body.appendChild(panel);
     const meta = panel.querySelector(".neo-recipes-card-summary");
     assert.equal(meta.textContent, "2 段 · 关键帧生视频 · 技能 A ×2 · 960×544 · 总时长 10s", "多段导演卡片摘要行（折叠区）显示概览（旧 i2v 显示为 f2v）");
+    assert.equal(panel.querySelectorAll(".neo-recipes-card-summary").length, 1, "无封面那份不在正文重复同一行");
+    const covers = [...panel.querySelectorAll(".neo-recipes-card-media")];
+    assert.equal(covers[1].querySelector(".neo-recipes-card-cover-meta").textContent,
+        "2 段 · 关键帧生视频 · 技能 A ×2 · 960×544 · 总时长 10s", "无封面那份概览落在封面位上");
+    assert.equal(covers[1].querySelector(".neo-recipes-card-cover-prompt").textContent, "p1",
+        "概览下面那行是首段提示词（seg.prompt，导演页存的就是这一份）");
+    assert.equal(panel.querySelectorAll(".neo-recipes-card-meta").length, 0,
+        "正文不补提示词预览行：有封面那份排摘要，无封面那份把摘要与提示词都写在封面位");
 });
 
 
@@ -272,7 +306,7 @@ test("thumbUrl：生成 /rs_recipes/thumbnail 查询串（dir 可选）", async 
         "有 dir 时追加 dir 参数");
 });
 
-test("卡片封面：图片走缩略图 URL，懒加载；无资源时占位符", async () => {
+test("卡片封面：图片走缩略图 URL，懒加载；无资源时封面位是摘要文字", async () => {
     const { createRecipesPanel } = await import("../../web/recipes.js");
     appState.graph = { _nodes: [] };
     mockRoute("/rs_prompts/skills", () => jsonResponse([]));
@@ -287,7 +321,36 @@ test("卡片封面：图片走缩略图 URL，懒加载；无资源时占位符"
     const img = covers[0].querySelector("img");
     assert.match(img.src, /\/rs_recipes\/thumbnail\?recipe=[^&]*&file=cover\.png&size=256/, "封面用 256px 缩略图");
     assert.equal(img.getAttribute("loading"), "lazy", "封面懒加载");
-    assert.ok(covers[1].querySelector(".neo-recipes-card-no-cover"), "无资源配方显示占位符");
+    assert.ok(covers[0].classList.contains("single") && !covers[0].classList.contains("cover-text"), "有封面走单张横幅");
+    const tile = covers[1].querySelector(".neo-recipes-card-cover-text");
+    assert.ok(tile, "无资源配方封面位是一块文字");
+    assert.equal(tile.querySelector(".neo-recipes-card-cover-prompt").textContent, "hello world", "文字块带出提示词");
+    assert.equal(tile.querySelector(".neo-recipes-card-cover-meta").textContent, "无封面", "脚注说明这一位没有封面");
+    assert.ok(covers[1].classList.contains("cover-text"), "文字块走文本布局，不占图片那一行 120px");
+    assert.equal(panel.querySelectorAll(".neo-recipes-card-meta").length, 1,
+        "提示词预览只排在有封面那张的正文，封面是文字的那张不在正文重复");
+});
+
+test("卡片无封面：导演配方提示词与概览落在封面位，正文不再重复摘要", async () => {
+    const { createRecipesPanel } = await import("../../web/recipes.js");
+    appState.graph = { _nodes: [] };
+    mockRoute("/rs_prompts/skills", () => jsonResponse([{ id: "s", name: "技能 A", gen_video: true }]));
+    // 导演页「保存该段」落盘的就是 seg.prompt 单数那一份（顶层 prompt 空着）：卡片摘要读这一份
+    mockRoute("/rs_recipes/list", () => jsonResponse([{
+        name: "dir-nocover", type: "video_director", source: "custom", prompt: "", assets: [], samples: [],
+        shared: { mode: "single_image_to_video", width: 1344, height: 768 },
+        segments: [{ skill_id: "s", prompt: "夜色咖啡馆二楼", duration_sec: 5 }, { skill_id: "s", prompt: "雨夜街头", duration_sec: 4 }],
+    }]));
+
+    const panel = await createRecipesPanel({ directorOnly: true });
+    document.body.appendChild(panel);
+    await sleep(60);
+    const media = panel.querySelector(".neo-recipes-card-media");
+    const meta = media.querySelector(".neo-recipes-card-cover-meta").textContent;
+    assert.ok(meta.includes("2 段") && meta.includes("1344×768"), `概览行落在封面位：${meta}`);
+    assert.equal(media.querySelector(".neo-recipes-card-cover-prompt").textContent, "夜色咖啡馆二楼", "首段提示词进封面位");
+    assert.equal(panel.querySelector(".neo-recipes-card-summary"), null, "同一行摘要不在正文再排一遍");
+    assert.equal(panel.querySelector(".neo-recipes-card-meta"), null, "正文不写「无提示词」——提示词就在封面上");
 });
 
 
@@ -334,6 +397,7 @@ test("卡片按钮：主操作直接展示，其余收进 ⋯ 更多菜单", asy
     assert.ok(card.querySelector(".neo-recipes-copy"), "复制为直接按钮");
     const directBtns = [...card.querySelectorAll(".neo-recipes-card-actions > button")];
     assert.equal(directBtns.length, 2, "仅 2 个直接按钮 + ⋯");
+    assert.ok(directBtns.every(b => b.childElementCount > 0 || b.textContent.trim()), "图标钮都带图标：空 icon 就是一颗空白方块");
     const moreBtn = card.querySelector(".neo-recipes-more");
     assert.ok(moreBtn, "有 ⋯ 更多按钮");
     moreBtn.click();
