@@ -5,9 +5,6 @@
 // 桌面端离线服务挂载同一份）；本页不发任何要 ComfyUI 运行时的请求，只有「保存为预设」按能力表门控。
 import test, { beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { resetEnv, mockRoute, clearRoutes, sseResponse, jsonResponse, fetchLog, click, keydown, flush, sleep, changeValue } from "./setup.mjs";
 import { $el } from "../../web/studio/shim/ui.js";
 // prompt-enhance.js 顶层导入 skill.js / gallery-utils.js（它们要 scripts/* 的 shim），
@@ -91,8 +88,8 @@ function mounted({ caps = {}, skills = SKILLS } = {}) {
         runBtn: () => host.querySelector(".ns-enhance-run"),
         out: () => [...host.querySelectorAll(".ns-enhance-out")].pop(),
         outs: () => [...host.querySelectorAll(".ns-enhance-out")],
-        // 回话气泡里那一行状态位（思考中… / 流程阶段），紧凑版面上它就是唯一的旁路输出
-        line: () => [...host.querySelectorAll(".ns-enhance-line")].pop(),
+        // 输入卡上方那一行独立的思考/流程状态位（思考中… / 流程阶段），紧凑版面上它是唯一的旁路输出
+        line: () => host.querySelector(".ns-enhance-line"),
         // 每一条回话自带「复制 / 存预设」两枚图标钮（正文落定之后才出现）：断言永远落在最新那条上
         aiCopy: () => [...host.querySelectorAll(".ns-enhance-msg-acts")].pop()?.querySelector(".ns-enhance-copy"),
         aiSave: () => [...host.querySelectorAll(".ns-enhance-msg-acts")].pop()?.querySelector(".ns-enhance-save"),
@@ -425,7 +422,7 @@ test("摘掉图位上的一枚：后面的补位，请求体里少那一张", as
         "发出去的就是留着的那一张");
 });
 
-test("思考与流程状态只占正文框上那一行：思考正文不上屏，流结束连那一行也收走", async () => {
+test("思考与流程状态只占输入卡上方那一行：思考正文不上屏，流结束连那一行也收走", async () => {
     resetEnv();
     mockEnhanceStream([
         "data: " + JSON.stringify({ text: "先想一句", kind: "thinking" }),
@@ -440,6 +437,8 @@ test("思考与流程状态只占正文框上那一行：思考正文不上屏�
     assert.equal(env.out().value, "采纳自检后的整段正文", "replace 帧整段替换已透传的正文");
     assert.equal(env.host.querySelectorAll(".rs-thinking").length, 0, "这一页不铺思考面板与状态块");
     assert.ok(env.line().hidden, "流结束那一行状态位收走，留供回看的就是正文本身");
+    assert.equal(env.lastAiMsg().querySelector(".ns-enhance-line"), null,
+        "那一行不在回话里：舞台上留给回看的就是正文本身");
 });
 
 test("在途那一发只有一句状态：思考逐字到达也不上屏，正文不落进结果框", async () => {
@@ -701,32 +700,4 @@ test("Enter 发送、Shift+Enter 换行：输入框里的回车不送流", async
     keydown(env.input(), "Enter");
     await settle();
     assert.equal(env.runs().length, 1, "Enter 就是发送");
-});
-
-// 页面 CSS 里读那一条 dock 卡片规则：投影是「浮出」的唯一来源，长回来就是聊天框与气泡不平了
-test("聊天框扁平：底部输入卡不吃视频页那层浮动投影", () => {
-    const cssDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../web/prompt-enhance");
-    const css = fs.readFileSync(path.join(cssDir, "prompt-enhance.css"), "utf8");
-    const card = css.match(/\.ns-enhance-dock \.ns-enhance-card\s*\{([^}]*)\}/);
-    assert.ok(card, "dock 卡片那条规则应在页面 CSS 里");
-    assert.ok(!/box-shadow/.test(card[1]),
-        "输入卡不给投影：卡片外观整副是绘画页 .neo-gallery-gm-composer 那一份扁平描边");
-});
-
-// 回话那两条框（气泡壳 + 正文框）是「套了很多层」的来源：断言按 CSS 文本读，壳长回来页面就又是三层
-test("回话不套框：气泡无壳、正文无描边底色", () => {
-    const cssDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../web/prompt-enhance");
-    const css = fs.readFileSync(path.join(cssDir, "prompt-enhance.css"), "utf8");
-    const ai = css.match(/\.ns-enhance-msg-ai\s*\{([^}]*)\}/);
-    assert.ok(ai, "回话那条应有去壳的规则");
-    assert.ok(/border:\s*0\s*;/.test(ai[1]), "回话气泡不带描边");
-    assert.ok(/background:\s*transparent/.test(ai[1]), "回话气泡不带底色");
-    const out = css.match(/\.ns-enhance-out\s*\{([^}]*)\}/);
-    assert.ok(out, "正文那条规则应在页面 CSS 里");
-    assert.ok(/border:\s*0\s*;/.test(out[1]), "正文自己不是框");
-    assert.ok(/background:\s*transparent/.test(out[1]), "正文不铺底色");
-    assert.ok(/padding:\s*0\s*;/.test(out[1]), "正文不铺内衬");
-    assert.ok(!css.includes(".ns-enhance-name"), "预设名输入框整条删掉：标题由正文自动生成");
-    assert.ok(css.includes(".ns-enhance-msg-acts[hidden] { display: none; }"),
-        "正文落定之前那一行整行不存在（flex 容器要自己压掉 hidden）");
 });

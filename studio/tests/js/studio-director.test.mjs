@@ -1,4 +1,4 @@
-// Neo Studio 导演页：配方条（下拉快切 / 配方管理弹窗 / 新建 / 素材库 / 高级模式）+ 出片区（实时预览舞台 + 状态行）
+// Neo Studio 导演页：配方条（配方管理弹窗 / ＋ 新建 / 右端素材库 · 高级模式）+ 出片区（实时预览舞台 + 状态行）
 // + 生成坞（紧凑时间轴 + 该段行 + 首帧 / 尾帧 / 参考三块素材槽 + 模型链覆盖 + 保存该段 + 生成）。
 // 页内写路径只有一条：段写 director.js 的 createSegmentOps，落盘走同一条 ops.save；整片参数在「分辨率」胶囊弹的表单里改。
 // studio-app.js 顶层会取 #ns-view 并连 WebSocket，导入前必须先备好 DOM 与 WS 桩。
@@ -25,8 +25,10 @@ const importApp = () => import(`../../web/studio/studio-app.js?director=${seq++}
 const settle = async () => { await sleep(0); await flush(); };
 
 const pageEl = () => document.querySelector(".ns-director");
-const recipeSel = () => document.querySelector(".ns-director-recipe");
 const barBtn = (label) => [...document.querySelectorAll(".ns-director-bar .ns-btn")].find((b) => b.textContent.includes(label));
+const newBtn = () => document.querySelector(".ns-director-bar .ns-director-new");
+// 当前选中那份：顶栏没有配方下拉了，配方管理那张卡的高亮就是本页选中态的读数
+const dirSelected = () => document.querySelector(".ns-director-recipes .neo-recipes-card-selected .neo-recipes-card-name span")?.textContent || null;
 const runBtn = () => document.querySelector(".ns-director-run");
 const cancelBtn = () => document.querySelector(".ns-director .ns-gen-cancel");
 const saveBtn = () => document.querySelector(".ns-director-save");
@@ -75,12 +77,15 @@ function wsSend(type, data) {
     ws.onmessage({ data: JSON.stringify({ type, data }) });
 }
 async function until(fn, what) {
-    for (let i = 0; i < 60; i++) { if (fn()) return; await sleep(10); }
+    for (let i = 0; i < 60; i++) { const got = fn(); if (got) return got; await sleep(10); }
     assert.fail(`等待超时：${what}`);
 }
+// 换配方只有一条路：开配方管理弹窗点那张卡（点卡片 = 收弹窗 + 选中喂给本页）
 async function pickRecipe(name) {
-    recipeSel().value = name;
-    fire(recipeSel(), "change");
+    click(barBtn("配方管理"));
+    const card = await until(() => [...document.querySelectorAll(".ns-director-recipes .neo-recipes-card")]
+        .find((c) => c.querySelector(".neo-recipes-card-name span")?.textContent === name), `配方管理里有 ${name} 那张卡`);
+    click(card);
     await settle();
     await settle();
 }
@@ -267,7 +272,7 @@ async function boot(layout = null, noRecipes = false) {
 async function openDirector(what = "导演页挂载") {
     await clickTab("director");
     await until(() => pageEl() && tlHost().__neoDirectorTimeline, what);
-    await until(() => recipeSel().value === "R1", "配方自动选中");
+    await until(() => dirSelected() === "R1", "配方自动选中");
 }
 async function clickTab(name) {
     click(document.querySelector(`.ns-tabs a[data-tab="${name}"]`));
@@ -338,9 +343,10 @@ test("导演页：进页铺好配方条 + 自动选中配方 + 时间轴 + 三�
     await boot();
     await openDirector();
     assert.ok(pageEl(), "应切到导演页");
-    assert.ok(barBtn("配方管理") && barBtn("新建配方") && barBtn("素材库") && barBtn("高级模式"), "配方条四枚按钮齐");
-    assert.equal(barBtn("配方管理").textContent.trim(), "配方管理",
-        "顶栏那枚叫「配方管理」：快速换配方是上方那名下拉，两枚不同名");
+    assert.deepEqual([...document.querySelectorAll(".ns-director-bar .ns-btn")].map((b) => b.textContent.trim()),
+        ["配方管理", "", "素材库", "高级模式"],
+        "顶栏四枚一排：左端 配方管理 + ＋（新建只剩图标），右端 素材库 / 高级模式");
+    assert.ok(!document.querySelector(".ns-director-bar select"), "顶栏没有配方下拉：换配方只有配方管理里点卡片那一条路");
     assert.ok(!document.querySelector(".neo-director-overlay"), "进页不出整片编辑器浮层：高级模式要用户自己点");
     assert.equal(tl().opts.getSegments().length, 2, "R1 两段画在时间轴上");
     assert.equal(selSeg(), 0, "该段面板落在第 1 段");
@@ -360,11 +366,11 @@ test("导演页：进页铺好配方条 + 自动选中配方 + 时间轴 + 三�
     assert.equal(runBtn().textContent.trim(), "生成", "生成钮文案：跑哪几段写在提示行上，按钮不重复那句长文案");
     assert.equal(cancelBtn().style.display, "none", "取消按钮起手隐藏");
 });
-test("导演页新建配方：顶栏「新建配方」在本页落一份一段配方，不开整片编辑器浮层", async () => {
+test("导演页新建配方：顶栏「＋」在本页落一份一段配方，不开整片编辑器浮层", async () => {
     await boot();
     await openDirector();
-    click(barBtn("新建配方"));
-    await until(() => recipeSel().value === "未命名配方", "新配方落在本页的配方下拉上");
+    click(newBtn());
+    await until(() => dirSelected() === "未命名配方", "新配方落在这页选中的那张卡上");
     assert.ok(!document.querySelector(".neo-director-overlay"), "不开整片编辑器浮层：配方就在本页长出来");
     const saves = posts("/rs_recipes/save");
     assert.equal(saves.length, 1, "新建就落盘一次：页内写路径就是 ops.save 那一条");
@@ -386,15 +392,15 @@ test("导演页新建配方：顶栏「新建配方」在本页落一份一段�
     assert.ok(statusEl().textContent.includes("已新建配方"), `状态行说出新建的是哪一份：${statusEl().textContent}`);
 });
 
-test("导演页新建配方：顶栏与配方管理里的新增连着点，名字往后排数字、不盖盘上那份", async () => {
+test("导演页新建配方：顶栏「＋」与配方管理里的新增连着点，名字往后排数字、不盖盘上那份", async () => {
     await boot();
     await openDirector();
-    click(barBtn("新建配方"));
-    await until(() => recipeSel().value === "未命名配方", "顶栏新建落在本页");
+    click(newBtn());
+    await until(() => dirSelected() === "未命名配方", "顶栏新建落在本页");
     click(barBtn("配方管理"));
     await until(() => recipesModal() && recipesModal().querySelector(".neo-recipes-director"), "弹窗里铺好配方卡与「新增导演配方」");
     click(recipesModal().querySelector(".neo-recipes-director"));
-    await until(() => recipeSel().value === "未命名配方2", "弹窗里的「新增导演配方」同样落在本页，名字让开刚落盘的那一份");
+    await until(() => dirSelected() === "未命名配方2", "弹窗里的「新增导演配方」同样落在本页，名字让开刚落盘的那一份");
     assert.ok(!document.querySelector(".neo-director-overlay"), "两处新增都不开整片编辑器");
     assert.ok(recipesModal().classList.contains("ns-hidden"), "新增先收弹窗：配方就在本页编辑，不在弹窗里");
     assert.deepEqual(posts("/rs_recipes/save").map((c) => c.body.name), ["未命名配方", "未命名配方2"], "两次新增各落盘一次，名字不撞");
@@ -402,7 +408,7 @@ test("导演页新建配方：顶栏与配方管理里的新增连着点，名�
 
 
 
-test("导演页：顶栏切配方 → 段数 / 该段行 / 尺寸回显跟着换", async () => {
+test("导演页：配方管理里切配方 → 段数 / 该段行 / 尺寸回显跟着换", async () => {
     await boot();
     await openDirector();
     await pickRecipe("R2");
@@ -752,7 +758,7 @@ test("导演页高级模式：整片编辑器以浮层打开，保存后本页�
     await settle();
     assert.equal(posts("/rs_recipes/save").length, 1, "编辑器底部保存走同一条 /rs_recipes/save");
     await until(() => loads("R1") > loadsBefore, "保存后本页重读该配方");
-    assert.equal(recipeSel().value, "R1", "保存后顶栏下拉选中这一份");
+    assert.equal(dirSelected(), "R1", "保存后本页选中这一份：配方管理里那张卡跟着高亮");
     assert.ok(!document.querySelector(".neo-director-overlay"), "保存后关掉编辑器");
 });
 
@@ -773,7 +779,7 @@ test("首页「宫格图分镜」卡：落自己那一页，编辑器内嵌铺�
     const panel = document.querySelector(".ns-storyboard-host .neo-director-embedded");
     assert.equal(panel.querySelector(".neo-director-name").value, "", "铺的是空白新配方：不认导演页下拉里显示的那一份");
     assert.ok(panel.querySelector(".neo-director-name-empty"), "标题行落「未命名配方」占位：这一页起手就是没名字的新配方");
-    assert.equal(recipeSel().value, "R1", "导演页的选中态不动：进这一页不替用户换配方");
+    assert.equal(dirSelected(), "R1", "导演页的选中态不动：进这一页不替用户换配方");
     assert.equal(posts("/rs_recipes/save").length, 0, "点卡这一发不落盘：没写完的草稿不预先长出一张卡");
     assert.ok(!panel.querySelector(".neo-director-tabs"), "没有页签栏：这一页只有故事板那一面");
     assert.equal(panel.querySelector(".neo-director-pane-story").style.display, "", "故事板那一面铺满整栏");
@@ -792,7 +798,7 @@ test("故事板页：空盘进页铺的也是空白编辑器，一发不落盘�
     await until(() => document.querySelector(".ns-storyboard-host .neo-director-embedded"), "空盘进故事板页也铺好那一面");
     assert.equal(posts("/rs_recipes/save").length, 0,
         `空盘进页一发不落盘：写完点「保存」才建卡（状态：${statusEl()?.textContent}）`);
-    assert.equal(recipeSel().value, "", "导演页没有配方时也不替它新建一份：这一页不动那一页的选中态");
+    assert.equal(dirSelected(), null, "导演页没有配方时也不替它新建一份：这一页不动那一页的选中态");
     clickTab("home");
     click(card);
     await settle(); await settle();

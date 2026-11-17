@@ -328,7 +328,7 @@ const DIRECTOR_TIMELINE_H = 68;   // 时间轴净高：16px 秒刻度尺 + 4px �
 const DIRECTOR_ZOOM_KEY = "neo_studio.director_zoom";   // 时间轴缩放档位：跨页面重开记住（同一浏览器档位是常态）
 const DIRECTOR_REF_MAX = { images: 9, videos: 3, audios: 3 };   // 与后端 _DIRECTOR_REF_CAPS 同一份
 const DIRECTOR_REF_TOTAL = DIRECTOR_REF_MAX.images + DIRECTOR_REF_MAX.videos + DIRECTOR_REF_MAX.audios;
-const NEW_RECIPE_BASE = "未命名配方";   // 顶栏「新建配方」的起手名：盘上同名配方（含预设）就往后排数字，不盖它的卡
+const NEW_RECIPE_BASE = "未命名配方";   // 顶栏「＋」的起手名：盘上同名配方（含预设）就往后排数字，不盖它的卡
 // 全参考家族（含旧 v2v / rv2v）用参考素材那一行，帧模式（t2v / i2v / l2v / fl2v）用首帧 / 尾帧两枚：
 // 判据与后端 director_spec 那条优先序同一份——整片生成模式（shared.mode）是全参考时每一段都走 ref2va，
 // 其余档按这一段自己的显式模式逐段切。混配方逐段切时，隐藏的槽位不写进配方——留着上一家族的素材就是让它替模式说话
@@ -427,19 +427,17 @@ async function buildDirector(el) {
         readOnly: isPreset,
     });
 
-    // --- 顶部条：配方（下拉快切）· 配方管理（卡片弹窗）· 新建配方 · 素材库 · 高级模式（整片编辑器浮层） ---
+    // --- 顶部条：左端 配方管理（卡片弹窗）· ＋（本页落一份新配方），右端 素材库 · 高级模式（整片编辑器浮层） ---
     recipesHost = $el("div", { className: "ns-director-recipes" });
     recipesModal = createLibraryModal({ storageKey: "neo_studio_libmodal_recipes", scope: "recipes" });
     recipesModal.setContent(recipesHost);
     document.body.appendChild(recipesModal.el);
-    const recipeSel = $el("select", { className: "ns-director-recipe", title: t("选一份导演配方：时间轴与该段控件跟着换") });
-    const recipeChip = chipButton(recipeSel, { icon: "list" });
-    // 顶栏这颗只管管理（弹窗里点卡片选中 / 复制 / 删除 / 新增）；快速换配方就是上方那名下拉，两边不再同名
+    // 换配方只有这一颗：弹窗里点卡片 = 选中喂给本页。顶栏不再挂一份同样的配方下拉——同一页两个入口选同一件事
     const recipesBtn = $el("button", { className: "ns-btn", type: "button", title: t("打开配方管理：点卡片选中，含复制 / 删除 / 新增") });
     setIconLabel(recipesBtn, "list", t("配方管理"));
     recipesBtn.onclick = () => { recipesModal.open(t("导演配方")); refreshRecipesPanel(); };
-    const newBtn = $el("button", { className: "ns-btn", type: "button", title: t("新建一份分镜视频导演配方：就在本页落一段，写完「保存该段」写回") });
-    setIconLabel(newBtn, "film", t("新建配方"));
+    const newBtn = $el("button", { className: "ns-btn ns-director-new", type: "button", title: t("新建一份分镜视频导演配方：就在本页落一段，写完「保存该段」写回") });
+    setIcon(newBtn, "plus", 15);
     newBtn.onclick = () => startNewRecipe();
     const libBtn = $el("button", { className: "ns-btn", type: "button", title: t("打开素材库：看大图与取用") });
     setIconLabel(libBtn, "folder", t("素材库"));
@@ -447,8 +445,9 @@ async function buildDirector(el) {
     const editorBtn = $el("button", { className: "ns-btn", type: "button", title: t("高级模式：整片编辑器浮层（分段增删、生成模式与分辨率、故事板与提示词工具）") });
     setIconLabel(editorBtn, "film", t("高级模式"));
     editorBtn.onclick = () => openEditor();
-    recipeSel.addEventListener("change", () => openRecipe(recipeSel.value));
-    page.appendChild($el("div", { className: "ns-director-bar" }, [recipeChip.el, recipesBtn, newBtn, libBtn, editorBtn]));
+    page.appendChild($el("div", { className: "ns-director-bar" }, [
+        recipesBtn, newBtn, $el("span", { className: "ns-director-bar-space" }), libBtn, editorBtn,
+    ]));
 
     // --- 结果舞台：idle 起手卡 / 实时预览 / 成片，下面一条状态行 + 进度 ---
     const idleCard = $el("div", { className: "ns-director-idle-card neo-gallery-gm-idle" }, [
@@ -715,7 +714,6 @@ async function buildDirector(el) {
     }
     const onDocPress = (e) => {
         if (!document.body.contains(page)) { document.removeEventListener("pointerdown", onDocPress, true); return; }
-        recipeChip.closeOnOutside(e.target);
         skillChip.closeOnOutside(e.target);
         if (segMenuOpen && !segMenuPanel.contains(e.target)) segMenuClose();
         if (sizeOpen && !sizePanel.contains(e.target) && !sizeBtn.contains(e.target)) sizeClose();
@@ -837,19 +835,9 @@ async function buildDirector(el) {
 
 
     const findItem = (name) => recipeItems.find((r) => r.name === name) || null;
-    const renderRecipeSelect = () => {
-        recipeSel.textContent = "";
-        for (const r of recipeItems) {
-            recipeSel.appendChild($el("option", { value: r.name, textContent: r.source === "preset" ? tf("{name}（预设）", { name: r.name }) : r.name }));
-        }
-        if (!recipeItems.length) recipeSel.appendChild($el("option", { value: "", textContent: t("（没有导演配方）") }));
-        recipeSel.value = currentName;
-        recipeChip.sync();
-    };
     async function refreshRecipeItems() {
         try { recipeItems = (await listRecipes()).filter((r) => r.type === "video_director"); }
         catch { recipeItems = []; }   // 离线模式 / ComfyUI 未就绪：列表拿不到就留着现有那一份
-        renderRecipeSelect();
     }
 
     function openEditor(opts = null) {
@@ -865,7 +853,7 @@ async function buildDirector(el) {
         await openRecipe(currentName);
     }
 
-    // 顶栏「新建配方」与配方管理里的「新增导演配方」都在本页落：一段空段起手，整片参数取本页那张表单的
+    // 顶栏「＋」与配方管理里的「新增导演配方」都在本页落：一段空段起手，整片参数取本页那张表单的
     // 默认口径，一次 ops.save 落盘——生成整片、素材槽取用、director_spec 回显从这一刻起全部可用，
     // 页上也因此只有「已落盘的配方」这一种状态，不给未落盘的草稿开第二条写路径。
     // 不想要就在配方管理里用那张卡自己的「删除」删掉（单件入口，页上不铺清空动作）。
@@ -892,12 +880,11 @@ async function buildDirector(el) {
             currentName = "";
             checkedSegments = [];
             clearDirty();
-            renderRecipeSelect();
             await loadSpec();   // 尺寸胶囊 / 时间轴 / 该段槽位一起回空白
             return;
         }
         statusEl.textContent = tf("已新建配方 {name}：写提示词、取首帧，「保存该段」写回", { name });
-        await refreshRecipesPanel();   // 保存链只刷下拉与本页，管理弹窗里那份面板得单独长出新卡
+        await refreshRecipesPanel();   // 保存链只刷本页；管理弹窗里那份面板得单独长出新卡
         promptIn.focus();
     }
 
@@ -958,8 +945,7 @@ async function buildDirector(el) {
         saveBtn.disabled = isPreset();
         timeline.setSegMenuOps(isPreset() ? null : openSegMenu);   // 预设只读：段菜单四项没有一项能用，块右上角不出 ⋯
         saveBtn.title = isPreset() ? t("内置预设配方只读：先「复制配方」才能改") : t("把该段的提示词 / 时长 / 素材槽改动写回配方（不新增段，也不动故事板与分辨率）");
-        renderRecipeSelect();
-        recipesPanelEl?.__neoRecipesPanel?.select(currentName);   // 卡片高亮跟着本页的选中配方挪（下拉快切 / 保存后重读）
+        recipesPanelEl?.__neoRecipesPanel?.select(currentName);   // 卡片高亮跟着本页的选中配方挪（配方管理里点卡片 / 保存后重读）
         // 「保存该段」后的重读要留着那句「已保存」：重读是把刚落盘的结果刷回界面，不是开一份新配方
         const presetNote = isPreset() ? t("内置预设配方只读：想改这一片就先「复制配方」") : "";
         statusEl.textContent = presetNote || (opts.keepStatus ? statusEl.textContent : "");

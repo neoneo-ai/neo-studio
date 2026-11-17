@@ -146,6 +146,9 @@ export function createPromptEnhanceView({ $el, toast, openMaterial, gateRun, can
         const toBottom = () => { stage.scrollTop = stage.scrollHeight; };
 
         const statusEl = $el("div", { className: "ns-enhance-status" });
+        // 思考与流程状态在整页只占这一行，就钉在输入卡上方（每发一条气泡不再各带一行）：思考正文一个字
+        // 也不上屏，正文一开始就收走。面板那份留给节点面板与技能执行弹窗（createStreamOutputHandlers 无 lineEl 的旧行为）
+        const lineEl = $el("div", { className: "ns-enhance-line", hidden: true });
 
         // 参考图：编辑页那一副「＋参考」方块（gallery.css 的 .neo-gallery-edit-refdrop 族，与编辑页同一份样式）——
         // 空格是 ＋，点击就是素材库取用，本地文件与素材卡直接拖进图位；hover 方块行浮出取图浮层
@@ -283,7 +286,7 @@ export function createPromptEnhanceView({ $el, toast, openMaterial, gateRun, can
 
         const promptEl = $el("textarea", {
             className: "ns-enhance-prompt ns-enhance-input neo-gallery-gm-quick-input",
-            rows: "3", spellcheck: "false",
+            rows: "2", spellcheck: "false",
         });
         const promptCount = $el("span", { className: "ns-enhance-count" });
         const syncCount = () => { promptCount.textContent = String(promptEl.value.length); };
@@ -307,9 +310,7 @@ export function createPromptEnhanceView({ $el, toast, openMaterial, gateRun, can
         gateRun(runBtn, "prompt_enhance", t("增强"));
         const newBtn = btn("新增会话", "plus");
 
-        const head = $el("div", { className: "ns-enhance-head" }, [statusEl]);
         const card = $el("div", { className: "ns-enhance-card neo-gallery-gm-composer" }, [
-            head,
             $el("div", { className: "ns-enhance-top" }, [
                 refRow,
                 $el("div", { className: "ns-enhance-inputbox" }, [promptEl, promptCount]),
@@ -322,7 +323,10 @@ export function createPromptEnhanceView({ $el, toast, openMaterial, gateRun, can
                 runBtn,
             ]),
         ]);
-        const dock = $el("div", { className: "ns-enhance-dock" }, [card]);
+        // 输入卡上方那一行独立的状态：左边是这一发的状态，右边是思考与流程的那一句。
+        // 卡片与气泡里都不留这一行——两个子项空着时这一行自己塌成零高，页面上就是干净的输入卡
+        const runline = $el("div", { className: "ns-enhance-runline" }, [statusEl, lineEl]);
+        const dock = $el("div", { className: "ns-enhance-dock" }, [runline, card]);
 
         // 右上浮一枚入口列（同绘画页与视频页那一列）：左半从提示词库挑一条，右半骰子抽一条；
         // 它们左边那枚「图像 / 视频」开关换的是整页作用域——技能清单只列那一类的增强技能，
@@ -436,9 +440,6 @@ export function createPromptEnhanceView({ $el, toast, openMaterial, gateRun, can
                 className: "ns-enhance-out", rows: "2", spellcheck: "false", readonly: "readonly",
                 placeholder: t("增强结果会逐字落在这里"),
             });
-            // 思考与流程状态这一发只占一行（「思考中…」「技能生成中…」）：思考正文一个字也不上屏，
-            // 正文一开始就收走。面板那份留给节点面板与技能执行弹窗（createStreamOutputHandlers 无 lineEl 的旧行为）
-            const lineEl = $el("div", { className: "ns-enhance-line", hidden: true });
             // 复制与保存各一枚图标钮，文字收进悬停提示；预设名不再让使用者填，标题由正文自动生成
             const copyBtn = $el("button", {
                 className: "ns-enhance-btn ns-enhance-acts-btn ns-enhance-copy", type: "button",
@@ -490,10 +491,10 @@ export function createPromptEnhanceView({ $el, toast, openMaterial, gateRun, can
                     // 会话里攒了回话就说清这一发垫了几条，空会话不铺这一句
                     histCount ? $el("span", { textContent: tf("带 {n} 条历史", { n: histCount }) }) : null,
                 ]),
-                $el("div", { className: "ns-enhance-out-wrap" }, [lineEl, outEl]),
+                outEl,
                 acts,
             ]);
-            return { el: box, outEl, lineEl, revealActs };
+            return { el: box, outEl, revealActs };
         };
 
         // 会话就攒在这一页的闭包里：每一发的输入与落定的回话依次进队，下一发默认整份垫在正文前面。
@@ -535,6 +536,7 @@ export function createPromptEnhanceView({ $el, toast, openMaterial, gateRun, can
             toBottom();
             const outEl = msg.outEl;
             statusEl.textContent = t("增强中…");
+            lineEl.hidden = true;   // 输入卡上方那一行：这一发先清空，思考与流程的话由处理器写进来
             setRunFace(true);
             abort = new AbortController();
             // 收场把这一发接进会话（完成 / 失败 / 停止三条收场都算一轮）：seq 对不上就是被
@@ -549,7 +551,7 @@ export function createPromptEnhanceView({ $el, toast, openMaterial, gateRun, can
             // 点停止与重跑之后在途的那一条流只丢字，不再上屏（seq 对不上就不落）
             const handlers = createStreamOutputHandlers({
                 textarea: outEl,
-                lineEl: msg.lineEl,
+                lineEl: lineEl,
                 onDone: () => {
                     keep();
                     msg.revealActs();   // 正文落定了，复制与保存这两枚才出现
@@ -617,6 +619,7 @@ export function createPromptEnhanceView({ $el, toast, openMaterial, gateRun, can
             guide.hidden = false;   // 舞台空了，起手引导回到中间
             stage.replaceChildren(guide);
             statusEl.textContent = "";
+            lineEl.hidden = true;   // 断在途的流：输入卡上方那行思考的话也跟着收掉
             setRunFace(false);
             toast(t("已开新会话"));
         };

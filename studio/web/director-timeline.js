@@ -784,14 +784,16 @@ export class DirectorTimeline {
     const checked = this._checked.has(idx);
     const dim = this.opts.checkable && !checked;
     this._rr(ctx, x + 1, top, iw, bh, 4);
-    // 半透明块底色：色相只作分段身份，饱和度压到 32%、静止 alpha 0.2，铺满块宽时不再压住首帧缩略图；
-    // 选中的加深靠 alpha 抬一档加亮描边，静止与选中仍是同一色相，重排换槽时块不跳色
+    // 半透明块底色：色相只作分段身份，饱和度压到 32%、alpha 0.11——块上真正要读的是首帧缩略图与提示词摘要，
+    // 底色只做「这是哪一段」的底纹。选中完全不碰底色（静止与选中同一个填充），那一圈描边就是选中的全部回答
     // 拖动中的块（幽灵）更醒目：填充更实更亮、描边更粗且用更亮的色，并加轻微投影营造“拿起/悬浮”感；静止与选中态配色不变
     if (ghost) { ctx.shadowColor = "rgba(120,205,255,0.85)"; ctx.shadowBlur = 8; }
-    ctx.fillStyle = "hsla(" + hue + ",32%," + (ghost ? 62 : sel ? 58 : 50) + "%," + (ghost ? 0.55 : sel ? 0.32 : dim ? 0.09 : 0.2) + ")";
+    ctx.fillStyle = "hsla(" + hue + ",32%," + (ghost ? 62 : 48) + "%," + (ghost ? 0.5 : dim ? 0.07 : 0.11) + ")";
     ctx.fill();
-    ctx.lineWidth = ghost ? 2.5 : (sel || drop ? 1.5 : 1);
-    ctx.strokeStyle = ghost ? "#bfe6ff" : sel ? "#8cf" : drop ? "#e6a23c" : "rgba(255,255,255,0.16)";
+    // 静止与选中都是 1px 细边：选中这圈换成淡青，靠颜色差而不是加粗立起来——一块块亮青框把时间轴
+    // 框成表格式清单，比块上的画面与字更抢眼（幽灵 2.5px 与拖放落点 1.5px 是瞬时反馈，不动）
+    ctx.lineWidth = ghost ? 2.5 : drop ? 1.5 : 1;
+    ctx.strokeStyle = ghost ? "#bfe6ff" : sel ? "rgba(140,204,255,0.5)" : drop ? "#e6a23c" : "rgba(255,255,255,0.1)";
     ctx.stroke();
     if (ghost) { ctx.shadowBlur = 0; }
     if (drop) {

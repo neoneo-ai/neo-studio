@@ -112,8 +112,7 @@ Execution details: [h3-video-gen.md](h3-video-gen.md).
   that segment; when the window is already open, clicking another block only switches the current segment).
 - Desktop Studio director page: entering the page selects the first (or the last-selected) director recipe and opens it
   embedded in the left pane; clicking a recipe card in the **📋 Recipe Management** modal selects it and opens it there
-  too (the card's ✎ works as well). The quick recipe switch stays the drop-down on that bar, so the two entries are
-  not named the same.
+  too (the card's ✎ works as well). Picking a recipe has this one path — the bar carries no second recipe entry.
 - The **＋** in the bottom-right outside the node's timeline display opens the create editor directly (after
   saving, the recipe is added to the `recipe` dropdown and selected).
 - **Run only the checked segments**: hovering a timeline segment block reveals a checkbox, and checking some
@@ -258,8 +257,8 @@ segment exists.
 lands on its own page `#/storyboard`: the page lays the editor's storyboard side straight into itself (character
 references / grid-image split / per-segment comparison) — no popup, no tab bar, the timeline side stays folded away,
 and the recipe name plus the footer 保存 are the editor's own. The entry always lays the editor's own new-recipe path -
-a blank recipe with an empty name box (the title reads 未命名配方): it never adopts the recipe the director page's
-dropdown shows and never saves one for it, and the grid split with the per-cell prompts reaches the disk only when the
+a blank recipe with an empty name box (the title reads 未命名配方): it never adopts the recipe the director page has
+selected and never saves one for it, and the grid split with the per-cell prompts reaches the disk only when the
 footer 保存 writes it, after which the director page selects it. When this page holds the embedded copy, the director
 stays where it is — nothing is closed silently). The top bar gives it no tab — the grid split, the per-cell prompts
 and the recipe save all stay on the chain that already exists; film settings, per-segment durations and rendering

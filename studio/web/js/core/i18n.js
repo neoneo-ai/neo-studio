@@ -419,7 +419,6 @@ const EN = {
     "高": "H",
     "保存并生成整片": "Save & Generate Film",
     "关闭编辑": "Close editor",
-    "新建配方": "New recipe",
     "新建一份分镜视频导演配方：就在本页落一段，写完「保存该段」写回": "Start a blank storyboard director recipe on this page: one empty segment, written back with 保存该段",
     "已新建配方 {name}：写提示词、取首帧，「保存该段」写回": "New recipe {name} is on this page: write the prompt, pick the first frame, save it with 保存该段",
     "拖动调整宽度 · 拖过下限关闭 · 收起后向外拖出展开": "Drag to resize · drag past the floor to close · drag outward to reopen a closed panel",

@@ -44,12 +44,11 @@ composer below.
    dice half appends a random prompt after what is already written. Which pool they read is the mode: `preset-picker.js`'s
    `kind` is the same rule the prompt-management page's 图像 / 视频 tabs use (a scan name whose first segment is `video/`
    is a video prompt), and 保存为预设 writes into that same pool (a video run is stored under the `video/` prefix).
-6. **The reply**: nothing is boxed — the reply bubble carries no shell and the text itself is not a bordered box; the
-   meta line, the one-line status, the text and the 复制 / 存预设 row sit directly on the stage. The text grows as tall as
-   it needs (`field-sizing: content`, scrolling inside after 40vh, 12px); thinking and pipeline status are a single dim
-   line above it — `createStreamOutputHandlers` is given a `lineEl` — the reasoning text never reaches the screen, and the
-   line clears when the text starts and when the stream ends. A `replace` frame swaps the text that was already streamed.
-   The NeoPromptAgent node panel and the skill-execution dialog keep the `.rs-thinking` panel (no `lineEl`, the old behavior).
+6. **The reply**: the text grows from the stream frame by frame, and a `replace` frame swaps the text that was
+   already streamed; thinking and pipeline status are one dim line — `createStreamOutputHandlers` is given a
+   `lineEl` — the reasoning text never reaches the screen, and the line clears when the text starts and when the
+   stream ends. The NeoPromptAgent node panel and the skill-execution dialog keep the `.rs-thinking` panel (no
+   `lineEl`, the old behavior).
 7. **The conversation**: each run's input and its landed reply stay in the page's own closure (`{role, text, refs}`),
    and the next run puts them in front of the text it sends — the enhance chain is single-turn
    (`studio/llm.py` builds a `[system, user]` message pair), so history travels as body text and the request shape

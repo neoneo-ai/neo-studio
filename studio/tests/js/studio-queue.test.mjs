@@ -136,7 +136,7 @@ test("队列：导演页提交整片即时登记，终态事件给成片链接�
     }));
     window.location.hash = "#/director";
     await until(() => document.querySelector('.ns-tabs a[data-tab="director"].active'), "导演页签激活");
-    await until(() => document.querySelector(".ns-director-recipe")?.value === "全片A", "进页自动选中首份配方");
+    await until(() => document.querySelector(".ns-director-recipes .neo-recipes-card-selected .neo-recipes-card-name span")?.textContent === "全片A", "进页自动选中首份配方");
     click(document.querySelector(".ns-director-run"));
     await until(() => rowBy("全片A"), "整片行登记");
     assert.equal(rowBy("全片A").querySelector(".ns-queue-kind").textContent, "整片");

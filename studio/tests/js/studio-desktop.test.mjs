@@ -205,21 +205,20 @@ test("导演页按钮走外壳配色：生成按钮半透明蓝，同排按钮�
               "未保存确认条的「放弃修改」保持红底语义色，灰底排不覆盖它");
 });
 
-// 该段行两栏的边界：方块列右缘几乎贴住描边框的左缘，而提示词框在 gallery.css 基础那条是
-// background:none / border:none（会话页的卡壳自带边界），本页卡面是平的——两栏看着像叠在一起
-test("导演页该段行：方块列与提示词之间有间距，提示词框自带边界", () => {
+// 该段行两栏读成一组输入：提示词自己不立框（边界归卡壳那圈 1px 白边），方块列与字之间就是页面的 12px。
+// 基础那条 .neo-gallery-gm-quick-input 在 gallery.css 里是 background:none / border:none，
+// 本页压字号与高度要两层特异，压完不许把一层底与描边加回来——加回来就是给同一组输入立第二道边
+test("导演页该段行：提示词不立框，与方块列读成一组输入", () => {
     const css = fs.readFileSync(path.join(webDir, "studio", "style.css"), "utf8");
     const main = css.match(/\.ns-director-main \{[^}]*\}/);
     assert.ok(main, "该段行版式规则要在");
-    assert.match(main[0], /gap:\s*16px/, "方块列与提示词之间 16px：12px 时方块右缘几乎贴住框的左缘");
+    assert.match(main[0], /gap:\s*12px/, "方块列与提示词 12px：同一组输入的余隙，不再给框沿让位");
     const prompt = css.match(/\.ns-director-dock \.ns-director-prompt \{[^}]*\}/);
     assert.ok(prompt, "提示词框要有页面这一档的版式");
-    assert.match(prompt[0], /border:\s*1px solid #3c3c3c/,
-              "提示词框有描边：基础那条 border:none 在这张平卡面上画不出边界");
-    assert.match(prompt[0], /background:\s*#0d0d0d/,
-              "提示词框走输入井那口深底：场底 #2a2a2e 比卡面 #17171b 还浅，框读成一块灰板、与方块糊在一起");
-    // 净距 16px 只有列不被压扁才成立：行允许收缩时行会缩到比方块本体还窄（120 内容缩成 105），
-    // 方块越过行沿吃进余隙，实测净距掉到 1~4px，读起来就是方块压住提示词框左缘
+    assert.match(prompt[0], /border:\s*none/, "提示词没有自己的框：边界归卡壳，一行里只立一道边");
+    assert.match(prompt[0], /background:\s*transparent/, "提示词不铺底：卡面 rgba(0,0,0,.35) 上的一块输入井就是一块凹陷");
+    // 净距只有列不被压扁才成立：行允许收缩时行会缩到比方块本体还窄（120 内容缩成 105），
+    // 方块越过行沿吃进余隙，字就贴到方块右缘上
     const segrow = css.match(/\.ns-director-segrow \{[^}]*\}/);
     assert.ok(segrow, "方块列那一行的版式规则要在");
     assert.match(segrow[0], /min-width:\s*max-content/, "方块列宽度下限钉在自己内容上：不许缩到比方块还窄");

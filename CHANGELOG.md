@@ -5,25 +5,31 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 ## [Unreleased]
 
 ### Changed
-- **The 提示词增强 reply is flat, and the reasoning stream is a status line.** The reply bubble drops its shell and the
-  prompt text drops its own bordered box — the meta line, the status line, the text and the action row sit directly on the
-  stage, the text growing as tall as it needs (`field-sizing: content`, scrolling inside past 40vh) at the page's 12px
-  scale, so a reply is no longer a card inside a card inside a card. The action row is two icon buttons — 复制提示词 and
-  保存为预设, the words in the tooltip — and it appears only once the text lands (done, failed or stopped): while a run is
-  streaming the reply is just the text growing, and a reply that produced nothing has no buttons. The preset name field is
-  gone — the title is generated from the text (`/rs_prompts/extract_title`, the text's first line when that call gives
-  none). Thinking no longer paints a panel:
-  `createStreamOutputHandlers` is given a `lineEl`, so 思考中… and the pipeline stage names are a single dim line above the
-  text that clears the moment the text starts and when the stream ends — reasoning tokens never reach the screen. The
-  NeoPromptAgent node panel and the 查看技能执行过程 dialog keep the `.rs-thinking` panel (they pass no `lineEl`, same as
-  before). Covered by `studio/tests/js/prompt-enhance.test.mjs` (the unboxed reply bubble and text in the page CSS, no
-  panel on this page, the status line while a run is in flight, reasoning never in the text, the line cleared at stream
-  end, `replace` still swapping the streamed text, the icon-only action row appearing only on landed text, the
-  auto-generated preset title).
+- **The Studio director page top bar is four buttons, not five.** The recipe drop-down on that bar is gone: the
+  recipe-management modal is now the one way to switch recipes there (clicking a card closes the modal and feeds the page,
+  same as before). 「新建配方」 is an icon-only **＋** button next to 配方管理 — the sentence it used to spell out lives in
+  the tooltip — and 素材库 / 高级模式 are pushed to the far right end of the bar by a flex spacer, so a bar that wraps on a
+  phone keeps both inside the row (a per-button `margin-left` would push them out of it). The ＋ keeps a square face the
+  same height as the text buttons beside it. The drop-down takes `renderRecipeSelect`, its three call sites, the chip
+  wrapper's outside-close listener and the 「新建配方」 i18n entry with it. Covered by
+  `studio/tests/js/studio-director.test.mjs` (the four buttons in order with the ＋ carrying no label, no select in the bar,
+  switching recipes through the recipe-management modal, 新建 / 保存后选中 read the card highlight) and
+  `studio/tests/js/studio-queue.test.mjs` (auto-select on entering the page).
+
+- **提示词增强 lands its actions on the reply, and the reasoning stream never reaches the text.** The action row is two
+  icon buttons — 复制提示词 and 保存为预设, the words in the tooltip — and it appears only once the text lands (done,
+  failed or stopped): while a run is streaming the reply is just the text, and a reply that produced nothing has no
+  buttons. The preset name field is gone — the title is generated from the text (`/rs_prompts/extract_title`, the text's
+  first line when that call gives none). 思考中… and the pipeline stage names are one dim line that clears the moment the
+  text starts and when the stream ends — reasoning tokens never reach the screen, and a `replace` frame swaps the text
+  that was already streamed. The NeoPromptAgent node panel and the 查看技能执行过程 dialog keep the `.rs-thinking` panel
+  (they pass no `lineEl`, same as before). Covered by `studio/tests/js/prompt-enhance.test.mjs` (the status line while a
+  run is in flight, reasoning never in the text, the line cleared at stream end, `replace` still swapping the streamed
+  text, the icon-only action row appearing only on landed text, the auto-generated preset title).
 - **The 提示词增强 page stops being a blank stage.** An empty `#/enhance` stage now carries the same start hint the
-  paint and video pages use (the shared `.neo-gallery-gm-idle` — 19px title line plus one 12px note): 「写一句，点增强」
-  with 「结果落在上方气泡，可复制或存为预设」 under it, centered in the stage. It hides when the first bubble lands,
-  returns to the middle after 新增会话 clears the stage, and clicking it focuses the input box. No buttons in the hint —
+  paint and video pages use (the shared `.neo-gallery-gm-idle`): 「写一句，点增强」 with
+  「结果落在上方气泡，可复制或存为预设」 under it. It hides when the first bubble lands, returns to the middle after
+  新增会话 clears the stage, and clicking it focuses the input box. No buttons in the hint —
   drawing a prompt, picking a reference and choosing the skill all stay on the composer below. Covered by
   `studio/tests/js/prompt-enhance.test.mjs` (the hint on an empty stage, two text lines and no buttons, hide-and-return).
 - **The 提示词增强 page switches between image and video prompts.** The top-right corner now carries an 图像 / 视频
@@ -37,12 +43,6 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   shape is unchanged, and the offline page keeps working (the skills and both prompt pools are data-root reads).
   Covered by `studio/tests/js/prompt-enhance.test.mjs` (the two skill pools, the mode in the dice / save / run payloads,
   the picker's pool, persistence, the no-video-skill guard).
-- **The 提示词增强 chat box sits flat now.** The composer pinned to the bottom edge of `#/enhance` keeps the 绘画页
-  composer's card — a translucent dark fill with a light border — and the video page's `0 14px 38px` drop shadow is off
-  it, so the chat box and the reply bubbles read as one flat surface. Only the page's own rule lost the shadow
-  (`studio/web/prompt-enhance/prompt-enhance.css`); the 视频页 and 导演页 docks keep theirs, and the layout, the chips
-  and the request shape are untouched. Guarded by a `studio/tests/js/prompt-enhance.test.mjs` case that reads the dock
-  card's block in the page's CSS.
 - **The 提示词增强 page takes reference images the way the 编辑 page does.** The composer's left column is a row of 「＋参考」 slots with the 编辑 page's pick menu: clicking an empty slot runs 「🖼 素材库取用」 (the asset-library modal), hovering the row floats the menu out — a 「参考图 N/4」 header, 「⬆ 本地上传」 (several local files at once) and 「🖼 素材库取用」 — with a 250 ms close grace, so the cursor crosses the 6 px gap and lands on an item instead of the menu vanishing under it (the same JS-driven reveal the 编辑 page has). Local files and gallery cards drop straight onto a slot, pasting still works, and the ✕ on a tile removes that image while the rest close up; video and audio never enter a slot, and a full row of 4 (`MAX_ENHANCE_REFS`) reports the cap. The 「上传图片」 icon button is off the chip row — 本地上传 lives in the menu. The page no longer uses the video page's material-slot component (`js/core/media-slot.js`): the slots, the menu and their styling are the 编辑 page's `.neo-gallery-edit-refdrop` family in `gallery.css`, and the `.ns-slot` geometry rules that listed `.ns-enhance-card` are down to the two pages that still use them. The request shape is unchanged — a library pick goes out as `{kind:"input", value:"<relative name>[output]"}`, a local file or paste as `{kind:"data", data:<data URI>}`. Covered by `studio/tests/js/prompt-enhance.test.mjs` (the two menu items, empty-slot click opens the library, 本地上传 opens the hidden file input, the close grace, the image-only and cap gates, remove-and-close-up).
 - **The 提示词增强 page chats.** The composer is one box now — the 补充要求 line is gone, Enter sends, Shift+Enter
   breaks a line, and every run's input plus its landed reply stay in the page as a conversation: the next run puts that

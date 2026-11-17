@@ -215,6 +215,12 @@ body {
 .ns-director { position: relative; display: flex; flex-direction: column; gap: 8px; height: 100%; min-height: 0; min-width: 620px; overflow: hidden; }
 .ns-director-bar { flex: none; display: flex; align-items: center; gap: 8px; min-width: 0; }
 .ns-director-bar .ns-btn { display: inline-flex; align-items: center; gap: 6px; }
+/* ＋ 新建：钮面只有图标，文字交给 title。边长不钉死数字——align-self: stretch 让它吃到这一行的高度
+   （就是旁边文字钮那一条线的高），aspect-ratio 再把宽收成同高的一颗正方形；
+   padding 收 0——图标的 svg 带 vertical-align，照文字那套内衬会长成一颗横椭圆 */
+.ns-director-bar .ns-director-new { flex: none; align-self: stretch; aspect-ratio: 1; padding: 0; justify-content: center; }
+/* 素材库 / 高级模式 钉这一行的右端：空宽交给这条 spacer，不给按钮挂 margin-left（窄屏 flex-wrap 时 margin 会把两枚顶出行外） */
+.ns-director-bar-space { flex: 1 1 auto; min-width: 0; }
 
 /* 结果舞台：画面按这份配方的比例居中，宽度贴住舞台宽；画面比这块高时按容器高收窄
    （100cqh × 宽高比）后居中，不在画面两侧留一片黑。
@@ -280,27 +286,26 @@ body {
 .ns-director-zoom { height: 20px; min-width: 22px; padding: 0 6px; border: 1px solid var(--ns-border); border-radius: 5px; background: var(--ns-raised); color: var(--ns-dim); font-size: 11px; line-height: 1; cursor: pointer; }
 .ns-director-zoom:hover { border-color: var(--ns-accent); color: var(--ns-fg); }
 /* 该段行：方块列在左，提示词吃剩下的宽度（窄屏上下堆叠见下面 720px）。段号与秒数不在这一行重复——
-   时间轴块左上就是「第 N 段 · Xs」，右缘一拖就改时长。两栏之间 16px：与视频页同档的 12px 只到「文字不贴住」，
-   框描边立起来之后，12px 就是方块右缘几乎贴住框的左缘，方块与框在卡面上读成同一块 */
-.ns-director-main { display: flex; align-items: flex-start; gap: 16px; min-width: 0; }
+   时间轴块左上就是「第 N 段 · Xs」，右缘一拖就改时长。两栏回到页面那一档 12px：提示词不再有自己的框，
+   方块与字就是同一组输入，余隙一宽反而读成两件事各管各的 */
+.ns-director-main { display: flex; align-items: flex-start; gap: 12px; min-width: 0; }
 /* 方块列那一列占多宽就占多宽，不许被压扁（参考素材铺满时方块行在自己列里横滚，不把提示词挤没） */
 .ns-director-segrow { flex: 0 0 auto; min-width: max-content; display: flex; flex-direction: column; gap: 4px; }
 .ns-director-prompt { flex: 1 1 auto; min-width: 0; }
 /* 提示词的字与行距归页面这一档：gallery.css 的 .neo-gallery-gm-quick-input（15px / 110px 起高 / 12px 内衬）
    是运行时后注入的，同特异它排在后面就赢，压住它要两层选择器。
-   框的边界也在这一条里：基础那条是 background:none / border:none（会话页的卡壳自带边界），
-   本页卡面是平的，不给一层底与描边，提示词就是浮在卡面上的裸文字，与左边的方块分不出界。
-   底色走高级模式那口输入井（recipes.css 的 textarea 是 #0d0d0d + #3c3c3c）：场底 --ns-field 是 #2a2a2e，
-   比 #17171b 这块卡面还浅，框在卡面上读成一块灰板、与方块糊在一起 */
+   这条只压字号与高度，不给底与描边：边界归卡壳（.neo-gallery-gm-composer 那圈 1px 白边，:focus-within
+   换成蓝）——「在写哪一块」由卡壳回答。提示词自己再套一层框，一个输入组里就立了两道边，
+   左边的首帧 / 尾帧方块被这条框劈出去，整行读成「一列方块 + 一个独立文本域」而不是一组输入 */
 .ns-director-dock .ns-director-prompt {
-    min-height: 40px; max-height: 20vh; padding: 3px 6px; font-size: 12px; line-height: 1.45; resize: vertical;
-    background: #0d0d0d; border: 1px solid #3c3c3c; border-radius: 6px;
+    min-height: 40px; max-height: 20vh; padding: 3px 0; font-size: 12px; line-height: 1.45; resize: vertical;
+    background: transparent; border: none;
 }
 /* 方块列的宽度下限钉在内容（min-width: max-content）：auto 的下限是方块内那两个字宽度，
-   列会缩到比方块本体还窄（120 内容缩成 111），尾帧右缘越过列沿吃进 16px 余隙，
-   与提示词框的实测净距就掉到 2~7px，读起来是贴住甚至压住框沿。
+   列会缩到比方块本体还窄（120 内容缩成 111），尾帧右缘越过列沿吃进 12px 余隙，
+   与提示词文字的实测净距就掉到 2~7px，读起来是贴住。
    overflow-x: auto 会把配对的 overflow-y 从 visible 变成 auto（visible 不与非 visible 混用），
-   列因此会裁方块，裁下的右半边正落在提示词框左上角上。窄屏叠列那条放开成可缩可滚 */
+   列因此会裁方块，裁下的右半边正落在提示词第一行字上。窄屏叠列那条放开成可缩可滚 */
 .ns-director-segrow > .ns-director-slots { min-width: max-content; }
 /* 空参考槽不占位：它宽 0，前面那 8px gap 照算进内容，列被撑出 8px 空白就是白吃的余隙 */
 .ns-director-slots > .ns-slot-row:not(:has(.ns-slot-tile)) { display: none; }

@@ -226,6 +226,9 @@ Read a file top-down as "what it defines, then where execution starts, then the 
   or config reading a field this change added, and the offline `409` gate.
 - Do not add cases for trivial construction or plain getters, and do not keep a case for a code
   path this change deleted.
+- A style- or copy-only UI change adds no case: spacing, sizing, colors, icon-only buttons, a flatter
+  layout, wording. Its contract is the page's own stylesheet and one manual pass over the page. A case
+  belongs to behavior the user can act on — a new action, state, route, setting, or a file the UI reads.
 - Suite inventory, runner flags, e2e environment switches, and the Pylance `extraPaths` assumption:
   [docs/testing.md](docs/testing.md).
 
@@ -241,6 +244,9 @@ Read a file top-down as "what it defines, then where execution starts, then the 
   `<ComfyUI root>` / `<data root>` placeholder rule are in [CONTRIBUTING.md](CONTRIBUTING.md).
 - Documentation states facts tied to the behavior that changed. No narrative, no marketing
   expansion, no feature list attached to a fix.
+- Docs follow copy, not style: user-visible wording that changed gets its doc lines updated in both
+  mirrors. Spacing, sizing, colors, icon-only buttons and a flatter layout stay out of the docs — the
+  page's own stylesheet and one manual pass over the page own those.
 - Install and config snippets use `<ComfyUI root>` and `<data root>` placeholders. Do not write
   fixed drive letters into docs, scripts, or test fixtures.
 - Registry `description` and `keywords` are the search surface `comfy-cli` writes into the Registry
@@ -258,8 +264,9 @@ Read a file top-down as "what it defines, then where execution starts, then the 
   `docs: ...`), one coherent behavioral change per commit, and a short PR description: the
   problem, the behavioral change, the tests run.
 - Do not bump the version in a feature change; a release is a maintainer act.
-- A user-visible change gets its `CHANGELOG.md` entry in the same change: English, naming the
-  behavior the user gets, not the files touched.
+- A user-visible behavior change gets its `CHANGELOG.md` entry in the same change: English, naming the
+  behavior the user gets, not the files touched. A style- or copy-only UI change has no entry — the
+  release notes carry behavior, and a page that only looks tighter is not a release note.
 - The commit format, the PR shape, and the list of changes a review rejects live in
   [CONTRIBUTING.md](CONTRIBUTING.md).
 

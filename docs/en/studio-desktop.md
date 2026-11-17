@@ -109,9 +109,10 @@ the unsaved content of the director editor and the settings forms, and a cross-o
 
 The director page is one full-width column, and the page is the editor: **the recipe bar on top, a stage, and a
 generation dock floating at the bottom of that stage** — segments and whole-film parameters are both written here.
-**📋 Recipe Management** / **📝 New recipe** / **🖼 Asset library** / **Advanced mode** sit on that bar, the recipe
-drop-down is the quick switch on it, and the recipe-management modal and the asset library both open as modals
-(`js/core/lib-modal.js`).
+**📋 Recipe Management** / **＋** (new recipe: the button carries the icon only, the words live in its title) sit at the
+left end of that bar and **🖼 Asset library** / **Advanced mode** at its right end; picking a recipe has the one path of
+clicking a card in Recipe Management, the bar carries no second recipe entry, and the recipe-management modal and the
+asset library both open as modals (`js/core/lib-modal.js`).
 
 - **Advanced mode** opens the full-film editor as an overlay (`openDirectorEditor`): segment add/delete, generation
   mode and chunk seconds, and the storyboard and prompt tools all live there — the same overlay
@@ -120,7 +121,7 @@ drop-down is the quick switch on it, and the recipe-management modal and the ass
 - **Startup always lands on home**: when the recipe panel lands the first director recipe is auto-selected (the dock
   and the agent context read it) and the director page never opens itself.
 - **Clicking a recipe card closes the recipe-management modal and selects that recipe** (clicking the same card again just
-  switches the recipe, the page is not rebuilt); "新增导演配方" in that modal and "📝 New recipe" on the bar both create a
+  switches the recipe, the page is not rebuilt); "新增导演配方" in that modal and the bar's **＋** both create a
   one-segment blank recipe on this page — the film parameters take the page defaults (16:9 at 0.5 megapixels, random seed
   `-1`), one `ops.save` writes it to disk, the page selects it, and generating the film / picking media / 保存该段 all work
   from that moment on; to drop it, delete the card in Recipe Management. With no frame yet the stage carries
@@ -222,10 +223,10 @@ drop-down is the quick switch on it, and the recipe-management modal and the ass
   that drives `DirectorTimeline.setZoom()`; the level lives in `localStorage["neo_studio.director_zoom"]`, so re-entering
   the page lands on the same zoom.
 - The segment row is a single line: the 首帧 / 尾帧 / 参考素材 squares on the left (56px each, the same size as on the
-  video page) and the prompt box taking the whole width left over at the page's own 12px text size (one row tall, growing
-  to a 20vh cap as you type; the box uses the director editor's input-well tone — `#0d0d0d` behind a `#3c3c3c` border,
-  since the shell's `#2a2a2e` field tone is lighter than this card face and reads as a grey slab — with 16px between it and
-  the squares, so the two columns read as separate areas on the card). The segment number and its seconds are not repeated on this line: the
+  video page) and the prompt taking the whole width left over at the page's own 12px text size (one row tall, growing to a
+  20vh cap as you type; the prompt carries no frame and no fill of its own — the edge belongs to the composer shell, which
+  lights up on `:focus-within`, so the row has one border and the squares plus the text read as a single input group, with
+  12px between them). The segment number and its seconds are not repeated on this line: the
   timeline block already reads "Segment N · Xs" and dragging its right edge changes the duration. Every control in the bar
   below is 28px tall with **生成** pinned at the right (which segments run is stated on the hint line under the timeline).
   Two narrow-screen fallbacks: at ≤900px the dock returns to normal flow (no
@@ -587,7 +588,7 @@ startable once the root is filled in.
   bar and the timeline side folded away, keeping the editor's own recipe name and footer 保存, and the title row drops
   the tab column on this page so the ✕ sits at its right end. The entry always lays the
   editor's own blank new recipe (`existing = null` - empty name box, one empty segment, the page header says the page
-  starts from a blank recipe and 保存 writes it); it never adopts the recipe the director page's dropdown shows and
+  starts from a blank recipe and 保存 writes it); it never adopts the recipe the director page has selected and
   never saves one for it, and the grid split with the per-cell prompts reach the disk through the footer 保存, after
   which the director page selects that recipe. The page's 角色素材库 / 宫格图素材库 buttons ride the same sidebar write
 the director page uses, and Studio lands that write on the asset modal with the gallery host marked

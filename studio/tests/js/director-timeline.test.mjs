@@ -566,8 +566,9 @@ test("生成进度条画在刻度尺上（块内不再画顶部细条）", async
     tl.destroy();
 });
 
-// 分段块底色只做“哪一段”的身份提示，不能压过块内的首帧缩略图与提示词摘要
-test("分段块是淡身份底：静止最淡、选中加深、拖动中的幽灵最实", async () => {
+// 分段块底色只做“哪一段”的身份提示，不能压过块内的首帧缩略图与提示词摘要；
+// 选中态不碰底色——「是哪一段」由底色说，「选中了哪一段」只由那一圈描边说，两件事不在一块底纹上抢话
+test("分段块底色只做身份底：选中不加深，拖动中的幽灵最实", async () => {
     resetEnv();
     const { tl } = makeTimeline([{ duration: 5 }]);
     await sleep(40);
@@ -582,8 +583,9 @@ test("分段块是淡身份底：静止最淡、选中加深、拖动中的幽�
     assert.equal(rest.hue, 180, "填充不改色相，段色相仍由 _segHue 按位置给");
     assert.ok(rest.sat <= 35, "饱和度压到 35% 以下，静止块才是淡底：" + rest.sat + "%");
     assert.ok(rest.alpha <= 0.25, "静止 alpha 不超过 0.25：" + rest.alpha);
-    assert.ok(sel.alpha > rest.alpha && ghost.alpha > sel.alpha, "静止淡、选中加深、幽灵最实：" + [rest, sel, ghost].map((c) => c.alpha).join(" < "));
-    assert.ok(sel.light > rest.light && sel.light <= 60, "选中靠亮度小抬区分，不跳成亮色块：" + rest.light + "% → " + sel.light + "%");
+    assert.deepEqual(sel, rest, "选中不动底色：静止与选中是同一笔填充，选中只加框");
+    assert.ok(ghost.alpha > rest.alpha && ghost.light > rest.light,
+              "静止淡、拖动中的幽灵最实：" + [rest, ghost].map((c) => c.alpha + "/" + c.light + "%").join(" < "));
     tl.destroy();
 });
 
