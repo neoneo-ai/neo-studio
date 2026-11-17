@@ -259,7 +259,8 @@ narrow-window rules are shared with the director page (one modal instance, one g
 - "🖼️ Generate asset" and "🖼️ New image recipe" switch to the input page; "🖼️ Edit image" in an image card's
   menu switches to the edit page. Each page owns one panel and one job — the input page generates, the edit page
   edits — so there is no text-to-image / image-edit mode bar and no image-recipe list.
-- The direct cards of the home **Edit** section (Image Edit / Outpaint / Local / Remove / Camera angle / Blend / Pose)
+- The direct cards of the home **Edit** section (Image Edit / Outpaint / Camera angle / Blend / Pose, plus Local /
+  Remove — those two sit in the **Add card** preset face by default)
   carry their mode into the panel the edit page already built (`openImageEditMode` through the host's `__neoSetMode`): a
   card switches the mode instead of rebuilding the panel, because a rebuild clears a half-written prompt. The mode
   switches the moment you land,

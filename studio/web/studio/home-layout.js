@@ -38,8 +38,9 @@ export const HOME_CARDS = [
     { id: "storyboard", section: "create", icon: "image", title: "宫格图分镜", sub: "宫格图拆成多段，逐格出提示词", target: "page", value: "storyboard", defaultHidden: true },
     { id: "edit-normal", section: "edit", icon: "pencil", title: "图片编辑", sub: "写下要改成什么样，整图重绘", target: "edit", value: "normal" },
     { id: "edit-outpaint", section: "edit", icon: "maximize", title: "扩图", sub: "拖框定四边留白，补全周边场景", target: "edit", value: "outpaint" },
-    { id: "edit-local", section: "edit", icon: "pencil", title: "局部", sub: "涂抹要改的区域，高分重绘并合回原图", target: "edit", value: "local" },
-    { id: "edit-remove", section: "edit", icon: "cross", title: "删除", sub: "点掉要删的物体，分割后移除", target: "edit", value: "remove" },
+    // 局部与删除默认不上首页：编辑板块默认只铺常用那几张，这两张收在「添加卡片」的预设里等着加
+    { id: "edit-local", section: "edit", icon: "pencil", title: "局部", sub: "涂抹要改的区域，高分重绘并合回原图", target: "edit", value: "local", defaultHidden: true },
+    { id: "edit-remove", section: "edit", icon: "cross", title: "删除", sub: "点掉要删的物体，分割后移除", target: "edit", value: "remove", defaultHidden: true },
     { id: "edit-angle", section: "edit", icon: "camera", title: "机位", sub: "拖机位球换角度重出这张", target: "edit", value: "angle" },
     { id: "edit-blend", section: "edit", icon: "copy", title: "融合", sub: "多张参考图融成一张连贯画面", target: "edit", value: "blend" },
     { id: "edit-pose", section: "edit", icon: "user", title: "姿势", sub: "骨架图锁姿势，重出这一张", target: "edit", value: "pose" },
@@ -463,7 +464,7 @@ export function createHomeInlineEditor(host = {}) {
         }
 
         /** 预设加进首页：摘掉 hidden 这一项，卡回到 order 里它原来那一格；
-         *  默认不上首页的那一张（特效）本来没有格子，排进板块末尾就是「排过」，这一次保存才把它带上首页 */
+         *  默认不上首页的那几张（特效 / 宫格 / 局部 / 删除）本来没有格子，排进板块末尾就是「排过」，这一次保存才把它带上首页 */
         function addPreset(card) {
             draft.hidden = draft.hidden.filter((id) => id !== card.id);
             if (card.defaultHidden) {

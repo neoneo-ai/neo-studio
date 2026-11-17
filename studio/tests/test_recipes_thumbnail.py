@@ -2,9 +2,9 @@
 """recipes 缩略图端点（/rs_recipes/thumbnail）的离线单测。
 
 验证路径校验（400）、配方/资产缺失（404）、缓存未命中现生成、缓存命中不再调用
-gallery._generate_thumbnail，以及 size 参数钳制到 [32, 1024]。server/folder_paths/
-gallery/bookmark/gallery_lora/util 用桩模块替换，RECIPES_DIR/CUSTOM_DIR/PRESETS_DIR/
-THUMB_DIR 指向临时目录。"""
+gallery._generate_thumbnail、视频封面的旧整帧大缓存按请求尺寸就地重生成，以及 size 参数钳制到
+[32, 1024]。server/folder_paths/gallery/bookmark/gallery_lora/util 用桩模块替换，
+RECIPES_DIR/CUSTOM_DIR/PRESETS_DIR/THUMB_DIR 指向临时目录。"""
 
 from stub_env import GALLERY_STUB_PREFIXES, restore, snapshot
 
@@ -69,13 +69,24 @@ def _load(name, fname):
 
 # gallery 桩：_generate_thumbnail 记录调用次数并写一个假 JPEG，避免依赖 PIL/ffmpeg
 _thumb_calls = {"n": 0}
+_FAKE_JPEG_HEAD = b"\xff\xd8\xff\xe0FAKEJPEG"
 
 
 def _fake_generate_thumbnail(source_path, thumb_path, size):
     _thumb_calls["n"] += 1
     with open(thumb_path, "wb") as f:
-        f.write(b"\xff\xd8\xff\xe0FAKEJPEG")
+        # 末尾记下生成时的尺寸：旧版整帧大缓存就靠它摆出来
+        f.write(_FAKE_JPEG_HEAD + str(size).encode())
     return True
+
+
+def _fake_cached_video_thumb_fits(suffix, thumb_path, size):
+    """尺寸检查的桩：非视频封面由 PIL 缩过，一律合格；视频读回缓存记下的尺寸与请求比。"""
+    if suffix.lower() not in _gallery.VIDEO_EXTENSIONS:
+        return True
+    with open(thumb_path, "rb") as f:
+        body = f.read()
+    return int(body[len(_FAKE_JPEG_HEAD):]) <= size
 
 
 _gallery = types.ModuleType(f"{_PKG}.gallery")
@@ -84,6 +95,7 @@ _gallery.IMG_EXTENSIONS = {".png", ".jpg", ".jpeg"}
 _gallery.VIDEO_EXTENSIONS = {".mp4", ".webm"}
 _gallery._copy_media_to_input = lambda src, fname: (fname, False)
 _gallery._generate_thumbnail = _fake_generate_thumbnail
+_gallery._cached_video_thumb_fits = _fake_cached_video_thumb_fits
 sys.modules[f"{_PKG}.gallery"] = _gallery
 setattr(_pkg, "gallery", _gallery)
 
@@ -192,6 +204,30 @@ class ThumbnailRoutesTests(StubFolderPathsMixin, unittest.TestCase):
         resp = _thumb({"recipe": "r1", "file": "a.png", "size": "256"})
         self.assertEqual(resp.status, 200)
         self.assertEqual(_thumb_calls["n"], 1, "命中缓存不得再次生成")
+
+    def test_oversized_video_cover_cache_is_regenerated(self):
+        """旧版 ffmpeg 不缩放，视频封面缓存里躺着的是整帧大图，文件名却写着 _256。"""
+        self._make_recipe("r2", asset="clip.mp4")
+        asset = pathlib.Path(self.custom, "r2", "assets", "clip.mp4")
+        thumb = recipes._recipe_thumb_path(asset, 256)
+        thumb.write_bytes(_FAKE_JPEG_HEAD + b"1024")
+
+        resp = _thumb({"recipe": "r2", "file": "clip.mp4", "size": "256"})
+
+        self.assertEqual(resp.status, 200)
+        self.assertEqual(_thumb_calls["n"], 1, "整帧大图判为不合格，重生成一次")
+        self.assertEqual(thumb.read_bytes(), _FAKE_JPEG_HEAD + b"256", "同一份缓存就地换成小图")
+
+    def test_fitting_video_cover_cache_is_served(self):
+        self._make_recipe("r3", asset="clip.mp4")
+        asset = pathlib.Path(self.custom, "r3", "assets", "clip.mp4")
+        thumb = recipes._recipe_thumb_path(asset, 256)
+        thumb.write_bytes(_FAKE_JPEG_HEAD + b"256")
+
+        resp = _thumb({"recipe": "r3", "file": "clip.mp4", "size": "256"})
+
+        self.assertEqual(resp.status, 200)
+        self.assertEqual(_thumb_calls["n"], 0, "尺寸合格且没过期就只读缓存")
 
     def test_size_clamped_to_bounds(self):
         _thumb({"recipe": "r1", "file": "a.png", "size": "1"})

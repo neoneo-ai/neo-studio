@@ -82,6 +82,8 @@ without moving a file or creating a directory:
   audio (wav / mp3 / m4a / flac / ogg …); audio cards show a waveform and ▶ plays a preview (the first playback
   decodes the real peaks).
 - **Thumbnail cache** - thumbnails are generated on first visit and appear instantly afterwards.
+- **Video covers** - ffmpeg extracts the first frame scaled down to the requested size: a 1080p clip gives a
+  6 KB 320 px cover. Full-frame entries the old build left in the cache are rewritten in place on the next visit.
 - **Card ratio cache** - image width/height are read from the file header and stored under
   path+mtime+size in `configs/gallery_dim_cache.json`, so reopening a directory (even after a restart) stops
   reading images one by one — very visible on network drives.

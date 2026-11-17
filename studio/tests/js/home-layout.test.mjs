@@ -316,8 +316,8 @@ test("首页按版式出卡：板块序、隐藏卡、自建卡与列数全生�
     assert.deepEqual(cardTitles(home), [
         "素材库", "技能", "设置",
         "生成视频", "生成图片", "导演视频", "3D 姿势", "声音克隆", "提示词增强", "自建卡",
-        "图片编辑", "扩图", "局部", "删除", "机位", "融合", "姿势", "视频抽帧", "图片反推", "视频反推",
-    ], "板块序、卡序、隐藏卡与自建卡全按版式出");
+        "图片编辑", "扩图", "机位", "融合", "姿势", "视频抽帧", "图片反推", "视频反推",
+    ], "板块序、卡序、隐藏卡与自建卡全按版式出：默认不上首页的局部与删除不铺进网格");
     assert.equal(home.querySelector(".ns-home-hero h1").textContent, "我的首页排版什么？",
         "版式改掉的标题行换掉默认，没改的后缀留默认");
     assert.equal(home.querySelector(".ns-home-hero p").textContent, "一句副标题");
@@ -539,7 +539,7 @@ test("自建卡走添加卡片这一面：表单保存才落卡，取消不动�
     await flush();
     assert.ok(dlg(), "占位卡开的是这一面弹窗");
     assert.deepEqual(presetTitles(dlg()), ["特效视频", "宫格图分镜"],
-        "默认版式里默认不上首页的那两张就在这一面等着加：其余内置卡都在首页上");
+        "创作板块默认不上首页的那两张就在这一面等着加：编辑板块的预设不挤进这一面");
     assert.ok(!dlg().querySelector(".ns-home-preset-empty"), "有预设可加时不给那一句空态");
     assert.equal(home.querySelectorAll(".ns-home-card.is-custom").length, 0, "没保存就不落卡");
     assert.ok(formCard() && fieldIn(dlg(), "跳转类型") && fieldIn(dlg(), "跳转目标"),
@@ -656,8 +656,9 @@ test("添加卡片这一面铺成一张卡：跳转类型是一排 radio，标�
     click(gridOf(home, "编辑").querySelector(".ns-home-add-tile"));
     await flush();
     assert.ok(dlg(), "「添加卡片」占位卡开的是这一面弹窗");
-    assert.ok(dlg().querySelector(".ns-home-preset-empty"),
-        "这一板块的预设都已在首页：空态说出来，这一面不空着一块");
+    assert.deepEqual(presetTitles(dlg()), ["局部", "删除"],
+        "这一板块默认不上首页的那两张就在这一面等着加：默认版式的编辑板块没有空态");
+    assert.ok(!dlg().querySelector(".ns-home-preset-empty"), "有预设可加时不给那一句空态");
     assert.deepEqual([...dlg().querySelectorAll(".ns-home-card-dialog-fields > .ns-home-f-field")]
         .map((f) => f.querySelector(".ns-home-f-label")?.textContent), ["跳转类型", "跳转目标"],
         "字段只剩跳转类型与跳转目标这两行：标题、副标题与图标都在卡上改");
@@ -1084,12 +1085,13 @@ test("首页版式的 CSS 挂点：列数走自定义属性，卡上的控件与
 test("预设表只收被移出首页的内置卡：已在首页的一张不出，板块各管各的", () => {
     const base = hl.normalizeLayout({});
     assert.deepEqual(hl.presetCards("create", base).map((c) => c.id), ["effect", "storyboard"],
-        "默认不上首页的那两张是默认版式唯一的预设：其余内置卡都在首页上");
+        "创作板块默认不上首页的那两张就是这一板块默认版式的预设：其余创作卡都在首页上");
     const layout = hl.normalizeLayout({ hidden: ["paint", "gallery"] });
     assert.deepEqual(hl.presetCards("create", layout).map((c) => c.id), ["paint", "effect", "storyboard"],
         "预设收本板块没在首页上的内置卡：移出首页的那一张与默认就不上的那两张");
     assert.deepEqual(hl.presetCards("material", layout).map((c) => c.id), ["gallery"]);
-    assert.deepEqual(hl.presetCards("edit", layout), [], "别的板块移出首页的卡不落进这一板块的预设里");
+    assert.deepEqual(hl.presetCards("edit", layout).map((c) => c.id), ["edit-local", "edit-remove"],
+        "别的板块移出首页的卡不落进这一板块的预设里：这一面只有本板块默认不上的那两张");
     const withCustom = hl.normalizeLayout({
         custom: [{ id: "custom_1", section: "create", title: "旧藏卡", target: "url", url: "https://ex.com/a" }],
         hidden: ["custom_1", "paint"],

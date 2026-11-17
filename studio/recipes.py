@@ -1226,8 +1226,9 @@ async def rs_recipes_thumbnail(request):
         size = THUMB_SIZE
 
     thumb_path = _recipe_thumb_path(asset_path, size)
-    if not thumb_path.is_file():
-        from .gallery import _generate_thumbnail   # 循环导入约束：函数内延迟导入
+    from .gallery import _cached_video_thumb_fits, _generate_thumbnail   # 循环导入约束：函数内延迟导入
+    if not (thumb_path.is_file() and _cached_video_thumb_fits(asset_path.suffix, thumb_path, size)):
+        # 视频封面的旧缓存是 ffmpeg 留下的整帧大图，尺寸不合格就重生成一次换小图。
         if not _generate_thumbnail(asset_path, thumb_path, size):
             return web.Response(status=404)
 

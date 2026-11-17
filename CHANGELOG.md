@@ -62,6 +62,14 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   landing page follows the mode the run was sent in).
 
 ### Changed
+- **局部 and 删除 leave the default home grid and become preset cards.** The 编辑 section's default grid now carries
+  图片编辑 / 扩图 / 机位 / 融合 / 姿势 plus the three tool pages (视频抽帧 / 图片反推 / 视频反推); the 局部 / 删除 cards
+  land in that section's 添加卡片 preset face, the same face that already holds 特效视频 / 宫格图分镜 on 创作. One click
+  there appends the card to the end of 编辑, and the card carries its edit mode exactly as before. A home layout that
+  already places the card keeps it where the user put it — the flag gates the default grid only, never a saved order —
+  and removing the card from the home hands it back to the preset face. The default-layout cases in
+  `studio/tests/js/home-layout.test.mjs` and the home landing case in `studio/tests/js/studio-desktop.test.mjs` read
+  the new default grid, and the Add-card sheet there lists 局部 / 删除 for 编辑.
 - **The Studio director page top bar is four buttons, not five.** The recipe drop-down on that bar is gone: the
   recipe-management modal is now the one way to switch recipes there (clicking a card closes the modal and feeds the page,
   same as before). 「新建配方」 is an icon-only **＋** button next to 配方管理 — the sentence it used to spell out lives in
@@ -136,6 +144,18 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   recipes and existing 配方 assets are untouched.
 
 ### Fixed
+- **Video thumbnails load without flashing a console window, and at card size.** The desktop window starts
+  ComfyUI with `CREATE_NO_WINDOW`, so the parent has no console and Windows gives every console program it
+  spawns — ffmpeg is one — a console window of its own. Clicking a top 归类 tag aggregates the whole library,
+  the lazy card grid asks for a thumbnail per video, and every uncached video ran ffmpeg with no window flag:
+  a burst of black windows flashing open and shut, one per clip. The same calls also ignored the requested
+  `size` and wrote the whole frame: a 1080p clip cached a 75 KB 1920×1080 JPEG for a 320 px card, a 4K clip
+  several MB, and ffmpeg started one decoder thread per core. The four ffmpeg calls (`_generate_video_thumbnail`
+  in `studio/gallery.py` for the grid and covers, `studio/backyard.py` for the 云端预设 preprocessing page) now pass
+  `creationflags=CREATE_NO_WINDOW` (0 off Windows) and let ffmpeg scale the frame to the requested size
+  (`-q:v 4 -threads 1 -an -sn`); a cache hit compares the cached image with the requested size, so a full-frame
+  entry the old build left behind is rewritten as the small thumbnail in place. A 1080p clip's 320 px thumbnail
+  went 75 KB → 6 KB. Covered by `studio/tests/test_gallery_video_thumb.py`.
 - **The 宫格图分镜 page's 素材库 buttons open the asset modal.** Every 素材库 button in the director editor ends with a
   `sidebarTab.activeSidebarTabId` write, and the Studio host answers that write by opening the asset-library modal — the
   gate only admitted the 导演页 and 图片编辑页, so 角色素材库 and 宫格图素材库 on the 宫格图分镜 page clicked into nothing.

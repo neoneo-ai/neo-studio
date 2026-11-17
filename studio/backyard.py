@@ -24,6 +24,10 @@ logger.addFilter(PrefixFilter())
 
 CONFIG_PATH = plugin_paths.CONFIGS_DIR / "backyard_oss.json"
 
+# 打包版里没有控制台，ffmpeg 派生时会自己开一个窗口。预处理一次要出几十条视频封面，
+# 屏幕上就是一闪一片黑框。CREATE_NO_WINDOW 只在 Windows 上存在，非 Windows 取 0。
+NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
 
 def _load_config() -> dict:
     try:
@@ -185,11 +189,13 @@ def _generate_video_thumbnail(source_path: Path, cache_path: Path, size: int) ->
             print("  [WARN] ffmpeg not found, skipping video thumbnail")
             return False
         cache_path.parent.mkdir(parents=True, exist_ok=True)
-        cmd = [ffmpeg_path, "-ss", "00:00:00.500", "-i", str(source_path), "-vframes", "1", "-y", str(cache_path)]
-        result = subprocess.run(cmd, capture_output=True, timeout=30)
+        thumb_args = ["-vf", f"scale={size}:{size}:force_original_aspect_ratio=decrease",
+                      "-q:v", "4", "-threads", "1", "-an", "-sn"]
+        cmd = [ffmpeg_path, "-ss", "00:00:00.500", "-i", str(source_path), "-vframes", "1", *thumb_args, "-y", str(cache_path)]
+        result = subprocess.run(cmd, capture_output=True, timeout=30, creationflags=NO_WINDOW)
         if result.returncode != 0:
-            cmd = [ffmpeg_path, "-i", str(source_path), "-vframes", "1", "-y", str(cache_path)]
-            result = subprocess.run(cmd, capture_output=True, timeout=30)
+            cmd = [ffmpeg_path, "-i", str(source_path), "-vframes", "1", *thumb_args, "-y", str(cache_path)]
+            result = subprocess.run(cmd, capture_output=True, timeout=30, creationflags=NO_WINDOW)
             if result.returncode != 0:
                 return False
         if cache_path.stat().st_size < 1024:

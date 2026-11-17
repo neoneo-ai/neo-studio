@@ -35,6 +35,11 @@ from .bookmark import (
     _is_civitai_bookmark_enabled,
 )
 
+# 桌面端用 CREATE_NO_WINDOW 拉起 ComfyUI：父进程没有控制台，Windows 就给派生出来的控制台程序
+# 新建一个窗口。素材页顶部归类标签一次批量出缩略图会连着派生几十个 ffmpeg，屏幕上就是一闪
+# 一片黑框。CREATE_NO_WINDOW 只在 Windows 上存在，非 Windows 取 0 —— CPython 认这个值。
+NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
@@ -2289,7 +2294,7 @@ def _ffmpeg_exe() -> str | None:
 def _generate_video_thumbnail(source_path: Path, cache_path: Path, size: int = THUMBNAIL_SIZE) -> bool:
     """Generate a thumbnail from a video file using ffmpeg.
     
-    Extracts the first frame and saves as JPEG thumbnail.
+    Extracts the first frame and saves it scaled down to size as a JPEG thumbnail.
     """
     try:
         # Check if ffmpeg is available
@@ -2306,21 +2311,23 @@ def _generate_video_thumbnail(source_path: Path, cache_path: Path, size: int = T
             "-ss", "00:00:00.500",
             "-i", str(source_path),
             "-vframes", "1",
+            *_ffmpeg_thumb_args(size),
             "-y",
             str(cache_path)
         ]
         
-        result = subprocess.run(cmd, capture_output=True, timeout=30)
+        result = subprocess.run(cmd, capture_output=True, timeout=30, creationflags=NO_WINDOW)
         if result.returncode != 0:
             # Try without -ss for first frame (some formats don't support input seeking well)
             cmd = [
                 ffmpeg_path,
                 "-i", str(source_path),
                 "-vframes", "1",
+                *_ffmpeg_thumb_args(size),
                 "-y",
                 str(cache_path)
             ]
-            result = subprocess.run(cmd, capture_output=True, timeout=30)
+            result = subprocess.run(cmd, capture_output=True, timeout=30, creationflags=NO_WINDOW)
             if result.returncode != 0:
                 return False
         
@@ -2342,6 +2349,16 @@ def _generate_video_thumbnail(source_path: Path, cache_path: Path, size: int = T
         return True
     except Exception as e:
         return False
+
+
+def _ffmpeg_thumb_args(size: int) -> list[str]:
+    """让 ffmpeg 自己把帧缩到请求尺寸：整帧 JPEG 是 1080p 75KB、4K 几 MB，卡片只有 320px。
+
+    -threads 1 是给懒加载网格的：ffmpeg 默认按核数起解码线程，前端在途 6 张卡就是 6 倍核数。
+    -an -sn 让 ffmpeg 不去映射音频与字幕流，NAS 上的 mp4 少一次流探测。
+    """
+    return ["-vf", f"scale={size}:{size}:force_original_aspect_ratio=decrease",
+            "-q:v", "4", "-threads", "1", "-an", "-sn"]
 
 
 def _find_source_media(filename: str, subfolder: str) -> Path | None:
@@ -2597,7 +2614,7 @@ def _thumbnail_payload(size: int, source_path: Path) -> tuple[bytes, str] | None
 
     cache_path = THUMBNAIL_DIR / time.strftime("%Y-%m", time.localtime(source_stat.st_mtime)) / f"{_thumbnail_hash(source_path, source_stat)}_{size}.jpg"
     try:
-        if cache_path.stat().st_mtime >= source_stat.st_mtime:
+        if cache_path.stat().st_mtime >= source_stat.st_mtime and _cached_video_thumb_fits(suffix, cache_path, size):
             return _read_media_bytes(cache_path)
     except OSError:
         pass
@@ -2608,6 +2625,23 @@ def _thumbnail_payload(size: int, source_path: Path) -> tuple[bytes, str] | None
     elif not _generate_thumbnail(source_path, cache_path, size):
         return _read_media_bytes(source_path)
     return _read_media_bytes(cache_path)
+
+
+def _cached_video_thumb_fits(suffix: str, cache_path: Path, size: int) -> bool:
+    """缓存里的视频封面要真的不超过请求尺寸才算命中。
+
+    旧的 ffmpeg 命令不带缩放，缓存里躺着的是 1080p 整帧（75KB 起），文件名却写着 _320，
+    命中一次就把原帧大图发给一张 320px 的卡。这里把它判为不合格，换一次重生成交回小图；
+    Image.open 只读 JPEG 头，不解码像素。图片封面由 PIL 缩过，不需要这道检查。
+    """
+    if suffix not in VIDEO_EXTENSIONS:
+        return True
+    try:
+        with Image.open(cache_path) as img:
+            width, height = img.size
+    except Exception:
+        return False
+    return max(width, height) <= size
 
 
 @routes.get("/neo_gallery/thumbnail")
