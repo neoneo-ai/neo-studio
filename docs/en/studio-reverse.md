@@ -7,7 +7,8 @@ The "图片反推" card in the **Edit** section of the Studio home opens `#/reve
 removing the card on the home page closes the page off (add it back from Add a card). Reverse prompting runs through the
 same endpoint the asset
 card's ⋯ menu uses (`POST /rs_prompts/reverse_prompt`, `studio/llm.py`); the page only picks an image, puts the text
-on screen, and copies it.
+on screen, and copies it. Videos are not on this page: sampling a video into a prompt lives on the 视频反推 page, see
+[studio-reverse-video.md](studio-reverse-video.md).
 
 ## The path
 

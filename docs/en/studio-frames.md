@@ -50,3 +50,11 @@ one of those frames — saving in a row never leaves a half-saved run.
 
 One path for both hosts: the desktop window extracts and saves frames with no ComfyUI runtime (the frames group
 in `app/studio_caps.py`).
+
+## The reverse-prompt page reuses this capture logic
+
+Both capture helpers are exported from `studio/web/frames/frames.js`, and the 视频反推 page (`studio/web/reverse-video/`)
+uses exactly that, adding only two things: `rangeTimes` spreads N frames evenly across a start-to-end range (this page lays
+timestamps out from a start plus a gap), and the `maxSide` scale of `captureFrames` — a reversal packs the whole batch
+into one LLM request, so frames go out at a 768 px side. Frames this page saves into the library stay at full size.
+`/neo_frames/video` is shared by both pages, so preview and extraction run in the offline window too.

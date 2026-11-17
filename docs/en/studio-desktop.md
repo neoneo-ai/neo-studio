@@ -678,18 +678,24 @@ buttons clicking into nothing. Only one editor exists in the window:
   by `openHomeCard` in `studio-app.js`. The settings sidebar no longer has a 首页 entry. Cases:
   `studio/tests/js/home-layout.test.mjs`, `studio/tests/test_home_layout.py` and the layout cases in
   `app/tests/test_studio_server.py`.
-- The 声音克隆 card in Create and the 图片反推 card in Edit are two `target: "page"` cards (`value: "voice"` /
-  `"reverse"`) that land in two branches of `route()`, mounting the `#/voice` and `#/reverse` pages
-  (`studio/web/voice-clone/voice-clone.js`, `studio/web/reverse-prompt/reverse-prompt.js`). The seven top-bar tabs
-  give them no place: hide the card on the home page and the page has no way in. Both pages ride the same
+- The 声音克隆 card in Create and the 图片反推 and 视频反推 cards in Edit are three `target: "page"` cards
+  (`value: "voice"` / `"reverse"` / `"reverse_video"`) that land in three branches of `route()`, mounting the
+  `#/voice`, `#/reverse` and `#/reverse_video` pages
+  (`studio/web/voice-clone/voice-clone.js`, `studio/web/reverse-prompt/reverse-prompt.js`,
+  `studio/web/reverse-video/reverse-video.js`). The seven top-bar tabs
+  give them no place: hide the card on the home page and the page has no way in. All three pages ride the same
   "views stay mounted, pages show and hide" route as every other page, and their run buttons go through
-  `RUN_GATES` (`voice` / `prompt_reverse`) — offline, clicking one starts the kernel instead of sending a request
-  that can only answer 409. Cases: `studio/tests/js/studio-home-pages.test.mjs`,
-  `studio/tests/js/reverse-prompt.test.mjs`, `studio/tests/js/voice-clone.test.mjs`.
+  `RUN_GATES` (`voice` / `prompt_reverse` / `prompt_reverse_video`) — offline, clicking one starts the kernel
+  instead of sending a request that can only answer 409. Cases: `studio/tests/js/studio-home-pages.test.mjs`,
+  `studio/tests/js/reverse-prompt.test.mjs`, `studio/tests/js/reverse-video.test.mjs`, `studio/tests/js/voice-clone.test.mjs`.
 - The "提示词增强" card in the **Create** section is the third `target: "page"` direct card (`value: "enhance"`); it lands in
   `route()` and mounts `#/enhance` (`studio/web/prompt-enhance/prompt-enhance.js`), and the top bar gives it no tab either.
   The page is one chat stage — the run's input is a bubble, the model's reply is a bubble, and a floating capsule composer
-  sits at the bottom edge like the video page's, with copy and save-preset living inside the reply bubble. Its run button goes
+  sits at the bottom edge like the video page's, with copy, a landing button and save-preset living inside the reply bubble.
+  The landing button fills that reply's text into the matching page's prompt box, keyed to the mode the run was sent in: the
+  image reply lands on the Paint page's composer (a panel already on the page only swaps its content), the video reply goes
+  through the existing `openVideoReuse` prefill chain (the `setVideoPageJump` hook registered at startup builds that page
+  first when this window has never opened it). Its run button goes
   through `RUN_GATES` under `prompt_enhance`: the chain only touches the data-root skill files and the LLM stream, so the
   desktop window serves it offline and the button never reads "需要 ComfyUI"; on the page only "保存为预设" rides the
   `prompt_library_write` flag (the prompt-library write side stays with the kernel). Cases:

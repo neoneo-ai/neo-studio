@@ -1704,6 +1704,7 @@ def _build_llm_tasks() -> Dict[str, Any]:
         "smart_prompt",
         "template_prompt",
         "reverse_prompt",
+        "video_reverse_prompt",
         "lora_tag",
         "director_story",
         "director_optimize",

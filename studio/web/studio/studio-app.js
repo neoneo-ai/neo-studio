@@ -33,6 +33,7 @@ import { initQueuePanel, setQueueOnline, queueTrack } from "../queue-panel.js";
 import { createPoseView } from "../pose/pose.js";
 import { createFramesView } from "../frames/frames.js";
 import { createReverseView } from "../reverse-prompt/reverse-prompt.js";
+import { createReverseVideoView } from "../reverse-video/reverse-video.js";
 import { createVoiceCloneView } from "../voice-clone/voice-clone.js";
 import { createPromptEnhanceView } from "../prompt-enhance/prompt-enhance.js";
 import { HOME_SECTIONS, createHomeInlineEditor, heroText, layoutSections, loadHomeLayout, normalizeLayout, sectionOrder, visibleCards } from "./home-layout.js";
@@ -292,10 +293,15 @@ function openMaterialOnce(scope, accept, onPick) {
     }, accept);
 }
 
-// 两页都只从首页的卡进（顶栏没有这两枚页签）：运行按钮交 gateRunButton，能力缺时点它引导启动内核
+// 三页都只从首页的卡进（顶栏没有这三枚页签）：运行按钮交 gateRunButton，能力缺时点它引导启动内核
 const buildReverse = createReverseView({
     api, $el, toast,
-    openMaterial: (onPick) => openMaterialOnce("reverse", "image", onPick),
+    openMaterial: (onPick, accept) => openMaterialOnce("reverse", accept || "image", onPick),
+    gateRun: gateRunButton,
+});
+const buildReverseVideo = createReverseVideoView({
+    api, $el, toast,
+    openMaterial: (onPick) => openMaterialOnce("reverse_video", "video", onPick),
     gateRun: gateRunButton,
 });
 const buildVoiceClone = createVoiceCloneView({
@@ -303,11 +309,13 @@ const buildVoiceClone = createVoiceCloneView({
     openMaterial: (onPick) => openMaterialOnce("voice", "audio", onPick),
     gateRun: gateRunButton,
 });
-// 提示词增强页只要素材库取图与运行闸门；保存为预设那颗钮自己读能力表（提示词库写侧归内核）
+// 提示词增强页只要素材库取图、运行闸门，以及回话上那枚「填入对应页」的落点（enhanceApplyToPage）；
+// 保存为预设那颗钮自己读能力表（提示词库写侧归内核）
 const buildPromptEnhance = createPromptEnhanceView({
     $el, toast, can,
     openMaterial: (onPick) => openMaterialOnce("enhance", "image", onPick),
     gateRun: gateRunButton,
+    applyToPage: enhanceApplyToPage,
 });
 
 onSidebarTabChange((id) => {
@@ -1276,11 +1284,7 @@ function buildPaint(el) {
  *  右半骰子抽一条图像提示词，两条都落进这一页现成面板的提示词框（面板不在了就重建一块带预填的）。
  *  extra 是这一页原本就有的入口（编辑页的「素材库」），排在最前 */
 function paintPromptBar(host, kind, extra = []) {
-    const fill = (text) => {
-        if (reusePaintPanel(host, kind, null, null, { prompt: text })) return;
-        if (kind === "edit") openImageEditDialog(app.neoGallery, null, "", { container: host, prefill: { prompt: text } });
-        else openGenMaterialDialog(app.neoGallery, { container: host, prefill: { prompt: text } });
-    };
+    const fill = (text) => fillPaintPrompt(host, kind, text);
     const presetBtn = $el("button", { className: "ns-btn ns-paint-preset-btn", type: "button", textContent: t("提示词"), title: t("从图像提示词列表里挑一条填进提示词") });
     const randomBtn = $el("button", { className: "ns-btn ns-paint-random-btn", type: "button", title: t("随机填入一条图像提示词") });
     setIcon(randomBtn, "dice");
@@ -1293,6 +1297,23 @@ function paintPromptBar(host, kind, extra = []) {
         } catch (e) { toast(String(e?.message || e)); }   // 桌面端离线那一发要说出需要 ComfyUI，不能报词库为空
     };
     return $el("div", { className: "ns-paint-bar" }, [...extra, $el("div", { className: "neo-split-btn" }, [presetBtn, randomBtn])]);
+}
+
+/** 把一段提示词落进那一页现成面板的提示词框：面板在位就只换内容（这一排入口与增强页的落页钮共用这一条），
+ *  面板不在这页了才重建一块带预填的 */
+function fillPaintPrompt(host, kind, text) {
+    if (reusePaintPanel(host, kind, null, null, { prompt: text })) return;
+    if (kind === "edit") openImageEditDialog(app.neoGallery, null, "", { container: host, prefill: { prompt: text } });
+    else openGenMaterialDialog(app.neoGallery, { container: host, prefill: { prompt: text } });
+}
+
+/** 增强页那枚落页钮的落点：图像进绘画页那块现成输入卡，视频走出视频页那条现成预填链
+ *  （这一页没建过时由启动时注册的 setVideoPageJump 先把页建起来，同素材卡「再来一发」那一条）。
+ *  只填提示词框：增强那一发认的是增强技能清单，两页的技能候选是另一套，不拿它改这页的技能 */
+function enhanceApplyToPage(mode, text) {
+    if (mode === "video") { openVideoReuse({ prompt: text }); return; }
+    go("paint");
+    fillPaintPrompt(paintTextHost, "text", text);
 }
 
 function buildEdit(el) {
@@ -2891,7 +2912,9 @@ const RUN_GATES = [
     [".neo-director-merge-run", "segment", t("拼回成片")],
     [".ns-director-segmenu-regen", "segment", t("重生成该段")],   // 段菜单那一项目前只做一件事：进编辑器展开上面那块面板
     [".ns-paint .neo-gallery-story-btn-primary", "image_gen", t("生成")],   // 绘画页文生图与编辑页图片编辑面板的生成
+    // 反推两页各一枚运行钮：图片页吃 prompt_reverse，视频页吃 prompt_reverse_video
     [".ns-reverse-run", "prompt_reverse", t("反推")],
+    [".ns-revvid-run", "prompt_reverse_video", t("反推")],
     [".ns-voice-run", "voice", t("生成")],
 ];
 
@@ -3371,6 +3394,7 @@ function route() {
     else if (name === "pose") ensureView("pose", buildPose);
     else if (name === "frames") ensureView("frames", buildFrames);
     else if (name === "reverse") ensureView("reverse", buildReverse);
+    else if (name === "reverse_video") ensureView("reverse_video", buildReverseVideo);   // 首页卡落的那一页：顶栏没有它的页签
     else if (name === "voice") ensureView("voice", buildVoiceClone);
     else if (name === "enhance") ensureView("enhance", buildPromptEnhance);   // 首页卡落的那一页：顶栏没有它的页签
     else if (name === "storyboard") ensureView("storyboard", buildStoryboard);   // 首页卡落的那一页：顶栏没有它的页签

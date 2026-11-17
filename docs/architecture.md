@@ -205,6 +205,7 @@ studio/
 | `pose/pose.js`                | 3D 姿势页宿主：iframe 承载、工具条与 postMessage 桥 |
 | `frames/frames.js`            | 视频抽帧页：播放器与起抽点、起抽参数、canvas 取帧与逐帧存进素材库 |
 | `reverse-prompt/reverse-prompt.js` | 图片反推页：素材库取图、`/rs_prompts/reverse_prompt` 的 SSE 上屏与复制提示词 |
+| `reverse-video/reverse-video.js`   | 视频反推页：素材库取视频、浏览器抽帧带时间戳，`/rs_prompts/reverse_video_prompt` 的 SSE 上屏与复制提示词 |
 | `voice-clone/voice-clone.js`  | 声音克隆页：参考音频与文字走 voice-gen 那条链，进度、取消与结果波形 |
 | `*.css`                       | 各模块样式 |
 

@@ -12,7 +12,7 @@ const webDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..
 const ALL_BUILTIN_CARDS = [
     "paint", "video", "director", "pose", "agent", "voice", "prompt-enhance",
     "edit-normal", "edit-outpaint", "edit-local", "edit-remove", "edit-angle", "edit-blend", "edit-pose",
-    "frames", "reverse", "gallery", "skills", "settings",
+    "frames", "reverse", "reverse-video", "gallery", "skills", "settings",
 ];
 const studioBody = '<header class="ns-header"><nav class="ns-tabs">'
     + '<a href="#/home" data-tab="home">首页</a>'

@@ -76,7 +76,7 @@ everything else, and links to a doc page that already owns a rule instead of cop
 | File                                         | Owns                                                       |
 | -------------------------------------------- | ---------------------------------------------------------- |
 | [studio/AGENTS.md](studio/AGENTS.md)         | node contract, plugin Python style, plugin-only boundaries |
-| [studio/web/AGENTS.md](studio/web/AGENTS.md) | frontend style, shim boundary, golden snapshots            |
+| [studio/web/AGENTS.md](studio/web/AGENTS.md) | frontend style, page layout, shim boundary, golden snapshots |
 | [app/AGENTS.md](app/AGENTS.md)               | window-first startup, ports, child process chain, routes   |
 | [tools/AGENTS.md](tools/AGENTS.md)           | gallery preset pipeline, exe and install scripts           |
 

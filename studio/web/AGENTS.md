@@ -29,6 +29,37 @@
   handling stay in the window layer instead of being duplicated per page.
 - CSS goes in the module's same-named stylesheet. Do not
   inline styles for structure a stylesheet already owns.
+- The `frontend-design` skill is an aesthetic reference, not a source of repo rules: its font,
+  gradient/noise/shadow, asymmetry and animation suggestions lose to this file and the root
+  Product Surface — no custom fonts, no decorative backgrounds, borders and fills beyond the
+  five classes in 版式 below, and tool pages keep the centered single column. UI 要简洁: take the
+  skill's own restraint line — a refined minimal page is spacing and typography executed with
+  precision, not added decoration.
+- The `web-design-guidelines` skill audits interaction and accessibility against the Vercel Web
+  Interface Guidelines — it carries no visual-design rules, so it cannot source 版式. Run it on
+  touched pages for the interaction baseline: icon-only buttons get `aria-label`, a drag gesture
+  gets a keyboard alternative, numeric readouts take `tabular-nums`, loading copy ends in `…`
+  (never `...`), `:focus-visible` is the shared list in `studio/style.css`, and the fetched
+  guideline text is never pasted into this repo.
+
+## 版式：一层为限，不套框
+
+- Studio 页面内容区一条 flat 规则：**框里不许套框**。一块内容的边框、圆角、面板底色只许有在外层一档；
+  正文、帧缩略图、状态行、刻度这类信息不许在自己外面再垫一层带底色的框。结果区、状态区、说明区起手就是无框的，
+  永远不许后补外框——「出现时才出现的区块」（视频反推结果区）出现时也不带框，正文直接铺在页面上。
+- 允许带框的只有这五类，且各算一层、互不嵌套：页眉工具条（`--ns-panel` + 下分隔线，与 frames.css /
+  reverse-prompt.css 同款）、播放器黑底描边、控件本体（滑轨、chip、按钮、输入 pill）、缩略图描边、弹层
+  （`studio/web/gallery.css` 的 `modal-overlay` / `modal-titlebar` 一族与 `.ns-director`）。给区块加底、加边、
+  加圆角之前先对照这份清单，清单外一律不带框。
+- 页内控件起手就是裸的：控件的框样式不许「用完即拆」（视频反推曾给抽帧/反推/语言钮配过整块面板 + 拆框，
+  两次都被打回）。控件起手就站在页面上，不垫任何容器样式。
+- 工具页（抽帧 / 反推 / 语音克隆这类）版式 = 一条居中竖列：`align-items: center` + 每块 `width: min(720px, 100%)`。
+  两列布局只留给导演页那种「清单 + 画布」的页；不许为了填右列的空白把整页推歪
+  （视频反推曾两列网格左列播放器、右列空着，视频看着偏左）。
+- 工具页一根滚动条，落在外层 `.ns-page` 上：内容区（main、结果区）不许自滚（`overflow-y: auto` 打在这些层上
+  就是双滚动条，视频反推的 main 自滚过一回，已拆）。流式正文要跟着页面走——每落一块把页面滚到正文底沿，
+  不许在正文容器里自己滚。
+- 版式与样式改动不加测试用例：页面自带样式表管契约，收尾是打开这一页过一遍（见根 AGENTS.md 的 Testing）。
 
 ## Node Panel UI
 

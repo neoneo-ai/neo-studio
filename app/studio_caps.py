@@ -280,6 +280,8 @@ FEATURE_ROUTES = {
     "voice": ("POST", "/neo_voice/generate"),
     # 图片反推要吃内核那侧的 LLM 链与图片读取路径（studio 的 /rs_prompts/reverse_prompt），桌面端自服不了
     "prompt_reverse": ("POST", "/rs_prompts/reverse_prompt"),
+    # 视频反推同一条 LLM 链，多的是抽帧序列的解码与 .rp.txt 落点，同样归内核
+    "prompt_reverse_video": ("POST", "/rs_prompts/reverse_video_prompt"),
     # 提示词增强走 LLM 链 + 数据根技能文件，桌面端自服（app/studio_caps.py 的 _LLM）
     "prompt_enhance": ("POST", "/rs_prompts/enhance_prompt"),
     # 提示词库写侧（存预设）归内核：读侧在 _PROMPTS 里离线答得出，写这条不在表内 → 离线窗口

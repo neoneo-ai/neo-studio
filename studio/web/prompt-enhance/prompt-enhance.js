@@ -115,7 +115,7 @@ export function galleryImageSource(item) {
  * 建「提示词增强」视图。依赖由宿主注入：$el 建 DOM，toast 落提示，openMaterial 开素材库弹窗取图，
  * gateRun 把「增强」交运行闸门，can 认能力表（提示词库写侧离线不可用）。
  */
-export function createPromptEnhanceView({ $el, toast, openMaterial, gateRun, can }) {
+export function createPromptEnhanceView({ $el, toast, openMaterial, gateRun, can, applyToPage }) {
     return async function buildEnhance(el) {
         ensureCss();
         el.classList.add("ns-enhance");
@@ -440,12 +440,21 @@ export function createPromptEnhanceView({ $el, toast, openMaterial, gateRun, can
                 className: "ns-enhance-out", rows: "2", spellcheck: "false", readonly: "readonly",
                 placeholder: t("增强结果会逐字落在这里"),
             });
-            // 复制与保存各一枚图标钮，文字收进悬停提示；预设名不再让使用者填，标题由正文自动生成
+            // 复制 / 落页 / 保存三枚图标钮，文字收进悬停提示；预设名不再让使用者填，标题由正文自动生成
             const copyBtn = $el("button", {
                 className: "ns-enhance-btn ns-enhance-acts-btn ns-enhance-copy", type: "button",
                 title: t("复制提示词"), "aria-label": t("复制提示词"),
             });
             setIcon(copyBtn, "copy");
+            // 落页的档位按这一发发出时的档位定：中途切了图像 / 视频开关，这一段正文仍是当时那一侧的提示词，
+            // 就落当时那一侧的页——图像落绘画页那块现成输入卡，视频走出视频页那条现成预填链
+            const landing = media === "video" ? "video" : "image";
+            const landingLabel = t(landing === "video" ? "填入视频页" : "填入绘画页");
+            const goBtn = $el("button", {
+                className: "ns-enhance-btn ns-enhance-acts-btn ns-enhance-go", type: "button",
+                title: landingLabel, "aria-label": landingLabel,
+            });
+            setIcon(goBtn, landing === "video" ? "film" : "image");
             const saveBtn = $el("button", {
                 className: "ns-enhance-btn ns-enhance-acts-btn ns-enhance-save", type: "button",
                 title: t("保存为预设"), "aria-label": t("保存为预设"),
@@ -453,7 +462,7 @@ export function createPromptEnhanceView({ $el, toast, openMaterial, gateRun, can
             setIcon(saveBtn, "save");
             gateRun(saveBtn, "prompt_library_write", t("保存提示词"));
             // 这一行只在正文落定之后出现：流式途中只有文字在长，空产出的那条回话不铺钮
-            const acts = $el("div", { className: "ns-enhance-msg-acts", hidden: true }, [copyBtn, saveBtn]);
+            const acts = $el("div", { className: "ns-enhance-msg-acts", hidden: true }, [copyBtn, goBtn, saveBtn]);
             const revealActs = () => { acts.hidden = !outEl.value.trim(); };
             copyBtn.onclick = async () => {
                 const out = outEl.value.trim();
@@ -466,6 +475,11 @@ export function createPromptEnhanceView({ $el, toast, openMaterial, gateRun, can
                     setIcon(copyBtn, "copy");
                     copyBtn.title = t("复制提示词");
                 }, 1500);
+            };
+            goBtn.onclick = () => {
+                const text = outEl.value.trim();
+                if (!text) { toast(t("还没有可填入的提示词")); return; }
+                applyToPage(landing, text);
             };
             saveBtn.onclick = async () => {
                 const text = outEl.value.trim();

@@ -133,6 +133,32 @@ test("首页「宫格图分镜」卡：落自己那一页——页上是内嵌�
     assert.ok(!html.includes('data-tab="storyboard"'), "顶栏不给宫格图分镜页签：入口只有首页那一发");
 });
 
+// 视频反推是独立的一页（web/reverse-video/）：首页「编辑」板块的卡直达 #/reverse_video，图片那一发的能力不顶它。
+test("首页「视频反推」卡：点卡与深链都落 #/reverse_video，运行钮吃 prompt_reverse_video", async () => {
+    mockShell({ prompt_reverse: true, prompt_reverse_video: false, voice: true, image_gen: true }, false);
+    window.location.hash = "#/home";
+    await import("../../web/studio/studio-app.js?homePages6=1");
+    await settle();
+    const card = document.querySelector('.ns-home-card[data-card-id="reverse-video"]');
+    assert.ok(card, "默认版式就出这张内置卡");
+    click(card);
+    await settle(); await settle(); await settle();
+    assert.equal(location.hash, "#/reverse_video", "点卡落自己那一页");
+    const page = document.querySelector(".ns-revvid");
+    assert.ok(page && !page.classList.contains("ns-hidden"), "显示的是视频反推页视图");
+    assert.ok(page.querySelector(".ns-revvid-empty"), "没选视频时给的是起手卡片");
+    const run = page.querySelector(".ns-revvid-run");
+    assert.ok(run, "工具条上就是那枚反推钮");
+    assert.match(run.textContent, /需要 ComfyUI/,
+                 "这一页的能力缺时写成需要 ComfyUI：图片反推那一项能力不顶这一页");
+    const html = fs.readFileSync(path.join(webDir, "studio", "index.html"), "utf8");
+    assert.ok(!html.includes('data-tab="reverse_video"'), "顶栏不给视频反推页页签：入口只有首页那一发");
+});
+
+
+
+
+
 test("故事板页标题行的列数：没有页签栏时 ✕ 落在行尾，不落在整行中间", () => {
     const css = fs.readFileSync(path.join(webDir, "studio", "style.css"), "utf8");
     const row = css.match(/\.ns-storyboard-host \.neo-director-embedded \.neo-director-title\s*\{[^}]*\}/);
@@ -178,4 +204,63 @@ test("离线形态：两页的运行钮写成「需要 ComfyUI」，点一下拉
     await settle();
     assert.equal(fetchLog.filter((c) => c.path === "/neo_voice/generate").length, 0,
                  "离线页不该发语音生成请求");
+});
+
+
+test("视频反推从素材库弹窗取一条视频：点卡片即换进播放器，图片卡不取用", async () => {
+    mockShell({ prompt_reverse_video: true, prompt_reverse: true }, false);
+    // 素材库替身：取用闸认卡片上的 data-filename，视频与图片各给一枚
+    const shim = await import("../../web/studio/shim/app.js");
+    shim.app.extensionManager.registerSidebarTab({
+        id: "neo.gallery",
+        render: async (el) => {
+            el.innerHTML = "";
+            for (const name of ["clip.mp4", "a.png"]) {
+                const card = document.createElement("div");
+                card.className = "neo-gallery-thumb-container";
+                card.dataset.filename = name;
+                card.dataset.subfolder = "";
+                el.appendChild(card);
+            }
+        },
+    });
+    document.body.innerHTML = studioBody;
+    window.location.hash = "#/home";
+    await import("../../web/studio/studio-app.js?homePages7=1");
+    await settle();
+    window.location.hash = "#/reverse_video";
+    await settle();
+
+    const page = () => document.querySelector(".ns-revvid");
+    const sourcePill = () => page().querySelector(".ns-revvid-source");
+    // 弹窗遮罩带着 scope:"assets" 出生就不动了，换页改的是里头画廊宿主的 data-lib-scope（见 openLibModal）
+    const libModal = () => document.querySelector('.ns-libmodal:not(.ns-hidden) .ns-gallery-host[data-lib-scope="reverse_video"]')
+        ?.closest(".ns-libmodal");
+    const modalCard = (name) => [...libModal().querySelectorAll(".neo-gallery-thumb-container")].find((c) => c.dataset.filename === name);
+
+    click(page().querySelector(".ns-revvid-empty .ns-revvid-btn"));
+    await settle();
+    assert.ok(libModal() && !libModal().classList.contains("ns-hidden"), "起手卡片那颗钮要开得出素材库弹窗");
+
+    // 关窗后画廊宿主被交还给寄留处（setOnClose 里 mountGallery(standby)），断言要攥着开窗那一刻的引用
+    click(modalCard("a.png"));
+    await settle();
+    assert.ok(libModal(), "图片卡过不了视频那道闸：弹窗留着给灯箱浏览");
+    assert.equal(sourcePill().textContent, "没有视频", "图片卡不得落进播放器");
+
+    const picked = libModal();
+    click(modalCard("clip.mp4"));
+    await settle();
+    assert.ok(picked.classList.contains("ns-hidden"), "取到视频就关窗");
+    assert.equal(sourcePill().textContent, "clip.mp4", "视频名要落进工具条那一格");
+    const video = page().querySelector("video.ns-revvid-video");
+    assert.ok(video.getAttribute("src")?.includes("/neo_frames/video"), "播放器要吃 /neo_frames/video 那条分段路由");
+    assert.ok(video.getAttribute("src")?.includes("clip.mp4"), "播放器带着选中的那条视频");
+    assert.ok(page().querySelector(".ns-revvid-main") && !page().querySelector(".ns-revvid-main").hidden, "起手卡片让位给播放器");
+    assert.ok(page().querySelector(".ns-revvid-empty").hidden, "起手卡片收起");
+
+    // 取用后换视频走工具条那颗「换视频」：同一条取用路
+    click(page().querySelector(".ns-revvid-bar .ns-revvid-btn"));
+    await settle();
+    assert.ok(!libModal().classList.contains("ns-hidden"), "「换视频」也开得出素材库弹窗");
 });

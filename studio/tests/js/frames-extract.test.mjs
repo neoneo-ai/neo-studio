@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { resetEnv, mockRoute, clearRoutes, jsonResponse, fetchLog, click, changeValue, flush, sleep, window } from "./setup.mjs";
 import { $el } from "../../web/studio/shim/ui.js";
 import {
-    createFramesView, captureFrames, frameStamp, frameTimes, framesVideoUrl, isVideoName,
+    createFramesView, captureFrames, frameStamp, frameTimes, framesVideoUrl, isVideoName, rangeTimes,
     FRAMES_MAX_FRAMES,
 } from "../../web/frames/frames.js";
 
@@ -117,6 +117,48 @@ test("逐帧 seek 取图：抽完把播放位置还回去", async () => {
     assert.equal(canvas.width, 1280);
     assert.equal(video.currentTime, 7, "抽帧前看的位置要还回去：连抽两批不该跳回片头");
     assert.equal(video.paused, false, "抽完把原来是否在播的状态还回去");
+});
+
+/** 缩放用例要的是一对能读回尺寸的桩件：canvas 的 width/height 就是页面设进去的那两个数 */
+const stubStage = (w, h) => {
+    const canvas = { width: 0, height: 0, getContext: () => ({ drawImage() {} }), toDataURL: () => "data:image/png;base64,F" };
+    const video = { currentTime: 0, paused: true, videoWidth: w, videoHeight: h, addEventListener: (_t, fn) => fn() };
+    return { video, canvas };
+};
+
+test("maxSide 把帧缩到那个边长：长边吃上限，短边按比例跟", async () => {
+    const { video, canvas } = stubStage(1280, 720);
+    await captureFrames(video, [1], () => canvas, 768);
+    assert.deepEqual([canvas.width, canvas.height], [768, 432]);
+});
+
+test("不传 maxSide 是原尺寸：抽帧页存进素材库的帧不吃缩放", async () => {
+    const { video, canvas } = stubStage(1280, 720);
+    await captureFrames(video, [1], () => canvas);
+    assert.deepEqual([canvas.width, canvas.height], [1280, 720]);
+});
+
+test("比 maxSide 还小的画面不放大：小视频抽出来的帧不糊成一团", async () => {
+    const { video, canvas } = stubStage(640, 360);
+    await captureFrames(video, [1], () => canvas, 768);
+    assert.deepEqual([canvas.width, canvas.height], [640, 360]);
+});
+
+test("采样区间：均分到位，最后一帧正落在终点上", () => {
+    assert.deepEqual(rangeTimes({ start: 6.9, end: 13.8, count: 3, duration: 30 }), [6.9, 10.35, 13.8]);
+    assert.deepEqual(rangeTimes({ start: 5, end: 8, count: 1, duration: 10 }), [5],
+        "一帧就是起点那一秒，不是区间中点");
+});
+
+test("采样区间的边界：终点留空吃片尾，越过片尾按片尾收", () => {
+    assert.deepEqual(rangeTimes({ start: 0, end: 0, count: 2, duration: 10 }), [0, 10],
+        "终点留空 = 整条片");
+    assert.deepEqual(rangeTimes({ start: 2, end: 99, count: 2, duration: 10 }), [2, 10],
+        "终点越过片尾就按片尾收：seek 出界的浏览器只会把最后一帧重复交回来");
+    assert.deepEqual(rangeTimes({ start: 12, end: 5, count: 4, duration: 10 }), [],
+        "起点已在终点之后是空表：调用方要的就是这一句");
+    assert.equal(rangeTimes({ start: 1, end: 2, count: 999, duration: 10 }).length, FRAMES_MAX_FRAMES,
+        "帧数被收到页面上限");
 });
 
 test("没选视频时只有起手卡片：抽帧与存帧的控件不出现在页面上", async () => {

@@ -387,16 +387,20 @@ js_api（`check_setup` / `pick_root` / `pick_python` / `start_setup`），根目
 - 卡表、版式形状与编辑器的装饰钩子（`decorateHero` / `decorateCard` / `decorateGrid` / `addTile`）只在 `studio/web/studio/home-layout.js` 一份，`studio-app.js`
   只管建 DOM 并把建好的 hero 与卡片交给钩子、把细栏右端那枚「完成」接到编辑器的 `save()` 上；「跳到哪一屏」是卡上的 target / value 这份数据，由 `studio-app.js` 的 `openHomeCard` 落地。设置页不再单列「首页」栏。
   用例：`studio/tests/js/home-layout.test.mjs`、`studio/tests/test_home_layout.py`、`app/tests/test_studio_server.py` 的版式用例。
-- 「创作」的「声音克隆」与「编辑」的「图片反推」是两张 `target: "page"` 的直连卡（`value: "voice"` / `"reverse"`），
-  落进 `route()` 的两条分支，挂出 `#/voice` 与 `#/reverse` 两页（`studio/web/voice-clone/voice-clone.js`、
-  `studio/web/reverse-prompt/reverse-prompt.js`）：顶栏那七枚页签不给它们位置，首页把这两张卡删掉（在「添加卡片」里加回来），这一页就进不去；
-  两页与其余页同一条「视图常驻、切页显隐」的路由。两页的运行钮交 `RUN_GATES`（`voice` / `prompt_reverse`），
+- 「创作」的「声音克隆」与「编辑」的「图片反推」「视频反推」是三张 `target: "page"` 的直连卡（`value: "voice"` / `"reverse"` /
+  `"reverse_video"`），落进 `route()` 的三条分支，挂出 `#/voice`、`#/reverse` 与 `#/reverse_video` 三页
+  （`studio/web/voice-clone/voice-clone.js`、`studio/web/reverse-prompt/reverse-prompt.js`、
+  `studio/web/reverse-video/reverse-video.js`）：顶栏那七枚页签不给它们位置，首页把这三张卡删掉（在「添加卡片」里加回来），这一页就进不去；
+  三页与其余页同一条「视图常驻、切页显隐」的路由。三页的运行钮交 `RUN_GATES`
+  （`voice` / `prompt_reverse` / `prompt_reverse_video`），
   离线形态点它是拉起内核，不是发一条注定 409 的请求。
   用例：`studio/tests/js/studio-home-pages.test.mjs`、`studio/tests/js/reverse-prompt.test.mjs`、
-  `studio/tests/js/voice-clone.test.mjs`。
+  `studio/tests/js/reverse-video.test.mjs`、`studio/tests/js/voice-clone.test.mjs`。
 - 「创作」的「提示词增强」是第三张 `target: "page"` 的直连卡（`value: "enhance"`），落进 `route()` 挂出
   `#/enhance`（`studio/web/prompt-enhance/prompt-enhance.js`）：顶栏同样不给它页签。整页是一块聊天舞台——
-  这一发的输入一条气泡、模型的回话一条气泡，底部一枚浮动胶囊输入卡（同视频页那一块），复制与存预设长在回话那条里。
+  这一发的输入一条气泡、模型的回话一条气泡，底部一枚浮动胶囊输入卡（同视频页那一块），复制、落页与存预设长在回话那条里。
+  落页那枚按这一发发出时的档位把正文填进对应那页的提示词框：图像走绘画页现成的输入卡（面板在位就只换内容），视频走
+  `openVideoReuse` 那条现成预填链（视频页没建过时由启动时注册的 `setVideoPageJump` 先把页建起来）。
   运行钮交 `RUN_GATES` 的 `prompt_enhance`：增强链只认数据根技能文件与 LLM 出流，桌面端离线自服，这颗钮在离线形态
   不写成「需要 ComfyUI」；页上只有「保存为预设」吃 `prompt_library_write` 那一位（提示词库写侧归内核）。
   用例：`studio/tests/js/prompt-enhance.test.mjs`、`studio/tests/js/studio-home-pages.test.mjs` 的增强页两发。

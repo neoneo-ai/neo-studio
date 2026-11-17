@@ -46,6 +46,7 @@ function mounted({ caps = {}, skills = SKILLS } = {}) {
     const toasts = [];
     const gated = [];
     const copied = [];
+    const applied = [];
     let pickCb = null;
     const build = createPromptEnhanceView({
         $el,
@@ -53,6 +54,7 @@ function mounted({ caps = {}, skills = SKILLS } = {}) {
         can: (feature) => caps[feature] !== false,
         openMaterial: (cb) => { pickCb = cb; },
         gateRun: (btn, feature, label) => { gated.push({ btn, feature, label }); },
+        applyToPage: (mode, text) => { applied.push({ mode, text }); },
     });
     mockRoute("/rs_prompts/skills", () => jsonResponse(skills));
     // jsdom 没有剪贴板：桩一枚，复制这条路径才测得到「写进去的是哪一段」
@@ -63,7 +65,7 @@ function mounted({ caps = {}, skills = SKILLS } = {}) {
     const pickItem = (word) => [...host.querySelectorAll(".neo-gallery-edit-refpick")]
         .find((b) => b.textContent.includes(word));
     const env = {
-        host, toasts, gated, copied,
+        host, toasts, gated, copied, applied,
         // 参考图是编辑页那一副方块 + 取图浮层：「素材库取用」那一项开宿主注入的弹窗，
         // 用例只把取到的那一项喂回回调；「本地上传」那一项点开的是隐藏的 file input
         pick: (item) => { click(env.libPick()); pickCb?.(item); },
@@ -90,8 +92,9 @@ function mounted({ caps = {}, skills = SKILLS } = {}) {
         outs: () => [...host.querySelectorAll(".ns-enhance-out")],
         // 输入卡上方那一行独立的思考/流程状态位（思考中… / 流程阶段），紧凑版面上它是唯一的旁路输出
         line: () => host.querySelector(".ns-enhance-line"),
-        // 每一条回话自带「复制 / 存预设」两枚图标钮（正文落定之后才出现）：断言永远落在最新那条上
+        // 每一条回话自带「复制 / 落页 / 存预设」三枚图标钮（正文落定之后才出现）：断言永远落在最新那条上
         aiCopy: () => [...host.querySelectorAll(".ns-enhance-msg-acts")].pop()?.querySelector(".ns-enhance-copy"),
+        aiGo: () => [...host.querySelectorAll(".ns-enhance-msg-acts")].pop()?.querySelector(".ns-enhance-go"),
         aiSave: () => [...host.querySelectorAll(".ns-enhance-msg-acts")].pop()?.querySelector(".ns-enhance-save"),
         acts: () => [...host.querySelectorAll(".ns-enhance-msg-acts")].pop(),
         status: () => host.querySelector(".ns-enhance-status"),
@@ -508,7 +511,7 @@ test("复制与随机灵感：复制的是这条回话的正文，随机抽来�
     assert.match(env.aiCopy().title, /已复制/, "图标钮的反馈写在悬停提示里");
 });
 
-test("保存为预设：两枚都是图标钮，标题由后端从正文自动生成", async () => {
+test("保存为预设：操作行三枚都是图标钮，标题由后端从正文自动生成", async () => {
     resetEnv();
     mockEnhanceStream([content("一座红色灯塔立在悬崖上")]);
     mockRoute("/rs_prompts/extract_title", () => jsonResponse({ status: "success", title: "悬崖灯塔" }));
@@ -518,6 +521,7 @@ test("保存为预设：两枚都是图标钮，标题由后端从正文自动�
     click(env.runBtn());
     await settle();
     assert.equal(env.aiCopy().textContent.trim(), "", "复制只剩图标，文字在悬停提示里");
+    assert.equal(env.aiGo().textContent.trim(), "", "落页钮同样只剩图标，落点写在悬停提示里");
     assert.equal(env.aiSave().textContent.trim(), "", "保存只剩图标，页面上没有名字框");
     click(env.aiSave());
     await settle();
@@ -525,6 +529,28 @@ test("保存为预设：两枚都是图标钮，标题由后端从正文自动�
     assert.equal(saved.body.name, "悬崖灯塔", "标题由后端从正文取");
     assert.equal(saved.body.text, "一座红色灯塔立在悬崖上");
     assert.ok(env.toasts.some((m) => m.includes("悬崖灯塔")), "存成哪一条要说给用户");
+});
+
+test("回话上那枚落页钮把正文交对应那页：图像落绘画页，切到视频档就落视频页", async () => {
+    resetEnv();
+    mockEnhanceStream([content("一座红色灯塔立在悬崖上")]);
+    const env = await mounted();
+    env.input().value = "灯塔";
+    click(env.runBtn());
+    await settle();
+    assert.match(env.aiGo().title, /绘画页/, "图像档那一发落在绘画页");
+    click(env.aiGo());
+    assert.deepEqual(env.applied, [{ mode: "image", text: "一座红色灯塔立在悬崖上" }],
+        "交出去的就是这一条回话的正文");
+    click(env.modeBtn("视频"));
+    await settle();
+    env.input().value = "灯塔在黄昏里转";
+    click(env.runBtn());
+    await settle();
+    assert.match(env.aiGo().title, /视频页/, "视频档那一发落在视频页");
+    click(env.aiGo());
+    assert.deepEqual(env.applied[1], { mode: "video", text: "一座红色灯塔立在悬崖上" },
+        "中途切了档位，前一条正文仍落它发出时那一侧的页");
 });
 
 test("标题兜底：后端那一发没给标题就用正文首行，保存不发空名", async () => {
@@ -549,7 +575,7 @@ test("操作行在正文落定之后才出现：途中没有钮，空产出也�
     env.input().value = "写一句";
     click(env.runBtn());
     await settle();
-    assert.equal(env.acts().hidden, false, "正文落定之后两枚图标钮出现");
+    assert.equal(env.acts().hidden, false, "正文落定之后操作行出现");
     // 在途那一发（最后一次性读会挂住，正文因此在路上）：正文没落定就没有钮
     const encoder = new TextEncoder();
     const frames = Array.from({ length: 6 }, (_, i) => encoder.encode(content(`第${i}段`) + "\n"));

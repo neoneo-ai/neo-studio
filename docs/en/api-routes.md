@@ -359,6 +359,7 @@ included), and the dock never calls a handler directly.
 | POST | `/rs_prompts/translate_prompt` | Prompt translation |
 | POST | `/rs_prompts/smart_prompt` | Quick description generation |
 | POST | `/rs_prompts/reverse_prompt` | Image reverse-prompting (SSE + same-name .txt cache) |
+| POST | `/rs_prompts/reverse_video_prompt` | Video reverse-prompting (a frame batch with timestamps, SSE, lands in `<video>.rp.txt`, cache keyed by language + frame count) |
 | POST | `/rs_prompts/stream_{task_name}` | Streaming generation endpoint registered by task name |
 | POST | `/rs_prompts/stream_generate_prompt` | Streaming generation |
 | POST | `/rs_prompts/fetch_remote_models` | Fetch the remote server's model list |

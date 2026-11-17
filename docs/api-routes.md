@@ -306,6 +306,7 @@ Neo Studio 独立页面（`web/studio/index.html`）的后端。素材 / 生图 
 | POST | `/rs_prompts/translate_prompt` | 提示词翻译 |
 | POST | `/rs_prompts/smart_prompt` | 快捷描述生成 |
 | POST | `/rs_prompts/reverse_prompt` | 图片反推（SSE + 同名 .txt 缓存） |
+| POST | `/rs_prompts/reverse_video_prompt` | 视频反推（整批帧带时间戳，SSE，落 `<视频>.rp.txt`，缓存按语言 + 帧数） |
 | POST | `/rs_prompts/stream_{task_name}` | 按任务名注册的流式生成端点 |
 | POST | `/rs_prompts/stream_generate_prompt` | 流式生成 |
 | POST | `/rs_prompts/fetch_remote_models` | 拉取远程服务端模型列表 |

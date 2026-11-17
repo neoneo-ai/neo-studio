@@ -45,6 +45,7 @@ export const HOME_CARDS = [
     { id: "edit-pose", section: "edit", icon: "user", title: "姿势", sub: "骨架图锁姿势，重出这一张", target: "edit", value: "pose" },
     { id: "frames", section: "edit", icon: "film", title: "视频抽帧", sub: "挑一条视频，抽帧存进素材库", target: "page", value: "frames" },
     { id: "reverse", section: "edit", icon: "eye", title: "图片反推", sub: "挑一张图，反推出提示词", target: "page", value: "reverse" },
+    { id: "reverse-video", section: "edit", icon: "eye", title: "视频反推", sub: "挑一条视频，抽帧反推出提示词", target: "page", value: "reverse_video" },
     { id: "gallery", section: "material", icon: "folder", title: "素材库", sub: "浏览与管理全部生成素材", target: "page", value: "gallery" },
     { id: "skills", section: "material", icon: "wand", title: "技能", sub: "管理预设与技能包", target: "page", value: "skills" },
     { id: "settings", section: "material", icon: "gear", title: "设置", sub: "生成默认值与界面语言", target: "page", value: "settings" },

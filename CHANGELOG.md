@@ -5,6 +5,39 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 ## [Unreleased]
 
 ### Added
+- **A standalone 视频反推 page, entered from its own card on the Studio home page.** The 编辑 section gains a 视频反推
+  card that opens `#/reverse_video` — its own page, its own run button, its own capability (`prompt_reverse_video`);
+  the 图片反推 page keeps doing images only. The page is one centered column — the player, the draggable time window
+  and the frame strip sitting directly on the page (no outer frame around them, the player dead center) — with a
+  single outer page scrollbar, the streamed text pulling the page down to follow itself — and the
+  反推出的提示词 result box **stays collapsed until a result arrives** — the language chips and the copy button live
+  in that box, and the status line lives outside it; the box carries no frame of its own, the result text sits
+  directly on the page.
+  Picking a video goes through the 素材库 modal — one click on a video card
+  loads it into the player, and an image card in that modal never loads, same `video` gate the modal applies — then
+  drag the time window under the player onto the stretch
+  worth sampling (the player previews the frame under your hand while you drag; the handles never cross, the ends
+  never leave the clip, `全片` resets to the full video; Tab reaches the track, where `←` `→` nudge the nearer
+  handle by 0.5 s, `Shift` by 5 s and `Home` spans the clip) and a
+  `1 / 2 / 4 / 6 / 8 / 12 帧` chip, and `抽帧` samples that stretch evenly in the browser with the extractor page's own
+  capture code (the shared `captureFrames`, plus a new `rangeTimes`) downscaled to a 768 px side, every thumbnail
+  keeping the timestamp it was taken at. `反推` sends the whole batch in one request
+  (`POST /rs_prompts/reverse_video_prompt`) with each frame's timestamp written into the prompt text — those labels are
+  what lets a model read camera work and pacing out of frames — and streams the reply like the image run. The result
+  lands in `<video>.rp.txt` with a `.rp-lang` marker of `language|frame-count`, and **never** in the `.txt` next to the
+  video: that sidecar is what "video run again" reads back as the effective generation parameters (`_read_sidecar` in
+  `studio/gallery.py`). The marker is the cache key, so re-sampling or switching language reruns the reversal, while the
+  image marker stays the bare language and every existing image cache keeps hitting. More than 12 frames is refused, and
+  the native GGUF engine — whose vision encoder takes one image per run — is refused before the chain starts, with the
+  reason on the status line. Preview and frame extraction run in the offline window too (`/neo_frames/video` is
+  desktop-served); only the run asks for ComfyUI. Covered by `studio/tests/test_prompts_reverse_video.py` (frame decode,
+  the timestamp labels in the prompt text, the `.rp.txt` landing with the generation sidecar left untouched, the cache
+  signature, the non-video / over-cap / empty-frame refusals, the native multi-frame gate, the caps table),
+  `studio/tests/js/reverse-video.test.mjs` (the frame strip and its labels, the request body, the gate key, the
+  time-window drag math and its clamping, the drag preview and ticks, the `[ERROR]` path, the copy path, and the
+  result box staying collapsed until a streamed result arrives,
+  re-collapsing on a video switch), `studio/tests/js/frames-extract.test.mjs` (the range math, its clamping
+  and the maxSide scale) and `studio/tests/js/studio-home-pages.test.mjs` (the card, the deep link and the offline gate).
 - **Hovering the 首页 tab floats out a quick menu.** From any other page, hovering (or keyboard-focusing) the 首页 tab in
   the Studio header opens a floating two-column panel of the home page's own direct cards — one home section per column,
   each entry the card's icon, title and subtitle, and clicking it takes the card's existing jump (no second card table, no
@@ -20,6 +53,13 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   the fixed two columns at any window height, nothing on 首页, nothing without hover, hidden with all cards
   removed, and the fixed placement / z-index 9650 (above the in-page floating layers, below the queue panel and the
   modals) / two columns capped to the window height with no scrolling / click-through panel body / 720 px tier in `style.css`).
+- **The 提示词增强 reply carries a landing button.** Each reply bubble's icon row is now 复制 / 落页 / 保存为预设: the middle
+  button fills that reply's text into the page matching the mode the run was sent in — an image reply lands on the Paint page's
+  prompt box (a panel already on that page only swaps its content), a video reply goes through the existing `openVideoReuse`
+  prefill chain, which builds the Video page first when this window has never opened it. The icon and tooltip name the page it
+  lands on (填入绘画页 / 填入视频页), and flipping the 图像 / 视频 switch later never moves an older reply to the other page.
+  Covered by `studio/tests/js/prompt-enhance.test.mjs` (the row stays icon-only, the jump carries that bubble's own text, the
+  landing page follows the mode the run was sent in).
 
 ### Changed
 - **The Studio director page top bar is four buttons, not five.** The recipe drop-down on that bar is gone: the

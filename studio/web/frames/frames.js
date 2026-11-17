@@ -68,7 +68,7 @@ export function frameTimes({ start, count, gapMs, duration }) {
 const onSeeked = (video) => new Promise((resolve) => video.addEventListener("seeked", resolve, { once: true }));
 
 /** 播放器 metadata 还没落地就抽：videoWidth 是 0，canvas 跟着空，抽出来的全是空图 */
-const waitMetadata = (video) => new Promise((resolve, reject) => {
+export const waitMetadata = (video) => new Promise((resolve, reject) => {
     if (video.readyState >= 2 && video.videoWidth) return resolve();
     const timer = setTimeout(() => {
         video.removeEventListener("loadeddata", hit);
@@ -79,15 +79,40 @@ const waitMetadata = (video) => new Promise((resolve, reject) => {
 });
 
 /**
+ * 采样区间里的时间戳表：起点到终点均分 count 帧，最后一帧正落在终点上（区间是闭的，
+ * 写「6.9 到 13.8」就该看见那两头的画面）。终点留空按片尾收，越过片尾也按片尾收；
+ * 起点已在终点之后是空表 —— 调用方要的就是那一句「区间不对」。
+ */
+export function rangeTimes({ start, end, count, duration }) {
+    const n = Math.max(1, Math.min(FRAMES_MAX_FRAMES, Number(count) || 1));
+    const dur = Number(duration) || 0;
+    const from = Math.max(0, Number(start) || 0);
+    let to = Number(end);
+    if (!Number.isFinite(to) || to <= 0) to = dur;
+    if (dur) to = Math.min(to, dur);
+    if (to <= from) return [];
+    const out = [];
+    for (let i = 0; i < n; i++) {
+        const ts = n > 1 ? from + (to - from) * (i / (n - 1)) : from;
+        out.push(Math.round(ts * 1000) / 1000);   // 毫秒取整：帧标签与 seek 的是同一个数
+    }
+    return out;
+}
+
+/**
  * seek 到每个时间戳、把那一帧画进 canvas 转 PNG。makeCanvas 留给用例与非画布环境：
  * 真实浏览器就是 document.createElement("canvas")。
+ * maxSide > 0 时按比例缩到那个边长：反推把整批帧塞进一次 LLM 请求，原尺寸发不出去。
  */
-export async function captureFrames(video, times, makeCanvas = () => document.createElement("canvas")) {
+export async function captureFrames(video, times, makeCanvas = () => document.createElement("canvas"), maxSide = 0) {
     const canvas = makeCanvas();
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error(t("浏览器不支持画布取帧"));
-    canvas.width = video.videoWidth || 0;
-    canvas.height = video.videoHeight || 0;
+    const longest = Math.max(video.videoWidth || 0, video.videoHeight || 0);
+    const fit = (px) => (maxSide > 0 && longest > maxSide
+        ? Math.max(1, Math.round(px * maxSide / longest)) : px);
+    canvas.width = fit(video.videoWidth || 0);
+    canvas.height = fit(video.videoHeight || 0);
     const wasPlaying = !video.paused;
     if (wasPlaying) video.pause();
     const back = video.currentTime;

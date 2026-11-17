@@ -1711,6 +1711,9 @@ const EN = {
     "启用": "Enable",
     "复制提示词": "Copy prompt",
     "已复制": "Copied",
+    "填入绘画页": "Use in the Paint page",
+    "填入视频页": "Use in the Video page",
+    "还没有可填入的提示词": "There is no prompt to fill in yet",
     "清除（重新选择）": "Clear (pick again)",
     "点击取用 / 拖入宫格图": "Click to pick from the library / drop a grid image",
     "基于角色图生成九宫格分镜图": "Generate a 3×3 storyboard grid from the character images",
@@ -1919,6 +1922,24 @@ const EN = {
     "反推中…": "Reversing…",
     "已生成，结果同时写进图片同目录的 .txt": "Done — the result is saved as a .txt next to the image",
     "反推失败": "Reverse prompt failed",
+    // Studio「视频反推」页（首页卡直达的那一页，顶栏没有这一枚页签）：抽一批帧 → 一次请求 → <视频>.rp.txt
+    // （视频同名 .txt 是「视频再来一发」读进去的生效参数，反推不能落在那里）
+    "视频反推": "Video Reverse Prompt",
+    "挑一条视频，抽帧反推出提示词": "Pick a video, sample frames, reverse-prompt them into a prompt",
+    "挑一条视频，在时间窗上拖出要看的段落，抽一批帧，一次请求把这段画面写成提示词，结果写进视频同名的 .rp.txt":
+        "Pick a video, drag the time window onto the stretch you want, sample a batch of frames, and one request writes that footage into a prompt — saved as .rp.txt next to the video",
+    "起点 {a} · 终点 {b} · 窗口 {c}s": "Start {a} · End {b} · Window {c}s",
+    "片尾": "end of the clip",
+    "全片": "Whole clip",
+    "时间窗滑轨": "Time window track",
+    "按住手柄拖：区间跟着手走，播放器跳到那一帧；聚焦后 ←→ 微调近侧手柄，Shift 加档，Home 铺满全片":
+        "Drag a handle: the window follows your hand, the player jumps to that frame; once focused, ←→ nudges the nearer handle, Shift steps five times as far, Home spans the whole clip",
+    "先抽帧，再点「反推」：结果写进视频同名的 .rp.txt":
+        "Extract frames first, then click Reverse-prompt: the result is saved as .rp.txt next to the video",
+    "已抽帧，点一下把这一批写进 .rp.txt": "Frames sampled — click to write this batch into .rp.txt",
+    "已生成，结果写进视频同名的 .rp.txt": "Done — the result is saved as .rp.txt next to the video",
+    "抽了 {n} 帧，点反推就吃这一批": "{n} frames sampled — Reverse-prompt takes this batch",
+    "抽帧失败：{msg}": "Frame capture failed: {msg}",
     "还没有可复制的提示词": "There is no prompt to copy yet",
     "复制失败，选中结果框自己复制": "Copy failed — select the text in the result box and copy it yourself",
     "声音克隆": "Voice Clone",

@@ -1,0 +1,300 @@
+/* reverse-video.css — 「视频反推」页：工具条 / 播放器与采样区间 / 帧预览条 / 结果框与语言 chip / 起手卡片。
+   颜色一律取 studio/style.css 的 --ns-* 变量，页面自身不引入第二套色板。 */
+
+/* 整页只有 .ns-page 一根滚动条：本页不给自己定死高度，播放器、帧条、结果正文全在同一条竖列里往下排，
+   正文流回来时由 JS 把页面滚到底（见 reverse-video.js 的 followStream） */
+.ns-revvid {
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+}
+
+.ns-revvid-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: none;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--ns-border);
+    background: var(--ns-panel);
+}
+
+.ns-revvid-title {
+    margin-right: 8px;
+    font-weight: 600;
+    color: var(--ns-fg);
+}
+
+.ns-revvid-source {
+    padding: 3px 9px;
+    border: 1px solid var(--ns-border-soft);
+    border-radius: 999px;
+    font-size: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 320px;
+}
+
+.ns-revvid-bar .ns-revvid-btn:last-child { margin-left: auto; }
+
+.ns-revvid-dim { color: var(--ns-dim); }
+
+.ns-revvid-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 11px;
+    border: 1px solid var(--ns-border-soft);
+    border-radius: 8px;
+    background: var(--ns-raised);
+    color: var(--ns-fg);
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.ns-revvid-btn:hover { background: var(--ns-field-hover); border-color: var(--ns-accent); }
+
+.ns-revvid-btn:disabled { opacity: .45; cursor: default; }
+
+/* 反推那一发是本页的主行动：与图片反推页同款主色钮 */
+.ns-revvid-run {
+    border-color: var(--ns-primary);
+    background: var(--ns-primary-soft);
+    color: var(--ns-primary-fg);
+}
+
+.ns-revvid-run:hover:not(:disabled) { background: var(--ns-primary); color: #fff; }
+
+.ns-revvid-icon { padding: 6px 8px; }
+
+/* 主区不再自滚：它长多高占多高，超出视口的那一段交给整页那根条（.ns-page） */
+.ns-revvid-main {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px 20px;
+}
+
+.ns-revvid-main[hidden] { display: none; }
+
+/* 播放器 → 时间窗滑轨 → 帧数 chips → 帧预览条：整页就这一条居中竖列，视频站在页面正中 */
+.ns-revvid-video-box {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: min(720px, 100%);
+    box-sizing: border-box;
+}
+
+.ns-revvid-video {
+    align-self: center;
+    width: 100%;
+    max-height: 40vh;
+    border: 1px solid var(--ns-border);
+    border-radius: 10px;
+    background: #000;   /* 播放器底色：解码器起不来的时候是一片黑，不给它留白的 */
+}
+
+/* 时间窗滑轨：两个手柄拖出采样窗口，拖到哪儿播放器就跳到那一帧预览。
+   手柄是绝对定位的圆钮，靠内联 left 百分比站队（paintRange 是唯一出口） */
+.ns-revvid-timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.ns-revvid-range {
+    font-size: 12px;
+    color: var(--ns-dim);
+    font-variant-numeric: tabular-nums;   /* 秒数读数对齐：拖动手时数字不左右抖 */
+}
+
+.ns-revvid-track {
+    position: relative;
+    height: 28px;
+    border: 1px solid var(--ns-field-bd);
+    border-radius: 8px;
+    background: var(--ns-field);
+    cursor: crosshair;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.ns-revvid-track.dragging { cursor: grabbing; }
+
+/* 键盘走查：钮与滑轨在键盘导航时亮焦点环（与 studio/style.css 那族同款，鼠标点击不亮） */
+.ns-revvid-btn:focus-visible,
+.ns-revvid-chip:focus-visible { outline: 2px solid #7aa2ff; outline-offset: 2px; }
+.ns-revvid-track:focus-visible { outline: 2px solid var(--ns-primary); outline-offset: 2px; }
+
+.ns-revvid-window {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    border-radius: 7px;
+    background: var(--ns-primary-soft);
+    border-inline: 2px solid var(--ns-primary);
+    pointer-events: none;
+}
+
+.ns-revvid-handle {
+    position: absolute;
+    top: 50%;
+    width: 14px;
+    height: 22px;
+    margin-left: -7px;
+    transform: translateY(-50%);
+    border: 1px solid var(--ns-primary-fg);
+    border-radius: 5px;
+    background: var(--ns-primary);
+    pointer-events: none;
+}
+
+.ns-revvid-tick {
+    position: absolute;
+    top: 4px;
+    bottom: 4px;
+    width: 2px;
+    margin-left: -1px;
+    background: var(--ns-primary);
+    opacity: .65;
+    pointer-events: none;
+}
+
+.ns-revvid-counts {
+    display: inline-flex;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+/* 抽出来的帧只在这里看一眼：不进素材库，落点在 .rp.txt 的正文里 */
+.ns-revvid-frames {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+}
+
+.ns-revvid-frames[hidden] { display: none; }
+
+.ns-revvid-frame {
+    margin: 0;
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+.ns-revvid-frame img {
+    width: 128px;
+    height: 82px;
+    object-fit: cover;
+    border: 1px solid var(--ns-border);
+    border-radius: 8px;
+    background: var(--ns-field);
+}
+
+.ns-revvid-frame figcaption {
+    font-size: 11px;
+    color: var(--ns-dim);
+    font-variant-numeric: tabular-nums;   /* 时间戳标签按秒对齐，不逐张跳位 */
+}
+
+/* 结果区是「有结果才出现」的一栏：没正文时整块收起（含语言 chip），与播放器同一条居中列。
+   页面就这一条竖列，出结果也不套外框——标题行与正文直接站在页面上 */
+.ns-revvid-out-box {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: min(720px, 100%);
+    box-sizing: border-box;
+    align-self: center;
+}
+
+.ns-revvid-out-box[hidden] { display: none; }
+
+.ns-revvid-out-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: .04em;
+    color: var(--ns-dim);
+}
+
+.ns-revvid-out-head .ns-revvid-btn {
+    font-weight: 400;
+    letter-spacing: normal;
+}
+
+/* 语言 chip 挤在结果框标题里：反推中途换语言重跑就是这一位，不给它单独一行面板 */
+.ns-revvid-langs {
+    display: inline-flex;
+    gap: 4px;
+    margin-left: auto;
+}
+
+.ns-revvid-chip {
+    padding: 3px 10px;
+    border: 1px solid var(--ns-field-bd);
+    border-radius: 999px;
+    background: var(--ns-field);
+    color: var(--ns-dim);
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.ns-revvid-chip.is-on {
+    border-color: var(--ns-primary);
+    background: var(--ns-primary-soft);
+    color: var(--ns-primary-fg);
+}
+
+.ns-revvid-out {
+    margin: 0;
+    padding: 0;
+    color: var(--ns-fg);
+    font-size: 13px;
+    line-height: 1.7;
+    white-space: pre-wrap;
+    word-break: break-word;
+    user-select: text;
+}
+
+.ns-revvid-status {
+    flex: none;
+    align-self: center;
+    width: min(720px, 100%);
+    box-sizing: border-box;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--ns-dim);
+}
+
+.ns-revvid-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    flex: 1;
+    min-height: 60%;
+    padding: 28px;
+    text-align: center;
+    color: var(--ns-dim);
+}
+
+.ns-revvid-empty[hidden] { display: none; }
+
+.ns-revvid-empty-icon { font-size: 26px; }
+
+.ns-revvid-empty p { margin: 0; max-width: 560px; line-height: 1.7; }
