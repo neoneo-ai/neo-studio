@@ -115,6 +115,7 @@ function showView(name) {
         if (on) a.scrollIntoView({ inline: "center", block: "nearest" });
     });
     if (name !== currentView) {
+        closeHomeQuick();       // 切页收起悬浮快速入口：它钉的是上一屏的落点，留着就压在别人那一页上
         libModal?.close();      // 离开该页收起素材库弹窗（close 自己把画廊交还宿主）
         recipesModal?.close();  // 配方弹窗同一条路
         // 离开素材页：侧栏替身归位。素材页挂载画廊时把 activeSidebarTabId 写成 neo.gallery，
@@ -160,7 +161,17 @@ function bindHeaderNav() {
             e.preventDefault();
             go(a.dataset.tab || a.getAttribute("href").slice(2));
         });
+        if (a.dataset.tab === "home") bindHomeQuickHover(a);
     }
+}
+
+/** 悬浮快速入口的触发就是顶栏那一格本身：鼠标落上、键盘 Tab 落上都浮出，离开与点走收起 */
+function bindHomeQuickHover(tab) {
+    tab.addEventListener("pointerenter", openHomeQuick);
+    tab.addEventListener("pointerleave", scheduleHomeQuickClose);
+    tab.addEventListener("focus", openHomeQuick);
+    tab.addEventListener("blur", scheduleHomeQuickClose);
+    tab.addEventListener("click", closeHomeQuick);
 }
 
 // ====== 素材宿主：NeoGallery 元素是单例，素材页与素材库弹窗共用，挂载点随宿主切换 ======
@@ -1309,12 +1320,25 @@ function buildEdit(el) {
 // 编辑态长在这份 DOM 上：每张卡长出一枚删除，板块末尾一枚「添加卡片」开预设卡与自建卡表单，
 // 标题区直接点字改，细栏只管列数与开关；落盘在细栏右端那枚「完成」。
 // 版式是数据根里的一份文件（configs/home_layout.json）：插件页、桌面窗口、手机页打开同一份首页。
+const HOME_QUICK_LEAVE_MS = 260;   // 指针从「首页」那一格跨进面板这几像素的宽限：不留宽限就是跨一步闪收
+const HOME_QUICK_EDGE = 8;          // 面板夹进窗口的边距，与 style.css 的 8px 同一份常量
+const HOME_QUICK_GAP = 10;          // 面板顶沿离顶栏底沿的间距：页签自己的矩形只到那一格，贴着它画就是把面板压在页签那一行上
+const HOME_QUICK_ROW_H = 38;        // 一行条目高，与 style.css 的 .ns-home-quick-item 最小高度同一份
+const HOME_QUICK_LABEL_H = 20;      // 一行列头高，与 style.css 的 .ns-home-quick-label 同一份
+const HOME_QUICK_PAD_H = 16;        // 面板上下内边距，与 style.css 的 padding 同一份
+// 「素材与配置」整块不进这一列：素材库在顶栏那一格、设置在顶栏右端那枚齿轮、技能在首页那张卡里都有直达，
+// 快捷入口只留创作与编辑那两板块的路（首页本身照旧铺这三张卡）
+const HOME_QUICK_SKIP_SECTIONS = ["material"];
+
 let homeViewEl = null;                    // 首页视图元素；版式到达后重画这一块
 let homeLayout = normalizeLayout({});     // 首页按这一份画：编辑期间是草稿，平时是已落盘的版式
 let homeStored = homeLayout;              // 已落盘的版式：退出编辑落回它，页面上未保存的草稿不留
 let homeEditing = false;
 let homeSaving = false;               // 「完成」在飞的这一发：不让人连点成两次 POST
 let homeEditor = null;
+let homeQuickEl = null;             // 悬浮快速入口的根：钉在 body 上，left/top 按顶栏「首页」那一格的矩形写
+let homeQuickPanel = null;          // 面板本体（多列 grid 在这一层）：每次浮出按可视高度分列重画
+let homeQuickTimer = null;          // 指针离开页签或面板之后的收起计时
 
 function buildHome(el) {
     el.classList.add("ns-home");
@@ -1325,7 +1349,9 @@ function buildHome(el) {
     });
     renderHome();
     document.addEventListener("keydown", (e) => {
-        if (e.key === "Escape" && homeEditing) stopHomeEdit();   // Esc 弃草稿退出：落盘只有「完成」这一条路，切页也一样丢草稿
+        if (e.key !== "Escape") return;
+        // Esc 弃草稿退出：落盘只有「完成」这一条路，切页也一样丢草稿
+        if (homeEditing) stopHomeEdit();
     });
 }
 
@@ -1402,6 +1428,108 @@ function renderHome() {
             homeEditor.decorateGrid(grid, grid.dataset.section || "");
         }
     }
+}
+
+/* ====== 悬浮快速入口：鼠标落在顶栏「首页」那一格上（当前不在首页时）浮出的多列直达面板 ======
+   条目读的就是首页那一叠（layoutSections 的板块序 + visibleCards 的卡序），跳转落在 openHomeCard——
+   浮窗不养第二套卡表，也不给一张首页上没有、点了只会失败的入口。
+   列数按当前可视高度算：一屏看全，一列装不下才加列，整块不滚（要滚起来的菜单不算快捷入口）。
+   根钉在 body 上、left/top 由那一格的矩形写：顶栏横滚、右侧控件吃掉宽度时它照旧落在那一格正下方 */
+
+function homeQuickRoot() {
+    if (homeQuickEl) return homeQuickEl;
+    homeQuickPanel = $el("div", { className: "ns-home-quick-panel" });
+    homeQuickEl = $el("div", { className: "ns-home-quick ns-hidden" }, [homeQuickPanel]);
+    document.body.appendChild(homeQuickEl);
+    return homeQuickEl;
+}
+
+/** 分列：整块板块不劈开、每块自带列头，当前列装不下整块就换下一列。
+ *  列数只由当前可视高度定（一屏看全，不滚）；排除的板块与首页卡全部移出一样没有条目，返回 null 让调用方不浮出 */
+function homeQuickColumns(availH) {
+    const groups = [];
+    for (const section of layoutSections(homeLayout)) {
+        if (HOME_QUICK_SKIP_SECTIONS.includes(section.id)) continue;   // 整块不进这一列，连列头一起不出
+        const cards = visibleCards(section.id, homeLayout);
+        if (cards.length) groups.push({ label: section.label, cards });
+    }
+    if (!groups.length) return null;
+    const budget = availH - HOME_QUICK_PAD_H;
+    const columns = [];
+    let used = 0;
+    for (const group of groups) {
+        const cost = HOME_QUICK_LABEL_H + group.cards.length * HOME_QUICK_ROW_H;
+        if (columns.length && used + cost <= budget) {
+            columns[columns.length - 1].push(group);
+            used += cost;
+        } else {
+            columns.push([group]);
+            used = cost;
+        }
+    }
+    return columns;
+}
+
+/** 画面板：一列一块，列数交给 CSS 的 grid（grid-template-columns 读这个自定义属性，宽度 = 列数 × 单列宽） */
+function renderHomeQuick(columns) {
+    homeQuickRoot();
+    homeQuickPanel.replaceChildren(...columns.map((blocks) => $el("div", { className: "ns-home-quick-col" },
+        blocks.flatMap((group) => [
+            $el("div", { className: "ns-home-quick-label", textContent: t(group.label) }),
+            ...group.cards.map(homeQuickItem),
+        ]))));
+    homeQuickEl.style.setProperty("--ns-home-quick-cols", String(columns.length));
+    return homeQuickEl;
+}
+
+function homeQuickItem(card) {
+    // 图标与两行字就是首页那张卡的形状，跳转是 openHomeCard 那一条现成的路：这一列不认第二套目标。
+    // 保活与收起挂在条目上——面板本体不吃指针事件，落在空白处的事件穿到浮窗下面那一页
+    return $el("button", {
+        className: "ns-home-quick-item", type: "button", dataset: { cardId: card.id },
+        onclick: () => { closeHomeQuick(); openHomeCard(card); },
+        onpointerenter: () => clearTimeout(homeQuickTimer),
+        onpointerleave: scheduleHomeQuickClose,
+        onfocus: () => clearTimeout(homeQuickTimer),
+        onblur: scheduleHomeQuickClose,
+    }, [
+        $el("span", { className: "ns-home-quick-icon" }, [icon(card.icon || "sparkles", 18)]),
+        $el("span", { className: "ns-home-quick-text" }, [
+            $el("span", { className: "ns-home-quick-name", textContent: t(card.title) }),
+            $el("span", { className: "ns-home-quick-sub", textContent: t(card.sub) }),
+        ]),
+    ]);
+}
+
+/** 浮出：鼠标落上与键盘 Tab 落上同一条路。已经站在首页上就不浮——那一页不缺这一列 */
+function openHomeQuick() {
+    clearTimeout(homeQuickTimer);
+    if (currentView === "home") return;
+    // 触屏档没有 hover：点那一格就是进首页。不在这里闪一列浮窗，tap 的 pointerenter 会让它闪一下
+    if (!window.matchMedia("(hover: hover)").matches) return;
+    const tab = document.querySelector('.ns-tabs a[data-tab="home"]');
+    const rect = tab.getBoundingClientRect();
+    // 落点锚在顶栏整条的底沿：页签的矩形只到那一格自己，贴着它画就是把面板压在页签那一行下沿上
+    const barBottom = (tab.closest(".ns-header") || tab.parentElement).getBoundingClientRect().bottom;
+    const columns = homeQuickColumns(window.innerHeight - barBottom - HOME_QUICK_EDGE);
+    if (!columns) return;
+    const root = renderHomeQuick(columns);
+    root.classList.remove("ns-hidden");   // 先上屏才量得出面板宽高；位置在同一个 task 里钉好，中间不落地
+    const left = Math.max(HOME_QUICK_EDGE, Math.min(rect.left, window.innerWidth - root.offsetWidth - HOME_QUICK_EDGE));
+    const top = Math.max(HOME_QUICK_EDGE, Math.min(barBottom + HOME_QUICK_GAP, window.innerHeight - root.offsetHeight - HOME_QUICK_EDGE));
+    root.style.left = `${left}px`;
+    root.style.top = `${top}px`;
+}
+
+/** 指针离开那一格或面板就收起；这一段宽限是给「从页签跨进面板」那几步指针留的，跨过去不算离开 */
+function scheduleHomeQuickClose() {
+    clearTimeout(homeQuickTimer);
+    homeQuickTimer = setTimeout(closeHomeQuick, HOME_QUICK_LEAVE_MS);
+}
+
+function closeHomeQuick() {
+    clearTimeout(homeQuickTimer);
+    if (homeQuickEl) homeQuickEl.classList.add("ns-hidden");
 }
 
 // 旧版式里收起的板块在编辑态连卡一起铺回来：这一版不给收起开关，收起状态在「完成」落盘时被清成展开
@@ -3183,6 +3311,8 @@ function localizeShell() {
     const logo = document.querySelector(".ns-logo");
     if (logo) { logo.textContent = t("新影工坊"); logo.title = t("返回首页"); }
     for (const a of document.querySelectorAll(".ns-tabs a")) a.textContent = t(a.textContent.trim());
+    // 「首页」那一格是悬浮快速入口的落点：tooltip 说出这一发（切语言走整页刷新，标题在这一轮里重画）
+    document.querySelector('.ns-tabs a[data-tab="home"]')?.setAttribute("title", t("悬浮快速入口：鼠标落在这里就浮出首页的直达卡片"));
     for (const id of ["ns-win-min", "ns-win-max", "ns-win-fs", "ns-win-close", "ns-settings-btn", "ns-queue-toggle"]) {
         const b = document.getElementById(id);
         if (b) b.title = t(b.title);

@@ -312,7 +312,7 @@ test("首页按版式出卡：板块序、隐藏卡、自建卡与列数全生�
     assert.ok(home, "首页视图应挂载");
     assert.ok(!bar(home), "非编辑态没有那条细栏");
     assert.deepEqual([...home.querySelectorAll(".ns-home-section")].map((e) => e.textContent),
-        ["素材与配置", "开始创作", "编辑"], "版式排到的板块在前，没排的板块按默认序补在末尾");
+        ["素材与配置", "创作", "编辑"], "版式排到的板块在前，没排的板块按默认序补在末尾");
     assert.deepEqual(cardTitles(home), [
         "素材库", "技能", "设置",
         "生成视频", "生成图片", "导演视频", "3D 姿势", "声音克隆", "提示词增强", "自建卡",
@@ -350,7 +350,7 @@ test("首页按版式出卡：板块序、隐藏卡、自建卡与列数全生�
         "移出首页在界面上说一句，指明去哪儿加回来");
     assert.ok(!cardOf(home, "生成视频"), "移出首页的卡不留格子，也不在网格上排回来");
     assert.ok(!cardTitles(home).includes("生成视频"), "首页上不再有这张卡");
-    click(gridOf(home, "开始创作").querySelector(".ns-home-add-tile"));
+    click(gridOf(home, "创作").querySelector(".ns-home-add-tile"));
     await flush();
     assert.ok(presetIn(dlg(), "生成视频"), "自己点开所在板块的「添加卡片」：删掉的那一张就在这面等着加回来");
     click(dlgClose());
@@ -422,7 +422,7 @@ test("卡片全移除与板块全收起：首页给出编辑入口的提示，�
         "编辑态铺出全部板块：卡全移出了也要在这页上加回来");
     assert.ok(sectionTitle(home, "编辑").classList.contains("is-off"), "收起的板块标暗留在原位");
     assert.equal(home.querySelectorAll(".ns-home-card").length, 0, "移出首页的卡一张不铺进网格");
-    click(gridOf(home, "开始创作").querySelector(".ns-home-add-tile"));
+    click(gridOf(home, "创作").querySelector(".ns-home-add-tile"));
     await flush();
     assert.deepEqual(presetTitles(dlg()),
         ["生成图片", "生成视频", "导演视频", "3D 姿势", "智能体", "声音克隆", "提示词增强", "特效视频", "宫格图分镜"],
@@ -483,7 +483,7 @@ test("就地排版：整张卡拖着排；板块不给控件，旧版式收起�
     assert.equal(paint.querySelectorAll(".ns-home-edit-move").length, 0,
         "卡上不设上下移箭头：卡片排序只有整张卡拖动这一条路");
     assert.equal(paint.draggable, false, "整张卡由 Sortable 拖起来：原生 draggable 关掉，两套手势不能同时开");
-    assert.ok(sortableFor(gridOf(home, "开始创作")), "编辑态的网格接上了 Sortable");
+    assert.ok(sortableFor(gridOf(home, "创作")), "编辑态的网格接上了 Sortable");
     assert.equal(home.querySelectorAll(".ns-home-section .ns-btn").length, 0,
         "板块标题上没有钮：整块的上下移与收起都不在这页上");
     assert.equal([...home.querySelectorAll(".ns-home-section")].filter((e) => e.draggable).length, 0,
@@ -494,7 +494,7 @@ test("就地排版：整张卡拖着排；板块不给控件，旧版式收起�
 
     dropAt(cardOf(home, "生成图片"), 1);   // 落位后自己是第 2 格：拖到「导演视频」身上就是这一格
     await flush();
-    assert.deepEqual(titlesIn(gridOf(home, "开始创作")).slice(0, 3), ["生成视频", "生成图片", "导演视频"],
+    assert.deepEqual(titlesIn(gridOf(home, "创作")).slice(0, 3), ["生成视频", "生成图片", "导演视频"],
         "整张卡落在第三张那一格就占住它的位置，那张卡往后挪一格");
 
     click(home.querySelector(".ns-home-edit-entry"));   // 细栏右端那枚「完成」
@@ -504,7 +504,7 @@ test("就地排版：整张卡拖着排；板块不给控件，旧版式收起�
     assert.deepEqual(sent.order.create.slice(0, 3), ["video", "paint", "director"], "卡序落进版式");
     assert.deepEqual(sent.hidden_sections, [], "落盘把旧版式留下的收起状态清成展开");
     assert.deepEqual([...home.querySelectorAll(".ns-home-section")].map((e) => e.firstChild.textContent),
-        ["开始创作", "编辑", "素材与配置"], "落回首页：板块按注册表默认序出，编辑那块又露出来了");
+        ["创作", "编辑", "素材与配置"], "落回首页：板块按注册表默认序出，编辑那块又露出来了");
     assert.ok(!home.querySelector(".ns-home-off-tag"), "落回首页：板块不再标「已收起」");
 });
 
@@ -821,7 +821,7 @@ test("落位搬运：同板块按格子落位，自建卡能落进别的板块�
     const home = homeOf();
     await enterEdit(home);
 
-    const create = gridOf(home, "开始创作");
+    const create = gridOf(home, "创作");
     assert.ok(sortableFor(create), "编辑态的网格接上 Sortable：让位动画与跨板块搬运都是它的内建");
     assert.equal(new Set(sortables.map((s) => s.opts.group)).size, 1, "三条网格同一个组：自建卡能在板块之间搬");
     assert.equal(sortableFor(create).opts.animation, 150, "让位动画由 Sortable 排：一格 150ms 的滑");
@@ -837,24 +837,24 @@ test("落位搬运：同板块按格子落位，自建卡能落进别的板块�
     assert.equal(bar(home).querySelector(".ns-home-edit-status").textContent, "", "自建卡不用提示");
 
     dropAt(cardOf(home, "生成图片"), 1);
-    const after = gridOf(home, "开始创作");   // 落位后首页按草稿重画：断言落在新画出来的那条网格上
+    const after = gridOf(home, "创作");   // 落位后首页按草稿重画：断言落在新画出来的那条网格上
     assert.deepEqual(titlesIn(after).slice(0, 3), ["生成视频", "生成图片", "导演视频"],
         "落在哪一格就插进那一格，其余卡往后挪一格");
     assert.equal(sortableFor(create).destroys, 1,
         "上一轮的网格在重画那一刻还挂在文档里：它的实例要收掉（离屏的就不收——Sortable 的 destroy 要写 el.parentNode，离屏元素上直接抛）");
     assert.ok(sortableFor(after), "落位重画出的新网格当场接上新实例");
 
-    const keep = titlesIn(gridOf(home, "开始创作"));
+    const keep = titlesIn(gridOf(home, "创作"));
     const back = dropAt(cardOf(home, "生成视频"), 0, gridOf(home, "编辑"));
     assert.equal(back.cancels, 1, "内置卡落进别的板块：Sortable 退回原位");
-    assert.deepEqual(titlesIn(gridOf(home, "开始创作")), keep, "草稿没动：板块里的卡还在板块里");
+    assert.deepEqual(titlesIn(gridOf(home, "创作")), keep, "草稿没动：板块里的卡还在板块里");
 
     dropAt(cardOf(home, "搬运卡"), 0, gridOf(home, "编辑"));
     assert.ok(titlesIn(gridOf(home, "编辑")).includes("搬运卡"), "自建卡落进「编辑」板块落位");
-    assert.ok(!titlesIn(gridOf(home, "开始创作")).includes("搬运卡"));
+    assert.ok(!titlesIn(gridOf(home, "创作")).includes("搬运卡"));
 
     dropAt(cardOf(home, "生成图片"), 6);   // 落在这一版最后一格
-    assert.deepEqual(titlesIn(gridOf(home, "开始创作")).slice(-1), ["生成图片"], "落在最后一格就是排到最后");
+    assert.deepEqual(titlesIn(gridOf(home, "创作")).slice(-1), ["生成图片"], "落在最后一格就是排到最后");
 
     click(home.querySelector(".ns-home-edit-entry"));
     await flush(40);
@@ -1143,7 +1143,7 @@ test("默认不上首页的预设卡：默认首页没有这一张，点了才�
     await flush();
     click(presetIn(dlg(), "特效视频"));
     await flush();
-    const titles = titlesIn(gridOf(home, "开始创作"));
+    const titles = titlesIn(gridOf(home, "创作"));
     assert.equal(titles[titles.length - 1], "特效视频", "点一下就是排进这一板块末尾，不插进用户排好的那几格中间");
     click(home.querySelector(".ns-home-edit-entry"));
     await flush(40);

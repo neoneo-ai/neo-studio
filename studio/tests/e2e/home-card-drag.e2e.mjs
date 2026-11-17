@@ -33,7 +33,7 @@ function guard(t) {
 // 断言写的是中文文案：Playwright 的 navigator.language 是 en-US，不钉住语言页面会跑成英文界面
 const pinZh = (page) => page.addInitScript(() => localStorage.setItem("neo_studio_lang", "zh"));
 
-/** 「开始创作」那一条网格里的卡片标题序（首条网格就是它：三个板块按注册表序出） */
+/** 「创作」那一条网格里的卡片标题序（首条网格就是它：三个板块按注册表序出） */
 const orderOf = (page) => page.evaluate(() =>
     [...(document.querySelectorAll(".ns-home-grid")[0]?.querySelectorAll(".ns-home-card") || [])]
         .map((el) => el.querySelector(".ns-home-card-title")?.textContent || ""));
@@ -62,7 +62,7 @@ test("首页编辑态：鼠标把第一张卡拖到第三张那一格，卡片�
         await page.waitForTimeout(600);
 
         const before = await orderOf(page);
-        assert.deepEqual(before.slice(0, 3), ["生成图片", "生成视频", "导演视频"], "默认版式「开始创作」前三张");
+        assert.deepEqual(before.slice(0, 3), ["生成图片", "生成视频", "导演视频"], "默认版式「创作」前三张");
 
         const { x: x0, y: y0 } = await cardCenter(page, 0);
         const { x: x1, y: y1 } = await cardCenter(page, 2);

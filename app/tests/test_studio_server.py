@@ -299,7 +299,7 @@ class OfflineServiceTests(_ServerCase):
         self.assertEqual(len(json.loads(body)["texts"]), 2, "随机按钮离线抽得出来")
 
     def test_prompt_enhance_chain_served_offline(self):
-        """「提示词增强」页（首页「开始创作」的卡直达 #/enhance）离线整条链答得来：
+        """「提示词增强」页（首页「创作」的卡直达 #/enhance）离线整条链答得来：
         技能列表读数据根，出流打 8080 与远程 LLM，参考图读 input/ —— 都不碰执行队列。
         提示词库写侧（save_prompt）不在这一侧：离线点保存要门在「启动 ComfyUI」上。"""
         self.assertEqual(caps.owner("POST", "/rs_prompts/enhance_prompt"), "desktop")

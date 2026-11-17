@@ -11,7 +11,7 @@ import { icon, ICON_NAMES } from "../js/core/icons.js";
 import "../vendor/sortable.min.js";   // 落位手势：vendored 的 Sortable（与 marked/purify 同一份引进来），运行时不联网
 
 export const HOME_SECTIONS = [
-    { id: "create", label: "开始创作" },
+    { id: "create", label: "创作" },
     { id: "edit", label: "编辑" },
     { id: "material", label: "素材与配置" },
 ];

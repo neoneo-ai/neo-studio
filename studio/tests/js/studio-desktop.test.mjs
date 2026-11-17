@@ -107,7 +107,7 @@ test("默认落地首页：意图卡片挂满主区，素材卡直达素材页",
               "顶栏首页签应高亮");
     assert.equal(home.querySelector("h1").textContent, "今天想创作什么？");
     assert.deepEqual([...home.querySelectorAll(".ns-home-section")].map((e) => e.textContent),
-        ["开始创作", "编辑", "素材与配置"],
+        ["创作", "编辑", "素材与配置"],
         "首页分创作与编辑两板块，素材与配置收最后一节");
     assert.deepEqual([...home.querySelectorAll(".ns-home-card-title")].map((e) => e.textContent),
         ["生成图片", "生成视频", "导演视频", "3D 姿势", "智能体", "声音克隆", "提示词增强",

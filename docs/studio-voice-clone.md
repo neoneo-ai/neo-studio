@@ -1,6 +1,6 @@
 # 声音克隆
 
-Studio 首页「开始创作」板块的卡片「声音克隆」进 `#/voice`（`studio/web/voice-clone/voice-clone.js`）。
+Studio 首页「创作」板块的卡片「声音克隆」进 `#/voice`（`studio/web/voice-clone/voice-clone.js`）。
 顶栏没有这一枚页签：首页那张卡是这页唯一的来路。生成链与音频卡片 ⋯ 菜单的「生成语音」是同一条
 （`voice-gen.js` 打 `/neo_voice/*`，进度认 `rs.voice_gen.status` 事件，不轮询 HTTP），波形控件也是那一份
 （`gallery-card-tools.js` 导出的 `voiceAudioWidget`）。

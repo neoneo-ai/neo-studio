@@ -60,7 +60,7 @@ test("深链 #/reverse 与 #/voice 挂出两页：起手卡片在页上，顶栏
               "顶栏不给这两页页签：首页那两张卡是唯一的入口");
 });
 // 提示词增强页：默认上首页的卡 + 深链挂页 + 离线照用（增强链归桌面端自服，只有写侧门控）
-test("首页「提示词增强」卡默认就在「开始创作」板块上，点卡与深链都落 #/enhance", async () => {
+test("首页「提示词增强」卡默认就在「创作」板块上，点卡与深链都落 #/enhance", async () => {
     mockShell({ prompt_enhance: true, prompt_library_write: true, image_gen: true }, false);
     window.location.hash = "#/home";
     await import("../../web/studio/studio-app.js?homePages4=1");

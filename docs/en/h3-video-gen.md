@@ -326,7 +326,7 @@ line, 11 effects):
   model, and the shots people actually run are a distilled checkpoint plus a speed-up LoRA, where those
   numbers only slow the shot down. Typing 8 into the panel's steps field really runs 8 steps; leaving that
   field untouched runs the skill's own 24.
-- The 特效视频 preset card of the home page's 开始创作 section (off the default home - add it back through
+- The 特效视频 preset card of the home page's 创作 section (off the default home - add it back through
   编辑首页 → 添加卡片) takes the skill-card route straight to the Video page with this skill selected, and the
   Effects dropdown lands on the shipped default effect.
 - Submitting on the Video page first asks the readiness check against the `models.json` manifest for the

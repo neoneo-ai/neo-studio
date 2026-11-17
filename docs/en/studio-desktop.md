@@ -524,6 +524,34 @@ startable once the root is filled in.
   carrying a rule; the zoomed director timeline keeps its own visible horizontal bar - that bar is the drag
   handle. The home additionally pins `scrollbar-gutter: stable`, so the centered content column does not shift
   when the edit bar appears or removing and adding a card changes the page height.
+- The **Quick Menu** (`.ns-home-quick`, `position: fixed` with `z-index: 9650` - it sits above the page content and the
+  in-page floating layers (gallery card menu 9000, the categorize and send-to menus 9100-9500, the image hover preview
+  9600) and below the header queue panel 9690, the asset-library modal 9700, the add-a-card face 9800 and the lightbox
+  9847) floats out of the 首页 tab in the header: hovering that tab opens it, keyboard focus opens it the same way;
+  leaving the tab and the panel closes it (a 260 ms grace, so the pointer can cross from the tab into the panel), and so
+  does clicking an entry. It never opens while 首页 is the current page - that page already shows those cards - never
+  while editing the home page (that page is the editor, and the menu would pull people off an unsaved draft), never when
+  every home card has been removed (no working entry, no control), and never on a touch tier with no hover - there the
+  tab is just the way to the home page (its tooltip says what the hover does). The root is pinned to `document.body` with
+  `left` computed from that tab's rectangle and `top` from the bottom edge of the whole header bar (10 px below it), so the
+  menu lands under the tab row inside an 8 px viewport margin - anchoring on the tab's own rectangle would lay the panel over
+  the tab row itself - and
+  `showView` closes it on a page switch - the router keeps no second visibility flag. Its entries read the same layout as
+  the home cards (`layoutSections` for the section order plus `visibleCards` for the card order; an entry is icon + title
+  + subtitle) and click through the existing `openHomeCard` path - the menu has no second card table and never offers a
+  card the home page does not have; the 素材与配置 section is kept out of this column whole - its column header and its
+  three cards alike - since 素材库 lives in the 素材 header tab, 设置 in the gear at the header's right end and 技能 is
+  entered from its own home card, so the menu carries the 创作 and 编辑 sections only and opens nothing when only that
+  section has cards left. **The panel splits into columns by the height available under the header bar**: a section
+  is never split across columns, every section carries its own column header, and a section that does not fit in the
+  current column opens the next one; the width is columns × the single-column width (`--ns-home-quick-colw`, 312 px,
+  240 px on the 720 px tier) and the column count is handed to CSS as `--ns-home-quick-cols` for
+  `grid-template-columns`. The panel never scrolls - a menu you have to scroll is not a shortcut - and the tail that no
+  column count can fit stays clipped inside the panel, whose placement is already clamped to the 8 px viewport margin.
+  The panel body takes no pointer events (`pointer-events: none`, only the entries are `auto`): the page under an open
+  menu keeps its own hover and clicks, so the menu never eats a click on the page below it - and the close timer hangs on
+  the entries for the same reason.
+  The pop-out animation is dropped under `prefers-reduced-motion`.
 - "Edit home" standing in the top-right corner of the home page in view mode (`.ns-home-edit-entry`, `position: absolute`
   inside `.ns-home`, so it scrolls away with the content instead of staying pinned on the window) switches that page into
   edit mode, and the page itself is the editor: the whole
@@ -577,7 +605,7 @@ startable once the root is filled in.
   `CUSTOM_TARGETS` keep them so one save cannot silently drop a card the user owns. `hidden` holds built-in cards only: a
   custom card an older layout hid shows on the home again, keeping its slot of `order`.
 - A built-in card carrying `defaultHidden` stays off the default home page: the home grid does not grow because of it,
-  and it waits in the Add a card face. 开始创作 has two such cards — 特效视频 (`target: "skill"`, `value: "effect_h3"`)
+  and it waits in the Add a card face. 创作 has two such cards — 特效视频 (`target: "skill"`, `value: "effect_h3"`)
   and 宫格图分镜 (`target: "page"`, `value: "storyboard"`) — and the home layout puts either on the page only when
   `order` names it explicitly (`homePlaced` reads that one slot): clicking the preset appends it to the end of that
   section, `normalizeLayout` never appends it on its own, and removing the card sends it back to the preset face. When

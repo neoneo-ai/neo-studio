@@ -987,6 +987,57 @@ body {
 .ns-home-card > svg:last-child { flex: none; margin-left: auto; color: var(--ns-dim); }
 /* 全部卡片收起来的首页：只剩一句话，指向右上角那枚入口，不把用户留在一片空白里 */
 .ns-home-empty { margin: 8px 0; color: var(--ns-dim); }
+/* 悬浮快速入口：鼠标落在顶栏「首页」那一格上（当前不在首页时）浮出的多列直达面板，条目点击走 openHomeCard。
+   根钉在 body 上，left 按顶栏「首页」那一格的矩形写、top 按顶栏整条的底沿写（落在那一行之下，夹进窗口 8px 边距内）。
+   宽度 = 列数 × 单列宽：列数由 studio-app.js 按可视高度算好传进来（一屏看全，一列装不下才加列），整块不滚——要滚起来的菜单不算快捷入口。
+   pointer-events 只给条目：浮窗展开时压在谁那一页上，谁那一页的悬停与点击照旧落在那页上，这一列不许吃掉底下的点击。
+   z-index 9650：页面上的浮层（素材卡菜单 9000、归类与发图菜单 9100-9500、图预览 9600）与首页内容都压在它下面，
+   顶栏队列面板（9690）、素材弹窗（9700）、添加卡片这一面（9800）、灯箱（9847/9999）盖在它上面——这一列是悬浮态的临时控件 */
+.ns-home-quick { position: fixed; z-index: 9650; pointer-events: none; }
+.ns-home-quick-panel {
+    box-sizing: border-box;
+    display: grid;
+    grid-template-columns: repeat(var(--ns-home-quick-cols, 1), minmax(0, 1fr));
+    gap: 0 6px;
+    width: min(calc(100vw - 16px), calc(var(--ns-home-quick-cols, 1) * var(--ns-home-quick-colw, 312px)));
+    max-width: calc(100vw - 16px);
+    padding: 5px 6px 8px;
+    background: var(--ns-panel);
+    border: 1px solid var(--ns-border); border-radius: 12px;
+    box-shadow: 0 14px 34px rgba(0, 0, 0, .45);
+    overflow: hidden;   /* 列数到了上限还装不下的那一段收在这一层里：落点已夹在窗口 8px 边距内，不出滚动条 */
+    animation: ns-home-quick-in .16s ease-out;
+}
+@keyframes ns-home-quick-in {
+    from { opacity: 0; transform: translateY(-6px); }   /* 从那一格往下长出来：落点就在页签正下方 */
+    to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .ns-home-quick-panel { animation: none; }
+}
+.ns-home-quick-col { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+/* 列头就是首页那个板块名（与首页同一份语言），这里只当列标题；英文档里注册值是小写词（"创作" 那条注册成 "create"），列头统一首字母大写 */
+.ns-home-quick-label { padding: 8px 8px 4px; font-size: 11px; font-weight: 600; letter-spacing: .06em; color: var(--ns-accent); text-transform: capitalize; }
+.ns-home-quick-item {
+    box-sizing: border-box; min-width: 0; display: flex; align-items: center; gap: 10px; text-align: left;
+    min-height: 38px; padding: 4px 8px; border: 1px solid transparent; border-radius: 8px;
+    background: transparent; color: var(--ns-fg); cursor: pointer;
+    pointer-events: auto;   /* 这一列里只有条目吃事件：落在面板空白处的事件穿到下面那一页 */
+}
+.ns-home-quick-item:hover { background: var(--ns-raised); border-color: var(--ns-accent); }
+.ns-home-quick-icon {
+    flex: none; display: flex; align-items: center; justify-content: center;
+    width: 30px; height: 30px; border-radius: 7px;
+    background: var(--ns-primary-soft); color: var(--ns-accent);
+}
+.ns-home-quick-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ns-home-quick-name { font-size: 13px; font-weight: 600; color: #fff; }
+/* 两行字整行读完：窄列里换行，不截断（截断就是把一条入口读成半句话） */
+.ns-home-quick-sub { font-size: 11px; color: var(--ns-dim); overflow-wrap: break-word; }
+/* 手机档顶栏是一条可横滚的页签：单列宽收一档，这一列不许比屏宽 */
+@media (max-width: 720px) {
+    .ns-home-quick-panel { --ns-home-quick-colw: 240px; }
+}
 /* 编辑首页的入口：浏览态站在首页自己的右上角——.ns-home 就是滚动容器，绝对定位落在滚动内容里，
    入口跟着页面一起滚，滚出首屏就不见，不常驻在窗口上压住卡片 */
 .ns-home-edit-entry {
@@ -1018,7 +1069,7 @@ body {
 .ns-home-edit-col.is-on { border-color: var(--ns-primary); color: var(--ns-accent); }
 .ns-home-edit-status { color: var(--ns-dim); font-size: 12px; }
 /* 旧版式里收起的板块：标暗并留一行「已收起」。本版没有板块收起开关，这个状态在落盘时被清成展开 */
-.ns-home-section { display: flex; align-items: center; gap: 8px; }
+.ns-home-section { display: flex; align-items: center; gap: 8px; text-transform: capitalize; }   /* 英文档里板块名注册成小写词，这一行统一首字母大写 */
 .ns-home-section.is-off { opacity: .6; }
 .ns-home-off-tag {
     font-size: 11px; color: var(--ns-dim); letter-spacing: 0;

@@ -10,7 +10,7 @@
  * 出流打 8080 与远程 LLM（POST /rs_prompts/stream_generate_prompt，注册在 studio/llm.py 的 routes 上，
  * 桌面端离线服务挂载的就是这一份），参考图读 input/ 与粘贴进来的 data URI —— 桌面窗口离线时这一页照用。
  * 只有「保存为预设」是提示词库写侧，按能力表门控（app/studio_caps.py 的 prompt_library_write）。
- * 首页「开始创作」板块的入口卡是这页唯一的来路（顶栏没有这一枚页签）。
+ * 首页「创作」板块的入口卡是这页唯一的来路（顶栏没有这一枚页签）。
  */
 import { t, tf } from "../js/core/i18n.js";
 import { setIcon, setIconLabel } from "../js/core/icons.js";

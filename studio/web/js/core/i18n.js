@@ -25,7 +25,6 @@ const EN = {
     "一句话到一段成片，全部在你自己的电脑上完成":
         "From one line to a finished video - all on your own machine.",
     "一句话出图": "Generate from one line",
-    "开始创作": "Create",
     "素材与配置": "Assets & Setup",
     "生成图片": "Generate Images",
     "描述画面，直接出图": "Describe a picture, get the picture",
@@ -50,6 +49,9 @@ const EN = {
         "Edit home: card order, remove and add cards, hero text and grid columns",
     "首页卡片已全部移除，在「编辑首页」的添加卡片里加回来。":
         "Every home card is removed - open 'Edit home' and add them back from Add a card.",
+    // 悬浮快速入口：鼠标落在顶栏「首页」那一格上浮出的多列直达面板（列里就是首页那一叠的版式）
+    "悬浮快速入口：鼠标落在这里就浮出首页的直达卡片":
+        "Quick menu - hover here to float out the home page's direct cards",
     "显示标题区": "Show the hero block",
     "隐藏标题区": "Hide the hero block",
     "显示出图按钮": "Show the hero button",
@@ -1928,7 +1930,7 @@ const EN = {
         "Pick a reference audio and write the text to speak: it is read with that voice, and the result lands in the library's Voice folder",
     "已生成语音，点波形播放试听；产物在 Output/Voice":
         "Voice generated — click the waveform to listen; output is in Output/Voice",
-    // Studio「提示词增强」页（首页「开始创作」的卡直达，顶栏没有这一枚页签；页名「提示词增强」见技能设置那一条）。
+    // Studio「提示词增强」页（首页「创作」的卡直达，顶栏没有这一枚页签；页名「提示词增强」见技能设置那一条）。
     // 版面是整页聊天窗口：舞台逐轮对话 + 底部浮动胶囊输入卡（同视频页），输入卡里的占位就是这一页的自述
     "选技能，把一句话写成完整提示词": "Pick a skill and turn one line into a full prompt",
     "智能判断": "Let the model decide",

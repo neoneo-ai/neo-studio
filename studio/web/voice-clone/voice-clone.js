@@ -3,7 +3,7 @@
  *
  * 生成链与音频卡片 ⋯ 菜单那条同源（voice-gen.js）：参考音频经 copy_to_input 落 input/ 当
  * {{REF_AUDIO_1}}，文字走 {{PROMPT}}，产物由 SaveAudio 落 Output/Voice。进度认后端推的事件
- * （rs.voice_gen.status）而不是轮询 HTTP。首页「开始创作」板块的入口卡是这页唯一的来路
+ * （rs.voice_gen.status）而不是轮询 HTTP。首页「创作」板块的入口卡是这页唯一的来路
  * （顶栏没有这一枚页签）；生成要吃执行队列，离线时按钮交运行闸门。
  */
 import { t } from "../js/core/i18n.js";
