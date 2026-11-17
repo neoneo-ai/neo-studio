@@ -29,6 +29,21 @@
   handling stay in the window layer instead of being duplicated per page.
 - CSS goes in the module's same-named stylesheet. Do not
   inline styles for structure a stylesheet already owns.
+- 首页上每个应用页有一份描述符：`studio/web/studio/app-registry.js`。一条描述符说清页 id（hash 路由名）、
+  首页板块与那张卡（图标、两行字、默认上不上首页）、顶栏给不给页签、每次导航是否注册视图、落地时认哪个深链
+  参数。首页卡表（`home-layout.js`）与 `studio-app.js` 的 `route()` 都从这张表派生，页的 `build` 在装配层的
+  `PAGE_BUILDERS` 里按同一个 id 点名。这张表是编译期常量：页不在运行时往里注册，表里没有的页跳不到，页也不写
+  自己那套能力闸门——闸门只有 `app/studio_caps.py` 那张表，随版本快照下发、页里用 `can` 读。注册表 ↔ 首页卡表 ↔
+  `index.html` 页签 ↔ `PAGE_BUILDERS` ↔ `skill.py` 的落地页清单这一条由 `studio/tests/js/app-registry.test.mjs` 钉住。
+- 从装配层拆出的页在 `studio/web/studio/pages/<页名>-page.js`：一页一个工厂函数，页壳与工厂在同一份文件里，工厂要的
+  东西由宿主按参数交进来（`$el`、`toast`、`go`、素材弹窗、画廊 getter），页的逐实例状态（在飞任务、提示词栏、播放器、
+  素材槽、内嵌编辑器、让位与补铺那一发、armed 旗标）留在工厂闭包里，随视图常驻、随页卸载即散。`studio-app.js` 是装配层：
+  引模块、给每页组一份宿主、在 `PAGE_BUILDERS` 里点名注册表每一条——缺一个点名就是一张点下去没反应的卡。跨页的钩子
+  （技能卡选技能、增强页落页、故事板让位）由装配层把两侧接起来，页之间不直接摸对方的状态。
+- `index.html` 的顶栏页签、标题与窗口按钮保持静态 DOM（冷启动不等模块图），注册表只说「哪些页该有页签」，顺序在
+  `index.html`，两边对不上由用例说。样式不分页拆文件：`index.html` 静态链整张 `studio/style.css`，模块样式才在自己的
+  同名 css 里——把装配层样式拆成多张动态链接的表，桌面端冷启动会闪一下未样式。
+
 - The `frontend-design` skill is an aesthetic reference, not a source of repo rules: its font,
   gradient/noise/shadow, asymmetry and animation suggestions lose to this file and the root
   Product Surface — no custom fonts, no decorative backgrounds, borders and fills beyond the

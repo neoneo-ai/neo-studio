@@ -2,13 +2,16 @@
 //
 // 版式落在后端（studio/home_layout.py 写 configs/home_layout.json），不落 localStorage：
 // 插件页、桌面窗口、手机页是三份互看不见的本机存储，偏好存本机等于每台设备各排一套首页。
-// 卡表只有这里一份：后端只存 id 与形状，认不出的一张卡落回默认板块与默认页；
+// 卡表只有这里一份：直连本页（page）的那一叠由应用注册表（app-registry.js）派生，特效与七发
+// 编辑模式这两类落点留在这里；后端只存 id 与形状，认不出的一张卡落回默认板块与默认页；
 // 「跳到哪一屏」是数据（target + value），由 studio-app.js 的 openHomeCard 落地。
 import { $el } from "./shim/ui.js";
 import { api } from "./shim/api.js";
 import { t, tf } from "../js/core/i18n.js";
 import { icon, ICON_NAMES } from "../js/core/icons.js";
 import "../vendor/sortable.min.js";   // 落位手势：vendored 的 Sortable（与 marked/purify 同一份引进来），运行时不联网
+import { homeCards } from "./app-registry.js";
+
 
 export const HOME_SECTIONS = [
     { id: "create", label: "创作" },
@@ -22,20 +25,15 @@ export const HOME_SECTIONS = [
 // page 与 edit 只出现在旧版式里存着的卡上：读得回来、跳得动，界面上不再产出这两类
 // （HOME_TARGETS 是读门，FORM_TARGETS 是能配的那三种，LEGACY_TARGET 单列就是为这个）。
 // defaultHidden = 这张内置卡默认不上首页，只在「添加卡片」的预设里等着加：首页版式排过它才出。
+// 直连本页的那一叠由注册表派生：板块、图标、两行字与 defaultHidden 都跟着那一条描述符走，
+// 加一页只写注册表那一处，卡与页不在两份文件里各点一次名
+const PAGE = homeCards();
 export const HOME_CARDS = [
-    { id: "paint", section: "create", icon: "sparkles", title: "生成图片", sub: "描述画面，直接出图", target: "page", value: "paint" },
-    { id: "video", section: "create", icon: "film", title: "生成视频", sub: "一句话加首帧，出一段视频", target: "page", value: "video" },
-    { id: "director", section: "create", icon: "play", title: "导演视频", sub: "多段配方，生成整片视频", target: "page", value: "director" },
-    { id: "pose", section: "create", icon: "pose", title: "3D 姿势", sub: "姿势 · 整场 · 全景", target: "page", value: "pose" },
-    { id: "agent", section: "create", icon: "target", title: "智能体", sub: "说出目标，工具链多轮跑完", target: "page", value: "agent" },
-    { id: "voice", section: "create", icon: "volume", title: "声音克隆", sub: "用一段参考音频的音色朗读文字", target: "page", value: "voice" },
-    { id: "prompt-enhance", section: "create", icon: "wand", title: "提示词增强", sub: "选技能，把一句话写成完整提示词", target: "page", value: "enhance" },
+    PAGE.paint, PAGE.video, PAGE.director, PAGE.pose, PAGE.agent, PAGE.voice, PAGE["prompt-enhance"],
     // 特效是这张技能的全部能力，不是一页自己的功能：卡片走技能落点，进视频页就把 effect_h3 选中，
     // 特效芯片由那张技能自己铺出来——技能页删了这张技能，这张卡跟着落技能页（goSkillApply 那条门）。
     { id: "effect", section: "create", icon: "sparkles", title: "特效视频", sub: "选一枚镜头特效，出一段片", target: "skill", value: "effect_h3", defaultHidden: true },
-    // 宫格图分镜是装配层的一页（`#/storyboard`，顶栏不给它页签）：页上只铺高级模式的故事板那一面。
-    // 宫格图拆分 → 逐格出提示词 → 生成配方全在那一页里走现成的链，整片参数与出片留在导演页。
-    { id: "storyboard", section: "create", icon: "image", title: "宫格图分镜", sub: "宫格图拆成多段，逐格出提示词", target: "page", value: "storyboard", defaultHidden: true },
+    PAGE.storyboard,   // 那一页的说明写在注册表 storyboard 那一条上
     { id: "edit-normal", section: "edit", icon: "pencil", title: "图片编辑", sub: "写下要改成什么样，整图重绘", target: "edit", value: "normal" },
     { id: "edit-outpaint", section: "edit", icon: "maximize", title: "扩图", sub: "拖框定四边留白，补全周边场景", target: "edit", value: "outpaint" },
     // 局部与删除默认不上首页：编辑板块默认只铺常用那几张，这两张收在「添加卡片」的预设里等着加
@@ -44,12 +42,8 @@ export const HOME_CARDS = [
     { id: "edit-angle", section: "edit", icon: "camera", title: "机位", sub: "拖机位球换角度重出这张", target: "edit", value: "angle" },
     { id: "edit-blend", section: "edit", icon: "copy", title: "融合", sub: "多张参考图融成一张连贯画面", target: "edit", value: "blend" },
     { id: "edit-pose", section: "edit", icon: "user", title: "姿势", sub: "骨架图锁姿势，重出这一张", target: "edit", value: "pose" },
-    { id: "frames", section: "edit", icon: "film", title: "视频抽帧", sub: "挑一条视频，抽帧存进素材库", target: "page", value: "frames" },
-    { id: "reverse", section: "edit", icon: "eye", title: "图片反推", sub: "挑一张图，反推出提示词", target: "page", value: "reverse" },
-    { id: "reverse-video", section: "edit", icon: "eye", title: "视频反推", sub: "挑一条视频，抽帧反推出提示词", target: "page", value: "reverse_video" },
-    { id: "gallery", section: "material", icon: "folder", title: "素材库", sub: "浏览与管理全部生成素材", target: "page", value: "gallery" },
-    { id: "skills", section: "material", icon: "wand", title: "技能", sub: "管理预设与技能包", target: "page", value: "skills" },
-    { id: "settings", section: "material", icon: "gear", title: "设置", sub: "生成默认值与界面语言", target: "page", value: "settings" },
+    PAGE.frames, PAGE.reverse, PAGE["reverse-video"],
+    PAGE.gallery, PAGE.skills, PAGE.settings,
 ];
 
 export const HOME_HERO = {

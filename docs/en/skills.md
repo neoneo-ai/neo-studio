@@ -23,6 +23,13 @@ Image and video skills additionally have a `config.json` (saved settings: model 
 prefix …) and a `workflow.json` (an API-format workflow template with runtime variables as `{{...}}`
 placeholders).
 
+`landing` is the page this skill's card on the Studio home page opens: its value is one of the page ids the
+Studio app registry knows (`paint`, `video`, `director`, `storyboard`, `enhance`, `voice`, …; the full table is
+`studio/web/studio/app-registry.js`). Declared means "open that page": `video` runs the 出视频 page chain with
+this skill selected, `paint` fills the 输入页 panel, any other id switches to that page. Not declared, or a value
+the registry does not know (saving drops that entry), lands on the two heuristics — a video skill opens 出视频,
+an image skill opens 输入页, and when neither applies the card says there is no page to open and lands on 技能.
+
 ## How the agent page uses skills
 
 The `@` in the agent page's input designates a skill, and the candidates come in two kinds:

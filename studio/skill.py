@@ -92,7 +92,14 @@ _SKILL_DEFAULT_INPUTS = {
 _META_KEY_ORDER = (
     "name", "cn_name", "tags", "inputs", "description", "max_tokens",
     "result_key", "multi_result", "multi_turn", "category",
-    "gen_image", "gen_video", "mode", "requires_ref", "audit", "created_at",
+    "gen_image", "gen_video", "mode", "requires_ref", "landing", "audit", "created_at",
+)
+
+# 技能卡直达的落地页：值就是 studio/web/studio/app-registry.js 里那一条页 id（两侧由用例钉同一张表）。
+# 空 = 这份技能没声明，首页技能卡的落点落回前端那两条启发（视频技能出视频页、生图技能进绘画页）。
+SKILL_LANDINGS = (
+    "home", "director", "paint", "edit", "gallery", "video", "pose", "skills", "settings",
+    "agent", "frames", "reverse", "reverse_video", "voice", "enhance", "storyboard",
 )
 
 # 技能文件管理器支持的文件扩展名（.md 主/子文档 + .txt 引用文本）。
@@ -107,6 +114,12 @@ def _skill_category(skill_id: str, data: dict) -> str:
     if "image" in (data.get("inputs") or []):
         return "vision"
     return "task"
+
+def _skill_landing(meta: dict) -> str:
+    """这份技能声明的落地页：认不出的值当没写（首页技能卡落回前端那两条启发）。"""
+    value = str(meta.get("landing") or "").strip()
+    return value if value in SKILL_LANDINGS else ""
+
 
 
 # ==========================================
@@ -917,6 +930,7 @@ def scan_skills() -> list:
                 "requires_ref": bool(meta.get("requires_ref", False)),
                 "multi_frame": bool(meta.get("multi_frame", False)),
                 "mode": str(meta.get("mode") or "").strip(),
+                "landing": _skill_landing(meta),
                 "description": meta.get("description", ""),
             }
             _attach_gen_config(skill, skill_id)
@@ -952,6 +966,7 @@ def scan_skills() -> list:
                     "requires_ref": bool(meta.get("requires_ref", False)),
                     "multi_frame": bool(meta.get("multi_frame", False)),
                     "mode": str(meta.get("mode") or "").strip(),
+                    "landing": _skill_landing(meta),
                     "has_workflow": os.path.isfile(os.path.join(d, "workflow.json")),
                     "description": meta.get("description", ""),
                 }
@@ -1006,10 +1021,11 @@ def _find_name_conflict(name: str, exclude_id: str):
 
 def save_skill_main(skill_id: str, name: str, content: str, tags=None, source: str = "custom", multi_turn=None,
                     category=None, gen_image=None, gen_video=None, mode=None, requires_ref=None,
-                    cn_name=None) -> bool:
+                    landing=None, cn_name=None) -> bool:
     """保存 skill 的主文件 skill.md（frontmatter + 正文），保留未编辑的既有字段。
 
-    multi_turn/category/gen_image/gen_video/mode/requires_ref 为 None 时沿用 frontmatter 既有值；显式传入则写入（假值时移除该字段）。
+    multi_turn/category/gen_image/gen_video/mode/requires_ref/landing 为 None 时沿用 frontmatter 既有值；
+    显式传入则写入（假值时移除该字段）。landing 只认 SKILL_LANDINGS 里那几名，传进认不出的值等于删掉这一项。
     """
     sid = _normalize_skill_id(skill_id)
     if not sid:
@@ -1025,6 +1041,10 @@ def save_skill_main(skill_id: str, name: str, content: str, tags=None, source: s
         gv = meta.get("gen_video") if gen_video is None else bool(gen_video)
         md = meta.get("mode") if mode is None else (mode or "").strip()
         rr = meta.get("requires_ref") if requires_ref is None else bool(requires_ref)
+        # landing 是 None = 这一项没在表单里，沿用既有值；显式传入要认 SKILL_LANDINGS 里那一名
+        ld = meta.get("landing") if landing is None else str(landing or "").strip()
+        if ld not in SKILL_LANDINGS:
+            ld = ""
         dn = meta.get("cn_name") if cn_name is None else (cn_name or "").strip()
         new_meta = {
             "name": (name or "").strip() or sid,
@@ -1041,6 +1061,7 @@ def save_skill_main(skill_id: str, name: str, content: str, tags=None, source: s
             "gen_video": gv or None,
             "mode": md or None,
             "requires_ref": rr or None,
+            "landing": ld or None,
             "ratio": meta.get("ratio"),
             "created_at": meta.get("created_at") or datetime.datetime.now(datetime.timezone.utc).isoformat(),
         }
@@ -2238,6 +2259,7 @@ async def rs_prompts_load_skill(request):
             "gen_video": bool(meta.get("gen_video", False)),
             "mode": str(meta.get("mode") or "").strip(),
             "requires_ref": bool(meta.get("requires_ref", False)),
+            "landing": _skill_landing(meta),
             "config_overridden": has_skill_config_override(skill_id),
         }
         if resp["gen_video"]:
@@ -2277,6 +2299,7 @@ async def rs_prompts_save_skill(request):
             gen_video=data.get("gen_video"),
             mode=data.get("mode"),
             requires_ref=data.get("requires_ref"),
+            landing=data.get("landing"),
             cn_name=cn_name or None,
         )
         if not ok:

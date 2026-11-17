@@ -5,6 +5,16 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 ## [Unreleased]
 
 ### Added
+- **A skill can name the page its home card opens.** A skill's `skill.md` frontmatter gains `landing`, whose value is one of
+  the Studio page ids the home app registry knows (`paint`, `video`, `director`, `storyboard`, `enhance`, `voice`, `frames`,
+  `reverse`, `reverse_video`, `pose`, `agent`, `edit`, `gallery`, `skills`, `settings`, `home`). The skill card on the Studio
+  home page now opens the page that skill declares: `landing: storyboard` opens the 宫格图分镜 page, `landing: video` runs the
+  出视频 page chain with that skill selected in its picker, `landing: paint` fills it into the 输入页 panel, and any other page id
+  just switches to that page. A skill with no `landing` — every skill shipped before this one — keeps the old rule: video skills
+  open 出视频 with the skill selected, image skills open 输入页, and a skill with neither says there is no page to open and lands
+  on the 技能 page. A page id the registry does not know is dropped when the skill is saved and reads as "not declared", so a typo
+  never leaves a card that goes nowhere.
+
 - **A standalone 视频反推 page, entered from its own card on the Studio home page.** The 编辑 section gains a 视频反推
   card that opens `#/reverse_video` — its own page, its own run button, its own capability (`prompt_reverse_video`);
   the 图片反推 page keeps doing images only. The page is one centered column — the player, the draggable time window

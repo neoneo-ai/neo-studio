@@ -10,8 +10,8 @@ import { $el } from "./shim/ui.js";
 import { configureCanvasOrigin } from "../js/core/canvas-origin.js";
 
 import "../gallery.js";   // 注册 comfy.neo.gallery 扩展（NeoGallery + 侧栏 tab 定义）
-import { openDirectorEditor, currentDirectorEditor, createSegmentOps, createSharedConfigSection, DIRECTOR_RECIPE_SAVED_EVENT, SEG_MODES, MODE_LABELS, LEGACY_MODE_MAP } from "../director.js";
-import { setPaintHost, openGenMaterialDialog, openImageEditDialog, openImageEditMode, setVideoReuseOpen, setVideoPageJump, openVideoReuse, reuseModelOverlay, chipButton, ratioGlyph, skillParamsChip } from "../gallery-gen.js";
+import { openDirectorEditor, createSegmentOps, createSharedConfigSection, DIRECTOR_RECIPE_SAVED_EVENT, SEG_MODES, MODE_LABELS, LEGACY_MODE_MAP } from "../director.js";
+import { openImageEditDialog, openImageEditMode, setVideoReuseOpen, setVideoPageJump, openVideoReuse, reuseModelOverlay, chipButton, ratioGlyph, skillParamsChip } from "../gallery-gen.js";
 import { createFramePlayer, DOCK_PREVIEW_SIDE, AGENT_PREVIEW_SIDE } from "../live-preview.js";
 import { createRecipesPanel, listRecipes } from "../recipes.js";
 import { listVideoSkills } from "../recipes.js";
@@ -26,17 +26,15 @@ import { icon, setIcon, setIconLabel } from "../js/core/icons.js";
 import { createLibraryModal, acceptsPick } from "../js/core/lib-modal.js";
 import { mediaKindOf } from "../gallery-utils.js";
 import { openPresetPicker, randomPromptText, savePromptTo } from "../js/core/preset-picker.js";
-import { reusePaintPanel } from "../gen-utils.js";
 import { createPairPanel } from "../js/core/pair-access.js";
 import { createMediaSlot } from "../js/core/media-slot.js";
 import { initQueuePanel, setQueueOnline, queueTrack } from "../queue-panel.js";
-import { createPoseView } from "../pose/pose.js";
-import { createFramesView } from "../frames/frames.js";
-import { createReverseView } from "../reverse-prompt/reverse-prompt.js";
-import { createReverseVideoView } from "../reverse-video/reverse-video.js";
-import { createVoiceCloneView } from "../voice-clone/voice-clone.js";
-import { createPromptEnhanceView } from "../prompt-enhance/prompt-enhance.js";
+import { createLeafPages } from "./pages/leaf-pages.js";
+import { createStoryboardPage } from "./pages/storyboard-page.js";
+import { createPaintEditPage } from "./pages/paint-edit-page.js";
 import { HOME_SECTIONS, createHomeInlineEditor, heroText, layoutSections, loadHomeLayout, normalizeLayout, sectionOrder, visibleCards } from "./home-layout.js";
+import { STUDIO_APPS, appById } from "./app-registry.js";
+
 
 const view = document.getElementById("ns-view");
 const REPO_URL = "https://github.com/neoneo-ai/neo-studio";   // 设置「关于」里的仓库行，与顶栏「关于插件」同一地址
@@ -261,61 +259,22 @@ function openLibModal(scope, onPick, accept) {
     else notifyAgentCtx();
 }
 
-// 悬浮「素材库」的取用：弹窗点卡片 = 把这张图喂进图片编辑面板当原图（参考图菜单自己交回调，不经这里）
-function editPickImage(images) {
-    const img = images[0];
-    if (!img) return;
-    openImageEditDialog(app.neoGallery, { filename: img.filename }, img.subfolder);
-}
-
-// 姿势视图的依赖在这汇聚：api 走 shim（离线/在线同一条路）；导出图组的控制图交图片编辑面板预填
-const buildPose = createPoseView({
-    api, $el, toast,
-    openEdit: (prefill) => openImageEditDialog(app.neoGallery, null, "", { prefill }),
-});
-
-/** 抽帧页取视频：点卡片取一条换进播放器（一次只看一条视频） */
-function openFramesMaterial(onPick) {
-    openLibModal("frames", (picked) => {
-        onPick(picked);
-        libModal?.close();
-    }, "video");
-}
-
-// 抽帧页与姿势页不共享任何东西：取用同一套弹窗，抽帧自己在浏览器里做（见 studio/web/frames/frames.js）
-const buildFrames = createFramesView({ api, $el, toast, openMaterial: openFramesMaterial });
-
-/** 素材库取用一次就收窗：反推页要的是图，声音克隆页要的是音频，各自认各自那一类 */
-function openMaterialOnce(scope, accept, onPick) {
+/** 素材库取用一次就收窗：薄页要的是那一张——抽帧与视频反推取视频，声音克隆取音频，图片反推与增强取图 */
+function openMaterial(scope, accept, onPick) {
     openLibModal(scope, (picked) => {
         onPick(picked);
         libModal?.close();
     }, accept);
 }
 
-// 三页都只从首页的卡进（顶栏没有这三枚页签）：运行按钮交 gateRunButton，能力缺时点它引导启动内核
-const buildReverse = createReverseView({
-    api, $el, toast,
-    openMaterial: (onPick, accept) => openMaterialOnce("reverse", accept || "image", onPick),
+// 六张薄页的工厂在 pages/leaf-pages.js：这一处只把宿主交下去——运行闸门交 gateRunButton，
+// 姿势页导出的控制图与增强页的「填入对应页」是装配层自己的两条现成链
+const { buildPose, buildFrames, buildReverse, buildReverseVideo, buildVoiceClone, buildPromptEnhance } = createLeafPages({
+    api, $el, toast, can,
     gateRun: gateRunButton,
-});
-const buildReverseVideo = createReverseVideoView({
-    api, $el, toast,
-    openMaterial: (onPick) => openMaterialOnce("reverse_video", "video", onPick),
-    gateRun: gateRunButton,
-});
-const buildVoiceClone = createVoiceCloneView({
-    $el,
-    openMaterial: (onPick) => openMaterialOnce("voice", "audio", onPick),
-    gateRun: gateRunButton,
-});
-// 提示词增强页只要素材库取图、运行闸门，以及回话上那枚「填入对应页」的落点（enhanceApplyToPage）；
-// 保存为预设那颗钮自己读能力表（提示词库写侧归内核）
-const buildPromptEnhance = createPromptEnhanceView({
-    $el, toast, can,
-    openMaterial: (onPick) => openMaterialOnce("enhance", "image", onPick),
-    gateRun: gateRunButton,
-    applyToPage: enhanceApplyToPage,
+    openMaterial,
+    openEdit: (prefill) => openImageEditDialog(app.neoGallery, null, "", { prefill }),
+    applyToPage: (mode, text) => paintEdit.applyEnhanced(mode, text),
 });
 
 onSidebarTabChange((id) => {
@@ -327,7 +286,7 @@ onSidebarTabChange((id) => {
     // 编辑页两个取用落点：参考图菜单的「素材库取用」把 addRefImages 经 neo:media-pick 交来（取的是参考图），
     // 悬浮「素材库」按钮自己交来 editPickImage（取的是原图）。回调一次一清：留着它，下一次从悬浮按钮开的
     // 弹窗会把该当原图的那张塞进参考位
-    const onPick = libPendingPick || (currentView === "edit" ? editPickImage : null);
+    const onPick = libPendingPick || (currentView === "edit" ? paintEdit.pickImage : null);
     // 编辑页两个落点都是 <img>，视频与音频落进去就是破图；导演页照旧媒体全收（出片的参考区吃的正是视频）
     const accept = libPendingAccept || (currentView === "edit" ? "image" : null);
     libPendingPick = null;
@@ -1189,152 +1148,26 @@ async function buildDirector(el) {
 }
 
 
-// ====== 故事板页（首页「宫格图分镜」卡的落点）：只铺故事板那一面，无顶栏页签、无弹窗 ======
-// 内容全在导演编辑器里（角色参考图 / 宫格图拆分 / 各段对照），这一页只做三件事：从空白配方起手、
-// 把编辑器内嵌进本页（storyOnly = 无页签、时间线那一面收起）、把整页参数与出片那一面留给导演页。
-async function buildStoryboard(el) {
-    el.classList.add("ns-storyboard");
-    const head = $el("div", { className: "ns-storyboard-head" }, [
-        $el("span", { className: "ns-storyboard-title", textContent: t("宫格图分镜") }),
-        $el("span", { className: "ns-storyboard-hint", textContent: t("空白配方起手，点「保存」才落盘；整片参数与逐段时长、出片都在导演页") }),
-        $el("button", { className: "ns-btn", type: "button", textContent: t("去导演页"), onclick: () => go("director") }),
-    ]);
-    const host = $el("div", { className: "ns-storyboard-host" });
-    // 编辑器关掉（标题栏 ✕）后这一页不能是空白：留一行「打开宫格图分镜」占位（同生成素材页内嵌关闭那条口径）
-    const placeholder = $el("div", { className: "ns-storyboard-placeholder" }, [
-        $el("span", { textContent: t("宫格图分镜已关闭") }),
-        $el("button", { className: "ns-btn", type: "button", textContent: t("打开宫格图分镜"), onclick: () => ensureBoard() }),
-    ]);
-    el.append(head, host, placeholder);
-
-    /** 收回「不属于这一页」的那份编辑器：干净就关掉；有未保存修改就停在原地请用户自己处理。
-     *  true = 这一页可以铺自己的那一面。编辑器全窗口只有一份，两处不能同时钉着同一份配方。 */
-    function releaseCur() {
-        const cur = currentDirectorEditor();
-        if (!cur) return true;
-        if (host.contains(cur.overlay)) return true;   // 本页钉着的就是它：不重建
-        if (!cur.isDirty()) { cur.close(); return true; }
-        toast(t("编辑器有未保存的修改，先保存或放弃"));
-        return false;
-    }
-
-    async function ensureBoard() {
-        if (!releaseCur()) return;
-        if (host.querySelector(".neo-director-embedded")) return;   // 已铺好：切页回来不重建（含这一页刚起手、还没落盘的那一份）
-        // 这一页从空白配方起手，不认导演页那份选中态：上一次的分镜铺在面前，新建就没有位置了。
-        // existing 传 null 走的是编辑器自己的新建那一路（一段空段、配方名空着）：底部「保存」按名字写盘，
-        // 写成功广播「配方已保存」，导演页据此选中它——这一页不提前落盘，也不养第二条写路径
-        await openDirectorEditor(null, null, -1, { container: host, storyOnly: true });
-    }
-
-    onStoryboardShown = () => { ensureBoard().catch(e => console.error("[Neo Studio] storyboard open failed:", e)); };
-    // 导演页「高级模式」要开的是全量编辑器（含时间线那一面）：本页钉着同一份配方时先收回内嵌那一份
-    storyboardReleaseEditor = () => {
-        const cur = currentDirectorEditor();
-        if (!cur || !host.contains(cur.overlay)) return true;   // 本页没钉编辑器：导演页照旧
-        if (!cur.isDirty()) { cur.close(); return true; }
-        toast(t("故事板有未保存的修改，先保存或放弃"));
-        go("storyboard");   // 确认条就在这页里：把人带去能点到的那一面
-        return false;
-    };
-    await ensureBoard();
-}
+// 故事板页的工厂在 pages/storyboard-page.js：内嵌编辑器与让位/补铺那一发都在页自己那一份里，
+// 这一处只把宿主交下去，并把导演页要用的两条钩子接回装配层
+const storyboardPage = createStoryboardPage({ $el, toast, go });
+storyboardReleaseEditor = () => storyboardPage.releaseEditor();
+onStoryboardShown = () => storyboardPage.shown();
+const buildStoryboard = storyboardPage.build;
 
 
 
 
-// ====== 绘画页（文生图）与编辑页（图片编辑）：一页一块面板铺满整栏；素材库走弹窗取用，只挂在编辑页 ======
-// 面板内嵌进这两页（同导演编辑器 setDirectorEditorHost 语义）：面板进页就铺好，素材库的「生成素材」与
-// 图片卡菜单「图片编辑」只负责跳到那一页（面板复用，不重建）。ComfyUI 插件模式没有宿主，照旧弹浮层窗。
-function openPaintTarget(kind) {
-    // 已在目标页时 go() 是同页空转，showView 里「离开该页收起弹窗」那段不触发：
-    // 交还给本页面板后弹窗会盖在面板上，所以入口自己收
-    go(kind === "edit" ? "edit" : "paint");
-    libModal?.close();
-}
-
-// 宿主 onOpen 是一份合并表（setPaintHost 后写覆盖前写），两页共用这一个按 kind 分流的入口。
-// 面板构造时宿主也会发一次（空画布自己种 storyboard 也发）：那一下不是用户要点素材，
-// 建完面板才放开跳页——启动时这一发就不会把页面从首页 / 设置页深链拽走
-let paintArmed = false;
-let paintTextHost = null;   // 输入页那块生图面板的宿主：技能卡直达时按它的 __neoSetPrompt 选中这张技能
-let editArmed = false;
-function paintHostOpen(kind) {
-    if (kind === "text" ? paintArmed : editArmed) openPaintTarget(kind);
-}
-
-function buildPaint(el) {
-    const page = $el("div", { className: "ns-paint" });
-    el.appendChild(page);
-    const main = $el("div", { className: "ns-paint-main" });
-    const textHost = $el("div", { className: "ns-paint-panel ns-paint-text" });
-    page.appendChild(main);
-    main.appendChild(textHost);
-
-    setPaintHost({ text: textHost, onOpen: paintHostOpen });
-    paintTextHost = textHost;
-    // 文生图直接写提示词就能生成
-    openGenMaterialDialog(app.neoGallery, { container: textHost });
-    // 右上角浮一枚提示词入口（绝对定位在预览区上，不为它们空出一行）
-    page.appendChild(paintPromptBar(textHost, "text"));
-    paintArmed = true;
-}
-
-/** 绘画页 / 编辑页右上角那排提示词入口：一颗组合钮——左半「提示词」在按钮下方开提示词浮层，
- *  右半骰子抽一条图像提示词，两条都落进这一页现成面板的提示词框（面板不在了就重建一块带预填的）。
- *  extra 是这一页原本就有的入口（编辑页的「素材库」），排在最前 */
-function paintPromptBar(host, kind, extra = []) {
-    const fill = (text) => fillPaintPrompt(host, kind, text);
-    const presetBtn = $el("button", { className: "ns-btn ns-paint-preset-btn", type: "button", textContent: t("提示词"), title: t("从图像提示词列表里挑一条填进提示词") });
-    const randomBtn = $el("button", { className: "ns-btn ns-paint-random-btn", type: "button", title: t("随机填入一条图像提示词") });
-    setIcon(randomBtn, "dice");
-    presetBtn.onclick = () => openPresetPicker({ kind: "image", onPick: fill, anchor: presetBtn });
-    randomBtn.onclick = async () => {
-        try {
-            const text = await randomPromptText("image");
-            if (!text.trim()) { toast(t("提示词库为空，抽不到图像提示词")); return; }
-            fill(text);
-        } catch (e) { toast(String(e?.message || e)); }   // 桌面端离线那一发要说出需要 ComfyUI，不能报词库为空
-    };
-    return $el("div", { className: "ns-paint-bar" }, [...extra, $el("div", { className: "neo-split-btn" }, [presetBtn, randomBtn])]);
-}
-
-/** 把一段提示词落进那一页现成面板的提示词框：面板在位就只换内容（这一排入口与增强页的落页钮共用这一条），
- *  面板不在这页了才重建一块带预填的 */
-function fillPaintPrompt(host, kind, text) {
-    if (reusePaintPanel(host, kind, null, null, { prompt: text })) return;
-    if (kind === "edit") openImageEditDialog(app.neoGallery, null, "", { container: host, prefill: { prompt: text } });
-    else openGenMaterialDialog(app.neoGallery, { container: host, prefill: { prompt: text } });
-}
-
-/** 增强页那枚落页钮的落点：图像进绘画页那块现成输入卡，视频走出视频页那条现成预填链
- *  （这一页没建过时由启动时注册的 setVideoPageJump 先把页建起来，同素材卡「再来一发」那一条）。
- *  只填提示词框：增强那一发认的是增强技能清单，两页的技能候选是另一套，不拿它改这页的技能 */
-function enhanceApplyToPage(mode, text) {
-    if (mode === "video") { openVideoReuse({ prompt: text }); return; }
-    go("paint");
-    fillPaintPrompt(paintTextHost, "text", text);
-}
-
-function buildEdit(el) {
-    const page = $el("div", { className: "ns-paint" });
-    el.appendChild(page);
-    const main = $el("div", { className: "ns-paint-main" });
-    const editHost = $el("div", { className: "ns-paint-panel ns-paint-edit" });
-    page.appendChild(main);
-    main.appendChild(editHost);
-    // 素材库入口浮在页面右上角（绝对定位在 .ns-paint 上），不为它空出一行；
-    // 弹窗点卡片 = 取用该图当原图，拖进预览区 = 投放当原图
-    const libBtn = $el("button", { className: "ns-btn ns-paint-lib-btn", type: "button", title: t("打开素材库：点卡片取用进图片编辑，拖进预览区投放") });
-    setIconLabel(libBtn, "folder", t("素材库"));
-    libBtn.onclick = () => openLibModal("edit", editPickImage, "image");
-    page.appendChild(paintPromptBar(editHost, "edit", [libBtn]));
-
-    setPaintHost({ edit: editHost, onOpen: paintHostOpen });
-    // 空面板铺好，从素材库把图拖进预览区当原图即可
-    openImageEditDialog(app.neoGallery, null, "", { container: editHost });
-    editArmed = true;
-}
+// 绘画页与编辑页的工厂在 pages/paint-edit-page.js：面板宿主、armed 门与提示词入口都在那一页自己那一份里，
+// 这一处只把宿主交下去，再把三条跨页落点接回来（增强页落页、技能卡选技能、侧栏取原图）
+const paintEdit = createPaintEditPage({
+    $el, toast, go,
+    openLibModal,
+    closeMaterialModal: () => libModal?.close(),
+    gallery: () => app.neoGallery,
+});
+const buildPaint = paintEdit.buildPaint;
+const buildEdit = paintEdit.buildEdit;
 
 // ====== 首页：意图卡片 —— 大字标题 + 板块卡片，点卡直达对应页；右上角入口把这一页切进原地编辑 ======
 // 卡表、板块表与版式形状在 web/studio/home-layout.js；这一块只管 DOM 与「这张卡跳到哪一屏」，
@@ -1628,7 +1461,9 @@ function goDirectorRecipe(name) {
     route();
 }
 
-// 技能卡的落点是这张技能的应用页：视频技能进视频页选中它，生图技能进输入页选中它。
+// 技能卡的落点是这张技能的应用页：技能 frontmatter 写了 landing 就落它声明的那一页
+// （app-registry.js 里认得出的那一名，写歪了就当没写）；没写的照旧走两条启发——
+// 视频技能进视频页选中它，生图技能进输入页选中它。
 // 增强类、模板类技能在这两页的技能下拉里都没有位置：没有可直达的应用页就说清楚再落技能页，不装能跳。
 async function goSkillApply(id) {
     if (!id) { go("skills"); return; }
@@ -1636,11 +1471,19 @@ async function goSkillApply(id) {
         listVideoSkills().catch(() => []),
         listSkills().catch(() => []),
     ]);
-    if (videoSkills.some((s) => s.id === id)) { openVideoReuse({ skill: id }); return; }
     const meta = skills.find((s) => s.id === id);
+    const landing = meta?.landing;
+    if (appById(landing)) {
+        // 视频页那一发要把这张技能选中在技能下拉上，走的是出视频页那条现成预填链
+        if (landing === "video") { openVideoReuse({ skill: id }); return; }
+        go(landing);
+        if (landing === "paint") paintEdit.selectSkill(id);   // 生图面板自己选中这张技能
+        return;
+    }
+    if (videoSkills.some((s) => s.id === id)) { openVideoReuse({ skill: id }); return; }
     if (meta?.gen_image) {
         go("paint");
-        paintTextHost?.__neoSetPrompt?.({ skill: id });   // 技能不在本页候选里时面板自己就不填
+        paintEdit.selectSkill(id);   // 技能不在本页候选里时面板自己就不填
         return;
     }
     toast(t("这张技能没有可直达的应用页（不是生图 / 生视频技能），先进技能页"));
@@ -3379,42 +3222,38 @@ function buildAgentPage(el) {
     agentCtxRefresh = () => panel.refresh();   // 切页 / 选配方时重画面板上的上下文条
 }
 
+// 注册表 id → 页的 build：注册表说清这一页「是什么」（首页卡、页签、深链参数、常驻与否），
+// build 认识 #ns-view、桌面桥与能力表，只有装配层给得出这一句。注册表有一条、这里缺点名，
+// 那一页点下去就是空白页——由 studio/tests/js/app-registry.test.mjs 说，不在运行时兜
+const PAGE_BUILDERS = {
+    home: buildHome, director: buildDirector, paint: buildPaint, edit: buildEdit,
+    gallery: buildGallery, video: buildVideo, pose: buildPose, skills: buildSkills,
+    settings: buildSettings, agent: buildAgentPage, frames: buildFrames, reverse: buildReverse,
+    reverse_video: buildReverseVideo, voice: buildVoiceClone, enhance: buildPromptEnhance,
+    storyboard: buildStoryboard,
+};
+
 function route() {
     let name = (location.hash || "#/home").replace(/^#\//, "").split("?")[0] || "home";
     if (name !== "home") stopHomeEdit();   // 离开首页即弃草稿：首页视图是常驻显隐的，编辑态不能跟着页签留到下一页回来
-    // 首页 / 导演页 / 绘画页 / 编辑页视图常驻：首页卡片直达后三页，内嵌宿主要在第一次点
-    // 「新建导演配方 / 生成素材 / 图片编辑」之前就要注册好
-    ensureView("home", buildHome);
-    ensureView("director", buildDirector);
-    ensureView("paint", buildPaint);
-    ensureView("edit", buildEdit);
-    if (name === "skills") ensureView("skills", buildSkills);
-    else if (name === "video") ensureView("video", buildVideo);
-    else if (name === "agent") ensureView("agent", buildAgentPage);
-    else if (name === "pose") ensureView("pose", buildPose);
-    else if (name === "frames") ensureView("frames", buildFrames);
-    else if (name === "reverse") ensureView("reverse", buildReverse);
-    else if (name === "reverse_video") ensureView("reverse_video", buildReverseVideo);   // 首页卡落的那一页：顶栏没有它的页签
-    else if (name === "voice") ensureView("voice", buildVoiceClone);
-    else if (name === "enhance") ensureView("enhance", buildPromptEnhance);   // 首页卡落的那一页：顶栏没有它的页签
-    else if (name === "storyboard") ensureView("storyboard", buildStoryboard);   // 首页卡落的那一页：顶栏没有它的页签
-    else if (name === "settings") {
-        ensureView("settings", buildSettings);
-        // 深链 #/settings?tab=mcp：智能体页「MCP」入口跳来这，视图常驻时也要落到那一栏
-        const query = new URLSearchParams(location.hash.split("?")[1] || "");
-        const tab = query.get("tab");
-        if (tab && settingsShow) {
-            settingsShow(tab);
-            if (tab === "agent") agentPrefs.prefill(query);   // 焦点链的技能与宽高照深链落进表单
-        }
+    // 注册表里 eager 那几条（首页 / 导演 / 绘画 / 编辑）每次导航都注册：首页卡片直达后三页，
+    // 内嵌宿主要在第一次点「新建导演配方 / 生成素材 / 图片编辑」之前就要挂好
+    for (const app of STUDIO_APPS) {
+        if (app.eager) ensureView(app.id, PAGE_BUILDERS[app.id]);
     }
-    else if (name !== "home") ensureView("gallery", buildGallery);
+    const app = appById(name);
+    if (app) ensureView(app.id, PAGE_BUILDERS[app.id]);
+    else if (name !== "home") ensureView("gallery", buildGallery);   // 认不出的名字：画廊预热，视图落回首页
     // 认不出的 tab 名（深链、别的构建里已删掉的页）没有视图可显：showView 会把全部视图一起隐掉，
     // 窗口停在只剩顶栏的空白页
     if (!views.has(name)) name = "home";
-    // 深链带的那一个目标要落到刚建好的页上：#/?recipe= 开那一份导演配方
-    const deep = new URLSearchParams(location.hash.split("?")[1] || "");
-    if (name === "director" && deep.get("recipe")) directorOpenRecipe?.(deep.get("recipe"));
+    // 深链带的那一个目标要落到刚建好的页上：注册表那一条上的 deep 说的就是这一页认哪一个参数
+    const query = new URLSearchParams(location.hash.split("?")[1] || "");
+    if (app?.deep === "recipe" && query.get("recipe")) directorOpenRecipe?.(query.get("recipe"));
+    if (app?.deep === "tab" && query.get("tab") && settingsShow) {
+        settingsShow(query.get("tab"));
+        if (query.get("tab") === "agent") agentPrefs.prefill(query);   // 焦点链的技能与宽高照深链落进表单
+    }
     showView(name);
 }
 

@@ -776,11 +776,15 @@ test("技能卡的落点是应用页：生图技能进输入页，视频技能�
         { id: "custom_img", section: "create", title: "生图技能卡", target: "skill", value: "skill_img" },
         { id: "custom_video", section: "create", title: "视频技能卡", target: "skill", value: "skill_video" },
         { id: "custom_none", section: "create", title: "增强技能卡", target: "skill", value: "skill_none" },
+        { id: "custom_land", section: "create", title: "声明落地页的卡", target: "skill", value: "skill_land" },
+        { id: "custom_badland", section: "create", title: "落地页写歪的卡", target: "skill", value: "skill_badland" },
     ] });
     mockRoute("/rs_prompts/skills", () => jsonResponse([
         { id: "skill_img", gen_image: true },
         { id: "skill_video", gen_video: true, mode: "t2v" },
         { id: "skill_none" },
+        { id: "skill_land", landing: "storyboard" },
+        { id: "skill_badland", landing: "not_a_page", gen_image: true },
     ]));
     mockRoute("/neo_video_gen/models", () => jsonResponse({
         diffusion_models: [], text_encoders: [], vae: [], loras: [],
@@ -812,6 +816,21 @@ test("技能卡的落点是应用页：生图技能进输入页，视频技能�
     assert.equal(window.location.hash, "#/skills", "增强类技能在两页下拉里都没有位置，落技能页");
     assert.ok(document.getElementById("ns-toast")?.textContent.includes("没有可直达的应用页"),
         "没有可直达的应用页这件事要在界面上说出来");
+
+    // 技能 frontmatter 里的 landing 说了算：这张技能声明落宫格图分镜页，就不走那两条启发
+    const toastTextBefore = document.getElementById("ns-toast")?.textContent;
+    click(cardOf(home, "声明落地页的卡"));
+    await settle();
+    assert.equal(window.location.hash, "#/storyboard", "技能写了 landing 就落它声明的那一页");
+    assert.ok(document.querySelector(".ns-storyboard"), "落点那一页要真挂在面前");
+    assert.equal(document.getElementById("ns-toast")?.textContent, toastTextBefore,
+        "落到了声明的那一页，就不报「没有可直达的应用页」");
+    await goHome();
+
+    click(cardOf(home, "落地页写歪的卡"));
+    await settle();
+    assert.equal(window.location.hash, "#/paint",
+        "landing 写了注册表认不出的一名就当没写：生图技能照旧进输入页");
 });
 
 test("落位搬运：同板块按格子落位，自建卡能落进别的板块，内置卡落不出板块", async () => {

@@ -2008,6 +2008,107 @@ class TestCanvasBindCandidates(unittest.TestCase):
         self.assertEqual(plan["candidates"], [])
 
 
+@unittest.skipUnless(PROMPTS_AVAILABLE, _reason)
+class TestSkillLanding(unittest.TestCase):
+    """技能落地页（frontmatter 的 landing）：扫描透传、写盘校验、旧技能落回那两条启发"""
+
+    def setUp(self):
+        self.skill_mod = getattr(prompts_mod, "skill", None)
+        if self.skill_mod is None:
+            self.skipTest("prompts 未暴露 skill 模块")
+        self._tmp = tempfile.TemporaryDirectory()
+        self._orig_dir = self.skill_mod.SKILL_CUSTOM_DIR
+        self.skill_mod.SKILL_CUSTOM_DIR = self._tmp.name
+
+    def tearDown(self):
+        self.skill_mod.SKILL_CUSTOM_DIR = self._orig_dir
+        self._tmp.cleanup()
+
+    def _write_skill(self, sid, meta_lines, body="body"):
+        d = os.path.join(self._tmp.name, sid)
+        os.makedirs(d, exist_ok=True)
+        text = "\n".join(["---"] + meta_lines + ["---", "", body])
+        with open(os.path.join(d, "skill.md"), "w", encoding="utf-8") as f:
+            f.write(text)
+
+    def _read_meta(self, sid):
+        with open(os.path.join(self._tmp.name, sid, "skill.md"), encoding="utf-8") as f:
+            meta, body = self.skill_mod.split_frontmatter(f.read())
+        return meta, body
+
+    def _scanned(self):
+        return {s["id"]: s for s in self.skill_mod.scan_skills()}
+
+    def test_landing_scanned(self):
+        self._write_skill("land-a", [
+            "name: Land A", "category: image_gen", "gen_image: true", "landing: storyboard",
+        ])
+        self.assertEqual(self._scanned()["land-a"]["landing"], "storyboard")
+
+    def test_unknown_landing_dropped_and_legacy_blank(self):
+        self._write_skill("land-u", ["name: Land U", "landing: not_a_page"])
+        self._write_skill("land-legacy", ["name: Land Legacy", "gen_image: true"])
+        scanned = self._scanned()
+        self.assertEqual(scanned["land-u"]["landing"], "", "认不出的落点当没声明：首页卡落回那两条启发")
+        self.assertEqual(scanned["land-legacy"]["landing"], "", "旧技能没有这一项就是空")
+
+    def test_save_writes_valid_landing(self):
+        self.assertTrue(self.skill_mod.save_skill_main(
+            "land-w", "Land W", "body", None, "custom", landing="voice"))
+        meta, _ = self._read_meta("land-w")
+        self.assertEqual(meta.get("landing"), "voice")
+
+    def test_save_rejects_unknown_landing(self):
+        self.skill_mod.save_skill_main("land-r", "Land R", "body", None, "custom", landing="paint")
+        self.assertTrue(self.skill_mod.save_skill_main(
+            "land-r", "Land R2", "body2", None, "custom", landing="not_a_page"))
+        meta, _ = self._read_meta("land-r")
+        self.assertNotIn("landing", meta, "写进认不出的一名等于删掉这一项")
+
+    def test_save_without_landing_preserves_existing(self):
+        # 技能编辑表单没有这一项：普通保存不得清掉用户写好的落点
+        self.skill_mod.save_skill_main("land-k", "Land K", "body", None, "custom", landing="director")
+        self.assertTrue(self.skill_mod.save_skill_main("land-k", "Land K2", "body2", None, "custom"))
+        meta, _ = self._read_meta("land-k")
+        self.assertEqual(meta.get("landing"), "director")
+
+    def test_empty_landing_removes_field(self):
+        self.skill_mod.save_skill_main("land-e", "Land E", "body", None, "custom", landing="gallery")
+        self.assertTrue(self.skill_mod.save_skill_main(
+            "land-e", "Land E", "body", None, "custom", landing=""))
+        meta, _ = self._read_meta("land-e")
+        self.assertNotIn("landing", meta)
+
+    def test_serialize_puts_landing_before_created_at(self):
+        text = self.skill_mod.serialize_frontmatter(
+            {"name": "L", "landing": "paint", "created_at": "2026-01-01T00:00:00+00:00"}, "body")
+        lines = text.splitlines()
+        landed = next(i for i, line in enumerate(lines) if line.startswith("landing:"))
+        stamped = next(i for i, line in enumerate(lines) if line.startswith("created_at:"))
+        self.assertLess(landed, stamped,
+                        "落点跟着生成类那一排字段写，不挤到 created_at 那一片")
+
+    def test_load_skill_route_returns_landing(self):
+        self._write_skill("land-d", ["name: Land D", "landing: enhance"])
+
+        async def _json():
+            return {"id": "land-d"}
+
+        resp = asyncio.run(self.skill_mod.rs_prompts_load_skill(
+            types.SimpleNamespace(json=_json)))
+        self.assertEqual(json.loads(resp.body)["landing"], "enhance")
+
+    def test_save_skill_route_round_trip(self):
+        async def _payload():
+            return {"id": "land-route", "name": "Land Route", "content": "body", "landing": "frames"}
+
+        resp = asyncio.run(self.skill_mod.rs_prompts_save_skill(
+            types.SimpleNamespace(json=_payload)))
+        self.assertTrue(json.loads(resp.body)["success"])
+        meta, _ = self._read_meta("land-route")
+        self.assertEqual(meta.get("landing"), "frames")
+
+
 if __name__ == '__main__':
     unittest.main()
 
