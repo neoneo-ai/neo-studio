@@ -3408,6 +3408,33 @@
     user-select: none;
 }
 
+/* 落地页下拉（multi_turn 行下方）：标签 + 一条窄下拉，选项值 = 应用注册表里的页 id */
+.rs-skill-landing-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 10px;
+}
+.rs-skill-landing-label {
+    font-size: 12px;
+    color: #ccc;
+    user-select: none;
+    flex-shrink: 0;
+}
+.rs-skill-landing-select {
+    max-width: 240px;
+    padding: 2px 8px;
+    font-size: 11px;
+    border-radius: 4px;
+    background: #2a2a2a;
+    color: #ccc;
+    border: 1px solid #444;
+}
+.rs-skill-landing-select:disabled {
+    opacity: 0.55;
+    cursor: default;
+}
+
 .rs-skill-modal-header .rs-skill-detail-badge {
     flex-shrink: 0;
     padding: 2px 7px;

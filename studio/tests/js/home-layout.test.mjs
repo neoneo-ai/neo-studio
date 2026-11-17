@@ -770,21 +770,44 @@ test("旧版式里的直连卡与编辑模式卡：照读照跳照删，弹窗�
     assert.deepEqual(lastCall("/neo_home/layout", "POST").body.custom, [], "落盘的形状里没有这两张旧卡");
 });
 
-test("技能卡的落点是应用页：生图技能进输入页，视频技能进出视频页那一发，没有应用页的落技能页", async () => {
+test("技能卡的落点是应用页：生图技能进输入页，视频技能进出视频页那一发，增强技能进提示词增强页，任务技能落技能页；声明了落地页就落那一页", async () => {
     mountStudio();
     mockLayout({ custom: [
-        { id: "custom_img", section: "create", title: "生图技能卡", target: "skill", value: "skill_img" },
-        { id: "custom_video", section: "create", title: "视频技能卡", target: "skill", value: "skill_video" },
-        { id: "custom_none", section: "create", title: "增强技能卡", target: "skill", value: "skill_none" },
-        { id: "custom_land", section: "create", title: "声明落地页的卡", target: "skill", value: "skill_land" },
-        { id: "custom_badland", section: "create", title: "落地页写歪的卡", target: "skill", value: "skill_badland" },
+        { id: "custom_img", section: "create", title: "生图技能卡", sub: "打开这一发技能的应用页", target: "skill", value: "skill_img" },
+        { id: "custom_video", section: "create", title: "视频技能卡", sub: "打开这一发技能的应用页", target: "skill", value: "skill_video" },
+        { id: "custom_none", section: "create", title: "增强技能卡", sub: "打开这一发技能的应用页", target: "skill", value: "skill_none" },
+        { id: "custom_task", section: "create", title: "任务技能卡", sub: "打开这一发技能的应用页", target: "skill", value: "skill_task" },
+        { id: "custom_land", section: "create", title: "声明落地页的卡", sub: "打开这一发技能的应用页", target: "skill", value: "skill_land" },
+        { id: "custom_badland", section: "create", title: "落地页写歪的卡", sub: "打开这一发技能的应用页", target: "skill", value: "skill_badland" },
+        { id: "custom_lv", section: "create", title: "声明视频页的卡", sub: "打开这一发技能的应用页", target: "skill", value: "skill_lv" },
+        { id: "custom_lp", section: "create", title: "声明绘画页的卡", sub: "打开这一发技能的应用页", target: "skill", value: "skill_lp" },
+        { id: "custom_le", section: "create", title: "声明增强页的卡", sub: "打开这一发技能的应用页", target: "skill", value: "skill_le" },
+        { id: "custom_out", section: "create", title: "扩图技能卡", sub: "打开这一发技能的应用页", target: "skill", value: "qwen_image_21_outpaint" },
+        { id: "custom_edit", section: "create", title: "编辑技能卡", sub: "打开这一发技能的应用页", target: "skill", value: "skill_edit_plain" },
+        { id: "custom_voice", section: "create", title: "声明语音页的卡", sub: "打开这一发技能的应用页", target: "skill", value: "skill_voice" },
+        { id: "custom_written", section: "create", title: "自己写过副标题的卡", sub: "我自己写的一句话", target: "skill", value: "skill_img" },
     ] });
     mockRoute("/rs_prompts/skills", () => jsonResponse([
         { id: "skill_img", gen_image: true },
         { id: "skill_video", gen_video: true, mode: "t2v" },
         { id: "skill_none" },
+        { id: "skill_task", category: "task" },
         { id: "skill_land", landing: "storyboard" },
         { id: "skill_badland", landing: "not_a_page", gen_image: true },
+        { id: "skill_lv", landing: "video", gen_video: true, mode: "t2v" },
+        { id: "skill_lp", landing: "paint", gen_image: true },
+        { id: "skill_le", landing: "enhance" },
+        { id: "qwen_image_21_outpaint", category: "image_gen", gen_image: true, mode: "edit", requires_ref: true },
+        { id: "skill_edit_plain", category: "image_gen", gen_image: true, mode: "edit", requires_ref: true },
+        { id: "skill_voice", landing: "voice" },
+        { id: "add_img", category: "image_gen", gen_image: true },
+        { id: "add_video", gen_video: true, mode: "t2v" },
+        { id: "add_none", gen_text: true },
+        { id: "add_task", category: "task", task: true },
+        { id: "add_land_voice", landing: "voice" },
+        { id: "add_land_page", landing: "storyboard" },
+        { id: "qwen_image_21_local_edit", category: "image_gen", gen_image: true, mode: "local", requires_ref: true },
+        { id: "add_edit_plain", category: "image_gen", gen_image: true, mode: "edit", requires_ref: true },
     ]));
     mockRoute("/neo_video_gen/models", () => jsonResponse({
         diffusion_models: [], text_encoders: [], vae: [], loras: [],
@@ -811,10 +834,38 @@ test("技能卡的落点是应用页：生图技能进输入页，视频技能�
     assert.equal(window.location.hash, "#/paint", "生图技能卡进的是输入页那一发");
     await goHome();
 
+    // 只能带参考图的编辑技能在输入页那块面板的候选里没有位置：落图片编辑页，对得上一发模式的连模式一起切
+    click(cardOf(home, "扩图技能卡"));
+    await settle();
+    await sleep(120);   // 技能下拉是异步填的：切模式那一下赋的技能值要等列表落位
+    assert.equal(window.location.hash, "#/edit", "只能带参考图的编辑技能落图片编辑页");
+    assert.equal(document.querySelector(".ns-paint-edit .neo-gallery-edit-mode-select")?.value, "outpaint",
+        "扩图技能要把页面切在扩图那一发");
+    assert.equal(document.querySelector(".ns-paint-edit .neo-gallery-gm-skill-sel")?.value, "qwen_image_21_outpaint",
+        "那一发要把这张技能选中");
+    await goHome();
+
+    click(cardOf(home, "编辑技能卡"));
+    await settle();
+    await sleep(120);
+    assert.equal(window.location.hash, "#/edit", "对不上一发模式的编辑技能也落图片编辑页");
+    assert.equal(document.querySelector(".ns-paint-edit .neo-gallery-edit-mode-select")?.value, "outpaint",
+        "落点只把技能填进面板，不动用户那一发的模式");
+    assert.equal(document.querySelector(".ns-paint-edit .neo-gallery-gm-skill-sel")?.value, "skill_edit_plain",
+        "技能选中在这块面板上");
+    await goHome();
+
     click(cardOf(home, "增强技能卡"));
     await settle();
-    assert.equal(window.location.hash, "#/skills", "增强类技能在两页下拉里都没有位置，落技能页");
-    assert.ok(document.getElementById("ns-toast")?.textContent.includes("没有可直达的应用页"),
+    assert.equal(window.location.hash, "#/enhance",
+        "增强类技能（含没写分类的那一类）落提示词增强页：这一页的技能 chip 就收这一池");
+    assert.ok(document.querySelector(".ns-enhance-stage"), "增强落点那一页要真挂在面前");
+
+    const taskToastBefore = document.getElementById("ns-toast")?.textContent;
+    click(cardOf(home, "任务技能卡"));
+    await settle();
+    assert.equal(window.location.hash, "#/skills", "任务类技能三处落点都没有位置，落技能页");
+    assert.notEqual(document.getElementById("ns-toast")?.textContent, taskToastBefore,
         "没有可直达的应用页这件事要在界面上说出来");
 
     // 技能 frontmatter 里的 landing 说了算：这张技能声明落宫格图分镜页，就不走那两条启发
@@ -831,6 +882,71 @@ test("技能卡的落点是应用页：生图技能进输入页，视频技能�
     await settle();
     assert.equal(window.location.hash, "#/paint",
         "landing 写了注册表认不出的一名就当没写：生图技能照旧进输入页");
+    await goHome();
+
+    // 三发真实落点：声明视频页走的就是出视频那一发（技能选中在页里），声明绘画页进输入页，
+    // 声明增强页进提示词增强页——落点与启发同页时也照声明走
+    click(cardOf(home, "声明视频页的卡"));
+    await settle();
+    assert.equal(window.location.hash, "#/video", "landing=video 进出视频页");
+    assert.equal(document.querySelector(".ns-video .ns-video-skill")?.value, "skill_lv",
+        "声明的落点是视频页时，那一发把这张技能选中在页里");
+    await goHome();
+
+    click(cardOf(home, "声明绘画页的卡"));
+    await settle();
+    assert.equal(window.location.hash, "#/paint", "landing=paint 进输入页那一发");
+    await goHome();
+
+    const toastBeforeEnh = document.getElementById("ns-toast")?.textContent;
+    click(cardOf(home, "声明增强页的卡"));
+    await settle();
+    assert.equal(window.location.hash, "#/enhance",
+        "增强技能声明了 enhance 就落增强页：落点与启发同页时也照声明走");
+    assert.ok(document.querySelector(".ns-enhance-stage"), "落点那一页要真挂在面前");
+    assert.equal(document.getElementById("ns-toast")?.textContent, toastBeforeEnh,
+        "落到了声明的那一页，就不报「没有可直达的应用页」");
+
+    // 声明语音页的技能落语音页：语音页写死用 cosyvoice_voice，落过去就是点即用
+    click(cardOf(home, "声明语音页的卡"));
+    await settle();
+    assert.equal(window.location.hash, "#/voice", "landing=voice 进语音页那一发");
+    await goHome();
+
+    // 卡上那一句在「添加卡片」落盘那一步就按落点写好，首页渲染只读版式里存的这一句：
+    // 表单里选上技能，卡预览落的就是那一页的那句话；人在预览里点字写过的，落盘也还是他写的那一句
+    await enterEdit(home);
+    click(gridOf(home, "创作").querySelector(".ns-home-add-tile"));
+    await flush();
+    const addSel = () => fieldIn(dlg(), "跳转目标").querySelector("select");
+    const addSub = () => lineIn("ns-home-card-sub").textContent;
+    const pickAdd = async (id) => { pick(addSel(), id); await flush(); };
+    await pickAdd("add_video");
+    assert.equal(addSub(), "进出视频页，这一发直接排成片子", "落视频页的技能写进出视频页这一发");
+    await pickAdd("add_land_voice");
+    assert.equal(addSub(), "进语音页，用克隆出的音色念这段字", "声明语音页的写克隆音色念这段字");
+    await pickAdd("add_land_page");
+    assert.equal(addSub(), "进「宫格图分镜」那一页", "落点是别的注册表页时报那一页的页名");
+    await pickAdd("qwen_image_21_local_edit");
+    assert.equal(addSub(), "进图片编辑 · 局部那一发", "对得上一发模式的编辑技能写那一发");
+    await pickAdd("add_edit_plain");
+    assert.equal(addSub(), "进图片编辑，带一张参考图改这一张", "对不上一发模式的编辑技能只说落图片编辑");
+    await pickAdd("add_none");
+    assert.equal(addSub(), "进提示词增强页，先把这一发润色到位", "落增强页的卡写先把这一发润色");
+    await pickAdd("add_task");
+    assert.equal(addSub(), "先进技能页，在这一叠里挑着用它", "没有可直达应用页的技能写先进技能页");
+    await pickAdd("add_img");
+    assert.equal(addSub(), "进输入页，写下画面就出图", "落输入页的卡写写下画面就出图");
+    typeLine(lineIn("ns-home-card-sub"), "我自己写的一句话");
+    await pickAdd("add_land_voice");
+    assert.equal(addSub(), "我自己写的一句话", "点字写过的副标题自动填换不掉");
+    click(dlgBtn("save"));
+    await flush();
+    click(home.querySelector(".ns-home-edit-entry"));
+    await flush(40);
+    const savedAdd = lastCall("/neo_home/layout", "POST").body.custom.at(-1);
+    assert.deepEqual([savedAdd.value, savedAdd.sub], ["add_land_voice", "我自己写的一句话"],
+        "落盘的就是这一张卡：跳转目标写它落的那一页，人写过的那一句副标题原样落盘");
 });
 
 test("落位搬运：同板块按格子落位，自建卡能落进别的板块，内置卡落不出板块", async () => {
@@ -989,11 +1105,19 @@ test("首页原地编辑的文案在英文界面也有话可说", () => {
     assert.ok(literals.length > 20, "文案应直接从 t() 字面量里扫");
     assert.deepEqual(literals.filter((s) => !en.includes(`"${s}"`)), [], "英文字典缺项会在英文界面落回中文");
     const app = fs.readFileSync(path.join(webDir, "studio", "pages", "home-page.js"), "utf8");
+    const landing = fs.readFileSync(path.join(webDir, "studio", "skill-landing.js"), "utf8");
     for (const s of ["编辑首页", "完成", "完成首页编辑：保存版式并退出", "已收起",
         "首页卡片已全部移除，在「编辑首页」的添加卡片里加回来。",
         "已保存：插件页、桌面窗口与手机页的首页同步生效", "保存失败：{msg}",
-        "这张技能没有可直达的应用页（不是生图 / 生视频技能），先进技能页"]) {
+        "这张技能没有可直达的应用页（不是生图 / 生视频 / 提示词增强技能），先进技能页"]) {
         assert.ok(app.includes(`"${s}"`) && en.includes(`"${s}"`), `首页编辑文案缺英文项：${s}`);
+    }
+    // 落点副标题那几句写在 skill-landing.js：添加卡片落盘时与首页渲染读的都是这一份
+    for (const s of ["打开这一发技能的应用页", "进出视频页，这一发直接排成片子", "进输入页，写下画面就出图",
+        "进图片编辑，带一张参考图改这一张", "进图片编辑 · {mode}那一发",
+        "进提示词增强页，先把这一发润色到位", "进语音页，用克隆出的音色念这段字",
+        "先进技能页，在这一叠里挑着用它", "进「{page}」那一页"]) {
+        assert.ok(landing.includes(`"${s}"`) && en.includes(`"${s}"`), `落点副标题缺英文项：${s}`);
     }
     for (const s of ["保存版式", "完成首页编辑（Esc）", "右下角「编辑首页」", "收起板块", "下移板块"]) {
         assert.ok(!app.includes(`"${s}"`) && !src.includes(`"${s}"`),

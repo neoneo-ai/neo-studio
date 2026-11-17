@@ -627,15 +627,29 @@ the director page uses, and Studio lands that write on the asset modal with the 
 buttons clicking into nothing. Only one editor exists in the window:
   while this page holds a clean copy the director page's 高级模式 reclaims it before opening the full editor, and an
   unsaved copy stays where it is instead of closing silently. The top bar gives it no tab.
-- A skill card lands on the page that applies the skill: `openHomeCard` checks the id against `listVideoSkills()`, and a
-  video skill goes through `openVideoReuse({ skill })` so the video page opens with that skill selected (when that page
-  was never built in this window, the `setVideoPageJump` hook the app registers at startup builds it first and the run is
-  handed over in the same gesture; only the canvas page, which has no app layer, says "The video page is not ready yet").
-  A skill that is no longer in that page's dropdown names the skill and points to the Skills page, and fills everything
-  else as before. An
-  image-generation skill opens the paint page and `paintTextHost.__neoSetPrompt({ skill })` selects it. A skill with no
-  slot in either page's skill list (enhancement / template skills) says on screen that it has no page to land on and
-  opens the skills page.
+- A skill card lands on the page that applies the skill: frontmatter `landing:` sends it to the page it declares
+  (`video` / `paint` / `edit` / `enhance` / `voice` / `skills`, a name outside that set reads as unset;
+  `studio/skills/presets/cosyvoice_voice` is the preset that rides `landing: voice` to the voice page), with the read and
+  validation rules in the Landing page section of [en/skills.md](skills.md). Without a declaration the three heuristics
+  run: `openHomeCard` checks the id against `listVideoSkills()`, and a video skill goes through
+  `openVideoReuse({ skill })` so the video page opens with that skill selected (when that page was never built in this
+  window, the `setVideoPageJump` hook the app registers at startup builds it first and the run is handed over in the same
+  gesture; only the canvas page, which has no app layer, says "The video page is not ready yet"). An image-generation
+  skill that takes plain text opens the paint page and selects it there; one that only takes a reference image lands on
+  the image-edit page, and a skill matching one edit mode (outpaint / local / pose / angle - the single
+  `EDIT_MODE_SKILLS` list in `gen-utils.js`) switches to that mode too. Prompt-enhancement skills (the same pool the
+  enhance page offers) land on the enhance page. A skill removed from the skills page, or one with no slot in the landing
+  page's skill dropdown, says on screen that it has no page to land on and opens the skills page.
+- The default subtitle line on a skill card ("Opens the page that applies this skill") is written from the landing
+  at the moment 添加卡片 saves the card, and the home page renders exactly what the layout file stores: the card
+  says what the click does - "Opens 输入页 - write the scene and get the image", "Opens 出视频 with this skill ready
+  to render", "Opens 图片编辑 in 扩图 mode", "Opens 语音 to speak this text with a cloned voice", "Opens 技能 - pick
+  it from the list there" - and names the page for any other registry target. The judgment is the one the click runs
+  (`landingAppId` in `pages/home-page.js`) and the lines live in `studio/web/studio/skill-landing.js` (`landingSub`,
+  which reads the mode names from `HOME_CARDS`); `autoFillShape` in `home-layout.js` reaches it through the
+  `skillLandingSub` the page hands to the editor, with the skill and video-skill lists `pickLists` loads once on
+  entering edit mode. A subtitle typed on the card is never auto-filled over, and cards stored before this change
+  keep the shipped default line until they are rebuilt.
 - The drop gesture is vendored SortableJS (`studio/web/vendor/sortable.min.js`, 1.15.7, MIT, pulled in by
   `import "../vendor/sortable.min.js"` in `home-layout.js`, the same route marked/purify take — the three third-party
   libs all live in `studio/web/vendor/` — nothing fetched at runtime):

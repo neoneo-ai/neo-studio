@@ -6,9 +6,11 @@
 import { t, tf } from "../../js/core/i18n.js";
 import { icon } from "../../js/core/icons.js";
 import { openImageEditMode, openVideoReuse } from "../../gallery-gen.js";
+import { editModeForSkill } from "../../gen-utils.js";
 import { listRecipes, listVideoSkills } from "../../recipes.js";
-import { listSkills, skillDisplayName } from "../../skill.js";
+import { listSkills, skillDisplayName, skillAcceptsText, isEnhanceSkill } from "../../skill.js";
 import { appById } from "../app-registry.js";
+import { landingSub } from "../skill-landing.js";
 import { HOME_SECTIONS, createHomeInlineEditor, heroText, layoutSections, loadHomeLayout, normalizeLayout, sectionOrder, visibleCards } from "../home-layout.js";
 
 export function createHomePage({ $el, toast, go, route, currentView, openExternalUrl, paintEdit }) {
@@ -40,7 +42,8 @@ function buildHome(el) {
     el.classList.add("ns-home");
     homeViewEl = el;
     homeEditor = createHomeInlineEditor({
-        listRecipes, listSkills, skillLabel: skillDisplayName, toast,
+        listRecipes, listSkills, listVideoSkills, skillLabel: skillDisplayName, toast,
+        skillLandingSub,   // 自建卡的副标题在落盘那一步按落点写好：判据在这块页上，句子在 skill-landing.js
         onDraft: (draft) => { if (!homeEditing) return; homeLayout = draft; renderHome(); },
     });
     renderHome();
@@ -305,32 +308,58 @@ function goDirectorRecipe(name) {
 }
 
 // 技能卡的落点是这张技能的应用页：技能 frontmatter 写了 landing 就落它声明的那一页
-// （app-registry.js 里认得出的那一名，写歪了就当没写）；没写的照旧走两条启发——
-// 视频技能进视频页选中它，生图技能进输入页选中它。
-// 增强类、模板类技能在这两页的技能下拉里都没有位置：没有可直达的应用页就说清楚再落技能页，不装能跳。
+// （app-registry.js 里认得出的那一名，写歪了就当没写）；没写的照旧走三条启发——
+// 视频技能进视频页选中它，生图技能进输入页选中它，提示词增强技能（图像 / 视频两池，与增强页的技能
+// chip 同一口径）进提示词增强页。任务类技能三处都没有位置：没有可直达的应用页就说清楚再落技能页，不装能跳。
 async function goSkillApply(id) {
     if (!id) { go("skills"); return; }
-    const [videoSkills, skills] = await Promise.all([
+    const [videoSkills, metas] = await Promise.all([
         listVideoSkills().catch(() => []),
         listSkills().catch(() => []),
     ]);
-    const meta = skills.find((s) => s.id === id);
-    const landing = meta?.landing;
-    if (appById(landing)) {
-        // 视频页那一发要把这张技能选中在技能下拉上，走的是出视频页那条现成预填链
-        if (landing === "video") { openVideoReuse({ skill: id }); return; }
-        go(landing);
-        if (landing === "paint") paintEdit.selectSkill(id);   // 生图面板自己选中这张技能
-        return;
-    }
-    if (videoSkills.some((s) => s.id === id)) { openVideoReuse({ skill: id }); return; }
-    if (meta?.gen_image) {
+    const skills = Array.isArray(metas) ? metas : [];   // listSkills 对非 2xx 会把错误体当结果返回，这里兜住
+    const landing = landingAppId(skills.find((s) => s.id === id), Array.isArray(videoSkills) ? videoSkills : []);
+    // 落点判在下面这一发的 landingAppId：与「添加卡片」落盘时写进版式的那一句副标题同一份，卡上写的话就是点下去的去处
+    if (landing === "video") { openVideoReuse({ skill: id }); return; }   // 技能下拉走那条现成预填链选中这张
+    if (landing === "edit") { goEditSkill(id); return; }   // 图片编辑那一发：对得上一发模式就切进那一发
+    if (landing === "paint") {
         go("paint");
-        paintEdit.selectSkill(id);   // 技能不在本页候选里时面板自己就不填
+        paintEdit.selectSkill(id);   // 输入页那块面板只收能纯文生图的技能：不在候选里时面板自己就不填
         return;
     }
-    toast(t("这张技能没有可直达的应用页（不是生图 / 生视频技能），先进技能页"));
-    go("skills");
+    if (landing === "enhance") { go("enhance"); return; }   // 增强页的技能 chip 自己列这一池，落过去就在手边
+    if (landing === "skills") {
+        toast(t("这张技能没有可直达的应用页（不是生图 / 生视频 / 提示词增强技能），先进技能页"));
+        go("skills");
+        return;
+    }
+    go(landing);   // 技能自己声明的落点（app-registry.js 里认得出的其余页）：直接落那一页
+}
+
+// 图片编辑那一发：这张技能对得上一发模式（扩图 / 局部 / 姿势 / 机位）就先切进那一发，模式专属的行与提示词当场在；
+// 技能下拉是异步填的，切模式那一下赋的技能值会落空，所以再把这张技能补选中（面板候选里没有它时自己就不填）
+function goEditSkill(id) {
+    go("edit");
+    const mode = editModeForSkill(id);
+    if (mode) openImageEditMode(mode);
+    paintEdit.selectEditSkill(id);
+}
+
+/** 这张技能落的那一页（app-registry.js 里认得出的一名）：声明过的先认，没声明的走上面那三条启发；
+ *  没有这张技能（技能页删了它）就是技能页 */
+function landingAppId(meta, videoSkills = []) {
+    if (!meta) return "skills";
+    if (appById(meta.landing)) return meta.landing;
+    if (videoSkills.some((s) => s.id === meta.id)) return "video";
+    if (meta.gen_image) return skillAcceptsText(meta) ? "paint" : "edit";
+    if (isEnhanceSkill(meta)) return "enhance";
+    return "skills";
+}
+
+/** 这张技能卡的副标题：落点判出来再写成那一页的话（那几句话在 skill-landing.js）。
+ *  「添加卡片」落盘那一步由这一页交给版式编辑器（host.skillLandingSub），写进版式的就是这一句 */
+function skillLandingSub(meta, videoSkills) {
+    return landingSub(landingAppId(meta, videoSkills), { mode: editModeForSkill(meta?.id) });
 }
 
 // 启动读一次版式（不挡启动链：先出默认版式，版式到了再重画）；编辑控件落盘后同一条事件重画并退出编辑

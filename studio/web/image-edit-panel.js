@@ -18,15 +18,11 @@ import { t, tf } from "./js/core/i18n.js";
 import { icon, setIcon } from "./js/core/icons.js";
 import { createAngleOrb, anglePrompt, rotationLabel, rotationToDisplay, displayToRotation, tiltLabel, zoomLabel, snapToNearest, ROTATION_VALUES, TILT_VALUES, ZOOM_VALUES } from "./angle/angle-orb.js";
 import {
-    QWEN_IMAGE_SKILL_ID, makeStoryWindowDraggable, copyImageToInput, _paintHosts,
+    QWEN_IMAGE_SKILL_ID, EDIT_MODE_SKILLS, makeStoryWindowDraggable, copyImageToInput, _paintHosts,
     storyPanelRoot, chipButton, skillParamsChip, guardMainModelFamily, reuseModelOverlay,
     reusePaintPanel, notifyPrefillFilled,
 } from "./gen-utils.js";
 
-// 扩图专用技能：LoRA 固定在其 config.json（缺失时后端提示并跳过）
-const QWEN_OUTPAINT_SKILL_ID = "qwen_image_21_outpaint";
-// 高分局部编辑技能：涂抹区域自动裁剪-高分重绘-羽化合并（无额外 LoRA）
-const QWEN_LOCAL_EDIT_SKILL_ID = "qwen_image_21_local_edit";
 // 姿势锁形技能（ControlNet）：第 1 张额外参考位放控制图，锁住它的姿势与构图重出原图
 const QWEN_CONTROLNET_SKILL_ID = "qwen_image_21_controlnet";
 const POSE_MAX_REFS = 1;   // 姿势锁形一发只吃这一张控制图：这个模式下参考图区只给一格
@@ -1108,7 +1104,7 @@ export function openImageEditDialog(gallery, image = null, subfolder = "", opts 
         syncModeRows();
 
         // 技能选择（程序改 value 不触发 onchange，自定参数要自己重放到新技能的配置）
-        skillSel.value = { outpaint: QWEN_OUTPAINT_SKILL_ID, local: QWEN_LOCAL_EDIT_SKILL_ID, pose: QWEN_CONTROLNET_SKILL_ID, angle: QWEN_CAMERA_ANGLE_SKILL_ID }[mode] || QWEN_IMAGE_SKILL_ID;
+        skillSel.value = EDIT_MODE_SKILLS[mode] || QWEN_IMAGE_SKILL_ID;
         skillChip.sync();
         await applyEditModelCfg(skillSel.value);
         syncEditParamsChip();

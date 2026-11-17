@@ -466,6 +466,16 @@ const CATEGORY_LABELS = {
     "task": { label: t("任务"), order: 6, hidden: true, managerHidden: true }
 };
 
+/** 提示词增强页收的那两池分类（图像 / 视频）：增强页的技能 chip、首页技能卡的落点共用这一份口径。
+ *  没写 category 的技能按 image_enhance 算，与 populateSkillOptions 的回落同一口径。 */
+const ENHANCE_CATEGORIES = ["image_enhance", "video_enhance"];
+
+/** 这一张技能在不在提示词增强页的候选里：带 workflow.json 与 gen_image 的走出图链路，增强页不收这两类 */
+function isEnhanceSkill(s) {
+    return !!s && !s.has_workflow && !s.gen_image
+        && ENHANCE_CATEGORIES.includes(s.category || ENHANCE_CATEGORIES[0]);
+}
+
 /** 技能显示名：中文界面用 cn_name（中文名）；英文界面不回落中文名，直接用 name / id。
  *  只用于显示——节点 combo 的取值、反查、持久化仍走 cn_name（见 skill.js / director-node.js）。 */
 function skillDisplayName(s) {
@@ -584,5 +594,6 @@ export {
     writeLog, buildWriteChangesTable,
     escapeHtml, renderMarkdown, CATEGORY_LABELS, populateSkillOptions, skillDisplayName,
     skillImageMode, skillAcceptsText, skillAcceptsRef, skillFamily,
+    ENHANCE_CATEGORIES, isEnhanceSkill,
     SKILL_CHANGED_EVENT, dispatchSkillChanged, copySkillAsCustom
 };

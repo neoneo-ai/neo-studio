@@ -10,10 +10,32 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   `reverse`, `reverse_video`, `pose`, `agent`, `edit`, `gallery`, `skills`, `settings`, `home`). The skill card on the Studio
   home page now opens the page that skill declares: `landing: storyboard` opens the 宫格图分镜 page, `landing: video` runs the
   出视频 page chain with that skill selected in its picker, `landing: paint` fills it into the 输入页 panel, and any other page id
-  just switches to that page. A skill with no `landing` — every skill shipped before this one — keeps the old rule: video skills
-  open 出视频 with the skill selected, image skills open 输入页, and a skill with neither says there is no page to open and lands
-  on the 技能 page. A page id the registry does not know is dropped when the skill is saved and reads as "not declared", so a typo
-  never leaves a card that goes nowhere.
+  just switches to that page. A skill with no `landing` — every skill shipped before this one — keeps the type rule: video
+  skills open 出视频 with the skill selected, image skills open 输入页, prompt-enhance skills (the image and video pools the
+  提示词增强 page lists, category empty included) open 提示词增强, and a skill in none of the three says there is no page to
+  open and lands on the 技能 page. A page id the registry does not know is dropped when the skill is saved and reads as "not declared", so a typo
+  never leaves a card that goes nowhere. The skill detail popup gains a **落地页** dropdown for this entry — the registry's
+  page ids with an **自动** (not declared) first option: a preset shows it read-only, changing it marks the skill unsaved, and
+  saving writes the chosen page id (leaving 自动 writes no `landing` field).
+
+- **`cosyvoice_voice` declares `landing: voice`.** The 语音 page hardcodes that skill (`VOICE_SKILL_ID` in
+  `studio/web/voice-gen.js`), so its home card now lands on the page that runs it instead of the skills page
+  with "no page to land on"; the preset's data-root copy moves forward on the next launch when you never edited it.
+- **An edit-only skill's home card lands on 图片编辑, on the mode it belongs to.** The 输入页 panel lists only skills
+  that run from text alone, so a skill that needs a reference image (`mode: edit`) opened a page whose skill picker
+  has no entry for it. The card now opens 图片编辑 with that skill selected in the panel, and a skill with its own
+  一发模式 switches to that mode too — 扩图 / 局部 / 姿势 / 机位 — reading the same table the panel's mode switch
+  uses (`EDIT_MODE_SKILLS` in `studio/web/gen-utils.js`), so "switch into 扩图" and "land on the 扩图 skill" stay
+  one rule. A declared `landing: edit` follows the same chain; `landing: paint` stays literal.
+- **A skill card names its landing on the card face.** When 编辑首页 adds a skill card, its subtitle is written
+  from where that skill lands and stored in the layout, and the home page renders exactly what the layout stores:
+  "Opens 输入页 - write the scene and get the image", "Opens 出视频 with this skill ready to render",
+  "Opens 图片编辑 in 扩图 mode", "Opens 语音 to speak this text with a cloned voice",
+  "Opens 技能 - pick it from the list there", and the page name for any other landing. The judgment is the one
+  the click runs (`landingAppId` in `studio/web/studio/pages/home-page.js`) and the lines live in
+  `studio/web/studio/skill-landing.js`, so a card never promises a page it does not open; a subtitle typed on the
+  card is never auto-filled over, and cards stored before this change keep the shipped default line until they
+  are rebuilt.
 
 - **A standalone 视频反推 page, entered from its own card on the Studio home page.** The 编辑 section gains a 视频反推
   card that opens `#/reverse_video` — its own page, its own run button, its own capability (`prompt_reverse_video`);

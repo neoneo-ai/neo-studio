@@ -17,6 +17,7 @@ import {
     loadSkillWorkflow, workflowParamValues, populateSkillOptions, CATEGORY_LABELS,
     renderMarkdown, SKILL_CHANGED_EVENT, copySkillAsCustom, serializeCanvasPrompt, skillDisplayName,
     skillImageMode, skillAcceptsText, skillAcceptsRef, skillFamily,
+    ENHANCE_CATEGORIES, isEnhanceSkill,
 } from "./skill/skill-core.js";
 import {
     showSkillWriteLogDialog, openSkillWorkflowInMainUi, openSkillWorkflowOnCanvas,
@@ -1422,6 +1423,8 @@ export {
     skillAcceptsText,
     skillAcceptsRef,
     skillFamily,
+    ENHANCE_CATEGORIES,
+    isEnhanceSkill,
     validateSkillForNode,
     invalidateSkillValidation,
     resolveSkillId,

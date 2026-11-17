@@ -24,6 +24,7 @@ export function createPaintEditPage(host) {
     // 建完面板才放开跳页——启动时这一发就不会把页面从首页 / 设置页深链拽走
     let paintArmed = false;
     let paintTextHost = null;   // 输入页那块生图面板的宿主：技能卡直达时按它的 __neoSetPrompt 选中这张技能
+    let paintEditHost = null;   // 图片编辑那块面板的宿主：只能带参考图的编辑技能在输入页候选里没有位置，落这一页选中
     let editArmed = false;
     function paintHostOpen(kind) {
         if (kind === "text" ? paintArmed : editArmed) openPaintTarget(kind);
@@ -95,6 +96,7 @@ export function createPaintEditPage(host) {
         page.appendChild(paintPromptBar(editHost, "edit", [libBtn]));
 
         setPaintHost({ edit: editHost, onOpen: paintHostOpen });
+        paintEditHost = editHost;
         // 空面板铺好，从素材库把图拖进预览区当原图即可
         openImageEditDialog(gallery(), null, "", { container: editHost });
         editArmed = true;
@@ -112,6 +114,11 @@ export function createPaintEditPage(host) {
         paintTextHost?.__neoSetPrompt?.({ skill: skillId });
     }
 
+    /** 只能带参考图的编辑技能那一发：图片编辑这块面板认 skill / 模式 / 原图，技能不在候选里时同样自己就不填 */
+    function selectEditSkill(skillId) {
+        paintEditHost?.__neoPrefillEdit?.({ skill: skillId });
+    }
+
     /** 增强页那枚落页钮的落点：图像进绘画页那块现成输入卡，视频走出视频页那条现成预填链
      *  （这一页没建过时由启动时注册的 setVideoPageJump 先把页建起来，同素材卡「再来一发」那一条）。
      *  只填提示词框：增强那一发认的是增强技能清单，两页的技能候选是另一套，不拿它改这页的技能 */
@@ -121,5 +128,5 @@ export function createPaintEditPage(host) {
         fillPaintPrompt(paintTextHost, "text", text);
     }
 
-    return { buildPaint, buildEdit, pickImage, selectSkill, applyEnhanced };
+    return { buildPaint, buildEdit, pickImage, selectSkill, selectEditSkill, applyEnhanced };
 }

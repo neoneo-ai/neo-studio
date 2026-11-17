@@ -16,7 +16,7 @@ import { t, tf } from "../js/core/i18n.js";
 import { setIcon, setIconLabel } from "../js/core/icons.js";
 import { actionToast } from "../toast.js";
 import { getThumbnailSrc, isPickableImage } from "../gallery-utils.js";
-import { listSkills, populateSkillOptions, openSkillDetailById, SKILL_CHANGED_EVENT } from "../skill.js";
+import { listSkills, populateSkillOptions, openSkillDetailById, SKILL_CHANGED_EVENT, ENHANCE_CATEGORIES, isEnhanceSkill } from "../skill.js";
 import { openLLMSettingsModal } from "../llm-setting.js";
 import { chipButton } from "../gen-utils.js";
 import { openPresetPicker, randomPromptText, savePromptTo } from "../js/core/preset-picker.js";
@@ -32,7 +32,7 @@ export const MAX_ENHANCE_REFS = 4;
  *  视频模式没有「智能判断」：后端空 skillId 只认图像侧（带图走反推、不带图走默认增强任务，studio/llm.py） */
 export const ENHANCE_MODES = ["image", "video"];
 const MODE_LABELS = { image: "图像", video: "视频" };
-const MODE_CATEGORIES = { image: "image_enhance", video: "video_enhance" };
+const MODE_CATEGORIES = { image: ENHANCE_CATEGORIES[0], video: ENHANCE_CATEGORIES[1] };
 export const ENHANCE_API = "/rs_prompts/stream_generate_prompt";
 /** 会话交进请求体的规模：与后端会话文件同一份口径（单条 4000 字裁剪、整份有上限）。
  *  粘贴与上传的参考图是整串 data URI，进历史只留一句引用，图字节只发当前这一发 */
@@ -401,10 +401,10 @@ export function createPromptEnhanceView({ $el, toast, openMaterial, gateRun, can
             const listed = await listSkills();
             const skills = Array.isArray(listed) ? listed : [];   // 桌面端离线那一发回来的不是数组
             const current = skillSel.value;
-            // 带 workflow.json 与 gen_image 的技能走出图链路，本页只写提示词，不收这两类；
-            // 图像与视频的增强技能不在同一张表里混着，只列当前这一池的分类
-            const pool = skills.filter((s) => !s.has_workflow && !s.gen_image
-                && (s.category || "image_enhance") === MODE_CATEGORIES[media]);
+            // 带 workflow.json 与 gen_image 的技能走出图链路，本页只写提示词，不收这两类（isEnhanceSkill 与首页
+            // 技能卡的落点同一口径）；图像与视频的增强技能不在同一张表里混着，只列当前这一池的分类
+            const pool = skills.filter((s) => isEnhanceSkill(s)
+                && (s.category || ENHANCE_CATEGORIES[0]) === MODE_CATEGORIES[media]);
             skillSel.replaceChildren();
             if (media === "image") {
                 skillSel.appendChild($el("option", { value: "", textContent: t("智能判断") }));

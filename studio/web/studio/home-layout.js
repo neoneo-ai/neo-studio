@@ -11,7 +11,7 @@ import { t, tf } from "../js/core/i18n.js";
 import { icon, ICON_NAMES } from "../js/core/icons.js";
 import "../vendor/sortable.min.js";   // 落位手势：vendored 的 Sortable（与 marked/purify 同一份引进来），运行时不联网
 import { homeCards } from "./app-registry.js";
-
+import { LANDING_SUB_DEFAULT } from "./skill-landing.js";
 
 export const HOME_SECTIONS = [
     { id: "create", label: "创作" },
@@ -81,7 +81,7 @@ export function cardShapeForTarget(target, value, label = "") {
     if (target === "url") {
         return { title: urlHost(value), sub: "打开外部链接", icon: "plug" };
     }
-    return { title: label || TARGET_LABELS.skill, sub: "打开这一发技能的应用页", icon: "wand" };
+    return { title: label || TARGET_LABELS.skill, sub: LANDING_SUB_DEFAULT, icon: "wand" };
 }
 
 /** 链接的主机名：自动填标题时给这一发外部链接起的名，认不出的地址留空让保存门去说 */
@@ -223,7 +223,7 @@ export function createHomeInlineEditor(host = {}) {
     const status = $el("span", { className: "ns-home-edit-status" });
 
     let draft = normalizeLayout({});
-    let pickLists = { recipes: [], skills: [] };   // 自建卡的配方 / 技能候选：开编辑弹窗时下拉要用，进编辑态拉一次
+    let pickLists = { recipes: [], skills: [], videoSkills: [] };   // 自建卡的配方 / 技能候选：开编辑弹窗时下拉要用，进编辑态拉一次
     let entry = null;                              // 「完成」：编辑态由宿主交进来，落进细栏右端
     let closeCardDialog = null;                    // 开着的添加卡片这一面：再开一面时先收掉旧的，不留两层遮罩
     const grids = new Map();                       // gridEl -> { section, epoch, sortable }：重画一次首页就换一批网格元素
@@ -308,13 +308,16 @@ export function createHomeInlineEditor(host = {}) {
         if (stored) draft = stored;
         // 配方与技能候选只服务卡内表单那两个下拉：宿主没给回调或拉崩了就留空下拉，排版照样能存
         // listRecipes / listSkills 对非 2xx 把后端的错误体当结果返回，那一发不是数组，下拉要按空清单铺
-        const [recipes, skills] = await Promise.all([
+        // 出视频的技能清单也要：自建卡的副标题在落盘那一步按落点写好，判据要用这一份
+        const [recipes, skills, videoSkills] = await Promise.all([
             (host.listRecipes?.() || Promise.resolve([])).catch(() => []),
             (host.listSkills?.() || Promise.resolve([])).catch(() => []),
+            (host.listVideoSkills?.() || Promise.resolve([])).catch(() => []),
         ]);
         pickLists = {
             recipes: Array.isArray(recipes) ? recipes : [],
             skills: Array.isArray(skills) ? skills : [],
+            videoSkills: Array.isArray(videoSkills) ? videoSkills : [],
         };
         render();
     }
@@ -484,6 +487,12 @@ export function createHomeInlineEditor(host = {}) {
         function autoFillShape() {
             const shape = cardShapeForTarget(work.target,
                 work.target === "url" ? work.url : work.value, pickLabel());
+            // 选上了具体技能：副标题当场换成这一发落点那一页的那一句（判据在首页那一条点击路由，句子在
+            // skill-landing.js），落进版式的就是一句说清了去哪儿的话；技能没选与人在预览里改过副标题的吃默认那一句
+            if (work.target === "skill" && work.value && !touched.sub) {
+                const meta = pickLists.skills.find((s) => s.id === work.value);
+                if (meta) shape.sub = host.skillLandingSub?.(meta, pickLists.videoSkills) || shape.sub;
+            }
             for (const key of ["title", "sub", "icon"]) {
                 if (!touched[key]) work[key] = shape[key];
             }

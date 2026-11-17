@@ -4,8 +4,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { beforeEach } from "node:test";
 import { readFileSync } from "node:fs";
-import { resetEnv, mockRoute, mockObjectInfo, clearRoutes, jsonResponse, flush, sleep, click, inputText, fire, keydown, setConfirmAnswer, dialogs, window, fetchLog } from "./setup.mjs";
+import { resetEnv, mockRoute, mockObjectInfo, clearRoutes, jsonResponse, flush, sleep, click, inputText, fire, keydown, changeValue, setConfirmAnswer, dialogs, window, fetchLog } from "./setup.mjs";
 import { appState, app } from "./mocks/comfy-app.mjs";
+import { STUDIO_APPS } from "../../web/studio/app-registry.js";
 
 const LEFT_W_KEY = "neo.skillManagerLeftWidth";
 
@@ -1285,5 +1286,96 @@ test("内嵌编辑：搜索框关掉鼠标离开自动关闭（中文 IME 候选
     assert.equal(mainCanvas.search_options.hide_on_mouse_leave, true, "主画布搜索框的鼠标离开自动关闭不应被改动");
 
     closeMgr(box);
+});
+
+// ---- 详情弹窗的落地页（landing）：值 = 应用注册表里的那一份页 id ----
+function mockLandingSkillLoad(overrides = {}) {
+    mockRoute("/rs_prompts/load_skill", (b) => jsonResponse({
+        id: b.id, name: "Custom A", content: "body", files: [{ name: "skill.md", size: 6 }],
+        gen_image: false, gen_video: false, multi_turn: false, tags: [], category: "", ...overrides,
+    }));
+    mockRoute("/rs_prompts/load_skill_file", () => jsonResponse({ file: "skill.md", content: "body" }));
+}
+async function openLandingPopup(source = "custom", overrides = {}) {
+    const { createSkillDetailPopup } = await import("../../web/skill.js");
+    mockLandingSkillLoad(overrides);
+    let saved = null;
+    mockRoute("/rs_prompts/save_skill", (b) => { saved = b; return jsonResponse({ success: true, id: b.id }); });
+    const popup = createSkillDetailPopup();
+    await popup.openExisting("custom_a", source);
+    await flush();
+    await sleep(50);
+    return {
+        popup,
+        sel: popup.overlay.querySelector(".rs-skill-landing-select"),
+        saved: () => saved,
+        save: () => click(popup.overlay.querySelector(".rs-tpl-save-btn")),
+    };
+}
+
+test("落地页下拉的选项就是应用注册表那一份页 id（首项是「自动」）", async () => {
+    const { popup, sel } = await openLandingPopup();
+    assert.deepEqual(Array.from(sel.options).map((o) => o.value), ["", ...STUDIO_APPS.map((a) => a.id)],
+        "选项 = 注册表那份页 id：前端不另写一份落点清单");
+    assert.equal(sel.options[0].textContent, "自动（按技能类型）", "空值那一档说清楚是自动");
+    popup.close();
+});
+
+test("载入声明了落地页的技能：下拉选中那一页，保存原样带回", async () => {
+    const { popup, sel, saved, save } = await openLandingPopup("custom", { landing: "storyboard" });
+    assert.equal(sel.value, "storyboard", "后端给什么名就选中什么名");
+    save();
+    await flush();
+    await sleep(50);
+    assert.equal(saved().landing, "storyboard", "保存 payload 带同一名（load/save 往返）");
+    assert.equal(popup.isDirty(), false, "保存后这一项不再算脏");
+    popup.close();
+});
+
+test("改落地页：只改这一项也算未保存，保存 payload 带新的那一名", async () => {
+    const { popup, sel, saved, save } = await openLandingPopup("custom", { landing: "director" });
+    changeValue(sel, "voice");
+    assert.equal(popup.isDirty(), true, "只动落地页也要出未保存确认");
+    save();
+    await flush();
+    await sleep(50);
+    assert.equal(saved().landing, "voice", "落点写进保存 payload");
+    popup.close();
+});
+
+test("新建技能默认落「自动」：保存 payload 的 landing 是空串", async () => {
+    const { createSkillDetailPopup } = await import("../../web/skill.js");
+    mockLandingSkillLoad();
+    let saved = null;
+    mockRoute("/rs_prompts/save_skill", (b) => { saved = b; return jsonResponse({ success: true, id: b.id }); });
+    const popup = createSkillDetailPopup();
+    popup.openNew();
+    const nameInput = popup.overlay.querySelector(".rs-skill-name-input");
+    inputText(nameInput, "落地新建");
+    keydown(nameInput, "Enter");
+    const sel = popup.overlay.querySelector(".rs-skill-landing-select");
+    assert.equal(sel.value, "", "新建表单默认未声明（首页卡落回那两条启发）");
+    click(popup.overlay.querySelector(".rs-tpl-save-btn"));
+    await flush();
+    await sleep(50);
+    assert.equal(saved.landing, "", "空串交给后端：写盘时删掉这一项");
+    popup.close();
+});
+
+test("后端把认不出的一名清成空：下拉落回「自动」，保存 payload 是空串", async () => {
+    const { popup, sel, saved, save } = await openLandingPopup("custom", { landing: "" });
+    assert.equal(sel.value, "", "写歪的一名在前端就是未声明：前端不再校验一遍");
+    save();
+    await flush();
+    await sleep(50);
+    assert.equal(saved().landing, "", "原样带回空串，不发明第二套落点校验");
+    popup.close();
+});
+
+test("预设技能：落地页下拉显示落点但只读", async () => {
+    const { popup, sel } = await openLandingPopup("presets", { landing: "gallery" });
+    assert.equal(sel.value, "gallery", "预设技能也显示它声明的落点");
+    assert.equal(sel.disabled, true, "预设 skill.md 不可写：这一项不可改");
+    popup.close();
 });
 

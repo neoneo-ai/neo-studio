@@ -18,6 +18,20 @@ import { icon, setIcon } from "./js/core/icons.js";
 // 一键角色图 / 九宫格分镜图都固定走 Qwen Image 2.1 预设（多路参考槽位、不走 Krea2 编辑链）。
 export const QWEN_IMAGE_SKILL_ID = "qwen_image_21";
 
+// 图片编辑每一发固定那一张技能：面板切模式选中它（扩图的 LoRA 就固定在其 config.json，缺失时后端提示并跳过），
+// 首页技能卡反过来按这张技能认它那一发。
+export const EDIT_MODE_SKILLS = {
+    outpaint: "qwen_image_21_outpaint",
+    local: "qwen_image_21_local_edit",      // 涂抹区自动裁剪-高分重绘-羽化合并（无额外 LoRA）
+    pose: "qwen_image_21_controlnet",       // 第 1 张额外参考位放控制图，锁它的姿势与构图重出原图
+    angle: "qwen_image_21_camera_angle",    // 按「转角 / 俯仰 / 镜头」三档改写机位重出这一张
+};
+
+/** 这张技能对上的那一发编辑模式：对不上回空串（落图片编辑页时按它切模式，模式自己会选中这张技能） */
+export function editModeForSkill(skillId) {
+    return Object.keys(EDIT_MODE_SKILLS).find((m) => EDIT_MODE_SKILLS[m] === skillId) || "";
+}
+
 /** 小窗标题栏拖动 + 双击最大化/还原（同导演编辑器）：首次按下从居中切到绝对定位并记录起点，
  *  之后按鼠标位移更新 left/top；钳制保证窗口不会被拖出视口（始终留一条可点到的标题栏 / ✕）。
  *  配合 overlay 的 pointer-events:none（gallery.css 的 *-modal-overlay 规则）= 不遮罩、可移动、窗户外照常浏览。 */

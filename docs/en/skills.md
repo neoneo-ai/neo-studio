@@ -26,9 +26,24 @@ placeholders).
 `landing` is the page this skill's card on the Studio home page opens: its value is one of the page ids the
 Studio app registry knows (`paint`, `video`, `director`, `storyboard`, `enhance`, `voice`, …; the full table is
 `studio/web/studio/app-registry.js`). Declared means "open that page": `video` runs the 出视频 page chain with
-this skill selected, `paint` fills the 输入页 panel, any other id switches to that page. Not declared, or a value
-the registry does not know (saving drops that entry), lands on the two heuristics — a video skill opens 出视频,
-an image skill opens 输入页, and when neither applies the card says there is no page to open and lands on 技能.
+this skill selected, `paint` fills the 输入页 panel, `edit` fills the 图片编辑 panel (a skill with its own edit
+mode switches to that mode too), any other id switches to that page. Not declared, or a value the registry does
+not know (saving drops that entry), lands on the three heuristics — a video skill opens 出视频, an image skill
+opens 输入页 (that panel only lists skills that run from text alone, so a skill that needs a reference image
+opens 图片编辑 with the skill selected there, and one with its own edit mode switches to that mode — 扩图 /
+局部 / 姿势 / 机位, the skill-mode table is in `studio/web/gen-utils.js`), a prompt-enhance skill (the image and
+video pools, the same candidates the enhance page's skill chip lists) opens 提示词增强, and when none applies the
+card says there is no page to open and lands on 技能. In the skill detail popup this entry is the 落地页 dropdown:
+its options are that registry page-id list with an 自动 (not declared) first entry; a preset shows it read-only,
+changing it on a custom skill marks it unsaved and it writes to disk with **Save**. The only preset that
+declares it is `cosyvoice_voice` with `landing: voice` — the 语音 page hardcodes that skill (`VOICE_SKILL_ID`),
+so its home card lands on the page that runs it; every other preset and task skill leaves it undeclared and
+follows the three heuristics above. The card's default subtitle is written from the landing at the moment
+添加卡片 saves the card, and the home page renders what the layout stores: the card says where the click goes
+("Opens 输入页 - write the scene and get the image", "Opens 图片编辑 in 扩图 mode", "Opens 语音 to speak this
+text with a cloned voice", and the page name for any other landing) - the landing judgment is the one the click
+runs (`studio/web/studio/pages/home-page.js`) and the lines live in `studio/web/studio/skill-landing.js`;
+a subtitle typed on the card stays untouched.
 
 ## How the agent page uses skills
 

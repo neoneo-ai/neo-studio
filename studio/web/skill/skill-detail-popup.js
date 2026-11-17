@@ -19,6 +19,7 @@ import {
 import { confirmWorkflowWrite, writeWorkflowToSkill, showSkillWriteLogDialog, armCanvasWriteback, openSkillWorkflowInMainUi } from "./skill-writeback.js";
 import { t, tf } from "../js/core/i18n.js";
 import { icon, setIconLabel } from "../js/core/icons.js";
+import { STUDIO_APPS } from "../studio/app-registry.js";
 
 // ==========================================
 // UI：createSkillDetailPopup() —— 单技能详情弹窗（查看 / 编辑 / 删除 / 复制为自定义 / 新建）
@@ -109,6 +110,27 @@ function createSkillDetailPopup(host, canvasBtns = true, opts = {}) {
     multiTurnLabel.textContent = "Multi-turn (multi_turn)";
     multiTurnLabel.title = t("每次生成仅推进一个阶段，需补充返回的问询后再次点击 继续");
     multiTurnRow.append(multiTurnChk, multiTurnLabel);
+
+    // 落地页（landing）下拉：首页技能卡点这张技能时直达的那一页，选项就是应用注册表里的那一叠页 id
+    // （两处同源，后端 SKILL_LANDINGS 与注册表由 app-registry 的用例钉住）。
+    // 留空 = 这份技能没声明，首页卡落回那两条启发（生视频技能出视频页、生图技能绘画页）。
+    const landingRow = mkEl("div", "rs-skill-landing-row");
+    const landingLabel = mkEl("label", "rs-skill-landing-label");
+    landingLabel.textContent = t("落地页");
+    landingLabel.title = t("首页技能卡点这张技能时直达的那一页；留空 = 生视频技能进视频页、生图技能进输入页（只能带参考图的进图片编辑，对得上一发模式的连模式一起切）、增强技能进提示词增强页，其余技能进技能页");
+    const landingSel = document.createElement("select");
+    landingSel.className = "rs-skill-landing-select";
+    const landingNone = document.createElement("option");
+    landingNone.value = "";
+    landingNone.textContent = t("自动（按技能类型）");
+    landingSel.appendChild(landingNone);
+    for (const page of STUDIO_APPS) {
+        const opt = document.createElement("option");
+        opt.value = page.id;
+        opt.textContent = page.tab || page.title;
+        landingSel.appendChild(opt);
+    }
+    landingRow.append(landingLabel, landingSel);
 
     const contentRow = mkEl("div", "rs-config-row");
     const contentHeader = mkEl("div", "rs-content-header");
@@ -803,7 +825,7 @@ function createSkillDetailPopup(host, canvasBtns = true, opts = {}) {
         settingsCol.style.display = on ? "" : "none";
     };
 
-    content.append(unavailableBanner, multiTurnRow, mainRow, workflowWrap, footerBtns);
+    content.append(unavailableBanner, multiTurnRow, landingRow, mainRow, workflowWrap, footerBtns);
     modal.append(header, content);
     if (embedded) { modal.style.display = "none"; host.appendChild(modal); }
     else { overlay.appendChild(modal); document.body.appendChild(overlay); }
@@ -1152,6 +1174,7 @@ function createSkillDetailPopup(host, canvasBtns = true, opts = {}) {
         nameInput.disabled = readOnly || (currentFiles.length > 0 && !mainSel);
         contentTextarea.disabled = readOnly;
         multiTurnChk.disabled = readOnly;
+        landingSel.disabled = readOnly;
         saveBtn.style.display = readOnly ? "none" : "inline-block";
         copyBtn.style.display = readOnly ? "inline-block" : "none";
         deleteBtn.style.display = isCustom() ? "inline-block" : "none";
@@ -1176,7 +1199,7 @@ function createSkillDetailPopup(host, canvasBtns = true, opts = {}) {
         let text = (data && data.content) || "";
         if (isMainFile(name)) text = stripFrontmatter(text);
         contentTextarea.value = text;
-        contentBaseline = { name: nameInput.value, content: text, multiTurn: multiTurnChk.checked };
+        contentBaseline = { name: nameInput.value, content: text, multiTurn: multiTurnChk.checked, landing: landingSel.value };
         setEditorMode(/\.md$/i.test(name) ? editorMode : "edit");
         updateControls();
     }
@@ -1205,6 +1228,7 @@ function createSkillDetailPopup(host, canvasBtns = true, opts = {}) {
         nameInput.value = nm;
         stopNameEdit();   // 切技能：退出上一个技能的编辑态并回显新名称
         multiTurnChk.checked = !!(full && full.multi_turn);
+        landingSel.value = (full && full.landing) || "";   // 后端已把注册表认不出的一名清成空：下拉落回「自动」
         currentIsVideo = !!(full && full.gen_video);
         configOverridden = !!(full && full.config_overridden);
         // 不可用视频技能（VDN 加速节点未装）：内容区顶部显示说明
@@ -1216,7 +1240,7 @@ function createSkillDetailPopup(host, canvasBtns = true, opts = {}) {
         populateFileSelect(mainName);
         setEditorMode("preview");
         if (mainName) await selectFile(mainName);
-        else { selectedFile = null; contentTextarea.value = ""; contentBaseline = { name: nm, content: "", multiTurn: multiTurnChk.checked }; }
+        else { selectedFile = null; contentTextarea.value = ""; contentBaseline = { name: nm, content: "", multiTurn: multiTurnChk.checked, landing: landingSel.value }; }
         // workflow.json 拉取与设置区加载互不依赖 → 提前并发发出，省一段串行等待
         const wfPromise = (full && (full.gen_image || full.gen_video)) ? loadSkillWorkflow(id) : null;
         // 生图/生视频技能显示各自 config.json 覆盖区（恒可编辑：预设存本地覆盖、自定义随主 Save）；其余技能隐藏。
@@ -1294,6 +1318,7 @@ function createSkillDetailPopup(host, canvasBtns = true, opts = {}) {
         fileSelect.style.display = "none";
         selectedFile = null;
         multiTurnChk.checked = false;
+        landingSel.value = "";
         multiTurnRow.style.display = "";
         enhancePromptWrap.style.display = "none";
         enhancePromptChk.checked = false;
@@ -1311,7 +1336,7 @@ function createSkillDetailPopup(host, canvasBtns = true, opts = {}) {
         syncContentVisibility();   // 新建：正文区回到主区
         workflowBody.innerHTML = "";
         workflowSummary.textContent = "";
-        contentBaseline = { name: "", content: "", multiTurn: false };
+        contentBaseline = { name: "", content: "", multiTurn: false, landing: "" };
         genSettingsBaseline = null;
         loadedGenInfo = null;
         nameInput.disabled = false;
@@ -1335,7 +1360,8 @@ function createSkillDetailPopup(host, canvasBtns = true, opts = {}) {
     function hasUnsavedChanges() {
         if (contentBaseline && (nameInput.value !== contentBaseline.name ||
             contentTextarea.value !== contentBaseline.content ||
-            multiTurnChk.checked !== contentBaseline.multiTurn)) return true;
+            multiTurnChk.checked !== contentBaseline.multiTurn ||
+            landingSel.value !== contentBaseline.landing)) return true;
         return genSettingsBaseline !== null && collectGenSettingsJson() !== genSettingsBaseline;
     }
 
@@ -1397,18 +1423,18 @@ function createSkillDetailPopup(host, canvasBtns = true, opts = {}) {
         if (!currentSkillId) {
             const id = name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-+|-+$/g, "");
             if (!id) return;
-            const result = await saveSkill({ id, name, content: contentTextarea.value, tags: [], source: "custom", multi_turn: multiTurnChk.checked });
+            const result = await saveSkill({ id, name, content: contentTextarea.value, tags: [], source: "custom", multi_turn: multiTurnChk.checked, landing: landingSel.value });
             if (result.success) { dispatchSkillsUpdated(); close(); }
             else alert("Save failed: " + (result.error || "Unknown error"));
             return;
         }
         if (isMainFile(selectedFile)) {
-            const result = await saveSkill({ id: currentSkillId, name, content: contentTextarea.value, tags: [], source: "custom", multi_turn: multiTurnChk.checked });
-            if (result.success) { contentBaseline = { name: nameInput.value, content: contentTextarea.value, multiTurn: multiTurnChk.checked }; await persistGenSettings(); dispatchSkillsUpdated(); close(); }
+            const result = await saveSkill({ id: currentSkillId, name, content: contentTextarea.value, tags: [], source: "custom", multi_turn: multiTurnChk.checked, landing: landingSel.value });
+            if (result.success) { contentBaseline = { name: nameInput.value, content: contentTextarea.value, multiTurn: multiTurnChk.checked, landing: landingSel.value }; await persistGenSettings(); dispatchSkillsUpdated(); close(); }
             else alert("Save failed: " + (result.error || "Unknown error"));
         } else {
             const r = await saveSkillFile(currentSkillId, selectedFile, contentTextarea.value);
-            if (r.success) { contentBaseline = { name: nameInput.value, content: contentTextarea.value, multiTurn: multiTurnChk.checked }; await persistGenSettings(); dispatchSkillsUpdated(); close(); }
+            if (r.success) { contentBaseline = { name: nameInput.value, content: contentTextarea.value, multiTurn: multiTurnChk.checked, landing: landingSel.value }; await persistGenSettings(); dispatchSkillsUpdated(); close(); }
             else alert("Save failed: " + (r.error || ""));
         }
     }
