@@ -1323,9 +1323,8 @@ function buildEdit(el) {
 const HOME_QUICK_LEAVE_MS = 260;   // 指针从「首页」那一格跨进面板这几像素的宽限：不留宽限就是跨一步闪收
 const HOME_QUICK_EDGE = 8;          // 面板夹进窗口的边距，与 style.css 的 8px 同一份常量
 const HOME_QUICK_GAP = 10;          // 面板顶沿离顶栏底沿的间距：页签自己的矩形只到那一格，贴着它画就是把面板压在页签那一行上
-const HOME_QUICK_ROW_H = 38;        // 一行条目高，与 style.css 的 .ns-home-quick-item 最小高度同一份
-const HOME_QUICK_LABEL_H = 20;      // 一行列头高，与 style.css 的 .ns-home-quick-label 同一份
-const HOME_QUICK_PAD_H = 16;        // 面板上下内边距，与 style.css 的 padding 同一份
+const HOME_QUICK_COLS = 2;          // 面板固定两列（创作｜编辑）：列数随窗口高度起落就是在宽窗口里拉出一条伸出屏外的长条
+const HOME_QUICK_MIN_H = 120;       // 面板封顶的最小高：窗口矮到顶沿以下放不下时也不把这块控件压成零高，条目裁在里面
 // 「素材与配置」整块不进这一列：素材库在顶栏那一格、设置在顶栏右端那枚齿轮、技能在首页那张卡里都有直达，
 // 快捷入口只留创作与编辑那两板块的路（首页本身照旧铺这三张卡）
 const HOME_QUICK_SKIP_SECTIONS = ["material"];
@@ -1430,11 +1429,11 @@ function renderHome() {
     }
 }
 
-/* ====== 悬浮快速入口：鼠标落在顶栏「首页」那一格上（当前不在首页时）浮出的多列直达面板 ======
+/* ====== 悬浮快速入口：鼠标落在顶栏「首页」那一格上（当前不在首页时）浮出的直达面板 ======
    条目读的就是首页那一叠（layoutSections 的板块序 + visibleCards 的卡序），跳转落在 openHomeCard——
    浮窗不养第二套卡表，也不给一张首页上没有、点了只会失败的入口。
-   列数按当前可视高度算：一屏看全，一列装不下才加列，整块不滚（要滚起来的菜单不算快捷入口）。
-   根钉在 body 上、left/top 由那一格的矩形写：顶栏横滚、右侧控件吃掉宽度时它照旧落在那一格正下方 */
+   列数固定两块（一块板块一列）：列数随窗口高度起落就是在宽窗口里拉出一条一路伸出屏外的长条；整块不滚（要滚起来的菜单不算快捷入口）。
+   根钉在 body 上、left 由那一格的矩形写、top 由顶栏整条的底沿写：顶栏横滚、右侧控件吃掉宽度时它照旧落在那一行之下 */
 
 function homeQuickRoot() {
     if (homeQuickEl) return homeQuickEl;
@@ -1444,30 +1443,16 @@ function homeQuickRoot() {
     return homeQuickEl;
 }
 
-/** 分列：整块板块不劈开、每块自带列头，当前列装不下整块就换下一列。
- *  列数只由当前可视高度定（一屏看全，不滚）；排除的板块与首页卡全部移出一样没有条目，返回 null 让调用方不浮出 */
-function homeQuickColumns(availH) {
-    const groups = [];
-    for (const section of layoutSections(homeLayout)) {
-        if (HOME_QUICK_SKIP_SECTIONS.includes(section.id)) continue;   // 整块不进这一列，连列头一起不出
-        const cards = visibleCards(section.id, homeLayout);
-        if (cards.length) groups.push({ label: section.label, cards });
-    }
-    if (!groups.length) return null;
-    const budget = availH - HOME_QUICK_PAD_H;
-    const columns = [];
-    let used = 0;
-    for (const group of groups) {
-        const cost = HOME_QUICK_LABEL_H + group.cards.length * HOME_QUICK_ROW_H;
-        if (columns.length && used + cost <= budget) {
-            columns[columns.length - 1].push(group);
-            used += cost;
-        } else {
-            columns.push([group]);
-            used = cost;
-        }
-    }
-    return columns;
+/** 分列：一块板块占一列，整块不劈开、每块自带列头，列数固定两列。
+ *  列数不看窗口高度：宽窗口里一列装得下两块就会拉出一条一路伸出屏外的长条，快捷入口就变成要滚的清单。
+ *  没有板块带条目时返回空表，调用方不浮出 */
+function homeQuickColumns() {
+    return layoutSections(homeLayout)
+        .filter((s) => !HOME_QUICK_SKIP_SECTIONS.includes(s.id))
+        .map((s) => ({ label: s.label, cards: visibleCards(s.id, homeLayout) }))
+        .filter((g) => g.cards.length)
+        .slice(0, HOME_QUICK_COLS)   // 旧版式里板块多于两块：第三块起不进这一列
+        .map((group) => [group]);
 }
 
 /** 画面板：一列一块，列数交给 CSS 的 grid（grid-template-columns 读这个自定义属性，宽度 = 列数 × 单列宽） */
@@ -1511,12 +1496,16 @@ function openHomeQuick() {
     const rect = tab.getBoundingClientRect();
     // 落点锚在顶栏整条的底沿：页签的矩形只到那一格自己，贴着它画就是把面板压在页签那一行下沿上
     const barBottom = (tab.closest(".ns-header") || tab.parentElement).getBoundingClientRect().bottom;
-    const columns = homeQuickColumns(window.innerHeight - barBottom - HOME_QUICK_EDGE);
-    if (!columns) return;
+    const columns = homeQuickColumns();
+    if (!columns.length) return;
     const root = renderHomeQuick(columns);
-    root.classList.remove("ns-hidden");   // 先上屏才量得出面板宽高；位置在同一个 task 里钉好，中间不落地
+    root.classList.remove("ns-hidden");   // 先上屏才量得出面板宽；位置在同一个 task 里钉好，中间不落地
     const left = Math.max(HOME_QUICK_EDGE, Math.min(rect.left, window.innerWidth - root.offsetWidth - HOME_QUICK_EDGE));
-    const top = Math.max(HOME_QUICK_EDGE, Math.min(barBottom + HOME_QUICK_GAP, window.innerHeight - root.offsetHeight - HOME_QUICK_EDGE));
+    // 顶沿只钉在顶栏底沿之下：窗口再矮也不把面板顶到页签那一行上去——压住页签的浮窗没人点得准
+    const top = barBottom + HOME_QUICK_GAP;
+    // 面板按顶沿以下的剩余高度封顶（CSS 的 max-height 是静态底线，这里按当次落点算准）：整块进窗口，装不下的尾部裁在面板里
+    root.querySelector(".ns-home-quick-panel").style.maxHeight =
+        `${Math.max(HOME_QUICK_MIN_H, window.innerHeight - top - HOME_QUICK_EDGE)}px`;
     root.style.left = `${left}px`;
     root.style.top = `${top}px`;
 }

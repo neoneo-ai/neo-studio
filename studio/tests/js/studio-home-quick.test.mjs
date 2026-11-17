@@ -1,4 +1,4 @@
-// 悬浮快速入口：鼠标落在顶栏「首页」那一格上（当前不在首页时）浮出的多列直达面板（整块板块不劈开，一屏看全，不滚）。
+// 悬浮快速入口：鼠标落在顶栏「首页」那一格上（当前不在首页时）浮出的直达面板（一块板块一列、固定两列，落点在顶栏那一行之下，不滚）。
 // 站在首页上浮出没有意义，所以这一列只在别的页上被那一格唤出。
 // 每条用例各自 import 一份 studio-app 实例：换页要改 location.hash，排在别人的文件里就是替别人重画现场。
 import test from "node:test";
@@ -74,10 +74,12 @@ test("不在首页时鼠标落在「首页」那一格上浮出：条目与首�
     assert.ok(!quick.classList.contains("ns-hidden"), "浮出态");
     assert.ok(quick.querySelector(".ns-home-quick-panel"), "浮出的是面板本体");
     const cols = [...quick.querySelectorAll(".ns-home-quick-col")];
-    assert.ok(cols.length >= 1, "条目铺在列里");
+    assert.equal(cols.length, 2, "固定两块：创作一列、编辑一列，列数不看窗口高度");
     assert.equal(quick.style.getPropertyValue("--ns-home-quick-cols"), String(cols.length), "列数交给 CSS 的 grid");
     assert.equal(quick.style.left, "120px", "左沿贴那一格的左沿");
     assert.equal(quick.style.top, "50px", "顶沿在顶栏整条底沿之下 10px：不压在页签那一行上");
+    assert.equal(quick.querySelector(".ns-home-quick-panel").style.maxHeight, `${window.innerHeight - 50 - 8}px`,
+                 "面板按顶沿以下的剩余高度封顶：整块进窗口，装不下的尾部裁在面板里");
     assert.match(homeTab().title, /快速入口/, "那一格自己说出这一发");
 
     const items = quickItems();
@@ -110,17 +112,20 @@ test("不在首页时鼠标落在「首页」那一格上浮出：条目与首�
     assert.ok(!isOpen(), "跳到首页就收起：这一页不缺这一列");
 });
 
-test("矮窗口里一列装不下整块板块就换下一列：多列一次看全，不靠滚", async () => {
+test("窗口高矮不改列数：面板固定两块，矮窗口里整块夹进窗口高度内，不靠滚", async () => {
     await boot("7", "gallery");
     const innerHeight = window.innerHeight;
     Object.defineProperty(window, "innerHeight", { value: 420, configurable: true });
     try {
         fire(homeTab(), "pointerenter");
         const cols = [...quickEl().querySelectorAll(".ns-home-quick-col")];
-        assert.ok(cols.length >= 2, "可视高度装不下就加分列：这一列不许靠滚");
+        assert.equal(cols.length, 2, "列数不随窗口高度起落：宽窗口里不拉出一条一路伸出屏外的长条");
+        assert.equal(quickEl().style.top, "50px", "顶沿不跟着窗口矮上去：窗口再矮也不压在页签那一行上");
+        assert.equal(quickEl().querySelector(".ns-home-quick-panel").style.maxHeight, `${420 - 50 - 8}px`,
+                     "面板按顶沿以下的剩余高度封顶：整块进窗口，尾部裁在面板里，不靠滚");
         assert.equal(quickEl().style.getPropertyValue("--ns-home-quick-cols"), String(cols.length), "列数交给 CSS 的 grid");
         const labels = quickLabels();
-        assert.equal(new Set(labels).size, labels.length, "换列时板块不劈开：一个板块只有一枚列头");
+        assert.equal(new Set(labels).size, labels.length, "一块板块一列：一个板块在这块面板里只有一枚列头");
         assert.ok(cols.every((c) => c.querySelector(".ns-home-quick-label")), "每一列自带列头");
     } finally {
         Object.defineProperty(window, "innerHeight", { value: innerHeight, configurable: true });
@@ -199,7 +204,8 @@ test("CSS 契约：钉在窗口上、压在页面内容之上弹窗之下、多�
     assert.match(item, /pointer-events:\s*auto/, "这一列里只有条目吃事件");
     const panel = css.match(/\.ns-home-quick-panel \{[^}]*\}/)?.[0] || "";
     assert.match(panel, /display:\s*grid/, "多列铺开");
-    assert.match(panel, /grid-template-columns:\s*repeat\(var\(--ns-home-quick-cols/, "列数由 JS 按可视高度传进来");
+    assert.match(panel, /grid-template-columns:\s*repeat\(var\(--ns-home-quick-cols/, "列数由 JS 定好传进来（固定两块）");
+    assert.match(panel, /max-height:\s*calc\(100vh - 16px\)/, "矮窗口里整块夹进窗口高度内：裁在面板里，不出滚动条");
     assert.match(panel, /width:\s*min\([^;]*var\(--ns-home-quick-cols[^;]*var\(--ns-home-quick-colw/,
         "宽度 = 列数 × 单列宽，窗口窄时吃满幅减去边距");
     assert.doesNotMatch(panel, /overflow-y:\s*(auto|scroll)/, "面板不滚：要滚起来的菜单不算快捷入口");

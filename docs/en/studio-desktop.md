@@ -542,12 +542,14 @@ startable once the root is filled in.
   card the home page does not have; the 素材与配置 section is kept out of this column whole - its column header and its
   three cards alike - since 素材库 lives in the 素材 header tab, 设置 in the gear at the header's right end and 技能 is
   entered from its own home card, so the menu carries the 创作 and 编辑 sections only and opens nothing when only that
-  section has cards left. **The panel splits into columns by the height available under the header bar**: a section
-  is never split across columns, every section carries its own column header, and a section that does not fit in the
-  current column opens the next one; the width is columns × the single-column width (`--ns-home-quick-colw`, 312 px,
-  240 px on the 720 px tier) and the column count is handed to CSS as `--ns-home-quick-cols` for
-  `grid-template-columns`. The panel never scrolls - a menu you have to scroll is not a shortcut - and the tail that no
-  column count can fit stays clipped inside the panel, whose placement is already clamped to the 8 px viewport margin.
+  section has cards left. **The panel is fixed at two columns** (one section per column, `HOME_QUICK_COLS` = 2): a section
+  is never split across columns, every section carries its own column header, and the column count never moves with the
+  window height - height-driven columns stretch into one overlong column that runs off the bottom in a wide window; the
+  width is columns × the single-column width (`--ns-home-quick-colw`, 312 px, 240 px on the 720 px tier) and the column
+  count is handed to CSS as `--ns-home-quick-cols` for `grid-template-columns`. The panel never scrolls - a menu you have
+  to scroll is not a shortcut - and it is capped to the space left under the header bar (the placement step computes that
+  cap, with `max-height: calc(100vh - 16px)` as the static floor), so in a short window the whole panel stays inside the
+  viewport and the tail that does not fit stays clipped inside it.
   The panel body takes no pointer events (`pointer-events: none`, only the entries are `auto`): the page under an open
   menu keeps its own hover and clicks, so the menu never eats a click on the page below it - and the close timer hangs on
   the entries for the same reason.

@@ -987,9 +987,11 @@ body {
 .ns-home-card > svg:last-child { flex: none; margin-left: auto; color: var(--ns-dim); }
 /* 全部卡片收起来的首页：只剩一句话，指向右上角那枚入口，不把用户留在一片空白里 */
 .ns-home-empty { margin: 8px 0; color: var(--ns-dim); }
-/* 悬浮快速入口：鼠标落在顶栏「首页」那一格上（当前不在首页时）浮出的多列直达面板，条目点击走 openHomeCard。
+/* 悬浮快速入口：鼠标落在顶栏「首页」那一格上（当前不在首页时）浮出的直达面板，条目点击走 openHomeCard。
    根钉在 body 上，left 按顶栏「首页」那一格的矩形写、top 按顶栏整条的底沿写（落在那一行之下，夹进窗口 8px 边距内）。
-   宽度 = 列数 × 单列宽：列数由 studio-app.js 按可视高度算好传进来（一屏看全，一列装不下才加列），整块不滚——要滚起来的菜单不算快捷入口。
+   宽度 = 列数 × 单列宽：列数固定两块（一块板块一列，studio-app.js 的 HOME_QUICK_COLS），不随窗口高度起落——
+   随高度起落就是在宽窗口里拉出一条一路伸出屏外的长条；矮窗口里面板整块夹进窗口高度内（max-height + overflow: hidden），
+   装不下的那一段裁在面板里，一列都不许滚——要滚起来的菜单不算快捷入口。
    pointer-events 只给条目：浮窗展开时压在谁那一页上，谁那一页的悬停与点击照旧落在那页上，这一列不许吃掉底下的点击。
    z-index 9650：页面上的浮层（素材卡菜单 9000、归类与发图菜单 9100-9500、图预览 9600）与首页内容都压在它下面，
    顶栏队列面板（9690）、素材弹窗（9700）、添加卡片这一面（9800）、灯箱（9847/9999）盖在它上面——这一列是悬浮态的临时控件 */
@@ -1001,11 +1003,12 @@ body {
     gap: 0 6px;
     width: min(calc(100vw - 16px), calc(var(--ns-home-quick-cols, 1) * var(--ns-home-quick-colw, 312px)));
     max-width: calc(100vw - 16px);
+    max-height: calc(100vh - 16px);   /* 矮窗口里整块夹进窗口高度内：裁在面板里，不出滚动条 */
     padding: 5px 6px 8px;
     background: var(--ns-panel);
     border: 1px solid var(--ns-border); border-radius: 12px;
     box-shadow: 0 14px 34px rgba(0, 0, 0, .45);
-    overflow: hidden;   /* 列数到了上限还装不下的那一段收在这一层里：落点已夹在窗口 8px 边距内，不出滚动条 */
+    overflow: hidden;
     animation: ns-home-quick-in .16s ease-out;
 }
 @keyframes ns-home-quick-in {

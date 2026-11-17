@@ -6,7 +6,7 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 ### Added
 - **Hovering the 首页 tab floats out a quick menu.** From any other page, hovering (or keyboard-focusing) the 首页 tab in
-  the Studio header opens a floating column of the home page's own direct cards — grouped under the home section names,
+  the Studio header opens a floating two-column panel of the home page's own direct cards — one home section per column,
   each entry the card's icon, title and subtitle, and clicking it takes the card's existing jump (no second card table, no
   entry that can only fail); the whole 素材与配置 section (素材库 / 技能 / 设置) is kept out of it - the 素材 tab, the gear
   at the header's right end and the 技能 card on the home page all reach those three - so the menu carries the 创作 and
@@ -17,9 +17,9 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   tab's tooltip says the hover is there. Covered by `studio/tests/js/studio-home-quick.test.mjs` (entries mirror the home card
   order of the 创作 and 编辑 sections with 素材与配置 excluded whole - header included - and nothing opens when only that
   section has cards left, the placement under the header bar, the jump and collapse, the leave grace and entry hover,
-  section integrity across columns at a short viewport, nothing on 首页, nothing without hover, hidden with all cards
+  the fixed two columns at any window height, nothing on 首页, nothing without hover, hidden with all cards
   removed, and the fixed placement / z-index 9650 (above the in-page floating layers, below the queue panel and the
-  modals) / height-driven columns with no scrolling / click-through panel body / 720 px tier in `style.css`).
+  modals) / two columns capped to the window height with no scrolling / click-through panel body / 720 px tier in `style.css`).
 
 ### Changed
 - **The Studio director page top bar is four buttons, not five.** The recipe drop-down on that bar is gone: the
