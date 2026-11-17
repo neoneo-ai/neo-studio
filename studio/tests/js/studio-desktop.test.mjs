@@ -288,8 +288,9 @@ test("导演页弹层表单是胶囊旁的一栏紧凑面板，不是整幅表�
     // 同特异，不带宿主就把这列顶成整窗宽，菜单横着盖住时间轴
     assert.ok(/\.ns-director \.ns-director-segmenu \{[^}]*width:\s*190px/.test(css), "段菜单那列的 190px 带导演宿主");
     // 两块弹层（技能 / 整片参数）共用这一套：只留一处密度定义，改一处两边都改
-    assert.ok(/ns-director-compact-form ns-director-skill-panel/.test(fs.readFileSync(path.join(webDir, "studio", "studio-app.js"), "utf8")), "技能面板挂紧凑版式");
-    assert.ok(/ns-director-compact-form ns-director-size-panel/.test(fs.readFileSync(path.join(webDir, "studio", "studio-app.js"), "utf8")), "整片参数面板挂同一套紧凑版式");
+    const directorSrc = fs.readFileSync(path.join(webDir, "studio", "pages", "director-page.js"), "utf8");
+    assert.ok(/ns-director-compact-form ns-director-skill-panel/.test(directorSrc), "技能面板挂紧凑版式");
+    assert.ok(/ns-director-compact-form ns-director-size-panel/.test(directorSrc), "整片参数面板挂同一套紧凑版式");
 });
 
 // 顶栏 ComfyUI 胶囊：桌面端窗口（有 pywebview api）里才出现，浏览器标签页里不显示。
