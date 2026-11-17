@@ -988,7 +988,7 @@ test("首页原地编辑的文案在英文界面也有话可说", () => {
     const literals = [...src.matchAll(/\bt[fa]?\(\s*"([^"]+)"/g)].map((m) => m[1]);
     assert.ok(literals.length > 20, "文案应直接从 t() 字面量里扫");
     assert.deepEqual(literals.filter((s) => !en.includes(`"${s}"`)), [], "英文字典缺项会在英文界面落回中文");
-    const app = fs.readFileSync(path.join(webDir, "studio", "studio-app.js"), "utf8");
+    const app = fs.readFileSync(path.join(webDir, "studio", "pages", "home-page.js"), "utf8");
     for (const s of ["编辑首页", "完成", "完成首页编辑：保存版式并退出", "已收起",
         "首页卡片已全部移除，在「编辑首页」的添加卡片里加回来。",
         "已保存：插件页、桌面窗口与手机页的首页同步生效", "保存失败：{msg}",
