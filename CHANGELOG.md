@@ -5,6 +5,66 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 ## [Unreleased]
 
 ### Changed
+- **The 提示词增强 reply is flat, and the reasoning stream is a status line.** The reply bubble drops its shell and the
+  prompt text drops its own bordered box — the meta line, the status line, the text and the action row sit directly on the
+  stage, the text growing as tall as it needs (`field-sizing: content`, scrolling inside past 40vh) at the page's 12px
+  scale, so a reply is no longer a card inside a card inside a card. The action row is two icon buttons — 复制提示词 and
+  保存为预设, the words in the tooltip — and it appears only once the text lands (done, failed or stopped): while a run is
+  streaming the reply is just the text growing, and a reply that produced nothing has no buttons. The preset name field is
+  gone — the title is generated from the text (`/rs_prompts/extract_title`, the text's first line when that call gives
+  none). Thinking no longer paints a panel:
+  `createStreamOutputHandlers` is given a `lineEl`, so 思考中… and the pipeline stage names are a single dim line above the
+  text that clears the moment the text starts and when the stream ends — reasoning tokens never reach the screen. The
+  NeoPromptAgent node panel and the 查看技能执行过程 dialog keep the `.rs-thinking` panel (they pass no `lineEl`, same as
+  before). Covered by `studio/tests/js/prompt-enhance.test.mjs` (the unboxed reply bubble and text in the page CSS, no
+  panel on this page, the status line while a run is in flight, reasoning never in the text, the line cleared at stream
+  end, `replace` still swapping the streamed text, the icon-only action row appearing only on landed text, the
+  auto-generated preset title).
+- **The 提示词增强 page stops being a blank stage.** An empty `#/enhance` stage now carries the same start hint the
+  paint and video pages use (the shared `.neo-gallery-gm-idle` — 19px title line plus one 12px note): 「写一句，点增强」
+  with 「结果落在上方气泡，可复制或存为预设」 under it, centered in the stage. It hides when the first bubble lands,
+  returns to the middle after 新增会话 clears the stage, and clicking it focuses the input box. No buttons in the hint —
+  drawing a prompt, picking a reference and choosing the skill all stay on the composer below. Covered by
+  `studio/tests/js/prompt-enhance.test.mjs` (the hint on an empty stage, two text lines and no buttons, hide-and-return).
+- **The 提示词增强 page switches between image and video prompts.** The top-right corner now carries an 图像 / 视频
+  switch next to the 提示词 | dice button, and it moves the whole page's scope at once: the 技能 chip lists only that
+  family's enhance skills (`image_enhance` in image mode, `video_enhance` in video mode — the two families no longer
+  share one list), and picking a prompt, the dice and 保存为预设 all read and write that pool (`preset-picker.js`'s
+  `kind`, the same rule the prompt-management page's 图像 / 视频 tabs use, so a video preset lands under `video/`).
+  Video mode has no 智能判断 entry — an empty `skillId` is image-side only in `studio/llm.py` — so the list lands on the
+  first video skill, and with none available 增强 explains that a 视频提示词增强 skill has to be created in 技能管理
+  instead of sending a run that cannot work. The mode is remembered in `localStorage["rs.enhance.media"]`, the request
+  shape is unchanged, and the offline page keeps working (the skills and both prompt pools are data-root reads).
+  Covered by `studio/tests/js/prompt-enhance.test.mjs` (the two skill pools, the mode in the dice / save / run payloads,
+  the picker's pool, persistence, the no-video-skill guard).
+- **The 提示词增强 chat box sits flat now.** The composer pinned to the bottom edge of `#/enhance` keeps the 绘画页
+  composer's card — a translucent dark fill with a light border — and the video page's `0 14px 38px` drop shadow is off
+  it, so the chat box and the reply bubbles read as one flat surface. Only the page's own rule lost the shadow
+  (`studio/web/prompt-enhance/prompt-enhance.css`); the 视频页 and 导演页 docks keep theirs, and the layout, the chips
+  and the request shape are untouched. Guarded by a `studio/tests/js/prompt-enhance.test.mjs` case that reads the dock
+  card's block in the page's CSS.
+- **The 提示词增强 page takes reference images the way the 编辑 page does.** The composer's left column is a row of 「＋参考」 slots with the 编辑 page's pick menu: clicking an empty slot runs 「🖼 素材库取用」 (the asset-library modal), hovering the row floats the menu out — a 「参考图 N/4」 header, 「⬆ 本地上传」 (several local files at once) and 「🖼 素材库取用」 — with a 250 ms close grace, so the cursor crosses the 6 px gap and lands on an item instead of the menu vanishing under it (the same JS-driven reveal the 编辑 page has). Local files and gallery cards drop straight onto a slot, pasting still works, and the ✕ on a tile removes that image while the rest close up; video and audio never enter a slot, and a full row of 4 (`MAX_ENHANCE_REFS`) reports the cap. The 「上传图片」 icon button is off the chip row — 本地上传 lives in the menu. The page no longer uses the video page's material-slot component (`js/core/media-slot.js`): the slots, the menu and their styling are the 编辑 page's `.neo-gallery-edit-refdrop` family in `gallery.css`, and the `.ns-slot` geometry rules that listed `.ns-enhance-card` are down to the two pages that still use them. The request shape is unchanged — a library pick goes out as `{kind:"input", value:"<relative name>[output]"}`, a local file or paste as `{kind:"data", data:<data URI>}`. Covered by `studio/tests/js/prompt-enhance.test.mjs` (the two menu items, empty-slot click opens the library, 本地上传 opens the hidden file input, the close grace, the image-only and cap gates, remove-and-close-up).
+- **The 提示词增强 page chats.** The composer is one box now — the 补充要求 line is gone, Enter sends, Shift+Enter
+  breaks a line, and every run's input plus its landed reply stay in the page as a conversation: the next run puts that
+  history in front of the text it sends, so "把刚才那段再改得暗一点" works without repeating yourself. History travels
+  as body text (the enhance chain in `studio/llm.py` stays single-turn, so the request shape does not change), capped at
+  the latest 8 exchanges with each one trimmed to 4000 characters, and a reference image is only a "（附 N 张参考图）" note
+  in it — the image bytes belong to the run they were attached to. **新增会话** clears the stage and the conversation
+  and leaves the input draft alone. While a run streams, the 增强 button *is* 停止: pressing it aborts the stream, keeps
+  the text that landed, moves that turn into the conversation, and the button never goes grey. Covered by the 历史块 /
+  会话 / 新增会话 / 停止 cases in `studio/tests/js/prompt-enhance.test.mjs`.
+- **The 提示词增强 page is a full-page chat window now.** The page (`#/enhance`, reached only from the 开始创作 card)
+  lays out like 绘画页 and 视频页: one scrolling stage with a floating capsule composer pinned at the bottom edge, and each
+  run as a pair of bubbles — the input (text plus reference thumbnails) on the right, the reply on the left, with the
+  streaming box, 复制提示词, the preset-name field and 保存为预设 all inside that reply bubble. Skill and thinking depth
+  are the two chips in the composer's bottom row (技能 now lists 智能判断 as its empty entry), the reference images are
+  the video page's `createMediaSlot` tiles (library picks, paste, upload and drag-drop, 4 of them), and the 提示词 | dice
+  split button floats in the top-right corner like the other two pages. The chain itself is unchanged — same skill list,
+  same `enhancePayload` rules, same SSE endpoint — and the desktop window enhances with ComfyUI stopped: only the
+  prompt-library write side is gated, so offline that button reads 需要 ComfyUI (`app/studio_caps.py`,
+  `prompt_library_write`). Covered by `studio/tests/js/prompt-enhance.test.mjs` and the 提示词增强 page cases in
+  `studio/tests/js/studio-home-pages.test.mjs`.
+
 - **The 导演页 "新建配方" creates the recipe on the page now, not in 高级模式.** The top-bar **📝 新建配方** button and
   the recipe-management modal's **新增导演配方** both save a one-segment **未命名配方** right on the 导演页 — the film
   parameters take the page defaults (16:9 at 0.5 megapixels, random seed), the new recipe is selected and readable at once,

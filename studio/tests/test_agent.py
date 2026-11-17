@@ -1556,10 +1556,10 @@ class TestAttachments(unittest.TestCase):
         self.assertEqual(frames[-1]["text"], "图里是一只橘猫")
 
     def test_resolve_images_caps_count_and_skips_non_sources(self):
-        """附件图按 prompts 的图片源口径解析，张数收在 MAX_IMAGES 内，非图片源项跳过。"""
+        """附件图按 image_gen_files 的图片源口径解析，张数收在 MAX_IMAGES 内，非图片源项跳过。"""
         fake = SimpleNamespace(resolve_image_bytes=lambda src, **kw:
                                b"x" if src.get("kind") == "data" else None)
-        with mock.patch.dict(sys.modules, {"studio.prompts": fake}):
+        with mock.patch.dict(sys.modules, {"studio.image_gen_files": fake}):
             self.assertEqual(len(agent._resolve_images(
                 [{"kind": "data"}] * 20 + ["str", 3, None])), agent.MAX_IMAGES)
             self.assertEqual(agent._resolve_images([]), [])

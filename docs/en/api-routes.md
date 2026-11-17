@@ -403,8 +403,11 @@ same handlers, and the module touches no `PromptServer` — the read side never 
 - Names come from the directory listing only: one request = one directory listing for `presets/` and one for
   `custom/`, each opening its own `_tags_index.json` once. No per-file `stat`, no prompt text is opened; the text
   is fetched when one entry gets picked. `custom` first, `presets` after — the same order in both tables.
-- The write side (`save_prompt` / `delete_prompt` updating the tag index) and the LLM generation chain stay in
-  `prompts.py`, on the ComfyUI port.
+- The five read-side routes are in the desktop capability table (`_PROMPTS` in `app/studio_caps.py`), so an offline
+  window answers them. The write side (`save_prompt` / `delete_prompt` updating the tag index) is not in the table: it is
+  the `prompt_library_write` flag, which is what points "save as preset" at starting the kernel. The enhancement chain
+  (`enhance_prompt` / `stream_generate_prompt`) sits in the table's `_LLM` group and is desktop-served offline
+  ([studio-prompt-enhance.md](studio-prompt-enhance.md)); `reverse_prompt` is not in the table and stays on the ComfyUI port.
 - Saving routes by the name's first segment: `video/<name>` lands in `custom/video/`, `presets/<name>` lands in the
   shipped preset tree, everything else in the `custom/` root layer; delete and the tag index use the same scan name.
   The one-time classified move of the legacy flat files runs at plugin start, what was judged is remembered in

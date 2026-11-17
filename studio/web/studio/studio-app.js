@@ -34,6 +34,7 @@ import { createPoseView } from "../pose/pose.js";
 import { createFramesView } from "../frames/frames.js";
 import { createReverseView } from "../reverse-prompt/reverse-prompt.js";
 import { createVoiceCloneView } from "../voice-clone/voice-clone.js";
+import { createPromptEnhanceView } from "../prompt-enhance/prompt-enhance.js";
 import { HOME_SECTIONS, createHomeInlineEditor, heroText, layoutSections, loadHomeLayout, normalizeLayout, sectionOrder, visibleCards } from "./home-layout.js";
 
 const view = document.getElementById("ns-view");
@@ -289,6 +290,12 @@ const buildReverse = createReverseView({
 const buildVoiceClone = createVoiceCloneView({
     $el,
     openMaterial: (onPick) => openMaterialOnce("voice", "audio", onPick),
+    gateRun: gateRunButton,
+});
+// 提示词增强页只要素材库取图与运行闸门；保存为预设那颗钮自己读能力表（提示词库写侧归内核）
+const buildPromptEnhance = createPromptEnhanceView({
+    $el, toast, can,
+    openMaterial: (onPick) => openMaterialOnce("enhance", "image", onPick),
     gateRun: gateRunButton,
 });
 
@@ -2791,7 +2798,8 @@ const gatedButtons = [];
 
 function gateRunButton(btn, feature, label) {
     if (can(feature)) return;
-    const original = btn.textContent;
+    // 原文案按节点存：图标钮里的那枚 svg 用文本存不住，就绪翻面时会把图标抹成空钮
+    const original = [...btn.childNodes];
     const originalTitle = btn.title;
     btn.textContent = runLabel();
     btn.title = tf("{label} 需要 ComfyUI 执行队列 · 点一下启动", { label });
@@ -2807,7 +2815,7 @@ function gateRunButton(btn, feature, label) {
 function ungateRunButtons() {
     for (const g of gatedButtons) {
         g.btn.removeEventListener("click", g.block);
-        g.btn.textContent = g.original;
+        g.btn.replaceChildren(...g.original);
         g.btn.title = g.originalTitle || g.label;
         g.btn.classList.remove("ns-gen-off");
     }
@@ -3259,6 +3267,7 @@ function route() {
     else if (name === "frames") ensureView("frames", buildFrames);
     else if (name === "reverse") ensureView("reverse", buildReverse);
     else if (name === "voice") ensureView("voice", buildVoiceClone);
+    else if (name === "enhance") ensureView("enhance", buildPromptEnhance);   // 首页卡落的那一页：顶栏没有它的页签
     else if (name === "storyboard") ensureView("storyboard", buildStoryboard);   // 首页卡落的那一页：顶栏没有它的页签
     else if (name === "settings") {
         ensureView("settings", buildSettings);

@@ -1,0 +1,266 @@
+/* prompt-enhance.css — 「提示词增强」页：整页聊天舞台 + 底部钉住的输入卡（版面照视频页，卡片照绘画页那份扁平描边）。
+   输入卡外壳与 chip 吃共享类（gallery.css 的 .neo-gallery-gm-*、style.css 的 .neo-split-btn），
+   参考图那一列就是编辑页同一副「＋参考」方块与取图浮层（gallery.css 的 .neo-gallery-edit-refdrop 族，
+   方块尺寸、浮层位置与配色两处共用一份），这里只铺页面骨架与气泡。
+   颜色一律取 studio/style.css 的 --ns-* 变量，页面自身不引入第二套色板。
+   思考与流程状态在这一页只是回话气泡里的一行细注（.ns-enhance-line）；.rs-thinking 那份面板由 prompts.css
+   定义，NeoPromptAgent 节点与「查看技能执行过程」弹窗还在用，这一页不再铺它。
+   共享的 .neo-gallery-gm-* 由 gallery.js 的 ensureCss 在模块图跑完时注入：桌面端窗口里 gallery.css 比
+   style.css 晚到，输入卡外壳与 chip 的裸选择器因此都压过 style.css 同特异那条；共享类只给外壳与 chip，
+   页面骨架（舞台、气泡、输入卡、dock）全带 .ns-enhance 前缀，注入顺序不影响这一页。 */
+
+.ns-enhance { height: 100%; }
+
+.ns-enhance-page { position: relative; height: 100%; overflow: hidden; }
+
+/* 舞台 = 逐轮对话，从上往下排；底部内边距躲开浮在页面下缘的胶囊输入卡 */
+.ns-enhance-stage {
+    height: 100%;
+    overflow-y: auto;
+    padding: 22px 24px 250px;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+}
+
+/* 空舞台那块引导：起手提示的字号与配色就是共享的 .neo-gallery-gm-idle（gallery.css，绘画页与视频页同一份），
+   这里只让它吃掉舞台的可见区落在中间，并抹掉共享类那 16vh 的顶衬（同视频页 hero 那一发）。
+   第一条气泡落下来就 hidden 收掉，flex 得自己压掉 [hidden] 的 UA display:none（同分镜页那一条） */
+.ns-enhance-guide[hidden] { display: none; }
+.ns-enhance-stage .ns-enhance-guide {
+    flex: 1 0 auto;
+    padding-top: 0;
+}
+
+/* 气泡：输入那条贴右，回话那条贴左。正文框与「复制 / 存预设」都在回话这条里——
+   复制与存预设跟着正文走，不必再回顶部找操作 */
+.ns-enhance-msg {
+    box-sizing: border-box;
+    max-width: min(920px, 100%);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 10px;
+    background: var(--ns-panel);
+    border: 1px solid var(--ns-border);
+    border-radius: 10px;
+}
+.ns-enhance-msg-user {
+    align-self: flex-end;
+    background: var(--ns-primary-soft);
+    border-color: var(--ns-primary);
+}
+/* 回话这条不套框：模型写出来的东西就是要读的，元信息 / 状态行 / 正文 / 操作行直接落在舞台上，
+   正文自己不再是一枚带描边的框（框里再框，页面上看着就是三层壳） */
+.ns-enhance-msg-ai {
+    background: transparent;
+    border: 0;
+    padding: 0 2px;
+    gap: 4px;
+}
+.ns-enhance-msg-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    letter-spacing: .04em;
+    color: var(--ns-dim);
+}
+.ns-enhance-msg-text {
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-size: 12px;
+    line-height: 1.6;
+    user-select: text;
+}
+.ns-enhance-refs { display: flex; flex-wrap: wrap; gap: 6px; }
+.ns-enhance-ref {
+    width: 56px;
+    height: 56px;
+    overflow: hidden;
+    border: 1px solid var(--ns-border);
+    border-radius: 6px;
+    background: var(--ns-field);
+}
+.ns-enhance-ref-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* 正文就是舞台上的那段文字：没有描边、没有底色、没有内衬，多长写多高（field-sizing 随内容涨，
+   上限 40vh 之后在区内滚，与输入框那一档同一口径）；思考与流程状态是它上面那一行细注，
+   正文一出现就 hidden 收走（flex 列里得自己压掉 UA 的 display:none，同引导那一条） */
+.ns-enhance-out-wrap { display: flex; flex-direction: column; gap: 4px; }
+.ns-enhance-line {
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--ns-dim);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: pre;
+}
+.ns-enhance-line[hidden] { display: none; }
+.ns-enhance-out {
+    box-sizing: border-box;
+    width: 100%;
+    field-sizing: content;
+    min-height: 1.6em;
+    max-height: 40vh;
+    overflow-y: auto;
+    padding: 0;
+    font-family: inherit;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--ns-fg);
+    background: transparent;
+    border: 0;
+    resize: none;
+    user-select: text;
+}
+.ns-enhance-out:focus { outline: none; }
+.ns-enhance-out::placeholder { color: var(--ns-dim); }
+.ns-enhance-msg-acts { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+/* 正文落定之前这一行是不存在的：flex 容器得自己压掉 hidden（同引导那一条） */
+.ns-enhance-msg-acts[hidden] { display: none; }
+
+/* 按钮：圆角矩形，与绘画页与视频页的胶囊钮同口径（色板全取 style.css 的 --ns-* 变量） */
+.ns-enhance-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 11px;
+    border: 1px solid var(--ns-border-soft);
+    border-radius: 8px;
+    background: var(--ns-raised);
+    color: var(--ns-fg);
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.ns-enhance-btn:hover { background: var(--ns-field-hover); border-color: var(--ns-accent); }
+.ns-enhance-btn:disabled { opacity: .45; cursor: default; }
+.ns-enhance-btn-primary {
+    border-color: var(--ns-primary);
+    background: var(--ns-primary-soft);
+    color: var(--ns-primary-fg);
+}
+.ns-enhance-btn-primary:hover { background: var(--ns-primary); color: #fff; }
+/* 复制与保存这两枚只给图标：压在基础钮之后，图标字号下内衬收小（文字在悬停提示与无障碍标签里） */
+.ns-enhance-msg-acts .ns-enhance-acts-btn { padding: 5px 9px; font-size: 14px; line-height: 1; }
+
+/* 右上那一列入口钮（同绘画页与视频页那一列）：绝对定位浮在舞台上层，不为它们空出一行 */
+.ns-enhance-bar {
+    position: absolute;
+    top: 12px;
+    right: 14px;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* 右上角的「图像 / 视频」开关：这一页增强的是哪一类提示词。两枚钮贴成一枚胶囊（与右侧「提示词」
+   那一组同一套圆角与高度口径），选中那枚吃主色——它换的是技能清单与提示词池，不是显示效果 */
+.ns-enhance-modes {
+    display: inline-flex;
+    overflow: hidden;
+    border: 1px solid var(--ns-border-soft);
+    border-radius: 8px;
+    background: var(--ns-raised);
+}
+.ns-enhance-mode-btn {
+    padding: 6px 12px;
+    border: 0;
+    background: transparent;
+    color: var(--ns-dim);
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.ns-enhance-mode-btn + .ns-enhance-mode-btn { border-left: 1px solid var(--ns-border-soft); }
+.ns-enhance-mode-btn:hover { color: var(--ns-fg); background: var(--ns-field-hover); }
+.ns-enhance-mode-btn.active { background: var(--ns-primary-soft); color: var(--ns-primary-fg); }
+
+
+/* 底部输入卡：钉在页面下缘正中，舞台滚到最底也露得完整 */
+.ns-enhance-dock {
+    position: absolute;
+    left: 50%;
+    bottom: 18px;
+    transform: translateX(-50%);
+    z-index: 5;
+    width: min(980px, calc(100% - 32px));
+}
+/* 卡片外观整副交给 .neo-gallery-gm-composer（绘画页那一副：黑半透明底 + 浅描边，本来就没有投影），
+   这一页只加定位与内衬。视频页与导演页的 dock 各带一层 0 14px 38px 的浮动投影，聊天框不吃那一份——
+   气泡与输入卡要一样平，投影只把卡片抬离舞台、页面看着像两块 */
+.ns-enhance-dock .ns-enhance-card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px 10px;
+}
+.ns-enhance-head { display: flex; align-items: center; gap: 10px; }
+.ns-enhance-status {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 12px;
+    color: var(--ns-dim);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: pre;
+}
+/* 状态行为空（页面刚打开、这一发跑完了）时整行不占高——「生成中才有那一行」的旧约定，靠 :has 兜成结构 */
+.ns-enhance-card:has(.ns-enhance-status:empty) .ns-enhance-head { display: none; }
+
+.ns-enhance-top { display: flex; gap: 12px; align-items: flex-start; }
+/* 参考图那一列：编辑页同一副方块，限宽在左（两枚 56px 一排），取图浮层从方块上方开
+   （.neo-gallery-edit-refdrop-row / -refpicks 的排布、位置与配色都在 gallery.css，这里只给它定位的底座） */
+.ns-enhance-refrow { position: relative; flex: none; max-width: 118px; }
+.ns-enhance-inputbox { position: relative; flex: 1 1 auto; min-width: 0; display: flex; }
+/* 提示词框给三行的位置并给右下角的字数留位（共享类那 110px 最小高是生成素材弹窗那一档） */
+.ns-enhance-card .ns-enhance-prompt {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 76px;
+    max-height: 26vh;
+    padding: 2px 48px 22px 2px;
+    font-size: 12px;
+    line-height: 1.5;
+    resize: vertical;
+}
+.ns-enhance-input .ns-enhance-count {
+    position: absolute;
+    right: 6px;
+    bottom: 6px;
+    font-size: 11px;
+    color: var(--ns-dim);
+    pointer-events: none;
+}
+
+/* 输入卡底行的胶囊（技能 / 思考深度 / 新增会话 / 增强）永不换行——整块被下缘的折叠线切掉过。
+   运行中「增强」就翻面成「停止」，底行不另铺一枚停止钮；参考图的取用收在方块上的取图浮层，不占底行 */
+.ns-enhance-card .ns-enhance-chips { gap: 8px; }
+.ns-enhance-card .ns-enhance-btn { flex: none; }
+.ns-enhance-run { padding: 6px 20px; }
+
+@media (max-width: 900px) {
+    .ns-enhance-dock { bottom: 10px; }
+    .ns-enhance-stage { padding-bottom: 320px; }
+}
+
+@media (max-width: 720px) {
+    /* 窄屏：胶囊铺满下缘，chip 行横滚（不换行——换行的 chip 会被下缘的折叠线切掉） */
+    .ns-enhance-dock {
+        bottom: max(8px, env(safe-area-inset-bottom));
+        left: 6px;
+        transform: none;
+        width: calc(100% - 12px);
+    }
+    .ns-enhance-dock .ns-enhance-card { padding: 8px; }
+    .ns-enhance-stage { padding: 12px 10px 340px; }
+    .ns-enhance-msg { max-width: 100%; }
+    .ns-enhance-top { flex-wrap: wrap; }
+    .ns-enhance-refrow { max-width: none; }
+    .ns-enhance-card .ns-enhance-chips { flex-wrap: nowrap; overflow-x: auto; min-width: 0; }
+}

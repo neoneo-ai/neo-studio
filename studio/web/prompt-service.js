@@ -6,6 +6,11 @@
 import { mkEl } from "./dom-utils.js";
 import { t } from "./js/core/i18n.js";
 
+// 「思考深度」下拉 → 服务端参数取值：off 由调用方发 enable_thinking:false（跳过推理），
+// low / medium / high 是 chat_template_kwargs.reasoning_effort 档位（xhigh 为模板的深度档）。
+// NeoPromptAgent 节点面板与 Studio「提示词增强」页共用这一份映射。
+export const THINKING_EFFORTS = { low: "low", medium: "medium", high: "xhigh" };
+
 // ==========================================
 // 远程 LLM 配置缓存
 // ==========================================
@@ -483,11 +488,13 @@ async function invokePromptStream(payload, options = {}) {
  * - thinking 块实时显示在 textarea 上方临时面板（跟随滚底），正文出现/流结束时清除，不写入提示词
  * - status 块显示为流程状态行（技能生成 / H3 自检等阶段），保留到流结束供回看，仅出错时清除
  * - replace 块整段替换已透传的正文
- * @param {Object} opts - { textarea, refreshPreview?, onDone?(accumulated), onError?(err) }
+ * @param {Object} opts - { textarea, refreshPreview?, onDone?(accumulated), onError?(err), lineEl? }
+ *   lineEl 是调用方自备的一行状态位（提示词增强页那种紧凑气泡）：给了它，思考与流程状态就只往这一行写一句
+ *   （「思考中…」「技能生成中…」），正文一出现就收；不传就是节点面板那两块的旧行为。
  * @returns {{onChunk: Function, onDone: Function, onError: Function, flush: Function}}
  *         前三个直接传给 sseStream/invokePromptStream；flush 供调用方在收尾块补落正文
  */
-function createStreamOutputHandlers({ textarea, refreshPreview, onDone, onError }) {
+function createStreamOutputHandlers({ textarea, refreshPreview, onDone, onError, lineEl = null }) {
     let rafId = null;
     let accumulated = "";
     const wrapper = textarea.parentElement;
@@ -498,6 +505,18 @@ function createStreamOutputHandlers({ textarea, refreshPreview, onDone, onError 
             textarea.scrollTop = textarea.scrollHeight;
             refreshPreview?.();
         }
+    }
+    // 一行状态位（紧凑版面）：只写一句、正文出现就收，思考正文一个字也不上屏
+    function setLine(msg) {
+        if (!lineEl) return false;
+        lineEl.textContent = msg;
+        lineEl.hidden = false;
+        return true;
+    }
+    function clearLine() {
+        if (!lineEl) return;
+        lineEl.textContent = "";
+        lineEl.hidden = true;
     }
     // 思考过程（reasoning_content）：临时面板只用于展示，不写入提示词
     let thinkingEl = null;
@@ -542,17 +561,20 @@ function createStreamOutputHandlers({ textarea, refreshPreview, onDone, onError 
             if (!chunk || !chunk.text) return;
             if (chunk.kind === "status") {
                 // 流程阶段上报：只显示状态行，不写入提示词
+                if (setLine(chunk.text)) return;
                 showStatus(chunk.text);
                 return;
             }
             if (chunk.kind === "replace") {
                 // H3 窄修复采纳后整段替换已透传的正文
                 if (thinkingEl) clearThinking();
+                clearLine();
                 accumulated = chunk.text;
                 if (!rafId) rafId = requestAnimationFrame(flush);
                 return;
             }
             if (chunk.kind === "thinking") {
+                if (setLine(t("思考中…"))) return;   // 紧凑版面：思考只占这一行，正文不上屏
                 thinkingBuf += chunk.text;
                 // 内联 display 必须显式设为可见值：设成 "" 会移除内联样式、回落到 .rs-thinking{display:none}，面板就永远不可见
                 ensureThinkingEl().style.display = "block";
@@ -570,6 +592,7 @@ function createStreamOutputHandlers({ textarea, refreshPreview, onDone, onError 
             }
             // 正文开始：思考完成，清除思考面板（状态行保留到流结束，供回看自检/修复结果）
             if (thinkingEl) clearThinking();
+            clearLine();
             accumulated += chunk.text;
             if (!rafId) rafId = requestAnimationFrame(flush);
         },
@@ -577,6 +600,7 @@ function createStreamOutputHandlers({ textarea, refreshPreview, onDone, onError 
         onDone: () => {
             flush();
             clearThinking();
+            clearLine();
             onDone?.(accumulated);
         },
         onError: (err) => {
@@ -584,6 +608,7 @@ function createStreamOutputHandlers({ textarea, refreshPreview, onDone, onError 
             if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
             clearThinking();
             clearStatus();
+            clearLine();
             onError?.(err);
         },
         flush,

@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { resetEnv, flush, sleep, mockRoute, clearRoutes, jsonResponse, fetchLog, click } from "./setup.mjs";
+import { resetEnv, flush, sleep, mockRoute, clearRoutes, jsonResponse, sseResponse, fetchLog, click } from "./setup.mjs";
 
 const webDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../web");
 const studioBody = '<header class="ns-header"><nav class="ns-tabs"></nav></header>'
@@ -59,6 +59,59 @@ test("深链 #/reverse 与 #/voice 挂出两页：起手卡片在页上，顶栏
     assert.ok(!html.includes('data-tab="voice"') && !html.includes('data-tab="reverse"'),
               "顶栏不给这两页页签：首页那两张卡是唯一的入口");
 });
+// 提示词增强页：默认上首页的卡 + 深链挂页 + 离线照用（增强链归桌面端自服，只有写侧门控）
+test("首页「提示词增强」卡默认就在「开始创作」板块上，点卡与深链都落 #/enhance", async () => {
+    mockShell({ prompt_enhance: true, prompt_library_write: true, image_gen: true }, false);
+    window.location.hash = "#/home";
+    await import("../../web/studio/studio-app.js?homePages4=1");
+    await settle();
+    const card = document.querySelector('.ns-home-card[data-card-id="prompt-enhance"]');
+    assert.ok(card, "空版式（默认首页）就出这张卡：内置卡不带 defaultHidden");
+    click(card);
+    await settle(); await settle(); await settle();
+    assert.equal(location.hash, "#/enhance", "点卡落自己那一页");
+    const page = document.querySelector(".ns-enhance");
+    assert.ok(page && !page.classList.contains("ns-hidden"), "显示的是提示词增强页视图");
+    assert.ok(page.querySelector(".ns-enhance-skill"), "页上有技能下拉（顶部一项是智能判断）");
+    assert.ok(page.querySelector(".ns-enhance-run"), "工具条上是那枚增强钮");
+
+    const html = fs.readFileSync(path.join(webDir, "studio", "index.html"), "utf8");
+    assert.ok(!html.includes('data-tab="enhance"'), "顶栏不给提示词增强页页签：入口只有首页那一发");
+});
+
+test("离线形态：增强链桌面端自服，运行钮不门控；保存为预设那一发说清楚要 ComfyUI", async () => {
+    mockShell({ prompt_enhance: true, prompt_library_write: false, prompt_reverse: false,
+                voice: false, image_gen: false, queue: false, task_history: true }, true);
+    mockRoute("/rs_prompts/stream_generate_prompt", () => sseResponse([
+        "data: " + JSON.stringify({ text: "一段增强出来的提示词", kind: "content" }),
+        "data: [DONE]",
+    ]));
+    window.location.hash = "#/enhance";
+    await import("../../web/studio/studio-app.js?homePages5=1");
+    await settle();
+    const run = document.querySelector(".ns-enhance-run");
+    assert.ok(run, "增强页在离线形态也挂得出来");
+    assert.ok(!run.classList.contains("ns-gen-off"),
+              "增强走 LLM 链与数据根技能文件：离线不需要内核，运行钮不写成「需要 ComfyUI」");
+
+    // 正文框长在回话那条气泡里：先跑一发，舞台上有回话了才谈得上「保存为预设」
+    document.querySelector(".ns-enhance-input").value = "写一句";
+    click(run);
+    await settle();
+    assert.equal(document.querySelector(".ns-enhance-out")?.value, "一段增强出来的提示词",
+                 "离线那一发正文照落进气泡");
+    // 写侧离线：宿主闸门把这颗钮改写成「需要 ComfyUI」（同绘画页那一套），点它只引导启动内核
+    const save = [...document.querySelectorAll(".ns-enhance-msg-ai button")]
+        .find((b) => b.textContent.includes("需要 ComfyUI"));
+    assert.ok(save?.classList.contains("ns-gen-off"),
+              "提示词库写侧离线：保存钮写成需要 ComfyUI，不给一颗只会失败的钮");
+    click(save);
+    await settle();
+    assert.equal(fetchLog.filter((c) => c.path === "/rs_prompts/save_prompt").length, 0,
+                 "离线点保存不发保存请求");
+});
+
+
 // 宫格图分镜在装配层就是首页那张卡的落点：内嵌的一页，无顶栏页签、无弹窗。
 test("首页「宫格图分镜」卡：落自己那一页——页上是内嵌的宿主，顶栏不给它页签", async () => {
     mockShell({ director: true, grid_split: true, queue: true, task_history: true }, false);

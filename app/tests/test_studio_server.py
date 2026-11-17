@@ -61,7 +61,6 @@ COMFY_ONLY_ROUTES = (
     "/neo_studio/mem_stats",
     "/neo_studio/clear_memory",
     "/neo_nodes/repair",
-    "/rs_prompts/enhance_prompt",
 )
 
 
@@ -260,12 +259,13 @@ class OfflineServiceTests(_ServerCase):
 
     def test_prompt_reads_served_offline(self):
         """提示词读侧离线全部答得来：整份条目、正文、行级集合、运行时随机都只扫 prompts/ 目录。
-        生图 / 生视频与 LLM 生成那条链（reverse_prompt / enhance_prompt）留在 ComfyUI 端口。"""
+        提示词增强链（enhance_prompt / stream_generate_prompt）也在桌面端这一侧：技能正文读数据根、
+        出流打 8080 与远程 LLM、参考图读 input/。生图 / 生视频与图片反推留在 ComfyUI 端口。"""
         for route in ("/rs_prompts/list_prompt_names", "/rs_prompts/list_prompts",
                       "/rs_prompts/load_prompt", "/rs_prompts/list_prompt_lines",
                       "/rs_prompts/random_prompts"):
             self.assertEqual(caps.owner("POST", route), "desktop", route)
-        for route in ("/rs_prompts/reverse_prompt", "/rs_prompts/enhance_prompt"):
+        for route in ("/rs_prompts/reverse_prompt",):
             self.assertEqual(caps.owner("POST", route), "comfy", route)
 
         status, body = self.post_json("/rs_prompts/list_prompt_names", {})
@@ -297,6 +297,26 @@ class OfflineServiceTests(_ServerCase):
         status, body = self.post_json("/rs_prompts/random_prompts", {"kind": "image", "count": 2})
         self.assertEqual(status, 200)
         self.assertEqual(len(json.loads(body)["texts"]), 2, "随机按钮离线抽得出来")
+
+    def test_prompt_enhance_chain_served_offline(self):
+        """「提示词增强」页（首页「开始创作」的卡直达 #/enhance）离线整条链答得来：
+        技能列表读数据根，出流打 8080 与远程 LLM，参考图读 input/ —— 都不碰执行队列。
+        提示词库写侧（save_prompt）不在这一侧：离线点保存要门在「启动 ComfyUI」上。"""
+        self.assertEqual(caps.owner("POST", "/rs_prompts/enhance_prompt"), "desktop")
+        self.assertEqual(caps.owner("POST", "/rs_prompts/stream_generate_prompt"), "desktop")
+        self.assertEqual(caps.owner("POST", "/rs_prompts/save_prompt"), "comfy",
+                         "提示词库写侧归内核：桌面端没有这条接口")
+
+        offline = caps.features(False)
+        self.assertTrue(offline["prompt_enhance"], "增强链离线自服：桌面窗口不启动内核也增强得了")
+        self.assertFalse(offline["prompt_library_write"], "存预设要内核：前端据此把保存入口指向启动")
+        self.assertNotIn("prompt_enhance", caps.KERNEL_FEATURES, "增强链不随内核就绪翻面")
+        self.assertIn("prompt_library_write", caps.KERNEL_FEATURES)
+
+        status, body = self.post_json("/rs_prompts/enhance_prompt", {"text": "一座灯塔"})
+        self.assertNotEqual(status, 409, "增强请求不该被离线闸门挡下")
+        self.assertIn("error", json.loads(body),
+                      "本机没配 LLM 时答的是 LLM 链自己的失败，不是「离线」")
 
     def test_agent_session_history_served_offline(self):
         """历史会话是数据根 agent_sessions/ 里的文件：列 / 读 / 删在桌面端就能做完，

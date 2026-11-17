@@ -2107,7 +2107,7 @@ async def handle_llm_api_stream(task_name, request):
         # 允许空文本：有图片输入（如反推）时合法
         images = []
         if raw_images:
-            from .prompts import resolve_image_bytes
+            from .image_gen_files import resolve_image_bytes
             images = [b for b in (resolve_image_bytes(src) for src in raw_images) if b]
             if not images:
                 return web.Response(text="data: [ERROR] invalid image data\n\n", content_type="text/event-stream")
@@ -2421,6 +2421,19 @@ async def rs_prompts_fetch_remote_models(request):
     except Exception as e:
         logger.error(f"Error fetching remote models: {e}")
         return web.json_response({"success": False, "error": str(e)}, status=502)
+
+
+@routes.post("/rs_prompts/enhance_prompt")
+async def rs_prompts_enhance_prompt(request):
+    """非流式提示词增强。注册在本模块：桌面端离线服务挂载的就是本模块的 routes，
+    而 prompts.py 顶层带 server 与 torch，桌面进程加载不动。"""
+    return await handle_llm_api_request("enhance_prompt", request)
+
+
+@routes.post("/rs_prompts/stream_generate_prompt")
+async def rs_prompts_stream_generate_prompt(request):
+    """流式提示词生成：skillId 选技能，留空由后端智能判断（带图时默认走反推）。"""
+    return await handle_llm_api_stream("smart_prompt", request)
 
 
 # ==========================================

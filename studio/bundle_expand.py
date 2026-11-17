@@ -14,7 +14,8 @@ import torch
 from PIL import Image
 
 from .bundles import get_bundle
-from .prompts import _read_image_raw, MAX_BUNDLE_REFERENCES
+from .image_gen_files import _read_image_raw
+from .prompts import MAX_BUNDLE_REFERENCES
 
 
 def _reference_to_image(src: dict) -> torch.Tensor | None:

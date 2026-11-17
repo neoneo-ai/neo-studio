@@ -342,7 +342,9 @@ narrow-window rules are shared with the director page (one modal instance, one g
   The picker's empty state names which case it is: only an empty library says "No prompts available"; the prompt
   list and the dice half are prompt read-side routes (`prompt_names.py`), so they answer even while the desktop
   window is starting ComfyUI; a backend read error says "Failed to load the prompt list". When a route answers
-  `409 offline` — the save/delete write side and prompt enhance stay with the kernel — the picker says "The
+  `409 offline` — the save/delete write side stays with the kernel (`prompt_library_write` in `app/studio_caps.py`);
+  the prompt-enhance chain itself is desktop-served and only its "save as preset" rides that flag, see
+  [studio-prompt-enhance.md](studio-prompt-enhance.md) — the picker says "The
   prompt list needs ComfyUI running" and the dice half says "The prompt list and Random need ComfyUI running"
   instead of claiming the library is empty.
 - "Save this prompt" sits in the `⋯` menu of the generate-asset / image-edit input card and in the video page's
@@ -653,6 +655,14 @@ buttons clicking into nothing. Only one editor exists in the window:
   `RUN_GATES` (`voice` / `prompt_reverse`) — offline, clicking one starts the kernel instead of sending a request
   that can only answer 409. Cases: `studio/tests/js/studio-home-pages.test.mjs`,
   `studio/tests/js/reverse-prompt.test.mjs`, `studio/tests/js/voice-clone.test.mjs`.
+- The "提示词增强" card in the **Create** section is the third `target: "page"` direct card (`value: "enhance"`); it lands in
+  `route()` and mounts `#/enhance` (`studio/web/prompt-enhance/prompt-enhance.js`), and the top bar gives it no tab either.
+  The page is one chat stage — the run's input is a bubble, the model's reply is a bubble, and a floating capsule composer
+  sits at the bottom edge like the video page's, with copy and save-preset living inside the reply bubble. Its run button goes
+  through `RUN_GATES` under `prompt_enhance`: the chain only touches the data-root skill files and the LLM stream, so the
+  desktop window serves it offline and the button never reads "需要 ComfyUI"; on the page only "保存为预设" rides the
+  `prompt_library_write` flag (the prompt-library write side stays with the kernel). Cases:
+  `studio/tests/js/prompt-enhance.test.mjs` and the two enhance-page cases in `studio/tests/js/studio-home-pages.test.mjs`.
 
 ## Settings page groups
 

@@ -232,7 +232,8 @@ ComfyUI 没就绪时点它只会得到「页面不存在」。`openSkillWorkflow
   页面自己的「Esc 关窗」不被带着跑；手机上这一排贴着右上角、不与提示词框重叠（`studio/style.css` 的 `.ns-paint-bar` / `.ns-video-bar`）。
   浮层空态分三种讲法：词库真空才是「暂无可用提示词」；提示词列表与骰子那半是提示词读侧路由（`prompt_names.py`），
   桌面端顶栏「启动中」那段时间也答得来；后端报错说「提示词列表读取失败」。路由回 409 offline（写侧的保存/删除
-  与提示词增强仍归内核）时，空态说「提示词列表需要 ComfyUI 运行」、骰子那半说「提示词与随机需要 ComfyUI 运行」，
+  归内核，`app/studio_caps.py` 的 `prompt_library_write` 一位；提示词增强链本身桌面端自服，只有它的「保存为预设」
+  吃这一位，见 [studio-prompt-enhance.md](studio-prompt-enhance.md)）时，空态说「提示词列表需要 ComfyUI 运行」、骰子那半说「提示词与随机需要 ComfyUI 运行」，
   不把离线说成词库为空。
 - 「保存当前提示词」收在生成素材 / 图片编辑输入卡的 `⋯` 菜单与视频页 composer 的 `⋯` 菜单里：名字自填，绘画 /
   编辑那一发落图像池（`custom/` 根层）、视频页那一发带 `video/` 前缀落视频池（`custom/video/`），存下去的名字就是
@@ -391,6 +392,12 @@ js_api（`check_setup` / `pick_root` / `pick_python` / `start_setup`），根目
   离线形态点它是拉起内核，不是发一条注定 409 的请求。
   用例：`studio/tests/js/studio-home-pages.test.mjs`、`studio/tests/js/reverse-prompt.test.mjs`、
   `studio/tests/js/voice-clone.test.mjs`。
+- 「开始创作」的「提示词增强」是第三张 `target: "page"` 的直连卡（`value: "enhance"`），落进 `route()` 挂出
+  `#/enhance`（`studio/web/prompt-enhance/prompt-enhance.js`）：顶栏同样不给它页签。整页是一块聊天舞台——
+  这一发的输入一条气泡、模型的回话一条气泡，底部一枚浮动胶囊输入卡（同视频页那一块），复制与存预设长在回话那条里。
+  运行钮交 `RUN_GATES` 的 `prompt_enhance`：增强链只认数据根技能文件与 LLM 出流，桌面端离线自服，这颗钮在离线形态
+  不写成「需要 ComfyUI」；页上只有「保存为预设」吃 `prompt_library_write` 那一位（提示词库写侧归内核）。
+  用例：`studio/tests/js/prompt-enhance.test.mjs`、`studio/tests/js/studio-home-pages.test.mjs` 的增强页两发。
 
 ## 设置页分组
 

@@ -196,7 +196,7 @@ test("空版式 = 注册表默认：板块与卡全出，标题区落默认文�
     const layout = hl.normalizeLayout({});
     assert.deepEqual(hl.layoutSections(layout).map((s) => s.id), ["create", "edit", "material"]);
     assert.deepEqual(hl.visibleCards("create", layout).map((c) => c.id),
-        ["paint", "video", "director", "pose", "agent", "voice"]);
+        ["paint", "video", "director", "pose", "agent", "voice", "prompt-enhance"]);
     assert.deepEqual(hl.heroText(layout), hl.HOME_HERO);
     assert.equal(layout.cols, 0, "默认列数是跟随窗口档位");
 });
@@ -212,7 +212,7 @@ test("形状清洗：认不出的板块与卡丢，越界列数与坏 hero 落�
     });
     assert.deepEqual(layout.sections, ["create", "edit"], "板块只收注册表里的 id");
     assert.deepEqual(layout.hidden_sections, ["material"]);
-    assert.deepEqual(layout.order.create, ["paint", "video", "director", "pose", "agent", "voice"],
+    assert.deepEqual(layout.order.create, ["paint", "video", "director", "pose", "agent", "voice", "prompt-enhance"],
         "重复与认不出的卡 id 丢，版式没排的内置卡补在末尾");
     assert.equal(layout.order.ghostsec, undefined, "认不出的板块不留 order 键");
     assert.deepEqual(layout.hidden, ["video"], "认不出的卡不能靠隐藏键留在版式里");
@@ -235,10 +235,10 @@ test("卡片顺序读写：认不出的卡丢，新卡补末尾，隐藏的卡�
         custom: [{ id: "custom_a", section: "create", title: "我的入口", target: "page", value: "settings" }],
     });
     assert.deepEqual(hl.sectionCards("create", layout).map((c) => c.id),
-        ["video", "paint", "director", "pose", "agent", "voice", "custom_a"],
+        ["video", "paint", "director", "pose", "agent", "voice", "prompt-enhance", "custom_a"],
         "版式没排到的卡补在末尾，表单才排得回原位");
     assert.deepEqual(hl.visibleCards("create", layout).map((c) => c.id),
-        ["video", "director", "pose", "agent", "voice", "custom_a"]);
+        ["video", "director", "pose", "agent", "voice", "prompt-enhance", "custom_a"]);
 });
 
 test("自建卡过同一条门：缺标题与跳转类型的卡丢，非 http(s) 的链接丢", () => {
@@ -315,7 +315,7 @@ test("首页按版式出卡：板块序、隐藏卡、自建卡与列数全生�
         ["素材与配置", "开始创作", "编辑"], "版式排到的板块在前，没排的板块按默认序补在末尾");
     assert.deepEqual(cardTitles(home), [
         "素材库", "技能", "设置",
-        "生成视频", "生成图片", "导演视频", "3D 姿势", "声音克隆", "自建卡",
+        "生成视频", "生成图片", "导演视频", "3D 姿势", "声音克隆", "提示词增强", "自建卡",
         "图片编辑", "扩图", "局部", "删除", "机位", "融合", "姿势", "视频抽帧", "图片反推",
     ], "板块序、卡序、隐藏卡与自建卡全按版式出");
     assert.equal(home.querySelector(".ns-home-hero h1").textContent, "我的首页排版什么？",
@@ -425,7 +425,7 @@ test("卡片全移除与板块全收起：首页给出编辑入口的提示，�
     click(gridOf(home, "开始创作").querySelector(".ns-home-add-tile"));
     await flush();
     assert.deepEqual(presetTitles(dlg()),
-        ["生成图片", "生成视频", "导演视频", "3D 姿势", "智能体", "声音克隆", "特效视频", "宫格图分镜"],
+        ["生成图片", "生成视频", "导演视频", "3D 姿势", "智能体", "声音克隆", "提示词增强", "特效视频", "宫格图分镜"],
         "这一板块的预设一张不缺：卡全移出时添加卡片就是唯一的来路");
     click(presetIn(dlg(), "生成图片"));
     await flush();
@@ -853,7 +853,7 @@ test("落位搬运：同板块按格子落位，自建卡能落进别的板块�
     assert.ok(titlesIn(gridOf(home, "编辑")).includes("搬运卡"), "自建卡落进「编辑」板块落位");
     assert.ok(!titlesIn(gridOf(home, "开始创作")).includes("搬运卡"));
 
-    dropAt(cardOf(home, "生成图片"), 5);   // 落在这一版最后一格
+    dropAt(cardOf(home, "生成图片"), 6);   // 落在这一版最后一格
     assert.deepEqual(titlesIn(gridOf(home, "开始创作")).slice(-1), ["生成图片"], "落在最后一格就是排到最后");
 
     click(home.querySelector(".ns-home-edit-entry"));
@@ -862,7 +862,7 @@ test("落位搬运：同板块按格子落位，自建卡能落进别的板块�
     assert.equal(sent.custom[0].section, "edit", "搬过去的板块落进版式");
     assert.ok(sent.order.edit.includes("custom_move"));
     assert.ok(!sent.order.create.includes("custom_move"));
-    assert.deepEqual(sent.order.create, ["video", "director", "pose", "agent", "voice", "paint"], "落位的格子序落进版式");
+    assert.deepEqual(sent.order.create, ["video", "director", "pose", "agent", "voice", "prompt-enhance", "paint"], "落位的格子序落进版式");
 });
 
 test("标题区就地改字：点字直接改，失焦写进草稿，收起的标题区留在这页上", async () => {

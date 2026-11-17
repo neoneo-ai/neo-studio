@@ -831,12 +831,12 @@ def _user_message(text: str, images: list) -> dict:
 
 
 def _resolve_images(raw: list) -> list:
-    """输入框附件图按 prompts 的图片源口径解析（data URI / input 目录文件名），
-    超长的图由 resolve_image_bytes 等比缩到 MAX_IMAGE_SIDE。没带图就不碰 prompts（它带 PIL 与
-    folder_paths 依赖，不该为一次纯文字对话被拖进来）。"""
+    """输入框附件图按 image_gen_files 的图片源口径解析（data URI / input 目录文件名），
+    超长的图由 resolve_image_bytes 等比缩到 MAX_IMAGE_SIDE。没带图就不碰 image_gen_files
+    （它带 PIL 与模型目录扫描，不该为一次纯文字对话被拖进来）。"""
     if not raw:
         return []
-    from .prompts import resolve_image_bytes
+    from .image_gen_files import resolve_image_bytes
     return [b for b in (resolve_image_bytes(src) for src in raw[:MAX_IMAGES]
                         if isinstance(src, dict)) if b]
 

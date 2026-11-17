@@ -432,7 +432,7 @@ def _format_workflow_context(context, grounding: bool = False) -> str:
 
 
 def _fetch_reference_image(context, index) -> tuple[bytes | None, str]:
-    """按 1-based 序号取回参考图字节（复用 prompts._read_image_raw 的目录校验）。"""
+    """按 1-based 序号取回参考图字节（复用 image_gen_files._read_image_raw 的目录校验）。"""
     refs = (context or {}).get("references") or []
     try:
         i = int(index)
@@ -445,7 +445,7 @@ def _fetch_reference_image(context, index) -> tuple[bytes | None, str]:
     name = src.get("value", "") if isinstance(src, dict) else str(src)
     if ref.get("kind") != "image":
         return None, f"[error] reference {i} ({name}) is a video; only images can be fetched"
-    from .prompts import _read_image_raw
+    from .image_gen_files import _read_image_raw
     data = _read_image_raw(src) if isinstance(src, dict) else None
     if data is None:
         return None, f"[error] failed to read reference image {i} ({name})"

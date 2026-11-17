@@ -6,7 +6,7 @@
 
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
-import { fileToBase64, imagesFromClipboard, sseStream, invokePromptStream, createStreamOutputHandlers } from "./prompt-service.js";
+import { fileToBase64, imagesFromClipboard, sseStream, invokePromptStream, createStreamOutputHandlers, THINKING_EFFORTS } from "./prompt-service.js";
 import { listSkills, populateSkillOptions, createSkillDropdown, renderMarkdown, resolveSkillId, openSkillDetailById, CATEGORY_LABELS, skillDisplayName } from "./skill.js";
 import { createModelConfigForm, openLLMSettingsModal } from "./llm-setting.js";
 import { mkEl } from "./dom-utils.js";
@@ -20,10 +20,6 @@ import { Lightbox } from "./lightbox.js";
 import { showToast } from "./gallery-utils.js";
 import { actionToast } from "./toast.js";
 import { t, tf } from "./js/core/i18n.js";
-
-// 「思考深度」下拉 → Qwen3.8 模板参数映射：off=不思考（enable_thinking:false）；
-// low/medium/high 对应 chat_template_kwargs.reasoning_effort 档位（xhigh 为模板的深度档）。
-const THINKING_EFFORTS = { low: "low", medium: "medium", high: "xhigh" };
 
 // LLM 自身异常的报文特征（llm.py 的 Remote LLM network error / timeout / HTTP <code>、
 // "LLM model not found" / "Model not loaded"、provider 的 openai 报错 "Error code: 401"、

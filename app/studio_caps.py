@@ -157,6 +157,11 @@ _LLM = {
     ("GET", "/rs_prompts/llm_mode"),
     ("POST", "/rs_prompts/extract_title"),
     ("POST", "/rs_prompts/fetch_remote_models"),
+    # 提示词增强链（首页「提示词增强」页用）：技能正文读数据根，出流打 8080 与远程 LLM，
+    # 参考图读 input/ —— 都不碰执行队列。注册在 studio/llm.py 的 routes 上，
+    # 注册在 prompts.py 的那两条桌面端加载不到（prompts.py 顶层带 server 与 torch）。
+    ("POST", "/rs_prompts/enhance_prompt"),
+    ("POST", "/rs_prompts/stream_generate_prompt"),
 }
 
 # 模型库（HF / ModelScope / C 站检索 + 断点续传下载）与 Backyard（OSS 上传管理）
@@ -275,6 +280,11 @@ FEATURE_ROUTES = {
     "voice": ("POST", "/neo_voice/generate"),
     # 图片反推要吃内核那侧的 LLM 链与图片读取路径（studio 的 /rs_prompts/reverse_prompt），桌面端自服不了
     "prompt_reverse": ("POST", "/rs_prompts/reverse_prompt"),
+    # 提示词增强走 LLM 链 + 数据根技能文件，桌面端自服（app/studio_caps.py 的 _LLM）
+    "prompt_enhance": ("POST", "/rs_prompts/enhance_prompt"),
+    # 提示词库写侧（存预设）归内核：读侧在 _PROMPTS 里离线答得出，写这条不在表内 → 离线窗口
+    # 把「保存为预设」的入口指向启动内核，不给一颗只会 409 的钮
+    "prompt_library_write": ("POST", "/rs_prompts/save_prompt"),
     "segment": ("POST", "/neo_video_gen/run_segment"),
     "director": ("POST", "/neo_studio/director/generate"),
     "simple_video": ("POST", "/neo_video_gen/simple"),

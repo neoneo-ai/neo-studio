@@ -2,7 +2,7 @@
 """NeoBundleExpand 节点离线单测：把 NeoPromptAgent 的 BUNDLE 展开成 prompt + image。
 
 不依赖 ComfyUI 运行中的服务器与真实模型：server/comfy/folder_paths/nodes 用桩模块替换；
-复用 prompts._read_image_raw 解析 data URI 参考图，验证接口形状、prompt 回退、
+复用 image_gen_files._read_image_raw 解析 data URI 参考图，验证接口形状、prompt 回退、
 参考图还原成 IMAGE 张量、无参考图/无效 bundle 的降级行为。"""
 
 from stub_env import NODE_STUB_PREFIXES, restore, snapshot

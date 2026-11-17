@@ -1929,6 +1929,61 @@ const EN = {
         "Pick a reference audio and write the text to speak: it is read with that voice, and the result lands in the library's Voice folder",
     "已生成语音，点波形播放试听；产物在 Output/Voice":
         "Voice generated — click the waveform to listen; output is in Output/Voice",
+    // Studio「提示词增强」页（首页「开始创作」的卡直达，顶栏没有这一枚页签；页名「提示词增强」见技能设置那一条）。
+    // 版面是整页聊天窗口：舞台逐轮对话 + 底部浮动胶囊输入卡（同视频页），输入卡里的占位就是这一页的自述
+    "选技能，把一句话写成完整提示词": "Pick a skill and turn one line into a full prompt",
+    "智能判断": "Let the model decide",
+    "随机灵感": "Random inspiration",
+    "输入": "Input",
+    "写下画面描述，或把已有的提示词贴进来": "Write what the picture should look like, or paste an existing prompt in",
+    "参考图": "Reference images",
+    "没有参考图": "No reference image",
+    "移除这张参考图": "Remove this reference image",
+    "粘贴的图片 {n}": "Pasted image {n}",
+    "参考图最多 {max} 张，先清掉几张": "At most {max} reference images - clear a few first",
+    "参考图只吃图片：视频与音频不进图位": "References take images only: video and audio do not enter the slots",
+    "选本地图片文件作参考：一次可选多张": "Pick local image files as references - several at once",
+    "点空格从素材库取图；把素材卡或本地图片文件拖进图位":
+        "Click an empty slot to pick from the library; drop a gallery card or a local image file onto a slot",
+    "图片读取失败：{msg}": "Image read failed: {msg}",
+    "参考图可粘贴、拖入或从素材库选；带图又没选技能时，后端默认按图片反推走":
+        "Reference images can be pasted, dropped in, or picked from the library; with an image and no skill picked, the backend defaults to reverse-prompt",
+    "停止": "Stop",
+    "增强结果": "Enhanced prompt",
+    "增强结果会逐字落在这里": "The enhanced prompt streams into this box",
+    "已生成，可复制或存为预设": "Done - copy it, or save it as a preset",
+    "保存为预设": "Save as preset",
+    "已存入提示词库：{name}": "Saved into the prompt library: {name}",
+    "提示词库是空的": "The prompt library is empty",
+    "先写一句描述，或附一张参考图": "Write a description first, or attach a reference image",
+    "我的输入": "My input",
+    "只给了参考图": "References only",
+    "还没有可保存的提示词": "There is no prompt to save yet",
+    "这一发没有产出内容": "This run produced nothing",
+    "查看技能详情": "View skill details",
+    "从提示词库挑一条填进输入框": "Pick a prompt from the library and fill the box",
+    "随机灵感填进输入框": "Fill the box with a random inspiration",
+    "写下这一镜的画面与动作，或把已有的视频提示词贴进来":
+        "Write what this shot shows and how it moves, or paste an existing video prompt in",
+    "增强图像提示词：技能清单与提示词池都换成图像那一池":
+        "Enhance image prompts: the skill list and the prompt pool both switch to the image pool",
+    "增强视频提示词：技能清单与提示词池都换成视频那一池":
+        "Enhance video prompts: the skill list and the prompt pool both switch to the video pool",
+    "选择技能": "Pick a skill",
+    "先选一个视频提示词增强技能：技能管理里新建，分类选「视频提示词增强」":
+        "Pick a video prompt enhance skill first - create one in Skill Management under the video prompt enhance category",
+    // 空舞台那块引导（字号与配色就是共享的 .neo-gallery-gm-idle，绘画页与视频页起手提示同一份）
+    "写一句，点增强": "Write a line, then hit 增强",
+    "结果落在上方气泡，可复制或存为预设": "The result lands in the bubble above - copy it, or save it as a preset",
+    "LLM 处理失败": "The LLM failed to handle this",
+    "打开 LLM 设置": "Open LLM settings",
+    // 会话：每一发的输入与落定的回话攒在这一页的闭包里，下一发默认垫在正文前面交给模型
+    "带 {n} 条历史": "with {n} earlier messages",
+    "上一轮我说的": "My previous message",
+    "上一轮模型回的": "The model's previous reply",
+    "（附 {n} 张参考图）": " (with {n} reference images)",
+    "已开新会话": "New session started",
+
     "用 Qwen Image 2.1 基于这张人像生成头特写+正/侧/背四视图角色设定图；窗口内可看进度与结果预览，完成后拖入配方的 角色参考图": "Uses Qwen Image 2.1 to build a character sheet with a head close-up plus front/side/back views from this portrait; track progress and preview the result in the window, then drag it into the recipe's character reference",
     "以这张图为参考、按所选宫格技能与故事生成分镜图（每格一镜，可直接进导演编辑器「宫格分镜图拆分」切成视频关键帧）": "Generates a storyboard using this image as reference, with the selected grid skill and story (one shot per panel; feed it straight into the director editor's “Split grid storyboard” to cut video keyframes)",
     "以这张图为参考进行 AI 编辑（默认 Qwen Image 2.1，可在弹窗内切换其他生图/编辑技能）": "AI-edit using this image as reference (Qwen Image 2.1 by default; switch to other generation/edit skills in the dialog)",

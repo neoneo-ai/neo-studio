@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 logger.addFilter(PrefixFilter())
 
 from . import skill
+from .image_gen_files import resolve_image_bytes
 from .llm import strip_inline_thinking
 from .bundles import create_bundle
 
@@ -67,91 +68,6 @@ def _auto_unload_after_generate():
         msg = f"Failed to auto-unload model: {e}"
         logger.warning(msg)
         print(f"[Neo Studio] {msg}")
-
-
-# ==========================================
-# Image Helpers (前端传图 / 节点 IMAGE 输入)
-# ==========================================
-
-MAX_IMAGE_SIDE = 1024
-
-# 节点 image 输入允许解析的图片扩展名
-_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif"}
-
-
-def _read_image_raw(src: dict) -> bytes | None:
-    """解析图片源为原始字节。
-
-    kind="data":  {"data": "data:image/png;base64,..."}  前端粘贴/选择/拖拽
-    kind="input": {"value": "sub/dir/img.png[output]"}   节点 image 输入上游（如 LoadImage）
-    """
-    import base64
-    import folder_paths
-
-    kind = src.get("kind", "data")
-    if kind == "data":
-        data_uri = src.get("data", "")
-        if "," not in data_uri:
-            return None
-        try:
-            return base64.b64decode(data_uri.split(",", 1)[1])
-        except Exception as e:
-            logger.warning(f"resolve_image_bytes: failed to decode base64 image: {e}")
-            return None
-
-    if kind == "input":
-        name = str(src.get("value", "")).strip()
-        if not name:
-            return None
-        # 解析 [input]/[output] 标注（LoadImage 的 widget 值可能带），默认 input 目录
-        stem, tag = name, ""
-        if name.endswith("]") and "[" in name:
-            stem, _, tag = name[:-1].rpartition("[")
-        base_dir = folder_paths.get_output_directory() if tag == "output" \
-            else folder_paths.get_input_directory()
-        real = os.path.realpath(os.path.join(base_dir, stem))
-        base_real = os.path.realpath(base_dir)
-        if not os.path.normcase(real).startswith(os.path.normcase(base_real) + os.sep):
-            logger.warning(f"resolve_image_bytes: path escapes directory: {name}")
-            return None
-        if not os.path.isfile(real):
-            logger.warning(f"resolve_image_bytes: image not found: {name}")
-            return None
-        if os.path.splitext(real)[1].lower() not in _IMAGE_EXTENSIONS:
-            logger.warning(f"resolve_image_bytes: unsupported image type: {name}")
-            return None
-        try:
-            with open(real, "rb") as f:
-                return f.read()
-        except Exception as e:
-            logger.warning(f"resolve_image_bytes: failed to read {name}: {e}")
-            return None
-
-    return None
-
-
-def resolve_image_bytes(src: dict, max_side: int = MAX_IMAGE_SIDE) -> bytes | None:
-    """将前端传入的图片源解析为字节数据（超过最长边时等比缩放为 PNG）。"""
-    import io
-    from PIL import Image
-
-    if not isinstance(src, dict):
-        return None
-    raw = _read_image_raw(src)
-    if raw is None:
-        return None
-    try:
-        with Image.open(io.BytesIO(raw)) as img:
-            w, h = img.size
-            if max(w, h) > max_side:
-                ratio = max_side / max(w, h)
-                img = img.resize((int(w * ratio), int(h * ratio)), Image.LANCZOS)
-            buf = io.BytesIO()
-            img.save(buf, format="PNG")
-            return buf.getvalue()
-    except Exception as e:
-        logger.warning(f"resolve_image_bytes: failed to process image: {e}")
-        return None
 
 
 def image_tensor_to_png(image: torch.Tensor) -> bytes | None:
@@ -654,10 +570,6 @@ def _rule_classify(text: str) -> Optional[str]:
                 return category
     return None
 
-@server.PromptServer.instance.routes.post("/rs_prompts/enhance_prompt")
-async def rs_prompts_enhance_prompt(request):
-    return await handle_llm_api_request("enhance_prompt", request)
-
 @server.PromptServer.instance.routes.post("/rs_prompts/translate_prompt")
 async def rs_prompts_translate_prompt(request):
     return await handle_llm_api_request("translate_prompt", request)
@@ -963,13 +875,6 @@ async def rs_prompts_stream_llm_api_request(request):
     """流式 LLM API 请求（SSE）"""
     task_name = request.match_info["task_name"]
     return await handle_llm_api_stream(task_name, request)
-
-
-@server.PromptServer.instance.routes.post("/rs_prompts/stream_generate_prompt")
-async def rs_prompts_stream_generate_prompt(request):
-    """流式提示词生成请求（智能判断是否使用模版）"""
-    # 默认使用 smart_prompt 任务，如果有 templateId 则会切换
-    return await handle_llm_api_stream("smart_prompt", request)
 
 
 # ==========================================

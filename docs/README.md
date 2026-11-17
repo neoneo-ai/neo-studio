@@ -22,6 +22,7 @@
 | [studio-frames.md](studio-frames.md) | 视频抽帧：播放器、起抽点与间隔、帧落进 `output/Frames` |
 | [studio-reverse.md](studio-reverse.md) | 图片反推：首页卡直达的一页、SSE 上屏、`.txt` 落点与复制 |
 | [studio-voice-clone.md](studio-voice-clone.md) | 声音克隆：参考音频加文字、进度与取消、结果波形 |
+| [studio-prompt-enhance.md](studio-prompt-enhance.md) | 提示词增强：首页卡直达的聊天页、思考深度与参考图、离线自服 |
 | [workflow-repair.md](workflow-repair.md) | 工作流模型路径修复 |
 | [model-hub.md](model-hub.md) | 模型库：Comfy-Org 专区双源搜索与断点续传下载 |
 | [studio-pose.md](studio-pose.md) | 3D 姿势：姿势包安装、页面与桥接口、场景与导出 |

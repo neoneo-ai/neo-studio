@@ -1250,7 +1250,9 @@ body {
    框的高度由自己那条规则给，不再吃方块 */
 .ns-video-top { display: flex; gap: 12px; align-items: flex-start; }
 .ns-video-deck { flex: none; display: flex; gap: 8px; }
-/* 填满的方块长一点，缩略图才有地方摊开（会话页单槽不换长） */
+/* 填满的方块长一点，缩略图才有地方摊开（会话页单槽不换长）。
+   方块这一组尺寸规则两页共用一份：视频页 / 导演页（提示词增强页用的是编辑页那一副
+   .neo-gallery-edit-refdrop 方块 + 取图浮层，不在这一组里），页面 CSS 只铺骨架，方块壳与缩略层永远归会话页壳管 */
 :is(.ns-video-card, .ns-director-card) .ns-slot:has(.ns-slot-thumbs:not(:empty)) { flex: 0 1 118px; }
 :is(.ns-video-card, .ns-director-card) .ns-slot-add {
     position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;

@@ -344,7 +344,10 @@ LLM 模式与配置见 [llm.md](llm.md)，技能设计见 [skills.md](skills.md)
 
 - 名字只从目录列表取：一次请求 = `presets/` 与 `custom/` 各一次目录列表、各开一份 `_tags_index.json`，
   全程不逐个 stat `.txt`，也不打开任何正文；正文是选中那一发才读。custom 在前、presets 在后，两表同序。
-- 写侧（`save_prompt` / `delete_prompt` 更新标签索引）与 LLM 生成链留在 `prompts.py`，走 ComfyUI 端口。
+- 读侧五条在桌面端能力表内（`app/studio_caps.py` 的 `_PROMPTS`），离线窗口答得来。写侧（`save_prompt` / `delete_prompt`
+  更新标签索引）不在表内：能力表上它是 `prompt_library_write` 那一位，前端据此把「保存为预设」指向启动内核。
+  提示词增强那条链（`enhance_prompt` / `stream_generate_prompt`）在表内的 `_LLM` 里，桌面端离线自服
+  （[studio-prompt-enhance.md](studio-prompt-enhance.md)），`reverse_prompt` 不在表内、仍走 ComfyUI 端口。
 - 保存按名字的首段落目录：`video/名字` 落 `custom/video/`，`presets/名字` 落出厂预设源目录，其余落 `custom/` 根层；
   删除与标签索引认同一份扫描名。旧版平铺文件的判类搬家在插件启动时跑一次，判过的记在 `custom/_kind_split.json`，
   删掉它是「从没跑过」。

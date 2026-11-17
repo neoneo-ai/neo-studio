@@ -29,6 +29,7 @@ export const HOME_CARDS = [
     { id: "pose", section: "create", icon: "pose", title: "3D 姿势", sub: "姿势 · 整场 · 全景", target: "page", value: "pose" },
     { id: "agent", section: "create", icon: "target", title: "智能体", sub: "说出目标，工具链多轮跑完", target: "page", value: "agent" },
     { id: "voice", section: "create", icon: "volume", title: "声音克隆", sub: "用一段参考音频的音色朗读文字", target: "page", value: "voice" },
+    { id: "prompt-enhance", section: "create", icon: "wand", title: "提示词增强", sub: "选技能，把一句话写成完整提示词", target: "page", value: "enhance" },
     // 特效是这张技能的全部能力，不是一页自己的功能：卡片走技能落点，进视频页就把 effect_h3 选中，
     // 特效芯片由那张技能自己铺出来——技能页删了这张技能，这张卡跟着落技能页（goSkillApply 那条门）。
     { id: "effect", section: "create", icon: "sparkles", title: "特效视频", sub: "选一枚镜头特效，出一段片", target: "skill", value: "effect_h3", defaultHidden: true },
