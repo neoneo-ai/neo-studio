@@ -26,7 +26,7 @@ const EN = {
         "From one line to a finished video - all on your own machine.",
     "一句话出图": "Generate from one line",
     "素材与配置": "Assets & Setup",
-    // 画布页（studio/pages/canvas-page.js，引擎层移植自 infinite-canvas）
+    // 画布页（studio/pages/canvas/，引擎层移植自 infinite-canvas）
     "画布": "Canvas",
     "画布编排": "Canvas Board",
     "图片与提示词，铺在一张画布上": "Images and prompts, laid out on one canvas",

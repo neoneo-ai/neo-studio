@@ -2,8 +2,12 @@ import assert from "node:assert/strict";
 import { test, describe } from "node:test";
 import { resetEnv, mockRoute, jsonResponse, flush, click, setConfirmAnswer, dialogs } from "./setup.mjs";
 
-// 引擎层纯函数与页面共用这一份模块：模块级没有可变状态，跨用例不串味
-const canvas = await import("../../web/studio/pages/canvas-page.js?canvasPage=1");
+// 引擎层纯函数在 pages/canvas/geometry.js，数据契约在 pages/canvas/store.js，页面在 pages/canvas/page.js：
+// 模块级没有可变状态，跨用例不串味
+const geometry = await import("../../web/studio/pages/canvas/geometry.js?canvasGeo=1");
+const store = await import("../../web/studio/pages/canvas/store.js?canvasStore=1");
+const page = await import("../../web/studio/pages/canvas/page.js?canvasPage=1");
+const canvas = { ...geometry, ...store, ...page };
 const { $el } = await import("../../web/studio/shim/ui.js?canvasPage=1");
 
 const STAGE = { x: 0, y: 0, left: 0, top: 0, right: 1200, bottom: 800, width: 1200, height: 800 };

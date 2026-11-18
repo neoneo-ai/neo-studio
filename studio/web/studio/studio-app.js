@@ -24,7 +24,7 @@ import { createStoryboardPage } from "./pages/storyboard-page.js";
 import { createPaintEditPage } from "./pages/paint-edit-page.js";
 import { createHomePage } from "./pages/home-page.js";
 import { createVideoPage } from "./pages/video-page.js";
-import { createCanvasPage } from "./pages/canvas-page.js";
+import { createCanvasPage } from "./pages/canvas/page.js";
 import { createSkillsPage } from "./pages/skills-page.js";
 import { createSettingsPage } from "./pages/settings-page.js";
 import { createDirectorPage } from "./pages/director-page.js";
@@ -381,8 +381,8 @@ const { buildVideo } = createVideoPage({
     groupLabels: VIDEO_GROUP_LABELS,
 });
 
-// 画布页工厂在 pages/canvas-page.js：视口、节点、连线与落盘都在那一页自己那份里，这一处只交
-// 建元素、api 与提示条，并把结果板的「摆到画布」接回生图家族（画布页没建过时 placeItems 自己等它建好）
+// 画布页工厂在 pages/canvas/page.js：工具条、视口与落盘在那一页，几何/节点/连线/手势是它下面那五个模块；
+// 这一处只交建元素、api 与提示条，并把结果板的「摆到画布」接回生图家族（画布页没建过时 placeItems 自己等它建好）
 const canvasPage = createCanvasPage({ $el, api, toast });
 const buildCanvas = canvasPage.build;
 setCanvasPlace((items) => {

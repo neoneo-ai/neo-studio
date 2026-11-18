@@ -208,7 +208,8 @@ studio/
 | `quick-input-history.js`      | Quick-input history |
 | `studio/`                     | Neo Studio standalone page (index.html + studio-app.js composition root + shim/) |
 | `studio/app-registry.js`      | Static app registry: one descriptor = one app page on the home page (page id, home card, tab visibility, deep-link param); the home card table and the router both derive from it |
-| `studio/pages/`               | Page factories extracted out of the composition root (one file per page; each factory takes only the host it needs and keeps its state in its own closure) |
+| `studio/pages/`               | Page factories extracted out of the composition root (one file per page; a page too big for one file is a directory whose entry is `page.js`, sibling modules never own the page state, and the composition root imports that one entry) |
+| `canvas/page.js`              | Canvas page directory: the `page.js` entry owns the toolbar, viewport, page state and persistence; siblings are `geometry.js` pure math, `store.js` data contract and `/neo_canvas/*` IO, `nodes.js` node DOM, `connections.js` links, `interactions.js` gestures |
 | `pose/pose.js`                | 3D Pose host view: iframe host, toolbar and the postMessage bridge |
 | `frames/frames.js`            | Video frame extractor view: player with the start marker, extraction settings, canvas capture and saving frames into the library |
 | `reverse-prompt/reverse-prompt.js` | Image reverse-prompt view: picks an image from the library, streams `/rs_prompts/reverse_prompt` onto the page and copies the prompt |

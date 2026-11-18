@@ -120,7 +120,7 @@ export async function copyImageToInput(image, subfolder) {
 export let _paintHosts = {};   // { text, edit, onOpen }：文生图宿主 / 图片编辑宿主 / 打开时切到那一页
 export function setPaintHost(hosts) { _paintHosts = { ..._paintHosts, ...hosts }; }
 
-// 画布落点由装配层注册（studio-app 把 pages/canvas-page.js 的落点交进来）：这两块面板与结果板在
+// 画布落点由装配层注册（studio-app 把 pages/canvas/page.js 的落点交进来）：这两块面板与结果板在
 // ComfyUI 主画布页里也活着，那里没有画布页 —— 落点没注册过就得把话说明白，不能点「摆到画布」没反应
 export let _canvasPlace = null;
 export function setCanvasPlace(fn) { _canvasPlace = fn || null; }

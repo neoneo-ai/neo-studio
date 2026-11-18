@@ -1444,7 +1444,7 @@ body {
 .ns-storyboard-placeholder { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; font-size: 12px; color: var(--ns-dim); }
 .ns-storyboard-host:has(.neo-director-embedded) ~ .ns-storyboard-placeholder { display: none; }
 
-/* ===== 画布页（studio/pages/canvas-page.js）：视口 + 节点 + 连线 =====
+/* ===== 画布页（studio/pages/canvas/）：视口 + 节点 + 连线 =====
    几何全在 .ns-canvas-world 那一层 transform 里，页面只改这一句；网格层与工具条不参与缩放。 */
 .ns-page.ns-canvas { margin: 0; padding: 8px 10px; height: 100%; overflow: hidden; display: flex; flex-direction: column; }
 .ns-canvas-page { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
