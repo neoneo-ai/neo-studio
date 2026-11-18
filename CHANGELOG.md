@@ -5,6 +5,14 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 ## [Unreleased]
 
 ### Added
+- **The canvas page's 加图片 opens the material library, and every node carries its own actions.** On the 画布 page,
+  **加图片** opens the library in pick mode (images only, the window closes on the pick) and lays the picked images out
+  as image nodes carrying their real `filename` / `subfolder`, so each tile shows the Gallery thumbnail instead of
+  standing on the placeholder. An image node with nothing in it shows **选图**, which fills that one node. Each node
+  head carries **删除节点** (that node plus the connections on its ends), and an image node carries **设为主图** —
+  one hero per canvas, clicking it again clears it. Where no library is available, 加图片 keeps its old behavior and
+  creates an empty image node, with 选图 as the way in.
+
 - **A random batch shows a board of N tiles, and a recipe names one result its cover.** The 输入页 panel lays all N
   tiles out before the first task is submitted and updates each tile in place — queued, generating with the real
   sampling percentage, the finished thumbnail, or the failure reason in its own tile — so a mid-batch failure keeps every

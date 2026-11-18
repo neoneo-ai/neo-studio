@@ -14,8 +14,9 @@ import { attachCanvasInteractions } from "./interactions.js";
 
 const SAVE_DEBOUNCE_MS = 900;
 
-/** 画布页工厂。 */
-export function createCanvasPage({ $el, api, toast }) {
+/** 画布页工厂：openMaterial 由装配层交下来（素材库弹窗，一次收窗）；没有它时「加图片」
+ *  与「选图」回到建空图片节点 —— ComfyUI 侧没有这扇弹窗。 */
+export function createCanvasPage({ $el, api, toast, openMaterial }) {
     let state = readCanvas({});
     let selectedNodeIds = new Set();
     let selectedConnectionId = null;
@@ -74,7 +75,7 @@ export function createCanvasPage({ $el, api, toast }) {
             mk(t("重命名"), "pencil", () => renameProject()),
             mk(t("删除画布"), "trash", () => deleteProject()),
             $el("span", { className: "ns-canvas-bar-gap" }),
-            mkLabel(t("加图片"), "image", () => addNode("image")),
+            mkLabel(t("加图片"), "image", () => pickImage()),
             mkLabel(t("加提示词"), "list", () => addNode("text")),
             $el("span", { className: "ns-canvas-bar-gap" }),
             mk(t("缩小"), "minimize", () => zoomStep(-1)),
@@ -104,7 +105,8 @@ export function createCanvasPage({ $el, api, toast }) {
     function renderNodes() {
         if (!view) return;
         renderNodeLayer({ nodeLayer: view.nodeLayer, links: view.links, hint: view.hint, nodes: state.nodes,
-            selectedNodeIds, selectedConnectionId, $el, onText });
+            selectedNodeIds, selectedConnectionId, $el, onText,
+            onPick: pickInto, onHero: (node) => toggleHero(node.id), onDelete: (node) => deleteNode(node.id) });
     }
 
     function renderConnections() {
@@ -229,6 +231,54 @@ export function createCanvasPage({ $el, api, toast }) {
         if (!selectedNodeIds.size) return;
         state = { ...state, ...removeNodes(state.nodes, state.connections, [...selectedNodeIds]) };
         selectedNodeIds = new Set();
+        renderNodes();
+        renderConnections();
+        markDirty();
+    }
+
+    /** 「加图片」：从素材库取图铺上画布（一次收窗，一批按不重叠网格铺）。装配层没交弹窗时
+     *  回到建一个空图片节点 —— 节点上的「选图」就是它的后路 */
+    function pickImage() {
+        if (!openMaterial) return addNode("image");
+        openMaterial((picked) => {
+            const list = (Array.isArray(picked) ? picked : [picked]).filter((p) => p?.filename);
+            if (!list.length) { toast(t("没有选中的图"), "info"); return; }
+            placeItems(list.map((p) => ({ filename: p.filename, subfolder: p.subfolder || "" })));
+        });
+    }
+
+    /** 空图片节点上的「选图」：取到的那一张填进这一张节点 */
+    function pickInto(node) {
+        if (!openMaterial) return;
+        openMaterial((picked) => {
+            const item = (Array.isArray(picked) ? picked : [picked]).find((p) => p?.filename);
+            if (!item) return;
+            setNodeMetadata(node.id, { filename: item.filename, subfolder: item.subfolder || "" });
+        });
+    }
+
+    /** 改一张节点的 metadata（选图与主图都走这一条）：整层重画把 <img> 与徽标落出来 */
+    function setNodeMetadata(id, patch) {
+        const node = state.nodes.find((n) => n.id === id);
+        if (!node) return;
+        node.metadata = { ...node.metadata, ...patch };
+        renderNodes();
+        renderConnections();
+        markDirty();
+    }
+
+    /** 主图整片只留一枚（与结果板同一口径）：点已为主图的那一枚就是取消 */
+    function toggleHero(id) {
+        const on = !(state.nodes.find((n) => n.id === id)?.metadata.hero);
+        state = { ...state, nodes: state.nodes.map((n) => ({ ...n, metadata: { ...n.metadata, hero: n.id === id ? on : false } })) };
+        renderNodes();
+        markDirty();
+    }
+
+    /** 节点头上的删除：只删这一张，连带两端接上的线 */
+    function deleteNode(id) {
+        state = { ...state, ...removeNodes(state.nodes, state.connections, [id]) };
+        selectedNodeIds = new Set([...selectedNodeIds].filter((x) => x !== id));
         renderNodes();
         renderConnections();
         markDirty();

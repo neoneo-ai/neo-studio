@@ -53,6 +53,8 @@ export function attachCanvasInteractions({ stage, view, host }) {
             return;
         }
         if (e.button !== 0) return;
+        // 节点头上的动作钮交浏览器发 click：起手不拖、也不 preventDefault（拦了 pointerdown 就没有 click 了）
+        if (e.target.closest(".ns-canvas-node-act, .ns-canvas-node-pick")) return;
         const handleEl = e.target.closest(".ns-canvas-handle");
         if (handleEl) {
             const nodeId = handleEl.closest(".ns-canvas-node").dataset.nodeId;

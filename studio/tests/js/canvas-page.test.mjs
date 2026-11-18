@@ -91,12 +91,12 @@ function dragFire(target, type, payload, init = {}) {
 }
 const galleryPayload = (obj) => ({ types: ["application/x-neo-gallery"], getData: (type) => (type === "application/x-neo-gallery" ? JSON.stringify(obj) : "") });
 const plainPayload = (text) => ({ types: ["text/plain"], getData: (type) => (type === "text/plain" ? text : "") });
-async function makePage(env = mockCanvas(), { width = STAGE.width, height = STAGE.height } = {}) {
+async function makePage(env = mockCanvas(), extraHost = {}, { width = STAGE.width, height = STAGE.height } = {}) {
   resetEnv();
   for (const [route, responder] of Object.entries(env.routes)) mockRoute(route, responder);
   document.body.innerHTML = '<div class="ns-page"></div>';
   const host = document.querySelector(".ns-page");
-  const page = canvas.createCanvasPage({ $el, api: env.api, toast: env.toast });
+  const page = canvas.createCanvasPage({ $el, api: env.api, toast: env.toast, ...extraHost });
   await page.build(host);
   const view = {
     stage: host.querySelector(".ns-canvas-stage"),
@@ -463,6 +463,17 @@ const TWO_IMAGES = () => mockCanvas({ projects: [
   { id: "canvas-0002", title: "乙", nodes: [], connections: [],
     viewport: { x: 0, y: 0, k: 1 }, background_mode: "lines" },
 ] });
+/** 一张填好图的 + 一张空着的图片节点，中间一条连线：节点头部动作的用例都从这一张起 */
+const PAIR_WITH_LINK = () => mockCanvas({ projects: [
+  { id: "canvas-0001", title: "甲", nodes: [
+    { id: "n-a", type: "image", title: "图片", position: { x: 10, y: 20 }, width: 340, height: 240, metadata: { filename: "a.png" } },
+    { id: "n-b", type: "image", title: "图片", position: { x: 400, y: 20 }, width: 340, height: 240, metadata: {} }],
+    connections: [{ id: "c1", fromNodeId: "n-a", toNodeId: "n-b" }],
+    viewport: { x: 0, y: 0, k: 1 }, background_mode: "dots" },
+] });
+/** 素材库弹窗的替身：开一次记一条回调，用例自己决定交回哪一批（与装配层同一份契约：一次一批数组） */
+const picker = () => { const calls = []; return { calls, openMaterial: (cb) => calls.push(cb) }; };
+const nodeAct = (view, id, act) => view.nodeEl(id).querySelector(`[data-node-act="${act}"]`);
 /** 选中一个节点：点它起手、松手收笔（点住即拖的起点，拖距 0 不算改动） */
 const selectNode = (view, id, init = {}) => {
   const el = view.nodeEl(id);
@@ -899,6 +910,94 @@ describe("canvas-page 页面", () => {
     });
   });
 
+
+  describe("加图片与节点头部动作", () => {
+    test("「加图片」开素材弹窗：弹窗交回图之前不铺节点", async () => {
+      const pk = picker();
+      const { view } = await makePage(mockCanvas(), pk);
+      click(view.button("加图片"));
+      assert.equal(pk.calls.length, 1, "点「加图片」要开一次素材库弹窗");
+      assert.equal(view.nodeLayer.children.length, 0, "没取到图之前不铺节点");
+    });
+
+    test("取到的图铺成图片节点：带 filename 走 Gallery 缩略图", async () => {
+      const pk = picker();
+      const { view, page } = await makePage(mockCanvas(), pk);
+      click(view.button("加图片"));
+      pk.calls[0]([{ filename: "a.png", subfolder: "neo_gen/x" }, { filename: "b.png", subfolder: "" }]);
+      await settle();
+      assert.deepEqual(page.current().nodes.map((n) => n.metadata.filename), ["a.png", "b.png"]);
+      const src = [...view.nodeLayer.children].map((el) => el.querySelector("img").src);
+      assert.ok(src[0].includes("/neo_gallery/thumbnail") && src[0].includes("a.png") && src[0].includes("neo_gen%2Fx"), src[0]);
+      assert.ok(src[1].includes("b.png"), src[1]);
+      assert.ok(!src[0].includes("placeholder"), "填上图的节点不该还站在占位图上");
+    });
+
+    test("素材弹窗空手回来时说「没有选中的图」，不铺节点", async () => {
+      const pk = picker();
+      const { view, env } = await makePage(mockCanvas(), pk);
+      click(view.button("加图片"));
+      pk.calls[0]([]);
+      await settle();
+      assert.ok(toastOf(env).some((m) => m.includes("没有选中的图")));
+      assert.equal(view.nodeLayer.children.length, 0);
+    });
+
+    test("空图片节点出「选图」：取到的那一张填这一张，落盘带 filename", async () => {
+      const pk = picker();
+      const { view, page, env } = await makePage(PAIR_WITH_LINK(), pk);
+      click(nodeAct(view, "n-b", "pick"));
+      assert.equal(pk.calls.length, 1);
+      pk.calls[0]([{ filename: "picked.png", subfolder: "neo_gen/p" }]);
+      await settle();
+      const node = page.current().nodes.find((n) => n.id === "n-b");
+      assert.deepEqual([node.metadata.filename, node.metadata.subfolder], ["picked.png", "neo_gen/p"]);
+      assert.ok(view.nodeEl("n-b").querySelector("img").src.includes("picked.png"));
+      assert.equal(nodeAct(view, "n-b", "pick"), null, "填上图之后「选图」钮要让位");
+      page.flush();
+      await settle();
+      assert.equal(env.store.saved[0].nodes.find((n) => n.id === "n-b").metadata.filename, "picked.png");
+    });
+
+    test("填好图的节点不出「选图」，两类节点都有删除钮", async () => {
+      const { view } = await makePage(PAIR_WITH_LINK());
+      assert.equal(nodeAct(view, "n-a", "pick"), null);
+      assert.ok(nodeAct(view, "n-a", "delete") && nodeAct(view, "n-b", "delete"));
+      assert.ok(nodeAct(view, "n-a", "hero"), "图片节点有主图钮");
+    });
+
+    test("设为主图整片只留一枚，再点同一枚是取消", async () => {
+      const { view, page } = await makePage(PAIR_WITH_LINK());
+      click(nodeAct(view, "n-a", "hero"));
+      assert.equal(page.current().nodes.find((n) => n.id === "n-a").metadata.hero, true);
+      assert.ok(view.nodeEl("n-a").querySelector(".ns-canvas-node-tag").textContent.includes("主图"));
+      click(nodeAct(view, "n-b", "hero"));
+      assert.deepEqual(page.current().nodes.map((n) => n.metadata.hero === true), [false, true]);
+      assert.equal([...view.nodeLayer.children].filter((el) => el.querySelector(".ns-canvas-node-act-on")).length, 1);
+      click(nodeAct(view, "n-b", "hero"));
+      assert.equal(page.current().nodes.find((n) => n.id === "n-b").metadata.hero, false);
+      assert.equal([...view.nodeLayer.children].filter((el) => el.querySelector(".ns-canvas-node-act-on")).length, 0);
+    });
+
+    test("节点头上的删除只删这一张，连带两端接上的线", async () => {
+      const { view, page } = await makePage(PAIR_WITH_LINK());
+      assert.equal(view.links.querySelectorAll(".ns-canvas-line").length, 1);
+      click(nodeAct(view, "n-a", "delete"));
+      await settle();
+      assert.deepEqual(page.current().nodes.map((n) => n.id), ["n-b"]);
+      assert.equal(page.current().connections.length, 0, "接在被删节点上的那条线要一起没了");
+      assert.equal(view.links.querySelectorAll(".ns-canvas-line").length, 0);
+    });
+
+    test("节点头上的钮起手不拖节点", async () => {
+      const { view, pos } = await makePage(PAIR_WITH_LINK());
+      const before = pos();
+      fire(nodeAct(view, "n-a", "hero"), "pointerdown", { clientX: 180, clientY: 140, button: 0 });
+      fire(window, "pointermove", { clientX: 320, clientY: 240 });
+      fire(window, "pointerup", {});
+      assert.deepEqual(pos(), before, "头部钮起手不能把整张节点拖走");
+    });
+  });
 
   describe("落盘与画布项目", () => {
     test("改动攒着，切页 flush 落盘；没有改动不重复写", async () => {

@@ -1484,6 +1484,11 @@ body {
 .ns-canvas-node-head { display: flex; align-items: center; gap: 6px; height: 26px; padding: 0 8px; font-size: 12px; color: var(--ns-dim); background: var(--ns-raised); border-bottom: 1px solid var(--ns-border); user-select: none; }
 .ns-canvas-node-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ns-canvas-node-tag { flex: none; color: var(--ns-accent); }
+.ns-canvas-node-act { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--ns-dim); cursor: pointer; }
+.ns-canvas-node-act:hover { color: #fff; background: var(--ns-field-hover); }
+.ns-canvas-node-act-on { color: var(--ns-accent); }
+.ns-canvas-node-pick { flex: none; display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 6px; border-radius: 5px; border: 1px solid var(--ns-field-bd); background: var(--ns-field); color: var(--ns-fg); font: inherit; font-size: 12px; cursor: pointer; }
+.ns-canvas-node-pick:hover { border-color: var(--ns-field-bd-hover); background: var(--ns-field-hover); color: #fff; }
 .ns-canvas-node-img { display: block; width: 100%; height: calc(100% - 26px); object-fit: cover; background: var(--ns-field); }
 .ns-canvas-node-textarea { display: block; width: 100%; height: calc(100% - 26px); padding: 8px; border: 0; resize: none; background: var(--ns-field); color: var(--ns-fg); font: 13px/1.5 "Segoe UI", system-ui, sans-serif; outline: none; }
 .ns-canvas-handle { position: absolute; top: 50%; width: 12px; height: 12px; margin-top: -6px; border-radius: 50%; border: 2px solid var(--ns-border-soft); background: var(--ns-field); cursor: crosshair; }
