@@ -73,6 +73,7 @@ RECIPES_DIR = DATA_ROOT / "recipes"
 SKILLS_DIR = DATA_ROOT / "skills"
 AGENT_SESSIONS_DIR = DATA_ROOT / "agent_sessions"   # 智能体一次运行的会话落盘，只存本机
 TASKS_DB = CONFIGS_DIR / "studio_tasks.sqlite"      # 顶栏任务中心：跨重启留下的生成状态历史
+CANVAS_DIR = DATA_ROOT / "canvas"                   # 画布页：用户铺的节点与连线，一张画布一个文件
 
 
 def seed_presets(plugin_dir: Path | None = None, data_root: Path | None = None) -> None:

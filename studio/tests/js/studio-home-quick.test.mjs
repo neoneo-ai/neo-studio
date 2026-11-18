@@ -10,7 +10,7 @@ import { resetEnv, flush, sleep, mockRoute, clearRoutes, jsonResponse, click, fi
 
 const webDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../web");
 const ALL_BUILTIN_CARDS = [
-    "paint", "video", "director", "pose", "agent", "voice", "prompt-enhance",
+    "paint", "video", "director", "pose", "canvas", "agent", "voice", "prompt-enhance",
     "edit-normal", "edit-outpaint", "edit-local", "edit-remove", "edit-angle", "edit-blend", "edit-pose",
     "frames", "reverse", "reverse-video", "gallery", "skills", "settings",
 ];

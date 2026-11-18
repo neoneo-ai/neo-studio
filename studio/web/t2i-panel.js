@@ -22,7 +22,7 @@ import { icon, setIcon } from "./js/core/icons.js";
 import {
     makeStoryWindowDraggable, _paintHosts, storyPanelRoot, ratioGlyph, chipButton,
     skillParamsChip, guardMainModelFamily, reuseModelOverlay, reusePaintPanel,
-    notifyPrefillFilled,
+    notifyPrefillFilled, openCanvasPlace,
 } from "./gen-utils.js";
 
 // 「生成素材」弹窗默认技能：Krea2 文生图（纯提示词出图，产物落 Output/NeoAgent/<日期>）
@@ -475,7 +475,10 @@ export function openGenMaterialDialog(gallery, opts = null) {
                 deleting = false;
             }
         };
-        fill(actionsBox, btn(t("打开输出目录"), openOutputDir), btn(t("删除"), deleteResult), panel.embedded ? null : btn(t("关闭"), close, true));
+        fill(actionsBox, btn(t("打开输出目录"), openOutputDir),
+            // 摆到画布：这一发生成的图一次铺进 Neo Studio 画布，首图当主图排最前
+            btn(t("摆到画布"), () => openCanvasPlace(images.map((im, i) => ({ ...im, hero: i === 0 })))),
+            btn(t("删除"), deleteResult), panel.embedded ? null : btn(t("关闭"), close, true));
     };
 
     const renderSuccess = (final) => {

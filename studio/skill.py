@@ -99,7 +99,7 @@ _META_KEY_ORDER = (
 # 空 = 这份技能没声明，首页技能卡的落点落回前端那两条启发（视频技能出视频页、生图技能进绘画页）。
 SKILL_LANDINGS = (
     "home", "director", "paint", "edit", "gallery", "video", "pose", "skills", "settings",
-    "agent", "frames", "reverse", "reverse_video", "voice", "enhance", "storyboard",
+    "agent", "frames", "reverse", "reverse_video", "voice", "enhance", "storyboard", "canvas",
 )
 
 # 技能文件管理器支持的文件扩展名（.md 主/子文档 + .txt 引用文本）。

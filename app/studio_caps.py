@@ -266,6 +266,16 @@ _TASKS = {
     ("GET", "/neo_studio/tasks"),
 }
 
+# 画布页（studio/canvas.py）：节点与连线落数据根 canvas/ 的 JSON，纯文件读写，没有 ComfyUI 运行时的事。
+# 离线窗口里画布照铺照存 —— 它要的素材图由 Gallery 那批路由给，桌面端本来也答得出。
+_CANVAS = {
+    ("GET", "/neo_canvas/list"),
+    ("GET", "/neo_canvas/project"),
+    ("POST", "/neo_canvas/project"),
+    ("POST", "/neo_canvas/rename"),
+    ("POST", "/neo_canvas/delete"),
+}
+
 # 手机扫码连接（局域网）：配对页、令牌校验与设置页轮询的二维码数据。只有桌面端服务有这条
 # 链路（app/mobile_pair.py + app/studio_server.py），ComfyUI 端口上没有配对页
 _PAIR = {
@@ -275,7 +285,7 @@ _PAIR = {
 }
 
 DESKTOP_ROUTES = (_GALLERY | _BOOKMARK | _SKILL | _PROMPTS | _RECIPES | _SETTINGS | _LLM | _MODEL_HUB
-                  | _SKILL_MODELS | _BACKYARD | _MCP | _AGENT | _POSE | _FRAMES | _PAIR | _TASKS)
+                  | _SKILL_MODELS | _BACKYARD | _MCP | _AGENT | _POSE | _FRAMES | _PAIR | _TASKS | _CANVAS)
 
 # 前端门控用的功能开关：功能 → 代表路由。桌面端服务时该功能可用，否则按钮指向「启动 ComfyUI」。
 FEATURE_ROUTES = {

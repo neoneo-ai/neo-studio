@@ -29,7 +29,7 @@ export const HOME_SECTIONS = [
 // 加一页只写注册表那一处，卡与页不在两份文件里各点一次名
 const PAGE = homeCards();
 export const HOME_CARDS = [
-    PAGE.paint, PAGE.video, PAGE.director, PAGE.pose, PAGE.agent, PAGE.voice, PAGE["prompt-enhance"],
+    PAGE.paint, PAGE.video, PAGE.director, PAGE.pose, PAGE.canvas, PAGE.agent, PAGE.voice, PAGE["prompt-enhance"],
     // 特效是这张技能的全部能力，不是一页自己的功能：卡片走技能落点，进视频页就把 effect_h3 选中，
     // 特效芯片由那张技能自己铺出来——技能页删了这张技能，这张卡跟着落技能页（goSkillApply 那条门）。
     { id: "effect", section: "create", icon: "sparkles", title: "特效视频", sub: "选一枚镜头特效，出一段片", target: "skill", value: "effect_h3", defaultHidden: true },

@@ -77,6 +77,10 @@ export const STUDIO_APPS = [
         title: "宫格图分镜", sub: "宫格图拆成多段，逐格出提示词",
         defaultHidden: true,
     },
+    {
+        id: "canvas", tab: "画布", section: "create", icon: "image",
+        title: "画布编排", sub: "图片与提示词，铺在一张画布上",
+    },
 ];
 
 /** 这一条描述符是哪一页：认不出（旧版式里的页名、别的构建里删掉的页）就交回 null，路由落回首页 */

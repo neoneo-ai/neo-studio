@@ -1,0 +1,25 @@
+MIT License
+
+Copyright (c) 2026 basketikun
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+本仓库的 studio/web/studio/pages/canvas-page.js 移植自 infinite-canvas（https://github.com/basketikun/infinite-canvas，MIT License，Copyright (c) 2026 basketikun），上游 commit 9cd3deacbcc598361807afc16c059a80dd18b6f9（2026-10-25）。移植范围：视口变换与缩放锚点数学、网格绘制、节点几何与缩放最小值、连线锚点/命中测试、连线贝塞尔路径、normalizeConnection 方向归一化。React 组件层、持久化 hooks、dnd-kit 拖拽层、富文本编辑器、minimap 与分组缩放不在移植范围内，由 Neo Studio 自己实现。

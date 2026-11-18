@@ -11,7 +11,7 @@ import { configureCanvasOrigin } from "../js/core/canvas-origin.js";
 
 import "../gallery.js";   // 注册 comfy.neo.gallery 扩展（NeoGallery + 侧栏 tab 定义）
 import { SEG_MODES, MODE_LABELS, LEGACY_MODE_MAP } from "../director.js";
-import { openImageEditDialog, setVideoPageJump } from "../gallery-gen.js";
+import { openImageEditDialog, setVideoPageJump, setCanvasPlace } from "../gallery-gen.js";
 import { AGENT_PREVIEW_SIDE } from "../live-preview.js";
 import { createAgentPanel } from "../agent-panel.js";
 import { t, tf } from "../js/core/i18n.js";
@@ -24,6 +24,7 @@ import { createStoryboardPage } from "./pages/storyboard-page.js";
 import { createPaintEditPage } from "./pages/paint-edit-page.js";
 import { createHomePage } from "./pages/home-page.js";
 import { createVideoPage } from "./pages/video-page.js";
+import { createCanvasPage } from "./pages/canvas-page.js";
 import { createSkillsPage } from "./pages/skills-page.js";
 import { createSettingsPage } from "./pages/settings-page.js";
 import { createDirectorPage } from "./pages/director-page.js";
@@ -114,6 +115,7 @@ function showView(name) {
         closeHomeQuick();       // 切页收起悬浮快速入口：它钉的是上一屏的落点，留着就压在别人那一页上
         libModal?.close();      // 离开该页收起素材库弹窗（close 自己把画廊交还宿主）
         closeRecipesModal();   // 配方弹窗同一条路
+        if (currentView === "canvas") canvasPage.flush();   // 离开画布页先落盘：攒着的节点与连线只在这页的内存里
         // 离开素材页：侧栏替身归位。素材页挂载画廊时把 activeSidebarTabId 写成 neo.gallery，
         // 不归位的话导演页 / 编辑页的「素材库」按钮再写同一个 id 会被去重吃掉，弹窗打不开
         const tab = app.extensionManager.sidebarTab;
@@ -377,6 +379,15 @@ const { buildVideo } = createVideoPage({
     modeGroup: videoModeGroup,
     defaultSkill: defaultVideoSkill,
     groupLabels: VIDEO_GROUP_LABELS,
+});
+
+// 画布页工厂在 pages/canvas-page.js：视口、节点、连线与落盘都在那一页自己那份里，这一处只交
+// 建元素、api 与提示条，并把结果板的「摆到画布」接回生图家族（画布页没建过时 placeItems 自己等它建好）
+const canvasPage = createCanvasPage({ $el, api, toast });
+const buildCanvas = canvasPage.build;
+setCanvasPlace((items) => {
+    go("canvas");
+    return canvasPage.placeItems(items);
 });
 
 // 首页工厂在 pages/home-page.js：卡表与版式在 home-layout.js，落点页在 app-registry.js，
@@ -980,7 +991,7 @@ const PAGE_BUILDERS = {
     gallery: buildGallery, video: buildVideo, pose: buildPose, skills: buildSkills,
     settings: buildSettings, agent: buildAgentPage, frames: buildFrames, reverse: buildReverse,
     reverse_video: buildReverseVideo, voice: buildVoiceClone, enhance: buildPromptEnhance,
-    storyboard: buildStoryboard,
+    storyboard: buildStoryboard, canvas: buildCanvas,
 };
 
 function route() {

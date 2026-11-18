@@ -1443,3 +1443,67 @@ body {
 .ns-storyboard-host .neo-director-embedded .neo-director-title { grid-template-columns: 1fr auto; }
 .ns-storyboard-placeholder { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; font-size: 12px; color: var(--ns-dim); }
 .ns-storyboard-host:has(.neo-director-embedded) ~ .ns-storyboard-placeholder { display: none; }
+
+/* ===== 画布页（studio/pages/canvas-page.js）：视口 + 节点 + 连线 =====
+   几何全在 .ns-canvas-world 那一层 transform 里，页面只改这一句；网格层与工具条不参与缩放。 */
+.ns-page.ns-canvas { margin: 0; padding: 8px 10px; height: 100%; overflow: hidden; display: flex; flex-direction: column; }
+.ns-canvas-page { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+.ns-canvas-bar { flex: none; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.ns-canvas-bar-gap { flex: 1; }
+.ns-canvas-select { height: 28px; max-width: 190px; padding: 0 6px; border-radius: 6px; border: 1px solid var(--ns-field-bd); background: var(--ns-field); color: var(--ns-fg); }
+.ns-canvas-tool { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 28px; padding: 0 8px; border-radius: 6px; border: 1px solid var(--ns-field-bd); background: var(--ns-field); color: var(--ns-fg); font: inherit; cursor: pointer; }
+.ns-canvas-tool:hover { border-color: var(--ns-field-bd-hover); background: var(--ns-field-hover); color: #fff; }
+.ns-canvas-zoom, .ns-canvas-save { min-width: 46px; font-size: 12px; color: var(--ns-dim); text-align: center; }
+.ns-canvas-save { min-width: 52px; text-align: right; }
+
+.ns-canvas-stage { position: relative; flex: 1; min-height: 0; overflow: hidden; border-radius: 8px; border: 1px solid var(--ns-border); background: var(--ns-bg); touch-action: none; outline: none; }
+.ns-canvas-stage:focus-visible { border-color: var(--ns-primary); }
+.ns-canvas-stage.ns-canvas-grabbing { cursor: grabbing; }
+.ns-canvas-grid { position: absolute; inset: 0; background-image: radial-gradient(circle, #3a3a44 1.15px, transparent 1.35px); }
+.ns-canvas-grid-fine { background-image: radial-gradient(circle, #3a3a44 .8px, transparent .95px); }
+.ns-canvas-grid-lines, .ns-canvas-grid-lines-fine {
+    background-image: linear-gradient(to right, #2e2e36 1px, transparent 1px), linear-gradient(to bottom, #2e2e36 1px, transparent 1px);
+}
+.ns-canvas-grid-lines-fine { background-image: linear-gradient(to right, #26262d 1px, transparent 1px), linear-gradient(to bottom, #26262d 1px, transparent 1px); }
+.ns-canvas-grid-blank { background-image: none; }
+.ns-canvas-world { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+/* svg 自己只占 1px 见方：连线全画在世界坐标里，靠 overflow: visible 溢出这一格 */
+.ns-canvas-links { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; }
+.ns-canvas-nodes { position: absolute; left: 0; top: 0; width: 0; height: 0; }
+.ns-canvas-line { fill: none; stroke: #6b7280; stroke-width: 1.5; vector-effect: non-scaling-stroke; pointer-events: none; }
+.ns-canvas-line-hit { fill: none; stroke: transparent; stroke-width: 16; vector-effect: non-scaling-stroke; pointer-events: stroke; cursor: pointer; }
+.ns-canvas-line-on { stroke: var(--ns-accent); }
+.ns-canvas-line-hit:hover + .ns-canvas-line { stroke: var(--ns-accent); }
+.ns-canvas-active-line { fill: none; stroke: var(--ns-accent); stroke-width: 1.5; stroke-dasharray: 6 5; vector-effect: non-scaling-stroke; pointer-events: none; }
+.ns-canvas-marquee { position: absolute; border: 1px dashed var(--ns-accent); background: var(--ns-primary-soft); pointer-events: none; }
+.ns-canvas-hint { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); font-size: 13px; color: var(--ns-dim); pointer-events: none; }
+
+.ns-canvas-node { position: absolute; border-radius: 10px; border: 1px solid var(--ns-border-soft); background: var(--ns-panel); overflow: hidden; box-shadow: 0 2px 10px rgba(0, 0, 0, .35); }
+.ns-canvas-node-on { border-color: var(--ns-primary); }
+.ns-canvas-node-drop { border-color: var(--ns-accent); box-shadow: 0 0 0 2px var(--ns-primary-soft); }
+.ns-canvas-node-head { display: flex; align-items: center; gap: 6px; height: 26px; padding: 0 8px; font-size: 12px; color: var(--ns-dim); background: var(--ns-raised); border-bottom: 1px solid var(--ns-border); user-select: none; }
+.ns-canvas-node-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ns-canvas-node-tag { flex: none; color: var(--ns-accent); }
+.ns-canvas-node-img { display: block; width: 100%; height: calc(100% - 26px); object-fit: cover; background: var(--ns-field); }
+.ns-canvas-node-textarea { display: block; width: 100%; height: calc(100% - 26px); padding: 8px; border: 0; resize: none; background: var(--ns-field); color: var(--ns-fg); font: 13px/1.5 "Segoe UI", system-ui, sans-serif; outline: none; }
+.ns-canvas-handle { position: absolute; top: 50%; width: 12px; height: 12px; margin-top: -6px; border-radius: 50%; border: 2px solid var(--ns-border-soft); background: var(--ns-field); cursor: crosshair; }
+.ns-canvas-handle-left { left: -7px; }
+.ns-canvas-handle-right { right: -7px; }
+.ns-canvas-handle:hover { border-color: var(--ns-accent); background: var(--ns-accent); }
+.ns-canvas-resize { position: absolute; width: 14px; height: 14px; }
+.ns-canvas-resize-top-left { left: -7px; top: -7px; cursor: nwse-resize; }
+.ns-canvas-resize-top-right { right: -7px; top: -7px; cursor: nesw-resize; }
+.ns-canvas-resize-bottom-left { left: -7px; bottom: -7px; cursor: nesw-resize; }
+.ns-canvas-resize-bottom-right { right: -7px; bottom: -7px; cursor: nwse-resize; }
+/* 触屏档：接线点与尺寸柄抬高到指尖按得中的尺寸，工具条留出两行 */
+@media (max-width: 720px) {
+    .ns-page.ns-canvas { padding: 6px; }
+    .ns-canvas-handle { width: 18px; height: 18px; margin-top: -9px; }
+    .ns-canvas-handle-left { left: -9px; }
+    .ns-canvas-handle-right { right: -9px; }
+    .ns-canvas-resize { width: 22px; height: 22px; }
+    .ns-canvas-resize-top-left { left: -11px; top: -11px; }
+    .ns-canvas-resize-top-right { right: -11px; top: -11px; }
+    .ns-canvas-resize-bottom-left { left: -11px; bottom: -11px; }
+    .ns-canvas-resize-bottom-right { right: -11px; bottom: -11px; }
+}

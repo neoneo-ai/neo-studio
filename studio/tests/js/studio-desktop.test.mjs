@@ -110,7 +110,7 @@ test("默认落地首页：意图卡片挂满主区，素材卡直达素材页",
         ["创作", "编辑", "素材与配置"],
         "首页分创作与编辑两板块，素材与配置收最后一节");
     assert.deepEqual([...home.querySelectorAll(".ns-home-card-title")].map((e) => e.textContent),
-        ["生成图片", "生成视频", "导演视频", "3D 姿势", "智能体", "声音克隆", "提示词增强",
+        ["生成图片", "生成视频", "导演视频", "3D 姿势", "画布编排", "智能体", "声音克隆", "提示词增强",
             "图片编辑", "扩图", "机位", "融合", "姿势", "视频抽帧", "图片反推", "视频反推",
             "素材库", "技能", "设置"],
         "编辑板块的直达卡铺图片编辑 / 扩图 / 机位 / 融合 / 姿势，局部与删除收在「添加卡片」的预设里；声音克隆、图片反推、视频反推与提示词增强四张卡在这，顶栏没有它们的页签");
@@ -832,12 +832,12 @@ test("版本快照不落地也要能拖窗口：桥注入完那一刻就挂上�
     assert.ok(calls.includes("drag"), "桥一到顶栏空白处按下就能拖窗");
 });
 
-// 顶栏结构：七枚页签 + 右侧两枚图标位（队列在前、设置在后），技能与智能体只在首页的卡上
-test("顶栏结构：七枚页签，队列与设置是图标位，技能与智能体不占顶栏位", () => {
+// 顶栏结构：八枚页签 + 右侧两枚图标位（队列在前、设置在后），技能与智能体只在首页的卡上
+test("顶栏结构：八枚页签，队列与设置是图标位，技能与智能体不占顶栏位", () => {
     const css = fs.readFileSync(path.join(webDir, "studio", "style.css"), "utf8");
     const html = fs.readFileSync(path.join(webDir, "studio", "index.html"), "utf8");
     assert.deepEqual([...html.matchAll(/data-tab="(\w+)"/g)].map((m) => m[1]),
-        ["home", "gallery", "paint", "edit", "video", "director", "pose"],
+        ["home", "gallery", "paint", "edit", "video", "director", "pose", "canvas"],
         "分组走 CSS，页签 DOM 保持平铺 <a>（图片编辑独立成「编辑」页，视频页与姿势页同绘画 / 导演属中部组）");
     assert.match(css, /\.ns-tabs a\[data-tab="gallery"\]::before[^}]*background/, "素材页签前要有组边界分隔线");
     assert.ok(!css.includes('[data-tab="skills"]'), "技能不占页签位，组边界分隔线只剩素材前那一条");

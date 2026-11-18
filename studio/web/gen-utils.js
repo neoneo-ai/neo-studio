@@ -120,6 +120,22 @@ export async function copyImageToInput(image, subfolder) {
 export let _paintHosts = {};   // { text, edit, onOpen }：文生图宿主 / 图片编辑宿主 / 打开时切到那一页
 export function setPaintHost(hosts) { _paintHosts = { ..._paintHosts, ...hosts }; }
 
+// 画布落点由装配层注册（studio-app 把 pages/canvas-page.js 的落点交进来）：这两块面板与结果板在
+// ComfyUI 主画布页里也活着，那里没有画布页 —— 落点没注册过就得把话说明白，不能点「摆到画布」没反应
+export let _canvasPlace = null;
+export function setCanvasPlace(fn) { _canvasPlace = fn || null; }
+
+/** 把一批生成结果摆到 Neo Studio 画布：items = [{filename, subfolder, hero}]，主图由调用方标好 */
+export async function openCanvasPlace(items) {
+    const list = (items || []).filter((item) => item?.filename);
+    if (!list.length) return false;
+    if (!_canvasPlace) {
+        actionToast({ severity: "info", summary: t("画布在 Neo Studio 里"), detail: t("打开 Neo Studio 的画布页，把图拖进去，或生成后按「摆到画布」") });
+        return false;
+    }
+    return _canvasPlace(list);
+}
+
 export function storyPanelRoot(host, overlayClass, kind) {
     const embedded = !!(host && host.isConnected);
     if (!embedded) {
