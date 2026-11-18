@@ -92,6 +92,9 @@ alignment, with no dialogs at all.
   opens the Lightbox; the trash icon asks for confirmation and then deletes the real product from disk (with its `.txt`
   sidecar) and removes the record.
   Files deleted by hand stop being listed, and re-saving the recipe does not clear the result records.
+- **Cover**: one result acts as the recipe cover. Recording the first product marks it as the cover
+  automatically, later appends never move it, and clicking "set cover" on a tile in the "Results (N)" area swaps
+  it — a recipe keeps exactly one cover badge (preset recipes are read-only, so their cover never changes).
 
 ## Storyboard video director recipe (video_director)
 

@@ -513,49 +513,86 @@ export function openGenMaterialDialog(gallery, opts = null) {
         return await watchTask(snap.task_id, render, () => cancelRequested);
     };
 
-    // 运行时随机批量：逐张生成，成功即把结果图追加进网格；取消时保留已生成的
+    // 运行时随机批量：逐张生成，N 格结果板一开窗就摆齐，每格只在自己的位上更新状态
     const runBatch = async (prompts) => {
         const total = prompts.length;
         const results = [];
         fill(statusBox, previewBox); // 结果区挂到上方区域（与单张模式复用同一容器）
-        previewBox.className = "neo-gallery-cs-result";
-        fill(previewBox);
+        previewBox.className = "neo-gallery-cs-result neo-gallery-gm-board";
+        const slots = prompts.map((text, i) => {
+            const state = $el("span", { className: "neo-gallery-gm-board-state", textContent: t("排队中") });
+            const cell = $el("div", {
+                className: "neo-gallery-gm-board-cell",
+                title: tf("第 {i} 张：{text}", { i: i + 1, text }),
+            }, [state]);
+            // 主图徽标点一下就换：绘画页批量不落配方，这一枚只说明「这一发用哪张当封面」
+            cell.addEventListener("click", () => { if (cell.dataset.state === "ok") markHero(i); });
+            return { cell, state, image: null };
+        });
+        fill(previewBox, ...slots.map(s => s.cell));
+        let heroIdx = -1;
+        const badge = $el("span", { className: "neo-gallery-gm-board-hero", textContent: t("主图") });
+        const markHero = (i) => {
+            heroIdx = i;
+            slots.forEach((s, k) => {
+                const on = k === i && s.image;
+                const has = s.cell.contains(badge);
+                if (has && !on) badge.remove();
+                if (on && !has) s.cell.appendChild(badge);
+            });
+        };
+
+        const renderDone = (slot, final) => {
+            slot.state.remove();
+            const images = final.images || [];
+            if (images.length > 0) {
+                const img = $el("img", {
+                    className: "neo-gallery-cs-result-img",
+                    src: `${window.location.protocol}//${window.location.host}/neo_gallery/thumbnail?filename=${encodeURIComponent(images[0].filename)}&subfolder=${encodeURIComponent(images[0].subfolder || "")}&size=320`,
+                    alt: images[0].filename
+                });
+                img.addEventListener("click", () => Lightbox.open({ items: results.flatMap(f => (f.images || []).map(im => ({ kind: "image", url: im.url, title: im.filename }))), index: 0 }));
+                slot.cell.appendChild(img);
+                slot.image = images[0];
+                slot.cell.dataset.state = "ok";
+                if (heroIdx < 0) markHero(slots.indexOf(slot));   // 首张成功的产物自动记主图
+            }
+        };
+        const renderFailed = (slot, reason) => {
+            slot.cell.dataset.state = "failed";
+            slot.cell.title = tf("第 {n} 张失败：{reason}", { n: slots.indexOf(slot) + 1, reason });
+            slot.state.textContent = tf("失败：{reason}", { reason });
+            slot.state.classList.add("neo-gallery-gm-board-state-failed");
+        };
+
         for (let i = 0; i < total; i++) {
             if (cancelRequested) break;
-            const runningRow = $el("div", { className: "neo-gallery-gm-batch-item" }, [
-                $el("span", { className: "neo-gallery-cs-spinner" }),
-                $el("span", { textContent: tf("生成 {i}/{total}（排队中…）", { i: i + 1, total }) })
-            ]);
-            previewBox.appendChild(runningRow);
+            const slot = slots[i];
+            slot.state.textContent = t("排队中");
             fill(actionsBox, btn(t("取消任务"), () => { cancelRequested = true; if (cancelId) cancelTask(cancelId); }));
             let final;
             try {
                 final = await runOnePrompt(prompts[i], s => {
-                    runningRow.lastChild.textContent = tf("生成 {i}/{total}（{state}…）", { i: i + 1, total, state: s.status === "running" ? t("生图中") : t("排队中") });
+                    // 百分比只在拿到步数进度时才出：排队与无进度上报的那段只能说状态，不能编一个数
+                    const pct = s.progress && s.progress.max > 0
+                        ? Math.max(0, Math.min(100, Math.round(s.progress.value / s.progress.max * 100))) : null;
+                    slot.state.textContent = s.status === "running"
+                        ? (pct === null ? t("生图中…") : tf("生图中 {pct}%", { pct }))
+                        : tf("排队中（{i}/{total}）", { i: i + 1, total });
                 });
             } catch (e) {
-                runningRow.remove();
-                throw e;
+                renderFailed(slot, String(e?.message || e));
+                break;
             }
-            runningRow.remove();
             if (final.status === "succeeded") {
                 results.push(final);
-                const images = final.images || [];
-                if (images.length > 0) {
-                    const img = $el("img", {
-                        className: "neo-gallery-cs-result-img",
-                        src: `${window.location.protocol}//${window.location.host}/neo_gallery/thumbnail?filename=${encodeURIComponent(images[0].filename)}&subfolder=${encodeURIComponent(images[0].subfolder || "")}&size=640`,
-                        alt: images[0].filename
-                    });
-                    img.addEventListener("click", () => Lightbox.open({ items: results.flatMap(f => (f.images || []).map(im => ({ kind: "image", url: im.url, title: im.filename }))), index: 0 }));
-                    previewBox.appendChild(img);
-                }
+                renderDone(slot, final);
             } else if (final.status === "cancelled") {
+                slot.cell.remove();
                 break;
             } else {
-                // 中途失败：保留已生成的图，错误显示在其下方
-                const oldHint = statusBox.querySelector(".neo-gallery-story-hint");
-                if (oldHint) oldHint.remove();
+                // 中途失败：保留已生成的图，这一格留住失败原因，后面的格不再跑
+                renderFailed(slot, final.error || t("生成失败"));
                 statusBox.appendChild($el("div", { className: "neo-gallery-story-hint neo-gallery-story-hint-error", textContent: tf("第 {i}/{total} 张生成失败：{err}", { i: i + 1, total, err: final.error || t("未知错误") }) }));
                 fill(actionsBox, panel.embedded ? null : btn(t("关闭"), close, true));
                 return;

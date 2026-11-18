@@ -105,6 +105,7 @@ _RECIPES = {
     ("POST", "/rs_recipes/delete_result"),
     ("POST", "/rs_recipes/append_results"),
     ("POST", "/rs_recipes/add_results"),
+    ("POST", "/rs_recipes/set_hero"),
     ("GET", "/rs_recipes/export"),
     ("POST", "/rs_recipes/import"),
     ("GET", "/rs_recipes/asset"),

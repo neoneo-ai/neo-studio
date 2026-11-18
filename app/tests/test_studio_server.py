@@ -551,6 +551,21 @@ class DesktopWriteTests(_ServerCase):
         self.assertEqual(status, 200)
         self.assertTrue(any(r.get("name") == name for r in json.loads(body)))
 
+    def test_recipe_hero_served_offline(self):
+        """配方主图是纯文件系统写入：离线桌面端答得出来，配方或结果不在时明说 404。"""
+        self.assertEqual(caps.owner("POST", "/rs_recipes/set_hero"), "desktop",
+                         "主图落在 recipe.json 的 results 上，页面离线也要改得动")
+        name = "desktop-hero-recipe"
+        status, body = self.post_json("/rs_recipes/save", {"name": name, "prompt": "desktop hero"})
+        self.assertEqual(status, 200, body)
+        self._extra_dirs.append(_data_root() / "recipes" / "custom" / name)
+        status, body = self.post_json("/rs_recipes/set_hero",
+                                      {"name": name, "filename": "gone.png", "subfolder": ""})
+        self.assertEqual(status, 404, body)
+        status, body = self.post_json("/rs_recipes/set_hero",
+                                      {"name": name + "-x", "filename": "gone.png", "subfolder": ""})
+        self.assertEqual(status, 404, body)
+
     def test_skill_save_and_delete(self):
         skill_id = "desktop_test_skill"
         status, body = self.post_json("/rs_prompts/save_skill",

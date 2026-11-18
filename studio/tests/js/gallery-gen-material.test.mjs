@@ -897,6 +897,96 @@ test("运行时随机批量：取消保留已生成的图", async () => {
     assert.equal(previewBox.querySelectorAll(".neo-gallery-cs-result-img").length, 1, "应保留已生成的图");
     assert.match(overlay.querySelector(".neo-gallery-story-hint").textContent, /已生成 1\/2/);
     assert.ok(fetchLog.some(c => c.path === "/neo_image_gen/cancel/gmc2"), "应发出取消请求");
+    assert.ok(previewBox.querySelector(".neo-gallery-gm-board-hero"), "首张成功的产物自动带主图徽标");
+    document.querySelector(".neo-gallery-gm-modal-overlay")?.remove();
+});
+
+test("运行时随机批量：N 格结果板出百分比，点格换主图", async () => {
+    resetEnv();
+    clearRoutes();
+    const { openGenMaterialDialog } = await import("../../web/gallery-gen.js");
+    localStorage.setItem("neo.gallery.gen_material.runtime_random", JSON.stringify({ enabled: true, count: 2 }));
+
+    mockRoute("/rs_prompts/skills", () => jsonResponse([
+        { id: "image_gen", cn_name: "Krea2文生图", category: "image_gen", gen_image: true },
+    ]));
+    mockRoute("/rs_prompts/random_prompts", () => jsonResponse({ texts: ["板甲", "板乙"] }));
+    mockRoute("/neo_image_gen/generate", (body) =>
+        jsonResponse({ task_id: body.prompt.includes("板甲") ? "gbd1" : "gbd2", status: "queued", images: [] }));
+    // 状态由推送驱动：兜底首拉给运行中，终态靠 dispatchApiEvent 送达
+    mockRoute("/neo_image_gen/status/gbd1", () => jsonResponse({ task_id: "gbd1", status: "running", progress: { value: 1, max: 10 }, images: [] }));
+    mockRoute("/neo_image_gen/status/gbd2", () => jsonResponse({ task_id: "gbd2", status: "running", progress: { value: 1, max: 10 }, images: [] }));
+
+    openGenMaterialDialog({ showDirectoryStructure: () => {} });
+    const overlay = document.querySelector(".neo-gallery-gm-modal-overlay");
+    await sleep(50);
+
+    click([...overlay.querySelectorAll(".neo-gallery-story-btn")].find(b => b.textContent === "生成"));
+    await sleep(60);
+    assert.equal(overlay.querySelectorAll(".neo-gallery-gm-board-cell").length, 2,
+                 "批量开窗就把 N 格摆齐，每格从「排队中」起");
+
+    // 采样进度到位时格上出百分比；没有步数进度时只说状态，不编数字
+    dispatchApiEvent("rs.image_gen.status", { task_id: "gbd1", status: "running", progress: { value: 3, max: 10 } });
+    await sleep(20);
+    assert.match(overlay.querySelector(".neo-gallery-gm-board-cell")?.textContent || "", /生图中 30%/,
+                 "格上出采样百分比");
+
+    dispatchApiEvent("rs.image_gen.status", {
+        task_id: "gbd1", status: "succeeded", width: 1024, height: 1024,
+        images: [{ filename: "board_00001_.png", subfolder: "NeoAgent/2026-10-01", url: "/b1.png" }],
+    });
+    await sleep(60);
+    dispatchApiEvent("rs.image_gen.status", {
+        task_id: "gbd2", status: "succeeded", width: 1024, height: 1024,
+        images: [{ filename: "board_00002_.png", subfolder: "NeoAgent/2026-10-01", url: "/b2.png" }],
+    });
+    await sleep(40);
+    const cells = [...overlay.querySelectorAll(".neo-gallery-gm-board-cell")];
+    assert.equal(cells.length, 2, "N 格各在自己的位上");
+    assert.equal(cells.filter(c => c.querySelector(".neo-gallery-cs-result-img")).length, 2, "两张结果图入格");
+    const heroAt = () => cells.findIndex(c => c.querySelector(".neo-gallery-gm-board-hero"));
+    assert.equal(heroAt(), 0, "首张成功的产物自动记主图");
+    click(cells[1]);
+    assert.equal(heroAt(), 1, "点第二格把主图换过去");
+    assert.equal(overlay.querySelectorAll(".neo-gallery-gm-board-hero").length, 1, "整板只留一枚主图徽标");
+    document.querySelector(".neo-gallery-gm-modal-overlay")?.remove();
+});
+
+test("运行时随机批量：中途失败的格留住失败原因", async () => {
+    resetEnv();
+    clearRoutes();
+    const { openGenMaterialDialog } = await import("../../web/gallery-gen.js");
+    localStorage.setItem("neo.gallery.gen_material.runtime_random", JSON.stringify({ enabled: true, count: 2 }));
+
+    mockRoute("/rs_prompts/skills", () => jsonResponse([
+        { id: "image_gen", cn_name: "Krea2文生图", category: "image_gen", gen_image: true },
+    ]));
+    mockRoute("/rs_prompts/random_prompts", () => jsonResponse({ texts: ["成甲", "成乙"] }));
+    mockRoute("/neo_image_gen/generate", (body) =>
+        jsonResponse({ task_id: body.prompt.includes("成甲") ? "gfe1" : "gfe2", status: "queued", images: [] }));
+    mockRoute("/neo_image_gen/status/gfe1", () => jsonResponse({
+        task_id: "gfe1", status: "succeeded", width: 1024, height: 1024,
+        images: [{ filename: "half_00001_.png", subfolder: "NeoAgent/2026-10-01", url: "/h1.png" }],
+    }));
+    mockRoute("/neo_image_gen/status/gfe2", () => jsonResponse({ task_id: "gfe2", status: "running", images: [] }));
+
+    openGenMaterialDialog({ showDirectoryStructure: () => {} });
+    const overlay = document.querySelector(".neo-gallery-gm-modal-overlay");
+    await sleep(50);
+
+    click([...overlay.querySelectorAll(".neo-gallery-story-btn")].find(b => b.textContent === "生成"));
+    await sleep(80);
+    dispatchApiEvent("rs.image_gen.status", { task_id: "gfe2", status: "failed", error: "显存不足" });
+    await sleep(40);
+
+    const cells = [...overlay.querySelectorAll(".neo-gallery-gm-board-cell")];
+    assert.equal(cells.length, 2, "失败后格板不塌，格子留住自己的状态");
+    assert.ok(cells[0].querySelector(".neo-gallery-cs-result-img"), "已生成的图保留");
+    assert.ok(cells[0].querySelector(".neo-gallery-gm-board-hero"), "主图仍指向成功的那张");
+    assert.match(cells[1].textContent, /失败：显存不足/, "失败的格留住失败原因");
+    assert.match(overlay.querySelector(".neo-gallery-story-hint-error")?.textContent || "", /第 2\/2 张生成失败：显存不足/);
+    assert.equal(fetchLog.filter(c => c.path === "/neo_image_gen/generate").length, 2, "中途失败不再提交后续");
     document.querySelector(".neo-gallery-gm-modal-overlay")?.remove();
 });
 

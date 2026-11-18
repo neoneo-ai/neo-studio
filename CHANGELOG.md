@@ -5,6 +5,14 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 ## [Unreleased]
 
 ### Added
+- **A random batch shows a board of N tiles, and a recipe names one result its cover.** The 输入页 panel lays all N
+  tiles out before the first task is submitted and updates each tile in place — queued, generating with the real
+  sampling percentage, the finished thumbnail, or the failure reason in its own tile — so a mid-batch failure keeps every
+  finished image on screen and stops the tiles after it, and the percentage only appears when the kernel reports step
+  progress. The first successful image carries the **主图** badge, and clicking a finished tile moves it. The recipe side
+  saves the cover: recording products marks the first one as the cover, later appends never move it, and the recipe
+  detail's 「结果（N）」 area badges the cover and sets another result as it
+  (`POST /rs_recipes/set_hero`, one cover per recipe, preset recipes refused).
 - **A cloud subscription source for skills.** The 技能 page gains a **☁ 云端技能** panel that lists one row per published
   skill with its local state — not installed / installed / upgradable / locally modified / collides with a built-in skill —
   and installs a row through the same zip-import path the "⬆ ZIP" button uses, so installed skills land in `skills/custom/`

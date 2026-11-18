@@ -475,6 +475,16 @@ export async function addRecipeResults(name, results) {
     return resp.json();
 }
 
+/** 指定配方的一张结果当封面（主图）：整份只留一枚，配方卡片与详情按它出缩略图。 */
+export async function setRecipeHero(name, ref) {
+    const resp = await api.fetchApi('/rs_recipes/set_hero', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, filename: ref.filename, subfolder: ref.subfolder || '' })
+    });
+    return resp.json();
+}
+
 /** 从配方结果里删掉一条，并删除 output 目录里的真实文件（前端先 confirm）。 */
 export async function deleteRecipeResult(name, ref) {
     const resp = await api.fetchApi('/rs_recipes/delete_result', {
@@ -1086,6 +1096,31 @@ export async function createRecipesPanel(options = {}) {
                     }
                 }, [icon('trash')]);
                 item.appendChild(delBtn);
+                if (x.hero) {
+                    // 配方封面（主图）：列表页与详情都按这一枚认封面
+                    item.appendChild($el('span', { className: 'neo-recipes-result-hero', textContent: t('主图') }));
+                } else if (r.source !== 'preset') {
+                    // 预设配方的 results 只读，换封面这颗钮不给（后端同样挡 403）
+                    const heroBtn = $el('button', {
+                        className: 'neo-recipes-result-hero-btn',
+                        title: t('把该结果设为配方封面（主图）'),
+                        onclick: async (e) => {
+                            e.stopPropagation();
+                            heroBtn.disabled = true;
+                            const res = await setRecipeHero(r.name, x);
+                            heroBtn.disabled = false;
+                            if (res?.hero) {
+                                close();
+                                await renderList();
+                                const fresh = (await listRecipes()).find(v => v.name === r.name);
+                                if (fresh) openDetail(fresh);
+                            } else {
+                                app.extensionManager.toast.add({ severity: 'error', summary: t('设为主图失败'), detail: res?.error || 'Unknown error', life: 4000 });
+                            }
+                        }
+                    }, [icon('image')]);
+                    item.appendChild(heroBtn);
+                }
                 resultGrid.appendChild(item);
             });
             bodyChildren.push($el('div', { className: 'neo-recipes-detail-section', textContent: tf("结果（{n}）", { n: results.length }) }));

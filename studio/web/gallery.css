@@ -653,16 +653,53 @@
 }
 
 
-/* 运行时随机批量：结果网格中的“生成中”行 */
-.neo-gallery-gm-batch-item {
+/* 运行时随机批量：N 格结果板，一开窗摆齐，每格在自己的位上从「排队中」走到图 / 失败原因 */
+.neo-gallery-gm-board {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 8px;
+}
+.neo-gallery-gm-board-cell {
+    position: relative;
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 8px 12px;
+    justify-content: center;
+    min-height: 110px;
+    padding: 6px;
     border: 1px dashed var(--border-color, #3a3a4a);
     border-radius: 8px;
     color: var(--text-secondary, #9a9ab0);
-    font-size: 13px;
+    font-size: 12px;
+    text-align: center;
+    overflow: hidden;
+}
+.neo-gallery-gm-board-cell[data-state="ok"] {
+    border-style: solid;
+    cursor: pointer;
+}
+.neo-gallery-gm-board-cell[data-state="failed"] {
+    border-color: #b0484b;
+    color: #e08a8d;
+}
+.neo-gallery-gm-board-cell .neo-gallery-cs-result-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 6px;
+}
+.neo-gallery-gm-board-state {
+    padding: 2px 4px;
+    word-break: break-word;
+}
+.neo-gallery-gm-board-hero {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    padding: 1px 6px;
+    border-radius: 6px;
+    background: rgba(24, 144, 80, .85);
+    color: #fff;
+    font-size: 11px;
 }
 
 

@@ -158,6 +158,11 @@ background overlay, title bar drags the window) that creates new assets from a p
 - **Generate** - the box content is the final prompt (`skip_enhance` is always sent); products land in
   `Output/NeoAgent/<date>/`, and after success you can jump straight to the landed directory, or delete the
   result images in one click when you do not like them.
+- **Batch result board** - a random batch lays all N tiles out the moment it starts, and each tile updates only in its
+  own slot: "queued" → "generating 30%" → image / "failed: reason". The percentage appears only once step progress
+  arrives - with no progress reported the tile just names its state; a mid-batch failure keeps every finished image in
+  its tile, keeps the reason in that one tile, and stops the remaining tiles. The first successful image carries the
+  cover badge automatically, and clicking a finished tile moves the badge there - the board keeps exactly one.
 - **Helper tools** - the three inside the `⋯` menu:
   runtime random settings (when enabled, "Generate" becomes a batch that samples N entries and generates
   them one by one, cancelling keeps what was already generated, and recipes are not part of the pool),

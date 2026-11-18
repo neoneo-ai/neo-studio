@@ -72,6 +72,7 @@ StoryBoard / CharacterSheet 主目录的只读预设区；未归类的目录仍�
 | POST | `/rs_recipes/save` | 保存配方（含 assets 收集） |
 | POST | `/rs_recipes/append_results` | 追加示例结果（含工作流备份） |
 | POST | `/rs_recipes/add_results` | 记录产物路径到 `results`（不复制文件） |
+| POST | `/rs_recipes/set_hero` | 指定一条结果为主图（整份只留一枚） |
 | POST | `/rs_recipes/delete_result` | 摘掉结果并删除 output 里的真实文件 |
 | POST | `/rs_recipes/delete_sample` | 删除示例结果 |
 | POST | `/rs_recipes/delete` | 删除配方（仅 custom） |

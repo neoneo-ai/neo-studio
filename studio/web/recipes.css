@@ -525,6 +525,37 @@
     background: rgba(0, 0, 0, 0.85);
 }
 
+/* 结果区主图（封面）：徽标在左上，设为主图的按钮同位 */
+.neo-recipes-detail-asset .neo-recipes-result-hero {
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    z-index: 1;
+    background: rgba(24, 144, 80, 0.85);
+    color: #fff;
+    font-size: 11px;
+    padding: 2px 5px;
+    border-radius: 4px;
+}
+
+.neo-recipes-detail-asset .neo-recipes-result-hero-btn {
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    z-index: 1;
+    background: rgba(0, 0, 0, 0.6);
+    border: none;
+    color: #eee;
+    cursor: pointer;
+    font-size: 11px;
+    padding: 2px 4px;
+    border-radius: 4px;
+}
+
+.neo-recipes-detail-asset .neo-recipes-result-hero-btn:hover {
+    background: rgba(0, 0, 0, 0.85);
+}
+
 /* 示例结果单项的复制工作流按钮（悬浮右上角，位于删除按钮左侧） */
 .neo-recipes-detail-asset .neo-recipes-sample-copy {
     position: absolute;

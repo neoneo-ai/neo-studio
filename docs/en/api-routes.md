@@ -78,6 +78,7 @@ entries carry `items` keeps working unchanged (counts and covers are derived fro
 | POST | `/rs_recipes/save` | Save a recipe (including assets collection) |
 | POST | `/rs_recipes/append_results` | Append sample results (including a workflow backup) |
 | POST | `/rs_recipes/add_results` | Record artifact paths into `results` (no file copying) |
+| POST | `/rs_recipes/set_hero` | Mark one result as the cover (one per recipe) |
 | POST | `/rs_recipes/delete_result` | Drop a result and delete the real files in output |
 | POST | `/rs_recipes/delete_sample` | Delete a sample result |
 | POST | `/rs_recipes/delete` | Delete a recipe (custom only) |

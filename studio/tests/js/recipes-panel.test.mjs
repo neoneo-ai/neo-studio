@@ -593,3 +593,50 @@ test("配方面板：selectable 卡片带「详情」按钮，点它打开详情
     assert.deepEqual(selected, [], "点详情按钮不触发选中回传");
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
 });
+
+test("配方详情：结果区一枚主图徽标，点「设为主图」发到 set_hero；预设配方不给这颗钮", async () => {
+    const { createRecipesPanel } = await import("../../web/recipes.js");
+    appState.graph = { _nodes: [] };
+    mockRoute("/rs_prompts/skills", () => jsonResponse([]));
+    mockRoute("/rs_recipes/list", () => jsonResponse([
+        recipeFixture({ results: [
+            { kind: "image", filename: "r1.png", subfolder: "NeoAgent/2026-10-01", hero: true },
+            { kind: "image", filename: "r2.png", subfolder: "NeoAgent/2026-10-01" },
+        ] }),
+        { name: "fx-preset", source: "preset", prompt: "p", assets: [], samples: [], results: [
+            { kind: "image", filename: "p1.png", subfolder: "" },
+        ] },
+    ]));
+    let heroBody = null;
+    mockRoute("/rs_recipes/set_hero", (body) => {
+        heroBody = body;
+        return jsonResponse({ success: true, hero: { filename: body.filename, subfolder: body.subfolder, kind: "image" } });
+    });
+
+    const panel = await createRecipesPanel();
+    document.body.appendChild(panel);
+    panel.querySelector(".neo-recipes-card-name").click();
+    await sleep(60);
+
+    let detail = document.querySelector(".neo-recipes-detail");
+    assert.ok(detail, "详情浮层已打开");
+    assert.equal(detail.querySelectorAll(".neo-recipes-result-hero").length, 1, "整份只有一枚主图徽标");
+    const heroBtn = detail.querySelector(".neo-recipes-result-hero-btn");
+    assert.ok(heroBtn, "非主图的结果给一颗「设为主图」");
+
+    heroBtn.click();
+    await sleep(60);
+    assert.deepEqual(heroBody, { name: "fx-recipe", filename: "r2.png", subfolder: "NeoAgent/2026-10-01" },
+                     "设为主图发到点的那一条");
+    detail = document.querySelector(".neo-recipes-detail");
+    assert.equal(detail.querySelectorAll(".neo-recipes-result-hero").length, 1, "重开详情仍是同一枚徽标");
+
+    document.querySelector(".neo-recipes-detail-close")?.click();
+    await sleep(20);
+    panel.querySelectorAll(".neo-recipes-card-name")[1].click();
+    await sleep(60);
+    detail = document.querySelector(".neo-recipes-detail");
+    assert.ok(detail, "预设配方的详情也打开");
+    assert.equal(detail.querySelector(".neo-recipes-result-hero-btn"), null,
+                 "预设配方的 results 只读，「设为主图」这颗钮不出");
+});

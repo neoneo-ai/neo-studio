@@ -251,10 +251,20 @@ class ResultRoutesTests(StubFolderPathsMixin, unittest.TestCase):
         stored = self._meta(self.custom, "res-a")["results"]
         self.assertEqual([r["filename"] for r in stored], ["shot_00001.mp4", "shot_00002.mp4"])
         self.assertTrue(all(r["kind"] == "video" and r["at"] for r in stored))
+        self.assertEqual([r.get("hero") for r in stored], [True, None], "首张成功的产物自动记主图")
 
         again = self._add("res-a", [{"filename": "shot_00001.mp4", "type": "output"}])
         self.assertEqual(_body(again), {"success": True, "added": 0, "skipped": 1})
         self.assertEqual(len(self._meta(self.custom, "res-a")["results"]), 2, "重复路径不得重复记录")
+
+    def test_add_results_keeps_existing_hero(self):
+        _write_output("h_00001.png", b"a")
+        _write_output("h_00002.png", b"b")
+        self._add("res-a", [{"filename": "h_00001.png", "type": "output", "kind": "image"}])
+        self._add("res-a", [{"filename": "h_00002.png", "type": "output", "kind": "image"}])
+        stored = self._meta(self.custom, "res-a")["results"]
+        self.assertEqual([r.get("hero") for r in stored], [True, None],
+                         "追加产物不得把配方封面顶到最新那张")
 
     def test_add_results_skips_missing_file(self):
         resp = self._add("res-a", [{"filename": "ghost.mp4", "type": "output"}])
@@ -268,6 +278,44 @@ class ResultRoutesTests(StubFolderPathsMixin, unittest.TestCase):
 
     def test_add_results_unknown_recipe_404(self):
         self.assertEqual(self._add("nope", []).status, 404)
+
+    def _set_hero(self, name, filename, subfolder=""):
+        return _run_async(recipes.rs_recipes_set_hero(
+            _FakeRequest({"name": name, "filename": filename, "subfolder": subfolder})))
+
+    def test_set_hero_moves_the_flag_and_survives_reload(self):
+        _write_output("hero_00001.png", b"a")
+        _write_output("hero_00002.png", b"b")
+        self._add("res-a", [
+            {"filename": "hero_00001.png", "type": "output", "kind": "image"},
+            {"filename": "hero_00002.png", "type": "output", "kind": "image"},
+        ])
+        resp = self._set_hero("res-a", "hero_00002.png")
+        self.assertEqual(resp.status, 200)
+        self.assertEqual(_body(resp), {"success": True,
+                                       "hero": {"filename": "hero_00002.png", "subfolder": "", "kind": "image"}})
+        stored = self._meta(self.custom, "res-a")["results"]
+        self.assertEqual([r.get("hero") for r in stored], [None, True], "整份只留一个主图")
+
+        listed = next(r for r in _body(_run_async(recipes.rs_recipes_list(_FakeRequest({}))))
+                      if r["name"] == "res-a")
+        self.assertEqual([r.get("hero") for r in listed["results"]], [None, True], "列表回读带出主图标记")
+
+    def test_set_hero_unknown_recipe_404(self):
+        self.assertEqual(self._set_hero("nope", "a.png").status, 404)
+
+    def test_set_hero_missing_result_404(self):
+        _write_output("hero_00003.png", b"a")
+        self._add("res-a", [{"filename": "hero_00003.png", "type": "output", "kind": "image"}])
+        resp = self._set_hero("res-a", "not_recorded.png")
+        self.assertEqual(resp.status, 404)
+        self.assertEqual([r.get("hero") for r in self._meta(self.custom, "res-a")["results"]], [True],
+                         "点名不存在的结果不得把原主图清掉")
+
+    def test_set_hero_preset_forbidden(self):
+        self._make_recipe(self.presets, "preset-hero")
+        resp = self._set_hero("preset-hero", "a.png")
+        self.assertEqual(resp.status, 403)
 
     def test_delete_result_removes_entry_and_file(self):
         path = _write_output("shot_00003.mp4", b"v3")

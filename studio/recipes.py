@@ -141,6 +141,8 @@ def _norm_result(ref) -> dict | None:
                 break
         if counts and all(n > 0 for n in counts):
             item["layout"] = counts
+    if ref.get("hero"):   # 主图标记（配方 results 里整份只有一条）：读侧原样带出去给面板
+        item["hero"] = True
     return item
 
 
@@ -819,9 +821,49 @@ def add_recipe_results(name: str, refs: list) -> tuple[int, int]:
 
     if added:
         meta["results"] = results
+        # 主图：这批产物落进来时配方还没有主图，第一条新产物就是主图。已有主图不动——
+        # 逐段追加的产物不该把配方封面顶来顶去，换主图要用户在面板上点名
+        if not any(isinstance(r, dict) and r.get("hero") for r in results):
+            results[-added]["hero"] = True
         with open(meta_path, "w", encoding="utf-8") as f:
             json.dump(meta, f, ensure_ascii=False, indent=2)
     return added, skipped
+
+
+def set_recipe_hero(name: str, ref: dict) -> dict:
+    """把配方 results 里的那一条钉成主图：整份只留一个 hero，换主图就是清掉旧的、标新的。
+
+    配方不存在 / 结果里没有这一条都抛 ValueError（HTTP 语义由调用方定）；预设只读由调用方挡住。
+    """
+    recipe_dir = _find_recipe_dir(name)
+    if recipe_dir is None:
+        raise ValueError(f"配方不存在：{name}")
+    meta_path = recipe_dir / "recipe.json"
+    try:
+        with open(meta_path, "r", encoding="utf-8") as f:
+            meta = json.load(f)
+    except Exception as e:
+        raise ValueError(f"配方读取失败：{name}（{e}）")
+    results = meta.get("results", []) or []
+    if not isinstance(results, list):
+        raise ValueError(f"配方 results 不是列表：{name}")
+    filename = str((ref or {}).get("filename", "")).strip()
+    subfolder = str((ref or {}).get("subfolder", "") or "").strip().strip("/")
+    target = None
+    for row in results:
+        if not isinstance(row, dict):
+            continue
+        row.pop("hero", None)
+        row_sub = str(row.get("subfolder", "") or "").strip().strip("/")
+        if str(row.get("filename", "")).strip() == filename and row_sub == subfolder:
+            target = row
+    if target is None:
+        raise ValueError(f"配方结果里没有这一条：{filename}")
+    target["hero"] = True
+    meta["results"] = results
+    with open(meta_path, "w", encoding="utf-8") as f:
+        json.dump(meta, f, ensure_ascii=False, indent=2)
+    return target
 
 
 def is_preset_recipe(name: str) -> bool:
@@ -865,6 +907,26 @@ async def rs_recipes_add_results(request):
             return web.json_response({"success": False, "error": "Preset recipes are read-only"}, status=403)
         added, skipped = add_recipe_results(name, data.get("results") or [])
         return web.json_response({"success": True, "added": added, "skipped": skipped})
+    except Exception as e:
+        return web.json_response({"success": False, "error": str(e)}, status=500)
+
+
+@routes.post("/rs_recipes/set_hero")
+async def rs_recipes_set_hero(request):
+    """把配方 results 里的一条钉成主图（整份只留一个 hero；预设配方只读）。"""
+    try:
+        data = await request.json()
+        name = data.get("name", "")
+        recipe_dir = _find_recipe_dir(name)
+        if recipe_dir is None:
+            return web.json_response({"success": False, "error": "Recipe not found"}, status=404)
+        if recipe_dir.parent == PRESETS_DIR:
+            return web.json_response({"success": False, "error": "Preset recipes are read-only"}, status=403)
+        hero = set_recipe_hero(name, data)
+        return web.json_response({"success": True,
+                                  "hero": {k: hero.get(k) for k in ("filename", "subfolder", "kind")}})
+    except ValueError as e:
+        return web.json_response({"success": False, "error": str(e)}, status=404)
     except Exception as e:
         return web.json_response({"success": False, "error": str(e)}, status=500)
 
