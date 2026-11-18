@@ -87,28 +87,61 @@ export function createCanvasPage({ $el, api, toast, openMaterial, canGen, startC
             btn.title = `${label}（${hint}）`;
             return btn;
         };
+        // 改名与删除是低频动作：收在下拉行右端，指针落到这一行、键盘落进这一行才现出来（样式在 style.css，
+        //   触屏档没有 hover，两枚常显）
+        const projectAct = (label, name, fn) => {
+            const btn = mk(label, name, fn);
+            btn.classList.add("ns-canvas-project-act");
+            return btn;
+        };
         const undo = mkHint(t("撤销"), "Ctrl+Z", "undo", () => undoEdit());
         const redo = mkHint(t("重做"), "Ctrl+Shift+Z", "redo", () => redoEdit());
-        const dup = mkHint(t("复制选中"), "Ctrl+D", "duplicate", () => duplicateSelection());
-        const cut = mkHint(t("剪切选中"), "Ctrl+X", "cut", () => cutSelection());
-        const copy = mkHint(t("复制"), "Ctrl+C", "copy", () => copySelection());
-        const paste = mkHint(t("粘贴"), "Ctrl+V", "paste", () => pasteClipboard());
         const group = (...kids) => $el("span", { className: "ns-canvas-bar-group" }, kids);
         const sep = () => $el("span", { className: "ns-canvas-bar-sep" });
+        // 加节点那五枚收成菜单里的五行：菜单钉在钮下方，position: fixed 让它不占条内的行位、也不被条的
+        // 横向滚动裁剪；行面上是图标 + 名字 —— 只有图标时「加生成节点」与「加视频节点」分不出来
+        const inMenu = (btn) => {
+            btn.classList.add("ns-canvas-add-item");
+            btn.appendChild($el("span", { className: "ns-canvas-add-label",
+                textContent: btn.getAttribute("aria-label") }));
+            return btn;
+        };
+        const addAction = (fn) => () => { closeAddMenu(); fn(); };
+        function closeAddMenu() {
+            addMenu.classList.remove("ns-canvas-add-menu-open");
+            addBtn.classList.remove("ns-canvas-tool-on");
+            document.removeEventListener("pointerdown", addOutside, true);
+            document.removeEventListener("keydown", addEscape, true);
+        }
+        function openAddMenu() {
+            const rect = addBtn.getBoundingClientRect();
+            addMenu.style.left = `${Math.max(8, rect.left)}px`;
+            addMenu.style.top = `${rect.bottom + 6}px`;
+            addMenu.classList.add("ns-canvas-add-menu-open");
+            addBtn.classList.add("ns-canvas-tool-on");
+            document.addEventListener("pointerdown", addOutside, true);
+            document.addEventListener("keydown", addEscape, true);
+        }
+        const addOutside = (e) => { if (!addMenu.contains(e.target) && !addBtn.contains(e.target)) closeAddMenu(); };
+        const addEscape = (e) => { if (e.key === "Escape") closeAddMenu(); };
+        const addMenu = $el("div", { className: "ns-canvas-add-menu" }, [
+            inMenu(mk(t("加图片"), "image", addAction(() => pickImage()))),
+            inMenu(mk(t("加提示词"), "list", addAction(() => addNode("text")))),
+            inMenu(mk(t("加生成节点"), "sparkles", addAction(() => addGenNode()))),
+            inMenu(mk(t("加视频节点"), "film", addAction(() => addVideoNode()))),
+            inMenu(mk(t("加配方节点"), "wand", addAction(() => addRecipeNode())))
+        ]);
+        const addBtn = mk(t("加节点"), "plus-square", () => (
+            addMenu.classList.contains("ns-canvas-add-menu-open") ? closeAddMenu() : openAddMenu()));
         const root = $el("div", { className: "ns-canvas-bar" }, [
-            // 三组：画布本身 / 节点与剪贴板 / 视图。整条不换行，窗口不够宽就在条内横向滚
-            group(select,
-                mk(t("新建画布"), "plus", () => createProject()),
-                mk(t("重命名"), "pencil", () => renameProject()),
-                mk(t("删除画布"), "trash", () => deleteProject())),
+            // 三组：画布本身 / 加节点与撤销重做 / 视图。整条不换行，窗口不够宽就在条内横向滚
+            group($el("span", { className: "ns-canvas-project" }, [
+                select,
+                projectAct(t("重命名"), "pencil", () => renameProject()),
+                projectAct(t("删除画布"), "trash", () => deleteProject())
+            ]), mk(t("新建画布"), "plus", () => createProject())),
             sep(),
-            group(mk(t("加图片"), "image", () => pickImage()),
-                mk(t("加提示词"), "list", () => addNode("text")),
-                mk(t("加生成节点"), "sparkles", () => addGenNode()),
-                mk(t("加视频节点"), "film", () => addVideoNode()),
-                mk(t("加配方节点"), "wand", () => addRecipeNode()),
-                mk(t("展开配方"), "maximize", () => expandSelectedRecipe()),
-                sep(), dup, cut, copy, paste, sep(), undo, redo),
+            group(addBtn, addMenu, sep(), undo, redo),
             $el("span", { className: "ns-canvas-bar-gap" }),
             group(mk(t("缩小"), "zoom-out", () => zoomStep(-1)), zoom,
                 mk(t("放大"), "zoom-in", () => zoomStep(1)),
@@ -142,7 +175,9 @@ export function createCanvasPage({ $el, api, toast, openMaterial, canGen, startC
         renderNodeLayer({ nodeLayer: view.nodeLayer, links: view.links, hint: view.hint, nodes: state.nodes,
             selectedNodeIds, selectedConnectionId, $el, onText,
             onPick: pickInto, onHero: (node) => toggleHero(node.id), onDelete: (node) => deleteNode(node.id),
-            onCopy: (node) => duplicateIds([node.id]), onExpand: (node) => expandRecipe(node),
+            onCopy: (node) => duplicateIds([node.id]),
+            onExpand: (node) => expandRecipe(node),
+            onToggleDisabled: (node) => setNodeMetadata(node.id, { disabled: node.metadata?.disabled !== true }),
             genControls: (node) => gen?.controls(node), genState: (node) => gen?.stateOf(node),
             genModel: (node) => gen?.modelText(node),
             recipeControls: (node) => gen?.controls(node), recipeState: (node) => gen?.stateOf(node),
@@ -550,13 +585,6 @@ export function createCanvasPage({ $el, api, toast, openMaterial, canGen, startC
         return names;
     }
 
-    /** 工具条那枚「展开配方」：认选中的那一台配方节点 */
-    function expandSelectedRecipe() {
-        const node = state.nodes.find((n) => selectedNodeIds.has(n.id) && n.type === "recipe");
-        if (!node) { toast(t("先选中一台配方节点"), "info"); return; }
-        expandRecipe(node);
-    }
-
     /** 删选中的东西：选中一条线先删线，否则删选中那批节点连带两端接上的线 */
     function deleteSelection() {
         if (!selectedConnectionId && !selectedNodeIds.size) return;   // 没选中就不压一份空栈：撤销不该出现按了没反应的一步
@@ -828,7 +856,8 @@ export function createCanvasPage({ $el, api, toast, openMaterial, canGen, startC
         for (const conn of state.connections) {
             if (conn.fromNodeId !== genId || !left.length) continue;
             const slot = state.nodes.find((n) => n.id === conn.toNodeId);
-            if (!slot || slot.type !== type || slot.metadata.filename) continue;
+            // 停用的那一张不是落点：整列出片跳过它，成片也不该铺到它身上，往下找空位新开
+            if (!slot || slot.type !== type || slot.metadata.filename || slot.metadata.disabled === true) continue;
             const img = left.shift();
             slot.metadata = { ...slot.metadata, filename: img.filename, subfolder: img.subfolder || "" };
         }

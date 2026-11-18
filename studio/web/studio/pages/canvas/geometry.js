@@ -7,8 +7,9 @@
 // handleWheel）/ gridGeometry（上游 CanvasGrid）/ nodeBounds / getConnectionTargetAnchor /
 // normalizeConnection / getConnectionDropTarget（上游 project.tsx 同名 useCallback）/
 // connectionPathD 与 activeConnectionPathD（上游 canvas-connections.tsx 的 ConnectionPath /
-// ActiveConnectionPath）/ resizeNode（上游 canvas-node.tsx handleResizeMove）/ placeGrid 是本仓库
-// 自己加的（上游是逐个鼠标落点，结果板一次几十张要的是网格）。
+// ActiveConnectionPath）/ resizeNode（上游 canvas-node.tsx handleResizeMove）/ placeGrid 与 connectionAxis
+// 是本仓库自己加的（上游是逐个鼠标落点，结果板一次几十张要的是网格；上游只有左右两枚接线点，
+// 上下叠放那一列要竖轴的线）。
 /** @typedef {{x: number, y: number}} Position */
 /** @typedef {{x: number, y: number, k: number}} Viewport 世界层变换：translate(x,y) scale(k) */
 /** @typedef {{x: number, y: number}} Rect 画布容器在屏幕上的矩形（getBoundingClientRect 那一份） */
@@ -76,60 +77,74 @@ export function nodeBounds(nodes) {
     return Number.isFinite(box.left) ? box : null;
 }
 
-/** 连线的三次贝塞尔（上游 ConnectionPath）：出在源节点右中、落在目标节点左中，曲率取
- *  max(水平距离 * 0.5, 50) —— 两个节点贴在一起时也要弯出一段看得清的弧 */
+/** 连线的三次贝塞尔（上游 ConnectionPath）：出在源节点的出接线点、落在目标节点的入接线点，
+ *  曲率沿两点那根轴取 max(轴上距离 * 0.5, 50) —— 两个节点贴在一起时也要弯出一段看得清的弧 */
 export function connectionPathD(from, to) {
-    const ends = connectionEnds(from, to);
-    return `M ${ends.start.x} ${ends.start.y} C ${ends.start.x + ends.curvature} ${ends.start.y},`
-        + ` ${ends.end.x - ends.curvature} ${ends.end.y}, ${ends.end.x} ${ends.end.y}`;
+    const { start, end, curvature } = connectionEnds(from, to);
+    const { c1, c2 } = bezierControls(start, end, curvature, connectionAxis(from, to));
+    return `M ${start.x} ${start.y} C ${c1.x} ${c1.y}, ${c2.x} ${c2.y}, ${end.x} ${end.y}`;
 }
 
 /** 贝塞尔两端与曲率（命中采样与浮层定位都要真实端点） */
 export function connectionEnds(from, to) {
-    const start = { x: from.position.x + from.width, y: from.position.y + from.height / 2 };
-    const end = { x: to.position.x, y: to.position.y + to.height / 2 };
-    return { start, end, curvature: Math.max(Math.abs(end.x - start.x) * 0.5, 50) };
+    const sides = linkSides(from, to);
+    const start = sidePoint(from, sides.from);
+    const end = sidePoint(to, sides.to);
+    const span = sides.from === "top" || sides.from === "bottom"
+        ? Math.abs(end.y - start.y) : Math.abs(end.x - start.x);
+    return { start, end, curvature: Math.max(span * 0.5, 50) };
 }
 
-/** 拉线中的那一条虚线（上游 ActiveConnectionPath）：源端钉在节点上、悬空那头跟手；
- *  落到候选节点上时把悬空那头吸到候选节点的锚点 */
+/** 连线走横轴还是竖轴（串联展开把正文铺在车厢正上方、参考素材铺在正下方）：两节点在横向上有交
+ *  就是上下叠放，线从上下两面进出，不再绕着节点画一个大弧；正好贴边不算叠放，照旧走左右 */
+export function connectionAxis(from, to) {
+    const overlap = Math.min(from.position.x + from.width, to.position.x + to.width)
+        - Math.max(from.position.x, to.position.x);
+    return overlap > 0 ? "y" : "x";
+}
+
+/** 拉线中的那一条虚线（上游 ActiveConnectionPath）：源端钉在起手那一枚接线点上、悬空那头跟手；
+ *  落到候选节点上时把悬空那头吸到候选节点迎过来的那一面 */
 export function activeConnectionPathD(node, handle, mouseWorld, target) {
     if (!node) return "";
     const isSource = handle.handleType === "source";
-    const fromNode = isSource ? node : target;
-    const toNode = isSource ? target : node;
-    const from = fromNode ? { x: fromNode.position.x + fromNode.width, y: fromNode.position.y + fromNode.height / 2 }
-        : { x: mouseWorld.x, y: mouseWorld.y };
-    const to = toNode ? { x: toNode.position.x, y: toNode.position.y + toNode.height / 2 }
-        : { x: mouseWorld.x, y: mouseWorld.y };
-    const distance = Math.abs(to.x - from.x);
-    return `M ${from.x} ${from.y} C ${from.x + distance * 0.5} ${from.y},`
-        + ` ${to.x - distance * 0.5} ${to.y}, ${to.x} ${to.y}`;
+    const own = sidePoint(node, handle.side || (isSource ? "right" : "left"));
+    const src = isSource ? own : (target ? sidePoint(target, linkSides(target, node).from) : mouseWorld);
+    const dst = isSource ? (target ? sidePoint(target, linkSides(node, target).to) : mouseWorld) : own;
+    const axis = target ? connectionAxis(node, target)
+        : (handle.side === "top" || handle.side === "bottom" ? "y" : "x");
+    const { c1, c2 } = bezierControls(src, dst,
+        Math.max(Math.abs(axis === "y" ? dst.y - src.y : dst.x - src.x) * 0.5, 50), axis);
+    return `M ${src.x} ${src.y} C ${c1.x} ${c1.y}, ${c2.x} ${c2.y}, ${dst.x} ${dst.y}`;
 }
 
 /** 世界点落在那一段连线上吗（上游是 pointerEvents:stroke 的 16px 透明描边，
  *  vanilla 侧按同一宽度采样同一条贝塞尔）：命中阈值除以 k，缩多远都点得中 */
 export function hitConnection(world, from, to, scale) {
     const { start, end, curvature } = connectionEnds(from, to);
+    const { c1, c2 } = bezierControls(start, end, curvature, connectionAxis(from, to));
     const limit = (CONNECTION_HIT_WIDTH / 2) / Math.max(scale, MIN_SCALE);
     for (let i = 0; i <= 24; i += 1) {
         const t = i / 24;
         const a = (1 - t) * (1 - t) * (1 - t), b = 3 * (1 - t) * (1 - t) * t;
         const c = 3 * (1 - t) * t * t, d = t * t * t;
-        const px = a * start.x + b * (start.x + curvature) + c * (end.x - curvature) + d * end.x;
-        const py = a * start.y + b * start.y + c * end.y + d * end.y;
+        const px = a * start.x + b * c1.x + c * c2.x + d * end.x;
+        const py = a * start.y + b * c1.y + c * c2.y + d * end.y;
         if (Math.hypot(world.x - px, world.y - py) <= limit) return true;
     }
     return false;
 }
 
-/** 拖线时候选节点的落点锚（上游 getConnectionTargetAnchor）：从右侧拖出要落在目标的左中，
- *  从左侧拖出要落在目标的右中 —— 方向反过来的话线会在节点上绕一圈 */
-export function getConnectionTargetAnchor(node, handle) {
-    return {
-        x: handle.handleType === "source" ? node.position.x : node.position.x + node.width,
-        y: node.position.y + node.height / 2,
-    };
+/** 拖线时候选节点的落点锚（上游 getConnectionTargetAnchor）：横着并排时从右侧拖出要落在目标的左中、
+ *  从左侧拖出要落在目标的右中 —— 方向反过来的话线会在节点上绕一圈。知道起手那台节点（origin）时按
+ *  上下叠放落顶边 / 底边中点：串联的正文在车厢正上方，就近落车厢顶边，不必绕到左中 */
+export function getConnectionTargetAnchor(node, handle, origin = null) {
+    const isSource = handle.handleType === "source";
+    if (origin && origin.id !== node.id) {
+        const sides = isSource ? linkSides(origin, node) : linkSides(node, origin);
+        return sidePoint(node, isSource ? sides.to : sides.from);
+    }
+    return { x: isSource ? node.position.x : node.position.x + node.width, y: node.position.y + node.height / 2 };
 }
 
 /** 连线方向归一化（上游 normalizeConnection，去掉 Config 与分组的分支）：拖出的那一端是源、
@@ -146,11 +161,12 @@ export function normalizeConnection(firstNodeId, secondNodeId, nodes) {
 export function getConnectionDropTarget(world, nodes, handle, scale) {
     const padding = CONNECTION_NODE_HIT_PADDING / Math.max(scale, MIN_SCALE);
     const handleRadius = CONNECTION_HANDLE_HIT_RADIUS / Math.max(scale, MIN_SCALE);
+    const origin = nodes.find((node) => node.id === handle.nodeId) || null;
     let isNearNode = false;
     let bestNodeId = null;
     let bestPriority = Number.POSITIVE_INFINITY;
     for (const node of [...nodes].reverse()) {
-        const anchor = getConnectionTargetAnchor(node, handle);
+        const anchor = getConnectionTargetAnchor(node, handle, origin);
         const hitsHandle = Math.hypot(world.x - anchor.x, world.y - anchor.y) <= handleRadius;
         const hitsInside = world.x >= node.position.x && world.x <= node.position.x + node.width
             && world.y >= node.position.y && world.y <= node.position.y + node.height;
@@ -168,7 +184,31 @@ export function getConnectionDropTarget(world, nodes, handle, scale) {
     return { nodeId: bestNodeId, isNearNode };
 }
 
+/** 连线两端各走节点的哪一面：横轴固定右出左入（ComfyUI 的口径，目标在源左边那一条照旧绕出去）；
+ *  竖轴按谁在谁下方 —— 在下方的一台收线，上面那一台出线 */
+function linkSides(from, to) {
+    if (connectionAxis(from, to) !== "y") return { from: "right", to: "left" };
+    const down = (to.position.y + to.height / 2) >= (from.position.y + from.height / 2);
+    return { from: down ? "bottom" : "top", to: down ? "top" : "bottom" };
+}
 
+/** 节点某一面的接线点（四枚接线点与连线端点共用这一份算法） */
+function sidePoint(node, side) {
+    const midX = node.position.x + node.width / 2, midY = node.position.y + node.height / 2;
+    if (side === "left") return { x: node.position.x, y: midY };
+    if (side === "top") return { x: midX, y: node.position.y };
+    if (side === "bottom") return { x: midX, y: node.position.y + node.height };
+    return { x: node.position.x + node.width, y: midY };
+}
+
+/** 贝塞尔的两个控制点：曲率沿两点那根轴外扩，横轴左右弯、竖轴上下弯（画线与命中采样同一套） */
+function bezierControls(start, end, curvature, axis) {
+    if (axis === "y") {
+        const sign = end.y >= start.y ? 1 : -1;
+        return { c1: { x: start.x, y: start.y + sign * curvature }, c2: { x: end.x, y: end.y - sign * curvature } };
+    }
+    return { c1: { x: start.x + curvature, y: start.y }, c2: { x: end.x - curvature, y: end.y } };
+}
 
 /** 加一条连线：谈不拢（自己连自己、节点不在表上）原样返回，同方向已存在也不重复画（上游 exists 检查） */
 export function addConnection(connections, nodes, firstNodeId, secondNodeId) {

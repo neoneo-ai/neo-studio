@@ -140,7 +140,8 @@ describe("canvas-page", () => {
   const at = (x, y) => ({ x, y });
   const imageNode = (id, x, y) => ({ id, type: "image", title: "图片", position: at(x, y), width: 340, height: 240, metadata: {} });
   const pair = () => [imageNode("n1", 0, 0), imageNode("n2", 800, 0)];
-  const handle = (nodeId, handleType) => ({ nodeId, handleType });
+  const handle = (nodeId, handleType, side = null) => (side
+    ? { nodeId, handleType, side } : { nodeId, handleType });
 
   describe("常量与节点规格", () => {
     test("格距、缩放区间与背景模式循环", () => {
@@ -246,6 +247,32 @@ describe("canvas-page", () => {
       assert.deepEqual(canvas.connectionEnds(imageNode("n1", 800, 0), imageNode("n2", 0, 0)),
         { start: at(1140, 120), end: at(0, 120), curvature: 570 });
     });
+    test("上下叠放的两台节点走竖轴：上面出底边、下面收顶边（串联那一列）", () => {
+      const text = imageNode("t", 0, 0), car = imageNode("c", 0, 300);
+      assert.equal(canvas.connectionAxis(text, car), "y");
+      assert.deepEqual(canvas.connectionEnds(text, car), { start: at(170, 240), end: at(170, 300), curvature: 50 });
+      assert.equal(canvas.connectionPathD(text, car), "M 170 240 C 170 290, 170 250, 170 300");
+    });
+    test("下方素材连上方车厢：出顶边、落底边", () => {
+      assert.deepEqual(canvas.connectionEnds(imageNode("ref", 0, 300), imageNode("car", 0, 0)),
+        { start: at(170, 300), end: at(170, 240), curvature: 50 });
+      assert.equal(canvas.connectionPathD(imageNode("ref", 0, 300), imageNode("car", 0, 0)),
+        "M 170 300 C 170 250, 170 290, 170 240");
+    });
+    test("横向上没交与正好贴边都算并排：照旧走左右", () => {
+      assert.equal(canvas.connectionAxis(imageNode("n1", 0, 0), imageNode("n2", 340, 0)), "x");
+      assert.equal(canvas.connectionAxis(imageNode("n1", 0, 0), imageNode("n2", 800, 0)), "x");
+      assert.equal(canvas.connectionAxis(imageNode("n1", 0, 0), imageNode("n2", 20, 400)), "y");
+    });
+    test("竖轴的线同样点得中：命中阈值同一套", () => {
+      const from = imageNode("t", 0, 0), to = imageNode("c", 0, 300);
+      assert.ok(canvas.hitConnection(at(170, 270), from, to, 1));
+      assert.ok(canvas.hitConnection(at(178, 270), from, to, 1));
+      assert.ok(!canvas.hitConnection(at(179, 270), from, to, 1), "离线 8 世界单位之外点不中");
+      assert.ok(!canvas.hitConnection(at(170, 120), from, to, 1), "节点自己的中线上没有线");
+      assert.ok(canvas.hitConnection(at(171, 270), from, to, 4));
+      assert.ok(!canvas.hitConnection(at(173, 270), from, to, 4));
+    });
     test("命中阈值 = 16/2/k：1 倍缩放 8 世界单位，4 倍缩放 2 世界单位", () => {
       const from = imageNode("n1", 0, 0), to = imageNode("n2", 800, 0);
       assert.ok(canvas.hitConnection(at(340, 120), from, to, 1));
@@ -274,6 +301,17 @@ describe("canvas-page", () => {
       const node = imageNode("n2", 800, 0);
       assert.deepEqual(canvas.getConnectionTargetAnchor(node, handle("n1", "source")), at(800, 120));
       assert.deepEqual(canvas.getConnectionTargetAnchor(node, handle("n1", "target")), at(1140, 120));
+    });
+    test("上下叠放时落点在顶边 / 底边中点：起手那台节点知道方向", () => {
+      const nodes = [imageNode("txt", 0, 0), imageNode("car", 20, 400)];
+      // 正文在车厢正上方：从底接线点拖出，就近落车厢顶边中点
+      assert.deepEqual(canvas.getConnectionTargetAnchor(nodes[1], handle("txt", "source", "bottom"), nodes[0]), at(190, 400));
+      // 从车厢顶接线点拖出接正文：车厢是出线那端，落点落正文底边中点
+      assert.deepEqual(canvas.getConnectionTargetAnchor(nodes[0], handle("car", "target", "top"), nodes[1]), at(170, 240));
+      assert.equal(canvas.getConnectionDropTarget(at(190, 400), nodes, handle("txt", "source", "bottom"), 1).nodeId, "car");
+      assert.equal(canvas.getConnectionDropTarget(at(170, 240), nodes, handle("car", "target", "top"), 1).nodeId, "txt");
+      // 没有起手那台节点（老调用口径）时照旧落左右
+      assert.deepEqual(canvas.getConnectionTargetAnchor(nodes[1], handle("txt", "source")), at(20, 520));
     });
     test("节点内 > 锚点半径 > 节点外扩 32/k，半径全除以 k", () => {
       const nodes = pair();
@@ -493,6 +531,17 @@ const PAIR_WITH_LINK = () => mockCanvas({ projects: [
     viewport: { x: 0, y: 0, k: 1 }, background_mode: "dots" },
 ] });
 /** 素材库弹窗的替身：开一次记一条回调，用例自己决定交回哪一批（与装配层同一份契约：一次一批数组） */
+/** 上下叠放的两台节点（串联展开那一列的形状：正文 340×240 在车厢正上方、车厢 360×152）：
+ *  就近接线与竖轴连线的用例从这一张起 */
+const STACKED_PAIR = () => mockCanvas({ projects: [
+  { id: "canvas-0001", title: "甲", nodes: [
+    { id: "txt", type: "text", title: "提示词", position: { x: 300, y: 60 }, width: 340, height: 240,
+      metadata: { content: "第一段正文" } },
+    { id: "car", type: "recipe", title: "配方闭环", position: { x: 300, y: 460 }, width: 360, height: 152,
+      metadata: { recipe: "短片配方", segment: 0 } }],
+    connections: [], viewport: { x: 0, y: 0, k: 1 }, background_mode: "dots" },
+] });
+
 const picker = () => { const calls = []; return { calls, openMaterial: (cb) => calls.push(cb) }; };
 const nodeAct = (view, id, act) => view.nodeEl(id).querySelector(`[data-node-act="${act}"]`);
 /** 选中一个节点：点它起手、松手收笔（点住即拖的起点，拖距 0 不算改动） */
@@ -523,19 +572,60 @@ describe("canvas-page 页面", () => {
       const { view } = await makePage();
       assert.ok(view.hint.textContent.includes("把图拖进来"));
       for (const label of ["新建画布", "重命名", "删除画布", "加图片", "加提示词", "加生成节点", "加视频节点", "加配方节点",
-        "复制选中", "剪切选中", "复制", "粘贴", "撤销", "重做", "缩小", "放大", "适应内容", "背景"]) {
+        "撤销", "重做", "缩小", "放大", "适应内容", "背景"]) {
         assert.ok(view.bar.querySelector(`[aria-label="${label}"]`), label);
       }
+      // 改名与删除收在画布下拉那一行里，新建画布常显在旁边；展开配方只留卡上那一枚
+      const row = view.bar.querySelector(".ns-canvas-project");
+      assert.ok(row.querySelector(".ns-canvas-select")
+        && row.querySelector('[aria-label="重命名"]') && row.querySelector('[aria-label="删除画布"]'));
+      assert.ok(!row.contains(view.button("新建画布")), "新建画布不跟着收，收起来的是这一张画布的改名与删除");
+      assert.equal(view.bar.querySelector('[aria-label="展开配方"]'), null, "工具条不摆展开配方：卡上那枚就够");
+      // 剪贴板四枚不上条：Ctrl+D / X / C / V 就是这四发，鼠标用户在同一条上按条上那枚是同一发
+      assert.deepEqual(["复制选中", "剪切选中", "复制", "粘贴"]
+        .filter((label) => view.bar.querySelector(`[aria-label="${label}"]`)), []);
     });
     test("工具条每一枚钮的图标名都画得出来（缺一名就是条上一枚只剩边框的空钮）", () => {
       const source = fs.readFileSync(path.join(webDir, "studio/pages/canvas/page.js"), "utf8");
       const bar = source.slice(source.indexOf("function buildBar"), source.indexOf("return { root, select"));
-      const names = [...bar.matchAll(/\bmk(?:Label|Hint)?\((?:[^()]|\([^()]*\))*?,\s*"([a-z0-9-]+)"/g)]
+      const names = [...bar.matchAll(/\b(?:mk(?:Label|Hint)?|projectAct)\((?:[^()]|\([^()]*\))*?,\s*"([a-z0-9-]+)"/g)]
         .map((m) => m[1]);
       assert.ok(names.length >= 14, `工具条里只扫到 ${names.length} 枚图标名：${names.join(",")}`);
       for (const name of names) {
         assert.ok(ICON_NAMES.includes(name), `图标 ${name} 在 icons.js 里画不出`);
       }
+    });
+    test("节点头上的图标名都画得出来，停用与删除分得开", () => {
+      const source = fs.readFileSync(path.join(webDir, "studio/pages/canvas/nodes.js"), "utf8");
+      const bar = source.slice(source.indexOf("function nodeBar"), source.indexOf("kids.push"));
+      const iconOf = (act) => (bar.match(new RegExp(`name === "${act}" \\? "([a-z0-9-]+)"`)) || [])[1];
+      // 两枚都是 ✕ 的话，按下去之前看不出这一枚是停一张还是删一张
+      assert.equal(iconOf("disable"), "ban", "停用是圆圈上一道斜杠");
+      assert.equal(iconOf("enable"), "check", "启用是一枚勾");
+      assert.equal(iconOf("delete"), "trash", "删除是垃圾桶");
+      for (const name of ["ban", "trash", "check", "copy", "maximize", "circle-check"]) {
+        assert.ok(ICON_NAMES.includes(name), `图标 ${name} 在 icons.js 里画不出`);
+      }
+    });
+    test("加节点是一枚下拉菜单：五条都在条里，点一项加一个并自己收起", async () => {
+      const { view } = await makePage();
+      const add = view.button("加节点");
+      const menu = view.bar.querySelector(".ns-canvas-add-menu");
+      assert.ok(add, "条上就一枚「加节点」");
+      assert.ok(!menu.classList.contains("ns-canvas-add-menu-open"), "起手是收着的");
+      for (const label of ["加图片", "加提示词", "加生成节点", "加视频节点", "加配方节点"]) {
+        const row = menu.querySelector(`[aria-label="${label}"]`);
+        assert.ok(row, `菜单里少了 ${label}`);
+        assert.ok(row.textContent.includes(label), `${label} 要把名字打在行面上`);
+      }
+      click(add);
+      assert.ok(menu.classList.contains("ns-canvas-add-menu-open"), "按一下就展开");
+      click(add);
+      assert.ok(!menu.classList.contains("ns-canvas-add-menu-open"), "再按一下就收起");
+      click(add);
+      click(view.button("加提示词"));
+      assert.equal(view.nodeLayer.children.length, 1, "菜单里点一项就加一个节点");
+      assert.ok(!menu.classList.contains("ns-canvas-add-menu-open"), "点完一项菜单自己收起");
     });
     test("加一个提示词节点：正文框可直接打字，有节点之后提示让位", async () => {
       const { view } = await makePage();
@@ -673,6 +763,25 @@ describe("canvas-page 页面", () => {
       assert.equal(view.links.children.length, 2, "一条连线是宽命中描边 + 可见细线两条 path");
       assert.equal(view.active.getAttribute("d"), "", "松手之后拉线虚线要收掉");
     });
+    test("四枚接线点：左与上收线、右与下出线，各认自己那一面", async () => {
+      const { view, n1 } = await twoNodes();
+      assert.deepEqual(["left", "top", "bottom", "right"].map((side) => nodeHandle(view, n1, side).dataset.handle),
+        ["target", "target", "source", "source"]);
+      assert.deepEqual(["left", "top", "bottom", "right"].map((side) => nodeHandle(view, n1, side).dataset.side),
+        ["left", "top", "bottom", "right"]);
+    });
+    test("上下叠放的两台节点：从上面那台的底接线点就近接到下面那台", async () => {
+      const { page, view } = await makePage(STACKED_PAIR(), { canGen: () => true, startComfy: () => {} });
+      fire(nodeHandle(view, "txt", "bottom"), "pointerdown", { clientX: 470, clientY: 300, button: 0 });
+      fire(window, "pointermove", { clientX: 480, clientY: 460 });
+      fire(window, "pointerup", {});
+      await settle();
+      const conn = page.current().connections[0];
+      assert.deepEqual([conn.fromNodeId, conn.toNodeId], ["txt", "car"], "正文是源、车厢是目标");
+      const d = view.links.querySelector('.ns-canvas-line[data-connection-id="conn-txt-car"]').getAttribute("d");
+      assert.ok(d.startsWith("M 470 300 C 470 380"), "线从正文底边出，不绕右中");
+      assert.ok(d.endsWith("480 460"), "落在车厢顶边中点");
+    });
     test("松手在空白处要说话，不记一条线", async () => {
       const { page, view, env, n1 } = await twoNodes();
       fire(nodeHandle(view, n1, "right"), "pointerdown", { clientX: 940, clientY: 520, button: 0 });
@@ -730,10 +839,10 @@ describe("canvas-page 页面", () => {
       click(view.button("加图片"));
       return [...view.nodeLayer.children].map((el) => el.dataset.nodeId);
     };
-    test("空白处起手框选，罩住的节点全亮", async () => {
+    test("Ctrl 空白处起手框选，罩住的节点全亮", async () => {
       const { view } = await makePage();
       twoImages(view);
-      fire(view.stage, "pointerdown", { clientX: 100, clientY: 100, button: 0 });
+      fire(view.stage, "pointerdown", { clientX: 100, clientY: 100, button: 0, ctrlKey: true });
       fire(window, "pointermove", { clientX: 1150, clientY: 700 });
       assert.equal(lit(view), 2);
       assert.ok(view.world.querySelector(".ns-canvas-marquee"));
@@ -745,7 +854,7 @@ describe("canvas-page 页面", () => {
     test("框不住任何节点时不亮", async () => {
       const { view } = await makePage();
       click(view.button("加图片"));
-      fire(view.stage, "pointerdown", { clientX: 30, clientY: 30, button: 0 });
+      fire(view.stage, "pointerdown", { clientX: 30, clientY: 30, button: 0, ctrlKey: true });
       fire(window, "pointermove", { clientX: 200, clientY: 200 });
       assert.equal(lit(view), 0);
       fire(window, "pointerup", {});
@@ -756,7 +865,7 @@ describe("canvas-page 页面", () => {
       const [n1, n2] = twoImages(view);
       selectNode(view, n1);
       assert.equal(lit(view), 1);
-      fire(view.stage, "pointerdown", { clientX: 1000, clientY: 450, button: 0 });
+      fire(view.stage, "pointerdown", { clientX: 1000, clientY: 450, button: 0, ctrlKey: true });
       fire(window, "pointermove", { clientX: 1300, clientY: 600 });
       fire(window, "pointerup", {});
       assert.deepEqual([...view.nodeLayer.children]
@@ -813,7 +922,7 @@ describe("canvas-page 页面", () => {
     test("框选之后 Delete 一次删掉整批", async () => {
       const { page, view } = await makePage();
       twoImages(view);
-      fire(view.stage, "pointerdown", { clientX: 100, clientY: 100, button: 0 });
+      fire(view.stage, "pointerdown", { clientX: 100, clientY: 100, button: 0, ctrlKey: true });
       fire(window, "pointermove", { clientX: 1150, clientY: 700 });
       fire(window, "pointerup", {});
       fire(window, "keydown", { key: "Delete", code: "Delete" });
@@ -877,6 +986,159 @@ describe("canvas-page 页面", () => {
   });
 
 
+  describe("收笔被接走的那一发：pointercancel、窗口失焦、原生拖拽", () => {
+    const addImage = (view) => {
+      click(view.button("加图片"));
+      return view.nodeLayer.children[view.nodeLayer.children.length - 1].dataset.nodeId;
+    };
+    const twoImages = (view) => {
+      addImage(view);
+      addImage(view);
+      return [...view.nodeLayer.children].map((el) => el.dataset.nodeId);
+    };
+    const litIds = (view) => [...view.nodeLayer.children]
+      .filter((el) => el.classList.contains("ns-canvas-node-on")).map((el) => el.dataset.nodeId);
+
+    test("拖节点中窗口失焦：挪出的落点收下，舞台手势态收掉，裸移动不再搬节点", async () => {
+      const { view, pos } = await makePage();
+      addImage(view);
+      fire(view.nodeLayer.children[0], "pointerdown", { clientX: CENTER.x, clientY: CENTER.y, button: 0 });
+      assert.ok(view.stage.classList.contains("ns-canvas-dragging"), "拖中的舞台挂让位态（style.css 那条 pointer-events）");
+      fire(window, "pointermove", { clientX: CENTER.x + 60, clientY: CENTER.y + 40 });
+      fire(window, "blur", {});   // 拖出窗口、切走窗口、原生菜单挡在中间：这一发的 pointerup 永远不会来
+      assert.deepEqual(pos(), [[CENTER.x + 60, CENTER.y + 40]], "已经挪出的落点要收下");
+      assert.ok(!view.stage.classList.contains("ns-canvas-dragging"), "失焦要把舞台手势态收掉");
+      fire(window, "pointermove", { clientX: CENTER.x + 500, clientY: CENTER.y + 300 });
+      assert.deepEqual(pos(), [[CENTER.x + 60, CENTER.y + 40]], "失焦之后的裸移动不许再搬节点");
+      fire(view.nodeLayer.children[0], "pointerdown", { clientX: CENTER.x + 60, clientY: CENTER.y + 40, button: 0 });
+      fire(window, "pointermove", { clientX: CENTER.x + 110, clientY: CENTER.y + 70 });
+      assert.deepEqual(pos(), [[CENTER.x + 110, CENTER.y + 70]], "失焦之后画布照旧拖得动节点");
+      fire(window, "pointerup", {});
+    });
+
+    test("pointercancel 收笔：那一按被系统手势接走之后不粘状态", async () => {
+      const { view, pos } = await makePage();
+      addImage(view);
+      fire(view.nodeLayer.children[0], "pointerdown", { clientX: CENTER.x, clientY: CENTER.y, button: 0 });
+      fire(window, "pointermove", { clientX: CENTER.x + 60, clientY: CENTER.y + 40 });
+      fire(window, "pointercancel", {});
+      assert.ok(!view.stage.classList.contains("ns-canvas-dragging"), "pointercancel 要把手势态收掉");
+      fire(window, "pointermove", { clientX: CENTER.x + 400, clientY: CENTER.y });
+      assert.deepEqual(pos(), [[CENTER.x + 60, CENTER.y + 40]], "被接走之后的裸移动不许再搬节点");
+    });
+
+    test("正文文本被浏览器拖出去：这一发就地收笔，节点不跟着光栅跑", async () => {
+      const { view, pos } = await makePage();
+      click(view.button("加提示词"));
+      const ta = view.nodeLayer.querySelector("textarea");
+      ta.focus();   // 编辑态里按下拖：选字与拖字归浏览器自己
+      fire(ta, "pointerdown", { clientX: CENTER.x, clientY: CENTER.y, button: 0 });
+      fire(window, "pointermove", { clientX: CENTER.x + 90, clientY: CENTER.y + 70 });
+      assert.deepEqual(pos(), [[CENTER.x + 90, CENTER.y + 70]], "拖过一截就是拖节点");
+      dragFire(ta, "dragstart", plainPayload("三段文字"));   // 文本拖出去：往后没有 pointerup
+      assert.ok(!view.stage.classList.contains("ns-canvas-dragging"), "拖拽起手就把舞台手势态收掉");
+      fire(window, "pointermove", { clientX: CENTER.x + 500, clientY: CENTER.y + 300 });
+      assert.deepEqual(pos(), [[CENTER.x + 90, CENTER.y + 70]], "原生拖拽接走之后不许再搬节点");
+    });
+    test("框选途中失焦：框选框与 pointer-events 那一层一起收掉", async () => {
+      const { view } = await makePage();
+      twoImages(view);
+      fire(view.stage, "pointerdown", { clientX: 100, clientY: 100, button: 0, ctrlKey: true });
+      fire(window, "pointermove", { clientX: 1150, clientY: 700 });
+      assert.ok(view.world.querySelector(".ns-canvas-marquee"), "起手要有框");
+      fire(window, "blur", {});
+      assert.ok(!view.world.querySelector(".ns-canvas-marquee"), "失焦要把框选框收掉");
+      assert.ok(!view.stage.classList.contains("ns-canvas-marqueeing"),
+        "失焦要把 pointer-events: none 那一层收掉 —— 留着就是整张画布按不动任何东西");
+    });
+
+    test("拉线中的源节点挂 ns-canvas-node-linking，松手摘掉", async () => {
+      const { view } = await makePage();
+      const [n1, n2] = twoImages(view);
+      fire(nodeHandle(view, n1, "right"), "pointerdown", { clientX: 940, clientY: 520, button: 0 });
+      assert.ok(view.nodeEl(n1).classList.contains("ns-canvas-node-linking"),
+        "起手那一张挂让位态（四枚接线点的可见规则也认它）");
+      assert.ok(!view.nodeEl(n2).classList.contains("ns-canvas-node-linking"), "只挂起手那一张");
+      fire(window, "pointermove", { clientX: 1142, clientY: 520 });
+      fire(window, "pointerup", {});
+      await settle();
+      assert.ok(!view.nodeEl(n1).classList.contains("ns-canvas-node-linking"), "松手要摘掉");
+    });
+
+    test("拖角缩放中的节点挂 ns-canvas-node-resizing，松手摘掉", async () => {
+      const { view } = await makePage();
+      const id = addImage(view);
+      fire(view.nodeEl(id).querySelector(".ns-canvas-resize-bottom-right"), "pointerdown",
+        { clientX: CENTER.x + 340, clientY: CENTER.y + 240, button: 0 });
+      assert.ok(view.nodeEl(id).classList.contains("ns-canvas-node-resizing"), "缩放中的节点里的正文与图片要让位");
+      fire(window, "pointermove", { clientX: CENTER.x + 400, clientY: CENTER.y + 300 });
+      fire(window, "pointerup", {});
+      assert.ok(!view.nodeEl(id).classList.contains("ns-canvas-node-resizing"), "松手要摘掉");
+    });
+
+    test("按在节点动作钮上就是选中这一张，起手不拖节点", async () => {
+      const { view, pos } = await makePage();
+      const [n1, n2] = twoImages(view);
+      selectNode(view, n1);
+      assert.deepEqual(litIds(view), [n1]);
+      fire(view.nodeEl(n2).querySelector(".ns-canvas-node-act"), "pointerdown", { clientX: 900, clientY: 400, button: 0 });
+      assert.deepEqual(litIds(view), [n2], "按在第二张的动作钮上就是选中第二张");
+      fire(window, "pointermove", { clientX: 1000, clientY: 500 });
+      assert.deepEqual(pos(), [[CENTER.x, CENTER.y], [CENTER.x + STEP_X, CENTER.y]], "控件那一片起手不拖节点");
+      fire(window, "pointerup", {});
+    });
+
+    test("让位那一层 CSS 认的就是这几个类，只让节点里的内容面让位", async () => {
+      const css = fs.readFileSync(path.join(webDir, "studio", "style.css"), "utf8");
+      const faces = ".ns-canvas-node-textarea, .ns-canvas-node-img, .ns-canvas-node-video-el, .ns-canvas-gen, .ns-canvas-car";
+      const scoped = (cls) => css.includes(`.${cls} :is(${faces})`);
+      assert.ok(scoped("ns-canvas-dragging") && scoped("ns-canvas-marqueeing")
+          && scoped("ns-canvas-node-resizing") && scoped("ns-canvas-node-linking"),
+        "让位的四个类就是 interactions.js 真挂的那四个，认的层必须是节点里那几张内容面");
+      assert.ok(!/^\.ns-canvas-dragging[^\n]*\{ pointer-events: none; \}/m.test(css),
+        "pointer-events 不许落在舞台自己身上：双击正文那第二下按完整张画布按不动，dblclick 落不到正文框，四角尺寸柄与接线点也一起没了");
+    });
+
+    test("光标在正文里时点节点外那一按交浏览器：焦点换走才出得了编辑", async () => {
+      const { view } = await makePage(mockCanvas());
+      click(view.button("加提示词"));
+      await settle();
+      const ta = view.nodeLayer.querySelector("textarea");
+      const pressDown = (el, x, y) => {
+        const ev = new window.PointerEvent("pointerdown",
+          { bubbles: true, cancelable: true, button: 0, clientX: x, clientY: y });
+        el.dispatchEvent(ev);
+        return ev;
+      };
+      ta.focus();
+      assert.ok(!pressDown(view.stage, 20, 20).defaultPrevented,
+        "点空白那一按不许拦：拦下 pointerdown 连焦点交接给空白一起拦了，blur 不来就一直出不了编辑");
+      ta.focus();
+      const card = view.nodeLayer.querySelector(".ns-canvas-node");
+      assert.ok(!pressDown(card, parseFloat(card.style.left) + 10, parseFloat(card.style.top) + 10).defaultPrevented,
+        "点在节点上那一按照样把焦点交接给浏览器");
+      ta.blur();
+      assert.ok(pressDown(view.stage, 20, 20).defaultPrevented,
+        "光标不在正文里时那一按照样要拦：拖动的选字与焦点抢占归浏览器");
+      fire(window, "pointerup", {});
+    });
+
+
+    test("卡上正文不可选：按下拖拖的是这一张节点，不是浏览器选字", async () => {
+      const css = fs.readFileSync(path.join(webDir, "studio", "style.css"), "utf8");
+      assert.match(css, /\.ns-canvas-node \{[^}]*user-select: none; \}/, "节点整体要禁选，否则拖一张卡就是在选它的正文");
+      const lift = css.match(/\.ns-canvas-node-textarea, \.ns-canvas-recipe-seed \{ user-select: text; \}/);
+      assert.ok(lift, "正文编辑框与种子输入要抬回可选");
+      assert.ok(!/\.ns-canvas-gen-ctl[^\n]*user-select: text/.test(css),
+        "整列控件行（.ns-canvas-gen-ctl 含配方概览与提示词行）不能整片抬回可选，那等于把正文选回来");
+      assert.ok(css.indexOf(".ns-canvas-node {") < css.indexOf(lift[0]),
+        "抬回可选那条写在禁选之后才压得住继承（同特异度看先后）");
+    });
+
+  });
+
+
+
   describe("视口：缩放、平移、网格、背景", () => {
     test("滚轮以指针为锚缩放，缩放标签跟着写", async () => {
       const { view, page } = await makePage();
@@ -915,16 +1177,16 @@ describe("canvas-page 页面", () => {
       assert.deepEqual(page.current().viewport, { x: 80, y: 0, k: 1 });
       assert.deepEqual(pos(), before);
     });
-    test("中键拖 = 平移，Ctrl 点空白 = 平移", async () => {
+    test("中键拖 = 平移，空白那一拖 = 平移（默认就是拖动）", async () => {
       const { view, page } = await makePage();
       fire(view.stage, "pointerdown", { clientX: 100, clientY: 100, button: 1 });
       fire(window, "pointermove", { clientX: 150, clientY: 110 });
       fire(window, "pointerup", {});
       assert.deepEqual(page.current().viewport, { x: 50, y: 10, k: 1 });
-      fire(view.stage, "pointerdown", { clientX: 100, clientY: 100, button: 0, ctrlKey: true });
+      fire(view.stage, "pointerdown", { clientX: 100, clientY: 100, button: 0 });
       fire(window, "pointermove", { clientX: 120, clientY: 100 });
       fire(window, "pointerup", {});
-      assert.deepEqual(page.current().viewport, { x: 70, y: 10, k: 1 });
+      assert.deepEqual(page.current().viewport, { x: 70, y: 10, k: 1 }, "左键在空白那一拖就是平移，与 ComfyUI 同一手感");
     });
     test("触屏那一拖 = 平移，不许画框", async () => {
       const { view, page } = await makePage();
@@ -935,16 +1197,29 @@ describe("canvas-page 页面", () => {
       assert.deepEqual(page.current().viewport, { x: 80, y: 50, k: 1 }, "触屏那一拖要挪得动画面");
       assert.ok(!view.world.querySelector(".ns-canvas-marquee"), "触屏不许画框");
     });
-    test("空白处起手拖 = 框选，画面与节点都不动", async () => {
+    test("Ctrl 空白处起手拖 = 框选，画面与节点都不动", async () => {
       const { view, page, pos } = await makePage();
       click(view.button("加图片"));
       const before = pos();
-      fire(view.stage, "pointerdown", { clientX: 300, clientY: 250, button: 0 });
+      fire(view.stage, "pointerdown", { clientX: 300, clientY: 250, button: 0, ctrlKey: true });
       fire(window, "pointermove", { clientX: 700, clientY: 500 });
       fire(window, "pointerup", {});
       assert.deepEqual(page.current().viewport, { x: 0, y: 0, k: 1 }, "框选不许挪画面");
       assert.deepEqual(pos(), before, "框选不许把节点挪走");
       assert.equal(lit(view), 1, "框罩到的那一张亮起来");
+    });
+    test("空白处起手拖 = 平移画面：节点世界位置不动，也不画框", async () => {
+      const { view, page, pos } = await makePage();
+      click(view.button("加图片"));
+      selectNode(view, view.nodeLayer.children[0].dataset.nodeId);
+      const before = pos();
+      fire(view.stage, "pointerdown", { clientX: 300, clientY: 250, button: 0 });
+      fire(window, "pointermove", { clientX: 700, clientY: 500 });
+      fire(window, "pointerup", {});
+      assert.deepEqual(page.current().viewport, { x: 400, y: 250, k: 1 }, "默认那一拖就是平移画面");
+      assert.deepEqual(pos(), before, "平移不许把节点挪走");
+      assert.ok(!view.world.querySelector(".ns-canvas-marquee"), "平移那一拖不画框");
+      assert.equal(lit(view), 1, "拖开了就是平移，选中集不动");
     });
     test("空白处点一下（没拖开）收走选中", async () => {
       const { view, page } = await makePage();
@@ -1044,6 +1319,20 @@ describe("canvas-page 页面", () => {
       assert.equal(nodeAct(view, "n-a", "pick"), null);
       assert.ok(nodeAct(view, "n-a", "delete") && nodeAct(view, "n-b", "delete"));
       assert.ok(nodeAct(view, "n-a", "hero"), "图片节点有主图钮");
+      assert.equal(nodeAct(view, "n-a", "edit"), null, "栏上不摆「进入编辑」：进编辑是双击正文那一条路");
+      assert.equal(nodeAct(view, "n-b", "edit"), null);
+    });
+
+    test("提示词节点的栏就是停用、复制、删除三枚，没有「进入编辑」", async () => {
+      const { view, page } = await makePage(mockCanvas());
+      click(view.button("加提示词"));
+      await settle();
+      const txt = page.current().nodes.find((n) => n.type === "text").id;
+      const acts = [...view.nodeEl(txt).querySelectorAll("[data-node-act]")]
+        .map((el) => el.dataset.nodeAct).filter((a) => a !== "expand");
+      assert.deepEqual(acts, ["disable", "copy", "delete"],
+        "进编辑只剩双击正文：栏上再摆一枚就是同一件事给两个入口");
+      assert.ok(view.nodeEl(txt).querySelector("textarea"), "正文框还在，双击落进去");
     });
 
     test("设为主图整片只留一枚，再点同一枚是取消", async () => {
@@ -1097,6 +1386,25 @@ describe("canvas-page 页面", () => {
       assert.match(css, /\.ns-canvas-node-img \{[^}]*inset: 0/);
       assert.match(css, /\.ns-canvas-node-textarea \{[^}]*inset: 0/);
     });
+    test("接线点默认收着：悬停、选中与被拉线瞄着时 CSS 才把它亮出来", () => {
+      const css = fs.readFileSync(path.join(webDir, "studio", "style.css"), "utf8");
+      assert.match(css, /\.ns-canvas-handle \{[^}]*opacity: 0/);
+      assert.match(css, /\.ns-canvas-node:hover \.ns-canvas-handle[^{]*\{[^}]*opacity: 1/);
+      assert.match(css, /\.ns-canvas-handle-top \{[^}]*top: -6px/);
+      assert.match(css, /\.ns-canvas-handle-bottom \{[^}]*bottom: -6px/);
+    });
+
+    test("画布改名与删除默认收着：指针与键盘落到下拉那一行才亮，触屏档常显", () => {
+      const css = fs.readFileSync(path.join(webDir, "studio", "style.css"), "utf8");
+      assert.match(css, /\.ns-canvas-project-act \{[^}]*opacity: 0[^}]*pointer-events: none/,
+        "默认收着就不能按得中：只降透明度不改 pointer-events，看不见时那一枚还在原位等着误按");
+      assert.match(css, /\.ns-canvas-project:hover \.ns-canvas-project-act[^{]*\{[^}]*opacity: 1/);
+      assert.match(css, /\.ns-canvas-project:focus-within \.ns-canvas-project-act[^{]*\{[^}]*opacity: 1/,
+        "键盘 Tab 进这一行也要亮：只认 hover 的话键盘用户永远碰不到改名与删除");
+      assert.match(css, /@media \(hover: none\) \{ \.ns-canvas-project-act \{[^}]*opacity: 1/,
+        "触屏没有 hover：收着就是按不到，这两枚在触屏档常显");
+    });
+
     test("主图徽标不住操作栏里：没选中也看得见那枚「主图」", async () => {
       const { view } = await makePage(PAIR_WITH_LINK());
       click(nodeAct(view, "n-a", "hero"));
@@ -1235,7 +1543,7 @@ describe("canvas-page 页面", () => {
       const { view, env } = await makePage();
       const undoBtn = view.button("撤销"), redoBtn = view.button("重做");
       assert.ok(undoBtn.disabled && redoBtn.disabled, "没有改动时两枚都是灰的");
-      click(view.button("复制选中"));
+      copyKey();
       assert.ok(toastOf(env).some((m) => m.includes("先选中")));
       click(view.button("加提示词"));
       assert.equal(undoBtn.disabled, false, "有了改动撤销就要亮");
@@ -1335,16 +1643,13 @@ describe("canvas-page 页面", () => {
     });
 
     test("没选中就 Ctrl+C 要说话，空剪贴板 Ctrl+V 要说话", async () => {
-      const { view, env, page } = await makePage();
+      const { env, page } = await makePage();
       copyKey();
-      click(view.button("粘贴"));
+      pasteKey();
       assert.equal(page.current().nodes.length, 0, "两条都不该改动画布");
       const toasts = toastOf(env);
       assert.ok(toasts.some((m) => m.includes("先选中")), "没选中要说清楚");
       assert.ok(toasts.some((m) => m.includes("剪贴板是空的")), "空剪贴板要说清楚");
-      assert.ok(view.button("剪切选中").title.includes("Ctrl+X"));
-      assert.ok(view.button("复制").title.includes("Ctrl+C"));
-      assert.ok(view.button("粘贴").title.includes("Ctrl+V"));
     });
 
     test("正文框里的 Ctrl+C 与 Ctrl+A 归浏览器，画布上的 Ctrl+A 是全选节点", async () => {
@@ -1823,7 +2128,7 @@ describe("canvas-page 页面", () => {
         "脱手的那一发不写旧画布");
       assert.equal(listenerCount("rs.image_gen.status"), 0);
     });
-    test("控件那一片起手不拖节点，胶囊菜单浮在节点外那一层", async () => {
+    test("胶囊、按钮与种子输入起手不拖节点，胶囊菜单浮在节点外那一层", async () => {
       const ctx = await genPage([genNode("g1", 0, 0)]);
       const nodeEl = ctx.view.nodeEl("g1");
       const at = { ...ctx.page.current().nodes[0].position };
@@ -1858,11 +2163,11 @@ describe("canvas-page 页面", () => {
       const recipe = ctx.page.current().nodes.find((n) => n.type === "recipe");
       assert.deepEqual([video.width, video.height], [320, 208], "出片节点默认 16:9 的框");
       assert.equal(video.metadata.skill_id, "h3_t2v", "技能默认落在视频技能表第一份");
-      assert.ok(ctx.genBtn(video.id, "出片"), "出片节点自带出片钮");
+      assert.ok(ctx.genBtn(video.id, "生成视频"), "出片节点自带生成视频钮");
       assert.equal(recipe.metadata.recipe, "", "配方默认空着，由面板里选");
       assert.equal(recipe.metadata.anchors, "both", "默认两端锚点");
       assert.equal(ctx.genText(recipe.id, "model"), "未选配方", "没选配方时概览行这么说");
-      click(ctx.genBtn(recipe.id, "出片"));
+      click(ctx.genBtn(recipe.id, "生成视频"));
       await settle();
       assert.ok(ctx.env.store.toasts.some((item) => item.message.includes("先选一份配方")));
       assert.equal(clipCalls("/neo_video_gen/run_segment").length, 0, "没选配方不进闭环节");
@@ -1874,7 +2179,7 @@ describe("canvas-page 页面", () => {
         { routes: clipRoutes() });
       await deepSettle();
       ctx.page.current().nodes.find((n) => n.id === "i1").metadata = { filename: "a.png", subfolder: "sub" };
-      click(ctx.genBtn("v1", "出片"));
+      click(ctx.genBtn("v1", "生成视频"));
       await deepSettle();
       assert.deepEqual(clipCalls("/neo_video_gen/simple")[0].body, {
         prompt: "镜头慢慢推进", skill_id: "h3_t2v",
@@ -1893,7 +2198,7 @@ describe("canvas-page 页面", () => {
       const ctx = await genPage([promptNode("t1", "一句"), videoGen("v1", 0)], [link("t1", "v1")],
         { routes: clipRoutes() });
       await deepSettle();
-      click(ctx.genBtn("v1", "出片"));
+      click(ctx.genBtn("v1", "生成视频"));
       await deepSettle();
       const created = ctx.page.current().nodes.filter((n) => n.type === "video");
       assert.equal(created.length, 1);
@@ -1910,16 +2215,16 @@ describe("canvas-page 页面", () => {
         { routes: clipRoutes({ snaps: [{ success: true, task_id: "clip-1", status: "running",
           progress: { value: 3, max: 120 } }] }) });
       await deepSettle();
-      click(ctx.genBtn("v1", "出片"));
+      click(ctx.genBtn("v1", "生成视频"));
       await deepSettle();
       assert.ok(ctx.genText("v1", "status").includes("生成中 3/120"), ctx.genText("v1", "status"));
       assert.ok(ctx.view.nodeEl("v1").classList.contains("ns-canvas-node-run"), "跑着时节点挂运行态");
-      assert.equal(ctx.genBtn("v1", "出片").disabled, true, "这一发在跑就不给叠第二发");
+      assert.equal(ctx.genBtn("v1", "生成视频").disabled, true, "这一发在跑就不给叠第二发");
       click(ctx.genBtn("v1", "取消任务"));
       await settle();
       assert.ok(fetchLog.some((c) => c.path === "/neo_video_gen/simple/clip-1/cancel" && c.method === "POST"),
         "取消要交后端出队，不是只把界面收掉");
-      click(ctx.genBtn("v1", "出片"));   // 闸门：这一发还没收摊就不叠第二发
+      click(ctx.genBtn("v1", "生成视频"));   // 闸门：这一发还没收摊就不叠第二发
       await deepSettle();
       assert.equal(clipCalls("/neo_video_gen/simple").length, 1, "取消没收摊前不提交第二发");
       assert.ok(ctx.genText("v1", "status").includes("生成中 3/120"), "终态由后端那一格收摊，界面不自演已取消");
@@ -1928,28 +2233,28 @@ describe("canvas-page 页面", () => {
       const ctx = await genPage([promptNode("t1", "一句"), videoGen("v1", 0)], [link("t1", "v1")],
         { routes: clipRoutes({ snaps: [{ success: true, task_id: "clip-1", status: "cancelled" }] }) });
       await deepSettle();
-      click(ctx.genBtn("v1", "出片"));
+      click(ctx.genBtn("v1", "生成视频"));
       await deepSettle();
       assert.equal(ctx.genText("v1", "status"), "", "取消完不挂运行态");
       assert.ok(ctx.env.store.toasts.some((item) => item.message.includes("已取消出片")));
-      assert.equal(ctx.genBtn("v1", "出片").disabled, false, "取消完允许再来一发");
+      assert.equal(ctx.genBtn("v1", "生成视频").disabled, false, "取消完允许再来一发");
     });
     test("出片失败：后端给的原因留在状态行，这一张允许再来一发", async () => {
       const ctx = await genPage([promptNode("t1", "一句"), videoGen("v1", 0)], [link("t1", "v1")],
         { routes: clipRoutes({ snaps: [{ success: false, status: "failed", error: "显存不够" }] }) });
       await deepSettle();
-      click(ctx.genBtn("v1", "出片"));
+      click(ctx.genBtn("v1", "生成视频"));
       await deepSettle();
       assert.equal(ctx.genText("v1", "status"), "显存不够", "状态行就是后端那一格的失败原因");
       assert.ok(ctx.view.nodeEl("v1").querySelector(".ns-canvas-gen-fail"), "失败那一行标失败色");
       assert.ok(ctx.env.store.toasts.some((item) => item.message.includes("出片失败：显存不够")));
-      assert.equal(ctx.genBtn("v1", "出片").disabled, false, "失败过的那一张允许再来一发");
+      assert.equal(ctx.genBtn("v1", "生成视频").disabled, false, "失败过的那一张允许再来一发");
     });
     test("要参考素材的技能缺图时在画布上就拦下", async () => {
       const ctx = await genPage([promptNode("t1", "一句"), videoGen("v1", 0, { skill_id: "h3_i2v" })],
         [link("t1", "v1")], { routes: clipRoutes() });
       await deepSettle();
-      click(ctx.genBtn("v1", "出片"));
+      click(ctx.genBtn("v1", "生成视频"));
       await settle();
       assert.equal(clipCalls("/neo_video_gen/simple").length, 0, "无参考的 i2v 不进队列");
       assert.ok(ctx.env.store.toasts.some((item) => item.message.includes("要参考素材")));
@@ -1960,7 +2265,7 @@ describe("canvas-page 页面", () => {
       await deepSettle();
       assert.ok(ctx.genText("r1", "model").includes("2 段"), ctx.genText("r1", "model"));
       assert.ok(ctx.genText("r1", "model").includes("1344×768"), "概览行读配方自己那份 spec");
-      click(ctx.genBtn("r1", "出片"));
+      click(ctx.genBtn("r1", "生成视频"));
       await deepSettle();
       assert.deepEqual(clipCalls("/neo_video_gen/run_segment")[0].body, {
         recipe: "短片配方", segment: 1, anchors: "both", steps: -1, seed: -1,
@@ -1975,7 +2280,7 @@ describe("canvas-page 页面", () => {
       await deepSettle();
       assert.ok(ctx.chipLabelAt("r1", 0).includes("未选配方"), "配方胶囊先说未选");
       assert.equal(ctx.genText("r1", "model"), "未选配方", "没选配方时概览行这么说");
-      click(ctx.genBtn("r1", "出片"));
+      click(ctx.genBtn("r1", "生成视频"));
       await settle();
       assert.equal(clipCalls("/neo_video_gen/run_segment").length, 0, "没选配方不进闭环节");
       await ctx.pickChip("r1", 0, "短片配方");
@@ -1983,7 +2288,7 @@ describe("canvas-page 页面", () => {
       const meta = ctx.page.current().nodes.find((n) => n.id === "r1").metadata;
       assert.deepEqual([meta.recipe, meta.segment, meta.anchors], ["短片配方", 0, "none"],
         "换配方时段号回到第 1 段");
-      click(ctx.genBtn("r1", "出片"));
+      click(ctx.genBtn("r1", "生成视频"));
       await deepSettle();
       assert.deepEqual(clipCalls("/neo_video_gen/run_segment")[0].body, {
         recipe: "短片配方", segment: 0, anchors: "none", steps: -1, seed: -1,
@@ -2018,6 +2323,30 @@ describe("canvas-page 页面", () => {
       assert.equal(ctx.page.current().nodes.find((n) => n.id === "r1").metadata.segment, 0, "撤销收回上一次选的段");
     });
 
+    test("卡上正文行按下拖就是拖这一张：只有胶囊、按钮与种子输入起手不吃这一按", async () => {
+      const ctx = await genPage([recipeNode("r1", 0)], [], { routes: clipRoutes() });
+      await deepSettle();
+      const posOf = () => ctx.page.current().nodes.find((n) => n.id === "r1").position;
+      const drag = (el, dx, dy) => {
+        const before = { ...posOf() };
+        fire(el, "pointerdown", { clientX: 620, clientY: 420, button: 0 });
+        fire(window, "pointermove", { clientX: 620 + dx, clientY: 420 + dy });
+        fire(window, "pointerup", {});
+        return [posOf().x - before.x, posOf().y - before.y];
+      };
+      const row = (part) => ctx.view.nodeEl("r1").querySelector(`.ns-canvas-recipe-${part}`);
+      assert.deepEqual(drag(row("info-text"), 40, 30), [40, 30], "第几段那一行按下拖就是拖这一张节点");
+      assert.deepEqual(drag(row("text"), -25, 12), [-25, 12], "配方提示词那一行按下拖就是拖这一张节点");
+      assert.deepEqual(drag(row("count"), 18, -9), [18, -9], "参考素材计数那一行按下拖就是拖这一张节点");
+      assert.deepEqual(drag(row("thumb"), 12, 14), [12, 14], "参考素材缩略图按下拖就是拖这一张节点");
+      assert.deepEqual(drag(ctx.chipAt("r1", 1), 40, 30), [0, 0], "胶囊起手不吃这一按，浏览器要在它上面发 click");
+      assert.deepEqual(drag(ctx.genBtn("r1", "生成视频"), 40, 30), [0, 0], "生成视频钮起手不吃这一按");
+      assert.deepEqual(drag(ctx.segBtn("r1", 0), 40, 30), [0, 0], "段钮起手不吃这一按");
+      assert.deepEqual(drag(row("seed"), 40, 30), [0, 0], "种子输入起手不吃这一按，点了要能落焦点打字");
+      assert.ok([...ctx.view.nodeLayer.children].some((el) => el.dataset.nodeId === "r1"
+        && el.classList.contains("ns-canvas-node-on")), "按在控件上就是选中这一张");
+    });
+
     test("配方卡提示词来源那一行：连过来的正文就是画布那一份", async () => {
       const ctx = await genPage([promptNode("t1", "画布上写的提示词"), recipeNode("r1", 0),
         videoSlot("vid1", 700)], [link("r1", "vid1")], { routes: clipRoutes() });
@@ -2031,7 +2360,7 @@ describe("canvas-page 页面", () => {
       assert.ok(row().classList.contains("ns-canvas-recipe-on"), "连了正文，这一行抬到主色");
       assert.equal(ctx.recipeText("r1", "src"), "画布");
       assert.equal(ctx.recipeText("r1", "text"), "画布上写的提示词");
-      click(ctx.genBtn("r1", "出片"));
+      click(ctx.genBtn("r1", "生成视频"));
       await deepSettle();
       assert.equal(clipCalls("/neo_video_gen/run_segment")[0].body.prompt, "画布上写的提示词",
         "出片发出去的就是画布那一份");
@@ -2051,7 +2380,7 @@ describe("canvas-page 页面", () => {
       assert.ok(thumbs()[1].getAttribute("src").includes("/rs_recipes/thumbnail")
         && thumbs()[1].getAttribute("src").includes("dir=assets"), "配方素材走配方 assets 那条缩略图");
       assert.equal(ctx.recipeText("r1", "count"), "3 张参考素材");
-      click(ctx.genBtn("r1", "出片"));
+      click(ctx.genBtn("r1", "生成视频"));
       await deepSettle();
       assert.deepEqual(clipCalls("/neo_video_gen/run_segment")[0].body.references,
         { images: [{ kind: "input", value: "sub/a.png[output]" }], videos: [], audios: [] },
@@ -2107,7 +2436,7 @@ describe("canvas-page 页面", () => {
       click(ctx.genBtn("r1", "展开配方"));
       await settle();
       const segId = ctx.page.current().nodes.find((n) => n.type === "recipe" && n.metadata.segment === 0).id;
-      click(ctx.genBtn(segId, "出片"));
+      click(ctx.genBtn(segId, "生成视频"));
       await deepSettle();
       const calls = clipCalls("/neo_video_gen/run_segment");
       assert.equal(calls.length, 1, "展开本身不出片");
@@ -2118,21 +2447,6 @@ describe("canvas-page 页面", () => {
       ], "摊出来的素材连配方名一起交后端，画布这边不用先把素材拷进 input");
       assert.equal(seg.prompt, "开场那一段的提示词", "摊出来的正文节点连到段节点上，出片走的就是这条连线");
       assert.equal(seg.segment, 0);
-    });
-
-    test("工具条的展开配方认选中的那一台配方节点：没选中与读不到都说话，不摊假节点", async () => {
-      const bare = await genPage([], [], { routes: clipRoutes() });
-      click(bare.view.button("展开配方"));
-      await settle();
-      assert.ok(bare.env.store.toasts.some((item) => item.message.includes("先选中一台配方节点")));
-      assert.equal(bare.page.current().nodes.length, 0);
-      const ctx = await genPage([recipeNode("r1", 0)], [], { routes: clipRoutes({ recipes: [] }) });
-      await deepSettle();
-      selectNode(ctx.view, "r1");
-      click(ctx.view.button("展开配方"));
-      await settle();
-      assert.ok(ctx.env.store.toasts.some((item) => item.message.includes("配方列表读不到")));
-      assert.equal(ctx.page.current().nodes.length, 1, "读不到就只留原来那一台");
     });
 
     test("串联展开：车厢首尾相接接到车尾，整列共用的参数与出片落在车尾那台生成节点上", async () => {
@@ -2159,10 +2473,9 @@ describe("canvas-page 页面", () => {
       assert.equal(car1.metadata.anchors, undefined, "锚点与步数这一套不落在车厢上");
       const carEl = ctx.view.nodeEl(car1.id);
       assert.ok(carEl.querySelector(".ns-canvas-car"), "车厢走的是精简卡那一层");
-      assert.ok(!carEl.querySelector(".ns-canvas-gen-go"), "车厢上没有出片钮：整列出片在车尾");
       assert.ok(!nodeAct(ctx.view, car1.id, "expand"), "车厢不给「展开配方」那一枚：点了是把同一份配方再铺一遍");
       assert.deepEqual(typed("recipe").map((n) => ctx.view.nodeEl(n.id)
-        .querySelectorAll(".ns-canvas-gen-btn").length), [1, 1], "车厢上一枚钮都没有：只有停用那一枚");
+        .querySelectorAll(".ns-canvas-gen-btn").length), [0, 0], "车厢卡上一枚钮都没有：停用与删除都在节点上方的浮出栏里");
       assert.deepEqual([tail.metadata.chain, tail.metadata.kind, tail.metadata.recipe,
         tail.metadata.anchors, tail.metadata.seed], ["train", "video", "短片配方", "first", 100],
         "整列共用的那一份参数在车尾");
@@ -2173,6 +2486,14 @@ describe("canvas-page 页面", () => {
       assert.ok(wired(typed("text")[0].id, car1.id), "这一段的正文连到自己那台车厢");
       assert.equal(typed("text")[0].position.x, car1.position.x, "正文与车厢同列");
       assert.ok(typed("text")[0].position.y < car1.position.y, "正文落在车厢上方");
+      // 上下叠放的一列走竖轴：正文出底边、车厢收顶边，线不绕到右中（拉线与看线同一口径）
+      const lineD = (from, to) => ctx.view.links
+        .querySelector(`.ns-canvas-line[data-connection-id="conn-${from}-${to}"]`).getAttribute("d");
+      const textTop = typed("text")[0];
+      assert.ok(lineD(textTop.id, car1.id).startsWith(
+        `M ${car1.position.x + 180} ${textTop.position.y + 220}`), "正文从底边中点出线");
+      assert.ok(lineD(textTop.id, car1.id).endsWith(` ${car1.position.x + 180} ${car1.position.y}`),
+        "线落在车厢顶边中点");
       const refs = typed("image");
       assert.deepEqual(refs.map((n) => [n.width, n.height]), [[176, 124], [176, 124], [176, 124]],
         "素材节点比平铺那一挡小一档：两列正好铺满车厢那一列的宽");
@@ -2205,7 +2526,7 @@ describe("canvas-page 页面", () => {
       const made = ctx.page.current().nodes.filter((n) => n.id !== "r1");
       const tail = made.find((n) => n.type === "gen");
       const cars = made.filter((n) => n.type === "recipe");
-      click(ctx.genBtn(tail.id, "出片"));
+      click(ctx.genBtn(tail.id, "生成视频"));
       await settle();
       assert.equal(ctx.genText(tail.id, "status"), "串联出片 1/2", "第一段收摊，车尾那一行进一格");
       const clips = () => ctx.page.current().nodes.filter((n) => n.type === "video");
@@ -2246,24 +2567,70 @@ describe("canvas-page 页面", () => {
       const made = ctx.page.current().nodes.filter((n) => n.id !== "r1");
       const cars = made.filter((n) => n.type === "recipe");
       const tail = made.find((n) => n.type === "gen");
-      click(ctx.genBtn(cars[1].id, "停用"));
+      click(nodeAct(ctx.view, cars[1].id, "disable"));
       await settle();
       assert.equal(ctx.page.current().nodes.find((n) => n.id === cars[1].id).metadata.disabled, true);
       assert.ok(ctx.view.nodeEl(cars[1].id).classList.contains("ns-canvas-node-off"), "停用的那一张压暗");
       assert.ok(ctx.view.nodeEl(cars[1].id).textContent.includes("已停用"), "停用的那一张挂徽标");
-      assert.ok(ctx.genBtn(cars[1].id, "启用"), "停用的那一张给启用这一枚");
+      assert.ok(nodeAct(ctx.view, cars[1].id, "enable"), "停用的那一张给启用这一枚");
       assert.equal(ctx.view.nodeEl(tail.id).querySelector(".ns-canvas-recipe-info-text").textContent,
         "链上 2 段 · 启用 1 段", "车尾那一行说这一列跑几段");
-      click(ctx.genBtn(tail.id, "出片"));
+      click(ctx.genBtn(tail.id, "生成视频"));
       await deepSettle();
       assert.deepEqual(clipCalls("/neo_video_gen/run_segment").map((c) => c.body.segment), [0],
         "整列出片跳过停用的那一段");
-      click(ctx.genBtn(cars[0].id, "停用"));
+      click(nodeAct(ctx.view, cars[0].id, "disable"));
       await settle();
-      click(ctx.genBtn(tail.id, "出片"));
+      click(ctx.genBtn(tail.id, "生成视频"));
       await settle();
       assert.equal(clipCalls("/neo_video_gen/run_segment").length, 1, "全停用就不入队");
       assert.ok(ctx.env.store.toasts.some((item) => item.message.includes("链上没有启用的段")));
+    });
+
+    test("停用是通用功能：正文与参考图都不取停用的那一张，停用的节点自己不出图", async () => {
+      const ctx = await genPage([promptNode("t1", "第一句"), promptNode("t2", "第二句"),
+        genNode("g1", 0, 0), imageSlot("i1", 0), imageSlot("i2", 400)],
+      [link("t1", "g1"), link("t2", "g1"), link("i1", "g1"), link("i2", "g1")]);
+      ctx.page.current().nodes.find((n) => n.id === "i1").metadata = { filename: "a.png" };
+      ctx.page.current().nodes.find((n) => n.id === "i2").metadata = { filename: "b.png" };
+      await settle();
+      click(nodeAct(ctx.view, "t2", "disable"));
+      click(nodeAct(ctx.view, "i2", "disable"));
+      await settle();
+      click(ctx.genBtn("g1", "出图"));
+      await settle();
+      const body = genCalls()[0].body;
+      assert.equal(body.prompt, "第一句", "停用的那块正文不进这一发");
+      assert.deepEqual(body.references, [{ kind: "input", value: "a.png[output]" }], "停用的那张参考图不进这一发");
+      // 这一发收摊才谈停用：跑着的那一张本来就不叠第二发，停用那一句要在这一发之外说
+      dispatchApiEvent("rs.image_gen.status", okImages(1));
+      await settle();
+      click(nodeAct(ctx.view, "g1", "disable"));
+      await settle();
+      click(ctx.genBtn("g1", "出图"));
+      await settle();
+      assert.equal(genCalls().length, 1, "停用的生成节点自己不出图");
+      assert.ok(ctx.env.store.toasts.some((item) => item.message.includes("已停用")),
+        "停用那一句要说给按下的那一张");
+      click(nodeAct(ctx.view, "g1", "enable"));
+      await settle();
+      click(ctx.genBtn("g1", "出图"));
+      await settle();
+      assert.equal(genCalls().length, 2, "启用之后照跑出图");
+    });
+
+    test("停用的视频位不是成片落点：出片往下找别的空位，没有就新开一台", async () => {
+      const ctx = await genPage([promptNode("t1", "一句"), videoGen("v1", 0), videoSlot("s1", 400)],
+        [link("t1", "v1"), link("v1", "s1")], { routes: clipRoutes() });
+      await deepSettle();
+      click(nodeAct(ctx.view, "s1", "disable"));
+      await settle();
+      click(ctx.genBtn("v1", "生成视频"));
+      await deepSettle();
+      assert.equal(ctx.view.nodeEl("s1").querySelector("video"), null, "停用的那一张不落片");
+      const created = ctx.page.current().nodes.filter((n) => n.type === "video" && n.id !== "s1");
+      assert.equal(created.length, 1, "新开一台视频位接在这台节点下游");
+      assert.ok(ctx.view.nodeEl(created[0].id).querySelector("video"), "成片落进新开的那一台");
     });
 
     test("车尾取消任务取消这一列在跑的每一段：两段都出队", async () => {
@@ -2282,7 +2649,7 @@ describe("canvas-page 页面", () => {
       click(ctx.genBtn("r1", "展开配方"));
       await settle();
       const tail = ctx.page.current().nodes.find((n) => n.type === "gen");
-      click(ctx.genBtn(tail.id, "出片"));
+      click(ctx.genBtn(tail.id, "生成视频"));
       await settle();
       assert.equal(ctx.genText(tail.id, "status"), "串联出片 0/2", "整列出片挂着，车尾数的是段数");
       click(ctx.genBtn(tail.id, "取消任务"));
@@ -2298,20 +2665,20 @@ describe("canvas-page 页面", () => {
       assert.ok(clipPolls("chain-2").length >= 1, "车厢自己的收摊归它那一发的轮询");
     });
 
-    test("串联的车厢是精简卡：只有停用这一枚，出片与公共参数都不在这一张上", async () => {
+    test("串联的车厢是精简卡：卡上一枚钮都没有，停用与删除在节点上方的浮出栏里", async () => {
       const ctx = await genPage([{ ...recipeNode("c1", 0, { train: 1, segment: 0 }), width: 360, height: 152 }],
         [], { routes: clipRoutes() });
       await deepSettle();
       const el = ctx.view.nodeEl("c1");
       assert.ok(el.querySelector(".ns-canvas-car"), "车厢走的是精简卡那一层");
-      assert.ok(ctx.genBtn("c1", "停用"), "车厢上就有停用这一枚");
-      assert.ok(!el.querySelector(".ns-canvas-gen-go"), "车厢上没有出片钮：整列出片在车尾那台生成节点");
+      assert.equal(el.querySelectorAll(".ns-canvas-gen-btn").length, 0, "车厢卡上一枚钮都没有：整列出片在车尾那台生成节点");
       assert.ok(!el.querySelector("select"), "配方 / 步数 / 锚点那些下拉不在车厢上");
       assert.ok(!el.querySelector(".ns-canvas-recipe-segs"), "段列表也不在车厢上");
-      click(ctx.genBtn("c1", "停用"));
+      assert.ok(nodeAct(ctx.view, "c1", "disable"), "停用这一枚在节点上方的浮出栏里");
+      click(nodeAct(ctx.view, "c1", "disable"));
       await settle();
       assert.equal(ctx.page.current().nodes.find((n) => n.id === "c1").metadata.disabled, true,
-        "停用是车厢上唯一的控制");
+        "栏上的停用落进 metadata.disabled");
       assert.equal(clipCalls("/neo_video_gen/run_segment").length, 0, "车厢这一张不发片");
     });
 
@@ -2320,7 +2687,7 @@ describe("canvas-page 页面", () => {
         { routes: clipRoutes() });
       await deepSettle();
       assert.ok(ctx.genText("tail1", "model").includes("2 段"), "车尾那一行说它带的是哪一份配方");
-      click(ctx.genBtn("tail1", "出片"));
+      click(ctx.genBtn("tail1", "生成视频"));
       await settle();
       assert.equal(clipCalls("/neo_video_gen/run_segment").length, 0);
       assert.ok(ctx.env.store.toasts.some((item) => item.message.includes("上游没有段节点")));
@@ -2334,7 +2701,7 @@ describe("canvas-page 页面", () => {
           routes: clipRoutes({ snaps: [{ success: true, task_id: "clip-1", status: "running",
             progress: { value: 3, max: 120 } }] }) });
       await deepSettle();
-      click(ctx.genBtn("v1", "出片"));
+      click(ctx.genBtn("v1", "生成视频"));
       await deepSettle();
       assert.equal(clipCalls("/neo_video_gen/simple").length, 1, "提交完先拉一格");
       assert.equal(clipPolls("clip-1").length, 1);

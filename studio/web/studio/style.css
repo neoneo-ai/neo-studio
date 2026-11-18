@@ -1455,6 +1455,12 @@ body {
 .ns-canvas-bar-group { display: flex; align-items: center; gap: 6px; flex: none; }
 .ns-canvas-bar-sep { flex: none; width: 1px; height: 18px; background: var(--ns-border); }
 .ns-canvas-select { height: 28px; max-width: 140px; padding: 0 6px; border-radius: 6px; border: 1px solid var(--ns-field-bd); background: var(--ns-field); color: var(--ns-fg); }
+/* 画布名改与删除收在下拉行右端：这两枚是低频动作，默认收着，指针落到这一行或键盘 Tab 进这一行才现出来。
+   触屏档没有 hover，收着就是按不到，两枚常显 */
+.ns-canvas-project { display: flex; align-items: center; gap: 6px; flex: none; }
+.ns-canvas-project-act { opacity: 0; pointer-events: none; transition: opacity .12s; }
+.ns-canvas-project:hover .ns-canvas-project-act, .ns-canvas-project:focus-within .ns-canvas-project-act { opacity: 1; pointer-events: auto; }
+@media (hover: none) { .ns-canvas-project-act { opacity: 1; pointer-events: auto; } }
 .ns-canvas-tool { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 28px; padding: 0 8px; border-radius: 6px; border: 1px solid var(--ns-field-bd); background: var(--ns-field); color: var(--ns-fg); font: inherit; cursor: pointer; }
 .ns-canvas-tool:hover { border-color: var(--ns-field-bd-hover); background: var(--ns-field-hover); color: #fff; }
 /* 没有可撤销 / 可重做时那两枚是灰的：灰态不能跟着 hover 亮起来，亮了就是点了也没反应 */
@@ -1462,6 +1468,16 @@ body {
 .ns-canvas-tool:disabled:hover { border-color: var(--ns-field-bd); background: var(--ns-field); color: var(--ns-fg); }
 .ns-canvas-zoom, .ns-canvas-save { min-width: 46px; font-size: 12px; color: var(--ns-dim); text-align: center; }
 .ns-canvas-save { min-width: 52px; text-align: right; }
+/* 「加节点」下拉菜单：position: fixed 才不被工具条的横向滚动裁掉，落点在 openAddMenu 里照钮的视口矩形算。
+   菜单里的钮就是工具条那枚钮，只是多写一行名字 */
+.ns-canvas-add-menu { position: fixed; display: none; z-index: 30; flex-direction: column; gap: 2px; min-width: 148px;
+    padding: 4px; border-radius: 8px; border: 1px solid var(--ns-border); background: var(--ns-panel); box-shadow: 0 6px 20px rgba(0, 0, 0, .45); }
+.ns-canvas-add-menu-open { display: flex; }
+/* 菜单里的一行是图标 + 名字：图标不跟着文字缩，名字打在图标右边，长名字收省略号（min-width 撑住行宽） */
+.ns-canvas-add-item { width: 100%; justify-content: flex-start; gap: 8px; white-space: nowrap; }
+.ns-canvas-add-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* 「加节点」那枚钮在菜单开着时抬到主色：一眼看得出条上哪一枚正在展开 */
+.ns-canvas-tool-on { border-color: var(--ns-primary); background: var(--ns-primary-soft); color: var(--ns-primary-fg); }
 
 .ns-canvas-stage { position: relative; flex: 1; min-height: 0; overflow: hidden; border-radius: 8px; border: 1px solid var(--ns-border); background: var(--ns-bg); touch-action: none; outline: none; }
 .ns-canvas-stage:focus-visible { border-color: var(--ns-primary); }
@@ -1486,23 +1502,28 @@ body {
 .ns-canvas-marquee { position: absolute; border: 1px dashed var(--ns-accent); background: var(--ns-primary-soft); pointer-events: none; }
 .ns-canvas-hint { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); font-size: 13px; color: var(--ns-dim); pointer-events: none; }
 
-.ns-canvas-node { position: absolute; border-radius: 10px; border: 1px solid var(--ns-border-soft); background: var(--ns-panel); overflow: hidden; box-shadow: 0 2px 10px rgba(0, 0, 0, .35); }
+/* 节点不铺标题栏：图与正文撑满整张，附加操作栏浮在节点上沿外 6px、只在该节点被选中时出现。
+   节点自己不裁剪（栏要在节点外），四张内容面各自带圆角，圆角由内容自己裁。
+   栏与徽标按 1/zoom 反缩放（--ns-canvas-inv 由 applyViewport 落），缩到很小时也按得中 */
+/* 卡上按下拖就是拖这一张节点：正文与图片一律不可选，浏览器不能把卡上的文字选走当成拖拽对象
+   （要打字与选字的地方在下面单独抬回可选） */
+.ns-canvas-node { position: absolute; border-radius: 10px; border: 1px solid var(--ns-border-soft); background: var(--ns-panel); box-shadow: 0 2px 10px rgba(0, 0, 0, .35); user-select: none; }
 .ns-canvas-node-on { border-color: var(--ns-primary); }
 .ns-canvas-node-drop { border-color: var(--ns-accent); box-shadow: 0 0 0 2px var(--ns-primary-soft); }
-/* 停用的那一段：整张压暗、左上角挂「已停用」徽标 —— 出片与整列出片都跳过它 */
+/* 停用的那一张：整张压暗、左上角挂「已停用」徽标 —— 出图、出片与整列出片都跳过它 */
 .ns-canvas-node-off { opacity: .55; }
 .ns-canvas-node-off .ns-canvas-node-tag { color: var(--ns-dim); }
 .ns-canvas-node-tag { position: absolute; left: 8px; top: 8px; z-index: 3; padding: 2px 7px; border-radius: 6px; background: rgba(8, 9, 12, .72); color: var(--ns-accent); font-size: 12px; pointer-events: none; transform: scale(var(--ns-canvas-inv, 1)); transform-origin: 0 0; }
-/* 节点不铺标题栏：图与正文撑满整张，附加操作栏浮在右上角、只在该节点被选中时出现。
-   栏与徽标按 1/zoom 反缩放（--ns-canvas-inv 由 applyViewport 落），缩到很小时也按得中 */
-.ns-canvas-node-bar { position: absolute; right: 8px; top: 8px; z-index: 4; display: none; align-items: center; gap: 2px; padding: 3px; border-radius: 8px; background: rgba(8, 9, 12, .72); transform: scale(var(--ns-canvas-inv, 1)); transform-origin: 100% 0; }
+/* 附加操作栏：整栏钉在节点上沿外头（bottom 100% 加一格 6px），右端对齐节点右沿，
+   栏底就是缩放支点 —— 反缩放之后栏仍贴着节点上沿。栏在节点外就不盖卡上的胶囊与正文 */
+.ns-canvas-node-bar { position: absolute; right: 0; bottom: calc(100% + 6px); z-index: 4; display: none; align-items: center; gap: 2px; padding: 3px; border-radius: 8px; background: rgba(8, 9, 12, .72); transform: scale(var(--ns-canvas-inv, 1)); transform-origin: 100% 100%; }
 .ns-canvas-node-on .ns-canvas-node-bar { display: flex; }
 .ns-canvas-node-act { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--ns-dim); cursor: pointer; }
 .ns-canvas-node-act:hover { color: #fff; background: var(--ns-field-hover); }
 .ns-canvas-node-act-on { color: var(--ns-accent); }
 .ns-canvas-node-pick { flex: none; display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 6px; border-radius: 5px; border: 1px solid var(--ns-field-bd); background: var(--ns-field); color: var(--ns-fg); font: inherit; font-size: 12px; cursor: pointer; }
 .ns-canvas-node-pick:hover { border-color: var(--ns-field-bd-hover); background: var(--ns-field-hover); color: #fff; }
-.ns-canvas-node-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: var(--ns-field); }
+.ns-canvas-node-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: inherit; background: var(--ns-panel); }
 /* 视频节点：整张是那一段片，播控交浏览器自己（pointerdown 认 .ns-canvas-node-video-el 让行，
    拖动与缩放从节点那一圈 6px 黑框与四角尺寸柄进来）。没落上片的是一张空位，出片时先按连线顺序填它 */
 .ns-canvas-node-video { background: #000; }
@@ -1510,14 +1531,29 @@ body {
 .ns-canvas-node-video-empty { position: absolute; inset: 6px; display: flex; align-items: center; justify-content: center; border: 1px dashed var(--ns-border-soft); border-radius: 6px; color: var(--ns-dim); font-size: 13px; }
 /* 正文节点整张就是这块文本框：滚动条只在文字溢出时出现（auto，不常驻滚动条槽），
    节点尺寸由用户拉，拉多大看多少行 */
-.ns-canvas-node-textarea { position: absolute; inset: 0; width: 100%; height: 100%; padding: 10px; border: 0; resize: none; background: var(--ns-field); color: var(--ns-fg); font: 13px/1.5 "Segoe UI", system-ui, sans-serif; outline: none; border-radius: 9px; caret-color: var(--ns-accent); overflow: auto; transition: background .12s, box-shadow .12s; }
+.ns-canvas-node-textarea { position: absolute; inset: 0; width: 100%; height: 100%; padding: 10px; border: 0; resize: none; background: var(--ns-panel); color: var(--ns-fg); font: 13px/1.5 "Segoe UI", system-ui, sans-serif; outline: none; border-radius: 9px; caret-color: var(--ns-accent); overflow: auto; transition: background .12s, box-shadow .12s; }
 .ns-canvas-node-textarea::placeholder { color: var(--ns-dim); }
-/* 提示词节点：单击只选中（不落焦点），双击才进编辑，Esc 出编辑。编辑态就靠内侧 1px 描边加底色抬起说话，
+/* 提示词节点：单击只选中（不落焦点），双击才进编辑，Esc 出编辑。编辑态就靠内侧 1px 描边加底色落深说话，
    不画整圈外框 —— 那一条落在选中边框的里侧就是双重粗框，方角还不跟节点的 10px 圆角 */
-.ns-canvas-node-textarea:focus { background: var(--ns-field-hover); box-shadow: inset 0 0 0 1px var(--ns-accent), inset 0 0 14px var(--ns-primary-soft); }
-.ns-canvas-handle { position: absolute; top: 50%; width: 12px; height: 12px; margin-top: -6px; border-radius: 50%; border: 2px solid var(--ns-border-soft); background: var(--ns-field); cursor: crosshair; }
-.ns-canvas-handle-left { left: -7px; }
-.ns-canvas-handle-right { right: -7px; }
+/* 进编辑要往深处走：底色从面板档落到最暗的 --ns-bg，配一圈描边，看着是这一格被按下去了。
+   落进输入控件那档（比面板亮一档）就成了洗白，光标在里面也像不能编辑 */
+.ns-canvas-node-textarea:focus { background: var(--ns-bg); box-shadow: inset 0 0 0 1px var(--ns-accent), inset 0 0 14px var(--ns-primary-soft); }
+/* 节点里真正要打字的两个地方抬回可选：正文编辑框与种子输入。控件的标题与卡上的正文行留在禁选里 ——
+   .ns-canvas-gen-ctl 是整列控件行（含配方概览、提示词行、参考素材那几行），抬它等于把正文选回来。
+   写在 .ns-canvas-node 那条之后才压得住继承（同特异度看先后） */
+.ns-canvas-node-textarea, .ns-canvas-recipe-seed { user-select: text; }
+
+/* 接线点平时收着不占视线：一台节点四枚接线点常亮时，几十台的画布上接线点比内容与连线还抢眼。
+   悬停、选中、正被拉线瞄着的那台节点才把四枚点亮出来（触屏档没有悬停，一直亮着）。点本身收小，
+   外面用透明的 ::after 把命中区外扩一圈 —— 拉线要的是好过，不是看得见 */
+.ns-canvas-handle { position: absolute; width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--ns-border-soft); background: var(--ns-field); cursor: crosshair; opacity: 0; }
+.ns-canvas-handle::after { content: ""; position: absolute; inset: -6px; }
+.ns-canvas-handle-left { left: -6px; top: 50%; transform: translateY(-50%); }
+.ns-canvas-handle-right { right: -6px; top: 50%; transform: translateY(-50%); }
+.ns-canvas-handle-top { top: -6px; left: 50%; transform: translateX(-50%); }
+.ns-canvas-handle-bottom { bottom: -6px; left: 50%; transform: translateX(-50%); }
+.ns-canvas-node:hover .ns-canvas-handle, .ns-canvas-node-on .ns-canvas-handle,
+.ns-canvas-node-drop .ns-canvas-handle, .ns-canvas-node-linking .ns-canvas-handle { opacity: 1; }
 .ns-canvas-handle:hover { border-color: var(--ns-accent); background: var(--ns-accent); }
 .ns-canvas-resize { position: absolute; width: 14px; height: 14px; }
 .ns-canvas-resize-top-left { left: -7px; top: -7px; cursor: nwse-resize; }
@@ -1527,10 +1563,11 @@ body {
 /* 生成节点：技能、比例、长边、张数与出图直接铺在节点上（胶囊是 gen-utils 那一套的精简版，图标 + 生效值，
    含义写在悬停提示里，与绘画页同一手感），下面两行是这一发的状态与主模型。控件那一片起手不拖节点
    （interactions.js 认 .ns-canvas-gen-ctl），拖动用其余部分，缩放走四角尺寸柄；胶囊菜单浮在
-   .ns-canvas-gen-menus 那一层（世界层带 scale、节点裁剪内容） */
-.ns-canvas-node-gen { background: linear-gradient(180deg, var(--ns-panel), var(--ns-bg)); }
+   .ns-canvas-gen-menus 那一层（世界层带 scale，菜单进那一层才不跟着缩放、也不会被控件行裁掉）。
+   卡片底色不在这一层写：画布上每一张节点都用 .ns-canvas-node 那一份面板底，生成节点自己压过一档
+   渐变就与车厢、配方闭环节点对不齐 */
 .ns-canvas-node-run { border-color: var(--ns-accent); }
-.ns-canvas-gen { position: absolute; inset: 0; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; overflow: hidden; }
+.ns-canvas-gen { position: absolute; inset: 0; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; overflow: hidden; border-radius: inherit; }
 .ns-canvas-gen-ctl { display: flex; flex-direction: column; gap: 6px; }
 .ns-canvas-gen-skill, .ns-canvas-gen-params, .ns-canvas-gen-bottom { display: grid; gap: 6px 8px; align-items: center; }
 /* 技能胶囊按内容自适应（长技能名一路铺到行宽，超出才收省略号）；比例、长边、张数挤在同一行，
@@ -1555,7 +1592,7 @@ body {
 .ns-canvas-recipe-seed { width: 100%; min-width: 0; height: 24px; padding: 0 7px; border-radius: 6px; border: 1px solid var(--ns-field-bd); background: var(--ns-field); color: var(--ns-fg); font: inherit; font-size: 12px; outline: none; }
 .ns-canvas-recipe-seed:focus { border-color: var(--ns-primary); background: var(--ns-field-hover); }
 .ns-canvas-recipe-seed:disabled { opacity: .45; }
-/* 这一段概览那一行：概览文字 + 展开方式 / 停用两枚胶囊（串联的车厢上才有停用） */
+/* 这一段概览那一行：概览文字 + 车尾上那几枚共用的参数胶囊 */
 .ns-canvas-recipe-info { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ns-dim); }
 .ns-canvas-recipe-info-text { min-width: 0; flex: 1 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ns-canvas-recipe-prompt { display: flex; align-items: flex-start; gap: 6px; min-height: 34px; padding: 5px 7px; border-radius: 6px; border: 1px solid var(--ns-border-soft); background: var(--ns-field); font-size: 12px; line-height: 1.45; }
@@ -1567,9 +1604,9 @@ body {
 .ns-canvas-recipe-thumb { flex: none; width: 52px; height: 44px; object-fit: cover; border-radius: 5px; border: 1px solid var(--ns-border-soft); background: var(--ns-field); }
 .ns-canvas-recipe-count { flex: 1 1 auto; min-width: 0; text-align: right; font-size: 11px; color: var(--ns-dim); white-space: nowrap; }
 .ns-canvas-recipe-segs { display: flex; flex-wrap: wrap; gap: 4px; }
-/* 串联的车厢是精简卡：段号 + 这一段概览 + 停用胶囊一行，提示词两行，参考素材只缩略两枚 + 数字，
-   最后一行是这一发的状态。出片与整列共用的参数都在车尾那台生成节点上，这一张上没有那几枚控件 */
-.ns-canvas-car { position: absolute; inset: 0; padding: 8px 10px; display: flex; flex-direction: column; gap: 5px; overflow: hidden; }
+/* 串联的车厢是精简卡：段号 + 这一段概览一行，提示词两行，参考素材只缩略两枚 + 数字，最后一行是这一发的
+   状态。卡上一枚钮都没有 —— 停用、复制与删除在节点上方的浮出栏里，出片与整列共用的参数都在车尾那台生成节点上 */
+.ns-canvas-car { position: absolute; inset: 0; padding: 8px 10px; display: flex; flex-direction: column; gap: 5px; overflow: hidden; border-radius: inherit; }
 .ns-canvas-car-head { display: flex; align-items: center; gap: 6px; }
 .ns-canvas-car-seg { flex: none; padding: 1px 6px; border-radius: 5px; background: rgba(8, 9, 12, .5); color: var(--ns-accent); font-size: 11px; }
 .ns-canvas-car-info { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; color: var(--ns-dim); }
@@ -1578,6 +1615,7 @@ body {
 .ns-canvas-gen-menus { position: absolute; inset: 0; z-index: 7; pointer-events: none; }
 .ns-canvas-gen-menus .neo-gallery-gm-chip-menu { pointer-events: auto; }
 /* 出图是这一张卡的主按钮：主色实底 + 独占最后一行铺满，和控件行里的字段胶囊一眼分得开。
+   生成视频那一枚不占这一档——它就是控件行同档的描边胶囊，不铺满、不加粗。
    取消任务保持字段档；在跑时收成软底，位置与宽度都不动（改尺寸会让这张控件行跟着抖）。 */
 .ns-canvas-gen-go {
     flex: 1; min-width: 0; justify-content: center;
@@ -1601,16 +1639,24 @@ body {
 /* 空画布上的「加生成节点」是这一页的主行动 → 扁平主色实底（主行动一律扁平主色实底） */
 .ns-canvas-add-gen { border-color: var(--ns-primary); background: var(--ns-primary); color: #fff; }
 .ns-canvas-add-gen:hover:not(:disabled) { background: var(--ns-primary-hover); border-color: var(--ns-primary-hover); color: #fff; }
-/* 拖线、拖节点、四角缩放与拖平移进行中：interactions.js 给舞台与节点挂上这几个类，
-   节点里的文本框、图片与胶囊菜单必须让位，不然起手落在被拖的东西上（拖到一半焦点被文本框吃掉） */
-.ns-canvas-inv, .ns-canvas-node-resizing, .ns-canvas-node-linking,
-.ns-canvas-marqueeing { pointer-events: none; }
+/* 拖线、拖节点、四角缩放与拖平移进行中：interactions.js 给舞台挂 ns-canvas-dragging / ns-canvas-marqueeing，
+   给被缩放与正被拉线的节点挂后两个类，让位的只有节点里那几张内容面 —— 起手落在被拖的东西上时焦点与选字
+   会被正文框、图片与视频抢走。pointer-events 一律不落在舞台与节点自己身上：dblclick 挂在舞台上，双击正文
+   那第二下按下时舞台正挂着这些类，整张画布按不动，dblclick 就落不到正文框上（进不了编辑），
+   四角尺寸柄与接线点也一起没了 */
+.ns-canvas-dragging :is(.ns-canvas-node-textarea, .ns-canvas-node-img, .ns-canvas-node-video-el, .ns-canvas-gen, .ns-canvas-car),
+.ns-canvas-marqueeing :is(.ns-canvas-node-textarea, .ns-canvas-node-img, .ns-canvas-node-video-el, .ns-canvas-gen, .ns-canvas-car),
+.ns-canvas-node-resizing :is(.ns-canvas-node-textarea, .ns-canvas-node-img, .ns-canvas-node-video-el, .ns-canvas-gen, .ns-canvas-car),
+.ns-canvas-node-linking :is(.ns-canvas-node-textarea, .ns-canvas-node-img, .ns-canvas-node-video-el, .ns-canvas-gen, .ns-canvas-car) { pointer-events: none; }
 /* 触屏档：接线点与尺寸柄抬高到指尖按得中的尺寸，工具条留出两行 */
 @media (max-width: 720px) {
     .ns-page.ns-canvas { padding: 6px; }
-    .ns-canvas-handle { width: 18px; height: 18px; margin-top: -9px; }
+    .ns-canvas-handle { width: 18px; height: 18px; opacity: 1; }
+    .ns-canvas-handle::after { inset: -4px; }
     .ns-canvas-handle-left { left: -9px; }
     .ns-canvas-handle-right { right: -9px; }
+    .ns-canvas-handle-top { top: -9px; }
+    .ns-canvas-handle-bottom { bottom: -9px; }
     .ns-canvas-resize { width: 22px; height: 22px; }
     .ns-canvas-node-act { width: 28px; height: 28px; }
     .ns-canvas-node-pick { height: 28px; font-size: 13px; }

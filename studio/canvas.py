@@ -31,7 +31,6 @@ MAX_CONNECTIONS = 800
 TITLE_MAX = 120
 # 画布 id 直接拼进文件名：只认这一形状，路径穿越在入口就挡掉
 ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
-NODE_TYPES = ("image", "text")
 BACKGROUND_MODES = ("dots", "lines", "blank")
 DEFAULT_VIEWPORT = {"x": 0.0, "y": 0.0, "k": 1.0}
 DEFAULT_BACKGROUND = "dots"
@@ -87,7 +86,9 @@ def _clean_node(raw) -> dict | None:
         return None
     return {
         "id": nid[:64],
-        "type": raw.get("type") if raw.get("type") in NODE_TYPES else "text",
+        # 类型原样存：后端认不全前端那几张面（gen / video / recipe），在这一层挡下来就是
+        # 画布一重开、生成节点变成提示词节点；旧页面认不出的类型自己回落到正文面
+        "type": str(raw.get("type") or "text").strip()[:64] or "text",
         "title": str(raw.get("title") or "")[:TITLE_MAX],
         "position": {"x": _num((raw.get("position") or {}).get("x"), 0.0),
                      "y": _num((raw.get("position") or {}).get("y"), 0.0)},

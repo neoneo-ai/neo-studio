@@ -63,10 +63,11 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 - **Canvas nodes carry content, not chrome.** A 画布 node has no title bar: the image or the prompt text fills the whole
   node, and its extra actions ride a bar at the node's top-right that appears **only while that node is selected** —
   **设为主图** (image nodes; one hero per canvas, clicking it again clears it), **选图** for an image node with nothing in
-  it, **复制节点** (that one node, cloned at a 36px offset) and **删除节点** (that node plus the connections on its ends).
+  it, **进入编辑** for a prompt node (the caret lands in its text, the same act as double-clicking that text),
+  **复制节点** (that one node, cloned at a 36px offset) and **删除节点** (that node plus the connections on its ends).
   The **主图** badge stays on the hero node without selecting it, and the bar keeps its screen size at any zoom, so it
-  stays clickable when the canvas is zoomed out. Clicking into the prompt text lands the caret on that same click, a
-  short drag there selects text, and a drag past that gate moves the node.
+  stays clickable when the canvas is zoomed out. A prompt node takes the caret on **double click** or on **进入编辑** -
+  a single click only selects the node; a short drag inside the text selects text, and a drag past that gate moves the node.
 
 - **Canvas editing has undo, redo and copy, cut and paste.** Every node edit on the 画布 page is reversible: **撤销** / **重做** in the
   toolbar (also Ctrl+Z, Ctrl+Shift+Z and Ctrl+Y) steps back and forward through added and deleted nodes, drags, resizes,
@@ -198,14 +199,52 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   landing page follows the mode the run was sent in).
 
 ### Changed
-- **Canvas: dragging the empty ground is a marquee, and panning moved onto the grab hand.** A left-drag on empty canvas draws the
-  selection box and the nodes it covers become the selection on release, the way ComfyUI and Figma do it; a press that never moved
-  past one notch is a click on empty ground and drops the selection, with the viewport staying put. Shift + drag keeps the additive
-  meaning - the box joins the selection as it was at the press. Panning now comes only from the middle button, Space and Ctrl (the
-  temporary grab hand), and on a touchscreen the blank drag keeps panning - there is no grab key to hold there, so the finger draws
-  no marquee. The stage shows a crosshair while a marquee is drawn, and the box follows the finger while the selection
-  only changes after the drag crosses the click gate. Covered by the 选中：框选、键盘、删除 and 视口：缩放、平移、网格、背景
-  blocks in `studio/tests/js/canvas-page.test.mjs`.
+- **Canvas: the clip button reads 生成视频, and 出图 is the card's primary button alone.** The video card, the 配方闭环 card
+  and the tail of a 串联展开 chain all queued a clip from a button labelled **出片** on the card's filled primary form, so a
+  video run looked like the same action as 出图. The label is **生成视频** in all three places, drawn as the outlined pill the
+  card's control row already uses, with its tooltip and the docs mirrors (zh + en) following; 出图 keeps the filled form and
+  the last row to itself. The same pass put every node face on one surface: the generation card's own gradient, the prompt
+  box's colour and the empty image face's colour all drop onto the node panel colour the 串联 car already used, a 提示词 box
+  entering editing deepens to the darkest surface instead of lightening, and only the video player keeps a black face — that
+  is the clip frame, not the card. Covered by the 生成节点与视频节点 block in `studio/tests/js/canvas-page.test.mjs`.
+
+- **Canvas wiring points sit on all four sides and stay faded until you need them.** A node now carries four points —
+  left and top take a line in, right and bottom send one out — and all four are hidden by default: they light up on the
+  node under the pointer, on the selected nodes and on the node a drag is aiming at, and the touch build keeps them lit.
+  The dot itself shrank with its hit area widened, so a board of dozens reads as its content instead of as rows of dots.
+  Nodes stacked in one column wire straight down: a node leaves through its bottom edge and lands on the other's top
+  edge, so 串联展开's prompt block (laid directly above its car) and its reference images (directly below) join the car
+  across that gap instead of looping around the right side; the drag-preview line, the drop anchor and the hit sampling
+  all follow the same edge, and nodes side by side keep wiring left-to-right. Covered by the 上下叠放的两台节点走竖轴,
+  竖轴的线同样点得中, 上下叠放时落点在顶边 / 底边中点, 四枚接线点 and 上下叠放的两台节点 cases in
+  `studio/tests/js/canvas-page.test.mjs`.
+- **Canvas: the selected node's action bar floats outside the node, and 停用 became a general node action.** The bar that
+  appears when a node is selected now sits above the node's top edge — 6px out, counter-scaled with the zoom, right-aligned
+  to the node's right edge — instead of lying inside its top-right corner, so it covers none of the card's chips, its prompt
+  rows or the 出图 button. The node stopped clipping its own content for it: the image, prompt, video and car faces carry
+  their own rounding now. The bar's first button is **停用 / 启用** on every node type, so the 串联 car card keeps no 停用
+  chip of its own — 停用, 复制 and 删除 all come from that bar. `metadata.disabled` is honored everywhere the canvas consumes
+  a node: 出图, 出片, a 配方闭环 segment and the chain run all refuse a disabled node and say 「这台节点已停用：在节点上方的
+  浮出栏里启用」; a disabled node's text never joins a prompt and its image / video / audio never rides as reference material,
+  the 配方 card drops it from its 参考素材 row, and a disabled video slot is never the landing slot for a finished clip — the
+  run keeps looking and opens a fresh one. The bar's icons read apart: **停用** is a circle with a slash through it, **启用**
+  is a check and **删除节点** is the same trash bin the toolbar's 删除画布 uses — 停用 no longer shares a shape with 删除.
+  Covered by the 停用一段, 停用是通用功能 and 停用的视频位不是成片落点 cases in `studio/tests/js/canvas-page.test.mjs`.
+- **Canvas toolbar: the five add buttons collapsed into one 加节点 drop-down.** 加图片 / 加提示词 / 加生成节点 / 加视频节点 /
+  加配方节点 are now the five rows of one icon button, pinned under it as a fixed-position panel so the bar's sideways scroll
+  never clips it. Every row shows its icon with its name written next to it (the same tooltip and `aria-label` stay), so
+  加生成节点 and 加视频节点 read apart without hovering; picking a row adds that node and closes the menu, and the 加节点
+  button itself, a press outside the bar and Esc close it too. Covered by the
+  加节点是一枚下拉菜单 case in `studio/tests/js/canvas-page.test.mjs`.
+- **Canvas: the plain drag pans the board, and 框选 moved onto Ctrl.** A left-drag on empty canvas moves the whole board -
+  the gesture a ComfyUI user reaches for by default - and a press that never moved past one notch is a click on empty
+  ground that drops the selection, with the viewport staying put. Ctrl + drag draws the selection box and the nodes it
+  covers become the selection on release; Shift + drag keeps the additive meaning, joining the selection as it was at the
+  press. Middle button and Space keep panning as the temporary grab hand, and on a touchscreen the blank drag pans too -
+  there is no Ctrl to hold there, so the finger draws no marquee. The stage shows the grabbing cursor while the board
+  moves and a crosshair while a marquee is drawn, and a drag fires only after it crosses the click gate, so a one-pixel
+  jitter never moves the board. Covered by the 选中：框选、键盘、删除 and 视口：缩放、平移、网格、背景 blocks in
+  `studio/tests/js/canvas-page.test.mjs`.
 
 - **Canvas toolbar: one row of icon buttons, and the two blank buttons are gone.** 撤销 / 重做 rendered as empty boxes - `undo` /
   `redo` had no icon in `icons.js`, so the button was only a border. The bar now runs as icon buttons only - every label
@@ -215,10 +254,6 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   zoom-in / zoom-out glyph instead of the fullscreen-looking maximize / minimize pair, and 复制选中 gains its own
   duplicate glyph so it is no longer the same icon as 复制. A canvas-page case now scans the toolbar's icon names
   against the icon set, so a missing glyph fails a test instead of shipping a blank button.
-- **Canvas: dragging the empty ground pans the board.** Press and drag on empty canvas now moves the whole board, the
-  way its other pan gestures do, and a press that never moved is still a click on empty ground - it drops the selection
-  on release. 框选 moves onto Shift + drag and keeps its additive meaning: the nodes the dragged box covers join the
-  selection as it was at the press. Middle button, Space and Ctrl keep panning as the temporary grab hand.
 - **局部 and 删除 leave the default home grid and become preset cards.** The 编辑 section's default grid now carries
   图片编辑 / 扩图 / 机位 / 融合 / 姿势 plus the three tool pages (视频抽帧 / 图片反推 / 视频反推); the 局部 / 删除 cards
   land in that section's 添加卡片 preset face, the same face that already holds 特效视频 / 宫格图分镜 on 创作. One click
@@ -301,6 +336,31 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   recipes and existing 配方 assets are untouched.
 
 ### Fixed
+- **An interrupted canvas gesture no longer freezes the canvas.** Dragging a node out of a generation card, dragging text
+  out of a prompt box, a touch drag the system takes over and a drag whose window loses focus all end without ever sending
+  `pointerup`: the drag stayed live and kept following the cursor, so every bare pointer move carried the node along, and
+  the content faces kept stealing the focus and the text selection mid-drag. The gesture layer now commits a node that
+  already moved and clears every gesture state and class on `dragstart`, `pointercancel` and window blur, and the yield
+  during a drag, a marquee, a resize and a link ride is scoped to the node content faces - `pointer-events: none` never
+  lands on the stage or on the node itself: with it on the stage, the second press of a double-click on a prompt body
+  found the whole canvas unhittable, so `dblclick` never reached the text box (double-click could not enter editing) and
+  the size handles and connection points went dead along with it. That same press is also what blocks the browser's focus
+  handoff, so the gesture layer now lets the press through when the caret sits in a 提示词 node's text box and the click lands on
+  the empty ground, on another node, on the toolbar or on a card control - the box blurs on that press and the editing ends
+  there, where it kept the caret until a second press moved it out. Pressing a node's controls (the 附加操作栏 buttons, a generation
+  card's chips, its 出图 / 出片 buttons, the 段 buttons, the seed input, 选图, a video's own controls) selects that node the
+  way ComfyUI does, while press-dragging the rest of the card - the segment summary, the 配方 prompt line, the reference
+  thumbnails, the status and model lines - drags the card; the whole control column used to swallow the press, which left
+  only the node's top and bottom edges draggable. Card text is no longer handed to the browser's text selection:
+  `.ns-canvas-node` is `user-select: none`, with only the editing box and the seed input read back as selectable. Covered
+  by the 收笔被接走 block and the 卡上正文行 case in `studio/tests/js/canvas-page.test.mjs`.
+
+- **A canvas keeps the node types it was given: 生成 / 视频 / 配方节点 no longer reopen as 提示词节点.** `studio/canvas.py`
+  normalized every node through a type table of `image` / `text`, on the write and on the read, so saving a canvas rewrote its
+  生成节点, 出片节点, 视频节点 and 配方闭环 nodes as `text` and reopening drew them as a prompt block — the skill, ratio, chain
+  and recipe fields stayed in `metadata` with no face left to draw them. The write layer keeps the type the page wrote and only
+  a missing one becomes `text`, so a canvas file is never rewritten under the user and a page too old to know a face falls back
+  to the text face itself. Covered by `studio/tests/test_canvas_node_types.py`.
 - **The empty seed box on the 出视频 page is a random seed, not seed 0.** The 出视频 page and the canvas 出片 node both send `-1`
   when the seed box is left empty, and `resolve_video_params` clamped every negative seed to `0`: clicking 开始出视频 twice with
   the same parameters gave back the identical clip. A negative seed now draws a fresh one, and a seed you typed stays exactly

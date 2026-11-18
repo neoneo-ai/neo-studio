@@ -1,13 +1,13 @@
 // 节点层：节点 DOM、几何落位与选中描边。节点不铺标题栏 —— 图与正文撑满整张节点，附加操作
-// （选图 / 设为主图 / 复制 / 删除）是右上角那一排，只在该节点被选中时浮出来（CSS 认 .ns-canvas-node-on）。
+// （停用 / 进入编辑 / 选图 / 设为主图 / 复制 / 删除）是浮在节点上沿外头那一排，只在该节点被选中时出现（CSS 认 .ns-canvas-node-on）。
 // 节点上的动作都从这里的元素出发，回调交给页面；手势不在这一层（在 interactions.js）。
 import { t, tf } from "../../../js/core/i18n.js";
 import { setIcon, setIconLabel } from "../../../js/core/icons.js";
 
-/** 节点 DOM（上游 canvas-node.tsx 的 vanilla 版）：内容铺满整张，右上角是附加操作栏，左上角是「主图」徽标，
- *  左右两个接线点、四个角上的尺寸柄。图片节点是 <img>（走 Gallery 缩略图，取不到落占位图），提示词节点是
+/** 节点 DOM（上游 canvas-node.tsx 的 vanilla 版）：内容铺满整张，上沿外头是附加操作栏，左上角是「主图」徽标，
+ *  上下左右四枚接线点、四个角上的尺寸柄。图片节点是 <img>（走 Gallery 缩略图，取不到落占位图），提示词节点是
  *  <textarea>，正文存在 metadata.content —— 图片节点上的坐标就是 Gallery 的 filename + subfolder */
-export function nodeElement(node, { $el, onText, onPick, onHero, onDelete, onCopy, onExpand,
+export function nodeElement(node, { $el, onText, onPick, onHero, onDelete, onCopy, onExpand, onToggleDisabled,
     genState, genControls, genModel, recipeState, recipeControls, recipeMeta, carView }) {
     const gen = node.type === "gen" ? (genState?.(node) || {}) : null;
     const recipe = node.type === "recipe" ? (recipeState?.(node) || {}) : null;
@@ -30,9 +30,13 @@ export function nodeElement(node, { $el, onText, onPick, onHero, onDelete, onCop
                 ? nodeCar(node, $el, { recipe, carView, recipeControls })
                 : nodeRecipe(node, $el, { recipe, recipeControls, recipeMeta }))
             : nodeText(node, $el, onText),
-        nodeBar(node, { $el, onPick, onHero, onDelete, onCopy, onExpand }),
-        $el("div", { className: "ns-canvas-handle ns-canvas-handle-left", dataset: { handle: "target" } }),
-        $el("div", { className: "ns-canvas-handle ns-canvas-handle-right", dataset: { handle: "source" } }),
+        nodeBar(node, { $el, onPick, onHero, onDelete, onCopy, onExpand, onToggleDisabled }),
+        // 四枚接线点：左与上收线（入），右与下出线（源）。上下这两枚给上下叠放的节点就近接线用
+        // （串联展开把正文铺在车厢正上方、参考素材铺在正下方），样式上平时收着，见 style.css
+        $el("div", { className: "ns-canvas-handle ns-canvas-handle-left", dataset: { handle: "target", side: "left" } }),
+        $el("div", { className: "ns-canvas-handle ns-canvas-handle-top", dataset: { handle: "target", side: "top" } }),
+        $el("div", { className: "ns-canvas-handle ns-canvas-handle-bottom", dataset: { handle: "source", side: "bottom" } }),
+        $el("div", { className: "ns-canvas-handle ns-canvas-handle-right", dataset: { handle: "source", side: "right" } }),
     );
     if (node.metadata.hero) {
         nodeEl.appendChild($el("span", { className: "ns-canvas-node-tag", textContent: t("主图") }));
@@ -171,17 +175,24 @@ function nodeCar(node, $el, { recipe, carView, recipeControls }) {
     ]);
 }
 
-/** 附加操作栏：图片节点多一枚主图钮（整片只留一枚），没填上图的多一枚「选图」，配方节点最前一枚「展开配方」，
- *  复制与删除每类节点都有。这一排默认不出现，节点被选中时才浮出来；点了算 click，起手不拖（见 interactions.js） */
-function nodeBar(node, { $el, onPick, onHero, onDelete, onCopy, onExpand }) {
-    const act = (name, label, fn) => {
+/** 附加操作栏：停用与复制、删除每类节点都有；图片节点多一枚主图钮（整片只留一枚），
+ *  没填上图的多一枚「选图」，配方节点前一枚「展开配方」。这一排默认不出现，节点被选中时才浮在节点上沿外头（定位在 style.css），
+ *  栏在节点外就不盖卡上的胶囊与正文；点了算 click，起手不拖（见 interactions.js）
+ *  提示词节点不在这一排放「进入编辑」那一枚：进编辑是双击正文，出编辑是 Esc 或落在节点外那一按（interactions.js） */
+function nodeBar(node, { $el, onPick, onHero, onDelete, onCopy, onExpand, onToggleDisabled }) {
+    const off = node.metadata.disabled === true;
+    const act = (name, label, fn, title = label) => {
         const btn = $el("button", { className: "ns-canvas-node-act", type: "button",
-            title: label, "aria-label": label, dataset: { nodeAct: name }, onclick: fn });
-        setIcon(btn, name === "delete" ? "circle-x" : name === "copy" ? "copy"
-            : name === "expand" ? "maximize" : "circle-check");
+            title, "aria-label": label, dataset: { nodeAct: name }, onclick: fn });
+        setIcon(btn, name === "delete" ? "trash" : name === "copy" ? "copy"
+            : name === "expand" ? "maximize" : name === "disable" ? "ban"
+            : name === "enable" ? "check" : "circle-check");
         return btn;
     };
-    const kids = [];
+    const kids = [off
+        ? act("enable", t("启用"), () => onToggleDisabled(node), t("启用这一张：出片与整列出片都会跑它"))
+        : act("disable", t("停用"), () => onToggleDisabled(node), t("停用这一张：出片与整列出片都跳过它"))];
+    if (off) kids[0].classList.add("ns-canvas-node-act-on");
     // 车厢是展开出来的那一段，不再给它「展开配方」那一枚：点了是把同一份配方再铺一遍
     if (node.type === "recipe" && node.metadata.train !== 1) kids.push(act("expand", t("展开配方"), () => onExpand(node)));
     if (node.type === "image") {
@@ -203,10 +214,10 @@ function nodeBar(node, { $el, onPick, onHero, onDelete, onCopy, onExpand }) {
 
 /** 整层节点重画：拖动与缩放不走这一条（走 applyNodeGeometry），换画布、增删节点才走 */
 export function renderNodes({ nodeLayer, links, hint, nodes, selectedNodeIds, selectedConnectionId, $el, onText,
-    onPick, onHero, onDelete, onCopy, onExpand, genState, genControls, genModel, recipeState, recipeControls,
-    recipeMeta, carView }) {
+    onPick, onHero, onDelete, onCopy, onExpand, onToggleDisabled, genState, genControls, genModel,
+    recipeState, recipeControls, recipeMeta, carView }) {
     nodeLayer.replaceChildren(...nodes.map((node) => nodeElement(node, { $el, onText, onPick, onHero, onDelete, onCopy,
-        onExpand, genState, genControls, genModel, recipeState, recipeControls, recipeMeta, carView })));
+        onExpand, onToggleDisabled, genState, genControls, genModel, recipeState, recipeControls, recipeMeta, carView })));
     // 几何要在元素挂上世界层之后再落：nodeElement 里查不到还没挂上的元素
     for (const node of nodes) applyNodeGeometry(nodeLayer, node);
     hint.style.display = nodes.length ? "none" : "";

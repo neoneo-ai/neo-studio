@@ -11,8 +11,15 @@ const TEXT_DRAG_GATE = 8;   // 正文框整张铺满节点：起手先让浏览�
 const CLICK_GATE = 3;   // 空白起手拖过这一截才算框选 / 平移，没拖过就是点空白（点空白要收走选中）
 const CLIP_NODE_KEYS = new Set(["c", "v", "x", "a"]);   // 节点那四键：光标在正文里时按了要说一句怎么走回节点
 const NEO_GALLERY_MIME = "application/x-neo-gallery";
+// 光标是否坐在画布正文框里：拦下 pointerdown 连着把焦点交给下一个元素那一发一起拦了，blur 不来就出不了编辑
+const CARET_IN_BODY = () => document.activeElement?.classList?.contains("ns-canvas-node-textarea");
 // 一条连线是两个 path（宽命中描边 + 可见细线），点哪一条都算点这条线
 const LINE_SELECTOR = ".ns-canvas-line, .ns-canvas-line-hit";
+// 节点上真正吃这一按的控件：浮出栏的动作钮与选图钮、生成卡上的胶囊 / 按钮 / 段钮 / 种子输入、视频自己的播控 ——
+// 起手交浏览器发 click，按下去是选中这张节点。整列控件行（.ns-canvas-gen-ctl）认成控件的代价是卡上几乎按不到
+// 能拖的地方：那一列里还有概览行、提示词行与参考素材那几行正文，按下拖只剩节点上下边缘拖得动
+const NODE_CTL_SELECTOR = ".ns-canvas-node-act, .ns-canvas-node-pick, .ns-canvas-node-video-el, "
+    + ".neo-gallery-gm-chip-btn, .ns-canvas-gen-btn, .ns-canvas-seg-btn, .ns-canvas-gen-ctl input";
 
 /** 把手势挂到舞台上：stage 是那一页的舞台元素，view 交出要画手势层（world 上画框选框），
  *  host 是页面交下来的读写面（见 createCanvasPage 里那一份 host）。 */
@@ -41,6 +48,13 @@ export function attachCanvasInteractions({ stage, view, host }) {
     // 拖动与拉线要跑到容器外还在跟手，收笔统一交给 window（上游同一形状）
     window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerup", onPointerUp);
+    // 收笔不止 pointerup 这一条：浏览器把这一发接走（正文里拖出文本、触屏那一按被系统手势拿走）只发
+    // pointercancel，桌面窗口拖到一半失焦（拖出窗口、切走窗口、原生菜单挡在中间）只发 blur。这两发不来，
+    // drag 就挂在窗口上跟着光栅跑，舞台上的 ns-canvas-grabbing / ns-canvas-marqueeing 也留在身上 —— 那两层是
+    // pointer-events: none，整张画布从此按不动任何东西，节点选中了也拖不动
+    window.addEventListener("pointercancel", onPointerUp);
+    window.addEventListener("blur", abortGestures);
+    document.addEventListener("dragstart", onDragStart, true);
     // 键盘手势挂在 window 的 capture 相位：装配层 initClipboardKeys 在 document 的 capture 上把
     // Ctrl+C/V/X/A/Z/Y 用 stopImmediatePropagation 摘走（为的是让注入的吞键 handler 收不到），挂在
     // window 冒泡相位的这条排在那之后，事件一路到不了这儿 —— 画布的撤销与剪贴板键按下去没反应就是这条
@@ -51,22 +65,32 @@ export function attachCanvasInteractions({ stage, view, host }) {
         if (!host.isPageActive()) return;
         const { ids } = host.getSelection();
         const isBackground = !e.target.closest(`.ns-canvas-node, ${LINE_SELECTOR}`);
-        // 中键直接平移；空格 / Ctrl 是临时抓手（上游 temporaryTool 那一条）
-        if (e.button === 1 || ((spaceDown || e.ctrlKey) && isBackground)) {
+        // 中键直接平移；空格是临时抓手（ComfyUI 口径：空白那一拖默认就是拖动画面）
+        if (e.button === 1 || (spaceDown && isBackground)) {
             e.preventDefault();
             pan = { startX: e.clientX, startY: e.clientY, viewport: { ...state().viewport } };
             stage.classList.add("ns-canvas-grabbing");
             return;
         }
         if (e.button !== 0) return;
-        // 节点头上的动作钮与生成节点上的控件交浏览器发 click：起手不拖、也不 preventDefault（拦了 pointerdown 就没有 click 了）
-        // 视频那一段同理：播控（进度条 / 全屏 / 音量）交浏览器，拖节点从节点那一圈黑框进来
-        if (e.target.closest(".ns-canvas-node-act, .ns-canvas-node-pick, .ns-canvas-gen-ctl, .ns-canvas-node-video-el")) return;
+        // 节点头上的动作钮与生成卡上的胶囊 / 按钮 / 种子输入交浏览器发 click：起手不拖、也不 preventDefault（拦了 pointerdown 就没有 click 了）
+        // 视频那一段同理：播控（进度条 / 全屏 / 音量）交浏览器，拖节点从节点那一圈黑框进来。
+        // 生成卡与串联车厢整张铺的都是控件，按完不选就看不出按的是哪一张 —— ComfyUI 口径：点在控件上就是点这张节点
+        const ctlEl = e.target.closest(NODE_CTL_SELECTOR);
+        if (ctlEl) {
+            const ctlNodeEl = ctlEl.closest(".ns-canvas-node");
+            if (ctlNodeEl) selectNode(ctlNodeEl.dataset.nodeId, e);
+            return;
+        }
         const handleEl = e.target.closest(".ns-canvas-handle");
         if (handleEl) {
-            const nodeId = handleEl.closest(".ns-canvas-node").dataset.nodeId;
-            connecting = { handle: { handleType: handleEl.dataset.handle, nodeId },
-                mouseWorld: worldPoint(e.clientX, e.clientY), targetId: null, isNearNode: false };
+            const sourceEl = handleEl.closest(".ns-canvas-node");
+            const nodeId = sourceEl.dataset.nodeId;
+            // side 是这一枚接线点在节点的哪一面：拉线中的虚线与落点锚都从那一面出发
+            connecting = { handle: { handleType: handleEl.dataset.handle, side: handleEl.dataset.side, nodeId },
+                mouseWorld: worldPoint(e.clientX, e.clientY), targetId: null, isNearNode: false, linkEl: sourceEl };
+            // 起手这一张挂 ns-canvas-node-linking：四枚接线点亮着（style.css），节点里的正文与图片让位
+            sourceEl.classList.add("ns-canvas-node-linking");
             e.preventDefault();
             host.paintActive(connecting);
             return;
@@ -75,8 +99,10 @@ export function attachCanvasInteractions({ stage, view, host }) {
         if (cornerEl) {
             const node = state().nodes.find((n) => n.id === cornerEl.closest(".ns-canvas-node").dataset.nodeId);
             if (!node) return;
+            const nodeEl = cornerEl.closest(".ns-canvas-node");
             resizing = {
                 nodeId: node.id,
+                nodeEl,
                 corner: cornerEl.dataset.corner,
                 startX: e.clientX, startY: e.clientY,
                 pushed: false,
@@ -84,6 +110,8 @@ export function attachCanvasInteractions({ stage, view, host }) {
                 // 图片节点锁比例（上游 keepRatio），提示词节点自由缩放
                 keepRatio: node.type === "image" && !node.metadata.freeResize,
             };
+            // 缩放中的节点挂 ns-canvas-node-resizing：里面的正文框与图片要让位，不然拖到一半焦点被文本框吃掉
+            nodeEl.classList.add("ns-canvas-node-resizing");
             e.preventDefault();
             return;
         }
@@ -94,7 +122,8 @@ export function attachCanvasInteractions({ stage, view, host }) {
             const fromText = e.target.classList.contains("ns-canvas-node-textarea");
             selectNode(nodeEl.dataset.nodeId, e);
             startNodeDrag(e, fromText);
-            if (!fromText) e.preventDefault();
+            // 光标在正文里时这一按交浏览器：焦点从正文框换走才发得出 blur，编辑才出得来
+            if (!fromText && !CARET_IN_BODY()) e.preventDefault();
             return;
         }
         const lineEl = e.target.closest(LINE_SELECTOR);
@@ -103,33 +132,45 @@ export function attachCanvasInteractions({ stage, view, host }) {
             e.preventDefault();
             return;
         }
-        // 触屏没有空格与中键可按：空白那一拖留给平移，框选只给鼠标与笔
+        // 触屏没有空格与 Ctrl 可按：空白那一拖留给平移，框选只给鼠标与笔
         if (e.pointerType === "touch") {
             pan = { startX: e.clientX, startY: e.clientY, viewport: { ...state().viewport } };
             stage.classList.add("ns-canvas-grabbing");
             e.preventDefault();
             return;
         }
-        // 空白处起手 = 框选（ComfyUI / Figma 口径）：松手时框罩到的那一批就是选中集
-        // Shift 起手 = 加选框选：起点那一刻的选中集当基准，罩到的并进去
+        // 空白处起手：Ctrl / Shift 是框选（Shift 在起点那一刻的选中集上加选），其余就是平移那一拖
+        // （ComfyUI 口径：默认那一拖是拖动画面，框选要按住 Ctrl）
+        if (!e.ctrlKey && !e.shiftKey) {
+            pan = { startX: e.clientX, startY: e.clientY, viewport: { ...state().viewport }, blank: true };
+            stage.classList.add("ns-canvas-grabbing");
+            if (!CARET_IN_BODY()) e.preventDefault();
+            return;
+        }
         const world = worldPoint(e.clientX, e.clientY);
         marquee = { startWorldX: world.x, startWorldY: world.y,
             currentWorldX: world.x, currentWorldY: world.y,
             startX: e.clientX, startY: e.clientY, moved: false,
             additive: e.shiftKey, base: e.shiftKey ? [...ids] : [] };
         stage.classList.add("ns-canvas-marqueeing");
-        e.preventDefault();
+        if (!CARET_IN_BODY()) e.preventDefault();
     }
 
     function startNodeDrag(e, fromText = false) {
         const ids = [...host.getSelection().ids];
         drag = { startX: e.clientX, startY: e.clientY, moved: false, fromText,
             initial: new Map(state().nodes.filter((n) => ids.includes(n.id)).map((n) => [n.id, { ...n.position }])) };
+        // 拖中的舞台挂 ns-canvas-dragging：节点里的正文框、图片与胶囊菜单全让位（style.css 那条 pointer-events），
+        // 拖到一半焦点与选字不再被内容面抢走
+        stage.classList.add("ns-canvas-dragging");
     }
 
     function onPointerMove(e) {
         if (pan) {
-            host.setViewport(panViewport(pan.viewport, pan.startX, pan.startY, e.clientX, e.clientY));
+            // 起手过 CLICK_GATE 那一截才算平移：点空白那一下不该被一像素的抖挪走画面
+            if (!pan.moved && Math.max(Math.abs(e.clientX - pan.startX),
+                Math.abs(e.clientY - pan.startY)) > CLICK_GATE) pan.moved = true;
+            if (pan.moved) host.setViewport(panViewport(pan.viewport, pan.startX, pan.startY, e.clientX, e.clientY));
             return;
         }
         if (drag) {
@@ -182,19 +223,24 @@ export function attachCanvasInteractions({ stage, view, host }) {
 
     function onPointerUp() {
         if (pan) {
-            // 平移只从中键与临时抓手（空格 / Ctrl）来：这一发从来不收选中
+            // 空白那一拖没挪开就是点空白：收笔收走选中；中键与空格那发是抓手，从来不动选中集
+            const clearSelection = pan.blank && !pan.moved;
             pan = null;
             stage.classList.remove("ns-canvas-grabbing");
+            if (clearSelection) host.setSelection([], null);
         }
         if (drag) {
             if (drag.moved) host.markDirty();
             drag = null;
+            stage.classList.remove("ns-canvas-dragging");
         }
         if (resizing) {
+            resizing.nodeEl?.classList.remove("ns-canvas-node-resizing");
             resizing = null;
             host.markDirty();
         }
         if (connecting) {
+            connecting.linkEl?.classList.remove("ns-canvas-node-linking");
             if (connecting.targetId) host.connect(connecting.handle.nodeId, connecting.targetId);
             else host.toast(t("连线要落在一个节点上"), "info");   // 落在空白处要说话，不能松手就没声
             connecting = null;
@@ -208,6 +254,31 @@ export function attachCanvasInteractions({ stage, view, host }) {
             paintMarquee();
             if (clearSelection) host.setSelection([], null);
         }
+    }
+
+    /** 这一发被浏览器接走（正文文本拖出去、系统手势拿走那一按）或窗口中途失焦：pointerup 不会来了。
+     *  已经挪出去的落点收下（跟正常收笔一样标脏），其余状态全丢掉 —— 不连线、不清选中，
+     *  舞台与节点上那几层 pointer-events: none 的类一并摘掉，画布不能因为一次没收到收笔就再也拖不动 */
+    function abortGestures() {
+        const movedNode = !!drag?.moved || !!resizing;
+        if (resizing) resizing.nodeEl?.classList.remove("ns-canvas-node-resizing");
+        if (connecting) {
+            connecting.linkEl?.classList.remove("ns-canvas-node-linking");
+            host.paintActive(null);
+        }
+        const hadMarquee = !!marquee;
+        pan = drag = marquee = resizing = connecting = null;
+        stage.classList.remove("ns-canvas-grabbing", "ns-canvas-marqueeing", "ns-canvas-dragging");
+        if (hadMarquee) paintMarquee();   // 状态清了再画一次：框选框跟着收掉
+        if (movedNode) host.markDirty();
+    }
+
+    /** 原生拖拽起来了就是这一发的收笔：节点拖动的 pointer 会话被拖拽接管，往后没有 pointerup，
+     *  不收笔的话 drag 会挂在窗口上，之后每一下裸移动都把节点按旧起点搬走 */
+    function onDragStart() {
+        if (!host.isPageActive()) return;
+        if (!pan && !drag && !marquee && !resizing && !connecting) return;
+        abortGestures();
     }
 
     /** 点节点选它（上游 selectNodeByEvent）：Shift / Ctrl / Cmd 加选或减选；

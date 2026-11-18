@@ -79,7 +79,7 @@ export function readRecipeParams(node) {
 /** 这一发的输入：上游连线里的提示词按连线顺序拼接；图片 / 视频 / 音频按参考素材那套标注给后端 ——
  *  画布图片节点存的正是 Output 目录里的那一份，[output] 标注让后端从输出目录取并拷进 input；
  *  带 asset 的图片节点是「展开配方」铺进来的配方素材，文件在配方自己那一份 assets/ 里，
- *  连配方名一起交后端，由后端拷进 input 再用 */
+ *  连配方名一起交后端，由后端拷进 input 再用；停用的那一张不进这一发（节点上的「停用」是通用功能） */
 export function genInputs(state, genNodeId) {
     const prompts = [];
     const references = { images: [], videos: [], audios: [] };
@@ -87,7 +87,7 @@ export function genInputs(state, genNodeId) {
     for (const conn of state.connections) {
         if (conn.toNodeId !== genNodeId) continue;
         const node = state.nodes.find((n) => n.id === conn.fromNodeId);
-        if (!node) continue;
+        if (!node || node.metadata?.disabled === true) continue;
         const text = String(node.metadata?.content || "").trim();
         if (node.type === "text" && text) prompts.push(text);
         const group = MEDIA_GROUPS[node.type];
@@ -354,8 +354,12 @@ export function createCanvasGen({ $el, toast, api, canGen, startComfy, host }) {
             });
     }
 
-    /** 出片的公共闸门：这一发在跑就不重复提交；离线按一下就替用户去启执行队列（与出图同一套做法） */
+    /** 出片的公共闸门：停用的那一张不跑；这一发在跑就不重复提交；离线按一下就替用户去启执行队列（与出图同一套做法） */
     function clipGate(node) {
+        if (node.metadata?.disabled === true) {
+            toast(t("这台节点已停用：在节点上方的浮出栏里启用"), "info");
+            return true;
+        }
         if (running.has(node.id)) return true;
         if (canGen() === false) {
             startComfy?.();
@@ -475,6 +479,11 @@ export function createCanvasGen({ $el, toast, api, canGen, startComfy, host }) {
     }
 
     function runImage(node) {
+        // 停用的那一张按一下就明说自己不跑：这条要说清「已停用」，排在「这一发在跑」之前（跑着的那一发不该把这句吃掉）
+        if (node.metadata?.disabled === true) {
+            toast(t("这台节点已停用：在节点上方的浮出栏里启用"), "info");
+            return;
+        }
         if (running.has(node.id)) return;
         if (canGen() === false) {
             startComfy?.();   // 出图要执行队列：按一下就替用户去启它，这一发不排队
@@ -627,8 +636,9 @@ export function createCanvasGen({ $el, toast, api, canGen, startComfy, host }) {
      * 改动当场走 host.patchMeta —— 进撤销栈、跟复制走、随画布落盘；比例与长边的「跟随」态跟着技能 config 走。
      */
     function controls(node) {
-        // 串联的车厢是精简卡：这一张只停用这一枚，出片与参数在车尾那台生成节点
-        if (node.type === "recipe") return node.metadata.train === 1 ? carControls(node) : recipeControls(node);
+        // 串联的车厢是精简卡：卡上一枚钮都没有 —— 停用、复制与删除都在节点上方的浮出栏里，
+        // 出片与整列共用的参数在车尾那台生成节点
+        if (node.type === "recipe") return node.metadata.train === 1 ? [] : recipeControls(node);
         const params = readGenParams(node);
         const st = running.get(node.id) || {};
         const busy = st.status === "queued" || st.status === "running";
@@ -737,8 +747,8 @@ export function createCanvasGen({ $el, toast, api, canGen, startComfy, host }) {
 
         const acts = [];
         if (busy) acts.push(genBtn(t("取消任务"), "cross", () => cancel(node), t("取消这一发后台任务")));
-        acts.push(genBtn(t("出片"), "play", () => run(node),
-            canGen() === false ? t("出片需要 ComfyUI 执行队列") : t("提交这一发出片任务"), busy, "ns-canvas-gen-go"));
+        acts.push(genBtn(t("生成视频"), "play", () => run(node),
+            canGen() === false ? t("生成视频需要 ComfyUI 执行队列") : t("提交这一发生成视频任务"), busy));
         return [
             $el("div", { className: "ns-canvas-gen-skill" }, [genChip(skillSel, { icon: "film" })]),
             $el("div", { className: "ns-canvas-gen-params" },
@@ -747,14 +757,15 @@ export function createCanvasGen({ $el, toast, api, canGen, startComfy, host }) {
         ];
     }
 
-    /** 连到这一台节点的素材节点（按连线顺序）：出片交给后端的就是这一批，卡上也按这一批铺 */
+    /** 连到这一台节点的素材节点（按连线顺序）：出片交给后端的就是这一批，卡上也按这一批铺；
+     *  停用的那一张既不进这一发也不在卡上露出来 */
     function mediaNodes(nodeId) {
         const state = host.getState();
         const out = [];
         for (const conn of state.connections) {
             if (conn.toNodeId !== nodeId) continue;
             const node = state.nodes.find((n) => n.id === conn.fromNodeId);
-            if (!node || !MEDIA_GROUPS[node.type]) continue;
+            if (!node || !MEDIA_GROUPS[node.type] || node.metadata?.disabled === true) continue;
             if (node.metadata?.filename || node.metadata?.asset) out.push(node);
         }
         return out;
@@ -797,7 +808,7 @@ export function createCanvasGen({ $el, toast, api, canGen, startComfy, host }) {
     /** 配方闭环节点的面：配方、步数 / 锚点 / 连续性 / 上下文帧 / 种子、这一段概览、提示词来源、参考素材、
      *  段列表与出片都在这一张卡上。段一行的内容读配方自己那份 spec；换配方时段号回到第 1 段。
      *  连过来的正文与素材是「画布覆盖」：只影响这一发出片，配方里那一份不动（提示词来源那一行就说清楚用的是哪一份）。
-     *  串联展开铺出来的那一台是车厢，不走这一张卡（见 carControls） */
+     *  串联展开铺出来的那一台是车厢，不走这一张卡（车厢的面在 nodes.js 的 nodeCar） */
     function recipeControls(node) {
         const params = readRecipeParams(node);
         const st = running.get(node.id) || {};
@@ -835,8 +846,8 @@ export function createCanvasGen({ $el, toast, api, canGen, startComfy, host }) {
         if (busy) acts.push(genBtn(t("取消任务"), "cross", () => cancel(node), t("取消这一发后台任务")));
         acts.push(genBtn(t("展开配方"), "maximize", () => host.expandRecipe?.(node),
             t("把每一段摊成段节点，提示词与参考素材摊成连过去的独立节点")));
-        acts.push(genBtn(t("出片"), "play", () => run(node),
-            canGen() === false ? t("出片需要 ComfyUI 执行队列") : t("生成这一段"), busy, "ns-canvas-gen-go"));
+        acts.push(genBtn(t("生成视频"), "play", () => run(node),
+            canGen() === false ? t("生成视频需要 ComfyUI 执行队列") : t("生成这一段"), busy));
 
         const rows = [$el("div", { className: "ns-canvas-gen-skill" }, [genChip(recipeSel, { icon: "film" })])];
         rows.push($el("div", { className: "ns-canvas-gen-params" },
@@ -932,19 +943,6 @@ export function createCanvasGen({ $el, toast, api, canGen, startComfy, host }) {
             t("展开配方怎么铺：平铺是一段一行，串联是一段接一段接到车尾"));
     }
 
-    /** 串联里这一段的停用 / 启用：停用就是整列出片跳过这一段 */
-    function carOffChip(node) {
-        const off = node.metadata.disabled === true;
-        return genBtn(off ? t("启用") : t("停用"), off ? "check" : "cross",
-            () => host.patchMeta(node.id, { disabled: !off }),
-            off ? t("启用这一段：整列出片会跑它") : t("停用这一段：整列出片跳过它"));
-    }
-
-    /** 串联车厢的面：整张卡就一枚停用胶囊 —— 出片与整列共用的那套参数都在车尾那台生成节点上 */
-    function carControls(node) {
-        return [carOffChip(node)];
-    }
-
     /** 车厢上显示的那一段读哪一份：配方与它的段 spec 取它那一列车尾的（公共参数只有一处，配方名也在
      *  车尾那一份上，换配方时车厢跟着换），车尾断了回落车厢自己存的这一份。段号、正文与素材是车厢自己的 */
     function carView(node) {
@@ -977,8 +975,8 @@ export function createCanvasGen({ $el, toast, api, canGen, startComfy, host }) {
         const { stepsSel, anchorSel, contSel, ctxSel, seedIn } = recipeParamSelects(node, busy);
         const acts = [];
         if (busy) acts.push(genBtn(t("取消任务"), "cross", () => cancel(node), t("取消这一列在跑的段")));
-        acts.push(genBtn(t("出片"), "play", () => run(node),
-            canGen() === false ? t("出片需要 ComfyUI 执行队列") : t("按链序跑启用的那几段"), busy, "ns-canvas-gen-go"));
+        acts.push(genBtn(t("生成视频"), "play", () => run(node),
+            canGen() === false ? t("生成视频需要 ComfyUI 执行队列") : t("按链序跑启用的那几段"), busy));
         return [
             $el("div", { className: "ns-canvas-gen-skill" }, [genChip(recipeSelect(node, busy), { icon: "film" })]),
             $el("div", { className: "ns-canvas-gen-params" },
