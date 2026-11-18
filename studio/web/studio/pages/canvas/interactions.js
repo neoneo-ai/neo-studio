@@ -8,7 +8,7 @@ import { getConnectionDropTarget, marqueeSelect, panViewport, resizeNode, screen
 
 const NUDGE = 8, NUDGE_BIG = 40;
 const TEXT_DRAG_GATE = 8;   // 正文框整张铺满节点：起手先让浏览器选字，拖过这一截才算拖节点
-const PAN_CLICK_GATE = 3;   // 空白起手拖过这一截才算拖画面，没拖过就是点空白（点空白要收走选中）
+const CLICK_GATE = 3;   // 空白起手拖过这一截才算框选 / 平移，没拖过就是点空白（点空白要收走选中）
 const CLIP_NODE_KEYS = new Set(["c", "v", "x", "a"]);   // 节点那四键：光标在正文里时按了要说一句怎么走回节点
 const NEO_GALLERY_MIME = "application/x-neo-gallery";
 // 一条连线是两个 path（宽命中描边 + 可见细线），点哪一条都算点这条线
@@ -25,7 +25,7 @@ export function attachCanvasInteractions({ stage, view, host }) {
 
     // 滚轮缩放锚在指针上（passive: false 才拦得住 preventDefault，否则浏览器连页面一起滚）
     stage.addEventListener("wheel", (e) => {
-        if (!host.isPageActive() || e.target.closest(".ns-canvas-bar, .ns-canvas-gen-ctl input")) return;
+        if (!host.isPageActive() || e.target.closest(".ns-canvas-bar, .ns-canvas-gen-ctl input, .ns-canvas-node-video-el")) return;
         e.preventDefault();
         const rect = stage.getBoundingClientRect();
         host.setViewport(zoomViewportAt(state().viewport, e.clientX - rect.left, e.clientY - rect.top, e.deltaY));
@@ -54,14 +54,14 @@ export function attachCanvasInteractions({ stage, view, host }) {
         // 中键直接平移；空格 / Ctrl 是临时抓手（上游 temporaryTool 那一条）
         if (e.button === 1 || ((spaceDown || e.ctrlKey) && isBackground)) {
             e.preventDefault();
-            pan = { startX: e.clientX, startY: e.clientY, viewport: { ...state().viewport },
-                moved: true, clearsSelection: false };
+            pan = { startX: e.clientX, startY: e.clientY, viewport: { ...state().viewport } };
             stage.classList.add("ns-canvas-grabbing");
             return;
         }
         if (e.button !== 0) return;
         // 节点头上的动作钮与生成节点上的控件交浏览器发 click：起手不拖、也不 preventDefault（拦了 pointerdown 就没有 click 了）
-        if (e.target.closest(".ns-canvas-node-act, .ns-canvas-node-pick, .ns-canvas-gen-ctl")) return;
+        // 视频那一段同理：播控（进度条 / 全屏 / 音量）交浏览器，拖节点从节点那一圈黑框进来
+        if (e.target.closest(".ns-canvas-node-act, .ns-canvas-node-pick, .ns-canvas-gen-ctl, .ns-canvas-node-video-el")) return;
         const handleEl = e.target.closest(".ns-canvas-handle");
         if (handleEl) {
             const nodeId = handleEl.closest(".ns-canvas-node").dataset.nodeId;
@@ -103,18 +103,21 @@ export function attachCanvasInteractions({ stage, view, host }) {
             e.preventDefault();
             return;
         }
-        // Shift 起手 = 框选（起点那一刻的选中集当基准，松手把罩住的并进选中）
-        const world = worldPoint(e.clientX, e.clientY);
-        if (e.shiftKey) {
-            marquee = { startWorldX: world.x, startWorldY: world.y,
-                currentWorldX: world.x, currentWorldY: world.y, additive: true, base: [...ids] };
+        // 触屏没有空格与中键可按：空白那一拖留给平移，框选只给鼠标与笔
+        if (e.pointerType === "touch") {
+            pan = { startX: e.clientX, startY: e.clientY, viewport: { ...state().viewport } };
+            stage.classList.add("ns-canvas-grabbing");
             e.preventDefault();
             return;
         }
-        // 空白处起手 = 拖画面（板子的常规）；按下一格没拖就是点空白，收笔收走选中
-        pan = { startX: e.clientX, startY: e.clientY, viewport: { ...state().viewport },
-            moved: false, clearsSelection: true };
-        stage.classList.add("ns-canvas-grabbing");
+        // 空白处起手 = 框选（ComfyUI / Figma 口径）：松手时框罩到的那一批就是选中集
+        // Shift 起手 = 加选框选：起点那一刻的选中集当基准，罩到的并进去
+        const world = worldPoint(e.clientX, e.clientY);
+        marquee = { startWorldX: world.x, startWorldY: world.y,
+            currentWorldX: world.x, currentWorldY: world.y,
+            startX: e.clientX, startY: e.clientY, moved: false,
+            additive: e.shiftKey, base: e.shiftKey ? [...ids] : [] };
+        stage.classList.add("ns-canvas-marqueeing");
         e.preventDefault();
     }
 
@@ -126,8 +129,6 @@ export function attachCanvasInteractions({ stage, view, host }) {
 
     function onPointerMove(e) {
         if (pan) {
-            if (!pan.moved && Math.max(Math.abs(e.clientX - pan.startX),
-                Math.abs(e.clientY - pan.startY)) > PAN_CLICK_GATE) pan.moved = true;
             host.setViewport(panViewport(pan.viewport, pan.startX, pan.startY, e.clientX, e.clientY));
             return;
         }
@@ -164,23 +165,26 @@ export function attachCanvasInteractions({ stage, view, host }) {
             return;
         }
         if (marquee) {
+            // 框起手先跟手画框，拖过那一格才动选中集：点空白那一下不该被一像素的抖清掉选中
+            if (!marquee.moved && Math.max(Math.abs(e.clientX - marquee.startX),
+                Math.abs(e.clientY - marquee.startY)) > CLICK_GATE) marquee.moved = true;
             const world = worldPoint(e.clientX, e.clientY);
             marquee.currentWorldX = world.x;
             marquee.currentWorldY = world.y;
-            const box = { left: Math.min(marquee.startWorldX, world.x), top: Math.min(marquee.startWorldY, world.y),
-                width: Math.abs(world.x - marquee.startWorldX), height: Math.abs(world.y - marquee.startWorldY) };
-            host.setSelection(marqueeSelect(state().nodes, box, marquee.base), null);
+            if (marquee.moved) {
+                const box = { left: Math.min(marquee.startWorldX, world.x), top: Math.min(marquee.startWorldY, world.y),
+                    width: Math.abs(world.x - marquee.startWorldX), height: Math.abs(world.y - marquee.startWorldY) };
+                host.setSelection(marqueeSelect(state().nodes, box, marquee.base), null);
+            }
             paintMarquee();
         }
     }
 
     function onPointerUp() {
         if (pan) {
-            // 空白处按下没拖开就是点空白：收笔收走选中；拖开的只是平移，选中照留
-            const clearSelection = pan.clearsSelection && !pan.moved;
+            // 平移只从中键与临时抓手（空格 / Ctrl）来：这一发从来不收选中
             pan = null;
             stage.classList.remove("ns-canvas-grabbing");
-            if (clearSelection) host.setSelection([], null);
         }
         if (drag) {
             if (drag.moved) host.markDirty();
@@ -197,8 +201,12 @@ export function attachCanvasInteractions({ stage, view, host }) {
             host.paintActive(null);
         }
         if (marquee) {
+            // 空白处按下没拖开就是点空白：收笔收走选中；Shift 那一发是加选，点空白不动选中集
+            const clearSelection = !marquee.moved && !marquee.additive;
             marquee = null;
+            stage.classList.remove("ns-canvas-marqueeing");
             paintMarquee();
+            if (clearSelection) host.setSelection([], null);
         }
     }
 

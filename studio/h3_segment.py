@@ -41,9 +41,9 @@ from .h3_video_director import (
     _panel_first,
 )
 from .h3_video_gen import _gen_video_skills, _resolve_skill_id, _seconds_to_frames
-from .image_gen import _error_from_history, _lookup, _progress_for, submit_graph
-from .recipes import (add_recipe_results, is_preset_recipe, list_director_recipes, list_recipe_results,
-                      load_director_spec)
+from .image_gen import _error_from_history, _lookup, _progress_for, _reference_name, submit_graph
+from .recipes import (_DIRECTOR_REF_CAPS, add_recipe_results, is_preset_recipe, list_director_recipes,
+                      list_recipe_results, load_director_spec)
 from .skill import get_skill_gen_config, load_skill_workflow
 from . import task_center
 from .util import PrefixFilter
@@ -54,6 +54,9 @@ logger.addFilter(PrefixFilter())
 # 锚点模式（节点下拉用中文标签，接口/内部用键）
 ANCHOR_LABELS = ("两端锚点", "只钉首帧", "不用锚点")
 _ANCHOR_KEYS = {label: key for label, key in zip(ANCHOR_LABELS, ("both", "first", "none"))}
+
+# 画布参考素材三档的档位名（覆盖提示里要说清换的是图 / 视频 / 音频哪一档）
+_REF_KIND_LABELS = {"images": "图", "videos": "视频", "audios": "音频"}
 
 # 单段任务的运行元数据：prompt_id -> {...}。只放"这次执行从哪来、预览推给谁、产物落在哪"这类小字段，
 # 由本模块的提交路由写入、由 NeoH3SegmentRun 在队列里读回，任务结束即删。
@@ -232,6 +235,42 @@ def _regen_spec(spec: dict, index: int, mode, first_name, last_name, skill_id: s
     return single
 
 
+def _canvas_refs(refs) -> dict:
+    """画布连到这台节点的参考素材（{images/videos/audios: [{kind, value}]}）落到 input 目录，
+    返回段 spec 那一份 refs（加载节点可用的 input 相对名）。
+
+    落不下来的那一条直接丢掉（文件被移走、类型不符）：少一张参考不该让整发出片失败，
+    配方里那一份参考仍然在。每档的上限与配方段参考素材同一份（图 9 / 视频 3 / 音频 3）。
+    """
+    if not isinstance(refs, dict):
+        return {}
+    out = {}
+    for key, media in (("images", "image"), ("videos", "video"), ("audios", "audio")):
+        names = []
+        for src in (refs.get(key) or [])[:_DIRECTOR_REF_CAPS[key]]:
+            name = _reference_name(src, media)
+            if name:
+                names.append(name)
+        if names:
+            out[key] = names
+    return out
+
+
+def _apply_canvas_overrides(single: dict, prompt: str, refs: dict, warnings: list) -> None:
+    """画布那一次的提示词 / 参考素材覆盖：只改这一发的单段 spec，配方自己那一份（recipe.json）不动。
+
+    参考素材按类型整档换（画布连了图，这一发的参考图就是画布上那几张），没连的类型沿用配方里那一份。
+    换了几档就 warnings 里说几档：这一发出来画面与配方对不上时，队列面板里能看出是被画布改过的。
+    """
+    seg = single["segments"][0]
+    if prompt:
+        seg["prompt"] = prompt
+        warnings.append("画布覆盖了这一段的提示词")
+    for key, names in (refs or {}).items():
+        seg["refs"] = {**(seg.get("refs") or {}), key: names}
+        warnings.append(f"画布换了这一段的参考{_REF_KIND_LABELS.get(key, key)}（{len(names)} 个）")
+
+
 def resolve_anchors(spec: dict, index: int, anchors: str, continuity: bool, context_frames: int,
                     warnings: list, film: dict | None = None) -> tuple:
     """按成片段边界取首/尾锚点帧并落盘，返回 (可用锚点模式, 首帧名, 尾帧名)；取不到就降级并在 warnings 里说明。
@@ -273,11 +312,13 @@ def resolve_anchors(spec: dict, index: int, anchors: str, continuity: bool, cont
 
 def run_single_segment(recipe: str, index: int, anchors: str, seed: int, *, steps: int = -1,
                        continuity: bool = True, context_frames: int = 22, preview: bool = True,
-                       preview_node_id=None, record: bool = True, anchors_ready=None, film: str = "") -> dict:
+                       preview_node_id=None, record: bool = True, anchors_ready=None, film: str = "",
+                       prompt: str = "", refs: dict | None = None) -> dict:
     """跑配方里的第 index 段（0 起）：解析成片/锚点 → 单段 spec → 执行 →（可选）落盘并记进配方结果。
 
     film 指定用哪个成片结果取锚点（文件名或 `subfolder/文件名`；空 = 最新的成片结果）。
     anchors_ready：(mode, first_name, last_name) 已解析好时直接复用，不再解一次成片。
+    prompt / refs：画布连过来的那一份（只改这一发的 spec，recipe.json 不动）。
     返回 {video, filename, subfolder, seed, frames, anchors, film, warnings}。
     """
     if not recipe:
@@ -314,6 +355,7 @@ def run_single_segment(recipe: str, index: int, anchors: str, seed: int, *, step
     mode = {"both": "fl2v", "first": "i2v"}.get(anchors)
     skill_id = _pick_anchor_skill(segments[index].get("skill_id") or "", need_last=(mode == "fl2v")) if mode else ""
     single = _regen_spec(spec, index, mode, first_name, last_name, skill_id)
+    _apply_canvas_overrides(single, str(prompt or ""), refs, warnings)
 
     if seed is None or int(seed) < 0:
         seed = random.randint(0, 2 ** 63 - 1)   # 默认换种子：同参数同种子会得到几乎一样的结果
@@ -402,7 +444,8 @@ class NeoH3SegmentRun:
                                     context_frames=int(context_frames), preview=bool(preview),
                                     preview_node_id=meta.get("preview_node_id") or unique_id,
                                     record=bool(record), anchors_ready=meta.get("anchors"),
-                                    film=str(film or "").strip())
+                                    film=str(film or "").strip(),
+                                    prompt=str(meta.get("prompt") or ""), refs=meta.get("refs") or None)
         if prompt_id and prompt_id in _RUNS:
             meta.update({"filename": result["filename"], "seed": result["seed"], "frames": result["frames"],
                          "anchors": result["anchors"], "film": result["film"],
@@ -535,10 +578,17 @@ def _run_prompt(data: dict) -> dict:
         film_entry = _film_entry(recipe, film)
         if film_entry is not None:
             film_layout(film_entry, spec, continuity, context_frames)
+    # 画布那一次的覆盖：连过来的正文与素材（画布卡上的「画布覆盖」）。参考素材在这里就落到 input 目录，
+    # 段在队列里执行时按名字取用；这两样不进节点 widget，走 _RUNS 交回节点（在 ComfyUI 图里直接跑这个
+    # 节点时没有这一份，用的是配方自己那份）
+    prompt = str(data.get("prompt") or "").strip()
+    refs = _canvas_refs(data.get("references"))
     return {
         "recipe": recipe,
         "index": index,
         "seed": int(data.get("seed", -1)),
+        "prompt": prompt,
+        "refs": refs,
         "graph": {"1": {"class_type": "NeoH3SegmentRun", "inputs": {
             "recipe": recipe,
             "segment": index + 1,
@@ -573,6 +623,9 @@ async def run_segment_route(request):
 
     now = time.time()
     _RUNS[prompt_id] = {"preview_node_id": data.get("node_id") or task_id}
+    if payload["prompt"] or payload["refs"]:
+        # 只有画布真给了覆盖才写这一份：在 ComfyUI 图里直接跑这个节点（没有这一份）用的就是配方自己那一份
+        _RUNS[prompt_id].update({"prompt": payload["prompt"], "refs": payload["refs"]})
     _SEGMENT_TASKS[task_id] = {
         "task_id": task_id, "prompt_id": prompt_id, "status": "queued",
         "recipe": payload["recipe"], "segment": payload["index"], "seed": payload["seed"],

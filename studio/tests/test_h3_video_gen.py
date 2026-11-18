@@ -419,6 +419,13 @@ class ResolveVideoParamsTests(unittest.TestCase):
         p = h3_video_gen.resolve_video_params({"prompt": "x"}, self._cfg())
         self.assertGreaterEqual(p["seed"], 0)
 
+    def test_negative_seed_sentinel_randomizes(self):
+        # 出视频页空种子框与画布出片都发 -1：夹成 0 的话同参数连点两次是同一发片
+        seeds = {h3_video_gen.resolve_video_params({"prompt": "x", "seed": -1}, self._cfg())["seed"]
+                 for _ in range(6)}
+        self.assertTrue(all(s >= 0 for s in seeds))
+        self.assertGreater(len(seeds), 1, "seed=-1 每一发都该换一个随机种子")
+
     def test_reference_image_resolved(self):
         buf = io.BytesIO()
         _PILImage.new("RGB", (4, 4), (255, 0, 0)).save(buf, format="PNG")

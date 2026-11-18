@@ -191,8 +191,10 @@ def resolve_video_params(body: dict, cfg: dict, skip_model: bool = False) -> dic
     # 模型上的参考值，社区换蒸馏 checkpoint 或加速 LoRA 后不适用，钉在特效上只会把这一发拖慢
     steps = _positive_steps(body.get("steps")) or _positive_steps(cfg.get("steps")) or 20
 
+    # 种子哨兵 -1 = 「随机」（出视频页空种子框与画布出片都发它）：把 -1 夹成 0 的话，同参数连点两次
+    # 得到的是同一发片，面板上那格占位写的「随机」就成了假承诺。导演/单段链在更外层已经把 -1 换成随机
     seed = body.get("seed")
-    seed = random.randint(0, 2**63 - 1) if seed is None else max(0, int(seed))
+    seed = random.randint(0, 2**63 - 1) if seed is None or int(seed) < 0 else int(seed)
 
     return {
         "prompt": prompt_text,

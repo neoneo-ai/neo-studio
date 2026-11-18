@@ -771,6 +771,111 @@ class RunSegmentRouteTests(_RecipeCase):
         self.assertIn("live", h3_segment._SEGMENT_TASKS)
 
 
+class CanvasOverrideTests(_RecipeCase):
+    """画布覆盖：连到配方卡上的提示词与参考素材只改这一发的单段 spec，配方自己那一份（recipe.json）不动。"""
+
+    def test_canvas_refs_land_in_input_dir(self):
+        with _pin_folder_paths() as work:
+            (work / "input" / "plain.png").write_bytes(b"png")
+            (work / "input" / "clip.mp4").write_bytes(b"mp4")
+            (work / "output" / "shot.png").write_bytes(b"png")
+            refs = h3_segment._canvas_refs({
+                "images": [{"kind": "input", "value": "plain.png"},
+                           {"kind": "input", "value": "shot.png[output]"},
+                           {"kind": "input", "value": "gone.png"}],
+                "videos": [{"kind": "input", "value": "clip.mp4"}],
+                "audios": [],
+            })
+        self.assertEqual(sorted(refs), ["images", "videos"])            # 空的那一档不写
+        self.assertEqual(refs["images"][0], "plain.png")               # input 里的原名直接用
+        self.assertTrue(refs["images"][1].startswith("NeoAgent/shot"))  # [output] 标注的拷进 input 再用
+        self.assertEqual(len(refs["images"]), 2)                        # 文件不在的那一条不占位
+        self.assertEqual(refs["videos"], ["clip.mp4"])
+
+    def test_canvas_recipe_asset_copy_lands_in_input_dir(self):
+        """「展开配方」铺上画布的素材节点：文件在配方自己那一份 assets/ 里，加载节点看不到它，
+        拷进 input 才认得；配方名读不到、文件不在都不占位。"""
+        with _pin_folder_paths() as work:
+            recipe_dir = self.write_recipe()
+            assets = recipe_dir / "assets"
+            assets.mkdir()
+            (assets / "角色.png").write_bytes(b"png")
+            refs = h3_segment._canvas_refs({"images": [
+                {"kind": "recipe", "value": "角色.png", "recipe": "T"},
+                {"kind": "recipe", "value": "没这份.png", "recipe": "T"},
+                {"kind": "recipe", "value": "角色.png", "recipe": "读不到的配方"},
+            ]})
+            copied = work / "input" / refs["images"][0]
+            self.assertTrue(copied.is_file(), "素材已经落进加载节点看得到的目录")
+        self.assertEqual(len(refs["images"]), 1, "读不到的那两条不占位")
+        self.assertTrue(refs["images"][0].startswith("NeoAgent/角色"))
+
+    def test_run_prompt_carries_overrides_outside_the_graph(self):
+        with _pin_folder_paths() as work:
+            self.write_recipe()
+            (work / "input" / "ref.png").write_bytes(b"png")
+            payload = h3_segment._run_prompt({"recipe": "T", "segment": 1, "anchors": "none", "seed": 3,
+                                             "prompt": "  画布上写的提示词  ",
+                                             "references": {"images": [{"kind": "input", "value": "ref.png"}]}})
+        self.assertEqual((payload["prompt"], payload["refs"]), ("画布上写的提示词", {"images": ["ref.png"]}))
+        # 这两样不进节点 widget：在 ComfyUI 图里直接跑 NeoH3SegmentRun 时用的是配方自己那一份
+        self.assertNotIn("prompt", payload["graph"]["1"]["inputs"])
+        self.assertNotIn("refs", payload["graph"]["1"]["inputs"])
+        plain = h3_segment._run_prompt({"recipe": "T", "segment": 0, "anchors": "none"})
+        self.assertEqual((plain["prompt"], plain["refs"]), ("", {}))
+
+    def test_overrides_patch_this_run_only_and_report_in_warnings(self):
+        with _pin_folder_paths():
+            segments = [{"skill_id": "sk-a", "prompt": "配方里的提示词", "duration_sec": 5,
+                         "refs": {"images": ["own.png"], "audios": ["voice.mp3"]}}]
+            recipe_dir = self.write_recipe(segments=segments)
+            assets = recipe_dir / "assets"
+            assets.mkdir()
+            (assets / "own.png").write_bytes(b"png")
+            (assets / "voice.mp3").write_bytes(b"mp3")
+            before = (recipe_dir / "recipe.json").read_text(encoding="utf-8")
+
+            rec = _RunSpecRecorder()
+            with patch.object(h3_video_director.NeoH3VideoDirector, "_run_spec", rec):
+                out = h3_segment.run_single_segment("T", 0, "none", 5, record=False,
+                                                   prompt="画布的提示词", refs={"images": ["canvas.png"]})
+            seg = rec.calls[0]["spec"]["segments"][0]
+            self.assertEqual(seg["prompt"], "画布的提示词")
+            self.assertEqual(seg["refs"], {"images": ["canvas.png"], "audios": ["voice.mp3"]})  # 没连的那档沿用配方
+            self.assertIn("画布覆盖了这一段的提示词", out["warnings"])
+            self.assertIn("画布换了这一段的参考图（1 个）", out["warnings"])
+
+            rec2 = _RunSpecRecorder()
+            with patch.object(h3_video_director.NeoH3VideoDirector, "_run_spec", rec2):
+                out2 = h3_segment.run_single_segment("T", 0, "none", 5, record=False)
+            seg2 = rec2.calls[0]["spec"]["segments"][0]
+            self.assertEqual(seg2["prompt"], "配方里的提示词")
+            self.assertEqual(seg2["refs"], {"images": ["own.png"], "audios": ["voice.mp3"]})
+            self.assertEqual(out2["warnings"], [])
+            self.assertEqual((recipe_dir / "recipe.json").read_text(encoding="utf-8"), before)
+
+    def test_node_forwards_the_run_overrides_from_metadata(self):
+        self.write_recipe()
+        calls = []
+
+        def _fake_run(recipe, index, anchors, seed, **kwargs):
+            calls.append({"index": index, "prompt": kwargs["prompt"], "refs": kwargs["refs"]})
+            return {"video": "VIDEO", "filename": "s.mp4", "subfolder": "neo_director_regen", "seed": seed,
+                    "frames": 124, "anchors": anchors, "film": None, "warnings": []}
+
+        node = h3_segment.NeoH3SegmentRun()
+        h3_segment._RUNS["with-ov"] = {"preview_node_id": 7, "prompt": "画布提示词", "refs": {"images": ["a.png"]}}
+        h3_segment._RUNS["plain"] = {"preview_node_id": 7}
+        for prompt_id in ("with-ov", "plain"):
+            with patch.object(h3_segment, "run_single_segment", _fake_run), \
+                    patch.object(h3_segment, "get_executing_context",
+                                 lambda: types.SimpleNamespace(prompt_id=prompt_id, node_id="1")):
+                node.run_segment(recipe="T", segment=2, anchors="不用锚点", seed=4)
+        self.assertEqual(calls[0]["index"], 1)
+        self.assertEqual((calls[0]["prompt"], calls[0]["refs"]), ("画布提示词", {"images": ["a.png"]}))
+        self.assertEqual((calls[1]["prompt"], calls[1]["refs"]), ("", None))
+
+
 class SegmentRunNodeTests(_RecipeCase):
     def test_input_types_expose_recipe_and_segment(self):
         self.write_recipe()

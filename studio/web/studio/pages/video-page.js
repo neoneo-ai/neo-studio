@@ -5,6 +5,7 @@ import { api } from "../shim/api.js";
 import { t, tf } from "../../js/core/i18n.js";
 import { icon, setIcon } from "../../js/core/icons.js";
 import { chipButton, ratioGlyph, reuseModelOverlay, setVideoReuseOpen, skillParamsChip } from "../../gallery-gen.js";
+import { VIDEO_DUR_CHOICES, VIDEO_SIZE_CHOICES } from "../../gen-utils.js";
 import { listVideoSkills } from "../../recipes.js";
 import { blockingMissingModels, createVideoModelConfigSection, getSkillGenConfig, listVideoGenModels } from "../../image-gen.js";
 import { skillDisplayName } from "../../skill.js";
@@ -17,17 +18,7 @@ export function createVideoPage({ $el, toast, go, openLibModal, closeLibModal, g
 // 独立于导演多段流程：不建配方、不读配方，参数在本页 composer 里现填，提交后端简单视频接口。
 // 版面照 ArtCraft 的 Create Video：整页是舞台，空着时正中盖一句起手提示（版式同绘画页 idle），
 // 底部浮一张胶囊 composer（素材方块 + 提示词 + 芯片行 + 生成钮）；出片后提示淡出，成片卡片进舞台滚动。
-// 分辨率档就是 MiniMax H3 的画布档（短边 768、面积上限 768×1344，官方节点按轴 32 对齐）：每一档横竖
-// 成对排在一起，竖屏就是同一档宽高对调——像素量与对齐要求同档同值，模型侧不需要第二条解析路
-const VIDEO_SIZE_CHOICES = [
-    [624, 352, "352p 横屏"], [352, 624, "352p 竖屏"],
-    [768, 432, "432p 横屏"], [432, 768, "432p 竖屏"],
-    [1024, 576, "576p 横屏"], [576, 1024, "576p 竖屏"],
-    [1280, 720, "720p 横屏"], [720, 1280, "720p 竖屏"],
-    [1344, 768, "768p 横屏"], [768, 1344, "768p 竖屏"],
-    [1920, 1080, "1080p 横屏"], [1080, 1920, "1080p 竖屏"],
-];
-const VIDEO_DUR_CHOICES = [3, 5, 8, 10, 15];
+// 分辨率档与时长档在 gen-utils 共用（画布视频节点是同一份档），这里只铺这一页的控件。
 // 参考素材那一行的三类上限（与后端 _MAX_REF 同档）：一行混收，各类各收各的，总数 = 三者之和
 const VIDEO_REF_MAX = { image: 9, video: 3, audio: 3 };
 const VIDEO_REF_TOTAL = Object.values(VIDEO_REF_MAX).reduce((a, b) => a + b, 0);

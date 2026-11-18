@@ -245,6 +245,26 @@ def _reference_name(src: dict, media: str = "image") -> str | None:
         shutil.copy2(real, os.path.join(dest_dir, name))
         return f"NeoAgent/{name}"
 
+    if kind == "recipe":
+        # 「展开配方」铺上画布的素材节点：文件在配方自己那一份 assets/ 里，加载节点看不到它，
+        # 与 [output] 同一走法 —— 复制进 input/NeoAgent 再用
+        recipe, file = str(src.get("recipe", "")), str(src.get("value", ""))
+        if not recipe or not file or ".." in file or "/" in file or "\\" in file:
+            return None
+        # 配方链只在真要读素材时才拉：生图链的单测环境里 recipes 是一套桩包，模块级拉它会把桩打穿
+        from .recipes import _find_recipe_dir, _recipe_asset_path
+        recipe_dir = _find_recipe_dir(recipe)
+        asset = _recipe_asset_path(recipe_dir, file, "assets") if recipe_dir else None
+        if asset is None or asset.suffix.lower() not in suffixes:
+            logger.warning(f"image_gen: recipe {media} asset not found: {recipe}/{file}")
+            return None
+        dest_dir = os.path.join(input_dir, "NeoAgent")
+        os.makedirs(dest_dir, exist_ok=True)
+        root, ext = os.path.splitext(asset.name)
+        name = f"{root}_{time.strftime('%Y%m%d-%H%M%S')}{ext}"
+        shutil.copy2(str(asset), os.path.join(dest_dir, name))
+        return f"NeoAgent/{name}"
+
     if kind == "data":
         data_uri = str(src.get("data", ""))
         if "," not in data_uri:

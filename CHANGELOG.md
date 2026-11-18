@@ -19,6 +19,47 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   wired to it. With no ComfyUI queue the node says so and starts it for you instead of failing silently, a skill missing
   its API Key sends you to 技能管理, and switching canvases detaches a running job - its images stay in the Output folder
   and nothing writes into the canvas you left.
+- **Canvas 出片 node and 配方闭环 node: video generation on the canvas face.** 画布 has **加视频节点** and **加配方节点** beside
+  **加生成节点**. The 出片 node is that same card with its kind switched to video: a 技能 chip listing the 出视频 page's video skills
+  (one missing its API Key sends you to 技能管理), a 时长 chip (2–32s) and a 尺寸 chip built from the skill's own ratios with the
+  出视频 page's 跟随尺寸 first (9 slots, sharing that page's saved size list), the node keeping its own aspect with the clip box
+  centered inside it. **出片** takes the prompt texts riding in connection order and the connected image as the reference, and a
+  skill whose 该技能需要参考图 is set says on the canvas that it needs a reference image instead of queueing a job that cannot run.
+  The 配方闭环 node lists the 导演页's own recipes — built-in presets and a recipe with no segment are not offered — with a 段 chip,
+  a 锚点 chip (两端锚点 / 只钉首帧 / 不用锚点) and a row naming the recipe's 段数, 宽×高 and mode chain; that segment's prompt, mode
+  and reference material stay in the recipe, edited on the 导演页. Both nodes run the 出视频 page's own backend chains, keep the
+  job's progress in the node's status line (`生成中 3/120`, from the backend's own step counter), refuse a second send while it
+  runs, offer **取消任务** that dequeues it, and land the finished clip in the empty video node downstream — creating and wiring a
+  fresh one when there is none. Leaving the canvas while a clip runs stops its polling, so nothing writes into the canvas you left.
+  Covered by the 生成节点与视频节点 block in `studio/tests/js/canvas-page.test.mjs`.
+- **Canvas 展开配方: one recipe spreads onto the canvas as one segment per node.** The 配方闭环 card and the canvas toolbar each
+  carry **展开配方**: it reads that recipe's own segment list and lays one row per segment — the segment's prompt as a text
+  node, its reference material as image nodes (up to 4, in a 2×2 block), a segment node carrying the source card's recipe /
+  anchor / steps / continuity / context-frame / seed values with the segment index pinned, and an empty video slot wired to
+  its right — up to 24 segments in one undo entry, so one undo takes the whole spread back. The laid asset nodes are
+  recipe-owned (`metadata.asset` + `metadata.recipe`, the canvas never copies the file): running one expanded segment sends
+  its connected text node as the canvas prompt override and hands the references as
+  `{"kind": "recipe", "value": …, "recipe": …}` beside the canvas files' `{"kind": "input", "value": "sub/file.png[output]"}`,
+  and the backend copies both classes into `input/NeoAgent/<name>_<timestamp>` before its load node sees them — a missing
+  recipe, a missing asset file, a name with a path separator in it, or a suffix outside that media type drops that one
+  reference with a backend log line and the run goes ahead. Covered by the 展开配方 cases in the 生成节点与视频节点 block of
+  `studio/tests/js/canvas-page.test.mjs` and `test_canvas_recipe_asset_copy_lands_in_input_dir` in `studio/tests/test_h3_segment.py`.
+- **Canvas 串联展开: a recipe spreads as one chained column run from its tail node.** The 配方闭环 card carries an **展开方式** chip
+  (平铺展开 / 串联展开, saved on the node), and **展开配方** lays the segments out by that slot. Chain expand wires one car per
+  segment end to end (`段0 → 段1 → … → 段N → 车尾`) and caps the line with a 生成节点 whose card is the 出片 card. Each car spreads
+  three nodes — the car on its own row, that segment's prompt as a text node directly above it (the same width as the car,
+  `360×220`, the whole prompt reads in one glance and a scrollbar shows only when the text overflows) and that segment's
+  reference material as image nodes below it (at most 4, `176×124`, a 2×2 block that fills the car's width) — so a spread is
+  at most 6 × segments + 1 tail node, with no video slot beside a car: where a clip lands is decided by the run itself, which
+  fills a free downstream video node and opens a new one when there is none. A car is a compact display card (`360×152`): the segment number, the skill and duration that segment runs with, where its
+  prompt and reference material come from with a preview of them, and the **停用** chip — nothing else. 出片, the recipe, anchor, continuity, context frames,
+  steps and seed shared by the whole column live only on the tail, whose card says 「链上 3 段 · 启用 2 段」. **出片** on the tail queues every
+  enabled segment in chain order through the same `/neo_video_gen/run_segment` the 导演页 uses - the seed offsets per segment, each clip
+  lands in its own downstream video slot, the tail's status line counts segments (`串联出片 2/3`) and its 取消任务 cancels the segments
+  that column is running. **停用** (`metadata.disabled`) drops a car from the column run, dims it and badges it 已停用; a tail with no
+  cars upstream and a column with every car disabled say what is missing instead of queueing a run. The chain is layout and order only -
+  there is no second execution path. Covered by the 串联展开 block of cases in `studio/tests/js/canvas-page.test.mjs`.
+
 - **Canvas nodes carry content, not chrome.** A 画布 node has no title bar: the image or the prompt text fills the whole
   node, and its extra actions ride a bar at the node's top-right that appears **only while that node is selected** —
   **设为主图** (image nodes; one hero per canvas, clicking it again clears it), **选图** for an image node with nothing in
@@ -157,6 +198,15 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   landing page follows the mode the run was sent in).
 
 ### Changed
+- **Canvas: dragging the empty ground is a marquee, and panning moved onto the grab hand.** A left-drag on empty canvas draws the
+  selection box and the nodes it covers become the selection on release, the way ComfyUI and Figma do it; a press that never moved
+  past one notch is a click on empty ground and drops the selection, with the viewport staying put. Shift + drag keeps the additive
+  meaning - the box joins the selection as it was at the press. Panning now comes only from the middle button, Space and Ctrl (the
+  temporary grab hand), and on a touchscreen the blank drag keeps panning - there is no grab key to hold there, so the finger draws
+  no marquee. The stage shows a crosshair while a marquee is drawn, and the box follows the finger while the selection
+  only changes after the drag crosses the click gate. Covered by the 选中：框选、键盘、删除 and 视口：缩放、平移、网格、背景
+  blocks in `studio/tests/js/canvas-page.test.mjs`.
+
 - **Canvas toolbar: one row of icon buttons, and the two blank buttons are gone.** 撤销 / 重做 rendered as empty boxes - `undo` /
   `redo` had no icon in `icons.js`, so the button was only a border. The bar now runs as icon buttons only - every label
   lives in the tooltip and the `aria-label` - in three groups split by a thin divider (canvas / nodes and clipboard /
@@ -251,6 +301,10 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   recipes and existing 配方 assets are untouched.
 
 ### Fixed
+- **The empty seed box on the 出视频 page is a random seed, not seed 0.** The 出视频 page and the canvas 出片 node both send `-1`
+  when the seed box is left empty, and `resolve_video_params` clamped every negative seed to `0`: clicking 开始出视频 twice with
+  the same parameters gave back the identical clip. A negative seed now draws a fresh one, and a seed you typed stays exactly
+  that number. Covered by the seed cases in `studio/tests/test_h3_video_gen.py`.
 - **Canvas keyboard shortcuts fire in the window.** Ctrl+Z, Ctrl+Shift+Z, Ctrl+Y, Ctrl+D, Ctrl+C, Ctrl+X, Ctrl+V and
   Ctrl+A on the 画布 page did nothing: the app shell's clipboard passthrough (`initClipboardKeys`) lifts those keys off
   the event path in the document capture phase with `stopImmediatePropagation`, while the canvas gesture handler

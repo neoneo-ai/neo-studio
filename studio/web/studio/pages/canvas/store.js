@@ -6,7 +6,7 @@ import { t } from "../../../js/core/i18n.js";
 import { MAX_SCALE, MIN_SCALE } from "./geometry.js";
 
 /** @typedef {{x: number, y: number}} Position */
-/** @typedef {{id: string, type: "image" | "text" | "gen", title: string, position: Position, width: number, height: number, metadata: Object}} CanvasNodeData */
+/** @typedef {{id: string, type: "image" | "text" | "gen" | "video" | "recipe", title: string, position: Position, width: number, height: number, metadata: Object}} CanvasNodeData */
 /** @typedef {{id: string, fromNodeId: string, toNodeId: string}} CanvasConnection */
 /** @typedef {{id: string, title: string, nodes: CanvasNodeData[], connections: CanvasConnection[], viewport: {x: number, y: number, k: number}, backgroundMode: string}} CanvasState */
 
@@ -15,6 +15,9 @@ export const NODE_SPECS = {
     image: { width: 340, height: 240, title: "图片" },
     text: { width: 340, height: 240, title: "提示词" },
     gen: { width: 320, height: 208, title: "生成" },
+    video: { width: 340, height: 240, title: "视频" },
+    // 配方卡是整页最大的一张：段列表、参考素材、锚点与生成参数都铺在这一张上
+    recipe: { width: 386, height: 324, title: "配方闭环" },
 };
 
 /** 建一个节点（上游 createCanvasNode）：图片节点带素材坐标，文本节点带正文 */
@@ -62,7 +65,7 @@ export function serializeCanvas(state) {
 }
 
 /** 读盘形状：缺字段回默认值、未知键整份忽略 —— 旧版页面写的文件与新版页面写的文件都要打得开。
- *  生成节点（type: "gen"）落在旧版页面里会回落成提示词节点，metadata 整份留着，写回不丢参数 */
+ *  新版写的生成 / 视频 / 配方节点落在旧版页面里会回落成提示词节点，metadata 整份留着，写回不丢参数 */
 export function readCanvas(data) {
     const payload = data && typeof data === "object" ? data : {};
     const nodes = [];

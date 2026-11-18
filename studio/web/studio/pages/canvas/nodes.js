@@ -7,26 +7,38 @@ import { setIcon, setIconLabel } from "../../../js/core/icons.js";
 /** 节点 DOM（上游 canvas-node.tsx 的 vanilla 版）：内容铺满整张，右上角是附加操作栏，左上角是「主图」徽标，
  *  左右两个接线点、四个角上的尺寸柄。图片节点是 <img>（走 Gallery 缩略图，取不到落占位图），提示词节点是
  *  <textarea>，正文存在 metadata.content —— 图片节点上的坐标就是 Gallery 的 filename + subfolder */
-export function nodeElement(node, { $el, onText, onPick, onHero, onDelete, onCopy,
-    genState, genControls, genModel }) {
+export function nodeElement(node, { $el, onText, onPick, onHero, onDelete, onCopy, onExpand,
+    genState, genControls, genModel, recipeState, recipeControls, recipeMeta, carView }) {
     const gen = node.type === "gen" ? (genState?.(node) || {}) : null;
+    const recipe = node.type === "recipe" ? (recipeState?.(node) || {}) : null;
+    const busy = (gen || recipe)?.status === "queued" || (gen || recipe)?.status === "running";
     const nodeEl = $el("div", {
         className: "ns-canvas-node "
             + (node.type === "image" ? "ns-canvas-node-image"
-                : node.type === "gen" ? "ns-canvas-node-gen" : "ns-canvas-node-text")
-            + (gen && (gen.status === "queued" || gen.status === "running") ? " ns-canvas-node-run" : ""),
+                : node.type === "gen" ? "ns-canvas-node-gen"
+                : node.type === "video" ? "ns-canvas-node-video"
+                : node.type === "recipe" ? "ns-canvas-node-recipe" : "ns-canvas-node-text")
+            + (busy ? " ns-canvas-node-run" : "")
+            + (node.metadata.disabled ? " ns-canvas-node-off" : ""),
         dataset: { nodeId: node.id },
     });
     nodeEl.append(
         node.type === "image" ? nodeImage(node, $el)
+            : node.type === "video" ? nodeVideo(node, $el)
             : node.type === "gen" ? nodeGen(node, $el, { gen, genControls, genModel })
+            : node.type === "recipe" ? (node.metadata.train === 1
+                ? nodeCar(node, $el, { recipe, carView, recipeControls })
+                : nodeRecipe(node, $el, { recipe, recipeControls, recipeMeta }))
             : nodeText(node, $el, onText),
-        nodeBar(node, { $el, onPick, onHero, onDelete, onCopy }),
+        nodeBar(node, { $el, onPick, onHero, onDelete, onCopy, onExpand }),
         $el("div", { className: "ns-canvas-handle ns-canvas-handle-left", dataset: { handle: "target" } }),
         $el("div", { className: "ns-canvas-handle ns-canvas-handle-right", dataset: { handle: "source" } }),
     );
     if (node.metadata.hero) {
         nodeEl.appendChild($el("span", { className: "ns-canvas-node-tag", textContent: t("主图") }));
+    }
+    if (node.metadata.disabled) {
+        nodeEl.appendChild($el("span", { className: "ns-canvas-node-tag", textContent: t("已停用") }));
     }
     for (const corner of ["top-left", "top-right", "bottom-left", "bottom-right"]) {
         nodeEl.appendChild($el("div", { className: `ns-canvas-resize ns-canvas-resize-${corner}`, dataset: { corner } }));
@@ -35,9 +47,23 @@ export function nodeElement(node, { $el, onText, onPick, onHero, onDelete, onCop
 }
 
 /** 图片节点的内容：整张就是那张图，缩略图缓存不在（刚生成、桌面端离线、素材被移走）时回原图那一条，
- *  原图也没有才落占位图 */
+ *  原图也没有才落占位图。带 asset 的那一张是「展开配方」铺进来的配方素材（在配方 assets/ 里，
+ *  不在 ComfyUI 的 Output 目录），读图走配方那两条路由 */
 function nodeImage(node, $el) {
     const filename = node.metadata.filename || "";
+    const asset = node.metadata.asset || "";
+    const recipe = node.metadata.recipe || "";
+    if (asset && recipe) {
+        return $el("img", {
+            className: "ns-canvas-node-img",
+            src: `/rs_recipes/thumbnail?recipe=${encodeURIComponent(recipe)}`
+                + `&file=${encodeURIComponent(asset)}&dir=assets&size=640`,
+            alt: asset,
+            draggable: "false",
+            onerror: (e) => { e.target.src = `/rs_recipes/asset?recipe=${encodeURIComponent(recipe)}`
+                + `&file=${encodeURIComponent(asset)}&dir=assets`; },
+        });
+    }
     return $el("img", {
         className: "ns-canvas-node-img",
         src: filename
@@ -53,6 +79,22 @@ function nodeImage(node, $el) {
                     + `&subfolder=${encodeURIComponent(node.metadata.subfolder || "")}&type=output`)
                 : "/neo_gallery/placeholder.png";
         },
+    });
+}
+
+/** 视频节点的内容：整张就是那一段片（Output 目录里的文件，播控交浏览器自己）。没落上片的是一张空位 ——
+ *  出片时先按连线顺序填这些空位，多出来的才新建节点（见 page.js 的 applyGenResult） */
+function nodeVideo(node, $el) {
+    const filename = node.metadata.filename || "";
+    if (!filename) {
+        return $el("div", { className: "ns-canvas-node-video-empty", textContent: t("空视频位") });
+    }
+    return $el("video", {
+        className: "ns-canvas-node-video-el",
+        src: `/neo_gallery/video?filename=${encodeURIComponent(filename)}`
+            + `&subfolder=${encodeURIComponent(node.metadata.subfolder || "")}`,
+        controls: "", muted: "", playsinline: "", preload: "metadata", draggable: "false",
+        title: filename,
     });
 }
 
@@ -75,26 +117,73 @@ function nodeText(node, $el, onText) {
 function nodeGen(node, $el, { gen, genControls, genModel }) {
     const st = gen || {};
     const failed = st.status === "failed";
+    // 串联的车尾跑的是链上一列段，那一行数的是段数，不是某一发的步数
+    const stepLabel = st.kind === "chain" ? "串联出片 {done}/{total}" : "生成中 {done}/{total}";
     const status = failed ? (st.error || t("出图失败"))
-        : st.status === "running" ? (st.total ? tf("生成中 {done}/{total}", { done: st.done, total: st.total }) : t("生成中"))
+        : st.status === "running" ? (st.total ? tf(stepLabel, { done: st.done, total: st.total }) : t("生成中"))
         : st.status === "queued" ? t("排队中") : "";
     return $el("div", { className: "ns-canvas-gen" }, [
         $el("div", { className: "ns-canvas-gen-ctl" }, genControls?.(node) || []),
         $el("div", { className: "ns-canvas-gen-status" + (failed ? " ns-canvas-gen-fail" : ""), textContent: status }),
-        $el("div", { className: "ns-canvas-gen-model", textContent: genModel?.(node.metadata.skill_id) || "" }),
+        $el("div", { className: "ns-canvas-gen-model", textContent: genModel?.(node) || "" }),
     ]);
 }
 
-/** 附加操作栏：图片节点多一枚主图钮（整片只留一枚），没填上图的多一枚「选图」，复制与删除每类节点都有。
- *  这一排默认不出现，节点被选中时才浮出来；点了算 click，起手不拖（见 interactions.js） */
-function nodeBar(node, { $el, onPick, onHero, onDelete, onCopy }) {
+/** 配方闭环节点的表面：配方、段、锚点与出片铺在节点上（控件由 gen.js 建，同一套胶囊与状态行），
+ *  下面两行是这一发的状态与配方概览。产物是一段片，落进下游的视频节点 */
+function nodeRecipe(node, $el, { recipe, recipeControls, recipeMeta }) {
+    const st = recipe || {};
+    const failed = st.status === "failed";
+    const status = failed ? (st.error || t("出片失败"))
+        : st.status === "running" ? (st.total ? tf("生成中 {done}/{total}", { done: st.done, total: st.total }) : t("生成中"))
+        : st.status === "queued" ? t("排队中") : "";
+    return $el("div", { className: "ns-canvas-gen" }, [
+        $el("div", { className: "ns-canvas-gen-ctl" }, recipeControls?.(node) || []),
+        $el("div", { className: "ns-canvas-gen-status" + (failed ? " ns-canvas-gen-fail" : ""), textContent: status }),
+        $el("div", { className: "ns-canvas-gen-model", textContent: recipeMeta?.(node) || "" }),
+    ]);
+}
+
+/** 串联的车厢：这一段显示什么与停不停用，就这些。出片与整列共用的锚点 / 连续性 / 上下文帧 / 步数 / 种子
+ *  都在它那一列的车尾那台生成节点上，这一段在跑时状态行跟着那一发的进度走 */
+function nodeCar(node, $el, { recipe, carView, recipeControls }) {
+    const st = recipe || {};
+    const view = carView?.(node) || {};
+    const failed = st.status === "failed";
+    const status = failed ? (st.error || t("出片失败"))
+        : st.status === "running" ? (st.total ? tf("生成中 {done}/{total}", { done: st.done, total: st.total }) : t("生成中"))
+        : st.status === "queued" ? t("排队中") : "";
+    return $el("div", { className: "ns-canvas-car" }, [
+        $el("div", { className: "ns-canvas-car-head" }, [
+            $el("span", { className: "ns-canvas-car-seg", textContent: tf("段 {n}", { n: Number(node.metadata.segment) + 1 }) }),
+            $el("span", { className: "ns-canvas-car-info", textContent: view.head || "" }),
+            ...(recipeControls?.(node) || []),
+        ]),
+        $el("div", { className: "ns-canvas-recipe-prompt" + (view.fromCanvas ? " ns-canvas-recipe-on" : "") }, [
+            $el("span", { className: "ns-canvas-recipe-src", textContent: view.fromCanvas ? t("画布") : t("配方") }),
+            $el("span", { className: "ns-canvas-recipe-text", textContent: view.prompt || "" }),
+        ]),
+        $el("div", { className: "ns-canvas-car-refs" }, [
+            ...(view.refs || []),
+            $el("span", { className: "ns-canvas-recipe-count", textContent: tf("{n} 张参考素材", { n: view.count || 0 }) }),
+        ]),
+        $el("div", { className: "ns-canvas-gen-status" + (failed ? " ns-canvas-gen-fail" : ""), textContent: status }),
+    ]);
+}
+
+/** 附加操作栏：图片节点多一枚主图钮（整片只留一枚），没填上图的多一枚「选图」，配方节点最前一枚「展开配方」，
+ *  复制与删除每类节点都有。这一排默认不出现，节点被选中时才浮出来；点了算 click，起手不拖（见 interactions.js） */
+function nodeBar(node, { $el, onPick, onHero, onDelete, onCopy, onExpand }) {
     const act = (name, label, fn) => {
         const btn = $el("button", { className: "ns-canvas-node-act", type: "button",
             title: label, "aria-label": label, dataset: { nodeAct: name }, onclick: fn });
-        setIcon(btn, name === "delete" ? "circle-x" : name === "copy" ? "copy" : "circle-check");
+        setIcon(btn, name === "delete" ? "circle-x" : name === "copy" ? "copy"
+            : name === "expand" ? "maximize" : "circle-check");
         return btn;
     };
     const kids = [];
+    // 车厢是展开出来的那一段，不再给它「展开配方」那一枚：点了是把同一份配方再铺一遍
+    if (node.type === "recipe" && node.metadata.train !== 1) kids.push(act("expand", t("展开配方"), () => onExpand(node)));
     if (node.type === "image") {
         const heroLabel = node.metadata.hero ? t("取消主图") : t("设为主图");
         const hero = act("hero", heroLabel, () => onHero(node));
@@ -114,9 +203,10 @@ function nodeBar(node, { $el, onPick, onHero, onDelete, onCopy }) {
 
 /** 整层节点重画：拖动与缩放不走这一条（走 applyNodeGeometry），换画布、增删节点才走 */
 export function renderNodes({ nodeLayer, links, hint, nodes, selectedNodeIds, selectedConnectionId, $el, onText,
-    onPick, onHero, onDelete, onCopy, genState, genControls, genModel }) {
+    onPick, onHero, onDelete, onCopy, onExpand, genState, genControls, genModel, recipeState, recipeControls,
+    recipeMeta, carView }) {
     nodeLayer.replaceChildren(...nodes.map((node) => nodeElement(node, { $el, onText, onPick, onHero, onDelete, onCopy,
-        genState, genControls, genModel })));
+        onExpand, genState, genControls, genModel, recipeState, recipeControls, recipeMeta, carView })));
     // 几何要在元素挂上世界层之后再落：nodeElement 里查不到还没挂上的元素
     for (const node of nodes) applyNodeGeometry(nodeLayer, node);
     hint.style.display = nodes.length ? "none" : "";
