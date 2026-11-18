@@ -2,12 +2,14 @@
 //
 // 这一页管装配与生命周期：工具条、视口、页面自己的 state 与落盘，以及装配层交来的三样。
 // 几何在 geometry.js，数据契约与 /neo_canvas/* 读写在 store.js，节点 DOM 在 nodes.js，
-// 连线画在 connections.js，平移/拖动/框选/拉线这些手势在 interactions.js（手势状态不在这一页）。
+// 连线画在 connections.js，平移/拖动/框选/拉线这些手势在 interactions.js（手势状态不在这一页），
+// 撤销重做栈在 history.js（只记节点与连线，视口与背景不进栈）。
 // 引擎层的出处与上游对应关系写在 geometry.js 头上，LICENSES/infinite-canvas.txt 是那份授权全文。
-import { t } from "../../../js/core/i18n.js";
+import { t, tf } from "../../../js/core/i18n.js";
 import { setIcon, setIconLabel } from "../../../js/core/icons.js";
 import { addConnection, gridGeometry, MAX_SCALE, MIN_SCALE, nodeBounds, placeGrid, removeNodes, screenToCanvas, zoomViewportAt } from "./geometry.js";
-import { BACKGROUND_MODES, createCanvasNode, createCanvasStore, NODE_SPECS, readCanvas } from "./store.js";
+import { BACKGROUND_MODES, createCanvasNode, createCanvasStore, duplicateNodes, NODE_SPECS, readCanvas } from "./store.js";
+import { createHistory, snapshotCanvas } from "./history.js";
 import { applyNodeGeometry as paintNodeGeometry, renderNodes as renderNodeLayer, paintSelection as paintNodeSelection } from "./nodes.js";
 import { renderConnections as renderLinkLayer, renderActiveConnection as paintActiveLine } from "./connections.js";
 import { attachCanvasInteractions } from "./interactions.js";
@@ -26,6 +28,10 @@ export function createCanvasPage({ $el, api, toast, openMaterial }) {
     let view = null;               // build 之后才有：DOM 引用与每帧要改的那几层
     let ready = null;              // 首次进页把上一张画布读进来的那条 promise
     const store = createCanvasStore({ api });
+    const history = createHistory();
+    let textRun = null;            // 正在连打正文的那张节点 id：同一段连打只压一次栈
+    let clipboard = null;          // Ctrl+C / Ctrl+X 收下来的那一批（含它们内部的连线）：切到别的画布也能粘回来
+    let pasteStep = 0;             // 连按 Ctrl+V 时一批比一批偏开，不在同一处叠成一叠
 
     // ====== 视图 ======
     function buildCanvas(el) {
@@ -45,11 +51,13 @@ export function createCanvasPage({ $el, api, toast, openMaterial }) {
         stage.append(grid, world, active, hint);
         page.append(bar.root, stage);
         el.appendChild(page);
-        view = { el, page, stage, grid, world, links, nodeLayer, active, hint, save: bar.save, zoom: bar.zoom, select: bar.select };
+        view = { el, page, stage, grid, world, links, nodeLayer, active, hint, save: bar.save, zoom: bar.zoom,
+            select: bar.select, undo: bar.undo, redo: bar.redo };
         attachCanvasInteractions({ stage, view, host });
         applyViewport();
         renderNodes();
         renderConnections();
+        refreshHistory();
         ready = loadProjects();
         return ready;
     }
@@ -69,6 +77,19 @@ export function createCanvasPage({ $el, api, toast, openMaterial }) {
         };
         const zoom = $el("span", { className: "ns-canvas-zoom", textContent: "100%" });
         const save = $el("span", { className: "ns-canvas-save", textContent: t("已保存") });
+        // 键盘快捷键写进 tooltip：桌面上这三条没有别的入口可发现，aria-label 保持干净的名字
+        const mkHint = (label, hint, name, fn) => {
+            const btn = mk(label, name, fn);
+            btn.title = `${label}（${hint}）`;
+            return btn;
+        };
+        const undo = mkHint(t("撤销"), "Ctrl+Z", "undo", () => undoEdit());
+        const redo = mkHint(t("重做"), "Ctrl+Shift+Z", "redo", () => redoEdit());
+        const dup = mkLabel(t("复制选中"), "copy", () => duplicateSelection());
+        dup.title = `${t("复制选中")}（Ctrl+D）`;
+        const cut = mkHint(t("剪切选中"), "Ctrl+X", "cut", () => cutSelection());
+        const copy = mkHint(t("复制"), "Ctrl+C", "copy", () => copySelection());
+        const paste = mkHint(t("粘贴"), "Ctrl+V", "paste", () => pasteClipboard());
         const root = $el("div", { className: "ns-canvas-bar" }, [
             select,
             mk(t("新建画布"), "plus", () => createProject()),
@@ -77,6 +98,12 @@ export function createCanvasPage({ $el, api, toast, openMaterial }) {
             $el("span", { className: "ns-canvas-bar-gap" }),
             mkLabel(t("加图片"), "image", () => pickImage()),
             mkLabel(t("加提示词"), "list", () => addNode("text")),
+            dup,
+            cut,
+            copy,
+            paste,
+            undo,
+            redo,
             $el("span", { className: "ns-canvas-bar-gap" }),
             mk(t("缩小"), "minimize", () => zoomStep(-1)),
             zoom,
@@ -85,13 +112,15 @@ export function createCanvasPage({ $el, api, toast, openMaterial }) {
             mkLabel(t("背景"), "eye", () => cycleBackground()),
             save,
         ]);
-        return { root, select, zoom, save };
+        return { root, select, zoom, save, undo, redo };
     }
 
     /** 视口落到 DOM：世界层一整层 transform，缩放与平移只改这一句（上游同一形状） */
     function applyViewport() {
         if (!view) return;
         view.world.style.transform = `translate(${state.viewport.x}px, ${state.viewport.y}px) scale(${state.viewport.k})`;
+        // 浮出栏与徽标住在世界层里，按 1/zoom 反缩放才不在缩小时缩成按不中的小点
+        view.world.style.setProperty("--ns-canvas-inv", String(1 / state.viewport.k));
         const grid = gridGeometry(state.viewport);
         view.grid.style.backgroundSize = grid.backgroundSize;
         view.grid.style.backgroundPosition = grid.backgroundPosition;
@@ -106,7 +135,8 @@ export function createCanvasPage({ $el, api, toast, openMaterial }) {
         if (!view) return;
         renderNodeLayer({ nodeLayer: view.nodeLayer, links: view.links, hint: view.hint, nodes: state.nodes,
             selectedNodeIds, selectedConnectionId, $el, onText,
-            onPick: pickInto, onHero: (node) => toggleHero(node.id), onDelete: (node) => deleteNode(node.id) });
+            onPick: pickInto, onHero: (node) => toggleHero(node.id), onDelete: (node) => deleteNode(node.id),
+            onCopy: (node) => duplicateIds([node.id]) });
     }
 
     function renderConnections() {
@@ -129,8 +159,13 @@ export function createCanvasPage({ $el, api, toast, openMaterial }) {
         paintNodeGeometry(view.nodeLayer, node);
     }
 
-    /** 提示词节点正文改一下：正文存在 metadata.content，改完就要落盘 */
+    /** 提示词节点正文改一下：正文存在 metadata.content，改完就要落盘。同一段连打只压一次栈 ——
+     *  撤销一次退掉整段，不是逐字退 */
     function onText(node, content) {
+        if (textRun !== node.id) {
+            history.push(snapshotCanvas(state));
+            textRun = node.id;
+        }
         node.metadata = { ...node.metadata, content };
         markDirty();
     }
@@ -202,10 +237,137 @@ export function createCanvasPage({ $el, api, toast, openMaterial }) {
         moveSelected,
         applyResize,
         connect,
+        beginEdit,
+        duplicateSelection,
+        copySelection,
+        pasteClipboard,
+        cutSelection,
+        selectAllNodes,
+        undoEdit,
+        redoEdit,
     };
+
+    // ====== 撤销 / 重做 / 复制 ======
+    /** 一次改动落笔之前压一份栈：拖动与缩放在真正动起来那一帧由手势层交这一条，正文由 onText 管运行边界 */
+    function beginEdit() {
+        history.push(snapshotCanvas(state));
+        textRun = null;
+        refreshHistory();
+    }
+
+    function refreshHistory() {
+        if (!view) return;
+        view.undo.disabled = !history.canUndo();
+        view.redo.disabled = !history.canRedo();
+    }
+
+    /** 整份节点与连线换回去：视口与背景不动。选中里被回退删掉的那几张要一起收掉 */
+    function restoreCanvas(snap) {
+        state = { ...state, nodes: snap.nodes, connections: snap.connections };
+        const ids = new Set(snap.nodes.map((node) => node.id));
+        const connIds = new Set(snap.connections.map((conn) => conn.id));
+        selectedNodeIds = new Set([...selectedNodeIds].filter((id) => ids.has(id)));
+        if (!connIds.has(selectedConnectionId)) selectedConnectionId = null;
+        textRun = null;
+        renderNodes();
+        renderConnections();
+        markDirty();   // 回退也是一次改动：要落盘，否则刷新页面又回原样
+    }
+
+    function undoEdit() {
+        const before = history.undo(snapshotCanvas(state));
+        if (before) restoreCanvas(before);
+    }
+
+    function redoEdit() {
+        const after = history.redo(snapshotCanvas(state));
+        if (after) restoreCanvas(after);
+    }
+
+    /** 复制选中的那批（Ctrl+D 与工具条那枚同一条）：没选中要先说清楚，不静默什么都不做 */
+    function duplicateSelection() {
+        if (!selectedNodeIds.size) { toast(t("先选中要复制的节点"), "info"); return; }
+        duplicateIds([...selectedNodeIds]);
+    }
+
+    /** 复制那一批节点：副本偏移 36 落在旁边，选中落到副本上（操作栏上的复制钮就是单张这一条） */
+    function duplicateIds(ids) {
+        beginEdit();
+        const dup = duplicateNodes(state.nodes, state.connections, ids);
+        state = { ...state, nodes: [...state.nodes, ...dup.nodes], connections: [...state.connections, ...dup.connections] };
+        selectedNodeIds = new Set(dup.ids);
+        selectedConnectionId = null;
+        renderNodes();
+        renderConnections();
+        markDirty();
+        toast(t("已复制选中的节点"), "success");
+    }
+
+    /** Ctrl+C / Ctrl+X 共用那一条：选中那批连它们内部的连线一起收进剪贴板。深拷贝一份，
+     *  之后原节点怎么改都不影响这一份；切到另一张画布按 Ctrl+V 就是把它搬过去 */
+    function snapshotSelection() {
+        if (!selectedNodeIds.size) { toast(t("先选中要复制的节点"), "info"); return 0; }
+        const ids = [...selectedNodeIds];
+        clipboard = {
+            nodes: structuredClone(state.nodes.filter((node) => ids.includes(node.id))),
+            connections: structuredClone(state.connections
+                .filter((c) => ids.includes(c.fromNodeId) && ids.includes(c.toNodeId))),
+        };
+        pasteStep = 0;
+        return ids.length;
+    }
+
+    function copySelection() {
+        const n = snapshotSelection();
+        if (n) toast(tf("已复制 {n} 个节点", { n }), "success");
+    }
+
+    /** Ctrl+X：进了剪贴板再把选中那批从这张画布上摘掉（连带两端接上的线） */
+    function cutSelection() {
+        const n = snapshotSelection();
+        if (!n) return;
+        const ids = [...selectedNodeIds];
+        beginEdit();
+        state = { ...state, ...removeNodes(state.nodes, state.connections, ids) };
+        selectedNodeIds = new Set();
+        renderNodes();
+        renderConnections();
+        markDirty();
+        toast(tf("已剪切 {n} 个节点", { n }), "success");
+    }
+
+    /** Ctrl+V：剪贴板那一批以新 id 落在看得见那一片的中心，连按一次比一批偏开 36px */
+    function pasteClipboard() {
+        if (!clipboard?.nodes.length) { toast(t("剪贴板是空的"), "info"); return; }
+        beginEdit();
+        const out = duplicateNodes(clipboard.nodes, clipboard.connections,
+            clipboard.nodes.map((node) => node.id));
+        const bounds = nodeBounds(out.nodes);
+        const center = centerWorld();
+        const cascade = 36 * (pasteStep++ % 5);   // 第一份正对中心，往后每份往右下让一格
+        const anchorX = center.x - (bounds.left + bounds.right) / 2 + cascade;
+        const anchorY = center.y - (bounds.top + bounds.bottom) / 2 + cascade;
+        for (const node of out.nodes) {
+            node.position = { x: node.position.x + anchorX, y: node.position.y + anchorY };
+        }
+        state = { ...state, nodes: [...state.nodes, ...out.nodes], connections: [...state.connections, ...out.connections] };
+        selectedNodeIds = new Set(out.ids);
+        selectedConnectionId = null;
+        renderNodes();
+        renderConnections();
+        markDirty();
+        toast(tf("已粘贴 {n} 个节点", { n: out.ids.length }), "success");
+    }
+
+    /** Ctrl+A：全选这一张画布上的节点（正文框里那一条归浏览器，见 interactions.js 的 typing 闸门） */
+    function selectAllNodes() {
+        if (!state.nodes.length) return;
+        host.setSelection(state.nodes.map((node) => node.id), null);
+    }
 
     /** 加一个节点：落点走 placeGrid，不压已有节点（拖放与「摆到画布」都从这一条进） */
     function addNode(type, at = null, metadata = {}) {
+        beginEdit();
         const spec = NODE_SPECS[type] || NODE_SPECS.text;
         const start = at ? { x: at.x - spec.width / 2, y: at.y - spec.height / 2 } : centerWorld();
         const node = createCanvasNode(type, placeGrid(state.nodes, spec, start), metadata);
@@ -220,6 +382,8 @@ export function createCanvasPage({ $el, api, toast, openMaterial }) {
 
     /** 删选中的东西：选中一条线先删线，否则删选中那批节点连带两端接上的线 */
     function deleteSelection() {
+        if (!selectedConnectionId && !selectedNodeIds.size) return;   // 没选中就不压一份空栈：撤销不该出现按了没反应的一步
+        beginEdit();
         if (selectedConnectionId) {
             state = { ...state, connections: state.connections.filter((c) => c.id !== selectedConnectionId) };
             selectedConnectionId = null;
@@ -261,6 +425,7 @@ export function createCanvasPage({ $el, api, toast, openMaterial }) {
     function setNodeMetadata(id, patch) {
         const node = state.nodes.find((n) => n.id === id);
         if (!node) return;
+        beginEdit();
         node.metadata = { ...node.metadata, ...patch };
         renderNodes();
         renderConnections();
@@ -270,13 +435,15 @@ export function createCanvasPage({ $el, api, toast, openMaterial }) {
     /** 主图整片只留一枚（与结果板同一口径）：点已为主图的那一枚就是取消 */
     function toggleHero(id) {
         const on = !(state.nodes.find((n) => n.id === id)?.metadata.hero);
+        beginEdit();
         state = { ...state, nodes: state.nodes.map((n) => ({ ...n, metadata: { ...n.metadata, hero: n.id === id ? on : false } })) };
         renderNodes();
         markDirty();
     }
 
-    /** 节点头上的删除：只删这一张，连带两端接上的线 */
+    /** 附加操作栏里的删除：只删这一张，连带两端接上的线 */
     function deleteNode(id) {
+        beginEdit();
         state = { ...state, ...removeNodes(state.nodes, state.connections, [id]) };
         selectedNodeIds = new Set([...selectedNodeIds].filter((x) => x !== id));
         renderNodes();
@@ -316,18 +483,17 @@ export function createCanvasPage({ $el, api, toast, openMaterial }) {
     function connect(fromNodeId, toNodeId) {
         const next = addConnection(state.connections, state.nodes, fromNodeId, toNodeId);
         if (next.length === state.connections.length) return;   // 同方向已有这条线：静默沿用，不叠第二条
+        beginEdit();
         state = { ...state, connections: next };
         renderConnections();
         markDirty();
     }
 
-
-
-
     // ====== 落盘：改一下就存一次，攒 900ms ======
     function markDirty() {
         dirty = true;
         view.save.textContent = t("未保存");
+        refreshHistory();
         clearTimeout(saveTimer);
         saveTimer = setTimeout(saveProject, SAVE_DEBOUNCE_MS);
     }
@@ -384,6 +550,8 @@ export function createCanvasPage({ $el, api, toast, openMaterial }) {
         state = readCanvas(project);
         selectedNodeIds = new Set();
         selectedConnectionId = null;
+        history.clear();         // 上一张的改动不能撤销到这一张上来
+        refreshHistory();
         dirty = false;
         view.save.textContent = t("已保存");
         view.select.value = state.id;
@@ -400,6 +568,8 @@ export function createCanvasPage({ $el, api, toast, openMaterial }) {
             viewport: state.viewport, background_mode: state.backgroundMode });
         selectedNodeIds = new Set();
         selectedConnectionId = null;
+        history.clear();
+        refreshHistory();
         renderNodes();
         renderConnections();
         dirty = true;
@@ -455,6 +625,7 @@ export function createCanvasPage({ $el, api, toast, openMaterial }) {
             pool.push(node);
             placed.push(node);
         }
+        beginEdit();
         state = { ...state, nodes: [...state.nodes, ...placed] };
         selectedNodeIds = new Set(placed.map((node) => node.id));
         selectedConnectionId = null;

@@ -332,7 +332,8 @@ js_api（`check_setup` / `pick_root` / `pick_python` / `start_setup`），根目
 - 原生复制按键在窗口显示后补开：`enable_copy_keys` 把 CoreWebView2 的 `AreBrowserAcceleratorKeysEnabled` 置真，
   Ctrl+C / Ctrl+V / Ctrl+X / Ctrl+A / Ctrl+Z / Ctrl+Y 不靠开发模式就能用。这几键在页面侧由
   `initClipboardKeys`（`studio/web/studio/studio-app.js`）在 capture 相位摘走，注入的那一套吞键 handler 收不到事件；
-  刷新键不在放行名单里，仍由 `initReloadHotkey` 接管。
+  摘走用的是 `stopImmediatePropagation`，事件到不了 document 以下与 window 的冒泡相位，画布页的键盘手势因此挂在
+  `window` 的 capture 相位（`pages/canvas/interactions.js`）才收得到这几键。刷新键不在放行名单里，仍由 `initReloadHotkey` 接管。
 - `http://127.0.0.1` 不是安全上下文，`navigator.clipboard` 不存在。智能体对话页一轮只放一枚复制钮
   （`mkCopyBtn`），钉在最终回答正文之后：钮面只有 Cline 那枚叠角方块图标（inline SVG），一句文案都不写、
   连 tooltip 都没有；点击走 `navigator.clipboard`，没有就退到 `execCommand`，成功换对勾、两条路都不通换叉，

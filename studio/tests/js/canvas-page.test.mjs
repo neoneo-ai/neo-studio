@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
 import { test, describe } from "node:test";
+import { fileURLToPath } from "node:url";
 import { resetEnv, mockRoute, jsonResponse, flush, click, setConfirmAnswer, dialogs } from "./setup.mjs";
+
+const webDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../web");
 
 // 引擎层纯函数在 pages/canvas/geometry.js，数据契约在 pages/canvas/store.js，页面在 pages/canvas/page.js：
 // 模块级没有可变状态，跨用例不串味
@@ -501,7 +506,7 @@ describe("canvas-page 页面", () => {
     test("空画布有提示，工具条上的动作一个不缺", async () => {
       const { view } = await makePage();
       assert.ok(view.hint.textContent.includes("把图拖进来"));
-      for (const label of ["新建画布", "重命名", "删除画布", "加图片", "加提示词", "适应内容"]) {
+      for (const label of ["新建画布", "重命名", "删除画布", "加图片", "加提示词", "复制选中", "撤销", "重做", "适应内容"]) {
         assert.ok(view.bar.querySelector(`[aria-label="${label}"]`), label);
       }
     });
@@ -525,15 +530,18 @@ describe("canvas-page 页面", () => {
       assert.equal(view.save.textContent, "未保存");
       assert.deepEqual(view.pos(), [[CENTER.x, CENTER.y]]);
     });
-    test("从正文框起手不拖节点（打字优先）", async () => {
-      const { view, pos } = await makePage();
+    test("正文框起手是选中这一张：短距离选字不动节点，拖过一截才挪走", async () => {
+      const { view, page } = await makePage();
       click(view.button("加提示词"));
-      const before = pos();
       const ta = view.nodeLayer.querySelector("textarea");
       fire(ta, "pointerdown", { clientX: CENTER.x, clientY: CENTER.y });
-      fire(window, "pointermove", { clientX: CENTER.x + 60, clientY: CENTER.y + 60 });
+      fire(window, "pointermove", { clientX: CENTER.x + 5, clientY: CENTER.y + 3 });
+      assert.deepEqual(view.pos(), [[CENTER.x, CENTER.y]], "正文里短距离是选字，节点不该跟着走");
+      fire(window, "pointermove", { clientX: CENTER.x + 90, clientY: CENTER.y + 70 });
+      assert.deepEqual(view.pos(), [[CENTER.x + 90, CENTER.y + 70]], "拖过一截就是拖节点");
       fire(window, "pointerup", {});
-      assert.deepEqual(pos(), before);
+      assert.equal(page.current().nodes[0].position.x, CENTER.x + 90);
+      assert.equal(lit(view), 1, "从正文框起手要把这一张选中");
     });
     test("加图片节点落在视口中心，第二个不压着第一个", async () => {
       const { view } = await makePage();
@@ -979,7 +987,7 @@ describe("canvas-page 页面", () => {
       assert.equal([...view.nodeLayer.children].filter((el) => el.querySelector(".ns-canvas-node-act-on")).length, 0);
     });
 
-    test("节点头上的删除只删这一张，连带两端接上的线", async () => {
+    test("附加操作栏里的删除只删这一张，连带两端接上的线", async () => {
       const { view, page } = await makePage(PAIR_WITH_LINK());
       assert.equal(view.links.querySelectorAll(".ns-canvas-line").length, 1);
       click(nodeAct(view, "n-a", "delete"));
@@ -989,13 +997,380 @@ describe("canvas-page 页面", () => {
       assert.equal(view.links.querySelectorAll(".ns-canvas-line").length, 0);
     });
 
-    test("节点头上的钮起手不拖节点", async () => {
+    test("附加操作栏上的钮起手不拖节点", async () => {
       const { view, pos } = await makePage(PAIR_WITH_LINK());
       const before = pos();
       fire(nodeAct(view, "n-a", "hero"), "pointerdown", { clientX: 180, clientY: 140, button: 0 });
       fire(window, "pointermove", { clientX: 320, clientY: 240 });
       fire(window, "pointerup", {});
-      assert.deepEqual(pos(), before, "头部钮起手不能把整张节点拖走");
+      assert.deepEqual(pos(), before, "操作栏上的钮起手不能把整张节点拖走");
+    });
+  });
+
+  describe("节点内容铺满与选中才出的操作栏", () => {
+    test("节点没有标题栏：内容与操作栏直接住在节点里", async () => {
+      const { view } = await makePage(PAIR_WITH_LINK());
+      click(view.button("加提示词"));
+      for (const el of [...view.nodeLayer.children]) {
+        assert.equal(el.querySelector(".ns-canvas-node-head"), null, "节点不铺标题栏");
+        assert.equal(el.querySelector(".ns-canvas-node-title"), null, "也不铺标题文字");
+        assert.ok(el.children[0].matches(".ns-canvas-node-img, .ns-canvas-node-textarea"), "第一层就是内容");
+        assert.ok(el.children[1].classList.contains("ns-canvas-node-bar"), "操作栏直接住在节点里");
+      }
+    });
+    test("操作栏默认不出现，节点选中时那条 CSS 规则才把它铺出来", () => {
+      const css = fs.readFileSync(path.join(webDir, "studio", "style.css"), "utf8");
+      assert.match(css, /\.ns-canvas-node-bar \{[^}]*display: none/);
+      assert.match(css, /\.ns-canvas-node-on \.ns-canvas-node-bar \{ display: flex/);
+      assert.match(css, /\.ns-canvas-node-img \{[^}]*inset: 0/);
+      assert.match(css, /\.ns-canvas-node-textarea \{[^}]*inset: 0/);
+    });
+    test("主图徽标不住操作栏里：没选中也看得见那枚「主图」", async () => {
+      const { view } = await makePage(PAIR_WITH_LINK());
+      click(nodeAct(view, "n-a", "hero"));
+      const tag = view.nodeEl("n-a").querySelector(".ns-canvas-node-tag");
+      assert.ok(tag.textContent.includes("主图"));
+      assert.ok(!tag.closest(".ns-canvas-node-bar"), "徽标不住在选中才出现的那一层里");
+      assert.equal([...view.nodeLayer.children].filter((el) => el.querySelector(".ns-canvas-node-tag")).length, 1);
+    });
+    test("操作栏上的复制只复制这一张，选中落到副本上", async () => {
+      const { view, page } = await makePage(PAIR_WITH_LINK());
+      selectNode(view, "n-a");
+      click(nodeAct(view, "n-a", "copy"));
+      const copy = page.current().nodes.at(-1);
+      assert.ok(copy.id !== "n-a", "副本是新 id");
+      assert.deepEqual([copy.position.x, copy.position.y], [46, 56], "副本偏移 36 落在旁边");
+      assert.equal(copy.metadata.filename, "a.png", "图坐标跟着副本走");
+      assert.equal(lit(view), 1);
+      assert.ok(view.nodeEl(copy.id).classList.contains("ns-canvas-node-on"), "选中要落到副本上");
+    });
+  });
+
+  describe("撤销重做与复制", () => {
+    const undo = () => fire(window, "keydown", { key: "z", ctrlKey: true });
+    const redoShift = () => fire(window, "keydown", { key: "z", ctrlKey: true, shiftKey: true });
+    const redoKey = () => fire(window, "keydown", { key: "y", ctrlKey: true });
+    const copyKey = () => fire(window, "keydown", { key: "d", ctrlKey: true });
+    const dragBy = (view, id, dx, dy) => {
+      const el = view.nodeEl(id);
+      const cx = parseFloat(el.style.left) + parseFloat(el.style.width) / 2;
+      const cy = parseFloat(el.style.top) + parseFloat(el.style.height) / 2;
+      fire(el, "pointerdown", { clientX: cx, clientY: cy, button: 0 });
+      fire(window, "pointermove", { clientX: cx + dx, clientY: cy + dy });
+      fire(window, "pointerup", {});
+    };
+
+    test("加一个节点：Ctrl+Z 退掉，Ctrl+Shift+Z 与 Ctrl+Y 都摆回来，回退要落盘", async () => {
+      const { view, page, env } = await makePage();
+      click(view.button("加提示词"));
+      undo();
+      assert.equal(page.current().nodes.length, 0);
+      assert.equal(view.nodeLayer.children.length, 0, "退掉的节点要从节点层上摘下来");
+      redoShift();
+      assert.equal(page.current().nodes.length, 1, "Ctrl+Shift+Z 是重做");
+      undo();
+      redoKey();
+      assert.equal(page.current().nodes.length, 1, "Ctrl+Y 同一条重做");
+      page.flush();
+      await settle();
+      assert.equal(env.store.saved[0].nodes.length, 1, "撤销与重做都是一次改动：要落盘");
+    });
+
+    test("拖一段撤销一次就回原位（一次拖动只压一次栈）", async () => {
+      const { view, pos } = await makePage(PAIR_WITH_LINK());
+      const before = pos();
+      dragBy(view, "n-a", 60, 80);
+      assert.notDeepEqual(pos(), before);
+      undo();
+      assert.deepEqual(pos(), before);
+      undo();
+      assert.deepEqual(pos(), before, "没有下一次改动，撤销不重复吃同一次拖动");
+    });
+
+    test("删掉带连线的节点，撤销把节点与连线一起带回来", async () => {
+      const { view, page } = await makePage(PAIR_WITH_LINK());
+      click(nodeAct(view, "n-a", "delete"));
+      assert.equal(page.current().connections.length, 0);
+      undo();
+      assert.deepEqual(page.current().nodes.map((n) => n.id), ["n-a", "n-b"]);
+      assert.equal(page.current().connections.length, 1);
+      assert.equal(page.current().nodes[0].metadata.filename, "a.png", "带回来的节点要带着素材坐标");
+      assert.equal(view.links.querySelectorAll(".ns-canvas-line").length, 1);
+    });
+
+    test("撤销只回节点与连线，不动视口与背景", async () => {
+      const { view, page } = await makePage(PAIR_WITH_LINK());
+      click(view.button("加提示词"));
+      fire(view.stage, "wheel", { clientX: 600, clientY: 400, deltaY: -120 });
+      click(view.button("背景"));
+      const viewport = { ...page.current().viewport };
+      undo();
+      assert.deepEqual(page.current().viewport, viewport, "撤销不该把用户脚下的那片画面拽走");
+      assert.equal(page.current().nodes.length, 2, "加的那一个提示词节点要退掉");
+    });
+    test("正文连打一段，撤销一次退掉整段；正文框里的 Ctrl+Z 不抢", async () => {
+      const { view, page } = await makePage();
+      click(view.button("加提示词"));
+      const ta = view.nodeLayer.querySelector("textarea");
+      let typed = "";
+      for (const text of ["三段", "文字", "啊"]) { typed += text; ta.value = typed; fire(ta, "input"); }
+      assert.equal(page.current().nodes[0].metadata.content, "三段文字啊");
+      ta.focus();
+      const nodes = page.current().nodes.length;
+      fire(window, "keydown", { key: "z", ctrlKey: true });
+      assert.equal(page.current().nodes.length, nodes, "正文框里的 Ctrl+Z 归浏览器自己的文本撤销");
+      ta.blur();
+      undo();
+      assert.equal(page.current().nodes[0].metadata.content ?? "", "", "撤销一次退掉整段连打，不是逐字退");
+      assert.equal(view.nodeLayer.querySelector("textarea").value, "", "重画出来的正文框要跟着回");
+    });
+
+    test("Ctrl+D 复制选中：新 id、偏移 36 落在旁边，选中落到副本上", async () => {
+      const { view, page } = await makePage(PAIR_WITH_LINK());
+      selectNode(view, "n-a");
+      copyKey();
+      const nodes = page.current().nodes;
+      assert.equal(nodes.length, 3);
+      const copy = nodes[2];
+      assert.ok(copy.id !== "n-a" && copy.id !== "n-b");
+      assert.deepEqual([copy.position.x, copy.position.y], [10 + 36, 20 + 36]);
+      assert.deepEqual([copy.type, copy.width, copy.height, copy.title], ["image", 340, 240, "图片"]);
+      assert.equal(copy.metadata.filename, "a.png", "副本要带着素材坐标");
+      assert.equal(lit(view), 1, "选中落到副本上");
+      assert.ok(view.nodeEl(copy.id));
+      undo();
+      assert.equal(page.current().nodes.length, 2, "复制这一步也能撤销");
+    });
+
+    test("复制带上两端都在选中里的那条连线，跨出选中集的连线不带", async () => {
+      const { view, page } = await makePage(PAIR_WITH_LINK());
+      selectNode(view, "n-a");
+      copyKey();
+      const single = page.current().connections;
+      assert.equal(single.length, 1, "只复制一张时原连线不该跟着多一条");
+      assert.deepEqual([single[0].fromNodeId, single[0].toNodeId], ["n-a", "n-b"]);
+      selectNode(view, "n-a");
+      selectNode(view, "n-b", { shiftKey: true });
+      copyKey();
+      const conns = page.current().connections;
+      assert.equal(conns.length, 2, "两端都在选中里的那条线跟着复制");
+      assert.deepEqual([conns[1].fromNodeId, conns[1].toNodeId],
+        page.current().nodes.slice(3).map((n) => n.id), "副本的连线只接副本自己");
+      assert.equal(view.links.querySelectorAll(".ns-canvas-line").length, 2);
+    });
+
+    test("没选中就复制要说话；撤销与重做钮的灰态跟着栈走", async () => {
+      const { view, env } = await makePage();
+      const undoBtn = view.button("撤销"), redoBtn = view.button("重做");
+      assert.ok(undoBtn.disabled && redoBtn.disabled, "没有改动时两枚都是灰的");
+      click(view.button("复制选中"));
+      assert.ok(toastOf(env).some((m) => m.includes("先选中")));
+      click(view.button("加提示词"));
+      assert.equal(undoBtn.disabled, false, "有了改动撤销就要亮");
+      assert.equal(redoBtn.disabled, true);
+      undo();
+      assert.equal(redoBtn.disabled, false, "撤销过就能重做");
+      redoShift();
+      assert.equal(undoBtn.disabled, false);
+    });
+
+    test("切画布清栈：上一张的撤销不倒进这一张", async () => {
+      const { view, page } = await makePage(TWO_IMAGES());
+      click(view.button("加提示词"));
+      view.select.value = "canvas-0002";
+      fire(view.select, "change");
+      await settle();
+      assert.equal(page.current().nodes.length, 0);
+      assert.equal(view.button("撤销").disabled, true, "切过来就是空栈");
+      click(view.button("加提示词"));
+      undo();
+      assert.equal(page.current().nodes.length, 0, "只退这一张上的一步");
+      view.select.value = "canvas-0001";
+      fire(view.select, "change");
+      await settle();
+      undo();
+      assert.equal(page.current().nodes.length, 2, "列表里那 1 个节点 + 之前加的 1 个：甲的栈切走时已清");
+    });
+  });
+
+  describe("剪贴板（Ctrl+C / Ctrl+X / Ctrl+V / Ctrl+A）", () => {
+    const copyKey = () => fire(window, "keydown", { key: "c", ctrlKey: true });
+    const cutKey = () => fire(window, "keydown", { key: "x", ctrlKey: true });
+    const pasteKey = () => fire(window, "keydown", { key: "v", ctrlKey: true });
+    const allKey = () => fire(window, "keydown", { key: "a", ctrlKey: true });
+    const undoKey = () => fire(window, "keydown", { key: "z", ctrlKey: true });
+    const pasted = (page) => page.current().nodes.at(-1);
+
+    test("Ctrl+C 再 Ctrl+V：副本是新 id，整批落在看得见的中心，选中落到副本上", async () => {
+      const { view, page } = await makePage(PAIR_WITH_LINK());
+      selectNode(view, "n-a");
+      copyKey();
+      pasteKey();
+      const nodes = page.current().nodes;
+      assert.equal(nodes.length, 3);
+      const out = pasted(page);
+      assert.ok(out.id !== "n-a" && out.id !== "n-b", "粘贴出来的是新节点");
+      assert.deepEqual([out.position.x, out.position.y], [CENTER.x - 170, CENTER.y - 120],
+        "整批的中心对到视口中心");
+      assert.equal(out.metadata.filename, "a.png", "副本带着素材坐标");
+      assert.equal(lit(view), 1, "选中落到粘贴出来的那一批上");
+      assert.ok(view.nodeEl(out.id), "粘贴出来的节点要立刻画在节点层上");
+      undoKey();
+      assert.equal(page.current().nodes.length, 2, "粘贴这一步也能撤销");
+    });
+
+    test("连按 Ctrl+V 一次比一批往右下让 36", async () => {
+      const { view, page } = await makePage(PAIR_WITH_LINK());
+      selectNode(view, "n-a");
+      copyKey();
+      pasteKey();
+      const first = { ...pasted(page).position };
+      pasteKey();
+      const second = { ...pasted(page).position };
+      assert.deepEqual([second.x - first.x, second.y - first.y], [36, 36]);
+      assert.equal(page.current().nodes.length, 4);
+    });
+
+    test("剪贴板带着那批内部的连线，粘回来只接副本自己", async () => {
+      const { view, page } = await makePage(PAIR_WITH_LINK());
+      selectNode(view, "n-a");
+      selectNode(view, "n-b", { shiftKey: true });
+      copyKey();
+      pasteKey();
+      const conns = page.current().connections;
+      assert.equal(conns.length, 2, "两条都在选中里的那条线跟着一起粘回来");
+      assert.deepEqual([conns[1].fromNodeId, conns[1].toNodeId],
+        page.current().nodes.slice(2).map((n) => n.id), "副本的连线只接副本自己");
+      assert.equal(view.links.querySelectorAll(".ns-canvas-line").length, 2);
+    });
+
+    test("Ctrl+X 剪掉原节点，Ctrl+V 再粘回来，撤销把剪掉的那一张连线带回来", async () => {
+      const { view, page } = await makePage(PAIR_WITH_LINK());
+      selectNode(view, "n-a");
+      cutKey();
+      assert.deepEqual(page.current().nodes.map((n) => n.id), ["n-b"], "剪掉的节点要摘掉");
+      assert.equal(page.current().connections.length, 0, "接在剪掉节点上的线一起摘");
+      assert.equal(lit(view), 0, "剪完没有选中");
+      pasteKey();
+      assert.equal(page.current().nodes.length, 2);
+      assert.ok(page.current().nodes.some((n) => n.id !== "n-b"), "粘回来的是新 id 那一张");
+      undoKey();
+      assert.deepEqual(page.current().nodes.map((n) => n.id), ["n-b"], "撤销粘贴回到剪完那一刻");
+      assert.equal(page.current().connections.length, 0);
+      undoKey();
+      assert.deepEqual(page.current().nodes.map((n) => n.id), ["n-a", "n-b"]);
+      assert.equal(page.current().connections.length, 1, "撤销把剪掉的连线一起带回来");
+    });
+
+    test("没选中就 Ctrl+C 要说话，空剪贴板 Ctrl+V 要说话", async () => {
+      const { view, env, page } = await makePage();
+      copyKey();
+      click(view.button("粘贴"));
+      assert.equal(page.current().nodes.length, 0, "两条都不该改动画布");
+      const toasts = toastOf(env);
+      assert.ok(toasts.some((m) => m.includes("先选中")), "没选中要说清楚");
+      assert.ok(toasts.some((m) => m.includes("剪贴板是空的")), "空剪贴板要说清楚");
+      assert.ok(view.button("剪切选中").title.includes("Ctrl+X"));
+      assert.ok(view.button("复制").title.includes("Ctrl+C"));
+      assert.ok(view.button("粘贴").title.includes("Ctrl+V"));
+    });
+
+    test("正文框里的 Ctrl+C 与 Ctrl+A 归浏览器，画布上的 Ctrl+A 是全选节点", async () => {
+      const { view, env } = await makePage();
+      click(view.button("加提示词"));
+      click(view.button("加提示词"));
+      const ta = view.nodeLayer.children[0].querySelector("textarea");
+      fire(window, "keydown", { key: "Escape" });
+      ta.focus();
+      copyKey();
+      allKey();
+      assert.equal(lit(view), 0, "正文框里 Ctrl+A 不该把节点全选");
+      assert.ok(!toastOf(env).some((m) => m.includes("已复制")), "正文框里 Ctrl+C 不该动节点");
+      ta.blur();
+      allKey();
+      assert.equal(lit(view), 2, "画布上 Ctrl+A 是把节点全选");
+    });
+
+    test("装配层摘走这几键（document capture）之后，画布上的撤销与剪贴板键照旧生效", async () => {
+      const { view, page } = await makePage(PAIR_WITH_LINK());
+      // studio-app.js 的 initClipboardKeys 形状：document capture 上 stopImmediatePropagation，
+      // 冒泡相位的 window 监听从此收不到事件
+      const keys = new Set(["KeyC", "KeyV", "KeyX", "KeyA", "KeyZ", "KeyY"]);
+      const swallow = (e) => { if ((e.ctrlKey || e.metaKey) && keys.has(e.code)) e.stopImmediatePropagation(); };
+      document.addEventListener("keydown", swallow, true);
+      try {
+        const hit = (key) => fire(view.nodeEl("n-a"), "keydown", { key, code: `Key${key.toUpperCase()}`, ctrlKey: true });
+        selectNode(view, "n-a");
+        hit("c");
+        hit("v");
+        assert.equal(page.current().nodes.length, 3, "Ctrl+V 粘得动才有这一条");
+        hit("z");
+        assert.equal(page.current().nodes.length, 2, "Ctrl+Z 撤得动");
+      } finally {
+        document.removeEventListener("keydown", swallow, true);
+      }
+    });
+
+    const evFire = (target, type, init = {}) => {
+      const Ctor = type.startsWith("key") ? window.KeyboardEvent : window.MouseEvent;
+      const ev = new Ctor(type, { bubbles: true, cancelable: true, ...init });
+      target.dispatchEvent(ev);
+      return ev;   // 这一组要看 defaultPrevented，模块级那条 fire 不回事件
+    };
+    const addPrompt = (view) => click(view.button("加提示词"));
+    const firstText = (view) => view.nodeLayer.children[0].querySelector("textarea");
+
+    test("提示词节点：单击不落焦点，双击才进编辑，编辑态里的 mousedown 不拦", async () => {
+      const { view } = await makePage();
+      addPrompt(view);
+      const ta = firstText(view);
+      ta.blur();   // 新建那一张落在编辑态里，先出编辑（真窗口里就是点一下空白）
+      assert.ok(evFire(ta, "mousedown").defaultPrevented, "没在编辑时那一发 mousedown 要拦掉焦点");
+      assert.notEqual(document.activeElement, ta, "单击只选中节点，光标不进正文");
+      fire(ta, "dblclick");
+      assert.equal(document.activeElement, ta, "双击才是进编辑");
+      assert.ok(!evFire(ta, "mousedown").defaultPrevented, "编辑态里不拦，划词与光标动作照旧");
+    });
+
+    test("提示词节点用 Ctrl+C / Ctrl+V / Ctrl+X 走得通，副本带着那句提示词", async () => {
+      const { view, page } = await makePage();
+      addPrompt(view);
+      const ta = firstText(view);
+      ta.value = "一句提示词";
+      fire(ta, "input");
+      ta.blur();
+      selectNode(view, page.current().nodes[0].id);
+      copyKey();
+      pasteKey();
+      assert.equal(page.current().nodes.length, 2);
+      assert.equal(pasted(page).metadata.content, "一句提示词", "副本带着正文");
+      cutKey();
+      assert.equal(page.current().nodes.length, 1, "Ctrl+X 剪掉副本");
+      undoKey();
+      assert.equal(page.current().nodes.length, 2, "撤销把剪掉的副本带回来");
+    });
+
+    test("编辑态按 Esc 出编辑，Ctrl+C 这才剪节点", async () => {
+      const { view, page } = await makePage();
+      addPrompt(view);
+      const ta = firstText(view);
+      ta.focus();
+      fire(window, "keydown", { key: "Escape" });
+      assert.notEqual(document.activeElement, ta, "Esc 要把光标从正文里收出来");
+      selectNode(view, page.current().nodes[0].id);
+      copyKey();
+      pasteKey();
+      assert.equal(page.current().nodes.length, 2, "出编辑之后粘得动");
+    });
+
+    test("光标在正文里按 Ctrl+C 要说出路，节点一个都不许动", async () => {
+      const { view, env, page } = await makePage();
+      addPrompt(view);
+      firstText(view).focus();
+      assert.ok(!evFire(window, "keydown", { key: "c", ctrlKey: true }).defaultPrevented,
+        "浏览器自己的划词复制不许被拦");
+      assert.ok(toastOf(env).some((m) => m.includes("Esc")), "要告诉用户怎么走回节点");
+      assert.equal(page.current().nodes.length, 1, "这一发不许动节点");
     });
   });
 

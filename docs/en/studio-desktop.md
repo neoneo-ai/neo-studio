@@ -485,8 +485,10 @@ startable once the root is filled in.
 - The native copy keys are re-opened once the window is shown: `enable_copy_keys` sets
   CoreWebView2's `AreBrowserAcceleratorKeysEnabled`, so Ctrl+C / Ctrl+V / Ctrl+X / Ctrl+A / Ctrl+Z / Ctrl+Y work
   without dev mode. The page side grabs those keys in the capture phase in `initClipboardKeys`
-  (`studio/web/studio/studio-app.js`) so the injected key-swallowing handler never sees them; the reload keys stay
-  out of that allow-list and remain owned by `initReloadHotkey`.
+  (`studio/web/studio/studio-app.js`) so the injected key-swallowing handler never sees them. That grab is
+  `stopImmediatePropagation`, so the event reaches nothing below document capture and nothing in the window bubble —
+  the canvas page's keyboard gestures listen on `window` in the capture phase (`pages/canvas/interactions.js`) to
+  receive them at all. The reload keys stay out of that allow-list and remain owned by `initReloadHotkey`.
 - `http://127.0.0.1` is not a secure context, so `navigator.clipboard` does not exist. The agent chat page puts one
   copy button per turn (`mkCopyBtn`), pinned after the final answer body: the button face is only Cline's
   overlapping-squares glyph as an inline SVG — no label and no tooltip at all. The click goes through

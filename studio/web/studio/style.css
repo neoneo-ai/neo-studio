@@ -1453,6 +1453,9 @@ body {
 .ns-canvas-select { height: 28px; max-width: 190px; padding: 0 6px; border-radius: 6px; border: 1px solid var(--ns-field-bd); background: var(--ns-field); color: var(--ns-fg); }
 .ns-canvas-tool { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 28px; padding: 0 8px; border-radius: 6px; border: 1px solid var(--ns-field-bd); background: var(--ns-field); color: var(--ns-fg); font: inherit; cursor: pointer; }
 .ns-canvas-tool:hover { border-color: var(--ns-field-bd-hover); background: var(--ns-field-hover); color: #fff; }
+/* 没有可撤销 / 可重做时那两枚是灰的：灰态不能跟着 hover 亮起来，亮了就是点了也没反应 */
+.ns-canvas-tool:disabled { opacity: .45; cursor: default; }
+.ns-canvas-tool:disabled:hover { border-color: var(--ns-field-bd); background: var(--ns-field); color: var(--ns-fg); }
 .ns-canvas-zoom, .ns-canvas-save { min-width: 46px; font-size: 12px; color: var(--ns-dim); text-align: center; }
 .ns-canvas-save { min-width: 52px; text-align: right; }
 
@@ -1481,16 +1484,22 @@ body {
 .ns-canvas-node { position: absolute; border-radius: 10px; border: 1px solid var(--ns-border-soft); background: var(--ns-panel); overflow: hidden; box-shadow: 0 2px 10px rgba(0, 0, 0, .35); }
 .ns-canvas-node-on { border-color: var(--ns-primary); }
 .ns-canvas-node-drop { border-color: var(--ns-accent); box-shadow: 0 0 0 2px var(--ns-primary-soft); }
-.ns-canvas-node-head { display: flex; align-items: center; gap: 6px; height: 26px; padding: 0 8px; font-size: 12px; color: var(--ns-dim); background: var(--ns-raised); border-bottom: 1px solid var(--ns-border); user-select: none; }
-.ns-canvas-node-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ns-canvas-node-tag { flex: none; color: var(--ns-accent); }
-.ns-canvas-node-act { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--ns-dim); cursor: pointer; }
+.ns-canvas-node-tag { position: absolute; left: 8px; top: 8px; z-index: 3; padding: 2px 7px; border-radius: 6px; background: rgba(8, 9, 12, .72); color: var(--ns-accent); font-size: 12px; pointer-events: none; transform: scale(var(--ns-canvas-inv, 1)); transform-origin: 0 0; }
+/* 节点不铺标题栏：图与正文撑满整张，附加操作栏浮在右上角、只在该节点被选中时出现。
+   栏与徽标按 1/zoom 反缩放（--ns-canvas-inv 由 applyViewport 落），缩到很小时也按得中 */
+.ns-canvas-node-bar { position: absolute; right: 8px; top: 8px; z-index: 4; display: none; align-items: center; gap: 2px; padding: 3px; border-radius: 8px; background: rgba(8, 9, 12, .72); transform: scale(var(--ns-canvas-inv, 1)); transform-origin: 100% 0; }
+.ns-canvas-node-on .ns-canvas-node-bar { display: flex; }
+.ns-canvas-node-act { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--ns-dim); cursor: pointer; }
 .ns-canvas-node-act:hover { color: #fff; background: var(--ns-field-hover); }
 .ns-canvas-node-act-on { color: var(--ns-accent); }
-.ns-canvas-node-pick { flex: none; display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 6px; border-radius: 5px; border: 1px solid var(--ns-field-bd); background: var(--ns-field); color: var(--ns-fg); font: inherit; font-size: 12px; cursor: pointer; }
+.ns-canvas-node-pick { flex: none; display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 6px; border-radius: 5px; border: 1px solid var(--ns-field-bd); background: var(--ns-field); color: var(--ns-fg); font: inherit; font-size: 12px; cursor: pointer; }
 .ns-canvas-node-pick:hover { border-color: var(--ns-field-bd-hover); background: var(--ns-field-hover); color: #fff; }
-.ns-canvas-node-img { display: block; width: 100%; height: calc(100% - 26px); object-fit: cover; background: var(--ns-field); }
-.ns-canvas-node-textarea { display: block; width: 100%; height: calc(100% - 26px); padding: 8px; border: 0; resize: none; background: var(--ns-field); color: var(--ns-fg); font: 13px/1.5 "Segoe UI", system-ui, sans-serif; outline: none; }
+.ns-canvas-node-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: var(--ns-field); }
+.ns-canvas-node-textarea { position: absolute; inset: 0; width: 100%; height: 100%; padding: 10px; border: 0; resize: none; background: var(--ns-field); color: var(--ns-fg); font: 13px/1.5 "Segoe UI", system-ui, sans-serif; outline: none; border-radius: 9px; caret-color: var(--ns-accent); transition: background .12s, box-shadow .12s; }
+.ns-canvas-node-textarea::placeholder { color: var(--ns-dim); }
+/* 提示词节点：单击只选中（不落焦点），双击才进编辑，Esc 出编辑。编辑态就靠内侧 1px 描边加底色抬起说话，
+   不画整圈外框 —— 那一条落在选中边框的里侧就是双重粗框，方角还不跟节点的 10px 圆角 */
+.ns-canvas-node-textarea:focus { background: var(--ns-field-hover); box-shadow: inset 0 0 0 1px var(--ns-accent), inset 0 0 14px var(--ns-primary-soft); }
 .ns-canvas-handle { position: absolute; top: 50%; width: 12px; height: 12px; margin-top: -6px; border-radius: 50%; border: 2px solid var(--ns-border-soft); background: var(--ns-field); cursor: crosshair; }
 .ns-canvas-handle-left { left: -7px; }
 .ns-canvas-handle-right { right: -7px; }
@@ -1507,6 +1516,8 @@ body {
     .ns-canvas-handle-left { left: -9px; }
     .ns-canvas-handle-right { right: -9px; }
     .ns-canvas-resize { width: 22px; height: 22px; }
+    .ns-canvas-node-act { width: 28px; height: 28px; }
+    .ns-canvas-node-pick { height: 28px; font-size: 13px; }
     .ns-canvas-resize-top-left { left: -11px; top: -11px; }
     .ns-canvas-resize-top-right { right: -11px; top: -11px; }
     .ns-canvas-resize-bottom-left { left: -11px; bottom: -11px; }

@@ -1,51 +1,25 @@
-// 节点层：节点 DOM、几何落位与选中描边。节点上的动作（改正文、以后要加的「选图」「设为主图」「删除」）
-// 都从这里的元素上出发，回调交给页面；手势不在这一层（在 interactions.js）。
+// 节点层：节点 DOM、几何落位与选中描边。节点不铺标题栏 —— 图与正文撑满整张节点，附加操作
+// （选图 / 设为主图 / 复制 / 删除）是右上角那一排，只在该节点被选中时浮出来（CSS 认 .ns-canvas-node-on）。
+// 节点上的动作都从这里的元素出发，回调交给页面；手势不在这一层（在 interactions.js）。
 import { t } from "../../../js/core/i18n.js";
 import { setIcon, setIconLabel } from "../../../js/core/icons.js";
-import { NODE_SPECS } from "./store.js";
 
-/** 节点 DOM（上游 canvas-node.tsx 的 vanilla 版）：左右两个接线点、四个角上的尺寸柄。
- *  图片节点是 <img>（走 Gallery 缩略图，取不到落占位图），提示词节点是 <textarea>，
- *  正文存在 metadata.content —— 图片节点上的坐标就是 Gallery 的 filename + subfolder */
-export function nodeElement(node, { $el, onText, onPick, onHero, onDelete }) {
+/** 节点 DOM（上游 canvas-node.tsx 的 vanilla 版）：内容铺满整张，右上角是附加操作栏，左上角是「主图」徽标，
+ *  左右两个接线点、四个角上的尺寸柄。图片节点是 <img>（走 Gallery 缩略图，取不到落占位图），提示词节点是
+ *  <textarea>，正文存在 metadata.content —— 图片节点上的坐标就是 Gallery 的 filename + subfolder */
+export function nodeElement(node, { $el, onText, onPick, onHero, onDelete, onCopy }) {
     const nodeEl = $el("div", {
         className: "ns-canvas-node " + (node.type === "image" ? "ns-canvas-node-image" : "ns-canvas-node-text"),
         dataset: { nodeId: node.id },
     });
     nodeEl.append(
-        nodeHead(node, { $el, onPick, onHero, onDelete }),
+        node.type === "image" ? nodeImage(node, $el) : nodeText(node, $el, onText),
+        nodeBar(node, { $el, onPick, onHero, onDelete, onCopy }),
         $el("div", { className: "ns-canvas-handle ns-canvas-handle-left", dataset: { handle: "target" } }),
         $el("div", { className: "ns-canvas-handle ns-canvas-handle-right", dataset: { handle: "source" } }),
     );
-    if (node.type === "image") {
-        const filename = node.metadata.filename || "";
-        nodeEl.appendChild($el("img", {
-            className: "ns-canvas-node-img",
-            src: filename
-                ? `/neo_gallery/thumbnail?filename=${encodeURIComponent(filename)}`
-                    + `&subfolder=${encodeURIComponent(node.metadata.subfolder || "")}&size=640`
-                : "/neo_gallery/placeholder.png",
-            alt: filename || t("图片"),
-            draggable: "false",
-            // 缩略图缓存不在（刚生成、桌面端离线、素材被移走）时回原图那一条，原图也没有才落占位图
-            onerror: (e) => {
-                e.target.src = filename && !e.target.dataset.fallback
-                    ? (e.target.dataset.fallback = "1",
-                        `/neo_gallery/image?filename=${encodeURIComponent(filename)}`
-                        + `&subfolder=${encodeURIComponent(node.metadata.subfolder || "")}&type=output`)
-                    : "/neo_gallery/placeholder.png";
-            },
-        }));
-    } else {
-        nodeEl.appendChild($el("textarea", {
-            className: "ns-canvas-node-textarea",
-            value: node.metadata.content || "",
-            placeholder: t("写提示词"),
-            spellcheck: "false",
-            oninput: (e) => onText(node, e.target.value),
-            // 正文区要把指针留给打字：从 textarea 上起手不能把节点拖走
-            onpointerdown: (e) => e.stopPropagation(),
-        }));
+    if (node.metadata.hero) {
+        nodeEl.appendChild($el("span", { className: "ns-canvas-node-tag", textContent: t("主图") }));
     }
     for (const corner of ["top-left", "top-right", "bottom-left", "bottom-right"]) {
         nodeEl.appendChild($el("div", { className: `ns-canvas-resize ns-canvas-resize-${corner}`, dataset: { corner } }));
@@ -53,9 +27,72 @@ export function nodeElement(node, { $el, onText, onPick, onHero, onDelete }) {
     return nodeEl;
 }
 
+/** 图片节点的内容：整张就是那张图，缩略图缓存不在（刚生成、桌面端离线、素材被移走）时回原图那一条，
+ *  原图也没有才落占位图 */
+function nodeImage(node, $el) {
+    const filename = node.metadata.filename || "";
+    return $el("img", {
+        className: "ns-canvas-node-img",
+        src: filename
+            ? `/neo_gallery/thumbnail?filename=${encodeURIComponent(filename)}`
+                + `&subfolder=${encodeURIComponent(node.metadata.subfolder || "")}&size=640`
+            : "/neo_gallery/placeholder.png",
+        alt: filename || t("图片"),
+        draggable: "false",
+        onerror: (e) => {
+            e.target.src = filename && !e.target.dataset.fallback
+                ? (e.target.dataset.fallback = "1",
+                    `/neo_gallery/image?filename=${encodeURIComponent(filename)}`
+                    + `&subfolder=${encodeURIComponent(node.metadata.subfolder || "")}&type=output`)
+                : "/neo_gallery/placeholder.png";
+        },
+    });
+}
+
+/** 提示词节点的内容：整张就是那块正文。单击不落焦点 —— 浏览器在 mousedown 上默认把焦点交给 textarea，
+ *  焦点在里面时 Ctrl+C/V/X/A 全归浏览器自己，节点就再也剪不动了。进编辑是双击（interactions.js 的
+ *  onDoubleClick 给焦点），落了焦点之后不拦 —— 划词与光标动作照旧（拖过一截才挪节点，见 TEXT_DRAG_GATE） */
+function nodeText(node, $el, onText) {
+    return $el("textarea", {
+        className: "ns-canvas-node-textarea",
+        value: node.metadata.content || "",
+        placeholder: t("写提示词"),
+        spellcheck: "false",
+        onmousedown: (e) => { if (document.activeElement !== e.target) e.preventDefault(); },
+        oninput: (e) => onText(node, e.target.value),
+    });
+}
+
+/** 附加操作栏：图片节点多一枚主图钮（整片只留一枚），没填上图的多一枚「选图」，复制与删除每类节点都有。
+ *  这一排默认不出现，节点被选中时才浮出来；点了算 click，起手不拖（见 interactions.js） */
+function nodeBar(node, { $el, onPick, onHero, onDelete, onCopy }) {
+    const act = (name, label, fn) => {
+        const btn = $el("button", { className: "ns-canvas-node-act", type: "button",
+            title: label, "aria-label": label, dataset: { nodeAct: name }, onclick: fn });
+        setIcon(btn, name === "delete" ? "circle-x" : name === "copy" ? "copy" : "circle-check");
+        return btn;
+    };
+    const kids = [];
+    if (node.type === "image") {
+        const heroLabel = node.metadata.hero ? t("取消主图") : t("设为主图");
+        const hero = act("hero", heroLabel, () => onHero(node));
+        if (node.metadata.hero) hero.classList.add("ns-canvas-node-act-on");
+        kids.push(hero);
+        if (!node.metadata.filename) {
+            const pick = $el("button", { className: "ns-canvas-node-pick", type: "button",
+                title: t("选图"), "aria-label": t("选图"), dataset: { nodeAct: "pick" }, onclick: () => onPick(node) });
+            setIconLabel(pick, "image", t("选图"));
+            kids.push(pick);
+        }
+    }
+    kids.push(act("copy", t("复制节点"), () => onCopy(node)));
+    kids.push(act("delete", t("删除节点"), () => onDelete(node)));
+    return $el("div", { className: "ns-canvas-node-bar" }, kids);
+}
+
 /** 整层节点重画：拖动与缩放不走这一条（走 applyNodeGeometry），换画布、增删节点才走 */
-export function renderNodes({ nodeLayer, links, hint, nodes, selectedNodeIds, selectedConnectionId, $el, onText, onPick, onHero, onDelete }) {
-    nodeLayer.replaceChildren(...nodes.map((node) => nodeElement(node, { $el, onText, onPick, onHero, onDelete })));
+export function renderNodes({ nodeLayer, links, hint, nodes, selectedNodeIds, selectedConnectionId, $el, onText, onPick, onHero, onDelete, onCopy }) {
+    nodeLayer.replaceChildren(...nodes.map((node) => nodeElement(node, { $el, onText, onPick, onHero, onDelete, onCopy })));
     // 几何要在元素挂上世界层之后再落：nodeElement 里查不到还没挂上的元素
     for (const node of nodes) applyNodeGeometry(nodeLayer, node);
     hint.style.display = nodes.length ? "none" : "";
@@ -80,36 +117,6 @@ export function paintSelection({ nodeLayer, links, selectedNodeIds, selectedConn
     for (const path of links.children) {
         path.classList.toggle("ns-canvas-line-on", path.dataset.connectionId === selectedConnectionId);
     }
-}
-
-/** 节点头部：标题 + 「主图」徽标 + 头部动作钮。图片节点多一枚主图钮（整片只留一枚），
- *  没填上图的图片节点多一枚「选图」；删除钮每类节点都有。点了算 click，起手不拖（见 interactions.js） */
-function nodeHead(node, { $el, onPick, onHero, onDelete }) {
-    const kids = [
-        $el("span", { className: "ns-canvas-node-title", textContent: node.title || NODE_SPECS[node.type].title }),
-        $el("span", { className: "ns-canvas-node-tag", textContent: node.metadata.hero ? t("主图") : "" }),
-    ];
-    if (node.type === "image") {
-        const heroLabel = node.metadata.hero ? t("取消主图") : t("设为主图");
-        const hero = $el("button", {
-            className: "ns-canvas-node-act" + (node.metadata.hero ? " ns-canvas-node-act-on" : ""),
-            type: "button", title: heroLabel, "aria-label": heroLabel,
-            dataset: { nodeAct: "hero" }, onclick: () => onHero(node),
-        });
-        setIcon(hero, "circle-check");
-        kids.push(hero);
-        if (!node.metadata.filename) {
-            const pick = $el("button", { className: "ns-canvas-node-pick", type: "button",
-                title: t("选图"), "aria-label": t("选图"), dataset: { nodeAct: "pick" }, onclick: () => onPick(node) });
-            setIconLabel(pick, "image", t("选图"));
-            kids.push(pick);
-        }
-    }
-    const del = $el("button", { className: "ns-canvas-node-act", type: "button",
-        title: t("删除节点"), "aria-label": t("删除节点"), dataset: { nodeAct: "delete" }, onclick: () => onDelete(node) });
-    setIcon(del, "circle-x");
-    kids.push(del);
-    return $el("div", { className: "ns-canvas-node-head" }, kids);
 }
 
 function cssEscape(value) {

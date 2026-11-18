@@ -30,6 +30,24 @@ export function createCanvasNode(type, position, metadata = {}) {
     };
 }
 
+/** 复制选中的那批：新 id、偏移落位、metadata 整份带上。两端都在选中集里的连线跟着复制，
+ *  跨出选中集的连线不跟 —— 复制出去的那一张不该凭空接上原节点 */
+export function duplicateNodes(nodes, connections, ids, offset = { x: 36, y: 36 }) {
+    const picked = nodes.filter((node) => ids.includes(node.id));
+    const clones = picked.map((node) => ({
+        ...createCanvasNode(node.type, { x: node.position.x + offset.x, y: node.position.y + offset.y }, { ...node.metadata }),
+        title: node.title, width: node.width, height: node.height,
+    }));
+    const copyId = new Map(picked.map((node, at) => [node.id, clones[at].id]));
+    return {
+        nodes: clones,
+        connections: connections.filter((conn) => copyId.has(conn.fromNodeId) && copyId.has(conn.toNodeId))
+            .map((conn) => ({ id: `conn-${copyId.get(conn.fromNodeId)}-${copyId.get(conn.toNodeId)}`,
+                fromNodeId: copyId.get(conn.fromNodeId), toNodeId: copyId.get(conn.toNodeId) })),
+        ids: clones.map((node) => node.id),
+    };
+}
+
 /** 存盘形状（studio/canvas.py 收的那一份） */
 export function serializeCanvas(state) {
     return {

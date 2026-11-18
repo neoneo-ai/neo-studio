@@ -7,6 +7,8 @@ import { t } from "../../../js/core/i18n.js";
 import { getConnectionDropTarget, marqueeSelect, panViewport, resizeNode, screenToCanvas, zoomViewportAt } from "./geometry.js";
 
 const NUDGE = 8, NUDGE_BIG = 40;
+const TEXT_DRAG_GATE = 8;   // 正文框整张铺满节点：起手先让浏览器选字，拖过这一截才算拖节点
+const CLIP_NODE_KEYS = new Set(["c", "v", "x", "a"]);   // 节点那四键：光标在正文里时按了要说一句怎么走回节点
 const NEO_GALLERY_MIME = "application/x-neo-gallery";
 // 一条连线是两个 path（宽命中描边 + 可见细线），点哪一条都算点这条线
 const LINE_SELECTOR = ".ns-canvas-line, .ns-canvas-line-hit";
@@ -38,7 +40,10 @@ export function attachCanvasInteractions({ stage, view, host }) {
     // 拖动与拉线要跑到容器外还在跟手，收笔统一交给 window（上游同一形状）
     window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerup", onPointerUp);
-    window.addEventListener("keydown", onKeyDown);
+    // 键盘手势挂在 window 的 capture 相位：装配层 initClipboardKeys 在 document 的 capture 上把
+    // Ctrl+C/V/X/A/Z/Y 用 stopImmediatePropagation 摘走（为的是让注入的吞键 handler 收不到），挂在
+    // window 冒泡相位的这条排在那之后，事件一路到不了这儿 —— 画布的撤销与剪贴板键按下去没反应就是这条
+    window.addEventListener("keydown", onKeyDown, true);
     window.addEventListener("keyup", (e) => { if (e.code === "Space") spaceDown = false; });
 
     function onPointerDown(e) {
@@ -72,6 +77,7 @@ export function attachCanvasInteractions({ stage, view, host }) {
                 nodeId: node.id,
                 corner: cornerEl.dataset.corner,
                 startX: e.clientX, startY: e.clientY,
+                pushed: false,
                 startNode: { ...node, position: { ...node.position } },
                 // 图片节点锁比例（上游 keepRatio），提示词节点自由缩放
                 keepRatio: node.type === "image" && !node.metadata.freeResize,
@@ -81,9 +87,12 @@ export function attachCanvasInteractions({ stage, view, host }) {
         }
         const nodeEl = e.target.closest(".ns-canvas-node");
         if (nodeEl) {
+            // 正文框整张铺满节点：起手算选中，光标与选字留给浏览器（preventDefault 会把光标拦掉），
+            // 拖过 TEXT_DRAG_GATE 那一截才把节点挪走
+            const fromText = e.target.classList.contains("ns-canvas-node-textarea");
             selectNode(nodeEl.dataset.nodeId, e);
-            startNodeDrag(e);
-            e.preventDefault();
+            startNodeDrag(e, fromText);
+            if (!fromText) e.preventDefault();
             return;
         }
         const lineEl = e.target.closest(LINE_SELECTOR);
@@ -99,9 +108,9 @@ export function attachCanvasInteractions({ stage, view, host }) {
         if (!e.shiftKey) host.setSelection([], null);
     }
 
-    function startNodeDrag(e) {
+    function startNodeDrag(e, fromText = false) {
         const ids = [...host.getSelection().ids];
-        drag = { startX: e.clientX, startY: e.clientY, moved: false,
+        drag = { startX: e.clientX, startY: e.clientY, moved: false, fromText,
             initial: new Map(state().nodes.filter((n) => ids.includes(n.id)).map((n) => [n.id, { ...n.position }])) };
     }
 
@@ -111,15 +120,24 @@ export function attachCanvasInteractions({ stage, view, host }) {
             return;
         }
         if (drag) {
+            const sx = e.clientX - drag.startX, sy = e.clientY - drag.startY;
+            // 正文框里起手：短距离是选字，不动节点
+            if (drag.fromText && !drag.moved && Math.max(Math.abs(sx), Math.abs(sy)) < TEXT_DRAG_GATE) return;
+            // 真拖起来了才压撤销栈：点一下节点不算一次改动
+            if (!drag.moved && (Math.abs(sx) > 3 || Math.abs(sy) > 3)) {
+                drag.moved = true;
+                host.beginEdit();
+                if (drag.fromText) document.activeElement?.blur?.();   // 拖起来了就收走光标，浏览器别跟着选字
+            }
             // 屏幕位移除以 k 才是世界位移：缩到 50% 时鼠标走 100px，节点在世界上要走 200px
-            const dx = (e.clientX - drag.startX) / state().viewport.k;
-            const dy = (e.clientY - drag.startY) / state().viewport.k;
-            if (Math.abs(e.clientX - drag.startX) > 3 || Math.abs(e.clientY - drag.startY) > 3) drag.moved = true;
+            const dx = sx / state().viewport.k;
+            const dy = sy / state().viewport.k;
             // 落点一律从起手那一份快照算：每帧交的是绝对位置，帧与帧之间不累加位移
             host.setNodePositions([...drag.initial].map(([id, pos]) => [id, { x: pos.x + dx, y: pos.y + dy }]));
             return;
         }
         if (resizing) {
+            if (!resizing.pushed) { resizing.pushed = true; host.beginEdit(); }
             const out = resizeNode(resizing.startNode, resizing.corner,
                 (e.clientX - resizing.startX) / state().viewport.k,
                 (e.clientY - resizing.startY) / state().viewport.k, resizing.keepRatio);
@@ -200,13 +218,35 @@ export function attachCanvasInteractions({ stage, view, host }) {
         const { ids } = host.getSelection();
         const typing = document.activeElement?.classList?.contains("ns-canvas-node-textarea");
         if (e.code === "Space" && !typing) { spaceDown = true; e.preventDefault(); return; }
-        if (typing || e.ctrlKey || e.metaKey || e.altKey) return;
+        // Ctrl/Cmd 编辑命令：正文框里打字时不抢（那一段是浏览器自己的文本撤销与复制粘贴）
+        if ((e.ctrlKey || e.metaKey) && !typing) {
+            const key = (e.key || "").toLowerCase();
+            if (key === "z") { e.preventDefault(); (e.shiftKey ? host.redoEdit : host.undoEdit)(); return; }
+            if (key === "y") { e.preventDefault(); host.redoEdit(); return; }
+            if (key === "d") { e.preventDefault(); host.duplicateSelection(); return; }
+            if (key === "c") { e.preventDefault(); host.copySelection(); return; }
+            if (key === "v") { e.preventDefault(); host.pasteClipboard(); return; }
+            if (key === "x") { e.preventDefault(); host.cutSelection(); return; }
+            if (key === "a") { e.preventDefault(); host.selectAllNodes(); return; }   // 正文框里那一条是浏览器全选文字
+        }
+        // 光标在正文里时那四键是浏览器自己的文字动作，节点剪不动：按键不拦（拦了连划词复制一起没了），
+        // 只说一句怎么走回节点；Esc 先把光标从正文里收出来，收出来之后就是节点的一套
+        if (typing) {
+            if ((e.ctrlKey || e.metaKey) && CLIP_NODE_KEYS.has((e.key || "").toLowerCase())) {
+                host.toast(t("光标在正文里 · Esc 出编辑后再剪节点"), "info");
+                return;
+            }
+            if (e.key === "Escape") document.activeElement?.blur?.();
+            return;
+        }
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
         if (e.key === "Escape") { host.setSelection([], null); return; }
         if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); host.deleteSelection(); return; }
         const step = e.shiftKey ? NUDGE_BIG : NUDGE;
         const by = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[e.key];
         if (!by || !ids.size) return;
         e.preventDefault();
+        host.beginEdit();   // 方向键一步一个落点：每步都可撤销
         host.moveSelected([...ids], by[0], by[1]);
         host.markDirty();   // 方向键那一步没有收笔可等，落点在键盘上
     }

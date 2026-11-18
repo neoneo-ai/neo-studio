@@ -5,13 +5,35 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 ## [Unreleased]
 
 ### Added
+- **Canvas nodes carry content, not chrome.** A 画布 node has no title bar: the image or the prompt text fills the whole
+  node, and its extra actions ride a bar at the node's top-right that appears **only while that node is selected** —
+  **设为主图** (image nodes; one hero per canvas, clicking it again clears it), **选图** for an image node with nothing in
+  it, **复制节点** (that one node, cloned at a 36px offset) and **删除节点** (that node plus the connections on its ends).
+  The **主图** badge stays on the hero node without selecting it, and the bar keeps its screen size at any zoom, so it
+  stays clickable when the canvas is zoomed out. Clicking into the prompt text lands the caret on that same click, a
+  short drag there selects text, and a drag past that gate moves the node.
+
+- **Canvas editing has undo, redo and copy, cut and paste.** Every node edit on the 画布 page is reversible: **撤销** / **重做** in the
+  toolbar (also Ctrl+Z, Ctrl+Shift+Z and Ctrl+Y) steps back and forward through added and deleted nodes, drags, resizes,
+  new connections, hero toggles and whole prompt-typing runs, restoring nodes with their connections and saving the
+  result. Undo never moves your viewport or background. **复制选中** (also Ctrl+D) clones the selected nodes at a 36px
+  offset with a fresh id, keeping each node's image coordinates and prompt text, and the connection between two
+  duplicated nodes is duplicated with them; the selection lands on the copies. Switching to another canvas clears its
+  undo stack, so one canvas's edits never undo onto another. **复制** (Ctrl+C), **剪切选中** (Ctrl+X) and **粘贴** (Ctrl+V)
+  — toolbar buttons with the shortcut in their tooltip — put the selected nodes and the connections between them on the
+  page's clipboard: **Ctrl+V** lays that batch out with fresh ids at the centre of the visible area, each consecutive
+  paste stepping 36px down-right, **Ctrl+X** takes the originals off the canvas along with the connections on their ends,
+  and **Ctrl+A** selects every node on the canvas. Paste and cut land in the undo stack, the clipboard survives switching
+  canvases (so one canvas's nodes paste onto another). A prompt node takes the caret only on **double click** - a
+  single click selects the node, so its text never swallows the keys, and **Esc** leaves the text back to the node.
+  While the caret is in the text, Ctrl+C / Ctrl+V / Ctrl+A / Ctrl+Z stay the browser's own text commands, and the
+  page says so on the keypress.
+
 - **The canvas page's 加图片 opens the material library, and every node carries its own actions.** On the 画布 page,
   **加图片** opens the library in pick mode (images only, the window closes on the pick) and lays the picked images out
   as image nodes carrying their real `filename` / `subfolder`, so each tile shows the Gallery thumbnail instead of
-  standing on the placeholder. An image node with nothing in it shows **选图**, which fills that one node. Each node
-  head carries **删除节点** (that node plus the connections on its ends), and an image node carries **设为主图** —
-  one hero per canvas, clicking it again clears it. Where no library is available, 加图片 keeps its old behavior and
-  creates an empty image node, with 选图 as the way in.
+  standing on the placeholder. An image node with nothing in it shows **选图**, which fills that one node. Where no library
+  is available, 加图片 keeps its old behavior and creates an empty image node, with 选图 as the way in.
 
 - **A random batch shows a board of N tiles, and a recipe names one result its cover.** The 输入页 panel lays all N
   tiles out before the first task is submitted and updates each tile in place — queued, generating with the real
@@ -203,6 +225,12 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   recipes and existing 配方 assets are untouched.
 
 ### Fixed
+- **Canvas keyboard shortcuts fire in the window.** Ctrl+Z, Ctrl+Shift+Z, Ctrl+Y, Ctrl+D, Ctrl+C, Ctrl+X, Ctrl+V and
+  Ctrl+A on the 画布 page did nothing: the app shell's clipboard passthrough (`initClipboardKeys`) lifts those keys off
+  the event path in the document capture phase with `stopImmediatePropagation`, while the canvas gesture handler
+  listened in the bubble phase on `window` — parked after that lift, it never received the event. The canvas now
+  listens on `window` in the capture phase, above the passthrough, so every canvas editing shortcut fires in the
+  desktop window and in the ComfyUI browser tab.
 - **Video thumbnails load without flashing a console window, and at card size.** The desktop window starts
   ComfyUI with `CREATE_NO_WINDOW`, so the parent has no console and Windows gives every console program it
   spawns — ffmpeg is one — a console window of its own. Clicking a top 归类 tag aggregates the whole library,
