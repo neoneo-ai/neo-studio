@@ -402,6 +402,39 @@ async function uploadSkill(payload) {
     }
 }
 
+/** 云端技能订阅源：清单 + 每行的本地状态。force=true 是面板上那枚「刷新清单」，也是唯一一次强拉。
+ *  读侧永不抛：未配置与拉取失败都出 enabled=false 与 reason，面板据此把入口整条收掉。 */
+async function listSkillSources(force = false) {
+    try {
+        const res = await fetch(`/rs_prompts/skill_sources${force ? "?force=1" : ""}`);
+        if (!res.ok) return { enabled: false, source: "none", reason: "fetch_failed", skills: [], error: await res.text() };
+        return await res.json();
+    } catch (e) {
+        console.error("Failed to list cloud skills:", e);
+        return { enabled: false, source: "none", reason: "fetch_failed", skills: [], error: e.message };
+    }
+}
+
+/** 安装 / 更新一行的云端技能：后端按 id 取 zip、验指纹、走既有安装口装进 skills/custom/。
+ *  allowModified 只由面板上「本地已修改 → 确认覆盖」那一条给出，别处不给它 true。
+ *  成功与失败都归一成 { success, code, message }：面板按 code 分支，不匹配中文文案。 */
+async function installSkillSource(id, allowModified = false) {
+    try {
+        const res = await fetch("/rs_prompts/install_skill_source", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id, allow_modified: allowModified }),
+        });
+        const raw = await res.text();
+        let data;
+        try { data = JSON.parse(raw); } catch { data = null; }
+        if (data && typeof data === "object") return { success: !!data.success, code: data.code || (res.ok ? "installed" : "failed"), message: data.message || "" };
+        return { success: false, code: "failed", message: res.ok ? "云端没有回话" : `HTTP ${res.status}` };
+    } catch (e) {
+        console.error("Failed to install cloud skill:", e);
+        return { success: false, code: "network", message: e.message };
+    }
+}
+
 /** 列出 skill 的文件（后端无独立接口，取自 load_skill.files） */
 async function listSkillFiles(id) {
     const full = await loadSkill(id);
@@ -588,6 +621,7 @@ async function copySkillAsCustom(skillId, fallbackName = "") {
 export {
     dispatchSkillsUpdated, stopPointerBubble, makeRepairDialog,
     listSkills, loadSkill, loadSkillWorkflow, saveSkill, deleteSkill, uploadSkill,
+    listSkillSources, installSkillSource,
     listSkillFiles, loadSkillFile, saveSkillFile, deleteSkillFile, resetSkillGenConfig,
     workflowParamValues, buildCanvasWorkflow, arrangeCanvasNodes, serializeCanvasPrompt,
     makeSkillLog, SKILL_WRITE_LOG_LIMIT, WRITE_SOURCE_LABELS, WRITE_API_ONLY_NOTE,

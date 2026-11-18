@@ -13,7 +13,7 @@ import { getSkillGenConfig, listGenModels, listVideoGenModels, shortModelName, v
 import { showToast } from "./gallery-utils.js";
 import {
     dispatchSkillsUpdated, stopPointerBubble, listSkills, loadSkill, saveSkill, deleteSkill,
-    uploadSkill, listSkillFiles, loadSkillFile, saveSkillFile, deleteSkillFile,
+    uploadSkill, listSkillSources, installSkillSource, listSkillFiles, loadSkillFile, saveSkillFile, deleteSkillFile,
     loadSkillWorkflow, workflowParamValues, populateSkillOptions, CATEGORY_LABELS,
     renderMarkdown, SKILL_CHANGED_EVENT, copySkillAsCustom, serializeCanvasPrompt, skillDisplayName,
     skillImageMode, skillAcceptsText, skillAcceptsRef, skillFamily,
@@ -1413,6 +1413,9 @@ export {
     saveSkill,
     deleteSkill,
     uploadSkill,
+    listSkillSources,
+    installSkillSource,
+    dispatchSkillsUpdated,
     listSkillFiles,
     loadSkillFile,
     saveSkillFile,

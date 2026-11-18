@@ -70,6 +70,7 @@ _BOOKMARK = {
 }
 
 # 技能管理：tasks / presets 目录里的 markdown、config.json、workflow.json
+# 技能云端订阅源：清单读缓存、按 id 装 zip，都是文件层 + aiohttp，桌面端离线给得出
 _SKILL = {
     ("GET", "/rs_prompts/skills"),
     ("POST", "/rs_prompts/load_skill"),
@@ -80,6 +81,8 @@ _SKILL = {
     ("POST", "/rs_prompts/load_skill_file"),
     ("POST", "/rs_prompts/save_skill_file"),
     ("POST", "/rs_prompts/delete_skill_file"),
+    ("GET", "/rs_prompts/skill_sources"),
+    ("POST", "/rs_prompts/install_skill_source"),
 }
 
 # 提示词读侧：只扫数据根 prompts/ 目录 —— 点名候选、整份条目、正文、行级集合、运行时随机

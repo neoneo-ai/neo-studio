@@ -9,6 +9,10 @@ exe 里随包的插件副本只取 `studio/` 的跟踪文件，`tools/` 不在�
 
 - 素材管线：`build_gallery_presets.py` → `gallery_preprocess.py` → `gallery_deploy_oss.py`，
   配套 `format_tags.py`、`profile_gallery.py`。
+- 技能订阅源：`skills_deploy_oss.py` 把一个技能目录根逐份打成 `<id>/<version>.zip` 并算 sha256，
+  连 `index.json` 一起传 `neo/skills/`；读侧是 `studio/skill_cloud.py`（配置 `configs/oss_presets.json`
+  的 `skill_index_url`）。id 撞内置技能（`studio/skills/presets` 与 `studio/skills/tasks`）的条目不发——
+  读侧对那种行只会拒装，发上去就是一条永远装不上的行。
 - 打包与安装：`build_studio_exe.ps1`（`Neo-Studio.spec`）、`build_studio_mac.sh`
   （macOS remote-only `.app`）、`build_studio_update.ps1`（整合包更新件，`update_neo_studio.ps1` 在包内消费它）、
   `install_plugin.ps1`、`mcp_setup.ps1`。

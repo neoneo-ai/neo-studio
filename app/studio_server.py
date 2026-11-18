@@ -42,11 +42,11 @@ PROXY_TIMEOUT = aiohttp.ClientTimeout(total=None, connect=10, sock_read=3600)
 
 # 桌面端进程加载的插件模块，按依赖顺序：handler 只依赖 folder_paths、文件系统与 8080 LLM 服务。
 DESKTOP_MODULES = ("util", "task_center", "civitai", "bookmark", "gallery_lora", "gallery_oss", "gallery",
-                 "minimax_h3", "skill", "laya_router", "prompt_names", "prompt_lines", "llm", "lora_tag",
+                 "minimax_h3", "skill", "skill_cloud", "laya_router", "prompt_names", "prompt_lines", "llm", "lora_tag",
                  "recipes", "video_gen", "image_gen_files", "model_hub", "skill_models",
                  "backyard", "agent", "pose", "pose_cloud", "frames", "home_layout")
 DESKTOP_ROUTE_MODULES = ("gallery_lora", "gallery_oss", "gallery", "bookmark", "lora_tag",
-                       "skill", "prompt_names", "llm", "recipes", "video_gen", "image_gen_files", "model_hub",
+                       "skill", "skill_cloud", "prompt_names", "llm", "recipes", "video_gen", "image_gen_files", "model_hub",
                        "skill_models", "backyard", "agent", "pose", "pose_cloud", "frames", "task_center",
                        "home_layout")
 

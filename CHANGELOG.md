@@ -5,6 +5,17 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 ## [Unreleased]
 
 ### Added
+- **A cloud subscription source for skills.** The 技能 page gains a **☁ 云端技能** panel that lists one row per published
+  skill with its local state — not installed / installed / upgradable / locally modified / collides with a built-in skill —
+  and installs a row through the same zip-import path the "⬆ ZIP" button uses, so installed skills land in `skills/custom/`
+  and "presets are read-only" plus "only USR skills are deletable" keep holding. The source is one setting,
+  `skill_index_url` in `configs/oss_presets.json` (the same file and bucket as the cloud asset presets and the cloud pose
+  library); with no source configured the entry is not shown at all. The index is a read-only cache
+  (`gallery/skill_cache/_index.json`, TTL from `sync_interval_hours`) fetched only when that panel opens and when
+  **刷新清单** is clicked — never at startup, never on a timer — and a failed fetch leaves the last successful index on
+  screen with its age. Downloaded packages are verified against the index sha256 before anything is written, a row whose
+  id matches a built-in skill is refused, and a skill the user edited is only overwritten after they confirm it, so
+  installing from the cloud never rewrites a hand-written skill. Publishers pack and upload with `tools\skills_deploy_oss.py`.
 - **A skill can name the page its home card opens.** A skill's `skill.md` frontmatter gains `landing`, whose value is one of
   the Studio page ids the home app registry knows (`paint`, `video`, `director`, `storyboard`, `enhance`, `voice`, `frames`,
   `reverse`, `reverse_video`, `pose`, `agent`, `edit`, `gallery`, `skills`, `settings`, `home`). The skill card on the Studio

@@ -4,7 +4,7 @@
 // 工厂只接装配层给得出的那两样（建元素与提示条）；技能管理组件、导入接口、文案与图标自己 import。
 import { t, tf } from "../../js/core/i18n.js";
 import { setIconLabel } from "../../js/core/icons.js";
-import { createSkillManager, importWorkflowSkill } from "../../skill.js";
+import { createSkillManager, importWorkflowSkill, listSkillSources, installSkillSource, dispatchSkillsUpdated } from "../../skill.js";
 
 /** @typedef {Object} SkillsPageHost
  *  @property {Function} $el 建元素
@@ -28,7 +28,7 @@ function buildSkills(el) {
         if (mgr?.isDirty() && !confirm(t("当前技能有未保存的修改，返回引导页将丢弃这些修改。"))) return;
         mgr?.close();
         mgr = null;
-        page.classList.remove("ns-skills-editing");
+        page.classList.remove("ns-skills-editing", "ns-skills-cloud");
     };
 
     const ensureManager = () => {
@@ -67,6 +67,23 @@ function buildSkills(el) {
     newBtn.onclick = () => showManager("new");
     listBtn.onclick = () => showManager("list");
 
+    // 云端技能入口：源不可用就不出这枚控件（产品面不变量）。可用与否读一次本机配置就够——
+    // 源未配置时后端不联网直接回「未配置」，配好了也在 TTL 内命中缓存索引，都不发请求
+    const cloudBtn = $el("button", { className: "ns-btn", type: "button", title: t("从云端订阅源查看并安装技能") });
+    setIconLabel(cloudBtn, "cloud", t("云端技能"));
+    cloudBtn.hidden = true;
+    cloudBtn.onclick = () => showCloud();
+    listSkillSources().then((data) => { cloudBtn.hidden = !data.enabled; });
+
+    let cloud = null;
+    const showCloud = async () => {
+        if (mgr?.isDirty() && !confirm(t("当前技能有未保存的修改，切到云端技能将丢弃这些修改。"))) return;
+        page.classList.remove("ns-skills-editing");
+        page.classList.add("ns-skills-cloud");
+        cloud = cloud || buildCloudPanel(page, $el, toast, showGuide);
+        await cloud.load(false);
+    };
+
     const fileInput = $el("input", { type: "file", accept: ".json,application/json", className: "ns-skills-file" });
     fileInput.hidden = true;
     importBtn.onclick = () => { fileInput.value = ""; fileInput.click(); };
@@ -104,7 +121,7 @@ function buildSkills(el) {
             $el("i", { className: "ns-video-corner c-bl" }),
             $el("i", { className: "ns-video-corner c-br" }),
         ]),
-        $el("div", { className: "ns-skills-guide-actions" }, [importBtn, newBtn, listBtn]),
+        $el("div", { className: "ns-skills-guide-actions" }, [importBtn, newBtn, listBtn, cloudBtn]),
     ]);
     page.append(guide, managerHost, fileInput);
 }
@@ -122,6 +139,114 @@ function workflowImportProblem(data) {
             return t("文件不是 API 工作流（节点缺少 class_type / inputs）");
     }
     return "";
+}
+
+// 云端技能面板：一份清单 + 每行的本地状态 + 安装/更新那一步。清单拉取只在本面板打开与「刷新清单」
+// 时发生，拉取失败显示上次成功的清单与最近成功时间（已装的技能不受影响）。安装走后端那条既有
+// 技能包安装口：装进 skills/custom/，预设只读与「只有 USR 可删」这两条规则一字不动地生效。
+const CLOUD_STATE_LABELS = {
+    not_installed: t("未安装"),
+    installed: t("已安装"),
+    upgrade: t("可更新"),
+    local_modified: t("本地已修改"),
+    blocked_preset: t("与内置技能同名"),
+};
+const CLOUD_ACTION_LABELS = { not_installed: t("安装"), upgrade: t("更新"), local_modified: t("确认覆盖") };
+
+function cloudAgeText(hours) {
+    if (hours === null || hours === undefined) return t("从未成功拉取");
+    if (hours < 1) return t("刚刚");
+    if (hours < 48) return tf("{n} 小时前", { n: Math.round(hours) });
+    return tf("{n} 天前", { n: Math.round(hours / 24) });
+}
+
+function buildCloudPanel(host, $el, toast, back) {
+    const panel = $el("div", { className: "ns-skills-cloud-panel" });
+    const status = $el("div", { className: "ns-skills-cloud-status", textContent: t("云端清单加载中…") });
+    const list = $el("div", { className: "ns-skills-cloud-list" });
+    const refresh = $el("button", { className: "ns-btn", type: "button", textContent: "⟳ " + t("刷新清单"), title: t("重新拉取云端清单（唯一一次强拉）") });
+    const backBtn = $el("button", { className: "ns-skills-back", type: "button", textContent: t("← 引导页"), title: t("返回技能引导页") });
+    backBtn.addEventListener("click", back);
+    refresh.addEventListener("click", () => load(true));
+    panel.append(
+        $el("div", { className: "ns-skills-cloud-bar" },
+            [backBtn, $el("span", { className: "ns-skills-cloud-title", textContent: t("云端技能") }), refresh]),
+        status, list);
+    host.appendChild(panel);
+    let loading = false;
+
+    function statusLine(data) {
+        const age = cloudAgeText(data.age_hours);
+        if (!data.enabled) return data.hint || t("云端技能源未配置");
+        if (data.reason === "fetch_failed") return tf("清单拉取失败，下面是上次成功的清单（{age}）", { age });
+        if (data.reason === "bad_index") return tf("云端清单读不出，下面是上次成功的清单（{age}）", { age });
+        return tf("共 {n} 条 · 最近刷新 {age}", { n: (data.skills || []).length, age });
+    }
+
+    async function installed(row) {
+        toast(tf("已安装「{name}」", { name: row.name || row.id }));
+        dispatchSkillsUpdated();
+        await load(false);
+    }
+
+    async function install(row, btn) {
+        btn.disabled = true;
+        const r = await installSkillSource(row.id, false);
+        if (r.success) return installed(row);
+        // 本地改过的技能只在这一发确认后覆盖：后端没给 allow_modified 就一动不动文件
+        if (r.code === "local_modified") {
+            if (!confirm(tf("技能「{id}」本地已修改：覆盖会丢掉你改过的内容。要用云端这一份覆盖吗？", { id: row.id }))) {
+                btn.disabled = false;
+                return;
+            }
+            const forced = await installSkillSource(row.id, true);
+            if (forced.success) return installed(row);
+            toast(tf("安装失败：{msg}", { msg: forced.message }));
+            btn.disabled = false;
+            return;
+        }
+        toast(tf("安装失败：{msg}", { msg: r.message }));
+        btn.disabled = false;
+    }
+
+    function render(data) {
+        status.textContent = statusLine(data);
+        const rows = data.skills || [];
+        if (!rows.length) {
+            list.replaceChildren($el("div", { className: "ns-skills-cloud-empty", textContent: t("云端清单里还没有技能") }));
+            return;
+        }
+        list.replaceChildren(...rows.map((row) => {
+            const kids = [
+                $el("span", { className: "ns-skills-cloud-name", textContent: row.name || row.id, title: row.id }),
+                $el("span", { className: "ns-skills-cloud-desc", textContent: row.description || "" }),
+            ];
+            if (row.state === "upgrade") {
+                kids.push($el("span", { className: "ns-skills-cloud-meta", textContent: `${row.installed_version} → ${row.version}` }));
+            }
+            kids.push($el("span", { className: "ns-skills-cloud-state", textContent: CLOUD_STATE_LABELS[row.state] || "" }));
+            const label = CLOUD_ACTION_LABELS[row.state];
+            if (label) {
+                const btn = $el("button", { className: "ns-btn", type: "button", textContent: label });
+                btn.addEventListener("click", () => install(row, btn));
+                kids.push(btn);
+            }
+            return $el("div", { className: "ns-skills-cloud-row" }, kids);
+        }));
+    }
+
+    async function load(force) {
+        if (loading) return null;
+        loading = true;
+        refresh.disabled = true;
+        const data = await listSkillSources(force);
+        refresh.disabled = false;
+        loading = false;
+        render(data);
+        return data;
+    }
+
+    return { panel, load };
 }
 
 return { buildSkills };

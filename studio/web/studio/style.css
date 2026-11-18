@@ -659,6 +659,22 @@ body {
 .ns-skills-editing .ns-skills-manager { display: flex; }
 .ns-skills-file { display: none; }
 
+/* 云端技能面板：与引导页 / 技能列表同一块页状态切换，一条竖列（720px 上限），滚动条只有外层 .ns-page 那一根。
+   行不带框：名字吃余宽，版本与状态是细字，动作钮在行尾 */
+.ns-skills-cloud-panel { display: none; flex: 1 1 auto; min-height: 0; flex-direction: column; align-items: center; gap: 12px; }
+.ns-skills-cloud .ns-skills-guide { display: none; }
+.ns-skills-cloud .ns-skills-cloud-panel { display: flex; }
+.ns-skills-cloud-bar { display: flex; align-items: center; gap: 10px; width: min(720px, 100%); }
+.ns-skills-cloud-title { font-weight: 600; }
+.ns-skills-cloud-status { width: min(720px, 100%); font-size: 12px; opacity: .75; }
+.ns-skills-cloud-list { display: flex; flex-direction: column; gap: 10px; width: min(720px, 100%); }
+.ns-skills-cloud-row { display: flex; align-items: center; gap: 10px; }
+.ns-skills-cloud-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ns-skills-cloud-meta, .ns-skills-cloud-state { font-size: 12px; opacity: .75; flex: none; }
+.ns-skills-cloud-desc { font-size: 12px; opacity: .6; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ns-skills-cloud-row .ns-btn { flex: none; display: inline-flex; align-items: center; }
+.ns-skills-cloud-empty { font-size: 12px; opacity: .6; }
+
 /* 技能页：统一技能管理直接挂满主区。组件本身是弹窗出身 —— prompts.css 那套 #1a1a2a 底、#1a2a3a 标题条、
    #5090cc 蓝高亮、#1a3a5a 小蓝按钮，在素材页 / 设置页的灰底 + #7aa2ff 旁边就是另一套色。
    这里只在外壳层把弹窗色换成外壳色（.ns-skills 作用域），ComfyUI 里的技能弹窗与节点技能选择窗不动。 */

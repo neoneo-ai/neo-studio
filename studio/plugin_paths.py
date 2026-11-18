@@ -27,7 +27,10 @@ SEED_DIRS = ("configs", "prompts/presets", "skills/presets", "skills/tasks", "re
 SEED_STAMP_REL = "configs/preset_seed.json"
 # 一次性搬运：这两条全参考预设在 2026-11-14 才带特效表与特效本体清单，播种指纹又是这轮才引入的，
 # 老数据根没有指纹可判，只能把缺的那几个键补进去——已有键与键值一字不动，用户钉过的 steps 照留。
+# configs/oss_presets.json 走同一条：这一版给它加了 skill_index_url（云端技能订阅源）。
+# 装了旧版又自己填过 bucket 的用户升上来，只多这一个键，自己那三行地址一字不动。
 SEED_ADD_KEYS = frozenset((
+    "configs/oss_presets.json",
     "skills/presets/minimax-h3-r2v/config.json",
     "skills/presets/minimax-h3-r2v/models.json",
     "skills/presets/minimax-h3-vdn-r2v/config.json",

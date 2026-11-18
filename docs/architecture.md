@@ -53,6 +53,7 @@ studio/
 ├── prompt_names.py            # 提示词读侧扫描 + /rs_prompts/*（列表 / 正文 / 行级 / 随机）
 ├── prompt_lines.py            # 多行提示词集合解析
 ├── skill.py                   # 技能系统 + 技能路由
+├── skill_cloud.py             # 云端技能订阅源读侧（清单缓存 + 按 id 验指纹装包）+ 两条 /rs_prompts 路由
 ├── llm.py                     # LLM 推理：远程 API / 原生 safetensors / 本地 GGUF
 ├── laya_router.py             # 本地轻量文本分类
 ├── minimax_h3.py              # MiniMax H3 生成模式与 grounding
@@ -103,6 +104,7 @@ studio/
 | `prompt_lines.py` | `collections/` 多行提示词集合的解析与随机选取 |
 | `skill.py` | 技能扫描加载、多结果契约、引用文件工具循环、技能路由 |
 | `llm.py` | 远程 OpenAI 兼容调用、国产云供应商、原生 safetensors 文本生成、本地 GGUF 推理 |
+| `skill_cloud.py` | 云端技能订阅源读侧：清单只读缓存、按 id 验指纹装进 `skills/custom/` |
 | `laya_router.py` | 轻量文本分类：增强技能选择与意图预路由 |
 
 ### 生图
@@ -280,6 +282,7 @@ V3 节点（`NeoImageGenEdit`）走 `io.Schema(description=..., search_aliases=[
 | `gallery/thumbnails/` | 缩略图缓存（可删除重建） |
 | `gallery/lora_cache/` | Civitai LORA 示例缓存 |
 | `gallery/oss_cache/` | 云端预设缓存 |
+| `gallery/skill_cache/` | 云端技能清单缓存（可删除重建） |
 | `recipes/presets/` | 内置预设配方（只读） |
 | `recipes/custom/` | 用户配方：`recipe.json` + `assets/` |
 | `agent_sessions/` | 智能体会话落盘：一次运行一个 JSON（时间线逐帧 + 续聊原文），只存本机、不进包 |
@@ -288,6 +291,7 @@ V3 节点（`NeoImageGenEdit`）走 `io.Schema(description=..., search_aliases=[
 | `configs/image_gen.json` | 生图默认参数 |
 | `configs/video_gen.json` | 生视频默认参数 |
 | `configs/gallery_settings.json` | 自定义目录与 Civitai 设置 |
+| `configs/skill_source_stamp.json` | 云端技能已装版本与目录指纹（可删除重建，删后只退化成「本地已修改」） |
 | `configs/gallery_dim_cache.json` | 卡片宽高缓存（路径+mtime+大小 为键，可删除重建） |
 | `configs/bookmarks.json` | 本地收藏（仅路径信息） |
 | `configs/oss_presets.json` | OSS 预设素材源配置 |

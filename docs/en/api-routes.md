@@ -368,7 +368,16 @@ included), and the dock never calls a handler directly.
 | POST | `/rs_prompts/save_skill` | Create / update a skill main file (presets read-only) |
 | POST | `/rs_prompts/delete_skill` | Delete an entire skill directory (USR only) |
 | POST | `/rs_prompts/reset_skill_config` | Reset skill settings to default (delete the local override file) |
+| GET  | `/rs_prompts/skill_sources` | Cloud skill subscription source: index rows plus each row's local state (`enabled` / `source` / `reason` / `age_hours` / `skills[]`; `?force=1` is the only forced refetch, an unconfigured source answers `enabled: false` and pulls nothing) |
+| POST | `/rs_prompts/install_skill_source` | Install one cloud row by id: download the zip, verify its sha256, install into `skills/custom/` through the `upload_skill` path; success and failure both answer `{success, code, message}` (`local_modified` / `preset_conflict` / `fingerprint_mismatch` and friends) |
 
+- The cloud skill source has one setting: `skill_index_url` in `configs/oss_presets.json` (missing = not configured,
+  and the skills page ships no 云端技能 entry at all). The index is a read-only cache in `gallery/skill_cache/_index.json`
+  with the TTL from `sync_interval_hours`, fetched only when that panel opens and when 刷新清单 is clicked. Installed
+  versions and directory fingerprints live in `configs/skill_source_stamp.json`: a higher index version is what makes a
+  row "upgradable", and a user-edited skill only answers `code: local_modified` — it is overwritten only when the
+  request carries `allow_modified`. Rows colliding with a built-in skill are refused (`code: preset_conflict`), leaving
+  presets read-only and "only USR skills are deletable" untouched. Publishers run `tools\skills_deploy_oss.py`.
 - `fetch_remote_models` requests carry `provider`; an empty `api_key` falls back to that provider's stored key.
   Local / LAN endpoints try the LM Studio and Ollama native endpoints in order first, and only then try the
   OpenAI-compatible `/v1/models` endpoint.

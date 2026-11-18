@@ -107,6 +107,18 @@ searching), or the embedded entry inside the node's bottom skill dropdown.
   detail window's title bar, fill in the system prompt content and save.
 - **Upload / import** - "⬆ ZIP" or "⬆ Folder" at the bottom of the dropdown imports a `.zip` or a whole
   folder (several `.md` files) as new skills.
+- **Cloud subscription source** - the skills page's "☁ 云端技能" entry lists one catalog row per published skill
+  with its state: not installed / installed / upgradable / locally modified / collides with a built-in skill.
+  "安装" and "更新" run through the zip import path above and land in `skills/custom/`, so "presets are read-only"
+  and "only USR skills are deletable" stay exactly as they were. The source is `skill_index_url` in
+  `<data root>/configs/oss_presets.json` (the same settings file and the same bucket as the cloud asset presets and
+  the cloud pose library); publishers run `tools\skills_deploy_oss.py`, and with no source configured the entry is
+  not shipped at all. The index is a read-only cache (TTL from `sync_interval_hours`) fetched only when that panel
+  opens and when 刷新清单 is clicked — never at startup, never on a timer — and a failed fetch leaves the last
+  successful index on screen with its age. Installed versions and directory fingerprints live in
+  `configs/skill_source_stamp.json`: only a higher index version reads as "upgradable", and a skill the user edited
+  only reports "locally modified" until they click the overwrite confirmation; rows colliding with a built-in skill
+  refuse to install.
 - **Copy as custom** - built-in templates and task skills cannot be deleted, but one click
   the header's "Copy as custom" icon button makes an editable copy and switches the detail view to it immediately.
 - **Delete** - only user skills (USR) can be deleted (with confirmation); built-ins (SYS / TASK) are
@@ -145,8 +157,8 @@ searching), or the embedded entry inside the node's bottom skill dropdown.
 
 - **Left column width** - drag the divider between the panels to set the list width; it is remembered on
   release and reused next time; double-click restores the default.
-- **Automatic sync** - saving, uploading, copying and deleting broadcast an update event and every skill
-  picker on every node refreshes immediately.
+- **Automatic sync** - saving, uploading, installing from the cloud source, copying and deleting broadcast an
+  update event and every skill picker on every node refreshes immediately.
 - **Independent window controls** - the unified window has no overlay (the canvas behind stays usable):
   drag the title bar to move, double-click it to maximize/restore, "⛶" in the title bar maximizes to fill
   (8px margin) / restores, the bottom-right handle resizes; closing only happens through "✕" (Esc does not

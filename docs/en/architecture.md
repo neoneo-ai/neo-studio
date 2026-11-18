@@ -56,6 +56,7 @@ studio/
 ├── prompt_names.py            # prompt read-side scan + /rs_prompts/* (list / text / lines / random)
 ├── prompt_lines.py            # multi-line prompt collection parsing
 ├── skill.py                   # skill system + skill routes
+├── skill_cloud.py             # cloud skill subscription source reader (cached index, verified install by id) + 2 /rs_prompts routes
 ├── llm.py                     # LLM inference: remote API / native safetensors / local GGUF
 ├── laya_router.py             # lightweight local text classification
 ├── minimax_h3.py              # MiniMax H3 generation modes & grounding
@@ -106,6 +107,7 @@ studio/
 | `prompt_lines.py` | Parsing and random selection of the multi-line prompt collections under `collections/` |
 | `skill.py` | Skill scanning and loading, multi-result contract, reference-file tool loop, skill routes |
 | `llm.py` | Remote OpenAI-compatible calls, domestic cloud providers, native safetensors text generation, local GGUF inference |
+| `skill_cloud.py` | Cloud skill subscription source reader: read-only cached index, fingerprint-verified install into `skills/custom/` |
 | `laya_router.py` | Lightweight text classification: enhancement-skill selection and intent pre-routing |
 
 ### Image generation
@@ -296,6 +298,7 @@ data root; the exe uses the `data/` next to the exe.
 | `gallery/thumbnails/` | Thumbnail cache (deletable, rebuilt) |
 | `gallery/lora_cache/` | Civitai LORA example cache |
 | `gallery/oss_cache/` | Cloud preset cache |
+| `gallery/skill_cache/` | Cloud skill index cache (deletable, rebuilt) |
 | `recipes/presets/` | Built-in preset recipes (read-only) |
 | `recipes/custom/` | User recipes: `recipe.json` + `assets/` |
 | `agent_sessions/` | Agent session records: one JSON per run (timeline frames + resume text), stored on this machine only, never packaged |
@@ -304,6 +307,7 @@ data root; the exe uses the `data/` next to the exe.
 | `configs/image_gen.json` | Image generation defaults |
 | `configs/video_gen.json` | Video generation defaults |
 | `configs/gallery_settings.json` | Custom directories and Civitai settings |
+| `configs/skill_source_stamp.json` | Installed cloud-skill versions and directory fingerprints (deletable; losing it only degrades to "local modified") |
 | `configs/gallery_dim_cache.json` | Card width/height cache (keyed by path+mtime+size, deletable and rebuilt) |
 | `configs/bookmarks.json` | Local bookmarks (path information only) |
 | `configs/oss_presets.json` | OSS preset asset source configuration |

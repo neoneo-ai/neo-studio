@@ -24,12 +24,12 @@ if __package__ not in (None, ""):
     # 桌面端模块：自带 RouteTableDef，handler 只依赖 folder_paths 与文件系统。
     # 这里统一挂进 ComfyUI 路由表（server.add_routes 会一并生成 /api 前缀副本）；
     # 桌面端离线服务复用同一批 handler，不经过 PromptServer。
-    from . import (gallery, gallery_lora, gallery_oss, bookmark, lora_tag, skill, llm, recipes,
+    from . import (gallery, gallery_lora, gallery_oss, bookmark, lora_tag, skill, skill_cloud, llm, recipes,
                    video_gen, image_gen_files, model_hub, skill_models, backyard, prompt_names, pose,
                    pose_cloud, frames, task_center, home_layout)
 
     from server import PromptServer
-    for _mod in (gallery_lora, gallery_oss, gallery, bookmark, lora_tag, skill, llm, recipes,
+    for _mod in (gallery_lora, gallery_oss, gallery, bookmark, lora_tag, skill, skill_cloud, llm, recipes,
                  video_gen, image_gen_files, model_hub, skill_models, backyard, prompt_names, pose,
                  pose_cloud, frames, task_center, home_layout):
 

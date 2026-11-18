@@ -315,7 +315,14 @@ Neo Studio 独立页面（`web/studio/index.html`）的后端。素材 / 生图 
 | POST | `/rs_prompts/save_skill` | 新建 / 更新技能主文件（预设只读） |
 | POST | `/rs_prompts/delete_skill` | 删除整个技能目录（仅 USR） |
 | POST | `/rs_prompts/reset_skill_config` | 技能设置恢复默认（删本地覆盖文件） |
+| GET  | `/rs_prompts/skill_sources` | 云端技能订阅源：清单行 + 每行的本地状态（`enabled` / `source` / `reason` / `age_hours` / `skills[]`；`?force=1` 是唯一一次强拉，未配置只回 `enabled: false`，不拉 OSS） |
+| POST | `/rs_prompts/install_skill_source` | 按 id 装一行云端技能：取 zip 验 sha256，走 `upload_skill` 那条口装进 `skills/custom/`；成功与失败都回 `{success, code, message}`（`local_modified` / `preset_conflict` / `fingerprint_mismatch` 等码） |
 
+- 云端技能订阅源的配置只有 `configs/oss_presets.json` 的 `skill_index_url`（缺失 = 未配置：技能页不出「云端技能」
+  入口）；清单只读缓存在 `gallery/skill_cache/_index.json`，TTL 取 `sync_interval_hours`，拉取只发生在技能页
+  打开这一面板与点「刷新清单」两处。已装版本与目录指纹记在 `configs/skill_source_stamp.json`：清单版本更高才是
+  「可更新」，本地目录被用户改过只回 `code: local_modified`，请求带 `allow_modified` 才覆盖；与内置技能同名的
+  条目拒装（`code: preset_conflict`），预设只读与「只有 USR 可删」两条照旧。发布跑 `tools\skills_deploy_oss.py`。
 - `fetch_remote_models` 请求带 `provider`，`api_key` 留空时回退该 provider 已存密钥。
   本地 / 局域网端点先依次尝试 LM Studio、Ollama 原生端点，没有结果再按 OpenAI 兼容 `/v1/models` 尝试。
 - `skills` 里的生图 / 生视频技能另带可选 `gen_config` 摘要（主模型、LoRA 名列表、长边尺寸、默认比例、步数），
