@@ -58,7 +58,7 @@ export function createCanvasPage({ $el, api, toast, openMaterial, canGen, startC
         page.append(bar.root, stage, menus);
         el.appendChild(page);
         view = { el, page, stage, grid, world, links, nodeLayer, active, hint, menus, save: bar.save, zoom: bar.zoom,
-            select: bar.select, undo: bar.undo, redo: bar.redo };
+            project: bar.project, undo: bar.undo, redo: bar.redo };
         attachCanvasInteractions({ stage, view, host });
         applyViewport();
         renderNodes();
@@ -72,8 +72,6 @@ export function createCanvasPage({ $el, api, toast, openMaterial, canGen, startC
     }
 
     function buildBar() {
-        const select = $el("select", { className: "ns-canvas-select", "aria-label": t("画布") });
-        select.addEventListener("change", () => loadProject(select.value));
         const mk = (label, name, fn) => {
             const btn = $el("button", { className: "ns-canvas-tool", type: "button", title: label, "aria-label": label, onclick: fn });
             setIcon(btn, name);
@@ -87,13 +85,34 @@ export function createCanvasPage({ $el, api, toast, openMaterial, canGen, startC
             btn.title = `${label}（${hint}）`;
             return btn;
         };
-        // 改名与删除是低频动作：收在下拉行右端，指针落到这一行、键盘落进这一行才现出来（样式在 style.css，
-        //   触屏档没有 hover，两枚常显）
-        const projectAct = (label, name, fn) => {
-            const btn = mk(label, name, fn);
-            btn.classList.add("ns-canvas-project-act");
-            return btn;
-        };
+        // 画布切换自绘面板：条上只有当前画布名与箭头，点开是一列画布，改名与删除在每一行右端 ——
+        //   原生 select 的弹层里装不下这两枚钮，切换这一层只能自己画（样式在 style.css，触屏档两枚常显）
+        const projectName = $el("span", { className: "ns-canvas-project-name" });
+        const projectCaret = $el("span", { className: "ns-canvas-project-caret" });
+        setIcon(projectCaret, "chevron");
+        const projectPanel = $el("div", { className: "ns-canvas-project-panel" });
+        const projectBtn = $el("button", { className: "ns-canvas-project-btn", type: "button",
+            "aria-label": t("画布"), "aria-expanded": "false",
+            onclick: () => (projectPanel.classList.contains("ns-canvas-project-panel-open")
+                ? closeProjectPanel() : openProjectPanel()) }, [projectName, projectCaret]);
+        function closeProjectPanel() {
+            projectPanel.classList.remove("ns-canvas-project-panel-open");
+            projectBtn.setAttribute("aria-expanded", "false");
+            document.removeEventListener("pointerdown", projectOutside, true);
+            document.removeEventListener("keydown", projectEscape, true);
+        }
+        function openProjectPanel() {
+            renderProjectPanel();
+            const rect = projectBtn.getBoundingClientRect();
+            projectPanel.style.left = `${Math.max(8, rect.left)}px`;
+            projectPanel.style.top = `${rect.bottom + 6}px`;
+            projectPanel.classList.add("ns-canvas-project-panel-open");
+            projectBtn.setAttribute("aria-expanded", "true");
+            document.addEventListener("pointerdown", projectOutside, true);
+            document.addEventListener("keydown", projectEscape, true);
+        }
+        const projectOutside = (e) => { if (!projectPanel.contains(e.target) && !projectBtn.contains(e.target)) closeProjectPanel(); };
+        const projectEscape = (e) => { if (e.key === "Escape") closeProjectPanel(); };
         const undo = mkHint(t("撤销"), "Ctrl+Z", "undo", () => undoEdit());
         const redo = mkHint(t("重做"), "Ctrl+Shift+Z", "redo", () => redoEdit());
         const group = (...kids) => $el("span", { className: "ns-canvas-bar-group" }, kids);
@@ -135,11 +154,7 @@ export function createCanvasPage({ $el, api, toast, openMaterial, canGen, startC
             addMenu.classList.contains("ns-canvas-add-menu-open") ? closeAddMenu() : openAddMenu()));
         const root = $el("div", { className: "ns-canvas-bar" }, [
             // 三组：画布本身 / 加节点与撤销重做 / 视图。整条不换行，窗口不够宽就在条内横向滚
-            group($el("span", { className: "ns-canvas-project" }, [
-                select,
-                projectAct(t("重命名"), "pencil", () => renameProject()),
-                projectAct(t("删除画布"), "trash", () => deleteProject())
-            ]), mk(t("新建画布"), "plus", () => createProject())),
+            group(projectBtn, projectPanel),
             sep(),
             group(addBtn, addMenu, sep(), undo, redo),
             $el("span", { className: "ns-canvas-bar-gap" }),
@@ -150,7 +165,8 @@ export function createCanvasPage({ $el, api, toast, openMaterial, canGen, startC
                 mk(t("背景"), "eye", () => cycleBackground()),
                 save),
         ]);
-        return { root, select, zoom, save, undo, redo };
+        return { root, project: { btn: projectBtn, panel: projectPanel, name: projectName, close: closeProjectPanel },
+            zoom, save, undo, redo };
     }
 
     /** 视口落到 DOM：世界层一整层 transform，缩放与平移只改这一句（上游同一形状） */
@@ -720,7 +736,7 @@ export function createCanvasPage({ $el, api, toast, openMaterial, canGen, startC
                 node_count: state.nodes.length, connection_count: state.connections.length };
             if (at >= 0) projects[at] = { ...projects[at], ...meta };
             else projects.push(meta);
-            fillProjectSelect();
+            renderProjectPanel();
         } catch (err) {
             dirty = true;   // 没写进去的改动留着：下一次去保存还会再来一发
             view.save.textContent = t("保存失败");
@@ -735,14 +751,37 @@ export function createCanvasPage({ $el, api, toast, openMaterial, canGen, startC
         if (dirty) saveProject();
     }
 
-    function fillProjectSelect() {
-        view.select.replaceChildren(...projects.map((p) => $el("option", { value: p.id, textContent: p.title })));
-        view.select.value = state.id || "";
+    /** 画布面板：一画布一行，行名切过去；改名与删除收在每一行右端，末行是新建画布。条上那枚名字跟着这一张走 */
+    function renderProjectPanel() {
+        if (!view) return;
+        const rows = projects.map((p) => $el("div", {
+            className: "ns-canvas-project-row" + (p.id === state.id ? " ns-canvas-project-row-on" : ""),
+            "data-canvas": p.id,
+        }, [
+            $el("button", { className: "ns-canvas-project-row-name", type: "button", textContent: p.title,
+                onclick: () => { view.project.close(); loadProject(p.id); } }),
+            rowAct(t("重命名"), "pencil", () => renameProject(p.id)),
+            rowAct(t("删除画布"), "trash", () => deleteProject(p.id)),
+        ]));
+        const createRow = $el("button", { className: "ns-canvas-tool ns-canvas-project-new", type: "button",
+            title: t("新建画布"), "aria-label": t("新建画布"),
+            onclick: () => { view.project.close(); createProject(); } });
+        setIconLabel(createRow, "plus", t("新建画布"));
+        view.project.panel.replaceChildren(...rows, createRow);
+        view.project.name.textContent = state.title || t("画布");
+    }
+
+    /** 面板行右端那两枚钮：样式默认收着，指针或键盘落到那一行才亮（style.css） */
+    function rowAct(label, name, fn) {
+        const btn = $el("button", { className: "ns-canvas-tool ns-canvas-project-row-act", type: "button",
+            title: label, "aria-label": label, onclick: fn });
+        setIcon(btn, name);
+        return btn;
     }
 
     async function loadProjects() {
         projects = await store.list();
-        fillProjectSelect();
+        renderProjectPanel();
         if (projects.length) await loadProject(projects[0].id);
     }
 
@@ -762,7 +801,7 @@ export function createCanvasPage({ $el, api, toast, openMaterial, canGen, startC
         refreshHistory();
         dirty = false;
         view.save.textContent = t("已保存");
-        view.select.value = state.id;
+        renderProjectPanel();
         renderNodes();
         renderConnections();
         applyViewport();
@@ -784,31 +823,33 @@ export function createCanvasPage({ $el, api, toast, openMaterial, canGen, startC
         await saveProject();
     }
 
-    async function renameProject() {
-        if (!state.id) { toast(t("这张画布还没存过，先加一个节点"), "info"); return; }
-        const name = window.prompt(t("重命名画布"), state.title);
+    /** 改名面板里那一行的画布：prompt 预填那一行自己的名字；改的是别的画布就不动这一张 */
+    async function renameProject(id) {
+        const meta = projects.find((p) => p.id === id);
+        const name = window.prompt(t("重命名画布"), meta ? meta.title : state.title);
         if (!name) return;
         try {
-            const data = await store.rename(state.id, name);
-            state = { ...state, title: data.title };
-            // 下拉里那条也要跟着改名：只改 state.title 的话列表还挂着旧名字
-            const at = projects.findIndex((p) => p.id === data.id);
-            if (at >= 0) projects[at] = { ...projects[at], title: data.title };
-            fillProjectSelect();
+            const data = await store.rename(id, name);
+            if (id === state.id) state = { ...state, title: data.title };
+            // 面板里那一行也要跟着改名：只改 state.title 的话列表还挂着旧名字
+            if (meta) meta.title = data.title;
+            renderProjectPanel();
         } catch (err) {
             toast(`${t("重命名失败")}：${err.message}`, "error");
         }
     }
 
-    async function deleteProject() {
-        if (!state.id) { toast(t("这张画布还没存过，没有可删的"), "info"); return; }
-        if (!window.confirm(`${t("删除画布")}「${state.title}」：${t("节点与连线一起删掉，删完不能撤销")}`)) return;
+    /** 删面板里那一行的画布：删的正是正在画的这一张才换到下一张，删别的画布这一张不动 */
+    async function deleteProject(id) {
+        const meta = projects.find((p) => p.id === id);
+        if (!window.confirm(`${t("删除画布")}「${meta ? meta.title : state.title}」：${t("节点与连线一起删掉，删完不能撤销")}`)) return;
         try {
-            await store.remove(state.id);
+            await store.remove(id);
         } catch (err) {
             toast(`${t("删除失败")}：${err.message}`, "error");
             return;
         }
+        if (id !== state.id) { projects = await store.list(); renderProjectPanel(); return; }
         dirty = false;
         await loadProjects();
     }

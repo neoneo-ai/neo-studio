@@ -1454,13 +1454,32 @@ body {
 .ns-canvas-bar-gap { flex: 1; }
 .ns-canvas-bar-group { display: flex; align-items: center; gap: 6px; flex: none; }
 .ns-canvas-bar-sep { flex: none; width: 1px; height: 18px; background: var(--ns-border); }
-.ns-canvas-select { height: 28px; max-width: 140px; padding: 0 6px; border-radius: 6px; border: 1px solid var(--ns-field-bd); background: var(--ns-field); color: var(--ns-fg); }
-/* 画布名改与删除收在下拉行右端：这两枚是低频动作，默认收着，指针落到这一行或键盘 Tab 进这一行才现出来。
-   触屏档没有 hover，收着就是按不到，两枚常显 */
-.ns-canvas-project { display: flex; align-items: center; gap: 6px; flex: none; }
-.ns-canvas-project-act { opacity: 0; pointer-events: none; transition: opacity .12s; }
-.ns-canvas-project:hover .ns-canvas-project-act, .ns-canvas-project:focus-within .ns-canvas-project-act { opacity: 1; pointer-events: auto; }
-@media (hover: none) { .ns-canvas-project-act { opacity: 1; pointer-events: auto; } }
+/* 画布切换自绘面板：条上是当前画布名加箭头，点开是一列画布，末行是新建画布。改名与删除收在每一行右端
+   —— 原生 select 的弹层装不下钮；这两枚默认收着，指针落到那一行、键盘 Tab 进那一行才现出来，触屏档没有
+   hover 就常显。position: fixed 让面板不被工具条的横向滚动裁掉，落点在 openProjectPanel 里照钮的视口矩形算 */
+.ns-canvas-project-btn { flex: none; display: inline-flex; align-items: center; gap: 6px; max-width: 190px;
+    height: 28px; padding: 0 8px; border-radius: 6px; border: 1px solid var(--ns-field-bd);
+    background: var(--ns-field); color: var(--ns-fg); font: inherit; cursor: pointer; }
+.ns-canvas-project-btn:hover { border-color: var(--ns-field-bd-hover); background: var(--ns-field-hover); color: #fff; }
+.ns-canvas-project-btn[aria-expanded="true"] { border-color: var(--ns-primary); background: var(--ns-primary-soft); color: var(--ns-primary-fg); }
+.ns-canvas-project-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ns-canvas-project-caret { flex: none; display: inline-flex; transform: rotate(90deg); }
+.ns-canvas-project-btn[aria-expanded="true"] .ns-canvas-project-caret { transform: rotate(-90deg); }
+.ns-canvas-project-panel { display: none; position: fixed; z-index: 30; flex-direction: column; gap: 2px;
+    min-width: 220px; max-height: 320px; overflow: auto; padding: 4px; border-radius: 8px;
+    border: 1px solid var(--ns-border); background: var(--ns-panel); box-shadow: 0 6px 20px rgba(0, 0, 0, .45); }
+.ns-canvas-project-panel-open { display: flex; }
+.ns-canvas-project-row { display: flex; align-items: center; gap: 6px; padding: 2px; border-radius: 6px; }
+.ns-canvas-project-row:hover { background: var(--ns-field-hover); }
+.ns-canvas-project-row-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+    white-space: nowrap; padding: 0 6px; border: 0; border-radius: 6px; background: none; color: inherit;
+    font: inherit; font-size: 12px; text-align: left; cursor: pointer; }
+.ns-canvas-project-row-on .ns-canvas-project-row-name { background: var(--ns-primary-soft); color: var(--ns-primary-fg); }
+.ns-canvas-project-row-act { opacity: 0; pointer-events: none; transition: opacity .12s; }
+.ns-canvas-project-row:hover .ns-canvas-project-row-act, .ns-canvas-project-row:focus-within .ns-canvas-project-row-act { opacity: 1; pointer-events: auto; }
+@media (hover: none) { .ns-canvas-project-row-act { opacity: 1; pointer-events: auto; } }
+.ns-canvas-project-new { width: 100%; justify-content: flex-start; gap: 8px; white-space: nowrap;
+    margin-top: 2px; border-top: 1px solid var(--ns-border); border-radius: 0 0 6px 6px; }
 .ns-canvas-tool { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 28px; padding: 0 8px; border-radius: 6px; border: 1px solid var(--ns-field-bd); background: var(--ns-field); color: var(--ns-fg); font: inherit; cursor: pointer; }
 .ns-canvas-tool:hover { border-color: var(--ns-field-bd-hover); background: var(--ns-field-hover); color: #fff; }
 /* 没有可撤销 / 可重做时那两枚是灰的：灰态不能跟着 hover 亮起来，亮了就是点了也没反应 */

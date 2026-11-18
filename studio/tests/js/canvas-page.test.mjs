@@ -114,7 +114,8 @@ async function makePage(env = mockCanvas(), extraHost = {}, { width = STAGE.widt
     nodeLayer: host.querySelector(".ns-canvas-nodes"),
     hint: host.querySelector(".ns-canvas-hint"),
     bar: host.querySelector(".ns-canvas-bar"),
-    select: host.querySelector(".ns-canvas-select"),
+    project: host.querySelector(".ns-canvas-project-btn"),
+    projectPanel: host.querySelector(".ns-canvas-project-panel"),
     zoom: host.querySelector(".ns-canvas-zoom"),
     save: host.querySelector(".ns-canvas-save"),
   };
@@ -135,6 +136,11 @@ async function makePage(env = mockCanvas(), extraHost = {}, { width = STAGE.widt
 const nodeHandle = (view, nodeId, side) => view.nodeLayer
   .querySelector(`[data-node-id="${nodeId}"] .ns-canvas-handle-${side}`);
 const toastOf = (env) => env.store.toasts.map((item) => item.message);
+// 切画布走自绘面板：点开条上那枚画布名，再点面板里那一行的名字
+const pickCanvas = (view, id) => {
+  click(view.project);
+  click(view.projectPanel.querySelector(`[data-canvas="${id}"] .ns-canvas-project-row-name`));
+};
 
 describe("canvas-page", () => {
   const at = (x, y) => ({ x, y });
@@ -571,15 +577,20 @@ describe("canvas-page 页面", () => {
     test("空画布有提示，工具条上的动作一个不缺", async () => {
       const { view } = await makePage();
       assert.ok(view.hint.textContent.includes("把图拖进来"));
-      for (const label of ["新建画布", "重命名", "删除画布", "加图片", "加提示词", "加生成节点", "加视频节点", "加配方节点",
+      for (const label of ["加图片", "加提示词", "加生成节点", "加视频节点", "加配方节点",
         "撤销", "重做", "缩小", "放大", "适应内容", "背景"]) {
         assert.ok(view.bar.querySelector(`[aria-label="${label}"]`), label);
       }
-      // 改名与删除收在画布下拉那一行里，新建画布常显在旁边；展开配方只留卡上那一枚
-      const row = view.bar.querySelector(".ns-canvas-project");
-      assert.ok(row.querySelector(".ns-canvas-select")
-        && row.querySelector('[aria-label="重命名"]') && row.querySelector('[aria-label="删除画布"]'));
-      assert.ok(!row.contains(view.button("新建画布")), "新建画布不跟着收，收起来的是这一张画布的改名与删除");
+      // 画布切换是自绘面板：画布组里不摆图标钮，新建画布是面板末行；没有画布就没有改名与删除可摆
+      const panel = view.projectPanel;
+      const groupEl = view.bar.querySelector(".ns-canvas-bar-group");
+      assert.ok([...groupEl.children].filter((el) => el !== panel)
+        .every((el) => !el.classList.contains("ns-canvas-tool")),
+      "画布组条上不摆图标钮：条上只有当前画布名与箭头");
+      assert.ok(panel.querySelector('[aria-label="新建画布"]'), "新建画布是面板末行");
+      assert.ok(!view.bar.querySelector('[aria-label="重命名"]') && !view.bar.querySelector('[aria-label="删除画布"]'),
+        "一张画布都没有时不摆改名与删除：不能工作的控件不上条");
+      assert.ok(!view.bar.querySelector(".ns-canvas-select"), "原生 select 不在条上：弹层装不下这两枚钮");
       assert.equal(view.bar.querySelector('[aria-label="展开配方"]'), null, "工具条不摆展开配方：卡上那枚就够");
       // 剪贴板四枚不上条：Ctrl+D / X / C / V 就是这四发，鼠标用户在同一条上按条上那枚是同一发
       assert.deepEqual(["复制选中", "剪切选中", "复制", "粘贴"]
@@ -587,8 +598,7 @@ describe("canvas-page 页面", () => {
     });
     test("工具条每一枚钮的图标名都画得出来（缺一名就是条上一枚只剩边框的空钮）", () => {
       const source = fs.readFileSync(path.join(webDir, "studio/pages/canvas/page.js"), "utf8");
-      const bar = source.slice(source.indexOf("function buildBar"), source.indexOf("return { root, select"));
-      const names = [...bar.matchAll(/\b(?:mk(?:Label|Hint)?|projectAct)\((?:[^()]|\([^()]*\))*?,\s*"([a-z0-9-]+)"/g)]
+      const names = [...source.matchAll(/\b(?:mk(?:Label|Hint)?|rowAct|setIcon(?:Label)?)\((?:[^()]|\([^()]*\))*?,\s*"([a-z0-9-]+)"/g)]
         .map((m) => m[1]);
       assert.ok(names.length >= 14, `工具条里只扫到 ${names.length} 枚图标名：${names.join(",")}`);
       for (const name of names) {
@@ -1394,15 +1404,17 @@ describe("canvas-page 页面", () => {
       assert.match(css, /\.ns-canvas-handle-bottom \{[^}]*bottom: -6px/);
     });
 
-    test("画布改名与删除默认收着：指针与键盘落到下拉那一行才亮，触屏档常显", () => {
+    test("画布改名与删除收在面板行右端：指针与键盘落到那一行才亮，触屏档常显", () => {
       const css = fs.readFileSync(path.join(webDir, "studio", "style.css"), "utf8");
-      assert.match(css, /\.ns-canvas-project-act \{[^}]*opacity: 0[^}]*pointer-events: none/,
+      assert.match(css, /\.ns-canvas-project-row-act \{[^}]*opacity: 0[^}]*pointer-events: none/,
         "默认收着就不能按得中：只降透明度不改 pointer-events，看不见时那一枚还在原位等着误按");
-      assert.match(css, /\.ns-canvas-project:hover \.ns-canvas-project-act[^{]*\{[^}]*opacity: 1/);
-      assert.match(css, /\.ns-canvas-project:focus-within \.ns-canvas-project-act[^{]*\{[^}]*opacity: 1/,
+      assert.match(css, /\.ns-canvas-project-row:hover \.ns-canvas-project-row-act[^{]*\{[^}]*opacity: 1/);
+      assert.match(css, /\.ns-canvas-project-row:focus-within \.ns-canvas-project-row-act[^{]*\{[^}]*opacity: 1/,
         "键盘 Tab 进这一行也要亮：只认 hover 的话键盘用户永远碰不到改名与删除");
-      assert.match(css, /@media \(hover: none\) \{ \.ns-canvas-project-act \{[^}]*opacity: 1/,
+      assert.match(css, /@media \(hover: none\) \{ \.ns-canvas-project-row-act \{[^}]*opacity: 1/,
         "触屏没有 hover：收着就是按不到，这两枚在触屏档常显");
+      assert.match(css, /\.ns-canvas-project-panel \{[^}]*position: fixed[^}]*z-index: 30/,
+        "面板钉在视口坐标上：工具条横向滚动时不被裁掉");
     });
 
     test("主图徽标不住操作栏里：没选中也看得见那枚「主图」", async () => {
@@ -1557,16 +1569,14 @@ describe("canvas-page 页面", () => {
     test("切画布清栈：上一张的撤销不倒进这一张", async () => {
       const { view, page } = await makePage(TWO_IMAGES());
       click(view.button("加提示词"));
-      view.select.value = "canvas-0002";
-      fire(view.select, "change");
+      pickCanvas(view, "canvas-0002");
       await settle();
       assert.equal(page.current().nodes.length, 0);
       assert.equal(view.button("撤销").disabled, true, "切过来就是空栈");
       click(view.button("加提示词"));
       undo();
       assert.equal(page.current().nodes.length, 0, "只退这一张上的一步");
-      view.select.value = "canvas-0001";
-      fire(view.select, "change");
+      pickCanvas(view, "canvas-0001");
       await settle();
       undo();
       assert.equal(page.current().nodes.length, 2, "列表里那 1 个节点 + 之前加的 1 个：甲的栈切走时已清");
@@ -1782,17 +1792,43 @@ describe("canvas-page 页面", () => {
       assert.equal(env.store.saved[0].nodes.length, 0);
       assert.equal(page.current().title, "我的画布");
       assert.equal(view.save.textContent, "已保存");
-      assert.ok([...view.select.options].some((o) => o.textContent === "我的画布"),
-        "新建的画布要出现在下拉里，切走之后还得切得回来");
-      assert.equal(view.select.value, page.current().id);
+      assert.ok([...view.projectPanel.querySelectorAll(".ns-canvas-project-row-name")]
+        .some((el) => el.textContent === "我的画布"),
+      "新建的画布要出现在面板里，切走之后还得切得回来");
+      assert.equal(view.projectPanel.querySelector(".ns-canvas-project-row-on").dataset.canvas, page.current().id);
     });
-    test("没存过的画布点重命名要说话", async () => {
-      const { view, env } = await makePage();
-      click(view.button("加图片"));
-      click(view.button("重命名"));
+    test("画布面板：点开是一列画布，Esc 收回去", async () => {
+      const { view } = await makePage(TWO_IMAGES());
+      assert.equal(view.project.getAttribute("aria-expanded"), "false");
+      click(view.project);
+      assert.ok(view.projectPanel.classList.contains("ns-canvas-project-panel-open"));
+      assert.equal(view.project.getAttribute("aria-expanded"), "true");
+      assert.ok([...view.projectPanel.querySelectorAll(".ns-canvas-project-row-name")]
+        .some((el) => el.textContent === "乙"), "面板里两张画布都在那一列里");
+      fire(view.project, "keydown", { key: "Escape" });
+      assert.equal(view.projectPanel.classList.contains("ns-canvas-project-panel-open"), false);
+      assert.equal(view.project.getAttribute("aria-expanded"), "false");
+    });
+    test("面板里改别的画布的名字：这一张不动，那一行跟着改名", async () => {
+      const { page, view, env } = await makePage(TWO_IMAGES());
+      dialogs.promptAnswer = "改名乙";
+      click(view.projectPanel.querySelector('[data-canvas="canvas-0002"] [aria-label="重命名"]'));
       await settle();
-      assert.equal(env.store.renames.length, 0);
-      assert.ok(toastOf(env).some((m) => m.includes("还没存过")));
+      assert.equal(env.store.renames[0].id, "canvas-0002");
+      assert.equal(env.store.renames[0].title, "改名乙");
+      assert.equal(page.current().title, "甲", "改的是那一行的画布，这一张的名字不跟着换");
+      assert.ok([...view.projectPanel.querySelectorAll(".ns-canvas-project-row-name")]
+        .some((el) => el.textContent === "改名乙"));
+    });
+    test("面板里删掉不是当前那张：这一张不动，列表少一行", async () => {
+      const { page, view, env } = await makePage(TWO_IMAGES());
+      setConfirmAnswer(true);
+      click(view.projectPanel.querySelector('[data-canvas="canvas-0002"] [aria-label="删除画布"]'));
+      await settle();
+      assert.deepEqual(env.store.deleted.map((item) => item.id), ["canvas-0002"]);
+      assert.equal(page.current().id, "canvas-0001", "删的是那一行，画面不换画布");
+      assert.equal(env.store.projects.length, 1);
+      assert.equal(view.projectPanel.querySelectorAll(".ns-canvas-project-row").length, 1);
     });
     test("重命名只动列表名字，节点与连线不碰", async () => {
       const { page, view, env } = await makePage();
@@ -1806,17 +1842,18 @@ describe("canvas-page 页面", () => {
       assert.equal(env.store.renames[0].title, "改名后");
       assert.equal(page.current().title, "改名后");
       assert.equal(page.current().nodes.length, 1);
-      assert.ok([...view.select.options].some((o) => o.textContent === "改名后"));
+      assert.ok([...view.projectPanel.querySelectorAll(".ns-canvas-project-row-name")]
+        .some((el) => el.textContent === "改名后"));
     });
     test("删除画布走单张真路由，删完加载下一张", async () => {
       const { view, env } = await makePage(TWO_IMAGES());
-      assert.equal(view.select.value, "canvas-0001");
+      assert.equal(view.projectPanel.querySelector(".ns-canvas-project-row-on").dataset.canvas, "canvas-0001");
       setConfirmAnswer(true);
       click(view.button("删除画布"));
       await settle();
       assert.equal(env.store.deleted.length, 1);
       assert.equal(env.store.deleted[0].id, "canvas-0001");
-      assert.equal(view.select.value, "canvas-0002");
+      assert.equal(view.projectPanel.querySelector(".ns-canvas-project-row-on").dataset.canvas, "canvas-0002");
       assert.equal(env.store.projects.length, 1);
     });
     test("删除取消就不动数据", async () => {
@@ -1825,13 +1862,12 @@ describe("canvas-page 页面", () => {
       click(view.button("删除画布"));
       await settle();
       assert.equal(env.store.deleted.length, 0);
-      assert.equal(view.select.value, "canvas-0001");
+      assert.equal(view.projectPanel.querySelector(".ns-canvas-project-row-on").dataset.canvas, "canvas-0001");
     });
     test("切画布先把未落盘的改动写进这一张，再读下一张", async () => {
       const { page, view, env } = await makePage(TWO_IMAGES());
       click(view.button("加图片"));
-      view.select.value = "canvas-0002";
-      fire(view.select, "change");
+      pickCanvas(view, "canvas-0002");
       await settle();
       assert.equal(env.store.saved.length, 1);
       assert.equal(env.store.saved[0].id, "canvas-0001");
@@ -2117,8 +2153,7 @@ describe("canvas-page 页面", () => {
           viewport: { x: 0, y: 0, k: 1 }, background_mode: "dots" }] } });
       click(ctx.genBtn("g1", "出图"));
       await deepSettle();
-      ctx.view.select.value = "canvas-0002";
-      fire(ctx.view.select, "change");
+      pickCanvas(ctx.view, "canvas-0002");
       await settle();
       dispatchApiEvent("rs.image_gen.status", okImages(2));
       await settle();
@@ -2705,8 +2740,7 @@ describe("canvas-page 页面", () => {
       await deepSettle();
       assert.equal(clipCalls("/neo_video_gen/simple").length, 1, "提交完先拉一格");
       assert.equal(clipPolls("clip-1").length, 1);
-      ctx.view.select.value = "canvas-0002";
-      fire(ctx.view.select, "change");
+      pickCanvas(ctx.view, "canvas-0002");
       await settle();
       const polls = clipPolls("clip-1").length;
       await deepSettle();

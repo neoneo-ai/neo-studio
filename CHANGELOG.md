@@ -199,6 +199,12 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   landing page follows the mode the run was sent in).
 
 ### Changed
+- **Canvas toolbar: the canvas switch is a self-drawn dropdown panel, and 重命名 / 删除画布 live inside it.** The canvas group
+  now shows one button with the current canvas name and a chevron - no icon button sits in that group. Clicking it opens the
+  list of canvases pinned under the button: a row's name switches to that canvas, 重命名 and 删除画布 sit at the right end of
+  every row (revealed by hovering that row, by keyboard focus, and always lit on touch), and each acts on that row's canvas
+  only - renaming a canvas you are not on keeps your canvas's name, deleting one you are not on keeps your canvas open.
+  新建画布 is the last row of the list, and with no saved canvas the list offers no rename or delete at all.
 - **Canvas: the clip button reads 生成视频, and 出图 is the card's primary button alone.** The video card, the 配方闭环 card
   and the tail of a 串联展开 chain all queued a clip from a button labelled **出片** on the card's filled primary form, so a
   video run looked like the same action as 出图. The label is **生成视频** in all three places, drawn as the outlined pill the
