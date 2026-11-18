@@ -1447,10 +1447,14 @@ body {
 /* ===== 画布页（studio/pages/canvas/）：视口 + 节点 + 连线 =====
    几何全在 .ns-canvas-world 那一层 transform 里，页面只改这一句；网格层与工具条不参与缩放。 */
 .ns-page.ns-canvas { margin: 0; padding: 8px 10px; height: 100%; overflow: hidden; display: flex; flex-direction: column; }
-.ns-canvas-page { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
-.ns-canvas-bar { flex: none; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.ns-canvas-page { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+/* 工具条只一行：整条不换行，窗口不够宽就在条内横向滚（滚动条藏起来，条高不跟着抖） */
+.ns-canvas-bar { flex: none; display: flex; align-items: center; flex-wrap: nowrap; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+.ns-canvas-bar::-webkit-scrollbar { display: none; }
 .ns-canvas-bar-gap { flex: 1; }
-.ns-canvas-select { height: 28px; max-width: 190px; padding: 0 6px; border-radius: 6px; border: 1px solid var(--ns-field-bd); background: var(--ns-field); color: var(--ns-fg); }
+.ns-canvas-bar-group { display: flex; align-items: center; gap: 6px; flex: none; }
+.ns-canvas-bar-sep { flex: none; width: 1px; height: 18px; background: var(--ns-border); }
+.ns-canvas-select { height: 28px; max-width: 140px; padding: 0 6px; border-radius: 6px; border: 1px solid var(--ns-field-bd); background: var(--ns-field); color: var(--ns-fg); }
 .ns-canvas-tool { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 28px; padding: 0 8px; border-radius: 6px; border: 1px solid var(--ns-field-bd); background: var(--ns-field); color: var(--ns-fg); font: inherit; cursor: pointer; }
 .ns-canvas-tool:hover { border-color: var(--ns-field-bd-hover); background: var(--ns-field-hover); color: #fff; }
 /* 没有可撤销 / 可重做时那两枚是灰的：灰态不能跟着 hover 亮起来，亮了就是点了也没反应 */
@@ -1509,6 +1513,61 @@ body {
 .ns-canvas-resize-top-right { right: -7px; top: -7px; cursor: nesw-resize; }
 .ns-canvas-resize-bottom-left { left: -7px; bottom: -7px; cursor: nesw-resize; }
 .ns-canvas-resize-bottom-right { right: -7px; bottom: -7px; cursor: nwse-resize; }
+/* 生成节点：技能、比例、长边、张数与出图直接铺在节点上（胶囊是 gen-utils 那一套的精简版，图标 + 生效值，
+   含义写在悬停提示里，与绘画页同一手感），下面两行是这一发的状态与主模型。控件那一片起手不拖节点
+   （interactions.js 认 .ns-canvas-gen-ctl），拖动用其余部分，缩放走四角尺寸柄；胶囊菜单浮在
+   .ns-canvas-gen-menus 那一层（世界层带 scale、节点裁剪内容） */
+.ns-canvas-node-gen { background: linear-gradient(180deg, var(--ns-panel), var(--ns-bg)); }
+.ns-canvas-node-run { border-color: var(--ns-accent); }
+.ns-canvas-gen { position: absolute; inset: 0; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; overflow: hidden; }
+.ns-canvas-gen-ctl { display: flex; flex-direction: column; gap: 6px; }
+.ns-canvas-gen-skill, .ns-canvas-gen-params, .ns-canvas-gen-bottom { display: grid; gap: 6px 8px; align-items: center; }
+/* 技能胶囊按内容自适应（长技能名一路铺到行宽，超出才收省略号）；比例、长边、张数挤在同一行，
+   出图独占最后一行 */
+.ns-canvas-gen-skill { grid-template-columns: minmax(0, max-content); }
+.ns-canvas-gen-params { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.ns-canvas-gen-bottom { grid-template-columns: minmax(0, 1fr); }
+.ns-canvas-gen .neo-gallery-gm-chip-wrap { display: block; min-width: 0; }
+.ns-canvas-gen .neo-gallery-gm-chip-btn { width: 100%; justify-content: flex-start; gap: 5px; padding: 0 7px; }
+.ns-canvas-gen .neo-gallery-gm-chip-label { flex: 0 1 auto; min-width: 0; }
+.ns-canvas-gen-acts { display: flex; align-items: center; gap: 4px; }
+.ns-canvas-gen-btn { flex: none; display: inline-flex; align-items: center; justify-content: center; gap: 4px; height: 24px; padding: 0 8px; border-radius: 6px; border: 1px solid var(--ns-field-bd); background: var(--ns-field); color: var(--ns-fg); font: inherit; font-size: 12px; cursor: pointer; }
+.ns-canvas-gen-btn:hover { border-color: var(--ns-field-bd-hover); background: var(--ns-field-hover); color: #fff; }
+.ns-canvas-gen-btn:disabled { opacity: .45; cursor: default; }
+.ns-canvas-gen-btn:disabled:hover { border-color: var(--ns-field-bd); background: var(--ns-field); color: var(--ns-fg); }
+.ns-canvas-gen-status { font-size: 12px; color: var(--ns-accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ns-canvas-gen-fail { color: #ff7b72; }
+.ns-canvas-gen-model { font-size: 12px; color: var(--ns-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ns-canvas-gen-menus { position: absolute; inset: 0; z-index: 7; pointer-events: none; }
+.ns-canvas-gen-menus .neo-gallery-gm-chip-menu { pointer-events: auto; }
+/* 出图是这一张卡的主按钮：主色实底 + 独占最后一行铺满，和控件行里的字段胶囊一眼分得开。
+   取消任务保持字段档；在跑时收成软底，位置与宽度都不动（改尺寸会让这张控件行跟着抖）。 */
+.ns-canvas-gen-go {
+    flex: 1; min-width: 0; justify-content: center;
+    border-color: var(--ns-primary); background: var(--ns-primary);
+    color: #fff; font-size: 13px; font-weight: 600;
+}
+.ns-canvas-gen-go:hover:not(:disabled) { background: var(--ns-primary-hover); border-color: var(--ns-primary-hover); color: #fff; }
+.ns-canvas-gen-go:disabled, .ns-canvas-gen-go:disabled:hover {
+    background: var(--ns-primary-soft); border-color: var(--ns-primary); color: var(--ns-primary-fg);
+}
+/* 节点上的分段钮（生图/文本）：与输入行同一档的字段胶囊，选中那一段抬到主色 */
+.ns-canvas-seg-btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+    height: 22px; padding: 0 8px; border-radius: 6px; border: 1px solid var(--ns-field-bd);
+    background: var(--ns-field); color: var(--ns-fg); font: inherit; font-size: 12px; cursor: pointer;
+}
+.ns-canvas-seg-btn:hover { border-color: var(--ns-field-bd-hover); background: var(--ns-field-hover); color: #fff; }
+.ns-canvas-seg-btn-on { border-color: var(--ns-primary); background: var(--ns-primary-soft); color: var(--ns-primary-fg); }
+.ns-canvas-seg-ico { display: inline-flex; }
+.ns-canvas-empty-actions { display: flex; align-items: center; gap: 8px; }
+/* 空画布上的「加生成节点」是这一页的主行动 → 扁平主色实底（主行动一律扁平主色实底） */
+.ns-canvas-add-gen { border-color: var(--ns-primary); background: var(--ns-primary); color: #fff; }
+.ns-canvas-add-gen:hover:not(:disabled) { background: var(--ns-primary-hover); border-color: var(--ns-primary-hover); color: #fff; }
+/* 拖线、拖节点、四角缩放与拖平移进行中：interactions.js 给舞台与节点挂上这几个类，
+   节点里的文本框、图片与胶囊菜单必须让位，不然起手落在被拖的东西上（拖到一半焦点被文本框吃掉） */
+.ns-canvas-inv, .ns-canvas-node-resizing, .ns-canvas-node-linking,
+.ns-canvas-stage-panning, .ns-canvas-stage-grab { pointer-events: none; }
 /* 触屏档：接线点与尺寸柄抬高到指尖按得中的尺寸，工具条留出两行 */
 @media (max-width: 720px) {
     .ns-page.ns-canvas { padding: 6px; }
@@ -1518,6 +1577,11 @@ body {
     .ns-canvas-resize { width: 22px; height: 22px; }
     .ns-canvas-node-act { width: 28px; height: 28px; }
     .ns-canvas-node-pick { height: 28px; font-size: 13px; }
+    .ns-canvas-gen-btn { height: 28px; font-size: 13px; }
+    .ns-canvas-gen-go { height: 34px; font-size: 14px; }
+    .ns-canvas-seg-btn { height: 28px; font-size: 13px; }
+    .ns-canvas-gen .neo-gallery-gm-chip-btn { height: 32px; padding: 0 6px; }
+    .ns-canvas-gen-params { gap: 4px; }
     .ns-canvas-resize-top-left { left: -11px; top: -11px; }
     .ns-canvas-resize-top-right { right: -11px; top: -11px; }
     .ns-canvas-resize-bottom-left { left: -11px; bottom: -11px; }

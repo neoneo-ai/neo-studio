@@ -21,7 +21,7 @@
 
 功能模块文档（用户说明 + 实现细节）：
 [prompts](docs/prompts.md) · [skills](docs/skills.md) · [image-gen](docs/image-gen.md) · [h3-video-gen](docs/h3-video-gen.md) ·
-[recipes](docs/recipes.md) · [gallery](docs/gallery.md) · [workflow-repair](docs/workflow-repair.md) ·
+[recipes](docs/recipes.md) · [gallery](docs/gallery.md) · [canvas](docs/canvas.md) · [workflow-repair](docs/workflow-repair.md) ·
 [3D 姿势](docs/studio-pose.md) · [视频抽帧](docs/studio-frames.md) · [图片反推](docs/studio-reverse.md) ·
 [视频反推](docs/studio-reverse-video.md) ·
 [声音克隆](docs/studio-voice-clone.md) · [提示词增强](docs/studio-prompt-enhance.md)

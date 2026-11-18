@@ -13,12 +13,15 @@ import { createHistory, snapshotCanvas } from "./history.js";
 import { applyNodeGeometry as paintNodeGeometry, renderNodes as renderNodeLayer, paintSelection as paintNodeSelection } from "./nodes.js";
 import { renderConnections as renderLinkLayer, renderActiveConnection as paintActiveLine } from "./connections.js";
 import { attachCanvasInteractions } from "./interactions.js";
+import { createCanvasGen } from "./gen.js";
 
 const SAVE_DEBOUNCE_MS = 900;
 
 /** 画布页工厂：openMaterial 由装配层交下来（素材库弹窗，一次收窗）；没有它时「加图片」
- *  与「选图」回到建空图片节点 —— ComfyUI 侧没有这扇弹窗。 */
-export function createCanvasPage({ $el, api, toast, openMaterial }) {
+ *  与「选图」回到建空图片节点 —— ComfyUI 侧没有这扇弹窗。
+ *  canGen 是 ComfyUI 执行队列在不在（生成素材能力位），startComfy 是「点一下把它启动起来」；
+ *  两者都不交时生成节点照样能铺能存，出图按钮自己说没有队列。 */
+export function createCanvasPage({ $el, api, toast, openMaterial, canGen, startComfy }) {
     let state = readCanvas({});
     let selectedNodeIds = new Set();
     let selectedConnectionId = null;
@@ -32,6 +35,7 @@ export function createCanvasPage({ $el, api, toast, openMaterial }) {
     let textRun = null;            // 正在连打正文的那张节点 id：同一段连打只压一次栈
     let clipboard = null;          // Ctrl+C / Ctrl+X 收下来的那一批（含它们内部的连线）：切到别的画布也能粘回来
     let pasteStep = 0;             // 连按 Ctrl+V 时一批比一批偏开，不在同一处叠成一叠
+    let gen = null;                // 生成节点那一套（gen.js）：host 装配好之后建起来
 
     // ====== 视图 ======
     function buildCanvas(el) {
@@ -47,17 +51,20 @@ export function createCanvasPage({ $el, api, toast, openMaterial }) {
         const active = document.createElementNS("http://www.w3.org/2000/svg", "path");
         active.setAttribute("class", "ns-canvas-active-line");
         const hint = $el("div", { className: "ns-canvas-hint", textContent: t("把图拖进来，或加一个提示词节点") });
+        // 生成节点上胶囊的菜单浮这一层：世界层带 scale、节点裁剪自己的内容，菜单进那一层会跟着缩放并被节点切掉
+        const menus = $el("div", { className: "ns-canvas-gen-menus" });
         world.append(links, active, nodeLayer);
         stage.append(grid, world, active, hint);
-        page.append(bar.root, stage);
+        page.append(bar.root, stage, menus);
         el.appendChild(page);
-        view = { el, page, stage, grid, world, links, nodeLayer, active, hint, save: bar.save, zoom: bar.zoom,
+        view = { el, page, stage, grid, world, links, nodeLayer, active, hint, menus, save: bar.save, zoom: bar.zoom,
             select: bar.select, undo: bar.undo, redo: bar.redo };
         attachCanvasInteractions({ stage, view, host });
         applyViewport();
         renderNodes();
         renderConnections();
         refreshHistory();
+        gen?.prime();     // 节点上那行技能名要有来源：技能列表与首张画布一起读
         ready = loadProjects();
         return ready;
     }
@@ -70,14 +77,9 @@ export function createCanvasPage({ $el, api, toast, openMaterial }) {
             setIcon(btn, name);
             return btn;
         };
-        const mkLabel = (label, name, fn) => {
-            const btn = $el("button", { className: "ns-canvas-tool ns-canvas-tool-text", type: "button", title: label, "aria-label": label, onclick: fn });
-            setIconLabel(btn, name, label);
-            return btn;
-        };
         const zoom = $el("span", { className: "ns-canvas-zoom", textContent: "100%" });
         const save = $el("span", { className: "ns-canvas-save", textContent: t("已保存") });
-        // 键盘快捷键写进 tooltip：桌面上这三条没有别的入口可发现，aria-label 保持干净的名字
+        // 工具条只放图标钮：名字与组合键都写在悬停提示与 aria-label 里，一行放得下
         const mkHint = (label, hint, name, fn) => {
             const btn = mk(label, name, fn);
             btn.title = `${label}（${hint}）`;
@@ -85,32 +87,30 @@ export function createCanvasPage({ $el, api, toast, openMaterial }) {
         };
         const undo = mkHint(t("撤销"), "Ctrl+Z", "undo", () => undoEdit());
         const redo = mkHint(t("重做"), "Ctrl+Shift+Z", "redo", () => redoEdit());
-        const dup = mkLabel(t("复制选中"), "copy", () => duplicateSelection());
-        dup.title = `${t("复制选中")}（Ctrl+D）`;
+        const dup = mkHint(t("复制选中"), "Ctrl+D", "duplicate", () => duplicateSelection());
         const cut = mkHint(t("剪切选中"), "Ctrl+X", "cut", () => cutSelection());
         const copy = mkHint(t("复制"), "Ctrl+C", "copy", () => copySelection());
         const paste = mkHint(t("粘贴"), "Ctrl+V", "paste", () => pasteClipboard());
+        const group = (...kids) => $el("span", { className: "ns-canvas-bar-group" }, kids);
+        const sep = () => $el("span", { className: "ns-canvas-bar-sep" });
         const root = $el("div", { className: "ns-canvas-bar" }, [
-            select,
-            mk(t("新建画布"), "plus", () => createProject()),
-            mk(t("重命名"), "pencil", () => renameProject()),
-            mk(t("删除画布"), "trash", () => deleteProject()),
+            // 三组：画布本身 / 节点与剪贴板 / 视图。整条不换行，窗口不够宽就在条内横向滚
+            group(select,
+                mk(t("新建画布"), "plus", () => createProject()),
+                mk(t("重命名"), "pencil", () => renameProject()),
+                mk(t("删除画布"), "trash", () => deleteProject())),
+            sep(),
+            group(mk(t("加图片"), "image", () => pickImage()),
+                mk(t("加提示词"), "list", () => addNode("text")),
+                mk(t("加生成节点"), "sparkles", () => addGenNode()),
+                sep(), dup, cut, copy, paste, sep(), undo, redo),
             $el("span", { className: "ns-canvas-bar-gap" }),
-            mkLabel(t("加图片"), "image", () => pickImage()),
-            mkLabel(t("加提示词"), "list", () => addNode("text")),
-            dup,
-            cut,
-            copy,
-            paste,
-            undo,
-            redo,
-            $el("span", { className: "ns-canvas-bar-gap" }),
-            mk(t("缩小"), "minimize", () => zoomStep(-1)),
-            zoom,
-            mk(t("放大"), "maximize", () => zoomStep(1)),
-            mkLabel(t("适应内容"), "target", () => fitView()),
-            mkLabel(t("背景"), "eye", () => cycleBackground()),
-            save,
+            group(mk(t("缩小"), "zoom-out", () => zoomStep(-1)), zoom,
+                mk(t("放大"), "zoom-in", () => zoomStep(1)),
+                sep(),
+                mk(t("适应内容"), "target", () => fitView()),
+                mk(t("背景"), "eye", () => cycleBackground()),
+                save),
         ]);
         return { root, select, zoom, save, undo, redo };
     }
@@ -133,10 +133,13 @@ export function createCanvasPage({ $el, api, toast, openMaterial }) {
 
     function renderNodes() {
         if (!view) return;
+        view.menus.textContent = "";   // 控件整份重建，挂在浮层里的菜单跟着作废
         renderNodeLayer({ nodeLayer: view.nodeLayer, links: view.links, hint: view.hint, nodes: state.nodes,
             selectedNodeIds, selectedConnectionId, $el, onText,
             onPick: pickInto, onHero: (node) => toggleHero(node.id), onDelete: (node) => deleteNode(node.id),
-            onCopy: (node) => duplicateIds([node.id]) });
+            onCopy: (node) => duplicateIds([node.id]),
+            genControls: (node) => gen?.controls(node), genState: (node) => gen?.stateOf(node),
+            genModel: (id) => gen?.modelText(id) });
     }
 
     function renderConnections() {
@@ -245,7 +248,22 @@ export function createCanvasPage({ $el, api, toast, openMaterial }) {
         selectAllNodes,
         undoEdit,
         redoEdit,
+        // 生成节点那一套（gen.js）要的几条：整层重画、查节点、量舞台、改 metadata、落结果
+        paintNodes: renderNodes,
+        hasNode: (id) => state.nodes.some((node) => node.id === id),
+        stageRect: () => view.stage.getBoundingClientRect(),
+        patchMeta: setNodeMetadata,
+        applyResult: applyGenResult,
+        genMenus: () => view.menus,
     };
+
+    gen = createCanvasGen({
+        $el,
+        toast,
+        canGen: canGen || (() => true),
+        startComfy,
+        host,
+    });
 
     // ====== 撤销 / 重做 / 复制 ======
     /** 一次改动落笔之前压一份栈：拖动与缩放在真正动起来那一帧由手势层交这一条，正文由 onText 管运行边界 */
@@ -378,6 +396,12 @@ export function createCanvasPage({ $el, api, toast, openMaterial }) {
         renderConnections();
         markDirty();
         return node;
+    }
+
+    /** 「加生成节点」：默认技能带上一次在这页选过的（技能列表还没读到时先空着，双击开浮层再选） */
+    function addGenNode() {
+        gen?.prime();
+        return addNode("gen", null, { skill_id: gen?.defaultSkillId() || "" });
     }
 
     /** 删选中的东西：选中一条线先删线，否则删选中那批节点连带两端接上的线 */
@@ -524,6 +548,7 @@ export function createCanvasPage({ $el, api, toast, openMaterial }) {
     /** 切页与关窗前调用：攒着的改动不能只留在内存里 */
     function flush() {
         clearTimeout(saveTimer);
+        gen?.stopAll();   // 切页与切画布都是脱手：跑着的那一发不再写回这一张
         if (dirty) saveProject();
     }
 
@@ -635,6 +660,43 @@ export function createCanvasPage({ $el, api, toast, openMaterial }) {
         fitView();   // 一次摆几十张时画面要自己拉回来，否则铺在看不见的地方
         toast(t("已摆到画布"), "success");
         return true;
+    }
+
+    /** 出图结果写回画布：先按连线顺序填这张生成节点下游那几张空图片节点，多出来的在右侧新建图片节点接上。
+     *  整发一次压栈 —— 撤销一次退掉这一发落下的全部图；节点已经不在这一张画布上（切走了）就一张不写 */
+    function applyGenResult(genId, images) {
+        const left = (images || []).filter((img) => img?.filename);
+        const gen = state.nodes.find((n) => n.id === genId);
+        if (!gen || !left.length) return;
+        beginEdit();
+        for (const conn of state.connections) {
+            if (conn.fromNodeId !== genId || !left.length) continue;
+            const slot = state.nodes.find((n) => n.id === conn.toNodeId);
+            if (!slot || slot.type !== "image" || slot.metadata.filename) continue;
+            const img = left.shift();
+            slot.metadata = { ...slot.metadata, filename: img.filename, subfolder: img.subfolder || "" };
+        }
+        const spec = NODE_SPECS.image;
+        const pool = [...state.nodes];
+        const base = { x: gen.position.x + gen.width + 32, y: gen.position.y };
+        const created = [];
+        for (const img of left) {
+            const node = createCanvasNode("image", placeGrid(pool, spec, base), {
+                filename: img.filename,
+                subfolder: img.subfolder || "",
+            });
+            pool.push(node);
+            created.push(node);
+        }
+        state = {
+            ...state,
+            nodes: [...state.nodes, ...created],
+            connections: [...state.connections,
+                ...created.map((n) => ({ id: `conn-${genId}-${n.id}`, fromNodeId: genId, toNodeId: n.id }))],
+        };
+        renderNodes();
+        renderConnections();
+        markDirty();
     }
 
     return { build: buildCanvas, flush, placeItems, current: () => state };

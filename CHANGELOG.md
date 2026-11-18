@@ -5,6 +5,20 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 ## [Unreleased]
 
 ### Added
+- **Canvas generation node: the skill and the parameters live on the node face.** 画布 has a **加生成节点** button, and the
+  node it lays carries everything on its surface with no dialog to open: a 技能 chip (sparkles) sized to its own text, a
+  ratio chip drawn with the ratio glyph, a 长边尺寸 chip and a 生图张数 chip that opens a pick from 1 to 8 — the three
+  parameter chips share one row — plus the node's 主模型 line read from that skill's config and the **出图** / **取消任务**
+  buttons. **出图** is the card's primary button (filled, owning the last row); every chip is the compact form with no
+  row label, icon plus the value in force, each one's meaning in its tooltip.
+  Every pick writes onto the node, so it is undoable, travels with a copied node and saves
+  with the canvas; a chip left at **默认比例** / **长边尺寸** keeps following the skill's config and the global generation
+  settings. **出图** takes the prompt texts and reference images riding into that node, in connection order, and the node
+  then shows the job's own progress, the failure reason when it fails, and the cancel button while it runs; the finished
+  images fill the empty image nodes downstream in connection order, and the extras get fresh image nodes on the right
+  wired to it. With no ComfyUI queue the node says so and starts it for you instead of failing silently, a skill missing
+  its API Key sends you to 技能管理, and switching canvases detaches a running job - its images stay in the Output folder
+  and nothing writes into the canvas you left.
 - **Canvas nodes carry content, not chrome.** A 画布 node has no title bar: the image or the prompt text fills the whole
   node, and its extra actions ride a bar at the node's top-right that appears **only while that node is selected** —
   **设为主图** (image nodes; one hero per canvas, clicking it again clears it), **选图** for an image node with nothing in
@@ -143,6 +157,18 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   landing page follows the mode the run was sent in).
 
 ### Changed
+- **Canvas toolbar: one row of icon buttons, and the two blank buttons are gone.** 撤销 / 重做 rendered as empty boxes - `undo` /
+  `redo` had no icon in `icons.js`, so the button was only a border. The bar now runs as icon buttons only - every label
+  lives in the tooltip and the `aria-label` - in three groups split by a thin divider (canvas / nodes and clipboard /
+  view), and it never wraps: a window narrower than the row scrolls the bar sideways inside itself with no scrollbar
+  shown. 放大 / 缩小 use the
+  zoom-in / zoom-out glyph instead of the fullscreen-looking maximize / minimize pair, and 复制选中 gains its own
+  duplicate glyph so it is no longer the same icon as 复制. A canvas-page case now scans the toolbar's icon names
+  against the icon set, so a missing glyph fails a test instead of shipping a blank button.
+- **Canvas: dragging the empty ground pans the board.** Press and drag on empty canvas now moves the whole board, the
+  way its other pan gestures do, and a press that never moved is still a click on empty ground - it drops the selection
+  on release. 框选 moves onto Shift + drag and keeps its additive meaning: the nodes the dragged box covers join the
+  selection as it was at the press. Middle button, Space and Ctrl keep panning as the temporary grab hand.
 - **局部 and 删除 leave the default home grid and become preset cards.** The 编辑 section's default grid now carries
   图片编辑 / 扩图 / 机位 / 融合 / 姿势 plus the three tool pages (视频抽帧 / 图片反推 / 视频反推); the 局部 / 删除 cards
   land in that section's 添加卡片 preset face, the same face that already holds 特效视频 / 宫格图分镜 on 创作. One click

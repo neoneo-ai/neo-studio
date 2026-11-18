@@ -8,6 +8,7 @@ import { getConnectionDropTarget, marqueeSelect, panViewport, resizeNode, screen
 
 const NUDGE = 8, NUDGE_BIG = 40;
 const TEXT_DRAG_GATE = 8;   // 正文框整张铺满节点：起手先让浏览器选字，拖过这一截才算拖节点
+const PAN_CLICK_GATE = 3;   // 空白起手拖过这一截才算拖画面，没拖过就是点空白（点空白要收走选中）
 const CLIP_NODE_KEYS = new Set(["c", "v", "x", "a"]);   // 节点那四键：光标在正文里时按了要说一句怎么走回节点
 const NEO_GALLERY_MIME = "application/x-neo-gallery";
 // 一条连线是两个 path（宽命中描边 + 可见细线），点哪一条都算点这条线
@@ -24,7 +25,7 @@ export function attachCanvasInteractions({ stage, view, host }) {
 
     // 滚轮缩放锚在指针上（passive: false 才拦得住 preventDefault，否则浏览器连页面一起滚）
     stage.addEventListener("wheel", (e) => {
-        if (!host.isPageActive() || e.target.closest(".ns-canvas-bar")) return;
+        if (!host.isPageActive() || e.target.closest(".ns-canvas-bar, .ns-canvas-gen-ctl input")) return;
         e.preventDefault();
         const rect = stage.getBoundingClientRect();
         host.setViewport(zoomViewportAt(state().viewport, e.clientX - rect.left, e.clientY - rect.top, e.deltaY));
@@ -53,13 +54,14 @@ export function attachCanvasInteractions({ stage, view, host }) {
         // 中键直接平移；空格 / Ctrl 是临时抓手（上游 temporaryTool 那一条）
         if (e.button === 1 || ((spaceDown || e.ctrlKey) && isBackground)) {
             e.preventDefault();
-            pan = { startX: e.clientX, startY: e.clientY, viewport: { ...state().viewport } };
+            pan = { startX: e.clientX, startY: e.clientY, viewport: { ...state().viewport },
+                moved: true, clearsSelection: false };
             stage.classList.add("ns-canvas-grabbing");
             return;
         }
         if (e.button !== 0) return;
-        // 节点头上的动作钮交浏览器发 click：起手不拖、也不 preventDefault（拦了 pointerdown 就没有 click 了）
-        if (e.target.closest(".ns-canvas-node-act, .ns-canvas-node-pick")) return;
+        // 节点头上的动作钮与生成节点上的控件交浏览器发 click：起手不拖、也不 preventDefault（拦了 pointerdown 就没有 click 了）
+        if (e.target.closest(".ns-canvas-node-act, .ns-canvas-node-pick, .ns-canvas-gen-ctl")) return;
         const handleEl = e.target.closest(".ns-canvas-handle");
         if (handleEl) {
             const nodeId = handleEl.closest(".ns-canvas-node").dataset.nodeId;
@@ -101,11 +103,19 @@ export function attachCanvasInteractions({ stage, view, host }) {
             e.preventDefault();
             return;
         }
-        // 空白处起手 = 框选（Shift 加选：起点那一刻的选中集当基准）
+        // Shift 起手 = 框选（起点那一刻的选中集当基准，松手把罩住的并进选中）
         const world = worldPoint(e.clientX, e.clientY);
-        marquee = { startWorldX: world.x, startWorldY: world.y, currentWorldX: world.x, currentWorldY: world.y,
-            additive: e.shiftKey, base: e.shiftKey ? [...ids] : [] };
-        if (!e.shiftKey) host.setSelection([], null);
+        if (e.shiftKey) {
+            marquee = { startWorldX: world.x, startWorldY: world.y,
+                currentWorldX: world.x, currentWorldY: world.y, additive: true, base: [...ids] };
+            e.preventDefault();
+            return;
+        }
+        // 空白处起手 = 拖画面（板子的常规）；按下一格没拖就是点空白，收笔收走选中
+        pan = { startX: e.clientX, startY: e.clientY, viewport: { ...state().viewport },
+            moved: false, clearsSelection: true };
+        stage.classList.add("ns-canvas-grabbing");
+        e.preventDefault();
     }
 
     function startNodeDrag(e, fromText = false) {
@@ -116,6 +126,8 @@ export function attachCanvasInteractions({ stage, view, host }) {
 
     function onPointerMove(e) {
         if (pan) {
+            if (!pan.moved && Math.max(Math.abs(e.clientX - pan.startX),
+                Math.abs(e.clientY - pan.startY)) > PAN_CLICK_GATE) pan.moved = true;
             host.setViewport(panViewport(pan.viewport, pan.startX, pan.startY, e.clientX, e.clientY));
             return;
         }
@@ -164,8 +176,11 @@ export function attachCanvasInteractions({ stage, view, host }) {
 
     function onPointerUp() {
         if (pan) {
+            // 空白处按下没拖开就是点空白：收笔收走选中；拖开的只是平移，选中照留
+            const clearSelection = pan.clearsSelection && !pan.moved;
             pan = null;
             stage.classList.remove("ns-canvas-grabbing");
+            if (clearSelection) host.setSelection([], null);
         }
         if (drag) {
             if (drag.moved) host.markDirty();
@@ -203,7 +218,7 @@ export function attachCanvasInteractions({ stage, view, host }) {
     }
 
     function onDoubleClick(e) {
-        if (!host.isPageActive() || e.target.closest(".ns-canvas-bar")) return;
+        if (!host.isPageActive() || e.target.closest(".ns-canvas-bar, .ns-canvas-gen-ctl")) return;
         const nodeEl = e.target.closest(".ns-canvas-node");
         if (nodeEl) {
             const node = state().nodes.find((n) => n.id === nodeEl.dataset.nodeId);

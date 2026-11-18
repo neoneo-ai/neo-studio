@@ -206,7 +206,7 @@ studio/
 | `studio/`                     | 新影工坊独立页面（index.html + studio-app.js 装配层 + shim/） |
 | `studio/app-registry.js`      | 应用注册表：一条描述符 = 首页上一个应用页（页 id、首页卡、页签可见性、深链参数），首页卡表与路由都从这一张表派生 |
 | `studio/pages/`               | 从装配层拆出的页面工厂（简单页一个文件；一页大到装不进一份文件时是一个目录，入口是 `page.js`，兄弟模块不吃页的 state，装配层只 import 那一个入口） |
-| `canvas/page.js`              | 画布页目录：入口 page.js 管工具条、视口、页的 state 与落盘、撤销重做与节点复制；同目录 `geometry.js` 纯几何、`store.js` 数据契约与 `/neo_canvas/*` 读写、`nodes.js` 节点 DOM、`connections.js` 连线、`interactions.js` 手势、`history.js` 撤销重做栈（只记节点与连线）；节点没有标题条，图片与正文铺满整张，动作条只在选中那一刻浮在节点右上角，正文里短距离是选字、拖过一截才挪节点；Ctrl+C / Ctrl+X / Ctrl+V 把选中那批（连同它们内部的连线）搬进剪贴板、再粘到视口中心，Ctrl+A 全选这一张上的节点 |
+| `canvas/page.js`              | 画布页目录：入口 page.js 管工具条、视口、页的 state 与落盘、撤销重做与节点复制；同目录 `geometry.js` 纯几何、`store.js` 数据契约与 `/neo_canvas/*` 读写、`nodes.js` 节点 DOM、`connections.js` 连线、`interactions.js` 手势、`history.js` 撤销重做栈（只记节点与连线）、`gen.js` 生成节点（技能、比例、长边、张数直接铺在节点表面，出图链客户端，胶囊菜单挂在页面那一层，见 [image-gen.md](image-gen.md)）；节点没有标题条，图片与正文铺满整张，动作条只在选中那一刻浮在节点右上角，正文里短距离是选字、拖过一截才挪节点；Ctrl+C / Ctrl+X / Ctrl+V 把选中那批（连同它们内部的连线）搬进剪贴板、再粘到视口中心，Ctrl+A 全选这一张上的节点 |
 | `pose/pose.js`                | 3D 姿势页宿主：iframe 承载、工具条与 postMessage 桥 |
 | `frames/frames.js`            | 视频抽帧页：播放器与起抽点、起抽参数、canvas 取帧与逐帧存进素材库 |
 | `reverse-prompt/reverse-prompt.js` | 图片反推页：素材库取图、`/rs_prompts/reverse_prompt` 的 SSE 上屏与复制提示词 |

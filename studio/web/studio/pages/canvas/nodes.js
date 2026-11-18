@@ -1,19 +1,26 @@
 // 节点层：节点 DOM、几何落位与选中描边。节点不铺标题栏 —— 图与正文撑满整张节点，附加操作
 // （选图 / 设为主图 / 复制 / 删除）是右上角那一排，只在该节点被选中时浮出来（CSS 认 .ns-canvas-node-on）。
 // 节点上的动作都从这里的元素出发，回调交给页面；手势不在这一层（在 interactions.js）。
-import { t } from "../../../js/core/i18n.js";
+import { t, tf } from "../../../js/core/i18n.js";
 import { setIcon, setIconLabel } from "../../../js/core/icons.js";
 
 /** 节点 DOM（上游 canvas-node.tsx 的 vanilla 版）：内容铺满整张，右上角是附加操作栏，左上角是「主图」徽标，
  *  左右两个接线点、四个角上的尺寸柄。图片节点是 <img>（走 Gallery 缩略图，取不到落占位图），提示词节点是
  *  <textarea>，正文存在 metadata.content —— 图片节点上的坐标就是 Gallery 的 filename + subfolder */
-export function nodeElement(node, { $el, onText, onPick, onHero, onDelete, onCopy }) {
+export function nodeElement(node, { $el, onText, onPick, onHero, onDelete, onCopy,
+    genState, genControls, genModel }) {
+    const gen = node.type === "gen" ? (genState?.(node) || {}) : null;
     const nodeEl = $el("div", {
-        className: "ns-canvas-node " + (node.type === "image" ? "ns-canvas-node-image" : "ns-canvas-node-text"),
+        className: "ns-canvas-node "
+            + (node.type === "image" ? "ns-canvas-node-image"
+                : node.type === "gen" ? "ns-canvas-node-gen" : "ns-canvas-node-text")
+            + (gen && (gen.status === "queued" || gen.status === "running") ? " ns-canvas-node-run" : ""),
         dataset: { nodeId: node.id },
     });
     nodeEl.append(
-        node.type === "image" ? nodeImage(node, $el) : nodeText(node, $el, onText),
+        node.type === "image" ? nodeImage(node, $el)
+            : node.type === "gen" ? nodeGen(node, $el, { gen, genControls, genModel })
+            : nodeText(node, $el, onText),
         nodeBar(node, { $el, onPick, onHero, onDelete, onCopy }),
         $el("div", { className: "ns-canvas-handle ns-canvas-handle-left", dataset: { handle: "target" } }),
         $el("div", { className: "ns-canvas-handle ns-canvas-handle-right", dataset: { handle: "source" } }),
@@ -63,6 +70,21 @@ function nodeText(node, $el, onText) {
     });
 }
 
+/** 生成节点的表面：技能、比例、长边、张数与出图直接铺在节点上（控件由 gen.js 建，改动走 patchMeta），
+ *  下面两行是这一发的状态与主模型。控件那一片不拖节点，拖动用其余部分，缩放走四角尺寸柄 */
+function nodeGen(node, $el, { gen, genControls, genModel }) {
+    const st = gen || {};
+    const failed = st.status === "failed";
+    const status = failed ? (st.error || t("出图失败"))
+        : st.status === "running" ? (st.total ? tf("生成中 {done}/{total}", { done: st.done, total: st.total }) : t("生成中"))
+        : st.status === "queued" ? t("排队中") : "";
+    return $el("div", { className: "ns-canvas-gen" }, [
+        $el("div", { className: "ns-canvas-gen-ctl" }, genControls?.(node) || []),
+        $el("div", { className: "ns-canvas-gen-status" + (failed ? " ns-canvas-gen-fail" : ""), textContent: status }),
+        $el("div", { className: "ns-canvas-gen-model", textContent: genModel?.(node.metadata.skill_id) || "" }),
+    ]);
+}
+
 /** 附加操作栏：图片节点多一枚主图钮（整片只留一枚），没填上图的多一枚「选图」，复制与删除每类节点都有。
  *  这一排默认不出现，节点被选中时才浮出来；点了算 click，起手不拖（见 interactions.js） */
 function nodeBar(node, { $el, onPick, onHero, onDelete, onCopy }) {
@@ -91,8 +113,10 @@ function nodeBar(node, { $el, onPick, onHero, onDelete, onCopy }) {
 }
 
 /** 整层节点重画：拖动与缩放不走这一条（走 applyNodeGeometry），换画布、增删节点才走 */
-export function renderNodes({ nodeLayer, links, hint, nodes, selectedNodeIds, selectedConnectionId, $el, onText, onPick, onHero, onDelete, onCopy }) {
-    nodeLayer.replaceChildren(...nodes.map((node) => nodeElement(node, { $el, onText, onPick, onHero, onDelete, onCopy })));
+export function renderNodes({ nodeLayer, links, hint, nodes, selectedNodeIds, selectedConnectionId, $el, onText,
+    onPick, onHero, onDelete, onCopy, genState, genControls, genModel }) {
+    nodeLayer.replaceChildren(...nodes.map((node) => nodeElement(node, { $el, onText, onPick, onHero, onDelete, onCopy,
+        genState, genControls, genModel })));
     // 几何要在元素挂上世界层之后再落：nodeElement 里查不到还没挂上的元素
     for (const node of nodes) applyNodeGeometry(nodeLayer, node);
     hint.style.display = nodes.length ? "none" : "";

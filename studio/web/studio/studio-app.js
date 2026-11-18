@@ -381,10 +381,13 @@ const { buildVideo } = createVideoPage({
     groupLabels: VIDEO_GROUP_LABELS,
 });
 
-// 画布页工厂在 pages/canvas/page.js：工具条、视口与落盘在那一页，几何/节点/连线/手势是它下面那五个模块；
+// 画布页工厂在 pages/canvas/page.js：工具条、视口与落盘在那一页，几何/节点/连线/手势是它下面那六个模块；
 // 这一处只交建元素、api、提示条与素材库取图（「加图片」与空节点的「选图」都开这一扇），并把结果板的
-// 「摆到画布」接回生图家族（画布页没建过时 placeItems 自己等它建好）
-const canvasPage = createCanvasPage({ $el, api, toast, openMaterial: (onPick) => openMaterial("canvas", "image", onPick) });
+// 「摆到画布」接回生图家族（画布页没建过时 placeItems 自己等它建好）。
+// 生成节点出图要 ComfyUI 执行队列：能力位与「点一下启动」都从这一层交下去
+const canvasPage = createCanvasPage({ $el, api, toast,
+    openMaterial: (onPick) => openMaterial("canvas", "image", onPick),
+    canGen: () => can("image_gen"), startComfy });
 const buildCanvas = canvasPage.build;
 setCanvasPlace((items) => {
     go("canvas");

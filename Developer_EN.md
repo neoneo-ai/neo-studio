@@ -21,7 +21,7 @@ split by major module under `docs/en/` (index: [docs/en/README.md](docs/en/READM
 
 Feature module docs (user guide + implementation details):
 [prompts](docs/en/prompts.md) · [skills](docs/en/skills.md) · [image-gen](docs/en/image-gen.md) ·
-[h3-video-gen](docs/en/h3-video-gen.md) · [recipes](docs/en/recipes.md) · [gallery](docs/en/gallery.md) ·
+[h3-video-gen](docs/en/h3-video-gen.md) · [recipes](docs/en/recipes.md) · [gallery](docs/en/gallery.md) · [canvas](docs/en/canvas.md) ·
 [workflow-repair](docs/en/workflow-repair.md) · [3D Pose](docs/en/studio-pose.md) ·
 [video frame extraction](docs/en/studio-frames.md) · [image reverse prompt](docs/en/studio-reverse.md) ·
 [voice clone](docs/en/studio-voice-clone.md)

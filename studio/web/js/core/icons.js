@@ -53,6 +53,13 @@ const PATHS = {
     "volume-mute": '<path d="M11 5 6 9H2v6h4l5 4V5"/><path d="m22 9-6 6"/><path d="m16 9 6 6"/>',
     // 「提示词」组合钮右半那枚骰子（抽一条随机提示词）：五点骰面，点用 h.01 的圆头短线，随按钮 currentColor 描边
     dice: '<rect width="18" height="18" x="3" y="3" rx="3"/><path d="M8.5 8.5h.01"/><path d="M15.5 8.5h.01"/><path d="M12 12h.01"/><path d="M8.5 15.5h.01"/><path d="M15.5 15.5h.01"/>',
+    // 画布工具条：撤销 / 重做缺一名就是工具条上一枚只剩边框的空钮（放大缩小原来借 maximize/minimize，
+    // 看着像全屏，缩与放不成对）；duplicate 是「复制选中」，与剪贴板那枚 copy 要分得开
+    undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>',
+    redo: '<path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/>',
+    "zoom-in": '<circle cx="11" cy="11" r="8"/><line x1="21" x2="16.65" y1="21" y2="16.65"/><line x1="11" x2="11" y1="8" y2="14"/><line x1="8" x2="14" y1="11" y2="11"/>',
+    "zoom-out": '<circle cx="11" cy="11" r="8"/><line x1="21" x2="16.65" y1="21" y2="16.65"/><line x1="8" x2="14" y1="11" y2="11"/>',
+    duplicate: '<rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/><path d="M9 12h6"/><path d="M12 9v6"/>',
 
 };
 

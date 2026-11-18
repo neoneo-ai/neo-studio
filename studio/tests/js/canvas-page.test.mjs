@@ -3,7 +3,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { test, describe } from "node:test";
 import { fileURLToPath } from "node:url";
-import { resetEnv, mockRoute, jsonResponse, flush, click, setConfirmAnswer, dialogs } from "./setup.mjs";
+import { resetEnv, mockRoute, jsonResponse, flush, click, setConfirmAnswer, dialogs, fetchLog } from "./setup.mjs";
+import { dispatchApiEvent, listenerCount, resetApiState } from "./mocks/comfy-api.mjs";
+import { ICON_NAMES } from "../../web/js/core/icons.js";
 
 const webDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../web");
 
@@ -506,8 +508,19 @@ describe("canvas-page 页面", () => {
     test("空画布有提示，工具条上的动作一个不缺", async () => {
       const { view } = await makePage();
       assert.ok(view.hint.textContent.includes("把图拖进来"));
-      for (const label of ["新建画布", "重命名", "删除画布", "加图片", "加提示词", "复制选中", "撤销", "重做", "适应内容"]) {
+      for (const label of ["新建画布", "重命名", "删除画布", "加图片", "加提示词", "加生成节点",
+        "复制选中", "剪切选中", "复制", "粘贴", "撤销", "重做", "缩小", "放大", "适应内容", "背景"]) {
         assert.ok(view.bar.querySelector(`[aria-label="${label}"]`), label);
+      }
+    });
+    test("工具条每一枚钮的图标名都画得出来（缺一名就是条上一枚只剩边框的空钮）", () => {
+      const source = fs.readFileSync(path.join(webDir, "studio/pages/canvas/page.js"), "utf8");
+      const bar = source.slice(source.indexOf("function buildBar"), source.indexOf("return { root, select"));
+      const names = [...bar.matchAll(/\bmk(?:Label|Hint)?\((?:[^()]|\([^()]*\))*?,\s*"([a-z0-9-]+)"/g)]
+        .map((m) => m[1]);
+      assert.ok(names.length >= 14, `工具条里只扫到 ${names.length} 枚图标名：${names.join(",")}`);
+      for (const name of names) {
+        assert.ok(ICON_NAMES.includes(name), `图标 ${name} 在 icons.js 里画不出`);
       }
     });
     test("加一个提示词节点：正文框可直接打字，有节点之后提示让位", async () => {
@@ -703,10 +716,10 @@ describe("canvas-page 页面", () => {
       click(view.button("加图片"));
       return [...view.nodeLayer.children].map((el) => el.dataset.nodeId);
     };
-    test("空白处起手框选，罩住的节点全亮", async () => {
+    test("Shift 起手框选，罩住的节点全亮", async () => {
       const { view } = await makePage();
       twoImages(view);
-      fire(view.stage, "pointerdown", { clientX: 100, clientY: 100, button: 0 });
+      fire(view.stage, "pointerdown", { clientX: 100, clientY: 100, button: 0, shiftKey: true });
       fire(window, "pointermove", { clientX: 1150, clientY: 700 });
       assert.equal(lit(view), 2);
       assert.ok(view.world.querySelector(".ns-canvas-marquee"));
@@ -716,7 +729,8 @@ describe("canvas-page 页面", () => {
     test("框不住任何节点时不亮", async () => {
       const { view } = await makePage();
       click(view.button("加图片"));
-      fire(view.stage, "pointerdown", { clientX: 30, clientY: 30, button: 0 });
+      fire(window, "keydown", { key: "Escape", code: "Escape" });   // 加选框以起点那一刻的选中集为基准
+      fire(view.stage, "pointerdown", { clientX: 30, clientY: 30, button: 0, shiftKey: true });
       fire(window, "pointermove", { clientX: 200, clientY: 200 });
       assert.equal(lit(view), 0);
       fire(window, "pointerup", {});
@@ -773,7 +787,7 @@ describe("canvas-page 页面", () => {
     test("框选之后 Delete 一次删掉整批", async () => {
       const { page, view } = await makePage();
       twoImages(view);
-      fire(view.stage, "pointerdown", { clientX: 100, clientY: 100, button: 0 });
+      fire(view.stage, "pointerdown", { clientX: 100, clientY: 100, button: 0, shiftKey: true });
       fire(window, "pointermove", { clientX: 1150, clientY: 700 });
       fire(window, "pointerup", {});
       fire(window, "keydown", { key: "Delete", code: "Delete" });
@@ -885,6 +899,28 @@ describe("canvas-page 页面", () => {
       fire(window, "pointermove", { clientX: 120, clientY: 100 });
       fire(window, "pointerup", {});
       assert.deepEqual(page.current().viewport, { x: 70, y: 10, k: 1 });
+    });
+    test("空白处起手拖 = 平移画面，节点与选中都不动", async () => {
+      const { view, page, pos } = await makePage();
+      click(view.button("加图片"));
+      selectNode(view, view.nodeLayer.children[0].dataset.nodeId);
+      const before = pos();
+      fire(view.stage, "pointerdown", { clientX: 300, clientY: 250, button: 0 });
+      fire(window, "pointermove", { clientX: 380, clientY: 300 });
+      fire(window, "pointerup", {});
+      assert.deepEqual(page.current().viewport, { x: 80, y: 50, k: 1 });
+      assert.deepEqual(pos(), before, "拖画面不许把节点挪走");
+      assert.equal(lit(view), 1, "拖画面不收走选中");
+    });
+    test("空白处点一下（没拖开）收走选中", async () => {
+      const { view, page } = await makePage();
+      click(view.button("加图片"));
+      selectNode(view, view.nodeLayer.children[0].dataset.nodeId);
+      assert.equal(lit(view), 1);
+      fire(view.stage, "pointerdown", { clientX: 300, clientY: 250, button: 0 });
+      fire(window, "pointerup", {});
+      assert.equal(lit(view), 0);
+      assert.deepEqual(page.current().viewport, { x: 0, y: 0, k: 1 }, "点一下不许挪画面");
     });
     test("适应内容把节点装进视口，四周留边且左右居中", async () => {
       const { view, page } = await makePage();
@@ -1482,6 +1518,241 @@ describe("canvas-page 页面", () => {
       await settle();
       assert.equal(page.current().nodes.length, 1);
       assert.equal(env.store.saved.length, 1);
+    });
+  });
+
+  describe("生成节点：技能、出图链与写回", () => {
+    /** 出图链那几条路由的内存替身：技能表、技能 config、缺模型预检（无清单 = 不挡）、提交、状态、取消 */
+    const genRoutes = ({ skills, skillConfig, generateImpl } = {}) => ({
+      "/rs_prompts/skills": () => jsonResponse(skills
+        || [{ id: "image_gen", name: "出图", category: "image_gen", source: "preset", gen_image: true }]),
+      "/neo_skill_models/check": () => jsonResponse({ success: true, check: { has_manifest: false } }),
+      "/neo_image_gen/skill_config": () => jsonResponse(skillConfig
+        || { default_ratio: "1:1", base_resolution: 1280, steps: 20 }),
+      "/neo_image_gen/generate": () => generateImpl ? generateImpl()
+        : jsonResponse({ task_id: "gen-1", status: "queued" }),
+      "/neo_image_gen/status/*": () => jsonResponse({ task_id: "gen-1", status: "running", progress: { value: 1, max: 8 } }),
+      "/neo_image_gen/cancel/*": () => jsonResponse({ success: true }),
+    });
+    const genNode = (id, x, y, meta = {}) => ({ id, type: "gen", title: "生成",
+      position: { x, y }, width: 260, height: 168, metadata: { skill_id: "image_gen", ...meta } });
+    const promptNode = (id, content) => ({ id, type: "text", title: "提示词",
+      position: { x: -400, y: 0 }, width: 340, height: 240, metadata: { content } });
+    const imageSlot = (id, x) => ({ id, type: "image", title: "图片",
+      position: { x, y: 300 }, width: 340, height: 240, metadata: {} });
+    const link = (from, to) => ({ id: `conn-${from}-${to}`, fromNodeId: from, toNodeId: to });
+    const oneCanvas = (nodes, connections = []) => [{ id: "canvas-0001", title: "甲", nodes, connections,
+      viewport: { x: 0, y: 0, k: 1 }, background_mode: "dots" }];
+    async function genPage(nodes, connections, { gen = {}, extraHost = {} } = {}) {
+      resetApiState();
+      globalThis.localStorage?.removeItem("neo.canvas.skill");
+      const env = mockCanvas({ projects: [...(nodes.length ? oneCanvas(nodes, connections) : []), ...(gen.canvases || [])] });
+      env.starts = [];
+      Object.assign(env.routes, genRoutes(gen));
+      const ctx = await makePage(env, { canGen: () => true, startComfy: () => { env.starts.push(1); }, ...extraHost });
+      await settle();   // 首张画布与技能列表都在 build 之后落地
+      const genText = (id, part) => ctx.view.nodeEl(id)
+        .querySelector(`.ns-canvas-gen-${part}`)?.textContent || "";
+      const genBtn = (id, label) => [...ctx.view.nodeEl(id).querySelectorAll(".ns-canvas-gen-btn")]
+        .find((btn) => btn.textContent.trim() === label);
+      const chipLabelAt = (id, at) => [...ctx.view.nodeEl(id).querySelectorAll(".neo-gallery-gm-chip-label")]
+        .map((el) => el.textContent)[at] || "";
+      const chipAt = (id, at) => [...ctx.view.nodeEl(id).querySelectorAll(".neo-gallery-gm-chip-btn")][at];
+      // 胶囊菜单浮在页面那一层（.ns-canvas-gen-menus）：世界层带 scale、节点裁剪自己的内容，菜单进那一层两头都吃亏
+      const menu = () => ctx.host.querySelector(".ns-canvas-gen-menus .neo-gallery-gm-chip-menu");
+      const pickChip = async (id, at, value) => {
+        click(chipAt(id, at));
+        await settle();
+        click([...menu().querySelectorAll(".neo-gallery-gm-menu-item")].find((el) => el.textContent === value));
+        await settle();
+      };
+      return { ...ctx, env, genText, genBtn, chipLabelAt, chipAt, menu, pickChip };
+    }
+    const genCalls = () => fetchLog.filter((c) => c.path === "/neo_image_gen/generate");
+    const okImages = (n) => ({ task_id: "gen-1", status: "succeeded",
+      images: Array.from({ length: n }, (_x, i) => ({ filename: `o${i + 1}.png`, subfolder: "" })) });
+    const deepSettle = () => flush(60);   // 出图链比页面落盘多两跳：提交一发 + 兜底首拉
+
+    test("加生成节点：铺一张生成节点，默认技能落内置生图技能", async () => {
+      const { page, view } = await genPage([]);
+      click(view.button("加生成节点"));
+      const node = page.current().nodes[0];
+      assert.equal(node.type, "gen");
+      assert.deepEqual([node.width, node.height], [320, 208]);
+      assert.equal(node.metadata.skill_id, "image_gen");
+      assert.ok(view.nodeEl(node.id).classList.contains("ns-canvas-node-gen"));
+    });
+    test("技能、比例、长边、张数直接铺在节点上，跑起来写进度与失败原因", async () => {
+      const ctx = await genPage([promptNode("t1", "一句"), genNode("g1", 0, 0, { default_ratio: "16:9", count: 3 })],
+        [link("t1", "g1")]);
+      await deepSettle();   // 技能 config 取到手才有「主模型」那一行
+      assert.deepEqual([ctx.chipLabelAt("g1", 0), ctx.chipLabelAt("g1", 1)], ["出图", "16:9"], "胶囊上写的是生效值");
+      assert.equal(ctx.chipLabelAt("g1", 2), "长边尺寸", "没盖过长边就写跟随");
+      assert.equal(ctx.chipLabelAt("g1", 3), "3 张", "张数也是一枚胶囊，写的是生效张数");
+      assert.deepEqual([ctx.chipAt("g1", 0), ctx.chipAt("g1", 1), ctx.chipAt("g1", 2), ctx.chipAt("g1", 3)]
+          .map((el) => el.title), ["技能", "默认比例", "长边尺寸", "生图张数"],
+        "精简胶囊不带行标签，每一枚是干什么的写在悬停提示里");
+      assert.equal(ctx.genText("g1", "model"), "主模型：跟随技能配置", "技能 config 取到手才写得出这一行");
+      assert.equal(ctx.genText("g1", "status"), "");
+      click(ctx.genBtn("g1", "出图"));
+      await deepSettle();
+      assert.equal(ctx.genText("g1", "status"), "生成中 1/8", "状态行走后端推进的那一格");
+      assert.ok(ctx.genBtn("g1", "取消任务"), "跑着的时候要给出取消的入口");
+      assert.equal(ctx.genBtn("g1", "出图").disabled, true, "这一发在跑就不给叠第二发");
+      dispatchApiEvent("rs.image_gen.status", { task_id: "gen-1", status: "failed", error: "显存不足" });
+      await settle();
+      assert.equal(ctx.genText("g1", "status"), "显存不足");
+      assert.ok(ctx.env.store.toasts.some((item) => item.message.includes("出图失败")));
+      assert.equal(ctx.genBtn("g1", "出图").disabled, false, "失败过的那一张允许再来一发");
+    });
+    test("出图请求按连线顺序带提示词与参考图，只带节点上盖过的值", async () => {
+      const ctx = await genPage([promptNode("t1", "第一句"), promptNode("t2", "第二句"),
+        genNode("g1", 0, 0, { count: 2 }), imageSlot("i1", 0)],
+      [link("t1", "g1"), link("t2", "g1"), link("i1", "g1")]);
+      ctx.page.current().nodes.find((n) => n.id === "i1").metadata = { filename: "a.png", subfolder: "sub" };
+      click(ctx.genBtn("g1", "出图"));
+      await settle();
+      const body = genCalls()[0].body;
+      assert.equal(body.prompt, "第一句\n\n第二句", "多张提示词按连线顺序拼");
+      assert.deepEqual(body.references, [{ kind: "input", value: "sub/a.png[output]" }]);
+      assert.equal(body.count, 2);
+      assert.equal("default_ratio" in body, false, "没盖过比例就不带这一项，交后端按技能 config 合并");
+      assert.equal("base_resolution" in body, false);
+    });
+    test("没有提示词连线时说出图要提示词，不发请求", async () => {
+      const ctx = await genPage([genNode("g1", 0, 0)]);
+      click(ctx.genBtn("g1", "出图"));
+      await settle();
+      assert.equal(genCalls().length, 0);
+      assert.ok(ctx.env.store.toasts.some((item) => item.message.includes("接一条文本或图片线")));
+    });
+    test("离线（没有执行队列）时出图不动作，点一下叫它启动", async () => {
+      const ctx = await genPage([promptNode("t1", "一句"), genNode("g1", 0, 0)], [link("t1", "g1")],
+        { extraHost: { canGen: () => false } });
+      click(ctx.genBtn("g1", "出图"));
+      await settle();
+      assert.equal(genCalls().length, 0);
+      assert.equal(ctx.env.starts.length, 1);
+      assert.ok(ctx.env.store.toasts.some((item) => item.message.includes("出图需要 ComfyUI 执行队列")));
+    });
+    test("节点上的胶囊选比例：写进节点并进撤销栈", async () => {
+      const ctx = await genPage([promptNode("t1", "一句"), genNode("g1", 0, 0)], [link("t1", "g1")]);
+      await ctx.pickChip("g1", 1, "9:16");
+      assert.equal(ctx.page.current().nodes.find((n) => n.id === "g1").metadata.default_ratio, "9:16");
+      assert.equal(ctx.chipLabelAt("g1", 1), "9:16");
+      click(ctx.view.button("撤销"));
+      await settle();
+      assert.equal(ctx.page.current().nodes.find((n) => n.id === "g1").metadata.default_ratio, undefined,
+        "撤销把这一项收回原样（原来没写过这一项）");
+      assert.equal(ctx.chipLabelAt("g1", 1), "默认比例", "跟随技能配置时胶囊写「默认比例」");
+    });
+    test("长边胶囊：盖过的值写进节点，选回默认收回跟随", async () => {
+      const ctx = await genPage([genNode("g1", 0, 0)]);
+      await ctx.pickChip("g1", 2, "2048");
+      assert.equal(ctx.page.current().nodes[0].metadata.base_resolution, 2048);
+      assert.equal(ctx.chipLabelAt("g1", 2), "2048");
+      await ctx.pickChip("g1", 2, "长边尺寸");
+      assert.equal(ctx.page.current().nodes[0].metadata.base_resolution, 0, "选回默认 = 跟随技能 config 与全局生图设置");
+      assert.equal(ctx.chipLabelAt("g1", 2), "长边尺寸");
+    });
+    test("张数胶囊写进节点，菜单就列后端吃得下的 1 到 8", async () => {
+      const ctx = await genPage([genNode("g1", 0, 0, { count: 3 })]);
+      assert.equal(ctx.chipLabelAt("g1", 3), "3 张");
+      click(ctx.chipAt("g1", 3));
+      await settle();
+      const items = () => [...ctx.menu().querySelectorAll(".neo-gallery-gm-menu-item")];
+      assert.deepEqual(items().map((el) => el.textContent),
+        ["1 张", "2 张", "3 张", "4 张", "5 张", "6 张", "7 张", "8 张"],
+        "菜单就列后端吃得下的那一份：一次最多 8 张");
+      click(items().find((el) => el.textContent === "8 张"));
+      await settle();
+      assert.equal(ctx.page.current().nodes[0].metadata.count, 8);
+      assert.equal(ctx.chipLabelAt("g1", 3), "8 张", "选完胶囊上写的是生效张数");
+      assert.equal(ctx.menu(), null, "这一发改动把节点重建了，菜单跟着收回");
+      click(ctx.chipAt("g1", 3));
+      await settle();
+      click(items().find((el) => el.textContent === "1 张"));
+      await settle();
+      assert.equal(ctx.page.current().nodes[0].metadata.count, 1);
+      assert.equal(ctx.chipLabelAt("g1", 3), "1 张");
+    });
+    test("出图结果按连线顺序填下游空图节点，多出来的在右侧新建并接上", async () => {
+      const ctx = await genPage([promptNode("t1", "一句"), genNode("g1", 0, 0, { count: 3 }),
+        imageSlot("i1", 0), imageSlot("i2", 400)],
+      [link("t1", "g1"), link("g1", "i1"), link("g1", "i2")]);
+      click(ctx.genBtn("g1", "出图"));
+      await deepSettle();   // 提交落进队列才收得到结果
+      dispatchApiEvent("rs.image_gen.status", okImages(3));
+      await settle();
+      const nodes = () => ctx.page.current().nodes;
+      const slot = (id) => nodes().find((n) => n.id === id).metadata.filename;
+      assert.deepEqual([slot("i1"), slot("i2")], ["o1.png", "o2.png"], "空着的槽位按连线顺序填");
+      const created = nodes().filter((n) => n.type === "image" && !["i1", "i2"].includes(n.id));
+      assert.equal(created.length, 1, "多出来的那一张新建图片节点落在右侧");
+      assert.equal(created[0].metadata.filename, "o3.png");
+      assert.ok(ctx.page.current().connections.some((c) => c.fromNodeId === "g1" && c.toNodeId === created[0].id),
+        "新建的那一张要接在这张生成节点上");
+      click(ctx.view.button("撤销"));
+      await settle();
+      assert.equal(nodes().length, 4, "撤销一次退掉这一发落下的全部图");
+      assert.equal(slot("i1"), undefined);
+    });
+    test("取消任务走后端取消，节点收回不挂运行态", async () => {
+      const ctx = await genPage([promptNode("t1", "一句"), genNode("g1", 0, 0)], [link("t1", "g1")]);
+      click(ctx.genBtn("g1", "出图"));
+      await deepSettle();
+      click(ctx.genBtn("g1", "取消任务"));
+      await settle();
+      assert.ok(fetchLog.some((c) => c.path === "/neo_image_gen/cancel/gen-1" && c.method === "POST"),
+        "取消要交后端出队，不是只把界面收掉");
+      dispatchApiEvent("rs.image_gen.status", { task_id: "gen-1", status: "cancelled" });
+      await settle();
+      assert.ok(ctx.env.store.toasts.some((item) => item.message.includes("已取消出图")));
+      assert.equal(ctx.genText("g1", "status"), "");
+      assert.equal(listenerCount("rs.image_gen.status"), 0, "终态把监听摘干净");
+    });
+    test("切画布时脱手：结果不写旧画布，说一句图已存进 Output", async () => {
+      const ctx = await genPage([promptNode("t1", "一句"), genNode("g1", 0, 0), imageSlot("i1", 0)],
+        [link("t1", "g1"), link("g1", "i1")],
+        { gen: { canvases: [{ id: "canvas-0002", title: "乙", nodes: [], connections: [],
+          viewport: { x: 0, y: 0, k: 1 }, background_mode: "dots" }] } });
+      click(ctx.genBtn("g1", "出图"));
+      await deepSettle();
+      ctx.view.select.value = "canvas-0002";
+      fire(ctx.view.select, "change");
+      await settle();
+      dispatchApiEvent("rs.image_gen.status", okImages(2));
+      await settle();
+      assert.ok(ctx.env.store.toasts.some((item) => item.message.includes("图已存进 Output 目录")));
+      assert.equal(ctx.page.current().id, "canvas-0002");
+      assert.ok(ctx.env.store.saved.every((payload) => !payload.nodes?.some((n) => n.id === "i1" && n.metadata.filename)),
+        "脱手的那一发不写旧画布");
+      assert.equal(listenerCount("rs.image_gen.status"), 0);
+    });
+    test("控件那一片起手不拖节点，胶囊菜单浮在节点外那一层", async () => {
+      const ctx = await genPage([genNode("g1", 0, 0)]);
+      const nodeEl = ctx.view.nodeEl("g1");
+      const at = { ...ctx.page.current().nodes[0].position };
+      for (const chip of nodeEl.querySelectorAll(".neo-gallery-gm-chip-btn")) fire(chip, "pointerdown");
+      fire(nodeEl.querySelector(".ns-canvas-gen-go"), "pointerdown");
+      assert.deepEqual(ctx.page.current().nodes[0].position, at, "控件上起手不拖节点");
+      assert.equal(ctx.env.store.saved.length, 0, "起手按控件不算一次改动");
+      click(ctx.chipAt("g1", 1));
+      await settle();
+      assert.ok(ctx.menu(), "菜单浮在页面那一层");
+      assert.equal(nodeEl.querySelector(".neo-gallery-gm-chip-menu"), null,
+        "菜单不在节点里 —— 世界层带 scale、节点裁剪自己的内容，进那一层两头都吃亏");
+    });
+    test("胶囊菜单：点菜单里的项不收，点节点外收掉", async () => {
+      const ctx = await genPage([genNode("g1", 0, 0)]);
+      click(ctx.chipAt("g1", 1));
+      await settle();
+      assert.ok(ctx.menu());
+      fire(ctx.menu().querySelector(".neo-gallery-gm-menu-item"), "pointerdown");
+      assert.ok(ctx.menu(), "点菜单里的项不算菜单外");
+      fire(ctx.host.querySelector(".ns-canvas-stage"), "pointerdown");
+      await settle();
+      assert.equal(ctx.menu(), null, "点节点外收掉菜单");
     });
   });
 });

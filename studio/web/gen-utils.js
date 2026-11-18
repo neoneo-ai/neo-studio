@@ -189,8 +189,10 @@ function placeChipPanel(el, chipRect) {
 
 /** 真 chip（输入条样式参考 ArtCraft）：一枚胶囊按钮 + 从上方浮出的选项菜单——输入卡钉在页面底部，
  *  菜单只能朝上开。原生 select 收在壳里当状态容器并隐藏：chip 显示生效值（覆盖值 / 跟随值 / 默认），
- *  点菜单项写 value 并派发 change；切技能重放配置是程序改 value，不触发 change，调用方要跟着 sync() */
-export function chipButton(sel, { icon: iconName, glyph = null } = {}) {
+ *  点菜单项写 value 并派发 change；切技能重放配置是程序改 value，不触发 change，调用方要跟着 sync()
+ *  mount 给定时菜单挂在宿主给的浮层里（宿主给的是不带 scale、不被裁剪的那一层）：宿主在带 scale 的
+ *  画布层里时，菜单留在 chip 壳里会跟着缩放并被节点切掉，placeChipPanel 量到的矩形也是缩放后的 */
+export function chipButton(sel, { icon: iconName, glyph = null, mount = null } = {}) {
     sel.hidden = true;
     const icoSlot = iconName ? $el("span", { className: "neo-gallery-gm-chip-icon" }, [icon(iconName, 12)]) : null;
     const label = $el("span", { className: "neo-gallery-gm-chip-label" });
@@ -200,7 +202,7 @@ export function chipButton(sel, { icon: iconName, glyph = null } = {}) {
         $el("span", { className: "neo-gallery-gm-chip-caret", textContent: "▾" }),
     ]);
     const menu = $el("div", { className: "rs-runtime-menu neo-gallery-gm-chip-menu" });
-    const wrap = $el("span", { className: "neo-gallery-gm-chip-wrap" }, [chip, menu, sel]);
+    const wrap = $el("span", { className: "neo-gallery-gm-chip-wrap" }, mount ? [chip, sel] : [chip, menu, sel]);
     let open = false;
     const sync = () => {
         const v = sel.value || sel.dataset.follow || "";
@@ -220,6 +222,7 @@ export function chipButton(sel, { icon: iconName, glyph = null } = {}) {
         if (!open) return;
         open = false;
         menu.style.display = "none";
+        if (menu.parentElement !== wrap) menu.remove();   // 挂在宿主浮层里的菜单：收起就离开那一层
         chip.classList.remove("neo-gallery-gm-chip-open");
     };
     chip.addEventListener("click", (e) => {
@@ -239,6 +242,7 @@ export function chipButton(sel, { icon: iconName, glyph = null } = {}) {
             });
             menu.appendChild(item);
         }
+        if (mount) mount().appendChild(menu);
         menu.style.display = "block";
         open = true;
         chip.classList.add("neo-gallery-gm-chip-open");
@@ -248,9 +252,9 @@ export function chipButton(sel, { icon: iconName, glyph = null } = {}) {
     sel.addEventListener("change", sync);
     sync();
     return {
-        el: wrap, chip, sync, close, setIcon,
+        el: wrap, chip, menu, sync, close, setIcon,
         isOpen: () => open,
-        closeOnOutside: (target) => { if (open && !wrap.contains(target)) close(); },
+        closeOnOutside: (target) => { if (open && !wrap.contains(target) && !menu.contains(target)) close(); },
     };
 }
 
