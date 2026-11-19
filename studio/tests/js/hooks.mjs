@@ -5,7 +5,6 @@ import { registerHooks } from "node:module";
 const SHIMS = {
     "app.js": "./mocks/comfy-app.mjs",
     "api.js": "./mocks/comfy-api.mjs",
-    "ui.js": "./mocks/comfy-ui.mjs",
 };
 
 let installed = false;

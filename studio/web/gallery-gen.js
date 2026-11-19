@@ -6,7 +6,6 @@
  * （角色图 / 九宫格分镜图 / 反推提示词 / LoRA 打标 / 语音克隆）。
  */
 
-import { $el } from "../../../../scripts/ui.js";
 import { isImageFile, isAudioFile } from "./gallery-utils.js";
 import { actionToast } from "./toast.js";
 import { t } from "./js/core/i18n.js";
@@ -21,6 +20,8 @@ import {
 } from "./gallery-card-tools.js";
 import { openImageEditDialog } from "./image-edit-panel.js";
 import { openGenMaterialDialog } from "./t2i-panel.js";
+
+const { $el } = window.comfyAPI.ui;
 
 /** 素材卡片「⋯」菜单里的生成入口（角色图 / 九宫格分镜图 / 图片编辑 / 语音克隆），由 gallery-card.js 展开使用。 */
 export function buildGenerationMenuItems({ card, gallery, image, subfolder }) {

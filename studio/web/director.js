@@ -4,7 +4,6 @@
  * + 半自动故事生成/拆分。数据与保存仍走 recipes.js 的 saveRecipe / listVideoSkills / scanMediaNodes。
  */
 import { app } from "../../../../scripts/app.js";
-import { $el } from "../../../../scripts/ui.js";
 import { DirectorTimeline } from "./director-timeline.js";
 import { saveRecipe, listVideoSkills, scanMediaNodes, widgetValueToRef } from "./recipes.js";
 import { attachSkillPickerToSelect, skillDisplayName, skillAcceptsText, skillAcceptsRef } from "./skill.js";
@@ -18,6 +17,8 @@ import { mediaKindOf } from "./gallery-utils.js";
 import { t, tf } from "./js/core/i18n.js";
 import { icon } from "./js/core/icons.js";
 import { queueTrack } from "./queue-panel.js";
+const { $el } = window.comfyAPI.ui;
+
 
 // 配方编辑器保存成功后广播：节点内时间轴等监听方据此刷新下拉候选 + 重载 spec。
 export const DIRECTOR_RECIPE_SAVED_EVENT = "neo-director-recipe-saved";

@@ -6,7 +6,6 @@
  * gallery-card-tools.js，卡片菜单入口与「再来一发」分发在 gallery-gen.js。
  */
 
-import { $el } from "../../../../scripts/ui.js";
 import { api } from "../../../../scripts/api.js";
 import { actionToast } from "./toast.js";
 import { skillFamily } from "./skill.js";
@@ -14,6 +13,7 @@ import { shortModelName, modelFamily, LORA_FAMILY_HINTS } from "./image-gen.js";
 import { inOpenComboList } from "./combo-box.js";
 import { t, tf } from "./js/core/i18n.js";
 import { icon, setIcon } from "./js/core/icons.js";
+const { $el } = window.comfyAPI.ui;
 
 // 一键角色图 / 九宫格分镜图都固定走 Qwen Image 2.1 预设（多路参考槽位、不走 Krea2 编辑链）。
 export const QWEN_IMAGE_SKILL_ID = "qwen_image_21";

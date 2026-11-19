@@ -1,11 +1,12 @@
 /**
  * Gallery List - toolbar controls and breadcrumb navigation
  */
-import { $el } from "../../../../scripts/ui.js";
 import { api } from "../../../../scripts/api.js";
 import { THUMBNAIL_SIZE_MIN, THUMBNAIL_SIZE_MAX, THUMBNAIL_SIZE_STEP, getCardHeight, cardColumnWidth, galleryCardSize, createBreadcrumbItem, createBreadcrumbSeparator, PAGE_SIZE, sortByMtime, isImageFile, showNoFilesMessage, showToast, releaseLazyThumbnails, KIND_FILTERS, kindLabel } from './gallery-utils.js';
 import { attachMasonry } from './gallery-masonry.js';
 import { t, tf } from "./js/core/i18n.js";
+const { $el } = window.comfyAPI.ui;
+
 
 // Civitai bookmarks virtual dir: identified by a stable key in the backend; "C站收藏" is display-only.
 const CIVITAI_DIR_KEY = "civitai_bookmarks";

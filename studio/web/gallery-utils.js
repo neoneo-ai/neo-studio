@@ -1,8 +1,9 @@
 /**
  * Gallery Utilities - Constants and helper functions
  */
-import { $el } from "../../../../scripts/ui.js";
 import { t } from "./js/core/i18n.js";
+
+const { $el } = window.comfyAPI.ui;
 
 // Constants
 export const PAGE_SIZE = 100;

@@ -6,9 +6,10 @@
  * 点一行 = 读该条全文交回调用方填框；× / 点浮层外 / Esc 三条退路都收口到 closePresetPicker。
  * 浮层是挂在按钮下方的下拉（placeUnder），不是居中弹窗。
  */
-import { $el } from "../../../../scripts/ui.js";
 import { t } from "./i18n.js";
 import { listPrompts, loadPrompt, randomPrompts, savePrompt, promptCoverUrl } from "../../prompt-service.js";
+
+const { $el } = window.comfyAPI.ui;
 
 /** 视频提示词判定：扫描名带目录前缀，首段是 video（含其子目录）归视频，其余归图像。后端 prompts.py 的 _is_video_prompt 同口径。 */
 export function isVideoPromptName(name) {

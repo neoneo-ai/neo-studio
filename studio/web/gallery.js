@@ -1,6 +1,5 @@
 import { app } from "../../../../scripts/app.js";
 import { api } from "../../../../scripts/api.js";
-import { $el } from "../../../../scripts/ui.js";
 import { GalleryList } from './gallery-list.js';
 import { GalleryCard } from './gallery-card.js';
 import { GallerySetting } from './gallery-setting.js';
@@ -30,6 +29,8 @@ import {
     releaseLazyThumbnails,
     kindLabel
 } from './gallery-utils.js';
+const { $el } = window.comfyAPI.ui;
+
 
 // 启动页里 gallery.css / recipes.css 由 studio/index.html 静态带上（见那里的注释）。在 ComfyUI 里
 // 当扩展加载时没有那份文档，这里补一份带时间戳的：prompts.css 同款坑——按内容估新鲜度的话，

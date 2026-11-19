@@ -1,11 +1,12 @@
 /**
  * Gallery Setting - directory management modal (custom dirs, OSS, Civitai sync)
  */
-import { $el } from "../../../../scripts/ui.js";
 import { api } from "../../../../scripts/api.js";
 import { showToast } from './gallery-utils.js';
 import { icon } from "./js/core/icons.js";
 import { t, tf } from "./js/core/i18n.js";
+const { $el } = window.comfyAPI.ui;
+
 
 export class GallerySetting {
     constructor(gallery) {

@@ -25,6 +25,12 @@
 - The standalone Studio page reaches ComfyUI-shaped APIs
   through `studio/web/studio/shim/`. Keep the shim as the
   boundary: page modules do not learn which process served them.
+  `shim/comfy-api.js` fills `window.comfyAPI` for that page, and
+  `studio/index.html` loads it ahead of every page module: a module
+  reads `$el` off `window.comfyAPI.ui` while it evaluates, so an assembly
+  that lands later is a blank window. No module under `studio/web/` imports
+  `scripts/ui.js` — the frontend marks that path as a deprecated legacy API;
+  `studio/tests/js/comfy-api-boundary.test.mjs` pins both halves.
 - Frameless window chrome, dragging, maximize/restore, and Esc
   handling stay in the window layer instead of being duplicated per page.
 - CSS goes in the module's same-named stylesheet. Do not

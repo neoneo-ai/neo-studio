@@ -4,7 +4,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { resetEnv, click } from "./setup.mjs";
 
-// lib-modal.js 顶层导入 scripts/ui.js 与 gallery-utils.js，必须等 setup.mjs 装好 shim 钩子再动态取
 const { createLibraryModal, acceptsPick } = await import("../../web/js/core/lib-modal.js");
 
 const KEY = "neo_test_libmodal_accept";

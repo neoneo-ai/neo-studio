@@ -443,6 +443,13 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   recipes and existing 配方 assets are untouched.
 
 ### Fixed
+- **Neo Studio no longer imports the ComfyUI frontend's deprecated UI module.** Every page module used to pull
+  `$el` from the legacy `scripts/ui.js` path, and the current frontend answers that import with a
+  `[DEPRECATION WARNING] Detected import of deprecated legacy API` entry in the browser console for each Neo Studio
+  file it loads. All of them now read `$el` from the official `window.comfyAPI.ui` entry point, and the standalone
+  Studio window assembles that `window.comfyAPI` from its own shim before its first page module runs — so the
+  desktop window, the gallery, the queue panel, the recipes panel, the director editor and the reference-grid node
+  all build the same DOM as before, with no console warning in ComfyUI.
 - **Prompt-library tag chips are the material page's chip, and readable in 浅色.** The 提示词库 filter row's chips
   (`全部 / 图像 / 视频`, `全部来源 / 预设 / 自定义`) carried the input-field box and a blue selected state, so in 浅色
   the three states read as one pale blue pill and the label washed out. They now take the 素材页 归类标签 chip

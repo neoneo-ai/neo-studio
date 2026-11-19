@@ -10,10 +10,11 @@
  * 值数组是组件的全部状态（[{value, kind}]）：宿主经 get() / first() / fill() 读写，
  * setReadOnly(true) = 预设配方那种「看得见改不了」：＋ 与 ✕ 都不画。
  */
-import { $el } from "../../../../scripts/ui.js";
 import { t, tf } from "./i18n.js";
 import { icon, setIcon } from "./icons.js";
 import { mediaKindOf } from "../../gallery-utils.js";
+
+const { $el } = window.comfyAPI.ui;
 
 export const REF_KIND_NAMES = { image: "参考图", video: "参考视频", audio: "参考音频" };   // 取用时过 t()，随语言现读
 

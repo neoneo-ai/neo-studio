@@ -6,7 +6,6 @@
  * t2i-panel.js 与 image-edit-panel.js，底座在 gen-utils.js，入口在 gallery-gen.js。
  */
 
-import { $el } from "../../../../scripts/ui.js";
 import { getImageHeight, getThumbnailSrc, getAudioSrc, renderWaveform, decorativeHeights, isVideoFile } from "./gallery-utils.js";
 import { openLLMSettingsModal } from "./llm-setting.js";
 import { actionToast } from "./toast.js";
@@ -21,6 +20,7 @@ import { ttlCache } from "./js/core/cache.js";
 import { t, tf } from "./js/core/i18n.js";
 import { icon, setIconLabel } from "./js/core/icons.js";
 import { QWEN_IMAGE_SKILL_ID, makeStoryWindowDraggable, copyImageToInput } from "./gen-utils.js";
+const { $el } = window.comfyAPI.ui;
 
 // 用所选人像作参考图生成四视图角色设定图，供拖入导演配方的 角色参考图。
 const CHARACTER_SHEET_PROMPT = "角色设定多视图：根据参考图中的人物，在一张横版画面中生成四个视图横向并排的角色设定图：第一格为大头特写（肩部以上，突出五官脸型），第二格为正面全身站立，第三格为侧面全身站立，第四格为背面全身站立。严格保持与参考图一致的五官脸型、发型发色、服装配饰和体型比例；全身视图中人物自然站立，双臂下垂，纯白背景，均匀柔光，写实摄影风格，高清细节，画面内不出现文字标注。";

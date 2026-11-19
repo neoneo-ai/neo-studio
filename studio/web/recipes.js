@@ -7,12 +7,13 @@
  */
 import { app } from "../../../../scripts/app.js";
 import { api } from "../../../../scripts/api.js";
-import { $el } from "../../../../scripts/ui.js";
 import { Lightbox } from "./lightbox.js";
 import { openDirectorEditor, MODE_LABELS, LEGACY_MODE_MAP } from "./director.js";
 import { skillDisplayName } from "./skill.js";
 import { t, tf } from "./js/core/i18n.js";
 import { icon } from "./js/core/icons.js";
+const { $el } = window.comfyAPI.ui;
+
 
 const assetUrl = (recipe, file, dir) =>
     `${window.location.protocol}//${window.location.host}/rs_recipes/asset?recipe=${encodeURIComponent(recipe)}&file=${encodeURIComponent(file)}${dir ? `&dir=${encodeURIComponent(dir)}` : ''}`;

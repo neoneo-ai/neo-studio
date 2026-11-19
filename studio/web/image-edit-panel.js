@@ -7,7 +7,6 @@
  * 从 gallery-gen.js 拆出，面板底座在 gen-utils.js。
  */
 
-import { $el } from "../../../../scripts/ui.js";
 import { isPickableImage } from "./gallery-utils.js";
 import { actionToast } from "./toast.js";
 import { openSkillDetailById, populateSkillOptions, skillDisplayName, skillAcceptsRef } from "./skill.js";
@@ -22,6 +21,7 @@ import {
     storyPanelRoot, chipButton, skillParamsChip, guardMainModelFamily, reuseModelOverlay,
     reusePaintPanel, notifyPrefillFilled,
 } from "./gen-utils.js";
+const { $el } = window.comfyAPI.ui;
 
 // 姿势锁形技能（ControlNet）：第 1 张额外参考位放控制图，锁住它的姿势与构图重出原图
 const QWEN_CONTROLNET_SKILL_ID = "qwen_image_21_controlnet";

@@ -1,7 +1,6 @@
 /**
  * Gallery Card - content and interactions of a single directory/media card
  */
-import { $el } from "../../../../scripts/ui.js";
 import { api } from "../../../../scripts/api.js";
 import { app } from "../../../../scripts/app.js";
 import { getReservedSpace, getImageHeight, isImageFile, isVideoFile, isAudioFile, getThumbnailSrc, getAudioSrc, showToast, showInlineFeedback, renderCoverTiles, coverMaxTiles, buildPlaceholderTile, decorativeHeights, renderWaveform, applyMediaCardRatio, registerLazyThumbnail, galleryCardSize } from './gallery-utils.js';
@@ -11,6 +10,8 @@ import { copyGalleryToInput } from "./media-transfer.js";
 import { openDirectorEditor } from "./director.js";
 import { t, tf } from "./js/core/i18n.js";
 import { icon } from "./js/core/icons.js";
+const { $el } = window.comfyAPI.ui;
+
 
 // 已解码波形峰值的会话缓存：同一文件在页面内只请求/解码一次，跨卡片复用。
 // 持久化到后端本地目录由 /neo_gallery/waveform 负责（见 gallery.py）。

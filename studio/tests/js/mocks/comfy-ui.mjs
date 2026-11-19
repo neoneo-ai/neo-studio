@@ -1,4 +1,4 @@
-// scripts/ui.js 的 `$el` 替身：只覆盖 Neo Studio 用到的语义
+// scripts/ui.js 的 `$el` 替身：setup.mjs 把它装进 window.comfyAPI.ui，只覆盖 Neo Studio 用到的语义
 // $el(tag, { className, id, textContent, innerHTML, value, style, dataset, onclick|onClick: fn, ...attrs }, children)
 export function $el(tag, options = null, children = null) {
     const parts = Array.isArray(tag) ? tag : [tag];

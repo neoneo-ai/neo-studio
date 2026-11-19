@@ -25,8 +25,7 @@
 {
     "imports": {
         "/scripts/app.js": "/extensions/comfyui-neo-studio/studio/shim/app.js",
-        "/scripts/api.js": "/extensions/comfyui-neo-studio/studio/shim/api.js",
-        "/scripts/ui.js": "/extensions/comfyui-neo-studio/studio/shim/ui.js"
+        "/scripts/api.js": "/extensions/comfyui-neo-studio/studio/shim/api.js"
     }
 }
 </script>
@@ -72,6 +71,9 @@
 <div class="ns-body">
     <main id="ns-view" class="ns-view"></main>
 </div>
+<!-- window.comfyAPI 装配排在本页第一个模块之前：web/ 模块顶层的 `const { $el } = window.comfyAPI.ui;`
+     求值时读不到值就是整页白屏，模块 script 的先后顺序就是这条装配的唯一契约 -->
+<script type="module" src="/extensions/comfyui-neo-studio/studio/shim/comfy-api.js"></script>
 <script type="module" src="/extensions/comfyui-neo-studio/studio/studio-app.js"></script>
 </body>
 </html>

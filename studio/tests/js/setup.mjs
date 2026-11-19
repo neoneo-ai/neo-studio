@@ -18,6 +18,9 @@ import { installFetch, mockRoute, clearRoutes, resetFetchLog, fetchLog, missingR
 import { clearObjectInfoCache } from "../../web/js/core/object-info.js";
 import { configureCanvasOrigin } from "../../web/js/core/canvas-origin.js";
 import { setLang } from "../../web/js/core/i18n.js";
+import { app } from "./mocks/comfy-app.mjs";
+import { api } from "./mocks/comfy-api.mjs";
+import { $el } from "./mocks/comfy-ui.mjs";
 
 const dom = new JSDOM("<!DOCTYPE html><html><head></head><body></body></html>", {
     url: "http://test.local/",
@@ -33,6 +36,11 @@ installRectStub(dom.window);
 installPollSpeedup(dom.window);
 installDialogs(dom.window);
 installFetch();
+
+// 生产模块按官方入口取 $el（`const { $el } = window.comfyAPI.ui;` 在模块求值时就要读到值），
+// 装配形状与独立页面的 studio/shim/comfy-api.js 一致：app 那一路同时喂 skill-core 的
+// renderMarkdownToHtml 回退，缺了它 markdown 用例就落到转义兜底上。
+window.comfyAPI = { app, api: { api }, ui: { $el } };
 
 // 用例基线语言：jsdom 的 navigator.language 是 en-US，不钉中文的话断言里的中文原文会全变英文
 setLang("zh");

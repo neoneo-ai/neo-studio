@@ -11,12 +11,13 @@
  * 收集/还原配方（鸭子类型，避免循环导入）。
  */
 import { app } from "../../../../scripts/app.js";
-import { $el } from "../../../../scripts/ui.js";
 import { t, tf } from "./js/core/i18n.js";
 import { icon } from "./js/core/icons.js";
 import { Lightbox } from "./lightbox.js";
 import { grabDataType, copyGalleryToInput, toggleGallerySidebar, uploadLocalFiles } from "./media-transfer.js";
 import { collectWorkflowAssets, saveRecipe, listRecipes } from "./recipes.js";
+
+const { $el } = window.comfyAPI.ui;
 
 if (!document.getElementById("neo-rg-css")) {
     const link = document.createElement("link");

@@ -6,7 +6,6 @@
  * 从 gallery-gen.js 拆出，面板底座在 gen-utils.js。
  */
 
-import { $el } from "../../../../scripts/ui.js";
 import { DIRECTOR_ASPECTS } from "./director.js";
 import { openLLMSettingsModal } from "./llm-setting.js";
 import { actionToast } from "./toast.js";
@@ -24,6 +23,8 @@ import {
     skillParamsChip, guardMainModelFamily, reuseModelOverlay, reusePaintPanel,
     notifyPrefillFilled, openCanvasPlace,
 } from "./gen-utils.js";
+
+const { $el } = window.comfyAPI.ui;
 
 // 「生成素材」弹窗默认技能：Krea2 文生图（纯提示词出图，产物落 Output/NeoAgent/<日期>）
 const KREA2_T2I_SKILL_ID = "image_gen";

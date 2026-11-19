@@ -7,11 +7,12 @@
  * 页面提交成功后调 queueTrack 登记这一发并把编辑区交回用户，进度落在这里。
  * 实时队列是 ComfyUI 运行时功能：桌面端离线时只剩持久历史，取消与显存清理随 queue / memory 能力一起收起。
  */
-import { $el } from "../../../../scripts/ui.js";
 import { api } from "../../../../scripts/api.js";
 import { Lightbox } from "./lightbox.js";
 import { t, tf } from "./js/core/i18n.js";
 import { icon, setIcon } from "./js/core/icons.js";
+const { $el } = window.comfyAPI.ui;
+
 
 // 类别 → 后端各模块的任务快照事件（image_gen / voice_gen / studio / simple_video / h3_segment / h3_assemble）
 const STATUS_EVENTS = {

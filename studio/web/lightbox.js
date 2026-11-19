@@ -18,9 +18,10 @@
  * 用于需要鉴权或需精确判断加载完成的媒体：加载期间显示 spinner，地址由本组件回收。
  * 缩放/平移跨翻页保持，仅关闭时复位；翻页时新图按上一张渲染尺寸占位，避免布局跳动。
  */
-import { $el } from "../../../../scripts/ui.js";
 import { t } from "./js/core/i18n.js";
 import { icon } from "./js/core/icons.js";
+
+const { $el } = window.comfyAPI.ui;
 
 // 组件自带样式（幂等注入，调用方无需单独加载 CSS）
 if (!document.getElementById('neo-lightbox-css')) {

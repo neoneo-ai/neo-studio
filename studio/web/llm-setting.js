@@ -12,8 +12,9 @@
 import { attachComboBox } from "./combo-box.js";
 import { setCurrentModel } from "./prompt-service.js";
 import { mkEl } from "./dom-utils.js";
-import { $el } from "../../scripts/ui.js";
 import { t } from "./js/core/i18n.js";
+
+const { $el } = window.comfyAPI.ui;
 
 // 字节数转人类可读大小（本地模型列表显示用）
 function formatFileSize(bytes) {

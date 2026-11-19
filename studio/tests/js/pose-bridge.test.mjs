@@ -5,8 +5,6 @@ import assert from "node:assert/strict";
 import { resetEnv, mockRoute, clearRoutes, jsonResponse, fetchLog, click, changeValue, inputText, keydown, flush, sleep, clearBody, window } from "./setup.mjs";
 import { $el } from "../../web/studio/shim/ui.js";
 
-// pose.js 现在经 lib-modal.js 拉 scripts/ui.js 的 shim：静态导入会在 setup.mjs 装好钩子之前就解完
-// 整张模块图，所以按 lib-modal-geometry.test.mjs 那条路动态取
 const { createPoseView, resolvePropChoice, POSE_PAGE_URL, previewOf, libFilter, libGroups, libTagsOf,
     propSourceOf, propSourceRows } =
     await import("../../web/pose/pose.js");

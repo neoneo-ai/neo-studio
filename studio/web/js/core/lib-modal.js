@@ -6,10 +6,11 @@
  * 取用语义交给调用方：setPickMode 传入后，单点素材卡片 = 取用并关窗；卡片左上角勾选进
  * 底部取用条批量取用。不传则卡片保持画廊原行为（点开灯箱）。
  */
-import { $el } from "../../../../scripts/ui.js";
 import { t, tf } from "./i18n.js";
 import { icon } from "./icons.js";
 import { isPickableImage } from "../../gallery-utils.js";
+
+const { $el } = window.comfyAPI.ui;
 
 // 单点取用只认媒体文件：卡片网格里有 Lora / txt / 工作流这类文件，点它们开灯箱才对
 const PICKABLE_RE = /\.(png|jpe?g|webp|gif|bmp|tiff?|heic|avif|mp4|mov|webm|mkv|avi|mp3|wav|m4a|flac)$/i;
