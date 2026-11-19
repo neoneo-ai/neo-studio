@@ -1,10 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
-"""提示词扫描的两条口径（离线单测，全程不依赖 ComfyUI）。
+"""提示词扫描的三条口径（离线单测，全程不依赖 ComfyUI）。
 
 scan_prompts 扫整棵 presets + custom 树：标签索引按来源读一次交进扫描，不再每个 .txt 各读一遍
 同一份 _tags_index.json。@ 点名弹层那份 iter_prompt_names 只从目录列表
 取名字、不逐个 stat，正文是选中那一发才读，桌面端离线服务与 ComfyUI 内注册共用它。
-名字与子目录前缀口径两条保持一致。
+名字与子目录前缀口径两条保持一致。卡片摘要（prompt_preview_texts）按名字开文件，
+压成一行、截到固定长度，读不到正文的名字不落键。
 """
 
 import builtins
@@ -178,6 +179,37 @@ class TagsScanTests(unittest.TestCase):
         self.assertEqual([r["tags"] for r in rows if r["name"] == "红杯"], [["红"]])
         self.assertEqual(index_calls, [prompt_names_mod.tags_file_path("presets")])
         self.assertEqual([p for p in opened if p.endswith(".txt")], [])
+
+
+@unittest.skipUnless(PROMPTS_AVAILABLE, f"prompt_names module unavailable: {_import_error}")
+class CardPreviewTests(unittest.TestCase):
+    """卡片摘要：正文压成一行、截到 PREVIEW_CHARS；名字解析不到正文与空正文都不落键"""
+
+    def setUp(self):
+        self.touched = []
+
+    def tearDown(self):
+        for source in self.touched:
+            base = (prompt_names_mod.PRESETS_DIR if source == "presets"
+                    else prompt_names_mod.CUSTOM_DIR)
+            shutil.rmtree(base, ignore_errors=True)
+
+    def seed(self, source, files):
+        self.touched.append(source)
+        _seed(source, files, [])
+
+    def test_preview_collapses_lines_and_truncates(self):
+        self.seed("custom", {"多行正文": "行一\n行二\n" + "长" * 400})
+        preview = prompt_names_mod.prompt_preview_texts(["多行正文"])["多行正文"]
+        self.assertIn("行一 行二 长", preview)
+        self.assertNotIn("\n", preview, "摘要是压成一行的一段，卡片那一格才排得开")
+        self.assertTrue(preview.endswith("…"), "正文长过摘要位就带省略号")
+        self.assertLessEqual(len(preview), prompt_names_mod.PREVIEW_CHARS + 1)
+
+    def test_preview_skips_names_without_a_body(self):
+        self.seed("presets", {"空正文": "   \n\t"})
+        previews = prompt_names_mod.prompt_preview_texts(["空正文", "不存在", "presets/空正文"])
+        self.assertEqual(list(previews), [], "空的与解析不到的都不落键，卡片落名字那一位")
 
 
 if __name__ == "__main__":

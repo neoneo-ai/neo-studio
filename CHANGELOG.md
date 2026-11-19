@@ -9,7 +9,11 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   `#/prompts`: one card per prompt with its cover on the card, each card carrying **填入绘画页** / **填入视频页** (reads the
   text and fills that page's prompt box through the same landing the enhance page uses), **复制**, **设为封面** and **删除**
   (delete arms on the first press and fires on the second). Search matches the display name and tags, and the pool filter
-  (全部 / 图像 / 视频) and origin filter (全部来源 / 预设 / 自定义) narrow the grid; entries sort newest first. A cover is a
+  (全部 / 图像 / 视频) and origin filter (全部来源 / 预设 / 自定义) narrow the grid; entries sort newest first. Each card
+  carries that prompt's own **body preview** — the first 220 characters of its text collapsed onto one line, read per page
+  by `POST /rs_prompts/prompt_previews` (at most 32 names per call, answered offline) — the display name with its two badges,
+  up to three tag chips, and an origin-and-age line beside the action buttons. The grid pages **24 cards at a time** with a
+  page bar pinned to the bottom of the page. A cover is a
   sidecar next to the prompt text, `prompts/custom/<scan name>.jpg`, written as a 512 px longest-side JPEG (first frame for
   video) only by the press the user names: **设为提示词封面** in the gallery card's ⋯ menu (which asks which prompt to pin it
   to) and **设为封面** on the library card. Prompts with a cover also show it in the 提示词 picker of the paint, video and

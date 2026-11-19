@@ -85,11 +85,12 @@ _SKILL = {
     ("POST", "/rs_prompts/install_skill_source"),
 }
 
-# 提示词读侧：只扫数据根 prompts/ 目录 —— 点名候选、整份条目、正文、行级集合、运行时随机、封面 sidecar
+# 提示词读侧：只扫数据根 prompts/ 目录 —— 点名候选、整份条目、正文、卡片摘要、行级集合、运行时随机、封面 sidecar
 _PROMPTS = {
     ("POST", "/rs_prompts/list_prompt_names"),
     ("POST", "/rs_prompts/list_prompts"),
     ("POST", "/rs_prompts/load_prompt"),
+    ("POST", "/rs_prompts/prompt_previews"),
     ("POST", "/rs_prompts/list_prompt_lines"),
     ("POST", "/rs_prompts/random_prompts"),
     ("GET", "/rs_prompts/prompt_cover"),

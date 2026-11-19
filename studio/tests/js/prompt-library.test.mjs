@@ -1,12 +1,12 @@
-// Studio「提示词库」页（web/prompt-library/prompt-library.js）：卡片网格与封面、筛选、「填入对应页」、
-// 设封面与删除那条链，全在 jsdom 里验。列表与封面读侧走 fetch mock，写侧两发认接口交回来的形状；
-// 桌面端离线那一发（列表 409 的 {offline:true}）要落在这页上说得清的一句话。
+// Studio「提示词库」页（web/prompt-library/prompt-library.js）：卡片网格与封面、正文摘要、分页、筛选、
+// 「填入对应页」、设封面与删除那条链，全在 jsdom 里验。列表 / 封面 / 摘要三条读侧走 fetch mock，
+// 写侧两发认接口交回来的形状；桌面端离线那一发（列表 409 的 {offline:true}）要落在这页上说得清的一句话。
 import test, { beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { resetEnv, mockRoute, clearRoutes, jsonResponse, fetchLog, click, flush, sleep } from "./setup.mjs";
 import { $el } from "../../web/studio/shim/ui.js";
 
-const { createPromptLibraryView, filterPromptCards, cardBadges } =
+const { createPromptLibraryView, filterPromptCards, cardBadges, pageWindow, agoText, PAGE_SIZE } =
     await import("../../web/prompt-library/prompt-library.js");
 const { promptCoverUrl } = await import("../../web/prompt-service.js");
 
@@ -24,6 +24,9 @@ const ITEMS = [
 function mockPromptRoutes() {
     mockRoute("/rs_prompts/list_prompts", () => jsonResponse(ITEMS));
     mockRoute("/rs_prompts/load_prompt", (body) => jsonResponse({ text: `全文:${body.name}` }));
+    mockRoute("/rs_prompts/prompt_previews", (body) => jsonResponse({
+        previews: Object.fromEntries(body.names.map((n) => [n, `摘要:${n}`])),
+    }));
     mockRoute("/rs_prompts/delete_prompt", () => jsonResponse({ status: "success" }));
     mockRoute("/rs_prompts/set_prompt_cover", () => jsonResponse({ status: "success", cover: 999 }));
 }
@@ -78,7 +81,7 @@ test("筛选：池子与来源各筛一发，配方不入池，最新的排前�
     assert.deepEqual(cardBadges(ITEMS[2]), ["自定义", "视频"]);
 });
 
-test("卡片网格：有封面落 <img>（带 v= 换缓存），没封面落文本位", async () => {
+test("卡片网格：有封面落 <img>（带 v= 换缓存），没封面不铺封面那一档", async () => {
     resetEnv();
     mockPromptRoutes();
     const env = await mounted();
@@ -87,8 +90,10 @@ test("卡片网格：有封面落 <img>（带 v= 换缓存），没封面落文�
     assert.ok(cover, "有封面的卡片铺封面图");
     assert.match(cover.getAttribute("src"), /name=%E7%BA%A2%E6%9D%AF&v=111$/);
     assert.equal(cover.getAttribute("loading"), "lazy", "整池卡片一次进来，封面按视野逐张取");
-    assert.ok(env.card("古风女孩").querySelector(".ns-pl-media.is-text"), "没有封面的卡片落正文摘要位");
+    assert.equal(env.card("古风女孩").querySelector(".ns-pl-media"), null, "没有封面就不占封面那一档");
     assert.equal(env.card("古风女孩").querySelector(".ns-pl-cover"), null);
+    assert.deepEqual([...env.card("红杯").querySelectorAll(".ns-pl-tag")].map((e) => e.textContent),
+        ["产品", "白底"], "标签排成 chip，最长三条");
     assert.equal(env.host.querySelector(".ns-pl-count").textContent, "3 条");
 });
 
@@ -192,3 +197,51 @@ test("写侧离线：闸门收着那两枚钮，点下去不发请求", async ()
         "离线时那一发由闸门接走，不给一条必败的请求");
 });
 
+
+test("分页：一屏 24 张卡，页码那一排换页就重画网格并滚回顶", async () => {
+    resetEnv();
+    const many = Array.from({ length: 30 }, (_, i) =>
+        ({ name: `提示词${i + 1}`, source: "presets", tags: [], _mtime: 1000 - i }));
+    mockRoute("/rs_prompts/list_prompts", () => jsonResponse(many));
+    mockRoute("/rs_prompts/prompt_previews", () => jsonResponse({ previews: {} }));
+    const env = await mounted();
+    assert.equal(cards(env.host).length, PAGE_SIZE, "第一条就只铺一屏");
+    assert.deepEqual([...env.host.querySelectorAll(".ns-pl-page:not(.is-edge)")].map((b) => b.textContent), ["1", "2"]);
+    assert.equal(env.host.querySelector(".ns-pl-pages").textContent, "第 1 / 2 页");
+    click(env.host.querySelector('.ns-pl-page.is-edge[aria-label="下一页"]'));
+    await settle();
+    assert.equal(cards(env.host).length, 30 - PAGE_SIZE, "第二页铺剩下的那几条");
+    assert.equal(env.host.querySelector(".ns-pl-pages").textContent, "第 2 / 2 页");
+    assert.equal(env.host.querySelector('.ns-pl-page.is-edge[aria-label="下一页"]').disabled, true,
+        "末页的下一枚箭头吃边界，不给一颗点了没反应的钮");
+});
+
+test("正文摘要按页取一次：卡上的摘要位铺服务端那句", async () => {
+    resetEnv();
+    mockPromptRoutes();
+    const env = await mounted();
+    const call = fetchLog.find((c) => c.path === "/rs_prompts/prompt_previews");
+    assert.deepEqual(call.body.names, ["红杯", "古风女孩", "video/镜头推进"], "一次请求吃这一页的名字");
+    assert.deepEqual([...env.host.querySelectorAll(".ns-pl-excerpt")].map((e) => e.textContent),
+        ["摘要:红杯", "摘要:古风女孩", "摘要:video/镜头推进"]);
+});
+
+test("摘要读不回来（离线 409）：卡片照铺，摘要位空着，不铺一句读取失败", async () => {
+    resetEnv();
+    mockPromptRoutes();
+    mockRoute("/rs_prompts/prompt_previews", () => jsonResponse({ offline: true }, 409));
+    const env = await mounted();
+    assert.equal(cards(env.host).length, 3);
+    assert.deepEqual([...env.host.querySelectorAll(".ns-pl-excerpt")].map((e) => e.textContent), ["", "", ""]);
+    assert.equal(env.host.querySelector(".ns-pl-note"), null);
+});
+
+test("页码窗口与「多久前」：出界补首页与末页，时间只到月这一档", () => {
+    assert.deepEqual(pageWindow(1, 2), [1, 2]);
+    assert.deepEqual(pageWindow(4, 10), [1, "…", 2, 3, 4, 5, 6, "…", 10]);
+    assert.deepEqual(pageWindow(10, 10), [1, "…", 6, 7, 8, 9, 10]);
+    const day = 86400;
+    assert.equal(agoText(Date.now() / 1000), "今天");
+    assert.equal(agoText(Date.now() / 1000 - 3 * day), "3 天前");
+    assert.equal(agoText(Date.now() / 1000 - 40 * day), "1 个月前");
+});

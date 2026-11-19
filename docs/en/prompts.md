@@ -389,9 +389,10 @@ Good for keyboard-only skill switching: type `/` plus a name fragment, arrow to 
 Prompts live in exactly two places: the shipped presets `prompts/presets/*.txt` (a code directory,
 read-only) and the user's own `prompts/custom/**/*.txt` (the `video/` tree is the video pool, the root
 layer is the image pool). The 「提示词库」 card in the Studio home 「Assets & Setup」 section opens
-`#/prompts`: one card per prompt with its cover on the card, each card carrying "fill the paint page /
-fill the video page / copy / set as cover / delete", with search and the image/video and origin filters
-on top. Card layout, how a cover gets set, and the offline window's behavior: [studio-prompts.md](studio-prompts.md).
+`#/prompts`: one card per prompt carrying its cover, its body preview (the batch `POST /rs_prompts/prompt_previews`
+answers per page) and tag chips, with the origin and "fill the paint page /
+fill the video page / copy / set as cover / delete" on the card's bottom row; search and the image/video and origin
+filters sit on top, 24 cards per page with a page bar at the bottom. Card layout, how a cover gets set, and the offline window's behavior: [studio-prompts.md](studio-prompts.md).
 
 - **A cover is a sidecar**: `prompts/custom/<scan name>.jpg`, written as a 512 px longest-side JPEG
   (first frame for video). It is only written when the user names that one prompt in "set as cover" —

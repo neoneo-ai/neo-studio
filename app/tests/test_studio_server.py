@@ -262,7 +262,8 @@ class OfflineServiceTests(_ServerCase):
         提示词增强链（enhance_prompt / stream_generate_prompt）也在桌面端这一侧：技能正文读数据根、
         出流打 8080 与远程 LLM、参考图读 input/。生图 / 生视频与图片反推留在 ComfyUI 端口。"""
         for route in ("/rs_prompts/list_prompt_names", "/rs_prompts/list_prompts",
-                      "/rs_prompts/load_prompt", "/rs_prompts/list_prompt_lines",
+                      "/rs_prompts/load_prompt", "/rs_prompts/prompt_previews",
+                      "/rs_prompts/list_prompt_lines",
                       "/rs_prompts/random_prompts"):
             self.assertEqual(caps.owner("POST", route), "desktop", route)
         for route in ("/rs_prompts/reverse_prompt",):
@@ -290,6 +291,14 @@ class OfflineServiceTests(_ServerCase):
                                       {"name": entries[0]["name"], "source": entries[0]["source"]})
         self.assertEqual(status, 200)
         self.assertIn("text", json.loads(body), "正文只在点名这一发才读")
+
+        status, body = self.post_json("/rs_prompts/prompt_previews",
+                                      {"names": [e["name"] for e in entries[:40]]})
+        self.assertEqual(status, 200, "卡片摘要也要离线铺得出来")
+        previews = json.loads(body)["previews"]
+        self.assertTrue(previews, "整份条目里的正文要出得来摘要")
+        self.assertLessEqual(len(previews), 32, "一次请求夹在一页的条数里，扫不出整棵树")
+        self.assertTrue(all("\n" not in v for v in previews.values()), "摘要是压成一行的")
 
         status, _ = self.post_json("/rs_prompts/list_prompt_lines", {"name": "*"})
         self.assertEqual(status, 200, "行级集合聚合在离线端口也答 200")

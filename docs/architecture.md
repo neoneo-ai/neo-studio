@@ -212,7 +212,7 @@ studio/
 | `reverse-prompt/reverse-prompt.js` | 图片反推页：素材库取图、`/rs_prompts/reverse_prompt` 的 SSE 上屏与复制提示词 |
 | `reverse-video/reverse-video.js`   | 视频反推页：素材库取视频、浏览器抽帧带时间戳，`/rs_prompts/reverse_video_prompt` 的 SSE 上屏与复制提示词 |
 | `voice-clone/voice-clone.js`  | 声音克隆页：参考音频与文字走 voice-gen 那条链，进度、取消与结果波形 |
-| `prompt-library/prompt-library.js` | 提示词库页：一条提示词一张卡（封面 / 文本位）、池子与来源筛子、「填入绘画页 / 填入视频页」走 `applyToPage`、「设为封面 / 删除」两枚写侧钮按能力表门控 |
+| `prompt-library/prompt-library.js` | 提示词库页：一条提示词一张卡（封面档 + 正文摘要位 + 标签 chip + 来源与动作行）、一屏 24 张卡与页码条、池子与来源筛子、「填入绘画页 / 填入视频页」走 `applyToPage`、「设为封面 / 删除」两枚写侧钮按能力表门控 |
 | `*.css`                       | 各模块样式 |
 
 ## 节点注册

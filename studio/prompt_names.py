@@ -37,6 +37,10 @@ KIND_SPLIT_FILE = os.path.join(CUSTOM_DIR, "_kind_split.json")
 # 预设池是代码目录、出厂只读，用户封面不往代码目录里写，presets 侧因此永远没有封面。
 COVER_SUFFIX = ".jpg"
 COVER_MAX_SIDE = 512
+# 卡片上的正文摘要位：一条只读正文开头那一段、压成一行，一次最多铺一页的条数（见提示词库页的分页）。
+# 整篇正文不在列表里读——列表扫的是目录，摘要只按名字开那一页的文件，SMB 上不会为一页扫整棵树。
+PREVIEW_CHARS = 220
+PREVIEW_MAX_NAMES = 32
 
 for _dir in (PROMPTS_DIR, PRESETS_DIR, CUSTOM_DIR):
     os.makedirs(_dir, exist_ok=True)
@@ -186,6 +190,30 @@ def read_prompt_text(name: str) -> str | None:
         return None
     with open(filepath, "r", encoding="utf-8") as f:
         return f.read()
+
+
+def prompt_preview_texts(names: list) -> dict:
+    """一批提示词的卡片摘要：正文压成一行、截到 PREVIEW_CHARS。
+
+    名字解析不到正文、正文是空的、文件开不动的都不落键——卡片没有摘要位就落名字与标签，
+    不给界面铺一句「读取失败」。
+    """
+    previews: dict = {}
+    for name in names:
+        filepath = resolve_prompt_file(name)
+        if filepath is None:
+            continue
+        try:
+            with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+                head = f.read(PREVIEW_CHARS * 4)
+        except OSError as e:
+            logger.warning(f"Cannot read prompt preview {name}: {e}")
+            continue
+        line = " ".join(head.split())
+        if not line:
+            continue
+        previews[name] = line[:PREVIEW_CHARS] + ("…" if len(line) > PREVIEW_CHARS else "")
+    return previews
 
 
 def iter_collection_files() -> list:
@@ -429,6 +457,18 @@ async def list_prompts_route(request):
         return web.json_response(await asyncio.to_thread(list_prompt_entries))
     except Exception as e:
         logger.error(f"Error listing prompts: {e}")
+        return web.Response(status=500, text=str(e))
+
+
+@routes.post("/rs_prompts/prompt_previews")
+async def prompt_previews_route(request):
+    """卡片上的正文摘要：一页一批发（名字最多 PREVIEW_MAX_NAMES 条），整篇正文仍是选中那一发才读"""
+    try:
+        data = await request.json()
+        names = [str(n) for n in (data.get("names") or []) if str(n).strip()][:PREVIEW_MAX_NAMES]
+        return web.json_response({"previews": await asyncio.to_thread(prompt_preview_texts, names)})
+    except Exception as e:
+        logger.error(f"Error building prompt previews: {e}")
         return web.Response(status=500, text=str(e))
 
 

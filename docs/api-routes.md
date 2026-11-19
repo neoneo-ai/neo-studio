@@ -349,6 +349,7 @@ LLM 模式与配置见 [llm.md](llm.md)，技能设计见 [skills.md](skills.md)
 | POST   | `/rs_prompts/list_prompts`      | 全部提示词条目（`custom` + `presets`，带标签与文件时间） |
 | POST   | `/rs_prompts/list_prompt_names` | 提示词名字与标签（@ 点名弹层的候选）                     |
 | POST   | `/rs_prompts/load_prompt`       | 提示词正文（`name`、可选 `source` 精确定位）             |
+| POST   | `/rs_prompts/prompt_previews`   | 一批提示词的卡片摘要（`names` 最多 32 条，压成一行截 220 字）                  |
 | POST   | `/rs_prompts/list_prompt_lines` | 多行集合按页列表（行级条目，`name="*"` 跨全部集合搜索）  |
 | POST   | `/rs_prompts/random_prompts`    | 运行时随机抽条（1–16，`kind`: image / video，空 = 混池） |
 | GET    | `/rs_prompts/prompt_cover`      | 提示词封面：直接回 sidecar `prompts/custom/<扫描名>.jpg` 的 JPEG（`v=` 吃条目上的封面 mtime，缓存满一年；没有封面 404） |
@@ -357,7 +358,7 @@ LLM 模式与配置见 [llm.md](llm.md)，技能设计见 [skills.md](skills.md)
   全程不逐个 stat `.txt`，也不打开任何正文；正文是选中那一发才读。custom 在前、presets 在后，两表同序。
 - `list_prompts` 的条目带 `cover`（封面文件的 mtime，整数秒）：没有封面就没有这一项。卡片上的图片地址由
   `prompt-service.js` 的 `promptCoverUrl(name, v)` 拼，换封面就换这一位。
-- 读侧六条在桌面端能力表内（`app/studio_caps.py` 的 `_PROMPTS`），离线窗口答得来，封面也是文件读取。
+- 读侧七条在桌面端能力表内（`app/studio_caps.py` 的 `_PROMPTS`），离线窗口答得来，封面也是文件读取。
   写侧（`save_prompt` / `delete_prompt` 更新标签索引、`set_prompt_cover` 写封面）不在表内：能力表上它是
   `prompt_library_write` 那一位，前端据此把「保存为预设」「设为封面」指向启动内核。
   提示词增强那条链（`enhance_prompt` / `stream_generate_prompt`）在表内的 `_LLM` 里，桌面端离线自服
@@ -416,7 +417,7 @@ LLM 模式与配置见 [llm.md](llm.md)，技能设计见 [skills.md](skills.md)
 | GET/POST   | `/neo_frames/video` `/neo_frames/save`                                                                                                                                      | 抽帧页的视频伺服与帧落盘                                                                                                                                                                                    |
 | GET/POST   | `/neo_gallery/*` `/neo_bookmark/*`                                                                                                                                          | 素材库与收藏（含删除 / 上传 / 打标 / OSS 同步）                                                                                                                                                                  |
 | GET/POST   | `/rs_prompts/skills` `load_skill` `save_skill` `delete_skill` `*_*_skill_file`                                                                                              | 技能编辑                                                                                                                                                                                            |
-| POST/GET   | `/rs_prompts/list_prompts` `list_prompt_names` `load_prompt` `list_prompt_lines` `random_prompts` `prompt_cover`                                                            | 提示词读侧：名字、标签、正文、行级集合、随机池与封面 sidecar，只扫数据根 `prompts/` 目录                                                                                                                                          |
+| POST/GET   | `/rs_prompts/list_prompts` `list_prompt_names` `load_prompt` `prompt_previews` `list_prompt_lines` `random_prompts` `prompt_cover`                                          | 提示词读侧：名字、标签、正文、卡片摘要、行级集合、随机池与封面 sidecar，只扫数据根 `prompts/` 目录                                                                                                                                     |
 | GET/POST   | `/rs_recipes/*`                                                                                                                                                             | 配方读写、LLM 重写 / 逐格描述 / 分段 / 宫格切分                                                                                                                                                                  |
 | GET/POST   | `/neo_image_gen/settings` `models` `input_images` `skill_config` `skill_workflow` `*workflow_skill*` `copy_skill_files`、`/neo_video_gen/settings` `models`                  | 生图 / 生视频设置                                                                                                                                                                                      |
 | GET/POST   | `/rs_prompts/get_models` `native_models` `set_model` `remote_llm_config` `llm_connection_test` `llm_mode` `extract_title` `fetch_remote_models`                             | LLM 配置与标题提取（只读 `configs/` 与 8080 服务）                                                                                                                                                            |

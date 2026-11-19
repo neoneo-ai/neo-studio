@@ -263,6 +263,23 @@ async function listPrompts() {
 }
 
 /**
+ * 一批提示词的卡片摘要（服务端把正文压成一行、截到固定长度）。
+ * 提示词库页每铺一页发一次，名字那一发最多 32 条；读不回来（离线、源文件不在）就是空表，
+ * 卡片落名字与标签那一位，不铺「读取失败」。
+ * @param {string[]} names - 提示词扫描名
+ * @returns {Promise<Object<string, string>>}
+ */
+async function listPromptPreviews(names) {
+    const res = await fetch("/rs_prompts/prompt_previews", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ names })
+    });
+    if (!res.ok) return {};
+    return (await res.json().catch(() => ({})))?.previews || {};
+}
+
+/**
  * 列出多行集合文件的提示词条目（分页，服务端按标题过滤）
  * @param {string} name - 集合显示名（collections/ 前缀）
  * @param {number} offset - 起始条目索引
@@ -730,6 +747,7 @@ export {
     savePrompt,
     loadPrompt,
     listPrompts,
+    listPromptPreviews,
     listPromptLines,
     deletePrompt,
     setPromptCover,
