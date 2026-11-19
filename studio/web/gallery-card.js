@@ -6,7 +6,7 @@ import { api } from "../../../../scripts/api.js";
 import { app } from "../../../../scripts/app.js";
 import { getReservedSpace, getImageHeight, isImageFile, isVideoFile, isAudioFile, getThumbnailSrc, getAudioSrc, showToast, showInlineFeedback, renderCoverTiles, coverMaxTiles, buildPlaceholderTile, decorativeHeights, renderWaveform, applyMediaCardRatio, registerLazyThumbnail, galleryCardSize } from './gallery-utils.js';
 import { Lightbox } from "./lightbox.js";
-import { buildGenerationMenuItems, openReversePromptDialog, openLoraTagDialog, reuseParamsFromMedia } from "./gallery-gen.js";
+import { buildGenerationMenuItems, openReversePromptDialog, openLoraTagDialog, reuseParamsFromMedia, openPromptCoverDialog } from "./gallery-gen.js";
 import { copyGalleryToInput } from "./media-transfer.js";
 import { openDirectorEditor } from "./director.js";
 import { t, tf } from "./js/core/i18n.js";
@@ -592,6 +592,11 @@ export class GalleryCard {
                 className: "neo-gallery-collect-item",
                 onclick: () => { this._removeCollectMenu(); openReversePromptDialog(image, subfolder); }
             }, [t("图片反推")]) : null,
+            (isImageFile(image.filename) || isVideoFile(image.filename)) ? $el("div", {
+                className: "neo-gallery-collect-item",
+                title: t("把这张产物设成一条提示词的封面：浮层里点名要给的那一条，封面存在提示词旁边（只给自定义提示词）"),
+                onclick: (e) => { const anchor = e.currentTarget; this._removeCollectMenu(); openPromptCoverDialog(image, subfolder, anchor); }
+            }, [t("设为提示词封面")]) : null,
             ...(image.lora_path ? [
                 $el("div", {
                     className: "neo-gallery-collect-item",

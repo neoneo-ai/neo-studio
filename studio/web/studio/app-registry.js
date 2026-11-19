@@ -30,6 +30,10 @@ export const STUDIO_APPS = [
         title: "素材库", sub: "浏览与管理全部生成素材",
     },
     {
+        id: "prompts", section: "material", icon: "list",
+        title: "提示词库", sub: "一条提示词一张卡，卡片上是它的封面",
+    },
+    {
         id: "video", tab: "视频", section: "create", icon: "film",
         title: "生成视频", sub: "一句话加首帧，出一段视频",
     },

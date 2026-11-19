@@ -24,7 +24,7 @@
 [recipes](docs/recipes.md) · [gallery](docs/gallery.md) · [canvas](docs/canvas.md) · [workflow-repair](docs/workflow-repair.md) ·
 [3D 姿势](docs/studio-pose.md) · [视频抽帧](docs/studio-frames.md) · [图片反推](docs/studio-reverse.md) ·
 [视频反推](docs/studio-reverse-video.md) ·
-[声音克隆](docs/studio-voice-clone.md) · [提示词增强](docs/studio-prompt-enhance.md)
+[声音克隆](docs/studio-voice-clone.md) · [提示词增强](docs/studio-prompt-enhance.md) · [提示词库](docs/studio-prompts.md)
 
 智能体与贡献者规则不在 `docs/` 里：根 [AGENTS.md](AGENTS.md) 只写跨层不变量与产品规则，
 `studio/`、`studio/web/`、`app/`、`tools/` 各有一份 `AGENTS.md` 写该层独有的规则。

@@ -13,7 +13,9 @@ import threading
 import logging
 import time
 import base64
+from pathlib import Path
 from typing import Optional
+import folder_paths
 from server import PromptServer
 
 from .util import PrefixFilter
@@ -27,7 +29,9 @@ from .llm import strip_inline_thinking
 from .bundles import create_bundle
 
 from .prompt_names import (PRESETS_DIR, CUSTOM_DIR,
-                           tags_file_path, load_tags_index, sample_runtime_prompts)
+                           tags_file_path, load_tags_index, sample_runtime_prompts,
+                           COVER_SUFFIX, COVER_MAX_SIDE, resolve_prompt_file,
+                           prompt_cover_target)
 
 PENDING_PROMPTS = {}
 
@@ -450,7 +454,7 @@ async def rs_prompts_delete_prompt(request):
         # 构建文件路径
         filepath = os.path.join(base_dir, *rel.split("/")) + ".txt"
         if os.path.exists(filepath):
-            os.remove(filepath)
+            _remove_prompt_file(filepath)
             _update_tags_index(rel, tags=None, source=source)
             return web.Response(status=200, text="OK")
         
@@ -458,7 +462,7 @@ async def rs_prompts_delete_prompt(request):
         for search_dir in [CUSTOM_DIR, PRESETS_DIR]:
             filepath = os.path.join(search_dir, *rel.split("/")) + ".txt"
             if os.path.exists(filepath):
-                os.remove(filepath)
+                _remove_prompt_file(filepath)
                 s = "custom" if search_dir == CUSTOM_DIR else "presets"
                 _update_tags_index(rel, tags=None, source=s)
                 return web.Response(status=200, text="OK")
@@ -467,6 +471,67 @@ async def rs_prompts_delete_prompt(request):
     except Exception as e:
         logger.error(f"Error deleting prompt: {e}")
         return web.Response(status=500, text=str(e))
+
+
+@server.PromptServer.instance.routes.post("/rs_prompts/set_prompt_cover")
+async def rs_prompts_set_prompt_cover(request):
+    """把素材库那张产物钉成这条提示词的封面：写 sidecar `prompts/custom/<扫描名>.jpg`。
+
+    预设池是代码目录、出厂只读，403 挡在这里；正文不存在给 404，源文件在 ComfyUI 的 output/
+    里找不到也给 404，前端把这句话说到卡上。封面不自动生成，只有用户点名这一发才写文件。
+    """
+    try:
+        data = await request.json()
+        name = str(data.get("name") or "")
+        target = prompt_cover_target(name)
+        if target is None:
+            if resolve_prompt_file(name) is not None:
+                return web.Response(status=403, text="出厂预设不带封面")
+            return web.Response(status=404, text="Prompt not found")
+        source = _output_media_path(str(data.get("filename") or ""), str(data.get("subfolder") or ""))
+        if source is None:
+            return web.Response(status=404, text="Source file not found")
+        if not await asyncio.to_thread(_write_prompt_cover, source, target):
+            return web.Response(status=500, text="Cover generation failed")
+        return web.json_response({"status": "success", "cover": int(os.path.getmtime(target))})
+    except Exception as e:
+        logger.error(f"Error setting prompt cover: {e}")
+        return web.Response(status=500, text=str(e))
+
+
+def _output_media_path(filename: str, subfolder: str) -> str | None:
+    """素材库那张产物在 ComfyUI output/ 里的物理路径：只认图与视频，文件已被删掉也给 None（卡片上是 404）"""
+    # 循环导入约束：媒体扩展名与缩略图生成同一层惰性取，节点用例的桩 util 里没有这两个表
+    from .gallery import IMG_EXTENSIONS, VIDEO_EXTENSIONS
+    if not filename:
+        return None
+    rel = os.path.join(subfolder, filename) if subfolder else filename
+    full = folder_paths.get_full_path("output", rel)
+    if not full or not os.path.isfile(full):
+        return None
+    if os.path.splitext(full)[1].lower() not in IMG_EXTENSIONS | VIDEO_EXTENSIONS:
+        return None
+    return full
+
+
+def _write_prompt_cover(source: str, target: str) -> bool:
+    """源文件缩成 512px 长边的 JPEG 落进 sidecar（视频取首帧）"""
+    # 循环导入约束：gallery 顶层 import 会把 folder_paths 的真实目录解析拉进节点用例的桩环境
+    from .gallery import _generate_thumbnail
+    os.makedirs(os.path.dirname(target), exist_ok=True)
+    if not _generate_thumbnail(Path(source), Path(target), COVER_MAX_SIDE):
+        if os.path.isfile(target):  # ffmpeg 中途失败会留下半张文件，卡片拿到它是张坏图
+            os.remove(target)
+        return False
+    return True
+
+
+def _remove_prompt_file(filepath: str) -> None:
+    """删正文连带它旁边那张封面：不给提示词树留一张没有主人的封面"""
+    os.remove(filepath)
+    cover = filepath[:-4] + COVER_SUFFIX
+    if os.path.isfile(cover):
+        os.remove(cover)
 
 
 def _prompt_rel_name(name: str):

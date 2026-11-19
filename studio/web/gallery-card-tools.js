@@ -7,15 +7,16 @@
  */
 
 import { $el } from "../../../../scripts/ui.js";
-import { getImageHeight, getThumbnailSrc, getAudioSrc, renderWaveform, decorativeHeights } from "./gallery-utils.js";
+import { getImageHeight, getThumbnailSrc, getAudioSrc, renderWaveform, decorativeHeights, isVideoFile } from "./gallery-utils.js";
 import { openLLMSettingsModal } from "./llm-setting.js";
 import { actionToast } from "./toast.js";
 import { openSkillDetailById, skillDisplayName } from "./skill.js";
 import { Lightbox } from "./lightbox.js";
 import { requestGeneration, watchTask, cancelTask, getSkillGenConfig } from "./image-gen.js";
 import { requestVoiceGeneration, watchVoiceTask, cancelVoiceTask, buildVoiceRequest, VOICE_SKILL_ID } from "./voice-gen.js";
-import { invokePromptStream } from "./prompt-service.js";
+import { invokePromptStream, setPromptCover } from "./prompt-service.js";
 import { openGallerySidebar } from "./media-transfer.js";
+import { openPresetPicker } from "./js/core/preset-picker.js";
 import { ttlCache } from "./js/core/cache.js";
 import { t, tf } from "./js/core/i18n.js";
 import { icon, setIconLabel } from "./js/core/icons.js";
@@ -688,6 +689,26 @@ export function openReversePromptDialog(image, subfolder) {
 }
 
 /** LoRA 打标弹窗：为叶子图片目录批量生成标准化标签 .txt（触发词 + 可选先自动标准化目录）。 */
+/**
+ * 素材卡「⋯」→「设为提示词封面」：先用提示词选择浮层点名要给哪一条提示词，再把这张产物写成它旁边的
+ * sidecar（prompts/<扫描名>.jpg，512px 长边）。浮层按这张产物的类别选池子 —— 视频卡只列视频提示词，
+ * 后端取首帧成图。预设那条由后端 403 挡回来（预设池是代码目录），界面上说的是同一句话。
+ * @param {{filename: string}} image 素材卡那张产物；anchor 是菜单里那一项，浮层挂在它正下方
+ */
+export function openPromptCoverDialog(image, subfolder, anchor) {
+    openPresetPicker({
+        kind: isVideoFile(image.filename) ? "video" : "image",
+        anchor,
+        onPick: async (_text, name) => {
+            const res = await setPromptCover(name, { filename: image.filename, subfolder });
+            actionToast({
+                severity: res.ok ? "success" : "warning",
+                summary: res.ok ? t("已设为提示词封面") : res.message,
+            });
+        },
+    });
+}
+
 export function openLoraTagDialog(gallery, dirPath) {
     document.querySelector(".neo-gallery-lt-modal-overlay")?.remove();
 

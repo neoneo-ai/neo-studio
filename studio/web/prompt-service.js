@@ -293,6 +293,45 @@ async function deletePrompt(name) {
 }
 
 /**
+ * 提示词封面的图片地址：sidecar `prompts/custom/<扫描名>.jpg` 的直接读取。
+ * `v=` 吃列表里那份封面 mtime —— 文件只在重新设封面时变，服务端把缓存给满一年，换封面就换这一位。
+ * @param {string} name - 提示词扫描名
+ * @param {number} [v] - 条目上的 cover mtime
+ * @returns {string}
+ */
+export function promptCoverUrl(name, v = 0) {
+    const q = new URLSearchParams({ name: String(name || "") });
+    if (v) q.set("v", String(v));
+    return `/rs_prompts/prompt_cover?${q.toString()}`;
+}
+
+/**
+ * 把素材库那张产物钉成这条提示词的封面（sidecar JPEG，512px 长边）。
+ * 封面只在用户点名这一发写文件；离线（409）、预设只读（403）与源文件不在（404）由后端直说，
+ * 这里把状态换成界面上那句话交回调用方。
+ * @param {string} name - 提示词扫描名
+ * @param {{filename: string, subfolder?: string}} source - ComfyUI output/ 里那张产物
+ * @returns {Promise<{ok: boolean, cover?: number, message?: string}>}
+ */
+async function setPromptCover(name, { filename, subfolder = "" } = {}) {
+    const res = await fetch("/rs_prompts/set_prompt_cover", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, filename, subfolder })
+    });
+    if (res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        return { ok: true, cover: payload.cover };
+    }
+    const messages = {
+        403: t("出厂预设不带封面"),
+        404: t("提示词或那张素材已经不在了"),
+        409: t("设封面需要 ComfyUI 运行"),
+    };
+    return { ok: false, message: messages[res.status] || t("封面设置失败") };
+}
+
+/**
  * 提取标题（非流式）
  * @param {string} text - 提示词内容
  * @returns {Promise<{status: string, title: string, error?: string}>}
@@ -693,6 +732,7 @@ export {
     listPrompts,
     listPromptLines,
     deletePrompt,
+    setPromptCover,
     extractTitle,
     extractClassify,
     randomPrompt,

@@ -267,7 +267,8 @@ function openMaterial(scope, accept, onPick) {
 
 // 六张薄页的工厂在 pages/leaf-pages.js：这一处只把宿主交下去——运行闸门交 gateRunButton，
 // 姿势页导出的控制图与增强页的「填入对应页」是装配层自己的两条现成链
-const { buildPose, buildFrames, buildReverse, buildReverseVideo, buildVoiceClone, buildPromptEnhance } = createLeafPages({
+const { buildPose, buildFrames, buildReverse, buildReverseVideo, buildVoiceClone, buildPromptEnhance,
+        buildPromptLibrary } = createLeafPages({
     api, $el, toast, can,
     gateRun: gateRunButton,
     openMaterial,
@@ -995,6 +996,7 @@ const PAGE_BUILDERS = {
     gallery: buildGallery, video: buildVideo, pose: buildPose, skills: buildSkills,
     settings: buildSettings, agent: buildAgentPage, frames: buildFrames, reverse: buildReverse,
     reverse_video: buildReverseVideo, voice: buildVoiceClone, enhance: buildPromptEnhance,
+    prompts: buildPromptLibrary,
     storyboard: buildStoryboard, canvas: buildCanvas,
 };
 

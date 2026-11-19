@@ -335,6 +335,11 @@ narrow-window rules are shared with the director page (one modal instance, one g
   one entry with a `kind`, and the backend filters the pool with the same rule (a scan name whose first segment is
   `video` belongs to video, everything else to image). Row labels carry no `video/` pool prefix
   (`promptDisplayName`), subdirectory segments included; the key and the read request keep the full scan name.
+  An entry that carries a cover (`cover` in `list_prompts` = the cover file's mtime) takes a 32 px thumbnail slot at
+  the left of its row, addressed by `GET /rs_prompts/prompt_cover?name=&v=` (`v` is that mtime, used for cache
+  busting, `loading="lazy"`); a row without a cover keeps no empty slot, so the picker's row height and density stay
+  the same. A cover is only written by the press the user names - "set as prompt cover" in the gallery card's ⋯ menu
+  and "set as cover" on the prompt library page - and the preset tree, a code directory, never gets one.
   The list hangs under the button instead of centering on the screen: its right edge lines up with the button's right
   edge, and the whole panel flips above the button when there is no room below it. It closes on the ×, on Escape, and
   on any press outside it - pressing the same button again closes it rather than reopening it.

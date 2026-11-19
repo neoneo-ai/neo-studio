@@ -1,13 +1,14 @@
-// 首页卡直达的六张薄页（3D 姿势 / 视频抽帧 / 图片反推 / 视频反推 / 声音克隆 / 提示词增强）。
+// 首页卡直达的七张薄页（3D 姿势 / 视频抽帧 / 图片反推 / 视频反推 / 声音克隆 / 提示词增强 / 提示词库）。
 // 页的实现各在 studio/web/<页名>/ 那一份里，这一层只把它们接到宿主交来的那几样：素材库取用、
 // 运行闸门，与两条交回装配层的现成链（姿势页导出控制图进图片编辑面板；增强页把回话填回那一页）。
-// 这六页在顶栏都没有页签，只从首页的卡进——落点由 app-registry.js 那六条描述符说。
+// 这七页在顶栏都没有页签，只从首页的卡进——落点由 app-registry.js 那七条描述符说。
 import { createPoseView } from "../../pose/pose.js";
 import { createFramesView } from "../../frames/frames.js";
 import { createReverseView } from "../../reverse-prompt/reverse-prompt.js";
 import { createReverseVideoView } from "../../reverse-video/reverse-video.js";
 import { createVoiceCloneView } from "../../voice-clone/voice-clone.js";
 import { createPromptEnhanceView } from "../../prompt-enhance/prompt-enhance.js";
+import { createPromptLibraryView } from "../../prompt-library/prompt-library.js";
 
 /** @typedef {Object} LeafPagesHost
  *  @property {Function} api 取接口：离线与在线同一条路
@@ -56,6 +57,14 @@ export function createLeafPages(host) {
         gateRun,
         applyToPage,
     });
+    // 提示词库页：读侧（列表与封面）桌面端离线答得出，写侧两发按 prompt_library_write 门控。
+    // 取封面用素材库取用一次就收窗，收哪一类由页上当前那一池定（图像池取图，视频池取视频）
+    const buildPromptLibrary = createPromptLibraryView({
+        $el, toast, can, gateRun,
+        openMaterial: (accept, onPick) => openMaterial("prompts", accept, onPick),
+        applyToPage,
+    });
 
-    return { buildPose, buildFrames, buildReverse, buildReverseVideo, buildVoiceClone, buildPromptEnhance };
+    return { buildPose, buildFrames, buildReverse, buildReverseVideo, buildVoiceClone,
+             buildPromptEnhance, buildPromptLibrary };
 }

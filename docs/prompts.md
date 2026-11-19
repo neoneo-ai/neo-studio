@@ -299,5 +299,23 @@ LLM 模式与本地安装见 [llm.md](llm.md)。
 
 适合纯键盘快速切换技能：打 `/` + 名称片段，方向键定位后回车即可。
 
+## 提示词库与封面
+
+提示词的存放只有两处：出厂预设 `prompts/presets/*.txt`（代码目录，出厂只读）与用户自存
+`prompts/custom/**/*.txt`（`video/` 目录及其子目录是视频池，根层是图像池）。
+Studio 首页「素材与配置」板块的「提示词库」卡进 `#/prompts`：一条提示词一张卡，卡片上是它的封面，
+卡上铺「填入绘画页 / 填入视频页 / 复制 / 设为封面 / 删除」，页顶是搜索与「图像 / 视频」「来源」筛子。
+卡片细节、封面怎么设、离线窗口上的行为见 [studio-prompts.md](studio-prompts.md)。
+
+- **封面是 sidecar**：`prompts/custom/<扫描名>.jpg`，写下去就是 512px 长边的 JPEG（视频取首帧），
+  只有用户在「设为封面」里点名那一发才写文件，没有任何自动生成。
+- **预设池没有封面**：预设是代码目录，界面上不铺「设为封面 / 删除」，后端同一处挡（403）。
+- **两条接口**：`GET /rs_prompts/prompt_cover?name=&v=` 直接回那张 JPEG（`v=` 是列表条目上的封面 mtime，
+  缓存给满一年），`POST /rs_prompts/set_prompt_cover` 写 sidecar。读侧在桌面端能力表内，离线窗口照出封面；
+  写侧归内核，按 `prompt_library_write` 门控。
+- **删正文连带删封面**：`POST /rs_prompts/delete_prompt` 一起清掉旁边的 `.jpg`，提示词树里不留没有主人的封面。
+- **预设浮层也认封面**：绘画页 / 视频页 / 生成素材的「提示词」浮层里，条目带封面才占一枚 32px 缩略位，
+  没封面的行不留空槽，浮层的行高与密度不变。
+
 后端实现见 [architecture.md](architecture.md)（`prompt_agent.py` / `prompt_encoder.py`），
 API 见 [api-routes.md](api-routes.md)。

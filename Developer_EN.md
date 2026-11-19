@@ -24,7 +24,8 @@ Feature module docs (user guide + implementation details):
 [h3-video-gen](docs/en/h3-video-gen.md) · [recipes](docs/en/recipes.md) · [gallery](docs/en/gallery.md) · [canvas](docs/en/canvas.md) ·
 [workflow-repair](docs/en/workflow-repair.md) · [3D Pose](docs/en/studio-pose.md) ·
 [video frame extraction](docs/en/studio-frames.md) · [image reverse prompt](docs/en/studio-reverse.md) ·
-[voice clone](docs/en/studio-voice-clone.md)
+[voice clone](docs/en/studio-voice-clone.md) · [prompt enhance](docs/en/studio-prompt-enhance.md) ·
+[prompt library](docs/en/studio-prompts.md)
 
 Agent and contributor rules do not live in `docs/`: the root [AGENTS.md](AGENTS.md) holds only the
 cross-cutting rules and product invariants, while `studio/`, `studio/web/`, `app/` and `tools/` each

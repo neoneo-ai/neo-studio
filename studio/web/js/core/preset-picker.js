@@ -8,7 +8,7 @@
  */
 import { $el } from "../../../../scripts/ui.js";
 import { t } from "./i18n.js";
-import { listPrompts, loadPrompt, randomPrompts, savePrompt } from "../../prompt-service.js";
+import { listPrompts, loadPrompt, randomPrompts, savePrompt, promptCoverUrl } from "../../prompt-service.js";
 
 /** 视频提示词判定：扫描名带目录前缀，首段是 video（含其子目录）归视频，其余归图像。后端 prompts.py 的 _is_video_prompt 同口径。 */
 export function isVideoPromptName(name) {
@@ -84,7 +84,7 @@ export async function openPresetPicker({ kind = "image", onPick, anchor } = {}) 
         try {
             const data = await loadPrompt(name);
             closePresetPicker();
-            onPick?.(data.text || "");
+            onPick?.(data.text || "", name);   // 扫描名一起交回：设封面那一发认的是名字，不是正文
         } catch (e) {
             console.error("[Neo Studio] 预设读取失败:", e);
         }
@@ -100,7 +100,12 @@ export async function openPresetPicker({ kind = "image", onPick, anchor } = {}) 
         }
         for (const it of shown) {
             const key = itemName(it);   // 扫描名是键：读正文、删除、标签索引都认它
+            // 有封面才占一枚缩略位：没封面的行不留空槽，浮层的行高与密度照旧
+            const cover = (typeof it === "object" && it.cover)
+                ? $el("img", { className: "rs-preset-cover", loading: "lazy", alt: "", src: promptCoverUrl(key, it.cover) })
+                : null;
             body.appendChild($el("div", { className: "rs-preset-item", dataset: { name: key }, onclick: () => choose(key) }, [
+                ...(cover ? [cover] : []),
                 $el("span", { className: "rs-preset-content", textContent: promptDisplayName(key) }),
                 $el("span", { className: "rs-source-badge", textContent: it.source === "presets" ? t("预设") : t("自定义") }),
             ]));

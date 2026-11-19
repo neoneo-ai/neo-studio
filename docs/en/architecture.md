@@ -215,6 +215,7 @@ studio/
 | `reverse-prompt/reverse-prompt.js` | Image reverse-prompt view: picks an image from the library, streams `/rs_prompts/reverse_prompt` onto the page and copies the prompt |
 | `reverse-video/reverse-video.js`   | Video reverse-prompt view: picks a video, samples frames in the browser with their timestamps, streams `/rs_prompts/reverse_video_prompt` onto the page and copies the prompt |
 | `voice-clone/voice-clone.js`  | Voice clone view: reference audio plus text through the voice-gen chain, progress, cancel and the result waveform |
+| `prompt-library/prompt-library.js` | Prompt library view: one card per prompt (cover or text slot), pool and origin filters, "fill the paint / video page" through `applyToPage`, with "set as cover / delete" gated by the capability table |
 | `*.css`                       | Styles per module |
 
 ## Node registration

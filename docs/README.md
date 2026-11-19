@@ -9,24 +9,25 @@
 
 ## 功能模块（终端用户）
 
-| 文档 | 内容 |
-|------|------|
-| [prompts.md](prompts.md) | 提示词节点、界面按钮、图片反推与 `@` / `/` 菜单 |
-| [skills.md](skills.md) | 技能管理：技能文件、管理窗口、工作流区编辑、画布导入与回写 |
-| [llm.md](llm.md) | LLM 模式、云供应商、本地 GGUF 安装与模型目录规范 |
-| [image-gen.md](image-gen.md) | 生图：聊天生图、Image Gen & Edit 节点、尺寸与扩图 |
-| [canvas.md](canvas.md) | 画布：图片与提示词节点铺在一张画布上，生成节点铺在画布上就地出图 |
-| [preset-models.md](preset-models.md) | 预设模型清单：38 个预设技能的 `models.json` 明细（文件、类别、体积、来源） |
-| [h3-video-gen.md](h3-video-gen.md) | 生视频：导演配方执行、单段重生成、宫格拆分、模板 |
-| [recipes.md](recipes.md) | 配方：保存、发送到工作流、导演配方编辑器 |
-| [gallery.md](gallery.md) | 素材库：浏览、灯箱、文件管理、Civitai LORA、收藏 |
-| [studio-frames.md](studio-frames.md) | 视频抽帧：播放器、起抽点与间隔、帧落进 `output/Frames` |
-| [studio-reverse.md](studio-reverse.md) | 图片反推：首页卡直达的一页、SSE 上屏、`.txt` 落点与复制 |
-| [studio-voice-clone.md](studio-voice-clone.md) | 声音克隆：参考音频加文字、进度与取消、结果波形 |
-| [studio-prompt-enhance.md](studio-prompt-enhance.md) | 提示词增强：首页卡直达的聊天页、思考深度与参考图、离线自服 |
-| [workflow-repair.md](workflow-repair.md) | 工作流模型路径修复 |
-| [model-hub.md](model-hub.md) | 模型库：Comfy-Org 专区双源搜索与断点续传下载 |
-| [studio-pose.md](studio-pose.md) | 3D 姿势：姿势包安装、页面与桥接口、场景与导出 |
+| 文档                                                   | 内容                                             |
+| ---------------------------------------------------- | ---------------------------------------------- |
+| [prompts.md](prompts.md)                             | 提示词节点、界面按钮、图片反推与 `@` / `/` 菜单                  |
+| [skills.md](skills.md)                               | 技能管理：技能文件、管理窗口、工作流区编辑、画布导入与回写                  |
+| [llm.md](llm.md)                                     | LLM 模式、云供应商、本地 GGUF 安装与模型目录规范                  |
+| [image-gen.md](image-gen.md)                         | 生图：聊天生图、Image Gen & Edit 节点、尺寸与扩图              |
+| [canvas.md](canvas.md)                               | 画布：图片与提示词节点铺在一张画布上，生成节点铺在画布上就地出图               |
+| [preset-models.md](preset-models.md)                 | 预设模型清单：38 个预设技能的 `models.json` 明细（文件、类别、体积、来源） |
+| [h3-video-gen.md](h3-video-gen.md)                   | 生视频：导演配方执行、单段重生成、宫格拆分、模板                       |
+| [recipes.md](recipes.md)                             | 配方：保存、发送到工作流、导演配方编辑器                           |
+| [gallery.md](gallery.md)                             | 素材库：浏览、灯箱、文件管理、Civitai LORA、收藏                 |
+| [studio-frames.md](studio-frames.md)                 | 视频抽帧：播放器、起抽点与间隔、帧落进 `output/Frames`            |
+| [studio-reverse.md](studio-reverse.md)               | 图片反推：首页卡直达的一页、SSE 上屏、`.txt` 落点与复制              |
+| [studio-voice-clone.md](studio-voice-clone.md)       | 声音克隆：参考音频加文字、进度与取消、结果波形                        |
+| [studio-prompt-enhance.md](studio-prompt-enhance.md) | 提示词增强：首页卡直达的聊天页、思考深度与参考图、离线自服                  |
+| [studio-prompts.md](studio-prompts.md)               | 提示词库：首页卡直达的一页、一条提示词一张卡、封面 sidecar 与两次确认删除      |
+| [workflow-repair.md](workflow-repair.md)             | 工作流模型路径修复                                      |
+| [model-hub.md](model-hub.md)                         | 模型库：Comfy-Org 专区双源搜索与断点续传下载                    |
+| [studio-pose.md](studio-pose.md)                     | 3D 姿势：姿势包安装、页面与桥接口、场景与导出                       |
 
 ## 开发者文档
 

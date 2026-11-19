@@ -43,7 +43,7 @@ export const HOME_CARDS = [
     { id: "edit-blend", section: "edit", icon: "copy", title: "融合", sub: "多张参考图融成一张连贯画面", target: "edit", value: "blend" },
     { id: "edit-pose", section: "edit", icon: "user", title: "姿势", sub: "骨架图锁姿势，重出这一张", target: "edit", value: "pose" },
     PAGE.frames, PAGE.reverse, PAGE["reverse-video"],
-    PAGE.gallery, PAGE.skills, PAGE.settings,
+    PAGE.gallery, PAGE.prompts, PAGE.skills, PAGE.settings,
 ];
 
 export const HOME_HERO = {

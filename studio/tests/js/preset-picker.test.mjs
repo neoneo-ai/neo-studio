@@ -257,6 +257,36 @@ test("存当前提示词：名字按后端同一套清洗，清洗完为空就�
     assert.equal(await savePromptTo("image", "  带非法字符<>/\\ 的名字  ", "x"), "带非法字符 的名字",
         "空格与下划线留着可用，尖括号与斜杠这类会被后端拒的字符先清掉");
     await assert.rejects(() => savePromptTo("video", "///", "x"), (e) => e.message === "要先给这条提示词起个名字");
+// 封面是提示词旁边的 sidecar：条目带 cover 的行才占一枚缩略位，浮层的行高与密度不变
+test("提示词浮层：条目带封面才铺缩略图，URL 带封面 mtime 换缓存", async () => {
+    resetEnv();
+    mockRoute("/rs_prompts/list_prompts", () => jsonResponse([
+        { name: "红杯", source: "custom", cover: 111 },
+        { name: "无封面", source: "custom" },
+    ]));
+    mockRoute("/rs_prompts/load_prompt", (body) => jsonResponse({ text: `全文:${body.name}` }));
+    openPresetPicker({ kind: "image", onPick: () => {}, anchor: anchorBtn() });
+    await flush();
+    const rows = [...document.querySelectorAll(".neo-preset-picker .rs-preset-item")];
+    const cover = rows[0].querySelector(".rs-preset-cover");
+    assert.match(cover.getAttribute("src"), /name=%E7%BA%A2%E6%9D%AF&v=111$/);
+    assert.equal(cover.getAttribute("loading"), "lazy");
+    assert.equal(rows[1].querySelector(".rs-preset-cover"), null, "没有封面的行不占缩略位");
+    closePresetPicker();
+});
+
+// 设封面那一发要点名的是哪条提示词：正文交不回名字，扫描名要跟着一起交
+test("提示词浮层：点一条把正文与扫描名一起交回调用方", async () => {
+    resetEnv();
+    mockPromptRoutes();
+    const picked = [];
+    openPresetPicker({ kind: "video", onPick: (text, name) => picked.push({ text, name }), anchor: anchorBtn() });
+    await flush();
+    click(document.querySelectorAll(".neo-preset-picker .rs-preset-item")[1]);
+    await flush();
+    assert.deepEqual(picked, [{ text: "全文:video/子目录/雨夜窗边", name: "video/子目录/雨夜窗边" }]);
+});
+
     assert.equal(fetchLog.filter((c) => c.path === "/rs_prompts/save_prompt" && c.body.name === "video/").length, 0,
         "名字不合法不该把空名字发出去");
 });

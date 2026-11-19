@@ -229,6 +229,10 @@ ComfyUI 没就绪时点它只会得到「页面不存在」。`openSkillWorkflow
   向 `/rs_prompts/random_prompts` 带 `kind` 要一条，
   池子由后端按同一口径筛（扫描名首段是 `video` 归视频，其余归图像）。行上的名字不带 `video/` 池子前缀
   （`promptDisplayName`），子目录段留着；键与读正文的请求照旧吃扫描名全名。
+  条目带封面（`list_prompts` 的 `cover` = 封面文件的 mtime）才在行左占一枚 32px 缩略位，地址是
+  `GET /rs_prompts/prompt_cover?name=&v=`（`v=` 吃那份 mtime 换缓存，`loading="lazy"`）；没封面的行不留空槽，
+  浮层的行高与密度不变。封面只在用户点名那一发写（素材卡「⋯」的「设为提示词封面」、提示词库页卡上的「设为封面」），
+  预设池是代码目录、不写封面。
   浮层是挂在按钮下方的下拉，不居中：右端对齐按钮右端，下面放不下整块就翻到按钮上方；收窗三条路——× 、Esc、
   浮层外任何按下（再点同一颗按钮也收窗，不是重开）。浮层收 Esc 时 `stopPropagation`，
   页面自己的「Esc 关窗」不被带着跑；手机上这一排贴着右上角、不与提示词框重叠（`studio/style.css` 的 `.ns-paint-bar` / `.ns-video-bar`）。

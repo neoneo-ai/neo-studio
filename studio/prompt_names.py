@@ -32,6 +32,11 @@ CUSTOM_TAGS_FILE = os.path.join(CUSTOM_DIR, "_tags_index.json")
 KIND_VIDEO = "video"
 KIND_IMAGE = "image"
 KIND_SPLIT_FILE = os.path.join(CUSTOM_DIR, "_kind_split.json")
+# 提示词封面是正文旁边的 sidecar：`custom/<扫描名>.jpg`，写下去就是 512px 长边的 JPEG，
+# 读侧直接回文件，不再逐尺寸现生成（所以这一层没有要清的缩略图缓存目录）。
+# 预设池是代码目录、出厂只读，用户封面不往代码目录里写，presets 侧因此永远没有封面。
+COVER_SUFFIX = ".jpg"
+COVER_MAX_SIDE = 512
 
 for _dir in (PROMPTS_DIR, PRESETS_DIR, CUSTOM_DIR):
     os.makedirs(_dir, exist_ok=True)
@@ -102,12 +107,16 @@ def scan_prompts(source: str) -> list:
             elif entry.endswith(".txt") and not entry.startswith("_"):
                 name = entry[:-4]  # 去掉 .txt 后缀
                 display_name = f"{prefix}{name}" if prefix else name
-                prompts.append({
+                item = {
                     "name": display_name,
                     "tags": tags_index.get(display_name, []),
                     "source": source,
                     "_mtime": os.path.getmtime(full_path),
-                })
+                }
+                cover = full_path[:-4] + COVER_SUFFIX
+                if os.path.isfile(cover):
+                    item["cover"] = int(os.path.getmtime(cover))  # 卡片上的 URL 带这一位换缓存
+                prompts.append(item)
 
     walk(base_dir, "")
     return prompts
@@ -121,19 +130,62 @@ def list_prompt_entries() -> list:
     return groups[0] + groups[1]
 
 
-def read_prompt_text(name: str) -> str | None:
-    """按扫描名读整篇正文：`presets/` 前缀认来源目录，其余 custom 优先、presets 兜底"""
-    candidates = []
-    if name.startswith("presets/"):
-        bare = name[len("presets/"):]
-        candidates.append(os.path.join(PRESETS_DIR, f"{bare}.txt"))
-        name = bare
-    candidates.extend(os.path.join(base, f"{name}.txt") for base in (CUSTOM_DIR, PRESETS_DIR))
-    for filepath in candidates:
-        if os.path.isfile(filepath):
-            with open(filepath, "r", encoding="utf-8") as f:
-                return f.read()
+def resolve_prompt_file(name: str) -> str | None:
+    """扫描名 → .txt 物理路径：`presets/` 前缀认来源目录，其余 custom 优先、presets 兜底。
+
+    越界判定与 resolve_collection_file 同一道：realpath 之后必须仍在来源目录内，
+    `..` 与绝对路径因此永远落不进提示词树。
+    """
+    bare = name[len("presets/"):] if name.startswith("presets/") else (name or "")
+    rel = os.path.normpath(bare.replace("\\", "/"))
+    if not rel or rel.startswith(".") or os.path.isabs(rel) or ".." in rel.split(os.sep):
+        return None
+    bases = (PRESETS_DIR,) if name.startswith("presets/") else (CUSTOM_DIR, PRESETS_DIR)
+    for base in bases:
+        root = os.path.realpath(base)
+        candidate = os.path.realpath(os.path.join(root, f"{rel}.txt"))
+        try:
+            inside = os.path.commonpath([candidate, root]) == root
+        except ValueError:  # 跨盘符等异常情形，跳过该目录
+            continue
+        if inside and os.path.isfile(candidate):
+            return candidate
     return None
+
+
+def _inside_custom(txt_path: str) -> bool:
+    """正文落在自定义池的树里（含子目录）：封面 sidecar 只跟着这一侧走"""
+    root = os.path.realpath(CUSTOM_DIR)
+    try:
+        return os.path.commonpath([os.path.realpath(txt_path), root]) == root
+    except ValueError:  # 跨盘符等异常情形，认不出就不给写
+        return False
+
+
+def prompt_cover_file(name: str) -> str | None:
+    """封面的物理路径：正文旁边的 `<扫描名>.jpg`，没有封面给 None"""
+    txt = resolve_prompt_file(name)
+    if txt is None:
+        return None
+    cover = txt[:-4] + COVER_SUFFIX
+    return cover if os.path.isfile(cover) else None
+
+
+def prompt_cover_target(name: str) -> str | None:
+    """封面要写到哪：自定义池正文旁边的 sidecar；预设池只读、名字解析不到正文都给 None"""
+    txt = resolve_prompt_file(name)
+    if txt is None or not _inside_custom(txt):
+        return None
+    return txt[:-4] + COVER_SUFFIX
+
+
+def read_prompt_text(name: str) -> str | None:
+    """按扫描名读整篇正文：路径由 resolve_prompt_file 定，选中那一发才打开文件"""
+    filepath = resolve_prompt_file(name)
+    if filepath is None:
+        return None
+    with open(filepath, "r", encoding="utf-8") as f:
+        return f.read()
 
 
 def iter_collection_files() -> list:
@@ -378,6 +430,21 @@ async def list_prompts_route(request):
     except Exception as e:
         logger.error(f"Error listing prompts: {e}")
         return web.Response(status=500, text=str(e))
+
+
+@routes.get("/rs_prompts/prompt_cover")
+async def prompt_cover_route(request):
+    """卡片上的封面：直接回 sidecar 的 JPEG（写下去就是 512px 长边，不逐尺寸现生成）。
+
+    URL 上的 `v=` 是列表里那份封面 mtime，前端换封面就换 URL；文件内容只在重新设封面时变，
+    因此缓存可以直接给满一年。名字解析不到封面就是 404，卡片落正文摘要位。
+    """
+    cover = await asyncio.to_thread(prompt_cover_file, request.rel_url.query.get("name", ""))
+    if cover is None:
+        return web.Response(status=404)
+    with open(cover, "rb") as f:
+        return web.Response(body=f.read(), content_type="image/jpeg",
+                            headers={"Cache-Control": "public, max-age=31536000, immutable"})
 
 
 @routes.post("/rs_prompts/list_prompt_lines")

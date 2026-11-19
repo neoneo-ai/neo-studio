@@ -179,6 +179,19 @@
 .neo-preset-picker-scope { flex: none; font-size: 11px; color: #8fa3b8; }
 .neo-preset-picker-empty { padding: 16px 10px; font-size: 12px; color: #8a8a95; text-align: center; }
 
+/* 提示词封面的缩略位（js/core/preset-picker.js）：条目带 cover 的行才占这一格。
+   sidecar 写下去就是 512px 长边的 JPEG，浏览器只把它缩进这一格；行高由这一格定，密度不变 */
+.rs-preset-cover {
+    flex: none;
+    width: 32px;
+    height: 32px;
+    margin-right: 8px;
+    border-radius: 5px;
+    object-fit: cover;
+    background: #222;
+}
+.rs-preset-item .rs-preset-content { flex: 1 1 auto; min-width: 0; }
+
 /* Close button */
 .rs-close-btn {
     background: #2a3a3a;

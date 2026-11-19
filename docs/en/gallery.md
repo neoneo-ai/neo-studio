@@ -330,6 +330,18 @@ embedded ComfyUI workflow).
   - Dragging that grid image into the director editor's "🧩 grid storyboard split" cuts it into N keyframes in
     row-major order (one shot per cell, thin white separators, no text inside cells).
 
+### Prompt covers
+
+- **🖼 Set as prompt cover** - On an image or video card, this opens the prompt picker first (an image card lists
+  only the image pool, a video card only the video pool - the same picker the "Prompt" button on the generation
+  pages uses); picking an entry makes this asset its cover, the asset pick window closes itself once a prompt is
+  chosen, and the success toast names the prompt. The cover is the same-named sidecar beside the `.txt`: only this
+  press and "Set as cover" on the prompt library page write it, generation never generates or batch-applies covers,
+  a video is captured at its first frame, and every cover becomes a 512 px longest-side JPEG. Factory presets are a
+  code directory, so an entry listed there cannot take a cover, and deleting a prompt deletes its cover with it. The
+  asset must land in `input/` for the cover to be written (unlike "add to bookmarks", which keeps its source path),
+  and the toast names that press's `subfolder/filename`.
+
 ### Image editing
 
 Opens a small window (image on top, controls below: source / result comparison area + the input card).

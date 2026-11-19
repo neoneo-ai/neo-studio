@@ -384,5 +384,29 @@ initials):
 
 Good for keyboard-only skill switching: type `/` plus a name fragment, arrow to the row, Enter.
 
+## Prompt library and covers
+
+Prompts live in exactly two places: the shipped presets `prompts/presets/*.txt` (a code directory,
+read-only) and the user's own `prompts/custom/**/*.txt` (the `video/` tree is the video pool, the root
+layer is the image pool). The 「提示词库」 card in the Studio home 「Assets & Setup」 section opens
+`#/prompts`: one card per prompt with its cover on the card, each card carrying "fill the paint page /
+fill the video page / copy / set as cover / delete", with search and the image/video and origin filters
+on top. Card layout, how a cover gets set, and the offline window's behavior: [studio-prompts.md](studio-prompts.md).
+
+- **A cover is a sidecar**: `prompts/custom/<scan name>.jpg`, written as a 512 px longest-side JPEG
+  (first frame for video). It is only written when the user names that one prompt in "set as cover" —
+  nothing generates covers automatically.
+- **Presets have no covers**: the preset tree is a code directory, so the UI ships no "set as cover /
+  delete" on those cards and the backend refuses the write (403).
+- **Two endpoints**: `GET /rs_prompts/prompt_cover?name=&v=` answers that JPEG directly (`v=` is the cover mtime
+  the list entry carries, cached for a year), `POST /rs_prompts/set_prompt_cover` writes the sidecar. The read
+  side is in the desktop capability table, so an offline window shows covers too; the write side belongs to the
+  kernel and is gated by `prompt_library_write`.
+- **Deleting the text deletes the cover**: `POST /rs_prompts/delete_prompt` removes the `.jpg` next to it, so the
+  prompt tree never keeps a cover without a prompt.
+- **The preset picker knows covers too**: in the "prompts" dropdown on the paint, video and generation panels,
+  an entry with a cover takes a 32 px thumbnail slot; an entry without one takes no slot, so the row height and
+  density stay the same.
+
 Backend implementation: [architecture.md](architecture.md) (`prompt_agent.py` / `prompt_encoder.py`),
 API: [api-routes.md](api-routes.md).

@@ -17,7 +17,7 @@ import {
 import {
     buildCharacterSheetRequest, buildStoryboardGridPrompt, buildStoryboardGridRequest,
     openStoryboardDialog, openReversePromptDialog, openLoraTagDialog,
-    openCharacterSheetDialog, openVoiceDialog,
+    openCharacterSheetDialog, openVoiceDialog, openPromptCoverDialog,
 } from "./gallery-card-tools.js";
 import { openImageEditDialog } from "./image-edit-panel.js";
 import { openGenMaterialDialog } from "./t2i-panel.js";
@@ -95,5 +95,5 @@ export {
     setPaintHost, chipButton, skillParamsChip, reuseModelOverlay, openImageEditMode,
     buildCharacterSheetRequest, buildStoryboardGridPrompt, buildStoryboardGridRequest,
     openStoryboardDialog, openReversePromptDialog, openLoraTagDialog, openImageEditDialog,
-    openGenMaterialDialog, ratioGlyph,
+    openGenMaterialDialog, openPromptCoverDialog, ratioGlyph,
 };

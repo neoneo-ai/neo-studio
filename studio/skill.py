@@ -100,6 +100,7 @@ _META_KEY_ORDER = (
 SKILL_LANDINGS = (
     "home", "director", "paint", "edit", "gallery", "video", "pose", "skills", "settings",
     "agent", "frames", "reverse", "reverse_video", "voice", "enhance", "storyboard", "canvas",
+    "prompts",
 )
 
 # 技能文件管理器支持的文件扩展名（.md 主/子文档 + .txt 引用文本）。

@@ -5,6 +5,18 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 ## [Unreleased]
 
 ### Added
+- **Prompt library page and prompt covers.** The Studio home 「素材与配置」 section gains a **提示词库** card that opens
+  `#/prompts`: one card per prompt with its cover on the card, each card carrying **填入绘画页** / **填入视频页** (reads the
+  text and fills that page's prompt box through the same landing the enhance page uses), **复制**, **设为封面** and **删除**
+  (delete arms on the first press and fires on the second). Search matches the display name and tags, and the pool filter
+  (全部 / 图像 / 视频) and origin filter (全部来源 / 预设 / 自定义) narrow the grid; entries sort newest first. A cover is a
+  sidecar next to the prompt text, `prompts/custom/<scan name>.jpg`, written as a 512 px longest-side JPEG (first frame for
+  video) only by the press the user names: **设为提示词封面** in the gallery card's ⋯ menu (which asks which prompt to pin it
+  to) and **设为封面** on the library card. Prompts with a cover also show it in the 提示词 picker of the paint, video and
+  generation panels, in a 32 px slot that no-cover rows do not take. Factory presets carry no covers, so the write buttons
+  are not shipped on those cards and the backend refuses them; deleting a prompt deletes its cover with it. The cover read
+  route answers offline, so the library shows covers without ComfyUI, while the write side is gated by `prompt_library_write`
+  and sends an offline window to start the kernel.
 - **Canvas generation node: the skill and the parameters live on the node face.** 画布 has a **加生成节点** button, and the
   node it lays carries everything on its surface with no dialog to open: a 技能 chip (sparkles) sized to its own text, a
   ratio chip drawn with the ratio glyph, a 长边尺寸 chip and a 生图张数 chip that opens a pick from 1 to 8 — the three
