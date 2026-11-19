@@ -300,6 +300,10 @@ ComfyUI 没就绪时点它只会得到「页面不存在」。`openSkillWorkflow
 `build_app` 连 `folder_paths` 都 import 不了，桌面端服务本来就起不来，页面只能不依赖 HTTP 服务。校验与拉起全走
 js_api（`check_setup` / `pick_root` / `pick_python` / `start_setup`），根目录补完了服务才起得来。
 
+页面底色与文字走 `page_theme(desktop.theme)`（`PAGE_THEME`：深色 `#1e1e1e` / 浅色 `#ffffff`，与
+`studio/web/studio/style.css` 的两套 token 块同源）：冷启动页 `splash_html(theme)` 与关窗时的「正在停止 ComfyUI」
+蒙层 `closing_js(theme)` 读同一份，浅色开机第一帧停在白，不再黑一下。
+
 ## 无边框窗口与拖动
 
 - 无边框是启动设置里的一项，存 `launcher_config.json` 的 `frameless`：Windows 缺省开，macOS v1 缺省关并
@@ -314,7 +318,8 @@ js_api（`check_setup` / `pick_root` / `pick_python` / `start_setup`），根目
   尺寸，新暴露的客户区先由这两个底色刷出来 —— 底色是白的就是白窗闪一下。补回的 `WS_THICKFRAME` 那一圈由 DWM 按
   系统主题色画，浅色主题下缩放时那条边框线本身就是白的：`set_window_frame` 重贴样式位时顺带把
   `DWMWA_BORDER_COLOR` / `DWMWA_CAPTION_COLOR` 钉成当前配色的底色（`set_theme` 换配色时跟着换；Win10 不认这两个
-  属性，只回非零 HRESULT）。
+  属性，只回非零 HRESULT）。桌面端自带的三张页面（启动页 / 引导页 / 收尾蒙层）读 `PAGE_THEME` 那份同名深浅，
+  与窗口底色一起翻面。
 - `easy_drag` 必须关掉 —— pywebview 的简易拖动是全局 mousedown，无边框时点任何卡片都会拖着窗口跑。拖动由顶栏
   空白处按下调 `win_start_drag`，桌面端在窗口线程上自己循环跟光标（`SetWindowPos` + `GetAsyncKeyState(VK_LBUTTON)`），
   左键一松就停 —— 交回系统走 `WM_NCLBUTTONDOWN + HTCAPTION` 或 `WM_SYSCOMMAND·SC_MOUSEMOVE` 都起不来，WinForms

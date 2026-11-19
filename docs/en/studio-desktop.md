@@ -440,6 +440,11 @@ the desktop-side service cannot start at all, so the page has to work without an
 all go through js_api (`check_setup` / `pick_root` / `pick_python` / `start_setup`), and the service only becomes
 startable once the root is filled in.
 
+The page colors come from `page_theme(desktop.theme)` — `PAGE_THEME`, `#1e1e1e` dark / `#ffffff` light, the same
+pair as the token blocks in `studio/web/studio/style.css`. The cold-start splash (`splash_html(theme)`) and the
+"stopping ComfyUI" overlay (`closing_js(theme)`) read the same table, so a light-themed launch opens on white
+instead of flashing dark first.
+
 
 ## Frameless window and dragging
 
@@ -458,7 +463,8 @@ startable once the root is filled in.
   restored `WS_THICKFRAME` ring is drawn by DWM in the system theme color, so on a light theme that border line is
   white during resizing: `set_window_frame` pins `DWMWA_BORDER_COLOR` / `DWMWA_CAPTION_COLOR` to the page color of the
   current scheme while it reapplies the style bits (`set_theme` recolors them with the theme; Windows 10 ignores both
-  attributes and only returns a non-zero HRESULT).
+  attributes and only returns a non-zero HRESULT). The three pages the desktop writes itself (splash, guide page,
+  closing overlay) read the matching `PAGE_THEME` table, so they flip with the window.
 - `easy_drag` must stay off — pywebview's simple drag is a global mousedown, and frameless means clicking any card
   drags the window along. Dragging starts by pressing an empty part of the header and calling `win_start_drag`,
   with the desktop looping on the window thread and following the cursor (`SetWindowPos` +

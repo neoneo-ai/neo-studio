@@ -175,6 +175,14 @@ WINDOW_BG = "#17171b"
 # 页面配色有两套（studio/web/studio/style.css 的 :root 与 [data-neo-theme="light"]），窗口底色照页面那枚
 # --ns-bg 走：深色就是原来那份，浅色对齐页面浅色块。页面第一帧之后由 core/theme.js 回报生效的那套。
 THEME_BG = {"dark": WINDOW_BG, "light": "#ffffff"}
+# 启动页 / 引导页 / 收尾提示是桌面端自己写的页面：style.css 与 core/theme.js 都还没进场，
+# 写死 #1e1e1e 时浅色开机第一帧就是黑的。这里跟页面那两套 token 块给一份，浅色停在白。
+PAGE_THEME = {
+    "dark": {"bg": "#1e1e1e", "fg": "#d7dae0", "dim": "#8a8f98", "field": "#262626",
+             "bd": "#3d3d3d", "ok": "#7ec699", "bad": "#e0a94a"},
+    "light": {"bg": "#ffffff", "fg": "#1a1a1a", "dim": "#555555", "field": "#f1f2f5",
+              "bd": "#c8c8c8", "ok": "#178a4f", "bad": "#9a6200"},
+}
 # 拖边框缩放走系统缩放模态循环，循环里 Form 与 Dock=Fill 的 WebView2 子控件被一起改尺寸，
 # 新暴露的客户区先由各自的背景色刷出来，页面合成落后一帧 —— 底色是白的就是白窗闪一下。
 # pywebview 的 background_color 默认 #FFFFFF，且同时定 Form.BackColor 与 WebView2 的
@@ -321,6 +329,11 @@ def theme_bg(theme: str) -> str:
     return THEME_BG.get(theme, THEME_BG["dark"])
 
 
+def page_theme(theme: str) -> dict:
+    """桌面端自带页面（启动页 / 引导页 / 收尾提示）的配色：跟着窗口那一套深浅走。"""
+    return PAGE_THEME.get(theme, PAGE_THEME["dark"])
+
+
 def alert(text: str) -> None:
     """pythonw 没有 stdout，提示走系统消息框；macOS 用 AppleScript alert，Linux 只写日志。"""
     if IS_WINDOWS:
@@ -442,6 +455,10 @@ def save_config(root: Path, python: str, port: int, flags: dict) -> bool:
     for key in ("pair_token", "pair_expires_at", "pair_host"):
         if flags.get(key) not in (None, ""):
             cfg[key] = flags[key]
+    # 深浅是页面回报后 set_theme 落盘的，设置页这一写没有它：沿用磁盘那份，下次开机才有底可依
+    theme = flags.get("theme") or load_config().get("theme")
+    if theme in THEME_BG:
+        cfg["theme"] = theme
     return write_config(cfg)
 
 
@@ -1048,15 +1065,17 @@ BACK_JS = """
 """
 
 
-CLOSING_JS = """
-(() => {
-    const o = document.createElement('div');
-    o.style.cssText = 'position:fixed;inset:0;z-index:100002;display:grid;place-items:center;'
-        + 'background:rgba(20,20,24,.94);color:#d7dae0;font:15px system-ui;pointer-events:none';
-    o.textContent = '正在停止 ComfyUI…';
-    document.documentElement.appendChild(o);
-})();
-"""
+def closing_js(theme: str) -> str:
+    """关窗收尾那层的整屏蒙层：颜色跟着窗口那一套深浅，浅色窗口关窗不能压成近黑。"""
+    scrim, fg = ("rgba(255,255,255,.94)", PAGE_THEME["light"]["fg"]) if theme == "light" \
+        else ("rgba(20,20,24,.94)", PAGE_THEME["dark"]["fg"])
+    return ("(() => {\n"
+            "    const o = document.createElement('div');\n"
+            "    o.style.cssText = 'position:fixed;inset:0;z-index:100002;display:grid;place-items:center;'\n"
+            f"        + 'background:{scrim};color:{fg};font:15px system-ui;pointer-events:none';\n"
+            "    o.textContent = '正在停止 ComfyUI…';\n"
+            "    document.documentElement.appendChild(o);\n"
+            "})();\n")
 
 
 class StudioDesktop:
@@ -1746,17 +1765,16 @@ SPLASH_JS = """
 """
 
 
-def splash_html() -> str:
+def splash_html(theme: str) -> str:
     """冷启动时先出窗口显示的启动页：ComfyUI 就绪前不让用户对着空白干等。
 
     动画照 ComfyUI 前端启动页那套机制：品牌图形当遮罩，遮罩里一条浪线横向滚、整组随呼吸上浮，
     浪头漫过图形就是「就绪在望」。阶段行走 js_api 报真实进度 —— 冷启动要扫模型目录、装依赖、
     起桌面端服务，写死一句「请稍候」在慢的那路上就是假承诺。
     """
-    return ('<!doctype html><meta charset=utf-8><title>新影工坊 · Neo Studio</title>'
-            '<style>'
-            'html,body{height:100%;margin:0;overflow:hidden;background:#1e1e1e;color:#d7dae0;'
-            'font-family:system-ui}'
+    p = page_theme(theme)
+    css = ('html,body{height:100%;margin:0;overflow:hidden;background:' + p["bg"] + ';color:' + p["fg"] + ';'
+           'font-family:system-ui}'
             '#splash{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;'
             'justify-content:center;contain:strict}'
             '#splash svg{width:min(190px,42vw);height:auto;transform:translateZ(0)}'
@@ -1771,8 +1789,9 @@ def splash_html() -> str:
             '@media (prefers-reduced-motion:reduce){#splash .wave-group,#splash .wave-path{animation:none;'
             'will-change:auto}#splash .wave-group{transform:translateY(-40px)}}'
             'h1{font-size:20px;font-weight:600;margin:20px 0 0}'
-            '#stage{font-size:13px;color:#8a8f98;margin-top:8px}'
-            '</style>'
+            '#stage{font-size:13px;color:' + p["dim"] + ';margin-top:8px}')
+    return ('<!doctype html><meta charset=utf-8><title>新影工坊 · Neo Studio</title>'
+            '<style>' + css + '</style>'
             '<div id="splash" role="status" aria-label="正在启动 ComfyUI">'
             # 场记板当遮罩：斜条与播放三角挖空，浪线漫过去时图形认得出来
             '<svg viewBox="0 0 240 200" fill="none" xmlns="http://www.w3.org/2000/svg">'
@@ -1853,26 +1872,27 @@ el('go').onclick = async function () {
 """
 
 
-def remote_guide_html(state: dict) -> str:
+def remote_guide_html(state: dict, theme: str) -> str:
     """macOS 远程引导页：只要一个远端 ComfyUI 地址，本机不找 root、不装插件、不起进程。"""
+    p = page_theme(theme)
+    css = ('html,body{height:100%;margin:0;background:' + p["bg"] + ';color:' + p["fg"] + ';font:14px/1.7 system-ui}'
+             '.wrap{max-width:820px;margin:0 auto;padding:40px 32px}'
+             'h1{font-size:20px;font-weight:600;margin:0}'
+             '.sub{font-size:13px;color:' + p["dim"] + ';margin:6px 0 26px}'
+             '.row{margin-bottom:20px}'
+             '.row b{display:block;margin-bottom:6px}'
+             '.line{display:flex;gap:8px}'
+             'input{flex:1;min-width:0;background:' + p["field"] + ';color:' + p["fg"]
+             + ';border:1px solid ' + p["bd"] + ';'
+             'border-radius:6px;padding:8px 10px;font:13px system-ui}'
+             'button{background:#2f6feb;color:#fff;border:0;border-radius:6px;padding:8px 16px;'
+             'font:13px system-ui;cursor:pointer}'
+             'button:disabled{opacity:.45;cursor:default}'
+             '.go{margin-top:6px;text-align:right}'
+             '#msg{font-size:13px;color:' + p["dim"] + ';margin-top:14px;white-space:pre-wrap}'
+             '.bad{color:' + p["bad"] + '}')
     return ('<!doctype html><meta charset=utf-8><title>新影工坊 · Neo Studio 远程连接</title>'
-            '<style>'
-            'html,body{height:100%;margin:0;background:#1e1e1e;color:#d7dae0;font:14px/1.7 system-ui}'
-            '.wrap{max-width:820px;margin:0 auto;padding:40px 32px}'
-            'h1{font-size:20px;font-weight:600;margin:0}'
-            '.sub{font-size:13px;color:#8a8f98;margin:6px 0 26px}'
-            '.row{margin-bottom:20px}'
-            '.row b{display:block;margin-bottom:6px}'
-            '.line{display:flex;gap:8px}'
-            'input{flex:1;min-width:0;background:#262626;color:#d7dae0;border:1px solid #3d3d3d;'
-            'border-radius:6px;padding:8px 10px;font:13px system-ui}'
-            'button{background:#2f6feb;color:#fff;border:0;border-radius:6px;padding:8px 16px;'
-            'font:13px system-ui;cursor:pointer}'
-            'button:disabled{opacity:.45;cursor:default}'
-            '.go{margin-top:6px;text-align:right}'
-            '#msg{font-size:13px;color:#8a8f98;margin-top:14px;white-space:pre-wrap}'
-            '.bad{color:#e0a94a}'
-            '</style>'
+            '<style>' + css + '</style>'
             '<div class=wrap>'
             '<h1>新影工坊 · Neo Studio</h1>'
             '<div class=sub>输入局域网内那台 ComfyUI 的地址。本机不需要安装 ComfyUI，也不需要选择根目录。</div>'
@@ -1885,33 +1905,34 @@ def remote_guide_html(state: dict) -> str:
             '<script>' + REMOTE_GUIDE_JS.replace("__STATE__", json.dumps(state, ensure_ascii=False)) + '</script>')
 
 
-def guide_html(state: dict) -> str:
+def guide_html(state: dict, theme: str) -> str:
     """首次设置页：macOS 远程第一版走远程引导，Windows 仍走补齐 ComfyUI 根目录与解释器的本地引导。"""
     if state.get("remote_guide"):
-        return remote_guide_html(state)
+        return remote_guide_html(state, theme)
     """补齐 ComfyUI 根目录与 Python 解释器，自动找到的直接预填，缺哪个补哪个。
 
     页面走 load_html + js_api，不碰桌面端服务 —— 根目录无效时 build_app 连 folder_paths 都 import 不了，
     服务本来就起不来。校验与拉起都在桌面端里，页面只收路径和显示原因。"""
+    p = page_theme(theme)
+    css = ('html,body{height:100%;margin:0;background:' + p["bg"] + ';color:' + p["fg"] + ';font:14px/1.7 system-ui}'
+           '.wrap{max-width:820px;margin:0 auto;padding:40px 32px}'
+           'h1{font-size:20px;font-weight:600;margin:0}'
+           '.sub{font-size:13px;color:' + p["dim"] + ';margin:6px 0 26px}'
+           '.row{margin-bottom:20px}'
+           '.row b{display:block;margin-bottom:6px}'
+           '.line{display:flex;gap:8px}'
+           'input{flex:1;min-width:0;background:' + p["field"] + ';color:' + p["fg"]
+           + ';border:1px solid ' + p["bd"] + ';'
+           'border-radius:6px;padding:8px 10px;font:13px system-ui}'
+           'button{background:#2f6feb;color:#fff;border:0;border-radius:6px;padding:8px 16px;'
+           'font:13px system-ui;cursor:pointer}'
+           'button:disabled{opacity:.45;cursor:default}'
+           '.st{font-size:12px;margin-top:5px}'
+           '.ok{color:' + p["ok"] + '}.bad{color:' + p["bad"] + '}'
+           '.go{margin-top:6px;text-align:right}'
+           '#msg{font-size:13px;color:' + p["dim"] + ';margin-top:14px;white-space:pre-wrap}')
     return ('<!doctype html><meta charset=utf-8><title>新影工坊 · Neo Studio 首次设置</title>'
-            '<style>'
-            'html,body{height:100%;margin:0;background:#1e1e1e;color:#d7dae0;font:14px/1.7 system-ui}'
-            '.wrap{max-width:820px;margin:0 auto;padding:40px 32px}'
-            'h1{font-size:20px;font-weight:600;margin:0}'
-            '.sub{font-size:13px;color:#8a8f98;margin:6px 0 26px}'
-            '.row{margin-bottom:20px}'
-            '.row b{display:block;margin-bottom:6px}'
-            '.line{display:flex;gap:8px}'
-            'input{flex:1;min-width:0;background:#262626;color:#d7dae0;border:1px solid #3d3d3d;'
-            'border-radius:6px;padding:8px 10px;font:13px system-ui}'
-            'button{background:#2f6feb;color:#fff;border:0;border-radius:6px;padding:8px 16px;'
-            'font:13px system-ui;cursor:pointer}'
-            'button:disabled{opacity:.45;cursor:default}'
-            '.st{font-size:12px;margin-top:5px}'
-            '.ok{color:#7ec699}.bad{color:#e0a94a}'
-            '.go{margin-top:6px;text-align:right}'
-            '#msg{font-size:13px;color:#8a8f98;margin-top:14px;white-space:pre-wrap}'
-            '</style>'
+            '<style>' + css + '</style>'
             '<div class=wrap>'
             '<h1>新影工坊 · Neo Studio 首次设置</h1>'
             '<div class=sub>补齐下面两项，启动器会写入配置并拉起 ComfyUI。已自动找到的直接沿用。</div>'
@@ -2064,6 +2085,8 @@ def main() -> int:
                 # remote 非空 = 连远端那台 ComfyUI：本机不拉进程，窗口直接指向远端
                 "listen": comfy_listen(cfg.get("listen", "")) or "", "lan_ips": lan_ips(),
                 "remote": remote, "remote_guide": remote_guide,
+                # 页面回报过、set_theme 落盘的深浅：冷启动建窗与启动页都按它开，不等页面第一帧
+                "theme": str(cfg.get("theme", "")),
                 "remote_only": remote_only, "platform": "mac" if IS_MAC else "windows"}
     launcher_api: dict = {}   # 桌面端路由延迟取桌面端的方法：服务先起，桌面端的方法随后补上
     if need_guide:
@@ -2152,9 +2175,9 @@ def main() -> int:
     # 窗口先出：起解释器查依赖、装配桌面端服务、拉起 ComfyUI 全在后台线程走完。
     # 引导页等用户补齐根目录与解释器，其余停在启动页，就绪后由后台线程把窗口指过去。
     if need_guide:
-        window = webview.create_window("新影工坊 · Neo Studio", html=guide_html(launcher), **kw)
+        window = webview.create_window("新影工坊 · Neo Studio", html=guide_html(launcher, desktop.theme), **kw)
     else:
-        window = webview.create_window("新影工坊 · Neo Studio", html=splash_html(), **kw)
+        window = webview.create_window("新影工坊 · Neo Studio", html=splash_html(desktop.theme), **kw)
     desktop.loader = window.load_url
     desktop._window = window
     # 原生窗口在 start() 里才建出来，建窗时拿不到 hwnd：无边框补边框挂在窗口显示之后
@@ -2185,7 +2208,7 @@ def main() -> int:
         try:
             desktop.comfy_close()   # 先带走内核：evaluate_js 要等 UI 线程回消息循环，卡住也不能拖住杀进程
             if desktop.comfy is not None:
-                window.evaluate_js(CLOSING_JS)   # 窗口停在提示上，直到收尾走完
+                window.evaluate_js(closing_js(desktop.theme))   # 窗口停在提示上，直到收尾走完
             mcp.close_all()   # 用户连过的外部 MCP 进程：不收就在后台读着已关的 stdin 挂着，netstat 里多一个「关不掉的 ComfyUI」
             server.stop()
         finally:
@@ -2234,7 +2257,7 @@ def main() -> int:
                 desktop._flag_when_ready()
                 return
             desktop.starting = False
-            window.load_html(guide_html(launcher))
+            window.load_html(guide_html(launcher, desktop.theme))
             desktop.rearm()
             return
         state, msg = startup_state(root, python, plugin_dir)

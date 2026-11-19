@@ -38,6 +38,22 @@ class FrozenPathTests(unittest.TestCase):
         ext = ".icns" if app.IS_MAC else ".ico"
         self.assertEqual(app.STUDIO_ICON, _PLUGIN_DIR / "web" / ("neo-studio" + ext))
 
+    def test_studio_icon_is_not_an_opaque_plate(self):
+        """实心深色底板在浅色任务栏上就是一块黑方块：底板透明，斜纹与播放三角挖空。"""
+        icon = _PLUGIN_DIR / "web" / "neo-studio.ico"
+        if app.IS_MAC or not icon.exists():
+            self.skipTest("图标由 tools/make_studio_icon.py 生成，mac 侧是 .icns")
+        from PIL import Image
+        with Image.open(icon) as img:
+            sizes = {int(size) for size, _ in img.ico.sizes()}
+            plate = img.ico.getimage(256).convert("RGBA")
+        alpha = plate.getchannel("A").histogram()
+        total = plate.width * plate.height
+        self.assertIn(256, sizes, "任务栏要 256 那一档")
+        self.assertGreater(alpha[0] / total, 0.5, "底板要透明：过半像素是透的")
+        self.assertEqual([plate.getpixel(pos) for pos in ((0, 0), (255, 0), (0, 255), (255, 255))],
+                         [(0, 0, 0, 0)] * 4, "四角全透")
+
     def test_state_dir_prefers_exe_side_data(self):
         # exe 可以放在任意可写目录：状态目录就在它旁边的 data/
         with tempfile.TemporaryDirectory() as tmp:
@@ -472,7 +488,7 @@ class GuidePageTests(unittest.TestCase):
     def test_guide_page_needs_no_desktop_service(self):
         """根目录无效时 build_app 连 folder_paths 都 import 不了，服务本来就起不来：
         引导页只能走 load_html + js_api，两个路径框、校验与开始全在桌面端里。"""
-        html = app.guide_html({"root": "D:/ComfyUI", "python": "D:/python/python.exe"})
+        html = app.guide_html({"root": "D:/ComfyUI", "python": "D:/python/python.exe"}, "dark")
         self.assertIn("id=root", html)
         self.assertIn("id=py", html)
         for fn in ("check_setup", "pick_root", "pick_python", "start_setup"):
@@ -507,6 +523,13 @@ class GuidePageTests(unittest.TestCase):
         apply.assert_not_called()
         self.assertEqual(desktop.launcher["root"], "D:/ComfyUI")
 
+    def test_guide_page_follows_the_window_theme(self):
+        """引导页是根目录没补完时用户看到的第一屏：浅色窗口下它不能是深底。"""
+        for state in ({"root": "", "python": ""}, {"remote_guide": True}):
+            self.assertIn("background:#ffffff", app.guide_html(state, "light"))
+            self.assertNotIn("#1e1e1e", app.guide_html(state, "light"))
+            self.assertIn("background:#1e1e1e", app.guide_html(state, "dark"))
+
     def test_start_setup_applies_once_the_service_is_up(self):
         desktop = app.StudioDesktop(None, 8188, pathlib.Path("root"))
         desktop.ensure_server = lambda: True
@@ -521,7 +544,7 @@ class SplashPageTests(unittest.TestCase):
     def test_splash_page_animates_and_reports_the_real_stage(self):
         """冷启动要扫模型目录、装依赖、起桌面端服务：启动页不能是一行静止文字，
         阶段行还得报真实进度 —— 写死一句「请稍候」在慢的那路上就是假承诺。"""
-        html = app.splash_html()
+        html = app.splash_html("dark")
         self.assertIn("@keyframes ns-rise", html)
         self.assertIn("@keyframes ns-wave", html)
         self.assertIn('mask="url(#ns-splash-mask)"', html)
@@ -529,6 +552,17 @@ class SplashPageTests(unittest.TestCase):
         self.assertIn("api.comfy_state()", html)
         self.assertIn("已拉起 ComfyUI", html)
         self.assertIn("ComfyUI 就绪", html)
+
+    def test_splash_page_follows_the_window_theme(self):
+        """浅色开机第一帧要停在白：写死 #1e1e1e 时页面与窗口底色在启动那一刻就对不上。"""
+        self.assertIn("background:#ffffff", app.splash_html("light"))
+        self.assertNotIn("#1e1e1e", app.splash_html("light"))
+        self.assertIn("background:#1e1e1e", app.splash_html("dark"))
+
+    def test_closing_hint_follows_the_window_theme(self):
+        self.assertIn("rgba(255,255,255,.94)", app.closing_js("light"))
+        self.assertNotIn("rgba(20,20,24,.94)", app.closing_js("light"))
+        self.assertIn("rgba(20,20,24,.94)", app.closing_js("dark"))
 
 
 class AlertTests(unittest.TestCase):
@@ -1498,7 +1532,7 @@ class MainWindowTests(unittest.TestCase):
         self.assertEqual(touched, [], "非桌面端拉起的 ComfyUI 关窗不许动")
         self.assertTrue(app.GEOMETRY_FILE.exists(), "关窗要存几何")
         # 窗口先出启动页，后台探活就绪后停在桌面端这一页；用户自己的 ComfyUI 不被桌面端接管
-        self.assertEqual(cw.call_args.kwargs["html"], app.splash_html())
+        self.assertEqual(cw.call_args.kwargs["html"], app.splash_html(cw.call_args.kwargs["js_api"].theme))
         self.assertIsNone(cw.call_args.kwargs["js_api"].comfy)
         self.assertFalse(cw.call_args.kwargs["js_api"].flags["starting"], "已就绪不报启动中")
         window.load_url.assert_called_once_with("http://127.0.0.1:8191/neo-studio")
@@ -1548,20 +1582,7 @@ class MainWindowTests(unittest.TestCase):
     def test_window_background_is_the_page_color(self):
         # pywebview 的 background_color 默认白色，同时定 Form.BackColor 与 WebView2 的 DefaultBackgroundColor：
         # 拖边框缩放的模态循环里新客户区先刷它，白色就是白窗闪一下
-        window = _fake_window()
-        cw = MagicMock(return_value=window)
-        self.port_busy = True
-        with patch.object(app, "webview", _fake_webview(cw)), \
-             patch.object(app, "singleton", lambda: 7), \
-             patch.object(app, "DesktopServer", _fake_desktop_server()), \
-             patch.object(app, "probe", lambda port, timeout=3.0: True), \
-             patch.object(sys, "argv", ["studio_app.py"]):
-            self.assertEqual(app.main(), 0)
-        self.assertEqual(cw.call_args.kwargs["background_color"], app.theme_bg(app.system_theme()),
-                         "建窗底色照系统深浅那套页面底色，不能是 pywebview 的默认白")
-
-    def test_saved_theme_pins_the_cold_start_window_color(self):
-        # 上一次开机页面回报过的那套配色存在启动配置里：冷启动建窗就以它开出来，不等页面第一帧
+        # 配置隔离在空文件上：本机真配置存过深浅时这条判的是「没回报过就按系统」
         window = _fake_window()
         cw = MagicMock(return_value=window)
         self.port_busy = True
@@ -1572,10 +1593,31 @@ class MainWindowTests(unittest.TestCase):
              patch.object(app, "DesktopServer", _fake_desktop_server()), \
              patch.object(app, "probe", lambda port, timeout=3.0: True), \
              patch.object(sys, "argv", ["studio_app.py"]):
-            app.save_config(_COMFY_ROOT, pathlib.Path(sys.executable), 8188, {"theme": "dark"})
             self.assertEqual(app.main(), 0)
-        self.assertEqual(cw.call_args.kwargs["background_color"], app.theme_bg("dark"),
+        self.assertEqual(cw.call_args.kwargs["background_color"], app.theme_bg(app.system_theme()),
+                         "建窗底色照系统深浅那套页面底色，不能是 pywebview 的默认白")
+
+    def test_saved_theme_pins_the_cold_start_window_color(self):
+        # 上一次开机页面回报过的那套配色存在启动配置里（set_theme 落盘）：冷启动建窗就以它开出来，不等页面第一帧
+        window = _fake_window()
+        cw = MagicMock(return_value=window)
+        self.port_busy = True
+        with tempfile.TemporaryDirectory() as tmp, \
+             patch.object(app, "CONFIG_FILE", pathlib.Path(tmp) / "launcher_config.json"), \
+             patch.object(app, "webview", _fake_webview(cw)), \
+             patch.object(app, "singleton", lambda: 7), \
+             patch.object(app, "DesktopServer", _fake_desktop_server()), \
+             patch.object(app, "probe", lambda port, timeout=3.0: True), \
+             patch.object(sys, "argv", ["studio_app.py"]):
+            app.save_config(_COMFY_ROOT, pathlib.Path(sys.executable), 8188, {})
+            cfg = json.loads(app.CONFIG_FILE.read_text(encoding="utf-8"))
+            cfg["theme"] = "light"
+            app.CONFIG_FILE.write_text(json.dumps(cfg), encoding="utf-8")
+            self.assertEqual(app.main(), 0)
+        self.assertEqual(cw.call_args.kwargs["background_color"], app.theme_bg("light"),
                          "存过的配色要压过本机系统深浅")
+        self.assertIn("background:#ffffff", cw.call_args.kwargs["html"],
+                      "启动页停在同一套浅色底色上：浅色开机不能先黑一下")
 
     def test_fullscreen_close_does_not_save_the_screen_rect(self):
         # 全屏时窗口是整屏矩形：存下来下次开机窗口直接铺满屏幕，几何只存窗口态的那份
@@ -1621,7 +1663,7 @@ class MainWindowTests(unittest.TestCase):
              patch.object(sys, "argv", ["studio_app.py"]):
             self.assertEqual(app.main(), 0)
         # 窗口先出启动页，后台拉起 ComfyUI 后停在桌面端这一页：就绪与否由页面快照原地翻面
-        self.assertEqual(cw.call_args.kwargs["html"], app.splash_html())
+        self.assertEqual(cw.call_args.kwargs["html"], app.splash_html(cw.call_args.kwargs["js_api"].theme))
         self.assertEqual(cw.call_args.kwargs["js_api"].page_url, "http://127.0.0.1:8191/neo-studio")
         window.load_url.assert_called_once_with("http://127.0.0.1:8191/neo-studio")
         # 桌面端只读服务与 js_api 共用启动中标记：窗口第一次 /neo_studio/version 就是「启动中」
@@ -1657,7 +1699,7 @@ class MainWindowTests(unittest.TestCase):
         # 先杀进程再挂提示：evaluate_js 要等 UI 线程回消息循环才执行，卡在这里不能拖住带走内核
         window = _fake_window()
         order = []
-        window.evaluate_js = lambda script: order.append("hint") if script is app.CLOSING_JS else None
+        window.evaluate_js = lambda script: order.append("hint") if "正在停止 ComfyUI" in script else None
         cw = MagicMock(return_value=window)
         comfy = SimpleNamespace(pid=1234, terminate=lambda: order.append("kill"), wait=lambda *a, **k: None)
         start = lambda *a, **k: (a[0](), window.events.closing.handlers[0]())
@@ -1687,7 +1729,8 @@ class MainWindowTests(unittest.TestCase):
              patch.object(app, "probe", lambda port, timeout=3.0: True), \
              patch.object(sys, "argv", ["studio_app.py"]):
             self.assertEqual(app.main(), 0)
-        self.assertNotIn(app.CLOSING_JS, [c[0][0] for c in window.evaluate_js.call_args_list])
+        self.assertEqual([s for s in (c[0][0] for c in window.evaluate_js.call_args_list)
+                          if "正在停止 ComfyUI" in s], [], "外部 ComfyUI 不挂停止提示")
 
     def test_closing_handler_defers_teardown_off_the_ui_thread(self):
         # closing 同步跑在 UI 线程：evaluate_js 要等这个线程回消息循环才执行，在处理器里调直接死锁；
@@ -1766,7 +1809,7 @@ class MainWindowTests(unittest.TestCase):
              patch.object(sys, "argv", ["studio_app.py"]):
             self.assertEqual(app.main(), 0)
         # 桌面端服务起不来（端口全被占）就没有离线页可去：窗口停在启动页，不往空地址跳
-        self.assertEqual(cw.call_args.kwargs["html"], app.splash_html())
+        self.assertEqual(cw.call_args.kwargs["html"], app.splash_html(cw.call_args.kwargs["js_api"].theme))
         window.load_url.assert_not_called()
 
     def test_missing_python_opens_the_guide_page(self):
@@ -1782,7 +1825,7 @@ class MainWindowTests(unittest.TestCase):
              patch.object(sys, "argv", ["studio_app.py"]):
             self.assertEqual(app.main(), 0)
         launcher = cw.call_args.kwargs["js_api"].launcher
-        self.assertEqual(cw.call_args.kwargs["html"], app.guide_html(launcher))
+        self.assertEqual(cw.call_args.kwargs["html"], app.guide_html(launcher, cw.call_args.kwargs["js_api"].theme))
         self.assertEqual(launcher["state"], app.ST_NO_PYTHON)
         self.assertEqual(launcher["python"], "")
         spawn.assert_not_called()
@@ -1800,7 +1843,7 @@ class MainWindowTests(unittest.TestCase):
              patch.object(sys, "argv", ["studio_app.py"]):
             self.assertEqual(app.main(), 0)
         launcher = cw.call_args.kwargs["js_api"].launcher
-        self.assertEqual(cw.call_args.kwargs["html"], app.guide_html(launcher))
+        self.assertEqual(cw.call_args.kwargs["html"], app.guide_html(launcher, cw.call_args.kwargs["js_api"].theme))
         self.assertEqual(launcher["state"], app.ST_BAD_ROOT)
         self.assertEqual(launcher["root"], "")
         spawn.assert_not_called()
@@ -1986,6 +2029,18 @@ class LauncherConfigTests(unittest.TestCase):
                 self.assertEqual(app.load_config()["listen"], "127.0.0.1,192.168.0.7")
                 self.assertEqual(app.load_config()["frameless"], False)
                 self.assertEqual(app.load_config()["remote"], "http://192.168.0.20:8188")
+
+    def test_config_roundtrip_keeps_the_saved_theme(self):
+        """深浅是页面回报后 set_theme 落盘的：设置页的「保存并重启」没有这一项，不能把它写没。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(app, "CONFIG_FILE", pathlib.Path(tmp) / "launcher_config.json"):
+                app.save_config(pathlib.Path("D:/ComfyUI"), "D:/python/python.exe", 8188, {})
+                cfg = json.loads(app.CONFIG_FILE.read_text(encoding="utf-8"))
+                cfg["theme"] = "light"
+                app.CONFIG_FILE.write_text(json.dumps(cfg), encoding="utf-8")
+                app.save_config(pathlib.Path("D:/ComfyUI"), "D:/python/python.exe", 8191, {"dev_mode": True})
+                self.assertEqual(app.load_config()["theme"], "light")
+                self.assertEqual(app.load_config()["port"], 8191)
 
     @WINDOWS_ONLY
     def test_set_frameless_keeps_the_rest_of_the_config(self):

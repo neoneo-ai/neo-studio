@@ -1012,31 +1012,30 @@
     flex-wrap: wrap;
 }
 
-/* Tag buttons */
+/* Tag buttons：与素材页归类标签同一枚 chip（gallery.css 的 .neo-gallery-kind-chip）。
+   上一轮给这几枚 chip 单造了一套浅色色阶，素材页早有现成的胶囊 chip —— 跟着它，深浅都只吃 --ns-* 令牌 */
 .rs-tag-btn {
-    padding: 4px 8px;
-    font-size: 10px;
-    border: 2px solid var(--ns-field-bd, #444);
-    background: var(--ns-p-bg-1a1a1a, #1a1a1a);
-    color: var(--ns-p-fg-666666, #666);
-    border-radius: 6px;
+    padding: 3px 10px;
+    font-size: 11px;
+    border: 1px solid var(--ns-fill-7a, rgba(255, 255, 255, 0.2));
+    background: transparent;
+    color: var(--ns-fg-soft, #ccc);
+    border-radius: 12px;
     cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
 .rs-tag-btn:hover {
-    border-color: var(--ns-blue-3, #5090cc);
-    background: var(--ns-p-bg-333333, #333);
-    color: var(--ns-fg-soft, #ccc);
+    border-color: var(--ns-orange, #ff6a00);
+    color: var(--ns-fg-strong, #fff);
 }
 
 .rs-tag-btn.rs-tag-selected {
-    background: var(--ns-p-bg-5090cc, #5090cc);
-    color: var(--ns-fg-strong, #fff) !important;
-    border-color: var(--ns-blue-3, #5090cc);
-    font-weight: 600;
+    background: var(--ns-orange, #ff6a00);
+    border-color: var(--ns-orange, #ff6a00);
+    color: var(--ns-fg-strong, #fff);
 }
-
-.rs-tag-btn.rs-tag-selected:hover { background: var(--ns-p-bg-60a0dc, #60a0dc); }
 
 /* AI Status */
 .rs-ai-status {

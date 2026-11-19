@@ -13,8 +13,9 @@ pinned to the bottom of the page.
 1. **Title row and filter row**: the title row carries the page name, the entry count and reload; the filter
    row carries the search box (matches the full scan name, directory segment included, plus tags), the image/video pool filter
    (`All / Image / Video`; the pool comes from the scan name's first segment, the same rule the prompt picker
-   uses) and the origin filter (`All origins / Presets / Custom`). Sorting is fixed to "newest first", using the
-   file time each list entry carries.
+   uses) and the origin filter (`All origins / Presets / Custom`) — both chip groups follow the asset library's
+   type-chip style: a transparent pill with a light border, 11px text, the accent-orange border on hover and a solid
+   accent-orange fill when selected. Sorting is fixed to "newest first", using the file time each list entry carries.
 2. **Card**: the image band takes one picture in the order "cloud image media → cover sidecar → cloud directory
    cover" — the media and the directory cover both come from `cloudDirCoverUrl` (the thumbnail proxy), the sidecar
    from `promptCoverUrl(name, v)` where `v` is exactly its mtime on the entry, and every `<img>` is `loading="lazy"`;

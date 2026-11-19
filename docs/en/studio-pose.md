@@ -324,7 +324,9 @@ panel's character dropdown has no import control, so there is nothing for a host
 The desktop top bar's Pose tab and the home card "3D Pose" open `#/pose`; the host module is
 `studio/web/pose/pose.js`. The canvas fills the whole page and the controls are two transparent
 toolbars floating over it: Pose Library / Character & Look / Props on the left, Save Pose / Export
-Image Set / Canvas State on the right. Pose Library and Props open a full-window modal (the asset
+Image Set / Canvas State on the right. In the light theme the canvas carries the page background until the pose pack
+paints its first frame, so no black plate sits on the page, and the separator between the filter groups of the pose
+library modal goes dark on the light panel. Pose Library and Props open a full-window modal (the asset
 library's shell), the other four open a small popup; neither takes width from the canvas, only one
 popup is open at a time, and the same toolbar button closes what it opened: a popup closes on Esc, on a
 click off it or on the same button, a modal on Esc, the backdrop, the title-bar ✕ or the same button -

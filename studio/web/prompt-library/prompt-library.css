@@ -45,22 +45,27 @@
 }
 .ns-pl-search:focus { outline: none; border-color: var(--ns-primary); }
 
-.ns-pl-chips { display: flex; gap: 4px; }
+.ns-pl-chips { display: flex; flex-wrap: wrap; gap: 4px; }
 
+/* 筛选 chip 与素材库类型 chip（.neo-gallery-kind-chip）同一份规格：透底胶囊 + 浅描边、
+   11px 字、hover 描边走强调橙、选中整颗填强调橙 */
 .ns-pl-chip {
-    padding: 5px 10px;
-    background: var(--ns-field);
-    border: 1px solid var(--ns-field-bd);
-    border-radius: 999px;
+    padding: 3px 10px;
+    background: transparent;
+    border: 1px solid var(--ns-fill-7a);
+    border-radius: 12px;
     color: var(--ns-dim);
-    font-size: 12px;
+    font-size: 11px;
+    line-height: 1.4;
+    white-space: nowrap;
     cursor: pointer;
+    transition: background .15s, color .15s, border-color .15s;
 }
-.ns-pl-chip:hover { background: var(--ns-field-hover); }
+.ns-pl-chip:hover { border-color: var(--ns-orange); color: var(--ns-fg); }
 .ns-pl-chip.is-on {
-    background: var(--ns-primary-soft);
-    border-color: var(--ns-primary);
-    color: var(--ns-primary-fg);
+    background: var(--ns-orange);
+    border-color: var(--ns-orange);
+    color: var(--ns-fg);
 }
 
 .ns-pl-count { color: var(--ns-dim); font-size: 12px; }

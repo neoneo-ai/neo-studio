@@ -61,6 +61,9 @@
     background: #000;
 }
 
+/* 浅色外壳里画布底色跟页面走：iframe 挂上到姿势包画出第一帧之间，这里不留一整块黑底 */
+html[data-neo-theme="light"] .ns-pose-frame { background: var(--ns-bg); }
+
 .ns-pose-hint,
 .ns-pose-empty {
     position: absolute;
@@ -312,6 +315,8 @@
 .ns-pose-lib-chipgroup[hidden] { display: none; }
 /* 组间那一条竖线只做视觉分组，不是一档筛选；藏掉的组（云端的来源行）连它一起不占位 */
 .ns-pose-lib-sep { width: 1px; align-self: stretch; background: rgba(255, 255, 255, .12); }
+/* 浅色弹窗里这条竖线落在浅底上：白描边等于画不出分组 */
+html[data-neo-theme="light"] .ns-pose-lib-sep { background: rgba(0, 0, 0, .12); }
 .ns-pose-prop-chips { row-gap: 6px; }
 
 /* 道具弹窗（外壳是 js/core/lib-modal.js）：名字行、分类 chip 行、数量行、一页卡片、页码条、动作行、场上道具清单。

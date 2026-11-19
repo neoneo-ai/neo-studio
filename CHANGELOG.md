@@ -411,6 +411,32 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   recipes and existing 配方 assets are untouched.
 
 ### Fixed
+- **Prompt-library tag chips are the material page's chip, and readable in 浅色.** The 提示词库 filter row's chips
+  (`全部 / 图像 / 视频`, `全部来源 / 预设 / 自定义`) carried the input-field box and a blue selected state, so in 浅色
+  the three states read as one pale blue pill and the label washed out. They now take the 素材页 归类标签 chip
+  (`gallery.css` `.neo-gallery-kind-chip`) — transparent pill, soft border, 11px label, the accent-orange border on
+  hover and the accent-orange fill when selected — all four states from `--ns-fill-7a` / `--ns-dim` / `--ns-orange` /
+  `--ns-fg`, and the enhance page's tag chips (`prompts.css` `.rs-tag-btn`) take the same set, so the two pages and the
+  素材页 stay in step.
+- **The 姿势 page has no black block in 浅色.** The canvas element kept a hard black backdrop, so opening 姿势 in a
+  light window showed a black plate until the 姿势包 painted its first frame; it now carries the page background under
+  `data-neo-theme="light"`. The separator between the filter groups of the 姿势库 modal was a white hairline on the
+  light panel, where it draws nothing — under the light theme it goes dark.
+- **Light-themed desktop launch opens white, and the taskbar icon has no dark plate.** The desktop's own pages —
+  the cold-start splash (`splash_html`), the first-time guide (`guide_html` / `remote_guide_html`) and the
+  「正在停止 ComfyUI」 overlay (`closing_js`) — read the window's scheme through `PAGE_THEME` / `page_theme(theme)`:
+  a window saved light opens light, so the first frame is no longer a dark page flashing to the light canvas, and
+  closing a light window no longer paints the whole window dark. The scheme persisted by `set_theme` now reaches
+  cold start — it was written to `launcher_config.json` but never read back, and 「保存并重启」 dropped it —
+  so `launcher["theme"]` carries it and `save_config` keeps it. `tools/make_studio_icon.py` writes the shipped
+  `studio/web/neo-studio.ico` — the path `Neo-Studio.spec` and `STUDIO_ICON` read; the generator used to write a
+  root-level `web/` path nothing consumed — with a transparent plate, transparent clapper stripes and a punched
+  play triangle, so the icon reads on a light taskbar instead of a dark square.
+- **Prompt-library tag chips are the material page's chip, and readable in 浅色.** The 提示词库 row's tag chips carried
+  their own flat ramp, so in 浅色 the base, hover and selected states were indistinguishable and the label read 2.87:1
+  on white. They now take the 素材页 归类标签 chip (`gallery.css` `.neo-gallery-kind-chip`) — transparent pill, soft
+  border, 素材页 accent filling the selected state — so all three states come from `--ns-fill-7a` / `--ns-fg-soft` /
+  `--ns-orange` / `--ns-fg-strong`, which the dark and light blocks both define, and the two pages stay in step.
 - **Inputs turn really white in 浅色; the 绘画 / 视频 app pages stop rendering as a grey sheet.** The auto-generated
   light tokens washed dark backgrounds to mid grey (`rgb(187, 187, 187)`) and dark text to near white (white on white),
   so the whole `--ns-background-*` and `--ns-color-*` families read dark in 浅色. The light block regenerates those values

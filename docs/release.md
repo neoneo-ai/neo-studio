@@ -76,7 +76,9 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File tools/install_plugin.ps1 -ComfyUI 
 `custom_nodes`（只覆盖同名文件，不删目标目录里的东西）；exe 只在内置副本版本更新时才替换插件目录，
 git 检出的那份不碰。
 
-窗口与任务栏图标是拍板造型的 `web/neo-studio.ico`（`tools/make_studio_icon.py` 生成），启动器打包时带同款图标。
+窗口与任务栏图标是拍板造型的 `web/neo-studio.ico`（`tools/make_studio_icon.py` 生成，写的就是 `studio/web/` 那一份，
+`STUDIO_ICON` 与 `Neo-Studio.spec` 都读它），底板透明、拍板斜纹与板身上的播放三角挖空 —— 实心深色底板在浅色任务栏上
+就是一块黑方块。启动器打包时带同款图标。
 
 ### Release 工作流
 
