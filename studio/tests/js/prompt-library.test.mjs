@@ -7,9 +7,9 @@ import { resetEnv, mockRoute, clearRoutes, jsonResponse, fetchLog, click, flush,
 import { $el } from "../../web/studio/shim/ui.js";
 
 const { createPromptLibraryView, filterPromptCards, cardBadges, pageWindow, agoText, coverSearchTerm,
-        COVER_SEARCH_CHARS, PAGE_SIZE } =
+        cloudPreviewMedia, cardCoverSrc, COVER_SEARCH_CHARS, PAGE_SIZE } =
     await import("../../web/prompt-library/prompt-library.js");
-const { promptCoverUrl } = await import("../../web/prompt-service.js");
+const { promptCoverUrl, cloudPreviewUrl, cloudDirCoverUrl } = await import("../../web/prompt-service.js");
 
 beforeEach(() => clearRoutes());
 
@@ -97,6 +97,129 @@ test("卡片网格：有封面落 <img>（带 v= 换缓存），没封面不铺�
     assert.deepEqual([...env.card("红杯").querySelectorAll(".ns-pl-tag")].map((e) => e.textContent),
         ["产品", "白底"], "标签排成 chip，最长三条");
     assert.equal(env.host.querySelector(".ns-pl-count").textContent, "3 条");
+});
+
+test("卡片封面取不到：先换一个缓存键重取，第二次仍失败才收掉这一档", async () => {
+    resetEnv();
+    mockPromptRoutes();
+    const env = await mounted();
+    const cover = env.card("红杯").querySelector(".ns-pl-cover");
+    const first = cover.getAttribute("src");
+    cover.dispatchEvent(new Event("error"));
+    const retry = env.card("红杯").querySelector(".ns-pl-cover").getAttribute("src");
+    assert.equal(retry.startsWith(`${first}&r=`), true, "失败那一次就换查询参数，逼浏览器重新取图");
+    env.card("红杯").querySelector(".ns-pl-cover").dispatchEvent(new Event("error"));
+    assert.equal(env.card("红杯").querySelector(".ns-pl-cover"), null, "重取也失败就收掉封面那一档");
+    assert.equal(env.card("红杯").querySelector(".ns-pl-media"), null, "图位一起收掉，卡片不留 150px 空档");
+    assert.ok(env.card("红杯").querySelector(".ns-pl-name"), "卡片留下名字与摘要");
+});
+
+/** 云端目录里那两条预设：一条带预览键，一条是发布预览之前的旧索引条目 */
+const CLOUD_ITEMS = [
+    { name: "video/prompts.chat/01_Remotion", source: "presets", tags: [], _mtime: 500, cover: 333,
+        media: { filename: "01_Remotion.mp4", subfolder: "Cloud Presets/prompts.chat", type: "video", preview: true } },
+    { name: "video/prompts.chat/02_Legacy", source: "presets", tags: [], _mtime: 400, cover: 444,
+        media: { filename: "02_Legacy.mp4", subfolder: "Cloud Presets/prompts.chat", type: "video", preview: false } },
+];
+
+/** 随包预设池根层那一条：扫描名就是池名，正文旁边没有封面 sidecar，条目带云端目录那张封面 */
+const DIR_COVER_ITEM = {
+    name: "仙侠玄幻人物", source: "presets", tags: [], _mtime: 600,
+    dir_cover: { filename: "01_仙侠.mp4", subfolder: "Cloud Presets/仙侠玄幻人物" },
+};
+
+test("预览判定：视频池 + 带预览的云端媒体 + 有封面，缺一就落封面图", () => {
+    const media = CLOUD_ITEMS[0].media;
+    assert.deepEqual(cloudPreviewMedia(CLOUD_ITEMS[0]), media, "三条都齐就交那一条媒体");
+    assert.equal(cloudPreviewMedia(CLOUD_ITEMS[1]), null, "索引条目没有预览键就不铺");
+    assert.equal(cloudPreviewMedia({ ...CLOUD_ITEMS[0], media: { ...media, type: "image" } }), null,
+        "云端那条是图就不播");
+    assert.equal(cloudPreviewMedia({ ...CLOUD_ITEMS[0], name: "prompts.chat/01_Remotion" }), null,
+        "图像池的条目不铺视频预览");
+    assert.equal(cloudPreviewMedia({ ...CLOUD_ITEMS[0], cover: undefined }), null,
+        "没有封面就没有 poster，落回文字卡");
+    assert.equal(cloudPreviewMedia({ name: "video/自存的一条", source: "custom", _mtime: 1, cover: 1 }), null,
+        "没配上云端媒体的条目不铺预览");
+});
+
+test("预览地址：素材库那条媒体路由带 preview=1 那一发", () => {
+    const url = cloudPreviewUrl(CLOUD_ITEMS[0].media);
+    assert.match(url, /\/neo_gallery\/video\?/);
+    assert.match(url, /filename=01_Remotion\.mp4/);
+    assert.match(url, /subfolder=Cloud%20Presets%2Fprompts\.chat/);
+    assert.match(url, /preview=1$/);
+});
+
+test("卡片预览位：<video> 只带 poster 与待挂的 src，进视野那一发才要文件", async () => {
+    resetEnv();
+    mockPromptRoutes();
+    mockRoute("/rs_prompts/list_prompts", () => jsonResponse(CLOUD_ITEMS));
+    const env = await mounted();
+    const cardEl = env.card("video/prompts.chat/01_Remotion");
+    const video = cardEl.querySelector(".ns-pl-preview");
+    assert.ok(video, "配上云端预览的卡片铺视频预览位");
+    assert.equal(video.tagName, "VIDEO");
+    assert.equal(video.muted, true, "预览是静音的：原片的声音留给素材页的灯箱");
+    assert.equal(video.loop, true);
+    assert.equal(video.playsInline, true);
+    assert.equal(video.getAttribute("preload"), "none", "卡片一进来不发媒体");
+    assert.match(video.getAttribute("poster"), /name=video%2Fprompts\.chat%2F01_Remotion&v=333$/,
+        "poster 用那张封面 sidecar");
+    assert.equal(video.getAttribute("src"), null, "src 由视野观察者挂，建卡时不发请求");
+    assert.match(video.dataset.src, /preview=1$/, "待挂的地址就是预览那一发");
+    const legacy = env.card("video/prompts.chat/02_Legacy");
+    assert.equal(legacy.querySelector(".ns-pl-preview"), null, "旧索引条目没有预览就落封面图");
+    assert.ok(legacy.querySelector("img.ns-pl-cover"));
+});
+
+/** 导入的提示词：正文配置上云端那张真图，旁边那张 sidecar 是排版占位 */
+const IMAGE_MEDIA_ITEM = {
+    name: "prompts.chat/American Comic", source: "presets", tags: [], _mtime: 700, cover: 777,
+    media: { filename: "03_AmericanComic.jpg", subfolder: "Cloud Presets/prompts.chat", type: "image", preview: false },
+};
+
+test("卡片图来源：封面 sidecar 优先，随包预设那条拿云端目录封面补图，两样都没有是文字卡", () => {
+    assert.match(cardCoverSrc(ITEMS[0]), /\/rs_prompts\/prompt_cover\?name=%E7%BA%A2%E6%9D%AF&v=111$/);
+    assert.match(cardCoverSrc(DIR_COVER_ITEM), /\/neo_gallery\/thumbnail\?/,
+        "没有 sidecar 封面的预设条目用目录封面那一发");
+    assert.equal(cardCoverSrc(ITEMS[1]), null, "没有封面也没有目录封面的条目不铺图位");
+    assert.match(cardCoverSrc(IMAGE_MEDIA_ITEM), /\/neo_gallery\/thumbnail\?filename=03_AmericanComic\.jpg/,
+        "配上云端真图的条目铺那张图，本机那张排版占位 sidecar 让位");
+});
+
+test("卡片铺云端真图：图像媒体走缩略图代理，不建预览位", async () => {
+    resetEnv();
+    mockPromptRoutes();
+    mockRoute("/rs_prompts/list_prompts", () => jsonResponse([...ITEMS, IMAGE_MEDIA_ITEM]));
+    const env = await mounted();
+    const cardEl = env.card("prompts.chat/American Comic");
+    const img = cardEl.querySelector("img.ns-pl-cover");
+    assert.ok(img, "图像媒体的条目铺 <img>");
+    assert.match(img.getAttribute("src"), /\/neo_gallery\/thumbnail\?/);
+    assert.match(img.getAttribute("src"), /subfolder=Cloud\+?Presets%2Fprompts\.chat/);
+    assert.equal(img.getAttribute("loading"), "lazy");
+    assert.equal(cardEl.querySelector(".ns-pl-preview"), null, "图不建视频位");
+});
+
+test("目录封面地址：素材库缩略图代理带目录 subfolder 与 512 那一档尺寸", () => {
+    const url = cloudDirCoverUrl(DIR_COVER_ITEM.dir_cover);
+    assert.match(url, /\/neo_gallery\/thumbnail\?/);
+    assert.match(url, /filename=01_%E4%BB%99%E4%BE%A0\.mp4/);
+    assert.match(url, /subfolder=Cloud\+?Presets%2F%E4%BB%99%E4%BE%A0%E7%8E%84%E5%B9%BB%E4%BA%BA%E7%89%A9/);
+    assert.match(url, /size=512$/);
+});
+
+test("卡片铺目录封面：随包预设没有 sidecar 的那一条补上那张图，有 sidecar 的卡片不变", async () => {
+    resetEnv();
+    mockPromptRoutes();
+    mockRoute("/rs_prompts/list_prompts", () => jsonResponse([...ITEMS, DIR_COVER_ITEM]));
+    const env = await mounted();
+    const dirCover = env.card("仙侠玄幻人物").querySelector(".ns-pl-cover");
+    assert.ok(dirCover, "带 dir_cover 的卡片铺云端目录封面");
+    assert.match(dirCover.getAttribute("src"), /\/neo_gallery\/thumbnail\?/);
+    assert.equal(dirCover.getAttribute("loading"), "lazy", "目录封面同样按视野逐张取");
+    assert.match(env.card("红杯").querySelector(".ns-pl-cover").getAttribute("src"),
+        /name=%E7%BA%A2%E6%9D%AF&v=111$/, "sidecar 封面优先，卡片地址不变");
 });
 
 test("填入对应页：读那条全文再交装配层那条现成链（绘画页 / 视频页）", async () => {

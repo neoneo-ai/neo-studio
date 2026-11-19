@@ -12,7 +12,7 @@
  */
 import { t, tf } from "../js/core/i18n.js";
 import { icon } from "../js/core/icons.js";
-import { listPrompts, listPromptPreviews, loadPrompt, deletePrompt, promptCoverUrl, setPromptCover } from "../prompt-service.js";
+import { listPrompts, listPromptPreviews, loadPrompt, deletePrompt, promptCoverUrl, setPromptCover, cloudPreviewUrl, cloudDirCoverUrl } from "../prompt-service.js";
 import { isVideoPromptName, promptDisplayName } from "../js/core/preset-picker.js";
 
 const CSS_MARK = "data-neo-prompt-library";
@@ -42,6 +42,29 @@ const SOURCE_LABELS = { all: "全部来源", presets: "预设", custom: "自定�
 
 /** 这一条属于哪一池：扫描名首段是 video 落视频池，其余落图像池 */
 const poolOf = (name) => (isVideoPromptName(name) ? "video" : "image");
+
+/**
+ * 卡片要自动播的那一发预览：视频池的条目、云端那条带预览的媒体、有封面当 poster，缺一就不铺预览。
+ * 预览是发布时 --preview 压的 480p 静音片；没配上对的条目这一位就是封面图。
+ */
+export function cloudPreviewMedia(item) {
+    const media = item?.media;
+    if (!media?.filename || media.type !== "video" || !media.preview) return null;
+    if (poolOf(String(item?.name || "")) !== "video") return null;
+    return item.cover ? media : null;
+}
+
+/**
+ * 卡片那张图的地址：云端那条媒体是这条提示词真正的产物，图像媒体直接铺那张图（缩略图代理 512px）；
+ * 没有媒体才看正文旁边的封面 sidecar，随包预设没有 sidecar 时再拿云端目录那张封面补一张
+ * （条目带的 dir_cover，见 _attach_cloud_dir_covers）；一样都没有就不铺图位。
+ */
+export function cardCoverSrc(item) {
+    const media = item?.media;
+    if (media?.filename && media.type === "image") return cloudDirCoverUrl(media);
+    if (item?.cover) return promptCoverUrl(String(item.name), item.cover);
+    return item?.dir_cover?.filename ? cloudDirCoverUrl(item.dir_cover) : null;
+}
 
 /**
  * 筛出要铺的那一叠：搜索吃显示名与标签，池子与来源各筛一发，最新的排前面（条目带的 _mtime）。
@@ -118,6 +141,17 @@ export function createPromptLibraryView({ $el, toast, can, gateRun, openMaterial
         const grid = $el("div", { className: "ns-pl-grid" });
         const pager = $el("div", { className: "ns-pl-pager" });
         const countEl = $el("span", { className: "ns-pl-count" });
+        // 卡片预览进视野才挂 src：一屏十几条视频，同时挂着就是十几路解码一起抢这一发带宽
+        const previewObserver = typeof IntersectionObserver === "function"
+            ? new IntersectionObserver((rows) => {
+                for (const row of rows) {
+                    if (row.isIntersecting) {
+                        if (!row.target.src) row.target.src = row.target.dataset.src;
+                        row.target.play()?.catch(() => { });
+                    } else row.target.pause?.();
+                }
+            }, { root: grid, threshold: 0.4 })
+            : null;
         const search = $el("input", {
             className: "ns-pl-search", type: "text", placeholder: t("搜索提示词与标签…"),
             oninput: (e) => { query = e.target.value; page = 0; render(); },
@@ -218,10 +252,15 @@ export function createPromptLibraryView({ $el, toast, can, gateRun, openMaterial
             const shown = promptDisplayName(name);
             const writable = it.source !== "presets";
             const kids = [];
-            // 封面那一档只在条目带 cover 时铺：512px 长边的 sidecar 直接进 <img>，浏览器只做等比裁切
-            if (it.cover) {
+            // 封面那一档只在有条目可铺时铺：512px 长边的 sidecar 直接进 <img>，浏览器只做等比裁切
+            // 视频池里配上对云端媒体的那一条换 480p 预览自动播，poster 仍是这张封面
+            const preview = cloudPreviewMedia(it);
+            const coverSrc = cardCoverSrc(it);
+            if (coverSrc) {
                 kids.push($el("div", { className: "ns-pl-media" }, [
-                    $el("img", { className: "ns-pl-cover", loading: "lazy", alt: "", src: promptCoverUrl(name, it.cover) }),
+                    preview
+                        ? previewVideo(it, preview, coverSrc)
+                        : coverImage(coverSrc),
                 ]));
             }
             kids.push($el("div", { className: "ns-pl-head" }, [
@@ -250,6 +289,39 @@ export function createPromptLibraryView({ $el, toast, can, gateRun, openMaterial
             return $el("div", { className: "ns-pl-card", dataset: { name } }, kids);
         }
 
+        /** 封面取不到就换一个缓存键重取一次：`v=` 是封面 mtime，长周期缓存把 ComfyUI 重启窗口里
+         *  那次失败的响应钉在原 URL 上，浏览器不再发请求，卡片便一直空着。查询参数一变就是新的
+         *  缓存键，浏览器必须重新取图。第二次仍失败连图位一起收掉——只摘 <img> 的话，
+         *  `.ns-pl-media` 那 150px 的 raised 底色就是一段谁都不认得的空档。 */
+        function coverImage(src) {
+            const img = $el("img", { className: "ns-pl-cover", loading: "lazy", alt: "", src });
+            img.onerror = () => {
+                if (img.dataset.probed) { (img.parentElement || img).remove(); return; }
+                img.dataset.probed = "1";
+                img.setAttribute("src", `${src}${src.includes("?") ? "&" : "?"}r=${Date.now()}`);
+            };
+            return img;
+        }
+
+        /** 预览位：<video> 先只带 poster，src 由视野观察者挂上；要少动效的用户就停在封面上 */
+        function previewVideo(it, media, poster) {
+            const video = $el("video", {
+                className: "ns-pl-preview",
+                poster,
+                preload: "none",
+                autoplay: true,
+            });
+            video.muted = true;
+            video.loop = true;
+            video.playsInline = true;
+            video.setAttribute("playsinline", "");
+            if (typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches)
+                return video;
+            video.dataset.src = cloudPreviewUrl(media);
+            previewObserver?.observe(video);
+            return video;
+        }
+
         /** 摘要按页取：只发这一页缺的那几个名字，回填只落在还挂在网格上的那张卡 */
         async function fillPreviews(rows) {
             const stamps = new Map();
@@ -275,6 +347,7 @@ export function createPromptLibraryView({ $el, toast, can, gateRun, openMaterial
         }
 
         function render() {
+            previewObserver?.disconnect();   // 重画即换卡：旧卡上的观察者不留
             const rows = filterPromptCards(items, {
                 query, pool: poolChips.value, source: sourceChips.value,
             });

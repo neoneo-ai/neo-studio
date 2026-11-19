@@ -177,6 +177,10 @@ python tools/gallery_preprocess.py --presets <presets_dir> --output <output_dir>
 # --presets 可省略：默认使用当前工作目录（把新增/更新的目录放在该目录下即可）
 cd <dir_with_new_dirs> && python tools/gallery_preprocess.py --output <output_dir> --dirs dir1 dir2
 
+# 卡片预览：--preview 与 --dirs 同用，给每条视频压一版 480p 静音 mp4 落 previews/<dir>/，
+# 目录索引条目带 "preview" 键（提示词库卡片自动播这一发）；ffmpeg 缺席时只跳过预览
+python tools/gallery_preprocess.py --output <output_dir> --dirs dir1 --preview
+
 # 分批发布：--draft 只写目录索引 <dir>/index.json，主索引不动，素材库还看不到；
 # --publish 把已写好的目录索引挂进主索引（不重扫素材）。
 python tools/gallery_preprocess.py --output <output_dir> --dirs dir1 dir2 --draft

@@ -222,6 +222,10 @@ python tools/gallery_preprocess.py --presets <presets_dir> --output <output_dir>
 # updated directories under it)
 cd <dir_with_new_dirs> && python tools/gallery_preprocess.py --output <output_dir> --dirs dir1 dir2
 
+# Card previews: --preview with --dirs transcodes a 480p muted mp4 per video into previews/<dir>/ and
+# writes the item's "preview" key (the prompt-library card autoplays it); missing ffmpeg skips previews only
+python tools/gallery_preprocess.py --output <output_dir> --dirs dir1 --preview
+
 # Staged release: --draft writes only the directory index <dir>/index.json and leaves the master index
 # untouched, so the asset page does not show it yet; --publish mounts already written directory indexes
 # into the master index without rescanning media.

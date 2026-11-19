@@ -243,6 +243,10 @@ embedded ComfyUI workflow).
   (`POST /neo_gallery/sync_oss`): directories published in the cloud show up on the home page and in this table at
   once, without waiting for the local index cache to expire; the success toast reports the directory and item counts,
   a failure reports the backend reason.
+- **Index cache age comes from the cache file** - once the local index cache is older than `sync_interval_hours`
+  (24 h by default), the next cloud preset request re-downloads it, so the first browse after a restart shows
+  directories published in the cloud with no manual refresh; the age is measured from the cache file's own time, so a
+  restart never treats a stale index as just fetched and pushes the refresh window back.
 - **⚙ on the Lora / Civitai bookmark rows** - the Civitai settings area (API KEY / proxy / sync directory
   picker) is hidden by default; clicking ⚙ on those rows expands it on the **right side** of the dialog, and
   clicking again collapses it; on the bookmark row, expanding focuses the API KEY box.
@@ -257,7 +261,9 @@ embedded ComfyUI workflow).
   - Each level's cards use that level's own first two media as the cover (image > video > audio priority).
   - Inside, a read-only **Cloud Presets** entry lists the preset directories from the cloud index; preset files are
     cached in `gallery/oss_cache/` and never written into these roots (a leftover `presets/` cache directory stays
-    undeletable, like Cloud Presets).
+    undeletable, like Cloud Presets). The card-preview request (`/neo_gallery/video?...&preview=1`) fills
+    `gallery/oss_cache/previews/<dir>/` on its own, kept apart from the originals; the same route without `preview`
+    serves the original.
 - **Recently updated first** - inside the three directories the plugin writes itself (generated `Output`, the
   `StoryBoard` / `CharacterSheet` roots), every level's subdirectory cards put the newest write first, and covers take
   the newest two within the same type (image > video > audio priority); other directories keep their original

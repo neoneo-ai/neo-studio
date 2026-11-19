@@ -392,6 +392,7 @@ from .gallery_oss import (
     _collect_oss_covers,
     _handle_oss_gallery_list,
     _find_in_oss_index,
+    _find_preview_in_oss_index,
     _find_thumbnail_in_oss_index,
     _download_oss_file,
     _oss_dir_cards,
@@ -2698,6 +2699,10 @@ async def view_video(request):
 
     source_path = await asyncio.to_thread(_find_source_media, filename, subfolder)
     if not source_path:
+        # preview=1 是要卡片预览那一发（480p 静音片），原片留给素材页的灯箱
+        preview = request.rel_url.query.get("preview", "") in ("1", "true")
+        source_path = await _oss_media_from_cache(filename, subfolder, preview)
+    if not source_path:
         return web.Response(status=404)
 
     if source_path.suffix.lower() not in VIDEO_EXTENSIONS:
@@ -2720,12 +2725,37 @@ async def view_audio(request):
 
     source_path = await asyncio.to_thread(_find_source_media, filename, subfolder)
     if not source_path:
+        source_path = await _oss_media_from_cache(filename, subfolder)
+    if not source_path:
         return web.Response(status=404)
 
     if source_path.suffix.lower() not in AUDIO_EXTENSIONS:
         return web.Response(status=400)
 
     return await asyncio.to_thread(_media_file_response, source_path)
+
+
+async def _oss_media_from_cache(filename: str, subfolder: str, preview: bool = False) -> Path | None:
+    """云端预设的媒体：目录索引命中后按 oss_cache 里的下载件交给媒体路由。
+
+    图片路由自带这套解析（它还要解 base dir），视频与音频只有这条共用路径。
+    filename 是路由原样取出的查询值，索引里是未编码名，所以编码过的名字要再试一次。
+    preview=True 取的是发布时 --preview 压的那一发 480p 静音片，键挂在同一目录条目上，
+    落 oss_cache/previews/，与原片互不占用。"""
+    oss_subdir = _oss_dir_from_subfolder(subfolder)
+    if not (oss_subdir and _is_oss_enabled()):
+        return None
+    if preview:
+        oss_rel = await _find_preview_in_oss_index(filename, oss_subdir)
+    else:
+        oss_rel = await _find_in_oss_index(filename, oss_subdir)
+        if not oss_rel:
+            from urllib.parse import unquote as _uq
+            oss_rel = await _find_in_oss_index(_uq(filename), oss_subdir)
+    if not oss_rel:
+        return None
+    cached = await _download_oss_file(oss_rel)
+    return cached if (cached and cached.exists()) else None
 
 
 def _get_waveform_path(filename: str, subfolder: str) -> Path | None:

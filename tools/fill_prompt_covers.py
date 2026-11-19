@@ -222,46 +222,6 @@ def first_frame(video: Path, out: Path, max_side: int, ffmpeg_path: str) -> bool
     return False
 
 
-def write_cover(media: Path, target: Path, max_side: int, ffmpeg_path: str | None) -> bool:
-    """按封面口径写 sidecar：图缩到 max_side 长边，视频先取首帧；先写临时文件再换名。
-
-    透明图铺白底再落 JPEG（与出图写封面那一路同一份口径），失败清掉临时文件回 False。
-    """
-    from PIL import Image
-
-    target.parent.mkdir(parents=True, exist_ok=True)
-    tmp = target.with_name(target.stem + ".tmp.jpg")
-    source = media
-    cleanup = False
-    if media.suffix.lower() in util_video_suffixes():
-        if not ffmpeg_path:
-            return False
-        cleanup = True
-        source = target.with_name(target.stem + ".tmp_frame.png")
-        if not first_frame(media, source, max_side, ffmpeg_path):
-            source.unlink(missing_ok=True)
-            return False
-    try:
-        with Image.open(source) as img:
-            img.load()
-            if img.mode in ("RGBA", "LA", "P"):
-                base = Image.new("RGB", img.size, (255, 255, 255))
-                base.paste(img.convert("RGBA"), mask=img.convert("RGBA").split()[-1])
-                img = base
-            elif img.mode != "RGB":
-                img = img.convert("RGB")
-            img.thumbnail((max_side, max_side), Image.LANCZOS)
-            img.save(tmp, format="JPEG", quality=85, optimize=True)
-        tmp.replace(target)
-        return True
-    except Exception:
-        tmp.unlink(missing_ok=True)
-        return False
-    finally:
-        if cleanup:
-            source.unlink(missing_ok=True)
-
-
 def write_cover(media: Path, target: Path, max_side: int, ffmpeg_path: str | None,
                 video_exts: set) -> bool:
     """按封面口径写 sidecar：图缩到 max_side 长边，视频先取首帧；先写临时文件再换名。

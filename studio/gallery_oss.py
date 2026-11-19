@@ -37,6 +37,9 @@ _oss_index_fetch_time: float = 0.0
 # directories hold (GenerateCharacterSheet output); the bare word "character" is already taken by
 # the archive category, so reusing it in the same index.json reads as two different things.
 OSS_TAG_CHARACTER_SHEET = "character-sheet"
+# 目录索引条目里 txt_content 的长度上限：tools/gallery_preprocess.py 的 parse_txt_preview 存旁车前 500 字，
+# 首行更长的条在索引里是截断的，提示词配对对这种条按前缀比（见 oss_prompt_media_map）。
+OSS_DIR_PREVIEW_CHARS = 500
 # 云端预设卡的导航前缀（卡片路径、封面 key、首页 token 共用）。
 OSS_NAV_PREFIX = "Cloud Presets"
 
@@ -197,10 +200,11 @@ def _load_oss_index_from_disk() -> dict | None:
     cache_file = _get_oss_cache_dir() / "_index.json"
     if cache_file.exists():
         try:
-            import time as _time
             with open(cache_file, "r", encoding="utf-8") as f:
                 _oss_index_cache = json.load(f)
-            _oss_index_fetch_time = _time.time()
+            # 年龄取缓存文件自己的时间：盖成"现在"会让每次启动都把旧索引当成刚拉过，
+            # sync_interval_hours 的窗口被重启一路重置，新发布的卡在窗口里永远不出现。
+            _oss_index_fetch_time = cache_file.stat().st_mtime
             return _oss_index_cache
         except Exception:
             pass
@@ -319,6 +323,111 @@ async def _find_in_oss_index(filename: str, subdir: str) -> str | None:
             if item.get("filename") == filename:
                 return f"{dir_name}/{filename}"
     return None
+
+
+async def _find_preview_in_oss_index(filename: str, subdir: str) -> str | None:
+    """云端目录里那条媒体的卡片预览键（previews/<目录>/<名>.mp4）；这条没有预览给 None。
+
+    预览是发布时 `--preview` 压的 480p 静音片，键存在目录索引条目上，旧索引没有这一位。"""
+    index = _oss_index_cache or _load_oss_index_from_disk()
+    if not index:
+        return None
+
+    target = _oss_match_dir(_oss_index_dirs(index), subdir)
+    if target is None:
+        return None
+    for item in await _fetch_oss_dir_index(index, target):
+        if item.get("filename") == filename:
+            rel = str(item.get("preview", "")).strip("/")
+            return rel or None
+    return None
+
+
+def _oss_body_text(txt_content) -> str:
+    """目录索引那条预览里的正文：旁车写成 `标题：X` + `提示词：<正文>`，取后者；导入的提示词没有这一行，整段就是正文。"""
+    text = str(txt_content or "")
+    _, sep, tail = text.partition("提示词：")
+    return tail if sep else text
+
+
+
+def _oss_body_prefix(txt_content) -> str:
+    """目录索引那条预览里的正文首行：旁车写成 `标题：X\n提示词：<正文首行>`，取 `提示词：` 之后。
+
+    导入的提示词（prompts.chat）没有这一行，整段存的就是正文；配对只认首行，这里只回第一行——
+    拿整段（带换行）去和本地首行做整行相等永远比不中，那批真图就一直上不了卡。"""
+    body = _oss_body_text(txt_content)
+    return (body.splitlines() or [""])[0].strip()
+
+
+def oss_prompt_media_map() -> dict[str, list[dict]]:
+    """云端各目录的媒体清单（文件名 / 类型 / 有无预览 / 正文首行）——只读磁盘缓存，不联网。
+
+    提示词库要把一条提示词钉到云端那条媒体上才有预览可播。索引目录缓存不在本地时这里就是空表：
+    配对不发网络请求，卡片保持封面。
+    """
+    index = _load_oss_index_from_disk()
+    if not index:
+        return {}
+
+    out: dict[str, list[dict]] = {}
+    for dir_name in _oss_index_dirs(index):
+        cache_file = OSS_CACHE_DIR / dir_name / "_index.json"
+        if not cache_file.exists():
+            continue
+        try:
+            data = json.loads(cache_file.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        rows = []
+        for item in data.get("items", []):
+            if not isinstance(item, dict) or item.get("type") not in ("video", "image"):
+                continue
+            preview_text = str(item.get("txt_content", ""))
+            prefix = _oss_body_prefix(preview_text)
+            body = _oss_body_text(preview_text)
+            rows.append({
+                "filename": str(item.get("filename", "")),
+                "type": str(item.get("type", "")),
+                "preview": bool(str(item.get("preview", "")).strip("/")),
+                "prefix": prefix,
+                "body": body.strip(),
+                # 发布时预览只存旁车前 500 字：正文里一个换行都没有又顶到上限，说明首行本身被截断了，
+                # 比对要按前缀走（多段正文有换行，整行相等那条路够用）。
+                "truncated": len(body) >= OSS_DIR_PREVIEW_CHARS - 40 and "\n" not in body.rstrip("\n"),
+            })
+        if rows:
+            out[dir_name] = rows
+    return out
+
+
+def oss_prompt_dir_cover_map() -> dict[str, dict]:
+    """云端各目录的一张封面（目录名 → 文件名 / 导航 subfolder）——只读磁盘索引缓存，不联网。
+
+    随包预设池只有 .txt，池名就是发布时那个云端目录名：池里没带封面 sidecar 的条目拿这张
+    目录封面补上卡片那张图。索引里 covers 的顺序是发布时的顺序，取第一份带缩略图的；
+    音频那条在素材页是装饰波形位，没有缩略图可铺。目录索引缓存不在本地时这里就是空表。
+    """
+    index = _load_oss_index_from_disk()
+    if not index:
+        return {}
+
+    out: dict[str, dict] = {}
+    for dir_name in _oss_index_dirs(index):
+        entry = _oss_dir_entry(index, dir_name)
+        candidates = entry.get("covers")
+        candidates = list(candidates) if isinstance(candidates, list) else list(entry.get("items", []))
+        for item in candidates:
+            if not isinstance(item, dict) or not item.get("filename") or not item.get("thumbnail"):
+                continue
+            if _oss_cover_kind(str(item["filename"])) == "audio":
+                continue
+            out[dir_name] = {
+                "filename": str(item["filename"]),
+                "subfolder": f"{OSS_NAV_PREFIX}/{dir_name}",
+            }
+            break
+    return out
 
 
 async def _find_thumbnail_in_oss_index(filename: str, subdir: str) -> str | None:

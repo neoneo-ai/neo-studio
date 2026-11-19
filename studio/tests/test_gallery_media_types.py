@@ -71,6 +71,20 @@ async def _oss_no_items(*a, **k):
     return []
 
 
+async def _oss_hit(filename, subdir):
+    """索引命中：返回与 tools/gallery_preprocess.py 写出一致的相对路径。"""
+    return f"{subdir}/{filename}"
+
+
+async def _oss_cache(rel):
+    return Path(_INPUT) / "oss_cache" / rel
+
+
+async def _oss_preview_hit(filename, subdir):
+    """预览键与 tools/gallery_preprocess.py 的 preview 位同形：previews/<目录>/<名>.mp4"""
+    return f"previews/{subdir}/{filename}"
+
+
 _stub("gallery_oss",
       OSS_NAV_PREFIX="Cloud Presets",
       OSS_CACHE_DIR=Path(_TMP) / "oss_cache",
@@ -84,6 +98,7 @@ _stub("gallery_oss",
       _collect_oss_covers=lambda *a, **k: {},
       _handle_oss_gallery_list=lambda *a, **k: None,
       _find_in_oss_index=_oss_none,
+      _find_preview_in_oss_index=_oss_none,
       _find_thumbnail_in_oss_index=_oss_none,
       _download_oss_file=lambda *a, **k: None,
       _oss_dir_cards=lambda *a, **k: {},
@@ -193,6 +208,68 @@ class MediaContentTypeTests(unittest.TestCase):
     def test_missing_file_is_404(self):
         resp = _run(gallery.view_video(_Request({"filename": "nope.mp4", "subfolder": "NeoAgent/media"})))
         self.assertEqual(resp.status, 404)
+
+    def test_cloud_preset_video_and_audio_serve_from_oss_cache(self):
+        # 云端预设的媒体不在本地 gallery 树里：视频与音频路由按目录索引拉到 oss_cache 再发
+        _write("oss_cache/prompts.chat/c1.mp4", b"\x00\x00\x00\x18ftypmp42fake")
+        _write("oss_cache/prompts.chat/c1.mp3", b"ID3fake")
+        prev = (gallery._is_oss_enabled, gallery._find_in_oss_index, gallery._download_oss_file)
+        gallery._is_oss_enabled = lambda: True
+        gallery._find_in_oss_index = _oss_hit
+        gallery._download_oss_file = _oss_cache
+        try:
+            video = _run(gallery.view_video(
+                _Request({"filename": "c1.mp4", "subfolder": "Cloud Presets/prompts.chat"})))
+            self.assertEqual((video.status, video.content_type), (200, "video/mp4"))
+            audio = _run(gallery.view_audio(
+                _Request({"filename": "c1.mp3", "subfolder": "Cloud Presets/prompts.chat"})))
+            self.assertEqual((audio.status, audio.content_type), (200, "audio/mpeg"))
+        finally:
+            gallery._is_oss_enabled, gallery._find_in_oss_index, gallery._download_oss_file = prev
+
+    def test_cloud_preset_media_missing_in_index_is_404(self):
+        prev = (gallery._is_oss_enabled, gallery._find_in_oss_index)
+        gallery._is_oss_enabled = lambda: True
+        gallery._find_in_oss_index = _oss_none
+        try:
+            resp = _run(gallery.view_video(
+                _Request({"filename": "c2.mp4", "subfolder": "Cloud Presets/prompts.chat"})))
+            self.assertEqual(resp.status, 404)
+        finally:
+            gallery._is_oss_enabled, gallery._find_in_oss_index = prev
+
+    def test_cloud_preset_preview_flag_serves_cached_preview(self):
+        # preview=1 那一发是卡片预览：键在索引条目的 preview 位上，落 oss_cache/previews/，与原片互不占用
+        _write("oss_cache/previews/prompts.chat/c3.mp4", b"\x00\x00\x00\x18ftypmp42fake")
+        prev = (gallery._is_oss_enabled, gallery._find_in_oss_index,
+                gallery._find_preview_in_oss_index, gallery._download_oss_file)
+        gallery._is_oss_enabled = lambda: True
+        gallery._find_in_oss_index = _oss_none      # 预览那一发不走去原片键那条路
+        gallery._find_preview_in_oss_index = _oss_preview_hit
+        gallery._download_oss_file = _oss_cache
+        try:
+            resp = _run(gallery.view_video(_Request({
+                "filename": "c3.mp4", "subfolder": "Cloud Presets/prompts.chat", "preview": "1"})))
+            self.assertEqual((resp.status, resp.content_type), (200, "video/mp4"))
+        finally:
+            (gallery._is_oss_enabled, gallery._find_in_oss_index,
+             gallery._find_preview_in_oss_index, gallery._download_oss_file) = prev
+
+    def test_cloud_preset_preview_flag_without_preview_key_is_404(self):
+        # 发布预览之前上线的旧条目没有 preview 位：卡片没有预览可播，界面落封面
+        prev = (gallery._is_oss_enabled, gallery._find_in_oss_index,
+                gallery._find_preview_in_oss_index, gallery._download_oss_file)
+        gallery._is_oss_enabled = lambda: True
+        gallery._find_in_oss_index = _oss_hit       # 原片在索引里，预览位没有
+        gallery._find_preview_in_oss_index = _oss_none
+        gallery._download_oss_file = _oss_cache
+        try:
+            resp = _run(gallery.view_video(_Request({
+                "filename": "c4.mp4", "subfolder": "Cloud Presets/prompts.chat", "preview": "1"})))
+            self.assertEqual(resp.status, 404)
+        finally:
+            (gallery._is_oss_enabled, gallery._find_in_oss_index,
+             gallery._find_preview_in_oss_index, gallery._download_oss_file) = prev
 
     def test_image_route_serves_png(self):
         resp = _run(gallery.view_image(_Request({"filename": "a.png", "subfolder": "NeoAgent/media"})))

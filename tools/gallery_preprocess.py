@@ -10,6 +10,9 @@
 #   python gallery_preprocess.py --output <output_dir> --split-legacy
 #   python gallery_preprocess.py --output <output_dir> --tag-dirs dir1 dir2 --tag character-sheet
 #       (--tag-dirs edits tags of existing index directories: no media scan, no new entries)
+#   python gallery_preprocess.py --output <output_dir> --dirs dir1 --preview
+#       (--preview transcodes a 480px muted mp4 per video into previews/<dir>/ and writes the
+#        item's "preview" key: the prompt-library card autoplays that file. --dirs mode only.)
 #
 # Without --dirs: full scan of all subdirectories, the master index is rebuilt from scratch.
 # With --dirs DIR...: only those subdirectories are (re)scanned — new directories are added,
@@ -28,6 +31,7 @@
 #   index.json          — v2 master index: per-directory count / index path / rev / covers
 #   <subdir>/index.json — the full item list of that directory
 #   thumbnails/         — pre-generated JPEG thumbnails
+#   previews/<subdir>/  — 480px muted mp4 previews (--preview only)
 #   <subdir>/           — copies of media + txt files (ready for OSS upload)
 
 import argparse
@@ -45,6 +49,10 @@ IMG_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".tiff"}
 VIDEO_EXTENSIONS = {".mp4", ".webm", ".mov", ".avi", ".mkv", ".flv", ".wmv"}
 ALL_MEDIA_EXTENSIONS = IMG_EXTENSIONS | VIDEO_EXTENSIONS
 THUMB_SIZE = 320
+# 卡片预览那一发的长边：480p 是提示词库卡片自动播的档位——原片一条 3MB 起，
+# 一屏十条就是三十几 MB 的首屏流量，预览压到每条几百 KB 才有站点那种观感。
+PREVIEW_LONG_EDGE = 480
+PREVIEW_MAXRATE = "700k"
 
 
 def generate_image_thumbnail(source_path: Path, cache_path: Path, size: int) -> bool:
@@ -68,7 +76,7 @@ def generate_image_thumbnail(source_path: Path, cache_path: Path, size: int) -> 
 
 def generate_video_thumbnail(source_path: Path, cache_path: Path, size: int) -> bool:
     try:
-        ffmpeg_path = shutil.which("ffmpeg")
+        ffmpeg_path = ffmpeg_exe()
         if not ffmpeg_path:
             print("  [WARN] ffmpeg not found, skipping video thumbnail")
             return False
@@ -92,10 +100,61 @@ def generate_video_thumbnail(source_path: Path, cache_path: Path, size: int) -> 
         return False
 
 
+def ffmpeg_exe() -> str | None:
+    """ffmpeg 解析链与素材页 / fill_prompt_covers 同一道：PATH 里的 ffmpeg，其次 imageio-ffmpeg 自带的二进制。
+
+    打包与 ComfyUI 环境里 ffmpeg 常常不在 PATH——只认 PATH 的话视频条一律没有缩略图，云端卡就没有预览。
+    """
+    found = shutil.which("ffmpeg")
+    if found:
+        return found
+    try:
+        import imageio_ffmpeg
+
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:
+        return None
+
+
 def generate_thumbnail(source_path: Path, cache_path: Path, size: int) -> bool:
     if source_path.suffix.lower() in VIDEO_EXTENSIONS:
         return generate_video_thumbnail(source_path, cache_path, size)
     return generate_image_thumbnail(source_path, cache_path, size)
+
+
+def preview_cmd(source_path: Path, preview_path: Path) -> list[str]:
+    """卡片预览那一发的 ffmpeg 参数：480p 高、静音、crf 30、faststart。
+
+    不带音轨：卡片是循环静音预览，有声原片走素材库那条灯箱。
+    faststart 把 moov 挪到文件头部——预览是一进页面就播的，moov 落在尾部的话
+    首帧要等整篇下完，卡片就退化成一张封面图。
+    """
+    return [
+        ffmpeg_exe() or "ffmpeg",
+        "-y", "-i", str(source_path),
+        "-an",
+        "-vf", f"scale=-2:'min({PREVIEW_LONG_EDGE},ih)':flags=lanczos",
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", "30",
+        "-maxrate", PREVIEW_MAXRATE, "-bufsize", PREVIEW_MAXRATE,
+        "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+        str(preview_path),
+    ]
+
+
+def generate_video_preview(source_path: Path, preview_path: Path) -> bool:
+    """一条视频的卡片预览文件；ffmpeg 缺席只跳过这一条，不压垮整次发布。"""
+    if not ffmpeg_exe():
+        print(f"  [WARN] ffmpeg not found, skipping preview for {source_path.name}")
+        return False
+    preview_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        subprocess.run(preview_cmd(source_path, preview_path), check=True,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except (subprocess.CalledProcessError, OSError) as e:
+        print(f"  [WARN] Preview transcode failed for {source_path.name}: {e}")
+        preview_path.unlink(missing_ok=True)
+        return False
+    return preview_path.exists()
 
 
 def parse_txt_preview(txt_path: Path, max_chars: int = 500) -> str:
@@ -161,7 +220,8 @@ def get_oss_index_url() -> str:
     return get_oss_config().get("index_url", "") or ""
 
 
-def prune_directory(output_dir: Path, dir_name: str, keep_files: set[str], keep_thumbs: set[str], copy_media: bool):
+def prune_directory(output_dir: Path, dir_name: str, keep_files: set[str], keep_thumbs: set[str],
+                    copy_media: bool, keep_previews: set[str] | None = None):
     """Remove output thumbnails/copies no longer present in the source directory (update mode)."""
     thumb_subdir = output_dir / "thumbnails" / dir_name
     if thumb_subdir.is_dir():
@@ -173,6 +233,12 @@ def prune_directory(output_dir: Path, dir_name: str, keep_files: set[str], keep_
         if media_dir.is_dir():
             for f in media_dir.iterdir():
                 if f.name not in keep_files:
+                    f.unlink(missing_ok=True)
+    if keep_previews is not None:
+        preview_dir = output_dir / "previews" / dir_name
+        if preview_dir.is_dir():
+            for f in preview_dir.iterdir():
+                if f.suffix.lower() == ".mp4" and f.stem not in keep_previews:
                     f.unlink(missing_ok=True)
 
 
@@ -290,7 +356,8 @@ def build_master_index(existing: dict | None, fragment: dict, base_url: str,
     return master
 
 
-def scan_directory(subdir: Path, output_dir: Path, thumb_size: int, copy_media: bool, prune: bool) -> tuple[list[dict], int]:
+def scan_directory(subdir: Path, output_dir: Path, thumb_size: int, copy_media: bool, prune: bool,
+                   preview: bool = False) -> tuple[list[dict], int]:
     """Scan one preset subdirectory: thumbnails, media copies, and its per-directory index."""
     dir_name = subdir.name
     print(f"\n[{dir_name}] Scanning...")
@@ -341,6 +408,15 @@ def scan_directory(subdir: Path, output_dir: Path, thumb_size: int, copy_media: 
         # Relative thumbnail path (for OSS URL construction)
         thumb_rel = f"thumbnails/{dir_name}/{stem}.jpg" if thumb_ok else ""
 
+        # 卡片预览：提示词库的自动播放只吃这一发，原片留给素材页的灯箱
+        preview_rel = ""
+        if preview and media_type == "video":
+            preview_path = output_dir / "previews" / dir_name / f"{stem}.mp4"
+            if not preview_path.exists():
+                generate_video_preview(media_file, preview_path)
+            if preview_path.exists():
+                preview_rel = f"previews/{dir_name}/{stem}.mp4"
+
         # Parse txt preview
         txt_content = parse_txt_preview(txt_file)
 
@@ -352,6 +428,8 @@ def scan_directory(subdir: Path, output_dir: Path, thumb_size: int, copy_media: 
             "txt_content": txt_content,
             "thumbnail": thumb_rel,
         }
+        if preview_rel:
+            entry["preview"] = preview_rel
         dir_entries.append(entry)
 
         # Copy media + txt to output
@@ -373,9 +451,12 @@ def scan_directory(subdir: Path, output_dir: Path, thumb_size: int, copy_media: 
         keep_files = {e["filename"] for e in dir_entries}
         keep_files |= {Path(e["filename"]).stem + ".txt" for e in dir_entries}
         keep_thumbs = {Path(e["thumbnail"]).stem for e in dir_entries if e["thumbnail"]}
-        prune_directory(output_dir, dir_name, keep_files, keep_thumbs, copy_media)
+        keep_previews = {Path(e["preview"]).stem for e in dir_entries if e.get("preview")}
+        prune_directory(output_dir, dir_name, keep_files, keep_thumbs, copy_media,
+                        keep_previews if preview else None)
 
-    print(f"  {len(dir_entries)} items, {sum(1 for e in dir_entries if e['thumbnail'])} thumbnails")
+    print(f"  {len(dir_entries)} items, {sum(1 for e in dir_entries if e['thumbnail'])} thumbnails, "
+          f"{sum(1 for e in dir_entries if e.get('preview'))} previews")
     return dir_entries, total_thumbs
 
 def scan_root_files(presets_dir: Path, output_dir: Path, thumb_size: int) -> tuple[list[dict], int]:
@@ -433,10 +514,12 @@ def scan_root_files(presets_dir: Path, output_dir: Path, thumb_size: int) -> tup
     return dir_entries, total_thumbs
 
 
-def scan_presets_directory(presets_dir: Path, output_dir: Path, thumb_size: int, copy_media: bool, only_dirs=None) -> dict:
+def scan_presets_directory(presets_dir: Path, output_dir: Path, thumb_size: int, copy_media: bool,
+                           only_dirs=None, preview: bool = False) -> dict:
     """Scan presets directories and return the master-index fragment of the scanned dirs.
 
-    only_dirs: list of subdirectory names to (re)scan; None means full scan."""
+    only_dirs: list of subdirectory names to (re)scan; None means full scan.
+    preview: transcode the 480p card preview for every video of the scanned directories."""
     (output_dir / "thumbnails").mkdir(parents=True, exist_ok=True)
 
     if only_dirs:
@@ -460,7 +543,7 @@ def scan_presets_directory(presets_dir: Path, output_dir: Path, thumb_size: int,
     total_thumbs = 0
 
     for subdir in subdirs:
-        entries, thumbs = scan_directory(subdir, output_dir, thumb_size, copy_media, bool(only_dirs))
+        entries, thumbs = scan_directory(subdir, output_dir, thumb_size, copy_media, bool(only_dirs), preview)
         rev = write_dir_index(output_dir, subdir.name, entries)
         fragment[subdir.name] = master_entry(subdir.name, entries, rev)
         total_items += len(entries)
@@ -548,6 +631,11 @@ def main():
         "--tag-dirs", nargs="+", default=None, metavar="DIR",
         help="Tag-only pass: set --tag (or clear with --clear-tags) on these existing index "
              "directories without rescanning media and without adding new entries"
+    )
+    parser.add_argument(
+        "--preview", action="store_true",
+        help="With --dirs: transcode a 480px muted mp4 per video into previews/<dir>/ and write "
+             "the item's \"preview\" key (prompt-library card autoplay); ffmpeg is optional"
     )
 
     args = parser.parse_args()
@@ -645,7 +733,8 @@ def main():
             print(f"  {d}: {len(items)} items published")
         scanned = list(args.publish)
     else:
-        fragment = scan_presets_directory(presets_dir, output_dir, args.size, not args.no_copy, args.dirs)
+        fragment = scan_presets_directory(presets_dir, output_dir, args.size, not args.no_copy, args.dirs,
+                                          args.preview)
         scanned = [d for d in (args.dirs or []) if d in fragment]
         if args.draft:
             print("\n[DRAFT] directory indexes written, master index left untouched")

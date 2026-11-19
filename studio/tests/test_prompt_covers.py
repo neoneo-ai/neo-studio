@@ -16,6 +16,8 @@ import tempfile
 import types
 import unittest
 
+from aiohttp import web
+
 import stub_env
 
 _NODE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -207,15 +209,17 @@ class PromptCoverTests(unittest.TestCase):
         self.assertFalse(os.path.isfile(os.path.join(names_mod.CUSTOM_DIR, "红杯.txt")))
         self.assertFalse(os.path.isfile(self.cover_path("红杯")))
 
-    def test_cover_route_serves_jpeg_immutable(self):
+    def test_cover_route_serves_jpeg_with_revalidating_cache(self):
         self.write_prompt("红杯")
         self.write_output_image()
         self.set_cover("红杯", "shot.png")
         resp = _run(names_mod.prompt_cover_route(_Request(query={"name": "红杯"})))
         self.assertEqual(resp.status, 200)
-        self.assertEqual(resp.content_type, "image/jpeg")
-        self.assertEqual(resp.headers.get("Cache-Control"), "public, max-age=31536000, immutable")
-        self.assertTrue(resp.body.startswith(b"\xff\xd8"))  # JPEG 起始标记
+        self.assertEqual(resp.headers.get("Cache-Control"), "public, max-age=0, must-revalidate")
+        self.assertNotIn("immutable", resp.headers.get("Cache-Control", ""))
+        self.assertIsInstance(resp, web.FileResponse)  # 条件请求由 FileResponse 判，没变回 304
+        with open(self.cover_path("红杯"), "rb") as f:
+            self.assertTrue(f.read(2).startswith(b"\xff\xd8"))  # JPEG 起始标记
 
     def test_cover_route_404_without_cover(self):
         self.write_prompt("无封面")

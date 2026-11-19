@@ -5,6 +5,29 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 ## [Unreleased]
 
 ### Added
+- **Imported prompt cards show the real cloud image instead of the typeset placeholder.** A prompt that pairs with a
+  cloud image item draws that item's image on its card through `GET /neo_gallery/thumbnail?filename=&subfolder=&size=512`,
+  ahead of the local cover sidecar. Pairing still keys on the body's first line (an imported body with no `提示词：`
+  label pairs on its own first line), and when that first line matches more than one cloud item the published
+  filename decides — the pool entry's name and that filename agree once the ordinal and punctuation are dropped.
+  A prompt that pairs with nothing keeps its sidecar, and a body that stays ambiguous on both routes pins nothing.
+- **Shipped preset cards take their cloud directory cover when they have no cover of their own.** A preset pool that
+  ships `.txt` only and is published under a cloud directory of the same name now shows that directory's cover on its
+  cards: `list_prompts` gives such an entry a `dir_cover` key (`{filename, subfolder}`, the first index `covers`
+  candidate with a thumbnail), and the card loads it through `GET /neo_gallery/thumbnail?filename=&subfolder=&size=512`,
+  which caches the thumbnail under `gallery/oss_cache/thumbnails/<dir>/` and serves it from there afterwards. A prompt
+  that paired with a cloud image item shows that item's image instead, a cover the user set with **设为封面** otherwise
+  wins, entries that paired with a cloud video keep that media's band, nested entries are untouched, and a card is a
+  text card when the cloud index is not cached, that directory has no cover, or the offline window answers 409.
+- **Cloud video prompts autoplay a 480p preview in the prompt library.** A video prompt whose body pairs with a cloud
+  preset item — the body's first line equals that item's `提示词：` first line in the cloud directory index, prefix-matched
+  when the stored preview is truncated at 500 characters — plays the
+  lightweight 480p muted preview published by `tools/gallery_preprocess.py --preview`: the card keeps its cover sidecar
+  as the poster, the preview is requested only for cards that enter the viewport, and it plays muted and looping.
+  `GET /neo_gallery/video?filename=&subfolder=&preview=1` downloads it once into `gallery/oss_cache/previews/<dir>/` and
+  every later play reads that cache, while the material page lightbox keeps playing the original. A card stays on its
+  cover image when there is no OSS config, no cached cloud index, no cover, an ambiguous body match, or the offline
+  window answers 409, and the system's "reduce motion" setting builds no preview at all.
 - **Prompt library page and prompt covers.** The Studio home 「素材与配置」 section gains a **提示词库** card that opens
   `#/prompts`: one card per prompt with its cover on the card, each card carrying **填入绘画页** / **填入视频页** (reads the
   text and fills that page's prompt box through the same landing the enhance page uses), **复制**, **设为封面** and **删除**
@@ -24,10 +47,21 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
    prompts that already have a cover stay untouched).
 
   Prompts with a cover also show it in the 提示词 picker of the paint, video and
-  generation panels, in a 32 px slot that no-cover rows do not take. Factory presets carry no covers, so the write buttons
-  are not shipped on those cards and the backend refuses them; deleting a prompt deletes its cover with it. The cover read
+  generation panels, in a 32 px slot that no-cover rows do not take. Factory presets ship no covers, so their cards take
+  the text slot, the write buttons are not shipped on those cards and the backend refuses them; deleting a prompt deletes
+  its cover with it. The cover read
   route answers offline, so the library shows covers without ComfyUI, while the write side is gated by `prompt_library_write`
   and sends an offline window to start the kernel.
+- **prompts.chat prompts arrive as a cloud preset pack, never as shipped files.** `tools/import_prompts_chat.py` reads
+  the public prompts.chat endpoint — its prompt text is CC0 public-domain data — keeps only the image and video types,
+  and builds a gallery preset directory (`tmp\gallery_pack\prompts.chat\`, gitignored): one row per stem with a pair of
+  files, the media plus its same-stem `.txt` sidecar in the gallery "label: value" layout, so the material gallery shows
+  one `prompts.chat` cloud preset card and the body reaches the generator through **复制提示词**. The media is the site's
+  own `mediaUrl` example output — an upload by a site author, hosted on third-party CDNs, which that text license does
+  not cover — and the locally typeset preview that fills a row with no downloadable media is no real output either, so
+  neither ships in the plugin package: the importer writes no file under `studio/prompts/`. Publishing runs the existing
+  material-preset chain (`gallery_preprocess.py` → `gallery_deploy_oss.py`), and `<out>/prompts.chat.manifest.json` keeps
+  the per-row url, author, tags and hashes outside the directory the deploy uploads.
 - **Canvas generation node: the skill and the parameters live on the node face.** 画布 has a **加生成节点** button, and the
   node it lays carries everything on its surface with no dialog to open: a 技能 chip (sparkles) sized to its own text, a
   ratio chip drawn with the ratio glyph, a 长边尺寸 chip and a 生图张数 chip that opens a pick from 1 to 8 — the three
@@ -365,6 +399,29 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   recipes and existing 配方 assets are untouched.
 
 ### Fixed
+- **A prompt cover that failed to load once stops staying blank.** The cover route no longer sends
+  `Cache-Control: public, max-age=31536000, immutable`: it serves the sidecar with
+  `Cache-Control: public, max-age=0, must-revalidate`, so every page open revalidates it and an unchanged file answers
+  304. One failed response (a card built during the ComfyUI restart window) used to be pinned to that cover URL for a
+  year, where a hard reload issues no request and the card keeps an empty cover band. A card whose cover image fails
+  now retries once under a fresh query parameter, and drops the band when that fails too.
+- **A freshly published cloud preset card shows up after a restart.** The cached cloud preset index in
+  `gallery/oss_cache/_index.json` was stamped with the moment the plugin loaded it, so every launch counted a days-old
+  index as just fetched and re-opened the `sync_interval_hours` window: a directory published in the cloud stayed
+  invisible on the home page for the whole window no matter how often the app restarted, and its media routes answered
+  404 for the rows the card did show. The cache age now comes from the cache file's own time, so the first cloud preset
+  request after a restart re-downloads an expired index; the 管理目录 dialog's **⟳ 刷新索引** keeps forcing it.
+
+- **Cloud preset videos and audio play.** `/neo_gallery/video` and `/neo_gallery/audio` resolved the local gallery tree
+  only, so a 云端预设 entry whose media is a video showed its thumbnail in the card and opened an empty lightbox: the
+  play request 404'd because the file lives on OSS and not on disk. Both routes now run the same directory-index lookup
+  the image, thumbnail and 提示词文本 routes run, so the first play pulls the file into `gallery/oss_cache/` and serves it.
+
+- **The gallery preprocessor finds ffmpeg the way the material page does.** `tools/gallery_preprocess.py` resolved
+  ffmpeg from PATH only, so publishing a video preset from a machine whose ffmpeg is the imageio-ffmpeg binary that
+  ComfyUI ships uploaded the entries with no thumbnail, and the cloud preset card opened with empty previews. It now
+  falls back to `imageio_ffmpeg.get_ffmpeg_exe()`, the same chain as `gallery._ffmpeg_exe` and
+  `fill_prompt_covers.ffmpeg_exe`.
 - **An interrupted canvas gesture no longer freezes the canvas.** Dragging a node out of a generation card, dragging text
   out of a prompt box, a touch drag the system takes over and a drag whose window loses focus all end without ever sending
   `pointerup`: the drag stayed live and kept following the cursor, so every bare pointer move carried the node along, and

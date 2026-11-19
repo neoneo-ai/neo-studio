@@ -2,7 +2,7 @@
 
 Studio 首页「素材与配置」板块的卡片「提示词库」进 `#/prompts`（`studio/web/prompt-library/prompt-library.js`）。
 顶栏没有这一枚页签：首页那张卡是这页唯一的来路，首页版式把这张卡删掉（在「添加卡片」里加回来），这一页也就进不去。
-一条提示词一张卡：有封面就铺封面，卡上是那条提示词的正文摘要与标签 chip，卡底是来源与动作；
+一条提示词一张卡：有图就铺图——正文旁的封面 sidecar 优先，随包预设没有 sidecar 时铺云端目录那张封面，卡上是那条提示词的正文摘要与标签 chip，卡底是来源与动作；
 一屏 24 张卡，页码条常驻页面底沿。
 
 ## 这一页的形状
@@ -10,8 +10,10 @@ Studio 首页「素材与配置」板块的卡片「提示词库」进 `#/prompt
 1. **标题行与筛子条**：标题行是页名、条数与「重新读取列表」；筛子条是搜索框（吃显示名与标签）、
    「图像 / 视频」池子筛子（`全部 / 图像 / 视频`，池子按扫描名首段判，与提示词选择浮层同一份规则）与
    「来源」筛子（`全部来源 / 预设 / 自定义`）。排序固定「最新的排前面」，用列表条目自带的文件时间。
-2. **卡片**：封面那一档（条目带 `cover` 才铺 `<img>`，`loading="lazy"`，地址由 `promptCoverUrl(name, v)`
-   拼，`v=` 就是条目上那份封面 mtime）、标题行（显示名 + 两枚徽标：预设 / 自定义、图像 / 视频）、
+2. **卡片**：图位那一档按「云端图像媒体 → 封面 sidecar → 云端目录封面」取一张——图像媒体与目录封面都由
+   `cloudDirCoverUrl` 拼（缩略图代理），封面 sidecar 由 `promptCoverUrl(name, v)` 拼、`v=` 就是条目上那份
+   mtime，`<img>` 一律 `loading="lazy"`；视频池里与云端媒体配上对的那一条改铺 `<video>` 480p 预览自动播，
+   见「云端预览那一发」与「云端目录封面那一发」。接着是标题行（显示名 + 两枚徽标：预设 / 自定义、图像 / 视频）、
    正文摘要位（那条正文压成一行后的前 220 字，等宽字、灰底；读不到就整位收掉，卡片不铺「读取失败」）、
    标签 chip（最长三条）、卡底那一行（来源与「多久前」在左，动作排右）。
 3. **分页**：一屏 24 张卡，页码条常驻页面底沿——首末箭头吃边界，「第 N / M 页」是那句读数。
@@ -36,10 +38,42 @@ Studio 首页「素材与配置」板块的卡片「提示词库」进 `#/prompt
   没有要清的缩略图缓存目录。
 - 只有用户点名那一发才写：素材卡「⋯」菜单的「设为提示词封面」（先点名要给的那条提示词）与本页卡上的
   「设为封面」两处，都不自动生成、不批量铺。
-- 预设池是代码目录、出厂只读：写侧挡 403「出厂预设不带封面」，界面上也不铺那两枚钮。
-- 读侧 `GET /rs_prompts/prompt_cover?name=&v=` 直接回那张 JPEG，`Cache-Control: public, max-age=31536000, immutable`；
-  名字解析不到封面就是 404，卡片落文本位。
+- 预设池是代码目录、出厂只读：写侧挡 403「出厂预设不带封面」，界面上也不铺那两枚钮；随包预设没有封面 sidecar，
+  池名对上云端目录的条目铺那张云端目录封面（见「云端目录封面那一发」），其余不铺图位，卡片落名字与摘要。
+  导入的提示词根本不进预设池（见下节），用户封面永远不进预设池。
+- 读侧 `GET /rs_prompts/prompt_cover?name=&v=` 用 `FileResponse` 直接回那张 JPEG，`Cache-Control: public, max-age=0, must-revalidate`：
+  每次进页面都带条件请求，响应带 `Last-Modified`，文件没变回 304。一年期 `immutable` 会把 ComfyUI 重启窗口里那一次失败响应钉死在封面 URL 上，
+  浏览器连硬刷都不发请求，卡片便永久空白，因此不发这一位。名字解析不到封面就是 404，卡片不铺图位，落名字与摘要；
+  取图失败时卡片先换一个查询参数重取一次（新缓存键，必须重新发请求），再失败才收掉这一档。
 - 删正文连带删它旁边的封面（`delete_prompt` 里一并清），提示词树里不留没有主人的封面。
+
+## 云端预览那一发
+
+- 云端预设目录里的视频提示词，卡上那一档播发布时 `--preview` 压的 480p 静音片：`poster` 是这条的封面 sidecar，
+  `muted / loop / playsinline / preload="none"`，`src` 由 IntersectionObserver 在卡片进视野那一发才挂上，出视野就停。
+- 配对先认正文首行：本地正文的首行与云端目录索引里那条预览的 `提示词：` 首行整行相等才算命中，
+  索引里被 500 字截断的那一条按前缀比；整篇正文没有 `提示词：` 那一行时（导入的提示词）取正文首行。
+  撞出两条以上退到文件名：池里的条目名与发布时的文件名去序号与标点后相等（云端名被截断的按前缀比）。
+  两条路都撞、都空就不钉。没有 OSS 配置、目录索引没缓存到本地、正文没配上的条目都落封面图，配对这一发不碰网络。
+- 图位顺序：云端那条图像媒体 → 正文旁的封面 sidecar → 云端目录封面（`dir_cover`）。图像媒体铺云端那张真图
+  （缩略图代理 512px），池里那张排版占位 sidecar 让位；视频池配上对的那一条仍是 480p 预览，poster 用封面 sidecar。
+- 预览位的 `poster` 只认这条的封面 sidecar：只带云端目录封面（`dir_cover`）的条目铺那张目录封面图，不铺预览视频。
+- 地址是 `GET /neo_gallery/video?filename=&subfolder=&preview=1`：预览从 `neo/presets/previews/<目录>/` 进
+  `gallery/oss_cache/previews/<目录>/`，之后重播读本地缓存（响应带 `Cache-Control: public, max-age=86400`）。
+  不带 `preview` 的那一发取的是原片，落 `oss_cache/<目录>/`，素材页灯箱播的仍是原片。
+- 离线窗口里这一发 409，卡片停在封面上；系统开了「减少动态效果」（`prefers-reduced-motion`）时不铺预览视频。
+
+## 云端目录封面那一发
+
+- 随包预设池只发 `.txt`，池名就是发布时那个云端目录名：`list_prompts` 给这种条目多带一个 `dir_cover` 键
+  （`{filename, subfolder}`），卡片拿它补上那张图。已有封面 sidecar 的条目、已按正文配上媒体（`media`）的条目
+  与子目录条目（`video/<目录>/<条>`）都不带这一位——图位归封面 sidecar 与那条媒体管。
+- 封面候选取自主索引里该目录的 `covers`，按发布顺序取第一份带缩略图的（音频那条在素材页是装饰波形位，没有图可铺）；
+  只读磁盘上的索引缓存，这一发不碰网络，目录没有封面候选时不铺图位，卡片落名字与摘要。
+- 地址是 `GET /neo_gallery/thumbnail?filename=&subfolder=&size=512`：`filename` 是那条媒体名，索引里它的 `thumbnail`
+  从 `neo/presets/thumbnails/<目录>/` 进 `gallery/oss_cache/thumbnails/<目录>/`，之后读本地缓存
+  （响应带 `Cache-Control: public, max-age=86400`）。
+- 离线窗口里这一发 409，卡片收掉图位，名字与摘要照出。
 
 ## 封面回填脚本
 
@@ -59,6 +93,45 @@ python tools\fill_prompt_covers.py --apply --loose --limit 20   # 先写一小�
 ```
 
 预设池是代码目录，脚本只扫 `prompts/custom`，与写侧同一道：出厂文件永不回填。
+
+## 导入的提示词走云端预设（prompts.chat）
+
+prompts.chat 的提示词文本是 CC0 1.0 公有领域（站上的 LICENSE 写明：提示词内容与数据进公有领域，站的代码是 MIT），
+正文可以逐字带走。每条自带的 `mediaUrl` 不在那条措辞里：它是站上作者上传的示例产物，托管在站外第三方
+（DigitalOcean Spaces、pbs.twimg.com、wiro.ai、fal.media）。所以 `tools\import_prompts_chat.py` 产的是**云端图库预设
+的构建目录**，代码目录一个文件都不写：`--build` 把 `IMAGE` / `VIDEO` 两型按 upvotes 落进
+`tmp\gallery_pack\prompts.chat\`（在 `.gitignore` 里），一条一个 stem 一对文件——`NN_<名称>.<媒体>` + 同名 `.txt`
+旁车，旁车按图库的「标签：值」版式写（首两行是标题与正文，卡片预览取前两行，灯箱走 `/neo_gallery/txt` 读全文）。
+
+图位优先是站上那份示例产物；拉不动、类型不认识、超 24MB 的条落本地排版的预览图，没有 `mediaUrl` 的条同样排一张预览
+占住图位——`gallery_preprocess.py` 对只有 `.txt` 的条目直接跳过，云端卡没有图位就不出卡。排版预览底色按标题取色，
+重跑字节一致，它不是任何真实产物，因此只活在云上。
+
+上云与素材预设同一条链（[gallery.md](gallery.md)）：
+
+```powershell
+python tools\import_prompts_chat.py --top 20 --pages 2 --build --out tmp\gallery_pack
+python tools\gallery_preprocess.py --presets tmp\gallery_pack --output tmp\gallery_pack --dirs prompts.chat --tag prompts-chat --preview
+python tools\gallery_deploy_oss.py --source tmp\gallery_pack --bucket <bucket> --prefix neo/presets/ --endpoint <endpoint>   # 先看 --dry-run
+```
+
+`gallery_preprocess.py` 把合并基准拉成线上主索引（`configs/oss_presets.json` 的 `index_url`），产
+`prompts.chat\index.json` 与 `thumbnails\prompts.chat\`，主索引挂一张 `prompts.chat` 卡。视频条的缩略图要 ffmpeg
+出首帧，解析链与素材页同一道（PATH 里的 ffmpeg，其次 imageio-ffmpeg 自带的二进制），两者都没有时那张卡没有预览。
+`--preview` 在同一发里给每条视频压一版 480p 静音预览落 `previews\prompts.chat\`（crf 30、码率上限 700k、faststart），
+目录索引条目带 `preview` 键，提示词库的卡片就播这一发；ffmpeg 缺席时只跳过预览，原片照发。
+首次发布要在同一次 preprocess 里带 `--tag prompts-chat`：`--tag-dirs` 只给主索引里已有的目录补标签。
+`gallery_deploy_oss.py` 的 endpoint 取 `OSS_ENDPOINT` 环境变量，那里不是 endpoint 时要点名
+`--endpoint https://oss-<region>.aliyuncs.com`——`--dry-run` 不连桶，照不出这个坑。
+
+逐条来源记在 `<out>\prompts.chat.manifest.json`：来源接口、许可说明、逐条的 url / 作者 / 标签与正文和媒体的 sha256。
+清单刻意写在 `prompts.chat\` 之外——`gallery_deploy_oss.py` 把 `--source` 目录里每个文件都当对象上传，落在目录里的
+那份会被插件读成卡里的条目。
+
+用户侧是素材库里那张 `prompts.chat` 云端预设卡：点开、用「复制提示词」把正文贴进生成器（[gallery.md](gallery.md)）。
+
+边界：`--build` 才产文件，同名旁车不重写，`--overwrite` 是唯一重写旁车的开关；`--type IMAGE` 与 `--type VIDEO` 分开跑，
+序号按排名写。用例在 `studio/tests/test_import_prompts_chat.py`，接口层与媒体下载都是替身——跑用例不发一个网络请求。
 
 ## 离线窗口
 

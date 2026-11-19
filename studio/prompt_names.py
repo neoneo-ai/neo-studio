@@ -127,11 +127,116 @@ def scan_prompts(source: str) -> list:
 
 
 def list_prompt_entries() -> list:
-    """整份条目：每组内按 mtime 倒序，custom 在前、presets 在后（@ 点名那份同名同序）"""
+    """整份条目：每组内按 mtime 倒序，custom 在前、presets 在后（@ 点名那份同名同序）
+
+    云端预设目录里的条目会多一个 `media` 键：正文与云端那条媒体配上对才有，见 _attach_cloud_media；
+    随包预设池里没带封面 sidecar 的条目会多一个 `dir_cover` 键，见 _attach_cloud_dir_covers。
+    """
     groups = [scan_prompts("custom"), scan_prompts("presets")]
     for group in groups:
         group.sort(key=lambda item: -item["_mtime"])
-    return groups[0] + groups[1]
+    combined = groups[0] + groups[1]
+    _attach_cloud_media(combined)
+    _attach_cloud_dir_covers(combined)
+    return combined
+
+
+def _attach_cloud_media(entries: list) -> None:
+    """云端预设目录里的条目：把正文钉到云端那条媒体上，卡片才有图与预览可播。
+
+    云端卡的正文只在本机预设池里，视频与图都在 OSS——配对先认目录索引里那条预览的正文首行，
+    与本地正文的首行整行相等才算命中（索引里被 500 字截断的那一条按前缀比）。撞两条以上时退到
+    文件名：池里的条目名与发布时的文件名同源，去序号与标点之后相等（云端名被截断的按前缀比）。
+    两条路都撞、都空就不钉——宁可不播也不播错的片。目录索引没缓存到本地时这里什么都不做。
+    """
+    try:
+        from . import gallery_oss
+    except Exception:
+        return
+    media_map = gallery_oss.oss_prompt_media_map()
+    if not media_map:
+        return
+
+    by_dir = {name.lower(): (name, rows) for name, rows in media_map.items()}
+    for item in entries:
+        parts = str(item["name"]).split("/")
+        if len(parts) < 2:
+            continue
+        hit = by_dir.get(parts[-2].lower())
+        if hit is None:
+            continue
+        dir_name, rows = hit
+        body = read_prompt_text(str(item["name"]))
+        first_line = ((body or "").splitlines() or [""])[0].strip()
+        # 三级口径，先严后宽：整段正文相等（发布时的原样）→ 首行相等（导入的整篇正文）→ 文件名同源
+        matched = [row for row in rows if row["body"] == first_line]
+        if len(matched) != 1:
+            matched = [row for row in rows if _head_pairs_with(row["prefix"], row["truncated"], first_line)]
+        if len(matched) != 1:
+            matched = [row for row in rows if _stem_pairs_with(row["filename"], parts[-1])]
+        if len(matched) != 1:
+            continue
+        item["media"] = {
+            "filename": matched[0]["filename"],
+            "subfolder": f"{gallery_oss.OSS_NAV_PREFIX}/{dir_name}",
+            "type": matched[0]["type"],
+            "preview": matched[0]["preview"],
+        }
+
+
+def _head_pairs_with(prefix: str, truncated: bool, head: str) -> bool:
+    """索引里那条预览的正文首行与本地正文首行是不是同一条：整行相等才算命中。
+
+    目录索引只存旁车前 500 字，首行更长的条在索引里是截断的——整行相等对那种条永远配不上，
+    截断位之后没有可比内容，所以截断的条按前缀比。
+    """
+    if not prefix or not head:
+        return False
+    if prefix == head:
+        return True
+    return truncated and head.startswith(prefix)
+
+
+def _stem_pairs_with(filename: str, name: str) -> bool:
+    """发布文件名与池里那条的名字是不是同一份：去 `NN_` 序号与标点后相等。
+
+    发布时文件名会截短（`05_CorporateStudioPortrait(AutoOutfitfor.jpg`），所以短的一头当前缀比；
+    名字太短（去标点后不到 6 个字）没有判别力，不参与。"""
+    def norm(text: str) -> str:
+        return re.sub(r"[^0-9a-z]+", "", text.lower())
+
+    left = norm(re.sub(r"^\d+_", "", os.path.splitext(str(filename))[0]))
+    right = norm(re.sub(r"^\d+_", "", str(name)))
+    if len(left) < 6 or len(right) < 6:
+        return False
+    return left == right or left.startswith(right) or right.startswith(left)
+
+
+
+def _attach_cloud_dir_covers(entries: list) -> None:
+    """随包预设池的条目补上云端目录那张封面：扫描名就是池名、正文旁边没有封面 sidecar 的那一条才有。
+
+    随包预设池只发 .txt，卡片一直是文字位；发布链把池名与云端目录名发成同一个名字，
+    目录索引里那张封面就是这批条目的图。已有封面 sidecar 与已钉上媒体的条目不覆盖，
+    子目录条目（`video/<目录>/<条>`）的图位归那条媒体管，这里也不动。
+    目录索引缓存不在本地时 oss_prompt_dir_cover_map 是空表，不发网络请求。
+    """
+    try:
+        from . import gallery_oss
+    except Exception:
+        return
+    dir_covers = gallery_oss.oss_prompt_dir_cover_map()
+    if not dir_covers:
+        return
+
+    by_pool = {name.lower(): row for name, row in dir_covers.items()}
+    for item in entries:
+        name = str(item["name"])
+        if item.get("cover") or item.get("media") or "/" in name:
+            continue
+        row = by_pool.get(name.lower())
+        if row:
+            item["dir_cover"] = row
 
 
 def resolve_prompt_file(name: str) -> str | None:
@@ -476,15 +581,16 @@ async def prompt_previews_route(request):
 async def prompt_cover_route(request):
     """卡片上的封面：直接回 sidecar 的 JPEG（写下去就是 512px 长边，不逐尺寸现生成）。
 
-    URL 上的 `v=` 是列表里那份封面 mtime，前端换封面就换 URL；文件内容只在重新设封面时变，
-    因此缓存可以直接给满一年。名字解析不到封面就是 404，卡片落正文摘要位。
+    URL 上的 `v=` 是列表里那份封面 mtime，前端换封面就换 URL。缓存必须救得回来：一年期
+    `immutable` 把 ComfyUI 重启窗口里那一次失败响应钉死在 URL 上，浏览器连硬刷都不发请求，
+    卡片便永久空白。`max-age=0, must-revalidate` 让每次进页面都带条件请求，FileResponse 报
+    `Last-Modified` 并自判 `If-Modified-Since`，文件没变回 304、变了就重新取图。
+    名字解析不到封面就是 404，卡片落正文摘要位。
     """
     cover = await asyncio.to_thread(prompt_cover_file, request.rel_url.query.get("name", ""))
     if cover is None:
         return web.Response(status=404)
-    with open(cover, "rb") as f:
-        return web.Response(body=f.read(), content_type="image/jpeg",
-                            headers={"Cache-Control": "public, max-age=31536000, immutable"})
+    return web.FileResponse(cover, headers={"Cache-Control": "public, max-age=0, must-revalidate"})
 
 
 @routes.post("/rs_prompts/list_prompt_lines")

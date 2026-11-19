@@ -323,6 +323,32 @@ export function promptCoverUrl(name, v = 0) {
 }
 
 /**
+ * 云端预设那条视频的卡片预览地址（--preview 压的那一发 480p 静音片）。
+ * 只有条目配上对（list_prompts 的 media 键）才有这一发；离线窗口里这一发 409，卡片保持封面。
+ */
+export function cloudPreviewUrl(media) {
+    // 编码口径与素材库那几处媒体地址一致：encodeURIComponent 的空格是 %20，aiohttp 不把 + 解成空格
+    const q = `filename=${encodeURIComponent(String(media?.filename || ""))}`
+        + `&subfolder=${encodeURIComponent(String(media?.subfolder || ""))}`
+        + "&preview=1";
+    return `${window.location.protocol}//${window.location.host}/neo_gallery/video?${q}`;
+}
+
+/**
+ * 云端媒体在卡片上的地址（图像媒体的图位与目录封面同一发）：索引里的 thumbnail 是远端相对路径，
+ * 浏览器要的地址走素材库那条缩略图代理，第一次取就把它落进 `gallery/oss_cache/thumbnails/`；
+ * 离线窗口里这一发 409，卡片不铺图位。
+ */
+export function cloudDirCoverUrl(cover) {
+    const q = new URLSearchParams({
+        filename: String(cover?.filename || ""),
+        subfolder: String(cover?.subfolder || ""),
+        size: "512",
+    });
+    return `${window.location.protocol}//${window.location.host}/neo_gallery/thumbnail?${q.toString()}`;
+}
+
+/**
  * 把素材库那张产物钉成这条提示词的封面（sidecar JPEG，512px 长边）。
  * 封面只在用户点名这一发写文件；离线（409）、预设只读（403）与源文件不在（404）由后端直说，
  * 这里把状态换成界面上那句话交回调用方。
