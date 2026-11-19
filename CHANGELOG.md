@@ -16,7 +16,14 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   page bar pinned to the bottom of the page. A cover is a
   sidecar next to the prompt text, `prompts/custom/<scan name>.jpg`, written as a 512 px longest-side JPEG (first frame for
   video) only by the press the user names: **设为提示词封面** in the gallery card's ⋯ menu (which asks which prompt to pin it
-  to) and **设为封面** on the library card. Prompts with a cover also show it in the 提示词 picker of the paint, video and
+  to) and **设为封面** on the library card — that library press opens the asset pick with the asset search prefilled with
+  that prompt's own text, so the window lands on the outputs generated with it (clearing the box browses everything).
+   A data-init script `tools/fill_prompt_covers.py` does the same job in batch for an existing shelf: it matches each
+   uncovered custom prompt back onto its outputs by the same-name `.txt` sidecar and the ComfyUI metadata embedded in the
+   image or video, reports first and writes only with `--apply` (image prompts take images, `video/` prompts take videos,
+   prompts that already have a cover stay untouched).
+
+  Prompts with a cover also show it in the 提示词 picker of the paint, video and
   generation panels, in a 32 px slot that no-cover rows do not take. Factory presets carry no covers, so the write buttons
   are not shipped on those cards and the backend refuses them; deleting a prompt deletes its cover with it. The cover read
   route answers offline, so the library shows covers without ComfyUI, while the write side is gated by `prompt_library_write`

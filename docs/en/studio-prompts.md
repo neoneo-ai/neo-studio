@@ -30,10 +30,13 @@ pinned to the bottom of the page.
    the assembly layer's existing chain `applyToPage(mode, text)` — `paint` switches to the paint page and fills its
    prompt box, `video` goes through the video page's reuse fill; it is the same landing the enhance page uses for
    its reply. An empty body reports "This prompt is empty" and sends nothing.
-6. **Set as cover**: opens the host's asset pick modal (one pick and it closes); which kind it accepts follows the
-   current pool — the image pool takes images, the video pool takes videos (the backend takes the first frame).
+6. **Set as cover**: opens the host's asset pick modal (one pick and it closes) with the asset search box prefilled
+   with this prompt's first text line — the sidecar's first line is the prompt that generated the asset, so the modal
+   lands on the outputs made with it, and clearing that box is what browses everything. Which kind it accepts follows
+   the current pool — the image pool takes images, the video pool takes videos (the backend takes the first frame).
    The pick is sent as `{name, filename, subfolder}` to `POST /rs_prompts/set_prompt_cover`; on success the list
-   reloads, so the card and its new cover swap together.
+   reloads, so the card and its new cover swap together. When the text cannot be read the modal never opens and the
+   toast says "Failed to set the cover".
 7. **Delete takes two presses**: the first only rewrites that button to "Confirm delete" and re-titles it
    "press again to delete this prompt and its cover"; the second sends `POST /rs_prompts/delete_prompt`. Redrawing
    the grid disarms, so an armed press never rides over onto another card.
@@ -50,6 +53,31 @@ pinned to the bottom of the page.
   `Cache-Control: public, max-age=31536000, immutable`; a name with no cover is 404 and the card takes the text slot.
 - Deleting the text deletes its cover (`delete_prompt` clears the `.jpg` in the same pass), so the prompt tree never
   keeps a cover without a prompt.
+
+## The cover backfill script
+
+With a shelf full of outputs there is no need to pick one card at a time: the data-initialization
+script `tools/fill_prompt_covers.py` matches media back onto the prompts — the same-name `.txt`
+sidecar next to an image and the ComfyUI metadata embedded in an image or video both carry the
+prompt line. The script takes a whole-line match as "this is what generated it" and writes the
+sidecar for every custom prompt left without a cover, on the same rule as above (a JPEG with a
+512px long side, a video gives its first frame). The default is a report; `--apply` is what writes.
+Prompts that already have a cover are left alone and `--overwrite` rewrites them. Image prompts
+take images only, entries under `video/` take videos only, and a body whose first line is too
+short has no discriminating power, so it is skipped. `--loose` also counts "the first line appears
+inside the metadata text" — a multi-segment film stores the whole body, where a whole-line match
+cannot land. The scanned roots are ComfyUI's `output` and the data root's `gallery/custom` by
+default, with `--output-dir` to add more and `--limit` to try a small batch first.
+
+```powershell
+python tools/fill_prompt_covers.py                              # report only
+python tools/fill_prompt_covers.py --apply                      # write the missing covers
+python tools/fill_prompt_covers.py "<ComfyUI root>" --loose     # a media root, looser matching
+python tools/fill_prompt_covers.py --apply --loose --limit 20   # a small batch first
+```
+
+The preset pool is code: the script scans `prompts/custom` only, the same boundary the write side
+keeps, so shipped files are never backfilled.
 
 ## The offline window
 

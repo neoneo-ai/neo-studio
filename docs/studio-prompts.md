@@ -22,9 +22,11 @@ Studio 首页「素材与配置」板块的卡片「提示词库」进 `#/prompt
 5. **填入对应页**：先按扫描名读全文（`POST /rs_prompts/load_prompt`），再交装配层那条现成链
    `applyToPage(mode, text)`——`paint` 切绘画页填提示词框，`video` 走出视频页的复用填框，与增强页把回话
    填回页面是同一发落点。空正文报「这条提示词是空的」，不发那一发。
-6. **设为封面**：开宿主的素材库取用弹窗（一次就收窗），收哪一类由当前那一池定：图像池取图，视频池取视频
-   （后端取首帧成图）。选定就把 `{name, filename, subfolder}` 交 `POST /rs_prompts/set_prompt_cover`，
-   成功后重读列表，卡片与新封面一起换。
+6. **设为封面**：开宿主的素材库取用弹窗（一次就收窗），开窗先把这条的正文首行铺进素材库的搜索框——产物旁车的
+   首行就是生成时那句提示词，窗里落的正是用它生成过的那几张，清空那一格才看全部素材。收哪一类由当前那一池定：
+   图像池取图，视频池取视频（后端取首帧成图）。选定就把 `{name, filename, subfolder}` 交
+   `POST /rs_prompts/set_prompt_cover`，成功后重读列表，卡片与新封面一起换。正文读不到不开窗，提示条说的是
+   「封面设置失败」。
 7. **删除要按两次**：第一发只把那颗钮换成「确认删除」并把 title 改写成「再按一次…」，第二发才发
    `POST /rs_prompts/delete_prompt`；重画网格即 disarm，armed 的那一发不会挂到别的卡上。
 
@@ -38,6 +40,25 @@ Studio 首页「素材与配置」板块的卡片「提示词库」进 `#/prompt
 - 读侧 `GET /rs_prompts/prompt_cover?name=&v=` 直接回那张 JPEG，`Cache-Control: public, max-age=31536000, immutable`；
   名字解析不到封面就是 404，卡片落文本位。
 - 删正文连带删它旁边的封面（`delete_prompt` 里一并清），提示词树里不留没有主人的封面。
+
+## 封面回填脚本
+
+已有大量出图时不必一条条手动挑：数据初始化脚本 `tools\fill_prompt_covers.py` 把产物对回提示词——
+图旁的同名 .txt 旁车与图、视频内嵌的 ComfyUI 元数据里都写着那句提示词，脚本按整行相等挑出
+「就是用它生成的那一条」，给没有封面的条按上面同一口径写 sidecar（512px 长边的 JPEG，视频取首帧）。
+默认只出报告，`--apply` 才落盘；已有封面的条不动，`--overwrite` 才重写。图像提示词只收图、
+`video/` 目录下的只收视频；正文首行太短的条没有判别力，不参与比对。`--loose` 把「首行出现在元数据
+文本里」也算匹配——多段片的元数据是整篇正文，整行相等对不上时才用它。产物目录默认是 ComfyUI 的
+`output` 与数据根的 `gallery/custom`，`--output-dir` 可再加，`--limit` 先试一小批。
+
+```powershell
+python tools\fill_prompt_covers.py                              # 只看报告
+python tools\fill_prompt_covers.py --apply                      # 写缺的封面
+python tools\fill_prompt_covers.py "<ComfyUI 根>" --loose       # 指定产物根并放宽匹配
+python tools\fill_prompt_covers.py --apply --loose --limit 20   # 先写一小批
+```
+
+预设池是代码目录，脚本只扫 `prompts/custom`，与写侧同一道：出厂文件永不回填。
 
 ## 离线窗口
 

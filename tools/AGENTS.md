@@ -25,6 +25,11 @@ exe 里随包的插件副本只取 `studio/` 的跟踪文件，`tools/` 不在�
   细则见 [../app/AGENTS.md](../app/AGENTS.md)。
 - 最小整合包：`build_minimal_package.ps1` 生成整包，`check_minimal_package.py` 核对节点与整包，
   `verify_minimal_package.ps1` 在自检之上做验收；插件与 commit 的钉版口径在 `minimal_plugins.json`。
+- 数据初始化：`fill_prompt_covers.py` 把 ComfyUI `output` 与数据根 `gallery/custom` 里的已有产物对回
+  提示词——读图旁同名 `.txt` 与图/视频内嵌的 ComfyUI 元数据（`studio/util.py` 那份读端），整行相等才算
+  来路；默认只出报告，`--apply` 才写封面 sidecar，已有封面的条不动，图像条只收图、`video/` 条只收视频，
+  口径与 `studio/prompts.py` 的封面写侧同一份。
+
 
 
 ## Gallery Preset Pipeline
