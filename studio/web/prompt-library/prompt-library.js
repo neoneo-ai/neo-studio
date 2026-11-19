@@ -122,6 +122,13 @@ export function coverSearchTerm(text) {
     return String(text || "").split("\n")[0].trim().slice(0, COVER_SEARCH_CHARS);
 }
 
+/** 卡片标题只写名字本身：这一页顶部有池子筛子，标题里再写一遍目录段就是白占一行。
+ *  整条扫描名在这张卡的 `title` 上，搜索照旧吃带目录段的全名。 */
+function cardTitle(name) {
+    const parts = promptDisplayName(name).split("/");
+    return parts[parts.length - 1] || String(name || "");
+}
+
 /** 建「提示词库」视图。依赖由宿主注入：$el 建 DOM，toast 落提示，can 认能力表（写侧离线不可用），
  * gateRun 把写侧那两枚钮交运行闸门，openMaterial 开素材库取封面（带这条的出图搜索词），
  * applyToPage 把正文填回绘画页 / 视频页。
@@ -249,7 +256,7 @@ export function createPromptLibraryView({ $el, toast, can, gateRun, openMaterial
 
         function card(it) {
             const name = String(it.name);
-            const shown = promptDisplayName(name);
+            const shown = cardTitle(name);
             const writable = it.source !== "presets";
             const kids = [];
             // 封面那一档只在有条目可铺时铺：512px 长边的 sidecar 直接进 <img>，浏览器只做等比裁切

@@ -78,7 +78,7 @@ test("筛选：池子与来源各筛一发，配方不入池，最新的排前�
     assert.deepEqual(filterPromptCards(ITEMS, { source: "presets" }).map((it) => it.name), ["古风女孩"]);
     assert.deepEqual(filterPromptCards(ITEMS, { query: "产品" }).map((it) => it.name), ["红杯"], "搜索吃标签");
     assert.deepEqual(filterPromptCards(ITEMS, { query: "镜头" }).map((it) => it.name), ["video/镜头推进"],
-        "搜索吃行上那串去池子段的显示名");
+        "搜索吃带目录段的全名");
     assert.deepEqual(cardBadges(ITEMS[0]), ["自定义", "图像"]);
     assert.deepEqual(cardBadges(ITEMS[2]), ["自定义", "视频"]);
 });
@@ -87,7 +87,7 @@ test("卡片网格：有封面落 <img>（带 v= 换缓存），没封面不铺�
     resetEnv();
     mockPromptRoutes();
     const env = await mounted();
-    assert.deepEqual(titles(env.host), ["红杯", "古风女孩", "镜头推进"], "行上只去 video/ 池子段");
+    assert.deepEqual(titles(env.host), ["红杯", "古风女孩", "镜头推进"], "标题只写名字本身，目录段不进标题");
     const cover = env.card("红杯").querySelector(".ns-pl-cover");
     assert.ok(cover, "有封面的卡片铺封面图");
     assert.match(cover.getAttribute("src"), /name=%E7%BA%A2%E6%9D%AF&v=111$/);

@@ -11,7 +11,7 @@ pinned to the bottom of the page.
 ## What the page looks like
 
 1. **Title row and filter row**: the title row carries the page name, the entry count and reload; the filter
-   row carries the search box (matches the display name and tags), the image/video pool filter
+   row carries the search box (matches the full scan name, directory segment included, plus tags), the image/video pool filter
    (`All / Image / Video`; the pool comes from the scan name's first segment, the same rule the prompt picker
    uses) and the origin filter (`All origins / Presets / Custom`). Sorting is fixed to "newest first", using the
    file time each list entry carries.
@@ -19,8 +19,10 @@ pinned to the bottom of the page.
    cover" — the media and the directory cover both come from `cloudDirCoverUrl` (the thumbnail proxy), the sidecar
    from `promptCoverUrl(name, v)` where `v` is exactly its mtime on the entry, and every `<img>` is `loading="lazy"`;
    a video-pool card paired with its cloud media plays the 480p silent preview in this band instead — see
-   "The cloud preview" and "The cloud directory cover". Then the title row (display name plus two badges: preset /
-   custom, image / video); the body-preview block (the first 220 characters of that prompt
+   "The cloud preview" and "The cloud directory cover". Then the title row (the name alone, without its directory
+   segment — the pool chips sit on top of this page, so repeating the directory in the title buys nothing; the full scan
+   name lives in the card's hover title, and search keeps matching the full name with that segment, plus two badges:
+   preset / custom, image / video); the body-preview block (the first 220 characters of that prompt
    collapsed onto one line, monospace on a raised fill — when it cannot be read the block collapses entirely and
    the card never says "read failed"); up to three tag chips; and the bottom row (origin and "how long ago" on
    the left, the actions on the right).
