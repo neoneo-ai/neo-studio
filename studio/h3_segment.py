@@ -256,6 +256,21 @@ def _canvas_refs(refs) -> dict:
     return out
 
 
+def _canvas_size(width, height) -> tuple | None:
+    """画布车尾盖的整列分辨率：两端都要正数才认（空 = 跟配方共享的分辨率走，半份按空处理）。"""
+    try:
+        w, h = int(width or 0), int(height or 0)
+    except (TypeError, ValueError):
+        return None
+    return (w, h) if w > 0 and h > 0 else None
+
+
+def _skill_label(skill_id: str) -> str:
+    """覆盖提示里技能怎么写：技能自己的中文名，列表里没有（技能被删了）就照它存的那个 id 说。"""
+    row = next((s for s in _gen_video_skills() if s["id"] == skill_id), None) or {}
+    return str(row.get("cn_name") or row.get("name") or skill_id)
+
+
 def _apply_canvas_overrides(single: dict, prompt: str, refs: dict, warnings: list) -> None:
     """画布那一次的提示词 / 参考素材覆盖：只改这一发的单段 spec，配方自己那一份（recipe.json）不动。
 
@@ -313,12 +328,15 @@ def resolve_anchors(spec: dict, index: int, anchors: str, continuity: bool, cont
 def run_single_segment(recipe: str, index: int, anchors: str, seed: int, *, steps: int = -1,
                        continuity: bool = True, context_frames: int = 22, preview: bool = True,
                        preview_node_id=None, record: bool = True, anchors_ready=None, film: str = "",
-                       prompt: str = "", refs: dict | None = None) -> dict:
+                       prompt: str = "", refs: dict | None = None, skill: str = "",
+                       width: int = 0, height: int = 0) -> dict:
     """跑配方里的第 index 段（0 起）：解析成片/锚点 → 单段 spec → 执行 →（可选）落盘并记进配方结果。
 
     film 指定用哪个成片结果取锚点（文件名或 `subfolder/文件名`；空 = 最新的成片结果）。
     anchors_ready：(mode, first_name, last_name) 已解析好时直接复用，不再解一次成片。
     prompt / refs：画布连过来的那一份（只改这一发的 spec，recipe.json 不动）。
+    skill：画布上给这一段选的技能，覆盖该段自己的 skill_id（空 = 跟随配方里那一份）。
+    width / height：画布车尾盖的整列分辨率（空 = 按配方共享的分辨率；两端锚点那一路照旧按成片尺寸走）。
     返回 {video, filename, subfolder, seed, frames, anchors, film, warnings}。
     """
     if not recipe:
@@ -335,16 +353,21 @@ def run_single_segment(recipe: str, index: int, anchors: str, seed: int, *, step
     film_entry = _film_entry(recipe, film) if anchors != "none" else None
     warnings = []
     # 锚点帧来自成片 → 就按成片的像素尺寸生成：同尺寸才能和成片无缝拼回（否则拼接只能缩放，必然掉画质）
+    canvas_size = _canvas_size(width, height)   # 画布车尾盖的那一份（空 = 跟配方走）
     width = height = -1
     if film_entry is not None:
         size = _video_size(film_entry["path"])
         if all(size):
             width, height = size
             shared = spec.get("shared") or {}
-            want = (int(shared.get("width") or 0), int(shared.get("height") or 0))
+            want = canvas_size or (int(shared.get("width") or 0), int(shared.get("height") or 0))
+            src = "画布选的分辨率" if canvas_size else "配方共享分辨率"
             if all(want) and want != size:
-                warnings.append(f"按成片尺寸 {size[0]}×{size[1]} 生成（配方共享分辨率是 {want[0]}×{want[1]}）："
+                warnings.append(f"按成片尺寸 {size[0]}×{size[1]} 生成（{src}是 {want[0]}×{want[1]}）："
                                 f"锚点帧取自该成片，同尺寸才能无缝拼回")
+    elif canvas_size:
+        width, height = canvas_size
+        warnings.append(f"整列按画布选的分辨率 {canvas_size[0]}×{canvas_size[1]} 出片")
     first_name = last_name = None
     if anchors != "none":
         if anchors_ready:
@@ -353,9 +376,14 @@ def run_single_segment(recipe: str, index: int, anchors: str, seed: int, *, step
             anchors, first_name, last_name = resolve_anchors(spec, index, anchors, continuity, context_frames,
                                                              warnings, film_entry)
     mode = {"both": "fl2v", "first": "i2v"}.get(anchors)
-    skill_id = _pick_anchor_skill(segments[index].get("skill_id") or "", need_last=(mode == "fl2v")) if mode else ""
+    canvas_skill = str(skill or "").strip()
+    seg_skill = canvas_skill or str(segments[index].get("skill_id") or "")
+    # 锚点模式要模板里带首/尾帧占位符：这一段自己的技能（含画布换的那一份）不够用时取第一个支持的
+    skill_id = _pick_anchor_skill(seg_skill, need_last=(mode == "fl2v")) if mode else seg_skill
     single = _regen_spec(spec, index, mode, first_name, last_name, skill_id)
     _apply_canvas_overrides(single, str(prompt or ""), refs, warnings)
+    if canvas_skill:
+        warnings.append(f"画布覆盖了这一段的技能（{_skill_label(canvas_skill)}）")
 
     if seed is None or int(seed) < 0:
         seed = random.randint(0, 2 ** 63 - 1)   # 默认换种子：同参数同种子会得到几乎一样的结果
@@ -409,6 +437,10 @@ class NeoH3SegmentRun:
                 "preview": ("BOOLEAN", {"default": True}),
                 "continuity": ("BOOLEAN", {"default": True}),
                 "context_frames": ("INT", {"default": 22, "min": 0, "max": 362}),
+                "width": ("INT", {"default": 0, "min": 0, "max": 8192,
+                                  "tooltip": "宽（像素，0 = 按配方共享的分辨率；画布车尾盖的那一份）。"}),
+                "height": ("INT", {"default": 0, "min": 0, "max": 8192,
+                                   "tooltip": "高（像素，0 = 按配方共享的分辨率）。"}),
                 "film": ("STRING", {"default": "",
                                     "tooltip": "成片文件名（配方「结果」区里的名字）：取其中的前后真实帧当锚点；空 = 用当前记录的最新成片。"}),
             },
@@ -434,7 +466,7 @@ class NeoH3SegmentRun:
     )
 
     def run_segment(self, recipe, segment, anchors, seed, record=True, steps=-1, preview=True,
-                    continuity=True, context_frames=22, film="", unique_id=None):
+                    continuity=True, context_frames=22, film="", width=0, height=0, unique_id=None):
         ctx = get_executing_context()
         prompt_id = getattr(ctx, "prompt_id", None)
         meta = _RUNS.get(prompt_id) or {}
@@ -445,7 +477,10 @@ class NeoH3SegmentRun:
                                     preview_node_id=meta.get("preview_node_id") or unique_id,
                                     record=bool(record), anchors_ready=meta.get("anchors"),
                                     film=str(film or "").strip(),
-                                    prompt=str(meta.get("prompt") or ""), refs=meta.get("refs") or None)
+                                    prompt=str(meta.get("prompt") or ""), refs=meta.get("refs") or None,
+                                    skill=str(meta.get("skill") or ""),
+                                    width=int(meta.get("width") or width or 0),
+                                    height=int(meta.get("height") or height or 0))
         if prompt_id and prompt_id in _RUNS:
             meta.update({"filename": result["filename"], "seed": result["seed"], "frames": result["frames"],
                          "anchors": result["anchors"], "film": result["film"],
@@ -579,16 +614,21 @@ def _run_prompt(data: dict) -> dict:
         if film_entry is not None:
             film_layout(film_entry, spec, continuity, context_frames)
     # 画布那一次的覆盖：连过来的正文与素材（画布卡上的「画布覆盖」）。参考素材在这里就落到 input 目录，
-    # 段在队列里执行时按名字取用；这两样不进节点 widget，走 _RUNS 交回节点（在 ComfyUI 图里直接跑这个
+    # 段在队列里执行时按名字取用；这三样不进节点 widget，走 _RUNS 交回节点（在 ComfyUI 图里直接跑这个
     # 节点时没有这一份，用的是配方自己那份）
     prompt = str(data.get("prompt") or "").strip()
     refs = _canvas_refs(data.get("references"))
+    skill = str(data.get("skill_id") or "").strip()
+    size = _canvas_size(data.get("width"), data.get("height"))   # 车尾盖的整列分辨率（空 = 跟配方走）
     return {
         "recipe": recipe,
         "index": index,
         "seed": int(data.get("seed", -1)),
         "prompt": prompt,
         "refs": refs,
+        "skill": skill,
+        "width": size[0] if size else 0,
+        "height": size[1] if size else 0,
         "graph": {"1": {"class_type": "NeoH3SegmentRun", "inputs": {
             "recipe": recipe,
             "segment": index + 1,
@@ -600,6 +640,8 @@ def _run_prompt(data: dict) -> dict:
             "continuity": continuity,
             "context_frames": context_frames,
             "film": film,
+            "width": size[0] if size else 0,
+            "height": size[1] if size else 0,
         }}},
     }
 
@@ -623,9 +665,10 @@ async def run_segment_route(request):
 
     now = time.time()
     _RUNS[prompt_id] = {"preview_node_id": data.get("node_id") or task_id}
-    if payload["prompt"] or payload["refs"]:
+    if payload["prompt"] or payload["refs"] or payload["skill"] or payload["width"]:
         # 只有画布真给了覆盖才写这一份：在 ComfyUI 图里直接跑这个节点（没有这一份）用的就是配方自己那一份
-        _RUNS[prompt_id].update({"prompt": payload["prompt"], "refs": payload["refs"]})
+        _RUNS[prompt_id].update({"prompt": payload["prompt"], "refs": payload["refs"], "skill": payload["skill"],
+                                 "width": payload["width"], "height": payload["height"]})
     _SEGMENT_TASKS[task_id] = {
         "task_id": task_id, "prompt_id": prompt_id, "status": "queued",
         "recipe": payload["recipe"], "segment": payload["index"], "seed": payload["seed"],

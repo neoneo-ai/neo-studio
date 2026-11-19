@@ -2508,6 +2508,33 @@ body {
 .ns-canvas-add-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 /* 「加节点」那枚钮在菜单开着时抬到主色：一眼看得出条上哪一枚正在展开 */
 .ns-canvas-tool-on { border-color: var(--ns-primary); background: var(--ns-primary-soft); color: var(--ns-primary-fg); }
+/* 「添加配方」弹窗：遮罩铺满整页、窗在正中，一张卡一份配方，点一张就直接串成一列车厢。
+   收窗三条：Esc、点卡片外头的遮罩、卡片上那一次点本身（见 page.js 的 openRecipePicker） */
+.ns-canvas-picker-mask { position: fixed; inset: 0; z-index: 40; display: flex; align-items: center;
+    justify-content: center; padding: 16px; background: var(--ns-scrim-5, rgba(0, 0, 0, .55)); }
+.ns-canvas-picker { display: flex; flex-direction: column; gap: 8px; width: min(760px, 100%);
+    max-height: min(560px, 92vh); padding: 12px; border-radius: 10px; border: 1px solid var(--ns-border);
+    background: var(--ns-panel); box-shadow: 0 12px 40px var(--ns-scrim-5, rgba(0, 0, 0, .5)); }
+.ns-canvas-picker-head { display: flex; align-items: center; gap: 8px; }
+.ns-canvas-picker-title { flex: none; font-size: 13px; font-weight: 600; }
+.ns-canvas-picker-search { flex: 1 1 auto; min-width: 0; height: 28px; padding: 0 9px; border-radius: 6px;
+    border: 1px solid var(--ns-field-bd); background: var(--ns-field); color: var(--ns-fg);
+    font: inherit; font-size: 12px; outline: none; }
+.ns-canvas-picker-search:focus { border-color: var(--ns-primary); background: var(--ns-field-hover); }
+.ns-canvas-picker-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 8px; min-height: 0; overflow: auto; }
+.ns-canvas-picker-card { display: flex; flex-direction: column; gap: 4px; min-width: 0; padding: 8px;
+    border-radius: 8px; border: 1px solid var(--ns-border-soft); background: var(--ns-field); color: var(--ns-fg);
+    font: inherit; text-align: left; cursor: pointer; }
+.ns-canvas-picker-card:hover { border-color: var(--ns-primary); background: var(--ns-field-hover); }
+.ns-canvas-picker-cover { width: 100%; height: 92px; object-fit: cover; border-radius: 6px;
+    border: 1px solid var(--ns-border-soft); background: var(--ns-bg); color: var(--ns-dim);
+    display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.ns-canvas-picker-name { min-width: 0; font-size: 12px; font-weight: 600;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ns-canvas-picker-meta { min-width: 0; font-size: 11px; color: var(--ns-dim);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ns-canvas-picker-empty { grid-column: 1 / -1; padding: 16px 4px; font-size: 12px; color: var(--ns-dim); text-align: center; }
 
 .ns-canvas-stage { position: relative; flex: 1; min-height: 0; overflow: hidden; border-radius: 8px; border: 1px solid var(--ns-border); background: var(--ns-bg); touch-action: none; outline: none; }
 .ns-canvas-stage:focus-visible { border-color: var(--ns-primary); }
@@ -2616,32 +2643,61 @@ body {
 .ns-canvas-gen-status { font-size: 12px; color: var(--ns-accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ns-canvas-gen-fail { color: var(--ns-err-4, #ff7b72); }
 .ns-canvas-gen-model { font-size: 12px; color: var(--ns-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-/* 配方卡独有的三行：这一段概览、提示词来源、参考素材（段一行用生成页那套分段钮）。
+/* 车尾与车厢共用的几行：整列共用参数弹窗里的种子输入、这一段概览、提示词来源、参考素材。
    提示词来源那一行就是「画布覆盖」的可见状态：连了正文，这一行抬到主色并说「画布」 */
-.ns-canvas-recipe-args { display: grid; grid-template-columns: minmax(0, 1fr) 112px; gap: 8px; align-items: center; }
 .ns-canvas-recipe-seed { width: 100%; min-width: 0; height: 24px; padding: 0 7px; border-radius: 6px; border: 1px solid var(--ns-field-bd); background: var(--ns-field); color: var(--ns-fg); font: inherit; font-size: 12px; outline: none; }
 .ns-canvas-recipe-seed:focus { border-color: var(--ns-primary); background: var(--ns-field-hover); }
 .ns-canvas-recipe-seed:disabled { opacity: .45; }
-/* 这一段概览那一行：概览文字 + 车尾上那几枚共用的参数胶囊 */
-.ns-canvas-recipe-info { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ns-dim); }
-.ns-canvas-recipe-info-text { min-width: 0; flex: 1 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ns-canvas-recipe-prompt { display: flex; align-items: flex-start; gap: 6px; min-height: 34px; padding: 5px 7px; border-radius: 6px; border: 1px solid var(--ns-border-soft); background: var(--ns-field); font-size: 12px; line-height: 1.45; }
-.ns-canvas-recipe-on { border-color: var(--ns-primary); background: var(--ns-primary-soft); }
+/* 车尾顶行与车厢顶行是同一行式：字号、颜色、段号那枚的写法都由 .ns-canvas-car-* 这一套给，
+   生成节点卡的粗体不作用到这一行上，两行在画布上看就是一模一样的排版 */
+.ns-canvas-gen .ns-canvas-car-head { font-weight: 400; }
+/* 车尾的「参数」弹窗：步数 / 锚点 / 连续性 / 上下文帧 / 种子这些不常用的参数收在这里，
+   车尾卡上只留技能、分辨率与出片（收窗与「添加配方」那扇同一套：点窗外、Esc、右上角 ×） */
+.ns-canvas-tailform-mask { position: fixed; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, .55); }
+.ns-canvas-tailform { position: relative; display: flex; flex-direction: column; gap: 8px; width: min(360px, 92vw); padding: 12px; border-radius: 12px; border: 1px solid var(--ns-border); background: var(--ns-bg-2, #16161a); box-shadow: 0 18px 48px rgba(0, 0, 0, .45); }
+/* 弹窗里那几枚胶囊的菜单浮在弹窗自己身上这一层：画布那一层在弹窗底下，菜单进那一层就被遮死，
+   且 .ns-canvas-stage 带着 overflow hidden 会把列表切掉。这一层不裁剪，列表超出弹窗也照样露全 */
+.ns-canvas-tailform-menus { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
+.ns-canvas-tailform-menus .neo-gallery-gm-chip-menu { pointer-events: auto; }
+.ns-canvas-tailform-head { display: flex; align-items: center; gap: 8px; }
+.ns-canvas-tailform-title { flex: 1 1 auto; min-width: 0; font-size: 13px; font-weight: 600; }
+.ns-canvas-tailform-row { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 8px; align-items: center; }
+.ns-canvas-tailform-label { font-size: 12px; color: var(--ns-dim); }
+/* 弹窗里的下拉一律是胶囊菜单：原生 select 在桌面窗口的 WebView 里弹不出列表 */
+.ns-canvas-tailform-row .neo-gallery-gm-chip-wrap { display: block; min-width: 0; }
+.ns-canvas-tailform-row .neo-gallery-gm-chip-btn { display: flex; align-items: center; gap: 6px;
+    width: 100%; min-width: 0; height: 26px; padding: 0 8px; text-align: left;
+    border-radius: 6px; border: 1px solid var(--ns-field-bd); background: var(--ns-field);
+    color: var(--ns-fg); font: inherit; font-size: 12px; }
+.ns-canvas-tailform-row .neo-gallery-gm-chip-label { flex: 1 1 auto; min-width: 0; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; }
+.ns-canvas-tailform-row input { width: 100%; min-width: 0; height: 26px; padding: 0 7px; border-radius: 6px;
+    border: 1px solid var(--ns-field-bd); background: var(--ns-field); color: var(--ns-fg);
+    font: inherit; font-size: 12px; outline: none; }
+.ns-canvas-tailform-note { font-size: 11px; color: var(--ns-dim); }
+/* 车厢卡上的正文不铺第二层框：卡面就是这一格的面，正文直接落在卡面上；连过来的正文那一份才描一块底 */
+.ns-canvas-recipe-prompt { display: flex; align-items: flex-start; gap: 6px; flex: 1 1 auto; min-height: 0;
+    padding: 0; border: 0; background: transparent; font-size: 12px; line-height: 1.45; }
+/* 车厢自己写的正文就是这一格的一块文本框：与提示词节点同一套手感（单击只选中、双击才进编辑），
+   在车厢卡里改成流内的一块，不铺满整张卡；连过来的正文在跑时这块锁着，来源写在左边那枚标签上 */
+.ns-canvas-car .ns-canvas-node-textarea { position: relative; inset: auto; flex: 1 1 auto; min-width: 0; width: auto; height: 100%; min-height: 0; padding: 0; background: transparent; border-radius: 0; }
+.ns-canvas-car .ns-canvas-node-textarea:disabled { color: var(--ns-dim); }
+.ns-canvas-car .ns-canvas-node-textarea:focus { background: transparent; box-shadow: none; }
+.ns-canvas-recipe-on { padding: 4px 6px; border: 0; border-radius: 6px; background: var(--ns-primary-soft); }
 .ns-canvas-recipe-src { flex: none; padding: 1px 5px; border-radius: 4px; background: var(--ns-scrim-12, rgba(8, 9, 12, .5)); color: var(--ns-dim); font-size: 11px; }
 .ns-canvas-recipe-on .ns-canvas-recipe-src { color: var(--ns-primary-fg); }
 .ns-canvas-recipe-text { min-width: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: break-word; }
-.ns-canvas-recipe-refs { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.ns-canvas-recipe-thumb { flex: none; width: 52px; height: 44px; object-fit: cover; border-radius: 5px; border: 1px solid var(--ns-border-soft); background: var(--ns-field); }
 .ns-canvas-recipe-count { flex: 1 1 auto; min-width: 0; text-align: right; font-size: 11px; color: var(--ns-dim); white-space: nowrap; }
-.ns-canvas-recipe-segs { display: flex; flex-wrap: wrap; gap: 4px; }
-/* 串联的车厢是精简卡：段号 + 这一段概览一行，提示词两行，参考素材只缩略两枚 + 数字，最后一行是这一发的
-   状态。卡上一枚钮都没有 —— 停用、复制与删除在节点上方的浮出栏里，出片与整列共用的参数都在车尾那台生成节点上 */
+/* 串联的车厢是精简卡：段号 + 这一段概览 + 这一段的参考素材计数一行，提示词两行，倒数第二行是这一发的状态，
+   最后一行是它那一列车尾的配方概览。停用、复制与删除在节点上方的浮出栏里，出片与整列共用的参数都在车尾那台生成节点上 */
 .ns-canvas-car { position: absolute; inset: 0; padding: 8px 10px; display: flex; flex-direction: column; gap: 5px; overflow: hidden; border-radius: inherit; }
 .ns-canvas-car-head { display: flex; align-items: center; gap: 6px; }
 .ns-canvas-car-seg { flex: none; padding: 1px 6px; border-radius: 5px; background: var(--ns-scrim-12, rgba(8, 9, 12, .5)); color: var(--ns-accent); font-size: 11px; }
 .ns-canvas-car-info { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; color: var(--ns-dim); }
-.ns-canvas-car-refs { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.ns-canvas-car-refs .ns-canvas-recipe-thumb { width: 42px; height: 34px; }
+/* 车厢上那一枚技能胶囊收在段号右边：技能名长就自己收省略号，不把段号那一行挤掉 */
+.ns-canvas-car .neo-gallery-gm-chip-wrap { flex: none; display: block; min-width: 0; max-width: 148px; }
+.ns-canvas-car .neo-gallery-gm-chip-btn { width: 100%; justify-content: flex-start; gap: 5px; padding: 0 7px; }
+.ns-canvas-car .neo-gallery-gm-chip-label { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .ns-canvas-gen-menus { position: absolute; inset: 0; z-index: 7; pointer-events: none; }
 .ns-canvas-gen-menus .neo-gallery-gm-chip-menu { pointer-events: auto; }
 /* 出图是这一张卡的主按钮：主色实底 + 独占最后一行铺满，和控件行里的字段胶囊一眼分得开。
@@ -2656,15 +2712,6 @@ body {
 .ns-canvas-gen-go:disabled, .ns-canvas-gen-go:disabled:hover {
     background: var(--ns-primary-soft); border-color: var(--ns-primary); color: var(--ns-primary-fg);
 }
-/* 节点上的分段钮（生图/文本）：与输入行同一档的字段胶囊，选中那一段抬到主色 */
-.ns-canvas-seg-btn {
-    display: inline-flex; align-items: center; justify-content: center; gap: 4px;
-    height: 22px; padding: 0 8px; border-radius: 6px; border: 1px solid var(--ns-field-bd);
-    background: var(--ns-field); color: var(--ns-fg); font: inherit; font-size: 12px; cursor: pointer;
-}
-.ns-canvas-seg-btn:hover { border-color: var(--ns-field-bd-hover); background: var(--ns-field-hover); color: var(--ns-fg-strong, #fff); }
-.ns-canvas-seg-btn-on { border-color: var(--ns-primary); background: var(--ns-primary-soft); color: var(--ns-primary-fg); }
-.ns-canvas-seg-ico { display: inline-flex; }
 .ns-canvas-empty-actions { display: flex; align-items: center; gap: 8px; }
 /* 空画布上的「加生成节点」是这一页的主行动 → 扁平主色实底（主行动一律扁平主色实底） */
 .ns-canvas-add-gen { border-color: var(--ns-primary); background: var(--ns-primary); color: var(--ns-on-accent, #fff); }
@@ -2689,12 +2736,16 @@ body {
     .ns-canvas-handle-bottom { bottom: -9px; }
     .ns-canvas-resize { width: 22px; height: 22px; }
     .ns-canvas-node-act { width: 28px; height: 28px; }
+    .ns-canvas-car .ns-canvas-node-textarea { font-size: 12px; }
     .ns-canvas-node-pick { height: 28px; font-size: 13px; }
     .ns-canvas-gen-btn { height: 28px; font-size: 13px; }
     .ns-canvas-gen-go { height: 34px; font-size: 14px; }
-    .ns-canvas-seg-btn { height: 28px; font-size: 13px; }
     .ns-canvas-recipe-seed { height: 28px; font-size: 13px; }
-    .ns-canvas-recipe-thumb { width: 62px; height: 52px; }
+    .ns-canvas-car .neo-gallery-gm-chip-btn { height: 32px; padding: 0 6px; }
+    .ns-canvas-picker { max-height: 88dvh; }
+    .ns-canvas-picker-search { height: 32px; font-size: 13px; }
+    .ns-canvas-picker-list { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+    .ns-canvas-picker-name, .ns-canvas-picker-meta { font-size: 12px; }
     .ns-canvas-gen .neo-gallery-gm-chip-btn { height: 32px; padding: 0 6px; }
     .ns-canvas-gen-params { gap: 4px; }
     .ns-canvas-resize-top-left { left: -11px; top: -11px; }

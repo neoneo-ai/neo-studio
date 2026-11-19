@@ -886,7 +886,7 @@ class SegmentRunNodeTests(_RecipeCase):
         self.assertEqual(spec["required"]["anchors"][0], list(h3_segment.ANCHOR_LABELS))
         self.assertEqual(spec["required"]["seed"][1]["default"], -1)
         self.assertEqual(sorted(spec["optional"]),
-                         ["context_frames", "continuity", "film", "preview", "steps"])
+                         ["context_frames", "continuity", "film", "height", "preview", "steps", "width"])
         self.assertEqual(spec["optional"]["film"][1]["default"], "")   # 留空 = 用最新成片
         self.assertEqual(spec["hidden"], {"unique_id": "UNIQUE_ID"})
 

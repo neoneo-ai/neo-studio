@@ -16,9 +16,24 @@ export const NODE_SPECS = {
     text: { width: 340, height: 240, title: "提示词" },
     gen: { width: 320, height: 208, title: "生成" },
     video: { width: 340, height: 240, title: "视频" },
-    // 配方卡是整页最大的一张：段列表、参考素材、锚点与生成参数都铺在这一张上
-    recipe: { width: 386, height: 324, title: "配方闭环" },
+    // 车厢一张一段：段号、这一段自己写的提示词与素材覆盖都在这一张上，整列共用的参数在车尾
+    recipe: { width: 360, height: 176, title: "车厢" },
 };
+
+/** 图片节点按原图比例落位时短边的下限：比这更窄/更矮的卡就点不动了 */
+const IMAGE_FIT_MIN_SIDE = 120;
+
+/** 图片节点落位的那一格：图的比例落在图片节点默认框里，长边贴框、短边按比例缩且不小于下限。
+ *  永远不超出默认框 —— placeGrid 的步长、串联的行距、生成结果的落点全按默认框算，超出就会压到一起。
+ *  比例读不出（宽高缺一个）返回 null，节点保持默认那一档 */
+export function fitImageSize(naturalWidth, naturalHeight) {
+    const w = Number(naturalWidth), h = Number(naturalHeight);
+    if (!(w > 0 && h > 0)) return null;
+    const { width, height } = NODE_SPECS.image;
+    return w >= h
+        ? { width, height: Math.min(height, Math.max(IMAGE_FIT_MIN_SIDE, Math.round(width * h / w))) }
+        : { height, width: Math.min(width, Math.max(IMAGE_FIT_MIN_SIDE, Math.round(height * w / h))) };
+}
 
 /** 建一个节点（上游 createCanvasNode）：图片节点带素材坐标，文本节点带正文 */
 export function createCanvasNode(type, position, metadata = {}) {

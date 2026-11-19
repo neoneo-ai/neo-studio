@@ -43,6 +43,9 @@ const PATHS = {
     plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
     "arrow-up": '<path d="M12 19V5"/><path d="m5 12 7-7 7 7"/>',
     clock: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+    // 车尾「参数」弹窗那五枚胶囊：步数与锚点原来没有图形，胶囊上就是一段空白
+    sliders: '<path d="M20 4H10"/><path d="M14 12H4"/><path d="M20 20H10"/><path d="M8 2v4"/><path d="M16 10v4"/><path d="M4 18v4"/>',
+    anchor: '<circle cx="12" cy="18" r="3"/><path d="M12 15V3"/><path d="M5 12H2a10 10 0 0 0 20 0h-3"/>',
     ratio: '<rect width="18" height="14" x="3" y="5" rx="2"/><path d="M7 12h10"/>',
     camera: '<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx=\"12\" cy=\"13\" r=\"3\"/>',
     pose: '<circle cx="12" cy="4.5" r="2"/><path d="m9 20 3-6 3 6"/><path d="m6 8.5 6 2 6-2"/><path d="M12 10.5V14"/>',

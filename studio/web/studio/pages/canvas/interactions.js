@@ -17,9 +17,9 @@ const CARET_IN_BODY = () => document.activeElement?.classList?.contains("ns-canv
 const LINE_SELECTOR = ".ns-canvas-line, .ns-canvas-line-hit";
 // 节点上真正吃这一按的控件：浮出栏的动作钮与选图钮、生成卡上的胶囊 / 按钮 / 段钮 / 种子输入、视频自己的播控 ——
 // 起手交浏览器发 click，按下去是选中这张节点。整列控件行（.ns-canvas-gen-ctl）认成控件的代价是卡上几乎按不到
-// 能拖的地方：那一列里还有概览行、提示词行与参考素材那几行正文，按下拖只剩节点上下边缘拖得动
+// 节点上真正吃这一按的控件：浮出栏的动作钮与选图钮、生成卡上的胶囊 / 按钮 / 种子输入、视频自己的播控 ——
 const NODE_CTL_SELECTOR = ".ns-canvas-node-act, .ns-canvas-node-pick, .ns-canvas-node-video-el, "
-    + ".neo-gallery-gm-chip-btn, .ns-canvas-gen-btn, .ns-canvas-seg-btn, .ns-canvas-gen-ctl input";
+    + ".neo-gallery-gm-chip-btn, .ns-canvas-gen-btn, .ns-canvas-gen-ctl input";
 
 /** 把手势挂到舞台上：stage 是那一页的舞台元素，view 交出要画手势层（world 上画框选框），
  *  host 是页面交下来的读写面（见 createCanvasPage 里那一份 host）。 */
@@ -32,7 +32,7 @@ export function attachCanvasInteractions({ stage, view, host }) {
 
     // 滚轮缩放锚在指针上（passive: false 才拦得住 preventDefault，否则浏览器连页面一起滚）
     stage.addEventListener("wheel", (e) => {
-        if (!host.isPageActive() || e.target.closest(".ns-canvas-bar, .ns-canvas-gen-ctl input, .ns-canvas-node-video-el")) return;
+        if (!host.isPageActive() || e.target.closest(".ns-canvas-bar, .ns-canvas-gen-ctl input, .ns-canvas-node-video-el, .ns-canvas-car-text")) return;
         e.preventDefault();
         const rect = stage.getBoundingClientRect();
         host.setViewport(zoomViewportAt(state().viewport, e.clientX - rect.left, e.clientY - rect.top, e.deltaY));
@@ -301,7 +301,11 @@ export function attachCanvasInteractions({ stage, view, host }) {
         const nodeEl = e.target.closest(".ns-canvas-node");
         if (nodeEl) {
             const node = state().nodes.find((n) => n.id === nodeEl.dataset.nodeId);
-            if (node?.type === "text") nodeEl.querySelector("textarea")?.focus();   // 双击正文 = 进编辑
+            if (!node) return;
+            // 重画之后手上那一个元素已经不在层里，焦点要落给重画出来的那一块正文框
+            if (node.type === "text" || node.type === "recipe") {
+                stage.querySelector(`[data-node-id="${node.id}"]`)?.querySelector("textarea")?.focus();
+            }
             return;
         }
         host.addNode("text", worldPoint(e.clientX, e.clientY));   // 空白处双击 = 就地写一句提示词

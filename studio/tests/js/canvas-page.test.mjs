@@ -98,6 +98,12 @@ function dragFire(target, type, payload, init = {}) {
 }
 const galleryPayload = (obj) => ({ types: ["application/x-neo-gallery"], getData: (type) => (type === "application/x-neo-gallery" ? JSON.stringify(obj) : "") });
 const plainPayload = (text) => ({ types: ["text/plain"], getData: (type) => (type === "text/plain" ? text : "") });
+/** 图片节点里的 <img> 读出图来了：jsdom 不真的读图，把 naturalWidth/Height 钉上去再交 load 事件 */
+const loadSize = (img, width, height) => {
+  Object.defineProperty(img, "naturalWidth", { value: width, configurable: true });
+  Object.defineProperty(img, "naturalHeight", { value: height, configurable: true });
+  fire(img, "load");
+};
 async function makePage(env = mockCanvas(), extraHost = {}, { width = STAGE.width, height = STAGE.height } = {}) {
   resetEnv();
   for (const [route, responder] of Object.entries(env.routes)) mockRoute(route, responder);
@@ -164,6 +170,17 @@ describe("canvas-page", () => {
       assert.equal(canvas.CONNECTION_HIT_WIDTH, 16);
       assert.equal(canvas.MIN_NODE_WIDTH, 220);
       assert.equal(canvas.MIN_NODE_HEIGHT, 160);
+    });
+    test("图片节点按比例落位：横图压矮、竖图收窄，短边钉在 120", () => {
+      assert.deepEqual(store.fitImageSize(1600, 900), { width: 340, height: 191 });
+      assert.deepEqual(store.fitImageSize(900, 1600), { width: 135, height: 240 });
+      assert.deepEqual(store.fitImageSize(1000, 1000), { width: 340, height: 240 },
+        "正方图就是默认那一档，不缩");
+      assert.deepEqual(store.fitImageSize(3000, 100), { width: 340, height: 120 },
+        "极端的长条幅压在短边下限上，不许比这更矮");
+      assert.deepEqual(store.fitImageSize(100, 3000), { width: 120, height: 240 });
+      assert.equal(store.fitImageSize(0, 900), null);
+      assert.equal(store.fitImageSize(1600, 0), null);
     });
   });
 
@@ -458,18 +475,21 @@ describe("canvas-page", () => {
         nodes: state.nodes, connections: state.connections, viewport: { x: 10, y: 20, k: 1.5 },
         background_mode: "lines" });
     });
-    test("串联展开的标记走一圈存盘读盘：chain / train / expand_mode / disabled 都读得回来", () => {
-      const nodes = [{ id: "g1", type: "gen", title: "生成", position: at(0, 0), width: 320, height: 208,
+    test("串联的标记走一圈存盘读盘：chain / skill_id / disabled 都读得回来（旧键整份留着不丢）", () => {
+      const nodes = [{ id: "g1", type: "gen", title: "出片", position: at(0, 0), width: 320, height: 208,
         metadata: { kind: "video", chain: "train", recipe: "短片配方", seed: 100 } },
-      { id: "r1", type: "recipe", title: "配方闭环", position: at(400, 0), width: 386, height: 324,
-        metadata: { recipe: "短片配方", segment: 1, train: 1, expand_mode: "train", disabled: true } }];
+      { id: "r1", type: "recipe", title: "车厢", position: at(400, 0), width: 360, height: 152,
+        metadata: { recipe: "短片配方", segment: 1, skill_id: "h3_i2v", disabled: true } }];
       const state = canvas.readCanvas(canvas.serializeCanvas({ ...canvas.readCanvas({}),
         id: "canvas-0001", title: "一圈", nodes, connections: [{ id: "c1", fromNodeId: "r1", toNodeId: "g1" }],
         viewport: { x: 0, y: 0, k: 1 }, backgroundMode: "dots" }));
       assert.deepEqual([state.nodes[0].metadata.chain, state.nodes[0].metadata.seed], ["train", 100]);
-      assert.deepEqual([state.nodes[1].metadata.train, state.nodes[1].metadata.expand_mode,
-        state.nodes[1].metadata.disabled], [1, "train", true],
-      "旧画布没这些键时读回来就是 undefined：平铺、不停用、非串联");
+      assert.deepEqual([state.nodes[1].metadata.skill_id, state.nodes[1].metadata.disabled], ["h3_i2v", true]);
+      assert.deepEqual([state.nodes[1].width, state.nodes[1].height], [360, 152], "车厢落的就是精简卡的尺寸");
+      const old = canvas.readCanvas({ id: "c", nodes: [{ id: "n1", type: "recipe", width: 386, height: 324,
+        metadata: { recipe: "短片配方", segment: 1, train: 1, expand_mode: "train" } }] });
+      assert.deepEqual([old.nodes[0].metadata.train, old.nodes[0].metadata.expand_mode], [1, "train"],
+        "旧画布上那两键读得回来，新版不写也不丢");
       assert.deepEqual(state.connections, [{ id: "c1", fromNodeId: "r1", toNodeId: "g1" }]);
     });
     test("读盘：缺字段回默认值", () => {
@@ -539,6 +559,8 @@ const PAIR_WITH_LINK = () => mockCanvas({ projects: [
 /** 素材库弹窗的替身：开一次记一条回调，用例自己决定交回哪一批（与装配层同一份契约：一次一批数组） */
 /** 上下叠放的两台节点（串联展开那一列的形状：正文 340×240 在车厢正上方、车厢 360×152）：
  *  就近接线与竖轴连线的用例从这一张起 */
+/** 选中那一排上的动作名，按栏上的顺序 */
+const barActs = (view, id) => [...view.nodeEl(id).querySelectorAll("[data-node-act]")].map((el) => el.dataset.nodeAct);
 const STACKED_PAIR = () => mockCanvas({ projects: [
   { id: "canvas-0001", title: "甲", nodes: [
     { id: "txt", type: "text", title: "提示词", position: { x: 300, y: 60 }, width: 340, height: 240,
@@ -577,7 +599,7 @@ describe("canvas-page 页面", () => {
     test("空画布有提示，工具条上的动作一个不缺", async () => {
       const { view } = await makePage();
       assert.ok(view.hint.textContent.includes("把图拖进来"));
-      for (const label of ["加图片", "加提示词", "加生成节点", "加视频节点", "加配方节点",
+      for (const label of ["加图片", "加提示词", "加生成节点", "加视频节点", "添加配方",
         "撤销", "重做", "缩小", "放大", "适应内容", "背景"]) {
         assert.ok(view.bar.querySelector(`[aria-label="${label}"]`), label);
       }
@@ -607,13 +629,23 @@ describe("canvas-page 页面", () => {
     });
     test("节点头上的图标名都画得出来，停用与删除分得开", () => {
       const source = fs.readFileSync(path.join(webDir, "studio/pages/canvas/nodes.js"), "utf8");
-      const bar = source.slice(source.indexOf("function nodeBar"), source.indexOf("kids.push"));
-      const iconOf = (act) => (bar.match(new RegExp(`name === "${act}" \\? "([a-z0-9-]+)"`)) || [])[1];
+      const bar = source.slice(source.indexOf("function nodeBar"));
+      const iconOf = (act) => (bar.match(new RegExp(`nodeAct\\(\\$el, "${act}", [^,]+, "([a-z0-9-]+)"`)) || [])[1];
       // 两枚都是 ✕ 的话，按下去之前看不出这一枚是停一张还是删一张
       assert.equal(iconOf("disable"), "ban", "停用是圆圈上一道斜杠");
       assert.equal(iconOf("enable"), "check", "启用是一枚勾");
       assert.equal(iconOf("delete"), "trash", "删除是垃圾桶");
-      for (const name of ["ban", "trash", "check", "copy", "maximize", "circle-check"]) {
+      assert.equal(iconOf("copy"), "copy", "复制是两张叠着的纸");
+      for (const name of ["ban", "trash", "check", "copy", "circle-check"]) {
+        assert.ok(ICON_NAMES.includes(name), `图标 ${name} 在 icons.js 里画不出`);
+      }
+    });
+    test("车尾「参数」弹窗里那几枚胶囊的图标名都画得出来", () => {
+      const source = fs.readFileSync(path.join(webDir, "studio/pages/canvas/gen.js"), "utf8");
+      const names = [...source.slice(source.indexOf("function openChainParams"))
+        .matchAll(/\bicon:\s*"([a-z0-9-]+)"/g)].map((m) => m[1]);
+      assert.ok(names.length >= 4, `参数弹窗里只扫到 ${names.length} 枚图标名：${names.join(",")}`);
+      for (const name of names) {
         assert.ok(ICON_NAMES.includes(name), `图标 ${name} 在 icons.js 里画不出`);
       }
     });
@@ -623,7 +655,7 @@ describe("canvas-page 页面", () => {
       const menu = view.bar.querySelector(".ns-canvas-add-menu");
       assert.ok(add, "条上就一枚「加节点」");
       assert.ok(!menu.classList.contains("ns-canvas-add-menu-open"), "起手是收着的");
-      for (const label of ["加图片", "加提示词", "加生成节点", "加视频节点", "加配方节点"]) {
+      for (const label of ["加图片", "加提示词", "加生成节点", "加视频节点", "添加配方"]) {
         const row = menu.querySelector(`[aria-label="${label}"]`);
         assert.ok(row, `菜单里少了 ${label}`);
         assert.ok(row.textContent.includes(label), `${label} 要把名字打在行面上`);
@@ -702,6 +734,58 @@ describe("canvas-page 页面", () => {
       fire(img, "error");
       assert.ok(img.src.endsWith("/neo_gallery/placeholder.png"));
     });
+    test("图读上来了就按图自己的比例落那一格：横图压矮、竖图收窄", async () => {
+      const { page, view, env } = await makePage();
+      dragFire(view.stage, "drop", galleryPayload({ filename: "wide.png" }),
+        { clientX: CENTER.x, clientY: CENTER.y });
+      await settle();
+      const [wide] = page.current().nodes;
+      loadSize(view.nodeEl(wide.id).querySelector("img"), 1600, 900);
+      assert.deepEqual([view.box(wide.id).w, view.box(wide.id).h], [340, 191], "16:9 的图压矮那一格");
+      dragFire(view.stage, "drop", galleryPayload({ filename: "tall.png" }),
+        { clientX: CENTER.x, clientY: CENTER.y + 300 });
+      await settle();
+      const tall = page.current().nodes[1];
+      loadSize(view.nodeEl(tall.id).querySelector("img"), 900, 1600);
+      assert.deepEqual([view.box(tall.id).w, view.box(tall.id).h], [135, 240], "2:3 的图收窄那一格");
+      page.flush();
+      const saved = env.store.saved[0].nodes.find((n) => n.id === wide.id);
+      assert.deepEqual([saved.width, saved.height], [340, 191],
+        "落下的比例跟着节点存盘，下次打开还是这一格");
+    });
+    test("拉过尺寸的节点不按图重铺，没有素材坐标的占位图不算比例", async () => {
+      const { page, view } = await makePage();
+      dragFire(view.stage, "drop", galleryPayload({ filename: "wide.png" }),
+        { clientX: CENTER.x, clientY: CENTER.y });
+      await settle();
+      const [id] = page.current().nodes.map((node) => node.id);
+      fire(view.nodeEl(id).querySelector(".ns-canvas-resize-bottom-right"), "pointerdown",
+        { clientX: CENTER.x + 340, clientY: CENTER.y + 240, button: 0 });
+      fire(window, "pointermove", { clientX: CENTER.x + 420, clientY: CENTER.y + 320 });
+      fire(window, "pointerup", {});
+      const sized = view.box(id);
+      assert.ok(sized.w > 340 && sized.h > 240, "先把这一张拉大一档");
+      loadSize(view.nodeEl(id).querySelector("img"), 1600, 900);
+      assert.deepEqual([view.box(id).w, view.box(id).h], [sized.w, sized.h],
+        "用户拉过的尺寸是用户要的，不许按图重铺");
+      click(view.button("加图片"));
+      const empty = page.current().nodes[1];
+      loadSize(view.nodeEl(empty.id).querySelector("img"), 1600, 900);
+      assert.deepEqual([view.box(empty.id).w, view.box(empty.id).h], [340, 240],
+        "空节点上的占位图不是那张图，不能按它的比例铺");
+    });
+    test("串联素材那种 240×160 的小卡不按图重铺", async () => {
+      const { page, view } = await makePage(mockCanvas({ projects: [
+        { id: "canvas-0001", title: "甲", nodes: [
+          { id: "n-ref", type: "image", title: "图片", position: { x: 0, y: 0 }, width: 240, height: 160,
+            metadata: { filename: "ref.png", subfolder: "" } }],
+          connections: [], viewport: { x: 0, y: 0, k: 1 }, background_mode: "dots" }] }));
+      await settle();
+      loadSize(view.nodeEl("n-ref").querySelector("img"), 1600, 900);
+      assert.deepEqual([view.box("n-ref").w, view.box("n-ref").h], [240, 160],
+        "串联的行距与素材卡都按 240×160 那一档铺，按图重铺就会压到车厢身上");
+      assert.equal(page.current().nodes[0].height, 160);
+    });
   });
 
 
@@ -745,10 +829,10 @@ describe("canvas-page 页面", () => {
       const { view } = await makePage();
       click(view.button("加提示词"));
       const node = view.nodeLayer.children[0];
-      const ta = node.querySelector("textarea");
       fire(node, "dblclick", { clientX: CENTER.x, clientY: CENTER.y });
-      assert.equal(document.activeElement, ta);
-      assert.equal(view.nodeLayer.children.length, 1);
+      assert.ok(document.activeElement?.classList?.contains("ns-canvas-node-textarea"),
+        "双击 = 落进正文框");
+      assert.equal(view.nodeLayer.children.length, 1, "进编辑不重建节点");
     });
   });
 
@@ -1324,25 +1408,23 @@ describe("canvas-page 页面", () => {
       assert.equal(env.store.saved[0].nodes.find((n) => n.id === "n-b").metadata.filename, "picked.png");
     });
 
-    test("填好图的节点不出「选图」，两类节点都有删除钮", async () => {
+    test("填好图的节点不出「选图」，选中那一排就是停用 / 主图 / 复制 / 删除", async () => {
       const { view } = await makePage(PAIR_WITH_LINK());
-      assert.equal(nodeAct(view, "n-a", "pick"), null);
-      assert.ok(nodeAct(view, "n-a", "delete") && nodeAct(view, "n-b", "delete"));
-      assert.ok(nodeAct(view, "n-a", "hero"), "图片节点有主图钮");
-      assert.equal(nodeAct(view, "n-a", "edit"), null, "栏上不摆「进入编辑」：进编辑是双击正文那一条路");
-      assert.equal(nodeAct(view, "n-b", "edit"), null);
+      assert.deepEqual(barActs(view, "n-a"), ["disable", "hero", "copy", "delete"],
+        "填好图的这一张不出「选图」");
+      assert.deepEqual(barActs(view, "n-b"), ["disable", "hero", "pick", "copy", "delete"],
+        "没填图的这一张多一枚「选图」");
     });
 
-    test("提示词节点的栏就是停用、复制、删除三枚，没有「进入编辑」", async () => {
+    test("选中就把那一排摆出来：停用 / 复制 / 删除，不留「进入编辑」", async () => {
       const { view, page } = await makePage(mockCanvas());
       click(view.button("加提示词"));
       await settle();
       const txt = page.current().nodes.find((n) => n.type === "text").id;
-      const acts = [...view.nodeEl(txt).querySelectorAll("[data-node-act]")]
-        .map((el) => el.dataset.nodeAct).filter((a) => a !== "expand");
-      assert.deepEqual(acts, ["disable", "copy", "delete"],
-        "进编辑只剩双击正文：栏上再摆一枚就是同一件事给两个入口");
-      assert.ok(view.nodeEl(txt).querySelector("textarea"), "正文框还在，双击落进去");
+      assert.deepEqual(barActs(view, txt), ["disable", "copy", "delete"],
+        "正文节点的栏上有停用 / 复制 / 删除三枚");
+      assert.ok(view.nodeEl(txt).querySelector("textarea"), "正文框还在：进编辑是双击它");
+      assert.equal(view.nodeEl(txt).querySelector(".ns-canvas-node-hero"), null, "就一排，不铺第二排");
     });
 
     test("设为主图整片只留一枚，再点同一枚是取消", async () => {
@@ -1361,6 +1443,7 @@ describe("canvas-page 页面", () => {
     test("附加操作栏里的删除只删这一张，连带两端接上的线", async () => {
       const { view, page } = await makePage(PAIR_WITH_LINK());
       assert.equal(view.links.querySelectorAll(".ns-canvas-line").length, 1);
+      fire(view.nodeEl("n-a"), "dblclick", {});
       click(nodeAct(view, "n-a", "delete"));
       await settle();
       assert.deepEqual(page.current().nodes.map((n) => n.id), ["n-b"]);
@@ -1386,7 +1469,10 @@ describe("canvas-page 页面", () => {
         assert.equal(el.querySelector(".ns-canvas-node-head"), null, "节点不铺标题栏");
         assert.equal(el.querySelector(".ns-canvas-node-title"), null, "也不铺标题文字");
         assert.ok(el.children[0].matches(".ns-canvas-node-img, .ns-canvas-node-textarea"), "第一层就是内容");
-        assert.ok(el.children[1].classList.contains("ns-canvas-node-bar"), "操作栏直接住在节点里");
+      }
+      for (const el of [...view.nodeLayer.children]) {
+        assert.ok(el.querySelector(".ns-canvas-node-bar"), "每一张节点里都住着一排附加操作");
+        assert.equal(el.querySelector(".ns-canvas-node-hero"), null, "选中那一排就一排");
       }
     });
     test("操作栏默认不出现，节点选中时那条 CSS 规则才把它铺出来", () => {
@@ -1428,6 +1514,7 @@ describe("canvas-page 页面", () => {
     test("操作栏上的复制只复制这一张，选中落到副本上", async () => {
       const { view, page } = await makePage(PAIR_WITH_LINK());
       selectNode(view, "n-a");
+      fire(view.nodeEl("n-a"), "dblclick", {});
       click(nodeAct(view, "n-a", "copy"));
       const copy = page.current().nodes.at(-1);
       assert.ok(copy.id !== "n-a", "副本是新 id");
@@ -1481,6 +1568,7 @@ describe("canvas-page 页面", () => {
 
     test("删掉带连线的节点，撤销把节点与连线一起带回来", async () => {
       const { view, page } = await makePage(PAIR_WITH_LINK());
+      fire(view.nodeEl("n-a"), "dblclick", {});
       click(nodeAct(view, "n-a", "delete"));
       assert.equal(page.current().connections.length, 0);
       undo();
@@ -1715,8 +1803,10 @@ describe("canvas-page 页面", () => {
       assert.ok(evFire(ta, "mousedown").defaultPrevented, "没在编辑时那一发 mousedown 要拦掉焦点");
       assert.notEqual(document.activeElement, ta, "单击只选中节点，光标不进正文");
       fire(ta, "dblclick");
-      assert.equal(document.activeElement, ta, "双击才是进编辑");
-      assert.ok(!evFire(ta, "mousedown").defaultPrevented, "编辑态里不拦，划词与光标动作照旧");
+      // 双击同时浮出停用 / 复制 / 删除那一排，整层重画过一次：在编辑的是重画出来的那一块正文框
+      const live = document.activeElement;
+      assert.ok(live?.classList?.contains("ns-canvas-node-textarea"), "双击才是进编辑");
+      assert.ok(!evFire(live, "mousedown").defaultPrevented, "编辑态里不拦，划词与光标动作照旧");
     });
 
     test("提示词节点用 Ctrl+C / Ctrl+V / Ctrl+X 走得通，副本带着那句提示词", async () => {
@@ -1943,10 +2033,7 @@ describe("canvas-page 页面", () => {
         click([...menu().querySelectorAll(".neo-gallery-gm-menu-item")].find((el) => el.textContent === value));
         await settle();
       };
-      // 配方卡独有的读法：段一行的钮（一枚一段，按段号排）与那几行概览文本
-      const segBtn = (id, at) => [...ctx.view.nodeEl(id).querySelectorAll(".ns-canvas-seg-btn")][at];
-      const segLabels = (id) => [...ctx.view.nodeEl(id).querySelectorAll(".ns-canvas-seg-btn")]
-        .map((el) => el.textContent.trim());
+      // 车厢卡独有的读法：那几行概览文本（段号是 .ns-canvas-car-seg，技能胶囊走上面那几条胶囊读法）
       const recipeText = (id, part) => ctx.view.nodeEl(id)
         .querySelector(`.ns-canvas-recipe-${part}`)?.textContent || "";
       // 画布上真连一条线：从右接线点拖到目标节点中间松手
@@ -1961,7 +2048,7 @@ describe("canvas-page 页面", () => {
         fire(window, "pointerup", {});
       };
       return { ...ctx, env, genText, genBtn, chipLabelAt, chipAt, menu, pickChip,
-        segBtn, segLabels, recipeText, linkNodes };
+        recipeText, linkNodes };
     }
     const genCalls = () => fetchLog.filter((c) => c.path === "/neo_image_gen/generate");
     const okImages = (n) => ({ task_id: "gen-1", status: "succeeded",
@@ -1980,7 +2067,11 @@ describe("canvas-page 页面", () => {
       segments: [{ title: "开场", skill_id: "h3_t2v", duration_sec: 5, prompt: "开场那一段的提示词",
         first_frame: "开场首帧.png", refs: { images: ["角色设定.png"] } },
         { title: "收尾", skill_id: "h3_t2v", duration_sec: 8, refs: { videos: ["收尾参考.mp4"] } }] };
-    const RECIPE_ROW_EMPTY = { ...RECIPE_ROW, name: "空配方", title: "空", segments: [] };
+    // 七段配方：没有参考素材，每一列就是一张厢的宽，专门用来量「几厢一行」的摆位
+    const SEVEN_ROW = { name: "七段配方", title: "七段", source: "mine", type: "video_director",
+      canvas_id: "", shared: { mode: "i2v", width: 1344, height: 768 },
+      segments: Array.from({ length: 7 }, (_s, i) => ({ title: `第${i + 1}段`,
+        skill_id: "h3_t2v", duration_sec: 5, prompt: `第${i + 1}段正文` })) };
     const clipRoutes = ({ snaps = [{ success: true, task_id: "clip-1", status: "succeeded",
       filename: "o.mp4", subfolder: "sub" }], recipes = [RECIPE_ROW] } = {}) => {
       let at = 0;
@@ -2001,12 +2092,24 @@ describe("canvas-page 页面", () => {
       metadata: { kind: "video", skill_id: "h3_t2v", duration: 8, width: 1344, height: 768, ...meta } });
     const videoSlot = (id, x, meta = {}) => ({ id, type: "video", title: "视频",
       position: { x, y: 600 }, width: 320, height: 208, metadata: meta });
-    const recipeNode = (id, x, meta = {}) => ({ id, type: "recipe", title: "配方闭环",
-      position: { x, y: 300 }, width: 386, height: 324,
-      metadata: { recipe: "短片配方", segment: 0, anchors: "both", ...meta } });
+    // 车厢（配方节点）：段号与这一段自己的技能在它身上，整列共用的参数在它那一列的车尾上
+    const recipeNode = (id, x, meta = {}) => ({ id, type: "recipe", title: "车厢",
+      position: { x, y: 300 }, width: 360, height: 152,
+      metadata: { recipe: "短片配方", segment: 0, skill_id: "", ...meta } });
+    const tailNode = (id, x, meta = {}) => ({ id, type: "gen", title: "出片",
+      position: { x, y: 0 }, width: 320, height: 208,
+      metadata: { kind: "video", chain: "train", recipe: "短片配方", anchors: "both",
+          continuity: true, context_frames: 22, steps: -1, seed: -1, ...meta } });
     const clipCalls = (path) => fetchLog.filter((c) => c.path === path);
     const clipPolls = (taskId) => fetchLog.filter((c) => c.path.endsWith(`/${taskId}`));
     const clipVideoSrc = (ctx, id) => ctx.view.nodeEl(id).querySelector("video")?.getAttribute("src") || "";
+    /** 工具条「添加配方」→ 弹窗第一张卡：车厢、素材与车尾一次铺进画布（换配方就是一条新链） */
+    const layTrain = async (ctx, cardAt = 0) => {
+      click(ctx.view.button("添加配方"));
+      await settle();
+      click([...ctx.host.querySelectorAll(".ns-canvas-picker-card")][cardAt]);
+      await deepSettle();
+    };
 
     test("加生成节点：铺一张生成节点，默认技能落内置生图技能", async () => {
       const { page, view } = await genPage([]);
@@ -2027,7 +2130,8 @@ describe("canvas-page 页面", () => {
       assert.deepEqual([ctx.chipAt("g1", 0), ctx.chipAt("g1", 1), ctx.chipAt("g1", 2), ctx.chipAt("g1", 3)]
           .map((el) => el.title), ["技能", "默认比例", "长边尺寸", "生图张数"],
         "精简胶囊不带行标签，每一枚是干什么的写在悬停提示里");
-      assert.equal(ctx.genText("g1", "model"), "主模型：跟随技能配置", "技能 config 取到手才写得出这一行");
+      assert.equal(ctx.genText("g1", "model"), "主模型：跟随技能配置 · 停用 · 双击节点停用",
+        "技能 config 取到手才写得出这一行；停用与启用从双击节点那一发来，这一行就写在那一行上");
       assert.equal(ctx.genText("g1", "status"), "");
       click(ctx.genBtn("g1", "出图"));
       await deepSettle();
@@ -2188,24 +2292,15 @@ describe("canvas-page 页面", () => {
       await settle();
       assert.equal(ctx.menu(), null, "点节点外收掉菜单");
     });
-    test("加视频节点与加配方节点：16:9 的出片节点与一份空着的配方", async () => {
+    test("加视频节点：16:9 的出片节点，默认技能落在视频技能表第一份", async () => {
       const ctx = await genPage([promptNode("t1", "一句"), videoSlot("vid1", 700)], [], { routes: clipRoutes() });
       await deepSettle();   // 视频技能表与配方表都在 build 之后才落地
       click(ctx.view.button("加视频节点"));
-      click(ctx.view.button("加配方节点"));
       await settle();
       const video = ctx.page.current().nodes.find((n) => n.type === "gen" && n.metadata.kind === "video");
-      const recipe = ctx.page.current().nodes.find((n) => n.type === "recipe");
       assert.deepEqual([video.width, video.height], [320, 208], "出片节点默认 16:9 的框");
       assert.equal(video.metadata.skill_id, "h3_t2v", "技能默认落在视频技能表第一份");
       assert.ok(ctx.genBtn(video.id, "生成视频"), "出片节点自带生成视频钮");
-      assert.equal(recipe.metadata.recipe, "", "配方默认空着，由面板里选");
-      assert.equal(recipe.metadata.anchors, "both", "默认两端锚点");
-      assert.equal(ctx.genText(recipe.id, "model"), "未选配方", "没选配方时概览行这么说");
-      click(ctx.genBtn(recipe.id, "生成视频"));
-      await settle();
-      assert.ok(ctx.env.store.toasts.some((item) => item.message.includes("先选一份配方")));
-      assert.equal(clipCalls("/neo_video_gen/run_segment").length, 0, "没选配方不进闭环节");
       assert.ok(ctx.view.nodeEl("vid1").querySelector(".ns-canvas-node-video-empty"), "没落上片的视频位这么说");
     });
     test("视频节点出片：入参进简单视频链，成片写进下游空视频节点", async () => {
@@ -2294,70 +2389,6 @@ describe("canvas-page 页面", () => {
       assert.equal(clipCalls("/neo_video_gen/simple").length, 0, "无参考的 i2v 不进队列");
       assert.ok(ctx.env.store.toasts.some((item) => item.message.includes("要参考素材")));
     });
-    test("配方节点出片：只发选中的那一段进闭环节，成片写进下游视频节点", async () => {
-      const ctx = await genPage([recipeNode("r1", 0, { segment: 1 }), videoSlot("vid1", 700)],
-        [link("r1", "vid1")], { routes: clipRoutes() });
-      await deepSettle();
-      assert.ok(ctx.genText("r1", "model").includes("2 段"), ctx.genText("r1", "model"));
-      assert.ok(ctx.genText("r1", "model").includes("1344×768"), "概览行读配方自己那份 spec");
-      click(ctx.genBtn("r1", "生成视频"));
-      await deepSettle();
-      assert.deepEqual(clipCalls("/neo_video_gen/run_segment")[0].body, {
-        recipe: "短片配方", segment: 1, anchors: "both", steps: -1, seed: -1,
-        continuity: true, context_frames: 22, prompt: "", references: { images: [], videos: [], audios: [] },
-      }, "只发选中的这一段，生成参数留跟随");
-      assert.equal(clipVideoSrc(ctx, "vid1"), "/neo_gallery/video?filename=seg0.mp4&subfolder=director");
-      assert.equal(ctx.genText("r1", "status"), "", "出完片状态行收回");
-      assert.ok(ctx.env.store.toasts.some((item) => item.message.includes("已出片")));
-    });
-    test("配方节点：没选配方不发，选中的段与锚点落进 metadata 并进闭环节", async () => {
-      const ctx = await genPage([recipeNode("r1", 0, { recipe: "" })], [], { routes: clipRoutes() });
-      await deepSettle();
-      assert.ok(ctx.chipLabelAt("r1", 0).includes("未选配方"), "配方胶囊先说未选");
-      assert.equal(ctx.genText("r1", "model"), "未选配方", "没选配方时概览行这么说");
-      click(ctx.genBtn("r1", "生成视频"));
-      await settle();
-      assert.equal(clipCalls("/neo_video_gen/run_segment").length, 0, "没选配方不进闭环节");
-      await ctx.pickChip("r1", 0, "短片配方");
-      await ctx.pickChip("r1", 2, "不用锚点");
-      const meta = ctx.page.current().nodes.find((n) => n.id === "r1").metadata;
-      assert.deepEqual([meta.recipe, meta.segment, meta.anchors], ["短片配方", 0, "none"],
-        "换配方时段号回到第 1 段");
-      click(ctx.genBtn("r1", "生成视频"));
-      await deepSettle();
-      assert.deepEqual(clipCalls("/neo_video_gen/run_segment")[0].body, {
-        recipe: "短片配方", segment: 0, anchors: "none", steps: -1, seed: -1,
-        continuity: true, context_frames: 22, prompt: "", references: { images: [], videos: [], audios: [] },
-      });
-    });
-    test("配方胶囊不列一段都没有的配方：那一个选了只会撞到段序号越界", async () => {
-      const ctx = await genPage([recipeNode("r1", 0, { recipe: "" })], [],
-        { routes: clipRoutes({ recipes: [RECIPE_ROW, RECIPE_ROW_EMPTY] }) });
-      await deepSettle();
-      click(ctx.chipAt("r1", 0));
-      await settle();
-      const labels = [...ctx.menu().querySelectorAll(".neo-gallery-gm-menu-item")].map((el) => el.textContent);
-      assert.ok(labels.includes("短片配方"), "有段的配方照旧列出来");
-      assert.ok(!labels.includes("空配方"), "一段都没有的配方不给选");
-    });
-    const undoKey = () => fire(window, "keydown", { key: "z", ctrlKey: true });
-
-    test("配方卡一段一枚钮：主色跟着选中的段走，改动进节点也进撤销栈", async () => {
-      const ctx = await genPage([recipeNode("r1", 0)], [], { routes: clipRoutes() });
-      await deepSettle();
-      assert.deepEqual(ctx.segLabels("r1"), ["段 1", "段 2"], "段一行一枚一段，按段号排");
-      assert.ok(ctx.segBtn("r1", 0).classList.contains("ns-canvas-seg-btn-on"), "第 1 段抬到主色");
-      assert.ok(ctx.segBtn("r1", 1).title.includes("8 秒"), "段钮的悬停说这一段多长");
-      assert.ok(ctx.segBtn("r1", 0).title.includes("开场那一段的提示词"), "悬停里带这一段的提示词");
-      click(ctx.segBtn("r1", 1));
-      await settle();
-      assert.equal(ctx.page.current().nodes.find((n) => n.id === "r1").metadata.segment, 1);
-      assert.ok(ctx.segBtn("r1", 1).classList.contains("ns-canvas-seg-btn-on"), "换段之后主色跟着走");
-      undoKey();
-      await settle();
-      assert.equal(ctx.page.current().nodes.find((n) => n.id === "r1").metadata.segment, 0, "撤销收回上一次选的段");
-    });
-
     test("卡上正文行按下拖就是拖这一张：只有胶囊、按钮与种子输入起手不吃这一按", async () => {
       const ctx = await genPage([recipeNode("r1", 0)], [], { routes: clipRoutes() });
       await deepSettle();
@@ -2369,178 +2400,36 @@ describe("canvas-page 页面", () => {
         fire(window, "pointerup", {});
         return [posOf().x - before.x, posOf().y - before.y];
       };
-      const row = (part) => ctx.view.nodeEl("r1").querySelector(`.ns-canvas-recipe-${part}`);
-      assert.deepEqual(drag(row("info-text"), 40, 30), [40, 30], "第几段那一行按下拖就是拖这一张节点");
-      assert.deepEqual(drag(row("text"), -25, 12), [-25, 12], "配方提示词那一行按下拖就是拖这一张节点");
-      assert.deepEqual(drag(row("count"), 18, -9), [18, -9], "参考素材计数那一行按下拖就是拖这一张节点");
-      assert.deepEqual(drag(row("thumb"), 12, 14), [12, 14], "参考素材缩略图按下拖就是拖这一张节点");
-      assert.deepEqual(drag(ctx.chipAt("r1", 1), 40, 30), [0, 0], "胶囊起手不吃这一按，浏览器要在它上面发 click");
-      assert.deepEqual(drag(ctx.genBtn("r1", "生成视频"), 40, 30), [0, 0], "生成视频钮起手不吃这一按");
-      assert.deepEqual(drag(ctx.segBtn("r1", 0), 40, 30), [0, 0], "段钮起手不吃这一按");
-      assert.deepEqual(drag(row("seed"), 40, 30), [0, 0], "种子输入起手不吃这一按，点了要能落焦点打字");
+      const row = (part) => ctx.view.nodeEl("r1").querySelector(`.ns-canvas-${part}`);
+      assert.deepEqual(drag(row("car-info"), 40, 30), [40, 30], "段号与配方概览那一行按下拖就是拖这一张节点");
+      assert.deepEqual(drag(row("recipe-count"), 18, -9), [18, -9], "参考素材计数那一行按下拖就是拖这一张节点");
+      // 正文框是打字的地方：拖过一截才算拖节点（TEXT_DRAG_GATE），没拖过就是选字
+      const ta = ctx.view.nodeEl("r1").querySelector(".ns-canvas-car-text");
+      assert.deepEqual(drag(ta, 2, 1), [0, 0], "正文框里拖两像素不算拖节点");
+      assert.deepEqual(drag(ta, 40, 30), [40, 30], "正文框里拖过一截就是拖这一张节点");
       assert.ok([...ctx.view.nodeLayer.children].some((el) => el.dataset.nodeId === "r1"
         && el.classList.contains("ns-canvas-node-on")), "按在控件上就是选中这一张");
     });
 
     test("配方卡提示词来源那一行：连过来的正文就是画布那一份", async () => {
       const ctx = await genPage([promptNode("t1", "画布上写的提示词"), recipeNode("r1", 0),
-        videoSlot("vid1", 700)], [link("r1", "vid1")], { routes: clipRoutes() });
+        tailNode("g1", 700, { skill_id: "h3_t2v" }), videoSlot("vid1", 1200)],
+      [link("r1", "g1")], { routes: clipRoutes() });
       await deepSettle();
       const row = () => ctx.view.nodeEl("r1").querySelector(".ns-canvas-recipe-prompt");
-      assert.equal(ctx.recipeText("r1", "text"), "开场那一段的提示词", "没连正文时这一行读配方选中那一段");
-      assert.equal(ctx.recipeText("r1", "src"), "配方");
+      const car = () => ctx.view.nodeEl("r1").querySelector(".ns-canvas-car-text");
+      assert.equal(car().value, "开场那一段的提示词", "没连正文也没写过：这一格铺的就是配方那一段那一句");
+      assert.equal(ctx.recipeText("r1", "src"), "", "配方那一段就是默认来源：提示词前不写「配方」二字");
       assert.ok(!row().classList.contains("ns-canvas-recipe-on"), "用配方那一份时不抬主色");
       ctx.linkNodes("t1", "r1");
       await settle();
       assert.ok(row().classList.contains("ns-canvas-recipe-on"), "连了正文，这一行抬到主色");
       assert.equal(ctx.recipeText("r1", "src"), "画布");
-      assert.equal(ctx.recipeText("r1", "text"), "画布上写的提示词");
-      click(ctx.genBtn("r1", "生成视频"));
+      assert.ok(car().disabled, "连过来的正文在跑，这一格锁着");
+      click(ctx.genBtn("g1", "生成视频"));
       await deepSettle();
       assert.equal(clipCalls("/neo_video_gen/run_segment")[0].body.prompt, "画布上写的提示词",
         "出片发出去的就是画布那一份");
-    });
-
-    test("配方卡上的参考素材：连过来的图排在配方素材前面，出片按参考素材那套交后端", async () => {
-      const ctx = await genPage([imageSlot("i1", -700), recipeNode("r1", 0),
-        videoSlot("vid1", 700)], [link("r1", "vid1")], { routes: clipRoutes() });
-      await deepSettle();
-      ctx.page.current().nodes.find((n) => n.id === "i1").metadata = { filename: "a.png", subfolder: "sub" };
-      ctx.linkNodes("i1", "r1");
-      await settle();
-      const thumbs = () => [...ctx.view.nodeEl("r1").querySelectorAll(".ns-canvas-recipe-thumb")];
-      assert.deepEqual(thumbs().map((el) => el.getAttribute("alt")),
-        ["a.png", "开场首帧.png", "角色设定.png"], "首帧排最前，连过来的图排在配方素材前面");
-      assert.ok(thumbs()[0].getAttribute("src").startsWith("/neo_gallery/thumbnail"), "画布上的图走 Gallery 缩略图");
-      assert.ok(thumbs()[1].getAttribute("src").includes("/rs_recipes/thumbnail")
-        && thumbs()[1].getAttribute("src").includes("dir=assets"), "配方素材走配方 assets 那条缩略图");
-      assert.equal(ctx.recipeText("r1", "count"), "3 张参考素材");
-      click(ctx.genBtn("r1", "生成视频"));
-      await deepSettle();
-      assert.deepEqual(clipCalls("/neo_video_gen/run_segment")[0].body.references,
-        { images: [{ kind: "input", value: "sub/a.png[output]" }], videos: [], audios: [] },
-        "连过来的图按参考素材那套标注交后端");
-    });
-
-    test("展开配方：一段一台段节点，提示词与参考素材摊成连过去的独立节点", async () => {
-      const ctx = await genPage([recipeNode("r1", 0, { anchors: "none", segment: 1 })], [],
-        { routes: clipRoutes() });
-      await deepSettle();
-      click(ctx.genBtn("r1", "展开配方"));
-      await settle();
-      const made = ctx.page.current().nodes.filter((n) => n.id !== "r1");
-      const typed = (type) => made.filter((n) => n.type === type);
-      assert.deepEqual([typed("recipe").length, typed("text").length, typed("video").length], [2, 2, 2],
-        "两段就是两台段节点、两块提示词、两台空视频位");
-      assert.deepEqual(typed("image").map((n) => n.metadata.asset),
-        ["开场首帧.png", "角色设定.png", "收尾参考.mp4"], "每一段的首帧与参考素材各摊一张");
-      assert.ok(typed("image").every((n) => n.metadata.recipe === "短片配方"),
-        "素材节点认得自己是哪一份配方的");
-      assert.deepEqual(typed("recipe").map((n) => n.metadata.segment), [0, 1], "段号按段序落进新节点");
-      assert.ok(typed("recipe").every((n) => n.metadata.recipe === "短片配方" && n.metadata.anchors === "none"),
-        "配方与锚点带到每一段上");
-      assert.deepEqual(typed("text").map((n) => n.metadata.content), ["开场那一段的提示词", ""],
-        "提示词摊成正文节点，配方里没写的就是空的");
-      assert.deepEqual(typed("text").map((n) => [n.position.x, n.position.y]), [[426, 300], [426, 724]],
-        "一段一行往下排");
-      assert.deepEqual(typed("image").map((n) => [n.position.x, n.position.y]),
-        [[716, 300], [998, 300], [716, 724]], "参考素材排在提示词右边一行里");
-      assert.deepEqual(typed("recipe").map((n) => [n.position.x, n.position.y]), [[1288, 300], [1288, 724]]);
-      assert.deepEqual(typed("video").map((n) => [n.position.x, n.position.y]), [[1706, 300], [1706, 724]],
-        "每段右边留一台空的成片位");
-      const conns = ctx.page.current().connections;
-      assert.equal(conns.length, 7, "一次摊出 7 条线：正文→段、素材→段、段→视频位");
-      assert.ok(conns.some((c) => c.fromNodeId === typed("text")[0].id
-        && c.toNodeId === typed("recipe")[0].id), "第 1 段的提示词连到自己那台段节点");
-      assert.ok(conns.some((c) => c.fromNodeId === typed("image")[1].id
-        && c.toNodeId === typed("recipe")[0].id), "这一段的参考图连到自己那台段节点");
-      assert.ok(conns.some((c) => c.fromNodeId === typed("recipe")[1].id
-        && c.toNodeId === typed("video")[1].id), "第 2 段的成片有落的位子");
-      assert.equal(lit(ctx.view), 2, "选中落在摊出来的那两台段节点上");
-      assert.ok(ctx.env.store.toasts.some((item) => item.message.includes("已展开 2 段")));
-      undoKey();
-      await settle();
-      assert.deepEqual([ctx.page.current().nodes.length, ctx.page.current().connections.length], [1, 0],
-        "撤销一次退掉整批");
-    });
-
-    test("展开出来的节点直接出片：素材连配方名交后端，正文走的就是那条连线", async () => {
-      const ctx = await genPage([recipeNode("r1", 0, { anchors: "none", segment: 1 })], [],
-        { routes: clipRoutes() });
-      await deepSettle();
-      click(ctx.genBtn("r1", "展开配方"));
-      await settle();
-      const segId = ctx.page.current().nodes.find((n) => n.type === "recipe" && n.metadata.segment === 0).id;
-      click(ctx.genBtn(segId, "生成视频"));
-      await deepSettle();
-      const calls = clipCalls("/neo_video_gen/run_segment");
-      assert.equal(calls.length, 1, "展开本身不出片");
-      const seg = calls[0].body;
-      assert.deepEqual(seg.references.images, [
-        { kind: "recipe", value: "开场首帧.png", recipe: "短片配方" },
-        { kind: "recipe", value: "角色设定.png", recipe: "短片配方" },
-      ], "摊出来的素材连配方名一起交后端，画布这边不用先把素材拷进 input");
-      assert.equal(seg.prompt, "开场那一段的提示词", "摊出来的正文节点连到段节点上，出片走的就是这条连线");
-      assert.equal(seg.segment, 0);
-    });
-
-    test("串联展开：车厢首尾相接接到车尾，整列共用的参数与出片落在车尾那台生成节点上", async () => {
-      const ctx = await genPage([recipeNode("r1", 0, { anchors: "first", seed: 100 })], [], { routes: clipRoutes() });
-      await deepSettle();
-      assert.equal(ctx.genBtn("r1", "平铺展开").textContent.trim(), "平铺展开", "展开方式先站在平铺那一挡");
-      click(ctx.genBtn("r1", "平铺展开"));
-      await settle();
-      assert.equal(ctx.genBtn("r1", "串联展开").textContent.trim(), "串联展开", "按一下就换到串联那一挡");
-      assert.equal(ctx.page.current().nodes.find((n) => n.id === "r1").metadata.expand_mode, "train");
-      click(ctx.genBtn("r1", "展开配方"));
-      await settle();
-      const made = ctx.page.current().nodes.filter((n) => n.id !== "r1");
-      const typed = (type) => made.filter((n) => n.type === type);
-      assert.deepEqual([typed("recipe").length, typed("text").length, typed("video").length, typed("image").length, typed("gen").length],
-        [2, 2, 0, 3, 1], "两段就是两台车厢、两块正文、三张参考素材与一台车尾：串联不铺成片位");
-      const [car1, car2] = typed("recipe");
-      const tail = typed("gen")[0];
-      assert.deepEqual([car1.metadata.train, car2.metadata.train], [1, 1], "车厢认得自己是串联里的一段");
-      assert.deepEqual([car1.metadata.segment, car2.metadata.segment], [0, 1], "段号按段序落进车厢");
-      assert.deepEqual([car1.width, car1.height], [360, 152], "车厢落的是精简卡的尺寸");
-      assert.deepEqual([typed("text")[0].width, typed("text")[0].height], [360, 220],
-        "正文与车厢同宽，铺得比平铺那一挡宽——整段提示词读得完");
-      assert.equal(car1.metadata.anchors, undefined, "锚点与步数这一套不落在车厢上");
-      const carEl = ctx.view.nodeEl(car1.id);
-      assert.ok(carEl.querySelector(".ns-canvas-car"), "车厢走的是精简卡那一层");
-      assert.ok(!nodeAct(ctx.view, car1.id, "expand"), "车厢不给「展开配方」那一枚：点了是把同一份配方再铺一遍");
-      assert.deepEqual(typed("recipe").map((n) => ctx.view.nodeEl(n.id)
-        .querySelectorAll(".ns-canvas-gen-btn").length), [0, 0], "车厢卡上一枚钮都没有：停用与删除都在节点上方的浮出栏里");
-      assert.deepEqual([tail.metadata.chain, tail.metadata.kind, tail.metadata.recipe,
-        tail.metadata.anchors, tail.metadata.seed], ["train", "video", "短片配方", "first", 100],
-        "整列共用的那一份参数在车尾");
-      const conns = ctx.page.current().connections;
-      const wired = (from, to) => conns.some((c) => c.fromNodeId === from && c.toNodeId === to);
-      assert.ok(wired(car1.id, car2.id), "第 1 段接到第 2 段");
-      assert.ok(wired(car2.id, tail.id), "最后一节接到车尾");
-      assert.ok(wired(typed("text")[0].id, car1.id), "这一段的正文连到自己那台车厢");
-      assert.equal(typed("text")[0].position.x, car1.position.x, "正文与车厢同列");
-      assert.ok(typed("text")[0].position.y < car1.position.y, "正文落在车厢上方");
-      // 上下叠放的一列走竖轴：正文出底边、车厢收顶边，线不绕到右中（拉线与看线同一口径）
-      const lineD = (from, to) => ctx.view.links
-        .querySelector(`.ns-canvas-line[data-connection-id="conn-${from}-${to}"]`).getAttribute("d");
-      const textTop = typed("text")[0];
-      assert.ok(lineD(textTop.id, car1.id).startsWith(
-        `M ${car1.position.x + 180} ${textTop.position.y + 220}`), "正文从底边中点出线");
-      assert.ok(lineD(textTop.id, car1.id).endsWith(` ${car1.position.x + 180} ${car1.position.y}`),
-        "线落在车厢顶边中点");
-      const refs = typed("image");
-      assert.deepEqual(refs.map((n) => [n.width, n.height]), [[176, 124], [176, 124], [176, 124]],
-        "素材节点比平铺那一挡小一档：两列正好铺满车厢那一列的宽");
-      assert.deepEqual(refs.map((n) => [n.position.x, n.position.y]), [[426, 488], [610, 488], [826, 488]],
-        "素材铺在自己那台车厢正下方：第 1 段两张，第 2 段一张");
-      assert.ok(wired(refs[0].id, car1.id) && wired(refs[1].id, car1.id) && wired(refs[2].id, car2.id),
-        "每一张素材连到自己那一段的车厢");
-      assert.ok(ctx.env.store.toasts.some((item) => item.message.includes("已串开 2 段")));
-      undoKey();
-      await settle();
-      assert.deepEqual([ctx.page.current().nodes.length, ctx.page.current().connections.length], [1, 0],
-        "撤销一次退掉整批");
     });
 
     test("车尾出片：启用的段按链序依次入队，参数取车尾那一份，成片落进新开的视频位", async () => {
@@ -2553,22 +2442,20 @@ describe("canvas-page 页面", () => {
           if (++seq === 2) await gate;
           return jsonResponse({ success: true, task_id: `chain-${seq}`, status: "queued" });
         } };
-      const ctx = await genPage([recipeNode("r1", 0, { expand_mode: "train", seed: 100, steps: 25, anchors: "first" })],
-        [], { routes });
-      await deepSettle();
-      click(ctx.genBtn("r1", "展开配方"));
+      const ctx = await genPage([], [], { routes });
+      await layTrain(ctx);
+      const tail = ctx.page.current().nodes.find((n) => n.type === "gen");
+      const cars = () => ctx.page.current().nodes.filter((n) => n.type === "recipe");
+      Object.assign(tail.metadata, { seed: 100, steps: 25, anchors: "first", skill_id: "h3_t2v" });
       await settle();
-      const made = ctx.page.current().nodes.filter((n) => n.id !== "r1");
-      const tail = made.find((n) => n.type === "gen");
-      const cars = made.filter((n) => n.type === "recipe");
       click(ctx.genBtn(tail.id, "生成视频"));
       await settle();
       assert.equal(ctx.genText(tail.id, "status"), "串联出片 1/2", "第一段收摊，车尾那一行进一格");
       const clips = () => ctx.page.current().nodes.filter((n) => n.type === "video");
       assert.equal(clips().length, 1, "车厢没有成片位：第一段收摊时新开一台视频位");
       assert.ok(clipVideoSrc(ctx, clips()[0].id), "新开的那一台落上这一段的成片");
-      assert.ok(ctx.page.current().connections.some((c) => c.fromNodeId === cars[0].id
-        && c.toNodeId === clips()[0].id), "新开的视频位接在出片那一发上，与平铺同一口径");
+      assert.ok(ctx.page.current().connections.some((c) => c.fromNodeId === cars()[0].id
+        && c.toNodeId === clips()[0].id), "新开的视频位接在自己那一段的车厢上");
       releaseGate();
       await deepSettle();
       assert.equal(ctx.genText(tail.id, "status"), "", "整列收完车尾收摊");
@@ -2578,12 +2465,12 @@ describe("canvas-page 页面", () => {
       assert.deepEqual(calls.map((c) => [c.body.recipe, c.body.anchors, c.body.steps,
         c.body.continuity, c.body.context_frames]),
       [["短片配方", "first", 25, true, 22], ["短片配方", "first", 25, true, 22]], "公共参数取的是车尾那一份");
-      assert.equal(calls[0].body.prompt, "开场那一段的提示词", "正文走的是这一段上方的那块正文节点");
+      assert.equal(calls[0].body.prompt, "开场那一段的提示词", "没连正文线时车厢跑的就是配方那一段那一句");
       assert.deepEqual(calls.map((c) => c.body.references.images), [
         [{ kind: "recipe", value: "开场首帧.png", recipe: "短片配方" },
           { kind: "recipe", value: "角色设定.png", recipe: "短片配方" }],
-        [{ kind: "recipe", value: "收尾参考.mp4", recipe: "短片配方" }]],
-      "厢底摊出的素材连配方名一起交后端：这一段跑的是它自己那几张");
+        []],
+      "铺在厢上方的图片素材连配方名一起交后端；参考视频不铺成节点，出片那一发由后端从配方那一份取");
       assert.deepEqual(clips().map((c) => ctx.view.nodeEl(c.id)?.querySelector("video")?.getAttribute("src") || ""),
         ["/neo_gallery/video?filename=seg0.mp4&subfolder=director",
           "/neo_gallery/video?filename=seg0.mp4&subfolder=director"],
@@ -2595,26 +2482,25 @@ describe("canvas-page 页面", () => {
       let seq = 0;
       const routes = { ...clipRoutes(),
         "/neo_video_gen/run_segment": () => jsonResponse({ success: true, task_id: `chain-${++seq}`, status: "queued" }) };
-      const ctx = await genPage([recipeNode("r1", 0, { expand_mode: "train" })], [], { routes });
-      await deepSettle();
-      click(ctx.genBtn("r1", "展开配方"));
+      const ctx = await genPage([], [], { routes });
+      await layTrain(ctx);
+      const cars = () => ctx.page.current().nodes.filter((n) => n.type === "recipe");
+      const tail = ctx.page.current().nodes.find((n) => n.type === "gen");
+      Object.assign(tail.metadata, { skill_id: "h3_t2v" });
       await settle();
-      const made = ctx.page.current().nodes.filter((n) => n.id !== "r1");
-      const cars = made.filter((n) => n.type === "recipe");
-      const tail = made.find((n) => n.type === "gen");
-      click(nodeAct(ctx.view, cars[1].id, "disable"));
+      click(nodeAct(ctx.view, cars()[1].id, "disable"));
       await settle();
-      assert.equal(ctx.page.current().nodes.find((n) => n.id === cars[1].id).metadata.disabled, true);
-      assert.ok(ctx.view.nodeEl(cars[1].id).classList.contains("ns-canvas-node-off"), "停用的那一张压暗");
-      assert.ok(ctx.view.nodeEl(cars[1].id).textContent.includes("已停用"), "停用的那一张挂徽标");
-      assert.ok(nodeAct(ctx.view, cars[1].id, "enable"), "停用的那一张给启用这一枚");
-      assert.equal(ctx.view.nodeEl(tail.id).querySelector(".ns-canvas-recipe-info-text").textContent,
-        "链上 2 段 · 启用 1 段", "车尾那一行说这一列跑几段");
+      assert.equal(ctx.page.current().nodes.find((n) => n.id === cars()[1].id).metadata.disabled, true);
+      assert.ok(ctx.view.nodeEl(cars()[1].id).classList.contains("ns-canvas-node-off"), "停用的那一张压暗");
+      assert.ok(ctx.view.nodeEl(cars()[1].id).textContent.includes("已停用"), "停用的那一张挂徽标");
+      assert.ok(nodeAct(ctx.view, cars()[1].id, "enable"), "停用的那一张给启用这一枚");
+      assert.equal(ctx.view.nodeEl(tail.id).querySelector(".ns-canvas-car-info").textContent,
+        "链上 2 段 · 启用 1 段 · 短片配方", "车尾那一行说这一列跑几段");
       click(ctx.genBtn(tail.id, "生成视频"));
       await deepSettle();
       assert.deepEqual(clipCalls("/neo_video_gen/run_segment").map((c) => c.body.segment), [0],
         "整列出片跳过停用的那一段");
-      click(nodeAct(ctx.view, cars[0].id, "disable"));
+      click(nodeAct(ctx.view, cars()[0].id, "disable"));
       await settle();
       click(ctx.genBtn(tail.id, "生成视频"));
       await settle();
@@ -2679,11 +2565,11 @@ describe("canvas-page 页面", () => {
           .then(() => jsonResponse({ success: true, task_id: "chain-1", status: "succeeded", filename: "a.mp4", subfolder: "" })),
         "/neo_video_gen/run_segment/chain-2": () => jsonResponse({ success: true, task_id: "chain-2",
           status: "running", progress: { value: 1, max: 100 } }) };
-      const ctx = await genPage([recipeNode("r1", 0, { expand_mode: "train", seed: 100 })], [], { routes });
-      await deepSettle();
-      click(ctx.genBtn("r1", "展开配方"));
-      await settle();
+      const ctx = await genPage([], [], { routes });
+      await layTrain(ctx);
       const tail = ctx.page.current().nodes.find((n) => n.type === "gen");
+      Object.assign(tail.metadata, { skill_id: "h3_t2v", seed: 100 });
+      await settle();
       click(ctx.genBtn(tail.id, "生成视频"));
       await settle();
       assert.equal(ctx.genText(tail.id, "status"), "串联出片 0/2", "整列出片挂着，车尾数的是段数");
@@ -2709,7 +2595,7 @@ describe("canvas-page 页面", () => {
       assert.equal(el.querySelectorAll(".ns-canvas-gen-btn").length, 0, "车厢卡上一枚钮都没有：整列出片在车尾那台生成节点");
       assert.ok(!el.querySelector("select"), "配方 / 步数 / 锚点那些下拉不在车厢上");
       assert.ok(!el.querySelector(".ns-canvas-recipe-segs"), "段列表也不在车厢上");
-      assert.ok(nodeAct(ctx.view, "c1", "disable"), "停用这一枚在节点上方的浮出栏里");
+      assert.ok(nodeAct(ctx.view, "c1", "disable"), "停用这一枚在选中那一排里");
       click(nodeAct(ctx.view, "c1", "disable"));
       await settle();
       assert.equal(ctx.page.current().nodes.find((n) => n.id === "c1").metadata.disabled, true,
@@ -2717,15 +2603,227 @@ describe("canvas-page 页面", () => {
       assert.equal(clipCalls("/neo_video_gen/run_segment").length, 0, "车厢这一张不发片");
     });
 
+    test("车厢卡上的正文铺的就是这一段生效的那一句：改了就走自己这一句", async () => {
+      const ctx = await genPage([recipeNode("c1", 0), tailNode("t1", 300, { skill_id: "h3_t2v" }), videoSlot("vid1", 600)],
+        [link("c1", "t1")], { routes: clipRoutes() });
+      await deepSettle();
+      const car = () => ctx.view.nodeEl("c1").querySelector(".ns-canvas-car-text");
+      assert.ok(car(), "车厢卡上有一块可编辑的正文");
+      assert.equal(car().value, "开场那一段的提示词", "车厢没写过：框里铺的就是配方那一段那一句");
+      assert.equal(ctx.recipeText("c1", "src"), "", "配方那一段就是默认来源：提示词前不写「配方」二字");
+      car().value = "开场那一段的提示词\n";   // 与配方那一份只差一个换行：这一发算改过
+      fire(car(), "input");
+      await settle();
+      assert.equal(ctx.recipeText("c1", "src"), "车厢", "与那一份一字不差才算没改过");
+      car().value = "车厢自己写的那一句";
+      fire(car(), "input");
+      await settle();
+      assert.equal(ctx.page.current().nodes.find((n) => n.id === "c1").metadata.content, "车厢自己写的那一句",
+        "正文落进 metadata.content，与提示词节点同一份存法");
+      assert.equal(ctx.recipeText("c1", "src"), "车厢", "写完来源就落到车厢这一档");
+      click(ctx.genBtn("t1", "生成视频"));
+      await deepSettle();
+      assert.equal(clipCalls("/neo_video_gen/run_segment")[0].body.prompt, "车厢自己写的那一句",
+        "出片发出去的就是车厢自己写的那一句");
+    });
+
+    test("连过来的正文盖过车厢自己写的那一句，断线回到车厢这一句", async () => {
+      const ctx = await genPage([promptNode("p1", "画布上写的提示词"),
+        recipeNode("c1", 0, { content: "车厢自己写的那一句" }), tailNode("t1", 300, { skill_id: "h3_t2v" }), videoSlot("vid1", 600)],
+      [link("p1", "c1"), link("c1", "t1")], { routes: clipRoutes() });
+      await deepSettle();
+      const car = () => ctx.view.nodeEl("c1").querySelector(".ns-canvas-car-text");
+      assert.ok(car().disabled, "连过来的正文在跑，这一块锁着，不给人改一份跑不出去的");
+      assert.equal(ctx.recipeText("c1", "src"), "画布", "来源那一枚说的是画布");
+      click(ctx.genBtn("t1", "生成视频"));
+      await deepSettle();
+      assert.equal(clipCalls("/neo_video_gen/run_segment")[0]?.body?.prompt, "画布上写的提示词",
+        "连过来的正文盖过车厢自己写的那一句");
+    });
+
+    test("铺一列不压在一起：厢在一行里排开，素材在自己厢正上方，车尾紧跟最后一厢", async () => {
+      const ctx = await genPage([], [], { routes: clipRoutes() });
+      click(ctx.view.button("添加配方"));
+      await settle();
+      click(ctx.host.querySelector(".ns-canvas-picker-card"));   // 弹窗里就一份短片配方，两段
+      await deepSettle();
+      const nodes = ctx.page.current().nodes;
+      const cars = nodes.filter((n) => n.type === "recipe");
+      const refs = nodes.filter((n) => n.type === "image");
+      const tail = nodes.find((n) => n.type === "gen");
+      assert.deepEqual([cars.length, refs.length, tail ? 1 : 0], [2, 2, 1],
+        "两段两厢，第一段铺首帧与那一张参考素材，一台车尾");
+      for (let i = 0; i < nodes.length; i += 1) {
+        for (let j = i + 1; j < nodes.length; j += 1) {
+          assert.ok(!canvas.overlaps(nodes[i], nodes[j]),
+            `${nodes[i].type} 与 ${nodes[j].type} 压在一起：`
+            + `${JSON.stringify(nodes[i].position)} ${JSON.stringify(nodes[j].position)}`);
+        }
+      }
+      assert.equal(cars[0].position.y, cars[1].position.y, "同一行的厢同一高");
+      assert.ok(cars[1].position.x > cars[0].position.x + cars[0].width, "第二厢在第一厢右边那一格");
+      assert.ok(tail.position.x > cars[1].position.x + cars[1].width, "车尾紧跟最后一厢右边那一格");
+      assert.ok(tail.position.y < cars[1].position.y + cars[1].height, "车尾与厢同一行：顶边落在厢那一带");
+      assert.ok(refs[0].position.y + refs[0].height <= cars[0].position.y, "参考素材落在自己那厢正上方");
+      assert.ok(refs[1].position.x > refs[0].position.x + refs[0].width, "同一厢的素材在一行里排开，不叠在一起");
+      // 素材行铺得比厢宽时是围着厢居中的（列宽就是素材行的宽）：居中在厢上就是「自己那一列」
+      assert.equal(Math.round(refs[0].position.x + (refs[1].position.x + refs[1].width - refs[0].position.x) / 2),
+        cars[0].position.x + Math.round(cars[0].width / 2), "素材行的中心就是自己那厢的中心");
+    });
+
+    test("铺一列默认 3 厢一行：第七段落第三行行首，与第一厢同一列", async () => {
+      const ctx = await genPage([], [], { routes: clipRoutes({ recipes: [SEVEN_ROW] }) });
+      await layTrain(ctx);
+      const cars = ctx.page.current().nodes.filter((n) => n.type === "recipe");
+      const tail = ctx.page.current().nodes.find((n) => n.type === "gen");
+      assert.equal(cars.length, 7, "七段铺七厢");
+      assert.ok(cars.slice(0, 3).every((c) => c.position.y === cars[0].position.y), "第一行就三厢");
+      assert.ok(cars[3].position.y > cars[2].position.y, "第 4 厢落第二行");
+      assert.ok(cars[6].position.y > cars[5].position.y, "第 7 厢落第三行");
+      assert.equal(cars[6].position.x, cars[0].position.x, "第三行从行首起：第 7 厢与第 1 厢同一列");
+      assert.ok(cars[1].position.x > cars[0].position.x + cars[0].width
+        && cars[2].position.x > cars[1].position.x + cars[1].width, "一行里三厢排开不叠");
+      assert.ok(tail.position.x > cars[6].position.x + cars[6].width, "车尾紧跟最后一厢右边那一格");
+      assert.ok(Math.abs(tail.position.y - cars[6].position.y) < cars[6].height, "车尾与最后一厢同一行");
+    });
+
+    test("整列那一句只在车尾露一份：配方名写在车尾，车厢一份都不出", async () => {
+      const ctx = await genPage([], [], { routes: clipRoutes() });
+      await layTrain(ctx);
+      const cars = () => ctx.page.current().nodes.filter((n) => n.type === "recipe");
+      const tailId = () => ctx.page.current().nodes.find((n) => n.type === "gen").id;
+      const info = () => ctx.view.nodeEl(tailId()).querySelector(".ns-canvas-car-info").textContent;
+      assert.equal(cars().length, 2, "两段铺两厢");
+      for (const car of cars()) {
+        assert.ok(!ctx.view.nodeEl(car.id).querySelector(".ns-canvas-recipe-info"), "车厢不铺整列那一句");
+        assert.ok(!ctx.view.nodeEl(car.id).querySelector("select"), "整列共用的下拉不在车厢上");
+      }
+      assert.equal(info(), "链上 2 段 · 启用 2 段 · 短片配方", "车尾那一行把段数与配方名一起写出来");
+      const model = ctx.view.nodeEl(tailId()).querySelector(".ns-canvas-gen-model");
+      assert.equal(model, null, "车尾不铺第二份配方概览：段数与配方名在顶行，技能与分辨率在两枚胶囊上");
+      assert.equal(ctx.view.nodeEl(tailId()).querySelector(".ns-canvas-recipe-pick"), null,
+        "车尾不在这里换配方：要换配方是重铺一列");
+      click(nodeAct(ctx.view, cars()[1].id, "disable"));
+      await settle();
+      assert.equal(info(), "链上 2 段 · 启用 1 段 · 短片配方", "启用几段写在同一行上");
+    });
+
+    test("车尾顶行是这一列的关键信息：配方名与段数写在第一行，卡上不铺第二份概览", async () => {
+      const ctx = await genPage([], [], { routes: clipRoutes() });
+      await layTrain(ctx);
+      const tailId = () => ctx.page.current().nodes.find((n) => n.type === "gen").id;
+      const rows = [...ctx.view.nodeEl(tailId()).querySelector(".ns-canvas-gen-ctl").children];
+      assert.ok(rows[0].classList.contains("ns-canvas-car-head"), "卡上第一行就是顶行那一行");
+      assert.equal(rows[0].querySelector(".ns-canvas-car-info").textContent,
+        "链上 2 段 · 启用 2 段 · 短片配方", "配方名与跑几段写在第一行");
+      assert.equal(ctx.view.nodeEl(tailId()).querySelector(".ns-canvas-gen-model"), null,
+        "车尾不铺第二份概览：段数、技能、分辨率各只在一处");
+    });
+
+    test("车尾技能空着 = 每一段跟配方里那一个；选一枚 = 整列共用这一份", async () => {
+      const ctx = await genPage([], [], { routes: clipRoutes() });
+      await layTrain(ctx);
+      const tailId = () => ctx.page.current().nodes.find((n) => n.type === "gen").id;
+      const carId = () => ctx.page.current().nodes.filter((n) => n.type === "recipe")[0].id;
+      assert.equal(ctx.chipLabelAt(tailId(), 0), "跟随配方 文生视频",
+        "车尾空着时胶囊上写的就是跟随配方那一份技能");
+      assert.ok(ctx.view.nodeEl(carId()).querySelector(".ns-canvas-car-info")
+        .textContent.includes("文生视频"), "车厢顶行写的是这一段生效的技能");
+      await ctx.pickChip(tailId(), 0, "图生视频");
+      assert.equal(ctx.page.current().nodes.find((n) => n.type === "gen").metadata.skill_id, "h3_i2v",
+        "车尾选一枚就盖在整列上");
+      click(ctx.genBtn(tailId(), "生成视频"));
+      await deepSettle();
+      assert.equal(clipCalls("/neo_video_gen/run_segment")[0].body.skill_id, "h3_i2v",
+        "发出去的那一发整列走车尾那一枚");
+    });
+
+    test("车尾分辨率空着 = 跟配方共享那一份；选一枚 = 整列出片用它", async () => {
+      const ctx = await genPage([], [], { routes: clipRoutes() });
+      await layTrain(ctx);
+      const tailId = () => ctx.page.current().nodes.find((n) => n.type === "gen").id;
+      assert.equal(ctx.chipLabelAt(tailId(), 1), "跟随配方 1344×768",
+        "空着时胶囊上写的就是配方共享的那一份");
+      await ctx.pickChip(tailId(), 1, "1280×720 · 720p 横屏");
+      const tail = ctx.page.current().nodes.find((n) => n.type === "gen");
+      assert.deepEqual([tail.metadata.width, tail.metadata.height], [1280, 720],
+        "选一枚就把整列出片的分辨率写进车尾");
+      click(ctx.genBtn(tail.id, "生成视频"));
+      await deepSettle();
+      const body = clipCalls("/neo_video_gen/run_segment")[0].body;
+      assert.deepEqual([body.width, body.height], [1280, 720], "发出去的那一发带着车尾选的分辨率");
+      assert.equal(body.skill_id, "", "车尾没盖技能就交空值：每一段用配方里那一段自己那一个，由后端合并");
+    });
+
+    test("车厢顶行只一行：段号一枚、配方名 · 时长 · 技能、参考素材计数在同一行", async () => {
+      const ctx = await genPage([], [], { routes: clipRoutes() });
+      await layTrain(ctx);
+      const carId = ctx.page.current().nodes.filter((n) => n.type === "recipe")[0].id;
+      const head = ctx.view.nodeEl(carId).querySelector(".ns-canvas-car-head");
+      assert.equal(head.querySelectorAll(".ns-canvas-car-seg").length, 1, "段号只写一枚");
+      assert.equal(head.querySelector(".ns-canvas-car-seg").textContent, "段 1");
+      assert.equal(head.querySelector(".ns-canvas-car-info").textContent,
+        "短片配方 · 5 秒 · 文生视频", "顶行一行说完，段号不重复");
+      const car = ctx.page.current().nodes.filter((n) => n.type === "recipe")[0];
+      // 计数 = 连进这一厢的素材节点 + 配方里那一段自己写了、画布上没铺的素材
+      const linked = ctx.page.current().nodes.filter((n) => n.type === "image"
+        && ctx.page.current().connections.some((c) => c.toNodeId === car.id));
+      const own = (RECIPE_ROW.segments[0].refs.images || [])
+        .filter((name) => !linked.some((n) => n.metadata.filename === name));
+      assert.equal(head.querySelector(".ns-canvas-recipe-count").textContent,
+        `${linked.length + own.length} 张参考素材`, "参考素材计数就在顶行这一行上");
+      assert.ok(!ctx.view.nodeEl(carId).querySelector("select"),
+        "车厢上没有技能 / 时长 / 分辨率的下拉：这些跟着配方走，整列共用的在车尾");
+    });
+
+    test("车尾「参数」弹窗：整列共用的次要点收在这里，改种子当场落盘，Esc 收窗", async () => {
+      const ctx = await genPage([], [], { routes: clipRoutes() });
+      await layTrain(ctx);
+      const tail = ctx.page.current().nodes.find((n) => n.type === "gen");
+      assert.ok(!ctx.view.nodeEl(tail.id).querySelector(".ns-canvas-gen-ctl select option[value=\"-1\"]"),
+        "步数 / 锚点那些下拉不铺在车尾卡上");
+      click(ctx.genBtn(tail.id, "参数"));
+      await settle();
+      const form = () => ctx.host.querySelector(".ns-canvas-tailform");
+      assert.ok(form(), "弹窗开在页面那一层");
+      assert.deepEqual([...form().querySelectorAll(".ns-canvas-tailform-label")].map((el) => el.textContent),
+        ["步数", "锚点", "连续性", "上下文帧", "种子"], "弹窗里就是这五项");
+      const seed = form().querySelector(".ns-canvas-recipe-seed");
+      seed.value = "7";
+      fire(seed, "change");
+      await settle();
+      assert.equal(ctx.page.current().nodes.find((n) => n.type === "gen").metadata.seed, 7,
+        "种子走 patchMeta：落进车尾那一台并随画布落盘");
+      const formChips = [...form().querySelectorAll(".neo-gallery-gm-chip-btn")];
+      assert.equal(formChips.length, 4, "步数 / 锚点 / 连续性 / 上下文帧各一枚胶囊");
+      click(formChips[1]);
+      await settle();
+      assert.ok(form().querySelector(".ns-canvas-tailform-menus .neo-gallery-gm-chip-menu"),
+        "弹窗里的下拉开在弹窗自己那一层：画布那一层在弹窗底下，菜单进那一层就看不见");
+      assert.equal(ctx.host.querySelector(".ns-canvas-gen-menus .neo-gallery-gm-chip-menu"), null,
+        "弹窗的菜单不落画布那一层");
+      click([...form().querySelectorAll(".neo-gallery-gm-menu-item")]
+        .find((el) => el.textContent === "只钉首帧"));
+      await settle();
+      assert.equal(ctx.page.current().nodes.find((n) => n.type === "gen").metadata.anchors, "first",
+        "弹窗里选一锚点挡：走 patchMeta 落进车尾");
+      assert.ok(form().querySelector(".ns-canvas-tailform-note").textContent.includes("时长跟着配方走"),
+        "弹窗说明每一段的时长跟着配方走");
+      fire(document, "keydown", { key: "Escape" });
+      await settle();
+      assert.equal(ctx.host.querySelector(".ns-canvas-tailform-mask"), null, "Esc 收窗");
+    });
+
     test("车尾生成节点上游没有车厢时说清楚：不发请求", async () => {
-      const ctx = await genPage([videoGen("tail1", 0, { chain: "train", skill_id: "", recipe: "短片配方" })], [],
+      const ctx = await genPage([videoGen("tail1", 0, { chain: "train", skill_id: "h3_t2v", recipe: "短片配方" })], [],
         { routes: clipRoutes() });
       await deepSettle();
-      assert.ok(ctx.genText("tail1", "model").includes("2 段"), "车尾那一行说它带的是哪一份配方");
+      assert.ok(ctx.view.nodeEl("tail1").querySelector(".ns-canvas-car-info")
+        .textContent.includes("链上 0 段"), "没有车厢可问时顶行就说这一列零段");
       click(ctx.genBtn("tail1", "生成视频"));
       await settle();
       assert.equal(clipCalls("/neo_video_gen/run_segment").length, 0);
-      assert.ok(ctx.env.store.toasts.some((item) => item.message.includes("上游没有段节点")));
+      assert.ok(ctx.env.store.toasts.some((item) => item.message.includes("上游没有车厢")));
     });
 
     test("切走画布停掉在出的片的轮询：卸页后不再问进度", async () => {

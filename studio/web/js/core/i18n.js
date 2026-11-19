@@ -76,6 +76,15 @@ const EN = {
     "加生成节点": "Add generation node",
     "生成技能": "Generation skill",
     "未选技能": "No skill picked",
+    "跟随每一段自己的技能": "Each segment keeps its own skill",
+    "跟随配方 {skill}": "Follow recipe {skill}",
+    "跟随配方 {size}": "Follow recipe {size}",
+    "跟随配方尺寸": "Follow recipe size",
+    "整列共用参数": "Shared column parameters",
+    "参数": "Params",
+    "步数 / 锚点 / 连续性 / 上下文帧 / 种子：整列共用的参数":
+        "Steps / anchors / continuity / context frames / seed - shared by the whole column",
+    "每一段的时长跟着配方走，不在这里改": "Segment durations follow the recipe - not editable here",
     "先选一个生图技能": "Pick an image skill first",
     "接一条文本或图片线过来再出图": "Run a text or image line into this node first",
     "{skill} 不吃文本提示词，接上参考图再出图": "{skill} takes no text prompt - connect a reference image",
@@ -96,7 +105,7 @@ const EN = {
     "已取消出图": "Generation cancelled",
     "图已存进 Output 目录": "The images are saved in the Output folder",
     "加视频节点": "Add video node",
-    "加配方节点": "Add recipe node",
+    "添加配方": "Add recipe",
     "空视频位": "Empty clip slot",
     "未选配方": "No recipe picked",
     "先选一份配方": "Pick a recipe first",
@@ -123,7 +132,8 @@ const EN = {
     "跟随技能 {edge}": "Follow the skill ({edge})",
     "出图比例：留默认就跟随技能配置与全局生图设置": "Aspect ratio - leaving it default follows the skill config and the global generation settings",
     "出图长边：留默认就跟随技能配置与全局生图设置": "Long edge - leaving it default follows the skill config and the global generation settings",
-    // 画布上的配方卡：段一行、参考素材、锚点 / 步数 / 连续性 / 上下文帧 / 种子，与「展开配方」
+    // 画布上的一列车厢：车厢一段一张（配方名、段号、这一段用的参考素材与正文），厢上方铺的参考素材
+    // 按连线接进厢；整列共用的视频技能与锚点 / 步数 / 连续性 / 上下文帧 / 种子都在车尾那台生成节点上
     "跟随步数": "Follow steps",
     "{n} 步": "{n} steps",
     "连续性 开": "Continuity on",
@@ -132,22 +142,30 @@ const EN = {
     "种子（-1 = 每次换种子）": "Seed (-1 = a new seed every run)",
     "这一段没有提示词": "This segment has no prompt",
     "第 {n} 段 · {sec} 秒 · {skill}": "Segment {n} · {sec} s · {skill}",
+    "第 {n} 段 · {sec} 秒": "Segment {n} · {sec} s",
+    // 车厢上那块自己写的正文：三档优先级（连过来的正文 > 车厢自己写的 > 配方那一段）在 gen.js 的 carPrompt
+    "写这一段": "Write this segment",
+    "车厢": "Car",
+    "连过来的正文盖过车厢自己写的那一句；断线就回到车厢这一句":
+        "Text wired in overrides what this car says - cut the wire to fall back to this car",
+    "双击进编辑，正文框里打字": "Double-click to edit, then type in the box",
+    "停用 · 双击节点停用": "Disable · double-click the node",
+    "已停用 · 双击节点启用": "Disabled · double-click the node to enable",
     "{n} 张参考素材": "{n} reference assets",
-    "展开配方": "Expand recipe",
-    "把每一段摊成段节点，提示词与参考素材摊成连过去的独立节点":
-        "Turn every segment into its own node, with the prompt and reference assets feeding it",
     "配方列表读不到：先在导演页保存这份配方":
         "The recipe list is unavailable - save this recipe on the director page first",
-    "段数太多（{n} 段），展开上限 {max} 段": "Too many segments ({n}) - the expand limit is {max}",
-    "已展开 {n} 段：每段一台段节点，提示词与参考素材连过去":
-        "Expanded {n} segments: one node per segment, with the prompts and reference assets feeding them",
-    // 串联展开（开火车）：车厢首尾相接接到车尾，整列共用的生成参数与出片都在车尾那台生成节点上
-    "平铺展开": "Flat expand",
-    "串联展开": "Chain expand",
-    "展开配方怎么铺：平铺是一段一行，串联是一段接一段接到车尾":
-        "How expanding lays the segments out: flat is one row per segment, chain wires the segments end to end into a tail node",
-    "已串开 {n} 段：车厢首尾相接接到车尾，出片与参数在车尾那台生成节点":
-        "Chained {n} segments: the cars wire end to end into the tail node, which carries the run button and the shared parameters",
+    "段数太多（{n} 段），一列上限 {max} 段": "Too many segments ({n}) - a chain holds at most {max}",
+    "先在这台生成节点选一个视频技能": "Pick a video skill on this generation node first",
+    "这份配方没有技能：在车尾选一个视频技能": "This recipe has no skill - pick a video skill on the tail",
+    "链上的车厢没有配方名：用「添加配方」重铺一列":
+        "The cars in this chain carry no recipe name - use Add recipe to lay a new train",
+    "已铺好 {n} 段：参考素材按连线接进每一厢，出片与整列共用的技能在车尾":
+        "Laid out {n} segments: reference assets wired into each car, the skill shared by the whole train is on the tail",
+    // 「添加配方」弹窗：一张卡一份配方，点一张就直接串成一列
+    "搜配方名": "Search recipe name",
+    "串开 {n} 段：一段一厢接到车尾": "Chain {n} segments: one car per segment into the tail",
+    "没有对得上的配方": "No recipe matches that",
+    "没有可串的配方：先在导演页保存一份": "No recipe to chain - save one on the director page first",
     "停用": "Disable",
     "启用": "Enable",
     "已停用": "Disabled",
@@ -155,13 +173,14 @@ const EN = {
     "启用这一张：出片与整列出片都会跑它": "Enable this node: the run and the chain run include it",
     "这台节点已停用：在节点上方的浮出栏里启用":
         "This node is disabled - enable it in the bar above the node",
-    "这台生成节点上游没有段节点：用串联展开铺一列":
-        "No segment nodes upstream of this generation node - expand a recipe as a chain first",
+    "这台生成节点上游没有车厢：用「添加配方」铺一列":
+        "No cars upstream of this generation node - add a recipe to lay a chain",
     "链上没有启用的段": "No enabled segment on this chain",
     "链上 {n} 段 · 启用 {m} 段": "{n} segments on the chain · {m} enabled",
+    "链上 {n} 段 · 启用 {m} 段 · {name}": "{n} segments on the chain · {m} enabled · {name}",
     "串联出片 {done}/{total}": "Chain render {done}/{total}",
-    "串联只管排布与顺序：出片就是逐段跑导演页那一条链":
-        "The chain only carries layout and order - rendering runs segment by segment on the director page's chain",
+    "这一列跑哪一份配方在铺的时候定下：要换配方用「添加配方」重铺一列":
+        "Which recipe this train runs is fixed when it is laid out - use Add recipe to lay a new train",
     "按链序跑启用的那几段": "Run the enabled segments in chain order",
     "取消这一列在跑的段": "Cancel the segments this chain is running",
     "摆到画布": "Place on canvas",
@@ -1821,6 +1840,7 @@ const EN = {
     "提示词（必填）": "Prompt (required)",
     "段": "Segment",
     "段 {n}": "Segment {n}",
+    "车尾": "Tail",
     "第 {n} 段": "Segment {n}",
     "第 {n} 段 · ": "Segment {n} · ",
     "技能（决定模板与模型）": "Skill (decides template and model)",

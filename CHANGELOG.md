@@ -5,6 +5,38 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 ## [Unreleased]
 
 ### Added
+- **An image node now lands at the picture's own ratio.** A dropped, placed or generated image fills an image node
+  sized to that picture inside the default image-node box - a 16:9 frame lands short and wide, a 2:3 portrait tall and
+  narrow - so the card no longer crops the photo to a fixed 340 × 240 frame. The fit never grows past that box, so
+  grid layouts and the 串联 material rows stay unoverlapped, the 240 × 160 train material cards keep their size, a size
+  you dragged yourself is never re-fit, and an empty node keeps the placeholder's own frame.
+
+- **Canvas train cards say each thing once, and the tail's uncommon parameters open in a 参数 window.** A 车厢's top
+  row is a single line - 段号, the recipe name, that segment's duration, the skill running for it and the
+  reference-material count - and its prompt sits flat on the card face, with no second frame around it. The column's
+  tail repeats nothing that row already states: its top row is the same layout writing
+  「链上 {n} 段 · 启用 {m} 段 · {配方名}」, and the card under it carries two chips and two buttons. The skill chip
+  empty is every segment taking its own recipe skill, picking one pins the whole column; the resolution chip empty is
+  the recipe's shared width / height, picking one pins every clip of the column to it. 参数 opens a window holding
+  步数 / 锚点 / 连续性 / 上下文帧 / 种子 with 每一段的时长跟着配方走 as its note - each dropdown is the page's own chip
+  menu opening inside that window, because a WebView window never pops a native select - and it closes on a click
+  outside, on the × and on Esc.
+
+- **A laid-out train puts 3 cars in a row.** A 9-segment recipe lands as 3×3 and a 6-segment one as two rows of 3,
+  so the canvas rows line up with the 九宫格 / 六宫格 storyboard grids the 出视频 page lays, and the tail follows the
+  last car in its row.
+
+- **The 车厢 no longer shows reference thumbnails.** The reference count on the car's top row is all it shows - the
+  reference images are already nodes above their own car, and a thumbnail whose URL cannot be read left an empty box
+  on the card.
+
+- **Canvas cars carry their own editable prompt, and 停用 / 复制 / 删除 moved onto double-click.** Every 车厢
+  (recipe segment node) on the canvas has a text box for that segment: the prompt that runs is the wired-in text nodes
+  first, the car's own text second, and the recipe segment's prompt third; the label on that row names which of the
+  three is running, and the box locks while a wired-in text prompt is in play, with that reason in its tooltip. The
+  per-node bar keeps only 主图 / 选图; 停用 / 复制 / 删除 now float out of the node you double-click, and the density
+  line of a generation card and of a car's last row says in words that this node is disabled and that double-clicking
+  it enables it again.
 - **Interface theme: 跟随系统 / 浅色 / 深色 in the desktop window.** The 「界面语言」 entry of the Studio settings page and
   of the 🅝 top-bar popup is now the 「界面语言与界面主题」 card with two tabs inside it, 语言 / 主题 (the
   `#/settings?tab=lang` deep link is unchanged). The theme tab is a 跟随系统 / 浅色 / 深色 radio group — default follow

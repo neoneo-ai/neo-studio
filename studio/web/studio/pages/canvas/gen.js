@@ -32,9 +32,6 @@ const CONTEXT_FRAMES_DEFAULT = 22;    // 导演页与后端同一个默认窗口
 const CONTEXT_FRAMES_CHOICES = [0, 8, 14, 22, 29, 36];
 // 连过来的素材按类型分三档，与后端段参考素材（refs.images / videos / audios）同一口径
 const MEDIA_GROUPS = { image: "images", video: "videos", audio: "audios" };
-// 配方卡上参考素材只铺得下这些张（段参考素材上限是 9 张，其余在计数里说清楚）
-const RECIPE_REF_SHOWN = 4;
-const CAR_REF_SHOWN = 2;      // 车厢是精简卡：素材缩略只留两枚，剩下的看数字
 
 /** 生效参数：空串与 0 是「跟随」—— 技能 config 与全局生图/生视频设置由后端合并，请求里不带这一项 */
 export function readGenParams(node) {
@@ -56,8 +53,9 @@ export function readGenParams(node) {
     };
 }
 
-/** 配方闭环节点上的参数：配方名、段序号（0 基，与后端 payload 同一口径）、锚点档位，
- *  与步数 / 种子 / 连续性 / 上下文帧。-1 与「跟随」是同一件事：请求里带着 -1，后端按配方与全局设置合并 */
+/** 车厢（配方节点）与串联车尾上的参数：配方名、段序号（0 基，与后端 payload 同一口径）、这一段自己的
+ *  技能（空 = 跟随配方里那一份）、锚点档位，与步数 / 种子 / 连续性 / 上下文帧。
+ *  -1 与「跟随」是同一件事：请求里带着 -1，后端按配方与全局设置合并 */
 export function readRecipeParams(node) {
     const meta = node?.metadata || {};
     const segment = parseInt(meta.segment, 10);
@@ -67,6 +65,7 @@ export function readRecipeParams(node) {
     return {
         recipe: String(meta.recipe || ""),
         segment: Number.isFinite(segment) && segment >= 0 ? segment : 0,
+        skill_id: String(meta.skill_id || ""),
         anchors: ANCHOR_CHOICES.some(([key]) => key === meta.anchors) ? meta.anchors : "both",
         steps: Number.isFinite(steps) && steps >= 1 ? Math.min(steps, STEPS_MAX) : -1,
         seed: Number.isFinite(seed) && seed >= 0 ? Math.min(seed, SEED_MAX) : -1,
@@ -177,6 +176,13 @@ export function createCanvasGen({ $el, toast, api, canGen, startComfy, host }) {
         return videoSkills.rows[0]?.id || "";
     }
 
+    /** 视频技能 id 在卡上怎么写：列表里有就用技能自己的名字，没有（技能被删了、列表没取到）就照存的 id 说 */
+    function videoSkillName(id) {
+        if (!id) return "";
+        const hit = videoSkills.rows.find((s) => s.id === id);
+        return hit ? skillDisplayName(hit) : id;
+    }
+
     /** 导演配方列表（单段生成只认用户配方：内置预设只读，后端会直接拒；没有一段的配方在这里只会撞到「段序号越界」） */
     function loadRecipes() {
         if (recipes.rows.length) return Promise.resolve(recipes.rows);
@@ -197,9 +203,34 @@ export function createCanvasGen({ $el, toast, api, canGen, startComfy, host }) {
         return recipes.rows.find((r) => r.name === String(name || "")) || null;
     }
 
-    /** 节点上那行配方概览：段数 · 模式 · 技能 · 宽高 · 总时长（与配方卡片那一行同一份文本） */
+    /** 密度行上的停用说法：停用的那一张在生成卡与车厢最后一行都写出来，启用与停用都从双击节点那一发来 */
+    function densityTitle(node) {
+        return node.metadata?.disabled === true
+            ? ` · ${t("已停用 · 双击节点启用")}`
+            : ` · ${t("停用 · 双击节点停用")}`;
+    }
+
+    /** 车厢自己写的正文（metadata.content，与提示词节点同一份存法） */
+    function carOwnText(car) {
+        return String(car?.metadata.content || "");
+    }
+
+    /** 这一段生效的提示词：连过来的正文 > 车厢自己写的那一句 > 配方里那一段的正文；三档都空就是空串 */
+    function carPrompt(state, car) {
+        const { prompts } = genInputs(state, car.id);
+        if (prompts.length) return prompts.join("\n\n");
+        const own = carOwnText(car);
+        if (own) return own;
+        const { recipe, segment } = readRecipeParams(car);
+        return recipeRow(recipe)?.segments?.[segment]?.prompt || "";
+    }
+
+    /** 那一行配方概览：段数 · 模式 · 技能 · 宽高 · 总时长 —— 整列共用的东西只在串联车尾露一份，
+     *  车厢一份都不出（车厢上的状态行说的是这一段自己跑到哪了）。
+     *  车尾读它那一列车厢记着的配方名 —— 车尾自己不记配方，只记整列共用的那一个视频技能 */
     function recipeMetaText(node) {
-        const { recipe } = readRecipeParams(node);
+        if (isCar(node)) return "";
+        const recipe = chainRecipe(chainCars(host.getState(), node.id));
         if (!recipe) return t("未选配方");
         const row = recipeRow(recipe);
         return row ? directorMetaText(row, videoSkills.rows) : recipe;
@@ -389,49 +420,59 @@ export function createCanvasGen({ $el, toast, api, canGen, startComfy, host }) {
         submitClip("/neo_video_gen/simple", body, "video", node);
     }
 
-    /** 配方闭环节点出片：配方名、段序号与锚点 / 步数 / 种子 / 连续性 / 上下文帧都从节点 metadata 交出去，
-     *  连到这台节点的正文与素材按画布覆盖交后端（只影响这一发，配方自己那一份不动）；成片落进下游视频节点。
-     *  串联展开铺的段节点（metadata.train）参数在它那一列的车尾上：停用与断链都明说，不静默按默认值跑 */
-    function runSegment(node) {
-        if (clipGate(node)) return;
-        const params = readRecipeParams(node);
-        if (!params.recipe) { toast(t("先选一份配方"), "info"); return; }
-        const { prompts, references } = genInputs(host.getState(), node.id);
-        submitClip("/neo_video_gen/run_segment",
-            { ...params, prompt: prompts.join("\n\n"), references },
-            "segment", node);
-    }
-
-    /** 串联的一列出片：按链序把启用的那几段依次入队 —— ComfyUI 队列自己按提交顺序跑，
-     *  跑法与在导演页逐段出片相同，成片各落各的下游视频位，停用的那几段不进这一发 */
+    /** 串联的一列出片：整列共用的那一个视频技能与那一套生成参数（锚点 / 步数 / 连续性 / 上下文帧 / 种子）
+     *  都在车尾这一张卡上，配方名与段号在每一厢自己身上；按链序把启用的那几段依次入队 —— ComfyUI 队列自己
+     *  按提交顺序跑，跑法与在导演页逐段出片相同，成片各落各的下游视频位，停用的那几段不进这一发 */
     function runChain(node) {
         if (clipGate(node)) return;
-        const params = readRecipeParams(node);
-        if (!params.recipe) { toast(t("先选一份配方"), "info"); return; }
         const cars = chainCars(host.getState(), node.id);
-        if (!cars.length) { toast(t("这台生成节点上游没有段节点：用串联展开铺一列"), "info"); return; }
+        if (!cars.length) { toast(t("这台生成节点上游没有车厢：用「添加配方」铺一列"), "info"); return; }
         const live = cars.filter((car) => car.metadata.disabled !== true);
         if (!live.length) { toast(t("链上没有启用的段"), "info"); return; }
+        const recipe = chainRecipe(cars);
+        if (!recipe) { toast(t("链上的车厢没有配方名：用「添加配方」重铺一列"), "info"); return; }
+        const skill_id = readGenParams(node).skill_id;
+        if (!skill_id && !chainRecipeSkillIds(recipe).length) {
+            toast(t("这份配方没有技能：在车尾选一个视频技能"), "error");
+            return;
+        }
+        // 车尾没盖技能就是空着交后端：每一段用配方里那一段自己写的技能；盖了就是整列共用这一份
+        const params = { ...readRecipeParams(node), recipe, skill_id };
+        const { width, height } = readGenParams(node);
+        if (width && height) Object.assign(params, { width, height });   // 车尾盖的分辨率：整列共用这一份
         chains.set(node.id, new Set(live.map((car) => car.id)));
         setRunning(node.id, { kind: "chain", task_id: "", status: "running", done: 0, total: live.length, error: "" });
         const state = host.getState();
         for (const car of live) submitCar(state, params, car);
     }
 
-    /** 串联里一段的载荷：车尾的公共参数 + 这一段的段号与画布连过来的正文 / 素材。
-     *  种子按段号偏移（与平铺展开逐段出片同一口径），-1 就是这一段每次换种子 */
-    function submitCar(state, shared, car) {
-        const segment = readRecipeParams(car).segment;
+    /** 串联里一段的载荷：车尾的公共参数与那一个技能 + 这一段的段号 + 画布连过来的正文 / 素材。
+     *  种子按段号偏移（一列车厢各段彼此不同种），-1 就是这一段每次换种子 */
+    function submitCar(state, params, car) {
+        const { segment } = readRecipeParams(car);
         const { prompts, references } = genInputs(state, car.id);
         submitClip("/neo_video_gen/run_segment",
-            { ...shared, segment, seed: shared.seed === -1 ? -1 : shared.seed + segment,
-                prompt: prompts.join("\n\n"), references },
+            { ...params, segment, seed: params.seed === -1 ? -1 : params.seed + segment,
+                prompt: carPrompt(state, car), references },
             "segment", car);
     }
 
-    /** 串联铺出来的那台段节点：参数在车尾，这一段只带配方名与段号 */
+    /** 整列共用的配方名读车厢身上那一份（「添加配方」铺出来的每一厢都记着同一份）—— 车尾那一张不记配方名，
+     *  链上出片与卡上那行概览都读车厢这一份 */
+    function chainRecipe(cars) {
+        const car = cars.find((c) => String(c.metadata.recipe || ""));
+        return car ? String(car.metadata.recipe) : "";
+    }
+
+    /** 「链上 N 段 · 启用 M 段」：整条链与启用数都要「段」字（链上没有启用的车厢，出片就是没有这一段），
+     *  段数后面的那一项（配方名）由调用方接在后面 */
+    function chainCountText(cars, live) {
+        return tf("链上 {n} 段 · 启用 {m} 段", { n: cars.length, m: live.length });
+    }
+
+    /** 车厢：一台配方节点就是链上的一段，参数在它那一列的车尾上，这一段只带段号与自己的技能 */
     function isCar(node) {
-        return node?.type === "recipe" && node.metadata?.train === 1;
+        return node?.type === "recipe";
     }
 
     /** 链序：链边是「段 → 下一段 → … → 车尾」，从车尾沿链往回走到车头再翻过来。
@@ -469,10 +510,9 @@ export function createCanvasGen({ $el, toast, api, canGen, startComfy, host }) {
         }
     }
 
-    /** 节点上那枚出片钮的入口：配方闭环节点出这一段，串联的车尾按链序跑启用的那几段，
-     *  视频节点出片，生成节点出图 */
+    /** 节点上那枚出片钮的入口：串联的车尾按链序跑启用的那几段，视频节点出片，生成节点出图；
+     *  车厢自己不出一发（卡上没有出片钮） */
     function run(node) {
-        if (node.type === "recipe") return runSegment(node);
         const params = readGenParams(node);
         if (params.kind !== "video") return runImage(node);
         return params.chain === "train" ? runChain(node) : runVideo(node);
@@ -595,12 +635,12 @@ export function createCanvasGen({ $el, toast, api, canGen, startComfy, host }) {
     }
 
     /** 节点上那行主模型：技能 config 里的那一个；比例与尺寸由技能自己定时说清楚。
-     *  串联的车尾不出自己的片，这一行说它带的是哪一份配方 */
+     *  串联的车尾不铺这一行（段数、技能、分辨率都在顶行与那两枚胶囊上，见 chainControls） */
     function modelText(node) {
-        if (readGenParams(node).chain === "train") return recipeMetaText(node);
         const cfg = cfgOf(node.metadata.skill_id);
-        if (!cfg) return t("主模型：读取中");
-        return cfg.model ? tf("主模型：{model}", { model: shortModelName(cfg.model) }) : t("主模型：跟随技能配置");
+        if (!cfg) return `${t("主模型：读取中")}${densityTitle(node)}`;
+        const label = cfg.model ? tf("主模型：{model}", { model: shortModelName(cfg.model) }) : t("主模型：跟随技能配置");
+        return `${label}${densityTitle(node)}`;
     }
 
     function genBtn(label, iconName, onclick, title = label, disabled = false, extraClass = "") {
@@ -636,9 +676,6 @@ export function createCanvasGen({ $el, toast, api, canGen, startComfy, host }) {
      * 改动当场走 host.patchMeta —— 进撤销栈、跟复制走、随画布落盘；比例与长边的「跟随」态跟着技能 config 走。
      */
     function controls(node) {
-        // 串联的车厢是精简卡：卡上一枚钮都没有 —— 停用、复制与删除都在节点上方的浮出栏里，
-        // 出片与整列共用的参数在车尾那台生成节点
-        if (node.type === "recipe") return node.metadata.train === 1 ? [] : recipeControls(node);
         const params = readGenParams(node);
         const st = running.get(node.id) || {};
         const busy = st.status === "queued" || st.status === "running";
@@ -786,113 +823,60 @@ export function createCanvasGen({ $el, toast, api, canGen, startComfy, host }) {
         return names;
     }
 
-    /** 卡上一枚参考素材缩略：画布上的图走 Gallery 缩略图，配方素材走配方缩略图那条（都是按需生成），
-     *  缩略图缓存不在时回原文件那一条 */
-    function refThumb(node, asset, recipe) {
-        const fromRecipe = !!asset;
-        const name = fromRecipe ? asset : String(node?.metadata?.filename || "");
-        const src = fromRecipe
-            ? `/rs_recipes/thumbnail?recipe=${encodeURIComponent(recipe)}&file=${encodeURIComponent(asset)}&dir=assets&size=160`
-            : `/neo_gallery/thumbnail?filename=${encodeURIComponent(name)}`
-                + `&subfolder=${encodeURIComponent(node?.metadata?.subfolder || "")}&size=160`;
-        return $el("img", {
-            className: "ns-canvas-recipe-thumb", src, alt: name, draggable: "false",
-            onerror: (e) => {
-                e.target.src = fromRecipe
-                    ? `/rs_recipes/asset?recipe=${encodeURIComponent(recipe)}&file=${encodeURIComponent(asset)}&dir=assets`
-                    : "/neo_gallery/placeholder.png";
-            },
-        });
+    /** 配方里每一段写了哪几份技能（去重）：一份 = 整列共用这一份；多份 = 跟随就是「每一段自己的技能」；
+     *  空 = 配方没写技能（配方列表没取到、段上没技能），出片要明说没技能可跑 */
+    function chainRecipeSkillIds(recipe) {
+        return [...new Set((recipeRow(recipe)?.segments || [])
+            .map((s) => String(s.skill_id || "")).filter(Boolean))];
     }
 
-    /** 配方闭环节点的面：配方、步数 / 锚点 / 连续性 / 上下文帧 / 种子、这一段概览、提示词来源、参考素材、
-     *  段列表与出片都在这一张卡上。段一行的内容读配方自己那份 spec；换配方时段号回到第 1 段。
-     *  连过来的正文与素材是「画布覆盖」：只影响这一发出片，配方里那一份不动（提示词来源那一行就说清楚用的是哪一份）。
-     *  串联展开铺出来的那一台是车厢，不走这一张卡（车厢的面在 nodes.js 的 nodeCar） */
-    function recipeControls(node) {
-        const params = readRecipeParams(node);
-        const st = running.get(node.id) || {};
-        const busy = st.status === "queued" || st.status === "running";
-        const segs = recipeRow(params.recipe)?.segments || [];
-        const segCount = Math.max(segs.length, 1);
-        const at = Math.min(params.segment, segCount - 1);
-        const seg = segs[at] || {};
-        const canvasPrompt = genInputs(host.getState(), node.id).prompts.join("\n\n");
-        const canvasRefs = mediaNodes(node.id);
-        const ownRefs = segmentRefs(seg);
-        const shownRefs = [...canvasRefs.map((n) => ({ node: n })), ...ownRefs.map((name) => ({ asset: name }))]
-            .slice(0, RECIPE_REF_SHOWN);
-        const recipeSel = recipeSelect(node, busy);
-        const { stepsSel, anchorSel, contSel, ctxSel, seedIn } = recipeParamSelects(node, busy);
-
-        // 段一行：一枚一段、按段号排开，选中那一段抬到主色；悬停说这一段的时长与提示词
-        const segChips = segs.map((s, i) => {
-            const title = [tf("第 {n} 段", { n: i + 1 }),
-                ...(Number(s.duration_sec) > 0 ? [tf("{n} 秒", { n: Number(s.duration_sec) })] : []),
-                String(s.prompt || "").trim() || t("这一段没有提示词")].join(" · ");
-            const btn = $el("button", { className: "ns-canvas-seg-btn" + (i === at ? " ns-canvas-seg-btn-on" : ""),
-                type: "button", title, "aria-label": title, disabled: busy,
-                onclick: () => host.patchMeta(node.id, { segment: i }) });
-            btn.append($el("span", { textContent: tf("段 {n}", { n: i + 1 }) }));
-            return btn;
-        });
-
-        const skillRow = videoSkills.rows.find((s) => s.id === String(seg.skill_id || ""));
-        const segInfo = tf("第 {n} 段 · {sec} 秒 · {skill}", { n: at + 1,
-            sec: Number(seg.duration_sec) || 0,
-            skill: skillRow ? skillDisplayName(skillRow) : t("未选技能") });
-
-        const acts = [];
-        if (busy) acts.push(genBtn(t("取消任务"), "cross", () => cancel(node), t("取消这一发后台任务")));
-        acts.push(genBtn(t("展开配方"), "maximize", () => host.expandRecipe?.(node),
-            t("把每一段摊成段节点，提示词与参考素材摊成连过去的独立节点")));
-        acts.push(genBtn(t("生成视频"), "play", () => run(node),
-            canGen() === false ? t("生成视频需要 ComfyUI 执行队列") : t("生成这一段"), busy));
-
-        const rows = [$el("div", { className: "ns-canvas-gen-skill" }, [genChip(recipeSel, { icon: "film" })])];
-        rows.push($el("div", { className: "ns-canvas-gen-params" },
-            [genChip(stepsSel, { icon: "gear" }), genChip(anchorSel, { icon: "plug" }),
-                genChip(contSel, { icon: "history" })]));
-        rows.push($el("div", { className: "ns-canvas-recipe-args" }, [genChip(ctxSel, { icon: "target" }), seedIn]));
-        rows.push($el("div", { className: "ns-canvas-recipe-info" },
-            [$el("span", { className: "ns-canvas-recipe-info-text", textContent: segInfo }),
-                expandModeChip(node)]));
-        // 提示词来源那一行就是「画布覆盖」的可见状态：连了正文就是画布那一份，没连就是配方那一份
-        rows.push($el("div", { className: "ns-canvas-recipe-prompt" + (canvasPrompt ? " ns-canvas-recipe-on" : "") }, [
-            $el("span", { className: "ns-canvas-recipe-src", textContent: canvasPrompt ? t("画布") : t("配方") }),
-            $el("span", { className: "ns-canvas-recipe-text",
-                textContent: canvasPrompt || String(seg.prompt || "").trim() || t("这一段没有提示词") }),
-        ]));
-        rows.push($el("div", { className: "ns-canvas-recipe-refs" }, [
-            ...shownRefs.map((item) => refThumb(item.node, item.asset, params.recipe)),
-            $el("span", { className: "ns-canvas-recipe-count",
-                textContent: tf("{n} 张参考素材", { n: canvasRefs.length + ownRefs.length }) }),
-        ]));
-        rows.push($el("div", { className: "ns-canvas-recipe-segs" }, segChips));
-        rows.push($el("div", { className: "ns-canvas-gen-bottom" }, [$el("div", { className: "ns-canvas-gen-acts" }, acts)]));
-        return rows;
-    }
-
-    /** 配方那一枚胶囊的 select：配方列表没取到、或节点上存的配方被删了，把存的这一个也列出来，
-     *  参数行不能看着是空的；换配方时段号回到第 1 段 */
-    function recipeSelect(node, busy) {
-        const { recipe } = readRecipeParams(node);
-        const sel = $el("select", { disabled: busy, title: t("配方"), onchange: () => {
-            host.patchMeta(node.id, { recipe: sel.value, segment: 0 });
-        } });
-        sel.append($el("option", { value: "", textContent: t("未选配方") }));
-        for (const r of recipes.rows) sel.append($el("option", { value: r.name, textContent: r.name }));
-        sel.dataset.follow = t("未选配方");   // 空着就是没选：胶囊上直接这么说，不是那句通用的「默认」
-        sel.value = recipe;
-        if (sel.value !== recipe) {
+    /** 车尾那一枚视频技能胶囊：整列共用这一个技能（配方里每一段自己写的技能被它盖掉）。
+     *  空着 = 跟随配方 —— 每一段用配方里那一段自己写的技能，每一段同一份时胶囊上就写那一份；
+     *  配方里没有技能就是没选，胶囊上直接这么说；技能列表没取到时把存的这一个也列出来，胶囊不能看着是空的 */
+    function chainSkillSelect(node, busy, recipe) {
+        const saved = readGenParams(node).skill_id;
+        const ids = chainRecipeSkillIds(recipe);
+        const follow = !ids.length
+            ? t("未选技能")
+            : ids.length > 1 ? t("跟随每一段自己的技能")
+                : tf("跟随配方 {skill}", { skill: videoSkillName(ids[0]) });
+        const sel = $el("select", { disabled: busy, title: t("技能"),
+            onchange: () => host.patchMeta(node.id, { skill_id: sel.value }) });
+        sel.append($el("option", { value: "", textContent: follow }));
+        for (const s of videoSkills.rows) sel.append($el("option", { value: s.id, textContent: skillDisplayName(s) }));
+        sel.dataset.follow = follow;   // 空着就是跟随：胶囊上写的是跟随的哪一份，不是那句通用的「默认」
+        sel.value = saved;
+        if (sel.value !== saved) {
             sel.value = "";
-            sel.appendChild($el("option", { value: recipe, textContent: recipe, disabled: true, selected: true }));
+            sel.appendChild($el("option", { value: saved, textContent: saved, disabled: true, selected: true }));
         }
         return sel;
     }
 
-    /** 整列共用那一套生成参数的控件（步数 / 锚点 / 连续性 / 上下文帧 / 种子）：配方卡的参数行与串联的
-     *  车尾生成节点读同一份，改动都走 patchMeta —— 空值与 -1 都是「跟随」，请求里带着它由后端合并 */
+    /** 车尾那一枚分辨率胶囊（与导演页同一份尺寸表）：整列出片共用的分辨率，空着 = 按配方共享的那一份；
+     *  盖一次就是这一列出片用的分辨率（两端锚点那一路后端照旧按成片尺寸走，并在任务里说明） */
+    function chainSizeSelect(node, busy, recipe) {
+        const { width, height } = readGenParams(node);
+        const shared = recipeRow(recipe)?.shared || {};
+        const follow = shared.width && shared.height
+            ? tf("跟随配方 {size}", { size: `${shared.width}×${shared.height}` })
+            : t("跟随配方尺寸");
+        const sel = $el("select", { disabled: busy, title: t("分辨率"),
+            onchange: () => {
+                const [w, h] = (sel.value || "0,0").split(",").map(Number);
+                host.patchMeta(node.id, { width: w || 0, height: h || 0 });
+            } });
+        sel.append($el("option", { value: "0", textContent: follow }));
+        for (const [w, h, label] of VIDEO_SIZE_CHOICES) {
+            sel.append($el("option", { value: `${w},${h}`, textContent: `${w}×${h} · ${t(label)}` }));
+        }
+        sel.value = width && height ? `${width},${height}` : "0";
+        sel.dataset.follow = follow;
+        return sel;
+    }
+
+    /** 整列共用那一套生成参数的控件（步数 / 锚点 / 连续性 / 上下文帧 / 种子）：只有串联的车尾那台生成节点
+     *  读这一份，改动都走 patchMeta —— 空值与 -1 都是「跟随」，请求里带着它由后端合并 */
     function recipeParamSelects(node, busy) {
         const params = readRecipeParams(node);
         const stepsSel = $el("select", { disabled: busy, title: t("步数"),
@@ -934,61 +918,103 @@ export function createCanvasGen({ $el, toast, api, canGen, startComfy, host }) {
         return { stepsSel, anchorSel, contSel, ctxSel, seedIn };
     }
 
-    /** 展开方式那一挡：平铺是一段一行，串联是一段接一段、生成参数收到车尾。这一挡存在卡的 metadata 里，
-     *  工具条与卡上的「展开配方」都按它铺 */
-    function expandModeChip(node) {
-        const train = node.metadata.expand_mode === "train";
-        return genBtn(train ? t("串联展开") : t("平铺展开"), train ? "plug" : "list",
-            () => host.patchMeta(node.id, { expand_mode: train ? "grid" : "train" }),
-            t("展开配方怎么铺：平铺是一段一行，串联是一段接一段接到车尾"));
-    }
-
-    /** 车厢上显示的那一段读哪一份：配方与它的段 spec 取它那一列车尾的（公共参数只有一处，配方名也在
-     *  车尾那一份上，换配方时车厢跟着换），车尾断了回落车厢自己存的这一份。段号、正文与素材是车厢自己的 */
+    /** 车厢上显示的那一段读哪一份：配方名与段号是车厢自己的（铺一列时写进去的那一份），整列共用的那一个
+     *  视频技能在它那一列的车尾上 —— 车尾断了回落配方里这一段自己写的技能。正文与素材是车厢自己的 */
     function carView(node) {
         const state = host.getState();
         const own = readRecipeParams(node);
-        const tail = chainTail(state, node.id);
-        const params = tail ? readRecipeParams(tail) : own;
-        const seg = (recipeRow(params.recipe)?.segments || [])[own.segment] || {};
-        const skillRow = videoSkills.rows.find((s) => s.id === String(seg.skill_id || ""));
-        const canvasPrompt = genInputs(state, node.id).prompts.join("\n\n");
+        const seg = recipeRow(own.recipe)?.segments?.[own.segment] || {};
+        const { prompts } = genInputs(state, node.id);
         const canvasRefs = mediaNodes(node.id);
-        const ownRefs = segmentRefs(seg);
+        const ownRefs = (seg.refs?.images || []).filter((name) => !canvasRefs.some((n) => n.metadata.filename === name));
+        const canvasPrompt = prompts.join("\n\n");
+        const ownText = carOwnText(node);
+        const segPrompt = String(seg.prompt || "").trim();
         return {
-            head: tf("第 {n} 段 · {sec} 秒 · {skill}", { n: own.segment + 1,
-                sec: Number(seg.duration_sec) || 0,
-                skill: skillRow ? skillDisplayName(skillRow) : t("未选技能") }),
+            // 顶行那一行：配方名 · 这一段时长 · 生效的技能（段号在左边「段 N」那枚里，这里不重复）
+            head: [own.recipe, tf("{n} 秒", { n: seg.duration_sec ?? 0 }),
+                videoSkillName(own.skill_id || seg.skill_id)].filter(Boolean).join(" · "),
+            src: canvasPrompt ? t("画布") : ownText ? t("车厢") : t("配方"),
+            // 正文框铺的是这一段生效的那一份：连过来的正文（锁着）、车厢写过的、都没有就是配方那一段
+            edit: canvasPrompt || ownText || segPrompt,
+            seed: segPrompt,      // 车厢没写过时框里就是这一份：改没改过拿它比
+            prompt: canvasPrompt || ownText || segPrompt || t("这一段没有提示词"),
             fromCanvas: !!canvasPrompt,
-            prompt: canvasPrompt || String(seg.prompt || "").trim() || t("这一段没有提示词"),
-            refs: [...canvasRefs.map((n) => refThumb(n, "", params.recipe)),
-                ...ownRefs.slice(0, CAR_REF_SHOWN).map((name) => refThumb(null, name, params.recipe))],
             count: canvasRefs.length + ownRefs.length,
         };
     }
 
-    /** 串联车尾那台生成节点的面：整列共用的配方与生成参数都在这一张卡上，出片就是按链序把启用的那几段
-     *  依次入队（与在导演页逐段出片同一发）。成片落各段的下游视频位，这台节点自己不落片 */
+    /** 串联车尾那台生成节点的面：卡上只留整列共用的技能与分辨率两枚胶囊、这一列跑几段那一行、出片那一发；
+     *  步数 / 锚点 / 连续性 / 上下文帧 / 种子这些不常用的参数收在「参数」弹窗里（openChainParams）。
+     *  出片就是按链序把启用的那几段依次入队（与在导演页逐段出片同一发），成片落各段的下游视频位，
+     *  这台节点自己不落片；每一段的时长跟着配方走，卡上没有时长口子 */
     function chainControls(node, busy) {
         const cars = chainCars(host.getState(), node.id);
         const live = cars.filter((car) => car.metadata.disabled !== true);
-        const { stepsSel, anchorSel, contSel, ctxSel, seedIn } = recipeParamSelects(node, busy);
+        // 这一列跑的是哪一份配方：铺的时候定下、记在每一厢身上，车尾只把它写出来（换配方是重铺一列，不在这里改）
+        const recipe = chainRecipe(cars) || String(node.metadata?.recipe || "");
         const acts = [];
         if (busy) acts.push(genBtn(t("取消任务"), "cross", () => cancel(node), t("取消这一列在跑的段")));
+        acts.push(genBtn(t("参数"), "gear", () => openChainParams(node),
+            t("步数 / 锚点 / 连续性 / 上下文帧 / 种子：整列共用的参数"), busy));
         acts.push(genBtn(t("生成视频"), "play", () => run(node),
             canGen() === false ? t("生成视频需要 ComfyUI 执行队列") : t("按链序跑启用的那几段"), busy));
         return [
-            $el("div", { className: "ns-canvas-gen-skill" }, [genChip(recipeSelect(node, busy), { icon: "film" })]),
-            $el("div", { className: "ns-canvas-gen-params" },
-                [genChip(stepsSel, { icon: "gear" }), genChip(anchorSel, { icon: "plug" }),
-                    genChip(contSel, { icon: "history" })]),
-            $el("div", { className: "ns-canvas-recipe-args" }, [genChip(ctxSel, { icon: "target" }), seedIn]),
-            $el("div", { className: "ns-canvas-recipe-info",
-                title: t("串联只管排布与顺序：出片就是逐段跑导演页那一条链") },
-                [$el("span", { className: "ns-canvas-recipe-info-text",
-                    textContent: tf("链上 {n} 段 · 启用 {m} 段", { n: cars.length, m: live.length }) })]),
+            // 第一行就是这一列的关键信息：配方名 + 跑几段 / 启用几段（与车厢顶行同一行式，段数与配方名一行写完）
+            $el("div", { className: "ns-canvas-car-head",
+                title: t("这一列跑哪一份配方在铺的时候定下：要换配方用「添加配方」重铺一列") }, [
+                $el("span", { className: "ns-canvas-car-seg", textContent: t("车尾") }),
+                $el("span", { className: "ns-canvas-car-info",
+                    textContent: recipe
+                        ? `${chainCountText(cars, live)} · ${recipe}`
+                        : chainCountText(cars, live) }),
+            ]),
+            $el("div", { className: "ns-canvas-gen-skill" },
+                [genChip(chainSkillSelect(node, busy, recipe), { icon: "film" }),
+                    genChip(chainSizeSelect(node, busy, recipe), { glyph: ratioGlyph() })]),
             $el("div", { className: "ns-canvas-gen-bottom" }, [$el("div", { className: "ns-canvas-gen-acts" }, acts)]),
         ];
+    }
+
+    /** 车尾的「参数」弹窗：整列共用的次要点（步数 / 锚点 / 连续性 / 上下文帧 / 种子）收在这里，
+     *  下拉一律走胶囊菜单 —— 桌面窗口的 WebView 里原生 select 弹不出列表（与卡上那两枚胶囊同一套控件）。
+     *  菜单挂在弹窗自己那一层（不是画布那层 .ns-canvas-gen-menus）：弹窗是盖在画布上的浮层，
+     *  画布层在弹窗下面，菜单进画布层就被这一层遮死、还被 .ns-canvas-stage 的 overflow 切掉。
+     *  改一下当场走 patchMeta（进撤销栈、随画布落盘）。收窗与「添加配方」那扇同一套：点窗外、Esc、右上角 × */
+    function openChainParams(node) {
+        const close = () => {
+            mask.remove();
+            document.removeEventListener("keydown", onKey);
+        };
+        const onKey = (ev) => { if (ev.key === "Escape") close(); };
+        const menus = $el("div", { className: "ns-canvas-tailform-menus" });
+        const formChip = (sel, opts) => {
+            const chip = chipButton(sel, { ...opts, mount: () => menus });
+            chips.add(chip);
+            return chip.el;
+        };
+        const { stepsSel, anchorSel, contSel, ctxSel, seedIn } = recipeParamSelects(node, false);
+        const row = (label, el) => $el("div", { className: "ns-canvas-tailform-row" },
+            [$el("span", { className: "ns-canvas-tailform-label", textContent: t(label) }), el]);
+        const mask = $el("div", { className: "ns-canvas-tailform-mask",
+            onclick: (ev) => { if (ev.target === mask) close(); } }, [
+            $el("div", { className: "ns-canvas-tailform" }, [
+                $el("div", { className: "ns-canvas-tailform-head" }, [
+                    $el("span", { className: "ns-canvas-tailform-title", textContent: t("整列共用参数") }),
+                    $el("button", { className: "ns-iconbtn ns-size-md ns-ghost", type: "button", textContent: "×",
+                        title: t("关闭"), onclick: close }),
+                ]),
+                row("步数", formChip(stepsSel, { icon: "sliders" })),
+                row("锚点", formChip(anchorSel, { icon: "anchor" })),
+                row("连续性", formChip(contSel, { icon: "film" })),
+                row("上下文帧", formChip(ctxSel, { icon: "clock" })),
+                row("种子", seedIn),
+                $el("p", { className: "ns-canvas-tailform-note",
+                    textContent: t("每一段的时长跟着配方走，不在这里改") }),
+                menus,
+            ])]);
+        host.pageEl().appendChild(mask);
+        document.addEventListener("keydown", onKey);
     }
 
     /** 「加视频节点」把视频技能列表取到手（与出视频页同一份来源） */
@@ -996,14 +1022,25 @@ export function createCanvasGen({ $el, toast, api, canGen, startComfy, host }) {
         loadVideoSkills().then(host.paintNodes).catch(() => {});
     }
 
-    /** 「加配方节点」把配方列表与视频技能取到手：段那一列与那行配方概览都读这两份 */
+    /** 「添加配方」弹窗把配方列表与视频技能取到手：弹窗的卡与车厢上那行配方概览都读这两份 */
     function primeRecipes() {
         Promise.all([loadRecipes(), loadVideoSkills()]).then(() => host.paintNodes()).catch(() => {});
     }
 
-    /** 展开配方要读的段列表：配方列表没取到（离线、配方被删）时交空数组，页面据此说明原因 */
+    /** 「添加配方」弹窗要读的段列表：配方列表没取到（离线、配方被删）时交空数组，页面据此说明原因 */
     function recipeSegments(name) {
         return recipeRow(name)?.segments || [];
+    }
+
+    /** 「添加配方」弹窗卡片上那一行概览：段数 · 模式 · 技能 · 宽高 · 总时长（弹窗自己不碰技能列表） */
+    function recipeCardText(name) {
+        const row = recipeRow(name);
+        return row ? directorMetaText(row, videoSkills.rows) : "";
+    }
+
+    /** 「添加配方」弹窗要列的那一份配方列表：卡片上的名称、段数、时长与封面都读这一份 */
+    function recipeCards() {
+        return recipes.rows;
     }
 
     return {
@@ -1014,6 +1051,9 @@ export function createCanvasGen({ $el, toast, api, canGen, startComfy, host }) {
         modelText,
         recipeMetaText,
         recipeSegments,
+        segmentRefs,
+        recipeCards,
+        recipeCardText,
         carView,
         controls,
         prime,

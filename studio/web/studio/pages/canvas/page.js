@@ -8,12 +8,14 @@
 import { t, tf } from "../../../js/core/i18n.js";
 import { setIcon, setIconLabel } from "../../../js/core/icons.js";
 import { addConnection, gridGeometry, MAX_SCALE, MIN_SCALE, nodeBounds, placeGrid, removeNodes, screenToCanvas, zoomViewportAt } from "./geometry.js";
-import { BACKGROUND_MODES, createCanvasNode, createCanvasStore, duplicateNodes, NODE_SPECS, readCanvas } from "./store.js";
+import { BACKGROUND_MODES, createCanvasNode, createCanvasStore, duplicateNodes, fitImageSize, NODE_SPECS, readCanvas } from "./store.js";
 import { createHistory, snapshotCanvas } from "./history.js";
 import { applyNodeGeometry as paintNodeGeometry, renderNodes as renderNodeLayer, paintSelection as paintNodeSelection } from "./nodes.js";
 import { renderConnections as renderLinkLayer, renderActiveConnection as paintActiveLine } from "./connections.js";
 import { attachCanvasInteractions } from "./interactions.js";
 import { createCanvasGen, readRecipeParams } from "./gen.js";
+import { thumbUrl } from "../../../recipes.js";
+import { mediaKindOf } from "../../../js/core/media-href.js";
 
 const SAVE_DEBOUNCE_MS = 900;
 
@@ -66,7 +68,7 @@ export function createCanvasPage({ $el, api, toast, openMaterial, canGen, startC
         refreshHistory();
         gen?.prime();     // 节点上那行技能名要有来源：技能列表与首张画布一起读
         gen?.primeVideo();     // 「加视频节点」的技能胶囊与出片预检读这一份
-        gen?.primeRecipes();   // 「加配方节点」的段那一列与配方概览读这一份
+        gen?.primeRecipes();   // 「添加配方」弹窗的卡与车厢上那行配方概览读这一份
         ready = loadProjects();
         return ready;
     }
@@ -148,7 +150,7 @@ export function createCanvasPage({ $el, api, toast, openMaterial, canGen, startC
             inMenu(mk(t("加提示词"), "list", addAction(() => addNode("text")))),
             inMenu(mk(t("加生成节点"), "sparkles", addAction(() => addGenNode()))),
             inMenu(mk(t("加视频节点"), "film", addAction(() => addVideoNode()))),
-            inMenu(mk(t("加配方节点"), "wand", addAction(() => addRecipeNode())))
+            inMenu(mk(t("添加配方"), "wand", addAction(() => addRecipe())))
         ]);
         const addBtn = mk(t("加节点"), "plus-square", () => (
             addMenu.classList.contains("ns-canvas-add-menu-open") ? closeAddMenu() : openAddMenu()));
@@ -192,12 +194,30 @@ export function createCanvasPage({ $el, api, toast, openMaterial, canGen, startC
             selectedNodeIds, selectedConnectionId, $el, onText,
             onPick: pickInto, onHero: (node) => toggleHero(node.id), onDelete: (node) => deleteNode(node.id),
             onCopy: (node) => duplicateIds([node.id]),
-            onExpand: (node) => expandRecipe(node),
             onToggleDisabled: (node) => setNodeMetadata(node.id, { disabled: node.metadata?.disabled !== true }),
             genControls: (node) => gen?.controls(node), genState: (node) => gen?.stateOf(node),
             genModel: (node) => gen?.modelText(node),
-            recipeControls: (node) => gen?.controls(node), recipeState: (node) => gen?.stateOf(node),
-            recipeMeta: (node) => gen?.recipeMetaText(node), carView: (node) => gen?.carView(node) });
+            carView: (node) => gen?.carView(node),
+            onImageSize: fitImageNode });
+    }
+
+    /** 图片节点按这张图自己的比例落那一格：横的压矮、竖的收窄，永远不超出图片节点默认那一档
+     *  （超出就会压到 placeGrid 的步长与串联的行距算出来的邻居）。
+     *  只动还停在默认尺寸的节点 —— 用户拉过尺寸的、串联素材那种小卡（240×160）一律不重铺；
+     *  没素材坐标的占位图不算比例。只落几何与连线，不重建节点（重建会打断正在加载的那张图） */
+    function fitImageNode(node, naturalWidth, naturalHeight) {
+        const cur = state.nodes.find((n) => n.id === node.id);
+        if (!cur || cur.type !== "image") return;
+        if (!cur.metadata.filename && !cur.metadata.asset) return;
+        const spec = NODE_SPECS.image;
+        if (cur.width !== spec.width || cur.height !== spec.height) return;
+        const size = fitImageSize(naturalWidth, naturalHeight);
+        if (!size || (size.width === cur.width && size.height === cur.height)) return;
+        cur.width = size.width;
+        cur.height = size.height;
+        paintNodeGeometry(view.nodeLayer, cur);
+        renderConnections();
+        markDirty();
     }
 
     function renderConnections() {
@@ -312,8 +332,8 @@ export function createCanvasPage({ $el, api, toast, openMaterial, canGen, startC
         stageRect: () => view.stage.getBoundingClientRect(),
         patchMeta: setNodeMetadata,
         applyResult: applyGenResult,
-        expandRecipe,
         genMenus: () => view.menus,
+        pageEl: () => view.el,
     };
 
     gen = createCanvasGen({
@@ -470,135 +490,158 @@ export function createCanvasPage({ $el, api, toast, openMaterial, canGen, startC
         return addNode("gen", null, { kind: "video", skill_id: gen?.defaultVideoSkillId() || "" });
     }
 
-    /** 「加配方节点」：选一份导演配方与其中一段，出片走单段那条链，成片落进下游视频节点 */
-    function addRecipeNode() {
+    /** 「添加配方」：弹窗选一份导演配方，选完直接串成一列车厢（一段一厢），出片与整列共用的参数在车尾 */
+    function addRecipe() {
         gen?.primeRecipes();
-        return addNode("recipe", null, { recipe: "", segment: 0, anchors: "both" });
+        openRecipePicker();
     }
 
-    // ====== 展开配方 ======
-    // 一台配方卡摊成「每段一台段节点」：平铺是一段一行，段的提示词摊成文本节点、参考素材摊成图片节点
-    // 连过去，段节点旁边留一台空视频位（出片落的位子）；串联是一段接一段 —— 车厢首尾相接成主线，每一厢
-    // 只铺车厢与自己那块正文两张，参考素材沿用配方里那一份，出片与整列共用的参数在列尾那台生成节点上，
-    // 成片落点由出片那一发自己找下游空位、没有就新开（见 applyGenResult）。两挡跑法相同：出片就是导演页
-    // 单段那一条链，串联的相接只管排布与顺序。一次压一份栈 —— 撤销一次退掉整批。
-    const EXPAND_SEG_MAX = 24;
-    const EXPAND_GAP = 40;
-    const EXPAND_REF_MAX = 4;
-    const EXPAND_REF_SIZE = { width: 250, height: 176 };
-    const EXPAND_TEXT_SIZE = { width: 250, height: 140 };
-    const EXPAND_ROW_PITCH = 424;   // 平铺：一段一行的纵向占位取参考图那一片的高度
-    // 串联的一厢铺三样：车厢（精简卡）在它自己那一行，正文铺在车厢正上方同一列、同宽，参考素材铺在
-    // 车厢正下方那一列（2×2 铺满车厢的宽）。成片位不在铺排里占位——出片那一发自己找下游空位、没有就新开。
-    // 一厢最多 6 张（车厢 + 正文 + 4 张素材），加一台车尾
-    const TRAIN_CAR_SIZE = { width: 360, height: 152 };
-    const TRAIN_TEXT_SIZE = { width: 360, height: 220 };   // 正文与车厢同宽同列：整段提示词读得完
-    const TRAIN_REF_SIZE = { width: 176, height: 124 };    // 素材带两块 176 加一格 8 正好铺满车厢那一列
-    const TRAIN_REF_GAP = 8;
-    const TRAIN_CAR_PITCH = 400;      // 车厢 360 加车厢之间那一格
-    const TRAIN_CARS_PER_ROW = 4;
-    const TRAIN_ROW_PITCH = 700;      // 正文 220 + 36 + 车厢 152 + 36 + 素材带 2×124+8 + 行与行的余隙
-    const TRAIN_TEXT_DY = -256;       // 正文落在车厢正上方，底边离车厢 36
-    const TRAIN_REF_DY = 188;         // 素材带落在车厢正下方，顶边离车厢 36
+    // ====== 一列车厢与「添加配方」弹窗 ======
+    // 一段一厢：车厢首尾相接接到车尾那台生成节点，链序就是段序（第 1 厢在最前，接进车尾的是最后一段）。
+    // 铺一列只造车厢与车厢上方那几张参考素材节点，按连线接进厢；不造文本节点 —— 车厢自己显示配方那一段的正文，
+    // 要改这一发的正文就在车厢上方连一条文本线过来，连了就是覆盖（见 genInputs 与出片载荷）。
+    // 出片与整列共用的视频技能 / 锚点 / 连续性 / 上下文帧 / 步数 / 种子都在车尾那一张上，车厢只带配方名与段号。
+    const TRAIN_SEG_MAX = 24;         // 一列最多铺 24 厢：几十张一起铺时撤销与摆位都不可控
+    const TRAIN_GAP = 40;
+    const TRAIN_CARS_PER_ROW = 3;     // 3 厢一行：9 段就是 3×3、6 段就是两行三列，与出视频页铺的九宫格 / 六宫格一行一行对得上
+    const TRAIN_REFS_MAX = 5;         // 每一厢上方最多铺 5 张参考素材：一次铺几十张时摆位与连线都不可控
+    const TRAIN_ROW_PITCH = 512;      // 参考素材行 196 加行距 40 加车厢 176 加行与行之间那一格
 
-    /** 一段的落位（左上角那一套）：平铺按四列一段一行，串联按厢排、每 4 厢换一行。
-     *  串联把 segs.length 那一格留给车尾 */
-    function expandCarSlots(node, i, train) {
-        const baseX = node.position.x + node.width + EXPAND_GAP;
-        const baseY = node.position.y;
-        if (!train) {
-            const refsX = baseX + EXPAND_TEXT_SIZE.width + EXPAND_GAP;
-            const segX = refsX + 2 * EXPAND_REF_SIZE.width + 32 + EXPAND_GAP;   // 参考图那两列铺满再接段
-            const rowY = baseY + i * EXPAND_ROW_PITCH;
-            return { textX: baseX, textY: rowY, refsX, refsY: rowY,
-                segX, segY: rowY, clipX: segX + NODE_SPECS.recipe.width + 32, clipY: rowY };
-        }
-        const carX = baseX + (i % TRAIN_CARS_PER_ROW) * TRAIN_CAR_PITCH;
-        const mainY = baseY + Math.floor(i / TRAIN_CARS_PER_ROW) * TRAIN_ROW_PITCH;
-        return { textX: carX, textY: mainY + TRAIN_TEXT_DY, segX: carX, segY: mainY,
-            refsX: carX, refsY: mainY + TRAIN_REF_DY };
+    /** 每一厢占多宽：铺几张参考素材就占几张的宽，车厢永远比它铺出来的那一行窄 */
+    function trainColWidth(seg) {
+        const n = Math.min((gen?.segmentRefs(seg) || []).filter((name) => mediaKindOf(name) === "image").length,
+            TRAIN_REFS_MAX);
+        return Math.max(NODE_SPECS.recipe.width, n * NODE_SPECS.image.width + (n - 1) * TRAIN_GAP);
     }
 
-    function expandRecipe(node) {
-        if (!node || node.type !== "recipe") return;
-        const params = readRecipeParams(node);
-        const segs = gen?.recipeSegments(params.recipe) || [];
-        if (!params.recipe) { toast(t("先选一份配方"), "info"); return; }
+    /** 把一份配方铺成一列火车：每一厢带自己那一段，厢上方铺这一段用的参考素材节点并按连线接进厢，
+     *  厢首尾相接接到车尾；不造文本节点 —— 车厢自己显示配方那一段的正文，连了文本线就是这一发的覆盖 */
+    function layTrain(recipe) {
+        const segs = gen?.recipeSegments(recipe) || [];
         if (!segs.length) { toast(t("配方列表读不到：先在导演页保存这份配方"), "error"); return; }
-        if (segs.length > EXPAND_SEG_MAX) {
-            toast(tf("段数太多（{n} 段），展开上限 {max} 段", { n: segs.length, max: EXPAND_SEG_MAX }), "info");
+        if (segs.length > TRAIN_SEG_MAX) {
+            toast(tf("段数太多（{n} 段），一列上限 {max} 段", { n: segs.length, max: TRAIN_SEG_MAX }), "info");
             return;
         }
-        const train = node.metadata.expand_mode === "train";
         beginEdit();
+        const car = NODE_SPECS.recipe;
+        const genSpec = NODE_SPECS.gen;
+        const refSpec = NODE_SPECS.image;
+        const carY = refSpec.height + TRAIN_GAP;   // 车厢在参考素材行下面这一格
+        const cols = segs.map(trainColWidth);
+        const carsInRow = (row) => Math.min(segs.length - row * TRAIN_CARS_PER_ROW, TRAIN_CARS_PER_ROW);
+        // 一列厢的 x 累的是「这一行里它左边那几厢」的宽与间距：按行号算会把同一行的厢全落在同一处
+        const slotX = (row, idx) => origin.x + cols
+            .slice(row * TRAIN_CARS_PER_ROW, row * TRAIN_CARS_PER_ROW + idx)
+            .reduce((sum, w) => sum + w + TRAIN_GAP, 0);
+        const rowWidth = (row) => cols
+            .slice(row * TRAIN_CARS_PER_ROW, row * TRAIN_CARS_PER_ROW + carsInRow(row))
+            .reduce((sum, w) => sum + w + TRAIN_GAP, 0) - TRAIN_GAP;
+        const carRows = Math.ceil(segs.length / TRAIN_CARS_PER_ROW);
+        const tailRow = segs.length % TRAIN_CARS_PER_ROW ? carRows - 1 : carRows;   // 最后一行铺满就换下一行行首
+        const tailIdx = tailRow === carRows - 1 ? carsInRow(tailRow) : 0;           // 车尾紧跟最后一厢右边那一格
+        const rows = tailRow + 1;
+        // 整块落在视口中心：一次铺几十张要铺在看得见的地方
+        const at = centerWorld();
+        const widest = Array.from({ length: rows }, (_x, row) =>
+            (row < carRows ? rowWidth(row) : 0) + (row === tailRow ? TRAIN_GAP + genSpec.width : 0))
+            .reduce((max, w) => Math.max(max, w), 0);
+        const origin = {
+            x: at.x - widest / 2,
+            y: at.y - ((rows - 1) * TRAIN_ROW_PITCH + carY + Math.max(car.height, genSpec.height)) / 2,
+        };
         const created = [];
         const connections = [];
-        let prevSeg = null;
+        let prev = null;
         for (let i = 0; i < segs.length; i += 1) {
-            const seg = segs[i] || {};
-            const at = expandCarSlots(node, i, train);
-            const textSize = train ? TRAIN_TEXT_SIZE : EXPAND_TEXT_SIZE;
-            const text = createCanvasNode("text", { x: at.textX, y: at.textY },
-                { content: String(seg.prompt || ""), width: textSize.width, height: textSize.height });
-            // 串联的厢是精简车厢：只带配方名与段号，锚点 / 连续性 / 上下文帧 / 步数 / 种子在车尾那台节点上
-            const segNode = createCanvasNode("recipe", { x: at.segX, y: at.segY },
-                train ? { recipe: params.recipe, segment: i, train: 1, expand_mode: "train",
-                    width: TRAIN_CAR_SIZE.width, height: TRAIN_CAR_SIZE.height }
-                    : { ...params, segment: i });
-            // 串联这一厢不铺成片位：成片落点由出片那一发自己找下游空位、没有就新开
-            const clip = train ? null : createCanvasNode("video", { x: at.clipX, y: at.clipY }, {});
-            const refSize = train ? TRAIN_REF_SIZE : EXPAND_REF_SIZE;
-            const refGap = train ? TRAIN_REF_GAP : 32;
-            const refs = recipeSegAssets(seg).slice(0, EXPAND_REF_MAX).map((asset, n) =>
-                createCanvasNode("image", {
-                    x: at.refsX + (n % 2) * (refSize.width + refGap),
-                    y: at.refsY + Math.floor(n / 2) * (refSize.height + refGap),
-                }, { asset, recipe: params.recipe,
-                    width: refSize.width, height: refSize.height }));
-            created.push(text, ...refs, segNode, ...(clip ? [clip] : []));
-            connections.push({ id: `conn-${text.id}-${segNode.id}`, fromNodeId: text.id, toNodeId: segNode.id },
-                ...refs.map((n) => ({ id: `conn-${n.id}-${segNode.id}`, fromNodeId: n.id, toNodeId: segNode.id })),
-                ...(clip ? [{ id: `conn-${segNode.id}-${clip.id}`, fromNodeId: segNode.id, toNodeId: clip.id }] : []));
-            if (train && prevSeg) {
-                connections.push({ id: `conn-${prevSeg.id}-${segNode.id}`, fromNodeId: prevSeg.id, toNodeId: segNode.id });
-            }
-            prevSeg = segNode;
+            const row = Math.floor(i / TRAIN_CARS_PER_ROW);
+            const carAt = { x: slotX(row, i % TRAIN_CARS_PER_ROW) + Math.round((cols[i] - car.width) / 2),
+                y: origin.y + row * TRAIN_ROW_PITCH + carY };
+            const segNode = createCanvasNode("recipe", carAt, { recipe, segment: i });
+            created.push(segNode);
+            // 参考素材落在厢的正上方，按连线接进厢：素材节点带 recipe/asset，出片那一发由后端从配方 assets 取
+            const names = gen.segmentRefs(segs[i])
+                .filter((name) => mediaKindOf(name) === "image").slice(0, TRAIN_REFS_MAX);
+            const refRow = names.length * refSpec.width + (names.length - 1) * TRAIN_GAP;
+            names.forEach((name, k) => {
+                const refNode = createCanvasNode("image",
+                    { x: carAt.x + Math.round((car.width - refRow) / 2) + k * (refSpec.width + TRAIN_GAP),
+                        y: origin.y + row * TRAIN_ROW_PITCH },
+                    { asset: name, recipe });
+                created.push(refNode);
+                connections.push({ id: `conn-${refNode.id}-${segNode.id}`, fromNodeId: refNode.id, toNodeId: segNode.id });
+            });
+            if (prev) connections.push({ id: `conn-${prev.id}-${segNode.id}`, fromNodeId: prev.id, toNodeId: segNode.id });
+            prev = segNode;
         }
-        if (train) {
-            // 车尾那台生成节点落在最后一厢后面的那一格，出片就是把启用的那几段按链序依次入队
-            const at = expandCarSlots(node, segs.length, true);
-            const tail = createCanvasNode("gen",
-                { x: at.segX, y: at.segY + Math.round((TRAIN_CAR_SIZE.height - NODE_SPECS.gen.height) / 2) },
-                { kind: "video", chain: "train", recipe: params.recipe, anchors: params.anchors,
-                    continuity: params.continuity, context_frames: params.context_frames,
-                    steps: params.steps, seed: params.seed });
-            connections.push({ id: `conn-${prevSeg.id}-${tail.id}`, fromNodeId: prevSeg.id, toNodeId: tail.id });
-            created.push(tail);
-        }
+        // 车尾只带整列共用的那一份：技能与锚点 / 连续性 / 上下文帧 / 步数 / 种子（配方名与段号在每一厢上）
+        const { recipe: _r, segment: _s, skill_id: _k, ...shared } = readRecipeParams({});
+        const tail = createCanvasNode("gen",
+            { x: slotX(tailRow, tailIdx), y: origin.y + tailRow * TRAIN_ROW_PITCH + carY + Math.round((car.height - genSpec.height) / 2) },
+            { ...shared, kind: "video", chain: "train", skill_id: "" });
+        connections.push({ id: `conn-${prev.id}-${tail.id}`, fromNodeId: prev.id, toNodeId: tail.id });
+        created.push(tail);
         state = { ...state, nodes: [...state.nodes, ...created], connections: [...state.connections, ...connections] };
         selectedNodeIds = new Set(created.filter((n) => n.type === "recipe").map((n) => n.id));
         selectedConnectionId = null;
         renderNodes();
         renderConnections();
         markDirty();
-        fitView();   // 一次摊出几十张时画面要自己拉回来，否则铺在看不见的地方
-        toast(train
-            ? tf("已串开 {n} 段：车厢首尾相接接到车尾，出片与参数在车尾那台生成节点", { n: segs.length })
-            : tf("已展开 {n} 段：每段一台段节点，提示词与参考素材连过去", { n: segs.length }), "success");
+        fitView();   // 一次铺几十张时画面要自己拉回来，否则铺在看不见的地方
+        toast(tf("已铺好 {n} 段：参考素材按连线接进每一厢，出片与整列共用的技能在车尾", { n: segs.length }), "success");
     }
 
-    /** 展开一段要铺的参考素材（配方 assets/ 里的文件名）：首帧与分镜关键帧排最前，其余按段的参考图列出 */
-    function recipeSegAssets(seg) {
-        const names = [];
-        for (const key of ["first_frame", "storyboard"]) {
-            const name = String(seg[key] || "");
-            if (name && !names.includes(name)) names.push(name);
+    /** 「添加配方」弹窗：列导演页自己存的那份配方（gen 里已滤掉内置预设与没有段的），一张卡一份配方，
+     *  点一张就直接串成一列。搜索框按名字过滤；Esc 与点卡片外头收窗 —— 收法与画布切换那扇面板同一套 */
+    function openRecipePicker() {
+        if (view.picker) return;
+        const search = $el("input", { className: "ns-canvas-picker-search", type: "search",
+            placeholder: t("搜配方名"), oninput: () => renderCards() });
+        const list = $el("div", { className: "ns-canvas-picker-list" });
+        const box = $el("div", { className: "ns-canvas-picker", role: "dialog", "aria-label": t("添加配方") }, [
+            $el("div", { className: "ns-canvas-picker-head" }, [
+                $el("span", { className: "ns-canvas-picker-title", textContent: t("添加配方") }),
+                search,
+            ]),
+            list,
+        ]);
+        const mask = $el("div", { className: "ns-canvas-picker-mask",
+            onclick: (e) => { if (e.target === mask) close(); } }, [box]);
+        function close() {
+            mask.remove();
+            view.picker = null;
+            document.removeEventListener("keydown", escape, true);
         }
-        const refs = seg.refs && typeof seg.refs === "object" ? seg.refs : {};
-        for (const key of ["images", "videos", "audios"]) {
-            for (const name of (refs[key] || [])) if (name && !names.includes(name)) names.push(name);
+        function escape(e) {
+            if (e.key === "Escape") close();
         }
-        return names;
+        function renderCards() {
+            const word = search.value.trim().toLowerCase();
+            const rows = (gen?.recipeCards() || []).filter((r) => !word || String(r.name).toLowerCase().includes(word));
+            list.replaceChildren(...rows.map((row) => {
+                // 封面沿用配方卡片那一条：各段首帧里的第一张（导演配方常只存提示词，没有就是文字位）
+                const frame = (row.segments || []).map((s) => String(s.first_frame || "")).find(Boolean) || "";
+                return $el("button", { className: "ns-canvas-picker-card", type: "button",
+                    title: tf("串开 {n} 段：一段一厢接到车尾", { n: (row.segments || []).length }),
+                    onclick: () => { close(); layTrain(row.name); } }, [
+                    frame
+                        ? $el("img", { className: "ns-canvas-picker-cover", alt: "", draggable: "false",
+                            src: thumbUrl(row.name, frame, "", 192) })
+                        : $el("span", { className: "ns-canvas-picker-cover", textContent: t("无封面") }),
+                    $el("span", { className: "ns-canvas-picker-name", textContent: row.name }),
+                    $el("span", { className: "ns-canvas-picker-meta", textContent: gen?.recipeCardText(row.name) || "" }),
+                ]);
+            }));
+            if (!rows.length) {
+                list.append($el("div", { className: "ns-canvas-picker-empty",
+                    textContent: word ? t("没有对得上的配方") : t("没有可串的配方：先在导演页保存一份") }));
+            }
+        }
+        view.el.appendChild(mask);
+        view.picker = mask;
+        renderCards();
+        document.addEventListener("keydown", escape, true);
+        search.focus();
     }
 
     /** 删选中的东西：选中一条线先删线，否则删选中那批节点连带两端接上的线 */
