@@ -2,7 +2,7 @@
 
 Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to the ComfyUI Registry.
 
-## [Unreleased]
+## [1.6.2] - 2026-11-19
 
 ### Added
 - **An image node now lands at the picture's own ratio.** A dropped, placed or generated image fills an image node
