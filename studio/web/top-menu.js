@@ -20,6 +20,7 @@ import { openSkillManager, runSkillWorkflowHandoff, showSkillWriteLogDialog, get
 import { openGenMaterialDialog } from "./gallery-gen.js";
 import { openModelHub } from "./model-hub.js";
 import { t, tf, getLang, applyLang, LANGS } from "./js/core/i18n.js";
+import { THEMES, getTheme, setTheme } from "./js/core/theme.js";
 
 const STUDIO_URL = "/neo-studio";
 const REPO_URL = "https://github.com/neoneo-ai/neo-studio";
@@ -275,7 +276,7 @@ function showAboutDialog() {
 }
 
 
-// ---- 统一设置弹窗（全局单例，与具体节点无关）：LLM / 生图默认 / 生视频模型 / 界面语言四 tab。
+// ---- 统一设置弹窗（全局单例，与具体节点无关）：LLM / 生图默认 / 生视频模型 / 界面主题 / 界面语言五 tab。
 // 版式与 Studio 设置页同款：弹窗外壳复用 .neo-director-llm-*（recipes.css），体内左栏 tab + 右栏内容。
 // 打开即四个表单后台 load、全部落定前关闭不判脏；有未保存修改时 ✕/点遮罩/Esc 先出确认条
 // （保存并关闭 / 放弃修改 / 继续编辑）。幂等：已打开时重复调用不叠加。
@@ -316,18 +317,57 @@ function createLangSettingsForm() {
     };
 }
 
+// 界面主题表单：单选当前配色，保存即落盘并当场生效——配色是纯 CSS 级联，没有要重建的模块文案，
+// 弹窗不关闭、画布上正编辑的东西也不被打断（语言要整页刷新是另一回事）
+function createThemeSettingsForm() {
+    const el = document.createElement("div");
+    el.className = "neo-settings-theme";
+    const saved = getTheme();
+    const rows = THEMES.map((opt) => {
+        const input = document.createElement("input");
+        input.type = "radio";
+        input.name = "neo-theme";
+        input.value = opt.value;
+        input.checked = opt.value === saved;
+        const label = document.createElement("span");
+        label.className = "rs-form-label";
+        label.textContent = t(opt.label);
+        const row = document.createElement("label");
+        row.className = "neo-settings-theme-row";
+        row.append(input, label);
+        return { value: opt.value, input, row };
+    });
+    const hint = document.createElement("div");
+    hint.className = "rs-form-hint";
+    hint.textContent = t("选择后立即生效，不需要刷新。只影响 Studio 页面：ComfyUI 画布与节点面板保持深色。");
+    el.append(...rows.map((r) => r.row), hint);
+    const picked = () => rows.find((r) => r.input.checked)?.value;
+    return {
+        el,
+        load: async () => {},
+        save: async () => {
+            const value = picked();
+            if (!value || value === getTheme()) return true;
+            setTheme(value);   // 落盘 + 当场生效，不刷新
+            return true;
+        },
+        isDirty: () => picked() !== saved,
+    };
+}
+
 let _settingsModal = null;
 
 function openSettingsModal() {
     if (_settingsModal && !_settingsModal.parentNode) _settingsModal = null;   // 浮层已被清除（外部/测试重置 body）→ 丢弃过期状态
     if (_settingsModal) return;   // 已打开：忽略，避免叠加
 
-    // 与 Neo Studio 设置页同一套顺序：生成（LLM / 生图 / 生视频）在前，界面语言在后，中间一条细线。
-    // 这个弹窗是画布侧改生成默认值的地方，四个 tab 平铺时看不出哪几个同属生成链。tab 的 key 与打开方式不变
+    // 与 Neo Studio 设置页同一套顺序：生成（LLM / 生图 / 生视频）在前，界面主题与界面语言在后，中间一条细线。
+    // 这个弹窗是画布侧改生成默认值的地方，tab 平铺时看不出哪几个同属生成链。tab 的 key 与打开方式不变
     const forms = [
         { key: "llm", group: "generate", label: t("LLM 设置"), form: createModelConfigForm() },
         { key: "gen", group: "generate", label: t("生图默认设置"), form: createImageGenSettingsForm() },
         { key: "video", group: "generate", label: t("生视频模型"), form: createVideoGenSettingsForm() },
+        { key: "theme", group: "ui", label: t("界面主题"), form: createThemeSettingsForm() },
         { key: "lang", group: "ui", label: t("界面语言"), form: createLangSettingsForm() },
     ];
     const tabs = document.createElement("div");

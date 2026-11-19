@@ -15,6 +15,7 @@ import { openImageEditDialog, setVideoPageJump, setCanvasPlace } from "../galler
 import { AGENT_PREVIEW_SIDE } from "../live-preview.js";
 import { createAgentPanel } from "../agent-panel.js";
 import { t, tf } from "../js/core/i18n.js";
+import { applyTheme, watchSystemTheme } from "../js/core/theme.js";
 import { setIcon } from "../js/core/icons.js";
 import { createLibraryModal, acceptsPick } from "../js/core/lib-modal.js";
 import { initQueuePanel, setQueueOnline } from "../queue-panel.js";
@@ -1038,6 +1039,8 @@ function route() {
 // 仅 Studio 独立页启动：本文件也会作为扩展模块被主画布页加载（WEB_DIRECTORY），那里没有 #ns-view
 if (view) {
     localizeShell();
+    applyTheme();         // 首帧配色（index.html 内联脚本钉的）回报桌面端窗口：标题栏底色跟着换
+    watchSystemTheme();   // 选了 auto 的页面跟着系统翻面
     bindHeaderNav();
     // 出视频页没建过时，素材卡的「再来一发」与技能卡要把这一发交出去，得先把页建起来（route 同步建视图）
     setVideoPageJump(() => go("video"));

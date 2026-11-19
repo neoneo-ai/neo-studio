@@ -6,7 +6,8 @@ The "提示词增强" card in the **Create** section of the Studio home opens `#
 (`studio/web/prompt-enhance/prompt-enhance.js`). The top bar has no tab for it: that home card is the only way in, and
 removing the card on the home page closes the page off (add it back from Add a card). The page is one chat stage — the
 run's input is a bubble on the right, the model's reply is a bubble on the left, and the composer is pinned to the
-bottom edge with the paint page's flat card — a translucent dark fill with a light border, no drop shadow.
+bottom edge with the paint page's flat card — a translucent dark fill with a light border, no drop shadow; the paint,
+video and director composers are flat the same way.
 The 图像 / 视频 switch in the top-right corner is the page's own scope: the skill list shows only that family's enhance
 skills, and picking a prompt, the dice and saving a preset all land in that pool
 (`localStorage["rs.enhance.media"]`, image by default).

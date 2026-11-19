@@ -132,7 +132,7 @@ test("默认落地首页：意图卡片挂满主区，素材卡直达素材页",
                  "页容器滚动条收细一档，不出默认那根系统条（首页 / 素材 / 导演共用这一层）");
     assert.match(homeCss, /\.ns-page\s*\{[^}]*scrollbar-color:\s*transparent transparent/,
                  "页容器滚动条平时隐形");
-    assert.match(homeCss, /\.ns-page:hover\s*\{[^}]*scrollbar-color:\s*#555/,
+    assert.match(homeCss, /\.ns-page:hover\s*\{[^}]*scrollbar-color:\s*(?:var\(--[a-z0-9-]+,\s*)?#555/,
                  "指针进页滚动条才落色");
     assert.match(homeCss, /\.ns-page::-webkit-scrollbar\s*\{\s*width:\s*8px/,
                  "webkit 档同宽 8px");
@@ -177,13 +177,13 @@ test("技能页：技能管理换外壳配色，标题条只在列表态出现",
               "引导页态没有标题条（顶栏 tab 已给页名，整页没有可拖的窗）");
     assert.ok(rules.some((r) => /\.ns-skills-editing \.rs-skill-manager-head\s*\{[^}]*display:\s*flex/.test(r)),
               "列表态露出标题条：标题写「技能列表」，兼作返回引导页的入口");
-    assert.ok(rules.some((r) => /\.rs-skill-manager\s*\{[^}]*background:\s*#17171b/.test(r)),
+    assert.ok(rules.some((r) => /\.rs-skill-manager\s*\{[^}]*background:\s*(?:var\(--[a-z0-9-]+,\s*)?#17171b/.test(r)),
               "整页底色走外壳 #17171b，不用弹窗的 #1a1a2a");
-    assert.ok(rules.some((r) => /\.rs-skill-modal-header\s*\{[^}]*background:\s*#202024/.test(r)),
+    assert.ok(rules.some((r) => /\.rs-skill-modal-header\s*\{[^}]*background:\s*(?:var\(--[a-z0-9-]+,\s*)?#202024/.test(r)),
               "详情标题条走顶栏同款 #202024");
-    assert.ok(rules.some((r) => /\.rs-btn\s*\{[^}]*background:\s*#2a2a2e/.test(r)),
+    assert.ok(rules.some((r) => /\.rs-btn\s*\{[^}]*background:\s*(?:var\(--[a-z0-9-]+,\s*)?#2a2a2e/.test(r)),
               "按钮走外壳 .ns-btn 的灰底，不用节点内的小蓝按钮");
-    assert.ok(rules.some((r) => /\.rs-skill-picker-item\.is-selected\s*\{[^}]*rgba\(47, 111, 237/.test(r)),
+    assert.ok(rules.some((r) => /\.rs-skill-picker-item\.is-selected\s*\{[^}]*(?:var\(--[a-z0-9-]+,\s*)?rgba\(47, 111, 237/.test(r)),
               "选中行与设置页 tab 同一套半透明蓝高亮");
 });
 
@@ -193,13 +193,13 @@ test("导演页按钮走外壳配色：生成按钮半透明蓝，同排按钮�
     const recipes = fs.readFileSync(path.join(webDir, "recipes.css"), "utf8");
     const run = css.match(/\.ns-director-card \.ns-director-run \{[^}]*\}/);
     assert.ok(run, "生成整片按钮要有配色规则");
-    assert.match(run[0], /background:\s*rgba\(47, 111, 237/, "「生成整片」走壳内半透明蓝底");
-    assert.match(run[0], /border-color:\s*#2f6fed/, "描边留饱和蓝：压淡底色后主行动仍是这一行最显眼的控件");
+    assert.match(run[0], /background:\s*(?:var\(--[a-z0-9-]+,\s*)?rgba\(47, 111, 237/, "「生成整片」走壳内半透明蓝底");
+    assert.match(run[0], /border-color:\s*(?:var\(--[a-z0-9-]+,\s*)?#2f6fed/, "描边留饱和蓝：压淡底色后主行动仍是这一行最显眼的控件");
     assert.ok(!/\.ns-director-run[^}]*background:\s*#2f6fed/.test(css), "主按钮不该再是实心 #2f6fed 蓝板");
     const saveRun = recipes.match(/\.neo-director-foot \.neo-director-save-run \{[^}]*\}/);
     assert.ok(saveRun, "编辑器底部「保存并生成整片」要有配色规则");
     assert.match(saveRun[0], /background:\s*rgba\(47, 111, 237/, "「保存并生成整片」与生成面板同款半透明蓝");
-    assert.ok(/\.neo-director-overlay :is\(\.neo-director-save[^{]*\{[^}]*background:\s*#2a2a2e/.test(css),
+    assert.ok(/\.neo-director-overlay :is\(\.neo-director-save[^{]*\{[^}]*background:\s*(?:var\(--[a-z0-9-]+,\s*)?#2a2a2e/.test(css),
               "编辑器里的 取消 / 保存 / 生成修改 走外壳灰底；白名单写法，未保存确认条的蓝-红-灰语义色不在其内");
     assert.ok(/\.neo-director-dirty-discard\s*\{[^}]*background:\s*#3a2a2a/.test(recipes),
               "未保存确认条的「放弃修改」保持红底语义色，灰底排不覆盖它");
@@ -245,7 +245,7 @@ test("弹窗外壳样式齐备：标题栏横排一行，盒子有壳，内容�
     assert.match(head[0], /display:\s*flex/, "标题栏是一行：标题、插槽、最大化、✕ 横排（没样式时这四个竖着堆）");
     assert.match(head[0], /cursor:\s*move/, "标题栏空白处拖窗");
     assert.ok(/\.ns-libmodal-titlebar-slot \{/.test(css), "标题栏右侧插槽有版式（搜索框钉在这里）");
-    assert.ok(/\.ns-libmodal-box \{[^}]*background:\s*#17171b/.test(css), "弹窗盒子有壳：底色、描边、圆角");
+    assert.ok(/\.ns-libmodal-box \{[^}]*background:\s*(?:var\(--[a-z0-9-]+,\s*)?#17171b/.test(css), "弹窗盒子有壳：底色、描边、圆角");
     assert.ok(/\.ns-libmodal \{[^}]*position:\s*fixed/.test(css), "遮罩铺满整窗");
     assert.ok(/\.ns-libmodal-maximized \.ns-libmodal-box \{[^}]*inset:\s*0/.test(css), "最大化铺满整窗");
     assert.ok(/\.ns-libmodal-content \{[^}]*flex:\s*1 1 auto/.test(css), "内容区吃掉标题栏以下的高度并内滚");

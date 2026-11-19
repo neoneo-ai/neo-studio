@@ -1,11 +1,25 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-neo-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>新影工坊 · Neo Studio</title>
 <!-- 各 web/ 模块会自行注入所需 CSS（recipes.css / lightbox.css …）；
      prompts.css 提供 action toast 与 rs-btn 基础样式，这里统一带上 -->
+<script>
+// 冷启动定配色：样式表加载前把 <html data-neo-theme> 钉成存储的那套，第一帧就是对的底色，
+// 深色用户不闪白、浅色用户不闪黑。core/theme.js 是模块脚本，跑在样式之后，赶不上这一帧。
+// <html> 上的 data-neo-theme="dark" 是这段跑不动时的落点（禁 JS / 解析失败）= 老版的深色。
+(() => {
+    let saved = "auto";
+    try { saved = localStorage.getItem("neo_studio_theme") || "auto"; } catch (e) { saved = "auto"; }
+    document.documentElement.dataset.neoTheme =
+        saved === "light" || saved === "dark" ? saved
+            : (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+})();
+</script>
+<!-- 样式与脚本全部指向当前目录：部署目录可换名，也可整份放进 ComfyUI static 的子目录 -->
+
 <link rel="stylesheet" href="/extensions/comfyui-neo-studio/prompts.css">
 <script type="importmap">
 {

@@ -1,4 +1,4 @@
-// 设置页分段：左栏十项 tab 按 启动与连接 / 生成 / 智能体 / 语言与关于 排下来，段与段之间一条无文字的分割线；
+// 设置页分段：左栏十一项 tab 按 启动与连接 / 生成 / 智能体 / 主题与关于 排下来，段与段之间一条无文字的分割线；
 // 栏内长表单的小标题分区保留
 // · 启动设置：ComfyUI 位置 · 网络与端口 · 桌面窗口
 // · LLM 设置：服务商与模型 · 远程连接 · 本地模型
@@ -73,14 +73,14 @@ const tabKeys = () => [...document.querySelectorAll(".ns-settings-tab")].map((b)
 const START_TABS = ["启动设置", "启动日志", "手机连接"];
 const GEN_TABS = ["LLM 设置", "生图设置", "生视频设置"];
 const AGENT_TABS = ["智能体偏好", "MCP 服务"];
-const UI_TABS = ["界面语言", "关于"];
+const UI_TABS = ["界面主题", "界面语言", "关于"];
 
-test("设置页左栏：启动与连接排在最上，段之间只有分割线，tab 顺序与 data-key 全不变", async () => {
+test("设置页左栏：启动与连接排在最上，段之间只有分割线，末段多一项界面主题，其余 data-key 不变", async () => {
     await openSettings("desktop", true);
     assert.deepEqual(strip(), [...START_TABS, "|", ...GEN_TABS, "|", ...AGENT_TABS, "|", ...UI_TABS],
         "四段之间三条线、线里不写字：界面上的行数就等于设定项的数目");
-    assert.deepEqual(tabKeys(), ["launch", "log", "pair", "llm", "gen", "video", "agent", "mcp", "lang", "about"],
-        "分段只加左栏层级：深链 #/settings?tab=.. 靠这些 key 定位，一项都不该动");
+    assert.deepEqual(tabKeys(), ["launch", "log", "pair", "llm", "gen", "video", "agent", "mcp", "theme", "lang", "about"],
+        "分段只加左栏层级：深链 #/settings?tab=.. 靠这些 key 定位，配色只是末段多出来的一个 key");
 });
 
 test("浏览器标签页摘掉启动设置：首段剩启动日志与手机连接，条首不悬一条多余的线", async () => {

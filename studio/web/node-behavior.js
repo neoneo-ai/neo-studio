@@ -323,8 +323,8 @@ function createOnTextChangeCallback(statusBar, updateStatusAndUI, node) {
             
             // 显示切换提示
             statusTextEl.textContent = "Switched to LOCAL PROMPT";
-            statusBar.style.background = "#1a3a1a";
-            statusBar.style.color = "#4ade80";
+            statusBar.style.background = "var(--ns-background-1a3a1a, #1a3a1a)";
+            statusBar.style.color = "var(--ns-color-4ade80, #4ade80)";
             
             setTimeout(() => {
                 if (statusTextEl) {

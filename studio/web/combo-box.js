@@ -142,7 +142,7 @@ export function attachComboBox(selectEl, opts = {}) {
         const els = items();
         if (!els.length) return;
         highlight = ((idx % els.length) + els.length) % els.length;
-        els.forEach((n, i) => { n.style.background = i === highlight ? "#3a5a8c" : ""; });
+        els.forEach((n, i) => { n.style.background = i === highlight ? "var(--ns-background-3a5a8c, #3a5a8c)" : ""; });
         els[highlight].scrollIntoView({ block: "nearest" });
         opts.onItemFocus?.(els[highlight]);
     };

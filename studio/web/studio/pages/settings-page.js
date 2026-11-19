@@ -1,9 +1,10 @@
 // 设置页（#/settings）：左栏四段十栏的壳与 tab 切换，深链 #/settings?tab=.. 认的那一个参数就在这页。
 // 页里自己铺的：生图 / 生视频 / LLM 三张表单、智能体偏好与 MCP 面板、手机连接二维码、启动日志轮询、
-// 界面语言单选、关于栏版本行，以及启动设置那一整块面板（内核启停 + 根目录 / 解释器 / 端口 / 监听 /
+// 界面语言与界面主题单选、关于栏版本行，以及启动设置那一整块面板（内核启停 + 根目录 / 解释器 / 端口 / 监听 /
 // 远程 / 无边框 / 开发模式 / 姿势仓库，桌面端桥在面板里自己读）。
 // 版本快照、内核启停与采样帧偏好是装配层的状态：这一页只把它们要的那几样接过来。
 import { t, tf, applyLang, getLang, LANGS } from "../../js/core/i18n.js";
+import { initThemeControl } from "../../js/core/theme.js";
 import { icon } from "../../js/core/icons.js";
 import { createPairPanel } from "../../js/core/pair-access.js";
 import { createImageGenSettingsForm, createVideoGenSettingsForm } from "../../image-gen.js";
@@ -317,6 +318,7 @@ function buildSettings(el) {
     const genForm = createImageGenSettingsForm();
     const videoForm = createVideoGenSettingsForm();
     const llmForm = createModelConfigForm();
+    const themeCtl = initThemeControl(t, tf);   // 界面主题那一栏：控件自带「当前生效」状态行
 
     // 日志面板：tab 激活时轮询。桌面端里两份日志分块 —— 内核那块是桌面端拉起 ComfyUI 的输出，
     // 桌面端那块是自身的启动 / 跳转 / 前端错误轨迹；浏览器标签页只有内核那一块，来源筛选不上页面
@@ -448,6 +450,7 @@ function buildSettings(el) {
         { key: "video", group: "generate", label: t("生视频设置"), body: $el("div", { className: "ns-settings-section" }, [section("生视频设置"), videoForm.el]) },
         { key: "agent", group: "agent", label: t("智能体偏好"), body: $el("div", { className: "ns-settings-section" }, [section("智能体偏好"), prefs.el]) },
         { key: "mcp", group: "agent", label: t("MCP 服务"), body: $el("div", { className: "ns-settings-section ns-mcp-section" }, [section("MCP 服务"), mcp.root]) },
+        { key: "theme", group: "ui", label: t("界面主题"), body: $el("div", { className: "ns-settings-section" }, [section("界面主题"), themeCtl.el]) },
         { key: "lang", group: "ui", label: t("界面语言"), body: $el("div", { className: "ns-settings-section" }, [section("界面语言"), createLangPanel()]) },
         { key: "about", group: "ui", label: t("关于"), body: $el("div", { className: "ns-settings-section ns-about-section" }, [section("关于"), $el("div", { className: "ns-about-version", id: "ns-about-version", textContent: versionText() }), $el("div", { className: "ns-about-rows", id: "ns-about-rows" })]) },
     ];

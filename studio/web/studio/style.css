@@ -1,35 +1,1039 @@
 /* Neo Studio 外壳样式：顶栏 + 视图容器。功能模块的样式由各自 CSS 注入（gallery.css / recipes.css …）。 */
 :root {
     color-scheme: dark;
-    /* 外壳调色单点：素材页 / 导演页 / 设置页与智能体共用这一组值。
-       智能体面板（agent-panel.css）只吃这组变量：
-       它们的宿主是本页，不在 ComfyUI 里渲染，原先回落 ComfyUI 主题变量就是面板与页面其它区域两套色的来源 */
-    --ns-bg: #17171b;
-    --ns-panel: #202024;
-    --ns-raised: #26262c;
-    --ns-field: #2a2a2e;
-    --ns-field-hover: #333338;
-    --ns-field-bd: #444;
-    --ns-field-bd-hover: #555;
-    --ns-border: #333;
-    --ns-border-soft: #3f3f4a;
-    --ns-fg: #ddd;
-    --ns-dim: #9a9aa8;
-    --ns-accent: #7aa2ff;
-    --ns-primary: #2f6fed;
-    --ns-primary-hover: #3f7ffe;
-    --ns-primary-soft: rgba(47, 111, 237, .16);
-    --ns-primary-fg: #cfe0ff;
-    --ns-ok: #7bc47f;
-    --ns-warn: #e0b070;
-    --ns-err: #ff8a8a;
+    /* 主题调色单点：Studio 各页（首页 / 项目画布 / 素材页 / 导演页 / 设置页 / 智能体）只吃下面这组
+       --ns-* 变量，色值不在别处写死。深色值就是主题化之前的原值，逐像素不变；浅色值只在
+       [data-neo-theme="light"] 那块里逐 token 覆盖。ComfyUI 画布的节点面板不吃本文件，与主题切换无关。 */
+
+
+    --ns-bg: #17171b;                       /* 页面底 */
+    --ns-code: #111214;                     /* 日志与代码块底 */
+    --ns-panel: #202024;                    /* 面板 / 顶栏 / 区头 */
+    --ns-panel-alt: #1a1a1a;                /* 素材页面板底 */
+    --ns-sunken: #232328;                   /* 下沉块 / 只读控件底 */
+    --ns-raised: #26262c;                   /* 悬起块 / 菜单底 */
+    --ns-field: #2a2a2e;                    /* 输入控件底 */
+    --ns-field-hover: #333338;              /* 控件悬起 */
+    --ns-hover: #3a3a44;                    /* 列表 / 工具条 hover */
+    --ns-fill-1: rgba(255, 255, 255, 0.06); /* 浅填充 */
+    --ns-fill-2: rgba(255, 255, 255, 0.08); /* 浅填充 */
+    --ns-fill-3: rgba(255, 255, 255, 0.10); /* 浅填充 */
+    --ns-fill-4: rgba(255, 255, 255, 0.12); /* 浅填充 */
+    --ns-fill-5: rgba(255, 255, 255, 0.15); /* 浅填充 */
+    --ns-fill-6: rgba(255, 255, 255, 0.18); /* 浅填充 */
+    --ns-fill-7: rgba(255, 255, 255, 0.25); /* 浅填充 */
+    --ns-border: #333333;                   /* 主描边 */
+    --ns-p-bd-3a3a3a: #3a3a3a;                 /* 次描边 */
+    --ns-border-3: #2c2c33;                 /* 分隔线 */
+    --ns-border-4: #35353d;                 /* 分隔线 */
+    --ns-border-soft: #3f3f4a;              /* 弱描边 / 虚线 */
+    --ns-field-bd: #444444;                 /* 控件描边 */
+    --ns-warn-fg: #ddaa66;                   /* 写回告警文字 */
+    --ns-field-bd-2: #4a4d55;               /* 控件描边（深一档） */
+    --ns-field-bd-hover: #555555;           /* 控件描边 · 悬起 */
+    --ns-line-strong: #55555f;              /* 滚动条 / 强线 */
+    --ns-line-1: #575e69;                   /* 分区线 */
+    --ns-line-2: #666666;                   /* 弱线 / 提示文字 */
+    --ns-fg-strong: #ffffff;                /* 标题 / 最亮正文 */
+    --ns-fg: #dddddd;                       /* 正文 */
+    --ns-fg-2: #eeeeee;                     /* 正文（亮一档） */
+    --ns-fg-2a: #e0e0e6;                    /* 正文（亮） */
+    --ns-fg-soft: #cccccc;                  /* 正文（弱一档） */
+    --ns-fg-3: #cfcfd8;                     /* 正文（灰） */
+    --ns-fg-4: #cfcfcf;                     /* 日志正文 */
+    --ns-fg-5: #d7dae0;                     /* 值文本 */
+    --ns-fg-6: #b8b8c2;                     /* 图标钮文字 */
+    --ns-fg-slate: #cbd5e1;                 /* slate 正文 */
+    --ns-fg-slate2: #b8c2ce;                /* slate 正文 */
+    --ns-fg-slate3: #9fb6d6;                /* slate 正文（蓝） */
+    --ns-fg-slate4: #bbccdd;                /* slate 正文 */
+    --ns-fg-info: #dbe6ff;                  /* 蓝底上的信息文字 */
+    --ns-aaa: #aaaaaa;                      /* 正文（弱） */
+    --ns-bbb: #bbbbbb;                      /* 正文（弱） */
+    --ns-dim: #9a9aa8;                      /* 次级文字 */
+    --ns-dim-2: #9a9a9a;                    /* 次级文字 */
+    --ns-dim-3: #9aa4b0;                    /* 次级文字（蓝灰） */
+    --ns-dim-3a: #9a9ab0;                   /* 次级文字（蓝灰） */
+    --ns-dim-4: #8a93a0;                    /* 次级文字（蓝灰） */
+    --ns-dim-5: #8a8a96;                    /* 次级文字 */
+    --ns-dim-slate: #94a3b8;                /* 次级文字（slate） */
+    --ns-faint: #8f8f9a;                    /* 提示文字 */
+    --ns-faint-2: #6f6f7a;                  /* 提示文字（弱） */
+    --ns-faint-3: #7f7f8a;                  /* 提示文字（弱） */
+    --ns-accent: #7aa2ff;                   /* 浅蓝：描边 / 链接 / 焦点 */
+    --ns-accent-2: #60a5fa;                 /* 浅蓝（深一档） */
+    --ns-primary: #2f6fed;                  /* 主蓝：主行动 */
+    --ns-primary-hover: #3f7ffe;            /* 主蓝 · 悬起 */
+    --ns-primary-fg: #cfe0ff;               /* 主蓝上的字 */
+    --ns-primary-soft: rgba(47, 111, 237, 0.16);/* 主蓝浅底 */
+    --ns-blue-3: #5090cc;                   /* 蓝高亮 */
+    --ns-blue-4: #4a7fd0;                   /* 蓝高亮 */
+    --ns-link-blue: #4c9aff;                /* 链接蓝 */
+    --ns-cyan: #4fc3f7;                     /* 青蓝强调 */
+    --ns-cyan-2: #66ccff;                   /* 青蓝强调 */
+    --ns-cyan-3: #9ad1ff;                   /* 青蓝强调 */
+    --ns-purple: #7c6cf0;                   /* 紫强调 */
+    --ns-info-bg: #1a3a5a;                  /* 蓝底小钮 */
+    --ns-info-bg2: #1a2a3a;                 /* 蓝底条 */
+    --ns-info-bg3: #1a1a2a;                 /* 蓝底面板 */
+    --ns-slate-bg: #1e293b;                 /* slate 底 */
+    --ns-ok: #7bc47f;                       /* 成功 */
+    --ns-ok-2: #4caf50;                     /* 成功（实心） */
+    --ns-ok-3: #2ea043;                     /* 成功（GitHub 绿） */
+    --ns-ok-4: #7ee787;                     /* 成功（亮） */
+    --ns-warn: #e0b070;                     /* 警告 */
+    --ns-warn-2: #f0c880;                   /* 警告文字 */
+    --ns-warn-bd: #7a5c2a;                  /* 警告描边 */
+    --ns-warn-bg: #2b2417;                  /* 警告底 */
+    --ns-warn-solid: #f0a050;               /* 警告实心 */
+    --ns-amber: #d29922;                    /* 琥珀 */
+    --ns-amber-2: #e3b341;                  /* 琥珀（亮） */
+    --ns-err: #ff8a8a;                      /* 错误文字 */
+    --ns-err-solid: #da3633;                /* 错误实心 */
+    --ns-err-solid-2: #b0484b;              /* 错误实心 */
+    --ns-err-close: #a83232;                /* 关闭钮悬起底 */
+    --ns-err-deep: #5a1a1a;                 /* 错误底 */
+    --ns-err-bd: #9a3a3a;                   /* 错误描边 */
+    --ns-err-bd2: #6a2a2a;                  /* 错误描边 */
+    --ns-err-solid-3: #f06060;              /* 错误实心（队列） */
+    --ns-orange: #ff6a00;                   /* 素材页主强调 */
+    --ns-orange-2: #ff9944;                 /* 素材页强调（亮） */
+    --ns-orange-3: #ffb84d;                 /* 素材页强调（弱） */
+    --ns-orange-4: #ffc77d;                 /* 素材页强调（更弱） */
+    --ns-fg-7: #e0e0e0;                     /* 正文（亮） */
+    --ns-err-2: #ff6b6b;                    /* 错误文字 */
+    --ns-err-3: #f87171;                    /* 错误文字 */
+    --ns-err-4: #ff7b72;                    /* 错误文字 */
+    --ns-err-5: #f44336;                    /* 错误文字 */
+    --ns-err-6: #ffb3b3;                    /* 错误文字（亮） */
+    --ns-err-7: #ff8a9a;                    /* 错误文字 */
+    --ns-err-8: #ff9d94;                    /* 错误文字 */
+    --ns-err-9: #e08a8d;                    /* 错误文字 */
+    --ns-err-solid-4: #d64545;              /* 错误实心 */
+    --ns-link-blue-2: #4f8cff;              /* 链接蓝 */
+    --ns-orange-5: #ffb570;                 /* 素材页强调（弱） */
+    --ns-tip-bg: #1b1b1f;                   /* 悬停说明底 */
+    --ns-panel-2: #16161a;                  /* 面板底（深一档） */
+    --ns-field-2: #2e2e36;                  /* 控件底（浅一档） */
+    --ns-sunken-2: #353535;                 /* 骨架块底 */
+    --ns-fg-8: #c8c8d2;                     /* 正文（灰） */
+    --ns-fg-9: #cfcfd6;                     /* 正文（灰） */
+    --ns-fg-10: #dfe3ea;                    /* 正文（亮） */
+    --ns-dim-6: #a9a9b6;                    /* 次级文字 */
+    --ns-dim-7: #9a9184;                    /* 次级文字（暖灰） */
+    --ns-dim-8: #a3a3a3;                    /* 次级文字 */
+    --ns-dim-9: #888888;                    /* 次级文字 */
+    --ns-dim-10: #999999;                   /* 次级文字 */
+    --ns-faint-4: #5a5a66;                  /* 占位提示 */
+    --ns-faint-5: #4a4a52;                  /* 占位提示（弱） */
+    --ns-faint-6: #6b7280;                  /* 次级文字（slate） */
+    --ns-fill-0: rgba(255, 255, 255, 0.05); /* 浅填充 */
+    --ns-fill-1a: rgba(255, 255, 255, 0.07);/* 浅填充 */
+    --ns-fill-3a: rgba(255, 255, 255, 0.1); /* 浅填充 */
+    --ns-fill-5a: rgba(255, 255, 255, 0.16);/* 浅填充 */
+    --ns-fill-7a: rgba(255, 255, 255, 0.2); /* 浅填充 */
+    --ns-fill-8: rgba(255, 255, 255, 0.3);  /* 浅填充 */
+    --ns-fill-9: rgba(255, 255, 255, 0.38); /* 浅填充 */
+    --ns-fill-10: rgba(255, 255, 255, 0.4); /* 浅填充 */
+    --ns-fill-11: rgba(255, 255, 255, 0.7); /* 浅填充 */
+    --ns-fill-warm: rgba(232, 226, 212, 0.07);/* 暖色浅填充 */
+    --ns-glass-1: rgba(24, 26, 32, 0.98);   /* 浮层底 */
+    --ns-glass-2: rgba(30, 45, 70, 0.95);   /* 浮层底（蓝） */
+    --ns-glass-3: rgba(42, 42, 46, 0.95);   /* 浮层底 */
+    --ns-glass-4: rgba(20, 20, 20, 0.95);   /* 浮层底 */
+    --ns-scrim-1: rgba(0, 0, 0, 0.3);       /* 遮罩 / 阴影 */
+    --ns-scrim-2: rgba(0, 0, 0, 0.35);      /* 遮罩 / 阴影 */
+    --ns-scrim-3: rgba(0, 0, 0, 0.4);       /* 遮罩 / 阴影 */
+    --ns-scrim-4: rgba(0, 0, 0, 0.42);      /* 遮罩 / 阴影 */
+    --ns-scrim-5: rgba(0, 0, 0, 0.45);      /* 遮罩 / 阴影 */
+    --ns-scrim-6: rgba(0, 0, 0, 0.5);       /* 遮罩 / 阴影 */
+    --ns-scrim-7: rgba(0, 0, 0, 0.55);      /* 遮罩 / 阴影 */
+    --ns-scrim-8: rgba(0, 0, 0, 0.6);       /* 遮罩 / 阴影 */
+    --ns-scrim-9: rgba(0, 0, 0, 0.72);      /* 遮罩 / 阴影 */
+    --ns-scrim-10: rgba(0, 0, 0, 0.8);      /* 遮罩 / 阴影 */
+    --ns-scrim-11: rgba(0, 0, 0, 0.85);     /* 遮罩 / 阴影 */
+    --ns-scrim-12: rgba(8, 9, 12, 0.5);     /* 图上的浮层 */
+    --ns-scrim-13: rgba(8, 9, 12, 0.72);    /* 图上的浮层 */
+    --ns-blue-bd: #3a6a9a;                  /* 蓝按钮描边 */
+    --ns-pop-shadow: 0 18px 50px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.05);/* 浮层与技能选择窗阴影 */
+    --ns-modal-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);/* 弹窗阴影 */
+    --ns-background-111111: var(--ns-p-bg-111111);
+    --ns-p-bg-33333a: #33333a;
+    --ns-p-bd-2a2a30: #2a2a30;
+    --ns-background-22262e: #22262e;
+    --ns-background-1a3a1a: var(--ns-p-bg-1a3a1a);
+    --ns-background-3a5a8c: var(--ns-p-bg-3a5a8c);
+    --ns-color-4ade80: var(--ns-p-fg-4ade80);
+    --ns-color-999: var(--ns-p-fg-999999);
+    --ns-color-fbbf24: var(--ns-p-fg-fbbf24);
+    --ns-border-2: var(--ns-p-bd-3a3a3a);
+    --ns-p-bg-1a1a1a: #1a1a1a;
+    --ns-p-bg-rgba-0-0-0-0-85: rgba(0, 0, 0, 0.85);
+    --ns-p-bg-2a2a2a: #2a2a2a;
+    --ns-p-bd-fbbf24: #fbbf24;
+    --ns-p-shadow-rgba-0-0-0-0-8: rgba(0, 0, 0, 0.8);
+    --ns-p-fg-eeeeee: #eee;
+    --ns-p-bg-rgba-255-255-255-1: rgba(255, 255, 255, .1);
+    --ns-p-bd-3a5a7a: #3a5a7a;
+    --ns-p-fg-666666: #666;
+    --ns-p-bg-222222: #222;
+    --ns-p-bg-333333: #333;
+    --ns-p-bg-5090cc: #5090cc;
+    --ns-p-fg-8fa3b8: #8fa3b8;
+    --ns-p-fg-8a8a95: #8a8a95;
+    --ns-p-bg-2a3a3a: #2a3a3a;
+    --ns-p-bg-3a4a4a: #3a4a4a;
+    --ns-p-fg-fbbf24: #fbbf24;
+    --ns-p-fg-f87171: #f87171;
+    --ns-p-bg-rgba-248-113-113-0-15: rgba(248, 113, 113, 0.15);
+    --ns-p-bg-3a3a3a: #3a3a3a;
+    --ns-p-bg-2a4a6a: #2a4a6a;
+    --ns-p-shadow-5090cc: #5090cc;
+    --ns-p-shadow-rgba-0-0-0-0-6: rgba(0, 0, 0, 0.6);
+    --ns-p-bg-rgba-80-144-204-0-3: rgba(80, 144, 204, 0.3);
+    --ns-p-bg-rgba-248-113-113-0-1: rgba(248, 113, 113, 0.1);
+    --ns-p-fg-999999: #999;
+    --ns-p-bg-111111: #111;
+    --ns-p-bg-10b981: #10b981;
+    --ns-p-bg-34d399: #34d399;
+    --ns-p-bg-d97706: #d97706;
+    --ns-p-bg-f59e0b: #f59e0b;
+    --ns-p-bg-4b5563: #4b5563;
+    --ns-p-fg-e5e5e5: #e5e5e5;
+    --ns-p-bg-6b7280: #6b7280;
+    --ns-p-bg-60a0dc: #60a0dc;
+    --ns-p-bd-555555: #555;
+    --ns-p-bg-2a5a8a: #2a5a8a;
+    --ns-p-bg-rgba-30-30-30-0-5: rgba(30, 30, 30, 0.5);
+    --ns-p-bg-1e1e1e: #1e1e1e;
+    --ns-p-fg-8a9aa8: #8a9aa8;
+    --ns-p-fg-7d8a96: #7d8a96;
+    --ns-p-bg-rgba-42-42-42-0-6: rgba(42, 42, 42, 0.6);
+    --ns-p-bg-rgba-42-42-42-0-85: rgba(42, 42, 42, 0.85);
+    --ns-p-bg-rgba-42-42-42-0-55: rgba(42, 42, 42, 0.55);
+    --ns-p-bg-rgba-60-60-60-0-9: rgba(60, 60, 60, 0.9);
+    --ns-p-fg-8a97a5: #8a97a5;
+    --ns-p-bg-2a3a4a: #2a3a4a;
+    --ns-p-bg-1a3a1a: #1a3a1a;
+    --ns-p-fg-4ade80: #4ade80;
+    --ns-p-bg-3a1a1a: #3a1a1a;
+    --ns-p-shadow-rgba-0-0-0-0-9: rgba(0, 0, 0, 0.9);
+    --ns-p-bg-1a2a2a: #1a2a2a;
+    --ns-p-bg-3a2a1a: #3a2a1a;
+    --ns-p-bg-rgba-0-0-0-0-6: rgba(0, 0, 0, 0.6);
+    --ns-p-bg-1e1e2e: #1e1e2e;
+    --ns-p-bg-2a2a3a: #2a2a3a;
+    --ns-p-bg-rgba-80-144-204-0-1: rgba(80, 144, 204, 0.1);
+    --ns-p-bd-rgba-248-113-113-0-3: rgba(248, 113, 113, 0.3);
+    --ns-p-bg-rgba-74-222-128-0-1: rgba(74, 222, 128, 0.1);
+    --ns-p-bd-rgba-74-222-128-0-3: rgba(74, 222, 128, 0.3);
+    --ns-p-bg-rgba-255-255-255-0-1: rgba(255, 255, 255, 0.1);
+    --ns-p-bg-4a4a4a: #4a4a4a;
+    --ns-p-bg-rgba-0-0-0-0-9: rgba(0, 0, 0, 0.9);
+    --ns-p-bd-rgba-0-0-0-0-9: rgba(0, 0, 0, 0.9);
+    --ns-p-fg-8f8f9a: #8f8f9a;
+    --ns-p-bg-999999: #999;
+    --ns-p-bg-ffffff: #fff;
+    --ns-p-bd-2a4a6a: #2a4a6a;
+    --ns-p-bg-3a5a7a: #3a5a7a;
+    --ns-p-bd-3a4a5a: #3a4a5a;
+    --ns-p-bg-3a4a5a: #3a4a5a;
+    --ns-p-fg-7aa8c1: #7aa8c1;
+    --ns-p-fg-e0b48c: #e0b48c;
+    --ns-p-bg-26313d: #26313d;
+    --ns-p-fg-b8c4d0: #b8c4d0;
+    --ns-p-bg-1a1a2e: #1a1a2e;
+    --ns-p-bg-2a2a3e: #2a2a3e;
+    --ns-p-bg-3a3a5e: #3a3a5e;
+    --ns-p-bd-666666: #666;
+    --ns-p-bg-1a4a8a: #1a4a8a;
+    --ns-p-fg-7ab8f5: #7ab8f5;
+    --ns-p-bg-343434: #343434;
+    --ns-p-bg-262626: #262626;
+    --ns-p-bd-rgba-255-255-255-0-12: rgba(255, 255, 255, 0.12);
+    --ns-p-shadow-rgba-0-0-0-0-35: rgba(0, 0, 0, 0.35);
+    --ns-p-bd-rgba-80-144-204-0-7: rgba(80, 144, 204, 0.7);
+    --ns-p-shadow-rgba-80-144-204-0-5: rgba(80, 144, 204, 0.5);
+    --ns-p-shadow-rgba-0-0-0-0-45: rgba(0, 0, 0, 0.45);
+    --ns-p-shadow-rgba-255-255-255-0-08: rgba(255, 255, 255, 0.08);
+    --ns-p-bg-5aa2e0: #5aa2e0;
+    --ns-p-bg-4079b8: #4079b8;
+    --ns-p-bg-rgba-220-38-38-0-85: rgba(220, 38, 38, 0.85);
+    --ns-p-bd-rgba-255-255-255-0-25: rgba(255, 255, 255, 0.25);
+    --ns-p-bd-rgba-255-255-255-0-15: rgba(255, 255, 255, 0.15);
+    --ns-p-shadow-rgba-0-0-0-0-4: rgba(0, 0, 0, 0.4);
+    --ns-p-bg-3d4d63: #3d4d63;
+    --ns-p-bg-3d3d3d: #3d3d3d;
+    --ns-p-bg-rgba-255-255-255-0-12: rgba(255, 255, 255, 0.12);
+    --ns-p-fg-bbbbbb: #bbb;
+    --ns-p-fg-7d8896: #7d8896;
+    --ns-p-bg-35507a: #35507a;
+    --ns-p-bg-232323: #232323;
+    --ns-p-fg-9a9a9a: #9a9a9a;
+    --ns-p-fg-f0c674: #f0c674;
+    --ns-p-fg-d8b45a: #d8b45a;
+    --ns-p-fg-e07b7b: #e07b7b;
+    --ns-p-fg-9ec5e8: #9ec5e8;
+    --ns-p-fg-b9e08a: #b9e08a;
+    --ns-p-bd-4a5a3a: #4a5a3a;
+    --ns-p-bg-1f1f1f: #1f1f1f;
+    --ns-p-bg-2f2f2f: #2f2f2f;
+    --ns-p-fg-c97b7b: #c97b7b;
+    --ns-p-bg-3a2a2a: #3a2a2a;
+    --ns-p-bg-3a5a8c: #3a5a8c;
+    --ns-p-bg-456ba8: #456ba8;
+    --ns-p-fg-8a8a8a: #8a8a8a;
+    --ns-p-fg-2a2a2a: #2a2a2a;
+    --ns-p-fg-555555: #555;
+    --ns-p-fg-e5484d: #e5484d;
+    --ns-p-fg-b5b5b5: #b5b5b5;
+    --ns-p-fg-d9a7a7: #d9a7a7;
+    --ns-p-bg-33272a: #33272a;
+    --ns-p-bd-5c3b3e: #5c3b3e;
+    --ns-p-fg-a7c6dd: #a7c6dd;
+    --ns-p-bg-22303c: #22303c;
+    --ns-p-bd-f87171: #f87171;
+    --ns-p-fg-fca5a5: #fca5a5;
+    --ns-p-bg-3a1e24: #3a1e24;
+    --ns-p-bg-4a262e: #4a262e;
+    --ns-p-bg-f87171: #f87171;
+    --ns-p-shadow-1b1b1f: #1b1b1f;
+    --ns-p-bg-rgba-0-0-0-55: rgba(0, 0, 0, .55);
+    --ns-p-bg-1b1b1f: #1b1b1f;
+    --ns-p-shadow-rgba-0-0-0-5: rgba(0, 0, 0, .5);
+    --ns-p-bd-2a2a2e: #2a2a2e;
+    --ns-p-bg-2d2d35: #2d2d35;
+    --ns-p-bg-3a3a44: #3a3a44;
+    --ns-p-bg-23303f: #23303f;
+    --ns-p-fg-9bd18a: #9bd18a;
+    --ns-p-bd-3b82c4: #3b82c4;
+    --ns-p-bg-2b3c4f: #2b3c4f;
+    --ns-p-bg-2a1b1f: #2a1b1f;
+    --ns-p-bd-7f2b32: #7f2b32;
+    --ns-p-fg-8ab4f0: #8ab4f0;
+    --ns-p-bd-3b5f84: #3b5f84;
+    --ns-p-bd-8ab4f0: #8ab4f0;
+    --ns-p-bg-3b82f6: #3b82f6;
+    --ns-p-bg-2563eb: #2563eb;
+    --ns-p-bg-555555: #555;
+    --ns-p-fg-88ccff: #8cf;
+    --ns-p-bg-3d5a80: #3d5a80;
+    --ns-p-bg-444444: #444;
+    --ns-p-bd-b45309: #b45309;
+    --ns-p-bg-2a2318: #2a2318;
+    --ns-p-bd-7f1d1d: #7f1d1d;
+    --ns-p-bg-4a2f2f: #4a2f2f;
+    --ns-p-fg-a9c6dd: #a9c6dd;
+    --ns-p-fg-cfe3f2: #cfe3f2;
+    --ns-p-shadow-rgba-0-0-0-0-55: rgba(0, 0, 0, 0.55);
+    --ns-p-shadow-rgba-255-255-255-0-05: rgba(255, 255, 255, 0.05);
+    --ns-p-shadow-rgba-80-144-204-0-2: rgba(80, 144, 204, 0.2);
+    --ns-p-bd-7ab8f5: #7ab8f5;
+    --ns-p-shadow-rgba-122-184-245-0-45: rgba(122, 184, 245, 0.45);
+    --ns-p-shadow-rgba-122-184-245-35: rgba(122,184,245,.35);
+    --ns-p-shadow-rgba-122-184-245-25: rgba(122,184,245,.25);
+    --ns-p-shadow-rgba-122-184-245-0: rgba(122,184,245,0);
+    --ns-p-bg-1e1e24: #1e1e24;
+    --ns-p-bd-3a3a44: #3a3a44;
+    --ns-p-shadow-rgba-0-0-0-45: rgba(0, 0, 0, .45);
+    --ns-p-bd-e5484d: #e5484d;
+    --ns-p-bd-f5a623: #f5a623;
+    --ns-p-bd-46a758: #46a758;
+    --ns-p-bd-4b9fe1: #4b9fe1;
+    --ns-p-fg-b9b9c3: #b9b9c3;
+    --ns-p-bg-rgba-75-159-225-15: rgba(75, 159, 225, .15);
+    --ns-p-fg-8ec6f2: #8ec6f2;
+    --ns-p-bg-rgba-75-159-225-3: rgba(75, 159, 225, .3);
+    --ns-p-fg-8a8a94: #8a8a94;
+
+    --ns-black: #000000;                    /* 视频与图片黑底 */
+    --ns-badge-1: rgba(33, 150, 243, 0.85); /* 彩色徽标 */
+    --ns-badge-2: rgba(244, 67, 54, 0.9);   /* 彩色徽标 */
+    --ns-badge-3: rgba(255, 152, 0, 0.85);  /* 彩色徽标 */
+    --ns-badge-4: rgba(255, 193, 7, 0.85);  /* 彩色徽标 */
+    --ns-badge-5: rgba(38, 166, 154, 0.9);  /* 彩色徽标 */
+    --ns-badge-6: rgba(24, 144, 80, 0.85);  /* 彩色徽标 */
+    --ns-badge-7: rgba(100, 116, 139, 0.85);/* 彩色徽标 */
+    --ns-badge-8: rgba(100, 116, 139, 1);   /* 彩色徽标 */
+    --ns-badge-9: rgba(255, 193, 7, 1);     /* 彩色徽标 */
+    --ns-badge-10: rgba(38, 166, 154, 1);   /* 彩色徽标 */
+    --ns-line-slate: rgba(160, 175, 200, 0.5);/* slate 描边 */
+    --ns-on-accent: #ffffff;                /* 主色实底上的字 */
+    --ns-accent-solid: rgba(76, 154, 255, 0.35);   /* 主色实底 */
+    --ns-accent-solid-hover: rgba(76, 154, 255, 0.5);  /* 主色实底 · 悬起 */
+    --ns-fill-orange-10: rgba(255, 106, 0, 0.1);/* 橙浅底 */
+    --ns-fill-orange-12: rgba(255, 106, 0, 0.12);/* 橙浅底 */
+    --ns-fill-orange-15: rgba(255, 106, 0, 0.15);/* 橙浅底 */
+    --ns-fill-orange-20: rgba(255, 106, 0, 0.2);/* 橙浅底 · 悬起 */
+    --ns-fill-orange-30: rgba(255, 106, 0, 0.3);/* 橙浅底 · 选中 */
+    --ns-fill-orange2-10: rgba(255, 153, 68, 0.10);/* 橙浅底 */
+    --ns-fill-orange2-22: rgba(255, 153, 68, 0.22);/* 橙浅底 · 悬起 */
+    --ns-fill-blue-16: rgba(76, 154, 255, 0.16);/* 蓝浅底 */
+    --ns-fill-blue-18: rgba(76, 154, 255, 0.18);/* 蓝浅底 · 悬起 */
+    --ns-fill-blue-22: rgba(76, 154, 255, 0.22);/* 蓝浅底 · 悬起 */
+    --ns-fill-blue-25: rgba(76, 154, 255, 0.25);/* 蓝浅底 · 悬起 */
+    --ns-fill-blue-28: rgba(76, 154, 255, 0.28);/* 蓝浅底 · 选中 */
+    --ns-fill-blue-30: rgba(76, 154, 255, 0.3);/* 蓝浅底 · 选中 */
+    --ns-fill-blue-34: rgba(76, 154, 255, 0.34);/* 蓝浅底 · 选中 */
+    --ns-fill-blue-35: rgba(76, 154, 255, 0.35);/* 蓝浅底 · 选中 */
+    --ns-fill-blue-50: rgba(76, 154, 255, 0.5);/* 蓝浅底 · 强 */
+    --ns-fill-blue-55: rgba(76, 154, 255, 0.55);/* 蓝浅底 · 强 */
+    --ns-fill-blue-60: rgba(76, 154, 255, 0.6);/* 蓝浅底 · 强 */
+    --ns-fill-blue-85: rgba(76, 154, 255, 0.85);/* 蓝实底 */
+    --ns-fill-blue2-12: rgba(79, 140, 255, 0.12);/* 蓝浅底 */
+    --ns-fill-blue2-35: rgba(79, 140, 255, 0.35);/* 蓝浅底 · 选中 */
+    --ns-fill-primary-28: rgba(47, 111, 237, 0.28);/* 主蓝浅底 · 选中 */
+    --ns-fill-primary-30: rgba(47, 111, 237, 0.3);/* 主蓝浅底 · 选中 */
+    --ns-fill-blue4-30: rgba(0, 150, 255, 0.3);/* 蓝浅底 */
+    --ns-fill-cyan-08: rgba(79, 195, 247, 0.08);/* 青浅底 */
+    --ns-fill-cyan-09: rgba(79, 195, 247, 0.09);/* 青浅底 */
+    --ns-fill-cyan-16: rgba(79, 195, 247, 0.16);/* 青浅底 · 悬起 */
+    --ns-fill-cyan-18: rgba(79, 195, 247, 0.18);/* 青浅底 · 悬起 */
+    --ns-fill-cyan2-08: rgba(120, 200, 255, 0.08);/* 青浅底 */
+    --ns-fill-cyan2-10: rgba(120, 200, 255, 0.10);/* 青浅底 */
+    --ns-fill-cyan2-25: rgba(120, 200, 255, 0.25);/* 青浅底 · 悬起 */
+    --ns-fill-cyan3-15: rgba(100, 200, 255, 0.15);/* 青浅底 */
+    --ns-fill-cyan3-30: rgba(100, 200, 255, 0.3);/* 青浅底 · 选中 */
+    --ns-fill-cyan4-45: rgba(122, 180, 255, 0.45);/* 青浅底 · 强 */
+    --ns-fill-accent-16: rgba(122, 162, 255, 0.16);/* 浅蓝底 */
+    --ns-fill-accent-18: rgba(122, 162, 255, 0.18);/* 浅蓝底 · 悬起 */
+    --ns-fill-purple-08: rgba(124, 108, 240, 0.08);/* 紫浅底 */
+    --ns-fill-purple-15: rgba(124, 108, 240, 0.15);/* 紫浅底 */
+    --ns-fill-red-10: rgba(244, 67, 54, 0.1);/* 红浅底 */
+    --ns-fill-red-12: rgba(244, 67, 54, 0.12);/* 红浅底 */
+    --ns-fill-red-18: rgba(244, 67, 54, 0.18);/* 红浅底 · 悬起 */
+    --ns-fill-red-40: rgba(244, 67, 54, 0.4);/* 红浅底 · 强 */
+    --ns-fill-red2-12: rgba(218, 54, 51, 0.12);/* 红浅底 */
+    --ns-fill-red2-18: rgba(218, 54, 51, 0.18);/* 红浅底 · 悬起 */
+    --ns-fill-red2-35: rgba(218, 54, 51, 0.35);/* 红浅底 · 强 */
+    --ns-fill-red2-45: rgba(218, 54, 51, 0.45);/* 红浅底 · 强 */
+    --ns-fill-amber-12: rgba(227, 179, 65, 0.12);/* 琥珀浅底 */
+    --ns-fill-green-12: rgba(46, 160, 67, 0.12);/* 绿浅底 */
+    --ns-fill-warn-16: rgba(224, 176, 112, 0.16);/* 警告浅底 */
+    --ns-fill-slate-25: rgba(148, 163, 184, 0.25);/* slate 浅底 */
+    --ns-fill-slate-14: rgba(154, 164, 176, 0.14);/* slate 浅底 */
+    --ns-fill-mat-blue-12: rgba(33, 150, 243, 0.12);/* 蓝徽标浅底 */
+    --ns-fill-mat-blue-35: rgba(33, 150, 243, 0.35);/* 蓝徽标浅底 */
+    --ns-fill-mat-amber-12: rgba(255, 152, 0, 0.12);/* 橙徽标浅底 */
+    --ns-fill-mat-amber-40: rgba(255, 152, 0, 0.4);/* 橙徽标浅底 */
+
+  --ns-background-1e1e1e: #1e1e1e;
+  --ns-background-2a2a2a: #2a2a2a;
+  --ns-background-2a2a31: #2a2a31;
+  --ns-background-2b2b33: #2b2b33;
+  --ns-background-2c2f36: #2c2f36;
+  --ns-background-383b43: #383b43;
+  --ns-background-3a3a46: #3a3a46;
+  --ns-background-color-111111: #111;
+  --ns-background-color-1e1e1e: #1e1e1e;
+  --ns-background-color-2a2a2a: #2a2a2a;
+  --ns-background-color-2c2f36: #2c2f36;
+  --ns-background-color-383b43: #383b43;
+  --ns-background-color-rgba-42-42-42-9: rgba(42, 42, 42, 0.9);
+  --ns-color-9aa4b2: #9aa4b2;
+  --ns-color-b9c0cc: #b9c0cc;
+  --ns-color-b9c2ce: #b9c2ce;
+  --ns-color-b9c4d0: #b9c4d0;
+  --ns-color-d6dde6: #d6dde6;
+  --ns-color-d7dde5: #d7dde5;
+
+
+  --ns-color-cfcfd8: #cfcfd8;
+
+
+  --ns-accent-color-4a9eff: #4a9eff;
+  --ns-background-1e1e1e-x: var(--ns-background-1e1e1e);
+  --ns-background-232327: #232327;
+  --ns-background-252525: #252525;
+  --ns-background-252525-x: var(--ns-background-252525);
+  --ns-background-252525-x-x: var(--ns-background-252525);
+  --ns-background-252525-x-x-x: var(--ns-background-252525);
+  --ns-background-2a2a2a-x: var(--ns-background-2a2a2a);
+  --ns-background-2a2a2a-x-x: var(--ns-background-2a2a2a);
+  --ns-background-2a2a2a-x-x-x: var(--ns-background-2a2a2a);
+  --ns-background-2a2a2a-x-x-x-x: var(--ns-background-2a2a2a);
+  --ns-background-2a2a2a-x-x-x-x-x: var(--ns-background-2a2a2a);
+  --ns-background-3a3a42: #3a3a42;
+  --ns-background-image-26262d: #26262d;
+  --ns-background-image-26262d-x: var(--ns-background-image-26262d);
+  --ns-background-rgba-15-22-38-96: rgba(15, 22, 38, 0.96);
+  --ns-background-rgba-15-22-38-96-x: rgba(15, 22, 38, 0.96);
+  --ns-background-rgba-15-22-38-98: rgba(15, 22, 38, 0.98);
+  --ns-background-rgba-232-226-212-07: rgba(232, 226, 212, 0.07);
+  --ns-background-rgba-30-45-70-92: rgba(30, 45, 70, 0.92);
+  --ns-background-rgba-30-45-70-92-x: rgba(30, 45, 70, 0.92);
+  --ns-background-rgba-47-111-237-18: rgba(47, 111, 237, 0.18);
+  --ns-background-rgba-47-111-237-18-x: rgba(47, 111, 237, 0.18);
+  --ns-background-rgba-47-111-237-18-x-x: rgba(47, 111, 237, 0.18);
+  --ns-background-rgba-47-111-237-18-x-x-x: rgba(47, 111, 237, 0.18);
+  --ns-background-rgba-47-111-237-18-x-x-x-x: rgba(47, 111, 237, 0.18);
+  --ns-border-3a3a4a: #3a3a4a;
+  --ns-border-3a3a4a-x: var(--ns-border-3a3a4a);
+  --ns-border-3a3a4a-x-x: var(--ns-border-3a3a4a);
+  --ns-border-bottom-2a2a2a: #2a2a2a;
+  --ns-color-191919: #191919;
+  --ns-color-232323: #232323;
+  --ns-color-252525: #252525;
+  --ns-color-252525-x: var(--ns-color-252525);
+  --ns-color-9a9aa6: #9a9aa6;
+  --ns-color-9aa4b2-x: var(--ns-color-9aa4b2);
+  --ns-color-b7bbc4: #b7bbc4;
+  --ns-p-bd-33333a-b: #33333a;
+  --ns-p-bd-3a3a42: #3a3a42;
+  --ns-p-bd-33333a: #33333a;
+
+
 }
+/* 智能体面板与绘画页输入卡的 token（agent-panel.css 用它们时不带 fallback）。
+   这套名字早年是宿主注入的，注入函数删掉后就无人定义：var() 取不到值时整条声明在计算期作废，
+   .neo-agent-field 的 background 就此消失、输入卡漏出页面底色，浅色系下就是一块像被禁用的灰。
+   深浅两块都得定义，缺哪边哪边的输入卡就没有底色。 */
+:root {
+    --neo-vsc-bg: #17171b;                   /* 面板底 / 输入卡底 */
+    --neo-vsc-bg-alt: #1f2026;               /* 面板头、轮次卡、工具卡 */
+    --neo-vsc-border: #33333a;
+    --neo-vsc-border-soft: #2a2a32;
+    --neo-vsc-fg: #e8e8e8;
+    --neo-vsc-fg-dim: #b3b3bd;
+    --neo-vsc-fg-faint: #7e7e88;             /* 输入框 placeholder */
+    --neo-vsc-accent: #4fc3f7;               /* 聚焦边框、链接 */
+    --neo-vsc-primary: #3794ff;
+    --neo-vsc-primary-soft: rgba(55, 148, 255, 0.18);
+    --neo-vsc-btn-bg: #2a2d33;
+    --neo-vsc-btn-hover: #35393f;
+    --neo-vsc-btn-bd: #4a4d55;
+    --neo-vsc-btn-bd-hover: #6a6f78;
+    --neo-vsc-ok: #4ec98a;
+    --neo-vsc-err: #f14c4c;
+    --neo-vsc-warn: #e2c08d;
+    --neo-vsc-cancel-bg: rgba(120, 40, 40, 0.22);
+    --neo-vsc-cancel-bd: #8a4a4a;
+    --neo-vsc-cancel-fg: #e08a8a;
+    --neo-vsc-mono: "Consolas", "JetBrains Mono", "Courier New", monospace;
+}
+
+/* 输入卡、预览框这类「页面里的内嵌表面」：暗色是往页面上压一层黑，浅色下必须改成压一点黑，
+   否则白页上压 35% 黑就是一块中灰（看着像禁用的输入框）。scrim 族本身留给阴影和图上蒙层。 */
+:root {
+    --ns-inset-surface: rgba(0, 0, 0, 0.35);      /* 输入卡 / 预览框 / 文本域底 */
+    --ns-inset-surface-2: rgba(0, 0, 0, 0.3);     /* 参考图列表面板底 */
+}
+
+/* 浅色主题：只在 data-neo-theme="light" 时生效，逐 token 覆盖上面那块。 */
+[data-neo-theme="light"] {
+    color-scheme: light;
+
+    /* 智能体面板与输入卡（上面 :root 那 21 个 --neo-vsc-* 的浅色值） */
+    --neo-vsc-bg: #ffffff;
+    --neo-vsc-bg-alt: #f7f8fa;
+    --neo-vsc-border: #d8dae0;
+    --neo-vsc-border-soft: #e4e6eb;
+    --neo-vsc-fg: #1f2328;
+    --neo-vsc-fg-dim: #5b636e;
+    --neo-vsc-fg-faint: #949aa4;
+    --neo-vsc-accent: #0a6ec1;
+    --neo-vsc-primary: #005fb8;
+    --neo-vsc-primary-soft: rgba(0, 95, 184, 0.10);
+    --neo-vsc-btn-bg: #f2f3f6;
+    --neo-vsc-btn-hover: #e8eaef;
+    --neo-vsc-btn-bd: #cfd3da;
+    --neo-vsc-btn-bd-hover: #a9b0ba;
+    --neo-vsc-ok: #1a7f37;
+    --neo-vsc-err: #c0392b;
+    --neo-vsc-warn: #8a6100;
+    --neo-vsc-cancel-bg: #fdf1f1;
+    --neo-vsc-cancel-bd: #e2b6b6;
+    --neo-vsc-cancel-fg: #a53c3c;
+
+    /* 内嵌表面的浅色值：白页上压 3%~3.5% 黑，读成近白卡片而不是一块灰 */
+    --ns-inset-surface: rgba(0, 0, 0, 0.035);
+    --ns-inset-surface-2: rgba(0, 0, 0, 0.03);
+
+    --ns-bg: #ffffff;                       /* 页面底 */
+    --ns-code: #f6f6f6;                     /* 日志与代码块底 */
+    --ns-panel: #f8f8f8;                    /* 面板 / 顶栏 / 区头 */
+    --ns-panel-alt: #fafafa;                /* 素材页面板底 */
+    --ns-sunken: #f2f2f2;                   /* 下沉块 / 只读控件底 */
+    --ns-raised: #efefef;                   /* 悬起块 / 菜单底 */
+    --ns-field: #ffffff;                    /* 输入控件底 */
+    --ns-field-hover: #f0f0f0;              /* 控件悬起 */
+    --ns-hover: #e8e8e8;                    /* 列表 / 工具条 hover */
+    --ns-fill-1: rgba(0, 0, 0, 0.04);       /* 浅填充 */
+    --ns-fill-2: rgba(0, 0, 0, 0.05);       /* 浅填充 */
+    --ns-fill-3: rgba(0, 0, 0, 0.06);       /* 浅填充 */
+    --ns-fill-4: rgba(0, 0, 0, 0.08);       /* 浅填充 */
+    --ns-fill-5: rgba(0, 0, 0, 0.10);       /* 浅填充 */
+    --ns-fill-6: rgba(0, 0, 0, 0.12);       /* 浅填充 */
+    --ns-fill-7: rgba(0, 0, 0, 0.16);       /* 浅填充 */
+    --ns-border: #c8c8c8;                   /* 主描边 */
+    --ns-p-bd-3a3a3a: #cfcfcf;                 /* 次描边 */
+    --ns-border-3: #dadada;                 /* 分隔线 */
+    --ns-border-4: #dedede;                 /* 分隔线 */
+    --ns-border-soft: #e5e5e5;              /* 弱描边 / 虚线 */
+    --ns-field-bd: #c8c8c8;                 /* 控件描边 */
+    --ns-warn-fg: #8a6914;                   /* 写回告警文字 */
+    --ns-field-bd-2: #b8b8b8;               /* 控件描边（深一档） */
+    --ns-field-bd-hover: #8b8b8b;           /* 控件描边 · 悬起 */
+    --ns-line-strong: #b0b0b0;              /* 滚动条 / 强线 */
+    --ns-line-1: #a0a0a0;                   /* 分区线 */
+    --ns-line-2: #909090;                   /* 弱线 / 提示文字 */
+    --ns-fg-strong: #0a0a0a;                /* 标题 / 最亮正文 */
+    --ns-fg: #171717;                       /* 正文 */
+    --ns-fg-2: #202020;                     /* 正文（亮一档） */
+    --ns-fg-2a: #222222;                    /* 正文（亮） */
+    --ns-fg-soft: #3a3a3a;                  /* 正文（弱一档） */
+    --ns-fg-3: #3f3f3f;                     /* 正文（灰） */
+    --ns-fg-4: #3f3f3f;                     /* 日志正文 */
+    --ns-fg-5: #2c2c2c;                     /* 值文本 */
+    --ns-fg-6: #4a4a4a;                     /* 图标钮文字 */
+    --ns-fg-slate: #454545;                 /* slate 正文 */
+    --ns-fg-slate2: #505050;                /* slate 正文 */
+    --ns-fg-slate3: #56708f;                /* slate 正文（蓝） */
+    --ns-fg-slate4: #556677;                /* slate 正文 */
+    --ns-fg-info: #0a4a8a;                  /* 蓝底上的信息文字 */
+    --ns-aaa: #555555;                      /* 正文（弱） */
+    --ns-bbb: #4f4f4f;                      /* 正文（弱） */
+    --ns-dim: #616161;                      /* 次级文字 */
+    --ns-dim-2: #666666;                    /* 次级文字 */
+    --ns-dim-3: #5f5f5f;                    /* 次级文字（蓝灰） */
+    --ns-dim-3a: #5f5f5f;                   /* 次级文字（蓝灰） */
+    --ns-dim-4: #6a6a6a;                    /* 次级文字（蓝灰） */
+    --ns-dim-5: #6f6f6f;                    /* 次级文字 */
+    --ns-dim-slate: #5f5f5f;                /* 次级文字（slate） */
+    --ns-faint: #808080;                    /* 提示文字 */
+    --ns-faint-2: #999999;                  /* 提示文字（弱） */
+    --ns-faint-3: #909090;                  /* 提示文字（弱） */
+    --ns-accent: #005fb8;                   /* 浅蓝：描边 / 链接 / 焦点 */
+    --ns-accent-2: #0a6ed8;                 /* 浅蓝（深一档） */
+    --ns-primary: #005fb8;                  /* 主蓝：主行动 */
+    --ns-primary-hover: #0258a8;            /* 主蓝 · 悬起 */
+    --ns-primary-fg: #ffffff;               /* 主蓝上的字 */
+    --ns-primary-soft: rgba(0, 95, 184, 0.10);/* 主蓝浅底 */
+    --ns-blue-3: #0a6bb5;                   /* 蓝高亮 */
+    --ns-blue-4: #0a6bb5;                   /* 蓝高亮 */
+    --ns-link-blue: #0a6ed8;                /* 链接蓝 */
+    --ns-cyan: #0572c7;                     /* 青蓝强调 */
+    --ns-cyan-2: #0a6ed8;                   /* 青蓝强调 */
+    --ns-cyan-3: #0a6ed8;                   /* 青蓝强调 */
+    --ns-purple: #8250df;                   /* 紫强调 */
+    --ns-info-bg: #d8e9f8;                  /* 蓝底小钮 */
+    --ns-info-bg2: #e8f0fa;                 /* 蓝底条 */
+    --ns-info-bg3: #f2f4fa;                 /* 蓝底面板 */
+    --ns-slate-bg: #eef1f5;                 /* slate 底 */
+    --ns-ok: #107c10;                       /* 成功 */
+    --ns-ok-2: #1a7f37;                     /* 成功（实心） */
+    --ns-ok-3: #1a7f37;                     /* 成功（GitHub 绿） */
+    --ns-ok-4: #1a7f37;                     /* 成功（亮） */
+    --ns-warn: #8a5a00;                     /* 警告 */
+    --ns-warn-2: #8a5a00;                   /* 警告文字 */
+    --ns-warn-bd: #e3b341;                  /* 警告描边 */
+    --ns-warn-bg: #fff5e6;                  /* 警告底 */
+    --ns-warn-solid: #b06e00;               /* 警告实心 */
+    --ns-amber: #9a6700;                    /* 琥珀 */
+    --ns-amber-2: #8a6100;                  /* 琥珀（亮） */
+    --ns-err: #cf222e;                      /* 错误文字 */
+    --ns-err-solid: #d1242f;                /* 错误实心 */
+    --ns-err-solid-2: #d1242f;              /* 错误实心 */
+    --ns-err-close: #c80000;                /* 关闭钮悬起底 */
+    --ns-err-deep: #fbe3e4;                 /* 错误底 */
+    --ns-err-bd: #ecd0d0;                   /* 错误描边 */
+    --ns-err-bd2: #f0dada;                  /* 错误描边 */
+    --ns-err-solid-3: #d1242f;              /* 错误实心（队列） */
+    --ns-orange: #bc4c00;                   /* 素材页主强调 */
+    --ns-orange-2: #d1610a;                 /* 素材页强调（亮） */
+    --ns-orange-3: #a1500a;                 /* 素材页强调（弱） */
+    --ns-orange-4: #8a5a00;                 /* 素材页强调（更弱） */
+    --ns-fg-7: #242424;                     /* 正文（亮） */
+    --ns-err-2: #cf222e;                    /* 错误文字 */
+    --ns-err-3: #cf222e;                    /* 错误文字 */
+    --ns-err-4: #cf222e;                    /* 错误文字 */
+    --ns-err-5: #cf222e;                    /* 错误文字 */
+    --ns-err-6: #cf222e;                    /* 错误文字（亮） */
+    --ns-err-7: #cf222e;                    /* 错误文字 */
+    --ns-err-8: #cf222e;                    /* 错误文字 */
+    --ns-err-9: #cf222e;                    /* 错误文字 */
+    --ns-err-solid-4: #cf222e;              /* 错误实心 */
+    --ns-link-blue-2: #0a6ed8;              /* 链接蓝 */
+    --ns-orange-5: #a1500a;                 /* 素材页强调（弱） */
+    --ns-tip-bg: #f8f8f8;                   /* 悬停说明底 */
+    --ns-panel-2: #fafafa;                  /* 面板底（深一档） */
+    --ns-field-2: #fafafa;                  /* 控件底（浅一档） */
+    --ns-sunken-2: #ededed;                 /* 骨架块底 */
+    --ns-fg-8: #404040;                     /* 正文（灰） */
+    --ns-fg-9: #3c3c3c;                     /* 正文（灰） */
+    --ns-fg-10: #262626;                    /* 正文（亮） */
+    --ns-dim-6: #585858;                    /* 次级文字 */
+    --ns-dim-7: #6a6355;                    /* 次级文字（暖灰） */
+    --ns-dim-8: #5f5f5f;                    /* 次级文字 */
+    --ns-dim-9: #707070;                    /* 次级文字 */
+    --ns-dim-10: #6a6a6a;                   /* 次级文字 */
+    --ns-faint-4: #909090;                  /* 占位提示 */
+    --ns-faint-5: #9a9a9a;                  /* 占位提示（弱） */
+    --ns-faint-6: #808080;                  /* 次级文字（slate） */
+    --ns-fill-0: rgba(0, 0, 0, 0.03);       /* 浅填充 */
+    --ns-fill-1a: rgba(0, 0, 0, 0.04);      /* 浅填充 */
+    --ns-fill-3a: rgba(0, 0, 0, 0.06);      /* 浅填充 */
+    --ns-fill-5a: rgba(0, 0, 0, 0.11);      /* 浅填充 */
+    --ns-fill-7a: rgba(0, 0, 0, 0.14);      /* 浅填充 */
+    --ns-fill-8: rgba(0, 0, 0, 0.20);       /* 浅填充 */
+    --ns-fill-9: rgba(0, 0, 0, 0.26);       /* 浅填充 */
+    --ns-fill-10: rgba(0, 0, 0, 0.28);      /* 浅填充 */
+    --ns-fill-11: rgba(0, 0, 0, 0.5);       /* 浅填充 */
+    --ns-fill-warm: rgba(120, 90, 40, 0.06);/* 暖色浅填充 */
+    --ns-glass-1: rgba(250, 250, 250, 0.96);/* 浮层底 */
+    --ns-glass-2: rgba(246, 248, 250, 0.95);/* 浮层底（蓝） */
+    --ns-glass-3: rgba(250, 250, 250, 0.95);/* 浮层底 */
+    --ns-glass-4: rgba(250, 250, 250, 0.95);/* 浮层底 */
+    --ns-scrim-1: rgba(0, 0, 0, 0.3);       /* 遮罩 / 阴影 */
+    --ns-scrim-2: rgba(0, 0, 0, 0.35);      /* 遮罩 / 阴影 */
+    --ns-scrim-3: rgba(0, 0, 0, 0.4);       /* 遮罩 / 阴影 */
+    --ns-scrim-4: rgba(0, 0, 0, 0.42);      /* 遮罩 / 阴影 */
+    --ns-scrim-5: rgba(0, 0, 0, 0.45);      /* 遮罩 / 阴影 */
+    --ns-scrim-6: rgba(0, 0, 0, 0.5);       /* 遮罩 / 阴影 */
+    --ns-scrim-7: rgba(0, 0, 0, 0.55);      /* 遮罩 / 阴影 */
+    --ns-scrim-8: rgba(0, 0, 0, 0.6);       /* 遮罩 / 阴影 */
+    --ns-scrim-9: rgba(0, 0, 0, 0.72);      /* 遮罩 / 阴影 */
+    --ns-scrim-10: rgba(0, 0, 0, 0.8);      /* 遮罩 / 阴影 */
+    --ns-scrim-11: rgba(0, 0, 0, 0.85);     /* 遮罩 / 阴影 */
+    --ns-scrim-12: rgba(8, 9, 12, 0.5);     /* 图上的浮层 */
+    --ns-scrim-13: rgba(8, 9, 12, 0.72);    /* 图上的浮层 */
+    --ns-blue-bd: #a8c8e4;                  /* 蓝按钮描边 */
+    --ns-pop-shadow: 0 18px 50px rgba(0, 0, 0, 0.22), 0 0 0 1px rgba(0, 0, 0, 0.08);/* 浮层与技能选择窗阴影 */
+    --ns-modal-shadow: 0 12px 40px rgba(0, 0, 0, 0.2);/* 弹窗阴影 */
+    --ns-background-111111: var(--ns-p-bg-111111);
+    --ns-p-bg-33333a: #ffffff;
+    --ns-p-bd-2a2a30: #cfcfcf;
+    --ns-background-22262e: #ffffff;
+    --ns-background-1a3a1a: var(--ns-p-bg-1a3a1a);
+    --ns-background-3a5a8c: var(--ns-p-bg-3a5a8c);
+    --ns-color-4ade80: var(--ns-p-fg-4ade80);
+    --ns-color-999: var(--ns-p-fg-999999);
+    --ns-color-fbbf24: var(--ns-p-fg-fbbf24);
+    --ns-border-2: var(--ns-p-bd-3a3a3a);
+    --ns-p-bg-1a1a1a: #ffffff;
+    --ns-p-bg-rgba-0-0-0-0-85: rgba(0, 0, 0, 0.85);
+    --ns-p-bg-2a2a2a: #ffffff;
+    --ns-p-bd-fbbf24: rgba(251, 191, 36, 0.35);
+    --ns-p-shadow-rgba-0-0-0-0-8: rgba(0, 0, 0, 0.8);
+    --ns-p-fg-eeeeee: #1a1a1a;
+    --ns-p-bg-rgba-255-255-255-1: rgba(0, 0, 0, 0.07);
+    --ns-p-bd-3a5a7a: #b6cbdd;
+    --ns-p-fg-666666: #7a7a7a;
+    --ns-p-bg-222222: #ffffff;
+    --ns-p-bg-333333: #ffffff;
+    --ns-p-bg-5090cc: #e9e9f0;
+    --ns-p-fg-8fa3b8: #41576f;
+    --ns-p-fg-8a8a95: #555555;
+    --ns-p-bg-2a3a3a: #ffffff;
+    --ns-p-bg-3a4a4a: #ffffff;
+    --ns-p-fg-fbbf24: #8a6914;
+    --ns-p-fg-f87171: #883e3e;
+    --ns-p-bg-rgba-248-113-113-0-15: rgba(248, 113, 113, 0.15);
+    --ns-p-bg-3a3a3a: #ffffff;
+    --ns-p-bg-2a4a6a: #ffffff;
+    --ns-p-shadow-5090cc: rgba(80, 144, 204, 0.25);
+    --ns-p-shadow-rgba-0-0-0-0-6: rgba(0, 0, 0, 0.6);
+    --ns-p-bg-rgba-80-144-204-0-3: rgba(10, 110, 216, 0.18);
+    --ns-p-bg-rgba-248-113-113-0-1: rgba(248, 113, 113, 0.1);
+    --ns-p-fg-999999: #555555;
+    --ns-p-bg-111111: #ffffff;
+    --ns-p-bg-10b981: #e9e9f0;
+    --ns-p-bg-34d399: #e9e9f0;
+    --ns-p-bg-d97706: #e9e9f0;
+    --ns-p-bg-f59e0b: #e9e9f0;
+    --ns-p-bg-4b5563: #f4f4f7;
+    --ns-p-fg-e5e5e5: #1a1a1a;
+    --ns-p-bg-6b7280: #f4f4f7;
+    --ns-p-bg-60a0dc: #e9e9f0;
+    --ns-p-bd-555555: #cfcfcf;
+    --ns-p-bg-2a5a8a: #f4f4f7;
+    --ns-p-bg-rgba-30-30-30-0-5: rgba(30, 30, 30, 0.5);
+    --ns-p-bg-1e1e1e: #ffffff;
+    --ns-p-fg-8a9aa8: #41576f;
+    --ns-p-fg-7d8a96: #555555;
+    --ns-p-bg-rgba-42-42-42-0-6: rgba(42, 42, 42, 0.6);
+    --ns-p-bg-rgba-42-42-42-0-85: rgba(42, 42, 42, 0.85);
+    --ns-p-bg-rgba-42-42-42-0-55: rgba(42, 42, 42, 0.55);
+    --ns-p-bg-rgba-60-60-60-0-9: rgba(60, 60, 60, 0.9);
+    --ns-p-fg-8a97a5: #41576f;
+    --ns-p-bg-2a3a4a: #ffffff;
+    --ns-p-bg-1a3a1a: #ffffff;
+    --ns-p-fg-4ade80: #297a46;
+    --ns-p-bg-3a1a1a: #ffffff;
+    --ns-p-shadow-rgba-0-0-0-0-9: rgba(0, 0, 0, 0.9);
+    --ns-p-bg-1a2a2a: #ffffff;
+    --ns-p-bg-3a2a1a: #ffffff;
+    --ns-p-bg-rgba-0-0-0-0-6: rgba(0, 0, 0, 0.6);
+    --ns-p-bg-1e1e2e: #ffffff;
+    --ns-p-bg-2a2a3a: #ffffff;
+    --ns-p-bg-rgba-80-144-204-0-1: rgba(10, 110, 216, 0.1);
+    --ns-p-bd-rgba-248-113-113-0-3: rgba(248, 113, 113, 0.3);
+    --ns-p-bg-rgba-74-222-128-0-1: rgba(10, 110, 216, 0.1);
+    --ns-p-bd-rgba-74-222-128-0-3: rgba(10, 110, 216, 0.18);
+    --ns-p-bg-rgba-255-255-255-0-1: rgba(0, 0, 0, 0.07);
+    --ns-p-bg-4a4a4a: #f4f4f7;
+    --ns-p-bg-rgba-0-0-0-0-9: rgba(0, 0, 0, 0.9);
+    --ns-p-bd-rgba-0-0-0-0-9: rgba(0, 0, 0, 0.9);
+    --ns-p-fg-8f8f9a: #555555;
+    --ns-p-bg-999999: #e9e9f0;
+    --ns-p-bg-ffffff: #e9e9f0;
+    --ns-p-bd-2a4a6a: #b6cbdd;
+    --ns-p-bg-3a5a7a: #f4f4f7;
+    --ns-p-bd-3a4a5a: #b6cbdd;
+    --ns-p-bg-3a4a5a: #f4f4f7;
+    --ns-p-fg-7aa8c1: #41576f;
+    --ns-p-fg-e0b48c: #555555;
+    --ns-p-bg-26313d: #ffffff;
+    --ns-p-fg-b8c4d0: #41576f;
+    --ns-p-bg-1a1a2e: #ffffff;
+    --ns-p-bg-2a2a3e: #ffffff;
+    --ns-p-bg-3a3a5e: #ffffff;
+    --ns-p-bd-666666: #c0c0c0;
+    --ns-p-bg-1a4a8a: #ffffff;
+    --ns-p-fg-7ab8f5: #436587;
+    --ns-p-bg-343434: #ffffff;
+    --ns-p-bg-262626: #ffffff;
+    --ns-p-bd-rgba-255-255-255-0-12: rgba(0, 0, 0, 0.08);
+    --ns-p-shadow-rgba-0-0-0-0-35: rgba(0, 0, 0, 0.35);
+    --ns-p-bd-rgba-80-144-204-0-7: rgba(10, 110, 216, 0.18);
+    --ns-p-shadow-rgba-80-144-204-0-5: rgba(10, 110, 216, 0.18);
+    --ns-p-shadow-rgba-0-0-0-0-45: rgba(0, 0, 0, 0.45);
+    --ns-p-shadow-rgba-255-255-255-0-08: rgba(0, 0, 0, 0.06);
+    --ns-p-bg-5aa2e0: #e9e9f0;
+    --ns-p-bg-4079b8: #f4f4f7;
+    --ns-p-bg-rgba-220-38-38-0-85: rgba(220, 38, 38, 0.85);
+    --ns-p-bd-rgba-255-255-255-0-25: rgba(0, 0, 0, 0.18);
+    --ns-p-bd-rgba-255-255-255-0-15: rgba(0, 0, 0, 0.1);
+    --ns-p-shadow-rgba-0-0-0-0-4: rgba(0, 0, 0, 0.4);
+    --ns-p-bg-3d4d63: #f4f4f7;
+    --ns-p-bg-3d3d3d: #ffffff;
+    --ns-p-bg-rgba-255-255-255-0-12: rgba(0, 0, 0, 0.08);
+    --ns-p-fg-bbbbbb: #555555;
+    --ns-p-fg-7d8896: #555555;
+    --ns-p-bg-35507a: #f4f4f7;
+    --ns-p-bg-232323: #ffffff;
+    --ns-p-fg-9a9a9a: #555555;
+    --ns-p-fg-f0c674: #846d40;
+    --ns-p-fg-d8b45a: #776332;
+    --ns-p-fg-e07b7b: #7b4444;
+    --ns-p-fg-9ec5e8: #41576f;
+    --ns-p-fg-b9e08a: #1a1a1a;
+    --ns-p-bd-4a5a3a: #cfcfcf;
+    --ns-p-bg-1f1f1f: #ffffff;
+    --ns-p-bg-2f2f2f: #ffffff;
+    --ns-p-fg-c97b7b: #555555;
+    --ns-p-bg-3a2a2a: #ffffff;
+    --ns-p-bg-3a5a8c: #f4f4f7;
+    --ns-p-bg-456ba8: #f4f4f7;
+    --ns-p-fg-8a8a8a: #555555;
+    --ns-p-fg-2a2a2a: #7a7a7a;
+    --ns-p-fg-555555: #7a7a7a;
+    --ns-p-fg-e5484d: #7e282a;
+    --ns-p-fg-b5b5b5: #555555;
+    --ns-p-fg-d9a7a7: #555555;
+    --ns-p-bg-33272a: #ffffff;
+    --ns-p-bd-5c3b3e: #cfcfcf;
+    --ns-p-fg-a7c6dd: #41576f;
+    --ns-p-bg-22303c: #ffffff;
+    --ns-p-bd-f87171: rgba(248, 113, 113, 0.35);
+    --ns-p-fg-fca5a5: #555555;
+    --ns-p-bg-3a1e24: #ffffff;
+    --ns-p-bg-4a262e: #ffffff;
+    --ns-p-bg-f87171: #e9e9f0;
+    --ns-p-shadow-1b1b1f: rgba(0, 0, 0, 0.12);
+    --ns-p-bg-rgba-0-0-0-55: rgba(0, 0, 0, 0.55);
+    --ns-p-bg-1b1b1f: #ffffff;
+    --ns-p-shadow-rgba-0-0-0-5: rgba(0, 0, 0, 0.5);
+    --ns-p-bd-2a2a2e: #cfcfcf;
+    --ns-p-bg-2d2d35: #ffffff;
+    --ns-p-bg-3a3a44: #ffffff;
+    --ns-p-bg-23303f: #ffffff;
+    --ns-p-fg-9bd18a: #1a1a1a;
+    --ns-p-bd-3b82c4: rgba(59, 130, 196, 0.35);
+    --ns-p-bg-2b3c4f: #ffffff;
+    --ns-p-bg-2a1b1f: #ffffff;
+    --ns-p-bd-7f2b32: #cfcfcf;
+    --ns-p-fg-8ab4f0: #4c6384;
+    --ns-p-bd-3b5f84: #b6cbdd;
+    --ns-p-bd-8ab4f0: rgba(138, 180, 240, 0.35);
+    --ns-p-bg-3b82f6: #f4f4f7;
+    --ns-p-bg-2563eb: #f4f4f7;
+    --ns-p-bg-555555: #f4f4f7;
+    --ns-p-fg-88ccff: #4b708c;
+    --ns-p-bg-3d5a80: #f4f4f7;
+    --ns-p-bg-444444: #ffffff;
+    --ns-p-bd-b45309: rgba(180, 83, 9, 0.35);
+    --ns-p-bg-2a2318: #ffffff;
+    --ns-p-bd-7f1d1d: #cfcfcf;
+    --ns-p-bg-4a2f2f: #ffffff;
+    --ns-p-fg-a9c6dd: #41576f;
+    --ns-p-fg-cfe3f2: #41576f;
+    --ns-p-shadow-rgba-0-0-0-0-55: rgba(0, 0, 0, 0.55);
+    --ns-p-shadow-rgba-255-255-255-0-05: rgba(0, 0, 0, 0.03);
+    --ns-p-shadow-rgba-80-144-204-0-2: rgba(10, 110, 216, 0.18);
+    --ns-p-bd-7ab8f5: rgba(122, 184, 245, 0.35);
+    --ns-p-shadow-rgba-122-184-245-0-45: rgba(10, 110, 216, 0.18);
+    --ns-p-shadow-rgba-122-184-245-35: rgba(10, 110, 216, 0.18);
+    --ns-p-shadow-rgba-122-184-245-25: rgba(10, 110, 216, 0.18);
+    --ns-p-shadow-rgba-122-184-245-0: rgba(10, 110, 216, 0);
+    --ns-p-bg-1e1e24: #ffffff;
+    --ns-p-bd-3a3a44: #cfcfcf;
+    --ns-p-shadow-rgba-0-0-0-45: rgba(0, 0, 0, 0.45);
+    --ns-p-bd-e5484d: rgba(229, 72, 77, 0.35);
+    --ns-p-bd-f5a623: rgba(245, 166, 35, 0.35);
+    --ns-p-bd-46a758: rgba(70, 167, 88, 0.35);
+    --ns-p-bd-4b9fe1: rgba(75, 159, 225, 0.35);
+    --ns-p-fg-b9b9c3: #555555;
+    --ns-p-bg-rgba-75-159-225-15: rgba(10, 110, 216, 0.15);
+    --ns-p-fg-8ec6f2: #4e6d85;
+    --ns-p-bg-rgba-75-159-225-3: rgba(10, 110, 216, 0.18);
+    --ns-p-fg-8a8a94: #555555;
+
+    --ns-black: #000000;                    /* 视频与图片黑底 */
+    --ns-badge-1: rgba(33, 150, 243, 0.85); /* 彩色徽标 */
+    --ns-badge-2: rgba(244, 67, 54, 0.9);   /* 彩色徽标 */
+    --ns-badge-3: rgba(255, 152, 0, 0.85);  /* 彩色徽标 */
+    --ns-badge-4: rgba(255, 193, 7, 0.85);  /* 彩色徽标 */
+    --ns-badge-5: rgba(38, 166, 154, 0.9);  /* 彩色徽标 */
+    --ns-badge-6: rgba(24, 144, 80, 0.85);  /* 彩色徽标 */
+    --ns-badge-7: rgba(100, 116, 139, 0.85);/* 彩色徽标 */
+    --ns-badge-8: rgba(100, 116, 139, 1);   /* 彩色徽标 */
+    --ns-badge-9: rgba(255, 193, 7, 1);     /* 彩色徽标 */
+    --ns-badge-10: rgba(38, 166, 154, 1);   /* 彩色徽标 */
+    --ns-line-slate: rgba(90, 100, 120, 0.5);/* slate 描边 */
+    --ns-on-accent: #ffffff;                /* 主色实底上的字 */
+    --ns-accent-solid: #005fb8;                   /* 主色实底 */
+    --ns-accent-solid-hover: #0050a0;               /* 主色实底 · 悬起 */
+    --ns-fill-orange-10: rgba(188, 76, 0, 0.08);/* 橙浅底 */
+    --ns-fill-orange-12: rgba(188, 76, 0, 0.10);/* 橙浅底 */
+    --ns-fill-orange-15: rgba(188, 76, 0, 0.10);/* 橙浅底 */
+    --ns-fill-orange-20: rgba(188, 76, 0, 0.12);/* 橙浅底 · 悬起 */
+    --ns-fill-orange-30: rgba(188, 76, 0, 0.16);/* 橙浅底 · 选中 */
+    --ns-fill-orange2-10: rgba(209, 97, 10, 0.10);/* 橙浅底 */
+    --ns-fill-orange2-22: rgba(209, 97, 10, 0.14);/* 橙浅底 · 悬起 */
+    --ns-fill-blue-16: rgba(0, 95, 184, 0.08);/* 蓝浅底 */
+    --ns-fill-blue-18: rgba(0, 95, 184, 0.10);/* 蓝浅底 · 悬起 */
+    --ns-fill-blue-22: rgba(0, 95, 184, 0.12);/* 蓝浅底 · 悬起 */
+    --ns-fill-blue-25: rgba(0, 95, 184, 0.14);/* 蓝浅底 · 悬起 */
+    --ns-fill-blue-28: rgba(0, 95, 184, 0.16);/* 蓝浅底 · 选中 */
+    --ns-fill-blue-30: rgba(0, 95, 184, 0.16);/* 蓝浅底 · 选中 */
+    --ns-fill-blue-34: rgba(0, 95, 184, 0.18);/* 蓝浅底 · 选中 */
+    --ns-fill-blue-35: rgba(0, 95, 184, 0.18);/* 蓝浅底 · 选中 */
+    --ns-fill-blue-50: rgba(0, 95, 184, 0.22);/* 蓝浅底 · 强 */
+    --ns-fill-blue-55: rgba(0, 95, 184, 0.24);/* 蓝浅底 · 强 */
+    --ns-fill-blue-60: rgba(0, 95, 184, 0.26);/* 蓝浅底 · 强 */
+    --ns-fill-blue-85: rgba(0, 95, 184, 0.85);/* 蓝实底 */
+    --ns-fill-blue2-12: rgba(0, 95, 184, 0.08);/* 蓝浅底 */
+    --ns-fill-blue2-35: rgba(0, 95, 184, 0.18);/* 蓝浅底 · 选中 */
+    --ns-fill-primary-28: rgba(0, 95, 184, 0.16);/* 主蓝浅底 · 选中 */
+    --ns-fill-primary-30: rgba(0, 95, 184, 0.18);/* 主蓝浅底 · 选中 */
+    --ns-fill-blue4-30: rgba(10, 110, 216, 0.16);/* 蓝浅底 */
+    --ns-fill-cyan-08: rgba(5, 114, 199, 0.07);/* 青浅底 */
+    --ns-fill-cyan-09: rgba(5, 114, 199, 0.08);/* 青浅底 */
+    --ns-fill-cyan-16: rgba(5, 114, 199, 0.10);/* 青浅底 · 悬起 */
+    --ns-fill-cyan-18: rgba(5, 114, 199, 0.12);/* 青浅底 · 悬起 */
+    --ns-fill-cyan2-08: rgba(10, 110, 216, 0.07);/* 青浅底 */
+    --ns-fill-cyan2-10: rgba(10, 110, 216, 0.08);/* 青浅底 */
+    --ns-fill-cyan2-25: rgba(10, 110, 216, 0.14);/* 青浅底 · 悬起 */
+    --ns-fill-cyan3-15: rgba(10, 110, 216, 0.10);/* 青浅底 */
+    --ns-fill-cyan3-30: rgba(10, 110, 216, 0.16);/* 青浅底 · 选中 */
+    --ns-fill-cyan4-45: rgba(10, 110, 216, 0.20);/* 青浅底 · 强 */
+    --ns-fill-accent-16: rgba(0, 95, 184, 0.08);/* 浅蓝底 */
+    --ns-fill-accent-18: rgba(0, 95, 184, 0.10);/* 浅蓝底 · 悬起 */
+    --ns-fill-purple-08: rgba(130, 80, 223, 0.07);/* 紫浅底 */
+    --ns-fill-purple-15: rgba(130, 80, 223, 0.10);/* 紫浅底 */
+    --ns-fill-red-10: rgba(207, 34, 46, 0.08);/* 红浅底 */
+    --ns-fill-red-12: rgba(207, 34, 46, 0.09);/* 红浅底 */
+    --ns-fill-red-18: rgba(207, 34, 46, 0.12);/* 红浅底 · 悬起 */
+    --ns-fill-red-40: rgba(207, 34, 46, 0.18);/* 红浅底 · 强 */
+    --ns-fill-red2-12: rgba(207, 34, 46, 0.09);/* 红浅底 */
+    --ns-fill-red2-18: rgba(207, 34, 46, 0.12);/* 红浅底 · 悬起 */
+    --ns-fill-red2-35: rgba(207, 34, 46, 0.18);/* 红浅底 · 强 */
+    --ns-fill-red2-45: rgba(207, 34, 46, 0.22);/* 红浅底 · 强 */
+    --ns-fill-amber-12: rgba(154, 103, 0, 0.10);/* 琥珀浅底 */
+    --ns-fill-green-12: rgba(26, 127, 55, 0.09);/* 绿浅底 */
+    --ns-fill-warn-16: rgba(138, 90, 0, 0.10);/* 警告浅底 */
+    --ns-fill-slate-25: rgba(100, 116, 139, 0.14);/* slate 浅底 */
+    --ns-fill-slate-14: rgba(100, 116, 139, 0.10);/* slate 浅底 */
+    --ns-fill-mat-blue-12: rgba(10, 110, 216, 0.09);/* 蓝徽标浅底 */
+    --ns-fill-mat-blue-35: rgba(10, 110, 216, 0.16);/* 蓝徽标浅底 */
+    --ns-fill-mat-amber-12: rgba(188, 76, 0, 0.09);/* 橙徽标浅底 */
+    --ns-fill-mat-amber-40: rgba(188, 76, 0, 0.18);/* 橙徽标浅底 */
+
+  --ns-background-1e1e1e: #ffffff;
+  --ns-background-2a2a2a: #ffffff;
+  --ns-background-2a2a31: #ffffff;
+  --ns-background-2b2b33: #ffffff;
+  --ns-background-2c2f36: #ffffff;
+  --ns-background-383b43: #ffffff;
+  --ns-background-3a3a46: #ffffff;
+  --ns-background-color-111111: #ffffff;
+  --ns-background-color-1e1e1e: #ffffff;
+  --ns-background-color-2a2a2a: #ffffff;
+  --ns-background-color-2c2f36: #ffffff;
+  --ns-background-color-383b43: #ffffff;
+  --ns-background-color-rgba-42-42-42-9: #bbbbbb;
+  --ns-color-9aa4b2: #303035;
+  --ns-color-b9c0cc: #3a3a3a;
+  --ns-color-b9c2ce: #3a3a3a;
+  --ns-color-b9c4d0: #3a3a3a;
+  --ns-color-d6dde6: #3a3a3a;
+  --ns-color-d7dde5: #3a3a3a;
+
+
+  --ns-color-cfcfd8: #3a3a3a;
+
+
+  --ns-accent-color-4a9eff: #005fb8;
+  --ns-background-1e1e1e-x: var(--ns-background-1e1e1e);
+  --ns-background-232327: #ffffff;
+  --ns-background-252525: #ffffff;
+  --ns-background-252525-x: var(--ns-background-252525);
+  --ns-background-252525-x-x: var(--ns-background-252525);
+  --ns-background-252525-x-x-x: var(--ns-background-252525);
+  --ns-background-2a2a2a-x: var(--ns-background-2a2a2a);
+  --ns-background-2a2a2a-x-x: var(--ns-background-2a2a2a);
+  --ns-background-2a2a2a-x-x-x: var(--ns-background-2a2a2a);
+  --ns-background-2a2a2a-x-x-x-x: var(--ns-background-2a2a2a);
+  --ns-background-2a2a2a-x-x-x-x-x: var(--ns-background-2a2a2a);
+  --ns-background-3a3a42: #ffffff;
+  --ns-background-image-26262d: #ffffff;
+  --ns-background-image-26262d-x: var(--ns-background-image-26262d);
+  --ns-background-rgba-15-22-38-96: #b3b5ba;
+  --ns-background-rgba-15-22-38-96-x: #b3b5ba;
+  --ns-background-rgba-15-22-38-98: #b3b5ba;
+  --ns-background-rgba-232-226-212-07: rgba(78, 77, 81, 0.24);
+  --ns-background-rgba-30-45-70-92: #b7bcc4;
+  --ns-background-rgba-30-45-70-92-x: #b7bcc4;
+  --ns-background-rgba-47-111-237-18: rgba(132, 152, 191, 0.64);
+  --ns-background-rgba-47-111-237-18-x: rgba(132, 152, 191, 0.64);
+  --ns-background-rgba-47-111-237-18-x-x: rgba(132, 152, 191, 0.64);
+  --ns-background-rgba-47-111-237-18-x-x-x: rgba(132, 152, 191, 0.64);
+  --ns-background-rgba-47-111-237-18-x-x-x-x: rgba(132, 152, 191, 0.64);
+  --ns-border-3a3a4a: #d7d7da;
+  --ns-border-3a3a4a-x: var(--ns-border-3a3a4a);
+  --ns-border-3a3a4a-x-x: var(--ns-border-3a3a4a);
+  --ns-border-bottom-2a2a2a: #d4d4d4;
+  --ns-color-191919: #171717;
+  --ns-color-232323: #171717;
+  --ns-color-252525: #171717;
+  --ns-color-252525-x: var(--ns-color-252525);
+  --ns-color-9a9aa6: #303035;
+  --ns-color-9aa4b2-x: var(--ns-color-9aa4b2);
+  --ns-color-b7bbc4: #3a3a3a;
+  --ns-p-bd-33333a-b: #d5d5d7;
+  --ns-p-bd-3a3a42: #d7d7d8;
+  --ns-p-bd-33333a: #d5d5d7;
+
+
+}
+
 * { box-sizing: border-box; }
 html, body { height: 100%; }
 body {
     margin: 0;
-    background: #17171b;
-    color: #ddd;
+    background: var(--ns-bg, #17171b);
+    color: var(--ns-fg, #ddd);
     font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
     font-size: 14px;
     display: flex;
@@ -42,12 +1046,12 @@ body {
     gap: 18px;
     height: 38px;
     padding: 0 16px;
-    background: #202024;
-    border-bottom: 1px solid #333;
+    background: var(--ns-panel, #202024);
+    border-bottom: 1px solid var(--ns-border, #333);
     flex: none;
 }
-.ns-logo { font-weight: 700; font-size: 15px; color: #fff; white-space: nowrap; text-decoration: none; }
-.ns-logo:hover { color: #7aa2ff; }
+.ns-logo { font-weight: 700; font-size: 15px; color: var(--ns-fg-strong, #fff); white-space: nowrap; text-decoration: none; }
+.ns-logo:hover { color: var(--ns-accent, #7aa2ff); }
 /* 页签条基础档就带横滚：右侧的状态位 / 队列 / 设置 / 窗口控件吃掉宽度时，这一条自己滚，
    不把页签挤成竖排两行（720–900 这一档没有手机档的滚动规则，全靠这一条兜住） */
 .ns-tabs { display: flex; gap: 4px; height: 100%; min-width: 0; overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain; }
@@ -57,13 +1061,13 @@ body {
     align-items: center;
     flex: none;
     padding: 0 14px;
-    color: #aaa;
+    color: var(--ns-aaa, #aaa);
     text-decoration: none;
     border-bottom: 2px solid transparent;
     white-space: nowrap;
 }
-.ns-tabs a:hover { color: #fff; }
-.ns-tabs a.active { color: #fff; border-bottom-color: #7aa2ff; }
+.ns-tabs a:hover { color: var(--ns-fg-strong, #fff); }
+.ns-tabs a.active { color: var(--ns-fg-strong, #fff); border-bottom-color: var(--ns-accent, #7aa2ff); }
 /* 顶栏分组：首页 | 创作（素材·绘画·视频·导演·姿势）—— 分隔线只落在组边界那一枚页签上。
    技能与智能体在首页的卡上、设置与队列是右侧图标位，都不占页签位，也就没有第二条分隔线 */
 .ns-tabs a[data-tab="gallery"] { margin-left: 10px; }
@@ -73,7 +1077,7 @@ body {
     width: 1px;
     height: 14px;
     margin-right: 10px;
-    background: #3a3a44;
+    background: var(--ns-hover, #3a3a44);
     vertical-align: middle;
 }
 /* 手机 / 窄窗口：六枚页签压不进一块手机的宽度，顶栏这一条改成横向可滚的页签条（DOM 与
@@ -112,38 +1116,38 @@ body {
    这一位常驻且宽度固定：读数没来时靠 visibility 收字，flex 位不塌 —— 用 display:none 收起的话
    右边的队列 / 设置 / 窗口控件整排往左滑，启动那段时间顶栏就是「状态不见了、图标也不对」 */
 .ns-comfy-status {
-    margin-left: auto; font-size: 12px; color: #9a9aa8; white-space: nowrap;
+    margin-left: auto; font-size: 12px; color: var(--ns-dim, #9a9aa8); white-space: nowrap;
     min-width: 66px; text-align: right; visibility: hidden;
 }
 .ns-comfy-status:not(:empty) { visibility: visible; }
-.ns-comfy-run { color: #7bc47f; }
-.ns-comfy-starting { color: #e0b070; }
-.ns-comfy-pending { color: #8a8a96; }
+.ns-comfy-run { color: var(--ns-ok, #7bc47f); }
+.ns-comfy-starting { color: var(--ns-warn, #e0b070); }
+.ns-comfy-pending { color: var(--ns-dim-5, #8a8a96); }
 /* 无边框窗口：桌面端摘掉系统标题栏后，最小化 / 最大化 / 全屏 / 关闭由顶栏自己出（只在桌面端窗口出现） */
 .ns-wctl { display: flex; align-items: center; gap: 2px; margin-left: 12px; }
 /* [hidden] 的 UA display:none 被上面这条 display:flex 盖掉：浏览器标签页里 pywebview 桥永不来、
    hidden 永不翻，不补这一条就是 142px 点了没反应的窗口控件杵在顶栏右端，页签条被挤到只剩一枚 */
 .ns-wctl[hidden] { display: none; }
-.ns-wctl-btn { width: 34px; height: 26px; display: inline-flex; align-items: center; justify-content: center; border: none; border-radius: 4px; background: transparent; color: #b8b8c2; font-size: 13px; line-height: 1; cursor: pointer; }
-.ns-wctl-btn:hover { background: #33333a; color: #fff; }
-.ns-wctl-close:hover { background: #a83232; color: #fff; }
+.ns-wctl-btn { width: 34px; height: 26px; display: inline-flex; align-items: center; justify-content: center; border: none; border-radius: 4px; background: transparent; color: var(--ns-fg-6, #b8b8c2); font-size: 13px; line-height: 1; cursor: pointer; }
+.ns-wctl-btn:hover { background: var(--ns-p-bg-33333a, #33333a); color: var(--ns-fg-strong, #fff); }
+.ns-wctl-close:hover { background: var(--ns-err-close, #a83232); color: var(--ns-fg-strong, #fff); }
 .ns-frameless .ns-header { cursor: move; user-select: none; }
 .ns-frameless .ns-header a, .ns-frameless .ns-header button { cursor: pointer; }
-.ns-about-version { font-size: 13px; color: #b7bbc4; user-select: text; cursor: text; }
+.ns-about-version { font-size: 13px; color: var(--ns-color-b7bbc4, #b7bbc4); user-select: text; cursor: text; }
 /* 「关于」的路径行：左标签固定宽 + 中间值可全选、右两端是复制 / 打开 */
 .ns-about-rows { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
 .ns-about-row { display: flex; align-items: center; gap: 8px; }
-.ns-about-label { flex: 0 0 118px; font-size: 12px; color: #9aa4b0; }
+.ns-about-label { flex: 0 0 118px; font-size: 12px; color: var(--ns-dim-3, #9aa4b0); }
 .ns-about-value {
     flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    font-size: 12px; color: #d7dae0; background: #1e1e1e; border: 1px solid #33333a;
+    font-size: 12px; color: var(--ns-fg-5, #d7dae0); background: var(--ns-background-1e1e1e-x, #1e1e1e); border: 1px solid var(--ns-p-bd-33333a, #33333a);
     border-radius: 4px; padding: 3px 6px; user-select: all;
 }
 .ns-about-copy, .ns-about-open {
-    flex: 0 0 auto; border: 1px solid #33333a; border-radius: 4px; background: transparent;
-    color: #b8b8c2; font-size: 12px; padding: 2px 8px; cursor: pointer;
+    flex: 0 0 auto; border: 1px solid var(--ns-p-bd-33333a-b, #33333a); border-radius: 4px; background: transparent;
+    color: var(--ns-fg-6, #b8b8c2); font-size: 12px; padding: 2px 8px; cursor: pointer;
 }
-.ns-about-copy:hover, .ns-about-open:hover { background: #33333a; color: #fff; }
+.ns-about-copy:hover, .ns-about-open:hover { background: var(--ns-p-bg-33333a, #33333a); color: var(--ns-fg-strong, #fff); }
 
 /* 顶栏图标位（设置）：与窗口控件同一档 30×26 方钮，落在设置页时点亮。
    入口是 <a href="#/settings">，字形由 initSettingsEntry 注入，页签条不吃这一格宽度 */
@@ -159,8 +1163,8 @@ body {
 /* 桌面端的离线素材页：body.ns-offline 只用来压暗生成入口与收起顶栏队列面板，离线页不叠横幅 */
 .ns-gen-off { opacity: .75; }
 .ns-comfy-hint { animation: ns-blink 1s ease-in-out 3; }
-@keyframes ns-blink { 50% { box-shadow: 0 0 0 3px #e0b070; } }
-.ns-toast { position: fixed; left: 50%; bottom: 42px; transform: translateX(-50%); padding: 8px 18px; border: 1px solid #7a5c2a; border-radius: 6px; background: #2b2417; color: #f0c880; font-size: 13px; opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 90; }
+@keyframes ns-blink { 50% { box-shadow: 0 0 0 3px var(--ns-warn, #e0b070); } }
+.ns-toast { position: fixed; left: 50%; bottom: 42px; transform: translateX(-50%); padding: 8px 18px; border: 1px solid var(--ns-warn-bd, #7a5c2a); border-radius: 6px; background: var(--ns-warn-bg, #2b2417); color: var(--ns-warn-2, #f0c880); font-size: 13px; opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 90; }
 .ns-toast.show { opacity: 1; }
 .ns-offline .neo-gallery-gm-btn,
 .ns-offline .neo-director-regen-run,
@@ -178,11 +1182,11 @@ body {
    自滚容器跟着收细隐形，不用逐容器补规则。时间轴放大态 .neo-dtl-scroll.neo-dtl-zoomed 那条可见横条
    是刻意的（它是拖动把手），元素自身声明压过继承，不在这条规则的作用里 */
 .ns-page { scrollbar-width: thin; scrollbar-color: transparent transparent; }
-.ns-page:hover { scrollbar-color: #555 transparent; }
+.ns-page:hover { scrollbar-color: var(--ns-field-bd-hover, #555) transparent; }
 .ns-page::-webkit-scrollbar { width: 8px; }
 .ns-page::-webkit-scrollbar-track { background: transparent; }
 .ns-page::-webkit-scrollbar-thumb { background: transparent; border-radius: 4px; }
-.ns-page:hover::-webkit-scrollbar-thumb { background: #555; }
+.ns-page:hover::-webkit-scrollbar-thumb { background: var(--ns-field-bd-hover, #555); }
 /* 素材页顶部不留内边距：sticky 停在容器 padding 内侧，上方会露出一条滚动的缩略图；顶部间距由工具条自己的 padding 提供 */
 .ns-page:has(.ns-gallery-host) { padding-top: 0; }
 .ns-hidden { display: none !important; }
@@ -245,7 +1249,7 @@ body {
     max-height: 100%;
     margin: auto;
 }
-.ns-director-media .ns-gen-preview { background: #000; border-radius: 4px; }
+.ns-director-media .ns-gen-preview { background: var(--ns-black, #000); border-radius: 4px; }
 .ns-director-media a.ns-gen-final { color: var(--ns-accent); text-decoration: none; font-size: 13px; }
 .ns-director-media a.ns-gen-final:hover { text-decoration: underline; }
 /* 实时预览：与成片同宽同高（占住结果区），首个载荷到达时由 onFrame 清掉内联高度交给 CSS */
@@ -261,14 +1265,15 @@ body {
 .ns-director-idle-card.neo-gallery-gm-idle { padding-top: 0; }
 .ns-director-statusrow { flex: none; display: flex; align-items: center; gap: 12px; min-width: 0; }
 .ns-director-status { flex: 1 1 auto; min-width: 0; font-size: 12px; color: var(--ns-dim); overflow: hidden; text-overflow: ellipsis; white-space: pre; }
-.ns-gen-progress { height: 6px; background: #333; border-radius: 3px; overflow: hidden; margin-top: 8px; display: none; }
-.ns-gen-progress > div { height: 100%; width: 0; background: #7aa2ff; transition: width .4s; }
+.ns-gen-progress { height: 6px; background: var(--ns-border, #333); border-radius: 3px; overflow: hidden; margin-top: 8px; display: none; }
+.ns-gen-progress > div { height: 100%; width: 0; background: var(--ns-accent, #7aa2ff); transition: width .4s; }
 .ns-director-progress { flex: none; width: 220px; margin-top: 0; }
 /* 状态行空闲时一个字都没有：连行带间距整条撤走，方块上方那条空带就是它顶出来的（视频页同一招）。
    走 :has 而不在 JS 里翻 display——校验消息（「这一发缺首帧」）写的也是这一行 */
 .ns-director-card:has(.ns-director-status:empty) > .ns-director-statusrow { display: none; }
 
-/* 生成坞：居中浮动胶囊贴页底（与视频页 dock 同一档：980px 上限、8px 10px 内衬、悬浮投影）。
+/* 生成坞：居中浮动胶囊贴页底（与视频页 dock 同一档：980px 上限、8px 10px 内衬、不给投影，
+   与绘画页输入卡一样平贴在页面上）。
    时间轴在最上（块左上角勾选 = 本次跑哪几段），勾选结果写在下面一行；
    该段的时长与提示词一行，素材槽一行，参数与生成钮在最下。
    内衬/行距带 .ns-director-dock 两层特异：gallery.css 的 .neo-gallery-gm-composer 在运行时后注入 */
@@ -276,7 +1281,7 @@ body {
     position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%);
     z-index: 5; width: min(980px, calc(100% - 24px));
 }
-.ns-director-dock .ns-director-card { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; box-shadow: 0 14px 38px rgba(0, 0, 0, .5); }
+.ns-director-dock .ns-director-card { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; }
 .ns-director-card { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; }
 .ns-director-hintrow { flex: none; display: flex; align-items: center; gap: 8px; min-width: 0; }
 .ns-director-timeline { min-width: 0; }
@@ -314,19 +1319,19 @@ body {
 .ns-director-controls { gap: 6px; }
 /* 编辑器浮层里的次要按钮走外壳灰底（同排一排蓝底会把主行动压平）；
    主行动「保存并生成整片」保持半透明蓝，未保存确认条的蓝-红-灰语义色不在这一排里 */
-.neo-director-overlay :is(.neo-director-save, .neo-director-cancel, .neo-director-regen-run) { background: #2a2a2e; border-color: #444; color: #ddd; }
+.neo-director-overlay :is(.neo-director-save, .neo-director-cancel, .neo-director-regen-run) { background: var(--ns-field, #2a2a2e); border-color: var(--ns-field-bd, #444); color: var(--ns-fg, #ddd); }
 .ns-director-card .rs-btn { flex: none; height: 28px; padding: 0 12px; font-size: 12px; }
-.ns-director-card .ns-director-save { background: #2a2a2e; border-color: #444; color: #ddd; }
-.ns-director-card .ns-director-save:hover { background: #333338; border-color: #555; color: #fff; }
+.ns-director-card .ns-director-save { background: var(--ns-field, #2a2a2e); border-color: var(--ns-field-bd, #444); color: var(--ns-fg, #ddd); }
+.ns-director-card .ns-director-save:hover { background: var(--ns-field-hover, #333338); border-color: var(--ns-field-bd-hover, #555); color: var(--ns-fg-strong, #fff); }
 /* 未保存的改动：保存钮自己亮起来，别让用户带着没进配方的改动去生成 */
-.ns-director-card .ns-director-dirty { border-color: #4a7fd0; color: #cfe0ff; }
+.ns-director-card .ns-director-dirty { border-color: var(--ns-blue-4, #4a7fd0); color: var(--ns-primary-fg, #cfe0ff); }
 .ns-director-save[disabled] { opacity: .5; cursor: not-allowed; }
 /* 主行动按钮：走壳内半透明蓝（同技能页 Save / 设置页「保存并重启 ComfyUI」）。实心 #2f6fed 在满幅
    #17171b 灰底上是一块高饱和蓝板，把整行观感全压住；描边留饱和蓝 + 亮字，主行动仍是最显眼的控件 */
-.ns-director-card .ns-director-run { background: rgba(47, 111, 237, 0.18); border-color: #2f6fed; color: #cfe0ff; font-weight: 600; padding: 0 18px; flex: none; }
-.ns-director-card .ns-director-run:hover:not([disabled]) { background: rgba(47, 111, 237, 0.3); border-color: #3f7ffe; color: #fff; }
-.ns-director-card .ns-gen-cancel { flex: none; border-color: #9a3a3a; background: #5a1a1a; color: #f87171; }
-.ns-director-card .ns-gen-cancel:hover { background: #6a2a2a; color: #fff; }
+.ns-director-card .ns-director-run { background: var(--ns-background-rgba-47-111-237-18, rgba(47, 111, 237, 0.18)); border-color: var(--ns-primary, #2f6fed); color: var(--ns-primary-fg, #cfe0ff); font-weight: 600; padding: 0 18px; flex: none; }
+.ns-director-card .ns-director-run:hover:not([disabled]) { background: var(--ns-fill-primary-30, rgba(47, 111, 237, 0.3)); border-color: var(--ns-primary-hover, #3f7ffe); color: var(--ns-fg-strong, #fff); }
+.ns-director-card .ns-gen-cancel { flex: none; border-color: var(--ns-err-bd, #9a3a3a); background: var(--ns-err-deep, #5a1a1a); color: var(--ns-err-3, #f87171); }
+.ns-director-card .ns-gen-cancel:hover { background: var(--ns-err-bd2, #6a2a2a); color: var(--ns-fg-strong, #fff); }
 /* 坞上两枚胶囊（技能 / 分辨率）弹的是同一批共享表单（行版式是 .rs-gen-model-section 那套）：
    整幅档是标签在上、控件整行在下，六行约 500px 高，从胶囊弹出就把时间轴与该段行整个盖住。
    照 gallery.css 给素材库弹窗那套「宿主容器限定密度」的做法出一档共享版式：行是「标签定宽 84px +
@@ -343,7 +1348,7 @@ body {
 }
 .ns-director .ns-director-compact-form .rs-gen-model-section { display: flex; flex-direction: column; gap: 4px; }
 .ns-director .ns-director-compact-form .rs-config-row { display: flex; flex-direction: row; align-items: center; flex-wrap: wrap; gap: 6px; min-width: 0; }
-.ns-director .ns-director-compact-form .rs-config-row > .rs-form-label { flex: none; width: 84px; white-space: nowrap; margin-bottom: 0; font-size: 12px; color: #9aa4b2; }
+.ns-director .ns-director-compact-form .rs-config-row > .rs-form-label { flex: none; width: 84px; white-space: nowrap; margin-bottom: 0; font-size: 12px; color: var(--ns-color-9aa4b2-x, #9aa4b2); }
 .ns-director .ns-director-compact-form .rs-config-row .rs-model-select-box { flex: 1; min-width: 0; }
 /* 步数行与 LoRA 强度输入：prompts.css 的 .rs-form-input 是 width:100%，在 wrap 行里自己占满一整行 */
 .ns-director .ns-director-compact-form .rs-config-row > input.rs-form-input { flex: 1; min-width: 0; width: auto; }
@@ -355,7 +1360,7 @@ body {
 .ns-director .ns-director-compact-form .rs-gen-lora-row { flex-wrap: wrap; }
 /* 「+ 添加 LoRA」「显示全部模型」「保存整片参数」整行占位：与控件同排时白吃掉一列宽度，长模型名只剩一条窄缝 */
 .ns-director .ns-director-compact-form :is(.rs-gen-lora-add, .rs-model-scope-toggle, .ns-director-size-save) { flex: 0 0 100%; width: fit-content; height: 24px; font-size: 12px; }
-.ns-director-shared-res { flex: none; font-size: 12px; color: #9aa4b2; }
+.ns-director-shared-res { flex: none; font-size: 12px; color: var(--ns-color-9aa4b2, #9aa4b2); }
 /* 段块右上角那枚「⋯」弹的菜单：190px 的一列面板（与自定参数面板同一档密度）。两条都带 .ns-director 宿主才压得住：
    .rs-runtime-menu 基座 min-width 210px 会把这列撑宽，而 gallery.css 那条 .neo-gallery-gm-chip-panel
    （min(720px, 94vw)）在桌面端比 style.css 后注入、同特异，不带宿主就被它顶成整窗宽（菜单横着盖住时间轴） */
@@ -523,8 +1528,8 @@ body {
 
 /* ===== 素材库 / 配方弹窗：深色遮罩 + 居中卡片，最大化铺满窗口（js/core/lib-modal.js 建 DOM）
    z-index 在故事面板浮层（9845）与灯箱（9999）之下：弹窗里点开的大图要盖得住弹窗 ===== */
-.ns-libmodal { position: fixed; inset: 0; z-index: 9700; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.55); }
-.ns-libmodal-box { position: relative; display: flex; flex-direction: column; width: min(1180px, 94vw); height: min(860px, 90vh); min-width: 640px; background: #17171b; border: 1px solid #35353d; border-radius: 8px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6); overflow: hidden; }
+.ns-libmodal { position: fixed; inset: 0; z-index: 9700; display: flex; align-items: center; justify-content: center; background: var(--ns-scrim-7, rgba(0, 0, 0, 0.55)); }
+.ns-libmodal-box { position: relative; display: flex; flex-direction: column; width: min(1180px, 94vw); height: min(860px, 90vh); min-width: 640px; background: var(--ns-bg, #17171b); border: 1px solid var(--ns-border-4, #35353d); border-radius: 8px; box-shadow: 0 10px 40px var(--ns-scrim-8, rgba(0, 0, 0, 0.6)); overflow: hidden; }
 .ns-libmodal-maximized .ns-libmodal-box { position: fixed; inset: 0; width: auto; height: auto; border: none; border-radius: 0; }
 /* 素材库默认开在最小档 = 浮窗地板 640×400（js/core/lib-modal.js 的 MIN_W / MIN_H 同一口径）：
    这扇窗是「挑一张塞进编辑位」的取景窗，一屏铺满缩略图不是它要干的事；要看多几行用最大化（铺满整窗）
@@ -536,19 +1541,19 @@ body {
 /* 右缘调整条：只在浮窗时出现，改宽度（下限 640px，画廊顶栏与右侧表单都还在） */
 .ns-libmodal-resize { display: none; position: absolute; top: 0; bottom: 0; right: 0; width: 8px; cursor: ew-resize; touch-action: none; }
 .ns-libmodal-floated .ns-libmodal-resize { display: block; }
-.ns-libmodal-resize::after { content: ""; position: absolute; top: 45%; right: 2px; width: 2px; height: 10%; border-radius: 2px; background: rgba(255, 255, 255, 0.18); }
-.ns-libmodal-resize:hover::after { background: rgba(255, 255, 255, 0.38); }
-.ns-libmodal-titlebar { flex: none; display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: #202024; border-bottom: 1px solid #333; cursor: move; user-select: none; touch-action: none; }
-.ns-libmodal-title { flex: 1 1 96px; min-width: 0; font-size: 13px; color: #ddd; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ns-libmodal-resize::after { content: ""; position: absolute; top: 45%; right: 2px; width: 2px; height: 10%; border-radius: 2px; background: var(--ns-fill-6, rgba(255, 255, 255, 0.18)); }
+.ns-libmodal-resize:hover::after { background: var(--ns-fill-9, rgba(255, 255, 255, 0.38)); }
+.ns-libmodal-titlebar { flex: none; display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: var(--ns-panel, #202024); border-bottom: 1px solid var(--ns-border, #333); cursor: move; user-select: none; touch-action: none; }
+.ns-libmodal-title { flex: 1 1 96px; min-width: 0; font-size: 13px; color: var(--ns-fg, #ddd); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* 标题栏右侧插槽（js/core/lib-modal.js 的 setTitlebarExtra）：搜索框钉在这里，内容区就不必为它留一行。
    上限 460px：整屏弹窗里搜索框拉到整条标题栏那么长，眼睛找不到自己的输入落在哪 */
 .ns-libmodal-titlebar-slot { flex: 1 1 auto; min-width: 0; max-width: 460px; display: flex; align-items: center; gap: 8px; }
 .ns-libmodal-titlebar-slot:empty { display: none; }
 /* 标题栏整条是 cursor:move + 禁选（拖窗用的），插槽里的输入框要把「这是打字的地方」说回去 */
 .ns-libmodal-titlebar-slot input { user-select: text; cursor: text; }
-.ns-libmodal-btn { flex: none; cursor: pointer; background: transparent; border: 1px solid transparent; border-radius: 4px; color: #9aa4b0; padding: 4px; line-height: 0; }
-.ns-libmodal-btn:hover { color: #fff; background: rgba(255, 255, 255, 0.06); }
-.ns-libmodal-close:hover { color: #ff8a9a; }
+.ns-libmodal-btn { flex: none; cursor: pointer; background: transparent; border: 1px solid transparent; border-radius: 4px; color: var(--ns-dim-3, #9aa4b0); padding: 4px; line-height: 0; }
+.ns-libmodal-btn:hover { color: var(--ns-fg-strong, #fff); background: var(--ns-fill-1, rgba(255, 255, 255, 0.06)); }
+.ns-libmodal-close:hover { color: var(--ns-err-7, #ff8a9a); }
 .ns-libmodal-content { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 /* 弹窗里的画廊宿主：不留上内边距，粘性工具条用画廊侧栏的负边距贴齐宿主边 */
 .ns-libmodal-content .ns-gallery-host { flex: 1 1 auto; min-height: 0; height: auto; overflow: auto; padding: 0 10px 12px; }
@@ -562,16 +1567,16 @@ body {
 .ns-libmodal-content .ns-director-recipes { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 10px; }
 /* 弹窗滚动条：平时隐形，鼠标进入才显形（槽位照留，显隐不引起内容跳动） */
 .ns-libmodal-content .ns-gallery-host, .ns-director-recipes { scrollbar-width: thin; scrollbar-color: transparent transparent; }
-.ns-libmodal-content .ns-gallery-host:hover, .ns-director-recipes:hover { scrollbar-color: #555 transparent; }
+.ns-libmodal-content .ns-gallery-host:hover, .ns-director-recipes:hover { scrollbar-color: var(--ns-field-bd-hover, #555) transparent; }
 .ns-libmodal-content .ns-gallery-host::-webkit-scrollbar, .ns-director-recipes::-webkit-scrollbar { width: 8px; }
 .ns-libmodal-content .ns-gallery-host::-webkit-scrollbar-track, .ns-director-recipes::-webkit-scrollbar-track { background: transparent; }
 .ns-libmodal-content .ns-gallery-host::-webkit-scrollbar-thumb, .ns-director-recipes::-webkit-scrollbar-thumb { background: transparent; border-radius: 4px; }
-.ns-libmodal-content .ns-gallery-host:hover::-webkit-scrollbar-thumb, .ns-director-recipes:hover::-webkit-scrollbar-thumb { background: #555; }
+.ns-libmodal-content .ns-gallery-host:hover::-webkit-scrollbar-thumb, .ns-director-recipes:hover::-webkit-scrollbar-thumb { background: var(--ns-field-bd-hover, #555); }
 /* 底部取用条：卡片左上角勾选出现后落出，「取用」执行当前页签的取用目标 */
-.ns-libmodal-pickbar { flex: none; display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-top: 1px solid #333; background: #1b1b1f; }
-.ns-libmodal-pick-count { flex: 1; font-size: 12px; color: #9a9aa8; }
-.ns-libmodal-pick-use { background: rgba(47, 111, 237, 0.18); border-color: #2f6fed; color: #cfe0ff; }
-.ns-libmodal-pick-use:hover { background: rgba(47, 111, 237, 0.3); }
+.ns-libmodal-pickbar { flex: none; display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-top: 1px solid var(--ns-border, #333); background: var(--ns-tip-bg, #1b1b1f); }
+.ns-libmodal-pick-count { flex: 1; font-size: 12px; color: var(--ns-dim, #9a9aa8); }
+.ns-libmodal-pick-use { background: var(--ns-background-rgba-47-111-237-18-x, rgba(47, 111, 237, 0.18)); border-color: var(--ns-primary, #2f6fed); color: var(--ns-primary-fg, #cfe0ff); }
+.ns-libmodal-pick-use:hover { background: var(--ns-fill-primary-30, rgba(47, 111, 237, 0.3)); }
 /* 手机：素材库 / 配方弹窗铺满整窗 —— 640px 地板 + 94vw 的居中卡在一块手机上就是横向溢出；
    右缘调宽条与浮窗摆位是鼠标手势，触摸上拖不动，收掉（标题栏 ✕ 与 Esc 照旧在） */
 @media (max-width: 720px) {
@@ -598,7 +1603,6 @@ body {
     .ns-director { height: auto; min-height: 0; overflow: visible; }
     .ns-director-stage { min-height: 300px; padding-bottom: 0; }
     .ns-director-dock { position: static; width: auto; transform: none; }
-    .ns-director-dock .ns-director-card { box-shadow: none; }
 }
 /* 手机：绘画页这一档只管版式，整页高度跟着基础档的 height:100% 走。输入卡底行一行压不进一块手机：
    技能与自定参数在条内横滚，「生成」与「⋯」钉在最右端——视频页 dock 有这一条，绘画页原本只有
@@ -679,46 +1683,46 @@ body {
    #5090cc 蓝高亮、#1a3a5a 小蓝按钮，在素材页 / 设置页的灰底 + #7aa2ff 旁边就是另一套色。
    这里只在外壳层把弹窗色换成外壳色（.ns-skills 作用域），ComfyUI 里的技能弹窗与节点技能选择窗不动。 */
 .ns-skills { padding: 0; }
-.ns-skills .rs-skill-manager { width: 100%; height: 100%; border: none; border-radius: 0; box-shadow: none; background: #17171b; }
+.ns-skills .rs-skill-manager { width: 100%; height: 100%; border: none; border-radius: 0; box-shadow: none; background: var(--ns-bg, #17171b); }
 /* 引导页态没有标题条：顶栏 tab 已给页名，那一行只会重复；列表态才让它出现，兼作「← 引导页」的落点 */
-.ns-skills .rs-skill-manager-head { display: none; background: #202024; border-bottom-color: #333; }
+.ns-skills .rs-skill-manager-head { display: none; background: var(--ns-panel, #202024); border-bottom-color: var(--ns-border, #333); }
 .ns-skills-editing .rs-skill-manager-head { display: flex; cursor: default; }
 .ns-skills-back {
     flex: none; padding: 3px 8px;
     background: transparent; border: 1px solid transparent; border-radius: 4px;
-    color: #9a9aa8; font-size: 12px; cursor: pointer;
+    color: var(--ns-dim, #9a9aa8); font-size: 12px; cursor: pointer;
 }
-.ns-skills-back:hover { background: #2a2a2e; border-color: #444; color: #fff; }
-.ns-skills .rs-skill-manager-left { background: #1b1b1f; }
-.ns-skills .rs-skill-picker-search { background: #2a2a2e; border-color: #444; }
-.ns-skills .rs-skill-picker-search:focus { border-color: #7aa2ff; box-shadow: 0 0 0 2px rgba(122, 162, 255, 0.18); }
+.ns-skills-back:hover { background: var(--ns-field, #2a2a2e); border-color: var(--ns-field-bd, #444); color: var(--ns-fg-strong, #fff); }
+.ns-skills .rs-skill-manager-left { background: var(--ns-tip-bg, #1b1b1f); }
+.ns-skills .rs-skill-picker-search { background: var(--ns-field, #2a2a2e); border-color: var(--ns-field-bd, #444); }
+.ns-skills .rs-skill-picker-search:focus { border-color: var(--ns-accent, #7aa2ff); box-shadow: 0 0 0 2px var(--ns-fill-accent-18, rgba(122, 162, 255, 0.18)); }
 /* 列表行选中态对齐设置页 tab（.ns-settings-tab.active）：半透明蓝底 + 描边，不用弹窗的实心蓝 */
 .ns-skills .rs-skill-picker-item:hover,
-.ns-skills .rs-skill-picker-item.is-highlighted { background: #26262c; }
-.ns-skills .rs-skill-picker-item.is-selected { background: rgba(47, 111, 237, 0.16); box-shadow: inset 0 0 0 1px #2f6fed; }
-.ns-skills .rs-skill-manager-cat { color: #9a9aa8; }
-.ns-skills .rs-skill-manager-cat:hover { color: #c8c8d2; }
-.ns-skills .rs-skill-manager-cat.is-open { color: #fff; }
-.ns-skills .rs-skill-manager-split::after { background: #333; }
+.ns-skills .rs-skill-picker-item.is-highlighted { background: var(--ns-raised, #26262c); }
+.ns-skills .rs-skill-picker-item.is-selected { background: var(--ns-primary-soft, rgba(47, 111, 237, 0.16)); box-shadow: inset 0 0 0 1px var(--ns-primary, #2f6fed); }
+.ns-skills .rs-skill-manager-cat { color: var(--ns-dim, #9a9aa8); }
+.ns-skills .rs-skill-manager-cat:hover { color: var(--ns-fg-8, #c8c8d2); }
+.ns-skills .rs-skill-manager-cat.is-open { color: var(--ns-fg-strong, #fff); }
+.ns-skills .rs-skill-manager-split::after { background: var(--ns-border, #333); }
 .ns-skills .rs-skill-manager-split:hover::after,
-.ns-skills .rs-skill-manager-split.is-dragging::after { background: #7aa2ff; }
-.ns-skills .rs-skill-manager-right .rs-skill-modal { background: #17171b; }
-.ns-skills .rs-skill-modal-header { background: #202024; border-bottom-color: #333; }
-.ns-skills .rs-skill-detail-actions { background: #17171b; }
-.ns-skills .rs-skill-name-view:hover { background: #2a2a2e; border-color: #444; }
-.ns-skills .rs-skill-name-input { border-color: #7aa2ff; }
-.ns-skills .rs-skill-multiturn-chk { accent-color: #7aa2ff; }
+.ns-skills .rs-skill-manager-split.is-dragging::after { background: var(--ns-accent, #7aa2ff); }
+.ns-skills .rs-skill-manager-right .rs-skill-modal { background: var(--ns-bg, #17171b); }
+.ns-skills .rs-skill-modal-header { background: var(--ns-panel, #202024); border-bottom-color: var(--ns-border, #333); }
+.ns-skills .rs-skill-detail-actions { background: var(--ns-bg, #17171b); }
+.ns-skills .rs-skill-name-view:hover { background: var(--ns-field, #2a2a2e); border-color: var(--ns-field-bd, #444); }
+.ns-skills .rs-skill-name-input { border-color: var(--ns-accent, #7aa2ff); }
+.ns-skills .rs-skill-multiturn-chk { accent-color: var(--ns-accent, #7aa2ff); }
 /* 按钮：prompts.css 的 .rs-btn 是节点内小蓝按钮（#1a3a5a 底 / #60a5fa 字），页里换成外壳 .ns-btn 的灰底观感；
    Save / 测试换成设置页「保存并重启 ComfyUI」那枚主按钮的半透明蓝 */
-.ns-skills .rs-btn { background: #2a2a2e; border-color: #444; color: #ddd; }
-.ns-skills .rs-btn:hover { background: #333338; border-color: #555; color: #fff; }
+.ns-skills .rs-btn { background: var(--ns-field, #2a2a2e); border-color: var(--ns-field-bd, #444); color: var(--ns-fg, #ddd); }
+.ns-skills .rs-btn:hover { background: var(--ns-field-hover, #333338); border-color: var(--ns-field-bd-hover, #555); color: var(--ns-fg-strong, #fff); }
 .ns-skills .rs-gen-save,
-.ns-skills .rs-gen-test { background: rgba(47, 111, 237, 0.18); border-color: #2f6fed; color: #cfe0ff; }
+.ns-skills .rs-gen-test { background: var(--ns-background-rgba-47-111-237-18-x-x, rgba(47, 111, 237, 0.18)); border-color: var(--ns-primary, #2f6fed); color: var(--ns-primary-fg, #cfe0ff); }
 .ns-skills .rs-gen-save:hover,
-.ns-skills .rs-gen-test:hover { background: rgba(47, 111, 237, 0.3); }
-.ns-skills .rs-skill-dropdown-footer { background: #1b1b1f; border-top-color: #333; }
-.ns-skills .rs-skill-footer-btn { border-color: #444 !important; color: #9a9aa8 !important; }
-.ns-skills .rs-skill-footer-btn:hover { background: #26262c !important; border-color: #555 !important; color: #fff !important; }
+.ns-skills .rs-gen-test:hover { background: var(--ns-fill-primary-30, rgba(47, 111, 237, 0.3)); }
+.ns-skills .rs-skill-dropdown-footer { background: var(--ns-tip-bg, #1b1b1f); border-top-color: var(--ns-border, #333); }
+.ns-skills .rs-skill-footer-btn { border-color: var(--ns-field-bd, #444) !important; color: var(--ns-dim, #9a9aa8) !important; }
+.ns-skills .rs-skill-footer-btn:hover { background: var(--ns-raised, #26262c) !important; border-color: var(--ns-field-bd-hover, #555) !important; color: var(--ns-fg-strong, #fff) !important; }
 /* 技能详情底部操作条：基础 .rs-btn 是 flex:1（窄弹窗底部按钮行用），满幅主区里不拉伸成长条 */
 .ns-skills .rs-skill-detail-actions .rs-btn { flex: none; padding: 5px 16px; }
 
@@ -726,34 +1730,34 @@ body {
    两栏之间裂成两块互不相干的板，宽窗口下内容区还整幅铺满、下半页全空 */
 .ns-settings {
     display: flex; align-items: stretch; height: 100%;
-    border: 1px solid #333; border-radius: 8px; background: #202024; overflow: hidden;
+    border: 1px solid var(--ns-border, #333); border-radius: 8px; background: var(--ns-panel, #202024); overflow: hidden;
 }
 .ns-settings-tabs {
     display: flex; flex-direction: column; gap: 4px; flex: none;
     width: 150px; padding: 10px 8px;
-    border-right: 1px solid #2c2c33; background: #1b1b1f;
+    border-right: 1px solid var(--ns-border-3, #2c2c33); background: var(--ns-tip-bg, #1b1b1f);
 }
 /* 左栏段间线：十项 tab 平铺时没有层级，用一条细线切段。线里不写字，界面上的行数
    就等于设定项的数目；线与 tab 平级放进 .ns-settings-tabs，tab 的 [data-key] 选择器与深链都不受影响 */
-.ns-settings-sep { height: 1px; margin: 4px 8px; background: #2c2c33; }
+.ns-settings-sep { height: 1px; margin: 4px 8px; background: var(--ns-border-3, #2c2c33); }
 .ns-settings-tab {
     text-align: left; padding: 7px 10px;
     background: transparent; border: none; border-radius: 6px;
-    color: #b8b8c2; font-size: 13px; cursor: pointer;
+    color: var(--ns-fg-6, #b8b8c2); font-size: 13px; cursor: pointer;
 }
-.ns-settings-tab:hover { background: #26262c; color: #fff; }
-.ns-settings-tab.active { background: rgba(47, 111, 237, 0.16); color: #fff; box-shadow: inset 2px 0 0 #2f6fed; }
+.ns-settings-tab:hover { background: var(--ns-raised, #26262c); color: var(--ns-fg-strong, #fff); }
+.ns-settings-tab.active { background: var(--ns-primary-soft, rgba(47, 111, 237, 0.16)); color: var(--ns-fg-strong, #fff); box-shadow: inset 2px 0 0 var(--ns-primary, #2f6fed); }
 .ns-settings-content { flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 0; overflow: auto; padding: 14px 18px; }
 .ns-settings-section { padding: 0; }
-.ns-settings-section h3 { margin: 0 0 8px; font-size: 15px; color: #fff; }
+.ns-settings-section h3 { margin: 0 0 8px; font-size: 15px; color: var(--ns-fg-strong, #fff); }
 /* 手机连接：二维码 + 配对链接 + 倒计时状态 */
-.ns-pair-hint { font-size: 12px; color: #9a9aa8; line-height: 1.7; margin-bottom: 10px; }
-.ns-pair-qr { display: flex; justify-content: center; background: #fff; border-radius: 10px; padding: 8px; width: fit-content; }
+.ns-pair-hint { font-size: 12px; color: var(--ns-dim, #9a9aa8); line-height: 1.7; margin-bottom: 10px; }
+.ns-pair-qr { display: flex; justify-content: center; background: var(--ns-fg-strong, #fff); border-radius: 10px; padding: 8px; width: fit-content; }
 .ns-pair-qr svg { width: 190px; height: 190px; display: block; }
 .ns-pair-qr:empty { display: none; }
 .ns-pair-row { display: flex; gap: 8px; align-items: center; margin-top: 10px; }
-.ns-pair-url { flex: 1; min-width: 0; font-size: 12px; font-family: ui-monospace, Consolas, monospace; padding: 7px 9px; border: 1px solid #3a3a42; border-radius: 6px; background: #16161a; color: #cfcfd8; }
-.ns-pair-status { margin-top: 8px; font-size: 12px; color: #9a9aa8; line-height: 1.7; }
+.ns-pair-url { flex: 1; min-width: 0; font-size: 12px; font-family: ui-monospace, Consolas, monospace; padding: 7px 9px; border: 1px solid var(--ns-p-bd-3a3a42, #3a3a42); border-radius: 6px; background: var(--ns-panel-2, #16161a); color: var(--ns-fg-3, #cfcfd8); }
+.ns-pair-status { margin-top: 8px; font-size: 12px; color: var(--ns-dim, #9a9aa8); line-height: 1.7; }
 .ns-pair-refresh { margin-top: 10px; }
 /* native hidden 要真收起来：上面几条给了 display，author 规则压过 UA 的 [hidden] */
 .ns-pair-qr[hidden], .ns-pair-row[hidden], .ns-pair-refresh[hidden] { display: none; }
@@ -768,6 +1772,8 @@ body {
    标签与输入框脱节，视线要横跨两屏找对应关系；日志区不限宽 */
 .ns-settings .rs-remote-form,
 .ns-settings .rs-gen-settings,
+.ns-settings .ns-theme,
+
 .ns-settings .ns-lang,
 .ns-settings .ns-kernel,
 .ns-settings .ns-launch-row,
@@ -787,13 +1793,13 @@ body {
     .ns-settings-tabs {
         flex-direction: row; width: auto; gap: 4px; padding: 6px;
         overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain;
-        border-right: none; border-bottom: 1px solid #2c2c33;
+        border-right: none; border-bottom: 1px solid var(--ns-border-3, #2c2c33);
     }
     .ns-settings-tabs::-webkit-scrollbar { display: none; }
     .ns-settings-tab { padding: 6px 10px; white-space: nowrap; }
     /* 横滚条里的段间线退化成 1px 竖线：不撑高这一行，随条一起滚，不与 tab 抢位置 */
     .ns-settings-sep { flex: none; width: 1px; height: auto; align-self: stretch; margin: 6px 2px; }
-    .ns-settings-tab.active { box-shadow: inset 0 -2px 0 #2f6fed; }
+    .ns-settings-tab.active { box-shadow: inset 0 -2px 0 var(--ns-primary, #2f6fed); }
     .ns-settings-content { padding: 10px 12px; }
     .ns-kernel { flex-wrap: wrap; gap: 8px; }
     .ns-launch-row { flex-direction: column; align-items: stretch; gap: 4px; }
@@ -804,30 +1810,30 @@ body {
 
 /* 启动设置：便携 exe 的 ComfyUI 根目录 / 解释器 / 端口（只有桌面端服务出这个 tab） */
 /* 面板顶部：内核状态 + 启停两枚按钮，此刻做不了的那枚禁用 */
-.ns-kernel { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; padding: 10px 12px; border: 1px solid #35353d; border-radius: 6px; background: #232328; }
-.ns-kernel-state { flex: 1; font-size: 12px; color: #9a9aa8; }
-.ns-kernel-run { color: #7bc47f; }
+.ns-kernel { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; padding: 10px 12px; border: 1px solid var(--ns-border-4, #35353d); border-radius: 6px; background: var(--ns-sunken, #232328); }
+.ns-kernel-state { flex: 1; font-size: 12px; color: var(--ns-dim, #9a9aa8); }
+.ns-kernel-run { color: var(--ns-ok, #7bc47f); }
 .ns-kernel-actions { display: flex; gap: 8px; flex: none; }
-.ns-kernel-stop:not([disabled]) { color: #ff8a9a; }
-.ns-launch-group { margin: 14px 0 6px; font-size: 11px; font-weight: 600; letter-spacing: .4px; color: #8f8f9a; }
+.ns-kernel-stop:not([disabled]) { color: var(--ns-err-7, #ff8a9a); }
+.ns-launch-group { margin: 14px 0 6px; font-size: 11px; font-weight: 600; letter-spacing: .4px; color: var(--ns-faint, #8f8f9a); }
 .ns-launch-row { display: flex; align-items: center; gap: 10px; }
 .ns-launch-row + .ns-launch-row { margin-top: 10px; }
-.ns-launch-label { font-size: 12px; color: #a9a9b6; width: 122px; flex: none; display: flex; align-items: center; gap: 6px; }
+.ns-launch-label { font-size: 12px; color: var(--ns-dim-6, #a9a9b6); width: 122px; flex: none; display: flex; align-items: center; gap: 6px; }
 /* ⓘ：悬停 / 键盘聚焦给出这一行的前提条件与生效方式（内容在 data-tip 里） */
 .ns-info {
     position: relative;
     flex: none;
     width: 14px; height: 14px;
-    border: 1px solid #6f6f7a; border-radius: 50%;
+    border: 1px solid var(--ns-faint-2, #6f6f7a); border-radius: 50%;
     font-size: 10px; font-style: italic; line-height: 13px; text-align: center;
-    color: #9a9aa6; cursor: help;
+    color: var(--ns-color-9a9aa6, #9a9aa6); cursor: help;
 }
 .ns-info::after {
     content: attr(data-tip);
     position: absolute; left: -6px; top: 19px; z-index: 40;
     width: 300px; max-width: 60vw; padding: 8px 10px;
-    background: #1b1b1f; border: 1px solid #3a3a42; border-radius: 6px;
-    font-size: 11px; font-style: normal; line-height: 1.7; color: #cfcfd8;
+    background: var(--ns-tip-bg, #1b1b1f); border: 1px solid var(--ns-background-3a3a42, #3a3a42); border-radius: 6px;
+    font-size: 11px; font-style: normal; line-height: 1.7; color: var(--ns-fg-3, #cfcfd8);
     white-space: pre-line; text-align: left;
     visibility: hidden; pointer-events: none;
 }
@@ -835,40 +1841,46 @@ body {
 .ns-launch-input {
     flex: 1;
     min-width: 0;
-    background: #2a2a2e;
-    border: 1px solid #444;
-    color: #eee;
+    background: var(--ns-field, #2a2a2e);
+    border: 1px solid var(--ns-field-bd, #444);
+    color: var(--ns-fg-2, #eee);
     font-size: 13px;
     padding: 6px 8px;
     border-radius: 4px;
 }
-.ns-launch-status { font-size: 12px; color: #7aa2ff; margin-bottom: 12px; white-space: pre-wrap; }
-.ns-launch-listen option { background: #2a2a2e; color: #eee; }
-.ns-launch-bad { color: #ff8a8a; }
+.ns-launch-status { font-size: 12px; color: var(--ns-accent, #7aa2ff); margin-bottom: 12px; white-space: pre-wrap; }
+.ns-launch-listen option { background: var(--ns-field, #2a2a2e); color: var(--ns-fg-2, #eee); }
+.ns-launch-bad { color: var(--ns-err, #ff8a8a); }
 .ns-launch-actions { display: flex; gap: 10px; margin-top: 14px; }
-.ns-launch-info { margin-top: 12px; font-size: 11px; color: #8f8f9a; }
+.ns-launch-info { margin-top: 12px; font-size: 11px; color: var(--ns-faint, #8f8f9a); }
 /* 远程模式：根目录 / 解释器 / 端口 / 局域网监听都在远端那台机器上设，本机这几行只读。
    逐元素降透明度（不整行 opacity），ⓘ 的悬停说明在灰掉的行里也要读得清 */
-.ns-launch-remote-off .ns-launch-label { color: #6f6f7a; }
-.ns-launch-remote-off .ns-launch-input { background: #232327; color: #8f8f9a; }
+.ns-launch-remote-off .ns-launch-label { color: var(--ns-faint-2, #6f6f7a); }
+.ns-launch-remote-off .ns-launch-input { background: var(--ns-background-232327, #232327); color: var(--ns-faint, #8f8f9a); }
 .ns-launch-remote-off .ns-btn { pointer-events: none; opacity: 0.45; }
-.ns-launch-remote-off .ns-info { border-color: #55555f; color: #7f7f8a; }
+.ns-launch-remote-off .ns-info { border-color: var(--ns-line-strong, #55555f); color: var(--ns-faint-3, #7f7f8a); }
 /* 界面语言：单选即选即落盘并整页刷新，提示说明刷新范围 */
-.ns-lang-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #ddd; cursor: pointer; }
+.ns-lang-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ns-fg, #ddd); cursor: pointer; }
 .ns-lang-row + .ns-lang-row { margin-top: 8px; }
-.ns-lang-hint { margin-top: 12px; font-size: 11px; color: #8f8f9a; }
+.ns-lang-hint { margin-top: 12px; font-size: 11px; color: var(--ns-faint, #8f8f9a); }
+/* 界面主题：单选即选即生效（配色是纯 CSS 级联，没有要重建的模块文案），提示说明生效范围 */
+.ns-theme-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ns-fg, #ddd); cursor: pointer; }
+.ns-theme-row + .ns-theme-row { margin-top: 8px; }
+.ns-theme-status { margin-top: 12px; font-size: 12px; color: var(--ns-fg-2, #eee); }
+.ns-theme-hint { margin-top: 6px; font-size: 11px; color: var(--ns-faint, #8f8f9a); }
+
 .ns-btn {
-    background: #2a2a2e;
-    border: 1px solid #444;
-    color: #ddd;
+    background: var(--ns-field, #2a2a2e);
+    border: 1px solid var(--ns-field-bd, #444);
+    color: var(--ns-fg, #ddd);
     font-size: 12px;
     padding: 6px 12px;
     border-radius: 4px;
     cursor: pointer;
 }
-.ns-btn:hover { background: #333338; border-color: #555; }
+.ns-btn:hover { background: var(--ns-field-hover, #333338); border-color: var(--ns-field-bd-hover, #555); }
 .ns-btn:disabled { opacity: 0.5; cursor: default; }
-.ns-launch-apply { background: rgba(47, 111, 237, 0.18); border-color: #2f6fed; color: #cfe0ff; }
+.ns-launch-apply { background: var(--ns-background-rgba-47-111-237-18-x-x-x, rgba(47, 111, 237, 0.18)); border-color: var(--ns-primary, #2f6fed); color: var(--ns-primary-fg, #cfe0ff); }
 
 /* 日志页：内核那块 + 桌面端那块，tab 激活时轮询 /neo_studio/log；日志区占满主区剩余空间 */
 .ns-log-section { flex: 1; display: flex; flex-direction: column; min-height: 0; }
@@ -876,18 +1888,18 @@ body {
 .ns-log-copy { flex: none; }
 .ns-log-srcs { flex: none; margin-left: auto; display: flex; gap: 6px; }
 .ns-log-src-btn { font-size: 11px; padding: 3px 9px; }
-.ns-log-src-btn.is-on { background: rgba(47, 111, 237, 0.18); border-color: #2f6fed; color: #cfe0ff; }
-.ns-log-src { color: #7aa2ff; }
+.ns-log-src-btn.is-on { background: var(--ns-background-rgba-47-111-237-18-x-x-x-x, rgba(47, 111, 237, 0.18)); border-color: var(--ns-primary, #2f6fed); color: var(--ns-primary-fg, #cfe0ff); }
+.ns-log-src { color: var(--ns-accent, #7aa2ff); }
 .ns-log {
     flex: 1;
     min-height: 0;
     overflow: auto;
     margin: 0;
-    background: #111214;
-    border: 1px solid #2a2a30;
+    background: var(--ns-code, #111214);
+    border: 1px solid var(--ns-p-bd-2a2a30, #2a2a30);
     border-radius: 6px;
     padding: 10px 12px;
-    color: #cfcfcf;
+    color: var(--ns-fg-4, #cfcfcf);
     font: 12px/1.5 Consolas, Menlo, monospace;
     white-space: pre-wrap;
     /* 桌面壳 pywebview 默认 text_select=False，注入的 body{user-select:none;cursor:default}
@@ -922,7 +1934,7 @@ body {
 .ns-launch-input:focus-visible,
 .neo-gallery-search-container input:focus-visible,
 .neo-gallery-search-container select:focus-visible {
-    outline: 2px solid #7aa2ff;
+    outline: 2px solid var(--ns-accent, #7aa2ff);
     outline-offset: 2px;
 }
 /* 智能体偏好（设置页一栏）：短字段两列，两条长文本，开关与保存收在整行下沿。
@@ -943,7 +1955,7 @@ body {
 .ns-prefs-check .rs-form-label { margin-bottom: 0; }
 .ns-prefs-check .rs-form-input { width: auto; }
 .ns-prefs-save { width: auto; padding: 6px 20px; justify-self: start; }
-.ns-prefs-note { grid-column: 1 / -1; font-size: 12px; color: #9a9aa8; }
+.ns-prefs-note { grid-column: 1 / -1; font-size: 12px; color: var(--ns-dim, #9a9aa8); }
 
 /* 智能体页：面板就是界面本身，一栏居中，结果与采样动画都铺在面板里（中间舞台与分隔条已删）。
    1280px 封顶居中：更宽的窗口两边留白，正文行宽也该收在这一档 */
@@ -964,12 +1976,12 @@ body {
    不再把整页钉死在 1020px 居中、两边各空出一屏 */
 .ns-home-hero, .ns-home-inner { max-width: clamp(1020px, calc(64vw + 248px), 1560px); margin-inline: auto; }
 .ns-home-hero { text-align: center; padding: 16px 0 8px; }
-.ns-home-hero h1 { margin: 0 0 8px; font-size: 27px; font-weight: 700; color: #fff; }
+.ns-home-hero h1 { margin: 0 0 8px; font-size: 27px; font-weight: 700; color: var(--ns-fg-strong, #fff); }
 .ns-home-accent { color: var(--ns-accent); }
 .ns-home-hero p { margin: 0 0 18px; color: var(--ns-dim); }
 .ns-home-cta {
     border: 1px solid var(--ns-primary); border-radius: 8px;
-    background: var(--ns-primary); color: #fff;
+    background: var(--ns-primary); color: var(--ns-on-accent, #fff);
     font-size: 14px; padding: 8px 22px; cursor: pointer;
 }
 .ns-home-cta:hover { background: var(--ns-primary-hover); }
@@ -995,7 +2007,7 @@ body {
     background: var(--ns-primary-soft); color: var(--ns-accent);
 }
 .ns-home-card-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-.ns-home-card-title { font-size: 15px; font-weight: 600; color: #fff; }
+.ns-home-card-title { font-size: 15px; font-weight: 600; color: var(--ns-fg-strong, #fff); }
 .ns-home-card-sub {
     font-size: 12px; color: var(--ns-dim);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -1023,7 +2035,7 @@ body {
     padding: 5px 6px 8px;
     background: var(--ns-panel);
     border: 1px solid var(--ns-border); border-radius: 12px;
-    box-shadow: 0 14px 34px rgba(0, 0, 0, .45);
+    box-shadow: 0 14px 34px var(--ns-scrim-5, rgba(0, 0, 0, .45));
     overflow: hidden;
     animation: ns-home-quick-in .16s ease-out;
 }
@@ -1050,7 +2062,7 @@ body {
     background: var(--ns-primary-soft); color: var(--ns-accent);
 }
 .ns-home-quick-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.ns-home-quick-name { font-size: 13px; font-weight: 600; color: #fff; }
+.ns-home-quick-name { font-size: 13px; font-weight: 600; color: var(--ns-fg-strong, #fff); }
 /* 两行字整行读完：窄列里换行，不截断（截断就是把一条入口读成半句话） */
 .ns-home-quick-sub { font-size: 11px; color: var(--ns-dim); overflow-wrap: break-word; }
 /* 手机档顶栏是一条可横滚的页签：单列宽收一档，这一列不许比屏宽 */
@@ -1077,7 +2089,7 @@ body {
     width: fit-content; max-width: 100%; margin: 0 0 14px auto;
     display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
     background: var(--ns-bg); border: 1px solid var(--ns-border); border-radius: 10px;
-    padding: 8px 10px; box-shadow: 0 10px 26px rgba(0, 0, 0, .35);
+    padding: 8px 10px; box-shadow: 0 10px 26px var(--ns-scrim-2, rgba(0, 0, 0, .35));
 }
 /* 「完成」就是栏里这一行末尾的那一枚：跟栏一起钉住，栏收成小组后它自然贴着右端 */
 .ns-home-edit-bar .ns-home-edit-entry { position: static; }
@@ -1275,7 +2287,7 @@ body {
 }
 .ns-video-clip { min-width: 0; background: var(--ns-panel); border: 1px solid var(--ns-border); border-radius: 10px; overflow: hidden; }
 /* 竖屏成片（768×1344 那档）满宽铺满会长成两屏高，整页舞台一路滚到底：限高让画面居中、两侧留黑，卡片与横屏同高 */
-.ns-video-player { display: block; width: 100%; max-height: min(62vh, 620px); background: #000; }
+.ns-video-player { display: block; width: 100%; max-height: min(62vh, 620px); background: var(--ns-black, #000); }
 .ns-video-clip-meta { display: flex; align-items: center; gap: 10px; padding: 6px 10px; font-size: 12px; color: var(--ns-dim); }
 .ns-video-clip-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ns-video-open { margin-left: auto; flex: none; color: var(--ns-accent); font-size: 12px; }
@@ -1304,12 +2316,11 @@ body {
     position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%);
     z-index: 5; width: min(980px, calc(100% - 32px));
 }
-/* 卡片外观（壳 / 边框 / 焦点框）由会话页的 .neo-gallery-gm-composer 提供，这里只加浮动投影，
-   并把内衬与行距收到编辑页那一档（gallery.css 的 12px 内衬 / 8px 行距在运行时后注入，
+/* 卡片外观（壳 / 边框 / 焦点框）由会话页的 .neo-gallery-gm-composer 提供，投影不给——与绘画页输入卡
+   一样平贴在页面上；这里只把内衬与行距收到编辑页那一档（gallery.css 的 12px 内衬 / 8px 行距在运行时后注入，
    这条带 .ns-video-dock 两层特异才压得过它） */
 .ns-video-dock .ns-video-card {
     display: flex; flex-direction: column; gap: 8px; padding: 8px 10px;
-    box-shadow: 0 14px 38px rgba(0, 0, 0, .5);
 }
 .ns-video-head { display: flex; align-items: center; gap: 12px; }
 .ns-video-status { flex: 1 1 auto; min-width: 0; font-size: 12px; color: var(--ns-dim); overflow: hidden; text-overflow: ellipsis; white-space: pre; }
@@ -1356,16 +2367,16 @@ body {
    首帧画面靠 preload="metadata" 拉，没拉到就是黑底；音频没有画面，只有居中的类型图标 + 方块 title 里的文件名 */
 :is(.ns-video-card, .ns-director-card) .ns-slot-media {
     position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
-    border-radius: 5px; background: #000; pointer-events: none;
+    border-radius: 5px; background: var(--ns-black, #000); pointer-events: none;
 }
 :is(.ns-video-card, .ns-director-card) .ns-slot-audio {
     position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-    border-radius: 5px; color: var(--ns-text-3, #9a9184); background: var(--ns-sunken, rgba(232, 226, 212, 0.07));
+    border-radius: 5px; color: var(--ns-dim-7, #9a9184); background: var(--ns-background-rgba-232-226-212-07, rgba(232, 226, 212, 0.07));
 }
 /* 视频那一枚的类型角标：缩略图上它和一张静图长得一样；白图标压不住任意封面，给它一层黑描影 */
 :is(.ns-video-card, .ns-director-card) .ns-slot-kind {
-    position: absolute; left: 4px; bottom: 3px; display: flex; color: #fff;
-    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.85)); pointer-events: none;
+    position: absolute; left: 4px; bottom: 3px; display: flex; color: var(--ns-fg-strong, #fff);
+    filter: drop-shadow(0 1px 2px var(--ns-scrim-11, rgba(0, 0, 0, 0.85))); pointer-events: none;
 }
 .ns-slot-thumb { position: relative; min-width: 0; aspect-ratio: 1; overflow: hidden; border-radius: 4px; }
 .ns-slot-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -1460,14 +2471,14 @@ body {
 .ns-canvas-project-btn { flex: none; display: inline-flex; align-items: center; gap: 6px; max-width: 190px;
     height: 28px; padding: 0 8px; border-radius: 6px; border: 1px solid var(--ns-field-bd);
     background: var(--ns-field); color: var(--ns-fg); font: inherit; cursor: pointer; }
-.ns-canvas-project-btn:hover { border-color: var(--ns-field-bd-hover); background: var(--ns-field-hover); color: #fff; }
+.ns-canvas-project-btn:hover { border-color: var(--ns-field-bd-hover); background: var(--ns-field-hover); color: var(--ns-fg-strong, #fff); }
 .ns-canvas-project-btn[aria-expanded="true"] { border-color: var(--ns-primary); background: var(--ns-primary-soft); color: var(--ns-primary-fg); }
 .ns-canvas-project-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ns-canvas-project-caret { flex: none; display: inline-flex; transform: rotate(90deg); }
 .ns-canvas-project-btn[aria-expanded="true"] .ns-canvas-project-caret { transform: rotate(-90deg); }
 .ns-canvas-project-panel { display: none; position: fixed; z-index: 30; flex-direction: column; gap: 2px;
     min-width: 220px; max-height: 320px; overflow: auto; padding: 4px; border-radius: 8px;
-    border: 1px solid var(--ns-border); background: var(--ns-panel); box-shadow: 0 6px 20px rgba(0, 0, 0, .45); }
+    border: 1px solid var(--ns-border); background: var(--ns-panel); box-shadow: 0 6px 20px var(--ns-scrim-5, rgba(0, 0, 0, .45)); }
 .ns-canvas-project-panel-open { display: flex; }
 .ns-canvas-project-row { display: flex; align-items: center; gap: 6px; padding: 2px; border-radius: 6px; }
 .ns-canvas-project-row:hover { background: var(--ns-field-hover); }
@@ -1481,7 +2492,7 @@ body {
 .ns-canvas-project-new { width: 100%; justify-content: flex-start; gap: 8px; white-space: nowrap;
     margin-top: 2px; border-top: 1px solid var(--ns-border); border-radius: 0 0 6px 6px; }
 .ns-canvas-tool { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 28px; padding: 0 8px; border-radius: 6px; border: 1px solid var(--ns-field-bd); background: var(--ns-field); color: var(--ns-fg); font: inherit; cursor: pointer; }
-.ns-canvas-tool:hover { border-color: var(--ns-field-bd-hover); background: var(--ns-field-hover); color: #fff; }
+.ns-canvas-tool:hover { border-color: var(--ns-field-bd-hover); background: var(--ns-field-hover); color: var(--ns-fg-strong, #fff); }
 /* 没有可撤销 / 可重做时那两枚是灰的：灰态不能跟着 hover 亮起来，亮了就是点了也没反应 */
 .ns-canvas-tool:disabled { opacity: .45; cursor: default; }
 .ns-canvas-tool:disabled:hover { border-color: var(--ns-field-bd); background: var(--ns-field); color: var(--ns-fg); }
@@ -1490,7 +2501,7 @@ body {
 /* 「加节点」下拉菜单：position: fixed 才不被工具条的横向滚动裁掉，落点在 openAddMenu 里照钮的视口矩形算。
    菜单里的钮就是工具条那枚钮，只是多写一行名字 */
 .ns-canvas-add-menu { position: fixed; display: none; z-index: 30; flex-direction: column; gap: 2px; min-width: 148px;
-    padding: 4px; border-radius: 8px; border: 1px solid var(--ns-border); background: var(--ns-panel); box-shadow: 0 6px 20px rgba(0, 0, 0, .45); }
+    padding: 4px; border-radius: 8px; border: 1px solid var(--ns-border); background: var(--ns-panel); box-shadow: 0 6px 20px var(--ns-scrim-5, rgba(0, 0, 0, .45)); }
 .ns-canvas-add-menu-open { display: flex; }
 /* 菜单里的一行是图标 + 名字：图标不跟着文字缩，名字打在图标右边，长名字收省略号（min-width 撑住行宽） */
 .ns-canvas-add-item { width: 100%; justify-content: flex-start; gap: 8px; white-space: nowrap; }
@@ -1502,18 +2513,18 @@ body {
 .ns-canvas-stage:focus-visible { border-color: var(--ns-primary); }
 .ns-canvas-stage.ns-canvas-grabbing { cursor: grabbing; }
 .ns-canvas-stage.ns-canvas-marqueeing { cursor: crosshair; }
-.ns-canvas-grid { position: absolute; inset: 0; background-image: radial-gradient(circle, #3a3a44 1.15px, transparent 1.35px); }
-.ns-canvas-grid-fine { background-image: radial-gradient(circle, #3a3a44 .8px, transparent .95px); }
+.ns-canvas-grid { position: absolute; inset: 0; background-image: radial-gradient(circle, var(--ns-hover, #3a3a44) 1.15px, transparent 1.35px); }
+.ns-canvas-grid-fine { background-image: radial-gradient(circle, var(--ns-hover, #3a3a44) .8px, transparent .95px); }
 .ns-canvas-grid-lines, .ns-canvas-grid-lines-fine {
-    background-image: linear-gradient(to right, #2e2e36 1px, transparent 1px), linear-gradient(to bottom, #2e2e36 1px, transparent 1px);
+    background-image: linear-gradient(to right, var(--ns-field-2, #2e2e36) 1px, transparent 1px), linear-gradient(to bottom, var(--ns-field-2, #2e2e36) 1px, transparent 1px);
 }
-.ns-canvas-grid-lines-fine { background-image: linear-gradient(to right, #26262d 1px, transparent 1px), linear-gradient(to bottom, #26262d 1px, transparent 1px); }
+.ns-canvas-grid-lines-fine { background-image: linear-gradient(to right, var(--ns-background-image-26262d, #26262d) 1px, transparent 1px), linear-gradient(to bottom, var(--ns-background-image-26262d-x, #26262d) 1px, transparent 1px); }
 .ns-canvas-grid-blank { background-image: none; }
 .ns-canvas-world { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
 /* svg 自己只占 1px 见方：连线全画在世界坐标里，靠 overflow: visible 溢出这一格 */
 .ns-canvas-links { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; }
 .ns-canvas-nodes { position: absolute; left: 0; top: 0; width: 0; height: 0; }
-.ns-canvas-line { fill: none; stroke: #6b7280; stroke-width: 1.5; vector-effect: non-scaling-stroke; pointer-events: none; }
+.ns-canvas-line { fill: none; stroke: var(--ns-faint-6, #6b7280); stroke-width: 1.5; vector-effect: non-scaling-stroke; pointer-events: none; }
 .ns-canvas-line-hit { fill: none; stroke: transparent; stroke-width: 16; vector-effect: non-scaling-stroke; pointer-events: stroke; cursor: pointer; }
 .ns-canvas-line-on { stroke: var(--ns-accent); }
 .ns-canvas-line-hit:hover + .ns-canvas-line { stroke: var(--ns-accent); }
@@ -1526,27 +2537,27 @@ body {
    栏与徽标按 1/zoom 反缩放（--ns-canvas-inv 由 applyViewport 落），缩到很小时也按得中 */
 /* 卡上按下拖就是拖这一张节点：正文与图片一律不可选，浏览器不能把卡上的文字选走当成拖拽对象
    （要打字与选字的地方在下面单独抬回可选） */
-.ns-canvas-node { position: absolute; border-radius: 10px; border: 1px solid var(--ns-border-soft); background: var(--ns-panel); box-shadow: 0 2px 10px rgba(0, 0, 0, .35); user-select: none; }
+.ns-canvas-node { position: absolute; border-radius: 10px; border: 1px solid var(--ns-border-soft); background: var(--ns-panel); box-shadow: 0 2px 10px var(--ns-scrim-2, rgba(0, 0, 0, .35)); user-select: none; }
 .ns-canvas-node-on { border-color: var(--ns-primary); }
 .ns-canvas-node-drop { border-color: var(--ns-accent); box-shadow: 0 0 0 2px var(--ns-primary-soft); }
 /* 停用的那一张：整张压暗、左上角挂「已停用」徽标 —— 出图、出片与整列出片都跳过它 */
 .ns-canvas-node-off { opacity: .55; }
 .ns-canvas-node-off .ns-canvas-node-tag { color: var(--ns-dim); }
-.ns-canvas-node-tag { position: absolute; left: 8px; top: 8px; z-index: 3; padding: 2px 7px; border-radius: 6px; background: rgba(8, 9, 12, .72); color: var(--ns-accent); font-size: 12px; pointer-events: none; transform: scale(var(--ns-canvas-inv, 1)); transform-origin: 0 0; }
+.ns-canvas-node-tag { position: absolute; left: 8px; top: 8px; z-index: 3; padding: 2px 7px; border-radius: 6px; background: var(--ns-scrim-13, rgba(8, 9, 12, .72)); color: var(--ns-accent); font-size: 12px; pointer-events: none; transform: scale(var(--ns-canvas-inv, 1)); transform-origin: 0 0; }
 /* 附加操作栏：整栏钉在节点上沿外头（bottom 100% 加一格 6px），右端对齐节点右沿，
    栏底就是缩放支点 —— 反缩放之后栏仍贴着节点上沿。栏在节点外就不盖卡上的胶囊与正文 */
-.ns-canvas-node-bar { position: absolute; right: 0; bottom: calc(100% + 6px); z-index: 4; display: none; align-items: center; gap: 2px; padding: 3px; border-radius: 8px; background: rgba(8, 9, 12, .72); transform: scale(var(--ns-canvas-inv, 1)); transform-origin: 100% 100%; }
+.ns-canvas-node-bar { position: absolute; right: 0; bottom: calc(100% + 6px); z-index: 4; display: none; align-items: center; gap: 2px; padding: 3px; border-radius: 8px; background: var(--ns-scrim-13, rgba(8, 9, 12, .72)); transform: scale(var(--ns-canvas-inv, 1)); transform-origin: 100% 100%; }
 .ns-canvas-node-on .ns-canvas-node-bar { display: flex; }
 .ns-canvas-node-act { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--ns-dim); cursor: pointer; }
-.ns-canvas-node-act:hover { color: #fff; background: var(--ns-field-hover); }
+.ns-canvas-node-act:hover { color: var(--ns-fg-strong, #fff); background: var(--ns-field-hover); }
 .ns-canvas-node-act-on { color: var(--ns-accent); }
 .ns-canvas-node-pick { flex: none; display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 6px; border-radius: 5px; border: 1px solid var(--ns-field-bd); background: var(--ns-field); color: var(--ns-fg); font: inherit; font-size: 12px; cursor: pointer; }
-.ns-canvas-node-pick:hover { border-color: var(--ns-field-bd-hover); background: var(--ns-field-hover); color: #fff; }
+.ns-canvas-node-pick:hover { border-color: var(--ns-field-bd-hover); background: var(--ns-field-hover); color: var(--ns-fg-strong, #fff); }
 .ns-canvas-node-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: inherit; background: var(--ns-panel); }
 /* 视频节点：整张是那一段片，播控交浏览器自己（pointerdown 认 .ns-canvas-node-video-el 让行，
    拖动与缩放从节点那一圈 6px 黑框与四角尺寸柄进来）。没落上片的是一张空位，出片时先按连线顺序填它 */
-.ns-canvas-node-video { background: #000; }
-.ns-canvas-node-video-el { position: absolute; inset: 6px; width: calc(100% - 12px); height: calc(100% - 12px); object-fit: contain; background: #000; border-radius: 6px; }
+.ns-canvas-node-video { background: var(--ns-black, #000); }
+.ns-canvas-node-video-el { position: absolute; inset: 6px; width: calc(100% - 12px); height: calc(100% - 12px); object-fit: contain; background: var(--ns-black, #000); border-radius: 6px; }
 .ns-canvas-node-video-empty { position: absolute; inset: 6px; display: flex; align-items: center; justify-content: center; border: 1px dashed var(--ns-border-soft); border-radius: 6px; color: var(--ns-dim); font-size: 13px; }
 /* 正文节点整张就是这块文本框：滚动条只在文字溢出时出现（auto，不常驻滚动条槽），
    节点尺寸由用户拉，拉多大看多少行 */
@@ -1599,11 +2610,11 @@ body {
 .ns-canvas-gen .neo-gallery-gm-chip-label { flex: 0 1 auto; min-width: 0; }
 .ns-canvas-gen-acts { display: flex; align-items: center; gap: 4px; }
 .ns-canvas-gen-btn { flex: none; display: inline-flex; align-items: center; justify-content: center; gap: 4px; height: 24px; padding: 0 8px; border-radius: 6px; border: 1px solid var(--ns-field-bd); background: var(--ns-field); color: var(--ns-fg); font: inherit; font-size: 12px; cursor: pointer; }
-.ns-canvas-gen-btn:hover { border-color: var(--ns-field-bd-hover); background: var(--ns-field-hover); color: #fff; }
+.ns-canvas-gen-btn:hover { border-color: var(--ns-field-bd-hover); background: var(--ns-field-hover); color: var(--ns-fg-strong, #fff); }
 .ns-canvas-gen-btn:disabled { opacity: .45; cursor: default; }
 .ns-canvas-gen-btn:disabled:hover { border-color: var(--ns-field-bd); background: var(--ns-field); color: var(--ns-fg); }
 .ns-canvas-gen-status { font-size: 12px; color: var(--ns-accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ns-canvas-gen-fail { color: #ff7b72; }
+.ns-canvas-gen-fail { color: var(--ns-err-4, #ff7b72); }
 .ns-canvas-gen-model { font-size: 12px; color: var(--ns-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* 配方卡独有的三行：这一段概览、提示词来源、参考素材（段一行用生成页那套分段钮）。
    提示词来源那一行就是「画布覆盖」的可见状态：连了正文，这一行抬到主色并说「画布」 */
@@ -1616,7 +2627,7 @@ body {
 .ns-canvas-recipe-info-text { min-width: 0; flex: 1 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ns-canvas-recipe-prompt { display: flex; align-items: flex-start; gap: 6px; min-height: 34px; padding: 5px 7px; border-radius: 6px; border: 1px solid var(--ns-border-soft); background: var(--ns-field); font-size: 12px; line-height: 1.45; }
 .ns-canvas-recipe-on { border-color: var(--ns-primary); background: var(--ns-primary-soft); }
-.ns-canvas-recipe-src { flex: none; padding: 1px 5px; border-radius: 4px; background: rgba(8, 9, 12, .5); color: var(--ns-dim); font-size: 11px; }
+.ns-canvas-recipe-src { flex: none; padding: 1px 5px; border-radius: 4px; background: var(--ns-scrim-12, rgba(8, 9, 12, .5)); color: var(--ns-dim); font-size: 11px; }
 .ns-canvas-recipe-on .ns-canvas-recipe-src { color: var(--ns-primary-fg); }
 .ns-canvas-recipe-text { min-width: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: break-word; }
 .ns-canvas-recipe-refs { display: flex; align-items: center; gap: 6px; min-width: 0; }
@@ -1627,7 +2638,7 @@ body {
    状态。卡上一枚钮都没有 —— 停用、复制与删除在节点上方的浮出栏里，出片与整列共用的参数都在车尾那台生成节点上 */
 .ns-canvas-car { position: absolute; inset: 0; padding: 8px 10px; display: flex; flex-direction: column; gap: 5px; overflow: hidden; border-radius: inherit; }
 .ns-canvas-car-head { display: flex; align-items: center; gap: 6px; }
-.ns-canvas-car-seg { flex: none; padding: 1px 6px; border-radius: 5px; background: rgba(8, 9, 12, .5); color: var(--ns-accent); font-size: 11px; }
+.ns-canvas-car-seg { flex: none; padding: 1px 6px; border-radius: 5px; background: var(--ns-scrim-12, rgba(8, 9, 12, .5)); color: var(--ns-accent); font-size: 11px; }
 .ns-canvas-car-info { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; color: var(--ns-dim); }
 .ns-canvas-car-refs { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .ns-canvas-car-refs .ns-canvas-recipe-thumb { width: 42px; height: 34px; }
@@ -1639,9 +2650,9 @@ body {
 .ns-canvas-gen-go {
     flex: 1; min-width: 0; justify-content: center;
     border-color: var(--ns-primary); background: var(--ns-primary);
-    color: #fff; font-size: 13px; font-weight: 600;
+    color: var(--ns-on-accent, #fff); font-size: 13px; font-weight: 600;
 }
-.ns-canvas-gen-go:hover:not(:disabled) { background: var(--ns-primary-hover); border-color: var(--ns-primary-hover); color: #fff; }
+.ns-canvas-gen-go:hover:not(:disabled) { background: var(--ns-primary-hover); border-color: var(--ns-primary-hover); color: var(--ns-on-accent, #fff); }
 .ns-canvas-gen-go:disabled, .ns-canvas-gen-go:disabled:hover {
     background: var(--ns-primary-soft); border-color: var(--ns-primary); color: var(--ns-primary-fg);
 }
@@ -1651,13 +2662,13 @@ body {
     height: 22px; padding: 0 8px; border-radius: 6px; border: 1px solid var(--ns-field-bd);
     background: var(--ns-field); color: var(--ns-fg); font: inherit; font-size: 12px; cursor: pointer;
 }
-.ns-canvas-seg-btn:hover { border-color: var(--ns-field-bd-hover); background: var(--ns-field-hover); color: #fff; }
+.ns-canvas-seg-btn:hover { border-color: var(--ns-field-bd-hover); background: var(--ns-field-hover); color: var(--ns-fg-strong, #fff); }
 .ns-canvas-seg-btn-on { border-color: var(--ns-primary); background: var(--ns-primary-soft); color: var(--ns-primary-fg); }
 .ns-canvas-seg-ico { display: inline-flex; }
 .ns-canvas-empty-actions { display: flex; align-items: center; gap: 8px; }
 /* 空画布上的「加生成节点」是这一页的主行动 → 扁平主色实底（主行动一律扁平主色实底） */
-.ns-canvas-add-gen { border-color: var(--ns-primary); background: var(--ns-primary); color: #fff; }
-.ns-canvas-add-gen:hover:not(:disabled) { background: var(--ns-primary-hover); border-color: var(--ns-primary-hover); color: #fff; }
+.ns-canvas-add-gen { border-color: var(--ns-primary); background: var(--ns-primary); color: var(--ns-on-accent, #fff); }
+.ns-canvas-add-gen:hover:not(:disabled) { background: var(--ns-primary-hover); border-color: var(--ns-primary-hover); color: var(--ns-on-accent, #fff); }
 /* 拖线、拖节点、四角缩放与拖平移进行中：interactions.js 给舞台挂 ns-canvas-dragging / ns-canvas-marqueeing，
    给被缩放与正被拉线的节点挂后两个类，让位的只有节点里那几张内容面 —— 起手落在被拖的东西上时焦点与选字
    会被正文框、图片与视频抢走。pointer-events 一律不落在舞台与节点自己身上：dblclick 挂在舞台上，双击正文
@@ -1691,3 +2702,6 @@ body {
     .ns-canvas-resize-bottom-left { left: -11px; bottom: -11px; }
     .ns-canvas-resize-bottom-right { right: -11px; bottom: -11px; }
 }
+
+
+

@@ -185,7 +185,7 @@ export function createModelConfigForm() {
     providerSaveStatusText.textContent = "";
     providerSaveStatusText.style.display = "none";
     providerSaveStatusText.style.fontSize = "11px";
-    providerSaveStatusText.style.color = "#999";
+    providerSaveStatusText.style.color = "var(--ns-color-999, #999)";
 
     // Base URL：有预设端点的供应商默认折叠（减少配置干扰），点标题可展开改写；
     // 无预设的（OpenAI Compatible）端点必须手填，保持常显且不给收起入口。
@@ -678,7 +678,7 @@ export function createModelConfigForm() {
     function setLocalStatusMsg(msg, color, autoHide = true) {
         providerSaveStatusText.textContent = msg;
         providerSaveStatusText.style.display = "block";
-        providerSaveStatusText.style.color = color || "#999";
+        providerSaveStatusText.style.color = color || "var(--ns-color-999, #999)";
         if (autoHide) {
             setTimeout(() => { providerSaveStatusText.style.display = "none"; }, 2500);
         }

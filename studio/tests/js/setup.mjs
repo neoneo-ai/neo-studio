@@ -54,6 +54,9 @@ export function resetEnv() {
     resetDialogs();
     resetFetchLog();
     setLang("zh");               // 用例里切过英文要复位，避免串到后面的用例
+    localStorage.removeItem("neo_studio_theme");   // 配色选择同语言一样是跨用例状态
+    document.documentElement.dataset.neoTheme = "dark";    // 首帧基线：Studio 页不靠用例现场决定深浅
+    document.documentElement.dataset.neoThemeResolved = "dark";
     clearObjectInfoCache();   // 节点定义/模型目录缓存是模块级，清掉避免跨用例串味
     delete window.pywebview;  // 桌面端的 js_api 桩：用例各自声明，留着会让后面的「浏览器标签页」用例当桌面端窗口
     window.location.hash = "";   // 上一个个例留在 URL 里的 fragment：开机落哪一页全靠它，不复位就是串味

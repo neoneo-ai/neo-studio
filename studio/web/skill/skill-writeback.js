@@ -47,7 +47,7 @@ export function showSkillWriteLogDialog(skillId) {
             }
             if ((entry.warnings || []).length) {
                 const w = mkEl("div", "rs-repair-hint");
-                w.style.color = "#da6";
+                w.style.color = "var(--ns-warn-fg, #da6)";
                 w.textContent = entry.warnings.join(" / ");
                 group.appendChild(w);
             }
@@ -94,7 +94,7 @@ function confirmWorkflowWrite(id, source, workflow, displayName, onSaved) {
         }
         if (warnings.length) {
             const warn = mkEl("div", "rs-repair-hint");
-            warn.style.color = "#da6";
+            warn.style.color = "var(--ns-warn-fg, #da6)";
             warn.textContent = warnings.join(" / ");
             body.appendChild(warn);
         }

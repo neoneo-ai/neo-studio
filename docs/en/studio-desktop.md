@@ -449,14 +449,16 @@ startable once the root is filled in.
   as style bits at runtime (only `WS_CAPTION` is removed, `WS_THICKFRAME` stays set — pywebview's frameless uses
   `FormBorderStyle=None`, which drops edge-drag resizing as well, restored by `ensure_resizable_frame` after the
   window is Shown; the native window is only created inside `start()`, so there is no hwnd at creation time).
-- The window background is set explicitly at creation time to the page color (`WINDOW_BG` = `#17171b`, the same as
-  the `body` background in `studio/web/studio/style.css`): pywebview's `background_color` defaults to `#FFFFFF` and
+- The window background is set explicitly at creation time to the page color of the effective scheme
+  (`background_color=theme_bg(desktop.theme)`, with `THEME_BG` = `#17171b` dark / `#ffffff` light — the same token as
+  the page's `--ns-bg`): pywebview's `background_color` defaults to `#FFFFFF` and
   sets both the WinForms `Form.BackColor` and the WebView2 control's `DefaultBackgroundColor`. Dragging a window edge
   runs the system size/move loop, where the Form and the `Dock=Fill` WebView2 control are resized together and the
   newly exposed client area is painted by those two backgrounds first — a white one is a white window flash. The
   restored `WS_THICKFRAME` ring is drawn by DWM in the system theme color, so on a light theme that border line is
-  white during resizing: `set_window_frame` pins `DWMWA_BORDER_COLOR` / `DWMWA_CAPTION_COLOR` to the same color while
-  it reapplies the style bits (Windows 10 ignores both attributes and only returns a non-zero HRESULT).
+  white during resizing: `set_window_frame` pins `DWMWA_BORDER_COLOR` / `DWMWA_CAPTION_COLOR` to the page color of the
+  current scheme while it reapplies the style bits (`set_theme` recolors them with the theme; Windows 10 ignores both
+  attributes and only returns a non-zero HRESULT).
 - `easy_drag` must stay off — pywebview's simple drag is a global mousedown, and frameless means clicking any card
   drags the window along. Dragging starts by pressing an empty part of the header and calling `win_start_drag`,
   with the desktop looping on the window thread and following the cursor (`SetWindowPos` +
@@ -727,7 +729,7 @@ buttons clicking into nothing. Only one editor exists in the window:
 
 - The ten entries in the settings sidebar run top-down in four blocks: `Startup & Connection` (Startup Settings /
   Startup Log / Phone Pairing), `Generate` (LLM Settings / Image Gen Settings / Video Gen Settings), `Agent` (Agent
-  Preferences / MCP Server) and `Language & About` (Interface Language / About). Between the blocks there is only a
+  Preferences / MCP Server) and `Language & About` (Interface Language & Theme / About). Between the blocks there is only a
   text-free hairline `.ns-settings-sep`, a sibling of the tabs inside `.ns-settings-tabs` — the line carries no label, so
   the sidebar shows exactly one row per setting. The tab `data-key`s and the `#/settings?tab=..` deep links are
   unchanged, and when a tab is dropped the lines follow the tabs that remain: in a browser tab, where there is no
@@ -742,7 +744,8 @@ buttons clicking into nothing. Only one editor exists in the window:
   heading over an empty section; Image Gen Settings splits into `Model` (model / Text Encoder / VAE) and `Output`
   (target pixels / output prefix).
 - The 🅝 settings popup in the ComfyUI top bar uses the same order: the three generate tabs (LLM Settings / Image
-  Defaults / Video Models) first, Interface Language last, with one `.neo-settings-sep` between them.
+  Defaults / Video Models) first, Interface Language & Theme last, with one `.neo-settings-sep` between them. In that
+  entry the popup and the settings page share the same card and the same choices.
 - Block names are not UI copy — they only become the hairline; tab names and in-panel section labels are Chinese-source
   keys in `studio/web/js/core/i18n.js`, and the shared forms (LLM / image / video) keep Chinese.
 
@@ -757,8 +760,9 @@ buttons clicking into nothing. Only one editor exists in the window:
 
 ## Interface language
 
-- The settings page has a "Language" section (`中文` / `English` radio group): picking one saves it and reloads the
-  page right away — there is no separate save step.
+- The settings page has an "Interface Language & Theme" section with two tabs inside it, `语言` / `主题` (the
+  `#/settings?tab=lang` deep link is unchanged): language is a `中文` / `English` radio group, and picking one saves it
+  and reloads the page right away — there is no separate save step.
 - The choice lives in `localStorage["neo_studio_lang"]` and defaults to the browser language. The desktop window and
   a browser tab are different origins, so each keeps its own language choice.
 - Translated: the desktop app's own strings — header and window controls, the director generation panel, startup
@@ -766,6 +770,24 @@ buttons clicking into nothing. Only one editor exists in the window:
   skills views and the LLM / image / video forms are shared modules and keep their Chinese source text.
 - Entries live in `studio/web/js/core/i18n.js`: Chinese source strings are the keys, so a missing English entry falls
   back to Chinese instead of exposing a placeholder.
+
+## Interface theme
+
+- "Interface Language & Theme → Theme" is a `跟随系统` / `浅色` / `深色` radio group, defaulting to follow system:
+  picking one takes effect immediately with no page reload. Light ships only in the desktop window — the plugin page
+  (ComfyUI's `/neo-studio` in a browser) has just the dark token set, so the group collapses together with the
+  language group in a browser tab.
+- The color tokens live in `studio/web/studio/style.css`: `:root` is the dark baseline and `[data-neo-theme="light"]`
+  overrides the light set. `studio/web/js/core/theme.js` writes the effective scheme to `<html data-neo-theme>`, the
+  choice is stored in `localStorage["neo_studio_theme"]`, and "follow system" reads the system
+  `prefers-color-scheme` and flips with it live. The window controls (header, director panel, popups) all read the
+  tokens, so recoloring needs no reload.
+- The effective scheme is also reported to the desktop (js_api `set_theme`): the title bar and the restored border
+  recolor on the spot, and the choice is written to `theme` in `launcher_config.json` so the next launch opens the
+  window with that color (`background_color=theme_bg(desktop.theme)`); a first launch that never reported one probes
+  the system scheme (`system_theme()`, falling back to dark). Cases:
+  `studio/tests/js/studio-theme.test.mjs` and the `set_theme` / window-background cases in
+  `app/tests/test_studio_desktop.py`.
 
 ## LAN access
 

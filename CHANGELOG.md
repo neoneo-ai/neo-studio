@@ -5,6 +5,18 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 ## [Unreleased]
 
 ### Added
+- **Interface theme: 跟随系统 / 浅色 / 深色 in the desktop window.** The 「界面语言」 entry of the Studio settings page and
+  of the 🅝 top-bar popup is now the 「界面语言与界面主题」 card with two tabs inside it, 语言 / 主题 (the
+  `#/settings?tab=lang` deep link is unchanged). The theme tab is a 跟随系统 / 浅色 / 深色 radio group — default follow
+  system — that recolors the whole window on the spot with no reload: `studio/web/js/core/theme.js` writes the effective
+  scheme to `<html data-neo-theme>`, stores the choice in `localStorage["neo_studio_theme"]` and follows the system
+  `prefers-color-scheme` live, while the palette itself is the `--ns-*` token set in `studio/web/studio/style.css`
+  (`:root` dark, `[data-neo-theme="light"]` light). The header, window controls, director generation panel and popups
+  all read the tokens, so nothing keeps a hard-coded dark color when the window turns light; 浅色 ships only in the
+  desktop window and the group collapses in a browser tab, where the plugin page has just the dark set. The effective
+  scheme is also reported to the desktop (`set_theme`): the title bar and the restored window border recolor with it,
+  and `theme` lands in `launcher_config.json` so the next launch opens the window in the same colors (a first launch
+  that never reported one probes the system scheme).
 - **Imported prompt cards show the real cloud image instead of the typeset placeholder.** A prompt that pairs with a
   cloud image item draws that item's image on its card through `GET /neo_gallery/thumbnail?filename=&subfolder=&size=512`,
   ahead of the local cover sidecar. Pairing still keys on the body's first line (an imported body with no `提示词：`
@@ -399,6 +411,41 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   recipes and existing 配方 assets are untouched.
 
 ### Fixed
+- **Inputs turn really white in 浅色; the 绘画 / 视频 app pages stop rendering as a grey sheet.** The auto-generated
+  light tokens washed dark backgrounds to mid grey (`rgb(187, 187, 187)`) and dark text to near white (white on white),
+  so the whole `--ns-background-*` and `--ns-color-*` families read dark in 浅色. The light block regenerates those values
+  from the dark luminance: dark backgrounds (luminance ≤ 0.28) become `#ffffff`, translucent dark backgrounds become the
+  same-alpha white, dark text becomes `#171717`, light-grey text becomes `#3a3a3a`, and `accent-color` goes back to the
+  brand blue. The 绘画 / 视频 page inputs, the gallery search and folder inputs, and the launcher address input are white
+  with readable dark text in 浅色, and 深色 renders pixel-identical (only the light block and three token names changed).
+  `studio/tests/js/css-integrity.test.mjs` gained a guard: a light-mode input background may not stay grey, and body
+  text may not be washed to near white.
+- **The 绘画 page input card and the 智能体 panel turn light.** `studio/web/agent-panel.css` reads the `--neo-vsc-*`
+  variables with no `var()` fallback, and nothing defines them any more: an unresolved `var()` invalidates the whole
+  declaration at computed-value time, so the composer's `background` disappeared and the card leaked the page colour —
+  in 浅色 a grey block that reads as a disabled input. The 21 `--neo-vsc-*` names are now defined in `style.css`, with
+  the dark values kept for 深色 and white input card, `#f7f8fa` panel rows and readable dark text in 浅色.
+  `studio/tests/js/css-integrity.test.mjs` fails when any `--neo-vsc-*` in use loses its definition in either theme.
+- **The 绘画 page composer card and preview box are near-white in 浅色, not a grey slab.** Their `background` was
+  `--ns-scrim-*` — a token whose meaning is "veil the page with black", so in 浅色 it painted 35% black over the white
+  page (`#a6a6a6`), the same disabled-looking grey the inputs had. `.neo-gallery-gm-composer`, `.neo-gallery-gm-preview`,
+  `.neo-gallery-story-idea`, `.neo-gallery-story-grid`, `.neo-gallery-rp-result` and `.neo-gallery-story-ref` now read
+  `--ns-inset-surface` / `--ns-inset-surface-2`: 深色 keeps the old black veil pixel-identical, 浅色 veils only 3%–3.5%,
+  which reads as a white card with a hairline border. The scrim family keeps serving shadows and the veils drawn over
+  media (thumbnail badges, lightbox, modal overlays, the black letterbox behind a reference image), where a dark veil is
+  right in both themes. `css-integrity.test.mjs` fails when one of those surface selectors takes a `--ns-scrim-*`
+  background, or when its light value veils more than 10% black.
+
+- **The prompts page and its popups turn light with the window.** The skill picker and skill editor, the preset picker,
+  the combo dropdown, the reference-image chips and the prompt inputs are appended to the page body, so the scoped light
+  rules never reached them and they stayed black in 浅色. Every color in `studio/web/prompts.css` now reads a `--ns-*`
+  token with its old dark value kept as the `var()` fallback: 深色 renders exactly as before, 浅色 gets the light set —
+  input and textarea backgrounds go white (`--ns-field`), and modal panels, headers, footers, lists and chips take the
+  light panel colors. Each token the page uses carries both theme values in the global `[data-neo-theme="light"]` block,
+  so a popup opened from the body cannot leak a dark surface. The handful of colors the JS set inline (the textarea
+  border, the status-bar colors, the combo highlight, the write-back warnings) read the same tokens, and
+  `studio/tests/js/css-integrity.test.mjs` fails when a prompts.css color bypasses a token, a token loses one of its two
+  theme values, or a `var()` is left unclosed.
 - **A prompt cover that failed to load once stops staying blank.** The cover route no longer sends
   `Cache-Control: public, max-age=31536000, immutable`: it serves the sidecar with
   `Cache-Control: public, max-age=0, must-revalidate`, so every page open revalidates it and an unchanged file answers

@@ -923,7 +923,7 @@ class StudioDesktopTests(unittest.TestCase):
         desktop = app.StudioDesktop(None, 8188, pathlib.Path("root"), launcher={"frameless": True})
         desktop._window = window
         frames = []
-        with patch.object(app, "set_window_frame", lambda hwnd, on: frames.append(on)):
+        with patch.object(app, "set_window_frame", lambda hwnd, on, bg: frames.append(on)):
             desktop.ensure_resizable_frame()
             desktop.frameless = False
             desktop.ensure_resizable_frame()
@@ -951,7 +951,7 @@ class StudioDesktopTests(unittest.TestCase):
         desktop = app.StudioDesktop(None, 8188, pathlib.Path("root"), launcher={"frameless": True})
         desktop._window = window
         frames = []
-        with patch.object(app, "set_window_frame", lambda hwnd, on: frames.append(on)):
+        with patch.object(app, "set_window_frame", lambda hwnd, on, bg: frames.append(on)):
             self.assertTrue(desktop.win_fullscreen()["fullscreen"])
             self.assertFalse(desktop.win_fullscreen()["fullscreen"])
         self.assertEqual(frames, [True, True])
@@ -1535,7 +1535,7 @@ class MainWindowTests(unittest.TestCase):
              patch.object(app, "singleton", lambda: 7), \
              patch.object(app, "DesktopServer", _fake_desktop_server()), \
              patch.object(app, "probe", lambda port, timeout=3.0: True), \
-             patch.object(app, "set_window_frame", lambda hwnd, on: frames.append(on)), \
+             patch.object(app, "set_window_frame", lambda hwnd, on, bg: frames.append(on)), \
              patch.object(sys, "argv", ["studio_app.py"]):
             app.save_config(_COMFY_ROOT, pathlib.Path(sys.executable), 8188, {"frameless": True})
             self.assertEqual(app.main(), 0)
@@ -1557,7 +1557,25 @@ class MainWindowTests(unittest.TestCase):
              patch.object(app, "probe", lambda port, timeout=3.0: True), \
              patch.object(sys, "argv", ["studio_app.py"]):
             self.assertEqual(app.main(), 0)
-        self.assertEqual(cw.call_args.kwargs["background_color"], app.WINDOW_BG)
+        self.assertEqual(cw.call_args.kwargs["background_color"], app.theme_bg(app.system_theme()),
+                         "建窗底色照系统深浅那套页面底色，不能是 pywebview 的默认白")
+
+    def test_saved_theme_pins_the_cold_start_window_color(self):
+        # 上一次开机页面回报过的那套配色存在启动配置里：冷启动建窗就以它开出来，不等页面第一帧
+        window = _fake_window()
+        cw = MagicMock(return_value=window)
+        self.port_busy = True
+        with tempfile.TemporaryDirectory() as tmp, \
+             patch.object(app, "CONFIG_FILE", pathlib.Path(tmp) / "launcher_config.json"), \
+             patch.object(app, "webview", _fake_webview(cw)), \
+             patch.object(app, "singleton", lambda: 7), \
+             patch.object(app, "DesktopServer", _fake_desktop_server()), \
+             patch.object(app, "probe", lambda port, timeout=3.0: True), \
+             patch.object(sys, "argv", ["studio_app.py"]):
+            app.save_config(_COMFY_ROOT, pathlib.Path(sys.executable), 8188, {"theme": "dark"})
+            self.assertEqual(app.main(), 0)
+        self.assertEqual(cw.call_args.kwargs["background_color"], app.theme_bg("dark"),
+                         "存过的配色要压过本机系统深浅")
 
     def test_fullscreen_close_does_not_save_the_screen_rect(self):
         # 全屏时窗口是整屏矩形：存下来下次开机窗口直接铺满屏幕，几何只存窗口态的那份
@@ -1985,6 +2003,26 @@ class LauncherConfigTests(unittest.TestCase):
                                   "python": "D:/python/python.exe", "port": 8188, "frameless": True,
                                   "dev_mode": False, "listen": "", "remote": "", "pose_repo": ""})
                 self.assertTrue(desktop.launcher["frameless"], "设置页快照要同步")
+
+    @WINDOWS_ONLY
+    def test_set_theme_recolors_the_window_and_persists(self):
+        # 页面回报的生效深浅要当场换标题栏底色，并且只落自己那一项：下次开机窗口以同一套底色开出来
+        with tempfile.TemporaryDirectory() as tmp:
+            colors = []
+            with patch.object(app, "CONFIG_FILE", pathlib.Path(tmp) / "launcher_config.json"), \
+                 patch.object(app, "log_line", lambda text: None), \
+                 patch.object(app, "set_window_colors", lambda hwnd, bg: colors.append(bg)):
+                app.save_config(pathlib.Path("D:/ComfyUI"), "D:/python/python.exe", 8188, {"theme": "dark"})
+                desktop = app.StudioDesktop(None, 8188, pathlib.Path("D:/ComfyUI"),
+                                            launcher={"root": "D:/ComfyUI", "port": 8188, "theme": "dark"})
+                desktop._window = _fake_window()
+                self.assertEqual(desktop.set_theme("light"), {"ok": True, "theme": "light"})
+                self.assertEqual(colors, [app.theme_bg("light")], "窗口底色要跟着页面换")
+                self.assertEqual(app.load_config()["theme"], "light", "生效深浅要落进启动配置")
+                self.assertEqual(app.load_config()["root"], str(pathlib.Path("D:/ComfyUI")),
+                                 "配色不能把根目录带跑")
+                self.assertEqual(desktop.set_theme("light"), {"ok": True, "theme": "light"})
+                self.assertEqual(colors, [app.theme_bg("light")], "同一套深浅重复回报不再重画窗口")
 
     @WINDOWS_ONLY
     def test_set_pose_repo_validates_saves_and_syncs(self):

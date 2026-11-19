@@ -1,4 +1,4 @@
-// 顶栏 菜单（top-menu.js）：单按钮注册、下拉条目、节点子菜单过滤、关于弹窗、界面语言
+// 顶栏 菜单（top-menu.js）：单按钮注册、下拉条目、节点子菜单过滤、关于弹窗、界面主题、界面语言
 import test, { beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { clearBody, mockRoute, mockObjectInfo, jsonResponse, flush, sleep } from "./setup.mjs";
@@ -125,7 +125,7 @@ test("关于插件弹窗显示源码与 License", async () => {
     assert.equal(document.querySelector(".neo-n-menu"), null, "点菜单项后菜单未收起");
 });
 
-test("设置打开统一设置弹窗（四 tab，切 tab 显隐同步）", async () => {
+test("设置打开统一设置弹窗（五 tab，切 tab 显隐同步）", async () => {
     mockRoute("/neo_image_gen/settings", () => jsonResponse({}));
     mockRoute("/neo_image_gen/models", () => jsonResponse({ diffusion_models: [], text_encoders: [], vae: [] }));
     mockRoute("/neo_video_gen/settings", () => jsonResponse({}));
@@ -141,13 +141,13 @@ test("设置打开统一设置弹窗（四 tab，切 tab 显隐同步）", async
     const overlay = document.querySelector(".neo-director-llm-overlay");
     assert.ok(overlay, "设置弹窗未打开");
     const tabs = [...overlay.querySelectorAll(".neo-settings-tab")].map((el) => el.textContent);
-    assert.deepEqual(tabs, ["LLM 设置", "生图默认设置", "生视频模型", "界面语言"], "tab 顺序/文案不符");
-    // 左栏顺序与 Neo Studio 设置页同一套：生成三项在前，界面语言在后，中间一条分割线（线里不写字，[data-key] 不受影响）
+    assert.deepEqual(tabs, ["LLM 设置", "生图默认设置", "生视频模型", "界面主题", "界面语言"], "tab 顺序/文案不符");
+    // 左栏顺序与 Neo Studio 设置页同一套：生成三项在前，界面主题与界面语言在后，中间一条分割线（线里不写字，[data-key] 不受影响）
     assert.deepEqual([...overlay.querySelectorAll(".neo-settings-tabs > *")]
         .map((el) => (el.classList.contains("neo-settings-sep") ? "|" : el.textContent.trim())),
-        ["LLM 设置", "生图默认设置", "生视频模型", "|", "界面语言"], "设置弹窗左栏分段与设置页不一致");
+        ["LLM 设置", "生图默认设置", "生视频模型", "|", "界面主题", "界面语言"], "设置弹窗左栏分段与设置页不一致");
     const panels = [...overlay.querySelectorAll(".neo-settings-panel")];
-    assert.equal(panels.length, 4, "四个设置面板缺失");
+    assert.equal(panels.length, 5, "五个设置面板缺失");
     assert.equal(panels.filter((p) => p.style.display !== "none").length, 1, "默认只显示一个面板");
     assert.ok(panels[0].style.display !== "none", "默认应显示 LLM tab");
 
@@ -601,9 +601,9 @@ test("设置弹窗「界面语言」：单选当前语言，保存落盘并整�
     };
     try {
         const overlay = openSettings();
-        overlay.querySelectorAll(".neo-settings-tab")[3].click();
-        assert.ok(overlay.querySelectorAll(".neo-settings-tab")[3].classList.contains("neo-settings-tab-active"), "语言 tab 未高亮");
-        const radios = [...overlay.querySelectorAll(".neo-settings-panel")[3].querySelectorAll("input[name=\"neo-lang\"]")];
+        overlay.querySelectorAll(".neo-settings-tab")[4].click();
+        assert.ok(overlay.querySelectorAll(".neo-settings-tab")[4].classList.contains("neo-settings-tab-active"), "语言 tab 未高亮");
+        const radios = [...overlay.querySelectorAll(".neo-settings-panel")[4].querySelectorAll("input[name=\"neo-lang\"]")];
         assert.equal(radios.length, 2, "语言单选项数量不符");
         assert.ok(radios[0].checked, "默认应选中当前语言（中文）");
 
@@ -615,7 +615,7 @@ test("设置弹窗「界面语言」：单选当前语言，保存落盘并整�
 
         // 选英文 → 判脏 → 保存并关闭 = 落盘 + 刷新
         const overlay2 = openSettings();
-        overlay2.querySelectorAll(".neo-settings-tab")[3].click();
+        overlay2.querySelectorAll(".neo-settings-tab")[4].click();
         await flush();
         overlay2.querySelectorAll("input[name=\"neo-lang\"]")[1].click();
         overlay2.querySelector(".neo-director-llm-close").click();
@@ -632,3 +632,49 @@ test("设置弹窗「界面语言」：单选当前语言，保存落盘并整�
     }
 });
 
+
+
+test("设置弹窗「界面主题」：单选配色，保存立刻换页面配色并落盘（不整页刷新）", async () => {
+    mockRoute("/neo_image_gen/settings", () => jsonResponse({}));
+    mockRoute("/neo_image_gen/models", () => jsonResponse({ diffusion_models: [], text_encoders: [], vae: [] }));
+    mockRoute("/neo_video_gen/settings", () => jsonResponse({}));
+    mockRoute("/neo_video_gen/models", () => jsonResponse({ diffusion_models: [], text_encoders: [], vae: [] }));
+    const reloads = [];
+    const realLocation = globalThis.location;
+    Object.defineProperty(globalThis, "location", { value: { reload: () => reloads.push(1) }, configurable: true, writable: true });
+    const ext = getExtension("comfy.neo.topMenu");
+    const openThemeTab = async () => {
+        ext.actionBarButtons[0].onClick({ currentTarget: document.createElement("button") });
+        [...document.querySelectorAll(".neo-n-menu-item")].find((el) => el.textContent.includes("设置")).click();
+        const overlay = document.querySelector(".neo-director-llm-overlay");
+        overlay.querySelectorAll(".neo-settings-tab")[3].click();
+        await flush();   // 五个表单 load 落定前不判脏
+        return overlay;
+    };
+    try {
+        const overlay = await openThemeTab();
+        assert.ok(overlay.querySelectorAll(".neo-settings-tab")[3].classList.contains("neo-settings-tab-active"), "主题 tab 未高亮");
+        const radios = [...overlay.querySelectorAll(".neo-settings-panel")[3].querySelectorAll("input[name=\"neo-theme\"]")];
+        assert.deepEqual(radios.map((el) => el.value), ["auto", "light", "dark"], "配色单选项不符");
+        assert.ok(radios[0].checked, "默认应选中跟随系统");
+        overlay.querySelector(".neo-director-llm-close").click();
+        assert.equal(document.querySelector(".neo-director-llm-overlay"), null, "无改动 ✕ 未直接关闭");
+        assert.deepEqual(reloads, [], "无改动不应刷新");
+
+        const overlay2 = await openThemeTab();
+        overlay2.querySelectorAll("input[name=\"neo-theme\"]")[1].click();
+        overlay2.querySelector(".neo-director-llm-close").click();
+        assert.equal(overlay2.querySelector(".neo-director-llm-dirty").hidden, false, "换配色应判脏");
+        overlay2.querySelector(".neo-director-llm-btn-save").click();
+        await flush();
+        assert.deepEqual(reloads, [], "换配色不该整页刷新：CSS 级联换色，打开的模态与画布状态都在原地");
+        assert.equal(localStorage.getItem("neo_studio_theme"), "light", "配色未落盘");
+        assert.equal(document.documentElement.dataset.neoTheme, "light", "保存未换页面配色");
+    } finally {
+        Object.defineProperty(globalThis, "location", { value: realLocation, configurable: true, writable: true });
+        localStorage.removeItem("neo_studio_theme");
+        document.documentElement.dataset.neoTheme = "dark";
+        document.documentElement.dataset.neoThemeResolved = "dark";
+        topMenu.resetTopMenu();
+    }
+});

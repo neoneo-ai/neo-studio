@@ -15,7 +15,7 @@
 .ns-queue-badge {
     position: absolute; top: 1px; right: 1px;
     min-width: 16px; padding: 1px 4px; border-radius: 8px;
-    background: var(--ns-primary); color: #fff;
+    background: var(--ns-primary); color: var(--ns-fg-strong, #fff);
     font-size: 10px; line-height: 1.4; text-align: center;
 }
 
@@ -25,7 +25,7 @@
     width: 420px; max-width: calc(100vw - 24px); max-height: 62vh;
     padding: 10px 12px;
     border: 1px solid var(--ns-border-soft); border-radius: 8px;
-    background: var(--ns-panel); box-shadow: 0 8px 26px rgba(0, 0, 0, .45);
+    background: var(--ns-panel); box-shadow: 0 8px 26px var(--ns-scrim-5, rgba(0, 0, 0, .45));
     overflow: auto;
 }
 /* [hidden] 依赖 UA display:none，会被上面的显式 display:flex 盖掉 → 默认收起要显式补一条 */
@@ -37,8 +37,8 @@
    读数只在面板展开时刷新（queue-panel.js 展开开表、收起停表） */
 .ns-queue-mem { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--ns-dim); white-space: nowrap; }
 .ns-queue-mem-item { background: var(--ns-field); padding: 2px 8px; border-radius: 3px; font-variant-numeric: tabular-nums; }
-.ns-queue-mem-item.warn { color: #f0a050; }
-.ns-queue-mem-item.crit { color: #f06060; }
+.ns-queue-mem-item.warn { color: var(--ns-warn-solid, #f0a050); }
+.ns-queue-mem-item.crit { color: var(--ns-err-solid-3, #f06060); }
 .ns-queue-mem-clear {
     display: inline-flex; align-items: center; margin-left: auto;
     border: 1px solid var(--ns-field-bd); border-radius: 4px;

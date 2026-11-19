@@ -249,7 +249,7 @@ app.registerExtension({
                 return () => {
                     const isDisabled = node.properties.rs_disable_state;
 
-                    customTextarea.style.border = "1px solid #444";
+                    customTextarea.style.border = "1px solid var(--ns-field-bd, #444)";
 
                     // Update status bar visibility based on text_input connection
                     const hasConn = hasTextInputConnection();
@@ -792,7 +792,7 @@ app.registerExtension({
                     const isDisabled = node.properties.rs_disable_state;
                     removeWaitingOverlay();
 
-                    customTextarea.style.border = "1px solid #444";
+                    customTextarea.style.border = "1px solid var(--ns-field-bd, #444)";
 
                     // Update status bar visibility based on text_input connection
                     const hasConn = hasTextInputConnection();
@@ -861,7 +861,7 @@ app.registerExtension({
 
                     if (!newState && !hasTextInputConnection()) {
                         statusBar.style.background = "";
-                        statusBar.style.color = "#fbbf24";
+                        statusBar.style.color = "var(--ns-color-fbbf24, #fbbf24)";
                         // 保持当前状态不变，更新 UI
                         updateStatusAndUI();
                         setTimeout(() => updateStatusAndUI(), 1500);

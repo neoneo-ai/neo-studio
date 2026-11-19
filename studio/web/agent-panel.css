@@ -17,7 +17,7 @@
     --neo-vsc-border-soft: var(--ns-border-soft, #3f3f4a);
     --neo-vsc-fg: var(--ns-fg, #ddd);
     --neo-vsc-fg-dim: var(--ns-dim, #9a9aa8);
-    --neo-vsc-fg-faint: #5a5a66;   /* 占位提示这一档：比 dim 再淡，只给空框里的提示用 */
+    --neo-vsc-fg-faint: var(--ns-faint-4, #5a5a66);   /* 占位提示这一档：比 dim 再淡，只给空框里的提示用 */
     --neo-vsc-accent: var(--ns-accent, #7aa2ff);
     --neo-vsc-primary: var(--ns-primary, #2f6fed);
     --neo-vsc-primary-soft: var(--ns-primary-soft, rgba(47, 111, 237, .16));
@@ -25,9 +25,9 @@
     --neo-vsc-btn-hover: var(--ns-field-hover, #333338);
     --neo-vsc-btn-bd: var(--ns-field-bd, #444);
     --neo-vsc-btn-bd-hover: var(--ns-field-bd-hover, #555);
-    --neo-vsc-cancel-bg: #5a1a1a;
-    --neo-vsc-cancel-bd: #9a3a3a;
-    --neo-vsc-cancel-fg: #f87171;
+    --neo-vsc-cancel-bg: var(--ns-err-deep, #5a1a1a);
+    --neo-vsc-cancel-bd: var(--ns-err-bd, #9a3a3a);
+    --neo-vsc-cancel-fg: var(--ns-err-3, #f87171);
     --neo-vsc-ok: var(--ns-ok, #7bc47f);
     --neo-vsc-warn: var(--ns-warn, #e0b070);
     --neo-vsc-err: var(--ns-err, #ff8a8a);
@@ -142,7 +142,7 @@
 .neo-agent-mcp-body:hover,
 .neo-agent-tool-args:hover,
 .neo-agent-tool-out:hover {
-    scrollbar-color: #5090cc transparent;
+    scrollbar-color: var(--ns-blue-3, #5090cc) transparent;
 }
 
 .neo-agent-transcript::-webkit-scrollbar,
@@ -172,7 +172,7 @@
 .neo-agent-mcp-body:hover::-webkit-scrollbar-thumb,
 .neo-agent-tool-args:hover::-webkit-scrollbar-thumb,
 .neo-agent-tool-out:hover::-webkit-scrollbar-thumb {
-    background: #5090cc;
+    background: var(--ns-blue-3, #5090cc);
 }
 
 .neo-agent-empty {
@@ -485,7 +485,7 @@
 }
 
 .neo-agent-media video {
-    background: #000;
+    background: var(--ns-black, #000);
     cursor: pointer;
 }
 
@@ -538,7 +538,7 @@
 }
 
 .neo-agent-run:hover:not(:disabled) {
-    background: rgba(47, 111, 237, .28);
+    background: var(--ns-fill-primary-28, rgba(47, 111, 237, .28));
 }
 
 .neo-agent-run:disabled {
@@ -548,7 +548,7 @@
 
 /* 暂停那一击是「继续」：整排都是扁平文字钮，这一态靠警示色文字 + 淡底分出来 */
 .neo-agent-run.neo-agent-paused {
-    background: rgba(224, 176, 112, .16);
+    background: var(--ns-fill-warn-16, rgba(224, 176, 112, .16));
     color: var(--neo-vsc-warn);
 }
 
@@ -567,8 +567,8 @@
 
 .neo-agent-cancelbar:hover,
 .neo-agent-cancelbar:focus-visible {
-    background: #6a2a2a;
-    color: #fff;
+    background: var(--ns-err-bd2, #6a2a2a);
+    color: var(--ns-fg-strong, #fff);
     outline: none;
 }
 
@@ -860,10 +860,10 @@
     width: 16px;
     height: 16px;
     padding: 0;
-    background: rgba(0, 0, 0, .6);
+    background: var(--ns-scrim-8, rgba(0, 0, 0, .6));
     border: 0;
     border-radius: 3px;
-    color: #fff;
+    color: var(--ns-on-accent, #fff);
     font-size: 11px;
     line-height: 16px;
     cursor: pointer;
@@ -1022,7 +1022,7 @@
     height: 8px;
     flex: 0 0 auto;
     border-radius: 50%;
-    background: #4a4a52;
+    background: var(--ns-faint-5, #4a4a52);
 }
 
 .neo-agent-dot-on {
@@ -1360,7 +1360,7 @@
     background: var(--ns-panel, #202024);
     border: 1px solid var(--ns-border, #333);
     border-radius: 6px;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 4px 14px var(--ns-scrim-3, rgba(0, 0, 0, 0.4));
 }
 
 .neo-agent-picker-list {

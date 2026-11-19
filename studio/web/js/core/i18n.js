@@ -541,6 +541,16 @@ const EN = {
     // 界面语言表单
     "保存后整页刷新，界面文案按新语言重建。": "Saving reloads the page and rebuilds the interface in the new language.",
     "选择后立即落盘并整页刷新，界面文案按新语言重建。": "Picking a language saves it and reloads the page, rebuilding the interface in the new language.",
+    // 界面主题（Studio 页面配色：深色基准 / 浅色 / 跟随系统）
+    "界面主题": "Theme",
+    "浅色": "Light",
+    "深色": "Dark",
+    "跟随系统": "Follow system",
+    "当前生效：{theme}{auto}": "In effect: {theme}{auto}",
+    "（跟随系统）": " (follow system)",
+    "选择后立即生效，不需要刷新。只影响 Studio 页面：ComfyUI 画布与节点面板保持深色。":
+        "Applied at once, no reload needed. Studio pages only - the ComfyUI canvas and node panels stay dark.",
+
     // ===== 桌面端 Studio（web/studio）：顶栏与窗口控件 =====
     "新影工坊 · Neo Studio": "Neo Studio",
     "返回首页": "Back to home",

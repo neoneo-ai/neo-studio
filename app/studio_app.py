@@ -172,6 +172,9 @@ def _child_spawn_kwargs() -> dict:
         return {"start_new_session": True}
     return {}
 WINDOW_BG = "#17171b"
+# 页面配色有两套（studio/web/studio/style.css 的 :root 与 [data-neo-theme="light"]），窗口底色照页面那枚
+# --ns-bg 走：深色就是原来那份，浅色对齐页面浅色块。页面第一帧之后由 core/theme.js 回报生效的那套。
+THEME_BG = {"dark": WINDOW_BG, "light": "#ffffff"}
 # 拖边框缩放走系统缩放模态循环，循环里 Form 与 Dock=Fill 的 WebView2 子控件被一起改尺寸，
 # 新暴露的客户区先由各自的背景色刷出来，页面合成落后一帧 —— 底色是白的就是白窗闪一下。
 # pywebview 的 background_color 默认 #FFFFFF，且同时定 Form.BackColor 与 WebView2 的
@@ -211,6 +214,7 @@ if IS_WINDOWS:
     SWP_FRAMECHANGED = 0x0020
     VK_LBUTTON = 0x01
     SPI_GETWORKAREA = 0x0030
+    SPI_GETICONS_IS_LIGHT = 19   # 注册表 AppsUseLightTheme 的公开读口：系统的深浅（图标是浅色 = 浅色模式）
     SM_CXDRAG = 116   # 系统拖动阈值：按下后光标走出这个距离才算真拖动
     # 默认按 c_int 传句柄，64 位上的 HWND 会被截断，样式位与拖动消息都作用到别的窗口上
     u32.GetWindowLongW.argtypes = [wintypes.HWND, wintypes.INT]
@@ -260,15 +264,26 @@ if IS_WINDOWS:
         h = hex_color.lstrip("#")
         return int(h[4:6], 16) << 16 | int(h[2:4], 16) << 8 | int(h[0:2], 16)
 
-    def set_window_frame(hwnd: int, frameless: bool) -> None:
+    def system_theme() -> str:
+        """系统的深浅：冷启动还没有页面回报时的落点。探测失败按深色 —— 页面的基准也是那套。"""
+        is_light = wintypes.BOOL()
+        if not u32.SystemParametersInfoW(SPI_GETICONS_IS_LIGHT, 0, ctypes.byref(is_light), 0):
+            return "dark"
+        return "light" if is_light.value else "dark"
+
+    def set_window_colors(hwnd: int, bg: str) -> None:
+        """标题栏与补回的边框钉成页面底色：换配色跟着换，缩放模态循环里露出的那一圈才是同一套颜色。"""
+        color = ctypes.c_int(_colorref(bg))
+        dwm.DwmSetWindowAttribute(hwnd, DWMWA_BORDER_COLOR, ctypes.byref(color), 4)
+        dwm.DwmSetWindowAttribute(hwnd, DWMWA_CAPTION_COLOR, ctypes.byref(color), 4)
+
+    def set_window_frame(hwnd: int, frameless: bool, bg: str = WINDOW_BG) -> None:
         # WS_THICKFRAME 恒置：pywebview 的 frameless 走 FormBorderStyle=None，可拖拽边框一起摘掉，
         # 这里补回来；有框时它本来就在，等于不动
         style = u32.GetWindowLongW(hwnd, GWL_STYLE)
         style = (style & ~WS_CAPTION if frameless else style | WS_CAPTION) | WS_THICKFRAME
         u32.SetWindowLongW(hwnd, GWL_STYLE, style)
-        bg = ctypes.c_int(_colorref(WINDOW_BG))
-        dwm.DwmSetWindowAttribute(hwnd, DWMWA_BORDER_COLOR, ctypes.byref(bg), 4)
-        dwm.DwmSetWindowAttribute(hwnd, DWMWA_CAPTION_COLOR, ctypes.byref(bg), 4)
+        set_window_colors(hwnd, bg)
         u32.SetWindowPos(hwnd, 0, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOZORDER | SWP_FRAMECHANGED)
 
     def window_rect(hwnd: int) -> tuple:
@@ -288,7 +303,10 @@ else:
     def _left_button_down() -> bool:
         return False
 
-    def set_window_frame(hwnd: int, frameless: bool) -> None:
+    def system_theme() -> str:
+        return "dark"   # macOS / Linux 的窗口深浅由系统外观管，桌面端不探测
+
+    def set_window_frame(hwnd: int, frameless: bool, bg: str = WINDOW_BG) -> None:
         """macOS 第一版走原生标题栏；自绘无边框窗口尚未移植，这里保持 no-op。"""
 
     def window_rect(hwnd: int) -> tuple:
@@ -296,6 +314,11 @@ else:
 
     def work_area() -> tuple:
         return 0, 0, 0, 0
+
+
+def theme_bg(theme: str) -> str:
+    """一套深浅对应的窗口底色：页面 --ns-bg 的那枚 token。认不出的值落回深色。"""
+    return THEME_BG.get(theme, THEME_BG["dark"])
 
 
 def alert(text: str) -> None:
@@ -1062,6 +1085,9 @@ class StudioDesktop:
         self.remote = comfy_remote(self.launcher.get("remote", "")) or ""
         self.fullscreen = False
         self.maximized = False    # 无边框下最大化是桌面端自己铺的矩形，系统不认 WS_MAXIMIZE，状态自己记
+        # 窗口配色：页面回报过的深浅优先，没回报过（首次开机）按系统
+        self.theme = (self.launcher.get("theme") if self.launcher.get("theme") in THEME_BG
+                      else system_theme())
         self._restore_rect: tuple | None = None   # 铺满前的矩形，点一下还原回这里
         self._window = None
         self.starting = comfy is not None
@@ -1297,7 +1323,7 @@ class StudioDesktop:
         self.frameless = bool(on)
         self.launcher["frameless"] = self.frameless
         if self._window is not None:
-            set_window_frame(self._hwnd(), self.frameless)
+            set_window_frame(self._hwnd(), self.frameless, theme_bg(self.theme))
         cfg = load_config()
         cfg["frameless"] = self.frameless
         if not write_config(cfg):
@@ -1305,6 +1331,24 @@ class StudioDesktop:
         log_line(f"frameless {self.frameless}")
         return {"ok": True, "frameless": self.frameless,
                 "msg": "无边框窗口已开启" if self.frameless else "已恢复系统标题栏"}
+
+    def set_theme(self, scheme: str) -> dict:
+        """页面回报的生效深浅（core/theme.js 在换配色与首帧时叫）：标题栏与补回的边框当场换色，
+        并写进启动配置，下次开机窗口直接以这一套底色开出来。Win32 调用跨线程安全 —— js_api 的
+        调用来自线程池；Form 与 WebView2 的底色在建窗时定值，运行中不动（客户区被页面铺满，看不见）。"""
+        theme = scheme if scheme in THEME_BG else "dark"
+        if theme == self.theme and self.launcher.get("theme") == theme:
+            return {"ok": True, "theme": theme}   # 页面每装载回报一次：同一套深浅不必重画窗口，也不必再落盘
+        self.theme = theme
+        self.launcher["theme"] = theme
+        if IS_WINDOWS and self._window is not None:
+            set_window_colors(self._hwnd(), theme_bg(theme))
+        cfg = load_config()
+        cfg["theme"] = theme
+        if not write_config(cfg):
+            return {"ok": False, "error": f"写入启动配置失败：{CONFIG_FILE}"}
+        log_line(f"theme {theme}")
+        return {"ok": True, "theme": theme}
 
     def _hwnd(self) -> int:
         if not IS_WINDOWS:
@@ -1352,7 +1396,7 @@ class StudioDesktop:
     def ensure_resizable_frame(self) -> None:
         """pywebview 的 frameless 走 FormBorderStyle=None，可拖拽边框一起摘掉：窗口显示后补回 WS_THICKFRAME。"""
         if self.frameless and self._window is not None:
-            set_window_frame(self._hwnd(), True)
+            set_window_frame(self._hwnd(), True, theme_bg(self.theme))
 
     def enable_copy_keys(self) -> None:
         """非 dev 窗口放开原生复制按键：pywebview 把 AreBrowserAcceleratorKeysEnabled 绑在 debug 上
@@ -1410,7 +1454,7 @@ class StudioDesktop:
         self.fullscreen = not self.fullscreen
         # pywebview 退出全屏会把 FormBorderStyle 写回建窗时的值，标题栏跟着回来：按我们的状态重贴
         if self._window is not None:
-            set_window_frame(self._hwnd(), self.frameless)
+            set_window_frame(self._hwnd(), self.frameless, theme_bg(self.theme))
         return self.window_state()
 
     def win_close(self) -> None:
@@ -2102,7 +2146,7 @@ def main() -> int:
              # text_select 显式开：pywebview 默认 False，注入页面的 customize.js 给非表单元素
              # preventDefault selectstart，聊天正文与右栏回答一个字都选不动，划词复制整条没有出口
              text_select=True,
-             background_color=WINDOW_BG)
+             background_color=theme_bg(desktop.theme))
     # easy_drag 关掉：pywebview 的简易拖动是全局 mousedown，无边框时点任何卡片都会拖着窗口跑；
     # 拖动改由顶栏空白处按下交回系统（StudioDesktop.win_start_drag）
     # 窗口先出：起解释器查依赖、装配桌面端服务、拉起 ComfyUI 全在后台线程走完。

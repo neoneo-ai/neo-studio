@@ -307,12 +307,14 @@ js_api（`check_setup` / `pick_root` / `pick_python` / `start_setup`），根目
   pywebview，运行中改样式位（只摘 `WS_CAPTION`，`WS_THICKFRAME` 恒置 —— pywebview 的 frameless 走
   `FormBorderStyle=None`，拖边缩放会一起被摘掉，窗口 Shown 之后由 `ensure_resizable_frame` 补回；原生窗口在
   `start()` 里才建出来，建窗时拿不到 hwnd）。
-- 窗口底色在建窗时显式给成页面底色（`WINDOW_BG` = `#17171b`，与 `studio/web/studio/style.css` 的 body 同色）：
+- 窗口底色在建窗时显式给成页面底色（`background_color=theme_bg(desktop.theme)`，`THEME_BG` 深色 `#17171b` /
+  浅色 `#ffffff`，与 `studio/web/studio/style.css` 的 `--ns-bg` 同源）：
   pywebview 的 `background_color` 默认 `#FFFFFF`，同时定 WinForms 的 `Form.BackColor` 与 WebView2 控件的
   `DefaultBackgroundColor`。拖边框缩放走系统缩放模态循环，循环里 Form 与 `Dock=Fill` 的 WebView2 子控件被一起改
   尺寸，新暴露的客户区先由这两个底色刷出来 —— 底色是白的就是白窗闪一下。补回的 `WS_THICKFRAME` 那一圈由 DWM 按
   系统主题色画，浅色主题下缩放时那条边框线本身就是白的：`set_window_frame` 重贴样式位时顺带把
-  `DWMWA_BORDER_COLOR` / `DWMWA_CAPTION_COLOR` 钉成同一底色（Win10 不认这两个属性，只回非零 HRESULT）。
+  `DWMWA_BORDER_COLOR` / `DWMWA_CAPTION_COLOR` 钉成当前配色的底色（`set_theme` 换配色时跟着换；Win10 不认这两个
+  属性，只回非零 HRESULT）。
 - `easy_drag` 必须关掉 —— pywebview 的简易拖动是全局 mousedown，无边框时点任何卡片都会拖着窗口跑。拖动由顶栏
   空白处按下调 `win_start_drag`，桌面端在窗口线程上自己循环跟光标（`SetWindowPos` + `GetAsyncKeyState(VK_LBUTTON)`），
   左键一松就停 —— 交回系统走 `WM_NCLBUTTONDOWN + HTCAPTION` 或 `WM_SYSCOMMAND·SC_MOUSEMOVE` 都起不来，WinForms
@@ -415,7 +417,7 @@ js_api（`check_setup` / `pick_root` / `pick_python` / `start_setup`），根目
 ## 设置页分组
 
 - 设置页左栏十项自上而下按 `启动与连接`（启动设置 / 启动日志 / 手机连接）· `生成`（LLM 设置 / 生图设置 / 生视频设置）·
-  `智能体`（智能体偏好 / MCP 服务）· `语言与关于`（界面语言 / 关于）四段排下来，段与段之间只有一条无文字的分割线
+  `智能体`（智能体偏好 / MCP 服务）· `语言与关于`（界面语言与界面主题 / 关于）四段排下来，段与段之间只有一条无文字的分割线
   `.ns-settings-sep`（与 tab 平级挂在 `.ns-settings-tabs` 里，线里不写字，界面上的行数就等于设定项的数目）。
   tab 的 `data-key` 与深链 `#/settings?tab=..` 全不变；摘掉一枚 tab 时线跟着剩下的内容走，浏览器标签页没有启动设置面板
   就只摘那一枚 tab，条首不悬一条多余的线。「首页」栏随首页原地编辑一起摘掉之后，旧书签里的 `?tab=home` 由
@@ -424,8 +426,8 @@ js_api（`check_setup` / `pick_root` / `pick_python` / `start_setup`），根目
   `桌面窗口`（无边框窗口 / 开发模式），启停与状态行始终在面板顶部；LLM 设置分 `服务商与模型` / `远程连接`（API Key 与
   自定义端点）/ `本地模型`（模型目录与两个自动卸载），后两组连小标题一起随整组显隐收起，切到本地 GGUF 时不空挂在没内容的
   组上（`.rs-form-group`）；生图设置分 `模型`（生图模型 / Text Encoder / VAE）与 `输出`（目标像素数 / 输出前缀）。
-- 顶栏 🅝 设置弹窗左栏是同一套顺序：`生成` 三项（LLM 设置 / 生图默认设置 / 生视频模型）在前，`界面语言` 在后，中间一条
-  `.neo-settings-sep`。
+- 顶栏 🅝 设置弹窗左栏是同一套顺序：`生成` 三项（LLM 设置 / 生图默认设置 / 生视频模型）在前，`界面语言与界面主题`
+  在后，中间一条 `.neo-settings-sep`。弹窗与设置页在这一栏里是同一张卡、同一套选择。
 - 段名不是界面文案，只落成分割线；tab 名与栏内小标题是 `studio/web/js/core/i18n.js` 的中文原文 key，
   共享表单（LLM / 生图 / 生视频）保持中文原文。
 
@@ -437,12 +439,27 @@ js_api（`check_setup` / `pick_root` / `pick_python` / `start_setup`），根目
 
 ## 界面语言
 
-- 设置页有「界面语言」一栏（`中文` / `English` 单选）：选完立刻落盘并整页刷新，没有「保存」这一步。
+- 设置页有「界面语言与界面主题」一栏，栏内 `语言` / `主题` 两个 tab（深链 `#/settings?tab=lang` 不变）：语言是
+  `中文` / `English` 单选，选完立刻落盘并整页刷新，没有「保存」这一步。
 - 语言存 `localStorage["neo_studio_lang"]`，默认跟随系统浏览器语言。桌面端窗口与浏览器标签页是不同 origin，
   两边各存各的语言选择。
 - 翻译覆盖桌面端自有文案：顶栏与窗口控件、导演页生成面板、启动设置（含 ⓘ 提示）、顶栏状态位、队列面板的显存 / 内存读数。
   素材 / 技能视图与 LLM / 生图 / 生视频表单是共享模块，保持中文原文。
 - 词条在 `studio/web/js/core/i18n.js`：中文原文作 key，英文缺项回落中文，漏译只会退回中文，不会露出占位符。
+
+## 界面主题
+
+- 「界面语言与界面主题 → 主题」是 `跟随系统` / `浅色` / `深色` 单选，默认跟随系统：选完立刻生效，不重载页面。
+  浅色只在桌面端窗口提供 —— 插件页面（浏览器里的 ComfyUI `/neo-studio`）只有深色那套 token，浏览器标签页里
+  这一组随语言组一起收起。
+- 配色 token 在 `studio/web/studio/style.css`：`:root` 是深色基准，`[data-neo-theme="light"]` 覆盖浅色那套；生效深浅由
+  `studio/web/js/core/theme.js` 写进 `<html data-neo-theme>`，选择存 `localStorage["neo_studio_theme"]`，「跟随系统」读
+  系统的 `prefers-color-scheme` 并跟着系统实时换。窗口控件（顶栏 / 导演页面板 / 弹窗）全部走 token 取色，换配色时
+  不重载页面。
+- 生效深浅同时回报桌面端（js_api `set_theme`）：标题栏与补回的边框当场换色，并写进 `launcher_config.json` 的 `theme`，
+  下次开机窗口直接以那一套底色开出来（`background_color=theme_bg(desktop.theme)`）；从没回报过的首次开机按系统深浅探
+  （`system_theme()`，探测失败按深色）。用例：`studio/tests/js/studio-theme.test.mjs`、`app/tests/test_studio_desktop.py`
+  的 `set_theme` 与建窗底色两条。
 
 ## 局域网访问
 

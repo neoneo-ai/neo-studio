@@ -56,7 +56,7 @@
 .neo-gallery-loading-skeleton .skeleton-card {
     width: 120px;
     height: 100px;
-    background: linear-gradient(90deg, #252525 25%, #353535 50%, #252525 75%);
+    background: linear-gradient(90deg, var(--ns-background-252525, #252525) 25%, var(--ns-sunken-2, #353535) 50%, var(--ns-background-252525-x, #252525) 75%);
     background-size: 200px 100%;
     animation: neoGalleryShimmer 1.5s ease-in-out infinite;
     border-radius: 6px;
@@ -71,7 +71,7 @@
     left: 4px;
     right: 4px;
     bottom: 30px;
-    background: linear-gradient(90deg, #1a1a1a 25%, #2a2a2a 50%, #1a1a1a 75%);
+    background: linear-gradient(90deg, var(--ns-panel-alt, #1a1a1a) 25%, var(--ns-background-2a2a2a-x, #2a2a2a) 50%, var(--ns-panel-alt, #1a1a1a) 75%);
     background-size: 200px 100%;
     animation: neoGalleryShimmer 1.5s ease-in-out infinite;
     border-radius: 4px;
@@ -85,7 +85,7 @@
     left: 8px;
     right: 8px;
     height: 12px;
-    background: linear-gradient(90deg, #2a2a2a 25%, #3a3a3a 50%, #2a2a2a 75%);
+    background: linear-gradient(90deg, var(--ns-background-2a2a2a-x-x, #2a2a2a) 25%, var(--ns-border-2, #3a3a3a) 50%, var(--ns-background-2a2a2a-x-x-x, #2a2a2a) 75%);
     background-size: 200px 100%;
     animation: neoGalleryShimmer 1.5s ease-in-out infinite;
     border-radius: 2px;
@@ -94,15 +94,15 @@
 .neo-gallery-loading-spinner {
     width: 32px;
     height: 32px;
-    border: 3px solid rgba(255, 106, 0, 0.2);
-    border-top-color: #FF6A00;
+    border: 3px solid var(--ns-fill-orange-20, rgba(255, 106, 0, 0.2));
+    border-top-color: var(--ns-orange, #FF6A00);
     border-radius: 50%;
     animation: neoGallerySpin 0.8s linear infinite;
     display: none; /* Hidden - using skeleton instead */
 }
 
 .neo-gallery-loading-text {
-    color: #999;
+    color: var(--ns-dim-10, #999);
     font-size: 13px;
 }
 
@@ -113,7 +113,7 @@
 /* Main panel wrapper */
 .neo-gallery-panel {
     padding: 10px;
-    background-color: #1a1a1a;
+    background-color: var(--ns-panel-alt, #1a1a1a);
     min-height: 400px;
     position: relative; /* 多选操作条等绝对定位子元素的锚点 */
 }
@@ -130,8 +130,8 @@
     gap: 6px 10px;
     margin: -10px -10px 8px;
     padding: 8px 10px;
-    background-color: #1a1a1a;
-    border-bottom: 1px solid #2a2a2a;
+    background-color: var(--ns-panel-alt, #1a1a1a);
+    border-bottom: 1px solid var(--ns-border-bottom-2a2a2a, #2a2a2a);
 }
 
 /* 归类标签栏：flex 占满整幅换到下一行，控件行了不够宽就自己掉行，窄侧栏与弹窗宿主都不会挤散。
@@ -148,30 +148,30 @@
     font-size: 11px;
     padding: 3px 10px;
     border-radius: 12px;
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    border: 1px solid var(--ns-fill-7a, rgba(255, 255, 255, 0.2));
     background: transparent;
-    color: #ccc;
+    color: var(--ns-fg-soft, #ccc);
     cursor: pointer;
     white-space: nowrap;
     transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
 .neo-gallery-kind-chip:hover {
-    border-color: #FF6A00;
-    color: #fff;
+    border-color: var(--ns-orange, #FF6A00);
+    color: var(--ns-fg-strong, #fff);
 }
 
 .neo-gallery-kind-chip.active {
-    background: #FF6A00;
-    border-color: #FF6A00;
-    color: #fff;
+    background: var(--ns-orange, #FF6A00);
+    border-color: var(--ns-orange, #FF6A00);
+    color: var(--ns-fg-strong, #fff);
 }
 
 /* 归类列表触到上限时的说明：这一类剩下的素材还在目录里，这里只是其中一截 */
 .neo-gallery-kind-hint {
     padding: 10px 16px;
     font-size: 12px;
-    color: #999;
+    color: var(--ns-dim-10, #999);
     text-align: center;
 }
 
@@ -181,9 +181,9 @@
     height: 28px;
     padding: 0;
     background-color: transparent;
-    border: 1px solid #555;
+    border: 1px solid var(--ns-field-bd-hover, #555);
     border-radius: 4px;
-    color: #ccc;
+    color: var(--ns-fg-soft, #ccc);
     cursor: pointer;
     font-size: 16px;
     line-height: 1;
@@ -195,9 +195,9 @@
 }
 
 .neo-gallery-custom-dir-btn:hover {
-    background-color: rgba(255, 106, 0, 0.2);
-    border-color: #FF6A00;
-    color: #FF9944;
+    background-color: var(--ns-fill-orange-20, rgba(255, 106, 0, 0.2));
+    border-color: var(--ns-orange, #FF6A00);
+    color: var(--ns-orange-2, #FF9944);
 }
 
 /* Back / forward navigation buttons in header */
@@ -213,9 +213,9 @@
     height: 28px;
     padding: 0;
     background-color: transparent;
-    border: 1px solid #555;
+    border: 1px solid var(--ns-field-bd-hover, #555);
     border-radius: 4px;
-    color: #ccc;
+    color: var(--ns-fg-soft, #ccc);
     cursor: pointer;
     font-size: 16px;
     line-height: 1;
@@ -226,9 +226,9 @@
 }
 
 .neo-gallery-nav-btn:hover:not(:disabled) {
-    background-color: rgba(255, 106, 0, 0.2);
-    border-color: #FF6A00;
-    color: #FF9944;
+    background-color: var(--ns-fill-orange-20, rgba(255, 106, 0, 0.2));
+    border-color: var(--ns-orange, #FF6A00);
+    color: var(--ns-orange-2, #FF9944);
 }
 
 .neo-gallery-nav-btn:disabled {
@@ -252,9 +252,9 @@
     align-items: center;
     gap: 4px;
     font-size: 12px;
-    color: #ccc;
+    color: var(--ns-fg-soft, #ccc);
     background-color: transparent;
-    border: 1px solid #555;
+    border: 1px solid var(--ns-field-bd-hover, #555);
     border-radius: 15px;
     cursor: pointer;
     white-space: nowrap;
@@ -262,9 +262,9 @@
 }
 
 .neo-gallery-gm-btn:hover {
-    background-color: rgba(255, 106, 0, 0.2);
-    border-color: #FF6A00;
-    color: #FF9944;
+    background-color: var(--ns-fill-orange-20, rgba(255, 106, 0, 0.2));
+    border-color: var(--ns-orange, #FF6A00);
+    color: var(--ns-orange-2, #FF9944);
 }
 
 /* 宽宿主（桌面素材页）里顶到栏尾：搜索框收窄后不再填满剩余空间，
@@ -306,7 +306,7 @@
     white-space: nowrap;
     margin-bottom: 0;
     font-size: 12px;
-    color: #9aa4b2;
+    color: var(--ns-color-9aa4b2, #9aa4b2);
 }
 .neo-gallery-gm-model-box .rs-config-row .rs-model-select-box,
 .neo-gallery-edit-model-box .rs-config-row .rs-model-select-box {
@@ -367,24 +367,24 @@
     max-width: 250px;
     padding: 4px 10px;
     font-size: 12px;
-    color: #dfe3ea;
-    background: rgba(255, 255, 255, 0.07);
-    border: 1px solid rgba(255, 255, 255, 0.18);
+    color: var(--ns-fg-10, #dfe3ea);
+    background: var(--ns-fill-1a, rgba(255, 255, 255, 0.07));
+    border: 1px solid var(--ns-fill-6, rgba(255, 255, 255, 0.18));
     border-radius: 999px;
     cursor: pointer;
     transition: border-color .15s, color .15s, background .15s;
 }
 .neo-gallery-gm-chip-btn:hover,
 .neo-gallery-gm-chip-btn.neo-gallery-gm-chip-open {
-    color: #fff;
-    border-color: #FF6A00;
-    background: rgba(255, 106, 0, 0.12);
+    color: var(--ns-fg-strong, #fff);
+    border-color: var(--ns-orange, #FF6A00);
+    background: var(--ns-fill-orange-12, rgba(255, 106, 0, 0.12));
 }
 /* 尺寸 chip 的「已手改宽高」态与「没有原图」禁用态 */
 .neo-gallery-gm-chip-btn.on {
-    color: #fff;
-    border-color: #4fc3f7;
-    background: rgba(79, 195, 247, 0.18);
+    color: var(--ns-fg-strong, #fff);
+    border-color: var(--ns-cyan, #4fc3f7);
+    background: var(--ns-fill-cyan-18, rgba(79, 195, 247, 0.18));
 }
 .neo-gallery-gm-chip-btn:disabled {
     opacity: .4;
@@ -402,7 +402,7 @@
 .neo-gallery-gm-chip-caret {
     flex: none;
     font-size: 9px;
-    color: #9aa4b2;
+    color: var(--ns-color-9aa4b2, #9aa4b2);
 }
 /* 比例 glyph：描边小方框按选中比例定形，长宽由 gen-utils.js 写行内样式 */
 .neo-gallery-gm-chip-glyph {
@@ -456,25 +456,25 @@
     display: flex;
     justify-content: flex-end;
     padding-top: 6px;
-    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    border-top: 1px solid var(--ns-fill-4, rgba(255, 255, 255, 0.12));
 }
 .neo-gallery-gm-panel-done {
     padding: 4px 16px;
     font-size: 12px;
     font-weight: 600;
-    color: #dbe6ff;
-    background: rgba(76, 154, 255, 0.22);
-    border: 1px solid rgba(122, 180, 255, 0.45);
+    color: var(--ns-fg-info, #dbe6ff);
+    background: var(--ns-fill-blue-22, rgba(76, 154, 255, 0.22));
+    border: 1px solid var(--ns-fill-cyan4-45, rgba(122, 180, 255, 0.45));
     border-radius: 7px;
     cursor: pointer;
 }
-.neo-gallery-gm-panel-done:hover { background: rgba(76, 154, 255, 0.34); }
+.neo-gallery-gm-panel-done:hover { background: var(--ns-fill-blue-34, rgba(76, 154, 255, 0.34)); }
 .neo-gallery-gm-skill-group {
     margin-top: 6px;
     padding-bottom: 2px;
     font-size: 11px;
-    color: #9aa4b2;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    color: var(--ns-color-9aa4b2, #9aa4b2);
+    border-bottom: 1px solid var(--ns-fill-4, rgba(255, 255, 255, 0.12));
 }
 .neo-gallery-gm-skill-group:first-child {
     margin-top: 0;
@@ -485,7 +485,7 @@
     text-overflow: ellipsis;
 }
 .neo-gallery-gm-menu-on {
-    color: #FF9944;
+    color: var(--ns-orange-2, #FF9944);
 }
 
 
@@ -494,16 +494,16 @@
     margin-top: 0;
     padding: 2px 10px;
     font-size: 12px;
-    color: #9aa4b2;
+    color: var(--ns-color-9aa4b2, #9aa4b2);
     background: none;
-    border: 1px solid #555;
+    border: 1px solid var(--ns-field-bd-hover, #555);
     border-radius: 10px;
     cursor: pointer;
 }
 
 .neo-gallery-gm-save-skill:hover {
-    color: #FF9944;
-    border-color: #FF6A00;
+    color: var(--ns-orange-2, #FF9944);
+    border-color: var(--ns-orange, #FF6A00);
 }
 
 /* 输入卡：一个提示词框 = 生成用的提示词，底行是 技能与自定参数 / 宽高比 / 最长边 … ⋯ 生成 */
@@ -512,13 +512,13 @@
     flex-direction: column;
     gap: 8px;
     padding: 12px;
-    background: rgba(0, 0, 0, 0.35);
-    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: var(--ns-inset-surface, rgba(0, 0, 0, 0.35));
+    border: 1px solid var(--ns-fill-6, rgba(255, 255, 255, 0.18));
     border-radius: 10px;
 }
 
 .neo-gallery-gm-composer:focus-within {
-    border-color: rgba(76, 154, 255, 0.55);
+    border-color: var(--ns-fill-blue-55, rgba(76, 154, 255, 0.55));
 }
 
 /* 提示词框：默认就是能写几句的多行框，拉高只靠 resize（文生图 / 图片编辑共用这一条） */
@@ -531,7 +531,7 @@
     font-family: inherit;
     font-size: 15px;
     line-height: 1.6;
-    color: #eee;
+    color: var(--ns-fg-2, #eee);
     background: none;
     border: none;
     resize: vertical;
@@ -567,11 +567,11 @@
 .neo-gallery-gm-idle-title {
     font-size: 19px;
     font-weight: 600;
-    color: #6b7280;
+    color: var(--ns-faint-6, #6b7280);
 }
 .neo-gallery-gm-idle-sub {
     font-size: 12px;
-    color: #575e69;
+    color: var(--ns-line-1, #575e69);
 }
 
 /* 增强行在 ⋯ 菜单里（可选步骤，默认视野不出现）：下拉吃掉整行余宽，按钮贴右 */
@@ -587,7 +587,7 @@
 .neo-gallery-gm-tool-btn {
     width: 28px;
     height: 28px;
-    border: 1px solid var(--border-color, #3a3a4a);
+    border: 1px solid var(--border-color, var(--ns-border-3a3a4a, #3a3a4a));
     border-radius: 6px;
     background: transparent;
     color: inherit;
@@ -601,13 +601,13 @@
 }
 
 .neo-gallery-gm-tool-btn:hover {
-    border-color: var(--accent-color, #7c6cf0);
-    background: rgba(124, 108, 240, .08);
+    border-color: var(--accent-color, var(--ns-purple, #7c6cf0));
+    background: var(--ns-fill-purple-08, rgba(124, 108, 240, .08));
 }
 
 .neo-gallery-gm-tool-on {
-    border-color: var(--accent-color, #7c6cf0);
-    background: rgba(124, 108, 240, .15);
+    border-color: var(--accent-color, var(--ns-purple, #7c6cf0));
+    background: var(--ns-fill-purple-15, rgba(124, 108, 240, .15));
 }
 
 /* ⋯ 菜单条目：整行文字按钮（外壳复用 .rs-runtime-menu）；运行时随机开关夹在两条条目中间 */
@@ -617,15 +617,15 @@
     padding: 5px 2px;
     font-size: 12px;
     text-align: left;
-    color: #dfe3ea;
+    color: var(--ns-fg-10, #dfe3ea);
     background: none;
     border: none;
-    border-bottom: 1px dashed #444;
+    border-bottom: 1px dashed var(--ns-field-bd, #444);
     border-radius: 0;
     cursor: pointer;
 }
 .neo-gallery-gm-menu-item:hover {
-    color: #FF9944;
+    color: var(--ns-orange-2, #FF9944);
 }
 .neo-gallery-gm-menu-item:disabled {
     opacity: .6;
@@ -639,17 +639,17 @@
     min-width: 0;
     padding: 3px 6px;
     font-size: 12px;
-    color: #dfe3ea;
-    background: #22262e;
-    border: 1px solid var(--border-color, #3a3a4a);
+    color: var(--ns-fg-10, #dfe3ea);
+    background: var(--ns-background-22262e, #22262e);
+    border: 1px solid var(--border-color, var(--ns-border-3a3a4a-x, #3a3a4a));
     border-radius: 5px;
 }
 .neo-gallery-gm-menu-input:focus {
     outline: none;
-    border-color: var(--accent-color, #7c6cf0);
+    border-color: var(--accent-color, var(--ns-purple, #7c6cf0));
 }
 .neo-gallery-gm-menu-input::placeholder {
-    color: #6b7280;
+    color: var(--ns-faint-6, #6b7280);
 }
 
 
@@ -666,9 +666,9 @@
     justify-content: center;
     min-height: 110px;
     padding: 6px;
-    border: 1px dashed var(--border-color, #3a3a4a);
+    border: 1px dashed var(--border-color, var(--ns-border-3a3a4a-x-x, #3a3a4a));
     border-radius: 8px;
-    color: var(--text-secondary, #9a9ab0);
+    color: var(--text-secondary, var(--ns-dim-3a, #9a9ab0));
     font-size: 12px;
     text-align: center;
     overflow: hidden;
@@ -678,8 +678,8 @@
     cursor: pointer;
 }
 .neo-gallery-gm-board-cell[data-state="failed"] {
-    border-color: #b0484b;
-    color: #e08a8d;
+    border-color: var(--ns-err-solid-2, #b0484b);
+    color: var(--ns-err-9, #e08a8d);
 }
 .neo-gallery-gm-board-cell .neo-gallery-cs-result-img {
     width: 100%;
@@ -697,15 +697,15 @@
     left: 6px;
     padding: 1px 6px;
     border-radius: 6px;
-    background: rgba(24, 144, 80, .85);
-    color: #fff;
+    background: var(--ns-badge-6, rgba(24, 144, 80, .85));
+    color: var(--ns-fg-strong, #fff);
     font-size: 11px;
 }
 
 
 .neo-gallery-size-label {
     font-size: 11px;
-    color: #999;
+    color: var(--ns-dim-10, #999);
 }
 
 /* ============================================
@@ -746,8 +746,8 @@
     border-radius: 8px;
     overflow: hidden;
     cursor: pointer;
-    background-color: #1a1a1a;
-    border: 1px solid #333;
+    background-color: var(--ns-panel-alt, #1a1a1a);
+    border: 1px solid var(--ns-border, #333);
     transition: all 0.2s ease;
     display: flex;
     flex-direction: column;
@@ -755,9 +755,9 @@
 }
 
 .neo-gallery-category-card:hover {
-    border-color: #fff;
+    border-color: var(--ns-fg-strong, #fff);
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(255, 255, 255, 0.15);
+    box-shadow: 0 4px 12px var(--ns-fill-5, rgba(255, 255, 255, 0.15));
 }
 
 /* Type indicator badge (top-left corner) */
@@ -779,39 +779,39 @@
 .neo-gallery-card-type-badge.type-directory {
     background-color: transparent;
     color: white;
-    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+    text-shadow: 0 1px 3px var(--ns-scrim-10, rgba(0, 0, 0, 0.8));
 }
 
 .neo-gallery-card-type-badge.type-remote {
-    background-color: rgba(0, 150, 255, 0.3);
-    color: #66ccff;
-    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
-    border: 1px solid rgba(100, 200, 255, 0.3);
+    background-color: var(--ns-fill-blue4-30, rgba(0, 150, 255, 0.3));
+    color: var(--ns-cyan-2, #66ccff);
+    text-shadow: 0 1px 3px var(--ns-scrim-10, rgba(0, 0, 0, 0.8));
+    border: 1px solid var(--ns-fill-cyan3-30, rgba(100, 200, 255, 0.3));
 }
 
 .neo-gallery-remote-badge {
     display: inline-block;
     font-size: 10px;
-    color: #66ccff;
+    color: var(--ns-cyan-2, #66ccff);
     margin-left: 4px;
     vertical-align: middle;
     opacity: 0.8;
 }
 
 .neo-gallery-card-remote {
-    border: 1px solid rgba(100, 200, 255, 0.15);
+    border: 1px solid var(--ns-fill-cyan3-15, rgba(100, 200, 255, 0.15));
 }
 
 .neo-gallery-card-type-badge.type-image {
     background-color: transparent;
-    color: #FF9944;
-    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+    color: var(--ns-orange-2, #FF9944);
+    text-shadow: 0 1px 3px var(--ns-scrim-10, rgba(0, 0, 0, 0.8));
 }
 
 .neo-gallery-card-type-badge.type-audio {
     background-color: transparent;
-    color: #66ccff;
-    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+    color: var(--ns-cyan-2, #66ccff);
+    text-shadow: 0 1px 3px var(--ns-scrim-10, rgba(0, 0, 0, 0.8));
 }
 
 /* Remove loading animation from type badge - skeleton screen handles loading */
@@ -825,7 +825,7 @@
     flex: 1;
     min-height: 0;
     overflow: hidden;
-    background-color: #111;
+    background-color: var(--ns-background-color-111111, #111);
     position: relative;
 }
 
@@ -839,7 +839,7 @@
     height: 100%;
     gap: 2px;
     padding: 2px;
-    background-color: #111;
+    background-color: var(--ns-background-color-111111, #111);
 }
 
 /* Portrait covers switch to side-by-side to avoid excessive top/bottom crop */
@@ -876,10 +876,10 @@
     align-items: center;
     justify-content: center;
     background:
-        radial-gradient(60% 80% at 50% 40%, rgba(120, 200, 255, 0.08), transparent 70%),
-        linear-gradient(160deg, #232323, #191919);
-    border-top: 1px solid #333;
-    border-bottom: 1px solid #333;
+        radial-gradient(60% 80% at 50% 40%, var(--ns-fill-cyan2-08, rgba(120, 200, 255, 0.08)), transparent 70%),
+        linear-gradient(160deg, var(--ns-color-232323, #232323), var(--ns-color-191919, #191919));
+    border-top: 1px solid var(--ns-border, #333);
+    border-bottom: 1px solid var(--ns-border, #333);
 }
 
 .neo-gallery-card-placeholder-icon {
@@ -890,9 +890,9 @@
     align-items: center;
     justify-content: center;
     font-size: 26px;
-    color: #a3a3a3;
-    background: rgba(255, 255, 255, 0.05);
-    box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.25), 0 0 18px rgba(120, 200, 255, 0.10);
+    color: var(--ns-dim-8, #a3a3a3);
+    background: var(--ns-fill-0, rgba(255, 255, 255, 0.05));
+    box-shadow: inset 0 0 0 1px var(--ns-fill-slate-25, rgba(148, 163, 184, 0.25)), 0 0 18px var(--ns-fill-cyan2-10, rgba(120, 200, 255, 0.10));
 }
 
 /* Audio cover tile: deep-blue gradient + note badge + decorative waveform */
@@ -904,9 +904,9 @@
     align-items: center;
     gap: 10px;
     padding: 0 14px;
-    background: linear-gradient(160deg, rgba(30, 45, 70, 0.95), rgba(15, 22, 38, 0.98));
-    border-top: 1px solid rgba(120, 200, 255, 0.25);
-    border-bottom: 1px solid rgba(120, 200, 255, 0.25);
+    background: linear-gradient(160deg, var(--ns-glass-2, rgba(30, 45, 70, 0.95)), var(--ns-background-rgba-15-22-38-98, rgba(15, 22, 38, 0.98)));
+    border-top: 1px solid var(--ns-fill-cyan2-25, rgba(120, 200, 255, 0.25));
+    border-bottom: 1px solid var(--ns-fill-cyan2-25, rgba(120, 200, 255, 0.25));
     overflow: hidden;
 }
 
@@ -918,10 +918,10 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(0, 0, 0, 0.6);
-    color: #fff;
+    background: var(--ns-scrim-8, rgba(0, 0, 0, 0.6));
+    color: var(--ns-fg-strong, #fff);
     font-size: 15px;
-    border: 1px solid rgba(255, 255, 255, 0.3);
+    border: 1px solid var(--ns-fill-8, rgba(255, 255, 255, 0.3));
 }
 
 .neo-gallery-cover-audio-waveform {
@@ -941,7 +941,7 @@
 .neo-gallery-card-skeleton {
     width: 100%;
     height: 100%;
-    background: linear-gradient(90deg, #1a1a1a 25%, #2a2a2a 50%, #1a1a1a 75%);
+    background: linear-gradient(90deg, var(--ns-panel-alt, #1a1a1a) 25%, var(--ns-background-2a2a2a-x-x-x-x, #2a2a2a) 50%, var(--ns-panel-alt, #1a1a1a) 75%);
     background-size: 200px 100%;
     animation: neoGalleryShimmer 1.5s ease-in-out infinite;
     border-radius: 4px;
@@ -958,7 +958,7 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background: linear-gradient(90deg, #1a1a1a 25%, #2a2a2a 50%, #1a1a1a 75%);
+    background: linear-gradient(90deg, var(--ns-panel-alt, #1a1a1a) 25%, var(--ns-background-2a2a2a-x-x-x-x-x, #2a2a2a) 50%, var(--ns-panel-alt, #1a1a1a) 75%);
     background-size: 200px 100%;
     animation: neoGalleryShimmer 1.5s ease-in-out infinite;
     z-index: 1;
@@ -973,15 +973,15 @@
     left: 4px;
     right: 4px;
     bottom: 4px;
-    background: linear-gradient(90deg, #252525 25%, #353535 50%, #252525 75%);
+    background: linear-gradient(90deg, var(--ns-background-252525-x-x, #252525) 25%, var(--ns-sunken-2, #353535) 50%, var(--ns-background-252525-x-x-x, #252525) 75%);
     background-size: 200px 100%;
     animation: neoGalleryShimmer 1.5s ease-in-out infinite;
     z-index: 2;
     border-radius: 2px;
     /* Simulate the split between two stacked images in the grid */
     background-image: 
-        linear-gradient(90deg, #252525 25%, #353535 50%, #252525 75%),
-        linear-gradient(to bottom, transparent 49%, #1a1a1a 49%, #1a1a1a 51%, transparent 51%);
+        linear-gradient(90deg, var(--ns-color-252525, #252525) 25%, var(--ns-sunken-2, #353535) 50%, var(--ns-color-252525-x, #252525) 75%),
+        linear-gradient(to bottom, transparent 49%, var(--ns-panel-alt, #1a1a1a) 49%, var(--ns-panel-alt, #1a1a1a) 51%, transparent 51%);
     background-size: 200px 100%, 100% 100%;
 }
 
@@ -1015,7 +1015,7 @@
 .neo-gallery-card-name {
     display: block;
     font-size: 13px;
-    color: #eee;
+    color: var(--ns-fg-2, #eee);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1025,7 +1025,7 @@
 .neo-gallery-card-meta {
     font-size: 11px;
     line-height: 1.3;
-    color: #9a9a9a;
+    color: var(--ns-dim-2, #9a9a9a);
     max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1095,7 +1095,7 @@
 
 /* Up button in breadcrumb */
 .neo-gallery-breadcrumb-up {
-    color: #FF9944 !important;
+    color: var(--ns-orange-2, #FF9944) !important;
     cursor: pointer;
     transition: color 0.2s ease;
     user-select: none;
@@ -1105,18 +1105,18 @@
 }
 
 .neo-gallery-breadcrumb-up:hover {
-    color: #FFB84D !important;
-    background-color: rgba(255, 106, 0, 0.1);
+    color: var(--ns-orange-3, #FFB84D) !important;
+    background-color: var(--ns-fill-orange-10, rgba(255, 106, 0, 0.1));
 }
 
 /* Sibling dropdown menu */
 .neo-gallery-sibling-dropdown {
     min-width: 120px;
     max-width: 200px;
-    background-color: #2a2a2a;
-    border: 1px solid #FF6A00;
+    background-color: var(--ns-background-color-2a2a2a, #2a2a2a);
+    border: 1px solid var(--ns-orange, #FF6A00);
     border-radius: 4px;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 4px 16px var(--ns-scrim-3, rgba(0, 0, 0, 0.4));
     overflow: hidden;
 }
 
@@ -1128,7 +1128,7 @@
 
 .neo-gallery-sibling-item {
     padding: 6px 12px;
-    color: #ccc;
+    color: var(--ns-fg-soft, #ccc);
     font-size: 13px;
     cursor: pointer;
     transition: all 0.15s ease;
@@ -1139,12 +1139,12 @@
 
 .neo-gallery-sibling-item:hover,
 .neo-gallery-sibling-item-hover {
-    background-color: rgba(255, 106, 0, 0.15);
-    color: #FF9944;
+    background-color: var(--ns-fill-orange-15, rgba(255, 106, 0, 0.15));
+    color: var(--ns-orange-2, #FF9944);
 }
 
 .neo-gallery-breadcrumb-item {
-    color: #aaa;
+    color: var(--ns-aaa, #aaa);
     cursor: pointer;
     transition: color 0.2s ease;
     user-select: none;
@@ -1156,27 +1156,27 @@
 }
 
 .neo-gallery-breadcrumb-item:hover {
-    color: #FF9944;
+    color: var(--ns-orange-2, #FF9944);
 }
 
 .neo-gallery-breadcrumb-home:hover {
-    color: #FF6A00;
+    color: var(--ns-orange, #FF6A00);
 }
 
 .neo-gallery-breadcrumb-current {
-    color: #eee;
+    color: var(--ns-fg-2, #eee);
     cursor: pointer;
     font-weight: 500;
 }
 
 .neo-gallery-breadcrumb-sibling-trigger:hover {
-    color: #FF9944 !important;
-    background-color: rgba(255, 106, 0, 0.1);
+    color: var(--ns-orange-2, #FF9944) !important;
+    background-color: var(--ns-fill-orange-10, rgba(255, 106, 0, 0.1));
     border-radius: 3px;
 }
 
 .neo-gallery-breadcrumb-sep {
-    color: #666;
+    color: var(--ns-line-2, #666);
     user-select: none;
     margin: 0 2px;
 }
@@ -1202,7 +1202,7 @@
 .neo-gallery-accordion-header {
     cursor: pointer;
     padding: 4px 8px;
-    background-color: #2a2a2a;
+    background-color: var(--ns-background-color-2a2a2a, #2a2a2a);
     border-radius: 4px;
     margin-bottom: 5px;
     display: flex;
@@ -1211,7 +1211,7 @@
 }
 
 .neo-gallery-accordion-header:hover {
-    background-color: #333;
+    background-color: var(--ns-border, #333);
 }
 
 /* Accordion indicator (+/-) */
@@ -1226,7 +1226,7 @@
     flex-direction: column;
     gap: 8px;
     padding: 6px 8px;
-    background-color: #1a1a1a;
+    background-color: var(--ns-panel-alt, #1a1a1a);
     border-radius: 4px;
 }
 
@@ -1247,8 +1247,8 @@
     width: 100%;
     padding: 0 10px;
     border-radius: 4px;
-    border: 1px solid #444;
-    background-color: #2a2a2a;
+    border: 1px solid var(--ns-field-bd, #444);
+    background-color: var(--ns-background-color-2a2a2a, #2a2a2a);
     color: white;
     font-size: 12px;
     outline: none;
@@ -1257,7 +1257,7 @@
 }
 
 .neo-gallery-search-input::placeholder {
-    color: #888;
+    color: var(--ns-dim-9, #888);
 }
 
 /* ============================================
@@ -1265,7 +1265,7 @@
    ============================================ */
 
 .neo-gallery-dropdown-placeholder {
-    color: #999;
+    color: var(--ns-dim-10, #999);
 }
 
 /* ============================================
@@ -1289,7 +1289,7 @@
     gap: 6px;
     flex-shrink: 0;
     padding: 3px 8px;
-    background-color: rgba(42, 42, 42, 0.9);
+    background-color: var(--ns-background-color-rgba-42-42-42-9, rgba(42, 42, 42, 0.9));
     border-radius: 4px;
 }
 
@@ -1308,23 +1308,23 @@
     justify-content: center;
     align-items: center;
     cursor: pointer;
-    border: 2px dashed #ccc;
+    border: 2px dashed var(--ns-fg-soft, #ccc);
     border-radius: 5px;
-    background-color: #2a2a2a;
+    background-color: var(--ns-background-color-2a2a2a, #2a2a2a);
 }
 
 .neo-gallery-add-button:hover {
     border-style: solid;
-    background-color: #333;
+    background-color: var(--ns-border, #333);
 }
 
 .neo-gallery-add-icon {
-    color: #ccc;
+    color: var(--ns-fg-soft, #ccc);
 }
 
 .neo-gallery-add-label {
     margin-top: 5px;
-    color: #ccc;
+    color: var(--ns-fg-soft, #ccc);
 }
 
 /* ============================================
@@ -1349,24 +1349,24 @@ Accordion Section Buttons (Clear)
 }
 
 .neo-gallery-random-btn {
-    color: #FF6A00;
-    border-color: #555;
+    color: var(--ns-orange, #FF6A00);
+    border-color: var(--ns-field-bd-hover, #555);
     font-size: 14px;
 }
 
 .neo-gallery-clear-btn {
-    color: #f44336;
-    border-color: #f44336;
+    color: var(--ns-err-5, #f44336);
+    border-color: var(--ns-err-5, #f44336);
 }
 
 .neo-gallery-random-btn:hover {
-    background-color: rgba(255, 106, 0, 0.2);
-    border-color: #FF6A00;
-    color: #FF9944;
+    background-color: var(--ns-fill-orange-20, rgba(255, 106, 0, 0.2));
+    border-color: var(--ns-orange, #FF6A00);
+    color: var(--ns-orange-2, #FF9944);
 }
 
 .neo-gallery-clear-btn:hover {
-    background-color: rgba(244, 67, 54, 0.1);
+    background-color: var(--ns-fill-red-10, rgba(244, 67, 54, 0.1));
 }
 
 /* ============================================
@@ -1379,20 +1379,20 @@ Accordion Section Buttons (Clear)
     align-items: center;
     height: 200px;
     justify-content: center;
-    background-color: #1a1a1a;
+    background-color: var(--ns-panel-alt, #1a1a1a);
     border-radius: 8px;
-    border: 1px solid #333;
+    border: 1px solid var(--ns-border, #333);
 }
 
 .neo-gallery-no-files-icon {
     font-size: 64px;
-    color: #666;
+    color: var(--ns-line-2, #666);
     margin-bottom: 20px;
 }
 
 .neo-gallery-no-files-text {
     font-size: 18px;
-    color: #aaa;
+    color: var(--ns-aaa, #aaa);
 }
 
 /* ============================================
@@ -1428,7 +1428,7 @@ Accordion Section Buttons (Clear)
     width: 100%;
     height: 100%;
     display: block;
-    background-color: #1a1a1a;
+    background-color: var(--ns-panel-alt, #1a1a1a);
 }
 
 /* Thumbnail image with fixed aspect ratio (square for non-image items) */
@@ -1457,7 +1457,7 @@ Accordion Section Buttons (Clear)
     min-height: 28px;
     opacity: 0;
     transition: opacity 0.2s ease;
-    background: linear-gradient(to top, rgba(0, 0, 0, 0.6) 0%, transparent 100%);
+    background: linear-gradient(to top, var(--ns-scrim-8, rgba(0, 0, 0, 0.6)) 0%, transparent 100%);
     border-radius: 0 0 5px 5px;
 }
 
@@ -1481,10 +1481,10 @@ Accordion Section Buttons (Clear)
     justify-content: center;
     width: 32px;
     height: 28px;
-    background-color: rgba(0, 0, 0, 0.6);
+    background-color: var(--ns-scrim-8, rgba(0, 0, 0, 0.6));
     backdrop-filter: blur(5px);
     color: white;
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    border: 1px solid var(--ns-fill-7a, rgba(255, 255, 255, 0.2));
     border-radius: 4px;
     font-size: 13px;
     cursor: pointer;
@@ -1493,7 +1493,7 @@ Accordion Section Buttons (Clear)
 }
 
 .neo-gallery-thumb-img-send-btn:hover {
-    background-color: rgba(0, 0, 0, 0.8);
+    background-color: var(--ns-scrim-10, rgba(0, 0, 0, 0.8));
     transform: scale(1.1);
 }
 
@@ -1507,10 +1507,10 @@ Accordion Section Buttons (Clear)
     justify-content: center;
     width: 32px;
     height: 28px;
-    background-color: rgba(0, 0, 0, 0.6);
+    background-color: var(--ns-scrim-8, rgba(0, 0, 0, 0.6));
     backdrop-filter: blur(5px);
     color: white;
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    border: 1px solid var(--ns-fill-7a, rgba(255, 255, 255, 0.2));
     border-radius: 4px;
     font-size: 13px;
     cursor: pointer;
@@ -1525,7 +1525,7 @@ Accordion Section Buttons (Clear)
 }
 
 .neo-gallery-thumb-bookmark-btn:hover {
-    background-color: rgba(0, 0, 0, 0.8);
+    background-color: var(--ns-scrim-10, rgba(0, 0, 0, 0.8));
     transform: scale(1.1);
 }
 
@@ -1558,14 +1558,14 @@ Accordion Section Buttons (Clear)
 /* No files message icon */
 .neo-gallery-no-files-message-icon {
     font-size: 48px;
-    color: #888;
+    color: var(--ns-dim-9, #888);
     margin-bottom: 15px;
 }
 
 /* No files message text */
 .neo-gallery-no-files-message-text {
     font-size: 18px;
-    color: #888;
+    color: var(--ns-dim-9, #888);
 }
 
 /* Video indicator badge — top-left corner of the thumbnail */
@@ -1578,7 +1578,7 @@ Accordion Section Buttons (Clear)
     justify-content: center;
     width: 20px;
     height: 20px;
-    background-color: rgba(0, 0, 0, 0.55);
+    background-color: var(--ns-scrim-7, rgba(0, 0, 0, 0.55));
     backdrop-filter: blur(4px);
     color: white;
     border-radius: 4px;
@@ -1596,7 +1596,7 @@ Accordion Section Buttons (Clear)
     width: 20px;
     height: 20px;
     margin: 0;
-    accent-color: #fff;
+    accent-color: var(--ns-fg-strong, #fff);
     cursor: pointer;
     opacity: 0.55;
     transition: opacity 0.15s ease;
@@ -1610,7 +1610,7 @@ Accordion Section Buttons (Clear)
 
 /* Selected card highlight */
 .neo-gallery-thumb-selected .neo-gallery-thumb-img-wrapper {
-    outline: 2px solid #fff;
+    outline: 2px solid var(--ns-fg-strong, #fff);
     outline-offset: -2px;
 }
 
@@ -1623,8 +1623,8 @@ Accordion Section Buttons (Clear)
     align-items: center;
     gap: 8px;
     padding: 6px 10px;
-    background-color: rgba(20, 20, 20, 0.95);
-    border: 1px solid rgba(255, 255, 255, 0.4);
+    background-color: var(--ns-glass-4, rgba(20, 20, 20, 0.95));
+    border: 1px solid var(--ns-fill-10, rgba(255, 255, 255, 0.4));
     border-radius: 6px;
     backdrop-filter: blur(6px);
 }
@@ -1632,25 +1632,25 @@ Accordion Section Buttons (Clear)
 .neo-gallery-selection-count {
     flex: 1;
     font-size: 13px;
-    color: #ddd;
+    color: var(--ns-fg, #ddd);
 }
 
 .neo-gallery-selection-btn {
     padding: 4px 10px;
     font-size: 12px;
     color: white;
-    background-color: rgba(255, 255, 255, 0.12);
+    background-color: var(--ns-fill-4, rgba(255, 255, 255, 0.12));
     border-radius: 4px;
     cursor: pointer;
     transition: background-color 0.15s ease;
 }
 
 .neo-gallery-selection-btn:hover {
-    background-color: rgba(255, 255, 255, 0.25);
+    background-color: var(--ns-fill-7, rgba(255, 255, 255, 0.25));
 }
 
 .neo-gallery-selection-btn-danger:hover {
-    background-color: #d64545;
+    background-color: var(--ns-err-solid-4, #d64545);
 }
 
 /* Audio card — square media tile with waveform + centered play button */
@@ -1663,8 +1663,8 @@ Accordion Section Buttons (Clear)
     align-items: center;
     gap: 8px;
     padding: 0 10px;
-    background: linear-gradient(160deg, rgba(30, 45, 70, 0.92), rgba(15, 22, 38, 0.96));
-    border: 1px solid rgba(120, 200, 255, 0.25);
+    background: linear-gradient(160deg, var(--ns-background-rgba-30-45-70-92, rgba(30, 45, 70, 0.92)), var(--ns-background-rgba-15-22-38-96, rgba(15, 22, 38, 0.96)));
+    border: 1px solid var(--ns-fill-cyan2-25, rgba(120, 200, 255, 0.25));
     overflow: hidden;
 }
 
@@ -1682,10 +1682,10 @@ Accordion Section Buttons (Clear)
     justify-content: center;
     width: 30px;
     height: 30px;
-    background-color: rgba(0, 0, 0, 0.6);
+    background-color: var(--ns-scrim-8, rgba(0, 0, 0, 0.6));
     backdrop-filter: blur(4px);
     color: white;
-    border: 1px solid rgba(255, 255, 255, 0.3);
+    border: 1px solid var(--ns-fill-8, rgba(255, 255, 255, 0.3));
     border-radius: 50%;
     font-size: 12px;
     line-height: 1;
@@ -1695,14 +1695,14 @@ Accordion Section Buttons (Clear)
 
 .neo-gallery-audio-play-btn:hover {
     transform: scale(1.1);
-    background-color: rgba(0, 0, 0, 0.8);
+    background-color: var(--ns-scrim-10, rgba(0, 0, 0, 0.8));
 }
 
 .neo-gallery-audio-time {
     flex: 0 0 auto;
     font-size: 10px;
     line-height: 1;
-    color: var(--neo-text-muted, #94a3b8);
+    color: var(--neo-text-muted, var(--ns-dim-slate, #94a3b8));
     pointer-events: none;
     white-space: nowrap;
     font-variant-numeric: tabular-nums;
@@ -1730,9 +1730,9 @@ Accordion Section Buttons (Clear)
 /* Directory structure summary */
 .neo-gallery-dir-summary {
     padding: 8px 12px;
-    background-color: rgba(255, 106, 0, 0.1);
-    border-left: 3px solid #FF6A00;
-    color: #FF9944;
+    background-color: var(--ns-fill-orange-10, rgba(255, 106, 0, 0.1));
+    border-left: 3px solid var(--ns-orange, #FF6A00);
+    color: var(--ns-orange-2, #FF9944);
     font-size: 12px;
     margin-bottom: 8px;
 }
@@ -1740,9 +1740,9 @@ Accordion Section Buttons (Clear)
 /* Section separator in directory view */
 .neo-gallery-section-separator {
     padding: 8px 12px;
-    background-color: rgba(255, 255, 255, 0.05);
+    background-color: var(--ns-fill-0, rgba(255, 255, 255, 0.05));
     border-radius: 4px;
-    color: #aaa;
+    color: var(--ns-aaa, #aaa);
     font-size: 12px;
     margin: 12px 0 8px 0;
 }
@@ -1752,9 +1752,9 @@ Accordion Section Buttons (Clear)
     display: block;
     margin: 16px auto;
     padding: 10px 24px;
-    background-color: rgba(255, 106, 0, 0.1);
-    border: 1px solid #FF6A00;
-    color: #FF9944;
+    background-color: var(--ns-fill-orange-10, rgba(255, 106, 0, 0.1));
+    border: 1px solid var(--ns-orange, #FF6A00);
+    color: var(--ns-orange-2, #FF9944);
     border-radius: 6px;
     cursor: pointer;
     font-size: 13px;
@@ -1762,8 +1762,8 @@ Accordion Section Buttons (Clear)
 }
 
 .neo-gallery-load-more-btn:hover {
-    background-color: rgba(255, 106, 0, 0.2);
-    color: #FFB84D;
+    background-color: var(--ns-fill-orange-20, rgba(255, 106, 0, 0.2));
+    color: var(--ns-orange-3, #FFB84D);
 }
 
 /* ============================================
@@ -1787,11 +1787,11 @@ Accordion Section Buttons (Clear)
 }
 
 .neo-gallery-feedback-success {
-    color: #4CAF50;
+    color: var(--ns-ok-2, #4CAF50);
 }
 
 .neo-gallery-feedback-error {
-    color: #f44336;
+    color: var(--ns-err-5, #f44336);
 }
 
 .neo-gallery-feedback-text {
@@ -1810,7 +1810,7 @@ Accordion Section Buttons (Clear)
     left: 0;
     width: 100vw;
     height: 100vh;
-    background: rgba(0, 0, 0, 0.5);
+    background: var(--ns-scrim-6, rgba(0, 0, 0, 0.5));
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1818,8 +1818,8 @@ Accordion Section Buttons (Clear)
 }
 
 .neo-gallery-dir-modal {
-    background-color: #1e1e1e;
-    border: 1px solid #3a3a3a;
+    background-color: var(--ns-background-color-1e1e1e, #1e1e1e);
+    border: 1px solid var(--ns-border-2, #3a3a3a);
     border-radius: 10px;
     width: 780px;
     max-width: 90vw;
@@ -1827,7 +1827,7 @@ Accordion Section Buttons (Clear)
     max-height: min(720px, 86vh);
     display: flex;
     flex-direction: column;
-    box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 8px 40px var(--ns-scrim-6, rgba(0, 0, 0, 0.5));
 }
 
 /* 弹窗主体：左侧目录列表，右侧 C 站设置 */
@@ -1854,11 +1854,11 @@ Accordion Section Buttons (Clear)
     padding: 12px 14px;
     font-size: 14px;
     font-weight: 600;
-    border-bottom: 1px solid #333;
+    border-bottom: 1px solid var(--ns-border, #333);
 }
 
 .neo-gallery-dir-modal-title {
-    color: #eee;
+    color: var(--ns-fg-2, #eee);
 }
 
 .neo-gallery-dir-modal-close {
@@ -1871,21 +1871,21 @@ Accordion Section Buttons (Clear)
     cursor: pointer;
     background: transparent;
     border-radius: 6px;
-    color: #9aa4b0;
+    color: var(--ns-dim-3, #9aa4b0);
     font-size: 13px;
     line-height: 1;
 }
 
 .neo-gallery-dir-modal-close:hover {
-    background: #2c2f36;
-    color: #fff;
+    background: var(--ns-background-2c2f36, #2c2f36);
+    color: var(--ns-fg-strong, #fff);
 }
 
 .neo-gallery-dir-modal-refresh {
     flex: 0 0 auto;
-    background: #2c2f36;
-    color: #9aa4b0;
-    border: 1px solid #4a4d55;
+    background: var(--ns-background-2c2f36, #2c2f36);
+    color: var(--ns-dim-3, #9aa4b0);
+    border: 1px solid var(--ns-field-bd-2, #4a4d55);
     border-radius: 6px;
     padding: 3px 9px;
     font-size: 12px;
@@ -1893,8 +1893,8 @@ Accordion Section Buttons (Clear)
 }
 
 .neo-gallery-dir-modal-refresh:hover:not(:disabled) {
-    background: #383b43;
-    color: #fff;
+    background: var(--ns-background-383b43, #383b43);
+    color: var(--ns-fg-strong, #fff);
 }
 
 .neo-gallery-dir-modal-refresh:disabled {
@@ -1907,12 +1907,12 @@ Accordion Section Buttons (Clear)
     flex: 1;
     min-height: 0;
     padding: 6px 10px;
-    border-bottom: 1px solid #333;
+    border-bottom: 1px solid var(--ns-border, #333);
     overflow-y: auto;
 }
 
 .neo-gallery-dir-empty {
-    color: #888;
+    color: var(--ns-dim-9, #888);
     font-size: 13px;
     text-align: center;
     padding: 12px 0;
@@ -1928,7 +1928,7 @@ Accordion Section Buttons (Clear)
 .neo-gallery-dir-section-title {
     font-size: 12px;
     font-weight: 600;
-    color: #999;
+    color: var(--ns-dim-10, #999);
     margin-bottom: 8px;
 }
 
@@ -1938,15 +1938,15 @@ Accordion Section Buttons (Clear)
     justify-content: space-between;
     gap: 8px;
     padding: 6px 10px;
-    background-color: #2a2a2a;
+    background-color: var(--ns-background-color-2a2a2a, #2a2a2a);
     border-radius: 4px;
-    border: 1px solid #444;
+    border: 1px solid var(--ns-field-bd, #444);
     cursor: grab;
     user-select: none;
 }
 
 .neo-gallery-dir-path {
-    color: #ccc;
+    color: var(--ns-fg-soft, #ccc);
     font-size: 12px;
     font-family: "Cascadia Mono", Consolas, monospace;
     overflow: hidden;
@@ -1974,9 +1974,9 @@ Accordion Section Buttons (Clear)
 }
 
 .neo-gallery-dir-ctl-btn {
-    background-color: #2c2f36;
-    color: #9aa4b0;
-    border: 1px solid #4a4d55;
+    background-color: var(--ns-background-color-2c2f36, #2c2f36);
+    color: var(--ns-dim-3, #9aa4b0);
+    border: 1px solid var(--ns-field-bd-2, #4a4d55);
     border-radius: 6px;
     padding: 3px 8px;
     cursor: pointer;
@@ -1985,8 +1985,8 @@ Accordion Section Buttons (Clear)
 }
 
 .neo-gallery-dir-ctl-btn:hover:not(:disabled) {
-    background-color: #383b43;
-    color: #fff;
+    background-color: var(--ns-background-color-383b43, #383b43);
+    color: var(--ns-fg-strong, #fff);
 }
 
 .neo-gallery-dir-item.is-hidden {
@@ -1994,14 +1994,14 @@ Accordion Section Buttons (Clear)
 }
 
 .neo-gallery-dir-item.is-hidden .neo-gallery-dir-path {
-    color: #888;
+    color: var(--ns-dim-9, #888);
     text-decoration: line-through;
 }
 
 .neo-gallery-dir-hidden-badge {
     font-size: 11px;
-    color: #9aa4b0;
-    background-color: rgba(154, 164, 176, 0.14);
+    color: var(--ns-dim-3, #9aa4b0);
+    background-color: var(--ns-fill-slate-14, rgba(154, 164, 176, 0.14));
     border-radius: 4px;
     padding: 1px 6px;
     flex-shrink: 0;
@@ -2010,21 +2010,21 @@ Accordion Section Buttons (Clear)
 /* 角色图目录标记：徽标常显，按钮打开状态也常亮（其余动作按钮只在 hover 行时出现） */
 .neo-gallery-dir-char-badge {
     font-size: 11px;
-    color: #cfe0ff;
-    background-color: rgba(122, 162, 255, 0.18);
+    color: var(--ns-primary-fg, #cfe0ff);
+    background-color: var(--ns-fill-accent-18, rgba(122, 162, 255, 0.18));
     border-radius: 4px;
     padding: 1px 6px;
     flex-shrink: 0;
 }
 
 .neo-gallery-dir-char-btn.is-on {
-    color: #7aa2ff;
-    background-color: rgba(122, 162, 255, 0.16);
+    color: var(--ns-accent, #7aa2ff);
+    background-color: var(--ns-fill-accent-16, rgba(122, 162, 255, 0.16));
     opacity: 1;
 }
 
 .neo-gallery-dir-drag-handle {
-    color: #666;
+    color: var(--ns-line-2, #666);
     font-size: 14px;
     line-height: 1;
     flex-shrink: 0;
@@ -2037,17 +2037,17 @@ Accordion Section Buttons (Clear)
 }
 
 .neo-gallery-dir-item.drop-above {
-    box-shadow: 0 -3px 0 0 #5090cc;
+    box-shadow: 0 -3px 0 0 var(--ns-blue-3, #5090cc);
 }
 
 .neo-gallery-dir-item.drop-below {
-    box-shadow: 0 3px 0 0 #5090cc;
+    box-shadow: 0 3px 0 0 var(--ns-blue-3, #5090cc);
 }
 
 .neo-gallery-dir-remove-btn {
-    background-color: rgba(218, 54, 51, 0.18);
-    color: #ff8a8a;
-    border: 1px solid rgba(218, 54, 51, 0.45);
+    background-color: var(--ns-fill-red2-18, rgba(218, 54, 51, 0.18));
+    color: var(--ns-err, #ff8a8a);
+    border: 1px solid var(--ns-fill-red2-45, rgba(218, 54, 51, 0.45));
     border-radius: 6px;
     padding: 3px 8px;
     cursor: pointer;
@@ -2056,8 +2056,8 @@ Accordion Section Buttons (Clear)
 }
 
 .neo-gallery-dir-remove-btn:hover {
-    background-color: rgba(218, 54, 51, 0.35);
-    color: #ffb3b3;
+    background-color: var(--ns-fill-red2-35, rgba(218, 54, 51, 0.35));
+    color: var(--ns-err-6, #ffb3b3);
 }
 
 /* Add new directory area */
@@ -2066,7 +2066,7 @@ Accordion Section Buttons (Clear)
     flex-direction: column;
     gap: 4px;
     padding: 6px 10px;
-    border-bottom: 1px solid #333;
+    border-bottom: 1px solid var(--ns-border, #333);
 }
 
 .neo-gallery-dir-add-row {
@@ -2076,34 +2076,34 @@ Accordion Section Buttons (Clear)
 
 .neo-gallery-dir-label {
     font-size: 12px;
-    color: #ccc;
+    color: var(--ns-fg-soft, #ccc);
 }
 
 .neo-gallery-dir-input {
     flex: 1;
     padding: 6px 8px;
-    background-color: #2a2a2a;
-    border: 1px solid #444;
+    background-color: var(--ns-background-color-2a2a2a, #2a2a2a);
+    border: 1px solid var(--ns-field-bd, #444);
     border-radius: 4px;
-    color: #ccc;
+    color: var(--ns-fg-soft, #ccc);
     font-size: 12px;
     outline: none;
     box-sizing: border-box;
 }
 
 .neo-gallery-dir-input:focus {
-    border-color: #5090cc;
+    border-color: var(--ns-blue-3, #5090cc);
 }
 
 .neo-gallery-dir-input::placeholder {
-    color: #666;
+    color: var(--ns-line-2, #666);
 }
 
 .neo-gallery-dir-add-btn {
     padding: 4px 10px;
-    background-color: #2c2f36;
-    color: #ddd;
-    border: 1px solid #4a4d55;
+    background-color: var(--ns-background-color-2c2f36, #2c2f36);
+    color: var(--ns-fg, #ddd);
+    border: 1px solid var(--ns-field-bd-2, #4a4d55);
     border-radius: 6px;
     cursor: pointer;
     font-size: 12px;
@@ -2111,42 +2111,42 @@ Accordion Section Buttons (Clear)
 }
 
 .neo-gallery-dir-add-btn:hover {
-    background-color: #383b43;
-    color: #fff;
+    background-color: var(--ns-background-color-383b43, #383b43);
+    color: var(--ns-fg-strong, #fff);
 }
 
 /* Bulk action button (Civitai section) */
 .neo-gallery-dir-bulk-btn {
     margin-top: 8px;
     padding: 4px 10px;
-    background-color: #2c2f36;
-    color: #ddd;
-    border: 1px solid #4a4d55;
+    background-color: var(--ns-background-color-2c2f36, #2c2f36);
+    color: var(--ns-fg, #ddd);
+    border: 1px solid var(--ns-field-bd-2, #4a4d55);
     border-radius: 6px;
     cursor: pointer;
     font-size: 12px;
 }
 
 .neo-gallery-dir-bulk-btn:hover {
-    background-color: #383b43;
-    color: #fff;
+    background-color: var(--ns-background-color-383b43, #383b43);
+    color: var(--ns-fg-strong, #fff);
 }
 
 /* Send menu dropdown */
 .neo-gallery-send-menu {
     min-width: 200px;
     max-width: 300px;
-    background-color: #1e1e1e;
-    border: 1px solid #444;
+    background-color: var(--ns-background-color-1e1e1e, #1e1e1e);
+    border: 1px solid var(--ns-field-bd, #444);
     border-radius: 6px;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 4px 16px var(--ns-scrim-6, rgba(0, 0, 0, 0.5));
     overflow: hidden;
     z-index: 9999;
 }
 
 .neo-gallery-send-menu-item {
     padding: 8px 12px;
-    color: #ccc;
+    color: var(--ns-fg-soft, #ccc);
     font-size: 13px;
     cursor: pointer;
     transition: background-color 0.15s ease;
@@ -2156,18 +2156,18 @@ Accordion Section Buttons (Clear)
 }
 
 .neo-gallery-send-menu-item:hover {
-    background-color: rgba(255, 106, 0, 0.2);
-    color: #FFB84D;
+    background-color: var(--ns-fill-orange-20, rgba(255, 106, 0, 0.2));
+    color: var(--ns-orange-3, #FFB84D);
 }
 
 .neo-gallery-send-menu-selected {
     font-weight: bold;
-    color: #FF9944;
+    color: var(--ns-orange-2, #FF9944);
 }
 
 .neo-gallery-send-menu-selected:hover {
-    background-color: rgba(255, 106, 0, 0.3);
-    color: #FFB84D;
+    background-color: var(--ns-fill-orange-30, rgba(255, 106, 0, 0.3));
+    color: var(--ns-orange-3, #FFB84D);
 }
 
 /* Manage Directories 弹窗右侧的 Civitai LORA 同步分区 */
@@ -2177,7 +2177,7 @@ Accordion Section Buttons (Clear)
     flex-direction: column;
     gap: 6px;
     padding: 6px 10px;
-    border-left: 1px solid #333;
+    border-left: 1px solid var(--ns-border, #333);
     min-height: 0;
     overflow-y: auto;
 }
@@ -2185,7 +2185,7 @@ Accordion Section Buttons (Clear)
 .neo-gallery-civitai-title {
     font-size: 12px;
     font-weight: 600;
-    color: #ccc;
+    color: var(--ns-fg-soft, #ccc);
 }
 
 .neo-gallery-lora-dirs {
@@ -2194,8 +2194,8 @@ Accordion Section Buttons (Clear)
     display: flex;
     flex-direction: column;
     gap: 2px;
-    background: #2a2a2a;
-    border: 1px solid #444;
+    background: var(--ns-background-2a2a2a, #2a2a2a);
+    border: 1px solid var(--ns-field-bd, #444);
     border-radius: 4px;
     padding: 6px;
 }
@@ -2205,7 +2205,7 @@ Accordion Section Buttons (Clear)
     align-items: center;
     gap: 6px;
     font-size: 11px;
-    color: #bbb;
+    color: var(--ns-bbb, #bbb);
     cursor: pointer;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -2214,14 +2214,14 @@ Accordion Section Buttons (Clear)
 
 .neo-gallery-lora-progress {
     font-size: 11px;
-    color: #9aa4b0;
+    color: var(--ns-dim-3, #9aa4b0);
     min-height: 14px;
     word-break: break-all;
 }
 
 .neo-gallery-civitai-progress {
     font-size: 11px;
-    color: #9aa4b0;
+    color: var(--ns-dim-3, #9aa4b0);
     min-height: 14px;
     word-break: break-all;
 }
@@ -2231,13 +2231,13 @@ Accordion Section Buttons (Clear)
     align-items: center;
     gap: 6px;
     font-size: 12px;
-    color: #ccc;
+    color: var(--ns-fg-soft, #ccc);
     cursor: pointer;
     user-select: none;
 }
 
 .neo-gallery-civitai-toggle input[type="checkbox"] {
-    accent-color: #5090cc;
+    accent-color: var(--ns-blue-3, #5090cc);
     width: 14px;
     height: 14px;
     cursor: pointer;
@@ -2274,29 +2274,29 @@ Accordion Section Buttons (Clear)
     line-height: 1.4;
     padding: 4px 6px;
     border-radius: 4px;
-    border-left: 3px solid #555;
+    border-left: 3px solid var(--ns-field-bd-hover, #555);
     word-break: break-all;
 }
 
 .neo-gallery-net-result.ok {
     display: block;
-    color: #7ee787;
-    background: rgba(46, 160, 67, 0.12);
-    border-left-color: #2ea043;
+    color: var(--ns-ok-4, #7ee787);
+    background: var(--ns-fill-green-12, rgba(46, 160, 67, 0.12));
+    border-left-color: var(--ns-ok-3, #2ea043);
 }
 
 .neo-gallery-net-result.warn {
     display: block;
-    color: #e3b341;
-    background: rgba(227, 179, 65, 0.12);
-    border-left-color: #d29922;
+    color: var(--ns-amber-2, #e3b341);
+    background: var(--ns-fill-amber-12, rgba(227, 179, 65, 0.12));
+    border-left-color: var(--ns-amber, #d29922);
 }
 
 .neo-gallery-net-result.err {
     display: block;
-    color: #ff8a8a;
-    background: rgba(218, 54, 51, 0.12);
-    border-left-color: #da3633;
+    color: var(--ns-err, #ff8a8a);
+    background: var(--ns-fill-red2-12, rgba(218, 54, 51, 0.12));
+    border-left-color: var(--ns-err-solid, #da3633);
 }
 
 /* Lora dir card pending / failed status badge */
@@ -2309,7 +2309,7 @@ Accordion Section Buttons (Clear)
     line-height: 1.3;
     padding: 2px 6px;
     border-radius: 4px;
-    color: #fff;
+    color: var(--ns-fg-strong, #fff);
     text-align: center;
     z-index: 3;
     pointer-events: none;
@@ -2319,16 +2319,16 @@ Accordion Section Buttons (Clear)
 }
 
 .neo-gallery-card-status.status-loading {
-    background: rgba(33, 150, 243, 0.85);
+    background: var(--ns-badge-1, rgba(33, 150, 243, 0.85));
     animation: neo-gallery-pulse 1.4s ease-in-out infinite;
 }
 
 .neo-gallery-card-status.status-failed {
-    background: rgba(244, 67, 54, 0.9);
+    background: var(--ns-badge-2, rgba(244, 67, 54, 0.9));
 }
 
 .neo-gallery-card-status.status-pending {
-    background: rgba(255, 152, 0, 0.85);
+    background: var(--ns-badge-3, rgba(255, 152, 0, 0.85));
 }
 
 @keyframes neo-gallery-pulse {
@@ -2348,8 +2348,8 @@ Accordion Section Buttons (Clear)
     align-items: center;
     justify-content: center;
     border-radius: 6px;
-    background: rgba(255, 193, 7, 0.85);
-    color: #fff;
+    background: var(--ns-badge-4, rgba(255, 193, 7, 0.85));
+    color: var(--ns-on-accent, #fff);
     font-size: 13px;
     cursor: pointer;
     opacity: 0;
@@ -2361,7 +2361,7 @@ Accordion Section Buttons (Clear)
 }
 
 .neo-gallery-card-lora-send-btn:hover {
-    background: rgba(255, 193, 7, 1);
+    background: var(--ns-badge-9, rgba(255, 193, 7, 1));
 }
 
 /* LoRA tagging ⋯ button on writable leaf dir cards */
@@ -2376,8 +2376,8 @@ Accordion Section Buttons (Clear)
     align-items: center;
     justify-content: center;
     border-radius: 6px;
-    background: rgba(100, 116, 139, 0.85);
-    color: #fff;
+    background: var(--ns-badge-7, rgba(100, 116, 139, 0.85));
+    color: var(--ns-on-accent, #fff);
     font-size: 15px;
     line-height: 1;
     cursor: pointer;
@@ -2390,13 +2390,13 @@ Accordion Section Buttons (Clear)
 }
 
 .neo-gallery-card-dir-menu-btn:hover {
-    background: rgba(100, 116, 139, 1);
+    background: var(--ns-badge-8, rgba(100, 116, 139, 1));
 }
 
 /* LoRA tagging dialog */
 .neo-gallery-lt-dir {
     font-size: 12px;
-    color: #94a3b8;
+    color: var(--ns-dim-slate, #94a3b8);
     padding: 4px 16px 0;
     word-break: break-all;
 }
@@ -2410,7 +2410,7 @@ Accordion Section Buttons (Clear)
 
 .neo-gallery-lt-label {
     font-size: 13px;
-    color: #cbd5e1;
+    color: var(--ns-fg-slate, #cbd5e1);
     white-space: nowrap;
 }
 
@@ -2426,7 +2426,7 @@ Accordion Section Buttons (Clear)
     gap: 6px;
     padding: 8px 16px 0;
     font-size: 13px;
-    color: #cbd5e1;
+    color: var(--ns-fg-slate, #cbd5e1);
     cursor: pointer;
 }
 
@@ -2441,7 +2441,7 @@ Accordion Section Buttons (Clear)
     height: 140px;
     object-fit: cover;
     border-radius: 6px;
-    background: #1e293b;
+    background: var(--ns-slate-bg, #1e293b);
     flex-shrink: 0;
 }
 
@@ -2449,7 +2449,7 @@ Accordion Section Buttons (Clear)
     flex: 1;
     min-width: 0;
     font-size: 13px;
-    color: #cbd5e1;
+    color: var(--ns-fg-slate, #cbd5e1);
     line-height: 1.5;
     word-break: break-all;
     overflow-y: auto;
@@ -2477,8 +2477,8 @@ Accordion Section Buttons (Clear)
     align-items: center;
     justify-content: center;
     border-radius: 6px;
-    background: rgba(38, 166, 154, 0.9);
-    color: #fff;
+    background: var(--ns-badge-5, rgba(38, 166, 154, 0.9));
+    color: var(--ns-on-accent, #fff);
     font-size: 13px;
     cursor: pointer;
     opacity: 0;
@@ -2490,7 +2490,7 @@ Accordion Section Buttons (Clear)
 }
 
 .neo-gallery-card-civitai-save-btn:hover {
-    background: rgba(38, 166, 154, 1);
+    background: var(--ns-badge-10, rgba(38, 166, 154, 1));
 }
 
 /* Smart workflow match filter bar (Lora section) */
@@ -2504,29 +2504,29 @@ Accordion Section Buttons (Clear)
 
 .neo-gallery-workflow-filter-label {
     font-size: 11px;
-    color: #9aa4b0;
+    color: var(--ns-dim-3, #9aa4b0);
 }
 
 .neo-gallery-workflow-chip {
     font-size: 11px;
     padding: 3px 10px;
     border-radius: 12px;
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    border: 1px solid var(--ns-fill-7a, rgba(255, 255, 255, 0.2));
     background: transparent;
-    color: #ccc;
+    color: var(--ns-fg-soft, #ccc);
     cursor: pointer;
     transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
 .neo-gallery-workflow-chip:hover {
-    border-color: #FF6A00;
-    color: #fff;
+    border-color: var(--ns-orange, #FF6A00);
+    color: var(--ns-fg-strong, #fff);
 }
 
 .neo-gallery-workflow-chip.active {
-    background: #FF6A00;
-    border-color: #FF6A00;
-    color: #fff;
+    background: var(--ns-orange, #FF6A00);
+    border-color: var(--ns-orange, #FF6A00);
+    color: var(--ns-on-accent, #fff);
 }
 
 /* Pending lora directory message (opening a lora whose examples are still fetching) */
@@ -2534,35 +2534,35 @@ Accordion Section Buttons (Clear)
     padding: 14px 16px;
     margin: 10px 0;
     border-radius: 8px;
-    background: rgba(33, 150, 243, 0.12);
-    border: 1px solid rgba(33, 150, 243, 0.35);
-    color: #9ad1ff;
+    background: var(--ns-fill-mat-blue-12, rgba(33, 150, 243, 0.12));
+    border: 1px solid var(--ns-fill-mat-blue-35, rgba(33, 150, 243, 0.35));
+    color: var(--ns-cyan-3, #9ad1ff);
     font-size: 12px;
     text-align: center;
 }
 
 .neo-gallery-pending-message.pending-failed {
-    background: rgba(244, 67, 54, 0.12);
-    border-color: rgba(244, 67, 54, 0.4);
-    color: #ff9d94;
+    background: var(--ns-fill-red-12, rgba(244, 67, 54, 0.12));
+    border-color: var(--ns-fill-red-40, rgba(244, 67, 54, 0.4));
+    color: var(--ns-err-8, #ff9d94);
 }
 
 .neo-gallery-pending-message.pending-warn {
-    background: rgba(255, 152, 0, 0.12);
-    border-color: rgba(255, 152, 0, 0.4);
-    color: #ffc77d;
+    background: var(--ns-fill-mat-amber-12, rgba(255, 152, 0, 0.12));
+    border-color: var(--ns-fill-mat-amber-40, rgba(255, 152, 0, 0.4));
+    color: var(--ns-orange-4, #ffc77d);
 }
 
 .neo-gallery-card-jump-highlight {
-    outline: 2px solid #4c9aff;
+    outline: 2px solid var(--ns-link-blue, #4c9aff);
     outline-offset: -2px;
     border-radius: 8px;
     animation: neo-gallery-jump-fade 2.5s ease-out forwards;
 }
 
 @keyframes neo-gallery-jump-fade {
-    0% { outline-width: 3px; box-shadow: 0 0 12px rgba(76, 154, 255, 0.6); }
-    70% { outline-width: 2px; box-shadow: 0 0 6px rgba(76, 154, 255, 0.25); }
+    0% { outline-width: 3px; box-shadow: 0 0 12px var(--ns-fill-blue-60, rgba(76, 154, 255, 0.6)); }
+    70% { outline-width: 2px; box-shadow: 0 0 6px var(--ns-fill-blue-25, rgba(76, 154, 255, 0.25)); }
     100% { outline-width: 0; box-shadow: none; }
 }
 
@@ -2573,11 +2573,11 @@ Accordion Section Buttons (Clear)
     z-index: 9000;
     min-width: 200px;
     max-width: 320px;
-    background: rgba(24, 26, 32, 0.98);
-    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: var(--ns-glass-1, rgba(24, 26, 32, 0.98));
+    border: 1px solid var(--ns-fill-5, rgba(255, 255, 255, 0.15));
     border-radius: 8px;
     padding: 6px;
-    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 6px 24px var(--ns-scrim-6, rgba(0, 0, 0, 0.5));
     backdrop-filter: blur(6px);
 }
 
@@ -2587,7 +2587,7 @@ Accordion Section Buttons (Clear)
     gap: 8px;
     padding: 4px 8px;
     font-size: 12px;
-    color: #eee;
+    color: var(--ns-fg-2, #eee);
 }
 
 .neo-gallery-collect-name {
@@ -2601,11 +2601,11 @@ Accordion Section Buttons (Clear)
 .neo-gallery-collect-path {
     padding: 2px 8px 6px;
     font-size: 11px;
-    color: #8a93a0;
+    color: var(--ns-dim-4, #8a93a0);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    border-bottom: 1px solid var(--ns-fill-2, rgba(255, 255, 255, 0.08));
     margin-bottom: 4px;
 }
 
@@ -2613,27 +2613,27 @@ Accordion Section Buttons (Clear)
     padding: 7px 10px;
     border-radius: 6px;
     font-size: 12px;
-    color: #ddd;
+    color: var(--ns-fg, #ddd);
     cursor: pointer;
     transition: background 0.12s ease;
 }
 
 .neo-gallery-collect-item:hover {
-    background: rgba(76, 154, 255, 0.18);
-    color: #fff;
+    background: var(--ns-fill-blue-18, rgba(76, 154, 255, 0.18));
+    color: var(--ns-fg-strong, #fff);
 }
 
 /* Destructive menu item (delete) — separated from the collect actions */
 .neo-gallery-collect-item-danger {
     margin-top: 4px;
     padding-top: 8px;
-    border-top: 1px solid rgba(255, 255, 255, 0.12);
-    color: #ff6b6b;
+    border-top: 1px solid var(--ns-fill-4, rgba(255, 255, 255, 0.12));
+    color: var(--ns-err-2, #ff6b6b);
 }
 
 .neo-gallery-collect-item-danger:hover {
-    background: rgba(244, 67, 54, 0.18);
-    color: #fff;
+    background: var(--ns-fill-red-18, rgba(244, 67, 54, 0.18));
+    color: var(--ns-fg-strong, #fff);
 }
 
 /* Prompt preview in the collect menu — selectable so the user can copy part of it */
@@ -2641,10 +2641,10 @@ Accordion Section Buttons (Clear)
     margin: 4px 6px;
     padding: 6px 8px;
     border-radius: 6px;
-    background: rgba(255, 255, 255, 0.06);
+    background: var(--ns-fill-1, rgba(255, 255, 255, 0.06));
     font-size: 11px;
     line-height: 1.5;
-    color: #b9c2ce;
+    color: var(--ns-color-b9c2ce, #b9c2ce);
     display: flex;
     gap: 6px;
     user-select: text;
@@ -2680,9 +2680,9 @@ Accordion Section Buttons (Clear)
     border-radius: 8px;
     font-size: 10px;
     line-height: 15px;
-    color: #9fb6d6;
-    background: rgba(76, 154, 255, 0.16);
-    border: 1px solid rgba(76, 154, 255, 0.25);
+    color: var(--ns-fg-slate3, #9fb6d6);
+    background: var(--ns-fill-blue-16, rgba(76, 154, 255, 0.16));
+    border: 1px solid var(--ns-fill-blue-25, rgba(76, 154, 255, 0.25));
 }
 
 /* 触发词区：逐词可复制 chip + 全量复制 */
@@ -2690,9 +2690,9 @@ Accordion Section Buttons (Clear)
     margin: 2px 6px 6px;
     padding: 6px 8px;
     border-radius: 6px;
-    background: rgba(255, 255, 255, 0.06);
+    background: var(--ns-fill-1, rgba(255, 255, 255, 0.06));
     font-size: 11px;
-    color: #b9c2ce;
+    color: var(--ns-color-b9c2ce, #b9c2ce);
 }
 
 .neo-gallery-collect-triggers-head {
@@ -2704,17 +2704,17 @@ Accordion Section Buttons (Clear)
 }
 
 .neo-gallery-collect-triggers-label {
-    color: #8a93a0;
+    color: var(--ns-dim-4, #8a93a0);
 }
 
 .neo-gallery-collect-triggers-copyall {
     cursor: pointer;
-    color: #7aa2ff;
+    color: var(--ns-accent, #7aa2ff);
     white-space: nowrap;
 }
 
 .neo-gallery-collect-triggers-copyall:hover {
-    color: #fff;
+    color: var(--ns-fg-strong, #fff);
 }
 
 .neo-gallery-collect-trigger-chip {
@@ -2722,15 +2722,15 @@ Accordion Section Buttons (Clear)
     margin: 2px 3px 2px 0;
     padding: 2px 7px;
     border-radius: 10px;
-    background: rgba(255, 255, 255, 0.1);
-    color: #d6dde6;
+    background: var(--ns-fill-3a, rgba(255, 255, 255, 0.1));
+    color: var(--ns-color-d6dde6, #d6dde6);
     cursor: pointer;
     user-select: none;
 }
 
 .neo-gallery-collect-trigger-chip:hover {
-    background: rgba(76, 154, 255, 0.28);
-    color: #fff;
+    background: var(--ns-fill-blue-28, rgba(76, 154, 255, 0.28));
+    color: var(--ns-fg-strong, #fff);
 }
 
 /* Source badge on a bookmark card (本地 / C 站 / OSS 预设) */
@@ -2741,8 +2741,8 @@ Accordion Section Buttons (Clear)
     border-radius: 8px;
     font-size: 10px;
     line-height: 14px;
-    color: #bcd;
-    background: rgba(255, 255, 255, 0.12);
+    color: var(--ns-fg-slate4, #bcd);
+    background: var(--ns-fill-4, rgba(255, 255, 255, 0.12));
     vertical-align: middle;
 }
 
@@ -2751,16 +2751,16 @@ Accordion Section Buttons (Clear)
     padding: 5px 14px;
     font-size: 12px;
     cursor: pointer;
-    background: rgba(42, 42, 46, 0.95);
-    color: #ccc;
-    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: var(--ns-glass-3, rgba(42, 42, 46, 0.95));
+    color: var(--ns-fg-soft, #ccc);
+    border: 1px solid var(--ns-fill-6, rgba(255, 255, 255, 0.18));
     border-radius: 6px;
     transition: background 0.15s ease, color 0.15s ease;
 }
 
 .neo-gallery-pagination-btn:hover:not(:disabled) {
-    background: rgba(76, 154, 255, 0.22);
-    color: #fff;
+    background: var(--ns-fill-blue-22, rgba(76, 154, 255, 0.22));
+    color: var(--ns-fg-strong, #fff);
 }
 
 .neo-gallery-pagination-btn:disabled {
@@ -2770,7 +2770,7 @@ Accordion Section Buttons (Clear)
 
 .neo-gallery-pagination-info {
     font-size: 12px;
-    color: #9aa4b0;
+    color: var(--ns-dim-3, #9aa4b0);
 }
 
 /* ====== Storyboard story dialog (九宫格分镜图：填故事) ====== */
@@ -2785,7 +2785,7 @@ Accordion Section Buttons (Clear)
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(0, 0, 0, 0.6);
+    background: var(--ns-scrim-8, rgba(0, 0, 0, 0.6));
     backdrop-filter: blur(3px);
 }
 
@@ -2796,10 +2796,10 @@ Accordion Section Buttons (Clear)
     width: 560px;
     max-width: 90vw;
     padding: 12px;
-    background: rgba(24, 26, 32, 0.98);
-    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: var(--ns-glass-1, rgba(24, 26, 32, 0.98));
+    border: 1px solid var(--ns-fill-5, rgba(255, 255, 255, 0.15));
     border-radius: 8px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 8px 32px var(--ns-scrim-6, rgba(0, 0, 0, 0.5));
 }
 
 .neo-gallery-story-titlebar {
@@ -2836,14 +2836,14 @@ Accordion Section Buttons (Clear)
 .neo-gallery-story-title {
     font-size: 13px;
     font-weight: 600;
-    color: #eee;
+    color: var(--ns-fg-2, #eee);
 }
 
 /* 生成素材窗标题栏右侧的提示词入口（提示词 / 随机）：贴右成一撮，✕ 在最右；
    标题栏本身是拖窗口的手势，按钮上的按下由 makeStoryWindowDraggable 让出来 */
 .neo-gallery-story-titlebar-tools { margin-left: auto; display: flex; align-items: center; gap: 6px; padding-right: 6px; }
-.neo-gallery-story-titlebar-btn { padding: 3px 8px; font-size: 12px; color: #b9c4d0; background: rgba(255, 255, 255, 0.06); border: 1px solid #3a3a3a; border-radius: 5px; cursor: pointer; }
-.neo-gallery-story-titlebar-btn:hover { color: #fff; background: rgba(255, 255, 255, 0.12); }
+.neo-gallery-story-titlebar-btn { padding: 3px 8px; font-size: 12px; color: var(--ns-color-b9c4d0, #b9c4d0); background: var(--ns-fill-1, rgba(255, 255, 255, 0.06)); border: 1px solid var(--ns-border-2, #3a3a3a); border-radius: 5px; cursor: pointer; }
+.neo-gallery-story-titlebar-btn:hover { color: var(--ns-fg-strong, #fff); background: var(--ns-fill-4, rgba(255, 255, 255, 0.12)); }
 .neo-gallery-story-titlebar-btn:disabled { opacity: 0.5; cursor: default; }
 
 /* 组合钮（左文字 + 右骰子）：两颗钮拼成一枚控件——左件收右角、右件收左角并压掉重复的那条边框。
@@ -2857,14 +2857,14 @@ Accordion Section Buttons (Clear)
     padding: 2px 6px;
     font-size: 18px;
     line-height: 1;
-    color: #888;
+    color: var(--ns-dim-9, #888);
     cursor: pointer;
     border-radius: 4px;
 }
 
 .neo-gallery-story-close:hover {
-    color: #FF9944;
-    background: rgba(255, 106, 0, 0.1);
+    color: var(--ns-orange-2, #FF9944);
+    background: var(--ns-fill-orange-10, rgba(255, 106, 0, 0.1));
 }
 
 /* 参考图预览：小窗里直接看到用作参考的那张图，大小与卡片一致（缩略图走 /neo_gallery/thumbnail 缓存） */
@@ -2873,8 +2873,8 @@ Accordion Section Buttons (Clear)
     flex-direction: column;
     gap: 6px;
     padding: 6px;
-    background: rgba(0, 0, 0, 0.3);
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: var(--ns-inset-surface-2, rgba(0, 0, 0, 0.3));
+    border: 1px solid var(--ns-fill-4, rgba(255, 255, 255, 0.12));
     border-radius: 6px;
 }
 
@@ -2883,7 +2883,7 @@ Accordion Section Buttons (Clear)
     width: 100%;
     display: block;
     object-fit: contain;
-    background: rgba(0, 0, 0, 0.5);
+    background: var(--ns-scrim-6, rgba(0, 0, 0, 0.5));
     border-radius: 4px;
 }
 
@@ -2896,13 +2896,13 @@ Accordion Section Buttons (Clear)
 
 .neo-gallery-story-ref-label {
     font-size: 11px;
-    color: #b8c2ce;
+    color: var(--ns-fg-slate2, #b8c2ce);
 }
 
 /* 参考图文件名（让用户确认用的是哪张图） */
 .neo-gallery-story-path {
     font-size: 11px;
-    color: #8a93a0;
+    color: var(--ns-dim-4, #8a93a0);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -2924,9 +2924,9 @@ Accordion Section Buttons (Clear)
     font-family: inherit;
     font-size: 12px;
     line-height: 1.5;
-    color: #eee;
-    background: rgba(0, 0, 0, 0.35);
-    border: 1px solid rgba(255, 255, 255, 0.18);
+    color: var(--ns-fg-2, #eee);
+    background: var(--ns-inset-surface, rgba(0, 0, 0, 0.35));
+    border: 1px solid var(--ns-fill-6, rgba(255, 255, 255, 0.18));
     border-radius: 6px;
     resize: vertical;
 }
@@ -2939,7 +2939,7 @@ Accordion Section Buttons (Clear)
 .neo-gallery-story-input:focus,
 .neo-gallery-story-idea:focus {
     outline: none;
-    border-color: rgba(76, 154, 255, 0.6);
+    border-color: var(--ns-fill-blue-60, rgba(76, 154, 255, 0.6));
 }
 
 /* 图片编辑弹窗：上方图片对比，下方表单 */
@@ -3005,7 +3005,7 @@ Accordion Section Buttons (Clear)
     top: 0;
     bottom: 0;
     width: 3px;
-    background: #4fc3f7;
+    background: var(--ns-cyan, #4fc3f7);
     z-index: 3;
     cursor: col-resize;
     border-radius: 1.5px;
@@ -3020,9 +3020,9 @@ Accordion Section Buttons (Clear)
     transform: translate(-50%, -50%);
     width: 24px;
     height: 24px;
-    background: #4fc3f7;
+    background: var(--ns-cyan, #4fc3f7);
     border-radius: 50%;
-    color: #fff;
+    color: var(--ns-on-accent, #fff);
     font-size: 12px;
     display: flex;
     align-items: center;
@@ -3036,7 +3036,7 @@ Accordion Section Buttons (Clear)
     max-width: 100%;
     max-height: 50vh;
     object-fit: contain;
-    background: rgba(0, 0, 0, 0.5);
+    background: var(--ns-scrim-6, rgba(0, 0, 0, 0.5));
     border-radius: 4px;
     cursor: zoom-in;
 }
@@ -3069,11 +3069,11 @@ Accordion Section Buttons (Clear)
    （出图尺寸跟原图走，很少要改）；胶囊壳、按下态、禁用态都复用 .neo-gallery-gm-chip-btn */
 .neo-gallery-edit-size-chip .neo-director-field-label {
     margin-bottom: 0;
-    color: #9aa4b2;
+    color: var(--ns-color-9aa4b2, #9aa4b2);
 }
 .neo-gallery-edit-size-chip-val {
     font-size: 12px;
-    color: #4fc3f7;
+    color: var(--ns-cyan, #4fc3f7);
     white-space: nowrap;
 }
 .neo-gallery-edit-size-editor {
@@ -3096,7 +3096,7 @@ Accordion Section Buttons (Clear)
 
 .neo-gallery-edit-size-label {
     font-size: 12px;
-    color: #4fc3f7;
+    color: var(--ns-cyan, #4fc3f7);
     white-space: nowrap;
 }
 
@@ -3137,7 +3137,7 @@ Accordion Section Buttons (Clear)
     display: flex;
     align-items: center;
     justify-content: center;
-    border: 1.5px dashed rgba(255, 255, 255, 0.3);
+    border: 1.5px dashed var(--ns-fill-8, rgba(255, 255, 255, 0.3));
     border-radius: 8px;
     cursor: pointer;
     position: relative;
@@ -3146,13 +3146,13 @@ Accordion Section Buttons (Clear)
 
 .neo-gallery-edit-refdrop:hover,
 .neo-gallery-edit-refdrop.drop-active {
-    border-color: #4fc3f7;
-    background: rgba(79, 195, 247, 0.08);
+    border-color: var(--ns-cyan, #4fc3f7);
+    background: var(--ns-fill-cyan-08, rgba(79, 195, 247, 0.08));
 }
 
 .neo-gallery-edit-refdrop.has-img {
     border-style: solid;
-    border-color: rgba(255, 255, 255, 0.25);
+    border-color: var(--ns-fill-7, rgba(255, 255, 255, 0.25));
 }
 
 .neo-gallery-edit-refdrop-icon {
@@ -3173,7 +3173,7 @@ Accordion Section Buttons (Clear)
     position: absolute;
     top: -6px;
     right: -6px;
-    background: #333;
+    background: var(--ns-border, #333);
     border-radius: 50%;
     width: 16px;
     height: 16px;
@@ -3183,7 +3183,7 @@ Accordion Section Buttons (Clear)
     font-size: 11px;
     line-height: 1;
     cursor: pointer;
-    color: #eee;
+    color: var(--ns-fg-2, #eee);
 }
 
 /* 参考图内联在提示词框左上角：参考列限宽在左，文字占右侧与方块并排流式排 */
@@ -3228,7 +3228,7 @@ Accordion Section Buttons (Clear)
     bottom: 6px;
     text-align: center;
     font-size: 10px;
-    color: #9aa4b2;
+    color: var(--ns-color-9aa4b2, #9aa4b2);
 }
 
 /* 取图浮层：hover / focus「＋参考」列才浮出，头部计数 + 本地上传 / 素材库取用，从方块上方开 */
@@ -3242,10 +3242,10 @@ Accordion Section Buttons (Clear)
     gap: 2px;
     min-width: 140px;
     padding: 6px;
-    background: #2a2a31;
-    border: 1px solid rgba(255, 255, 255, 0.16);
+    background: var(--ns-background-2a2a31, #2a2a31);
+    border: 1px solid var(--ns-fill-5a, rgba(255, 255, 255, 0.16));
     border-radius: 9px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+    box-shadow: 0 8px 24px var(--ns-scrim-7, rgba(0, 0, 0, 0.55));
     opacity: 0;
     pointer-events: none;
     z-index: 6;
@@ -3264,17 +3264,17 @@ Accordion Section Buttons (Clear)
     padding: 2px 4px 5px;
     font-size: 11px;
     letter-spacing: 0.4px;
-    color: #8a8a96;
+    color: var(--ns-dim-5, #8a8a96);
     text-transform: uppercase;
 }
-.neo-gallery-edit-refcount-num { color: #b9c0cc; }
+.neo-gallery-edit-refcount-num { color: var(--ns-color-b9c0cc, #b9c0cc); }
 .neo-gallery-edit-refpick {
     width: 100%;
     text-align: left;
     padding: 7px 8px;
     font-size: 12px;
     line-height: 1.2;
-    color: #cfcfd6;
+    color: var(--ns-fg-9, #cfcfd6);
     background: none;
     border: none;
     border-radius: 6px;
@@ -3283,9 +3283,9 @@ Accordion Section Buttons (Clear)
 }
 
 .neo-gallery-edit-refpick:hover {
-    color: #eee;
-    background: rgba(79, 195, 247, 0.16);
-    border-color: #4fc3f7;
+    color: var(--ns-fg-2, #eee);
+    background: var(--ns-fill-cyan-16, rgba(79, 195, 247, 0.16));
+    border-color: var(--ns-cyan, #4fc3f7);
 }
 
 /* 扩图：imgwrap 变为中心舞台，画布（原图+留白）超出时整体等比缩小 */
@@ -3294,7 +3294,7 @@ Accordion Section Buttons (Clear)
 }
 
 .neo-gallery-edit-compare-imgwrap.drop-active {
-    outline: 2px dashed var(--accent, #60a5fa);
+    outline: 2px dashed var(--accent, var(--ns-accent-2, #60a5fa));
     outline-offset: -2px;
     border-radius: 8px;
 }
@@ -3309,7 +3309,7 @@ Accordion Section Buttons (Clear)
     align-items: center;
     justify-content: center;
     text-align: center;
-    color: #8a8a96;
+    color: var(--ns-dim-5, #8a8a96);
     font-size: 13px;
     pointer-events: none;
 }
@@ -3328,7 +3328,7 @@ Accordion Section Buttons (Clear)
     height: 140px;
     max-width: 100%;
     padding: 12px 18px;
-    border: 1px dashed rgba(160, 175, 200, 0.5);
+    border: 1px dashed var(--ns-line-slate, rgba(160, 175, 200, 0.5));
     border-radius: 10px;
     background: transparent;
     color: inherit;
@@ -3338,8 +3338,8 @@ Accordion Section Buttons (Clear)
 
 .neo-gallery-edit-srcbox:hover,
 .neo-gallery-edit-srcbox.drop-active {
-    border-color: #4fc3f7;
-    background: rgba(79, 195, 247, 0.09);
+    border-color: var(--ns-cyan, #4fc3f7);
+    background: var(--ns-fill-cyan-09, rgba(79, 195, 247, 0.09));
 }
 
 .neo-gallery-edit-srcbox-plus {
@@ -3368,10 +3368,10 @@ Accordion Section Buttons (Clear)
     gap: 2px;
     min-width: 132px;
     padding: 4px;
-    border: 1px solid #444;
+    border: 1px solid var(--ns-field-bd, #444);
     border-radius: 8px;
-    background: #2b2b33;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+    background: var(--ns-background-2b2b33, #2b2b33);
+    box-shadow: 0 4px 16px var(--ns-scrim-5, rgba(0, 0, 0, 0.45));
     text-align: left;
     z-index: 20;
 }
@@ -3383,14 +3383,14 @@ Accordion Section Buttons (Clear)
     border: none;
     border-radius: 6px;
     background: transparent;
-    color: #e0e0e6;
+    color: var(--ns-fg-2a, #e0e0e6);
     font-size: 12px;
     text-align: left;
     cursor: pointer;
 }
 
 .neo-gallery-edit-libmenu-item:hover {
-    background: #3a3a46;
+    background: var(--ns-background-3a3a46, #3a3a46);
 }
 
 /* 开扩图：图片盒改回满宽舞台（拖框/原图归位都按舞台盒量尺寸），画布居中 */
@@ -3407,7 +3407,7 @@ Accordion Section Buttons (Clear)
     position: relative;
     flex: 0 0 auto;
     transform-origin: center;
-    background: rgba(0, 0, 0, 0.5);
+    background: var(--ns-scrim-6, rgba(0, 0, 0, 0.5));
     border-radius: 4px;
 }
 
@@ -3437,8 +3437,8 @@ Accordion Section Buttons (Clear)
     top: 0;
     width: 100%;
     height: 100%;
-    border: 2px solid #4fc3f7;
-    background: rgba(79, 195, 247, 0.08);
+    border: 2px solid var(--ns-cyan, #4fc3f7);
+    background: var(--ns-fill-cyan-08, rgba(79, 195, 247, 0.08));
     cursor: move;
     touch-action: none;
 }
@@ -3447,8 +3447,8 @@ Accordion Section Buttons (Clear)
     position: absolute;
     width: 10px;
     height: 10px;
-    background: #4fc3f7;
-    border: 1px solid #fff;
+    background: var(--ns-cyan, #4fc3f7);
+    border: 1px solid var(--ns-fg-strong, #fff);
     border-radius: 2px;
     transform: scale(var(--op-inv, 1)); /* 抵消画布缩放，手柄保持可抓取大小 */
 }
@@ -3465,7 +3465,7 @@ Accordion Section Buttons (Clear)
 /* 输入框上方的小标签（九宫格故事 / 简要故事 / 想法） */
 .neo-gallery-story-field-label {
     font-size: 11px;
-    color: #b8c2ce;
+    color: var(--ns-fg-slate2, #b8c2ce);
 }
 
 /* 语音弹窗的波形 + 播放控件（参考音源 / 结果音频共用），复用音频卡片的播放按钮与波形类 */
@@ -3475,8 +3475,8 @@ Accordion Section Buttons (Clear)
     gap: 8px;
     height: 48px;
     padding: 0 10px;
-    background: linear-gradient(160deg, rgba(30, 45, 70, 0.92), rgba(15, 22, 38, 0.96));
-    border: 1px solid rgba(120, 200, 255, 0.25);
+    background: linear-gradient(160deg, var(--ns-background-rgba-30-45-70-92-x, rgba(30, 45, 70, 0.92)), var(--ns-background-rgba-15-22-38-96-x, rgba(15, 22, 38, 0.96)));
+    border: 1px solid var(--ns-fill-cyan2-25, rgba(120, 200, 255, 0.25));
     border-radius: 6px;
 }
 .neo-gallery-voice-audio .neo-gallery-audio-waveform {
@@ -3491,24 +3491,24 @@ Accordion Section Buttons (Clear)
     padding: 6px 8px;
     font-family: inherit;
     font-size: 12px;
-    color: #eee;
-    background: rgba(0, 0, 0, 0.35);
-    border: 1px solid rgba(255, 255, 255, 0.18);
+    color: var(--ns-fg-2, #eee);
+    background: var(--ns-inset-surface, rgba(0, 0, 0, 0.35));
+    border: 1px solid var(--ns-fill-6, rgba(255, 255, 255, 0.18));
     border-radius: 6px;
 }
 
 .neo-gallery-story-grid:focus {
     outline: none;
-    border-color: rgba(76, 154, 255, 0.6);
+    border-color: var(--ns-fill-blue-60, rgba(76, 154, 255, 0.6));
 }
 
 .neo-gallery-story-hint {
     font-size: 11px;
-    color: #8a93a0;
+    color: var(--ns-dim-4, #8a93a0);
 }
 
 .neo-gallery-story-hint-error {
-    color: #ff6b6b;
+    color: var(--ns-err-2, #ff6b6b);
 }
 
 .neo-gallery-story-actions {
@@ -3525,25 +3525,25 @@ Accordion Section Buttons (Clear)
 .neo-gallery-story-btn {
     padding: 5px 14px;
     font-size: 12px;
-    color: #ccc;
-    background: rgba(42, 42, 46, 0.95);
-    border: 1px solid rgba(255, 255, 255, 0.18);
+    color: var(--ns-fg-soft, #ccc);
+    background: var(--ns-glass-3, rgba(42, 42, 46, 0.95));
+    border: 1px solid var(--ns-fill-6, rgba(255, 255, 255, 0.18));
     border-radius: 6px;
     cursor: pointer;
 }
 
 .neo-gallery-story-btn:hover {
-    background: rgba(76, 154, 255, 0.22);
-    color: #fff;
+    background: var(--ns-fill-blue-22, rgba(76, 154, 255, 0.22));
+    color: var(--ns-fg-strong, #fff);
 }
 
 .neo-gallery-story-btn-primary {
-    color: #fff;
-    background: rgba(76, 154, 255, 0.35);
+    color: var(--ns-on-accent, #fff);
+    background: var(--ns-accent-solid, rgba(76, 154, 255, 0.35));
 }
 
 .neo-gallery-story-btn-primary:hover {
-    background: rgba(76, 154, 255, 0.5);
+    background: var(--ns-accent-solid-hover, rgba(76, 154, 255, 0.5));
 }
 
 /* ====== Character sheet dialog (生成角色图：进度 + 结果预览) ====== */
@@ -3560,22 +3560,22 @@ Accordion Section Buttons (Clear)
     align-items: center;
     gap: 8px;
     font-size: 12px;
-    color: #b8c2ce;
+    color: var(--ns-fg-slate2, #b8c2ce);
 }
 
 .neo-gallery-cs-spinner {
     flex: none;
     width: 14px;
     height: 14px;
-    border: 2px solid rgba(76, 154, 255, 0.3);
-    border-top-color: #4c9aff;
+    border: 2px solid var(--ns-fill-blue-30, rgba(76, 154, 255, 0.3));
+    border-top-color: var(--ns-link-blue, #4c9aff);
     border-radius: 50%;
     animation: neoGallerySpin 0.8s linear infinite;
 }
 
 .neo-gallery-cs-progress {
     height: 6px;
-    background: rgba(255, 255, 255, 0.12);
+    background: var(--ns-fill-4, rgba(255, 255, 255, 0.12));
     border-radius: 3px;
     overflow: hidden;
 }
@@ -3583,7 +3583,7 @@ Accordion Section Buttons (Clear)
 .neo-gallery-cs-progress-fill {
     height: 100%;
     width: 0;
-    background: rgba(76, 154, 255, 0.85);
+    background: var(--ns-fill-blue-85, rgba(76, 154, 255, 0.85));
     border-radius: 3px;
     transition: width 0.3s ease;
 }
@@ -3600,9 +3600,9 @@ Accordion Section Buttons (Clear)
     padding: 8px;
     font-size: 12px;
     line-height: 1.5;
-    color: #d7dde5;
-    background: rgba(0, 0, 0, 0.35);
-    border: 1px solid rgba(255, 255, 255, 0.18);
+    color: var(--ns-color-d7dde5, #d7dde5);
+    background: var(--ns-inset-surface, rgba(0, 0, 0, 0.35));
+    border: 1px solid var(--ns-fill-6, rgba(255, 255, 255, 0.18));
     border-radius: 6px;
     white-space: pre-wrap;
     word-break: break-word;
@@ -3614,8 +3614,8 @@ Accordion Section Buttons (Clear)
 }
 /* 反推语言选择（中文/英文 radio，默认中文） */
 .neo-gallery-rp-lang { display: flex; gap: 18px; margin: 2px 0 6px; }
-.neo-gallery-rp-lang-opt { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; color: var(--text-color-secondary, #999); cursor: pointer; user-select: none; }
-.neo-gallery-rp-lang-opt input { accent-color: var(--accent-color, #4a9eff); margin: 0; cursor: pointer; }
+.neo-gallery-rp-lang-opt { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; color: var(--text-color-secondary, var(--ns-dim-10, #999)); cursor: pointer; user-select: none; }
+.neo-gallery-rp-lang-opt input { accent-color: var(--accent-color, var(--ns-accent-color-4a9eff, #4a9eff)); margin: 0; cursor: pointer; }
 
 @keyframes neoCsSlide {
     0% { margin-left: -40%; }
@@ -3634,7 +3634,7 @@ Accordion Section Buttons (Clear)
     max-height: 420px;
     display: block;
     object-fit: contain;
-    background: rgba(0, 0, 0, 0.5);
+    background: var(--ns-scrim-6, rgba(0, 0, 0, 0.5));
     border-radius: 4px;
     cursor: zoom-in;
 }
@@ -3648,8 +3648,8 @@ Accordion Section Buttons (Clear)
     gap: 10px;
     min-height: 220px;
     padding: 12px;
-    background: rgba(0, 0, 0, 0.35);
-    border: 1px dashed rgba(255, 255, 255, 0.2);
+    background: var(--ns-inset-surface, rgba(0, 0, 0, 0.35));
+    border: 1px dashed var(--ns-fill-7a, rgba(255, 255, 255, 0.2));
     border-radius: 6px;
 }
 
@@ -3672,10 +3672,10 @@ Accordion Section Buttons (Clear)
     z-index: 9999;
     pointer-events: none;
     display: none;
-    border: 2px solid #4f8cff;
+    border: 2px solid var(--ns-link-blue-2, #4f8cff);
     border-radius: 6px;
-    background: rgba(79, 140, 255, 0.12);
-    box-shadow: 0 0 0 1px rgba(79, 140, 255, 0.35);
+    background: var(--ns-fill-blue2-12, rgba(79, 140, 255, 0.12));
+    box-shadow: 0 0 0 1px var(--ns-fill-blue2-35, rgba(79, 140, 255, 0.35));
 }
 
 /* ===== 移动端（手机浏览器打 http://<局域网 IP>:8188/neo-studio 的那条路）
