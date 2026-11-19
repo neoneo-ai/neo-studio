@@ -107,7 +107,7 @@ export function genInputs(state, genNodeId) {
     return { prompts, references };
 }
 
-export function createCanvasGen({ $el, toast, api, canGen, startComfy, host }) {
+export function createCanvasGen({ $el, toast, api, canGen, host }) {
     // 一发一份运行态（节点上那一行状态就是它）。watchTask 在终态自己摘监听；切画布只把这一发脱手：
     // 图已经落在 Output 目录，不再写回旧画布，也不在页面外头留一份没人收的监听
     const running = new Map();
@@ -278,7 +278,6 @@ export function createCanvasGen({ $el, toast, api, canGen, startComfy, host }) {
         host.paintNodes();
         if (needKey) {
             toast(t("技能缺 API Key，已为你打开技能管理"), "info");
-            startComfy?.();   // 页面把这一枚钮接去技能管理：缺 Key 就是要去填它
             return;
         }
         toast(`${t("出图失败")}${msg ? `：${msg}` : ""}`, "error");
@@ -367,9 +366,8 @@ export function createCanvasGen({ $el, toast, api, canGen, startComfy, host }) {
 
     /** 提交一发出片（简单视频 / 配方单段同一条路）：入队成功就挂上轮询，失败把真原因写在节点上 */
     function submitClip(path, body, kind, node) {
-        Promise.resolve(startComfy())
-            .then(() => api.fetchApi(path, { method: "POST",
-                headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }))
+        api.fetchApi(path, { method: "POST",
+            headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
             .then(async (resp) => {
                 const data = await resp.json().catch(() => null);
                 if (!resp.ok || !data?.success) throw new Error(data?.error || `HTTP ${resp.status}`);
@@ -385,7 +383,7 @@ export function createCanvasGen({ $el, toast, api, canGen, startComfy, host }) {
             });
     }
 
-    /** 出片的公共闸门：停用的那一张不跑；这一发在跑就不重复提交；离线按一下就替用户去启执行队列（与出图同一套做法） */
+    /** 出片的公共闸门：停用的那一张不跑；这一发在跑就不重复提交；没有执行队列只说去哪儿启（与出图同一套做法） */
     function clipGate(node) {
         if (node.metadata?.disabled === true) {
             toast(t("这台节点已停用：在节点上方的浮出栏里启用"), "info");
@@ -393,8 +391,7 @@ export function createCanvasGen({ $el, toast, api, canGen, startComfy, host }) {
         }
         if (running.has(node.id)) return true;
         if (canGen() === false) {
-            startComfy?.();
-            toast(t("出片需要 ComfyUI 执行队列，已试着启动，好了再按一次"), "warn");
+            toast(t("出片需要 ComfyUI 执行队列：点顶栏 ComfyUI 胶囊启动，好了再按一次"), "warn");
             return true;
         }
         return false;
@@ -526,8 +523,8 @@ export function createCanvasGen({ $el, toast, api, canGen, startComfy, host }) {
         }
         if (running.has(node.id)) return;
         if (canGen() === false) {
-            startComfy?.();   // 出图要执行队列：按一下就替用户去启它，这一发不排队
-            toast(t("出图需要 ComfyUI 执行队列，已试着启动，好了再按一次"), "warn");
+            // 出图要执行队列，拉起它是顶栏那一位的事：画布出图与绘画页出图同一口径，这里只说去哪儿启
+            toast(t("出图需要 ComfyUI 执行队列：点顶栏 ComfyUI 胶囊启动，好了再按一次"), "warn");
             return;
         }
         const params = readGenParams(node);
@@ -545,8 +542,7 @@ export function createCanvasGen({ $el, toast, api, canGen, startComfy, host }) {
             references: references.images, count: params.count };
         if (params.default_ratio) body.default_ratio = params.default_ratio;
         if (params.base_resolution) body.base_resolution = params.base_resolution;
-        Promise.resolve(startComfy())   // 宿主可以同步回话：不押它一定交 Promise
-            .then(() => requestGeneration(body))
+        requestGeneration(body)
             .then((res) => {
                 // requestGeneration 的契约：成功交后端那一份 {task_id,status}，失败抛 Error（落进 catch）
                 setRunning(node.id, { kind: "image", task_id: res.task_id, status: res.status || "queued",

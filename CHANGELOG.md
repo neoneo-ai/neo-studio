@@ -443,6 +443,22 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   recipes and existing 配方 assets are untouched.
 
 ### Fixed
+- **A video node drags by its face, and every node now carries a grab handle in its floating bar.** A video fills its
+  node with the browser's own playback controls, so the node used to move only by the 6 px black frame around its edge.
+  Press-dragging the clip now moves the node once the pointer passes 8 px; a press that never passed it stays the
+  browser's play/pause, and the control bar along the bottom stays the browser's - dragging the seek bar seeks and no
+  longer walks the card away. The bar above a selected node also leads with a fixed grab handle: press it and the card
+  drags right away, the whole selection when several are selected, so a video card has a handle that never fights its
+  playback controls.
+
+- **A running ComfyUI stays running when you press 出图.** The canvas's 出图 / 出片 asked the desktop to start the kernel
+  before sending their own request, and that start cleared the desktop's proxy target, waited up to 30 seconds for the
+  instance it had launched to exit, and re-synced the plugin into the ComfyUI that was already running. The request sent
+  in the same click landed on the proxy the desktop had just cleared, so a machine with ComfyUI up answered
+  「ComfyUI 未运行」 on the card and the header pill switched to 「启动中」. The canvas no longer asks for a start at all:
+  with no execution queue it only says to start it from the header pill, the same rule the paint and video pages follow.
+  A start on a kernel that answers now reports its state and touches nothing, a ready snapshot takes the header pill back
+  to 运行中, and 「保存并重启内核」 still restarts it on the saved settings.
 - **Neo Studio no longer imports the ComfyUI frontend's deprecated UI module.** Every page module used to pull
   `$el` from the legacy `scripts/ui.js` path, and the current frontend answers that import with a
   `[DEPRECATION WARNING] Detected import of deprecated legacy API` entry in the browser console for each Neo Studio

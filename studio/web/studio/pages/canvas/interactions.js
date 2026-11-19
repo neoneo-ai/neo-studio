@@ -4,10 +4,11 @@
 // 手势状态（pan / drag / marquee / resizing / connecting / spaceDown）留在这一个闭包里，
 // 画布内容本身是页面的：一律经 host.getState() 读、经 host 交下来的回调写，改完由页面重画。
 import { t } from "../../../js/core/i18n.js";
-import { getConnectionDropTarget, marqueeSelect, panViewport, resizeNode, screenToCanvas, zoomViewportAt } from "./geometry.js";
+import { canvasToScreen, getConnectionDropTarget, marqueeSelect, panViewport, resizeNode, screenToCanvas, zoomViewportAt } from "./geometry.js";
 
 const NUDGE = 8, NUDGE_BIG = 40;
-const TEXT_DRAG_GATE = 8;   // 正文框整张铺满节点：起手先让浏览器选字，拖过这一截才算拖节点
+const CONTENT_DRAG_GATE = 8;   // 铺满整张卡的那两片内容面（正文框与视频）：起手交浏览器选字与翻播放，拖过这一截才算拖节点
+const NATIVE_MEDIA_BAR_PX = 36;   // 浏览器在 video 上自绘的那一条播控（进度条 / 音量 / 全屏）有多高
 const CLICK_GATE = 3;   // 空白起手拖过这一截才算框选 / 平移，没拖过就是点空白（点空白要收走选中）
 const CLIP_NODE_KEYS = new Set(["c", "v", "x", "a"]);   // 节点那四键：光标在正文里时按了要说一句怎么走回节点
 const NEO_GALLERY_MIME = "application/x-neo-gallery";
@@ -15,9 +16,9 @@ const NEO_GALLERY_MIME = "application/x-neo-gallery";
 const CARET_IN_BODY = () => document.activeElement?.classList?.contains("ns-canvas-node-textarea");
 // 一条连线是两个 path（宽命中描边 + 可见细线），点哪一条都算点这条线
 const LINE_SELECTOR = ".ns-canvas-line, .ns-canvas-line-hit";
-// 节点上真正吃这一按的控件：浮出栏的动作钮与选图钮、生成卡上的胶囊 / 按钮 / 段钮 / 种子输入、视频自己的播控 ——
-// 起手交浏览器发 click，按下去是选中这张节点。整列控件行（.ns-canvas-gen-ctl）认成控件的代价是卡上几乎按不到
-// 节点上真正吃这一按的控件：浮出栏的动作钮与选图钮、生成卡上的胶囊 / 按钮 / 种子输入、视频自己的播控 ——
+// 节点上真正吃这一按的控件：浮出栏的动作钮与选图钮、生成卡上的胶囊 / 按钮 / 段钮 / 种子输入、视频那一段片 ——
+// 起手交浏览器发 click，按下去是选中这张节点。整列控件行（.ns-canvas-gen-ctl）认成控件的代价是卡上几乎按不到；
+// 浮出栏首那枚固定抓手（.ns-canvas-node-drag）是 span，不在这一列里，按下就是拖节点
 const NODE_CTL_SELECTOR = ".ns-canvas-node-act, .ns-canvas-node-pick, .ns-canvas-node-video-el, "
     + ".neo-gallery-gm-chip-btn, .ns-canvas-gen-btn, .ns-canvas-gen-ctl input";
 
@@ -74,12 +75,17 @@ export function attachCanvasInteractions({ stage, view, host }) {
         }
         if (e.button !== 0) return;
         // 节点头上的动作钮与生成卡上的胶囊 / 按钮 / 种子输入交浏览器发 click：起手不拖、也不 preventDefault（拦了 pointerdown 就没有 click 了）
-        // 视频那一段同理：播控（进度条 / 全屏 / 音量）交浏览器，拖节点从节点那一圈黑框进来。
         // 生成卡与串联车厢整张铺的都是控件，按完不选就看不出按的是哪一张 —— ComfyUI 口径：点在控件上就是点这张节点
         const ctlEl = e.target.closest(NODE_CTL_SELECTOR);
         if (ctlEl) {
             const ctlNodeEl = ctlEl.closest(".ns-canvas-node");
-            if (ctlNodeEl) selectNode(ctlNodeEl.dataset.nodeId, e);
+            if (!ctlNodeEl) return;
+            selectNode(ctlNodeEl.dataset.nodeId, e);
+            // 视频整张是那一段片，点一下是浏览器在翻播放：起手照拖这一张节点，没拖过那一截就把这一发整个交回浏览器。
+            // 底部那一条是浏览器自绘的播控（拖进度条是 seek），那一发起手不拖节点，不然 seek 一刀把整张卡搬走
+            if (ctlEl.classList.contains("ns-canvas-node-video-el") && !onNativeMediaBar(e, ctlNodeEl.dataset.nodeId)) {
+                startNodeDrag(e, CONTENT_DRAG_GATE);
+            }
             return;
         }
         const handleEl = e.target.closest(".ns-canvas-handle");
@@ -118,10 +124,10 @@ export function attachCanvasInteractions({ stage, view, host }) {
         const nodeEl = e.target.closest(".ns-canvas-node");
         if (nodeEl) {
             // 正文框整张铺满节点：起手算选中，光标与选字留给浏览器（preventDefault 会把光标拦掉），
-            // 拖过 TEXT_DRAG_GATE 那一截才把节点挪走
+            // 拖过 CONTENT_DRAG_GATE 那一截才把节点挪走
             const fromText = e.target.classList.contains("ns-canvas-node-textarea");
             selectNode(nodeEl.dataset.nodeId, e);
-            startNodeDrag(e, fromText);
+            startNodeDrag(e, fromText ? CONTENT_DRAG_GATE : 0);
             // 光标在正文里时这一按交浏览器：焦点从正文框换走才发得出 blur，编辑才出得来
             if (!fromText && !CARET_IN_BODY()) e.preventDefault();
             return;
@@ -156,13 +162,27 @@ export function attachCanvasInteractions({ stage, view, host }) {
         if (!CARET_IN_BODY()) e.preventDefault();
     }
 
-    function startNodeDrag(e, fromText = false) {
+    /** gate 是「让给浏览器的那一截」：0 = 起手就拖；正文框与视频面上手是选字与翻播放，拖过 gate 才算拖节点 */
+    function startNodeDrag(e, gate = 0) {
         const ids = [...host.getSelection().ids];
-        drag = { startX: e.clientX, startY: e.clientY, moved: false, fromText,
+        drag = { startX: e.clientX, startY: e.clientY, moved: false, gate,
             initial: new Map(state().nodes.filter((n) => ids.includes(n.id)).map((n) => [n.id, { ...n.position }])) };
-        // 拖中的舞台挂 ns-canvas-dragging：节点里的正文框、图片与胶囊菜单全让位（style.css 那条 pointer-events），
-        // 拖到一半焦点与选字不再被内容面抢走
-        stage.classList.add("ns-canvas-dragging");
+        // 让位类要等真拖起来那一帧才挂（在 onPointerMove 里挂）：起手就挂的话，style.css 那条 pointer-events
+        // 落在正文框与视频上，这一发的 click 就落不到它们身上 —— 点一下选字与翻播放全没了
+        if (!gate) stage.classList.add("ns-canvas-dragging");
+    }
+
+    /** 落在浏览器自绘的那一条 video 播控上（进度条 / 音量 / 全屏）：这一发起手交浏览器，不拖节点。
+     *  播控子控件住在 video 自己那一层里，页面只拿得到 .ns-canvas-node-video-el 这一个落点，只能按几何认那一条 ——
+     *  片面的底（style.css 的 inset: 6px）往上 NATIVE_MEDIA_BAR_PX 乘当前缩放 k。走 canvasToScreen 不查
+     *  getBoundingClientRect：世界层的平移与缩放本来就在 state.viewport 上，节点几何也是 */
+    function onNativeMediaBar(e, nodeId) {
+        const node = state().nodes.find((n) => n.id === nodeId);
+        if (!node) return false;
+        const viewport = state().viewport;
+        const videoBottom = canvasToScreen(viewport, node.position.x,
+            node.position.y + node.height - 6, stage.getBoundingClientRect()).y;
+        return e.clientY > videoBottom - NATIVE_MEDIA_BAR_PX * viewport.k;
     }
 
     function onPointerMove(e) {
@@ -175,13 +195,14 @@ export function attachCanvasInteractions({ stage, view, host }) {
         }
         if (drag) {
             const sx = e.clientX - drag.startX, sy = e.clientY - drag.startY;
-            // 正文框里起手：短距离是选字，不动节点
-            if (drag.fromText && !drag.moved && Math.max(Math.abs(sx), Math.abs(sy)) < TEXT_DRAG_GATE) return;
+            // 铺满卡面的那两片（正文框 / 视频）起手交浏览器：这一截之内是选字与翻播放，不动节点
+            if (drag.gate && !drag.moved && Math.max(Math.abs(sx), Math.abs(sy)) < drag.gate) return;
             // 真拖起来了才压撤销栈：点一下节点不算一次改动
             if (!drag.moved && (Math.abs(sx) > 3 || Math.abs(sy) > 3)) {
                 drag.moved = true;
                 host.beginEdit();
-                if (drag.fromText) document.activeElement?.blur?.();   // 拖起来了就收走光标，浏览器别跟着选字
+                stage.classList.add("ns-canvas-dragging");   // 到这一帧内容面才让位（含带 gate 的那两片）
+                if (drag.gate) document.activeElement?.blur?.();   // 拖起来了就收走光标，浏览器别跟着选字
             }
             // 屏幕位移除以 k 才是世界位移：缩到 50% 时鼠标走 100px，节点在世界上要走 200px
             const dx = sx / state().viewport.k;

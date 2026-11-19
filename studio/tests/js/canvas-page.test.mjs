@@ -865,7 +865,7 @@ describe("canvas-page 页面", () => {
         ["left", "top", "bottom", "right"]);
     });
     test("上下叠放的两台节点：从上面那台的底接线点就近接到下面那台", async () => {
-      const { page, view } = await makePage(STACKED_PAIR(), { canGen: () => true, startComfy: () => {} });
+      const { page, view } = await makePage(STACKED_PAIR(), { canGen: () => true });
       fire(nodeHandle(view, "txt", "bottom"), "pointerdown", { clientX: 470, clientY: 300, button: 0 });
       fire(window, "pointermove", { clientX: 480, clientY: 460 });
       fire(window, "pointerup", {});
@@ -1154,6 +1154,99 @@ describe("canvas-page 页面", () => {
         "起手那一张挂让位态（四枚接线点的可见规则也认它）");
       assert.ok(!view.nodeEl(n2).classList.contains("ns-canvas-node-linking"), "只挂起手那一张");
       fire(window, "pointermove", { clientX: 1142, clientY: 520 });
+  describe("视频卡面与操作栏固定抓手", () => {
+    // 这一组吃视口 {0,0,1} 与舞台矩形原点 0,0：世界坐标与屏幕坐标同值，浏览器自绘播控那一条落在
+    // 哪个 clientY 上就能直接写进断言（片面底 = y + height - 6，见 style.css 的 inset: 6px）
+    const at = (x, y) => ({ x, y });
+    const imageNode = (id, x, y) => ({ id, type: "image", title: "图片", position: at(x, y),
+      width: 340, height: 240, metadata: { filename: `${id}.png` } });
+    const videoNode = (id, x, y) => ({ id, type: "video", title: "视频", position: at(x, y),
+      width: 320, height: 208, metadata: { filename: `片${id}.mp4` } });
+    const videoPage = async (nodes) => {
+      const ctx = await makePage(mockCanvas({ projects: [{ id: "canvas-0001", title: "甲",
+        nodes, connections: [], viewport: { x: 0, y: 0, k: 1 }, background_mode: "dots" }] }));
+      await settle();   // 首张画布落地才有节点
+      return ctx;
+    };
+    const face = (view, id) => view.nodeEl(id).querySelector("video");
+    const grab = (view, id) => view.nodeEl(id).querySelector(".ns-canvas-node-drag");
+
+    test("视频卡面上起手：拖过那一截整张卡跟着走", async () => {
+      const ctx = await videoPage([videoNode("v1", 100, 100)]);
+      fire(face(ctx.view, "v1"), "pointerdown", { clientX: 200, clientY: 150, button: 0 });
+      assert.ok(ctx.view.nodeEl("v1").classList.contains("ns-canvas-node-on"), "起手就是选中这一张");
+      assert.deepEqual(ctx.pos(), [[100, 100]], "起手只选中，不动");
+      fire(window, "pointermove", { clientX: 206, clientY: 150 });
+      assert.deepEqual(ctx.pos(), [[100, 100]], "8px 那一截之内是浏览器在翻播放，节点不动");
+      assert.ok(!ctx.view.stage.classList.contains("ns-canvas-dragging"),
+        "没真拖起来就不压内容面 —— 压了这一发的 click 就落不到 video 上");
+      fire(window, "pointermove", { clientX: 220, clientY: 172 });
+      assert.deepEqual(ctx.pos(), [[120, 122]]);
+      assert.ok(ctx.view.stage.classList.contains("ns-canvas-dragging"), "真拖起来了，内容面才让位");
+      fire(window, "pointerup", { clientX: 220, clientY: 172 });
+      assert.deepEqual(ctx.page.current().nodes.find((n) => n.id === "v1").position, { x: 120, y: 122 });
+    });
+
+    test("视频卡面点一下只翻播放：节点不挪，也不进撤销栈", async () => {
+      const ctx = await videoPage([videoNode("v1", 100, 100)]);
+      fire(face(ctx.view, "v1"), "pointerdown", { clientX: 200, clientY: 150, button: 0 });
+      fire(window, "pointermove", { clientX: 204, clientY: 153 });
+      fire(window, "pointerup", { clientX: 204, clientY: 153 });
+      assert.deepEqual(ctx.pos(), [[100, 100]]);
+      assert.ok(!ctx.view.stage.classList.contains("ns-canvas-dragging"));
+      fire(document, "keydown", { key: "z", ctrlKey: true });   // 撤一发：撤销栈里没有这一按
+      assert.deepEqual(ctx.pos(), [[100, 100]], "点一下卡不算一次改动，撤销撤不动它");
+    });
+
+    test("底部那一条播控上起手：拖的是进度条，节点不跟着走", async () => {
+      const ctx = await videoPage([videoNode("v1", 100, 100)]);
+      // 片面 106..302，浏览器自绘播控占底上 36px（缩 1 时）：266 以下是 seek / 音量 / 全屏那一行
+      fire(face(ctx.view, "v1"), "pointerdown", { clientX: 200, clientY: 290, button: 0 });
+      fire(window, "pointermove", { clientX: 240, clientY: 290 });
+      fire(window, "pointerup", { clientX: 240, clientY: 290 });
+      assert.deepEqual(ctx.pos(), [[100, 100]], "播控那一行上起手不拖节点，整条交浏览器 seek");
+      assert.ok(ctx.view.nodeEl("v1").classList.contains("ns-canvas-node-on"), "按完还是要选中这一张");
+      fire(face(ctx.view, "v1"), "pointerdown", { clientX: 200, clientY: 250, button: 0 });
+      fire(window, "pointermove", { clientX: 220, clientY: 250 });
+      fire(window, "pointerup", { clientX: 220, clientY: 250 });
+      assert.deepEqual(ctx.pos(), [[120, 100]], "同一张卡上面那一截照旧拖得动");
+    });
+
+    test("操作栏首那枚固定抓手：是 span，按下就拖，视频卡也有这一枚", async () => {
+      const ctx = await videoPage([imageNode("i1", 0, 0), videoNode("v1", 100, 100)]);
+      const handle = grab(ctx.view, "v1");
+      assert.ok(handle, "视频卡的操作栏首挂着这一枚固定抓手");
+      assert.equal(handle.tagName, "SPAN");
+      assert.ok(handle.querySelector("svg"), "抓手是一枚图标，不是一段空白");
+      fire(handle, "pointerdown", { clientX: 120, clientY: 60, button: 0 });
+      assert.ok(ctx.view.stage.classList.contains("ns-canvas-dragging"), "这一枚不吃那一截，起手就拖");
+      fire(window, "pointermove", { clientX: 140, clientY: 90 });
+      assert.deepEqual(ctx.pos(), [[0, 0], [120, 130]], "拖的是视频卡自己");
+      fire(window, "pointerup", { clientX: 140, clientY: 90 });
+    });
+
+    test("多张卡一起选中时，抓手拖走整组", async () => {
+      const ctx = await videoPage([imageNode("i1", 0, 0), videoNode("v1", 100, 100)]);
+      fire(ctx.view.stage, "pointerdown", { clientX: 10, clientY: 10, button: 0, ctrlKey: true });
+      fire(window, "pointermove", { clientX: 500, clientY: 400 });
+      fire(window, "pointerup", {});
+      assert.deepEqual(ctx.pos(), [[0, 0], [100, 100]], "框选两张，两张都在选中集里");
+      fire(grab(ctx.view, "i1"), "pointerdown", { clientX: 50, clientY: 50, button: 0 });
+      fire(window, "pointermove", { clientX: 70, clientY: 60 });
+      assert.deepEqual(ctx.pos(), [[20, 10], [120, 110]], "拖一张就是拖这一组");
+      fire(window, "pointerup", { clientX: 70, clientY: 60 });
+    });
+
+    test("固定抓手不在节点控件那一列里，也不在让位列里", () => {
+      const gestures = fs.readFileSync(path.join(webDir, "studio/pages/canvas/interactions.js"), "utf8");
+      const ctlBlock = gestures.match(/const NODE_CTL_SELECTOR = ([\s\S]*?);/)[1];
+      assert.ok(!ctlBlock.includes("ns-canvas-node-drag"),
+        "抓手进了控件列就只剩 click，按下永远拖不动");
+      const bar = fs.readFileSync(path.join(webDir, "studio/pages/canvas/nodes.js"), "utf8");
+      assert.match(bar, /\$el\("span", \{ className: "ns-canvas-node-drag"/);
+    });
+  });
+
       fire(window, "pointerup", {});
       await settle();
       assert.ok(!view.nodeEl(n1).classList.contains("ns-canvas-node-linking"), "松手要摘掉");
@@ -2016,6 +2109,7 @@ describe("canvas-page 页面", () => {
       const env = mockCanvas({ projects: [...(nodes.length ? oneCanvas(nodes, connections) : []), ...(gen.canvases || [])] });
       env.starts = [];
       Object.assign(env.routes, genRoutes(gen), routes);
+      // 宿主这里照旧交一份启动回调：画布拿不到它，env.starts 就是「页面有没有自己去拉内核」的探针
       const ctx = await makePage(env, { canGen: () => true, startComfy: () => { env.starts.push(1); }, ...extraHost });
       await settle();   // 首张画布与技能列表都在 build 之后落地
       const genText = (id, part) => ctx.view.nodeEl(id)
@@ -2165,14 +2259,16 @@ describe("canvas-page 页面", () => {
       assert.equal(genCalls().length, 0);
       assert.ok(ctx.env.store.toasts.some((item) => item.message.includes("接一条文本或图片线")));
     });
-    test("离线（没有执行队列）时出图不动作，点一下叫它启动", async () => {
+    test("没有执行队列时出图不拉内核：只说去顶栏胶囊启动", async () => {
       const ctx = await genPage([promptNode("t1", "一句"), genNode("g1", 0, 0)], [link("t1", "g1")],
         { extraHost: { canGen: () => false } });
       click(ctx.genBtn("g1", "出图"));
       await settle();
       assert.equal(genCalls().length, 0);
-      assert.equal(ctx.env.starts.length, 1);
-      assert.ok(ctx.env.store.toasts.some((item) => item.message.includes("出图需要 ComfyUI 执行队列")));
+      assert.equal(ctx.env.starts.length, 0,
+                   "出图不叫宿主拉内核：在跑的内核被拉一次就是收回它的代理目标，与绘画页出图同一口径");
+      assert.ok(ctx.env.store.toasts.some((item) => item.message.includes("点顶栏 ComfyUI 胶囊启动")),
+                "提示要说清去哪儿启");
     });
     test("节点上的胶囊选比例：写进节点并进撤销栈", async () => {
       const ctx = await genPage([promptNode("t1", "一句"), genNode("g1", 0, 0)], [link("t1", "g1")]);
@@ -2403,7 +2499,7 @@ describe("canvas-page 页面", () => {
       const row = (part) => ctx.view.nodeEl("r1").querySelector(`.ns-canvas-${part}`);
       assert.deepEqual(drag(row("car-info"), 40, 30), [40, 30], "段号与配方概览那一行按下拖就是拖这一张节点");
       assert.deepEqual(drag(row("recipe-count"), 18, -9), [18, -9], "参考素材计数那一行按下拖就是拖这一张节点");
-      // 正文框是打字的地方：拖过一截才算拖节点（TEXT_DRAG_GATE），没拖过就是选字
+      // 正文框是打字的地方：拖过一截才算拖节点（CONTENT_DRAG_GATE），没拖过就是选字
       const ta = ctx.view.nodeEl("r1").querySelector(".ns-canvas-car-text");
       assert.deepEqual(drag(ta, 2, 1), [0, 0], "正文框里拖两像素不算拖节点");
       assert.deepEqual(drag(ta, 40, 30), [40, 30], "正文框里拖过一截就是拖这一张节点");

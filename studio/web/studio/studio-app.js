@@ -397,10 +397,10 @@ const { buildVideo } = createVideoPage({
 // 画布页工厂在 pages/canvas/page.js：工具条、视口与落盘在那一页，几何/节点/连线/手势是它下面那六个模块；
 // 这一处只交建元素、api、提示条与素材库取图（「加图片」与空节点的「选图」都开这一扇），并把结果板的
 // 「摆到画布」接回生图家族（画布页没建过时 placeItems 自己等它建好）。
-// 生成节点出图要 ComfyUI 执行队列：能力位与「点一下启动」都从这一层交下去
+// 生成节点出图要 ComfyUI 执行队列：只交能力位下去，拉起内核是顶栏那一位的事（画布出图与绘画页同一口径）
 const canvasPage = createCanvasPage({ $el, api, toast,
     openMaterial: (onPick) => openMaterial("canvas", "image", onPick),
-    canGen: () => can("image_gen"), startComfy });
+    canGen: () => can("image_gen") });
 const buildCanvas = canvasPage.build;
 setCanvasPlace((items) => {
     go("canvas");
@@ -508,7 +508,9 @@ function stopKernel() {
 }
 
 function startComfy() {
-    if (starting) return;   // 启动中：不重复拉起，也不出提示
+    // 启动中不重复拉起；内核在答话就不动它 —— 在跑的内核被拉一次就是收回它的代理目标，正打着的
+    // 生成请求只拿回 409「ComfyUI 未运行」。画布/绘画/视频的生成入口都不叫这一条，只有顶栏与离线页那几处
+    if (starting || comfyState?.ready) return;
     const inDesktop = !!window.pywebview?.api?.comfy_start;
     startKernel();
     if (inDesktop) toast(comfyState?.remote ? t("重连远端 ComfyUI…") : t("ComfyUI 启动中…就绪后自动接上生成"));
@@ -864,6 +866,7 @@ function initComfyStatus() {
     const render = (s) => {
         headerFallback = false;   // 真快照落地：顶栏这一位交回真状态，占位句不再补
         setStarting(!!s.starting);   // 桌面端拉起的启动中：生成按钮文案跟着收
+        if (s.ready) userStarting = false;   // 就绪的快照落下：这轮「等端口」到此为止，顶栏不许留在「启动中」
         // 就绪就翻面，不看是谁拉起内核。桌面端在 ready 这同一份快照里才清掉 starting（_jump_when_ready），
         // 5 秒轮询只会看到「启动中·未就绪」紧跟「已就绪·不再启动中」；拿 starting 当翻面条件的话，
         // 桌面端自己拉起内核的冷启动（userStarting 为假）永远进不来，顶栏出「运行中」而页面钉在离线形态。

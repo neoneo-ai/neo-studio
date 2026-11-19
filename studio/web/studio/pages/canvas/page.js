@@ -21,9 +21,9 @@ const SAVE_DEBOUNCE_MS = 900;
 
 /** 画布页工厂：openMaterial 由装配层交下来（素材库弹窗，一次收窗）；没有它时「加图片」
  *  与「选图」回到建空图片节点 —— ComfyUI 侧没有这扇弹窗。
- *  canGen 是 ComfyUI 执行队列在不在（生成素材能力位），startComfy 是「点一下把它启动起来」；
- *  两者都不交时生成节点照样能铺能存，出图按钮自己说没有队列。 */
-export function createCanvasPage({ $el, api, toast, openMaterial, canGen, startComfy }) {
+ *  canGen 是 ComfyUI 执行队列在不在（生成素材能力位）：没有队列时生成节点自己说要去顶栏启动，
+ *  不碰拉起那一路。两者都不交时生成节点照样能铺能存，出图按钮自己说没有队列。 */
+export function createCanvasPage({ $el, api, toast, openMaterial, canGen }) {
     let state = readCanvas({});
     let selectedNodeIds = new Set();
     let selectedConnectionId = null;
@@ -341,7 +341,6 @@ export function createCanvasPage({ $el, api, toast, openMaterial, canGen, startC
         toast,
         api,
         canGen: canGen || (() => true),
-        startComfy,
         host,
     });
 

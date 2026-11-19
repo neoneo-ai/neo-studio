@@ -2580,9 +2580,14 @@ body {
 .ns-canvas-node-act-on { color: var(--ns-accent); }
 .ns-canvas-node-pick { flex: none; display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 6px; border-radius: 5px; border: 1px solid var(--ns-field-bd); background: var(--ns-field); color: var(--ns-fg); font: inherit; font-size: 12px; cursor: pointer; }
 .ns-canvas-node-pick:hover { border-color: var(--ns-field-bd-hover); background: var(--ns-field-hover); color: var(--ns-fg-strong, #fff); }
+/* 栏首那枚固定抓手：span 不吃 pointerdown，按下就是拖这一张节点。整张铺满播控的视频卡只有这一处稳 */
+.ns-canvas-node-drag { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 5px; color: var(--ns-dim); cursor: grab; }
+.ns-canvas-node-drag:hover { color: var(--ns-fg-strong, #fff); background: var(--ns-field-hover); }
+.ns-canvas-dragging .ns-canvas-node-drag { cursor: grabbing; }
 .ns-canvas-node-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: inherit; background: var(--ns-panel); }
-/* 视频节点：整张是那一段片，播控交浏览器自己（pointerdown 认 .ns-canvas-node-video-el 让行，
-   拖动与缩放从节点那一圈 6px 黑框与四角尺寸柄进来）。没落上片的是一张空位，出片时先按连线顺序填它 */
+/* 视频节点：整张是那一段片，播控交浏览器自己 —— 点一下是浏览器在翻播放，拖过 CONTENT_DRAG_GATE 那一截才搬走
+   这张节点（interactions.js 起手挂在 .ns-canvas-node-video-el 上），底部那一条浏览器自绘的播控交浏览器 seek 与音量。
+   整张没有按得中的空白，固定抓手在操作栏首那枚 .ns-canvas-node-drag 上。没落上片的是一张空位，出片时先按连线顺序填它 */
 .ns-canvas-node-video { background: var(--ns-black, #000); }
 .ns-canvas-node-video-el { position: absolute; inset: 6px; width: calc(100% - 12px); height: calc(100% - 12px); object-fit: contain; background: var(--ns-black, #000); border-radius: 6px; }
 .ns-canvas-node-video-empty { position: absolute; inset: 6px; display: flex; align-items: center; justify-content: center; border: 1px dashed var(--ns-border-soft); border-radius: 6px; color: var(--ns-dim); font-size: 13px; }
@@ -2736,6 +2741,7 @@ body {
     .ns-canvas-handle-bottom { bottom: -9px; }
     .ns-canvas-resize { width: 22px; height: 22px; }
     .ns-canvas-node-act { width: 28px; height: 28px; }
+    .ns-canvas-node-drag { width: 28px; height: 28px; }
     .ns-canvas-car .ns-canvas-node-textarea { font-size: 12px; }
     .ns-canvas-node-pick { height: 28px; font-size: 13px; }
     .ns-canvas-gen-btn { height: 28px; font-size: 13px; }

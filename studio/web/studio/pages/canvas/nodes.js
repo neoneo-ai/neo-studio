@@ -107,7 +107,7 @@ function nodeVideo(node, $el) {
 
 /** 提示词节点的内容：整张就是那块正文。单击不落焦点 —— 浏览器在 mousedown 上默认把焦点交给 textarea，
  *  焦点在里面时 Ctrl+C/V/X/A 全归浏览器自己，节点就再也剪不动了。进编辑是双击（interactions.js 的
- *  onDoubleClick 给焦点），落了焦点之后不拦 —— 划词与光标动作照旧（拖过一截才挪节点，见 TEXT_DRAG_GATE） */
+ *  onDoubleClick 给焦点），落了焦点之后不拦 —— 划词与光标动作照旧（拖过一截才挪节点，见 CONTENT_DRAG_GATE） */
 function nodeText(node, $el, onText) {
     return $el("textarea", {
         className: "ns-canvas-node-textarea",
@@ -195,10 +195,14 @@ function nodeCar(node, $el, { recipe, carView, onText }) {
  *  提示词节点不在这一排放「进入编辑」那一枚：进编辑是双击正文，出编辑是 Esc 或落在节点外那一按（interactions.js） */
 function nodeBar(node, { $el, onPick, onHero, onDelete, onCopy, onToggleDisabled }) {
     const off = node.metadata.disabled === true;
-    const kids = [off
+    // 栏首这一枚是固定抓手：整张铺满播控的视频卡上没有按得中的空白，每一张卡都从这一枚起手拖
+    const drag = $el("span", { className: "ns-canvas-node-drag", title: t("拖动这张节点"),
+        "aria-label": t("拖动这张节点") });
+    setIcon(drag, "move");
+    const kids = [drag, off
         ? nodeAct($el, "enable", t("启用"), "check", () => onToggleDisabled(node), t("启用这一张：出片与整列出片都会跑它"))
         : nodeAct($el, "disable", t("停用"), "ban", () => onToggleDisabled(node), t("停用这一张：出片与整列出片都跳过它"))];
-    if (off) kids[0].classList.add("ns-canvas-node-act-on");
+    if (off) kids[1].classList.add("ns-canvas-node-act-on");
     if (node.type === "image") {
         const heroLabel = node.metadata.hero ? t("取消主图") : t("设为主图");
         const hero = nodeAct($el, "hero", heroLabel, "circle-check", () => onHero(node), heroLabel);

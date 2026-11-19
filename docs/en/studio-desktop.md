@@ -424,6 +424,15 @@ is picked; landing on the guide does not fetch the skill list.
   `/neo_studio/version` probe (that instance has not loaded the plugin yet and is still importing custom nodes) also
   only attaches — a second instance is never started on a neighbouring port, and the "Startup settings → Start
   kernel" button only attaches as well.
+- Starting the kernel has four entry points only: the header pill, the startup settings, the guide page and the offline page.
+  The generation entries (canvas 出图 / 出片, the paint page, the video page) never receive that path — with no execution
+  queue they only say "Generation needs the ComfyUI queue - start it from the ComfyUI pill in the header, then press it
+  again". `comfy_start` reports the current state when the probe answers and touches nothing — the proxy target stays, the
+  plugin is not re-synced, and it never waits for its own child to exit: taking the proxy target down makes the request in
+  flight answer `409 "ComfyUI is not running"` and the header pill sticks at "Starting", and a ready snapshot ends that
+  round of waiting for the port, so the pill cannot stay at "Starting". Only "save and restart the kernel"
+  (`apply_launcher`: it has just stopped the kernel, and root / port / listen may all have changed) passes `restart` —
+  what answers that probe is the old settings, so it starts on the new ones.
 - The start / stop row on top of "Settings → Startup settings" carries a third button, "Open ComfyUI": it shows up once the
   kernel is ready and hands that kernel's address to the system default browser (a frameless window has no new tab to open, so
   the link goes through the js_api `open_url` and the window itself never navigates). The address is the one `comfy_state`

@@ -67,6 +67,8 @@ const PATHS = {
     duplicate: '<rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/><path d="M9 12h6"/><path d="M12 9v6"/>',
     // 画布工具条「加节点」那一枚下拉菜单的入口：方框里一枚加号，与「新建画布」那枚裸加号分得开
     "plus-square": '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M12 8v8"/><path d="M8 12h8"/>',
+    // 画布节点操作栏首那枚固定抓手：十字四向箭头 —— 与 maximize / fullscreen 那两枚角箭头分得开
+    move: '<polyline points="5 9 2 12 5 15"/><polyline points="9 5 12 2 15 5"/><polyline points="15 19 12 22 9 19"/><polyline points="19 9 22 12 19 15"/><line x1="2" x2="22" y1="12" y2="12"/><line x1="12" x2="12" y1="2" y2="22"/>',
 
 };
 

@@ -25,12 +25,12 @@ const OFFLINE_CAPS = {
     director: false, grid_split: true, memory: false, repair: false,
 };
 
-function mockStartingDesktop() {
+function mockStartingDesktop(starting = true) {
     resetEnv();
     document.body.innerHTML = studioBody;
     mockRoute("/neo_studio/version", jsonResponse({
         success: true, plugin_version: "9.9.9", comfyui_version: "ComfyUI 未运行",
-        offline: true, starting: true, caps: OFFLINE_CAPS, recipes: [],
+        offline: true, starting, caps: OFFLINE_CAPS, recipes: [],
     }));
     mockRoute("/rs_recipes/list", jsonResponse([]));
     mockRoute("/rs_prompts/skills", jsonResponse([]));
@@ -113,5 +113,34 @@ test("开机落首页：不带 hash 与认不出的 tab 名都落首页，窗口
     await flush();
     assert.equal(active(), "home", "认不出的 tab 名落回首页");
     assert.equal(document.querySelectorAll(".ns-page:not(.ns-hidden)").length, 1, "认不出的 tab 名不停在空白页");
+});
+
+// 内核在答话（顶栏那份 comfy_state 探到 ready）、桌面端快照还没认下它：这一轮页面是门控形态。
+// 门控形态里的按钮点击会经 startComfy 落到桌面端 comfy_start —— 那条一进来就收回代理目标，正打着的
+// 提交只拿回 409「ComfyUI 未运行」，顶栏跟着变「启动中」，而用户那一侧 ComfyUI 明明在跑（画布卡上那行红字）。
+test("内核在跑时点生成入口：不叫桌面端重拉内核，顶栏不停在「启动中」", async () => {
+    mockStartingDesktop(false);   // starting 为假：这一段没有任何「启动中」的依据，只有 comfy_state 报就绪
+    const starts = [];
+    window.pywebview = {
+        api: {
+            comfy_state: async () => ({ port: 8188, pid: 4321, mine: false, running: true, ready: true, starting: false }),
+            comfy_start: async () => {
+                starts.push(1);
+                return { port: 8188, pid: 0, mine: true, running: false, ready: false, starting: true };
+            },
+        },
+    };
+    window.location.hash = "#/director";
+    await import("../../web/studio/studio-app.js?kernelUpGate=1");
+    await flush();
+
+    const run = document.querySelector(".ns-director-run");
+    assert.ok(run, "导演页应已挂载");
+    click(run);
+    await flush();
+    assert.deepEqual(starts, [], "内核在答话就不许叫桌面端重拉：重拉就是收回它正在用的代理目标");
+    assert.equal(document.getElementById("ns-toast"), null, "就绪的内核上不出「ComfyUI 启动中…」提示条");
+    assert.equal(document.getElementById("ns-comfy-status").textContent, "● 运行中",
+                 "就绪的快照落下：顶栏读运行中，不许停在「启动中」");
 });
 

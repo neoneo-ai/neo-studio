@@ -1345,6 +1345,30 @@ class StudioDesktopTests(unittest.TestCase):
         self.assertEqual(state["pid"], 4321, "状态报端口上那路外部 ComfyUI")
         self.assertIn("comfy attach port=8188", logs)
 
+    def test_start_on_a_ready_kernel_leaves_the_running_one_alone(self):
+        # 顶栏与启动设置里那枚「启动内核」在内核明明答话时照样能被点：这条路径一进来就收代理目标，
+        # 正打着的生成请求打在自己刚清空的代理上，拿回 409「ComfyUI 未运行」（画布卡上那行红字）；
+        # 自己那路还活着时那 30 秒「等它退出」让代理目标清空着睡满，整段生成面全在离线形态
+        comfy = SimpleNamespace(pid=1234, poll=lambda: None, terminate=MagicMock())
+        desktop = app.StudioDesktop(comfy, 8188, pathlib.Path("root"), "",
+                                    "http://127.0.0.1:8191/neo-studio", 8191)
+        desktop.flags["kernel_base"] = "http://127.0.0.1:8188"
+        touched = []
+        with patch.object(app, "probe", lambda base, timeout=3.0: True), \
+             patch.object(app, "sync_plugin", lambda dst, src: touched.append("sync") or 0), \
+             patch.object(app, "start_comfy", lambda *a: touched.append("spawn") or MagicMock()), \
+             patch.object(app, "port_busy", lambda port: touched.append("busy") or True), \
+             patch.object(app, "port_owner", lambda port: touched.append("netstat") or 4321), \
+             patch.object(app.threading, "Thread", lambda target, daemon=True: touched.append("thread")), \
+             patch.object(app.time, "sleep", lambda sec: touched.append(f"sleep{sec}")), \
+             patch.object(app, "log_line", lambda text: None):
+            state = desktop.comfy_start()
+        self.assertEqual(touched, [], "在跑的内核上不许同步插件、拉第二路、探端口、等退出")
+        self.assertEqual(desktop.flags["kernel_base"], "http://127.0.0.1:8188",
+                         "代理目标原样留着：收回就是这一发 409")
+        self.assertEqual((state["running"], state["ready"], state["starting"]), (True, True, False))
+        comfy.terminate.assert_not_called()
+
     def test_stop_leaves_the_window_on_the_desktop_page(self):
         loader = MagicMock()
         desktop = app.StudioDesktop(None, 8188,
@@ -2238,7 +2262,7 @@ class ListenTests(unittest.TestCase):
                  patch.object(app, "log_line", lambda text: None), \
                  patch.object(app, "startup_state", lambda *a: ("ok", "")), \
                  patch.object(desktop, "comfy_stop", lambda: {"running": False}), \
-                 patch.object(desktop, "comfy_start", lambda: {"ok": True, "port": 8188}):
+                 patch.object(desktop, "comfy_start", lambda **kw: {"ok": True, "port": 8188}):
                 res = desktop.apply_launcher(str(root), str(sys.executable), 8188, "192.168.0.7")
                 self.assertTrue(res["ok"], res)
                 self.assertEqual(app.load_config()["listen"], "127.0.0.1,192.168.0.7")
@@ -2341,7 +2365,7 @@ class RemoteTargetTests(unittest.TestCase):
              patch.object(app, "log_line", lambda text: None), \
              patch.object(app, "startup_state", lambda *a: ("ok", "")), \
              patch.object(desktop, "comfy_stop", lambda: {"running": False}), \
-             patch.object(desktop, "comfy_start", lambda: {"ok": True}):
+             patch.object(desktop, "comfy_start", lambda **kw: {"ok": True}):
             res = desktop.apply_launcher(str(root), str(sys.executable), 8188, *args)
             return res, app.load_config()
 
@@ -2641,6 +2665,16 @@ class PluginSyncTests(unittest.TestCase):
         ok, msg = app.ensure_plugin(self.plugin, self.source)
         self.assertTrue(ok, msg)
         self.assertEqual(self._index().read_text(encoding="utf-8"), "old")
+
+    def test_installed_data_root_pointer_is_never_overwritten(self):
+        # 插件目录里的数据根指针归 write_data_pointer 写：开发目录里那一份是开发机的运行数据
+        # （内容就是开发机的绝对路径），跟着同步走就是每回一行「overwrote edited configs\data_root.json」
+        (self.source / "configs" / "data_root.json").write_text('{"version": 1, "data_root": "F:/dev/data"}',
+                                                                encoding="utf-8")
+        target = self.plugin / "configs" / "data_root.json"
+        target.write_text('{"version": 1, "data_root": "D:/user/data"}', encoding="utf-8")
+        app.sync_plugin(self.plugin, self.source)
+        self.assertEqual(json.loads(target.read_text(encoding="utf-8"))["data_root"], "D:/user/data")
 
 
 # git 取数在导入期完成：跑完窗口几何那批用例后，进程里的子进程会全部启动即没

@@ -536,7 +536,10 @@ INSTALL_SKIP = ("build", "dist", "tests", "docs", "node_modules", "__pycache__",
 INSTALL_SKIP_FILES = ("remote_llm_config.json", "model_config.json", "gallery_settings.json",
                       "image_gen.json", "video_gen.json", "bookmarks.json", "model_hub.json",
                       "backyard_oss.json", "studio_window.json", "gallery_dim_cache.json",
-                      "laya_token.json", "neo_repair_mappings.json")
+                      "laya_token.json", "neo_repair_mappings.json",
+                      # 插件目录里的数据根指针由 write_data_pointer 写：内置那份是开发机的运行数据
+                      # （里面是开发机的绝对路径），覆盖它每次同步都留一行「overwrote edited」
+                      "data_root.json")
 
 
 def install_ignore(source_dir: Path):
@@ -1290,8 +1293,18 @@ class StudioDesktop:
                     log_line(f"comfy close attached pid={marker['pid']} 失败：没有权限终止该进程")
         forget_comfy_child()
 
-    def comfy_start(self) -> dict:
-        """胶囊的启动路径：停止后重新拉起 ComfyUI，就绪后页面原地接上生成。"""
+    def comfy_start(self, restart: bool = False) -> dict:
+        """胶囊的启动路径：停止后重新拉起 ComfyUI，就绪后页面原地接上生成。
+
+        探活答话就原样回报当前状态：这条路径一进来就收代理目标，而顶栏那一枚「启动内核」在内核明明
+        在答话时照样能被点（离线形态的残留、启动设置里那一发），代理目标一收，正打着的生成请求就打在
+        自己刚清空的代理上，拿回 409「ComfyUI 未运行」；自己拉起的那路还活着时，那 30 秒「等它退出」
+        也把代理目标清空着在线程里睡满，这段时间生成面全在离线形态。
+
+        restart 是「保存并重启内核」那一发：刚 stop 过、根目录与端口都可能换了，探活答话的是
+        旧设置那一路，必须按新设置重起。"""
+        if not restart and probe(self.base, 1.0):
+            return self.comfy_state()   # comfy_state 自己把就绪写进 flags：代理目标与页面形态原样留着
         self._kernel_flag(False)
         if self.remote:
             # 远程内核由远端机器自己起：这里只做探活，本机不拉进程、不探本机端口
@@ -1634,7 +1647,7 @@ class StudioDesktop:
         self.launcher.update(state=state, error=msg)
         if state != ST_OK:
             return {"ok": False, "error": msg, "state": state}
-        st = self.comfy_start()
+        st = self.comfy_start(restart=True)   # 刚 stop 过：这一发就是按新设置重起，探活答话也不能算起来过
         self.launcher.update(comfy=st)
         return {"ok": True, "state": state, "comfy": st,
                 "msg": "已保存，正在连接远端 ComfyUI…" if self.remote else "已保存，ComfyUI 重启中…"}
