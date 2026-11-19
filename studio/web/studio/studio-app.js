@@ -228,8 +228,9 @@ function ensureLibModal() {
 }
 
 /** 打开素材库弹窗。onPick = 点卡片 / 批量取用回调（null = 纯浏览：卡片照旧开灯箱）.
- *  accept 声明这一扇收哪一类素材（"image" / "video"，不传 = 媒体全收）：类别对不上的卡片点下去不取用。 */
-function openLibModal(scope, onPick, accept) {
+ *  accept 声明这一扇收哪一类素材（"image" / "video"，不传 = 媒体全收）：类别对不上的卡片点下去不取用。
+ *  searchTerm 把窗里的素材库筛到指定那一叠上（提示词库取封面就靠它筛这条自己的出图）。 */
+function openLibModal(scope, onPick, accept, searchTerm) {
     const modal = ensureLibModal();
     const g = app.neoGallery;
     libScope = scope;
@@ -253,16 +254,26 @@ function openLibModal(scope, onPick, accept) {
         accept: accept || null,
     });
     modal.open(t("素材库"));
-    if (galleryMountHost !== libModalHost) mountGallery(libModalHost).then(notifyAgentCtx);
-    else notifyAgentCtx();
+    const afterMount = () => { notifyAgentCtx(); applyLibSearch(app.neoGallery, searchTerm); };
+    if (galleryMountHost !== libModalHost) mountGallery(libModalHost).then(afterMount);
+    else afterMount();
+}
+
+/** 素材库搜索框吃的是产物旁车首行（生成时那句提示词）：开窗把这一发的词铺进去，弹窗就落在这一叠上。
+ *  空词只在上一次铺过词时清一下——没铺过就不发那一发搜索请求，画廊状态也不动。 */
+function applyLibSearch(g, term) {
+    const want = String(term || "");
+    if (!g?.searchInput || g.searchInput.value === want) return;
+    g.searchInput.value = want;
+    g.handleSearch(want);
 }
 
 /** 素材库取用一次就收窗：薄页要的是那一张——抽帧与视频反推取视频，声音克隆取音频，图片反推与增强取图 */
-function openMaterial(scope, accept, onPick) {
+function openMaterial(scope, accept, onPick, searchTerm) {
     openLibModal(scope, (picked) => {
         onPick(picked);
         libModal?.close();
-    }, accept);
+    }, accept, searchTerm);
 }
 
 // 六张薄页的工厂在 pages/leaf-pages.js：这一处只把宿主交下去——运行闸门交 gateRunButton，

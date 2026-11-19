@@ -341,6 +341,9 @@ embedded ComfyUI workflow).
   code directory, so an entry listed there cannot take a cover, and deleting a prompt deletes its cover with it. The
   asset must land in `input/` for the cover to be written (unlike "add to bookmarks", which keeps its source path),
   and the toast names that press's `subfolder/filename`.
+- The opposite press lives on the prompt library page: "Set as cover" on a card opens this same asset pick window with
+  the asset search box prefilled with that prompt's first text line — the sidecar's first line is the prompt that
+  generated the asset, so the window lands on the outputs made with it, and clearing that box browses everything.
 
 ### Image editing
 

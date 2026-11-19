@@ -16,7 +16,7 @@ import { createPromptLibraryView } from "../../prompt-library/prompt-library.js"
  *  @property {Function} toast 提示文本
  *  @property {Function} can 读一个能力旗标
  *  @property {Function} gateRun 门控运行钮：能力缺时点它引导启动内核
- *  @property {Function} openMaterial 素材库取用一次就收窗（scope, accept, onPick）
+ *  @property {Function} openMaterial 素材库取用一次就收窗（scope, accept, onPick, searchTerm）
  *  @property {Function} openEdit 把导出的控制图交图片编辑面板预填
  *  @property {Function} applyToPage 增强页的回话填回对应那一页 */
 
@@ -58,10 +58,11 @@ export function createLeafPages(host) {
         applyToPage,
     });
     // 提示词库页：读侧（列表与封面）桌面端离线答得出，写侧两发按 prompt_library_write 门控。
-    // 取封面用素材库取用一次就收窗，收哪一类由页上当前那一池定（图像池取图，视频池取视频）
+    // 取封面用素材库取用一次就收窗，收哪一类由页上当前那一池定（图像池取图，视频池取视频）；
+    // 第三条是这条自己的出图搜索词，窗一开就落在那几条出图上
     const buildPromptLibrary = createPromptLibraryView({
         $el, toast, can, gateRun,
-        openMaterial: (accept, onPick) => openMaterial("prompts", accept, onPick),
+        openMaterial: (accept, onPick, term) => openMaterial("prompts", accept, onPick, term),
         applyToPage,
     });
 

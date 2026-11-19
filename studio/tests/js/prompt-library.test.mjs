@@ -6,7 +6,8 @@ import assert from "node:assert/strict";
 import { resetEnv, mockRoute, clearRoutes, jsonResponse, fetchLog, click, flush, sleep } from "./setup.mjs";
 import { $el } from "../../web/studio/shim/ui.js";
 
-const { createPromptLibraryView, filterPromptCards, cardBadges, pageWindow, agoText, PAGE_SIZE } =
+const { createPromptLibraryView, filterPromptCards, cardBadges, pageWindow, agoText, coverSearchTerm,
+        COVER_SEARCH_CHARS, PAGE_SIZE } =
     await import("../../web/prompt-library/prompt-library.js");
 const { promptCoverUrl } = await import("../../web/prompt-service.js");
 
@@ -41,6 +42,7 @@ async function mounted({ caps = { prompt_library_write: true } } = {}) {
         gated: [],
         applied: [],
         picks: [],
+        terms: [],
         writeOn: caps.prompt_library_write !== false,
         pickCb: null,
         card(name) { return [...host.querySelectorAll(".ns-pl-card")].find((c) => c.dataset.name === name); },
@@ -52,7 +54,7 @@ async function mounted({ caps = { prompt_library_write: true } } = {}) {
         toast: (text) => env.toasts.push(text),
         can: (feature) => (feature === "prompt_library_write" ? env.writeOn : true),
         gateRun: (btn, feature, label) => { if (!env.writeOn) env.gated.push({ btn, feature, label }); },
-        openMaterial: (accept, cb) => { env.picks.push(accept); env.pickCb = cb; },
+        openMaterial: (accept, cb, term) => { env.picks.push(accept); env.terms.push(term); env.pickCb = cb; },
         applyToPage: (mode, text) => env.applied.push({ mode, text }),
     });
     await build(host);
@@ -129,6 +131,7 @@ test("设封面：素材库取回来的那张产物交后端，成功后重读�
     click(env.btn(env.card("红杯"), "设为封面"));
     await settle();
     assert.deepEqual(env.picks, ["image"], "图像池这一发只收图");
+    assert.deepEqual(env.terms, ["全文:红杯"], "开窗先把这条的出图搜索词铺进素材库");
     env.useMaterial([{ filename: "Neo_0001.png", subfolder: "NeoStudio" }]);
     await settle();
     const call = fetchLog.find((c) => c.path === "/rs_prompts/set_prompt_cover");
@@ -138,6 +141,27 @@ test("设封面：素材库取回来的那张产物交后端，成功后重读�
     assert.ok(env.toasts.includes("已设为提示词封面"));
     assert.ok(fetchLog.filter((c) => c.path === "/rs_prompts/list_prompts").length >= 2,
         "写完重读列表，卡片上的封面才换得过来");
+});
+
+test("出图搜索词：取正文首行前缀，长度夹在素材库读得到副文件前 500 字里", () => {
+    assert.equal(coverSearchTerm("白底产品照，柔光\n第二段不要"), "白底产品照，柔光",
+        "旁车首行就是正文的第一行，后面的段落不进搜索词");
+    assert.equal(coverSearchTerm("  带空格的正文  "), "带空格的正文", "首行两端空白不进搜索词");
+    assert.equal(coverSearchTerm(""), "", "空正文给空词：开窗就是整池素材库");
+    assert.equal(coverSearchTerm("长".repeat(COVER_SEARCH_CHARS + 40)).length, COVER_SEARCH_CHARS,
+        "整段长正文不进搜索框：副文件读端只吃前 500 字，前缀落得进去才筛得到");
+});
+
+test("正文读不到不开窗：空正文那一发落「封面设置失败」的提示，不发素材库取用", async () => {
+    resetEnv();
+    mockPromptRoutes();
+    mockRoute("/rs_prompts/load_prompt", (body) =>
+        jsonResponse({ text: body.name === "红杯" ? "   " : `全文:${body.name}` }));
+    const env = await mounted();
+    click(env.btn(env.card("红杯"), "设为封面"));
+    await settle();
+    assert.equal(env.picks.length, 0, "空正文不开素材库窗：开出去也筛不到这一条的出图");
+    assert.ok(env.toasts.some((s) => s.startsWith("封面设置失败")), "空正文说的是这一句");
 });
 
 test("删除要按两次：第一发只把那一颗钮换成确认删除，第二发才发请求", async () => {

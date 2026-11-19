@@ -8,6 +8,7 @@
  * 出厂预设是代码目录，界面上不铺「设封面 / 删除」，后端同一处也挡（403）。
  * 卡片上的正文摘要按页批量取（一次最多那一页的条数），整篇正文仍是「填入 / 复制」那一发才读。
  * 「填入绘画页 / 填入视频页」走装配层那条现成链（applyToPage），与增强页把回话填回页面是同一发落点。
+ * 「设为封面」开素材库时先铺这条的出图搜索词：窗里那几条就是用它生成过的产物，清空那一格才看全部。
  */
 import { t, tf } from "../js/core/i18n.js";
 import { icon } from "../js/core/icons.js";
@@ -89,9 +90,18 @@ export function agoText(mtime) {
     return tf("{n} 个月前", { n: Math.floor(days / 30) });
 }
 
-/**
- * 建「提示词库」视图。依赖由宿主注入：$el 建 DOM，toast 落提示，can 认能力表（写侧离线不可用），
- * gateRun 把写侧那两枚钮交运行闸门，openMaterial 开素材库取封面，applyToPage 把正文填回绘画页 / 视频页。
+// 素材库取用窗的搜索框吃的是产物旁车首行——生成时那句提示词（读端只吃副文件前 500 字）。
+// 封面要在这条自己的出图里挑，就把正文首行当前缀铺进那一格：出过图的落进来，清空那一格照旧看全部素材
+export const COVER_SEARCH_CHARS = 60;
+
+/** 这条的出图搜索词：正文首行（旁车首行就是正文的第一行），夹到副文件读得到的长度里 */
+export function coverSearchTerm(text) {
+    return String(text || "").split("\n")[0].trim().slice(0, COVER_SEARCH_CHARS);
+}
+
+/** 建「提示词库」视图。依赖由宿主注入：$el 建 DOM，toast 落提示，can 认能力表（写侧离线不可用），
+ * gateRun 把写侧那两枚钮交运行闸门，openMaterial 开素材库取封面（带这条的出图搜索词），
+ * applyToPage 把正文填回绘画页 / 视频页。
  */
 export function createPromptLibraryView({ $el, toast, can, gateRun, openMaterial, applyToPage }) {
     return async function buildPrompts(el) {
@@ -171,7 +181,11 @@ export function createPromptLibraryView({ $el, toast, can, gateRun, openMaterial
             } catch (e) { toast(`${t("复制失败")}：${e.message || e}`); }
         }
 
-        function pickCover(name) {
+        async function pickCover(name) {
+            // 先读这条的正文：素材库靠它筛出这条自己的出图，正文读不到就不开窗
+            let term;
+            try { term = coverSearchTerm(await textOf(name)); }
+            catch (e) { toast(`${t("封面设置失败")}：${e.message || e}`); return; }
             // 封面跟着当前这一池走：图像池挑图，视频池挑视频（后端取首帧成图）
             openMaterial(poolChips.value === "video" ? "video" : "image", async (picked) => {
                 const src = picked?.[0];
@@ -179,7 +193,7 @@ export function createPromptLibraryView({ $el, toast, can, gateRun, openMaterial
                 const res = await setPromptCover(name, { filename: src.filename, subfolder: src.subfolder || "" });
                 toast(res.ok ? t("已设为提示词封面") : res.message);
                 if (res.ok) loadList();
-            });
+            }, term);
         }
 
 
