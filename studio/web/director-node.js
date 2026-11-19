@@ -2,7 +2,7 @@
 // 按当前 recipe 下拉值拉取配方 spec，按时长比例绘制分段块 + 秒尺；点击分段块直接打开编辑器（只读，不重排）。
 // 采样期间另有一块实时预览面板：后端 h3_preview.py 每步抽多帧、经自有 WS 事件推来，
 // 这里自动循环播放该段的动作，并可暂停 / 逐帧 / 逐采样步回看（核心的单图预览通道后端已关掉）。
-import { app } from "../../../../scripts/app.js";
+import { registerExtension } from "./js/core/comfy-app.js";
 import { api } from "../../../../scripts/api.js";
 import { DirectorTimeline } from "./director-timeline.js";
 import { createFramePlayer } from "./live-preview.js";
@@ -149,7 +149,7 @@ function createLivePreview(node, box, grow) {
     return { node, ...player }; // {node, apply, tick, reset, pause}——接口与原先一致
 }
 
-app.registerExtension({
+registerExtension({
     name: "NeoH3VideoDirector.Timeline",
     async beforeRegisterNodeDef(nodeType, nodeData) {
         if (nodeData.name !== "NeoH3VideoDirector") return;

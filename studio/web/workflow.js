@@ -12,6 +12,7 @@
  */
 import { api } from "../../../../scripts/api.js";
 import { app } from "../../../../scripts/app.js";
+import { registerExtension } from "./js/core/comfy-app.js";
 import { showToast } from './gallery-utils.js';
 import { openModelHub } from './model-hub.js';
 import { t, tf } from './js/core/i18n.js';
@@ -952,7 +953,7 @@ export async function showRepairMappingsDialog() {
     document.body.appendChild(overlay);
 }
 
-app.registerExtension({
+registerExtension({
     name: "comfy.neo.workflowRepairHook",
     // 导入工作流后自动检测失效模型路径并提示修复（挂载 loadGraphData / loadApiJson）。
     // 顶栏 菜单按钮与下拉菜单归 top-menu.js（runRepair / showRepairLogDialog /

@@ -89,6 +89,11 @@ npm run update-goldens   # NEO_UPDATE_GOLDENS=1，写入新 golden
   无预设的 OpenAI Compatible 常显，Local GGUF 整体隐藏。
 - `studio-settings-groups.test.mjs` — 设置页左栏 tab 的 data-key 顺序与段间分割线落位；摘掉启动设置 tab 后条首不落线；启动设置栏内三类分区；LLM 设置切服务商时整组连小标题一起收起。
 - `studio-log-panel.test.mjs` — 设置页「启动日志」：内核那块在前、桌面端那块在后，ANSI 色码剥掉；来源筛选整块显隐并亮在选中项上；浏览器标签页单块不挂块标题、「桌面端」筛选钮收起。
+- `comfy-app-registry.test.mjs` — 扩展注册与 comfyAPI 边界：`web/` 顶层不许 `app.registerExtension`（顶层求值是一次性快照，
+  前端装配晚到就整片失败）；`scripts/app.js` / `scripts/api.js` 的相对导入必须解析到前端顶层 `/scripts/`（从 `/extensions/<插件>/`
+  出发，层数少一级就落到 `/extensions/scripts/` 上 404）；app 装配晚到要补注册且不留定时器，始终没装配就等满上限并说明入口不可用；
+  空壳 `registerExtension` 以扩展列表收下为准；`web/` 顶层的 `window.comfyAPI` 整份赋值只许挡在独立页 `#ns-view` 守卫之后。
+
 - `studio-kernel-open.test.mjs` — 启动设置顶栏的「打开 ComfyUI」：内核就绪才有这枚并走 js_api 的 `open_url`；地址取 `comfy_state` 报的那个端口（桌面端换过端口跟过去）、远程模式取远端地址；已停止与启动中收起这枚。
 
 ## JS 测试运行器（带超时强制终止）
@@ -156,3 +161,7 @@ node --test --test-force-exit --test-timeout=180000 studio/tests/e2e/skill-manag
   同一批形态在 1440×900 桌面视口再验一遍反向断言：手机那一档不许动桌面宽窗口与 ComfyUI 侧栏的版式。
   纯前端：注入 `web/studio/style.css`、`web/gallery.css`、`web/prompts.css`、`web/recipes.css`、
   `web/lightbox.css`、`web/pose/pose.css` 与真实同构 DOM，不需要 ComfyUI 在跑。
+- `canvas-comfy-api.e2e.mjs` — ComfyUI 画布页上的扩展装配：官方 `comfyAPI.app.app` 装配在、独立页 shim 的形状没有覆盖它、
+  Neo Studio 的侧栏 tab 出现在侧栏上、页面上不留下注册失败的报错。jsdom 覆盖不到这一发——它验的是本插件的模块被画布页
+  import 之后宿主前端还剩什么。
+

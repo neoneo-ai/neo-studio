@@ -7,7 +7,7 @@
  *    实时连线变化（onConnectionsChange）与加载工作流（onAfterGraphConfigured）都按当前连线状态刷新。
  */
 
-import { app } from "../../../../scripts/app.js";
+import { registerExtension } from "./js/core/comfy-app.js";
 
 // Gen&Edit 只锁 prompt（bundle 携带的增强提示词）；skill_id 保持可用——bundle 只带资源、不带 skill。
 // Director 的 recipe / 视频 skill 选择器显隐由 director-node.js 自行处理，这里不锁控件。
@@ -32,7 +32,7 @@ function applyBundleLock(node) {
     if (node.graph) node.graph.setDirtyCanvas(true, true);
 }
 
-app.registerExtension({
+registerExtension({
     name: "NeoNodes.BundleLock",
     beforeRegisterNodeDef(nodeType, nodeData) {
         if (!(nodeData.name in BUNDLE_LOCK_NODES)) return;

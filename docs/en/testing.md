@@ -126,6 +126,14 @@ npm run update-goldens   # NEO_UPDATE_GOLDENS=1, writes new goldens
 - `studio-kernel-open.test.mjs` — the "Open ComfyUI" button on the Startup Settings kernel row: it exists only with the
   kernel ready and goes through the js_api `open_url`; the address follows the port `comfy_state` reports (the desktop
   moves to a free port) and the remote address in remote mode; stopped and starting hide the button.
+- `comfy-app-registry.test.mjs` — extension registration and the comfyAPI boundary: no top-level `app.registerExtension`
+  anywhere in `web/` (a top-level import is an evaluate-time snapshot, so a late app assembly fails the whole module
+  graph); `scripts/app.js` / `scripts/api.js` imports must resolve to the frontend top-level `/scripts/` (from
+  `/extensions/<plugin>/` one missing level lands on `/extensions/scripts/` and 404s); a late app assembly is caught by
+  polling with no leftover timer, and an assembly that never lands stops at the cap with one console explanation; an
+  empty-shell `registerExtension` counts as registered only when the extension list accepts it; a top-level
+  `window.comfyAPI` assignment is allowed only behind the standalone page's `#ns-view` guard.
+
 
 ## JS test runner (with forced exit)
 
@@ -212,3 +220,7 @@ node --test --test-force-exit --test-timeout=180000 studio/tests/e2e/skill-manag
   wide window or the ComfyUI sidebar layout. Pure frontend: injects `web/studio/style.css`, `web/gallery.css`,
   `web/prompts.css`, `web/recipes.css`, `web/lightbox.css` and `web/pose/pose.css` into a DOM mirroring the real
   page, no running ComfyUI required.
+- `canvas-comfy-api.e2e.mjs` — the extension assembly on the ComfyUI canvas page: the official `comfyAPI.app.app` is
+  assembled, the standalone page's shim shape has not replaced it, Neo Studio's sidebar tabs show up in the sidebar, and
+  the page keeps no registration-failure errors. jsdom cannot cover this one — it asserts what is left of the host
+  frontend after this plugin's modules are imported by the canvas page.

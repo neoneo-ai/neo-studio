@@ -10,6 +10,7 @@
  * 红点 = workflow.js 的 setRepairHint（失效模型路径），绿点 = skill.js 的画布技能待回写。
  */
 import { app } from "../../../../scripts/app.js";
+import { registerExtension } from "./js/core/comfy-app.js";
 import { api } from "../../../../scripts/api.js";
 import { showToast } from "./gallery-utils.js";
 import { openDirectorEditor } from "./director.js";
@@ -576,7 +577,7 @@ function openMenu(anchor, byHover = false) {
     document.addEventListener("keydown", _escHandler);
 }
 
-app.registerExtension({
+registerExtension({
     name: "comfy.neo.topMenu",
     setup() {
         // 图标：前端把 icon 字段渲染为 <i class=...>，用 ::before 出 emoji 字符（构建期 Tailwind 不保证自定义类）

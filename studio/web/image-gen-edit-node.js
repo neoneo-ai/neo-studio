@@ -4,12 +4,12 @@
 // 另修复旧版本工作流/复制粘贴导致的 widgets_values 串位：seed 之后会自动追加 control_after_generate
 // 下拉（吃一个位置），widget 集合变化后按位置还原会把它落到数字上。正常态它恒为模式串、seed 恒为非负整数，
 // 二者任一非法即判定 seed/count/width/height 整块错位 → 复位 control/seed/count 并强制按预设重填宽高。
-import { app } from "../../../../scripts/app.js";
+import { registerExtension } from "./js/core/comfy-app.js";
 import { api } from "../../../../scripts/api.js";
 import { attachSkillPickerToComboWidget, createSkillStatusRow } from "./skill.js";
 import { t } from "./js/core/i18n.js";
 
-app.registerExtension({
+registerExtension({
     name: "NeoImageGenEdit.DimDefaults",
     async beforeRegisterNodeDef(nodeType, nodeData) {
         if (nodeData.name !== "NeoImageGenEdit") return;

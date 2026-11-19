@@ -92,6 +92,14 @@
 - Frontend extensions load as `extensions/**/*.js` and only
   `.js` is recognized. Subdirectories are fine; renaming a
   module to `.mjs` makes the whole frontend fail to load.
+  这条收集规则的后果要记住：`studio/web/` 下每一份 `.js` 都会被 ComfyUI 画布页 import 一次，
+  `studio/` 子目录里独立页专用的那些也在内。所以顶层不许写 `window.*` 全局——画布页的
+  `window.comfyAPI` 是前端逐键增量装配的，被整份换掉之后每个插件顶层的 `app.registerExtension(...)`
+  都取不到 app，79 个扩展一起失败，侧栏与顶栏随之消失。顶层注册一律走 `js/core/comfy-app.js` 的
+  `registerExtension`：它在调用时刻取值，装配晚到就等着，模块图不再因一次快照取空而整片失败。
+  独立页 shim 装配 `window.comfyAPI` 必须挡在 `#ns-view` 在场守卫之后。这两条由
+  `studio/tests/js/comfy-app-registry.test.mjs` 钉住，画布页上的真实形态由
+  `studio/tests/e2e/canvas-comfy-api.e2e.mjs` 验。
 - Node panel UI lives in the matching `studio/web/<node>.js`
   with a same-named `.css`. Shared DOM factories go in
   `dom-utils.js`, dropdowns in `combo-box.js`, toasts in `toast.js`.

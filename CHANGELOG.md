@@ -443,6 +443,16 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   recipes and existing 配方 assets are untouched.
 
 ### Fixed
+
+- **The 素材库 / 配方 sidebar tabs and the Neo menu button are back on the ComfyUI canvas page.** The standalone Studio
+  page installs its own `window.comfyAPI` stand-in, and ComfyUI's extension loader imports every `.js` under the
+  plugin's `web/` folder - that stand-in included - so opening the canvas page ran it there and replaced the canvas
+  page's own assembly wholesale: `comfyAPI.app.app` became undefined, every plugin's top-level
+  `app.registerExtension(...)` threw, and all 79 installed extensions - the sidebar, the top bar, Neo Studio's own
+  nodes - loaded as nothing. The stand-in assembles only on the Studio page now, and Neo Studio's own registration
+  reads the app singleton at call time, so a frontend that finishes assembling late registers the moment it lands
+  instead of failing for the whole session.
+
 - **A video node drags by its face, and every node now carries a grab handle in its floating bar.** A video fills its
   node with the browser's own playback controls, so the node used to move only by the 6 px black frame around its edge.
   Press-dragging the clip now moves the node once the pointer passes 8 px; a press that never passed it stays the

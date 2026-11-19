@@ -11,6 +11,7 @@
  * 收集/还原配方（鸭子类型，避免循环导入）。
  */
 import { app } from "../../../../scripts/app.js";
+import { registerExtension } from "./js/core/comfy-app.js";
 import { t, tf } from "./js/core/i18n.js";
 import { icon } from "./js/core/icons.js";
 import { Lightbox } from "./lightbox.js";
@@ -464,7 +465,7 @@ function refreshFromWidgets(node) {
     ui.render();
 }
 
-app.registerExtension({
+registerExtension({
     name: "NeoRefGrid.Grid",
     beforeRegisterNodeDef(nodeType, nodeData) {
         if (nodeData.name !== "NeoRefGrid") return;

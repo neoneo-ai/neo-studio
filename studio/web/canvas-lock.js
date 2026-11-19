@@ -8,6 +8,7 @@
  * 节点拖动 / 缩放 / widget 编辑 / 右键加节点全停。解锁还原用户自己的锁状态，不抢用户的锁定。
  */
 import { app } from "../../../../scripts/app.js";
+import { registerExtension } from "./js/core/comfy-app.js";
 import { api } from "../../../../scripts/api.js";
 import { t } from "./js/core/i18n.js";
 
@@ -67,7 +68,7 @@ async function probe() {
     else goOffline();
 }
 
-app.registerExtension({
+registerExtension({
     name: "comfy.neo.canvasLock",
     setup() {
         api.addEventListener("status", (e) => { if (e?.detail) goOnline(); else probe(); });

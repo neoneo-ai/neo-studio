@@ -3,8 +3,9 @@
  * 主入口 - 节点注册、生命周期、增强/翻译
  */
 
-import { app } from "../../scripts/app.js";
-import { api } from "../../scripts/api.js";
+import { app } from "../../../../scripts/app.js";
+import { api } from "../../../../scripts/api.js";
+import { registerExtension } from "./js/core/comfy-app.js";
 import { createPromptManagerUI } from "./prompt-manager.js";
 import { mkEl } from "./dom-utils.js";
 
@@ -84,7 +85,7 @@ function syncHiddenWidgets(node) {
 // A simple prompt generator node - same as NeoPromptEncoder but without statusbar/toggle
 // Only outputs STRING (the prompt text)
 // ==========================================
-app.registerExtension({
+registerExtension({
     name: "NeoPromptAgent",
     async beforeRegisterNodeDef(nodeType, nodeData) {
         if (nodeData.name !== "NeoPromptAgent" && nodeData.name !== "NeoPromptGenerator") return;
@@ -590,7 +591,7 @@ if (![...document.querySelectorAll('link[rel="stylesheet"]')]
 // Main Node Logic for NeoPromptEncoder
 // ==========================================
 
-app.registerExtension({
+registerExtension({
     name: "NeoPromptEncoder",
     async beforeRegisterNodeDef(nodeType, nodeData) {
         if (nodeData.name !== "NeoPromptEncoder") return;

@@ -1,4 +1,5 @@
 import { app } from "../../../../scripts/app.js";
+import { registerExtension } from "./js/core/comfy-app.js";
 import { api } from "../../../../scripts/api.js";
 import { GalleryList } from './gallery-list.js';
 import { GalleryCard } from './gallery-card.js';
@@ -1945,7 +1946,7 @@ export class NeoGallery {
 }
 
 // ====== Extension Registration =====
-app.registerExtension({
+registerExtension({
     name: "comfy.neo.gallery",
     async setup() {
         const gallery = new NeoGallery(app);

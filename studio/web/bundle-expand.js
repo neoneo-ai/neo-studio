@@ -1,6 +1,7 @@
 // NeoBundleExpand 节点：在节点内只读展示 BUNDLE 展开结果（提示词 + 参考图缩略图网格，编号对应输出 image_1..image_N）。
 // 数据来自后端 expand() 返回的 ui payload（{"prompt":[...], "images":[dataURI|null,...]}），经 node.onExecuted 送达。
 import { app } from "../../../../scripts/app.js";
+import { registerExtension } from "./js/core/comfy-app.js";
 import { Lightbox } from "./lightbox.js";
 import { t } from "./js/core/i18n.js";
 
@@ -147,7 +148,7 @@ function fitNode(node, root) {
     node.setSize([w, Math.max(h, MIN_HEIGHT)]);
 }
 
-app.registerExtension({
+registerExtension({
     name: "NeoBundleExpand.Display",
     beforeRegisterNodeDef(nodeType, nodeData) {
         if (nodeData.name !== "NeoBundleExpand") return;
