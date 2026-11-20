@@ -16,34 +16,40 @@ import { t } from "../../../js/core/i18n.js";
  *  手势层认的控件面不在这里：那是共享的一份清单，按类型拆会让卡面几乎按不到（见 interactions.js） */
 export const NODE_TYPES = {
     image: { title: "图片", w: 340, h: 240, css: "ns-canvas-node-image", body: "image", bar: "hero",
-        add: { label: "加图片", icon: "image" } },
+        add: { label: "加图片", icon: "image", act: "material" } },
     text: { title: "提示词", w: 340, h: 240, css: "ns-canvas-node-text", body: "text", bar: "prompt",
         add: { label: "加提示词", icon: "list" } },
     gen: { title: "生成", w: 320, h: 208, css: "ns-canvas-node-gen", body: "gen", gate: "image_gen",
-        run: "image", add: { label: "加生成节点", icon: "sparkles" } },
+        run: "image", add: { label: "加生成节点", icon: "sparkles", prime: "prime", seed: "skill" } },
     // 图像编辑节点：图与提示词都从连过来的节点取，这一张只管选技能与出图 —— 卡面与生成节点同一档（接法见 gen.js 的 runEdit）
     edit: { title: "图像编辑", w: 320, h: 208, css: "", body: "edit", gate: "image_gen", run: "edit",
-        add: { label: "加编辑节点", icon: "pencil" } },
+        add: { label: "加编辑节点", icon: "pencil", prime: "prime", seed: "editSkill" } },
     // 增强节点：要重写的正文从连过来的提示词节点取，成文写进下游空的提示词节点（见 gen.js 的 runEnhance）
     enhance: { title: "增强", w: 320, h: 168, css: "", body: "llm", gate: "prompt_enhance", run: "enhance",
-        add: { label: "加增强节点", icon: "refresh" } },
+        add: { label: "加增强节点", icon: "refresh", prime: "prime", defaults: { skill_id: "" } } },
     // 反推节点：要反推的那一张从连过来的图片节点取，成文同样写进下游空的提示词节点（见 gen.js 的 runReverse）
     reverse: { title: "反推", w: 320, h: 168, css: "", body: "llm", gate: "prompt_reverse", run: "reverse",
-        add: { label: "加反推节点", icon: "camera" } },
+        add: { label: "加反推节点", icon: "camera", defaults: { language: "zh" } } },
+    // 「加视频节点」落的还是生成节点那一类，视频档记在 metadata.kind 里（见 gen.js 的 runVideo）
     video: { title: "视频", w: 340, h: 240, css: "ns-canvas-node-video", body: "video",
-        add: { label: "加视频节点", icon: "film" } },
-    // 车厢一张一段：段号、这一段自己写的提示词与素材覆盖都在这一张上，整列共用的参数在车尾
+        add: { label: "加视频节点", icon: "film", type: "gen", prime: "primeVideo", seed: "videoSkill" } },
+    // 车厢一张一段：段号、这一段自己写的提示词与素材覆盖都在这一张上，整列共用的参数在车尾。
+    // 「添加配方」铺的是一整列（见 page.js 的铺一列），菜单那一行不落一张空车厢
     recipe: { title: "车厢", w: 360, h: 176, css: "ns-canvas-node-recipe", body: "car", gate: "video_gen",
-        run: "car", add: { label: "添加配方", icon: "wand" } },
+        run: "car", add: { label: "添加配方", icon: "wand", prime: "primeRecipes", act: "recipe" } },
 };
 
 /** store.js 建节点与读盘兜底用的那一份规格（形状不变，值从注册表来） */
 export const NODE_SPECS = Object.fromEntries(Object.entries(NODE_TYPES)
     .map(([type, d]) => [type, { width: d.w, height: d.h, title: d.title }]));
 
-/** 「加节点」菜单：顺序就是上面这一列的顺序，图标与名字都在类型那一行里 */
+/** 「加节点」菜单：顺序就是上面这一列的顺序。图标与名字、这一行落哪一类节点（加视频节点落的是生成节点的
+ *  视频档）、建之前要先读到手的那一份清单（prime 是 gen.js 交下来的那个读法）、默认 metadata（defaults
+ *  写死在类型那一行，seed 是页面那一层才知道的默认技能）都在这一行里。
+ *  act 是菜单里不落一张空节点的那两发：加图片开素材库，添加配方开配方弹窗 */
 export const ADD_MENU = Object.entries(NODE_TYPES)
-    .filter(([, d]) => d.add).map(([type, d]) => ({ type, ...d.add }));
+    .filter(([, d]) => d.add)
+    .map(([type, d]) => ({ ...d.add, type: d.add.type || type }));
 
 /** 卡上那一发说的话：运行钮、悬停提示与状态行的取值。状态行三条链形状各不一样 —— 出图与编辑数张数、
  *  增强与反推数字数（字数每 40 字才报一次：逐 token 整层重画会把节点上的打字与拖动全卡住） */

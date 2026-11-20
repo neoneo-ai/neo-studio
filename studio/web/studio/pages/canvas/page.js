@@ -11,6 +11,7 @@ import { addConnection, gridGeometry, MAX_SCALE, MIN_SCALE, nodeBounds, placeGri
 import { BACKGROUND_MODES, createCanvasNode, createCanvasStore, duplicateNodes, fitImageSize, NODE_SPECS, readCanvas } from "./store.js";
 import { createHistory, snapshotCanvas } from "./history.js";
 import { applyNodeGeometry as paintNodeGeometry, renderNodes as renderNodeLayer, paintSelection as paintNodeSelection } from "./nodes.js";
+import { ADD_MENU } from "./node-types.js";
 import { renderConnections as renderLinkLayer, renderActiveConnection as paintActiveLine } from "./connections.js";
 import { attachCanvasInteractions } from "./interactions.js";
 import { createCanvasGen, readRecipeParams } from "./gen.js";
@@ -121,8 +122,9 @@ export function createCanvasPage({ $el, api, toast, openMaterial, canGen, can })
         const redo = mkHint(t("重做"), "Ctrl+Shift+Z", "redo", () => redoEdit());
         const group = (...kids) => $el("span", { className: "ns-canvas-bar-group" }, kids);
         const sep = () => $el("span", { className: "ns-canvas-bar-sep" });
-        // 加节点那五枚收成菜单里的五行：菜单钉在钮下方，position: fixed 让它不占条内的行位、也不被条的
-        // 横向滚动裁剪；行面上是图标 + 名字 —— 只有图标时「加生成节点」与「加视频节点」分不出来
+        // 加节点收成菜单里的八行：顺序、图标与名字都在 node-types.js 的那一列里。菜单钉在钮下方，
+        // position: fixed 让它不占条内的行位、也不被条的横向滚动裁剪；行面上是图标 + 名字 —— 只有图标时
+        // 「加生成节点」与「加视频节点」分不出来
         const inMenu = (btn) => {
             btn.classList.add("ns-canvas-add-item");
             btn.appendChild($el("span", { className: "ns-canvas-add-label",
@@ -147,16 +149,8 @@ export function createCanvasPage({ $el, api, toast, openMaterial, canGen, can })
         }
         const addOutside = (e) => { if (!addMenu.contains(e.target) && !addBtn.contains(e.target)) closeAddMenu(); };
         const addEscape = (e) => { if (e.key === "Escape") closeAddMenu(); };
-        const addMenu = $el("div", { className: "ns-canvas-add-menu" }, [
-            inMenu(mk(t("加图片"), "image", addAction(() => pickImage()))),
-            inMenu(mk(t("加提示词"), "list", addAction(() => addNode("text")))),
-            inMenu(mk(t("加生成节点"), "sparkles", addAction(() => addGenNode()))),
-            inMenu(mk(t("加编辑节点"), "pencil", addAction(() => addEditNode()))),
-            inMenu(mk(t("加增强节点"), "refresh", addAction(() => addEnhanceNode()))),
-            inMenu(mk(t("加反推节点"), "camera", addAction(() => addReverseNode()))),
-            inMenu(mk(t("加视频节点"), "film", addAction(() => addVideoNode()))),
-            inMenu(mk(t("添加配方"), "wand", addAction(() => addRecipe())))
-        ]);
+        const addMenu = $el("div", { className: "ns-canvas-add-menu" },
+            ADD_MENU.map((row) => inMenu(mk(t(row.label), row.icon, addAction(() => addTypedNode(row))))));
         const addBtn = mk(t("加节点"), "plus-square", () => (
             addMenu.classList.contains("ns-canvas-add-menu-open") ? closeAddMenu() : openAddMenu()));
         const root = $el("div", { className: "ns-canvas-bar" }, [
@@ -493,40 +487,24 @@ export function createCanvasPage({ $el, api, toast, openMaterial, canGen, can })
         return node;
     }
 
-    /** 「加生成节点」：默认技能带上一次在这页选过的（技能列表还没读到时先空着，双击开浮层再选） */
-    function addGenNode() {
-        gen?.prime();
-        return addNode("gen", null, { skill_id: gen?.defaultSkillId() || "" });
-    }
+    /** 菜单那一行的默认 metadata 里，只有「上一次在这页选过的技能」是页面这一层才知道的取值
+     *  （技能列表与默认技能都在 gen.js 读到手）；写死的默认值在注册表那一行的 defaults 里 */
+    const ADD_SEEDS = {
+        skill: () => ({ skill_id: gen?.defaultSkillId() || "" }),
+        // 「加生成节点」的默认技能带上一次在这页选过的（技能列表还没读到时先空着，双击开浮层再选）
+        editSkill: () => ({ skill_id: gen?.defaultEditSkillId() || "" }),
+        // 视频档记在 metadata.kind 里：出片走简单视频那条链，成片落进下游视频节点
+        videoSkill: () => ({ kind: "video", skill_id: gen?.defaultVideoSkillId() || "" }),
+    };
 
-    /** 「加编辑节点」：图像编辑链的那一张 —— 只选技能与出图，被改的那一张与要用的提示词都从连过来的节点取。
-     *  技能列表与生图模型清单读到手才建（胶囊里列的就是那一份），与「加生成节点」同一发 */
-    function addEditNode() {
-        gen?.prime();
-        return addNode("edit", null, { skill_id: gen?.defaultEditSkillId() || "" });
-    }
-
-    /** 「加视频节点」：同一张生成节点的面，kind 记在 metadata 里 —— 出片走简单视频那条链，成片落进下游视频节点 */
-    function addVideoNode() {
-        gen?.primeVideo();
-        return addNode("gen", null, { kind: "video", skill_id: gen?.defaultVideoSkillId() || "" });
-    }
-
-    /** 「加增强节点」：把连过来的正文交给那条增强链，技能胶囊里列的就是技能列表那一份 */
-    function addEnhanceNode() {
-        gen?.prime();
-        return addNode("enhance", null, { skill_id: "" });
-    }
-
-    /** 「加反推节点」：把连过来的那一张图写成一段提示词，语言与反推页同一对取值（默认中文） */
-    function addReverseNode() {
-        return addNode("reverse", null, { language: "zh" });
-    }
-
-    /** 「添加配方」：弹窗选一份导演配方，选完直接串成一列车厢（一段一厢），出片与整列共用的参数在车尾 */
-    function addRecipe() {
-        gen?.primeRecipes();
-        openRecipePicker();
+    /** 「加节点」菜单的一行落一张节点：先把这一行要用的清单读到手（技能列表 / 出视频技能 / 配方——胶囊里列的
+     *  就是那一份），默认 metadata 看注册表那一行。菜单里那两发不落一张空节点：加图片开素材库取图铺，
+     *  添加配方开配方弹窗铺一列 */
+    function addTypedNode(row) {
+        if (row.act === "material") return pickImage();
+        if (row.act === "recipe") { gen?.primeRecipes(); return openRecipePicker(); }
+        if (row.prime) gen?.[row.prime]?.();
+        return addNode(row.type, null, row.seed ? ADD_SEEDS[row.seed]() : { ...row.defaults });
     }
 
     // ====== 一列车厢与「添加配方」弹窗 ======

@@ -621,9 +621,13 @@ describe("canvas-page 页面", () => {
         .filter((label) => view.bar.querySelector(`[aria-label="${label}"]`)), []);
     });
     test("工具条每一枚钮的图标名都画得出来（缺一名就是条上一枚只剩边框的空钮）", () => {
+      // 加节点那八行的图标在 node-types.js 那一列里（菜单照它铺），其余各枚还在 page.js 里现建
       const source = fs.readFileSync(path.join(webDir, "studio/pages/canvas/page.js"), "utf8");
-      const names = [...source.matchAll(/\b(?:mk(?:Label|Hint)?|rowAct|setIcon(?:Label)?)\((?:[^()]|\([^()]*\))*?,\s*"([a-z0-9-]+)"/g)]
-        .map((m) => m[1]);
+      const addSource = fs.readFileSync(path.join(webDir, "studio/pages/canvas/node-types.js"), "utf8");
+      const names = [
+        ...[...source.matchAll(/\b(?:mk(?:Label|Hint)?|rowAct|setIcon(?:Label)?)\((?:[^()]|\([^()]*\))*?,\s*"([a-z0-9-]+)"/g)].map((m) => m[1]),
+        ...[...addSource.matchAll(/\bicon:\s*"([a-z0-9-]+)"/g)].map((m) => m[1]),
+      ];
       assert.ok(names.length >= 14, `工具条里只扫到 ${names.length} 枚图标名：${names.join(",")}`);
       for (const name of names) {
         assert.ok(ICON_NAMES.includes(name), `图标 ${name} 在 icons.js 里画不出`);
