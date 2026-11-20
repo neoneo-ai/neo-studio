@@ -398,9 +398,10 @@ const { buildVideo } = createVideoPage({
 // 这一处只交建元素、api、提示条与素材库取图（「加图片」与空节点的「选图」都开这一扇），并把结果板的
 // 「摆到画布」接回生图家族（画布页没建过时 placeItems 自己等它建好）。
 // 生成节点出图要 ComfyUI 执行队列：只交能力位下去，拉起内核是顶栏那一位的事（画布出图与绘画页同一口径）
+// 出图、出片与增强 / 反推四条链的能力位由画布按节点自己那一发问（见 pages/canvas/node-types.js）；
+// 拉起内核是顶栏那一位的事，画布只说去哪儿启（与绘画页出图同一口径）
 const canvasPage = createCanvasPage({ $el, api, toast,
     openMaterial: (onPick) => openMaterial("canvas", "image", onPick),
-    canGen: () => can("image_gen"),
     can: (feature) => can(feature) });
 const buildCanvas = canvasPage.build;
 setCanvasPlace((items) => {

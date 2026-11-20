@@ -871,7 +871,7 @@ describe("canvas-page 页面", () => {
         ["left", "top", "bottom", "right"]);
     });
     test("上下叠放的两台节点：从上面那台的底接线点就近接到下面那台", async () => {
-      const { page, view } = await makePage(STACKED_PAIR(), { canGen: () => true });
+      const { page, view } = await makePage(STACKED_PAIR());
       fire(nodeHandle(view, "txt", "bottom"), "pointerdown", { clientX: 470, clientY: 300, button: 0 });
       fire(window, "pointermove", { clientX: 480, clientY: 460 });
       fire(window, "pointerup", {});
@@ -2177,8 +2177,7 @@ describe("canvas-page 页面", () => {
       const env = mockCanvas({ projects: [...(nodes.length ? oneCanvas(nodes, connections) : []), ...(gen.canvases || [])] });
       env.starts = [];
       Object.assign(env.routes, genRoutes(gen), routes);
-      // 宿主这里照旧交一份启动回调：画布拿不到它，env.starts 就是「页面有没有自己去拉内核」的探针
-      const ctx = await makePage(env, { canGen: () => true, startComfy: () => { env.starts.push(1); }, ...extraHost });
+      const ctx = await makePage(env, { can: () => true, ...extraHost });
       await settle();   // 首张画布与技能列表都在 build 之后落地
       const genText = (id, part) => ctx.view.nodeEl(id)
         .querySelector(`.ns-canvas-gen-${part}`)?.textContent || "";
@@ -2330,7 +2329,7 @@ describe("canvas-page 页面", () => {
     });
     test("没有执行队列时出图不拉内核：只说去顶栏胶囊启动", async () => {
       const ctx = await genPage([promptNode("t1", "一句"), genNode("g1", 0, 0)], [link("t1", "g1")],
-        { extraHost: { canGen: () => false } });
+        { extraHost: { can: () => false } });
       click(ctx.genBtn("g1", "出图"));
       await settle();
       assert.equal(genCalls().length, 0);
@@ -3316,7 +3315,7 @@ describe("canvas-page 页面", () => {
 
       test("离线按出图：只说去哪儿启队列，不拉内核", async () => {
         const ctx = await genPage([promptNode("t1", "改背景"), imageSlot("i1", 500), editNode("e1", 0, 0)],
-          [link("t1", "e1"), link("i1", "e1")], { gen: { skills: EDIT_SKILLS }, extraHost: { canGen: () => false } });
+          [link("t1", "e1"), link("i1", "e1")], { gen: { skills: EDIT_SKILLS }, extraHost: { can: () => false } });
         Object.assign(metaOf(ctx, "i1"), { filename: "a.png" });
         click(ctx.genBtn("e1", "出图"));
         await settle();
@@ -3420,7 +3419,7 @@ describe("canvas-page 页面", () => {
         [REV_PATH]: reverseResponder
           || (() => llmSse((reverse || [{ text: REV_OUT }, "[DONE]"]).map(sseLine))),
       });
-      const ctx = await makePage(env, { canGen: () => true, ...extraHost });
+      const ctx = await makePage(env, { can: () => true, ...extraHost });
       await settle();
       const genText = (id, part) => ctx.view.nodeEl(id)?.querySelector(`.ns-canvas-gen-${part}`)?.textContent || "";
       const genBtn = (id, label) => [...ctx.view.nodeEl(id).querySelectorAll(".ns-canvas-gen-btn")]

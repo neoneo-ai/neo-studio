@@ -83,14 +83,20 @@ test("运行文案齐那一行要说的字，每一条都在词表里：少一�
             assert.ok(labels[key], `${type}（run=${d.run}）的运行文案缺 ${key}`);
             assert.ok(inWordTable(labels[key]), `${type} 的 ${key}「${labels[key]}」没进 i18n 词表`);
         }
+        // 钮上的离线提示与闸门的话术是英文界面要说的两句：没进词表就在英文界面上露中文
+        if (labels.offline) assert.ok(inWordTable(labels.offline), `${type} 的离线提示「${labels.offline}」没进词表`);
+        if (labels.gateNote) assert.ok(inWordTable(labels.gateNote), `${type} 的闸门话术「${labels.gateNote}」没进词表`);
     }
 });
 
 test("能力位就是桌面端能力表里那一个名字：表里写错一名，这一发在离线窗口与插件页都不说话", () => {
-    for (const [type, d] of Object.entries(NODE_TYPES)) {
-        if (!d.gate) continue;
-        assert.ok(capsSource.includes(`"${d.gate}"`),
-            `${type} 的能力位 ${d.gate} 不在 app/studio_caps.py 的能力名里`);
+    for (const [run, labels] of Object.entries(RUN_LABELS)) {
+        // 车厢自己不跑出片：这一行不该留一份没人读的能力位
+        if (run === "car") assert.ok(!labels.cap, "车厢那一行没有运行钮，不该有能力位");
+        else assert.ok(labels.cap && labels.gateNote, `${run} 那一发要有能力位，也要有缺了要说的话`);
+        if (!labels.cap) continue;
+        assert.ok(capsSource.includes(`"${labels.cap}"`),
+            `${run} 的能力位 ${labels.cap} 不在 app/studio_caps.py 的能力名里`);
     }
 });
 
@@ -110,17 +116,35 @@ test("跑哪一条链看节点自己的档：串联的车尾数段数，视频�
     assert.equal(runKind({ type: "recipe", metadata: {} }), "car");
 });
 
-test("闸门：停用的那一张先说话，在跑的不重复提交，能力位缺了的话术按能力位分三档", () => {
-    const on = () => true, off = () => false;
-    assert.deepEqual(gateOf({ metadata: { disabled: true } }, { running: true, gate: "image_gen", canFeature: off }),
+test("闸门：停用的那一张先说话，在跑的不重复提交，缺了的能力位按节点自己那一发说话", () => {
+    const all = () => true, none = () => false;
+    const gen = { type: "gen", metadata: {} };
+    const tail = { type: "gen", metadata: { kind: "video", chain: "train" } };
+    const clip = { type: "gen", metadata: { kind: "video" } };
+    assert.deepEqual(gateOf({ type: "gen", metadata: { disabled: true } }, { running: true, canFeature: none }),
         { msg: "这台节点已停用：在节点上方的浮出栏里启用", level: "info" }, "已停用这句不许被「在跑」吃掉");
-    assert.deepEqual(gateOf({ metadata: {} }, { running: true, gate: "image_gen", canFeature: on }),
+    assert.deepEqual(gateOf(gen, { running: true, canFeature: all }),
         { msg: "", level: "info" }, "这一发在跑：不出声，也不许重复提交");
-    assert.ok(gateOf({ metadata: {} }, { gate: "image_gen", canFeature: off }).msg.startsWith("出图需要"));
-    assert.ok(gateOf({ metadata: {} }, { gate: "simple_video", canFeature: off }).msg.startsWith("出片需要"));
-    assert.ok(gateOf({ metadata: {} }, { gate: "segment", canFeature: off }).msg.startsWith("出片需要"));
-    assert.ok(gateOf({ metadata: {} }, { gate: "prompt_enhance", canFeature: off }).msg.startsWith("该功能需要"));
-    assert.equal(gateOf({ metadata: {} }, { gate: "image_gen", canFeature: on }), null, "能力位在就不该拦");
+    assert.equal(gateOf(gen, { canFeature: all }), null, "能力位在就不该拦");
+    const warn = (node) => {
+        const stop = gateOf(node, { canFeature: none });
+        assert.equal(stop.level, "warn", `${node.type}·${node.metadata?.chain || node.metadata?.kind || "图"}：拦下要说去哪儿启`);
+        return stop.msg;
+    };
+    assert.ok(warn(gen).startsWith("出图需要"), "出图那一位缺了要说去启队列");
+    assert.ok(warn(clip).startsWith("出片需要"));
+    assert.ok(warn(tail).startsWith("出片需要"), "串联的车尾跑的是分段那条链，缺的是 segment 那一位");
+    assert.ok(warn({ type: "enhance", metadata: {} }).startsWith("该功能需要"));
+    assert.ok(warn({ type: "edit", metadata: {} }).startsWith("出图需要"));
+    // 只有出图那一位在：出图照跑，出片那两位（分段 / 简单视频）缺了照样说话 —— 闸门问的是节点自己那一发
+    const imgOnly = (feature) => feature === "image_gen";
+    assert.equal(gateOf(gen, { canFeature: imgOnly }), null);
+    assert.ok(gateOf(clip, { canFeature: imgOnly }).msg.startsWith("出片需要"));
+    assert.ok(gateOf(tail, { canFeature: imgOnly }).msg.startsWith("出片需要"));
+    // 卡上没有运行钮的那几类（图片、提示词、车厢）闸门一律不拦：那三张卡没有运行钮可拦
+    for (const type of ["image", "text", "recipe"]) {
+        assert.equal(gateOf({ type, metadata: {} }, { canFeature: none }), null, `${type} 卡上没有运行钮`);
+    }
 });
 
 test("上游取数只看直连：顺序就是连线顺序，停用的那一张不进这一发", () => {

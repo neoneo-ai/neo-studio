@@ -19,7 +19,7 @@ import { directorMetaText, listRecipes, listVideoSkills } from "../../../recipes
 import { listSkills, skillAcceptsRef, skillAcceptsText, skillDisplayName, isEnhanceSkill } from "../../../skill.js";
 import { ENHANCE_API, enhancePayload } from "../../../prompt-enhance/prompt-enhance.js";
 import { REVERSE_API, REVERSE_LANGS, reverseRequestBody } from "../../../reverse-prompt/reverse-prompt.js";
-import { NODE_TYPES, RUN_LABELS, gateOf, runKind, upstreamNodes } from "./node-types.js";
+import { RUN_LABELS, gateOf, runKind, upstreamNodes } from "./node-types.js";
 
 // 画布自己记的默认技能（绘画页与视频页各记各的，同一套法）：新建生成节点带出上一次在这页选的技能
 const LAST_SKILL_KEY = "neo.canvas.skill";
@@ -170,7 +170,7 @@ export function genInputs(state, genNodeId) {
     return { prompts, references };
 }
 
-export function createCanvasGen({ $el, toast, api, canGen, canFeature, host }) {
+export function createCanvasGen({ $el, toast, api, canFeature, host }) {
     // 一发一份运行态（节点上那一行状态就是它）。watchTask 在终态自己摘监听；切画布只把这一发脱手：
     // 图已经落在 Output 目录，不再写回旧画布，也不在页面外头留一份没人收的监听
     const running = new Map();
@@ -355,7 +355,6 @@ export function createCanvasGen({ $el, toast, api, canGen, canFeature, host }) {
             done: st?.done || 0,
             total: st?.total || 0,
             error: st?.error || "",
-            offline: canGen() === false,
         };
     }
 
@@ -503,9 +502,10 @@ export function createCanvasGen({ $el, toast, api, canGen, canFeature, host }) {
     }
 
     /** 出片的闸门（串联的车尾与视频节点共用，见 node-types.js 的 gateOf）：停用的那一张不跑；这一发在跑
-     *  就不重复提交；没有执行队列只说去哪儿启（与出图同一套做法） */
+     *  就不重复提交；没有执行队列只说去哪儿启（与出图同一套做法）。车尾与视频节点要的能力位不同（分段 /
+     *  简单视频），闸门按节点自己那一发查 */
     function clipGate(node) {
-        const stop = gateOf(node, { running: running.has(node.id), gate: NODE_TYPES.video.gate, canFeature: canGen });
+        const stop = gateOf(node, { running: running.has(node.id), canFeature });
         if (stop) {
             if (stop.msg) toast(stop.msg, stop.level);
             return true;
@@ -636,8 +636,8 @@ export function createCanvasGen({ $el, toast, api, canGen, canFeature, host }) {
 
     function runImage(node) {
         // 停用的那一张按一下就明说自己不跑（这句排在「这一发在跑」之前）；出图要执行队列，拉起它是顶栏
-        // 那一位的事：画布出图与绘画页出图同一口径，这里只说去哪儿启
-        const stop = gateOf(node, { running: running.has(node.id), gate: NODE_TYPES.gen.gate, canFeature: canGen });
+        // 那一位的事：画布出图与绘画页出图同一口径，这里只说去哪儿启。能力位与话术都在注册表那一行里
+        const stop = gateOf(node, { running: running.has(node.id), canFeature });
         if (stop) {
             if (stop.msg) toast(stop.msg, stop.level);
             return;
@@ -693,7 +693,7 @@ export function createCanvasGen({ $el, toast, api, canGen, canFeature, host }) {
      *  那几条正文。载荷与绘画页编辑面板「常规」那一发同口径（references + skip_enhance），结果照走
      *  finish 落下游图片节点 */
     function runEdit(node) {
-        const stop = gateOf(node, { running: running.has(node.id), gate: NODE_TYPES.edit.gate, canFeature: canGen });
+        const stop = gateOf(node, { running: running.has(node.id), canFeature });
         if (stop) {
             if (stop.msg) toast(stop.msg, stop.level);
             return;
@@ -718,8 +718,8 @@ export function createCanvasGen({ $el, toast, api, canGen, canFeature, host }) {
     /** 增强与反推共用的闸门：停用的那一张不跑；这一发在跑就不重复提交；能力位缺了说去哪儿启。
      *  两条链都在桌面端自服的能力表上（prompt_enhance / prompt_reverse），离线窗口照跑 ——
      *  要的是本机配好 LLM，不是执行队列 */
-    function llmGate(node, feature) {
-        const stop = gateOf(node, { running: running.has(node.id), gate: feature, canFeature });
+    function llmGate(node) {
+        const stop = gateOf(node, { running: running.has(node.id), canFeature });
         if (stop) {
             if (stop.msg) toast(stop.msg, stop.level);
             return true;
@@ -823,7 +823,7 @@ export function createCanvasGen({ $el, toast, api, canGen, canFeature, host }) {
     /** 增强节点：连过来的正文按连线顺序拼一条送进那条增强链（技能留空 = 后端按输入智能挑一条），
      *  成文落下游提示词节点 —— 与首页「提示词增强」页是同一条接口 */
     function runEnhance(node) {
-        if (llmGate(node, NODE_TYPES.enhance.gate)) return;
+        if (llmGate(node)) return;
         const { prompts } = genInputs(host.getState(), node.id);
         if (!prompts.length) { toast(t("把要增强的提示词节点连过来"), "info"); return; }
         submitLlmRun(node, ENHANCE_API,
@@ -834,7 +834,7 @@ export function createCanvasGen({ $el, toast, api, canGen, canFeature, host }) {
     /** 反推节点：连线顺序里第一张图进请求（素材库那三元组，与素材卡 ⋯ 反推同一份），成文落下游
      *  提示词节点。配方素材（只有 asset 没有 filename）后端认不到，跑之前就说清楚 */
     function runReverse(node) {
-        if (llmGate(node, NODE_TYPES.reverse.gate)) return;
+        if (llmGate(node)) return;
         const src = reverseFirstImage(host.getState(), node.id);
         if (!src) { toast(t("把要反推的那一张图片节点连过来"), "info"); return; }
         const filename = String(src.metadata?.filename || "");
@@ -1099,7 +1099,7 @@ export function createCanvasGen({ $el, toast, api, canGen, canFeature, host }) {
             // 串联的车尾那台生成节点的面与出视频页那一张不同：参数是整列共用的那一份
             return params.chain === "train" ? chainControls(node, busy) : videoControls(node, params, busy);
         }
-        const offline = canGen() === false;
+        const offline = canFeature(RUN_LABELS[runKind(node)].cap) === false;
         const cfg = cfgOf(params.skill_id);
         primeCfg(params.skill_id);
 
@@ -1149,7 +1149,7 @@ export function createCanvasGen({ $el, toast, api, canGen, canFeature, host }) {
         const params = readEditParams(node);
         const st = running.get(node.id) || {};
         const busy = st.status === "queued" || st.status === "running";
-        const offline = canGen() === false;
+        const offline = canFeature(RUN_LABELS.edit.cap) === false;
         primeCfg(params.skill_id);
         const labels = RUN_LABELS.edit;
         const acts = [];
@@ -1241,7 +1241,7 @@ export function createCanvasGen({ $el, toast, api, canGen, canFeature, host }) {
         const acts = [];
         if (busy) acts.push(genBtn(t("取消任务"), "cross", () => cancel(node), t("取消这一发后台任务")));
         acts.push(genBtn(t(labels.btn), "play", () => run(node),
-            canGen() === false ? t(labels.offline) : t(labels.tip), busy));
+            canFeature(labels.cap) === false ? t(labels.offline) : t(labels.tip), busy));
         // 技能与自定参数就这一枚胶囊：点开左栏换技能、右栏改这一发的模型链 / 步数 / LoRA（出视频页同一枚）
         const skillChip = genParamsChip(node, { icon: "film", isVideo: true, busy });
         return [
@@ -1421,7 +1421,7 @@ export function createCanvasGen({ $el, toast, api, canGen, canFeature, host }) {
         acts.push(genBtn(t("参数"), "gear", () => openChainParams(node),
             t("步数 / 锚点 / 连续性 / 上下文帧 / 种子：整列共用的参数"), busy));
         acts.push(genBtn(t(labels.btn), "play", () => run(node),
-            canGen() === false ? t(labels.offline) : t(labels.tip), busy));
+            canFeature(labels.cap) === false ? t(labels.offline) : t(labels.tip), busy));
         return [
             // 第一行就是这一列的关键信息：配方名 + 跑几段 / 启用几段（与车厢顶行同一行式，段数与配方名一行写完）
             $el("div", { className: "ns-canvas-car-head",

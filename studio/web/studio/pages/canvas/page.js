@@ -23,10 +23,9 @@ const SAVE_DEBOUNCE_MS = 900;
 
 /** 画布页工厂：openMaterial 由装配层交下来（素材库弹窗，一次收窗）；没有它时「加图片」
  *  与「选图」回到建空图片节点 —— ComfyUI 侧没有这扇弹窗。
- *  canGen 是 ComfyUI 执行队列在不在（生成素材能力位）：没有队列时生成节点自己说要去顶栏启动，
- *  不碰拉起那一路。两者都不交时生成节点照样能铺能存，出图按钮自己说没有队列。
- *  can 是能力表读法：增强与反推两条链门在 prompt_enhance / prompt_reverse 上（桌面端离线自服）。 */
-export function createCanvasPage({ $el, api, toast, openMaterial, canGen, can }) {
+ *  can 是能力表读法（app/studio_caps.py 的能力名）：出图、出片与增强 / 反推四条链的闸门与钮上的提示
+ *  全按节点自己那一发要的那一位问（见 node-types.js 的 gateOf）；不交时生成节点照样能铺能存、照样放行。 */
+export function createCanvasPage({ $el, api, toast, openMaterial, can }) {
     let state = readCanvas({});
     let selectedNodeIds = new Set();
     let selectedConnectionId = null;
@@ -349,7 +348,6 @@ export function createCanvasPage({ $el, api, toast, openMaterial, canGen, can })
         $el,
         toast,
         api,
-        canGen: canGen || (() => true),
         canFeature: can || (() => true),
         host,
     });
