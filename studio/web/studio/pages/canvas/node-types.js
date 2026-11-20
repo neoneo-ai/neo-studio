@@ -12,31 +12,40 @@ import { t } from "../../../js/core/i18n.js";
 
 /** 每一类节点一行：title / w / h 是建节点与读盘兜底的默认框；css 是卡面类名（空 = 这一类没有独立卡面框，
  *  走 .ns-canvas-gen 那一套）；body 是卡面内容走哪一个渲染器；bar 是附加操作栏多出来的那枚；
- *  gate 是这一发要的能力位；run 是 RUN_LABELS 里那一发说的话；add 是「加节点」菜单那一行。
+ *  gate 是这一发要的能力位；run 是 RUN_LABELS 里那一发说的话；add 是「加节点」菜单那一行；
+ *  doc 是这一类在 docs/canvas.md 与 docs/en/canvas.md 节点表里的那几行名字（两份都要有，缺一边的用例就红）。
  *  手势层认的控件面不在这里：那是共享的一份清单，按类型拆会让卡面几乎按不到（见 interactions.js） */
 export const NODE_TYPES = {
     image: { title: "图片", w: 340, h: 240, css: "ns-canvas-node-image", body: "image", bar: "hero",
+        doc: { zh: ["图片节点"], en: ["Image node"] },
         add: { label: "加图片", icon: "image", act: "material" } },
     text: { title: "提示词", w: 340, h: 240, css: "ns-canvas-node-text", body: "text", bar: "prompt",
+        doc: { zh: ["提示词节点"], en: ["Prompt node"] },
         add: { label: "加提示词", icon: "list" } },
     gen: { title: "生成", w: 320, h: 208, css: "ns-canvas-node-gen", body: "gen", gate: "image_gen",
-        run: "image", add: { label: "加生成节点", icon: "sparkles", prime: "prime", seed: "skill" } },
+        run: "image", doc: { zh: ["生成节点", "出片节点"], en: ["Generation node", "出片 node"] },
+        add: { label: "加生成节点", icon: "sparkles", prime: "prime", seed: "skill" } },
     // 图像编辑节点：图与提示词都从连过来的节点取，这一张只管选技能与出图 —— 卡面与生成节点同一档（接法见 gen.js 的 runEdit）
     edit: { title: "图像编辑", w: 320, h: 208, css: "", body: "edit", gate: "image_gen", run: "edit",
+        doc: { zh: ["编辑节点"], en: ["Image-edit node"] },
         add: { label: "加编辑节点", icon: "pencil", prime: "prime", seed: "editSkill" } },
     // 增强节点：要重写的正文从连过来的提示词节点取，成文写进下游空的提示词节点（见 gen.js 的 runEnhance）
     enhance: { title: "增强", w: 320, h: 168, css: "", body: "llm", gate: "prompt_enhance", run: "enhance",
+        doc: { zh: ["增强节点"], en: ["Enhance node"] },
         add: { label: "加增强节点", icon: "refresh", prime: "prime", defaults: { skill_id: "" } } },
     // 反推节点：要反推的那一张从连过来的图片节点取，成文同样写进下游空的提示词节点（见 gen.js 的 runReverse）
     reverse: { title: "反推", w: 320, h: 168, css: "", body: "llm", gate: "prompt_reverse", run: "reverse",
+        doc: { zh: ["反推节点"], en: ["Reverse-prompt node"] },
         add: { label: "加反推节点", icon: "camera", defaults: { language: "zh" } } },
     // 「加视频节点」落的还是生成节点那一类，视频档记在 metadata.kind 里（见 gen.js 的 runVideo）
-    video: { title: "视频", w: 340, h: 240, css: "ns-canvas-node-video", body: "video",
+    video: { title: "视频", w: 340, h: 240, css: "ns-canvas-node-video", body: "video", gate: "simple_video",
+        doc: { zh: ["视频节点"], en: ["Video node"] },
         add: { label: "加视频节点", icon: "film", type: "gen", prime: "primeVideo", seed: "videoSkill" } },
     // 车厢一张一段：段号、这一段自己写的提示词与素材覆盖都在这一张上，整列共用的参数在车尾。
     // 「添加配方」铺的是一整列（见 page.js 的铺一列），菜单那一行不落一张空车厢
-    recipe: { title: "车厢", w: 360, h: 176, css: "ns-canvas-node-recipe", body: "car", gate: "video_gen",
-        run: "car", add: { label: "添加配方", icon: "wand", prime: "primeRecipes", act: "recipe" } },
+    recipe: { title: "车厢", w: 360, h: 176, css: "ns-canvas-node-recipe", body: "car", gate: "segment",
+        run: "car", doc: { zh: ["车厢"], en: ["车厢"] },
+        add: { label: "添加配方", icon: "wand", prime: "primeRecipes", act: "recipe" } },
 };
 
 /** store.js 建节点与读盘兜底用的那一份规格（形状不变，值从注册表来） */
@@ -85,6 +94,15 @@ export function runKind(node) {
     return node.metadata?.kind === "video" ? "video" : "image";
 }
 
+/** 能力位缺了要说的话：出图与出片明说需要执行队列（拉起它是顶栏那一位的事），LLM 两条链只说这一项功能
+ *  需要 ComfyUI —— 两条链在桌面端自服表上，离线窗口答得出，要的是本机配好 LLM */
+const GATE_NOTES = {
+    image_gen: "出图需要 ComfyUI 执行队列：点顶栏 ComfyUI 胶囊启动，好了再按一次",
+    simple_video: "出片需要 ComfyUI 执行队列：点顶栏 ComfyUI 胶囊启动，好了再按一次",
+    segment: "出片需要 ComfyUI 执行队列：点顶栏 ComfyUI 胶囊启动，好了再按一次",
+};
+const GATE_NOTE_OTHER = "该功能需要 ComfyUI：点顶栏 ComfyUI 胶囊启动，好了再按一次";
+
 /** 运行钮的闸门（三条链共用）：交回 null = 放行；交回 { msg, level } = 拦下，调用方把 msg 说给用户
  *  （msg 为空 = 这一发已经在跑，不出声）。停用的那一张先说已停用 —— 这句排在「这一发在跑」之前，跑着的
  *  那一发不该把它吃掉；这一发在跑就不重复提交；能力位缺了只说去哪儿启，页面不替用户拉内核（拉一次就是
@@ -95,12 +113,7 @@ export function gateOf(node, { running = false, gate = "", canFeature } = {}) {
     }
     if (running) return { msg: "", level: "info" };
     if (gate && canFeature?.(gate) === false) {
-        return {
-            msg: gate === "image_gen" ? t("出图需要 ComfyUI 执行队列：点顶栏 ComfyUI 胶囊启动，好了再按一次")
-                : gate === "video_gen" ? t("出片需要 ComfyUI 执行队列：点顶栏 ComfyUI 胶囊启动，好了再按一次")
-                : t("该功能需要 ComfyUI：点顶栏 ComfyUI 胶囊启动，好了再按一次"),
-            level: "warn",
-        };
+        return { msg: t(GATE_NOTES[gate] || GATE_NOTE_OTHER), level: "warn" };
     }
     return null;
 }
