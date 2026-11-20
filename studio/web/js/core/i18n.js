@@ -93,7 +93,6 @@ const EN = {
     "技能缺 API Key，在技能管理里填好再出图": "The skill is missing its API Key - fill it in Skill Management first",
     "技能缺 API Key，已为你打开技能管理": "The skill is missing its API Key - Skill Management is open",
     "出图": "Generate",
-    "取消任务": "Cancel job",
     "取消这一发后台任务": "Cancel this background job",
     "提交这一发生图任务": "Submit this generation job",
     "出图需要 ComfyUI 执行队列": "Generation needs the ComfyUI queue",
@@ -121,12 +120,10 @@ const EN = {
     "增强中 · {n} 字": "Enhancing · {n} characters",
     "反推中 · {n} 字": "Reverse-prompting · {n} characters",
     "增强失败": "Enhance failed",
-    "反推失败": "Reverse-prompt failed",
     "已增强出提示词": "Prompt enhanced",
     "已反推出提示词": "Prompt written from the image",
     "已取消增强": "Enhance cancelled",
     "已取消反推": "Reverse-prompt cancelled",
-    "提示词已生成": "The prompt was generated",
     "后端没有回正文": "The backend returned no text",
     "LLM 链失败": "The LLM run failed",
     "把要增强的提示词节点连过来": "Run the prompt node you want enhanced into this one",
@@ -170,8 +167,6 @@ const EN = {
     "出图长边：留默认就跟随技能配置与全局生图设置": "Long edge - leaving it default follows the skill config and the global generation settings",
     // 卡上那一行主模型摘要里自定参数的写法（技能胶囊面板里的覆盖值与条数）
     "LoRA ×{n}": "{n} LoRA",
-    "技能与自定参数：只列吃文字输入的生图技能；主模型 / LoRA 留空 = 跟随该技能配置与全局生图设置": "Skill and custom params - lists the text-input image skills only; leaving the main model / LoRA empty follows the skill config and the global image settings",
-    "技能与自定参数：主模型 / LoRA 留空 = 跟随该技能配置与全局生视频设置": "Skill and custom params - leaving the main model / LoRA empty follows the skill config and the global video settings",
     "整列共用的出视频技能：空着 = 每一段用配方里那一段自己写的技能": "Video skill shared by the whole chain - leaving it empty uses each segment's own skill from the recipe",
     "整列出片共用这一个技能：参数跟着技能配置与全局生视频设置走，逐发的自定参数在分镜卡与出片节点上": "The whole chain shares this skill: parameters follow the skill config and the global video settings, and per-shot custom params live on the shot card and the render node",
     // 画布上的一列车厢：车厢一段一张（配方名、段号、这一段用的参考素材与正文），厢上方铺的参考素材
@@ -2341,7 +2336,6 @@ const EN = {
     "先拖入原图（从素材库取一张，或把图片文件拖进来）":
         "Add a source image first - pick one from the library, or drop an image file in",
     "增强中…": "Enhancing…",
-    "增强失败": "Enhance failed",
     "LLM 未返回内容": "The LLM returned no content",
     "提示词增强失败": "Prompt enhancement failed",
     "起个名字": "Give it a name",
