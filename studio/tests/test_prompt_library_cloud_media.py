@@ -276,5 +276,68 @@ class PreviewKeyLookupTests(unittest.TestCase):
         self.assertEqual(rel, f"{CLOUD_DIR}/07_Remotion.mp4")
 
 
+class ArtifactKeySubfolderTests(unittest.TestCase):
+    """产物键前缀进 subfolder 时，媒体请求要落回它本来那条云端目录。
+
+    缩略图与预览的键按 `thumbnails/<目录>`、`previews/<目录>` 落，界面把一条卡的来路拼进
+    subfolder 时带着这一段；索引的目录名里没有这两个前缀，整串比过去就 404，云端视频条那一排
+    封面因此全空。索引没压封面的条，键查找退回源 mp4——它当不了封面，池子旁边那张旁车封面才是。
+    """
+
+    def setUp(self):
+        self.cache_dir = _oss_cache_dir()
+        sys.modules.pop("studio.gallery_oss", None)
+        self.gallery_oss = importlib.import_module("studio.gallery_oss")
+        self.gallery_oss._oss_index_cache = None
+        self.gallery_oss._oss_index_fetch_time = 0.0
+        self.addCleanup(self._clean)
+
+    def _clean(self):
+        shutil.rmtree(self.cache_dir, ignore_errors=True)
+        self.gallery_oss._oss_index_cache = None
+
+    def test_preview_lookup_tolerates_previews_prefix(self):
+        _write_indexes([_video_item("20_Remotion", BODY_HEAD)])
+        rel = asyncio.run(self.gallery_oss._find_preview_in_oss_index(
+            "20_Remotion.mp4", f"previews/{CLOUD_DIR}"))
+        self.assertEqual(rel, f"previews/{CLOUD_DIR}/20_Remotion.mp4")
+
+    def test_thumbnail_lookup_tolerates_thumbnails_prefix(self):
+        _write_indexes([_video_item("21_Remotion", BODY_HEAD)])
+        rel = asyncio.run(self.gallery_oss._find_thumbnail_in_oss_index(
+            "21_Remotion.mp4", f"thumbnails/{CLOUD_DIR}"))
+        self.assertEqual(rel, f"thumbnails/{CLOUD_DIR}/21_Remotion.jpg")
+
+    def test_source_lookup_tolerates_previews_prefix(self):
+        _write_indexes([_video_item("22_Remotion", BODY_HEAD)])
+        rel = asyncio.run(self.gallery_oss._find_in_oss_index(
+            "22_Remotion.mp4", f"previews/{CLOUD_DIR}"))
+        self.assertEqual(rel, f"{CLOUD_DIR}/22_Remotion.mp4")
+
+    def test_unrelated_directory_under_artifact_prefix_stays_unfound(self):
+        # `previews/` 下面没有这一棵目录：剥前缀只对真实目录生效，不能把随便一条路径认成云端目录
+        _write_indexes([_video_item("23_Remotion", BODY_HEAD)])
+        rel = asyncio.run(self.gallery_oss._find_in_oss_index(
+            "23_Remotion.mp4", "previews/未发布的目录"))
+        self.assertIsNone(rel)
+
+    def test_video_without_thumbnail_key_has_no_cloud_cover(self):
+        # 发布时只压预览、没压封面的那批视频：键查找给 None，路由光靠云端就是 404、卡片空着；
+        # 补上的是预设池旁边那张旁车封面（见 test_gallery_media_types 里的封面用例）
+        item = _video_item("24_No_Thumb", BODY_HEAD)
+        item.pop("thumbnail")
+        _write_indexes([item])
+        rel = asyncio.run(self.gallery_oss._find_thumbnail_in_oss_index(
+            "24_No_Thumb.mp4", CLOUD_DIR))
+        self.assertIsNone(rel, "没有压好的封面键就不给键，源 mp4 当不了封面")
+
+    def test_sidecar_cover_lookup_rejects_parent_path(self):
+        _write_indexes([_video_item("27_Remotion", BODY_HEAD)])
+        rel = asyncio.run(self.gallery_oss._find_in_oss_index("27_Remotion.mp4", f"../{CLOUD_DIR}"))
+        self.assertIsNone(rel, "产物前缀只剥一层，父路径不当云端目录")
+        rel = asyncio.run(self.gallery_oss._find_in_oss_index("27_Remotion.mp4", ""))
+        self.assertEqual(rel, f"{CLOUD_DIR}/27_Remotion.mp4", "空 subfolder 照旧逐目录找")
+
+
 if __name__ == "__main__":
     unittest.main()

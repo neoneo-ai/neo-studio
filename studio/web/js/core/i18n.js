@@ -1788,6 +1788,10 @@ const EN = {
     "这一类还没有素材": "No assets of this kind yet",
     "只列了前 {n} 条，这一类还有更多：继续滚动加载，或按目录卡片浏览": "Only the first {n} are listed; the rest of this kind lives in the directories - keep scrolling to load more, or browse by directory card",
     "加载归类列表失败": "Failed to load the kind list",
+    // 网格尾部的载入行（状态行即哨兵）
+    "继续滚动载入更多 · 剩余 {n}": "Scroll on to load more · {n} left",
+    "已全部载入 · {n}": "All loaded · {n}",
+    "点击载入更多": "Click to load more",
 
     // ===== 分镜视频导演（director.js） =====
     "关键帧生视频": "Keyframe → video",

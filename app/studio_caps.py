@@ -32,6 +32,7 @@ _GALLERY = {
     ("GET", "/neo_gallery/thumbnail"),
     ("GET", "/neo_gallery/image"),
     ("GET", "/neo_gallery/video"),
+    ("GET", "/neo_gallery/preview"),
     ("GET", "/neo_gallery/audio"),
     ("GET", "/neo_gallery/waveform"),
     ("POST", "/neo_gallery/waveform"),

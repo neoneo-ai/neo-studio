@@ -10,6 +10,7 @@ import hashlib
 import random
 import shutil
 import subprocess
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -51,6 +52,9 @@ CUSTOM_DIR = GALLERY_DIR / "custom"
 THUMBNAIL_DIR = GALLERY_DIR / "thumbnails"
 LORA_CACHE_DIR = GALLERY_DIR / "lora_cache"
 WAVEFORM_DIR = GALLERY_DIR / "waveform_cache"  # decoded audio waveform peaks (JSON)
+# 卡片自动播的那一发（360p 静音、只留开头 15 秒）落这里：由原片现压，删了会重压，
+# 与原片互不占用（云端预设发布时压好的 previews/ 在 oss_cache 那一侧，不落这里）。
+VIDEO_PREVIEW_DIR = GALLERY_DIR / "preview_cache"
 # Main dirs (StoryBoard / CharacterSheet): browsable output subdirs. Character images land
 # in output/CharacterSheet, storyboard sheets in output/StoryBoard. Cloud presets are
 # cached in the Gallery oss_cache, never inside these dirs.
@@ -75,6 +79,11 @@ try:
 except OSError:
     pass
 THUMBNAIL_SIZE = 320  # Fixed thumbnail size in pixels
+# 卡片预览那一发：长边 360、码率封顶、时长只取开头 15 秒。素材页一屏要循环播十几条，
+# 本体是 1080p 带音轨的整片，那一发必须是静音小片（有声本体留给灯箱）。
+VIDEO_PREVIEW_LONG_EDGE = 360
+VIDEO_PREVIEW_MAX_SECONDS = 15
+VIDEO_PREVIEW_MAXRATE = "600k"
 
 
 def _get_system_dirs():
@@ -395,6 +404,7 @@ from .gallery_oss import (
     _find_preview_in_oss_index,
     _find_thumbnail_in_oss_index,
     _download_oss_file,
+    OSS_ARTIFACT_DIRS,
     _oss_dir_cards,
     _oss_dir_items,
     OSS_TAG_CHARACTER_SHEET,
@@ -1602,8 +1612,10 @@ def _kind_cloud_roots() -> list[tuple[str, Path]]:
 
     云端预设是只读源，缓存目录要按 OSS_NAV_PREFIX 拼成首页那张卡的导航名，角色图标记
     （character_dirs 里存的就是 "cloud presets/<目录>"）才认得它。一个云端目录的完整条目
-    要一次索引下载，这里不下载、不联网，只认 oss_cache 里已有的文件；thumbnails 是缩略图
-    缓存，进归类会把「图片」计数灌水。
+    要一次索引下载，这里不下载、不联网，只认 oss_cache 里已有的文件。
+    thumbnails 与 previews 是发布侧落产物键的两层，不是一棵云端目录：缩略图进归类会把
+    「图片」计数灌水，previews 进导航会多出一棵 `Cloud Presets/previews/<目录>` 的假目录卡，
+    那一页的卡把 `previews/prompts.chat` 当 subfolder 发出去，索引里没有这个名字，封面全 404。
     """
     if not _is_oss_enabled():
         return []
@@ -1612,8 +1624,9 @@ def _kind_cloud_roots() -> list[tuple[str, Path]]:
                           if e.is_dir(follow_symlinks=False)), key=lambda e: e.name)
     except OSError:
         return []
+    lowered = {name.lower() for name in OSS_ARTIFACT_DIRS}
     return [(f"{OSS_NAV_PREFIX}/{entry.name}", Path(entry.path))
-            for entry in entries if entry.name != "thumbnails"]
+            for entry in entries if entry.name.lower() not in lowered]
 
 
 def _kind_root_tokens(root_name: str, base: Path) -> list[str]:
@@ -2362,6 +2375,94 @@ def _ffmpeg_thumb_args(size: int) -> list[str]:
             "-q:v", "4", "-threads", "1", "-an", "-sn"]
 
 
+# ====== 卡片自动播的那一发（360p 静音预览，前 15 秒） ======
+
+# 同一时刻只允许一发 ffmpeg 在压：素材页一次交回 100 张卡，其中几十条视频的话，
+# 逐条请求就是几十个 ffmpeg 同时起，压片比缩略图贵一个数量级，NAS 上会把首屏拖死。
+_PREVIEW_LOCK = threading.Semaphore(1)
+
+
+def _video_preview_cmd(source_path: Path, preview_path: Path) -> list[str]:
+    """卡片预览那一发的 ffmpeg 参数：360p 长边、静音、前 15 秒、faststart。
+
+    -t 是输出侧封顶：长视频只留开头 15 秒，ffmpeg 也只解到那一秒就收工 ——
+    一条 5 分钟的 NAS 片不会变成一次三分钟的首屏请求；15 秒内的片子整条播。
+    -an：卡片是循环静音预览，有声本体走灯箱那条 /neo_gallery/video。
+    +faststart：moov 挪到文件头部，否则首帧要等整篇下完，卡片退化成一张封面图。
+    -threads 1 与缩略图同一条理由：ffmpeg 默认按核数起解码线程，一屏几条预览就是几倍核数。
+    """
+    return [
+        _ffmpeg_exe() or "ffmpeg",
+        "-y", "-i", str(source_path),
+        "-an",
+        "-vf", f"scale=-2:'min({VIDEO_PREVIEW_LONG_EDGE},ih)':flags=lanczos",
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", "30",
+        "-maxrate", VIDEO_PREVIEW_MAXRATE, "-bufsize", VIDEO_PREVIEW_MAXRATE,
+        "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+        "-threads", "1", "-t", str(VIDEO_PREVIEW_MAX_SECONDS),
+        str(preview_path),
+    ]
+
+
+def _video_preview_cache_path(source_path: Path, source_stat) -> Path:
+    """预览片落 preview_cache/<YYYY-MM>/<hash>_360_15.mp4：分桶与缓存键同缩略图一套。
+
+    文件名带长边与封顶秒数这两个常数，以后改常数时旧文件的键就不匹配、自动重生成，
+    不会留下「文件名写着 15、里面是整片」的脏缓存（缩略图那边由 _cached_video_thumb_fits 补检）。
+    """
+    bucket = time.strftime("%Y-%m", time.localtime(source_stat.st_mtime))
+    name = f"{_thumbnail_hash(source_path, source_stat)}_{VIDEO_PREVIEW_LONG_EDGE}_{VIDEO_PREVIEW_MAX_SECONDS}.mp4"
+    return VIDEO_PREVIEW_DIR / bucket / name
+
+
+def _generate_video_preview(source_path: Path, cache_path: Path) -> bool:
+    """压一发卡片预览。压不上就 False：ffmpeg 缺席，或已有一发在压（卡片保持封面）。
+
+    写 .part 再 replace：ffmpeg 中途失败会留下半个 mp4，那份文件头有 moov 却没有完整帧，
+    <video> 拿到它是一格解不开的播放器，比停在封面上更糟。
+    """
+    if not _ffmpeg_exe():
+        return False
+    if not _PREVIEW_LOCK.acquire(blocking=False):
+        return False
+    part = cache_path.with_suffix(".part")
+    try:
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        result = subprocess.run(_video_preview_cmd(source_path, part), capture_output=True,
+                                timeout=120, creationflags=NO_WINDOW)
+        if result.returncode != 0:
+            return False
+        part.replace(cache_path)
+        return cache_path.stat().st_size > 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+    finally:
+        part.unlink(missing_ok=True)
+        _PREVIEW_LOCK.release()
+
+
+def _video_preview_file(source_path: Path) -> Path | None:
+    """本地视频的卡片预览文件：缓存新鲜就直回，压不出来（含 ffmpeg 缺席）就 None。
+
+    压片是阻塞的，调用方在 to_thread 里跑。缓存新鲜只看 mtime 不比对时长 ——
+    封顶值写在文件名里，常数一变键就换，不需要读 mp4 的时长字段。
+    """
+    try:
+        source_stat = source_path.stat()
+    except OSError:
+        return None
+    cache_path = _video_preview_cache_path(source_path, source_stat)
+    try:
+        cache_stat = cache_path.stat()
+        if cache_stat.st_size > 0 and cache_stat.st_mtime >= source_stat.st_mtime:
+            return cache_path
+    except OSError:
+        pass
+    if _generate_video_preview(source_path, cache_path):
+        return cache_path
+    return None
+
+
 def _find_source_media(filename: str, subfolder: str) -> Path | None:
     """Find the source media file (image, video, or audio) for a given filename and subfolder."""
     user_custom_dirs = _get_user_custom_dirs()
@@ -2579,6 +2680,20 @@ def _media_file_response(path: Path) -> web.Response:
     )
 
 
+def _media_stream_response(path: Path) -> web.FileResponse:
+    """分段回一个本地媒体：FileResponse 自己处理 Range（aiohttp 3.14 带 Range 解析）。
+
+    卡片预览是循环播的：没有分段响应时浏览器只会顺序往后读，循环回去就重传整片
+    （/neo_gallery/video 那条整份读进内存的响应就是为灯箱建的，抽帧页的 seek 坑见 frames.py 头注）。
+    """
+    resp = web.FileResponse(path)
+    ctype = mimetypes.guess_type(path.name)[0]
+    if ctype:
+        resp.headers["Content-Type"] = ctype
+    resp.headers["Cache-Control"] = "public, max-age=86400"   # 循环与 seek 是反复打的：分段复用缓存
+    return resp
+
+
 def _thumbnail_hash(source_path: Path, source_stat) -> str:
     """Cache hash for a thumbnail: source path + size + mtime, so a regenerated file
     with the same name gets a new entry.
@@ -2663,15 +2778,16 @@ async def get_thumbnail(request):
     # Find the source image
     source_path = await asyncio.to_thread(_find_source_image, filename, subfolder)
 
-    # OSS fallback: try pre-generated thumbnail from remote index
-    if not source_path and _is_oss_enabled():
-        oss_subdir = _oss_dir_from_subfolder(subfolder)
-        if oss_subdir:
-            thumb_rel = await _find_thumbnail_in_oss_index(filename, oss_subdir)
-            if thumb_rel:
-                cached = await _download_oss_file(thumb_rel)
-                if cached and cached.exists():
-                    return await asyncio.to_thread(_media_file_response, cached)
+    # 云端预设的封面只认压好的那张图：索引上的缩略图键，其次提示词池旁边的旁车封面。索引没压封面
+    # 的条（`--preview` 那批视频就没有）键会退回源 mp4，本机 ffmpeg 缺位时又抽不出帧，把 mp4 当封面
+    # 发出去 <img> 播不动，卡片就只剩一块空带；提示词库那批视频播的正是池子里那张 .jpg。
+    oss_subdir = _oss_dir_from_subfolder(subfolder) if _is_oss_enabled() else ""
+    if oss_subdir and (not source_path or source_path.suffix.lower() in VIDEO_EXTENSIONS):
+        cover = await _cloud_card_cover(filename, oss_subdir)
+        if cover is not None:
+            return await asyncio.to_thread(_media_file_response, cover)
+        if not source_path:
+            return web.Response(status=404)
 
     if not source_path:
         return web.Response(status=404)
@@ -2683,6 +2799,38 @@ async def get_thumbnail(request):
     body, content_type = payload
     return web.Response(body=body, content_type=content_type,
                         headers={"Cache-Control": "public, max-age=86400"})
+
+
+_CLOUD_COVER_SUFFIXES = (".jpg", ".jpeg", ".png", ".webp")
+
+
+async def _cloud_card_cover(filename: str, oss_dir: str) -> Path | None:
+    """云端预设一条卡的封面文件：先索引压好的缩略图键，其次提示词池的旁车封面，都没有给 None。
+
+    索引没压封面键的条（`--preview` 压的那批视频就没有这一位）键给 None；源 mp4 当不了封面，
+    所以只认图片后缀再去取，免得一发缩略图把整条视频拖进缓存。"""
+    rel = await _find_thumbnail_in_oss_index(filename, oss_dir)
+    if rel and Path(rel).suffix.lower() in _CLOUD_COVER_SUFFIXES:
+        cached = await _download_oss_file(rel)
+        if cached is not None and cached.is_file():
+            return cached
+    return _prompt_pool_cover(oss_dir, Path(filename).stem)
+
+
+def _prompt_pool_cover(dir_name: str, stem: str) -> Path | None:
+    """预设池里那条媒体旁边的封面：`prompts/presets/video/<目录>/<名>.jpg`，其次 `prompts/presets/<目录>/<名>.jpg`。
+
+    镜像流把云端压好的封面落到这两处，提示词库的视频卡播的就是这一张；`video/` 一层是视频提示词、
+    根层是图像提示词，与 prompt_names 的分池口径同一份。预设池出厂只读，这里读到的是镜像写进来的数据。"""
+    parts = [p for p in (dir_name or "").replace("\\", "/").split("/") if p and p != "."]
+    if not parts or ".." in parts or not stem or "/" in stem or "\\" in stem:
+        return None
+    presets = Path(plugin_paths.PROMPTS_DIR) / "presets"
+    for base in (presets / "video", presets):
+        candidate = base.joinpath(*parts, f"{stem}.jpg")
+        if candidate.is_file():
+            return candidate
+    return None
 
 
 @routes.get("/neo_gallery/video")
@@ -2709,6 +2857,37 @@ async def view_video(request):
         return web.Response(status=400)
 
     return await asyncio.to_thread(_media_file_response, source_path)
+
+
+@routes.get("/neo_gallery/preview")
+async def view_video_preview(request):
+    """卡片自动播那一发：360p 静音、只留开头 15 秒，分段回。
+
+    与灯箱那条 /neo_gallery/video 的分工：这条给卡片循环播（小、静音、封顶 15 秒、
+    FileResponse 带 Range），那条给灯箱播本体（全长、有声）。
+    压不出来就 404 —— ffmpeg 缺席是这台机器没有这个能力，正有一发在压是这条排在后面；
+    两种情况下卡片都停在首帧封面上，不铺一格解不开的播放器。
+    """
+    if "filename" not in request.rel_url.query:
+        return web.Response(status=400)
+
+    filename = request.rel_url.query["filename"]
+    subfolder = request.rel_url.query.get("subfolder", "presets")
+
+    if ".." in filename or ".." in subfolder:
+        return web.Response(status=400)
+
+    source_path = await asyncio.to_thread(_find_source_media, filename, subfolder)
+    if source_path:
+        if source_path.suffix.lower() not in VIDEO_EXTENSIONS:
+            return web.Response(status=400)
+        preview = await asyncio.to_thread(_video_preview_file, source_path)
+        return _media_stream_response(preview) if preview else web.Response(status=404)
+
+    # 云端预设的预览是发布时 --preview 压好的那一发（480p 整片），不为卡片现压一次云端片；
+    # 15 秒那一刀由卡片那侧统一补（前端预览条的封顶闸门），本地片与云端片口径一致
+    cached = await _oss_media_from_cache(filename, subfolder, preview=True)
+    return _media_stream_response(cached) if cached else web.Response(status=404)
 
 
 @routes.get("/neo_gallery/audio")

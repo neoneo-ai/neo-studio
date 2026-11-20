@@ -91,6 +91,15 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 
 ### Fixed
+- **Cloud preset video cards keep their cover, and the published preview layers stay out of the gallery.** Two paths
+  left a cloud video card blank. A directory whose rows publish no pre-generated thumbnail had nothing to serve: the
+  source `.mp4` was handed out as the cover, which an `<img>` cannot play, and it 404'd where ffmpeg is absent — the card
+  kept only its badge band. The thumbnail route now serves the same file the prompt library shows, the sidecar `.jpg` the
+  mirror writes beside the pool entry, and a card with no cover at all stays a plain 404 instead of a blank tile. And
+  `oss_cache/previews/<dir>` / `oss_cache/thumbnails/<dir>` — the layers the publisher drops preview and thumbnail keys
+  into — were listed as navigable cloud directories: a page opened there sent `subfolder=Cloud Presets/previews/<dir>`,
+  a name the cloud index does not carry, so every cover request on that page 404'd by the thousands. Those two layers no
+  longer enter the directory list, and a media request carrying one of them resolves to the cloud directory it belongs to.
 - **A refresh no longer deletes and re-imports the same cloud prompt cards.** A pool card is named from its sidecar
   title, while the directory index names the row from the preview's first line — a preview cut at 500 characters loses
   that line, and the pre-1.6 publisher left pool cards named `Cat` sitting beside cloud rows titled `Dog fun`. Pairing

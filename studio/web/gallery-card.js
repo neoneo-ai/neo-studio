@@ -3,7 +3,7 @@
  */
 import { api } from "../../../../scripts/api.js";
 import { app } from "../../../../scripts/app.js";
-import { getReservedSpace, getImageHeight, isImageFile, isVideoFile, isAudioFile, getThumbnailSrc, getAudioSrc, showToast, showInlineFeedback, renderCoverTiles, coverMaxTiles, buildPlaceholderTile, decorativeHeights, renderWaveform, applyMediaCardRatio, registerLazyThumbnail, galleryCardSize } from './gallery-utils.js';
+import { getReservedSpace, getImageHeight, isImageFile, isVideoFile, isAudioFile, getThumbnailSrc, getAudioSrc, getVideoPreviewSrc, showToast, showInlineFeedback, renderCoverTiles, coverMaxTiles, buildPlaceholderTile, decorativeHeights, renderWaveform, applyMediaCardRatio, registerLazyThumbnail, registerLazyVideo, galleryCardSize } from './gallery-utils.js';
 import { Lightbox } from "./lightbox.js";
 import { buildGenerationMenuItems, openReversePromptDialog, openLoraTagDialog, reuseParamsFromMedia, openPromptCoverDialog } from "./gallery-gen.js";
 import { copyGalleryToInput } from "./media-transfer.js";
@@ -791,7 +791,9 @@ export class GalleryCard {
                 ? "neo-gallery-thumb-container neo-gallery-thumb-container-audio"
                 : "neo-gallery-thumb-container",
             style: {
-                height: `${cardSize}px`,
+                // 卡片高度由媒体带 + 名称行自己撑出来（B 型卡）：定高的方盒会把名称行
+                // 压回图里，3:4 的带在方盒下也留出一截空白底边。
+                height: "auto",
                 width: `${cardSize}px`
             },
             // 音频卡片不需要灯箱；取用模式下点卡片即选中（交给弹窗 capture 处理），不开灯箱。
@@ -878,20 +880,53 @@ export class GalleryCard {
             className: "neo-gallery-thumb-video-badge"
         }, ["\u25B6"]) : null;
 
+        // 封面上叠一格静音预览：src 由 gallery-utils 的预览队列在卡片进视口时才挂，
+        // 出视口就停回第一帧。点开卡片照旧是灯箱播带音轨的本体，勾选 / 拖拽 / ⋯ 菜单
+        // 都在封面这层（预览层 pointer-events:none，不吃点击）。
+        const videoPreview = isVideoFileResult ? $el("video", {
+            className: "neo-gallery-thumb-video-preview",
+            preload: "none",
+            draggable: false,
+        }) : null;
+        if (videoPreview) {
+            // 静音/循环/内联播按属性赋值：content attribute 的反射在 WebView 上不一致，
+            // 带音轨的预览会被浏览器当有声播放整段拒掉
+            videoPreview.muted = true;
+            videoPreview.loop = true;
+            videoPreview.playsInline = true;
+            // 首帧解出来才淡入：淡早了是给一张黑盒，淡晚了是封面与画面之间闪一下
+            videoPreview.addEventListener("loadeddata", () => {
+                videoPreview.classList.add("neo-gallery-thumb-video-preview--ready");
+            });
+            // 后端压不出预览（ffmpeg 缺席 / 已有一发在压）就是 404：卡片停在封面上
+            videoPreview.addEventListener("error", () => {
+                videoPreview.classList.add("neo-gallery-thumb-video-preview--failed");
+            });
+        }
+
         // ⋯ 按钮是右上角独立覆盖层；底部浮动栏只留给 Lora 发送按钮（无则不建）
         const btnBar = imgSendBtn ? $el("div", { className: "neo-gallery-thumb-btn-bar" }, [imgSendBtn]) : null;
 
-        const imgWrapper = $el("div", { className: "neo-gallery-thumb-img-wrapper" }, [videoBadge, mediaEl, btnBar, bookmarkBtn, selectCheck].filter(Boolean));
+        const imgWrapper = $el("div", { className: "neo-gallery-thumb-img-wrapper" }, [videoBadge, mediaEl, videoPreview, btnBar, bookmarkBtn, selectCheck].filter(Boolean));
 
         // 列表已下发图片尺寸（w/h）：卡片先按方向占好位，滚动到视口才排队取缩略图
         if (thumbnailSrc) {
-            applyMediaCardRatio(container, imgWrapper, image.w, image.h);
+            if (!applyMediaCardRatio(container, imgWrapper, image.w, image.h)) {
+                imgWrapper.style.height = `${imageHeight}px`;   // 没有方向数据：媒体带先按滑杆档占位
+            }
             registerLazyThumbnail(mediaEl, thumbnailSrc, {
                 onLoaded: (el, w, h) => {
                     // 无尺寸数据（视频 / 旧列表）时，缩略图到位后再按真实方向排版
-                    applyMediaCardRatio(container, imgWrapper, w, h);
+                    if (!applyMediaCardRatio(container, imgWrapper, w, h)) {
+                        imgWrapper.style.height = `${imageHeight}px`;
+                    }
                 }
             });
+        } else if (!isAudioFileResult) {
+            imgWrapper.style.height = `${imageHeight}px`;
+        }
+        if (videoPreview) {
+            registerLazyVideo(videoPreview, getVideoPreviewSrc(image, subfolder));
         }
 
         const labelEl = gallery.displayLabels ? $el("span", {

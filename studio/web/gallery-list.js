@@ -2,7 +2,7 @@
  * Gallery List - toolbar controls and breadcrumb navigation
  */
 import { api } from "../../../../scripts/api.js";
-import { THUMBNAIL_SIZE_MIN, THUMBNAIL_SIZE_MAX, THUMBNAIL_SIZE_STEP, getCardHeight, cardColumnWidth, galleryCardSize, createBreadcrumbItem, createBreadcrumbSeparator, PAGE_SIZE, sortByMtime, isImageFile, showNoFilesMessage, showToast, releaseLazyThumbnails, KIND_FILTERS, kindLabel } from './gallery-utils.js';
+import { THUMBNAIL_SIZE_MIN, THUMBNAIL_SIZE_MAX, THUMBNAIL_SIZE_STEP, getCardHeight, cardColumnWidth, galleryCardSize, createBreadcrumbItem, createBreadcrumbSeparator, PAGE_SIZE, sortByMtime, isImageFile, showNoFilesMessage, showToast, releaseLazyThumbnails, attachQueueTailLoader, KIND_FILTERS, kindLabel } from './gallery-utils.js';
 import { attachMasonry } from './gallery-masonry.js';
 import { t, tf } from "./js/core/i18n.js";
 const { $el } = window.comfyAPI.ui;
@@ -651,10 +651,8 @@ export class GalleryList {
             // Render first page
             renderPage(PAGE_SIZE);
             
-            // Setup auto-load if there are more images
-            if (this.gallery._renderQueue.length > 0) {
-                this._setupAutoLoad(container, renderPage);
-            }
+            // 载入行排在网格末尾：进视口取下一页，取完写「已全部载入」
+            this._setupAutoLoad(container, renderPage);
             
             // Save images for lightbox navigation (lazy mode fallback)
             this.gallery._currentDirImages = [...sortByMtime(items)];
@@ -704,10 +702,8 @@ export class GalleryList {
         // Save images for lightbox navigation (lazy mode fallback)
         this.gallery._currentDirImages = [...sortedItems];
         
-        // 滚动到底部自动加载
-        if (this.gallery._renderQueue.length > 0) {
-            this._setupAutoLoad(imageGrid, renderPage);
-        }
+        // 载入行排在网格末尾：进视口取下一页，取完写「已全部载入」
+        this._setupAutoLoad(imageGrid, renderPage);
     }
 
     renderExpandedImages() {
@@ -766,10 +762,8 @@ export class GalleryList {
         // Save images for lightbox navigation (lazy mode fallback)
         this.gallery._currentDirImages = [...sortedItems];
         
-        // 滚动到底部自动加载
-        if (this.gallery._renderQueue.length > 0) {
-            this._setupAutoLoad(imageGrid, renderPage);
-        }
+        // 载入行排在网格末尾：进视口取下一页，取完写「已全部载入」
+        this._setupAutoLoad(imageGrid, renderPage);
     }
 
 // ====== Lazy Pagination & Cover Loading ======
@@ -802,48 +796,20 @@ export class GalleryList {
     }
 
     _setupAutoLoad(container, renderPage) {
-        // 移除旧的监听器 - 使用闭包保存的旧容器引用
-        if (this._autoLoadScrollHandler && this._currentScrollContainer) {
-            const oldContainer = this._currentScrollContainer;
-            if (oldContainer === window) {
-                window.removeEventListener('scroll', this._autoLoadScrollHandler);
-            } else {
-                oldContainer.removeEventListener('scroll', this._autoLoadScrollHandler);
-            }
-        }
-        
-        const threshold = 300; // 距离底部多少像素时触发加载
-        const scrollContainer = this._getScrollContainer();
-        
-        // 保存容器引用到闭包中，避免后续查找错误元素
-        this._currentScrollContainer = scrollContainer;
-        
-        this._autoLoadScrollHandler = () => {
-            const currentContainer = this._currentScrollContainer || this._getScrollContainer();
-            const scrollTop = currentContainer === window 
-                ? window.pageYOffset || document.documentElement.scrollTop 
-                : currentContainer.scrollTop;
-            const viewHeight = currentContainer === window 
-                ? window.innerHeight 
-                : currentContainer.clientHeight;
-            const docHeight = currentContainer === window 
-                ? document.documentElement.scrollHeight 
-                : currentContainer.scrollHeight;
-            
-            // 当滚动到距离底部 threshold 像素时触发加载
-            if (scrollTop + viewHeight >= docHeight - threshold) {
-                if (this.gallery._renderQueue.length > 0) {
-                    renderPage(PAGE_SIZE);
-                    if (this.gallery._renderQueue.length > 0) {
-                        this._setupAutoLoad(container, renderPage);
-                    }
-                }
-            }
-        };
-        if (scrollContainer === window) {
-            window.addEventListener('scroll', this._autoLoadScrollHandler);
-        } else {
-            scrollContainer.addEventListener('scroll', this._autoLoadScrollHandler);
+        this.releaseAutoLoad();
+        this._tailLoader = attachQueueTailLoader(container, {
+            hasMore: () => this.gallery._renderQueue.length,
+            loaded: () => this.gallery._renderedCount,
+            loadMore: () => renderPage(PAGE_SIZE),
+            getScrollContainer: () => this._getScrollContainer(),
+        });
+    }
+
+    /** 视图换掉前调用：断开载入行的观察，旧队列的取页不再被触发。 */
+    releaseAutoLoad() {
+        if (this._tailLoader) {
+            this._tailLoader.release();
+            this._tailLoader = null;
         }
     }
 

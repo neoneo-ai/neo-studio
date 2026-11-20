@@ -143,7 +143,8 @@ Read a file top-down as "what it defines, then where execution starts, then the 
   excluded by `studio/.comfyignore`. Never log an API key, never echo one back, never send one
   anywhere but its provider endpoint.
 - Cache directories stay deletable and rebuildable: `gallery/thumbnails/`, `gallery/lora_cache/`,
-  `gallery/oss_cache/`, `gallery/skill_cache/`, `gallery/waveform_cache/`, `configs/gallery_dim_cache.json`, whose key
+  `gallery/oss_cache/`, `gallery/skill_cache/`, `gallery/waveform_cache/`, `gallery/preview_cache/`,
+  `configs/gallery_dim_cache.json`, whose key
   stays path + mtime + size, `configs/skill_source_stamp.json` (losing it only degrades an installed cloud skill to
   "local modified"), and the `configs/preset_seed.json` shipped-preset stamps, whose key stays the
   relative path + the shipped file's sha256.

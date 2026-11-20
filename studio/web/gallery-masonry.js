@@ -79,7 +79,9 @@ class Masonry {
             columns = this.maxColumns;
             columnWidth = Math.floor((width - (columns - 1) * GAP) / columns);
         }
-        const items = Array.from(container.children).filter((el) => el.offsetWidth > 0);
+        // 载入行不是卡片：它排在网格底边之下占一整行，装箱与列宽都不该碰它
+        const items = Array.from(container.children)
+            .filter((el) => el.offsetWidth > 0 && !el.classList.contains("neo-gallery-load-status"));
         if (items.length === 0) {
             container.style.height = "0px";
             return;

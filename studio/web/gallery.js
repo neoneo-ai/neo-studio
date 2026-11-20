@@ -28,6 +28,7 @@ import {
     isAudioFile,
     isImageFile,
     releaseLazyThumbnails,
+    releaseLazyVideos,
     kindLabel
 } from './gallery-utils.js';
 const { $el } = window.comfyAPI.ui;
@@ -546,6 +547,8 @@ export class NeoGallery {
             this._loaded = true;
         } else {
             releaseLazyThumbnails(this.accordion);
+            releaseLazyVideos(this.accordion);
+            this.list.releaseAutoLoad();
             this.accordion.innerHTML = "";
             await this.renderCurrentView();
         }
@@ -625,6 +628,8 @@ export class NeoGallery {
 
     async _renderLocalBookmarks() {
         releaseLazyThumbnails(this.accordion);
+        releaseLazyVideos(this.accordion);
+        this.list.releaseAutoLoad();
         this.accordion.innerHTML = "";
         let data;
         try {
@@ -805,6 +810,8 @@ export class NeoGallery {
 
     async _renderCivitaiBookmarks(refresh = false, page = 0) {
         releaseLazyThumbnails(this.accordion);
+        releaseLazyVideos(this.accordion);
+        this.list.releaseAutoLoad();
         this.accordion.innerHTML = "";
         this._civitaiPage = page;
         let data;
@@ -1213,6 +1220,8 @@ export class NeoGallery {
         }
         this.stopLoraRefresh();
         releaseLazyThumbnails(this.accordion);
+        releaseLazyVideos(this.accordion);
+        this.list.releaseAutoLoad();
         this.accordion.innerHTML = "";
         const loadingEl = showLoadingOverlay(this.accordion, galleryCardSize(this));
         const stateKey = `gallery_kind:${kindKey}`;
@@ -1863,6 +1872,8 @@ export class NeoGallery {
 
     async loadAndDisplay() {
         releaseLazyThumbnails(this.accordion);
+        releaseLazyVideos(this.accordion);
+        this.list.releaseAutoLoad();
         this.accordion.innerHTML = '';
         const loadingEl = showLoadingOverlay(this.accordion, galleryCardSize(this));
         

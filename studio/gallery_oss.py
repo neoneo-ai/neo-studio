@@ -48,6 +48,9 @@ OSS_TAG_CHARACTER_SHEET = "character-sheet"
 OSS_DIR_PREVIEW_CHARS = 500
 # 云端预设卡的导航前缀（卡片路径、封面 key、首页 token 共用）。
 OSS_NAV_PREFIX = "Cloud Presets"
+# 发布侧落产物键的两层前缀：缩略图进 `thumbnails/<目录>`、卡片预览进 `previews/<目录>`。
+# 它们不是一棵可导航的目录，主索引的 directories 里没有这两个名字。
+OSS_ARTIFACT_DIRS = ("previews", "thumbnails")
 # 带这个标签的云端目录是提示词池的镜像源：目录里每一条都是一条提示词。标签值由发布侧
 # tools/gallery_preprocess.py 的 --tag 写进主索引，两边必须一字不差。
 OSS_TAG_PROMPTS = "prompts"
@@ -351,13 +354,26 @@ def _oss_match_dir(dirs: list[str], subdir: str) -> str | None:
     """Resolve a navigation subfolder to an index directory name.
 
     路由传进来的 subfolder 是 lowercase 过的，索引里的目录名保留原大小写；
-    精确匹配会让 Style_A 这种 ASCII 目录名查不到，媒体请求 404。"""
+    精确匹配会让 Style_A 这种 ASCII 目录名查不到，媒体请求 404。
+
+    封面的缩略图与卡片预览的键是按 `thumbnails/<目录>`、`previews/<目录>` 落的产物键，界面上
+    一条卡的来路拼进 subfolder 时带着这一段：索引里没有这两个目录名，整串比过去就 404，云端视频
+    条那一排封面因此全空。剥掉这一层再比一次，请求落回它本来那条目录。"""
     if subdir in dirs:
         return subdir
     lowered = subdir.lower()
     for name in dirs:
         if name.lower() == lowered:
             return name
+    parts = [p for p in (subdir or "").replace("\\", "/").split("/") if p]
+    if len(parts) > 1 and parts[0].lower() in OSS_ARTIFACT_DIRS:
+        tail = "/".join(parts[1:])
+        if tail in dirs:
+            return tail
+        tail_lower = tail.lower()
+        for name in dirs:
+            if name.lower() == tail_lower:
+                return name
     return None
 
 

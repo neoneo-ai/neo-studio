@@ -1,7 +1,7 @@
 /**
  * Gallery Utilities - Constants and helper functions
  */
-import { t } from "./js/core/i18n.js";
+import { t, tf } from "./js/core/i18n.js";
 
 const { $el } = window.comfyAPI.ui;
 
@@ -146,6 +146,16 @@ export function getVideoSrc(video, subfolder) {
 }
 
 /**
+ * Get video source URL for the card's looping preview (360p, muted, first 15 seconds).
+ * Distinct from getVideoSrc on purpose: the card wants the small silent loop, the
+ * lightbox wants the full file with its audio track.
+ */
+export function getVideoPreviewSrc(video, subfolder) {
+    const mtimeParam = video.mtime ? `&t=${video.mtime}` : '';
+    return `${window.location.protocol}//${window.location.host}/neo_gallery/preview?filename=${encodeURIComponent(video.filename)}&subfolder=${encodeURIComponent(subfolder)}${mtimeParam}`;
+}
+
+/**
  * Get audio source URL (waveform decode + playback + lightbox)
  */
 export function getAudioSrc(audio, subfolder) {
@@ -267,6 +277,100 @@ export function releaseLazyThumbnails(container) {
     for (const img of container.querySelectorAll("img[data-thumbnail-src]")) releaseLazyThumbnail(img);
 }
 
+/**
+ * 视频卡片自动播：进视口才挂 src 起播，出视口停回第一帧，同时最多 2 条在播。
+ * 每条视频各自 autoplay 的话，一屏十几条 360p 解码全押在视口外的卡片上，首屏的缩略图
+ * 请求也要和它们抢带宽；预览的作用只是「一眼看出这条在动什么」，两条并播已够，
+ * 多条并播在集成显卡上就是掉帧。src 是进视口才挂的：渲染 100 张卡片时不发任何预览请求。
+ */
+const VIDEO_PREVIEW_CONCURRENCY = 2;
+const VIDEO_PREVIEW_CAP_SECONDS = 15;   // 与后端 VIDEO_PREVIEW_MAX_SECONDS 同口径
+const _videoQueue = [];
+const _videoCounted = new WeakSet();
+let _videoPlaying = 0;
+let _videoObserver = null;
+
+function _playVideoPreview(v) {
+    _videoPlaying++;
+    _videoCounted.add(v);
+    const played = v.play();
+    // 没有用户手势时浏览器会拒绝 play()：卡片就停在封面上，不是错误
+    if (played && played.catch) played.catch(() => { });
+}
+
+function _pumpVideoQueue() {
+    while (_videoPlaying < VIDEO_PREVIEW_CONCURRENCY && _videoQueue.length > 0) {
+        const v = _videoQueue.shift();
+        if (!v.isConnected) continue;   // 卡片已被网格换掉：任务作废
+        _playVideoPreview(v);
+    }
+}
+
+function _startVideoPreview(v) {
+    if (!v._previewAttached) {
+        v._previewAttached = true;
+        v.src = v.dataset.previewSrc;
+        v.addEventListener("timeupdate", () => {
+            // 本地预览后端已截到 15 秒；云端预设带的是发布时压的整片，这一刀在卡片侧补齐
+            if (v.currentTime > VIDEO_PREVIEW_CAP_SECONDS) v.currentTime = 0;
+        });
+    }
+    const queued = _videoQueue.indexOf(v);
+    if (queued >= 0) _videoQueue.splice(queued, 1);
+    if (_videoPlaying >= VIDEO_PREVIEW_CONCURRENCY) {
+        _videoQueue.push(v);
+        return;
+    }
+    _playVideoPreview(v);
+}
+
+function _stopVideoPreview(v) {
+    v.pause();
+    if (v.currentTime > 0) v.currentTime = 0;   // 回第一帧：再进视口是从头播，不是从半路接上
+    if (_videoCounted.delete(v)) {
+        _videoPlaying = Math.max(0, _videoPlaying - 1);
+        _pumpVideoQueue();
+    }
+}
+
+/** 注册一张卡片预览：src 先留在 dataset 里，元素进视口才发请求。 */
+export function registerLazyVideo(videoEl, src) {
+    if (!src) return;
+    videoEl.dataset.previewSrc = src;
+    if (typeof IntersectionObserver === "undefined") {
+        _startVideoPreview(videoEl);
+        return;
+    }
+    if (!_videoObserver) {
+        _videoObserver = new IntersectionObserver((entries) => {
+            for (const entry of entries) {
+                if (entry.isIntersecting) _startVideoPreview(entry.target);
+                else _stopVideoPreview(entry.target);
+            }
+        }, { rootMargin: "150px 0px" });
+    }
+    _videoObserver.observe(videoEl);
+}
+
+export function releaseLazyVideo(videoEl) {
+    if (_videoObserver) _videoObserver.unobserve(videoEl);
+    const queued = _videoQueue.indexOf(videoEl);
+    if (queued >= 0) _videoQueue.splice(queued, 1);
+    videoEl.pause();
+    if (videoEl.currentTime > 0) videoEl.currentTime = 0;
+    // 释放不补位：容器释放紧跟着就是清空网格，此时把排队的那条拉起来播就是白取一发。
+    // 补位交给「进视口」事件——留在屏幕上的卡片会自己把它要回来。
+    if (_videoCounted.delete(videoEl)) {
+        _videoPlaying = Math.max(0, _videoPlaying - 1);
+    }
+}
+
+/** 容器清空前调用：停掉容器内所有在播预览并作废排队，避免网格换掉后还留着在跑的解码。 */
+export function releaseLazyVideos(container) {
+    if (!container) return;
+    for (const v of container.querySelectorAll("video[data-preview-src]")) releaseLazyVideo(v);
+}
+
 
 
 /**
@@ -281,31 +385,49 @@ export function debounce(func, wait) {
 }
 
 /**
- * Create pagination UI with load more button
+ * 网格尾部的载入行：状态行排在最后一行，进视口就取下一页；取完改成「已全部载入」。
+ * 旧实现是「滚动到距底 300px 取一页，取完重建监听」：瀑布流逐页装箱会把网格越推越长，
+ * 距底阈值在长列表上连着满足，一次滚动就把整库排进 DOM，首屏之后是一段很长的空白滚动。
+ * 载入行自己就是哨兵：它排到网格末尾，看见它才取下一页，注册一次不再重建。
+ *
+ * opts.hasMore()   队列里还剩多少条（0 表示取完）
+ * opts.loaded()    已渲染条数（取完时写在状态行上）
+ * opts.loadMore()  取下一页
+ * opts.getScrollContainer() 滚动宿主（侧栏 / 素材页 / 窗口）
  */
-export function createPaginationUI(container, items, renderPage, gallery) {
-    const displayedCount = Math.min(PAGE_SIZE, items.length);
-    
-    renderPage(displayedCount);
-    
-    if (displayedCount < items.length) {
-        const createLoadMoreBtn = () => {
-            const btn = $el("div", {
-                className: "neo-gallery-load-more-btn",
-                textContent: `Load more (${items.length - displayedCount} remaining)`
-            });
-            btn.onclick = () => {
-                btn.remove();
-                renderPage(PAGE_SIZE);
-                const remaining = items.length - gallery._renderedCount;
-                if (remaining > 0) {
-                    container.appendChild(createLoadMoreBtn());
-                }
-            };
-            return btn;
-        };
-        container.appendChild(createLoadMoreBtn());
+export function attachQueueTailLoader(container, opts) {
+    const status = $el("div", { className: "neo-gallery-load-status" });
+    const draw = () => {
+        const left = opts.hasMore();
+        status.textContent = left > 0
+            ? tf("继续滚动载入更多 · 剩余 {n}", { n: left })
+            : tf("已全部载入 · {n}", { n: opts.loaded() });
+        status.classList.toggle("neo-gallery-load-status--done", left <= 0);
+    };
+    const take = () => {
+        if (opts.hasMore() <= 0) return;
+        opts.loadMore();
+        container.appendChild(status);   // 新卡片排在状态行后面，载入行始终留在网格末尾
+        draw();
+    };
+    draw();
+    container.appendChild(status);
+
+    if (typeof IntersectionObserver === "undefined") {
+        // 没有 IntersectionObserver 的宿主（老 WebView）：载入行退化成点一下载下一页
+        status.classList.add("neo-gallery-load-status--clickable");
+        status.onclick = take;
+        return { release() { status.onclick = null; } };
     }
+    const root = opts.getScrollContainer ? opts.getScrollContainer() : null;
+    const observer = new IntersectionObserver((entries) => {
+        if (entries.some(e => e.isIntersecting)) take();
+    }, { root: root && root !== window ? root : null, rootMargin: "400px 0px" });
+    observer.observe(status);
+    return {
+        release() { observer.disconnect(); },
+        refresh() { draw(); },
+    };
 }
 
 /**
@@ -439,13 +561,17 @@ function _applyAdaptiveCoverRatio(coverWrapper, grid, ratios) {
  * Adapt a single media card to its image's orientation: portrait gets a tall card,
  * landscape a wide/short one, square stays square. The thumbnail box drives the
  * card height (the grid is top-aligned so mixed heights don't stretch).
+ * Returns whether a ratio was applied: without size data the caller keeps a
+ * slider-sized band, and the real orientation takes over when it arrives.
  */
 export function applyMediaCardRatio(container, imgWrapper, w, h) {
     const ratio = _orientationRatio(w, h);
-    if (!ratio) return;
+    if (!ratio) return false;
     imgWrapper.style.aspectRatio = String(ratio);
     imgWrapper.style.flex = "0 0 auto";
+    imgWrapper.style.height = "auto";
     container.style.height = "auto";
+    return true;
 }
 
 /**
@@ -549,17 +675,21 @@ export function showNoFilesMessage(container, message = "No images found") {
 /**
  * Show loading overlay
  */
-export function showLoadingOverlay(container, size = 320) {
+export function showLoadingOverlay(container, size = THUMBNAIL_SIZE_DEFAULT) {
+    // 骨架与真实卡片同形（媒体带 + 名称行），张数按容器宽度与当前边长排两行。
+    // 旧版是一块 200px 高的居中转圈块：视图换完，整页从 200px 撑成一屏卡片，整页往下跳一次。
+    const perRow = Math.max(2, Math.floor((container.clientWidth || size * 4) / size));
     const skeletonCards = [];
-    // Create 6 skeleton cards to simulate a grid
-    for (let i = 0; i < 6; i++) {
-        skeletonCards.push($el("div", { className: "skeleton-card" }));
+    for (let i = 0; i < Math.min(perRow * 2, 24); i++) {
+        skeletonCards.push($el("div", {
+            className: "neo-gallery-skeleton-card",
+            style: { width: `${size}px` },
+        }, [
+            $el("div", { className: "neo-gallery-skeleton-media" }),
+            $el("div", { className: "neo-gallery-skeleton-label" }),
+        ]));
     }
-    
-    const loadingEl = $el("div", { className: "neo-gallery-loading-overlay" }, [
-        $el("div", { className: "neo-gallery-loading-skeleton", dataset: { size: size.toString() } }, skeletonCards),
-        $el("span", { className: "neo-gallery-loading-text", textContent: "Loading gallery..." })
-    ]);
+    const loadingEl = $el("div", { className: "neo-gallery-skeleton-grid" }, skeletonCards);
     container.appendChild(loadingEl);
     return loadingEl;
 }

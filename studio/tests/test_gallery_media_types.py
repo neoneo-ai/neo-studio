@@ -38,6 +38,8 @@ sys.modules["folder_paths"] = _folder_paths
 PLUGIN_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PLUGIN_DIR)
 
+import plugin_paths
+
 _PKG = "_neo_gallery_media_pkg"
 _pkg = types.ModuleType(_PKG)
 _pkg.__path__ = [PLUGIN_DIR]
@@ -86,7 +88,7 @@ async def _oss_preview_hit(filename, subdir):
 
 
 _stub("gallery_oss",
-      OSS_NAV_PREFIX="Cloud Presets",
+      OSS_NAV_PREFIX="Cloud Presets", OSS_ARTIFACT_DIRS=("previews", "thumbnails"),
       OSS_CACHE_DIR=Path(_TMP) / "oss_cache",
       _is_oss_enabled=lambda: False,
       _load_oss_index_from_disk=lambda *a, **k: {},
@@ -270,6 +272,62 @@ class MediaContentTypeTests(unittest.TestCase):
         finally:
             (gallery._is_oss_enabled, gallery._find_in_oss_index,
              gallery._find_preview_in_oss_index, gallery._download_oss_file) = prev
+
+    def test_cloud_video_cover_uses_pool_sidecar_cover(self):
+        # 发布时只压预览、没压封面的那批视频：索引键给 None，本机 ffmpeg 又抽不出帧，光靠云端就是
+        # 404，卡片空着。提示词库那些视频播的是预设池旁边那张 .jpg，这边发同一张才有封面
+        sidecar = Path(plugin_paths.PROMPTS_DIR) / "presets" / "video" / "prompts.chat" / "c5.jpg"
+        sidecar.parent.mkdir(parents=True, exist_ok=True)
+        sidecar.write_bytes(b"\xff\xd8jpg")
+        prev = (gallery._is_oss_enabled, gallery._find_thumbnail_in_oss_index, gallery._download_oss_file)
+        gallery._is_oss_enabled = lambda: True
+        gallery._find_thumbnail_in_oss_index = _oss_none
+        gallery._download_oss_file = _oss_cache
+        try:
+            resp = _run(gallery.get_thumbnail(_Request({
+                "filename": "c5.mp4", "subfolder": "Cloud Presets/prompts.chat"})))
+            self.assertEqual((resp.status, resp.content_type), (200, "image/jpeg"))
+        finally:
+            (gallery._is_oss_enabled, gallery._find_thumbnail_in_oss_index,
+             gallery._download_oss_file) = prev
+
+    def test_cloud_video_cover_never_serves_the_source_video(self):
+        # 云端与池子都没有封面时给 404：把源 mp4 当封面发出去，<img> 播不动它，卡片只剩一块空带
+        _write("oss_cache/prompts.chat/c6.mp4", b"\x00\x00\x00\x18ftypmp42fake")
+        prev = (gallery._is_oss_enabled, gallery._find_thumbnail_in_oss_index, gallery._download_oss_file)
+        gallery._is_oss_enabled = lambda: True
+        gallery._find_thumbnail_in_oss_index = _oss_none
+        gallery._download_oss_file = _oss_cache
+        try:
+            resp = _run(gallery.get_thumbnail(_Request({
+                "filename": "c6.mp4", "subfolder": "Cloud Presets/prompts.chat"})))
+            self.assertEqual(resp.status, 404)
+        finally:
+            (gallery._is_oss_enabled, gallery._find_thumbnail_in_oss_index,
+             gallery._download_oss_file) = prev
+
+    def test_cloud_video_cover_under_previews_path_serves_index_thumbnail(self):
+        # 界面把一条预览卡的来路拼成 `Cloud Presets/previews/<目录>`：索引里没有这一棵目录名，
+        # 整串比过去就 404，那一页的封面全空。剥掉产物前缀后落回它本来那条云端目录
+        _write("oss_cache/thumbnails/prompts.chat/c7.jpg", b"\xff\xd8jpg")
+
+        async def _thumb_key(filename, subdir):
+            # 真查找把产物前缀剥回云端目录名（见 test_prompt_library_cloud_media），键形因此不带 previews/
+            parts = subdir.split("/")
+            tail = "/".join(parts[1:]) if parts[0] in ("previews", "thumbnails") else subdir
+            return f"thumbnails/{tail}/{Path(filename).stem}.jpg"
+
+        prev = (gallery._is_oss_enabled, gallery._find_thumbnail_in_oss_index, gallery._download_oss_file)
+        gallery._is_oss_enabled = lambda: True
+        gallery._find_thumbnail_in_oss_index = _thumb_key
+        gallery._download_oss_file = _oss_cache
+        try:
+            resp = _run(gallery.get_thumbnail(_Request({
+                "filename": "c7.mp4", "subfolder": "Cloud Presets/previews/prompts.chat"})))
+            self.assertEqual((resp.status, resp.content_type), (200, "image/jpeg"))
+        finally:
+            (gallery._is_oss_enabled, gallery._find_thumbnail_in_oss_index,
+             gallery._download_oss_file) = prev
 
     def test_image_route_serves_png(self):
         resp = _run(gallery.view_image(_Request({"filename": "a.png", "subfolder": "NeoAgent/media"})))
