@@ -7,9 +7,13 @@ _clean_node 在写与读两条路上都要过：类型表只认 image / text 时
 """
 from __future__ import annotations
 
+import re
 import unittest
+from pathlib import Path
 
 from studio import canvas
+
+NODE_TYPES_JS = Path(__file__).resolve().parents[2] / "studio" / "web" / "studio" / "pages" / "canvas" / "node-types.js"
 
 
 def _node(**over) -> dict:
@@ -19,9 +23,21 @@ def _node(**over) -> dict:
     return raw
 
 
+def _registry_types() -> list[str]:
+    """前端注册表里的那几类（每类一行 `xxx: { title`）：后端的类型表与它是两条独立的路，
+    前端加一类、后端不认，保存那一轮就把面改了名"""
+    return re.findall(r"^    (\w+): \{ title", NODE_TYPES_JS.read_text(encoding="utf-8"), re.M)
+
+
 class CanvasNodeTypeTests(unittest.TestCase):
     def test_page_types_survive_the_clean(self):
         for kind in ("image", "text", "gen", "video", "recipe"):
+            self.assertEqual(canvas._clean_node(_node(type=kind))["type"], kind)
+
+    def test_every_type_the_page_registry_ships_survives_the_clean(self):
+        kinds = _registry_types()
+        self.assertGreaterEqual(len(kinds), 5, "没从注册表里扫出类型来：形状改了，这一发就钉不住")
+        for kind in kinds:
             self.assertEqual(canvas._clean_node(_node(type=kind))["type"], kind)
 
     def test_a_type_this_build_does_not_know_lands_unchanged(self):

@@ -44,6 +44,16 @@
   `PAGE_BUILDERS` 里按同一个 id 点名。这张表是编译期常量：页不在运行时往里注册，表里没有的页跳不到，页也不写
   自己那套能力闸门——闸门只有 `app/studio_caps.py` 那张表，随版本快照下发、页里用 `can` 读。注册表 ↔ 首页卡表 ↔
   `index.html` 页签 ↔ `PAGE_BUILDERS` ↔ `skill.py` 的落地页清单这一条由 `studio/tests/js/app-registry.test.mjs` 钉住。
+- 画布页上每一类节点有一份描述符：`studio/web/studio/pages/canvas/node-types.js`。一行说清标题与默认框、卡面类名与
+  走哪个渲染器、附加栏多出来的那枚、这一发要的能力位（名字就是 `app/studio_caps.py` 里那一个）、那一发在卡上与提示条
+  里说的话（`RUN_LABELS`）、「加节点」菜单那一行，以及它在中英文档节点表里的那几行名字。`store.js` 的 `NODE_SPECS`、
+  `nodes.js` 的卡面与附加栏、`page.js` 的加节点菜单、`gen.js` 的闸门与运行文案全从这张表读。加一类节点只动六处：这张表
+  加一行、`gen.js` 加一条请求构造、`style.css` 加一段卡面、`docs/canvas.md` 与 `docs/en/canvas.md` 各加一行、画布用例
+  加一段——其余全从表里读。这张表同样是编译期常量：没有运行期注册，也不持有节点运行态（`running` 在 `gen.js`、画布
+  state 在 `page.js`）。表里的 `type` 就是画布落盘 JSON 与 `studio/canvas.py` 里那一个字符串，**不进 ComfyUI 的
+  `NODE_CLASS_MAPPINGS`**——画布节点是这一页自己的东西，内核不认识它。手势层认的控件面是 `interactions.js` 里一份
+  共享清单，按类型拆会让卡面几乎按不到，不进这张表。注册表 ↔ `store.js` 规格 ↔ 加节点菜单 ↔ `RUN_LABELS` 的 i18n
+  词条 ↔ 能力位 ↔ 中英文档行这一条由 `studio/tests/js/canvas-node-types.test.mjs` 钉住。
 - 从装配层拆出的页在 `studio/web/studio/pages/<页名>-page.js`：一页一个工厂函数，页壳与工厂在同一份文件里，工厂要的
   东西由宿主按参数交进来（`$el`、`toast`、`go`、素材弹窗、画廊 getter），页的逐实例状态（在飞任务、提示词栏、播放器、
   素材槽、内嵌编辑器、让位与补铺那一发、armed 旗标）留在工厂闭包里，随视图常驻、随页卸载即散。一页大到一份文件装不下
