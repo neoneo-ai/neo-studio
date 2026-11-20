@@ -1031,11 +1031,7 @@
     color: var(--ns-fg-strong, #fff);
 }
 
-.rs-tag-btn.rs-tag-selected {
-    background: var(--ns-orange, #ff6a00);
-    border-color: var(--ns-orange, #ff6a00);
-    color: var(--ns-fg-strong, #fff);
-}
+/* 选中档走 studio/style.css 那条全站共用的胶囊选中档，本页不再写一份 */
 
 /* AI Status */
 .rs-ai-status {

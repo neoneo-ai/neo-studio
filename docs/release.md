@@ -213,7 +213,8 @@ Backyard 页面（`/neo-studio-backyard`）走同一套增量语义：预处理�
 ETag 相同的文件跳过；上传的 key 前缀会补尾部 `/`，前缀写成 `/neo/presets` 也对得上云端的
 `neo/presets/index.json`。上传写入新文件后会强刷一次素材库的云端索引缓存（与 `/neo_gallery/sync_oss`
 同源），新目录立刻出现在素材页；不刷的话要等 `sync_interval_hours`（默认 24 小时）缓存过期才看得见。
-素材库「Manage Directories」弹窗标题栏的「⟳ 刷新索引」走同一个接口，随时可以手动强刷这份云端索引缓存。
+素材库「Manage Directories」弹窗标题栏的「⟳ 刷新索引」走同一个接口，随时可以手动强刷这份云端索引缓存
+（主索引与逐目录索引一起重拉，提示词库卡片上的云端媒体也跟着换到当前 rev）。
 
 上传页打开先列一份待上传清单（`GET /neo_backyard/upload_plan`）：每个目录的条目数、要传的文件数与体积，
 按云端主索引比对出「待上传」（云端没有这条）、「已更新待传」（`rev` 与云端不同，旧版整包索引没有 `rev`，

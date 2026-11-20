@@ -64,6 +64,10 @@ python -m pytest -q app/tests      # 桌面端套件（需同级 ComfyUI 根）
   gallery 模块族自带 `RouteTableDef` 且源码不再出现 `PromptServer`（桌面端进程里没有 ComfyUI 运行时）；
   启动设置路由 `/neo_studio/launcher` GET 读配置、POST 校验后落盘（根目录缺 `main.py` 拒绝、未知动作拒绝）；
   启动日志 `/neo_studio/log` 把内核输出与桌面端自身轨迹拼成两块（条目带 `src`，拖动步数不进面板）。
+- `studio/tests/test_gallery_oss_mirror.py` — 云端提示词目录 → 提示词池的镜像：只镜像带 `prompts` 标签的目录，云端有、池子里没有的条补进
+  `presets/<目录>/`（正文旁边落一张封面 sidecar，视频条落 `presets/video/<目录>/`）；名字对不上标题的卡按整名相等与正文前缀认条，
+  既不剪掉也不补第二遍；云端删掉的条只在目录索引刷到主索引当前 rev 时收掉。
+
 
 - `studio/tests/test_node_metadata.py` — 节点元数据契约：注册表键清单、`__init__.py` 的 `NEO_NODES` 清单与注册表一致、
   每个节点都有 `web/docs/<节点键>.md` 帮助文档（ComfyUI 原生「信息」页的取用路径）、`SEARCH_ALIASES`（小写、去重、含中文别名）、

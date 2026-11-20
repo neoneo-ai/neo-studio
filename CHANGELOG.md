@@ -2,6 +2,103 @@
 
 Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to the ComfyUI Registry.
 
+## [Unreleased]
+
+### Added
+- **A prompt library card with a picture opens the lightbox, and its fill button follows its pool.** Clicking the card
+  runs the asset library's lightbox, and it shows the full file behind the tile instead of the tile's own copy: an image
+  card paired with cloud image media enlarges the image that cloud directory published, fetched whole through
+  `/neo_gallery/image` (the tile's 512 px thumbnail was being enlarged — for a cloud directory that is the small
+  pre-generated cover, so the lightbox came out blurred), a prompt whose cover pointer names an image enlarges that
+  output, and one with only a sidecar cover enlarges the sidecar; a video card plays the original video — a cloud
+  preset its own file on `/neo_gallery/video` without the `preview=1` flag, a custom prompt the local output the cover
+  pointer names — with controls and sound, while the card tile keeps the published 480p muted preview; ←/→ pages only
+  the cards the current filter shows with a picture, and the side panel is that prompt's tags plus its full text, with
+  the card's own actions on the toolbar. A text-only card is not clickable, since there is no picture to show. In the
+  action row, a video-pool prompt now offers only 「填入视频页」 and an image-pool prompt only 「填入绘画页」 —
+  the card no longer ships the fill button for the other pool — and the lightbox toolbar follows the same rule.
+- **The prompt library's reload pulls the cloud preset index too.** The title-row button was a bare list glyph that only
+  re-read the local list, so a preset published to the cloud stayed hidden until ComfyUI was restarted. It is now a
+  labelled 「刷新」 (Refresh) button: it force-refetches the master index **and every directory index** — the cloud card
+  image and preview pairing reads only the per-directory cache under `gallery/oss_cache/`, which sat on the previous
+  `rev` — and reloads the list once they land. The toast reports "N cloud directories / M items (K directory indexes
+  refetched)"; a page with no cloud presets configured, or with the kernel not running, names which of the two it is and
+  the local list reloads anyway. The icon is the shared `refresh` glyph, and the button is disabled while a refresh is in flight.
+- **A refresh mirrors the cloud prompt directories into the prompt pools.** The cloud rows tagged `prompts-chat` are the
+  source of truth for `presets/prompts.chat/` and `presets/video/prompts.chat/`: the rows the pools lack are imported
+  (body only — the publisher's `说明 / 标签 / 来源` tail stays out of the text that 「填入绘画页」 pastes into the
+  generation panel, and the cloud tags land in `_tags_index.json`), each with the published thumbnail written as the
+  cover sidecar beside its text, because a card with no cover sidecar is a text-only card and a video-pool card with no
+  cover sidecar never mounts its preview. A refresh backfills that cover for the cards an earlier build imported
+  without one, and prunes the cards the cloud dropped — the cover goes with the card, and the tag key goes with it.
+  Nothing is pruned while a directory index is not at the master index's current `rev`, so one offline click cannot
+  empty the pool; the factory pools, the collections and the `custom` pool are never touched. The toast adds
+  "，云端提示词 +x / -y" when that step changed cards.
+- **Prompt library cards run as a waterfall, and a custom cover plays its own video.** The page now packs its cards with
+  the asset library's shortest-column layout at a fixed 230 px width, so a card is as tall as its picture: the media
+  band spans the full card width, a landscape crops to 3/4 of it and a portrait runs full width up to twice it (a
+  9:16 cover is no longer a 97 px strip in the middle of the card), and a prompt
+  with no picture takes a text card (pool label plus its body preview) instead of an empty slot. A hover pushes
+  the border to the accent orange and zooms the picture, and a system asking to "reduce motion" drops it.
+  Video-pool cards autoplay two sources: a cloud preset keeps its published 480p preview, and a custom prompt whose
+  cover records its source autoplays that very local output — setting a cover now writes a `<scan name>.cover.json`
+  pointer beside the JPEG (`filename` / `subfolder` / `kind`), the list carries it as `cover_media`, and the card plays
+  it muted and looping through `/neo_gallery/video` with the cover as poster, only while the card is in view. The local
+  chain counts in the image pool too, and the cover pick accepts videos under the "All" pool chip, so an image-pool
+  prompt can pin one of its outputs as a moving cover. The cover backfill script writes the same pointer with
+  `--apply`, so the outputs already on the shelf become playable cards;
+  a prompt that already had a cover gets only the missing pointer and keeps its JPEG untouched, so a cover set by an
+  older build starts playing the film it was cut from; `--frame-match` adds a first-frame tier for covers whose text
+  left no trace — every output's first frame is decoded once into a 16×16 luminance vector, and a cover regains its
+  film only when the leading match sits under 0.02 and wins by 4× over the runner-up. Deleting a prompt clears its
+  cover and that pointer together.
+  The cover write now also records the cover's own
+  pixel size (`w` / `h`) in that pointer, so a band takes its final height the moment the card lands and the waterfall
+  does not re-pack when pictures arrive; a pointer written before sizes were recorded has neither field and the card
+  falls back to probing that cover.
+- **The prompt library's filter bar and loading state match the prompts.chat browse page.** The bar now carries a sort
+  filter (`Newest / Oldest / Name`) and a tag filter whose chips are the tags of the loaded list ranked by how often
+  each appears (at most 14, with "All tags" first; the row is skipped when the list carries fewer than two tags), on
+  top of the pool and origin chips, and every chip resets to the first screen. The grid fills 24 skeleton cards while the
+  list is being read instead of a single "Loading…" line, so the waterfall has a screen shape before the cards arrive, and
+  the shimmer drops under "reduce motion". The trending, author and like controls prompts.chat runs on cloud data are
+  not shipped: a local prompt carries only a file time and tags, and a control with no data behind it is not shipped.
+- **The prompt library loads on scroll.** The page bar is gone: the grid lays 24 cards per screen, the row at the bottom
+  of the list is watched by an IntersectionObserver on the page's own scroll container, and scrolling to it appends the
+  next screen until every match is on the grid, where it reads "All {n} loaded". Search and every chip rebuild the
+  first screen and pull the scroll position back to the top.
+
+### Changed
+- **The cloud `prompts.chat` preset card no longer carries typeset text cards.** The published directory keeps only rows
+  whose media slot holds the author's own example output — 80 items, every one of them with its media, sidecar, thumbnail
+  and 480p preview resolving on OSS — and the importer's `--skip-preview` gate keeps a row with no example output out of
+  the build directory, its sidecar and the manifest, so those entries never come back.
+- **The prompt-pool mirror source tag is now `prompts`.** A cloud preset directory joins the prompt pools by carrying
+  that tag in the master index, and the two cloud prompt directories published in this release (`26-06-25`, `26-06-26`)
+  arrive in the library as cards with their own cover images on the first 刷新. `prompts.chat` carries the new tag beside
+  the old `prompts-chat` one, so installs built before this change keep refreshing it; that second tag drops out of the
+  index in a later publish.
+
+
+### Fixed
+- **A refresh no longer deletes and re-imports the same cloud prompt cards.** A pool card is named from its sidecar
+  title, while the directory index names the row from the preview's first line — a preview cut at 500 characters loses
+  that line, and the pre-1.6 publisher left pool cards named `Cat` sitting beside cloud rows titled `Dog fun`. Pairing
+  only titles read those as cloud-dropped, so every 刷新 pruned cards the cloud still publishes and the next 刷新
+  imported them back: the library count moved between refreshes and their covers were re-downloaded every time. A card
+  now pairs with its row on an exact name match or on the shared body prefix, so a card is pruned only when its text is
+  really gone from the cloud.
+- **Rebuilding the prompts.chat pack never books the same prompt twice.** The pack numbers its rows by the
+  site's upvotes ranking, and that ranking moves when votes move, so a prompt that first arrived as
+  `05_HeartIllustration` used to arrive again under its new rank and the cloud card showed the same prompt
+  twice. The importer now reads its own manifest: a prompt whose slug is recorded keeps the stem it first
+  landed on, and the row is reported as 已导入 instead of built.
+- **A half-downloaded example output no longer publishes as a video that never plays.** A stream that ends
+  before the byte count the CDN declared used to be renamed into place and shipped on OSS; the importer
+  compares the written bytes with `Content-Length`, discards that media, and the row takes the typeset
+  preview like any other row whose media will not come.
+
+
 ## [1.6.2] - 2026-11-19
 
 ### Added

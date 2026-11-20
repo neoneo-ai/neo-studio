@@ -23,7 +23,8 @@
     display: flex;
     flex-direction: column;
     max-width: 92vw;
-    max-height: 88vh;
+    /* 遮罩上下各 24px 内衬，卡片吃到只剩 8px 余量；媒体那一发的上限在下面按同一笔账算 */
+    max-height: calc(100vh - 40px);
     background: var(--ns-background-1e1e1e, #1e1e1e);
     border: 1px solid var(--ns-fill-4, rgba(255, 255, 255, 0.12));
     border-radius: 12px;
@@ -49,7 +50,9 @@
 .neo-lightbox-media {
     display: block;
     max-width: 100%;
-    max-height: calc(88vh - 110px);
+    /* 卡片上限 100vh-40px 减去这一发吃不到的那几块：描边 2、舞台上下内衬 24、
+       底栏那行（两行的最坏那档 ~65） */
+    max-height: calc(100vh - 132px);
     width: auto;
     height: auto;
     object-fit: contain;
@@ -66,10 +69,17 @@
     width: 90%;
 }
 
-/* 底部信息条：计数 + 标题 + 动作按钮 */
+/* 底部信息条：计数 + 标题 + 尺寸 + 动作按钮。
+   上限 400px 是卡片贴住图的那一发开关：卡片宽度由这一行与媒体那一条里更宽的那位决定，
+   这一行不封顶时三枚按钮 + 46px 内衬就是 600px 起，竖构图那条按宽高比只剩 360px 宽，
+   多出来的一整段全是舞台的黑底。封到 400px 后窄图那一侧卡片跟着图收拢，
+   挤不下的按钮自己换行（两行的那一档已算进媒体上限里的底栏高度）。 */
 .neo-lightbox-meta {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
+    box-sizing: border-box;
+    max-width: 400px;
     gap: 10px;
     padding: 8px 46px;
     border-top: 1px solid var(--ns-fill-2, rgba(255, 255, 255, 0.08));
@@ -78,7 +88,8 @@
 
 .neo-lightbox-caption {
     flex: 1;
-    min-width: 0;
+    /* 底栏被卡片宽度压住时的底线：低于八个字标题就整条缩成省略号，读不出是哪一张 */
+    min-width: 8ch;
     font-size: 12px;
     color: var(--ns-fg-soft, #ccc);
     white-space: nowrap;
@@ -193,7 +204,7 @@
 }
 
 .neo-lightbox-compact .neo-lightbox-media {
-    max-height: calc(74vh - 110px);
+    max-height: calc(74vh - 92px);
 }
 
 .neo-lightbox-compact .neo-lightbox-video {
@@ -429,10 +440,17 @@
     .neo-lightbox-box.neo-lightbox-with-panel .neo-lightbox-panel {
         width: 100%;
         min-width: 0;
-        max-height: 46%;
+        /* 34vh 不是 34%：卡片这一盒高度由内容定，百分比的 max-height 在这种盒子里
+           按规范落到 none —— 46% 那一条从来没生效，手机竖构图被舞台裁掉一截 */
+        max-height: 34vh;
         border-left: none;
         border-top: 1px solid var(--ns-fill-2, rgba(255, 255, 255, 0.08));
         padding: 10px;
+    }
+    /* 画面在上、侧栏在下：46vh + 底栏两行 + 侧栏 34vh 正好落在卡片高度里，再高一档
+       媒体就伸进侧栏那一段被裁。照上层那条 100vh 上限时视频控件整条被裁。 */
+    .neo-lightbox-box.neo-lightbox-with-panel .neo-lightbox-media {
+        max-height: 46vh;
     }
     .neo-lightbox-close,
     .neo-lightbox-nav,

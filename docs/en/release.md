@@ -267,7 +267,9 @@ skips files whose ETag already matches; the key prefix gets its trailing `/` add
 gallery's cloud index cache is force-refreshed (the same path as `/neo_gallery/sync_oss`), so the new
 directory shows up on the asset page at once; without that refresh it stays invisible until the
 `sync_interval_hours` cache (24 h by default) expires. The "⟳ Refresh index" button in the asset page's
-"Manage Directories" dialog hits the same endpoint, so the cloud index cache can be force-refreshed by hand at any time.
+"Manage Directories" dialog hits the same endpoint, so the cloud index cache can be force-refreshed by hand at any time
+(the master index and every per-directory index are refetched together, which is also what moves the prompt library's
+cloud card media to the current `rev`).
 
 The upload page opens with a pending-upload list (`GET /neo_backyard/upload_plan`): per directory the item
 count, the file count and the size to upload, classified against the cloud master index as "to upload" (the

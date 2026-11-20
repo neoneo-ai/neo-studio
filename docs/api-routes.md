@@ -291,34 +291,34 @@ Neo Studio 独立页面（`web/studio/index.html`）的后端。素材 / 生图 
 
 ## prompts.py — `/rs_prompts/*`
 
-| 方法 | 路由 | 说明 |
-|------|------|------|
-| POST | `/rs_prompts/save_prompt` | 保存提示词预设 |
-| POST | `/rs_prompts/delete_prompt` | 删除提示词（连带它旁边的封面 sidecar） |
-| POST | `/rs_prompts/set_prompt_cover` | 把素材库那张产物设成提示词封面：写 `prompts/custom/<扫描名>.jpg`（512px 长边 JPEG，视频取首帧）；预设只读 403、正文或源文件不在 404 |
-| GET | `/rs_prompts/get_models` | 可用 LLM 模型列表（远程 + 本地） |
-| GET | `/rs_prompts/native_models` | 原生文本生成模型列表（扫描 `models/text_encoders/` 下 `.safetensors`） |
-| POST | `/rs_prompts/set_model` | 切换当前 LLM 模型 |
-| GET/POST | `/rs_prompts/remote_llm_config` | 远程 LLM 配置读取 / 保存 |
-| POST | `/rs_prompts/llm_connection_test` | 连接测试（远程用当前表单值发送「你好」；Native 实跑一次本地推理） |
-| GET | `/rs_prompts/llm_mode` | 当前 LLM 模式 |
-| POST | `/rs_prompts/extract_title` | AI 提取标题 |
-| POST | `/rs_prompts/extract_classify` | AI 提取分类 |
-| POST | `/rs_prompts/enhance_prompt` | 提示词增强 |
-| POST | `/rs_prompts/translate_prompt` | 提示词翻译 |
-| POST | `/rs_prompts/smart_prompt` | 快捷描述生成 |
-| POST | `/rs_prompts/reverse_prompt` | 图片反推（SSE + 同名 .txt 缓存） |
-| POST | `/rs_prompts/reverse_video_prompt` | 视频反推（整批帧带时间戳，SSE，落 `<视频>.rp.txt`，缓存按语言 + 帧数） |
-| POST | `/rs_prompts/stream_{task_name}` | 按任务名注册的流式生成端点 |
-| POST | `/rs_prompts/stream_generate_prompt` | 流式生成 |
-| POST | `/rs_prompts/fetch_remote_models` | 拉取远程服务端模型列表 |
-| GET | `/rs_prompts/skills` | 技能列表（预设 / 任务 / 自定义分组） |
-| POST | `/rs_prompts/load_skill` | 读取单个技能 |
-| POST | `/rs_prompts/save_skill` | 新建 / 更新技能主文件（预设只读） |
-| POST | `/rs_prompts/delete_skill` | 删除整个技能目录（仅 USR） |
-| POST | `/rs_prompts/reset_skill_config` | 技能设置恢复默认（删本地覆盖文件） |
-| GET  | `/rs_prompts/skill_sources` | 云端技能订阅源：清单行 + 每行的本地状态（`enabled` / `source` / `reason` / `age_hours` / `skills[]`；`?force=1` 是唯一一次强拉，未配置只回 `enabled: false`，不拉 OSS） |
-| POST | `/rs_prompts/install_skill_source` | 按 id 装一行云端技能：取 zip 验 sha256，走 `upload_skill` 那条口装进 `skills/custom/`；成功与失败都回 `{success, code, message}`（`local_modified` / `preset_conflict` / `fingerprint_mismatch` 等码） |
+| 方法       | 路由                                   | 说明                                                                                                                                                                                          |
+|----------|--------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| POST     | `/rs_prompts/save_prompt`            | 保存提示词预设                                                                                                                                                                                     |
+| POST     | `/rs_prompts/delete_prompt`          | 删除提示词（连带它旁边的封面 sidecar 与那条封面指针）                                                                                                                                                             |
+| POST     | `/rs_prompts/set_prompt_cover`       | 把素材库那张产物设成提示词封面：写 `prompts/custom/<扫描名>.jpg`（512px 长边 JPEG，视频取首帧）与旁边那条 `<扫描名>.cover.json` 指针（`filename` / `subfolder` / `kind`，外加封面自己的 `w` / `h`，列表据此带 `cover_media`）；预设只读 403、正文或源文件不在 404 |
+| GET      | `/rs_prompts/get_models`             | 可用 LLM 模型列表（远程 + 本地）                                                                                                                                                                        |
+| GET      | `/rs_prompts/native_models`          | 原生文本生成模型列表（扫描 `models/text_encoders/` 下 `.safetensors`）                                                                                                                                     |
+| POST     | `/rs_prompts/set_model`              | 切换当前 LLM 模型                                                                                                                                                                                 |
+| GET/POST | `/rs_prompts/remote_llm_config`      | 远程 LLM 配置读取 / 保存                                                                                                                                                                            |
+| POST     | `/rs_prompts/llm_connection_test`    | 连接测试（远程用当前表单值发送「你好」；Native 实跑一次本地推理）                                                                                                                                                        |
+| GET      | `/rs_prompts/llm_mode`               | 当前 LLM 模式                                                                                                                                                                                   |
+| POST     | `/rs_prompts/extract_title`          | AI 提取标题                                                                                                                                                                                     |
+| POST     | `/rs_prompts/extract_classify`       | AI 提取分类                                                                                                                                                                                     |
+| POST     | `/rs_prompts/enhance_prompt`         | 提示词增强                                                                                                                                                                                       |
+| POST     | `/rs_prompts/translate_prompt`       | 提示词翻译                                                                                                                                                                                       |
+| POST     | `/rs_prompts/smart_prompt`           | 快捷描述生成                                                                                                                                                                                      |
+| POST     | `/rs_prompts/reverse_prompt`         | 图片反推（SSE + 同名 .txt 缓存）                                                                                                                                                                      |
+| POST     | `/rs_prompts/reverse_video_prompt`   | 视频反推（整批帧带时间戳，SSE，落 `<视频>.rp.txt`，缓存按语言 + 帧数）                                                                                                                                                |
+| POST     | `/rs_prompts/stream_{task_name}`     | 按任务名注册的流式生成端点                                                                                                                                                                               |
+| POST     | `/rs_prompts/stream_generate_prompt` | 流式生成                                                                                                                                                                                        |
+| POST     | `/rs_prompts/fetch_remote_models`    | 拉取远程服务端模型列表                                                                                                                                                                                 |
+| GET      | `/rs_prompts/skills`                 | 技能列表（预设 / 任务 / 自定义分组）                                                                                                                                                                       |
+| POST     | `/rs_prompts/load_skill`             | 读取单个技能                                                                                                                                                                                      |
+| POST     | `/rs_prompts/save_skill`             | 新建 / 更新技能主文件（预设只读）                                                                                                                                                                          |
+| POST     | `/rs_prompts/delete_skill`           | 删除整个技能目录（仅 USR）                                                                                                                                                                             |
+| POST     | `/rs_prompts/reset_skill_config`     | 技能设置恢复默认（删本地覆盖文件）                                                                                                                                                                           |
+| GET      | `/rs_prompts/skill_sources`          | 云端技能订阅源：清单行 + 每行的本地状态（`enabled` / `source` / `reason` / `age_hours` / `skills[]`；`?force=1` 是唯一一次强拉，未配置只回 `enabled: false`，不拉 OSS）                                                          |
+| POST     | `/rs_prompts/install_skill_source`   | 按 id 装一行云端技能：取 zip 验 sha256，走 `upload_skill` 那条口装进 `skills/custom/`；成功与失败都回 `{success, code, message}`（`local_modified` / `preset_conflict` / `fingerprint_mismatch` 等码）                    |
 
 - 云端技能订阅源的配置只有 `configs/oss_presets.json` 的 `skill_index_url`（缺失 = 未配置：技能页不出「云端技能」
   入口）；清单只读缓存在 `gallery/skill_cache/_index.json`，TTL 取 `sync_interval_hours`，拉取只发生在技能页
@@ -344,15 +344,15 @@ LLM 模式与配置见 [llm.md](llm.md)，技能设计见 [skills.md](skills.md)
 只扫数据根 `prompts/` 目录：名字、标签、整篇正文、行级集合条目与运行时随机池都出自这里，
 全程不碰 PromptServer。桌面端离线端口与 ComfyUI 内注册的是同一份 handler——读侧不依赖 ComfyUI 运行时。
 
-| 方法   | 路由                              | 说明                                                     |
-|--------|---------------------------------|----------------------------------------------------------|
-| POST   | `/rs_prompts/list_prompts`      | 全部提示词条目（`custom` + `presets`，带标签与文件时间） |
-| POST   | `/rs_prompts/list_prompt_names` | 提示词名字与标签（@ 点名弹层的候选）                     |
-| POST   | `/rs_prompts/load_prompt`       | 提示词正文（`name`、可选 `source` 精确定位）             |
-| POST   | `/rs_prompts/prompt_previews`   | 一批提示词的卡片摘要（`names` 最多 32 条，压成一行截 220 字）                  |
-| POST   | `/rs_prompts/list_prompt_lines` | 多行集合按页列表（行级条目，`name="*"` 跨全部集合搜索）  |
-| POST   | `/rs_prompts/random_prompts`    | 运行时随机抽条（1–16，`kind`: image / video，空 = 混池） |
-| GET    | `/rs_prompts/prompt_cover`      | 提示词封面：直接回 sidecar `prompts/custom/<扫描名>.jpg` 的 JPEG（`v=` 吃条目上的封面 mtime，缓存满一年；没有封面 404） |
+| 方法       | 路由                              | 说明                                                                                                                                                |
+|----------|---------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------|
+| POST     | `/rs_prompts/list_prompts`      | 全部提示词条目（`custom` + `presets`，带标签与文件时间）                                                                                                            |
+| POST     | `/rs_prompts/list_prompt_names` | 提示词名字与标签（@ 点名弹层的候选）                                                                                                                               |
+| POST     | `/rs_prompts/load_prompt`       | 提示词正文（`name`、可选 `source` 精确定位）                                                                                                                    |
+| POST     | `/rs_prompts/prompt_previews`   | 一批提示词的卡片摘要（`names` 最多 32 条，压成一行截 220 字）                                                                                                           |
+| POST     | `/rs_prompts/list_prompt_lines` | 多行集合按页列表（行级条目，`name="*"` 跨全部集合搜索）                                                                                                                 |
+| POST     | `/rs_prompts/random_prompts`    | 运行时随机抽条（1–16，`kind`: image / video，空 = 混池）                                                                                                        |
+| GET      | `/rs_prompts/prompt_cover`      | 提示词封面：直接回 sidecar `prompts/custom/<扫描名>.jpg` 的 JPEG（`v=` 吃条目上的封面 mtime，`Cache-Control` 是 `public, max-age=0, must-revalidate`，文件没变回 304；没有封面 404） |
 
 - 名字只从目录列表取：一次请求 = `presets/` 与 `custom/` 各一次目录列表、各开一份 `_tags_index.json`，
   全程不逐个 stat `.txt`，也不打开任何正文；正文是选中那一发才读。custom 在前、presets 在后，两表同序。

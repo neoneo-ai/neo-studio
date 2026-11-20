@@ -18,17 +18,19 @@ v3b.fal.media），推特与第三方渲染链会过期、会防盗链。本地�
 产物口径就是图库预设那一套（`studio/gallery.py` 读旁车，灯箱按「标签：值」分段，`/neo_gallery/txt`
 读全文）：`<out>/prompts.chat/<NN>_<名称>.<媒体>` + 同名 `.txt` 旁车。没有 mediaUrl 的条排一张
 预览图占住图位——`gallery_preprocess.py` 的 `scan_directory()` 对只有 `.txt` 的条目直接跳过，
-云端卡没有图位就不出卡。清单写在产物目录之外（`<out>/prompts.chat.manifest.json`）：
+云端卡没有图位就不出卡。`--skip-preview` 把这条口径立成硬门槛：没有 mediaUrl 的条整条不要，
+那张纯文字卡不是任何真实产物，不配当云端卡片的图位。清单写在产物目录之外（`<out>/prompts.chat.manifest.json`）：
 `gallery_deploy_oss.py` 把 --source 目录里每个文件都当对象上传，清单混进去就是云上多出的一份文件。
 
 Usage:
   python tools/import_prompts_chat.py --list                                        # 只出报告
   python tools/import_prompts_chat.py --type IMAGE --top 20
-  python tools/import_prompts_chat.py --build --top 20 --pages 2                   # 产进 tmp\\gallery_pack
+  python tools/import_prompts_chat.py --build --top 20 --pages 2 --skip-preview            # 产进 tmp\\gallery_pack
   python tools/gallery_preprocess.py --presets tmp\\gallery_pack --output tmp\\gallery_pack --dirs prompts.chat
   python tools/gallery_deploy_oss.py --source tmp\\gallery_pack --bucket <bucket> --prefix neo/presets/
 
-默认只出报告，--build 才产文件；同名旁车已有就不动，--overwrite 才重写。视频条的缩略图要 ffmpeg
+默认只出报告，--build 才产文件；同名旁车已有就不动，--overwrite 才重写。清单记过的 slug 只认它
+第一次落的 stem——站上的票一变排名就漂，漂到别名下水会把同一条发成两张卡。视频条的缩略图要 ffmpeg
 出首帧，ffmpeg 不在 PATH 时 gallery_preprocess.py 给一条 WARN，那张卡没有预览。
 """
 from __future__ import annotations
@@ -82,21 +84,32 @@ TOKENS = re.compile(r"[A-Za-z0-9@._#%+\-]+|\s+|.")
 def main() -> int:
     """报告 → --build 产进构建目录 → 打印把这份目录推上云的两条命令"""
     args = _parse_args()
+    out = Path(args.out)
+    recorded = _imported_slugs(out)
     plans: list[dict] = []
     taken: set[str] = set()
     for type_ in (("IMAGE", "VIDEO") if args.type == "both" else (args.type,)):
         for rank, row in enumerate(candidates(type_, args.top, args.tag, args.pages), start=1):
             plans.append(_plan(row, rank, taken))
+    if not plans:
+        print("候选: 0（接口没返回这个型的条，检查 --type / --tag）")
+        return 1
+    # 站上的票一变排名就漂：清单记过这条 slug 就认它第一次落的 stem，在别名下水是同一张卡发两遍
+    drifted = [plan for plan in plans if plan["slug"] in recorded]
+    plans = [plan for plan in plans if plan["slug"] not in recorded]
 
     for plan in plans:
         print(f"{_type_label(plan['type'])} | {plan['stem']} | 图位 {_slot_note(plan)}"
               f" | 标签 {plan['tags'][:3] or '无'} | ↑{plan['votes']}")
-    if not plans:
-        print("候选: 0（接口没返回这个型的条，检查 --type / --tag）")
-        return 1
+    for plan in drifted:
+        print(f"已导入 | {plan['stem']} → 清单里的 {recorded[plan['slug']]}")
+    dropped = [plan for plan in plans if not plan["media_url"]] if args.skip_preview else []
+    plans = [plan for plan in plans if plan["media_url"]] if args.skip_preview else plans
     with_media = sum(1 for plan in plans if plan["media_url"])
-    print(f"候选: {len(plans)}（示例产物 {with_media} / 排版预览 {len(plans) - with_media}）")
-    out = Path(args.out)
+    note = f" | 清单已有 {len(drifted)}" if drifted else ""
+    if dropped:
+        note += f" | 无示例产物整条不要 {len(dropped)}"
+    print(f"候选: {len(plans)}（示例产物 {with_media} / 排版预览 {len(plans) - with_media}）{note}")
     if not args.build:
         print(f"未产出（--build 才产进 {out / DIR_NAME}）")
         return 0
@@ -251,11 +264,12 @@ def _place(plan: dict, src: Path, overwrite: bool) -> tuple[str, dict | None]:
 # ============================================================================
 
 def _download_media(url: str, stem: str, src: Path, cap: int = MAX_MEDIA_BYTES) -> Path | None:
-    """把站上那条示例产物落到构建目录，回它的文件名；类型不认识、超量、拉不动都回 None
+    """把站上那条示例产物落到构建目录，回它的文件名；类型不认识、超量、断流、拉不动都回 None
 
     链上常没有后缀（cdn1.wiro.ai/<hash>、pbs.twimg.com/media/<id>?format=jpg），后缀认不出就认
     响应的 content-type，两边都不认的媒体 gallery_preprocess.py 收不了。落全了才改名占位：
-    半截的媒体会让那张云端卡永远加载不出来。
+    半截的媒体会让那张云端卡永远加载不出来——服务端报了 Content-Length 就按它对账，没报就只认
+    连接正常收尾的那一份。
     """
     req = urllib.request.Request(url, headers={"User-Agent": UA, "Referer": HOME_URL})
     try:
@@ -264,6 +278,7 @@ def _download_media(url: str, stem: str, src: Path, cap: int = MAX_MEDIA_BYTES) 
             ext = _media_ext(url, content_type)
             if not ext:
                 return None
+            declared = int(resp.headers.get("content-length") or 0)
             dest = src / f"{stem}{ext}"
             tmp = dest.with_name(dest.name + ".tmp")
             got = 0
@@ -274,9 +289,12 @@ def _download_media(url: str, stem: str, src: Path, cap: int = MAX_MEDIA_BYTES) 
                         tmp.unlink(missing_ok=True)
                         return None
                     fh.write(chunk)
+            if declared and got != declared:
+                tmp.unlink(missing_ok=True)
+                return None
             tmp.replace(dest)
             return dest
-    except (urllib.error.URLError, OSError):
+    except (urllib.error.URLError, OSError, ValueError):
         return None
 
 
@@ -373,6 +391,25 @@ def _wrap(text: str, font, width: int) -> list[str]:
     return lines
 
 
+def _manifest_doc(out: Path) -> dict | None:
+    """构建目录里那份清单：读不到、被外部编辑器写坏都回 None，调用方按空表重建"""
+    target = out / f"{DIR_NAME}.manifest.json"
+    if not target.is_file():
+        return None
+    try:
+        loaded = json.loads(target.read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+        return None
+    return loaded if isinstance(loaded, dict) else None
+
+
+def _imported_slugs(out: Path) -> dict[str, str]:
+    """清单记过的 slug → 它第一次落的 stem：序号按排名写，同一条只认第一次那个名"""
+    entries = (_manifest_doc(out) or {}).get("entries") or []
+    return {str(row["slug"]): str(row["stem"]) for row in entries
+            if isinstance(row, dict) and row.get("slug") and row.get("stem")}
+
+
 def _write_manifest(out: Path, rows: list[dict]) -> None:
     """清单写在产物目录之外：上云那一步把 --source 里每个文件都当对象上传，混进去就是云上多出的一份
 
@@ -380,14 +417,8 @@ def _write_manifest(out: Path, rows: list[dict]) -> None:
     来的，都只看这份清单。
     """
     target = out / f"{DIR_NAME}.manifest.json"
-    known: dict[str, dict] = {}
-    if target.is_file():
-        try:
-            loaded = json.loads(target.read_text(encoding="utf-8-sig"))
-            old = loaded.get("entries") if isinstance(loaded, dict) else []
-            known = {str(r.get("stem")): r for r in (old or []) if isinstance(r, dict)}
-        except (OSError, json.JSONDecodeError, UnicodeDecodeError):
-            known = {}  # 外部编辑器写坏时当空表重建
+    old = (_manifest_doc(out) or {}).get("entries") or []
+    known = {str(row.get("stem")): row for row in old if isinstance(row, dict)}
     known.update({str(row["stem"]): row for row in rows})
     doc = {
         "directory": DIR_NAME,
@@ -433,6 +464,8 @@ def _parse_args():
     ap.add_argument("--out", default=str(Path("tmp") / "gallery_pack"),
                     help="构建目录（默认 tmp\\gallery_pack，在 .gitignore 里，产物永不进 git）")
     ap.add_argument("--overwrite", action="store_true", help="同名旁车也重写")
+    ap.add_argument("--skip-preview", action="store_true",
+                    help="没有 mediaUrl 的条整条不要：不排那张纯文字预览，旁车与清单也不记它")
     return ap.parse_args()
 
 

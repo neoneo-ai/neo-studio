@@ -30,8 +30,8 @@ from .bundles import create_bundle
 
 from .prompt_names import (PRESETS_DIR, CUSTOM_DIR,
                            tags_file_path, load_tags_index, sample_runtime_prompts,
-                           COVER_SUFFIX, COVER_MAX_SIDE, resolve_prompt_file,
-                           prompt_cover_target)
+                           COVER_SUFFIX, COVER_MAX_SIDE, COVER_SOURCE_SUFFIX, resolve_prompt_file,
+                           prompt_cover_target, write_cover_source)
 
 PENDING_PROMPTS = {}
 
@@ -493,6 +493,7 @@ async def rs_prompts_set_prompt_cover(request):
             return web.Response(status=404, text="Source file not found")
         if not await asyncio.to_thread(_write_prompt_cover, source, target):
             return web.Response(status=500, text="Cover generation failed")
+        _record_cover_source(target, str(data.get("filename") or ""), str(data.get("subfolder") or ""))
         return web.json_response({"status": "success", "cover": int(os.path.getmtime(target))})
     except Exception as e:
         logger.error(f"Error setting prompt cover: {e}")
@@ -526,12 +527,43 @@ def _write_prompt_cover(source: str, target: str) -> bool:
     return True
 
 
+def _record_cover_source(cover_path: str, filename: str, subfolder: str) -> None:
+    """把这张封面的来路写进封面旁边那条指针（`<扫描名>.cover.json`）
+
+    列表条目只认这一发认得出「这张封面是素材库哪一条产物播出来的」：视频池的卡片据此自动播
+    本地那条成片（`cover_media`，见 web/prompt-library）。指针写失败不动封面——设封面那一发
+    已经成功了，卡片落一张静封面，比一次半途失败的设封面便宜。
+    """
+    # 循环导入约束与 _output_media_path 同一发：视频后缀表在 gallery 那一层，节点用例的桩里没有
+    from .gallery import VIDEO_EXTENSIONS
+    kind = "video" if os.path.splitext(filename)[1].lower() in VIDEO_EXTENSIONS else "image"
+    write_cover_source(cover_path, filename, subfolder, kind, _cover_size(cover_path))
+
+
+def _cover_size(cover_path: str) -> tuple[int, int] | None:
+    """封面 JPEG 自己的像素尺寸：写指针时带上，卡片落位即按它定高（见 write_cover_source 的 w/h）
+
+    PIL 的 .size 只读文件头，不解码整张图。读不出（指针测试里那张假 JPEG、被写坏的文件）给 None，
+    卡片退回前端探测那张封面那一发。
+    """
+    try:
+        from PIL import Image
+        with Image.open(cover_path) as img:
+            return img.size
+    except Exception:
+        return None
+
+
 def _remove_prompt_file(filepath: str) -> None:
-    """删正文连带它旁边那张封面：不给提示词树留一张没有主人的封面"""
+    """删正文连带它旁边那张封面与那条指针：不给提示词树留一张没有主人的封面"""
     os.remove(filepath)
-    cover = filepath[:-4] + COVER_SUFFIX
+    stem = filepath[:-4]
+    cover = stem + COVER_SUFFIX
     if os.path.isfile(cover):
         os.remove(cover)
+    pointer = stem + COVER_SOURCE_SUFFIX
+    if os.path.isfile(pointer):
+        os.remove(pointer)
 
 
 def _prompt_rel_name(name: str):

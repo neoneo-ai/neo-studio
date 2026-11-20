@@ -162,6 +162,46 @@ class WriteCoverTests(unittest.TestCase):
             self.assertFalse(target.exists())
 
 
+class FrameSignatureTests(unittest.TestCase):
+    """首帧签名那一档：只给「已有封面、来路整行对不上、旁边没有指针」的条补那条指针，那张 JPEG 不动"""
+
+    def test_a_decisive_first_place_is_accepted(self):
+        self.assertTrue(cover_init.frame_match_accepted(0.003, 0.4))
+
+    def test_a_second_place_right_behind_is_a_guess(self):
+        # 前两名挨在一起说的是「这批片长得像」，不是「这张封面切自它」
+        self.assertFalse(cover_init.frame_match_accepted(0.019, 0.021))
+
+    def test_a_weak_first_place_is_rejected(self):
+        self.assertFalse(cover_init.frame_match_accepted(0.19, 0.9))
+
+    def test_a_frame_of_another_shape_never_enters_the_ranking(self):
+        flat = [1.0] * cover_init.FRAME_SIG_GRID ** 2
+        wide = [1.0] * cover_init.FRAME_SIG_GRID ** 2
+        sigs = {Path("wide.mp4"): (wide, 1.78), Path("scope.mp4"): (flat, 2.39)}
+        cover_sig = [1.6] * cover_init.FRAME_SIG_GRID ** 2
+        hit = cover_init.best_frame_match((cover_sig, 2.39), sigs)
+        self.assertEqual(hit[0], Path("scope.mp4"))
+
+    def test_the_pointer_fill_leaves_the_cover_jpeg_untouched(self):
+        from PIL import Image
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cover = root / "p.jpg"
+            Image.new("RGB", (512, 220), (30, 40, 50)).save(cover)
+            before = cover.read_bytes()
+            video = root / "clip.mp4"
+            video.write_bytes(b"fake video")
+            _plugin_paths, prompt_names, _util = cover_init.load_studio()
+            cover_init.write_cover_pointer(prompt_names, cover, video, [root], MP4)
+            pointer = cover.with_name(cover.stem + prompt_names.COVER_SOURCE_SUFFIX)
+            self.assertEqual(json.loads(pointer.read_text(encoding="utf-8")),
+                             {"filename": "clip.mp4", "subfolder": "", "kind": "video",
+                              "w": 512, "h": 220})
+            self.assertEqual(cover.read_bytes(), before)
+
+
 class LoaderTests(unittest.TestCase):
     def test_cover_rules_come_from_the_plugin_not_from_a_second_copy(self):
         """脚本读的是插件那一份 prompt_names / util：sidecar 后缀、封面尺寸、视频后缀不能各写一套"""

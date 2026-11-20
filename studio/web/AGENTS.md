@@ -35,6 +35,9 @@
   handling stay in the window layer instead of being duplicated per page.
 - CSS goes in the module's same-named stylesheet. Do not
   inline styles for structure a stylesheet already owns.
+- 胶囊筛子的选中档只写在 `studio/style.css` 那一条共享规则里（`.ns-pl-chip.is-on`、`.neo-gallery-kind-chip.active`、
+  `.neo-gallery-workflow-chip.active`、`.rs-tag-btn.rs-tag-selected`）：页样式表比它后注入，页里再写一份同特异就盖过共享档，
+  四页各写一份就是四种选中色（实心橙在浅色主题压近黑字就是这一路长出来的）。页样式表只写基座与 hover。
 - 首页上每个应用页有一份描述符：`studio/web/studio/app-registry.js`。一条描述符说清页 id（hash 路由名）、
   首页板块与那张卡（图标、两行字、默认上不上首页）、顶栏给不给页签、每次导航是否注册视图、落地时认哪个深链
   参数。首页卡表（`home-layout.js`）与 `studio-app.js` 的 `route()` 都从这张表派生，页的 `build` 在装配层的

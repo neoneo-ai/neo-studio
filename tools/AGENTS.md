@@ -29,13 +29,21 @@ exe 里随包的插件副本只取 `studio/` 的跟踪文件，`tools/` 不在�
   `verify_minimal_package.ps1` 在自检之上做验收；插件与 commit 的钉版口径在 `minimal_plugins.json`。
 - 数据初始化：`fill_prompt_covers.py` 把 ComfyUI `output` 与数据根 `gallery/custom` 里的已有产物对回
   提示词——读图旁同名 `.txt` 与图/视频内嵌的 ComfyUI 元数据（`studio/util.py` 那份读端），整行相等才算
-  来路；默认只出报告，`--apply` 才写封面 sidecar，已有封面的条不动，图像条只收图、`video/` 条只收视频，
+  来路；默认只出报告，`--apply` 才写封面 sidecar 与它旁边那条封面指针（`<扫描名>.cover.json`，subfolder 按
+  产物根目录算，已知根之外的留空）；已有封面、对得上视频、旁边没有指针的条只补那条指针，那张封面 JPEG
+  不动（指针只说得出来路，替用户重截一张封面是猜），图像条只收图、`video/` 条只收视频，
   口径与 `studio/prompts.py` 的封面写侧同一份。
+- 整行对不上的已有封面走 `--frame-match` 的首帧签名那一档：一条视频只抽一次首帧（宽度 64 保比例的
+  rgb24 裸帧，灰度缩到 16x16、按整幅均值归一），与封面比整幅平均绝对差；第一名 ≤ 0.02 且赢第二名
+  4 倍才认，画面比例差过 8% 的首帧不进排名。那一档同样只写指针、不动那张 JPEG，抽帧要过一遍产物树，
+  默认关。
 - 预设导入：`import_prompts_chat.py` 走 prompts.chat 的公开接口只收 `IMAGE` / `VIDEO` 两型，产的是**云端图库预设的
   构建目录**（默认 `tmp\gallery_pack\prompts.chat\`，在 `.gitignore` 里），代码目录一个文件都不写：一条一个 stem
   一对文件，`NN_<名称>.<媒体>` + 同名 `.txt` 旁车，旁车按图库的「标签：值」版式写。图位优先是站上自带的 `mediaUrl`
   示例产物；拉不动、类型不认识、超量的条落本地排版预览，没有 `mediaUrl` 的条同样排一张预览占住图位
-  （`gallery_preprocess.py` 跳过只有 `.txt` 的条目）。许可只把提示词文本划进公有领域，`mediaUrl` 是作者上传的
+  （`gallery_preprocess.py` 跳过只有 `.txt` 的条目）。`--skip-preview` 把这条口径立成硬门槛：没有示例产物的条
+  整条不要，那张纯文字卡不是任何真实产物，不配当云端卡片的图位；构建目录里已有的这种条目删媒体、删旁车、
+  从清单里去掉。许可只把提示词文本划进公有领域，`mediaUrl` 是作者上传的
   第三方托管图，所以媒体与预览都只在云上。上云走 `gallery_preprocess.py` + `gallery_deploy_oss.py`，部署前看
   `--dry-run`，视频条的缩略图要 ffmpeg 出首帧（解析链与 `fill_prompt_covers.ffmpeg_exe` 同一道：PATH →
   imageio-ffmpeg）；`--build` 才产文件，同名旁车不重写，`--overwrite` 是唯一重写旁车的开关。逐条来源记在

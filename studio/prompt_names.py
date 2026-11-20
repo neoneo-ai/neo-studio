@@ -37,6 +37,9 @@ KIND_SPLIT_FILE = os.path.join(CUSTOM_DIR, "_kind_split.json")
 # 预设池是代码目录、出厂只读，用户封面不往代码目录里写，presets 侧因此永远没有封面。
 COVER_SUFFIX = ".jpg"
 COVER_MAX_SIDE = 512
+# 封面旁边那条小指针 `<扫描名>.cover.json`：记这张封面是从素材库哪条产物缩出来的。封面的 JPEG 认不出
+# 自己的来路，视频池的卡片要自动播本地那条成片时，只有这一发说得出「就是这条播出来的那一条」。
+COVER_SOURCE_SUFFIX = ".cover.json"
 # 卡片上的正文摘要位：一条只读正文开头那一段、压成一行，一次最多铺一页的条数（见提示词库页的分页）。
 # 整篇正文不在列表里读——列表扫的是目录，摘要只按名字开那一页的文件，SMB 上不会为一页扫整棵树。
 PREVIEW_CHARS = 220
@@ -104,7 +107,9 @@ def scan_prompts(source: str) -> list:
     prompts: list = []
 
     def walk(dir_path: str, prefix: str) -> None:
-        for entry in sorted(os.listdir(dir_path)):
+        entries = sorted(os.listdir(dir_path))
+        present = set(entries)   # 指针在同一次目录列表里认，不逐条 stat：SMB 上一次列表就是一趟往返
+        for entry in entries:
             full_path = os.path.join(dir_path, entry)
             if os.path.isdir(full_path):
                 walk(full_path, f"{prefix}{entry}/" if prefix else f"{entry}/")
@@ -120,6 +125,11 @@ def scan_prompts(source: str) -> list:
                 cover = full_path[:-4] + COVER_SUFFIX
                 if os.path.isfile(cover):
                     item["cover"] = int(os.path.getmtime(cover))  # 卡片上的 URL 带这一位换缓存
+                    pointer = full_path[:-4] + COVER_SOURCE_SUFFIX
+                    if os.path.basename(pointer) in present:
+                        media = _read_cover_source(pointer)
+                        if media:
+                            item["cover_media"] = media
                 prompts.append(item)
 
     walk(base_dir, "")
@@ -286,6 +296,46 @@ def prompt_cover_target(name: str) -> str | None:
     if txt is None or not _inside_custom(txt):
         return None
     return txt[:-4] + COVER_SUFFIX
+
+
+def write_cover_source(cover_path: str, filename: str, subfolder: str, kind: str,
+                       size: tuple[int, int] | None = None) -> None:
+    """把封面的来路落在它旁边那条指针里：视频池的卡片自动播的就是这条成片（见 scan_prompts 的 cover_media）。
+
+    写指针只跟着「设封面」那一发；写坏了不影响封面本身，卡片落一张静封面，预览位空着。
+    size 是封面 JPEG 自己的像素尺寸，记成 w/h：瀑布流的卡片落位就要定高，等画面到位再量比例
+    会让整页重排一次；量不到就不写这一发，卡片退回探测。
+    """
+    row = {"filename": filename, "subfolder": subfolder, "kind": kind}
+    if size and size[0] > 0 and size[1] > 0:
+        row["w"], row["h"] = int(size[0]), int(size[1])
+    try:
+        with open(cover_path[:-4] + COVER_SOURCE_SUFFIX, "w", encoding="utf-8") as f:
+            json.dump(row, f, ensure_ascii=False)
+    except OSError as e:
+        logger.warning(f"Cannot write cover source for {cover_path}: {e}")
+
+
+def _read_cover_source(pointer: str) -> dict | None:
+    """读那条指针：文件缺失、被外部编辑器写坏、没有 filename 都给 None（卡片落一张静封面）"""
+    try:
+        with open(pointer, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception as e:
+        logger.warning(f"Error loading cover source {pointer}: {e}")
+        return None
+    if not isinstance(data, dict) or not data.get("filename"):
+        return None
+    media = {
+        "filename": str(data["filename"]),
+        "subfolder": str(data.get("subfolder") or ""),
+        "kind": data.get("kind") if data.get("kind") in ("image", "video") else "image",
+    }
+    # 这条指针记尺寸的写法之前写的封面没有这一发：读不出就不带，卡片退回探测那张封面
+    w, h = data.get("w"), data.get("h")
+    if isinstance(w, int) and isinstance(h, int) and w > 0 and h > 0:
+        media["w"], media["h"] = w, h
+    return media
 
 
 def read_prompt_text(name: str) -> str | None:

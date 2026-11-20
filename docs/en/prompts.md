@@ -389,22 +389,33 @@ Good for keyboard-only skill switching: type `/` plus a name fragment, arrow to 
 Prompts live in exactly two places: the shipped presets `prompts/presets/*.txt` (a code directory,
 read-only) and the user's own `prompts/custom/**/*.txt` (the `video/` tree is the video pool, the root
 layer is the image pool). The 「提示词库」 card in the Studio home 「Assets & Setup」 section opens
-`#/prompts`: one card per prompt carrying its cover, its body preview (the batch `POST /rs_prompts/prompt_previews`
-answers per page) and tag chips, with the origin and "fill the paint page /
-fill the video page / copy / set as cover / delete" on the card's bottom row; search and the image/video and origin
-filters sit on top, 24 cards per page with a page bar at the bottom. Card layout, how a cover gets set, and the offline window's behavior: [studio-prompts.md](studio-prompts.md).
+`#/prompts`: one card per prompt in a waterfall (a fixed 230 px column, each card into the shortest column), its top
+band a media tile spanning the card's full width with its height from the picture's orientation (a landscape crops to
+3/4 of it, a portrait runs full width up to twice it; the cover or the cloud image, a prompt with no picture takes a
+text tile), then its body preview (the batch `POST /rs_prompts/prompt_previews`
+answers per screen) and tag chips, with the origin and "fill the paint page /
+fill the video page / copy / set as cover / delete" on the card's bottom row; search and the image/video, origin,
+sort and tag filters sit on top, 24 cards per screen with the next screen appended on scroll. Card layout, how a cover gets set, and the offline window's behavior: [studio-prompts.md](studio-prompts.md).
 
 - **A cover is a sidecar**: `prompts/custom/<scan name>.jpg`, written as a 512 px longest-side JPEG
   (first frame for video). It is only written when the user names that one prompt in "set as cover" —
   nothing generates covers automatically.
+- **A pointer sits beside it**: `prompts/custom/<scan name>.cover.json` records which output that cover came out of
+  (`filename` / `subfolder` / `kind`, plus the cover's own pixel size `w` / `h`), written by the "set as cover" press
+  and the cover backfill script only. `list_prompts` gives such an entry a `cover_media` key, which is the only thing
+  a card can autoplay from, in the image pool exactly as in the video pool, and the waterfall sizes its band from
+  `w` / `h` the moment the card lands (a
+  pointer written before sizes were recorded has neither and the card falls back to probing that cover); a pointer
+  that cannot be read leaves the card on a still cover.
 - **Presets have no covers**: the preset tree is a code directory, so the UI ships no "set as cover /
   delete" on those cards and the backend refuses the write (403).
 - **Two endpoints**: `GET /rs_prompts/prompt_cover?name=&v=` answers that JPEG directly (`v=` is the cover mtime
-  the list entry carries, cached for a year), `POST /rs_prompts/set_prompt_cover` writes the sidecar. The read
+  the list entry carries, cached for a year), `POST /rs_prompts/set_prompt_cover` writes the sidecar and the pointer
+  beside it. The read
   side is in the desktop capability table, so an offline window shows covers too; the write side belongs to the
   kernel and is gated by `prompt_library_write`.
-- **Deleting the text deletes the cover**: `POST /rs_prompts/delete_prompt` removes the `.jpg` next to it, so the
-  prompt tree never keeps a cover without a prompt.
+- **Deleting the text deletes the cover and the pointer**: `POST /rs_prompts/delete_prompt` removes the `.jpg` and the
+  `.cover.json` next to it, so the prompt tree never keeps a cover without a prompt, nor a pointer aimed at a gone cover.
 - **The preset picker knows covers too**: in the "prompts" dropdown on the paint, video and generation panels,
   an entry with a cover takes a 32 px thumbnail slot; an entry without one takes no slot, so the row height and
   density stay the same.

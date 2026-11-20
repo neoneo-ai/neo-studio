@@ -90,6 +90,12 @@ never touch the real data under `Neo-Studio/data/` or the plugin directory.
   `/neo_studio/launcher` GET reads the configuration and POST validates before writing (a root without `main.py`
   is refused, an unknown action is refused); the startup-log route `/neo_studio/log` merges the kernel output and the
   desktop's own trace into two blocks (entries carry `src`, drag-step lines stay out of the panel).
+- `studio/tests/test_gallery_oss_mirror.py` — the cloud prompt directory → prompt pool mirror: only directories tagged
+  `prompts` are mirrored, the rows the cloud has and the pools lack land in `presets/<dir>/` (a cover sidecar beside the
+  text, videos under `presets/video/<dir>/`); a card whose name matches no row title pairs with its row on an exact name
+  match or on the shared body prefix, so it is neither pruned nor imported a second time; rows the cloud dropped are
+  pruned only once the directory index is at the master index's current `rev`.
+
 - `studio/tests/test_node_metadata.py` — the node metadata contract: the registry key list, the `NEO_NODES` list in
   `__init__.py` matching the registry, every node having a `web/docs/<node key>.md` help document (the path the
   ComfyUI native "Info" tab fetches), `SEARCH_ALIASES` (lowercase, deduplicated, including Chinese aliases),

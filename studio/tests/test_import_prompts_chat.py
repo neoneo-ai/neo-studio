@@ -45,6 +45,26 @@ def _fake_download(ext):
     return download
 
 
+def _fake_urlopen(body: bytes, headers: dict):
+    """把取媒体打桩成一份报定了长度、只发这么多字节的响应——断流要能在不联网的情况下复现"""
+    class Resp:
+        def __init__(self):
+            self.headers = headers
+            self.left = body
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def read(self, size):
+            chunk, self.left = self.left[:size], self.left[size:]
+            return chunk
+
+    return lambda req, timeout=None: Resp()
+
+
 def test_stem_is_serial_and_spaceless(tmp_path):
     """卡名在云端目录里是扁平的一个文件：标题里的空白按图库预设那一份口径去掉"""
     plan = _plan(_row(title="Photorealistic Selfie Portrait 🎨"))
@@ -72,6 +92,22 @@ def test_media_ext_prefers_url_suffix_then_content_type():
     assert ic._media_ext("https://cdn1.wiro.ai/9f21c0", "image/jpeg") == ".jpg"
     assert ic._media_ext("https://cdn1.wiro.ai/9f21c0", "video/mp4") == ".mp4"
     assert ic._media_ext("https://cdn1.wiro.ai/9f21c0", "application/octet-stream") == ""
+
+
+def test_download_drops_a_media_shorter_than_its_declared_length(tmp_path, monkeypatch):
+    """断流：服务端报了 Content-Length、落地短一截就是半截媒体，上云是一条永远加载不出来的视频"""
+    headers = {"content-type": "video/mp4", "content-length": "400"}
+    monkeypatch.setattr(ic.urllib.request, "urlopen", _fake_urlopen(b"v" * 100, headers))
+    assert ic._download_media("https://x/a.mp4", "01_a", tmp_path) is None
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_download_keeps_a_media_matching_its_declared_length(tmp_path, monkeypatch):
+    headers = {"content-type": "video/mp4", "content-length": "400"}
+    monkeypatch.setattr(ic.urllib.request, "urlopen", _fake_urlopen(b"v" * 400, headers))
+    got = ic._download_media("https://x/a.mp4", "01_a", tmp_path)
+    assert got == tmp_path / "01_a.mp4"
+    assert got.read_bytes() == b"v" * 400
 
 
 def test_preview_is_deterministic_jpeg(tmp_path):
@@ -131,6 +167,27 @@ def test_place_reports_failure_when_no_slot_can_be_written(tmp_path, monkeypatch
     assert list(src.glob("*")) == []
 
 
+def test_a_vote_shift_reuses_the_recorded_stem(tmp_path, monkeypatch):
+    """排名随投票漂：清单记过这条 slug 就认它第一次落的 stem，不在别名下水第二张卡"""
+    page = {"prompts": [_row(title="Heart Illustration", slug="heart-illustration",
+                             mediaUrl="https://x/a.mp4")], "totalPages": 1}
+    monkeypatch.setattr(ic, "fetch_page", lambda type_, page_no, tag=None: page)
+    monkeypatch.setattr(ic, "_download_media", _fake_download(".mp4"))
+    out = tmp_path / "pack"
+    src = out / ic.DIR_NAME
+    src.mkdir(parents=True)
+    (src / "05_HeartIllustration.txt").write_text("标题：Heart Illustration\n提示词：old\n",
+                                                  encoding="utf-8")
+    ic._write_manifest(out, [{"stem": "05_HeartIllustration", "slug": "heart-illustration",
+                              "title": "Heart Illustration"}])
+    monkeypatch.setattr(sys, "argv", ["prog", "--type", "VIDEO", "--top", "1",
+                                      "--build", "--out", str(out)])
+    assert ic.main() == 0
+    assert [p.name for p in sorted(src.iterdir())] == ["05_HeartIllustration.txt"]
+    doc = json.loads((out / "prompts.chat.manifest.json").read_text(encoding="utf-8"))
+    assert [row["stem"] for row in doc["entries"]] == ["05_HeartIllustration"]
+
+
 def test_manifest_sits_outside_the_upload_dir(tmp_path):
     """上云那一步把 --source 里每个文件都当对象上传：清单混进产物目录就是云上多出的一份文件"""
     out = tmp_path / "pack"
@@ -174,6 +231,22 @@ def test_build_lands_in_the_build_dir_only(tmp_path, monkeypatch):
         assert (src / (stem + ".jpg")).is_file()
     assert not (PRESETS / ic.DIR_NAME).exists()
     assert not (PRESETS / "video" / ic.DIR_NAME).exists()
+
+
+def test_skip_preview_drops_a_card_with_no_example_output(tmp_path, monkeypatch):
+    """那张纯文字排版预览不是任何真实产物：--skip-preview 下没有示例产物的整条不落地，旁车与清单都不记"""
+    page = {"prompts": [_row(title="写实人像", slug="x2", mediaUrl="https://x/b.jpg"), _row()],
+            "totalPages": 1}
+    monkeypatch.setattr(ic, "fetch_page", lambda type_, page_no, tag=None: page)
+    monkeypatch.setattr(ic, "_download_media", _fake_download(".jpg"))
+    out = tmp_path / "pack"
+    monkeypatch.setattr(sys, "argv", ["prog", "--type", "IMAGE", "--top", "2",
+                                      "--build", "--skip-preview", "--out", str(out)])
+    assert ic.main() == 0
+    src = out / ic.DIR_NAME
+    assert sorted(p.name for p in src.iterdir()) == ["01_写实人像.jpg", "01_写实人像.txt"]
+    doc = json.loads((out / "prompts.chat.manifest.json").read_text(encoding="utf-8"))
+    assert [e["stem"] for e in doc["entries"]] == ["01_写实人像"]
 
 
 def test_empty_candidates_reports_and_exits_nonzero(tmp_path, monkeypatch):

@@ -162,6 +162,68 @@ class PromptCoverTests(unittest.TestCase):
         self.assertGreater(rows["红杯"]["cover"], 0)
         self.assertNotIn("cover", rows["无封面"])
 
+    def test_cover_source_pointer_lands_next_to_cover(self):
+        """封面的来路记在它旁边那条指针里：视频池的卡片自动播认的就是这一发指的产物"""
+        self.write_prompt("红杯")
+        self.write_output_image("NeoStudio/shot.png")
+        self.assertEqual(self.set_cover("红杯", "shot.png", subfolder="NeoStudio").status, 200)
+        pointer = self.cover_path("红杯")[:-4] + names_mod.COVER_SOURCE_SUFFIX
+        with open(pointer, encoding="utf-8") as f:
+            row = json.load(f)
+        self.assertEqual({key: row[key] for key in ("filename", "subfolder", "kind")},
+                         {"filename": "shot.png", "subfolder": "NeoStudio", "kind": "image"})
+        from PIL import Image
+        with Image.open(self.cover_path("红杯")) as img:
+            self.assertEqual((row["w"], row["h"]), img.size,
+                             "指针记的就是封面自己那一张的像素尺寸：卡片落位即按它定高")
+
+    def test_pointer_written_before_size_still_reads(self):
+        """记尺寸这写法之前写的指针：只有来路三个字段，读侧照出，条目不带 w/h（卡片退回探测那张封面）"""
+        self.write_prompt("红杯")
+        self.write_output_image()
+        self.set_cover("红杯", "shot.png")
+        pointer = self.cover_path("红杯")[:-4] + names_mod.COVER_SOURCE_SUFFIX
+        with open(pointer, "w", encoding="utf-8") as f:
+            json.dump({"filename": "shot.png", "subfolder": "", "kind": "image"}, f)
+        rows = {r["name"]: r for r in names_mod.scan_prompts("custom")}
+        self.assertEqual(rows["红杯"]["cover_media"],
+                         {"filename": "shot.png", "subfolder": "", "kind": "image"})
+
+    def test_scan_exposes_cover_media_for_card_preview(self):
+        """列表带出指针：前端只有这一发认得出「这张封面是这条产物播出来的」，卡片并按记下的尺寸定高"""
+        self.write_prompt("video/镜头")
+        self.write_prompt("无封面")
+        self.write_output_image("out/frame.png")
+        self.set_cover("video/镜头", "frame.png", subfolder="out")
+        rows = {r["name"]: r for r in names_mod.scan_prompts("custom")}
+        media = rows["video/镜头"]["cover_media"]
+        self.assertEqual({key: media[key] for key in ("filename", "subfolder", "kind")},
+                         {"filename": "frame.png", "subfolder": "out", "kind": "image"})
+        self.assertEqual((media["w"], media["h"]), (512, 341), "900×600 缩到 512 长边就是这一档")
+        self.assertNotIn("cover_media", rows["无封面"], "没有封面的条连这一位都不带")
+
+    def test_pointer_records_video_kind_of_the_source(self):
+        """指针认得源是视频（后缀表在 gallery 那一层，惰性取）：卡片的视频位只播 kind 是 video 的那一发"""
+        self.write_prompt("video/镜头")
+        cover = self.cover_path("video/镜头")
+        os.makedirs(os.path.dirname(cover), exist_ok=True)
+        with open(cover, "wb") as f:
+            f.write(b"\xff\xd8placeholderjpeg")
+        prompts_mod._record_cover_source(cover, "镜头推进.mp4", "out")
+        rows = {r["name"]: r for r in names_mod.scan_prompts("custom")}
+        self.assertEqual(rows["video/镜头"]["cover_media"]["kind"], "video")
+
+    def test_broken_pointer_leaves_the_card_a_still_cover(self):
+        """指针被外部编辑器写坏：封面照出，预览位空着，不给卡片一条必败的视频地址"""
+        self.write_prompt("红杯")
+        self.write_output_image()
+        self.set_cover("红杯", "shot.png")
+        with open(self.cover_path("红杯")[:-4] + names_mod.COVER_SOURCE_SUFFIX, "w", encoding="utf-8") as f:
+            f.write("{不是 JSON")
+        rows = {r["name"]: r for r in names_mod.scan_prompts("custom")}
+        self.assertGreater(rows["红杯"]["cover"], 0)
+        self.assertNotIn("cover_media", rows["红杯"])
+
     def test_cover_in_video_subdir_pool(self):
         """视频池的提示词一样有封面：sidecar 跟着正文落在 video/ 里"""
         self.write_prompt("video/镜头")
@@ -208,6 +270,8 @@ class PromptCoverTests(unittest.TestCase):
         self.assertEqual(_run(prompts_mod.rs_prompts_delete_prompt(_Request({"name": "红杯"}))).status, 200)
         self.assertFalse(os.path.isfile(os.path.join(names_mod.CUSTOM_DIR, "红杯.txt")))
         self.assertFalse(os.path.isfile(self.cover_path("红杯")))
+        self.assertFalse(os.path.isfile(self.cover_path("红杯")[:-4] + names_mod.COVER_SOURCE_SUFFIX),
+                         "那条指针跟着封面一起清，不留一条指向空封面的记录")
 
     def test_cover_route_serves_jpeg_with_revalidating_cache(self):
         self.write_prompt("红杯")

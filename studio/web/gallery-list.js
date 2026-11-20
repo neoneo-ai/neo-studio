@@ -199,6 +199,7 @@ export class GalleryList {
             className: "neo-gallery-kind-chip" + (active ? "" : " active"),
             textContent: t("全部"),
             title: t("回到目录卡首页"),
+            "aria-pressed": String(!active),
             onclick: () => gallery.showCategoryCards()
         }));
         for (const filter of usable) {
@@ -207,6 +208,7 @@ export class GalleryList {
                 className: "neo-gallery-kind-chip" + (active === filter.key ? " active" : ""),
                 textContent: `${label} ${counts[filter.key]}`,
                 title: tf("{label}：全库这一类的条数，点开只看这一类", { label }),
+                "aria-pressed": String(active === filter.key),
                 onclick: () => gallery.showKindView(filter.key)
             }));
         }

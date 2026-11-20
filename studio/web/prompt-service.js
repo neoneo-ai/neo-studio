@@ -335,6 +335,31 @@ export function cloudPreviewUrl(media) {
 }
 
 /**
+ * 云端预设那条视频的本体地址：同一条视频路由去掉 `preview=1` 就是原片，服务端走
+ * `gallery/oss_cache/` 那份整片缓存，与卡片预览互不占用（灯箱那一份口径见素材页的 _lightboxVideoUrl）。
+ * 卡片那一格要的是 480p 静音预览，灯箱里要的是这一发。
+ */
+export function cloudMediaUrl(media) {
+    const q = `filename=${encodeURIComponent(String(media?.filename || ""))}`
+        + `&subfolder=${encodeURIComponent(String(media?.subfolder || ""))}`;
+    return `${window.location.protocol}//${window.location.host}/neo_gallery/video?${q}`;
+}
+
+/**
+ * 图像本体的地址（灯箱那一份）：与素材页灯箱同一个口径走 `/neo_gallery/image`。
+ * 卡片那一格不能用它 —— 云端目录那条在缩略图路由上是直接回发布时预生成的那张小图（不缩放，
+ * 实测 181x320），放大进灯箱就是糊的；这一发由服务端把目录里那份整图取回本地缓存再回文件。
+ * 云端目录（`Cloud Presets/<目录>`）与封面指针那条本地产物根（`Output/<子目录>`）这条路由都认，
+ * 桌面端离线能力表内。
+ */
+export function galleryImageUrl(media) {
+    // 编码口径与素材库那几处媒体地址一致：encodeURIComponent 的空格是 %20，aiohttp 不把 + 解成空格
+    const q = `filename=${encodeURIComponent(String(media?.filename || ""))}`
+        + `&subfolder=${encodeURIComponent(String(media?.subfolder || ""))}`;
+    return `${window.location.protocol}//${window.location.host}/neo_gallery/image?${q}`;
+}
+
+/**
  * 云端媒体在卡片上的地址（图像媒体的图位与目录封面同一发）：索引里的 thumbnail 是远端相对路径，
  * 浏览器要的地址走素材库那条缩略图代理，第一次取就把它落进 `gallery/oss_cache/thumbnails/`；
  * 离线窗口里这一发 409，卡片不铺图位。
@@ -346,6 +371,48 @@ export function cloudDirCoverUrl(cover) {
         size: "512",
     });
     return `${window.location.protocol}//${window.location.host}/neo_gallery/thumbnail?${q.toString()}`;
+}
+
+/**
+ * 强制重拉云端预设索引：主索引按配置的 sync_interval_hours（缺省 24 小时）缓存在进程里，逐目录索引按
+ * 主索引的 rev 缓存在 gallery/oss_cache/ 下 —— 提示词库的云端配对与卡片预览只读磁盘上那份目录索引缓存，
+ * 不发这一发就停在旧那一叠上。带 prompts 标签的云端目录同一发镜像进提示词池——池子那批 .txt
+ * 才是提示词库的卡片单位，云端新发的条要落进池子、云端删掉的条要从池子里收掉才看得见数量变了。
+ * 这一发在桌面端离线能力表内（app/studio_caps.py 的 _GALLERY），内核没跑也答得出。
+ * @returns {Promise<{ok: boolean, directories?: number, items?: number, refreshed?: number,
+ *                    imported?: number, pruned?: number,
+ *                    reason?: string, message?: string}>} reason 是机器可读原因：
+ *          not_configured（这一页没有云端预设可刷）/ offline（要内核）/ network
+ */
+export async function syncCloudIndex() {
+    try {
+        const res = await fetch("/neo_gallery/sync_oss", { method: "POST" });
+        const data = await res.json().catch(() => ({}));
+        if (data?.success) {
+            const mirror = data.mirror || {};
+            return {
+                ok: true, directories: data.directories, items: data.items, refreshed: data.refreshed,
+                imported: Number(mirror.imported) || 0, pruned: Number(mirror.pruned) || 0,
+            };
+        }
+        // 桌面端代理把「内核缺席」答成 {offline:true}：界面要说这一发要 ComfyUI 运行，不是报刷失败
+        if (data?.offline) return { ok: false, reason: "offline", message: String(data.error || "") };
+        return { ok: false, reason: String(data?.reason || ""), message: String(data?.error || `HTTP ${res.status}`) };
+    } catch (e) {
+        return { ok: false, reason: "network", message: String(e?.message || e) };
+    }
+}
+
+/**
+ * 自定义那条封面的本地成片地址：list_prompts 的 cover_media（封面旁边那条指针）指的
+ * 就是素材库里那条产物，走素材库那条视频代理 —— 与素材方块 / 素材库播放同一个口径，
+ * 这条路由在桌面端离线能力表内。指针缺失由卡片自己判，这里不发预览位。
+ */
+export function coverMediaSrc(media) {
+    // 编码口径与素材库那几处媒体地址一致：encodeURIComponent 的空格是 %20，aiohttp 不把 + 解成空格
+    const q = `filename=${encodeURIComponent(String(media?.filename || ""))}`
+        + `&subfolder=${encodeURIComponent(String(media?.subfolder || ""))}`;
+    return `${window.location.protocol}//${window.location.host}/neo_gallery/video?${q}`;
 }
 
 /**

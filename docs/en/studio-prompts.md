@@ -3,36 +3,92 @@
 The 「提示词库」 card in the Studio home 「Assets & Setup」 section opens `#/prompts`
 (`studio/web/prompt-library/prompt-library.js`). The header has no tab for it: that home card is the only
 way in, and removing the card from the home layout (adding it back in "add card") removes access to the page.
-One prompt per card: its image when it has one — the cover sidecar next to the text wins, and a shipped preset with no
-sidecar takes its cloud directory's cover — then the prompt's own body preview and tag chips, with the
-origin and the actions on the card's bottom row. The grid shows 24 cards per page and the page bar stays
-pinned to the bottom of the page.
+One prompt per card, the cards laid out as a waterfall (the same column packing the asset library uses,
+`studio/web/gallery-masonry.js`). The top band is a media tile that spans the card's full width and takes its height
+from the picture's orientation — a landscape crops to 3/4 of the card width, a portrait runs full width up to twice
+it; its image when it has one — the cover sidecar next to the text wins, and a shipped preset with no sidecar takes
+its cloud directory's cover. A card with no picture has the title row as its first row, with the body preview in a
+text tile under it instead of a fake thumbnail. Under the band sit the name and the tag chips, with the origin
+and the actions on the card's bottom
+row. A card with a picture opens the asset library's lightbox (`studio/web/lightbox.js`) when it is clicked. The grid
+shows 24 cards per screen and the next screen is appended when the list is scrolled to its end.
 
 ## What the page looks like
 
-1. **Title row and filter row**: the title row carries the page name, the entry count and reload; the filter
+1. **Title row and filter row**: the title row carries the page name, the entry count and 「刷新」 (Refresh) — that button
+   force-refetches the whole cloud preset index (the master index plus every directory index: the cloud card image and
+   preview pairing on this page reads only the per-directory cache under `gallery/oss_cache/`, and the master index is
+   cached in-process for 24 hours), then reloads the list. Every cloud directory tagged `prompts` is a mirror source
+   for the prompt pools: the rows the cloud has and the pools do not land in `presets/<dir>/` and
+   `presets/video/<dir>/` (each with a cover sidecar beside its text — the card's media tile and the video
+   preview both start from that file), and the rows the cloud dropped are pruned from both (nothing is pruned while a
+   directory index is not at the master index's current `rev`, so an offline click never empties the pool); the toast
+   reports the imported and pruned counts. When no cloud presets are configured, or the kernel is not
+   running, it says which of the two it is and the local list reloads anyway. The filter
    row carries the search box (matches the full scan name, directory segment included, plus tags), the image/video pool filter
    (`All / Image / Video`; the pool comes from the scan name's first segment, the same rule the prompt picker
-   uses) and the origin filter (`All origins / Presets / Custom`) — both chip groups follow the asset library's
-   type-chip style: a transparent pill with a light border, 11px text, the accent-orange border on hover and a solid
-   accent-orange fill when selected. Sorting is fixed to "newest first", using the file time each list entry carries.
-2. **Card**: the image band takes one picture in the order "cloud image media → cover sidecar → cloud directory
-   cover" — the media and the directory cover both come from `cloudDirCoverUrl` (the thumbnail proxy), the sidecar
-   from `promptCoverUrl(name, v)` where `v` is exactly its mtime on the entry, and every `<img>` is `loading="lazy"`;
-   a video-pool card paired with its cloud media plays the 480p silent preview in this band instead — see
-   "The cloud preview" and "The cloud directory cover". Then the title row (the name alone, without its directory
+   uses), the origin filter (`All origins / Presets / Custom`), the sort filter (`Newest / Oldest / Name` — newest and
+   oldest use the file time each list entry carries, name uses the display name without its directory segment) and the
+   tag filter (its vocabulary is the tags of this loaded list ranked by how often each appears, at most 14 chips with
+   "All tags" first; the row is skipped when the vocabulary holds fewer than two tags, since one chip filters nothing)
+   — every chip group follows the asset library's type-chip style: a transparent pill with a light border, 11px text,
+   the accent-orange border on hover and a solid accent-orange fill when selected. Trending, author and like controls, as
+   [prompts.chat](https://prompts.chat/prompts) ships them, live on cloud data; these entries carry only a file time and
+   tags, so a control with no data behind it is not shipped.
+2. **Card**: the column width is fixed at 230px and the column count follows the page width; cards of unequal height are
+   packed by `gallery-masonry.js`, each into whichever column is shortest right now (the asset library's packing).
+   The media band spans the full card width, and it takes its picture in the order
+   "cloud image media → cover sidecar → cloud directory cover" — the media and the directory cover both come from
+   `cloudDirCoverUrl` (the thumbnail proxy), the sidecar from `promptCoverUrl(name, v)` where `v` is exactly its mtime
+   on the entry, and every `<img>` is `loading="lazy"`; with none of the three the title row is the card's first row and
+   the body-preview block fills the text tile under it, so no empty slot is left. The band's height follows the
+   size first comes from the `w` / `h` the cover write recorded in the pointer (the card lands at its final height, so
+   the packing never re-runs once the pictures arrive), and only a cloud media row or a factory directory cover, which
+   carry no such record, falls back to probing: the image reports it on `load`, the video on `loadedmetadata`, and a
+   preview band probes its own `poster` first (the poster is that card's cover, so its ratio is the film's — waiting
+   for metadata would land a portrait card at 4:3 and re-pack on every card's first frame) — a landscape crops to 3/4
+   of the card width, a portrait runs full width up to twice it, and the packing re-runs as cards grow. Both autoplay
+   chains count — a card paired with its cloud media plays the 480p silent preview
+   (see "The cloud preview"; the video pool only), and a custom card with a cover pointer plays that local output
+   (see "The local cover video"; the image and the video pool both count — the pointer is what records where this
+   cover came from); the cover is the
+   `poster` of both, and the band carries a play badge. Then the title row (the name alone, without its directory
    segment — the pool chips sit on top of this page, so repeating the directory in the title buys nothing; the full scan
    name lives in the card's hover title, and search keeps matching the full name with that segment, plus two badges:
-   preset / custom, image / video); the body-preview block (the first 220 characters of that prompt
-   collapsed onto one line, monospace on a raised fill — when it cannot be read the block collapses entirely and
-   the card never says "read failed"); up to three tag chips; and the bottom row (origin and "how long ago" on
-   the left, the actions on the right).
-3. **Pagination**: 24 cards per page, the page bar pinned to the bottom of the page — the edge arrows honour the
-   bounds and "第 N / M 页" is the readout. Body previews go out once per page as
+   preset / custom, image / video — on a card with no picture this row is the card's first row and the pool label
+   appears in those two badges only); the body-preview block (the first 220 characters of that prompt
+   collapsed onto one line, monospace on a raised fill, at most three lines — when it cannot be read the block collapses
+   entirely and the card never says "read failed"); up to three tag chips; and the bottom row (origin and "how long ago"
+   on the left, the actions on the right). Hover pushes the border to the accent orange and zooms the picture by 1.05,
+   and a system asking to "reduce motion" drops that whole layer.
+   A card with a picture opens the asset library's lightbox (`studio/web/lightbox.js`), and what it opens is the full
+   file behind the tile, never the tile itself: an image card paired with cloud image media enlarges the image that
+   cloud directory published (`GET /neo_gallery/image?filename=&subfolder=` — the card tile shows a 512 px thumbnail of
+   the same file, and on a cloud directory the thumbnail route hands back the small cover the publisher generated,
+   which blurs once enlarged), an image card whose cover pointer names an image enlarges that output, and one with
+   nothing but a sidecar cover enlarges the sidecar. A video card plays the original video — a cloud preset its own
+   file on the same video route with the
+   `preview=1` flag dropped, a custom prompt the local output its cover pointer names — with playback controls and
+   its sound, while the card tile keeps the published 480p muted preview and asks for the file only in view. The
+   cursor on such a card is the zoom one; ←/→ pages only the cards the current filter shows with a picture, and a
+   text tile has nothing to show, so clicking it opens nothing. The lightbox panel is that prompt's tags plus its
+   full text (read through `POST /rs_prompts/load_prompt`; with nothing readable it lays out the tags alone, and an
+   empty body takes no slot), and its toolbar carries the card's own actions, pool included.
+
+3. **Scroll loading**: 24 cards per screen; the bottom row (`.ns-pl-more`) is watched by an IntersectionObserver on
+   this page's own scroll container, and entering its view appends the next screen until every match is on the grid,
+   where the row reads "All {n} loaded". There is no page bar. Until the list arrives the grid shows 24 skeleton cards (card-shaped
+   placeholders with a shimmer, so the packing has a screen shape to show; a system asking to "reduce motion" drops the
+   shimmer), and they are replaced wholesale once the list lands. Search and every filter chip rebuild the first screen
+   and pull this page's scroll position back to the top, so a viewport scrolled into the old stack never sits in the gap
+   of the new one.
+   Body previews go out per screen as
    `POST /rs_prompts/prompt_previews`, at most 32 names per call, cached per page under "scan name + file time"
    and refetched only when reloading the list changes that file time.
-4. **Card actions**: "fill the paint page", "fill the video page", "copy", "set as cover", "delete". Preset cards
-   only carry the first three — the preset tree is a code directory, so the UI never ships a button that must fail.
+4. **Card actions**: the fill button follows the pool — a video-pool prompt carries only 「填入视频页」
+   ("fill the video page") and an image-pool prompt only 「填入绘画页」 ("fill the paint page"), so a card never
+   ships a button it has no use for; then "copy", "set as cover" and "delete". Preset cards
+   only carry the fill button and "copy" — the preset tree is a code directory, so the UI never ships a button that must fail.
 5. **Filling a page**: the full text is read by scan name first (`POST /rs_prompts/load_prompt`), then handed to
    the assembly layer's existing chain `applyToPage(mode, text)` — `paint` switches to the paint page and fills its
    prompt box, `video` goes through the video page's reuse fill; it is the same landing the enhance page uses for
@@ -40,7 +96,8 @@ pinned to the bottom of the page.
 6. **Set as cover**: opens the host's asset pick modal (one pick and it closes) with the asset search box prefilled
    with this prompt's first text line — the sidecar's first line is the prompt that generated the asset, so the modal
    lands on the outputs made with it, and clearing that box is what browses everything. Which kind it accepts follows
-   the current pool — the image pool takes images, the video pool takes videos (the backend takes the first frame).
+   the filter chip — "Image" takes images, "Video" takes videos (the backend takes the first frame), and "All" takes
+   both, so a prompt of the image pool can pin an output as its cover and the card plays it.
    The pick is sent as `{name, filename, subfolder}` to `POST /rs_prompts/set_prompt_cover`; on success the list
    reloads, so the card and its new cover swap together. When the text cannot be read the modal never opens and the
    toast says "Failed to set the cover".
@@ -66,8 +123,15 @@ pinned to the bottom of the page.
   stays blank forever. A name with no cover is 404 and the card carries no image band — name and body preview only.
   When the image fails to load the card retries once under a new cache key (a fresh query parameter forces a real
   request), and when that fails too the band is dropped, leaving a 150px empty block out of the card.
-- Deleting the text deletes its cover (`delete_prompt` clears the `.jpg` in the same pass), so the prompt tree never
-  keeps a cover without a prompt.
+- A pointer sits next to the cover: `<scan name>.cover.json` (`filename` / `subfolder` / `kind`, plus the cover's own
+  pixel size `w` / `h`). Only the "set as cover" press and the cover backfill script write it, and `list_prompts`
+  gives such an entry a `cover_media` key from it — that is the only thing telling a card "this cover was
+  played out of that output", and it is what lets a waterfall card take its final height the moment it lands. A
+  pointer written before sizes were recorded reads without `w` / `h` and the card falls back to probing that cover.
+  A pointer that cannot be read (broken by an external editor, no `filename`) leaves the key off the entry and the
+  card on a still cover.
+- Deleting the text deletes its cover and that pointer (`delete_prompt` clears them in the same pass), so the prompt
+  tree never keeps a cover without a prompt, nor a pointer aimed at a cover that is gone.
 
 ## The cloud preview
 
@@ -85,6 +149,10 @@ pinned to the bottom of the page.
   directory cover (`dir_cover`). Image media shows the real cloud image through the 512 px thumbnail proxy, so the
   typeset placeholder sidecar in the pool gives way; a paired video still plays the 480p preview with the sidecar
   as its poster.
+- The lightbox takes the full file of that same origin, not the tile's copy: image media through
+  `GET /neo_gallery/image?filename=&subfolder=` (the route the material page lightbox uses), a cover pointer naming an
+  image through that output, and a directory cover only when it is an image — a video directory's cover is a frame the
+  index already stores small, so there is no full image behind it.
 - The preview band takes only that entry's cover sidecar as its `poster`: an entry carrying just the cloud directory
   cover (`dir_cover`) shows that cover as the card image and plays no preview.
 - The URL is `GET /neo_gallery/video?filename=&subfolder=&preview=1`: the preview downloads from
@@ -93,6 +161,31 @@ pinned to the bottom of the page.
   `oss_cache/<dir>/`, and the material page lightbox keeps playing the original.
 - In the offline window this request answers 409 and the card stays on its poster; when the system asks to
   "reduce motion" (`prefers-reduced-motion`), no preview video is built at all.
+
+## The local cover video
+
+- An entry that carries `cover_media` whose `kind` is `video` — the pointer beside its cover, holding `filename`,
+  `subfolder` and `kind` — plays that very output in the same band, in the image pool exactly as in the video pool:
+  the pool chip filters the list, it does not decide where a cover came from. The URL is
+  `GET /neo_gallery/video?filename=&subfolder=`, the request without
+  the `preview` flag — the same route the material square and the gallery lightbox use, and it is in the desktop
+  capability table, so an offline window plays it too. The cover is the `poster`, the element is
+  `muted / loop / playsinline / preload="none"`, and the `src` is attached by the same IntersectionObserver only when
+  the card enters the viewport; leaving the viewport pauses it, and the sound stays with the material page's lightbox.
+- A pointer whose `kind` is `image`, an entry with no cover, and a pointer that cannot be
+  read each drop the card to a still cover — no preview element, and no request that can only fail. The cloud preview
+  wins: an entry paired with cloud media keeps playing its 480p preview.
+- The pointer is written by `prompt_names.write_cover_source`: the UI writes it right after `set_prompt_cover` lands
+  the cover (the kind comes from the gallery video suffix list), and the backfill script writes it after `--apply`
+  lands one (the subfolder is computed against the media roots; an output outside every known root leaves it empty and
+  the card stays on a still cover). A prompt that already has a cover, a matching video and no pointer next to it gets
+  just that pointer, with its JPEG untouched — a cover set by an older build starts playing the film it was cut from.
+  `--frame-match` adds a first-frame tier for covers whose text left no trace: each output's first frame is decoded
+  once into a 16×16 luminance vector, and a cover regains its film only when the leading match sits under 0.02 and
+  wins by 4× over the runner-up (frames whose aspect is more than 8% off never enter the ranking). That tier writes
+  the pointer too, never the JPEG.
+  A pointer write that fails never touches the cover — that press already succeeded,
+  and a card on a still cover is cheaper than a half-written "set as cover".
 
 ## The cloud directory cover
 
@@ -116,17 +209,22 @@ script `tools/fill_prompt_covers.py` matches media back onto the prompts — the
 sidecar next to an image and the ComfyUI metadata embedded in an image or video both carry the
 prompt line. The script takes a whole-line match as "this is what generated it" and writes the
 sidecar for every custom prompt left without a cover, on the same rule as above (a JPEG with a
-512px long side, a video gives its first frame). The default is a report; `--apply` is what writes.
-Prompts that already have a cover are left alone and `--overwrite` rewrites them. Image prompts
+512px long side, a video gives its first frame), together with the cover pointer beside it
+(`<scan name>.cover.json`, what the card autoplays that output from). The default is a report; `--apply` is what writes.
+Prompts that already have a cover are left alone and `--overwrite` rewrites them; a prompt that has a cover,
+has no pointer beside it, and matches a video output gets only that pointer filled — the JPEG is never touched,
+so the card drops back from a still cover onto that very output. Image prompts
 take images only, entries under `video/` take videos only, and a body whose first line is too
 short has no discriminating power, so it is skipped. `--loose` also counts "the first line appears
 inside the metadata text" — a multi-segment film stores the whole body, where a whole-line match
-cannot land. The scanned roots are ComfyUI's `output` and the data root's `gallery/custom` by
+cannot land. A body whose first line matches nothing keeps a still cover: the backfill never picks a film
+for the user, so pin that film with "set as cover" in the UI. The scanned roots are ComfyUI's `output` and
+the data root's `gallery/custom` by
 default, with `--output-dir` to add more and `--limit` to try a small batch first.
 
 ```powershell
 python tools/fill_prompt_covers.py                              # report only
-python tools/fill_prompt_covers.py --apply                      # write the missing covers
+python tools/fill_prompt_covers.py --apply                      # write missing covers, fill missing pointers
 python tools/fill_prompt_covers.py "<ComfyUI root>" --loose     # a media root, looser matching
 python tools/fill_prompt_covers.py --apply --loose --limit 20   # a small batch first
 ```
@@ -145,17 +243,19 @@ and writes no file into the code tree: `--build` drops the `IMAGE` / `VIDEO` row
 the same-stem `.txt` sidecar written in the gallery "label: value" layout (the first two lines are the title and the
 body; the card preview reads exactly those, the lightbox reads the full text through `/neo_gallery/txt`).
 
-The media slot is the site's own example output first; a row that will not download, whose type is not recognized, or
-that exceeds 24 MB falls back to a locally typeset preview, and a row with no `mediaUrl` gets a preview for the same
+The media slot is the site's own example output first; a row that will not download, whose type is not recognized, that
+exceeds 24 MB, or that lands shorter than its declared `Content-Length` (a cut-off stream) falls back to a locally typeset
+preview, and a row with no `mediaUrl` gets a preview for the same
 reason — `gallery_preprocess.py` skips entries that are `.txt` only, and a cloud card with no media slot is not a card.
 The preview's base color comes from the title's sha256, a rerun yields the same bytes, and since it is no real output it
-lives on OSS only.
+lives on OSS only. `--skip-preview` makes that a hard gate: a row with no example output is dropped whole — no sidecar,
+no manifest row — because a cloud card must not carry a typeset text block as its media slot.
 
 Uploading runs the same chain as the material presets ([gallery.md](gallery.md)):
 
 ```powershell
-python tools/import_prompts_chat.py --top 20 --pages 2 --build --out tmp\gallery_pack
-python tools/gallery_preprocess.py --presets tmp\gallery_pack --output tmp\gallery_pack --dirs prompts.chat --tag prompts-chat --preview
+python tools/import_prompts_chat.py --top 20 --pages 2 --build --skip-preview --out tmp\gallery_pack
+python tools/gallery_preprocess.py --presets tmp\gallery_pack --output tmp\gallery_pack --dirs prompts.chat --tag prompts --preview
 python tools/gallery_deploy_oss.py --source tmp\gallery_pack --bucket <bucket> --prefix neo/presets/ --endpoint <endpoint>   # check --dry-run first
 ```
 
@@ -166,7 +266,7 @@ then the imageio-ffmpeg binary), and a machine with neither publishes that card 
 that same run to transcode a 480p muted mp4 per video into `previews/prompts.chat/` (crf 30, 700k cap, faststart) and
 writes the item's `preview` key — that is what the prompt-library card autoplays, and when ffmpeg is missing only the
 preview is skipped, the originals still publish. The first
-publication carries `--tag prompts-chat` in that same run — `--tag-dirs` only relabels a directory the live master
+publication carries `--tag prompts` in that same run — `--tag-dirs` only relabels a directory the live master
 index already knows. `gallery_deploy_oss.py` takes its endpoint from `OSS_ENDPOINT`; when that variable holds
 anything else, name `--endpoint https://oss-<region>.aliyuncs.com`, and a `--dry-run` never connects, so it cannot
 catch that.
@@ -179,8 +279,11 @@ read by the plugin as an item of the card.
 On the user side this is one `prompts.chat` cloud preset card in the material gallery: open it, paste the body into the
 generator with "Copy prompt" ([gallery.md](gallery.md)).
 
-Boundaries: `--build` is what writes files, an existing sidecar is left alone, and `--overwrite` is the only switch that
-rewrites one; `--type IMAGE` and `--type VIDEO` run separately and the serial follows the ranking. The cases live in
+Boundaries: `--build` is what writes files, an existing sidecar is left alone, `--overwrite` is the only switch that
+rewrites one, and `--skip-preview` drops a row that has no example output; `--type IMAGE` and `--type VIDEO` run
+separately and the serial follows the ranking — the ranking moves when
+votes move, so a slug the manifest already records keeps the stem it first landed on, and re-issuing it under the drifted
+rank would book the same prompt twice. The cases live in
 `studio/tests/test_import_prompts_chat.py` against stand-ins for the endpoint and for the media download — running them
 issues no network request.
 
@@ -201,9 +304,12 @@ go to the run gate and pressing one starts the kernel instead of firing a reques
   `studio/skill.py`) accepts the same name — `studio/tests/js/app-registry.test.mjs` pins those places onto one table.
 - Styles: `studio/web/prompt-library/prompt-library.css`, colors taken only from the `--ns-*` variables in
   `studio/style.css`.
-- Cases: `studio/tests/js/prompt-library.test.mjs` (cards and covers, body previews, pagination, filters, filling a
-  page, setting a cover, two-press delete, the offline state), `studio/tests/js/preset-picker.test.mjs` (the
-  picker's thumbnail slot), `studio/tests/test_prompt_covers.py` (sidecar write / read / delete, 403 on presets,
+- Cases: `studio/tests/js/prompt-library.test.mjs` (cards and covers, body previews, scroll loading, filters, sorting and
+  the tag filter, the skeleton cards, filling a
+  page, setting a cover, two-press delete, the offline state, plus the band's orientation, the text tile and the two
+  autoplay chains), `studio/tests/js/preset-picker.test.mjs` (the
+  picker's thumbnail slot), `studio/tests/test_prompt_covers.py` (sidecar write / read / delete, cover-pointer
+  write / read / delete and a broken pointer dropping to a still cover, 403 on presets,
   404 on a missing source, traversal names), `studio/tests/test_prompts_tags_scan.py` (the preview collapses onto
   one line, truncates, and drops names without a body).
 

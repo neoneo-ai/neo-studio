@@ -240,9 +240,13 @@ embedded ComfyUI workflow).
   character directory brings the checkbox back (multi-select then only feeds recipe creation — the images are
   downloaded to `input/` on demand, and bulk delete still skips read-only items).
 - **⟳ Refresh index** - a title-bar button that force re-downloads the cloud preset index
-  (`POST /neo_gallery/sync_oss`): directories published in the cloud show up on the home page and in this table at
-  once, without waiting for the local index cache to expire; the success toast reports the directory and item counts,
-  a failure reports the backend reason.
+  (`POST /neo_gallery/sync_oss`): besides the master index it refetches every per-directory index (moving
+  `gallery/oss_cache/<dir>/_index.json` to the current `rev`), so directories published in the cloud and the media
+  behind their cards show up on the home page, in this table and in the prompt library at once, without waiting for
+  the local index cache to expire; a directory tagged `prompts` is mirrored into the prompt pools in the same
+  click — rows the pools lack are imported into `presets/<dir>/` and `presets/video/<dir>/` (each with a
+  cover sidecar beside its text), and rows the cloud dropped are pruned from both (nothing is pruned while a directory
+  index is not at the current `rev`); the success toast reports the directory and item counts, a failure reports the backend reason.
 - **Index cache age comes from the cache file** - once the local index cache is older than `sync_interval_hours`
   (24 h by default), the next cloud preset request re-downloads it, so the first browse after a restart shows
   directories published in the cloud with no manual refresh; the age is measured from the cache file's own time, so a

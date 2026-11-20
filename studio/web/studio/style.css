@@ -1881,6 +1881,18 @@ body {
 .ns-btn:hover { background: var(--ns-field-hover, #333338); border-color: var(--ns-field-bd-hover, #555); }
 .ns-btn:disabled { opacity: 0.5; cursor: default; }
 .ns-launch-apply { background: var(--ns-background-rgba-47-111-237-18-x-x-x, rgba(47, 111, 237, 0.18)); border-color: var(--ns-primary, #2f6fed); color: var(--ns-primary-fg, #cfe0ff); }
+/* 胶囊筛子的选中档全站一份（素材页归类标签 .neo-gallery-kind-chip 与工作流标签
+   .neo-gallery-workflow-chip、增强页标签 .rs-tag-btn、提示词库筛子与标签 .ns-pl-chip）。实心填在浅色主题是
+   #bc4c00 压 #0a0a0a 字——深字压深红读不动，白字压上去也只有 4:1 出头；来源与排序同屏各亮一颗时
+   一排实心橙还糊成一块。描边 + 同色浅染 + 加粗字重与 .ns-log-src-btn.is-on、.ns-home-f-btn.is-on
+   那两条选中档同一取向。页里不许再写一份：页样式表比本表后注入，同特异会盖过这一条 */
+.ns-pl-chip.is-on, .neo-gallery-kind-chip.active, .neo-gallery-workflow-chip.active,
+.rs-tag-btn.rs-tag-selected {
+    background: color-mix(in srgb, var(--ns-orange, #ff6a00) 16%, transparent);
+    border-color: var(--ns-orange, #ff6a00);
+    color: var(--ns-fg, #ddd);
+    font-weight: 600;
+}
 
 /* 日志页：内核那块 + 桌面端那块，tab 激活时轮询 /neo_studio/log；日志区占满主区剩余空间 */
 .ns-log-section { flex: 1; display: flex; flex-direction: column; min-height: 0; }
