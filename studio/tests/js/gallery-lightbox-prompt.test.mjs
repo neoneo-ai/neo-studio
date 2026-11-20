@@ -67,3 +67,52 @@ test("全文取不到时保留预览渲染，面板不空", async () => {
     assert.deepEqual(texts(".neo-lightbox-panel-label"), ["画面中间区域："]);
     assert.equal(texts(".neo-lightbox-panel-line").length, 1);
 });
+
+const WORKFLOW = { "1": { class_type: "SaveVideo", inputs: { filename_prefix: "AnimateDiff_00011" } } };
+
+/** 无同名 .txt 的视频卡：侧栏全靠 /neo_gallery/media_meta 的内嵌元数据 */
+async function embeddedPanel(meta) {
+    resetEnv();
+    clearRoutes();
+    mockRoute("/neo_gallery/media_meta", () => jsonResponse(meta));
+    const { NeoGallery } = await import("../../web/gallery.js");
+    const { GalleryCard } = await import("../../web/gallery-card.js");
+    const gallery = new NeoGallery({ extensionManager: { toast: { add: () => {} } } });
+    const card = new GalleryCard(gallery);
+    const inner = await card._buildLightboxPanel(gallery, {
+        raw: { name: "video_00001_.mp4", filename: "video_00001_.mp4" },
+        subfolder: "NeoSimple",
+    });
+    if (inner) document.body.appendChild(inner);
+    await flush();
+    return inner;
+}
+
+test("内嵌元数据解出提示词：正向分节 + 导入工作流按钮", async () => {
+    const inner = await embeddedPanel({
+        has: true, workflow: WORKFLOW, prompt: null,
+        texts: { positive: ["雨夜街角的女孩回头"], negative: [], params: { seed: 12345 } },
+    });
+    assert.notEqual(inner, null);
+    assert.deepEqual(texts(".neo-lightbox-panel-label"), ["正向："]);
+    assert.deepEqual(texts(".neo-lightbox-panel-line"), ["雨夜街角的女孩回头"]);
+    assert.deepEqual(texts(".neo-lightbox-panel-btn"), ["导入工作流"]);
+});
+
+test("内嵌元数据解不出提示词：空正文那一盒不出现，导入工作流照留", async () => {
+    const inner = await embeddedPanel({
+        has: true, workflow: WORKFLOW, prompt: null,
+        texts: { positive: [], negative: [], params: {} },
+    });
+    assert.notEqual(inner, null);
+    assert.equal(inner.querySelector(".neo-lightbox-panel-body"), null, "没有正文就不铺那一盒");
+    assert.deepEqual(texts(".neo-lightbox-panel-btn"), ["导入工作流"]);
+});
+
+test("内嵌元数据既无提示词又无工作流：侧栏整块不出现", async () => {
+    const inner = await embeddedPanel({
+        has: true, workflow: null, prompt: null,
+        texts: { positive: [], negative: [], params: {} },
+    });
+    assert.equal(inner, null);
+});

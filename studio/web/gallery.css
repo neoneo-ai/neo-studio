@@ -1414,7 +1414,7 @@ Accordion Section Buttons (Clear)
 
 /* 卡片静音预览层：叠在封面（poster）上，首帧解出来才淡入。
    pointer-events:none —— 点击穿透到卡片本体，点开仍是灯箱播带音轨的本体。
-   --failed：后端压不出预览（ffmpeg 缺席 / 正有一发在压），停在封面上。 */
+   --failed：后端压不出预览（这台机器没有 ffmpeg / 这一发在队列里等满了），停在封面上。 */
 .neo-gallery-thumb-video-preview {
     position: absolute;
     top: 0;
@@ -1434,8 +1434,11 @@ Accordion Section Buttons (Clear)
     opacity: 1;
 }
 
+/* --failed 只让这一格保持隐形（基础那侧就是 opacity:0），不能 display:none：
+   display:none 的元素在 IntersectionObserver 里永远不会相交，「再进视口重挂 src」那一发
+   就没有触发点，一次 404 会把这张卡判死到页面关闭。 */
 .neo-gallery-thumb-video-preview--failed {
-    display: none;
+    opacity: 0;
 }
 
 /* Button bar — floating overlay at bottom of the image */

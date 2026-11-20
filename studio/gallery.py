@@ -52,7 +52,7 @@ CUSTOM_DIR = GALLERY_DIR / "custom"
 THUMBNAIL_DIR = GALLERY_DIR / "thumbnails"
 LORA_CACHE_DIR = GALLERY_DIR / "lora_cache"
 WAVEFORM_DIR = GALLERY_DIR / "waveform_cache"  # decoded audio waveform peaks (JSON)
-# 卡片自动播的那一发（360p 静音、只留开头 15 秒）落这里：由原片现压，删了会重压，
+# 卡片自动播的那一发（宽度 480 静音、只留开头 15 秒）落这里：由原片现压，删了会重压，
 # 与原片互不占用（云端预设发布时压好的 previews/ 在 oss_cache 那一侧，不落这里）。
 VIDEO_PREVIEW_DIR = GALLERY_DIR / "preview_cache"
 # Main dirs (StoryBoard / CharacterSheet): browsable output subdirs. Character images land
@@ -79,11 +79,16 @@ try:
 except OSError:
     pass
 THUMBNAIL_SIZE = 320  # Fixed thumbnail size in pixels
-# 卡片预览那一发：长边 360、码率封顶、时长只取开头 15 秒。素材页一屏要循环播十几条，
+# 卡片预览那一发：短边封顶 480、静音、只取开头 10 秒。素材页一屏要循环播十几条，
 # 本体是 1080p 带音轨的整片，那一发必须是静音小片（有声本体留给灯箱）。
-VIDEO_PREVIEW_LONG_EDGE = 360
-VIDEO_PREVIEW_MAX_SECONDS = 15
-VIDEO_PREVIEW_MAXRATE = "600k"
+# 封顶按短边：横屏钉高出 854×480、竖屏钉宽出 480×854。瀑布布局钉死的是列宽
+# （cardColumnWidth，150-250 CSS px，Windows 125% 缩放下 188-310 设备 px），卡的高度由素材比例定
+# （横屏截到列宽的 3/4、竖屏满宽到 2 倍）—— 只钉宽度时横屏出 480×270，连横屏那一格都铺不满，
+# 铺满就是放大播；按短边出片两边都只剩缩小，横屏那一发与云端 --preview 同尺寸。
+# 云端 --preview 是按高度封顶（竖屏只剩 270px 宽，比最宽的列还窄），那一句本机不跟。
+VIDEO_PREVIEW_SHORT_EDGE = 480
+VIDEO_PREVIEW_MAX_SECONDS = 10
+VIDEO_PREVIEW_MAXRATE = "700k"   # 与云端同一档：实测 CRF 30 才是约束，这一发从没顶到码率
 
 
 def _get_system_dirs():
@@ -2375,58 +2380,89 @@ def _ffmpeg_thumb_args(size: int) -> list[str]:
             "-q:v", "4", "-threads", "1", "-an", "-sn"]
 
 
-# ====== 卡片自动播的那一发（360p 静音预览，前 15 秒） ======
+# ====== 卡片自动播的那一发（短边 480 静音预览，前 10 秒） ======
 
 # 同一时刻只允许一发 ffmpeg 在压：素材页一次交回 100 张卡，其中几十条视频的话，
 # 逐条请求就是几十个 ffmpeg 同时起，压片比缩略图贵一个数量级，NAS 上会把首屏拖死。
+# 排不上不能直回：卡片是进视口才发请求的，一次交回就是一串请求，全部顶回 404 等于把
+# 这一屏的视频全判成「只能停在封面上」。所以排队等有界，等满了才回 404。
 _PREVIEW_LOCK = threading.Semaphore(1)
+_PREVIEW_QUEUE_WAIT = 30
 
 
 def _video_preview_cmd(source_path: Path, preview_path: Path) -> list[str]:
-    """卡片预览那一发的 ffmpeg 参数：360p 长边、静音、前 15 秒、faststart。
+    """卡片预览那一发的 ffmpeg 参数：短边封顶 480、静音、前 10 秒、faststart。
 
-    -t 是输出侧封顶：长视频只留开头 15 秒，ffmpeg 也只解到那一秒就收工 ——
-    一条 5 分钟的 NAS 片不会变成一次三分钟的首屏请求；15 秒内的片子整条播。
+    缩放按短边封顶：横屏钉高度（'min(ih,480)'，宽跟 -2 自动）、竖屏钉宽度（'min(iw,480)'），
+    比 480 窄的那条边不放大。瀑布那一格的宽是列宽定死的，横屏那一格的高只有列宽的 3/4 ——
+    只钉宽度时横屏出 480×270，铺不满那一格就是放大播；钉短边出 854×480 与 480×854，
+    横屏那一发与云端 --preview 同尺寸，竖屏比它多 2.6 倍像素（云端按高度封顶，竖屏只剩 270px 宽）。
+    -2 保证偶数边长（libx264 的 yuv420p 要偶数宽高，奇数边 ffmpeg 直接报错）。
+    -t 是输出侧封顶：长视频只留开头 10 秒，ffmpeg 也只解到那一秒就收工 ——
+    一条 5 分钟的 NAS 片不会变成一次三分钟的首屏请求；10 秒内的片子整条播。
     -an：卡片是循环静音预览，有声本体走灯箱那条 /neo_gallery/video。
     +faststart：moov 挪到文件头部，否则首帧要等整篇下完，卡片退化成一张封面图。
     -threads 1 与缩略图同一条理由：ffmpeg 默认按核数起解码线程，一屏几条预览就是几倍核数。
+    -f mp4 把封装器写死：ffmpeg 是按输出文件名的扩展名选封装器的，中间份那个名字一旦带上
+    别的后缀，它就是一句 "Unable to choose an output format ... Invalid argument"，
+    整条本地预览链全灭，卡片全部停在首帧封面上。
     """
+    edge = VIDEO_PREVIEW_SHORT_EDGE
     return [
         _ffmpeg_exe() or "ffmpeg",
         "-y", "-i", str(source_path),
         "-an",
-        "-vf", f"scale=-2:'min({VIDEO_PREVIEW_LONG_EDGE},ih)':flags=lanczos",
+        "-vf", (f"scale='if(gt(iw,ih),-2,min(iw,{edge}))'"
+                f":'if(gt(iw,ih),min(ih,{edge}),-2)':flags=lanczos"),
         "-c:v", "libx264", "-preset", "veryfast", "-crf", "30",
         "-maxrate", VIDEO_PREVIEW_MAXRATE, "-bufsize", VIDEO_PREVIEW_MAXRATE,
-        "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+        "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-f", "mp4",
         "-threads", "1", "-t", str(VIDEO_PREVIEW_MAX_SECONDS),
         str(preview_path),
     ]
 
 
 def _video_preview_cache_path(source_path: Path, source_stat) -> Path:
-    """预览片落 preview_cache/<YYYY-MM>/<hash>_360_15.mp4：分桶与缓存键同缩略图一套。
+    """预览片落 preview_cache/<YYYY-MM>/<hash>_e480_10.mp4：分桶与缓存键同缩略图一套。
 
-    文件名带长边与封顶秒数这两个常数，以后改常数时旧文件的键就不匹配、自动重生成，
-    不会留下「文件名写着 15、里面是整片」的脏缓存（缩略图那边由 _cached_video_thumb_fits 补检）。
+    文件名带短边上限与封顶秒数这两个常数，键前缀写 e（edge）：以后改常数、或者把封顶口径从
+    按宽换成按短边这类换了算法的改动，旧文件的键都不匹配、自动重生成，不会留下「文件名写着 480、
+    里面是按宽 480 压出来的 480×270 横屏小片」这种口径变了还新鲜可用的脏缓存（缩略图那边由
+    _cached_video_thumb_fits 补检）。
     """
     bucket = time.strftime("%Y-%m", time.localtime(source_stat.st_mtime))
-    name = f"{_thumbnail_hash(source_path, source_stat)}_{VIDEO_PREVIEW_LONG_EDGE}_{VIDEO_PREVIEW_MAX_SECONDS}.mp4"
+    token = f"e{VIDEO_PREVIEW_SHORT_EDGE}_{VIDEO_PREVIEW_MAX_SECONDS}"
+    name = f"{_thumbnail_hash(source_path, source_stat)}_{token}.mp4"
     return VIDEO_PREVIEW_DIR / bucket / name
 
 
-def _generate_video_preview(source_path: Path, cache_path: Path) -> bool:
-    """压一发卡片预览。压不上就 False：ffmpeg 缺席，或已有一发在压（卡片保持封面）。
+def _preview_cache_is_fresh(source_path: Path, cache_path: Path) -> bool:
+    """缓存片可用 = 有内容且不早于源文件。压之前与排到队之后各判一次：一屏里同一条素材的
+    重复请求只压一发。新鲜只看 mtime 不比对时长 —— 封顶值写在文件名里，常数一变键就换。
+    """
+    try:
+        cache_stat = cache_path.stat()
+        return cache_stat.st_size > 0 and cache_stat.st_mtime >= source_path.stat().st_mtime
+    except OSError:
+        return False
 
-    写 .part 再 replace：ffmpeg 中途失败会留下半个 mp4，那份文件头有 moov 却没有完整帧，
-    <video> 拿到它是一格解不开的播放器，比停在封面上更糟。
+
+def _generate_video_preview(source_path: Path, cache_path: Path) -> bool:
+    """压一发卡片预览。压不上就 False：这台机器没有 ffmpeg，或在队列里等满了。
+
+    写中间份再 replace：ffmpeg 中途失败会留下半个 mp4，那份文件头有 moov 却没有完整帧，
+    <video> 拿到它是一格解不开的播放器，比停在封面上更糟。中间份的后缀留 .mp4，
+    理由与 -f mp4 同一条。
     """
     if not _ffmpeg_exe():
         return False
-    if not _PREVIEW_LOCK.acquire(blocking=False):
+    if not _PREVIEW_LOCK.acquire(timeout=_PREVIEW_QUEUE_WAIT):
         return False
-    part = cache_path.with_suffix(".part")
+    part = cache_path.with_name(f"{cache_path.stem}.part.mp4")
     try:
+        # 排队这一段时间里，这一发多半已经被排在前面那条请求压好了
+        if _preview_cache_is_fresh(source_path, cache_path):
+            return True
         cache_path.parent.mkdir(parents=True, exist_ok=True)
         result = subprocess.run(_video_preview_cmd(source_path, part), capture_output=True,
                                 timeout=120, creationflags=NO_WINDOW)
@@ -2442,22 +2478,17 @@ def _generate_video_preview(source_path: Path, cache_path: Path) -> bool:
 
 
 def _video_preview_file(source_path: Path) -> Path | None:
-    """本地视频的卡片预览文件：缓存新鲜就直回，压不出来（含 ffmpeg 缺席）就 None。
+    """本地视频的卡片预览文件：缓存新鲜就直回，压不出来（含 ffmpeg 缺席、排队等满）就 None。
 
-    压片是阻塞的，调用方在 to_thread 里跑。缓存新鲜只看 mtime 不比对时长 ——
-    封顶值写在文件名里，常数一变键就换，不需要读 mp4 的时长字段。
+    压片是阻塞的，调用方在 to_thread 里跑。
     """
     try:
         source_stat = source_path.stat()
     except OSError:
         return None
     cache_path = _video_preview_cache_path(source_path, source_stat)
-    try:
-        cache_stat = cache_path.stat()
-        if cache_stat.st_size > 0 and cache_stat.st_mtime >= source_stat.st_mtime:
-            return cache_path
-    except OSError:
-        pass
+    if _preview_cache_is_fresh(source_path, cache_path):
+        return cache_path
     if _generate_video_preview(source_path, cache_path):
         return cache_path
     return None
@@ -2861,12 +2892,12 @@ async def view_video(request):
 
 @routes.get("/neo_gallery/preview")
 async def view_video_preview(request):
-    """卡片自动播那一发：360p 静音、只留开头 15 秒，分段回。
+    """卡片自动播那一发：短边 480 静音、只留开头 10 秒，分段回。
 
     与灯箱那条 /neo_gallery/video 的分工：这条给卡片循环播（小、静音、封顶 15 秒、
     FileResponse 带 Range），那条给灯箱播本体（全长、有声）。
-    压不出来就 404 —— ffmpeg 缺席是这台机器没有这个能力，正有一发在压是这条排在后面；
-    两种情况下卡片都停在首帧封面上，不铺一格解不开的播放器。
+    压不出来就 404 —— 这台机器没有 ffmpeg，或这一发在队列里等满了；卡片都停在首帧封面上，
+    不铺一格解不开的播放器。
     """
     if "filename" not in request.rel_url.query:
         return web.Response(status=400)
@@ -2884,8 +2915,8 @@ async def view_video_preview(request):
         preview = await asyncio.to_thread(_video_preview_file, source_path)
         return _media_stream_response(preview) if preview else web.Response(status=404)
 
-    # 云端预设的预览是发布时 --preview 压好的那一发（480p 整片），不为卡片现压一次云端片；
-    # 15 秒那一刀由卡片那侧统一补（前端预览条的封顶闸门），本地片与云端片口径一致
+    # 云端预设的预览是发布时 --preview 压好的那一发（短边 480 的整片），不为卡片现压一次云端片；
+    # 10 秒那一刀由卡片那侧统一补（前端预览条的封顶闸门），本地片与云端片口径一致
     cached = await _oss_media_from_cache(filename, subfolder, preview=True)
     return _media_stream_response(cached) if cached else web.Response(status=404)
 

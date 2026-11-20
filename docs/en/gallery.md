@@ -84,6 +84,11 @@ without moving a file or creating a directory:
 - **Thumbnail cache** - thumbnails are generated on first visit and appear instantly afterwards.
 - **Video covers** - ffmpeg extracts the first frame scaled down to the requested size: a 1080p clip gives a
   6 KB 320 px cover. Full-frame entries the old build left in the cache are rewritten in place on the next visit.
+- **Card video preview** - a video card layers a short-edge-capped-480 muted preview over its cover when it scrolls into
+  view (the local file is compressed on the fly to its first 10 seconds — 854×480 for a landscape clip, 480×854 for a
+  portrait one, the landscape one matching the published preset pack's preview — cached in
+  `gallery/preview_cache/`, and the preview pauses back to its first frame when the card leaves the view); the card
+  stays on its cover where the machine cannot produce the preview.
 - **Card ratio cache** - image width/height are read from the file header and stored under
   path+mtime+size in `configs/gallery_dim_cache.json`, so reopening a directory (even after a restart) stops
   reading images one by one — very visible on network drives.
@@ -177,7 +182,12 @@ background overlay, title bar drags the window) that creates new assets from a p
 
 Click a thumbnail to open full-screen viewing with wheel zoom and drag panning, neighbor preloading and size
 display; the prompt sidebar on the right shows the image's prompt and parameters (hidden when there is nothing
-to show, and hidden automatically when entering full screen). The sample results in recipe details share this
+to show, and hidden automatically when entering full screen). A video card reads its prompt from the same-named
+`.txt` sidecar first, and from the media's embedded ComfyUI metadata when there is none: the `prompt` input of the
+video-generation node counts as its prompt, and so does the text node (`PrimitiveStringMultiline` and friends) that
+input is chained from. When only a workflow is embedded, the sidebar is the ⤷ Import workflow button alone with no
+empty body box, and when neither a prompt nor an importable workflow is there, the sidebar does not appear at all.
+The sample results in recipe details share this
 same lightbox component. The sidebar lays the prompt out section by section: a section label on its own line with
 a divider between sections, long sentences broken at commas, and comma lists like the negative prompt rendered as
 chips; the copy button always copies the raw full text.

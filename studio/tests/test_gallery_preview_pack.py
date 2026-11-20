@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """发布预处理里卡片预览那一发（离线单测，不跑 ffmpeg）。
 
---preview 给每条视频压一发 480p 静音片落 previews/<目录>/，目录索引条目带 "preview" 键，
-提示词库的卡片自动播就吃这一发。参数口径（静音 / 480p / faststart / 码率上限）钉在这里，
+--preview 给每条视频压一发短边封顶 480 的静音片落 previews/<目录>/，目录索引条目带 "preview" 键，
+提示词库的卡片自动播就吃这一发。参数口径（静音 / 短边 480 / faststart / 码率上限）钉在这里，
 ffmpeg 缺席时只跳过这一条，不压垮整次发布；update 模式的 prune 跟着索引留对应的预览。
 """
 
@@ -27,13 +27,15 @@ def _write_video(stem: str, src: Path) -> Path:
 
 
 class PreviewCmdTests(unittest.TestCase):
-    """ffmpeg 参数：静音、480p 长边、faststart、码率上限，落点永远是最后一个参数"""
+    """ffmpeg 参数：静音、短边封顶 480、faststart、码率上限，落点永远是最后一个参数"""
 
     def test_cmd_is_silent_480p_faststart(self):
         cmd = pack.preview_cmd(Path("in/01.mp4"), Path("previews/d/01.mp4"))
         self.assertIn("-an", cmd)
         vf = cmd[cmd.index("-vf") + 1]
-        self.assertIn(f"min({pack.PREVIEW_LONG_EDGE},ih)", vf)
+        # 横屏钉高（854×480）、竖屏钉宽（480×706）：与素材库插件现压那一条同一条 -vf
+        self.assertIn(f"'if(gt(iw,ih),min(ih,{pack.PREVIEW_SHORT_EDGE}),-2)'", vf)
+        self.assertIn(f"'if(gt(iw,ih),-2,min(iw,{pack.PREVIEW_SHORT_EDGE}))'", vf)
         self.assertEqual(cmd[cmd.index("-c:v") + 1], "libx264")
         self.assertEqual(cmd[cmd.index("-preset") + 1], "veryfast")
         self.assertEqual(cmd[cmd.index("-crf") + 1], "30")

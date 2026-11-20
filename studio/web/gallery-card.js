@@ -880,9 +880,9 @@ export class GalleryCard {
             className: "neo-gallery-thumb-video-badge"
         }, ["\u25B6"]) : null;
 
-        // 封面上叠一格静音预览：src 由 gallery-utils 的预览队列在卡片进视口时才挂，
-        // 出视口就停回第一帧。点开卡片照旧是灯箱播带音轨的本体，勾选 / 拖拽 / ⋯ 菜单
-        // 都在封面这层（预览层 pointer-events:none，不吃点击）。
+        // 封面上叠一格静音预览：src 由 gallery-utils 的视野观察者在卡片进视口时才挂，
+        // 出视口就停回第一帧，视口里有几条卡片就同时播几条。点开卡片照旧是灯箱播带音轨的
+        // 本体，勾选 / 拖拽 / ⋯ 菜单都在封面这层（预览层 pointer-events:none，不吃点击）。
         const videoPreview = isVideoFileResult ? $el("video", {
             className: "neo-gallery-thumb-video-preview",
             preload: "none",
@@ -898,9 +898,11 @@ export class GalleryCard {
             videoPreview.addEventListener("loadeddata", () => {
                 videoPreview.classList.add("neo-gallery-thumb-video-preview--ready");
             });
-            // 后端压不出预览（ffmpeg 缺席 / 已有一发在压）就是 404：卡片停在封面上
+            // 后端压不出预览（这台机器没有 ffmpeg / 这一发在队列里等满了）就是 404：卡片停在封面上
             videoPreview.addEventListener("error", () => {
                 videoPreview.classList.add("neo-gallery-thumb-video-preview--failed");
+                // 失败标记交给观察者的契约：这一发没拿到预览，下一次进视口重挂 src 再要一次
+                videoPreview._previewFailed = true;
             });
         }
 
@@ -1271,14 +1273,16 @@ export class GalleryCard {
         addSection("\u6B63\u5411", texts?.positive);
         addSection("\u8D1F\u5411", texts?.negative);
 
-        const inner = $el("div", { className: "neo-lightbox-panel-inner" }, [body]);
+        const inner = $el("div", { className: "neo-lightbox-panel-inner" });
+        // 解不出提示词就只留那枚按钮：空正文那一盒比不出现更占地方
+        if (body.childNodes.length) inner.appendChild(body);
         const frag = this._buildMetaButtons(meta, gallery, image, subfolder);
         if (frag.childNodes.length) {
             const btns = $el("div", { className: "neo-lightbox-panel-btns" });
             btns.appendChild(frag);
             inner.appendChild(btns);
         }
-        return inner;
+        return inner.childNodes.length ? inner : null;
     }
 
     _fetchMediaMeta(image, subfolder) {

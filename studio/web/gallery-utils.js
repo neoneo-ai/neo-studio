@@ -146,7 +146,7 @@ export function getVideoSrc(video, subfolder) {
 }
 
 /**
- * Get video source URL for the card's looping preview (360p, muted, first 15 seconds).
+ * Get video source URL for the card's looping preview (short-edge-capped 480, muted, first 10 seconds).
  * Distinct from getVideoSrc on purpose: the card wants the small silent loop, the
  * lightbox wants the full file with its audio track.
  */
@@ -278,59 +278,38 @@ export function releaseLazyThumbnails(container) {
 }
 
 /**
- * 视频卡片自动播：进视口才挂 src 起播，出视口停回第一帧，同时最多 2 条在播。
- * 每条视频各自 autoplay 的话，一屏十几条 360p 解码全押在视口外的卡片上，首屏的缩略图
- * 请求也要和它们抢带宽；预览的作用只是「一眼看出这条在动什么」，两条并播已够，
- * 多条并播在集成显卡上就是掉帧。src 是进视口才挂的：渲染 100 张卡片时不发任何预览请求。
+ * 视频卡片自动播：进视口才挂 src 起播，出视口停回第一帧，视口里有几条播几条——与提示词库那页
+ * 的预览观察者同一口径。并发不在这一刀上：src 进视口才挂，出视口就停，一屏卡片里在解码的
+ * 就是看得见的那几条，渲染 100 张卡片时视口外一条预览请求都不发。
  */
-const VIDEO_PREVIEW_CONCURRENCY = 2;
-const VIDEO_PREVIEW_CAP_SECONDS = 15;   // 与后端 VIDEO_PREVIEW_MAX_SECONDS 同口径
-const _videoQueue = [];
-const _videoCounted = new WeakSet();
-let _videoPlaying = 0;
+const VIDEO_PREVIEW_CAP_SECONDS = 10;   // 与后端 VIDEO_PREVIEW_MAX_SECONDS 同口径
 let _videoObserver = null;
 
-function _playVideoPreview(v) {
-    _videoPlaying++;
-    _videoCounted.add(v);
+function _startVideoPreview(v) {
+    if (v._previewFailed) {
+        // 上一发是 404（这台机器没有 ffmpeg / 这一发在队列里等满了）：这张卡再进视口重新
+        // 挂一次 src —— 媒体元素进了 error 状态，不换 src 它就不会再发起一次加载
+        v._previewFailed = false;
+        v._previewAttached = false;
+        v.classList.remove("neo-gallery-thumb-video-preview--failed");
+        v.removeAttribute("src");
+    }
+    if (!v._previewAttached) {
+        v._previewAttached = true;
+        v.src = v.dataset.previewSrc;
+        v.addEventListener("timeupdate", () => {
+            // 本地预览后端已截到 10 秒；云端预设带的是发布时压的整片，这一刀在卡片侧补齐
+            if (v.currentTime > VIDEO_PREVIEW_CAP_SECONDS) v.currentTime = 0;
+        });
+    }
     const played = v.play();
     // 没有用户手势时浏览器会拒绝 play()：卡片就停在封面上，不是错误
     if (played && played.catch) played.catch(() => { });
 }
 
-function _pumpVideoQueue() {
-    while (_videoPlaying < VIDEO_PREVIEW_CONCURRENCY && _videoQueue.length > 0) {
-        const v = _videoQueue.shift();
-        if (!v.isConnected) continue;   // 卡片已被网格换掉：任务作废
-        _playVideoPreview(v);
-    }
-}
-
-function _startVideoPreview(v) {
-    if (!v._previewAttached) {
-        v._previewAttached = true;
-        v.src = v.dataset.previewSrc;
-        v.addEventListener("timeupdate", () => {
-            // 本地预览后端已截到 15 秒；云端预设带的是发布时压的整片，这一刀在卡片侧补齐
-            if (v.currentTime > VIDEO_PREVIEW_CAP_SECONDS) v.currentTime = 0;
-        });
-    }
-    const queued = _videoQueue.indexOf(v);
-    if (queued >= 0) _videoQueue.splice(queued, 1);
-    if (_videoPlaying >= VIDEO_PREVIEW_CONCURRENCY) {
-        _videoQueue.push(v);
-        return;
-    }
-    _playVideoPreview(v);
-}
-
 function _stopVideoPreview(v) {
     v.pause();
     if (v.currentTime > 0) v.currentTime = 0;   // 回第一帧：再进视口是从头播，不是从半路接上
-    if (_videoCounted.delete(v)) {
-        _videoPlaying = Math.max(0, _videoPlaying - 1);
-        _pumpVideoQueue();
-    }
 }
 
 /** 注册一张卡片预览：src 先留在 dataset 里，元素进视口才发请求。 */
@@ -354,18 +333,11 @@ export function registerLazyVideo(videoEl, src) {
 
 export function releaseLazyVideo(videoEl) {
     if (_videoObserver) _videoObserver.unobserve(videoEl);
-    const queued = _videoQueue.indexOf(videoEl);
-    if (queued >= 0) _videoQueue.splice(queued, 1);
     videoEl.pause();
     if (videoEl.currentTime > 0) videoEl.currentTime = 0;
-    // 释放不补位：容器释放紧跟着就是清空网格，此时把排队的那条拉起来播就是白取一发。
-    // 补位交给「进视口」事件——留在屏幕上的卡片会自己把它要回来。
-    if (_videoCounted.delete(videoEl)) {
-        _videoPlaying = Math.max(0, _videoPlaying - 1);
-    }
 }
 
-/** 容器清空前调用：停掉容器内所有在播预览并作废排队，避免网格换掉后还留着在跑的解码。 */
+/** 容器清空前调用：停掉容器内所有预览格并摘下观察者，避免网格换掉后还留着在跑的解码。 */
 export function releaseLazyVideos(container) {
     if (!container) return;
     for (const v of container.querySelectorAll("video[data-preview-src]")) releaseLazyVideo(v);

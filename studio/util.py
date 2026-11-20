@@ -20,6 +20,11 @@ CURRENT_DIR = Path(__file__).parent.resolve()
 CONFIGS_DIR = plugin_paths.CONFIGS_DIR
 SETTINGS_FILE = CONFIGS_DIR / "gallery_settings.json"
 
+# ComfyUI 图里真做提示词的输入键：视频生成节点（MiniMaxH3* 这类）把原文写在 `prompt`，
+# 文本原语节点（PrimitiveStringMultiline / String Literal）写在 `value`。
+PROMPT_TEXT_KEYS = ("text", "prompt", "value", "positive_prompt", "negative_prompt", "text_g", "text_l", "caption")
+PROMPT_PARAM_KEYS = ("steps", "cfg", "seed", "width", "height", "length", "num_frames", "frame_rate")
+
 
 class PrefixFilter(logging.Filter):
     """Auto-prepend '[Neo Studio] ' to log records that lack the prefix."""
@@ -193,17 +198,41 @@ def _extract_media_metadata(path: Path) -> dict:
 
 def _collect_prompt_texts(prompt: dict) -> dict:
     positive, negative, params = [], [], {}
-    for node in (prompt or {}).values():
+    nodes = prompt or {}
+    seen = set()
+    for node in nodes.values():
         if not isinstance(node, dict):
             continue
-        for k, v in node.get("inputs", {}).items():
-            if isinstance(v, str) and k in (
-                "text", "positive_prompt", "negative_prompt", "text_g", "text_l", "caption",
-            ):
-                (negative if "negative" in k else positive).append(v)
-            elif k in ("steps", "cfg", "seed", "width", "height", "length", "num_frames", "frame_rate") \
-                    and isinstance(v, (int, float)) and k not in params:
-                params[k] = v
+        for key, val in (node.get("inputs") or {}).items():
+            if key in PROMPT_TEXT_KEYS:
+                text = _linked_prompt_text(nodes, val, 0)
+                if not text or text in seen:
+                    continue
+                seen.add(text)
+                (negative if "negative" in key else positive).append(text)
+            elif key in PROMPT_PARAM_KEYS and isinstance(val, (int, float)) and key not in params:
+                params[key] = val
     return {"positive": positive, "negative": negative, "params": params}
+
+
+def _linked_prompt_text(nodes: dict, val, depth: int) -> str:
+    """一处输入上的提示词原文：字面量直接取，链到文本节点就顺着链取。
+
+    API 图里的链写作 [节点 id, 输出口]。PrimitiveStringMultiline 喂给视频生成节点时原文只在
+    源头那一侧，顺着链最多两层就到；ConditioningZeroOut 这类条件链取不到文本就放手。
+    """
+    if isinstance(val, str):
+        return val.strip()
+    if depth >= 2 or not isinstance(val, list) or len(val) != 2:
+        return ""
+    src = nodes.get(str(val[0]))
+    if not isinstance(src, dict):
+        return ""
+    for key, inner in (src.get("inputs") or {}).items():
+        if key in PROMPT_TEXT_KEYS:
+            text = _linked_prompt_text(nodes, inner, depth + 1)
+            if text:
+                return text
+    return ""
 
 

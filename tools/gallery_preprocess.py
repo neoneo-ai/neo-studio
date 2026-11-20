@@ -49,9 +49,10 @@ IMG_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".tiff"}
 VIDEO_EXTENSIONS = {".mp4", ".webm", ".mov", ".avi", ".mkv", ".flv", ".wmv"}
 ALL_MEDIA_EXTENSIONS = IMG_EXTENSIONS | VIDEO_EXTENSIONS
 THUMB_SIZE = 320
-# 卡片预览那一发的长边：480p 是提示词库卡片自动播的档位——原片一条 3MB 起，
+# 卡片预览那一发的短边：480 是卡片自动播的档位——原片一条 3MB 起，
 # 一屏十条就是三十几 MB 的首屏流量，预览压到每条几百 KB 才有站点那种观感。
-PREVIEW_LONG_EDGE = 480
+# 横屏钉高、竖屏钉宽（与插件现压那条同口径）：按高度封顶时竖屏只剩 270px 宽，铺满卡片就是放大。
+PREVIEW_SHORT_EDGE = 480
 PREVIEW_MAXRATE = "700k"
 
 
@@ -123,8 +124,10 @@ def generate_thumbnail(source_path: Path, cache_path: Path, size: int) -> bool:
 
 
 def preview_cmd(source_path: Path, preview_path: Path) -> list[str]:
-    """卡片预览那一发的 ffmpeg 参数：480p 高、静音、crf 30、faststart。
+    """卡片预览那一发的 ffmpeg 参数：短边封顶 480、静音、crf 30、faststart。
 
+    横屏钉高（854×480）、竖屏钉宽（480×706），与素材库插件现压那一条同一口径；旧口径只钉高度时
+    竖屏只剩 270px 宽，卡片铺满就是放大。
     不带音轨：卡片是循环静音预览，有声原片走素材库那条灯箱。
     faststart 把 moov 挪到文件头部——预览是一进页面就播的，moov 落在尾部的话
     首帧要等整篇下完，卡片就退化成一张封面图。
@@ -133,7 +136,8 @@ def preview_cmd(source_path: Path, preview_path: Path) -> list[str]:
         ffmpeg_exe() or "ffmpeg",
         "-y", "-i", str(source_path),
         "-an",
-        "-vf", f"scale=-2:'min({PREVIEW_LONG_EDGE},ih)':flags=lanczos",
+        "-vf", (f"scale='if(gt(iw,ih),-2,min(iw,{PREVIEW_SHORT_EDGE}))'"
+                f":'if(gt(iw,ih),min(ih,{PREVIEW_SHORT_EDGE}),-2)':flags=lanczos"),
         "-c:v", "libx264", "-preset", "veryfast", "-crf", "30",
         "-maxrate", PREVIEW_MAXRATE, "-bufsize", PREVIEW_MAXRATE,
         "-pix_fmt", "yuv420p", "-movflags", "+faststart",

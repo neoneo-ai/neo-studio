@@ -79,6 +79,18 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   first screen and pull the scroll position back to the top.
 
 ### Changed
+- **The video-card preview caps the clip's short edge at 480, not its width.** A landscape clip was encoding to
+  480×270 — narrower than the masonry tile it fills, so it played enlarged. It now comes out 854×480 and a portrait
+  clip keeps 480×854, the same landscape size the published preset pack ships and 2.6× its portrait pixels, at the
+  pack's own crf 30 / 700k; the preview window is 10 seconds (the card-side cap follows), and the cache key moved to
+  `_e480_10`, so every `_w480_15` preview regenerates on the next visit. `tools\gallery_preview_warm.py` pre-encodes
+  the directories you watch (`--apply`) and drops the four retired cache keys per source with `--drop-legacy`, only
+  for sources whose new preview landed.
+- **Every video card in view plays its preview, like the prompt library.** The material square gated its card previews
+  at two concurrent plays and queued the rest, so a screen of video cards moved one tile at a time and a tile only
+  started when another left the screen. The gate and the queue are gone: a card attaches its preview `src` when it
+  enters the viewport and pauses back to the first frame when it leaves, so all the video cards visible at once play,
+  the 10-second card cap and the lightbox audio are unchanged, and no preview request is sent for a card off screen.
 - **The cloud `prompts.chat` preset card no longer carries typeset text cards.** The published directory keeps only rows
   whose media slot holds the author's own example output — 80 items, every one of them with its media, sidecar, thumbnail
   and 480p preview resolving on OSS — and the importer's `--skip-preview` gate keeps a row with no example output out of
@@ -91,6 +103,36 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 
 
 ### Fixed
+- **A video card shows the prompt it was generated with.** The lightbox sidebar was an empty box over the 「导入工作流」
+  button for every video whose prompt lives in its embedded metadata: the text collector read only node inputs named
+  `text` / `text_g` / `text_l` / `caption`, while a Neo Studio video writes its prompt on the video-generation node's
+  `prompt` input and an AnimateDiff film writes it on a `PrimitiveStringMultiline` node that input is chained to. The
+  collector takes the `prompt` and `value` inputs too and follows a link (two hops at most) to the node holding the
+  literal, counting the source node once, and a conditioning link carrying no text still yields nothing. The empty
+  body box is gone as well: with no prompt text the sidebar keeps only the import button, and with neither prompt
+  text nor an importable workflow the sidebar does not appear at all. Covered by `studio/tests/test_media_prompt_texts.py`
+  and `studio/tests/js/gallery-lightbox-prompt.test.mjs`.
+
+- **Local video cards play their preview inside the grid.** Every card preview request reached the compression step
+  and came back 404: the compression writes a temporary file and moves it into the cache, that temporary name ended
+  in `.part`, and ffmpeg picks its muxer by output extension — one "Unable to choose an output format ...
+  Invalid argument" per card, so no local video ever had a preview to play while cloud preset cards, served the
+  published 480p file, played fine. The temporary file keeps a `.mp4` suffix and `-f mp4` pins the muxer, so the muted
+  15-second preview encodes and the card fades from its cover into the picture. Two follow-ups on the same
+  screen: the compression queue now waits for its turn instead of answering every request of a burst immediately
+  (a dozen visible cards is a dozen requests, and refusing them all is what froze the screen on covers), and a card
+  whose preview failed is no longer dead for the rest of the page — the failed layer stays in the grid where the
+  observer sees it and re-arms its request the next time the card scrolls into view.
+
+- **Portrait video cards are no longer a blurrier tier than the landscape cards beside them.** The card preview
+  scaled by height (`scale=-2:'min(360,ih)'`): a 608×992 clip comes out 220×360, and a card is 160-250 CSS px wide
+  — 200-310 device px at the Windows 125% scale the desktop window runs at — so `object-fit: cover` stretched that
+  220 px frame across the whole card, while a landscape clip's 630 px frame only ever got downscaled. The cap now
+  follows the **short edge**: landscape clips keep 630×360, portrait clips get 360×588, always wider than the card,
+  so nothing is upscaled. The cache key carries the rule (`_sh360_15.mp4`), so the height-scaled previews already on
+  disk regenerate on the next visit. Measured here: a portrait preview goes 121 KB → 240 KB in 0.37 s, and the 600k
+  bitrate cap stays where it is — CRF 30 is the binding constraint, the cap was never reached.
+
 - **Cloud preset video cards keep their cover, and the published preview layers stay out of the gallery.** Two paths
   left a cloud video card blank. A directory whose rows publish no pre-generated thumbnail had nothing to serve: the
   source `.mp4` was handed out as the cover, which an `<img>` cannot play, and it 404'd where ffmpeg is absent — the card

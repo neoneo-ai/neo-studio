@@ -1,4 +1,5 @@
-// 素材库视频卡片：进视口才发预览请求、并发上限 2、出视口停回第一帧、15 秒封顶只作用于卡片预览。
+// 素材库视频卡片：进视口才发预览请求、视口里有几条播几条、出视口停回第一帧、10 秒封顶只作用于卡片预览、
+// 一发 404 之后回到视口能重来。
 import test from "node:test";
 import assert from "node:assert/strict";
 import { resetEnv, clearRoutes, flush } from "./setup.mjs";
@@ -91,7 +92,7 @@ test("进视口才挂 src 起播；出视口暂停并回到第一帧", async () 
     assert.equal(v.currentTime, 0, "回到第一帧：再进视口是从头播，不是从半路接上");
 });
 
-test("并发上限 2：一屏进 5 条只播 2 条，停掉一条才补下一条", async () => {
+test("视口里有几条播几条：进视口的各自起播，出视口只停自己那一格", async () => {
     resetEnv();
     installManualObserver();
     const { registerLazyVideo, releaseLazyVideos } = await loadUtils();
@@ -101,16 +102,52 @@ test("并发上限 2：一屏进 5 条只播 2 条，停掉一条才补下一条
         registerLazyVideo(v, `http://test.local/neo_gallery/preview?filename=v${i}.mp4`);
         videos.push(v);
     }
-    videos.forEach(enterView);
-    assert.equal(playedCount(videos), 2, "同时最多 2 条在播");
+    videos.slice(0, 4).forEach(enterView);
+    assert.deepEqual(videos.map((v) => v.__play || 0), [1, 1, 1, 1, 0],
+        "进视口的四条各自起播，没进视口的那条一条都不发");
 
-    const playing = videos.find(v => v.__play);
-    leaveView(playing);
-    assert.equal(playedCount(videos), 3, "腾出的一格立刻补上排队里下一条");
-    releaseLazyVideos(document.body);   // 并发计数是模块级的：不把在播的格子留给后面的用例
+    leaveView(videos[1]);
+    assert.equal(videos[1].__pause, 1, "出视口只停自己那一格");
+    assert.equal(videos[0].__pause, undefined, "留在视口里的一格不跟着停");
+    assert.equal(playedCount(videos), 4, "腾出来的一格不给别的格子补播");
+    releaseLazyVideos(document.body);
 });
 
-test("15 秒封顶只作用在卡片预览：到点回到第一帧", async () => {
+test("预览发过 404 的卡片再进视口重挂 src：一次失败不把它判死到页面关闭", async () => {
+    resetEnv();
+    clearRoutes();
+    installManualObserver();
+    const Neo = await loadNeoGallery();
+    const { GalleryCard } = await import("../../web/gallery-card.js");
+    const { releaseLazyVideos } = await loadUtils();
+    const gallery = new Neo({ extensionManager: { toast: { added: [], add() { } } } });
+    document.body.appendChild(gallery.element);
+    const card = new GalleryCard({}).createImageElement(
+        gallery, { name: "clip", filename: "clip.mp4", mtime: 100 }, "Output", "Output");
+    document.body.appendChild(card);
+    const preview = card.querySelector("video.neo-gallery-thumb-video-preview");
+    stubPlayback(preview);
+
+    enterView(preview);
+    assert.match(preview.src, /neo_gallery\/preview/, "进视口挂上预览");
+
+    // 后端压不出预览（这台机器没有 ffmpeg / 这一发在队列里等满了）就是 404：媒体元素进 error 状态
+    preview.dispatchEvent(new Event("error"));
+    assert.equal(preview._previewFailed, true, "卡片记下这一发没拿到预览");
+    assert.ok(preview.classList.contains("neo-gallery-thumb-video-preview--failed"), "先停在封面上");
+
+    // 这一格在观察者们眼里始终存在（--failed 不能 display:none），出视口再进就有这一次重挂
+    leaveView(preview);
+    enterView(preview);
+    assert.match(preview.src, /neo_gallery\/preview/, "再进视口重新挂 src：元素进了 error 不换 src 不再加载");
+    assert.equal(preview.__play, 2, "重新起播");
+    assert.equal(preview._previewFailed, false, "失败标记随重挂摘掉");
+    assert.ok(!preview.classList.contains("neo-gallery-thumb-video-preview--failed"), "失败样式一并摘掉");
+
+    releaseLazyVideos(document.body);
+});
+
+test("10 秒封顶只作用在卡片预览：到点回到第一帧", async () => {
     resetEnv();
     installManualObserver();
     const { registerLazyVideo, releaseLazyVideos } = await loadUtils();
@@ -119,19 +156,18 @@ test("15 秒封顶只作用在卡片预览：到点回到第一帧", async () =>
     enterView(v);
 
     // 云端预设带的是发布时压好的整片：卡片这一刀按 timeupdate 补齐，本地片永远到不了这一档
-    v.currentTime = 16;
+    v.currentTime = 11;
     v.dispatchEvent(new Event("timeupdate"));
-    assert.equal(v.currentTime, 0, "超过 15 秒回到第一帧循环");
+    assert.equal(v.currentTime, 0, "超过 10 秒回到第一帧循环");
 
     v.currentTime = 9;
     v.dispatchEvent(new Event("timeupdate"));
-    assert.equal(v.currentTime, 9, "15 秒以内不动它");
+    assert.equal(v.currentTime, 9, "10 秒以内不动它");
 
-    // 并发计数是模块级的：用例结尾把这张释放掉，不把在播的那一格留给后面的用例
-    releaseLazyVideos(document.body);
+    releaseLazyVideos(document.body);   // 共享观察者活到本文件结束：不把这张卡片留给后面的用例
 });
 
-test("releaseLazyVideos 释放容器：排队里的卡片不再起播", async () => {
+test("releaseLazyVideos 释放容器：在播的全部停下，释放之后不再有起播", async () => {
     resetEnv();
     installManualObserver();
     const { registerLazyVideo, releaseLazyVideos } = await loadUtils();
@@ -145,11 +181,11 @@ test("releaseLazyVideos 释放容器：排队里的卡片不再起播", async ()
         videos.push(v);
     }
     videos.forEach(enterView);
-    assert.equal(playedCount(videos), 2, "两条在播，三条排队");
+    assert.equal(playedCount(videos), 5, "五条都在视口里就五条都播");
 
     releaseLazyVideos(grid);
     grid.innerHTML = "";
     await flush(30);
-    assert.equal(playedCount(videos), 2, "释放后排队任务作废，不给已移除的卡片起播");
+    assert.equal(playedCount(videos), 5, "释放之后不给已移除的卡片起播");
     videos.forEach((v) => assert.ok(v.__pause >= 1, "释放时在播的全部停下"));
 });
