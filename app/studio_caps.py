@@ -169,6 +169,10 @@ _LLM = {
     # 注册在 prompts.py 的那两条桌面端加载不到（prompts.py 顶层带 server 与 torch）。
     ("POST", "/rs_prompts/enhance_prompt"),
     ("POST", "/rs_prompts/stream_generate_prompt"),
+    # 反推链（图片 + 视频抽帧）走同一条 LLM 链：取图取视频用 gallery 的媒体查找器，成文落素材同目录
+    # 的 .txt / .rp.txt 旁车 —— 全程 LLM 与文件系统，同样注册在 studio/llm.py 的 routes 上
+    ("POST", "/rs_prompts/reverse_prompt"),
+    ("POST", "/rs_prompts/reverse_video_prompt"),
 }
 
 # 模型库（HF / ModelScope / C 站检索 + 断点续传下载）与 Backyard（OSS 上传管理）
@@ -295,9 +299,9 @@ FEATURE_ROUTES = {
     "image_gen": ("POST", "/neo_image_gen/generate"),
     "agent": ("POST", "/neo_agent/run"),
     "voice": ("POST", "/neo_voice/generate"),
-    # 图片反推要吃内核那侧的 LLM 链与图片读取路径（studio 的 /rs_prompts/reverse_prompt），桌面端自服不了
+    # 图片反推走 llm.py 的 LLM 链 + gallery 的媒体查找，桌面端自服（_LLM）
     "prompt_reverse": ("POST", "/rs_prompts/reverse_prompt"),
-    # 视频反推同一条 LLM 链，多的是抽帧序列的解码与 .rp.txt 落点，同样归内核
+    # 视频反推同一条 LLM 链，多的是抽帧序列的解码与 .rp.txt 落点，同样自服
     "prompt_reverse_video": ("POST", "/rs_prompts/reverse_video_prompt"),
     # 提示词增强走 LLM 链 + 数据根技能文件，桌面端自服（app/studio_caps.py 的 _LLM）
     "prompt_enhance": ("POST", "/rs_prompts/enhance_prompt"),

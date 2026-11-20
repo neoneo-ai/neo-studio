@@ -1,15 +1,15 @@
 /**
  * reverse-prompt.js — 「图片反推」页宿主（Studio 视图）：挑一张图，把画面写成一段提示词。
  *
- * 反推由内核那侧的 LLM 链做（POST /rs_prompts/reverse_prompt），逐 token 经 SSE 推流，成文同时
- * 写进图片同目录的 .txt —— 与素材卡 ⋯ 菜单那条反推是同一个接口、同一份落点，本页只管取图、
- * 上屏、复制。首页「编辑」板块的入口卡是这页唯一的来路（顶栏没有这一枚页签）。
+ * 反推走桌面端自服的 LLM 链（studio/llm.py 的 POST /rs_prompts/reverse_prompt），逐 token 经 SSE
+ * 推流，成文同时写进图片同目录的 .txt —— 与素材卡 ⋯ 菜单那条反推是同一个接口、同一份落点，
+ * 本页只管取图、上屏、复制。首页「编辑」板块的入口卡是这页唯一的来路（顶栏没有这一枚页签）。
  */
 import { t } from "../js/core/i18n.js";
 import { icon, setIconLabel } from "../js/core/icons.js";
 import { getThumbnailSrc } from "../gallery-utils.js";
 
-const REVERSE_API = "/rs_prompts/reverse_prompt";
+export const REVERSE_API = "/rs_prompts/reverse_prompt";
 
 // 与素材卡反推弹窗同一对取值：后端认 zh / en，界面上的「中文 / 英文」只是字
 export const REVERSE_LANGS = [

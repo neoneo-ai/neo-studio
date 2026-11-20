@@ -29,9 +29,11 @@ own reason — the result box never passes a half-finished run off as success.
 
 ## Offline
 
-Reverse prompting needs the kernel-side LLM chain and image reading, so in the desktop window with ComfyUI not running
-the 反推 button reads "需要 ComfyUI"; clicking it hands the desktop app the job of starting the kernel instead of
-sending a request that can only answer 409 (`app/studio_caps.py`, the `prompt_reverse` flag).
+The reverse chain is registered on `studio/llm.py`'s routes, so the offline desktop window serves this shot itself
+(the `prompt_reverse` entry in `app/studio_caps.py`): the picture is located by the gallery media finder and the
+finished text is written to the `.txt` next to the image — LLM chain plus filesystem, the execution queue is never
+touched. The only prerequisite is a configured LLM: with none set the page reports the LLM chain's own failure,
+not 需要 ComfyUI.
 
 ## Agent and MCP
 

@@ -2,7 +2,7 @@
 
 Studio 首页「编辑」板块的卡片「视频反推」进 `#/reverse_video`（`studio/web/reverse-video/reverse-video.js`）。
 顶栏没有这一枚页签：首页那张卡是这页唯一的来路，首页版式把这张卡删掉（在「添加卡片」里加回来），这一页也就进不去。
-接口是 `POST /rs_prompts/reverse_video_prompt`（`studio/prompts.py`）——与「图片反推」页是两条接口、两个落点，
+接口是 `POST /rs_prompts/reverse_video_prompt`（`studio/llm.py`）——与「图片反推」页是两条接口、两个落点，
 页与页互不牵扯。
 
 ## 用这条路径
@@ -40,9 +40,10 @@ Studio 首页「编辑」板块的卡片「视频反推」进 `#/reverse_video`�
 
 ## 离线形态
 
-反推要吃内核那侧的 LLM 链与视频读取路径，桌面端窗口在 ComfyUI 未就绪时把「反推」写成「需要 ComfyUI」，
-点它交桌面端拉起内核，不发一条注定 409 的请求（`app/studio_caps.py` 的 `prompt_reverse_video` 一位）。
-抽帧本身在浏览器里做，离线窗口里预览与抽帧都跑得动，要内核的只有「反推」这一发。
+反推链注册在 `studio/llm.py` 的 routes 上，桌面端离线窗口自己就服务这一发（`app/studio_caps.py` 的
+`prompt_reverse_video` 一位）：取视频用 gallery 的媒体查找器、成文写 `<视频>.rp.txt`，全程 LLM 链与文件系统，
+不碰执行队列。抽帧本身也在浏览器里做，整页在离线窗口里跑得出，不需要 ComfyUI 起来。
+要配的只有 LLM；原生引擎一次只吃第一帧，多帧那一发由后端当场拒掉（见 [llm.md](llm.md)）。
 
 ## 智能体与 MCP
 

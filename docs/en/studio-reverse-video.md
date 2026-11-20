@@ -3,7 +3,7 @@
 The 视频反推 card in the **Edit** section of the Studio home page opens `#/reverse_video`
 (`studio/web/reverse-video/reverse-video.js`). The top bar has no tab for it: that card is the only way in, and
 deleting it from the home layout (add it back in the card picker) leaves the page unreachable. The route is
-`POST /rs_prompts/reverse_video_prompt` (`studio/prompts.py`) — a separate endpoint and a separate landing file
+`POST /rs_prompts/reverse_video_prompt` (`studio/llm.py`) — a separate endpoint and a separate landing file
 from the 图片反推 page; the two pages share nothing.
 
 ## Using it
@@ -56,10 +56,11 @@ directly on the page, the result text lands with no frame around it, all in one 
 
 ## Offline mode
 
-Reversal needs the kernel-side LLM chain and the video read path, so when ComfyUI is not ready the desktop window
-writes the 反推 button as 需要 ComfyUI, and clicking it asks the window to start the kernel instead of sending a
-request that can only answer 409 (the `prompt_reverse_video` entry in `app/studio_caps.py`). Frame extraction runs
-in the browser, so preview and extraction work in the offline window — only the reversal needs the kernel.
+The reverse chain is registered on `studio/llm.py`'s routes, so the offline desktop window serves this shot itself (the
+`prompt_reverse_video` entry in `app/studio_caps.py`): the video is located by the gallery media finder and the finished
+text is written to `<video>.rp.txt` — LLM chain plus filesystem, the execution queue is never touched. Frame extraction
+also runs in the browser, so the whole page works with the kernel down. The only prerequisite is a configured LLM; the
+native engine takes only the first frame, so a multi-frame shot is refused on the spot (see [llm.md](llm.md)).
 
 ## Agent and MCP
 

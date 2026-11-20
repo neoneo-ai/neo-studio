@@ -57,7 +57,7 @@ studio/
 ├── prompt_lines.py            # multi-line prompt collection parsing
 ├── skill.py                   # skill system + skill routes
 ├── skill_cloud.py             # cloud skill subscription source reader (cached index, verified install by id) + 2 /rs_prompts routes
-├── llm.py                     # LLM inference: remote API / native safetensors / local GGUF
+├── llm.py                     # LLM inference: remote API / native safetensors / local GGUF + enhance & reverse-prompt routes
 ├── laya_router.py             # lightweight local text classification
 ├── minimax_h3.py              # MiniMax H3 generation modes & grounding
 ├── h3_prompt_audit.py         # H3 prompt format audit
@@ -106,7 +106,7 @@ studio/
 | `prompt_names.py` | Prompt read-side scan: list, text, line-level collections, random pool, names and tags; touches no `PromptServer`, shared with the offline desktop service |
 | `prompt_lines.py` | Parsing and random selection of the multi-line prompt collections under `collections/` |
 | `skill.py` | Skill scanning and loading, multi-result contract, reference-file tool loop, skill routes |
-| `llm.py` | Remote OpenAI-compatible calls, domestic cloud providers, native safetensors text generation, local GGUF inference |
+| `llm.py` | Remote OpenAI-compatible calls, domestic cloud providers, native safetensors text generation, local GGUF inference; the enhancement and reverse-prompt chain routes (desktop-served offline) |
 | `skill_cloud.py` | Cloud skill subscription source reader: read-only cached index, fingerprint-verified install into `skills/custom/` |
 | `laya_router.py` | Lightweight text classification: enhancement-skill selection and intent pre-routing |
 

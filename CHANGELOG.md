@@ -82,6 +82,7 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
   first screen and pull the scroll position back to the top.
 
 ### Changed
+- **Image and video reverse-prompt run in the desktop window with ComfyUI down.** The reverse chain moved off the plugin's `prompts.py` onto `studio/llm.py`'s routes — the module the desktop window already serves offline — so 图片反推 and 视频反推 answer inside the offline window: the picture and the video are located through the gallery media finder, and the finished text lands in the same sidecar files as before (`.txt` next to an image, `<video>.rp.txt` next to a video, both keyed by language, the video one by frame count too). A missing LLM now shows that chain's own error in the page instead of the 需要 ComfyUI gate, and the two pages no longer ask the window to boot the kernel. The 需要 ComfyUI gate stays on 声音克隆, and every reverse entry (asset card 反推, 图片反推页, 视频反推页, MCP `reverse_prompt`) keeps its existing capability flag.
 - **The video-card preview caps the clip's short edge at 480, not its width.** A landscape clip was encoding to
   480×270 — narrower than the masonry tile it fills, so it played enlarged. It now comes out 854×480 and a portrait
   clip keeps 480×854, the same landscape size the published preset pack ships and 2.6× its portrait pixels, at the

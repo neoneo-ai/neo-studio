@@ -724,8 +724,9 @@ buttons clicking into nothing. Only one editor exists in the window:
   `studio/web/reverse-video/reverse-video.js`). The seven top-bar tabs
   give them no place: hide the card on the home page and the page has no way in. All three pages ride the same
   "views stay mounted, pages show and hide" route as every other page, and their run buttons go through
-  `RUN_GATES` (`voice` / `prompt_reverse` / `prompt_reverse_video`) — offline, clicking one starts the kernel
-  instead of sending a request that can only answer 409. Cases: `studio/tests/js/studio-home-pages.test.mjs`,
+  `RUN_GATES` (`voice` / `prompt_reverse` / `prompt_reverse_video`): offline, 声音克隆 starts the kernel instead of
+  sending a request that can only answer 409, while 图片反推 and 视频反推 are desktop-served and run in the offline
+  window. Cases: `studio/tests/js/studio-home-pages.test.mjs`,
   `studio/tests/js/reverse-prompt.test.mjs`, `studio/tests/js/reverse-video.test.mjs`, `studio/tests/js/voice-clone.test.mjs`.
 - The "提示词增强" card in the **Create** section is the third `target: "page"` direct card (`value: "enhance"`); it lands in
   `route()` and mounts `#/enhance` (`studio/web/prompt-enhance/prompt-enhance.js`), and the top bar gives it no tab either.

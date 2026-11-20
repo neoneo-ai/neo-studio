@@ -6,7 +6,7 @@ import { t } from "../../../js/core/i18n.js";
 import { MAX_SCALE, MIN_SCALE } from "./geometry.js";
 
 /** @typedef {{x: number, y: number}} Position */
-/** @typedef {{id: string, type: "image" | "text" | "gen" | "video" | "recipe" | "edit", title: string, position: Position, width: number, height: number, metadata: Object}} CanvasNodeData */
+/** @typedef {{id: string, type: "image" | "text" | "gen" | "video" | "recipe" | "edit" | "enhance" | "reverse", title: string, position: Position, width: number, height: number, metadata: Object}} CanvasNodeData */
 /** @typedef {{id: string, fromNodeId: string, toNodeId: string}} CanvasConnection */
 /** @typedef {{id: string, title: string, nodes: CanvasNodeData[], connections: CanvasConnection[], viewport: {x: number, y: number, k: number}, backgroundMode: string}} CanvasState */
 
@@ -20,6 +20,10 @@ export const NODE_SPECS = {
     recipe: { width: 360, height: 176, title: "车厢" },
     // 图像编辑节点：图与提示词都从连过来的节点取，这一张只管选技能与出图 —— 卡面与生成节点同一档（接法见 gen.js 的 runEdit）
     edit: { width: 320, height: 208, title: "图像编辑" },
+    // 增强节点：要重写的正文从连过来的提示词节点取，成文写进下游空的提示词节点（见 gen.js 的 runEnhance）
+    enhance: { width: 320, height: 168, title: "增强" },
+    // 反推节点：要反推的那一张从连过来的图片节点取，成文同样写进下游空的提示词节点（见 gen.js 的 runReverse）
+    reverse: { width: 320, height: 168, title: "反推" },
 };
 
 /** 图片节点按原图比例落位时短边的下限：比这更窄/更矮的卡就点不动了 */

@@ -334,8 +334,9 @@ Neo Studio 独立页面（`web/studio/index.html`）的后端。素材 / 生图 
   正文型技能只能走 `generate_prompt`，见 `docs/skills.md`）。
 - `save_skill` 校验名称唯一性（与其它技能重名返回 409）；可选字段缺省沿用 frontmatter 既有值，显式假值移除该字段。
 - LLM 配置与标题提取（`get_models` / `native_models` / `set_model` / `remote_llm_config` /
-  `llm_connection_test` / `llm_mode` / `extract_title` / `fetch_remote_models`）由 `llm.py` 的
-  `RouteTableDef` 注册：只读 `configs/` 与 8080 服务，不依赖 ComfyUI 运行时，桌面端离线同样服务。
+  `llm_connection_test` / `llm_mode` / `extract_title` / `fetch_remote_models`）与反推两条
+  （`reverse_prompt` / `reverse_video_prompt`）都由 `llm.py` 的 `RouteTableDef` 注册：只读 `configs/`、
+  数据根里的素材与 8080 服务，不依赖 ComfyUI 运行时，桌面端离线同样服务。
 
 LLM 模式与配置见 [llm.md](llm.md)，技能设计见 [skills.md](skills.md)。
 
@@ -361,8 +362,9 @@ LLM 模式与配置见 [llm.md](llm.md)，技能设计见 [skills.md](skills.md)
 - 读侧七条在桌面端能力表内（`app/studio_caps.py` 的 `_PROMPTS`），离线窗口答得来，封面也是文件读取。
   写侧（`save_prompt` / `delete_prompt` 更新标签索引、`set_prompt_cover` 写封面）不在表内：能力表上它是
   `prompt_library_write` 那一位，前端据此把「保存为预设」「设为封面」指向启动内核。
-  提示词增强那条链（`enhance_prompt` / `stream_generate_prompt`）在表内的 `_LLM` 里，桌面端离线自服
-  （[studio-prompt-enhance.md](studio-prompt-enhance.md)），`reverse_prompt` 不在表内、仍走 ComfyUI 端口。
+  提示词增强与反推两条链（`enhance_prompt` / `stream_generate_prompt` / `reverse_prompt` /
+  `reverse_video_prompt`）都在表内的 `_LLM` 里，桌面端离线自服
+  （[studio-prompt-enhance.md](studio-prompt-enhance.md)、[studio-reverse.md](studio-reverse.md)）。
 - 保存按名字的首段落目录：`video/名字` 落 `custom/video/`，`presets/名字` 落出厂预设源目录，其余落 `custom/` 根层；
   删除与标签索引认同一份扫描名。旧版平铺文件的判类搬家在插件启动时跑一次，判过的记在 `custom/_kind_split.json`，
   删掉它是「从没跑过」。

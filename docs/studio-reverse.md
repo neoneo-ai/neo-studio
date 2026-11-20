@@ -21,8 +21,9 @@ Studio 首页「编辑」板块的卡片「图片反推」进 `#/reverse`（`stu
 
 ## 离线形态
 
-反推要吃内核那侧的 LLM 链与图片读取路径，桌面端窗口在 ComfyUI 未就绪时把「反推」写成「需要 ComfyUI」，
-点它交桌面端拉起内核，不发一条注定 409 的请求（`app/studio_caps.py` 的 `prompt_reverse` 一位）。
+反推链注册在 `studio/llm.py` 的 routes 上，桌面端离线窗口自己就服务这一发（`app/studio_caps.py` 的
+`prompt_reverse` 一位）：取图用 gallery 的媒体查找器、成文写素材同目录的 `.txt`，全程 LLM 链与文件系统，
+不碰执行队列。要配的只有 LLM —— 本机没配时页面报的是 LLM 链自己的失败，不是「需要 ComfyUI」。
 
 ## 智能体与 MCP
 

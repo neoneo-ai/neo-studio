@@ -412,8 +412,8 @@ js_api（`check_setup` / `pick_root` / `pick_python` / `start_setup`），根目
   （`studio/web/voice-clone/voice-clone.js`、`studio/web/reverse-prompt/reverse-prompt.js`、
   `studio/web/reverse-video/reverse-video.js`）：顶栏那七枚页签不给它们位置，首页把这三张卡删掉（在「添加卡片」里加回来），这一页就进不去；
   三页与其余页同一条「视图常驻、切页显隐」的路由。三页的运行钮交 `RUN_GATES`
-  （`voice` / `prompt_reverse` / `prompt_reverse_video`），
-  离线形态点它是拉起内核，不是发一条注定 409 的请求。
+  （`voice` / `prompt_reverse` / `prompt_reverse_video`）：`voice` 离线点它是拉起内核，不是发一条注定 409
+  的请求；`prompt_reverse` 与 `prompt_reverse_video` 在桌面端自服，离线窗口直接跑这一发。
   用例：`studio/tests/js/studio-home-pages.test.mjs`、`studio/tests/js/reverse-prompt.test.mjs`、
   `studio/tests/js/reverse-video.test.mjs`、`studio/tests/js/voice-clone.test.mjs`。
 - 「创作」的「提示词增强」是第三张 `target: "page"` 的直连卡（`value: "enhance"`），落进 `route()` 挂出

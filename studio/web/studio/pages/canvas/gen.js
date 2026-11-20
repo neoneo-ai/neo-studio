@@ -16,7 +16,9 @@ import { cancelTask, COMMON_EDGES, COMMON_RATIOS, createModelConfigSection, crea
     getSkillGenConfig, listGenModels, listVideoGenModels, requestGeneration, shortModelName,
     watchTask } from "../../../image-gen.js";
 import { directorMetaText, listRecipes, listVideoSkills } from "../../../recipes.js";
-import { listSkills, skillAcceptsRef, skillAcceptsText, skillDisplayName } from "../../../skill.js";
+import { listSkills, skillAcceptsRef, skillAcceptsText, skillDisplayName, isEnhanceSkill } from "../../../skill.js";
+import { ENHANCE_API, enhancePayload } from "../../../prompt-enhance/prompt-enhance.js";
+import { REVERSE_API, REVERSE_LANGS, reverseRequestBody } from "../../../reverse-prompt/reverse-prompt.js";
 
 // 画布自己记的默认技能（绘画页与视频页各记各的，同一套法）：新建生成节点带出上一次在这页选的技能
 const LAST_SKILL_KEY = "neo.canvas.skill";
@@ -35,6 +37,19 @@ const CONTEXT_FRAMES_DEFAULT = 22;    // 导演页与后端同一个默认窗口
 const CONTEXT_FRAMES_CHOICES = [0, 8, 14, 22, 29, 36];
 // 连过来的素材按类型分三档，与后端段参考素材（refs.images / videos / audios）同一口径
 const MEDIA_GROUPS = { image: "images", video: "videos", audio: "audios" };
+
+// 增强与反推两条 LLM 链在卡面上说的话：运行钮、状态行与提示条都读这一对
+export const LLM_RUNS = {
+    enhance: { kind: "enhance", text: "增强", fail: "增强失败", running: "增强中",
+        chars: "增强中 · {n} 字", done: "已增强出提示词", cancelled: "已取消增强" },
+    reverse: { kind: "reverse", text: "反推", fail: "反推失败", running: "反推中",
+        chars: "反推中 · {n} 字", done: "已反推出提示词", cancelled: "已取消反推" },
+};
+
+/** SSE 帧体 → 帧对象：非 JSON 的帧（心跳、注释行）交 null，读流那一条不收它当正文 */
+function llmFrame(data) {
+    try { return JSON.parse(data); } catch { return null; }
+}
 
 // 自定参数存在生成节点 metadata.gen_params 里的键（与后端 _OVERRIDE_KEYS / _VIDEO_OVERRIDE_KEYS 同一批）：
 // 空 = 跟随该技能 config 与全局生图 / 生视频设置，请求里不带这一项
@@ -163,14 +178,16 @@ export function genInputs(state, genNodeId) {
     return { prompts, references };
 }
 
-export function createCanvasGen({ $el, toast, api, canGen, host }) {
+export function createCanvasGen({ $el, toast, api, canGen, canFeature, host }) {
     // 一发一份运行态（节点上那一行状态就是它）。watchTask 在终态自己摘监听；切画布只把这一发脱手：
     // 图已经落在 Output 目录，不再写回旧画布，也不在页面外头留一份没人收的监听
     const running = new Map();
     const detached = new Set();
     const timers = new Map();     // 轮询链（简单视频 / 配方单段）的计时句柄：task_id → setInterval
     const chains = new Map();     // 串联的车尾节点 id → 这一列还在跑的段节点 id（车尾的进度与整列取消读它）
+    const llmRuns = new Map();    // 增强 / 反推的在途一发：节点 id → {abort, stopped}（取消与脱手都按节点摘这一发）
     const skills = { rows: [], inflight: null };
+    const enhanceSkills = { rows: [], inflight: null };
     const videoSkills = { rows: [], inflight: null };
     const recipes = { rows: [], inflight: null };
     const cfgs = { byId: new Map(), inflight: new Map() };
@@ -212,6 +229,19 @@ export function createCanvasGen({ $el, toast, api, canGen, host }) {
                 .finally(() => { skills.inflight = null; });
         }
         return skills.inflight;
+    }
+
+    /** 增强节点的技能胶囊要列的那一份：与首页「提示词增强」页同一判法（吃正文的那几条增强技能）。
+     *  生图技能不在这一份里 —— 增强链不跑图，画布上的技能列表与那一页必须同一口径 */
+    function loadEnhanceSkills() {
+        if (enhanceSkills.rows.length) return Promise.resolve(enhanceSkills.rows);
+        if (!enhanceSkills.inflight) {
+            enhanceSkills.inflight = listSkills()
+                .then((rows) => { enhanceSkills.rows = (rows || []).filter(isEnhanceSkill); return enhanceSkills.rows; })
+                .catch(() => [])
+                .finally(() => { enhanceSkills.inflight = null; });
+        }
+        return enhanceSkills.inflight;
     }
 
     function skillName(id) {
@@ -695,7 +725,152 @@ export function createCanvasGen({ $el, toast, api, canGen, host }) {
         submitImageRun(node, body, params.count);
     }
 
+    /** 增强与反推共用的闸门：停用的那一张不跑；这一发在跑就不重复提交；能力位缺了说去哪儿启。
+     *  两条链都在桌面端自服的能力表上（prompt_enhance / prompt_reverse），离线窗口照跑 ——
+     *  要的是本机配好 LLM，不是执行队列 */
+    function llmGate(node, feature) {
+        if (node.metadata?.disabled === true) {
+            toast(t("这台节点已停用：在节点上方的浮出栏里启用"), "info");
+            return true;
+        }
+        if (running.has(node.id)) return true;
+        if (canFeature?.(feature) === false) {
+            toast(t("该功能需要 ComfyUI：点顶栏 ComfyUI 胶囊启动，好了再按一次"), "warn");
+            return true;
+        }
+        return false;
+    }
+
+    /** 反推吃的那一张：连线顺序里第一张启用的图片节点（与 genInputs 取参考同一条顺序） */
+    function reverseFirstImage(state, nodeId) {
+        for (const conn of state.connections) {
+            if (conn.toNodeId !== nodeId) continue;
+            const node = state.nodes.find((n) => n.id === conn.fromNodeId);
+            if (node?.type === "image" && node.metadata?.disabled !== true) return node;
+        }
+        return null;
+    }
+
+    /** LLM 流的帧 → 正文增量：思考块不进正文（画布要落的是提示词，不是模型的思考过程）；失败走
+     *  [ERROR] 前缀帧与写进正文块里的 [ERROR] 两种（与 prompt-service 读流那一条同一口径）——
+     *  这一发没有状态码可查，不在这里抛就只剩一个空正文 */
+    async function readLlmText(resp, onProgress) {
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let acc = "";
+        let buf = "";
+        const fail = (msg) => new Error(msg || t("LLM 链失败"));
+        for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buf += decoder.decode(value, { stream: true });
+            const lines = buf.split("\n");
+            buf = lines.pop() || "";
+            for (const line of lines) {
+                if (!line.startsWith("data:")) continue;
+                const data = line.slice(5).trim();
+                if (data === "[DONE]") return acc;
+                if (data.startsWith("[ERROR]")) throw fail(data.slice(7).trim());
+                const frame = llmFrame(data);
+                if (!frame || frame.kind === "thinking") continue;   // 心跳与非 JSON 帧照收不下屏
+                if (typeof frame.text !== "string") continue;
+                if (frame.text.startsWith("[ERROR]")) throw fail(frame.text.slice(7).trim());
+                acc += frame.text;
+                onProgress(acc);
+            }
+        }
+        return acc;
+    }
+
+    /** 一发 LLM 链（增强 / 反推）：POST 一条 SSE，正文逐段落进状态行那一串字数，成文交 applyText
+     *  写进下游空的提示词节点。取消走 AbortController（cancel 里按节点摘这一发）；切画布与卸页交
+     *  stopAll 脱手 —— 在途的正文不落这一张画布 */
+    function submitLlmRun(node, path, body, run) {
+        const inflight = { abort: new AbortController(), stopped: false };
+        llmRuns.set(node.id, inflight);
+        setRunning(node.id, { kind: run.kind, status: "running", done: 0, total: 0, error: "" });
+        let shown = 0;
+        api.fetchApi(path, { method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body), signal: inflight.abort.signal })
+            .then(async (resp) => {
+                // 状态码先判，正文一消费就读不了流：失败那一格的提示只在这一条里取 json（prompt-service 同一读流法）
+                if (!resp.ok) {
+                    const data = await resp.json().catch(() => null);
+                    throw new Error(data?.error || `HTTP ${resp.status}`);
+                }
+                const text = await readLlmText(resp, (acc) => {
+                    // 每 40 字报一次进度：逐 token 整层重画会把节点上的打字与拖动全卡住
+                    if (acc.length - shown < 40) return;
+                    shown = acc.length;
+                    if (running.has(node.id)) setRunning(node.id, { done: acc.length });
+                });
+                if (inflight.stopped || inflight.abort.signal.aborted) {
+                    // 取消时流自己断（reader 直接 done）：在途的半截正文不落这一张画布
+                    if (llmRuns.get(node.id) === inflight) finishLlmCancel(node, inflight, run);
+                    return;
+                }
+                llmRuns.delete(node.id);
+                if (!text.trim()) throw new Error(t("后端没有回正文"));
+                running.delete(node.id);
+                if (!host.hasNode(node.id)) { toast(t("提示词已生成"), "success"); return; }
+                host.applyText(node.id, text.trim());
+                toast(t(run.done), "success");
+            })
+            .catch((err) => {
+                const fell = llmRuns.get(node.id) !== inflight;   // 脱手与取消：这一发不再改这一张画布上的状态
+                llmRuns.delete(node.id);
+                if (fell) return;
+                if (err?.name === "AbortError" || inflight.stopped) {
+                    finishLlmCancel(node, inflight, run);
+                    return;
+                }
+                running.set(node.id, { kind: run.kind, status: "failed", error: String(err?.message || err) });
+                host.paintNodes();
+                toast(`${t(run.fail)}：${String(err?.message || err)}`, "error");
+            });
+    }
+
+    /** 取消那一发的收场：摘状态、整层重画、说一句「已取消」—— 已摘掉这一发的（脱手）不再说话 */
+    function finishLlmCancel(node, inflight, run) {
+        if (llmRuns.get(node.id) !== inflight) return;
+        llmRuns.delete(node.id);
+        running.delete(node.id);
+        host.paintNodes();
+        toast(t(run.cancelled), "info");
+    }
+
+    /** 增强节点：连过来的正文按连线顺序拼一条送进那条增强链（技能留空 = 后端按输入智能挑一条），
+     *  成文落下游提示词节点 —— 与首页「提示词增强」页是同一条接口 */
+    function runEnhance(node) {
+        if (llmGate(node, "prompt_enhance")) return;
+        const { prompts } = genInputs(host.getState(), node.id);
+        if (!prompts.length) { toast(t("把要增强的提示词节点连过来"), "info"); return; }
+        submitLlmRun(node, ENHANCE_API,
+            enhancePayload({ text: prompts.join("\n\n"), skillId: String(node.metadata.skill_id || "") }),
+            LLM_RUNS.enhance);
+    }
+
+    /** 反推节点：连线顺序里第一张图进请求（素材库那三元组，与素材卡 ⋯ 反推同一份），成文落下游
+     *  提示词节点。配方素材（只有 asset 没有 filename）后端认不到，跑之前就说清楚 */
+    function runReverse(node) {
+        if (llmGate(node, "prompt_reverse")) return;
+        const src = reverseFirstImage(host.getState(), node.id);
+        if (!src) { toast(t("把要反推的那一张图片节点连过来"), "info"); return; }
+        const filename = String(src.metadata?.filename || "");
+        if (!filename) { toast(t("反推只吃素材库里的图：连一张带素材路径的图片节点过来"), "info"); return; }
+        submitLlmRun(node, REVERSE_API,
+            reverseRequestBody({ filename, subfolder: String(src.metadata?.subfolder || "") },
+                node.metadata.language === "en" ? "en" : "zh"),
+            LLM_RUNS.reverse);
+    }
+
     function cancel(node) {
+        const inflight = llmRuns.get(node.id);
+        if (inflight) {
+            inflight.stopped = true;
+            inflight.abort.abort();   // 收摊在 submitLlmRun 的 catch：那一发自己收状态并说一句已取消
+            return;
+        }
         const chain = chains.get(node.id);
         if (chain) {
             // 整列取消：这一列在跑的每一段自己出队，收摊归各自的轮询
@@ -739,6 +914,11 @@ export function createCanvasGen({ $el, toast, api, canGen, host }) {
         }
         running.clear();
         chains.clear();
+        for (const llm of llmRuns.values()) {
+            llm.stopped = true;
+            llm.abort.abort();   // 在途的正文不落这一张画布：catch 认得出这是脱手，只收流
+        }
+        llmRuns.clear();
     }
 
     /** 技能 config 缓存：节点上「主模型」那一行与比例 / 长边的跟随态读它。一份技能只取一次
@@ -1002,9 +1182,53 @@ export function createCanvasGen({ $el, toast, api, canGen, host }) {
         ];
     }
 
+    /** 增强 / 反推节点上的控件：一枚技能（增强）或语言（反推）胶囊 + 运行钮一行 —— 要重写的正文与
+     *  要反推的那一张都不在这张节点上，从连过来的节点取（见 runEnhance 与 runReverse） */
+    function llmControls(node) {
+        const st = running.get(node.id) || {};
+        const busy = st.status === "running";
+        const isReverse = node.type === "reverse";
+        const run = isReverse ? LLM_RUNS.reverse : LLM_RUNS.enhance;
+        const acts = [];
+        if (busy) acts.push(genBtn(t("取消任务"), "cross", () => cancel(node), t("取消这一发后台任务")));
+        acts.push(genBtn(t(run.text), "play", () => (isReverse ? runReverse(node) : runEnhance(node)),
+            t(isReverse ? "把连过来的那张图写成一段提示词" : "把连过来的正文交给 LLM 重写"),
+            busy, "ns-canvas-gen-go"));
+        return [
+            $el("div", { className: "ns-canvas-gen-skill" }, [isReverse ? reverseLangChip(node, busy) : enhanceSkillChip(node, busy)]),
+            $el("div", { className: "ns-canvas-gen-bottom" }, [$el("div", { className: "ns-canvas-gen-acts" }, acts)]),
+        ];
+    }
+
+    /** 反推节点上的语言胶囊：与反推页和素材卡反推同一对取值（后端认 zh / en） */
+    function reverseLangChip(node, busy) {
+        const sel = $el("select", { disabled: busy, title: t("反推输出的语言"),
+            onchange: () => host.patchMeta(node.id, { language: sel.value }) });
+        for (const { value, label } of REVERSE_LANGS) sel.append($el("option", { value, textContent: label }));
+        sel.value = node.metadata.language === "en" ? "en" : "zh";
+        return genChip(sel, { icon: "list" });
+    }
+
+    /** 增强节点上的技能胶囊：列表里留空那一档就是「后端智能判断」（带图走反推、不带图走默认增强），
+     *  与首页「提示词增强」页的技能那一枚同一口径；技能被删了、列表没取到时把存的这一个也列出来 */
+    function enhanceSkillChip(node, busy) {
+        const saved = String(node.metadata.skill_id || "");
+        const sel = $el("select", { disabled: busy, title: t("增强用哪一条技能：留空 = 后端按输入智能判断"),
+            onchange: () => host.patchMeta(node.id, { skill_id: sel.value }) });
+        sel.append($el("option", { value: "", textContent: t("智能判断") }));
+        for (const s of enhanceSkills.rows) sel.append($el("option", { value: s.id, textContent: skillDisplayName(s) }));
+        sel.value = saved;
+        if (sel.value !== saved && saved) {
+            sel.value = "";
+            sel.appendChild($el("option", { value: saved, textContent: saved, disabled: true, selected: true }));
+        }
+        return genChip(sel, { icon: "sparkles" });
+    }
+
     /** 「加生成节点」把技能列表取到手：胶囊里列的就是那一份；技能被删了，旧画布上的节点要能认出来 */
     function prime() {
         loadSkills().then(host.paintNodes).catch(() => {});
+        loadEnhanceSkills().then(host.paintNodes).catch(() => {});
         loadModelLists();
     }
 
@@ -1323,6 +1547,7 @@ export function createCanvasGen({ $el, toast, api, canGen, host }) {
         carView,
         controls,
         editControls,
+        llmControls,
         prime,
         primeVideo,
         primeRecipes,

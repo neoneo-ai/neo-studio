@@ -2438,6 +2438,298 @@ async def rs_prompts_stream_generate_prompt(request):
 
 
 # ==========================================
+# 反推提示词（图片 / 视频抽帧序列）：LLM 流 + 同名旁车落盘，注册在本模块的 routes。
+# 桌面端离线服务挂载的就是本模块的 routes（app/studio_caps.py 的 _LLM）；反推要在离线窗口跑得动，
+# 这条链就不能留在顶层带 server 与 torch 的 prompts.py 里。
+# ==========================================
+
+# 中文反推系统提示词：明确中文质量词示例，避免 skill.md 默认英文版里的英文质量词把输出带成英文
+_REVERSE_PROMPT_ZH_SYSTEM = (
+    "你是一个专业的图像反推提示词助手。请仔细观察给定的图像，反推出用于生成该图像的文生图提示词。要求：\n"
+    "1. 分析图像中的主体、场景、风格、光影、构图、材质、氛围等所有视觉元素\n"
+    "2. 使用中文生成详细的提示词，包含中文质量词（如：杰作、最佳画质、高分辨率、细节丰富、8k 等）\n"
+    "3. 提示词应适合文生图模型使用\n"
+    "4. 仅返回提示词内容，不要包含任何解释、说明、前言或后缀文字\n"
+    "5. 不要说'好的'、'这是反推的提示词'等任何多余内容，直接输出提示词本身"
+)
+
+# 一发最多喂几帧：canvas 出的是 PNG，12 帧 @768px 编码后约 3MB，稳在桌面端自服务的
+# 请求体上限内（app/studio_server.py 按 frames.MAX_BODY_BYTES 装配请求体）
+REVERSE_VIDEO_MAX_FRAMES = 12
+
+# 中文视频反推系统提示词：明确中文质量词，理由与图像那条同——skill.md 的默认英文版会把中文输出带成英文
+_REVERSE_VIDEO_ZH_SYSTEM = (
+    "你是专业的视频反推提示词助手。用户给出来自同一条视频、按时间顺序排列的若干帧，"
+    "每一帧都带它在片中的时间戳。把这些帧还原成一段能生成这条视频的提示词。要求："
+    "1. 把帧当成一段在动的镜头来读：主体、场景、风格、光线、色调、氛围写成一段连贯的话，不要逐帧罗列；"
+    "2. 从帧与帧的变化判断运镜：推、拉、摇、移、跟、升降、手持、航拍、固定机位，以及镜头之间的切换节奏；"
+    "3. 用时间戳说清动作发生在片中的哪一段：前段发生什么、后段发生什么；"
+    "4. 使用中文生成提示词，附带中文视频质量词（如：电影感、运镜流畅、细节丰富、高画质、稳定画面等），"
+    "适用于文生视频与文生图模型；"
+    "5. 只返回提示词本身，不要解释，不要前后缀，不要分帧描述。"
+)
+
+
+@routes.post("/rs_prompts/reverse_prompt")
+async def rs_prompts_reverse_prompt(request):
+    """从图像反推提示词并流式返回，结果保存为同名 .txt 文件"""
+    try:
+        data = await request.json()
+        filename = data.get("filename", "")
+        subfolder = data.get("subfolder", "presets")
+        language = str(data.get("language", "zh")).strip().lower()
+        if language not in ("zh", "en"):
+            language = "zh"
+
+        if not filename:
+            return _reverse_sse_error("filename is required")
+
+        # 用共享的媒体查找器定位图像（覆盖 presets/custom/输入输出/宫格/角色等全部来源）
+        from .gallery import _find_source_media
+        image_path = _find_source_media(filename, subfolder)
+        if image_path is None or not image_path.exists():
+            return _reverse_sse_error("Image not found")
+
+        txt_path = image_path.with_suffix(".txt")
+        lang_path = image_path.with_suffix(".rp-lang")
+
+        # 同名 .txt 已存在且语言匹配时直接返回缓存，避免重复调用 LLM；
+        # 切换语言（或旧缓存无语言标记）则跳过缓存强制重新反推。
+        cached_prompt = _reverse_cache_hit(txt_path, lang_path, language)
+        if cached_prompt is not None:
+            logger.info(f"Reverse prompt cache hit: {txt_path} (lang={language})")
+
+            async def cached_stream():
+                yield _reverse_sse_frame({"text": cached_prompt, "kind": "content"})
+                yield _reverse_sse_frame({"meta": {"status": "success", "txt_file": txt_path.name, "language": language}})
+                yield b"data: [DONE]\n\n"
+
+            return web.Response(body=cached_stream(), content_type="text/event-stream",
+                                headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+        # 读取图像，如果过大则缩放到最长边 1024px
+        MAX_REVERSE_SIDE = 1024
+        image_bytes: bytes = b""
+        try:
+            with Image.open(image_path) as img:
+                w, h = img.size
+                if max(w, h) > MAX_REVERSE_SIDE:
+                    ratio = MAX_REVERSE_SIDE / max(w, h)
+                    new_w = int(w * ratio)
+                    new_h = int(h * ratio)
+                    img_resized = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+                    buf = io.BytesIO()
+                    img_resized.save(buf, format=img.format or "PNG")
+                    image_bytes = buf.getvalue()
+                else:
+                    with open(image_path, "rb") as f:
+                        image_bytes = f.read()
+        except Exception as resize_err:
+            logger.warning(f"Failed to resize image, using original: {resize_err}")
+            with open(image_path, "rb") as f:
+                image_bytes = f.read()
+
+        # 按语言选择系统提示词：中文用明确中文版，英文沿用 skill.md 默认
+        system_prompt = _reverse_system_prompt(language)
+        gen = run_llm_task_stream("reverse_prompt", "", images=[image_bytes], system_prompt=system_prompt)
+
+        return web.Response(body=_reverse_llm_stream(gen, txt_path, lang_path, language, language),
+                            content_type="text/event-stream",
+                            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+    except Exception as e:
+        logger.error(f"Error handling reverse prompt: {e}")
+        logger.exception(e)
+        return _reverse_sse_error(str(e))
+
+
+@routes.post("/rs_prompts/reverse_video_prompt")
+async def rs_prompts_reverse_video_prompt(request):
+    """从一条视频的抽帧序列反推提示词并流式返回，结果写进视频同名的 .rp.txt"""
+    try:
+        data = await request.json()
+        filename = data.get("filename", "")
+        subfolder = data.get("subfolder", "")
+        language = str(data.get("language", "zh")).strip().lower()
+        if language not in ("zh", "en"):
+            language = "zh"
+
+        if not filename:
+            return _reverse_sse_error("filename is required")
+
+        from .gallery import _find_source_media
+        video_path = _find_source_media(filename, subfolder)
+        if video_path is None or not video_path.exists():
+            return _reverse_sse_error("Video not found")
+        from .util import VIDEO_EXTENSIONS
+        if video_path.suffix.lower() not in VIDEO_EXTENSIONS:
+            return _reverse_sse_error(f"视频反推只吃视频：{video_path.suffix}")
+
+        frames = _decode_reverse_frames(data.get("frames"))
+        if not frames:
+            return _reverse_sse_error("没有收到帧：先到抽帧页抽一批，或在本页抽帧")
+        if len(frames) > REVERSE_VIDEO_MAX_FRAMES:
+            return _reverse_sse_error(f"一次最多 {REVERSE_VIDEO_MAX_FRAMES} 帧")
+        # 原生引擎的视觉编码器一次只吃第一张图（docs/llm.md），多帧发过去只有首帧被看见
+        if get_current_mode() == LLM_MODE_NATIVE and len(frames) > 1:
+            return _reverse_sse_error("原生引擎只吃第一帧：把帧数调到 1，或改用远程视觉模型")
+
+        # 视频同名 .txt 是「视频再来一发」读进去的生效参数旁车（studio/gallery.py 的 _read_sidecar），
+        # 反推结果只能落 .rp.txt —— 落 .txt 等于一发把用户的生成参数覆盖掉
+        txt_path = video_path.with_suffix(".rp.txt")
+        lang_path = video_path.with_suffix(".rp-lang")
+        marker = f"{language}|{len(frames)}"
+
+        # 缓存按「语言 + 帧数」失效：帧数换了就是换了一次采样，旧结果不再对得上这一发
+        cached_prompt = _reverse_cache_hit(txt_path, lang_path, language, signature=len(frames))
+        if cached_prompt is not None:
+            logger.info(f"Reverse video prompt cache hit: {txt_path} (lang={marker})")
+
+            async def cached_stream():
+                yield _reverse_sse_frame({"text": cached_prompt, "kind": "content"})
+                yield _reverse_sse_frame({"meta": {"status": "success", "txt_file": txt_path.name, "language": language}})
+                yield b"data: [DONE]\n\n"
+
+            return web.Response(body=cached_stream(), content_type="text/event-stream",
+                                headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+        duration = data.get("range", {}).get("duration") if isinstance(data.get("range"), dict) else None
+        user_text = _reverse_video_user_text(frames, language, duration)
+        gen = run_llm_task_stream("video_reverse_prompt", user_text,
+                                  images=[blob for _, blob in frames],
+                                  system_prompt=_reverse_video_system_prompt(language))
+
+        return web.Response(body=_reverse_llm_stream(gen, txt_path, lang_path, language, marker),
+                            content_type="text/event-stream",
+                            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+    except Exception as e:
+        logger.error(f"Error handling video reverse prompt: {e}")
+        logger.exception(e)
+        return _reverse_sse_error(str(e))
+
+
+def _reverse_system_prompt(language):
+    """按语言返回反推系统提示词：中文用明确中文版（含中文质量词），英文沿用 skill.md 默认。"""
+    if language == "en":
+        return LLM_TASKS["reverse_prompt"]["system"]
+    return _REVERSE_PROMPT_ZH_SYSTEM
+
+
+def _reverse_sse_frame(obj):
+    return ("data: " + json.dumps(obj) + "\n\n").encode()
+
+
+def _reverse_sse_error(msg):
+    return web.Response(text=f"data: [ERROR] {msg}\n\n" + "data: [DONE]\n\n",
+                        content_type="text/event-stream")
+
+
+async def _reverse_llm_stream(gen, txt_path, lang_path, language, lang_marker):
+    """LLM 生成器 → SSE 正文帧 → 落盘同名旁车；模型跑空与链路异常都写成 [ERROR] 帧，不给空结果框。"""
+    accumulated = ""
+    try:
+        loop = asyncio.get_running_loop()
+
+        def next_chunk():
+            try:
+                return next(gen)
+            except StopIteration:
+                return None
+
+        while True:
+            chunk = await loop.run_in_executor(None, next_chunk)
+            if chunk is None:
+                break
+            text = chunk.get("text", "") if isinstance(chunk, dict) else str(chunk)
+            kind = chunk.get("kind", "content") if isinstance(chunk, dict) else "content"
+            if kind == "thinking":
+                continue
+            accumulated += text
+            yield _reverse_sse_frame({"text": text, "kind": "content"})
+
+        prompt_text = accumulated.strip()
+        if not prompt_text:
+            yield b"data: [ERROR] Failed to generate prompt\n\n"
+            yield b"data: [DONE]\n\n"
+            return
+        # 旁车与语言标记一起落：标记对不上（换语言 / 视频换了帧数）就跳过缓存重新反推
+        txt_path.write_text(prompt_text, encoding="utf-8")
+        lang_path.write_text(lang_marker, encoding="utf-8")
+        logger.info(f"Reverse prompt saved to: {txt_path} (lang={lang_marker})")
+        yield _reverse_sse_frame({"meta": {"status": "success", "txt_file": txt_path.name, "language": language}})
+        yield b"data: [DONE]\n\n"
+    except Exception as e:
+        logger.error(f"Reverse prompt stream error: {e}")
+        yield (f"data: [ERROR] {str(e)}\n\n").encode()
+        yield b"data: [DONE]\n\n"
+
+
+def _reverse_cache_hit(txt_path, lang_path, language, signature=None):
+    """同名 .txt 存在且记录标记与请求一致时返回缓存文本，否则返回 None（需重新反推）。
+
+    signature 是图片以外那一发特有的输入（视频用它 = 帧数）：标进 .rp-lang 后换输入就失效。
+    不传（图片那条）标记就是语言本身，旧缓存文件的读法一字不变。
+    """
+    if not txt_path.exists():
+        return None
+    cached = txt_path.read_text(encoding="utf-8").strip()
+    if not cached:
+        return None
+    expected = language if signature is None else f"{language}|{signature}"
+    cached_lang = lang_path.read_text(encoding="utf-8").strip() if lang_path.exists() else None
+    return cached if cached_lang == expected else None
+
+
+def _reverse_video_system_prompt(language: str) -> str:
+    """按语言返回视频反推系统提示词：中文用明确中文版（带运镜与时间戳读法），英文沿用 skill.md 默认。"""
+    if language == "en":
+        return LLM_TASKS["video_reverse_prompt"]["system"]
+    return _REVERSE_VIDEO_ZH_SYSTEM
+
+
+def _reverse_video_frame_stamp(sec) -> str:
+    """秒 → mm:ss.mmm：与抽帧页 frameStamp 同一套标签，模型看到的与用户在页面上看到的是同一个时间。"""
+    ms = int(round(float(sec) * 1000))
+    return f"{ms // 60000:02d}:{(ms // 1000) % 60:02d}.{ms % 1000:03d}"
+
+
+def _decode_reverse_frames(raw):
+    """前端抽好的帧 [{t, data}] → [(秒, PNG 字节)]。data 收裸 base64，也收 canvas 的 data URI 前缀。"""
+    frames = []
+    for item in raw or []:
+        if not isinstance(item, dict):
+            continue
+        data = str(item.get("data", ""))
+        if data.startswith("data:"):
+            data = data.partition(",")[2]
+        try:
+            blob = base64.b64decode(data)
+        except (ValueError, TypeError):
+            continue
+        if blob:
+            frames.append((float(item.get("t") or 0), blob))
+    return frames
+
+
+def _reverse_video_user_text(frames, language, duration=None):
+    """帧标签进正文：不带时间戳的多张图在模型眼里就是互不相关的画面，写不出运镜、节奏与先后。"""
+    if language == "en":
+        labels = ", ".join(f"frame {i + 1} at {_reverse_video_frame_stamp(t)}"
+                           for i, (t, _) in enumerate(frames))
+        text = f"These frames come from one video, in time order: {labels}."
+        if duration:
+            text += f" The full video is {_reverse_video_frame_stamp(duration)} long."
+        return text
+    labels = "、".join(f"帧{i + 1}@{_reverse_video_frame_stamp(t)}"
+                       for i, (t, _) in enumerate(frames))
+    text = f"以下 {len(frames)} 帧取自同一条视频，按时间顺序：{labels}。"
+    if duration:
+        text += f"整片时长 {_reverse_video_frame_stamp(duration)}。"
+    return text
+
+
+# ==========================================
 # Module Exports
 # ==========================================
 

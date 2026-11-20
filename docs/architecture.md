@@ -54,7 +54,7 @@ studio/
 ├── prompt_lines.py            # 多行提示词集合解析
 ├── skill.py                   # 技能系统 + 技能路由
 ├── skill_cloud.py             # 云端技能订阅源读侧（清单缓存 + 按 id 验指纹装包）+ 两条 /rs_prompts 路由
-├── llm.py                     # LLM 推理：远程 API / 原生 safetensors / 本地 GGUF
+├── llm.py                     # LLM 推理：远程 API / 原生 safetensors / 本地 GGUF + 增强与反推链路由
 ├── laya_router.py             # 本地轻量文本分类
 ├── minimax_h3.py              # MiniMax H3 生成模式与 grounding
 ├── h3_prompt_audit.py         # H3 提示词格式审计
@@ -103,7 +103,7 @@ studio/
 | `prompt_names.py`  | 提示词读侧扫描：列表、正文、行级集合、随机池、名字与标签；不碰 PromptServer，桌面端离线共用 |
 | `prompt_lines.py` | `collections/` 多行提示词集合的解析与随机选取 |
 | `skill.py` | 技能扫描加载、多结果契约、引用文件工具循环、技能路由 |
-| `llm.py` | 远程 OpenAI 兼容调用、国产云供应商、原生 safetensors 文本生成、本地 GGUF 推理 |
+| `llm.py` | 远程 OpenAI 兼容调用、国产云供应商、原生 safetensors 文本生成、本地 GGUF 推理；增强与反推两条链的路由（桌面端离线自服） |
 | `skill_cloud.py` | 云端技能订阅源读侧：清单只读缓存、按 id 验指纹装进 `skills/custom/` |
 | `laya_router.py` | 轻量文本分类：增强技能选择与意图预路由 |
 

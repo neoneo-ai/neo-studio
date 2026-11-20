@@ -392,9 +392,10 @@ included), and the dock never calls a handler directly.
 - `save_skill` validates name uniqueness (a collision with another skill returns 409); omitted optional fields keep
   the existing frontmatter values, and an explicit falsy value removes the field.
 - The LLM configuration and title-extraction routes (`get_models` / `native_models` / `set_model` /
-  `remote_llm_config` / `llm_connection_test` / `llm_mode` / `extract_title` / `fetch_remote_models`) are registered
-  by `llm.py`'s `RouteTableDef`: they only read `configs/` and the 8080 service, do not depend on the ComfyUI
-  runtime, and serve identically in the Studio desktop offline.
+  `remote_llm_config` / `llm_connection_test` / `llm_mode` / `extract_title` / `fetch_remote_models`) and the two
+  reverse-prompt routes (`reverse_prompt` / `reverse_video_prompt`) are registered
+  by `llm.py`'s `RouteTableDef`: they only read `configs/`, the assets in the data root and the 8080 service, do not
+  depend on the ComfyUI runtime, and serve identically in the Studio desktop offline.
 
 LLM modes and configuration: [llm.md](llm.md). Skill design: [skills.md](skills.md).
 
@@ -422,9 +423,10 @@ same handlers, and the module touches no `PromptServer` — the read side never 
 - The seven read-side routes are in the desktop capability table (`_PROMPTS` in `app/studio_caps.py`), so an offline
   window answers them — the cover is a plain file read too. The write side (`save_prompt` / `delete_prompt` updating
   the tag index, `set_prompt_cover` writing the sidecar) is not in the table: it is
-  the `prompt_library_write` flag, which is what points "save as preset" and "set as cover" at starting the kernel. The enhancement chain
-  (`enhance_prompt` / `stream_generate_prompt`) sits in the table's `_LLM` group and is desktop-served offline
-  ([studio-prompt-enhance.md](studio-prompt-enhance.md)); `reverse_prompt` is not in the table and stays on the ComfyUI port.
+  the `prompt_library_write` flag, which is what points "save as preset" and "set as cover" at starting the kernel. The enhancement
+  chain (`enhance_prompt` / `stream_generate_prompt`) and the two reverse-prompt routes (`reverse_prompt` /
+  `reverse_video_prompt`) sit in the table's `_LLM` group and are desktop-served offline
+  ([studio-prompt-enhance.md](studio-prompt-enhance.md), [studio-reverse.md](studio-reverse.md)).
 - Saving routes by the name's first segment: `video/<name>` lands in `custom/video/`, `presets/<name>` lands in the
   shipped preset tree, everything else in the `custom/` root layer; delete and the tag index use the same scan name.
   The one-time classified move of the legacy flat files runs at plugin start, what was judged is remembered in

@@ -400,7 +400,8 @@ const { buildVideo } = createVideoPage({
 // 生成节点出图要 ComfyUI 执行队列：只交能力位下去，拉起内核是顶栏那一位的事（画布出图与绘画页同一口径）
 const canvasPage = createCanvasPage({ $el, api, toast,
     openMaterial: (onPick) => openMaterial("canvas", "image", onPick),
-    canGen: () => can("image_gen") });
+    canGen: () => can("image_gen"),
+    can: (feature) => can(feature) });
 const buildCanvas = canvasPage.build;
 setCanvasPlace((items) => {
     go("canvas");

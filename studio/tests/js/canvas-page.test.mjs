@@ -3357,8 +3357,336 @@ describe("canvas-page 页面", () => {
       });
     });
 
+  });
 
+  // ====== 画布上的增强节点与反推节点（LLM 链在画布上的那两张卡） ======
+  describe("画布上的增强节点与反推节点：成文写进下游空的提示词节点", () => {
+    // 增强链的技能池就是首页「提示词增强」那一条判法（category image_enhance / enhance，且不吃生图与配方）
+    const LLM_SKILLS = [
+      { id: "image_gen", name: "出图", category: "image_gen", source: "preset", gen_image: true, gen_video: false },
+      { id: "zh_enh", name: "zh_enh", cn_name: "中文增强", category: "image_enhance", source: "preset" },
+      { id: "en_enh", name: "en_enh", cn_name: "英文增强", category: "image_enhance", source: "preset" },
+    ];
+    const ENH_OUT = "增强出来的那一段正文";
+    const REV_OUT = "反推出来的那一段正文";
+    const ENH_PATH = "/rs_prompts/stream_generate_prompt";
+    const REV_PATH = "/rs_prompts/reverse_prompt";
 
+    const enhNode = (id, x, metadata = {}) => ({ id, type: "enhance", title: "增强",
+      position: { x, y: 40 }, width: 320, height: 168, metadata: { skill_id: "", ...metadata } });
+    const revNode = (id, x, metadata = {}) => ({ id, type: "reverse", title: "反推",
+      position: { x, y: 40 }, width: 320, height: 168, metadata: { language: "zh", ...metadata } });
+    const textNode = (id, x, y, content = "", metadata = {}) => ({ id, type: "text", title: `提示词 ${id}`,
+      position: { x, y }, width: 340, height: 240, metadata: { content, ...metadata } });
+    const picNode = (id, x, metadata = { filename: "a.png" }) => ({ id, type: "image", title: `图片 ${id}`,
+      position: { x, y: 300 }, width: 340, height: 240, metadata });
+    const llmLink = (from, to) => ({ id: `lc-${from}-${to}`, fromNodeId: from, toNodeId: to });
+    const llmCanvas = (nodes, connections, id = "canvas-0001", title = "甲") =>
+      ({ id, title, nodes, connections, viewport: { x: 0, y: 0, k: 1 }, background_mode: "dots" });
+    const sseLine = (frame) => `data: ${typeof frame === "string" ? frame : JSON.stringify(frame)}`;
+    const llmSse = (lines) => new Response(lines.map((l) => `${l}\n`).join(""),
+      { status: 200, headers: { "Content-Type": "text/event-stream" } });
 
+    // 跑到一半的那一条流：交一份认 signal 的在途 SSE，最后一块后面永不落 ——「取消这一发」与「切画布脱手」
+    // 都发生在正文只到一半的时候；abort 一到就交 done，读流那一条跟着收摊
+    const inflightSse = (frames) => (_body, call) => ({
+      ok: true, status: 200, json: async () => ({}),
+      body: { getReader: () => {
+        let i = 0;
+        return {
+          read: async () => (i < frames.length
+            ? { done: false, value: new TextEncoder().encode(`${sseLine(frames[i++])}\n`) }
+            : new Promise((res) => {
+              if (call.signal?.aborted) return res({ done: true });
+              call.signal?.addEventListener("abort", () => res({ done: true }));
+            })),
+          releaseLock() {},
+        };
+      } },
+    });
+
+    async function llmPage(nodes, connections, { skills = LLM_SKILLS, canvases = [],
+      enhance, reverse, enhanceResponder, reverseResponder, extraHost = {} } = {}) {
+      fetchLog.length = 0;
+      const env = mockCanvas({ projects: [llmCanvas(nodes, connections), ...canvases] });
+      Object.assign(env.routes, {
+        "/rs_prompts/skills": () => jsonResponse(skills),
+        [ENH_PATH]: enhanceResponder
+          || (() => llmSse((enhance || [{ text: ENH_OUT }, "[DONE]"]).map(sseLine))),
+        [REV_PATH]: reverseResponder
+          || (() => llmSse((reverse || [{ text: REV_OUT }, "[DONE]"]).map(sseLine))),
+      });
+      const ctx = await makePage(env, { canGen: () => true, ...extraHost });
+      await settle();
+      const genText = (id, part) => ctx.view.nodeEl(id)?.querySelector(`.ns-canvas-gen-${part}`)?.textContent || "";
+      const genBtn = (id, label) => [...ctx.view.nodeEl(id).querySelectorAll(".ns-canvas-gen-btn")]
+        .find((btn) => btn.textContent.trim() === label);
+      const chipOptions = (id) => [...ctx.view.nodeEl(id)
+        .querySelectorAll(".ns-canvas-gen-skill select option")].map((opt) => opt.textContent);
+      const chipLabel = (id) => ctx.view.nodeEl(id)
+        .querySelector(".ns-canvas-gen-skill .neo-gallery-gm-chip-label")?.textContent || "";
+      // 胶囊的菜单挂在节点浮层那一级（节点在带 scale 的世界层里，菜单落在节点外面才不跟着缩放）
+      const chipItems = () => [...document.body.querySelectorAll(".ns-canvas-gen-menus .neo-gallery-gm-menu-item")];
+      const pickChip = async (id, label) => {
+        click(ctx.view.nodeEl(id).querySelector(".ns-canvas-gen-skill .neo-gallery-gm-chip-btn"));
+        await settle();
+        click(chipItems().find((el) => el.textContent === label));
+        await settle();
+      };
+      // 流是 fetch 之后一层层 await 出来的：光收微任务收不到帧，跑流的那几步用真实定时器等一拍
+      const tick = async () => { await new Promise((r) => setTimeout(r, 30)); await settle(); };
+      const run = async (id, label) => { click(genBtn(id, label)); await tick(); };
+      const content = (id) => ctx.page.current().nodes.find((n) => n.id === id)?.metadata.content;
+      const sent = (path) => fetchLog.filter((c) => c.path === path).map((c) => c.body);
+      return { ...ctx, genText, genBtn, chipOptions, chipLabel, pickChip, content, sent, run, tick, chipItems };
+    }
+
+    test("加增强节点：节点上不写正文，只有一枚增强技能胶囊与「增强」钮，默认落「后端智能判断」", async () => {
+      const ctx = await llmPage([]);
+      click(ctx.view.button("加增强节点"));
+      await settle();
+      const node = ctx.page.current().nodes[0];
+      assert.equal(node.type, "enhance");
+      assert.deepEqual([node.width, node.height], [320, 168]);
+      assert.equal(node.metadata.skill_id, "", "默认让后端按提示词语言挑增强技能");
+      const el = ctx.view.nodeEl(node.id);
+      assert.ok(el.querySelector(".ns-canvas-gen"), "增强节点走生成节点那张卡的骨架与控件行");
+      assert.equal(el.querySelectorAll("textarea").length, 0, "要增强的是连过来的那一段，节点上不写正文");
+      assert.deepEqual([...el.querySelectorAll("[data-node-act]")].map((btn) => btn.dataset.nodeAct),
+        ["disable", "copy", "delete"], "增强节点上没有选图与设为主图那两枚");
+      assert.deepEqual(ctx.chipOptions(node.id), ["智能判断", "中文增强", "英文增强"],
+        "技能胶囊只列增强链那三条（与首页「提示词增强」同一判法），生图技能不在里头");
+      assert.equal(ctx.chipLabel(node.id), "默认", "留空那一档在胶囊上就说「默认」：挑哪一条是后端的事");
+      assert.ok(ctx.genBtn(node.id, "增强").classList.contains("ns-canvas-gen-go"));
+      assert.equal(ctx.genText(node.id, "status"), "", "没在跑就不出状态行");
+    });
+
+    test("加反推节点：节点上不摆图，只有一枚语言胶囊与「反推」钮，默认中文", async () => {
+      const ctx = await llmPage([]);
+      click(ctx.view.button("加反推节点"));
+      await settle();
+      const node = ctx.page.current().nodes[0];
+      assert.equal(node.type, "reverse");
+      assert.equal(node.metadata.language, "zh");
+      const el = ctx.view.nodeEl(node.id);
+      assert.equal(el.querySelectorAll("img").length, 0, "要反推的是连过来的那一张图片节点，节点上不摆图");
+      assert.deepEqual(ctx.chipOptions(node.id), ["中文", "英文"], "语言就是反推页那一对取值");
+      assert.equal(ctx.chipLabel(node.id), "中文");
+      assert.ok(ctx.genBtn(node.id, "反推").classList.contains("ns-canvas-gen-go"));
+    });
+
+    test("增强一发：连过来的正文按连线顺序拼一段交链，技能照节点上选的，成文只写下游第一个空正文节点", async () => {
+      const ctx = await llmPage([
+        textNode("t1", -760, 0, "第一段"),
+        textNode("t2", -760, 300, "第二段"),
+        enhNode("e1", -340, { skill_id: "zh_enh" }),
+        textNode("o1", 40, 0, ""),
+        textNode("o2", 40, 300, "已填过的正文"),
+      ], [llmLink("t1", "e1"), llmLink("t2", "e1"), llmLink("e1", "o1"), llmLink("e1", "o2")]);
+      click(ctx.genBtn("e1", "增强"));
+      await settle();
+      assert.deepEqual(ctx.sent(ENH_PATH),
+        [{ text: "第一段\n\n第二段", skillId: "zh_enh", reasoning_effort: "medium" }]);
+      assert.equal(ctx.content("o1"), ENH_OUT, "成文写进下游第一个空的提示词节点");
+      assert.equal(ctx.content("o2"), "已填过的正文", "下游填过的正文一个字都不盖");
+      assert.ok(ctx.env.store.toasts.some((i) => i.message === "已增强出提示词" && i.kind === "success"));
+      assert.equal(ctx.genText("e1", "status"), "", "跑完收回状态行");
+      assert.equal(ctx.genBtn("e1", "增强").disabled, false, "跑完的节点上能直接再按");
+    });
+
+    test("技能留空 = 后端智能判断：载荷里不带 skillId；换技能落在节点 metadata 上，撤销一次退回去", async () => {
+      const ctx = await llmPage([textNode("t1", -760, 0, "写一段夜景"), enhNode("e1", -340)], [llmLink("t1", "e1")]);
+      click(ctx.genBtn("e1", "增强"));
+      await settle();
+      assert.deepEqual(ctx.sent(ENH_PATH)[0], { text: "写一段夜景", reasoning_effort: "medium" },
+        "空串不进载荷（与首页「提示词增强」留空同一档）");
+      await ctx.pickChip("e1", "中文增强");
+      assert.equal(ctx.page.current().nodes.find((n) => n.id === "e1").metadata.skill_id, "zh_enh");
+      assert.equal(ctx.chipLabel("e1"), "中文增强");
+      click(ctx.genBtn("e1", "增强"));
+      await settle();
+      assert.equal(ctx.sent(ENH_PATH)[1].skillId, "zh_enh");
+      click(ctx.view.button("撤销"));   // 这一发的写回先退掉（下游没有空位，新建的那一张整张撤走）
+      await settle();
+      click(ctx.view.button("撤销"));   // 再退一次才回到换技能之前：撤销栈按压栈的次序一层层退
+      await settle();
+      assert.equal(ctx.page.current().nodes.find((n) => n.id === "e1").metadata.skill_id, "",
+        "两次撤销退完这一发与换技能那一格：技能回到留空");
+    });
+
+    test("增强没连正文：说一句不发包", async () => {
+      const ctx = await llmPage([enhNode("e1", -340), textNode("o1", 40, 0, "")], [llmLink("e1", "o1")]);
+      click(ctx.genBtn("e1", "增强"));
+      await settle();
+      assert.ok(ctx.env.store.toasts.some((i) => i.message === "把要增强的提示词节点连过来" && i.kind === "info"));
+      assert.equal(ctx.sent(ENH_PATH).length, 0);
+      assert.equal(ctx.genText("e1", "status"), "", "不收摊不写状态行");
+    });
+
+    test("反推一发：吃连线顺序里第一张启用的图，subfolder 与语言照节点上选的，成文落下游空正文节点", async () => {
+      const ctx = await llmPage([
+        picNode("i1", -760, { filename: "z.png", subfolder: "videos", disabled: true }),
+        picNode("i2", -400, { filename: "a.png", subfolder: "人物" }),
+        picNode("i3", -40, { filename: "b.png" }),
+        revNode("r1", 300, { language: "en" }),
+        textNode("o1", 700, 0, ""),
+      ], [llmLink("i1", "r1"), llmLink("i2", "r1"), llmLink("i3", "r1"), llmLink("r1", "o1")]);
+      click(ctx.genBtn("r1", "反推"));
+      await settle();
+      assert.deepEqual(ctx.sent(REV_PATH), [{ filename: "a.png", subfolder: "人物", language: "en" }],
+        "停用的那一张不吃，连线顺序里第一张启用的就是被反推的那一张");
+      assert.equal(ctx.content("o1"), REV_OUT);
+      assert.ok(ctx.env.store.toasts.some((i) => i.message === "已反推出提示词" && i.kind === "success"));
+    });
+
+    test("反推的输入认到点上：只有配方素材的那一张与没连图都只说一句", async () => {
+      const asset = await llmPage([picNode("i1", -400, { asset: "开场首帧.png", recipe: "短片配方" }),
+        revNode("r1", 300), textNode("o1", 700, 0, "")], [llmLink("i1", "r1"), llmLink("r1", "o1")]);
+      click(asset.genBtn("r1", "反推"));
+      await settle();
+      assert.ok(asset.env.store.toasts.some((i) => i.message === "反推只吃素材库里的图：连一张带素材路径的图片节点过来" && i.kind === "info"),
+        "配方素材（只有 asset 没有 filename）后端认不到，跑之前就说清楚");
+      assert.equal(asset.sent(REV_PATH).length, 0);
+      assert.equal(asset.content("o1"), "");
+      const empty = await llmPage([revNode("r1", 300), textNode("o1", 700, 0, "")], [llmLink("r1", "o1")]);
+      click(empty.genBtn("r1", "反推"));
+      await settle();
+      assert.ok(empty.env.store.toasts.some((i) => i.message === "把要反推的那一张图片节点连过来"));
+      assert.equal(empty.sent(REV_PATH).length, 0);
+    });
+
+    test("停用的那一张按一下就明说自己不跑；连过来的停用正文也不取", async () => {
+      const ctx = await llmPage([
+        textNode("t1", -760, 0, "启用的那一段"),
+        textNode("t2", -760, 300, "停用的那一段", { disabled: true }),
+        enhNode("e1", -340),
+        enhNode("e2", -340, { disabled: true }),
+        textNode("o1", 40, 0, ""),
+      ], [llmLink("t1", "e1"), llmLink("t2", "e1"), llmLink("e1", "o1"), llmLink("t1", "e2")]);
+      click(ctx.genBtn("e2", "增强"));
+      await settle();
+      assert.ok(ctx.env.store.toasts.some((i) => i.message === "这台节点已停用：在节点上方的浮出栏里启用" && i.kind === "info"));
+      assert.equal(ctx.sent(ENH_PATH).length, 0);
+      click(ctx.genBtn("e1", "增强"));
+      await settle();
+      assert.deepEqual(ctx.sent(ENH_PATH), [{ text: "启用的那一段", reasoning_effort: "medium" }],
+        "连过来的停用正文不进载荷");
+    });
+
+    test("能力位没有那一项（桌面端离线窗）：增强与反推都说一句去哪儿启，不发请求", async () => {
+      const ctx = await llmPage([
+        textNode("t1", -760, 0, "一段正文"), enhNode("e1", -340),
+        picNode("i1", -400), revNode("r1", 300), textNode("o1", 40, 300, ""),
+      ], [llmLink("t1", "e1"), llmLink("e1", "o1"), llmLink("i1", "r1"), llmLink("r1", "o1")],
+      { extraHost: { can: (feature) => feature !== "prompt_enhance" && feature !== "prompt_reverse" } });
+      click(ctx.genBtn("e1", "增强"));
+      click(ctx.genBtn("r1", "反推"));
+      await settle();
+      assert.equal(ctx.env.store.toasts.filter((i) => i.message === "该功能需要 ComfyUI：点顶栏 ComfyUI 胶囊启动，好了再按一次").length, 2);
+      assert.deepEqual(ctx.sent(ENH_PATH), []);
+      assert.deepEqual(ctx.sent(REV_PATH), []);
+    });
+
+    test("[ERROR] 帧：失败那句写进状态行并落进提示条，半截正文不落节点，节点上能直接再按", async () => {
+      const enh = await llmPage([textNode("t1", -760, 0, "一段正文"), enhNode("e1", -340), textNode("o1", 40, 0, "")],
+        [llmLink("t1", "e1"), llmLink("e1", "o1")], { enhance: [{ text: "半截" }, "[ERROR] 缺少 MS_TOKEN"] });
+      click(enh.genBtn("e1", "增强"));
+      await settle();
+      assert.equal(enh.genText("e1", "status"), "缺少 MS_TOKEN");
+      assert.ok(enh.view.nodeEl("e1").querySelector(".ns-canvas-gen-status")
+        .classList.contains("ns-canvas-gen-fail"));
+      assert.ok(enh.env.store.toasts.some((i) => i.message === "增强失败：缺少 MS_TOKEN" && i.kind === "error"));
+      assert.equal(enh.content("o1"), "", "半截正文不落节点");
+      assert.equal(enh.genBtn("e1", "增强").disabled, false, "失败的那一发收摊：能直接再按");
+      const rev = await llmPage([picNode("i1", -400), revNode("r1", 300), textNode("o1", 700, 0, "")],
+        [llmLink("i1", "r1"), llmLink("r1", "o1")],
+        { reverse: [{ text: "前半截" }, { text: "[ERROR] 反推链失败：LLM 端点未配置" }, "[DONE]"] });
+      click(rev.genBtn("r1", "反推"));
+      await settle();
+      assert.equal(rev.genText("r1", "status"), "反推链失败：LLM 端点未配置",
+        "失败写进正文块里也认得出（与 prompt-service 读流同一口径）");
+      assert.ok(rev.env.store.toasts.some((i) => i.message === "反推失败：反推链失败：LLM 端点未配置"));
+      assert.equal(rev.content("o1"), "");
+    });
+
+    test("心跳与非 JSON 帧照收不下屏，思考块不进正文：落节点的是成文那一段", async () => {
+      const ctx = await llmPage([textNode("t1", -760, 0, "一段正文"), enhNode("e1", -340), textNode("o1", 40, 0, "")],
+        [llmLink("t1", "e1"), llmLink("e1", "o1")], {
+        enhance: ["ping", { kind: "thinking", text: "我先想想这一段的构图" }, { text: "成文那一段" }, "[DONE]"],
+      });
+      click(ctx.genBtn("e1", "增强"));
+      await settle();
+      assert.equal(ctx.content("o1"), "成文那一段", "画布要落的是提示词，不是模型的思考过程");
+      assert.ok(ctx.env.store.toasts.some((i) => i.message === "已增强出提示词"));
+      assert.equal(ctx.genText("e1", "status"), "");
+    });
+
+    test("跑到一半：状态行报字数并出「取消任务」，取消掉半截正文不落节点，说一句已取消增强", async () => {
+      const long = "一大段增强出来的正文";   // 每满 40 字才报一次进度：不足这一格只说「增强中」
+      const ctx = await llmPage([textNode("t1", -760, 0, "一段正文"), enhNode("e1", -340), textNode("o1", 40, 0, "")],
+        [llmLink("t1", "e1"), llmLink("e1", "o1")],
+        { enhanceResponder: inflightSse([{ text: long.repeat(4) }, { text: long.repeat(4) }]) });
+      click(ctx.genBtn("e1", "增强"));
+      await settle();
+      const el = ctx.view.nodeEl("e1");
+      assert.ok(el.classList.contains("ns-canvas-node-run"), "在跑的那一张节点上有运行的边");
+      assert.ok(ctx.genBtn("e1", "取消任务"), "这一发还在途：出着取消钮");
+      assert.equal(el.querySelector(".ns-canvas-gen-status").textContent, `增强中 · ${long.length * 8} 字`);
+      click(ctx.genBtn("e1", "取消任务"));
+      await ctx.tick();
+      assert.ok(ctx.env.store.toasts.some((i) => i.message === "已取消增强" && i.kind === "info"));
+      assert.equal(ctx.content("o1"), "", "在途那一发的正文一个字都不写");
+      assert.equal(ctx.genText("e1", "status"), "", "取消完收回状态行");
+      assert.equal(ctx.genBtn("e1", "增强").disabled, false);
+    });
+
+    test("切画布脱手：在途那一发不落这一张画布，也不报成功", async () => {
+      const long = "一大段增强出来的正文";
+      const ctx = await llmPage([textNode("t1", -760, 0, "一段正文"), enhNode("e1", -340), textNode("o1", 40, 0, "")],
+        [llmLink("t1", "e1"), llmLink("e1", "o1")],
+        { enhanceResponder: inflightSse([{ text: long + long + long }]),
+          canvases: [llmCanvas([], "乙", "canvas-0002")] });
+      click(ctx.genBtn("e1", "增强"));
+      await settle();
+      assert.ok(ctx.genBtn("e1", "取消任务"), "这一发还在途：节点上有取消钮");
+      pickCanvas(ctx.view, "canvas-0002");
+      await settle();
+      pickCanvas(ctx.view, "canvas-0001");
+      await settle();
+      assert.equal(ctx.content("o1"), "", "切走的画布脱手：在途的正文不落回来");
+      assert.ok(!ctx.env.store.toasts.some((i) => i.message === "已增强出提示词"));
+      assert.equal(ctx.genText("e1", "status"), "", "脱手的那一发不在眼前报状态");
+    });
+
+    test("下游没有空的提示词节点：新建一张接过去，撤销一次整发退掉", async () => {
+      const ctx = await llmPage([textNode("t1", -760, 0, "一段正文"), enhNode("e1", -340),
+        textNode("o1", 40, 0, "已填过的正文")], [llmLink("t1", "e1"), llmLink("e1", "o1")]);
+      click(ctx.genBtn("e1", "增强"));
+      await settle();
+      const nodes = ctx.page.current().nodes;
+      const made = nodes.find((n) => n.type === "text" && n.id !== "o1" && n.metadata.content === ENH_OUT);
+      assert.ok(made, "在增强节点右下方新建一张提示词节点接过去");
+      assert.ok(ctx.page.current().connections.some((c) => c.fromNodeId === "e1" && c.toNodeId === made.id),
+        "新建的那一张接在增强节点下游");
+      assert.equal(ctx.content("o1"), "已填过的正文");
+      click(ctx.view.button("撤销"));
+      await settle();
+      assert.equal(ctx.page.current().nodes.length, 3, "撤销一次退掉新建的节点与连线");
+      assert.equal(ctx.content("o1"), "已填过的正文");
+    });
+
+    test("节点上的技能与语言随画布落盘：metadata 就是存盘的那一份", async () => {
+      const ctx = await llmPage([]);
+      click(ctx.view.button("加增强节点"));
+      click(ctx.view.button("加反推节点"));
+      await settle();
+      const [enh, rev] = ctx.page.current().nodes;
+      await ctx.pickChip(enh.id, "英文增强");
+      await ctx.pickChip(rev.id, "英文");
+      ctx.page.flush();
+      const saved = ctx.env.store.saved.at(-1).nodes;
+      assert.equal(saved.find((n) => n.id === enh.id).metadata.skill_id, "en_enh");
+      assert.equal(saved.find((n) => n.id === rev.id).metadata.language, "en");
+    });
   });
 });

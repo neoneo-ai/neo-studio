@@ -55,7 +55,6 @@ COMFY_ONLY_ROUTES = (
     "/neo_video_gen/assemble_segments",
     "/neo_video_gen/simple",
     "/neo_voice/generate",
-    "/rs_prompts/reverse_prompt",   # 图片反推页的运行接口：归内核，桌面端只有 409
     "/neo_studio/director/generate",
     "/neo_studio/queue",
     "/neo_studio/mem_stats",
@@ -260,14 +259,12 @@ class OfflineServiceTests(_ServerCase):
     def test_prompt_reads_served_offline(self):
         """提示词读侧离线全部答得来：整份条目、正文、行级集合、运行时随机都只扫 prompts/ 目录。
         提示词增强链（enhance_prompt / stream_generate_prompt）也在桌面端这一侧：技能正文读数据根、
-        出流打 8080 与远程 LLM、参考图读 input/。生图 / 生视频与图片反推留在 ComfyUI 端口。"""
+        出流打 8080 与远程 LLM、参考图读 input/。生图 / 生视频留在 ComfyUI 端口。"""
         for route in ("/rs_prompts/list_prompt_names", "/rs_prompts/list_prompts",
                       "/rs_prompts/load_prompt", "/rs_prompts/prompt_previews",
                       "/rs_prompts/list_prompt_lines",
                       "/rs_prompts/random_prompts"):
             self.assertEqual(caps.owner("POST", route), "desktop", route)
-        for route in ("/rs_prompts/reverse_prompt",):
-            self.assertEqual(caps.owner("POST", route), "comfy", route)
 
         status, body = self.post_json("/rs_prompts/list_prompt_names", {})
         self.assertEqual(status, 200)
@@ -326,6 +323,21 @@ class OfflineServiceTests(_ServerCase):
         self.assertNotEqual(status, 409, "增强请求不该被离线闸门挡下")
         self.assertIn("error", json.loads(body),
                       "本机没配 LLM 时答的是 LLM 链自己的失败，不是「离线」")
+
+    def test_reverse_chain_served_offline(self):
+        """反推链（图片 + 视频抽帧）离线自服：取图取视频用 gallery 的媒体查找、成文落素材旁的旁车，
+        全程 LLM 与文件系统，不碰执行队列 —— 桌面窗口不启动内核也反推得了。"""
+        for route in ("/rs_prompts/reverse_prompt", "/rs_prompts/reverse_video_prompt"):
+            self.assertEqual(caps.owner("POST", route), "desktop", route)
+        offline = caps.features(False)
+        self.assertTrue(offline["prompt_reverse"], "图片反推离线可用")
+        self.assertTrue(offline["prompt_reverse_video"], "视频反推离线可用")
+        self.assertNotIn("prompt_reverse", caps.KERNEL_FEATURES, "反推链不随内核就绪翻面")
+        self.assertNotIn("prompt_reverse_video", caps.KERNEL_FEATURES)
+
+        status, body = self.post_json("/rs_prompts/reverse_prompt", {"filename": ""})
+        self.assertNotEqual(status, 409, "反推请求不该被离线闸门挡下")
+        self.assertIn(b"[ERROR]", body, "缺 filename 答的是反推链自己的失败帧，不是「离线」")
 
     def test_agent_session_history_served_offline(self):
         """历史会话是数据根 agent_sessions/ 里的文件：列 / 读 / 删在桌面端就能做完，

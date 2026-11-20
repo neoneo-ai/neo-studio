@@ -23,8 +23,9 @@ const SAVE_DEBOUNCE_MS = 900;
 /** 画布页工厂：openMaterial 由装配层交下来（素材库弹窗，一次收窗）；没有它时「加图片」
  *  与「选图」回到建空图片节点 —— ComfyUI 侧没有这扇弹窗。
  *  canGen 是 ComfyUI 执行队列在不在（生成素材能力位）：没有队列时生成节点自己说要去顶栏启动，
- *  不碰拉起那一路。两者都不交时生成节点照样能铺能存，出图按钮自己说没有队列。 */
-export function createCanvasPage({ $el, api, toast, openMaterial, canGen }) {
+ *  不碰拉起那一路。两者都不交时生成节点照样能铺能存，出图按钮自己说没有队列。
+ *  can 是能力表读法：增强与反推两条链门在 prompt_enhance / prompt_reverse 上（桌面端离线自服）。 */
+export function createCanvasPage({ $el, api, toast, openMaterial, canGen, can }) {
     let state = readCanvas({});
     let selectedNodeIds = new Set();
     let selectedConnectionId = null;
@@ -151,6 +152,8 @@ export function createCanvasPage({ $el, api, toast, openMaterial, canGen }) {
             inMenu(mk(t("加提示词"), "list", addAction(() => addNode("text")))),
             inMenu(mk(t("加生成节点"), "sparkles", addAction(() => addGenNode()))),
             inMenu(mk(t("加编辑节点"), "pencil", addAction(() => addEditNode()))),
+            inMenu(mk(t("加增强节点"), "refresh", addAction(() => addEnhanceNode()))),
+            inMenu(mk(t("加反推节点"), "camera", addAction(() => addReverseNode()))),
             inMenu(mk(t("加视频节点"), "film", addAction(() => addVideoNode()))),
             inMenu(mk(t("添加配方"), "wand", addAction(() => addRecipe())))
         ]);
@@ -200,6 +203,7 @@ export function createCanvasPage({ $el, api, toast, openMaterial, canGen }) {
             genControls: (node) => gen?.controls(node), genState: (node) => gen?.stateOf(node),
             genModel: (node) => gen?.modelText(node),
             editControls: (node) => gen?.editControls(node),
+            llmControls: (node) => gen?.llmControls(node),
             carView: (node) => gen?.carView(node),
             onImageSize: fitImageNode });
     }
@@ -342,6 +346,7 @@ export function createCanvasPage({ $el, api, toast, openMaterial, canGen }) {
         stageRect: () => view.stage.getBoundingClientRect(),
         patchMeta: setNodeMetadata,
         applyResult: applyGenResult,
+        applyText: applyLlmText,
         genMenus: () => view.menus,
         pageEl: () => view.el,
     };
@@ -351,6 +356,7 @@ export function createCanvasPage({ $el, api, toast, openMaterial, canGen }) {
         toast,
         api,
         canGen: canGen || (() => true),
+        canFeature: can || (() => true),
         host,
     });
 
@@ -504,6 +510,17 @@ export function createCanvasPage({ $el, api, toast, openMaterial, canGen }) {
     function addVideoNode() {
         gen?.primeVideo();
         return addNode("gen", null, { kind: "video", skill_id: gen?.defaultVideoSkillId() || "" });
+    }
+
+    /** 「加增强节点」：把连过来的正文交给那条增强链，技能胶囊里列的就是技能列表那一份 */
+    function addEnhanceNode() {
+        gen?.prime();
+        return addNode("enhance", null, { skill_id: "" });
+    }
+
+    /** 「加反推节点」：把连过来的那一张图写成一段提示词，语言与反推页同一对取值（默认中文） */
+    function addReverseNode() {
+        return addNode("reverse", null, { language: "zh" });
     }
 
     /** 「添加配方」：弹窗选一份导演配方，选完直接串成一列车厢（一段一厢），出片与整列共用的参数在车尾 */
@@ -943,6 +960,37 @@ export function createCanvasPage({ $el, api, toast, openMaterial, canGen }) {
         fitView();   // 一次摆几十张时画面要自己拉回来，否则铺在看不见的地方
         toast(t("已摆到画布"), "success");
         return true;
+    }
+
+    /** LLM 链（增强 / 反推）的成文写回画布：按连线顺序找这台节点下游第一张空的提示词节点填进去，
+     *  下游没有空位就在它右下方新建一张接上。整发一次压栈 —— 撤销一次退掉这一发落下的改动 */
+    function applyLlmText(genId, text) {
+        const gen = state.nodes.find((n) => n.id === genId);
+        if (!gen) return;
+        beginEdit();
+        const slot = state.connections
+            .filter((conn) => conn.fromNodeId === genId)
+            .map((conn) => state.nodes.find((n) => n.id === conn.toNodeId))
+            .find((n) => n?.type === "text" && n.metadata.disabled !== true
+                && !String(n.metadata.content || "").trim());
+        if (slot) {
+            slot.metadata = { ...slot.metadata, content: text };
+            renderNodes();
+            markDirty();
+            return;
+        }
+        const spec = NODE_SPECS.text;
+        const node = createCanvasNode("text", placeGrid(state.nodes, spec,
+            { x: gen.position.x + gen.width + 32, y: gen.position.y }), { content: text });
+        state = {
+            ...state,
+            nodes: [...state.nodes, node],
+            connections: [...state.connections,
+                { id: `conn-${genId}-${node.id}`, fromNodeId: genId, toNodeId: node.id }],
+        };
+        renderNodes();
+        renderConnections();
+        markDirty();
     }
 
     /** 出片结果写回画布：先按连线顺序填这台节点下游那几张空节点（出图填图片节点，出片填视频节点），

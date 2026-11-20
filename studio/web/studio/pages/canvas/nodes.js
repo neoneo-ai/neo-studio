@@ -3,23 +3,27 @@
 // 节点上的动作都从这里的元素出发，回调交给页面；手势不在这一层（在 interactions.js）。
 import { t, tf } from "../../../js/core/i18n.js";
 import { setIcon, setIconLabel } from "../../../js/core/icons.js";
+import { LLM_RUNS } from "./gen.js";
 
 /** 节点 DOM（上游 canvas-node.tsx 的 vanilla 版）：内容铺满整张，上沿外头是附加操作栏，左上角是「主图」徽标，
  *  上下左右四枚接线点、四个角上的尺寸柄。图片节点是 <img>（走 Gallery 缩略图，取不到落占位图），提示词节点是
  *  <textarea>，正文存在 metadata.content —— 图片节点上的坐标就是 Gallery 的 filename + subfolder */
 export function nodeElement(node, { $el, onText, onPick, onPickPrompt, onHero, onDelete, onCopy, onToggleDisabled,
-    genState, genControls, genModel, editControls, recipeMeta, carView, onImageSize }) {
+    genState, genControls, genModel, editControls, llmControls, recipeMeta, carView, onImageSize }) {
     const gen = node.type === "gen" ? (genState?.(node) || {}) : null;
     const recipe = node.type === "recipe" ? (genState?.(node) || {}) : null;
     const edit = node.type === "edit" ? (genState?.(node) || {}) : null;
-    const busy = (gen || recipe || edit)?.status === "queued" || (gen || recipe || edit)?.status === "running";
+    // 增强与反推共用生成节点那一套运行态（running 按节点 id 记在 gen.js 里）
+    const llm = node.type === "enhance" || node.type === "reverse" ? (genState?.(node) || {}) : null;
+    const busy = (gen || recipe || edit || llm)?.status === "queued" || (gen || recipe || edit || llm)?.status === "running";
     const nodeEl = $el("div", {
         className: "ns-canvas-node "
             + (node.type === "image" ? "ns-canvas-node-image"
                 : node.type === "gen" ? "ns-canvas-node-gen"
                 : node.type === "video" ? "ns-canvas-node-video"
                 : node.type === "recipe" ? "ns-canvas-node-recipe"
-                : node.type === "edit" ? "" : "ns-canvas-node-text")
+                : node.type === "edit"
+                    || node.type === "enhance" || node.type === "reverse" ? "" : "ns-canvas-node-text")
             + (busy ? " ns-canvas-node-run" : "")
             + (node.metadata.disabled ? " ns-canvas-node-off" : ""),
         dataset: { nodeId: node.id },
@@ -30,6 +34,8 @@ export function nodeElement(node, { $el, onText, onPick, onPickPrompt, onHero, o
             : node.type === "gen" ? nodeGen(node, $el, { gen, genControls, genModel })
             : node.type === "recipe" ? nodeCar(node, $el, { recipe, carView, recipeMeta, onText })
             : node.type === "edit" ? nodeEdit(node, $el, { edit, editControls })
+            : node.type === "enhance" || node.type === "reverse"
+                ? nodeLlm(node, $el, { llm, llmControls })
             : nodeText(node, $el, onText),
         nodeBar(node, { $el, onPick, onPickPrompt, onHero, onDelete, onCopy, onToggleDisabled }),
         // 四枚接线点：左与上收线（入），右与下出线（源）。上下这两枚给上下叠放的节点就近接线用
@@ -155,6 +161,21 @@ function nodeEdit(node, $el, { edit, editControls }) {
     ]);
 }
 
+/** 增强 / 反推节点的内容：一行控件（技能或语言胶囊 · 运行钮）加一行这一发的状态 —— 要重写的正文与
+ *  要反推的那一张都不在这张节点上，从连过来的节点取（见 gen.js 的 runEnhance 与 runReverse） */
+function nodeLlm(node, $el, { llm, llmControls }) {
+    const st = llm || {};
+    const run = node.type === "reverse" ? LLM_RUNS.reverse : LLM_RUNS.enhance;
+    const failed = st.status === "failed";
+    const status = failed ? (st.error || t(run.fail))
+        : st.status === "running" ? (st.done ? tf(run.chars, { n: st.done }) : t(run.running))
+        : "";
+    return $el("div", { className: "ns-canvas-gen" }, [
+        $el("div", { className: "ns-canvas-gen-ctl" }, llmControls?.(node) || []),
+        $el("div", { className: "ns-canvas-gen-status" + (failed ? " ns-canvas-gen-fail" : ""), textContent: status }),
+    ]);
+}
+
 /** 串联的车厢：这一段自己写的提示词、停不停用，就这些 —— 技能与整列共用的生成参数都在它那一列的车尾
  *  那台生成节点上，出片也从车尾那一发。三档正文优先级（连过来的正文 > 车厢自己写的 > 配方那一段）在
  *  gen.js 的 carPrompt 里，卡上只铺车厢自己写的那一份；连过来的正文在跑时这块锁着并说出来源 */
@@ -255,9 +276,9 @@ function nodeAct($el, name, label, iconName, onclick, title = label) {
 /** 整层节点重画：拖动与缩放不走这一条（走 applyNodeGeometry），换画布、增删节点才走 */
 export function renderNodes({ nodeLayer, links, hint, nodes, selectedNodeIds, selectedConnectionId, $el, onText,
     onPick, onPickPrompt, onHero, onDelete, onCopy, onToggleDisabled, genState, genControls, genModel, editControls,
-    recipeMeta, carView, onImageSize }) {
+    llmControls, recipeMeta, carView, onImageSize }) {
     nodeLayer.replaceChildren(...nodes.map((node) => nodeElement(node, { $el, onText, onPick, onPickPrompt, onHero, onDelete, onCopy,
-        onToggleDisabled, genState, genControls, genModel, editControls, recipeMeta, carView, onImageSize })));
+        onToggleDisabled, genState, genControls, genModel, editControls, llmControls, recipeMeta, carView, onImageSize })));
     // 几何要在元素挂上世界层之后再落：nodeElement 里查不到还没挂上的元素
     for (const node of nodes) applyNodeGeometry(nodeLayer, node);
     hint.style.display = nodes.length ? "none" : "";
