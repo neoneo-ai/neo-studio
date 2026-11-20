@@ -4,6 +4,7 @@
 // 旧版页面写的文件与新版页面写的文件都要打得开，缺字段回默认值、未知键整份忽略。
 import { t } from "../../../js/core/i18n.js";
 import { MAX_SCALE, MIN_SCALE } from "./geometry.js";
+import { NODE_SPECS } from "./node-types.js";
 
 /** @typedef {{x: number, y: number}} Position */
 /** @typedef {{id: string, type: "image" | "text" | "gen" | "video" | "recipe" | "edit" | "enhance" | "reverse", title: string, position: Position, width: number, height: number, metadata: Object}} CanvasNodeData */
@@ -11,20 +12,7 @@ import { MAX_SCALE, MIN_SCALE } from "./geometry.js";
 /** @typedef {{id: string, title: string, nodes: CanvasNodeData[], connections: CanvasConnection[], viewport: {x: number, y: number, k: number}, backgroundMode: string}} CanvasState */
 
 export const BACKGROUND_MODES = ["dots", "lines", "blank"];
-export const NODE_SPECS = {
-    image: { width: 340, height: 240, title: "图片" },
-    text: { width: 340, height: 240, title: "提示词" },
-    gen: { width: 320, height: 208, title: "生成" },
-    video: { width: 340, height: 240, title: "视频" },
-    // 车厢一张一段：段号、这一段自己写的提示词与素材覆盖都在这一张上，整列共用的参数在车尾
-    recipe: { width: 360, height: 176, title: "车厢" },
-    // 图像编辑节点：图与提示词都从连过来的节点取，这一张只管选技能与出图 —— 卡面与生成节点同一档（接法见 gen.js 的 runEdit）
-    edit: { width: 320, height: 208, title: "图像编辑" },
-    // 增强节点：要重写的正文从连过来的提示词节点取，成文写进下游空的提示词节点（见 gen.js 的 runEnhance）
-    enhance: { width: 320, height: 168, title: "增强" },
-    // 反推节点：要反推的那一张从连过来的图片节点取，成文同样写进下游空的提示词节点（见 gen.js 的 runReverse）
-    reverse: { width: 320, height: 168, title: "反推" },
-};
+export { NODE_SPECS };
 
 /** 图片节点按原图比例落位时短边的下限：比这更窄/更矮的卡就点不动了 */
 const IMAGE_FIT_MIN_SIDE = 120;

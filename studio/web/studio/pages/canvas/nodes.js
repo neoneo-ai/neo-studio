@@ -3,39 +3,32 @@
 // 节点上的动作都从这里的元素出发，回调交给页面；手势不在这一层（在 interactions.js）。
 import { t, tf } from "../../../js/core/i18n.js";
 import { setIcon, setIconLabel } from "../../../js/core/icons.js";
-import { LLM_RUNS } from "./gen.js";
+import { NODE_TYPES, RUN_LABELS, runKind } from "./node-types.js";
 
 /** 节点 DOM（上游 canvas-node.tsx 的 vanilla 版）：内容铺满整张，上沿外头是附加操作栏，左上角是「主图」徽标，
  *  上下左右四枚接线点、四个角上的尺寸柄。图片节点是 <img>（走 Gallery 缩略图，取不到落占位图），提示词节点是
- *  <textarea>，正文存在 metadata.content —— 图片节点上的坐标就是 Gallery 的 filename + subfolder */
+ *  <textarea>，正文存在 metadata.content —— 图片节点上的坐标就是 Gallery 的 filename + subfolder。
+ *  这一张长什么样全按 node-types.js 里那一行落：css 卡面类名、body 内容走哪个渲染器、bar 附加栏多出来的那枚 */
 export function nodeElement(node, { $el, onText, onPick, onPickPrompt, onHero, onDelete, onCopy, onToggleDisabled,
     genState, genControls, genModel, editControls, llmControls, recipeMeta, carView, onImageSize }) {
-    const gen = node.type === "gen" ? (genState?.(node) || {}) : null;
-    const recipe = node.type === "recipe" ? (genState?.(node) || {}) : null;
-    const edit = node.type === "edit" ? (genState?.(node) || {}) : null;
-    // 增强与反推共用生成节点那一套运行态（running 按节点 id 记在 gen.js 里）
-    const llm = node.type === "enhance" || node.type === "reverse" ? (genState?.(node) || {}) : null;
-    const busy = (gen || recipe || edit || llm)?.status === "queued" || (gen || recipe || edit || llm)?.status === "running";
+    const desc = NODE_TYPES[node.type] || NODE_TYPES.text;
+    // 四类控件卡共用生成节点那一份运行态（running 按节点 id 记在 gen.js 里）；图片 / 提示词 / 视频位没有运行态
+    const st = desc.body === "gen" || desc.body === "car" || desc.body === "edit" || desc.body === "llm"
+        ? (genState?.(node) || {}) : null;
+    const busy = st?.status === "queued" || st?.status === "running";
     const nodeEl = $el("div", {
-        className: "ns-canvas-node "
-            + (node.type === "image" ? "ns-canvas-node-image"
-                : node.type === "gen" ? "ns-canvas-node-gen"
-                : node.type === "video" ? "ns-canvas-node-video"
-                : node.type === "recipe" ? "ns-canvas-node-recipe"
-                : node.type === "edit"
-                    || node.type === "enhance" || node.type === "reverse" ? "" : "ns-canvas-node-text")
+        className: `ns-canvas-node ${desc.css}`
             + (busy ? " ns-canvas-node-run" : "")
             + (node.metadata.disabled ? " ns-canvas-node-off" : ""),
         dataset: { nodeId: node.id },
     });
     nodeEl.append(
-        node.type === "image" ? nodeImage(node, $el, onImageSize)
-            : node.type === "video" ? nodeVideo(node, $el)
-            : node.type === "gen" ? nodeGen(node, $el, { gen, genControls, genModel })
-            : node.type === "recipe" ? nodeCar(node, $el, { recipe, carView, recipeMeta, onText })
-            : node.type === "edit" ? nodeEdit(node, $el, { edit, editControls })
-            : node.type === "enhance" || node.type === "reverse"
-                ? nodeLlm(node, $el, { llm, llmControls })
+        desc.body === "image" ? nodeImage(node, $el, onImageSize)
+            : desc.body === "video" ? nodeVideo(node, $el)
+            : desc.body === "gen" ? nodeGen(node, $el, { gen: st, genControls, genModel })
+            : desc.body === "car" ? nodeCar(node, $el, { recipe: st, carView, recipeMeta, onText })
+            : desc.body === "edit" ? nodeEdit(node, $el, { edit: st, editControls })
+            : desc.body === "llm" ? nodeLlm(node, $el, { llm: st, llmControls })
             : nodeText(node, $el, onText),
         nodeBar(node, { $el, onPick, onPickPrompt, onHero, onDelete, onCopy, onToggleDisabled }),
         // 四枚接线点：左与上收线（入），右与下出线（源）。上下这两枚给上下叠放的节点就近接线用
@@ -45,7 +38,7 @@ export function nodeElement(node, { $el, onText, onPick, onPickPrompt, onHero, o
         $el("div", { className: "ns-canvas-handle ns-canvas-handle-bottom", dataset: { handle: "source", side: "bottom" } }),
         $el("div", { className: "ns-canvas-handle ns-canvas-handle-right", dataset: { handle: "source", side: "right" } }),
     );
-    if (node.metadata.hero) {
+    if (desc.bar === "hero" && node.metadata.hero) {
         nodeEl.appendChild($el("span", { className: "ns-canvas-node-tag", textContent: t("主图") }));
     }
     if (node.metadata.disabled) {
@@ -128,52 +121,51 @@ function nodeText(node, $el, onText) {
     });
 }
 
+/** 控件卡的骨架：一行控件 + 一行这一发的状态 —— 生成 / 编辑 / 增强 / 反推四类控件卡共用这一条。
+ *  生成节点把主模型那一行追加在状态行之后，车厢与图片 / 提示词 / 视频位不走这一条 */
+function cardShell($el, rows, statusEl) {
+    return $el("div", { className: "ns-canvas-gen" }, [
+        $el("div", { className: "ns-canvas-gen-ctl" }, rows),
+        statusEl,
+    ]);
+}
+
+/** 卡上那一行状态（RUN_LABELS 里的取值）：出图与编辑数的是张数、增强与反推数的是字数（字数由 gen.js
+ *  每 40 字收一次，逐 token 整层重画会把节点上的打字与拖动全卡住）、串联的车尾数的是链上的段数。
+ *  失败那一条把后端给的原因留在行上并挂红 */
+function statusRow($el, st, labels) {
+    const el = $el("div", { className: "ns-canvas-gen-status" });
+    const failed = st.status === "failed";
+    el.textContent = failed ? (st.error || t(labels.fail))
+        : st.status === "running"
+            ? (st.total ? tf(labels.progress, { done: st.done, total: st.total })
+                : st.done && labels.chars ? tf(labels.chars, { n: st.done }) : t(labels.running))
+        : st.status === "queued" ? t(labels.queued) : "";
+    el.classList.toggle("ns-canvas-gen-fail", failed);
+    return el;
+}
+
 /** 生成节点的表面：技能、比例、长边、张数与出图直接铺在节点上（控件由 gen.js 建，改动走 patchMeta），
  *  下面两行是这一发的状态与主模型。控件那一片不拖节点，拖动用其余部分，缩放走四角尺寸柄 */
 function nodeGen(node, $el, { gen, genControls, genModel }) {
-    const st = gen || {};
-    const failed = st.status === "failed";
-    // 串联的车尾跑的是链上一列段，那一行数的是段数，不是某一发的步数
-    const stepLabel = st.kind === "chain" ? "串联出片 {done}/{total}" : "生成中 {done}/{total}";
-    const status = failed ? (st.error || t("出图失败"))
-        : st.status === "running" ? (st.total ? tf(stepLabel, { done: st.done, total: st.total }) : t("生成中"))
-        : st.status === "queued" ? t("排队中") : "";
-    return $el("div", { className: "ns-canvas-gen" }, [
-        $el("div", { className: "ns-canvas-gen-ctl" }, genControls?.(node) || []),
-        $el("div", { className: "ns-canvas-gen-status" + (failed ? " ns-canvas-gen-fail" : ""), textContent: status }),
-        // 串联车尾的段数、技能、分辨率都在顶行与那两枚胶囊里，这里不再重复一份配方概览
-        ...(node.metadata?.chain === "train" ? []
-            : [$el("div", { className: "ns-canvas-gen-model", textContent: genModel?.(node) || "" })]),
-    ]);
+    const card = cardShell($el, genControls?.(node) || [], statusRow($el, gen || {}, RUN_LABELS[runKind(node)]));
+    // 串联车尾的段数、技能、分辨率都在顶行与那两枚胶囊里，这里不再重复一份配方概览
+    if (node.metadata?.chain !== "train") {
+        card.appendChild($el("div", { className: "ns-canvas-gen-model", textContent: genModel?.(node) || "" }));
+    }
+    return card;
 }
 
 /** 图像编辑节点的内容：一行控件（技能胶囊 · 张数胶囊 · 出图）加一行这一发的状态。要改的那一张与
  *  要用的提示词都不在这张节点上 —— 从连过来的节点取（见 gen.js 的 runEdit） */
 function nodeEdit(node, $el, { edit, editControls }) {
-    const st = edit || {};
-    const failed = st.status === "failed";
-    const status = failed ? (st.error || t("出图失败"))
-        : st.status === "running" ? (st.total ? tf("编辑中 {done}/{total}", { done: st.done, total: st.total }) : t("编辑中"))
-        : st.status === "queued" ? t("排队中") : "";
-    return $el("div", { className: "ns-canvas-gen" }, [
-        $el("div", { className: "ns-canvas-gen-ctl" }, editControls?.(node) || []),
-        $el("div", { className: "ns-canvas-gen-status" + (failed ? " ns-canvas-gen-fail" : ""), textContent: status }),
-    ]);
+    return cardShell($el, editControls?.(node) || [], statusRow($el, edit || {}, RUN_LABELS.edit));
 }
 
 /** 增强 / 反推节点的内容：一行控件（技能或语言胶囊 · 运行钮）加一行这一发的状态 —— 要重写的正文与
  *  要反推的那一张都不在这张节点上，从连过来的节点取（见 gen.js 的 runEnhance 与 runReverse） */
 function nodeLlm(node, $el, { llm, llmControls }) {
-    const st = llm || {};
-    const run = node.type === "reverse" ? LLM_RUNS.reverse : LLM_RUNS.enhance;
-    const failed = st.status === "failed";
-    const status = failed ? (st.error || t(run.fail))
-        : st.status === "running" ? (st.done ? tf(run.chars, { n: st.done }) : t(run.running))
-        : "";
-    return $el("div", { className: "ns-canvas-gen" }, [
-        $el("div", { className: "ns-canvas-gen-ctl" }, llmControls?.(node) || []),
-        $el("div", { className: "ns-canvas-gen-status" + (failed ? " ns-canvas-gen-fail" : ""), textContent: status }),
-    ]);
+    return cardShell($el, llmControls?.(node) || [], statusRow($el, llm || {}, RUN_LABELS[runKind(node)]));
 }
 
 /** 串联的车厢：这一段自己写的提示词、停不停用，就这些 —— 技能与整列共用的生成参数都在它那一列的车尾
@@ -182,10 +174,6 @@ function nodeLlm(node, $el, { llm, llmControls }) {
 function nodeCar(node, $el, { recipe, carView, onText }) {
     const st = recipe || {};
     const view = carView?.(node) || {};
-    const failed = st.status === "failed";
-    const status = failed ? (st.error || t("出片失败"))
-        : st.status === "running" ? (st.total ? tf("生成中 {done}/{total}", { done: st.done, total: st.total }) : t("生成中"))
-        : st.status === "queued" ? t("排队中") : "";
     const locked = view.fromCanvas === true;
     // disabled 走属性：$el 把它当普通属性落，disabled="false" 在浏览器里就是真禁用（genBtn 同一坑）
     const text = $el("textarea", {
@@ -223,7 +211,7 @@ function nodeCar(node, $el, { recipe, carView, onText }) {
             text,
         ]),
         // 整列共用的那一句（段数、模式、技能、宽高、总时长）只在车尾露一份，车厢不重复；这一行只说这一段跑到哪了
-        $el("div", { className: "ns-canvas-gen-status" + (failed ? " ns-canvas-gen-fail" : ""), textContent: status }),
+        statusRow($el, st, RUN_LABELS.car),
     ]);
 }
 
@@ -232,6 +220,7 @@ function nodeCar(node, $el, { recipe, carView, onText }) {
  *  栏在节点外就不盖卡上的胶囊与正文；点了算 click，起手不拖（见 interactions.js）
  *  提示词节点不在这一排放「进入编辑」那一枚：进编辑是双击正文，出编辑是 Esc 或落在节点外那一按（interactions.js） */
 function nodeBar(node, { $el, onPick, onPickPrompt, onHero, onDelete, onCopy, onToggleDisabled }) {
+    const desc = NODE_TYPES[node.type] || NODE_TYPES.text;
     const off = node.metadata.disabled === true;
     // 栏首这一枚是固定抓手：整张铺满播控的视频卡上没有按得中的空白，每一张卡都从这一枚起手拖
     const drag = $el("span", { className: "ns-canvas-node-drag", title: t("拖动这张节点"),
@@ -241,7 +230,8 @@ function nodeBar(node, { $el, onPick, onPickPrompt, onHero, onDelete, onCopy, on
         ? nodeAct($el, "enable", t("启用"), "check", () => onToggleDisabled(node), t("启用这一张：出片与整列出片都会跑它"))
         : nodeAct($el, "disable", t("停用"), "ban", () => onToggleDisabled(node), t("停用这一张：出片与整列出片都跳过它"))];
     if (off) kids[1].classList.add("ns-canvas-node-act-on");
-    if (node.type === "image") {
+    // 栏里多出来的那一枚看注册表里那一行：图片节点是主图（空着的还多一枚选图），提示词节点是提示词库
+    if (desc.bar === "hero") {
         const heroLabel = node.metadata.hero ? t("取消主图") : t("设为主图");
         const hero = nodeAct($el, "hero", heroLabel, "circle-check", () => onHero(node), heroLabel);
         if (node.metadata.hero) hero.classList.add("ns-canvas-node-act-on");
@@ -253,7 +243,7 @@ function nodeBar(node, { $el, onPick, onPickPrompt, onHero, onDelete, onCopy, on
             kids.push(pick);
         }
     }
-    if (node.type === "text") {
+    if (desc.bar === "prompt") {
         // 这一枚开的是绘画页同一扇提示词浮层：点一行把整段全文填进正文框
         const prompt = $el("button", { className: "ns-canvas-node-pick", type: "button",
             title: t("从提示词库挑一条填进输入框"), "aria-label": t("提示词"), dataset: { nodeAct: "prompt" },
