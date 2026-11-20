@@ -19,6 +19,7 @@ import { directorMetaText, listRecipes, listVideoSkills } from "../../../recipes
 import { listSkills, skillAcceptsRef, skillAcceptsText, skillDisplayName, isEnhanceSkill } from "../../../skill.js";
 import { ENHANCE_API, enhancePayload } from "../../../prompt-enhance/prompt-enhance.js";
 import { REVERSE_API, REVERSE_LANGS, reverseRequestBody } from "../../../reverse-prompt/reverse-prompt.js";
+import { NODE_TYPES, RUN_LABELS, gateOf, runKind, upstreamNodes } from "./node-types.js";
 
 // 画布自己记的默认技能（绘画页与视频页各记各的，同一套法）：新建生成节点带出上一次在这页选的技能
 const LAST_SKILL_KEY = "neo.canvas.skill";
@@ -38,13 +39,7 @@ const CONTEXT_FRAMES_CHOICES = [0, 8, 14, 22, 29, 36];
 // 连过来的素材按类型分三档，与后端段参考素材（refs.images / videos / audios）同一口径
 const MEDIA_GROUPS = { image: "images", video: "videos", audio: "audios" };
 
-// 增强与反推两条 LLM 链在卡面上说的话：运行钮、状态行与提示条都读这一对
-export const LLM_RUNS = {
-    enhance: { kind: "enhance", text: "增强", fail: "增强失败", running: "增强中",
-        chars: "增强中 · {n} 字", done: "已增强出提示词", cancelled: "已取消增强" },
-    reverse: { kind: "reverse", text: "反推", fail: "反推失败", running: "反推中",
-        chars: "反推中 · {n} 字", done: "已反推出提示词", cancelled: "已取消反推" },
-};
+// 增强与反推两条 LLM 链在卡面上说的话在 node-types.js 的 RUN_LABELS 里（运行钮、状态行与提示条共用）
 
 /** SSE 帧体 → 帧对象：非 JSON 的帧（心跳、注释行）交 null，读流那一条不收它当正文 */
 function llmFrame(data) {
@@ -154,10 +149,7 @@ export function genInputs(state, genNodeId) {
     const prompts = [];
     const references = { images: [], videos: [], audios: [] };
     const seen = new Set();
-    for (const conn of state.connections) {
-        if (conn.toNodeId !== genNodeId) continue;
-        const node = state.nodes.find((n) => n.id === conn.fromNodeId);
-        if (!node || node.metadata?.disabled === true) continue;
+    for (const node of upstreamNodes(state, genNodeId, ["text", "image", "video", "audio"])) {
         const text = String(node.metadata?.content || "").trim();
         if (node.type === "text" && text) prompts.push(text);
         const group = MEDIA_GROUPS[node.type];
@@ -372,21 +364,29 @@ export function createCanvasGen({ $el, toast, api, canGen, canFeature, host }) {
         host.paintNodes();
     }
 
+    /** 这一张节点那一发在提示条里说的话（RUN_LABELS 里那一行）：节点已经不在这一张画布上（切走了、撤销掉了）
+     *  就按生图那一发收 —— 图与片都已经在 Output 目录里，只剩一句落点 */
+    function labelsOf(nodeId) {
+        const node = host.getState().nodes.find((n) => n.id === nodeId);
+        return RUN_LABELS[node ? runKind(node) : "image"];
+    }
+
     function finish(nodeId, snap) {
         const fell = detached.delete(snap.task_id);
+        const labels = labelsOf(nodeId);
         if (snap.status === "succeeded") {
             running.delete(nodeId);
             host.paintNodes();
             // 切画布时脱手的那一发、以及节点已被删掉的：图就在 Output 目录里，不往现在这张画布上写
-            if (fell || !host.hasNode(nodeId)) { toast(t("图已存进 Output 目录"), "success"); return; }
+            if (fell || !host.hasNode(nodeId)) { toast(t(labels.fell), "success"); return; }
             host.applyResult(nodeId, snap.images || []);
-            toast(tf("已出图 {n} 张", { n: (snap.images || []).length }), "success");
+            toast(tf(labels.doneN, { n: (snap.images || []).length }), "success");
             return;
         }
         if (snap.status === "cancelled") {
             running.delete(nodeId);
             host.paintNodes();
-            toast(t("已取消出图"), "info");
+            toast(t(labels.cancelled), "info");
             return;
         }
         const msg = String(snap.error || "");
@@ -398,7 +398,7 @@ export function createCanvasGen({ $el, toast, api, canGen, canFeature, host }) {
             toast(t("技能缺 API Key，已为你打开技能管理"), "info");
             return;
         }
-        toast(`${t("出图失败")}${msg ? `：${msg}` : ""}`, "error");
+        toast(`${t(labels.failToast)}${msg ? `：${msg}` : ""}`, "error");
     }
 
     /** 一轮任务快照（简单视频 / 配方单段都是轮询链）：进度写回节点，终态收摊并写回画布。
@@ -443,25 +443,26 @@ export function createCanvasGen({ $el, toast, api, canGen, canFeature, host }) {
     function clipFinish(nodeId, snap) {
         chainStep(nodeId);   // 串联里的一段收摊：车尾那一行跟着走进度
         const fell = detached.delete(snap.task_id);
+        const labels = labelsOf(nodeId);
         if (snap.status === "succeeded") {
             running.delete(nodeId);
             host.paintNodes();
-            if (fell || !host.hasNode(nodeId)) { toast(t("视频已存进 Output 目录"), "success"); return; }
+            if (fell || !host.hasNode(nodeId)) { toast(t(labels.fell), "success"); return; }
             host.applyResult(nodeId, snap.filename
                 ? [{ filename: snap.filename, subfolder: snap.subfolder || "" }] : [], "video");
-            toast(t("已出片"), "success");
+            toast(t(labels.done), "success");
             return;
         }
         if (snap.status === "cancelled") {
             running.delete(nodeId);
             host.paintNodes();
-            toast(t("已取消出片"), "info");
+            toast(t(labels.cancelled), "info");
             return;
         }
         const msg = String(snap.error || "");
         running.set(nodeId, { ...(running.get(nodeId) || {}), status: "failed", error: msg });
         host.paintNodes();
-        toast(`${t("出片失败")}${msg ? `：${msg}` : ""}`, "error");
+        toast(`${t(labels.failToast)}${msg ? `：${msg}` : ""}`, "error");
     }
 
     /** 串联的一列里收掉一段：车尾那一行的进度跟着走，最后一收发完才收掉车尾那一发 */
@@ -497,19 +498,16 @@ export function createCanvasGen({ $el, toast, api, canGen, canFeature, host }) {
                 const msg = String(err?.message || err);
                 running.set(node.id, { kind, status: "failed", error: msg });
                 host.paintNodes();
-                toast(`${t("出片失败")}：${msg}`, "error");
+                toast(`${t(labelsOf(node.id).failToast)}：${msg}`, "error");
             });
     }
 
-    /** 出片的公共闸门：停用的那一张不跑；这一发在跑就不重复提交；没有执行队列只说去哪儿启（与出图同一套做法） */
+    /** 出片的闸门（串联的车尾与视频节点共用，见 node-types.js 的 gateOf）：停用的那一张不跑；这一发在跑
+     *  就不重复提交；没有执行队列只说去哪儿启（与出图同一套做法） */
     function clipGate(node) {
-        if (node.metadata?.disabled === true) {
-            toast(t("这台节点已停用：在节点上方的浮出栏里启用"), "info");
-            return true;
-        }
-        if (running.has(node.id)) return true;
-        if (canGen() === false) {
-            toast(t("出片需要 ComfyUI 执行队列：点顶栏 ComfyUI 胶囊启动，好了再按一次"), "warn");
+        const stop = gateOf(node, { running: running.has(node.id), gate: NODE_TYPES.video.gate, canFeature: canGen });
+        if (stop) {
+            if (stop.msg) toast(stop.msg, stop.level);
             return true;
         }
         return false;
@@ -637,15 +635,11 @@ export function createCanvasGen({ $el, toast, api, canGen, canFeature, host }) {
     }
 
     function runImage(node) {
-        // 停用的那一张按一下就明说自己不跑：这条要说清「已停用」，排在「这一发在跑」之前（跑着的那一发不该把这句吃掉）
-        if (node.metadata?.disabled === true) {
-            toast(t("这台节点已停用：在节点上方的浮出栏里启用"), "info");
-            return;
-        }
-        if (running.has(node.id)) return;
-        if (canGen() === false) {
-            // 出图要执行队列，拉起它是顶栏那一位的事：画布出图与绘画页出图同一口径，这里只说去哪儿启
-            toast(t("出图需要 ComfyUI 执行队列：点顶栏 ComfyUI 胶囊启动，好了再按一次"), "warn");
+        // 停用的那一张按一下就明说自己不跑（这句排在「这一发在跑」之前）；出图要执行队列，拉起它是顶栏
+        // 那一位的事：画布出图与绘画页出图同一口径，这里只说去哪儿启
+        const stop = gateOf(node, { running: running.has(node.id), gate: NODE_TYPES.gen.gate, canFeature: canGen });
+        if (stop) {
+            if (stop.msg) toast(stop.msg, stop.level);
             return;
         }
         const params = readGenParams(node);
@@ -691,7 +685,7 @@ export function createCanvasGen({ $el, toast, api, canGen, canFeature, host }) {
                 const msg = String(err?.message || err);
                 running.set(node.id, { kind: "image", status: "failed", error: msg });
                 host.paintNodes();
-                toast(`${t("出图失败")}：${msg}`, "error");
+                toast(`${t(labelsOf(node.id).failToast)}：${msg}`, "error");
             });
     }
 
@@ -699,13 +693,9 @@ export function createCanvasGen({ $el, toast, api, canGen, canFeature, host }) {
      *  那几条正文。载荷与绘画页编辑面板「常规」那一发同口径（references + skip_enhance），结果照走
      *  finish 落下游图片节点 */
     function runEdit(node) {
-        if (node.metadata?.disabled === true) {
-            toast(t("这台节点已停用：在节点上方的浮出栏里启用"), "info");
-            return;
-        }
-        if (running.has(node.id)) return;
-        if (canGen() === false) {
-            toast(t("出图需要 ComfyUI 执行队列：点顶栏 ComfyUI 胶囊启动，好了再按一次"), "warn");
+        const stop = gateOf(node, { running: running.has(node.id), gate: NODE_TYPES.edit.gate, canFeature: canGen });
+        if (stop) {
+            if (stop.msg) toast(stop.msg, stop.level);
             return;
         }
         const params = readEditParams(node);
@@ -729,13 +719,9 @@ export function createCanvasGen({ $el, toast, api, canGen, canFeature, host }) {
      *  两条链都在桌面端自服的能力表上（prompt_enhance / prompt_reverse），离线窗口照跑 ——
      *  要的是本机配好 LLM，不是执行队列 */
     function llmGate(node, feature) {
-        if (node.metadata?.disabled === true) {
-            toast(t("这台节点已停用：在节点上方的浮出栏里启用"), "info");
-            return true;
-        }
-        if (running.has(node.id)) return true;
-        if (canFeature?.(feature) === false) {
-            toast(t("该功能需要 ComfyUI：点顶栏 ComfyUI 胶囊启动，好了再按一次"), "warn");
+        const stop = gateOf(node, { running: running.has(node.id), gate: feature, canFeature });
+        if (stop) {
+            if (stop.msg) toast(stop.msg, stop.level);
             return true;
         }
         return false;
@@ -743,12 +729,7 @@ export function createCanvasGen({ $el, toast, api, canGen, canFeature, host }) {
 
     /** 反推吃的那一张：连线顺序里第一张启用的图片节点（与 genInputs 取参考同一条顺序） */
     function reverseFirstImage(state, nodeId) {
-        for (const conn of state.connections) {
-            if (conn.toNodeId !== nodeId) continue;
-            const node = state.nodes.find((n) => n.id === conn.fromNodeId);
-            if (node?.type === "image" && node.metadata?.disabled !== true) return node;
-        }
-        return null;
+        return upstreamNodes(state, nodeId, ["image"])[0] || null;
     }
 
     /** LLM 流的帧 → 正文增量：思考块不进正文（画布要落的是提示词，不是模型的思考过程）；失败走
@@ -842,18 +823,18 @@ export function createCanvasGen({ $el, toast, api, canGen, canFeature, host }) {
     /** 增强节点：连过来的正文按连线顺序拼一条送进那条增强链（技能留空 = 后端按输入智能挑一条），
      *  成文落下游提示词节点 —— 与首页「提示词增强」页是同一条接口 */
     function runEnhance(node) {
-        if (llmGate(node, "prompt_enhance")) return;
+        if (llmGate(node, NODE_TYPES.enhance.gate)) return;
         const { prompts } = genInputs(host.getState(), node.id);
         if (!prompts.length) { toast(t("把要增强的提示词节点连过来"), "info"); return; }
         submitLlmRun(node, ENHANCE_API,
             enhancePayload({ text: prompts.join("\n\n"), skillId: String(node.metadata.skill_id || "") }),
-            LLM_RUNS.enhance);
+            RUN_LABELS.enhance);
     }
 
     /** 反推节点：连线顺序里第一张图进请求（素材库那三元组，与素材卡 ⋯ 反推同一份），成文落下游
      *  提示词节点。配方素材（只有 asset 没有 filename）后端认不到，跑之前就说清楚 */
     function runReverse(node) {
-        if (llmGate(node, "prompt_reverse")) return;
+        if (llmGate(node, NODE_TYPES.reverse.gate)) return;
         const src = reverseFirstImage(host.getState(), node.id);
         if (!src) { toast(t("把要反推的那一张图片节点连过来"), "info"); return; }
         const filename = String(src.metadata?.filename || "");
@@ -861,7 +842,7 @@ export function createCanvasGen({ $el, toast, api, canGen, canFeature, host }) {
         submitLlmRun(node, REVERSE_API,
             reverseRequestBody({ filename, subfolder: String(src.metadata?.subfolder || "") },
                 node.metadata.language === "en" ? "en" : "zh"),
-            LLM_RUNS.reverse);
+            RUN_LABELS.reverse);
     }
 
     function cancel(node) {
@@ -1144,12 +1125,13 @@ export function createCanvasGen({ $el, toast, api, canGen, canFeature, host }) {
             edgeSel.dataset.follow = t("跟随技能 {edge}", { edge: cfg.base_resolution || "" });
         }
 
+        const labels = RUN_LABELS[runKind(node)];
         const acts = [];
         if (busy) acts.push(genBtn(t("取消任务"), "cross", () => cancel(node), t("取消这一发后台任务")));
         // 出图是这一张卡的主按钮：独占最后一行铺满、主色实心，一眼看见（参考无限画布卡片底部那条生成钮）
-        acts.push(genBtn(t("出图"), "play", () => run(node),
+        acts.push(genBtn(t(labels.btn), "play", () => run(node),
             // 离线不 disable：按下去就是要替用户去启队列的（run 里说清楚）；只有这一发在跑才收着
-            offline ? t("出图需要 ComfyUI 执行队列") : t("提交这一发生图任务"), busy, "ns-canvas-gen-go"));
+            offline ? t(labels.offline) : t(labels.tip), busy, "ns-canvas-gen-go"));
         // 技能与自定参数就这一枚胶囊：点开左栏换技能、右栏改这一发的主模型与 LoRA（绘画页同一枚）
         const skillChip = genParamsChip(node, { icon: "sparkles", isVideo: false, busy });
         return [
@@ -1169,11 +1151,12 @@ export function createCanvasGen({ $el, toast, api, canGen, canFeature, host }) {
         const busy = st.status === "queued" || st.status === "running";
         const offline = canGen() === false;
         primeCfg(params.skill_id);
+        const labels = RUN_LABELS.edit;
         const acts = [];
         if (busy) acts.push(genBtn(t("取消任务"), "cross", () => cancel(node), t("取消这一发后台任务")));
-        acts.push(genBtn(t("出图"), "play", () => runEdit(node),
+        acts.push(genBtn(t(labels.btn), "play", () => runEdit(node),
             // 离线不 disable：按下去就是要替用户去启队列的（runEdit 里说清楚）；只有这一发在跑才收着
-            offline ? t("出图需要 ComfyUI 执行队列") : t("提交这一发图像编辑任务"), busy, "ns-canvas-gen-go"));
+            offline ? t(labels.offline) : t(labels.tip), busy, "ns-canvas-gen-go"));
         const skillChip = genParamsChip(node, { icon: "pencil", isVideo: false, busy });
         return [
             $el("div", { className: "ns-canvas-gen-skill" }, [skillChip.chip.el]),
@@ -1188,12 +1171,11 @@ export function createCanvasGen({ $el, toast, api, canGen, canFeature, host }) {
         const st = running.get(node.id) || {};
         const busy = st.status === "running";
         const isReverse = node.type === "reverse";
-        const run = isReverse ? LLM_RUNS.reverse : LLM_RUNS.enhance;
+        const run = RUN_LABELS[runKind(node)];
         const acts = [];
         if (busy) acts.push(genBtn(t("取消任务"), "cross", () => cancel(node), t("取消这一发后台任务")));
-        acts.push(genBtn(t(run.text), "play", () => (isReverse ? runReverse(node) : runEnhance(node)),
-            t(isReverse ? "把连过来的那张图写成一段提示词" : "把连过来的正文交给 LLM 重写"),
-            busy, "ns-canvas-gen-go"));
+        acts.push(genBtn(t(run.btn), "play", () => (isReverse ? runReverse(node) : runEnhance(node)),
+            t(run.tip), busy, "ns-canvas-gen-go"));
         return [
             $el("div", { className: "ns-canvas-gen-skill" }, [isReverse ? reverseLangChip(node, busy) : enhanceSkillChip(node, busy)]),
             $el("div", { className: "ns-canvas-gen-bottom" }, [$el("div", { className: "ns-canvas-gen-acts" }, acts)]),
@@ -1255,10 +1237,11 @@ export function createCanvasGen({ $el, toast, api, canGen, canFeature, host }) {
         sizeSel.value = params.width && params.height ? `${params.width},${params.height}` : "0";
         sizeSel.dataset.follow = t("跟随尺寸");   // 空着就是跟随：胶囊上要说「跟随尺寸」，不是那句通用的「默认」
 
+        const labels = RUN_LABELS.video;
         const acts = [];
         if (busy) acts.push(genBtn(t("取消任务"), "cross", () => cancel(node), t("取消这一发后台任务")));
-        acts.push(genBtn(t("生成视频"), "play", () => run(node),
-            canGen() === false ? t("生成视频需要 ComfyUI 执行队列") : t("提交这一发生成视频任务"), busy));
+        acts.push(genBtn(t(labels.btn), "play", () => run(node),
+            canGen() === false ? t(labels.offline) : t(labels.tip), busy));
         // 技能与自定参数就这一枚胶囊：点开左栏换技能、右栏改这一发的模型链 / 步数 / LoRA（出视频页同一枚）
         const skillChip = genParamsChip(node, { icon: "film", isVideo: true, busy });
         return [
@@ -1272,15 +1255,8 @@ export function createCanvasGen({ $el, toast, api, canGen, canFeature, host }) {
     /** 连到这一台节点的素材节点（按连线顺序）：出片交给后端的就是这一批，卡上也按这一批铺；
      *  停用的那一张既不进这一发也不在卡上露出来 */
     function mediaNodes(nodeId) {
-        const state = host.getState();
-        const out = [];
-        for (const conn of state.connections) {
-            if (conn.toNodeId !== nodeId) continue;
-            const node = state.nodes.find((n) => n.id === conn.fromNodeId);
-            if (!node || !MEDIA_GROUPS[node.type] || node.metadata?.disabled === true) continue;
-            if (node.metadata?.filename || node.metadata?.asset) out.push(node);
-        }
-        return out;
+        return upstreamNodes(host.getState(), nodeId, ["image", "video", "audio"])
+            .filter((node) => node.metadata?.filename || node.metadata?.asset);
     }
 
     /** 配方这一段自己的参考素材（recipe.json 记的是配方 assets/ 里的文件名）：首帧与分镜关键帧排最前 ——
@@ -1439,12 +1415,13 @@ export function createCanvasGen({ $el, toast, api, canGen, canFeature, host }) {
         const live = cars.filter((car) => car.metadata.disabled !== true);
         // 这一列跑的是哪一份配方：铺的时候定下、记在每一厢身上，车尾只把它写出来（换配方是重铺一列，不在这里改）
         const recipe = chainRecipe(cars) || String(node.metadata?.recipe || "");
+        const labels = RUN_LABELS.chain;
         const acts = [];
         if (busy) acts.push(genBtn(t("取消任务"), "cross", () => cancel(node), t("取消这一列在跑的段")));
         acts.push(genBtn(t("参数"), "gear", () => openChainParams(node),
             t("步数 / 锚点 / 连续性 / 上下文帧 / 种子：整列共用的参数"), busy));
-        acts.push(genBtn(t("生成视频"), "play", () => run(node),
-            canGen() === false ? t("生成视频需要 ComfyUI 执行队列") : t("按链序跑启用的那几段"), busy));
+        acts.push(genBtn(t(labels.btn), "play", () => run(node),
+            canGen() === false ? t(labels.offline) : t(labels.tip), busy));
         return [
             // 第一行就是这一列的关键信息：配方名 + 跑几段 / 启用几段（与车厢顶行同一行式，段数与配方名一行写完）
             $el("div", { className: "ns-canvas-car-head",

@@ -49,25 +49,26 @@ export const ADD_MENU = Object.entries(NODE_TYPES)
  *  增强与反推数字数（字数每 40 字才报一次：逐 token 整层重画会把节点上的打字与拖动全卡住） */
 export const RUN_LABELS = {
     image: { btn: "出图", tip: "提交这一发生图任务", queued: "排队中", running: "生成中",
-        progress: "生成中 {done}/{total}", fail: "出图失败", doneN: "已出图 {n} 张",
+        progress: "生成中 {done}/{total}", fail: "出图失败", failToast: "出图失败", doneN: "已出图 {n} 张",
         cancelled: "已取消出图", fell: "图已存进 Output 目录", offline: "出图需要 ComfyUI 执行队列" },
-    // 生成节点的视频档：状态行与生图共用同一份字（状态机与 style.css 都共用这一套），只有钮是「生成视频」
+    // 生成节点的视频档：状态行与生图共用同一份字（状态机与 style.css 都共用这一套），只有钮与提示条是出片那一份
     video: { btn: "生成视频", tip: "提交这一发生成视频任务", queued: "排队中", running: "生成中",
-        progress: "生成中 {done}/{total}", fail: "出图失败", done: "已出片", cancelled: "已取消出片",
-        fell: "视频已存进 Output 目录", offline: "生成视频需要 ComfyUI 执行队列" },
+        progress: "生成中 {done}/{total}", fail: "出图失败", failToast: "出片失败", done: "已出片",
+        cancelled: "已取消出片", fell: "视频已存进 Output 目录", offline: "生成视频需要 ComfyUI 执行队列" },
     // 串联的车尾：那一行数的是链上的段数不是某一发的步数；出片是按链序把启用的那几段依次入队
     chain: { btn: "生成视频", tip: "按链序跑启用的那几段", queued: "排队中", running: "生成中",
-        progress: "串联出片 {done}/{total}", fail: "出片失败", done: "已出片", cancelled: "已取消出片",
-        fell: "视频已存进 Output 目录", offline: "生成视频需要 ComfyUI 执行队列" },
-    edit: { btn: "出图", tip: "提交这一发生成任务", queued: "排队中", running: "编辑中",
-        progress: "编辑中 {done}/{total}", fail: "出图失败", doneN: "已出图 {n} 张",
+        progress: "串联出片 {done}/{total}", fail: "出片失败", failToast: "出片失败", done: "已出片",
+        cancelled: "已取消出片", fell: "视频已存进 Output 目录", offline: "生成视频需要 ComfyUI 执行队列" },
+    edit: { btn: "出图", tip: "提交这一发图像编辑任务", queued: "排队中", running: "编辑中",
+        progress: "编辑中 {done}/{total}", fail: "出图失败", failToast: "出图失败", doneN: "已出图 {n} 张",
         cancelled: "已取消出图", fell: "图已存进 Output 目录", offline: "出图需要 ComfyUI 执行队列" },
-    enhance: { btn: "增强", tip: "把连过来的正文交给 LLM 重写", running: "增强中",
-        chars: "增强中 · {n} 字", fail: "增强失败", done: "已增强出提示词", cancelled: "已取消增强" },
-    reverse: { btn: "反推", tip: "把连过来的那张图写成一段提示词", running: "反推中",
-        chars: "反推中 · {n} 字", fail: "反推失败", done: "已反推出提示词", cancelled: "已取消反推" },
-    // 车厢：卡上那一行只说这一段跑到哪了（整列共用的段数与参数在车尾），车厢自己不跑出片
-    car: { queued: "排队中", running: "生成中", progress: "生成中 {done}/{total}", fail: "出片失败" },
+    enhance: { kind: "enhance", btn: "增强", tip: "把连过来的正文交给 LLM 重写", running: "增强中",
+        chars: "增强中 · {n} 字", fail: "增强失败", failToast: "增强失败", done: "已增强出提示词", cancelled: "已取消增强" },
+    reverse: { kind: "reverse", btn: "反推", tip: "把连过来的那张图写成一段提示词", running: "反推中",
+        chars: "反推中 · {n} 字", fail: "反推失败", failToast: "反推失败", done: "已反推出提示词", cancelled: "已取消反推" },
+    // 车厢：卡上那一行只说这一段跑到哪了（整列共用的段数与参数在车尾），车厢自己不跑出片，收摊的是它那一发的轮询
+    car: { queued: "排队中", running: "生成中", progress: "生成中 {done}/{total}", fail: "出片失败",
+        failToast: "出片失败", done: "已出片", cancelled: "已取消出片", fell: "视频已存进 Output 目录" },
 };
 
 /** 这一张节点跑哪一条链：生成节点看它自己的档 —— 串联的车尾按链序跑，视频档走出片；其余类型看表里那一行 */
@@ -78,39 +79,39 @@ export function runKind(node) {
     return node.metadata?.kind === "video" ? "video" : "image";
 }
 
-/** 运行钮的闸门（三条链共用，交回要说的那一句，空串 = 放行）：停用的那一张先说已停用 —— 这句排在
- *  「这一发在跑」之前，跑着的那一发不该把它吃掉；这一发在跑就不重复提交；能力位缺了只说去哪儿启，页面不替
- *  用户拉内核（拉一次就是收回在跑的内核正在用的代理目标）。运行态由 gen.js 交出，注册表不持有节点状态 */
+/** 运行钮的闸门（三条链共用）：交回 null = 放行；交回 { msg, level } = 拦下，调用方把 msg 说给用户
+ *  （msg 为空 = 这一发已经在跑，不出声）。停用的那一张先说已停用 —— 这句排在「这一发在跑」之前，跑着的
+ *  那一发不该把它吃掉；这一发在跑就不重复提交；能力位缺了只说去哪儿启，页面不替用户拉内核（拉一次就是
+ *  收回在跑的内核正在用的代理目标）。运行态由 gen.js 交出：注册表不持有节点状态 */
 export function gateOf(node, { running = false, gate = "", canFeature } = {}) {
-    if (node.metadata?.disabled === true) return t("这台节点已停用：在节点上方的浮出栏里启用");
-    if (running) return "";
-    if (gate && canFeature?.(gate) === false) {
-        return gate === "image_gen" ? t("出图需要 ComfyUI 执行队列：点顶栏 ComfyUI 胶囊启动，好了再按一次")
-            : gate === "video_gen" ? t("出片需要 ComfyUI 执行队列：点顶栏 ComfyUI 胶囊启动，好了再按一次")
-            : t("该功能需要 ComfyUI：点顶栏 ComfyUI 胶囊启动，好了再按一次");
+    if (node.metadata?.disabled === true) {
+        return { msg: t("这台节点已停用：在节点上方的浮出栏里启用"), level: "info" };
     }
-    return "";
+    if (running) return { msg: "", level: "info" };
+    if (gate && canFeature?.(gate) === false) {
+        return {
+            msg: gate === "image_gen" ? t("出图需要 ComfyUI 执行队列：点顶栏 ComfyUI 胶囊启动，好了再按一次")
+                : gate === "video_gen" ? t("出片需要 ComfyUI 执行队列：点顶栏 ComfyUI 胶囊启动，好了再按一次")
+                : t("该功能需要 ComfyUI：点顶栏 ComfyUI 胶囊启动，好了再按一次"),
+            level: "warn",
+        };
+    }
+    return null;
 }
 
-/** 沿连线往回溯到某一类上游节点：从起点按连线顺序广度走，回来的顺序就是连线顺序（gen.js 取正文、取参考、
- *  取反推那一张、取素材共用这一条）。seen 只挡画布上成环的连线；disableOk 为假时跳过停用的那一张 ——
- *  停用的节点的正文与素材既不进这一发也不当落点 */
+/** 连线顺序里直接连过来的那一层中的某一类上游节点：顺序就是 connections 的书写顺序，后端吃进去的参考
+ *  顺序与正文拼接顺序都是它（gen.js 取正文、取参考、取反推那一张、取素材共用这一条）。只看直连这一层，
+ *  不沿链往上回溯 —— 上游的上游连过来的是那一条链，不是这一发的输入。
+ *  disableOk 为假时跳过停用的那一张：停用的节点的正文与素材既不进这一发也不当落点 */
 export function upstreamNodes(state, from, types, disableOk = false) {
     const byType = new Set(types);
-    const nodes = state.nodes || [];
-    const connections = state.connections || [];
-    const out = [], seen = new Set([from]), queue = [from];
-    while (queue.length) {
-        const id = queue.shift();
-        for (const conn of connections) {
-            if (conn.toNodeId !== id || seen.has(conn.fromNodeId)) continue;
-            const node = nodes.find((n) => n.id === conn.fromNodeId);
-            if (!node) continue;
-            seen.add(node.id);
-            if (node.metadata?.disabled === true && !disableOk) { queue.push(node.id); continue; }
-            if (byType.has(node.type)) out.push(node);
-            queue.push(node.id);
-        }
+    const out = [];
+    for (const conn of (state.connections || [])) {
+        if (conn.toNodeId !== from) continue;
+        const node = (state.nodes || []).find((n) => n.id === conn.fromNodeId);
+        if (!node || !byType.has(node.type)) continue;
+        if (node.metadata?.disabled === true && !disableOk) continue;
+        out.push(node);
     }
     return out;
 }
