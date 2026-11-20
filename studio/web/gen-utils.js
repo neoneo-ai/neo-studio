@@ -281,7 +281,10 @@ const SKILL_FAMILY_LABELS = { qwen: "Qwen Image", krea2: "Krea2", moss: "MOSS" }
  *  原生 select 收在壳里只当状态容器：点技能写 value 并派发 change；切技能重放配置是程序改 value，调用方要跟着 sync()
  *  分组规则由调用方给：视频页按生成模式分组（groupOf 取 skill 的 mode），组头名与组序都取 groupLabels 的键序。
  *  panelClass 是宿主给面板加的密度/版式类（导演页把这一份双栏面板收进自己的紧凑档，不在两处各写一套密度规则）。 */
-export function skillParamsChip(sel, paramsEl, { icon: iconName = "sparkles", getOverride, groupOf = skillFamily, groupLabels = SKILL_FAMILY_LABELS, panelClass = "" } = {}) {
+/** mount 给定时面板挂在宿主给的浮层里（画布：世界层带 scale、节点裁剪自己的内容，面板进节点里就跟着缩放并被切掉），
+ *  收窗与重开都在那一层里挪，placeChipPanel 照视口量点再减包含块偏移，画布缩放下弹点照旧落在胶囊上方。
+ *  onClose：宿主认得面板收了 —— 画布节点每改一格参数就整层重画，靠这一句记着「面板还开着」才敢重画完接着弹开 */
+export function skillParamsChip(sel, paramsEl, { icon: iconName = "sparkles", getOverride, groupOf = skillFamily, groupLabels = SKILL_FAMILY_LABELS, panelClass = "", mount = null, onClose = null } = {}) {
     sel.hidden = true;
     const icoSlot = $el("span", { className: "neo-gallery-gm-chip-icon" }, [icon(iconName, 12)]);
     const label = $el("span", { className: "neo-gallery-gm-chip-label" });
@@ -303,7 +306,9 @@ export function skillParamsChip(sel, paramsEl, { icon: iconName = "sparkles", ge
     }, [skillsCol, $el("div", { className: "neo-gallery-gm-params-col" }, [paramsEl]), foot]);
     // 双栏样式自带 display:grid，盖过 .rs-runtime-menu 基座的 display:none：收起态由这里钉住
     panel.style.display = "none";
-    const wrap = $el("span", { className: "neo-gallery-gm-chip-wrap" }, [chip, panel, sel]);
+    // mount 给定时面板不住在 wrap 里（挂出去才不跟着画布缩放、不被节点切掉）：closeOnOutside 认面板内的
+    // 点击要直接量面板自己，光看 wrap.contains 会把「在面板里选一枚模型」当成点面板外
+    const wrap = $el("span", { className: "neo-gallery-gm-chip-wrap" }, mount ? [chip, sel] : [chip, panel, sel]);
     let open = false;
     // 组序 = groupLabels 的键序，词表认不出的技能落「其他」排最后
     const famOrder = (fam) => { const i = Object.keys(groupLabels).indexOf(fam); return i < 0 ? 99 : i; };
@@ -351,6 +356,18 @@ export function skillParamsChip(sel, paramsEl, { icon: iconName = "sparkles", ge
         open = false;
         panel.style.display = "none";
         chip.classList.remove("neo-gallery-gm-chip-open");
+        if (mount) panel.remove();
+        if (onClose) onClose();
+    };
+    /** 开面板（重开也走这一条）：挂出去的面板被宿主那层清空过（画布每重画一次清一次浮层），
+     *  这里重新 append 并照新的胶囊矩形落位，面板就回到原处 */
+    const show = () => {
+        renderSkills();
+        panel.style.display = "grid";   // 双栏靠这里钉住：.rs-runtime-menu 基座在 gallery.css 之后加载，样式表分不出胜负
+        open = true;
+        chip.classList.add("neo-gallery-gm-chip-open");
+        if (mount) mount().appendChild(panel);
+        placeChipPanel(panel, chip.getBoundingClientRect());
     };
     // chip 说出当前生效值：技能名，有覆盖时带上主模型短名与 LoRA 条数
     const sync = () => {
@@ -366,20 +383,17 @@ export function skillParamsChip(sel, paramsEl, { icon: iconName = "sparkles", ge
     chip.addEventListener("click", (e) => {
         e.stopPropagation();
         if (open) { close(); return; }
-        renderSkills();
-        panel.style.display = "grid";   // 双栏靠这里钉住：.rs-runtime-menu 基座在 gallery.css 之后加载，样式表分不出胜负
-        open = true;
-        chip.classList.add("neo-gallery-gm-chip-open");
-        const r = chip.getBoundingClientRect();
-        placeChipPanel(panel, r);
+        show();
     });
     sel.addEventListener("change", sync);
     sync();
     return {
-        el: wrap, chip, sync, close,
+        el: wrap, chip, sync, close, open: show,
         isOpen: () => open,
         // 模型 / LoRA 下拉的列表弹层挂在 body 上，点在弹层里不算「面板外」
-        closeOnOutside: (target) => { if (open && !wrap.contains(target) && !inOpenComboList(target)) close(); },
+        closeOnOutside: (target) => {
+            if (open && !wrap.contains(target) && !panel.contains(target) && !inOpenComboList(target)) close();
+        },
     };
 }
 

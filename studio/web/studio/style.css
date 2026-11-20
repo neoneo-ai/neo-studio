@@ -2720,6 +2720,10 @@ body {
 .ns-canvas-car .neo-gallery-gm-chip-label { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .ns-canvas-gen-menus { position: absolute; inset: 0; z-index: 7; pointer-events: none; }
 .ns-canvas-gen-menus .neo-gallery-gm-chip-menu { pointer-events: auto; }
+/* 技能胶囊里那一栏自定参数：这一发在跑时两栏都不给按（跑着的一发不改参数，与胶囊 disabled 同一档），
+   「完成」在 foot 里不在这两栏内，收窗这一按总要能按 */
+.ns-canvas-params-busy .neo-gallery-gm-skills-col,
+.ns-canvas-params-busy .neo-gallery-gm-params-col { pointer-events: none; opacity: .55; }
 /* 出图是这一张卡的主按钮：主色实底 + 独占最后一行铺满，和控件行里的字段胶囊一眼分得开。
    生成视频那一枚不占这一档——它就是控件行同档的描边胶囊，不铺满、不加粗。
    取消任务保持字段档；在跑时收成软底，位置与宽度都不动（改尺寸会让这张控件行跟着抖）。 */
@@ -2732,6 +2736,8 @@ body {
 .ns-canvas-gen-go:disabled, .ns-canvas-gen-go:disabled:hover {
     background: var(--ns-primary-soft); border-color: var(--ns-primary); color: var(--ns-primary-fg);
 }
+/* 图像编辑节点的技能窗口：同一套参数面板，只留左侧那一列技能（尺寸与锚点在这条路上后端自己定） */
+.ns-canvas-edit-params { grid-template-columns: minmax(0, 1fr); }
 .ns-canvas-empty-actions { display: flex; align-items: center; gap: 8px; }
 /* 空画布上的「加生成节点」是这一页的主行动 → 扁平主色实底（主行动一律扁平主色实底） */
 .ns-canvas-add-gen { border-color: var(--ns-primary); background: var(--ns-primary); color: var(--ns-on-accent, #fff); }

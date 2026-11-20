@@ -1,5 +1,5 @@
 // 节点层：节点 DOM、几何落位与选中描边。节点不铺标题栏 —— 图与正文撑满整张节点，附加操作
-// （停用 / 选图 / 设为主图 / 复制 / 删除）是浮在节点上沿外头那一排，选中该节点就出现（CSS 认 .ns-canvas-node-on）。
+// （停用 / 选图 / 设为主图 / 提示词 / 复制 / 删除）是浮在节点上沿外头那一排，选中该节点就出现（CSS 认 .ns-canvas-node-on）。
 // 节点上的动作都从这里的元素出发，回调交给页面；手势不在这一层（在 interactions.js）。
 import { t, tf } from "../../../js/core/i18n.js";
 import { setIcon, setIconLabel } from "../../../js/core/icons.js";
@@ -7,17 +7,19 @@ import { setIcon, setIconLabel } from "../../../js/core/icons.js";
 /** 节点 DOM（上游 canvas-node.tsx 的 vanilla 版）：内容铺满整张，上沿外头是附加操作栏，左上角是「主图」徽标，
  *  上下左右四枚接线点、四个角上的尺寸柄。图片节点是 <img>（走 Gallery 缩略图，取不到落占位图），提示词节点是
  *  <textarea>，正文存在 metadata.content —— 图片节点上的坐标就是 Gallery 的 filename + subfolder */
-export function nodeElement(node, { $el, onText, onPick, onHero, onDelete, onCopy, onToggleDisabled,
-    genState, genControls, genModel, recipeMeta, carView, onImageSize }) {
+export function nodeElement(node, { $el, onText, onPick, onPickPrompt, onHero, onDelete, onCopy, onToggleDisabled,
+    genState, genControls, genModel, editControls, recipeMeta, carView, onImageSize }) {
     const gen = node.type === "gen" ? (genState?.(node) || {}) : null;
     const recipe = node.type === "recipe" ? (genState?.(node) || {}) : null;
-    const busy = (gen || recipe)?.status === "queued" || (gen || recipe)?.status === "running";
+    const edit = node.type === "edit" ? (genState?.(node) || {}) : null;
+    const busy = (gen || recipe || edit)?.status === "queued" || (gen || recipe || edit)?.status === "running";
     const nodeEl = $el("div", {
         className: "ns-canvas-node "
             + (node.type === "image" ? "ns-canvas-node-image"
                 : node.type === "gen" ? "ns-canvas-node-gen"
                 : node.type === "video" ? "ns-canvas-node-video"
-                : node.type === "recipe" ? "ns-canvas-node-recipe" : "ns-canvas-node-text")
+                : node.type === "recipe" ? "ns-canvas-node-recipe"
+                : node.type === "edit" ? "" : "ns-canvas-node-text")
             + (busy ? " ns-canvas-node-run" : "")
             + (node.metadata.disabled ? " ns-canvas-node-off" : ""),
         dataset: { nodeId: node.id },
@@ -27,8 +29,9 @@ export function nodeElement(node, { $el, onText, onPick, onHero, onDelete, onCop
             : node.type === "video" ? nodeVideo(node, $el)
             : node.type === "gen" ? nodeGen(node, $el, { gen, genControls, genModel })
             : node.type === "recipe" ? nodeCar(node, $el, { recipe, carView, recipeMeta, onText })
+            : node.type === "edit" ? nodeEdit(node, $el, { edit, editControls })
             : nodeText(node, $el, onText),
-        nodeBar(node, { $el, onPick, onHero, onDelete, onCopy, onToggleDisabled }),
+        nodeBar(node, { $el, onPick, onPickPrompt, onHero, onDelete, onCopy, onToggleDisabled }),
         // 四枚接线点：左与上收线（入），右与下出线（源）。上下这两枚给上下叠放的节点就近接线用
         // （串联铺出来的那几张参考素材就在车厢正上方，按连线接进车厢）
         $el("div", { className: "ns-canvas-handle ns-canvas-handle-left", dataset: { handle: "target", side: "left" } }),
@@ -138,6 +141,20 @@ function nodeGen(node, $el, { gen, genControls, genModel }) {
     ]);
 }
 
+/** 图像编辑节点的内容：一行控件（技能胶囊 · 张数胶囊 · 出图）加一行这一发的状态。要改的那一张与
+ *  要用的提示词都不在这张节点上 —— 从连过来的节点取（见 gen.js 的 runEdit） */
+function nodeEdit(node, $el, { edit, editControls }) {
+    const st = edit || {};
+    const failed = st.status === "failed";
+    const status = failed ? (st.error || t("出图失败"))
+        : st.status === "running" ? (st.total ? tf("编辑中 {done}/{total}", { done: st.done, total: st.total }) : t("编辑中"))
+        : st.status === "queued" ? t("排队中") : "";
+    return $el("div", { className: "ns-canvas-gen" }, [
+        $el("div", { className: "ns-canvas-gen-ctl" }, editControls?.(node) || []),
+        $el("div", { className: "ns-canvas-gen-status" + (failed ? " ns-canvas-gen-fail" : ""), textContent: status }),
+    ]);
+}
+
 /** 串联的车厢：这一段自己写的提示词、停不停用，就这些 —— 技能与整列共用的生成参数都在它那一列的车尾
  *  那台生成节点上，出片也从车尾那一发。三档正文优先级（连过来的正文 > 车厢自己写的 > 配方那一段）在
  *  gen.js 的 carPrompt 里，卡上只铺车厢自己写的那一份；连过来的正文在跑时这块锁着并说出来源 */
@@ -193,7 +210,7 @@ function nodeCar(node, $el, { recipe, carView, onText }) {
  *  没填上图的多一枚「选图」。这一排默认不出现，该节点被选中时才浮在节点上沿外头（定位在 style.css），
  *  栏在节点外就不盖卡上的胶囊与正文；点了算 click，起手不拖（见 interactions.js）
  *  提示词节点不在这一排放「进入编辑」那一枚：进编辑是双击正文，出编辑是 Esc 或落在节点外那一按（interactions.js） */
-function nodeBar(node, { $el, onPick, onHero, onDelete, onCopy, onToggleDisabled }) {
+function nodeBar(node, { $el, onPick, onPickPrompt, onHero, onDelete, onCopy, onToggleDisabled }) {
     const off = node.metadata.disabled === true;
     // 栏首这一枚是固定抓手：整张铺满播控的视频卡上没有按得中的空白，每一张卡都从这一枚起手拖
     const drag = $el("span", { className: "ns-canvas-node-drag", title: t("拖动这张节点"),
@@ -215,6 +232,14 @@ function nodeBar(node, { $el, onPick, onHero, onDelete, onCopy, onToggleDisabled
             kids.push(pick);
         }
     }
+    if (node.type === "text") {
+        // 这一枚开的是绘画页同一扇提示词浮层：点一行把整段全文填进正文框
+        const prompt = $el("button", { className: "ns-canvas-node-pick", type: "button",
+            title: t("从提示词库挑一条填进输入框"), "aria-label": t("提示词"), dataset: { nodeAct: "prompt" },
+            onclick: () => onPickPrompt(node, prompt) });
+        setIconLabel(prompt, "list", t("提示词"));
+        kids.push(prompt);
+    }
     kids.push(nodeAct($el, "copy", t("复制"), "copy", () => onCopy(node), t("复制节点")));
     kids.push(nodeAct($el, "delete", t("删除"), "trash", () => onDelete(node), t("删除节点")));
     return $el("div", { className: "ns-canvas-node-bar" }, kids);
@@ -229,10 +254,10 @@ function nodeAct($el, name, label, iconName, onclick, title = label) {
 
 /** 整层节点重画：拖动与缩放不走这一条（走 applyNodeGeometry），换画布、增删节点才走 */
 export function renderNodes({ nodeLayer, links, hint, nodes, selectedNodeIds, selectedConnectionId, $el, onText,
-    onPick, onHero, onDelete, onCopy, onToggleDisabled, genState, genControls, genModel,
+    onPick, onPickPrompt, onHero, onDelete, onCopy, onToggleDisabled, genState, genControls, genModel, editControls,
     recipeMeta, carView, onImageSize }) {
-    nodeLayer.replaceChildren(...nodes.map((node) => nodeElement(node, { $el, onText, onPick, onHero, onDelete, onCopy,
-        onToggleDisabled, genState, genControls, genModel, recipeMeta, carView, onImageSize })));
+    nodeLayer.replaceChildren(...nodes.map((node) => nodeElement(node, { $el, onText, onPick, onPickPrompt, onHero, onDelete, onCopy,
+        onToggleDisabled, genState, genControls, genModel, editControls, recipeMeta, carView, onImageSize })));
     // 几何要在元素挂上世界层之后再落：nodeElement 里查不到还没挂上的元素
     for (const node of nodes) applyNodeGeometry(nodeLayer, node);
     hint.style.display = nodes.length ? "none" : "";

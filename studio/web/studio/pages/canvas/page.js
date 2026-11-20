@@ -16,6 +16,7 @@ import { attachCanvasInteractions } from "./interactions.js";
 import { createCanvasGen, readRecipeParams } from "./gen.js";
 import { thumbUrl } from "../../../recipes.js";
 import { mediaKindOf } from "../../../js/core/media-href.js";
+import { openPresetPicker } from "../../../js/core/preset-picker.js";
 
 const SAVE_DEBOUNCE_MS = 900;
 
@@ -149,6 +150,7 @@ export function createCanvasPage({ $el, api, toast, openMaterial, canGen }) {
             inMenu(mk(t("加图片"), "image", addAction(() => pickImage()))),
             inMenu(mk(t("加提示词"), "list", addAction(() => addNode("text")))),
             inMenu(mk(t("加生成节点"), "sparkles", addAction(() => addGenNode()))),
+            inMenu(mk(t("加编辑节点"), "pencil", addAction(() => addEditNode()))),
             inMenu(mk(t("加视频节点"), "film", addAction(() => addVideoNode()))),
             inMenu(mk(t("添加配方"), "wand", addAction(() => addRecipe())))
         ]);
@@ -192,13 +194,21 @@ export function createCanvasPage({ $el, api, toast, openMaterial, canGen }) {
         view.menus.textContent = "";   // 控件整份重建，挂在浮层里的菜单跟着作废
         renderNodeLayer({ nodeLayer: view.nodeLayer, links: view.links, hint: view.hint, nodes: state.nodes,
             selectedNodeIds, selectedConnectionId, $el, onText,
-            onPick: pickInto, onHero: (node) => toggleHero(node.id), onDelete: (node) => deleteNode(node.id),
+            onPick: pickInto, onPickPrompt: pickPromptInto, onHero: (node) => toggleHero(node.id), onDelete: (node) => deleteNode(node.id),
             onCopy: (node) => duplicateIds([node.id]),
             onToggleDisabled: (node) => setNodeMetadata(node.id, { disabled: node.metadata?.disabled !== true }),
             genControls: (node) => gen?.controls(node), genState: (node) => gen?.stateOf(node),
             genModel: (node) => gen?.modelText(node),
+            editControls: (node) => gen?.editControls(node),
             carView: (node) => gen?.carView(node),
             onImageSize: fitImageNode });
+    }
+
+    /** 提示词节点上那一枚「提示词」：浮层挂在按钮下方，点中一条把整段全文填进这一格。正文照走 onText
+     *  那一条（撤销一次退掉整段、跟着标脏落盘），填完重画一次节点层，不然正文框里还是用户原来写的那一段。
+     *  词库要 ComfyUI 在跑：离线那一发由浮层自己说，这一层不加第二条判断 */
+    function pickPromptInto(node, btn) {
+        openPresetPicker({ kind: "image", anchor: btn, onPick: (text) => { onText(node, text); renderNodes(); } });
     }
 
     /** 图片节点按这张图自己的比例落那一格：横的压矮、竖的收窄，永远不超出图片节点默认那一档
@@ -481,6 +491,13 @@ export function createCanvasPage({ $el, api, toast, openMaterial, canGen }) {
     function addGenNode() {
         gen?.prime();
         return addNode("gen", null, { skill_id: gen?.defaultSkillId() || "" });
+    }
+
+    /** 「加编辑节点」：图像编辑链的那一张 —— 只选技能与出图，被改的那一张与要用的提示词都从连过来的节点取。
+     *  技能列表与生图模型清单读到手才建（胶囊里列的就是那一份），与「加生成节点」同一发 */
+    function addEditNode() {
+        gen?.prime();
+        return addNode("edit", null, { skill_id: gen?.defaultEditSkillId() || "" });
     }
 
     /** 「加视频节点」：同一张生成节点的面，kind 记在 metadata 里 —— 出片走简单视频那条链，成片落进下游视频节点 */

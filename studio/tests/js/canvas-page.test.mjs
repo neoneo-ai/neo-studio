@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { resetEnv, mockRoute, jsonResponse, flush, click, setConfirmAnswer, dialogs, fetchLog } from "./setup.mjs";
 import { dispatchApiEvent, listenerCount, resetApiState } from "./mocks/comfy-api.mjs";
 import { ICON_NAMES } from "../../web/js/core/icons.js";
+import { closePresetPicker } from "../../web/js/core/preset-picker.js";
 
 const webDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../web");
 
@@ -14,6 +15,7 @@ const webDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..
 const geometry = await import("../../web/studio/pages/canvas/geometry.js?canvasGeo=1");
 const store = await import("../../web/studio/pages/canvas/store.js?canvasStore=1");
 const page = await import("../../web/studio/pages/canvas/page.js?canvasPage=1");
+const gen = await import("../../web/studio/pages/canvas/gen.js?canvasGen=1");
 const canvas = { ...geometry, ...store, ...page };
 const { $el } = await import("../../web/studio/shim/ui.js?canvasPage=1");
 
@@ -1509,13 +1511,13 @@ describe("canvas-page 页面", () => {
         "没填图的这一张多一枚「选图」");
     });
 
-    test("选中就把那一排摆出来：停用 / 复制 / 删除，不留「进入编辑」", async () => {
+    test("选中就把那一排摆出来：停用 / 提示词 / 复制 / 删除，不留「进入编辑」", async () => {
       const { view, page } = await makePage(mockCanvas());
       click(view.button("加提示词"));
       await settle();
       const txt = page.current().nodes.find((n) => n.type === "text").id;
-      assert.deepEqual(barActs(view, txt), ["disable", "copy", "delete"],
-        "正文节点的栏上有停用 / 复制 / 删除三枚");
+      assert.deepEqual(barActs(view, txt), ["disable", "prompt", "copy", "delete"],
+        "正文节点的栏上有停用 / 提示词 / 复制 / 删除四枚");
       assert.ok(view.nodeEl(txt).querySelector("textarea"), "正文框还在：进编辑是双击它");
       assert.equal(view.nodeEl(txt).querySelector(".ns-canvas-node-hero"), null, "就一排，不铺第二排");
     });
@@ -1615,6 +1617,68 @@ describe("canvas-page 页面", () => {
       assert.equal(copy.metadata.filename, "a.png", "图坐标跟着副本走");
       assert.equal(lit(view), 1);
       assert.ok(view.nodeEl(copy.id).classList.contains("ns-canvas-node-on"), "选中要落到副本上");
+    });
+  });
+
+  describe("提示词节点上的「提示词」", () => {
+    /** 提示词浮层的两条读侧接口（/rs_prompts/*，与 prompt-service 同一口径） */
+    const promptPool = (items) => {
+      mockRoute("/rs_prompts/list_prompts", () => jsonResponse(items));
+      mockRoute("/rs_prompts/load_prompt", (body) => jsonResponse({ text: `全文：${body.name}` }));
+    };
+    const pickerRows = () => [...document.querySelectorAll(".neo-preset-picker .rs-preset-item")];
+
+    test("只有提示词节点那一排有「提示词」：车厢与图片节点都不带这一枚", async () => {
+      const { view } = await makePage(STACKED_PAIR());
+      assert.ok(nodeAct(view, "txt", "prompt"), "提示词节点要有这一枚");
+      assert.equal(nodeAct(view, "car", "prompt"), null, "车厢的正文是配方那一段，不接词库");
+    });
+    test("点「提示词」开浮层：只列图像池，选一条把整段全文填进正文并落盘", async () => {
+      const { page, view, env } = await makePage();
+      promptPool([{ name: "地铁通勤", source: "presets" }, { name: "video/雨夜站台", source: "custom" }]);
+      click(view.button("加提示词"));
+      const id = page.current().nodes[0].id;
+      const ta = view.nodeEl(id).querySelector("textarea");
+      ta.value = "原来写的";
+      fire(ta, "input");
+      click(nodeAct(view, id, "prompt"));
+      await settle();
+      assert.deepEqual(pickerRows().map((el) => el.dataset.name), ["地铁通勤"], "浮层只列图像池那一条");
+      click(pickerRows()[0]);
+      await settle();
+      assert.equal(view.nodeEl(id).querySelector("textarea").value, "全文：地铁通勤",
+        "正文框里换的是整段全文，不是名字");
+      assert.equal(page.current().nodes[0].metadata.content, "全文：地铁通勤", "正文落 metadata.content");
+      assert.equal(document.querySelector(".neo-preset-picker"), null, "填完自己收窗");
+      page.flush();
+      const saved = env.store.saved.at(-1).nodes.find((n) => n.id === id);
+      assert.equal(saved.metadata.content, "全文：地铁通勤", "填进去的正文跟着画布落盘");
+    });
+    test("ComfyUI 没在跑时浮层说要 ComfyUI，正文不动", async () => {
+      const { page, view } = await makePage();
+      mockRoute("/rs_prompts/list_prompts", () => jsonResponse({ offline: true, reason: "comfyui_not_running" }, 409));
+      click(view.button("加提示词"));
+      const id = page.current().nodes[0].id;
+      click(nodeAct(view, id, "prompt"));
+      await settle();
+      assert.ok(document.querySelector(".neo-preset-picker .neo-preset-picker-empty")?.textContent.includes("需要 ComfyUI"),
+        "离线那一发要点明来源，不能只写「暂无可用提示词」");
+      assert.equal(page.current().nodes[0].metadata.content, undefined, "没有可填的正文时这一格不动");
+      closePresetPicker();
+    });
+    test("填进去的正文撤销一次退回去：正文框与落盘一起回原样", async () => {
+      const { page, view } = await makePage();
+      promptPool([{ name: "地铁通勤", source: "presets" }]);
+      click(view.button("加提示词"));
+      const id = page.current().nodes[0].id;
+      click(nodeAct(view, id, "prompt"));
+      await settle();
+      click(pickerRows()[0]);
+      await settle();
+      assert.equal(page.current().nodes[0].metadata.content, "全文：地铁通勤", "先确认填进去了");
+      fire(window, "keydown", { key: "z", ctrlKey: true });
+      assert.equal(page.current().nodes[0].metadata.content, undefined, "撤销一次退掉整段填入");
+      assert.equal(view.nodeEl(id).querySelector("textarea").value, "", "正文框跟着回退");
     });
   });
 
@@ -2222,8 +2286,9 @@ describe("canvas-page 页面", () => {
       assert.equal(ctx.chipLabelAt("g1", 2), "长边尺寸", "没盖过长边就写跟随");
       assert.equal(ctx.chipLabelAt("g1", 3), "3 张", "张数也是一枚胶囊，写的是生效张数");
       assert.deepEqual([ctx.chipAt("g1", 0), ctx.chipAt("g1", 1), ctx.chipAt("g1", 2), ctx.chipAt("g1", 3)]
-          .map((el) => el.title), ["技能", "默认比例", "长边尺寸", "生图张数"],
-        "精简胶囊不带行标签，每一枚是干什么的写在悬停提示里");
+          .map((el) => el.title), ["技能与自定参数：只列吃文字输入的生图技能；主模型 / LoRA 留空 = 跟随该技能配置与全局生图设置",
+        "默认比例", "长边尺寸", "生图张数"],
+        "技能那一枚说的是「技能 + 自定参数」（绘画页同一句），其余精简胶囊不带行标签，含义写在悬停提示里");
       assert.equal(ctx.genText("g1", "model"), "主模型：跟随技能配置 · 停用 · 双击节点停用",
         "技能 config 取到手才写得出这一行；停用与启用从双击节点那一发来，这一行就写在那一行上");
       assert.equal(ctx.genText("g1", "status"), "");
@@ -2940,6 +3005,360 @@ describe("canvas-page 页面", () => {
       await deepSettle();
       assert.equal(clipPolls("clip-1").length, polls, "切走画布停掉这一发的轮询");
     });
+
+    // ===== 自定参数：这一发临时换的主模型 / LoRA / 步数（存 metadata.gen_params，随画布落盘）=====
+    const IMAGE_MODELS = () => jsonResponse({
+      diffusion_models: ["base/base.safetensors", "qwen/diffusion_qwen.safetensors"],
+      text_encoders: ["base/te.safetensors"], vae: ["base/vae.safetensors"],
+      loras: ["lora_a.safetensors"],
+      mtimes_diffusion_models: {}, mtimes_text_encoders: {}, mtimes_vae: {}, mtimes_loras: {},
+    });
+    const VIDEO_MODELS = () => jsonResponse({
+      diffusion_models: ["h3/h3_t2v.safetensors", "h3/h3_i2v.safetensors"],
+      text_encoders: ["h3/h3_te.safetensors"], vae: ["h3/h3_vae.safetensors"],
+      loras: ["lora_b.safetensors"],
+      mtimes_diffusion_models: {}, mtimes_text_encoders: {}, mtimes_vae: {}, mtimes_loras: {},
+    });
+    // 技能那一枚就是绘画页 / 出视频页那枚共享技能弹窗：面板挂在页面那一层（.ns-canvas-gen-menus），
+    // 节点每重画一次不收它，画布缩放也不裁它。节点上第一枚胶囊就是技能
+    const openParams = async (ctx, id) => {
+      click(ctx.chipAt(id, 0));
+      await settle();
+      return ctx.host.querySelector(".ns-canvas-gen-menus .neo-gallery-gm-skills-panel .neo-gallery-gm-model-box");
+    };
+    const pickField = (box, name) => {
+      const sel = box.querySelector(".rs-model-select-box select");
+      sel.value = name;
+      fire(sel, "change");
+    };
+
+    test("自定参数读法：空串、-1 与空白 LoRA 名都是跟随，强度跟着名字走", () => {
+      assert.deepEqual(gen.readGenOverrides({ metadata: {} }), {}, "旧画布没有这一份");
+      assert.deepEqual(gen.readGenOverrides({ metadata: { gen_params: { model: "  ", steps: -1, loras: [""] } } }), {},
+        "空值与 -1 都不进请求：后端按技能 config 与全局设置合并");
+      assert.deepEqual(gen.readGenOverrides({ metadata: { gen_params: {
+        model: " qwen/diffusion_qwen.safetensors ", steps: "24", audio_vae: "h3/h3_vae.safetensors",
+        loras: ["lora_a.safetensors", { name: "lora_b.safetensors", strength: 0.5 }, { name: "  " }] } } }),
+        { model: "qwen/diffusion_qwen.safetensors", audio_vae: "h3/h3_vae.safetensors", steps: 24,
+          loras: ["lora_a.safetensors", { name: "lora_b.safetensors", strength: 0.5 }] });
+    });
+
+    test("出图自定参数：弹窗里换主模型与加 LoRA 当场写进节点，出图请求带上这一发", async () => {
+      const ctx = await genPage([promptNode("t1", "一句"), genNode("g1", 0, 0)], [link("t1", "g1")],
+        { gen: { skillConfig: { model: "base/base.safetensors", steps: 20 } },
+          routes: { "/neo_image_gen/models": IMAGE_MODELS } });
+      await deepSettle();
+      assert.equal(ctx.genText("g1", "model"), "主模型：base · 停用 · 双击节点停用",
+        "技能 config 钉的主模型铺在卡上（shortModelName 把「目录 = 文件名」那一种收成目录名）");
+      const box = await openParams(ctx, "g1");
+      assert.ok(box, "自定参数弹窗挂在页面那一层：节点重画不收它");
+      assert.equal(box.querySelectorAll(".rs-gen-adv-row").length, 0,
+        "出图只露主模型与 LoRA：Text Encoder / VAE 随高级行摘掉");
+      pickField(box, "qwen/diffusion_qwen.safetensors");
+      await settle();
+      click(box.querySelector(".rs-gen-lora-add"));
+      await settle();
+      const loraSel = box.querySelector(".rs-gen-lora-row select");
+      loraSel.value = "lora_a.safetensors";
+      fire(loraSel, "change");
+      await settle();
+      const node = ctx.page.current().nodes.find((n) => n.id === "g1");
+      assert.equal(node.metadata.gen_params.model, "qwen/diffusion_qwen.safetensors");
+      assert.deepEqual(node.metadata.gen_params.loras, [{ name: "lora_a.safetensors", strength: 1 }]);
+      assert.equal(ctx.genText("g1", "model"),
+        "主模型：diffusion_qwen · LoRA ×1 · 停用 · 双击节点停用",
+        "卡上那一行说的是这一发真正生效的那一套");
+      click(ctx.genBtn("g1", "出图"));
+      await settle();
+      const body = genCalls()[0].body;
+      assert.equal(body.model, "qwen/diffusion_qwen.safetensors");
+      assert.deepEqual(body.loras, [{ name: "lora_a.safetensors", strength: 1 }]);
+      click(ctx.view.button("撤销"));
+      await settle();
+      assert.deepEqual(ctx.page.current().nodes.find((n) => n.id === "g1").metadata.gen_params,
+        { model: "qwen/diffusion_qwen.safetensors" }, "一次撤销退掉最后那一改（LoRA）");
+      click(ctx.view.button("撤销"));
+      await settle();
+      assert.equal(ctx.page.current().nodes.find((n) => n.id === "g1").metadata.gen_params, undefined,
+        "再撤一回落回这一发没改之前的样子：这一项压根没写过，跟着技能配置走");
+    });
+
+    test("没自定参数的节点出图不带 model / loras：旧画布那一发照旧走技能配置", async () => {
+      const ctx = await genPage([promptNode("t1", "一句"), genNode("g1", 0, 0)], [link("t1", "g1")],
+        { gen: { skillConfig: { model: "base/base.safetensors", steps: 20 } },
+          routes: { "/neo_image_gen/models": IMAGE_MODELS } });
+      await deepSettle();
+      click(ctx.genBtn("g1", "出图"));
+      await settle();
+      const body = genCalls()[0].body;
+      assert.equal("model" in body, false, "没盖过主模型就不带这一项，交后端按技能 config 合并");
+      assert.equal("loras" in body, false);
+      assert.equal("steps" in body, false);
+    });
+
+    test("出片自定参数：弹窗里换生视频模型与步数，写进节点并进 /neo_video_gen/simple", async () => {
+      const ctx = await genPage([promptNode("t1", "一句"), videoGen("v1", 0)], [link("t1", "v1")],
+        { gen: { skillConfig: { model: "h3/h3_t2v.safetensors", steps: 20 } },
+          routes: { ...clipRoutes(), "/neo_video_gen/models": VIDEO_MODELS } });
+      await deepSettle();
+      const box = await openParams(ctx, "v1");
+      assert.ok(box.querySelector(".rs-gen-steps"), "出片的自定参数带步数那一格");
+      pickField(box, "h3/h3_i2v.safetensors");
+      const steps = box.querySelector(".rs-gen-steps");
+      steps.value = "24";
+      fire(steps, "change");
+      await settle();
+      const node = ctx.page.current().nodes.find((n) => n.id === "v1");
+      assert.deepEqual(node.metadata.gen_params, { model: "h3/h3_i2v.safetensors", steps: 24 },
+        "与技能钉的那一份相同的值不落盘：跟着技能配置走");
+      click(ctx.genBtn("v1", "生成视频"));
+      await deepSettle();
+      const body = clipCalls("/neo_video_gen/simple")[0].body;
+      assert.equal(body.model, "h3/h3_i2v.safetensors");
+      assert.equal(body.steps, 24);
+      assert.equal("text_encoder" in body, false, "没动过的行不进请求");
+    });
+
+    test("换技能清掉这台节点的自定参数：技能钉的那一套整份换掉", async () => {
+      const ctx = await genPage([promptNode("t1", "一句"),
+        genNode("g1", 0, 0, { gen_params: { model: "qwen/diffusion_qwen.safetensors", loras: ["lora_a.safetensors"] } })],
+      [link("t1", "g1")], {
+        gen: { skills: [{ id: "image_gen", name: "出图", category: "image_gen", source: "preset", gen_image: true },
+          { id: "t2i_fast", name: "快图", category: "image_gen", source: "preset", gen_image: true }],
+          skillConfig: { model: "base/base.safetensors", steps: 20 } },
+        routes: { "/neo_image_gen/models": IMAGE_MODELS } });
+      await deepSettle();
+      const sel = ctx.view.nodeEl("g1").querySelector(".ns-canvas-gen-skill select");
+      sel.value = "t2i_fast";
+      fire(sel, "change");
+      await settle();
+      const node = ctx.page.current().nodes.find((n) => n.id === "g1");
+      assert.deepEqual(node.metadata.gen_params, {}, "换技能 = 这一发自定的那几项一起清");
+      click(ctx.genBtn("g1", "出图"));
+      await settle();
+      assert.equal("model" in genCalls()[0].body, false, "下一发不再带着上一发钉的主模型");
+    });
+
+    test("车尾技能弹窗就是出视频页那一枚模型链：主模型写进车尾，整列每一段都带着这一发", async () => {
+      const ctx = await genPage([], [], { gen: { skillConfig: { model: "h3/h3_t2v.safetensors", steps: 20 } },
+        routes: { ...clipRoutes(), "/neo_video_gen/models": VIDEO_MODELS } });
+      await layTrain(ctx);
+      const tailId = () => ctx.page.current().nodes.find((n) => n.type === "gen").id;
+      const box = await openParams(ctx, tailId());
+      assert.ok(box, "车尾那一枚弹的是模型链那一整块：与出视频页同一块表单");
+      assert.ok(box.querySelector(".rs-model-select-box select"), "右栏第一行就是生视频模型");
+      assert.ok(box.querySelector(".rs-gen-lora-add"), "LoRA 那一行也在");
+      assert.equal(box.querySelector(".rs-gen-steps"), null, "步数不在这枚上：整列那一份在「参数」弹窗里");
+      pickField(box, "h3/h3_i2v.safetensors");
+      await settle();
+      const tail = ctx.page.current().nodes.find((n) => n.type === "gen");
+      assert.equal(tail.metadata.gen_params.model, "h3/h3_i2v.safetensors", "主模型写进车尾那一台");
+      click(ctx.genBtn(tail.id, "生成视频"));
+      await deepSettle();
+      const calls = clipCalls("/neo_video_gen/run_segment");
+      assert.equal(calls.length, 2, "两段各发一段");
+      assert.deepEqual(calls.map((c) => c.body.model),
+        ["h3/h3_i2v.safetensors", "h3/h3_i2v.safetensors"], "整列每一段都带着车尾这一发主模型");
+    });
+
+    test("技能弹窗里换技能：整层重画完在原处接着弹开，面板不在节点壳里（缩放与裁剪切不到它）", async () => {
+      const ctx = await genPage([promptNode("t1", "一句"), genNode("g1", 0, 0)], [link("t1", "g1")], {
+        gen: { skills: [{ id: "image_gen", name: "出图", category: "image_gen", source: "preset", gen_image: true },
+          { id: "t2i_fast", name: "快图", category: "image_gen", source: "preset", gen_image: true }],
+          skillConfig: { model: "base/base.safetensors", steps: 20 } },
+        routes: { "/neo_image_gen/models": IMAGE_MODELS } });
+      await deepSettle();
+      const panel = () => ctx.host.querySelector(".ns-canvas-gen-menus .neo-gallery-gm-skills-panel");
+      await openParams(ctx, "g1");
+      assert.ok(panel(), "面板挂在页面那一层");
+      assert.ok(!ctx.view.nodeEl("g1").contains(panel()), "面板不在节点壳里：画布缩放与节点裁剪都切不到它");
+      click([...panel().querySelectorAll(".neo-gallery-gm-skill-item")]
+          .find((el) => el.textContent.includes("快图")));
+      await settle();
+      assert.ok(panel(), "换技能要走一次整层重画，重画完面板在原处接着弹开");
+      assert.equal(panel().querySelector(".neo-gallery-gm-skill-item.neo-gallery-gm-menu-on")?.textContent,
+        "快图", "弹回来时选中的就是新技能那一套");
+      assert.deepEqual(ctx.page.current().nodes.find((n) => n.id === "g1").metadata.gen_params, {},
+        "换技能把这一发自定的那几项一起清");
+    });
+
+    test("这一发在跑时技能弹窗整块收控件，整列取消当场恢复", async () => {
+      // 第二段的入队卡在闸门后：整列停在「跑着」那一档（画布用例的 flush 不推定时器，收摊只能走整列取消）
+      let seq = 0;
+      let releaseGate;
+      const gate = new Promise((done) => { releaseGate = done; });
+      const ctx = await genPage([], [], { routes: { ...clipRoutes(),
+        "/neo_video_gen/run_segment": async () => {
+          if (++seq === 2) await gate;
+          return jsonResponse({ success: true, task_id: `chain-${seq}`, status: "queued" });
+        },
+        "/neo_video_gen/models": VIDEO_MODELS } });
+      await layTrain(ctx);
+      const tailId = () => ctx.page.current().nodes.find((n) => n.type === "gen").id;
+      const panel = () => ctx.host.querySelector(".ns-canvas-gen-menus .neo-gallery-gm-skills-panel");
+      await openParams(ctx, tailId());
+      assert.ok(!panel().classList.contains("ns-canvas-params-busy"), "没在跑不收控件");
+      click(ctx.genBtn(tailId(), "生成视频"));
+      await settle();
+      assert.equal(ctx.genText(tailId(), "status"), "串联出片 1/2", "整列停在跑着那一档");
+      assert.ok(panel(), "整列在跑，开着的面板跟着整层重画还在原处");
+      assert.ok(panel().classList.contains("ns-canvas-params-busy"),
+        "面板挂上这一发在跑那一档：两栏的指针事件由 CSS 收掉（style.css）");
+      click(ctx.genBtn(tailId(), "取消任务"));
+      await settle();
+      releaseGate();
+      await deepSettle();
+      assert.ok(panel(), "整列取消重画完面板还在原处");
+      assert.ok(!panel().classList.contains("ns-canvas-params-busy"), "取消当场摘掉那一档");
+    });
+
+    test("删掉节点与切走画布把开着的面板一起收掉", async () => {
+      const ctx = await genPage([promptNode("t1", "一句"), genNode("g1", 0, 0)], [link("t1", "g1")],
+        { gen: { canvases: [{ id: "canvas-0002", title: "乙", nodes: [], connections: [],
+          viewport: { x: 0, y: 0, k: 1 }, background_mode: "dots" }] },
+          routes: { "/neo_image_gen/models": IMAGE_MODELS } });
+      await deepSettle();
+      const panel = () => ctx.host.querySelector(".ns-canvas-gen-menus .neo-gallery-gm-skills-panel");
+      await openParams(ctx, "g1");
+      assert.ok(panel(), "面板开着");
+      click(nodeAct(ctx.view, "g1", "delete"));
+      await settle();
+      assert.equal(panel(), null, "删掉节点：控件整份重建，面板跟着收");
+      pickCanvas(ctx.view, "canvas-0002");
+      await settle();
+      assert.equal(panel(), null, "切走画布：这一层里没有节点认得它了");
+    });
+
+    describe("图像编辑节点：连过来的图与提示词，节点只管选技能与出图", () => {
+      // 编辑链认的是吃参考图的技能：纯文生图那一张在列表里，专门用来验「不吃参考图就说清楚」那一发
+      const EDIT_SKILLS = [
+        { id: "image_gen", name: "出图", category: "image_gen", source: "preset", gen_image: true, mode: "t2i" },
+        { id: "qwen_image_21", name: "Qwen 编辑", category: "image_gen", source: "preset", gen_image: true, mode: "t2i_edit" },
+      ];
+      const editNode = (id, x, y, meta = {}) => ({ id, type: "edit", title: "图像编辑",
+        position: { x, y }, width: 320, height: 208, metadata: { skill_id: "qwen_image_21", ...meta } });
+      const metaOf = (ctx, id) => ctx.page.current().nodes.find((n) => n.id === id).metadata;
+
+      test("加编辑节点：卡上只有控件行与状态行，默认技能落在吃参考图的那一张", async () => {
+        const ctx = await genPage([], [], { gen: { skills: EDIT_SKILLS } });
+        click(ctx.view.button("加编辑节点"));
+        await settle();
+        const node = ctx.page.current().nodes.at(-1);
+        assert.deepEqual([node.type, node.metadata.skill_id], ["edit", "qwen_image_21"],
+          "编辑节点不跟「加生成节点」记的上一次：那一档记的是出图技能，吃不吃参考图两回事");
+        const el = ctx.view.nodeEl(node.id);
+        assert.ok(el.querySelector(".ns-canvas-gen-ctl"), "控件行铺在节点上");
+        assert.ok(ctx.genBtn(node.id, "出图"), "控件行最后一枚是出图");
+        assert.equal(el.querySelector("textarea"), null, "这张节点上不进正文 —— 提示词从连过来的节点取");
+        assert.equal(el.querySelector(".ns-canvas-node-img"), null, "这张节点上不进图 —— 被改的那一张从连过来的节点取");
+        assert.deepEqual(barActs(ctx.view, node.id), ["disable", "copy", "delete"],
+          "这一排是停用 / 复制 / 删除 —— 编辑节点没有选图位，也没有提示词位");
+      });
+
+      test("出图载荷：连过来的图片按连线顺序进参考，提示词就是连过来的那几条正文", async () => {
+        const ctx = await genPage([promptNode("t1", "把外套换成红色"), promptNode("t2", "背景换成地下铁"),
+          imageSlot("i1", 500), imageSlot("i2", 900), editNode("e1", 0, 0, { count: 2 })],
+        [link("t1", "e1"), link("t2", "e1"), link("i1", "e1"), link("i2", "e1")], { gen: { skills: EDIT_SKILLS } });
+        Object.assign(metaOf(ctx, "i1"), { filename: "a.png" });
+        Object.assign(metaOf(ctx, "i2"), { filename: "b.png", subfolder: "sub" });
+        click(ctx.genBtn("e1", "出图"));
+        await settle();
+        const body = genCalls()[0].body;
+        assert.equal(body.prompt, "把外套换成红色\n\n背景换成地下铁", "提示词按连线顺序拼");
+        assert.deepEqual(body.references.map((r) => r.value), ["a.png[output]", "sub/b.png[output]"],
+          "连过来的第一张就是被改的那一张，后面的依次跟上");
+        assert.deepEqual([body.skill_id, body.count, body.skip_enhance], ["qwen_image_21", 2, true],
+          "目标尺寸不在节点上钉：跟着技能配置与全局生图设置");
+      });
+
+      test("同一张图片连两条线只算一份参考", async () => {
+        const ctx = await genPage([promptNode("t1", "改背景"), imageSlot("i1", 500), editNode("e1", 0, 0)],
+          [link("t1", "e1"), link("i1", "e1"), link("i1", "e1")], { gen: { skills: EDIT_SKILLS } });
+        Object.assign(metaOf(ctx, "i1"), { filename: "a.png" });
+        click(ctx.genBtn("e1", "出图"));
+        await settle();
+        assert.deepEqual(genCalls()[0].body.references.map((r) => r.value), ["a.png[output]"]);
+      });
+
+      test("没连图片：说把要编辑的那一张连过来，不发请求", async () => {
+        const ctx = await genPage([promptNode("t1", "改背景"), editNode("e1", 0, 0)], [],
+          { gen: { skills: EDIT_SKILLS } });
+        click(ctx.genBtn("e1", "出图"));
+        await settle();
+        assert.equal(genCalls().length, 0);
+        assert.ok(ctx.env.store.toasts.some((i) => i.message.includes("把要编辑的那一张图片节点连过来")));
+      });
+
+      test("没连提示词：说把要用的提示词连过来，不发请求", async () => {
+        const ctx = await genPage([imageSlot("i1", 500), editNode("e1", 0, 0)], [link("i1", "e1")],
+          { gen: { skills: EDIT_SKILLS } });
+        Object.assign(metaOf(ctx, "i1"), { filename: "a.png" });
+        click(ctx.genBtn("e1", "出图"));
+        await settle();
+        assert.equal(genCalls().length, 0);
+        assert.ok(ctx.env.store.toasts.some((i) => i.message.includes("把要用的提示词节点连过来")));
+      });
+
+      test("技能不吃参考图：说换一张技能，不发请求", async () => {
+        const ctx = await genPage([promptNode("t1", "改背景"), imageSlot("i1", 500),
+          editNode("e1", 0, 0, { skill_id: "image_gen" })],
+        [link("t1", "e1"), link("i1", "e1")], { gen: { skills: EDIT_SKILLS } });
+        Object.assign(metaOf(ctx, "i1"), { filename: "a.png" });
+        click(ctx.genBtn("e1", "出图"));
+        await settle();
+        assert.equal(genCalls().length, 0);
+        assert.ok(ctx.env.store.toasts.some((i) => i.message.includes("不吃参考图")));
+      });
+
+      test("离线按出图：只说去哪儿启队列，不拉内核", async () => {
+        const ctx = await genPage([promptNode("t1", "改背景"), imageSlot("i1", 500), editNode("e1", 0, 0)],
+          [link("t1", "e1"), link("i1", "e1")], { gen: { skills: EDIT_SKILLS }, extraHost: { canGen: () => false } });
+        Object.assign(metaOf(ctx, "i1"), { filename: "a.png" });
+        click(ctx.genBtn("e1", "出图"));
+        await settle();
+        assert.equal(genCalls().length, 0);
+        assert.equal(ctx.env.starts.length, 0, "出图不叫宿主拉内核：与生成节点那一发同一口径");
+        assert.ok(ctx.env.store.toasts.some((i) => i.message.includes("点顶栏 ComfyUI 胶囊启动")));
+      });
+
+      test("卡上就技能胶囊与张数胶囊两枚，跑起来状态行写编辑中", async () => {
+        const ctx = await genPage([promptNode("t1", "改背景"), imageSlot("i1", 500), editNode("e1", 0, 0)],
+          [link("t1", "e1"), link("i1", "e1")], { gen: { skills: EDIT_SKILLS } });
+        Object.assign(metaOf(ctx, "i1"), { filename: "a.png" });
+        assert.deepEqual([ctx.chipLabelAt("e1", 0), ctx.chipLabelAt("e1", 1)], ["Qwen 编辑", "1 张"],
+          "比例与长边不在编辑节点上摆：这一发的尺寸跟着技能配置走");
+        click(ctx.genBtn("e1", "出图"));
+        await deepSettle();
+        assert.ok(ctx.genText("e1", "status").startsWith("编辑中"), ctx.genText("e1", "status"));
+        assert.ok(ctx.genBtn("e1", "取消任务"), "跑着的时候要给出取消的入口");
+        dispatchApiEvent("rs.image_gen.status", { task_id: "gen-1", status: "failed", error: "显存不足" });
+        await settle();
+        assert.equal(ctx.genText("e1", "status"), "显存不足");
+        assert.ok(ctx.env.store.toasts.some((i) => i.message.includes("出图失败")));
+      });
+
+      test("编辑结果按连线顺序落下游图片节点，撤销一次退掉这一发", async () => {
+        const ctx = await genPage([promptNode("t1", "改背景"), imageSlot("s0", 900),
+          editNode("e1", 0, 0, { count: 2 }), imageSlot("i1", 500)],
+        [link("t1", "e1"), link("s0", "e1"), link("e1", "i1")], { gen: { skills: EDIT_SKILLS } });
+        Object.assign(metaOf(ctx, "s0"), { filename: "a.png" });
+        click(ctx.genBtn("e1", "出图"));
+        await deepSettle();
+        dispatchApiEvent("rs.image_gen.status", okImages(2));
+        await settle();
+        assert.equal(metaOf(ctx, "i1").filename, "o1.png", "空着的槽位按连线顺序填");
+        const created = ctx.page.current().nodes.filter((n) => n.type === "image" && n.id !== "i1" && n.id !== "s0");
+        assert.deepEqual(created.map((n) => n.metadata.filename), ["o2.png"]);
+        assert.ok(ctx.page.current().connections.some((c) => c.fromNodeId === "e1" && c.toNodeId === created[0].id),
+          "多出来的那一张新建图片节点接在这张编辑节点上");
+        click(ctx.view.button("撤销"));
+        await settle();
+        assert.equal(metaOf(ctx, "i1").filename, undefined, "撤销一次退掉这一发落下的全部图");
+      });
+    });
+
+
+
 
   });
 });

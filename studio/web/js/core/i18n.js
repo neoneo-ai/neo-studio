@@ -105,6 +105,14 @@ const EN = {
     "已出图 {n} 张": "Generated {n} images",
     "已取消出图": "Generation cancelled",
     "图已存进 Output 目录": "The images are saved in the Output folder",
+    // 画布上的图像编辑节点：被改的那一张与要用的提示词都从连过来的节点取，这一张只选技能与出图
+    "加编辑节点": "Add image-edit node",
+    "编辑中": "Editing",
+    "编辑中 {done}/{total}": "Editing {done}/{total}",
+    "把要编辑的那一张图片节点连过来": "Run the image node you want edited into this one",
+    "把要用的提示词节点连过来": "Run a prompt node into this one",
+    "{skill} 不吃参考图，换一张技能再编辑": "{skill} takes no reference image - pick a skill that does",
+    "提交这一发图像编辑任务": "Submit this image-edit job",
     "加视频节点": "Add video node",
     "添加配方": "Add recipe",
     "空视频位": "Empty clip slot",
@@ -133,6 +141,12 @@ const EN = {
     "跟随技能 {edge}": "Follow the skill ({edge})",
     "出图比例：留默认就跟随技能配置与全局生图设置": "Aspect ratio - leaving it default follows the skill config and the global generation settings",
     "出图长边：留默认就跟随技能配置与全局生图设置": "Long edge - leaving it default follows the skill config and the global generation settings",
+    // 卡上那一行主模型摘要里自定参数的写法（技能胶囊面板里的覆盖值与条数）
+    "LoRA ×{n}": "{n} LoRA",
+    "技能与自定参数：只列吃文字输入的生图技能；主模型 / LoRA 留空 = 跟随该技能配置与全局生图设置": "Skill and custom params - lists the text-input image skills only; leaving the main model / LoRA empty follows the skill config and the global image settings",
+    "技能与自定参数：主模型 / LoRA 留空 = 跟随该技能配置与全局生视频设置": "Skill and custom params - leaving the main model / LoRA empty follows the skill config and the global video settings",
+    "整列共用的出视频技能：空着 = 每一段用配方里那一段自己写的技能": "Video skill shared by the whole chain - leaving it empty uses each segment's own skill from the recipe",
+    "整列出片共用这一个技能：参数跟着技能配置与全局生视频设置走，逐发的自定参数在分镜卡与出片节点上": "The whole chain shares this skill: parameters follow the skill config and the global video settings, and per-shot custom params live on the shot card and the render node",
     // 画布上的一列车厢：车厢一段一张（配方名、段号、这一段用的参考素材与正文），厢上方铺的参考素材
     // 按连线接进厢；整列共用的视频技能与锚点 / 步数 / 连续性 / 上下文帧 / 种子都在车尾那台生成节点上
     "跟随步数": "Follow steps",
