@@ -35,8 +35,10 @@ shows 24 cards per screen and the next screen is appended when the list is scrol
    the accent-orange border on hover and a solid accent-orange fill when selected. Trending, author and like controls, as
    [prompts.chat](https://prompts.chat/prompts) ships them, live on cloud data; these entries carry only a file time and
    tags, so a control with no data behind it is not shipped.
-2. **Card**: the column width is fixed at 230px and the column count follows the page width; cards of unequal height are
-   packed by `gallery-masonry.js`, each into whichever column is shortest right now (the asset library's packing).
+2. **Card**: the column width has a 280px floor and the column count follows the page width, capped at 7 columns — past
+   that cap the leftover width is shared out across the columns instead of leaving a blank band along the page's right
+   edge; cards of unequal height are packed by `gallery-masonry.js`, each into whichever column is shortest right now
+   (the asset library's packing).
    The media band spans the full card width, and it takes its picture in the order
    "cloud image media → cover sidecar → cloud directory cover" — the media and the directory cover both come from
    `cloudDirCoverUrl` (the thumbnail proxy), the sidecar from `promptCoverUrl(name, v)` where `v` is exactly its mtime
@@ -257,6 +259,7 @@ Uploading runs the same chain as the material presets ([gallery.md](gallery.md))
 python tools/import_prompts_chat.py --top 20 --pages 2 --build --skip-preview --out tmp\gallery_pack
 python tools/gallery_preprocess.py --presets tmp\gallery_pack --output tmp\gallery_pack --dirs prompts.chat --tag prompts --preview
 python tools/gallery_deploy_oss.py --source tmp\gallery_pack --bucket <bucket> --prefix neo/presets/ --endpoint <endpoint>   # check --dry-run first
+python tools/gallery_prune_oss.py --dir prompts.chat --stems doomed.txt                # retire rows: lists the keys, deletes only with --apply
 ```
 
 `gallery_preprocess.py` fetches the live master index as the merge base (`configs/oss_presets.json` → `index_url`),
@@ -275,6 +278,14 @@ Per-row provenance is `<out>/prompts.chat.manifest.json`: the endpoint, the lice
 tags and the sha256 of the body and of the media. The manifest sits outside `prompts.chat/` on purpose —
 `gallery_deploy_oss.py` uploads every file under `--source` as an object, and a manifest inside the directory would be
 read by the plugin as an item of the card.
+
+Retiring a row runs `tools/gallery_prune_oss.py`: `--dir` and `--stems` name the cards, and the media and sidecar under
+`prompts.chat/`, the thumbnail under `thumbnails/prompts.chat/` and the preview under `previews/prompts.chat/` go
+together. It lists by default and deletes only with `--apply`; a name whose files are still in the build directory
+refuses the whole batch, because a cloud delete with the index and the media disagreeing leaves the card on a media slot
+that can never load. The refresh that fills a card's media tile fetches past `gallery/oss_cache/`: that cache hits on the
+path and knows nothing about the bytes, so once a directory is re-published under the same keys the cover has to be the
+one the cloud holds now.
 
 On the user side this is one `prompts.chat` cloud preset card in the material gallery: open it, paste the body into the
 generator with "Copy prompt" ([gallery.md](gallery.md)).

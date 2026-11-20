@@ -439,6 +439,31 @@ class MirrorCovers(MirrorSandbox, unittest.TestCase):
         self.assertEqual(self._pool_covers("video"), [])
 
 
+    def test_a_republished_thumbnail_reaches_the_cover_past_the_cached_copy(self):
+        # 缓存按路径命中、不认内容：云上把同一个键重发过一遍后，补封面那一发还读缓存的话，
+        # 卡片这一格就永远停在旧图上——这一发必须绕开缓存取云上现在那一份
+        self._cloud_server()
+        cached = gallery_oss.OSS_CACHE_DIR / "thumbnails" / CLOUD_DIR / "01_Foo.jpg"
+        cached.parent.mkdir(parents=True, exist_ok=True)
+        cached.write_bytes(b"OLD-JPEG")
+        card = self._mirror_file("image", "Foo Portrait", body="foo body first line\nsecond body line\n")
+        result = self._sync()
+        cover = card.with_name("Foo Portrait.jpg")
+        self.assertEqual(result["covers"], 3)
+        self.assertEqual(cover.read_bytes(), THUMB_BYTES.encode("utf-8"))
+        self.assertEqual(cached.read_bytes(), THUMB_BYTES.encode("utf-8"))
+
+    def test_a_sidecar_that_is_already_cached_is_not_fetched_again(self):
+        # 绕缓存的只有封面位：正文那一发命中缓存照旧不重复打云端
+        self._cloud_server()
+        cached = gallery_oss.OSS_CACHE_DIR / CLOUD_DIR / "01_Foo.txt"
+        cached.parent.mkdir(parents=True, exist_ok=True)
+        cached.write_text(SIDECARS[f"{BASE_URL}/{CLOUD_DIR}/01_Foo.txt"], encoding="utf-8")
+        self._sync()
+        self.assertIn("Foo Portrait", self._pool_files("image"))
+        self.assertNotIn(f"{BASE_URL}/{CLOUD_DIR}/01_Foo.txt", gallery_oss.aiohttp.requested)
+
+
 class MirrorOnlyTaggedDirs(MirrorSandbox, unittest.TestCase):
     """只有带 prompts 标签的目录是镜像源：角色卡目录是素材，不是提示词。"""
 

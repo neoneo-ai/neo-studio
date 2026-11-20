@@ -13,7 +13,7 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 12px 14px 6px;
+    padding: 8px 14px 4px;
 }
 .ns-pl-h1 {
     margin: 0;
@@ -29,7 +29,7 @@
     flex-wrap: wrap;
     row-gap: 8px;
     column-gap: 12px;
-    padding: 6px 14px 10px;
+    padding: 4px 14px 8px;
     border-bottom: 1px solid var(--ns-border);
 }
 
@@ -75,13 +75,13 @@
     flex: 1 1 auto;
     min-height: 0;
     overflow-y: auto;
-    padding: 14px;
+    padding: 10px 14px 14px;
 }
 
-/* 装箱脚本没跑起来时的兜底：定宽列的普通网格，列宽与瀑布流同一档 */
+/* 装箱脚本没跑起来时的兜底：普通网格，列宽下限与余宽摊法都和瀑布流同一档 */
 .ns-pl-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, 230px);
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
     gap: 12px;
     align-content: start;
 }

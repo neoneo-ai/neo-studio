@@ -5,6 +5,16 @@ Notable changes for Neo Studio. Versions are tagged `vX.Y.Z` and published to th
 ## [Unreleased]
 
 ### Added
+- **A published preset card retires by name, and a re-published card's picture reaches the card.** Twelve `prompts.chat`
+  cards sat on the repo's own typeset text block: their authors' example output failed to download on the first pass
+  (hotlink and cut-off stream, not the 24 MB cap), and the fallback filled the media slot with a title-and-body layout. A
+  re-fetch pulled all twelve real outputs, so those cards now show what the prompt produced (27 objects re-uploaded, the
+  mirrored prompt pools' covers refetched, the cards' sidecars untouched). `tools/gallery_prune_oss.py` retires a
+  published card by name — media, sidecar, thumbnail and video preview go together, it lists by default and deletes only
+  with `--apply`, and a name whose files are still in the build directory refuses the whole batch, because deleting the
+  cloud copy while the index still names it leaves the card on a media slot that can never load. The refresh that fills a
+  card's media tile now fetches past the path-keyed `gallery/oss_cache/` copy, so a directory re-published under the same
+  keys updates the card's cover instead of keeping the byte it cached first.
 - **A prompt library card with a picture opens the lightbox, and its fill button follows its pool.** Clicking the card
   runs the asset library's lightbox, and it shows the full file behind the tile instead of the tile's own copy: an image
   card paired with cloud image media enlarges the image that cloud directory published, fetched whole through

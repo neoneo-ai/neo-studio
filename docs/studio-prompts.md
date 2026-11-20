@@ -21,7 +21,8 @@ Studio 首页「素材与配置」板块的卡片「提示词库」进 `#/prompt
    就不铺这一排，一颗筛子筛不出任何东西）—— chip 与素材库类型 chip 同一份样式：透底胶囊 + 浅描边、
    11px 字、hover 描边走强调橙、选中整颗填强调橙。热度、作者、点赞那一排在 [prompts.chat](https://prompts.chat/prompts)
    靠云端数据，这一页的条目只有文件时间与标签，界面上就不铺没有数据的控件。
-2. **卡片**：卡片列宽固定 230px、列数由页宽排出，长短不一的卡片由 `gallery-masonry.js` 逐个放进当前最矮的一列
+2. **卡片**：卡片列宽下限 280px，列数由页宽排出、最多 7 列——宽屏排出的列数一超过 7 就夹在这一档，余下的
+   宽度摊进每一列（页右沿不留一条整幅空白），长短不一的卡片由 `gallery-masonry.js` 逐个放进当前最矮的一列
    （与素材页同一份装箱）。媒体位那一档宽度吃满卡片，取图按「云端图像媒体 → 封面 sidecar → 云端目录封面」——图像媒体与目录封面都由
    `cloudDirCoverUrl` 拼（缩略图代理），封面 sidecar 由 `promptCoverUrl(name, v)` 拼、`v=` 就是条目上那份
    mtime，`<img>` 一律 `loading="lazy"`；三样都没有就把标题行落在卡片最上方、正文摘要那一格文字位放在它下面，不留空档。
@@ -175,6 +176,7 @@ prompts.chat 的提示词文本是 CC0 1.0 公有领域（站上的 LICENSE 写�
 python tools\import_prompts_chat.py --top 20 --pages 2 --build --skip-preview --out tmp\gallery_pack
 python tools\gallery_preprocess.py --presets tmp\gallery_pack --output tmp\gallery_pack --dirs prompts.chat --tag prompts --preview
 python tools\gallery_deploy_oss.py --source tmp\gallery_pack --bucket <bucket> --prefix neo/presets/ --endpoint <endpoint>   # 先看 --dry-run
+python tools\gallery_prune_oss.py --dir prompts.chat --stems doomed.txt                # 撤下一条：只列要删的键，--apply 才删
 ```
 
 `gallery_preprocess.py` 把合并基准拉成线上主索引（`configs/oss_presets.json` 的 `index_url`），产
@@ -189,6 +191,11 @@ python tools\gallery_deploy_oss.py --source tmp\gallery_pack --bucket <bucket> -
 逐条来源记在 `<out>\prompts.chat.manifest.json`：来源接口、许可说明、逐条的 url / 作者 / 标签与正文和媒体的 sha256。
 清单刻意写在 `prompts.chat\` 之外——`gallery_deploy_oss.py` 把 `--source` 目录里每个文件都当对象上传，落在目录里的
 那份会被插件读成卡里的条目。
+
+撤下一条走 `tools\gallery_prune_oss.py`：`--dir` 与 `--stems` 点名卡名，`prompts.chat\` 下的媒体与旁车、
+`thumbnails\prompts.chat\` 与 `previews\prompts.chat\` 的同名片段一起走，默认只列不发、`--apply` 才删；点名的卡名在
+构建目录里还留着文件就整批拒删——索引与媒体对不上时删云端，卡就只剩一个加载不出来的图位。刷新补封面那一发绕开
+`gallery\oss_cache\`：缓存按路径命中、不认内容，云端把同一个键重发过一遍后，卡片图位要的是云上现在那一份。
 
 用户侧是素材库里那张 `prompts.chat` 云端预设卡：点开、用「复制提示词」把正文贴进生成器（[gallery.md](gallery.md)）。
 

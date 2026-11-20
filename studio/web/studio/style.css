@@ -1189,6 +1189,9 @@ body {
 .ns-page:hover::-webkit-scrollbar-thumb { background: var(--ns-field-bd-hover, #555); }
 /* 素材页顶部不留内边距：sticky 停在容器 padding 内侧，上方会露出一条滚动的缩略图；顶部间距由工具条自己的 padding 提供 */
 .ns-page:has(.ns-gallery-host) { padding-top: 0; }
+/* 提示词库页同口径：页名与筛子条自带顶部内衬，页容器那 16px 叠上去，第一排卡片就往下压出一整条空白。
+   这一发的类名落在 .ns-page 自己身上（buildPrompts 直接给 el 加类），所以是复选选择器，不是 :has() */
+.ns-page.ns-prompt-library { padding-top: 0; }
 .ns-hidden { display: none !important; }
 /* 手机 / 窄窗口：页内 16px 内衬在手机上吃掉四分之一幅，一律收到 8px；
    底部安全区落在这一层的 padding 上，钉在页底的生成按钮与操作行不被圆角与手势条压住 */

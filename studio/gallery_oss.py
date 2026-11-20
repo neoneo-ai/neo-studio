@@ -236,7 +236,7 @@ def _load_oss_index_from_disk() -> dict | None:
     return None
 
 
-async def _download_oss_file(remote_rel_path: str) -> Path | None:
+async def _download_oss_file(remote_rel_path: str, refresh: bool = False) -> Path | None:
     """Download a single file from OSS to local cache. Returns local cache path or None."""
     cfg = _get_oss_config()
     base_url = cfg.get("base_url", "").rstrip("/")
@@ -245,7 +245,9 @@ async def _download_oss_file(remote_rel_path: str) -> Path | None:
 
     cache_dir = _get_oss_cache_dir()
     local_path = cache_dir / remote_rel_path
-    if local_path.exists():
+    # 缓存按路径命中、不认内容：云端把同一个键重发过一遍（换封面、撤下再发）之后，缓存里那张
+    # 旧图不会自己过期。要拿云上现在这一发的调用方传 refresh，其余读取照旧不重复下载。
+    if local_path.exists() and not refresh:
         return local_path
 
     local_path.parent.mkdir(parents=True, exist_ok=True)
@@ -641,6 +643,11 @@ async def sync_prompt_mirror(index: dict) -> dict:
         async with sem:
             return await _download_oss_file(rel)
 
+    async def _fetch_cover(rel: str) -> Path | None:
+        # 封面是卡片图位与视频预览的起点：云上重发过这张时，池子里那一格不能停在缓存的旧字节上
+        async with sem:
+            return await _download_oss_file(rel, refresh=True)
+
     for dir_name in dirs:
         rows = [item for item in await _fetch_oss_dir_index(index, dir_name)
                 if isinstance(item, dict) and item.get("filename")]
@@ -700,7 +707,7 @@ async def sync_prompt_mirror(index: dict) -> dict:
             thumb = _mirror_row_thumb(hits[0]) if len(hits) == 1 else ""
             if thumb:
                 cover_jobs.append((cover, thumb))
-        fetched = await asyncio.gather(*(_fetch(rel) for _, rel in cover_jobs))
+        fetched = await asyncio.gather(*(_fetch_cover(rel) for _, rel in cover_jobs))
         for (cover, _), src in zip(cover_jobs, fetched):
             if src is not None and _mirror_write_cover(src, cover):
                 result["covers"] += 1

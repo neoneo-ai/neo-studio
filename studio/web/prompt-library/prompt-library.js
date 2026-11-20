@@ -26,8 +26,10 @@ const CSS_MARK = "data-neo-prompt-library";
 // 一屏 24 张卡：滚到底才追加下一屏，摘要那一发的批量也夹在这一屏的条数里（服务端同一口径夹上限）
 export const PAGE_SIZE = 24;
 
-// 瀑布流的列宽：素材页那一份装箱（web/gallery-masonry.js）认的是定宽列，卡片不随页宽拉伸
-export const CARD_COLUMN_WIDTH = 230;
+// 瀑布流的列宽下限与列数上限（素材页那一份装箱，web/gallery-masonry.js）：定宽 230 那一档在 2K 屏上排出 9 列，
+// 一张卡的正文摘要只剩四个字宽，列数就夹在 7 这一档，余下的宽度摊给每一列
+export const CARD_COLUMN_WIDTH = 280;
+const CARD_MAX_COLUMNS = 7;
 // 媒体位高度夹档：横版裁到 3/4 卡宽，竖版整宽最长 2 倍卡宽（9:16 整幅进位，长截图不铺成长条）
 const MEDIA_HEIGHT_FLOOR = 0.75;
 const MEDIA_HEIGHT_CEIL = 2;
@@ -220,7 +222,7 @@ export function createPromptLibraryView({ $el, toast, can, gateRun, openMaterial
         const noteEl = $el("div", { className: "ns-pl-note" });   // 空池 / 读取失败那句话落在网格之外：瀑布流只装箱卡片
         const moreEl = $el("div", { className: "ns-pl-more" });   // 底部那一行：还有下一屏是「载入更多…」，铺完是「已全部 N 条」
         body.append(grid, noteEl, moreEl);
-        attachMasonry(grid, CARD_COLUMN_WIDTH);
+        attachMasonry(grid, CARD_COLUMN_WIDTH, CARD_MAX_COLUMNS);
         const countEl = $el("span", { className: "ns-pl-count" });
         // 卡片预览进视野才挂 src：一屏十几条视频，同时挂着就是十几路解码一起抢这一发带宽
         const previewObserver = typeof IntersectionObserver === "function"
