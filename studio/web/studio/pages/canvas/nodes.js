@@ -10,7 +10,7 @@ import { NODE_TYPES, RUN_LABELS, runKind } from "./node-types.js";
  *  <textarea>，正文存在 metadata.content —— 图片节点上的坐标就是 Gallery 的 filename + subfolder。
  *  这一张长什么样全按 node-types.js 里那一行落：css 卡面类名、body 内容走哪个渲染器、bar 附加栏多出来的那枚 */
 export function nodeElement(node, { $el, onText, onPick, onPickPrompt, onHero, onDelete, onCopy, onToggleDisabled,
-    genState, genControls, genModel, editControls, llmControls, recipeMeta, carView, onImageSize }) {
+    genState, genControls, genModel, editControls, llmControls, recipeMeta, carView, onMediaSize }) {
     const desc = NODE_TYPES[node.type] || NODE_TYPES.text;
     // 四类控件卡共用生成节点那一份运行态（running 按节点 id 记在 gen.js 里）；图片 / 提示词 / 视频位没有运行态
     const st = desc.body === "gen" || desc.body === "car" || desc.body === "edit" || desc.body === "llm"
@@ -23,8 +23,9 @@ export function nodeElement(node, { $el, onText, onPick, onPickPrompt, onHero, o
         dataset: { nodeId: node.id },
     });
     nodeEl.append(
-        desc.body === "image" ? nodeImage(node, $el, onImageSize)
-            : desc.body === "video" ? nodeVideo(node, $el)
+        desc.body === "image" ? nodeImage(node, $el, onMediaSize)
+            : desc.body === "video" ? nodeVideo(node, $el, onMediaSize)
+            : desc.body === "audio" ? nodeAudio(node, $el)
             : desc.body === "gen" ? nodeGen(node, $el, { gen: st, genControls, genModel })
             : desc.body === "car" ? nodeCar(node, $el, { recipe: st, carView, recipeMeta, onText })
             : desc.body === "edit" ? nodeEdit(node, $el, { edit: st, editControls })
@@ -53,13 +54,13 @@ export function nodeElement(node, { $el, onText, onPick, onPickPrompt, onHero, o
 /** 图片节点的内容：整张就是那张图，缩略图缓存不在（刚生成、桌面端离线、素材被移走）时回原图那一条，
  *  原图也没有才落占位图。带 asset 的那一张是「添加配方」铺出来的配方素材（在配方 assets/ 里，
  *  不在 ComfyUI 的 Output 目录），读图走配方那两条路由。
- *  图读上来了就把宽高交回页面落节点的那一格（onImageSize → page.js 的 fitImageNode）：
+ *  图读上来了就把宽高交回页面落节点的那一格（onMediaSize → page.js 的 fitMediaNode）：
  *  缩略图与素材卡都是同一张图的缩放，比例就是原图的比例 */
-function nodeImage(node, $el, onImageSize) {
+function nodeImage(node, $el, onMediaSize) {
     const filename = node.metadata.filename || "";
     const asset = node.metadata.asset || "";
     const recipe = node.metadata.recipe || "";
-    const loaded = (e) => onImageSize?.(node, e.target.naturalWidth, e.target.naturalHeight);
+    const loaded = (e) => onMediaSize?.(node, e.target.naturalWidth, e.target.naturalHeight);
     if (asset && recipe) {
         return $el("img", {
             className: "ns-canvas-node-img",
@@ -91,20 +92,42 @@ function nodeImage(node, $el, onImageSize) {
     });
 }
 
-/** 视频节点的内容：整张就是那一段片（Output 目录里的文件，播控交浏览器自己）。没落上片的是一张空位 ——
- *  出片时先按连线顺序填这些空位，多出来的才新建节点（见 page.js 的 applyGenResult） */
-function nodeVideo(node, $el) {
+/** 视频类节点的内容：整张就是那一段片（Output 目录与素材库里的文件，播控交浏览器自己）。出片落点空着是
+ *  一张空位 —— 出片时先按连线顺序填这些空位，多出来的才新建节点（见 page.js 的 applyGenResult）；
+ *  视频输入节点空着说「空视频输入」，并且不静音 —— 参考片的声音要在画布上听得到，出片那一发吃的就是它 */
+function nodeVideo(node, $el, onMediaSize) {
     const filename = node.metadata.filename || "";
+    const input = node.type === "video_in";
     if (!filename) {
-        return $el("div", { className: "ns-canvas-node-video-empty", textContent: t("空视频位") });
+        return $el("div", { className: "ns-canvas-node-video-empty",
+            textContent: t(input ? "空视频输入" : "空视频位") });
     }
     return $el("video", {
         className: "ns-canvas-node-video-el",
         src: `/neo_gallery/video?filename=${encodeURIComponent(filename)}`
             + `&subfolder=${encodeURIComponent(node.metadata.subfolder || "")}`,
-        controls: "", muted: "", playsinline: "", preload: "metadata", draggable: "false",
+        controls: "", muted: input ? null : "", playsinline: "", preload: "metadata", draggable: "false",
         title: filename,
+        // 段的宽高读出来才落节点那一格（preload=metadata 就是为这一发）：竖片落在横框里就是一圈黑边
+        onloadedmetadata: (e) => onMediaSize?.(node, e.target.videoWidth, e.target.videoHeight),
     });
+}
+
+/** 音频输入节点的内容：浏览器自绘的那一条播控加下面一行出处。文件走 /neo_gallery/audio ——
+ *  视频那条按扩展名挡非视频（400），音频吃那条流永远播不出来；空着的是一张空位，
+ *  栏上「取用素材」开素材库 */
+function nodeAudio(node, $el) {
+    const filename = node.metadata.filename || "";
+    if (!filename) {
+        return $el("div", { className: "ns-canvas-node-video-empty", textContent: t("空音频输入") });
+    }
+    return $el("div", { className: "ns-canvas-node-audio-body" }, [
+        $el("audio", { className: "ns-canvas-node-audio-el", controls: "", preload: "metadata",
+            draggable: "false", title: filename,
+            src: `/neo_gallery/audio?filename=${encodeURIComponent(filename)}`
+                + `&subfolder=${encodeURIComponent(node.metadata.subfolder || "")}` }),
+        $el("span", { className: "ns-canvas-node-audio-name", textContent: filename, title: filename }),
+    ]);
 }
 
 /** 提示词节点的内容：整张就是那块正文。单击不落焦点 —— 浏览器在 mousedown 上默认把焦点交给 textarea，
@@ -230,18 +253,18 @@ function nodeBar(node, { $el, onPick, onPickPrompt, onHero, onDelete, onCopy, on
         ? nodeAct($el, "enable", t("启用"), "check", () => onToggleDisabled(node), t("启用这一张：出片与整列出片都会跑它"))
         : nodeAct($el, "disable", t("停用"), "ban", () => onToggleDisabled(node), t("停用这一张：出片与整列出片都跳过它"))];
     if (off) kids[1].classList.add("ns-canvas-node-act-on");
-    // 栏里多出来的那一枚看注册表里那一行：图片节点是主图（空着的还多一枚选图），提示词节点是提示词库
+    // 栏里多出来的那一枚看注册表里那一行：图片节点是主图 + 取图（填过图的写「换图」，换的照旧从素材库取），
+    // 视频 / 音频输入节点是「取用素材 / 换素材」，提示词节点是提示词库
     if (desc.bar === "hero") {
         const heroLabel = node.metadata.hero ? t("取消主图") : t("设为主图");
         const hero = nodeAct($el, "hero", heroLabel, "circle-check", () => onHero(node), heroLabel);
         if (node.metadata.hero) hero.classList.add("ns-canvas-node-act-on");
         kids.push(hero);
-        if (!node.metadata.filename) {
-            const pick = $el("button", { className: "ns-canvas-node-pick", type: "button",
-                title: t("选图"), "aria-label": t("选图"), dataset: { nodeAct: "pick" }, onclick: () => onPick(node) });
-            setIconLabel(pick, "image", t("选图"));
-            kids.push(pick);
-        }
+        kids.push(nodePick($el, node, onPick, node.metadata.filename ? t("换图") : t("选图"), "image"));
+    }
+    if (desc.bar === "media") {
+        kids.push(nodePick($el, node, onPick, node.metadata.filename ? t("换素材") : t("取用素材"),
+            node.type === "audio_in" ? "volume" : "film"));
     }
     if (desc.bar === "prompt") {
         // 这一枚开的是绘画页同一扇提示词浮层：点一行把整段全文填进正文框
@@ -256,6 +279,14 @@ function nodeBar(node, { $el, onPick, onPickPrompt, onHero, onDelete, onCopy, on
     return $el("div", { className: "ns-canvas-node-bar" }, kids);
 }
 
+/** 栏上那一枚取素材：开素材库（按这一类节点只收图 / 视频 / 音频中的一类），取到的那一份填进这一张节点 */
+function nodePick($el, node, onPick, label, iconName) {
+    const pick = $el("button", { className: "ns-canvas-node-pick", type: "button",
+        title: label, "aria-label": label, dataset: { nodeAct: "pick" }, onclick: () => onPick(node) });
+    setIconLabel(pick, iconName, label);
+    return pick;
+}
+
 function nodeAct($el, name, label, iconName, onclick, title = label) {
     const btn = $el("button", { className: "ns-canvas-node-act", type: "button",
         title, "aria-label": label, dataset: { nodeAct: name }, onclick });
@@ -266,9 +297,9 @@ function nodeAct($el, name, label, iconName, onclick, title = label) {
 /** 整层节点重画：拖动与缩放不走这一条（走 applyNodeGeometry），换画布、增删节点才走 */
 export function renderNodes({ nodeLayer, links, hint, nodes, selectedNodeIds, selectedConnectionId, $el, onText,
     onPick, onPickPrompt, onHero, onDelete, onCopy, onToggleDisabled, genState, genControls, genModel, editControls,
-    llmControls, recipeMeta, carView, onImageSize }) {
+    llmControls, recipeMeta, carView, onMediaSize }) {
     nodeLayer.replaceChildren(...nodes.map((node) => nodeElement(node, { $el, onText, onPick, onPickPrompt, onHero, onDelete, onCopy,
-        onToggleDisabled, genState, genControls, genModel, editControls, llmControls, recipeMeta, carView, onImageSize })));
+        onToggleDisabled, genState, genControls, genModel, editControls, llmControls, recipeMeta, carView, onMediaSize })));
     // 几何要在元素挂上世界层之后再落：nodeElement 里查不到还没挂上的元素
     for (const node of nodes) applyNodeGeometry(nodeLayer, node);
     hint.style.display = nodes.length ? "none" : "";

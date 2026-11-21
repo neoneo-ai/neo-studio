@@ -20,7 +20,7 @@ const LINE_SELECTOR = ".ns-canvas-line, .ns-canvas-line-hit";
 // 起手交浏览器发 click，按下去是选中这张节点。整列控件行（.ns-canvas-gen-ctl）认成控件的代价是卡上几乎按不到；
 // 浮出栏首那枚固定抓手（.ns-canvas-node-drag）是 span，不在这一列里，按下就是拖节点
 const NODE_CTL_SELECTOR = ".ns-canvas-node-act, .ns-canvas-node-pick, .ns-canvas-node-video-el, "
-    + ".neo-gallery-gm-chip-btn, .ns-canvas-gen-btn, .ns-canvas-gen-ctl input";
+    + ".ns-canvas-node-audio-el, .neo-gallery-gm-chip-btn, .ns-canvas-gen-btn, .ns-canvas-gen-ctl input";
 
 /** 把手势挂到舞台上：stage 是那一页的舞台元素，view 交出要画手势层（world 上画框选框），
  *  host 是页面交下来的读写面（见 createCanvasPage 里那一份 host）。 */
@@ -33,7 +33,7 @@ export function attachCanvasInteractions({ stage, view, host }) {
 
     // 滚轮缩放锚在指针上（passive: false 才拦得住 preventDefault，否则浏览器连页面一起滚）
     stage.addEventListener("wheel", (e) => {
-        if (!host.isPageActive() || e.target.closest(".ns-canvas-bar, .ns-canvas-gen-ctl input, .ns-canvas-node-video-el, .ns-canvas-car-text")) return;
+        if (!host.isPageActive() || e.target.closest(".ns-canvas-bar, .ns-canvas-gen-ctl input, .ns-canvas-node-video-el, .ns-canvas-node-audio-el, .ns-canvas-car-text")) return;
         e.preventDefault();
         const rect = stage.getBoundingClientRect();
         host.setViewport(zoomViewportAt(state().viewport, e.clientX - rect.left, e.clientY - rect.top, e.deltaY));
@@ -41,10 +41,16 @@ export function attachCanvasInteractions({ stage, view, host }) {
     stage.addEventListener("pointerdown", (e) => onPointerDown(e));
     stage.addEventListener("dblclick", (e) => onDoubleClick(e));
     stage.addEventListener("dragover", (e) => {
-        if (!host.isPageActive() || !galleryPayload(e)) return;
+        if (!host.isPageActive() || (!galleryPayload(e) && !hasLocalFiles(e))) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = "copy";
+        // 从资源管理器拖进来时这一发的坐标是系统拖放循环给的，Chromium / WebView2 在原生文件拖放上
+        // 会交出 (0,0)（crbug 那一条老问题）：把这一发的指针位置与指针下那枚节点留着，drop 那一发
+        // 不带坐标时用它。坐标没带就不要存，存了一枚假节点比没有更坏
+        if (e.clientX || e.clientY) lastDragPoint = { x: e.clientX, y: e.clientY, nodeEl: dropTargetNode(e) };
+        paintDropHalo(dropTargetNode(e));
     });
+    stage.addEventListener("dragleave", (e) => { if (!stage.contains(e.relatedTarget)) paintDropHalo(null); });
     stage.addEventListener("drop", (e) => onDrop(e));
     // 拖动与拉线要跑到容器外还在跟手，收笔统一交给 window（上游同一形状）
     window.addEventListener("pointermove", onPointerMove);
@@ -370,7 +376,7 @@ export function attachCanvasInteractions({ stage, view, host }) {
         host.markDirty();   // 方向键那一步没有收笔可等，落点在键盘上
     }
 
-    // ====== Gallery 拖放 ======
+    // ====== 拖放落点（素材卡片 + 本地文件） ======
     /** 素材卡片的载荷（gallery-card.js 写的 application/x-neo-gallery）；回退 text/plain 的文件名 */
     function galleryPayload(e) {
         const dt = e.dataTransfer;
@@ -387,12 +393,51 @@ export function attachCanvasInteractions({ stage, view, host }) {
         }
     }
 
+    /** 这一放带的是不是本地文件：dragover 阶段浏览器不交出 files（安全边界），只交出 types */
+    function hasLocalFiles(e) {
+        const dt = e.dataTransfer;
+        if (!dt) return false;
+        if (dt.files && dt.files.length) return true;
+        return Array.from(dt.types || []).includes("Files");
+    }
+
+    /** 指针下那一枚节点就是更换落点；落在节点外就是添加 */
+    function dropTargetNode(e) {
+        return e.target?.closest?.(".ns-canvas-node") || null;
+    }
+
+    /** 更换落点的描边：用户要看得见这一放是换它，不是往它身上叠一张 */
+    let dropHalo = null;
+    let lastDragPoint = null;   // 最后一次 dragover 的指针位置与指针下那枚节点（见上面那条 dragover）
+    function paintDropHalo(el) {
+        if (dropHalo === el) return;
+        dropHalo?.classList.remove("ns-canvas-node-dropon");
+        dropHalo = el;
+        dropHalo?.classList.add("ns-canvas-node-dropon");
+    }
+
     function onDrop(e) {
         if (!host.isPageActive()) return;
+        const files = e.dataTransfer?.files ? Array.from(e.dataTransfer.files) : [];
         const picked = galleryPayload(e);
-        if (!picked) return;
+        if (!files.length && !picked) return;
         e.preventDefault();
-        host.addNode("image", worldPoint(e.clientX, e.clientY), picked);
+        // 整发收在这里：ComfyUI 壳在 document 上有一份全局文件导入（把文件当节点写进它自己的工作流），
+        // 桌面端没有处理器时浏览器会把窗口导航到 file:///，两条都在这一发之后
+        e.stopPropagation();
+        const painted = Boolean(e.clientX || e.clientY);
+        const at = painted ? worldPoint(e.clientX, e.clientY)
+            : (lastDragPoint ? worldPoint(lastDragPoint.x, lastDragPoint.y) : host.centerWorld());
+        // 更换落点跟着落点走：坐标没带过来的那一发，事件 target 是 (0,0) 那头的元素，指针下那枚节点
+        // 只可能在 dragover 里拿到
+        const targetEl = painted ? dropTargetNode(e) : lastDragPoint?.nodeEl;
+        paintDropHalo(null);
+        host.dropMedia({
+            files,
+            picked,
+            at,
+            nodeId: targetEl?.dataset?.nodeId || null,
+        });
     }
 
     function paintMarquee() {

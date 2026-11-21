@@ -11,9 +11,9 @@ single implementation (`voiceAudioWidget`, exported from `gallery-card-tools.js`
 ## The path
 
 1. **Pick a reference audio**: `从素材库选音频` opens the library modal; clicking an audio card puts its waveform on
-   the reference slot. This modal only accepts audio (`accept: "audio"`) — clicking an image or video card opens the
-   lightbox instead. The text box prefills the voice skill's `default_prompt` from its `config.json`; text the user
-   already typed is never overwritten.
+   the reference slot. This modal only accepts audio (`accept: "audio"`) and opens straight on the 音频 chip; on any
+   other chip, clicking an image or video card opens the lightbox instead. The text box prefills the voice skill's
+   `default_prompt` from its `config.json`; text the user already typed is never overwritten.
 2. **Write the text to speak**: with an empty box, clicking Generate only says "请先输入要说的文字" and sends nothing.
 3. **Generate**: the reference audio goes through `/neo_gallery/copy_to_input` into `input/` as `{{REF_AUDIO_1}}`, the
    text goes in as `{{PROMPT}}`, the skill is `cosyvoice_voice`, and SaveAudio writes the output to `Output/Voice`.

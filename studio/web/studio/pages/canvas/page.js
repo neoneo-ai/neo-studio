@@ -11,7 +11,7 @@ import { addConnection, gridGeometry, MAX_SCALE, MIN_SCALE, nodeBounds, placeGri
 import { BACKGROUND_MODES, createCanvasNode, createCanvasStore, duplicateNodes, fitImageSize, NODE_SPECS, readCanvas } from "./store.js";
 import { createHistory, snapshotCanvas } from "./history.js";
 import { applyNodeGeometry as paintNodeGeometry, renderNodes as renderNodeLayer, paintSelection as paintNodeSelection } from "./nodes.js";
-import { ADD_MENU } from "./node-types.js";
+import { ADD_MENU, VIDEO_GEN_TITLE } from "./node-types.js";
 import { renderConnections as renderLinkLayer, renderActiveConnection as paintActiveLine } from "./connections.js";
 import { attachCanvasInteractions } from "./interactions.js";
 import { createCanvasGen, readRecipeParams } from "./gen.js";
@@ -21,11 +21,24 @@ import { openPresetPicker } from "../../../js/core/preset-picker.js";
 
 const SAVE_DEBOUNCE_MS = 900;
 
-/** 画布页工厂：openMaterial 由装配层交下来（素材库弹窗，一次收窗）；没有它时「加图片」
- *  与「选图」回到建空图片节点 —— ComfyUI 侧没有这扇弹窗。
+// 节点类型 → 素材库那扇弹窗收哪一类：图片节点只收图，视频 / 音频输入节点各收各的
+const MATERIAL_ACCEPT = { image: "image", video_in: "video", audio_in: "audio" };
+// 拖放的更换表：素材输入节点照弹窗那一份，出片落点收一段片，提示词节点收一段正文
+const DROP_ACCEPT = { ...MATERIAL_ACCEPT, video: "video", text: "text" };
+// 拖进来的素材落哪一类节点：出片落点只当更换落点，凭空铺一张空位给出片没有好处
+const DROP_NODE = { image: "image", video: "video_in", audio: "audio_in", text: "text" };
+const ACCEPT_LABEL = { image: "图片", video: "视频", audio: "音频", text: "正文" };
+const DROP_TEXT_EXT = /\.(txt|md|markdown|csv)(?=&|#|$)/i;
+const DROP_TEXT_MAX_CHARS = 20000;   // 正文要进 textarea 又跟着整张画布的 JSON 落盘，长过这一截就是自杀式保存
+
+/** 画布页工厂：openMaterial(onPick, accept) 由装配层交下来（素材库弹窗，一次收窗，accept 说这一扇
+ *  收图 / 视频 / 音频里的哪一类）；没有它时「加图片 / 加视频输入 / 加音频输入」与节点上那一枚
+ *  回到建一张空节点 —— ComfyUI 侧没有这扇弹窗。
  *  can 是能力表读法（app/studio_caps.py 的能力名）：出图、出片与增强 / 反推四条链的闸门与钮上的提示
- *  全按节点自己那一发要的那一位问（见 node-types.js 的 gateOf）；不交时生成节点照样能铺能存、照样放行。 */
-export function createCanvasPage({ $el, api, toast, openMaterial, can }) {
+ *  全按节点自己那一发要的那一位问（见 node-types.js 的 gateOf）；不交时生成节点照样能铺能存、照样放行。
+ *  modeGroup(meta) / groupLabels 是出视频页那一份生成模式分组（studio-app.js）：画布上选技能的面按它分组，
+ *  「全参考生视频」那一组的出片口径（三桶参考、不吃锚点）也由它判定。 */
+export function createCanvasPage({ $el, api, toast, openMaterial, can, modeGroup, groupLabels }) {
     let state = readCanvas({});
     let selectedNodeIds = new Set();
     let selectedConnectionId = null;
@@ -69,7 +82,7 @@ export function createCanvasPage({ $el, api, toast, openMaterial, can }) {
         renderConnections();
         refreshHistory();
         gen?.prime();     // 节点上那行技能名要有来源：技能列表与首张画布一起读
-        gen?.primeVideo();     // 「加视频节点」的技能胶囊与出片预检读这一份
+        gen?.primeVideo();     // 「加视频生成节点」的技能胶囊与出片预检读这一份
         gen?.primeRecipes();   // 「添加配方」弹窗的卡与车厢上那行配方概览读这一份
         ready = loadProjects();
         return ready;
@@ -123,7 +136,7 @@ export function createCanvasPage({ $el, api, toast, openMaterial, can }) {
         const sep = () => $el("span", { className: "ns-canvas-bar-sep" });
         // 加节点收成菜单里的八行：顺序、图标与名字都在 node-types.js 的那一列里。菜单钉在钮下方，
         // position: fixed 让它不占条内的行位、也不被条的横向滚动裁剪；行面上是图标 + 名字 —— 只有图标时
-        // 「加生成节点」与「加视频节点」分不出来
+        // 「加图像生成节点」与「加视频生成节点」落在同一类节点的两个档上，行面上只有图标时更分不出来
         const inMenu = (btn) => {
             btn.classList.add("ns-canvas-add-item");
             btn.appendChild($el("span", { className: "ns-canvas-add-label",
@@ -198,7 +211,7 @@ export function createCanvasPage({ $el, api, toast, openMaterial, can }) {
             editControls: (node) => gen?.editControls(node),
             llmControls: (node) => gen?.llmControls(node),
             carView: (node) => gen?.carView(node),
-            onImageSize: fitImageNode });
+            onMediaSize: fitMediaNode });
     }
 
     /** 提示词节点上那一枚「提示词」：浮层挂在按钮下方，点中一条把整段全文填进这一格。正文照走 onText
@@ -208,17 +221,17 @@ export function createCanvasPage({ $el, api, toast, openMaterial, can }) {
         openPresetPicker({ kind: "image", anchor: btn, onPick: (text) => { onText(node, text); renderNodes(); } });
     }
 
-    /** 图片节点按这张图自己的比例落那一格：横的压矮、竖的收窄，永远不超出图片节点默认那一档
+    /** 图片与视频输入按素材自己的比例落那一格：横的压矮、竖的收窄，永远不超出这一类节点默认那一档
      *  （超出就会压到 placeGrid 的步长与串联的行距算出来的邻居）。
      *  只动还停在默认尺寸的节点 —— 用户拉过尺寸的、串联素材那种小卡（240×160）一律不重铺；
-     *  没素材坐标的占位图不算比例。只落几何与连线，不重建节点（重建会打断正在加载的那张图） */
-    function fitImageNode(node, naturalWidth, naturalHeight) {
+     *  没素材坐标的占位图与空视频位不算比例。只落几何与连线，不重建节点（重建会打断正在加载的那一张） */
+    function fitMediaNode(node, naturalWidth, naturalHeight) {
         const cur = state.nodes.find((n) => n.id === node.id);
-        if (!cur || cur.type !== "image") return;
+        if (!cur || (cur.type !== "image" && cur.type !== "video_in")) return;
         if (!cur.metadata.filename && !cur.metadata.asset) return;
-        const spec = NODE_SPECS.image;
+        const spec = NODE_SPECS[cur.type];
         if (cur.width !== spec.width || cur.height !== spec.height) return;
-        const size = fitImageSize(naturalWidth, naturalHeight);
+        const size = fitImageSize(naturalWidth, naturalHeight, spec);
         if (!size || (size.width === cur.width && size.height === cur.height)) return;
         cur.width = size.width;
         cur.height = size.height;
@@ -314,12 +327,14 @@ export function createCanvasPage({ $el, api, toast, openMaterial, can }) {
             paintSelection();
         },
         setViewport,
+        centerWorld,   // 拖放那一发两手都拿不到坐标时的落点（视口中心）
         paintNode,
         paintConnections: renderConnections,
         paintActive,
         markDirty,
         isPageActive,
         addNode,
+        dropMedia,
         deleteSelection,
         setNodePositions,
         moveSelected,
@@ -350,6 +365,8 @@ export function createCanvasPage({ $el, api, toast, openMaterial, can }) {
         api,
         canFeature: can || (() => true),
         host,
+        modeGroup,
+        groupLabels,
     });
 
     // ====== 撤销 / 重做 / 复制 ======
@@ -489,17 +506,17 @@ export function createCanvasPage({ $el, api, toast, openMaterial, can }) {
      *  （技能列表与默认技能都在 gen.js 读到手）；写死的默认值在注册表那一行的 defaults 里 */
     const ADD_SEEDS = {
         skill: () => ({ skill_id: gen?.defaultSkillId() || "" }),
-        // 「加生成节点」的默认技能带上一次在这页选过的（技能列表还没读到时先空着，双击开浮层再选）
+        // 「加图像生成节点」的默认技能带上一次在这页选过的（技能列表还没读到时先空着，双击开浮层再选）
         editSkill: () => ({ skill_id: gen?.defaultEditSkillId() || "" }),
-        // 视频档记在 metadata.kind 里：出片走简单视频那条链，成片落进下游视频节点
-        videoSkill: () => ({ kind: "video", skill_id: gen?.defaultVideoSkillId() || "" }),
+        // 视频档记在 metadata.kind 里：出片走简单视频那条链，成片落进下游视频节点；卡上的名字跟着档走
+        videoSkill: () => ({ title: VIDEO_GEN_TITLE, kind: "video", skill_id: gen?.defaultVideoSkillId() || "" }),
     };
 
     /** 「加节点」菜单的一行落一张节点：先把这一行要用的清单读到手（技能列表 / 出视频技能 / 配方——胶囊里列的
      *  就是那一份），默认 metadata 看注册表那一行。菜单里那两发不落一张空节点：加图片开素材库取图铺，
      *  添加配方开配方弹窗铺一列 */
     function addTypedNode(row) {
-        if (row.act === "material") return pickImage();
+        if (row.act === "material") return pickImage(row);
         if (row.act === "recipe") { gen?.primeRecipes(); return openRecipePicker(); }
         if (row.prime) gen?.[row.prime]?.();
         return addNode(row.type, null, row.seed ? ADD_SEEDS[row.seed]() : { ...row.defaults });
@@ -514,7 +531,7 @@ export function createCanvasPage({ $el, api, toast, openMaterial, can }) {
     const TRAIN_GAP = 40;
     const TRAIN_CARS_PER_ROW = 3;     // 3 厢一行：9 段就是 3×3、6 段就是两行三列，与出视频页铺的九宫格 / 六宫格一行一行对得上
     const TRAIN_REFS_MAX = 5;         // 每一厢上方最多铺 5 张参考素材：一次铺几十张时摆位与连线都不可控
-    const TRAIN_ROW_PITCH = 512;      // 参考素材行 196 加行距 40 加车厢 176 加行与行之间那一格
+    const TRAIN_ROW_PITCH = NODE_SPECS.image.height + TRAIN_GAP + NODE_SPECS.recipe.height + 80;   // 参考素材行 + 行距 + 车厢 + 行与行之间那一格
 
     /** 每一厢占多宽：铺几张参考素材就占几张的宽，车厢永远比它铺出来的那一行窄 */
     function trainColWidth(seg) {
@@ -587,7 +604,7 @@ export function createCanvasPage({ $el, api, toast, openMaterial, can }) {
         const { recipe: _r, segment: _s, skill_id: _k, ...shared } = readRecipeParams({});
         const tail = createCanvasNode("gen",
             { x: slotX(tailRow, tailIdx), y: origin.y + tailRow * TRAIN_ROW_PITCH + carY + Math.round((car.height - genSpec.height) / 2) },
-            { ...shared, kind: "video", chain: "train", skill_id: "" });
+            { ...shared, title: VIDEO_GEN_TITLE, kind: "video", chain: "train", skill_id: "" });
         connections.push({ id: `conn-${prev.id}-${tail.id}`, fromNodeId: prev.id, toNodeId: tail.id });
         created.push(tail);
         state = { ...state, nodes: [...state.nodes, ...created], connections: [...state.connections, ...connections] };
@@ -674,25 +691,56 @@ export function createCanvasPage({ $el, api, toast, openMaterial, can }) {
         markDirty();
     }
 
-    /** 「加图片」：从素材库取图铺上画布（一次收窗，一批按不重叠网格铺）。装配层没交弹窗时
-     *  回到建一个空图片节点 —— 节点上的「选图」就是它的后路 */
-    function pickImage() {
-        if (!openMaterial) return addNode("image");
+    /** 「加图片 / 加视频输入 / 加音频输入」：从素材库取素材铺上画布（一次收窗）。图那一批按不重叠网格
+     *  铺，片与声音一份落一张输入节点。装配层没交弹窗时回到建一张空节点 —— 节点上那一枚就是它的后路 */
+    function pickImage(row = {}) {
+        const type = row.type || "image";
+        const accept = row.accept || MATERIAL_ACCEPT.image;
+        if (!openMaterial) return addNode(type);
         openMaterial((picked) => {
             const list = (Array.isArray(picked) ? picked : [picked]).filter((p) => p?.filename);
-            if (!list.length) { toast(t("没有选中的图"), "info"); return; }
-            placeItems(list.map((p) => ({ filename: p.filename, subfolder: p.subfolder || "" })));
-        });
+            if (!list.length) { toast(t(accept === "image" ? "没有选中的图" : "没有选中的素材"), "info"); return; }
+            if (type === "image") {
+                placeItems(list.map((p) => ({ filename: p.filename, subfolder: p.subfolder || "" })));
+                return;
+            }
+            for (const p of list) addNode(type, null, { filename: p.filename, subfolder: p.subfolder || "" });
+        }, accept);
     }
 
-    /** 空图片节点上的「选图」：取到的那一张填进这一张节点 */
+    /** 节点上那一枚（选图 / 换图 / 取用素材 / 换素材）：开素材库，只收这一类节点吃的那一类，
+     *  取到的那一份填进这一张节点 */
     function pickInto(node) {
         if (!openMaterial) return;
         openMaterial((picked) => {
             const item = (Array.isArray(picked) ? picked : [picked]).find((p) => p?.filename);
             if (!item) return;
-            setNodeMetadata(node.id, { filename: item.filename, subfolder: item.subfolder || "" });
-        });
+            applyMediaPick(node, item);
+        }, MATERIAL_ACCEPT[node.type] || MATERIAL_ACCEPT.image);
+    }
+
+    /** 素材换进一张节点：素材库选图与拖放更换共用这一份 patch。串联铺出来的配方素材节点换成了素材库的一张，
+     *  配方那一份出处要一起收掉 —— 留着它，卡上播的还是配方 assets/ 里那一张，出片带的却是新取的这一张，两头对不上 */
+    function applyMediaPick(node, item) {
+        const patch = { filename: item.filename, subfolder: item.subfolder || "" };
+        if (node.metadata.asset) {
+            // 串联铺出来的那一张：框子留给它那一格（网格步长与串联行距按它算），只收配方出处
+            patch.asset = null;
+            patch.recipe = null;
+        } else if (node.type === "image" || node.type === "video_in") {
+            resetMediaBox(node);
+        }
+        setNodeMetadata(node.id, patch);
+    }
+
+    /** 换素材这一发先把框收回默认那一档：比例落位只发生在还停在默认尺寸的节点上（fitMediaNode 不砸用户拉过的框），
+     *  旧框里那道横竖比例因此会一直跟着这张节点活到下一次换素材。收回默认档之后，新那一张的宽高读出来就按它自己
+     *  的比例重铺 —— 横框里换一张竖片不再剩一圈黑边，横框里的竖图也不再被 object-fit 裁掉一截 */
+    function resetMediaBox(node) {
+        const spec = NODE_SPECS[node.type] || NODE_SPECS.image;
+        if (node.width === spec.width && node.height === spec.height) return;
+        node.width = spec.width;
+        node.height = spec.height;
     }
 
     /** 改一张节点的 metadata（选图与主图都走这一条）：整层重画把 <img> 与徽标落出来 */
@@ -936,6 +984,110 @@ export function createCanvasPage({ $el, api, toast, openMaterial, can }) {
         fitView();   // 一次摆几十张时画面要自己拉回来，否则铺在看不见的地方
         toast(t("已摆到画布"), "success");
         return true;
+    }
+
+    // ====== 拖放落点（本地文件 + 素材卡片） ======
+    /** 一次拖放交过来的一批素材落画布：落到节点上就是换它，落在画布空白就是加一张。图按不重叠网格铺开，
+     *  片 / 声音 / 正文一份一张。本地文件先落进 ComfyUI 的 input/（画布的预览与出片只认这个目录里的文件），
+     *  正文类文件不上传 —— 提示词节点吃的就是 metadata.content。
+     *  类型对不上的那张节点不动：把一段片换进图片节点，卡上是一张读不出来的占位图，出片也吃不到它 */
+    async function dropMedia({ files = [], picked = null, at = null, nodeId = null }) {
+        const items = [];
+        for (const file of files) {
+            const kind = dropKindOf(file.name);
+            if (!kind) { toast(tf("画布不吃这个文件：{name}", { name: file.name }), "info"); continue; }
+            if (kind === "text") {
+                const text = await readDroppedText(file);
+                if (text.length > DROP_TEXT_MAX_CHARS) toast(tf("正文太长，已截断到 {n} 字", { n: DROP_TEXT_MAX_CHARS }), "info");
+                items.push({ kind, content: text.slice(0, DROP_TEXT_MAX_CHARS) });
+                continue;
+            }
+            const media = await uploadDropped(file);
+            if (media.filename) { items.push({ kind, ...media }); continue; }
+            toast(media.error, "error");   // 一份文件一句：超体积那一张与旁边那一张无关
+        }
+        if (picked) items.push({ kind: mediaKindOf(picked.filename), ...picked });
+        if (!items.length) return;
+        const target = nodeId ? state.nodes.find((node) => node.id === nodeId) : null;
+        const want = target ? DROP_ACCEPT[target.type] : null;
+        const swapAt = want ? items.findIndex((item) => item.kind === want) : -1;
+        if (swapAt >= 0) {
+            applyDropPick(target, items[swapAt]);
+            items.splice(swapAt, 1);
+        } else if (want) {
+            toast(tf("这一张节点吃的是{accept} · 已另建一张{node}",
+                { accept: t(ACCEPT_LABEL[want]), node: t(NODE_SPECS[DROP_NODE[items[0].kind]].title) }), "info");
+        }
+        const images = items.filter((item) => item.kind === "image");
+        if (images.length) placeDropImages(images, at);
+        for (const item of items.filter((it) => it.kind !== "image")) {
+            addNode(DROP_NODE[item.kind], at, item.kind === "text"
+                ? { content: item.content }
+                : { filename: item.filename, subfolder: item.subfolder || "" });
+        }
+    }
+
+    /** 拖进来的文件是哪一类素材：扩展名说了算，认不出给 null。heic 这类浏览器与 LoadImage 都吃不动的收在外面，
+     *  落一张永远读不出来的节点不如把话说清楚 */
+    function dropKindOf(name) {
+        return DROP_TEXT_EXT.test(name) ? "text" : mediaKindOf(name, true);
+    }
+
+    /** 本地正文文件读进内存：FileReader 是这一发的唯一读法（浏览器、桌面窗口与 jsdom 都只有它稳） */
+    function readDroppedText(file) {
+        return new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result || ""));
+            reader.onerror = () => resolve("");
+            reader.readAsText(file);
+        });
+    }
+
+    /** 本地文件落进 ComfyUI 的 input/：画布自己那条文件写入（studio/canvas.py 的 /neo_canvas/upload）。
+     *  拖放要的是文件落地，桌面端离线服务照 app/studio_caps.py 的 _CANVAS 自己答 —— 内核在不在跑
+     *  与这一放无关；节点上的预览走的也是 /neo_gallery/image 这一族离线读得到的路由 */
+    async function uploadDropped(file) {
+        try {
+            const query = `?name=${encodeURIComponent(file.name)}`;
+            const resp = await api.fetchApi(`/neo_canvas/upload${query}`, { method: "POST", body: file });
+            const data = await resp.json().catch(() => null);
+            // 状态码带在话里：超体积那条（studio/canvas.py 的 MAX_UPLOAD_BYTES）与这条路由本身不通
+            // 是两回事，光一句「上传失败」分不开
+            if (!resp.ok || !data?.filename) {
+                return { error: tf("上传失败（{code}）：{name}", { code: resp.status, name: file.name }) };
+            }
+            return { filename: data.filename, subfolder: data.subfolder || "" };
+        } catch {
+            return { error: tf("上传失败：{name}", { name: file.name }) };
+        }
+    }
+
+    /** 更换落点的那一发：正文换正文，素材走素材库选图那一条同一份 patch（换上去的框跟着新素材的比例重落） */
+    function applyDropPick(node, item) {
+        if (node.type === "text") { setNodeMetadata(node.id, { content: item.content }); return; }
+        applyMediaPick(node, item);
+    }
+
+    /** 一次拖进来的那一批图铺开：格心就是落点（与结果板「摆到画布」共用 placeGrid，只把格心从视口中心换成落点），
+     *  整批一次压栈 —— 撤销一次退掉这一放 */
+    function placeDropImages(items, at) {
+        const spec = NODE_SPECS.image;
+        const start = { x: (at?.x ?? 0) - spec.width / 2, y: (at?.y ?? 0) - spec.height / 2 };
+        const pool = [...state.nodes];
+        const created = [];
+        for (const item of items) {
+            const node = createCanvasNode("image", placeGrid(pool, spec, start),
+                { filename: item.filename, subfolder: item.subfolder || "" });
+            pool.push(node);
+            created.push(node);
+        }
+        beginEdit();
+        state = { ...state, nodes: [...state.nodes, ...created] };
+        selectedNodeIds = new Set(created.map((node) => node.id));
+        selectedConnectionId = null;
+        renderNodes();
+        renderConnections();
+        markDirty();
     }
 
     /** LLM 链（增强 / 反推）的成文写回画布：按连线顺序找这台节点下游第一张空的提示词节点填进去，

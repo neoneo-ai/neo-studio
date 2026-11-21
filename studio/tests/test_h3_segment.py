@@ -233,6 +233,12 @@ class RegenSpecTests(unittest.TestCase):
         self.assertIsNone(seg.get("ref_input"))
         self.assertEqual(seg["refs"]["images"], ["a.png"])
 
+    def test_canvas_mode_overrides_segment_mode_only_without_anchors(self):
+        """画布盖的生成模式只在这一段不用锚点时生效：锚点模式由成片真实帧定，优先它。"""
+        self.assertEqual(h3_segment._regen_spec(self.SPEC, 0, None, None, None, "", "t2v")["segments"][0]["mode"], "t2v")
+        anchored = h3_segment._regen_spec(self.SPEC, 0, "fl2v", "first.png", "last.png", "anchor-skill", "t2v")
+        self.assertEqual(anchored["segments"][0]["mode"], "fl2v")
+
 
 
 class AnchorSkillTests(unittest.TestCase):
@@ -854,17 +860,44 @@ class CanvasOverrideTests(_RecipeCase):
             self.assertEqual(out2["warnings"], [])
             self.assertEqual((recipe_dir / "recipe.json").read_text(encoding="utf-8"), before)
 
+    def test_canvas_mode_lands_in_this_run_with_a_warning(self):
+        """画布盖的生成模式只改这一发的 spec：配方那一份不动，队列面板里要说清这一发被盖过"""
+        with _pin_folder_paths():
+            self.write_recipe()
+            rec = _RunSpecRecorder()
+            with patch.object(h3_video_director.NeoH3VideoDirector, "_run_spec", rec):
+                out = h3_segment.run_single_segment("T", 0, "none", 5, record=False, mode="r2v")
+            self.assertEqual(rec.calls[0]["spec"]["segments"][0]["mode"], "r2v")
+            self.assertIn("画布覆盖了这一段的生成模式（参考生视频）", " ".join(out["warnings"]))
+            rec2 = _RunSpecRecorder()
+            with patch.object(h3_video_director.NeoH3VideoDirector, "_run_spec", rec2):
+                out2 = h3_segment.run_single_segment("T", 0, "none", 5, record=False)
+            self.assertEqual(rec2.calls[0]["spec"]["segments"][0]["mode"], "t2v",
+                             "没有画布那一份就照配方里这一段自己的模式走")
+            self.assertEqual(out2["warnings"], [])
+
+    def test_run_prompt_validates_canvas_mode_outside_the_graph(self):
+        with _pin_folder_paths():
+            self.write_recipe()
+            payload = h3_segment._run_prompt({"recipe": "T", "segment": 1, "anchors": "none", "seed": 3, "mode": "r2v"})
+        self.assertEqual(payload["mode"], "r2v")
+        self.assertEqual(payload["graph"]["1"]["inputs"]["anchors"], "不用锚点")
+        self.assertNotIn("mode", payload["graph"]["1"]["inputs"])   # 覆盖不进 widget：图里直接跑就是配方那一份
+        with self.assertRaisesRegex(ValueError, "未知生成模式"):
+            h3_segment._run_prompt({"recipe": "T", "segment": 1, "anchors": "none", "mode": "nope"})
+
     def test_node_forwards_the_run_overrides_from_metadata(self):
         self.write_recipe()
         calls = []
 
         def _fake_run(recipe, index, anchors, seed, **kwargs):
-            calls.append({"index": index, "prompt": kwargs["prompt"], "refs": kwargs["refs"]})
+            calls.append({"index": index, "prompt": kwargs["prompt"], "refs": kwargs["refs"], "mode": kwargs["mode"]})
             return {"video": "VIDEO", "filename": "s.mp4", "subfolder": "neo_director_regen", "seed": seed,
                     "frames": 124, "anchors": anchors, "film": None, "warnings": []}
 
         node = h3_segment.NeoH3SegmentRun()
-        h3_segment._RUNS["with-ov"] = {"preview_node_id": 7, "prompt": "画布提示词", "refs": {"images": ["a.png"]}}
+        h3_segment._RUNS["with-ov"] = {"preview_node_id": 7, "prompt": "画布提示词", "refs": {"images": ["a.png"]},
+                                       "mode": "r2v"}
         h3_segment._RUNS["plain"] = {"preview_node_id": 7}
         for prompt_id in ("with-ov", "plain"):
             with patch.object(h3_segment, "run_single_segment", _fake_run), \
@@ -872,8 +905,9 @@ class CanvasOverrideTests(_RecipeCase):
                                  lambda: types.SimpleNamespace(prompt_id=prompt_id, node_id="1")):
                 node.run_segment(recipe="T", segment=2, anchors="不用锚点", seed=4)
         self.assertEqual(calls[0]["index"], 1)
-        self.assertEqual((calls[0]["prompt"], calls[0]["refs"]), ("画布提示词", {"images": ["a.png"]}))
-        self.assertEqual((calls[1]["prompt"], calls[1]["refs"]), ("", None))
+        self.assertEqual((calls[0]["prompt"], calls[0]["refs"], calls[0]["mode"]),
+                         ("画布提示词", {"images": ["a.png"]}, "r2v"))
+        self.assertEqual((calls[1]["prompt"], calls[1]["refs"], calls[1]["mode"]), ("", None, ""))
 
 
 class SegmentRunNodeTests(_RecipeCase):

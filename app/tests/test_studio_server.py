@@ -673,6 +673,12 @@ class DesktopModuleTests(_RealFolderPaths):
                    if r.method != "HEAD" and r.resource.canonical.startswith(("/neo", "/rs_"))}
         self.assertEqual(mounted - desktop_pages, caps.DESKTOP_ROUTES)
 
+    def test_canvas_drop_upload_is_desktop_owned(self):
+        """拖进画布的素材是文件写入：桌面端离线服务自己答，内核不在跑也落得进 input/。"""
+        self.assertEqual(caps.owner("POST", "/neo_canvas/upload"), "desktop")
+        self.assertEqual(caps.owner("POST", "/upload/image"), "comfy",
+                         "ComfyUI 自己的上传口不在桌面端表内 —— 画布拖放走的不是它")
+
 
 # 路由用例用的最小 MCP 服务：UTF-8 的 NDJSON over stdio，规范三步齐全
 FAKE_MCP = '''

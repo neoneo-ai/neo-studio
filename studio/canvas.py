@@ -10,6 +10,7 @@ exe 版本不同步时旧文件照样打得开，新字段来了旧页面也不�
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -21,6 +22,7 @@ from pathlib import Path
 from aiohttp import web
 
 from .plugin_paths import CANVAS_DIR
+from .util import ALL_MEDIA_EXTENSIONS
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +36,10 @@ ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 BACKGROUND_MODES = ("dots", "lines", "blank")
 DEFAULT_VIEWPORT = {"x": 0.0, "y": 0.0, "k": 1.0}
 DEFAULT_BACKGROUND = "dots"
+# 拖进画布的素材体积上限：与抽帧、姿势导出同一条（app/studio_server.py 的请求体上限按这值装配），
+# 接口先到不会让 transport 先截断
+MAX_UPLOAD_BYTES = 48 * 1024 * 1024
+STEM_MAX = 64
 
 routes = web.RouteTableDef()
 # 页面是「改一下就存一次」的写法，两次保存可能在同一轮网络请求里撞上来：
@@ -269,3 +275,53 @@ async def canvas_delete(request):
             return web.json_response({"success": False, "error": f"删除失败：{exc}"}, status=500)
         _index_save([e for e in _index_list() if e["id"] != path.stem])
     return web.json_response({"success": True, "id": path.stem})
+
+
+@routes.post("/neo_canvas/upload")
+async def canvas_upload(request):
+    """拖进画布的素材落进 ComfyUI 的 input/：一次请求一个文件，交回的是落盘后的文件名。
+
+    拖放要的是文件落地 —— 写一份文件不跑队列、不吃显存、不读节点定义，桌面端离线服务照
+    app/studio_caps.py 的 _CANVAS 自己答，内核在不在跑与这一放无关。画布上的预览走的也是
+    /neo_gallery/image 这一族桌面端自服的读图路由，节点存的就是这里交回的名字。
+    """
+    import folder_paths   # 惰性导入：画布模块要在没有 ComfyUI 的导入环境下也打得开
+    stem, ext = _drop_name(request.rel_url.query.get("name", ""))
+    if not ext:
+        return _upload_error("拖进来的文件名不合法，或画布不收这个扩展名")
+    if (request.content_length or 0) > MAX_UPLOAD_BYTES:
+        return _upload_error(f"文件超过 {MAX_UPLOAD_BYTES // (1024 * 1024)}MB", 413)
+    body = await request.read()
+    if not body:
+        return _upload_error("请求体为空")
+    input_dir = Path(folder_paths.input_directory).resolve()
+    dest = await asyncio.to_thread(_unique_input_path, input_dir, stem, ext)
+    await asyncio.to_thread(dest.write_bytes, body)
+    return web.json_response({"success": True, "filename": dest.name, "subfolder": ""})
+
+
+def _drop_name(raw: str) -> tuple[str, str]:
+    """浏览器交出的文件名 → (落盘名干, 扩展名)：只取最后一个路径段，扩展名不在素材白名单里给空。
+
+    文件名会直接拼进 input/ 的文件名，Windows 不吃冒号与斜杠，路径段与穿越段一律换成下划线。
+    """
+    tail = str(raw or "").replace("\\", "/").rsplit("/", 1)[-1]
+    stem, ext = os.path.splitext(tail)
+    ext = ext.lower()
+    if ext not in ALL_MEDIA_EXTENSIONS:
+        return "", ""
+    return re.sub(r"[^\w\-]+", "_", stem).strip("_")[:STEM_MAX] or "drop", ext
+
+
+def _unique_input_path(directory: Path, stem: str, ext: str) -> Path:
+    """input/ 是 ComfyUI 自己的目录，同名文件只能追加序号，不能覆盖别人传上去的那一张。"""
+    dest = directory / f"{stem}{ext}"
+    counter = 1
+    while dest.exists():
+        dest = directory / f"{stem}_{counter}{ext}"
+        counter += 1
+    return dest
+
+
+def _upload_error(text: str, status: int = 400) -> web.Response:
+    return web.json_response({"success": False, "error": text}, status=status)

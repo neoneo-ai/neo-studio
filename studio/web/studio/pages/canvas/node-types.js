@@ -8,7 +8,10 @@
 // 不进 ComfyUI 的 NODE_CLASS_MAPPINGS：画布节点是这一页自己的东西，内核不认识它。
 import { t } from "../../../js/core/i18n.js";
 
-/** @typedef {"image" | "text" | "gen" | "video" | "recipe" | "edit" | "enhance" | "reverse"} CanvasNodeType */
+/** @typedef {"image" | "text" | "gen" | "video" | "video_in" | "audio_in" | "recipe" | "edit" | "enhance" | "reverse"} CanvasNodeType */
+
+/** 视频档的生成节点（出片卡）的名字：菜单「加视频生成节点」与「添加配方」铺的车尾共用这一份（见 page.js 的 ADD_SEEDS 与 layTrain） */
+export const VIDEO_GEN_TITLE = "视频生成";
 
 /** 每一类节点一行：title / w / h 是建节点与读盘兜底的默认框；css 是卡面类名（空 = 这一类没有独立卡面框，
  *  走 .ns-canvas-gen 那一套）；body 是卡面内容走哪一个渲染器；bar 是附加操作栏多出来的那枚；
@@ -16,31 +19,41 @@ import { t } from "../../../js/core/i18n.js";
  *  doc 是这一类在 docs/canvas.md 与 docs/en/canvas.md 节点表里的那几行名字（两份都要有，缺一边的用例就红）。
  *  手势层认的控件面不在这里：那是共享的一份清单，按类型拆会让卡面几乎按不到（见 interactions.js） */
 export const NODE_TYPES = {
-    image: { title: "图片", w: 340, h: 240, css: "ns-canvas-node-image", body: "image", bar: "hero",
+    // 默认框是竖友好那一档（340×360）：节点按素材自己的比例落位且永不超出默认框（store.js 的 fitImageSize），
+    // 框是横的那一档时 9:16 的竖图只能落到 135×240 —— 竖屏素材永远比横屏小一圈，素材页拖进来就是这一发
+    image: { title: "图片", w: 340, h: 360, css: "ns-canvas-node-image", body: "image", bar: "hero",
         doc: { zh: ["图片节点"], en: ["Image node"] },
         add: { label: "加图片", icon: "image", act: "material" } },
     text: { title: "提示词", w: 340, h: 240, css: "ns-canvas-node-text", body: "text", bar: "prompt",
         doc: { zh: ["提示词节点"], en: ["Prompt node"] },
         add: { label: "加提示词", icon: "list" } },
-    gen: { title: "生成", w: 320, h: 208, css: "ns-canvas-node-gen", body: "gen", run: "image",
-        doc: { zh: ["生成节点", "出片节点"], en: ["Generation node", "出片 node"] },
-        add: { label: "加生成节点", icon: "sparkles", prime: "prime", seed: "skill" } },
-    // 图像编辑节点：图与提示词都从连过来的节点取，这一张只管选技能与出图 —— 卡面与生成节点同一档（接法见 gen.js 的 runEdit）
+    gen: { title: "图像生成", w: 320, h: 208, css: "ns-canvas-node-gen", body: "gen", run: "image",
+        doc: { zh: ["图像生成节点", "视频生成节点"], en: ["Image-gen node", "Video-gen node"] },
+        add: { label: "加图像生成节点", icon: "sparkles", prime: "prime", seed: "skill" } },
+    // 图像编辑节点：图与提示词都从连过来的节点取，这一张只管选技能与出图 —— 卡面与图像生成节点同一档（接法见 gen.js 的 runEdit）
     edit: { title: "图像编辑", w: 320, h: 208, css: "", body: "edit", run: "edit",
-        doc: { zh: ["编辑节点"], en: ["Image-edit node"] },
-        add: { label: "加编辑节点", icon: "pencil", prime: "prime", seed: "editSkill" } },
-    // 增强节点：要重写的正文从连过来的提示词节点取，成文写进下游空的提示词节点（见 gen.js 的 runEnhance）
-    enhance: { title: "增强", w: 320, h: 168, css: "", body: "llm", run: "enhance",
-        doc: { zh: ["增强节点"], en: ["Enhance node"] },
-        add: { label: "加增强节点", icon: "refresh", prime: "prime", defaults: { skill_id: "" } } },
-    // 反推节点：要反推的那一张从连过来的图片节点取，成文同样写进下游空的提示词节点（见 gen.js 的 runReverse）
-    reverse: { title: "反推", w: 320, h: 168, css: "", body: "llm", run: "reverse",
-        doc: { zh: ["反推节点"], en: ["Reverse-prompt node"] },
-        add: { label: "加反推节点", icon: "camera", defaults: { language: "zh" } } },
-    // 「加视频节点」落的还是生成节点那一类，视频档记在 metadata.kind 里（见 gen.js 的 runVideo）
+        doc: { zh: ["图像编辑节点"], en: ["Image-edit node"] },
+        add: { label: "加图像编辑节点", icon: "pencil", prime: "prime", seed: "editSkill" } },
+    // 文本增强节点：要重写的正文从连过来的提示词节点取，成文写进下游空的提示词节点（见 gen.js 的 runEnhance）
+    enhance: { title: "文本增强", w: 320, h: 168, css: "", body: "llm", run: "enhance",
+        doc: { zh: ["文本增强节点"], en: ["Text-enhance node"] },
+        add: { label: "加文本增强节点", icon: "refresh", prime: "prime", defaults: { skill_id: "" } } },
+    // 图片反推节点：要反推的那一张从连过来的图片节点取，成文同样写进下游空的提示词节点（见 gen.js 的 runReverse）
+    reverse: { title: "图片反推", w: 320, h: 168, css: "", body: "llm", run: "reverse",
+        doc: { zh: ["图片反推节点"], en: ["Image-to-prompt node"] },
+        add: { label: "加图片反推节点", icon: "camera", defaults: { language: "zh" } } },
+    // 这一行落的是图像生成节点那一类的视频档（metadata.kind = "video"，见 gen.js 的 runVideo）；表里 type = "video" 那一类是成片的落点，菜单里没有它
     video: { title: "视频", w: 340, h: 240, css: "ns-canvas-node-video", body: "video",
         doc: { zh: ["视频节点"], en: ["Video node"] },
-        add: { label: "加视频节点", icon: "film", type: "gen", prime: "primeVideo", seed: "videoSkill" } },
+        add: { label: "加视频生成节点", icon: "film", type: "gen", prime: "primeVideo", seed: "videoSkill" } },
+    // 素材输入节点：从素材库取一段片 / 一段声音铺上画布，连进生成节点就是那一路的参考视频 / 参考音频
+    // （分桶与槽位上限见 gen.js 的 genInputs 与 videoRefs）。栏上那一枚开素材库，按类型只收那一类
+    video_in: { title: "视频输入", w: 340, h: 360, css: "ns-canvas-node-video", body: "video", bar: "media",
+        doc: { zh: ["视频输入节点"], en: ["Video-input node"] },
+        add: { label: "加视频输入", icon: "film", act: "material", accept: "video" } },
+    audio_in: { title: "音频输入", w: 340, h: 104, css: "ns-canvas-node-audio", body: "audio", bar: "media",
+        doc: { zh: ["音频输入节点"], en: ["Audio-input node"] },
+        add: { label: "加音频输入", icon: "volume", act: "material", accept: "audio" } },
     // 车厢一张一段：段号、这一段自己写的提示词与素材覆盖都在这一张上，整列共用的参数在车尾。
     // 「添加配方」铺的是一整列（见 page.js 的铺一列），菜单那一行不落一张空车厢
     recipe: { title: "车厢", w: 360, h: 176, css: "ns-canvas-node-recipe", body: "car", run: "car",
@@ -52,7 +65,7 @@ export const NODE_TYPES = {
 export const NODE_SPECS = Object.fromEntries(Object.entries(NODE_TYPES)
     .map(([type, d]) => [type, { width: d.w, height: d.h, title: d.title }]));
 
-/** 「加节点」菜单：顺序就是上面这一列的顺序。图标与名字、这一行落哪一类节点（加视频节点落的是生成节点的
+/** 「加节点」菜单：顺序就是上面这一列的顺序。图标与名字、这一行落哪一类节点（加视频生成节点落的是图像生成节点的视频档）
  *  视频档）、建之前要先读到手的那一份清单（prime 是 gen.js 交下来的那个读法）、默认 metadata（defaults
  *  写死在类型那一行，seed 是页面那一层才知道的默认技能）都在这一行里。
  *  act 是菜单里不落一张空节点的那两发：加图片开素材库，添加配方开配方弹窗 */

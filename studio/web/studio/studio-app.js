@@ -183,7 +183,9 @@ let libModal = null;            // 素材库弹窗（导演页 / 绘画页共用
 let libModalHost = null;        // 弹窗里的画廊宿主：libScope 记它此刻替哪一页上屏
 let libScope = "director";
 let libPendingPick = null;      // 面板经 neo:media-pick 交来的取用回调（开弹窗时消费，一次一清）
-let libPendingAccept = null;    // 该回调收哪一类素材（"image" / "video"，null = 媒体全收）
+let libPendingAccept = null;    // 该回调收哪一类素材（"image" / "video" / "audio"，null = 媒体全收）
+// 开窗直接落位的三类标签（gallery.py 的 KIND_KEYS 里的类型那一组，与 lib-modal.js 的 accept 同一套词汇）
+const LIB_KINDS = ["image", "video", "audio"];
 
 function mountGallery(host) {
     galleryTab = galleryTab || getSidebarTab("neo.gallery");
@@ -229,7 +231,8 @@ function ensureLibModal() {
 }
 
 /** 打开素材库弹窗。onPick = 点卡片 / 批量取用回调（null = 纯浏览：卡片照旧开灯箱）.
- *  accept 声明这一扇收哪一类素材（"image" / "video"，不传 = 媒体全收）：类别对不上的卡片点下去不取用。
+ *  accept 声明这一扇收哪一类素材（"image" / "video" / "audio"，不传 = 媒体全收）：类别对不上的卡片点下去不取用，
+ *  开窗顺带落在这一类的归类标签上（见 applyLibKind）。
  *  searchTerm 把窗里的素材库筛到指定那一叠上（提示词库取封面就靠它筛这条自己的出图）。 */
 function openLibModal(scope, onPick, accept, searchTerm) {
     const modal = ensureLibModal();
@@ -255,9 +258,29 @@ function openLibModal(scope, onPick, accept, searchTerm) {
         accept: accept || null,
     });
     modal.open(t("素材库"));
-    const afterMount = () => { notifyAgentCtx(); applyLibSearch(app.neoGallery, searchTerm); };
+    const afterMount = () => {
+        notifyAgentCtx();
+        // 先落类别标签再铺搜索词：搜索那一张视图盖在归类视图上，顺序反了这一次开窗就只剩搜索结果
+        applyLibKind(app.neoGallery, accept)
+            .finally(() => applyLibSearch(app.neoGallery, searchTerm))
+            .catch(() => { });   // 归类那一发读盘失败：开窗照旧停在原落位，不把这次取用打断
+    };
     if (galleryMountHost !== libModalHost) mountGallery(libModalHost).then(afterMount);
     else afterMount();
+}
+
+/** 开窗把窗里的素材库落到取用方要的那一类标签上：画布「加图片 / 加视频输入 / 加音频输入」、图片反推、
+ *  抽帧与声音克隆开的那一扇从此不用在混合列表里挑。accept 为空（导演页出片的参考区媒体全收）不动窗里现落位。
+ *  条数没到手先补一次；这一类是空的、或全库只剩一类就不切——标签栏自己也是不足两枚就撤，
+ *  切过去等于把用户关在一页没有出口（没有别的标签可点）的列表里。 */
+async function applyLibKind(g, accept) {
+    if (!g || !LIB_KINDS.includes(accept)) return;
+    const nonEmpty = (c) => Object.values(c || {}).filter((n) => n > 0);
+    if (!nonEmpty(g.kindCounts).length) await g.loadKindCounts?.();
+    const counts = g.kindCounts || {};
+    if (!(counts[accept] > 0) || nonEmpty(counts).length < 2) return;
+    if (g.currentView?.mode === "kind" && g.currentView.source === accept) return;
+    await g.showKindView(accept);
 }
 
 /** 素材库搜索框吃的是产物旁车首行（生成时那句提示词）：开窗把这一发的词铺进去，弹窗就落在这一叠上。
@@ -395,14 +418,17 @@ const { buildVideo } = createVideoPage({
 });
 
 // 画布页工厂在 pages/canvas/page.js：工具条、视口与落盘在那一页，几何/节点/连线/手势是它下面那六个模块；
-// 这一处只交建元素、api、提示条与素材库取图（「加图片」与空节点的「选图」都开这一扇），并把结果板的
+// 这一处只交建元素、api、提示条与素材库取用（「加图片 / 加视频输入 / 加音频输入」与节点上那一枚都开这一扇，
+// 弹窗收图 / 视频 / 音频里的哪一类由画布按节点类型交上来），并把结果板的
 // 「摆到画布」接回生图家族（画布页没建过时 placeItems 自己等它建好）。
 // 生成节点出图要 ComfyUI 执行队列：只交能力位下去，拉起内核是顶栏那一位的事（画布出图与绘画页同一口径）
 // 出图、出片与增强 / 反推四条链的能力位由画布按节点自己那一发问（见 pages/canvas/node-types.js）；
 // 拉起内核是顶栏那一位的事，画布只说去哪儿启（与绘画页出图同一口径）
 const canvasPage = createCanvasPage({ $el, api, toast,
-    openMaterial: (onPick) => openMaterial("canvas", "image", onPick),
-    can: (feature) => can(feature) });
+    openMaterial: (onPick, accept) => openMaterial("canvas", accept || "image", onPick),
+    can: (feature) => can(feature),
+    // 出片技能按生成模式分组（出视频页同一判法）：画布上选技能的面与「全参考生视频」那一组的出片口径共用这一份
+    modeGroup: videoModeGroup, groupLabels: VIDEO_GROUP_LABELS });
 const buildCanvas = canvasPage.build;
 setCanvasPlace((items) => {
     go("canvas");
@@ -603,6 +629,17 @@ function initOfflineGate() {
             return;
         }
     }, true);
+}
+
+// 整窗的落放守门：本地文件落在页面框上（工具条、侧栏、页边）时浏览器会把窗口导航到 file:///，
+// 一整页状态就这么没了。各页自己的落点（画布、导演网格、编辑页）在事件冒到这里之前已经接住，这里只兜住落空的那一发
+function initFileDropGuard() {
+    document.addEventListener("dragover", (e) => {
+        if (Array.from(e.dataTransfer?.types || []).includes("Files")) e.preventDefault();
+    });
+    document.addEventListener("drop", (e) => {
+        if (e.dataTransfer?.files?.length) e.preventDefault();
+    });
 }
 
 // 离线标记：body 上的 .ns-offline 让生成入口压暗、显存条收起。离线页不叠横幅 ——
@@ -1061,6 +1098,7 @@ if (view) {
     initExtensions().then(async () => {
         await loadVersion();   // 先拿到离线标记与能力表，再建视图（生成按钮要按能力门控）
         initOfflineGate();
+        initFileDropGuard();   // 落放落在页面框上时不许把窗口导航走
         route();   // 视图先挂上：桌面端附件（顶栏状态位）失败不能连坐，窗口不至于停在只出顶栏的空白页
         initHomeLayout();   // 首页版式读回来再重画：不排在启动链上，默认版式先站着
         initComfyStatus();

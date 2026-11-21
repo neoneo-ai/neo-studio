@@ -7,7 +7,7 @@ import { MAX_SCALE, MIN_SCALE } from "./geometry.js";
 import { NODE_SPECS } from "./node-types.js";
 
 /** @typedef {{x: number, y: number}} Position */
-/** @typedef {{id: string, type: "image" | "text" | "gen" | "video" | "recipe" | "edit" | "enhance" | "reverse", title: string, position: Position, width: number, height: number, metadata: Object}} CanvasNodeData */
+/** @typedef {{id: string, type: "image" | "text" | "gen" | "video" | "video_in" | "audio_in" | "recipe" | "edit" | "enhance" | "reverse", title: string, position: Position, width: number, height: number, metadata: Object}} CanvasNodeData */
 /** @typedef {{id: string, fromNodeId: string, toNodeId: string}} CanvasConnection */
 /** @typedef {{id: string, title: string, nodes: CanvasNodeData[], connections: CanvasConnection[], viewport: {x: number, y: number, k: number}, backgroundMode: string}} CanvasState */
 
@@ -17,13 +17,14 @@ export { NODE_SPECS };
 /** 图片节点按原图比例落位时短边的下限：比这更窄/更矮的卡就点不动了 */
 const IMAGE_FIT_MIN_SIDE = 120;
 
-/** 图片节点落位的那一格：图的比例落在图片节点默认框里，长边贴框、短边按比例缩且不小于下限。
+/** 图片节点落位的那一格：图的比例落在节点默认框里，长边贴框、短边按比例缩且不小于下限。
  *  永远不超出默认框 —— placeGrid 的步长、串联的行距、生成结果的落点全按默认框算，超出就会压到一起。
- *  比例读不出（宽高缺一个）返回 null，节点保持默认那一档 */
-export function fitImageSize(naturalWidth, naturalHeight) {
+ *  比例读不出（宽高缺一个）返回 null，节点保持默认那一档。
+ *  box 交这一类节点自己的默认框（图片与视频输入同一条规则，各自的框在注册表那一行） */
+export function fitImageSize(naturalWidth, naturalHeight, box = NODE_SPECS.image) {
     const w = Number(naturalWidth), h = Number(naturalHeight);
     if (!(w > 0 && h > 0)) return null;
-    const { width, height } = NODE_SPECS.image;
+    const { width, height } = box;
     return w >= h
         ? { width, height: Math.min(height, Math.max(IMAGE_FIT_MIN_SIDE, Math.round(width * h / w))) }
         : { height, width: Math.min(width, Math.max(IMAGE_FIT_MIN_SIDE, Math.round(height * w / h))) };

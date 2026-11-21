@@ -8,8 +8,8 @@ Studio 首页「创作」板块的卡片「声音克隆」进 `#/voice`（`studi
 ## 用这条路径
 
 1. **挑一段参考音频**：`从素材库选音频` 开素材库弹窗，点一张音频卡片落上参考波形；这一扇弹窗只放行音频
-   （`accept: "audio"`），图片与视频点它是开灯箱浏览。文字框在这一步预填语音技能 `config.json` 的
-   `default_prompt`，用户写过的字不会被覆盖。
+   （`accept: "audio"`），开窗直接落在 音频 那一类标签上；切到别的标签时，图片与视频卡片点下去是开灯箱浏览。
+   文字框在这一步预填语音技能 `config.json` 的 `default_prompt`，用户写过的字不会被覆盖。
 2. **写要说的文字**：文字为空时点生成只报「请先输入要说的文字」，不发请求。
 3. **生成**：参考音频经 `/neo_gallery/copy_to_input` 落进 `input/` 当 `{{REF_AUDIO_1}}`，文字走
    `{{PROMPT}}`，技能是 `cosyvoice_voice`，产物由 SaveAudio 落 `Output/Voice`。页上给「排队中…」与

@@ -17,6 +17,7 @@ import { cancelTask, COMMON_EDGES, COMMON_RATIOS, createModelConfigSection, crea
     watchTask } from "../../../image-gen.js";
 import { directorMetaText, listRecipes, listVideoSkills } from "../../../recipes.js";
 import { listSkills, skillAcceptsRef, skillAcceptsText, skillDisplayName, isEnhanceSkill } from "../../../skill.js";
+import { MEDIA_CAPS, REF_KIND_NAMES } from "../../../js/core/media-slot.js";
 import { ENHANCE_API, enhancePayload } from "../../../prompt-enhance/prompt-enhance.js";
 import { REVERSE_API, REVERSE_LANGS, reverseRequestBody } from "../../../reverse-prompt/reverse-prompt.js";
 import { RUN_LABELS, gateOf, runKind, upstreamNodes } from "./node-types.js";
@@ -36,8 +37,11 @@ const STEPS_CHOICES = [8, 12, 15, 20, 25, 30, 40, 60];
 const CONTEXT_FRAMES_MAX = 362;
 const CONTEXT_FRAMES_DEFAULT = 22;    // 导演页与后端同一个默认窗口
 const CONTEXT_FRAMES_CHOICES = [0, 8, 14, 22, 29, 36];
-// 连过来的素材按类型分三档，与后端段参考素材（refs.images / videos / audios）同一口径
-const MEDIA_GROUPS = { image: "images", video: "videos", audio: "audios" };
+// 连过来的素材按节点类型分三桶，与后端段参考素材（refs.images / videos / audios）同一口径：
+// 视频输入节点与出片落点都进参考视频那一桶，音频输入节点进参考音频那一桶
+const MEDIA_GROUPS = { image: "images", video: "videos", video_in: "videos", audio_in: "audios" };
+// 参考类别 → 那一桶：出片那一发按类别取桶、按类别说丢掉的是哪一类
+const REF_BUCKETS = { image: "images", video: "videos", audio: "audios" };
 
 // 增强与反推两条 LLM 链在卡面上说的话在 node-types.js 的 RUN_LABELS 里（运行钮、状态行与提示条共用）
 
@@ -149,7 +153,7 @@ export function genInputs(state, genNodeId) {
     const prompts = [];
     const references = { images: [], videos: [], audios: [] };
     const seen = new Set();
-    for (const node of upstreamNodes(state, genNodeId, ["text", "image", "video", "audio"])) {
+    for (const node of upstreamNodes(state, genNodeId, ["text", "image", "video", "video_in", "audio_in"])) {
         const text = String(node.metadata?.content || "").trim();
         if (node.type === "text" && text) prompts.push(text);
         const group = MEDIA_GROUPS[node.type];
@@ -170,7 +174,7 @@ export function genInputs(state, genNodeId) {
     return { prompts, references };
 }
 
-export function createCanvasGen({ $el, toast, api, canFeature, host }) {
+export function createCanvasGen({ $el, toast, api, canFeature, host, modeGroup, groupLabels }) {
     // 一发一份运行态（节点上那一行状态就是它）。watchTask 在终态自己摘监听；切画布只把这一发脱手：
     // 图已经落在 Output 目录，不再写回旧画布，也不在页面外头留一份没人收的监听
     const running = new Map();
@@ -242,7 +246,7 @@ export function createCanvasGen({ $el, toast, api, canFeature, host }) {
         return hit ? skillDisplayName(hit) : id;
     }
 
-    /** 「加生成节点」的默认技能：上次在这页选的那一个，没有就落内置生图技能 */
+    /** 「加图像生成节点」的默认技能：上次在这页选的那一个，没有就落内置生图技能 */
     function defaultSkillId() {
         let last = "";
         try { last = localStorage.getItem(LAST_SKILL_KEY) || ""; } catch { /* 隐私模式记不住就算了，不挡建节点 */ }
@@ -250,8 +254,8 @@ export function createCanvasGen({ $el, toast, api, canFeature, host }) {
         return skills.rows.some((s) => s.id === "image_gen") ? "image_gen" : (skills.rows[0]?.id || "");
     }
 
-    /** 「加编辑节点」的默认技能：编辑链默认那一张（Qwen Image 2.1 —— 参考图槽位最宽、编辑触发词钉在它
-     *  的 config 里），技能列表里没有就落第一张。编辑节点不跟着「加生成节点」记住的上一次：那一档记的是
+    /** 「加图像编辑节点」的默认技能：编辑链默认那一张（Qwen Image 2.1 —— 参考图槽位最宽、编辑触发词钉在它
+     *  的 config 里），技能列表里没有就落第一张。编辑节点不跟着「加图像生成节点」记住的上一次：那一档记的是
      *  出图技能，吃不吃参考图两回事 */
     function defaultEditSkillId() {
         return skills.rows.some((s) => s.id === QWEN_IMAGE_SKILL_ID) ? QWEN_IMAGE_SKILL_ID : (skills.rows[0]?.id || "");
@@ -269,7 +273,7 @@ export function createCanvasGen({ $el, toast, api, canFeature, host }) {
         return videoSkills.inflight;
     }
 
-    /** 「加视频节点」的默认技能：上次在这页选的那一个，没有就落列表里第一张 */
+    /** 「加视频生成节点」的默认技能：上次在这页选的那一个，没有就落列表里第一张 */
     function defaultVideoSkillId() {
         let last = "";
         try { last = localStorage.getItem(LAST_VIDEO_SKILL_KEY) || ""; } catch { /* 隐私模式记不住就算了，不挡建节点 */ }
@@ -513,25 +517,77 @@ export function createCanvasGen({ $el, toast, api, canFeature, host }) {
         return false;
     }
 
-    /** 视频节点出片：上游正文拼成提示词，上游图片按 [output] 标注交后端取用（首帧 / 参考同一份来源）。
-     *  简单视频链的参考素材只有图这一档（首帧 / 参考图），连过来的视频与音频不进这一发 */
+    /** 视频节点出片：上游正文拼成提示词，参考按技能那一组归一后交后端（首帧 / 尾帧 / 三桶参考同一份来源）。
+     *  图 / 视频 / 音频三类都发，各带 media 交后端按 MiniMaxH3ReferenceToVideo 的槽位分桶取用 */
     function runVideo(node) {
         if (clipGate(node)) return;
         const params = readGenParams(node);
         if (!params.skill_id) { toast(t("先选一个视频技能"), "info"); return; }
         const { prompts, references } = genInputs(host.getState(), node.id);
         const skill = videoSkills.rows.find((s) => s.id === params.skill_id);
+        const { refs, last_frame: lastFrame, dropped } = videoRefs(skill, references);
         // 后端对这批技能是硬要求（无首帧的 i2v / 无参考的 r2v 必败），在画布上说清楚比跑完再报错省一整发
-        if (skill?.requires_ref && !references.images.length) {
-            toast(t("这一发要参考素材：把一张图连到这台节点上"), "info");
+        if (skill?.requires_ref && !refs.length) {
+            toast(t(modeGroup(skill) === "r2v"
+                ? "全参考生视频要参考素材：把图 / 视频 / 音频连到这台节点上"
+                : "这一发要参考素材：把一张图连到这台节点上"), "info");
             return;
         }
         if (!prompts.length) { toast(t("接一条文本线过来再出片"), "info"); return; }
-        const body = { prompt: prompts.join("\n\n"), skill_id: params.skill_id, references: references.images,
-            last_frame: null, duration_sec: params.duration, seed: -1 };
+        const body = { prompt: prompts.join("\n\n"), skill_id: params.skill_id, references: refs,
+            last_frame: lastFrame, duration_sec: params.duration, seed: -1 };
         if (params.width && params.height) { body.width = params.width; body.height = params.height; }
         mergeGenOverrides(body, readGenOverrides(node));   // 这一发自定的模型链 / LoRA / 步数（空 = 后端按技能配置与全局设置合并）
         submitClip("/neo_video_gen/simple", body, "video", node);
+    }
+
+    /** 出片那一发交后端的参考：技能属于哪一组决定吃哪几类，连过来的顺序就是交出去的顺序。
+     *  图生视频只吃前两张图 —— 第一张进首帧槽、第二张进 last_frame，第三张与视频 / 音频在这一发没有槽位；
+     *  全参考生视频吃图 / 视频 / 音频三桶，各类按 H3 槽位上限裁，技能模板没有那一类槽位就整类丢掉
+     *  （发过去也只会被后端静默扔，落盘前挡住）；文生视频不吃参考。
+     *  dropped 是丢掉素材的那些类别：卡上那一行要说清丢的是哪一类，不然用户只知道「没出来」 */
+    function videoRefs(skill, references) {
+        const group = modeGroup(skill);
+        const slots = skill?.gen_config?.ref_kinds || null;   // 老后端与老技能没这一项 = 不门控
+        const of = (kind) => references[REF_BUCKETS[kind]] || [];
+        const withMedia = (kind, list) => list.map((r) => ({ ...r, media: kind }));
+        const lost = new Set();
+        if (group === "f2v") {
+            const images = of("image");
+            if (images.length > 2) lost.add("image");
+            if (of("video").length) lost.add("video");
+            if (of("audio").length) lost.add("audio");
+            return {
+                refs: withMedia("image", images.slice(0, 1)),
+                last_frame: images.length > 1 ? withMedia("image", images.slice(1, 2))[0] : null,
+                dropped: [...lost],
+            };
+        }
+        if (group === "r2v") {
+            const refs = [];
+            for (const kind of ["image", "video", "audio"]) {
+                const list = of(kind);
+                if (!list.length) continue;
+                if (slots && !slots.includes(kind)) { lost.add(kind); continue; }
+                if (list.length > MEDIA_CAPS[kind]) lost.add(kind);
+                refs.push(...withMedia(kind, list.slice(0, MEDIA_CAPS[kind])));
+            }
+            return { refs, last_frame: null, dropped: [...lost] };
+        }
+        return { refs: [], last_frame: null, dropped: ["image", "video", "audio"].filter((k) => of(k).length) };
+    }
+
+    /** 卡上那一行参考概览：这一发真正交出去的参考按类别计数，后面带上被这一发丢掉的类别 */
+    function refsSummaryText(refs, lastFrame, dropped) {
+        const n = { image: 0, video: 0, audio: 0 };
+        for (const r of refs) n[r.media] += 1;
+        if (lastFrame) n.image += 1;
+        const kinds = ["image", "video", "audio"].filter((k) => n[k])
+            .map((k) => tf("{label} {n}", { label: t(REF_KIND_NAMES[k]), n: n[k] })).join(" · ");
+        const lost = dropped.length
+            ? tf("（{kinds} 没进）", { kinds: dropped.map((k) => t(REF_KIND_NAMES[k])).join(" · ") })
+            : "";
+        return kinds ? tf("参考：{kinds}{lost}", { kinds, lost }) : tf("没有参考素材{lost}", { lost });
     }
 
     /** 串联的一列出片：整列共用的那一个视频技能与那一套生成参数（锚点 / 步数 / 连续性 / 上下文帧 / 种子）
@@ -540,7 +596,7 @@ export function createCanvasGen({ $el, toast, api, canFeature, host }) {
     function runChain(node) {
         if (clipGate(node)) return;
         const cars = chainCars(host.getState(), node.id);
-        if (!cars.length) { toast(t("这台生成节点上游没有车厢：用「添加配方」铺一列"), "info"); return; }
+        if (!cars.length) { toast(t("这台视频生成节点上游没有车厢：用「添加配方」铺一列"), "info"); return; }
         const live = cars.filter((car) => car.metadata.disabled !== true);
         if (!live.length) { toast(t("链上没有启用的段"), "info"); return; }
         const recipe = chainRecipe(cars);
@@ -550,8 +606,12 @@ export function createCanvasGen({ $el, toast, api, canFeature, host }) {
             toast(t("这份配方没有技能：在车尾选一个视频技能"), "error");
             return;
         }
-        // 车尾没盖技能就是空着交后端：每一段用配方里那一段自己写的技能；盖了就是整列共用这一份
-        const params = { ...readRecipeParams(node), recipe, skill_id };
+        // 车尾没盖技能就是空着交后端：每一段用配方里那一段自己写的技能；盖了就是整列共用这一份。
+        // 盖的是全参考那一组就整列按全参考出片：锚点帧在那一发的模板里没有槽位，锁成不用锚点
+        const fullRef = tailFullRef(node);
+        const params = { ...readRecipeParams(node), recipe, skill_id,
+            anchors: fullRef ? "none" : readRecipeParams(node).anchors,
+            mode: fullRef ? "r2v" : "" };
         const { width, height } = readGenParams(node);
         if (width && height) Object.assign(params, { width, height });   // 车尾盖的分辨率：整列共用这一份
         const ov = readGenOverrides(node);   // 车尾那一发的模型链 / LoRA / 步数：整列共用（导演页同一份合并）
@@ -624,6 +684,13 @@ export function createCanvasGen({ $el, toast, api, canFeature, host }) {
             seen.add(next.id);
             cur = next.id;
         }
+    }
+
+    /** 车尾盖的技能属于哪一组出片：「全参考生视频」那一组整列按全参考出片（画布盖 mode、不吃锚点帧）。
+     *  车尾空着 = 每一段用配方里那一段自己的技能，画布不盖模式，锚点照车尾上那一份 */
+    function tailFullRef(node) {
+        const id = readGenParams(node).skill_id;
+        return !!id && modeGroup(videoSkills.rows.find((s) => s.id === id)) === "r2v";
     }
 
     /** 节点上那枚出片钮的入口：串联的车尾按链序跑启用的那几段，视频节点出片，生成节点出图；
@@ -1042,6 +1109,8 @@ export function createCanvasGen({ $el, toast, api, canFeature, host }) {
             chip: skillParamsChip(skillSel, box, {
                 icon,
                 getOverride: () => readGenOverrides(live()),
+                // 出片技能按生成模式分组（出视频页同一份判法与词表）：全参考生视频那一组在画布上要看得见
+                ...(isVideo ? { groupOf: modeGroup, groupLabels } : {}),
                 panelClass: busy ? "ns-canvas-params-busy" : "",
                 mount: () => host.genMenus(),
                 onClose: () => openParams.delete(node.id),
@@ -1207,7 +1276,7 @@ export function createCanvasGen({ $el, toast, api, canFeature, host }) {
         return genChip(sel, { icon: "sparkles" });
     }
 
-    /** 「加生成节点」把技能列表取到手：胶囊里列的就是那一份；技能被删了，旧画布上的节点要能认出来 */
+    /** 「加图像生成节点」把技能列表取到手：胶囊里列的就是那一份；技能被删了，旧画布上的节点要能认出来 */
     function prime() {
         loadSkills().then(host.paintNodes).catch(() => {});
         loadEnhanceSkills().then(host.paintNodes).catch(() => {});
@@ -1244,8 +1313,15 @@ export function createCanvasGen({ $el, toast, api, canFeature, host }) {
             canFeature(labels.cap) === false ? t(labels.offline) : t(labels.tip), busy));
         // 技能与自定参数就这一枚胶囊：点开左栏换技能、右栏改这一发的模型链 / 步数 / LoRA（出视频页同一枚）
         const skillChip = genParamsChip(node, { icon: "film", isVideo: true, busy });
+        // 参考概览那一行：这一发真正交出去的是哪几类素材、被这一发丢掉的是哪一类
+        const skill = videoSkills.rows.find((s) => s.id === params.skill_id);
+        const { refs, last_frame: lastFrame, dropped } = videoRefs(skill, genInputs(host.getState(), node.id).references);
+        const refsLine = (refs.length || dropped.length)
+            ? [$el("div", { className: "ns-canvas-gen-refs", textContent: refsSummaryText(refs, lastFrame, dropped) })]
+            : [];
         return [
             $el("div", { className: "ns-canvas-gen-skill" }, [skillChip.chip.el]),
+            ...refsLine,
             $el("div", { className: "ns-canvas-gen-params" },
                 [genChip(durSel, { icon: "clock" }), genChip(sizeSel, { glyph: ratioGlyph() })]),
             $el("div", { className: "ns-canvas-gen-bottom" }, [$el("div", { className: "ns-canvas-gen-acts" }, acts)]),
@@ -1255,7 +1331,7 @@ export function createCanvasGen({ $el, toast, api, canFeature, host }) {
     /** 连到这一台节点的素材节点（按连线顺序）：出片交给后端的就是这一批，卡上也按这一批铺；
      *  停用的那一张既不进这一发也不在卡上露出来 */
     function mediaNodes(nodeId) {
-        return upstreamNodes(host.getState(), nodeId, ["image", "video", "audio"])
+        return upstreamNodes(host.getState(), nodeId, ["image", "video", "video_in", "audio_in"])
             .filter((node) => node.metadata?.filename || node.metadata?.asset);
     }
 
@@ -1350,12 +1426,15 @@ export function createCanvasGen({ $el, toast, api, canFeature, host }) {
         stepsSel.value = String(params.steps);
         stepsSel.dataset.follow = t("跟随步数");   // -1 就是跟随：胶囊上直接这么说，不是那句通用的「默认」
 
-        const anchorSel = $el("select", { disabled: busy, title: t("锚点"),
+        // 车尾盖的是全参考那一组：锚点帧在那一发的模板里没有槽位，出片固定走不用锚点，这一格不给改
+        const fullRef = tailFullRef(node);
+        const anchorSel = $el("select", { disabled: busy || fullRef,
+            title: fullRef ? t("全参考生视频不吃锚点帧：整列固定不用锚点") : t("锚点"),
             onchange: () => host.patchMeta(node.id, { anchors: anchorSel.value }) });
         for (const [key, label] of ANCHOR_CHOICES) {
             anchorSel.append($el("option", { value: key, textContent: t(label) }));
         }
-        anchorSel.value = params.anchors;
+        anchorSel.value = fullRef ? "none" : params.anchors;
 
         const contSel = $el("select", { disabled: busy, title: t("连续性"),
             onchange: () => host.patchMeta(node.id, { continuity: contSel.value === "on" }) });
@@ -1419,7 +1498,9 @@ export function createCanvasGen({ $el, toast, api, canFeature, host }) {
         const acts = [];
         if (busy) acts.push(genBtn(t("取消任务"), "cross", () => cancel(node), t("取消这一列在跑的段")));
         acts.push(genBtn(t("参数"), "gear", () => openChainParams(node),
-            t("步数 / 锚点 / 连续性 / 上下文帧 / 种子：整列共用的参数"), busy));
+            tailFullRef(node)
+                ? t("步数 / 连续性 / 上下文帧 / 种子：整列共用的参数（锚点已锁为不用锚点）")
+                : t("步数 / 锚点 / 连续性 / 上下文帧 / 种子：整列共用的参数"), busy));
         acts.push(genBtn(t(labels.btn), "play", () => run(node),
             canFeature(labels.cap) === false ? t(labels.offline) : t(labels.tip), busy));
         return [
@@ -1482,7 +1563,7 @@ export function createCanvasGen({ $el, toast, api, canFeature, host }) {
         document.addEventListener("keydown", onKey);
     }
 
-    /** 「加视频节点」把视频技能列表取到手（与出视频页同一份来源） */
+    /** 「加视频生成节点」把视频技能列表取到手（与出视频页同一份来源） */
     function primeVideo() {
         loadVideoSkills().then(host.paintNodes).catch(() => {});
         loadModelLists();

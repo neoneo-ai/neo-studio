@@ -106,12 +106,25 @@ const loadSize = (img, width, height) => {
   Object.defineProperty(img, "naturalHeight", { value: height, configurable: true });
   fire(img, "load");
 };
+/** 视频节点里的 <video> 读出那一段的宽高来了：同一发钉在 videoWidth/Height 上再交 loadedmetadata */
+const loadVideoSize = (video, width, height) => {
+  Object.defineProperty(video, "videoWidth", { value: width, configurable: true });
+  Object.defineProperty(video, "videoHeight", { value: height, configurable: true });
+  fire(video, "loadedmetadata");
+};
+/** 出视频页那一份生成模式分组（studio-app.js 的 videoModeGroup / VIDEO_GROUP_LABELS 同一判法）：
+ *  画布出片的参考分桶与技能面板分组都按它走，测试钉住这同一条判法 */
+const GROUP_LABELS = { f2v: "图生视频", r2v: "全参考生视频", t2v: "文生视频" };
+const modeGroupOf = (meta) => (["r2v", "v2v", "rv2v"].includes(meta?.mode) ? "r2v"
+    : (meta?.mode && meta.mode !== "t2v" ? "f2v" : "t2v"));
+
 async function makePage(env = mockCanvas(), extraHost = {}, { width = STAGE.width, height = STAGE.height } = {}) {
   resetEnv();
   for (const [route, responder] of Object.entries(env.routes)) mockRoute(route, responder);
   document.body.innerHTML = '<div class="ns-page"></div>';
   const host = document.querySelector(".ns-page");
-  const page = canvas.createCanvasPage({ $el, api: env.api, toast: env.toast, ...extraHost });
+  const page = canvas.createCanvasPage({ $el, api: env.api, toast: env.toast,
+    modeGroup: modeGroupOf, groupLabels: GROUP_LABELS, ...extraHost });
   await page.build(host);
   const view = {
     stage: host.querySelector(".ns-canvas-stage"),
@@ -163,7 +176,7 @@ describe("canvas-page", () => {
       assert.equal(canvas.MIN_SCALE, 0.05);
       assert.equal(canvas.MAX_SCALE, 5);
       assert.deepEqual(canvas.BACKGROUND_MODES, ["dots", "lines", "blank"]);
-      assert.deepEqual(canvas.NODE_SPECS.image, { width: 340, height: 240, title: "图片" });
+      assert.deepEqual(canvas.NODE_SPECS.image, { width: 340, height: 360, title: "图片" });
       assert.deepEqual(canvas.NODE_SPECS.text, { width: 340, height: 240, title: "提示词" });
     });
     test("连线命中半径与节点外扩 padding", () => {
@@ -175,12 +188,13 @@ describe("canvas-page", () => {
     });
     test("图片节点按比例落位：横图压矮、竖图收窄，短边钉在 120", () => {
       assert.deepEqual(store.fitImageSize(1600, 900), { width: 340, height: 191 });
-      assert.deepEqual(store.fitImageSize(900, 1600), { width: 135, height: 240 });
-      assert.deepEqual(store.fitImageSize(1000, 1000), { width: 340, height: 240 },
-        "正方图就是默认那一档，不缩");
+      assert.deepEqual(store.fitImageSize(900, 1600), { width: 203, height: 360 },
+        "默认框是竖友好那一档：9:16 的竖图不再落到 135 宽那一条细条");
+      assert.deepEqual(store.fitImageSize(1000, 1000), { width: 340, height: 340 },
+        "正方图吃满默认框的宽，矮到 240 那一档就是竖屏素材变小那一发");
       assert.deepEqual(store.fitImageSize(3000, 100), { width: 340, height: 120 },
         "极端的长条幅压在短边下限上，不许比这更矮");
-      assert.deepEqual(store.fitImageSize(100, 3000), { width: 120, height: 240 });
+      assert.deepEqual(store.fitImageSize(100, 3000), { width: 120, height: 360 });
       assert.equal(store.fitImageSize(0, 900), null);
       assert.equal(store.fitImageSize(1600, 0), null);
     });
@@ -572,7 +586,11 @@ const STACKED_PAIR = () => mockCanvas({ projects: [
     connections: [], viewport: { x: 0, y: 0, k: 1 }, background_mode: "dots" },
 ] });
 
-const picker = () => { const calls = []; return { calls, openMaterial: (cb) => calls.push(cb) }; };
+/** 素材库弹窗的替身：开一次记一条回调与它声明要收的那一类（与装配层同一份契约：一次一批数组） */
+const picker = () => {
+  const calls = [], kinds = [];
+  return { calls, kinds, openMaterial: (cb, kind) => { calls.push(cb); kinds.push(kind || "image"); } };
+};
 const nodeAct = (view, id, act) => view.nodeEl(id).querySelector(`[data-node-act="${act}"]`);
 /** 选中一个节点：点它起手、松手收笔（点住即拖的起点，拖距 0 不算改动） */
 const selectNode = (view, id, init = {}) => {
@@ -601,7 +619,7 @@ describe("canvas-page 页面", () => {
     test("空画布有提示，工具条上的动作一个不缺", async () => {
       const { view } = await makePage();
       assert.ok(view.hint.textContent.includes("把图拖进来"));
-      for (const label of ["加图片", "加提示词", "加生成节点", "加视频节点", "添加配方",
+      for (const label of ["加图片", "加提示词", "加图像生成节点", "加视频生成节点", "添加配方",
         "撤销", "重做", "缩小", "放大", "适应内容", "背景"]) {
         assert.ok(view.bar.querySelector(`[aria-label="${label}"]`), label);
       }
@@ -661,7 +679,7 @@ describe("canvas-page 页面", () => {
       const menu = view.bar.querySelector(".ns-canvas-add-menu");
       assert.ok(add, "条上就一枚「加节点」");
       assert.ok(!menu.classList.contains("ns-canvas-add-menu-open"), "起手是收着的");
-      for (const label of ["加图片", "加提示词", "加生成节点", "加视频节点", "添加配方"]) {
+      for (const label of ["加图片", "加提示词", "加图像生成节点", "加视频生成节点", "添加配方"]) {
         const row = menu.querySelector(`[aria-label="${label}"]`);
         assert.ok(row, `菜单里少了 ${label}`);
         assert.ok(row.textContent.includes(label), `${label} 要把名字打在行面上`);
@@ -753,7 +771,7 @@ describe("canvas-page 页面", () => {
       await settle();
       const tall = page.current().nodes[1];
       loadSize(view.nodeEl(tall.id).querySelector("img"), 900, 1600);
-      assert.deepEqual([view.box(tall.id).w, view.box(tall.id).h], [135, 240], "2:3 的图收窄那一格");
+      assert.deepEqual([view.box(tall.id).w, view.box(tall.id).h], [203, 360], "2:3 的图收窄那一格");
       page.flush();
       const saved = env.store.saved[0].nodes.find((n) => n.id === wide.id);
       assert.deepEqual([saved.width, saved.height], [340, 191],
@@ -777,7 +795,7 @@ describe("canvas-page 页面", () => {
       click(view.button("加图片"));
       const empty = page.current().nodes[1];
       loadSize(view.nodeEl(empty.id).querySelector("img"), 1600, 900);
-      assert.deepEqual([view.box(empty.id).w, view.box(empty.id).h], [340, 240],
+      assert.deepEqual([view.box(empty.id).w, view.box(empty.id).h], [340, 360],
         "空节点上的占位图不是那张图，不能按它的比例铺");
     });
     test("串联素材那种 240×160 的小卡不按图重铺", async () => {
@@ -806,8 +824,8 @@ describe("canvas-page 页面", () => {
       assert.equal(node.type, "image");
       assert.equal(node.metadata.filename, "rain.png");
       assert.equal(node.metadata.subfolder, "neo_gen/2026-11");
-      // 落点 = 鼠标处居中的图片节点：(400,300) 减掉半张图 170x120
-      assert.deepEqual(view.pos(), [[CENTER.x - 170, CENTER.y - 120]]);
+      // 落点 = 鼠标处居中的图片节点：(400,300) 减掉半张图 170x180
+      assert.deepEqual(view.pos(), [[CENTER.x - 170, CENTER.y - 180]]);
     });
     test("素材卡片只给文件名时走 text/plain 回退", async () => {
       const { page, view } = await makePage();
@@ -1071,7 +1089,7 @@ describe("canvas-page 页面", () => {
       dragCorner(view, id, 100, 0);
       const { w, h, x, y } = box(id);
       assert.ok(Math.abs(w - 440) < 1e-6, `宽 ${w}`);
-      assert.ok(Math.abs(h - 440 * 240 / 340) < 1e-6, `高 ${h} 要按 340:240 跟上`);
+      assert.ok(Math.abs(h - 440 * 360 / 340) < 1e-6, `高 ${h} 要按 340:360 跟上`);
       assert.ok(Math.abs(x - CENTER.x) < 1e-6, `右下角拖时左上角 x 不动：${x}`);
       assert.ok(Math.abs(y - CENTER.y) < 1e-6, `右下角拖时左上角 y 不动：${y}`);
     });
@@ -1283,7 +1301,8 @@ describe("canvas-page 页面", () => {
 
     test("让位那一层 CSS 认的就是这几个类，只让节点里的内容面让位", async () => {
       const css = fs.readFileSync(path.join(webDir, "studio", "style.css"), "utf8");
-      const faces = ".ns-canvas-node-textarea, .ns-canvas-node-img, .ns-canvas-node-video-el, .ns-canvas-gen, .ns-canvas-car";
+      const faces = ".ns-canvas-node-textarea, .ns-canvas-node-img, .ns-canvas-node-video-el, "
+        + ".ns-canvas-node-audio-body, .ns-canvas-gen, .ns-canvas-car";
       const scoped = (cls) => css.includes(`.${cls} :is(${faces})`);
       assert.ok(scoped("ns-canvas-dragging") && scoped("ns-canvas-marqueeing")
           && scoped("ns-canvas-node-resizing") && scoped("ns-canvas-node-linking"),
@@ -1431,12 +1450,12 @@ describe("canvas-page 页面", () => {
       click(view.button("加图片"));
       click(view.button("适应内容"));
       const { x, y, k } = page.current().viewport;
-      assert.equal(view.zoom.textContent, "267%");
+      assert.equal(view.zoom.textContent, "178%");
       const left = x + CENTER.x * k;                       // 节点左上角落到屏幕的位置
       const right = x + (CENTER.x + 340) * k;
       assert.ok(left > 80 - 1e-6 && STAGE.width - right > 80 - 1e-6, `两侧要留 80 边距：${left}/${right}`);
       assert.ok(Math.abs(left - (STAGE.width - right)) < 1e-6, "左右等边距");
-      const top = y + CENTER.y * k, bottom = y + (CENTER.y + 240) * k;
+      const top = y + CENTER.y * k, bottom = y + (CENTER.y + 360) * k;
       assert.ok(top > 80 - 1e-6 && STAGE.height - bottom > 80 - 1e-6, `上下留边距：${top}/${bottom}`);
     });
     test("空画布适应内容回到原点 100%", async () => {
@@ -1496,23 +1515,165 @@ describe("canvas-page 页面", () => {
       const { view, page, env } = await makePage(PAIR_WITH_LINK(), pk);
       click(nodeAct(view, "n-b", "pick"));
       assert.equal(pk.calls.length, 1);
+      assert.equal(pk.kinds[0], "image", "图片节点开的那扇只收图");
       pk.calls[0]([{ filename: "picked.png", subfolder: "neo_gen/p" }]);
       await settle();
       const node = page.current().nodes.find((n) => n.id === "n-b");
       assert.deepEqual([node.metadata.filename, node.metadata.subfolder], ["picked.png", "neo_gen/p"]);
       assert.ok(view.nodeEl("n-b").querySelector("img").src.includes("picked.png"));
-      assert.equal(nodeAct(view, "n-b", "pick"), null, "填上图之后「选图」钮要让位");
+      assert.equal(nodeAct(view, "n-b", "pick")?.getAttribute("aria-label"), "换图",
+        "填上图之后这一枚换成「换图」：图必须还能换");
       page.flush();
       await settle();
       assert.equal(env.store.saved[0].nodes.find((n) => n.id === "n-b").metadata.filename, "picked.png");
     });
 
-    test("填好图的节点不出「选图」，选中那一排就是停用 / 主图 / 复制 / 删除", async () => {
+    test("配方素材节点换一张：配方那一份出处一起收掉，卡面跟着换", async () => {
+      const pk = picker();
+      const { view, page } = await makePage(mockCanvas({ projects: [
+        { id: "canvas-0001", title: "甲", nodes: [
+          { id: "m1", type: "image", title: "素材", position: { x: 0, y: 0 }, width: 240, height: 160,
+            metadata: { asset: "角色设定.png", recipe: "短片配方" } }],
+          connections: [], viewport: { x: 0, y: 0, k: 1 }, background_mode: "dots" }] }), pk);
+      assert.ok(view.nodeEl("m1").querySelector("img").src.includes("/rs_recipes/thumbnail"),
+        "配方里的素材走配方那两条路由");
+      click(nodeAct(view, "m1", "pick"));
+      pk.calls[0]([{ filename: "new.png", subfolder: "neo_gen/x" }]);
+      await settle();
+      const node = page.current().nodes.find((n) => n.id === "m1");
+      assert.deepEqual([node.metadata.filename, node.metadata.asset, node.metadata.recipe],
+        ["new.png", null, null], "换了素材库的一张，配方那一份出处要一起收掉");
+      assert.ok(view.nodeEl("m1").querySelector("img").src.includes("/neo_gallery/thumbnail"),
+        "卡面播的就是换上去的那一张，不是配方里那一张");
+      loadSize(view.nodeEl("m1").querySelector("img"), 900, 1600);
+      assert.deepEqual([view.box("m1").w, view.box("m1").h], [240, 160],
+        "串联铺出来的那一格不换框：网格步长与串联行距全按它算");
+    });
+
+    test("换图之后框按新那一张的比例重落：旧的横竖比例不留着", async () => {
+      const pk = picker();
+      const { view, page, env } = await makePage(mockCanvas({ projects: [
+        { id: "canvas-0001", title: "甲", nodes: [
+          { id: "n-a", type: "image", title: "图", position: { x: 0, y: 0 }, width: 340, height: 191,
+            metadata: { filename: "wide.png", subfolder: "" } }],
+          connections: [], viewport: { x: 0, y: 0, k: 1 }, background_mode: "dots" }] }), pk);
+      assert.deepEqual([view.box("n-a").w, view.box("n-a").h], [340, 191], "起手是一张按横图落过位的框");
+      click(nodeAct(view, "n-a", "pick"));
+      pk.calls[0]([{ filename: "tall.png", subfolder: "" }]);
+      await settle();
+      loadSize(view.nodeEl("n-a").querySelector("img"), 900, 1600);
+      assert.deepEqual([view.box("n-a").w, view.box("n-a").h], [203, 360],
+        "换上去的竖图读出来就按它自己的比例重铺，object-fit 不再裁掉一截");
+      page.flush();
+      await settle();
+      const saved = env.store.saved[0].nodes.find((n) => n.id === "n-a");
+      assert.deepEqual([saved.width, saved.height], [203, 360], "重落的框要跟着这张画布存下去");
+    });
+
+    test("填好图的节点照样出那一枚（写「换图」）：选中那一排是停用 / 主图 / 换图 / 复制 / 删除", async () => {
       const { view } = await makePage(PAIR_WITH_LINK());
-      assert.deepEqual(barActs(view, "n-a"), ["disable", "hero", "copy", "delete"],
-        "填好图的这一张不出「选图」");
+      assert.deepEqual(barActs(view, "n-a"), ["disable", "hero", "pick", "copy", "delete"],
+        "填好图的这一张也留那一枚 —— 换不了图就是这条链断了");
+      assert.equal(nodeAct(view, "n-a", "pick").getAttribute("aria-label"), "换图");
       assert.deepEqual(barActs(view, "n-b"), ["disable", "hero", "pick", "copy", "delete"],
-        "没填图的这一张多一枚「选图」");
+        "没填图的这一张同一枚写「选图」");
+      assert.equal(nodeAct(view, "n-b", "pick").getAttribute("aria-label"), "选图");
+    });
+
+    test("「加视频输入 / 加音频输入」按类型开素材库：取到的那一份落成对应的输入节点", async () => {
+      const pk = picker();
+      const { view, page, env } = await makePage(mockCanvas(), pk);
+      click(view.button("加视频输入"));
+      click(view.button("加音频输入"));
+      assert.deepEqual(pk.kinds, ["video", "audio"], "素材库那一扇按这一类节点只收一类");
+      pk.calls[0]([{ filename: "ref.mp4", subfolder: "neo_gen/v" }]);
+      pk.calls[1]([{ filename: "voice.mp3", subfolder: "" }]);
+      await settle();
+      assert.deepEqual(page.current().nodes.map((n) => [n.type, n.metadata.filename, n.metadata.subfolder]),
+        [["video_in", "ref.mp4", "neo_gen/v"], ["audio_in", "voice.mp3", ""]]);
+      page.flush();
+      await settle();
+      assert.deepEqual(env.store.saved.at(-1).nodes.map((n) => [n.type, n.metadata.filename]),
+        [["video_in", "ref.mp4"], ["audio_in", "voice.mp3"]], "两类输入节点照同一份形状落盘");
+    });
+
+    test("输入节点的卡面：视频整张是那一播（不静音），音频是播控加一行出处", async () => {
+      const pk = picker();
+      const { view, page } = await makePage(mockCanvas(), pk);
+      click(view.button("加视频输入"));
+      click(view.button("加音频输入"));
+      pk.calls[0]([{ filename: "ref.mp4" }]);
+      pk.calls[1]([{ filename: "voice.mp3" }]);
+      await settle();
+      const [vin, ain] = page.current().nodes;
+      const video = view.nodeEl(vin.id).querySelector("video.ns-canvas-node-video-el");
+      assert.ok(video.getAttribute("src").includes("/neo_gallery/video?filename=ref.mp4"), video.getAttribute("src"));
+      assert.equal(video.hasAttribute("muted"), false, "参考片的声音要在画布上听得到");
+      const audio = view.nodeEl(ain.id).querySelector("audio.ns-canvas-node-audio-el");
+      assert.ok(audio.getAttribute("src").includes("/neo_gallery/audio?filename=voice.mp3"),
+        audio.getAttribute("src"));
+      assert.ok(!audio.getAttribute("src").includes("/neo_gallery/video"),
+        "音频走音频那条流：视频那条按扩展名挡非视频，音频吃它永远播不出来");
+      assert.equal(view.nodeEl(ain.id).querySelector(".ns-canvas-node-audio-name").textContent, "voice.mp3");
+    });
+
+    test("取到一段竖片时视频输入节点按片的比例落框：横框里不留一圈黑边", async () => {
+      const pk = picker();
+      const { view, page, env } = await makePage(mockCanvas(), pk);
+      click(view.button("加视频输入"));
+      pk.calls[0]([{ filename: "portrait.mp4", subfolder: "" }]);
+      await settle();
+      const vin = page.current().nodes[0];
+      assert.deepEqual([view.box(vin.id).w, view.box(vin.id).h], [340, 360], "落点先站在默认那一档");
+      loadVideoSize(view.nodeEl(vin.id).querySelector("video"), 720, 1280);
+      assert.deepEqual([view.box(vin.id).w, view.box(vin.id).h], [203, 360],
+        "那一段读出来是竖的，框就收窄成它的比例");
+      page.flush();
+      await settle();
+      assert.deepEqual([env.store.saved.at(-1).nodes[0].width, env.store.saved.at(-1).nodes[0].height],
+        [203, 360], "重落的框要跟着这张画布存下去");
+    });
+
+    test("视频输入换一段：旧框的比例不留着，按新那一段重落", async () => {
+      const pk = picker();
+      const { view, page } = await makePage(mockCanvas({ projects: [
+        { id: "canvas-0001", title: "甲", nodes: [
+          { id: "v1", type: "video_in", title: "视频输入", position: { x: 0, y: 0 }, width: 340, height: 191,
+            metadata: { filename: "wide.mp4", subfolder: "" } }],
+          connections: [], viewport: { x: 0, y: 0, k: 1 }, background_mode: "dots" }] }), pk);
+      assert.deepEqual([view.box("v1").w, view.box("v1").h], [340, 191], "起手是一段横片落过的框");
+      click(nodeAct(view, "v1", "pick"));
+      pk.calls[0]([{ filename: "tall.mp4", subfolder: "" }]);
+      await settle();
+      loadVideoSize(view.nodeEl("v1").querySelector("video"), 720, 1280);
+      assert.deepEqual([view.box("v1").w, view.box("v1").h], [203, 360],
+        "换上去的那一段读出来是竖的，框跟着重铺");
+    });
+
+    test("空的输入节点说空位，栏上是「取用素材」；装配层没交弹窗时菜单落一张空输入节点", async () => {
+      const { view, page } = await makePage(mockCanvas());
+      click(view.button("加视频输入"));
+      click(view.button("加音频输入"));
+      await settle();
+      const [vin, ain] = page.current().nodes;
+      assert.deepEqual([vin.type, ain.type], ["video_in", "audio_in"]);
+      assert.equal(view.nodeEl(vin.id).querySelector(".ns-canvas-node-video-empty").textContent, "空视频输入");
+      assert.equal(view.nodeEl(ain.id).querySelector(".ns-canvas-node-video-empty").textContent, "空音频输入");
+      assert.deepEqual(barActs(view, vin.id), ["disable", "pick", "copy", "delete"],
+        "输入节点没有主图位，也没有提示词位");
+      assert.equal(nodeAct(view, vin.id, "pick").getAttribute("aria-label"), "取用素材");
+      assert.equal(nodeAct(view, ain.id, "pick").getAttribute("aria-label"), "取用素材");
+    });
+
+    test("从素材库拖进来的卡片按文件类型落节点：片落视频输入，声音落音频输入", async () => {
+      const { view, page } = await makePage(mockCanvas());
+      dragFire(view.stage, "drop", galleryPayload({ filename: "clip.mp4" }), { clientX: CENTER.x, clientY: CENTER.y });
+      dragFire(view.stage, "drop", galleryPayload({ filename: "voice.mp3" }), { clientX: CENTER.x, clientY: CENTER.y });
+      dragFire(view.stage, "drop", galleryPayload({ filename: "shot.png" }), { clientX: CENTER.x, clientY: CENTER.y });
+      await settle();
+      assert.deepEqual(page.current().nodes.map((n) => [n.type, n.metadata.filename]),
+        [["video_in", "clip.mp4"], ["audio_in", "voice.mp3"], ["image", "shot.png"]],
+        "把一段片落成图片节点，卡上就是一张读不出来的占位图");
     });
 
     test("选中就把那一排摆出来：停用 / 提示词 / 复制 / 删除，不留「进入编辑」", async () => {
@@ -2220,8 +2381,11 @@ describe("canvas-page 页面", () => {
     // 路由按真接口的形状给 —— 提交回 task_id，状态快照带 progress 与 filename/subfolder，取消在同一层 /cancel
     const videoSkills = () => ([
       { id: "image_gen", name: "出图", category: "image_gen", source: "preset", gen_image: true },
-      { id: "h3_t2v", name: "文生视频", category: "gen_video", source: "preset", gen_video: true },
-      { id: "h3_i2v", name: "图生视频", category: "gen_video", source: "preset", gen_video: true, requires_ref: true },
+      { id: "h3_t2v", name: "文生视频", category: "gen_video", source: "preset", gen_video: true, mode: "t2v" },
+      { id: "h3_i2v", name: "图生视频", category: "gen_video", source: "preset", gen_video: true,
+        mode: "i2v", requires_ref: true },
+      { id: "h3_r2v", name: "参考生视频", category: "gen_video", source: "preset", gen_video: true,
+        mode: "r2v", requires_ref: true, gen_config: { ref_kinds: ["image", "video", "audio"] } },
     ]);
     const RECIPE_ROW = { name: "短片配方", title: "短片", source: "mine", type: "video_director",
       canvas_id: "", shared: { mode: "i2v", width: 1344, height: 768 },
@@ -2272,11 +2436,12 @@ describe("canvas-page 页面", () => {
       await deepSettle();
     };
 
-    test("加生成节点：铺一张生成节点，默认技能落内置生图技能", async () => {
+    test("加图像生成节点：铺一张图像生成节点，默认技能落内置生图技能", async () => {
       const { page, view } = await genPage([]);
-      click(view.button("加生成节点"));
+      click(view.button("加图像生成节点"));
       const node = page.current().nodes[0];
       assert.equal(node.type, "gen");
+      assert.equal(node.title, "图像生成", "卡上的名字点明这一张出的是图");
       assert.deepEqual([node.width, node.height], [320, 208]);
       assert.equal(node.metadata.skill_id, "image_gen");
       assert.ok(view.nodeEl(node.id).classList.contains("ns-canvas-node-gen"));
@@ -2456,30 +2621,31 @@ describe("canvas-page 页面", () => {
       await settle();
       assert.equal(ctx.menu(), null, "点节点外收掉菜单");
     });
-    test("加视频节点：16:9 的出片节点，默认技能落在视频技能表第一份", async () => {
+    test("加视频生成节点：16:9 的出片节点，默认技能落在视频技能表第一份", async () => {
       const ctx = await genPage([promptNode("t1", "一句"), videoSlot("vid1", 700)], [], { routes: clipRoutes() });
       await deepSettle();   // 视频技能表与配方表都在 build 之后才落地
-      click(ctx.view.button("加视频节点"));
+      click(ctx.view.button("加视频生成节点"));
       await settle();
       const video = ctx.page.current().nodes.find((n) => n.type === "gen" && n.metadata.kind === "video");
       assert.deepEqual([video.width, video.height], [320, 208], "出片节点默认 16:9 的框");
+      assert.equal(video.title, "视频生成", "同一类节点的两个档，卡上的名字跟着档走");
       assert.equal(video.metadata.skill_id, "h3_t2v", "技能默认落在视频技能表第一份");
       assert.ok(ctx.genBtn(video.id, "生成视频"), "出片节点自带生成视频钮");
       assert.ok(ctx.view.nodeEl("vid1").querySelector(".ns-canvas-node-video-empty"), "没落上片的视频位这么说");
     });
     test("视频节点出片：入参进简单视频链，成片写进下游空视频节点", async () => {
-      const ctx = await genPage([promptNode("t1", "镜头慢慢推进"), videoGen("v1", 0), imageSlot("i1", 0),
-        videoSlot("vid1", 700)], [link("t1", "v1"), link("i1", "v1"), link("v1", "vid1")],
+      const ctx = await genPage([promptNode("t1", "镜头慢慢推进"), videoGen("v1", 0, { skill_id: "h3_i2v" }),
+        imageSlot("i1", 0), videoSlot("vid1", 700)], [link("t1", "v1"), link("i1", "v1"), link("v1", "vid1")],
         { routes: clipRoutes() });
       await deepSettle();
       ctx.page.current().nodes.find((n) => n.id === "i1").metadata = { filename: "a.png", subfolder: "sub" };
       click(ctx.genBtn("v1", "生成视频"));
       await deepSettle();
       assert.deepEqual(clipCalls("/neo_video_gen/simple")[0].body, {
-        prompt: "镜头慢慢推进", skill_id: "h3_t2v",
-        references: [{ kind: "input", value: "sub/a.png[output]" }],
+        prompt: "镜头慢慢推进", skill_id: "h3_i2v",
+        references: [{ kind: "input", value: "sub/a.png[output]", media: "image" }],
         last_frame: null, duration_sec: 8, seed: -1, width: 1344, height: 768,
-      }, "入参按出视频页那一条链的字段名走");
+      }, "入参按出视频页那一条链的字段名走，参考带自己的 media 交后端分桶");
       assert.ok(fetchLog.some((c) => c.path === "/neo_video_gen/simple/clip-1" && c.method === "GET"),
         "提交完先拉一格快照");
       assert.equal(clipVideoSrc(ctx, "vid1"), "/neo_gallery/video?filename=o.mp4&subfolder=sub",
@@ -2487,6 +2653,139 @@ describe("canvas-page 页面", () => {
       assert.equal(ctx.genText("v1", "status"), "", "出完片状态行收回，节点不挂运行态");
       assert.ok(ctx.env.store.toasts.some((item) => item.message.includes("已出片")));
       assert.equal(ctx.page.current().nodes.filter((n) => n.type === "video").length, 1, "有空位就不新开");
+    });
+
+    test("全参考生视频出片：图与参考视频都进简单视频链，卡上那一行说出交出去的每一类", async () => {
+      const ctx = await genPage([promptNode("t1", "一句话"), videoGen("v1", 0, { skill_id: "h3_r2v" }),
+        imageSlot("i1", 0), videoSlot("r1", 400, { filename: "ref.mp4" }), videoSlot("vid1", 700)],
+      [link("t1", "v1"), link("i1", "v1"), link("r1", "v1"), link("v1", "vid1")], { routes: clipRoutes() });
+      await deepSettle();
+      ctx.page.current().nodes.find((n) => n.id === "i1").metadata = { filename: "a.png" };
+      click(ctx.genBtn("v1", "生成视频"));
+      await deepSettle();
+      assert.deepEqual(clipCalls("/neo_video_gen/simple")[0].body.references, [
+        { kind: "input", value: "a.png[output]", media: "image" },
+        { kind: "input", value: "ref.mp4[output]", media: "video" },
+      ], "全参考那一组吃三桶：参考视频不再像图生视频那一发一样被丢掉");
+      assert.equal(ctx.genText("v1", "refs"), "参考：参考图 1 · 参考视频 1", "卡上那一行说清这一发交出去的参考");
+    });
+
+    test("画布上取的参考视频与参考音频直接进全参考那一发的三桶", async () => {
+      const ctx = await genPage([promptNode("t1", "一句话"), videoGen("v1", 0, { skill_id: "h3_r2v" }),
+        imageSlot("i1", 0),
+        { id: "vin", type: "video_in", title: "视频输入", position: { x: 300, y: 600 }, width: 340, height: 240,
+          metadata: { filename: "ref.mp4", subfolder: "neo_gen/v" } },
+        { id: "ain", type: "audio_in", title: "音频输入", position: { x: 600, y: 600 }, width: 340, height: 104,
+          metadata: { filename: "voice.mp3" } },
+        videoSlot("vid1", 700)],
+      [link("t1", "v1"), link("i1", "v1"), link("vin", "v1"), link("ain", "v1"), link("v1", "vid1")],
+      { routes: clipRoutes() });
+      await deepSettle();
+      ctx.page.current().nodes.find((n) => n.id === "i1").metadata = { filename: "a.png" };
+      click(ctx.genBtn("v1", "生成视频"));
+      await deepSettle();
+      assert.deepEqual(clipCalls("/neo_video_gen/simple")[0].body.references, [
+        { kind: "input", value: "a.png[output]", media: "image" },
+        { kind: "input", value: "neo_gen/v/ref.mp4[output]", media: "video" },
+        { kind: "input", value: "voice.mp3[output]", media: "audio" },
+      ], "素材输入节点照同一口径带 media 交后端分桶，连线顺序就是交出去的顺序");
+      assert.equal(ctx.genText("v1", "refs"), "参考：参考图 1 · 参考视频 1 · 参考音频 1");
+    });
+
+    test("图生视频那一发不吃画布上的参考视频与参考音频：卡上说明丢的是哪一类", async () => {
+      const ctx = await genPage([promptNode("t1", "一句话"), videoGen("v1", 0, { skill_id: "h3_i2v" }),
+        imageSlot("i1", 0),
+        { id: "vin", type: "video_in", title: "视频输入", position: { x: 300, y: 600 }, width: 340, height: 240,
+          metadata: { filename: "ref.mp4" } },
+        { id: "ain", type: "audio_in", title: "音频输入", position: { x: 600, y: 600 }, width: 340, height: 104,
+          metadata: { filename: "voice.mp3" } },
+        videoSlot("vid1", 700)],
+      [link("t1", "v1"), link("i1", "v1"), link("vin", "v1"), link("ain", "v1"), link("v1", "vid1")],
+      { routes: clipRoutes() });
+      await deepSettle();
+      ctx.page.current().nodes.find((n) => n.id === "i1").metadata = { filename: "a.png" };
+      click(ctx.genBtn("v1", "生成视频"));
+      await deepSettle();
+      const body = clipCalls("/neo_video_gen/simple")[0].body;
+      assert.deepEqual(body.references, [{ kind: "input", value: "a.png[output]", media: "image" }],
+        "首帧槽只吃第一张图：这一发的模板没有参考视频与参考音频的槽位");
+      assert.equal(ctx.genText("v1", "refs"), "参考：参考图 1（参考视频 · 参考音频 没进）");
+    });
+
+    test("全参考生视频出片：超过 H3 槽位上限的那几张不进，卡上说明丢的是哪一类", async () => {
+      const nodes = [promptNode("t1", "一句话"), videoGen("v1", 0, { skill_id: "h3_r2v" })];
+      const links = [link("t1", "v1")];
+      for (let i = 1; i <= 10; i += 1) {
+        nodes.push(imageSlot(`i${i}`, i * 40));
+        links.push(link(`i${i}`, "v1"));
+      }
+      for (let i = 1; i <= 4; i += 1) {
+        nodes.push(videoSlot(`r${i}`, 3000 + i * 40, { filename: `ref${i}.mp4` }));
+        links.push(link(`r${i}`, "v1"));
+      }
+      const ctx = await genPage(nodes, links, { routes: clipRoutes() });
+      await deepSettle();
+      for (const n of ctx.page.current().nodes) if (n.type === "image") n.metadata = { filename: `${n.id}.png` };
+      click(ctx.genBtn("v1", "生成视频"));
+      await deepSettle();
+      const refs = clipCalls("/neo_video_gen/simple")[0].body.references;
+      assert.deepEqual([refs.filter((r) => r.media === "image").length, refs.filter((r) => r.media === "video").length],
+        [9, 3], "图 9 / 视频 3 是 MiniMaxH3ReferenceToVideo 的槽位上限，多出来的不发出去");
+      assert.equal(refs[8].value, "i9.png[output]", "连过来的顺序就是交出去的顺序");
+      assert.equal(ctx.genText("v1", "refs"), "参考：参考图 9 · 参考视频 3（参考图 · 参考视频 没进）",
+        "丢掉的那一类写在卡上，不让用户只看见「没出来」");
+    });
+
+    test("图生视频出片：前两张图进首帧与尾帧，第三张与参考视频不进这一发", async () => {
+      const ctx = await genPage([promptNode("t1", "一句话"), videoGen("v1", 0, { skill_id: "h3_i2v" }),
+        imageSlot("i1", 0), imageSlot("i2", 40), imageSlot("i3", 80),
+        videoSlot("r1", 400, { filename: "ref.mp4" }), videoSlot("vid1", 700)],
+      [link("t1", "v1"), link("i1", "v1"), link("i2", "v1"), link("i3", "v1"), link("r1", "v1"), link("v1", "vid1")],
+      { routes: clipRoutes() });
+      await deepSettle();
+      for (const id of ["i1", "i2", "i3"]) {
+        ctx.page.current().nodes.find((n) => n.id === id).metadata = { filename: `${id}.png` };
+      }
+      click(ctx.genBtn("v1", "生成视频"));
+      await deepSettle();
+      const body = clipCalls("/neo_video_gen/simple")[0].body;
+      assert.deepEqual(body.references, [{ kind: "input", value: "i1.png[output]", media: "image" }],
+        "首帧槽只吃第一张：这一发的模板没有多路参考槽位");
+      assert.deepEqual(body.last_frame, { kind: "input", value: "i2.png[output]", media: "image" }, "第二张进尾帧");
+      assert.equal(ctx.genText("v1", "refs"), "参考：参考图 2（参考图 · 参考视频 没进）");
+    });
+
+    test("文生视频出片：连过来的图不带走，卡上说明这一发没有参考", async () => {
+      const ctx = await genPage([promptNode("t1", "一句话"), videoGen("v1", 0), imageSlot("i1", 0),
+        videoSlot("vid1", 700)], [link("t1", "v1"), link("i1", "v1"), link("v1", "vid1")],
+        { routes: clipRoutes() });
+      await deepSettle();
+      ctx.page.current().nodes.find((n) => n.id === "i1").metadata = { filename: "a.png" };
+      click(ctx.genBtn("v1", "生成视频"));
+      await deepSettle();
+      assert.deepEqual(clipCalls("/neo_video_gen/simple")[0].body.references, [],
+        "文生视频的模板没有参考槽位，发过去也只会被后端静默扔");
+      assert.equal(ctx.genText("v1", "refs"), "没有参考素材（参考图 没进）");
+    });
+
+    test("全参考生视频缺参考素材时在画布上就拦下", async () => {
+      const ctx = await genPage([promptNode("t1", "一句"), videoGen("v1", 0, { skill_id: "h3_r2v" })],
+        [link("t1", "v1")], { routes: clipRoutes() });
+      await deepSettle();
+      click(ctx.genBtn("v1", "生成视频"));
+      await settle();
+      assert.equal(clipCalls("/neo_video_gen/simple").length, 0, "无参考的 r2v 不进队列");
+      assert.ok(ctx.env.store.toasts.some((item) => item.message.includes("全参考生视频要参考素材")),
+        "缺的是哪一类参考要说清：图 / 视频 / 音频都算这一发的素材");
+    });
+
+    test("出片技能面板按生成模式分组：全参考生视频那一组在画布上看得见", async () => {
+      const ctx = await genPage([videoGen("v1", 0)], [], { routes: clipRoutes() });
+      await deepSettle();
+      click(ctx.chipAt("v1", 0));
+      await settle();
+      assert.deepEqual([...ctx.menu().querySelectorAll(".neo-gallery-gm-skill-group")].map((el) => el.textContent),
+        ["图生视频", "全参考生视频", "文生视频"], "组头与组序就是出视频页那一份词表");
     });
     test("视频节点出片：没有空视频节点就新开一台并连上这一发", async () => {
       const ctx = await genPage([promptNode("t1", "一句"), videoGen("v1", 0)], [link("t1", "v1")],
@@ -2640,6 +2939,30 @@ describe("canvas-page 页面", () => {
           "/neo_gallery/video?filename=seg0.mp4&subfolder=director"],
         "两段各落各的视频位，车尾自己不落片");
       assert.equal(clips().length, 2, "第二段收摊时再开一台");
+    });
+
+    test("车尾盖全参考技能：整列按全参考出片，锚点锁成不用锚点", async () => {
+      const ctx = await genPage([], [], { routes: clipRoutes() });
+      await layTrain(ctx);
+      await deepSettle();
+      const tail = ctx.page.current().nodes.find((n) => n.type === "gen");
+      Object.assign(tail.metadata, { skill_id: "h3_r2v", anchors: "both" });
+      await settle();
+      click(ctx.genBtn(tail.id, "生成视频"));
+      await deepSettle();
+      const calls = clipCalls("/neo_video_gen/run_segment");
+      assert.deepEqual(calls.map((c) => c.body.mode), ["r2v", "r2v"], "每一段都带上画布盖的生成模式");
+      assert.deepEqual(calls.map((c) => c.body.anchors), ["none", "none"],
+        "全参考那一组的模板没有锚点帧槽位：整列不吃锚点，车尾上那一份「两端锚点」不生效");
+      click(ctx.genBtn(tail.id, "参数"));
+      await settle();
+      const form = ctx.host.querySelector(".ns-canvas-tailform");
+      const anchorSel = [...form.querySelectorAll("select")].find((s) => s.title.includes("全参考生视频不吃锚点帧"));
+      assert.ok(anchorSel.disabled, "锚点那一格锁着：这一发没有它要换的东西");
+      assert.equal(anchorSel.value, "none", "锁在出片真正用的那一份上");
+      fire(document, "keydown", { key: "Escape" });
+      await settle();
+      assert.equal(ctx.host.querySelector(".ns-canvas-tailform-mask"), null, "Esc 收窗");
     });
 
     test("停用一段：整列跳过这一段，这一张压暗并挂徽标", async () => {
@@ -3242,13 +3565,13 @@ describe("canvas-page 页面", () => {
         position: { x, y }, width: 320, height: 208, metadata: { skill_id: "qwen_image_21", ...meta } });
       const metaOf = (ctx, id) => ctx.page.current().nodes.find((n) => n.id === id).metadata;
 
-      test("加编辑节点：卡上只有控件行与状态行，默认技能落在吃参考图的那一张", async () => {
+      test("加图像编辑节点：卡上只有控件行与状态行，默认技能落在吃参考图的那一张", async () => {
         const ctx = await genPage([], [], { gen: { skills: EDIT_SKILLS } });
-        click(ctx.view.button("加编辑节点"));
+        click(ctx.view.button("加图像编辑节点"));
         await settle();
         const node = ctx.page.current().nodes.at(-1);
         assert.deepEqual([node.type, node.metadata.skill_id], ["edit", "qwen_image_21"],
-          "编辑节点不跟「加生成节点」记的上一次：那一档记的是出图技能，吃不吃参考图两回事");
+          "编辑节点不跟「加图像生成节点」记的上一次：那一档记的是出图技能，吃不吃参考图两回事");
         const el = ctx.view.nodeEl(node.id);
         assert.ok(el.querySelector(".ns-canvas-gen-ctl"), "控件行铺在节点上");
         assert.ok(ctx.genBtn(node.id, "出图"), "控件行最后一枚是出图");
@@ -3444,9 +3767,9 @@ describe("canvas-page 页面", () => {
       return { ...ctx, genText, genBtn, chipOptions, chipLabel, pickChip, content, sent, run, tick, chipItems };
     }
 
-    test("加增强节点：节点上不写正文，只有一枚增强技能胶囊与「增强」钮，默认落「后端智能判断」", async () => {
+    test("加文本增强节点：节点上不写正文，只有一枚增强技能胶囊与「增强」钮，默认落「后端智能判断」", async () => {
       const ctx = await llmPage([]);
-      click(ctx.view.button("加增强节点"));
+      click(ctx.view.button("加文本增强节点"));
       await settle();
       const node = ctx.page.current().nodes[0];
       assert.equal(node.type, "enhance");
@@ -3464,9 +3787,9 @@ describe("canvas-page 页面", () => {
       assert.equal(ctx.genText(node.id, "status"), "", "没在跑就不出状态行");
     });
 
-    test("加反推节点：节点上不摆图，只有一枚语言胶囊与「反推」钮，默认中文", async () => {
+    test("加图片反推节点：节点上不摆图，只有一枚语言胶囊与「反推」钮，默认中文", async () => {
       const ctx = await llmPage([]);
-      click(ctx.view.button("加反推节点"));
+      click(ctx.view.button("加图片反推节点"));
       await settle();
       const node = ctx.page.current().nodes[0];
       assert.equal(node.type, "reverse");
@@ -3680,8 +4003,8 @@ describe("canvas-page 页面", () => {
 
     test("节点上的技能与语言随画布落盘：metadata 就是存盘的那一份", async () => {
       const ctx = await llmPage([]);
-      click(ctx.view.button("加增强节点"));
-      click(ctx.view.button("加反推节点"));
+      click(ctx.view.button("加文本增强节点"));
+      click(ctx.view.button("加图片反推节点"));
       await settle();
       const [enh, rev] = ctx.page.current().nodes;
       await ctx.pickChip(enh.id, "英文增强");

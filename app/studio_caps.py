@@ -281,6 +281,8 @@ _CANVAS = {
     ("POST", "/neo_canvas/project"),
     ("POST", "/neo_canvas/rename"),
     ("POST", "/neo_canvas/delete"),
+    # 拖进画布的素材落 input/：写一份文件不跑队列也不吃显存，桌面端离线服务自己答
+    ("POST", "/neo_canvas/upload"),
 }
 
 # 手机扫码连接（局域网）：配对页、令牌校验与设置页轮询的二维码数据。只有桌面端服务有这条

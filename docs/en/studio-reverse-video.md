@@ -9,8 +9,8 @@ from the 图片反推 page; the two pages share nothing.
 ## Using it
 
 1. **Pick a video**: `从素材库选视频` opens the media-library modal and a card drops into the player
-   (this modal accepts videos only, `accept: "video"`); the player reads the range-served `/neo_frames/video`
-   stream, which is what makes seeking land on a frame. `换视频` opens the same modal.
+   (this modal accepts videos only, `accept: "video"`, and opens straight on the 视频 chip); the player reads the
+   range-served `/neo_frames/video` stream, which is what makes seeking land on a frame. `换视频` opens the same modal.
 2. **Set the sampling range by dragging**: the time window under the player spans the whole clip by default. Drag
    either handle to set a closed range, the player jumps to the frame under your hand while you drag; the two
    handles never cross, the ends never leave the clip, and `全片` (Whole clip) resets the window to the full video.

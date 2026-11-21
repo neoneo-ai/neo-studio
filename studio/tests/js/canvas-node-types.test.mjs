@@ -31,10 +31,10 @@ test("描述符形状：每一类齐标题与默认框，卡面与运行文案�
     for (const [type, d] of Object.entries(NODE_TYPES)) {
         assert.ok(d.title, `${type} 没有标题：建出来的节点没有名字`);
         assert.ok(d.w > 0 && d.h > 0, `${type} 的默认框不在正数里：placeGrid 的格距会算成 0`);
-        assert.ok(["image", "text", "video", "gen", "edit", "llm", "car"].includes(d.body),
+        assert.ok(["image", "text", "video", "audio", "gen", "edit", "llm", "car"].includes(d.body),
             `${type} 的 body 不在 nodes.js 认的那几个渲染器里：这一类铺出来是空的`);
         if (d.run) assert.ok(RUN_LABELS[d.run], `${type} 说 run=${d.run}，RUN_LABELS 里没有那一行`);
-        if (d.bar) assert.ok(["hero", "prompt"].includes(d.bar), `${type} 的 bar 不是附加栏认的那两枚`);
+        if (d.bar) assert.ok(["hero", "prompt", "media"].includes(d.bar), `${type} 的 bar 不是附加栏认的那三枚`);
         assert.ok(!d.add || ICON_NAMES.includes(d.add.icon), `${type} 的菜单图标 ${d.add?.icon} 画不出`);
     }
 });
@@ -46,7 +46,7 @@ test("规格与落盘同源：store 建节点用的就是这一份，旧画布�
     }
     const node = createCanvasNode("gen", { x: 0, y: 0 });
     assert.deepEqual([node.type, node.width, node.height, node.title],
-        ["gen", NODE_TYPES.gen.w, NODE_TYPES.gen.h, "生成"]);
+        ["gen", NODE_TYPES.gen.w, NODE_TYPES.gen.h, "图像生成"]);
     // 旧版页面写的文件里有这一版不认的类型：回落成提示词节点，metadata 整份留着（写回不丢参数）
     const read = readCanvas({ nodes: [{ id: "n1", type: "sticker", width: 99, metadata: { content: "旧正文" } }] });
     assert.equal(read.nodes[0].type, "text");
@@ -63,11 +63,14 @@ test("加节点菜单与页面同源：顺序与图标都在注册表那一列�
         // 菜单那一行不许在页面里现写一遍名字（「添加配方」在配方弹窗的标题里还有正当的一处）
         assert.ok(!new RegExp(`mk\\(\\s*t\\("${label}"`).test(pageSource), `菜单名 ${label} 又在页面里现写了一遍`);
     }
-    // 「加视频节点」落的是生成节点的视频档，「添加配方」铺一列 —— 这两发落的类型与菜单名不是一回事
-    assert.equal(ADD_MENU.find((row) => row.label === "加视频节点").type, "gen");
-    assert.equal(ADD_MENU.find((row) => row.label === "加视频节点").seed, "videoSkill");
+    // 「加视频生成节点」落的是图像生成节点那一类的视频档，「添加配方」铺一列 —— 这两发落的类型与菜单名不是一回事
+    assert.equal(ADD_MENU.find((row) => row.label === "加视频生成节点").type, "gen");
+    assert.equal(ADD_MENU.find((row) => row.label === "加视频生成节点").seed, "videoSkill");
     assert.equal(ADD_MENU.find((row) => row.label === "添加配方").act, "recipe");
     assert.equal(ADD_MENU.find((row) => row.label === "加图片").act, "material");
+    // 素材输入节点那两行开的是同一扇素材库，只收各自那一类（page.js 把 accept 交给装配层）
+    assert.deepEqual(ADD_MENU.filter((row) => row.act === "material").map((row) => [row.label, row.type, row.accept]),
+        [["加图片", "image", undefined], ["加视频输入", "video_in", "video"], ["加音频输入", "audio_in", "audio"]]);
 });
 
 test("运行文案齐那一行要说的字，每一条都在词表里：少一条就是卡上或提示条上露键名", () => {

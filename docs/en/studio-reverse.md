@@ -13,8 +13,8 @@ on screen, and copies it. Videos are not on this page: sampling a video into a p
 ## The path
 
 1. **Pick an image**: `从素材库选图` opens the library modal, and clicking a card drops it onto the reference slot.
-   This modal only accepts images (`accept: "image"`) — clicking a video or audio card opens the lightbox instead.
-   `换图` opens the same modal.
+   This modal only accepts images (`accept: "image"`) and opens straight on the 图片 chip; on any other chip,
+   clicking a video or audio card opens the lightbox instead. `换图` opens the same modal.
 2. **Pick the output language**: the `中文` / `英文` chips in the result header set the `language` of the next request
    (the backend takes `zh` / `en`); switching languages does not touch the run in flight.
 3. **Reverse-prompt**: the text lands in the result box piece by piece — the backend streams it token by token over

@@ -141,7 +141,8 @@ asset library both open as modals (`js/core/lib-modal.js`).
   browsing** (never the home root), and cards drag straight into the editor's first-frame / reference slots.
   Clicking a material slot — the first-/last-frame slots, the three reference grids, the grid-image drop area, the
   per-segment storyboard thumbs and the trailing empty-segment row — **opens this same modal** (each slot declares
-  the kind it takes, so a card of another kind is not picked), and local upload sits on the slot's 「本地」 corner
+  the kind it takes, so a card of another kind is not picked, and the modal opens on that kind's chip - a kind with
+  nothing in the library gets no landing), and local upload sits on the slot's 「本地」 corner
   button.
   The top bar's **Size** slider belongs to the gallery page only — it sets the thumbnail density there (the shared
   gallery setting), so the modal hides that row, its cards stay at the 150px floor (never the slider's size), and the

@@ -16,6 +16,11 @@ import { mediaKindOf } from "../../gallery-utils.js";
 
 const { $el } = window.comfyAPI.ui;
 
+/** MiniMaxH3ReferenceToVideo 三类参考的槽位上限（后端 recipes.py 的 _DIRECTOR_REF_CAPS 同一份数值）：
+ *  出视频页混收那一行与画布出片共用这一份，超限的那几张在发出去之前就说清丢的是哪一类 */
+export const MEDIA_CAPS = { image: 9, video: 3, audio: 3 };
+export const MEDIA_MAX_TOTAL = Object.values(MEDIA_CAPS).reduce((a, b) => a + b, 0);
+
 export const REF_KIND_NAMES = { image: "参考图", video: "参考视频", audio: "参考音频" };   // 取用时过 t()，随语言现读
 
 /** 方块上的画面：图是封面，视频是首帧画面（不给 controls——这枚方块点了是换素材不是播片），

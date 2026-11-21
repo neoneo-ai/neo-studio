@@ -51,6 +51,10 @@ without moving a file or creating a directory:
 - A chip opens the aggregated waterfall of exactly that kind: sorted by modification time, covers lazy-load, and
   drag-into-node, multi-select, delete and the lightbox behave exactly as they do in a directory view. The
   breadcrumb shows the chip name, back and 返回上级 follow the same browsing trail, and Esc leaves the view.
+- A library modal that takes one class of asset opens straight onto that class's chip: the canvas's 加图片 /
+  加视频输入 / 加音频输入 and a node's 换图 / 换素材, the 图片反推 / 视频反推 / 抽帧 / 声音克隆 pages, and the
+  image-edit and director asset slots. A class with nothing in the library gets no landing (the chip row itself
+  hides below two kinds); a modal that takes every media type opens where you last browsed.
 - An aggregated view returns at most 400 items at a time, and the page says so under the list when it truncates.
 
 ### Card layout

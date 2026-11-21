@@ -42,8 +42,8 @@ from .h3_video_director import (
 )
 from .h3_video_gen import _gen_video_skills, _resolve_skill_id, _seconds_to_frames
 from .image_gen import _error_from_history, _lookup, _progress_for, _reference_name, submit_graph
-from .recipes import (_DIRECTOR_REF_CAPS, add_recipe_results, is_preset_recipe, list_director_recipes,
-                      list_recipe_results, load_director_spec)
+from .recipes import (_DIRECTOR_MODES, _DIRECTOR_REF_CAPS, _README_MODE_LABELS, add_recipe_results,
+                      is_preset_recipe, list_director_recipes, list_recipe_results, load_director_spec)
 from .skill import get_skill_gen_config, load_skill_workflow
 from . import task_center
 from .util import PrefixFilter
@@ -216,17 +216,21 @@ def film_layout(film: dict, spec: dict, continuity: bool, context_frames: int) -
     return [(start, kept) for start, kept, _generated in ranges]
 
 
-def _regen_spec(spec: dict, index: int, mode, first_name, last_name, skill_id: str) -> dict:
+def _regen_spec(spec: dict, index: int, mode, first_name, last_name, skill_id: str, canvas_mode: str = "") -> dict:
     """把配方第 index 段改成「锚点单段」的 spec：mode/skill 按可用锚点定，其余字段原样保留。
 
     配方级身份参考图（identity_images）一并带下去：单段重生成走同一条身份注入通路，
     不塞 refs.images —— i2v/fl2v 模板只有单路首帧槽位，塞进去也不会生效。
+    canvas_mode 是画布上给这一段选的技能所属的生成模式（全参考生视频 = r2v）：锚点模式由成片真实帧
+    定，优先它；只有不用锚点时才盖这一段自己写的模式。
     """
     seg = dict((spec.get("segments") or [])[index])
     if mode:
         seg["mode"] = mode
         seg["ref_input"] = first_name
         seg["last_input"] = last_name
+    elif canvas_mode:
+        seg["mode"] = canvas_mode
     if skill_id:
         seg["skill_id"] = skill_id
     single = {"shared": dict(spec.get("shared") or {}), "segments": [seg]}
@@ -269,6 +273,11 @@ def _skill_label(skill_id: str) -> str:
     """覆盖提示里技能怎么写：技能自己的中文名，列表里没有（技能被删了）就照它存的那个 id 说。"""
     row = next((s for s in _gen_video_skills() if s["id"] == skill_id), None) or {}
     return str(row.get("cn_name") or row.get("name") or skill_id)
+
+
+def _mode_label(mode: str) -> str:
+    """覆盖提示里生成模式怎么写：配方 Readme 那一份中文标签（r2v = 参考生视频）。"""
+    return _README_MODE_LABELS["cn"].get(mode, mode)
 
 
 def _apply_canvas_overrides(single: dict, prompt: str, refs: dict, warnings: list) -> None:
@@ -329,13 +338,14 @@ def run_single_segment(recipe: str, index: int, anchors: str, seed: int, *, step
                        continuity: bool = True, context_frames: int = 22, preview: bool = True,
                        preview_node_id=None, record: bool = True, anchors_ready=None, film: str = "",
                        prompt: str = "", refs: dict | None = None, skill: str = "",
-                       width: int = 0, height: int = 0) -> dict:
+                       width: int = 0, height: int = 0, mode: str = "") -> dict:
     """跑配方里的第 index 段（0 起）：解析成片/锚点 → 单段 spec → 执行 →（可选）落盘并记进配方结果。
 
     film 指定用哪个成片结果取锚点（文件名或 `subfolder/文件名`；空 = 最新的成片结果）。
     anchors_ready：(mode, first_name, last_name) 已解析好时直接复用，不再解一次成片。
     prompt / refs：画布连过来的那一份（只改这一发的 spec，recipe.json 不动）。
     skill：画布上给这一段选的技能，覆盖该段自己的 skill_id（空 = 跟随配方里那一份）。
+    mode：画布上那一个技能所属的生成模式（全参考生视频 = r2v）：只在不用锚点时盖这一段自己写的模式。
     width / height：画布车尾盖的整列分辨率（空 = 按配方共享的分辨率；两端锚点那一路照旧按成片尺寸走）。
     返回 {video, filename, subfolder, seed, frames, anchors, film, warnings}。
     """
@@ -349,6 +359,9 @@ def run_single_segment(recipe: str, index: int, anchors: str, seed: int, *, step
         raise ValueError(f"段序号越界：第 {index + 1} 段（配方共 {len(segments)} 段）")
     if anchors not in ("both", "first", "none"):
         raise ValueError(f"未知锚点模式：{anchors}")
+    canvas_mode = str(mode or "").strip()
+    if canvas_mode and canvas_mode not in _DIRECTOR_MODES:
+        raise ValueError(f"未知生成模式：{canvas_mode}")
 
     film_entry = _film_entry(recipe, film) if anchors != "none" else None
     warnings = []
@@ -380,10 +393,14 @@ def run_single_segment(recipe: str, index: int, anchors: str, seed: int, *, step
     seg_skill = canvas_skill or str(segments[index].get("skill_id") or "")
     # 锚点模式要模板里带首/尾帧占位符：这一段自己的技能（含画布换的那一份）不够用时取第一个支持的
     skill_id = _pick_anchor_skill(seg_skill, need_last=(mode == "fl2v")) if mode else seg_skill
-    single = _regen_spec(spec, index, mode, first_name, last_name, skill_id)
+    single = _regen_spec(spec, index, mode, first_name, last_name, skill_id, canvas_mode)
     _apply_canvas_overrides(single, str(prompt or ""), refs, warnings)
     if canvas_skill:
         warnings.append(f"画布覆盖了这一段的技能（{_skill_label(canvas_skill)}）")
+    if canvas_mode:
+        # 锚点模式（fl2v/i2v）由成片真实帧定，画布那一份盖不过它：说清哪一份生效了，别让人猜
+        warnings.append(f"画布覆盖了这一段的生成模式（{_mode_label(canvas_mode)}）" if not mode
+                        else f"这一段按成片锚点生成（{_mode_label(mode)}），画布选的生成模式没生效")
 
     if seed is None or int(seed) < 0:
         seed = random.randint(0, 2 ** 63 - 1)   # 默认换种子：同参数同种子会得到几乎一样的结果
@@ -478,7 +495,7 @@ class NeoH3SegmentRun:
                                     record=bool(record), anchors_ready=meta.get("anchors"),
                                     film=str(film or "").strip(),
                                     prompt=str(meta.get("prompt") or ""), refs=meta.get("refs") or None,
-                                    skill=str(meta.get("skill") or ""),
+                                    skill=str(meta.get("skill") or ""), mode=str(meta.get("mode") or ""),
                                     width=int(meta.get("width") or width or 0),
                                     height=int(meta.get("height") or height or 0))
         if prompt_id and prompt_id in _RUNS:
@@ -619,6 +636,9 @@ def _run_prompt(data: dict) -> dict:
     prompt = str(data.get("prompt") or "").strip()
     refs = _canvas_refs(data.get("references"))
     skill = str(data.get("skill_id") or "").strip()
+    canvas_mode = str(data.get("mode") or "").strip()
+    if canvas_mode and canvas_mode not in _DIRECTOR_MODES:
+        raise ValueError(f"未知生成模式：{canvas_mode}")
     size = _canvas_size(data.get("width"), data.get("height"))   # 车尾盖的整列分辨率（空 = 跟配方走）
     return {
         "recipe": recipe,
@@ -627,6 +647,7 @@ def _run_prompt(data: dict) -> dict:
         "prompt": prompt,
         "refs": refs,
         "skill": skill,
+        "mode": canvas_mode,
         "width": size[0] if size else 0,
         "height": size[1] if size else 0,
         "graph": {"1": {"class_type": "NeoH3SegmentRun", "inputs": {
@@ -665,9 +686,10 @@ async def run_segment_route(request):
 
     now = time.time()
     _RUNS[prompt_id] = {"preview_node_id": data.get("node_id") or task_id}
-    if payload["prompt"] or payload["refs"] or payload["skill"] or payload["width"]:
+    if payload["prompt"] or payload["refs"] or payload["skill"] or payload["mode"] or payload["width"]:
         # 只有画布真给了覆盖才写这一份：在 ComfyUI 图里直接跑这个节点（没有这一份）用的就是配方自己那一份
         _RUNS[prompt_id].update({"prompt": payload["prompt"], "refs": payload["refs"], "skill": payload["skill"],
+                                 "mode": payload["mode"],
                                  "width": payload["width"], "height": payload["height"]})
     _SEGMENT_TASKS[task_id] = {
         "task_id": task_id, "prompt_id": prompt_id, "status": "queued",

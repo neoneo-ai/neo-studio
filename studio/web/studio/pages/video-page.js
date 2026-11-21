@@ -10,7 +10,7 @@ import { listVideoSkills } from "../../recipes.js";
 import { blockingMissingModels, createVideoModelConfigSection, getSkillGenConfig, listVideoGenModels } from "../../image-gen.js";
 import { skillDisplayName } from "../../skill.js";
 import { queueTrack } from "../../queue-panel.js";
-import { createMediaSlot } from "../../js/core/media-slot.js";
+import { createMediaSlot, MEDIA_CAPS, MEDIA_MAX_TOTAL } from "../../js/core/media-slot.js";
 import { openPresetPicker, randomPromptText, savePromptTo } from "../../js/core/preset-picker.js";
 
 export function createVideoPage({ $el, toast, go, openLibModal, closeLibModal, gateRunButton, thumbSrc, copyPickedToInput, modeGroup, groupLabels, defaultSkill }) {
@@ -19,9 +19,7 @@ export function createVideoPage({ $el, toast, go, openLibModal, closeLibModal, g
 // 版面照 ArtCraft 的 Create Video：整页是舞台，空着时正中盖一句起手提示（版式同绘画页 idle），
 // 底部浮一张胶囊 composer（素材方块 + 提示词 + 芯片行 + 生成钮）；出片后提示淡出，成片卡片进舞台滚动。
 // 分辨率档与时长档在 gen-utils 共用（画布视频节点是同一份档），这里只铺这一页的控件。
-// 参考素材那一行的三类上限（与后端 _MAX_REF 同档）：一行混收，各类各收各的，总数 = 三者之和
-const VIDEO_REF_MAX = { image: 9, video: 3, audio: 3 };
-const VIDEO_REF_TOTAL = Object.values(VIDEO_REF_MAX).reduce((a, b) => a + b, 0);
+// 参考素材那一行的三类上限在 js/core/media-slot.js（与后端 _MAX_REF 同档），画布出片共用那一份。
 const VIDEO_TERMINAL = ["succeeded", "failed", "cancelled"];
 const VIDEO_LAST_SKILL_KEY = "neo.video.skill";
 
@@ -67,7 +65,7 @@ function buildVideo(el) {
 
     const firstSlot = mediaSlot("首帧", false, 1);
     const lastSlot = mediaSlot("尾帧", false, 1);
-    const refSlot = mediaSlot("参考素材", true, VIDEO_REF_TOTAL, VIDEO_REF_MAX);
+    const refSlot = mediaSlot("参考素材", true, MEDIA_MAX_TOTAL, MEDIA_CAPS);
 
     const promptIn = $el("textarea", {
         className: "ns-video-prompt neo-gallery-gm-quick-input", rows: "2", spellcheck: "false",
