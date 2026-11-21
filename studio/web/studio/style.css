@@ -2788,6 +2788,26 @@ body {
 .ns-canvas-gen-go:disabled, .ns-canvas-gen-go:disabled:hover {
     background: var(--ns-primary-soft); border-color: var(--ns-primary); color: var(--ns-primary-fg);
 }
+/* 备注卡（node-extensions.js 那一行铺的卡）：正文框吃卡面剩下的那一块，底行一枚颜色标记落进 metadata.tone；
+   data-tone 是渲染器按 metadata 落的那一位，空值就是跟卡面同色 */
+.ns-canvas-node-note { display: flex; flex-direction: column; }
+.ns-canvas-node-note .ns-canvas-node-textarea {
+    position: relative; inset: auto; flex: 1 1 auto; min-width: 0; min-height: 0;
+    width: 100%; height: auto; padding: 10px; background: transparent; border-radius: 0;
+}
+.ns-canvas-node-note .ns-canvas-node-textarea:focus { background: transparent; box-shadow: none; }
+.ns-canvas-note-tone {
+    flex: none; width: calc(100% - 12px); margin: 0 6px 6px; padding: 3px 6px;
+    border: 1px solid var(--ns-border); border-radius: 7px;
+    background: var(--ns-panel); color: var(--ns-fg); font: 12px/1.4 "Segoe UI", system-ui, sans-serif;
+}
+.ns-canvas-note-tone:focus { border-color: var(--ns-accent); outline: none; }
+.ns-canvas-note[data-tone="warm"] .ns-canvas-node-textarea { background: color-mix(in srgb, #d99a3c 16%, transparent); }
+.ns-canvas-note[data-tone="cool"] .ns-canvas-node-textarea { background: var(--ns-primary-soft); }
+.ns-canvas-note[data-tone="alert"] .ns-canvas-node-textarea { background: color-mix(in srgb, var(--ns-danger) 18%, transparent); }
+.ns-canvas-note[data-tone="warm"] .ns-canvas-note-tone { border-color: #d99a3c; }
+.ns-canvas-note[data-tone="alert"] .ns-canvas-note-tone { border-color: var(--ns-danger); }
+
 /* 图像编辑节点的技能窗口：同一套参数面板，只留左侧那一列技能（尺寸与锚点在这条路上后端自己定） */
 .ns-canvas-edit-params { grid-template-columns: minmax(0, 1fr); }
 .ns-canvas-empty-actions { display: flex; align-items: center; gap: 8px; }

@@ -9,8 +9,9 @@ import { storyboardPreviewLines } from "../../storyboard/storyboard.js";
 /** 节点 DOM（上游 canvas-node.tsx 的 vanilla 版）：内容铺满整张，上沿外头是附加操作栏，左上角是「主图」徽标，
  *  上下左右四枚接线点、四个角上的尺寸柄。图片节点是 <img>（走 Gallery 缩略图，取不到落占位图），提示词节点是
  *  <textarea>，正文存在 metadata.content —— 图片节点上的坐标就是 Gallery 的 filename + subfolder。
- *  这一张长什么样全按 node-types.js 里那一行落：css 卡面类名、body 内容走哪个渲染器、bar 附加栏多出来的那枚 */
-export function nodeElement(node, { $el, onText, onPick, onPickPrompt, onHero, onDelete, onCopy, onToggleDisabled,
+ *  这一张长什么样全按 node-types.js 里那一行落：css 卡面类名、body 内容走哪个渲染器（仓内扩展行自带
+ *  render 时走它）、bar 附加栏多出来的那枚 */
+export function nodeElement(node, { $el, onText, onPick, onPickPrompt, onHero, onDelete, onCopy, onToggleDisabled, onMeta,
     genState, genControls, genModel, editControls, llmControls, storyboardControls, recipeMeta, carView, onCarDuration, onMediaSize }) {
     const desc = NODE_TYPES[node.type] || NODE_TYPES.text;
     // 有运行钮的那几类共用生成节点那一份运行态（running 按节点 id 记在 gen.js 里）；
@@ -24,7 +25,8 @@ export function nodeElement(node, { $el, onText, onPick, onPickPrompt, onHero, o
         dataset: { nodeId: node.id },
     });
     nodeEl.append(
-        desc.body === "image" ? nodeImage(node, $el, onMediaSize)
+        desc.render ? desc.render(node, { $el, onText, onMeta })
+            : desc.body === "image" ? nodeImage(node, $el, onMediaSize)
             : desc.body === "video" ? nodeVideo(node, $el, onMediaSize)
             : desc.body === "audio" ? nodeAudio(node, $el)
             : desc.body === "gen" ? nodeGen(node, $el, { gen: st, genControls, genModel })
@@ -349,10 +351,10 @@ function nodeAct($el, name, label, iconName, onclick, title = label) {
 
 /** 整层节点重画：拖动与缩放不走这一条（走 applyNodeGeometry），换画布、增删节点才走 */
 export function renderNodes({ nodeLayer, links, hint, nodes, selectedNodeIds, selectedConnectionId, $el, onText,
-    onPick, onPickPrompt, onHero, onDelete, onCopy, onToggleDisabled, genState, genControls, genModel, editControls,
+    onPick, onPickPrompt, onHero, onDelete, onCopy, onToggleDisabled, onMeta, genState, genControls, genModel, editControls,
     llmControls, storyboardControls, recipeMeta, carView, onCarDuration, onMediaSize }) {
     nodeLayer.replaceChildren(...nodes.map((node) => nodeElement(node, { $el, onText, onPick, onPickPrompt, onHero, onDelete, onCopy,
-        onToggleDisabled, genState, genControls, genModel, editControls, llmControls, storyboardControls, recipeMeta, carView, onCarDuration, onMediaSize })));
+        onToggleDisabled, onMeta, genState, genControls, genModel, editControls, llmControls, storyboardControls, recipeMeta, carView, onCarDuration, onMediaSize })));
     // 几何要在元素挂上世界层之后再落：nodeElement 里查不到还没挂上的元素
     for (const node of nodes) applyNodeGeometry(nodeLayer, node);
     hint.style.display = nodes.length ? "none" : "";

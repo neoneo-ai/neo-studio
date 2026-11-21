@@ -13,7 +13,9 @@ from pathlib import Path
 
 from studio import canvas
 
-NODE_TYPES_JS = Path(__file__).resolve().parents[2] / "studio" / "web" / "studio" / "pages" / "canvas" / "node-types.js"
+CANVAS_JS_DIR = Path(__file__).resolve().parents[2] / "studio" / "web" / "studio" / "pages" / "canvas"
+NODE_TYPES_JS = CANVAS_JS_DIR / "node-types.js"
+NODE_EXTENSIONS_JS = CANVAS_JS_DIR / "node-extensions.js"
 
 
 def _node(**over) -> dict:
@@ -24,9 +26,11 @@ def _node(**over) -> dict:
 
 
 def _registry_types() -> list[str]:
-    """前端注册表里的那几类（每类一行 `xxx: { title`）：后端的类型表与它是两条独立的路，
+    """前端注册表里的那几类：内置那一列每类一行 `xxx: { title`，仓内扩展点那一列每类一行 `type: "xxx"`。
     前端加一类、后端不认，保存那一轮就把面改了名"""
-    return re.findall(r"^    (\w+): \{ title", NODE_TYPES_JS.read_text(encoding="utf-8"), re.M)
+    kinds = re.findall(r"^    (\w+): \{ title", NODE_TYPES_JS.read_text(encoding="utf-8"), re.M)
+    kinds += re.findall(r'^\s+type: "(\w+)",', NODE_EXTENSIONS_JS.read_text(encoding="utf-8"), re.M)
+    return kinds
 
 
 class CanvasNodeTypeTests(unittest.TestCase):
@@ -43,6 +47,15 @@ class CanvasNodeTypeTests(unittest.TestCase):
     def test_a_type_this_build_does_not_know_lands_unchanged(self):
         """前端新加的面，旧后端也不给改名：页面自己认不出就落正文面，画布不能替它改"""
         self.assertEqual(canvas._clean_node(_node(type="audio"))["type"], "audio")
+
+    def test_the_extension_rows_land_unchanged(self):
+        """仓内扩展点那一列（备注卡）照原样落盘：画布存的正是前端写的那一个字符串与那一身 metadata"""
+        kinds = _registry_types()
+        self.assertIn("note", kinds, "扩展点那一列的类型没扫进来：扩展节点的落盘就钉不住")
+        node = canvas._clean_node(_node(type="note", metadata={"content": "先看一眼", "tone": "warm"}))
+        self.assertEqual(node["type"], "note")
+        self.assertEqual(node["metadata"], {"content": "先看一眼", "tone": "warm"})
+
 
     def test_missing_type_falls_back_to_text(self):
         for blank in (None, "", "   "):

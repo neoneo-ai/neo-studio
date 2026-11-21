@@ -225,6 +225,7 @@ export function createCanvasPage({ $el, api, toast, openMaterial, can, modeGroup
             onPick: pickInto, onPickPrompt: pickPromptInto, onHero: (node) => toggleHero(node.id), onDelete: (node) => deleteNode(node.id),
             onCopy: (node) => duplicateIds([node.id]),
             onToggleDisabled: (node) => setNodeMetadata(node.id, { disabled: node.metadata?.disabled !== true }),
+            onMeta: (node, patch) => setNodeMetadata(node.id, patch),
             genControls: (node) => gen?.controls(node), genState: (node) => gen?.stateOf(node),
             genModel: (node) => gen?.modelText(node),
             editControls: (node) => gen?.editControls(node),

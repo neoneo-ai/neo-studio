@@ -23,6 +23,8 @@ const docsZh = fs.readFileSync(path.join(docsDir, "canvas.md"), "utf8");
 const docsEn = fs.readFileSync(path.join(docsDir, "en", "canvas.md"), "utf8");
 
 const types = Object.keys(NODE_TYPES);
+const RENDERERS = ["image", "text", "video", "audio", "gen", "edit", "llm", "car", "storyboard"];
+
 const inWordTable = (text) => i18nSource.includes(`"${text}":`);
 const hasRow = (doc, name) => doc.split("\n").some((line) => line.trimStart().startsWith(`| ${name} `));
 
@@ -31,13 +33,36 @@ test("描述符形状：每一类齐标题与默认框，卡面与运行文案�
     for (const [type, d] of Object.entries(NODE_TYPES)) {
         assert.ok(d.title, `${type} 没有标题：建出来的节点没有名字`);
         assert.ok(d.w > 0 && d.h > 0, `${type} 的默认框不在正数里：placeGrid 的格距会算成 0`);
-        assert.ok(["image", "text", "video", "audio", "gen", "edit", "llm", "car", "storyboard"].includes(d.body),
-            `${type} 的 body 不在 nodes.js 认的那几个渲染器里：这一类铺出来是空的`);
+        assert.ok(RENDERERS.includes(d.body) || typeof d.render === "function",
+            `${type} 的卡面既不在 nodes.js 认的那几个渲染器里、也没有自带 render：这一类铺出来是空的`);
         if (d.run) assert.ok(RUN_LABELS[d.run], `${type} 说 run=${d.run}，RUN_LABELS 里没有那一行`);
         if (d.bar) assert.ok(["hero", "prompt", "media"].includes(d.bar), `${type} 的 bar 不是附加栏认的那三枚`);
         assert.ok(!d.add || ICON_NAMES.includes(d.add.icon), `${type} 的菜单图标 ${d.add?.icon} 画不出`);
     }
 });
+
+test("仓内扩展点：扩展行与内置列并成同一张表，形状、撞名与顺序都在这一发钉住", () => {
+    const extSource = fs.readFileSync(path.join(canvasDir, "node-extensions.js"), "utf8");
+    const baseSource = fs.readFileSync(path.join(canvasDir, "node-types.js"), "utf8");
+    const baseKeys = [...baseSource.slice(baseSource.indexOf("const BASE_TYPES"))
+        .matchAll(/^    (\w+): \{ title/gm)].map((m) => m[1]);
+    const extKeys = [...extSource.matchAll(/^\s+type: "(\w+)",/gm)].map((m) => m[1]);
+    assert.ok(extKeys.length >= 1, "扩展点那一列是空的：并表这一条路没人走过");
+    for (const key of extKeys) {
+        // canvas.py 逐类原样落盘认的就是这一个字符串；带空格与点号的键在那一头会被截
+        assert.match(key, /^\w+$/, `扩展行的 type「${key}」不是裸词`);
+        assert.ok(!baseKeys.includes(key), `扩展行 ${key} 与内置那一列撞名：这一行被丢掉，铺不出来`);
+    }
+    // 菜单与规格都跟着这一列的顺序走：内置在前、扩展排在后头
+    assert.deepEqual(types, [...baseKeys, ...extKeys], "并表的顺序不是内置在前、扩展在后：菜单那一列的顺序跟着动了");
+    for (const type of extKeys) {
+        const d = NODE_TYPES[type];
+        assert.ok(d.render, `扩展行 ${type} 没有自带 render：nodes.js 认不到它的卡面`);
+        // 跑一条链要同时给 RUN_LABELS 那一行与能力位，扩展点先不接这一发
+        assert.ok(!d.run, `扩展行 ${type} 写了 run ${d.run}：链、闸门与能力位要一并给，不能只给一半`);
+    }
+});
+
 
 test("规格与落盘同源：store 建节点用的就是这一份，旧画布上的未知类型照旧回落并留着 metadata", () => {
     for (const [type, d] of Object.entries(NODE_TYPES)) {
@@ -71,6 +96,8 @@ test("加节点菜单与页面同源：顺序、图标与三大类落点都在�
     }
     for (const type of types) {
         const label = NODE_TYPES[type].add.label;
+        assert.ok(inWordTable(label), `菜单名 ${label} 没进 i18n 词表：英文界面要露中文`);
+
         // 菜单那一行不许在页面里现写一遍名字（「添加配方」在配方弹窗的标题里还有正当的一处）
         assert.ok(!new RegExp(`mk\\(\\s*t\\("${label}"`).test(pageSource), `菜单名 ${label} 又在页面里现写了一遍`);
     }

@@ -55,7 +55,8 @@
   各加一行、画布用例加一段——其余全从表里读。这张表同样是编译期常量：没有运行期注册，也不持有节点运行态（`running`
   在 `gen-state.js`、画布 state 在 `page.js`）。表里的 `type` 就是画布落盘 JSON 与 `studio/canvas.py` 里那一个字符串，
   **不进 ComfyUI 的 `NODE_CLASS_MAPPINGS`**——画布节点是这一页自己的东西，内核不认识它。手势层认的控件面是
-  `interactions.js` 里一份共享清单，按类型拆会让卡面几乎按不到，不进这张表。注册表 ↔ `store.js` 规格 ↔ 加节点菜单（含每一行的三大类落点与 `ADD_GROUPS` 标题词条）↔
+  `interactions.js` 里一份共享清单（按元素名与控件类名认，扩展卡自带的控件照元素名落进来，不各写一份清单），
+  按类型拆会让卡面几乎按不到，不进这张表。注册表 ↔ `store.js` 规格 ↔ 加节点菜单（含每一行的三大类落点与 `ADD_GROUPS` 标题词条）↔
   `RUN_LABELS` 的 i18n 词条（含钮上的离线提示与闸门话术）↔ `RUN_LABELS.cap` 在能力表里 ↔ `RUN_LABELS.out` 与写回同源
   ↔ 中英文档行这一条由 `studio/tests/js/canvas-node-types.test.mjs` 钉住；落盘 JSON 里的 `type` 后端照旧认
   （`studio/canvas.py` 不认的类型才回落），由 `studio/tests/test_canvas_node_types.py` 按注册表逐类钉住。

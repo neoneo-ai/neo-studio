@@ -13,20 +13,22 @@ const NATIVE_MEDIA_BAR_PX = 36;   // 浏览器在 video 上自绘的那一条播
 const CLICK_GATE = 3;   // 空白起手拖过这一截才算框选 / 平移，没拖过就是点空白（点空白要收走选中）
 const CLIP_NODE_KEYS = new Set(["c", "v", "x", "a"]);   // 节点那四键：光标在正文里时按了要说一句怎么走回节点
 const NEO_GALLERY_MIME = "application/x-neo-gallery";
-// 光标坐在画布的哪一格可写里：节点上的正文框与数框，加上浮出栏里那两块（参数浮层与选图菜单住在
+// 光标坐在画布的哪一格可写里：节点上的正文框、数框与下拉，加上浮出栏里那两块（参数浮层与选图菜单住在
 // .ns-canvas-gen-menus 那一层，不在节点里）。这一位决定「这一按要把焦点交出去」与「键盘那一套要让给浏览器」：
 // 拦下 pointerdown 连着把焦点交给下一个元素那一发一起拦了，blur 不来就出不了编辑；数框里按 Backspace
 // 删的是那一格里的字，不是选中的节点
-const CARET_SELECTOR = ".ns-canvas-node textarea, .ns-canvas-node input, .ns-canvas-gen-menus textarea, .ns-canvas-gen-menus input";
+const CARET_SELECTOR = ".ns-canvas-node textarea, .ns-canvas-node input, .ns-canvas-node select, "
+    + ".ns-canvas-gen-menus textarea, .ns-canvas-gen-menus input, .ns-canvas-gen-menus select";
 const CARET_IN_BODY = () => Boolean(document.activeElement?.closest?.(CARET_SELECTOR));
 // 一条连线是两个 path（宽命中描边 + 可见细线），点哪一条都算点这条线
 const LINE_SELECTOR = ".ns-canvas-line, .ns-canvas-line-hit";
-// 节点上真正吃这一按的控件：浮出栏的动作钮与选图钮、生成卡上的胶囊 / 按钮 / 段钮 / 种子输入、车厢顶行那一枚时长框、视频那一段片 ——
-// 起手交浏览器发 click，按下去是选中这张节点。整列控件行（.ns-canvas-gen-ctl）认成控件的代价是卡上几乎按不到；
-// 浮出栏首那枚固定抓手（.ns-canvas-node-drag）是 span，不在这一列里，按下就是拖节点
+// 节点上真正吃这一按的控件：浮出栏的动作钮与选图钮、生成卡上的胶囊 / 按钮 / 段钮 / 种子输入、车厢顶行那一枚时长框、
+// 卡上的下拉、视频那一段片 —— 起手交浏览器发 click，按下去是选中这张节点。这一列认的是元素名与控件类名共享的一份
+// 清单（仓内扩展卡自带的控件照元素名落进来，不各写一份）；整列控件行（.ns-canvas-gen-ctl）认成控件的代价是卡上
+// 几乎按不到；浮出栏首那枚固定抓手（.ns-canvas-node-drag）是 span，不在这一列里，按下就是拖节点
 const NODE_CTL_SELECTOR = ".ns-canvas-node-act, .ns-canvas-node-pick, .ns-canvas-node-video-el, "
     + ".ns-canvas-node-audio-el, .neo-gallery-gm-chip-btn, .ns-canvas-gen-btn, .ns-canvas-gen-ctl input, "
-    + ".ns-canvas-car-dur, .ns-canvas-storyboard-sec";
+    + ".ns-canvas-car-dur, .ns-canvas-storyboard-sec, .ns-canvas-node select";
 
 /** 把手势挂到舞台上：stage 是那一页的舞台元素，view 交出要画手势层（world 上画框选框），
  *  host 是页面交下来的读写面（见 createCanvasPage 里那一份 host）。 */
@@ -39,9 +41,9 @@ export function attachCanvasInteractions({ stage, view, host }) {
 
     // 滚轮缩放锚在指针上（passive: false 才拦得住 preventDefault，否则浏览器连页面一起滚）
     stage.addEventListener("wheel", (e) => {
-        if (!host.isPageActive() || e.target.closest(".ns-canvas-bar, .ns-canvas-gen-ctl input, .ns-canvas-car-dur, "
-            + ".ns-canvas-storyboard-sec, .ns-canvas-node-video-el, .ns-canvas-node-audio-el, .ns-canvas-car-text, "
-            + ".ns-canvas-storyboard-text")) return;
+        if (!host.isPageActive() || e.target.closest(".ns-canvas-bar, .ns-canvas-node textarea, .ns-canvas-node input, "
+            + ".ns-canvas-node select, .ns-canvas-node video, .ns-canvas-node audio, .ns-canvas-gen-menus textarea, "
+            + ".ns-canvas-gen-menus input, .ns-canvas-gen-menus select")) return;
         e.preventDefault();
         const rect = stage.getBoundingClientRect();
         host.setViewport(zoomViewportAt(state().viewport, e.clientX - rect.left, e.clientY - rect.top, e.deltaY));

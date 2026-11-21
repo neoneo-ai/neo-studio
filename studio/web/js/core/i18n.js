@@ -226,6 +226,16 @@ const EN = {
     // 文字故事板节点（studio/storyboard/ + gen.js 的 runStoryboard）：一段话 → 每一段的提示词，写进连过来的车厢
     "文字故事板": "Text Storyboard",
     "加文字故事板节点": "Add text-storyboard node",
+    // 备注卡（studio/pages/canvas/node-extensions.js 的仓内扩展行）
+    "备注卡": "Note card",
+    "加备注卡": "Add note card",
+    "备注卡的颜色": "Note colour",
+    "写一句备注：这一张不跑出片": "Jot a note - this card runs nothing",
+    "默认色": "Default colour",
+    "暖": "Warm",
+    "冷": "Cool",
+    "醒目": "Alert",
+
     "生成段提示词": "Generate segment prompts",
     "把这一段话生成每一段的提示词，写进连过来的车厢":
         "Turn this text into a prompt for every segment and write them into the wired-in cars",

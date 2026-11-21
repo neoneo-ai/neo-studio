@@ -1,5 +1,6 @@
 // 画布上的节点类型注册表：每一类节点在这张页面上长什么样、跑起来说什么话、跑完把结果写进哪一类节点，
-// 全在这张静态表里一份。新增一类节点只要动这五处：这张表加一行、对应族模块加一条请求构造（gen-image.js /
+// 全在这张静态表里一份。新增一类节点只要动这五处：这张表加一行（落在内置那一列之外的仓内节点加在
+// node-extensions.js 那一列，行形状同一份，由它并进这张表）、对应族模块加一条请求构造（gen-image.js /
 // gen-video.js / gen-recipe.js / gen-llm.js）、style.css 加一段卡面、docs/canvas.md 与 docs/en/canvas.md
 // 各加一行、canvas 用例加一段 —— 卡面分支、附加栏、闸门、运行文案、结果落点、加节点菜单、手势层认的那一片
 // 控件全从这张表读，不再各写一份。
@@ -8,8 +9,9 @@
 // 表里的 type 就是画布落盘 JSON 与 studio/canvas.py 里那一个字符串（canvas._KNOWN_TYPES 与它同口径），
 // 不进 ComfyUI 的 NODE_CLASS_MAPPINGS：画布节点是这一页自己的东西，内核不认识它。
 import { t } from "../../../js/core/i18n.js";
+import { NODE_EXTENSIONS } from "./node-extensions.js";
 
-/** @typedef {"image" | "text" | "gen" | "video" | "video_in" | "audio_in" | "recipe" | "edit" | "enhance" | "reverse" | "storyboard"} CanvasNodeType */
+/** @typedef {"image" | "text" | "gen" | "video" | "video_in" | "audio_in" | "recipe" | "edit" | "enhance" | "reverse" | "storyboard" | "note"} CanvasNodeType */
 
 /** 视频档的生成节点（出片卡）的名字：菜单「加视频生成节点」与「添加配方」铺的车尾共用这一份（见 page.js 的 ADD_SEEDS 与 layTrain） */
 export const VIDEO_GEN_TITLE = "视频生成";
@@ -19,8 +21,9 @@ export const VIDEO_GEN_TITLE = "视频生成";
  *  run 是 RUN_LABELS 里那一发说的话（这一发要的能力位与缺了说什么话都在那一行里）；add 是「加节点」菜单那一行；
  *  doc 是这一类在 docs/canvas.md 与 docs/en/canvas.md 节点表里的那几行名字（两份都要有，缺一边的用例就红）。
  *  bodyText 是「这张卡上带一块正文框，双击进编辑」—— 手势层照这一位认，不在页面里写类型名单。
- *  手势层认的控件面不在这里：那是共享的一份清单，按类型拆会让卡面几乎按不到（见 interactions.js） */
-export const NODE_TYPES = {
+ *  手势层认的控件面不在这里：那是共享的一份清单，按类型拆会让卡面几乎按不到（见 interactions.js）。
+ *  render 只有仓内扩展行用得上（node-extensions.js）：内置这一列的卡面都走 body 那一个渲染器名 */
+const BASE_TYPES = {
     // 默认框是竖友好那一档（340×360）：节点按素材自己的比例落位且永不超出默认框（store.js 的 fitImageSize），
     // 框是横的那一档时 9:16 的竖图只能落到 135×240 —— 竖屏素材永远比横屏小一圈，素材页拖进来就是这一发
     image: { title: "图片", w: 340, h: 360, css: "ns-canvas-node-image", body: "image", bar: "hero",
@@ -68,6 +71,15 @@ export const NODE_TYPES = {
         doc: { zh: ["车厢"], en: ["车厢"] },
         add: { label: "添加配方", icon: "wand", prime: "primeRecipes", act: "recipe", group: "video" } },
 };
+
+/** 仓内扩展点并进同一张表：node-extensions.js 那一列与上面这一列同一形状，两条都是静态 import 的常量，
+ *  没有运行期注册。内置那一列排在前面，撞名的扩展行在这一发被丢掉（canvas-node-types 用例把撞名钉红），
+ *  扩展行因此永不顶掉一类内置节点。「加节点」菜单与规格跟着这一列的顺序走。
+ *  扩展行的卡面由行自带的 render 给出，nodes.js 在内置渲染器之前认它。 */
+export const NODE_TYPES = Object.fromEntries([
+    ...Object.entries(BASE_TYPES),
+    ...NODE_EXTENSIONS.filter((d) => !BASE_TYPES[d.type]).map((d) => [d.type, d]),
+]);
 
 /** store.js 建节点与读盘兜底用的那一份规格（形状不变，值从注册表来） */
 export const NODE_SPECS = Object.fromEntries(Object.entries(NODE_TYPES)

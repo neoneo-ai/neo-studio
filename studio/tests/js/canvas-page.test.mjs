@@ -704,15 +704,50 @@ describe("canvas-page 页面", () => {
         under[head].push(child.getAttribute("aria-label"));
       }
       assert.deepEqual(Object.keys(under), ["文字", "图像", "视频"], "三大类的标题与顺序");
-      assert.deepEqual(under["文字"], ["加提示词", "加文本增强节点", "加文字故事板节点"]);
+      assert.deepEqual(under["文字"], ["加提示词", "加文本增强节点", "加文字故事板节点", "加备注卡"]);
       assert.deepEqual(under["图像"], ["加图片", "加图像生成节点", "加图像编辑节点", "加图片反推节点"]);
       assert.deepEqual(under["视频"], ["加视频生成节点", "加视频输入", "加音频输入", "添加配方"]);
       // 标题行是一行小字，不是可按的钮：菜单里可按的行就是注册表那一列的行数
-      assert.equal([...menu.children].filter((el) => el.classList.contains("ns-canvas-add-item")).length, 11);
+      assert.equal([...menu.children].filter((el) => el.classList.contains("ns-canvas-add-item")).length, 12);
       for (const el of menu.querySelectorAll(".ns-canvas-add-group")) {
         assert.equal(el.tagName, "DIV", `标题行「${el.textContent}」不可按`);
       }
     });
+    test("备注卡（仓内扩展行的第一类）：正文与颜色标记都落进 metadata，卡上的控件按得中", async () => {
+      const { page, view } = await makePage();
+      click(view.button("加备注卡"));
+      const card = view.nodeLayer.querySelector(".ns-canvas-node-note");
+      assert.ok(card, "菜单里那一行要铺出一张备注卡");
+      assert.equal(parseFloat(card.style.width), 240, "默认框按扩展行那一档");
+      const ta = card.querySelector("textarea");
+      const pick = card.querySelector("select");
+      assert.ok(ta && !ta.hasAttribute("readonly"), "正文框要能直接打字");
+      assert.equal(pick.options.length, 4, "颜色标记四档：默认色 / 暖 / 冷 / 醒目");
+      ta.value = "拍 3 号镜头之前先看一眼";
+      fire(ta, "input");
+      pick.value = "warm";
+      fire(pick, "change");
+      await settle();
+      const [note] = page.current().nodes;
+      assert.equal(note.type, "note", "落盘的 type 就是扩展行那一个字符串");
+      assert.equal(note.metadata.content, "拍 3 号镜头之前先看一眼");
+      assert.equal(note.metadata.tone, "warm");
+      const live = view.nodeEl(note.id).querySelector("select");
+      assert.equal(live.value, "warm", "重画完要认得出这一张标的是暖");
+      assert.equal(view.save.textContent, "未保存", "改了正文与颜色要标脏");
+      // 手势层那一条：卡上的下拉起手交浏览器（那一发拦下来就没有展开），滚轮在卡上的控件上不缩放画面
+      const press = new window.PointerEvent("pointerdown",
+        { bubbles: true, cancelable: true, button: 0, clientX: CENTER.x, clientY: CENTER.y });
+      live.dispatchEvent(press);
+      assert.ok(!press.defaultPrevented, "下拉那一发不许拦：拦了 pointerdown 就没有展开");
+      fire(window, "pointerup", {});
+      fire(live, "wheel", { clientX: CENTER.x, clientY: CENTER.y, deltaY: -100 });
+      assert.equal(page.current().viewport.k, 1, "滚轮落在卡上的下拉上不缩放画面");
+      fire(view.nodeEl(note.id).querySelector("textarea"), "wheel", { clientX: CENTER.x, clientY: CENTER.y, deltaY: -100 });
+      assert.equal(page.current().viewport.k, 1, "滚轮落在正文框上也不缩放画面");
+    });
+
+
 
     test("加一个提示词节点：正文框可直接打字，有节点之后提示让位", async () => {
       const { view } = await makePage();
