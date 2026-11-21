@@ -1,7 +1,7 @@
-// 画布节点类型注册表（studio/pages/canvas/node-types.js）的跨文件契约。每一类节点要在六处都兑现——
+// 画布节点类型注册表（studio/pages/canvas/node-types.js）的跨文件契约。每一类节点要在七处都兑现——
 // 规格（store.js 建节点与读盘兜底）、卡面（nodes.js 的 body/css）、附加栏、加节点菜单（page.js 照 ADD_MENU 铺）、
-// 运行文案（RUN_LABELS 的每条字都在 i18n 词表里）、中英文档的节点表行。以前这六处分头写，漏一处就是
-// 「菜单里有、卡上没有」或「中文文档有行、英文文档没有」。这里把六处钉在同一张表上。
+// 运行文案（RUN_LABELS 的每条字都在 i18n 词表里）、每一发的结果落点、中英文档的节点表行。以前这七处分头写，
+// 漏一处就是「菜单里有、卡上没有」或「中文文档有行、英文文档没有」。这里把七处钉在同一张表上。
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -100,6 +100,18 @@ test("能力位就是桌面端能力表里那一个名字：表里写错一名�
         if (!labels.cap) continue;
         assert.ok(capsSource.includes(`"${labels.cap}"`),
             `${run} 的能力位 ${labels.cap} 不在 app/studio_caps.py 的能力名里`);
+    }
+});
+
+test("每一发都写明结果写进哪一类节点：写回读注册表这一位，链模块里不各写一份类型名", () => {
+    assert.deepEqual(Object.fromEntries(Object.entries(RUN_LABELS).map(([run, l]) => [run, l.out])),
+        { image: "image", video: "video", chain: "video", edit: "image", enhance: "prompt",
+            reverse: "prompt", storyboard: "prompt", car: "video" },
+        "落点这一位与画布写回的落点集合对不上：applyResult 认不到落点就是结果铺不出去");
+    for (const f of ["gen-state.js", "gen-video.js"]) {
+        const src = fs.readFileSync(path.join(canvasDir, f), "utf8");
+        assert.ok(/applyResult\([^)]*labels\.out\)/.test(src), `${f} 写回没读注册表那一位落点`);
+        assert.ok(!/applyResult\([^)]*"(image|video)"\)/.test(src), `${f} 还写死着落点的类型名`);
     }
 });
 

@@ -1,9 +1,10 @@
-// 画布上的节点类型注册表：每一类节点在这张页面上长什么样、跑起来说什么话，全在这张静态表里一份。
-// 新增一类节点只要动这五处：这张表加一行、gen.js 加一条请求构造、style.css 加一段卡面、docs/canvas.md
-// 与 docs/en/canvas.md 各加一行、canvas 用例加一段 —— 卡面分支、附加栏、闸门、运行文案、加节点菜单、
-// 手势层认的那一片控件全从这张表读，不再各写一份。
-// 表里没有运行期注册，也不持有页面状态：它是纯数据，只放类型自己的取值。节点运行态在 gen.js（running /
-// llmRuns / chains），画布 state 在 page.js。
+// 画布上的节点类型注册表：每一类节点在这张页面上长什么样、跑起来说什么话、跑完把结果写进哪一类节点，
+// 全在这张静态表里一份。新增一类节点只要动这五处：这张表加一行、对应族模块加一条请求构造（gen-image.js /
+// gen-video.js / gen-recipe.js / gen-llm.js）、style.css 加一段卡面、docs/canvas.md 与 docs/en/canvas.md
+// 各加一行、canvas 用例加一段 —— 卡面分支、附加栏、闸门、运行文案、结果落点、加节点菜单、手势层认的那一片
+// 控件全从这张表读，不再各写一份。
+// 表里没有运行期注册，也不持有页面状态：它是纯数据，只放类型自己的取值。节点运行态在 gen-state.js（running /
+// detached / timers / chains / llmRuns），画布 state 在 page.js。
 // 表里的 type 就是画布落盘 JSON 与 studio/canvas.py 里那一个字符串（canvas._KNOWN_TYPES 与它同口径），
 // 不进 ComfyUI 的 NODE_CLASS_MAPPINGS：画布节点是这一页自己的东西，内核不认识它。
 import { t } from "../../../js/core/i18n.js";
@@ -82,41 +83,51 @@ export const ADD_MENU = Object.entries(NODE_TYPES)
 /** 每一发要的能力位（名字就是 app/studio_caps.py 的 FEATURE_ROUTES 里那一个）与能力位缺了要说的话：
  *  出图与出片明说要执行队列（拉起它是顶栏那一位的事，页面不替用户拉），LLM 两条链只说这一项功能需要
  *  ComfyUI —— 两条链在桌面端自服表上，离线窗口答得出，要的是本机配好 LLM */
+/** 每一发的结果写进哪一类节点（out）：出图与编辑落图片节点，出片与串联与车厢落视频节点，增强 / 反推 /
+ *  故事板落提示词节点 —— 落图与落片的写回都读这一位，链模块里不再各写一份类型名 */
 export const RUN_LABELS = {
     image: { btn: "出图", tip: "提交这一发生图任务", queued: "排队中", running: "生成中",
         progress: "生成中 {done}/{total}", fail: "出图失败", failToast: "出图失败", doneN: "已出图 {n} 张",
         cancelled: "已取消出图", fell: "图已存进 Output 目录", offline: "出图需要 ComfyUI 执行队列",
+        out: "image",
         cap: "image_gen", gateNote: "出图需要 ComfyUI 执行队列：点顶栏 ComfyUI 胶囊启动，好了再按一次" },
     // 生成节点的视频档：状态行与生图共用同一份字（状态机与 style.css 都共用这一套），只有钮与提示条是出片那一份
     video: { btn: "生成视频", tip: "提交这一发生成视频任务", queued: "排队中", running: "生成中",
         progress: "生成中 {done}/{total}", fail: "出图失败", failToast: "出片失败", done: "已出片",
         cancelled: "已取消出片", fell: "视频已存进 Output 目录", offline: "生成视频需要 ComfyUI 执行队列",
+        out: "video",
         cap: "simple_video", gateNote: "出片需要 ComfyUI 执行队列：点顶栏 ComfyUI 胶囊启动，好了再按一次" },
     // 串联的车尾：那一行数的是链上的段数不是某一发的步数；出片是按链序把启用的那几段依次入队（跑的是分段那条链）
     chain: { btn: "生成视频", tip: "按链序跑启用的那几段", queued: "排队中", running: "生成中",
         progress: "串联出片 {done}/{total}", fail: "出片失败", failToast: "出片失败", done: "已出片",
         cancelled: "已取消出片", fell: "视频已存进 Output 目录", offline: "生成视频需要 ComfyUI 执行队列",
+        out: "video",
         cap: "segment", gateNote: "出片需要 ComfyUI 执行队列：点顶栏 ComfyUI 胶囊启动，好了再按一次" },
     edit: { btn: "出图", tip: "提交这一发图像编辑任务", queued: "排队中", running: "编辑中",
         progress: "编辑中 {done}/{total}", fail: "出图失败", failToast: "出图失败", doneN: "已出图 {n} 张",
         cancelled: "已取消出图", fell: "图已存进 Output 目录", offline: "出图需要 ComfyUI 执行队列",
+        out: "image",
         cap: "image_gen", gateNote: "出图需要 ComfyUI 执行队列：点顶栏 ComfyUI 胶囊启动，好了再按一次" },
     enhance: { kind: "enhance", btn: "增强", tip: "把连过来的正文交给 LLM 重写", running: "增强中",
         chars: "增强中 · {n} 字", fail: "增强失败", failToast: "增强失败", done: "已增强出提示词", cancelled: "已取消增强",
+        out: "prompt",
         cap: "prompt_enhance", gateNote: "该功能需要 ComfyUI：点顶栏 ComfyUI 胶囊启动，好了再按一次" },
     reverse: { kind: "reverse", btn: "反推", tip: "把连过来的那张图写成一段提示词", running: "反推中",
         chars: "反推中 · {n} 字", fail: "反推失败", failToast: "反推失败", done: "已反推出提示词", cancelled: "已取消反推",
+        out: "prompt",
         cap: "prompt_reverse", gateNote: "该功能需要 ComfyUI：点顶栏 ComfyUI 胶囊启动，好了再按一次" },
     // 文字故事板：这一发走后端既有的导演段生成链（在桌面端自服的能力表上，离线窗口答得出，要的是本机配好
     // LLM），一条请求直接开跑没有排队档 —— 数的是字数，成文那一句数的是写进了几厢
     storyboard: { kind: "storyboard", btn: "生成段提示词", tip: "把这一段话生成每一段的提示词，写进连过来的车厢",
         running: "生成中", chars: "生成中 · {n} 字", fail: "生成失败", failToast: "生成失败",
         done: "已写进 {n} 厢", cancelled: "已取消生成",
+        out: "prompt",
         cap: "storyboard", gateNote: "该功能需要 ComfyUI：点顶栏 ComfyUI 胶囊启动，好了再按一次" },
     // 车厢：卡上那一行只说这一段跑到哪了（整列共用的段数与参数在车尾），车厢自己不跑出片，收摊的是它那一发的轮询
     // —— 车厢卡上没有运行钮，这一行没有钮字，也没有要的能力位（出片那一位在车尾那一发身上）
     car: { queued: "排队中", running: "生成中", progress: "生成中 {done}/{total}", fail: "出片失败",
-        failToast: "出片失败", done: "已出片", cancelled: "已取消出片", fell: "视频已存进 Output 目录" },
+        failToast: "出片失败", done: "已出片", cancelled: "已取消出片", fell: "视频已存进 Output 目录",
+        out: "video" },
 };
 
 /** 这一张节点跑哪一条链：生成节点看它自己的档 —— 串联的车尾按链序跑，视频档走出片；其余类型看表里那一行 */

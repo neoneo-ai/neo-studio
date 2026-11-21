@@ -66,7 +66,7 @@ export function createCanvasVideo({ $el, host, toast, api, canFeature, modeGroup
             host.paintNodes();
             if (fell || !host.hasNode(nodeId)) { toast(t(labels.fell), "success"); return; }
             host.applyResult(nodeId, snap.filename
-                ? [{ filename: snap.filename, subfolder: snap.subfolder || "" }] : [], "video");
+                ? [{ filename: snap.filename, subfolder: snap.subfolder || "" }] : [], labels.out);
             toast(t(labels.done), "success");
             return;
         }

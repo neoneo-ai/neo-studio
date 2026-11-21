@@ -45,7 +45,7 @@ export function createCanvasState({ host, toast }) {
             host.paintNodes();
             // 切画布时脱手的那一发、以及节点已被删掉的：图就在 Output 目录里，不往现在这张画布上写
             if (fell || !host.hasNode(nodeId)) { toast(t(labels.fell), "success"); return; }
-            host.applyResult(nodeId, snap.images || []);
+            host.applyResult(nodeId, snap.images || [], labels.out);
             toast(tf(labels.doneN, { n: (snap.images || []).length }), "success");
             return;
         }

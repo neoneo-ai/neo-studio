@@ -47,16 +47,25 @@
 - 画布页上每一类节点有一份描述符：`studio/web/studio/pages/canvas/node-types.js`。一行说清标题与默认框、卡面类名与
   走哪个渲染器、附加栏多出来的那枚、「加节点」菜单那一行，以及它在中英文档节点表里的那几行名字；那一发在卡上与提示条
   里说的话在 `RUN_LABELS` 同一索引的那一行里，连它要的能力位（`cap`，名字就是 `app/studio_caps.py` 里那一个）与缺了要
-  说的话（`gateNote`）都在那一行——闸门 `gateOf` 按节点自己那一发查，调用方不传能力位名字。`store.js` 的 `NODE_SPECS`、
-  `nodes.js` 的卡面与附加栏、`page.js` 的加节点菜单、`gen.js` 的闸门与运行文案全从这张表读。加一类节点只动六处：这张表
-  加一行、`gen.js` 加一条请求构造、`style.css` 加一段卡面、`docs/canvas.md` 与 `docs/en/canvas.md` 各加一行、画布用例
-  加一段——其余全从表里读。这张表同样是编译期常量：没有运行期注册，也不持有节点运行态（`running` 在 `gen.js`、画布
-  state 在 `page.js`）。表里的 `type` 就是画布落盘 JSON 与 `studio/canvas.py` 里那一个字符串，**不进 ComfyUI 的
-  `NODE_CLASS_MAPPINGS`**——画布节点是这一页自己的东西，内核不认识它。手势层认的控件面是 `interactions.js` 里一份
-  共享清单，按类型拆会让卡面几乎按不到，不进这张表。注册表 ↔ `store.js` 规格 ↔ 加节点菜单 ↔ `RUN_LABELS` 的 i18n
-  词条（含钮上的离线提示与闸门话术）↔ `RUN_LABELS.cap` 在能力表里 ↔ 中英文档行这一条由
-  `studio/tests/js/canvas-node-types.test.mjs` 钉住；落盘 JSON 里的 `type` 后端照旧认（`studio/canvas.py` 不认的类型才
-  回落），由 `studio/tests/test_canvas_node_types.py` 按注册表逐类钉住。
+  说的话（`gateNote`）、跑完把结果写进哪一类节点（`out`：图片节点 / 视频节点 / 提示词节点）都在那一行——闸门 `gateOf`
+  按节点自己那一发查，调用方不传能力位名字；落图与落片的写回读 `out`，链模块里不各写一份类型名。`store.js` 的
+  `NODE_SPECS`、`nodes.js` 的卡面与附加栏、`page.js` 的加节点菜单、`gen.js` 的闸门与运行文案全从这张表读。加一类节点
+  只动六处：这张表加一行、对应族模块加一条请求构造、`style.css` 加一段卡面、`docs/canvas.md` 与 `docs/en/canvas.md`
+  各加一行、画布用例加一段——其余全从表里读。这张表同样是编译期常量：没有运行期注册，也不持有节点运行态（`running`
+  在 `gen-state.js`、画布 state 在 `page.js`）。表里的 `type` 就是画布落盘 JSON 与 `studio/canvas.py` 里那一个字符串，
+  **不进 ComfyUI 的 `NODE_CLASS_MAPPINGS`**——画布节点是这一页自己的东西，内核不认识它。手势层认的控件面是
+  `interactions.js` 里一份共享清单，按类型拆会让卡面几乎按不到，不进这张表。注册表 ↔ `store.js` 规格 ↔ 加节点菜单 ↔
+  `RUN_LABELS` 的 i18n 词条（含钮上的离线提示与闸门话术）↔ `RUN_LABELS.cap` 在能力表里 ↔ `RUN_LABELS.out` 与写回同源
+  ↔ 中英文档行这一条由 `studio/tests/js/canvas-node-types.test.mjs` 钉住；落盘 JSON 里的 `type` 后端照旧认
+  （`studio/canvas.py` 不认的类型才回落），由 `studio/tests/test_canvas_node_types.py` 按注册表逐类钉住。
+- 画布的生成层按模型依赖分层，装配与分发在 `canvas/gen.js`：共享运行态在 `gen-state.js`（`running` / `detached` /
+  `timers` / `chains` / `llmRuns` 与进度写回、脱手），只读清单在 `gen-catalog.js`（生图 / 增强 / 生视频技能、配方、
+  技能 config、模型清单），卡面控件基座在 `gen-controls.js`（运行钮、胶囊、共享的技能 + 自定参数胶囊、主模型摘要）。
+  四条链按族分文件：`gen-image.js`（出图 / 编辑）、`gen-video.js`（简单视频链与每一段的轮询）、`gen-recipe.js`
+  （串联的车尾与车厢、配方列表读法、段秒数写回）、`gen-llm.js`（增强 / 反推 / 故事板）。族模块只吃装配层交下来的
+  ctx（`$el`、`toast`、`api`、`canFeature`、`host`、`modeGroup`、`groupLabels` 与 `runs` / `catalog` / `ctl` /
+  `hooks`），不直连页面、不自持跨请求的缓存；跨族的那一手（车尾技能下拉、故事板写段时长）由装配层点名接线，
+  族与族之间不互拿。
 - 从装配层拆出的页在 `studio/web/studio/pages/<页名>-page.js`：一页一个工厂函数，页壳与工厂在同一份文件里，工厂要的
   东西由宿主按参数交进来（`$el`、`toast`、`go`、素材弹窗、画廊 getter），页的逐实例状态（在飞任务、提示词栏、播放器、
   素材槽、内嵌编辑器、让位与补铺那一发、armed 旗标）留在工厂闭包里，随视图常驻、随页卸载即散。一页大到一份文件装不下

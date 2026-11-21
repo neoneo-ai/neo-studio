@@ -1,6 +1,6 @@
 # 画布
 
-图片与提示词，铺在一张画布上。画布页把图片节点、提示词节点、图像生成节点、图像编辑节点、文本增强节点、图片反推节点、视频节点与车厢（配方节点）摆在同一张能缩放平移的画面里，节点之间的连线决定出图与出片带哪些提示词与参考图，也决定出完的图与成片落在哪儿。页面在 `studio/web/studio/pages/canvas/`（`page.js` 是这一页，`geometry.js` / `nodes.js` / `interactions.js` / `store.js` / `history.js` / `gen.js` 在它下面），一份画布的节点与连线落数据根 `canvas/<画布 id>.json`。
+图片与提示词，铺在一张画布上。画布页把图片节点、提示词节点、图像生成节点、图像编辑节点、文本增强节点、图片反推节点、视频节点与车厢（配方节点）摆在同一张能缩放平移的画面里，节点之间的连线决定出图与出片带哪些提示词与参考图，也决定出完的图与成片落在哪儿。页面在 `studio/web/studio/pages/canvas/`（`page.js` 是这一页，`geometry.js` / `nodes.js` / `interactions.js` / `store.js` / `history.js` / `node-types.js` 在它下面，生成层按族分文件：`gen.js` 装配与分发、`gen-state.js` 运行态、`gen-catalog.js` 只读清单、`gen-controls.js` 卡面控件基座、`gen-image.js` 出图与编辑、`gen-video.js` 出片、`gen-recipe.js` 串联与配方、`gen-llm.js` 增强 / 反推 / 故事板），一份画布的节点与连线落数据根 `canvas/<画布 id>.json`。
 
 ## 这一页在哪
 
