@@ -862,13 +862,22 @@ describe("canvas-page 页面", () => {
       await settle();
       assert.equal(page.current().nodes.length, 0);
     });
-    test("空白处双击就地写一句提示词", async () => {
+    test("空白处双击弹「加节点」菜单：选完那一行就在指针那一点铺一张节点", async () => {
       const { page, view } = await makePage();
       click(view.button("加图片"));
+      const menu = view.bar.querySelector(".ns-canvas-add-menu");
       fire(view.stage, "dblclick", { clientX: CENTER.x - 200, clientY: CENTER.y - 100 });
-      assert.equal(page.current().nodes.length, 2);
-      assert.deepEqual(view.pos(), [[CENTER.x, CENTER.y], [CENTER.x - 370, CENTER.y - 220]]);
+      assert.ok(menu.classList.contains("ns-canvas-add-menu-open"), "双击空白 = 弹节点选择，不是默认铺一张提示词");
+      assert.equal(page.current().nodes.length, 1, "双击那一下自己不铺节点");
+      fire(document.body, "keydown", { key: "Escape" });
+      assert.ok(!menu.classList.contains("ns-canvas-add-menu-open"), "Esc 把菜单收回去");
+      fire(view.stage, "dblclick", { clientX: CENTER.x - 200, clientY: CENTER.y - 100 });
+      click(menu.querySelector('[aria-label="加提示词"]'));
+      await settle();
+      assert.deepEqual(view.pos(), [[CENTER.x, CENTER.y], [CENTER.x - 370, CENTER.y - 220]],
+        "菜单里那一行落在双击的那一点上（节点中心 = 指针），不回到视口中心");
       assert.ok(view.nodeLayer.children[1].classList.contains("ns-canvas-node-text"));
+      assert.ok(!menu.classList.contains("ns-canvas-add-menu-open"), "选完菜单自己收起");
     });
     test("双击节点正文 = 进编辑", async () => {
       const { view } = await makePage();

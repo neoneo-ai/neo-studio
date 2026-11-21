@@ -89,12 +89,15 @@ export function createCanvasPage({ $el, api, toast, openMaterial, can, modeGroup
         return ready;
     }
 
+    /** 条上每一枚图标钮：只有图标，名字写在悬停提示与 aria-label 里。「加节点」菜单里的行共用这一条，
+     *  所以它住在页面这一层而不是条里 */
+    const mk = (label, name, fn) => {
+        const btn = $el("button", { className: "ns-canvas-tool", type: "button", title: label, "aria-label": label, onclick: fn });
+        setIcon(btn, name);
+        return btn;
+    };
+
     function buildBar() {
-        const mk = (label, name, fn) => {
-            const btn = $el("button", { className: "ns-canvas-tool", type: "button", title: label, "aria-label": label, onclick: fn });
-            setIcon(btn, name);
-            return btn;
-        };
         const zoom = $el("span", { className: "ns-canvas-zoom", textContent: "100%" });
         const save = $el("span", { className: "ns-canvas-save", textContent: t("已保存") });
         // 工具条只放图标钮：名字与组合键都写在悬停提示与 aria-label 里，一行放得下
@@ -135,41 +138,6 @@ export function createCanvasPage({ $el, api, toast, openMaterial, can, modeGroup
         const redo = mkHint(t("重做"), "Ctrl+Shift+Z", "redo", () => redoEdit());
         const group = (...kids) => $el("span", { className: "ns-canvas-bar-group" }, kids);
         const sep = () => $el("span", { className: "ns-canvas-bar-sep" });
-        // 加节点收成菜单里的三大类：文字 / 图像 / 视频 各一小行标题，标题下是那一档里的行 —— 顺序、图标、
-        // 名字与落在哪一档都在 node-types.js 的那一列里。菜单钉在钮下方，
-        // position: fixed 让它不占条内的行位、也不被条的横向滚动裁剪；行面上是图标 + 名字 —— 只有图标时
-        // 「加图像生成节点」与「加视频生成节点」落在同一类节点的两个档上，行面上只有图标时更分不出来
-        const inMenu = (btn) => {
-            btn.classList.add("ns-canvas-add-item");
-            btn.appendChild($el("span", { className: "ns-canvas-add-label",
-                textContent: btn.getAttribute("aria-label") }));
-            return btn;
-        };
-        const addAction = (fn) => () => { closeAddMenu(); fn(); };
-        function closeAddMenu() {
-            addMenu.classList.remove("ns-canvas-add-menu-open");
-            addBtn.classList.remove("ns-canvas-tool-on");
-            document.removeEventListener("pointerdown", addOutside, true);
-            document.removeEventListener("keydown", addEscape, true);
-        }
-        function openAddMenu() {
-            const rect = addBtn.getBoundingClientRect();
-            addMenu.style.left = `${Math.max(8, rect.left)}px`;
-            addMenu.style.top = `${rect.bottom + 6}px`;
-            addMenu.classList.add("ns-canvas-add-menu-open");
-            addBtn.classList.add("ns-canvas-tool-on");
-            document.addEventListener("pointerdown", addOutside, true);
-            document.addEventListener("keydown", addEscape, true);
-        }
-        const addOutside = (e) => { if (!addMenu.contains(e.target) && !addBtn.contains(e.target)) closeAddMenu(); };
-        const addEscape = (e) => { if (e.key === "Escape") closeAddMenu(); };
-        const addMenu = $el("div", { className: "ns-canvas-add-menu" }, ADD_GROUPS.flatMap((group) => [
-            $el("div", { className: "ns-canvas-add-group", "aria-hidden": "true", textContent: t(group.label) }),
-            ...ADD_MENU.filter((row) => row.group === group.key)
-                .map((row) => inMenu(mk(t(row.label), row.icon, addAction(() => addTypedNode(row))))),
-        ]));
-        const addBtn = mk(t("加节点"), "plus-square", () => (
-            addMenu.classList.contains("ns-canvas-add-menu-open") ? closeAddMenu() : openAddMenu()));
         const root = $el("div", { className: "ns-canvas-bar" }, [
             // 三组：画布本身 / 加节点与撤销重做 / 视图。整条不换行，窗口不够宽就在条内横向滚
             group(projectBtn, projectPanel),
@@ -186,6 +154,52 @@ export function createCanvasPage({ $el, api, toast, openMaterial, can, modeGroup
         return { root, project: { btn: projectBtn, panel: projectPanel, name: projectName, close: closeProjectPanel },
             zoom, save, undo, redo };
     }
+
+    // 「加节点」那扇菜单：条上那枚钮开它，双击画布空白开的也是它（ComfyUI 那一条 —— 就地挑要加的节点，
+    // 选完就在指针那一点铺一张节点）。菜单与钮建在页面这一层、由条把这两枚摆进条里：开法与落点只有一份，
+    // 手势层交下来的那一条走的也是这一条。菜单钉在视口固定层，不占条内的行位、也不被条的横向滚动裁剪。
+    // 三大类（文字 / 图像 / 视频）各一小行标题，标题下是那一档里的行 —— 顺序、图标、名字与落在哪一档都在
+    // node-types.js 的那一列里；标题行只是归类，不可按
+    let addMenuSpot = null;      // 双击空白开菜单时那一点的世界落点：选完行就在这一点铺节点
+    const inMenu = (btn) => {
+        btn.classList.add("ns-canvas-add-item");
+        btn.appendChild($el("span", { className: "ns-canvas-add-label",
+            textContent: btn.getAttribute("aria-label") }));
+        return btn;
+    };
+    // 落点先交出去再收菜单：closeAddMenu 会把那一点清掉
+    const addAction = (fn) => () => { const spot = addMenuSpot; closeAddMenu(); fn(spot); };
+    function closeAddMenu() {
+        addMenuSpot = null;
+        addMenu.classList.remove("ns-canvas-add-menu-open");
+        addBtn.classList.remove("ns-canvas-tool-on");
+        document.removeEventListener("pointerdown", addOutside, true);
+        document.removeEventListener("keydown", addEscape, true);
+    }
+    /** spot = { world, screen }：双击画布空白那一点（world 是铺节点的落点，screen 是菜单摆位）。
+     *  不给就钉在条上那枚钮下方。菜单的宽高要打开之后才量得到，落点按视口收边 —— 贴着右边与下边时
+     *  菜单翻回视口里，不甩出屏外（双击常发生在画布右下角那一片） */
+    function openAddMenu(spot = null) {
+        addMenu.classList.add("ns-canvas-add-menu-open");
+        addBtn.classList.add("ns-canvas-tool-on");
+        const box = addMenu.getBoundingClientRect();
+        const btnRect = addBtn.getBoundingClientRect();
+        const fit = (v, size, edge) => Math.max(8, Math.min(v, edge - size - 8));
+        addMenu.style.left = `${fit(spot?.screen?.x ?? btnRect.left, box.width, window.innerWidth)}px`;
+        addMenu.style.top = `${fit(spot?.screen?.y ?? btnRect.bottom + 6, box.height, window.innerHeight)}px`;
+        addMenuSpot = spot?.world || null;
+        document.addEventListener("pointerdown", addOutside, true);
+        document.addEventListener("keydown", addEscape, true);
+    }
+    const addOutside = (e) => { if (!addMenu.contains(e.target) && !addBtn.contains(e.target)) closeAddMenu(); };
+    const addEscape = (e) => { if (e.key === "Escape") closeAddMenu(); };
+    const addMenu = $el("div", { className: "ns-canvas-add-menu" }, ADD_GROUPS.flatMap((group) => [
+        $el("div", { className: "ns-canvas-add-group", "aria-hidden": "true", textContent: t(group.label) }),
+        ...ADD_MENU.filter((row) => row.group === group.key)
+            .map((row) => inMenu(mk(t(row.label), row.icon, addAction((spot) => addTypedNode(row, spot))))),
+    ]));
+    const addBtn = mk(t("加节点"), "plus-square", () => (
+        addMenu.classList.contains("ns-canvas-add-menu-open") ? closeAddMenu() : openAddMenu()));
 
     /** 视口落到 DOM：世界层一整层 transform，缩放与平移只改这一句（上游同一形状） */
     function applyViewport() {
@@ -341,6 +355,7 @@ export function createCanvasPage({ $el, api, toast, openMaterial, can, modeGroup
         markDirty,
         isPageActive,
         addNode,
+        openAddMenu,   // 双击画布空白：在指针那一点开「加节点」菜单（与条上那枚钮同一扇）
         dropMedia,
         deleteSelection,
         setNodePositions,
@@ -521,12 +536,12 @@ export function createCanvasPage({ $el, api, toast, openMaterial, can, modeGroup
 
     /** 「加节点」菜单的一行落一张节点：先把这一行要用的清单读到手（技能列表 / 出视频技能 / 配方——胶囊里列的
      *  就是那一份），默认 metadata 看注册表那一行。菜单里那两发不落一张空节点：加图片开素材库取图铺，
-     *  添加配方开配方弹窗铺一列 */
-    function addTypedNode(row) {
+     *  添加配方开配方弹窗铺一列。at 是双击画布空白时那一点（从条上开菜单时为空 = 落在视口中心） */
+    function addTypedNode(row, at = null) {
         if (row.act === "material") return pickImage(row);
         if (row.act === "recipe") { gen?.primeRecipes(); return openRecipePicker(); }
         if (row.prime) gen?.[row.prime]?.();
-        return addNode(row.type, null, row.seed ? ADD_SEEDS[row.seed]() : { ...row.defaults });
+        return addNode(row.type, at, row.seed ? ADD_SEEDS[row.seed]() : { ...row.defaults });
     }
 
     // ====== 一列车厢与「添加配方」弹窗 ======

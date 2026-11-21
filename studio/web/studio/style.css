@@ -2513,7 +2513,8 @@ body {
 .ns-canvas-tool:disabled:hover { border-color: var(--ns-field-bd); background: var(--ns-field); color: var(--ns-fg); }
 .ns-canvas-zoom, .ns-canvas-save { min-width: 46px; font-size: 12px; color: var(--ns-dim); text-align: center; }
 .ns-canvas-save { min-width: 52px; text-align: right; }
-/* 「加节点」下拉菜单：position: fixed 才不被工具条的横向滚动裁掉，落点在 openAddMenu 里照钮的视口矩形算。
+/* 「加节点」下拉菜单：position: fixed 才不被工具条的横向滚动裁掉，落点在 openAddMenu 里算 —— 条上那枚钮开的
+   钉在钮下方，双击画布空白开的钉在指针上（按视口收边）。
    菜单里的钮就是工具条那枚钮，只是多写一行名字 */
 .ns-canvas-add-menu { position: fixed; display: none; z-index: 30; flex-direction: column; gap: 2px; min-width: 148px;
     padding: 4px; border-radius: 8px; border: 1px solid var(--ns-border); background: var(--ns-panel); box-shadow: 0 6px 20px var(--ns-scrim-5, rgba(0, 0, 0, .45)); }
@@ -2722,12 +2723,15 @@ body {
 .ns-canvas-car .ns-canvas-node-textarea { position: relative; inset: auto; flex: 1 1 auto; min-width: 0; width: auto; height: 100%; min-height: 0; padding: 0; background: transparent; border-radius: 0; }
 .ns-canvas-car .ns-canvas-node-textarea:disabled { color: var(--ns-dim); }
 .ns-canvas-car .ns-canvas-node-textarea:focus { background: transparent; box-shadow: none; }
-/* 文字故事板卡：正文框在控件行里（绝对定位的正文框在控件行里会盖住整张卡，与车厢同一法改成流内），
-   每一段时长是一枚小数框（与车厢顶行那一枚同一档，步进箭头去掉），底下是生成出来的每一段预览 */
-.ns-canvas-storyboard-text { position: relative; inset: auto; flex: 1 1 auto; min-height: 0; width: auto;
-    height: 100%; padding: 0; background: transparent; border-radius: 0; }
+/* 文字故事板卡：正文框就是这一张卡的主输入区 —— 收回流里（绝对定位的正文框会盖住整张卡，与车厢同一法），
+   再吃满卡上剩下的高度；字段底把这一大片说成一块写得动的输入区，每一段时长与跑这一发在最后一行 */
+.ns-canvas-storyboard-text { position: relative; inset: auto; flex: 1 1 auto; min-height: 0; width: 100%;
+    height: auto; padding: 8px; border: 1px solid var(--ns-field-bd); border-radius: 6px;
+    background: var(--ns-field); }
+.ns-canvas-storyboard-text:focus { border-color: var(--ns-accent); background: var(--ns-field-hover); box-shadow: none; }
 .ns-canvas-storyboard-text:disabled { color: var(--ns-dim); }
-.ns-canvas-storyboard-text:focus { background: transparent; box-shadow: none; }
+/* 最后一行两头分开：左端是每一段的时长，右端是跑这一发 */
+.ns-canvas-gen-storyboard .ns-canvas-gen-acts .ns-canvas-gen-go { margin-left: auto; }
 .ns-canvas-storyboard-sec-label { flex: none; font-size: 11px; color: var(--ns-dim); }
 .ns-canvas-storyboard-sec { flex: none; width: 48px; height: 24px; padding: 0 5px; text-align: right;
     border-radius: 6px; border: 1px solid var(--ns-field-bd); background: var(--ns-field);
@@ -2737,7 +2741,8 @@ body {
 .ns-canvas-storyboard-sec::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .ns-canvas-storyboard-sec:focus { border-color: var(--ns-accent); }
 .ns-canvas-storyboard-sec:disabled { color: var(--ns-dim); }
-.ns-canvas-storyboard-segs { flex: 1 1 auto; min-height: 0; overflow: auto; display: flex;
+/* 每一段预览按内容占行，不与正文输入区抢高度（几十段时卡上滚得动） */
+.ns-canvas-storyboard-segs { flex: 0 1 auto; min-height: 0; overflow: auto; display: flex;
     flex-direction: column; gap: 3px; font-size: 11px; color: var(--ns-dim); }
 .ns-canvas-storyboard-seg { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ns-canvas-recipe-on { padding: 4px 6px; border: 0; border-radius: 6px; background: var(--ns-primary-soft); }

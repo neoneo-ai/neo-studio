@@ -2,6 +2,9 @@
 // 请求构造、响应规整与写回计划都不持页面状态；页面那一发从节点上的运行钮出发，写回看节点自己的 metadata
 import test, { describe, beforeEach } from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { mockRoute, jsonResponse, flush, click, resetEnv, fetchLog } from "./setup.mjs";
 import { setLang } from "../../web/js/core/i18n.js";
 
@@ -17,6 +20,8 @@ const SB_PATH = "/rs_recipes/director_generate_segments";
 const DUR_PATH = "/rs_recipes/set_segment_duration";
 const settle = () => flush(20);
 const STAGE = { x: 0, y: 0, left: 0, top: 0, right: 1200, bottom: 800, width: 1200, height: 800 };
+const canvasCss = fs.readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)),
+    "../../web/studio/style.css"), "utf8");
 
 beforeEach(() => setLang("zh"));
 
@@ -194,18 +199,33 @@ function gated(data) {
 
 
 describe("画布上的文字故事板节点：一段话写进连过来的车厢", () => {
-    test("菜单那一行落一张节点：卡上是正文框、每一段时长数框与运行钮", async () => {
+    test("菜单那一行落一张节点：正文输入区在最前，每一段时长与运行钮在最后一行", async () => {
         const ctx = await sbPage([], []);
         click(ctx.view.button("加文字故事板节点"));
         await settle();
         const node = ctx.page.current().nodes.at(-1);
         assert.deepEqual([node.type, node.metadata.segment_seconds], ["storyboard", 5]);
-        const el = ctx.view.nodeEl(node.id);
-        assert.ok(el.querySelector("textarea.ns-canvas-storyboard-text"), "要写的那一段话就在这张卡上");
-        assert.equal(el.querySelector(".ns-canvas-storyboard-sec").value, "5");
-        assert.ok(ctx.genBtn(node.id, "生成段提示词"), "控件行那一枚是运行钮");
-        assert.ok(el.querySelector(".ns-canvas-gen-status"), "最后一行是这一发的状态");
+        const card = ctx.view.nodeEl(node.id).querySelector(".ns-canvas-gen-storyboard");
+        assert.ok(card, "卡面是故事板自己那一份版式");
+        const rows = [...card.children];
+        assert.equal(rows[0], card.querySelector("textarea.ns-canvas-storyboard-text"),
+            "卡上第一块就是要写的那一段话 —— 主输入区");
+        const foot = rows[rows.length - 1];
+        assert.equal(foot.querySelector(".ns-canvas-storyboard-sec").value, "5", "每一段的时长在最后一行");
+        assert.ok([...foot.querySelectorAll(".ns-canvas-gen-btn")]
+            .some((btn) => btn.textContent.trim() === "生成段提示词"), "运行钮与每一段时长同一行");
+        assert.equal(rows[rows.length - 2], card.querySelector(".ns-canvas-gen-status"),
+            "这一发的状态在时长行之前");
         assert.equal(ctx.status(node.id), "", "没跑起来状态行是空的");
+    });
+
+    test("版式写在 style.css 上：正文框吃满剩下的高度，时长与运行钮落在最后一行两头分开", () => {
+        const face = canvasCss.match(/\.ns-canvas-storyboard-text \{[^}]*\}/);
+        assert.ok(face && /position: relative/.test(face[0]) && /height: auto/.test(face[0])
+            && /flex: 1 1 auto/.test(face[0]),
+            "正文框要从「绝对铺满整张卡」收回流里、吃满剩下的高度 —— 不然它压在时长行与状态行上头");
+        assert.ok(/\.ns-canvas-gen-storyboard \.ns-canvas-gen-acts \.ns-canvas-gen-go \{ margin-left: auto; \}/
+            .test(canvasCss), "最后一行右端是跑这一发");
     });
 
     test("主题就在这张卡上写：双击正文框进编辑，每段时长框点一下就能改", async () => {

@@ -25,7 +25,8 @@ const LINE_SELECTOR = ".ns-canvas-line, .ns-canvas-line-hit";
 // 起手交浏览器发 click，按下去是选中这张节点。整列控件行（.ns-canvas-gen-ctl）认成控件的代价是卡上几乎按不到；
 // 浮出栏首那枚固定抓手（.ns-canvas-node-drag）是 span，不在这一列里，按下就是拖节点
 const NODE_CTL_SELECTOR = ".ns-canvas-node-act, .ns-canvas-node-pick, .ns-canvas-node-video-el, "
-    + ".ns-canvas-node-audio-el, .neo-gallery-gm-chip-btn, .ns-canvas-gen-btn, .ns-canvas-gen-ctl input, .ns-canvas-car-dur";
+    + ".ns-canvas-node-audio-el, .neo-gallery-gm-chip-btn, .ns-canvas-gen-btn, .ns-canvas-gen-ctl input, "
+    + ".ns-canvas-car-dur, .ns-canvas-storyboard-sec";
 
 /** 把手势挂到舞台上：stage 是那一页的舞台元素，view 交出要画手势层（world 上画框选框），
  *  host 是页面交下来的读写面（见 createCanvasPage 里那一份 host）。 */
@@ -39,7 +40,8 @@ export function attachCanvasInteractions({ stage, view, host }) {
     // 滚轮缩放锚在指针上（passive: false 才拦得住 preventDefault，否则浏览器连页面一起滚）
     stage.addEventListener("wheel", (e) => {
         if (!host.isPageActive() || e.target.closest(".ns-canvas-bar, .ns-canvas-gen-ctl input, .ns-canvas-car-dur, "
-            + ".ns-canvas-node-video-el, .ns-canvas-node-audio-el, .ns-canvas-car-text, .ns-canvas-storyboard-text")) return;
+            + ".ns-canvas-storyboard-sec, .ns-canvas-node-video-el, .ns-canvas-node-audio-el, .ns-canvas-car-text, "
+            + ".ns-canvas-storyboard-text")) return;
         e.preventDefault();
         const rect = stage.getBoundingClientRect();
         host.setViewport(zoomViewportAt(state().viewport, e.clientX - rect.left, e.clientY - rect.top, e.deltaY));
@@ -342,7 +344,8 @@ export function attachCanvasInteractions({ stage, view, host }) {
             }
             return;
         }
-        host.addNode("text", worldPoint(e.clientX, e.clientY));   // 空白处双击 = 就地写一句提示词
+        // 空白处双击 = 就地挑要加的节点（ComfyUI 那一条）：「加节点」菜单钉在指针上，选完就在这一点铺一张
+        host.openAddMenu({ world: worldPoint(e.clientX, e.clientY), screen: { x: e.clientX, y: e.clientY } });
     }
 
     function onKeyDown(e) {

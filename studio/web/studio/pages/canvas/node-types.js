@@ -44,8 +44,10 @@ export const NODE_TYPES = {
     reverse: { title: "图片反推", w: 320, h: 168, css: "", body: "llm", run: "reverse",
         doc: { zh: ["图片反推节点"], en: ["Image-to-prompt node"] },
         add: { label: "加图片反推节点", icon: "camera", defaults: { language: "zh" }, group: "image" } },
-    // 文字故事板节点：主题或整篇剧本就在这一张的正文里，每一段写进连过来的车厢（接法见 gen.js 的 runStoryboard）
-    storyboard: { title: "文字故事板", w: 320, h: 208, css: "", body: "storyboard", run: "storyboard", bodyText: true,
+    // 文字故事板节点：主题或整篇剧本就在这一张的正文里，每一段写进连过来的车厢（接法见 gen.js 的 runStoryboard）。
+    // 卡面自己有一块主输入区（.ns-canvas-node-storyboard 那一套），默认框照提示词节点那一档高，输入区才有得吃
+    storyboard: { title: "文字故事板", w: 320, h: 240, css: "ns-canvas-node-storyboard", body: "storyboard",
+        run: "storyboard", bodyText: true,
         doc: { zh: ["文字故事板节点"], en: ["Text-storyboard node"] },
         add: { label: "加文字故事板节点", icon: "list", defaults: { segment_seconds: 5 }, group: "text" } },
     // 这一行落的是图像生成节点那一类的视频档（metadata.kind = "video"，见 gen.js 的 runVideo）；表里 type = "video" 那一类是成片的落点，菜单里没有它

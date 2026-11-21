@@ -206,9 +206,10 @@ function nodeLlm(node, $el, { llm, llmControls }) {
     return cardShell($el, llmControls?.(node) || [], statusRow($el, llm || {}, RUN_LABELS[runKind(node)]));
 }
 
-/** 文字故事板节点的内容：要写的那一段话（主题或整篇剧本）就在这张节点上，一行控件（每一段时长 · 运行钮）
- *  加一行这一发的状态，底下是生成出来的每一段预览。正文与那几段都在这一张自己的 metadata 里 ——
- *  进撤销栈、随画布落盘、复制带着走（预览是 metadata.segments 现算的，不另存一份） */
+/** 文字故事板节点的内容：要写的那一段话（主题或整篇剧本）就是这一张卡上的主输入区，底下依次是生成出来的
+ *  每一段预览、这一发的状态，最后一行是每一段的时长与跑这一发（由 gen-llm.js 的 storyboardControls 交下来）。
+ *  正文与那几段都在这一张自己的 metadata 里 —— 进撤销栈、随画布落盘、复制带着走（预览是 metadata.segments
+ *  现算的，不另存一份） */
 function nodeStoryboard(node, $el, { storyboard, storyboardControls, onText }) {
     const busy = storyboard?.status === "running";
     const text = $el("textarea", {
@@ -220,12 +221,16 @@ function nodeStoryboard(node, $el, { storyboard, storyboardControls, onText }) {
         oninput: (e) => onText?.(node, e.target.value),
     });
     if (busy) text.disabled = true;   // 在途的那一发送的是起手这一段话，跑着不许改
-    const card = cardShell($el, [text, ...(storyboardControls?.(node) || [])],
-        statusRow($el, storyboard || {}, RUN_LABELS.storyboard));
     const lines = storyboardPreviewLines(node.metadata.segments);
-    if (lines.length) card.appendChild($el("div", { className: "ns-canvas-storyboard-segs" },
-        lines.map((line) => $el("div", { className: "ns-canvas-storyboard-seg", textContent: line }))));
-    return card;
+    // 卡面从上往下：正文输入区（吃满剩下的高度）→ 每一段预览 → 这一发的状态 → 最后一行是每段时长与跑这一发
+    const rows = [text];
+    if (lines.length) {
+        rows.push($el("div", { className: "ns-canvas-storyboard-segs" },
+            lines.map((line) => $el("div", { className: "ns-canvas-storyboard-seg", textContent: line }))));
+    }
+    rows.push(statusRow($el, storyboard || {}, RUN_LABELS.storyboard));
+    rows.push(...(storyboardControls?.(node) || []));
+    return $el("div", { className: "ns-canvas-gen ns-canvas-gen-storyboard" }, rows);
 }
 
 /** 串联的车厢：这一段自己写的提示词、这一段的时长、停不停用，就这些 —— 技能与整列共用的生成参数都在它那一列的车尾
