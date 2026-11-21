@@ -252,8 +252,7 @@ function llmFrame(data) {
         const sec = $el("input", { className: "ns-canvas-storyboard-sec", type: "number",
             min: String(SEG_SEC_MIN), max: String(SEG_SEC_MAX), step: "1",
             value: String(Number(node.metadata.segment_seconds) || SEG_SEC_DEFAULT),
-            title: t("每一段的时长（秒）：交后端按这一发拆段"),
-            onmousedown: (e) => { if (document.activeElement !== e.target) e.preventDefault(); },
+            title: t("每一段的时长（秒）：点一下就能改，交后端按这一发拆段"),
             onchange: () => host.patchMeta(node.id, {
                 segment_seconds: Math.min(SEG_SEC_MAX, Math.max(SEG_SEC_MIN,
                     Math.round(Number(sec.value)) || SEG_SEC_DEFAULT)) }) });

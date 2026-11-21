@@ -216,7 +216,7 @@ function nodeStoryboard(node, $el, { storyboard, storyboardControls, onText }) {
         value: node.metadata.content || "",
         placeholder: t("写一段话：一个主题（一只猫去冒险）或整篇剧本（一行一段）"),
         spellcheck: "false",
-        onmousedown: (e) => { if (document.activeElement !== e.target) e.preventDefault(); },
+        title: t("点一下就能写：一段话按主题拆段，多行文本按行当剧本"),
         oninput: (e) => onText?.(node, e.target.value),
     });
     if (busy) text.disabled = true;   // 在途的那一发送的是起手这一段话，跑着不许改
@@ -241,8 +241,7 @@ function nodeCar(node, $el, { recipe, carView, onText, onCarDuration }) {
     const durEl = $el("input", {
         className: "ns-canvas-car-dur", type: "number", min: "1", max: "3600", step: "1",
         value: view.duration == null ? "" : String(view.duration),
-        title: t("这一段时长（秒）：写进配方那一段，导演页与出片都读这一份"),
-        onmousedown: (e) => { if (document.activeElement !== e.target) e.preventDefault(); },
+        title: t("点一下就能改；这一段时长（秒）：写进配方那一段，导演页与出片都读这一份"),
         onchange: (e) => onCarDuration?.(node, e.target.value),
     });
     durEl.disabled = busy;

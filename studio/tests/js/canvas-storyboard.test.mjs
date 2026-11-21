@@ -112,6 +112,13 @@ const RECIPE = { name: "短片配方", title: "短片", source: "mine", type: "v
     segments: [{ title: "开场", skill_id: "h3_t2v", duration_sec: 5, prompt: "配方里那一段" },
         { title: "收尾", skill_id: "h3_t2v", duration_sec: 8, prompt: "收尾那一段" }] };
 
+/** 手势与键盘事件：jsdom 认 PointerEvent / KeyboardEvent，正文框与数框那几发要点得中才测得出焦点 */
+function fire(target, type, init = {}) {
+    const Ctor = type.startsWith("key") ? window.KeyboardEvent
+        : type.startsWith("pointer") ? window.PointerEvent : window.MouseEvent;
+    target.dispatchEvent(new Ctor(type, { bubbles: true, cancelable: true, ...init }));
+}
+
 const segNode = (id, metadata = {}) => ({ id, type: "storyboard", title: "文字故事板",
     position: { x: 0, y: 40 }, width: 320, height: 208,
     metadata: { segment_seconds: 5, content: "一只猫去冒险", ...metadata } });
@@ -199,6 +206,52 @@ describe("画布上的文字故事板节点：一段话写进连过来的车厢"
         assert.ok(ctx.genBtn(node.id, "生成段提示词"), "控件行那一枚是运行钮");
         assert.ok(el.querySelector(".ns-canvas-gen-status"), "最后一行是这一发的状态");
         assert.equal(ctx.status(node.id), "", "没跑起来状态行是空的");
+    });
+
+    test("主题就在这张卡上写：双击正文框进编辑，每段时长框点一下就能改", async () => {
+        const ctx = await sbPage([segNode("sb")], []);
+        const ta = ctx.view.nodeEl("sb").querySelector(".ns-canvas-storyboard-text");
+        const sec = ctx.view.nodeEl("sb").querySelector(".ns-canvas-storyboard-sec");
+        assert.equal(ta.disabled, false, "没在跑的时候正文框要能写");
+        assert.equal(sec.disabled, false, "没在跑的时候每段时长框要能用");
+        fire(ta, "dblclick", {});
+        assert.equal(document.activeElement, ta, "双击故事板卡上的正文框要进编辑");
+        sec.focus();
+        sec.value = "9";
+        fire(sec, "change");
+        await settle();
+        assert.equal(ctx.metaOf("sb").segment_seconds, 9, "数框里的数走 metadata 落盘");
+        sec.value = "9000";
+        fire(sec, "change");
+        await settle();
+        assert.equal(ctx.metaOf("sb").segment_seconds, 3600, "写歪了钳进后端认的那一份区间");
+    });
+
+    test("光标在卡上的格子里时键盘让给浏览器：数框里 Backspace 删的是字，不是节点", async () => {
+        const ctx = await sbPage([segNode("sb")], []);
+        const sec = ctx.view.nodeEl("sb").querySelector(".ns-canvas-storyboard-sec");
+        sec.focus();
+        fire(window, "keydown", { key: "Backspace" });
+        fire(window, "keydown", { key: "a", ctrlKey: true });
+        await settle();
+        assert.equal(ctx.page.current().nodes.length, 1, "光标在数框里那两键是浏览器的文字动作，节点不该动");
+        fire(window, "keydown", { key: "Escape" });
+        assert.notEqual(document.activeElement, sec, "Esc 先把光标从格子里收出来");
+    });
+
+    test("在途的那一发锁着这两格：跑起来正文框与每段时长框都 disabled，跑完回到能改", async () => {
+        const g = gated({ ok: true, segments: [{ prompt: "第一段正文", segment: 0, duration_sec: 7 }] });
+        const ctx = await sbPage([segNode("sb"), car("c0", { segment: 0 })], [link("c0", "sb")], g);
+        click(ctx.genBtn("sb", "生成段提示词"));
+        await settle();
+        assert.equal(ctx.view.nodeEl("sb").querySelector(".ns-canvas-storyboard-text").disabled, true,
+            "在途的那一发送的是起手这一段话，不许改");
+        assert.equal(ctx.view.nodeEl("sb").querySelector(".ns-canvas-storyboard-sec").disabled, true,
+            "跑着的时候每段时长锁着");
+        g.release();
+        await settle();
+        assert.equal(ctx.view.nodeEl("sb").querySelector(".ns-canvas-storyboard-sec").disabled, false,
+            "跑完回到能改");
     });
 
     test("空正文与没连车厢：各说一句，不发请求", async () => {

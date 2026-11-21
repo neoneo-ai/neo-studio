@@ -5,6 +5,7 @@
 // 画布内容本身是页面的：一律经 host.getState() 读、经 host 交下来的回调写，改完由页面重画。
 import { t } from "../../../js/core/i18n.js";
 import { canvasToScreen, getConnectionDropTarget, marqueeSelect, panViewport, resizeNode, screenToCanvas, zoomViewportAt } from "./geometry.js";
+import { NODE_TYPES } from "./node-types.js";
 
 const NUDGE = 8, NUDGE_BIG = 40;
 const CONTENT_DRAG_GATE = 8;   // 铺满整张卡的那两片内容面（正文框与视频）：起手交浏览器选字与翻播放，拖过这一截才算拖节点
@@ -12,8 +13,12 @@ const NATIVE_MEDIA_BAR_PX = 36;   // 浏览器在 video 上自绘的那一条播
 const CLICK_GATE = 3;   // 空白起手拖过这一截才算框选 / 平移，没拖过就是点空白（点空白要收走选中）
 const CLIP_NODE_KEYS = new Set(["c", "v", "x", "a"]);   // 节点那四键：光标在正文里时按了要说一句怎么走回节点
 const NEO_GALLERY_MIME = "application/x-neo-gallery";
-// 光标是否坐在画布正文框里：拦下 pointerdown 连着把焦点交给下一个元素那一发一起拦了，blur 不来就出不了编辑
-const CARET_IN_BODY = () => document.activeElement?.classList?.contains("ns-canvas-node-textarea");
+// 光标坐在画布的哪一格可写里：节点上的正文框与数框，加上浮出栏里那两块（参数浮层与选图菜单住在
+// .ns-canvas-gen-menus 那一层，不在节点里）。这一位决定「这一按要把焦点交出去」与「键盘那一套要让给浏览器」：
+// 拦下 pointerdown 连着把焦点交给下一个元素那一发一起拦了，blur 不来就出不了编辑；数框里按 Backspace
+// 删的是那一格里的字，不是选中的节点
+const CARET_SELECTOR = ".ns-canvas-node textarea, .ns-canvas-node input, .ns-canvas-gen-menus textarea, .ns-canvas-gen-menus input";
+const CARET_IN_BODY = () => Boolean(document.activeElement?.closest?.(CARET_SELECTOR));
 // 一条连线是两个 path（宽命中描边 + 可见细线），点哪一条都算点这条线
 const LINE_SELECTOR = ".ns-canvas-line, .ns-canvas-line-hit";
 // 节点上真正吃这一按的控件：浮出栏的动作钮与选图钮、生成卡上的胶囊 / 按钮 / 段钮 / 种子输入、车厢顶行那一枚时长框、视频那一段片 ——
@@ -325,13 +330,14 @@ export function attachCanvasInteractions({ stage, view, host }) {
     }
 
     function onDoubleClick(e) {
-        if (!host.isPageActive() || e.target.closest(".ns-canvas-bar, .ns-canvas-gen-ctl")) return;
+        if (!host.isPageActive()) return;
         const nodeEl = e.target.closest(".ns-canvas-node");
         if (nodeEl) {
             const node = state().nodes.find((n) => n.id === nodeEl.dataset.nodeId);
             if (!node) return;
-            // 重画之后手上那一个元素已经不在层里，焦点要落给重画出来的那一块正文框
-            if (node.type === "text" || node.type === "recipe") {
+            // 重画之后手上那一个元素已经不在层里，焦点要落给重画出来的那一块正文框。带正文框的卡写在注册表
+            // 那一行（bodyText）：故事板那一块住在控件层里，控件层整行不早退才进得了编辑
+            if ((NODE_TYPES[node.type] || NODE_TYPES.text).bodyText) {
                 stage.querySelector(`[data-node-id="${node.id}"]`)?.querySelector("textarea")?.focus();
             }
             return;
@@ -342,7 +348,7 @@ export function attachCanvasInteractions({ stage, view, host }) {
     function onKeyDown(e) {
         if (!host.isPageActive()) return;
         const { ids } = host.getSelection();
-        const typing = document.activeElement?.classList?.contains("ns-canvas-node-textarea");
+        const typing = CARET_IN_BODY();
         if (e.code === "Space" && !typing) { spaceDown = true; e.preventDefault(); return; }
         // Ctrl/Cmd 编辑命令：正文框里打字时不抢（那一段是浏览器自己的文本撤销与复制粘贴）
         if ((e.ctrlKey || e.metaKey) && !typing) {

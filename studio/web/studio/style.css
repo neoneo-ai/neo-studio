@@ -2629,6 +2629,9 @@ body {
    .ns-canvas-gen-ctl 是整列控件行（含配方概览、提示词行、参考素材那几行），抬它等于把正文选回来。
    写在 .ns-canvas-node 那条之后才压得住继承（同特异度看先后） */
 .ns-canvas-node-textarea, .ns-canvas-recipe-seed { user-select: text; }
+/* 卡上的数框（车厢段时长、故事板每段、车尾种子、参数浮层里那几枚）与浮出栏里的正文：节点整块是
+   user-select: none 加 grab 光标，数框要划得动词、双击选得词，光标也要落成文本那一枚 */
+.ns-canvas-node input, .ns-canvas-gen-menus input, .ns-canvas-gen-menus textarea { user-select: text; cursor: text; }
 
 /* 接线点平时收着不占视线：一台节点四枚接线点常亮时，几十台的画布上接线点比内容与连线还抢眼。
    悬停、选中、正被拉线瞄着的那台节点才把四枚点亮出来（触屏档没有悬停，一直亮着）。点本身收小，

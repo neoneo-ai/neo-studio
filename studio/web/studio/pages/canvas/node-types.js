@@ -18,52 +18,53 @@ export const VIDEO_GEN_TITLE = "视频生成";
  *  走 .ns-canvas-gen 那一套）；body 是卡面内容走哪一个渲染器；bar 是附加操作栏多出来的那枚；
  *  run 是 RUN_LABELS 里那一发说的话（这一发要的能力位与缺了说什么话都在那一行里）；add 是「加节点」菜单那一行；
  *  doc 是这一类在 docs/canvas.md 与 docs/en/canvas.md 节点表里的那几行名字（两份都要有，缺一边的用例就红）。
+ *  bodyText 是「这张卡上带一块正文框，双击进编辑」—— 手势层照这一位认，不在页面里写类型名单。
  *  手势层认的控件面不在这里：那是共享的一份清单，按类型拆会让卡面几乎按不到（见 interactions.js） */
 export const NODE_TYPES = {
     // 默认框是竖友好那一档（340×360）：节点按素材自己的比例落位且永不超出默认框（store.js 的 fitImageSize），
     // 框是横的那一档时 9:16 的竖图只能落到 135×240 —— 竖屏素材永远比横屏小一圈，素材页拖进来就是这一发
     image: { title: "图片", w: 340, h: 360, css: "ns-canvas-node-image", body: "image", bar: "hero",
         doc: { zh: ["图片节点"], en: ["Image node"] },
-        add: { label: "加图片", icon: "image", act: "material" } },
-    text: { title: "提示词", w: 340, h: 240, css: "ns-canvas-node-text", body: "text", bar: "prompt",
+        add: { label: "加图片", icon: "image", act: "material", group: "image" } },
+    text: { title: "提示词", w: 340, h: 240, css: "ns-canvas-node-text", body: "text", bar: "prompt", bodyText: true,
         doc: { zh: ["提示词节点"], en: ["Prompt node"] },
-        add: { label: "加提示词", icon: "list" } },
+        add: { label: "加提示词", icon: "list", group: "text" } },
     gen: { title: "图像生成", w: 320, h: 208, css: "ns-canvas-node-gen", body: "gen", run: "image",
         doc: { zh: ["图像生成节点", "视频生成节点"], en: ["Image-gen node", "Video-gen node"] },
-        add: { label: "加图像生成节点", icon: "sparkles", prime: "prime", seed: "skill" } },
+        add: { label: "加图像生成节点", icon: "sparkles", prime: "prime", seed: "skill", group: "image" } },
     // 图像编辑节点：图与提示词都从连过来的节点取，这一张只管选技能与出图 —— 卡面与图像生成节点同一档（接法见 gen.js 的 runEdit）
     edit: { title: "图像编辑", w: 320, h: 208, css: "", body: "edit", run: "edit",
         doc: { zh: ["图像编辑节点"], en: ["Image-edit node"] },
-        add: { label: "加图像编辑节点", icon: "pencil", prime: "prime", seed: "editSkill" } },
+        add: { label: "加图像编辑节点", icon: "pencil", prime: "prime", seed: "editSkill", group: "image" } },
     // 文本增强节点：要重写的正文从连过来的提示词节点取，成文写进下游空的提示词节点（见 gen.js 的 runEnhance）
     enhance: { title: "文本增强", w: 320, h: 168, css: "", body: "llm", run: "enhance",
         doc: { zh: ["文本增强节点"], en: ["Text-enhance node"] },
-        add: { label: "加文本增强节点", icon: "refresh", prime: "prime", defaults: { skill_id: "" } } },
+        add: { label: "加文本增强节点", icon: "refresh", prime: "prime", defaults: { skill_id: "" }, group: "text" } },
     // 图片反推节点：要反推的那一张从连过来的图片节点取，成文同样写进下游空的提示词节点（见 gen.js 的 runReverse）
     reverse: { title: "图片反推", w: 320, h: 168, css: "", body: "llm", run: "reverse",
         doc: { zh: ["图片反推节点"], en: ["Image-to-prompt node"] },
-        add: { label: "加图片反推节点", icon: "camera", defaults: { language: "zh" } } },
+        add: { label: "加图片反推节点", icon: "camera", defaults: { language: "zh" }, group: "image" } },
     // 文字故事板节点：主题或整篇剧本就在这一张的正文里，每一段写进连过来的车厢（接法见 gen.js 的 runStoryboard）
-    storyboard: { title: "文字故事板", w: 320, h: 208, css: "", body: "storyboard", run: "storyboard",
+    storyboard: { title: "文字故事板", w: 320, h: 208, css: "", body: "storyboard", run: "storyboard", bodyText: true,
         doc: { zh: ["文字故事板节点"], en: ["Text-storyboard node"] },
-        add: { label: "加文字故事板节点", icon: "list", defaults: { segment_seconds: 5 } } },
+        add: { label: "加文字故事板节点", icon: "list", defaults: { segment_seconds: 5 }, group: "text" } },
     // 这一行落的是图像生成节点那一类的视频档（metadata.kind = "video"，见 gen.js 的 runVideo）；表里 type = "video" 那一类是成片的落点，菜单里没有它
     video: { title: "视频", w: 340, h: 240, css: "ns-canvas-node-video", body: "video",
         doc: { zh: ["视频节点"], en: ["Video node"] },
-        add: { label: "加视频生成节点", icon: "film", type: "gen", prime: "primeVideo", seed: "videoSkill" } },
+        add: { label: "加视频生成节点", icon: "film", type: "gen", prime: "primeVideo", seed: "videoSkill", group: "video" } },
     // 素材输入节点：从素材库取一段片 / 一段声音铺上画布，连进生成节点就是那一路的参考视频 / 参考音频
     // （分桶与槽位上限见 gen.js 的 genInputs 与 videoRefs）。栏上那一枚开素材库，按类型只收那一类
     video_in: { title: "视频输入", w: 340, h: 360, css: "ns-canvas-node-video", body: "video", bar: "media",
         doc: { zh: ["视频输入节点"], en: ["Video-input node"] },
-        add: { label: "加视频输入", icon: "film", act: "material", accept: "video" } },
+        add: { label: "加视频输入", icon: "film", act: "material", accept: "video", group: "video" } },
     audio_in: { title: "音频输入", w: 340, h: 104, css: "ns-canvas-node-audio", body: "audio", bar: "media",
         doc: { zh: ["音频输入节点"], en: ["Audio-input node"] },
-        add: { label: "加音频输入", icon: "volume", act: "material", accept: "audio" } },
+        add: { label: "加音频输入", icon: "volume", act: "material", accept: "audio", group: "video" } },
     // 车厢一张一段：段号、这一段自己写的提示词与素材覆盖都在这一张上，整列共用的参数在车尾。
     // 「添加配方」铺的是一整列（见 page.js 的铺一列），菜单那一行不落一张空车厢
-    recipe: { title: "车厢", w: 360, h: 176, css: "ns-canvas-node-recipe", body: "car", run: "car",
+    recipe: { title: "车厢", w: 360, h: 176, css: "ns-canvas-node-recipe", body: "car", run: "car", bodyText: true,
         doc: { zh: ["车厢"], en: ["车厢"] },
-        add: { label: "添加配方", icon: "wand", prime: "primeRecipes", act: "recipe" } },
+        add: { label: "添加配方", icon: "wand", prime: "primeRecipes", act: "recipe", group: "video" } },
 };
 
 /** store.js 建节点与读盘兜底用的那一份规格（形状不变，值从注册表来） */
@@ -72,11 +73,18 @@ export const NODE_SPECS = Object.fromEntries(Object.entries(NODE_TYPES)
 
 /** 「加节点」菜单：顺序就是上面这一列的顺序。图标与名字、这一行落哪一类节点（加视频生成节点落的是图像生成节点的视频档）
  *  视频档）、建之前要先读到手的那一份清单（prime 是 gen.js 交下来的那个读法）、默认 metadata（defaults
- *  写死在类型那一行，seed 是页面那一层才知道的默认技能）都在这一行里。
+ *  写死在类型那一行，seed 是页面那一层才知道的默认技能，group 是这一行落在菜单三大类里的哪一档）都在这一行里。
  *  act 是菜单里不落一张空节点的那两发：加图片开素材库，添加配方开配方弹窗 */
 export const ADD_MENU = Object.entries(NODE_TYPES)
     .filter(([, d]) => d.add)
     .map(([type, d]) => ({ ...d.add, type: d.add.type || type }));
+
+/** 菜单里的三大类（页面照它铺小标题）：音频输入与「添加配方」进的都是出片那一路，归在视频那一档 */
+export const ADD_GROUPS = [
+    { key: "text", label: "文字" },
+    { key: "image", label: "图像" },
+    { key: "video", label: "视频" },
+];
 
 /** 卡上那一发说的话：运行钮、悬停提示与状态行的取值。状态行三条链形状各不一样 —— 出图与编辑数张数、
  *  增强与反推数字数（字数每 40 字才报一次：逐 token 整层重画会把节点上的打字与拖动全卡住） */
