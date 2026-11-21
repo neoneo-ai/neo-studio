@@ -1,62 +1,55 @@
-// 画布上的生成节点：技能与参数存在节点 metadata 里（随画布落盘、进撤销栈、跟复制走），三条出片链共用
-// 同一份运行态与同一条写回 —— 生图走 POST /neo_image_gen/generate + rs.image_gen.status 事件推送；
-// 视频节点（metadata.kind = "video"）走出视频页那条简单视频链（POST /neo_video_gen/simple + 1s 轮询快照）；
-// 配方闭环节点（type = "recipe"）走导演页单段那条链（POST /neo_video_gen/run_segment + 1s 轮询快照）。
-// 结果写回该节点下游：图进图片节点，片进视频节点。
-// 参数控件直接铺在节点上 —— 胶囊与比例字形是 gen-utils 那一套，与绘画页同一手感；节点缩放时控件跟着缩放，
-// 拖节点用控件之外那一片，缩放走四角尺寸柄。比例、长边、张数是精简的那一枚（图标 + 生效值，没有行标签），
-// 每一枚是干什么的写在悬停提示里。技能那一枚就是绘画页与出视频页的那一枚（skillParamsChip）：
-// 点开左栏换技能、右栏改这一发的自定参数（主模型 / LoRA，出片多几行模型链与步数）。
-// 这一层不持画布 state：读写全走页面交下来的那几条（host.getState / patchMeta / applyResult / paintNodes）。
-
-// 运行态在 gen-state.js，只读清单（技能 / 配方 / 技能 config / 模型清单）在 gen-catalog.js，卡面控件基座在
-// gen-controls.js —— 这一层装配那三层，出图 / 出片 / LLM 三条链的请求构造与卡面控件暂时还在这一个文件里。
+// 画布上的生成节点：技能与参数存在节点 metadata 里（随画布落盘、进撤销栈、跟复制走）。这一层只做装配与
+// 分发 —— 运行态在 gen-state.js，只读清单在 gen-catalog.js，卡面控件基座在 gen-controls.js，出图与编辑
+// 两条链在 gen-image.js，增强 / 反推 / 故事板三条链在 gen-llm.js；出片与串联这两族还在这一个文件里。
+// 族模块只吃装配层交下来的 ctx（$el / toast / api / canFeature / host / modeGroup / groupLabels 与 runs /
+// catalog / ctl / hooks），不直连页面、不自持跨请求的缓存；要跨族的那两一手（车尾那一枚技能下拉、故事板
+// 写段时长）由装配层点名接线，族与族之间不互拿。
+// 结果写回该节点下游：图进图片节点，片进视频节点，成文进提示词节点与车厢。
 import { t, tf } from "../../../js/core/i18n.js";
-import { chipButton, QWEN_IMAGE_SKILL_ID, ratioGlyph, VIDEO_DUR_CHOICES,
-    VIDEO_SIZE_CHOICES } from "../../../gen-utils.js";
-import { cancelTask, COMMON_EDGES, COMMON_RATIOS, requestGeneration,
-    watchTask } from "../../../image-gen.js";
+import { chipButton, ratioGlyph, VIDEO_DUR_CHOICES, VIDEO_SIZE_CHOICES } from "../../../gen-utils.js";
+import { cancelTask } from "../../../image-gen.js";
 import { directorMetaText } from "../../../recipes.js";
-import { skillAcceptsRef, skillAcceptsText, skillDisplayName } from "../../../skill.js";
+import { skillDisplayName } from "../../../skill.js";
 import { MEDIA_CAPS, REF_KIND_NAMES } from "../../../js/core/media-slot.js";
-import { ENHANCE_API, enhancePayload } from "../../../prompt-enhance/prompt-enhance.js";
-import { REVERSE_API, REVERSE_LANGS, reverseRequestBody } from "../../../reverse-prompt/reverse-prompt.js";
-import { STORYBOARD_API, SEG_SEC_DEFAULT, storyboardCarPatches, storyboardDurationWrites, storyboardError,
-    storyboardMismatchText, storyboardRequestBody, storyboardSegments } from "../../storyboard/storyboard.js";
-import { RUN_LABELS, gateOf, runKind, upstreamNodes } from "./node-types.js";
+import { RUN_LABELS, gateOf, runKind } from "./node-types.js";
 import { ANCHOR_CHOICES, CONTEXT_FRAMES_CHOICES, CONTEXT_FRAMES_DEFAULT, SEG_SEC_MAX, SEG_SEC_MIN,
-    SEED_MAX, STEPS_CHOICES, mergeGenOverrides, readEditParams, readGenOverrides, readGenParams,
-    readRecipeParams } from "./gen-params.js";
-import { REF_BUCKETS, chainCars, chainRecipe, genInputs, isCar, mediaNodes, reverseFirstImage,
-    segmentRefs } from "./gen-graph.js";
+    SEED_MAX, STEPS_CHOICES, mergeGenOverrides, readGenOverrides, readGenParams, readRecipeParams } from "./gen-params.js";
+import { REF_BUCKETS, chainCars, chainRecipe, genInputs, isCar, mediaNodes, segmentRefs } from "./gen-graph.js";
 import { createCanvasCatalog } from "./gen-catalog.js";
 import { createCanvasControls } from "./gen-controls.js";
+import { createCanvasImage } from "./gen-image.js";
+import { createCanvasLlm } from "./gen-llm.js";
 import { createCanvasState } from "./gen-state.js";
 
+/**
+ * 装配层的接线面（族模块契约里的 `ctx.recipe`）：族模块要跨到配方族那一发时，只从这里取点名好的那一个。
+ * @typedef {object} CanvasGenHooks
+ * @property {(node: object) => void} run 卡上的运行钮走分发（按节点那一发的种类派到族里）
+ * @property {(node: object) => void} cancel 卡上的取消钮走分发（按在途那一发的种类收场）
+ */
 // 参数读法在 gen-params.js，连线图上的取用在 gen-graph.js（都是纯读法，不持页面状态）：这一层只管三条链
 // 的请求构造、运行态与卡面控件。
 
 const CLIP_TERMINAL = ["succeeded", "failed", "cancelled"];
 const CLIP_POLL_MS = 1000;        // 简单视频与单段任务只有轮询快照：画布就在眼前，进度比出视频页那一格更快
 
-/** SSE 帧体 → 帧对象：非 JSON 的帧（心跳、注释行）交 null，读流那一条不收它当正文 */
-function llmFrame(data) {
-    try { return JSON.parse(data); } catch { return null; }
-}
-
 export function createCanvasGen({ $el, toast, api, canFeature, host, modeGroup, groupLabels }) {
-    // 三层共享件先装配起来。车尾那一枚技能下拉长在配方那一段里，控件层不认配方 —— 交一份按调用时点取的
-    // 读法进来（函数声明的提升，装配顺序不卡在前面）
     const runs = createCanvasState({ host, toast });
     const catalog = createCanvasCatalog({ host });
+    // 卡上的运行钮与取消钮都走分发（按种类派到族里），族模块拿到的就是这两个点名好的入口
+    const hooks = { run: (node) => run(node), cancel: (node) => cancel(node) };
     const ctl = createCanvasControls({ $el, host, catalog, groupLabels, modeGroup,
         tailSkillSelect: (node, busy, follow) => tailSkillSelect(node, busy, follow) });
-    const { running, detached, timers, chains, llmRuns, stateOf, setRunning, labelsOf, finish,
-        detachTask } = runs;
+    const image = createCanvasImage({ $el, host, toast, canFeature, runs, catalog, ctl, hooks });
+    const llm = createCanvasLlm({ $el, host, toast, api, canFeature, runs, catalog, ctl, hooks,
+        recipe: { writeSegmentDuration: (w) => writeSegmentDuration(w) } });
+    const { running, detached, timers, chains, llmRuns, stateOf, setRunning, labelsOf, detachTask } = runs;
     const { skills, enhanceSkills, videoSkills, recipes, loadSkills, loadEnhanceSkills, loadVideoSkills,
         loadRecipes, loadModelLists, skillName, videoSkillName, defaultSkillId, defaultEditSkillId,
         defaultVideoSkillId, recipeRow, cfgOf, primeCfg } = catalog;
     const { chips, openParams, paramsChips, genBtn, genChip, countChip, genParamsChip, modelText } = ctl;
+    const { runImage, runEdit, imageControls, editControls } = image;
+    const { runEnhance, runReverse, runStoryboard, llmControls, storyboardControls } = llm;
     /** 车厢自己写的正文（metadata.content，与提示词节点同一份存法） */
     function carOwnText(car) {
         return String(car?.metadata.content || "");
@@ -341,286 +334,6 @@ export function createCanvasGen({ $el, toast, api, canFeature, host, modeGroup, 
         RUNNERS[runKind(node)]?.(node);
     }
 
-    function runImage(node) {
-        // 停用的那一张按一下就明说自己不跑（这句排在「这一发在跑」之前）；出图要执行队列，拉起它是顶栏
-        // 那一位的事：画布出图与绘画页出图同一口径，这里只说去哪儿启。能力位与话术都在注册表那一行里
-        const stop = gateOf(node, { running: running.has(node.id), canFeature });
-        if (stop) {
-            if (stop.msg) toast(stop.msg, stop.level);
-            return;
-        }
-        const params = readGenParams(node);
-        if (!params.skill_id) { toast(t("先选一个生图技能"), "info"); return; }
-        const state = host.getState();
-        const { prompts, references } = genInputs(state, node.id);
-        // 技能收不进文本就别把正文发出去：后端会 400，画布上提前说清楚（参考图照带）
-        const skill = skills.rows.find((s) => s.id === params.skill_id);
-        if (prompts.length && skill && !skillAcceptsText(skill)) {
-            toast(tf("{skill} 不吃文本提示词，接上参考图再出图", { skill: skillName(params.skill_id) }), "info");
-            return;
-        }
-        if (!prompts.length && !references.images.length) { toast(t("接一条文本或图片线过来再出图"), "info"); return; }
-        const body = { skill_id: params.skill_id, prompt: prompts.join("\n\n"),
-            references: references.images, count: params.count };
-        if (params.default_ratio) body.default_ratio = params.default_ratio;
-        if (params.base_resolution) body.base_resolution = params.base_resolution;
-        mergeGenOverrides(body, readGenOverrides(node));   // 这一发自定的主模型 / LoRA（空 = 后端按技能 config 与全局设置合并）
-        submitImageRun(node, body, params.count);
-    }
-
-    /** 出图与图像编辑共用的那一发：入队、挂上监听、把进度与终态落回这张节点（终态收摊在 finish）。
-     *  requestGeneration 的契约：成功交后端那一份 {task_id,status}，失败抛 Error（落进 catch） */
-    function submitImageRun(node, body, total) {
-        requestGeneration(body)
-            .then((res) => {
-                setRunning(node.id, { kind: "image", task_id: res.task_id, status: res.status || "queued",
-                    done: 0, total, error: "" });
-                watchTask(res.task_id, (snap) => {
-                    if (snap.status === "queued" || snap.status === "running") {
-                        const cur = running.get(node.id);
-                        if (!cur) return;   // 脱手的那一发不在这一张画布上，进度不写它
-                        const p = snap.progress;
-                        setRunning(node.id, { status: snap.status,
-                            done: p ? Number(p.value) || 0 : (snap.images || []).length,
-                            total: p ? Number(p.max) || cur.total : cur.total });
-                        return;
-                    }
-                    finish(node.id, snap);
-                });
-            })
-            .catch((err) => {
-                const msg = String(err?.message || err);
-                running.set(node.id, { kind: "image", status: "failed", error: msg });
-                host.paintNodes();
-                toast(`${t(labelsOf(node.id).failToast)}：${msg}`, "error");
-            });
-    }
-
-    /** 图像编辑节点出图：连过来的图片节点按连线顺序进参考，第一张就是被改的那一张；提示词就是连过来的
-     *  那几条正文。载荷与绘画页编辑面板「常规」那一发同口径（references + skip_enhance），结果照走
-     *  finish 落下游图片节点 */
-    function runEdit(node) {
-        const stop = gateOf(node, { running: running.has(node.id), canFeature });
-        if (stop) {
-            if (stop.msg) toast(stop.msg, stop.level);
-            return;
-        }
-        const params = readEditParams(node);
-        const skill = skills.rows.find((s) => s.id === params.skill_id);
-        // 这一发的全部力气都在「按指令改那张图」上：技能不吃参考图就是必败，跑之前说清楚
-        if (skill && !skillAcceptsRef(skill)) {
-            toast(tf("{skill} 不吃参考图，换一张技能再编辑", { skill: skillName(params.skill_id) }), "info");
-            return;
-        }
-        const { prompts, references } = genInputs(host.getState(), node.id);
-        const refs = references.images;
-        if (!refs.length) { toast(t("把要编辑的那一张图片节点连过来"), "info"); return; }
-        if (!prompts.length) { toast(t("把要用的提示词节点连过来"), "info"); return; }
-        const body = { skill_id: params.skill_id || QWEN_IMAGE_SKILL_ID, prompt: prompts.join("\n\n"),
-            references: refs, count: params.count, skip_enhance: true };
-        mergeGenOverrides(body, readGenOverrides(node));
-        submitImageRun(node, body, params.count);
-    }
-
-    /** 增强与反推共用的闸门：停用的那一张不跑；这一发在跑就不重复提交；能力位缺了说去哪儿启。
-     *  两条链都在桌面端自服的能力表上（prompt_enhance / prompt_reverse），离线窗口照跑 ——
-     *  要的是本机配好 LLM，不是执行队列 */
-    function llmGate(node) {
-        const stop = gateOf(node, { running: running.has(node.id), canFeature });
-        if (stop) {
-            if (stop.msg) toast(stop.msg, stop.level);
-            return true;
-        }
-        return false;
-    }
-
-    /** LLM 流的帧 → 正文增量：思考块不进正文（画布要落的是提示词，不是模型的思考过程）；失败走
-     *  [ERROR] 前缀帧与写进正文块里的 [ERROR] 两种（与 prompt-service 读流那一条同一口径）——
-     *  这一发没有状态码可查，不在这里抛就只剩一个空正文 */
-    async function readLlmText(resp, onProgress) {
-        const reader = resp.body.getReader();
-        const decoder = new TextDecoder();
-        let acc = "";
-        let buf = "";
-        const fail = (msg) => new Error(msg || t("LLM 链失败"));
-        for (;;) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            buf += decoder.decode(value, { stream: true });
-            const lines = buf.split("\n");
-            buf = lines.pop() || "";
-            for (const line of lines) {
-                if (!line.startsWith("data:")) continue;
-                const data = line.slice(5).trim();
-                if (data === "[DONE]") return acc;
-                if (data.startsWith("[ERROR]")) throw fail(data.slice(7).trim());
-                const frame = llmFrame(data);
-                if (!frame || frame.kind === "thinking") continue;   // 心跳与非 JSON 帧照收不下屏
-                if (typeof frame.text !== "string") continue;
-                if (frame.text.startsWith("[ERROR]")) throw fail(frame.text.slice(7).trim());
-                acc += frame.text;
-                onProgress(acc);
-            }
-        }
-        return acc;
-    }
-
-    /** 一发 LLM 链（增强 / 反推）：POST 一条 SSE，正文逐段落进状态行那一串字数，成文交 applyText
-     *  写进下游空的提示词节点。取消走 AbortController（cancel 里按节点摘这一发）；切画布与卸页交
-     *  stopAll 脱手 —— 在途的正文不落这一张画布 */
-    function submitLlmRun(node, path, body, run) {
-        const inflight = { abort: new AbortController(), stopped: false };
-        llmRuns.set(node.id, inflight);
-        setRunning(node.id, { kind: run.kind, status: "running", done: 0, total: 0, error: "" });
-        let shown = 0;
-        api.fetchApi(path, { method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body), signal: inflight.abort.signal })
-            .then(async (resp) => {
-                // 状态码先判，正文一消费就读不了流：失败那一格的提示只在这一条里取 json（prompt-service 同一读流法）
-                if (!resp.ok) {
-                    const data = await resp.json().catch(() => null);
-                    throw new Error(data?.error || `HTTP ${resp.status}`);
-                }
-                const text = await readLlmText(resp, (acc) => {
-                    // 每 40 字报一次进度：逐 token 整层重画会把节点上的打字与拖动全卡住
-                    if (acc.length - shown < 40) return;
-                    shown = acc.length;
-                    if (running.has(node.id)) setRunning(node.id, { done: acc.length });
-                });
-                if (inflight.stopped || inflight.abort.signal.aborted) {
-                    // 取消时流自己断（reader 直接 done）：在途的半截正文不落这一张画布
-                    if (llmRuns.get(node.id) === inflight) finishLlmCancel(node, inflight, run);
-                    return;
-                }
-                llmRuns.delete(node.id);
-                if (!text.trim()) throw new Error(t("后端没有回正文"));
-                running.delete(node.id);
-                if (!host.hasNode(node.id)) { toast(t("提示词已生成"), "success"); return; }
-                host.applyText(node.id, text.trim());
-                toast(t(run.done), "success");
-            })
-            .catch((err) => {
-                const fell = llmRuns.get(node.id) !== inflight;   // 脱手与取消：这一发不再改这一张画布上的状态
-                llmRuns.delete(node.id);
-                if (fell) return;
-                if (err?.name === "AbortError" || inflight.stopped) {
-                    finishLlmCancel(node, inflight, run);
-                    return;
-                }
-                running.set(node.id, { kind: run.kind, status: "failed", error: String(err?.message || err) });
-                host.paintNodes();
-                toast(`${t(run.fail)}：${String(err?.message || err)}`, "error");
-            });
-    }
-
-    /** 取消那一发的收场：摘状态、整层重画、说一句「已取消」—— 已摘掉这一发的（脱手）不再说话 */
-    function finishLlmCancel(node, inflight, run) {
-        if (llmRuns.get(node.id) !== inflight) return;
-        llmRuns.delete(node.id);
-        running.delete(node.id);
-        host.paintNodes();
-        toast(t(run.cancelled), "info");
-    }
-
-    /** 增强节点：连过来的正文按连线顺序拼一条送进那条增强链（技能留空 = 后端按输入智能挑一条），
-     *  成文落下游提示词节点 —— 与首页「提示词增强」页是同一条接口 */
-    function runEnhance(node) {
-        if (llmGate(node)) return;
-        const { prompts } = genInputs(host.getState(), node.id);
-        if (!prompts.length) { toast(t("把要增强的提示词节点连过来"), "info"); return; }
-        submitLlmRun(node, ENHANCE_API,
-            enhancePayload({ text: prompts.join("\n\n"), skillId: String(node.metadata.skill_id || "") }),
-            RUN_LABELS.enhance);
-    }
-
-    /** 反推节点：连线顺序里第一张图进请求（素材库那三元组，与素材卡 ⋯ 反推同一份），成文落下游
-     *  提示词节点。配方素材（只有 asset 没有 filename）后端认不到，跑之前就说清楚 */
-    function runReverse(node) {
-        if (llmGate(node)) return;
-        const src = reverseFirstImage(host.getState(), node.id);
-        if (!src) { toast(t("把要反推的那一张图片节点连过来"), "info"); return; }
-        const filename = String(src.metadata?.filename || "");
-        if (!filename) { toast(t("反推只吃素材库里的图：连一张带素材路径的图片节点过来"), "info"); return; }
-        submitLlmRun(node, REVERSE_API,
-            reverseRequestBody({ filename, subfolder: String(src.metadata?.subfolder || "") },
-                node.metadata.language === "en" ? "en" : "zh"),
-            RUN_LABELS.reverse);
-    }
-
-    /** 文字故事板节点那一发：主题或整篇剧本就在这一张的正文里，每一段的时长由卡上那枚数框定；
-     *  成文按连线顺序写进连过来的车厢，段时长写进车厢所属配方那一段（配方名读车厢身上那一份）。
-     *  这一发走的是后端既有的导演段生成链，与导演页「从一段话生成每一段」同一发，配方一个字都不写 */
-    function runStoryboard(node) {
-        if (llmGate(node)) return;
-        const text = String(node.metadata.content || "").trim();
-        if (!text) { toast(t("在这张节点上写一段话：一个主题或整篇剧本"), "info"); return; }
-        const cars = upstreamNodes(host.getState(), node.id, ["recipe"]);
-        if (!cars.length) { toast(t("把要写的那几厢车厢连过来：按连线顺序一厢一段"), "info"); return; }
-        const run = RUN_LABELS.storyboard;
-        submitJsonRun(node, STORYBOARD_API,
-            storyboardRequestBody({ text, segmentSeconds: node.metadata.segment_seconds }),
-            run, (data) => applyStoryboard(node, cars, data, run));
-    }
-
-    /** 一发非流式的后端链（文字故事板）：在途那一发照 LLM 那一条的记法挂在 llmRuns 上 —— 取消与切画布
-     *  的脱手共用那一条收场（finishLlmCancel 认「已摘掉这一发」就不写画布）。成了交 onDone 写回，
-     *  败了落在状态行上 */
-    function submitJsonRun(node, path, body, run, onDone) {
-        const inflight = { abort: new AbortController(), stopped: false };
-        llmRuns.set(node.id, inflight);
-        setRunning(node.id, { kind: run.kind, status: "running", done: 0, total: 0, error: "" });
-        api.fetchApi(path, { method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body), signal: inflight.abort.signal })
-            .then(async (resp) => {
-                const data = await resp.json().catch(() => null);
-                // 状态码先判：后端在缺 LLM 与正文为空时回的是 {ok:false, error}，那一格的 reason 要说给用户
-                if (!resp.ok) throw data?.error ? storyboardError(data) : new Error(`HTTP ${resp.status}`);
-                if (inflight.stopped || inflight.abort.signal.aborted) {
-                    if (llmRuns.get(node.id) === inflight) finishLlmCancel(node, inflight, run);
-                    return;
-                }
-                llmRuns.delete(node.id);
-                onDone(data);
-            })
-            .catch((err) => {
-                const fell = llmRuns.get(node.id) !== inflight;   // 脱手与取消：这一发不再改这一张画布上的状态
-                llmRuns.delete(node.id);
-                if (fell) return;
-                if (err?.name === "AbortError" || inflight.stopped) {
-                    finishLlmCancel(node, inflight, run);
-                    return;
-                }
-                running.set(node.id, { kind: run.kind, status: "failed", error: String(err?.message || err) });
-                host.paintNodes();
-                toast(`${t(run.fail)}：${String(err?.message || err)}`, "error");
-            });
-    }
-
-    /** 成文落画布：段提示词按连线顺序写进车厢（一格一发的 patchMeta，进撤销栈、随画布落盘），生成的那一段
-     *  列表记在故事板节点自己的 metadata 上 —— 复制、撤销与存盘都带着走。段时长只有车厢记着配方名时
-     *  才有落点（手工铺的车厢没有配方，段时长就没有地方落） */
-    function applyStoryboard(node, cars, data, run) {
-        const segments = storyboardSegments(data);
-        if (!segments) {
-            const msg = String(data?.error || t("后端没有回段列表"));
-            running.set(node.id, { kind: run.kind, status: "failed", error: msg });
-            host.paintNodes();
-            toast(`${t(run.failToast)}：${msg}`, "error");
-            return;
-        }
-        running.delete(node.id);
-        if (!host.hasNode(node.id)) { toast(t("段提示词已生成"), "success"); return; }   // 切画布脱手与节点被删
-        const live = cars.filter((car) => host.hasNode(car.id));
-        const patches = storyboardCarPatches(segments, live);
-        host.patchMeta(node.id, { segments, segments_at: Date.now() });
-        for (const p of patches) host.patchMeta(p.node.id, p.meta);
-        for (const w of storyboardDurationWrites(patches, chainRecipe(live))) writeSegmentDuration(w);
-        host.paintNodes();
-        const note = storyboardMismatchText(segments.length, live.length);
-        if (note) toast(note, "info");
-        toast(tf(run.done, { n: patches.length }), "success");
-    }
-
     function cancel(node) {
         const inflight = llmRuns.get(node.id);
         if (inflight) {
@@ -672,10 +385,6 @@ export function createCanvasGen({ $el, toast, api, canFeature, host, modeGroup, 
         llmRuns.clear();
     }
 
-    /**
-     * 铺在节点上的控件：技能与自定参数一枚胶囊，比例、长边、张数一行一枚，出图与取消在最后一行。
-     * 改动当场走 host.patchMeta —— 进撤销栈、跟复制走、随画布落盘；比例与长边的「跟随」态跟着技能 config 走。
-     */
     function controls(node) {
         const params = readGenParams(node);
         const st = running.get(node.id) || {};
@@ -684,139 +393,9 @@ export function createCanvasGen({ $el, toast, api, canFeature, host, modeGroup, 
             // 串联的车尾那台生成节点的面与出视频页那一张不同：参数是整列共用的那一份
             return params.chain === "train" ? chainControls(node, busy) : videoControls(node, params, busy);
         }
-        const offline = canFeature(RUN_LABELS[runKind(node)].cap) === false;
-        const cfg = cfgOf(params.skill_id);
-        primeCfg(params.skill_id);
 
-        const ratioSel = $el("select", { disabled: busy, title: t("默认比例"),
-            onchange: () => host.patchMeta(node.id, { default_ratio: ratioSel.value }) });
-        ratioSel.append($el("option", { value: "", textContent: t("默认比例") }));
-        for (const r of COMMON_RATIOS) ratioSel.append($el("option", { value: r, textContent: r }));
-        ratioSel.value = params.default_ratio;
-        ratioSel.dataset.follow = t("默认比例");
-        if (cfg?.follow_ratio) {
-            ratioSel.value = "";
-            ratioSel.dataset.follow = t("跟随技能 {ratio}", { ratio: cfg.default_ratio || "" });
-        }
-
-        const edgeSel = $el("select", { disabled: busy, title: t("长边尺寸"),
-            onchange: () => host.patchMeta(node.id, { base_resolution: Number(edgeSel.value) || 0 }) });
-        edgeSel.append($el("option", { value: "0", textContent: t("长边尺寸") }));
-        for (const e of COMMON_EDGES) edgeSel.append($el("option", { value: String(e), textContent: String(e) }));
-        edgeSel.value = String(params.base_resolution || 0);
-        edgeSel.dataset.follow = t("长边尺寸");
-        if (cfg?.follow_resolution) {
-            edgeSel.value = "0";
-            edgeSel.dataset.follow = t("跟随技能 {edge}", { edge: cfg.base_resolution || "" });
-        }
-
-        const labels = RUN_LABELS[runKind(node)];
-        const acts = [];
-        if (busy) acts.push(genBtn(t("取消任务"), "cross", () => cancel(node), t("取消这一发后台任务")));
-        // 出图是这一张卡的主按钮：独占最后一行铺满、主色实心，一眼看见（参考无限画布卡片底部那条生成钮）
-        acts.push(genBtn(t(labels.btn), "play", () => run(node),
-            // 离线不 disable：按下去就是要替用户去启队列的（run 里说清楚）；只有这一发在跑才收着
-            offline ? t(labels.offline) : t(labels.tip), busy, "ns-canvas-gen-go"));
-        // 技能与自定参数就这一枚胶囊：点开左栏换技能、右栏改这一发的主模型与 LoRA（绘画页同一枚）
-        const skillChip = genParamsChip(node, { icon: "sparkles", isVideo: false, busy });
-        return [
-            $el("div", { className: "ns-canvas-gen-skill" }, [skillChip.chip.el]),
-            $el("div", { className: "ns-canvas-gen-params" },
-                [genChip(ratioSel, { glyph: ratioGlyph() }), genChip(edgeSel, { icon: "image" }),
-                    countChip(node, params, busy)]),
-            $el("div", { className: "ns-canvas-gen-bottom" }, [$el("div", { className: "ns-canvas-gen-acts" }, acts)]),
-        ];
+        return imageControls(node, params, busy);
     }
-
-    /** 图像编辑节点上的控件：技能与自定参数一枚胶囊、张数一枚、出图与取消一行 —— 这一张节点上不进图
-     *  也不进正文，那两样都从连过来的节点取（见 runEdit） */
-    function editControls(node) {
-        const params = readEditParams(node);
-        const st = running.get(node.id) || {};
-        const busy = st.status === "queued" || st.status === "running";
-        const offline = canFeature(RUN_LABELS.edit.cap) === false;
-        primeCfg(params.skill_id);
-        const labels = RUN_LABELS.edit;
-        const acts = [];
-        if (busy) acts.push(genBtn(t("取消任务"), "cross", () => cancel(node), t("取消这一发后台任务")));
-        acts.push(genBtn(t(labels.btn), "play", () => runEdit(node),
-            // 离线不 disable：按下去就是要替用户去启队列的（runEdit 里说清楚）；只有这一发在跑才收着
-            offline ? t(labels.offline) : t(labels.tip), busy, "ns-canvas-gen-go"));
-        const skillChip = genParamsChip(node, { icon: "pencil", isVideo: false, busy });
-        return [
-            $el("div", { className: "ns-canvas-gen-skill" }, [skillChip.chip.el]),
-            $el("div", { className: "ns-canvas-gen-params ns-canvas-edit-params" }, [countChip(node, params, busy)]),
-            $el("div", { className: "ns-canvas-gen-bottom" }, [$el("div", { className: "ns-canvas-gen-acts" }, acts)]),
-        ];
-    }
-
-    /** 增强 / 反推节点上的控件：一枚技能（增强）或语言（反推）胶囊 + 运行钮一行 —— 要重写的正文与
-     *  要反推的那一张都不在这张节点上，从连过来的节点取（见 runEnhance 与 runReverse） */
-    function llmControls(node) {
-        const st = running.get(node.id) || {};
-        const busy = st.status === "running";
-        const isReverse = node.type === "reverse";
-        const run = RUN_LABELS[runKind(node)];
-        const acts = [];
-        if (busy) acts.push(genBtn(t("取消任务"), "cross", () => cancel(node), t("取消这一发后台任务")));
-        acts.push(genBtn(t(run.btn), "play", () => (isReverse ? runReverse(node) : runEnhance(node)),
-            t(run.tip), busy, "ns-canvas-gen-go"));
-        return [
-            $el("div", { className: "ns-canvas-gen-skill" }, [isReverse ? reverseLangChip(node, busy) : enhanceSkillChip(node, busy)]),
-            $el("div", { className: "ns-canvas-gen-bottom" }, [$el("div", { className: "ns-canvas-gen-acts" }, acts)]),
-        ];
-    }
-
-    /** 文字故事板节点上的控件：每一段的时长（进这一发的 segment_seconds，边界与后端同一份）与那一枚运行钮。
-     *  要写的那一段话就在这张节点上（与车厢自己写正文同一份存法），不从连过来的节点取 */
-    function storyboardControls(node) {
-        const st = running.get(node.id) || {};
-        const busy = st.status === "running";
-        const run = RUN_LABELS.storyboard;
-        const acts = [];
-        if (busy) acts.push(genBtn(t("取消任务"), "cross", () => cancel(node), t("取消这一发后台任务")));
-        acts.push(genBtn(t(run.btn), "play", () => runStoryboard(node), t(run.tip), busy, "ns-canvas-gen-go"));
-        // 每一段的时长就是一枚数框（与车厢顶行那一枚同一法，步进箭头去掉）：写歪了钳进后端认的那一份区间
-        const sec = $el("input", { className: "ns-canvas-storyboard-sec", type: "number",
-            min: String(SEG_SEC_MIN), max: String(SEG_SEC_MAX), step: "1",
-            value: String(Number(node.metadata.segment_seconds) || SEG_SEC_DEFAULT),
-            title: t("每一段的时长（秒）：交后端按这一发拆段"),
-            onmousedown: (e) => { if (document.activeElement !== e.target) e.preventDefault(); },
-            onchange: () => host.patchMeta(node.id, {
-                segment_seconds: Math.min(SEG_SEC_MAX, Math.max(SEG_SEC_MIN,
-                    Math.round(Number(sec.value)) || SEG_SEC_DEFAULT)) }) });
-        sec.disabled = busy;
-        return [$el("div", { className: "ns-canvas-gen-acts" }, [
-            $el("span", { className: "ns-canvas-storyboard-sec-label", textContent: t("每段") }),
-            sec, ...acts,
-        ])];
-    }
-
-    /** 反推节点上的语言胶囊：与反推页和素材卡反推同一对取值（后端认 zh / en） */
-    function reverseLangChip(node, busy) {
-        const sel = $el("select", { disabled: busy, title: t("反推输出的语言"),
-            onchange: () => host.patchMeta(node.id, { language: sel.value }) });
-        for (const { value, label } of REVERSE_LANGS) sel.append($el("option", { value, textContent: label }));
-        sel.value = node.metadata.language === "en" ? "en" : "zh";
-        return genChip(sel, { icon: "list" });
-    }
-
-    /** 增强节点上的技能胶囊：列表里留空那一档就是「后端智能判断」（带图走反推、不带图走默认增强），
-     *  与首页「提示词增强」页的技能那一枚同一口径；技能被删了、列表没取到时把存的这一个也列出来 */
-    function enhanceSkillChip(node, busy) {
-        const saved = String(node.metadata.skill_id || "");
-        const sel = $el("select", { disabled: busy, title: t("增强用哪一条技能：留空 = 后端按输入智能判断"),
-            onchange: () => host.patchMeta(node.id, { skill_id: sel.value }) });
-        sel.append($el("option", { value: "", textContent: t("智能判断") }));
-        for (const s of enhanceSkills.rows) sel.append($el("option", { value: s.id, textContent: skillDisplayName(s) }));
-        sel.value = saved;
-        if (sel.value !== saved && saved) {
-            sel.value = "";
-            sel.appendChild($el("option", { value: saved, textContent: saved, disabled: true, selected: true }));
-        }
-        return genChip(sel, { icon: "sparkles" });
-    }
-
     /** 「加图像生成节点」把技能列表取到手：胶囊里列的就是那一份；技能被删了，旧画布上的节点要能认出来 */
     function prime() {
         loadSkills().then(host.paintNodes).catch(() => {});
