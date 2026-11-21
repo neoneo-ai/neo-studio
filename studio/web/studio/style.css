@@ -2521,6 +2521,10 @@ body {
 /* 菜单里的一行是图标 + 名字：图标不跟着文字缩，名字打在图标右边，长名字收省略号（min-width 撑住行宽） */
 .ns-canvas-add-item { width: 100%; justify-content: flex-start; gap: 8px; white-space: nowrap; }
 .ns-canvas-add-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* 三大类的标题行（文字 / 图像 / 视频）：不可按的小字，标题与上一档之间一条线 —— 菜单一屏二十来行，
+   没有这一层就要逐行读完才找得到要的那一枚 */
+.ns-canvas-add-group { padding: 2px 8px; font-size: 11px; color: var(--ns-dim); }
+.ns-canvas-add-group:not(:first-child) { margin-top: 4px; padding-top: 7px; border-top: 1px solid var(--ns-border); }
 /* 「加节点」那枚钮在菜单开着时抬到主色：一眼看得出条上哪一枚正在展开 */
 .ns-canvas-tool-on { border-color: var(--ns-primary); background: var(--ns-primary-soft); color: var(--ns-primary-fg); }
 /* 「添加配方」弹窗：遮罩铺满整页、窗在正中，一张卡一份配方，点一张就直接串成一列车厢。

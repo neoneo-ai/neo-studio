@@ -8,7 +8,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import "./setup.mjs";   // 与画布其余用例同一套：jsdom 与全局在 import 被测模块之前装好
-import { ADD_MENU, NODE_SPECS, NODE_TYPES, RUN_LABELS, gateOf, runKind, upstreamNodes }
+import { ADD_GROUPS, ADD_MENU, NODE_SPECS, NODE_TYPES, RUN_LABELS, gateOf, runKind, upstreamNodes }
     from "../../web/studio/pages/canvas/node-types.js";
 import { createCanvasNode, readCanvas } from "../../web/studio/pages/canvas/store.js?nodeTypesStore=1";
 import { ICON_NAMES } from "../../web/js/core/icons.js";
@@ -54,10 +54,21 @@ test("规格与落盘同源：store 建节点用的就是这一份，旧画布�
     assert.equal(read.nodes[0].metadata.content, "旧正文");
 });
 
-test("加节点菜单与页面同源：顺序与图标都在注册表那一列里，页面不再逐行写一遍名字", () => {
+test("加节点菜单与页面同源：顺序、图标与三大类落点都在注册表那一列里，页面不再逐行写一遍名字", () => {
     assert.deepEqual(ADD_MENU.map((row) => row.label), types.map((t) => NODE_TYPES[t].add.label),
         "菜单顺序与注册表那一列的顺序对不上");
-    assert.ok(pageSource.includes("ADD_MENU.map"), "页面没有照注册表铺菜单：加一类节点还要在页面补一行菜单");
+    assert.ok(pageSource.includes("ADD_MENU.filter") && pageSource.includes("ADD_GROUPS"),
+        "页面没有照注册表铺菜单：加一类节点还要在页面补一行菜单与归类");
+    // 菜单按三大类铺开：就三档，每一行都要落进其中一档，一档空了就是标题空转
+    assert.deepEqual(ADD_GROUPS.map((g) => g.key), ["text", "image", "video"], "三大类那一列就三档");
+    assert.deepEqual([...new Set(ADD_MENU.map((row) => row.group))].sort(), ["image", "text", "video"],
+        "菜单里的行没有落点，或落点不在这三档里");
+    for (const key of ADD_GROUPS.map((g) => g.key)) {
+        assert.ok(ADD_MENU.some((row) => row.group === key), `三大类里 ${key} 那一档空了`);
+    }
+    for (const g of ADD_GROUPS) {
+        assert.ok(i18nSource.includes(`"${g.label}"`), `三大类标题 ${g.label} 不在词表里：英文界面露中文`);
+    }
     for (const type of types) {
         const label = NODE_TYPES[type].add.label;
         // 菜单那一行不许在页面里现写一遍名字（「添加配方」在配方弹窗的标题里还有正当的一处）

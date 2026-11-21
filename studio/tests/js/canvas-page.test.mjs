@@ -694,6 +694,26 @@ describe("canvas-page 页面", () => {
       assert.equal(view.nodeLayer.children.length, 1, "菜单里点一项就加一个节点");
       assert.ok(!menu.classList.contains("ns-canvas-add-menu-open"), "点完一项菜单自己收起");
     });
+    test("加节点菜单按 文字 / 图像 / 视频 三大类铺开：每一行落在自己那一档下", async () => {
+      const { view } = await makePage();
+      const menu = view.bar.querySelector(".ns-canvas-add-menu");
+      const under = {};
+      let head = null;
+      for (const child of menu.children) {
+        if (child.classList.contains("ns-canvas-add-group")) { head = child.textContent; under[head] = []; continue; }
+        under[head].push(child.getAttribute("aria-label"));
+      }
+      assert.deepEqual(Object.keys(under), ["文字", "图像", "视频"], "三大类的标题与顺序");
+      assert.deepEqual(under["文字"], ["加提示词", "加文本增强节点", "加文字故事板节点"]);
+      assert.deepEqual(under["图像"], ["加图片", "加图像生成节点", "加图像编辑节点", "加图片反推节点"]);
+      assert.deepEqual(under["视频"], ["加视频生成节点", "加视频输入", "加音频输入", "添加配方"]);
+      // 标题行是一行小字，不是可按的钮：菜单里可按的行就是注册表那一列的行数
+      assert.equal([...menu.children].filter((el) => el.classList.contains("ns-canvas-add-item")).length, 11);
+      for (const el of menu.querySelectorAll(".ns-canvas-add-group")) {
+        assert.equal(el.tagName, "DIV", `标题行「${el.textContent}」不可按`);
+      }
+    });
+
     test("加一个提示词节点：正文框可直接打字，有节点之后提示让位", async () => {
       const { view } = await makePage();
       click(view.button("加提示词"));

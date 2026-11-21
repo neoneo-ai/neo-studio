@@ -41,6 +41,8 @@ const EN = {
     "加视频输入": "Add video input",
     "加音频输入": "Add audio input",
     "加节点": "Add node",
+    // 「加节点」菜单里三大类的标题（「图像」与「视频」两条在标签分析与视频页那两段里已有）
+    "文字": "Text",
     "选图": "Pick image",
     "换图": "Change image",
     "取用素材": "Pick asset",

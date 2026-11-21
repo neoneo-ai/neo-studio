@@ -45,7 +45,8 @@
   自己那套能力闸门——闸门只有 `app/studio_caps.py` 那张表，随版本快照下发、页里用 `can` 读。注册表 ↔ 首页卡表 ↔
   `index.html` 页签 ↔ `PAGE_BUILDERS` ↔ `skill.py` 的落地页清单这一条由 `studio/tests/js/app-registry.test.mjs` 钉住。
 - 画布页上每一类节点有一份描述符：`studio/web/studio/pages/canvas/node-types.js`。一行说清标题与默认框、卡面类名与
-  走哪个渲染器、附加栏多出来的那枚、「加节点」菜单那一行，以及它在中英文档节点表里的那几行名字；那一发在卡上与提示条
+  走哪个渲染器、附加栏多出来的那枚、「加节点」菜单那一行（图标、名字，以及它落在 `ADD_GROUPS` 三大类里的哪一档
+  `group`），卡上带不带一块正文框（`bodyText`：手势层的双击进编辑照这一位认，不在页面里写类型名单），以及它在中英文档节点表里的那几行名字；那一发在卡上与提示条
   里说的话在 `RUN_LABELS` 同一索引的那一行里，连它要的能力位（`cap`，名字就是 `app/studio_caps.py` 里那一个）与缺了要
   说的话（`gateNote`）、跑完把结果写进哪一类节点（`out`：图片节点 / 视频节点 / 提示词节点）都在那一行——闸门 `gateOf`
   按节点自己那一发查，调用方不传能力位名字；落图与落片的写回读 `out`，链模块里不各写一份类型名。`store.js` 的
@@ -54,7 +55,7 @@
   各加一行、画布用例加一段——其余全从表里读。这张表同样是编译期常量：没有运行期注册，也不持有节点运行态（`running`
   在 `gen-state.js`、画布 state 在 `page.js`）。表里的 `type` 就是画布落盘 JSON 与 `studio/canvas.py` 里那一个字符串，
   **不进 ComfyUI 的 `NODE_CLASS_MAPPINGS`**——画布节点是这一页自己的东西，内核不认识它。手势层认的控件面是
-  `interactions.js` 里一份共享清单，按类型拆会让卡面几乎按不到，不进这张表。注册表 ↔ `store.js` 规格 ↔ 加节点菜单 ↔
+  `interactions.js` 里一份共享清单，按类型拆会让卡面几乎按不到，不进这张表。注册表 ↔ `store.js` 规格 ↔ 加节点菜单（含每一行的三大类落点与 `ADD_GROUPS` 标题词条）↔
   `RUN_LABELS` 的 i18n 词条（含钮上的离线提示与闸门话术）↔ `RUN_LABELS.cap` 在能力表里 ↔ `RUN_LABELS.out` 与写回同源
   ↔ 中英文档行这一条由 `studio/tests/js/canvas-node-types.test.mjs` 钉住；落盘 JSON 里的 `type` 后端照旧认
   （`studio/canvas.py` 不认的类型才回落），由 `studio/tests/test_canvas_node_types.py` 按注册表逐类钉住。

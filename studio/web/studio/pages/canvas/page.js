@@ -11,7 +11,7 @@ import { addConnection, gridGeometry, MAX_SCALE, MIN_SCALE, nodeBounds, placeGri
 import { BACKGROUND_MODES, createCanvasNode, createCanvasStore, duplicateNodes, fitImageSize, NODE_SPECS, readCanvas } from "./store.js";
 import { createHistory, snapshotCanvas } from "./history.js";
 import { applyNodeGeometry as paintNodeGeometry, renderNodes as renderNodeLayer, paintSelection as paintNodeSelection } from "./nodes.js";
-import { ADD_MENU, VIDEO_GEN_TITLE } from "./node-types.js";
+import { ADD_MENU, ADD_GROUPS, VIDEO_GEN_TITLE } from "./node-types.js";
 import { renderConnections as renderLinkLayer, renderActiveConnection as paintActiveLine } from "./connections.js";
 import { attachCanvasInteractions } from "./interactions.js";
 import { createCanvasGen } from "./gen.js";
@@ -135,7 +135,8 @@ export function createCanvasPage({ $el, api, toast, openMaterial, can, modeGroup
         const redo = mkHint(t("重做"), "Ctrl+Shift+Z", "redo", () => redoEdit());
         const group = (...kids) => $el("span", { className: "ns-canvas-bar-group" }, kids);
         const sep = () => $el("span", { className: "ns-canvas-bar-sep" });
-        // 加节点收成菜单里的八行：顺序、图标与名字都在 node-types.js 的那一列里。菜单钉在钮下方，
+        // 加节点收成菜单里的三大类：文字 / 图像 / 视频 各一小行标题，标题下是那一档里的行 —— 顺序、图标、
+        // 名字与落在哪一档都在 node-types.js 的那一列里。菜单钉在钮下方，
         // position: fixed 让它不占条内的行位、也不被条的横向滚动裁剪；行面上是图标 + 名字 —— 只有图标时
         // 「加图像生成节点」与「加视频生成节点」落在同一类节点的两个档上，行面上只有图标时更分不出来
         const inMenu = (btn) => {
@@ -162,8 +163,11 @@ export function createCanvasPage({ $el, api, toast, openMaterial, can, modeGroup
         }
         const addOutside = (e) => { if (!addMenu.contains(e.target) && !addBtn.contains(e.target)) closeAddMenu(); };
         const addEscape = (e) => { if (e.key === "Escape") closeAddMenu(); };
-        const addMenu = $el("div", { className: "ns-canvas-add-menu" },
-            ADD_MENU.map((row) => inMenu(mk(t(row.label), row.icon, addAction(() => addTypedNode(row))))));
+        const addMenu = $el("div", { className: "ns-canvas-add-menu" }, ADD_GROUPS.flatMap((group) => [
+            $el("div", { className: "ns-canvas-add-group", "aria-hidden": "true", textContent: t(group.label) }),
+            ...ADD_MENU.filter((row) => row.group === group.key)
+                .map((row) => inMenu(mk(t(row.label), row.icon, addAction(() => addTypedNode(row))))),
+        ]));
         const addBtn = mk(t("加节点"), "plus-square", () => (
             addMenu.classList.contains("ns-canvas-add-menu-open") ? closeAddMenu() : openAddMenu()));
         const root = $el("div", { className: "ns-canvas-bar" }, [
