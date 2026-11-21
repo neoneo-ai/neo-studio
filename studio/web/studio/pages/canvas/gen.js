@@ -8,35 +8,36 @@
 // 每一枚是干什么的写在悬停提示里。技能那一枚就是绘画页与出视频页的那一枚（skillParamsChip）：
 // 点开左栏换技能、右栏改这一发的自定参数（主模型 / LoRA，出片多几行模型链与步数）。
 // 这一层不持画布 state：读写全走页面交下来的那几条（host.getState / patchMeta / applyResult / paintNodes）。
+
+// 运行态在 gen-state.js，只读清单（技能 / 配方 / 技能 config / 模型清单）在 gen-catalog.js，卡面控件基座在
+// gen-controls.js —— 这一层装配那三层，出图 / 出片 / LLM 三条链的请求构造与卡面控件暂时还在这一个文件里。
 import { t, tf } from "../../../js/core/i18n.js";
-import { setIconLabel } from "../../../js/core/icons.js";
-import { chipButton, guardMainModelFamily, QWEN_IMAGE_SKILL_ID, ratioGlyph, skillParamsChip,
-    VIDEO_DUR_CHOICES, VIDEO_SIZE_CHOICES } from "../../../gen-utils.js";
-import { cancelTask, COMMON_EDGES, COMMON_RATIOS, createModelConfigSection, createVideoModelConfigSection,
-    getSkillGenConfig, listGenModels, listVideoGenModels, requestGeneration, shortModelName,
+import { chipButton, QWEN_IMAGE_SKILL_ID, ratioGlyph, VIDEO_DUR_CHOICES,
+    VIDEO_SIZE_CHOICES } from "../../../gen-utils.js";
+import { cancelTask, COMMON_EDGES, COMMON_RATIOS, requestGeneration,
     watchTask } from "../../../image-gen.js";
-import { directorMetaText, listRecipes, listVideoSkills } from "../../../recipes.js";
-import { listSkills, skillAcceptsRef, skillAcceptsText, skillDisplayName, isEnhanceSkill } from "../../../skill.js";
+import { directorMetaText } from "../../../recipes.js";
+import { skillAcceptsRef, skillAcceptsText, skillDisplayName } from "../../../skill.js";
 import { MEDIA_CAPS, REF_KIND_NAMES } from "../../../js/core/media-slot.js";
 import { ENHANCE_API, enhancePayload } from "../../../prompt-enhance/prompt-enhance.js";
 import { REVERSE_API, REVERSE_LANGS, reverseRequestBody } from "../../../reverse-prompt/reverse-prompt.js";
 import { STORYBOARD_API, SEG_SEC_DEFAULT, storyboardCarPatches, storyboardDurationWrites, storyboardError,
     storyboardMismatchText, storyboardRequestBody, storyboardSegments } from "../../storyboard/storyboard.js";
 import { RUN_LABELS, gateOf, runKind, upstreamNodes } from "./node-types.js";
-import { ANCHOR_CHOICES, CONTEXT_FRAMES_CHOICES, CONTEXT_FRAMES_DEFAULT,
-    GEN_COUNT_MAX, GEN_PARAM_KEYS, SEG_SEC_MAX, SEG_SEC_MIN, SEED_MAX, STEPS_CHOICES, STEPS_MAX,
-    mergeGenOverrides, readEditParams, readGenOverrides, readGenParams, readRecipeParams } from "./gen-params.js";
-import { REF_BUCKETS, chainCars, chainRecipe, genInputs, isCar, mediaNodes, reverseFirstImage, segmentRefs } from "./gen-graph.js";
+import { ANCHOR_CHOICES, CONTEXT_FRAMES_CHOICES, CONTEXT_FRAMES_DEFAULT, SEG_SEC_MAX, SEG_SEC_MIN,
+    SEED_MAX, STEPS_CHOICES, mergeGenOverrides, readEditParams, readGenOverrides, readGenParams,
+    readRecipeParams } from "./gen-params.js";
+import { REF_BUCKETS, chainCars, chainRecipe, genInputs, isCar, mediaNodes, reverseFirstImage,
+    segmentRefs } from "./gen-graph.js";
+import { createCanvasCatalog } from "./gen-catalog.js";
+import { createCanvasControls } from "./gen-controls.js";
+import { createCanvasState } from "./gen-state.js";
 
 // 参数读法在 gen-params.js，连线图上的取用在 gen-graph.js（都是纯读法，不持页面状态）：这一层只管三条链
 // 的请求构造、运行态与卡面控件。
-// 画布自己记的默认技能（绘画页与视频页各记各的，同一套法）：新建生成节点带出上一次在这页选的技能
-const LAST_SKILL_KEY = "neo.canvas.skill";
-const LAST_VIDEO_SKILL_KEY = "neo.canvas.video.skill";
+
 const CLIP_TERMINAL = ["succeeded", "failed", "cancelled"];
 const CLIP_POLL_MS = 1000;        // 简单视频与单段任务只有轮询快照：画布就在眼前，进度比出视频页那一格更快
-
-// 增强与反推两条 LLM 链在卡面上说的话在 node-types.js 的 RUN_LABELS 里（运行钮、状态行与提示条共用）
 
 /** SSE 帧体 → 帧对象：非 JSON 的帧（心跳、注释行）交 null，读流那一条不收它当正文 */
 function llmFrame(data) {
@@ -44,155 +45,18 @@ function llmFrame(data) {
 }
 
 export function createCanvasGen({ $el, toast, api, canFeature, host, modeGroup, groupLabels }) {
-    // 一发一份运行态（节点上那一行状态就是它）。watchTask 在终态自己摘监听；切画布只把这一发脱手：
-    // 图已经落在 Output 目录，不再写回旧画布，也不在页面外头留一份没人收的监听
-    const running = new Map();
-    const detached = new Set();
-    const timers = new Map();     // 轮询链（简单视频 / 配方单段）的计时句柄：task_id → setInterval
-    const chains = new Map();     // 串联的车尾节点 id → 这一列还在跑的段节点 id（车尾的进度与整列取消读它）
-    const llmRuns = new Map();    // 增强 / 反推的在途一发：节点 id → {abort, stopped}（取消与脱手都按节点摘这一发）
-    const skills = { rows: [], inflight: null };
-    const enhanceSkills = { rows: [], inflight: null };
-    const videoSkills = { rows: [], inflight: null };
-    const recipes = { rows: [], inflight: null };
-    const cfgs = { byId: new Map(), inflight: new Map() };
-    const chips = new Set();
-    // 技能 + 自定参数那一枚胶囊按节点存一份（nodeId → 签名 + 那一套表单）：patchMeta 每改一格就整层重画，
-    // 面板每重画一次重建的话，下拉的焦点与滚动位置全丢了 —— 签名没变就接同一块；openParams 记着
-    // 「这台节点的面板开着」，重画完在原处接着弹开
-    const paramsChips = new Map();
-    const openParams = new Set();
-    // 自定参数那两块表单要列的模型清单（生图与生视频各一份，与出视频页那份 videoModels 同一判法）：
-    // 没到手就不发覆盖值，各节点照技能 config 与全局设置走，弹窗里的模型行也铺不出东西
-    let genModels = null;
-    let videoModels = null;
-    // 胶囊菜单挂在页面给的浮层里（世界层带 scale、节点裁剪自己的内容，菜单进那一层会跟着缩放并被节点切掉）。
-    // 节点每重画一次控件就整份重建，挂出去的菜单元素由页面在那一层里一起清掉 —— 收菜单只看 document 起手这一下
-    document.addEventListener("pointerdown", (e) => {
-        for (const chip of chips) {
-            if (!chip.el.isConnected) chips.delete(chip);
-            else if (chip.isOpen()) chip.closeOnOutside(e.target);
-        }
-        // 节点没了（删节点、切画布）就把这台节点的表单连同开着的面板一起收掉：那一层里没有节点认得它了
-        for (const [id, entry] of paramsChips) {
-            if (host.hasNode(id)) continue;
-            chips.delete(entry.chip);
-            entry.chip.close();
-            paramsChips.delete(id);
-        }
-    }, true);
-
-    function loadSkills() {
-        if (skills.rows.length) return Promise.resolve(skills.rows);
-        if (!skills.inflight) {
-            skills.inflight = listSkills()
-                .then((rows) => {
-                    skills.rows = (rows || []).filter((s) => s.gen_image && skillAcceptsText(s));
-                    return skills.rows;
-                })
-                .catch(() => [])
-                .finally(() => { skills.inflight = null; });
-        }
-        return skills.inflight;
-    }
-
-    /** 增强节点的技能胶囊要列的那一份：与首页「提示词增强」页同一判法（吃正文的那几条增强技能）。
-     *  生图技能不在这一份里 —— 增强链不跑图，画布上的技能列表与那一页必须同一口径 */
-    function loadEnhanceSkills() {
-        if (enhanceSkills.rows.length) return Promise.resolve(enhanceSkills.rows);
-        if (!enhanceSkills.inflight) {
-            enhanceSkills.inflight = listSkills()
-                .then((rows) => { enhanceSkills.rows = (rows || []).filter(isEnhanceSkill); return enhanceSkills.rows; })
-                .catch(() => [])
-                .finally(() => { enhanceSkills.inflight = null; });
-        }
-        return enhanceSkills.inflight;
-    }
-
-    function skillName(id) {
-        if (!id) return t("未选技能");
-        const hit = skills.rows.find((s) => s.id === id);
-        return hit ? skillDisplayName(hit) : id;
-    }
-
-    /** 「加图像生成节点」的默认技能：上次在这页选的那一个，没有就落内置生图技能 */
-    function defaultSkillId() {
-        let last = "";
-        try { last = localStorage.getItem(LAST_SKILL_KEY) || ""; } catch { /* 隐私模式记不住就算了，不挡建节点 */ }
-        if (skills.rows.some((s) => s.id === last)) return last;
-        return skills.rows.some((s) => s.id === "image_gen") ? "image_gen" : (skills.rows[0]?.id || "");
-    }
-
-    /** 「加图像编辑节点」的默认技能：编辑链默认那一张（Qwen Image 2.1 —— 参考图槽位最宽、编辑触发词钉在它
-     *  的 config 里），技能列表里没有就落第一张。编辑节点不跟着「加图像生成节点」记住的上一次：那一档记的是
-     *  出图技能，吃不吃参考图两回事 */
-    function defaultEditSkillId() {
-        return skills.rows.some((s) => s.id === QWEN_IMAGE_SKILL_ID) ? QWEN_IMAGE_SKILL_ID : (skills.rows[0]?.id || "");
-    }
-
-    /** 视频技能（带 workflow.json 的 gen_video）：与出视频页同一份来源，画布上共用一份列表 */
-    function loadVideoSkills() {
-        if (videoSkills.rows.length) return Promise.resolve(videoSkills.rows);
-        if (!videoSkills.inflight) {
-            videoSkills.inflight = listVideoSkills()
-                .then((rows) => { videoSkills.rows = rows || []; return videoSkills.rows; })
-                .catch(() => [])
-                .finally(() => { videoSkills.inflight = null; });
-        }
-        return videoSkills.inflight;
-    }
-
-    /** 「加视频生成节点」的默认技能：上次在这页选的那一个，没有就落列表里第一张 */
-    function defaultVideoSkillId() {
-        let last = "";
-        try { last = localStorage.getItem(LAST_VIDEO_SKILL_KEY) || ""; } catch { /* 隐私模式记不住就算了，不挡建节点 */ }
-        if (videoSkills.rows.some((s) => s.id === last)) return last;
-        return videoSkills.rows[0]?.id || "";
-    }
-
-    /** 自定参数那两块表单要列的模型清单（生图与生视频各一份）：到手重画一次，
-     *  节点上那行主模型摘要跟着生效值走；取不到（离线）就整页不发覆盖值 */
-    function loadModelLists() {
-        if (!genModels) listGenModels()
-            .then((rows) => { genModels = rows || {}; host.paintNodes(); }).catch(() => {});
-        if (!videoModels) listVideoGenModels()
-            .then((rows) => { videoModels = rows || {}; host.paintNodes(); }).catch(() => {});
-    }
-
-    /** 视频技能 id 在卡上怎么写：列表里有就用技能自己的名字，没有（技能被删了、列表没取到）就照存的 id 说 */
-    function videoSkillName(id) {
-        if (!id) return "";
-        const hit = videoSkills.rows.find((s) => s.id === id);
-        return hit ? skillDisplayName(hit) : id;
-    }
-
-    /** 导演配方列表（单段生成只认用户配方：内置预设只读，后端会直接拒；没有一段的配方在这里只会撞到「段序号越界」） */
-    function loadRecipes() {
-        if (recipes.rows.length) return Promise.resolve(recipes.rows);
-        if (!recipes.inflight) {
-            recipes.inflight = listRecipes()
-                .then((rows) => {
-                    recipes.rows = (rows || []).filter((r) => r?.type === "video_director" && r.source !== "preset"
-                        && (r.segments?.length || 0) > 0);
-                    return recipes.rows;
-                })
-                .catch(() => [])
-                .finally(() => { recipes.inflight = null; });
-        }
-        return recipes.inflight;
-    }
-
-    function recipeRow(name) {
-        return recipes.rows.find((r) => r.name === String(name || "")) || null;
-    }
-
-    /** 密度行上的停用说法：停用的那一张在生成卡与车厢最后一行都写出来，启用与停用都从双击节点那一发来 */
-    function densityTitle(node) {
-        return node.metadata?.disabled === true
-            ? ` · ${t("已停用 · 双击节点启用")}`
-            : ` · ${t("停用 · 双击节点停用")}`;
-    }
-
+    // 三层共享件先装配起来。车尾那一枚技能下拉长在配方那一段里，控件层不认配方 —— 交一份按调用时点取的
+    // 读法进来（函数声明的提升，装配顺序不卡在前面）
+    const runs = createCanvasState({ host, toast });
+    const catalog = createCanvasCatalog({ host });
+    const ctl = createCanvasControls({ $el, host, catalog, groupLabels, modeGroup,
+        tailSkillSelect: (node, busy, follow) => tailSkillSelect(node, busy, follow) });
+    const { running, detached, timers, chains, llmRuns, stateOf, setRunning, labelsOf, finish,
+        detachTask } = runs;
+    const { skills, enhanceSkills, videoSkills, recipes, loadSkills, loadEnhanceSkills, loadVideoSkills,
+        loadRecipes, loadModelLists, skillName, videoSkillName, defaultSkillId, defaultEditSkillId,
+        defaultVideoSkillId, recipeRow, cfgOf, primeCfg } = catalog;
+    const { chips, openParams, paramsChips, genBtn, genChip, countChip, genParamsChip, modelText } = ctl;
     /** 车厢自己写的正文（metadata.content，与提示词节点同一份存法） */
     function carOwnText(car) {
         return String(car?.metadata.content || "");
@@ -217,60 +81,6 @@ export function createCanvasGen({ $el, toast, api, canFeature, host, modeGroup, 
         if (!recipe) return t("未选配方");
         const row = recipeRow(recipe);
         return row ? directorMetaText(row, videoSkills.rows) : recipe;
-    }
-
-    function stateOf(node) {
-        const st = running.get(node.id);
-        return {
-            status: st?.status || "",
-            // kind 给状态行认串联的车尾：那一行数的是链上的段数，不是某一发的步数
-            kind: st?.kind || "",
-            done: st?.done || 0,
-            total: st?.total || 0,
-            error: st?.error || "",
-        };
-    }
-
-    function setRunning(id, patch) {
-        running.set(id, { ...(running.get(id) || {}), ...patch });
-        host.paintNodes();
-    }
-
-    /** 这一张节点那一发在提示条里说的话（RUN_LABELS 里那一行）：节点已经不在这一张画布上（切走了、撤销掉了）
-     *  就按生图那一发收 —— 图与片都已经在 Output 目录里，只剩一句落点 */
-    function labelsOf(nodeId) {
-        const node = host.getState().nodes.find((n) => n.id === nodeId);
-        return RUN_LABELS[node ? runKind(node) : "image"];
-    }
-
-    function finish(nodeId, snap) {
-        const fell = detached.delete(snap.task_id);
-        const labels = labelsOf(nodeId);
-        if (snap.status === "succeeded") {
-            running.delete(nodeId);
-            host.paintNodes();
-            // 切画布时脱手的那一发、以及节点已被删掉的：图就在 Output 目录里，不往现在这张画布上写
-            if (fell || !host.hasNode(nodeId)) { toast(t(labels.fell), "success"); return; }
-            host.applyResult(nodeId, snap.images || []);
-            toast(tf(labels.doneN, { n: (snap.images || []).length }), "success");
-            return;
-        }
-        if (snap.status === "cancelled") {
-            running.delete(nodeId);
-            host.paintNodes();
-            toast(t(labels.cancelled), "info");
-            return;
-        }
-        const msg = String(snap.error || "");
-        const needKey = ["GEMINI_API_KEY", "GOOGLE_API_KEY"].some((k) => msg.includes(k)) || msg.includes("apiKey");
-        running.set(nodeId, { ...(running.get(nodeId) || {}),
-            status: "failed", error: needKey ? t("技能缺 API Key，在技能管理里填好再出图") : msg });
-        host.paintNodes();
-        if (needKey) {
-            toast(t("技能缺 API Key，已为你打开技能管理"), "info");
-            return;
-        }
-        toast(`${t(labels.failToast)}${msg ? `：${msg}` : ""}`, "error");
     }
 
     /** 一轮任务快照（简单视频 / 配方单段都是轮询链）：进度写回节点，终态收摊并写回画布。
@@ -844,12 +654,6 @@ export function createCanvasGen({ $el, toast, api, canFeature, host, modeGroup, 
         api.fetchApi(path, { method: "POST" }).catch(() => { /* 取消失败不挡 UI：这一发还在队列里，顶栏「队列」能取消 */ });
     }
 
-    /** 切画布项目：这一发脱手 —— 图落在 Output 目录里，不再写回旧画布，也不在页面外头留一份没人收的监听 */
-    function detachTask(taskId, nodeId) {
-        detached.add(taskId);
-        running.delete(nodeId);
-    }
-
     /** 卸页与切项目共用的那一发：把还在跑的先脱手，再断监听。脱手那一份名单留着 ——
      *  终态那一格晚于切画布到达时，靠它认得出「这一发不再写回哪张画布」，只说一句图已存进 Output。
      *  生图脱手（图落在 Output 目录里，终态那一格只说一句），轮询链摘计时并脱手 —— 画布不在眼前了
@@ -867,193 +671,6 @@ export function createCanvasGen({ $el, toast, api, canFeature, host, modeGroup, 
         }
         llmRuns.clear();
     }
-
-    /** 技能 config 缓存：节点上「主模型」那一行与比例 / 长边的跟随态读它。一份技能只取一次
-     *  （画布上同技能的节点共用这一份），取到手才重画节点 */
-    function cfgOf(skillId) {
-        return cfgs.byId.get(String(skillId || "")) || null;
-    }
-
-    function primeCfg(skillId) {
-        const id = String(skillId || "");
-        if (!id || cfgs.byId.has(id) || cfgs.inflight.has(id)) return;
-        const inflight = getSkillGenConfig(id)
-            .then((cfg) => { cfgs.byId.set(id, cfg || {}); host.paintNodes(); })
-            .catch(() => { cfgs.byId.set(id, {}); })
-            .finally(() => { cfgs.inflight.delete(id); });
-        cfgs.inflight.set(id, inflight);
-    }
-
-    /** 节点上那行主模型：技能 config 里的那一个；比例与尺寸由技能自己定时说清楚。
-     *  自定参数存在时这一行说的是这一发真正生效的那一套（换掉的主模型 / LoRA 条数 / 步数）。
-     *  串联的车尾不铺这一行（段数、技能、分辨率都在顶行与那两枚胶囊上，见 chainControls） */
-    function modelText(node) {
-        const cfg = cfgOf(node.metadata.skill_id);
-        if (!cfg) return `${t("主模型：读取中")}${densityTitle(node)}`;
-        const ov = readGenOverrides(node);
-        const model = ov.model || cfg.model;
-        const parts = [model ? tf("主模型：{model}", { model: shortModelName(model) }) : t("主模型：跟随技能配置")];
-        if (ov.loras?.length) parts.push(tf("LoRA ×{n}", { n: ov.loras.length }));
-        if (ov.steps) parts.push(tf("{n} 步", { n: ov.steps }));
-        return `${parts.join(" · ")}${densityTitle(node)}`;
-    }
-
-    function genBtn(label, iconName, onclick, title = label, disabled = false, extraClass = "") {
-        // disabled 走属性：$el 把它当普通属性落，disabled="false" 在浏览器里就是真禁用（属性只看存在）
-        const el = $el("button", { className: `ns-canvas-gen-btn${extraClass ? ` ${extraClass}` : ""}`,
-            type: "button", title, "aria-label": title, onclick: disabled ? null : onclick });
-        if (disabled) el.disabled = true;
-        setIconLabel(el, iconName, label);
-        return el;
-    }
-
-    /** 张数也是一枚胶囊：点开从 1 到 8 里选一枚（后端一次最多 8 张），不给它留第三格输入 */
-    function countChip(node, params, busy) {
-        const sel = $el("select", { disabled: busy, title: t("生图张数"),
-            onchange: () => host.patchMeta(node.id, { count: Number(sel.value) || 1 }) });
-        for (let i = 1; i <= GEN_COUNT_MAX; i += 1) {
-            sel.append($el("option", { value: String(i), textContent: tf("{n} 张", { n: i }) }));
-        }
-        sel.value = String(params.count);
-        return genChip(sel, { icon: "images" });
-    }
-
-    /** 节点上的一枚胶囊：菜单交页面那一层浮着（genMenus），控件自己留在节点里跟着缩放 */
-    function genChip(sel, opts) {
-        const chip = chipButton(sel, { ...opts, mount: () => host.genMenus() });
-        chips.add(chip);
-        return chip.el;
-    }
-
-    /** 那一枚技能胶囊里的技能下拉（共用胶囊把它当状态容器收在壳里，只列吃文字输入的生图技能）：
-     *  技能被删了、列表没取到时把存的这一个也列出来，胶囊上不能看着是空的 */
-    function paramsSkillSelect(node, busy, isVideo) {
-        const saved = readGenParams(node).skill_id;
-        const sel = $el("select", { disabled: busy,
-            title: isVideo
-                ? t("技能与自定参数：主模型 / LoRA 留空 = 跟随该技能配置与全局生视频设置")
-                : t("技能与自定参数：只列吃文字输入的生图技能；主模型 / LoRA 留空 = 跟随该技能配置与全局生图设置"),
-            onchange: () => {
-                const id = sel.value;
-                try { localStorage.setItem(isVideo ? LAST_VIDEO_SKILL_KEY : LAST_SKILL_KEY, id); } catch { /* 隐私模式记不住就算了，不挡出片 */ }
-                // 换技能 = 技能钉的那一套整份换掉：这台节点自定的那几项跟着清空。patchMeta 要整层重画，
-                // 记着「面板开着」才弹得回来 —— 绘画页选技能不收面板，右栏就是要看新技能钉的那一套
-                openParams.add(node.id);
-                host.patchMeta(node.id, { skill_id: id, gen_params: {} });
-                primeCfg(id);
-            } });
-        sel.append($el("option", { value: "", textContent: t("未选技能") }));
-        for (const s of (isVideo ? videoSkills.rows : skills.rows)) {
-            const opt = $el("option", { value: s.id, textContent: skillDisplayName(s) });
-            opt.__skillMeta = s;   // 面板左栏的技能分组与主模型家族守卫认的就是这一个
-            sel.append(opt);
-        }
-        sel.value = saved;
-        if (sel.value !== saved) {
-            sel.value = "";
-            sel.appendChild($el("option", { value: saved, textContent: saved, disabled: true, selected: true }));
-        }
-        return sel;
-    }
-
-    /** 出图 / 出片节点上那一枚技能胶囊就是绘画页与出视频页的那一枚（skillParamsChip）：点开的双栏面板
-     *  左栏换技能、右栏改这一发的自定参数 —— 出图 = 主模型 + LoRA，出片 = 生视频模型 / Text Encoder /
-     *  视频 VAE / 音频 VAE / 步数 + LoRA。空 = 跟随该技能 config 与全局生图 / 生视频设置：与技能钉的那一份
-     *  相同的值不落盘，技能配置改了这台节点跟着走；改动当场写进 metadata.gen_params（进撤销栈、随画布落盘）。
-     *  传了 `follow`（「跟随配方 …」那一句）就是串联车尾那一枚：只有技能一栏，出片参数不在这里改。
-     *  表单按节点签名存一份（见 paramsChips）：改一格参数就整层重画，签名没变接同一块，面板不被重建；
-     *  技能换了、模型清单到手、这一发开跑 —— 签名变了才换新的，面板开着时重画完接着在原处弹开 */
-    function genParamsChip(node, { icon, isVideo, busy, follow }) {
-        const tail = follow != null;   // 车尾那一枚：整列共用一个技能，参数是整列出片共用的那一份
-        const skillId = readGenParams(node).skill_id;
-        const models = isVideo ? videoModels : genModels;
-        const key = `${tail ? "t" : isVideo ? "v" : "i"}|${skillId}|${(isVideo ? videoSkills : skills).rows.length}`
-            + `|${busy ? 1 : 0}|${models ? 1 : 0}|${cfgOf(skillId) ? 1 : 0}|${tail ? follow : ""}`;
-        // 撤销与切画布把节点对象整份换掉：闭包里那份旧的只能用来认 id，读值要拿画布上活着的那一台
-        const live = () => host.getState().nodes.find((n) => n.id === node.id) || node;
-        const keepOpen = openParams.has(node.id);   // 换旧的表单会收面板：这一份记着「收之前开着」，新的铺完接着弹开
-        // 换表单那一路 old.chip.close() 走的是旧的 onClose，会把这一份抹掉：弹开之后要把它钉回去，
-        // 下一发重画（技能 config 到手、模型清单到手）才认得出「这一台的面板还开着」
-        const reopen = (chip) => { if (!keepOpen) return; chip.open(); openParams.add(node.id); };
-        const old = paramsChips.get(node.id);
-        if (old && old.key === key) {
-            old.chip.sync();
-            reopen(old.chip);
-            return old;
-        }
-        if (old) {
-            chips.delete(old.chip);
-            old.chip.close();
-            paramsChips.delete(node.id);
-        }
-        const skillSel = tail ? tailSkillSelect(node, busy, follow) : paramsSkillSelect(node, busy, isVideo);
-        // 出片（含车尾那一枚）的右栏就是出视频页那块模型链表单；车尾改的这一段是整列出片共用的那一份
-        const cfg = isVideo
-            ? createVideoModelConfigSection()
-            : createModelConfigSection({ getSkillId: () => readGenParams(live()).skill_id });
-        const box = $el("div", { className: "neo-gallery-gm-model-box" }, [cfg.el]);
-        if (!isVideo) {
-            // 出图只露主模型与 LoRA：Text Encoder / VAE 是高级行，与绘画页那一条摘掉同一批
-            for (const row of cfg.el.querySelectorAll(".rs-gen-adv-row")) row.remove();
-            guardMainModelFamily(cfg, skillSel);   // 手填主模型与该技能家族对撞就当场收回这一选（绘画页同一判定）
-        }
-        if (tail) {
-            // 车尾的步数在「参数」弹窗里（metadata.steps 那一份，与锚点 / 种子同处）：右栏只给模型链与 LoRA，一口子不两处
-            box.querySelector(".rs-gen-steps")?.closest(".rs-config-row")?.remove();
-        }
-        const stored = readGenOverrides(live());
-        const entry = {
-            key,
-            last: JSON.stringify(stored),
-            chip: skillParamsChip(skillSel, box, {
-                icon,
-                getOverride: () => readGenOverrides(live()),
-                // 出片技能按生成模式分组（出视频页同一份判法与词表）：全参考生视频那一组在画布上要看得见
-                ...(isVideo ? { groupOf: modeGroup, groupLabels } : {}),
-                panelClass: busy ? "ns-canvas-params-busy" : "",
-                mount: () => host.genMenus(),
-                onClose: () => openParams.delete(node.id),
-            }),
-        };
-        chips.add(entry.chip);
-        // 点开就记着「这台节点的面板开着」：整层重画完要在原处接着弹开（收窗那一路走 onClose 摘掉）
-        entry.chip.chip.addEventListener("click", () => { if (entry.chip.isOpen()) openParams.add(node.id); });
-        const write = () => {
-            const ov = cfg.collect();
-            const base = cfgOf(readGenParams(live()).skill_id) || {};
-            const patch = {};
-            for (const field of GEN_PARAM_KEYS) {
-                const v = ov[field];
-                if (v === "" || v == null) continue;
-                if (field === "steps") {
-                    // 步数没动过 = 这一发跟着技能配置走（出视频页同一判法）
-                    if (cfg.stepsFollowSkill?.() || !(Number(v) > 0)) continue;
-                    patch.steps = Math.min(Number(v), STEPS_MAX);
-                    continue;
-                }
-                if (String(base[field] ?? "") === String(v)) continue;   // 与技能钉的一样 = 跟随，不钉死
-                patch[field] = v;
-            }
-            const loras = (ov.loras || [])
-                .filter((row) => String(typeof row === "string" ? row : row?.name || "").trim());
-            if (loras.length) patch.loras = loras;
-            const json = JSON.stringify(patch);
-            if (json === entry.last) return;   // 真没改就不压撤销栈：加一条空 LoRA 行、点开下拉都算这一发
-            entry.last = json;
-            host.patchMeta(node.id, { gen_params: patch });
-            entry.chip.sync();
-        };
-        cfg.el.addEventListener("change", write);
-        // 删 LoRA 行（✕）与「+ 添加 LoRA」是按钮，不发 change：跟着点击写一次，不然删掉的那一条还钉在盘上
-        cfg.el.addEventListener("click", write);
-        // 模型清单没到手就不铺：面板里的模型行没有可列的东西，这一发照技能 config 与全局设置走
-        if (models) cfg.load({ ...(cfgOf(skillId) || {}), ...stored }, models,
-            { stepsFromRun: Number(stored.steps) >= 1 });
-        paramsChips.set(node.id, entry);
-        reopen(entry.chip);
-        return entry;
-    }
-
 
     /**
      * 铺在节点上的控件：技能与自定参数一枚胶囊，比例、长边、张数一行一枚，出图与取消在最后一行。
