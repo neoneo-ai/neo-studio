@@ -31,7 +31,7 @@ test("描述符形状：每一类齐标题与默认框，卡面与运行文案�
     for (const [type, d] of Object.entries(NODE_TYPES)) {
         assert.ok(d.title, `${type} 没有标题：建出来的节点没有名字`);
         assert.ok(d.w > 0 && d.h > 0, `${type} 的默认框不在正数里：placeGrid 的格距会算成 0`);
-        assert.ok(["image", "text", "video", "audio", "gen", "edit", "llm", "car"].includes(d.body),
+        assert.ok(["image", "text", "video", "audio", "gen", "edit", "llm", "car", "storyboard"].includes(d.body),
             `${type} 的 body 不在 nodes.js 认的那几个渲染器里：这一类铺出来是空的`);
         if (d.run) assert.ok(RUN_LABELS[d.run], `${type} 说 run=${d.run}，RUN_LABELS 里没有那一行`);
         if (d.bar) assert.ok(["hero", "prompt", "media"].includes(d.bar), `${type} 的 bar 不是附加栏认的那三枚`);
@@ -79,8 +79,8 @@ test("运行文案齐那一行要说的字，每一条都在词表里：少一�
         const labels = RUN_LABELS[d.run];
         const keys = d.run === "car" ? ["queued", "running", "progress", "fail", "failToast"]
             : ["btn", "tip", "running", "fail", "failToast"];
-        // LLM 两条链没有排队档（一条 SSE 直接开跑），数的是字数；三条队列链数张数 / 段数
-        if (d.run === "enhance" || d.run === "reverse") keys.push("chars", "done", "cancelled");
+        // LLM 那几条链没有排队档（一条请求直接开跑），数的是字数；三条队列链数张数 / 段数
+        if (d.run === "enhance" || d.run === "reverse" || d.run === "storyboard") keys.push("chars", "done", "cancelled");
         else keys.push("queued", "progress");
         for (const key of keys) {
             assert.ok(labels[key], `${type}（run=${d.run}）的运行文案缺 ${key}`);

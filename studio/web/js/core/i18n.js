@@ -97,7 +97,8 @@ const EN = {
     "参数": "Params",
     "步数 / 锚点 / 连续性 / 上下文帧 / 种子：整列共用的参数":
         "Steps / anchors / continuity / context frames / seed - shared by the whole column",
-    "每一段的时长跟着配方走，不在这里改": "Segment durations follow the recipe - not editable here",
+    "每一段的时长在车厢上那一枚框里改，写进配方那一段":
+        "Edit each segment's length in that box on the car - it writes into the recipe segment",
     "先选一个生图技能": "Pick an image skill first",
     "接一条文本或图片线过来再出图": "Run a text or image line into this node first",
     "{skill} 不吃文本提示词，接上参考图再出图": "{skill} takes no text prompt - connect a reference image",
@@ -215,6 +216,34 @@ const EN = {
     "停用 · 双击节点停用": "Disable · double-click the node",
     "已停用 · 双击节点启用": "Disabled · double-click the node to enable",
     "{n} 张参考素材": "{n} reference assets",
+    // 车厢顶行那一枚时长框：改了写进配方那一段（导演页、重铺一列、出片读的都是同一份）
+    "这一段时长（秒）：写进配方那一段，导演页与出片都读这一份":
+        "This segment's length in seconds - it lands on the recipe segment; the director page and every render read the same one",
+    "第 {n} 段：{sec} 秒（写进配方）": "Segment {n}: {sec} s (written into the recipe)",
+    "段时长没写进去": "The segment length was not written",
+    // 文字故事板节点（studio/storyboard/ + gen.js 的 runStoryboard）：一段话 → 每一段的提示词，写进连过来的车厢
+    "文字故事板": "Text Storyboard",
+    "加文字故事板节点": "Add text-storyboard node",
+    "生成段提示词": "Generate segment prompts",
+    "把这一段话生成每一段的提示词，写进连过来的车厢":
+        "Turn this text into a prompt for every segment and write them into the wired-in cars",
+    "生成中 · {n} 字": "Generating · {n} chars",
+    "已写进 {n} 厢": "Written into {n} cars",
+    "已取消生成": "Generation cancelled",
+    "写一段话：一个主题（一只猫去冒险）或整篇剧本（一行一段）":
+        "Write a line: a topic (a cat going on an adventure) or a whole script (one line per segment)",
+    "在这张节点上写一段话：一个主题或整篇剧本":
+        "Write a line on this node: a topic or a whole script",
+    "把要写的那几厢车厢连过来：按连线顺序一厢一段":
+        "Wire in the cars you want written - one car per segment, in wire order",
+    "段提示词已生成": "Segment prompts generated",
+    "后端没有回段列表": "The backend returned no segments",
+    "每一段的时长（秒）：交后端按这一发拆段": "Segment length in seconds - the backend splits segments by it",
+    "每段": "Per segment",
+    "第 {n} 段{dur}：{text}": "Segment {n}{dur}: {text}",
+    " · {n} 秒": " · {n} s",
+    "生成 {n} 段 · 链上 {m} 厢：按连线顺序一厢一段":
+        "Generated {n} segments · {m} cars on the chain: one car per segment, in wire order",
     "配方列表读不到：先在导演页保存这份配方":
         "The recipe list is unavailable - save this recipe on the director page first",
     "段数太多（{n} 段），一列上限 {max} 段": "Too many segments ({n}) - a chain holds at most {max}",

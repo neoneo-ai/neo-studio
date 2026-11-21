@@ -2715,6 +2715,24 @@ body {
 .ns-canvas-car .ns-canvas-node-textarea { position: relative; inset: auto; flex: 1 1 auto; min-width: 0; width: auto; height: 100%; min-height: 0; padding: 0; background: transparent; border-radius: 0; }
 .ns-canvas-car .ns-canvas-node-textarea:disabled { color: var(--ns-dim); }
 .ns-canvas-car .ns-canvas-node-textarea:focus { background: transparent; box-shadow: none; }
+/* 文字故事板卡：正文框在控件行里（绝对定位的正文框在控件行里会盖住整张卡，与车厢同一法改成流内），
+   每一段时长是一枚小数框（与车厢顶行那一枚同一档，步进箭头去掉），底下是生成出来的每一段预览 */
+.ns-canvas-storyboard-text { position: relative; inset: auto; flex: 1 1 auto; min-height: 0; width: auto;
+    height: 100%; padding: 0; background: transparent; border-radius: 0; }
+.ns-canvas-storyboard-text:disabled { color: var(--ns-dim); }
+.ns-canvas-storyboard-text:focus { background: transparent; box-shadow: none; }
+.ns-canvas-storyboard-sec-label { flex: none; font-size: 11px; color: var(--ns-dim); }
+.ns-canvas-storyboard-sec { flex: none; width: 48px; height: 24px; padding: 0 5px; text-align: right;
+    border-radius: 6px; border: 1px solid var(--ns-field-bd); background: var(--ns-field);
+    color: var(--ns-fg); font: inherit; font-size: 12px; outline: none;
+    appearance: textfield; -moz-appearance: textfield; }
+.ns-canvas-storyboard-sec::-webkit-outer-spin-button,
+.ns-canvas-storyboard-sec::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.ns-canvas-storyboard-sec:focus { border-color: var(--ns-accent); }
+.ns-canvas-storyboard-sec:disabled { color: var(--ns-dim); }
+.ns-canvas-storyboard-segs { flex: 1 1 auto; min-height: 0; overflow: auto; display: flex;
+    flex-direction: column; gap: 3px; font-size: 11px; color: var(--ns-dim); }
+.ns-canvas-storyboard-seg { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ns-canvas-recipe-on { padding: 4px 6px; border: 0; border-radius: 6px; background: var(--ns-primary-soft); }
 .ns-canvas-recipe-src { flex: none; padding: 1px 5px; border-radius: 4px; background: var(--ns-field); border: 1px solid var(--ns-border); color: var(--ns-dim); font-size: 11px; }
 .ns-canvas-recipe-on .ns-canvas-recipe-src { color: var(--ns-primary-fg); }
@@ -2726,6 +2744,16 @@ body {
 .ns-canvas-car-head { display: flex; align-items: center; gap: 6px; }
 .ns-canvas-car-seg { flex: none; padding: 1px 6px; border-radius: 5px; background: var(--ns-field); border: 1px solid var(--ns-border); color: var(--ns-accent); font-size: 11px; }
 .ns-canvas-car-info { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; color: var(--ns-dim); }
+/* 车厢顶行那一枚时长框：段号右边一个小数框，改了写进配方那一段。步进箭头去掉 ——
+   这一行只有 11-12px 的字，箭头会把行撑高（WebView 与浏览器都给箭头） */
+.ns-canvas-car-dur { flex: none; width: 44px; height: 20px; padding: 0 4px; text-align: right;
+    border-radius: 5px; border: 1px solid var(--ns-field-bd); background: var(--ns-field);
+    color: var(--ns-fg); font: inherit; font-size: 11px; outline: none;
+    appearance: textfield; -moz-appearance: textfield; }
+.ns-canvas-car-dur::-webkit-outer-spin-button,
+.ns-canvas-car-dur::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.ns-canvas-car-dur:focus { border-color: var(--ns-accent); }
+.ns-canvas-car-dur:disabled { color: var(--ns-dim); }
 /* 车厢上那一枚技能胶囊收在段号右边：技能名长就自己收省略号，不把段号那一行挤掉 */
 .ns-canvas-car .neo-gallery-gm-chip-wrap { flex: none; display: block; min-width: 0; max-width: 148px; }
 .ns-canvas-car .neo-gallery-gm-chip-btn { width: 100%; justify-content: flex-start; gap: 5px; padding: 0 7px; }

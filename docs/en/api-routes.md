@@ -79,6 +79,8 @@ entries carry `items` keeps working unchanged (counts and covers are derived fro
 | POST | `/rs_recipes/append_results` | Append sample results (including a workflow backup) |
 | POST | `/rs_recipes/add_results` | Record artifact paths into `results` (no file copying) |
 | POST | `/rs_recipes/set_hero` | Mark one result as the cover (one per recipe) |
+| POST | `/rs_recipes/set_segment_duration` | Write one segment's duration into `segments[].duration_sec` (the box on a canvas car, and the text-storyboard write) |
+
 | POST | `/rs_recipes/delete_result` | Drop a result and delete the real files in output |
 | POST | `/rs_recipes/delete_sample` | Delete a sample result |
 | POST | `/rs_recipes/delete` | Delete a recipe (custom only) |
@@ -90,7 +92,7 @@ entries carry `items` keeps working unchanged (counts and covers are derived fro
 | GET | `/rs_recipes/workflow` | The workflow snapshot of a sample |
 | POST | `/rs_recipes/send_to_workflow` | Copy assets into `input/` for one-click restore |
 | GET | `/rs_recipes/director_spec` | Director recipe `{shared, segments}` and identity reference images |
-| POST | `/rs_recipes/director_generate_segments` | Theme / script → segment JSON (agent / MCP path; the editor UI does not call it) |
+| POST | `/rs_recipes/director_generate_segments` | Theme / script → segment JSON (the canvas text-storyboard node, agent / MCP path) |
 | POST | `/rs_recipes/director_optimize_prompts` | Rewrite a single segment prompt in H3 format |
 | POST | `/rs_recipes/grid_split` | Split a grid storyboard image into per-segment first frames |
 | POST | `/rs_recipes/director_describe_panel` | Per-panel description → finished single-segment prompt |

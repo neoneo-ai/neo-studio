@@ -587,6 +587,29 @@ class DesktopWriteTests(_ServerCase):
                                       {"name": name + "-x", "filename": "gone.png", "subfolder": ""})
         self.assertEqual(status, 404, body)
 
+    def test_recipe_segment_duration_served_offline(self):
+        """段时长是配方文件里的一次写字：离线桌面端答得出来，段号越界就明说 400。"""
+        self.assertEqual(caps.owner("POST", "/rs_recipes/set_segment_duration"), "desktop",
+                         "画布车厢上那一枚时长框离线也要写得了配方文件")
+        name = "desktop-duration-recipe"
+        status, body = self.post_json("/rs_recipes/save", {
+            "name": name, "type": "video_director",
+            "segments": [{"prompt": "第一段", "duration_sec": 5}]})
+        self.assertEqual(status, 200, body)
+        recipe_dir = _data_root() / "recipes" / "custom" / name
+        self._extra_dirs.append(recipe_dir)
+        status, body = self.post_json("/rs_recipes/set_segment_duration",
+                                      {"name": name, "segment": 0, "duration_sec": 8})
+        self.assertEqual(status, 200, body)
+        meta = json.loads((recipe_dir / "recipe.json").read_text(encoding="utf-8"))
+        self.assertEqual(meta["segments"][0]["duration_sec"], 8, "写进去的就是文件里那一份")
+        status, body = self.post_json("/rs_recipes/set_segment_duration",
+                                      {"name": name, "segment": 3, "duration_sec": 8})
+        self.assertEqual(status, 400, body)
+        meta = json.loads((recipe_dir / "recipe.json").read_text(encoding="utf-8"))
+        self.assertEqual(meta["segments"][0]["duration_sec"], 8, "拒掉的那一发不动文件")
+
+
     def test_skill_save_and_delete(self):
         skill_id = "desktop_test_skill"
         status, body = self.post_json("/rs_prompts/save_skill",

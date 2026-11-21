@@ -115,6 +115,7 @@ _RECIPES = {
     ("GET", "/rs_recipes/thumbnail"),
     ("GET", "/rs_recipes/workflow"),
     ("GET", "/rs_recipes/director_spec"),
+    ("POST", "/rs_recipes/set_segment_duration"),
     ("POST", "/rs_recipes/image_sizes"),
     ("GET", "/rs_recipes/cached_loras"),
     ("POST", "/rs_recipes/save_from_civitai"),
@@ -312,6 +313,8 @@ FEATURE_ROUTES = {
     "prompt_library_write": ("POST", "/rs_prompts/save_prompt"),
     "segment": ("POST", "/neo_video_gen/run_segment"),
     "director": ("POST", "/neo_studio/director/generate"),
+    # 画布上的文字故事板节点：走导演段生成链（_RECIPES 自服，要的是本机配好 LLM），不是出片那一位
+    "storyboard": ("POST", "/rs_recipes/director_generate_segments"),
     "simple_video": ("POST", "/neo_video_gen/simple"),
     "grid_split": ("POST", "/rs_recipes/grid_split"),
     "queue": ("GET", "/neo_studio/queue"),

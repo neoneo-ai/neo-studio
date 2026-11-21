@@ -375,6 +375,104 @@ class ResultRoutesTests(StubFolderPathsMixin, unittest.TestCase):
         self.assertEqual([r["filename"] for r in meta["results"]], ["keep_00002.mp4"], "重存配方不得清空结果记录")
 
 
+# ===========================================================================
+# 端点：/rs_recipes/set_segment_duration（画布车厢顶行那一枚时长框写的那一发）
+# ===========================================================================
+class SegmentDurationRouteTests(StubFolderPathsMixin, unittest.TestCase):
+    """只写 segments[index].duration_sec 这一个字段：预设只读、越界钳到导演页那一份边界，
+    资产 / 示例 / 结果 / 故事板原样留着（区别于整份覆盖的 /rs_recipes/save）。"""
+
+    def setUp(self):
+        self.install_folder_paths()
+        self._tmp = tempfile.mkdtemp(prefix="neo_recipes_dur_routes_")
+        self.recipes_dir = os.path.join(self._tmp, "recipes")
+        self.custom = os.path.join(self.recipes_dir, "custom")
+        self.presets = os.path.join(self.recipes_dir, "presets")
+        os.makedirs(self.custom)
+        os.makedirs(self.presets)
+        self._orig = (recipes.RECIPES_DIR, recipes.CUSTOM_DIR, recipes.PRESETS_DIR)
+        recipes.RECIPES_DIR = pathlib.Path(self.recipes_dir)
+        recipes.CUSTOM_DIR = pathlib.Path(self.custom)
+        recipes.PRESETS_DIR = pathlib.Path(self.presets)
+
+    def tearDown(self):
+        self.restore_folder_paths()
+        recipes.RECIPES_DIR, recipes.CUSTOM_DIR, recipes.PRESETS_DIR = self._orig
+
+    def _write(self, base, name, meta=None):
+        d = os.path.join(base, name)
+        os.makedirs(os.path.join(d, "assets"), exist_ok=True)
+        with open(os.path.join(d, "recipe.json"), "w", encoding="utf-8") as f:
+            json.dump(meta or {"name": name, "type": "video_director",
+                               "segments": [{"prompt": "a", "duration_sec": 5}]}, f, ensure_ascii=False)
+
+    def _meta(self, base, name):
+        with open(os.path.join(base, name, "recipe.json"), "r", encoding="utf-8") as f:
+            return json.load(f)
+
+    def _director(self, base=None, name="dur-a"):
+        meta = {"name": name, "type": "video_director", "title": "短片",
+                "assets": [{"filename": "角色.png", "kind": "image"}],
+                "samples": ["开场首帧.png"],
+                "results": [{"filename": "r_00001.mp4", "subfolder": "", "kind": "video"}],
+                "story": {"logline": "一句话故事"},
+                "setup": {"characters": [{"name": "橘猫"}]},
+                "shared": {"mode": "i2v", "width": 1344, "height": 768},
+                "segments": [{"prompt": "第一段", "duration_sec": 5, "skill_id": "h3_t2v"},
+                             {"prompt": "第二段", "duration_sec": 12, "skill_id": "h3_t2v"}]}
+        self._write(base if base is not None else self.custom, name, meta)
+        return meta
+
+    def _set(self, name, segment, duration_sec):
+        return _run_async(recipes.rs_recipes_set_segment_duration(_FakeRequest(
+            {"name": name, "segment": segment, "duration_sec": duration_sec})))
+
+    def test_writes_only_the_touched_segment(self):
+        self._director()
+        resp = self._set("dur-a", 0, 8)
+        self.assertEqual(resp.status, 200)
+        self.assertEqual(_body(resp), {"success": True, "name": "dur-a", "segment": 0,
+                                       "duration_sec": 8})
+        meta = self._meta(self.custom, "dur-a")
+        self.assertEqual([s["duration_sec"] for s in meta["segments"]], [8, 12],
+                         "只动写到的那一段，别段时长不动")
+        self.assertEqual(meta["segments"][0]["prompt"], "第一段", "段上的其它字段原样")
+        self.assertEqual(meta["assets"], [{"filename": "角色.png", "kind": "image"}],
+                         "改时长不得清空资产")
+        self.assertEqual(meta["samples"], ["开场首帧.png"])
+        self.assertEqual(meta["results"], [{"filename": "r_00001.mp4", "subfolder": "", "kind": "video"}])
+        self.assertEqual(meta["story"], {"logline": "一句话故事"})
+        self.assertEqual(meta["shared"], {"mode": "i2v", "width": 1344, "height": 768})
+
+    def test_clamps_to_the_director_page_bounds(self):
+        self._director()
+        self.assertEqual(_body(self._set("dur-a", 1, 9000))["duration_sec"], 3600,
+                         "越界钳到上限再落盘（与导演页时长框同一份边界）")
+        self.assertEqual(self._meta(self.custom, "dur-a")["segments"][1]["duration_sec"], 3600)
+        self.assertEqual(_body(self._set("dur-a", 1, 0))["duration_sec"], 1)
+        self.assertEqual(self._meta(self.custom, "dur-a")["segments"][1]["duration_sec"], 1)
+
+    def test_preset_recipe_stays_readonly(self):
+        self._director(base=self.presets, name="preset-dur")
+        resp = self._set("preset-dur", 0, 9)
+        self.assertEqual(resp.status, 403)
+        self.assertIn("只读", _body(resp)["error"], "要说清楚去哪儿能改")
+        self.assertEqual([s["duration_sec"] for s in self._meta(self.presets, "preset-dur")["segments"]],
+                         [5, 12], "拒了就不动预设文件")
+
+    def test_rejects_missing_recipe_segment_and_type(self):
+        self._director()
+        self.assertEqual(self._set("nope", 0, 8).status, 404, "配方不存在")
+        self.assertEqual(self._set("dur-a", 9, 8).status, 400, "段序号越界")
+        self.assertEqual(self._set("dur-a", -1, 8).status, 400)
+        self.assertEqual(self._set("dur-a", "x", 8).status, 400, "段序号不是个数就是 400")
+        self.assertEqual(self._set("dur-a", 0, None).status, 400, "没有秒数不写盘")
+        self._write(self.custom, "plain", {"name": "plain", "type": "image_lora", "prompt": "一句"})
+        self.assertEqual(self._set("plain", 0, 8).status, 400, "没有分段的配方没有时长可写")
+        self.assertEqual([s["duration_sec"] for s in self._meta(self.custom, "dur-a")["segments"]],
+                         [5, 12], "拒掉的每一发都不落盘")
+
+
 if __name__ == "__main__":
     unittest.main()
 

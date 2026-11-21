@@ -8,7 +8,7 @@
 // 不进 ComfyUI 的 NODE_CLASS_MAPPINGS：画布节点是这一页自己的东西，内核不认识它。
 import { t } from "../../../js/core/i18n.js";
 
-/** @typedef {"image" | "text" | "gen" | "video" | "video_in" | "audio_in" | "recipe" | "edit" | "enhance" | "reverse"} CanvasNodeType */
+/** @typedef {"image" | "text" | "gen" | "video" | "video_in" | "audio_in" | "recipe" | "edit" | "enhance" | "reverse" | "storyboard"} CanvasNodeType */
 
 /** 视频档的生成节点（出片卡）的名字：菜单「加视频生成节点」与「添加配方」铺的车尾共用这一份（见 page.js 的 ADD_SEEDS 与 layTrain） */
 export const VIDEO_GEN_TITLE = "视频生成";
@@ -42,6 +42,10 @@ export const NODE_TYPES = {
     reverse: { title: "图片反推", w: 320, h: 168, css: "", body: "llm", run: "reverse",
         doc: { zh: ["图片反推节点"], en: ["Image-to-prompt node"] },
         add: { label: "加图片反推节点", icon: "camera", defaults: { language: "zh" } } },
+    // 文字故事板节点：主题或整篇剧本就在这一张的正文里，每一段写进连过来的车厢（接法见 gen.js 的 runStoryboard）
+    storyboard: { title: "文字故事板", w: 320, h: 208, css: "", body: "storyboard", run: "storyboard",
+        doc: { zh: ["文字故事板节点"], en: ["Text-storyboard node"] },
+        add: { label: "加文字故事板节点", icon: "list", defaults: { segment_seconds: 5 } } },
     // 这一行落的是图像生成节点那一类的视频档（metadata.kind = "video"，见 gen.js 的 runVideo）；表里 type = "video" 那一类是成片的落点，菜单里没有它
     video: { title: "视频", w: 340, h: 240, css: "ns-canvas-node-video", body: "video",
         doc: { zh: ["视频节点"], en: ["Video node"] },
@@ -103,6 +107,12 @@ export const RUN_LABELS = {
     reverse: { kind: "reverse", btn: "反推", tip: "把连过来的那张图写成一段提示词", running: "反推中",
         chars: "反推中 · {n} 字", fail: "反推失败", failToast: "反推失败", done: "已反推出提示词", cancelled: "已取消反推",
         cap: "prompt_reverse", gateNote: "该功能需要 ComfyUI：点顶栏 ComfyUI 胶囊启动，好了再按一次" },
+    // 文字故事板：这一发走后端既有的导演段生成链（在桌面端自服的能力表上，离线窗口答得出，要的是本机配好
+    // LLM），一条请求直接开跑没有排队档 —— 数的是字数，成文那一句数的是写进了几厢
+    storyboard: { kind: "storyboard", btn: "生成段提示词", tip: "把这一段话生成每一段的提示词，写进连过来的车厢",
+        running: "生成中", chars: "生成中 · {n} 字", fail: "生成失败", failToast: "生成失败",
+        done: "已写进 {n} 厢", cancelled: "已取消生成",
+        cap: "storyboard", gateNote: "该功能需要 ComfyUI：点顶栏 ComfyUI 胶囊启动，好了再按一次" },
     // 车厢：卡上那一行只说这一段跑到哪了（整列共用的段数与参数在车尾），车厢自己不跑出片，收摊的是它那一发的轮询
     // —— 车厢卡上没有运行钮，这一行没有钮字，也没有要的能力位（出片那一位在车尾那一发身上）
     car: { queued: "排队中", running: "生成中", progress: "生成中 {done}/{total}", fail: "出片失败",

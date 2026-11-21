@@ -4,17 +4,18 @@
 import { t, tf } from "../../../js/core/i18n.js";
 import { setIcon, setIconLabel } from "../../../js/core/icons.js";
 import { NODE_TYPES, RUN_LABELS, runKind } from "./node-types.js";
+import { storyboardPreviewLines } from "../../storyboard/storyboard.js";
 
 /** 节点 DOM（上游 canvas-node.tsx 的 vanilla 版）：内容铺满整张，上沿外头是附加操作栏，左上角是「主图」徽标，
  *  上下左右四枚接线点、四个角上的尺寸柄。图片节点是 <img>（走 Gallery 缩略图，取不到落占位图），提示词节点是
  *  <textarea>，正文存在 metadata.content —— 图片节点上的坐标就是 Gallery 的 filename + subfolder。
  *  这一张长什么样全按 node-types.js 里那一行落：css 卡面类名、body 内容走哪个渲染器、bar 附加栏多出来的那枚 */
 export function nodeElement(node, { $el, onText, onPick, onPickPrompt, onHero, onDelete, onCopy, onToggleDisabled,
-    genState, genControls, genModel, editControls, llmControls, recipeMeta, carView, onMediaSize }) {
+    genState, genControls, genModel, editControls, llmControls, storyboardControls, recipeMeta, carView, onCarDuration, onMediaSize }) {
     const desc = NODE_TYPES[node.type] || NODE_TYPES.text;
-    // 四类控件卡共用生成节点那一份运行态（running 按节点 id 记在 gen.js 里）；图片 / 提示词 / 视频位没有运行态
-    const st = desc.body === "gen" || desc.body === "car" || desc.body === "edit" || desc.body === "llm"
-        ? (genState?.(node) || {}) : null;
+    // 有运行钮的那几类共用生成节点那一份运行态（running 按节点 id 记在 gen.js 里）；
+    // 图片 / 提示词 / 视频位没有运行态 —— 注册表那一行没有 run 的就是这一批
+    const st = desc.run ? (genState?.(node) || {}) : null;
     const busy = st?.status === "queued" || st?.status === "running";
     const nodeEl = $el("div", {
         className: `ns-canvas-node ${desc.css}`
@@ -27,9 +28,10 @@ export function nodeElement(node, { $el, onText, onPick, onPickPrompt, onHero, o
             : desc.body === "video" ? nodeVideo(node, $el, onMediaSize)
             : desc.body === "audio" ? nodeAudio(node, $el)
             : desc.body === "gen" ? nodeGen(node, $el, { gen: st, genControls, genModel })
-            : desc.body === "car" ? nodeCar(node, $el, { recipe: st, carView, recipeMeta, onText })
+            : desc.body === "car" ? nodeCar(node, $el, { recipe: st, carView, recipeMeta, onText, onCarDuration })
             : desc.body === "edit" ? nodeEdit(node, $el, { edit: st, editControls })
             : desc.body === "llm" ? nodeLlm(node, $el, { llm: st, llmControls })
+            : desc.body === "storyboard" ? nodeStoryboard(node, $el, { storyboard: st, storyboardControls, onText })
             : nodeText(node, $el, onText),
         nodeBar(node, { $el, onPick, onPickPrompt, onHero, onDelete, onCopy, onToggleDisabled }),
         // 四枚接线点：左与上收线（入），右与下出线（源）。上下这两枚给上下叠放的节点就近接线用
@@ -97,17 +99,25 @@ function nodeImage(node, $el, onMediaSize) {
  *  视频输入节点空着说「空视频输入」，并且不静音 —— 参考片的声音要在画布上听得到，出片那一发吃的就是它 */
 function nodeVideo(node, $el, onMediaSize) {
     const filename = node.metadata.filename || "";
+    const asset = node.metadata.asset || "";
+    const recipe = node.metadata.recipe || "";
     const input = node.type === "video_in";
-    if (!filename) {
+    // 「添加配方」铺出来的那一段参考视频在配方自己那一份 assets/ 里：播它走配方那一条路由，不经 input/
+    const src = asset && recipe
+        ? `/rs_recipes/asset?recipe=${encodeURIComponent(recipe)}&file=${encodeURIComponent(asset)}&dir=assets`
+        : filename
+            ? `/neo_gallery/video?filename=${encodeURIComponent(filename)}`
+                + `&subfolder=${encodeURIComponent(node.metadata.subfolder || "")}`
+            : "";
+    if (!src) {
         return $el("div", { className: "ns-canvas-node-video-empty",
             textContent: t(input ? "空视频输入" : "空视频位") });
     }
     return $el("video", {
         className: "ns-canvas-node-video-el",
-        src: `/neo_gallery/video?filename=${encodeURIComponent(filename)}`
-            + `&subfolder=${encodeURIComponent(node.metadata.subfolder || "")}`,
+        src,
         controls: "", muted: input ? null : "", playsinline: "", preload: "metadata", draggable: "false",
-        title: filename,
+        title: asset || filename,
         // 段的宽高读出来才落节点那一格（preload=metadata 就是为这一发）：竖片落在横框里就是一圈黑边
         onloadedmetadata: (e) => onMediaSize?.(node, e.target.videoWidth, e.target.videoHeight),
     });
@@ -115,18 +125,23 @@ function nodeVideo(node, $el, onMediaSize) {
 
 /** 音频输入节点的内容：浏览器自绘的那一条播控加下面一行出处。文件走 /neo_gallery/audio ——
  *  视频那条按扩展名挡非视频（400），音频吃那条流永远播不出来；空着的是一张空位，
- *  栏上「取用素材」开素材库 */
+ *  栏上「取用素材」开素材库。「添加配方」铺的那一段参考音频在配方 assets/ 里，播它走配方那一条路由 */
 function nodeAudio(node, $el) {
     const filename = node.metadata.filename || "";
-    if (!filename) {
+    const asset = node.metadata.asset || "";
+    const recipe = node.metadata.recipe || "";
+    const name = asset || filename;
+    if (!name) {
         return $el("div", { className: "ns-canvas-node-video-empty", textContent: t("空音频输入") });
     }
     return $el("div", { className: "ns-canvas-node-audio-body" }, [
         $el("audio", { className: "ns-canvas-node-audio-el", controls: "", preload: "metadata",
-            draggable: "false", title: filename,
-            src: `/neo_gallery/audio?filename=${encodeURIComponent(filename)}`
-                + `&subfolder=${encodeURIComponent(node.metadata.subfolder || "")}` }),
-        $el("span", { className: "ns-canvas-node-audio-name", textContent: filename, title: filename }),
+            draggable: "false", title: name,
+            src: asset && recipe
+                ? `/rs_recipes/asset?recipe=${encodeURIComponent(recipe)}&file=${encodeURIComponent(asset)}&dir=assets`
+                : `/neo_gallery/audio?filename=${encodeURIComponent(filename)}`
+                    + `&subfolder=${encodeURIComponent(node.metadata.subfolder || "")}` }),
+        $el("span", { className: "ns-canvas-node-audio-name", textContent: name, title: name }),
     ]);
 }
 
@@ -191,13 +206,46 @@ function nodeLlm(node, $el, { llm, llmControls }) {
     return cardShell($el, llmControls?.(node) || [], statusRow($el, llm || {}, RUN_LABELS[runKind(node)]));
 }
 
-/** 串联的车厢：这一段自己写的提示词、停不停用，就这些 —— 技能与整列共用的生成参数都在它那一列的车尾
+/** 文字故事板节点的内容：要写的那一段话（主题或整篇剧本）就在这张节点上，一行控件（每一段时长 · 运行钮）
+ *  加一行这一发的状态，底下是生成出来的每一段预览。正文与那几段都在这一张自己的 metadata 里 ——
+ *  进撤销栈、随画布落盘、复制带着走（预览是 metadata.segments 现算的，不另存一份） */
+function nodeStoryboard(node, $el, { storyboard, storyboardControls, onText }) {
+    const busy = storyboard?.status === "running";
+    const text = $el("textarea", {
+        className: "ns-canvas-node-textarea ns-canvas-storyboard-text",
+        value: node.metadata.content || "",
+        placeholder: t("写一段话：一个主题（一只猫去冒险）或整篇剧本（一行一段）"),
+        spellcheck: "false",
+        onmousedown: (e) => { if (document.activeElement !== e.target) e.preventDefault(); },
+        oninput: (e) => onText?.(node, e.target.value),
+    });
+    if (busy) text.disabled = true;   // 在途的那一发送的是起手这一段话，跑着不许改
+    const card = cardShell($el, [text, ...(storyboardControls?.(node) || [])],
+        statusRow($el, storyboard || {}, RUN_LABELS.storyboard));
+    const lines = storyboardPreviewLines(node.metadata.segments);
+    if (lines.length) card.appendChild($el("div", { className: "ns-canvas-storyboard-segs" },
+        lines.map((line) => $el("div", { className: "ns-canvas-storyboard-seg", textContent: line }))));
+    return card;
+}
+
+/** 串联的车厢：这一段自己写的提示词、这一段的时长、停不停用，就这些 —— 技能与整列共用的生成参数都在它那一列的车尾
  *  那台生成节点上，出片也从车尾那一发。三档正文优先级（连过来的正文 > 车厢自己写的 > 配方那一段）在
  *  gen.js 的 carPrompt 里，卡上只铺车厢自己写的那一份；连过来的正文在跑时这块锁着并说出来源 */
-function nodeCar(node, $el, { recipe, carView, onText }) {
+function nodeCar(node, $el, { recipe, carView, onText, onCarDuration }) {
     const st = recipe || {};
     const view = carView?.(node) || {};
     const locked = view.fromCanvas === true;
+    const busy = st.status === "running" || st.status === "queued";
+    // 时长就铺在顶行这一枚数框上：改了写进配方那一段（导演页、重铺一列、出片读的都是这一份）。
+    // 跑起来这一发锁着 —— disabled 走属性（与 genBtn 同一坑，$el 把 disabled="false" 也当禁用）
+    const durEl = $el("input", {
+        className: "ns-canvas-car-dur", type: "number", min: "1", max: "3600", step: "1",
+        value: view.duration == null ? "" : String(view.duration),
+        title: t("这一段时长（秒）：写进配方那一段，导演页与出片都读这一份"),
+        onmousedown: (e) => { if (document.activeElement !== e.target) e.preventDefault(); },
+        onchange: (e) => onCarDuration?.(node, e.target.value),
+    });
+    durEl.disabled = busy;
     // disabled 走属性：$el 把它当普通属性落，disabled="false" 在浏览器里就是真禁用（genBtn 同一坑）
     const text = $el("textarea", {
         className: "ns-canvas-node-textarea ns-canvas-car-text",
@@ -221,9 +269,10 @@ function nodeCar(node, $el, { recipe, carView, onText }) {
     });
     if (locked) text.disabled = true;
     return $el("div", { className: "ns-canvas-car" }, [
-        // 顶行就一行：段号 + 配方名 · 这一段时长 · 生效的技能，右端是参考素材计数（段号只写一次）
+        // 顶行就一行：段号 + 这一段时长 + 配方名 · 生效的技能，右端是参考素材计数（段号只写一次）
         $el("div", { className: "ns-canvas-car-head" }, [
             $el("span", { className: "ns-canvas-car-seg", textContent: tf("段 {n}", { n: Number(node.metadata.segment) + 1 }) }),
+            durEl,
             $el("span", { className: "ns-canvas-car-info", textContent: view.head || "" }),
             $el("span", { className: "ns-canvas-recipe-count", textContent: tf("{n} 张参考素材", { n: view.count || 0 }) }),
         ]),
@@ -297,9 +346,9 @@ function nodeAct($el, name, label, iconName, onclick, title = label) {
 /** 整层节点重画：拖动与缩放不走这一条（走 applyNodeGeometry），换画布、增删节点才走 */
 export function renderNodes({ nodeLayer, links, hint, nodes, selectedNodeIds, selectedConnectionId, $el, onText,
     onPick, onPickPrompt, onHero, onDelete, onCopy, onToggleDisabled, genState, genControls, genModel, editControls,
-    llmControls, recipeMeta, carView, onMediaSize }) {
+    llmControls, storyboardControls, recipeMeta, carView, onCarDuration, onMediaSize }) {
     nodeLayer.replaceChildren(...nodes.map((node) => nodeElement(node, { $el, onText, onPick, onPickPrompt, onHero, onDelete, onCopy,
-        onToggleDisabled, genState, genControls, genModel, editControls, llmControls, recipeMeta, carView, onMediaSize })));
+        onToggleDisabled, genState, genControls, genModel, editControls, llmControls, storyboardControls, recipeMeta, carView, onCarDuration, onMediaSize })));
     // 几何要在元素挂上世界层之后再落：nodeElement 里查不到还没挂上的元素
     for (const node of nodes) applyNodeGeometry(nodeLayer, node);
     hint.style.display = nodes.length ? "none" : "";

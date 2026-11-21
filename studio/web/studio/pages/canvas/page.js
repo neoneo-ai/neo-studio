@@ -14,7 +14,8 @@ import { applyNodeGeometry as paintNodeGeometry, renderNodes as renderNodeLayer,
 import { ADD_MENU, VIDEO_GEN_TITLE } from "./node-types.js";
 import { renderConnections as renderLinkLayer, renderActiveConnection as paintActiveLine } from "./connections.js";
 import { attachCanvasInteractions } from "./interactions.js";
-import { createCanvasGen, readRecipeParams } from "./gen.js";
+import { createCanvasGen } from "./gen.js";
+import { readRecipeParams } from "./gen-params.js";
 import { thumbUrl } from "../../../recipes.js";
 import { mediaKindOf } from "../../../js/core/media-href.js";
 import { openPresetPicker } from "../../../js/core/preset-picker.js";
@@ -210,7 +211,9 @@ export function createCanvasPage({ $el, api, toast, openMaterial, can, modeGroup
             genModel: (node) => gen?.modelText(node),
             editControls: (node) => gen?.editControls(node),
             llmControls: (node) => gen?.llmControls(node),
+            storyboardControls: (node) => gen?.storyboardControls(node),
             carView: (node) => gen?.carView(node),
+            onCarDuration: (node, seconds) => gen?.setCarDuration(node, seconds),
             onMediaSize: fitMediaNode });
     }
 
@@ -530,13 +533,28 @@ export function createCanvasPage({ $el, api, toast, openMaterial, can, modeGroup
     const TRAIN_SEG_MAX = 24;         // 一列最多铺 24 厢：几十张一起铺时撤销与摆位都不可控
     const TRAIN_GAP = 40;
     const TRAIN_CARS_PER_ROW = 3;     // 3 厢一行：9 段就是 3×3、6 段就是两行三列，与出视频页铺的九宫格 / 六宫格一行一行对得上
-    const TRAIN_REFS_MAX = 5;         // 每一厢上方最多铺 5 张参考素材：一次铺几十张时摆位与连线都不可控
+    const TRAIN_REF_CAPS = { image: 5, video: 3, audio: 3 };   // 每一厢上方铺的参考素材：图 5 / 参考视频 3 / 参考音频 3（后端段参考素材是图 9 / 视频 3 / 音频 3，画布一行铺得下的更少一档）
+    const TRAIN_REFS_MAX = 8;         // 一厢上方一行最多铺 8 张：一次铺几十张时摆位与连线都不可控
     const TRAIN_ROW_PITCH = NODE_SPECS.image.height + TRAIN_GAP + NODE_SPECS.recipe.height + 80;   // 参考素材行 + 行距 + 车厢 + 行与行之间那一格
+
+    /** 这一厢上方要铺的那几张参考素材：配方那一段写了的按类别排好（图 → 参考视频 → 参考音频），
+     *  每一类按画布铺得下的那一档截断；节点类别就按素材的扩展名落（图 → 图片节点，
+     *  视频 → 视频输入节点，音频 → 音频输入节点），出片那一发由 genInputs 按节点类型分三桶交后端 */
+    function trainRefs(seg) {
+        const laid = [];
+        for (const kind of ["image", "video", "audio"]) {
+            const names = (gen?.segmentRefs(seg) || []).filter((name) => mediaKindOf(name) === kind);
+            const room = Math.min(TRAIN_REF_CAPS[kind], TRAIN_REFS_MAX - laid.length);
+            for (const name of names.slice(0, room)) {
+                laid.push({ type: kind === "image" ? "image" : kind === "video" ? "video_in" : "audio_in", name });
+            }
+        }
+        return laid;
+    }
 
     /** 每一厢占多宽：铺几张参考素材就占几张的宽，车厢永远比它铺出来的那一行窄 */
     function trainColWidth(seg) {
-        const n = Math.min((gen?.segmentRefs(seg) || []).filter((name) => mediaKindOf(name) === "image").length,
-            TRAIN_REFS_MAX);
+        const n = trainRefs(seg).length;
         return Math.max(NODE_SPECS.recipe.width, n * NODE_SPECS.image.width + (n - 1) * TRAIN_GAP);
     }
 
@@ -586,14 +604,13 @@ export function createCanvasPage({ $el, api, toast, openMaterial, can, modeGroup
             const segNode = createCanvasNode("recipe", carAt, { recipe, segment: i });
             created.push(segNode);
             // 参考素材落在厢的正上方，按连线接进厢：素材节点带 recipe/asset，出片那一发由后端从配方 assets 取
-            const names = gen.segmentRefs(segs[i])
-                .filter((name) => mediaKindOf(name) === "image").slice(0, TRAIN_REFS_MAX);
-            const refRow = names.length * refSpec.width + (names.length - 1) * TRAIN_GAP;
-            names.forEach((name, k) => {
-                const refNode = createCanvasNode("image",
+            const refs = trainRefs(segs[i]);
+            const refRow = refs.length * refSpec.width + (refs.length - 1) * TRAIN_GAP;
+            refs.forEach((ref, k) => {
+                const refNode = createCanvasNode(ref.type,
                     { x: carAt.x + Math.round((car.width - refRow) / 2) + k * (refSpec.width + TRAIN_GAP),
                         y: origin.y + row * TRAIN_ROW_PITCH },
-                    { asset: name, recipe });
+                    { asset: ref.name, recipe });
                 created.push(refNode);
                 connections.push({ id: `conn-${refNode.id}-${segNode.id}`, fromNodeId: refNode.id, toNodeId: segNode.id });
             });

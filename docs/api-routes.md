@@ -73,6 +73,8 @@ StoryBoard / CharacterSheet 主目录的只读预设区；未归类的目录仍�
 | POST | `/rs_recipes/append_results` | 追加示例结果（含工作流备份） |
 | POST | `/rs_recipes/add_results` | 记录产物路径到 `results`（不复制文件） |
 | POST | `/rs_recipes/set_hero` | 指定一条结果为主图（整份只留一枚） |
+| POST | `/rs_recipes/set_segment_duration` | 只写一段的时长进 `segments[].duration_sec`（画布车厢上那一枚数框与文字故事板写回） |
+
 | POST | `/rs_recipes/delete_result` | 摘掉结果并删除 output 里的真实文件 |
 | POST | `/rs_recipes/delete_sample` | 删除示例结果 |
 | POST | `/rs_recipes/delete` | 删除配方（仅 custom） |
@@ -84,7 +86,7 @@ StoryBoard / CharacterSheet 主目录的只读预设区；未归类的目录仍�
 | GET | `/rs_recipes/workflow` | 示例对应的工作流快照 |
 | POST | `/rs_recipes/send_to_workflow` | 资源复制进 `input/` 供一键还原 |
 | GET | `/rs_recipes/director_spec` | 导演配方 `{shared, segments}` 与身份参考图 |
-| POST | `/rs_recipes/director_generate_segments` | 按主题 / 脚本生成分段 JSON（智能体 / MCP 路径，编辑器 UI 不调用） |
+| POST | `/rs_recipes/director_generate_segments` | 按主题 / 脚本生成分段 JSON（画布文字故事板节点、智能体 / MCP 路径） |
 | POST | `/rs_recipes/director_optimize_prompts` | 单段提示词按 H3 格式重写 |
 | POST | `/rs_recipes/grid_split` | 宫格分镜图拆分为各段首帧 |
 | POST | `/rs_recipes/director_describe_panel` | 逐格描述生成单段成品提示词 |

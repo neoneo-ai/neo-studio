@@ -16,6 +16,7 @@ const geometry = await import("../../web/studio/pages/canvas/geometry.js?canvasG
 const store = await import("../../web/studio/pages/canvas/store.js?canvasStore=1");
 const page = await import("../../web/studio/pages/canvas/page.js?canvasPage=1");
 const gen = await import("../../web/studio/pages/canvas/gen.js?canvasGen=1");
+const params = await import("../../web/studio/pages/canvas/gen-params.js?canvasGenParams=1");
 const canvas = { ...geometry, ...store, ...page };
 const { $el } = await import("../../web/studio/shim/ui.js?canvasPage=1");
 
@@ -3242,7 +3243,7 @@ describe("canvas-page 页面", () => {
       assert.equal(body.skill_id, "", "车尾没盖技能就交空值：每一段用配方里那一段自己那一个，由后端合并");
     });
 
-    test("车厢顶行只一行：段号一枚、配方名 · 时长 · 技能、参考素材计数在同一行", async () => {
+    test("车厢顶行只一行：段号一枚、时长数框、配方名 · 技能与参考素材计数在同一行", async () => {
       const ctx = await genPage([], [], { routes: clipRoutes() });
       await layTrain(ctx);
       const carId = ctx.page.current().nodes.filter((n) => n.type === "recipe")[0].id;
@@ -3250,18 +3251,140 @@ describe("canvas-page 页面", () => {
       assert.equal(head.querySelectorAll(".ns-canvas-car-seg").length, 1, "段号只写一枚");
       assert.equal(head.querySelector(".ns-canvas-car-seg").textContent, "段 1");
       assert.equal(head.querySelector(".ns-canvas-car-info").textContent,
-        "短片配方 · 5 秒 · 文生视频", "顶行一行说完，段号不重复");
+        "短片配方 · 文生视频", "顶行那一行说完配方名与生效技能，时长不在这句里");
+      assert.equal(head.querySelector(".ns-canvas-car-dur").value, "5",
+        "这一段跑几秒就是顶行那一枚数框，值来自配方那一段");
+
       const car = ctx.page.current().nodes.filter((n) => n.type === "recipe")[0];
-      // 计数 = 连进这一厢的素材节点 + 配方里那一段自己写了、画布上没铺的素材
-      const linked = ctx.page.current().nodes.filter((n) => n.type === "image"
-        && ctx.page.current().connections.some((c) => c.toNodeId === car.id));
-      const own = (RECIPE_ROW.segments[0].refs.images || [])
-        .filter((name) => !linked.some((n) => n.metadata.filename === name));
+      // 计数 = 连进这一厢的素材节点（铺一列铺上来的）+ 配方里那一段写了、画布上没铺的那几份
+      const state = ctx.page.current();
+      const laid = state.nodes.filter((n) => n.metadata.asset
+        && state.connections.some((c) => c.fromNodeId === n.id && c.toNodeId === car.id));
       assert.equal(head.querySelector(".ns-canvas-recipe-count").textContent,
-        `${linked.length + own.length} 张参考素材`, "参考素材计数就在顶行这一行上");
+        `${laid.length} 张参考素材`, "顶行数的就是连进这一厢生效的那几张，铺上来的不重复数");
       assert.ok(!ctx.view.nodeEl(carId).querySelector("select"),
-        "车厢上没有技能 / 时长 / 分辨率的下拉：这些跟着配方走，整列共用的在车尾");
+        "车厢上没有技能 / 分辨率的下拉：整列共用的在车尾，这一段只有时长那一枚数框");
     });
+
+    // 车厢顶行那一枚时长框：改了走后端写进配方那一段（画布不存这一份，重画读的就是文件里那一份）
+    const carDur = (ctx, id) => ctx.view.nodeEl(id).querySelector(".ns-canvas-car-dur");
+    const setCarDur = async (ctx, id, value) => {
+      const el = carDur(ctx, id);
+      el.value = value;
+      fire(el, "change");
+      await deepSettle();
+    };
+    // 每一发用例领一份配方副本：写成功时 helper 会把那一段改掉，不串到后面的用例
+    const durRoutes = (impl) => ({ ...clipRoutes({ recipes: [structuredClone(RECIPE_ROW)] }),
+      "/rs_recipes/set_segment_duration": impl });
+    const durOk = (body) => jsonResponse({ success: true, name: body.name, segment: body.segment,
+      duration_sec: body.duration_sec });
+    const firstCar = (ctx) => ctx.page.current().nodes.filter((n) => n.type === "recipe")[0].id;
+
+    test("车厢时长框改了那一发就写进配方：只带配方名 + 段号 + 秒数，只动这一段", async () => {
+      const ctx = await genPage([], [], { routes: durRoutes(durOk) });
+      await layTrain(ctx);
+      const cars = ctx.page.current().nodes.filter((n) => n.type === "recipe");
+      assert.equal(carDur(ctx, cars[0].id).value, "5", "框里就是配方那一段的时长");
+      await setCarDur(ctx, cars[0].id, "12");
+      assert.deepEqual(clipCalls("/rs_recipes/set_segment_duration").map((c) => c.body),
+        [{ name: "短片配方", segment: 0, duration_sec: 12 }], "那一发只带配方名、段号与秒数");
+      assert.equal(carDur(ctx, cars[0].id).value, "12", "写成功当场把新时长铺回这一厢");
+      assert.equal(carDur(ctx, cars[1].id).value, "8", "只写这一段的时长，第二厢那一枚不动");
+      assert.ok(ctx.env.store.toasts.some((item) => item.message.includes("第 1 段：12 秒")),
+        "写成了当场说一声");
+    });
+
+    test("时长框填回配方里那一个数不打后端；越界钳到上限；后端拒了就退回配方那一份并说清原因", async () => {
+      const ctx = await genPage([], [], { routes: durRoutes(durOk) });
+      await layTrain(ctx);
+      const carId = firstCar(ctx);
+      await setCarDur(ctx, carId, "5");
+      assert.equal(clipCalls("/rs_recipes/set_segment_duration").length, 0,
+        "与配方一字不差就不写盘");
+      await setCarDur(ctx, carId, "9000");
+      assert.equal(clipCalls("/rs_recipes/set_segment_duration")[0].body.duration_sec, 3600,
+        "越界先钳到上限再写盘");
+      assert.equal(carDur(ctx, carId).value, "3600", "框里就是钳过之后落盘的那一份");
+
+      const bad = await genPage([], [], { routes: durRoutes(() => jsonResponse(
+        { success: false, error: "内置预设配方只读：请先「复制配方」" }, 403)) });
+      await layTrain(bad);
+      const badCar = firstCar(bad);
+      await setCarDur(bad, badCar, "12");
+      assert.equal(carDur(bad, badCar).value, "5",
+        "没写进去就不在画布上留一份配方里没有的时长");
+      assert.ok(bad.env.store.toasts.some((item) => item.message.includes("内置预设配方只读")),
+        "toast 里带上后端给的原因");
+    });
+
+    test("这一列在跑着就锁着时长框：跑着的一发不改段时长", async () => {
+      const ctx = await genPage([], [], { routes: { ...durRoutes(durOk),
+        "/neo_video_gen/run_segment/*": () => jsonResponse({ success: true, task_id: "seg-1",
+          status: "running", progress: { value: 1, max: 12 } }) } });
+      await layTrain(ctx);
+      const tail = ctx.page.current().nodes.find((n) => n.type === "gen");
+      const carId = firstCar(ctx);
+      assert.equal(carDur(ctx, carId).disabled, false, "没在跑就开着");
+      click(ctx.genBtn(tail.id, "生成视频"));
+      await deepSettle();
+      assert.equal(carDur(ctx, carId).disabled, true, "这一发在跑就锁着这枚框");
+      assert.equal(carDur(ctx, carId).value, "5", "锁着时框里还是配方那一段的时长");
+    });
+
+    // 全参考那一段写了图 / 参考视频 / 参考音频：铺一列要把三样都铺成素材节点接进厢
+    const MEDIA_ROW = { name: "全参考配方", title: "全参考", source: "mine", type: "video_director",
+      canvas_id: "", shared: { mode: "r2v", width: 1344, height: 768 },
+      segments: [{ title: "开场", skill_id: "h3_r2v", duration_sec: 5, prompt: "开场正文",
+        refs: { images: ["角色.png"], videos: ["动作参考.mp4"], audios: ["旁白.mp3"] } }] };
+    const mediaRoutes = () => clipRoutes({ recipes: [MEDIA_ROW] });
+    const laidByType = (ctx, type) => ctx.page.current().nodes.filter((n) => n.type === type);
+
+    test("铺一列把这一段写的参考视频与参考音频也铺成素材节点，按连线接进厢", async () => {
+      const ctx = await genPage([], [], { routes: mediaRoutes() });
+      await layTrain(ctx);
+      const state = ctx.page.current();
+      const car = state.nodes.find((n) => n.type === "recipe");
+      assert.deepEqual(laidByType(ctx, "image").map((n) => n.metadata.asset), ["角色.png"]);
+      assert.deepEqual(laidByType(ctx, "video_in").map((n) => n.metadata.asset), ["动作参考.mp4"]);
+      assert.deepEqual(laidByType(ctx, "audio_in").map((n) => n.metadata.asset), ["旁白.mp3"]);
+      for (const type of ["image", "video_in", "audio_in"]) {
+        const node = laidByType(ctx, type)[0];
+        assert.ok(state.connections.some((c) => c.fromNodeId === node.id && c.toNodeId === car.id),
+          `${type} 要按连线接进自己那一厢`);
+        assert.equal(node.metadata.recipe, "全参考配方", "铺出来的素材节点带自己那一份配方出处");
+      }
+      // 三样都在厢上方同一行里排开，落在厢的正上方
+      const row = ["image", "video_in", "audio_in"].map((type) => laidByType(ctx, type)[0]);
+      assert.ok(row.every((n) => n.position.y + n.height <= car.position.y), "素材行在厢的正上方");
+      const lefts = row.map((n) => n.position.x);
+      assert.deepEqual([...lefts].sort((a, b) => a - b), lefts, "一行里从左到右排开：图 → 参考视频 → 参考音频");
+      // 视频与音频节点播的是配方 assets/ 里那一份（不经 input/ 的 gallery 那两条路由）
+      const videoSrc = ctx.view.nodeEl(row[1].id).querySelector("video").getAttribute("src");
+      assert.match(videoSrc, /^\/rs_recipes\/asset\?recipe=[^&]+&file=[^&]+&dir=assets$/,
+        "参考视频播的是配方自己那一份文件");
+      const audioSrc = ctx.view.nodeEl(row[2].id).querySelector("audio").getAttribute("src");
+      assert.match(audioSrc, /^\/rs_recipes\/asset\?recipe=[^&]+&file=[^&]+&dir=assets$/,
+        "参考音频播的是配方自己那一份文件");
+      assert.equal(ctx.view.nodeEl(car.id).querySelector(".ns-canvas-recipe-count").textContent,
+        "3 张参考素材", "顶行计数把三样各数一份，铺上来的不重复数");
+    });
+
+    test("串联出片那一发把连进厢的参考视频与参考音频按三桶交后端", async () => {
+      const ctx = await genPage([], [], { routes: mediaRoutes() });
+      await layTrain(ctx);
+      const tail = ctx.page.current().nodes.find((n) => n.type === "gen");
+      click(ctx.genBtn(tail.id, "生成视频"));
+      await deepSettle();
+      const body = clipCalls("/neo_video_gen/run_segment")[0].body;
+      assert.deepEqual(body.references, {
+        images: [{ kind: "recipe", value: "角色.png", recipe: "全参考配方" }],
+        videos: [{ kind: "recipe", value: "动作参考.mp4", recipe: "全参考配方" }],
+        audios: [{ kind: "recipe", value: "旁白.mp3", recipe: "全参考配方" }],
+      }, "三桶各归各的，出处是配方 assets/ 里那一份");
+    });
+
+
 
     test("车尾「参数」弹窗：整列共用的次要点收在这里，改种子当场落盘，Esc 收窗", async () => {
       const ctx = await genPage([], [], { routes: clipRoutes() });
@@ -3294,8 +3417,8 @@ describe("canvas-page 页面", () => {
       await settle();
       assert.equal(ctx.page.current().nodes.find((n) => n.type === "gen").metadata.anchors, "first",
         "弹窗里选一锚点挡：走 patchMeta 落进车尾");
-      assert.ok(form().querySelector(".ns-canvas-tailform-note").textContent.includes("时长跟着配方走"),
-        "弹窗说明每一段的时长跟着配方走");
+      assert.ok(form().querySelector(".ns-canvas-tailform-note").textContent.includes("在车厢上那一枚框里改"),
+        "弹窗说清楚时长在车厢那一枚框上改");
       fire(document, "keydown", { key: "Escape" });
       await settle();
       assert.equal(ctx.host.querySelector(".ns-canvas-tailform-mask"), null, "Esc 收窗");
@@ -3359,10 +3482,10 @@ describe("canvas-page 页面", () => {
     };
 
     test("自定参数读法：空串、-1 与空白 LoRA 名都是跟随，强度跟着名字走", () => {
-      assert.deepEqual(gen.readGenOverrides({ metadata: {} }), {}, "旧画布没有这一份");
-      assert.deepEqual(gen.readGenOverrides({ metadata: { gen_params: { model: "  ", steps: -1, loras: [""] } } }), {},
+      assert.deepEqual(params.readGenOverrides({ metadata: {} }), {}, "旧画布没有这一份");
+      assert.deepEqual(params.readGenOverrides({ metadata: { gen_params: { model: "  ", steps: -1, loras: [""] } } }), {},
         "空值与 -1 都不进请求：后端按技能 config 与全局设置合并");
-      assert.deepEqual(gen.readGenOverrides({ metadata: { gen_params: {
+      assert.deepEqual(params.readGenOverrides({ metadata: { gen_params: {
         model: " qwen/diffusion_qwen.safetensors ", steps: "24", audio_vae: "h3/h3_vae.safetensors",
         loras: ["lora_a.safetensors", { name: "lora_b.safetensors", strength: 0.5 }, { name: "  " }] } } }),
         { model: "qwen/diffusion_qwen.safetensors", audio_vae: "h3/h3_vae.safetensors", steps: 24,

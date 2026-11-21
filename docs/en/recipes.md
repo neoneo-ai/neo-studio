@@ -236,7 +236,10 @@ Execution details: [h3-video-gen.md](h3-video-gen.md).
 - Below the timeline sits the detail card for the current segment: its title row reads **Segment {n}**, and on the
   right sit the **skill (decides template & model)** dropdown (per-segment only in mixed mode), the
   **duration (sec)** input (an integer 1–3600, 5 by default) and delete-this-segment. Changing the duration
-  re-renders the block width and the seconds ruler live.
+  re-renders the block width and the seconds ruler live. A car on a canvas column carries the same box on
+  its top row: it writes this segment through `POST /rs_recipes/set_segment_duration`, and the director page
+  and the canvas read the same file copy. The canvas text-storyboard node writes its generated segment
+  lengths through the same call - its own per-segment box decides how many seconds land on each segment.
 - The left column carries the frame slots (`f2v` first frame / `fl2v` first + last frame) or the reference media
   area (`r2v`): its label switches between “First frame” and “Reference media” with the effective mode, and
   an `r2v` segment hides the frame slots so the reference area takes the column over.

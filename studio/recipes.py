@@ -406,6 +406,10 @@ _DIRECTOR_MODES = ("t2v", "i2v", "l2v", "fl2v", "r2v", "v2v", "rv2v")
 # 身份参考图上限：与 h3_video_director 的身份继承上限一致（关键帧没脸时靠它保住角色身份）
 _DIRECTOR_IDENTITY_CAP = 4
 
+# 段时长边界（整数秒）：导演页「时长（秒）」输入框与画布车厢上那一枚数框同一份 min-max
+_DIRECTOR_SEC_MIN = 1
+_DIRECTOR_SEC_MAX = 3600
+
 
 def _normalize_director(data: dict, orig_to_copied: dict, existing_assets: set | None = None) -> tuple[dict, list]:
     """校验并规范化 video_director 配方的 shared/segments；非法抛 ValueError（消息可直接回前端）。
@@ -1567,6 +1571,58 @@ async def rs_recipes_director_spec(request):
         return web.json_response({"success": True, "name": name, **spec, "defaults": defaults})
     except Exception as e:
         return web.json_response({"success": False, "error": str(e)}, status=500)
+
+
+@routes.post("/rs_recipes/set_segment_duration")
+async def rs_recipes_set_segment_duration(request):
+    """把一份多段配方里某一段的时长写进 recipe.json（画布车厢顶行那一枚数框）。
+
+    只动 segments[index].duration_sec 这一个字段：资产 / 示例 / 结果一概不重算，
+    区别于整份覆盖的 /rs_recipes/save（那条要前端把 shared/segments/story/setup 全交回来，
+    画布手里没有完整那一份）。执行侧不读请求里的时长，读的就是这里落盘的这一份。
+    """
+    try:
+        data = await request.json()
+    except Exception:
+        return web.json_response({"success": False, "error": "请求体不是有效 JSON"}, status=400)
+    name = _sanitize_name_re.sub("", str(data.get("name") or "").strip()).strip().replace(" ", "-")
+    if not name:
+        return web.json_response({"success": False, "error": "缺少配方名"}, status=400)
+    recipe_dir = _find_recipe_dir(name)
+    if recipe_dir is None:
+        return web.json_response({"success": False, "error": "Recipe not found"}, status=404)
+    if recipe_dir.parent == PRESETS_DIR:
+        return web.json_response({"success": False,
+                                  "error": "内置预设配方只读：请先「复制配方」"}, status=403)
+    try:
+        index = int(data.get("segment"))
+    except (TypeError, ValueError):
+        return web.json_response({"success": False, "error": "缺少段序号"}, status=400)
+    try:
+        seconds = int(round(float(data.get("duration_sec"))))
+    except (TypeError, ValueError):
+        return web.json_response({"success": False, "error": "缺少合法的段时长（秒）"}, status=400)
+    seconds = min(_DIRECTOR_SEC_MAX, max(_DIRECTOR_SEC_MIN, seconds))
+
+    meta_path = recipe_dir / "recipe.json"
+    try:
+        with open(meta_path, "r", encoding="utf-8") as f:
+            meta = json.load(f)
+    except Exception:
+        return web.json_response({"success": False, "error": "Recipe meta unreadable"}, status=500)
+    if meta.get("type") != "video_director":
+        return web.json_response({"success": False, "error": "这一份配方没有分段"}, status=400)
+    segments = meta.get("segments") or []
+    if index < 0 or index >= len(segments):
+        return web.json_response({"success": False,
+                                  "error": f"段序号越界：第 {index + 1} 段（配方共 {len(segments)} 段）"},
+                                 status=400)
+    segments[index]["duration_sec"] = seconds
+    meta["segments"] = segments
+    with open(meta_path, "w", encoding="utf-8") as f:
+        json.dump(meta, f, ensure_ascii=False, indent=2)
+    return web.json_response({"success": True, "name": name, "segment": index,
+                              "duration_sec": seconds})
 
 
 def _read_input_image_bytes(filename, subfolder=""):

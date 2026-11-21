@@ -20,158 +20,27 @@ import { listSkills, skillAcceptsRef, skillAcceptsText, skillDisplayName, isEnha
 import { MEDIA_CAPS, REF_KIND_NAMES } from "../../../js/core/media-slot.js";
 import { ENHANCE_API, enhancePayload } from "../../../prompt-enhance/prompt-enhance.js";
 import { REVERSE_API, REVERSE_LANGS, reverseRequestBody } from "../../../reverse-prompt/reverse-prompt.js";
+import { STORYBOARD_API, SEG_SEC_DEFAULT, storyboardCarPatches, storyboardDurationWrites, storyboardError,
+    storyboardMismatchText, storyboardRequestBody, storyboardSegments } from "../../storyboard/storyboard.js";
 import { RUN_LABELS, gateOf, runKind, upstreamNodes } from "./node-types.js";
+import { ANCHOR_CHOICES, CONTEXT_FRAMES_CHOICES, CONTEXT_FRAMES_DEFAULT,
+    GEN_COUNT_MAX, GEN_PARAM_KEYS, SEG_SEC_MAX, SEG_SEC_MIN, SEED_MAX, STEPS_CHOICES, STEPS_MAX,
+    mergeGenOverrides, readEditParams, readGenOverrides, readGenParams, readRecipeParams } from "./gen-params.js";
+import { REF_BUCKETS, chainCars, chainRecipe, genInputs, isCar, mediaNodes, reverseFirstImage, segmentRefs } from "./gen-graph.js";
 
+// 参数读法在 gen-params.js，连线图上的取用在 gen-graph.js（都是纯读法，不持页面状态）：这一层只管三条链
+// 的请求构造、运行态与卡面控件。
 // 画布自己记的默认技能（绘画页与视频页各记各的，同一套法）：新建生成节点带出上一次在这页选的技能
 const LAST_SKILL_KEY = "neo.canvas.skill";
 const LAST_VIDEO_SKILL_KEY = "neo.canvas.video.skill";
-const GEN_COUNT_MAX = 8;          // 后端 MAX_IMAGES：一次最多这么多张，画布上也不至于铺不满
 const CLIP_TERMINAL = ["succeeded", "failed", "cancelled"];
 const CLIP_POLL_MS = 1000;        // 简单视频与单段任务只有轮询快照：画布就在眼前，进度比出视频页那一格更快
-// 锚点三档与后端 _ANCHOR_KEYS 同一份，文案沿用导演页那三个标签
-const ANCHOR_CHOICES = [["both", "两端锚点（首+尾，最稳）"], ["first", "只钉首帧"], ["none", "不用锚点"]];
-// 生成参数的边界与 NeoH3SegmentRun 的 widget 同一份（steps / context_frames 的 min-max）
-const SEED_MAX = 9007199254740991;    // JS 能精确表示的整数上限，再大后端也接不住
-const STEPS_MAX = 200;
-const STEPS_CHOICES = [8, 12, 15, 20, 25, 30, 40, 60];
-const CONTEXT_FRAMES_MAX = 362;
-const CONTEXT_FRAMES_DEFAULT = 22;    // 导演页与后端同一个默认窗口
-const CONTEXT_FRAMES_CHOICES = [0, 8, 14, 22, 29, 36];
-// 连过来的素材按节点类型分三桶，与后端段参考素材（refs.images / videos / audios）同一口径：
-// 视频输入节点与出片落点都进参考视频那一桶，音频输入节点进参考音频那一桶
-const MEDIA_GROUPS = { image: "images", video: "videos", video_in: "videos", audio_in: "audios" };
-// 参考类别 → 那一桶：出片那一发按类别取桶、按类别说丢掉的是哪一类
-const REF_BUCKETS = { image: "images", video: "videos", audio: "audios" };
 
 // 增强与反推两条 LLM 链在卡面上说的话在 node-types.js 的 RUN_LABELS 里（运行钮、状态行与提示条共用）
 
 /** SSE 帧体 → 帧对象：非 JSON 的帧（心跳、注释行）交 null，读流那一条不收它当正文 */
 function llmFrame(data) {
     try { return JSON.parse(data); } catch { return null; }
-}
-
-// 自定参数存在生成节点 metadata.gen_params 里的键（与后端 _OVERRIDE_KEYS / _VIDEO_OVERRIDE_KEYS 同一批）：
-// 空 = 跟随该技能 config 与全局生图 / 生视频设置，请求里不带这一项
-export const GEN_PARAM_KEYS = ["model", "text_encoder", "vae", "audio_vae", "steps"];
-
-/** 生效参数：空串与 0 是「跟随」—— 技能 config 与全局生图/生视频设置由后端合并，请求里不带这一项 */
-export function readGenParams(node) {
-    const meta = node?.metadata || {};
-    const count = parseInt(meta.count, 10);
-    const duration = parseInt(meta.duration, 10);
-    const width = Number(meta.width) > 0 ? Number(meta.width) : 0;
-    const height = Number(meta.height) > 0 ? Number(meta.height) : 0;
-    return {
-        kind: meta.kind === "video" ? "video" : "image",
-        chain: meta.chain === "train" ? "train" : "",   // 串联展开的车尾：出片是按链序跑启用的那几段
-        skill_id: String(meta.skill_id || ""),
-        default_ratio: String(meta.default_ratio || ""),
-        base_resolution: Number(meta.base_resolution) > 0 ? Number(meta.base_resolution) : 0,
-        count: count >= 1 && count <= GEN_COUNT_MAX ? count : 1,
-        duration: VIDEO_DUR_CHOICES.includes(duration) ? duration : 5,
-        width,
-        height,
-    };
-}
-
-/** 图像编辑节点生效的参数：这一版只开「常规编辑」—— 连过来的第一张图片是被改的那一张，后面的依次进
- *  参考；提示词从连过来的提示词节点取。目标尺寸不在节点上钉：跟着技能 config 与全局生图设置
- *  （与绘画页编辑面板不设宽高那一档同一口径） */
-export function readEditParams(node) {
-    const meta = node?.metadata || {};
-    const count = parseInt(meta.count, 10);
-    return {
-        skill_id: String(meta.skill_id || ""),
-        count: count >= 1 && count <= GEN_COUNT_MAX ? count : 1,
-    };
-}
-
-/** 车厢（配方节点）与串联车尾上的参数：配方名、段序号（0 基，与后端 payload 同一口径）、这一段自己的
- *  技能（空 = 跟随配方里那一份）、锚点档位，与步数 / 种子 / 连续性 / 上下文帧。
- *  -1 与「跟随」是同一件事：请求里带着 -1，后端按配方与全局设置合并 */
-export function readRecipeParams(node) {
-    const meta = node?.metadata || {};
-    const segment = parseInt(meta.segment, 10);
-    const seed = Number(meta.seed);
-    const steps = Number(meta.steps);
-    const window = Number(meta.context_frames);
-    return {
-        recipe: String(meta.recipe || ""),
-        segment: Number.isFinite(segment) && segment >= 0 ? segment : 0,
-        skill_id: String(meta.skill_id || ""),
-        anchors: ANCHOR_CHOICES.some(([key]) => key === meta.anchors) ? meta.anchors : "both",
-        steps: Number.isFinite(steps) && steps >= 1 ? Math.min(steps, STEPS_MAX) : -1,
-        seed: Number.isFinite(seed) && seed >= 0 ? Math.min(seed, SEED_MAX) : -1,
-        continuity: meta.continuity !== false,
-        context_frames: Number.isFinite(window) && window >= 0
-            ? Math.min(window, CONTEXT_FRAMES_MAX) : CONTEXT_FRAMES_DEFAULT,
-    };
-}
-
-/** 这台生成节点的自定参数：画布上这一发临时换的主模型 / Text Encoder / VAE / LoRA / 步数，
- *  存 metadata.gen_params（进撤销栈、随画布落盘）。空串与 -1 / 0 都是「跟随」—— 该技能 config 与
- *  全局生图 / 生视频设置由后端合并，请求里不带这一项。旧画布没有这一份，出图出片照旧跑 */
-export function readGenOverrides(node) {
-    const raw = node?.metadata?.gen_params;
-    if (!raw || typeof raw !== "object") return {};
-    const out = {};
-    for (const key of GEN_PARAM_KEYS) {
-        const v = String(raw[key] ?? "").trim();
-        if (!v) continue;
-        if (key === "steps") {
-            const steps = Number(v);
-            if (!(steps > 0)) continue;   // -1 / 0 是「跟随技能配置」的哨兵（车尾参数同一口径）
-            out.steps = Math.min(steps, STEPS_MAX);
-            continue;
-        }
-        out[key] = v;
-    }
-    const loras = (Array.isArray(raw.loras) ? raw.loras : []).map((entry) => {
-        if (typeof entry === "string") return entry.trim();   // 旧画布存的纯名字照收（后端认这一型）
-        const name = String(entry?.name ?? "").trim();
-        return name ? { name, strength: Number(entry.strength) || 1 } : "";
-    }).filter(Boolean);
-    if (loras.length) out.loras = loras;
-    return out;
-}
-
-/** 自定参数并进请求体：只带非空项，后端按技能 config 与全局设置合并（image_gen._OVERRIDE_KEYS /
- *  h3_video_gen._VIDEO_OVERRIDE_KEYS 认的就是这一批键） */
-function mergeGenOverrides(body, overrides) {
-    for (const key of GEN_PARAM_KEYS) {
-        if (overrides[key]) body[key] = overrides[key];
-    }
-    if (overrides.loras) body.loras = overrides.loras;
-    return body;
-}
-
-/** 这一发的输入：上游连线里的提示词按连线顺序拼接；图片 / 视频 / 音频按参考素材那套标注给后端 ——
- *  画布图片节点存的正是 Output 目录里的那一份，[output] 标注让后端从输出目录取并拷进 input；
- *  带 asset 的图片节点是「展开配方」铺进来的配方素材，文件在配方自己那一份 assets/ 里，
- *  连配方名一起交后端，由后端拷进 input 再用；停用的那一张不进这一发（节点上的「停用」是通用功能） */
-export function genInputs(state, genNodeId) {
-    const prompts = [];
-    const references = { images: [], videos: [], audios: [] };
-    const seen = new Set();
-    for (const node of upstreamNodes(state, genNodeId, ["text", "image", "video", "video_in", "audio_in"])) {
-        const text = String(node.metadata?.content || "").trim();
-        if (node.type === "text" && text) prompts.push(text);
-        const group = MEDIA_GROUPS[node.type];
-        if (!group) continue;
-        const filename = String(node.metadata?.filename || "");
-        const sub = String(node.metadata?.subfolder || "");
-        // 「展开配方」铺进来的素材节点：文件在配方自己那一份 assets/ 里，把配方名一起交后端去取
-        const asset = String(node.metadata?.asset || "");
-        const recipe = String(node.metadata?.recipe || "");
-        const key = filename ? `${sub ? `${sub}/` : ""}${filename}[output]` : `${recipe}/${asset}`;
-        // 同一个节点往这一台生成节点上连两条线，参考素材也只算一份
-        if (!key || seen.has(key)) continue;
-        seen.add(key);
-        references[group].push(filename
-            ? { kind: "input", value: key }
-            : { kind: "recipe", value: asset, recipe });
-    }
-    return { prompts, references };
 }
 
 export function createCanvasGen({ $el, toast, api, canFeature, host, modeGroup, groupLabels }) {
@@ -633,57 +502,10 @@ export function createCanvasGen({ $el, toast, api, canFeature, host, modeGroup, 
         submitClip("/neo_video_gen/run_segment", body, "segment", car);
     }
 
-    /** 整列共用的配方名读车厢身上那一份（「添加配方」铺出来的每一厢都记着同一份）—— 车尾那一张不记配方名，
-     *  链上出片与卡上那行概览都读车厢这一份 */
-    function chainRecipe(cars) {
-        const car = cars.find((c) => String(c.metadata.recipe || ""));
-        return car ? String(car.metadata.recipe) : "";
-    }
-
     /** 「链上 N 段 · 启用 M 段」：整条链与启用数都要「段」字（链上没有启用的车厢，出片就是没有这一段），
      *  段数后面的那一项（配方名）由调用方接在后面 */
     function chainCountText(cars, live) {
         return tf("链上 {n} 段 · 启用 {m} 段", { n: cars.length, m: live.length });
-    }
-
-    /** 车厢：一台配方节点就是链上的一段，参数在它那一列的车尾上，这一段只带段号与自己的技能 */
-    function isCar(node) {
-        return node?.type === "recipe";
-    }
-
-    /** 链序：链边是「段 → 下一段 → … → 车尾」，从车尾沿链往回走到车头再翻过来。
-     *  链被剪断就停在走到的那一段，成环靠 seen 停下 */
-    function chainCars(state, tailNodeId) {
-        const nodeOf = (id) => state.nodes.find((n) => n.id === id) || null;
-        const carUp = (id) => state.connections
-            .map((c) => (c.toNodeId === id ? nodeOf(c.fromNodeId) : null))
-            .find((n) => isCar(n)) || null;
-        const out = [];
-        const seen = new Set();
-        let cur = carUp(tailNodeId);
-        while (cur && !seen.has(cur.id)) {
-            seen.add(cur.id);
-            out.push(cur);
-            cur = carUp(cur.id);
-        }
-        return out.reverse();
-    }
-
-    /** 这一段那一列的车尾：沿链往下走到那台生成节点（链剪断了交 null，出片要明说没有参数来源） */
-    function chainTail(state, carId) {
-        const nodeOf = (id) => state.nodes.find((n) => n.id === id) || null;
-        const seen = new Set([carId]);
-        let cur = carId;
-        for (;;) {
-            const next = state.connections
-                .map((c) => (c.fromNodeId === cur ? nodeOf(c.toNodeId) : null))
-                .find((n) => n && !seen.has(n.id)
-                    && (isCar(n) || (n.type === "gen" && readGenParams(n).chain === "train")));
-            if (!next) return null;
-            if (!isCar(next)) return next;
-            seen.add(next.id);
-            cur = next.id;
-        }
     }
 
     /** 车尾盖的技能属于哪一组出片：「全参考生视频」那一组整列按全参考出片（画布盖 mode、不吃锚点帧）。
@@ -693,12 +515,20 @@ export function createCanvasGen({ $el, toast, api, canFeature, host, modeGroup, 
         return !!id && modeGroup(videoSkills.rows.find((s) => s.id === id)) === "r2v";
     }
 
-    /** 节点上那枚出片钮的入口：串联的车尾按链序跑启用的那几段，视频节点出片，生成节点出图；
-     *  车厢自己不出一发（卡上没有出片钮） */
+    /** 节点上那枚运行钮的入口：这一发走哪一条链全看 runKind 落在注册表里的哪一行 —— 车厢那一行没有钮，
+     *  落在这张表上就是空（出片在它那一列的车尾） */
+    const RUNNERS = {
+        image: runImage,
+        video: runVideo,
+        chain: runChain,
+        edit: runEdit,
+        enhance: runEnhance,
+        reverse: runReverse,
+        storyboard: runStoryboard,
+    };
+
     function run(node) {
-        const params = readGenParams(node);
-        if (params.kind !== "video") return runImage(node);
-        return params.chain === "train" ? runChain(node) : runVideo(node);
+        RUNNERS[runKind(node)]?.(node);
     }
 
     function runImage(node) {
@@ -792,11 +622,6 @@ export function createCanvasGen({ $el, toast, api, canFeature, host, modeGroup, 
             return true;
         }
         return false;
-    }
-
-    /** 反推吃的那一张：连线顺序里第一张启用的图片节点（与 genInputs 取参考同一条顺序） */
-    function reverseFirstImage(state, nodeId) {
-        return upstreamNodes(state, nodeId, ["image"])[0] || null;
     }
 
     /** LLM 流的帧 → 正文增量：思考块不进正文（画布要落的是提示词，不是模型的思考过程）；失败走
@@ -910,6 +735,80 @@ export function createCanvasGen({ $el, toast, api, canFeature, host, modeGroup, 
             reverseRequestBody({ filename, subfolder: String(src.metadata?.subfolder || "") },
                 node.metadata.language === "en" ? "en" : "zh"),
             RUN_LABELS.reverse);
+    }
+
+    /** 文字故事板节点那一发：主题或整篇剧本就在这一张的正文里，每一段的时长由卡上那枚数框定；
+     *  成文按连线顺序写进连过来的车厢，段时长写进车厢所属配方那一段（配方名读车厢身上那一份）。
+     *  这一发走的是后端既有的导演段生成链，与导演页「从一段话生成每一段」同一发，配方一个字都不写 */
+    function runStoryboard(node) {
+        if (llmGate(node)) return;
+        const text = String(node.metadata.content || "").trim();
+        if (!text) { toast(t("在这张节点上写一段话：一个主题或整篇剧本"), "info"); return; }
+        const cars = upstreamNodes(host.getState(), node.id, ["recipe"]);
+        if (!cars.length) { toast(t("把要写的那几厢车厢连过来：按连线顺序一厢一段"), "info"); return; }
+        const run = RUN_LABELS.storyboard;
+        submitJsonRun(node, STORYBOARD_API,
+            storyboardRequestBody({ text, segmentSeconds: node.metadata.segment_seconds }),
+            run, (data) => applyStoryboard(node, cars, data, run));
+    }
+
+    /** 一发非流式的后端链（文字故事板）：在途那一发照 LLM 那一条的记法挂在 llmRuns 上 —— 取消与切画布
+     *  的脱手共用那一条收场（finishLlmCancel 认「已摘掉这一发」就不写画布）。成了交 onDone 写回，
+     *  败了落在状态行上 */
+    function submitJsonRun(node, path, body, run, onDone) {
+        const inflight = { abort: new AbortController(), stopped: false };
+        llmRuns.set(node.id, inflight);
+        setRunning(node.id, { kind: run.kind, status: "running", done: 0, total: 0, error: "" });
+        api.fetchApi(path, { method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body), signal: inflight.abort.signal })
+            .then(async (resp) => {
+                const data = await resp.json().catch(() => null);
+                // 状态码先判：后端在缺 LLM 与正文为空时回的是 {ok:false, error}，那一格的 reason 要说给用户
+                if (!resp.ok) throw data?.error ? storyboardError(data) : new Error(`HTTP ${resp.status}`);
+                if (inflight.stopped || inflight.abort.signal.aborted) {
+                    if (llmRuns.get(node.id) === inflight) finishLlmCancel(node, inflight, run);
+                    return;
+                }
+                llmRuns.delete(node.id);
+                onDone(data);
+            })
+            .catch((err) => {
+                const fell = llmRuns.get(node.id) !== inflight;   // 脱手与取消：这一发不再改这一张画布上的状态
+                llmRuns.delete(node.id);
+                if (fell) return;
+                if (err?.name === "AbortError" || inflight.stopped) {
+                    finishLlmCancel(node, inflight, run);
+                    return;
+                }
+                running.set(node.id, { kind: run.kind, status: "failed", error: String(err?.message || err) });
+                host.paintNodes();
+                toast(`${t(run.fail)}：${String(err?.message || err)}`, "error");
+            });
+    }
+
+    /** 成文落画布：段提示词按连线顺序写进车厢（一格一发的 patchMeta，进撤销栈、随画布落盘），生成的那一段
+     *  列表记在故事板节点自己的 metadata 上 —— 复制、撤销与存盘都带着走。段时长只有车厢记着配方名时
+     *  才有落点（手工铺的车厢没有配方，段时长就没有地方落） */
+    function applyStoryboard(node, cars, data, run) {
+        const segments = storyboardSegments(data);
+        if (!segments) {
+            const msg = String(data?.error || t("后端没有回段列表"));
+            running.set(node.id, { kind: run.kind, status: "failed", error: msg });
+            host.paintNodes();
+            toast(`${t(run.failToast)}：${msg}`, "error");
+            return;
+        }
+        running.delete(node.id);
+        if (!host.hasNode(node.id)) { toast(t("段提示词已生成"), "success"); return; }   // 切画布脱手与节点被删
+        const live = cars.filter((car) => host.hasNode(car.id));
+        const patches = storyboardCarPatches(segments, live);
+        host.patchMeta(node.id, { segments, segments_at: Date.now() });
+        for (const p of patches) host.patchMeta(p.node.id, p.meta);
+        for (const w of storyboardDurationWrites(patches, chainRecipe(live))) writeSegmentDuration(w);
+        host.paintNodes();
+        const note = storyboardMismatchText(segments.length, live.length);
+        if (note) toast(note, "info");
+        toast(tf(run.done, { n: patches.length }), "success");
     }
 
     function cancel(node) {
@@ -1251,6 +1150,31 @@ export function createCanvasGen({ $el, toast, api, canFeature, host, modeGroup, 
         ];
     }
 
+    /** 文字故事板节点上的控件：每一段的时长（进这一发的 segment_seconds，边界与后端同一份）与那一枚运行钮。
+     *  要写的那一段话就在这张节点上（与车厢自己写正文同一份存法），不从连过来的节点取 */
+    function storyboardControls(node) {
+        const st = running.get(node.id) || {};
+        const busy = st.status === "running";
+        const run = RUN_LABELS.storyboard;
+        const acts = [];
+        if (busy) acts.push(genBtn(t("取消任务"), "cross", () => cancel(node), t("取消这一发后台任务")));
+        acts.push(genBtn(t(run.btn), "play", () => runStoryboard(node), t(run.tip), busy, "ns-canvas-gen-go"));
+        // 每一段的时长就是一枚数框（与车厢顶行那一枚同一法，步进箭头去掉）：写歪了钳进后端认的那一份区间
+        const sec = $el("input", { className: "ns-canvas-storyboard-sec", type: "number",
+            min: String(SEG_SEC_MIN), max: String(SEG_SEC_MAX), step: "1",
+            value: String(Number(node.metadata.segment_seconds) || SEG_SEC_DEFAULT),
+            title: t("每一段的时长（秒）：交后端按这一发拆段"),
+            onmousedown: (e) => { if (document.activeElement !== e.target) e.preventDefault(); },
+            onchange: () => host.patchMeta(node.id, {
+                segment_seconds: Math.min(SEG_SEC_MAX, Math.max(SEG_SEC_MIN,
+                    Math.round(Number(sec.value)) || SEG_SEC_DEFAULT)) }) });
+        sec.disabled = busy;
+        return [$el("div", { className: "ns-canvas-gen-acts" }, [
+            $el("span", { className: "ns-canvas-storyboard-sec-label", textContent: t("每段") }),
+            sec, ...acts,
+        ])];
+    }
+
     /** 反推节点上的语言胶囊：与反推页和素材卡反推同一对取值（后端认 zh / en） */
     function reverseLangChip(node, busy) {
         const sel = $el("select", { disabled: busy, title: t("反推输出的语言"),
@@ -1326,28 +1250,6 @@ export function createCanvasGen({ $el, toast, api, canFeature, host, modeGroup, 
                 [genChip(durSel, { icon: "clock" }), genChip(sizeSel, { glyph: ratioGlyph() })]),
             $el("div", { className: "ns-canvas-gen-bottom" }, [$el("div", { className: "ns-canvas-gen-acts" }, acts)]),
         ];
-    }
-
-    /** 连到这一台节点的素材节点（按连线顺序）：出片交给后端的就是这一批，卡上也按这一批铺；
-     *  停用的那一张既不进这一发也不在卡上露出来 */
-    function mediaNodes(nodeId) {
-        return upstreamNodes(host.getState(), nodeId, ["image", "video", "video_in", "audio_in"])
-            .filter((node) => node.metadata?.filename || node.metadata?.asset);
-    }
-
-    /** 配方这一段自己的参考素材（recipe.json 记的是配方 assets/ 里的文件名）：首帧与分镜关键帧排最前 ——
-     *  后端解析首帧与 refs.images 是同一路，卡上也要看见「这一段靠哪张图起头」 */
-    function segmentRefs(seg) {
-        const names = [];
-        for (const key of ["first_frame", "storyboard"]) {
-            const name = String(seg[key] || "");
-            if (name && !names.includes(name)) names.push(name);
-        }
-        const refs = seg.refs && typeof seg.refs === "object" ? seg.refs : {};
-        for (const key of ["images", "videos", "audios"]) {
-            for (const name of (refs[key] || [])) if (name && !names.includes(name)) names.push(name);
-        }
-        return names;
     }
 
     /** 配方里每一段写了哪几份技能（去重）：一份 = 整列共用这一份；多份 = 跟随就是「每一段自己的技能」；
@@ -1466,15 +1368,19 @@ export function createCanvasGen({ $el, toast, api, canFeature, host, modeGroup, 
         const own = readRecipeParams(node);
         const seg = recipeRow(own.recipe)?.segments?.[own.segment] || {};
         const { prompts } = genInputs(state, node.id);
-        const canvasRefs = mediaNodes(node.id);
-        const ownRefs = (seg.refs?.images || []).filter((name) => !canvasRefs.some((n) => n.metadata.filename === name));
+        const canvasRefs = mediaNodes(state, node.id);
+        // 这一段写了的参考素材（图 / 参考视频 / 参考音频，连首帧与分镜图）：铺一列时已经落成画布节点的
+        // 数在 canvasRefs 里，这一条只补配方里写了、画布上没铺的那几份
+        const laid = new Set(canvasRefs.map((n) => String(n.metadata.asset || n.metadata.filename || "")));
+        const ownRefs = segmentRefs(seg).filter((name) => !laid.has(name));
         const canvasPrompt = prompts.join("\n\n");
         const ownText = carOwnText(node);
         const segPrompt = String(seg.prompt || "").trim();
         return {
-            // 顶行那一行：配方名 · 这一段时长 · 生效的技能（段号在左边「段 N」那枚里，这里不重复）
-            head: [own.recipe, tf("{n} 秒", { n: seg.duration_sec ?? 0 }),
-                videoSkillName(own.skill_id || seg.skill_id)].filter(Boolean).join(" · "),
+            // 顶行那一行：这一段时长（车厢上那一枚数框，改了写进配方）· 配方名 · 生效的技能
+            // （段号在左边「段 N」那枚里，这里不重复）
+            duration: seg.duration_sec ?? null,
+            head: [own.recipe, videoSkillName(own.skill_id || seg.skill_id)].filter(Boolean).join(" · "),
             src: canvasPrompt ? t("画布") : ownText ? t("车厢") : t("配方"),
             // 正文框铺的是这一段生效的那一份：连过来的正文（锁着）、车厢写过的、都没有就是配方那一段
             edit: canvasPrompt || ownText || segPrompt,
@@ -1483,6 +1389,43 @@ export function createCanvasGen({ $el, toast, api, canFeature, host, modeGroup, 
             fromCanvas: !!canvasPrompt,
             count: canvasRefs.length + ownRefs.length,
         };
+    }
+
+    /** 车厢顶行那一枚时长框落笔：把这一段的时长写进配方文件（导演页、重铺一列、出片读的都是这一份）。
+     *  与配方里那一份一字不差就不打后端；写成功就把手里那一段改成后端钳过的值再整层重画，
+     *  车尾那一行的总时长跟着变。这是配方文件的写，不进画布撤销栈（与「删除素材」同一类），
+     *  改回去就在车厢上改回来 */
+    function setCarDuration(node, seconds) {
+        const own = readRecipeParams(node);
+        const seg = recipeRow(own.recipe)?.segments?.[own.segment];
+        const typed = Math.round(Number(seconds));
+        if (!Number.isFinite(typed)) { host.paintNodes(); return; }   // 空框 / 非数：不写盘，重画回配方那一份
+        const next = Math.min(SEG_SEC_MAX, Math.max(SEG_SEC_MIN, typed));
+        if (next === Number(seg?.duration_sec)) { host.paintNodes(); return; }
+        writeSegmentDuration({ recipe: own.recipe, segment: own.segment, duration_sec: next },
+            (sec) => toast(tf("第 {n} 段：{sec} 秒（写进配方）", { n: own.segment + 1, sec }), "success"));
+    }
+
+    /** 把一段的时长写进配方文件（车厢顶行那一枚数框与文字故事板写回共用这一发）：成功后把手里那一段
+     *  改成后端钳过的值并整层重画，车尾那一行的总时长跟着变。这是配方文件的写，不进画布撤销栈
+     *  （与「删除素材」同一类），改回去就在车厢上改回来 */
+    function writeSegmentDuration({ recipe, segment, duration_sec }, onDone) {
+        api.fetchApi("/rs_recipes/set_segment_duration", { method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: recipe, segment, duration_sec }) })
+            .then(async (resp) => {
+                const data = await resp.json().catch(() => null);
+                if (!resp.ok || !data?.success) throw new Error(data?.error || `HTTP ${resp.status}`);
+                const seg = recipeRow(recipe)?.segments?.[segment];
+                if (seg) seg.duration_sec = Number(data.duration_sec) || duration_sec;
+                host.paintNodes();
+                onDone?.(Number(data.duration_sec) || duration_sec);
+            })
+            .catch((err) => {
+                // 没写进去就不在画布上留一份配方里没有的时长：整层重画把框退回配方那一份
+                host.paintNodes();
+                toast(`${t("段时长没写进去")}：${String(err?.message || err)}`, "error");
+            });
     }
 
     /** 串联车尾那台生成节点的面：卡上只留整列共用的技能与分辨率两枚胶囊、这一列跑几段那一行、出片那一发；
@@ -1556,7 +1499,7 @@ export function createCanvasGen({ $el, toast, api, canFeature, host, modeGroup, 
                 row("上下文帧", formChip(ctxSel, { icon: "clock" })),
                 row("种子", seedIn),
                 $el("p", { className: "ns-canvas-tailform-note",
-                    textContent: t("每一段的时长跟着配方走，不在这里改") }),
+                    textContent: t("每一段的时长在车厢上那一枚框里改，写进配方那一段") }),
                 menus,
             ])]);
         host.pageEl().appendChild(mask);
@@ -1603,9 +1546,11 @@ export function createCanvasGen({ $el, toast, api, canFeature, host, modeGroup, 
         recipeCards,
         recipeCardText,
         carView,
+        setCarDuration,
         controls,
         editControls,
         llmControls,
+        storyboardControls,
         prime,
         primeVideo,
         primeRecipes,
