@@ -666,7 +666,7 @@ describe("canvas-page 页面", () => {
       }
     });
     test("车尾「参数」弹窗里那几枚胶囊的图标名都画得出来", () => {
-      const source = fs.readFileSync(path.join(webDir, "studio/pages/canvas/gen.js"), "utf8");
+      const source = fs.readFileSync(path.join(webDir, "studio/pages/canvas/gen-recipe.js"), "utf8");
       const names = [...source.slice(source.indexOf("function openChainParams"))
         .matchAll(/\bicon:\s*"([a-z0-9-]+)"/g)].map((m) => m[1]);
       assert.ok(names.length >= 4, `参数弹窗里只扫到 ${names.length} 枚图标名：${names.join(",")}`);
